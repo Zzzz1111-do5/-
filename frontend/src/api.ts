@@ -16,7 +16,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
     });
   } catch {
-    throw new ApiError("无法连接后端服务，请确认 API 服务已启动", 0);
+    throw new ApiError("无法连接后台程序：请确认启动时打开的命令行窗口（start.bat / start.sh）仍在运行；如已关闭，请重新启动", 0);
   }
   const text = await resp.text();
   let data: unknown = null;
@@ -32,6 +32,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
   return data as T;
 }
+
+/** 交易所行情接口失败（后端返回 502），可提示用户切换行情源 */
+export const isSourceError = (e: unknown) => e instanceof ApiError && e.status === 502;
 
 const qs = (params: Record<string, string | number | undefined>) =>
   new URLSearchParams(

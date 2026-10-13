@@ -142,7 +142,7 @@ async def load_frame(req: RunConfig):
 
 @app.get("/api/health")
 async def health():
-    return {"status": "ok", "time": now_ms()}
+    return {"status": "ok", "app": "coinquant", "time": now_ms()}
 
 
 @app.get("/api/meta")

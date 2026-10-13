@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { api } from "../api";
+import { api, isSourceError } from "../api";
 import { PriceChart, SeriesChart, type TradeMarker } from "../components/charts";
 import { CostFields, MarketFields, StrategyFields, defaultParams } from "../components/forms";
-import { Card, Empty, ErrorBox, OrdersTable, Segmented, Spinner, Stat, TradesTable } from "../components/ui";
+import { Card, Empty, ErrorBox, SourceHint, OrdersTable, Segmented, Spinner, Stat, TradesTable } from "../components/ui";
 import { loadLocal, saveLocal, useApp } from "../context";
 import { INTERVAL_LABEL, INTERVAL_MS, REASON_LABEL, SERIES_COLORS, daysAgo, fmtDuration, fmtNum, fmtPct } from "../format";
 import type { BacktestResult, Meta, RunSettings } from "../types";
@@ -59,6 +59,7 @@ export default function BacktestPage() {
   const [settings, setSettings] = useState<RunSettings | null>(null);
   const [result, setResult] = useState<BacktestResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [sourceErr, setSourceErr] = useState(false);
   const [running, setRunning] = useState(false);
   const [tab, setTab] = useState<"trades" | "orders">("trades");
   const [runId, setRunId] = useState(0);
@@ -95,6 +96,7 @@ export default function BacktestPage() {
     if (!s) return;
     setRunning(true);
     setError(null);
+    setSourceErr(false);
     saveLocal("cq.backtest", s);
     try {
       const r = await api.backtest(s);
@@ -102,6 +104,7 @@ export default function BacktestPage() {
       setRunId((x) => x + 1);
     } catch (e) {
       setError((e as Error).message);
+      setSourceErr(isSourceError(e));
     } finally {
       setRunning(false);
     }
@@ -141,6 +144,7 @@ export default function BacktestPage() {
 
       <div className="results">
         <ErrorBox error={error} />
+        <SourceHint show={sourceErr && settings.source !== "synthetic"} onSwitch={() => update({ source: "synthetic" })} />
         {running && !result && <Spinner text="正在获取行情并回测，首次拉取历史数据可能需要数秒…" />}
         {!result && !running && !error && (
           <Card>

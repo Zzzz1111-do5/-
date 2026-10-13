@@ -1,8 +1,8 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { api } from "../api";
+import { api, isSourceError } from "../api";
 import { PriceChart } from "../components/charts";
-import { Card, ErrorBox, Segmented, Spinner, Toggle } from "../components/ui";
+import { Card, ErrorBox, Segmented, SourceHint, Spinner, Toggle } from "../components/ui";
 import { loadLocal, saveLocal, useApp } from "../context";
 import { INTERVAL_LABEL, fmtCompact, fmtPrice, tone } from "../format";
 import { usePolling } from "../hooks";
@@ -46,7 +46,7 @@ interface MarketPrefs {
 const QUICK_INTERVALS = ["1m", "5m", "15m", "1h", "4h", "1d"];
 
 export default function MarketPage() {
-  const { meta, source } = useApp();
+  const { meta, source, setSource } = useApp();
   const navigate = useNavigate();
   const [prefs, setPrefsState] = useState<MarketPrefs>(() =>
     loadLocal("cq.market", { symbol: "BTC/USDT", interval: "1h", ma: true, boll: false, volume: true }),
@@ -64,6 +64,8 @@ export default function MarketPage() {
   const [chartKey, setChartKey] = useState("");
   const [chartError, setChartError] = useState<string | null>(null);
   const [loadingChart, setLoadingChart] = useState(true);
+  const [tickerSourceErr, setTickerSourceErr] = useState(false);
+  const [chartSourceErr, setChartSourceErr] = useState(false);
 
   const symbols = useMemo(() => {
     const list = meta?.symbols ?? [];
@@ -78,8 +80,11 @@ export default function MarketPage() {
         if (token.cancelled) return;
         setTickers(r.tickers);
         setTickerError(null);
+        setTickerSourceErr(false);
       } catch (e) {
-        if (!token.cancelled) setTickerError((e as Error).message);
+        if (token.cancelled) return;
+        setTickerError((e as Error).message);
+        setTickerSourceErr(isSourceError(e));
       }
     },
     [source, symbols.join(",")],
@@ -96,8 +101,11 @@ export default function MarketPage() {
         setCandles(r.candles);
         setChartKey(key);
         setChartError(null);
+        setChartSourceErr(false);
       } catch (e) {
-        if (!token.cancelled) setChartError((e as Error).message);
+        if (token.cancelled) return;
+        setChartError((e as Error).message);
+        setChartSourceErr(isSourceError(e));
       } finally {
         if (!token.cancelled) setLoadingChart(false);
       }
@@ -146,6 +154,7 @@ export default function MarketPage() {
         ))}
       </div>
       <ErrorBox error={tickerError} />
+      <SourceHint show={(tickerSourceErr || chartSourceErr) && source !== "synthetic"} onSwitch={() => setSource("synthetic")} />
 
       <Card
         className="market-card"

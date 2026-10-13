@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { api } from "../api";
+import { api, isSourceError } from "../api";
 import { CostFields, MarketFields, StrategyFields } from "../components/forms";
-import { Card, Empty, ErrorBox, Field, NumberInput, Spinner } from "../components/ui";
+import { Card, Empty, ErrorBox, SourceHint, Field, NumberInput, Spinner } from "../components/ui";
 import { loadLocal, saveLocal, useApp } from "../context";
 import { fmtNum, fmtPct, fmtTime, tone } from "../format";
 import type { OptimizeResult, OptimizeRow, ParamSpec, RunSettings, StrategySpec, SummaryMetrics } from "../types";
@@ -53,6 +53,7 @@ export default function OptimizePage() {
   const [oos, setOos] = useState(0.3);
   const [result, setResult] = useState<OptimizeResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [sourceErr, setSourceErr] = useState(false);
   const [running, setRunning] = useState(false);
   const [showAll, setShowAll] = useState(false);
 
@@ -94,6 +95,7 @@ export default function OptimizePage() {
     if (!settings) return;
     setRunning(true);
     setError(null);
+    setSourceErr(false);
     setShowAll(false);
     const grid = Object.fromEntries(
       Object.entries(ranges)
@@ -104,6 +106,7 @@ export default function OptimizePage() {
       setResult(await api.optimize({ ...settings, grid, metric, oos_ratio: oos, top: Math.min(Math.max(combos, 1), 500) }));
     } catch (e) {
       setError((e as Error).message);
+      setSourceErr(isSourceError(e));
     } finally {
       setRunning(false);
     }
@@ -194,6 +197,7 @@ export default function OptimizePage() {
 
       <div className="results">
         <ErrorBox error={error} />
+        <SourceHint show={sourceErr && settings.source !== "synthetic"} onSwitch={() => update({ source: "synthetic" })} />
         {running && <Spinner text={`正在评估 ${combos} 组参数…`} />}
         {!result && !running && !error && (
           <Card>

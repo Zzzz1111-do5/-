@@ -16,3 +16,6 @@ frontend/dist/
 # 其他
 .DS_Store
 .env
+
+# 启动锁
+/backend/.launch.lock

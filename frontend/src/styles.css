@@ -523,6 +523,24 @@ select.input {
   word-break: break-word;
 }
 
+.hint {
+  color: var(--muted);
+  background: var(--panel);
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  padding: 8px 12px;
+  line-height: 1.7;
+}
+.link-btn {
+  background: none;
+  border: none;
+  padding: 0 4px;
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
 .spinner-wrap {
   display: flex;
   align-items: center;
@@ -1030,4 +1048,9 @@ select.input {
   .form-grid {
     grid-template-columns: 1fr;
   }
+}
+
+.page > .error-box,
+.page > .hint {
+  margin-bottom: 12px;
 }

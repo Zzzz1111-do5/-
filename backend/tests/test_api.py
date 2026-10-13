@@ -25,6 +25,11 @@ def test_parse_time():
         parse_time("yesterday")
 
 
+def test_health_identifies_app(client):
+    # run.py 依赖 app 字段判断端口上是否已运行 CoinQuant
+    assert client.get("/api/health").json()["app"] == "coinquant"
+
+
 def test_meta_and_market(client):
     meta = client.get("/api/meta").json()
     assert {s["id"] for s in meta["sources"]} >= {"binance", "okx", "synthetic"}

@@ -63,6 +63,19 @@ export function ErrorBox({ error, onRetry }: { error: string | null; onRetry?: (
   );
 }
 
+/** 行情源不可用时的提示，可一键切换到离线模拟数据 */
+export function SourceHint({ show, onSwitch }: { show: boolean; onSwitch: () => void }) {
+  if (!show) return null;
+  return (
+    <div className="hint small">
+      提示：如果所在地区或网络无法访问该交易所，可在右上角「行情源」切换为其他交易所，或
+      <button className="link-btn" type="button" onClick={onSwitch}>
+        切换到模拟数据（离线）
+      </button>
+    </div>
+  );
+}
+
 export function Spinner({ text = "加载中…" }: { text?: string }) {
   return (
     <div className="spinner-wrap">
