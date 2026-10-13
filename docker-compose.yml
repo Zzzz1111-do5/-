@@ -1,0 +1,13 @@
+services:
+  coinquant:
+    build: .
+    container_name: coinquant
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/data
+    environment:
+      DEFAULT_SOURCE: binance
+      # 如需代理访问交易所：
+      # HTTPS_PROXY: http://host.docker.internal:7890
+    restart: unless-stopped
