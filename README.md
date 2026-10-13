@@ -28,7 +28,25 @@
 
 ## 快速开始
 
-### 方式一：Docker（推荐）
+> 💡 `http://localhost:8000` 指的是**你自己的电脑**。必须先在电脑上把程序启动起来，这个地址才能打开。
+
+### 方式一：一键启动（推荐，只需安装 Python）
+
+1. 安装 **Python 3.11 或更高版本**：<https://www.python.org/downloads/>
+   - Windows 安装时务必勾选 **“Add python.exe to PATH”**。
+2. 下载并解压项目：
+   - **发布包** `coinquant-release.zip`：已包含构建好的前端页面，**不需要安装 Node.js**；
+   - 或直接下载 / 克隆本仓库源码：此时还需安装 [Node.js 18+](https://nodejs.org)，首次启动会自动构建前端。
+3. 启动：
+   - **Windows**：双击 `start.bat`
+   - **macOS / Linux**：打开“终端”，进入解压后的文件夹，运行 `bash start.sh`
+     （macOS 可以输入 `cd ` 加一个空格，再把文件夹拖进终端窗口，按回车）
+4. 首次启动会自动安装依赖（约 1~3 分钟），完成后浏览器会自动打开 <http://127.0.0.1:8000>。
+   使用期间**不要关闭这个命令行窗口**，关闭窗口或按 `Ctrl+C` 即停止。
+
+也可以直接运行 `python run.py`（`--port 8001` 换端口，`--no-browser` 不自动打开浏览器）。
+
+### 方式二：Docker
 
 ```bash
 docker compose up -d --build
@@ -37,7 +55,7 @@ docker compose up -d --build
 
 数据（SQLite）保存在 `./data` 目录。
 
-### 方式二：本地运行
+### 方式三：手动运行（开发者）
 
 需要 Python 3.11+ 与 Node.js 18+。
 
@@ -82,7 +100,7 @@ pytest
 | `MAX_OPT_COMBOS` | `500` | 单次优化最多参数组合数 |
 | `BOT_POLL_SECONDS` | `10` | 模拟交易机器人轮询行情间隔（秒） |
 
-> 如果所在网络无法访问币安/OKX，可在页面右上角把行情源切换为「模拟数据（离线）」体验全部功能。
+> 如果行情加载失败（所在地区或网络无法访问币安/OKX），可在页面右上角切换行情源：币安、OKX 或「模拟数据（离线）」，模拟数据无需联网即可体验全部功能。
 
 ## 回测规则
 
