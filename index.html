@@ -1,0 +1,2396 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>蓝星纪元</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Noto+Sans+SC:wght@400;500;700&family=Noto+Serif+SC:wght@700;900&display=swap">
+<style>
+:root{
+  /* Layout: observatory console. The planet floats on a dark stage at left; an instrument rail of readouts runs down the right. */
+  --space:#060a14;
+  --stage-glow:#0d1a36;
+  --panel:#0b1324;
+  --panel-2:#111c33;
+  --panel-3:#16233f;
+  --line:#1f2d4a;
+  --ink:#e9eef8;
+  --ink-2:#a6b3cc;
+  --ink-3:#6f7e9b;
+  --sodium:#ffb547;
+  --sodium-dim:rgba(255,181,71,.14);
+  --sea:#5cc4e6;
+  --leaf:#7fd18b;
+  --ember:#ff8a4c;
+  --blood:#ff5f6b;
+  --violet:#b8a2ff;
+  --series-1:#3987e5;
+  --mix-coal:#3987e5;
+  --mix-oil:#d95926;
+  --mix-nuke:#199e70;
+  --mix-renew:#c98500;
+  --mix-fusion:#d55181;
+  --status-serious:#ec835a;
+  --font-display:"Noto Serif SC","Songti SC","STSong","SimSun",serif;
+  --font-body:"Noto Sans SC","PingFang SC","Hiragino Sans GB","Microsoft YaHei",system-ui,sans-serif;
+  --font-mono:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{height:100%}
+body{margin:0;background:var(--space);color:var(--ink);font:14px/1.55 var(--font-body);overflow:hidden;-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit}
+button:focus-visible,input:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--sodium);outline-offset:2px}
+.mono{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+
+.app{display:grid;grid-template-columns:minmax(0,1fr) 384px;grid-template-rows:auto minmax(0,1fr);height:100%}
+
+/* ---------- header ---------- */
+.bar{grid-column:1/-1;display:flex;align-items:center;gap:12px 24px;flex-wrap:wrap;padding-block:10px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));background:var(--panel);border-bottom:1px solid var(--line)}
+.brand{display:flex;flex-direction:column;min-width:0}
+.brand h1{margin:0;font-family:var(--font-display);font-weight:900;font-size:22px;line-height:1.15;letter-spacing:.14em;text-wrap:balance}
+.brand .sub{margin:0;color:var(--ink-3);font-size:12px;letter-spacing:.04em}
+.clock{flex:1;display:flex;align-items:baseline;justify-content:center;gap:14px;min-width:0}
+.year{font-size:22px;font-weight:500;color:var(--sodium);letter-spacing:.02em;white-space:nowrap}
+.era{color:var(--ink-2);font-size:13px;white-space:nowrap}
+.era b{color:var(--ink);font-weight:500}
+.ctrl{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:32px;padding:0 12px;border-radius:6px;border:1px solid var(--line);background:var(--panel-2);cursor:pointer;font-size:13px;color:var(--ink)}
+.btn:hover{background:var(--panel-3)}
+.btn.icon{width:36px;padding:0}
+.btn svg{width:14px;height:14px;fill:currentColor}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:6px;overflow:hidden;background:var(--panel-2)}
+.seg button{height:30px;padding:0 10px;border:0;background:transparent;cursor:pointer;font-size:13px;color:var(--ink-2);border-right:1px solid var(--line)}
+.seg button:last-child{border-right:0}
+.seg button:hover{color:var(--ink);background:var(--panel-3)}
+.seg button[aria-pressed="true"]{color:var(--sodium);background:var(--sodium-dim)}
+
+/* ---------- stage ---------- */
+.stage{position:relative;overflow:hidden;min-height:0;background:radial-gradient(ellipse at 45% 48%,var(--stage-glow) 0%,var(--space) 68%)}
+#view{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:grab}
+#view.dragging{cursor:grabbing}
+#view.tool{cursor:crosshair}
+.overlay{position:absolute;z-index:2}
+.ticker{top:14px;left:50%;transform:translateX(-50%);max-width:min(640px,calc(100% - 220px));padding:7px 14px;border-radius:999px;background:rgba(11,19,36,.82);border:1px solid var(--line);font-size:13px;color:var(--ink);text-align:center;transition:opacity .5s;pointer-events:none;backdrop-filter:blur(6px)}
+.ticker .dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:8px;vertical-align:1px}
+.ticker[data-empty="1"]{opacity:0}
+.god{top:14px;left:max(16px,env(safe-area-inset-left,0px));display:flex;flex-direction:column;gap:6px;align-items:flex-start}
+.god .lbl{font-size:11px;letter-spacing:.12em;color:var(--ink-3)}
+.god .tools{display:flex;flex-direction:column;gap:4px}
+.god button{height:28px;padding:0 10px;border-radius:6px;border:1px solid var(--line);background:rgba(17,28,51,.85);cursor:pointer;font-size:12px;color:var(--ink-2);text-align:left;min-width:84px}
+.god button:hover{color:var(--ink)}
+.god button[aria-pressed="true"]{color:var(--space);background:var(--sodium);border-color:var(--sodium)}
+.god .hint{font-size:12px;color:var(--sodium);max-width:180px}
+.dock{left:max(16px,env(safe-area-inset-left,0px));bottom:14px;display:flex;flex-direction:column;gap:8px;align-items:flex-start;max-width:calc(100% - 80px)}
+.dock .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.toggles{display:flex;gap:4px;flex-wrap:wrap}
+.toggles label{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 10px;border:1px solid var(--line);border-radius:6px;background:rgba(17,28,51,.85);font-size:12px;color:var(--ink-2);cursor:pointer;user-select:none}
+.toggles input{accent-color:var(--sodium);margin:0}
+.dock .seg{background:rgba(17,28,51,.85)}
+.zoom{right:max(16px,env(safe-area-inset-right,0px));bottom:14px;display:flex;flex-direction:column;gap:4px}
+.zoom button{width:32px;height:32px;border-radius:6px;border:1px solid var(--line);background:rgba(17,28,51,.85);cursor:pointer;font-size:16px;color:var(--ink-2)}
+.legend{display:flex;flex-wrap:wrap;gap:4px 12px;padding:8px 10px;border-radius:6px;background:rgba(11,19,36,.85);border:1px solid var(--line);font-size:12px;color:var(--ink-2);max-width:420px}
+.legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+.legend .ramp{display:flex;align-items:center;gap:8px;width:100%}
+.legend .ramp span.bar{flex:1;height:8px;border-radius:2px;min-width:120px}
+.insp{top:60px;right:max(16px,env(safe-area-inset-right,0px));width:280px;max-width:calc(100% - 32px);padding:14px 14px 12px;border-radius:8px;background:rgba(11,19,36,.94);border:1px solid var(--line);box-shadow:0 12px 40px rgba(0,0,0,.45);backdrop-filter:blur(8px)}
+.insp h2{margin:0 0 2px;font-family:var(--font-display);font-size:18px;font-weight:700;letter-spacing:.06em;padding-right:24px}
+.insp .meta{color:var(--ink-3);font-size:12px;margin-bottom:10px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.insp .close{position:absolute;top:8px;right:8px;width:26px;height:26px;border:0;border-radius:4px;background:transparent;cursor:pointer;color:var(--ink-3);font-size:18px;line-height:1}
+.insp .close:hover{color:var(--ink);background:var(--panel-3)}
+.insp dl{display:grid;grid-template-columns:auto 1fr;gap:3px 12px;margin:0;font-size:13px}
+.insp dt{color:var(--ink-3)}
+.insp dd{margin:0;text-align:right;font-family:var(--font-mono);font-variant-numeric:tabular-nums;color:var(--ink)}
+.insp .tags{display:flex;flex-wrap:wrap;gap:4px;margin-top:10px}
+.tag{display:inline-flex;align-items:center;gap:4px;padding:1px 7px;border-radius:999px;border:1px solid var(--line);font-size:11px;color:var(--ink-2);background:var(--panel-2)}
+.swatch{display:inline-block;width:10px;height:10px;border-radius:2px;flex:none}
+.hovertip{pointer-events:none;padding:3px 8px;border-radius:4px;background:rgba(6,10,20,.9);border:1px solid var(--line);font-size:12px;color:var(--ink);white-space:nowrap;transform:translate(10px,-50%)}
+.banner{left:50%;top:42%;transform:translate(-50%,-50%);padding:18px 26px;border-radius:10px;background:rgba(6,10,20,.88);border:1px solid var(--sodium);text-align:center;pointer-events:none;transition:opacity .8s}
+.banner h3{margin:0;font-family:var(--font-display);font-size:24px;letter-spacing:.12em;color:var(--sodium)}
+.banner p{margin:6px 0 0;color:var(--ink-2);font-size:13px}
+
+/* ---------- rail ---------- */
+.rail{display:flex;flex-direction:column;min-height:0;background:var(--panel);border-left:1px solid var(--line)}
+.tabs{display:flex;gap:2px;padding-block:8px 0;padding-left:16px;padding-right:max(16px,env(safe-area-inset-right,0px));border-bottom:1px solid var(--line);flex:none}
+.tabs button{flex:1;height:36px;border:0;background:transparent;cursor:pointer;color:var(--ink-3);font-size:14px;border-bottom:2px solid transparent;margin-bottom:-1px}
+.tabs button:hover{color:var(--ink)}
+.tabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--sodium)}
+.pane{flex:1;overflow:auto;padding-block:14px 28px;padding-left:16px;padding-right:max(16px,env(safe-area-inset-right,0px));min-height:0}
+.pane h3{margin:22px 0 10px;font-size:12px;font-weight:500;letter-spacing:.14em;color:var(--ink-3);display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.pane h3:first-child{margin-top:4px}
+.pane h3 small{font-size:12px;letter-spacing:0;color:var(--ink-3);font-weight:400}
+.kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.kpi{background:var(--panel);padding:9px 10px;display:flex;flex-direction:column;gap:1px;min-width:0}
+.kpi.wide{grid-column:1/-1;flex-direction:row;align-items:baseline;justify-content:space-between;gap:8px}
+.kpi .k{font-size:12px;color:var(--ink-3)}
+.kpi .v{font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-size:16px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kpi.wide .v{font-size:24px;color:var(--sodium)}
+.kpi .d{font-size:11px;color:var(--ink-3);font-family:var(--font-mono)}
+.spark{position:relative;height:96px;margin-top:6px}
+.spark canvas{width:100%;height:100%;display:block}
+.spark .tip{position:absolute;top:0;pointer-events:none;padding:2px 7px;border-radius:4px;background:var(--panel-3);border:1px solid var(--line);font-size:11px;font-family:var(--font-mono);color:var(--ink);white-space:nowrap;transform:translateX(-50%)}
+.sparkhead{display:flex;justify-content:space-between;align-items:baseline;font-size:12px;color:var(--ink-2);margin-top:12px}
+.sparkhead b{font-family:var(--font-mono);font-weight:500;color:var(--ink)}
+.mixbar{display:flex;height:14px;border-radius:3px;overflow:hidden;gap:2px;background:var(--panel)}
+.mixbar span{display:block;height:100%;min-width:0}
+.mixlegend{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:4px 12px;margin-top:8px;font-size:12px;color:var(--ink-2)}
+.mixlegend div{display:flex;align-items:center;gap:6px}
+.mixlegend b{margin-left:auto;font-family:var(--font-mono);font-weight:400;color:var(--ink)}
+.res{display:grid;grid-template-columns:52px 1fr 64px;gap:6px 10px;align-items:center;font-size:12px}
+.res .name{color:var(--ink-2)}
+.res .track{height:6px;border-radius:3px;background:var(--panel-3);overflow:hidden}
+.res .fill{height:100%;background:var(--ink-2);border-radius:3px}
+.res .fill.low{background:var(--status-serious)}
+.res .pct{text-align:right;font-family:var(--font-mono);color:var(--ink)}
+.res .pct.low{color:var(--status-serious)}
+.note{font-size:12px;color:var(--ink-3);margin:6px 0 0}
+
+.nat{border:1px solid var(--line);border-radius:6px;padding:10px 12px;margin-bottom:8px;cursor:pointer;background:var(--panel)}
+.nat:hover{background:var(--panel-2)}
+.nat[aria-expanded="true"]{background:var(--panel-2);border-color:var(--ink-3)}
+.nat .top{display:flex;align-items:center;gap:8px}
+.nat .nm{font-weight:500;font-size:14px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nat .pp{font-family:var(--font-mono);font-size:13px;color:var(--ink)}
+.nat .sub{display:flex;gap:10px;font-size:12px;color:var(--ink-3);margin-top:4px;flex-wrap:wrap}
+.nat .war{color:var(--blood)}
+.nat .prog{margin-top:8px;display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ink-2)}
+.nat .prog .track{flex:1;height:4px;border-radius:2px;background:var(--panel-3);overflow:hidden}
+.nat .prog .fill{height:100%;background:var(--sea)}
+.nat .more{margin-top:10px;padding-top:10px;border-top:1px solid var(--line);display:grid;grid-template-columns:auto 1fr;gap:3px 12px;font-size:12px}
+.nat .more dt{color:var(--ink-3)}
+.nat .more dd{margin:0;text-align:right;font-family:var(--font-mono);color:var(--ink)}
+.dead{opacity:.55}
+
+.era-group{margin-bottom:16px}
+.era-group h4{margin:0 0 8px;font-size:12px;font-weight:500;color:var(--ink-2);letter-spacing:.08em;display:flex;justify-content:space-between}
+.era-group h4 span{color:var(--ink-3);font-weight:400;letter-spacing:0}
+.techs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+.tech{position:relative;border:1px solid var(--line);border-radius:6px;padding:7px 9px 8px;background:var(--panel);overflow:hidden;min-width:0}
+.tech .tn{font-size:13px;color:var(--ink-3)}
+.tech .tw{font-size:11px;color:var(--ink-3);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tech .tb{position:absolute;left:0;bottom:0;height:2px;background:var(--sea)}
+.tech.known{border-color:#2b4f6a;background:#0f2034}
+.tech.known .tn{color:var(--ink)}
+.tech.known .tw{color:var(--ink-2)}
+.tech.cur{border-color:var(--sea)}
+.techhead{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:12px;font-size:12px;color:var(--ink-2)}
+.techhead select{background:var(--panel-2);color:var(--ink);border:1px solid var(--line);border-radius:6px;height:30px;padding:0 8px;font:inherit;font-size:12px;max-width:60%}
+
+.chips{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:12px}
+.chips button{height:26px;padding:0 10px;border-radius:999px;border:1px solid var(--line);background:var(--panel);cursor:pointer;font-size:12px;color:var(--ink-2)}
+.chips button[aria-pressed="true"]{border-color:var(--sodium);color:var(--sodium)}
+.log{list-style:none;margin:0;padding:0}
+.log li{display:grid;grid-template-columns:76px 10px 1fr;gap:8px;padding:7px 0;border-bottom:1px solid var(--line);font-size:13px;align-items:baseline}
+.log .y{font-family:var(--font-mono);font-size:12px;color:var(--ink-3);text-align:right}
+.log .dot{width:7px;height:7px;border-radius:50%;align-self:center}
+.log .t{color:var(--ink);min-width:0}
+.log li[data-cell]{cursor:pointer}
+.log li[data-cell]:hover .t{color:var(--sodium)}
+
+/* ---------- phone ---------- */
+@media (max-width:900px){
+  body{overflow:auto}
+  .app{grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto auto;height:auto;min-height:100%}
+  .stage{height:66vh;min-height:380px}
+  .rail{border-left:0;border-top:1px solid var(--line)}
+  .pane{overflow:visible}
+  .clock{justify-content:flex-start;order:3;flex-basis:100%}
+  .ctrl{margin-left:auto}
+  .ticker{max-width:calc(100% - 32px);width:max-content;top:76px;font-size:12px}
+  .god .tools{flex-direction:row;flex-wrap:wrap}
+  .god button{min-width:0}
+  .insp{top:auto;bottom:14px;left:max(16px,env(safe-area-inset-left,0px));right:max(16px,env(safe-area-inset-right,0px));width:auto;max-height:55%;overflow:auto;z-index:4}
+}
+@media (max-width:520px){
+  .seg button{padding:0 8px}
+  .brand h1{font-size:19px}
+  .year{font-size:19px}
+}
+@media (prefers-reduced-motion:reduce){
+  .ticker,.banner{transition:none}
+}
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <header class="bar">
+    <div class="brand">
+      <h1>蓝星纪元</h1>
+      <p class="sub">一颗自己运转的星球 · 世界种子 <span class="mono" id="seedLabel"></span></p>
+    </div>
+    <div class="clock">
+      <div class="year mono" id="yearLabel">公元前 3500 年</div>
+      <div class="era" id="eraLabel"></div>
+    </div>
+    <div class="ctrl">
+      <button class="btn icon" id="btnPlay" aria-label="暂停" title="暂停 / 继续（空格）"></button>
+      <div class="seg" id="speedSeg" role="group" aria-label="模拟速度">
+        <button data-speed="auto" aria-pressed="true" title="按时代自动调节">自动</button>
+        <button data-speed="2" aria-pressed="false" title="每秒 2 年">慢</button>
+        <button data-speed="10" aria-pressed="false" title="每秒 10 年">中</button>
+        <button data-speed="40" aria-pressed="false" title="每秒 40 年">快</button>
+        <button data-speed="150" aria-pressed="false" title="每秒 150 年">极速</button>
+      </div>
+      <button class="btn" id="btnNew" title="用新的种子生成另一颗星球">新世界</button>
+    </div>
+  </header>
+
+  <main class="stage" id="stage">
+    <canvas id="view" aria-label="行星视图。拖动旋转，滚轮缩放，点击城市查看详情。"></canvas>
+    <div class="overlay ticker" id="ticker" data-empty="1" aria-live="polite"></div>
+    <div class="overlay god" id="god">
+      <span class="lbl">上帝之手</span>
+      <div class="tools">
+        <button data-tool="inspire" aria-pressed="false" title="点击一座城市，让它的国家获得科研灵感">灵感</button>
+        <button data-tool="plague" aria-pressed="false" title="点击一座城市，向它的国家降下瘟疫">瘟疫</button>
+        <button data-tool="meteor" aria-pressed="false" title="点击任意位置，召唤一颗陨石">陨石</button>
+        <button data-tool="seed" aria-pressed="false" title="点击无人陆地，播下一个新文明">播种文明</button>
+      </div>
+      <span class="hint" id="toolHint" hidden></span>
+    </div>
+    <div class="overlay dock">
+      <div class="legend" id="legend" hidden></div>
+      <div class="row">
+        <div class="seg" id="layerSeg" role="group" aria-label="图层">
+          <button data-layer="0" aria-pressed="true">自然</button>
+          <button data-layer="1" aria-pressed="false">政治</button>
+          <button data-layer="2" aria-pressed="false">资源</button>
+          <button data-layer="3" aria-pressed="false">人口</button>
+          <button data-layer="4" aria-pressed="false">气候</button>
+        </div>
+        <div class="toggles">
+          <label><input type="checkbox" id="tClouds" checked> 云层</label>
+          <label><input type="checkbox" id="tNight" checked> 昼夜</label>
+          <label><input type="checkbox" id="tSpin" checked> 自转</label>
+        </div>
+      </div>
+    </div>
+    <div class="overlay zoom">
+      <button id="zIn" aria-label="放大">+</button>
+      <button id="zOut" aria-label="缩小">−</button>
+    </div>
+    <div class="overlay insp" id="insp" hidden></div>
+    <div class="overlay hovertip" id="hoverTip" hidden></div>
+    <div class="overlay banner" id="banner" hidden></div>
+  </main>
+
+  <aside class="rail">
+    <nav class="tabs" role="tablist">
+      <button role="tab" data-tab="ov" aria-selected="true">总览</button>
+      <button role="tab" data-tab="nat" aria-selected="false">文明</button>
+      <button role="tab" data-tab="tech" aria-selected="false">科技</button>
+      <button role="tab" data-tab="log" aria-selected="false">编年史</button>
+    </nav>
+
+    <section class="pane" id="pane-ov" role="tabpanel">
+      <h3>人类</h3>
+      <div class="kpis">
+        <div class="kpi wide"><span class="k">世界人口</span><span class="v" id="kPop">—</span></div>
+        <div class="kpi"><span class="k">文明</span><span class="v" id="kNat">—</span></div>
+        <div class="kpi"><span class="k">城市</span><span class="v" id="kCity">—</span></div>
+        <div class="kpi"><span class="k">领先时代</span><span class="v" id="kEra">—</span></div>
+        <div class="kpi"><span class="k">工厂</span><span class="v" id="kFac">—</span></div>
+        <div class="kpi"><span class="k">研究所</span><span class="v" id="kLab">—</span></div>
+        <div class="kpi"><span class="k">科研 / 年</span><span class="v" id="kRP">—</span></div>
+      </div>
+      <div class="sparkhead"><span>世界人口</span><b id="sPop"></b></div>
+      <div class="spark"><canvas id="chPop"></canvas><div class="tip" hidden></div></div>
+
+      <h3>大气与气候</h3>
+      <div class="kpis">
+        <div class="kpi"><span class="k">CO₂</span><span class="v" id="kCO2">—</span></div>
+        <div class="kpi"><span class="k">气温变化</span><span class="v" id="kT">—</span></div>
+        <div class="kpi"><span class="k">海平面</span><span class="v" id="kSea">—</span></div>
+      </div>
+      <div class="sparkhead"><span>CO₂ 浓度（ppm）</span><b id="sCO2"></b></div>
+      <div class="spark"><canvas id="chCO2"></canvas><div class="tip" hidden></div></div>
+      <div class="sparkhead"><span>全球气温变化（°C，相对工业化前）</span><b id="sT"></b></div>
+      <div class="spark"><canvas id="chT"></canvas><div class="tip" hidden></div></div>
+
+      <h3>能源结构 <small id="mixNote"></small></h3>
+      <div id="mix"></div>
+
+      <h3>自然资源 <small>剩余储量</small></h3>
+      <div class="res" id="resBars"></div>
+
+      <div id="spaceBlock" hidden>
+        <h3>太空</h3>
+        <div class="kpis">
+          <div class="kpi"><span class="k">在轨卫星</span><span class="v" id="kSat">0</span></div>
+          <div class="kpi"><span class="k">轨道人口</span><span class="v" id="kOrb">0</span></div>
+          <div class="kpi"><span class="k">星际方舟</span><span class="v" id="kShip">0</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="pane" id="pane-nat" role="tabpanel" hidden>
+      <div id="natList"></div>
+    </section>
+
+    <section class="pane" id="pane-tech" role="tabpanel" hidden>
+      <div class="techhead">
+        <span id="techSummary"></span>
+        <select id="techWho" aria-label="查看对象"></select>
+      </div>
+      <div id="techTree"></div>
+    </section>
+
+    <section class="pane" id="pane-log" role="tabpanel" hidden>
+      <div class="chips" id="logFilter"></div>
+      <ol class="log" id="logList"></ol>
+    </section>
+  </aside>
+</div>
+
+<script>
+(() => {
+'use strict';
+
+/* =====================================================================
+   Constants & helpers
+   ===================================================================== */
+const TAU = Math.PI * 2, PI = Math.PI;
+const W = 192, H = 96, N = W * H;          // simulation grid (1.875° cells)
+const TS = 4, TW = W * TS, TH = H * TS, TN = TW * TH;   // render texture
+const CW = 1024, CH = 512;                  // cloud texture (upsampled from 512×256 noise)
+const START_YEAR = -3500;
+const MAX_CITIES = 380;
+
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+const pick = arr => arr[(rand() * arr.length) | 0];
+const $ = id => document.getElementById(id);
+
+function mulberry32(a) {
+  return function () {
+    a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+// simulation RNG keeps its state on S so a snapshot can resume it
+function rand() {
+  let a = (S.rng = (S.rng + 0x6D2B79F5) | 0);
+  let t = Math.imul(a ^ (a >>> 15), 1 | a);
+  t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+}
+
+function makeNoise(rnd) {
+  const p = new Uint8Array(512), perm = [];
+  for (let i = 0; i < 256; i++) perm.push(i);
+  for (let i = 255; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); const t = perm[i]; perm[i] = perm[j]; perm[j] = t; }
+  for (let i = 0; i < 512; i++) p[i] = perm[i & 255];
+  const fade = t => t * t * t * (t * (t * 6 - 15) + 10);
+  const grad = (h, x, y, z) => { const u = h < 8 ? x : y, v = h < 4 ? y : (h === 12 || h === 14 ? x : z); return ((h & 1) ? -u : u) + ((h & 2) ? -v : v); };
+  return function (x, y, z) {
+    const fx = Math.floor(x), fy = Math.floor(y), fz = Math.floor(z);
+    const X = fx & 255, Y = fy & 255, Z = fz & 255;
+    x -= fx; y -= fy; z -= fz;
+    const u = fade(x), v = fade(y), w = fade(z);
+    const A = p[X] + Y, AA = p[A] + Z, AB = p[A + 1] + Z, B2 = p[X + 1] + Y, BA = p[B2] + Z, BB = p[B2 + 1] + Z;
+    const l1 = grad(p[AA] & 15, x, y, z) + u * (grad(p[BA] & 15, x - 1, y, z) - grad(p[AA] & 15, x, y, z));
+    const l2 = grad(p[AB] & 15, x, y - 1, z) + u * (grad(p[BB] & 15, x - 1, y - 1, z) - grad(p[AB] & 15, x, y - 1, z));
+    const l3 = grad(p[AA + 1] & 15, x, y, z - 1) + u * (grad(p[BA + 1] & 15, x - 1, y, z - 1) - grad(p[AA + 1] & 15, x, y, z - 1));
+    const l4 = grad(p[AB + 1] & 15, x, y - 1, z - 1) + u * (grad(p[BB + 1] & 15, x - 1, y - 1, z - 1) - grad(p[AB + 1] & 15, x, y - 1, z - 1));
+    const m1 = l1 + v * (l2 - l1), m2 = l3 + v * (l4 - l3);
+    return m1 + w * (m2 - m1);
+  };
+}
+function fbm(nz, x, y, z, oct) {
+  let s = 0, a = 0.5, f = 1, t = 0;
+  for (let i = 0; i < oct; i++) { s += a * nz(x * f, y * f, z * f); t += a; a *= 0.5; f *= 2.03; }
+  return s / t;
+}
+
+const CELL_LAT = new Float32Array(H), COSLAT = new Float32Array(H), AMP_CELL = new Float32Array(H), AMP_TEX = new Float32Array(TH);
+for (let y = 0; y < H; y++) { const lat = PI / 2 - (y + 0.5) / H * PI; CELL_LAT[y] = lat; COSLAT[y] = Math.cos(lat); AMP_CELL[y] = 1 + 1.6 * Math.abs(Math.sin(lat)); }
+for (let y = 0; y < TH; y++) { const lat = PI / 2 - (y + 0.5) / TH * PI; AMP_TEX[y] = 1 + 1.6 * Math.abs(Math.sin(lat)); }
+const cellLon = x => (x + 0.5) / W * TAU - PI;
+
+function cellDist(i, j) {
+  const yi = (i / W) | 0, xi = i - yi * W, yj = (j / W) | 0, xj = j - yj * W;
+  let dx = Math.abs(xi - xj); if (dx > W / 2) dx = W - dx;
+  const cl = Math.cos((CELL_LAT[yi] + CELL_LAT[yj]) / 2);
+  const ddx = dx * cl, ddy = yi - yj;
+  return Math.sqrt(ddx * ddx + ddy * ddy);
+}
+
+/* =====================================================================
+   Biomes, resources, technology
+   ===================================================================== */
+const B = { DEEP: 0, SHALLOW: 1, ICE: 2, TUNDRA: 3, TAIGA: 4, FOREST: 5, GRASS: 6, DESERT: 7, SAVANNA: 8, JUNGLE: 9, MOUNTAIN: 10, STEPPE: 11 };
+const BIOME_NAME = ['深海', '浅海', '冰原', '苔原', '针叶林', '温带森林', '草原', '沙漠', '稀树草原', '热带雨林', '山地', '干草原'];
+const BIOME_FERT = [0, 0, 0, 0.08, 0.32, 0.8, 1.0, 0.04, 0.62, 0.6, 0.12, 0.45];
+const BIOME_FOREST = [0, 0, 0, 0, 0.85, 0.8, 0.06, 0, 0.25, 0.95, 0.1, 0.02];
+const FARMABLE = [0, 0, 0, 0, 1, 1, 1, 0, 1, 1, 0, 1];
+// cleared / forested colours per biome
+const CLR = [[0,0,0],[0,0,0],[232,238,244],[132,128,108],[112,122,88],[132,148,82],[124,152,70],[212,184,128],[176,160,86],[118,140,68],[116,106,96],[166,156,104]];
+const FOR = [[0,0,0],[0,0,0],[232,238,244],[132,128,108],[40,78,56],[48,100,46],[110,142,62],[212,184,128],[122,136,60],[26,88,40],[96,98,84],[160,152,100]];
+const FARM_A = [176, 166, 96], FARM_B = [120, 150, 70];
+
+const RES = ['coal', 'oil', 'iron', 'uran', 'rare'];
+const RES_NAME = { coal: '煤炭', oil: '石油', iron: '铁矿', uran: '铀矿', rare: '稀土' };
+const RES_RGB = { coal: [210, 210, 214], oil: [229, 90, 150], iron: [236, 120, 60], uran: [140, 228, 90], rare: [80, 206, 236] };
+const RES_TOTAL = { coal: 520000, oil: 260000, iron: 330000, uran: 26000, rare: 30000 };
+
+const ERA_NAME = ['远古', '古典', '中世纪', '文艺复兴', '工业', '现代', '信息', '未来'];
+const COST = [3000, 30000, 43000, 72000, 40000, 70000, 330000, 3600000];
+// reference start year of each era; research slows when the world runs ahead of it and speeds up a little when behind
+const ERA_REF = [-3500, -1000, 500, 1450, 1760, 1890, 1975, 2035, 2250];
+
+const TECHS = [];
+function T(id, name, era, req, desc, fx) { TECHS.push({ id, name, era, req, desc, fx, idx: TECHS.filter(t => t.era === era).length }); }
+T('agri', '农业', 0, [], '驯化作物，人类开始定居', m => {});
+T('bronze', '青铜冶炼', 0, ['agri'], '铜锡合金，第一批矿山出现', m => { m.mil *= 1.4; m.mine = 1; });
+T('writing', '文字', 0, ['agri'], '知识第一次被记录下来', m => { m.sci *= 1.5; m.lab += 0.3; });
+T('wheel', '车轮', 0, ['agri'], '陆路运输让疆域扩张', m => { m.range += 1.5; });
+T('iron', '铁器', 1, ['bronze'], '铁制农具与兵器普及', m => { m.food *= 1.3; m.mil *= 1.5; });
+T('irrigation', '灌溉', 1, ['agri', 'wheel'], '水渠把干旱土地变成良田', m => { m.food *= 1.3; m.dry = 1; });
+T('math', '数学', 1, ['writing'], '几何与算术奠定科学基础', m => { m.sci *= 1.3; });
+T('sailing', '航海', 1, ['wheel'], '帆船开始跨越近海', m => { m.sea = 12; m.fish *= 1.6; });
+T('philosophy', '哲学', 1, ['math'], '百家争鸣，思想启蒙', m => { m.sci *= 1.2; m.stab += 0.15; });
+T('croprot', '轮作制', 2, ['iron', 'irrigation'], '土地休养生息，产量倍增', m => { m.food *= 1.4; });
+T('astronomy', '天文学', 2, ['math', 'sailing'], '观星定位，历法精确', m => { m.sci *= 1.2; m.sea = Math.max(m.sea, 20); });
+T('paper', '造纸术', 2, ['writing'], '廉价的书写材料', m => { m.sci *= 1.2; m.lab += 0.2; });
+T('printing', '印刷术', 2, ['paper', 'philosophy'], '知识开始大规模传播', m => { m.sci *= 1.4; m.diff *= 1.3; });
+T('gunpowder', '火药', 2, ['iron'], '战争的形态被彻底改变', m => { m.mil *= 2; });
+T('navigation', '远洋航行', 3, ['astronomy'], '罗盘与大帆船开启环球航行', m => { m.sea = 70; m.fish *= 1.3; });
+T('scimethod', '科学方法', 3, ['printing', 'astronomy'], '实验与理性取代教条', m => { m.sci *= 1.6; m.lab += 0.5; });
+T('banking', '银行', 3, ['printing'], '资本积累为工业铺路', m => { m.sci *= 1.1; m.stab += 0.1; });
+T('anatomy', '解剖学', 3, ['scimethod'], '近代医学起步', m => { m.growth += 0.002; m.plague *= 0.8; });
+T('steam', '蒸汽机', 4, ['scimethod', 'banking'], '工业革命，第一批工厂冒出浓烟', m => { m.ind = 1; m.food *= 1.1; });
+T('rail', '铁路', 4, ['steam'], '钢铁动脉把城市连在一起', m => { m.ind *= 1.3; m.food *= 1.4; m.range += 2; m.rail = 1; m.rate *= 1.5; });
+T('vaccine', '疫苗', 4, ['anatomy'], '天花不再可怕', m => { m.growth += 0.006; m.plague *= 0.5; });
+T('electricity', '电力', 4, ['steam'], '电灯照亮了夜晚', m => { m.ind *= 1.4; m.sci *= 1.2; m.light = 1; });
+T('fertilizer', '化肥', 4, ['electricity', 'croprot'], '合成氨养活数十亿人', m => { m.food *= 4.5; });
+T('combustion', '内燃机', 5, ['electricity'], '石油时代来临，拖拉机开进农田', m => { m.ind *= 1.3; m.oil = 1; m.rate *= 1.5; m.food *= 1.3; });
+T('antibiotics', '抗生素', 5, ['vaccine', 'fertilizer'], '青霉素拯救了亿万生命', m => { m.growth += 0.008; m.plague *= 0.4; });
+T('flight', '航空', 5, ['combustion'], '天涯若比邻', m => { m.diff *= 1.3; m.range += 2; });
+T('nuclear', '核裂变', 5, ['electricity', 'scimethod'], '原子之力：电站与威慑', m => { m.nuke = 1; m.mil *= 2; });
+T('computer', '计算机', 5, ['electricity', 'math'], '电子大脑诞生', m => { m.sci *= 1.8; m.lab += 0.6; });
+T('rocketry', '航天', 5, ['flight', 'computer'], '人造卫星升空', m => { m.space = 1; });
+T('internet', '互联网', 6, ['computer'], '全球即时互联', m => { m.sci *= 1.5; m.diff *= 1.6; m.peace *= 0.5; m.birth *= 0.82; });
+T('renewables', '可再生能源', 6, ['computer', 'electricity'], '风电与光伏开始替代煤炭', m => { m.renew = 1; });
+T('genetics', '基因工程', 6, ['antibiotics', 'computer'], '第二次绿色革命', m => { m.food *= 2; m.plague *= 0.6; });
+T('ai', '人工智能', 6, ['internet'], '机器开始思考', m => { m.sci *= 2; m.ind *= 1.3; m.rate *= 1.4; m.birth *= 0.85; });
+T('ccs', '碳捕集', 7, ['renewables', 'fertilizer'], '把二氧化碳从天空中取回来', m => { m.ccs = 1; });
+T('fusion', '可控核聚变', 7, ['nuclear', 'ai'], '人造太阳带来无尽的清洁能源', m => { m.fusion = 1; m.ind *= 1.3; });
+T('nanotech', '纳米技术', 7, ['ai', 'genetics'], '原子尺度的制造', m => { m.ind *= 1.4; m.food *= 1.3; });
+T('spacecol', '轨道城市', 7, ['rocketry', 'fusion'], '人类开始移居近地轨道', m => { m.orbital = 1; });
+T('warp', '星际航行', 7, ['spacecol', 'nanotech'], '方舟驶向群星', m => { m.warp = 1; });
+const TECH_BY_ID = Object.fromEntries(TECHS.map(t => [t.id, t]));
+
+function computeMult(n) {
+  const m = { food: 1, sci: 1, ind: 0, mil: 1, growth: 0.008, range: 6, sea: 0, plague: 1, light: 0.18, fish: 1, lab: 0, era: 0,
+    diff: 1, birth: 1, peace: 1, stab: 0, rate: 1, dry: 0, mine: 0, rail: 0, oil: 0, nuke: 0, space: 0, renew: 0, ccs: 0, fusion: 0, orbital: 0, warp: 0, count: 0 };
+  for (const t of TECHS) if (n.techs[t.id] !== undefined) { t.fx(m); if (t.era > m.era) m.era = t.era; m.count++; }
+  return m;
+}
+
+/* =====================================================================
+   Names
+   ===================================================================== */
+const SYL = '阿 巴 卡 达 厄 法 伽 哈 伊 嘉 克 洛 玛 纳 欧 帕 奎 拉 萨 塔 乌 维 沃 夏 亚 泽 辛 莫 雷 索 缇 琉 瑟 赫 诺 兰 贝 米 奥 塞 图 坦 斯 林 安 恩 特 丽 罗 苏 梅 凯 珀 黎 昆 澜 汐 岚 曦 墨 弥 艾 尔 迦 珊 蒂 沙 寒 鸣 青 燕 齐 楚 越 秦 吴'.split(' ');
+const STARS = ['比邻星', '巴纳德星', '天苑四', '天仓五', '罗斯 128', '格利泽 581', '开普勒 452', '波江座 ε', '鲸鱼座 τ', '牛郎星', '织女星', '天狼星'];
+const NATION_COLORS = ['#e8604c', '#4aa8e8', '#f0c04a', '#6fcf86', '#b07ee6', '#ea7fbf', '#49d6c4', '#f2913d', '#97a6ff', '#c3e05a', '#ff7a95', '#5f8dff', '#d9a878', '#9fe3ff', '#ffd2a0', '#8ec63f', '#e0e0e0', '#c47d5a'];
+function hexRgb(h) { const v = parseInt(h.slice(1), 16); return [(v >> 16) & 255, (v >> 8) & 255, v & 255]; }
+function uniqueName(make) { for (let k = 0; k < 40; k++) { const s = make(); if (!S.names[s]) { S.names[s] = 1; return s; } } const s = make() + (S.nextCity % 97); S.names[s] = 1; return s; }
+function nationName(era) {
+  const suf = era < 2 ? ['王国', '帝国', '城邦', '部落联盟'] : era < 4 ? ['王国', '帝国', '公国', '共和国'] : ['共和国', '联邦', '合众国', '联合体'];
+  return uniqueName(() => pick(SYL) + pick(SYL) + (rand() < 0.3 ? pick(SYL) : '')) + pick(suf);
+}
+function cityName(i) {
+  const coastal = isCoastal(i), mtn = nearBiome(i, B.MOUNTAIN, 2);
+  const suf = coastal ? ['港', '湾', '城', '津', ''] : mtn ? ['岭', '堡', '城', '关', ''] : ['城', '原', '州', '镇', '堡', '谷', ''];
+  return uniqueName(() => pick(SYL) + pick(SYL) + pick(suf));
+}
+
+/* =====================================================================
+   World generation (static, deterministic from seed)
+   ===================================================================== */
+let WORLD = null, S = null;
+
+function genWorld(seed) {
+  const rnd = mulberry32(seed);
+  const nE = makeNoise(rnd), nW = makeNoise(rnd), nM = makeNoise(rnd), nT = makeNoise(rnd), nR = makeNoise(rnd), nC = makeNoise(rnd);
+  const o1 = rnd() * 50, o2 = rnd() * 50, o3 = rnd() * 50;
+  const raw = new Float32Array(TN), mo = new Float32Array(TN), tn = new Float32Array(TN);
+  for (let ty = 0; ty < TH; ty++) {
+    const lat = PI / 2 - (ty + 0.5) / TH * PI, sl = Math.sin(lat), cl = Math.cos(lat);
+    for (let tx = 0; tx < TW; tx++) {
+      const lon = (tx + 0.5) / TW * TAU - PI;
+      const x = cl * Math.cos(lon), y = sl, z = cl * Math.sin(lon);
+      const wv = fbm(nW, x * 1.5 + o1, y * 1.5 + o2, z * 1.5 + o3, 3);
+      const ti = ty * TW + tx;
+      raw[ti] = fbm(nE, x * 1.2 + wv * 0.9 + o1, y * 1.2 + wv * 0.9 + o2, z * 1.2 - wv * 0.9 + o3, 8);
+      mo[ti] = fbm(nM, x * 2.1 + o3, y * 2.1 + o1, z * 2.1 + o2, 4);
+      tn[ti] = nT(x * 1.7 + o2, y * 1.7 + o3, z * 1.7 + o1);
+    }
+  }
+  // sea level at the 70th percentile → ~30% land
+  const sample = [];
+  for (let i = 0; i < TN; i += 7) sample.push(raw[i]);
+  sample.sort((a, b) => a - b);
+  const sea = sample[(sample.length * 0.70) | 0], lo = sample[0], hi = sample[sample.length - 1];
+  const tElev = new Float32Array(TN), tT = new Float32Array(TN), tM = new Float32Array(TN), tBiome = new Uint8Array(TN);
+  const tHash = new Uint8Array(TN), tHash2 = new Uint8Array(TN), tShade = new Float32Array(TN);
+  for (let i = 0; i < TN; i++) {
+    const e = raw[i];
+    tElev[i] = e > sea ? (e - sea) / (hi - sea) : (e - sea) / (sea - lo);
+    let h = Math.imul(i ^ (seed * 7919), 2654435761) >>> 0; h ^= h >>> 15; h = Math.imul(h, 2246822519) >>> 0; h ^= h >>> 13;
+    tHash[i] = h & 255; tHash2[i] = (h >>> 8) & 255;
+  }
+  const landSample = [];
+  for (let i = 0; i < TN; i += 5) if (tElev[i] > 0) landSample.push(tElev[i]);
+  landSample.sort((a, b) => a - b);
+  const mtn = landSample[(landSample.length * 0.93) | 0] || 0.6;
+  for (let ty = 0; ty < TH; ty++) {
+    const lat = PI / 2 - (ty + 0.5) / TH * PI, cl = Math.cos(lat), latDeg = Math.abs(lat * 180 / PI);
+    for (let tx = 0; tx < TW; tx++) {
+      const i = ty * TW + tx, e = tElev[i], el = Math.max(0, e);
+      tT[i] = -26 + 54 * Math.pow(cl, 1.35) - el * 30 + tn[i] * 6;
+      tM[i] = clamp(0.5 + 0.95 * mo[i] + 0.2 * Math.cos(latDeg * PI / 30) - el * 0.25, 0, 1);
+      tBiome[i] = e > 0 ? classify(e, tT[i], tM[i], mtn) : (e > -0.1 ? B.SHALLOW : B.DEEP);
+    }
+  }
+  for (let ty = 0; ty < TH; ty++) for (let tx = 0; tx < TW; tx++) {
+    const i = ty * TW + tx;
+    if (tElev[i] <= 0) { tShade[i] = 1; continue; }
+    const l = tElev[ty * TW + (tx + TW - 1) % TW], r = tElev[ty * TW + (tx + 1) % TW];
+    const u = tElev[Math.max(0, ty - 1) * TW + tx], d = tElev[Math.min(TH - 1, ty + 1) * TW + tx];
+    tShade[i] = clamp(1 + ((r - l) + (d - u)) * 7, 0.72, 1.3);
+  }
+  // simulation cells = 4×4 texel averages
+  const elev = new Float32Array(N), cT = new Float32Array(N), moist = new Float32Array(N), biome = new Uint8Array(N);
+  const fert0 = new Float32Array(N), forest0 = new Float32Array(N), fish = new Float32Array(N);
+  const minTE = new Float32Array(N), minTT = new Float32Array(N);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    let se = 0, st = 0, sm = 0, mn = 9, mt = 99;
+    for (let sy = 0; sy < TS; sy++) for (let sx = 0; sx < TS; sx++) {
+      const ti = (y * TS + sy) * TW + x * TS + sx;
+      se += tElev[ti]; st += tT[ti]; sm += tM[ti]; if (tElev[ti] < mn) mn = tElev[ti]; if (tT[ti] < mt) mt = tT[ti];
+    }
+    const i = y * W + x, k = TS * TS;
+    elev[i] = se / k; cT[i] = st / k; moist[i] = sm / k; minTE[i] = mn; minTT[i] = mt;
+    biome[i] = elev[i] > 0 ? classify(elev[i], cT[i], moist[i], mtn) : (elev[i] > -0.1 ? B.SHALLOW : B.DEEP);
+    fert0[i] = BIOME_FERT[biome[i]] * (0.75 + 0.5 * moist[i]);
+    forest0[i] = BIOME_FOREST[biome[i]];
+  }
+  // fish & mineral deposits
+  const res0 = {}; for (const r of RES) res0[r] = new Float32Array(N);
+  const cand = { coal: [], oil: [], iron: [], uran: [], rare: [] };
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const i = y * W + x, lat = CELL_LAT[y], lon = cellLon(x), cl = Math.cos(lat);
+    const px = cl * Math.cos(lon), py = Math.sin(lat), pz = cl * Math.sin(lon);
+    const b = biome[i], land = elev[i] > 0;
+    if (b === B.SHALLOW) fish[i] = clamp(0.45 + 0.6 * fbm(nR, px * 4, py * 4, pz * 4, 2) + (Math.abs(lat) > 0.6 ? 0.15 : 0), 0.1, 1);
+    if (land && b !== B.ICE) {
+      if ([B.FOREST, B.TAIGA, B.GRASS, B.STEPPE, B.TUNDRA].includes(b) && elev[i] < 0.5) cand.coal.push([i, fbm(nC, px * 3 + 5, py * 3, pz * 3, 3)]);
+      if ([B.DESERT, B.STEPPE, B.TUNDRA, B.SAVANNA, B.JUNGLE].includes(b)) cand.oil.push([i, fbm(nR, px * 3.3, py * 3.3 + 7, pz * 3.3, 3)]);
+      if (elev[i] > 0.1) cand.iron.push([i, fbm(nW, px * 4 + 3, py * 4, pz * 4 - 3, 3)]);
+      cand.uran.push([i, fbm(nM, px * 5 + 9, py * 5, pz * 5, 3)]);
+      if (elev[i] > 0.06) cand.rare.push([i, fbm(nT, px * 5 + 11, py * 5, pz * 5, 3)]);
+    }
+    if (b === B.SHALLOW) cand.oil.push([i, fbm(nR, px * 3.3, py * 3.3 + 7, pz * 3.3, 3) - 0.04]);
+  }
+  const share = { coal: 0.16, oil: 0.13, iron: 0.14, uran: 0.05, rare: 0.06 };
+  const resTotal = {};
+  for (const r of RES) {
+    const c = cand[r].sort((a, b) => b[1] - a[1]);
+    const k = Math.max(4, (c.length * share[r]) | 0), thr = c[Math.min(k, c.length - 1)][1], top = c[0][1];
+    let sum = 0;
+    for (let j = 0; j < k && j < c.length; j++) { const v = 0.35 + (c[j][1] - thr) / (top - thr + 1e-6); res0[r][c[j][0]] = v; sum += v; }
+    const scale = RES_TOTAL[r] / sum;
+    for (let i = 0; i < N; i++) res0[r][i] *= scale;
+    resTotal[r] = RES_TOTAL[r];
+  }
+  // clouds
+  const CW0 = 512, CH0 = 256, craw = new Float32Array(CW0 * CH0);
+  for (let y = 0; y < CH0; y++) {
+    const lat = PI / 2 - (y + 0.5) / CH0 * PI, sl = Math.sin(lat), cl = Math.cos(lat), ld = Math.abs(lat * 180 / PI);
+    const band = 0.08 * Math.exp(-ld * ld / 60) + 0.1 * Math.exp(-(ld - 52) * (ld - 52) / 120) - 0.08 * Math.exp(-(ld - 25) * (ld - 25) / 80);
+    for (let x = 0; x < CW0; x++) {
+      const lon = (x + 0.5) / CW0 * TAU - PI;
+      craw[y * CW0 + x] = fbm(nC, cl * Math.cos(lon) * 2.6 + 3, sl * 2.6 * 1.4, cl * Math.sin(lon) * 2.6 - 3, 6) + band;
+    }
+  }
+  const cloud = new Uint8Array(CW * CH);
+  for (let y = 0; y < CH; y++) {
+    const sy = clamp((y + 0.5) / CH * CH0 - 0.5, 0, CH0 - 1), y0 = Math.floor(sy), y1 = Math.min(CH0 - 1, y0 + 1), fy = sy - y0;
+    for (let x = 0; x < CW; x++) {
+      const sx = (x + 0.5) / CW * CW0 - 0.5, xf = Math.floor(sx), fx = sx - xf;
+      const x0 = (xf + CW0) % CW0, x1 = (x0 + 1) % CW0;
+      const a = craw[y0 * CW0 + x0] + (craw[y0 * CW0 + x1] - craw[y0 * CW0 + x0]) * fx;
+      const b = craw[y1 * CW0 + x0] + (craw[y1 * CW0 + x1] - craw[y1 * CW0 + x0]) * fx;
+      cloud[y * CW + x] = Math.round(smooth(0.03, 0.3, a + (b - a) * fy) * 225);
+    }
+  }
+  return { seed, tElev, tT, tBiome, tHash, tHash2, tShade, elev, cT, moist, biome, fert0, forest0, fish, res0, resTotal, minTE, minTT, cloud, mtn };
+}
+
+function classify(e, T, m, mtn) {
+  if (T < -10) return B.ICE;
+  if (e > mtn) return B.MOUNTAIN;
+  if (T < -2) return B.TUNDRA;
+  if (T < 5) return m > 0.42 ? B.TAIGA : B.STEPPE;
+  if (T < 18) return m < 0.27 ? B.DESERT : m < 0.43 ? B.STEPPE : m < 0.57 ? B.GRASS : B.FOREST;
+  return m < 0.3 ? B.DESERT : m < 0.45 ? B.SAVANNA : m < 0.6 ? B.GRASS : B.JUNGLE;
+}
+
+/* =====================================================================
+   Simulation state
+   ===================================================================== */
+const best = new Float32Array(N);
+const prevOwner = new Int16Array(N);
+
+const isLand = i => WORLD.elev[i] > S.seaRise;
+const isShallow = i => WORLD.elev[i] <= S.seaRise && WORLD.elev[i] > S.seaRise - 0.1;
+const cellTeff = i => WORLD.cT[i] + S.tanom * AMP_CELL[(i / W) | 0];
+function neighbors4(i) { const y = (i / W) | 0, x = i - y * W; const out = [y * W + (x + 1) % W, y * W + (x + W - 1) % W]; if (y > 0) out.push(i - W); if (y < H - 1) out.push(i + W); return out; }
+function isCoastal(i) { for (const j of neighbors4(i)) if (!isLand(j)) return true; return false; }
+function nearBiome(i, b, r) {
+  const y0 = (i / W) | 0, x0 = i - y0 * W;
+  for (let dy = -r; dy <= r; dy++) { const y = y0 + dy; if (y < 0 || y >= H) continue; for (let dx = -r; dx <= r; dx++) if (WORLD.biome[y * W + (x0 + dx + W) % W] === b) return true; }
+  return false;
+}
+
+function newState(seed) {
+  WORLD = genWorld(seed);
+  S = {
+    v: 1, seed, year: START_YEAR, tick: 0, rng: (seed ^ 0x9e3779b9) | 0,
+    co2: 280, tanom: 0, seaRise: 0, co2Peak: 280,
+    cities: [], nations: [], wars: [], log: [], history: [], firsts: {}, names: {}, flags: { maxEra: 0 },
+    forest: WORLD.forest0.slice(), res: {}, owner: new Int16Array(N).fill(-1), cityOf: new Int16Array(N).fill(-1),
+    farm: new Float32Array(N), smog: new Float32Array(N),
+    nextCity: 1, sats: 0, orbital: 0, orbPop: 0, ships: 0, moon: null, moonDue: 0, moonBy: -1, forestFrac: 1,
+    resLeft: {}, deforest: 0, terrDirty: true, borders: [], lastShip: 0,
+  };
+  for (const r of RES) { S.res[r] = WORLD.res0[r].slice(); S.resLeft[r] = WORLD.resTotal[r]; }
+  seedCivs();
+}
+
+function seedCivs() {
+  const starts = [];
+  for (let minD = 24; starts.length < 7 && minD > 8; minD -= 4) {
+    for (let t = 0; t < 6000 && starts.length < 7; t++) {
+      const i = (rand() * N) | 0; if (!isLand(i)) continue;
+      const y = (i / W) | 0; if (Math.abs(CELL_LAT[y]) > 0.95) continue;
+      if (WORLD.fert0[i] < 0.55 || WORLD.biome[i] === B.MOUNTAIN) continue;
+      if (starts.some(j => cellDist(i, j) < minD)) continue;
+      starts.push(i);
+    }
+  }
+  S.firsts.agri = { n: -1, name: '各部落', y: START_YEAR };
+  for (const i of starts) { const n = createNation(null); createCity(i, n.id, 150000 + rand() * 100000, true); }
+  log('civ', `${starts.length} 个部落在大河两岸定居，人类文明由此开始`, starts[0]);
+}
+
+function createNation(techsFrom) {
+  const id = S.nations.length;
+  const col = NATION_COLORS[id % NATION_COLORS.length];
+  const n = {
+    id, name: nationName(techsFrom ? 2 : 0), color: col, rgb: hexRgb(col), techs: techsFrom ? Object.assign({}, techsFrom) : { agri: S.year },
+    research: 0, target: null, alive: true, born: S.year, aggr: 0.4 + rand() * 1.2, stab: rand(),
+    renew: 0, fusion: 0, nuke: 0, ccs: 0, golden: 0, capital: -1, crisis: -999, rr: 0,
+    st: { pop: 0, cities: 0, fac: 0, labs: 0, rp: 0, E: 0, emit: 0, cap: 0, sat: 1, ironSat: 1, rareSat: 1, newFac: 0, mix: [0, 0, 0, 0, 0] },
+  };
+  n.mult = computeMult(n);
+  n.dep = { coal: [], oil: [], iron: [], uran: [], rare: [] };
+  n.cl = [];
+  S.nations.push(n);
+  return n;
+}
+
+function createCity(i, nid, pop, isCap) {
+  const y = (i / W) | 0, x = i - y * W;
+  const c = {
+    id: S.nextCity++, name: cityName(i), n: nid, x, y, i, pop, born: S.year, fac: 0, labs: 0, cap: !!isCap,
+    K: pop * 1.5, fertSum: 0, fishSum: 0, cells: 0, mines: 0, rp: 0, goods: 0, coastal: isCoastal(i), drought: 0, smog: 0,
+    lat: CELL_LAT[y] + (rand() - 0.5) * 0.02, lon: cellLon(x) + (rand() - 0.5) * 0.02, links: [],
+  };
+  S.cities.push(c);
+  if (isCap) S.nations[nid].capital = c.id;
+  S.terrDirty = true;
+  return c;
+}
+
+/* ---------- log ---------- */
+const TYPE_COLOR = { tech: '--sea', war: '--blood', disaster: '--ember', climate: '--leaf', space: '--violet', civ: '--sodium' };
+const TYPE_NAME = { tech: '科技', war: '战争', disaster: '灾害', climate: '气候', space: '太空', civ: '文明' };
+let logVersion = 0;
+function log(type, text, cell, major = true) {
+  S.log.unshift({ y: S.year, t: type, s: text, i: cell ?? -1 });
+  if (S.log.length > 400) S.log.length = 400;
+  logVersion++;
+  if (!booting) {
+    if (cell !== undefined && cell >= 0) addFx(cell, type);
+    if (major) showTicker(type, text);
+  }
+}
+
+/* =====================================================================
+   Territory
+   ===================================================================== */
+function cityRadius(c) { return clamp(1.25 + Math.sqrt(c.pop / 160000) * 0.42, 1.25, 6.5); }
+
+function territory() {
+  S.terrDirty = false;
+  prevOwner.set(S.owner);
+  best.fill(1e9);
+  S.cityOf.fill(-1);
+  const cities = S.cities;
+  for (let ci = 0; ci < cities.length; ci++) {
+    const c = cities[ci], R = cityRadius(c), R2 = R * R, Rs2 = R2 * 0.5, rc = Math.ceil(R);
+    for (let dy = -rc; dy <= rc; dy++) {
+      const y = c.y + dy; if (y < 0 || y >= H) continue;
+      const cl = COSLAT[y], rx = Math.min(W / 2 - 1, Math.ceil(R / Math.max(cl, 0.2)));
+      for (let dx = -rx; dx <= rx; dx++) {
+        const i = y * W + (c.x + dx + W) % W;
+        const ddx = dx * cl, d2 = ddx * ddx + dy * dy;
+        if (d2 > R2) continue;
+        const land = WORLD.elev[i] > S.seaRise;
+        if (!land && (d2 > Rs2 || WORLD.elev[i] < S.seaRise - 0.1)) continue;
+        const sc = Math.sqrt(d2) / R + ci * 1e-6;
+        if (sc < best[i]) { best[i] = sc; S.cityOf[i] = ci; }
+      }
+    }
+  }
+  for (const n of S.nations) { for (const r of RES) n.dep[r].length = 0; }
+  for (const c of cities) { c.cells = 0; c.fertSum = 0; c.fishSum = 0; c.mines = 0; }
+  const bmap = new Map();
+  for (let i = 0; i < N; i++) { const ci = S.cityOf[i]; S.owner[i] = ci >= 0 ? cities[ci].n : -1; }
+  for (let i = 0; i < N; i++) {
+    const ci = S.cityOf[i];
+    const own = S.owner[i];
+    if (own !== prevOwner[i]) { markDirty(i); for (const j of neighbors4(i)) markDirty(j); }
+    let farm = 0, smog = 0;
+    if (ci >= 0) {
+      const c = cities[ci], n = S.nations[own];
+      if (WORLD.elev[i] > S.seaRise) {
+        c.cells++;
+        c.fertSum += fertEff(i, n.mult);
+        farm = FARMABLE[WORLD.biome[i]] ? clamp(c.pop / c.K, 0, 1) * clamp(WORLD.fert0[i] * 1.6, 0.2, 1) : 0;
+        smog = c.smog;
+      } else c.fishSum += WORLD.fish[i];
+      for (const r of RES) if (S.res[r][i] > 0) { n.dep[r].push(i); c.mines++; }
+    }
+    if (Math.abs(farm - S.farm[i]) > 0.08) { S.farm[i] = farm; markDirty(i); }
+    if (Math.abs(smog - S.smog[i]) > 0.08) { S.smog[i] = smog; if (layer === 4) markDirty(i); }
+    // borders between nations
+    if (own >= 0) {
+      const y = (i / W) | 0, x = i - y * W;
+      const o1 = S.owner[y * W + (x + 1) % W];
+      if (o1 >= 0 && o1 !== own) { const k = Math.min(own, o1) * 1000 + Math.max(own, o1); bmap.set(k, (bmap.get(k) || 0) + 1); }
+      if (y > 0) { const o2 = S.owner[i - W]; if (o2 >= 0 && o2 !== own) { const k = Math.min(own, o2) * 1000 + Math.max(own, o2); bmap.set(k, (bmap.get(k) || 0) + 1); } }
+    }
+  }
+  S.borders = [...bmap].map(([k, len]) => [Math.floor(k / 1000), k % 1000, len]);
+  // road links for night lights
+  for (const c of cities) {
+    c.links.length = 0;
+    let a = null, ad = 11, b2 = null, bd = 11;
+    for (const o of cities) {
+      if (o === c || o.n !== c.n) continue;
+      const d = cellDist(c.i, o.i);
+      if (d < ad) { b2 = a; bd = ad; a = o; ad = d; } else if (d < bd) { b2 = o; bd = d; }
+    }
+    if (a) c.links.push(a.id); if (b2) c.links.push(b2.id);
+  }
+}
+
+function fertEff(i, m) {
+  const b = WORLD.biome[i];
+  let f = WORLD.fert0[i];
+  if (b === B.ICE) { if (cellTeff(i) > -9) f = 0.08; else return 0; }
+  if (m.dry && (b === B.DESERT || b === B.STEPPE || b === B.SAVANNA)) f += 0.12;
+  const t = S.tanom;
+  if (t > 0) { const ct = WORLD.cT[i]; f *= ct > 20 ? 1 - 0.08 * t : ct > 10 ? 1 - 0.03 * t : 1 + 0.04 * t; }
+  f *= 1 - S.forest[i] * 0.6;
+  f *= 1 - Math.min(0.5, S.smog[i] * 0.5);
+  return Math.max(0, f);
+}
+
+/* =====================================================================
+   Yearly tick
+   ===================================================================== */
+const CAP_FERT = 170000, CAP_FISH = 50000;
+const COAL_USE = 0.4, OIL_USE = 0.4, U_USE = 0.1, RARE_USE = 0.03, IRON_BUILD = 2, IRON_MAINT = 0.02;
+const EMIT_K = 0.00034;
+
+function tick() {
+  S.tick++;
+  S.year++; if (S.year === 0) S.year = 1;
+  if (S.terrDirty || S.tick % 5 === 0) territory();
+  for (const n of S.nations) n.cl.length = 0;
+  for (const c of S.cities) S.nations[c.n].cl.push(c);
+  for (const c of S.cities) cityTick(c, S.nations[c.n]);
+  for (const n of S.nations) if (n.alive) nationTick(n);
+  warTick();
+  eventsTick();
+  climateTick();
+  spaceTick();
+  if (S.year % 5 === 0) sampleHistory();
+}
+
+function cityTick(c, n) {
+  const m = n.mult;
+  let K = (c.fertSum * CAP_FERT * m.food + c.fishSum * CAP_FISH * m.fish) * (1 + 0.3 * Math.min(1, c.goods));
+  if (m.orbital) K *= 1.1;
+  if (c.drought > 0) { K *= 0.6; c.drought--; }
+  K = Math.max(K * Math.pow(m.birth, 1.3), 15000);
+  c.K = K;
+  const r = m.growth * m.birth * (n.golden > 0 ? 1.15 : 1);
+  if (c.pop < K) c.pop += r * c.pop * (1 - c.pop / K) + 100;
+  else c.pop -= (c.pop - K) * 0.06;
+  // industry
+  if (m.ind > 0) {
+    const target = c.pop / 1e6 * 1.1 * m.ind;
+    let d = target - c.fac;
+    d = d > 0 ? d * 0.05 * n.st.ironSat * (0.25 + 0.75 * n.st.sat) : d * 0.03;
+    c.fac = Math.max(0, c.fac + d);
+    if (d > 0) n.st.newFac += d;
+  }
+  c.goods = c.fac * n.st.sat / Math.max(0.05, c.pop / 1e6) / 2.5;
+  const fossil = Math.max(0, 1 - n.nuke - n.renew - n.fusion);
+  c.smog = clamp(c.fac * fossil * n.st.sat / Math.max(4, c.cells * 2.5), 0, 1);
+  if (m.lab > 0) { const tl = c.pop / 1e6 * m.lab * 1.2; c.labs += (tl - c.labs) * 0.04; }
+  c.rp = Math.pow(c.pop / 1e5, 0.7) * 0.12 * m.sci * (1 + Math.sqrt(c.labs) * 0.25) * (1 + 0.3 * Math.min(1, c.goods)) * (n.golden > 0 ? 1.5 : 1);
+  // land use: clear forests under population pressure, regrow with green tech
+  if (c.pop > 0.6 * K && rand() < 0.12) {
+    const i = randomOwnedCell(c);
+    const floor = WORLD.forest0[i] * (m.ind > 0 ? 0.25 : 0.45);
+    if (i >= 0 && S.forest[i] > floor + 0.01) { const d = Math.min(S.forest[i] - floor, 0.025 * (m.ind > 0 ? 1.6 : 1)); S.forest[i] -= d; S.deforest += d; markDirty(i); }
+  }
+  if ((m.renew || m.ccs) && rand() < 0.35) {
+    const i = randomOwnedCell(c);
+    if (i >= 0 && S.forest[i] < WORLD.forest0[i]) { S.forest[i] = Math.min(WORLD.forest0[i], S.forest[i] + 0.02 * (m.ccs ? 2 : 1)); markDirty(i); }
+  }
+  // settlers
+  if (S.cities.length < MAX_CITIES && c.pop > 0.45 * K && c.pop > 120000 && rand() < 0.035) trySettle(c, n);
+}
+
+function randomOwnedCell(c) {
+  const R = Math.ceil(cityRadius(c));
+  for (let k = 0; k < 6; k++) {
+    const dy = Math.round((rand() * 2 - 1) * R), y = c.y + dy; if (y < 0 || y >= H) continue;
+    const rx = R / Math.max(COSLAT[y], 0.25);
+    const i = y * W + (c.x + Math.round((rand() * 2 - 1) * rx) + W) % W;
+    if (S.cityOf[i] >= 0 && S.cities[S.cityOf[i]] === c && isLand(i)) return i;
+  }
+  return -1;
+}
+
+function trySettle(c, n) {
+  const m = n.mult;
+  let bestI = -1, bs = -1e9, viaSea = false;
+  for (let k = 0; k < 22; k++) {
+    const sea = m.sea > 0 && c.coastal && rand() < 0.45;
+    const R = sea ? m.sea : m.range;
+    const dy = Math.round((rand() * 2 - 1) * R), y = c.y + dy;
+    if (y < 1 || y >= H - 1) continue;
+    const rx = R / Math.max(COSLAT[y], 0.3);
+    const i = y * W + (c.x + Math.round((rand() * 2 - 1) * rx) + W) % W;
+    if (!isLand(i)) continue;
+    const own = S.owner[i];
+    if (own !== -1 && own !== n.id) continue;
+    const b = WORLD.biome[i];
+    if (b === B.MOUNTAIN || (b === B.ICE && cellTeff(i) < -9)) continue;
+    const f = fertEff(i, m);
+    let rs = 0; for (const r of RES) if (S.res[r][i] > 0) rs += 1;
+    if (f < 0.12 && rs === 0) continue;
+    const coast = isCoastal(i);
+    if (sea && !coast) continue;
+    let ok = true;
+    for (const o of S.cities) { if (Math.abs(o.y - y) < 4 && cellDist(o.i, i) < 3.3) { ok = false; break; } }
+    if (!ok) continue;
+    const d = cellDist(c.i, i);
+    const s = f * 1.6 + rs * 0.25 + (coast ? 0.25 : 0) + (own === -1 ? 0.35 : 0) - d / R * 0.25 + rand() * 0.25;
+    if (s > bs) { bs = s; bestI = i; viaSea = sea && d > m.range; }
+  }
+  if (bestI < 0) return;
+  const take = Math.min(c.pop * 0.25, 45000 + rand() * 30000);
+  c.pop -= take;
+  const nc = createCity(bestI, n.id, take, false);
+  if (viaSea && !n.colony) { n.colony = 1; log('civ', `${n.name}的船队跨海建立了第一块殖民地「${nc.name}」`, bestI, false); }
+}
+
+function pickTech(n) {
+  const avail = TECHS.filter(t => n.techs[t.id] === undefined && t.req.every(r => n.techs[r] !== undefined));
+  if (!avail.length) return null;
+  let minEra = 9; for (const t of avail) minEra = Math.min(minEra, t.era);
+  const pool = avail.filter(t => t.era === minEra || (t.era === minEra + 1 && rand() < 0.2));
+  const alive = S.nations.filter(o => o.alive && o !== n).length || 1;
+  let tot = 0;
+  const w = pool.map(t => { const k = S.nations.filter(o => o.alive && o !== n && o.techs[t.id] !== undefined).length / alive; const v = 1 + 2 * k; tot += v; return v; });
+  let r = rand() * tot;
+  for (let k = 0; k < pool.length; k++) { r -= w[k]; if (r <= 0) return pool[k].id; }
+  return pool[0].id;
+}
+function techCost(n, id) {
+  const t = TECH_BY_ID[id];
+  const alive = S.nations.filter(o => o.alive && o !== n);
+  const known = alive.length ? alive.filter(o => o.techs[id] !== undefined).length / alive.length : 0;
+  const per = TECHS.filter(x => x.era === t.era).length;
+  const a = ERA_REF[t.era], b = ERA_REF[t.era + 1];
+  const ref = a + (b - a) * t.idx / per, tau = (b - a) / 3;
+  const pace = clamp(Math.pow(2, (ref - S.year) / tau), 0.5, 40);
+  return COST[t.era] * (1 + 0.06 * t.idx) * (1 - Math.min(0.75, 0.5 * known * n.mult.diff)) * pace;
+}
+
+function nationTick(n) {
+  const m = n.mult;
+  let pop = 0, fac = 0, labs = 0, rp = 0;
+  for (const c of n.cl) { pop += c.pop; fac += c.fac; labs += c.labs; rp += c.rp; }
+  if (!n.cl.length) { killNation(n, -1); return; }
+  n.st.pop = pop; n.st.cities = n.cl.length; n.st.fac = fac; n.st.labs = labs; n.st.rp = rp;
+  if (n.golden > 0) n.golden--;
+  // research
+  if (!n.target || n.techs[n.target] !== undefined) n.target = pickTech(n);
+  if (n.target) {
+    n.research += rp;
+    const cost = techCost(n, n.target);
+    if (n.research >= cost) { n.research -= cost; discover(n, n.target); n.target = pickTech(n); }
+  }
+  // energy
+  if (m.nuke) n.nuke = Math.min(0.14, n.nuke + 0.004);
+  if (m.fusion) n.fusion = Math.min(0.95, n.fusion + 0.015);
+  if (m.renew) n.renew = Math.max(0, Math.min(0.85 * (1 - n.fusion) - n.nuke * 0.2, n.renew + 0.011 * n.st.rareSat));
+  if (m.ccs) n.ccs = Math.min(1, n.ccs + 0.01);
+  if (n.fusion > 0.5) n.nuke = Math.max(0, n.nuke - 0.005);
+  const E = fac;
+  n.st.E = E;
+  const fossil = Math.max(0, 1 - n.nuke - n.renew - n.fusion);
+  const oilShare = m.oil ? 0.45 : 0;
+  if (E > 0.01) {
+    const gC = extract(n, 'coal', E * fossil * (1 - oilShare) * COAL_USE);
+    const gO = oilShare > 0 ? extract(n, 'oil', E * fossil * oilShare * OIL_USE) : 1;
+    let gSub = 0;
+    if (oilShare > 0 && gO < 1) gSub = (1 - gO) * extract(n, 'coal', E * fossil * oilShare * (1 - gO) * COAL_USE);
+    const gU = n.nuke > 0 ? extract(n, 'uran', E * n.nuke * U_USE) : 1;
+    n.st.rareSat = m.renew ? Math.max(0.15, extract(n, 'rare', E * Math.max(0.03, n.renew) * RARE_USE)) : 1;
+    const coalPart = fossil * (1 - oilShare) * gC, oilPart = fossil * oilShare * (gO + gSub), nukePart = n.nuke * gU;
+    n.st.sat = clamp(coalPart + oilPart + nukePart + n.renew + n.fusion, 0, 1);
+    n.st.mix = [coalPart + fossil * oilShare * gSub, fossil * oilShare * gO, nukePart, n.renew, n.fusion];
+    n.st.emit = E * (coalPart * 1.0 + fossil * oilShare * gO * 0.75 + fossil * oilShare * gSub * 1.0);
+    n.st.cap = n.ccs * E * 0.32;
+    n.st.ironSat = Math.max(0.1, extract(n, 'iron', n.st.newFac * IRON_BUILD + E * IRON_MAINT));
+    if (n.st.sat < 0.6 && S.year - n.crisis > 40 && m.ind > 0) { n.crisis = S.year; log('disaster', `${n.name}陷入能源危机，工厂开工率跌至 ${Math.round(n.st.sat * 100)}%`, capitalCell(n), false); }
+  } else { n.st.sat = 1; n.st.emit = 0; n.st.cap = 0; n.st.mix = [0, 0, 0, 0, 0]; }
+  n.st.newFac = 0;
+}
+
+function extract(n, r, amount) {
+  if (amount <= 1e-6) return 1;
+  let need = amount;
+  const arr = S.res[r], m = n.mult;
+  const rate = 30 * m.rate;
+  const cells = n.dep[r];
+  const L = cells.length;
+  for (let k = 0; k < L && need > 0; k++) {
+    const i = cells[(k + n.rr) % L];
+    const take = Math.min(arr[i], rate, need);
+    if (take > 0) { arr[i] -= take; need -= take; if (arr[i] < 0.01) { arr[i] = 0; markDirty(i); } }
+  }
+  n.rr = (n.rr + 1) % 9973;
+  if (need > 0) {
+    const g = GLOBAL_DEP[r];
+    for (let k = 0; k < 40 && need > 0 && g.length; k++) {
+      const i = g[(rand() * g.length) | 0];
+      if (arr[i] <= 0 || S.owner[i] === n.id) continue;
+      const take = Math.min(arr[i], rate * 0.7, need);
+      arr[i] -= take; need -= take;
+      if (arr[i] < 0.01) { arr[i] = 0; markDirty(i); }
+    }
+  }
+  const got = amount - need;
+  S.resLeft[r] = Math.max(0, S.resLeft[r] - got);
+  return got / amount;
+}
+let GLOBAL_DEP = null;
+function buildGlobalDep() { GLOBAL_DEP = {}; for (const r of RES) { GLOBAL_DEP[r] = []; for (let i = 0; i < N; i++) if (WORLD.res0[r][i] > 0) GLOBAL_DEP[r].push(i); } }
+
+function discover(n, id) {
+  n.techs[id] = S.year;
+  const oldEra = n.mult.era;
+  n.mult = computeMult(n);
+  techVersion++;
+  const t = TECH_BY_ID[id];
+  if (!S.firsts[id]) {
+    const big = largestCity(n);
+    S.firsts[id] = { n: n.id, name: n.name, y: S.year };
+    log('tech', `${n.name}在${big ? big.name : '国都'}率先掌握「${t.name}」，${t.desc}`, big ? big.i : -1);
+    if (id === 'rocketry') { log('space', `${n.name}发射了人类第一颗人造卫星`, big ? big.i : -1); S.moonDue = S.year + 8 + ((rand() * 6) | 0); S.moonBy = n.id; }
+    if (id === 'spacecol') log('space', `${n.name}建成第一座轨道城市，人类开始在太空中生活`, -1);
+    if (id === 'warp') { log('space', `${n.name}掌握曲率航行，星际方舟开始建造`, -1); }
+    if (id === 'steam') showBanner('工业革命', `${n.name}的第一座蒸汽工厂在${big ? big.name : '国都'}投产`);
+  }
+  if (n.mult.era > oldEra && n.mult.era > S.flags.maxEra) {
+    S.flags.maxEra = n.mult.era;
+    log('civ', `${n.name}率先迈入${ERA_NAME[n.mult.era]}时代`, capitalCell(n), false);
+  }
+}
+
+function largestCity(n) { let b = null; for (const c of S.cities) if (c.n === n.id && (!b || c.pop > b.pop)) b = c; return b; }
+function capitalCell(n) { const c = S.cities.find(c => c.id === n.capital) || largestCity(n); return c ? c.i : -1; }
+function cityById(id) { return S.cities.find(c => c.id === id); }
+
+function killNation(n, cell) {
+  if (!n.alive) return;
+  n.alive = false; n.died = S.year;
+  log('war', `${n.name}灭亡了`, cell, true);
+  S.wars = S.wars.filter(w => w.a !== n.id && w.b !== n.id);
+}
+
+/* ---------- war ---------- */
+function atWar(a, b) { return S.wars.some(w => (w.a === a && w.b === b) || (w.a === b && w.b === a)); }
+function warCount(a) { let k = 0; for (const w of S.wars) if (w.a === a || w.b === a) k++; return k; }
+
+function warTick() {
+  if (S.tick % 2 === 0) {
+    for (const [a, b, len] of S.borders) {
+      const A = S.nations[a], Bn = S.nations[b];
+      if (!A || !Bn || !A.alive || !Bn.alive || atWar(a, b) || warCount(a) > 1 || warCount(b) > 1) continue;
+      const era = Math.min(A.mult.era, Bn.mult.era);
+      let p = 0.0045 * (A.aggr + Bn.aggr) / 2 * [1, 1, 1, 0.9, 0.8, 0.6, 0.22, 0.08][era] * Math.min(A.mult.peace, Bn.mult.peace) * (1 + Math.min(len, 60) / 40);
+      if (A.mult.nuke && Bn.mult.nuke) p *= 0.3;
+      if (rand() < p) {
+        const front = nearestPair(A, Bn);
+        S.wars.push({ a, b, start: S.year, dur: 3 + ((rand() * 14) | 0), front: front ? front.i : -1, caps: [0, 0] });
+        log('war', `${A.name}与${Bn.name}爆发战争`, front ? front.i : -1);
+      }
+    }
+  }
+  for (let k = S.wars.length - 1; k >= 0; k--) {
+    const w = S.wars[k], A = S.nations[w.a], Bn = S.nations[w.b];
+    if (!A.alive || !Bn.alive) { S.wars.splice(k, 1); continue; }
+    const pa = Math.pow(A.st.pop + 1, 0.8) * A.mult.mil * (0.5 + rand()), pb = Math.pow(Bn.st.pop + 1, 0.8) * Bn.mult.mil * (0.5 + rand());
+    const win = pa > pb ? A : Bn, lose = win === A ? Bn : A;
+    for (const c of S.cities) if ((c.n === w.a || c.n === w.b) && c.i === w.front) c.pop *= 0.985;
+    if (rand() < 0.2) {
+      const lc = nearestPair(lose, win);
+      if (lc && lc.d < 10 + win.mult.range * 0.5 + win.mult.sea * 0.3) captureCity(lc.c, win, lose, w);
+    }
+    if (S.year - w.start >= w.dur && S.wars.includes(w)) {
+      S.wars.splice(S.wars.indexOf(w), 1);
+      const ca = w.caps[0], cb = w.caps[1];
+      const res = ca === cb ? '双方回到战前边界' : `${ca > cb ? A.name : Bn.name}获得 ${Math.abs(ca - cb)} 座城市`;
+      log('war', `${A.name}与${Bn.name}签订和约，${res}`, w.front, false);
+    }
+  }
+}
+// returns the city of `of` closest to any city of `to`
+function nearestPair(of, to) {
+  let bc = null, bd = 1e9;
+  for (const c of of.cl) for (const o of to.cl) { const d = cellDist(c.i, o.i); if (d < bd) { bd = d; bc = c; } }
+  return bc ? { c: bc, d: bd, i: bc.i } : null;
+}
+function captureCity(c, win, lose, w) {
+  c.n = win.id; c.pop *= 0.85; c.fac *= 0.7;
+  const wasCap = c.cap; c.cap = false;
+  w.front = c.i;
+  w.caps[win.id === w.a ? 0 : 1]++;
+  lose.cl = lose.cl.filter(x => x !== c); win.cl.push(c);
+  log('war', `${win.name}攻占了${lose.name}的${wasCap ? '首都' : ''}${c.name}`, c.i, wasCap);
+  if (wasCap) { const nc = largestCity(lose); if (nc) { nc.cap = true; lose.capital = nc.id; } }
+  if (!lose.cl.length) killNation(lose, c.i);
+  S.terrDirty = true;
+}
+
+/* ---------- random events ---------- */
+function eventsTick() {
+  const alive = S.nations.filter(n => n.alive);
+  if (!alive.length) return;
+  // plague
+  let pm = 0; for (const n of alive) pm += n.mult.plague; pm /= alive.length;
+  if (rand() < 0.006 * pm) plague(pickByPop(alive), false);
+  // golden age
+  for (const n of alive) if (n.golden <= 0 && rand() < 0.0012) { n.golden = 25; log('civ', `${n.name}迎来文化与科学的黄金时代`, capitalCell(n), false); }
+  // independence
+  if (S.tick % 10 === 0 && alive.length < 16) {
+    for (const n of alive) {
+      if (n.cl.length < 10 || rand() > 0.03 * (1 - n.stab * 0.6 - n.mult.stab)) continue;
+      const cap = cityById(n.capital) || largestCity(n); if (!cap) continue;
+      const far = n.cl.filter(c => c !== cap && c.pop > 300000 && cellDist(c.i, cap.i) > 14);
+      if (!far.length) continue;
+      const core = pick(far);
+      const group = n.cl.filter(c => c !== cap && cellDist(c.i, core.i) < 6).slice(0, 7);
+      const nn = createNation(n.techs);
+      for (const c of group) { c.n = nn.id; c.cap = false; }
+      core.cap = true; nn.capital = core.id;
+      n.cl = n.cl.filter(c => !group.includes(c)); nn.cl = group;
+      log('civ', `${core.name}宣布脱离${n.name}独立，建立${nn.name}`, core.i);
+      S.terrDirty = true;
+      break;
+    }
+  }
+  // tiny, far less advanced neighbours are absorbed peacefully
+  if (S.tick % 5 === 0) {
+    for (const [a, b] of S.borders) {
+      const A = S.nations[a], Bn = S.nations[b];
+      if (!A || !Bn || !A.alive || !Bn.alive || atWar(a, b)) continue;
+      const big = A.st.pop >= Bn.st.pop ? A : Bn, small = big === A ? Bn : A;
+      if (small.st.pop > big.st.pop * 0.03 || (big.mult.era < small.mult.era + 2 && small.st.pop > big.st.pop * 0.01) || rand() > 0.04) continue;
+      for (const c of S.cities) if (c.n === small.id) { c.n = big.id; c.cap = false; }
+      big.cl.push(...small.cl); small.cl = [];
+      small.alive = false; small.died = S.year;
+      S.wars = S.wars.filter(w => w.a !== small.id && w.b !== small.id);
+      log('civ', `${small.name}和平并入${big.name}`, capitalCell(big), false);
+      S.terrDirty = true;
+      break;
+    }
+  }
+  const T = Math.max(0, S.tanom);
+  const cs = S.cities;
+  if (!cs.length) return;
+  if (rand() < 0.012) {
+    const c = pick(cs);
+    if (nearBiome(c.i, B.MOUNTAIN, 3) || rand() < 0.25) { const loss = c.pop * (0.03 + rand() * 0.05); c.pop -= loss; log('disaster', `里氏 ${(6.8 + rand() * 2).toFixed(1)} 级地震袭击${c.name}，${fmtPop(loss)}人遇难`, c.i, false); }
+  }
+  if (rand() < 0.004) {
+    for (let k = 0; k < 30; k++) {
+      const i = (rand() * N) | 0;
+      if (WORLD.biome[i] !== B.MOUNTAIN) continue;
+      S.tanom -= 0.15 + rand() * 0.25;
+      for (const c of cs) if (cellDist(c.i, i) < 4) c.pop *= 0.9;
+      log('disaster', `一座火山猛烈喷发，火山灰让全球短暂降温`, i, true);
+      break;
+    }
+  }
+  if (rand() < 0.008 * (1 + T * 0.7)) {
+    const coast = cs.filter(c => c.coastal && Math.abs(c.lat) < 0.6);
+    if (coast.length) { const c = pick(coast); const loss = c.pop * (0.01 + rand() * 0.03 * (1 + T * 0.3)); c.pop -= loss; log('disaster', `${T > 1 ? '超强' : ''}台风登陆${c.name}，${fmtPop(loss)}人遇难`, c.i, false); }
+  }
+  if (rand() < 0.007 * (1 + T * 0.6)) {
+    const hot = cs.filter(c => WORLD.cT[c.i] > 12);
+    if (hot.length) { const c = pick(hot); c.drought = 4 + ((rand() * 6) | 0); log('disaster', `${c.name}周边遭遇持续 ${c.drought} 年的大旱`, c.i, false); }
+  }
+  if (rand() < 0.00012) meteor((rand() * N) | 0, false);
+}
+function pickByPop(list) { let t = 0; for (const n of list) t += n.st.pop; let r = rand() * t; for (const n of list) { r -= n.st.pop; if (r <= 0) return n; } return list[0]; }
+
+function plague(n, forced) {
+  if (!n || !n.alive) return;
+  const era = n.mult.era;
+  const name = era <= 2 ? pick(['大瘟疫', '黑死病', '鼠疫']) : era <= 4 ? pick(['天花', '霍乱', '伤寒']) : era === 5 ? '大流感' : '新型病毒';
+  const sev = (0.06 + rand() * 0.18) * n.mult.plague * (forced ? 2.2 : 1);
+  let dead = 0;
+  const hit = (nat, s) => { for (const c of S.cities) if (c.n === nat.id) { const d = c.pop * Math.min(0.8, s * (0.6 + rand() * 0.8)); c.pop -= d; dead += d; } };
+  hit(n, sev);
+  for (const [a, b] of S.borders) { const o = a === n.id ? b : b === n.id ? a : -1; if (o >= 0 && rand() < 0.5) hit(S.nations[o], sev * 0.5 * S.nations[o].mult.plague / Math.max(0.05, n.mult.plague)); }
+  log('disaster', `${name}席卷${n.name}${forced ? '（神罚）' : ''}，约 ${fmtPop(dead)} 人罹难`, capitalCell(n));
+}
+
+function meteor(i, forced) {
+  for (let k = S.cities.length - 1; k >= 0; k--) {
+    const c = S.cities[k], d = cellDist(c.i, i);
+    if (d < 4.5) { c.pop *= clamp(d / 4.5, 0, 1) * 0.6; if (c.pop < 20000) removeCity(c, false); }
+  }
+  const y0 = (i / W) | 0, x0 = i - y0 * W;
+  for (let dy = -4; dy <= 4; dy++) for (let dx = -6; dx <= 6; dx++) {
+    const y = y0 + dy; if (y < 0 || y >= H) continue;
+    const j = y * W + (x0 + dx + W) % W;
+    if (cellDist(i, j) < 4) { S.forest[j] *= 0.2; markDirty(j); }
+  }
+  S.tanom -= forced ? 0.6 : 0.4;
+  log('disaster', `一颗${forced ? '被召唤的' : ''}陨石撞击地表，冲击波摧毁了方圆数百公里`, i, true);
+  addFx(i, 'meteor');
+  S.terrDirty = true;
+}
+
+function removeCity(c, drowned) {
+  const idx = S.cities.indexOf(c); if (idx < 0) return;
+  S.cities.splice(idx, 1);
+  const n = S.nations[c.n];
+  n.cl = n.cl.filter(x => x !== c);
+  if (drowned) {
+    let best2 = null, bd = 1e9;
+    for (const o of S.cities) if (o.n === c.n) { const d = cellDist(o.i, c.i); if (d < bd) { bd = d; best2 = o; } }
+    if (best2) best2.pop += c.pop * 0.7;
+  }
+  if (c.cap) { const nc = largestCity(n); if (nc) { nc.cap = true; n.capital = nc.id; } }
+  if (!S.cities.some(o => o.n === c.n)) killNation(n, c.i);
+  if (selected && selected.city === c.id) selected = { cell: c.i };
+  S.terrDirty = true;
+}
+
+/* ---------- climate ---------- */
+let lastRiseDrawn = 0, lastTanomDrawn = 0;
+function climateTick() {
+  let emit = 0, cap = 0;
+  for (const n of S.nations) if (n.alive) { emit += n.st.emit; cap += n.st.cap; }
+  cap *= clamp((S.co2 - 290) / 80, 0, 1);
+  const sink = (S.co2 - 280) * 0.0055 * (0.55 + 0.45 * S.forestFrac);
+  S.co2 = Math.max(270, S.co2 + (emit - cap) * EMIT_K + S.deforest * 0.06 - sink);
+  S.deforest = 0;
+  const teq = 3 * Math.log2(S.co2 / 280);
+  S.tanom += (teq - S.tanom) * 0.035;
+  const seaT = Math.max(0, S.tanom) * 0.0055;
+  S.seaRise += (seaT - S.seaRise) * (seaT > S.seaRise ? 0.012 : 0.002);
+  if (S.tick % 20 === 0) { let f = 0, f0 = 0; for (let i = 0; i < N; i += 3) { f += S.forest[i]; f0 += WORLD.forest0[i]; } S.forestFrac = f0 ? f / f0 : 1; }
+  // nature reclaims empty land
+  for (let k = 0; k < 25; k++) { const i = (rand() * N) | 0; if (S.owner[i] < 0 && S.forest[i] < WORLD.forest0[i]) { S.forest[i] = Math.min(WORLD.forest0[i], S.forest[i] + 0.03); markDirty(i); } }
+  // milestones
+  if (S.co2 > S.co2Peak) S.co2Peak = S.co2;
+  for (const v of [350, 400, 450, 500, 560, 650]) if (S.co2 >= v && !S.flags['co2' + v]) { S.flags['co2' + v] = 1; log('climate', `大气二氧化碳浓度突破 ${v} ppm`, -1, v >= 400); }
+  for (const v of [1, 1.5, 2, 3, 4]) if (S.tanom >= v && !S.flags['t' + v]) { S.flags['t' + v] = 1; log('climate', `全球平均气温比工业化前升高 ${v} °C`, -1, true); }
+  if (S.co2Peak > 380 && S.co2 < S.co2Peak - 8 && !S.flags.co2down) { S.flags.co2down = 1; log('climate', `大气二氧化碳浓度越过峰值（${Math.round(S.co2Peak)} ppm），开始下降`, -1, true); }
+  for (const r of ['oil', 'coal']) {
+    const f = S.resLeft[r] / WORLD.resTotal[r];
+    if (f < 0.5 && !S.flags[r + '50']) { S.flags[r + '50'] = 1; log('climate', `全球${RES_NAME[r]}储量已消耗过半`, -1, false); }
+    if (f < 0.1 && !S.flags[r + '10']) { S.flags[r + '10'] = 1; log('climate', `${RES_NAME[r]}濒临枯竭，仅剩不到一成`, -1, true); }
+  }
+  // flooding & melting
+  if (S.seaRise - lastRiseDrawn > 0.0004 || lastRiseDrawn - S.seaRise > 0.0004) {
+    const lo = Math.min(lastRiseDrawn, S.seaRise) - 0.001, hi = Math.max(lastRiseDrawn, S.seaRise) + 0.001;
+    for (let i = 0; i < N; i++) if (WORLD.minTE[i] < hi && WORLD.elev[i] > lo - 0.05) markDirty(i);
+    lastRiseDrawn = S.seaRise;
+    for (let k = S.cities.length - 1; k >= 0; k--) {
+      const c = S.cities[k];
+      if (WORLD.elev[c.i] <= S.seaRise) { log('climate', `海平面上升，${c.name}被海水吞没，居民向内陆迁徙`, c.i, true); removeCity(c, true); }
+    }
+    S.terrDirty = true;
+  }
+  if (Math.abs(S.tanom - lastTanomDrawn) > 0.06) {
+    lastTanomDrawn = S.tanom;
+    for (let i = 0; i < N; i++) if (WORLD.minTT[i] < 4) markDirty(i);
+  }
+}
+
+/* ---------- space ---------- */
+function spaceTick() {
+  for (const n of S.nations) {
+    if (!n.alive) continue;
+    const m = n.mult;
+    if (m.space) S.sats += (4 + n.st.pop / 4e8) * Math.max(0, 1 - S.sats / 15000);
+    if (m.orbital) { S.orbital = Math.min(1, S.orbital + 0.01); S.orbPop = Math.min(3e8, S.orbPop + 4e5 + S.orbPop * 0.01); }
+  }
+  if (S.moonBy >= 0 && !S.moon && S.year >= S.moonDue) {
+    const n = S.nations[S.moonBy];
+    S.moon = { n: n.id, y: S.year };
+    log('space', `${n.name}的宇航员第一次踏上月球`, -1, true);
+    showBanner('登月', `${n.name}的宇航员在月面留下第一个脚印`);
+  }
+  const warpers = S.nations.filter(n => n.alive && n.mult.warp);
+  if (warpers.length && S.year - S.lastShip >= 8 && rand() < 0.15) {
+    const n = pick(warpers);
+    S.ships++; S.lastShip = S.year;
+    const loud = S.ships <= 5 || S.ships % 10 === 0;
+    if (loud) log('space', `${n.name}的第 ${S.ships} 艘星际方舟启航，目标：${pick(STARS)}`, capitalCell(n), true);
+    launchShip(n);
+    if (S.ships === 5) showBanner('星际文明', '人类不再只属于这一颗星球');
+  }
+  for (const v of [1e8, 1e9, 5e9, 1e10]) if (worldPop() >= v && !S.flags['p' + v]) { S.flags['p' + v] = 1; log('civ', `世界人口突破 ${fmtPop(v)}`, -1, v >= 1e9); }
+}
+
+function worldPop() { let p = 0; for (const c of S.cities) p += c.pop; return p + S.orbPop; }
+function sampleHistory() {
+  let fac = 0, rp = 0;
+  for (const c of S.cities) { fac += c.fac; rp += c.rp; }
+  S.history.push([S.year, Math.round(worldPop()), +S.co2.toFixed(1), +S.tanom.toFixed(3), Math.round(fac), Math.round(rp)]);
+  if (S.history.length > 1400) S.history = S.history.filter((_, k) => k % 2 === 0 || k > S.history.length - 200);
+}
+
+/* =====================================================================
+   Formatting
+   ===================================================================== */
+function fmtPop(p) {
+  if (p >= 1e8) return (p / 1e8).toFixed(p >= 1e9 ? 1 : 2).replace(/\.0$/, '') + ' 亿';
+  if (p >= 1e4) return (p / 1e4).toFixed(p >= 1e6 ? 0 : 1).replace(/\.0$/, '') + ' 万';
+  return String(Math.round(p));
+}
+function fmtNum(v) { if (v >= 1e4) return (v / 1e4).toFixed(1).replace(/\.0$/, '') + ' 万'; return Math.round(v).toLocaleString('zh-CN'); }
+function fmtYear(y) { return y < 0 ? `公元前 ${-y} 年` : `公元 ${y} 年`; }
+function fmtYearShort(y) { return y < 0 ? `前${-y}` : `${y}`; }
+
+/* =====================================================================
+   Texture painting
+   ===================================================================== */
+const COL = new Uint8ClampedArray(TN * 3);
+const WATER = new Uint8Array(TN);
+const LIGHTS = new Float32Array(TN);
+const DIRTY = new Uint8Array(N);
+let dirtyList = [];
+let layer = 0;
+function markDirty(i) { if (!DIRTY[i]) { DIRTY[i] = 1; dirtyList.push(i); } }
+function flushDirty() { for (let k = 0; k < dirtyList.length; k++) { const i = dirtyList[k]; DIRTY[i] = 0; recolorCell(i); } dirtyList.length = 0; }
+function recolorAll() { DIRTY.fill(0); dirtyList.length = 0; for (let i = 0; i < N; i++) recolorCell(i); }
+
+const POP_RAMP = [[40, 26, 12], [120, 66, 18], [214, 128, 30], [255, 196, 90], [255, 244, 214]];
+function popColor(t) { t = clamp(t, 0, 1) * (POP_RAMP.length - 1); const k = Math.min(POP_RAMP.length - 2, t | 0), f = t - k, a = POP_RAMP[k], b = POP_RAMP[k + 1]; return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f]; }
+function tempColor(T) {
+  // diverging: cool blue ← neutral grey (10 °C) → warm red
+  const cold = [57, 120, 214], mid = [120, 122, 126], hot = [222, 72, 64];
+  if (T < 10) { const f = clamp((10 - T) / 40, 0, 1); return [mid[0] + (cold[0] - mid[0]) * f, mid[1] + (cold[1] - mid[1]) * f, mid[2] + (cold[2] - mid[2]) * f]; }
+  const f = clamp((T - 10) / 25, 0, 1); return [mid[0] + (hot[0] - mid[0]) * f, mid[1] + (hot[1] - mid[1]) * f, mid[2] + (hot[2] - mid[2]) * f];
+}
+
+function recolorCell(ci) {
+  const cy = (ci / W) | 0, cx = ci - cy * W;
+  const own = S.owner[ci];
+  const L = layer;
+  let oL = own, oR = own, oU = own, oD = own;
+  if (L === 1) { oL = S.owner[cy * W + (cx + W - 1) % W]; oR = S.owner[cy * W + (cx + 1) % W]; if (cy > 0) oU = S.owner[ci - W]; if (cy < H - 1) oD = S.owner[ci + W]; }
+  const f0 = WORLD.forest0[ci];
+  const fr = f0 > 0.01 ? clamp(S.forest[ci] / f0, 0, 1) : 1;
+  const farm = S.farm[ci];
+  const city = S.cityOf[ci] >= 0 ? S.cities[S.cityOf[ci]] : null;
+  const nrgb = own >= 0 ? S.nations[own].rgb : null;
+  const rise = S.seaRise, tan = S.tanom;
+  const tE = WORLD.tElev, tTT = WORLD.tT, tB = WORLD.tBiome, tH = WORLD.tHash, tH2 = WORLD.tHash2, tSh = WORLD.tShade;
+  let density = 0;
+  if (L === 3 && city && city.cells > 0) density = clamp((Math.log10(city.pop / city.cells) - 3.8) / 3.4, 0, 1);
+  for (let sy = 0; sy < TS; sy++) {
+    const ty = cy * TS + sy, amp = AMP_TEX[ty];
+    for (let sx = 0; sx < TS; sx++) {
+      const ti = ty * TW + cx * TS + sx;
+      const e = tE[ti], T = tTT[ti] + tan * amp, h = tH[ti] / 255;
+      let r, g, b, water = 0;
+      if (e <= rise) {
+        water = 1;
+        const d = rise - e;
+        if (T < -7 + (h - 0.5) * 3) { const s = 0.94 + h * 0.08; r = 214 * s; g = 226 * s; b = 236 * s; water = 2; }
+        else {
+          const k1 = Math.min(1, d / 0.1), k2 = clamp((d - 0.1) / 0.6, 0, 1);
+          r = 54 + (20 - 54) * k1 + (7 - 20) * k2;
+          g = 146 + (72 - 146) * k1 + (26 - 72) * k2;
+          b = 168 + (124 - 168) * k1 + (66 - 124) * k2;
+          if (d < 0.012) { r += 18; g += 20; b += 10; }
+          const j = 0.97 + h * 0.06; r *= j; g *= j; b *= j;
+        }
+      } else {
+        let bio = tB[ti];
+        if (bio === B.ICE && T > -9.5 + (h - 0.5) * 2.5) bio = B.TUNDRA;
+        const c0 = CLR[bio], c1 = FOR[bio];
+        if (BIOME_FOREST[bio] > 0.05) { r = c0[0] + (c1[0] - c0[0]) * fr; g = c0[1] + (c1[1] - c0[1]) * fr; b = c0[2] + (c1[2] - c0[2]) * fr; }
+        else { r = c0[0]; g = c0[1]; b = c0[2]; }
+        if ((bio === B.MOUNTAIN || bio === B.TUNDRA || bio === B.TAIGA) && T < -4 + (h - 0.5) * 5) { r = 224; g = 230; b = 236; }
+        if (farm > 0.02 && FARMABLE[bio]) { const k = farm * 0.55, fc = h > 0.55 ? FARM_A : FARM_B; r += (fc[0] - r) * k; g += (fc[1] - g) * k; b += (fc[2] - b) * k; }
+        const s = tSh[ti] * (0.93 + h * 0.14); r *= s; g *= s; b *= s;
+      }
+      if (L !== 0) {
+        const lum = 0.3 * r + 0.55 * g + 0.15 * b;
+        if (L === 1) {
+          if (!water) {
+            if (nrgb) {
+              r = lum * 0.35 + nrgb[0] * 0.62; g = lum * 0.35 + nrgb[1] * 0.62; b = lum * 0.35 + nrgb[2] * 0.62;
+              const edge = (sx === 0 && oL !== own) || (sx === TS - 1 && oR !== own) || (sy === 0 && oU !== own) || (sy === TS - 1 && oD !== own);
+              if (edge) { r = r * 0.45 + 255 * 0.55; g = g * 0.45 + 255 * 0.55; b = b * 0.45 + 255 * 0.55; }
+            } else { r = lum * 0.55 + 20; g = lum * 0.55 + 22; b = lum * 0.55 + 28; }
+          } else { r *= 0.7; g *= 0.75; b *= 0.85; }
+        } else if (L === 2) {
+          r = lum * 0.42 + 8; g = lum * 0.42 + 12; b = lum * 0.42 + 22;
+          const h2 = tH2[ti] / 255;
+          if (!water || water === 1) {
+            for (let k = 0; k < 5; k++) {
+              const rr = RES[k], amt = S.res[rr][ci]; const a0 = WORLD.res0[rr][ci];
+              if (a0 <= 0) continue;
+              const lo = k * 0.2, frac = amt / a0;
+              if (h2 >= lo && h2 < lo + 0.2 * (0.35 + 0.65 * Math.sqrt(frac))) { const c = RES_RGB[rr]; r = c[0]; g = c[1]; b = c[2]; break; }
+              if (amt <= 0 && h2 >= lo && h2 < lo + 0.05) { r = 70; g = 70; b = 76; break; }
+            }
+            if (water === 1 && WORLD.fish[ci] > 0 && h2 > 0.93) { r = 150; g = 200; b = 255; }
+          }
+        } else if (L === 3) {
+          if (!water) { if (city) { const c = popColor(density); r = c[0]; g = c[1]; b = c[2]; } else { r = lum * 0.4 + 6; g = lum * 0.4 + 8; b = lum * 0.4 + 14; } }
+          else { r *= 0.5; g *= 0.55; b *= 0.7; }
+        } else if (L === 4) {
+          const c = tempColor(T); r = c[0] * 0.85 + lum * 0.15; g = c[1] * 0.85 + lum * 0.15; b = c[2] * 0.85 + lum * 0.15;
+          const sm = S.smog[ci];
+          if (sm > 0.05 && !water && h > 0.35) { const k = Math.min(0.75, sm); r += (96 - r) * k; g += (80 - g) * k; b += (56 - b) * k; }
+        }
+      }
+      const o = ti * 3; COL[o] = r; COL[o + 1] = g; COL[o + 2] = b;
+      WATER[ti] = water;
+    }
+  }
+}
+
+function buildLights() {
+  LIGHTS.fill(0);
+  const tH = WORLD.tHash;
+  const cmap = new Map(); for (const c of S.cities) cmap.set(c.id, c);
+  for (const c of S.cities) {
+    const n = S.nations[c.n];
+    const elec = n.mult.light;
+    const inten = Math.min(1.3, Math.log10(c.pop / 16000 + 1) * 0.42) * (0.3 + 0.7 * elec);
+    const rad = clamp(1.4 + Math.sqrt(c.pop / 8e5) * 1.5, 1.4, 11);
+    const tx0 = (c.lon + PI) / TAU * TW, ty0 = (PI / 2 - c.lat) / PI * TH;
+    const cl = Math.max(0.2, Math.cos(c.lat));
+    const ry = Math.ceil(rad), rx = Math.ceil(rad / cl);
+    const inv = 1 / (rad * rad * 0.45);
+    for (let dy = -ry; dy <= ry; dy++) {
+      const ty = Math.floor(ty0) + dy; if (ty < 0 || ty >= TH) continue;
+      const fy = ty + 0.5 - ty0;
+      for (let dx = -rx; dx <= rx; dx++) {
+        const txr = Math.floor(tx0) + dx, tx = ((txr % TW) + TW) % TW;
+        const fx = (txr + 0.5 - tx0) * cl;
+        const d2 = fx * fx + fy * fy;
+        if (d2 > rad * rad) continue;
+        const ti = ty * TW + tx;
+        if (WATER[ti]) continue;
+        const hv = tH[ti] / 255;
+        LIGHTS[ti] += inten * Math.exp(-d2 * inv) * (hv > 0.35 ? 0.4 + 0.6 * hv : 0.12);
+      }
+    }
+    if (n.mult.rail || n.mult.light >= 1) {
+      for (const id of c.links) {
+        const o = cmap.get(id); if (!o || o.id < c.id) continue;
+        let dl = o.lon - c.lon; if (dl > PI) dl -= TAU; if (dl < -PI) dl += TAU;
+        const steps = 24;
+        for (let s = 1; s < steps; s++) {
+          const f = s / steps, lat = c.lat + (o.lat - c.lat) * f, lon = c.lon + dl * f;
+          const tx = ((Math.floor((lon + PI) / TAU * TW) % TW) + TW) % TW, ty = clamp(Math.floor((PI / 2 - lat) / PI * TH), 0, TH - 1);
+          const ti = ty * TW + tx;
+          if (!WATER[ti]) LIGHTS[ti] += 0.22 * elec;
+        }
+      }
+    }
+  }
+  for (let i = 0; i < TN; i++) if (LIGHTS[i] > 1.6) LIGHTS[i] = 1.6;
+}
+
+/* =====================================================================
+   Globe rendering
+   ===================================================================== */
+const canvas = $('view'), ctx = canvas.getContext('2d');
+const stageEl = $('stage');
+const gCanvas = document.createElement('canvas'), gctx = gCanvas.getContext('2d');
+const starCanvas = document.createElement('canvas');
+const view = { w: 800, h: 600, dpr: 1, cx: 400, cy: 300, R: 240, zoom: 1, rot: 0.6, pitch: 0.28, box: null, q: 1 };
+const SUN = (() => { const v = [-0.62, 0.3, 0.72]; const l = Math.hypot(...v); return v.map(x => x / l); })();
+const HALF = (() => { const v = [SUN[0], SUN[1], SUN[2] + 1]; const l = Math.hypot(...v); return v.map(x => x / l); })();
+let P = null, gImg = null, tablesDirty = true;
+let showClouds = true, showNight = true, autoSpin = true;
+const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+if (reducedMotion) autoSpin = false;
+let CSSV = {};
+
+function readCss() {
+  const cs = getComputedStyle(document.documentElement);
+  for (const k of ['--ink', '--ink-2', '--ink-3', '--line', '--panel', '--panel-3', '--sodium', '--sea', '--leaf', '--ember', '--blood', '--violet', '--series-1', '--space'])
+    CSSV[k] = cs.getPropertyValue(k).trim();
+  CSSV.font = getComputedStyle(document.body).fontFamily;
+}
+
+function layout() {
+  const r = stageEl.getBoundingClientRect();
+  view.w = Math.max(200, r.width); view.h = Math.max(200, r.height);
+  view.dpr = Math.min(window.devicePixelRatio || 1, 2);
+  canvas.width = Math.round(view.w * view.dpr); canvas.height = Math.round(view.h * view.dpr);
+  view.cx = view.w / 2; view.cy = view.h / 2;
+  view.R = Math.min(view.w, view.h) * radiusFactor() * view.zoom;
+  // stars
+  starCanvas.width = canvas.width; starCanvas.height = canvas.height;
+  const sc = starCanvas.getContext('2d');
+  const rnd = mulberry32(1234);
+  sc.clearRect(0, 0, starCanvas.width, starCanvas.height);
+  const count = Math.round(view.w * view.h / 1800);
+  for (let k = 0; k < count; k++) {
+    const x = rnd() * starCanvas.width, y = rnd() * starCanvas.height, s = rnd();
+    sc.fillStyle = `rgba(${200 + rnd() * 55 | 0},${210 + rnd() * 45 | 0},255,${0.25 + s * 0.6})`;
+    sc.fillRect(x, y, s > 0.94 ? 2 * view.dpr : view.dpr, s > 0.94 ? 2 * view.dpr : view.dpr);
+  }
+  tablesDirty = true;
+}
+
+function buildTables() {
+  tablesDirty = false;
+  const R = view.R;
+  const bx0 = Math.max(0, Math.floor(view.cx - R - 1)), by0 = Math.max(0, Math.floor(view.cy - R - 1));
+  const bx1 = Math.min(view.w, Math.ceil(view.cx + R + 1)), by1 = Math.min(view.h, Math.ceil(view.cy + R + 1));
+  const bw = Math.max(1, bx1 - bx0), bh = Math.max(1, by1 - by0);
+  const area = Math.min(PI * R * R, bw * bh);
+  const q = Math.min(view.dpr, 1.6, Math.sqrt(300000 / area));
+  view.q = q; view.box = { x: bx0, y: by0, w: bw, h: bh };
+  const gw = Math.max(1, Math.ceil(bw * q)), gh = Math.max(1, Math.ceil(bh * q));
+  gCanvas.width = gw; gCanvas.height = gh;
+  gImg = gctx.createImageData(gw, gh);
+  const maxP = gw * gh;
+  if (!P || P.cap < maxP) P = { cap: maxP, idx: new Int32Array(maxP), tx: new Float32Array(maxP), ty: new Int32Array(maxP), cy: new Int32Array(maxP),
+    Lt: new Float32Array(maxP), Nt: new Float32Array(maxP), Sp: new Float32Array(maxP), Rim: new Float32Array(maxP), Al: new Float32Array(maxP), n: 0 };
+  const { idx, tx, ty, cy, Lt, Nt, Sp, Rim, Al } = P;
+  const cp = Math.cos(view.pitch), sp = Math.sin(view.pitch);
+  let k = 0;
+  for (let py = 0; py < gh; py++) {
+    const sy = by0 + (py + 0.5) / q;
+    const vy = -(sy - view.cy) / R;
+    for (let px = 0; px < gw; px++) {
+      const sx = bx0 + (px + 0.5) / q;
+      const vx = (sx - view.cx) / R;
+      const d2 = vx * vx + vy * vy;
+      if (d2 >= 1) continue;
+      const vz = Math.sqrt(1 - d2);
+      const wx = vx, wy = vy * cp + vz * sp, wz = -vy * sp + vz * cp;
+      const lat = Math.asin(clamp(wy, -1, 1)), lonP = Math.atan2(wz, -wx);
+      idx[k] = (py * gw + px) * 4;
+      tx[k] = (lonP + PI) / TAU * TW;
+      ty[k] = clamp(Math.floor((PI / 2 - lat) / PI * TH), 0, TH - 1);
+      cy[k] = clamp(Math.floor((PI / 2 - lat) / PI * CH), 0, CH - 1);
+      const dot = vx * SUN[0] + vy * SUN[1] + vz * SUN[2];
+      const day = smooth(-0.14, 0.28, dot);
+      Lt[k] = 0.045 + day * (0.32 + 0.85 * Math.max(0, dot));
+      Nt[k] = 1 - smooth(-0.28, 0.06, dot);
+      const hd = Math.max(0, vx * HALF[0] + vy * HALF[1] + vz * HALF[2]);
+      Sp[k] = Math.pow(hd, 70) * 120 * day;
+      Rim[k] = Math.pow(1 - vz, 2.6) * 0.8;
+      Al[k] = clamp((1 - Math.sqrt(d2)) * R * q * 1.2, 0, 1);
+      k++;
+    }
+  }
+  P.n = k;
+}
+
+let cloudOff = 0;
+function renderGlobe() {
+  if (tablesDirty) buildTables();
+  const d = gImg.data;
+  const n = P.n, idx = P.idx, ptx = P.tx, pty = P.ty, pcy = P.cy, Lt = P.Lt, Nt = P.Nt, Sp = P.Sp, Rim = P.Rim, Al = P.Al;
+  const rotTex = (view.rot / TAU) * TW;
+  const cs = CW / TW;
+  const c1 = cloudOff * CW, c2 = -cloudOff * 0.6 * CW + CW * 0.37;
+  const CL = WORLD.cloud;
+  const era = S.flags.maxEra || 0;
+  const lc = era < 4 ? [255, 150, 70] : era < 6 ? [255, 198, 112] : [255, 228, 184];
+  const night = showNight, clouds = showClouds;
+  const dataLayer = layer !== 0, cloudK = dataLayer ? 0.2 : 1, Lmin = dataLayer ? 0.55 : 0, nightK = dataLayer ? 0.35 : 1;
+  for (let k = 0; k < n; k++) {
+    let fx = ptx[k] + rotTex; fx -= Math.floor(fx / TW) * TW;
+    let tx = fx | 0; if (tx >= TW) tx = TW - 1;
+    const ti = pty[k] * TW + tx, o3 = ti * 3;
+    let r = COL[o3], g = COL[o3 + 1], b = COL[o3 + 2];
+    const lt = LIGHTS[ti];
+    if (lt > 0.05) { const u = Math.min(0.4, lt * 0.3); r += (150 - r) * u; g += (146 - g) * u; b += (140 - b) * u; }
+    let L, nf;
+    if (night) { L = Lt[k] > Lmin ? Lt[k] : Lmin; nf = Nt[k] * nightK; } else { L = 0.92 + 0.12 * Math.max(0, Lt[k] - 0.5); nf = 0; }
+    r *= L; g *= L; b *= L;
+    if (WATER[ti] === 1) { const s = Sp[k]; r += s; g += s; b += s * 0.95; }
+    if (nf > 0 && lt > 0) { const v = lt * nf; r += lc[0] * v; g += lc[1] * v; b += lc[2] * v; }
+    if (clouds) {
+      const cx0 = fx * cs;
+      let a1 = cx0 + c1; a1 -= Math.floor(a1 / CW) * CW;
+      let a2 = cx0 + c2; a2 -= Math.floor(a2 / CW) * CW;
+      const row = pcy[k] * CW;
+      const ca = (CL[row + (a1 | 0)] * 0.62 + CL[row + (a2 | 0)] * 0.55) / 255 * cloudK;
+      if (ca > 0.02) {
+        const a = ca > 0.92 ? 0.92 : ca;
+        const cl = night ? 0.05 + L * 0.95 : 0.95;
+        r += (248 * cl - r) * a; g += (250 * cl - g) * a; b += (255 * cl - b) * a;
+      }
+    }
+    const rim = Rim[k], rl = night ? 0.12 + Lt[k] * 0.9 : 1;
+    r += (110 * rl - r) * rim; g += (168 * rl - g) * rim; b += (255 * rl - b) * rim;
+    const o = idx[k];
+    d[o] = r; d[o + 1] = g; d[o + 2] = b; d[o + 3] = Al[k] * 255;
+  }
+  gctx.putImageData(gImg, 0, 0);
+}
+
+function project(lat, lon) {
+  const lonP = lon - view.rot, cl = Math.cos(lat);
+  const px = -cl * Math.cos(lonP), py = Math.sin(lat), pz = cl * Math.sin(lonP);
+  const cp = Math.cos(view.pitch), sp = Math.sin(view.pitch);
+  const vy = py * cp - pz * sp, vz = py * sp + pz * cp;
+  return { x: view.cx + px * view.R, y: view.cy - vy * view.R, z: vz };
+}
+function unproject(sx, sy) {
+  const vx = (sx - view.cx) / view.R, vy = -(sy - view.cy) / view.R, d2 = vx * vx + vy * vy;
+  if (d2 >= 1) return null;
+  const vz = Math.sqrt(1 - d2), cp = Math.cos(view.pitch), sp = Math.sin(view.pitch);
+  const wy = vy * cp + vz * sp, wz = -vy * sp + vz * cp;
+  const lat = Math.asin(clamp(wy, -1, 1));
+  let lon = Math.atan2(wz, -vx) + view.rot;
+  lon = ((lon + PI) % TAU + TAU) % TAU - PI;
+  const x = clamp(Math.floor((lon + PI) / TAU * W), 0, W - 1), y = clamp(Math.floor((PI / 2 - lat) / PI * H), 0, H - 1);
+  return { lat, lon, cell: y * W + x };
+}
+function cellLatLon(i) { const y = (i / W) | 0, x = i - y * W; return { lat: CELL_LAT[y], lon: cellLon(x) }; }
+
+/* ---------- overlay: moon, satellites, cities, effects ---------- */
+const FX = [], SMOKE = [], SHIPS = [];
+const SAT = Array.from({ length: 160 }, (_, k) => { const r = mulberry32(k * 977 + 3); return { inc: (r() - 0.5) * 2.2, node: r() * TAU, ph: r() * TAU, sp: 0.15 + r() * 0.35, rad: 1.07 + r() * 0.22 }; });
+let moonA = 2.2, animT = 0;
+
+function addFx(cell, type) {
+  if (cell < 0) return;
+  const ll = cellLatLon(cell);
+  FX.push({ lat: ll.lat, lon: ll.lon, t0: animT, type });
+  if (FX.length > 40) FX.shift();
+}
+function launchShip(n) { const c = cityById(n.capital) || largestCity(n); if (c) SHIPS.push({ lat: c.lat, lon: c.lon, t0: animT, ang: (rand() - 0.5) * 1.2 - PI / 2 }); }
+
+function satPos(s, t) {
+  const a = s.ph + t * s.sp;
+  let x = Math.cos(a), y = 0, z = Math.sin(a);
+  const ci = Math.cos(s.inc), si = Math.sin(s.inc);
+  let y2 = y * ci - z * si, z2 = y * si + z * ci; y = y2; z = z2;
+  const cn = Math.cos(s.node), sn = Math.sin(s.node);
+  const x2 = x * cn + z * sn; z2 = -x * sn + z * cn; x = x2; z = z2;
+  return { x: view.cx + x * s.rad * view.R, y: view.cy - y * s.rad * view.R, z };
+}
+
+function drawMoon(front) {
+  const Rm = view.R * 1.85, z = Math.sin(moonA);
+  if ((z >= 0) !== front) return;
+  const mx = view.cx + Math.cos(moonA) * Rm, my = view.cy - view.R * 0.35 - Math.sin(moonA) * view.R * 0.12;
+  const mr = view.R * 0.11 * (1 + z * 0.08);
+  if (!front && Math.hypot(mx - view.cx, my - view.cy) < view.R + mr) return;
+  const g = ctx.createRadialGradient(mx - mr * 0.45, my - mr * 0.25, mr * 0.1, mx, my, mr);
+  g.addColorStop(0, '#d9dbe0'); g.addColorStop(0.6, '#9a9ea8'); g.addColorStop(1, '#3a3e48');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(mx, my, mr, 0, TAU); ctx.fill();
+  if (S.moon) { ctx.fillStyle = CSSV['--sodium']; ctx.beginPath(); ctx.arc(mx - mr * 0.2, my - mr * 0.1, Math.max(1.2, mr * 0.07), 0, TAU); ctx.fill(); }
+}
+
+function drawOrbitalRing(front) {
+  if (S.orbital <= 0) return;
+  const cp = Math.cos(view.pitch), sp = Math.sin(view.pitch);
+  const rr = 1.32 * view.R;
+  ctx.save();
+  ctx.strokeStyle = `rgba(184,162,255,${0.18 + 0.35 * S.orbital})`;
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  let started = false;
+  for (let k = 0; k <= 96; k++) {
+    const a = k / 96 * TAU;
+    const px = Math.cos(a), pz = Math.sin(a);
+    const vy = -pz * sp, vz = pz * cp;
+    const x = view.cx + px * rr, y = view.cy - vy * rr;
+    const isFront = vz >= 0;
+    if (isFront === front) { if (!started) { ctx.moveTo(x, y); started = true; } else ctx.lineTo(x, y); }
+    else started = false;
+  }
+  ctx.stroke();
+  const ns = Math.round(4 + 14 * S.orbital);
+  for (let k = 0; k < ns; k++) {
+    const a = k / ns * TAU + animT * 0.05;
+    const px = Math.cos(a), pz = Math.sin(a), vy = -pz * sp, vz = pz * cp;
+    if ((vz >= 0) !== front) continue;
+    ctx.fillStyle = CSSV['--violet'];
+    ctx.fillRect(view.cx + px * rr - 2, view.cy - vy * rr - 1, 4, 2);
+  }
+  ctx.restore();
+}
+
+let hoverCity = null, selected = null, selectedNation = -1;
+let screenCities = [];
+
+function drawFrame() {
+  ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
+  ctx.clearRect(0, 0, view.w, view.h);
+  ctx.drawImage(starCanvas, 0, 0, view.w, view.h);
+  drawMoon(false);
+  drawOrbitalRing(false);
+  // satellites behind
+  const nsat = Math.min(SAT.length, Math.round(Math.sqrt(S.sats) * 2.2));
+  const satP = [];
+  for (let k = 0; k < nsat; k++) satP.push(satPos(SAT[k], animT));
+  ctx.fillStyle = 'rgba(200,220,255,.7)';
+  for (const p of satP) if (p.z < 0 && Math.hypot(p.x - view.cx, p.y - view.cy) > view.R) ctx.fillRect(p.x - 0.75, p.y - 0.75, 1.5, 1.5);
+  // atmosphere glow
+  const R = view.R;
+  const ag = ctx.createRadialGradient(view.cx, view.cy, R * 0.96, view.cx, view.cy, R * 1.16);
+  ag.addColorStop(0, 'rgba(90,160,255,0.42)'); ag.addColorStop(0.35, 'rgba(70,130,240,0.16)'); ag.addColorStop(1, 'rgba(60,110,230,0)');
+  ctx.fillStyle = ag; ctx.beginPath(); ctx.arc(view.cx, view.cy, R * 1.16, 0, TAU); ctx.fill();
+  // globe
+  ctx.imageSmoothingEnabled = true;
+  const bx = view.box;
+  ctx.drawImage(gCanvas, 0, 0, gCanvas.width, gCanvas.height, bx.x, bx.y, gCanvas.width / view.q, gCanvas.height / view.q);
+  // cities
+  screenCities = [];
+  const labels = [];
+  for (const c of S.cities) {
+    const p = project(c.lat, c.lon);
+    if (p.z < 0.03) continue;
+    screenCities.push({ c, x: p.x, y: p.y, z: p.z });
+  }
+  screenCities.sort((a, b) => a.c.pop - b.c.pop);
+  const markerScale = layer === 1 || layer === 3 ? 1.15 : 0.85;
+  for (const s of screenCities) {
+    const c = s.c, n = S.nations[c.n];
+    const dim = selectedNation >= 0 && c.n !== selectedNation;
+    const rr = clamp(1.2 + Math.log10(Math.max(1, c.pop / 30000)) * 1.25, 1.2, 5.2) * markerScale * (0.6 + 0.4 * s.z) * Math.sqrt(view.zoom);
+    ctx.globalAlpha = (dim ? 0.25 : 1) * clamp(s.z * 4, 0, 1);
+    ctx.fillStyle = n.color;
+    ctx.strokeStyle = 'rgba(6,10,20,.85)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(s.x, s.y, rr, 0, TAU); ctx.fill(); ctx.stroke();
+    if (c.cap) { ctx.strokeStyle = n.color; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.arc(s.x, s.y, rr + 2.5, 0, TAU); ctx.stroke(); }
+    ctx.globalAlpha = 1;
+    s.r = rr;
+    // smoke
+    if (!reducedMotion && c.fac > 0.3 && s.z > 0.25 && SMOKE.length < 260) {
+      const nn = S.nations[c.n], fossil = Math.max(0, 1 - nn.nuke - nn.renew - nn.fusion);
+      if (rand2() < Math.min(0.5, c.fac * fossil * 0.01)) SMOKE.push({ id: c.id, t0: animT, dx: (rand2() - 0.5) * 4, life: 1.6 + rand2() * 1.2 });
+    }
+  }
+  // labels: largest visible cities first
+  const byPop = screenCities.slice().sort((a, b) => b.c.pop - a.c.pop);
+  const maxLabels = view.w < 600 ? 7 : 14;
+  ctx.font = `12px ${CSSV.font}`;
+  ctx.textBaseline = 'middle';
+  let placed = 0;
+  for (const s of byPop) {
+    if (placed >= maxLabels) break;
+    if (s.z < 0.3) continue;
+    if (selectedNation >= 0 && s.c.n !== selectedNation) continue;
+    const txt = s.c.name, tw = ctx.measureText(txt).width;
+    const box = { x: s.x + s.r + 4, y: s.y - 8, w: tw, h: 16 };
+    if (labels.some(b => box.x < b.x + b.w + 4 && box.x + box.w + 4 > b.x && box.y < b.y + b.h && box.y + box.h > b.y)) continue;
+    labels.push(box); placed++;
+    ctx.globalAlpha = clamp((s.z - 0.3) * 4, 0, 1);
+    ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(6,10,20,.8)'; ctx.strokeText(txt, box.x, s.y);
+    ctx.fillStyle = s.c.cap ? '#fff4dc' : 'rgba(233,238,248,.88)'; ctx.fillText(txt, box.x, s.y);
+    ctx.globalAlpha = 1;
+  }
+  // smoke particles
+  const posById = new Map(); for (const s of screenCities) posById.set(s.c.id, s);
+  for (let k = SMOKE.length - 1; k >= 0; k--) {
+    const p = SMOKE[k], age = (animT - p.t0) / p.life;
+    const s = posById.get(p.id);
+    if (age >= 1 || !s) { SMOKE.splice(k, 1); continue; }
+    ctx.fillStyle = `rgba(150,140,128,${0.35 * (1 - age)})`;
+    ctx.beginPath(); ctx.arc(s.x + p.dx * age * 2, s.y - 3 - age * 16, 1.5 + age * 4, 0, TAU); ctx.fill();
+  }
+  // war fronts
+  for (const w of S.wars) {
+    if (w.front < 0) continue;
+    const ll = cellLatLon(w.front), p = project(ll.lat, ll.lon);
+    if (p.z < 0.05) continue;
+    const ph = (animT * 1.4) % 1;
+    ctx.strokeStyle = `rgba(255,95,107,${0.9 * (1 - ph)})`; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(p.x, p.y, 5 + ph * 12, 0, TAU); ctx.stroke();
+    ctx.strokeStyle = CSSV['--blood']; ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.moveTo(p.x - 4, p.y - 4); ctx.lineTo(p.x + 4, p.y + 4); ctx.moveTo(p.x + 4, p.y - 4); ctx.lineTo(p.x - 4, p.y + 4); ctx.stroke();
+  }
+  // event rings
+  for (let k = FX.length - 1; k >= 0; k--) {
+    const f = FX[k], age = (animT - f.t0) / 3;
+    if (age >= 1) { FX.splice(k, 1); continue; }
+    const p = project(f.lat, f.lon); if (p.z < 0.05) continue;
+    const col = f.type === 'meteor' ? '#ffffff' : CSSV[TYPE_COLOR[f.type]] || CSSV['--sodium'];
+    ctx.globalAlpha = 1 - age; ctx.strokeStyle = col; ctx.lineWidth = f.type === 'meteor' ? 3 : 1.6;
+    ctx.beginPath(); ctx.arc(p.x, p.y, 4 + age * (f.type === 'meteor' ? 60 : 26), 0, TAU); ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+  // selection
+  if (selected) {
+    let lat, lon;
+    if (selected.city) { const c = cityById(selected.city); if (c) { lat = c.lat; lon = c.lon; } }
+    else if (selected.cell >= 0) { const ll = cellLatLon(selected.cell); lat = ll.lat; lon = ll.lon; }
+    if (lat !== undefined) {
+      const p = project(lat, lon);
+      if (p.z > 0) { ctx.strokeStyle = CSSV['--sodium']; ctx.lineWidth = 1.5; ctx.setLineDash([3, 3]); ctx.beginPath(); ctx.arc(p.x, p.y, 10, 0, TAU); ctx.stroke(); ctx.setLineDash([]); }
+    }
+  }
+  // satellites in front
+  ctx.fillStyle = 'rgba(220,235,255,.9)';
+  for (const p of satP) if (p.z >= 0) ctx.fillRect(p.x - 0.9, p.y - 0.9, 1.8, 1.8);
+  drawOrbitalRing(true);
+  // colony ships
+  for (let k = SHIPS.length - 1; k >= 0; k--) {
+    const s = SHIPS[k], age = (animT - s.t0) / 6;
+    if (age >= 1) { SHIPS.splice(k, 1); continue; }
+    const p0 = project(s.lat, s.lon);
+    const dx = Math.cos(s.ang), dy = Math.sin(s.ang);
+    const dist = Math.pow(age, 1.6) * Math.max(view.w, view.h);
+    const hx = p0.x + dx * dist, hy = p0.y + dy * dist;
+    const tail = Math.min(dist, 60 + age * 80);
+    const gr = ctx.createLinearGradient(hx, hy, hx - dx * tail, hy - dy * tail);
+    gr.addColorStop(0, 'rgba(255,240,210,1)'); gr.addColorStop(1, 'rgba(255,181,71,0)');
+    ctx.strokeStyle = gr; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(hx, hy); ctx.lineTo(hx - dx * tail, hy - dy * tail); ctx.stroke();
+  }
+  drawMoon(true);
+}
+let r2s = 77;
+function rand2() { r2s = (r2s * 16807) % 2147483647; return r2s / 2147483647; }
+
+/* =====================================================================
+   Main loop
+   ===================================================================== */
+let playing = true, speed = 'auto', budget = 0, lastT = 0, lastLights = -1e9, lastRecolor = 0, lastUI = 0, lastSlowUI = 0, lastLayerRefresh = 0;
+let booting = false, techVersion = 0;
+const AUTO_SPEED = [60, 45, 32, 20, 8, 5, 3.5, 3.5];
+
+function frame(t) {
+  const dt = Math.min(0.1, (t - lastT) / 1000 || 0);
+  lastT = t;
+  animT += dt;
+  if (playing && S) {
+    const ys = speed === 'auto' ? AUTO_SPEED[S.flags.maxEra || 0] : speed;
+    budget += ys * dt;
+    let steps = 0;
+    const maxSteps = 6;
+    while (budget >= 1 && steps < maxSteps) { tick(); budget -= 1; steps++; }
+    if (budget > 2) budget = 2;
+    if (steps && S.terrDirty) territory();
+  }
+  if (dirtyList.length && t - lastRecolor > 100) { flushDirty(); lastRecolor = t; }
+  if ((layer === 3 || layer === 4) && t - lastLayerRefresh > 1500) { recolorAll(); lastLayerRefresh = t; }
+  if (t - lastLights > 450) { buildLights(); lastLights = t; }
+  if (autoSpin && !drag) view.rot -= dt * 0.07;
+  if (!reducedMotion) { cloudOff += dt * 0.0035; moonA += dt * 0.03; }
+  renderGlobe();
+  drawFrame();
+  if (t - lastUI > 200) { updateHeader(); updateInspector(); lastUI = t; }
+  if (t - lastSlowUI > (playing && speed !== 'auto' && speed > 20 ? 400 : 900)) { updatePanels(); lastSlowUI = t; }
+  requestAnimationFrame(frame);
+}
+
+/* =====================================================================
+   UI
+   ===================================================================== */
+function leadingEra() { let e = 0; for (const n of S.nations) if (n.alive && n.mult.era > e) e = n.mult.era; return e; }
+
+const playIcon = '<svg viewBox="0 0 16 16"><path d="M4 2.5v11l9-5.5z"/></svg>';
+const pauseIcon = '<svg viewBox="0 0 16 16"><path d="M3.5 2.5h3v11h-3zM9.5 2.5h3v11h-3z"/></svg>';
+function setPlaying(p) { playing = p; const b = $('btnPlay'); b.innerHTML = p ? pauseIcon : playIcon; b.setAttribute('aria-label', p ? '暂停' : '继续'); }
+
+function updateHeader() {
+  $('yearLabel').textContent = fmtYear(S.year);
+  const e = leadingEra();
+  const lead = S.nations.filter(n => n.alive).sort((a, b) => b.mult.count - a.mult.count || b.st.pop - a.st.pop)[0];
+  $('eraLabel').innerHTML = `<b>${ERA_NAME[e]}时代</b>${lead ? ` · 科技领先：${esc(lead.name)}` : ''}`;
+}
+function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+
+let tickerTimer = 0;
+function showTicker(type, text) {
+  const el = $('ticker');
+  el.innerHTML = `<span class="dot" style="background:var(${TYPE_COLOR[type]})"></span>${esc(fmtYearShort(S.year))} · ${esc(text)}`;
+  el.dataset.empty = '0';
+  clearTimeout(tickerTimer);
+  tickerTimer = setTimeout(() => { el.dataset.empty = '1'; }, 4500);
+}
+let bannerTimer = 0;
+function showBanner(title, sub) {
+  if (booting) return;
+  const el = $('banner');
+  el.innerHTML = `<h3>${esc(title)}</h3><p>${esc(sub)}</p>`;
+  el.hidden = false; el.style.opacity = '1';
+  clearTimeout(bannerTimer);
+  bannerTimer = setTimeout(() => { el.style.opacity = '0'; setTimeout(() => { el.hidden = true; }, 800); }, 3200);
+}
+
+let activeTab = 'ov';
+function updatePanels() {
+  if (activeTab === 'ov') updateOverview();
+  if (activeTab === 'nat') renderNations();
+  if (activeTab === 'tech' && techVersion !== renderedTechVersion) renderTech();
+  if (activeTab === 'log' && logVersion !== renderedLogVersion) renderLog();
+}
+
+function updateOverview() {
+  const alive = S.nations.filter(n => n.alive);
+  let fac = 0, labs = 0, rp = 0;
+  for (const c of S.cities) { fac += c.fac; labs += c.labs; rp += c.rp; }
+  $('kPop').textContent = fmtPop(worldPop());
+  $('kNat').textContent = alive.length;
+  $('kCity').textContent = S.cities.length;
+  $('kEra').textContent = ERA_NAME[leadingEra()];
+  $('kFac').textContent = fmtNum(fac);
+  $('kLab').textContent = fmtNum(labs);
+  $('kRP').textContent = fmtNum(rp);
+  $('kCO2').textContent = S.co2.toFixed(0) + ' ppm';
+  $('kT').textContent = (S.tanom >= 0 ? '+' : '') + S.tanom.toFixed(2) + ' °C';
+  $('kSea').textContent = '+' + (S.seaRise * 400).toFixed(2) + ' m';
+  const hist = chartWindow(S.history);
+  $('sPop').textContent = fmtPop(worldPop());
+  $('sCO2').textContent = S.co2.toFixed(0);
+  $('sT').textContent = (S.tanom >= 0 ? '+' : '') + S.tanom.toFixed(2);
+  drawSpark(CHARTS.pop, hist);
+  drawSpark(CHARTS.co2, hist);
+  drawSpark(CHARTS.t, hist);
+  // energy mix
+  const mix = [0, 0, 0, 0, 0]; let E = 0;
+  for (const n of alive) { E += n.st.E; for (let k = 0; k < 5; k++) mix[k] += n.st.mix[k] * n.st.E; }
+  const names = ['煤炭', '石油', '核能', '可再生', '聚变'], vars = ['--mix-coal', '--mix-oil', '--mix-nuke', '--mix-renew', '--mix-fusion'];
+  const mixEl = $('mix');
+  if (E < 0.5) { mixEl.innerHTML = '<p class="note">工业革命尚未到来，人类的能源来自柴薪、畜力与水车。</p>'; $('mixNote').textContent = ''; }
+  else {
+    const tot = mix.reduce((a, b) => a + b, 0) || 1;
+    $('mixNote').textContent = `开工率 ${Math.round(tot / E * 100)}%`;
+    mixEl.innerHTML = `<div class="mixbar" role="img" aria-label="全球能源结构">${mix.map((v, k) => v / tot > 0.002 ? `<span style="width:${(v / tot * 100).toFixed(2)}%;background:var(${vars[k]})" title="${names[k]} ${(v / tot * 100).toFixed(1)}%"></span>` : '').join('')}</div>
+      <div class="mixlegend">${mix.map((v, k) => `<div><span class="swatch" style="background:var(${vars[k]})"></span>${names[k]}<b>${(v / tot * 100).toFixed(0)}%</b></div>`).join('')}</div>`;
+  }
+  // resources
+  let rows = '';
+  for (const r of RES) {
+    const f = S.resLeft[r] / WORLD.resTotal[r], low = f < 0.25;
+    rows += `<span class="name">${RES_NAME[r]}</span><span class="track"><span class="fill${low ? ' low' : ''}" style="width:${(f * 100).toFixed(1)}%;display:block"></span></span><span class="pct${low ? ' low' : ''}">${low ? '告急 ' : ''}${(f * 100).toFixed(0)}%</span>`;
+  }
+  const ff = S.forestFrac;
+  rows += `<span class="name">森林</span><span class="track"><span class="fill${ff < 0.5 ? ' low' : ''}" style="width:${(ff * 100).toFixed(1)}%;display:block"></span></span><span class="pct${ff < 0.5 ? ' low' : ''}">${(ff * 100).toFixed(0)}%</span>`;
+  $('resBars').innerHTML = rows;
+  if (S.sats > 0) {
+    $('spaceBlock').hidden = false;
+    $('kSat').textContent = fmtNum(S.sats);
+    $('kOrb').textContent = fmtPop(S.orbPop);
+    $('kShip').textContent = S.ships;
+  }
+}
+
+/* ---------- sparklines ---------- */
+const CHARTS = {
+  pop: { el: $('chPop'), col: 1, fmt: v => fmtPop(v), hover: -1 },
+  co2: { el: $('chCO2'), col: 2, fmt: v => v.toFixed(0) + ' ppm', hover: -1, floor: 250 },
+  t: { el: $('chT'), col: 3, fmt: v => (v >= 0 ? '+' : '') + v.toFixed(2) + ' °C', hover: -1, zero: true },
+};
+function chartWindow(h) {
+  const st = S.firsts.steam; if (!st) return h;
+  const k = h.findIndex(r => r[0] >= st.y - 150);
+  return k > 0 ? h.slice(k) : h;
+}
+function drawSpark(ch, hist) {
+  ch.data = hist;
+  const el = ch.el, rect = el.getBoundingClientRect();
+  if (rect.width < 10) return;
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  const w = Math.round(rect.width * dpr), h = Math.round(rect.height * dpr);
+  if (el.width !== w || el.height !== h) { el.width = w; el.height = h; }
+  const c = el.getContext('2d');
+  c.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const W2 = rect.width, H2 = rect.height;
+  c.clearRect(0, 0, W2, H2);
+  const padL = 2, padR = 2, padT = 16, padB = 16;
+  if (hist.length < 2) { c.fillStyle = CSSV['--ink-3']; c.font = `11px ${CSSV.font || 'sans-serif'}`; c.fillText('数据收集中…', 4, H2 / 2); return; }
+  const xs = hist.map(r => r[0]), ys = hist.map(r => r[ch.col]);
+  const x0 = xs[0], x1 = xs[xs.length - 1];
+  let y0 = Math.min(...ys), y1 = Math.max(...ys);
+  if (ch.zero) { y0 = Math.min(y0, 0); y1 = Math.max(y1, 0.5); }
+  if (ch.floor !== undefined) y0 = Math.min(y0, 280);
+  if (ch.col === 1) y0 = 0;
+  if (y1 - y0 < 1e-9) y1 = y0 + 1;
+  const X = x => padL + (x - x0) / (x1 - x0 || 1) * (W2 - padL - padR);
+  const Y = y => padT + (1 - (y - y0) / (y1 - y0)) * (H2 - padT - padB);
+  // grid
+  c.strokeStyle = CSSV['--line']; c.lineWidth = 1;
+  for (const f of [0, 0.5, 1]) { const yy = Math.round(padT + f * (H2 - padT - padB)) + 0.5; c.beginPath(); c.moveTo(padL, yy); c.lineTo(W2 - padR, yy); c.stroke(); }
+  if (ch.zero && y0 < 0) { c.strokeStyle = CSSV['--ink-3']; c.setLineDash([2, 3]); c.beginPath(); c.moveTo(padL, Y(0)); c.lineTo(W2 - padR, Y(0)); c.stroke(); c.setLineDash([]); }
+  // area + line
+  const col = CSSV['--series-1'];
+  c.beginPath();
+  for (let k = 0; k < xs.length; k++) { const x = X(xs[k]), y = Y(ys[k]); k ? c.lineTo(x, y) : c.moveTo(x, y); }
+  c.lineWidth = 2; c.strokeStyle = col; c.lineJoin = 'round'; c.stroke();
+  c.lineTo(X(x1), Y(y0)); c.lineTo(X(x0), Y(y0)); c.closePath();
+  const grad = c.createLinearGradient(0, padT, 0, H2 - padB);
+  grad.addColorStop(0, 'rgba(57,135,229,.28)'); grad.addColorStop(1, 'rgba(57,135,229,0)');
+  c.fillStyle = grad; c.fill();
+  // labels
+  c.font = `10px ${CSSV.font}`;
+  c.fillStyle = CSSV['--ink-3']; c.textBaseline = 'alphabetic';
+  c.textAlign = 'left'; c.fillText(ch.fmt(y1), padL, 11);
+  c.textBaseline = 'alphabetic';
+  c.fillText(fmtYearShort(x0), padL, H2 - 3);
+  c.textAlign = 'right'; c.fillText(fmtYearShort(x1), W2 - padR, H2 - 3);
+  c.textAlign = 'left';
+  // endpoint
+  const ex = X(x1), ey = Y(ys[ys.length - 1]);
+  c.fillStyle = col; c.beginPath(); c.arc(ex, ey, 3.5, 0, TAU); c.fill();
+  c.strokeStyle = CSSV['--panel']; c.lineWidth = 2; c.stroke();
+  // hover
+  const tip = el.parentElement.querySelector('.tip');
+  if (ch.hover >= 0 && ch.hover < xs.length) {
+    const k = ch.hover, hx = X(xs[k]), hy = Y(ys[k]);
+    c.strokeStyle = CSSV['--ink-3']; c.lineWidth = 1; c.beginPath(); c.moveTo(hx, padT); c.lineTo(hx, H2 - padB); c.stroke();
+    c.fillStyle = col; c.beginPath(); c.arc(hx, hy, 4, 0, TAU); c.fill(); c.strokeStyle = CSSV['--panel']; c.lineWidth = 2; c.stroke();
+    tip.hidden = false;
+    tip.textContent = `${fmtYearShort(xs[k])} · ${ch.fmt(ys[k])}`;
+    tip.style.left = clamp(hx, 60, W2 - 60) + 'px';
+  } else tip.hidden = true;
+}
+for (const key in CHARTS) {
+  const ch = CHARTS[key], el = ch.el;
+  el.addEventListener('pointermove', e => {
+    const r = el.getBoundingClientRect(), hist = ch.data || S.history; if (hist.length < 2) return;
+    const f = clamp((e.clientX - r.left - 2) / (r.width - 4), 0, 1);
+    const x0 = hist[0][0], x1 = hist[hist.length - 1][0], target = x0 + f * (x1 - x0);
+    let bi = 0, bd = 1e18; for (let k = 0; k < hist.length; k++) { const d = Math.abs(hist[k][0] - target); if (d < bd) { bd = d; bi = k; } }
+    ch.hover = bi; drawSpark(ch, hist);
+  });
+  el.addEventListener('pointerleave', () => { ch.hover = -1; drawSpark(ch, ch.data || S.history); });
+}
+
+/* ---------- nations ---------- */
+let expandedNation = -1;
+function renderNations() {
+  const list = S.nations.slice().sort((a, b) => (b.alive - a.alive) || b.st.pop - a.st.pop);
+  let html = '';
+  let deadCount = 0;
+  for (const n of list) {
+    if (!n.alive) { deadCount++; continue; }
+    const wars = S.wars.filter(w => w.a === n.id || w.b === n.id).map(w => S.nations[w.a === n.id ? w.b : w.a].name);
+    const t = n.target ? TECH_BY_ID[n.target] : null;
+    const prog = t ? clamp(n.research / techCost(n, n.target), 0, 1) : 1;
+    const exp = expandedNation === n.id;
+    const fossil = Math.max(0, 1 - n.nuke - n.renew - n.fusion);
+    html += `<div class="nat" data-n="${n.id}" role="button" tabindex="0" aria-expanded="${exp}">
+      <div class="top"><span class="swatch" style="background:${n.color}"></span><span class="nm">${esc(n.name)}</span><span class="pp">${fmtPop(n.st.pop)}</span></div>
+      <div class="sub"><span>${ERA_NAME[n.mult.era]}时代</span><span>${n.st.cities} 城</span><span>科技 ${n.mult.count}/${TECHS.length}</span>${n.golden > 0 ? '<span style="color:var(--sodium)">黄金时代</span>' : ''}${wars.length ? `<span class="war">交战：${esc(wars.join('、'))}</span>` : ''}</div>
+      <div class="prog"><span>${t ? '研究 ' + esc(t.name) : '已完成全部科技'}</span><span class="track"><span class="fill" style="width:${(prog * 100).toFixed(0)}%;display:block"></span></span></div>
+      ${exp ? `<dl class="more">
+        <dt>首都</dt><dd>${esc((cityById(n.capital) || {}).name || '—')}</dd>
+        <dt>建国</dt><dd>${fmtYear(n.born)}</dd>
+        <dt>工厂</dt><dd>${fmtNum(n.st.fac)}</dd>
+        <dt>研究所</dt><dd>${fmtNum(n.st.labs)}</dd>
+        <dt>科研 / 年</dt><dd>${fmtNum(n.st.rp)}</dd>
+        <dt>能源满足率</dt><dd>${n.st.E > 0.5 ? Math.round(n.st.sat * 100) + '%' : '—'}</dd>
+        <dt>化石能源占比</dt><dd>${n.st.E > 0.5 ? Math.round(fossil * 100) + '%' : '—'}</dd>
+        <dt>国土（格）</dt><dd>${n.cl.reduce((a, c) => a + c.cells, 0)}</dd>
+      </dl>` : ''}
+    </div>`;
+  }
+  if (deadCount) html += `<p class="note">另有 ${deadCount} 个文明已湮灭于历史：${esc(list.filter(n => !n.alive).map(n => n.name).join('、'))}</p>`;
+  $('natList').innerHTML = html;
+}
+$('natList').addEventListener('click', e => {
+  const el = e.target.closest('.nat'); if (!el) return;
+  const id = +el.dataset.n;
+  expandedNation = expandedNation === id ? -1 : id;
+  selectedNation = expandedNation;
+  renderNations();
+});
+$('natList').addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target.closest('.nat')) { e.preventDefault(); e.target.closest('.nat').click(); } });
+
+/* ---------- tech ---------- */
+let renderedTechVersion = -1, techWho = 'world';
+function renderTech() {
+  renderedTechVersion = techVersion;
+  const sel = $('techWho');
+  const alive = S.nations.filter(n => n.alive);
+  const opts = `<option value="world">全世界（首次发现）</option>` + alive.map(n => `<option value="${n.id}">${esc(n.name)}</option>`).join('');
+  if (sel.dataset.sig !== alive.map(n => n.id).join(',')) { sel.innerHTML = opts; sel.dataset.sig = alive.map(n => n.id).join(','); }
+  if (techWho !== 'world' && !alive.some(n => String(n.id) === techWho)) techWho = 'world';
+  sel.value = techWho;
+  const who = techWho === 'world' ? null : S.nations[+techWho];
+  const knownWorld = Object.keys(S.firsts).length;
+  $('techSummary').textContent = who ? `${who.name}：${who.mult.count} / ${TECHS.length}` : `人类已发现 ${knownWorld} / ${TECHS.length} 项科技`;
+  let html = '';
+  for (let e = 0; e < ERA_NAME.length; e++) {
+    const ts = TECHS.filter(t => t.era === e);
+    const done = ts.filter(t => who ? who.techs[t.id] !== undefined : S.firsts[t.id]).length;
+    html += `<div class="era-group"><h4>${ERA_NAME[e]}时代<span>${done} / ${ts.length}</span></h4><div class="techs">`;
+    for (const t of ts) {
+      let cls = 'tech', sub = '', bar = 0;
+      if (who) {
+        if (who.techs[t.id] !== undefined) { cls += ' known'; sub = fmtYear(who.techs[t.id]); }
+        else if (who.target === t.id) { cls += ' cur'; bar = clamp(who.research / techCost(who, t.id), 0, 1); sub = `研究中 ${Math.round(bar * 100)}%`; }
+        else sub = t.req.every(r => who.techs[r] !== undefined) ? '可研究' : '需要：' + t.req.filter(r => who.techs[r] === undefined).map(r => TECH_BY_ID[r].name).join('、');
+      } else {
+        const f = S.firsts[t.id];
+        const k = alive.filter(n => n.techs[t.id] !== undefined).length;
+        if (f) { cls += ' known'; sub = `${fmtYearShort(f.y)} · ${f.name}`; bar = alive.length ? k / alive.length : 0; }
+        else sub = t.desc;
+      }
+      html += `<div class="${cls}" title="${esc(t.name + '：' + t.desc)}"><div class="tn">${esc(t.name)}</div><div class="tw">${esc(sub)}</div>${bar > 0 ? `<span class="tb" style="width:${(bar * 100).toFixed(0)}%"></span>` : ''}</div>`;
+    }
+    html += '</div></div>';
+  }
+  $('techTree').innerHTML = html;
+}
+$('techWho').addEventListener('change', e => { techWho = e.target.value; renderedTechVersion = -1; renderTech(); });
+
+/* ---------- log ---------- */
+let renderedLogVersion = -1, logFilter = 'all';
+function renderLog() {
+  renderedLogVersion = logVersion;
+  const items = S.log.filter(e => logFilter === 'all' || e.t === logFilter).slice(0, 160);
+  $('logList').innerHTML = items.map(e => `<li${e.i >= 0 ? ` data-cell="${e.i}"` : ''}><span class="y">${esc(fmtYearShort(e.y))}</span><span class="dot" style="background:var(${TYPE_COLOR[e.t]})" title="${TYPE_NAME[e.t]}"></span><span class="t">${esc(e.s)}</span></li>`).join('') || '<li><span></span><span></span><span class="t" style="color:var(--ink-3)">暂无记录</span></li>';
+}
+$('logFilter').innerHTML = [['all', '全部'], ...Object.entries(TYPE_NAME)].map(([k, v]) => `<button data-f="${k}" aria-pressed="${k === 'all'}">${v}</button>`).join('');
+$('logFilter').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  logFilter = b.dataset.f;
+  for (const x of $('logFilter').children) x.setAttribute('aria-pressed', x === b);
+  renderedLogVersion = -1; renderLog();
+});
+$('logList').addEventListener('click', e => {
+  const li = e.target.closest('li[data-cell]'); if (!li) return;
+  focusCell(+li.dataset.cell);
+});
+function focusCell(cell) {
+  const ll = cellLatLon(cell);
+  view.rot = ll.lon - PI / 2;
+  const np = clamp(ll.lat, -1.1, 1.1);
+  if (Math.abs(np - view.pitch) > 1e-3) { view.pitch = np; tablesDirty = true; }
+  const c = S.cities.find(c => c.i === cell);
+  selected = c ? { city: c.id } : { cell };
+  autoSpin = false; $('tSpin').checked = false;
+  updateInspector(true);
+}
+
+/* ---------- inspector ---------- */
+function updateInspector(force) {
+  const el = $('insp');
+  if (!selected) { el.hidden = true; return; }
+  if (!force && el.matches(':hover')) return;
+  let html = '';
+  if (selected.city) {
+    const c = cityById(selected.city);
+    if (!c) { selected = null; el.hidden = true; return; }
+    const n = S.nations[c.n];
+    const res = RES.filter(r => S.res[r][c.i] > 0 || nearRes(c, r)).map(r => `<span class="tag"><span class="swatch" style="background:rgb(${RES_RGB[r].join(',')})"></span>${RES_NAME[r]}</span>`).join('');
+    html = `<button class="close" aria-label="关闭">×</button>
+      <h2>${esc(c.name)}</h2>
+      <div class="meta"><span class="swatch" style="background:${n.color}"></span>${esc(n.name)}${c.cap ? ' · 首都' : ''} · 建于${fmtYear(c.born)}</div>
+      <dl>
+        <dt>人口</dt><dd>${fmtPop(c.pop)}</dd>
+        <dt>承载上限</dt><dd>${fmtPop(c.K)}</dd>
+        <dt>工厂</dt><dd>${c.fac >= 0.05 ? c.fac.toFixed(1) : '—'}</dd>
+        <dt>研究所</dt><dd>${c.labs >= 0.05 ? c.labs.toFixed(1) : '—'}</dd>
+        <dt>矿区</dt><dd>${n.mult.mine ? c.mines : '—'}</dd>
+        <dt>科研 / 年</dt><dd>${c.rp.toFixed(1)}</dd>
+        <dt>辖区</dt><dd>${c.cells} 格</dd>
+        <dt>地貌</dt><dd style="font-family:var(--font-body)">${BIOME_NAME[WORLD.biome[c.i]]}${c.coastal ? '，沿海' : ''}</dd>
+        <dt>气温</dt><dd>${cellTeff(c.i).toFixed(1)} °C</dd>
+      </dl>
+      ${res ? `<div class="tags">${res}</div>` : ''}`;
+  } else {
+    const i = selected.cell;
+    const land = isLand(i), own = S.owner[i];
+    const e = WORLD.elev[i];
+    const res = RES.filter(r => S.res[r][i] > 0).map(r => `<span class="tag"><span class="swatch" style="background:rgb(${RES_RGB[r].join(',')})"></span>${RES_NAME[r]} ${Math.round(S.res[r][i])}</span>`).join('');
+    const biome = land ? BIOME_NAME[WORLD.biome[i] === B.ICE && cellTeff(i) > -9 ? B.TUNDRA : WORLD.biome[i]] : (cellTeff(i) < -7 ? '海冰' : (isShallow(i) ? '浅海' : '深海'));
+    const ll = cellLatLon(i);
+    html = `<button class="close" aria-label="关闭">×</button>
+      <h2>${biome}</h2>
+      <div class="meta">${Math.abs(ll.lat * 180 / PI).toFixed(1)}°${ll.lat >= 0 ? 'N' : 'S'} · ${Math.abs(ll.lon * 180 / PI).toFixed(1)}°${ll.lon >= 0 ? 'E' : 'W'}</div>
+      <dl>
+        <dt>${land ? '海拔' : '水深'}</dt><dd>${land ? Math.round((e - S.seaRise) * 5600) : Math.round((S.seaRise - e) * 6500)} m</dd>
+        <dt>气温</dt><dd>${cellTeff(i).toFixed(1)} °C</dd>
+        ${land ? `<dt>森林覆盖</dt><dd>${Math.round(S.forest[i] * 100)}%</dd><dt>土地肥力</dt><dd>${(WORLD.fert0[i] * 100).toFixed(0)}</dd>` : `<dt>渔业资源</dt><dd>${WORLD.fish[i] > 0 ? Math.round(WORLD.fish[i] * 100) : '—'}</dd>`}
+        <dt>归属</dt><dd style="font-family:var(--font-body)">${own >= 0 ? esc(S.nations[own].name) : '无主之地'}</dd>
+      </dl>
+      ${res ? `<div class="tags">${res}</div>` : ''}`;
+  }
+  el.innerHTML = html;
+  el.hidden = false;
+}
+function nearRes(c, r) { const ci = S.cities.indexOf(c); for (const i of S.nations[c.n].dep[r]) if (S.cityOf[i] === ci) return true; return false; }
+$('insp').addEventListener('click', e => { if (e.target.closest('.close')) { selected = null; $('insp').hidden = true; } });
+
+/* ---------- legend ---------- */
+function renderLegend() {
+  const el = $('legend');
+  if (layer === 0) { el.hidden = true; return; }
+  let html = '';
+  if (layer === 1) html = '颜色代表国家，白线是国界。点击城市查看详情。';
+  if (layer === 2) html = RES.map(r => `<span><i style="background:rgb(${RES_RGB[r].join(',')})"></i>${RES_NAME[r]}</span>`).join('') + '<span><i style="background:rgb(150,200,255)"></i>渔场</span><span><i style="background:rgb(70,70,76)"></i>已采空</span>';
+  if (layer === 3) html = `<div class="ramp"><span>稀疏</span><span class="bar" style="background:linear-gradient(90deg,${POP_RAMP.map(c => `rgb(${c.join(',')})`).join(',')})"></span><span>稠密</span></div>`;
+  if (layer === 4) html = `<div class="ramp"><span>-30 °C</span><span class="bar" style="background:linear-gradient(90deg,rgb(57,120,214),rgb(120,122,126),rgb(222,72,64))"></span><span>35 °C</span></div><span><i style="background:rgb(96,80,56)"></i>工业雾霾</span>`;
+  el.innerHTML = html;
+  el.hidden = false;
+}
+
+/* ---------- controls ---------- */
+$('btnPlay').addEventListener('click', () => setPlaying(!playing));
+$('speedSeg').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  speed = b.dataset.speed === 'auto' ? 'auto' : +b.dataset.speed;
+  for (const x of $('speedSeg').children) x.setAttribute('aria-pressed', x === b);
+  if (!playing) setPlaying(true);
+});
+$('layerSeg').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  layer = +b.dataset.layer;
+  for (const x of $('layerSeg').children) x.setAttribute('aria-pressed', x === b);
+  recolorAll(); renderLegend();
+});
+$('tClouds').addEventListener('change', e => { showClouds = e.target.checked; });
+$('tNight').addEventListener('change', e => { showNight = e.target.checked; });
+$('tSpin').addEventListener('change', e => { autoSpin = e.target.checked; });
+$('tSpin').checked = autoSpin;
+$('zIn').addEventListener('click', () => setZoom(view.zoom * 1.25));
+$('zOut').addEventListener('click', () => setZoom(view.zoom / 1.25));
+function setZoom(z) { view.zoom = clamp(z, 0.6, 3.2); view.R = Math.min(view.w, view.h) * radiusFactor() * view.zoom; tablesDirty = true; }
+function radiusFactor() { return view.w < 600 ? 0.42 : 0.36; }
+$('btnNew').addEventListener('click', () => { boot({ seed: (Math.random() * 1e9) | 0 }); });
+document.querySelector('.tabs').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  activeTab = b.dataset.tab;
+  for (const x of document.querySelectorAll('.tabs button')) x.setAttribute('aria-selected', x === b);
+  for (const k of ['ov', 'nat', 'tech', 'log']) $('pane-' + k).hidden = k !== activeTab;
+  renderedTechVersion = -1; renderedLogVersion = -1;
+  updatePanels();
+});
+
+let tool = null;
+const TOOL_HINT = { inspire: '点击一座城市：它的国家将获得一次科研突破', plague: '点击一座城市：瘟疫将在它的国家蔓延', meteor: '点击任意位置：陨石将撞向那里', seed: '点击一块无人陆地：在那里播下新文明' };
+$('god').addEventListener('click', e => {
+  const b = e.target.closest('button[data-tool]'); if (!b) return;
+  setTool(tool === b.dataset.tool ? null : b.dataset.tool);
+});
+function setTool(t) {
+  tool = t;
+  for (const x of document.querySelectorAll('#god button')) x.setAttribute('aria-pressed', x.dataset.tool === t);
+  const h = $('toolHint'); h.hidden = !t; h.textContent = t ? TOOL_HINT[t] + '（Esc 取消）' : '';
+  canvas.classList.toggle('tool', !!t);
+}
+function applyTool(sx, sy) {
+  const hit = pickCity(sx, sy), u = unproject(sx, sy);
+  if (!u) return false;
+  if (tool === 'inspire' || tool === 'plague') {
+    const c = hit || nearestCityTo(u.cell, 6);
+    if (!c) { flashHint('那里附近没有城市'); return false; }
+    const n = S.nations[c.n];
+    if (tool === 'inspire') {
+      if (!n.target) n.target = pickTech(n);
+      if (n.target) { const t = TECH_BY_ID[n.target]; n.research += techCost(n, n.target) * 0.9; log('tech', `神启降临${c.name}，${n.name}的学者在「${t.name}」上取得突破`, c.i); }
+    } else plague(n, true);
+  } else if (tool === 'meteor') meteor(u.cell, true);
+  else if (tool === 'seed') {
+    const i = u.cell;
+    if (!isLand(i) || S.owner[i] >= 0) { flashHint('需要一块无人居住的陆地'); return false; }
+    const alive = S.nations.filter(n => n.alive);
+    const common = { agri: S.year };
+    for (const t of TECHS) if (alive.length && alive.every(n => n.techs[t.id] !== undefined)) common[t.id] = S.year;
+    const n = createNation(common);
+    createCity(i, n.id, 120000, true);
+    log('civ', `一个新的文明在荒野中诞生：${n.name}`, i);
+    territory();
+  }
+  return true;
+}
+function flashHint(t) { const h = $('toolHint'); h.textContent = t; setTimeout(() => { if (tool) h.textContent = TOOL_HINT[tool] + '（Esc 取消）'; }, 1600); }
+function nearestCityTo(cell, maxD) { let b = null, bd = maxD; for (const c of S.cities) { const d = cellDist(c.i, cell); if (d < bd) { bd = d; b = c; } } return b; }
+
+/* ---------- pointer ---------- */
+let drag = null;
+const pointers = new Map();
+function pickCity(sx, sy) {
+  let b = null, bd = 14;
+  for (const s of screenCities) { const d = Math.hypot(s.x - sx, s.y - sy) - (s.r || 2); if (d < bd) { bd = d; b = s.c; } }
+  return b;
+}
+canvas.addEventListener('pointerdown', e => {
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  canvas.setPointerCapture(e.pointerId);
+  if (pointers.size === 2) { const [a, b] = [...pointers.values()]; drag = { pinch: Math.hypot(a.x - b.x, a.y - b.y), zoom: view.zoom, moved: 99 }; return; }
+  drag = { x: e.clientX, y: e.clientY, rot: view.rot, pitch: view.pitch, moved: 0 };
+  canvas.classList.add('dragging');
+});
+canvas.addEventListener('pointermove', e => {
+  const r = canvas.getBoundingClientRect(), sx = e.clientX - r.left, sy = e.clientY - r.top;
+  if (pointers.has(e.pointerId)) pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (drag && drag.pinch && pointers.size === 2) { const [a, b] = [...pointers.values()]; setZoom(drag.zoom * Math.hypot(a.x - b.x, a.y - b.y) / drag.pinch); return; }
+  if (drag && !drag.pinch) {
+    const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+    drag.moved = Math.max(drag.moved, Math.abs(dx) + Math.abs(dy));
+    view.rot = drag.rot - dx / view.R;
+    const np = clamp(drag.pitch + dy / view.R, -1.3, 1.3);
+    if (np !== view.pitch) { view.pitch = np; tablesDirty = true; }
+    return;
+  }
+  const c = pickCity(sx, sy);
+  const tip = $('hoverTip');
+  if (c) { tip.hidden = false; tip.textContent = `${c.name} · ${fmtPop(c.pop)}`; tip.style.left = sx + 'px'; tip.style.top = sy + 'px'; canvas.style.cursor = 'pointer'; }
+  else { tip.hidden = true; canvas.style.cursor = ''; }
+});
+function endPointer(e) {
+  pointers.delete(e.pointerId);
+  if (pointers.size) return;
+  canvas.classList.remove('dragging');
+  const d = drag; drag = null;
+  if (!d || d.pinch || d.moved >= 6 || e.type !== 'pointerup') return;
+  const r = canvas.getBoundingClientRect(), sx = e.clientX - r.left, sy = e.clientY - r.top;
+  if (tool) { if (applyTool(sx, sy)) setTool(null); return; }
+  const c = pickCity(sx, sy);
+  if (c) { selected = { city: c.id }; updateInspector(true); return; }
+  const u = unproject(sx, sy);
+  selected = u ? { cell: u.cell } : null;
+  updateInspector(true);
+}
+canvas.addEventListener('pointerup', endPointer);
+canvas.addEventListener('pointercancel', endPointer);
+canvas.addEventListener('pointerleave', () => { $('hoverTip').hidden = true; });
+canvas.addEventListener('wheel', e => { e.preventDefault(); setZoom(view.zoom * Math.exp(-e.deltaY * 0.0012)); }, { passive: false });
+window.addEventListener('keydown', e => {
+  if (e.target.matches('input,select,textarea')) return;
+  if (e.code === 'Space' && !e.target.closest('button')) { e.preventDefault(); setPlaying(!playing); }
+  if (e.key === 'Escape') { if (tool) setTool(null); else { selected = null; updateInspector(true); } }
+});
+window.addEventListener('resize', () => { layout(); });
+
+/* =====================================================================
+   Snapshot / boot
+   ===================================================================== */
+function serialize() {
+  const sparse = a => { const out = []; for (let i = 0; i < a.length; i++) if (a[i] > 0) out.push(i, Math.round(a[i] * 10) / 10); return out; };
+  const res = {}; for (const r of RES) res[r] = sparse(S.res[r]);
+  return {
+    v: 1, seed: S.seed, year: S.year, tick: S.tick, rng: S.rng, co2: S.co2, tanom: S.tanom, seaRise: S.seaRise, co2Peak: S.co2Peak,
+    cities: S.cities, wars: S.wars, log: S.log.slice(0, 200), history: S.history, firsts: S.firsts, names: S.names, flags: S.flags,
+    nations: S.nations.map(n => { const { mult, dep, cl, ...rest } = n; return rest; }),
+    forest: Array.from(S.forest, v => Math.round(v * 100) / 100), res, resLeft: S.resLeft,
+    nextCity: S.nextCity, sats: S.sats, orbital: S.orbital, orbPop: S.orbPop, ships: S.ships, moon: S.moon, moonDue: S.moonDue, moonBy: S.moonBy,
+    forestFrac: S.forestFrac, lastShip: S.lastShip,
+    ui: { layer, speed, playing, rot: view.rot, pitch: view.pitch, zoom: view.zoom, activeTab },
+  };
+}
+function deserialize(d) {
+  WORLD = genWorld(d.seed);
+  S = {
+    v: 1, seed: d.seed, year: d.year, tick: d.tick, rng: d.rng, co2: d.co2, tanom: d.tanom, seaRise: d.seaRise, co2Peak: d.co2Peak,
+    cities: d.cities, wars: d.wars, log: d.log, history: d.history, firsts: d.firsts, names: d.names, flags: d.flags,
+    nations: d.nations.map(n => { n.mult = null; n.dep = { coal: [], oil: [], iron: [], uran: [], rare: [] }; n.cl = []; return n; }),
+    forest: Float32Array.from(d.forest), res: {}, owner: new Int16Array(N).fill(-1), cityOf: new Int16Array(N).fill(-1),
+    farm: new Float32Array(N), smog: new Float32Array(N), resLeft: d.resLeft,
+    nextCity: d.nextCity, sats: d.sats, orbital: d.orbital, orbPop: d.orbPop, ships: d.ships, moon: d.moon, moonDue: d.moonDue, moonBy: d.moonBy,
+    forestFrac: d.forestFrac, deforest: 0, terrDirty: true, borders: [], lastShip: d.lastShip,
+  };
+  for (const n of S.nations) n.mult = computeMult(n);
+  for (const r of RES) { const a = new Float32Array(N); const s = d.res[r]; for (let k = 0; k < s.length; k += 2) a[s[k]] = s[k + 1]; S.res[r] = a; }
+}
+
+function boot(data) {
+  booting = true;
+  let restored = false;
+  if (data && data.state && data.state.v === 1) {
+    try { deserialize(data.state); restored = true; } catch (err) { restored = false; }
+  }
+  if (!restored) newState(data && data.seed ? data.seed : ((Math.random() * 1e9) | 0));
+  buildGlobalDep();
+  lastRiseDrawn = S.seaRise; lastTanomDrawn = S.tanom;
+  S.flags.maxEra = S.flags.maxEra || 0;
+  territory();
+  if (!restored) { for (let k = 0; k < 420; k++) tick(); }
+  const ui = restored && data.state.ui;
+  if (ui) {
+    layer = ui.layer; speed = ui.speed; view.rot = ui.rot; view.pitch = ui.pitch; view.zoom = ui.zoom;
+    for (const x of $('layerSeg').children) x.setAttribute('aria-pressed', +x.dataset.layer === layer);
+    for (const x of $('speedSeg').children) x.setAttribute('aria-pressed', String(x.dataset.speed) === String(speed));
+    setPlaying(ui.playing);
+  } else setPlaying(true);
+  territory();
+  recolorAll();
+  buildLights();
+  booting = false;
+  selected = null; selectedNation = -1; expandedNation = -1;
+  FX.length = 0; SMOKE.length = 0; SHIPS.length = 0;
+  $('seedLabel').textContent = S.seed;
+  renderLegend();
+  layout();
+  updateHeader();
+  techVersion++; logVersion++;
+  updatePanels();
+}
+
+function start(data) {
+  readCss();
+  boot(data && data.state ? data : null);
+  window.claude?.hot?.snapshot?.(() => ({ state: serialize() }));
+  requestAnimationFrame(t => { lastT = t; requestAnimationFrame(frame); });
+}
+
+// debugging handle (harmless in production)
+window.__earth = { get S() { return S; }, tick: n => { for (let k = 0; k < n; k++) tick(); }, serialize, TECHS, newWorld: seed => boot({ seed }) };
+
+if (window.claude?.hot?.ready) window.claude.hot.ready(start);
+else start(window.claude?.hot?.data ?? {});
+})();
+</script>
+</body>
+</html>
