@@ -678,6 +678,7 @@ const RES_NAME = { coal: '煤炭', oil: '石油', iron: '铁矿', uran: '铀矿'
 const RES_RGB = { coal: [210, 210, 214], oil: [229, 90, 150], iron: [236, 120, 60], uran: [140, 228, 90], rare: [80, 206, 236] };
 const RES_TOTAL = { coal: 520000, oil: 260000, iron: 330000, uran: 26000, rare: 30000 };
 
+
 const ERA_NAME = ['远古', '古典', '中世纪', '文艺复兴', '工业', '现代', '信息', '未来', '星际'];
 const NERA = ERA_NAME.length;
 const BRANCH = {
@@ -1002,6 +1003,7 @@ function classify(e, T, m, mtn) {
   if (T < 18) return m < 0.27 ? B.DESERT : m < 0.43 ? B.STEPPE : m < 0.57 ? B.GRASS : B.FOREST;
   return m < 0.3 ? B.DESERT : m < 0.45 ? B.SAVANNA : m < 0.6 ? B.GRASS : B.JUNGLE;
 }
+
 
 /* =====================================================================
    Simulation state
@@ -1329,6 +1331,7 @@ function fmtPop(p) {
 function fmtNum(v) { if (v >= 1e4) return (v / 1e4).toFixed(1).replace(/\.0$/, '') + ' 万'; return Math.round(v).toLocaleString('zh-CN'); }
 function fmtYear(y) { return y < 0 ? `公元前 ${-y} 年` : `公元 ${y} 年`; }
 function fmtYearShort(y) { return y < 0 ? `前${-y}` : `${y}`; }
+
 
 /* =====================================================================
    Ideologies: spread, elections, revolutions, civil wars, puppets
@@ -2923,6 +2926,7 @@ function buildLights() {
   for (let i = 0; i < TN; i++) if (LIGHTS[i] > 1.6) LIGHTS[i] = 1.6;
 }
 
+
 /* =====================================================================
    Pixel-art world map (16 px per simulation cell)
    ===================================================================== */
@@ -3033,6 +3037,7 @@ function flushMapDirty() {
   if (list.length > 500) { mctx.putImageData(mapImg, 0, 0); return; }
   for (const i of list) { const cy = (i / W) | 0, cx = i - cy * W; mctx.putImageData(mapImg, 0, 0, cx * PX, cy * PX, PX, PX); }
 }
+
 
 /* =====================================================================
    Globe renderer (main globe view and the mini-globe)
@@ -3145,6 +3150,41 @@ function globeUnproject(g, sx, sy) {
 }
 function cellLatLon(i) { const y = (i / W) | 0, x = i - y * W; return { lat: CELL_LAT[y], lon: cellLon(x) }; }
 
+
+/* =====================================================================
+   Graphics quality
+   Every renderer reads GFX.* to decide how much detail to draw. Level 3
+   ("极致") is the default; on slow devices the auto monitor steps down.
+   ===================================================================== */
+const GFX_LEVELS = [
+  { name: '流畅', dpr: 1, globe: 160000, parts: 0.4, post: 0, shadows: 0, weather: 0, water: 0, detail: 0 },
+  { name: '均衡', dpr: 1.5, globe: 260000, parts: 0.7, post: 0, shadows: 1, weather: 1, water: 1, detail: 1 },
+  { name: '精致', dpr: 2, globe: 420000, parts: 1, post: 1, shadows: 1, weather: 1, water: 1, detail: 2 },
+  { name: '极致', dpr: 3, globe: 700000, parts: 1.5, post: 2, shadows: 1, weather: 1, water: 1, detail: 3 },
+];
+const GFX = Object.assign({ level: 3, auto: true }, GFX_LEVELS[3]);
+let gfxSlow = 0, gfxVersion = 0;
+function setGfx(level, auto) {
+  level = clamp(level | 0, 0, GFX_LEVELS.length - 1);
+  Object.assign(GFX, GFX_LEVELS[level], { level });
+  if (auto !== undefined) GFX.auto = !!auto;
+  try { localStorage.setItem('blue-planet-gfx', JSON.stringify({ level: GFX.level, auto: GFX.auto })); } catch (e) {}
+  G.budget = GFX.globe; G.dirty = true;
+  if (typeof GP !== 'undefined') { GP.budget = Math.round(GFX.globe * 0.75); GP.dirty = true; }
+  gfxSlow = 0; gfxVersion++;
+  if (typeof layout === 'function' && view.w > 0) layout();
+}
+function loadGfx() {
+  let g = null; try { g = JSON.parse(localStorage.getItem('blue-planet-gfx') || 'null'); } catch (e) {}
+  setGfx(g && g.level !== undefined ? g.level : 3, g && g.auto !== undefined ? g.auto : true);
+}
+// called once per frame with the real frame interval; steps quality down after ~4 s below ~40 fps
+function gfxMonitor(dt) {
+  if (!GFX.auto || GFX.level === 0 || document.hidden) { gfxSlow = 0; return; }
+  if (dt > 0.025 && dt < 0.2) gfxSlow += dt; else gfxSlow = Math.max(0, gfxSlow - dt * 0.5);
+  if (gfxSlow > 4) { setGfx(GFX.level - 1); if (typeof showTicker === 'function' && S) showTicker('civ', `画面帧率偏低，画质已自动调整为「${GFX.name}」`); }
+}
+
 /* =====================================================================
    Views, camera
    ===================================================================== */
@@ -3169,7 +3209,7 @@ function zMin() { return view.w / MW; }
 function layout() {
   const r = stageEl.getBoundingClientRect();
   view.w = Math.max(200, r.width); view.h = Math.max(200, r.height);
-  view.dpr = Math.min(window.devicePixelRatio || 1, 2);
+  view.dpr = Math.min(window.devicePixelRatio || 1, GFX.dpr);
   canvas.width = Math.round(view.w * view.dpr); canvas.height = Math.round(view.h * view.dpr);
   starCanvas.width = canvas.width; starCanvas.height = canvas.height;
   const sc = starCanvas.getContext('2d'), rnd = mulberry32(1234);
@@ -3255,6 +3295,7 @@ function switchView(mode, near) {
   AG.length = 0;
   onViewChanged();
 }
+
 
 /* =====================================================================
    City layouts and building sprites
@@ -3410,6 +3451,7 @@ function drawCitySprites(c, z) {
     }
   }
 }
+
 
 /* =====================================================================
    The little people
@@ -3753,6 +3795,144 @@ function addFx(cell, type, strong, col) {
 }
 function launchShip(n) { const c = cityById(n.capital) || largestCity(n); if (c) SHIPS.push({ lat: c.lat, lon: c.lon, t0: animT, ang: (rand() - 0.5) * 1.2 - PI / 2 }); }
 
+
+function drawPerson(a, z) {
+  const sx = sxOf(a.x), sy = syOf(a.y);
+  if (sx < -30 || sx > view.w + 30 || sy < -40 || sy > view.h + 20) return;
+  if (a.hide && a.st === 'rest') return;
+  const n = S.nations[a.n]; if (!n) return;
+  SPX = sx; SPY = sy; SPZ = z * 0.62;
+  const dead = a.st === 'dead';
+  if (dead) { if (a.vanish) return; ctx.globalAlpha = clamp(a.t / 2.5, 0, 1); }
+  const shirt = a.role === 'army' || a.role === 'soldier' ? n.color : (ROLE_SHIRT[a.role] || '#a0a0a0');
+  const skin = a.skin || SKINS[0], hair = a.hair || HAIRS[0];
+  if (dead) { pr(-2, -1.2, 3, 1.2, shirt); pr(1, -1.4, 1.4, 1.4, skin); ctx.globalAlpha = 1; return; }
+  const moving = a.st === 'walk';
+  const step = moving ? (Math.floor(a.ph * 7) & 1) : 0;
+  const d = a.dir || 1;
+  if (a.boat) {
+    pr(-3, -1.6, 6, 1.6, '#7a5230'); pr(-2.4, -2.1, 4.8, 0.5, '#9a6a40');
+    pr(-0.2, -7, 0.4, 5, '#4a3424'); pr(0.2 * d, -6.6, 2.2 * d, 3.6, '#f2efe6');
+    pr(-1.8, -3.6, 1.4, 1.5, skin); pr(-1.8, -4, 1.4, 0.5, hair);
+    return;
+  }
+  if (a.kind === 'ship') {
+    const hull = a.wp >= 5 ? '#5c6670' : '#6a4626', era = a.wp;
+    pr(-4.5, -1.8, 9, 1.8, hull); pr(-5, -2.3, 10, 0.5, shade(hull.length === 7 ? hull : '#6a4626', 1.2)); pr(d > 0 ? 3.5 : -5, -1.4, 1.5, 1, hull);
+    if (era < 4) { pr(-0.3, -9, 0.6, 7, '#4a3424'); pr(-3, -8.5, 6, 4.5, '#efe9da'); pr(-3, -8.5, 6, 0.6, n.color); }
+    else if (era < 6) { for (const mx of [-2.6, 0, 2.6]) { pr(mx - 0.2, -9, 0.4, 7, '#4a3424'); pr(mx - 1.4, -8.4, 2.8, 2.4, '#efe9da'); pr(mx - 1.2, -5.6, 2.4, 2, '#efe9da'); } }
+    else { pr(-2.5, -4, 5, 1.8, '#8a949e'); pr(-1, -5.6, 2, 1.6, '#9aa4ae'); pr(d > 0 ? 1.5 : -4.5, -3.6, 3, 0.5, '#4a525a'); }
+    pr(d > 0 ? -4.4 : 3.2, -4.6, 1.2, 0.8, n.color);
+    if (a.flash > 0) pr(d > 0 ? 4.8 : -5.8, -2.6, 1, 1, '#ffd27a');
+    return;
+  }
+  if (a.kind === 'cannon') {
+    pr(-2.6, -1.6, 1.4, 1.4, '#5a3a20'); pr(0.4, -1.6, 1.4, 1.4, '#5a3a20');
+    pr(d > 0 ? -2 : -2.6, -2.6, 4.6, 1, '#3a3a3e'); pr(d > 0 ? 2 : -3.6, -2.9, 1.6, 0.8, '#2a2a2e');
+    if (a.flash > 0) pr(d > 0 ? 3.6 : -5, -3.2, 1.4, 1.4, '#ffd27a');
+    SPX = sx - d * z * 0.62 * 3.2;
+  }
+  if (a.kind === 'cart') {
+    pr(-3, -3, 5, 2, '#8a6438'); pr(-3, -4.2, 5, 1.2, '#efe6d0'); pr(-2.6, -1, 1.2, 1, '#2a2018'); pr(0.6, -1, 1.2, 1, '#2a2018');
+    pr(2 * d + (d > 0 ? 0 : -3), -3, 3, 1.6, '#7a5a3a'); pr(d > 0 ? 4.4 : -5, -3.6, 1, 1, '#7a5a3a');
+    return;
+  }
+  if (a.kind === 'tank') {
+    const tc = shade(n.color, 0.55);
+    pr(-4, -1.4, 8, 1.4, '#2e2e2a'); pr(-3.6, -3, 7.2, 1.8, tc); pr(-1.6, -4.4, 3.2, 1.6, shade(n.color, 0.7)); pr(d > 0 ? 1.6 : -5.6, -4, 4, 0.6, '#2a2a26');
+    if (a.flash > 0) pr(d > 0 ? 5.6 : -6.8, -4.3, 1.2, 1.2, '#ffd27a');
+    return;
+  }
+  if (a.kind === 'drone') {
+    ctx.globalAlpha = 0.35; pr(-1.5, -0.6, 3, 0.6, '#000'); ctx.globalAlpha = 1;
+    const hy = -9 + Math.sin(a.ph * 4) * 0.6;
+    pr(-0.8, hy, 1.6, 1.2, '#3a3e46'); pr(-3, hy - 0.4, 2.2, 0.4, '#3a3e46'); pr(0.8, hy - 0.4, 2.2, 0.4, '#3a3e46');
+    const rp = (Math.floor(a.ph * 20) & 1) ? '#c8d0d8' : '#8a9098'; pr(-3.4, hy - 0.8, 1.2, 0.3, rp); pr(2.2, hy - 0.8, 1.2, 0.3, rp);
+    pr(-0.3, hy + 0.2, 0.6, 0.5, n.color);
+    return;
+  }
+  if (a.kind === 'mech') {
+    SPZ = z * 1.1;
+    const mc = '#9aa2aa';
+    pr(-1.4, -2, 1, 2 - step * 0.4, '#5a6068'); pr(0.4, -2, 1, 2 - (1 - step) * 0.4, '#5a6068');
+    pr(-1.8, -4.4, 3.6, 2.4, mc); pr(-0.8, -5.4, 1.6, 1, '#7a828a'); pr(-0.4, -5.1, 0.8, 0.4, '#ff4a4a');
+    pr(d > 0 ? 1.8 : -3.4, -4.2, 1.6, 0.6, '#5a6068'); pr(-1.8, -3.8, 3.6, 0.5, n.color);
+    if (a.flash > 0) pr(d > 0 ? 3.4 : -4.4, -4.3, 1, 1, '#ffd27a');
+    return;
+  }
+  if (a.kind === 'horse') {
+    pr(-3, -3.4, 6, 1.8, '#7a4e2a'); pr(d > 0 ? 2.4 : -3.8, -4.6, 1.4, 1.6, '#7a4e2a');
+    pr(-2.6, -1.6, 0.6, 1.6 - step * 0.5, '#5a3a20'); pr(1.8, -1.6, 0.6, 1.6 - (1 - step) * 0.5, '#5a3a20');
+    SPY = sy - 2.2 * z * 0.62;
+  }
+  const kid = a.role === 'child';
+  if (kid) SPZ = z * 0.45;
+  if (a.kind !== 'horse') { pr(-1, -2, 0.9, 2 - step * 0.5, '#3a3430'); pr(0.1, -2, 0.9, 2 - (1 - step) * 0.5, '#3a3430'); }
+  pr(-1, -4, 2, 2, shirt);
+  pr(-1, -6, 2, 2, skin);
+  const hat = a.role === 'farmer' ? '#e2c46a' : a.role === 'miner' || a.role === 'builder' ? '#f0c040' : null;
+  if (hat) { pr(-1.5, -6.4, 3, 0.6, hat); pr(-0.8, -7, 1.6, 0.6, hat); } else pr(-1, -6.3, 2, 0.6, hair);
+  if (a.role === 'army' && a.wp >= 5) pr(-1.1, -6.6, 2.2, 0.8, shade(n.color, 0.6));
+  if (a.carry) pr(d > 0 ? -2.2 : 1, -5, 1.2, 1.6, a.carry);
+  const work = a.st === 'work' || a.st === 'fight' || a.st === 'siege';
+  const up = work && (Math.floor(a.ph * (a.st === 'fight' ? 5 : 3)) & 1);
+  switch (a.role) {
+    case 'farmer': if (work) { pr(d > 0 ? 0.8 : -1.2, up ? -6 : -4.6, 0.4, 2.6, '#7a5a30'); pr(d > 0 ? 0.8 : -1.8, up ? -6.2 : -2.2, 1, 0.4, '#9aa0a8'); } break;
+    case 'wood': if (work) { pr(d > 0 ? 0.8 : -1.2, up ? -6.2 : -4.8, 0.4, 2.4, '#7a5a30'); pr(d > 0 ? 1.1 : -1.9, up ? -6.4 : -3, 0.8, 0.8, '#9aa0a8'); } break;
+    case 'miner': if (work) { pr(d > 0 ? 0.8 : -1.2, up ? -6.4 : -4.8, 0.4, 2.4, '#7a5a30'); pr(d > 0 ? 0.2 : -1.6, up ? -6.6 : -3.2, 1.8, 0.4, '#8a9098'); } break;
+    case 'worker': case 'builder': if (work) { pr(d > 0 ? 0.9 : -1.3, up ? -5.6 : -4.4, 0.4, 1.6, '#7a5a30'); pr(d > 0 ? 0.7 : -1.5, up ? -5.9 : -4.6, 0.8, 0.5, '#7a7e86'); } break;
+    case 'scholar': if (work) pr(d > 0 ? 0.6 : -1.8, -4.2, 1.2, 0.9, '#f4f0e0'); break;
+    case 'trader': pr(d > 0 ? -2 : 1, -4.8, 1, 2, '#8a5a30'); break;
+    case 'soldier': case 'army': {
+      const wp = a.role === 'soldier' ? n.mult.weapon : a.wp;
+      if (a.kind === 'flag') { pr(d > 0 ? 1 : -1.4, -11, 0.4, 9, '#5a4028'); const wv = Math.sin(animT * 5 + a.id) > 0 ? 0.3 : 0; pr(d > 0 ? 1.4 : -5.4, -11 + wv, 4, 2.6, n.color); pr(d > 0 ? 1.4 : -5.4, -8.6 + wv, 4, 0.4, shade(n.color, 0.6)); break; }
+      if (a.kind === 'archer') { pr(d > 0 ? 1 : -1.4, -6.4, 0.4, 4, '#7a5230'); pr(d > 0 ? 1.4 : -1.8, -6.2, 0.3, 3.6, '#e8e0c8'); if (up && a.st === 'fight') pr(d > 0 ? 1.2 : -2.6, -4.6, 1.6, 0.25, '#c8b080'); pr(d > 0 ? -1.8 : 1, -5, 0.8, 2, '#6a4a2a'); break; }
+      if (wp >= 4) { pr(d > 0 ? 0.6 : -3, up && a.st === 'fight' ? -4.6 : -4.2, 2.4, 0.45, '#2a2420'); if (a.flash > 0) pr(d > 0 ? 3 : -3.8, -4.7, 0.9, 0.9, '#ffe08a'); }
+      else if (wp === 2 || wp === 3) { pr(d > 0 ? 0.9 : -1.3, up ? -6.8 : -5.6, 0.4, 2.8, '#c8ccd2'); pr(d > 0 ? 0.6 : -1.6, -4.2, 1, 0.4, '#8a6a3a'); }
+      else { pr(d > 0 ? 1 : -1.4, up ? -8 : -7.2, 0.4, 5, '#7a5a30'); pr(d > 0 ? 0.9 : -1.5, up ? -8.6 : -7.8, 0.6, 0.8, wp >= 1 ? '#c08a3a' : '#8a8a8a'); }
+      if (a.role === 'army' && wp < 4 && a.kind !== 'horse') pr(d > 0 ? -1.8 : 1, -4.4, 0.9, 1.8, shade(n.color, 0.7));
+      break;
+    }
+  }
+}
+
+function drawAgents(z) {
+  const list = AG.slice().sort((a, b) => a.y - b.y);
+  for (const a of list) drawPerson(a, z);
+  for (const t of TRACERS) {
+    ctx.globalAlpha = clamp(t.t / 0.09, 0, 1); ctx.strokeStyle = t.col; ctx.lineWidth = Math.max(1, z * 0.18);
+    ctx.beginPath(); ctx.moveTo(sxOf(t.x0), syOf(t.y0)); ctx.lineTo(sxOf(t.x0) + wrapDx(t.x1 - t.x0) * z, syOf(t.y1)); ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+}
+
+let r2s = 77;
+function rand2() { r2s = (r2s * 16807) % 2147483647; return r2s / 2147483647; }
+
+function drawProjectiles(z) {
+  for (const p of PROJ) {
+    const f = p.t / p.dur, x = p.x0 + wrapDx(p.x1 - p.x0) * f, y = p.y0 + (p.y1 - p.y0) * f - Math.sin(f * PI) * p.arc;
+    const sx = sxOf(x), sy = syOf(y);
+    if (p.kind === 'arrow') { const f2 = Math.min(1, f + 0.05), x2 = p.x0 + wrapDx(p.x1 - p.x0) * f2, y2 = p.y0 + (p.y1 - p.y0) * f2 - Math.sin(f2 * PI) * p.arc; ctx.strokeStyle = '#d8c8a0'; ctx.lineWidth = Math.max(1, z * 0.15); ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx + (sxOf(x2) - sx) * 2.5, sy + (syOf(y2) - sy) * 2.5); ctx.stroke(); }
+    else { const r = Math.max(1.5, z * (p.kind === 'ball' ? 0.45 : 0.3)); ctx.fillStyle = p.kind === 'missile' ? '#ffcf6a' : '#2a2624'; ctx.beginPath(); ctx.arc(sx, sy, r, 0, TAU); ctx.fill(); if (p.kind === 'missile') particle(x, y, 0, 0, 0.4, '#d8d8d8', 0.6, 1.5, 0.5); }
+  }
+}
+function drawBattleLabels(z) {
+  ctx.font = `12px ${CSSV.font}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  for (const b of BATTLES) {
+    const sx = sxOf(b.x), sy = syOf(b.y) - (22 + 6 * z);
+    if (sx < -100 || sx > view.w + 100 || sy < -20 || sy > view.h + 20) continue;
+    const d = b.w.dead || [0, 0];
+    const txt = `${b.a.name}  ⚔  ${b.b.name}${b.w.civil ? '（内战）' : b.naval ? '（海战）' : ''} · 阵亡 ${d[0]} : ${d[1]}`;
+    const tw = ctx.measureText(txt).width + 22;
+    ctx.fillStyle = 'rgba(6,10,20,.82)'; ctx.fillRect(sx - tw / 2, sy - 11, tw, 22);
+    ctx.fillStyle = b.a.color; ctx.fillRect(sx - tw / 2, sy - 11, 4, 22);
+    ctx.fillStyle = b.b.color; ctx.fillRect(sx + tw / 2 - 4, sy - 11, 4, 22);
+    ctx.fillStyle = '#ffdfe2'; ctx.fillText(txt, sx, sy);
+  }
+  ctx.textAlign = 'left';
+}
+
 /* =====================================================================
    Map scene
    ===================================================================== */
@@ -3802,6 +3982,7 @@ function drawMapScene() {
   screenCities = vis;
   if (z >= AGENT_Z && showPeople) { drawAgents(z); drawProjectiles(z); }
   drawParticles(z);
+  drawAmbient(z);
   if (z >= AGENT_Z && showPeople) drawBattleLabels(z);
   drawMapFx(z);
   drawWarMarks(z);
@@ -3923,114 +4104,6 @@ function drawRails(z) {
   }
   ctx.lineCap = 'round';
 }
-function drawPerson(a, z) {
-  const sx = sxOf(a.x), sy = syOf(a.y);
-  if (sx < -30 || sx > view.w + 30 || sy < -40 || sy > view.h + 20) return;
-  if (a.hide && a.st === 'rest') return;
-  const n = S.nations[a.n]; if (!n) return;
-  SPX = sx; SPY = sy; SPZ = z * 0.62;
-  const dead = a.st === 'dead';
-  if (dead) { if (a.vanish) return; ctx.globalAlpha = clamp(a.t / 2.5, 0, 1); }
-  const shirt = a.role === 'army' || a.role === 'soldier' ? n.color : (ROLE_SHIRT[a.role] || '#a0a0a0');
-  const skin = a.skin || SKINS[0], hair = a.hair || HAIRS[0];
-  if (dead) { pr(-2, -1.2, 3, 1.2, shirt); pr(1, -1.4, 1.4, 1.4, skin); ctx.globalAlpha = 1; return; }
-  const moving = a.st === 'walk';
-  const step = moving ? (Math.floor(a.ph * 7) & 1) : 0;
-  const d = a.dir || 1;
-  if (a.boat) {
-    pr(-3, -1.6, 6, 1.6, '#7a5230'); pr(-2.4, -2.1, 4.8, 0.5, '#9a6a40');
-    pr(-0.2, -7, 0.4, 5, '#4a3424'); pr(0.2 * d, -6.6, 2.2 * d, 3.6, '#f2efe6');
-    pr(-1.8, -3.6, 1.4, 1.5, skin); pr(-1.8, -4, 1.4, 0.5, hair);
-    return;
-  }
-  if (a.kind === 'ship') {
-    const hull = a.wp >= 5 ? '#5c6670' : '#6a4626', era = a.wp;
-    pr(-4.5, -1.8, 9, 1.8, hull); pr(-5, -2.3, 10, 0.5, shade(hull.length === 7 ? hull : '#6a4626', 1.2)); pr(d > 0 ? 3.5 : -5, -1.4, 1.5, 1, hull);
-    if (era < 4) { pr(-0.3, -9, 0.6, 7, '#4a3424'); pr(-3, -8.5, 6, 4.5, '#efe9da'); pr(-3, -8.5, 6, 0.6, n.color); }
-    else if (era < 6) { for (const mx of [-2.6, 0, 2.6]) { pr(mx - 0.2, -9, 0.4, 7, '#4a3424'); pr(mx - 1.4, -8.4, 2.8, 2.4, '#efe9da'); pr(mx - 1.2, -5.6, 2.4, 2, '#efe9da'); } }
-    else { pr(-2.5, -4, 5, 1.8, '#8a949e'); pr(-1, -5.6, 2, 1.6, '#9aa4ae'); pr(d > 0 ? 1.5 : -4.5, -3.6, 3, 0.5, '#4a525a'); }
-    pr(d > 0 ? -4.4 : 3.2, -4.6, 1.2, 0.8, n.color);
-    if (a.flash > 0) pr(d > 0 ? 4.8 : -5.8, -2.6, 1, 1, '#ffd27a');
-    return;
-  }
-  if (a.kind === 'cannon') {
-    pr(-2.6, -1.6, 1.4, 1.4, '#5a3a20'); pr(0.4, -1.6, 1.4, 1.4, '#5a3a20');
-    pr(d > 0 ? -2 : -2.6, -2.6, 4.6, 1, '#3a3a3e'); pr(d > 0 ? 2 : -3.6, -2.9, 1.6, 0.8, '#2a2a2e');
-    if (a.flash > 0) pr(d > 0 ? 3.6 : -5, -3.2, 1.4, 1.4, '#ffd27a');
-    SPX = sx - d * z * 0.62 * 3.2;
-  }
-  if (a.kind === 'cart') {
-    pr(-3, -3, 5, 2, '#8a6438'); pr(-3, -4.2, 5, 1.2, '#efe6d0'); pr(-2.6, -1, 1.2, 1, '#2a2018'); pr(0.6, -1, 1.2, 1, '#2a2018');
-    pr(2 * d + (d > 0 ? 0 : -3), -3, 3, 1.6, '#7a5a3a'); pr(d > 0 ? 4.4 : -5, -3.6, 1, 1, '#7a5a3a');
-    return;
-  }
-  if (a.kind === 'tank') {
-    const tc = shade(n.color, 0.55);
-    pr(-4, -1.4, 8, 1.4, '#2e2e2a'); pr(-3.6, -3, 7.2, 1.8, tc); pr(-1.6, -4.4, 3.2, 1.6, shade(n.color, 0.7)); pr(d > 0 ? 1.6 : -5.6, -4, 4, 0.6, '#2a2a26');
-    if (a.flash > 0) pr(d > 0 ? 5.6 : -6.8, -4.3, 1.2, 1.2, '#ffd27a');
-    return;
-  }
-  if (a.kind === 'drone') {
-    ctx.globalAlpha = 0.35; pr(-1.5, -0.6, 3, 0.6, '#000'); ctx.globalAlpha = 1;
-    const hy = -9 + Math.sin(a.ph * 4) * 0.6;
-    pr(-0.8, hy, 1.6, 1.2, '#3a3e46'); pr(-3, hy - 0.4, 2.2, 0.4, '#3a3e46'); pr(0.8, hy - 0.4, 2.2, 0.4, '#3a3e46');
-    const rp = (Math.floor(a.ph * 20) & 1) ? '#c8d0d8' : '#8a9098'; pr(-3.4, hy - 0.8, 1.2, 0.3, rp); pr(2.2, hy - 0.8, 1.2, 0.3, rp);
-    pr(-0.3, hy + 0.2, 0.6, 0.5, n.color);
-    return;
-  }
-  if (a.kind === 'mech') {
-    SPZ = z * 1.1;
-    const mc = '#9aa2aa';
-    pr(-1.4, -2, 1, 2 - step * 0.4, '#5a6068'); pr(0.4, -2, 1, 2 - (1 - step) * 0.4, '#5a6068');
-    pr(-1.8, -4.4, 3.6, 2.4, mc); pr(-0.8, -5.4, 1.6, 1, '#7a828a'); pr(-0.4, -5.1, 0.8, 0.4, '#ff4a4a');
-    pr(d > 0 ? 1.8 : -3.4, -4.2, 1.6, 0.6, '#5a6068'); pr(-1.8, -3.8, 3.6, 0.5, n.color);
-    if (a.flash > 0) pr(d > 0 ? 3.4 : -4.4, -4.3, 1, 1, '#ffd27a');
-    return;
-  }
-  if (a.kind === 'horse') {
-    pr(-3, -3.4, 6, 1.8, '#7a4e2a'); pr(d > 0 ? 2.4 : -3.8, -4.6, 1.4, 1.6, '#7a4e2a');
-    pr(-2.6, -1.6, 0.6, 1.6 - step * 0.5, '#5a3a20'); pr(1.8, -1.6, 0.6, 1.6 - (1 - step) * 0.5, '#5a3a20');
-    SPY = sy - 2.2 * z * 0.62;
-  }
-  const kid = a.role === 'child';
-  if (kid) SPZ = z * 0.45;
-  if (a.kind !== 'horse') { pr(-1, -2, 0.9, 2 - step * 0.5, '#3a3430'); pr(0.1, -2, 0.9, 2 - (1 - step) * 0.5, '#3a3430'); }
-  pr(-1, -4, 2, 2, shirt);
-  pr(-1, -6, 2, 2, skin);
-  const hat = a.role === 'farmer' ? '#e2c46a' : a.role === 'miner' || a.role === 'builder' ? '#f0c040' : null;
-  if (hat) { pr(-1.5, -6.4, 3, 0.6, hat); pr(-0.8, -7, 1.6, 0.6, hat); } else pr(-1, -6.3, 2, 0.6, hair);
-  if (a.role === 'army' && a.wp >= 5) pr(-1.1, -6.6, 2.2, 0.8, shade(n.color, 0.6));
-  if (a.carry) pr(d > 0 ? -2.2 : 1, -5, 1.2, 1.6, a.carry);
-  const work = a.st === 'work' || a.st === 'fight' || a.st === 'siege';
-  const up = work && (Math.floor(a.ph * (a.st === 'fight' ? 5 : 3)) & 1);
-  switch (a.role) {
-    case 'farmer': if (work) { pr(d > 0 ? 0.8 : -1.2, up ? -6 : -4.6, 0.4, 2.6, '#7a5a30'); pr(d > 0 ? 0.8 : -1.8, up ? -6.2 : -2.2, 1, 0.4, '#9aa0a8'); } break;
-    case 'wood': if (work) { pr(d > 0 ? 0.8 : -1.2, up ? -6.2 : -4.8, 0.4, 2.4, '#7a5a30'); pr(d > 0 ? 1.1 : -1.9, up ? -6.4 : -3, 0.8, 0.8, '#9aa0a8'); } break;
-    case 'miner': if (work) { pr(d > 0 ? 0.8 : -1.2, up ? -6.4 : -4.8, 0.4, 2.4, '#7a5a30'); pr(d > 0 ? 0.2 : -1.6, up ? -6.6 : -3.2, 1.8, 0.4, '#8a9098'); } break;
-    case 'worker': case 'builder': if (work) { pr(d > 0 ? 0.9 : -1.3, up ? -5.6 : -4.4, 0.4, 1.6, '#7a5a30'); pr(d > 0 ? 0.7 : -1.5, up ? -5.9 : -4.6, 0.8, 0.5, '#7a7e86'); } break;
-    case 'scholar': if (work) pr(d > 0 ? 0.6 : -1.8, -4.2, 1.2, 0.9, '#f4f0e0'); break;
-    case 'trader': pr(d > 0 ? -2 : 1, -4.8, 1, 2, '#8a5a30'); break;
-    case 'soldier': case 'army': {
-      const wp = a.role === 'soldier' ? n.mult.weapon : a.wp;
-      if (a.kind === 'flag') { pr(d > 0 ? 1 : -1.4, -11, 0.4, 9, '#5a4028'); const wv = Math.sin(animT * 5 + a.id) > 0 ? 0.3 : 0; pr(d > 0 ? 1.4 : -5.4, -11 + wv, 4, 2.6, n.color); pr(d > 0 ? 1.4 : -5.4, -8.6 + wv, 4, 0.4, shade(n.color, 0.6)); break; }
-      if (a.kind === 'archer') { pr(d > 0 ? 1 : -1.4, -6.4, 0.4, 4, '#7a5230'); pr(d > 0 ? 1.4 : -1.8, -6.2, 0.3, 3.6, '#e8e0c8'); if (up && a.st === 'fight') pr(d > 0 ? 1.2 : -2.6, -4.6, 1.6, 0.25, '#c8b080'); pr(d > 0 ? -1.8 : 1, -5, 0.8, 2, '#6a4a2a'); break; }
-      if (wp >= 4) { pr(d > 0 ? 0.6 : -3, up && a.st === 'fight' ? -4.6 : -4.2, 2.4, 0.45, '#2a2420'); if (a.flash > 0) pr(d > 0 ? 3 : -3.8, -4.7, 0.9, 0.9, '#ffe08a'); }
-      else if (wp === 2 || wp === 3) { pr(d > 0 ? 0.9 : -1.3, up ? -6.8 : -5.6, 0.4, 2.8, '#c8ccd2'); pr(d > 0 ? 0.6 : -1.6, -4.2, 1, 0.4, '#8a6a3a'); }
-      else { pr(d > 0 ? 1 : -1.4, up ? -8 : -7.2, 0.4, 5, '#7a5a30'); pr(d > 0 ? 0.9 : -1.5, up ? -8.6 : -7.8, 0.6, 0.8, wp >= 1 ? '#c08a3a' : '#8a8a8a'); }
-      if (a.role === 'army' && wp < 4 && a.kind !== 'horse') pr(d > 0 ? -1.8 : 1, -4.4, 0.9, 1.8, shade(n.color, 0.7));
-      break;
-    }
-  }
-}
-function drawAgents(z) {
-  const list = AG.slice().sort((a, b) => a.y - b.y);
-  for (const a of list) drawPerson(a, z);
-  for (const t of TRACERS) {
-    ctx.globalAlpha = clamp(t.t / 0.09, 0, 1); ctx.strokeStyle = t.col; ctx.lineWidth = Math.max(1, z * 0.18);
-    ctx.beginPath(); ctx.moveTo(sxOf(t.x0), syOf(t.y0)); ctx.lineTo(sxOf(t.x0) + wrapDx(t.x1 - t.x0) * z, syOf(t.y1)); ctx.stroke();
-  }
-  ctx.globalAlpha = 1;
-}
 function drawParticles(z) {
   for (const p of PARTS) {
     const sx = sxOf(p.x), sy = syOf(p.y);
@@ -4136,6 +4209,13 @@ function drawCityLabels(vis, z) {
   }
   ctx.textAlign = 'left';
 }
+
+
+/* =====================================================================
+   Ambient life and weather on the map (cloud shadows, rain, snow, birds…)
+   ===================================================================== */
+function ambientTick(dt) {}
+function drawAmbient(z) {}
 
 /* =====================================================================
    Globe scene and mini-globe
@@ -4288,32 +4368,11 @@ function drawMini() {
   }
   miniCtx.stroke();
 }
-let r2s = 77;
-function rand2() { r2s = (r2s * 16807) % 2147483647; return r2s / 2147483647; }
 
-function drawProjectiles(z) {
-  for (const p of PROJ) {
-    const f = p.t / p.dur, x = p.x0 + wrapDx(p.x1 - p.x0) * f, y = p.y0 + (p.y1 - p.y0) * f - Math.sin(f * PI) * p.arc;
-    const sx = sxOf(x), sy = syOf(y);
-    if (p.kind === 'arrow') { const f2 = Math.min(1, f + 0.05), x2 = p.x0 + wrapDx(p.x1 - p.x0) * f2, y2 = p.y0 + (p.y1 - p.y0) * f2 - Math.sin(f2 * PI) * p.arc; ctx.strokeStyle = '#d8c8a0'; ctx.lineWidth = Math.max(1, z * 0.15); ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx + (sxOf(x2) - sx) * 2.5, sy + (syOf(y2) - sy) * 2.5); ctx.stroke(); }
-    else { const r = Math.max(1.5, z * (p.kind === 'ball' ? 0.45 : 0.3)); ctx.fillStyle = p.kind === 'missile' ? '#ffcf6a' : '#2a2624'; ctx.beginPath(); ctx.arc(sx, sy, r, 0, TAU); ctx.fill(); if (p.kind === 'missile') particle(x, y, 0, 0, 0.4, '#d8d8d8', 0.6, 1.5, 0.5); }
-  }
-}
-function drawBattleLabels(z) {
-  ctx.font = `12px ${CSSV.font}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  for (const b of BATTLES) {
-    const sx = sxOf(b.x), sy = syOf(b.y) - (22 + 6 * z);
-    if (sx < -100 || sx > view.w + 100 || sy < -20 || sy > view.h + 20) continue;
-    const d = b.w.dead || [0, 0];
-    const txt = `${b.a.name}  ⚔  ${b.b.name}${b.w.civil ? '（内战）' : b.naval ? '（海战）' : ''} · 阵亡 ${d[0]} : ${d[1]}`;
-    const tw = ctx.measureText(txt).width + 22;
-    ctx.fillStyle = 'rgba(6,10,20,.82)'; ctx.fillRect(sx - tw / 2, sy - 11, tw, 22);
-    ctx.fillStyle = b.a.color; ctx.fillRect(sx - tw / 2, sy - 11, 4, 22);
-    ctx.fillStyle = b.b.color; ctx.fillRect(sx + tw / 2 - 4, sy - 11, 4, 22);
-    ctx.fillStyle = '#ffdfe2'; ctx.fillText(txt, sx, sy);
-  }
-  ctx.textAlign = 'left';
-}
+/* =====================================================================
+   Post-processing (applied to the finished frame in every view)
+   ===================================================================== */
+function postFX(dt) {}
 
 /* =====================================================================
    Space: the solar system, colonies, terraforming, colony independence
@@ -5131,8 +5190,10 @@ function zoomTimeFactor() {
   return Math.exp(t * Math.log(0.025));
 }
 function effSpeed() { return speed === 'auto' ? AUTO_SPEED[S.flags.maxEra || 0] * zoomTimeFactor() : speed; }
+let perfMs = 0;
 function frame(t) {
-  const dt = Math.min(0.1, (t - lastT) / 1000 || 0);
+  const t0 = performance.now(), rawDt = (t - lastT) / 1000 || 0;
+  const dt = Math.min(0.1, rawDt);
   lastT = t; animT += dt; frameNo++;
   if (playing && S) {
     budget += effSpeed() * dt;
@@ -5149,6 +5210,7 @@ function frame(t) {
     if (t - lastAgentMgr > 300) { manageAgents(); manageArmies(); lastAgentMgr = t; }
     if (playing) updateAgents(dt);
     updateParticles(dt);
+    ambientTick(dt);
     drawMapScene();
     if ((frameNo & 1) === 0) drawMini();
   } else if (viewMode === 'system' || viewMode === 'planet') {
@@ -5170,6 +5232,9 @@ function frame(t) {
     globeRender(G, { night: showNight, clouds: showClouds, lights: true });
     drawGlobeScene();
   }
+  postFX(dt);
+  perfMs = perfMs * 0.95 + (performance.now() - t0) * 0.05;
+  gfxMonitor(rawDt);
   if (!reducedMotion) { cloudOff += dt * 0.0035; moonA += dt * 0.03; }
   if (t - lastUI > 200) { updateHeader(); updateInspector(); lastUI = t; }
   if (t - lastSlowUI > (playing && speed !== 'auto' && speed > 20 ? 400 : 900)) { updatePanels(); lastSlowUI = t; }
@@ -6472,7 +6537,7 @@ function boot(data) {
   return restored;
 }
 function start(data) {
-  readCss(); loadAch(); buildToolbar(); refreshToolHint();
+  readCss(); loadGfx(); loadAch(); buildToolbar(); refreshToolHint();
   const snap = data && data.state ? data.state : null;
   const restored = boot(snap || loadWorld());
   if (restored && !snap) showTicker('civ', '已恢复你上次的世界');
@@ -6482,7 +6547,7 @@ function start(data) {
   requestAnimationFrame(t => { lastT = t; requestAnimationFrame(frame); });
 }
 
-window.__earth = { api: { startWar, makePeace, formAlliance, orderAttack, godSeed, godCity, meteor, quake, volcano, terraform, splitFrom, godGrantTech, openTree, nationAction }, get S() { return S; }, tick: n => { for (let k = 0; k < n; k++) tick(); }, serialize, newWorld: seed => boot({ seed }), cam, AG, flyTo, setTool, applyTool, switchView, setView, openPlanet, setMode, playGame, gameTick, startCivilWar, setIdeology, queueModal, get modalOpen() { return modalOpen; }, BATTLES, PROJ, aiTick, doctrineTick, get sys() { return sys; }, get viewMode() { return viewMode; } };
+window.__earth = { api: { startWar, makePeace, formAlliance, orderAttack, godSeed, godCity, meteor, quake, volcano, terraform, splitFrom, godGrantTech, openTree, nationAction }, get S() { return S; }, tick: n => { for (let k = 0; k < n; k++) tick(); }, serialize, newWorld: seed => boot({ seed }), cam, AG, flyTo, setTool, applyTool, switchView, setView, openPlanet, setMode, playGame, gameTick, startCivilWar, setIdeology, queueModal, get modalOpen() { return modalOpen; }, BATTLES, PROJ, aiTick, doctrineTick, get sys() { return sys; }, GFX, setGfx, get perfMs() { return perfMs; }, get viewMode() { return viewMode; } };
 
 if (window.claude?.hot?.ready) window.claude.hot.ready(start);
 else start(window.claude?.hot?.data ?? {});
@@ -6490,3 +6555,4 @@ else start(window.claude?.hot?.data ?? {});
 </script>
 </body>
 </html>
+
