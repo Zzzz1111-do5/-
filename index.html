@@ -887,6 +887,25 @@ const RES_RGB = { coal: [210, 210, 214], oil: [229, 90, 150], iron: [236, 120, 6
 const RES_TOTAL = { coal: 520000, oil: 260000, iron: 330000, uran: 26000, rare: 30000 };
 
 
+/* =====================================================================
+   Event bus. The simulation and the UI announce what happened; optional
+   modules (missions, tutorial, sound, key moments) listen without the core
+   knowing about them. A listener must never break the simulation, so errors
+   are caught and logged. Events (payload):
+     log {type, text, cell, major} · war {w, a, b} · peace {a, b} · capture {c, win, lose, wasCap, w}
+     fall {n, cell} · tech {n, id, first} · era {n, era, first} · nuke {X, Y, c, big, retal}
+     civilwar {n, rebels} · ideology {n, from, to} · victory {kind, title, text} · defeat {n}
+     built {n, c, k} · produced {n, u, ue} · focus {n, f} · mode {mode, n} · order {o, from, to}
+     decision {id, n, target} · milevent {t, a, b, i, ...} · banner {title, sub} · frame dt (seconds)
+   ===================================================================== */
+const BUS = {};
+function busOn(type, fn) { (BUS[type] = BUS[type] || []).push(fn); }
+function busEmit(type, d) {
+  const L = BUS[type]; if (!L) return;
+  if (type !== 'frame' && booting) return;
+  for (const f of L) { try { f(d); } catch (e) { if (window.console) console.warn('bus listener for ' + type + ' failed', e); } }
+}
+
 const ERA_NAME = ['远古', '古典', '中世纪', '文艺复兴', '工业', '现代', '信息', '未来', '星际'];
 const NERA = ERA_NAME.length;
 const BRANCH = {
@@ -1982,6 +2001,7 @@ function setIdeology(n, id, text) {
   if (!id || n.ideo === id) return;
   const old = n.ideo, oldName = n.name;
   n.ideo = id;
+  busEmit('ideology', { n, from: old, to: id });
   n.sup[id] = Math.max(n.sup[id] || 0, 0.5);
   let s = 0; for (const k in n.sup) s += n.sup[k]; for (const k in n.sup) n.sup[k] /= s;
   const nm = regimeName(n, id);
@@ -2023,6 +2043,7 @@ function startCivilWar(n, id) {
   if (w) { w.civil = true; w.dur = 6 + ((rand() * 10) | 0); }
   S.terrDirty = true;
   if (isPlayer(n)) playerCivilWarNotice(n, rb);
+  busEmit('civilwar', { n, rebels: rb, w });
   return rb;
 }
 function endCivilWar(w) {
@@ -2139,6 +2160,7 @@ function log(type, text, cell, major = true) {
   if (!booting) {
     if (cell !== undefined && cell >= 0) addFx(cell, type);
     if (major) showTicker(type, text);
+    busEmit('log', { type, text, cell: cell ?? -1, major });
   }
 }
 
@@ -2228,10 +2250,13 @@ function discover(n, id) {
   const oldEra = n.mult.era;
   n.mult = computeMult(n);
   techVersion++;
-  if (!S.firsts[id]) firstTech(n, id);
-  if (n.mult.era > oldEra && n.mult.era > S.flags.maxEra) {
-    S.flags.maxEra = n.mult.era;
-    log('civ', `${n.name}率先迈入${ERA_NAME[n.mult.era]}时代`, capitalCell(n), false);
+  const first = !S.firsts[id];
+  if (first) firstTech(n, id);
+  busEmit('tech', { n, id, first });
+  if (n.mult.era > oldEra) {
+    const firstEra = n.mult.era > S.flags.maxEra;
+    if (firstEra) { S.flags.maxEra = n.mult.era; log('civ', `${n.name}率先迈入${ERA_NAME[n.mult.era]}时代`, capitalCell(n), false); }
+    busEmit('era', { n, era: n.mult.era, first: firstEra });
   }
 }
 function firstTech(n, id) {
@@ -2252,6 +2277,7 @@ function killNation(n, cell) {
   S.wars = S.wars.filter(w => w.a !== n.id && w.b !== n.id);
   for (const o of S.nations) { o.allies = o.allies.filter(x => x !== n.id); if (o.overlord === n.id) o.overlord = -1; }
   n.allies = [];
+  busEmit('fall', { n, cell });
   if (isPlayer(n)) playerNationLost(n, null);
 }
 
@@ -2279,6 +2305,7 @@ function startWar(a, b, forced, text) {
   for (const p of puppetsOf(A.id)) if (!atWar(p.id, b)) joinWar(p.id, b, A);
   if (isPlayer(Bn) && !booting) playerWarDeclared(w, A);
   if (!forced || !isPlayer(A)) balanceOfPower(w);
+  busEmit('war', { w, a: A, b: Bn });
   return w;
 }
 function joinWar(id, enemy, friend) {
@@ -2296,6 +2323,7 @@ function makePeace(a, b, text) {
   S.wars.splice(S.wars.indexOf(w), 1);
   S.orders = S.orders.filter(o => !((o.a === a && o.tn === b) || (o.a === b && o.tn === a)));
   log('war', text || `${S.nations[a].name}与${S.nations[b].name}停战`, w.front, false);
+  busEmit('peace', { a: S.nations[a], b: S.nations[b], w });
   return true;
 }
 function formAlliance(a, b, text) {
@@ -2447,6 +2475,7 @@ function captureCity(c, win, lose, w) {
   log('war', `${win.name}攻占了${lose.name}的${wasCap ? '首都' : ''}${c.name}`, c.i, wasCap || isPlayer(win) || isPlayer(lose));
   if (wasCap) { const nc = largestCity(lose); if (nc) { nc.cap = true; lose.capital = nc.id; } }
   onCapture(c, win, lose);
+  busEmit('capture', { c, win, lose, wasCap, w });
   if (!lose.cl.length) { killNation(lose, c.i); S.terrDirty = true; return; }
   const ls = w && w.sc ? w.sc[lose.id === w.a ? 0 : 1] : lose.cl.length + 1;
   const crushed = lose.cl.length <= ls * 0.35 || (wasCap && (lose.cl.length <= ls * 0.6 || power(lose) < power(win) * 0.3));
@@ -2464,6 +2493,7 @@ function orderAttack(fromC, toC) {
   S.orders.push(o);
   log('war', `${A.name}的大军从${fromC.name}开拔，目标：${toC.name}`, fromC.i, true);
   onOrder(o, fromC, toC);
+  busEmit('order', { o, from: fromC, to: toC });
   return o;
 }
 
@@ -2777,7 +2807,7 @@ const EXCL = {}; for (const t of TECHS) if (t.excl) (EXCL[t.excl] = EXCL[t.excl]
 // transient strategic events for the renderer (not saved; newest last, max 40; the renderer may splice what it has shown):
 // { t: 'nuke'|'sbomb'|'msl'|'orbital'|'naval'|'air'|'invade', a: attacker id, b: target id, i: target cell, from: attacker capital cell, y, big, retal, via: 'icbm'|'bomber' }
 const MIL_EVENTS = [];
-function milEvent(e) { if (booting) return; e.y = S.year; MIL_EVENTS.push(e); if (MIL_EVENTS.length > 40) MIL_EVENTS.shift(); }
+function milEvent(e) { if (booting) return; e.y = S.year; MIL_EVENTS.push(e); if (MIL_EVENTS.length > 40) MIL_EVENTS.shift(); busEmit('milevent', e); }
 
 /* ---------- national forces ---------- */
 function mxDefaults(n) {
@@ -3079,6 +3109,7 @@ function nukeStrike(X, Y, w, retal) {
   log('war', `${retal ? `${X.name}发动核反击：` : `${X.name}对${Y.name}动用了核武器：`}${big ? '一枚热核弹头' : '一颗原子弹'}在${c.name}上空爆炸，约 ${fmtPop(dead)} 人罹难`, c.i, true);
   if (first) showBanner('末日时钟', `${X.name}在${c.name}投下了战争中的第一颗核弹`);
   milEvent({ t: 'nuke', a: X.id, b: Y.id, i: c.i, from: capitalCell(X), big, retal: !!retal, via: X.mult.icbm ? 'icbm' : 'bomber' });
+  busEmit('nuke', { X, Y, c, big, retal: !!retal });
   if (!retal && Y.mult.secondStrike && deterrent(Y) && !isPlayer(Y) && rand() < 0.8) nukeStrike(Y, X, w, true);
   return true;
 }
@@ -3488,7 +3519,7 @@ function prodTick(n) {
       const pool = u.dom === 'sea' ? pd : pm; if (pool <= 0) continue;
       const use = Math.min(pool, o.n * u.cost);
       give(u, use); o.n -= use / u.cost; o.done = (o.done || 0) + use / u.cost;
-      if (o.n <= 1e-6 && isPlayer(n) && !booting) showTicker('war', `生产完成：${u.name} ${dispNum(u, o.done)} ${dispOf(u)[1]}`);
+      if (o.n <= 1e-6 && isPlayer(n) && !booting) { showTicker('war', `生产完成：${u.name} ${dispNum(u, o.done)} ${dispOf(u)[1]}`); busEmit('produced', { n, u, ue: o.done }); }
     }
     mx.queue = mx.queue.filter(o => o.n > 1e-6 && UNIT_BY_ID[o.u]);
   }
@@ -3615,6 +3646,7 @@ function finishBuild(n, c, k) {
   const b = bldOf(c); b[k] = (b[k] || 0) + 1; c.lay = null;
   if (n.mx) n.mx.tick = -1;
   if (isPlayer(n) && !booting) showTicker('civ', `${c.name}的${bldName(k, n)}${BLD_KINDS[k].lv ? `升到 ${b[k]} 级` : '建成投产'}`);
+  busEmit('built', { n, c, k });
 }
 // yearly progress of the build queue: a few projects at a time (more with more industry), each paid when it starts
 function buildTick(n) {
@@ -10146,7 +10178,7 @@ function playerTick() {
   if (P.focus) {
     P.focus.prog += 1 / sp;
     const f = FOCUS_BY_ID[P.focus.id];
-    if (P.focus.prog >= f.sec) { P.done.push(f.id); P.focus = null; f.fx(n); n.mult = computeMult(n); log('civ', `${n.name}完成国策「${f.name}」：${f.fxt}`, capitalCell(n), true); }
+    if (P.focus.prog >= f.sec) { P.done.push(f.id); P.focus = null; f.fx(n); n.mult = computeMult(n); log('civ', `${n.name}完成国策「${f.name}」：${f.fxt}`, capitalCell(n), true); busEmit('focus', { n, f }); }
   }
   if (S.tick % 10 === 0) checkVictory();
 }
@@ -10164,6 +10196,7 @@ function checkVictory() {
 function victory(kind, title, text) {
   S.player.victory = { kind, y: S.year };
   unlock('leader_' + kind);
+  busEmit('victory', { kind, title, text });
   queueModal({ kicker: '胜利', title, html: `<p>${esc(text)}</p><p class="note">${fmtYear(S.year)}。你可以继续玩下去，看看这个世界的后续。</p>`, buttons: [{ label: '继续统治', primary: true }, { label: '开启新世界', fn: () => openModeOverlay() }] });
 }
 
@@ -10200,6 +10233,7 @@ function aiPeaceOffer(w) {
 function playerNationLost(n, by) {
   if (S.mode !== 'leader') return;
   S.player.lost = true;
+  busEmit('defeat', { n });
   queueModal({ kicker: '终局', title: `${n.name}灭亡了`, html: `<p>${by ? esc(by.name) + '吞并了你的最后一座城市。' : '你的最后一座城市陷落了。'}历史不会停下，你可以扮演另一个文明，或者成为造物主继续观看。</p>`,
     buttons: [{ label: '扮演另一个文明', primary: true, fn: () => openNationPicker() }, { label: '成为造物主', fn: () => setMode('god') }, { label: '开启新世界', fn: () => openModeOverlay() }] });
 }
@@ -10319,8 +10353,14 @@ function doDecision(id, target) {
     case 'amnesty': n.stabV = Math.min(1, n.stabV + 0.1); break;
     case 'purge': pushIdeo(n, n.ideo, 0.15); n.stabV = Math.max(0, n.stabV - 0.05); break;
   }
-  if (ok) P.pp -= cost;
+  if (ok) { P.pp -= cost; busEmit('decision', { id, n, target }); }
   $('pane-me')._html = '';
+}
+// readable military strength: rank in the world and the ratio to another nation
+function powerRank(n) { const al = S.nations.filter(o => o.alive && o.cl.length).sort((a, b) => power(b) - power(a)); return [al.indexOf(n) + 1, al.length]; }
+function powerRatioText(o, n) {
+  const r = power(o) / Math.max(1e-9, power(n));
+  return r >= 1.15 ? `军力是你的 ${r >= 10 ? Math.round(r) : r.toFixed(1)} 倍` : r <= 0.87 ? `军力只有你的 ${r >= 0.1 ? Math.round(r * 100) + '%' : '不到一成'}` : '军力与你相当';
 }
 function flyToWar(w) {
   const A = S.nations[w.a], Bn = S.nations[w.b];
@@ -10343,6 +10383,7 @@ function setMode(mode, nid) {
   } else { S.player = null; }
   applyModeUI();
   switchTab(mode === 'leader' ? 'me' : 'ov');
+  busEmit('mode', { mode, n: mode === 'leader' ? S.nations[nid] : null });
 }
 function applyModeUI() {
   const leader = S.mode === 'leader';
@@ -10446,8 +10487,9 @@ function renderMe() {
     <div class="kpis">
       <div class="kpi"><span class="k">政治点数</span><span class="v">${Math.floor(P.pp)} <small>+${(P.ppRate).toFixed(1)}</small></span></div>
       <div class="kpi"><span class="k">稳定度</span><span class="v">${Math.round(n.stabV * 100)}%</span></div>
-      <div class="kpi"><span class="k">军力</span><span class="v">${fmtNum(power(n) / 1000)}</span></div>
+      <div class="kpi"><span class="k">军力 · 世界第 ${powerRank(n)[0]}/${powerRank(n)[1]}</span><span class="v">${fmtNum(power(n) / 1000)}</span></div>
     </div>
+    ${typeof missionCard === 'function' ? missionCard(n) : ''}
     <h3>国策 <small><button class="btn small" data-me="focus">打开国策树</button></small></h3>
     ${f ? `<div class="rrow"><span class="swatch" style="background:var(--sodium)"></span><span>${esc(f.name)}</span><span class="mono">${Math.round(P.focus.prog / f.sec * 100)}%</span><span class="track"><span class="fill" style="width:${(P.focus.prog / f.sec * 100).toFixed(0)}%"></span></span></div>` : '<p class="note">当前没有推进中的国策。打开国策树选择一项。</p>'}
     <h3>民意</h3>
@@ -10467,7 +10509,7 @@ function renderMe() {
     ${armyBlock(n)}
     <h3>外交与决议</h3>
     <div class="acts"><select data-me="target" aria-label="对象国家" class="msel">${others.map(o => `<option value="${o.id}"${o.id === decisionTarget ? ' selected' : ''}>${esc(o.name)}${atWar(n.id, o.id) ? '（交战）' : allied(n.id, o.id) ? '（同盟）' : o.overlord === n.id ? '（附庸）' : ''}</option>`).join('')}</select></div>
-    ${T ? `<p class="note">${sw(T)}${esc(T.name)} · ${esc(ideoOf(T).name)} · 军力 ${fmtNum(power(T) / 1000)} · 互信 ${Math.round(getTrust(n.id, T.id) * 100)}% · ${T.ambition * ideoOf(T).aggr > 1.2 ? '野心勃勃' : '相对温和'}${claim !== undefined ? (claim <= S.year ? ' · <b style="color:var(--sodium)">已有战争借口</b>' : ` · 借口还需 ${claim - S.year} 年`) : ''}${hasNap(n, T) ? ' · 互不侵犯' : ''}</p>` : ''}
+    ${T ? `<p class="note">${sw(T)}${esc(T.name)} · ${esc(ideoOf(T).name)} · ${powerRatioText(T, n)}（${fmtNum(power(T) / 1000)}）· 互信 ${Math.round(getTrust(n.id, T.id) * 100)}% · ${T.ambition * ideoOf(T).aggr > 1.2 ? '野心勃勃' : '相对温和'}${claim !== undefined ? (claim <= S.year ? ' · <b style="color:var(--sodium)">已有战争借口</b>' : ` · 借口还需 ${claim - S.year} 年`) : ''}${hasNap(n, T) ? ' · 互不侵犯' : ''}</p>` : ''}
     <div class="decs">${DECISIONS.filter(d => d.tgt).map(d => { const c = d.id === 'declare' && T && !canJustifiedWar(n, T) ? 60 : d.pp; return `<button class="btn small${d.id === 'declare' ? ' danger' : ''}" data-dec="${d.id}" title="${esc(d.desc)}" ${P.pp < c ? 'disabled' : ''}>${d.name}${c ? ` · ${c}` : ''}</button>`; }).join('')}</div>
     <div class="decs">${DECISIONS.filter(d => !d.tgt).map(d => `<button class="btn small" data-dec="${d.id}" title="${esc(d.desc)}" ${P.pp < d.pp ? 'disabled' : ''}>${d.name} · ${d.pp}</button>`).join('')}<button class="btn small" data-me="attack">派兵进攻…</button></div>
     <h3>战争</h3>
@@ -10803,6 +10845,7 @@ function frame(t) {
     drawGlobeScene();
   }
   postFX(dt);
+  busEmit('frame', dt);
   perfMs = perfMs * 0.95 + (performance.now() - t0) * 0.05;
   gfxMonitor(rawDt);
   if (!reducedMotion) { cloudOff += dt * 0.0035; moonA += dt * 0.03; }
@@ -10858,6 +10901,7 @@ let bannerTimer = 0;
 function showBanner(title, sub) {
   if (booting) return;
   const el = $('banner');
+  busEmit('banner', { title, sub });
   el.innerHTML = `<h3>${esc(title)}</h3><p>${esc(sub)}</p>`;
   el.hidden = false; el.style.opacity = '1';
   clearTimeout(bannerTimer);

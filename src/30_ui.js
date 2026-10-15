@@ -53,6 +53,7 @@ function frame(t) {
     drawGlobeScene();
   }
   postFX(dt);
+  busEmit('frame', dt);
   perfMs = perfMs * 0.95 + (performance.now() - t0) * 0.05;
   gfxMonitor(rawDt);
   if (!reducedMotion) { cloudOff += dt * 0.0035; moonA += dt * 0.03; }
@@ -108,6 +109,7 @@ let bannerTimer = 0;
 function showBanner(title, sub) {
   if (booting) return;
   const el = $('banner');
+  busEmit('banner', { title, sub });
   el.innerHTML = `<h3>${esc(title)}</h3><p>${esc(sub)}</p>`;
   el.hidden = false; el.style.opacity = '1';
   clearTimeout(bannerTimer);

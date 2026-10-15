@@ -66,6 +66,7 @@ function log(type, text, cell, major = true) {
   if (!booting) {
     if (cell !== undefined && cell >= 0) addFx(cell, type);
     if (major) showTicker(type, text);
+    busEmit('log', { type, text, cell: cell ?? -1, major });
   }
 }
 
@@ -155,10 +156,13 @@ function discover(n, id) {
   const oldEra = n.mult.era;
   n.mult = computeMult(n);
   techVersion++;
-  if (!S.firsts[id]) firstTech(n, id);
-  if (n.mult.era > oldEra && n.mult.era > S.flags.maxEra) {
-    S.flags.maxEra = n.mult.era;
-    log('civ', `${n.name}率先迈入${ERA_NAME[n.mult.era]}时代`, capitalCell(n), false);
+  const first = !S.firsts[id];
+  if (first) firstTech(n, id);
+  busEmit('tech', { n, id, first });
+  if (n.mult.era > oldEra) {
+    const firstEra = n.mult.era > S.flags.maxEra;
+    if (firstEra) { S.flags.maxEra = n.mult.era; log('civ', `${n.name}率先迈入${ERA_NAME[n.mult.era]}时代`, capitalCell(n), false); }
+    busEmit('era', { n, era: n.mult.era, first: firstEra });
   }
 }
 function firstTech(n, id) {
@@ -179,6 +183,7 @@ function killNation(n, cell) {
   S.wars = S.wars.filter(w => w.a !== n.id && w.b !== n.id);
   for (const o of S.nations) { o.allies = o.allies.filter(x => x !== n.id); if (o.overlord === n.id) o.overlord = -1; }
   n.allies = [];
+  busEmit('fall', { n, cell });
   if (isPlayer(n)) playerNationLost(n, null);
 }
 
@@ -206,6 +211,7 @@ function startWar(a, b, forced, text) {
   for (const p of puppetsOf(A.id)) if (!atWar(p.id, b)) joinWar(p.id, b, A);
   if (isPlayer(Bn) && !booting) playerWarDeclared(w, A);
   if (!forced || !isPlayer(A)) balanceOfPower(w);
+  busEmit('war', { w, a: A, b: Bn });
   return w;
 }
 function joinWar(id, enemy, friend) {
@@ -223,6 +229,7 @@ function makePeace(a, b, text) {
   S.wars.splice(S.wars.indexOf(w), 1);
   S.orders = S.orders.filter(o => !((o.a === a && o.tn === b) || (o.a === b && o.tn === a)));
   log('war', text || `${S.nations[a].name}与${S.nations[b].name}停战`, w.front, false);
+  busEmit('peace', { a: S.nations[a], b: S.nations[b], w });
   return true;
 }
 function formAlliance(a, b, text) {
@@ -374,6 +381,7 @@ function captureCity(c, win, lose, w) {
   log('war', `${win.name}攻占了${lose.name}的${wasCap ? '首都' : ''}${c.name}`, c.i, wasCap || isPlayer(win) || isPlayer(lose));
   if (wasCap) { const nc = largestCity(lose); if (nc) { nc.cap = true; lose.capital = nc.id; } }
   onCapture(c, win, lose);
+  busEmit('capture', { c, win, lose, wasCap, w });
   if (!lose.cl.length) { killNation(lose, c.i); S.terrDirty = true; return; }
   const ls = w && w.sc ? w.sc[lose.id === w.a ? 0 : 1] : lose.cl.length + 1;
   const crushed = lose.cl.length <= ls * 0.35 || (wasCap && (lose.cl.length <= ls * 0.6 || power(lose) < power(win) * 0.3));
@@ -391,6 +399,7 @@ function orderAttack(fromC, toC) {
   S.orders.push(o);
   log('war', `${A.name}的大军从${fromC.name}开拔，目标：${toC.name}`, fromC.i, true);
   onOrder(o, fromC, toC);
+  busEmit('order', { o, from: fromC, to: toC });
   return o;
 }
 

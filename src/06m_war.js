@@ -21,7 +21,7 @@ const EXCL = {}; for (const t of TECHS) if (t.excl) (EXCL[t.excl] = EXCL[t.excl]
 // transient strategic events for the renderer (not saved; newest last, max 40; the renderer may splice what it has shown):
 // { t: 'nuke'|'sbomb'|'msl'|'orbital'|'naval'|'air'|'invade', a: attacker id, b: target id, i: target cell, from: attacker capital cell, y, big, retal, via: 'icbm'|'bomber' }
 const MIL_EVENTS = [];
-function milEvent(e) { if (booting) return; e.y = S.year; MIL_EVENTS.push(e); if (MIL_EVENTS.length > 40) MIL_EVENTS.shift(); }
+function milEvent(e) { if (booting) return; e.y = S.year; MIL_EVENTS.push(e); if (MIL_EVENTS.length > 40) MIL_EVENTS.shift(); busEmit('milevent', e); }
 
 /* ---------- national forces ---------- */
 function mxDefaults(n) {
@@ -323,6 +323,7 @@ function nukeStrike(X, Y, w, retal) {
   log('war', `${retal ? `${X.name}发动核反击：` : `${X.name}对${Y.name}动用了核武器：`}${big ? '一枚热核弹头' : '一颗原子弹'}在${c.name}上空爆炸，约 ${fmtPop(dead)} 人罹难`, c.i, true);
   if (first) showBanner('末日时钟', `${X.name}在${c.name}投下了战争中的第一颗核弹`);
   milEvent({ t: 'nuke', a: X.id, b: Y.id, i: c.i, from: capitalCell(X), big, retal: !!retal, via: X.mult.icbm ? 'icbm' : 'bomber' });
+  busEmit('nuke', { X, Y, c, big, retal: !!retal });
   if (!retal && Y.mult.secondStrike && deterrent(Y) && !isPlayer(Y) && rand() < 0.8) nukeStrike(Y, X, w, true);
   return true;
 }

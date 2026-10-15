@@ -115,7 +115,7 @@ function playerTick() {
   if (P.focus) {
     P.focus.prog += 1 / sp;
     const f = FOCUS_BY_ID[P.focus.id];
-    if (P.focus.prog >= f.sec) { P.done.push(f.id); P.focus = null; f.fx(n); n.mult = computeMult(n); log('civ', `${n.name}完成国策「${f.name}」：${f.fxt}`, capitalCell(n), true); }
+    if (P.focus.prog >= f.sec) { P.done.push(f.id); P.focus = null; f.fx(n); n.mult = computeMult(n); log('civ', `${n.name}完成国策「${f.name}」：${f.fxt}`, capitalCell(n), true); busEmit('focus', { n, f }); }
   }
   if (S.tick % 10 === 0) checkVictory();
 }
@@ -133,6 +133,7 @@ function checkVictory() {
 function victory(kind, title, text) {
   S.player.victory = { kind, y: S.year };
   unlock('leader_' + kind);
+  busEmit('victory', { kind, title, text });
   queueModal({ kicker: '胜利', title, html: `<p>${esc(text)}</p><p class="note">${fmtYear(S.year)}。你可以继续玩下去，看看这个世界的后续。</p>`, buttons: [{ label: '继续统治', primary: true }, { label: '开启新世界', fn: () => openModeOverlay() }] });
 }
 
@@ -169,6 +170,7 @@ function aiPeaceOffer(w) {
 function playerNationLost(n, by) {
   if (S.mode !== 'leader') return;
   S.player.lost = true;
+  busEmit('defeat', { n });
   queueModal({ kicker: '终局', title: `${n.name}灭亡了`, html: `<p>${by ? esc(by.name) + '吞并了你的最后一座城市。' : '你的最后一座城市陷落了。'}历史不会停下，你可以扮演另一个文明，或者成为造物主继续观看。</p>`,
     buttons: [{ label: '扮演另一个文明', primary: true, fn: () => openNationPicker() }, { label: '成为造物主', fn: () => setMode('god') }, { label: '开启新世界', fn: () => openModeOverlay() }] });
 }
@@ -288,8 +290,14 @@ function doDecision(id, target) {
     case 'amnesty': n.stabV = Math.min(1, n.stabV + 0.1); break;
     case 'purge': pushIdeo(n, n.ideo, 0.15); n.stabV = Math.max(0, n.stabV - 0.05); break;
   }
-  if (ok) P.pp -= cost;
+  if (ok) { P.pp -= cost; busEmit('decision', { id, n, target }); }
   $('pane-me')._html = '';
+}
+// readable military strength: rank in the world and the ratio to another nation
+function powerRank(n) { const al = S.nations.filter(o => o.alive && o.cl.length).sort((a, b) => power(b) - power(a)); return [al.indexOf(n) + 1, al.length]; }
+function powerRatioText(o, n) {
+  const r = power(o) / Math.max(1e-9, power(n));
+  return r >= 1.15 ? `军力是你的 ${r >= 10 ? Math.round(r) : r.toFixed(1)} 倍` : r <= 0.87 ? `军力只有你的 ${r >= 0.1 ? Math.round(r * 100) + '%' : '不到一成'}` : '军力与你相当';
 }
 function flyToWar(w) {
   const A = S.nations[w.a], Bn = S.nations[w.b];
@@ -312,6 +320,7 @@ function setMode(mode, nid) {
   } else { S.player = null; }
   applyModeUI();
   switchTab(mode === 'leader' ? 'me' : 'ov');
+  busEmit('mode', { mode, n: mode === 'leader' ? S.nations[nid] : null });
 }
 function applyModeUI() {
   const leader = S.mode === 'leader';
@@ -415,8 +424,9 @@ function renderMe() {
     <div class="kpis">
       <div class="kpi"><span class="k">政治点数</span><span class="v">${Math.floor(P.pp)} <small>+${(P.ppRate).toFixed(1)}</small></span></div>
       <div class="kpi"><span class="k">稳定度</span><span class="v">${Math.round(n.stabV * 100)}%</span></div>
-      <div class="kpi"><span class="k">军力</span><span class="v">${fmtNum(power(n) / 1000)}</span></div>
+      <div class="kpi"><span class="k">军力 · 世界第 ${powerRank(n)[0]}/${powerRank(n)[1]}</span><span class="v">${fmtNum(power(n) / 1000)}</span></div>
     </div>
+    ${typeof missionCard === 'function' ? missionCard(n) : ''}
     <h3>国策 <small><button class="btn small" data-me="focus">打开国策树</button></small></h3>
     ${f ? `<div class="rrow"><span class="swatch" style="background:var(--sodium)"></span><span>${esc(f.name)}</span><span class="mono">${Math.round(P.focus.prog / f.sec * 100)}%</span><span class="track"><span class="fill" style="width:${(P.focus.prog / f.sec * 100).toFixed(0)}%"></span></span></div>` : '<p class="note">当前没有推进中的国策。打开国策树选择一项。</p>'}
     <h3>民意</h3>
@@ -436,7 +446,7 @@ function renderMe() {
     ${armyBlock(n)}
     <h3>外交与决议</h3>
     <div class="acts"><select data-me="target" aria-label="对象国家" class="msel">${others.map(o => `<option value="${o.id}"${o.id === decisionTarget ? ' selected' : ''}>${esc(o.name)}${atWar(n.id, o.id) ? '（交战）' : allied(n.id, o.id) ? '（同盟）' : o.overlord === n.id ? '（附庸）' : ''}</option>`).join('')}</select></div>
-    ${T ? `<p class="note">${sw(T)}${esc(T.name)} · ${esc(ideoOf(T).name)} · 军力 ${fmtNum(power(T) / 1000)} · 互信 ${Math.round(getTrust(n.id, T.id) * 100)}% · ${T.ambition * ideoOf(T).aggr > 1.2 ? '野心勃勃' : '相对温和'}${claim !== undefined ? (claim <= S.year ? ' · <b style="color:var(--sodium)">已有战争借口</b>' : ` · 借口还需 ${claim - S.year} 年`) : ''}${hasNap(n, T) ? ' · 互不侵犯' : ''}</p>` : ''}
+    ${T ? `<p class="note">${sw(T)}${esc(T.name)} · ${esc(ideoOf(T).name)} · ${powerRatioText(T, n)}（${fmtNum(power(T) / 1000)}）· 互信 ${Math.round(getTrust(n.id, T.id) * 100)}% · ${T.ambition * ideoOf(T).aggr > 1.2 ? '野心勃勃' : '相对温和'}${claim !== undefined ? (claim <= S.year ? ' · <b style="color:var(--sodium)">已有战争借口</b>' : ` · 借口还需 ${claim - S.year} 年`) : ''}${hasNap(n, T) ? ' · 互不侵犯' : ''}</p>` : ''}
     <div class="decs">${DECISIONS.filter(d => d.tgt).map(d => { const c = d.id === 'declare' && T && !canJustifiedWar(n, T) ? 60 : d.pp; return `<button class="btn small${d.id === 'declare' ? ' danger' : ''}" data-dec="${d.id}" title="${esc(d.desc)}" ${P.pp < c ? 'disabled' : ''}>${d.name}${c ? ` · ${c}` : ''}</button>`; }).join('')}</div>
     <div class="decs">${DECISIONS.filter(d => !d.tgt).map(d => `<button class="btn small" data-dec="${d.id}" title="${esc(d.desc)}" ${P.pp < d.pp ? 'disabled' : ''}>${d.name} · ${d.pp}</button>`).join('')}<button class="btn small" data-me="attack">派兵进攻…</button></div>
     <h3>战争</h3>

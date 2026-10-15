@@ -95,6 +95,7 @@ function setIdeology(n, id, text) {
   if (!id || n.ideo === id) return;
   const old = n.ideo, oldName = n.name;
   n.ideo = id;
+  busEmit('ideology', { n, from: old, to: id });
   n.sup[id] = Math.max(n.sup[id] || 0, 0.5);
   let s = 0; for (const k in n.sup) s += n.sup[k]; for (const k in n.sup) n.sup[k] /= s;
   const nm = regimeName(n, id);
@@ -136,6 +137,7 @@ function startCivilWar(n, id) {
   if (w) { w.civil = true; w.dur = 6 + ((rand() * 10) | 0); }
   S.terrDirty = true;
   if (isPlayer(n)) playerCivilWarNotice(n, rb);
+  busEmit('civilwar', { n, rebels: rb, w });
   return rb;
 }
 function endCivilWar(w) {

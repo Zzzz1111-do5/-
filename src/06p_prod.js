@@ -105,7 +105,7 @@ function prodTick(n) {
       const pool = u.dom === 'sea' ? pd : pm; if (pool <= 0) continue;
       const use = Math.min(pool, o.n * u.cost);
       give(u, use); o.n -= use / u.cost; o.done = (o.done || 0) + use / u.cost;
-      if (o.n <= 1e-6 && isPlayer(n) && !booting) showTicker('war', `生产完成：${u.name} ${dispNum(u, o.done)} ${dispOf(u)[1]}`);
+      if (o.n <= 1e-6 && isPlayer(n) && !booting) { showTicker('war', `生产完成：${u.name} ${dispNum(u, o.done)} ${dispOf(u)[1]}`); busEmit('produced', { n, u, ue: o.done }); }
     }
     mx.queue = mx.queue.filter(o => o.n > 1e-6 && UNIT_BY_ID[o.u]);
   }
@@ -232,6 +232,7 @@ function finishBuild(n, c, k) {
   const b = bldOf(c); b[k] = (b[k] || 0) + 1; c.lay = null;
   if (n.mx) n.mx.tick = -1;
   if (isPlayer(n) && !booting) showTicker('civ', `${c.name}的${bldName(k, n)}${BLD_KINDS[k].lv ? `升到 ${b[k]} 级` : '建成投产'}`);
+  busEmit('built', { n, c, k });
 }
 // yearly progress of the build queue: a few projects at a time (more with more industry), each paid when it starts
 function buildTick(n) {
