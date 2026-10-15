@@ -33,7 +33,7 @@ function wmaskCell(ci) {
     for (let tx = cx * TS; tx < cx * TS + TS; tx++) {
       const i = ty * TW + tx;
       let a = (rise - tE[i] - 0.012) * 11; a = a <= 0 ? 0 : a >= 1 ? 1 : a * a * (3 - 2 * a);
-      const ice = (-0.45 - (-5.6 - tT[i] - ta) * 0.42 - NZC[((ty * 4 + 2) & NTM) * NT + ((tx * 4 + 2) & NTM)] * 1.3) * 2.5; a *= ice <= 0 ? 0 : ice >= 1 ? 1 : ice;
+      const ice = (-0.45 - (-5.6 - tT[i] - ta) * 0.42 - iceNoise(tx * 4 + 2, ty * 4 + 2)) * 2.5; a *= ice <= 0 ? 0 : ice >= 1 ? 1 : ice;
       d[i] = a * 255;
     }
   }
@@ -65,6 +65,9 @@ function noiseTile(seed, oct) {
   const sc = 0.42 / Math.sqrt(s2 / out.length); for (let k = 0; k < out.length; k++) out[k] = clamp(out[k] * sc, -1, 1);
   return out;
 }
+// coarse noise for the sea-ice margin: two samples of the 512-px tile at scales 1 and 5/6 (both wrap the 3072-px map
+// exactly), so the floe edge no longer repeats six times around the world
+function iceNoise(x, y) { return (NZC[(y & NTM) * NT + (x & NTM)] + NZC[((((y * 5) / 6) | 0) + 211 & NTM) * NT + ((((x * 5) / 6) | 0) & NTM)]) * 0.8; }
 function initNoise() {
   NZF = noiseTile(7717, [[16, 1], [8, 0.62], [4, 0.36], [2, 0.16]]);
   NZC = noiseTile(4241, [[256, 1], [128, 0.7], [64, 0.45], [32, 0.25]]);
@@ -176,11 +179,13 @@ function paintRegion(buf, bw, bo, X0, Y0, nx, ny, R) {
       // noise and ridged crests (along the noise zero-lines) on high ground; snow and ice sheets are smoother still
       const cold = T < -3 ? Math.min(1, (-3 - T) * 0.25) : 0, dk = 0.35 * (1 - cold);
       const bxs = (EB[o + 1] - EB[o - 1]) * hr, bys = (EB[o + pw] - EB[o - pw]) * hr, sgx = bxs + (gxs - bxs) * dk, sgy = bys + (gys - bys) * dk;
-      const ra = es > 0 ? (0.002 + es * 0.03) * (1 - 0.7 * cold) - (es > 0.1 ? (nf > 0 ? 1 : -1) * Math.min(0.07, (es - 0.1) * 0.16) * (1 - cold) : 0) : 0.0012, K = es > 0 ? 30 + es * 34 : 30;
+      const rs = 1 - 0.82 * cold * (es > mtn ? Math.max(0, 1 - (es - mtn) * 5) : 1), ra = es > 0 ? (0.002 + es * 0.03) * (1 - 0.7 * cold) - (es > 0.1 ? (nf > 0 ? 1 : -1) * Math.min(0.07, (es - 0.1) * 0.16) * (1 - cold) : 0) : 0.0012, K = (es > 0 ? 30 + es * 34 : 30) * rs;
       const nxv = -(sgx + (NF[o + 1] - NF[o - 1]) * hr * ra) * K, nyv = -(sgy + (NF[o + pw] - NF[o - pw]) * hr * ra) * K;
-      let sh = ((nxv + nyv) * LXY + LZ) / (Math.sqrt(nxv * nxv + nyv * nyv + 1) * LZ);
+      // slopes steeper than ~58° (terraformed cliffs, texel-scale steps) are clamped so they shade like steep ground
+      let nm = nxv * nxv + nyv * nyv, nf2 = 1; if (nm > 2.56) { nf2 = 1.6 / Math.sqrt(nm); nm = 2.56; }
+      let sh = ((nxv + nyv) * nf2 * LXY + LZ) / (Math.sqrt(nm + 1) * LZ);
       sh = sh < 0.3 ? 0.3 : sh > 1.5 ? 1.5 : sh;
-      let ao = (EB[o + 1] + EB[o - 1] + EB[o + pw] + EB[o - pw] - 4 * EB[o]) * R2 * 300; ao = es > 0 ? 1 - (ao > 0.16 ? 0.16 : ao < -0.08 ? -0.08 : ao) : 1;
+      let ao = (EB[o + 1] + EB[o - 1] + EB[o + pw] + EB[o - pw] - 4 * EB[o]) * R2 * 300; ao = es > 0 ? 1 - (ao > 0.16 ? 0.16 : ao < -0.08 ? -0.08 : ao) * rs : 1;
       let r = 0, g = 0, b = 0;
       if (cov > 0) {
         // biome: soft categorical interpolation of the 4 nearest texels at a noise-jittered position → organic boundaries
@@ -203,7 +208,7 @@ function paintRegion(buf, bw, bo, X0, Y0, nx, ny, R) {
         // snow cover by temperature
         let sn = 0;
         if (bio !== B.ICE) { sn = clamp((-3.4 - T - nf * 2.6) / 2.2, 0, 1); if (sn > 0) { r += (240 - r) * sn; g += (245 - g) * sn; b += (251 - b) * sn; } }
-        let lit = bio === B.ICE || sn > 0.5 ? 0.5 + 0.5 * sh : 0.26 + 0.74 * sh;
+        let lit = bio === B.ICE || sn > 0.5 ? 0.56 + 0.44 * sh : 0.26 + 0.74 * sh;
         if (R > 1) { const mt = NZF[((fy * 4) & NTM) * NT + ((fx * 4) & NTM)] + ((hash2(fx * 16, fy * 16) & 255) - 128) * 0.0016; lit *= 1 + mt * (bio === B.DESERT || bio === B.ICE ? 0.04 : 0.09); }
         // fields
         let field = false;
@@ -263,12 +268,19 @@ function paintRegion(buf, bw, bo, X0, Y0, nx, ny, R) {
           const q = (sd + 5) * 0.2, q2 = q * q * 0.28; wr += (150 - wr) * q2; wg += (222 - wg) * q2; wb += (216 - wb) * q2;
           if (sd > -1.4) { const f = (sd + 1.4) / 1.4, fo = f * f * clamp(0.35 + J1[o] * 1.6, 0, 1) * 0.8; wr += (238 - wr) * fo; wg += (248 - wg) * fo; wb += (250 - wb) * fo; }
         }
-        const ib = (-5.6 - T) * 0.42 + nf * 0.3 + ncv * 1.3;
-        if (ib > -0.6) {
-          // pack ice: solid sheet in the cold, broken floes with dark leads toward the margin
-          const fl = (ib - 0.5 + J1[o] * 0.55 + J2[o] * 0.25) * 4 * (R > 1 ? 1.6 : 1) + 0.5, ik = (fl <= 0 ? 0 : fl >= 1 ? 1 : fl) * (0.94 + ncv * 0.05);
-          if (ib > -0.2 && ik < 1) { const q = (ib + 0.2) * 0.5; wr *= 1 - q * 0.3; wg *= 1 - q * 0.2; wb *= 1 - q * 0.12; }
-          if (ik > 0) { const ed = ik < 1 ? 1 + (1 - ik) * 0.05 : 1; wr += (216 * (1 + nf * 0.04) * ed - wr) * ik; wg += (229 * (1 + nf * 0.03) * ed - wg) * ik; wb += (240 - wb) * ik; }
+        const ib = (-5.6 - T) * 0.42 + nf * 0.3 + iceNoise(mxi, myi);
+        if (ib > -0.9) {
+          // pack ice: solid sheet in the cold, broken floes with dark leads toward a ragged margin
+          const fl = (ib - 0.5 + J1[o] * 0.7 + J2[o] * 0.35 + ncv * 0.25) * 2.6 * (R > 1 ? 1.5 : 1) + 0.5, ik = (fl <= 0 ? 0 : fl >= 1 ? 1 : fl) * (0.95 + ncv * 0.04);
+          if (ib > -0.5 && ik < 1) { const q = Math.min(1, (ib + 0.5) * 0.4); wr *= 1 - q * 0.28; wg *= 1 - q * 0.18; wb *= 1 - q * 0.1; }
+          if (ik > 0) {
+            const ed = ik < 1 ? 1 + (1 - ik) * 0.05 : 1, dr = 1 + nf * 0.035 + J1[o] * 0.02;
+            let ir = 214 * dr * ed, ig = 228 * dr * ed, ibl = 240 * (1 + nf * 0.015);
+            // refrozen leads: a faint crack network along the fine-noise zero lines, denser toward the margin
+            const cw = 0.03 + (1 - ik) * 0.05 + (ib < 1.4 ? 0.02 : 0), ca = J2[o] < 0 ? -J2[o] : J2[o];
+            if (ca < cw) { const q = (1 - ca / cw) * (ib < 1.6 ? 0.22 : 0.12); ir *= 1 - q * 0.45; ig *= 1 - q * 0.3; ibl *= 1 - q * 0.14; }
+            wr += (ir - wr) * ik; wg += (ig - wg) * ik; wb += (ibl - wb) * ik;
+          }
         }
         if (cov > 0) { r = wr + (r - wr) * cov; g = wg + (g - wg) * cov; b = wb + (b - wb) * cov; } else { r = wr; g = wg; b = wb; }
       }
@@ -283,7 +295,7 @@ function paintMapAll() {
   for (let y = 0; y < MH; y += 64) for (let x = 0; x < MW; x += 128) paintRegion(M32, MW, y * MW + x, x, y, 128, 64, 1);
   for (let i = 0; i < N; i++) wmaskCell(i);
   CCLS.fill(0); CPOLY.fill(null);
-  mctx.putImageData(mapImg, 0, 0);
+  mctx.putImageData(mapImg, 0, 0); polarDirty = true;
 }
 // repaint dirty cells within a time budget (cells on screen first; the rest stay queued for the next flush), then
 // upload one dirty band per touched cell row to the base bitmap
@@ -302,6 +314,7 @@ function flushMapDirty() {
     if (n >= 48 && (n & 15) === 0 && performance.now() - t0 > budget) break;
     const i = list[n], cy = (i / W) | 0, cx = i - cy * W;
     MDIRTY[i] = 0; paintMapCell(i); wmaskCell(i); coastInvalidate(i); tileDirtyCell(i);
+    if (cy < 2 || cy >= H - 2) polarDirty = true;
     if (cx < FL_X0[cy]) FL_X0[cy] = cx; if (cx > FL_X1[cy]) FL_X1[cy] = cx;
   }
   if (n < list.length) mdirtyList = list.slice(n).concat(mdirtyList);

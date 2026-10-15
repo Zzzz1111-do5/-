@@ -64,28 +64,47 @@ function drawMapImage(x0, x1, y0, y1, z, rows) {
     ctx.drawImage(mapCanvas, sx0, sy0, sx1 - sx0, sy1 - sy0, (ox + sx0 - cam.x) * z + sw / 2, (sy0 - cam.y) * z + sh / 2, (sx1 - sx0) * z, (sy1 - sy0) * z);
   }
 }
-// zoomed out the map is shorter than the stage: continue the polar seas as a mirrored, fading reflection into deep space
+// zoomed out the map is shorter than the stage: the polar edge colour (averaged over the outermost 24 map rows and
+// smoothed east-west, so no texture repeats) bleeds into the letterbox and fades into deep space
+let POLAR = null, polarDirty = true;
+function polarStrips() {
+  const n = MW / 8, cv = POLAR || document.createElement('canvas'); cv.width = n; cv.height = 2;
+  const c = cv.getContext('2d'), im = c.createImageData(n, 2), d = im.data, D = mapImg.data, acc = new Float32Array(n * 3);
+  for (let side = 0; side < 2; side++) {
+    acc.fill(0);
+    for (let r = 0; r < 24; r++) {
+      const y = side ? MH - 1 - r : r, w = 1 - r / 30;
+      for (let x = 0; x < MW; x++) { const q = (y * MW + x) * 4, k = (x >> 3) * 3; acc[k] += D[q] * w; acc[k + 1] += D[q + 1] * w; acc[k + 2] += D[q + 2] * w; }
+    }
+    for (let i = 0; i < n; i++) {   // wrap-around box blur over ±6 columns (±48 map px)
+      let r = 0, g = 0, b = 0;
+      for (let k = -6; k <= 6; k++) { const j = ((i + k + n) % n) * 3; r += acc[j]; g += acc[j + 1]; b += acc[j + 2]; }
+      const q = (side * n + i) * 4, f = 1 / (13 * 8 * 14.8);
+      d[q] = r * f; d[q + 1] = g * f; d[q + 2] = b * f; d[q + 3] = 255;
+    }
+  }
+  c.putImageData(im, 0, 0); POLAR = cv; polarDirty = false;
+}
 function drawBackdrop(x0, x1, z) {
   const sw = view.w, sh = view.h, top = syOf(0), bot = syOf(MH);
   ctx.fillStyle = '#04101f'; ctx.fillRect(-20, -20, sw + 40, sh + 40);
   if (top <= 0 && bot >= sh) return;
+  if (GFX.level && (polarDirty || !POLAR)) polarStrips();
   ctx.imageSmoothingEnabled = true;
   for (const side of [0, 1]) {
     const edge = side ? bot : top, hpx = side ? sh - bot : top;
     if (hpx <= 0) continue;
-    if (!GFX.level) { const g = ctx.createLinearGradient(0, edge, 0, side ? sh : 0); g.addColorStop(0, '#4a6178'); g.addColorStop(0.3, '#10243c'); g.addColorStop(1, '#04101f'); ctx.fillStyle = g; ctx.fillRect(-20, side ? edge : -20, sw + 40, hpx + 20); continue; }
-    const rows = Math.ceil(hpx / z) + 2;
-    ctx.save();
-    ctx.beginPath(); ctx.rect(-20, side ? edge : -20, sw + 40, hpx + 20); ctx.clip();
-    ctx.translate(0, 2 * edge); ctx.scale(1, -1);
-    ctx.globalAlpha = 0.9; drawMapImage(x0, x1, 0, MH, z, side ? -rows : rows); ctx.globalAlpha = 1;
-    ctx.restore();
-    const g = ctx.createLinearGradient(0, edge, 0, side ? sh : 0);
-    g.addColorStop(0, 'rgba(4,16,31,0.18)'); g.addColorStop(0.35, 'rgba(4,16,31,0.62)'); g.addColorStop(0.8, 'rgba(4,14,28,0.94)'); g.addColorStop(1, 'rgba(3,10,22,1)');
-    ctx.fillStyle = g; ctx.fillRect(-20, side ? edge : -20, sw + 40, hpx + 20);
-    const gl = ctx.createLinearGradient(0, edge, 0, edge + (side ? 10 : -10));
-    gl.addColorStop(0, 'rgba(170,215,255,0.16)'); gl.addColorStop(1, 'rgba(170,215,255,0)');
-    ctx.fillStyle = gl; ctx.fillRect(-20, side ? edge : edge - 10, sw + 40, 10);
+    const ya = side ? edge : -20, hh = hpx + 20, fade = Math.min(hpx, 26 + 160 * z);
+    if (GFX.level) {
+      // the strip is drawn per east-west copy of the map; its source row (0 north, 1 south) is stretched over the band
+      for (let k = Math.floor(x0 / MW); k * MW < x1; k++) ctx.drawImage(POLAR, 0, side + 0.25, POLAR.width, 0.5, (k * MW - cam.x) * z + sw / 2, ya, MW * z, hh);
+      const g = ctx.createLinearGradient(0, edge, 0, side ? edge + fade : edge - fade);
+      g.addColorStop(0, 'rgba(4,16,31,0.05)'); g.addColorStop(0.18, 'rgba(4,16,31,0.32)'); g.addColorStop(0.55, 'rgba(4,15,30,0.8)'); g.addColorStop(1, 'rgba(4,16,31,1)');
+      ctx.fillStyle = g; ctx.fillRect(-20, side ? edge : edge - fade, sw + 40, fade);
+      if (hpx > fade) { ctx.fillStyle = '#04101f'; ctx.fillRect(-20, side ? edge + fade : -20, sw + 40, hpx - fade + 20); }
+    } else {
+      const g = ctx.createLinearGradient(0, edge, 0, side ? sh : 0); g.addColorStop(0, '#4a6178'); g.addColorStop(0.3, '#10243c'); g.addColorStop(1, '#04101f'); ctx.fillStyle = g; ctx.fillRect(-20, ya, sw + 40, hh);
+    }
   }
 }
 // hi-res detail tiles over the base bitmap when zoomed in (GFX.detail ≥ 1; 4 samples per map px at detail 3):
