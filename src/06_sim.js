@@ -143,11 +143,12 @@ function techCost(n, id) {
     const tau = Math.min((b - a) / 3, MTAU), pace = clamp(Math.pow(2, (t.ry - S.year) / tau), 0.5, 40);
     return MCOST[t.era] * (1 + 0.4 * clamp((t.ry - a) / (b - a), 0, 1)) * diff * pace;
   }
-  const ref = a + (b - a) * t.idx / t.per, tau = (b - a) / 3;
+  const ref = a + (b - a) * t.idx / t.per, tau = Math.min((b - a) / 3, CTAU);
   const pace = clamp(Math.pow(2, (ref - S.year) / tau), 0.5, 40);
   return COST[t.era] * (1 + 0.4 * t.idx / t.per) * diff * pace;
 }
 const MTAU = 14;   // military techs: years per doubling of the ahead-of-time penalty
+const CTAU = 25;   // civil techs: the same, capped so the long late eras cannot be raced through a century early
 
 function discover(n, id) {
   n.techs[id] = S.year;
