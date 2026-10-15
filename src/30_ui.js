@@ -132,6 +132,7 @@ function updatePanels() {
   if (activeTab === 'log' && logVersion !== renderedLogVersion) renderLog();
   if (activeTab === 'ach' && achVersion !== renderedAch) renderAch();
   if (tmOpen && techVersion !== renderedTreeVersion) renderTree();
+  if ($('gfxSel')._v !== gfxVersion) syncGfxUI();
 }
 function updateOverview() {
   const alive = S.nations.filter(n => n.alive);
@@ -319,6 +320,44 @@ function aiBlock(n) {
     <ol class="ailog">${a.log.slice(0, 4).map(l => `<li><span class="y">${esc(fmtYearShort(l.y))}</span><span>${esc(l.t)}</span></li>`).join('') || '<li><span class="y"></span><span>正在观察局势</span></li>'}</ol>`;
 }
 
+/* ---------- military summaries (nation cards, leader panel, war modal) ---------- */
+const DOM_BAR = { land: '#e8553f', sea: '#4a90e2', air: '#bfe8ff' };
+function landMain(n) {
+  const b = n.mult.best || {}, a = UNIT_BY_ID[b.arm];
+  if (a && (a.spr === 'tracked' || a.spr === 'hover' || a.spr === 'mech')) return a;
+  return UNIT_BY_ID[b.inf] || a || null;
+}
+function milStrengthBars(n) {
+  const F = milForces(n), tot = F.L + F.S + F.A || 1;
+  return `<div class="milbars" role="img" aria-label="陆军 ${fmtNum(F.L / 1000)}，海军 ${fmtNum(F.S / 1000)}，空军 ${fmtNum(F.A / 1000)}">${[['陆军', F.L, 'land'], ['海军', F.S, 'sea'], ['空军', F.A, 'air']].map(([k, v, d]) => `<span>${k.slice(0, 1)}</span><span class="track"><span class="fill" style="width:${(v / tot * 100).toFixed(1)}%;background:${DOM_BAR[d]}"></span></span><b>${fmtNum(v / 1000)}（${Math.round(v / tot * 100)}%）</b>`).join('')}</div>`;
+}
+function fieldedUnits(n, dom) {
+  const out = []; if (effSplit(n)[DOM[dom]] <= 0) return out;
+  const mix = ensureMil(n).mix[dom];
+  for (const r of ROLES[dom]) { const id = n.mult.best[r]; if (id && !out.includes(id) && (mix[r] || 0) > 0.01) out.push(id); }
+  return out;
+}
+function uchips(ids) { return ids.map(id => `<span class="uchip">${unitImg(id)}${esc(UNIT_BY_ID[id].name)}</span>`).join(''); }
+function doctrineChips(n) { return DOMS.map(d => { const id = n.mult.doc[d]; return id ? `<span class="dchip" title="${DOM_NAME[d]}学说">${esc(doctrineName(id, n))}</span>` : `<span class="dchip none">${DOM_NAME[d]}：无学说</span>`; }).join(''); }
+// share of air / sea control and blockade suffered, seen from nation n
+function warControl(n, w) {
+  const s = w.a === n.id ? 0 : 1, f = v => (v === undefined ? 0.5 : v);
+  return { air: s ? 1 - f(w.air) : f(w.air), sea: s ? 1 - f(w.sea) : f(w.sea), block: (w.blockade || [0, 0])[s] || 0, land: s ? 1 - f(w.ls) : f(w.ls) };
+}
+function milResearchRow(n) {
+  const r = researchBars(n);
+  return `<div class="prog"><span>${r.mt ? '军工 ' + esc(r.mt.name) : '军工：暂无目标'}</span><span class="track"><span class="fill mil" style="width:${(r.mp * 100).toFixed(0)}%"></span></span><span class="mono">${r.mt ? Math.round(r.mp * 100) + '%' : ''}</span></div>`;
+}
+function milPanel(n) {
+  const wars = S.wars.filter(w => w.a === n.id || w.b === n.id);
+  const doms = DOMS.map(d => [d, fieldedUnits(n, d)]).filter(a => a[1].length);
+  return `<span class="cap">军事</span>${milStrengthBars(n)}
+    <div class="milrow"><span class="k">学说</span>${doctrineChips(n)}</div>
+    <div class="milrow"><span class="k">现役</span>${doms.map(([d, ids]) => `<span class="ugrp"><i style="background:${DOM_BAR[d]}" title="${DOM_NAME[d]}"></i>${uchips(ids)}</span>`).join('') || '<span class="note" style="margin:0">无</span>'}</div>
+    ${milResearchRow(n)}
+    ${wars.map(w => { const o = S.nations[w.a === n.id ? w.b : w.a], c = warControl(n, w); return `<div class="milrow"><span class="k">战争</span>对${esc(o.name)} · 制空 ${Math.round(c.air * 100)}% · 制海 ${Math.round(c.sea * 100)}%${c.block > 0.01 ? ` · 被封锁 ${Math.round(c.block * 100)}%` : ''}</div>`; }).join('')}`;
+}
+
 /* ---------- nations (with god controls) ---------- */
 let expandedNation = -1;
 const natTarget = {};
@@ -341,9 +380,9 @@ function renderNations() {
     const exp = expandedNation === n.id;
     html += `<div class="nat" data-n="${n.id}" aria-expanded="${exp}">
       <div class="top" role="button" tabindex="0" data-act="toggle">${sw(n)}<span class="nm">${esc(n.name)}</span><span class="pp">${fmtPop(n.st.pop)}</span></div>
-      <div class="sub"><span class="ibadge" style="--ic:${ideoOf(n).color}">${ideoOf(n).short}</span>${isPlayer(n) ? '<span style="color:var(--sodium)">你的国家</span>' : ''}<span>${ERA_NAME[n.mult.era]}时代</span><span>稳定 ${Math.round(n.stabV * 100)}%</span>${n.ai && !isPlayer(n) ? `<span>AI：${GOAL_NAME[n.ai.goal] || '观望'}</span>` : ''}<span>${n.st.cities} 城</span><span>科技 ${n.mult.count}/${TECHS.length}</span><span>${WEAPON_NAME[n.mult.weapon]}</span>${n.golden > 0 ? '<span style="color:var(--sodium)">黄金时代</span>' : ''}${n.legions > 1 ? `<span>神兵 ×${n.legions.toFixed(0)}</span>` : ''}</div>
+      <div class="sub"><span class="ibadge" style="--ic:${ideoOf(n).color}">${ideoOf(n).short}</span>${isPlayer(n) ? '<span style="color:var(--sodium)">你的国家</span>' : ''}<span>${ERA_NAME[n.mult.era]}时代</span><span>稳定 ${Math.round(n.stabV * 100)}%</span>${n.ai && !isPlayer(n) ? `<span>AI：${GOAL_NAME[n.ai.goal] || '观望'}</span>` : ''}<span>${n.st.cities} 城</span><span>科技 ${n.mult.count}/${CIV_TOTAL} · 军工 ${n.mult.mcount}/${MIL_TOTAL}</span><span>${esc((landMain(n) || { name: WEAPON_NAME[n.mult.weapon] }).name)}</span>${n.golden > 0 ? '<span style="color:var(--sodium)">黄金时代</span>' : ''}${n.legions > 1 ? `<span>神兵 ×${n.legions.toFixed(0)}</span>` : ''}</div>
       ${relTags(n) ? `<div class="rels">${relTags(n)}</div>` : ''}
-      <div class="prog"><span>${t ? '研究 ' + esc(t.name) : '已掌握全部科技'}</span><span class="track"><span class="fill" style="width:${(prog * 100).toFixed(0)}%"></span></span></div>`;
+      <div class="prog"><span>${t ? '研究 ' + esc(t.name) : '已掌握全部科技'}</span><span class="track"><span class="fill" style="width:${(prog * 100).toFixed(0)}%"></span></span></div>${exp ? '' : n.mtarget ? milResearchRow(n) : ''}`;
     if (exp) {
       const others = list.filter(o => o !== n);
       if (natTarget[n.id] === undefined || !others.some(o => o.id === natTarget[n.id])) natTarget[n.id] = others.length ? others[0].id : -1;
@@ -374,7 +413,11 @@ function renderNations() {
           <button class="btn small" data-act="army">赐军</button>
           <button class="btn small" data-act="plague">瘟疫</button>
           <button class="btn small" data-act="tree">赐予科技</button>
-        </div>`;
+        </div>
+        <span class="cap">军备</span>
+        <div class="line"><select data-role="milp" aria-label="军费结构预设">${Object.keys(MIL_PRESET_NAME).map(k => `<option value="${k}">${MIL_PRESET_NAME[k]}</option>`).join('')}</select>
+          <button class="btn small" data-act="milpreset">调整军备</button>
+          <button class="btn small" data-act="miltree">军工科技</button></div>`;
       html += `<span class="cap">民意</span>
         <div class="supbar">${sup.map(([id, v]) => `<span style="width:${(v * 100).toFixed(1)}%;background:${IDEO_BY_ID[id].color}" title="${IDEO_BY_ID[id].name} ${Math.round(v * 100)}%"></span>`).join('')}</div>
         <div class="mixlegend" style="margin-top:0">${sup.slice(0, 4).map(([id, v]) => `<div><span class="swatch" style="background:${IDEO_BY_ID[id].color}"></span>${IDEO_BY_ID[id].short}<b>${Math.round(v * 100)}%</b></div>`).join('')}</div>
@@ -391,6 +434,7 @@ function renderNations() {
           ${ov && ov.alive ? `<dt>宗主国</dt><dd class="txt">${esc(ov.name)}</dd>` : ''}
         </dl>
         <p class="note">${esc(I.desc)}</p>
+        ${milPanel(n)}
         ${isPlayer(n) ? '<span class="cap">执政</span><p class="note" style="margin:0">由你亲自执政。顾问建议：' + esc(n.ai ? n.ai.advice : '') + '</p>' : `<span class="cap">执政</span>${aiBlock(n)}`}
         ${n.eco ? `<span class="cap">财政与预算 · ${esc(doct(n.ideo).school)}</span>${financeKV(n)}${budgetBar(n.eco.alloc)}` : ''}
       </div>`;
@@ -411,7 +455,7 @@ $('natList').addEventListener('click', e => {
   if (act === 'toggle') { expandedNation = expandedNation === n.id ? -1 : n.id; selectedNation = expandedNation; $('natList')._hold = 0; renderNations(); return; }
   const sel = box.querySelector('select[data-role="target"]');
   const o = sel ? S.nations[+sel.value] : null;
-  const isel = box.querySelector('select[data-role="ideo"]');
+  const isel = box.querySelector(act === 'milpreset' ? 'select[data-role="milp"]' : 'select[data-role="ideo"]');
   nationAction(act, n, o, isel ? isel.value : null);
   $('natList')._hold = 0; $('natList')._html = ''; renderNations();
 });
@@ -437,6 +481,8 @@ function nationAction(act, n, o, extra) {
     case 'army': godArmy(n); break;
     case 'plague': plague(n, true); break;
     case 'tree': openTree(String(n.id)); break;
+    case 'miltree': openTree(String(n.id), 'land'); break;
+    case 'milpreset': if (extra && milPreset(n, extra)) showTicker('war', `${n.name}的军费结构调整为「${MIL_PRESET_NAME[extra]}」`); break;
     case 'locate': { const c = cityById(n.capital) || largestCity(n); if (c) { selected = { city: c.id }; flyToCity(c); } break; }
   }
 }
@@ -501,39 +547,212 @@ function renderGame() {
 holdOnInteract($('pane-game'));
 
 /* ---------- tech pane ---------- */
+const CIV_TOTAL = TECHS.filter(t => !t.mil).length, MIL_TOTAL = TECHS.length - CIV_TOTAL;
+function researchBars(n) {
+  const t = n.target ? TECH_BY_ID[n.target] : null, p = t ? clamp(n.research / techCost(n, n.target), 0, 1) : 1;
+  const mt = n.mtarget ? TECH_BY_ID[n.mtarget] : null, mp = mt ? clamp(n.mresearch / techCost(n, n.mtarget), 0, 1) : 0;
+  return { t, p, mt, mp };
+}
 function renderTechPane() {
   const alive = S.nations.filter(n => n.alive).sort((a, b) => b.mult.count - a.mult.count);
-  const found = Object.keys(S.firsts).length;
-  const recent = Object.entries(S.firsts).filter(([id]) => id !== 'agri').sort((a, b) => b[1].y - a[1].y).slice(0, 8);
+  let civ = 0, mil = 0; for (const id in S.firsts) { const t = TECH_BY_ID[id]; if (t) { if (t.mil) mil++; else civ++; } }
+  const recent = Object.entries(S.firsts).filter(([id]) => id !== 'agri' && TECH_BY_ID[id]).sort((a, b) => b[1].y - a[1].y).slice(0, 8);
   setHTML($('techPane'), `
     <h3>人类的知识</h3>
-    <p class="note" style="margin:0 0 10px">已发现 ${found} / ${TECHS.length} 项科技，分为 ${NERA} 个时代、${BRANCH_ORDER.length} 个分支。</p>
+    <p class="note" style="margin:0 0 10px">已发现 ${civ + mil} / ${TECHS.length} 项科技（文明 ${civ}/${CIV_TOTAL} · 军事 ${mil}/${MIL_TOTAL}），分为 ${TECH_CATS.length} 个类别。军事科技由军费推动，走单独的军工研究轨道。</p>
     <button class="btn primary" data-act="open">打开完整科技树</button>
-    <h3>各国正在研究</h3>
-    <div class="rlist">${alive.map(n => { const t = n.target ? TECH_BY_ID[n.target] : null, p = t ? clamp(n.research / techCost(n, n.target), 0, 1) : 1; return `<div class="rrow">${sw(n)}<span>${esc(n.name)} · ${t ? esc(t.name) : '全部完成'}</span><span class="mono">${n.mult.count}</span><span class="track"><span class="fill" style="width:${(p * 100).toFixed(0)}%"></span></span></div>`; }).join('')}</div>
+    <h3>各国正在研究 <small>科研 · 军工</small></h3>
+    <div class="rlist">${alive.map(n => { const r = researchBars(n); return `<div class="rrow r2">${sw(n)}<span>${esc(n.name)}</span><span class="mono">${n.mult.count} · ${n.mult.mcount}</span>
+      <span class="rl">${r.t ? esc(r.t.name) : '文明科技全部完成'}</span><span class="track"><span class="fill" style="width:${(r.p * 100).toFixed(0)}%"></span></span>
+      <span class="rl mil">${r.mt ? esc(r.mt.name) : '军工：暂无目标'}</span><span class="track"><span class="fill mil" style="width:${(r.mp * 100).toFixed(0)}%"></span></span></div>`; }).join('')}</div>
     <h3>最近的重大发现</h3>
     <ol class="log">${recent.map(([id, f]) => `<li><span class="y">${esc(fmtYearShort(f.y))}</span><span class="dot" style="background:${BRANCH[TECH_BY_ID[id].br].color}"></span><span class="t">${esc(f.name)} · ${esc(TECH_BY_ID[id].name)}</span></li>`).join('') || '<li><span></span><span></span><span class="t" style="color:var(--ink-3)">还没有</span></li>'}</ol>`);
 }
 $('techPane').addEventListener('click', e => { if (e.target.closest('[data-act="open"]')) openTree(); });
 
-/* ---------- full tech tree ---------- */
-let tmWho = 'world', tmSel = null, tmOpen = false, renderedTreeVersion = -1, tmGrant = null;
-const TM = { colW: 178, rowH: 56, top: 34, left: 16 };
-function openTree(who) {
+/* ---------- unit glyphs (procedural, cached as data URLs) ---------- */
+const DOM_COLOR = { land: '#d8b48a', sea: '#9cc6ee', air: '#d6ecff' };
+const UGLYPH = new Map();
+function unitGlyph(id, big) {
+  const key = id + (big ? '@b' : ''); let url = UGLYPH.get(key);
+  if (url) return url;
+  const u = UNIT_BY_ID[id]; if (!u) return '';
+  const W = big ? 144 : 48, H = big ? 96 : 32, c = document.createElement('canvas'); c.width = W; c.height = H;
+  const g = c.getContext('2d'); g.scale(W / 24, H / 16); g.lineCap = 'round'; g.lineJoin = 'round';
+  drawGlyph(g, u);
+  url = c.toDataURL(); UGLYPH.set(key, url);
+  return url;
+}
+function drawGlyph(g, u) {
+  const v = u.vis || {}, col = v.body || DOM_COLOR[u.dom], dark = 'rgba(0,0,0,.45)';
+  const L = (pts, w, s) => { g.beginPath(); g.moveTo(pts[0], pts[1]); for (let k = 2; k < pts.length; k += 2) g.lineTo(pts[k], pts[k + 1]); g.lineWidth = w; g.strokeStyle = s || col; g.stroke(); };
+  const P = (pts, f) => { g.beginPath(); g.moveTo(pts[0], pts[1]); for (let k = 2; k < pts.length; k += 2) g.lineTo(pts[k], pts[k + 1]); g.closePath(); g.fillStyle = f || col; g.fill(); };
+  const E = (x, y, rx, ry, f) => { g.beginPath(); g.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2); g.fillStyle = f || col; g.fill(); };
+  const R = (x, y, w, h, f) => { g.fillStyle = f || col; g.fillRect(x, y, w, h); };
+  const water = () => L([1, 13.6, 23, 13.6], 0.7, 'rgba(110,170,230,.75)');
+  switch (u.spr) {
+    case 'foot': {
+      const pole = v.wpn === 'spear' || v.wpn === 'pike';
+      for (const dx of [-5, 0, 5]) {
+        const x = 12 + dx;
+        E(x, 4.2, 1.3, 1.3); R(x - 1.1, 5.6, 2.2, 4.6); L([x - 0.6, 10, x - 1.2, 14], 0.9); L([x + 0.6, 10, x + 1.2, 14], 0.9);
+        if (pole) L([x + 1.8, 2, x + 1.8, 13], 0.5, '#cbb'); else L([x - 1, 7, x + 3.4, 5.6], 0.7, '#9aa');
+        if (v.shield) E(x - 1.4, 8, 1.2, 1.8, '#a76');
+      }
+      break;
+    }
+    case 'horse': {
+      E(11, 9.5, 5.5, 2.3); L([7, 10.5, 6.4, 14.5], 0.9); L([9, 11, 9.2, 14.5], 0.9); L([13.5, 11, 13.8, 14.5], 0.9); L([15.6, 10.5, 16.4, 14.5], 0.9);
+      L([15.5, 8.6, 18.5, 5.4], 1.6); E(19.2, 5.2, 1.6, 0.9);
+      if (v.chariot || u.id === 'chariot') { g.beginPath(); g.arc(6, 12, 2.4, 0, Math.PI * 2); g.lineWidth = 0.6; g.strokeStyle = '#cbb'; g.stroke(); }
+      else { E(11, 5.4, 1.1, 1.1); R(10.2, 6.2, 1.6, 2.6); L([12, 6.5, 18, 2.4], 0.5, '#cbb'); }
+      break;
+    }
+    case 'tracked': case 'hover': {
+      const len = clamp((v.len || 6) * 2.6, 12, 20), x0 = 12 - len / 2;
+      if (u.spr === 'hover') { E(12, 14, len / 2, 1, 'rgba(120,220,255,.6)'); P([x0, 11.5, x0 + len, 11.5, x0 + len - 2, 8.5, x0 + 2, 8.5]); }
+      else if (v.hull === 'truck') { R(x0, 8, len, 3.5); R(x0 + len - 4, 5.5, 4, 3, col); for (const k of [0.2, 0.5, 0.85]) E(x0 + len * k, 12.6, 1.4, 1.4, '#333'); }
+      else { P([x0, 9, x0 + len, 9, x0 + len - 1.5, 12, x0 + 1.5, 12]); g.beginPath(); g.roundRect ? g.roundRect(x0 + 0.5, 11.3, len - 1, 2.8, 1.4) : g.rect(x0 + 0.5, 11.3, len - 1, 2.8); g.fillStyle = '#2a2a2a'; g.fill(); }
+      if (v.launcher) { g.save(); g.translate(x0 + 3, 8); g.rotate(-0.45); R(0, -2.2, 8, 2.2, '#bbb'); g.restore(); }
+      else if (v.turret === 'open') { R(11, 6.4, 6, 2.6); L([16, 7.4, 22, 4], 1, col); }
+      else { E(12.5, 7.6, v.turret === 'small' ? 2.6 : 3.4, 1.8); L([14.5, 7.4, 14.5 + clamp((v.gun || 4) * 1.6, 3, 10), 7], v.turret === 'rails' ? 1.2 : 0.9, v.beam || col); }
+      break;
+    }
+    case 'gun': {
+      g.beginPath(); g.arc(9, 12, 2.4, 0, Math.PI * 2); g.lineWidth = 0.9; g.strokeStyle = '#a98'; g.stroke();
+      L([5, 13, 12, 11], 1.4); L([8, 11, 20, 5], v.len > 3 ? 1.5 : 1.1);
+      break;
+    }
+    case 'mech': {
+      R(9, 3.5, 6, 5); E(12, 2.6, 1.6, 1.2); L([10, 8.5, 8.4, 14.5], 1.4); L([14, 8.5, 15.6, 14.5], 1.4); L([15, 5, 20, 4], 1.1, '#9cf');
+      break;
+    }
+    case 'heli': {
+      E(11, 9, 5, 2.4); L([15, 8.6, 22, 7.6], 1); L([3, 5.6, 19, 5.6], 0.6, '#ccc'); L([11, 5.6, 11, 7], 0.6, '#ccc'); L([8, 12, 14, 12], 0.5, '#999');
+      break;
+    }
+    case 'plane': {
+      const jet = v.jet || v.swept;
+      if (v.flyingWing) { P([3, 10, 12, 4, 21, 10, 12, 8.5]); break; }
+      if (v.wedge) { P([2, 8, 22, 6, 22, 10]); E(2.2, 8, 1.4, 0.8, '#6af'); break; }
+      L([3, 8, 21, 8], 2);
+      if (jet) P([10, 8, 15, 8, 7, 14]); else P([9, 8, 12.5, 8, 11.5, 14, 9.5, 14]);
+      P([3, 8, 4.8, 8, 2.6, 4.5]);
+      if (!jet) L([21.6, 6, 21.6, 10], 0.5, '#ddd');
+      if (v.engines >= 2 || v.size >= 2) { P([11, 8, 14, 8, 9, 2.5, 8, 2.5]); }
+      break;
+    }
+    case 'drone': {
+      if (v.swarm) { for (let k = 0; k < 9; k++) E(5 + (k * 7) % 15, 4 + ((k * 5) % 9), 0.8, 0.5); break; }
+      L([4, 8, 18, 8], 1.2); P([9, 8, 13, 8, 10, 3, 9, 3]); P([9, 8, 13, 8, 10, 13, 9, 13]); P([4, 8, 5.5, 8, 3.5, 5]);
+      break;
+    }
+    case 'airship': { E(12, 7, 9, 3.2); R(10, 10, 4, 1.6, '#887'); P([3, 7, 1.2, 4.5, 1.2, 9.5]); break; }
+    case 'missile': {
+      if (v.kind === 'beam') { R(10, 1, 4, 3, '#bcd'); L([12, 4, 12, 15], 1.6, '#fff'); break; }
+      L([4, 12, 19, 4], 1.6, '#ddd'); P([19, 4, 21.5, 2.6, 20.2, 5.2], '#f84'); L([4, 12, 2, 13.2], 1.4, v.trail || '#f84');
+      break;
+    }
+    case 'oared': {
+      P([2, 9, 22, 9, 19, 12, 5, 12]); for (let x = 6; x <= 18; x += 3) L([x, 11, x - 1.5, 14.5], 0.5, '#cba'); L([12, 9, 12, 3], 0.6, '#cba'); P([9, 3.5, 15, 3.5, 14, 8, 10, 8], '#e8dcc0');
+      break;
+    }
+    case 'sail': {
+      P([2, 9.5, 22, 9.5, 19.5, 13, 4.5, 13]); const m = v.masts || 3;
+      for (let k = 0; k < m; k++) { const x = 6 + k * (12 / Math.max(1, m - 1 || 1)); L([x, 9.5, x, 1.5], 0.5, '#cba'); P([x - 2.3, 2.5, x + 2.3, 2.5, x + 2.6, 8.5, x - 2.6, 8.5], '#ece2c8'); }
+      water(); break;
+    }
+    case 'steam': case 'carrier': {
+      if (u.spr === 'carrier') { P([1.5, 9, 22.5, 9, 21, 12.5, 3.5, 12.5]); R(1, 8, 22, 1.2, '#888'); R(15, 5, 3, 3); L([16.5, 5, 16.5, 3], 0.4, '#ccc'); water(); break; }
+      P([1.5, 9.5, 22.5, 9.5, 20.5, 12.8, 3.5, 12.8]); R(9, 6.8, 6, 2.7); R(10.6, 4.2, 2.6, 2.8);
+      const f = v.funnels || 1; for (let k = 0; k < f; k++) R(13.6 + k * 1.8, 3.6, 1.2, 3.2, '#777');
+      const t = v.turrets || (v.gun ? 2 : 1); for (let k = 0; k < Math.min(4, t); k++) { const x = k % 2 ? 18 : 5.4; E(x - (k > 1 ? 2.2 : 0) * (k % 2 ? 1 : -1), 8.8, 1.4, 0.9); L([x, 8.6, x + (k % 2 ? 2.8 : -2.8), 8.2], 0.5); }
+      water(); break;
+    }
+    case 'sub': { E(12, 11.5, 9.5, 1.9); R(10, 8, 3, 2.6); L([11.5, 8, 11.5, 6], 0.4, '#bbb'); water(); break; }
+    default: E(12, 8, 6, 4);
+  }
+}
+function unitImg(id, cls) { const u = UNIT_BY_ID[id]; return u ? `<img class="${cls || 'ug'}" src="${unitGlyph(id, cls === 'ugb')}" alt="" title="${esc(u.name)}">` : ''; }
+
+/* ---------- full tech tree: one page per category ---------- */
+let tmWho = 'world', tmSel = null, tmOpen = false, renderedTreeVersion = -1, tmGrant = null, tmCat = 'life', tmQuery = '';
+try { const c = localStorage.getItem('blue-planet-tmcat'); if (c && TECH_CATS.some(x => x.id === c)) tmCat = c; } catch (e) {}
+const TM = { colW: 186, rowH: 56, top: 40, laneW: 132, nodeW: 164 };
+const CAT_TECHS = {}; for (const c of TECH_CATS) CAT_TECHS[c.id] = TECHS.filter(t => t.cat === c.id);
+const CAT_BY_ID = Object.fromEntries(TECH_CATS.map(c => [c.id, c]));
+const BRANCH_ROLE = { inf: 'inf', art: 'art', arm: 'arm', ncap: 'cap', nscr: 'scr', ncv: 'cv', nsub: 'sub', afi: 'fi', aatk: 'cas', abo: 'bomb', auav: 'uav' };
+const EXCL_N = ['', '', '二选一', '三选一', '四选一', '五选一'];
+let tmSwap = false;
+function setTmCat(id, keepScroll) {
+  if (!CAT_BY_ID[id]) return;
+  if (id !== tmCat) tmSwap = true;
+  if (id !== tmCat && !keepScroll) { const tr = $('tmTree'); tr.scrollLeft = 0; tr.scrollTop = 0; }
+  tmCat = id; try { localStorage.setItem('blue-planet-tmcat', id); } catch (e) {}
+}
+function openTree(who, cat) {
   if (who !== undefined) tmWho = who;
-  $('techModal').hidden = false; tmOpen = true; renderedTreeVersion = -1; renderTree();
+  if (cat) setTmCat(cat);
+  $('techModal').hidden = false; tmOpen = true; renderedTreeVersion = -1; tmSwap = true; $('tmTree').scrollLeft = 0; renderTree();
   setTimeout(() => $('tmClose').focus(), 0);
 }
 function closeTree() { $('techModal').hidden = true; tmOpen = false; }
-function treePos() {
-  const pos = {};
-  for (let e = 0; e < NERA; e++) {
-    TECHS.filter(t => t.era === e).sort((a, b) => BRANCH_ORDER.indexOf(a.br) - BRANCH_ORDER.indexOf(b.br) || a.idx - b.idx)
-      .forEach((t, k) => { pos[t.id] = { x: TM.left + e * TM.colW, y: TM.top + k * TM.rowH }; });
-  }
-  return pos;
-}
 function ancestors(id, out = new Set()) { for (const r of TECH_BY_ID[id].req) if (!out.has(r)) { out.add(r); ancestors(r, out); } return out; }
+function techState(t, who) {
+  if (who.techs[t.id] !== undefined) return 'known';
+  if (t.mil ? who.mtarget === t.id : who.target === t.id) return 'cur';
+  if (t.excl && exclBlocked(who, t)) return 'locked';
+  if (!t.req.every(r => who.techs[r] !== undefined)) return 'none';
+  if (t.mil && t.era > who.mult.era) return 'era';
+  return 'avail';
+}
+function techProg(t, who) { return clamp((t.mil ? who.mresearch : who.research) / techCost(who, t.id), 0, 1); }
+function treeLayout(cat) {
+  const ts = CAT_TECHS[cat.id], eras = [...new Set(ts.map(t => t.era))].sort((a, b) => a - b);
+  const narrow = window.innerWidth < 640, laneW = narrow ? 92 : TM.laneW;
+  // exclusive groups (doctrines) sit side by side, everything else stacks by reference year inside its era cell
+  const cellOf = (b, e) => ts.filter(t => t.br === b && t.era === e).sort((p, q) => p.ry - q.ry || p.idx - q.idx);
+  const isRow = cell => cell.length > 1 && cell.every(t => t.excl);
+  const span = eras.map(e => Math.max(1, ...cat.branches.map(b => { const c = cellOf(b, e); return isRow(c) ? c.length : 1; })));
+  const colX = []; let cx = laneW + 14; span.forEach((n, ci) => { colX[ci] = cx; cx += n * TM.colW; });
+  const pos = {}, lanes = []; let y = TM.top;
+  for (const b of cat.branches) {
+    let depth = 1;
+    const cells = eras.map(e => cellOf(b, e));
+    cells.forEach((cell, ci) => {
+      const row = isRow(cell);
+      if (!row) depth = Math.max(depth, cell.length);
+      cell.forEach((t, k) => { pos[t.id] = row ? { x: colX[ci] + k * TM.colW, y: y + 10 } : { x: colX[ci], y: y + 6 + k * TM.rowH }; });
+    });
+    lanes.push({ b, y, h: depth * TM.rowH + 8, cells });
+    y += depth * TM.rowH + 8;
+  }
+  return { ts, eras, pos, lanes, laneW, colX, span, W: cx + 10, H: y + 12 };
+}
+function laneNow(b, who) {
+  if (!who) return '';
+  const r = BRANCH_ROLE[b];
+  if (r) { const u = UNIT_BY_ID[who.mult.best[r]]; return u ? `当前：${u.name}` : '尚未装备'; }
+  const ex = TECHS.find(t => t.br === b && t.excl && who.techs[t.id] !== undefined);
+  if (ex) return `已选：${TECH_BY_ID[ex.id].name}`;
+  let last = null; for (const t of TECHS) if (t.br === b && who.techs[t.id] !== undefined && (!last || t.ry > last.ry)) last = t;
+  return last ? `最新：${last.name}` : '尚未起步';
+}
+function renderTabs(who) {
+  const alive = S.nations.filter(n => n.alive);
+  let html = '', grp = '', k = 0;
+  for (const c of TECH_CATS) {
+    if (c.group !== grp) { if (grp) html += '<span class="tm-sep" aria-hidden="true"></span>'; grp = c.group; html += `<span class="tm-grp">${grp}</span>`; }
+    const ts = CAT_TECHS[c.id];
+    const have = who ? ts.filter(t => who.techs[t.id] !== undefined).length : ts.filter(t => S.firsts[t.id]).length;
+    const dot = who ? ts.some(t => t.id === who.target || t.id === who.mtarget) : false;
+    const hit = tmQuery && ts.some(t => t.name.includes(tmQuery));
+    const key = (k + 1) % 10; k++;
+    html += `<button role="tab" class="tm-tab${hit ? ' hit' : ''}" data-cat="${c.id}" aria-selected="${c.id === tmCat}" title="${esc(c.name)}（快捷键 ${key}）"><span class="kk">${key}</span>${esc(c.name)}<small>${have}/${ts.length}</small>${dot ? '<i class="dot" title="正在研究"></i>' : ''}</button>`;
+  }
+  void alive;
+  setHTML($('tmTabs'), html);
+}
 function renderTree() {
   renderedTreeVersion = techVersion;
   const alive = S.nations.filter(n => n.alive);
@@ -543,87 +762,186 @@ function renderTree() {
   if (sel.dataset.sig !== sig) { sel.innerHTML = `<option value="world">全世界（首次发现）</option>` + alive.map(n => `<option value="${n.id}">${esc(n.name)}</option>`).join(''); sel.dataset.sig = sig; }
   sel.value = tmWho;
   const who = tmWho === 'world' ? null : S.nations[+tmWho];
-  $('tmLegend').innerHTML = BRANCH_ORDER.map(b => `<span><i style="background:${BRANCH[b].color}"></i>${BRANCH[b].name}</span>`).join('');
-  const pos = treePos();
-  const Wd = TM.left * 2 + NERA * TM.colW, Ht = TM.top + 12 * TM.rowH + 10;
+  if (tmSel && TECH_BY_ID[tmSel].cat !== tmCat) tmSel = null;
+  renderTabs(who);
+  const cat = CAT_BY_ID[tmCat], Ly = treeLayout(cat), pos = Ly.pos;
+  $('tmLegend').textContent = cat.desc;
   const rel = tmSel ? new Set([tmSel, ...ancestors(tmSel), ...(UNLOCKS[tmSel] || [])]) : null;
-  let svg = `<svg width="${Wd}" height="${Ht}" viewBox="0 0 ${Wd} ${Ht}" aria-hidden="true">`;
-  for (const t of TECHS) for (const r of t.req) {
-    const a = pos[r], b = pos[t.id];
-    const x1 = a.x + 150, y1 = a.y + 23, x2 = b.x, y2 = b.y + 23, mx = (x1 + x2) / 2;
+  const NW = TM.nodeW;
+  let svg = `<svg width="${Ly.W}" height="${Ly.H}" viewBox="0 0 ${Ly.W} ${Ly.H}" aria-hidden="true">`;
+  for (const t of Ly.ts) for (const r of t.req) {
+    const a = pos[r], b = pos[t.id]; if (!a) continue;
+    const x1 = a.x + NW, y1 = a.y + 23, x2 = b.x, y2 = b.y + 23, mx = (x1 + x2) / 2;
     const known = who ? who.techs[t.id] !== undefined && who.techs[r] !== undefined : !!S.firsts[t.id];
     const hi = rel && rel.has(t.id) && rel.has(r);
-    svg += `<path d="M${x1} ${y1}C${mx} ${y1} ${mx} ${y2} ${x2} ${y2}" fill="none" stroke="${hi ? '#ffb547' : known ? '#3d6a90' : '#1f2d4a'}" stroke-width="${hi ? 2 : 1.2}" opacity="${rel && !hi ? 0.25 : 1}"/>`;
+    svg += `<path d="M${x1} ${y1}C${mx} ${y1} ${mx} ${y2} ${x2} ${y2}" fill="none" stroke="${hi ? '#ffb547' : known ? '#3d6a90' : '#26385a'}" stroke-width="${hi ? 2 : 1.2}" opacity="${rel && !hi ? 0.25 : 1}"/>`;
   }
   svg += '</svg>';
-  let html = svg;
-  for (let e = 0; e < NERA; e++) html += `<div class="tm-era" style="left:${TM.left + e * TM.colW}px">${ERA_NAME[e]}时代</div>`;
-  for (const t of TECHS) {
+  let html = '';
+  Ly.eras.forEach((e, ci) => { if (ci % 2) html += `<div class="tm-col" style="left:${Ly.colX[ci] - 10}px;width:${Ly.span[ci] * TM.colW}px;height:${Ly.H}px"></div>`; });
+  for (const L of Ly.lanes) html += `<div class="tm-lrow" style="top:${L.y}px;width:${Ly.W}px;height:${L.h}px"></div>`;
+  html += svg;
+  // exclusive doctrine groups: dashed bracket around each stacked cell
+  for (const L of Ly.lanes) L.cells.forEach(cell => {
+    const ex = cell.filter(t => t.excl); if (ex.length < 2) return;
+    const p0 = pos[ex[0].id], p1 = pos[ex[ex.length - 1].id];
+    html += `<div class="tm-excl" style="left:${p0.x - 8}px;top:${p0.y - 6}px;width:${p1.x - p0.x + NW + 16}px;height:${p1.y - p0.y + 58}px"><span>${EXCL_N[ex.length] || '多选一'}</span></div>`;
+  });
+  for (const t of Ly.ts) {
     const p = pos[t.id];
-    let cls = 'tn', sub = '', bar = 0;
+    let cls = 'tn', sub = '', bar = 0, name = t.name;
+    const unit = t.units.length ? UNIT_BY_ID[t.units[0]] : null;
     if (who) {
-      if (who.techs[t.id] !== undefined) { cls += ' known'; sub = fmtYear(who.techs[t.id]); }
-      else if (who.target === t.id) { cls += ' cur'; bar = clamp(who.research / techCost(who, t.id), 0, 1); sub = `研究中 ${Math.round(bar * 100)}%`; }
-      else if (t.req.every(r => who.techs[r] !== undefined)) { cls += ' avail'; sub = '可以研究'; }
+      const st = techState(t, who);
+      if (st === 'known') { cls += ' known'; sub = fmtYear(who.techs[t.id]); if (t.excl) { cls += ' chosen'; name = doctrineName(t.id, who); } }
+      else if (st === 'cur') { cls += ' cur'; bar = techProg(t, who); sub = `${t.mil ? '军工' : '研究'}中 ${Math.round(bar * 100)}%`; }
+      else if (st === 'locked') { cls += ' locked'; sub = '已选择其他学说'; }
+      else if (st === 'avail') { cls += ' avail'; sub = '可以研究'; }
+      else if (st === 'era') sub = `需要${ERA_NAME[t.era]}时代`;
       else sub = '尚未解锁';
+      if (unit && st !== 'known' && st !== 'locked') sub = `解锁：${unit.name}` + (st === 'cur' ? ` · ${Math.round(bar * 100)}%` : '');
     } else {
       const f = S.firsts[t.id], k = alive.filter(n => n.techs[t.id] !== undefined).length;
-      if (f) { cls += ' known'; sub = `${fmtYearShort(f.y)} · ${f.name}`; bar = alive.length ? k / alive.length : 0; } else sub = t.fxt;
+      if (f) { cls += ' known'; sub = `${fmtYearShort(f.y)} · ${f.name}`; bar = alive.length ? k / alive.length : 0; } else sub = unit ? `解锁：${unit.name}` : t.fxt;
+      if (t.excl && k) sub = `${k} 国采用`;
     }
+    if (t.excl) cls += ' excl';
+    if (t.mil) cls += ' mil';
     if (tmSel === t.id) cls += ' sel';
     if (rel && !rel.has(t.id)) cls += ' dim';
-    html += `<button class="${cls}" data-t="${t.id}" style="left:${p.x}px;top:${p.y}px;--bc:${BRANCH[t.br].color}" title="${esc(t.name)}：${esc(t.fxt)}"><div class="n1">${esc(t.name)}</div><div class="n2">${esc(sub)}</div>${bar > 0 ? `<span class="pb" style="width:${(bar * 146).toFixed(0)}px"></span>` : ''}</button>`;
+    if (tmQuery && t.name.includes(tmQuery)) cls += ' hit';
+    const xr = t.req.filter(r => TECH_BY_ID[r].cat !== tmCat);
+    html += `<button class="${cls}" data-t="${t.id}" style="left:${p.x}px;top:${p.y}px;--bc:${BRANCH[t.br].color}" title="${esc(name)}：${esc(t.fxt)}"><div class="n1">${esc(name)}</div><div class="n2">${esc(sub)}</div>${unit ? unitImg(unit.id) : ''}${xr.length ? `<span class="xb" title="其他页的前置：${esc(xr.map(r => TECH_BY_ID[r].name).join('、'))}">+${xr.length}</span>` : ''}${bar > 0 ? `<span class="pb" style="width:${(bar * (NW - 4)).toFixed(0)}px"></span>` : ''}</button>`;
   }
+  // sticky lane titles and era header (moved with the scroll position)
+  let lanes = `<div class="tm-lanes" id="tmLanes" style="width:${Ly.laneW}px;height:${Ly.H}px">`;
+  for (const L of Ly.lanes) lanes += `<div class="tm-lane" style="top:${L.y}px;height:${L.h}px;--bc:${BRANCH[L.b].color}"><b>${esc(BRANCH[L.b].name)}</b><small>${esc(laneNow(L.b, who))}</small></div>`;
+  lanes += '</div>';
+  let eraRow = `<div class="tm-eras" id="tmEras" style="width:${Ly.W}px">`;
+  Ly.eras.forEach((e, ci) => { eraRow += `<span style="left:${Ly.colX[ci]}px">${ERA_NAME[e]}时代</span>`; });
+  eraRow += '</div>';
   const cv = $('tmCanvas');
-  cv.style.width = Wd + 'px'; cv.style.height = Ht + 'px';
-  cv.innerHTML = html;
+  cv.style.width = Ly.W + 'px'; cv.style.height = Ly.H + 'px';
+  cv.innerHTML = html + eraRow + lanes;
+  if (tmSwap) {
+    tmSwap = false; cv.classList.remove('swap'); void cv.offsetWidth; cv.classList.add('swap');
+    // open the page at its research frontier: the current target, else the newest known era
+    const tr = $('tmTree');
+    if (!tmSel && tr.scrollLeft === 0) {
+      const ts = Ly.ts; let e = -1;
+      const cur = who && ts.find(t => t.id === who.target || t.id === who.mtarget);
+      if (cur) e = cur.era; else for (const t of ts) if (who ? who.techs[t.id] !== undefined : S.firsts[t.id]) e = Math.max(e, t.era);
+      const ci = Ly.eras.indexOf(e);
+      if (ci > 0) tr.scrollLeft = Math.max(0, Ly.colX[ci] - Ly.laneW - TM.colW * 0.6);
+    }
+  }
+  syncTreeScroll();
   renderTreeDetail();
+}
+function syncTreeScroll() {
+  const tr = $('tmTree'), l = $('tmLanes'), e = $('tmEras');
+  if (l) l.style.transform = `translateX(${tr.scrollLeft}px)`;
+  if (e) e.style.transform = `translateY(${tr.scrollTop}px)`;
+}
+$('tmTree').addEventListener('scroll', syncTreeScroll, { passive: true });
+function revealNode(id) {
+  const b = $('tmCanvas').querySelector(`[data-t="${id}"]`); if (!b) return;
+  const tr = $('tmTree'), x = b.offsetLeft, y = b.offsetTop, lw = ($('tmLanes') || {}).offsetWidth || 0;
+  if (x < tr.scrollLeft + lw || x + 170 > tr.scrollLeft + tr.clientWidth) tr.scrollLeft = Math.max(0, x - lw - 40);
+  if (y < tr.scrollTop + 40 || y + 60 > tr.scrollTop + tr.clientHeight) tr.scrollTop = Math.max(0, y - 80);
+}
+function jumpTech(id) { const t = TECH_BY_ID[id]; if (!t) return; setTmCat(t.cat); tmSel = id; renderTree(); revealNode(id); }
+function statBar(label, v, mx, sqrt) {
+  const f = mx > 0 ? (sqrt ? Math.sqrt(v / mx) : v / mx) : 0;
+  return `<span>${label}</span><span class="track"><span class="fill" style="width:${(clamp(f, 0, 1) * 100).toFixed(0)}%"></span></span><b>${v >= 10 ? Math.round(v) : +v.toFixed(1)}</b>`;
+}
+const UMAX = {}; for (const u of UNITS) { const m = UMAX[u.dom] || (UMAX[u.dom] = { atk: 0, def: 0, hp: 0, sp: 0, range: 0, cost: 0 }); for (const k in m) m[k] = Math.max(m[k], u[k]); }
+function unitCard(u) {
+  const m = UMAX[u.dom], roles = u.roles.map(r => MIL_ROLE_NAME[r] || r);
+  const beats = new Set(), by = new Set();
+  for (const r of u.roles) { const c = ROLE_COUNTER[r]; if (c) { c.beats.forEach(x => beats.add(MIL_ROLE_NAME[x])); c.beatenBy.forEach(x => by.add(MIL_ROLE_NAME[x])); } }
+  const rep = u.obsBy.map(id => UNIT_BY_ID[id].name), next = u.obs ? UNIT_BY_ID[u.obs] : null;
+  return `<div class="ucard"><div class="uhead">${unitImg(u.id, 'ugb')}<div><b>${esc(u.name)}</b><div class="tags"><span class="tag">${DOM_NAME[u.dom]}</span>${roles.map(r => `<span class="tag">${esc(r)}</span>`).join('')}</div></div></div>
+    ${u.desc ? `<p>${esc(u.desc)}</p>` : ''}
+    <div class="ustats">${statBar('攻击', u.atk, m.atk, true)}${statBar('防御', u.def, m.def, true)}${statBar('耐久', u.hp, m.hp)}${statBar('速度', u.sp, m.sp)}${statBar('射程', u.range, m.range)}${statBar('造价', u.cost, m.cost, true)}</div>
+    <p class="note">${rep.length ? `取代 ${esc(rep.join('、'))}` : '本系列的第一种型号'}${next ? ` · 将被 ${esc(next.name)} 取代` : ''}</p>
+    ${beats.size || by.size ? `<p class="note">${beats.size ? `克制：${esc([...beats].join('、'))}` : ''}${beats.size && by.size ? '；' : ''}${by.size ? `被克制：${esc([...by].join('、'))}` : ''}</p>` : ''}</div>`;
 }
 function renderTreeDetail() {
   const el = $('tmDetail');
   const alive = S.nations.filter(n => n.alive);
-  if (!tmSel) { el.innerHTML = `<h3>点选一项科技</h3><p>查看它的作用、前置科技和掌握它的国家。你可以把任何科技直接赐给任何国家，前置科技会一并赐予。</p><p class="note">左侧颜色条代表科技分支；被选中科技的前后关系会高亮。</p>`; return; }
+  if (!tmSel) {
+    const cat = CAT_BY_ID[tmCat];
+    el.innerHTML = `<h3>${esc(cat.name)}</h3><p>${esc(cat.desc)}</p><p>点选一项科技，查看它的作用、前置科技和掌握它的国家。你可以把任何科技直接赐给任何国家，前置科技会一并赐予。</p>
+      <p class="note">${cat.group === '军事' ? '军事科技由军费推动，走单独的「军工研究」轨道，不计入文明时代。' : '文明科技决定一个国家所处的时代。'}节点右上角的「+N」表示有 N 项前置科技在其他页。数字键 1–0 或 ←/→ 切换类别。</p>`;
+    return;
+  }
   const t = TECH_BY_ID[tmSel], f = S.firsts[t.id];
   const who = tmWho === 'world' ? null : S.nations[+tmWho];
   const knowers = alive.filter(n => n.techs[t.id] !== undefined);
-  const chips = ids => ids.map(id => `<button class="chipbtn" data-t="${id}">${esc(TECH_BY_ID[id].name)}</button>`).join('') || '<span class="note">无</span>';
+  const chips = ids => ids.map(id => { const x = TECH_BY_ID[id], other = x.cat !== tmCat; return `<button class="chipbtn${other ? ' xp' : ''}" data-t="${id}">${esc(x.name)}${other ? ` · ${esc(CAT_BY_ID[x.cat].name)}` : ''}</button>`; }).join('') || '<span class="note">无</span>';
   if (tmGrant === null || !alive.some(n => n.id === tmGrant)) tmGrant = who ? who.id : (alive.find(n => n.techs[t.id] === undefined) || alive[0] || {}).id;
   let status = '';
-  if (who) status = who.techs[t.id] !== undefined ? `${esc(who.name)}已于${fmtYear(who.techs[t.id])}掌握。` : who.target === t.id ? `${esc(who.name)}正在研究，进度 ${Math.round(clamp(who.research / techCost(who, t.id), 0, 1) * 100)}%。` : t.req.every(r => who.techs[r] !== undefined) ? `${esc(who.name)}可以研究这项科技。` : `${esc(who.name)}还缺少前置科技。`;
+  if (who) {
+    const st = techState(t, who);
+    status = st === 'known' ? `${esc(who.name)}已于${fmtYear(who.techs[t.id])}掌握。` : st === 'cur' ? `${esc(who.name)}正在${t.mil ? '军工' : ''}研究，进度 ${Math.round(techProg(t, who) * 100)}%。` : st === 'locked' ? `${esc(who.name)}已选择了同一军种的其他学说。` : st === 'era' ? `${esc(who.name)}需要先进入${ERA_NAME[t.era]}时代。` : st === 'avail' ? `${esc(who.name)}可以研究这项科技。` : `${esc(who.name)}还缺少前置科技。`;
+  }
+  const excl = t.excl ? EXCL[t.excl] : null;
   el.innerHTML = `
-    <h3>${esc(t.name)}</h3>
-    <div class="tags"><span class="tag">${ERA_NAME[t.era]}时代</span><span class="tag"><span class="swatch" style="background:${BRANCH[t.br].color}"></span>${BRANCH[t.br].name}</span></div>
+    <h3>${esc(who && who.techs[t.id] !== undefined && t.excl ? doctrineName(t.id, who) : t.name)}</h3>
+    <div class="tags"><span class="tag">${ERA_NAME[t.era]}时代</span><span class="tag"><span class="swatch" style="background:${BRANCH[t.br].color}"></span>${BRANCH[t.br].name}</span>${t.mil ? '<span class="tag gold">军工研究</span>' : ''}${t.mil && t.ry !== undefined ? `<span class="tag">历史参考 ${fmtYearShort(t.ry)}</span>` : ''}</div>
     <p>${esc(t.desc)}</p>
     <div class="fx">效果：${esc(t.fxt)}</div>
     ${status ? `<p>${status}</p>` : ''}
+    ${t.units.map(id => unitCard(UNIT_BY_ID[id])).join('')}
+    ${excl ? `<h4>互斥学说（${EXCL_N[excl.length] || '多选一'}）</h4><div>${chips(excl.filter(o => o !== t).map(o => o.id))}</div>` : ''}
     <h4>前置科技</h4><div>${chips(t.req)}</div>
     <h4>解锁</h4><div>${chips(UNLOCKS[t.id] || [])}</div>
     <h4>首次发现</h4><p>${f ? `${fmtYear(f.y)}，${esc(f.name)}` : '尚未被任何文明发现'}</p>
     <h4>掌握它的国家（${knowers.length}/${alive.length}）</h4><div class="tags">${knowers.map(n => `<span class="tag">${sw(n)}${esc(n.name)}</span>`).join('') || '<span class="note">还没有</span>'}</div>
     <h4>造物主</h4>
     <div class="acts">
-      <select id="tmGrantWho" aria-label="赐予对象" style="background:var(--panel-2);color:var(--ink);border:1px solid var(--line);border-radius:6px;height:30px;font:inherit;font-size:12px">${alive.map(n => `<option value="${n.id}"${n.id === tmGrant ? ' selected' : ''}>${esc(n.name)}${n.techs[t.id] !== undefined ? '（已掌握）' : ''}</option>`).join('')}</select>
+      <select id="tmGrantWho" aria-label="赐予对象" class="msel" style="flex:0 1 auto">${alive.map(n => `<option value="${n.id}"${n.id === tmGrant ? ' selected' : ''}>${esc(n.name)}${n.techs[t.id] !== undefined ? '（已掌握）' : ''}</option>`).join('')}</select>
       <button class="btn primary small" data-act="grant">直接赐予</button>
-      <button class="btn small" data-act="target">设为研究目标</button>
+      <button class="btn small" data-act="target">${t.excl ? '改用这一学说' : t.mil ? '设为军工研究目标' : '设为研究目标'}</button>
     </div>
     <p class="note" id="tmMsg"></p>`;
 }
 $('tmCanvas').addEventListener('click', e => { const b = e.target.closest('[data-t]'); if (!b) return; tmSel = tmSel === b.dataset.t ? null : b.dataset.t; renderTree(); });
+$('tmTabs').addEventListener('click', e => { const b = e.target.closest('[data-cat]'); if (!b) return; setTmCat(b.dataset.cat); renderTree(); b.scrollIntoView({ block: 'nearest', inline: 'nearest' }); });
+function cycleTmCat(d) { const k = TECH_CATS.findIndex(c => c.id === tmCat); setTmCat(TECH_CATS[(k + d + TECH_CATS.length) % TECH_CATS.length].id); renderTree(); const b = $('tmTabs').querySelector('[aria-selected="true"]'); if (b) b.scrollIntoView({ block: 'nearest', inline: 'nearest' }); }
 $('tmDetail').addEventListener('click', e => {
-  const c = e.target.closest('[data-t]'); if (c) { tmSel = c.dataset.t; renderTree(); return; }
+  const c = e.target.closest('[data-t]'); if (c) { jumpTech(c.dataset.t); return; }
   const b = e.target.closest('[data-act]'); if (!b || !tmSel) return;
   const n = S.nations[+$('tmGrantWho').value]; if (!n || !n.alive) return;
   tmGrant = n.id;
-  if (b.dataset.act === 'grant') { if (godGrantTech(n, tmSel)) renderTree(); else $('tmMsg').textContent = `${n.name}已经掌握了这项科技`; }
-  else if (b.dataset.act === 'target') {
-    const t = TECH_BY_ID[tmSel];
-    if (n.techs[tmSel] !== undefined) $('tmMsg').textContent = `${n.name}已经掌握了这项科技`;
-    else if (!t.req.every(r => n.techs[r] !== undefined)) $('tmMsg').textContent = `${n.name}还缺少前置科技，可以直接赐予`;
-    else { n.target = tmSel; renderTree(); $('tmMsg').textContent = `${n.name}的学者开始研究「${t.name}」`; }
+  const t = TECH_BY_ID[tmSel], msg = s => { $('tmMsg').textContent = s; };
+  if (b.dataset.act === 'grant') { if (godGrantTech(n, tmSel)) renderTree(); else msg(`${n.name}已经掌握了这项科技`); return; }
+  if (n.techs[tmSel] !== undefined) { msg(`${n.name}已经掌握了这项科技`); return; }
+  if (t.excl) {
+    const reform = EXCL[t.excl].some(o => o !== t && n.techs[o.id] !== undefined);
+    if (reform && isPlayer(n) && S.player.pp < 60) { msg('学说改革需要 60 政治点数'); return; }
+    const r = chooseDoctrine(n, tmSel);
+    if (r.ok && reform && isPlayer(n)) S.player.pp -= 60;
+    renderTree(); msg(r.msg); return;
   }
+  if (!t.req.every(r => n.techs[r] !== undefined)) { msg(`${n.name}还缺少前置科技，可以直接赐予`); return; }
+  if (t.mil) {
+    if (t.era > n.mult.era) { msg(`${n.name}还没有进入${ERA_NAME[t.era]}时代，可以直接赐予`); return; }
+    if (!milTechOK(n, t)) { msg('现在无法研究这项科技'); return; }
+    n.mtarget = tmSel; renderTree(); msg(`${n.name}的军工部门开始研制「${t.name}」`); return;
+  }
+  n.target = tmSel; renderTree(); msg(`${n.name}的学者开始研究「${t.name}」`);
 });
 $('tmDetail').addEventListener('change', e => { if (e.target.id === 'tmGrantWho') tmGrant = +e.target.value; });
 $('tmWho').addEventListener('change', e => { tmWho = e.target.value; renderTree(); });
+$('tmSearch').addEventListener('input', e => { tmQuery = e.target.value.trim(); renderTree(); });
+$('tmSearch').addEventListener('keydown', e => {
+  if (e.key !== 'Enter' || !tmQuery) return;
+  const hits = TECHS.filter(t => t.name.includes(tmQuery)); if (!hits.length) return;
+  const k = hits.findIndex(t => t.id === tmSel), nx = hits[(k + 1) % hits.length];
+  jumpTech(nx.id);
+});
 $('tmClose').addEventListener('click', closeTree);
 $('btnTree').addEventListener('click', () => openTree());
 
@@ -774,7 +1092,7 @@ function updateInspector(force) {
         <dt>研究所</dt><dd>${c.labs >= 0.05 ? c.labs.toFixed(1) : '—'}</dd>
         ${c.inst ? `<dt>国立研究院</dt><dd>${c.inst} 座</dd>` : ''}
         <dt>科研 / 年</dt><dd>${c.rp.toFixed(1)}</dd>
-        <dt>守军</dt><dd class="txt">${WEAPON_NAME[n.mult.weapon]}</dd>
+        <dt>守军</dt><dd class="txt">${esc((landMain(n) || { name: WEAPON_NAME[n.mult.weapon] }).name)}</dd>
         <dt>地貌</dt><dd class="txt">${BIOME_NAME[WORLD.biome[c.i]]}${c.coastal ? '，沿海' : ''}</dd>
         <dt>气温</dt><dd>${cellTeff(c.i).toFixed(1)} °C</dd>
       </dl>
@@ -1149,6 +1467,10 @@ window.addEventListener('keydown', e => {
     if (tool !== 'inspect') { setTool('inspect'); return; }
     selected = null; cam.follow = null; updateInspector(true); return;
   }
+  if (tmOpen && !modalOpen && $('focusModal').hidden && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    if (/^[0-9]$/.test(e.key)) { const k = (+e.key + 9) % 10; if (TECH_CATS[k]) { setTmCat(TECH_CATS[k].id); renderTree(); } e.preventDefault(); return; }
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { cycleTmCat(e.key === 'ArrowLeft' ? -1 : 1); e.preventDefault(); return; }
+  }
   if (tmOpen || modalOpen || !$('modeSel').hidden || !$('focusModal').hidden) return;
   if (e.code === 'Space' && !e.target.closest('button')) { e.preventDefault(); setPlaying(!playing); return; }
   const step = 60;
@@ -1245,10 +1567,20 @@ $('btnNew').addEventListener('click', () => {
   const b = $('btnNew');
   if (performance.now() - newArmed > 3000) { newArmed = performance.now(); b.textContent = '确定换一颗？'; setTimeout(() => { b.textContent = '新世界'; }, 3000); return; }
   b.textContent = '新世界'; newArmed = 0;
-  boot({ seed: (Math.random() * 1e9) | 0 });
-  saveWorld();
-  openModeOverlay();
+  bootFresh(openModeOverlay);
 });
+/* graphics quality selector (reflects automatic step-downs through gfxVersion) and the day/night toggle */
+function syncGfxUI() { const el = $('gfxSel'); el.options[0].textContent = GFX.auto ? `自动 · ${GFX_LEVELS[GFX.level].name}` : '自动'; el.value = GFX.auto ? 'auto' : String(GFX.level); el._v = gfxVersion; }
+$('gfxSel').addEventListener('change', e => { const v = e.target.value; if (v === 'auto') setGfx(GFX.auto ? GFX.level : 3, true); else setGfx(+v, false); syncGfxUI(); e.target.blur(); });
+$('tDayNight').addEventListener('change', e => { showDayNight = e.target.checked; try { localStorage.setItem('blue-planet-daynight', showDayNight ? '1' : '0'); } catch (err) {} });
+function loadDayNight() { try { const v = localStorage.getItem('blue-planet-daynight'); if (v !== null) showDayNight = v === '1'; } catch (e) {} $('tDayNight').checked = showDayNight; }
+function splash(on, msg) {
+  const el = $('splash'); if (!el) return;
+  if (on) { $('splashMsg').textContent = msg || '正在生成星球…'; el.hidden = false; el.classList.remove('gone'); return; }
+  el.classList.add('gone'); setTimeout(() => { if (el.classList.contains('gone')) el.hidden = true; }, 400);
+}
+// regenerate behind the splash: give the browser one frame to paint it first
+function bootFresh(after) { splash(true, '正在生成新的星球…'); setTimeout(() => { boot({ seed: (Math.random() * 1e9) | 0 }); saveWorld(); splash(false); if (after) after(); }, 40); }
 function switchTab(k) {
   activeTab = k;
   for (const x of document.querySelectorAll('.tabs button')) x.setAttribute('aria-selected', x.dataset.tab === k);
@@ -1268,9 +1600,9 @@ function serialize() {
   const sparse = a => { const out = []; for (let i = 0; i < a.length; i++) if (a[i] > 0) out.push(i, Math.round(a[i] * 10) / 10); return out; };
   const res = {}; for (const r of RES) res[r] = sparse(S.res[r]);
   return {
-    v: 3, seed: S.seed, year: S.year, tick: S.tick, rng: S.rng, co2: S.co2, tanom: S.tanom, seaRise: S.seaRise, co2Peak: S.co2Peak,
-    cities: S.cities.map(c => { const { lay, ...r } = c; return r; }), wars: S.wars, orders: S.orders, log: S.log.slice(0, 250), history: S.history, firsts: S.firsts, names: S.names, flags: S.flags,
-    nations: S.nations.map(n => { const { mult, dep, cl, ...rest } = n; return rest; }),
+    v: 4, seed: S.seed, year: S.year, tick: S.tick, rng: S.rng, co2: S.co2, tanom: S.tanom, seaRise: S.seaRise, co2Peak: S.co2Peak,
+    cities: S.cities.map(c => { const { lay, ...r } = c; return r; }), wars: S.wars.map(w => { const { th, ...r } = w; return r; }), milDoc: S.milDoc || {}, milPref: S.milPref || {}, orders: S.orders, log: S.log.slice(0, 250), history: S.history, firsts: S.firsts, names: S.names, flags: S.flags,
+    nations: S.nations.map(n => { const { mult, dep, cl, ...rest } = n; if (rest.mx) { const { F, ...mx } = rest.mx; rest.mx = mx; } return rest; }),
     forest: Array.from(S.forest, v => Math.round(v * 100) / 100), res, resLeft: S.resLeft,
     nextCity: S.nextCity, nextOrder: S.nextOrder, sats: S.sats, orbital: S.orbital, orbPop: S.orbPop, ships: S.ships, moon: S.moon, moonDue: S.moonDue, moonBy: S.moonBy,
     forestFrac: S.forestFrac, lastShip: S.lastShip, terra: S.terra, stats: S.stats,
@@ -1282,7 +1614,7 @@ function serialize() {
 function deserialize(d) {
   WORLD = genWorld(d.seed);
   S = {
-    v: 3, seed: d.seed, year: d.year, tick: d.tick, rng: d.rng, co2: d.co2, tanom: d.tanom, seaRise: d.seaRise, co2Peak: d.co2Peak,
+    v: d.v || 3, milDoc: d.milDoc || {}, milPref: d.milPref || {}, seed: d.seed, year: d.year, tick: d.tick, rng: d.rng, co2: d.co2, tanom: d.tanom, seaRise: d.seaRise, co2Peak: d.co2Peak,
     cities: d.cities, wars: d.wars || [], orders: d.orders || [], log: d.log || [], history: d.history || [], firsts: d.firsts || {}, names: d.names || {}, flags: d.flags || { maxEra: 0 },
     nations: d.nations.map(n => { n.mult = null; n.dep = { coal: [], oil: [], iron: [], uran: [], rare: [] }; n.cl = []; n.allies = n.allies || []; n.legions = n.legions || 0; return n; }),
     forest: Float32Array.from(d.forest), res: {}, owner: new Int16Array(N).fill(-1), cityOf: new Int16Array(N).fill(-1),
@@ -1309,6 +1641,7 @@ function deserialize(d) {
   for (const w of S.wars) { w.caps = w.caps || [0, 0]; w.vis = w.vis || [0, 0]; }
   for (const [ci, k] of d.terra || []) { terraform(ci, TERRA_KIND[k], true, true); S.terra.push([ci, k]); }
   for (const n of S.nations) n.mult = computeMult(n);
+  migrateMil(S);   // v2/v3 saves: military state, research track and doctrine conflicts (idempotent for v4)
   for (const r of RES) { const a = new Float32Array(N); const s = d.res[r]; for (let k = 0; k < s.length; k += 2) a[s[k]] = s[k + 1]; S.res[r] = a; }
 }
 function saveWorld() { if (!S || booting) return; try { localStorage.setItem(SAVE_KEY, JSON.stringify(serialize())); } catch (e) {} }
@@ -1318,7 +1651,7 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) saveW
 function boot(data) {
   booting = true;
   let restored = false;
-  if (data && (data.v === 2 || data.v === 3)) { try { deserialize(data); restored = true; } catch (err) { console.warn(err); restored = false; } }
+  if (data && (data.v === 2 || data.v === 3 || data.v === 4)) { try { deserialize(data); restored = true; } catch (err) { console.warn(err); restored = false; } }
   if (!restored) newState(data && data.seed ? data.seed : ((Math.random() * 1e9) | 0));
   HSEED = Math.imul(S.seed | 0, 2654435761) | 0;
   buildGlobalDep();
@@ -1357,13 +1690,14 @@ function boot(data) {
   return restored;
 }
 function start(data) {
-  readCss(); loadGfx(); loadAch(); buildToolbar(); refreshToolHint();
+  readCss(); loadGfx(); loadDayNight(); loadAch(); buildToolbar(); refreshToolHint();
   const snap = data && data.state ? data.state : null;
   const restored = boot(snap || loadWorld());
   if (restored && !snap) showTicker('civ', '已恢复你上次的世界');
   window.claude?.hot?.snapshot?.(() => ({ state: serialize() }));
   let seen = false; try { seen = !!localStorage.getItem('blue-planet-intro'); } catch (e) {}
   if (!snap && (!seen || !restored)) openModeOverlay();
+  syncGfxUI(); splash(false);
   requestAnimationFrame(t => { lastT = t; requestAnimationFrame(frame); });
 }
 
