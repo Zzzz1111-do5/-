@@ -192,7 +192,7 @@ function manageArmies() {
       if (!vis(px, py) && (dom !== 'land' || (!vis(ax, ay) && !vis(bx, by)))) continue;
       BATTLES.push({ w, x: px, y: py, a: A, b: Bn, dom, host, air: airOK, airSup: w.air, seaCtl: w.sea, naval: dom === 'sea' });
       const fa = dom === 'land' ? FA.L : dom === 'sea' ? FA.S : FA.A, fb = dom === 'land' ? FB.L : dom === 'sea' ? FB.S : FB.A;
-      const share = fa / (fa + fb || 1), mul = dom === 'land' ? 1 : dom === 'sea' ? 0.5 : 0.45 * (GFX.level === 0 ? 0.6 : 1);
+      const share = fa / (fa + fb || 1), mul = dom === 'land' ? 1 : dom === 'sea' ? 0.5 : 0.45 * (GFX.level === 0 ? 0.4 : 1);
       const has = [milUnitsFor(A, dom).length > 0, milUnitsFor(Bn, dom).length > 0];
       const want = [0, 1].map(sd => has[sd] ? Math.min(SIDE_CAP[dom], Math.max(dom === 'land' ? 1 : 1, Math.round(base * mul * clamp((sd ? 1 - share : share) * 2, 0.5, 1.6)))) : 0);
       const have = [0, 0], slots = [0, 0];
@@ -792,7 +792,7 @@ function drawAgents(z) {
   for (const a of AG) (a.dom === 'air' ? air : list).push(a);
   list.sort((a, b) => a.y - b.y);
   AIRL = air;
-  if (air.length) drawAircraft(air, z, true);
+  if (air.length && GFX.level > 0) drawAircraft(air, z, true);
   for (const a of list) drawPerson(a, z);
   for (const t of TRACERS) {
     ctx.globalAlpha = clamp(t.t / (t.t0 || 0.09), 0, 1); ctx.strokeStyle = t.col; ctx.lineWidth = Math.max(1, z * t.w);

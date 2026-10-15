@@ -459,18 +459,18 @@ function drawAircraft(list, z, shadow) {
     const alt = a.alt || 0, sx = sxOf(a.x), gy = syOf(a.y);
     if (sx < -60 || sx > view.w + 60 || gy < -40 || gy > view.h + 140) continue;
     const n = S.nations[a.n]; if (!n) continue;
-    const dead = a.st === 'dead';
+    const dead = a.st === 'dead', ks = u.spr === 'plane' ? ((u.vis.size || 1) >= 1.8 ? 1.1 : 1.4) : u.spr === 'drone' ? 1.3 : 1;
     ctx.save();
     if (shadow) {
       ctx.globalAlpha = clamp(0.32 - alt * 0.008, 0.08, 0.3) * (dead ? 0.6 : 1);
-      ctx.translate(sx + alt * k * 0.18, gy); ctx.rotate(a.hd || 0); ctx.scale(k * 0.9, k * 0.55 * 0.9);
+      ctx.translate(sx + alt * k * 0.18, gy); ctx.rotate(a.hd || 0); ctx.scale(k * 0.9 * ks, k * 0.55 * 0.9 * ks);
       drawPlaneShape(a, u, n, milPal(n), true);
     } else {
       const sy = gy - alt * k;
       ctx.translate(sx, sy);
       if (u.spr === 'airship' || u.spr === 'heli') ctx.rotate(Math.abs(Math.cos(a.hd || 0)) > 0.3 ? (Math.cos(a.hd || 0) > 0 ? 0 : PI) : (a.hd || 0));
       else ctx.rotate((a.hd || 0) + (dead ? a.ph * 6 : 0));
-      const bank = a.bank || 0; ctx.scale(k, k * (1 - Math.min(0.45, Math.abs(bank)) ) * 0.78);
+      const bank = a.bank || 0; ctx.scale(k * ks, k * ks * (1 - Math.min(0.45, Math.abs(bank))) * 0.78);
       if (dead) ctx.globalAlpha = clamp(a.t, 0, 1);
       drawPlaneShape(a, u, n, milPal(n), false);
     }
