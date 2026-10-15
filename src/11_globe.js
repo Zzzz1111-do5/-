@@ -166,7 +166,7 @@ function globeRender(g, o) {
     }
     if (nf > 0 && lt > 0) {
       let v = lt * nf * (1 - ca * 0.65);
-      v = v * 0.85 / (0.4 + v);
+      v = v * 1.05 / (0.35 + v);
       r += lc0 * v; gg += lc1 * v; bb += lc2 * v;
       if (v > 0.6) { v = (v - 0.6) * 140; r += v; gg += v; bb += v; }
     }

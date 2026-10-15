@@ -132,9 +132,8 @@ function drawAurora() {
       const wav = 0.5 + 0.5 * Math.sin(k * 0.31 + animT * 0.9) * Math.sin(k * 0.13 - animT * 0.5);
       const hgt = 0.022 + 0.035 * wav;
       const x0 = G.cx + px * R, y0 = G.cy - vy * R, x1 = G.cx + px * R * (1 + hgt), y1 = G.cy - vy * R * (1 + hgt);
-      // hidden: behind the globe (top of the curtain also inside the disc) or on the day side
-      const hid = vz < 0 && (x1 - G.cx) * (x1 - G.cx) + (y1 - G.cy) * (y1 - G.cy) < R * R;
-      pts.push({ x0, y0, x1, y1, a: hid ? 0 : (1 - smooth(-0.25, 0.1, dot)) * (0.1 + 0.3 * wav) * (0.75 + 0.25 * Math.sin(k * 2.3 + animT * 3)) });
+      // faded out towards the limb / far side and on the day side
+      pts.push({ x0, y0, x1, y1, a: smooth(0, 0.18, vz) * (1 - smooth(-0.25, 0.1, dot)) * (0.1 + 0.3 * wav) * (0.75 + 0.25 * Math.sin(k * 2.3 + animT * 3)) });
     }
     for (let k = 0; k < NR; k++) {
       const p = pts[k], q = pts[k + 1], al = (p.a + q.a) * 0.5;
