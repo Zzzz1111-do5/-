@@ -19,7 +19,11 @@ function layoutFor(c) {
   const rng = mulberry32(c.id * 9973 + 17);
   const [cx, cy] = cityMpx(c);
   const occ = new Set();
+  // keep a clear band where the town wall will run (it is laid out after the buildings)
+  const nb0 = clamp(Math.round(3 + bucket * 2.4), 3, 60), wallR = n.mult.wall && era <= 4 && bucket >= 3 ? Math.round((6 + Math.sqrt(nb0) * 3.2) * 0.85) : 0;
+  const onWall = (x, y) => Math.abs(Math.hypot(x - cx, (y - cy) / 0.75) - wallR) < 1.6;
   const free = (x, y, w, h) => {
+    if (wallR && (onWall(x, y) || onWall(x, y - h * 0.5) || onWall(x - w / 2, y) || onWall(x + w / 2, y))) return false;
     for (let yy = y - h; yy <= y; yy++) for (let xx = x - Math.ceil(w / 2); xx <= x + Math.ceil(w / 2); xx++) { if (!landAt(xx, yy)) return false; if (occ.has(xx * 4096 + yy)) return false; }
     return true;
   };
@@ -75,9 +79,11 @@ function layoutFor(c) {
   }
   let wall = 0;
   if (n.mult.wall && era <= 4 && bucket >= 3) {
-    wall = Math.round(maxR * 0.85);
-    for (let a = 0; a < 6; a++) { const x = Math.round(cx + Math.cos(a * 1.05) * wall), y = Math.round(cy + Math.sin(a * 1.05) * wall * 0.75); patrol.push([x, y]); items.push({ t: 'tower', x, y: y + 0.5, v: rng() }); }
-    for (let k = 0; k < 12; k++) { const a0 = k / 12 * TAU, a1 = (k + 1) / 12 * TAU; let my = -1; for (let s = 0; s <= 4; s++) my = Math.max(my, Math.sin(a0 + (a1 - a0) * s / 4)); items.push({ t: 'wseg', a0, a1, x: cx, y: cy + my * wall * 0.75 }); }
+    wall = wallR;
+    // the ring follows the shore: segments and towers that would stand in the sea are dropped
+    const onL = a => landAt(cx + Math.cos(a) * wall, cy + Math.sin(a) * wall * 0.75);
+    for (let a = 0; a < 6; a++) { const x = Math.round(cx + Math.cos(a * 1.05) * wall), y = Math.round(cy + Math.sin(a * 1.05) * wall * 0.75); if (!landAt(x, y) || !landAt(x, y + 1)) continue; patrol.push([x, y]); items.push({ t: 'tower', x, y: y + 0.5, v: rng() }); }
+    for (let k = 0; k < 24; k++) { const a0 = k / 24 * TAU, a1 = (k + 1) / 24 * TAU; if (!onL((a0 + a1) / 2) || !onL(a0) && !onL(a1)) continue; let my = -1; for (let s = 0; s <= 2; s++) my = Math.max(my, Math.sin(a0 + (a1 - a0) * s / 2)); items.push({ t: 'wseg', a0, a1, x: cx, y: cy + my * wall * 0.75 }); }
   }
   if (!patrol.length) patrol.push([cx, cy + 2]);
   // streets: rows of a grid town, or a few winding lanes in an organic one
@@ -105,11 +111,29 @@ function layoutFor(c) {
         if (!on && r0 !== null) { st.push([cx + i * GX + 2.4, cy + r0 * GY - 5.6, 1.2, (j - 1 - r0) * GY + 7.7]); r0 = null; }
       }
     }
+    // break streets where they would run across water
+    const st0 = st.splice(0);
+    for (const s of st0) {
+      const hz = s[2] > s[3], L = hz ? s[2] : s[3];
+      let r0 = -1;
+      for (let u = 0; u < L + 1; u += 1) {
+        const ok = u < L && landAt(hz ? s[0] + u + 0.5 : s[0] + s[2] / 2, hz ? s[1] + s[3] / 2 : s[1] + u + 0.5);
+        if (ok && r0 < 0) r0 = u;
+        if (!ok && r0 >= 0) { const e = Math.min(u, L); if (e - r0 >= 1.5) st.push(hz ? [s[0] + r0, s[1], e - r0, s[3]] : [s[0], s[1] + r0, s[2], e - r0]); r0 = -1; }
+      }
+    }
     for (const s of st) for (let yy = Math.floor(s[1]); yy <= s[1] + s[3]; yy++) for (let xx = Math.floor(s[0]); xx <= s[0] + s[2]; xx++) occ.add(xx * 4096 + yy);
     if (era >= 4) for (const s of st) if (s[2] > s[3]) for (let x = s[0] + 2.6; x < s[0] + s[2] - 1 && lamps.length < 26; x += GX * 2) lamps.push({ t: 'lamp', x: Math.round(x * 2) / 2, y: s[1] + s[3] + 0.05, v: rng() });
   } else {
     const m = era === 0 ? 4 : 5 + (bucket > 8 ? 2 : 0);
-    for (let k = 0; k < m; k++) { const a = k / m * TAU + rng() * 0.7, r1 = maxR + 4, b = (rng() - 0.5) * 0.6; ln.push([Math.cos(a) * r1, Math.sin(a) * r1 * 0.75, Math.cos(a + b) * r1 * 0.5, Math.sin(a + b) * r1 * 0.38]); }
+    for (let k = 0; k < m; k++) {
+      const a = k / m * TAU + rng() * 0.7, r1 = maxR + 4, b = (rng() - 0.5) * 0.6, ex = Math.cos(a) * r1, ey = Math.sin(a) * r1 * 0.75, qx = Math.cos(a + b) * r1 * 0.5, qy = Math.sin(a + b) * r1 * 0.38;
+      // walk the curve outwards and cut it where it meets water
+      let t1 = 0;
+      for (let t = 0.05; t <= 1.001; t += 0.05) { const u = 2 * (1 - t) * t, v = t * t; if (!landAt(cx + qx * u + ex * v, cy + qy * u + ey * v)) break; t1 = t; }
+      if (t1 < 0.3) continue;
+      ln.push([qx * 2 * (1 - t1) * t1 + ex * t1 * t1, qy * 2 * (1 - t1) * t1 + ey * t1 * t1, qx * t1, qy * t1]);
+    }
   }
   for (const l of lamps) items.push(l);
   // trees and gardens in the gaps
@@ -1278,7 +1302,7 @@ function drawCityGround(lay, z, sx0, sy0) {
 }
 const WALLC = [['#7a5634', '#9a7448'], ['#b8a07a', '#cdb894'], ['#9a9488', '#b2ac9f'], ['#a29c90', '#bab4a6'], ['#a29c90', '#bab4a6']];
 function drawWallSeg(lay, it, z, era, sx0, sy0) {
-  const R = lay.wall * z, ry = R * 0.75, wh = (era === 0 ? 1.7 : era <= 2 ? 2.1 : 2.4) * z, [fc, tc] = WALLC[era], n = 6;
+  const R = lay.wall * z, ry = R * 0.75, wh = (era === 0 ? 1.7 : era <= 2 ? 2.1 : 2.4) * z, [fc, tc] = WALLC[era], n = 3;
   const px = [], py = [];
   for (let k = 0; k <= n; k++) { const a = it.a0 + (it.a1 - it.a0) * k / n; px.push(sx0 + Math.cos(a) * R); py.push(sy0 + Math.sin(a) * ry); }
   const am = (it.a0 + it.a1) / 2;
@@ -1289,7 +1313,8 @@ function drawWallSeg(lay, it, z, era, sx0, sy0) {
     ctx.strokeStyle = tc; ctx.lineWidth = Math.max(1, 0.2 * z); ctx.beginPath(); for (let k = 0; k <= n; k++) ctx[k ? 'lineTo' : 'moveTo'](px[k], py[k] - wh * 0.7); ctx.stroke();
     return;
   }
-  ctx.fillStyle = cSh(fc, 0.92 - 0.14 * Math.cos(am));
+  if (it.fc === undefined || it.fe !== era) { it.fc = cSh(fc, 0.92 - 0.14 * Math.cos(am)); it.fe = era; }
+  ctx.fillStyle = it.fc;
   ctx.beginPath(); for (let k = 0; k <= n; k++) ctx[k ? 'lineTo' : 'moveTo'](px[k], py[k]); for (let k = n; k >= 0; k--) ctx.lineTo(px[k], py[k] - wh); ctx.closePath(); ctx.fill();
   ctx.strokeStyle = tc; ctx.lineWidth = Math.max(1, 0.75 * z); ctx.beginPath(); for (let k = 0; k <= n; k++) ctx[k ? 'lineTo' : 'moveTo'](px[k], py[k] - wh - 0.2 * z); ctx.stroke();
   if (z >= 2.5) { ctx.strokeStyle = fc; ctx.lineWidth = Math.max(1, 0.4 * z); ctx.setLineDash([0.45 * z, 0.4 * z]); ctx.beginPath(); for (let k = 0; k <= n; k++) ctx[k ? 'lineTo' : 'moveTo'](px[k], py[k] - wh - 0.6 * z); ctx.stroke(); ctx.setLineDash([]); }
@@ -1335,7 +1360,7 @@ function drawCitySprites(c, z) {
   for (const it of lay.items) {
     const t = it.t;
     if (t === 'wseg') { drawWallSeg(lay, it, z, era, sx0, sy0); continue; }
-    if (!deco && (t === 'tree' || t === 'lamp' || t === 'park' || t === 'market')) continue;
+    if (!deco && (t === 'tree' || t === 'lamp' || t === 'park' || t === 'market') || t === 'lamp' && z < 4.5) continue;
     const sx = sx0 + (it.x - lay.cx) * z, sy = sy0 + (it.y - lay.cy) * z;
     if (sx < mL || sx > mR || sy < mT || sy > mB) continue;
     const e = itemSprite(it, t === 'tower' ? Math.min(era, 4) : era, col, K);
