@@ -175,14 +175,18 @@ function randomOwnedCell(c) {
 }
 
 
+// civil research track only (military techs: pickMilTech in 06m_war.js)
 function pickTech(n) {
-  const avail = TECHS.filter(t => n.techs[t.id] === undefined && t.req.every(r => n.techs[r] !== undefined));
+  const avail = TECHS.filter(t => !t.mil && n.techs[t.id] === undefined && t.req.every(r => n.techs[r] !== undefined));
   if (!avail.length) return null;
   let minEra = 9; for (const t of avail) minEra = Math.min(minEra, t.era);
   const pool = avail.filter(t => t.era === minEra || (t.era === minEra + 1 && rand() < 0.2));
   const alive = S.nations.filter(o => o.alive && o !== n).length || 1;
+  // from the industrial era on, techs come roughly in their historical (declaration) order: engines before aircraft before rockets
+  let mi = 99; for (const t of pool) if (t.era === minEra && t.idx < mi) mi = t.idx;
+  if (minEra < 4) mi = -1;
   let tot = 0;
-  const w = pool.map(t => { const k = S.nations.filter(o => o.alive && o !== n && o.techs[t.id] !== undefined).length / alive; const v = 1 + 2 * k; tot += v; return v; });
+  const w = pool.map(t => { const k = S.nations.filter(o => o.alive && o !== n && o.techs[t.id] !== undefined).length / alive; const v = (1 + 2 * k) * (mi < 0 ? 1 : t.era === minEra ? Math.pow(0.8, t.idx - mi) : 0.4); tot += v; return v; });
   let r = rand() * tot;
   for (let k = 0; k < pool.length; k++) { r -= w[k]; if (r <= 0) return pool[k].id; }
   return pool[0].id;
@@ -195,13 +199,16 @@ function nationTick(n) {
   if (!n.cl.length) { killNation(n, -1); return; }
   n.st.pop = pop; n.st.cities = n.cl.length; n.st.fac = fac; n.st.labs = labs; n.st.rp = rp;
   if (n.golden > 0) n.golden--;
-  // research
+  // research: civil track, then the military track funded by the army budget
+  if (n.target && TECH_BY_ID[n.target] && TECH_BY_ID[n.target].mil) { if (!n.mtarget || n.techs[n.mtarget] !== undefined) n.mtarget = n.target; n.target = null; }
   if (!n.target || n.techs[n.target] !== undefined) n.target = pickTech(n);
   if (n.target) {
     n.research += rp * (n.eco ? n.eco.K.sci : 1);
     const cost = techCost(n, n.target);
     if (n.research >= cost) { n.research -= cost; discover(n, n.target); n.target = pickTech(n); }
   }
+  milResearch(n, rp);
+  milRecover(n);
   // energy
   if (m.nuke) n.nuke = Math.min(0.14, n.nuke + 0.004);
   if (m.fusion) n.fusion = Math.min(0.95, n.fusion + 0.015);

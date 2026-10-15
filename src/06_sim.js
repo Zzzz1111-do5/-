@@ -4,7 +4,7 @@
 function newState(seed) {
   WORLD = genWorld(seed);
   S = {
-    v: 3, doct: {}, aiFeed: [], rails: {}, seed, year: START_YEAR, tick: 0, rng: (seed ^ 0x9e3779b9) | 0,
+    v: 4, doct: {}, aiFeed: [], rails: {}, milDoc: {}, milPref: {}, seed, year: START_YEAR, tick: 0, rng: (seed ^ 0x9e3779b9) | 0,
     co2: 280, tanom: 0, seaRise: 0, co2Peak: 280,
     cities: [], nations: [], wars: [], orders: [], log: [], history: [], firsts: {}, names: {}, flags: { maxEra: 0 },
     forest: WORLD.forest0.slice(), res: {}, owner: new Int16Array(N).fill(-1), cityOf: new Int16Array(N).fill(-1),
@@ -37,6 +37,7 @@ function createNation(techsFrom, parent) {
   }
   n.dep = { coal: [], oil: [], iron: [], uran: [], rare: [] };
   n.cl = [];
+  ensureMil(n);
   S.nations.push(n);
   return n;
 }
@@ -132,15 +133,21 @@ function farFromCities(i, dmin) {
   return true;
 }
 
+// cost of a tech for nation n now: cheaper when others know it, more expensive when researched ahead of its reference year
 function techCost(n, id) {
   const t = TECH_BY_ID[id];
   const alive = S.nations.filter(o => o.alive && o !== n);
   const known = alive.length ? alive.filter(o => o.techs[id] !== undefined).length / alive.length : 0;
-  const a = ERA_REF[t.era], b = ERA_REF[t.era + 1];
+  const a = ERA_REF[t.era], b = ERA_REF[t.era + 1], diff = 1 - Math.min(0.75, 0.5 * known * n.mult.diff);
+  if (t.mil) {
+    const tau = Math.min((b - a) / 3, MTAU), pace = clamp(Math.pow(2, (t.ry - S.year) / tau), 0.5, 40);
+    return MCOST[t.era] * (1 + 0.4 * clamp((t.ry - a) / (b - a), 0, 1)) * diff * pace;
+  }
   const ref = a + (b - a) * t.idx / t.per, tau = (b - a) / 3;
   const pace = clamp(Math.pow(2, (ref - S.year) / tau), 0.5, 40);
-  return COST[t.era] * (1 + 0.03 * t.idx) * (1 - Math.min(0.75, 0.5 * known * n.mult.diff)) * pace;
+  return COST[t.era] * (1 + 0.4 * t.idx / t.per) * diff * pace;
 }
+const MTAU = 14;   // military techs: years per doubling of the ahead-of-time penalty
 
 function discover(n, id) {
   n.techs[id] = S.year;
@@ -156,6 +163,7 @@ function discover(n, id) {
 function firstTech(n, id) {
   const t = TECH_BY_ID[id], big = largestCity(n);
   S.firsts[id] = { n: n.id, name: n.name, y: S.year };
+  if (t.mil) { if (!milFirst(n, id, big ? big.i : -1)) log('tech', `${n.name}在${big ? big.name : '国都'}率先掌握「${t.name}」，${t.desc.replace(/。$/, '')}`, big ? big.i : -1, false); return; }
   log('tech', `${n.name}在${big ? big.name : '国都'}率先掌握「${t.name}」，${t.desc.replace(/。$/, '')}`, big ? big.i : -1);
   if (id === 'rocketry') { log('space', `${n.name}发射了人类第一颗人造卫星`, big ? big.i : -1); S.moonDue = S.year + 8 + ((rand() * 6) | 0); S.moonBy = n.id; }
   if (id === 'spacecol') log('space', `${n.name}建成第一座轨道城市，人类开始在太空中生活`, -1);
@@ -178,7 +186,7 @@ function atWar(a, b) { return S.wars.some(w => (w.a === a && w.b === b) || (w.a 
 function warCount(a) { let k = 0; for (const w of S.wars) if (w.a === a || w.b === a) k++; return k; }
 function allied(a, b) { const A = S.nations[a]; return !!A && A.allies.includes(b); }
 function enemiesOf(a) { const out = []; for (const w of S.wars) { if (w.a === a) out.push(w.b); else if (w.b === a) out.push(w.a); } return out; }
-function power(n) { return Math.pow(n.st.pop + 1, 0.8) * n.mult.mil * (1 + 0.08 * (n.legions + n.mult.era)) * (n.eco ? n.eco.K.mil : 1); }
+// power(n) lives in 06m_war.js (army + navy + air forces)
 
 function startWar(a, b, forced, text) {
   if (a === b || atWar(a, b)) return null;
@@ -188,7 +196,7 @@ function startWar(a, b, forced, text) {
   if (Bn.overlord >= 0 && S.nations[Bn.overlord] && S.nations[Bn.overlord].alive && Bn.overlord !== a) { Bn = S.nations[Bn.overlord]; b = Bn.id; if (atWar(a, b)) return null; }
   if (allied(a, b)) breakAlliance(a, b, true);
   const fr = nearestPair(A, Bn);
-  const w = { id: S.nextOrder++, a, b, start: S.year, dur: forced ? 14 + ((rand() * 18) | 0) : 6 + ((rand() * 16) | 0), front: fr ? fr.i : -1, caps: [0, 0], forced: !!forced, sc: [A.cl.length, Bn.cl.length], vis: [0, 0] };
+  const w = { id: S.nextOrder++, a, b, start: S.year, dur: forced ? 14 + ((rand() * 18) | 0) : 6 + ((rand() * 16) | 0), front: fr ? fr.i : -1, caps: [0, 0], forced: !!forced, sc: [A.cl.length, Bn.cl.length], vis: [0, 0], air: 0.5, sea: 0.5, ls: 0.5, blockade: [0, 0], capLost: [0, 0], yr: {} };
   S.wars.push(w);
   log('war', text || `${A.name}向${Bn.name}宣战`, w.front);
   for (const id of Bn.allies.slice()) { const o = S.nations[id]; if (o && o.alive && id !== a && !atWar(id, a) && rand() < 0.7) joinWar(id, a, Bn); }
@@ -203,7 +211,7 @@ function joinWar(id, enemy, friend) {
   const O = S.nations[id], E = S.nations[enemy];
   if (allied(id, enemy)) breakAlliance(id, enemy, true);
   const fr = nearestPair(O, E);
-  S.wars.push({ id: S.nextOrder++, a: id, b: enemy, start: S.year, dur: 6 + ((rand() * 12) | 0), front: fr ? fr.i : -1, caps: [0, 0], forced: false, sc: [O.cl.length, E.cl.length], vis: [0, 0] });
+  S.wars.push({ id: S.nextOrder++, a: id, b: enemy, start: S.year, dur: 6 + ((rand() * 12) | 0), front: fr ? fr.i : -1, caps: [0, 0], forced: false, sc: [O.cl.length, E.cl.length], vis: [0, 0], air: 0.5, sea: 0.5, ls: 0.5, blockade: [0, 0], capLost: [0, 0], yr: {} });
   if (isPlayer(E) && !booting) showTicker('war', `${O.name}作为${friend.name}的盟友向你宣战`);
   log('war', `${O.name}履行与${friend.name}的盟约，向${E.name}宣战`, fr ? fr.i : -1, false);
 }
@@ -236,7 +244,7 @@ function annexNation(big, small, text, major = true) {
   if (!big.alive || !small.alive || big === small) return false;
   for (const c of S.cities) if (c.n === small.id) { c.n = big.id; c.cap = false; c.origin = small.id; c.lay = null; }
   big.cl.push(...small.cl); small.cl = [];
-  for (const k in small.techs) if (big.techs[k] === undefined) big.techs[k] = S.year;
+  for (const k in small.techs) if (big.techs[k] === undefined && TECH_BY_ID[k] && !exclBlocked(big, TECH_BY_ID[k])) big.techs[k] = S.year;
   big.mult = computeMult(big);
   small.alive = false; small.died = S.year;
   S.wars = S.wars.filter(w => w.a !== small.id && w.b !== small.id);
@@ -283,9 +291,11 @@ function warTick() {
       const ratio = Math.max(power(A), power(Bn)) / Math.max(1, Math.min(power(A), power(Bn)));
       let p = 0.004 * amb * [0.55, 0.75, 0.9, 1, 0.9, 0.75, 0.45, 0.3, 0.25][era] * Math.min(A.mult.peace, Bn.mult.peace) * (1 + Math.min(len, 60) / 40) * (1 + ideoDist(A.ideo, Bn.ideo) * 1.5) * (1 + Math.min(2, Math.log(ratio) * 0.8));
       if (ideoOf(A).demo && ideoOf(Bn).demo) p *= 0.15;
-      if (A.mult.nukeW && Bn.mult.nukeW) p *= 0.25;
+      const da = deterrent(A), db = deterrent(Bn);
+      p *= da && db ? nukeWarK(A, Bn) : S.flags.nukeTaboo > S.year ? 0.5 : 1;
       if (rand() < p) {
-        const sa = A.ambition * ideoOf(A).aggr * power(A), sb = Bn.ambition * ideoOf(Bn).aggr * power(Bn);
+        let sa = A.ambition * ideoOf(A).aggr * power(A), sb = Bn.ambition * ideoOf(Bn).aggr * power(Bn);
+        if (da !== db) { if (da) { sa *= 1.3; sb *= 0.5; } else { sb *= 1.3; sa *= 0.5; } }
         const att = rand() < sa / (sa + sb) ? A : Bn, def = att === A ? Bn : A;
         if (isPlayer(att)) continue;
         startWar(att.id, def.id, false);
@@ -307,15 +317,8 @@ function warTick() {
     const A = S.nations[w.a], Bn = S.nations[w.b];
     if (!A.alive || !Bn.alive) { S.wars.splice(k, 1); continue; }
     if (w.vis) { w.vis[0] *= 0.97; w.vis[1] *= 0.97; }
-    const pa = power(A) * (0.5 + rand()) * visBias(w, 0), pb = power(Bn) * (0.5 + rand()) * visBias(w, 1);
-    const win = pa > pb ? A : Bn, lose = win === A ? Bn : A;
     for (const c of S.cities) if (c.i === w.front && (c.n === w.a || c.n === w.b)) c.pop *= 0.985;
-    if (rand() < 0.2) {
-      const lc = nearestPair(lose, win);
-      if (lc && lc.d < 10 + win.mult.range * 0.5 + win.mult.sea * 0.3) {
-        if (rand() < 1 / lose.mult.def) captureCity(lc.c, win, lose, w); else w.front = lc.i;
-      }
-    }
+    warYear(w);
     if (!S.wars.includes(w)) continue;
     if (S.year - w.start >= w.dur) {
       if (w.civil) { S.wars.splice(S.wars.indexOf(w), 1); endCivilWar(w); continue; }
@@ -334,10 +337,19 @@ function warTick() {
     if (!tc || !A || !A.alive || tc.n === A.id) { onOrderResult(o, false, true); continue; }
     const D = S.nations[tc.n];
     let w = warBetween(A.id, D.id);
-    const side = w && w.a === A.id ? 0 : 1;
-    const pa = power(A) * o.str * (0.6 + rand() * 0.8) * (w ? visBias(w, side) : 1), pd = power(D) * (0.6 + rand() * 0.8) * D.mult.def * (tc.cap ? 1.25 : 1);
     if (!w) w = startWar(A.id, D.id, true, `${A.name}的大军向${D.name}开战`);
-    if (pa > pd) { captureCity(tc, A, D, w); S.stats.conquer++; onOrderResult(o, true); }
+    const side = w && w.a === A.id ? 0 : 1, FA = milForces(A), FD = milForces(D);
+    if (w) warInit(w);
+    const sa = w ? airC(w, side) : 0, fc = cityById(o.from);
+    const wet = o.amphib || (fc && seaGap(fc.i, tc.i) > 0.4 && !(w && theatre(w).land && cellDist(fc.i, tc.i) < 12));
+    if (wet && w && FD.S > 0) {           // an overseas expedition must first beat the defending fleet
+      if (theatre(w).sea || o.amphib) seaWar(w, w.a === A.id ? A : D, w.a === A.id ? D : A, w.a === A.id ? FA : FD, w.a === A.id ? FD : FA, theatre(w));
+      if (seaC(w, side) < 0.15) { log('war', `${A.name}的登陆舰队在${tc.name}外海被${D.name}的海军击退`, tc.i, true); A.legions = Math.max(0, A.legions - 1); onOrderResult(o, false); continue; }
+    }
+    const amph = wet ? (A.mult.era >= 5 ? 0.35 + 0.65 * Math.min(1, A.mult.amphib) : 0.8) : 1;
+    const pa = landStrength(A, D, FA, FD, sa, w) * o.str * amph * (0.6 + rand() * 0.8) * (w ? visBias(w, side) : 1);
+    const pd = landStrength(D, A, FD, FA, -sa, w) * (0.6 + rand() * 0.8) * D.mult.def * (tc.cap ? 1.25 : 1);
+    if (pa > pd) { if (wet) S.stats.invasions = (S.stats.invasions || 0) + 1; captureCity(tc, A, D, w); S.stats.conquer++; onOrderResult(o, true); }
     else { log('war', `${A.name}进攻${tc.name}失败，大军溃退`, tc.i, true); A.legions = Math.max(0, A.legions - 2); onOrderResult(o, false); }
   }
   const involved = new Set(); for (const w of S.wars) { involved.add(w.a); involved.add(w.b); }
@@ -353,7 +365,7 @@ function nearestPair(of, to) {
 function captureCity(c, win, lose, w) {
   c.n = win.id; c.pop *= 0.85; c.fac *= 0.7; c.origin = lose.id; c.capturedAt = S.year;
   const wasCap = c.cap; c.cap = false;
-  if (w) { w.front = c.i; w.caps[win.id === w.a ? 0 : 1]++; }
+  if (w) { w.front = c.i; w.caps[win.id === w.a ? 0 : 1]++; if (wasCap) { warInit(w); w.capLost[lose.id === w.a ? 0 : 1] = 1; } }
   lose.cl = lose.cl.filter(x => x !== c); win.cl.push(c);
   lose.warLoss = Math.min(1.2, (lose.warLoss || 0) + 0.12);
   if (lose.ai) lose.ai.grudge[win.id] = Math.min(1, (lose.ai.grudge[win.id] || 0) + 0.15);
@@ -555,7 +567,14 @@ function godBless(n) {
 }
 function godInspire(n) {
   if (!n.target || n.techs[n.target] !== undefined) n.target = pickTech(n);
-  if (!n.target) return false;
+  if (!n.target) {
+    if (!n.mtarget || n.techs[n.mtarget] !== undefined) n.mtarget = pickMilTech(n);
+    if (!n.mtarget) return false;
+    n.mresearch += techCost(n, n.mtarget) * 0.95;
+    log('tech', `神启降临${n.name}，工程师们在「${TECH_BY_ID[n.mtarget].name}」上取得突破`, capitalCell(n));
+    addFx(capitalCell(n), 'inspire', true);
+    return true;
+  }
   const t = TECH_BY_ID[n.target];
   n.research += techCost(n, n.target) * 0.95;
   log('tech', `神启降临${n.name}，学者们在「${t.name}」上取得突破`, capitalCell(n));
@@ -564,12 +583,15 @@ function godInspire(n) {
 }
 function godArmy(n) {
   n.legions += 4;
+  const mx = ensureMil(n); mx.att = [0, 0, 0]; mx.tick = -1;
   log('war', `${n.name}的军队得到神力加持，战力大增`, capitalCell(n), false);
   addFx(capitalCell(n), 'army', true);
   onArmyGift(n);
 }
 function godGrantTech(n, id) {
   if (n.techs[id] !== undefined) return false;
+  const T0 = TECH_BY_ID[id];
+  if (T0.excl) for (const o of EXCL[T0.excl]) if (o !== T0 && n.techs[o.id] !== undefined) { delete n.techs[o.id]; ensureMil(n).pref[T0.excl] = id; log('war', `造物主改写了${n.name}的军事学说：「${o.name}」→「${T0.name}」`, capitalCell(n), false); }
   const added = [];
   const add = tid => { if (n.techs[tid] !== undefined) return; for (const r of TECH_BY_ID[tid].req) add(r); n.techs[tid] = S.year; added.push(tid); };
   add(id);
@@ -577,6 +599,7 @@ function godGrantTech(n, id) {
   for (const tid of added) if (!S.firsts[tid]) firstTech(n, tid);
   if (n.mult.era > S.flags.maxEra) S.flags.maxEra = n.mult.era;
   if (n.target && n.techs[n.target] !== undefined) n.target = null;
+  if (n.mtarget && n.techs[n.mtarget] !== undefined) n.mtarget = null;
   techVersion++;
   log('tech', `造物主把「${TECH_BY_ID[id].name}」${added.length > 1 ? `连同 ${added.length - 1} 项前置科技` : ''}赐给了${n.name}`, capitalCell(n));
   addFx(capitalCell(n), 'inspire', true);

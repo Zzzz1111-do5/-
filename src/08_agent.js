@@ -75,8 +75,11 @@ function econTick(n) {
   const prodPerM = 2 * Math.pow(1.55, era) * (1 + 0.5 * Math.min(1.5, fac / pm / 2.5)) * (1 + 0.25 * e.railCov);
   const L = pm * prodPerM, I = fac * 3 * Math.pow(1.2, Math.max(0, era - 4)) * n.st.sat;
   const W = clamp(d.market * Math.pow((1 - e.tax) / 0.82, 1.5) * (0.55 + 0.6 * n.stabV) * (war ? 0.85 : 1) * (1 + 0.08 * Math.min(4, trade)), 0.15, 2);
-  const X = (I * 0.25 + L * 0.05) * ideoOf(n).trade * (1 + 0.15 * Math.min(5, trade) + 0.3 * coast) * (1 + 0.3 * e.railCov);
-  const Y = (L + I) * (0.6 + 0.4 * W) + X * W;
+  const mx = ensureMil(n);
+  if (!war) mx.block *= 0.8;
+  // exports are cut by submarine raiding and blockade; strategic bombing wrecks output
+  const X = (I * 0.25 + L * 0.05) * ideoOf(n).trade * (1 + 0.15 * Math.min(5, trade) + 0.3 * coast) * (1 + 0.3 * e.railCov) * (1 - mx.block);
+  const Y = ((L + I) * (0.6 + 0.4 * W) + X * W) * (1 - 0.25 * mx.block - 0.3 * mx.bombed);
   const R = e.tax * Y * (0.65 + 0.35 * n.stabV);
   e.will = W; e.exp = X; e.gdp = Y; e.rev = R;
   let spend = R * 0.95 + Math.max(0, e.treasury - 2 * R) * 0.25;
@@ -236,7 +239,7 @@ function aiBudget(n, A, speak) {
 }
 function warPicture(n, w) {
   const side = w.a === n.id ? 0 : 1, o = S.nations[side === 0 ? w.b : w.a];
-  return { o, net: w.caps[side] - w.caps[1 - side], ratio: power(n) / Math.max(1, power(o)), age: S.year - w.start };
+  return { o, net: w.caps[side] - w.caps[1 - side], ratio: theatrePower(n, w) / Math.max(1, theatrePower(o, w)), age: S.year - w.start };
 }
 function agentThink(n) {
   const A = aiAssess(n), ai = n.ai;
@@ -246,6 +249,7 @@ function agentThink(n) {
   if (g !== ai.goal) { ai.goal = g; ai.since = S.year; ai.prep = 0; think(n, `新战略「${GOAL_NAME[g]}」：${goalReason(n, g, A)}`); }
   ai.target = g === 'expand' && A.prey ? A.prey.id : g === 'defend' && A.threat ? A.threat.id : g === 'unify' && A.same ? A.same.id : -1;
   aiBudget(n, A, true);
+  milThink(n, A);
   // losing wars: sue for peace
   for (const w of A.wars) {
     if (w.civil) continue;
@@ -265,7 +269,15 @@ function agentThink(n) {
       const pr = nearestPair(T, n);
       if (pr && pr.d < 9 && T.cl.length > 1 && rand() < 0.35 && agentGame('crisis', n, T, { city: pr.c.id, v: 1 + Math.min(3, Math.log10(pr.c.pop / 1e5 + 1) * 1.5) })) { think(n, `向${T.name}施压，索要${pr.c.name}`); break; }
       let p = 0.3 * clamp(A.ps / 2, 0.15, 1) * Math.min(1, m.peace) * [0.3, 0.5, 0.7, 0.9, 1, 0.9, 0.6, 0.45, 0.4][m.era];
-      if (m.nukeW && T.mult.nukeW) p *= 0.3;
+      p *= nukeWarK(n, T);
+      // a prey across the sea needs a fleet first (and landing craft in the modern era)
+      if (overseasPair(n, T)) {
+        const F = milForces(n), FT = milForces(T);
+        if ((FT.S > 0 && F.S < FT.S * 0.8) || (m.era >= 5 && !m.amphib)) {
+          if (!(n.mx.prepSea > S.year)) { n.mx.prepSea = S.year + 20; think(n, `${T.name}远在海外，先扩建舰队${m.era >= 5 && !m.amphib ? '、研制登陆艇' : ''}，为渡海进攻做准备`); }
+          p *= 0.25;
+        }
+      }
       if (ideoOf(n).demo && ideoOf(T).demo) p *= 0.2;
       if (rand() < p) {
         const dist = ideoDist(n.ideo, T.ideo);
@@ -311,6 +323,7 @@ function aiAdvise(n) {
   if (txt !== n.ai.advice) { n.ai.advice = txt; aiVersion++; }
   n.ai.weary = clamp(n.ai.weary + (A.wars.length ? 0.05 : -0.03), 0, 1);
   if (S.player && S.player.autoBudget) { n.ai.goal = g; aiBudget(n, A, true); }
+  if (ensureMil(n).auto) milThink(n, A);
 }
 function aiTick() {
   if (!S.aiFeed) S.aiFeed = [];
@@ -320,7 +333,7 @@ function aiTick() {
     econTick(n);
     if ((S.tick + n.id) % 4) continue;
     if (isPlayer(n)) { aiAdvise(n); continue; }
-    if (n.overlord >= 0) { const A = aiAssess(n); n.ai.goal = 'develop'; aiBudget(n, A, false); continue; }
+    if (n.overlord >= 0) { const A = aiAssess(n); n.ai.goal = 'develop'; aiBudget(n, A, false); milThink(n, A); continue; }
     agentThink(n);
   }
 }
@@ -363,6 +376,7 @@ function balanceOfPower(w) {
 // change in share of world power, and stability. Laggards borrow from the best performer
 // (with some random mutation) and become a new school; winners grow more confident.
 function doctrineTick() {
+  milDoctrineTick();
   const alive = S.nations.filter(n => n.alive && n.cl.length && n.eco);
   let wp = 0; for (const n of alive) wp += power(n);
   const agg = {};

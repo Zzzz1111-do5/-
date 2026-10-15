@@ -53,7 +53,7 @@ function buildGame(type, a, b, ctx) {
     case 'arms': { const ta = dist + (1 - ra) * 0.8, tb = dist + ra * 0.8; A = [[3, -ta], [4 + ta, 1]]; B = [[3, 4 + tb], [-tb, 1]]; break; }
     case 'trade': { const oa = ideoOf(A_).trade + A_.mult.tradeK * 0.4, ob = ideoOf(B_).trade + B_.mult.tradeK * 0.4; A = [[2 + 1.5 * oa, 0.5], [3.3 + (1.4 - oa) * 0.8, 1.5]]; B = [[2 + 1.5 * ob, 3.3 + (1.4 - ob) * 0.8], [0.5, 1.5]]; break; }
     case 'crisis': {
-      const v = ctx.v, nukes = A_.mult.nukeW && B_.mult.nukeW;
+      const v = ctx.v, nukes = deterrent(A_) && deterrent(B_);
       const ca = nukes ? 30 : 1 + 6 * (1 - ra), cb = nukes ? 30 : 1 + 6 * ra;
       A = [[0, -1], [v, v * ra * 1.2 - ca]];
       B = [[0, 0.6], [-v, -cb + v * (1 - ra)]];
@@ -93,11 +93,13 @@ function resolveGame(rec, i, j) {
   let out = '';
   switch (rec.type) {
     case 'arms':
+      // arming speeds up the military research track at the expense of civil research, disarming does the opposite
       for (const [n, s] of [[A, i], [Bn, j]]) {
-        if (s === 1) { n.legions += 1.5; if (n.target) n.research -= techCost(n, n.target) * 0.02; }
-        else if (n.target) n.research += techCost(n, n.target) * 0.015;
+        ensureMil(n);
+        if (s === 1) { n.legions += 1.5; if (n.target) n.research -= techCost(n, n.target) * 0.02; if (n.mtarget) n.mresearch += techCost(n, n.mtarget) * 0.04; }
+        else { if (n.target) n.research += techCost(n, n.target) * 0.015; if (n.mtarget) n.mresearch = Math.max(0, n.mresearch - techCost(n, n.mtarget) * 0.02); }
       }
-      if (i === 0 && j === 0) { addTrust(A.id, Bn.id, 0.1); out = '双方签署裁军条约，把钱花在民生与科研上'; S.stats.coop = (S.stats.coop || 0) + 1; if (A.mult.nukeW && Bn.mult.nukeW) S.stats.nukeDisarm = (S.stats.nukeDisarm || 0) + 1; }
+      if (i === 0 && j === 0) { addTrust(A.id, Bn.id, 0.1); out = '双方签署裁军条约，把钱花在民生与科研上'; S.stats.coop = (S.stats.coop || 0) + 1; if (deterrent(A) && deterrent(Bn)) S.stats.nukeDisarm = (S.stats.nukeDisarm || 0) + 1; }
       else if (i === 1 && j === 1) { addTrust(A.id, Bn.id, -0.05); out = '军备竞赛升级，双方都在扩军'; S.stats.armsRaces = (S.stats.armsRaces || 0) + 1; }
       else { addTrust(A.id, Bn.id, -0.18); out = `${i === 1 ? A.name : Bn.name}趁对方裁军时扩军，取得军事优势`; }
       break;
@@ -111,7 +113,7 @@ function resolveGame(rec, i, j) {
       if (i === 1 && j === 0 && c && c.n === Bn.id && Bn.cl.length > 1) { transferCity(c, A, Bn); Bn.warLoss = Math.min(1.2, Bn.warLoss + 0.06); addTrust(A.id, Bn.id, -0.1); out = `${Bn.name}在压力下让步，把${c.name}割让给${A.name}`; log('war', `边境危机：${Bn.name}向${A.name}让步，割让了${c.name}`, c.i, true); }
       else if (i === 1 && j === 1) { S.trust[trustKey(A.id, Bn.id)] = 0.1; out = '双方都拒绝让步，危机升级为战争'; startWar(A.id, Bn.id, false, `${A.name}与${Bn.name}的边境危机升级为战争：双方都拒绝让步`); }
       else if (i === 0 && j === 1) { A.stabV = Math.max(0, A.stabV - 0.03); out = `${A.name}在对方的强硬面前退缩了`; }
-      else { addTrust(A.id, Bn.id, 0.06); out = '双方各退一步，维持现状'; if (A.mult.nukeW && Bn.mult.nukeW) S.stats.mad = (S.stats.mad || 0) + 1; }
+      else { addTrust(A.id, Bn.id, 0.06); out = '双方各退一步，维持现状'; if (deterrent(A) && deterrent(Bn)) S.stats.mad = (S.stats.mad || 0) + 1; }
       break;
     }
     case 'alliance':
