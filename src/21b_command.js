@@ -140,6 +140,7 @@ function milForceStock(n) {
 $('mmClose').addEventListener('click', closeMil);
 $('mmTabs').addEventListener('click', e => { const b = e.target.closest('[data-mm]'); if (!b) return; mmTab = b.dataset.mm; renderMil(); });
 $('mmBody').addEventListener('click', e => {
+  if (e.target.closest('select, option, input, textarea, label')) return;      // handled on 'change'
   const n = playerNation(); if (!n) return;
   const t = e.target;
   const bc = t.closest('[data-bc]');

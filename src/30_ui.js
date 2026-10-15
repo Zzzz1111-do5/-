@@ -71,7 +71,9 @@ function flyToCity(c, z) { const [mx, my] = cityMpx(c); flyTo(mx, my, z || Math.
 function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 function setHTML(el, html) { if (el._hold && el._hold > performance.now()) return; if (el._html === html) return; el.innerHTML = html; el._html = html; }
 function holdOnInteract(el) {
-  el.addEventListener('pointerdown', () => { el._hold = performance.now() + 1200; });
+  el.addEventListener('pointerdown', () => { el._hold = Math.max(el._hold || 0, performance.now() + 1200); });
+  // while a mouse moves over the panel (aiming at a button or a dropdown) keep it still, so nothing shifts under the cursor
+  el.addEventListener('pointermove', e => { if (e.pointerType === 'mouse') el._hold = Math.max(el._hold || 0, performance.now() + 900); });
   el.addEventListener('focusin', e => { if (e.target.matches('select,input')) el._hold = Infinity; });
   el.addEventListener('focusout', () => { el._hold = performance.now() + 300; });
 }

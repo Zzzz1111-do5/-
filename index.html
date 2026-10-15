@@ -10481,6 +10481,9 @@ function renderMe() {
     <div class="acts" style="margin-top:16px"><button class="btn small" data-me="god">放弃统治，回到造物主模式</button></div>`);
 }
 $('pane-me').addEventListener('click', e => {
+  // form controls (the nation picker, thrust and doctrine selects, checkboxes) act on 'change'; re-rendering the pane on
+  // the click that opens a <select> would replace it while its dropdown is open and the choice would never land
+  if (e.target.closest('select, option, input, textarea, label')) return;
   const n = playerNation();
   const me = e.target.closest('[data-me]');
   if (me) {
@@ -10720,6 +10723,7 @@ function milForceStock(n) {
 $('mmClose').addEventListener('click', closeMil);
 $('mmTabs').addEventListener('click', e => { const b = e.target.closest('[data-mm]'); if (!b) return; mmTab = b.dataset.mm; renderMil(); });
 $('mmBody').addEventListener('click', e => {
+  if (e.target.closest('select, option, input, textarea, label')) return;      // handled on 'change'
   const n = playerNation(); if (!n) return;
   const t = e.target;
   const bc = t.closest('[data-bc]');
@@ -10817,7 +10821,9 @@ function flyToCity(c, z) { const [mx, my] = cityMpx(c); flyTo(mx, my, z || Math.
 function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 function setHTML(el, html) { if (el._hold && el._hold > performance.now()) return; if (el._html === html) return; el.innerHTML = html; el._html = html; }
 function holdOnInteract(el) {
-  el.addEventListener('pointerdown', () => { el._hold = performance.now() + 1200; });
+  el.addEventListener('pointerdown', () => { el._hold = Math.max(el._hold || 0, performance.now() + 1200); });
+  // while a mouse moves over the panel (aiming at a button or a dropdown) keep it still, so nothing shifts under the cursor
+  el.addEventListener('pointermove', e => { if (e.pointerType === 'mouse') el._hold = Math.max(el._hold || 0, performance.now() + 900); });
   el.addEventListener('focusin', e => { if (e.target.matches('select,input')) el._hold = Infinity; });
   el.addEventListener('focusout', () => { el._hold = performance.now() + 300; });
 }

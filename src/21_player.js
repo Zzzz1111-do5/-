@@ -450,6 +450,9 @@ function renderMe() {
     <div class="acts" style="margin-top:16px"><button class="btn small" data-me="god">放弃统治，回到造物主模式</button></div>`);
 }
 $('pane-me').addEventListener('click', e => {
+  // form controls (the nation picker, thrust and doctrine selects, checkboxes) act on 'change'; re-rendering the pane on
+  // the click that opens a <select> would replace it while its dropdown is open and the choice would never land
+  if (e.target.closest('select, option, input, textarea, label')) return;
   const n = playerNation();
   const me = e.target.closest('[data-me]');
   if (me) {
