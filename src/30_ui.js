@@ -1454,19 +1454,45 @@ miniCv.addEventListener('click', e => {
   const r = miniCv.getBoundingClientRect(), u = globeUnproject(GM, e.clientX - r.left, e.clientY - r.top);
   if (u) flyTo((u.lon + PI) / TAU * MW, (PI / 2 - u.lat) / PI * MH, Math.max(cam.z, zMin() * 2));
 });
+// one step "back" (Escape, and the Android back key through window.__appBack): closes the topmost open
+// thing and returns true, or returns false when nothing was open
+function uiBack() {
+  if (!$('focusModal').hidden) { $('focusModal').hidden = true; return true; }
+  if (modalOpen) return true;                       // event and decision dialogs need an answer
+  if (!$('modeSel').hidden) {
+    if (!$('modeNations').hidden) { $('modeCards').hidden = false; $('modeNations').hidden = true; return true; }
+    if (S && S.modeChosen) { $('modeSel').hidden = true; setPlaying(true); return true; }
+    return false;                                   // the start screen: let the app close
+  }
+  if (tmOpen) { closeTree(); return true; }
+  if (document.body.classList.contains('rail-open')) { setRailOpen(false); return true; }
+  if (viewMode === 'planet') { setView('system'); return true; }
+  if (viewMode === 'system') { setView(spaceReturn); return true; }
+  if (!$('popup').hidden) { $('popup').hidden = true; return true; }
+  if (diploFrom || attackFrom) { diploFrom = null; attackFrom = null; refreshToolHint(); return true; }
+  if (tool !== 'inspect') { setTool('inspect'); return true; }
+  if (selected || cam.follow) { selected = null; cam.follow = null; updateInspector(true); return true; }
+  if (viewMode === 'globe') { switchView('map'); return true; }
+  return false;
+}
+// the info rail as a slide-in drawer (landscape phones; see the CSS for .rail-open)
+function setRailOpen(on) { document.body.classList.toggle('rail-open', on); $('btnRail').setAttribute('aria-expanded', on); }
+$('btnRail').addEventListener('click', () => setRailOpen(!document.body.classList.contains('rail-open')));
+$('stage').addEventListener('pointerdown', () => { if (document.body.classList.contains('rail-open')) setRailOpen(false); }, true);
+// hooks for the Android shell: back key, and save + pause while the app is in the background
+let appPausedPlaying = null;
+window.__appBack = () => { try { return uiBack(); } catch (e) { return false; } };
+window.__appPause = () => {
+  try { saveWorld(); lastSave = performance.now(); } catch (e) {}
+  try { if (appPausedPlaying === null) { appPausedPlaying = playing; if (playing) setPlaying(false); } } catch (e) {}
+};
+window.__appResume = () => { try { if (appPausedPlaying) setPlaying(true); } catch (e) {} appPausedPlaying = null; };
+// mobile browsers may discard a background tab without warning: save whenever the page is hidden
+document.addEventListener('visibilitychange', () => { if (document.hidden) { saveWorld(); lastSave = performance.now(); } });
+window.addEventListener('pagehide', () => saveWorld());
 window.addEventListener('keydown', e => {
   if (e.target.matches('input,select,textarea')) return;
-  if (e.key === 'Escape') {
-    if (!$('focusModal').hidden) { $('focusModal').hidden = true; return; }
-    if (modalOpen || !$('modeSel').hidden) return;
-    if (tmOpen) { closeTree(); return; }
-    if (viewMode === 'planet') { setView('system'); return; }
-    if (viewMode === 'system') { setView(spaceReturn); return; }
-    if (!$('popup').hidden) { $('popup').hidden = true; return; }
-    if (diploFrom || attackFrom) { diploFrom = null; attackFrom = null; refreshToolHint(); return; }
-    if (tool !== 'inspect') { setTool('inspect'); return; }
-    selected = null; cam.follow = null; updateInspector(true); return;
-  }
+  if (e.key === 'Escape') { uiBack(); return; }
   if (tmOpen && !modalOpen && $('focusModal').hidden && !e.ctrlKey && !e.metaKey && !e.altKey) {
     if (/^[0-9]$/.test(e.key)) { const k = (+e.key + 9) % 10; if (TECH_CATS[k]) { setTmCat(TECH_CATS[k].id); renderTree(); } e.preventDefault(); return; }
     if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { cycleTmCat(e.key === 'ArrowLeft' ? -1 : 1); e.preventDefault(); return; }

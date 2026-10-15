@@ -7,7 +7,8 @@
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Noto+Sans+SC:wght@400;500;700&family=Noto+Serif+SC:wght@700;900&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Noto+Sans+SC:wght@400;500;700&family=Noto+Serif+SC:wght@700;900&display=swap" media="print" onload="this.media='all'">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Noto+Sans+SC:wght@400;500;700&family=Noto+Serif+SC:wght@700;900&display=swap"></noscript>
 <style>
 :root{
   /* Layout: god's-eye console. The world map fills a stage with a tool tray along its foot; an instrument rail of readouts runs down the right. */
@@ -34,8 +35,8 @@
   --mix-renew:#c98500;
   --mix-fusion:#d55181;
   --status-serious:#ec835a;
-  --font-display:"Noto Serif SC","Songti SC","STSong","SimSun",serif;
-  --font-body:"Noto Sans SC","PingFang SC","Hiragino Sans GB","Microsoft YaHei",system-ui,sans-serif;
+  --font-display:"Noto Serif SC","Source Han Serif SC","Noto Serif CJK SC","Songti SC","STSong","SimSun",serif;
+  --font-body:"Noto Sans SC","PingFang SC","Hiragino Sans GB","Microsoft YaHei","Source Han Sans SC","Noto Sans CJK SC",system-ui,sans-serif;
   --font-mono:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;
   color-scheme:dark;
 }
@@ -63,6 +64,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,[tabindex]:focus-v
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:32px;padding:0 12px;border-radius:6px;border:1px solid var(--line);background:var(--panel-2);cursor:pointer;font-size:13px;color:var(--ink)}
 .btn:hover{background:var(--panel-3)}
 .btn.icon{width:36px;padding:0}
+#btnRail{display:none}
 .btn svg{width:14px;height:14px;fill:currentColor}
 .btn.primary{background:var(--sodium);border-color:var(--sodium);color:#1a1205;font-weight:500}
 .btn.primary:hover{filter:brightness(1.08)}
@@ -488,6 +490,39 @@ label.chk input{accent-color:var(--sodium);margin:0}
   .vlist button{height:24px;padding:0 6px}
   .ticker{top:84px;left:116px;right:12px;max-width:none}
 }
+@media (max-height:500px) and (orientation:landscape){
+  /* landscape phones: the map fills the screen under a one-line header; the info rail slides in from the right */
+  body{overflow:hidden}
+  .app{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);height:100%;min-height:0}
+  .stage{height:auto;min-height:0}
+  .bar{flex-wrap:nowrap;gap:8px;padding-block:4px;overflow-x:auto}
+  .brand .sub,.era,.tbadge{display:none}
+  .brand h1{font-size:16px;letter-spacing:.08em;white-space:nowrap}
+  .clock{order:0;flex:0 0 auto;justify-content:flex-start}
+  .year{font-size:16px}
+  .ctrl{flex-wrap:nowrap;margin-left:auto}
+  .btn{height:28px;padding:0 8px;font-size:12px;white-space:nowrap}
+  .btn.icon{width:30px;padding:0}
+  .seg button{height:26px;padding:0 6px;font-size:12px}
+  #btnRail{display:inline-flex}
+  .rail{position:fixed;top:0;right:0;bottom:0;width:min(380px,86vw);z-index:40;border-left:1px solid var(--line);border-top:0;box-shadow:-12px 0 40px rgba(0,0,0,.5);transform:translateX(102%);transition:transform .2s ease-out;visibility:hidden}
+  .rail-open .rail{transform:none;visibility:visible}
+  .pane{overflow:auto}
+  .mini{top:8px;width:84px;padding:3px}
+  .mini canvas{width:76px;height:76px}
+  .side{top:8px;left:100px;right:auto;width:auto;max-width:calc(100% - 160px);flex-direction:row;flex-wrap:wrap;align-items:center;gap:4px;padding:4px}
+  .vlist{flex-direction:row;flex-wrap:wrap}
+  .vlist button{height:24px;padding:0 6px}
+  .ticker{top:46px;left:100px;right:auto;transform:none;max-width:calc(100% - 160px);font-size:12px;border-radius:8px;text-align:left}
+  .toolbar{gap:8px;padding-block:3px 4px}
+  .tgroup .gl{display:none}
+  .tool{width:46px;height:42px;font-size:10px}
+  .tool svg{width:16px;height:16px}
+  .zoom{bottom:58px}
+  .zoom button{width:30px;height:30px}
+  .legend{bottom:58px}
+  .insp{top:8px;bottom:auto;left:auto;right:max(48px,env(safe-area-inset-right,0px));width:min(300px,48%);max-height:calc(100% - 70px)}
+}
 @media (prefers-reduced-motion:reduce){
   .ticker,.banner{transition:none}
   .tmodal,.evmodal,.evcard,.pane,.tm-canvas,.splash,.splash .sp-planet,.tm-tab,.tn{animation:none!important;transition:none!important}
@@ -524,6 +559,7 @@ label.chk input{accent-color:var(--sodium);margin:0}
       <button class="btn" id="btnMode" title="切换造物主 / 领袖模式">造物主模式</button>
       <button class="btn" id="btnTree">科技树</button>
       <button class="btn" id="btnNew" title="用新的种子生成另一颗星球">新世界</button>
+      <button class="btn icon" id="btnRail" aria-label="信息面板" aria-expanded="false" title="信息面板">☰</button>
     </div>
   </header>
 
