@@ -1,7 +1,9 @@
 /* =====================================================================
    Texture painting
    ===================================================================== */
-const COL = new Uint8ClampedArray(TN * 3);
+// packed texel colour 0x00BBGGRR, and AUX = lights (bits 0-7, 0..1.6 → 0..255) | open water (bits 16-23)
+const COL32 = new Uint32Array(TN);
+const AUX32 = new Uint32Array(TN);
 const WATER = new Uint8Array(TN);
 const LIGHTS = new Float32Array(TN);
 const DIRTY = new Uint8Array(N);
@@ -98,8 +100,8 @@ function recolorCell(ci) {
           if (sm > 0.05 && !water && h > 0.35) { const k = Math.min(0.75, sm); r += (96 - r) * k; g += (80 - g) * k; b += (56 - b) * k; }
         }
       }
-      const o = ti * 3; COL[o] = r; COL[o + 1] = g; COL[o + 2] = b;
-      WATER[ti] = water;
+      COL32[ti] = (r > 255 ? 255 : r < 0 ? 0 : r) | (g > 255 ? 255 : g < 0 ? 0 : g) << 8 | (b > 255 ? 255 : b < 0 ? 0 : b) << 16;
+      WATER[ti] = water; AUX32[ti] = (AUX32[ti] & 255) | (water === 1 ? 0xff0000 : 0);
     }
   }
 }
@@ -145,6 +147,6 @@ function buildLights() {
       }
     }
   }
-  for (let i = 0; i < TN; i++) if (LIGHTS[i] > 1.6) LIGHTS[i] = 1.6;
+  for (let i = 0; i < TN; i++) { let v = LIGHTS[i]; if (v > 1.6) LIGHTS[i] = v = 1.6; AUX32[i] = (AUX32[i] & 0xff0000) | ((v * 159) | 0); }
 }
 
