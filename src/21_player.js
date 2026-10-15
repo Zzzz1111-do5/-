@@ -150,7 +150,8 @@ function playerCivilWarNotice(n, rb) {
 }
 function playerWarDeclared(w, attacker) {
   const n = playerNation();
-  queueModal({ kicker: '战争', title: `${attacker.name}向你宣战！`, html: `<p>军力对比：你 ${fmtNum(power(n) / 1000)} 对 ${fmtNum(power(attacker) / 1000)}。${attacker.allies.length ? `对方的盟友：${esc(attacker.allies.map(i => S.nations[i].name).join('、'))}。` : ''}</p>`,
+  const Fn = milForces(n), Fa = milForces(attacker), th = theatre(w), r1 = v => fmtNum(v / 1000);
+  queueModal({ kicker: '战争', title: `${attacker.name}向你宣战！`, html: `<p>军力对比（你 : 对方）：<b>陆 ${r1(Fn.L)} : ${r1(Fa.L)}</b> · 海 ${r1(Fn.S)} : ${r1(Fa.S)} · 空 ${r1(Fn.A)} : ${r1(Fa.A)}。${th.land ? '两国陆地相连，主战场在陆上。' : '两国隔海相望，谁控制海洋谁就能登陆。'}${deterrent(attacker) ? '<b>对方拥有核武器。</b>' : ''}${attacker.allies.length ? `对方的盟友：${esc(attacker.allies.map(i => S.nations[i].name).join('、'))}。` : ''}</p>`,
     buttons: [{ label: '迎战', primary: true, fn: () => { const p = nearestPair(n, attacker); if (p && viewMode === 'map') flyToWar(w); } }, { label: '割让一座边境城市求和', fn: () => { const p = nearestPair(n, attacker); if (p && n.cl.length > 1) transferCity(p.c, attacker, n); makePeace(n.id, attacker.id, `${n.name}割地求和，${attacker.name}接受`); } }] });
 }
 function aiPeaceOffer(w) {
@@ -332,9 +333,53 @@ $('modeSel').addEventListener('click', e => {
   const p = e.target.closest('.pick');
   if (p) { $('modeSel').hidden = true; setMode('leader', +p.dataset.n); setPlaying(true); try { localStorage.setItem('blue-planet-intro', '1'); } catch (er) {} return; }
   if (e.target.closest('#modeBack')) { $('modeCards').hidden = false; $('modeNations').hidden = true; }
-  if (e.target.closest('#modeNew')) { boot({ seed: (Math.random() * 1e9) | 0 }); openModeOverlay(); }
+  if (e.target.closest('#modeNew')) bootFresh(openModeOverlay);
 });
 $('btnMode').addEventListener('click', () => openModeOverlay());
+
+/* ---------- leader panel: army block ---------- */
+let armyMixOpen = false, docPick = '';
+function presetOn(n, k) { const p = MIL_PRESET[k] || (MIL_DOCT[n.ideo] || MIL_DOCT.tribal).split, s = n.mx.split; let t = 0; for (const v of p) t += v; return p.every((v, i) => Math.abs(v / t - s[i]) < 0.006); }
+function doctrineOptions(n) { const out = []; for (const d of DOMS) for (const t of EXCL[d] || []) if (n.techs[t.id] === undefined && t.req.every(r => n.techs[r] !== undefined) && t.era <= n.mult.era) out.push(t); return out; }
+function armyBlock(n) {
+  const mx = ensureMil(n), F = milForces(n), m = n.mult, P = S.player, es = effSplit(n), r = researchBars(n);
+  const notes = [];
+  if (mx.split[1] > 0.01 && es[1] === 0) notes.push(mx.coast ? '还没有战舰，海军经费暂时转给陆军' : '没有海岸城市，海军经费转给陆军');
+  if (mx.split[2] > 0.01 && es[2] === 0) notes.push('尚未掌握军用航空，空军经费转给陆军');
+  const opts = doctrineOptions(n); if (!opts.some(t => t.id === docPick)) docPick = opts.length ? opts[0].id : '';
+  const pick = TECH_BY_ID[docPick], reform = pick && EXCL[pick.excl].some(o => n.techs[o.id] !== undefined);
+  return `<h3>军队 <small><label class="chk"><input type="checkbox" data-me="milauto"${mx.auto ? ' checked' : ''}> 顾问代管军队</label></small></h3>
+    <div class="kpis">
+      <div class="kpi"><span class="k">陆军</span><span class="v">${fmtNum(F.L / 1000)}</span></div>
+      <div class="kpi"><span class="k">海军</span><span class="v">${fmtNum(F.S / 1000)}</span></div>
+      <div class="kpi"><span class="k">空军</span><span class="v">${fmtNum(F.A / 1000)}</span></div>
+    </div>
+    <div class="acts"><span class="note" style="margin:0">军费结构：</span><div class="seg">${Object.keys(MIL_PRESET_NAME).map(k => `<button data-milp="${k}" aria-pressed="${presetOn(n, k)}">${MIL_PRESET_NAME[k]}</button>`).join('')}</div></div>
+    <div class="alloc">${DOMS.map((d, k) => `<span class="swatch" style="background:${DOM_BAR[d]}"></span><span>${DOM_NAME[d]}</span><span class="track"><span class="fill" style="width:${(mx.split[k] * 100).toFixed(0)}%;background:${DOM_BAR[d]}"></span></span><span class="mono">${pctS(mx.split[k])}</span><button class="btn small" data-ms="${k}" data-d="-1" aria-label="减少${DOM_NAME[d]}经费">−</button><button class="btn small" data-ms="${k}" data-d="1" aria-label="增加${DOM_NAME[d]}经费">+</button>`).join('')}</div>
+    ${notes.length ? `<p class="note">${notes.join('；')}。</p>` : ''}
+    <details class="fold"${armyMixOpen ? ' open' : ''}><summary data-me="mixfold">编制：各兵种占比与现役型号</summary><div class="mixgrid">${DOMS.map(d => `<span class="dh">${DOM_NAME[d]}</span>` + ROLES[d].map(ro => { const u = UNIT_BY_ID[m.best[ro]]; return `<span>${MIL_ROLE_NAME[ro]} <small>· ${u ? esc(u.name) : '未解锁'}</small></span><span class="mono">${pctS(mx.mix[d][ro] || 0)}</span><button class="btn small" data-mix="${d}:${ro}" data-d="-1" aria-label="减少${MIL_ROLE_NAME[ro]}">−</button><button class="btn small" data-mix="${d}:${ro}" data-d="1" aria-label="增加${MIL_ROLE_NAME[ro]}">+</button>`; }).join('')).join('')}</div></details>
+    <div class="rrow" style="margin-top:12px"><span class="swatch" style="background:#e8a25a"></span><span>军工研究 · ${r.mt ? esc(r.mt.name) : '暂无目标'}</span><span class="mono">${r.mt ? Math.round(r.mp * 100) + '%' : ''} <button class="btn small" data-me="miltree">选择</button></span><span class="track"><span class="fill mil" style="width:${(r.mp * 100).toFixed(0)}%"></span></span></div>
+    <div class="milrow" style="margin-top:10px"><span class="k">学说</span>${doctrineChips(n)}</div>
+    ${opts.length ? `<div class="acts"><select class="msel" data-me="docpick" aria-label="新学说">${opts.map(t => `<option value="${t.id}"${t.id === docPick ? ' selected' : ''}>${DOM_NAME[t.excl]} · ${esc(t.name)}</option>`).join('')}</select><button class="btn small" data-me="doctrine" ${reform && P.pp < 60 ? 'disabled' : ''}>${reform ? '学说改革 · 60' : '研究此学说'}</button></div>` : ''}`;
+}
+function warControlRows(n, w) {
+  const c = warControl(n, w), th = theatre(w), o = S.nations[w.a === n.id ? w.b : w.a];
+  const bar = (k, v) => `<span>${k}</span><span class="track"><span class="fill" style="width:${(v * 100).toFixed(0)}%"></span></span><b>${Math.round(v * 100)}%</b>`;
+  const btns = [];
+  if (!w.civil && !th.land && o && o.cl.some(x => x.coastal)) btns.push(`<button class="btn small" data-war="${w.id}" data-wa="amphib" title="对最近的敌方沿海城市发起两栖登陆，需要制海 58% 以上">两栖登陆</button>`);
+  if (deterrent(n)) btns.push(`<button class="btn small danger" data-war="${w.id}" data-wa="nuke">核打击…</button>`);
+  return `<div class="warctl">${bar('地面', c.land)}${bar('制空', c.air)}${th.sea || c.sea !== 0.5 ? bar('制海', c.sea) : ''}${c.block > 0.01 ? `<span>被封锁</span><span></span><b>${Math.round(c.block * 100)}%</b>` : ''}</div>${btns.length ? `<div class="decs" style="margin:2px 0 6px 16px">${btns.join('')}</div>` : ''}`;
+}
+function confirmNuke(n, w) {
+  const o = S.nations[w.a === n.id ? w.b : w.a]; if (!o) return;
+  queueModal({ kicker: '核打击', title: `对${o.name}动用核武器？`, html: `<p>这是不可撤回的决定。后果：</p><ul class="evlist">
+      <li>${esc(o.name)}前线附近人口最多的城市将有 ${n.mult.nukeY >= 2 ? '80%' : '60%'} 的居民罹难，九成工业化为灰烬，周边城市同样受创。</li>
+      <li>世界上所有国家对你的互信 −40%，本国稳定 −10%。</li>
+      <li>尘埃遮蔽阳光，全球降温；此后 50 年人类将笼罩在核禁忌之下。</li>
+      ${o.mult.secondStrike && deterrent(o) ? `<li><b>${esc(o.name)}拥有二次打击能力，极有可能立即发动核反击。</b></li>` : deterrent(o) ? `<li>${esc(o.name)}同样拥有核武器。</li>` : ''}
+    </ul>`,
+    buttons: [{ label: '取消', primary: true, fn: () => {} }, { label: '发射', note: n.mult.icbm ? '洲际导弹' : '战略轰炸机', danger: true, fn: () => { const r = milCommand(n, w, 'nuke'); showTicker('war', r.msg); $('pane-me')._html = ''; } }] });
+}
 
 /* ---------- leader panel ---------- */
 let decisionTarget = -1;
@@ -376,13 +421,14 @@ function renderMe() {
     <div class="alloc">${BUD.map((b, k) => (b === 'space' && !n.mult.space) ? '' : `<span class="swatch" style="background:${BUD_COLOR[b]}"></span><span>${BUD_NAME[b]}</span><span class="track"><span class="fill" style="width:${(n.eco.alloc[k] * 100).toFixed(0)}%;background:${BUD_COLOR[b]}"></span></span><span class="mono">${pctS(n.eco.alloc[k])}</span><button class="btn small" data-al="${k}" data-d="-1" aria-label="减少${BUD_NAME[b]}">−</button><button class="btn small" data-al="${k}" data-d="1" aria-label="增加${BUD_NAME[b]}">+</button>`).join('')}</div>
     <p class="note">铁路 ${n.eco.rails} 段 · 研究院 ${n.eco.inst} 座 · 本国路线「${esc(doct(n.ideo).school)}」</p>
     ${n.ai && n.ai.advice ? `<p class="note">顾问建议：${esc(n.ai.advice)}</p>` : ''}` : ''}
+    ${armyBlock(n)}
     <h3>外交与决议</h3>
     <div class="acts"><select data-me="target" aria-label="对象国家" class="msel">${others.map(o => `<option value="${o.id}"${o.id === decisionTarget ? ' selected' : ''}>${esc(o.name)}${atWar(n.id, o.id) ? '（交战）' : allied(n.id, o.id) ? '（同盟）' : o.overlord === n.id ? '（附庸）' : ''}</option>`).join('')}</select></div>
     ${T ? `<p class="note">${sw(T)}${esc(T.name)} · ${esc(ideoOf(T).name)} · 军力 ${fmtNum(power(T) / 1000)} · 互信 ${Math.round(getTrust(n.id, T.id) * 100)}% · ${T.ambition * ideoOf(T).aggr > 1.2 ? '野心勃勃' : '相对温和'}${claim !== undefined ? (claim <= S.year ? ' · <b style="color:var(--sodium)">已有战争借口</b>' : ` · 借口还需 ${claim - S.year} 年`) : ''}${hasNap(n, T) ? ' · 互不侵犯' : ''}</p>` : ''}
     <div class="decs">${DECISIONS.filter(d => d.tgt).map(d => { const c = d.id === 'declare' && T && !canJustifiedWar(n, T) ? 60 : d.pp; return `<button class="btn small${d.id === 'declare' ? ' danger' : ''}" data-dec="${d.id}" title="${esc(d.desc)}" ${P.pp < c ? 'disabled' : ''}>${d.name}${c ? ` · ${c}` : ''}</button>`; }).join('')}</div>
     <div class="decs">${DECISIONS.filter(d => !d.tgt).map(d => `<button class="btn small" data-dec="${d.id}" title="${esc(d.desc)}" ${P.pp < d.pp ? 'disabled' : ''}>${d.name} · ${d.pp}</button>`).join('')}<button class="btn small" data-me="attack">派兵进攻…</button></div>
     <h3>战争</h3>
-    ${wars.length ? wars.map(w => { const o = S.nations[w.a === n.id ? w.b : w.a], sc = warScore(w); return `<div class="warrow">${sw(o)}<span>${esc(o.name)}${w.civil ? '（内战）' : ''}</span><span class="mono ${sc >= 0 ? 'pos' : 'neg'}">${sc >= 0 ? '+' : ''}${sc}</span><button class="btn small" data-war="${w.id}" data-wa="watch">观战</button><button class="btn small" data-war="${w.id}" data-wa="peace">和谈</button></div>`; }).join('') : '<p class="note">和平时期。</p>'}
+    ${wars.length ? wars.map(w => { const o = S.nations[w.a === n.id ? w.b : w.a], sc = warScore(w); return `<div class="warrow">${sw(o)}<span>${esc(o.name)}${w.civil ? '（内战）' : ''}</span><span class="mono ${sc >= 0 ? 'pos' : 'neg'}">${sc >= 0 ? '+' : ''}${sc}</span><button class="btn small" data-war="${w.id}" data-wa="watch">观战</button><button class="btn small" data-war="${w.id}" data-wa="peace">和谈</button></div>${warControlRows(n, w)}`; }).join('') + `<div class="acts"><label class="chk"><input type="checkbox" data-me="sbomb"${ensureMil(n).policy.sbomb ? ' checked' : ''}> 战略轰炸</label><label class="chk" title="中立国会愤怒，民主国家可能参战"><input type="checkbox" data-me="unres"${ensureMil(n).policy.unrestricted ? ' checked' : ''}> 无限制潜艇战</label></div>` : '<p class="note">和平时期。</p>'}
     <h3>胜利目标</h3>
     <div class="res">
       <span class="name">世界统一</span><span class="track"><span class="fill" style="width:${(realmC / Math.max(1, S.cities.length) * 100).toFixed(1)}%"></span></span><span class="pct">${realmC}/${S.cities.length} 城</span>
@@ -400,7 +446,20 @@ $('pane-me').addEventListener('click', e => {
     if (k === 'god') setMode('god');
     if (k === 'pick') openNationPicker();
     if (k === 'attack') { setTool('attack'); flashHint('先点你的一座城市，再点要攻打的敌城'); }
+    if (k === 'mixfold') armyMixOpen = !armyMixOpen;
+    if (k === 'miltree' && n) openTree(String(n.id), 'land');
+    if (k === 'doctrine' && n && docPick) {
+      const t = TECH_BY_ID[docPick], reform = EXCL[t.excl].some(o => n.techs[o.id] !== undefined);
+      if (reform && S.player.pp < 60) flashHint('学说改革需要 60 政治点数');
+      else { const r = chooseDoctrine(n, docPick); if (r.ok && reform) S.player.pp -= 60; showTicker('war', r.msg); }
+    }
   }
+  const mp = e.target.closest('[data-milp]');
+  if (mp && n) milPreset(n, mp.dataset.milp);
+  const ms = e.target.closest('[data-ms]');
+  if (ms && n) { const sp = ensureMil(n).split.slice(), k = +ms.dataset.ms; sp[k] = Math.max(0, sp[k] + 0.05 * +ms.dataset.d); setMilSplit(n, sp); }
+  const mi = e.target.closest('[data-mix]');
+  if (mi && n) { const [d, ro] = mi.dataset.mix.split(':'); setMilMix(n, d, ro, (ensureMil(n).mix[d][ro] || 0) + 0.05 * +mi.dataset.d); }
   const tx = e.target.closest('[data-tax]');
   if (tx && n && n.eco) { n.eco.tax = clamp(n.eco.tax + 0.02 * +tx.dataset.tax, 0.03, 0.75); S.player.autoBudget = false; }
   const al = e.target.closest('[data-al]');
@@ -410,10 +469,26 @@ $('pane-me').addEventListener('click', e => {
   const d = e.target.closest('[data-dec]');
   if (d) doDecision(d.dataset.dec, S.nations[decisionTarget]);
   const w = e.target.closest('[data-war]');
-  if (w) { const war = S.wars.find(x => x.id === +w.dataset.war); if (war) { if (w.dataset.wa === 'watch') flyToWar(war); else peaceConference(war); } }
+  if (w) {
+    const war = S.wars.find(x => x.id === +w.dataset.war), wa = w.dataset.wa;
+    if (war) {
+      if (wa === 'watch') flyToWar(war);
+      else if (wa === 'amphib') { const r = milCommand(n, war, 'amphib'); if (r.ok) { showTicker('war', r.msg); if (r.order && viewMode === 'map') flyToWar(war); } else flashHint(r.msg); }
+      else if (wa === 'nuke') confirmNuke(n, war);
+      else peaceConference(war);
+    }
+  }
   $('pane-me')._hold = 0; $('pane-me')._html = ''; renderMe();
 });
-$('pane-me').addEventListener('change', e => { if (e.target.matches('[data-me="auto"]')) { S.player.autoBudget = e.target.checked; $('pane-me')._hold = 0; $('pane-me')._html = ''; renderMe(); return; } if (e.target.matches('[data-me="target"]')) { decisionTarget = +e.target.value; $('pane-me')._hold = 0; $('pane-me')._html = ''; renderMe(); } });
+$('pane-me').addEventListener('change', e => {
+  const n = playerNation(), k = e.target.dataset && e.target.dataset.me;
+  if (n && (k === 'milauto' || k === 'sbomb' || k === 'unres' || k === 'docpick')) {
+    if (k === 'milauto') { ensureMil(n).auto = e.target.checked; n.mx.tick = -1; }
+    else if (k === 'docpick') docPick = e.target.value;
+    else { const r = milCommand(n, null, k === 'sbomb' ? 'sbomb' : 'unrestricted'); showTicker('war', r.msg); }
+    $('pane-me')._hold = 0; $('pane-me')._html = ''; renderMe(); return;
+  }
+  if (e.target.matches('[data-me="auto"]')) { S.player.autoBudget = e.target.checked; $('pane-me')._hold = 0; $('pane-me')._html = ''; renderMe(); return; } if (e.target.matches('[data-me="target"]')) { decisionTarget = +e.target.value; $('pane-me')._hold = 0; $('pane-me')._html = ''; renderMe(); } });
 holdOnInteract($('pane-me'));
 
 /* ---------- focus tree modal ---------- */
