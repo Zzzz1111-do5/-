@@ -21,6 +21,7 @@ function drawMapScene() {
   ctx.imageSmoothingEnabled = !tiles || tiles.sc < 1.9 || (view.dpr < 1.5 && GFX.level >= 3);
   if (tiles) for (const [cv, s, xa, ya, w, h, a] of tiles.draw) { ctx.globalAlpha = a; ctx.drawImage(cv, 1, 1, s, s, xa, ya, w, h); }
   ctx.globalAlpha = 1; ctx.imageSmoothingEnabled = true;
+  drawPolarSeam(x0, x1, z);
   if (GFX.water && z >= 1.3) drawWaterGlints(x0, y0, x1, y1, z);
   drawMapLayer(x0, y0, x1, y1, z);
   drawBorders(x0, y0, x1, y1, z);
@@ -106,6 +107,22 @@ function drawBackdrop(x0, x1, z) {
       const g = ctx.createLinearGradient(0, edge, 0, side ? sh : 0); g.addColorStop(0, '#4a6178'); g.addColorStop(0.3, '#10243c'); g.addColorStop(1, '#04101f'); ctx.fillStyle = g; ctx.fillRect(-20, ya, sw + 40, hh);
     }
   }
+}
+// the polar edge strip feathered a few px into the map's outermost rows (in 4 alpha bands), so the painted map melts
+// into the letterbox instead of ending in a hard line
+function drawPolarSeam(x0, x1, z) {
+  if (!GFX.level || !POLAR) return;
+  const sw = view.w, sh = view.h, top = syOf(0), bot = syOf(MH), bh = Math.min(3, 1 + 2.5 * z);
+  for (const side of [0, 1]) {
+    const edge = side ? bot : top;
+    if (side ? edge >= sh : edge <= 0) continue;
+    for (let b = 0; b < 4; b++) {
+      ctx.globalAlpha = [0.78, 0.5, 0.27, 0.1][b];
+      const ya = side ? edge - (b + 1) * bh : edge + b * bh;
+      for (let k = Math.floor(x0 / MW); k * MW < x1; k++) ctx.drawImage(POLAR, 0, side + 0.25, POLAR.width, 0.5, (k * MW - cam.x) * z + sw / 2, ya, MW * z, bh);
+    }
+  }
+  ctx.globalAlpha = 1;
 }
 // hi-res detail tiles over the base bitmap when zoomed in (GFX.detail ≥ 1; 4 samples per map px at detail 3):
 // returns the tile draws for this frame (a ready tile of the other resolution stands in while one is painted, new
@@ -300,11 +317,35 @@ function cellRuns(x0, y0, x1, y1, z, key, s, g = PX, gw = W, gh = H) {
   }
   return groups;
 }
+// national borders: each land cell draws its edges facing another nation's land, inset on its own side (neighbours'
+// lines run side by side). Corners are chamfered at 45° — convex ones cut inside the cell, concave ones bridged to the
+// diagonal neighbour's edge — so borders read as drawn lines rather than 16-px stairs.
 function drawBorders(x0, y0, x1, y1, z) {
   const paths = new Map(), glow = new Map(), cs = PX * z, sw2 = view.w / 2, sh2 = view.h / 2, d = view.dpr;
   const lwD = Math.max(1, Math.round(clamp(z * 0.9, 1, 3) * d)), lw = lwD / d, half = (lwD & 1) ? 0.5 / d : 0;
   const ins = Math.min(1.5, cs * 0.06) + lw / 2, gw = z >= 1.2 && GFX.detail >= 1 ? clamp(cs * 0.16, 2, 8) : 0, gi = ins + gw / 2;
+  const chf = GFX.level ? 0.26 : 0;
   const P = v => Math.round(v * d) / d + half, rise = S.seaRise, E = WORLD.elev, O = S.owner;
+  const mine = (cx, cy, own) => { if (cy < 0 || cy >= H) return false; const j = cy * W + (cx + W) % W; return O[j] === own && E[j] > rise; };
+  // one cell's border edges into path p at inset t (snap: pixel-align straight runs); flags R L D U, diagonal ownership
+  const edges = (p, sx, sy, t, R, L, D, U, dUR, dUL, dDR, dDL, snap) => {
+    const c = Math.max(t + 0.4, cs * chf), Q = snap ? P : v => v;
+    const xa = sx, xb = sx + cs, ya = sy, yb = sy + cs;
+    for (const sxn of [1, -1]) {
+      if (!(sxn > 0 ? R : L)) continue;
+      const lx = Q(sxn > 0 ? xb - t : xa + t), hU = U, hD = D, gU = sxn > 0 ? dUR : dUL, gD = sxn > 0 ? dDR : dDL;
+      const yt = !chf ? ya : hU ? ya + t + c : gU ? ya - t + c : ya, yb2 = !chf ? yb : hD ? yb - t - c : gD ? yb + t - c : yb;
+      if (chf && hU) p.moveTo(lx - sxn * c, ya + t); else if (chf && gU) p.moveTo(lx + sxn * c, ya - t); else p.moveTo(lx, Q(yt));
+      p.lineTo(lx, Q(yt)); p.lineTo(lx, Q(yb2));
+      if (chf && hD) p.lineTo(lx - sxn * c, yb - t); else if (chf && gD) p.lineTo(lx + sxn * c, yb + t);
+    }
+    for (const syn of [1, -1]) {
+      if (!(syn > 0 ? D : U)) continue;
+      const ly = Q(syn > 0 ? yb - t : ya + t), gL = syn > 0 ? dDL : dUL, gR = syn > 0 ? dDR : dUR;
+      const xl = !chf ? xa : L ? xa + t + c : gL ? xa - t + c : xa, xr = !chf ? xb : R ? xb - t - c : gR ? xb + t - c : xb;
+      p.moveTo(Q(xl), ly); p.lineTo(Q(xr), ly);
+    }
+  };
   forVisibleCells(x0, y0, x1, y1, (i, cxr, cy) => {
     const own = O[i]; if (own < 0 || E[i] <= rise) return;
     const x = i - cy * W, sx = (cxr * PX - cam.x) * z + sw2, sy = (cy * PX - cam.y) * z + sh2;
@@ -312,20 +353,11 @@ function drawBorders(x0, y0, x1, y1, z) {
     const R = E[jr] > rise && O[jr] !== own, L = E[jl] > rise && O[jl] !== own, D = cy < H - 1 && E[i + W] > rise && O[i + W] !== own, U = cy > 0 && E[i - W] > rise && O[i - W] !== own;
     if (!(R || L || D || U)) return;
     let p = paths.get(own); if (!p) { p = new Path2D(); paths.set(own, p); }
-    const xa = P(sx), xb = P(sx + cs), ya = P(sy), yb = P(sy + cs);
-    if (R) { const v = P(sx + cs - ins); p.moveTo(v, ya); p.lineTo(v, yb); }
-    if (L) { const v = P(sx + ins); p.moveTo(v, ya); p.lineTo(v, yb); }
-    if (D) { const v = P(sy + cs - ins); p.moveTo(xa, v); p.lineTo(xb, v); }
-    if (U) { const v = P(sy + ins); p.moveTo(xa, v); p.lineTo(xb, v); }
-    if (gw) {
-      let q = glow.get(own); if (!q) { q = new Path2D(); glow.set(own, q); }
-      if (R) { q.moveTo(sx + cs - gi, sy); q.lineTo(sx + cs - gi, sy + cs); }
-      if (L) { q.moveTo(sx + gi, sy); q.lineTo(sx + gi, sy + cs); }
-      if (D) { q.moveTo(sx, sy + cs - gi); q.lineTo(sx + cs, sy + cs - gi); }
-      if (U) { q.moveTo(sx, sy + gi); q.lineTo(sx + cs, sy + gi); }
-    }
+    const dUR = mine(x + 1, cy - 1, own), dUL = mine(x - 1, cy - 1, own), dDR = mine(x + 1, cy + 1, own), dDL = mine(x - 1, cy + 1, own);
+    edges(p, sx, sy, ins, R, L, D, U, dUR, dUL, dDR, dDL, true);
+    if (gw) { let q = glow.get(own); if (!q) { q = new Path2D(); glow.set(own, q); } edges(q, sx, sy, gi, R, L, D, U, dUR, dUL, dDR, dDL, false); }
   });
-  ctx.lineCap = 'square'; ctx.lineJoin = 'miter';
+  ctx.lineCap = chf ? 'round' : 'square'; ctx.lineJoin = chf ? 'round' : 'miter';
   if (gw) for (const [own, q] of glow) { ctx.globalAlpha = own === selectedNation ? 0.34 : 0.2; ctx.lineWidth = gw; ctx.strokeStyle = S.nations[own].color; ctx.stroke(q); }
   // dark casing under every border line (not at 流畅), then the nation-coloured line on top
   if (GFX.level) {
@@ -337,7 +369,7 @@ function drawBorders(x0, y0, x1, y1, z) {
     ctx.lineWidth = lw * (sel ? 2 : 1); ctx.globalAlpha = sel ? 1 : 0.9;
     ctx.strokeStyle = S.nations[own].color; ctx.stroke(p);
   }
-  ctx.globalAlpha = 1;
+  ctx.globalAlpha = 1; ctx.lineCap = 'round'; ctx.lineJoin = 'miter';
 }
 function drawRoads(z) {
   const byId = new Map(S.cities.map(c => [c.id, c])), dirt = new Path2D(), paved = new Path2D();

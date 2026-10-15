@@ -172,7 +172,13 @@ function paintRegion(buf, bw, bo, X0, Y0, nx, ny, R) {
       const es = ES[o], nf = NF[o];
       const gxs = (ES[o + 1] - ES[o - 1]) * hr, gys = (ES[o + pw] - ES[o - pw]) * hr;
       const gm = Math.sqrt(gxs * gxs + gys * gys) + 1e-5;
-      let sd = (es - rise) / gm; sd = sd > 40 ? 40 : sd < -40 ? -40 : sd; sd += nf * 1.35;
+      let sd = (es - rise) / gm; sd = sd > 40 ? 40 : sd < -40 ? -40 : sd;
+      // natural shores slope gently; a steep step is a terraformed cell edge → roughen it much more so new land isn't a box
+      sd += nf * 1.35;
+      if (gm > 0.008) {   // + broader (32-px) noise, bilinear at half scale
+        const u = fx * 0.5 + 97, v = fy * 0.5 + 41, iu = u | 0, iv = v | 0, a = u - iu, c = v - iv, r0 = (iv & NTM) * NT, r1 = ((iv + 1) & NTM) * NT, u0 = iu & NTM, u1 = (iu + 1) & NTM;
+        sd += ((NZF[r0 + u0] * (1 - a) + NZF[r0 + u1] * a) * (1 - c) + (NZF[r1 + u0] * (1 - a) + NZF[r1 + u1] * a) * c) * Math.min(6, (gm - 0.008) * 150);
+      }
       let cov = sd * R + 0.5; cov = cov < 0 ? 0 : cov > 1 ? 1 : cov;
       const T = TP[o] + tan * amp, ncv = NZC[(myi & NTM) * NT + (mxi & NTM)];
       // relief normal: B-spline-smoothed surface (hides texel-scale steps) with some interpolating detail, plus fine
