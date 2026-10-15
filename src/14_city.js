@@ -83,7 +83,14 @@ function layoutFor(c) {
     // the ring follows the shore: segments and towers that would stand in the sea are dropped
     const onL = a => landAt(cx + Math.cos(a) * wall, cy + Math.sin(a) * wall * 0.75);
     for (let a = 0; a < 6; a++) { const x = Math.round(cx + Math.cos(a * 1.05) * wall), y = Math.round(cy + Math.sin(a * 1.05) * wall * 0.75); if (!landAt(x, y) || !landAt(x, y + 1)) continue; patrol.push([x, y]); items.push({ t: 'tower', x, y: y + 0.5, v: rng() }); }
-    for (let k = 0; k < 24; k++) { const a0 = k / 24 * TAU, a1 = (k + 1) / 24 * TAU; if (!onL((a0 + a1) / 2) || !onL(a0) && !onL(a1)) continue; let my = -1; for (let s = 0; s <= 2; s++) my = Math.max(my, Math.sin(a0 + (a1 - a0) * s / 2)); items.push({ t: 'wseg', a0, a1, x: cx, y: cy + my * wall * 0.75 }); }
+    // 15° steps, merged into ≤30° pieces that are each depth-sorted with the buildings
+    let r0 = -1;
+    const seg = (k0, k1) => { const a0 = k0 / 24 * TAU, a1 = k1 / 24 * TAU; let my = -1; for (let s = 0; s <= 4; s++) my = Math.max(my, Math.sin(a0 + (a1 - a0) * s / 4)); items.push({ t: 'wseg', a0, a1, x: cx, y: cy + my * wall * 0.75 }); };
+    for (let k = 0; k <= 24; k++) {
+      const a0 = k / 24 * TAU, a1 = (k + 1) / 24 * TAU, ok = k < 24 && onL((a0 + a1) / 2) && (onL(a0) || onL(a1));
+      if (r0 >= 0 && (!ok || k - r0 >= 2)) { seg(r0, k); r0 = -1; }
+      if (ok && r0 < 0) r0 = k;
+    }
   }
   if (!patrol.length) patrol.push([cx, cy + 2]);
   // streets: rows of a grid town, or a few winding lanes in an organic one
@@ -1301,24 +1308,42 @@ function drawCityGround(lay, z, sx0, sy0) {
   }
 }
 const WALLC = [['#7a5634', '#9a7448'], ['#b8a07a', '#cdb894'], ['#9a9488', '#b2ac9f'], ['#a29c90', '#bab4a6'], ['#a29c90', '#bab4a6']];
-function drawWallSeg(lay, it, z, era, sx0, sy0) {
-  const R = lay.wall * z, ry = R * 0.75, wh = (era === 0 ? 1.7 : era <= 2 ? 2.1 : 2.4) * z, [fc, tc] = WALLC[era], n = 3;
+// a wall piece is painted once into a small canvas at the sprite scale and then blitted
+function wallPaint(g, lay, it, z, era, sx0, sy0) {
+  const R = lay.wall * z, ry = R * 0.75, wh = (era === 0 ? 1.7 : era <= 2 ? 2.1 : 2.4) * z, [fc, tc] = WALLC[era], n = Math.max(2, Math.round((it.a1 - it.a0) / TAU * 48));
   const px = [], py = [];
   for (let k = 0; k <= n; k++) { const a = it.a0 + (it.a1 - it.a0) * k / n; px.push(sx0 + Math.cos(a) * R); py.push(sy0 + Math.sin(a) * ry); }
-  const am = (it.a0 + it.a1) / 2;
-  if (px[0] < -wh * 3 && px[n] < -wh * 3 || px[0] > view.w + wh * 3 && px[n] > view.w + wh * 3) return;
+  const am = (it.a0 + it.a1) / 2, path = dy => { g.beginPath(); for (let k = 0; k <= n; k++) g[k ? 'lineTo' : 'moveTo'](px[k], py[k] - dy); };
   if (era === 0) {
-    ctx.strokeStyle = fc; ctx.lineWidth = wh; ctx.setLineDash([Math.max(1, 0.42 * z), Math.max(0.5, 0.14 * z)]);
-    ctx.beginPath(); for (let k = 0; k <= n; k++) ctx[k ? 'lineTo' : 'moveTo'](px[k], py[k] - wh / 2); ctx.stroke(); ctx.setLineDash([]);
-    ctx.strokeStyle = tc; ctx.lineWidth = Math.max(1, 0.2 * z); ctx.beginPath(); for (let k = 0; k <= n; k++) ctx[k ? 'lineTo' : 'moveTo'](px[k], py[k] - wh * 0.7); ctx.stroke();
+    g.strokeStyle = fc; g.lineWidth = wh; g.setLineDash([Math.max(1, 0.42 * z), Math.max(0.5, 0.14 * z)]);
+    path(wh / 2); g.stroke(); g.setLineDash([]);
+    g.strokeStyle = tc; g.lineWidth = Math.max(1, 0.2 * z); path(wh * 0.7); g.stroke();
     return;
   }
-  if (it.fc === undefined || it.fe !== era) { it.fc = cSh(fc, 0.92 - 0.14 * Math.cos(am)); it.fe = era; }
-  ctx.fillStyle = it.fc;
-  ctx.beginPath(); for (let k = 0; k <= n; k++) ctx[k ? 'lineTo' : 'moveTo'](px[k], py[k]); for (let k = n; k >= 0; k--) ctx.lineTo(px[k], py[k] - wh); ctx.closePath(); ctx.fill();
-  ctx.strokeStyle = tc; ctx.lineWidth = Math.max(1, 0.75 * z); ctx.beginPath(); for (let k = 0; k <= n; k++) ctx[k ? 'lineTo' : 'moveTo'](px[k], py[k] - wh - 0.2 * z); ctx.stroke();
-  if (z >= 2.5) { ctx.strokeStyle = fc; ctx.lineWidth = Math.max(1, 0.4 * z); ctx.setLineDash([0.45 * z, 0.4 * z]); ctx.beginPath(); for (let k = 0; k <= n; k++) ctx[k ? 'lineTo' : 'moveTo'](px[k], py[k] - wh - 0.6 * z); ctx.stroke(); ctx.setLineDash([]); }
-  ctx.fillStyle = 'rgba(0,0,0,.18)'; ctx.beginPath(); for (let k = 0; k <= n; k++) ctx[k ? 'lineTo' : 'moveTo'](px[k], py[k]); for (let k = n; k >= 0; k--) ctx.lineTo(px[k], py[k] - Math.min(wh, 0.5 * z)); ctx.closePath(); ctx.fill();
+  g.fillStyle = cSh(fc, 0.92 - 0.14 * Math.cos(am));
+  g.beginPath(); for (let k = 0; k <= n; k++) g[k ? 'lineTo' : 'moveTo'](px[k], py[k]); for (let k = n; k >= 0; k--) g.lineTo(px[k], py[k] - wh); g.closePath(); g.fill();
+  g.strokeStyle = tc; g.lineWidth = Math.max(1, 0.75 * z); path(wh + 0.2 * z); g.stroke();
+  if (z >= 2.5) { g.strokeStyle = fc; g.lineWidth = Math.max(1, 0.4 * z); g.setLineDash([0.45 * z, 0.4 * z]); path(wh + 0.6 * z); g.stroke(); g.setLineDash([]); }
+  g.fillStyle = 'rgba(0,0,0,.18)'; g.beginPath(); for (let k = 0; k <= n; k++) g[k ? 'lineTo' : 'moveTo'](px[k], py[k]); for (let k = n; k >= 0; k--) g.lineTo(px[k], py[k] - Math.min(wh, 0.5 * z)); g.closePath(); g.fill();
+}
+function drawWallSeg(lay, it, z, era, sx0, sy0, K) {
+  let w = it._w;
+  if (!w || w.era !== era || w.g !== sprGen || w.K !== K && !sprZoom && sprNew < sprCap) {
+    {
+      sprNew++;
+      let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+      for (let k = 0; k <= 8; k++) { const a = it.a0 + (it.a1 - it.a0) * k / 8, x = Math.cos(a) * lay.wall, y = Math.sin(a) * lay.wall * 0.75; x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+      x0 -= 1; x1 += 1; y0 -= 3.6; y1 += 0.8;
+      const cw = Math.ceil((x1 - x0) * K), ch = Math.ceil((y1 - y0) * K);
+      const A = sprScratch(0, cw, ch), a = A.getContext('2d');
+      a.setTransform(1, 0, 0, 1, 0, 0); a.clearRect(0, 0, cw, ch);
+      wallPaint(a, lay, it, K, era, -x0 * K, -y0 * K);
+      const cv = document.createElement('canvas'); cv.width = cw; cv.height = ch; cv.getContext('2d').drawImage(A, 0, 0, cw, ch, 0, 0, cw, ch);
+      w = it._w = { cv, K, era, g: sprGen, x0, y0, cw, ch };
+    }
+  }
+  const s = z / w.K;
+  ctx.drawImage(w.cv, 0, 0, w.cw, w.ch, sx0 + w.x0 * z, sy0 + w.y0 * z, w.cw * s, w.ch * s);
 }
 function drawFlagAt(x, y, z, col, ph) {
   const h = 3.0 * z, fw = 1.9 * z, fh = 1.15 * z, t0 = animT * 4.5 + ph;
@@ -1359,7 +1384,7 @@ function drawCitySprites(c, z) {
   }
   for (const it of lay.items) {
     const t = it.t;
-    if (t === 'wseg') { drawWallSeg(lay, it, z, era, sx0, sy0); continue; }
+    if (t === 'wseg') { drawWallSeg(lay, it, z, era, sx0, sy0, K); continue; }
     if (!deco && (t === 'tree' || t === 'lamp' || t === 'park' || t === 'market') || t === 'lamp' && z < 4.5) continue;
     const sx = sx0 + (it.x - lay.cx) * z, sy = sy0 + (it.y - lay.cy) * z;
     if (sx < mL || sx > mR || sy < mT || sy > mB) continue;
