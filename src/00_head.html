@@ -447,6 +447,51 @@ label.chk input{accent-color:var(--sodium);margin:0}
 .evlist{margin:6px 0;padding-left:18px;display:flex;flex-direction:column;gap:4px}
 
 /* ---------- phone ---------- */
+/* ---------- 军务 modal: construction, production, forces ---------- */
+.mm-body{flex:1;overflow:auto;min-height:0;padding-block:14px 32px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.mm-wrap{max-width:1000px;margin:0 auto}
+.mm-wrap h3{margin:22px 0 8px;font-size:12px;font-weight:500;letter-spacing:.14em;color:var(--ink-3);display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.mm-wrap h3 small{font-size:12px;letter-spacing:0;font-weight:400}
+.mm-wrap .chk{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-2);margin-top:10px}
+.bq{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr) 84px 28px;gap:6px 10px;align-items:center;font-size:12.5px;color:var(--ink-2)}
+.bq .track,.oq .track{height:5px;border-radius:3px;background:var(--panel-3);overflow:hidden}
+.bq .fill,.oq .fill{display:block;height:100%;background:var(--sodium)}
+.bq .st,.oq .st{font-size:11.5px;color:var(--ink-3);text-align:right;white-space:nowrap}
+.bq .btn.small,.oq .btn.small,.stk .btn.small{padding:0 7px}
+.bleg{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:11.5px;color:var(--ink-3);margin-bottom:4px}
+.bleg b{color:var(--ink-2);font-weight:500}
+.crow{display:flex;flex-wrap:wrap;align-items:center;gap:4px 12px;padding:8px 0;border-bottom:1px solid var(--line)}
+.crow .cn{min-width:150px;font-size:13px;color:var(--ink)}
+.crow .cn small{color:var(--ink-3);font-size:11.5px;margin-left:4px}
+.crow .cb{flex:1;min-width:140px;font-size:11.5px;color:var(--ink-3)}
+.bchips{display:flex;flex-wrap:wrap;gap:4px}
+.bchip{min-width:34px;height:28px;padding:0 7px;border-radius:5px;border:1px solid var(--line);background:var(--panel-2);color:var(--ink-2);font-size:12px;cursor:pointer}
+.bchip:hover:not(:disabled){color:var(--ink);border-color:var(--sodium)}
+.bchip:disabled{opacity:.32;cursor:default}
+.oq{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) 92px auto;gap:6px 10px;align-items:center;font-size:12.5px;color:var(--ink-2)}
+.oq .ob{display:flex;gap:3px}
+.useg{margin-top:4px}
+.ucards{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:8px;margin-top:10px}
+.ucard{border:1px solid var(--line);border-radius:8px;background:var(--panel-2);padding:9px 11px;display:flex;flex-direction:column;gap:3px}
+.ucard .un{font-size:13.5px;color:var(--ink);display:flex;justify-content:space-between;gap:6px}
+.ucard .un small{font-size:11px;color:var(--ink-3);font-weight:400}
+.ucard .us{font-size:11.5px;color:var(--ink-3)}
+.ucard.old{opacity:.72}
+.ucard .ub{display:flex;gap:4px;flex-wrap:wrap;margin-top:4px}
+.stk{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) 70px auto;gap:5px 10px;align-items:center;font-size:12.5px;color:var(--ink-2);padding:2px 0}
+.stk .dim{color:var(--ink-3);font-size:11.5px}
+.stk .tagx{font-size:10.5px;border-radius:3px;padding:0 4px;margin-left:4px;border:1px solid var(--line);color:var(--ink-3)}
+.stk .tagx.main{color:var(--leaf);border-color:rgba(127,209,139,.5)}
+.capbar{position:relative;height:10px;border-radius:5px;background:var(--panel-3);overflow:hidden;margin-top:8px}
+.capbar .fill{display:block;height:100%;background:var(--sea)}
+.capbar .over{position:absolute;top:0;bottom:0;right:0;background:repeating-linear-gradient(45deg,rgba(255,95,107,.65) 0 4px,transparent 4px 8px)}
+.lawseg{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.lawseg button{flex:1 1 150px;text-align:left;padding:8px 10px;border-radius:6px;border:1px solid var(--line);background:var(--panel-2);color:var(--ink-2);cursor:pointer;font-size:13px}
+.lawseg button small{display:block;font-size:11px;color:var(--ink-3);margin-top:2px;line-height:1.35}
+.lawseg button[aria-pressed="true"]{border-color:var(--sodium);color:var(--sodium);background:var(--sodium-dim)}
+.ibld{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
+.ibld .tag{font-size:11.5px}
+.objsel{background:var(--panel-2);color:var(--ink);border:1px solid var(--line);border-radius:6px;height:26px;font:inherit;font-size:12px;padding:0 6px;max-width:150px}
 @media (max-width:900px){
   body{overflow:auto}
   .app{grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto auto;height:auto;min-height:100%}
@@ -693,6 +738,19 @@ label.chk input{accent-color:var(--sodium);margin:0}
     <div class="tm-tree"><div class="tm-canvas" id="fmCanvas"></div></div>
     <div class="tm-detail" id="fmDetail"></div>
   </div>
+</div>
+<div class="tmodal" id="milModal" hidden role="dialog" aria-modal="true" aria-labelledby="mmTitle">
+  <div class="tm-head">
+    <h2 id="mmTitle">军务</h2>
+    <div class="tm-legend" id="mmLegend">建设工厂和基地，下达生产订单，决定养多少兵。</div>
+    <button class="btn" id="mmClose">关闭</button>
+  </div>
+  <div class="tm-tabs" id="mmTabs" role="tablist" aria-label="军务">
+    <button class="tm-tab" role="tab" data-mm="build" aria-selected="true">建设</button>
+    <button class="tm-tab" role="tab" data-mm="prod" aria-selected="false">生产</button>
+    <button class="tm-tab" role="tab" data-mm="force" aria-selected="false">兵力</button>
+  </div>
+  <div class="mm-body" id="mmBody"></div>
 </div>
 <div class="evmodal" id="evModal" hidden></div>
 <div class="modesel" id="modeSel" hidden role="dialog" aria-modal="true" aria-labelledby="msTitle">

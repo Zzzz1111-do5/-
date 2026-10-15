@@ -3,7 +3,7 @@
 一个只有一个 Activity 的 WebView 外壳：把离线版网页打包进 APK 的 `assets/index.html`，全屏运行。
 
 - 完全离线，**不申请任何权限**（连网络权限都没有），没有 JS 桥接对象。
-- 包名 `com.blueplanet.jiyuan`，minSdk 21（Android 5.0）/ targetSdk 34，版本 4.1（versionCode 1）。
+- 包名 `com.blueplanet.jiyuan`，minSdk 21（Android 5.0）/ targetSdk 34，版本 4.2（versionCode 2）。
 - 沉浸式全屏，旋转屏幕不会重建页面，前台时保持亮屏。
 - 页面里的 http(s) 链接交给系统浏览器打开；WebView 渲染进程崩溃时自动重建而不是闪退。
 - 切到后台时调用页面的 `window.__appPause()`（立即存档并暂停），回到前台调用 `window.__appResume()`。

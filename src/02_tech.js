@@ -198,7 +198,8 @@ function computeMult(n) {
     m.stab += b.stab || 0; m.spread *= 1 + (b.spread || 0); m.coop += b.coop || 0; m.renewK *= 1 + (b.renew || 0); m.tradeK += b.trade || 0; m.growth += b.growth || 0;
     if (b.arm) m.q.arm *= 1 + b.arm; if (b.navy) { m.q.scr *= 1 + b.navy; m.q.cap *= 1 + b.navy; m.q.cv *= 1 + b.navy; m.q.sub *= 1 + b.navy; }
   }
-  if (n.mobil) { m.mil *= 1 + 0.15 * n.mobil; m.sci *= 1 - 0.06 * n.mobil; m.growth *= 1 - 0.1 * n.mobil; m.stab -= 0.04 * n.mobil; }
+  const law = n.law === undefined ? 1 : n.law;      // conscription law (06p_prod.js): its cost to the home front
+  if (law !== 1) { m.sci *= 1 - LAW_SCI[law]; m.growth *= 1 - LAW_GROW[law]; m.stab += LAW_STAB[law]; }
   const I = typeof IDEO_BY_ID !== 'undefined' ? IDEO_BY_ID[n.ideo || 'tribal'] : null;
   if (I) { m.sci *= I.sci; m.mil *= I.mil; m.growth *= I.growth; m.stab += I.stab; m.spread *= I.spread; m.coop += I.coop; }
   const tp = n.trade ? Object.keys(n.trade).length : 0;

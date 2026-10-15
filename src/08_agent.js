@@ -50,7 +50,7 @@ function normW(w) { let s = 0; for (const v of w) s += Math.max(0, v); for (let 
 function ensureEco(n) {
   if (!n.eco) {
     const d = doct(n.ideo);
-    n.eco = { tax: d.tax, treasury: 0, gdp: 0, exp: 0, will: 1, rev: 0, spend: 0, alloc: d.w.slice(), stock: [0, 0, 0, 0, 0, 0, 0], lv: [1, 1, 1, 1, 1, 1, 1], fund: [0, 0], K: { mil: 1, sci: 1, ind: 1, infra: 1, stab: 0, prop: 1, space: 1, wel: 1 }, rails: 0, railCov: 0, inst: 0, hist: [], init: 0, snap: null };
+    n.eco = { tax: d.tax, treasury: 0, gdp: 0, exp: 0, will: 1, rev: 0, spend: 0, alloc: d.w.slice(), stock: [0, 0, 0, 0, 0, 0, 0], lv: [1, 1, 1, 1, 1, 1, 1], fund: [0, 0, 0], K: { mil: 1, sci: 1, ind: 1, infra: 1, stab: 0, prop: 1, space: 1, wel: 1 }, rails: 0, railCov: 0, inst: 0, hist: [], init: 0, snap: null };
   }
   if (!n.ai) n.ai = { goal: 'develop', since: S.year, target: -1, prep: 0, weary: 0, log: [], grudge: {}, persona: { zeal: 0.5 + rand(), caution: 0.5 + rand(), coop: 0.5 + rand() }, advice: '' };
   return n.eco;
@@ -74,12 +74,13 @@ function econTick(n) {
   const war = enemiesOf(n.id).length;
   const prodPerM = 2 * Math.pow(1.55, era) * (1 + 0.5 * Math.min(1.5, fac / pm / 2.5)) * (1 + 0.25 * e.railCov);
   const L = pm * prodPerM, I = fac * 3 * Math.pow(1.2, Math.max(0, era - 4)) * n.st.sat;
-  const W = clamp(d.market * Math.pow((1 - e.tax) / 0.82, 1.5) * (0.55 + 0.6 * n.stabV) * (war ? 0.85 : 1) * (1 + 0.08 * Math.min(4, trade)), 0.15, 2);
+  const Im = m.ind > 0 ? ((n.st.mf || 0) + (n.st.dock || 0)) * 3 * Math.pow(1.2, Math.max(0, era - 4)) * n.st.sat * 0.4 : 0;     // industrial war plants: output, but no exports
+  const W = clamp(d.market * Math.pow((1 - e.tax) / 0.82, 1.5) * (0.55 + 0.6 * n.stabV) * (war ? 0.85 : 1) * (1 + 0.08 * Math.min(4, trade)) * (1 - LAW_WILL[lawOf(n)]), 0.15, 2);
   const mx = ensureMil(n);
   if (!war) mx.block *= 0.8;
   // exports are cut by submarine raiding and blockade; strategic bombing wrecks output
   const X = (I * 0.25 + L * 0.05) * ideoOf(n).trade * (1 + 0.15 * Math.min(5, trade) + 0.3 * coast) * (1 + 0.3 * e.railCov) * (1 - mx.block);
-  const Y = ((L + I) * (0.6 + 0.4 * W) + X * W) * (1 - 0.25 * mx.block - 0.3 * mx.bombed);
+  const Y = ((L + I + Im) * (0.6 + 0.4 * W) + X * W) * (1 - 0.25 * mx.block - 0.3 * mx.bombed);
   const R = e.tax * Y * (0.65 + 0.35 * n.stabV);
   e.will = W; e.exp = X; e.gdp = Y; e.rev = R;
   let spend = R * 0.95 + Math.max(0, e.treasury - 2 * R) * 0.25;
@@ -91,6 +92,7 @@ function econTick(n) {
   if (!e.init) { for (let k = 0; k < 7; k++) e.stock[k] = 20 * spend * a[k]; e.init = 1; }
   for (let k = 0; k < 7; k++) { e.stock[k] = e.stock[k] * 0.95 + spend * a[k]; e.lv[k] = e.stock[k] / (20 * ref); }
   e.fund[0] += spend * a[2] * 0.35; e.fund[1] += spend * a[1] * 0.25;
+  e.fund[2] = Math.min((e.fund[2] || 0) + spend * (0.35 * a[3] + 0.15 * a[2]), Math.max(50, Y * 0.5));      // construction (factories, bases)
   if (S.tick % 3 === n.id % 3) buildProjects(n);
   const L3 = k => Math.min(3, e.lv[k]);
   e.K.mil = 0.75 + 0.25 * L3(0);
@@ -150,6 +152,8 @@ function buildProjects(n) {
       if (best.inst === 1 || e.inst % 4 === 0) think(n, `在${best.name}兴建${nm}（第 ${best.inst} 座）`, false);
     }
   } else e.fund[1] = Math.min(e.fund[1], costI * 3);
+  // factories, dockyards and bases (the player's own queue comes first; 自动建设 lets the advisor add to it)
+  if (!isPlayer(n) || S.player.autoBuild !== false) aiBuild(n);
 }
 
 /* ---------- the agents ---------- */
@@ -250,6 +254,7 @@ function agentThink(n) {
   ai.target = g === 'expand' && A.prey ? A.prey.id : g === 'defend' && A.threat ? A.threat.id : g === 'unify' && A.same ? A.same.id : -1;
   aiBudget(n, A, true);
   milThink(n, A);
+  aiLaw(n);
   // losing wars: sue for peace
   for (const w of A.wars) {
     if (w.civil) continue;

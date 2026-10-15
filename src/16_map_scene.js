@@ -43,6 +43,7 @@ function drawMapScene() {
     ctx.fillStyle = n.color; ctx.strokeStyle = 'rgba(6,10,20,.85)'; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.arc(v.x, v.y, rr, 0, TAU); ctx.fill(); ctx.stroke();
     if (c.cap) { ctx.strokeStyle = n.color; ctx.lineWidth = 1.3; ctx.beginPath(); ctx.arc(v.x, v.y, rr + 2.5, 0, TAU); ctx.stroke(); }
+    if (c.bld && z >= 0.9) baseGlyphs(c.bld, v.x + rr + 3, v.y - rr - 1, n.color);
     ctx.globalAlpha = 1; v.r = rr + 3;
   }
   screenCities = vis;
@@ -55,6 +56,16 @@ function drawMapScene() {
   drawWarMarks(z);
   drawSelection(z);
   if (showNames) drawCityLabels(vis, z);
+}
+// tiny markers for military bases next to a city dot: flag (army), anchor (navy), plane (air), bastion (fort)
+function baseGlyphs(b, x, y, col) {
+  let k = 0;
+  ctx.lineWidth = 1.2; ctx.strokeStyle = 'rgba(6,10,20,.9)';
+  const at = () => x + (k++) * 7;
+  if (b.army) { const gx = at(); ctx.fillStyle = col; ctx.fillRect(gx, y - 5, 4, 3); ctx.fillStyle = '#e8e8e8'; ctx.fillRect(gx - 0.6, y - 5, 1, 6); }
+  if (b.navy) { const gx = at() + 2; ctx.strokeStyle = '#cfe4f2'; ctx.beginPath(); ctx.moveTo(gx, y - 5); ctx.lineTo(gx, y + 1); ctx.moveTo(gx - 2.5, y - 1); ctx.quadraticCurveTo(gx, y + 3, gx + 2.5, y - 1); ctx.moveTo(gx - 1.5, y - 3.5); ctx.lineTo(gx + 1.5, y - 3.5); ctx.stroke(); }
+  if (b.air) { const gx = at() + 2; ctx.fillStyle = '#dfe6ec'; ctx.fillRect(gx - 0.6, y - 5, 1.2, 6); ctx.fillRect(gx - 3, y - 2.5, 6, 1.2); ctx.fillRect(gx - 1.5, y + 0.2, 3, 0.9); }
+  if (b.fort) { const gx = at() + 2; ctx.fillStyle = '#b8b0a0'; ctx.beginPath(); ctx.moveTo(gx, y - 5); ctx.lineTo(gx + 3, y - 2.5); ctx.lineTo(gx + 2, y + 1); ctx.lineTo(gx - 2, y + 1); ctx.lineTo(gx - 3, y - 2.5); ctx.closePath(); ctx.fill(); }
 }
 // the base bitmap, repeated east-west; rows > 0 / < 0 limits it to the top / bottom rows (the mirrored polar backdrop)
 function drawMapImage(x0, x1, y0, y1, z, rows) {

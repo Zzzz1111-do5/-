@@ -3,7 +3,10 @@
    nuclear deterrence, the military research track and the AI's
    army / navy / air choices.
    Contract (battle renderer, UI):
-     milForces(n) → { R: {role: strength}, base, L, S, A, sp: [land, sea, air] effective split }
+     milForces(n) → { R: {role: strength}, base, L, S, A, sp: [land, sea, air] shares of the units in service,
+                      cap: establishment (UE), tot: units in stock (UE), act: share of the stock that is in service }
+     Strength now comes from the unit stock n.mx.stock (06p_prod.js); a full establishment laid out by split × mix
+     equals the old population-driven formula.
      power(n)     = L + 0.55·S·(0.4 + 0.6·coast) + 0.85·A   (same magnitude as the old formula)
      w.air ∈ [0,1]  side a's share of air superiority (0.5 = contested; no aircraft → 0.5)
      w.sea ∈ [0,1]  side a's share of sea control (0.5 = contested); only meaningful when w.th.sea
@@ -13,7 +16,7 @@
    ===================================================================== */
 const PWR_K = 1.2;          // calibration of power() against the old m.mil curve (navies count 0.55× in power)
 const CAP_K = 1;            // calibration of the yearly chance to attempt a siege
-const MX_V = 1;
+const MX_V = 2;
 const EXCL = {}; for (const t of TECHS) if (t.excl) (EXCL[t.excl] = EXCL[t.excl] || []).push(t);
 // transient strategic events for the renderer (not saved; newest last, max 40; the renderer may splice what it has shown):
 // { t: 'nuke'|'sbomb'|'msl'|'orbital'|'naval'|'air'|'invade', a: attacker id, b: target id, i: target cell, from: attacker capital cell, y, big, retal, via: 'icbm'|'bomber' }
@@ -25,7 +28,8 @@ function mxDefaults(n) {
   const D = MIL_DOCT[n.ideo] || MIL_DOCT.tribal;
   return { v: MX_V, split: D.split.slice(), mix: { land: Object.assign({}, D.land), sea: Object.assign({}, D.sea), air: Object.assign({}, D.air) }, auto: true,
     att: [0, 0, 0], bombed: 0, block: 0, coast: 0, overseas: 0, island: false, F: null, tick: -1, policy: { sbomb: true, unrestricted: false },
-    pref: {}, airCap: 0, said: [0, 0, 0], reform: -1e9, nukeHit: -1e9, prepSea: -1e9, lock: -1e9, need: null, pickAt: -1e9, idle: false };
+    pref: {}, airCap: 0, said: [0, 0, 0], reform: -1e9, nukeHit: -1e9, prepSea: -1e9, lock: -1e9, need: null, pickAt: -1e9, idle: false,
+    stock: null, queue: [], prodAuto: true, pp: [0, 0, 0, 0] };
 }
 function ensureMil(n) {
   let mx = n.mx;
@@ -49,14 +53,20 @@ function milForces(n) {
   const m = n.mult;
   let co = 0; for (const c of n.cl) if (c.coastal) co++;
   mx.coast = n.cl.length ? co / n.cl.length : 0;
-  const base = Math.pow(n.st.pop + 1, 0.8) * m.mil * (1 + 0.08 * (n.legions + m.era)) * (n.eco ? n.eco.K.mil : 1) * m.manpower * (1 - 0.5 * mx.bombed) * (mx.nukeHit > S.year ? 0.85 : 1) * PWR_K;
-  const sp = effSplit(n), R = {};
-  for (let d = 0; d < 3; d++) {
-    const rs = ROLES[DOMS[d]], mix = mx.mix[DOMS[d]];
-    let w = 0; for (const r of rs) if (m.best[r]) w += (mix[r] || 0) + 0.02;
-    for (const r of rs) { const v = roleVal(n, r); R[r] = v > 0 && w > 0 ? base * sp[d] * ((mix[r] || 0) + 0.02) / w * v * (1 - mx.att[d]) : 0; }
+  if (!mx.stock && (n.st.pop || 0) > 0) initStock(n);
+  const cap = capUE(n), qk = qualK(n), st = mx.stock || {}, R = {}, D = [0, 0, 0];
+  for (const r in ROLE_OF_DOM) R[r] = 0;
+  let tot = 0; for (const id in st) tot += st[id];
+  const act = tot > cap ? cap / tot : 1;
+  for (const id in st) {
+    const u = UNIT_BY_ID[id], rs = CROLE[id]; if (!u || !rs || !rs.length) continue;
+    const d = DOM[u.dom]; if (d === 1 && !mx.coast) continue;      // a fleet without a single port cannot sail
+    D[d] += st[id];
+    const k = st[id] * act * u.rating * qk * UEK * (1 - mx.att[d]) / rs.length;
+    for (const r of rs) R[r] += k * (m.q[r] === undefined ? 1 : m.q[r]);
   }
-  const F = { R, base, sp, L: R.inf + R.art + R.arm + R.at + R.aa, S: R.scr + R.cap + R.cv + R.sub, A: R.fi + R.cas + R.bomb + R.nb + R.uav };
+  const dt = D[0] + D[1] + D[2];
+  const F = { R, base: cap * UEK * qk, cap, tot, act, sp: dt > 0 ? [D[0] / dt, D[1] / dt, D[2] / dt] : effSplit(n), L: R.inf + R.art + R.arm + R.at + R.aa, S: R.scr + R.cap + R.cv + R.sub, A: R.fi + R.cas + R.bomb + R.nb + R.uav };
   F.P = F.L + 0.55 * F.S * (0.4 + 0.6 * mx.coast) + 0.85 * F.A;
   mx.F = F; mx.tick = S.tick;
   return F;
@@ -119,7 +129,6 @@ function theatre(w) {
   w.th = { k, y: S.year, c: cc, land, sea: !!p && A.mx.coast > 0 && B.mx.coast > 0 && (!land || (p.a.coastal && p.b.coastal)), d: p ? p.d : 99 };
   return w.th;
 }
-function frontDist(X, w) { const cc = capitalCell(X); return cc >= 0 && w.front >= 0 ? cellDist(cc, w.front) : 0; }
 function nearFrontCities(Y, w, k) { const f = w.front >= 0 ? w.front : capitalCell(Y); return Y.cl.slice().sort((a, b) => cellDist(a.i, f) - cellDist(b.i, f)).slice(0, k); }
 function cryptoEdge(X, Y) { const a = X.mult, b = Y.mult; return 1 + 0.2 * clamp(a.crypto - (b.cyber ? 0 : b.crypto) + (a.cyber && !b.cyber ? 0.25 : 0), -0.5, 0.5); }
 const sideOf = (w, n) => w.a === n.id ? 0 : 1;
@@ -143,13 +152,13 @@ function warYear(w) {
 }
 function airWar(w, A, B, FA, FB) {
   if (FA.A + FB.A <= 0) { w.air = 0.5; return; }
-  const fi = (X, Y, F) => (F.R.fi + 0.3 * F.R.cv * X.mult.cvAir) * (1 + 0.3 * X.mult.radar) * (1 + X.mult.supK) * (1 + 0.3 * X.mult.stealth * (1 - 0.5 * Math.min(1, Y.mult.radar)));
+  const fi = (X, Y, F) => (F.R.fi + 0.3 * F.R.cv * X.mult.cvAir) * (1 + 0.3 * X.mult.radar) * (1 + X.mult.supK) * (1 + 0.3 * X.mult.stealth * (1 - 0.5 * Math.min(1, Y.mult.radar))) * (1 + 0.1 * baseNear(X, 'air', w.front, 25));
   const fa = fi(A, B, FA), fb = fi(B, A, FB);
   const sup = fa + fb > 0 ? (fa - fb) / (fa + fb) : FA.A > FB.A ? 0.6 : FB.A > FA.A ? -0.6 : 0;
   const prev = 2 * w.air - 1, c = prev * 0.5 + sup * 0.5;
   w.air = (1 + c) / 2;
-  if (FA.A > 0) A.mx.att[2] = Math.min(0.7, A.mx.att[2] + 0.04 * (1 - c) / 2 * A.mult.airLossK);
-  if (FB.A > 0) B.mx.att[2] = Math.min(0.7, B.mx.att[2] + 0.04 * (1 + c) / 2 * B.mult.airLossK);
+  if (FA.A > 0) milHit(A, 2, 0.04 * (1 - c) / 2 * A.mult.airLossK, 0.7);
+  if (FB.A > 0) milHit(B, 2, 0.04 * (1 + c) / 2 * B.mult.airLossK, 0.7);
   if (Math.abs(c) > 0.3 && fa > 0 && fb > 0) {
     const win = c > 0 ? A : B, lose = win === A ? B : A;
     if (S.tick % 4 === 0) { docStat(win.mult.doc.air, true); docStat(lose.mult.doc.air, false); }
@@ -160,7 +169,7 @@ function airWar(w, A, B, FA, FB) {
     }
   }
 }
-function navalScore(X, Y, FX, FY, sup, near) {
+function navalScore(X, Y, FX, FY, sup, near, nbase) {
   const R = FX.R, Q = FY.R, m = X.mult;
   const screenK = 0.65 + 0.35 * clamp(R.scr / (0.6 * (R.cap + R.cv) + 1e-9), 0, 1);
   const asw = Q.scr * (1 + Y.mult.asw);
@@ -168,19 +177,19 @@ function navalScore(X, Y, FX, FY, sup, near) {
   const cvStrike = R.cv * (1 + m.cvAir) * (1 - 0.5 * clamp(Y.mult.fleetAA, 0, 0.9)) * (0.7 + 0.3 * Math.max(0, sup));
   const gunNerf = Q.cv > 0 && R.cv === 0 && m.era >= 5 ? 0.55 : 1;
   const landAir = near ? (R.nb + 0.3 * R.cas) * clamp(0.4 + sup, 0, 1.4) : 0;
-  const s = (R.cap * screenK * gunNerf + 0.5 * R.scr + 1.4 * cvStrike + 0.9 * subEff + landAir) * (1 + 0.2 * m.radar) * cryptoEdge(X, Y) * (0.75 + 0.5 * rand());
+  const s = (R.cap * screenK * gunNerf + 0.5 * R.scr + 1.4 * cvStrike + 0.9 * subEff + landAir) * (1 + 0.2 * m.radar) * (1 + 0.08 * (nbase || 0)) * cryptoEdge(X, Y) * (0.75 + 0.5 * rand());
   return { s, subEff };
 }
 function seaWar(w, A, B, FA, FB, th) {
   const supA = airC(w, 0), near = th.d < 14;
-  const a = navalScore(A, B, FA, FB, supA, near), b = navalScore(B, A, FB, FA, -supA, near);
+  const a = navalScore(A, B, FA, FB, supA, near, baseNear(A, 'navy', w.front, 20)), b = navalScore(B, A, FB, FA, -supA, near, baseNear(B, 'navy', w.front, 20));
   let na = a.s, nb = b.s;
   if (na + nb > 0) {
     if (na > nb) na *= 1 + A.mult.decisive; else nb *= 1 + B.mult.decisive;
     const nc = (na - nb) / (na + nb), prev = 2 * w.sea - 1, c = prev * 0.6 + nc * 0.4;
     w.sea = (1 + c) / 2;
-    if (FA.S > 0) A.mx.att[1] = Math.min(0.7, A.mx.att[1] + 0.04 * nb / (na + nb));
-    if (FB.S > 0) B.mx.att[1] = Math.min(0.7, B.mx.att[1] + 0.04 * na / (na + nb));
+    if (FA.S > 0) milHit(A, 1, 0.04 * nb / (na + nb), 0.7);
+    if (FB.S > 0) milHit(B, 1, 0.04 * na / (na + nb), 0.7);
     if (Math.abs(nc) > 0.3 && FA.S > 0 && FB.S > 0) {
       const win = nc > 0 ? A : B, lose = win === A ? B : A;
       docStat(win.mult.doc.sea, true); docStat(lose.mult.doc.sea, false);
@@ -213,7 +222,7 @@ function strategicStrike(X, Y, FX, FY, supX, w) {
     const intercept = clamp((FY.R.fi * (1 - Math.max(0, supX)) + 0.5 * FY.R.aa) / (FX.R.bomb + 1e-9), 0, 1);
     bombs = FX.R.bomb * (0.4 + m.sbomb) * (1 - 0.7 * intercept);
     sb += bombs;
-    X.mx.att[2] = Math.min(0.7, X.mx.att[2] + 0.03 * intercept * FX.R.bomb / (FX.A + 1e-9));
+    milHit(X, 2, 0.03 * intercept * FX.R.bomb / (FX.A + 1e-9), 0.7);
   }
   const tx = FX.L + FX.S + FX.A, ty = FY.L + FY.S + FY.A;
   if (m.msl) sb += 0.04 * m.msl * tx * clamp(1 - Y.mult.abm * (1 - m.mslPen), 0.1, 1) * (0.2 + 0.8 * Math.min(1, FX.sp[1] + FX.sp[2]));
@@ -221,7 +230,7 @@ function strategicStrike(X, Y, FX, FY, supX, w) {
   if (sb <= 0) return;
   const k = sb / (0.3 * ty + sb + 1e-9);
   Y.mx.bombed = Math.min(0.5, Y.mx.bombed + 0.15 * k);
-  for (const c of nearFrontCities(Y, w, 3)) c.fac *= 1 - 0.03 * k;
+  for (const c of nearFrontCities(Y, w, 3)) { c.fac *= 1 - 0.03 * k; if (c.bld && c.bld.mf > 0 && rand() < 0.25 * k) { c.bld.mf--; c.lay = null; } }
   Y.stabV = Math.max(0, Y.stabV - 0.004 * k);
   if (X.mx.policy.sbomb && bombs > 0) for (const o of S.nations) if (o.alive && o !== X && o !== Y && ideoOf(o).demo && !atWar(o.id, X.id) && rand() < 0.3) addTrust(o.id, X.id, -0.02);
   if (k > 0.04 && S.year - (w.yr.bomb || -1e9) >= 10) {
@@ -240,8 +249,8 @@ function landStrength(X, Y, FX, FY, supX, w) {
   const atCov = R.arm > 0 ? clamp((Q.at + 0.3 * Q.inf * (1 + Y.mult.infAT) + 0.25 * Q.art) / R.arm * (1 - m.armorRes), 0, 1) : 1;
   const LA = R.inf + 1.2 * R.art + R.arm * (1 + 0.5 * (1 - atCov)) + 0.6 * R.at + 0.2 * R.aa;
   const air = R.cas + R.uav + 0.6 * R.bomb, aaCov = air > 0 ? clamp(Q.aa / air, 0, 1) : 0;
-  const CAS = air * clamp(0.4 + supX, 0, 1.4) * (1 - 0.5 * aaCov) * (1 + m.casK);
-  const supply = w ? clamp(1 - Math.max(0, frontDist(X, w) - (20 + 8 * m.supply)) / 60, 0.55, 1) : 1;
+  const CAS = air * clamp(0.4 + supX, 0, 1.4) * (1 - 0.5 * aaCov) * (1 + m.casK) * (w ? 1 + 0.1 * baseNear(X, 'air', w.front, 25) : 1);
+  const supply = w ? clamp(1 - Math.max(0, supplyDist(X, w) - (20 + 8 * m.supply)) / 60, 0.55, 1) : 1;
   const plan = w ? 1 + Math.min(0.3, m.planK * (S.year - w.start)) : 1;
   return (LA + 0.8 * CAS) * supply * plan * cryptoEdge(X, Y);
 }
@@ -254,15 +263,15 @@ function landWar(w, A, B, FA, FB, th) {
   const win = pa > pb ? A : B, lose = win === A ? B : A, ws = win === A ? 0 : 1;
   if (!S.flags.tankWar) for (const X of [A, B]) if (TANKS.has(X.mult.best.arm) && (X === A ? FA : FB).R.arm > 0 && th.land) { S.flags.tankWar = S.year; const c = cityById(X.capital); log('war', `${X.name}的坦克第一次出现在战场上`, w.front >= 0 ? w.front : c ? c.i : -1, true); break; }
   if (rand() < 0.2 * (1 + win.mult.tempo) * CAP_K) {
-    const lc = nearestPair(lose, win), overseas = !th.land;
-    const seaW = seaC(w, ws), airW = airC(w, ws);
+    const overseas = !th.land, seaW = seaC(w, ws), airW = airC(w, ws);
     const FW = win === A ? FA : FB, FL = lose === A ? FA : FB;
     const reach = 10 + win.mult.range * 0.5 + win.mult.sea * 0.3 + 2 * win.mult.supply + (win.mult.para && airW > 0.3 ? 6 : 0);
+    const lc = siegeTarget(w, win, lose, reach);
     const free = FL.S <= 0 && (win.mult.sea > 0 || FW.S > 0);      // nobody contests the sea lanes
     const seaOK = !overseas || seaW > 0.15 || free || (S.year - w.start > 60 && rand() < 0.2);
     if (lc && seaOK && lc.d < reach) {
       const amph = overseas ? (win.mult.era >= 5 ? 0.35 + 0.65 * Math.min(1, win.mult.amphib) : 0.8) : (lc.c.coastal && seaW > 0.4 ? 1.3 : 1);
-      if (rand() < (1 + 0.5 * win.mult.siege) / lose.mult.def * amph) {
+      if (rand() < (1 + 0.5 * win.mult.siege) / lose.mult.def * amph / (1 + 0.35 * bget(lc.c, 'fort'))) {
         if (overseas && !free) { S.stats.invasions = (S.stats.invasions || 0) + 1; milEvent({ t: 'invade', a: win.id, b: lose.id, i: lc.c.i }); }
         docStat(win.mult.doc.land, true); docStat(lose.mult.doc.land, false);
         captureCity(lc.c, win, lose, w);
@@ -270,8 +279,8 @@ function landWar(w, A, B, FA, FB, th) {
     }
   }
   const lk = th.land ? 1 : 0.35;      // armies facing each other across the sea only skirmish
-  lose.mx.att[0] = Math.min(0.6, lose.mx.att[0] + 0.04 * lk * lose.mult.lossK);
-  win.mx.att[0] = Math.min(0.6, win.mx.att[0] + 0.015 * lk * win.mult.lossK);
+  milHit(lose, 0, 0.04 * lk * lose.mult.lossK, 0.6);
+  milHit(win, 0, 0.015 * lk * win.mult.lossK, 0.6);
 }
 function costK(n, d) {
   const F = n.mx.F; if (!F) return 1;
@@ -301,7 +310,8 @@ function nukeStrike(X, Y, w, retal) {
   if (!c) return false;
   const big = X.mult.nukeY >= 2, k = big ? 0.2 : 0.4, dead = c.pop * (1 - k);
   c.pop *= k; c.fac *= 0.1; c.lay = null; c.nuked = S.year;
-  for (const o of S.cities) if (o !== c && cellDist(o.i, c.i) < (big ? 3 : 2)) { o.pop *= big ? 0.8 : 0.9; o.fac *= 0.7; }
+  if (c.bld) { const b = c.bld; b.mf = Math.floor(b.mf * 0.1); b.dock = Math.floor(b.dock * 0.1); b.cf = Math.floor(b.cf * 0.1); for (const q of ['army', 'navy', 'air', 'fort']) b[q] = Math.max(0, b[q] - 2); }
+  for (const o of S.cities) if (o !== c && cellDist(o.i, c.i) < (big ? 3 : 2)) { o.pop *= big ? 0.8 : 0.9; o.fac *= 0.7; if (o.bld) { o.bld.mf = Math.floor(o.bld.mf * 0.7); o.bld.dock = Math.floor(o.bld.dock * 0.7); o.lay = null; } }
   S.stats.nukeCool = S.stats.nukeCool || 0;
   if (S.stats.nukeCool < 0.6) { S.tanom -= 0.05; S.stats.nukeCool += 0.05; }
   for (const o of S.nations) if (o.alive && o !== X && o.cl.length) addTrust(o.id, X.id, -0.4);
@@ -391,7 +401,7 @@ function pickMilTech(n) {
 function milResearch(n, rp) {
   ensureMil(n);
   const share = n.eco ? n.eco.alloc[0] : 0.2;
-  const mrp = rp * MRP_K * (0.25 + 2.5 * share) * (1 + 0.25 * (n.mobil || 0)) * (warCount(n.id) ? 1.2 : 1);
+  const mrp = rp * MRP_K * (0.25 + 2.5 * share) * (1 + LAW_MRP[lawOf(n)]) * (warCount(n.id) ? 1.2 : 1);
   const mx = n.mx;
   if (n.mtarget && !milTechOK(n, TECH_BY_ID[n.mtarget])) n.mtarget = null;
   if (!n.mtarget && S.year >= mx.pickAt) { n.mtarget = pickMilTech(n); if (!n.mtarget) mx.pickAt = mx.idle ? S.year + 10 : nextMilYear(n); }
@@ -516,19 +526,15 @@ function milDoctrineTick() {
 }
 
 /* ---------- views for the renderer ---------- */
-// units to draw for a nation in a domain: the fielded model per role (70%) plus older models still in service (30%)
+// units to draw for a nation in a domain: what is actually in its stock, weighted by numbers
 function milUnitsFor(n, dom) {
   const out = [], m = n.mult; if (!m || !ROLES[dom]) return out;
-  const mx = ensureMil(n), sp = effSplit(n)[DOM[dom]];
-  if (sp <= 0) return out;
-  let tot = 0; for (const r of ROLES[dom]) if (m.best[r]) tot += (mx.mix[dom][r] || 0) + 0.02;
-  for (const r of ROLES[dom]) {
-    const bid = m.best[r]; if (!bid) continue;
-    const share = ((mx.mix[dom][r] || 0) + 0.02) / tot, bu = UNIT_BY_ID[bid];
-    const olds = UNITS_BY_ROLE[r].filter(u => u !== bu && n.techs[u.tech] !== undefined && u.rating >= bu.rating * 0.3 && u.rating < bu.rating).sort((a, b) => b.rating - a.rating).slice(0, 2);
-    out.push({ unit: bid, w: share * (olds.length ? 0.7 : 1), role: r });
-    for (const u of olds) out.push({ unit: u.id, w: share * 0.3 / olds.length, role: r });
-  }
+  const mx = ensureMil(n), st = mx.stock;
+  if (!st) return out;
+  let tot = 0;
+  for (const id in st) { const u = UNIT_BY_ID[id]; if (u && u.dom === dom && CROLE[id].length && st[id] > 0) tot += st[id]; }
+  if (tot <= 0) return out;
+  for (const id in st) { const u = UNIT_BY_ID[id]; if (u && u.dom === dom && CROLE[id].length && st[id] > tot * 0.03) out.push({ unit: id, w: st[id] / tot, role: CROLE[id][0] }); }
   return out;
 }
 // per-shot hit probability for battle agents: follows the land-score share / sea control / air superiority of the war
@@ -580,11 +586,11 @@ function milCommand(n, w, cmd) {
     const sc = seaC(w, side), FO = milForces(o);
     if (FO.S > 0 && sc < 0.15) return { ok: false, msg: `制海权不足（${Math.round(50 + 50 * sc)}%），需要 58% 以上` };
     let best = null, bd = 1e9;
-    for (const c of n.cl) if (c.coastal) for (const t of o.cl) if (t.coastal) { const d = cellDist(c.i, t.i); if (d < bd) { bd = d; best = [c, t]; } }
+    for (const c of n.cl) if (c.coastal) for (const t of o.cl) if (t.coastal) { const d = cellDist(c.i, t.i) - 6 * bget(c, 'navy'); if (d < bd) { bd = d; best = [c, t]; } }
     if (!best) return { ok: false, msg: '双方都没有可以登陆的海岸' };
     const ord = orderAttack(best[0], best[1]);
     if (!ord) return { ok: false, msg: '无法发起登陆' };
-    ord.amphib = 1; ord.str = 1.5 * (n.mult.era >= 5 ? 0.6 + 0.4 * Math.min(1, n.mult.amphib + 0.2) : 0.85);
+    ord.amphib = 1; ord.str = 1.5 * (n.mult.era >= 5 ? 0.6 + 0.4 * Math.min(1, n.mult.amphib + 0.2) : 0.85) * (1 + 0.15 * bget(best[0], 'navy'));
     return { ok: true, msg: `两栖舰队从${best[0].name}出发，目标：${best[1].name}`, order: ord };
   }
   if (cmd === 'nuke') {
@@ -608,6 +614,7 @@ function chooseDoctrine(n, techId) {
 function migrateMil(st) {
   st = st || S;
   st.v = 4; if (!st.milDoc) st.milDoc = {}; if (!st.milPref) st.milPref = {};
+  migrateProd(st);
   for (const n of st.nations) {
     ensureMil(n); n.mx.tick = -1; n.mx.F = null;
     if (n.target && TECH_BY_ID[n.target] && TECH_BY_ID[n.target].mil) { if (!n.mtarget) n.mtarget = n.target; n.target = null; }

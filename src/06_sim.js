@@ -345,18 +345,18 @@ function warTick() {
     const wet = o.amphib || (fc && seaGap(fc.i, tc.i) > 0.4 && !(w && theatre(w).land && cellDist(fc.i, tc.i) < 12));
     if (wet && w && FD.S > 0) {           // an overseas expedition must first beat the defending fleet
       if (theatre(w).sea || o.amphib) seaWar(w, w.a === A.id ? A : D, w.a === A.id ? D : A, w.a === A.id ? FA : FD, w.a === A.id ? FD : FA, theatre(w));
-      if (seaC(w, side) < 0.15) { log('war', `${A.name}的登陆舰队在${tc.name}外海被${D.name}的海军击退`, tc.i, true); A.legions = Math.max(0, A.legions - 1); onOrderResult(o, false); continue; }
+      if (seaC(w, side) < 0.15) { log('war', `${A.name}的登陆舰队在${tc.name}外海被${D.name}的海军击退`, tc.i, true); stockLoss(A, 0, 0.02); stockLoss(A, 1, 0.02); onOrderResult(o, false); continue; }
     }
     const amph = wet ? (A.mult.era >= 5 ? 0.35 + 0.65 * Math.min(1, A.mult.amphib) : 0.8) : 1;
-    const pa = landStrength(A, D, FA, FD, sa, w) * o.str * amph * (0.6 + rand() * 0.8) * (w ? visBias(w, side) : 1);
-    const pd = landStrength(D, A, FD, FA, -sa, w) * (0.6 + rand() * 0.8) * D.mult.def * (tc.cap ? 1.25 : 1);
-    if (pa > pd) { if (wet) S.stats.invasions = (S.stats.invasions || 0) + 1; captureCity(tc, A, D, w); S.stats.conquer++; onOrderResult(o, true); }
-    else { log('war', `${A.name}进攻${tc.name}失败，大军溃退`, tc.i, true); A.legions = Math.max(0, A.legions - 2); onOrderResult(o, false); }
+    const pa = landStrength(A, D, FA, FD, sa, w) * o.str * amph * (0.6 + rand() * 0.8) * (w ? visBias(w, side) : 1) * (fc ? 1 + 0.15 * bget(fc, 'army') : 1);
+    const pd = landStrength(D, A, FD, FA, -sa, w) * (0.6 + rand() * 0.8) * D.mult.def * (tc.cap ? 1.25 : 1) * (1 + 0.3 * bget(tc, 'fort'));
+    if (pa > pd) { if (wet) S.stats.invasions = (S.stats.invasions || 0) + 1; stockLoss(A, 0, 0.015); stockLoss(D, 0, 0.03); captureCity(tc, A, D, w); S.stats.conquer++; onOrderResult(o, true); }
+    else { log('war', `${A.name}进攻${tc.name}失败，大军溃退`, tc.i, true); stockLoss(A, 0, 0.04); stockLoss(D, 0, 0.01); onOrderResult(o, false); }
   }
   const involved = new Set(); for (const w of S.wars) { involved.add(w.a); involved.add(w.b); }
   if (involved.size > S.stats.maxWarNations) S.stats.maxWarNations = involved.size;
   if (S.wars.length) S.stats.lastWarYear = S.year;
-  for (const n of S.nations) if (n.legions > 0 && !(isPlayer(n) && n.mobil)) n.legions *= 0.99;
+  for (const n of S.nations) if (n.legions > 0) n.legions *= 0.99;
 }
 function nearestPair(of, to) {
   let bc = null, bd = 1e9;
@@ -364,7 +364,8 @@ function nearestPair(of, to) {
   return bc ? { c: bc, d: bd, i: bc.i } : null;
 }
 function captureCity(c, win, lose, w) {
-  c.n = win.id; c.pop *= 0.85; c.fac *= 0.7; c.origin = lose.id; c.capturedAt = S.year;
+  c.n = win.id; c.pop *= 0.85; c.fac *= 0.7; c.origin = lose.id; c.capturedAt = S.year; c.lay = null;
+  if (c.bld) { const b = c.bld; b.mf = Math.floor(b.mf * 0.6); b.dock = Math.floor(b.dock * 0.7); b.cf = Math.floor(b.cf * 0.8); for (const k of ['army', 'navy', 'air', 'fort']) b[k] = Math.max(0, b[k] - 1); }
   const wasCap = c.cap; c.cap = false;
   if (w) { w.front = c.i; w.caps[win.id === w.a ? 0 : 1]++; if (wasCap) { warInit(w); w.capLost[lose.id === w.a ? 0 : 1] = 1; } }
   lose.cl = lose.cl.filter(x => x !== c); win.cl.push(c);
@@ -585,6 +586,7 @@ function godInspire(n) {
 function godArmy(n) {
   n.legions += 4;
   const mx = ensureMil(n); mx.att = [0, 0, 0]; mx.tick = -1;
+  if (mx.stock) { const T = stockTargets(n, capUE(n) * 0.35); for (const r in T) if (T[r] > 0) { const id = n.mult.best[r]; mx.stock[id] = (mx.stock[id] || 0) + T[r]; } }      // a divine gift arrives fully equipped
   log('war', `${n.name}的军队得到神力加持，战力大增`, capitalCell(n), false);
   addFx(capitalCell(n), 'army', true);
   onArmyGift(n);

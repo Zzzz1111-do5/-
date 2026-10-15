@@ -117,7 +117,6 @@ function playerTick() {
     const f = FOCUS_BY_ID[P.focus.id];
     if (P.focus.prog >= f.sec) { P.done.push(f.id); P.focus = null; f.fx(n); n.mult = computeMult(n); log('civ', `${n.name}完成国策「${f.name}」：${f.fxt}`, capitalCell(n), true); }
   }
-  if (n.mobil) n.legions = Math.min(40, n.legions + (n.mobil === 2 ? 0.8 : 0.3) / sp * 10);
   if (S.tick % 10 === 0) checkVictory();
 }
 function checkVictory() {
@@ -306,7 +305,6 @@ function setMode(mode, nid) {
   if (mode === 'leader') {
     const n = S.nations[nid];
     S.player = { autoBudget: true, n: nid, pp: 40, ppRate: 1, focus: null, done: [], claims: {}, gcd: S.year + secYears(20), victory: null, started: S.year };
-    n.mobil = 0;
     selectedNation = -1;
     const c = cityById(n.capital) || largestCity(n);
     if (c) { selected = { city: c.id }; flyToCity(c, 3.2); }
@@ -354,12 +352,15 @@ function armyBlock(n) {
   if (mx.split[2] > 0.01 && es[2] === 0) notes.push('尚未掌握军用航空，空军经费转给陆军');
   const opts = doctrineOptions(n); if (!opts.some(t => t.id === docPick)) docPick = opts.length ? opts[0].id : '';
   const pick = TECH_BY_ID[docPick], reform = pick && EXCL[pick.excl].some(o => n.techs[o.id] !== undefined);
-  return `<h3>军队 <small><label class="chk"><input type="checkbox" data-me="milauto"${mx.auto ? ' checked' : ''}> 顾问代管军队</label></small></h3>
+  const PC = prodCap(n), q = n.bq || [], oq = mx.queue || [];
+  return `<h3>军队 <small><label class="chk"><input type="checkbox" data-me="milauto"${mx.auto ? ' checked' : ''}> 顾问代管军种比例</label></small></h3>
     <div class="kpis">
       <div class="kpi"><span class="k">陆军</span><span class="v">${fmtNum(F.L / 1000)}</span></div>
       <div class="kpi"><span class="k">海军</span><span class="v">${fmtNum(F.S / 1000)}</span></div>
       <div class="kpi"><span class="k">空军</span><span class="v">${fmtNum(F.A / 1000)}</span></div>
     </div>
+    <p class="note">现役 ${Math.round(F.tot)} / 编制 ${Math.round(F.cap)}${F.tot > F.cap * 1.02 ? '（超编）' : ''} · 兵员约 ${fmtNum(soldiersOf(n))} 人 · ${bldName('mf', n)} ${PC.mf} 座 · ${bldName('dock', n)} ${PC.dk} 座${q.length ? ` · 在建 ${q.length} 项` : ''}${oq.length ? ` · 订单 ${oq.length} 个` : ''}</p>
+    <div class="decs"><button class="btn small primary" data-mil="build">建设工厂与基地…</button><button class="btn small" data-mil="prod">生产订单…</button><button class="btn small" data-mil="force">兵力与征兵…</button></div>
     <div class="acts"><span class="note" style="margin:0">军费结构：</span><div class="seg">${Object.keys(MIL_PRESET_NAME).map(k => `<button data-milp="${k}" aria-pressed="${presetOn(n, k)}">${MIL_PRESET_NAME[k]}</button>`).join('')}</div></div>
     <div class="alloc">${DOMS.map((d, k) => `<span class="swatch" style="background:${DOM_BAR[d]}"></span><span>${DOM_NAME[d]}</span><span class="track"><span class="fill" style="width:${(mx.split[k] * 100).toFixed(0)}%;background:${DOM_BAR[d]}"></span></span><span class="mono">${pctS(mx.split[k])}</span><button class="btn small" data-ms="${k}" data-d="-1" aria-label="减少${DOM_NAME[d]}经费">−</button><button class="btn small" data-ms="${k}" data-d="1" aria-label="增加${DOM_NAME[d]}经费">+</button>`).join('')}</div>
     ${notes.length ? `<p class="note">${notes.join('；')}。</p>` : ''}
@@ -374,7 +375,12 @@ function warControlRows(n, w) {
   const btns = [];
   if (!w.civil && !th.land && o && o.cl.some(x => x.coastal)) btns.push(`<button class="btn small" data-war="${w.id}" data-wa="amphib" title="对最近的敌方沿海城市发起两栖登陆，需要制海 58% 以上">两栖登陆</button>`);
   if (deterrent(n)) btns.push(`<button class="btn small danger" data-war="${w.id}" data-wa="nuke">核打击…</button>`);
-  return `<div class="warctl">${bar('地面', c.land)}${bar('制空', c.air)}${th.sea || c.sea !== 0.5 ? bar('制海', c.sea) : ''}${c.block > 0.01 ? `<span>被封锁</span><span></span><b>${Math.round(c.block * 100)}%</b>` : ''}</div>${btns.length ? `<div class="decs" style="margin:2px 0 6px 16px">${btns.join('')}</div>` : ''}`;
+  // main thrust: the enemy city the army pushes toward (stepping through closer cities when it is out of reach)
+  const obj = w.obj ? w.obj[sideOf(w, n)] : null, f = w.front;
+  const cands = o ? o.cl.slice().sort((a, b) => (f >= 0 ? cellDist(a.i, f) - cellDist(b.i, f) : 0) || b.pop - a.pop).slice(0, 14) : [];
+  if (obj != null && !cands.some(x => x.id === obj)) { const oc = cityById(obj); if (oc) cands.unshift(oc); }
+  const objSel = cands.length ? `<div class="milrow" style="margin:2px 0 6px 16px"><span class="k">主攻</span><select class="objsel" data-obj="${w.id}" aria-label="主攻方向"><option value="">前线自行选择</option>${cands.map(x => `<option value="${x.id}"${x.id === obj ? ' selected' : ''}>${esc(x.name)}${x.cap ? '（首都）' : ''}</option>`).join('')}</select></div>` : '';
+  return `<div class="warctl">${bar('地面', c.land)}${bar('制空', c.air)}${th.sea || c.sea !== 0.5 ? bar('制海', c.sea) : ''}${c.block > 0.01 ? `<span>被封锁</span><span></span><b>${Math.round(c.block * 100)}%</b>` : ''}</div>${objSel}${btns.length ? `<div class="decs" style="margin:2px 0 6px 16px">${btns.join('')}</div>` : ''}`;
 }
 function confirmNuke(n, w) {
   const o = S.nations[w.a === n.id ? w.b : w.a]; if (!o) return;
@@ -416,7 +422,7 @@ function renderMe() {
     <h3>民意</h3>
     <div class="supbar">${sup.map(([id, v]) => `<span style="width:${(v * 100).toFixed(1)}%;background:${IDEO_BY_ID[id].color}" title="${IDEO_BY_ID[id].name} ${Math.round(v * 100)}%"></span>`).join('')}</div>
     <div class="mixlegend">${sup.slice(0, 4).map(([id, v]) => `<div><span class="swatch" style="background:${IDEO_BY_ID[id].color}"></span>${IDEO_BY_ID[id].short}<b>${Math.round(v * 100)}%</b></div>`).join('')}</div>
-    <div class="acts"><span class="note" style="margin:0">动员：</span><div class="seg" data-me="mobilseg">${['和平', '部分动员', '总动员'].map((t, k) => `<button data-mobil="${k}" aria-pressed="${(n.mobil || 0) === k}">${t}</button>`).join('')}</div></div>
+    <div class="acts"><span class="note" style="margin:0">征兵：</span><div class="seg">${LAW_NAME.map((t, k) => `<button data-law="${k}" aria-pressed="${lawOf(n) === k}" title="${esc(LAW_DESC[k])}">${t}</button>`).join('')}</div></div>
     ${n.eco ? `<h3>财政 <small><label class="chk"><input type="checkbox" data-me="auto"${P.autoBudget ? ' checked' : ''}> AI 顾问代管</label></small></h3>
     <div class="kpis">
       <div class="kpi"><span class="k">GDP</span><span class="v">${fmtMoney(n.eco.gdp)}</span></div>
@@ -470,8 +476,10 @@ $('pane-me').addEventListener('click', e => {
   if (tx && n && n.eco) { n.eco.tax = clamp(n.eco.tax + 0.02 * +tx.dataset.tax, 0.03, 0.75); S.player.autoBudget = false; }
   const al = e.target.closest('[data-al]');
   if (al && n && n.eco) { const k = +al.dataset.al; n.eco.alloc[k] = Math.max(0, n.eco.alloc[k] + 0.05 * +al.dataset.d); normW(n.eco.alloc); S.player.autoBudget = false; }
-  const mb = e.target.closest('[data-mobil]');
-  if (mb && n) { n.mobil = +mb.dataset.mobil; n.mult = computeMult(n); }
+  const lw = e.target.closest('[data-law]');
+  if (lw && n && setLaw(n, +lw.dataset.law)) showTicker('war', `征兵法令改为「${LAW_NAME[n.law]}」`);
+  const mo = e.target.closest('[data-mil]');
+  if (mo && n) openMil(mo.dataset.mil);
   const d = e.target.closest('[data-dec]');
   if (d) doDecision(d.dataset.dec, S.nations[decisionTarget]);
   const w = e.target.closest('[data-war]');
@@ -492,6 +500,11 @@ $('pane-me').addEventListener('change', e => {
     if (k === 'milauto') { ensureMil(n).auto = e.target.checked; n.mx.tick = -1; }
     else if (k === 'docpick') docPick = e.target.value;
     else { const r = milCommand(n, null, k === 'sbomb' ? 'sbomb' : 'unrestricted'); showTicker('war', r.msg); }
+    $('pane-me')._hold = 0; $('pane-me')._html = ''; renderMe(); return;
+  }
+  if (e.target.matches('[data-obj]')) {
+    const w = S.wars.find(x => x.id === +e.target.dataset.obj);
+    if (w && n) showTicker('war', setWarObjective(n, w, e.target.value === '' ? null : +e.target.value));
     $('pane-me')._hold = 0; $('pane-me')._html = ''; renderMe(); return;
   }
   if (e.target.matches('[data-me="auto"]')) { S.player.autoBudget = e.target.checked; $('pane-me')._hold = 0; $('pane-me')._html = ''; renderMe(); return; } if (e.target.matches('[data-me="target"]')) { decisionTarget = +e.target.value; $('pane-me')._hold = 0; $('pane-me')._html = ''; renderMe(); } });

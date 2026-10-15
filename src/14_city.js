@@ -14,7 +14,10 @@ function layoutFor(c) {
   const n = S.nations[c.n], era = n.mult.era;
   const bucket = Math.max(0, Math.round(Math.log2(c.pop / 2e4 + 1) * 2));
   const nF = n.mult.ind > 0 ? Math.min(4, Math.ceil(c.fac / 6)) : 0, nL = n.mult.lab > 0 ? Math.min(3, Math.ceil(c.labs / 4)) : 0, nI = Math.min(3, c.inst || 0);
-  const key = `${bucket}|${era}|${nF}|${nL}|${nI}|${c.cap ? 1 : 0}|${n.mult.wall}|${(S.seaRise * 1000) | 0}|${S.terra.length}|${c.n}`;
+  // military buildings (06p_prod.js): a few sprites stand for many factories; bases and forts show their level
+  const Bd = c.bld, nMF = Bd ? Math.min(3, Math.ceil(Bd.mf / 5)) : 0, nDK = Bd && c.coastal ? Math.min(2, Math.ceil(Bd.dock / 3)) : 0;
+  const bArmy = Bd ? Bd.army : 0, bAir = Bd ? Bd.air : 0, bNavy = Bd && c.coastal ? Bd.navy : 0, bFort = Bd ? Bd.fort : 0;
+  const key = `${bucket}|${era}|${nF}|${nL}|${nI}|${c.cap ? 1 : 0}|${n.mult.wall}|${(S.seaRise * 1000) | 0}|${S.terra.length}|${c.n}|${nMF}${nDK}${bArmy}${bAir}${bNavy}${bFort}`;
   if (c.lay && c.lay.key === key) return c.lay;
   const rng = mulberry32(c.id * 9973 + 17);
   const [cx, cy] = cityMpx(c);
@@ -50,6 +53,10 @@ function layoutFor(c) {
   for (let k = 0; k < nI; k++) { const it = place('inst', 6, 6, maxR + 3, 8); if (it) labs.push([it.x, it.y + 1]); }
   for (let k = 0; k < nL; k++) { const it = place('lab', 5, 5, maxR, 8); if (it) labs.push([it.x, it.y + 1]); }
   for (let k = 0; k < nF; k++) { const it = place('factory', 7, 6, maxR + 6, 20); if (it) factories.push([it.x, it.y + 1]); }
+  for (let k = 0; k < nMF; k++) { const it = place('mfac', 8, 6, maxR + 9, 24); if (it) factories.push([it.x, it.y + 1]); }
+  if (bArmy) { const it = place('barracks', 9, 6, maxR + 9, 26); if (it) it.vi = bArmy; }
+  if (bFort) { const it = place('bastion', 7, 5, maxR + 5, 22); if (it) it.vi = bFort; }
+  if (bAir) { const it = place('airfield', 14, 5, maxR + 14, 34); if (it) it.vi = bAir; }
   if (era >= 1 && bucket >= 3) place(era >= 5 ? 'park' : 'market', 6, 3, maxR, 4);
   let placed = 0;
   const hR = maxR + (grid ? 6 : 4);
@@ -74,6 +81,15 @@ function layoutFor(c) {
     }
     if (port) {
       port.vi = port.dir > 0 ? 0 : 1; items.push(port);
+      // dockyards and the naval base along the shore near the port, slipways and piers reaching into the water
+      const want = []; for (let k = 0; k < nDK; k++) want.push('dockyd'); if (bNavy) want.push('navyb');
+      for (let k = 0; k < 500 && want.length; k++) {
+        const ang = k * 2.39996, rad = 4 + Math.sqrt(k) * 1.2, x = Math.round(port.x + Math.cos(ang) * rad), y = Math.round(port.y + Math.sin(ang) * rad * 0.75);
+        const wr = !landAt(x + 5, y) || !landAt(x + 6, y), wl = !landAt(x - 5, y) || !landAt(x - 6, y);
+        if (!(wr || wl) || !free(x, y, 6, 4)) continue;
+        take(x, y, 6, 4); const t = want.shift(), d = wr ? 1 : 0;
+        items.push(t === 'navyb' ? { t, x, y, v: rng(), vi: bNavy, hc: d } : { t, x, y, v: rng(), vi: d });
+      }
       if (era >= 2) for (let k = 0; k < 60; k++) { const x = Math.round(port.x - port.dir * (3 + (k % 6))), y = Math.round(port.y - 2 + ((k / 6) | 0) - 4); if (free(x, y, 5, 4)) { take(x, y, 5, 4); items.push({ t: 'ware', x, y, v: rng() }); break; } }
     }
   }
@@ -1179,7 +1195,132 @@ function sMineB(era, vi) {
   }
   bP('#5a4a3a', [1.4, 0.3, 3.4, 0.3, 2.4, -1.0]); bP(oc, [1.9, -0.05, 2.9, -0.05, 2.4, -0.75]); bE(2.1, 0.1, 0.25, 0.15, oc);
 }
-const BLD = { house: (e, v, h, c) => HOUSE[e](v, h, c), palace: sPalaceB, hall: sHallB, temple: sTempleB, lab: sLabB, inst: sInstB, factory: sFactoryB, port: sPortB, ware: sWareB, wonder: sWonderB, market: sMarketB, park: sParkB, tree: sTreeB, lamp: sLampB, tower: sTowerB, mine: sMineB };
+// ---- military buildings (06p_prod.js city.bld): military factory, dockyard, army base, airfield, naval base, fort ----
+function sMfacB(era, vi, hc, col) {
+  if (era <= 3) {          // 军械坊: a smithy with a roaring forge and racks of spears
+    const w = 5.2, d = 3.0, h = 2.0, x = hX(w + 1.4, d) + 0.6, c = era >= 2 ? '#8f8577' : '#8a6a48';
+    if (bM === 1) for (let k = 0; k < 5; k++) bL(x - 1.2 + k * 0.22, 0, x - 1.0 + k * 0.22, -2.6, 0.08, '#4a3a2a');
+    bBox(x, 0, w, h, d, c); if (era >= 2) bStone(x, 0, w, h);
+    bR(x + 0.6, -1.5, 1.5, 1.5, '#2a1e16'); bWin(x + 0.7, -1.4, 1.3, 1.4, null, 0.95, '#ff9a4a');
+    bGab(x, -h, w, d, 1.3, era >= 2 ? '#6e4a36' : '#6a5038', c);
+    const sx = x + w - 1.2 + 1.4 * OBX, sy = -1.4 * OBY;
+    bBox(sx - 0.5, sy, 1.0, 4.4, 0.8, '#6e665c'); bSmk(sx, sy - 4.6, 1); bFire(x + w + 0.8, -0.1);
+  } else if (era === 4) {  // arsenal: brick gun works with stacked barrels in the yard
+    const w = 7.2, d = 3.6, h = 2.8, x = hX(w + 1.8, d), c = '#7e4636';
+    bBox(x, 0, w, h, d, c); bBrick(x, 0, w, h);
+    for (let k = 0; k < 4; k++) { bR(x + 0.5 + k * 1.7, -2.2, 1.1, 2.2, '#26221f'); bE(x + 1.05 + k * 1.7, -2.2, 0.55, 0.35, '#26221f', true); bWin(x + 0.6 + k * 1.7, -2.1, 0.9, 2.0, null, 0.85, '#ffb060'); }
+    bGab(x, -h, w, d, 1.2, '#4c4e52', c);
+    for (const sx of [x + 1.4, x + w - 1.0]) { const cx = sx + 1.4 * OBX, cy = -1.4 * OBY - h; bCyl(cx, cy, 0.42, 4.2, '#6a3a2e', 0.18, false); bSmk(cx, cy - 4.4, 1); }
+    if (bM === 1) for (let k = 0; k < 3; k++) bL(x + w + 0.4, -0.25 - k * 0.34, x + w + 2.4, -0.5 - k * 0.34, 0.27, '#2c2c2e');
+    bFlag(x + 0.4, -h - 1.1);
+  } else {                 // modern: drab assembly halls under arched roofs, a tank in the yard
+    const drab = era >= 6 ? '#8d9486' : '#6f7656', w = 7.6, d = 3.8, h = 2.6, x = hX(w + 2.4, d);
+    bBox(x, 0, w, h, d, drab, 0.72, 1.05);
+    for (let k = 0; k < 3; k++) bE(x + k * w / 3 + w / 6 + d * OBX / 2, -h - d * OBY / 2 + 0.2, w / 6, 1.05, cSh(drab, 1.12), true);
+    bR(x + 0.6, -2.0, 2.2, 2.0, '#3a3e3a'); bR(x + 4.0, -2.0, 2.2, 2.0, '#3a3e3a');
+    bWg(x + 0.3, -h + 0.25, w - 0.6, 0.35, 8, 1, 0.7, 1, null, 0.8, LITW2);
+    bEm(x, -h + 0.02, w, 0.14, col);
+    const tc = era >= 6 ? '#7c8270' : '#5e6648', tx = x + w + 0.5;
+    bBox(tx, 0, 1.9, 0.6, 1.1, tc); bBox(tx + 0.45, -0.6, 1.0, 0.45, 0.75, cSh(tc, 1.12));
+    if (bM === 1) bL(tx + 1.45, -0.85, tx + 2.7, -0.95, 0.14, '#33362e');
+    bFlag(x + 0.4, -h - 0.7);
+  }
+}
+function sDockB(era, vi) {
+  const dir = vi ? 1 : -1;             // the side the water is on
+  if (era <= 3) {          // 造船厂: a wooden slipway with a hull taking shape, and a carpenters' shed
+    const x0 = dir > 0 ? 0.4 : -6.8;
+    bBox(x0, 0, 6.4, 0.25, 2.4, '#7a5a3a');
+    bP('#8a6438', [x0 + 0.8, -0.3, x0 + 5.6, -0.3, x0 + 5.0, -0.9, x0 + 1.2, -0.9]);
+    if (bM === 1) for (let k = 0; k < 7; k++) { const xx = x0 + 1.1 + k * 0.7; bL(xx, -0.4, xx - 0.25, -1.7 - 0.4 * Math.sin(k / 6 * PI), 0.14, '#5a3e24'); }
+    const sx = dir > 0 ? -3.4 : 1.0; bBox(sx, 0, 2.6, 1.6, 2.0, '#8a6a48'); bGab(sx, -1.6, 2.6, 2.0, 1.0, '#6a5038', '#8a6a48');
+    bWin(sx + 0.8, -1.3, 0.9, 0.8, null, 0.6, LITW);
+  } else {                 // shipyard: dry dock with a grey hull under a gantry crane
+    const L = 8.0, x0 = dir > 0 ? 0.2 : -L - 0.2, hull = era >= 6 ? '#7d8790' : '#6b7178', g = era >= 6 ? '#d8a032' : '#b8402e';
+    bBox(x0, 0, L, 0.3, 3.0, '#8c8c88');
+    bP(hull, [x0 + 0.8, -0.3, x0 + L - 1.6, -0.3, x0 + L - 0.3, -1.6, x0 + 0.4, -1.6]);
+    bR(x0 + 2.6, -2.4, 2.8, 0.8, cSh(hull, 1.15)); bR(x0 + 3.4, -3.1, 1.2, 0.7, cSh(hull, 1.22));
+    bBox(x0 + 0.2, 0, 0.35, 5.2, 0.35, g); bBox(x0 + L - 0.6, 0, 0.35, 5.2, 0.35, g); bBox(x0, -5.2, L, 0.45, 0.5, g);
+    if (bM === 1) bL(x0 + L * 0.62, -4.75, x0 + L * 0.62, -2.6, 0.06, '#2a2a2a');
+    const sx = dir > 0 ? -3.8 : 0.8; bBox(sx, 0, 3.0, 2.2, 2.4, era >= 6 ? '#d6dade' : '#a4553e'); bWg(sx + 0.2, -1.8, 2.6, 0.6, 3, 1, 0.7, 1, null, 0.7, LITW);
+    bBcn(x0 + L / 2, -5.7);
+  }
+}
+function sBarracksB(era, vi, hc, col) {
+  const lv = Math.max(1, vi || 1);
+  if (era <= 3) {          // a stockade camp: palisade ring, tents, a banner
+    const R = 3.0 + lv * 0.6;
+    const ring = front => { for (let k = 0; k < 20; k++) { const a = k / 20 * TAU, x = Math.cos(a) * R, y = -0.9 + Math.sin(a) * R * 0.45; if ((Math.sin(a) >= 0) === front) bBox(x - 0.16, y, 0.32, 1.25, 0.2, '#7a5636'); } };
+    ring(false);
+    for (let k = 0; k < 2 + lv; k++) { const tx = -R * 0.55 + (k % 3) * R * 0.5, ty = -0.6 - Math.floor(k / 3) * 0.9; bP('#d8c8a0', [tx - 0.8, ty, tx + 0.8, ty, tx, ty - 1.2]); bP('#b8a882', [tx + 0.8, ty, tx + 1.2, ty - 0.35, tx + 0.4, ty - 1.5, tx, ty - 1.2]); }
+    ring(true);
+    if (bM === 1) bL(0.2, -0.9, 0.2, -3.6, 0.1, '#5a4430');
+    bFlag(0.2, -3.6);
+  } else {                 // barracks blocks behind a parade ground, flagpole, vehicles in modern times
+    const nb = 1 + lv, c = era >= 6 ? '#c9c4b2' : '#a89a78', w = 6.2, d = 1.6, rf = era >= 5 ? '#5e6a50' : '#6a5a48';
+    bP(era >= 5 ? '#b8ae94' : '#a89a7a', [-4.4, 0.5, 3.2, 0.5, 3.2 + 3.0 * OBX, 0.5 - 3.0 * OBY, -4.4 + 3.0 * OBX, 0.5 - 3.0 * OBY]);
+    for (let k = nb - 1; k >= 0; k--) { const ox = -3.8 + k * 2.3 * OBX, oy = -0.6 - k * 2.3 * OBY; bBox(ox, oy, w, 1.4, d, c); bGab(ox, oy - 1.4, w, d, 0.7, rf, c, 0.2); bWg(ox + 0.3, oy - 1.15, w - 0.6, 0.5, 6, 1, 0.55, 1, null, 0.6, LITW); }
+    if (bM === 1) bL(3.4, 0.3, 3.4, -4.6, 0.1, '#d0d0d0');
+    bFlag(3.4, -4.6);
+    if (era >= 5) for (let k = 0; k < lv; k++) { const tx = -3.2 + k * 2.2, tc = era >= 6 ? '#7c8270' : '#5e6648'; bBox(tx, 0.4, 1.6, 0.55, 0.9, tc); bBox(tx + 0.35, -0.15, 0.85, 0.4, 0.6, cSh(tc, 1.12)); }
+  }
+}
+function sAirfieldB(era, vi, hc, col) {
+  const lv = Math.max(1, vi || 1), L = 10 + lv * 1.5, rw = era >= 6 ? '#4a4d52' : '#5c5f62';
+  bP(rw, [-L / 2, 0.6, L / 2, 0.6, L / 2 + 1.6 * OBX, 0.6 - 1.6 * OBY, -L / 2 + 1.6 * OBX, 0.6 - 1.6 * OBY]);
+  if (bM === 1) for (let k = 0.6; k < L - 1; k += 1.5) bR(-L / 2 + k + 0.8 * OBX, 0.6 - 0.8 * OBY - 0.05, 0.75, 0.1, '#e8e8e0');
+  for (let k = 0; k < lv; k++) {
+    const hx = -L / 2 + 0.8 + k * 3.3 + 2.8 * OBX, hy = -2.8 * OBY;
+    bBox(hx, hy, 2.8, 1.3, 1.8, '#9aa0a4'); bE(hx + 1.4 + 0.9 * OBX, hy - 1.3 - 0.9 * OBY + 0.1, 1.55, 0.85, '#b4babe', true); bR(hx + 0.6, hy - 1.05, 1.6, 1.05, '#2e3236');
+  }
+  const tx = L / 2 - 1.8 + 2.6 * OBX, ty = -2.6 * OBY;
+  bBox(tx, ty, 0.9, 3.0, 0.9, '#c8ccd0'); bBox(tx - 0.2, ty - 3.0, 1.3, 0.8, 1.1, '#5a7a90'); bWin(tx - 0.1, ty - 3.65, 1.1, 0.5, null, 0.9, LITO); bBcn(tx + 0.45, ty - 4.0);
+  for (let k = 0; k < 1 + lv; k++) {
+    const px = -L / 2 + 1.6 + k * 2.3, py = 0.2, pc = era >= 6 ? '#9aa2aa' : '#7c8468';
+    bR(px - 0.75, py - 0.12, 1.5, 0.24, pc); bP(pc, [px - 0.15, py - 0.12, px + 0.25, py - 0.12, px - 0.1, py - 0.9, px - 0.4, py - 0.9]); bP(cSh(pc, 0.8), [px - 0.15, py + 0.12, px + 0.25, py + 0.12, px - 0.1, py + 0.6, px - 0.4, py + 0.6]);
+    bE(px - 0.2, py - 0.5, 0.12, 0.08, col);
+  }
+}
+function sNavybB(era, vi, hc, col) {
+  const lv = Math.max(1, vi || 1), dir = hc ? 1 : -1, L = 8 + lv, x0 = dir > 0 ? 0.3 : -L - 0.3;
+  bBox(x0, 0, L, 0.35, 1.4, era >= 4 ? '#9c9c98' : '#8a6438');
+  if (bM === 1 && era < 4) for (let k = 0; k <= L; k += 1.2) bR(x0 + k, -0.2, 0.22, 0.9, '#3e2e20');
+  const hull = era >= 6 ? '#7d8790' : era >= 4 ? '#6b7178' : '#5a3e28', yy = -0.9 - 1.4 * OBY;
+  for (let k = 0; k < Math.min(2, lv); k++) {
+    const sx = x0 + 0.6 + k * (L / 2), sy = yy - k * 0.15;
+    bP(hull, [sx, sy, sx + L / 2 - 0.6, sy, sx + L / 2 - 0.2, sy - 0.9, sx + 0.4, sy - 0.9]);
+    if (era >= 4) { bR(sx + 1.0, sy - 1.6, 1.6, 0.7, cSh(hull, 1.18)); bR(sx + 1.4, sy - 2.2, 0.8, 0.6, cSh(hull, 1.25)); if (bM === 1) bL(sx + 2.4, sy - 1.3, sx + 3.4, sy - 1.45, 0.12, '#2a2e33'); }
+    else { if (bM === 1) for (const m of [0.9, 2.1]) bL(sx + m, sy - 0.9, sx + m, sy - 3.4, 0.1, '#4a3420'); bR(sx + 0.5, sy - 2.9, 1.0, 1.1, '#e8e0cc'); bR(sx + 1.7, sy - 3.0, 1.0, 1.2, '#e8e0cc'); }
+  }
+  const bx = dir > 0 ? -3.4 : 0.6; bBox(bx, 0, 2.8, era >= 4 ? 2.4 : 1.8, 2.2, era >= 4 ? '#b8b4a8' : '#9a8a72');
+  if (era >= 4) bWg(bx + 0.2, -2.0, 2.4, 0.6, 3, 1, 0.7, 1, null, 0.7, LITW); else bGab(bx, -1.8, 2.8, 2.2, 1.0, '#6a5038', '#9a8a72');
+  if (bM === 1) bL(x0 + (dir > 0 ? L - 0.4 : 0.4), -0.35, x0 + (dir > 0 ? L - 0.4 : 0.4), -3.4, 0.08, '#d0d0d0');
+  bFlag(x0 + (dir > 0 ? L - 0.4 : 0.4), -3.4);
+}
+function sBastionB(era, vi, hc, col) {
+  const lv = Math.max(1, vi || 1);
+  if (era <= 4) {          // a star fort: five bastions, walls lit along the top, guns on the points
+    const R = 2.2 + lv * 0.7, wh = 0.8 + 0.15 * lv, pts = [];
+    for (let k = 0; k < 10; k++) { const a = k / 10 * TAU - PI / 2, r = k % 2 ? R * 0.6 : R; pts.push(Math.cos(a) * r, -0.6 + Math.sin(a) * r * 0.5); }
+    bShdP(pts.map((v, i) => i % 2 ? v + 0.6 : v), wh, true);
+    const wall = era >= 3 ? '#8c8478' : '#7a6e5e';
+    bP(cSh(wall, 0.72), pts); bP(cSh(wall, 1.15), pts.map((v, i) => i % 2 ? v - wh : v));
+    bP(cSh(wall, 0.9), pts.map((v, i) => i % 2 ? (v + 0.6) * 0.55 - 0.6 - wh : v * 0.55));
+    if (era >= 3 && bM === 1) for (let k = 0; k < 10; k += 2) bR(pts[k] - 0.18, pts[k + 1] - wh - 0.28, 0.36, 0.26, '#2a2a2a');
+    if (bM === 1) bL(0, -0.6 - wh, 0, -0.6 - wh - 2.2, 0.08, '#5a4430');
+    bFlag(0, -0.6 - wh - 2.2);
+  } else {                 // concrete pillboxes behind sandbags
+    for (let k = 0; k <= lv; k++) {
+      const bx = -3.0 + k * 2.3, c = era >= 6 ? '#a4a49a' : '#94948a';
+      bBox(bx, 0, 1.8, 0.9, 1.4, c); bR(bx + 0.3, -0.62, 1.2, 0.18, '#1a1a1a');
+      bE(bx + 0.9 + 0.7 * OBX, -0.9 - 0.7 * OBY, 1.0, 0.35, cSh(c, 1.1), true);
+      if (bM === 1) for (let j = 0; j < 4; j++) bE(bx + 0.2 + j * 0.45, 0.35, 0.26, 0.15, '#9a8a62');
+    }
+    if (bM === 1) bL(-3.6, 0.2, -3.6, -2.8, 0.08, '#d0d0d0');
+    bFlag(-3.6, -2.8);
+  }
+}
+const BLD = { house: (e, v, h, c) => HOUSE[e](v, h, c), palace: sPalaceB, hall: sHallB, temple: sTempleB, lab: sLabB, inst: sInstB, factory: sFactoryB, port: sPortB, ware: sWareB, wonder: sWonderB, market: sMarketB, park: sParkB, tree: sTreeB, lamp: sLampB, tower: sTowerB, mine: sMineB, mfac: sMfacB, dockyd: sDockB, barracks: sBarracksB, airfield: sAirfieldB, navyb: sNavybB, bastion: sBastionB };
 const NOCOL = { tree: 1, lamp: 1, tower: 1, mine: 1, port: 1 };
 
 /* ---- sprite cache ---- */

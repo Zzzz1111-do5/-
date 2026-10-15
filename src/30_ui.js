@@ -123,6 +123,7 @@ function flashHint(t, ms) {
    ===================================================================== */
 let activeTab = 'ov';
 function updatePanels() {
+  if (mmOpen) renderMil();
   if (activeTab === 'me') renderMe();
   if (activeTab === 'game') renderGame();
   if (layer === 5) renderLegend();
@@ -1053,6 +1054,20 @@ function renderAch() {
 /* ---------- inspector ---------- */
 const CITY_STYLE = ['茅草村落', '泥砖城镇', '石砌城邦', '木构市镇', '红砖工业城', '钢筋都市', '玻璃摩天城', '未来之城', '星际都会'];
 const KIND_NAME = KIND_LABEL;
+// buildings of a city (everyone sees them); the player's own cities get build buttons, enemy cities a thrust button
+function inspBuildings(c, n) {
+  const have = BLD_ORDER.filter(k => bget(c, k)).map(k => `<span class="tag">${esc(bldName(k, n))}${BLD_KINDS[k].lv ? ' ' + bget(c, k) + ' 级' : ' ×' + bget(c, k)}</span>`).join('');
+  const P = S.mode === 'leader' ? playerNation() : null;
+  let h = have ? `<div class="ibld">${have}</div>` : '';
+  if (P && P.alive && c.n === P.id) {
+    const q = queuedAt(P, c);
+    h += `<p class="note">建设（用地 ${slotsUsed(c) + queuedSlots(P, c)}/${citySlots(c)}${q ? `，在建 ${q} 项` : ''}）：民用工厂 · 军工厂 · 船坞 · 陆/海/空军基地 · 要塞</p><div class="bchips" style="margin-top:4px">${bldButtons(P, c, 'bchip')}<button class="bchip" data-act="milbuild" title="打开军务面板">军务…</button></div>`;
+  } else if (P && P.alive && warBetween(P.id, n.id)) {
+    const w = warBetween(P.id, n.id), on = w.obj && w.obj[sideOf(w, P)] === c.id;
+    h += `<div class="acts"><button class="btn small${on ? '' : ' danger'}" data-act="thrust" ${on ? 'disabled' : ''}>${on ? '已是主攻方向' : '设为主攻方向'}</button></div>`;
+  }
+  return h;
+}
 function updateInspector(force) {
   const el = $('insp');
   if (!selected) { el.hidden = true; el._html = ''; return; }
@@ -1098,6 +1113,7 @@ function updateInspector(force) {
       </dl>
       ${relTags(n) ? `<div class="tags">${relTags(n)}</div>` : ''}
       ${res ? `<div class="tags">${res}</div>` : ''}
+      ${inspBuildings(c, n)}
       <div class="acts">
         <button class="btn small" data-act="zoom">放大看看</button>
         ${S.mode === 'leader' ? '' : `<button class="btn small" data-act="bless">赐福</button>
@@ -1130,6 +1146,12 @@ function updateInspector(force) {
 }
 $('insp').addEventListener('click', e => {
   if (e.target.closest('.close')) { selected = null; cam.follow = null; $('insp').hidden = true; return; }
+  const bc = e.target.closest('[data-bc]');
+  if (bc && selected && selected.city) {
+    const P = playerNation(), c = cityById(+bc.dataset.bc);
+    if (P && c) { const r = queueBuild(P, c, bc.dataset.bk, 1); if (r.ok) showTicker('civ', r.msg); else flashHint(r.msg); }
+    $('insp')._html = ''; updateInspector(true); return;
+  }
   const b = e.target.closest('[data-act]'); if (!b || !selected) return;
   const act = b.dataset.act;
   if (selected.agent) {
@@ -1140,7 +1162,9 @@ $('insp').addEventListener('click', e => {
     const c = cityById(selected.city); if (!c) return;
     const n = S.nations[c.n];
     if (act === 'zoom') flyToCity(c, Math.max(cam.z, 4.5));
-    if (S.mode === 'leader' && act !== 'zoom' && act !== 'nation') return;
+    if (act === 'milbuild') openMil('build');
+    if (act === 'thrust') { const P = playerNation(), w = P && warBetween(P.id, n.id); if (w) { showTicker('war', setWarObjective(P, w, c.id)); $('pane-me')._html = ''; } }
+    if (S.mode === 'leader' && act !== 'zoom' && act !== 'nation') { $('insp')._html = ''; updateInspector(true); return; }
     if (act === 'bless') godBless(n);
     if (act === 'inspire') godInspire(n);
     if (act === 'army') godArmy(n);
@@ -1238,7 +1262,14 @@ function applyTool(city, cell, sx, sy) {
     const P = playerNation(); if (!P || !P.alive) return;
     if (!c) { flashHint('请点击一座城市'); return; }
     const from = attackFrom ? cityById(attackFrom) : null;
-    if (!from || from.n !== P.id) { if (c.n !== P.id) { flashHint('先点你自己的一座城市'); return; } attackFrom = c.id; refreshToolHint(); return; }
+    if (!from || from.n !== P.id) {
+      if (c.n !== P.id) {
+        const w = warBetween(P.id, c.n);
+        if (w) { showTicker('war', setWarObjective(P, w, c.id) + '（要直接突击，先点你自己的出发城市）'); $('pane-me')._html = ''; return; }
+        flashHint(`你没有与${S.nations[c.n].name}交战。先在「国家」页宣战`); return;
+      }
+      attackFrom = c.id; refreshToolHint(); return;
+    }
     if (c.n === P.id) { attackFrom = c.id; refreshToolHint(); return; }
     if (!atWar(P.id, c.n)) { flashHint(`你没有与${S.nations[c.n].name}交战。先在「国家」页宣战`); return; }
     orderAttack(from, c); attackFrom = null; refreshToolHint();
@@ -1465,6 +1496,7 @@ function uiBack() {
     return false;                                   // the start screen: let the app close
   }
   if (tmOpen) { closeTree(); return true; }
+  if (mmOpen) { closeMil(); return true; }
   if (document.body.classList.contains('rail-open')) { setRailOpen(false); return true; }
   if (viewMode === 'planet') { setView('system'); return true; }
   if (viewMode === 'system') { setView(spaceReturn); return true; }

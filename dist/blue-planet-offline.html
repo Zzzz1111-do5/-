@@ -2645,6 +2645,307 @@ label.chk input {
   grid-gap: 4px;
   gap: 4px;
 }
+.mm-body {
+  flex: 1;
+  overflow: auto;
+  min-height: 0;
+  padding-top: 14px;
+  padding-bottom: 32px;
+  padding-block: 14px 32px;
+  padding-left: 16px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: 16px;
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.mm-wrap {
+  max-width: 1000px;
+  margin: 0 auto;
+}
+.mm-wrap h3 {
+  margin: 22px 0 8px;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: .14em;
+  color: var(--ink-3);
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  grid-gap: 8px;
+  gap: 8px;
+}
+.mm-wrap h3 small {
+  font-size: 12px;
+  letter-spacing: 0;
+  font-weight: 400;
+}
+.mm-wrap .chk {
+  display: flex;
+  align-items: center;
+  grid-gap: 6px;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--ink-2);
+  margin-top: 10px;
+}
+.bq {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) 84px 28px;
+  grid-gap: 6px 10px;
+  gap: 6px 10px;
+  align-items: center;
+  font-size: 12.5px;
+  color: var(--ink-2);
+}
+.bq .track,
+.oq .track {
+  height: 5px;
+  border-radius: 3px;
+  background: var(--panel-3);
+  overflow: hidden;
+}
+.bq .fill,
+.oq .fill {
+  display: block;
+  height: 100%;
+  background: var(--sodium);
+}
+.bq .st,
+.oq .st {
+  font-size: 11.5px;
+  color: var(--ink-3);
+  text-align: right;
+  white-space: nowrap;
+}
+.bq .btn.small,
+.oq .btn.small,
+.stk .btn.small {
+  padding: 0 7px;
+}
+.bleg {
+  display: flex;
+  flex-wrap: wrap;
+  grid-gap: 4px 14px;
+  gap: 4px 14px;
+  font-size: 11.5px;
+  color: var(--ink-3);
+  margin-bottom: 4px;
+}
+.bleg b {
+  color: var(--ink-2);
+  font-weight: 500;
+}
+.crow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  grid-gap: 4px 12px;
+  gap: 4px 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+.crow .cn {
+  min-width: 150px;
+  font-size: 13px;
+  color: var(--ink);
+}
+.crow .cn small {
+  color: var(--ink-3);
+  font-size: 11.5px;
+  margin-left: 4px;
+}
+.crow .cb {
+  flex: 1;
+  min-width: 140px;
+  font-size: 11.5px;
+  color: var(--ink-3);
+}
+.bchips {
+  display: flex;
+  flex-wrap: wrap;
+  grid-gap: 4px;
+  gap: 4px;
+}
+.bchip {
+  min-width: 34px;
+  height: 28px;
+  padding: 0 7px;
+  border-radius: 5px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--ink-2);
+  font-size: 12px;
+  cursor: pointer;
+}
+.bchip:hover:not(:disabled) {
+  color: var(--ink);
+  border-color: var(--sodium);
+}
+.bchip:disabled {
+  opacity: .32;
+  cursor: default;
+}
+.oq {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) 92px auto;
+  grid-gap: 6px 10px;
+  gap: 6px 10px;
+  align-items: center;
+  font-size: 12.5px;
+  color: var(--ink-2);
+}
+.oq .ob {
+  display: flex;
+  grid-gap: 3px;
+  gap: 3px;
+}
+.useg {
+  margin-top: 4px;
+}
+.ucards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  grid-gap: 8px;
+  gap: 8px;
+  margin-top: 10px;
+}
+.ucard {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-2);
+  padding: 9px 11px;
+  display: flex;
+  flex-direction: column;
+  grid-gap: 3px;
+  gap: 3px;
+}
+.ucard .un {
+  font-size: 13.5px;
+  color: var(--ink);
+  display: flex;
+  justify-content: space-between;
+  grid-gap: 6px;
+  gap: 6px;
+}
+.ucard .un small {
+  font-size: 11px;
+  color: var(--ink-3);
+  font-weight: 400;
+}
+.ucard .us {
+  font-size: 11.5px;
+  color: var(--ink-3);
+}
+.ucard.old {
+  opacity: .72;
+}
+.ucard .ub {
+  display: flex;
+  grid-gap: 4px;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+.stk {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) 70px auto;
+  grid-gap: 5px 10px;
+  gap: 5px 10px;
+  align-items: center;
+  font-size: 12.5px;
+  color: var(--ink-2);
+  padding: 2px 0;
+}
+.stk .dim {
+  color: var(--ink-3);
+  font-size: 11.5px;
+}
+.stk .tagx {
+  font-size: 10.5px;
+  border-radius: 3px;
+  padding: 0 4px;
+  margin-left: 4px;
+  border: 1px solid var(--line);
+  color: var(--ink-3);
+}
+.stk .tagx.main {
+  color: var(--leaf);
+  border-color: rgba(127, 209, 139, .5);
+}
+.capbar {
+  position: relative;
+  height: 10px;
+  border-radius: 5px;
+  background: var(--panel-3);
+  overflow: hidden;
+  margin-top: 8px;
+}
+.capbar .fill {
+  display: block;
+  height: 100%;
+  background: var(--sea);
+}
+.capbar .over {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  background:
+    repeating-linear-gradient(
+      45deg,
+      rgba(255, 95, 107, .65) 0 4px,
+      transparent 4px 8px);
+}
+.lawseg {
+  display: flex;
+  flex-wrap: wrap;
+  grid-gap: 6px;
+  gap: 6px;
+  margin-top: 6px;
+}
+.lawseg button {
+  flex: 1 1 150px;
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--ink-2);
+  cursor: pointer;
+  font-size: 13px;
+}
+.lawseg button small {
+  display: block;
+  font-size: 11px;
+  color: var(--ink-3);
+  margin-top: 2px;
+  line-height: 1.35;
+}
+.lawseg button[aria-pressed=true] {
+  border-color: var(--sodium);
+  color: var(--sodium);
+  background: var(--sodium-dim);
+}
+.ibld {
+  display: flex;
+  flex-wrap: wrap;
+  grid-gap: 4px;
+  gap: 4px;
+  margin-top: 6px;
+}
+.ibld .tag {
+  font-size: 11.5px;
+}
+.objsel {
+  background: var(--panel-2);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  height: 26px;
+  font: inherit;
+  font-size: 12px;
+  padding: 0 6px;
+  max-width: 150px;
+}
 @media (max-width: 900px) {
   body {
     overflow: auto;
@@ -3185,6 +3486,19 @@ label.chk input {
     <div class="tm-tree"><div class="tm-canvas" id="fmCanvas"></div></div>
     <div class="tm-detail" id="fmDetail"></div>
   </div>
+</div>
+<div class="tmodal" id="milModal" hidden role="dialog" aria-modal="true" aria-labelledby="mmTitle">
+  <div class="tm-head">
+    <h2 id="mmTitle">军务</h2>
+    <div class="tm-legend" id="mmLegend">建设工厂和基地，下达生产订单，决定养多少兵。</div>
+    <button class="btn" id="mmClose">关闭</button>
+  </div>
+  <div class="tm-tabs" id="mmTabs" role="tablist" aria-label="军务">
+    <button class="tm-tab" role="tab" data-mm="build" aria-selected="true">建设</button>
+    <button class="tm-tab" role="tab" data-mm="prod" aria-selected="false">生产</button>
+    <button class="tm-tab" role="tab" data-mm="force" aria-selected="false">兵力</button>
+  </div>
+  <div class="mm-body" id="mmBody"></div>
 </div>
 <div class="evmodal" id="evModal" hidden></div>
 <div class="modesel" id="modeSel" hidden role="dialog" aria-modal="true" aria-labelledby="msTitle">
@@ -4051,11 +4365,11 @@ if (typeof Path2D === 'function' && typeof Path2D.prototype.addPath !== 'functio
         m.q.sub *= 1 + b.navy;
       }
     }
-    if (n.mobil) {
-      m.mil *= 1 + 0.15 * n.mobil;
-      m.sci *= 1 - 0.06 * n.mobil;
-      m.growth *= 1 - 0.1 * n.mobil;
-      m.stab -= 0.04 * n.mobil;
+    const law = n.law === void 0 ? 1 : n.law;
+    if (law !== 1) {
+      m.sci *= 1 - LAW_SCI[law];
+      m.growth *= 1 - LAW_GROW[law];
+      m.stab += LAW_STAB[law];
     }
     const I = typeof IDEO_BY_ID !== "undefined" ? IDEO_BY_ID[n.ideo || "tribal"] : null;
     if (I) {
@@ -4888,7 +5202,7 @@ if (typeof Path2D === 'function' && typeof Path2D.prototype.addPath !== 'functio
     if (c.pop < K) c.pop += r * c.pop * (1 - c.pop / K) + 100;
     else c.pop -= (c.pop - K) * 0.06;
     if (m.ind > 0) {
-      const target = c.pop / 1e6 * 1.1 * m.ind * (n.eco ? n.eco.K.ind : 1);
+      const target = c.pop / 1e6 * 1.1 * m.ind * (n.eco ? n.eco.K.ind : 1) + bget(c, "cf");
       let d = target - c.fac;
       d = d > 0 ? d * 0.05 * n.st.ironSat * (0.25 + 0.75 * n.st.sat) : d * 0.03;
       c.fac = Math.max(0, c.fac + d);
@@ -4958,12 +5272,16 @@ if (typeof Path2D === 'function' && typeof Path2D.prototype.addPath !== 'functio
   }
   function nationTick(n) {
     const m = n.mult;
-    let pop = 0, fac = 0, labs = 0, rp = 0;
+    let pop = 0, fac = 0, labs = 0, rp = 0, mf = 0, dock = 0;
     for (const c of n.cl) {
       pop += c.pop;
       fac += c.fac;
       labs += c.labs;
       rp += c.rp;
+      if (c.bld) {
+        mf += c.bld.mf;
+        dock += c.bld.dock;
+      }
     }
     if (!n.cl.length) {
       killNation(n, -1);
@@ -4974,6 +5292,8 @@ if (typeof Path2D === 'function' && typeof Path2D.prototype.addPath !== 'functio
     n.st.fac = fac;
     n.st.labs = labs;
     n.st.rp = rp;
+    n.st.mf = mf;
+    n.st.dock = dock;
     if (n.golden > 0) n.golden--;
     if (n.target && TECH_BY_ID[n.target] && TECH_BY_ID[n.target].mil) {
       if (!n.mtarget || n.techs[n.mtarget] !== void 0) n.mtarget = n.target;
@@ -4991,12 +5311,14 @@ if (typeof Path2D === 'function' && typeof Path2D.prototype.addPath !== 'functio
     }
     milResearch(n, rp);
     milRecover(n);
+    buildTick(n);
+    prodTick(n);
     if (m.nuke) n.nuke = Math.min(0.14, n.nuke + 4e-3);
     if (m.fusion) n.fusion = Math.min(0.95, n.fusion + 0.015);
     if (m.renew) n.renew = Math.max(0, Math.min(0.85 * (1 - n.fusion) - n.nuke * 0.2, n.renew + 0.011 * m.renewK * n.st.rareSat));
     if (m.ccs) n.ccs = Math.min(1, n.ccs + 0.01);
     if (n.fusion > 0.5) n.nuke = Math.max(0, n.nuke - 5e-3);
-    const E = fac;
+    const E = fac + (m.ind > 0 ? mf + dock : 0);
     n.st.E = E;
     const fossil = Math.max(0, 1 - n.nuke - n.renew - n.fusion);
     const oilShare = m.oil ? 0.45 : 0;
@@ -6007,22 +6329,26 @@ if (typeof Path2D === 'function' && typeof Path2D.prototype.addPath !== 'functio
         if (theatre(w).sea || o.amphib) seaWar(w, w.a === A.id ? A : D, w.a === A.id ? D : A, w.a === A.id ? FA : FD, w.a === A.id ? FD : FA, theatre(w));
         if (seaC(w, side) < 0.15) {
           log("war", "".concat(A.name, "的登陆舰队在").concat(tc.name, "外海被").concat(D.name, "的海军击退"), tc.i, true);
-          A.legions = Math.max(0, A.legions - 1);
+          stockLoss(A, 0, 0.02);
+          stockLoss(A, 1, 0.02);
           onOrderResult(o, false);
           continue;
         }
       }
       const amph = wet ? A.mult.era >= 5 ? 0.35 + 0.65 * Math.min(1, A.mult.amphib) : 0.8 : 1;
-      const pa = landStrength(A, D, FA, FD, sa, w) * o.str * amph * (0.6 + rand() * 0.8) * (w ? visBias(w, side) : 1);
-      const pd = landStrength(D, A, FD, FA, -sa, w) * (0.6 + rand() * 0.8) * D.mult.def * (tc.cap ? 1.25 : 1);
+      const pa = landStrength(A, D, FA, FD, sa, w) * o.str * amph * (0.6 + rand() * 0.8) * (w ? visBias(w, side) : 1) * (fc ? 1 + 0.15 * bget(fc, "army") : 1);
+      const pd = landStrength(D, A, FD, FA, -sa, w) * (0.6 + rand() * 0.8) * D.mult.def * (tc.cap ? 1.25 : 1) * (1 + 0.3 * bget(tc, "fort"));
       if (pa > pd) {
         if (wet) S.stats.invasions = (S.stats.invasions || 0) + 1;
+        stockLoss(A, 0, 0.015);
+        stockLoss(D, 0, 0.03);
         captureCity(tc, A, D, w);
         S.stats.conquer++;
         onOrderResult(o, true);
       } else {
         log("war", "".concat(A.name, "进攻").concat(tc.name, "失败，大军溃退"), tc.i, true);
-        A.legions = Math.max(0, A.legions - 2);
+        stockLoss(A, 0, 0.04);
+        stockLoss(D, 0, 0.01);
         onOrderResult(o, false);
       }
     }
@@ -6033,7 +6359,7 @@ if (typeof Path2D === 'function' && typeof Path2D.prototype.addPath !== 'functio
     }
     if (involved.size > S.stats.maxWarNations) S.stats.maxWarNations = involved.size;
     if (S.wars.length) S.stats.lastWarYear = S.year;
-    for (const n of S.nations) if (n.legions > 0 && !(isPlayer(n) && n.mobil)) n.legions *= 0.99;
+    for (const n of S.nations) if (n.legions > 0) n.legions *= 0.99;
   }
   function nearestPair(of, to) {
     let bc = null, bd = 1e9;
@@ -6052,6 +6378,14 @@ if (typeof Path2D === 'function' && typeof Path2D.prototype.addPath !== 'functio
     c.fac *= 0.7;
     c.origin = lose.id;
     c.capturedAt = S.year;
+    c.lay = null;
+    if (c.bld) {
+      const b = c.bld;
+      b.mf = Math.floor(b.mf * 0.6);
+      b.dock = Math.floor(b.dock * 0.7);
+      b.cf = Math.floor(b.cf * 0.8);
+      for (const k of ["army", "navy", "air", "fort"]) b[k] = Math.max(0, b[k] - 1);
+    }
     const wasCap = c.cap;
     c.cap = false;
     if (w) {
@@ -6369,6 +6703,13 @@ if (typeof Path2D === 'function' && typeof Path2D.prototype.addPath !== 'functio
     const mx = ensureMil(n);
     mx.att = [0, 0, 0];
     mx.tick = -1;
+    if (mx.stock) {
+      const T2 = stockTargets(n, capUE(n) * 0.35);
+      for (const r in T2) if (T2[r] > 0) {
+        const id = n.mult.best[r];
+        mx.stock[id] = (mx.stock[id] || 0) + T2[r];
+      }
+    }
     log("war", "".concat(n.name, "的军队得到神力加持，战力大增"), capitalCell(n), false);
     addFx(capitalCell(n), "army", true);
     onArmyGift(n);
@@ -6521,7 +6862,7 @@ if (typeof Path2D === 'function' && typeof Path2D.prototype.addPath !== 'functio
   }
   const PWR_K = 1.2;
   const CAP_K = 1;
-  const MX_V = 1;
+  const MX_V = 2;
   const EXCL = {};
   for (const t of TECHS) if (t.excl) (EXCL[t.excl] = EXCL[t.excl] || []).push(t);
   const MIL_EVENTS = [];
@@ -6556,7 +6897,11 @@ if (typeof Path2D === 'function' && typeof Path2D.prototype.addPath !== 'functio
       lock: -1e9,
       need: null,
       pickAt: -1e9,
-      idle: false
+      idle: false,
+      stock: null,
+      queue: [],
+      prodAuto: true,
+      pp: [0, 0, 0, 0]
     };
   }
   function ensureMil(n) {
@@ -6594,18 +6939,23 @@ if (typeof Path2D === 'function' && typeof Path2D.prototype.addPath !== 'functio
     let co = 0;
     for (const c of n.cl) if (c.coastal) co++;
     mx.coast = n.cl.length ? co / n.cl.length : 0;
-    const base = Math.pow(n.st.pop + 1, 0.8) * m.mil * (1 + 0.08 * (n.legions + m.era)) * (n.eco ? n.eco.K.mil : 1) * m.manpower * (1 - 0.5 * mx.bombed) * (mx.nukeHit > S.year ? 0.85 : 1) * PWR_K;
-    const sp = effSplit(n), R = {};
-    for (let d = 0; d < 3; d++) {
-      const rs = ROLES[DOMS[d]], mix = mx.mix[DOMS[d]];
-      let w = 0;
-      for (const r of rs) if (m.best[r]) w += (mix[r] || 0) + 0.02;
-      for (const r of rs) {
-        const v = roleVal(n, r);
-        R[r] = v > 0 && w > 0 ? base * sp[d] * ((mix[r] || 0) + 0.02) / w * v * (1 - mx.att[d]) : 0;
-      }
+    if (!mx.stock && (n.st.pop || 0) > 0) initStock(n);
+    const cap = capUE(n), qk = qualK(n), st = mx.stock || {}, R = {}, D = [0, 0, 0];
+    for (const r in ROLE_OF_DOM) R[r] = 0;
+    let tot = 0;
+    for (const id in st) tot += st[id];
+    const act = tot > cap ? cap / tot : 1;
+    for (const id in st) {
+      const u = UNIT_BY_ID[id], rs = CROLE[id];
+      if (!u || !rs || !rs.length) continue;
+      const d = DOM[u.dom];
+      if (d === 1 && !mx.coast) continue;
+      D[d] += st[id];
+      const k = st[id] * act * u.rating * qk * UEK * (1 - mx.att[d]) / rs.length;
+      for (const r of rs) R[r] += k * (m.q[r] === void 0 ? 1 : m.q[r]);
     }
-    const F = { R, base, sp, L: R.inf + R.art + R.arm + R.at + R.aa, S: R.scr + R.cap + R.cv + R.sub, A: R.fi + R.cas + R.bomb + R.nb + R.uav };
+    const dt = D[0] + D[1] + D[2];
+    const F = { R, base: cap * UEK * qk, cap, tot, act, sp: dt > 0 ? [D[0] / dt, D[1] / dt, D[2] / dt] : effSplit(n), L: R.inf + R.art + R.arm + R.at + R.aa, S: R.scr + R.cap + R.cv + R.sub, A: R.fi + R.cas + R.bomb + R.nb + R.uav };
     F.P = F.L + 0.55 * F.S * (0.4 + 0.6 * mx.coast) + 0.85 * F.A;
     mx.F = F;
     mx.tick = S.tick;
@@ -6694,10 +7044,6 @@ if (typeof Path2D === 'function' && typeof Path2D.prototype.addPath !== 'functio
     w.th = { k, y: S.year, c: cc, land, sea: !!p && A.mx.coast > 0 && B2.mx.coast > 0 && (!land || p.a.coastal && p.b.coastal), d: p ? p.d : 99 };
     return w.th;
   }
-  function frontDist(X, w) {
-    const cc = capitalCell(X);
-    return cc >= 0 && w.front >= 0 ? cellDist(cc, w.front) : 0;
-  }
   function nearFrontCities(Y, w, k) {
     const f = w.front >= 0 ? w.front : capitalCell(Y);
     return Y.cl.slice().sort((a, b) => cellDist(a.i, f) - cellDist(b.i, f)).slice(0, k);
@@ -6751,13 +7097,13 @@ if (typeof Path2D === 'function' && typeof Path2D.prototype.addPath !== 'functio
       w.air = 0.5;
       return;
     }
-    const fi = (X, Y, F) => (F.R.fi + 0.3 * F.R.cv * X.mult.cvAir) * (1 + 0.3 * X.mult.radar) * (1 + X.mult.supK) * (1 + 0.3 * X.mult.stealth * (1 - 0.5 * Math.min(1, Y.mult.radar)));
+    const fi = (X, Y, F) => (F.R.fi + 0.3 * F.R.cv * X.mult.cvAir) * (1 + 0.3 * X.mult.radar) * (1 + X.mult.supK) * (1 + 0.3 * X.mult.stealth * (1 - 0.5 * Math.min(1, Y.mult.radar))) * (1 + 0.1 * baseNear(X, "air", w.front, 25));
     const fa = fi(A, B2, FA), fb = fi(B2, A, FB);
     const sup = fa + fb > 0 ? (fa - fb) / (fa + fb) : FA.A > FB.A ? 0.6 : FB.A > FA.A ? -0.6 : 0;
     const prev = 2 * w.air - 1, c = prev * 0.5 + sup * 0.5;
     w.air = (1 + c) / 2;
-    if (FA.A > 0) A.mx.att[2] = Math.min(0.7, A.mx.att[2] + 0.04 * (1 - c) / 2 * A.mult.airLossK);
-    if (FB.A > 0) B2.mx.att[2] = Math.min(0.7, B2.mx.att[2] + 0.04 * (1 + c) / 2 * B2.mult.airLossK);
+    if (FA.A > 0) milHit(A, 2, 0.04 * (1 - c) / 2 * A.mult.airLossK, 0.7);
+    if (FB.A > 0) milHit(B2, 2, 0.04 * (1 + c) / 2 * B2.mult.airLossK, 0.7);
     if (Math.abs(c) > 0.3 && fa > 0 && fb > 0) {
       const win = c > 0 ? A : B2, lose = win === A ? B2 : A;
       if (S.tick % 4 === 0) {
@@ -6774,7 +7120,7 @@ if (typeof Path2D === 'function' && typeof Path2D.prototype.addPath !== 'functio
       }
     }
   }
-  function navalScore(X, Y, FX2, FY, sup, near) {
+  function navalScore(X, Y, FX2, FY, sup, near, nbase) {
     const R = FX2.R, Q = FY.R, m = X.mult;
     const screenK = 0.65 + 0.35 * clamp(R.scr / (0.6 * (R.cap + R.cv) + 1e-9), 0, 1);
     const asw = Q.scr * (1 + Y.mult.asw);
@@ -6782,20 +7128,20 @@ if (typeof Path2D === 'function' && typeof Path2D.prototype.addPath !== 'functio
     const cvStrike = R.cv * (1 + m.cvAir) * (1 - 0.5 * clamp(Y.mult.fleetAA, 0, 0.9)) * (0.7 + 0.3 * Math.max(0, sup));
     const gunNerf = Q.cv > 0 && R.cv === 0 && m.era >= 5 ? 0.55 : 1;
     const landAir = near ? (R.nb + 0.3 * R.cas) * clamp(0.4 + sup, 0, 1.4) : 0;
-    const s = (R.cap * screenK * gunNerf + 0.5 * R.scr + 1.4 * cvStrike + 0.9 * subEff + landAir) * (1 + 0.2 * m.radar) * cryptoEdge(X, Y) * (0.75 + 0.5 * rand());
+    const s = (R.cap * screenK * gunNerf + 0.5 * R.scr + 1.4 * cvStrike + 0.9 * subEff + landAir) * (1 + 0.2 * m.radar) * (1 + 0.08 * (nbase || 0)) * cryptoEdge(X, Y) * (0.75 + 0.5 * rand());
     return { s, subEff };
   }
   function seaWar(w, A, B2, FA, FB, th) {
     const supA = airC(w, 0), near = th.d < 14;
-    const a = navalScore(A, B2, FA, FB, supA, near), b = navalScore(B2, A, FB, FA, -supA, near);
+    const a = navalScore(A, B2, FA, FB, supA, near, baseNear(A, "navy", w.front, 20)), b = navalScore(B2, A, FB, FA, -supA, near, baseNear(B2, "navy", w.front, 20));
     let na = a.s, nb = b.s;
     if (na + nb > 0) {
       if (na > nb) na *= 1 + A.mult.decisive;
       else nb *= 1 + B2.mult.decisive;
       const nc = (na - nb) / (na + nb), prev = 2 * w.sea - 1, c = prev * 0.6 + nc * 0.4;
       w.sea = (1 + c) / 2;
-      if (FA.S > 0) A.mx.att[1] = Math.min(0.7, A.mx.att[1] + 0.04 * nb / (na + nb));
-      if (FB.S > 0) B2.mx.att[1] = Math.min(0.7, B2.mx.att[1] + 0.04 * na / (na + nb));
+      if (FA.S > 0) milHit(A, 1, 0.04 * nb / (na + nb), 0.7);
+      if (FB.S > 0) milHit(B2, 1, 0.04 * na / (na + nb), 0.7);
       if (Math.abs(nc) > 0.3 && FA.S > 0 && FB.S > 0) {
         const win = nc > 0 ? A : B2, lose = win === A ? B2 : A;
         docStat(win.mult.doc.sea, true);
@@ -6833,7 +7179,7 @@ if (typeof Path2D === 'function' && typeof Path2D.prototype.addPath !== 'functio
       const intercept = clamp((FY.R.fi * (1 - Math.max(0, supX)) + 0.5 * FY.R.aa) / (FX2.R.bomb + 1e-9), 0, 1);
       bombs = FX2.R.bomb * (0.4 + m.sbomb) * (1 - 0.7 * intercept);
       sb += bombs;
-      X.mx.att[2] = Math.min(0.7, X.mx.att[2] + 0.03 * intercept * FX2.R.bomb / (FX2.A + 1e-9));
+      milHit(X, 2, 0.03 * intercept * FX2.R.bomb / (FX2.A + 1e-9), 0.7);
     }
     const tx = FX2.L + FX2.S + FX2.A, ty = FY.L + FY.S + FY.A;
     if (m.msl) sb += 0.04 * m.msl * tx * clamp(1 - Y.mult.abm * (1 - m.mslPen), 0.1, 1) * (0.2 + 0.8 * Math.min(1, FX2.sp[1] + FX2.sp[2]));
@@ -6841,7 +7187,13 @@ if (typeof Path2D === 'function' && typeof Path2D.prototype.addPath !== 'functio
     if (sb <= 0) return;
     const k = sb / (0.3 * ty + sb + 1e-9);
     Y.mx.bombed = Math.min(0.5, Y.mx.bombed + 0.15 * k);
-    for (const c of nearFrontCities(Y, w, 3)) c.fac *= 1 - 0.03 * k;
+    for (const c of nearFrontCities(Y, w, 3)) {
+      c.fac *= 1 - 0.03 * k;
+      if (c.bld && c.bld.mf > 0 && rand() < 0.25 * k) {
+        c.bld.mf--;
+        c.lay = null;
+      }
+    }
     Y.stabV = Math.max(0, Y.stabV - 4e-3 * k);
     if (X.mx.policy.sbomb && bombs > 0) {
       for (const o of S.nations) if (o.alive && o !== X && o !== Y && ideoOf(o).demo && !atWar(o.id, X.id) && rand() < 0.3) addTrust(o.id, X.id, -0.02);
@@ -6866,8 +7218,8 @@ if (typeof Path2D === 'function' && typeof Path2D.prototype.addPath !== 'functio
     const atCov = R.arm > 0 ? clamp((Q.at + 0.3 * Q.inf * (1 + Y.mult.infAT) + 0.25 * Q.art) / R.arm * (1 - m.armorRes), 0, 1) : 1;
     const LA = R.inf + 1.2 * R.art + R.arm * (1 + 0.5 * (1 - atCov)) + 0.6 * R.at + 0.2 * R.aa;
     const air = R.cas + R.uav + 0.6 * R.bomb, aaCov = air > 0 ? clamp(Q.aa / air, 0, 1) : 0;
-    const CAS = air * clamp(0.4 + supX, 0, 1.4) * (1 - 0.5 * aaCov) * (1 + m.casK);
-    const supply = w ? clamp(1 - Math.max(0, frontDist(X, w) - (20 + 8 * m.supply)) / 60, 0.55, 1) : 1;
+    const CAS = air * clamp(0.4 + supX, 0, 1.4) * (1 - 0.5 * aaCov) * (1 + m.casK) * (w ? 1 + 0.1 * baseNear(X, "air", w.front, 25) : 1);
+    const supply = w ? clamp(1 - Math.max(0, supplyDist(X, w) - (20 + 8 * m.supply)) / 60, 0.55, 1) : 1;
     const plan = w ? 1 + Math.min(0.3, m.planK * (S.year - w.start)) : 1;
     return (LA + 0.8 * CAS) * supply * plan * cryptoEdge(X, Y);
   }
@@ -6887,15 +7239,15 @@ if (typeof Path2D === 'function' && typeof Path2D.prototype.addPath !== 'functio
       }
     }
     if (rand() < 0.2 * (1 + win.mult.tempo) * CAP_K) {
-      const lc = nearestPair(lose, win), overseas = !th.land;
-      const seaW = seaC(w, ws), airW = airC(w, ws);
+      const overseas = !th.land, seaW = seaC(w, ws), airW = airC(w, ws);
       const FW = win === A ? FA : FB, FL = lose === A ? FA : FB;
       const reach = 10 + win.mult.range * 0.5 + win.mult.sea * 0.3 + 2 * win.mult.supply + (win.mult.para && airW > 0.3 ? 6 : 0);
+      const lc = siegeTarget(w, win, lose, reach);
       const free = FL.S <= 0 && (win.mult.sea > 0 || FW.S > 0);
       const seaOK = !overseas || seaW > 0.15 || free || S.year - w.start > 60 && rand() < 0.2;
       if (lc && seaOK && lc.d < reach) {
         const amph = overseas ? win.mult.era >= 5 ? 0.35 + 0.65 * Math.min(1, win.mult.amphib) : 0.8 : lc.c.coastal && seaW > 0.4 ? 1.3 : 1;
-        if (rand() < (1 + 0.5 * win.mult.siege) / lose.mult.def * amph) {
+        if (rand() < (1 + 0.5 * win.mult.siege) / lose.mult.def * amph / (1 + 0.35 * bget(lc.c, "fort"))) {
           if (overseas && !free) {
             S.stats.invasions = (S.stats.invasions || 0) + 1;
             milEvent({ t: "invade", a: win.id, b: lose.id, i: lc.c.i });
@@ -6907,8 +7259,8 @@ if (typeof Path2D === 'function' && typeof Path2D.prototype.addPath !== 'functio
       }
     }
     const lk = th.land ? 1 : 0.35;
-    lose.mx.att[0] = Math.min(0.6, lose.mx.att[0] + 0.04 * lk * lose.mult.lossK);
-    win.mx.att[0] = Math.min(0.6, win.mx.att[0] + 0.015 * lk * win.mult.lossK);
+    milHit(lose, 0, 0.04 * lk * lose.mult.lossK, 0.6);
+    milHit(win, 0, 0.015 * lk * win.mult.lossK, 0.6);
   }
   function costK(n, d) {
     const F = n.mx.F;
@@ -6953,9 +7305,21 @@ if (typeof Path2D === 'function' && typeof Path2D.prototype.addPath !== 'functio
     c.fac *= 0.1;
     c.lay = null;
     c.nuked = S.year;
+    if (c.bld) {
+      const b = c.bld;
+      b.mf = Math.floor(b.mf * 0.1);
+      b.dock = Math.floor(b.dock * 0.1);
+      b.cf = Math.floor(b.cf * 0.1);
+      for (const q2 of ["army", "navy", "air", "fort"]) b[q2] = Math.max(0, b[q2] - 2);
+    }
     for (const o of S.cities) if (o !== c && cellDist(o.i, c.i) < (big ? 3 : 2)) {
       o.pop *= big ? 0.8 : 0.9;
       o.fac *= 0.7;
+      if (o.bld) {
+        o.bld.mf = Math.floor(o.bld.mf * 0.7);
+        o.bld.dock = Math.floor(o.bld.dock * 0.7);
+        o.lay = null;
+      }
     }
     S.stats.nukeCool = S.stats.nukeCool || 0;
     if (S.stats.nukeCool < 0.6) {
@@ -7069,7 +7433,7 @@ if (typeof Path2D === 'function' && typeof Path2D.prototype.addPath !== 'functio
   function milResearch(n, rp) {
     ensureMil(n);
     const share = n.eco ? n.eco.alloc[0] : 0.2;
-    const mrp = rp * MRP_K * (0.25 + 2.5 * share) * (1 + 0.25 * (n.mobil || 0)) * (warCount(n.id) ? 1.2 : 1);
+    const mrp = rp * MRP_K * (0.25 + 2.5 * share) * (1 + LAW_MRP[lawOf(n)]) * (warCount(n.id) ? 1.2 : 1);
     const mx = n.mx;
     if (n.mtarget && !milTechOK(n, TECH_BY_ID[n.mtarget])) n.mtarget = null;
     if (!n.mtarget && S.year >= mx.pickAt) {
@@ -7273,17 +7637,17 @@ if (typeof Path2D === 'function' && typeof Path2D.prototype.addPath !== 'functio
   function milUnitsFor(n, dom) {
     const out = [], m = n.mult;
     if (!m || !ROLES[dom]) return out;
-    const mx = ensureMil(n), sp = effSplit(n)[DOM[dom]];
-    if (sp <= 0) return out;
+    const mx = ensureMil(n), st = mx.stock;
+    if (!st) return out;
     let tot = 0;
-    for (const r of ROLES[dom]) if (m.best[r]) tot += (mx.mix[dom][r] || 0) + 0.02;
-    for (const r of ROLES[dom]) {
-      const bid = m.best[r];
-      if (!bid) continue;
-      const share = ((mx.mix[dom][r] || 0) + 0.02) / tot, bu = UNIT_BY_ID[bid];
-      const olds = UNITS_BY_ROLE[r].filter((u) => u !== bu && n.techs[u.tech] !== void 0 && u.rating >= bu.rating * 0.3 && u.rating < bu.rating).sort((a, b) => b.rating - a.rating).slice(0, 2);
-      out.push({ unit: bid, w: share * (olds.length ? 0.7 : 1), role: r });
-      for (const u of olds) out.push({ unit: u.id, w: share * 0.3 / olds.length, role: r });
+    for (const id in st) {
+      const u = UNIT_BY_ID[id];
+      if (u && u.dom === dom && CROLE[id].length && st[id] > 0) tot += st[id];
+    }
+    if (tot <= 0) return out;
+    for (const id in st) {
+      const u = UNIT_BY_ID[id];
+      if (u && u.dom === dom && CROLE[id].length && st[id] > tot * 0.03) out.push({ unit: id, w: st[id] / tot, role: CROLE[id][0] });
     }
     return out;
   }
@@ -7353,7 +7717,7 @@ if (typeof Path2D === 'function' && typeof Path2D.prototype.addPath !== 'functio
       let best2 = null, bd = 1e9;
       for (const c of n.cl) if (c.coastal) {
         for (const t of o.cl) if (t.coastal) {
-          const d = cellDist(c.i, t.i);
+          const d = cellDist(c.i, t.i) - 6 * bget(c, "navy");
           if (d < bd) {
             bd = d;
             best2 = [c, t];
@@ -7364,7 +7728,7 @@ if (typeof Path2D === 'function' && typeof Path2D.prototype.addPath !== 'functio
       const ord = orderAttack(best2[0], best2[1]);
       if (!ord) return { ok: false, msg: "无法发起登陆" };
       ord.amphib = 1;
-      ord.str = 1.5 * (n.mult.era >= 5 ? 0.6 + 0.4 * Math.min(1, n.mult.amphib + 0.2) : 0.85);
+      ord.str = 1.5 * (n.mult.era >= 5 ? 0.6 + 0.4 * Math.min(1, n.mult.amphib + 0.2) : 0.85) * (1 + 0.15 * bget(best2[0], "navy"));
       return { ok: true, msg: "两栖舰队从".concat(best2[0].name, "出发，目标：").concat(best2[1].name), order: ord };
     }
     if (cmd === "nuke") {
@@ -7400,6 +7764,7 @@ if (typeof Path2D === 'function' && typeof Path2D.prototype.addPath !== 'functio
     st.v = 4;
     if (!st.milDoc) st.milDoc = {};
     if (!st.milPref) st.milPref = {};
+    migrateProd(st);
     for (const n of st.nations) {
       ensureMil(n);
       n.mx.tick = -1;
@@ -7416,6 +7781,553 @@ if (typeof Path2D === 'function' && typeof Path2D.prototype.addPath !== 'functio
       w.th = null;
     }
     return st;
+  }
+  const UEK = 1e5;
+  const UCE = [1.3, 1.6, 2.5, 4.5, 8, 20, 40, 80, 150];
+  const LAW_NAME = ["志愿兵役", "有限征兵", "广泛征兵", "全面动员"];
+  const LAW_CAP = [0.7, 1, 1.3, 1.65], LAW_GROW = [0, 0, 0.05, 0.12], LAW_SCI = [0, 0, 0.03, 0.08], LAW_STAB = [0.03, 0, -0.03, -0.08], LAW_WILL = [0, 0, 0.05, 0.12], LAW_MRP = [0, 0, 0.15, 0.3];
+  const LAW_DESC = ["编制 ×0.7，稳定 +3", "编制 ×1（默认）", "编制 ×1.3，人口增长 −5%，科研 −3%，稳定 −3，企业意愿 −5%", "编制 ×1.65，人口增长 −12%，科研 −8%，稳定 −8，企业意愿 −12%"];
+  function lawOf(n) {
+    return n.law === void 0 ? 1 : n.law;
+  }
+  function setLaw(n, L) {
+    L = clamp(L | 0, 0, 3);
+    if (lawOf(n) === L) return false;
+    n.law = L;
+    n.mult = computeMult(n);
+    if (n.mx) n.mx.tick = -1;
+    return true;
+  }
+  const DISP = {
+    spear: [1e3, "人"],
+    bronze_inf: [1e3, "人"],
+    legion: [1500, "人"],
+    musketeer: [3e3, "人"],
+    rifleman: [5e3, "人"],
+    inf_ww: [8e3, "人"],
+    mech_inf: [6e3, "人"],
+    exo_inf: [4e3, "人"],
+    archer: [800, "人"],
+    crossbowman: [800, "人"],
+    cannon: [20, "门"],
+    fieldgun: [60, "门"],
+    howitzer: [80, "门"],
+    spg: [60, "辆"],
+    mlrs: [40, "辆"],
+    railgun: [20, "辆"],
+    aa_gun: [60, "门"],
+    sam: [30, "辆"],
+    laser_aa: [30, "辆"],
+    tank_destroyer: [50, "辆"],
+    chariot: [100, "辆"],
+    horse: [800, "骑"],
+    knight: [500, "骑"],
+    tank_light: [50, "辆"],
+    tank_medium: [50, "辆"],
+    tank_heavy: [40, "辆"],
+    mbt: [50, "辆"],
+    mech: [20, "台"],
+    grav_tank: [20, "辆"],
+    galley: [6, "艘"],
+    carrack: [2, "艘"],
+    galleon: [1, "艘"],
+    frigate: [2, "艘"],
+    ship_line: [0.5, "艘"],
+    ironclad: [0.3, "艘"],
+    torpedo_boat: [4, "艘"],
+    destroyer: [1, "艘"],
+    light_cruiser: [0.4, "艘"],
+    heavy_cruiser: [0.25, "艘"],
+    battleship: [0.1, "艘"],
+    carrier: [0.1, "艘"],
+    submarine: [1, "艘"],
+    nuke_sub: [0.3, "艘"],
+    missile_destroyer: [0.5, "艘"],
+    missile_cruiser: [0.2, "艘"],
+    supercarrier: [0.06, "艘"],
+    stealth_destroyer: [0.4, "艘"],
+    drone_carrier: [0.06, "艘"],
+    uuv: [2, "艘"],
+    airship: [3, "艘"],
+    biplane: [40, "架"],
+    fighter: [30, "架"],
+    dive_bomber: [30, "架"],
+    tac_bomber: [25, "架"],
+    naval_bomber: [25, "架"],
+    strat_bomber: [10, "架"],
+    jet_fighter: [25, "架"],
+    multirole: [20, "架"],
+    attack_heli: [20, "架"],
+    drone: [30, "架"],
+    stealth_fighter: [10, "架"],
+    stealth_bomber: [4, "架"],
+    drone_swarm: [200, "架"],
+    spacefighter: [6, "架"]
+  };
+  function dispOf(u) {
+    return DISP[u.id] || [1, "个"];
+  }
+  function dispNum(u, ue) {
+    const v = ue * dispOf(u)[0];
+    return v >= 1e4 ? fmtNum(v) : v >= 10 ? String(Math.round(v)) : v >= 1 ? v.toFixed(v < 3 ? 1 : 0) : v > 0 ? v.toFixed(2) : "0";
+  }
+  const CROLE = {};
+  for (const u of UNITS) CROLE[u.id] = u.roles.filter((r) => ROLE_OF_DOM[r]);
+  function capUE(n) {
+    const m = n.mult;
+    return Math.pow((n.st.pop || 0) + 1, 0.8) * (n.eco ? n.eco.K.mil : 1) * m.manpower * LAW_CAP[lawOf(n)] * (1 + 0.08 * Math.max(0, n.legions || 0)) * PWR_K / UEK;
+  }
+  function qualK(n) {
+    const m = n.mult, mx = n.mx;
+    return m.mil * (1 + 0.08 * m.era) * (1 - 0.5 * mx.bombed) * (mx.nukeHit > S.year ? 0.85 : 1);
+  }
+  function stockTargets(n, cap) {
+    const m = n.mult, mx = n.mx, sp = effSplit(n), T2 = {};
+    for (let d = 0; d < 3; d++) {
+      const rs = ROLES[DOMS[d]], mix = mx.mix[DOMS[d]];
+      let w = 0;
+      for (const r of rs) if (m.best[r]) w += (mix[r] || 0) + 0.02;
+      for (const r of rs) T2[r] = m.best[r] && w > 0 ? cap * sp[d] * ((mix[r] || 0) + 0.02) / w : 0;
+    }
+    return T2;
+  }
+  function roleStock(n) {
+    const R = {};
+    for (const r in ROLE_OF_DOM) R[r] = 0;
+    const st = n.mx.stock || {};
+    for (const id in st) {
+      const rs = CROLE[id];
+      if (rs) for (const r of rs) R[r] += st[id] / rs.length;
+    }
+    return R;
+  }
+  function stockTotal(n) {
+    let t = 0;
+    const st = n.mx.stock || {};
+    for (const id in st) t += st[id];
+    return t;
+  }
+  function domStock(n) {
+    const D = [0, 0, 0], st = n.mx.stock || {};
+    for (const id in st) {
+      const u = UNIT_BY_ID[id];
+      if (u) D[DOM[u.dom]] += st[id];
+    }
+    return D;
+  }
+  function initStock(n) {
+    const mx = n.mx, T2 = stockTargets(n, capUE(n)), st = {};
+    for (const r in T2) if (T2[r] > 0) {
+      const id = n.mult.best[r];
+      st[id] = (st[id] || 0) + T2[r];
+    }
+    mx.stock = st;
+    mx.tick = -1;
+  }
+  function milHit(n, d, delta, cap) {
+    const mx = n.mx;
+    mx.att[d] = Math.min(cap, mx.att[d] + delta);
+    stockLoss(n, d, delta * 0.6);
+  }
+  function stockLoss(n, d, frac) {
+    const st = n.mx.stock;
+    if (!st || frac <= 0) return;
+    const dom = DOMS[d];
+    for (const id in st) {
+      const u = UNIT_BY_ID[id];
+      if (u && u.dom === dom) st[id] *= 1 - frac;
+    }
+    n.mx.tick = -1;
+  }
+  function prodCap(n) {
+    const era = n.mult.era, mx = n.mx, sat = n.st.sat === void 0 ? 1 : n.st.sat, k = (0.35 + 0.65 * sat) * (1 - 0.5 * mx.bombed);
+    const mf = n.st.mf || 0, dk = n.st.dock || 0, cap = capUE(n), sp = effSplit(n), base = cap * UCE[era] * 0.03;
+    return { mf, dk, cap, pm: mf * UCE[era] * 0.1 * k + base * (1 - sp[1]), pd: dk * UCE[era] * 0.12 * k + base * sp[1] };
+  }
+  function unitBuildable(n, u) {
+    if (!CROLE[u.id].length || n.techs[u.tech] === void 0) return false;
+    if (u.dom === "sea" && !n.cl.some((c) => c.coastal)) return false;
+    if (u.dom === "air" && !n.mult.airOK) return false;
+    return true;
+  }
+  function prodTick(n) {
+    const mx = ensureMil(n);
+    if (!mx.stock) return;
+    const m = n.mult, P = prodCap(n), cap = P.cap, st = mx.stock;
+    let pm = P.pm, pd = P.pd;
+    const give = (u, pts) => {
+      st[u.id] = (st[u.id] || 0) + pts / u.cost;
+      if (u.dom === "sea") pd -= pts;
+      else pm -= pts;
+    };
+    if (mx.queue && mx.queue.length) {
+      for (const o of mx.queue) {
+        const u = UNIT_BY_ID[o.u];
+        if (!u || o.n <= 0) continue;
+        const pool = u.dom === "sea" ? pd : pm;
+        if (pool <= 0) continue;
+        const use = Math.min(pool, o.n * u.cost);
+        give(u, use);
+        o.n -= use / u.cost;
+        o.done = (o.done || 0) + use / u.cost;
+        if (o.n <= 1e-6 && isPlayer(n) && !booting) showTicker("war", "生产完成：".concat(u.name, " ").concat(dispNum(u, o.done), " ").concat(dispOf(u)[1]));
+      }
+      mx.queue = mx.queue.filter((o) => o.n > 1e-6 && UNIT_BY_ID[o.u]);
+    }
+    const auto = !isPlayer(n) || mx.prodAuto !== false;
+    if (!auto) {
+      mx.pp = [P.pm, P.pd, P.pm - pm, P.pd - pd];
+      mx.tick = -1;
+      return;
+    }
+    const T2 = stockTargets(n, cap), cur = roleStock(n), def = [];
+    let dm = 0, dd = 0;
+    for (const r in T2) {
+      const g = T2[r] - cur[r], u = UNIT_BY_ID[m.best[r]];
+      if (g > 1e-3 && u) {
+        def.push([u, g]);
+        if (u.dom === "sea") dd += g * u.cost;
+        else dm += g * u.cost;
+      }
+    }
+    const pm0 = pm, pd0 = pd;
+    for (const [u, g] of def) {
+      const sea = u.dom === "sea", pool = sea ? pd0 : pm0, tot = sea ? dd : dm;
+      if (pool > 0 && tot > 0) give(u, Math.min(pool * g * u.cost / tot, g * u.cost));
+    }
+    if (pm > 1e-6 || pd > 1e-6) {
+      const old = [];
+      for (const id in st) {
+        const u = UNIT_BY_ID[id], rs = CROLE[id];
+        if (!u || !rs || !rs.length) continue;
+        const b = UNIT_BY_ID[m.best[rs[0]]];
+        if (b && b.id !== id && u.rating < b.rating * 0.8) old.push([u, b, u.rating / b.rating]);
+      }
+      old.sort((a, b) => a[2] - b[2]);
+      for (const [u, b] of old) {
+        const sea = u.dom === "sea", pool = sea ? pd : pm;
+        if (pool <= 1e-6) continue;
+        const x = Math.min(st[u.id] * 0.25, pool / b.cost);
+        st[u.id] -= x;
+        if (sea) pd -= x * b.cost;
+        else pm -= x * b.cost;
+      }
+    }
+    const cur2 = roleStock(n), byRating = Object.keys(st).sort((a, b) => UNIT_BY_ID[a].rating - UNIT_BY_ID[b].rating);
+    for (const r in T2) {
+      let ex = (cur2[r] - T2[r] * 1.1 - 0.05) * 0.2;
+      if (ex <= 0) continue;
+      for (const id of byRating) {
+        if (CROLE[id][0] !== r || !(st[id] > 0)) continue;
+        const x = Math.min(st[id], ex);
+        st[id] -= x;
+        ex -= x;
+        if (ex <= 0) break;
+      }
+    }
+    const total = stockTotal(n);
+    if (total > cap * 1.05) {
+      let ex = (total - cap * 1.05) * 0.2;
+      for (const id of byRating) {
+        if (!(st[id] > 0)) continue;
+        const x = Math.min(st[id], ex);
+        st[id] -= x;
+        ex -= x;
+        if (ex <= 0) break;
+      }
+    }
+    for (const id in st) if (!(st[id] > 1e-4)) delete st[id];
+    mx.pp = [P.pm, P.pd, P.pm - Math.max(0, pm), P.pd - Math.max(0, pd)];
+    mx.tick = -1;
+  }
+  function queueUnit(n, uid, qty) {
+    const u = UNIT_BY_ID[uid], mx = ensureMil(n);
+    if (!u || !unitBuildable(n, u)) return { ok: false, msg: "现在无法生产这种装备" };
+    const ue = Math.max(1e-3, qty / dispOf(u)[0]);
+    mx.queue = mx.queue || [];
+    const o = mx.queue.find((x) => x.u === uid);
+    if (o) o.n += ue;
+    else mx.queue.push({ u: uid, n: ue, done: 0 });
+    return { ok: true, msg: "已下单：".concat(u.name, " ").concat(dispNum(u, ue), " ").concat(dispOf(u)[1]) };
+  }
+  function retireUnit(n, uid, frac) {
+    const st = ensureMil(n).stock;
+    if (!st || !st[uid]) return 0;
+    const x = st[uid] * clamp(frac, 0, 1);
+    st[uid] -= x;
+    if (st[uid] < 1e-4) delete st[uid];
+    n.mx.tick = -1;
+    return x;
+  }
+  const BLD_KINDS = {
+    cf: { name: "民用工厂", slot: 1, lv: 0, cost: 1, time: 1, desc: "提高这座城市的工业产出：更多税收、出口和商品" },
+    mf: { name: "军工厂", old: "军械坊", slot: 1, lv: 0, cost: 1.2, time: 1, desc: "生产陆军装备和飞机" },
+    dock: { name: "船坞", old: "造船厂", slot: 1, lv: 0, cost: 1.5, time: 1.5, coast: true, desc: "建造舰船" },
+    army: { name: "陆军基地", slot: 0, lv: 3, cost: 2, time: 1.5, desc: "补给线从这里算起；从这里出发的进攻更有力" },
+    navy: { name: "海军基地", slot: 0, lv: 3, cost: 2.5, time: 2, coast: true, desc: "附近海域的舰队更强，两栖登陆从这里出发" },
+    air: { name: "空军基地", slot: 0, lv: 3, cost: 2.5, time: 1.5, desc: "附近战区的制空权和对地支援更强" },
+    fort: { name: "要塞", slot: 0, lv: 3, cost: 1.6, time: 2, desc: "这座城市被围攻时更难攻破" }
+  };
+  const BLD_ORDER = ["cf", "mf", "dock", "army", "navy", "air", "fort"];
+  function bldName(k, n) {
+    const K = BLD_KINDS[k];
+    return K.old && n && n.mult.era < 4 ? K.old : K.name;
+  }
+  function bldOf(c) {
+    return c.bld || (c.bld = { cf: 0, mf: 0, dock: 0, army: 0, navy: 0, air: 0, fort: 0 });
+  }
+  function bget(c, k) {
+    return c.bld ? c.bld[k] || 0 : 0;
+  }
+  function citySlots(c) {
+    return Math.min(50, 3 + Math.floor(c.pop / 1e6));
+  }
+  function slotsUsed(c) {
+    return bget(c, "cf") + bget(c, "mf") + bget(c, "dock");
+  }
+  function eraPrice(n) {
+    return 2 * Math.pow(1.55, n.mult.era);
+  }
+  function bldCount(n, k) {
+    let s = 0;
+    for (const c of n.cl) s += bget(c, k);
+    return s;
+  }
+  function buildCost(n, k, c) {
+    const K = BLD_KINDS[k];
+    return 0.5 * K.cost * eraPrice(n) * (1 + 0.01 * bldCount(n, k)) * (K.lv ? 1 + bget(c, k) : 1);
+  }
+  function queuedAt(n, c, k) {
+    let q2 = 0;
+    for (const it of n.bq || []) if (it.c === c.id && (!k || it.k === k)) q2++;
+    return q2;
+  }
+  function queuedSlots(n, c) {
+    let q2 = 0;
+    for (const it of n.bq || []) if (it.c === c.id && BLD_KINDS[it.k].slot) q2++;
+    return q2;
+  }
+  function canBuild(n, c, k) {
+    const K = BLD_KINDS[k], m = n.mult;
+    if (!K || !c || c.n !== n.id) return "不是本国城市";
+    if (K.coast && !c.coastal) return "需要沿海城市";
+    if (k === "cf" && !(m.ind > 0)) return "需要先进入工业时代（蒸汽机）";
+    if ((k === "dock" || k === "navy") && !hasNavy(m)) return "尚未掌握造船技术";
+    if (k === "air" && !m.airOK) return "尚未掌握军用航空";
+    if (K.slot && slotsUsed(c) + queuedSlots(n, c) >= citySlots(c)) return "这座城市的建筑用地已满";
+    if (K.lv && bget(c, k) + queuedAt(n, c, k) >= K.lv) return "已经是最高等级";
+    return "";
+  }
+  function buildConc(n) {
+    return Math.min(6, 1 + Math.floor(((n.st.fac || 0) + (n.st.mf || 0)) / 120));
+  }
+  function payBuild(n, cost, treasuryOK) {
+    const e = n.eco;
+    if (!e) return true;
+    if (e.fund[2] === void 0) e.fund[2] = 0;
+    if (e.fund[2] >= cost) {
+      e.fund[2] -= cost;
+      return true;
+    }
+    const need = cost - e.fund[2];
+    if (treasuryOK && e.treasury - need >= 0.3 * (e.rev || 0)) {
+      e.treasury -= need;
+      e.fund[2] = 0;
+      return true;
+    }
+    return false;
+  }
+  function queueBuild(n, c, k, times) {
+    n.bq = n.bq || [];
+    let added = 0, why = "";
+    for (let t = 0; t < (times || 1); t++) {
+      why = canBuild(n, c, k);
+      if (why) break;
+      n.bq.push({ c: c.id, k, p: 0, paid: 0 });
+      added++;
+    }
+    if (!added) return { ok: false, msg: why };
+    return { ok: true, n: added, msg: "".concat(c.name, "：").concat(bldName(k, n)).concat(added > 1 ? " ×" + added : "", " 已加入建设队列") };
+  }
+  function cancelBuild(n, idx) {
+    const it = n.bq && n.bq[idx];
+    if (!it) return false;
+    if (it.paid && n.eco) n.eco.fund[2] = (n.eco.fund[2] || 0) + it.paid * 0.5;
+    n.bq.splice(idx, 1);
+    return true;
+  }
+  function finishBuild(n, c, k) {
+    const b = bldOf(c);
+    b[k] = (b[k] || 0) + 1;
+    c.lay = null;
+    if (n.mx) n.mx.tick = -1;
+    if (isPlayer(n) && !booting) showTicker("civ", "".concat(c.name, "的").concat(bldName(k, n)).concat(BLD_KINDS[k].lv ? "升到 ".concat(b[k], " 级") : "建成投产"));
+  }
+  function buildTick(n) {
+    const q2 = n.bq;
+    if (!q2 || !q2.length) return;
+    const conc = buildConc(n), money = isPlayer(n) || warCount(n.id) > 0, slow = n.mult.era < 4 ? 1.5 : 1;
+    let act = 0;
+    for (let k = 0; k < q2.length && act < conc; k++) {
+      const it = q2[k], c = cityById(it.c);
+      if (!c || c.n !== n.id || !BLD_KINDS[it.k]) {
+        q2.splice(k--, 1);
+        continue;
+      }
+      if (!it.paid) {
+        const cost = buildCost(n, it.k, c);
+        if (!payBuild(n, cost, money)) continue;
+        it.paid = cost;
+      }
+      act++;
+      it.p += 1 / (BLD_KINDS[it.k].time * slow);
+      if (it.p >= 1 - 1e-9) {
+        finishBuild(n, c, it.k);
+        q2.splice(k--, 1);
+      }
+    }
+  }
+  function aiBuild(n) {
+    if (!n.cl.length || !n.eco) return;
+    n.bq = n.bq || [];
+    const m = n.mult, conc = buildConc(n);
+    if (n.bq.length >= conc) return;
+    const cap = capUE(n), war = warCount(n.id) > 0, goal = n.ai ? n.ai.goal : "";
+    const qd = (k) => n.bq.filter((it) => it.k === k).length;
+    const sp = effSplit(n)[1];
+    const enemy = warEnemy(n) || (n.ai && n.ai.target != null && n.ai.target >= 0 ? S.nations[n.ai.target] : null), rival = enemy && enemy.alive && enemy.cl.length ? enemy : null;
+    const need = {
+      mf: Math.round(cap * 0.6 * (war ? 1.3 : 1) * (goal === "expand" || goal === "defend" ? 1.15 : 1)) - (n.st.mf || 0) - qd("mf"),
+      dock: sp > 0.02 ? Math.round(cap * sp * 0.5) - (n.st.dock || 0) - qd("dock") : 0,
+      cf: m.ind > 0 && (goal === "industrialize" || goal === "develop" || goal === "recover" || rand() < 0.25) ? 2 - qd("cf") : 0,
+      army: rival ? 1 + (war ? 1 : 0) - bldCount(n, "army") - qd("army") : 0,
+      navy: sp > 0.1 ? 1 - bldCount(n, "navy") - qd("navy") : 0,
+      air: m.airOK && rival ? 1 - bldCount(n, "air") - qd("air") : 0,
+      fort: goal === "defend" && rival ? 2 - bldCount(n, "fort") - qd("fort") : 0
+    };
+    for (let guard = 0; n.bq.length < conc && guard < 12; guard++) {
+      let added = false;
+      for (const k of ["mf", "dock", "cf", "army", "navy", "air", "fort"]) {
+        if (need[k] <= 0 || n.bq.length >= conc) continue;
+        const c = pickBuildCity(n, k, rival);
+        if (c) {
+          n.bq.push({ c: c.id, k, p: 0, paid: 0 });
+          need[k]--;
+          added = true;
+        } else need[k] = 0;
+      }
+      if (!added) break;
+    }
+  }
+  function warEnemy(n) {
+    const w = S.wars.find((x) => x.a === n.id || x.b === n.id);
+    return w ? S.nations[w.a === n.id ? w.b : w.a] : null;
+  }
+  function nearestTo(n, other) {
+    const p = nearestPair(n, other);
+    return p ? p.c : null;
+  }
+  function pickBuildCity(n, k, rival) {
+    const K = BLD_KINDS[k];
+    if (K.lv) {
+      const anchor = rival ? nearestTo(n, rival) : cityById(n.capital), cands = n.cl.filter((x) => !canBuild(n, x, k));
+      if (!cands.length) return null;
+      return cands.sort((a, b) => (anchor ? cellDist(a.i, anchor.i) - cellDist(b.i, anchor.i) : 0) || b.pop - a.pop)[0];
+    }
+    let best2 = null, bs = -1e18;
+    for (const c of n.cl) {
+      if (canBuild(n, c, k)) continue;
+      let s = c.pop;
+      if (k === "mf" && rival) {
+        const p = nearestPair(rival, { cl: [c] });
+        s *= p ? Math.min(1, 0.4 + p.d / 40) : 1;
+      }
+      if (s > bs) {
+        bs = s;
+        best2 = c;
+      }
+    }
+    return best2;
+  }
+  function baseNear(n, k, cell, range) {
+    if (cell < 0) return 0;
+    let best2 = 0;
+    for (const c of n.cl) {
+      const L = bget(c, k);
+      if (L > best2 && cellDist(c.i, cell) <= range) best2 = L;
+    }
+    return best2;
+  }
+  function supplyDist(X, w) {
+    const f = w.front;
+    if (f < 0) return 0;
+    const cc = capitalCell(X);
+    let d = cc >= 0 ? cellDist(cc, f) : 0;
+    for (const c of X.cl) {
+      const L = bget(c, "army");
+      if (L) d = Math.min(d, cellDist(c.i, f) - 8 * L);
+    }
+    return Math.max(0, d);
+  }
+  function minDistTo(n, cell) {
+    let d = 1e9;
+    for (const c of n.cl) {
+      const x = cellDist(c.i, cell);
+      if (x < d) d = x;
+    }
+    return d;
+  }
+  function setWarObjective(n, w, cityId) {
+    if (!w.obj) w.obj = [null, null];
+    w.obj[sideOf(w, n)] = cityId;
+    const c = cityId == null ? null : cityById(cityId);
+    return c ? "主攻方向：".concat(c.name) : "主攻方向：由前线自行选择";
+  }
+  function siegeTarget(w, win, lose, reach) {
+    const near = nearestPair(lose, win), side = sideOf(w, win), oid = w.obj ? w.obj[side] : null;
+    if (oid == null) return near;
+    const oc = cityById(oid);
+    if (!oc || oc.n !== lose.id) {
+      w.obj[side] = null;
+      return near;
+    }
+    const d0 = minDistTo(win, oc.i);
+    if (d0 < reach) return { c: oc, d: d0, i: oc.i };
+    let best2 = null, bd = 1e9;
+    for (const c of lose.cl) {
+      const d = minDistTo(win, c.i);
+      if (d < reach) {
+        const t = cellDist(c.i, oc.i);
+        if (t < bd) {
+          bd = t;
+          best2 = { c, d, i: c.i };
+        }
+      }
+    }
+    return best2 || near;
+  }
+  function aiLaw(n) {
+    const ws = S.wars.filter((w) => w.a === n.id || w.b === n.id);
+    let L = 1;
+    if (ws.length) {
+      let net = 0, capLost = false, worse = false;
+      for (const w of ws) {
+        const s = sideOf(w, n);
+        net += w.caps ? w.caps[s] - w.caps[1 - s] : 0;
+        if (w.capLost && w.capLost[s]) capLost = true;
+        const o = S.nations[s === 0 ? w.b : w.a];
+        if (o && power(o) > power(n) * 1.15) worse = true;
+      }
+      L = capLost || net <= -3 ? 3 : (worse || net < 0) && S.year - ws[0].start >= 2 ? 2 : 1;
+    }
+    setLaw(n, L);
+  }
+  function migrateProd(st) {
+    for (const n of st.nations) {
+      if (n.mobil && n.law === void 0) n.law = Math.min(3, 1 + n.mobil);
+      delete n.mobil;
+      if (n.eco && n.eco.fund && n.eco.fund[2] === void 0) n.eco.fund[2] = 0;
+    }
   }
   const GAMES = {
     arms: { name: "军备竞赛", kind: "囚徒困境", s: ["裁军", "扩军"], t: ["裁军", "扩军"], note: "无论对方怎么做，扩军对自己都更有利，于是双方都扩军，结果谁也没有更安全。这就是囚徒困境：个体理性导致集体非理性。只有足够耐心、彼此信任的国家，才会因为“未来的报复”而选择合作。" },
@@ -7772,7 +8684,7 @@ if (typeof Path2D === 'function' && typeof Path2D.prototype.addPath !== 'functio
   function ensureEco(n) {
     if (!n.eco) {
       const d = doct(n.ideo);
-      n.eco = { tax: d.tax, treasury: 0, gdp: 0, exp: 0, will: 1, rev: 0, spend: 0, alloc: d.w.slice(), stock: [0, 0, 0, 0, 0, 0, 0], lv: [1, 1, 1, 1, 1, 1, 1], fund: [0, 0], K: { mil: 1, sci: 1, ind: 1, infra: 1, stab: 0, prop: 1, space: 1, wel: 1 }, rails: 0, railCov: 0, inst: 0, hist: [], init: 0, snap: null };
+      n.eco = { tax: d.tax, treasury: 0, gdp: 0, exp: 0, will: 1, rev: 0, spend: 0, alloc: d.w.slice(), stock: [0, 0, 0, 0, 0, 0, 0], lv: [1, 1, 1, 1, 1, 1, 1], fund: [0, 0, 0], K: { mil: 1, sci: 1, ind: 1, infra: 1, stab: 0, prop: 1, space: 1, wel: 1 }, rails: 0, railCov: 0, inst: 0, hist: [], init: 0, snap: null };
     }
     if (!n.ai) n.ai = { goal: "develop", since: S.year, target: -1, prep: 0, weary: 0, log: [], grudge: {}, persona: { zeal: 0.5 + rand(), caution: 0.5 + rand(), coop: 0.5 + rand() }, advice: "" };
     return n.eco;
@@ -7800,11 +8712,12 @@ if (typeof Path2D === 'function' && typeof Path2D.prototype.addPath !== 'functio
     const war = enemiesOf(n.id).length;
     const prodPerM = 2 * Math.pow(1.55, era) * (1 + 0.5 * Math.min(1.5, fac / pm / 2.5)) * (1 + 0.25 * e.railCov);
     const L = pm * prodPerM, I = fac * 3 * Math.pow(1.2, Math.max(0, era - 4)) * n.st.sat;
-    const W2 = clamp(d.market * Math.pow((1 - e.tax) / 0.82, 1.5) * (0.55 + 0.6 * n.stabV) * (war ? 0.85 : 1) * (1 + 0.08 * Math.min(4, trade)), 0.15, 2);
+    const Im = m.ind > 0 ? ((n.st.mf || 0) + (n.st.dock || 0)) * 3 * Math.pow(1.2, Math.max(0, era - 4)) * n.st.sat * 0.4 : 0;
+    const W2 = clamp(d.market * Math.pow((1 - e.tax) / 0.82, 1.5) * (0.55 + 0.6 * n.stabV) * (war ? 0.85 : 1) * (1 + 0.08 * Math.min(4, trade)) * (1 - LAW_WILL[lawOf(n)]), 0.15, 2);
     const mx = ensureMil(n);
     if (!war) mx.block *= 0.8;
     const X = (I * 0.25 + L * 0.05) * ideoOf(n).trade * (1 + 0.15 * Math.min(5, trade) + 0.3 * coast) * (1 + 0.3 * e.railCov) * (1 - mx.block);
-    const Y = ((L + I) * (0.6 + 0.4 * W2) + X * W2) * (1 - 0.25 * mx.block - 0.3 * mx.bombed);
+    const Y = ((L + I + Im) * (0.6 + 0.4 * W2) + X * W2) * (1 - 0.25 * mx.block - 0.3 * mx.bombed);
     const R = e.tax * Y * (0.65 + 0.35 * n.stabV);
     e.will = W2;
     e.exp = X;
@@ -7828,6 +8741,7 @@ if (typeof Path2D === 'function' && typeof Path2D.prototype.addPath !== 'functio
     }
     e.fund[0] += spend * a[2] * 0.35;
     e.fund[1] += spend * a[1] * 0.25;
+    e.fund[2] = Math.min((e.fund[2] || 0) + spend * (0.35 * a[3] + 0.15 * a[2]), Math.max(50, Y * 0.5));
     if (S.tick % 3 === n.id % 3) buildProjects(n);
     const L3 = (k) => Math.min(3, e.lv[k]);
     e.K.mil = 0.75 + 0.25 * L3(0);
@@ -7926,6 +8840,7 @@ if (typeof Path2D === 'function' && typeof Path2D.prototype.addPath !== 'functio
         if (best2.inst === 1 || e.inst % 4 === 0) think(n, "在".concat(best2.name, "兴建").concat(nm, "（第 ").concat(best2.inst, " 座）"), false);
       }
     } else e.fund[1] = Math.min(e.fund[1], costI * 3);
+    if (!isPlayer(n) || S.player.autoBuild !== false) aiBuild(n);
   }
   function canPlay(a, b) {
     const key = trustKey(a.id, b.id);
@@ -8062,6 +8977,7 @@ if (typeof Path2D === 'function' && typeof Path2D.prototype.addPath !== 'functio
     ai.target = g === "expand" && A.prey ? A.prey.id : g === "defend" && A.threat ? A.threat.id : g === "unify" && A.same ? A.same.id : -1;
     aiBudget(n, A, true);
     milThink(n, A);
+    aiLaw(n);
     for (const w of A.wars) {
       if (w.civil) continue;
       const p = warPicture(n, w);
@@ -9774,7 +10690,9 @@ if (typeof Path2D === 'function' && typeof Path2D.prototype.addPath !== 'functio
     const n = S.nations[c.n], era = n.mult.era;
     const bucket = Math.max(0, Math.round(Math.log2(c.pop / 2e4 + 1) * 2));
     const nF = n.mult.ind > 0 ? Math.min(4, Math.ceil(c.fac / 6)) : 0, nL = n.mult.lab > 0 ? Math.min(3, Math.ceil(c.labs / 4)) : 0, nI = Math.min(3, c.inst || 0);
-    const key = "".concat(bucket, "|").concat(era, "|").concat(nF, "|").concat(nL, "|").concat(nI, "|").concat(c.cap ? 1 : 0, "|").concat(n.mult.wall, "|").concat(S.seaRise * 1e3 | 0, "|").concat(S.terra.length, "|").concat(c.n);
+    const Bd = c.bld, nMF = Bd ? Math.min(3, Math.ceil(Bd.mf / 5)) : 0, nDK = Bd && c.coastal ? Math.min(2, Math.ceil(Bd.dock / 3)) : 0;
+    const bArmy = Bd ? Bd.army : 0, bAir = Bd ? Bd.air : 0, bNavy = Bd && c.coastal ? Bd.navy : 0, bFort = Bd ? Bd.fort : 0;
+    const key = "".concat(bucket, "|").concat(era, "|").concat(nF, "|").concat(nL, "|").concat(nI, "|").concat(c.cap ? 1 : 0, "|").concat(n.mult.wall, "|").concat(S.seaRise * 1e3 | 0, "|").concat(S.terra.length, "|").concat(c.n, "|").concat(nMF).concat(nDK).concat(bArmy).concat(bAir).concat(bNavy).concat(bFort);
     if (c.lay && c.lay.key === key) return c.lay;
     const rng = mulberry32(c.id * 9973 + 17);
     const [cx, cy] = cityMpx(c);
@@ -9830,6 +10748,22 @@ if (typeof Path2D === 'function' && typeof Path2D.prototype.addPath !== 'functio
       const it = place("factory", 7, 6, maxR + 6, 20);
       if (it) factories.push([it.x, it.y + 1]);
     }
+    for (let k = 0; k < nMF; k++) {
+      const it = place("mfac", 8, 6, maxR + 9, 24);
+      if (it) factories.push([it.x, it.y + 1]);
+    }
+    if (bArmy) {
+      const it = place("barracks", 9, 6, maxR + 9, 26);
+      if (it) it.vi = bArmy;
+    }
+    if (bFort) {
+      const it = place("bastion", 7, 5, maxR + 5, 22);
+      if (it) it.vi = bFort;
+    }
+    if (bAir) {
+      const it = place("airfield", 14, 5, maxR + 14, 34);
+      if (it) it.vi = bAir;
+    }
     if (era >= 1 && bucket >= 3) place(era >= 5 ? "park" : "market", 6, 3, maxR, 4);
     let placed = 0;
     const hR = maxR + (grid ? 6 : 4);
@@ -9859,6 +10793,17 @@ if (typeof Path2D === 'function' && typeof Path2D.prototype.addPath !== 'functio
       if (port) {
         port.vi = port.dir > 0 ? 0 : 1;
         items.push(port);
+        const want = [];
+        for (let k = 0; k < nDK; k++) want.push("dockyd");
+        if (bNavy) want.push("navyb");
+        for (let k = 0; k < 500 && want.length; k++) {
+          const ang = k * 2.39996, rad = 4 + Math.sqrt(k) * 1.2, x = Math.round(port.x + Math.cos(ang) * rad), y = Math.round(port.y + Math.sin(ang) * rad * 0.75);
+          const wr = !landAt(x + 5, y) || !landAt(x + 6, y), wl = !landAt(x - 5, y) || !landAt(x - 6, y);
+          if (!(wr || wl) || !free(x, y, 6, 4)) continue;
+          take(x, y, 6, 4);
+          const t = want.shift(), d = wr ? 1 : 0;
+          items.push(t === "navyb" ? { t, x, y, v: rng(), vi: bNavy, hc: d } : { t, x, y, v: rng(), vi: d });
+        }
         if (era >= 2) for (let k = 0; k < 60; k++) {
           const x = Math.round(port.x - port.dir * (3 + k % 6)), y = Math.round(port.y - 2 + (k / 6 | 0) - 4);
           if (free(x, y, 5, 4)) {
@@ -11774,7 +12719,195 @@ if (typeof Path2D === 'function' && typeof Path2D.prototype.addPath !== 'functio
     bP(oc, [1.9, -0.05, 2.9, -0.05, 2.4, -0.75]);
     bE(2.1, 0.1, 0.25, 0.15, oc);
   }
-  const BLD = { house: (e, v, h, c) => HOUSE[e](v, h, c), palace: sPalaceB, hall: sHallB, temple: sTempleB, lab: sLabB, inst: sInstB, factory: sFactoryB, port: sPortB, ware: sWareB, wonder: sWonderB, market: sMarketB, park: sParkB, tree: sTreeB, lamp: sLampB, tower: sTowerB, mine: sMineB };
+  function sMfacB(era, vi, hc, col) {
+    if (era <= 3) {
+      const w = 5.2, d = 3, h = 2, x = hX(w + 1.4, d) + 0.6, c = era >= 2 ? "#8f8577" : "#8a6a48";
+      if (bM === 1) for (let k = 0; k < 5; k++) bL(x - 1.2 + k * 0.22, 0, x - 1 + k * 0.22, -2.6, 0.08, "#4a3a2a");
+      bBox(x, 0, w, h, d, c);
+      if (era >= 2) bStone(x, 0, w, h);
+      bR(x + 0.6, -1.5, 1.5, 1.5, "#2a1e16");
+      bWin(x + 0.7, -1.4, 1.3, 1.4, null, 0.95, "#ff9a4a");
+      bGab(x, -h, w, d, 1.3, era >= 2 ? "#6e4a36" : "#6a5038", c);
+      const sx = x + w - 1.2 + 1.4 * OBX, sy = -1.4 * OBY;
+      bBox(sx - 0.5, sy, 1, 4.4, 0.8, "#6e665c");
+      bSmk(sx, sy - 4.6, 1);
+      bFire(x + w + 0.8, -0.1);
+    } else if (era === 4) {
+      const w = 7.2, d = 3.6, h = 2.8, x = hX(w + 1.8, d), c = "#7e4636";
+      bBox(x, 0, w, h, d, c);
+      bBrick(x, 0, w, h);
+      for (let k = 0; k < 4; k++) {
+        bR(x + 0.5 + k * 1.7, -2.2, 1.1, 2.2, "#26221f");
+        bE(x + 1.05 + k * 1.7, -2.2, 0.55, 0.35, "#26221f", true);
+        bWin(x + 0.6 + k * 1.7, -2.1, 0.9, 2, null, 0.85, "#ffb060");
+      }
+      bGab(x, -h, w, d, 1.2, "#4c4e52", c);
+      for (const sx of [x + 1.4, x + w - 1]) {
+        const cx = sx + 1.4 * OBX, cy = -1.4 * OBY - h;
+        bCyl(cx, cy, 0.42, 4.2, "#6a3a2e", 0.18, false);
+        bSmk(cx, cy - 4.4, 1);
+      }
+      if (bM === 1) for (let k = 0; k < 3; k++) bL(x + w + 0.4, -0.25 - k * 0.34, x + w + 2.4, -0.5 - k * 0.34, 0.27, "#2c2c2e");
+      bFlag(x + 0.4, -h - 1.1);
+    } else {
+      const drab = era >= 6 ? "#8d9486" : "#6f7656", w = 7.6, d = 3.8, h = 2.6, x = hX(w + 2.4, d);
+      bBox(x, 0, w, h, d, drab, 0.72, 1.05);
+      for (let k = 0; k < 3; k++) bE(x + k * w / 3 + w / 6 + d * OBX / 2, -h - d * OBY / 2 + 0.2, w / 6, 1.05, cSh(drab, 1.12), true);
+      bR(x + 0.6, -2, 2.2, 2, "#3a3e3a");
+      bR(x + 4, -2, 2.2, 2, "#3a3e3a");
+      bWg(x + 0.3, -h + 0.25, w - 0.6, 0.35, 8, 1, 0.7, 1, null, 0.8, LITW2);
+      bEm(x, -h + 0.02, w, 0.14, col);
+      const tc = era >= 6 ? "#7c8270" : "#5e6648", tx = x + w + 0.5;
+      bBox(tx, 0, 1.9, 0.6, 1.1, tc);
+      bBox(tx + 0.45, -0.6, 1, 0.45, 0.75, cSh(tc, 1.12));
+      if (bM === 1) bL(tx + 1.45, -0.85, tx + 2.7, -0.95, 0.14, "#33362e");
+      bFlag(x + 0.4, -h - 0.7);
+    }
+  }
+  function sDockB(era, vi) {
+    const dir = vi ? 1 : -1;
+    if (era <= 3) {
+      const x0 = dir > 0 ? 0.4 : -6.8;
+      bBox(x0, 0, 6.4, 0.25, 2.4, "#7a5a3a");
+      bP("#8a6438", [x0 + 0.8, -0.3, x0 + 5.6, -0.3, x0 + 5, -0.9, x0 + 1.2, -0.9]);
+      if (bM === 1) for (let k = 0; k < 7; k++) {
+        const xx = x0 + 1.1 + k * 0.7;
+        bL(xx, -0.4, xx - 0.25, -1.7 - 0.4 * Math.sin(k / 6 * PI), 0.14, "#5a3e24");
+      }
+      const sx = dir > 0 ? -3.4 : 1;
+      bBox(sx, 0, 2.6, 1.6, 2, "#8a6a48");
+      bGab(sx, -1.6, 2.6, 2, 1, "#6a5038", "#8a6a48");
+      bWin(sx + 0.8, -1.3, 0.9, 0.8, null, 0.6, LITW);
+    } else {
+      const L = 8, x0 = dir > 0 ? 0.2 : -L - 0.2, hull = era >= 6 ? "#7d8790" : "#6b7178", g = era >= 6 ? "#d8a032" : "#b8402e";
+      bBox(x0, 0, L, 0.3, 3, "#8c8c88");
+      bP(hull, [x0 + 0.8, -0.3, x0 + L - 1.6, -0.3, x0 + L - 0.3, -1.6, x0 + 0.4, -1.6]);
+      bR(x0 + 2.6, -2.4, 2.8, 0.8, cSh(hull, 1.15));
+      bR(x0 + 3.4, -3.1, 1.2, 0.7, cSh(hull, 1.22));
+      bBox(x0 + 0.2, 0, 0.35, 5.2, 0.35, g);
+      bBox(x0 + L - 0.6, 0, 0.35, 5.2, 0.35, g);
+      bBox(x0, -5.2, L, 0.45, 0.5, g);
+      if (bM === 1) bL(x0 + L * 0.62, -4.75, x0 + L * 0.62, -2.6, 0.06, "#2a2a2a");
+      const sx = dir > 0 ? -3.8 : 0.8;
+      bBox(sx, 0, 3, 2.2, 2.4, era >= 6 ? "#d6dade" : "#a4553e");
+      bWg(sx + 0.2, -1.8, 2.6, 0.6, 3, 1, 0.7, 1, null, 0.7, LITW);
+      bBcn(x0 + L / 2, -5.7);
+    }
+  }
+  function sBarracksB(era, vi, hc, col) {
+    const lv = Math.max(1, vi || 1);
+    if (era <= 3) {
+      const R = 3 + lv * 0.6;
+      const ring = (front) => {
+        for (let k = 0; k < 20; k++) {
+          const a = k / 20 * TAU, x = Math.cos(a) * R, y = -0.9 + Math.sin(a) * R * 0.45;
+          if (Math.sin(a) >= 0 === front) bBox(x - 0.16, y, 0.32, 1.25, 0.2, "#7a5636");
+        }
+      };
+      ring(false);
+      for (let k = 0; k < 2 + lv; k++) {
+        const tx = -R * 0.55 + k % 3 * R * 0.5, ty = -0.6 - Math.floor(k / 3) * 0.9;
+        bP("#d8c8a0", [tx - 0.8, ty, tx + 0.8, ty, tx, ty - 1.2]);
+        bP("#b8a882", [tx + 0.8, ty, tx + 1.2, ty - 0.35, tx + 0.4, ty - 1.5, tx, ty - 1.2]);
+      }
+      ring(true);
+      if (bM === 1) bL(0.2, -0.9, 0.2, -3.6, 0.1, "#5a4430");
+      bFlag(0.2, -3.6);
+    } else {
+      const nb = 1 + lv, c = era >= 6 ? "#c9c4b2" : "#a89a78", w = 6.2, d = 1.6, rf = era >= 5 ? "#5e6a50" : "#6a5a48";
+      bP(era >= 5 ? "#b8ae94" : "#a89a7a", [-4.4, 0.5, 3.2, 0.5, 3.2 + 3 * OBX, 0.5 - 3 * OBY, -4.4 + 3 * OBX, 0.5 - 3 * OBY]);
+      for (let k = nb - 1; k >= 0; k--) {
+        const ox = -3.8 + k * 2.3 * OBX, oy = -0.6 - k * 2.3 * OBY;
+        bBox(ox, oy, w, 1.4, d, c);
+        bGab(ox, oy - 1.4, w, d, 0.7, rf, c, 0.2);
+        bWg(ox + 0.3, oy - 1.15, w - 0.6, 0.5, 6, 1, 0.55, 1, null, 0.6, LITW);
+      }
+      if (bM === 1) bL(3.4, 0.3, 3.4, -4.6, 0.1, "#d0d0d0");
+      bFlag(3.4, -4.6);
+      if (era >= 5) for (let k = 0; k < lv; k++) {
+        const tx = -3.2 + k * 2.2, tc = era >= 6 ? "#7c8270" : "#5e6648";
+        bBox(tx, 0.4, 1.6, 0.55, 0.9, tc);
+        bBox(tx + 0.35, -0.15, 0.85, 0.4, 0.6, cSh(tc, 1.12));
+      }
+    }
+  }
+  function sAirfieldB(era, vi, hc, col) {
+    const lv = Math.max(1, vi || 1), L = 10 + lv * 1.5, rw = era >= 6 ? "#4a4d52" : "#5c5f62";
+    bP(rw, [-L / 2, 0.6, L / 2, 0.6, L / 2 + 1.6 * OBX, 0.6 - 1.6 * OBY, -L / 2 + 1.6 * OBX, 0.6 - 1.6 * OBY]);
+    if (bM === 1) for (let k = 0.6; k < L - 1; k += 1.5) bR(-L / 2 + k + 0.8 * OBX, 0.6 - 0.8 * OBY - 0.05, 0.75, 0.1, "#e8e8e0");
+    for (let k = 0; k < lv; k++) {
+      const hx = -L / 2 + 0.8 + k * 3.3 + 2.8 * OBX, hy = -2.8 * OBY;
+      bBox(hx, hy, 2.8, 1.3, 1.8, "#9aa0a4");
+      bE(hx + 1.4 + 0.9 * OBX, hy - 1.3 - 0.9 * OBY + 0.1, 1.55, 0.85, "#b4babe", true);
+      bR(hx + 0.6, hy - 1.05, 1.6, 1.05, "#2e3236");
+    }
+    const tx = L / 2 - 1.8 + 2.6 * OBX, ty = -2.6 * OBY;
+    bBox(tx, ty, 0.9, 3, 0.9, "#c8ccd0");
+    bBox(tx - 0.2, ty - 3, 1.3, 0.8, 1.1, "#5a7a90");
+    bWin(tx - 0.1, ty - 3.65, 1.1, 0.5, null, 0.9, LITO);
+    bBcn(tx + 0.45, ty - 4);
+    for (let k = 0; k < 1 + lv; k++) {
+      const px = -L / 2 + 1.6 + k * 2.3, py = 0.2, pc = era >= 6 ? "#9aa2aa" : "#7c8468";
+      bR(px - 0.75, py - 0.12, 1.5, 0.24, pc);
+      bP(pc, [px - 0.15, py - 0.12, px + 0.25, py - 0.12, px - 0.1, py - 0.9, px - 0.4, py - 0.9]);
+      bP(cSh(pc, 0.8), [px - 0.15, py + 0.12, px + 0.25, py + 0.12, px - 0.1, py + 0.6, px - 0.4, py + 0.6]);
+      bE(px - 0.2, py - 0.5, 0.12, 0.08, col);
+    }
+  }
+  function sNavybB(era, vi, hc, col) {
+    const lv = Math.max(1, vi || 1), dir = hc ? 1 : -1, L = 8 + lv, x0 = dir > 0 ? 0.3 : -L - 0.3;
+    bBox(x0, 0, L, 0.35, 1.4, era >= 4 ? "#9c9c98" : "#8a6438");
+    if (bM === 1 && era < 4) for (let k = 0; k <= L; k += 1.2) bR(x0 + k, -0.2, 0.22, 0.9, "#3e2e20");
+    const hull = era >= 6 ? "#7d8790" : era >= 4 ? "#6b7178" : "#5a3e28", yy = -0.9 - 1.4 * OBY;
+    for (let k = 0; k < Math.min(2, lv); k++) {
+      const sx = x0 + 0.6 + k * (L / 2), sy = yy - k * 0.15;
+      bP(hull, [sx, sy, sx + L / 2 - 0.6, sy, sx + L / 2 - 0.2, sy - 0.9, sx + 0.4, sy - 0.9]);
+      if (era >= 4) {
+        bR(sx + 1, sy - 1.6, 1.6, 0.7, cSh(hull, 1.18));
+        bR(sx + 1.4, sy - 2.2, 0.8, 0.6, cSh(hull, 1.25));
+        if (bM === 1) bL(sx + 2.4, sy - 1.3, sx + 3.4, sy - 1.45, 0.12, "#2a2e33");
+      } else {
+        if (bM === 1) for (const m of [0.9, 2.1]) bL(sx + m, sy - 0.9, sx + m, sy - 3.4, 0.1, "#4a3420");
+        bR(sx + 0.5, sy - 2.9, 1, 1.1, "#e8e0cc");
+        bR(sx + 1.7, sy - 3, 1, 1.2, "#e8e0cc");
+      }
+    }
+    const bx = dir > 0 ? -3.4 : 0.6;
+    bBox(bx, 0, 2.8, era >= 4 ? 2.4 : 1.8, 2.2, era >= 4 ? "#b8b4a8" : "#9a8a72");
+    if (era >= 4) bWg(bx + 0.2, -2, 2.4, 0.6, 3, 1, 0.7, 1, null, 0.7, LITW);
+    else bGab(bx, -1.8, 2.8, 2.2, 1, "#6a5038", "#9a8a72");
+    if (bM === 1) bL(x0 + (dir > 0 ? L - 0.4 : 0.4), -0.35, x0 + (dir > 0 ? L - 0.4 : 0.4), -3.4, 0.08, "#d0d0d0");
+    bFlag(x0 + (dir > 0 ? L - 0.4 : 0.4), -3.4);
+  }
+  function sBastionB(era, vi, hc, col) {
+    const lv = Math.max(1, vi || 1);
+    if (era <= 4) {
+      const R = 2.2 + lv * 0.7, wh = 0.8 + 0.15 * lv, pts = [];
+      for (let k = 0; k < 10; k++) {
+        const a = k / 10 * TAU - PI / 2, r = k % 2 ? R * 0.6 : R;
+        pts.push(Math.cos(a) * r, -0.6 + Math.sin(a) * r * 0.5);
+      }
+      bShdP(pts.map((v, i) => i % 2 ? v + 0.6 : v), wh, true);
+      const wall = era >= 3 ? "#8c8478" : "#7a6e5e";
+      bP(cSh(wall, 0.72), pts);
+      bP(cSh(wall, 1.15), pts.map((v, i) => i % 2 ? v - wh : v));
+      bP(cSh(wall, 0.9), pts.map((v, i) => i % 2 ? (v + 0.6) * 0.55 - 0.6 - wh : v * 0.55));
+      if (era >= 3 && bM === 1) for (let k = 0; k < 10; k += 2) bR(pts[k] - 0.18, pts[k + 1] - wh - 0.28, 0.36, 0.26, "#2a2a2a");
+      if (bM === 1) bL(0, -0.6 - wh, 0, -0.6 - wh - 2.2, 0.08, "#5a4430");
+      bFlag(0, -0.6 - wh - 2.2);
+    } else {
+      for (let k = 0; k <= lv; k++) {
+        const bx = -3 + k * 2.3, c = era >= 6 ? "#a4a49a" : "#94948a";
+        bBox(bx, 0, 1.8, 0.9, 1.4, c);
+        bR(bx + 0.3, -0.62, 1.2, 0.18, "#1a1a1a");
+        bE(bx + 0.9 + 0.7 * OBX, -0.9 - 0.7 * OBY, 1, 0.35, cSh(c, 1.1), true);
+        if (bM === 1) for (let j = 0; j < 4; j++) bE(bx + 0.2 + j * 0.45, 0.35, 0.26, 0.15, "#9a8a62");
+      }
+      if (bM === 1) bL(-3.6, 0.2, -3.6, -2.8, 0.08, "#d0d0d0");
+      bFlag(-3.6, -2.8);
+    }
+  }
+  const BLD = { house: (e, v, h, c) => HOUSE[e](v, h, c), palace: sPalaceB, hall: sHallB, temple: sTempleB, lab: sLabB, inst: sInstB, factory: sFactoryB, port: sPortB, ware: sWareB, wonder: sWonderB, market: sMarketB, park: sParkB, tree: sTreeB, lamp: sLampB, tower: sTowerB, mine: sMineB, mfac: sMfacB, dockyd: sDockB, barracks: sBarracksB, airfield: sAirfieldB, navyb: sNavybB, bastion: sBastionB };
   const NOCOL = { tree: 1, lamp: 1, tower: 1, mine: 1, port: 1 };
   const SPR = /* @__PURE__ */ new Map(), SPALT = /* @__PURE__ */ new Map(), SPSCR = [], CGLOW = [];
   const SPB = [3e6, 5e6, 9e6, 16e6];
@@ -15108,6 +16241,7 @@ if (typeof Path2D === 'function' && typeof Path2D.prototype.addPath !== 'functio
         ctx.arc(v.x, v.y, rr + 2.5, 0, TAU);
         ctx.stroke();
       }
+      if (c.bld && z >= 0.9) baseGlyphs(c.bld, v.x + rr + 3, v.y - rr - 1, n.color);
       ctx.globalAlpha = 1;
       v.r = rr + 3;
     }
@@ -15124,6 +16258,50 @@ if (typeof Path2D === 'function' && typeof Path2D.prototype.addPath !== 'functio
     drawWarMarks(z);
     drawSelection(z);
     if (showNames) drawCityLabels(vis, z);
+  }
+  function baseGlyphs(b, x, y, col) {
+    let k = 0;
+    ctx.lineWidth = 1.2;
+    ctx.strokeStyle = "rgba(6,10,20,.9)";
+    const at = () => x + k++ * 7;
+    if (b.army) {
+      const gx = at();
+      ctx.fillStyle = col;
+      ctx.fillRect(gx, y - 5, 4, 3);
+      ctx.fillStyle = "#e8e8e8";
+      ctx.fillRect(gx - 0.6, y - 5, 1, 6);
+    }
+    if (b.navy) {
+      const gx = at() + 2;
+      ctx.strokeStyle = "#cfe4f2";
+      ctx.beginPath();
+      ctx.moveTo(gx, y - 5);
+      ctx.lineTo(gx, y + 1);
+      ctx.moveTo(gx - 2.5, y - 1);
+      ctx.quadraticCurveTo(gx, y + 3, gx + 2.5, y - 1);
+      ctx.moveTo(gx - 1.5, y - 3.5);
+      ctx.lineTo(gx + 1.5, y - 3.5);
+      ctx.stroke();
+    }
+    if (b.air) {
+      const gx = at() + 2;
+      ctx.fillStyle = "#dfe6ec";
+      ctx.fillRect(gx - 0.6, y - 5, 1.2, 6);
+      ctx.fillRect(gx - 3, y - 2.5, 6, 1.2);
+      ctx.fillRect(gx - 1.5, y + 0.2, 3, 0.9);
+    }
+    if (b.fort) {
+      const gx = at() + 2;
+      ctx.fillStyle = "#b8b0a0";
+      ctx.beginPath();
+      ctx.moveTo(gx, y - 5);
+      ctx.lineTo(gx + 3, y - 2.5);
+      ctx.lineTo(gx + 2, y + 1);
+      ctx.lineTo(gx - 2, y + 1);
+      ctx.lineTo(gx - 3, y - 2.5);
+      ctx.closePath();
+      ctx.fill();
+    }
   }
   function drawMapImage(x0, x1, y0, y1, z, rows) {
     const sw2 = view.w, sh = view.h;
@@ -18273,7 +19451,6 @@ if (typeof Path2D === 'function' && typeof Path2D.prototype.addPath !== 'functio
         log("civ", "".concat(n.name, "完成国策「").concat(f.name, "」：").concat(f.fxt), capitalCell(n), true);
       }
     }
-    if (n.mobil) n.legions = Math.min(40, n.legions + (n.mobil === 2 ? 0.8 : 0.3) / sp * 10);
     if (S.tick % 10 === 0) checkVictory();
   }
   function checkVictory() {
@@ -18597,7 +19774,6 @@ if (typeof Path2D === 'function' && typeof Path2D.prototype.addPath !== 'functio
     if (mode === "leader") {
       const n = S.nations[nid];
       S.player = { autoBudget: true, n: nid, pp: 40, ppRate: 1, focus: null, done: [], claims: {}, gcd: S.year + secYears(20), victory: null, started: S.year };
-      n.mobil = 0;
       selectedNation = -1;
       const c = cityById(n.capital) || largestCity(n);
       if (c) {
@@ -18694,7 +19870,8 @@ if (typeof Path2D === 'function' && typeof Path2D.prototype.addPath !== 'functio
     const opts = doctrineOptions(n);
     if (!opts.some((t) => t.id === docPick)) docPick = opts.length ? opts[0].id : "";
     const pick3 = TECH_BY_ID[docPick], reform = pick3 && EXCL[pick3.excl].some((o) => n.techs[o.id] !== void 0);
-    return '<h3>军队 <small><label class="chk"><input type="checkbox" data-me="milauto"'.concat(mx.auto ? " checked" : "", '> 顾问代管军队</label></small></h3>\n    <div class="kpis">\n      <div class="kpi"><span class="k">陆军</span><span class="v">').concat(fmtNum(F.L / 1e3), '</span></div>\n      <div class="kpi"><span class="k">海军</span><span class="v">').concat(fmtNum(F.S / 1e3), '</span></div>\n      <div class="kpi"><span class="k">空军</span><span class="v">').concat(fmtNum(F.A / 1e3), '</span></div>\n    </div>\n    <div class="acts"><span class="note" style="margin:0">军费结构：</span><div class="seg">').concat(Object.keys(MIL_PRESET_NAME).map((k) => '<button data-milp="'.concat(k, '" aria-pressed="').concat(presetOn(n, k), '">').concat(MIL_PRESET_NAME[k], "</button>")).join(""), '</div></div>\n    <div class="alloc">').concat(DOMS.map((d, k) => '<span class="swatch" style="background:'.concat(DOM_BAR[d], '"></span><span>').concat(DOM_NAME[d], '</span><span class="track"><span class="fill" style="width:').concat((mx.split[k] * 100).toFixed(0), "%;background:").concat(DOM_BAR[d], '"></span></span><span class="mono">').concat(pctS(mx.split[k]), '</span><button class="btn small" data-ms="').concat(k, '" data-d="-1" aria-label="减少').concat(DOM_NAME[d], '经费">−</button><button class="btn small" data-ms="').concat(k, '" data-d="1" aria-label="增加').concat(DOM_NAME[d], '经费">+</button>')).join(""), "</div>\n    ").concat(notes.length ? '<p class="note">'.concat(notes.join("；"), "。</p>") : "", '\n    <details class="fold"').concat(armyMixOpen ? " open" : "", '><summary data-me="mixfold">编制：各兵种占比与现役型号</summary><div class="mixgrid">').concat(DOMS.map((d) => '<span class="dh">'.concat(DOM_NAME[d], "</span>") + ROLES[d].map((ro) => {
+    const PC = prodCap(n), q2 = n.bq || [], oq = mx.queue || [];
+    return '<h3>军队 <small><label class="chk"><input type="checkbox" data-me="milauto"'.concat(mx.auto ? " checked" : "", '> 顾问代管军种比例</label></small></h3>\n    <div class="kpis">\n      <div class="kpi"><span class="k">陆军</span><span class="v">').concat(fmtNum(F.L / 1e3), '</span></div>\n      <div class="kpi"><span class="k">海军</span><span class="v">').concat(fmtNum(F.S / 1e3), '</span></div>\n      <div class="kpi"><span class="k">空军</span><span class="v">').concat(fmtNum(F.A / 1e3), '</span></div>\n    </div>\n    <p class="note">现役 ').concat(Math.round(F.tot), " / 编制 ").concat(Math.round(F.cap)).concat(F.tot > F.cap * 1.02 ? "（超编）" : "", " · 兵员约 ").concat(fmtNum(soldiersOf(n)), " 人 · ").concat(bldName("mf", n), " ").concat(PC.mf, " 座 · ").concat(bldName("dock", n), " ").concat(PC.dk, " 座").concat(q2.length ? " · 在建 ".concat(q2.length, " 项") : "").concat(oq.length ? " · 订单 ".concat(oq.length, " 个") : "", '</p>\n    <div class="decs"><button class="btn small primary" data-mil="build">建设工厂与基地…</button><button class="btn small" data-mil="prod">生产订单…</button><button class="btn small" data-mil="force">兵力与征兵…</button></div>\n    <div class="acts"><span class="note" style="margin:0">军费结构：</span><div class="seg">').concat(Object.keys(MIL_PRESET_NAME).map((k) => '<button data-milp="'.concat(k, '" aria-pressed="').concat(presetOn(n, k), '">').concat(MIL_PRESET_NAME[k], "</button>")).join(""), '</div></div>\n    <div class="alloc">').concat(DOMS.map((d, k) => '<span class="swatch" style="background:'.concat(DOM_BAR[d], '"></span><span>').concat(DOM_NAME[d], '</span><span class="track"><span class="fill" style="width:').concat((mx.split[k] * 100).toFixed(0), "%;background:").concat(DOM_BAR[d], '"></span></span><span class="mono">').concat(pctS(mx.split[k]), '</span><button class="btn small" data-ms="').concat(k, '" data-d="-1" aria-label="减少').concat(DOM_NAME[d], '经费">−</button><button class="btn small" data-ms="').concat(k, '" data-d="1" aria-label="增加').concat(DOM_NAME[d], '经费">+</button>')).join(""), "</div>\n    ").concat(notes.length ? '<p class="note">'.concat(notes.join("；"), "。</p>") : "", '\n    <details class="fold"').concat(armyMixOpen ? " open" : "", '><summary data-me="mixfold">编制：各兵种占比与现役型号</summary><div class="mixgrid">').concat(DOMS.map((d) => '<span class="dh">'.concat(DOM_NAME[d], "</span>") + ROLES[d].map((ro) => {
       const u = UNIT_BY_ID[m.best[ro]];
       return "<span>".concat(MIL_ROLE_NAME[ro], " <small>· ").concat(u ? esc(u.name) : "未解锁", '</small></span><span class="mono">').concat(pctS(mx.mix[d][ro] || 0), '</span><button class="btn small" data-mix="').concat(d, ":").concat(ro, '" data-d="-1" aria-label="减少').concat(MIL_ROLE_NAME[ro], '">−</button><button class="btn small" data-mix="').concat(d, ":").concat(ro, '" data-d="1" aria-label="增加').concat(MIL_ROLE_NAME[ro], '">+</button>');
     }).join("")).join(""), '</div></details>\n    <div class="rrow" style="margin-top:12px"><span class="swatch" style="background:#e8a25a"></span><span>军工研究 · ').concat(r.mt ? esc(r.mt.name) : "暂无目标", '</span><span class="mono">').concat(r.mt ? Math.round(r.mp * 100) + "%" : "", ' <button class="btn small" data-me="miltree">选择</button></span><span class="track"><span class="fill mil" style="width:').concat((r.mp * 100).toFixed(0), '%"></span></span></div>\n    <div class="milrow" style="margin-top:10px"><span class="k">学说</span>').concat(doctrineChips(n), "</div>\n    ").concat(opts.length ? '<div class="acts"><select class="msel" data-me="docpick" aria-label="新学说">'.concat(opts.map((t) => '<option value="'.concat(t.id, '"').concat(t.id === docPick ? " selected" : "", ">").concat(DOM_NAME[t.excl], " · ").concat(esc(t.name), "</option>")).join(""), '</select><button class="btn small" data-me="doctrine" ').concat(reform && P.pp < 60 ? "disabled" : "", ">").concat(reform ? "学说改革 · 60" : "研究此学说", "</button></div>") : "");
@@ -18705,7 +19882,14 @@ if (typeof Path2D === 'function' && typeof Path2D.prototype.addPath !== 'functio
     const btns = [];
     if (!w.civil && !th.land && o && o.cl.some((x) => x.coastal)) btns.push('<button class="btn small" data-war="'.concat(w.id, '" data-wa="amphib" title="对最近的敌方沿海城市发起两栖登陆，需要制海 58% 以上">两栖登陆</button>'));
     if (deterrent(n)) btns.push('<button class="btn small danger" data-war="'.concat(w.id, '" data-wa="nuke">核打击…</button>'));
-    return '<div class="warctl">'.concat(bar("地面", c.land)).concat(bar("制空", c.air)).concat(th.sea || c.sea !== 0.5 ? bar("制海", c.sea) : "").concat(c.block > 0.01 ? "<span>被封锁</span><span></span><b>".concat(Math.round(c.block * 100), "%</b>") : "", "</div>").concat(btns.length ? '<div class="decs" style="margin:2px 0 6px 16px">'.concat(btns.join(""), "</div>") : "");
+    const obj = w.obj ? w.obj[sideOf(w, n)] : null, f = w.front;
+    const cands = o ? o.cl.slice().sort((a, b) => (f >= 0 ? cellDist(a.i, f) - cellDist(b.i, f) : 0) || b.pop - a.pop).slice(0, 14) : [];
+    if (obj != null && !cands.some((x) => x.id === obj)) {
+      const oc = cityById(obj);
+      if (oc) cands.unshift(oc);
+    }
+    const objSel = cands.length ? '<div class="milrow" style="margin:2px 0 6px 16px"><span class="k">主攻</span><select class="objsel" data-obj="'.concat(w.id, '" aria-label="主攻方向"><option value="">前线自行选择</option>').concat(cands.map((x) => '<option value="'.concat(x.id, '"').concat(x.id === obj ? " selected" : "", ">").concat(esc(x.name)).concat(x.cap ? "（首都）" : "", "</option>")).join(""), "</select></div>") : "";
+    return '<div class="warctl">'.concat(bar("地面", c.land)).concat(bar("制空", c.air)).concat(th.sea || c.sea !== 0.5 ? bar("制海", c.sea) : "").concat(c.block > 0.01 ? "<span>被封锁</span><span></span><b>".concat(Math.round(c.block * 100), "%</b>") : "", "</div>").concat(objSel).concat(btns.length ? '<div class="decs" style="margin:2px 0 6px 16px">'.concat(btns.join(""), "</div>") : "");
   }
   function confirmNuke(n, w) {
     const o = S.nations[w.a === n.id ? w.b : w.a];
@@ -18744,7 +19928,7 @@ if (typeof Path2D === 'function' && typeof Path2D.prototype.addPath !== 'functio
     const share = (S.ideoWorld || {})[n.ideo] || 0, realmC = S.cities.filter((c) => realmOf(c.n) === n.id).length;
     const planets = new Set(cols.map(([k]) => k)).size;
     const claim = T2 ? P.claims[T2.id] : void 0;
-    setHTML(el, '\n    <div class="me-head">'.concat(sw(n), '<div><div class="me-name">').concat(esc(n.name), '</div><div class="me-sub"><span class="ibadge" style="--ic:').concat(I.color, '">').concat(esc(I.name), "</span> ").concat(ERA_NAME[n.mult.era], "时代 · ").concat(n.cl.length, " 城 · ").concat(fmtPop(n.st.pop), '</div></div></div>\n    <div class="kpis">\n      <div class="kpi"><span class="k">政治点数</span><span class="v">').concat(Math.floor(P.pp), " <small>+").concat(P.ppRate.toFixed(1), '</small></span></div>\n      <div class="kpi"><span class="k">稳定度</span><span class="v">').concat(Math.round(n.stabV * 100), '%</span></div>\n      <div class="kpi"><span class="k">军力</span><span class="v">').concat(fmtNum(power(n) / 1e3), '</span></div>\n    </div>\n    <h3>国策 <small><button class="btn small" data-me="focus">打开国策树</button></small></h3>\n    ').concat(f ? '<div class="rrow"><span class="swatch" style="background:var(--sodium)"></span><span>'.concat(esc(f.name), '</span><span class="mono">').concat(Math.round(P.focus.prog / f.sec * 100), '%</span><span class="track"><span class="fill" style="width:').concat((P.focus.prog / f.sec * 100).toFixed(0), '%"></span></span></div>') : '<p class="note">当前没有推进中的国策。打开国策树选择一项。</p>', '\n    <h3>民意</h3>\n    <div class="supbar">').concat(sup.map(([id, v]) => '<span style="width:'.concat((v * 100).toFixed(1), "%;background:").concat(IDEO_BY_ID[id].color, '" title="').concat(IDEO_BY_ID[id].name, " ").concat(Math.round(v * 100), '%"></span>')).join(""), '</div>\n    <div class="mixlegend">').concat(sup.slice(0, 4).map(([id, v]) => '<div><span class="swatch" style="background:'.concat(IDEO_BY_ID[id].color, '"></span>').concat(IDEO_BY_ID[id].short, "<b>").concat(Math.round(v * 100), "%</b></div>")).join(""), '</div>\n    <div class="acts"><span class="note" style="margin:0">动员：</span><div class="seg" data-me="mobilseg">').concat(["和平", "部分动员", "总动员"].map((t, k) => '<button data-mobil="'.concat(k, '" aria-pressed="').concat((n.mobil || 0) === k, '">').concat(t, "</button>")).join(""), "</div></div>\n    ").concat(n.eco ? '<h3>财政 <small><label class="chk"><input type="checkbox" data-me="auto"'.concat(P.autoBudget ? " checked" : "", '> AI 顾问代管</label></small></h3>\n    <div class="kpis">\n      <div class="kpi"><span class="k">GDP</span><span class="v">').concat(fmtMoney(n.eco.gdp), '</span></div>\n      <div class="kpi"><span class="k">税收 / 年</span><span class="v">').concat(fmtMoney(n.eco.rev), '</span></div>\n      <div class="kpi"><span class="k">国库</span><span class="v">').concat(fmtMoney(n.eco.treasury), '</span></div>\n    </div>\n    <div class="taxrow"><span>税率</span><button class="btn small" data-tax="-1" aria-label="降低税率">−</button><b class="mono">').concat(pctS(n.eco.tax), '</b><button class="btn small" data-tax="1" aria-label="提高税率">+</button><span class="note" style="margin:0">企业意愿 ').concat(n.eco.will.toFixed(2), " · 出口 ").concat(fmtMoney(n.eco.exp)).concat(n.eco.tax > doct(n.ideo).tax + 0.05 ? ' · <b style="color:var(--blood)">高于惯例，民怨上升</b>' : "", '</span></div>\n    <div class="alloc">').concat(BUD.map((b, k) => b === "space" && !n.mult.space ? "" : '<span class="swatch" style="background:'.concat(BUD_COLOR[b], '"></span><span>').concat(BUD_NAME[b], '</span><span class="track"><span class="fill" style="width:').concat((n.eco.alloc[k] * 100).toFixed(0), "%;background:").concat(BUD_COLOR[b], '"></span></span><span class="mono">').concat(pctS(n.eco.alloc[k]), '</span><button class="btn small" data-al="').concat(k, '" data-d="-1" aria-label="减少').concat(BUD_NAME[b], '">−</button><button class="btn small" data-al="').concat(k, '" data-d="1" aria-label="增加').concat(BUD_NAME[b], '">+</button>')).join(""), '</div>\n    <p class="note">铁路 ').concat(n.eco.rails, " 段 · 研究院 ").concat(n.eco.inst, " 座 · 本国路线「").concat(esc(doct(n.ideo).school), "」</p>\n    ").concat(n.ai && n.ai.advice ? '<p class="note">顾问建议：'.concat(esc(n.ai.advice), "</p>") : "") : "", "\n    ").concat(armyBlock(n), '\n    <h3>外交与决议</h3>\n    <div class="acts"><select data-me="target" aria-label="对象国家" class="msel">').concat(others.map((o) => '<option value="'.concat(o.id, '"').concat(o.id === decisionTarget ? " selected" : "", ">").concat(esc(o.name)).concat(atWar(n.id, o.id) ? "（交战）" : allied(n.id, o.id) ? "（同盟）" : o.overlord === n.id ? "（附庸）" : "", "</option>")).join(""), "</select></div>\n    ").concat(T2 ? '<p class="note">'.concat(sw(T2)).concat(esc(T2.name), " · ").concat(esc(ideoOf(T2).name), " · 军力 ").concat(fmtNum(power(T2) / 1e3), " · 互信 ").concat(Math.round(getTrust(n.id, T2.id) * 100), "% · ").concat(T2.ambition * ideoOf(T2).aggr > 1.2 ? "野心勃勃" : "相对温和").concat(claim !== void 0 ? claim <= S.year ? ' · <b style="color:var(--sodium)">已有战争借口</b>' : " · 借口还需 ".concat(claim - S.year, " 年") : "").concat(hasNap(n, T2) ? " · 互不侵犯" : "", "</p>") : "", '\n    <div class="decs">').concat(DECISIONS.filter((d) => d.tgt).map((d) => {
+    setHTML(el, '\n    <div class="me-head">'.concat(sw(n), '<div><div class="me-name">').concat(esc(n.name), '</div><div class="me-sub"><span class="ibadge" style="--ic:').concat(I.color, '">').concat(esc(I.name), "</span> ").concat(ERA_NAME[n.mult.era], "时代 · ").concat(n.cl.length, " 城 · ").concat(fmtPop(n.st.pop), '</div></div></div>\n    <div class="kpis">\n      <div class="kpi"><span class="k">政治点数</span><span class="v">').concat(Math.floor(P.pp), " <small>+").concat(P.ppRate.toFixed(1), '</small></span></div>\n      <div class="kpi"><span class="k">稳定度</span><span class="v">').concat(Math.round(n.stabV * 100), '%</span></div>\n      <div class="kpi"><span class="k">军力</span><span class="v">').concat(fmtNum(power(n) / 1e3), '</span></div>\n    </div>\n    <h3>国策 <small><button class="btn small" data-me="focus">打开国策树</button></small></h3>\n    ').concat(f ? '<div class="rrow"><span class="swatch" style="background:var(--sodium)"></span><span>'.concat(esc(f.name), '</span><span class="mono">').concat(Math.round(P.focus.prog / f.sec * 100), '%</span><span class="track"><span class="fill" style="width:').concat((P.focus.prog / f.sec * 100).toFixed(0), '%"></span></span></div>') : '<p class="note">当前没有推进中的国策。打开国策树选择一项。</p>', '\n    <h3>民意</h3>\n    <div class="supbar">').concat(sup.map(([id, v]) => '<span style="width:'.concat((v * 100).toFixed(1), "%;background:").concat(IDEO_BY_ID[id].color, '" title="').concat(IDEO_BY_ID[id].name, " ").concat(Math.round(v * 100), '%"></span>')).join(""), '</div>\n    <div class="mixlegend">').concat(sup.slice(0, 4).map(([id, v]) => '<div><span class="swatch" style="background:'.concat(IDEO_BY_ID[id].color, '"></span>').concat(IDEO_BY_ID[id].short, "<b>").concat(Math.round(v * 100), "%</b></div>")).join(""), '</div>\n    <div class="acts"><span class="note" style="margin:0">征兵：</span><div class="seg">').concat(LAW_NAME.map((t, k) => '<button data-law="'.concat(k, '" aria-pressed="').concat(lawOf(n) === k, '" title="').concat(esc(LAW_DESC[k]), '">').concat(t, "</button>")).join(""), "</div></div>\n    ").concat(n.eco ? '<h3>财政 <small><label class="chk"><input type="checkbox" data-me="auto"'.concat(P.autoBudget ? " checked" : "", '> AI 顾问代管</label></small></h3>\n    <div class="kpis">\n      <div class="kpi"><span class="k">GDP</span><span class="v">').concat(fmtMoney(n.eco.gdp), '</span></div>\n      <div class="kpi"><span class="k">税收 / 年</span><span class="v">').concat(fmtMoney(n.eco.rev), '</span></div>\n      <div class="kpi"><span class="k">国库</span><span class="v">').concat(fmtMoney(n.eco.treasury), '</span></div>\n    </div>\n    <div class="taxrow"><span>税率</span><button class="btn small" data-tax="-1" aria-label="降低税率">−</button><b class="mono">').concat(pctS(n.eco.tax), '</b><button class="btn small" data-tax="1" aria-label="提高税率">+</button><span class="note" style="margin:0">企业意愿 ').concat(n.eco.will.toFixed(2), " · 出口 ").concat(fmtMoney(n.eco.exp)).concat(n.eco.tax > doct(n.ideo).tax + 0.05 ? ' · <b style="color:var(--blood)">高于惯例，民怨上升</b>' : "", '</span></div>\n    <div class="alloc">').concat(BUD.map((b, k) => b === "space" && !n.mult.space ? "" : '<span class="swatch" style="background:'.concat(BUD_COLOR[b], '"></span><span>').concat(BUD_NAME[b], '</span><span class="track"><span class="fill" style="width:').concat((n.eco.alloc[k] * 100).toFixed(0), "%;background:").concat(BUD_COLOR[b], '"></span></span><span class="mono">').concat(pctS(n.eco.alloc[k]), '</span><button class="btn small" data-al="').concat(k, '" data-d="-1" aria-label="减少').concat(BUD_NAME[b], '">−</button><button class="btn small" data-al="').concat(k, '" data-d="1" aria-label="增加').concat(BUD_NAME[b], '">+</button>')).join(""), '</div>\n    <p class="note">铁路 ').concat(n.eco.rails, " 段 · 研究院 ").concat(n.eco.inst, " 座 · 本国路线「").concat(esc(doct(n.ideo).school), "」</p>\n    ").concat(n.ai && n.ai.advice ? '<p class="note">顾问建议：'.concat(esc(n.ai.advice), "</p>") : "") : "", "\n    ").concat(armyBlock(n), '\n    <h3>外交与决议</h3>\n    <div class="acts"><select data-me="target" aria-label="对象国家" class="msel">').concat(others.map((o) => '<option value="'.concat(o.id, '"').concat(o.id === decisionTarget ? " selected" : "", ">").concat(esc(o.name)).concat(atWar(n.id, o.id) ? "（交战）" : allied(n.id, o.id) ? "（同盟）" : o.overlord === n.id ? "（附庸）" : "", "</option>")).join(""), "</select></div>\n    ").concat(T2 ? '<p class="note">'.concat(sw(T2)).concat(esc(T2.name), " · ").concat(esc(ideoOf(T2).name), " · 军力 ").concat(fmtNum(power(T2) / 1e3), " · 互信 ").concat(Math.round(getTrust(n.id, T2.id) * 100), "% · ").concat(T2.ambition * ideoOf(T2).aggr > 1.2 ? "野心勃勃" : "相对温和").concat(claim !== void 0 ? claim <= S.year ? ' · <b style="color:var(--sodium)">已有战争借口</b>' : " · 借口还需 ".concat(claim - S.year, " 年") : "").concat(hasNap(n, T2) ? " · 互不侵犯" : "", "</p>") : "", '\n    <div class="decs">').concat(DECISIONS.filter((d) => d.tgt).map((d) => {
       const c = d.id === "declare" && T2 && !canJustifiedWar(n, T2) ? 60 : d.pp;
       return '<button class="btn small'.concat(d.id === "declare" ? " danger" : "", '" data-dec="').concat(d.id, '" title="').concat(esc(d.desc), '" ').concat(P.pp < c ? "disabled" : "", ">").concat(d.name).concat(c ? " · ".concat(c) : "", "</button>");
     }).join(""), '</div>\n    <div class="decs">').concat(DECISIONS.filter((d) => !d.tgt).map((d) => '<button class="btn small" data-dec="'.concat(d.id, '" title="').concat(esc(d.desc), '" ').concat(P.pp < d.pp ? "disabled" : "", ">").concat(d.name, " · ").concat(d.pp, "</button>")).join(""), '<button class="btn small" data-me="attack">派兵进攻…</button></div>\n    <h3>战争</h3>\n    ').concat(wars.length ? wars.map((w) => {
@@ -18801,11 +19985,10 @@ if (typeof Path2D === 'function' && typeof Path2D.prototype.addPath !== 'functio
       normW(n.eco.alloc);
       S.player.autoBudget = false;
     }
-    const mb = e.target.closest("[data-mobil]");
-    if (mb && n) {
-      n.mobil = +mb.dataset.mobil;
-      n.mult = computeMult(n);
-    }
+    const lw = e.target.closest("[data-law]");
+    if (lw && n && setLaw(n, +lw.dataset.law)) showTicker("war", "征兵法令改为「".concat(LAW_NAME[n.law], "」"));
+    const mo = e.target.closest("[data-mil]");
+    if (mo && n) openMil(mo.dataset.mil);
     const d = e.target.closest("[data-dec]");
     if (d) doDecision(d.dataset.dec, S.nations[decisionTarget]);
     const w = e.target.closest("[data-war]");
@@ -18838,6 +20021,14 @@ if (typeof Path2D === 'function' && typeof Path2D.prototype.addPath !== 'functio
         const r = milCommand(n, null, k === "sbomb" ? "sbomb" : "unrestricted");
         showTicker("war", r.msg);
       }
+      $("pane-me")._hold = 0;
+      $("pane-me")._html = "";
+      renderMe();
+      return;
+    }
+    if (e.target.matches("[data-obj]")) {
+      const w = S.wars.find((x) => x.id === +e.target.dataset.obj);
+      if (w && n) showTicker("war", setWarObjective(n, w, e.target.value === "" ? null : +e.target.value));
       $("pane-me")._hold = 0;
       $("pane-me")._html = "";
       renderMe();
@@ -18931,6 +20122,200 @@ if (typeof Path2D === 'function' && typeof Path2D.prototype.addPath !== 'functio
   $("fmClose").addEventListener("click", () => {
     $("focusModal").hidden = true;
   });
+  let mmTab = "build", mmOpen = false, mmDom = "land";
+  const BLD_SHORT = { cf: "民", mf: "军", dock: "坞", army: "陆", navy: "海", air: "空", fort: "塞" };
+  function openMil(tab) {
+    if (!playerNation()) return;
+    if (tab) mmTab = tab;
+    $("milModal").hidden = false;
+    mmOpen = true;
+    $("mmBody")._tab = null;
+    renderMil();
+  }
+  function closeMil() {
+    $("milModal").hidden = true;
+    mmOpen = false;
+  }
+  function renderMil() {
+    if (!mmOpen) return;
+    const n = playerNation(), body = $("mmBody");
+    if (!n || !n.alive) {
+      closeMil();
+      return;
+    }
+    for (const b2 of $("mmTabs").children) b2.setAttribute("aria-selected", b2.dataset.mm === mmTab);
+    if (body._tab !== mmTab) {
+      body.innerHTML = '<div class="mm-wrap"><div id="mmA"></div><div id="mmB"></div></div>';
+      body._tab = mmTab;
+      body.scrollTop = 0;
+    }
+    const [a, b] = mmTab === "build" ? [milBuildTop(n), milBuildCities(n)] : mmTab === "prod" ? [milProdTop(n), milProdCards(n)] : [milForceTop(n), milForceStock(n)];
+    setHTML($("mmA"), a);
+    setHTML($("mmB"), b);
+  }
+  function yrs(v) {
+    return !isFinite(v) ? "—" : v < 1 ? "<1 年" : v < 10 ? v.toFixed(1) + " 年" : Math.round(v) + " 年";
+  }
+  function milBuildTop(n) {
+    const e = n.eco, P = S.player, q2 = n.bq || [], conc = buildConc(n), sp = e.spend || 0, a = e.alloc;
+    const inflow = sp * (0.35 * a[3] + 0.15 * a[2]);
+    let act = 0;
+    const rows = q2.slice(0, 40).map((it, k) => {
+      const c = cityById(it.c), K = BLD_KINDS[it.k];
+      if (!c || !K) return "";
+      const running = it.paid && act < conc;
+      if (running) act++;
+      const afford = (e.fund[2] || 0) + Math.max(0, e.treasury - 0.3 * (e.rev || 0)) >= buildCost(n, it.k, c);
+      const st = it.paid ? running ? "施工 ".concat(Math.round(it.p * 100), "%") : "排队" : k < conc ? afford ? "待开工" : "等待资金" : "排队";
+      return "<span>".concat(esc(c.name), "</span><span>").concat(esc(bldName(it.k, n))).concat(K.lv ? " → ".concat(bget(c, it.k) + 1, " 级") : "", '</span><span class="st">').concat(st, '</span><button class="btn small" data-bx="').concat(k, '" aria-label="取消">×</button>\n      <span class="track" style="grid-column:1/-1"><span class="fill" style="width:').concat((it.p * 100).toFixed(0), '%"></span></span>');
+    }).join("");
+    return '<div class="kpis">\n      <div class="kpi"><span class="k">建设资金</span><span class="v">'.concat(fmtMoney(e.fund[2] || 0), " <small>+").concat(fmtMoney(inflow), '/年</small></span></div>\n      <div class="kpi"><span class="k">国库</span><span class="v">').concat(fmtMoney(e.treasury), '</span></div>\n      <div class="kpi"><span class="k">同时施工</span><span class="v">').concat(act, " / ").concat(conc, '</span></div>\n    </div>\n    <p class="note">建设资金来自「产业」和「基建」预算，不够时动用国库（保留三成年税收作储备）。工业越发达，能同时开工的项目越多。</p>\n    <label class="chk"><input type="checkbox" data-mmauto="build"').concat(P.autoBuild !== false ? " checked" : "", "> 自动建设：你的队列有空位时，由顾问补建缺少的军工厂、船坞和基地</label>\n    <h3>建设队列 <small>").concat(q2.length ? q2.length + " 项" : "", "</small></h3>\n    ").concat(q2.length ? '<div class="bq">'.concat(rows, "</div>").concat(q2.length > 40 ? '<p class="note">还有 '.concat(q2.length - 40, " 项排在后面。</p>") : "") : '<p class="note">队列是空的。在下面的城市列表里，或者点地图上的本国城市来下令建设。</p>');
+  }
+  function milBuildCities(n) {
+    const cities = n.cl.slice().sort((a, b) => b.cap - a.cap || b.pop - a.pop), ref = cities[0];
+    const leg = BLD_ORDER.map((k) => "<span><b>".concat(BLD_SHORT[k], "</b> ").concat(esc(bldName(k, n)), " ").concat(ref ? fmtMoney(buildCost(n, k, ref)) : "", "</span>")).join("");
+    return '<h3>城市 <small>用地 = 民用工厂 + 军工厂 + 船坞；基地和要塞最高 3 级</small></h3>\n    <div class="bleg">'.concat(leg, "</div>\n    ").concat(cities.map((c) => cityBuildRow(n, c)).join(""));
+  }
+  function bldSummary(c, n) {
+    return BLD_ORDER.filter((k) => bget(c, k)).map((k) => "".concat(BLD_SHORT[k]).concat(BLD_KINDS[k].lv ? bget(c, k) + "级" : "×" + bget(c, k))).join(" ");
+  }
+  function bldButtons(n, c, cls) {
+    return BLD_ORDER.map((k) => {
+      const why = canBuild(n, c, k), K = BLD_KINDS[k];
+      return '<button class="'.concat(cls, '" data-bc="').concat(c.id, '" data-bk="').concat(k, '" ').concat(why ? 'disabled title="'.concat(esc(bldName(k, n)), "：").concat(esc(why), '"') : 'title="'.concat(esc(bldName(k, n)), "：").concat(fmtMoney(buildCost(n, k, c)), "，").concat(esc(K.desc), '"'), ">").concat(BLD_SHORT[k]).concat(K.lv ? "↑" : "+", "</button>");
+    }).join("");
+  }
+  function cityBuildRow(n, c) {
+    const have = bldSummary(c, n), q2 = queuedAt(n, c);
+    return '<div class="crow"><span class="cn">'.concat(esc(c.name)).concat(c.cap ? " · 首都" : "", "<small>").concat(fmtPop(c.pop)).concat(c.coastal ? " · 沿海" : "", '</small></span>\n    <span class="cb">用地 ').concat(slotsUsed(c) + queuedSlots(n, c), "/").concat(citySlots(c)).concat(have ? " · " + have : "").concat(q2 ? " · 在建 ".concat(q2) : "", '</span>\n    <span class="bchips">').concat(bldButtons(n, c, "bchip"), "</span></div>");
+  }
+  function batchUE(u) {
+    const per = dispOf(u)[0];
+    return u.dom === "sea" && per < 1 ? 1 / per : 1;
+  }
+  function milProdTop(n) {
+    const mx = ensureMil(n), F = milForces(n), P = prodCap(n), q2 = mx.queue || [];
+    let poolLeft = [P.pm, P.pd];
+    const rows = q2.map((o, k) => {
+      const u = UNIT_BY_ID[o.u];
+      if (!u) return "";
+      const sea = u.dom === "sea" ? 1 : 0, cost = o.n * u.cost, eta = poolLeft[sea] > 0 ? cost / poolLeft[sea] : Infinity;
+      const done = o.done || 0, frac = done / Math.max(1e-6, done + o.n);
+      return "<span>".concat(esc(u.name), ' <small class="dim">').concat(MIL_ROLE_NAME[CROLE[u.id][0]], "</small></span><span>还差 ").concat(dispNum(u, o.n), " ").concat(dispOf(u)[1], '</span><span class="st">约 ').concat(yrs(eta), '</span>\n      <span class="ob"><button class="btn small" data-oq="').concat(k, '" data-d="1" aria-label="多造一批">+</button><button class="btn small" data-oq="').concat(k, '" data-d="-1" aria-label="少造一批">−</button><button class="btn small" data-ox="').concat(k, '" aria-label="取消订单">×</button></span>\n      <span class="track" style="grid-column:1/-1"><span class="fill" style="width:').concat((frac * 100).toFixed(0), '%"></span></span>');
+    }).join("");
+    const over = F.tot > F.cap * 1.02;
+    return '<div class="kpis">\n      <div class="kpi"><span class="k">军工产能 · '.concat(P.mf, " 座").concat(bldName("mf", n), '</span><span class="v">').concat(fmtNum(P.pm), ' <small>点/年</small></span></div>\n      <div class="kpi"><span class="k">船坞产能 · ').concat(P.dk, " 座").concat(bldName("dock", n), '</span><span class="v">').concat(fmtNum(P.pd), ' <small>点/年</small></span></div>\n      <div class="kpi"><span class="k">现役 / 编制</span><span class="v">').concat(Math.round(F.tot), " / ").concat(Math.round(F.cap), '</span></div>\n    </div>\n    <p class="note">军工厂造陆军装备和飞机，船坞只造舰船。').concat(over ? '<b style="color:var(--blood)">部队已超编：多出来的装备只能封存，不增加战斗力。</b>' : "编制没满时，新造的部队直接形成战斗力。", '</p>\n    <label class="chk"><input type="checkbox" data-mmauto="prod"').concat(mx.prodAuto !== false ? " checked" : "", "> 自动补充：订单之外剩余的产能，按「国家」页的军种比例自动补齐编制、换装新型号</label>\n    <h3>生产订单 <small>").concat(q2.length ? "按顺序优先分配产能" : "", "</small></h3>\n    ").concat(q2.length ? '<div class="oq">'.concat(rows, "</div>") : '<p class="note">还没有订单。在下面选择要生产的装备。</p>');
+  }
+  function milProdCards(n) {
+    const P = prodCap(n), m = n.mult;
+    const seg = DOMS.map((d) => '<button data-mmdom="'.concat(d, '" aria-pressed="').concat(mmDom === d, '">').concat(DOM_NAME[d], "</button>")).join("");
+    const cards = [];
+    for (const r of ROLES[mmDom]) {
+      const best2 = UNIT_BY_ID[m.best[r]];
+      const list = (UNITS_BY_ROLE[r] || []).filter((u) => CROLE[u.id][0] === r && unitBuildable(n, u) && (!best2 || u.rating >= best2.rating * 0.4)).sort((a, b) => b.rating - a.rating).slice(0, 3);
+      for (const u of list) {
+        const bu = batchUE(u), cost = bu * u.cost, pool = u.dom === "sea" ? P.pd : P.pm, d = dispOf(u);
+        cards.push('<div class="ucard'.concat(best2 && u.id !== best2.id ? " old" : "", '">\n        <div class="un"><span>').concat(esc(u.name), "</span><small>").concat(MIL_ROLE_NAME[r]).concat(best2 && u.id === best2.id ? " · 最新" : "", '</small></div>\n        <div class="us">攻 ').concat(u.atk, " · 防 ").concat(u.def, " · 每批 ").concat(dispNum(u, bu), " ").concat(d[1], " · ").concat(fmtNum(cost), " 点 · 约 ").concat(yrs(pool > 0 ? cost / pool : Infinity), "</div>\n        ").concat(u.desc ? '<div class="us">'.concat(esc(u.desc), "</div>") : "", '\n        <div class="ub"><button class="btn small" data-ou="').concat(u.id, '" data-k="1">下单 1 批</button><button class="btn small" data-ou="').concat(u.id, '" data-k="5">5 批</button><button class="btn small" data-ou="').concat(u.id, '" data-k="20">20 批</button></div>\n      </div>'));
+      }
+    }
+    const note = mmDom === "sea" && !n.cl.some((c) => c.coastal) ? "没有沿海城市，造不了船。" : mmDom === "sea" && !P.dk ? "还没有船坞：舰船只能靠沿海渔港慢慢补充。先在沿海城市建船坞。" : mmDom === "air" && !m.airOK ? "尚未掌握军用航空。" : "";
+    return '<h3>下单生产</h3><div class="seg useg">'.concat(seg, "</div>").concat(note ? '<p class="note">'.concat(note, "</p>") : "", '<div class="ucards">').concat(cards.join("") || '<p class="note">这个军种暂时没有可以生产的装备。</p>', "</div>");
+  }
+  function soldiersOf(n) {
+    let s = 0;
+    const st = n.mx.stock || {}, act = milForces(n).act;
+    for (const id in st) {
+      const u = UNIT_BY_ID[id];
+      if (u && dispOf(u)[1] === "人") s += st[id] * dispOf(u)[0] * act;
+    }
+    return s;
+  }
+  function milForceTop(n) {
+    const F = milForces(n), L = lawOf(n), fillW = Math.min(1, F.tot / Math.max(1e-6, F.cap)), over = F.tot > F.cap ? (F.tot - F.cap) / F.tot : 0;
+    return '<h3>征兵法令 <small>决定能养多少兵（编制）</small></h3>\n    <div class="lawseg">'.concat(LAW_NAME.map((t, k) => '<button data-law="'.concat(k, '" aria-pressed="').concat(L === k, '">').concat(t, "<small>").concat(LAW_DESC[k], "</small></button>")).join(""), "</div>\n    <h3>编制 <small>现役 ").concat(Math.round(F.tot), " / 编制 ").concat(Math.round(F.cap), '（单位：营 / 中队 / 舰）</small></h3>\n    <div class="capbar"><span class="fill" style="width:').concat((fillW * 100).toFixed(1), '%"></span>').concat(over > 5e-3 ? '<span class="over" style="width:'.concat((over * 100).toFixed(1), '%"></span>') : "", '</div>\n    <p class="note">编制由人口、军费预算（「国家」页）和征兵法令决定。').concat(over > 0.02 ? "超编 ".concat(Math.round(over * 100), "%：多出来的部队封存待命，不增加战斗力，可以退役旧型号腾出编制。") : F.tot < F.cap * 0.9 ? "编制没满：多建军工厂、船坞，或者下生产订单来补齐。" : "编制已满。", "现役兵员约 ").concat(fmtNum(soldiersOf(n)), " 人。</p>");
+  }
+  function milForceStock(n) {
+    const st = ensureMil(n).stock || {}, m = n.mult, act = milForces(n).act;
+    const by = { land: [], sea: [], air: [] };
+    for (const id in st) {
+      const u = UNIT_BY_ID[id];
+      if (u && CROLE[id].length) by[u.dom].push([u, st[id]]);
+    }
+    return DOMS.map((d) => {
+      const list = by[d].sort((a, b) => b[1] - a[1]);
+      if (!list.length) return "";
+      return "<h3>".concat(DOM_NAME[d], "</h3>") + list.map(([u, ue]) => {
+        const r = CROLE[u.id][0], best2 = UNIT_BY_ID[m.best[r]], main = best2 && best2.id === u.id, old = best2 && u.rating < best2.rating * 0.8;
+        return '<div class="stk"><span>'.concat(esc(u.name), '<span class="tagx').concat(main ? " main" : "", '">').concat(main ? "主力" : old ? "老旧" : MIL_ROLE_NAME[r], "</span></span><span>").concat(dispNum(u, ue * act), " ").concat(dispOf(u)[1]).concat(act < 0.995 ? ' <span class="dim">(另封存 '.concat(dispNum(u, ue * (1 - act)), ")</span>") : "", '</span><span class="dim">攻防 ').concat(Math.round(u.rating), '</span><button class="btn small" data-rt="').concat(u.id, '" title="退役四分之一，腾出编制">退役¼</button></div>');
+      }).join("");
+    }).join("") || '<p class="note">还没有任何部队。</p>';
+  }
+  $("mmClose").addEventListener("click", closeMil);
+  $("mmTabs").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-mm]");
+    if (!b) return;
+    mmTab = b.dataset.mm;
+    renderMil();
+  });
+  $("mmBody").addEventListener("click", (e) => {
+    const n = playerNation();
+    if (!n) return;
+    const t = e.target;
+    const bc = t.closest("[data-bc]");
+    if (bc) {
+      const c = cityById(+bc.dataset.bc);
+      if (c) {
+        const r = queueBuild(n, c, bc.dataset.bk, 1);
+        if (r.ok) showTicker("civ", r.msg);
+        else flashHint(r.msg);
+      }
+    }
+    const bx = t.closest("[data-bx]");
+    if (bx) cancelBuild(n, +bx.dataset.bx);
+    const ou = t.closest("[data-ou]");
+    if (ou) {
+      const u = UNIT_BY_ID[ou.dataset.ou];
+      if (u) {
+        const r = queueUnit(n, u.id, batchUE(u) * dispOf(u)[0] * +ou.dataset.k);
+        if (r.ok) showTicker("war", r.msg);
+        else flashHint(r.msg);
+      }
+    }
+    const oq = t.closest("[data-oq]");
+    if (oq) {
+      const o = (n.mx.queue || [])[+oq.dataset.oq], u = o && UNIT_BY_ID[o.u];
+      if (u) {
+        o.n = Math.max(0, o.n + batchUE(u) * +oq.dataset.d);
+        if (o.n <= 1e-6) n.mx.queue.splice(+oq.dataset.oq, 1);
+      }
+    }
+    const ox = t.closest("[data-ox]");
+    if (ox) (n.mx.queue || []).splice(+ox.dataset.ox, 1);
+    const md = t.closest("[data-mmdom]");
+    if (md) mmDom = md.dataset.mmdom;
+    const lw = t.closest("[data-law]");
+    if (lw && setLaw(n, +lw.dataset.law)) showTicker("war", "征兵法令改为「".concat(LAW_NAME[n.law], "」"));
+    const rt = t.closest("[data-rt]");
+    if (rt) {
+      const u = UNIT_BY_ID[rt.dataset.rt], x = retireUnit(n, rt.dataset.rt, 0.25);
+      if (u && x) showTicker("war", "".concat(u.name, "退役 ").concat(dispNum(u, x), " ").concat(dispOf(u)[1]));
+    }
+    $("mmBody")._hold = 0;
+    $("mmA")._html = "";
+    $("mmB")._html = "";
+    renderMil();
+    $("pane-me")._html = "";
+  });
+  $("mmBody").addEventListener("change", (e) => {
+    const n = playerNation(), k = e.target.dataset && e.target.dataset.mmauto;
+    if (!n || !k) return;
+    if (k === "build") S.player.autoBuild = e.target.checked;
+    if (k === "prod") ensureMil(n).prodAuto = e.target.checked;
+    $("mmBody")._hold = 0;
+    $("mmA")._html = "";
+    renderMil();
+  });
+  holdOnInteract($("mmBody"));
   let playing = true, speed = "auto", budget = 0, lastT = 0, lastLights = -1e9, lastRecolor = 0, lastMFlush = 0, lastUI = 0, lastSlowUI = 0, lastLayerRefresh = 0, lastAgentMgr = 0, frameNo = 0, lastSave = 0, lastSpaceUI = 0;
   let booting = false, techVersion = 0, achVersion = 0;
   const AUTO_SPEED = [40, 30, 22, 15, 6, 4, 3, 3, 3];
@@ -19149,6 +20534,7 @@ if (typeof Path2D === 'function' && typeof Path2D.prototype.addPath !== 'functio
   }
   let activeTab = "ov";
   function updatePanels() {
+    if (mmOpen) renderMil();
     if (activeTab === "me") renderMe();
     if (activeTab === "game") renderGame();
     if (layer === 5) renderLegend();
@@ -20522,6 +21908,19 @@ if (typeof Path2D === 'function' && typeof Path2D.prototype.addPath !== 'functio
   }
   const CITY_STYLE = ["茅草村落", "泥砖城镇", "石砌城邦", "木构市镇", "红砖工业城", "钢筋都市", "玻璃摩天城", "未来之城", "星际都会"];
   const KIND_NAME = KIND_LABEL;
+  function inspBuildings(c, n) {
+    const have = BLD_ORDER.filter((k) => bget(c, k)).map((k) => '<span class="tag">'.concat(esc(bldName(k, n))).concat(BLD_KINDS[k].lv ? " " + bget(c, k) + " 级" : " ×" + bget(c, k), "</span>")).join("");
+    const P = S.mode === "leader" ? playerNation() : null;
+    let h = have ? '<div class="ibld">'.concat(have, "</div>") : "";
+    if (P && P.alive && c.n === P.id) {
+      const q2 = queuedAt(P, c);
+      h += '<p class="note">建设（用地 '.concat(slotsUsed(c) + queuedSlots(P, c), "/").concat(citySlots(c)).concat(q2 ? "，在建 ".concat(q2, " 项") : "", '）：民用工厂 · 军工厂 · 船坞 · 陆/海/空军基地 · 要塞</p><div class="bchips" style="margin-top:4px">').concat(bldButtons(P, c, "bchip"), '<button class="bchip" data-act="milbuild" title="打开军务面板">军务…</button></div>');
+    } else if (P && P.alive && warBetween(P.id, n.id)) {
+      const w = warBetween(P.id, n.id), on = w.obj && w.obj[sideOf(w, P)] === c.id;
+      h += '<div class="acts"><button class="btn small'.concat(on ? "" : " danger", '" data-act="thrust" ').concat(on ? "disabled" : "", ">").concat(on ? "已是主攻方向" : "设为主攻方向", "</button></div>");
+    }
+    return h;
+  }
   function updateInspector(force) {
     const el = $("insp");
     if (!selected) {
@@ -20554,7 +21953,7 @@ if (typeof Path2D === 'function' && typeof Path2D.prototype.addPath !== 'functio
       }
       const n = S.nations[c.n];
       const res = RES.filter((r) => n.dep[r].some((i) => S.cityOf[i] === S.cities.indexOf(c))).map((r) => '<span class="tag"><span class="swatch" style="background:rgb('.concat(RES_RGB[r].join(","), ')"></span>').concat(RES_NAME[r], "</span>")).join("");
-      html = '<button class="close" aria-label="关闭">×</button>\n      <h2>'.concat(esc(c.name), '</h2>\n      <div class="meta">').concat(sw(n)).concat(esc(n.name)).concat(c.cap ? " · 首都" : "", " · 建于").concat(fmtYear(c.born), '</div>\n      <dl class="kv">\n        <dt>政体</dt><dd class="txt">').concat(esc(ideoOf(n).name), "</dd>\n        <dt>人口</dt><dd>").concat(fmtPop(c.pop), "</dd>\n        <dt>承载上限</dt><dd>").concat(fmtPop(c.K), '</dd>\n        <dt>风貌</dt><dd class="txt">').concat(CITY_STYLE[n.mult.era], "</dd>\n        <dt>工厂</dt><dd>").concat(c.fac >= 0.05 ? c.fac.toFixed(1) : "—", "</dd>\n        <dt>研究所</dt><dd>").concat(c.labs >= 0.05 ? c.labs.toFixed(1) : "—", "</dd>\n        ").concat(c.inst ? "<dt>国立研究院</dt><dd>".concat(c.inst, " 座</dd>") : "", "\n        <dt>科研 / 年</dt><dd>").concat(c.rp.toFixed(1), '</dd>\n        <dt>守军</dt><dd class="txt">').concat(esc((landMain(n) || { name: WEAPON_NAME[n.mult.weapon] }).name), '</dd>\n        <dt>地貌</dt><dd class="txt">').concat(BIOME_NAME[WORLD.biome[c.i]]).concat(c.coastal ? "，沿海" : "", "</dd>\n        <dt>气温</dt><dd>").concat(cellTeff(c.i).toFixed(1), " °C</dd>\n      </dl>\n      ").concat(relTags(n) ? '<div class="tags">'.concat(relTags(n), "</div>") : "", "\n      ").concat(res ? '<div class="tags">'.concat(res, "</div>") : "", '\n      <div class="acts">\n        <button class="btn small" data-act="zoom">放大看看</button>\n        ').concat(S.mode === "leader" ? "" : '<button class="btn small" data-act="bless">赐福</button>\n        <button class="btn small" data-act="inspire">灵感</button>\n        <button class="btn small" data-act="army">赐军</button>\n        <button class="btn small" data-act="rebel">煽动独立</button>', '\n        <button class="btn small" data-act="nation">').concat(isPlayer(n) ? "国家面板" : S.mode === "leader" ? "查看国家" : "管理国家", "</button>\n      </div>");
+      html = '<button class="close" aria-label="关闭">×</button>\n      <h2>'.concat(esc(c.name), '</h2>\n      <div class="meta">').concat(sw(n)).concat(esc(n.name)).concat(c.cap ? " · 首都" : "", " · 建于").concat(fmtYear(c.born), '</div>\n      <dl class="kv">\n        <dt>政体</dt><dd class="txt">').concat(esc(ideoOf(n).name), "</dd>\n        <dt>人口</dt><dd>").concat(fmtPop(c.pop), "</dd>\n        <dt>承载上限</dt><dd>").concat(fmtPop(c.K), '</dd>\n        <dt>风貌</dt><dd class="txt">').concat(CITY_STYLE[n.mult.era], "</dd>\n        <dt>工厂</dt><dd>").concat(c.fac >= 0.05 ? c.fac.toFixed(1) : "—", "</dd>\n        <dt>研究所</dt><dd>").concat(c.labs >= 0.05 ? c.labs.toFixed(1) : "—", "</dd>\n        ").concat(c.inst ? "<dt>国立研究院</dt><dd>".concat(c.inst, " 座</dd>") : "", "\n        <dt>科研 / 年</dt><dd>").concat(c.rp.toFixed(1), '</dd>\n        <dt>守军</dt><dd class="txt">').concat(esc((landMain(n) || { name: WEAPON_NAME[n.mult.weapon] }).name), '</dd>\n        <dt>地貌</dt><dd class="txt">').concat(BIOME_NAME[WORLD.biome[c.i]]).concat(c.coastal ? "，沿海" : "", "</dd>\n        <dt>气温</dt><dd>").concat(cellTeff(c.i).toFixed(1), " °C</dd>\n      </dl>\n      ").concat(relTags(n) ? '<div class="tags">'.concat(relTags(n), "</div>") : "", "\n      ").concat(res ? '<div class="tags">'.concat(res, "</div>") : "", "\n      ").concat(inspBuildings(c, n), '\n      <div class="acts">\n        <button class="btn small" data-act="zoom">放大看看</button>\n        ').concat(S.mode === "leader" ? "" : '<button class="btn small" data-act="bless">赐福</button>\n        <button class="btn small" data-act="inspire">灵感</button>\n        <button class="btn small" data-act="army">赐军</button>\n        <button class="btn small" data-act="rebel">煽动独立</button>', '\n        <button class="btn small" data-act="nation">').concat(isPlayer(n) ? "国家面板" : S.mode === "leader" ? "查看国家" : "管理国家", "</button>\n      </div>");
     } else {
       const i = selected.cell;
       if (i < 0) {
@@ -20578,6 +21977,18 @@ if (typeof Path2D === 'function' && typeof Path2D.prototype.addPath !== 'functio
       $("insp").hidden = true;
       return;
     }
+    const bc = e.target.closest("[data-bc]");
+    if (bc && selected && selected.city) {
+      const P = playerNation(), c = cityById(+bc.dataset.bc);
+      if (P && c) {
+        const r = queueBuild(P, c, bc.dataset.bk, 1);
+        if (r.ok) showTicker("civ", r.msg);
+        else flashHint(r.msg);
+      }
+      $("insp")._html = "";
+      updateInspector(true);
+      return;
+    }
     const b = e.target.closest("[data-act]");
     if (!b || !selected) return;
     const act = b.dataset.act;
@@ -20596,7 +22007,19 @@ if (typeof Path2D === 'function' && typeof Path2D.prototype.addPath !== 'functio
       if (!c) return;
       const n = S.nations[c.n];
       if (act === "zoom") flyToCity(c, Math.max(cam.z, 4.5));
-      if (S.mode === "leader" && act !== "zoom" && act !== "nation") return;
+      if (act === "milbuild") openMil("build");
+      if (act === "thrust") {
+        const P = playerNation(), w = P && warBetween(P.id, n.id);
+        if (w) {
+          showTicker("war", setWarObjective(P, w, c.id));
+          $("pane-me")._html = "";
+        }
+      }
+      if (S.mode === "leader" && act !== "zoom" && act !== "nation") {
+        $("insp")._html = "";
+        updateInspector(true);
+        return;
+      }
       if (act === "bless") godBless(n);
       if (act === "inspire") godInspire(n);
       if (act === "army") godArmy(n);
@@ -20748,7 +22171,13 @@ if (typeof Path2D === 'function' && typeof Path2D.prototype.addPath !== 'functio
       const from = attackFrom ? cityById(attackFrom) : null;
       if (!from || from.n !== P.id) {
         if (c.n !== P.id) {
-          flashHint("先点你自己的一座城市");
+          const w = warBetween(P.id, c.n);
+          if (w) {
+            showTicker("war", setWarObjective(P, w, c.id) + "（要直接突击，先点你自己的出发城市）");
+            $("pane-me")._html = "";
+            return;
+          }
+          flashHint("你没有与".concat(S.nations[c.n].name, "交战。先在「国家」页宣战"));
           return;
         }
         attackFrom = c.id;
@@ -21175,6 +22604,10 @@ if (typeof Path2D === 'function' && typeof Path2D.prototype.addPath !== 'functio
     }
     if (tmOpen) {
       closeTree();
+      return true;
+    }
+    if (mmOpen) {
+      closeMil();
       return true;
     }
     if (document.body.classList.contains("rail-open")) {

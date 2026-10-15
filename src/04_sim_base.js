@@ -138,7 +138,7 @@ function cityTick(c, n) {
   else c.pop -= (c.pop - K) * 0.06;
   // industry
   if (m.ind > 0) {
-    const target = c.pop / 1e6 * 1.1 * m.ind * (n.eco ? n.eco.K.ind : 1);
+    const target = c.pop / 1e6 * 1.1 * m.ind * (n.eco ? n.eco.K.ind : 1) + bget(c, 'cf');      // built civilian factories add to the private base
     let d = target - c.fac;
     d = d > 0 ? d * 0.05 * n.st.ironSat * (0.25 + 0.75 * n.st.sat) : d * 0.03;
     c.fac = Math.max(0, c.fac + d);
@@ -194,10 +194,10 @@ function pickTech(n) {
 
 function nationTick(n) {
   const m = n.mult;
-  let pop = 0, fac = 0, labs = 0, rp = 0;
-  for (const c of n.cl) { pop += c.pop; fac += c.fac; labs += c.labs; rp += c.rp; }
+  let pop = 0, fac = 0, labs = 0, rp = 0, mf = 0, dock = 0;
+  for (const c of n.cl) { pop += c.pop; fac += c.fac; labs += c.labs; rp += c.rp; if (c.bld) { mf += c.bld.mf; dock += c.bld.dock; } }
   if (!n.cl.length) { killNation(n, -1); return; }
-  n.st.pop = pop; n.st.cities = n.cl.length; n.st.fac = fac; n.st.labs = labs; n.st.rp = rp;
+  n.st.pop = pop; n.st.cities = n.cl.length; n.st.fac = fac; n.st.labs = labs; n.st.rp = rp; n.st.mf = mf; n.st.dock = dock;
   if (n.golden > 0) n.golden--;
   // research: civil track, then the military track funded by the army budget
   if (n.target && TECH_BY_ID[n.target] && TECH_BY_ID[n.target].mil) { if (!n.mtarget || n.techs[n.mtarget] !== undefined) n.mtarget = n.target; n.target = null; }
@@ -209,13 +209,15 @@ function nationTick(n) {
   }
   milResearch(n, rp);
   milRecover(n);
+  buildTick(n);
+  prodTick(n);
   // energy
   if (m.nuke) n.nuke = Math.min(0.14, n.nuke + 0.004);
   if (m.fusion) n.fusion = Math.min(0.95, n.fusion + 0.015);
   if (m.renew) n.renew = Math.max(0, Math.min(0.85 * (1 - n.fusion) - n.nuke * 0.2, n.renew + 0.011 * m.renewK * n.st.rareSat));
   if (m.ccs) n.ccs = Math.min(1, n.ccs + 0.01);
   if (n.fusion > 0.5) n.nuke = Math.max(0, n.nuke - 0.005);
-  const E = fac;
+  const E = fac + (m.ind > 0 ? mf + dock : 0);      // industrial war plants burn coal and oil too (pre-industrial armories do not)
   n.st.E = E;
   const fossil = Math.max(0, 1 - n.nuke - n.renew - n.fusion);
   const oilShare = m.oil ? 0.45 : 0;
