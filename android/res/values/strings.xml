@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">蓝星纪元</string>
+    <string name="press_again_exit">再按一次退出</string>
+    <string name="no_browser">没有可以打开此链接的应用</string>
+    <string name="webview_missing">无法启动系统 WebView 组件。\n请在应用商店更新“Android System WebView”（或系统浏览器内核）后重新打开。</string>
+</resources>
