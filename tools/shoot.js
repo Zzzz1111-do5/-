@@ -2,7 +2,8 @@
 // Screenshot + perf harness for 蓝星纪元.
 // Usage: node tools/shoot.js <build.html> <out-prefix> '<json scenario list>'
 // Each scenario: { name, seed=22, year=1900, view='map'|'globe'|'system'|'planet', planet='mars',
-//   focus='city'|'battle'|'rail'|'coast'|'none', z=4, gfx=3, wait=2500, w=1440, h=900, night=false }
+//   focus='city'|'battle'|'rail'|'coast'|'none', dom='land'|'sea'|'air' (which battle theatre to frame), z=4, gfx=3,
+//   wait=2500, w=1440, h=900, night=false }
 // Prints one JSON line per scenario: { name, file, perfMs, fps, agents, errors }.
 const path = require('path');
 const { chromium } = require('/opt/node22/lib/node_modules/playwright');
@@ -42,12 +43,13 @@ const scenarios = JSON.parse(json || '[{"name":"city"}]');
     const steps = Math.ceil(o.wait / 500);
     for (let k = 0; k < steps; k++) {
       await page.waitForTimeout(500);
-      if (o.focus === 'battle' && o.view === 'map') await page.evaluate((z) => { const E = window.__earth, b = E.BATTLES[0]; if (b) { E.cam.goal = null; E.cam.x = b.x; E.cam.y = b.y; E.cam.z = E.cam.tz = z; } }, o.z);
+      if (o.focus === 'battle' && o.view === 'map') await page.evaluate(([z, dom]) => { const E = window.__earth, b = E.BATTLES.find(b => !dom || b.dom === dom) || E.BATTLES[0]; if (b) { E.cam.goal = null; E.cam.x = b.x; E.cam.y = b.y; E.cam.z = E.cam.tz = z; } }, [o.z, o.dom]);
     }
+    const doms = await page.evaluate(() => window.__earth.BATTLES.map(b => b.dom).join(','));
     const stats = await page.evaluate(() => new Promise(r => { let n = 0; const t0 = performance.now(); function f() { n++; if (performance.now() - t0 < 1500) requestAnimationFrame(f); else r({ fps: n / 1.5, perfMs: window.__earth.perfMs, agents: window.__earth.AG.length }); } requestAnimationFrame(f); }));
     const file = `${prefix}-${o.name}.png`;
     await page.screenshot({ path: file, clip: o.clip });
-    console.log(JSON.stringify({ name: o.name, file, perfMs: +stats.perfMs.toFixed(2), fps: +stats.fps.toFixed(1), agents: stats.agents, errors }));
+    console.log(JSON.stringify({ name: o.name, file, perfMs: +stats.perfMs.toFixed(2), fps: +stats.fps.toFixed(1), agents: stats.agents, battles: doms, errors }));
     await page.close();
   }
   await browser.close();

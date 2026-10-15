@@ -8091,12 +8091,26 @@ function drawRails(z) {
   }
   ctx.lineCap = 'round';
 }
+// small particles are plain squares; bigger puffs (smoke grows as it rises) use a soft disc so they never show hard edges
+const PUFF = new Map();
+function puffSprite(col) {
+  let cv = PUFF.get(col);
+  if (!cv) {
+    cv = document.createElement('canvas'); cv.width = cv.height = 32;
+    const g = cv.getContext('2d'), gr = g.createRadialGradient(16, 16, 0, 16, 16, 16), rgb = col[0] === '#' && col.length === 7 ? cRgb(col) : '128,128,128';
+    gr.addColorStop(0, `rgba(${rgb},1)`); gr.addColorStop(0.5, `rgba(${rgb},.7)`); gr.addColorStop(1, `rgba(${rgb},0)`);
+    g.fillStyle = gr; g.fillRect(0, 0, 32, 32); PUFF.set(col, cv);
+  }
+  return cv;
+}
 function drawParticles(z) {
   for (const p of PARTS) {
     const sx = sxOf(p.x), sy = syOf(p.y);
-    if (sx < -20 || sx > view.w + 20 || sy < -20 || sy > view.h + 20) continue;
+    if (sx < -40 || sx > view.w + 40 || sy < -40 || sy > view.h + 40) continue;
     const f = p.t / p.life, s = Math.max(1, (p.size + p.grow * f) * z);
-    ctx.globalAlpha = (1 - f) * p.a; ctx.fillStyle = p.col; ctx.fillRect(sx - s / 2, sy - s / 2, s, s);
+    ctx.globalAlpha = (1 - f) * p.a;
+    if (s < 5) { ctx.fillStyle = p.col; ctx.fillRect(sx - s / 2, sy - s / 2, s, s); }
+    else { const r = s * 0.8; ctx.drawImage(puffSprite(p.col), sx - r, sy - r, r * 2, r * 2); }
   }
   ctx.globalAlpha = 1;
 }
