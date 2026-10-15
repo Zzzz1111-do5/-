@@ -104,16 +104,20 @@ function manageAgents() {
   if (viewMode !== 'map' || cam.z < AGENT_Z || !showPeople) { if (AG.length) AG.length = 0; return; }
   const inR = viewRect(40);
   const counts = new Map(), live = new Set();
-  for (const a of AG) if (a.role !== 'army' && a.role !== 'settler' && a.st !== 'dead') counts.set(a.c, (counts.get(a.c) || 0) + 1);
+  let civ = 0;
+  for (const a of AG) if (a.role !== 'army' && a.role !== 'settler' && a.st !== 'dead') { counts.set(a.c, (counts.get(a.c) || 0) + 1); civ++; }
+  // cap the crowd: fewer people per city at mid zoom (they are tiny there) and a total cap per quality level
+  const cap = [120, 220, 330, 440][GFX.level], zk = clamp((cam.z - 1.4) / 3.6, 0.3, 1);
   for (const c of S.cities) {
     const [cx, cy] = cityMpx(c);
     if (!inR(cx, cy)) continue;
     live.add(c.id);
-    const tc = clamp(Math.round(3 + Math.log2(c.pop / 1e4 + 1) * 2.4), 3, 30);
+    const tc = Math.max(2, Math.round(clamp(Math.round(3 + Math.log2(c.pop / 1e4 + 1) * 2.4), 3, 30) * zk));
+    if (civ >= cap) continue;
     let have = counts.get(c.id) || 0;
     if (have >= tc) continue;
     const lay = layoutFor(c);
-    for (; have < tc; have++) spawnCivilian(c, lay);
+    for (; have < tc && civ < cap; have++, civ++) spawnCivilian(c, lay);
   }
   const far = viewRect(160);
   for (let k = AG.length - 1; k >= 0; k--) {

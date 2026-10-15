@@ -1574,13 +1574,13 @@ function syncGfxUI() { const el = $('gfxSel'); el.options[0].textContent = GFX.a
 $('gfxSel').addEventListener('change', e => { const v = e.target.value; if (v === 'auto') setGfx(GFX.auto ? GFX.level : 3, true); else setGfx(+v, false); syncGfxUI(); e.target.blur(); });
 $('tDayNight').addEventListener('change', e => { showDayNight = e.target.checked; try { localStorage.setItem('blue-planet-daynight', showDayNight ? '1' : '0'); } catch (err) {} });
 function loadDayNight() { try { const v = localStorage.getItem('blue-planet-daynight'); if (v !== null) showDayNight = v === '1'; } catch (e) {} $('tDayNight').checked = showDayNight; }
-function splash(on, msg) {
+function loadSplash(on, msg) {
   const el = $('splash'); if (!el) return;
   if (on) { $('splashMsg').textContent = msg || '正在生成星球…'; el.hidden = false; el.classList.remove('gone'); return; }
   el.classList.add('gone'); setTimeout(() => { if (el.classList.contains('gone')) el.hidden = true; }, 400);
 }
 // regenerate behind the splash: give the browser one frame to paint it first
-function bootFresh(after) { splash(true, '正在生成新的星球…'); setTimeout(() => { boot({ seed: (Math.random() * 1e9) | 0 }); saveWorld(); splash(false); if (after) after(); }, 40); }
+function bootFresh(after) { loadSplash(true, '正在生成新的星球…'); setTimeout(() => { boot({ seed: (Math.random() * 1e9) | 0 }); saveWorld(); loadSplash(false); if (after) after(); }, 40); }
 function switchTab(k) {
   activeTab = k;
   for (const x of document.querySelectorAll('.tabs button')) x.setAttribute('aria-selected', x.dataset.tab === k);
@@ -1697,7 +1697,7 @@ function start(data) {
   window.claude?.hot?.snapshot?.(() => ({ state: serialize() }));
   let seen = false; try { seen = !!localStorage.getItem('blue-planet-intro'); } catch (e) {}
   if (!snap && (!seen || !restored)) openModeOverlay();
-  syncGfxUI(); splash(false);
+  syncGfxUI(); loadSplash(false);
   requestAnimationFrame(t => { lastT = t; requestAnimationFrame(frame); });
 }
 

@@ -1238,7 +1238,7 @@ function sprNight(e) {
 }
 function sprBegin() {
   sprFrame = frameNo; sprNew = 0; CGLOW.length = 0;
-  if (sprGfx !== gfxVersion) { SPR.clear(); SPALT.clear(); sprPx = 0; sprGen++; sprGfx = gfxVersion; }
+  if (sprGfx !== gfxVersion) { SPR.clear(); SPALT.clear(); sprPx = 0; sprGen++; sprGfx = gfxVersion; CCOMP.clear(); ccPx = 0; }
   const kr = cam.z * view.dpr, kmax = [6, 10, 16, 24][GFX.level];
   sprK = Math.min(kmax, Math.max(2, Math.pow(2, Math.ceil(Math.log2(kr) * 2 - 0.25) / 2)));
   sprCap = [12, 18, 28, 40][GFX.level];
@@ -1288,23 +1288,23 @@ function groundSprite(era) {
   for (let k = 0; k < 420; k++) { const r = Math.sqrt(rnd()) * 44, t = rnd() * TAU, x = 48 + Math.cos(t) * r, y = 48 + Math.sin(t) * r; g.fillStyle = rnd() < 0.5 ? `rgba(0,0,0,${0.05 * (1 - r / 48)})` : `rgba(255,250,235,${0.06 * (1 - r / 48)})`; g.fillRect(x, y, 2, 2); }
   return (groundCv[era] = c);
 }
-function drawCityGround(lay, z, sx0, sy0) {
+function drawCityGround(lay, z, sx0, sy0, g = ctx, marks = z >= 3.5 && GFX.detail >= 1) {
   const era = lay.era, rx = (lay.r + (lay.grid ? 7 : 5)) * z, ry = rx * 0.8;
-  ctx.drawImage(groundSprite(era), sx0 - rx, sy0 - ry, rx * 2, ry * 2);
+  g.drawImage(groundSprite(era), sx0 - rx, sy0 - ry, rx * 2, ry * 2);
   const sc = STREET[era];
-  if (lay.pz) { ctx.fillStyle = era >= 4 ? (era >= 7 ? '#d6dde0' : '#a8a49c') : era >= 2 ? '#a69a86' : 'rgba(170,146,110,.75)'; const r = lay.pz[2] * z, px = sx0 + (lay.pz[0] - lay.cx) * z, py = sy0 + (lay.pz[1] - lay.cy) * z; ctx.beginPath(); if (lay.grid) ctx.rect(px - r, py - r * 0.55, r * 2, r * 0.95); else ctx.ellipse(px, py, r, r * 0.62, 0, 0, TAU); ctx.fill(); }
+  if (lay.pz) { g.fillStyle = era >= 4 ? (era >= 7 ? '#d6dde0' : '#a8a49c') : era >= 2 ? '#a69a86' : 'rgba(170,146,110,.75)'; const r = lay.pz[2] * z, px = sx0 + (lay.pz[0] - lay.cx) * z, py = sy0 + (lay.pz[1] - lay.cy) * z; g.beginPath(); if (lay.grid) g.rect(px - r, py - r * 0.55, r * 2, r * 0.95); else g.ellipse(px, py, r, r * 0.62, 0, 0, TAU); g.fill(); }
   if (lay.st.length) {
-    ctx.fillStyle = sc;
-    for (const s of lay.st) ctx.fillRect(sx0 + (s[0] - lay.cx) * z, sy0 + (s[1] - lay.cy) * z, s[2] * z, s[3] * z);
-    if (z >= 3.5 && GFX.detail >= 1) {
-      ctx.fillStyle = era >= 5 ? 'rgba(240,226,150,.55)' : 'rgba(255,255,255,.12)';
-      for (const s of lay.st) { if (s[2] > s[3]) { if (era >= 5) for (let x = s[0] + 0.6; x < s[0] + s[2] - 0.8; x += 1.6) ctx.fillRect(sx0 + (x - lay.cx) * z, sy0 + (s[1] + s[3] / 2 - 0.05 - lay.cy) * z, 0.8 * z, Math.max(1, 0.1 * z)); else ctx.fillRect(sx0 + (s[0] - lay.cx) * z, sy0 + (s[1] - lay.cy) * z, s[2] * z, Math.max(1, 0.12 * z)); } }
+    g.fillStyle = sc;
+    for (const s of lay.st) g.fillRect(sx0 + (s[0] - lay.cx) * z, sy0 + (s[1] - lay.cy) * z, s[2] * z, s[3] * z);
+    if (marks) {
+      g.fillStyle = era >= 5 ? 'rgba(240,226,150,.55)' : 'rgba(255,255,255,.12)';
+      for (const s of lay.st) { if (s[2] > s[3]) { if (era >= 5) for (let x = s[0] + 0.6; x < s[0] + s[2] - 0.8; x += 1.6) g.fillRect(sx0 + (x - lay.cx) * z, sy0 + (s[1] + s[3] / 2 - 0.05 - lay.cy) * z, 0.8 * z, Math.max(1, 0.1 * z)); else g.fillRect(sx0 + (s[0] - lay.cx) * z, sy0 + (s[1] - lay.cy) * z, s[2] * z, Math.max(1, 0.12 * z)); } }
     }
   }
   if (lay.ln.length) {
-    ctx.strokeStyle = sc; ctx.globalAlpha = 0.8; ctx.lineWidth = Math.max(1, 1.15 * z); ctx.lineCap = 'round'; ctx.beginPath();
-    for (const l of lay.ln) { ctx.moveTo(sx0, sy0); ctx.quadraticCurveTo(sx0 + l[2] * z, sy0 + l[3] * z, sx0 + l[0] * z, sy0 + l[1] * z); }
-    ctx.stroke(); ctx.lineCap = 'butt'; ctx.globalAlpha = 1;
+    g.strokeStyle = sc; g.globalAlpha = 0.8; g.lineWidth = Math.max(1, 1.15 * z); g.lineCap = 'round'; g.beginPath();
+    for (const l of lay.ln) { g.moveTo(sx0, sy0); g.quadraticCurveTo(sx0 + l[2] * z, sy0 + l[3] * z, sx0 + l[0] * z, sy0 + l[1] * z); }
+    g.stroke(); g.lineCap = 'butt'; g.globalAlpha = 1;
   }
 }
 const WALLC = [['#7a5634', '#9a7448'], ['#b8a07a', '#cdb894'], ['#9a9488', '#b2ac9f'], ['#a29c90', '#bab4a6'], ['#a29c90', '#bab4a6']];
@@ -1326,23 +1326,24 @@ function wallPaint(g, lay, it, z, era, sx0, sy0) {
   if (z >= 2.5) { g.strokeStyle = fc; g.lineWidth = Math.max(1, 0.4 * z); g.setLineDash([0.45 * z, 0.4 * z]); path(wh + 0.6 * z); g.stroke(); g.setLineDash([]); }
   g.fillStyle = 'rgba(0,0,0,.18)'; g.beginPath(); for (let k = 0; k <= n; k++) g[k ? 'lineTo' : 'moveTo'](px[k], py[k]); for (let k = n; k >= 0; k--) g.lineTo(px[k], py[k] - Math.min(wh, 0.5 * z)); g.closePath(); g.fill();
 }
-function drawWallSeg(lay, it, z, era, sx0, sy0, K) {
+function wallSprite(lay, it, era, K) {
   let w = it._w;
   if (!w || w.era !== era || w.g !== sprGen || w.K !== K && !sprZoom && sprNew < sprCap) {
-    {
-      sprNew++;
-      let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
-      for (let k = 0; k <= 8; k++) { const a = it.a0 + (it.a1 - it.a0) * k / 8, x = Math.cos(a) * lay.wall, y = Math.sin(a) * lay.wall * 0.75; x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
-      x0 -= 1; x1 += 1; y0 -= 3.6; y1 += 0.8;
-      const cw = Math.ceil((x1 - x0) * K), ch = Math.ceil((y1 - y0) * K);
-      const A = sprScratch(0, cw, ch), a = A.getContext('2d');
-      a.setTransform(1, 0, 0, 1, 0, 0); a.clearRect(0, 0, cw, ch);
-      wallPaint(a, lay, it, K, era, -x0 * K, -y0 * K);
-      const cv = document.createElement('canvas'); cv.width = cw; cv.height = ch; cv.getContext('2d').drawImage(A, 0, 0, cw, ch, 0, 0, cw, ch);
-      w = it._w = { cv, K, era, g: sprGen, x0, y0, cw, ch };
-    }
+    sprNew++;
+    let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+    for (let k = 0; k <= 8; k++) { const a = it.a0 + (it.a1 - it.a0) * k / 8, x = Math.cos(a) * lay.wall, y = Math.sin(a) * lay.wall * 0.75; x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+    x0 -= 1; x1 += 1; y0 -= 3.6; y1 += 0.8;
+    const cw = Math.ceil((x1 - x0) * K), ch = Math.ceil((y1 - y0) * K);
+    const A = sprScratch(0, cw, ch), a = A.getContext('2d');
+    a.setTransform(1, 0, 0, 1, 0, 0); a.clearRect(0, 0, cw, ch);
+    wallPaint(a, lay, it, K, era, -x0 * K, -y0 * K);
+    const cv = document.createElement('canvas'); cv.width = cw; cv.height = ch; cv.getContext('2d').drawImage(A, 0, 0, cw, ch, 0, 0, cw, ch);
+    w = it._w = { cv, K, era, g: sprGen, x0, y0, cw, ch };
   }
-  const s = z / w.K;
+  return w;
+}
+function drawWallSeg(lay, it, z, era, sx0, sy0, K) {
+  const w = wallSprite(lay, it, era, K), s = z / w.K;
   ctx.drawImage(w.cv, 0, 0, w.cw, w.ch, sx0 + w.x0 * z, sy0 + w.y0 * z, w.cw * s, w.ch * s);
 }
 function drawFlagAt(x, y, z, col, ph) {
@@ -1365,17 +1366,113 @@ function drawFireAt(x, y, z, night, ph) {
 function drawCityLights(z) {
   if (cglowF !== frameNo || !CGLOW.length) return;
   ctx.globalCompositeOperation = 'lighter';
-  for (let k = 0; k < CGLOW.length; k += 6) { ctx.globalAlpha = CGLOW[k + 5] * 0.55; ctx.drawImage(CGLOW[k], CGLOW[k + 1], CGLOW[k + 2], CGLOW[k + 3], CGLOW[k + 4]); }
+  for (let k = 0; k < CGLOW.length; k += 6) { ctx.globalAlpha = CGLOW[k + 5] * 0.4; ctx.drawImage(CGLOW[k], CGLOW[k + 1], CGLOW[k + 2], CGLOW[k + 3], CGLOW[k + 4]); }
   ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'; CGLOW.length = 0;
 }
-let cglowF = -1;
+let cglowF = -1, ccNew = 0, ccPx = 0;
+// Each visible city is baked into one canvas at the sprite scale (ground, streets, mines, buildings,
+// walls), plus a second canvas of its lit windows. Drawing a city is then 1–2 blits instead of
+// ~1000; flags, fires, beacons and smoke stay live on top. Baking needs every sprite at the current
+// scale, which are made a few per frame, so until then the city is drawn item by item.
+const CCOMP = new Map(), CCB = [6e6, 10e6, 18e6, 30e6];
+function ccTrim() {
+  ccNew = 0;
+  if (ccPx <= CCB[GFX.level]) return;
+  const old = []; for (const [id, q] of CCOMP) if (q.u < frameNo - 1) old.push([id, q]);
+  old.sort((p, q) => p[1].u - q[1].u);
+  for (const [id, q] of old) { if (ccPx <= CCB[GFX.level] * 0.7) break; CCOMP.delete(id); ccPx -= q.px; }
+}
+function decoSkip(t, mk) { return !(mk & 1) && (t === 'tree' || t === 'lamp' || t === 'park' || t === 'market') || t === 'lamp' && !(mk & 2); }
+// null: some sprite is not ready at scale K yet; false: too big to bake at this zoom
+function cityBake(lay, era, col, K, mk) {
+  const ex = lay.r + (lay.grid ? 7 : 5), parts = [], anim = [], lit = [];
+  let x0 = -ex, x1 = ex, y0 = -ex * 0.8, y1 = ex * 0.8;
+  const add = (cv, sw, sh, x, y, w, h) => { parts.push(cv, sw, sh, x, y); if (x < x0) x0 = x; if (y < y0) y0 = y; if (x + w > x1) x1 = x + w; if (y + h > y1) y1 = y + h; };
+  for (const m of lay.mines) {
+    const e = sprGet('mine', era >= 4 ? 4 : 0, RES.indexOf(m[2]), 0, '', K);
+    if (!e || e.K !== K) return null;
+    add(e.cv, e.w, e.h, wrapDx(m[0] - lay.cx) - e.ox / K, m[1] - lay.cy - e.oy / K, e.w / K, e.h / K);
+  }
+  for (const it of lay.items) {
+    const t = it.t;
+    if (t === 'wseg') { const w = wallSprite(lay, it, era, K); if (w.K !== K) return null; add(w.cv, w.cw, w.ch, w.x0, w.y0, w.cw / K, w.ch / K); continue; }
+    if (decoSkip(t, mk)) continue;
+    const e = itemSprite(it, t === 'tower' ? Math.min(era, 4) : era, col, K);
+    if (!e || e.K !== K) return null;
+    const x = it.x - lay.cx - e.ox / K, y = it.y - lay.cy - e.oy / K;
+    add(e.cv, e.w, e.h, x, y, e.w / K, e.h / K);
+    if (e.lt) lit.push(it, x, y);
+    if (e.fl.length || e.fi.length || e.bc.length || e.sm.length) anim.push(it, e);
+  }
+  const W = Math.ceil((x1 - x0) * K) + 2, H = Math.ceil((y1 - y0) * K) + 2;
+  if (W * H > 4.2e6) return false;
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const g = cv.getContext('2d'), ox = 1 - x0 * K, oy = 1 - y0 * K;
+  drawCityGround(lay, K, ox, oy, g, !!(mk & 4));
+  for (let k = 0; k < parts.length; k += 5) g.drawImage(parts[k], 0, 0, parts[k + 1], parts[k + 2], ox + parts[k + 3] * K, oy + parts[k + 4] * K, parts[k + 1], parts[k + 2]);
+  return { key: '', K, cv, nv: lit.length ? null : false, ox, oy, W, H, anim, lit, px: W * H, u: frameNo, big: false };
+}
+function cityBakeNight(q, lay, era, col) {
+  const K = q.K, L = q.lit, nvs = [];
+  for (let k = 0; k < L.length; k += 3) {
+    const it = L[k], e = itemSprite(it, it.t === 'tower' ? Math.min(era, 4) : era, col, K);
+    if (!e || e.K !== K) return;
+    const nv = e.nv === null ? sprNight(e) : e.nv;
+    if (e.nv === null) return;            // still queued behind this frame's sprite budget
+    if (nv) nvs.push(nv, L[k + 1], L[k + 2]);
+  }
+  if (!nvs.length) { q.nv = false; return; }
+  const cv = document.createElement('canvas'); cv.width = q.W; cv.height = q.H; const g = cv.getContext('2d');
+  for (let k = 0; k < nvs.length; k += 3) g.drawImage(nvs[k], q.ox + nvs[k + 1] * K, q.oy + nvs[k + 2] * K);
+  q.nv = cv; q.px += q.W * q.H; ccPx += q.W * q.H;
+}
+function cityAnim(it, e, sx, sy, z, col, nl, n, smoke, rate) {
+  if (z >= 2.4) {
+    for (const f of e.fl) drawFlagAt(sx + f[0] * z, sy + f[1] * z, z * 0.8, col, it.x * 0.3 + f[0]);
+    for (const f of e.fi) drawFireAt(sx + f[0] * z, sy + f[1] * z, z, nl, it.x + f[0]);
+    if (z >= 3) for (const b of e.bc) if (Math.sin(animT * 2.4 + it.v * 9 + b[1]) > 0.55) { ctx.fillStyle = '#ff3a2a'; const r = Math.max(1.5, 0.3 * z); ctx.fillRect(sx + b[0] * z - r / 2, sy + b[1] * z - r / 2, r, r); }
+  }
+  if (smoke && e.sm.length) for (const p of e.sm) {
+    if (p[2]) { if (rand2() < 0.08) { const fossil = Math.max(0, 1 - n.nuke - n.renew - n.fusion); if (rand2() < 0.2 + fossil) particle(it.x + p[0], it.y + p[1], 0.4 + (rand2() - 0.3) * 1.2, -2.2 - rand2(), 3 + rand2() * 2, fossil > 0.4 ? '#77706a' : '#c8ccd0', 1.2, 2.5, 0.55); } }
+    else if (rand2() < rate) particle(it.x + p[0], it.y + p[1], 0.5 + rand2() * 0.6, -1.3 - rand2() * 0.7, 2.4 + rand2() * 1.4, '#8e8a86', 0.45, 1.6, 0.3);
+  }
+}
 function drawCitySprites(c, z) {
-  if (sprFrame !== frameNo) { sprBegin(); cglowF = frameNo; }
+  if (sprFrame !== frameNo) { sprBegin(); ccTrim(); cglowF = frameNo; }
   const lay = layoutFor(c), n = S.nations[c.n], era = lay.era, col = n.color, K = sprK;
   const sx0 = sxOf(lay.cx), sy0 = syOf(lay.cy), night = nightAt(lay.cx, lay.cy), nl = smooth(0.3, 0.7, night);
-  drawCityGround(lay, z, sx0, sy0);
   const deco = GFX.detail >= 1 && z >= 2.1, vw = view.w, vh = view.h, mL = -18 * z, mR = vw + 9 * z, mT = -7 * z, mB = vh + 30 * z;
   const smoke = playing && z >= 2 && GFX.parts > 0, rate = 0.011 * GFX.parts;
+  const mk = (deco ? 1 : 0) | (z >= 4.5 ? 2 : 0) | (z >= 3.5 && GFX.detail >= 1 ? 4 : 0), key = lay.key + '|' + col + '|' + mk + '|' + sprGen;
+  // a stale bake (the city grew or changed era) keeps being shown until its replacement is ready
+  let q = CCOMP.get(c.id);
+  const fresh = q && q.key === key;
+  if (q && q.big && !fresh) { CCOMP.delete(c.id); q = null; }
+  if (!sprZoom && (!fresh || q.K !== K) && ccNew < 2) {
+    const r = cityBake(lay, era, col, K, mk);
+    if (r !== null) {
+      ccNew++;
+      if (q) ccPx -= q.px;
+      q = r || { K, px: 0, u: 0, big: true };
+      q.key = key; CCOMP.set(c.id, q); ccPx += q.px;
+    }
+  }
+  if (q && !q.big) {
+    q.u = frameNo;
+    const s = z / q.K, dx = sx0 - q.ox * s, dy = sy0 - q.oy * s, dw = q.W * s, dh = q.H * s;
+    ctx.drawImage(q.cv, dx, dy, dw, dh);
+    if (nl > 0 && q.nv !== false) {
+      if (q.nv === null && q.K === K && !sprZoom && fresh) cityBakeNight(q, lay, era, col);
+      if (q.nv) { ctx.globalAlpha = nl; ctx.drawImage(q.nv, dx, dy, dw, dh); ctx.globalAlpha = 1; CGLOW.push(q.nv, dx, dy, dw, dh, nl); }
+    }
+    if (z >= 2.4 || smoke) for (let k = 0; k < q.anim.length; k += 2) {
+      const it = q.anim[k], sx = sx0 + (it.x - lay.cx) * z, sy = sy0 + (it.y - lay.cy) * z;
+      if (sx < mL || sx > mR || sy < mT || sy > mB) continue;
+      cityAnim(it, q.anim[k + 1], sx, sy, z, col, nl, n, smoke, rate);
+    }
+    return;
+  }
+  drawCityGround(lay, z, sx0, sy0);
   for (const m of lay.mines) {
     const sx = sxOf(m[0]), sy = syOf(m[1]);
     if (sx < mL || sx > mR || sy < mT || sy > mB) continue;
@@ -1385,7 +1482,7 @@ function drawCitySprites(c, z) {
   for (const it of lay.items) {
     const t = it.t;
     if (t === 'wseg') { drawWallSeg(lay, it, z, era, sx0, sy0, K); continue; }
-    if (!deco && (t === 'tree' || t === 'lamp' || t === 'park' || t === 'market') || t === 'lamp' && z < 4.5) continue;
+    if (decoSkip(t, mk)) continue;
     const sx = sx0 + (it.x - lay.cx) * z, sy = sy0 + (it.y - lay.cy) * z;
     if (sx < mL || sx > mR || sy < mT || sy > mB) continue;
     const e = itemSprite(it, t === 'tower' ? Math.min(era, 4) : era, col, K);
@@ -1393,14 +1490,6 @@ function drawCitySprites(c, z) {
     const s = z / e.K, dx = sx - e.ox * s, dy = sy - e.oy * s, dw = e.w * s, dh = e.h * s;
     ctx.drawImage(e.cv, dx, dy, dw, dh);
     if (nl > 0 && e.lt) { const nv = e.nv || sprNight(e); if (nv) { ctx.globalAlpha = nl; ctx.drawImage(nv, dx, dy, dw, dh); ctx.globalAlpha = 1; CGLOW.push(nv, dx, dy, dw, dh, nl); } }
-    if (z >= 2.4) {
-      for (const f of e.fl) drawFlagAt(sx + f[0] * z, sy + f[1] * z, z * 0.8, col, it.x * 0.3 + f[0]);
-      for (const f of e.fi) drawFireAt(sx + f[0] * z, sy + f[1] * z, z, nl, it.x + f[0]);
-      if (z >= 3) for (const b of e.bc) if (Math.sin(animT * 2.4 + it.v * 9 + b[1]) > 0.55) { ctx.fillStyle = '#ff3a2a'; const r = Math.max(1.5, 0.3 * z); ctx.fillRect(sx + b[0] * z - r / 2, sy + b[1] * z - r / 2, r, r); }
-    }
-    if (smoke && e.sm.length) for (const p of e.sm) {
-      if (p[2]) { if (rand2() < 0.08) { const fossil = Math.max(0, 1 - n.nuke - n.renew - n.fusion); if (rand2() < 0.2 + fossil) particle(it.x + p[0], it.y + p[1], 0.4 + (rand2() - 0.3) * 1.2, -2.2 - rand2(), 3 + rand2() * 2, fossil > 0.4 ? '#77706a' : '#c8ccd0', 1.2, 2.5, 0.55); } }
-      else if (rand2() < rate) particle(it.x + p[0], it.y + p[1], 0.5 + rand2() * 0.6, -1.3 - rand2() * 0.7, 2.4 + rand2() * 1.4, '#8e8a86', 0.45, 1.6, 0.3);
-    }
+    cityAnim(it, e, sx, sy, z, col, nl, n, smoke, rate);
   }
 }

@@ -48,6 +48,7 @@ function drawMapScene() {
   if (z >= AGENT_Z && showPeople) { drawAgents(z); drawProjectiles(z); }
   drawParticles(z);
   drawAmbient(z);
+  if (z >= BUILD_Z) drawCityLights(z);
   if (z >= AGENT_Z && showPeople) drawBattleLabels(z);
   drawMapFx(z);
   drawWarMarks(z);
@@ -151,7 +152,8 @@ function tilePlan(x0, y0, x1, y1, z) {
     const xa = SX(txr), ya = SY(ty);
     draw.push([d.cv, TILE * d.R, xa, ya, SX(txr + 1) - xa, SY(ty + 1) - ya, fade]);
   }
-  if (need.length) { need.sort((a, b) => a.dist - b.dist); tilesWork(need, GFX.detail >= 3 ? 3 : GFX.detail >= 2 ? 2 : 1.5); }
+  // fresh tiles get a few ms so they appear quickly; dirty-cell touch-ups (the running sim keeps marking cells) only ~1 ms
+  if (need.length) { need.sort((a, b) => a.dist - b.dist); tilesWork(need, (need.some(t => !t.ready) ? 2.5 : 0.9) * (GFX.detail >= 3 ? 1 : 0.7)); }
   tilesEvict(Math.max(48, ((ty1 - ty0 + 2) * ((x1 - x0) / TILE + 2)) | 0) * (R === 4 ? 1 : 3));
   return { draw, full, sc: zd / R };
 }
@@ -528,6 +530,34 @@ function drawSelection(z) {
   if (diploFrom) { const c = cityById(diploFrom.city); if (c) { const [mx, my] = cityMpx(c); ctx.strokeStyle = S.nations[c.n].color; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(sxOf(mx), syOf(my), 16, 0, TAU); ctx.stroke(); } }
 }
 function plate(x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
+// each label is pre-rendered once (plate, rim, shadowed text) and blitted with one drawImage per frame
+const LABEL_CACHE = new Map();
+function labelSprite(txt, cap, big, col, hq) {
+  const d = view.dpr, key = txt + '|' + (cap ? 1 : 0) + (big ? 1 : 0) + col + (hq ? 1 : 0) + d;
+  let s = LABEL_CACHE.get(key);
+  if (s) return s;
+  const font = `${big ? 12 : 11}px ${CSSV.font}`;
+  ctx.font = font;
+  const w = Math.round(ctx.measureText(txt).width + 14 + (cap ? 11 : 0)), h = big ? 17 : 16, pad = 2;
+  const cv = document.createElement('canvas'); cv.width = Math.ceil((w + pad * 2) * d); cv.height = Math.ceil((h + pad * 2 + 1) * d);
+  const c = cv.getContext('2d'); c.scale(d, d); c.translate(pad, pad);
+  const rr = (x, y, ww, hh, r) => { c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + ww, y, x + ww, y + hh, r); c.arcTo(x + ww, y + hh, x, y + hh, r); c.arcTo(x, y + hh, x, y, r); c.arcTo(x, y, x + ww, y, r); c.closePath(); };
+  if (hq) {
+    c.fillStyle = 'rgba(0,0,0,.32)'; rr(0.5, 1.5, w, h, 4); c.fill();
+    c.fillStyle = 'rgba(8,12,22,.8)'; rr(0, 0, w, h, 4); c.fill();
+    c.strokeStyle = cap ? 'rgba(255,214,140,.38)' : 'rgba(255,255,255,.12)'; c.lineWidth = 1; rr(0.5, 0.5, w - 1, h - 1, 3.5); c.stroke();
+    c.fillStyle = col; c.fillRect(1, 3, 2.5, h - 6);
+  } else { c.fillStyle = 'rgba(6,10,20,.72)'; c.fillRect(0, 0, w, h); c.fillStyle = col; c.fillRect(0, 0, 3, h); }
+  let tx = w / 2 + 1.5;
+  if (cap) { const sx = 11, sy = h / 2; c.fillStyle = '#ffcf6e'; c.beginPath(); for (let j = 0; j < 10; j++) { const r = j & 1 ? 1.7 : 4, an = -PI / 2 + j * PI / 5; c.lineTo(sx + Math.cos(an) * r, sy + Math.sin(an) * r); } c.fill(); tx += 5.5; }
+  c.font = font; c.textBaseline = 'middle'; c.textAlign = 'center';
+  if (hq) { c.fillStyle = 'rgba(0,0,0,.55)'; c.fillText(txt, tx + 0.5, h / 2 + 1); }
+  c.fillStyle = cap ? '#fff4dc' : 'rgba(233,238,248,.94)'; c.fillText(txt, tx, h / 2);
+  s = { cv, w, h, pad };
+  if (LABEL_CACHE.size > 500) LABEL_CACHE.clear();
+  LABEL_CACHE.set(key, s);
+  return s;
+}
 function drawCityLabels(vis, z) {
   const boxes = [], d = view.dpr, P = v => Math.round(v * d) / d;
   const list = vis.slice().sort((a, b) => b.c.pop - a.c.pop);
@@ -539,24 +569,13 @@ function drawCityLabels(vis, z) {
     if (k >= maxN) break;
     if (selectedNation >= 0 && v.c.n !== selectedNation && z < BUILD_Z) continue;
     const c = v.c, txt = c.name + (z >= 3 ? ` · ${fmtPop(c.pop)}` : ''), cap = c.cap, h = big ? 17 : 16;
-    const tw = ctx.measureText(txt).width + 14 + (cap ? 11 : 0);
+    const col = S.nations[c.n].color, hq = GFX.level > 0, spr = labelSprite(txt, cap, big, col, hq), tw = spr.w;
     const ly = big ? v.y - Math.max(18, layoutFor(c).r * z * 0.75 + 10) : v.y - v.r - 8;
     const b = { x: P(v.x - tw / 2), y: P(ly - h / 2), w: Math.round(tw), h };
     if (b.x > view.w || b.x + b.w < 0 || b.y > view.h || b.y + b.h < 0) continue;
     if (boxes.some(o => b.x < o.x + o.w && b.x + b.w > o.x && b.y < o.y + o.h && b.y + b.h > o.y)) continue;
     boxes.push(b); k++;
-    const col = S.nations[c.n].color, hq = GFX.level > 0;
-    if (hq) {   // rounded plate with a drop shadow and a hairline rim (gold for capitals)
-      ctx.fillStyle = 'rgba(0,0,0,.32)'; plate(b.x + 0.5, b.y + 1.5, b.w, b.h, 4); ctx.fill();
-      ctx.fillStyle = 'rgba(8,12,22,.8)'; plate(b.x, b.y, b.w, b.h, 4); ctx.fill();
-      ctx.strokeStyle = cap ? 'rgba(255,214,140,.38)' : 'rgba(255,255,255,.12)'; ctx.lineWidth = 1; plate(b.x + 0.5, b.y + 0.5, b.w - 1, b.h - 1, 3.5); ctx.stroke();
-      ctx.fillStyle = col; ctx.fillRect(b.x + 1, b.y + 3, 2.5, b.h - 6);
-    } else { ctx.fillStyle = 'rgba(6,10,20,.72)'; ctx.fillRect(b.x, b.y, b.w, b.h); ctx.fillStyle = col; ctx.fillRect(b.x, b.y, 3, b.h); }
-    let tx = v.x + 1.5;
-    if (cap) { const sx = b.x + 11, sy = b.y + b.h / 2; ctx.fillStyle = '#ffcf6e'; ctx.beginPath(); for (let j = 0; j < 10; j++) { const rr = j & 1 ? 1.7 : 4, an = -PI / 2 + j * PI / 5; ctx.lineTo(sx + Math.cos(an) * rr, sy + Math.sin(an) * rr); } ctx.fill(); tx += 5.5; }
-    if (hq) { ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fillText(txt, P(tx) + 0.5, P(b.y + b.h / 2) + 1); }
-    ctx.fillStyle = cap ? '#fff4dc' : 'rgba(233,238,248,.94)';
-    ctx.fillText(txt, P(tx), P(b.y + b.h / 2));
+    ctx.drawImage(spr.cv, b.x - spr.pad, b.y - spr.pad, spr.w + spr.pad * 2, spr.h + spr.pad * 2 + 1);
   }
   ctx.textAlign = 'left';
 }

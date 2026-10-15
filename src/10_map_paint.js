@@ -308,7 +308,7 @@ function paintMapAll() {
 const FL_X0 = new Int16Array(H), FL_X1 = new Int16Array(H);
 function flushMapDirty() {
   let list = mdirtyList; mdirtyList = [];
-  const t0 = performance.now(), budget = list.length > 300 ? 45 : 8;   // a big backlog (view switch, fast-forward) clears in ~1 s
+  const t0 = performance.now(), budget = list.length > 300 ? 10 : 4;   // keep frames smooth; a big backlog (view switch, fast-forward) drains over a few seconds
   if (list.length > 256 && viewMode === 'map') {
     const hw = view.w / 2 / cam.z + PX, hh = view.h / 2 / cam.z + PX, vis = [], rest = [];
     for (const i of list) { const cy = (i / W) | 0, cx = i - cy * W; (Math.abs(wrapDx((cx + 0.5) * PX - cam.x)) < hw && Math.abs((cy + 0.5) * PX - cam.y) < hh ? vis : rest).push(i); }
@@ -348,13 +348,14 @@ function tileGet(tx, ty, R, make) {
 function tileDirtyCell(ci) {
   if (!TILES.size) return;
   const cy = (ci / W) | 0, cx = ci - cy * W, tx = cx >> 2, ty = cy >> 2;
-  for (let R = 2; R <= 4; R += 2) { const t = tileGet(tx, ty, R, false); if (!t) continue; if (t.ready) { if (!t.dirty.includes(ci)) t.dirty.push(ci); } else t.row = Math.min(t.row, ((cy & 3) * PX) * R); }
+  // a cell above the painted band of an unfinished tile becomes a patch too: rewinding the band would let a busy sim starve the tile forever
+  for (let R = 2; R <= 4; R += 2) { const t = tileGet(tx, ty, R, false); if (!t) continue; if ((t.ready || ((cy & 3) * PX) * R < t.row) && !t.dirty.includes(ci)) t.dirty.push(ci); }
 }
 // paint one step of tile t (a band of rows, or one dirty cell); returns false when nothing is left to do
 function tileStep(t) {
   const R = t.R, n = t.n, inv = 1 / R, X0 = t.tx * TILE - inv, Y0 = t.ty * TILE - inv;
   if (!t.ready) {
-    const rows = Math.min(n - t.row, 8 * R), im = tileImg(n, rows);
+    const rows = Math.min(n - t.row, (R >= 4 ? 4 : 8) * R), im = tileImg(n, rows);   // finer steps at R 4 keep each one well under the frame budget
     paintRegion(im.u32, n, 0, X0, Y0 + t.row * inv, n, rows, R);
     t.cx.putImageData(im, 0, t.row); t.row += rows;
     if (t.row >= n) { t.ready = true; t.t0 = animT; }

@@ -9,7 +9,7 @@ const DAY_SEC = 180;                       // one full day per 3 minutes of real
 function sunX() { return (((-animT / DAY_SEC) * MW) % MW + MW) % MW; }   // sun moves east → west
 // 0 = full day, 1 = deep night at map pixel (mx, my)
 function nightAt(mx, my) {
-  if (!showDayNight) return 0;
+  if (!showDayNight || GFX.level === 0) return 0;
   const c = Math.cos(wrapDx(mx - sunX()) / MW * TAU);
   return smooth(0.3, -0.45, c);
 }
@@ -50,7 +50,7 @@ function drawAmbient(z) {
     }
     ctx.globalAlpha = 1;
   }
-  if (showDayNight) {
+  if (showDayNight && GFX.level > 0) {
     // night side: a 48×1 strip of darkness values stretched over the screen (much cheaper than a gradient fill)
     const n = 48, px = AMB.sdata.data;
     let lo = n, hi = -1;
