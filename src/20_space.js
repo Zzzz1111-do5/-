@@ -639,8 +639,9 @@ function planetFy(g) {
     }
   }
 }
+function P0reset(g) { g.P.roW = -1; }
 function planetRender(g, tx, p) {
-  if (g.dirty) { globeTables(g); planetFy(g); }
+  if (g.dirty) { globeTables(g); planetFy(g); P0reset(g); }
   const d = g.img.data, P = g.P;
   const n = P.n, idx = P.idx, ptx = P.tx, Fy = P.fy, Lt = P.Lt, Nt = P.Nt, Sp = P.Sp, Rim = P.Rim, Al = P.Al;
   const W2 = tx.w, H2 = tx.h, sx = W2 / TW, rotTex = (g.rot / TAU) * W2, c32 = tx.c32, li = tx.lights, wet = tx.wet, rs = tx.rs;
@@ -649,12 +650,29 @@ function planetRender(g, tx, p) {
   const bil = GFX.detail >= 2 && g.R * g.q * 4 > W2 * 1.4, anim = GFX.level >= 1 && BANDED[p.type];
   // gas giants: zonal jets drift at latitude-dependent speeds (texels at texture resolution)
   if (anim) { const sp = W2 / 512 * (p.type === 'venus' ? 2.2 : 1.4); for (let y = 0; y < H2; y++) { const lat = PI / 2 - (y + 0.5) / H2 * PI; let s = animT * sp * Math.sin(lat * 9 + 0.6) * Math.cos(lat); s -= Math.floor(s / W2) * W2; rs[y] = s; } }
-  else rs.fill(0);
   const Hm = H2 - 1;
+  if (!bil && !anim) {
+    // fast path (gfx 0/1 and unmagnified views): nearest texel, precomputed row offsets
+    if (P.roW !== W2 || P.roN !== n) { if (!P.ro || P.ro.length < P.cap) P.ro = new Int32Array(P.cap); for (let k = 0; k < n; k++) P.ro[k] = Math.min(Hm, (Fy[k] * H2) | 0) * W2; P.roW = W2; P.roN = n; }
+    const ro = P.ro;
+    for (let k = 0; k < n; k++) {
+      let fx = ptx[k] * sx + rotTex; fx -= Math.floor(fx / W2) * W2;
+      const i = ro[k] + (fx < W2 ? fx | 0 : 0), A = c32[i], L = Lt[k];
+      let r = (A & 255) * L, gg = ((A >> 8) & 255) * L, b = ((A >> 16) & 255) * L;
+      if (wet !== null && wet[i] === 1) { const s = Sp[k] * 0.9; r += s; gg += s; b += s * 0.95; }
+      const lt = li[i];
+      if (lt > 0) { const v = Math.min(1.2, lt) * (0.25 + Nt[k] * 0.9); r += 255 * v; gg += 214 * v; b += 150 * v; }
+      const rim = Rim[k] * rimK, rl = 0.15 + L * 0.85;
+      r += (ac[0] * rl - r) * rim; gg += (ac[1] * rl - gg) * rim; b += (ac[2] * rl - b) * rim;
+      const oo = idx[k]; d[oo] = r; d[oo + 1] = gg; d[oo + 2] = b; d[oo + 3] = Al[k] * 255;
+    }
+    g.gctx.putImageData(g.img, 0, 0);
+    return;
+  }
   for (let k = 0; k < n; k++) {
     let fy = Fy[k] * H2 - 0.5; if (fy < 0) fy = 0; else if (fy > Hm) fy = Hm;
     const y0 = fy | 0;
-    let fx = ptx[k] * sx + rotTex + rs[y0]; fx -= Math.floor(fx / W2) * W2; if (fx >= W2) fx = 0;
+    let fx = ptx[k] * sx + rotTex + (anim ? rs[y0] : 0); fx -= Math.floor(fx / W2) * W2; if (fx >= W2) fx = 0;
     let r, gg, b, i;
     if (bil) {
       let fxs = fx - 0.5; if (fxs < 0) fxs += W2;
