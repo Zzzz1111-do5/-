@@ -16,7 +16,8 @@ function drawMapScene() {
   drawBackdrop(x0, x1, z);
   const tiles = tilePlan(x0, y0, x1, y1, z);
   // the base bitmap is skipped once ready detail tiles cover the whole view
-  if (!tiles || !tiles.full) { ctx.imageSmoothingEnabled = z * view.dpr < 2; drawMapImage(x0, x1, y0, y1, z, 0); }
+  // (filtered while detail tiles are still filling in: a soft placeholder reads better than big blocks)
+  if (!tiles || !tiles.full) { ctx.imageSmoothingEnabled = z * view.dpr < 2 || !!tiles; drawMapImage(x0, x1, y0, y1, z, 0); }
   // tiles are filtered unless each sample already spans ≥ 1.9 device px on a hi-dpi screen (nearest is far cheaper there)
   ctx.imageSmoothingEnabled = !tiles || tiles.sc < 1.9 || (view.dpr < 1.5 && GFX.level >= 3);
   if (tiles) for (const [cv, s, xa, ya, w, h, a] of tiles.draw) { ctx.globalAlpha = a; ctx.drawImage(cv, 1, 1, s, s, xa, ya, w, h); }

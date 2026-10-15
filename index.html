@@ -476,9 +476,17 @@ label.chk input{accent-color:var(--sodium);margin:0}
   .planetcard{top:auto;bottom:60px;left:max(12px,env(safe-area-inset-left,0px));width:auto;max-height:45%}
 }
 @media (max-width:520px){
-  .seg button{padding:0 8px}
+  /* phones: a tighter header, and the layer list becomes a chip row beside the mini globe so the map stays clear */
+  .bar{gap:6px 10px;padding-block:6px}
+  .brand .sub{display:none}
+  .btn{height:30px;padding:0 9px;font-size:12px}
+  .seg button{height:28px;padding:0 7px;font-size:12px}
   .brand h1{font-size:18px}
   .year{font-size:18px}
+  .side{top:12px;left:auto;right:max(12px,env(safe-area-inset-right,0px));width:auto;max-width:calc(100% - 128px);flex-direction:row;flex-wrap:wrap;align-items:center;gap:4px}
+  .vlist{flex-direction:row;flex-wrap:wrap}
+  .vlist button{height:24px;padding:0 6px}
+  .ticker{top:84px;left:116px;right:12px;max-width:none}
 }
 @media (prefers-reduced-motion:reduce){
   .ticker,.banner{transition:none}
@@ -7667,7 +7675,8 @@ function drawMapScene() {
   drawBackdrop(x0, x1, z);
   const tiles = tilePlan(x0, y0, x1, y1, z);
   // the base bitmap is skipped once ready detail tiles cover the whole view
-  if (!tiles || !tiles.full) { ctx.imageSmoothingEnabled = z * view.dpr < 2; drawMapImage(x0, x1, y0, y1, z, 0); }
+  // (filtered while detail tiles are still filling in: a soft placeholder reads better than big blocks)
+  if (!tiles || !tiles.full) { ctx.imageSmoothingEnabled = z * view.dpr < 2 || !!tiles; drawMapImage(x0, x1, y0, y1, z, 0); }
   // tiles are filtered unless each sample already spans ≥ 1.9 device px on a hi-dpi screen (nearest is far cheaper there)
   ctx.imageSmoothingEnabled = !tiles || tiles.sc < 1.9 || (view.dpr < 1.5 && GFX.level >= 3);
   if (tiles) for (const [cv, s, xa, ya, w, h, a] of tiles.draw) { ctx.globalAlpha = a; ctx.drawImage(cv, 1, 1, s, s, xa, ya, w, h); }
