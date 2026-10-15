@@ -1092,7 +1092,7 @@ function updateInspector(force) {
         <dt>研究所</dt><dd>${c.labs >= 0.05 ? c.labs.toFixed(1) : '—'}</dd>
         ${c.inst ? `<dt>国立研究院</dt><dd>${c.inst} 座</dd>` : ''}
         <dt>科研 / 年</dt><dd>${c.rp.toFixed(1)}</dd>
-        <dt>守军</dt><dd class="txt">${WEAPON_NAME[n.mult.weapon]}</dd>
+        <dt>守军</dt><dd class="txt">${esc((landMain(n) || { name: WEAPON_NAME[n.mult.weapon] }).name)}</dd>
         <dt>地貌</dt><dd class="txt">${BIOME_NAME[WORLD.biome[c.i]]}${c.coastal ? '，沿海' : ''}</dd>
         <dt>气温</dt><dd>${cellTeff(c.i).toFixed(1)} °C</dd>
       </dl>

@@ -54,11 +54,15 @@ FZ('f_acad', '国家科学院', '科学', 3, ['f_univ'], 12, { minEra: 4 }, '集
 FZ('f_manhattan', '曼哈顿计划', '科学', 4, ['f_acad'], 14, { minEra: 5, tech: 'relativity' }, '秘密研制终极武器。', '立即获得「核裂变」与「核武器」', n => { godGrantTechQuiet(n, 'nukeweapons'); });
 FZ('f_space', '国家太空计划', '科学', 4, ['f_acad'], 14, { minEra: 5, tech: 'flight' }, '我们选择登月。', '立即获得「航天」，太空殖民 +50%', n => { godGrantTechQuiet(n, 'rocketry'); addB(n, 'space', 0.5); });
 FZ('f_ai', '国家 AI 战略', '科学', 5, ['f_manhattan'], 14, { minEra: 6 }, '算力即国力。', '科研 +15%', n => addB(n, 'sci', 0.15));
+FZ('f_triad', '核三位一体', '科学', 5, ['f_manhattan'], 14, { minEra: 6 }, '陆基导弹、战略轰炸机与核潜艇，任何一击都无法解除我们的反击能力。', '获得「洲际弹道导弹」「战略核潜艇」', n => { grantMil(n, 'icbm'); grantMil(n, 'ssbn'); });
 FZ('f_army', '扩充军队', '军事', 0, [], 7, {}, '招募青壮，操练兵马。', '获得 4 个军团', n => { n.legions += 4; });
 FZ('f_fort', '边境要塞', '军事', 1, ['f_army'], 9, {}, '在边境线上筑起堡垒。', '防御 +20%', n => addB(n, 'def', 0.2));
-FZ('f_navy', '建立舰队', '军事', 1, ['f_army'], 10, { minEra: 1, tech: 'sailing' }, '控制海洋就控制了贸易。', '跨海距离 +6，军力 +5%', n => { addB(n, 'sea', 6); addB(n, 'mil', 0.05); });
+FZ('f_navy', '建立舰队', '军事', 1, ['f_army'], 10, { minEra: 1, tech: 'sailing' }, '控制海洋就控制了贸易。', '跨海距离 +6，军力 +5%，获得「桨帆战船」', n => { addB(n, 'sea', 6); addB(n, 'mil', 0.05); grantMil(n, 'trireme'); });
 FZ('f_conscript', '义务兵役', '军事', 2, ['f_fort'], 10, { minEra: 3 }, '全民皆兵。', '军力 +15%，获得 6 个军团', n => { addB(n, 'mil', 0.15); n.legions += 6; });
 FZ('f_general', '总参谋部', '军事', 3, ['f_conscript'], 12, { minEra: 4 }, '现代化的指挥体系。', '军力 +15%', n => addB(n, 'mil', 0.15));
+FZ('f_armor', '装甲兵团', '军事', 3, ['f_conscript'], 12, { minEra: 5, tech: 'tank' }, '把坦克集中起来使用，而不是分散给步兵。', '获得「中型坦克」，装甲 +10%', n => { grantMil(n, 'tankmed'); addB(n, 'arm', 0.1); });
+FZ('f_airforce', '独立空军', '军事', 3, ['f_conscript'], 12, { minEra: 5, tech: 'flight' }, '空军从陆军中独立出来，成为第三个军种。', '获得「军用航空」「单翼战斗机」，空军经费 +10%', n => { grantMil(n, 'milaviation'); grantMil(n, 'monoplane'); const mx = ensureMil(n); mx.split[2] += 0.1; normW(mx.split); mx.tick = -1; });
+FZ('f_bluewater', '远洋海军', '军事', 4, ['f_navy'], 12, { minEra: 5 }, '舰队驶出近海，保护全球航线。', '获得「驱逐舰」「轻巡洋舰」，海军 +10%', n => { grantMil(n, 'destroyer'); grantMil(n, 'cruiser'); addB(n, 'navy', 0.1); });
 FZ('f_envoy', '派遣使节', '外交', 0, [], 7, {}, '与邻国互通往来。', '与所有邻国互信 +0.15', n => { for (const o of neighborNations(n)) addTrust(n.id, o.id, 0.15); });
 FZ('f_trade', '开放港口', '外交', 1, ['f_envoy'], 9, { minEra: 1 }, '让商船自由来往。', '贸易收益 +1，渔业 +15%', n => { addB(n, 'trade', 1); });
 FZ('f_explore', '远洋探索', '外交', 2, ['f_trade'], 12, { minEra: 3, tech: 'navigation' }, '寻找新大陆。', '跨海距离 +10', n => addB(n, 'sea', 10));
@@ -87,6 +91,8 @@ FZ('f_star', '星际殖民计划', '星际', 2, ['f_space'], 12, { tech: 'moonba
 FZ('f_star2', '太空军', '星际', 3, ['f_star'], 12, { tech: 'orbitalwar' }, '从轨道俯瞰战场。', '军力 +20%', n => addB(n, 'mil', 0.2));
 FZ('f_star3', '方舟计划', '星际', 4, ['f_star2'], 14, { tech: 'warp' }, '为人类准备一艘诺亚方舟。', '太空殖民速度再 ×2，系外殖民加速', n => addB(n, 'space', 2));
 const FOCUS_BY_ID = Object.fromEntries(FOCUS.map(f => [f.id, f]));
+// grant a military tech together with its military prerequisites, but only when its civil prerequisites are already known
+function grantMil(n, id) { const t = TECH_BY_ID[id]; if (!t || n.techs[id] !== undefined) return; const ok = x => TECH_BY_ID[x].req.every(r => n.techs[r] !== undefined || (TECH_BY_ID[r].mil && ok(r))); if (ok(id)) godGrantTechQuiet(n, id); }
 function godGrantTechQuiet(n, id) { const was = booting; godGrantTech(n, id); }
 function neighborNations(n) { const out = new Set(); for (const [a, b] of S.borders) { if (a === n.id) out.add(b); else if (b === n.id) out.add(a); } return [...out].map(i => S.nations[i]).filter(o => o && o.alive); }
 function focusState(f, n) {
@@ -497,13 +503,17 @@ function openFocusTree() { $('focusModal').hidden = false; renderFocusTree(); se
 function renderFocusTree() {
   const n = playerNation(); if (!n) return;
   const colW = 172, rowH = 56, left = 96, top = 30;
-  const Wd = left + 6 * colW + 20, Ht = top + FOCUS_LANES.length * rowH + 10;
+  // focuses sharing a lane and tier stack inside that lane
+  const sub = {}, depth = {}, laneY = {};
+  for (const f of FOCUS) { const k = f.lane + f.tier; sub[f.id] = depth[k] = (depth[k] === undefined ? 0 : depth[k] + 1); }
+  let yy = top; for (const l of FOCUS_LANES) { laneY[l] = yy; let d = 1; for (let t = 0; t < 8; t++) if (depth[l + t] !== undefined) d = Math.max(d, depth[l + t] + 1); yy += d * rowH; }
+  const Wd = left + 6 * colW + 20, Ht = yy + 10;
   let svg = `<svg width="${Wd}" height="${Ht}" aria-hidden="true">`;
-  const pos = f => ({ x: left + f.tier * colW, y: top + FOCUS_LANES.indexOf(f.lane) * rowH });
+  const pos = f => ({ x: left + f.tier * colW, y: laneY[f.lane] + sub[f.id] * rowH });
   for (const f of FOCUS) for (const r of f.req) { const a = pos(FOCUS_BY_ID[r]), b = pos(f); const x1 = a.x + 150, y1 = a.y + 23, x2 = b.x, y2 = b.y + 23, mx = (x1 + x2) / 2; svg += `<path d="M${x1} ${y1}C${mx} ${y1} ${mx} ${y2} ${x2} ${y2}" fill="none" stroke="${S.player.done.includes(r) ? '#3d6a90' : '#1f2d4a'}" stroke-width="1.3"/>`; }
   svg += '</svg>';
   let html = svg;
-  FOCUS_LANES.forEach((l, k) => { html += `<div class="tm-era" style="left:10px;top:${top + k * rowH + 15}px">${l}</div>`; });
+  FOCUS_LANES.forEach(l => { html += `<div class="tm-era" style="left:10px;top:${laneY[l] + 15}px">${l}</div>`; });
   for (const f of FOCUS) {
     const p = pos(f), st = focusState(f, n);
     const cls = { done: 'known', cur: 'cur', avail: 'avail', locked: '', blocked: 'dim' }[st];
