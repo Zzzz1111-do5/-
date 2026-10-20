@@ -23,26 +23,28 @@ function newGame(seed, level) {
     ships: [], teams: [], enemies: [], planes: [], shells: [], tracers: [], fx: [], smoke: [],
     mines: [], wire: [], obst: [], trench: [], supply: [], rlines: [], boats: [], recon: [], log: [],
     groups: { 1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [], 8: [], 9: [] }, sel: [],
-    assets: { recon: 3, strike: 3, rline: 2, reserve: 6, smoke: 4 },
+    assets: { recon: 3, strike: 3, rline: 3, reserve: 9, smoke: 6 },
     points: TER.points.map(p => ({ ...p, owner: 'e', prog: 0 })),
-    dd: { x: W / 2, y: 975, tx: W / 2, ty: 975, hull: 3, state: 'ready', cool: 0, repairT: 0, repairDur: 16, auto: false, exposedUntil: 0, moving: false },
+    dd: { x: W / 2, y: 1720, tx: W / 2, ty: 1720, hull: 3, state: 'ready', cool: 0, repairT: 0, repairDur: 16, auto: false, exposedUntil: 0, moving: false },
     stats: { lost: 0, killed: 0, shots: 0, exposed: 0, structs: 0 }, throttle: {}
   };
   deployDefenses(r, DIFF[level]);
   aiInit(level);
   deployFleet();
+  if (typeof initCarrier === 'function') initCarrier();
   rebuildForts(); rebuildCraters(); indexUnits();
   log('舰队已在集结海域就位。对岸地形已投影至沙盘，守军部署不明。', 'info');
-  log(`共 ${S.points.length} 个据点，全部夺取并同时控制 ${HOLD} 秒即胜利。`, 'info');
+  log(`共 ${S.points.length} 个据点。夺取指挥所并控制七成以上据点分值，坚守 ${HOLD} 秒即胜利。`, 'info');
   return S;
 }
 
-// 固定编成：两个突击编队、一个补给编队、驱逐舰
+// 固定编成：两个突击编队（各 5 艘）、一个补给编队（3 艘）、驱逐舰；航母在更南面
+// 登陆兵力：10 × 15 + 3 × 15 = 195 人，另有 9 组（27 人）后备经增援线上岸
 function deployFleet() {
   const slot = (kind, x, y, label, grp) => S.groups[grp].push(addShip(kind, x, y, label).id);
-  [[380, 915], [440, 945], [500, 915]].forEach(([x, y], k) => slot('assault', x, y, 'LA-' + (k + 1), 1));
-  [[1100, 915], [1160, 945], [1220, 915]].forEach(([x, y], k) => slot('assault', x, y, 'LA-' + (k + 4), 2));
-  [[760, 935], [840, 935]].forEach(([x, y], k) => slot('supply', x, y, 'LS-' + (k + 1), 3));
+  for (let k = 0; k < 5; k++) slot('assault', W * (.2 + k * .045), 1600 + (k % 2) * 46, 'LA-' + (k + 1), 1);
+  for (let k = 0; k < 5; k++) slot('assault', W * (.62 + k * .045), 1600 + (k % 2) * 46, 'LA-' + (k + 6), 2);
+  for (let k = 0; k < 3; k++) slot('supply', W * (.45 + k * .05), 1640, 'LS-' + (k + 1), 3);
 }
 
 function deployDefenses(r, D) {
@@ -77,21 +79,21 @@ function deployDefenses(r, D) {
     }
   }
   // 岸防重炮：岬角悬崖顶
-  const bt = S.points.find(p => p.key === 'BT'), gunXs = bt ? [bt.x] : [];
+  const gunXs = ['BT', 'BT2'].map(k => S.points.find(p => p.key === k)).filter(Boolean).map(p => p.x);
   for (let x = 40; x < W - 40; x += 20)
-    if (typeAt(x, coastAt(x) - 10) === T.CLIFF && gunXs.length < D.coastal && gunXs.every(g => Math.abs(g - x) > 300)) gunXs.push(x);
+    if (typeAt(x, coastAt(x) - 10) === T.CLIFF && gunXs.length < D.coastal && gunXs.every(g => Math.abs(g - x) > 450)) gunXs.push(x);
   for (const x of gunXs.slice(0, D.coastal)) addEnemy('coastal', x, coastAt(x) - 45);
   for (let i = 0; i < D.arty; i++) {
-    const x = 160 + i * (W - 320) / Math.max(1, D.arty - 1) + (r() - .5) * 100;
-    addEnemy('arty', x, clamp(coastAt(x) - 340 - r() * 80, 40, 400));
+    const x = 200 + i * (W - 400) / Math.max(1, D.arty - 1) + (r() - .5) * 140;
+    addEnemy('arty', x, clamp(coastAt(x) - 480 - r() * 120, 60, coastAt(x) - 300));
   }
   for (let i = 0; i < D.mortars; i++) {
-    const b = TER.beaches[i % 4], x = b.cx + (r() - .5) * 120;
-    addEnemy('mortar', x, coastAt(x) - 150 - r() * 40);
+    const b = TER.beaches[i % TER.beaches.length], x = b.cx + (r() - .5) * 140;
+    addEnemy('mortar', x, coastAt(x) - 160 - r() * 50);
   }
-  const aaAt = ['HQ', 'RD', 'TW'].map(k => S.points.find(p => p.key === k)).filter(Boolean);
+  const aaAt = ['HQ', 'RD', 'T1', 'T2'].map(k => S.points.find(p => p.key === k)).filter(Boolean);
   for (let i = 0; i < D.aa; i++) { const p = aaAt[i % aaAt.length]; addEnemy('aa', p.x + (r() - .5) * 80, p.y + 30 + r() * 30); }
-  for (const k of ['BT', 'RD']) {
+  for (const k of ['BT', 'BT2', 'RD']) {
     const p = S.points.find(p => p.key === k);
     if (p) S.mines.push({ id: S.nid++, x: p.x + (r() - .5) * 60, y: p.y + 55, r: 24, known: false, clr: 0 });
   }
@@ -103,9 +105,12 @@ function deployDefenses(r, D) {
       if (passInf(x, y)) addTeam('e', x, y, ['rifle', 'rifle', 'mg'], { role: 'garrison', obj: p.key, u: ug.id });
     }
   }
-  const tw = S.points.find(p => p.key === 'TW') || S.points[0];
+  // 机动预备队：分驻两个镇子
+  const towns = ['T1', 'T2'].map(k => S.points.find(p => p.key === k)).filter(Boolean);
+  if (!towns.length) towns.push(S.points[0]);
   let ur = null;
   for (let k = 0; k < D.reserves; k++) {
+    const tw = towns[Math.floor(k / 3) % towns.length];
     if (k % 3 === 0) ur = addUnit('e', 'inf', { role: 'reserve', obj: tw.key });
     addTeam('e', tw.x + (r() - .5) * 60, tw.y - 30 - r() * 30, ['rifle', 'rifle', 'mg'], { role: 'reserve', obj: tw.key, u: ur.id });
   }

@@ -81,7 +81,7 @@ function disembark(s) {
 }
 
 function makeSupplyLine(s, eng) {
-  const x1 = s.x, y1 = s.y, x2 = lerp(s.x, W / 2, .2), y2 = H - 6, n = 7, segs = [];
+  const x1 = s.x, y1 = s.y, x2 = lerp(s.x, W / 2, .2), y2 = STAGING_Y + 60, n = 7, segs = [];
   for (let i = 0; i < n; i++)
     segs.push({ x0: lerp(x1, x2, i / n), y0: lerp(y1, y2, i / n), x1: lerp(x1, x2, (i + 1) / n), y1: lerp(y1, y2, (i + 1) / n), ok: true, rep: 0 });
   S.supply.push({ id: S.nid++, ship: s.id, eng: eng.id, x: s.bx, y: s.by, segs, connected: true });

@@ -1,7 +1,8 @@
 'use strict';
 // 常量、工具函数、地形类型表
-const W = 1600, H = 1000, CELL = 10, GW = W / CELL, GH = H / CELL;
-const STAGING_Y = 880;            // 我方舰队集结海域上沿
+const W = 3000, H = 2000, CELL = 10, GW = W / CELL, GH = H / CELL;
+const STAGING_Y = 1500;           // 我方舰队集结海域上沿（航母在更南边）
+const CARRIER_Y = 1880;
 const ELEV_H = 6;                 // 高程 1.0 对应的视线高度（格）
 const COL = {
   bg: '#020704', g: '#3dff8a', gMid: '#1fa457', gDim: '#0f4a29', enemy: '#ff3d6e',
@@ -27,8 +28,8 @@ const gauss = () => (Math.random() + Math.random() + Math.random() - 1.5) / 1.5;
 const pick = arr => arr[Math.floor(Math.random() * arr.length)];
 const bearing = (ax, ay, bx, by) => (Math.atan2(bx - ax, ay - by) * 180 / Math.PI + 360) % 360;
 const fmtBrg = b => String(Math.round(b) % 360).padStart(3, '0') + '°';
-const GRID_COLS = 'ABCDEFGHIJKLMNOP';
-const gridRef = (x, y) => GRID_COLS[clamp(Math.floor(x / 100), 0, 15)] + (clamp(Math.floor(y / 100), 0, 9) + 1);
+const GRID_COLS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+const gridRef = (x, y) => GRID_COLS[clamp(Math.floor(x / 200), 0, 14)] + (clamp(Math.floor(y / 200), 0, 9) + 1);
 
 function segDist(px, py, x0, y0, x1, y1) {
   const dx = x1 - x0, dy = y1 - y0, l2 = dx * dx + dy * dy || 1;

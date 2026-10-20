@@ -82,7 +82,7 @@ function restart(briefed) {
   newGame(undefined, U.level);
   S.briefed = briefed; U.tool = null; U.logKey = null; U.cardKey = null; MX.seed = null;
   mmInit($('mm')); updateVision();
-  CAM.x = W / 2; CAM.y = H * .72; CAM.z = CAM.fit * 1.5; camClamp();
+  CAM.x = W / 2; CAM.y = STAGING_Y + 120; CAM.z = CAM.fit * 2.2; camClamp();
   delete $('btnNew').dataset.armed;
   updateHud();
 }

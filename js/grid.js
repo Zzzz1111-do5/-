@@ -64,7 +64,7 @@ function rebuildForts() {
     for (let s = 0; s <= n; s++) WIREC[ci(lerp(w.x0, w.x1, s / n), lerp(w.y0, w.y1, s / n))] = 1;
   }
   for (const o of S.obst) if (!o.dead) OBSC[ci(o.x, o.y)] = o.known ? 2 : 1;
-  fieldGen++; FIELDS.clear();
+  fieldGen++;
 }
 
 // cls：'p' 我方步兵（只回避已知雷区），'e' 守军（熟悉自己的雷区），'ship' 舰船
@@ -94,54 +94,51 @@ function nearestPassable(i, cls) {
 const NB = [[1, 0, 1], [-1, 0, 1], [0, 1, 1], [0, -1, 1], [1, 1, 1.414], [1, -1, 1.414], [-1, 1, 1.414], [-1, -1, 1.414]];
 const NDX = NB.map(n => n[0]), NDY = NB.map(n => n[1]), NDM = NB.map(n => n[2]);
 
+// 流场缓存：地形/工事变化只让版本号递增；每个推演步最多重算 FBUDGET 个，超出时先用旧流场，避免大地图卡顿
+let FBUDGET = 3;
+const HEAP_N = new Int32Array(GW * GH * 8), HEAP_P = new Float64Array(GW * GH * 8);
 function field(tx, ty, cls) {
   const ti = nearestPassable(ci(tx, ty), cls);
   if (ti < 0) return null;
-  const key = cls + ti + ':' + fieldGen;
-  let d = FIELDS.get(key);
-  if (d) return d;
-  if (FIELDS.size > 48) FIELDS.delete(FIELDS.keys().next().value);
-  d = new Float64Array(GW * GH).fill(Infinity);   // 双精度：避免与堆优先级比较时的舍入误差
-  const heap = [ti], pr = [0];
-  d[ti] = 0;
-  const push = (i, p) => {
-    let k = heap.length; heap.push(i); pr.push(p);
-    while (k > 0) { const pa = (k - 1) >> 1; if (pr[pa] <= p) break; heap[k] = heap[pa]; pr[k] = pr[pa]; k = pa; }
-    heap[k] = i; pr[k] = p;
-  };
-  const pop = () => {
-    const top = heap[0], tp = pr[0], li = heap.pop(), lp = pr.pop();
-    if (heap.length) {
-      let k = 0;
-      for (;;) {
-        let c = 2 * k + 1;
-        if (c >= heap.length) break;
-        if (c + 1 < heap.length && pr[c + 1] < pr[c]) c++;
-        if (pr[c] >= lp) break;
-        heap[k] = heap[c]; pr[k] = pr[c]; k = c;
-      }
-      heap[k] = li; pr[k] = lp;
-    }
-    popP = tp;
-    return top;
-  };
-  let popP = 0;
+  const key = cls + ti, f = FIELDS.get(key);
+  if (f && (f.gen === fieldGen || FBUDGET <= 0)) { FIELDS.delete(key); FIELDS.set(key, f); return f.d; }
+  FBUDGET--;
+  const d = f ? f.d : new Float64Array(GW * GH);
+  d.fill(Infinity);
   const cost = new Float64Array(GW * GH);
   for (let k = 0; k < GW * GH; k++) cost[k] = stepCost(k, cls);
-  while (heap.length) {
-    const i = pop(), p = popP;
+  let n = 0;
+  const push = (i, p) => {
+    let k = n++;
+    while (k > 0) { const pa = (k - 1) >> 1; if (HEAP_P[pa] <= p) break; HEAP_N[k] = HEAP_N[pa]; HEAP_P[k] = HEAP_P[pa]; k = pa; }
+    HEAP_N[k] = i; HEAP_P[k] = p;
+  };
+  d[ti] = 0; push(ti, 0);
+  while (n) {
+    const i = HEAP_N[0], p = HEAP_P[0], li = HEAP_N[--n], lp = HEAP_P[n];
+    let k = 0;
+    for (;;) {
+      let c = 2 * k + 1;
+      if (c >= n) break;
+      if (c + 1 < n && HEAP_P[c + 1] < HEAP_P[c]) c++;
+      if (HEAP_P[c] >= lp) break;
+      HEAP_N[k] = HEAP_N[c]; HEAP_P[k] = HEAP_P[c]; k = c;
+    }
+    HEAP_N[k] = li; HEAP_P[k] = lp;
     if (p > d[i]) continue;
     const gx = i % GW, gy = (i / GW) | 0, c0 = cost[i];
-    for (let k = 0; k < 8; k++) {
-      const nx = gx + NDX[k], ny = gy + NDY[k];
+    for (let k2 = 0; k2 < 8; k2++) {
+      const nx = gx + NDX[k2], ny = gy + NDY[k2];
       if (nx < 0 || ny < 0 || nx >= GW || ny >= GH) continue;
       const j = ny * GW + nx, cj = cost[j];
       if (cj === Infinity) continue;
-      const nd = p + (cj + c0) * .5 * NDM[k];
-      if (nd < d[j]) { d[j] = nd; push(j, nd); }
+      const nd = p + (cj + c0) * .5 * NDM[k2];
+      if (nd < d[j] && n < HEAP_N.length) { d[j] = nd; push(j, nd); }
     }
   }
-  FIELDS.set(key, d);
+  FIELDS.delete(key);
+  FIELDS.set(key, { d, gen: fieldGen });
+  while (FIELDS.size > 40) FIELDS.delete(FIELDS.keys().next().value);
   return d;
 }
 

@@ -61,7 +61,7 @@ function buildRLine(ship) {
   if (S.rlines.some(l => l.ship === ship.id)) { log('该滩头已有增援线', 'warn', 'rl2', 2); return false; }
   S.assets.rline--;
   const x0 = clamp(ship.x - (W / 2 - ship.x) * .15, 20, W - 20);
-  S.rlines.push({ id: S.nid++, ship: ship.id, x0, y0: H - 6, x1: ship.x, y1: ship.y, bx: ship.bx, by: ship.by, timer: 2 });
+  S.rlines.push({ id: S.nid++, ship: ship.id, x0, y0: STAGING_Y + 60, x1: ship.x, y1: ship.y, bx: ship.bx, by: ship.by, timer: 2 });
   log('增援线已开辟', 'good', null, 0, { x: ship.bx, y: ship.by });
   return true;
 }
@@ -136,10 +136,14 @@ function updateVision() {
   if (forts) rebuildForts();
 }
 
+const VP_WIN = .7;
+const vpShare = () => S.points.filter(p => p.owner === 'p').reduce((a, p) => a + p.vp, 0) / S.points.reduce((a, p) => a + p.vp, 0);
+const victoryHeld = () => S.points.some(p => p.key === 'HQ' && p.owner === 'p') && vpShare() >= VP_WIN;
+
 function checkEnd(dt) {
   if (S.over) return;
-  if (S.points.every(p => p.owner === 'p')) {
-    if (!S.holdT) log(`全部据点已夺取，坚守 ${HOLD} 秒即可巩固滩头`, 'good');
+  if (victoryHeld()) {
+    if (!S.holdT) log(`已控制指挥所与七成据点分值，坚守 ${HOLD} 秒即胜利`, 'good');
     S.holdT += dt;
     if (S.holdT >= HOLD) { S.over = 'win'; log('登陆场已巩固，作战胜利', 'good'); return; }
   } else if (S.holdT) { S.holdT = 0; log('有据点被夺回，巩固计时中断', 'bad'); }
@@ -151,6 +155,7 @@ function checkEnd(dt) {
 
 function step(dt) {
   S.t += dt;
+  FBUDGET = 3;
   indexUnits();
   if ((S.visT = (S.visT ?? 0) - dt) <= 0) { S.visT = .25; updateVision(); }
   updateShips(dt); updateDD(dt); updateTeams(dt); indexUnits(); updateUnits(dt); updateEnemies(dt); aiUpdate(dt);

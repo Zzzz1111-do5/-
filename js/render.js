@@ -1,6 +1,6 @@
 'use strict';
 // 渲染（一）：画布、镜头变换、辉光、海岸线/网格/海滩标注、无 WebGL 时的像素地形
-const R = { cv: null, ctx: null, dpr: 1, s: 1, ox: 0, oy: 0, b1: null, b2: null, pix: null, fog: null, dprCap: 0 };
+const R = { cv: null, ctx: null, dpr: 1, s: 1, ox: 0, oy: 0, b1: null, b2: null, pix: null, fog: null, dprCap: 0, rain: .25 };
 const px = n => n / R.s;
 const _rgb = {};
 function rgba(hex, a) {
@@ -33,7 +33,8 @@ function resize() {
 // 降级：世界分辨率的像素地形
 function buildPixel() {
   const c = R.pix || (R.pix = document.createElement('canvas')), g = c.getContext('2d');
-  c.width = W; c.height = H;
+  c.width = W / 2; c.height = H / 2;
+  g.setTransform(.5, 0, 0, .5, 0, 0);
   g.fillStyle = COL.bg; g.fillRect(0, 0, W, H);
   for (let i = 0; i < GW * GH; i++) {
     const t = TER.type[i];

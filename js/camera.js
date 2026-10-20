@@ -1,17 +1,17 @@
 'use strict';
 // 镜头：缩放、平移、坐标换算、小地图
-const CAM = { x: W / 2, y: H * .72, z: 1, vw: 1, vh: 1, fit: 1 };
+const CAM = { x: W / 2, y: STAGING_Y + 120, z: 1, vw: 1, vh: 1, fit: 1 };
 
 function camFit(vw, vh) {
   const first = CAM.vw === 1;
   CAM.vw = vw; CAM.vh = vh;
   CAM.fit = Math.min(vw / W, vh / H);
-  if (first) CAM.z = CAM.fit * 1.5;
+  if (first) CAM.z = CAM.fit * 2.2;
   camClamp();
 }
 
 function camClamp() {
-  CAM.z = clamp(CAM.z, CAM.fit, CAM.fit * 6);
+  CAM.z = clamp(CAM.z, CAM.fit, CAM.fit * 12);
   const hw = CAM.vw / 2 / CAM.z, hh = CAM.vh / 2 / CAM.z;
   CAM.x = W <= 2 * hw ? W / 2 : clamp(CAM.x, hw, W - hw);
   CAM.y = H <= 2 * hh ? H / 2 : clamp(CAM.y, hh, H - hh);

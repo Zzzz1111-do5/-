@@ -1,11 +1,11 @@
 'use strict';
 // 守军指挥官 AI：只依据己方观察哨、部队与雷达看到的情报决策，不开全图
 const DIFF = {
-  normal: { name: '普通', beachBunkers: 1, beachMines: 1, coastal: 1, arty: 2, mortars: 1, aa: 2, garrison: 0, ambush: 1, reserves: 2, waves: 2, waveEvery: 240, waveSize: 2,
+  normal: { name: '普通', beachBunkers: 1, beachMines: 1, coastal: 2, arty: 3, mortars: 3, aa: 3, garrison: 0, ambush: 1, reserves: 3, waves: 2, waveEvery: 240, waveSize: 2,
     morale: 55, nerve: 1.2, think: 2.5, err: 30, lead: .5, radio: .15, hold: 100, scoot: 3, ratio: 1.6, acc: .9, dig: .8 },
-  hard: { name: '困难', beachBunkers: 2, beachMines: 2, coastal: 2, arty: 3, mortars: 3, aa: 2, garrison: 0, ambush: 2, reserves: 4, waves: 5, waveEvery: 180, waveSize: 2,
+  hard: { name: '困难', beachBunkers: 2, beachMines: 2, coastal: 3, arty: 4, mortars: 5, aa: 3, garrison: 0, ambush: 2, reserves: 6, waves: 5, waveEvery: 180, waveSize: 2,
     morale: 65, nerve: 1, think: 1.4, err: 21, lead: .85, radio: .4, hold: 120, scoot: 2, ratio: 1.25, acc: 1.05, dig: .55 },
-  hell: { name: '地狱', beachBunkers: 2, beachMines: 3, coastal: 2, arty: 4, mortars: 4, aa: 3, garrison: 1, ambush: 3, reserves: 6, waves: 7, waveEvery: 130, waveSize: 3,
+  hell: { name: '地狱', beachBunkers: 2, beachMines: 3, coastal: 4, arty: 6, mortars: 7, aa: 5, garrison: 1, ambush: 3, reserves: 9, waves: 7, waveEvery: 130, waveSize: 3,
     morale: 80, nerve: .75, think: .7, err: 15, lead: 1, radio: .6, hold: 130, scoot: 1, ratio: 1.05, acc: 1.2, dig: .45 }
 };
 let AIC = null;   // 由地形派生的缓存（据点周围掩体格），不进 S

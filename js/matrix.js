@@ -9,20 +9,21 @@ const GLYPHS = KANA.slice(0, 56) + '0123456789' + SYMS.slice(0, 30);
 const MX_VS = 'attribute vec2 p; void main(){ gl_Position = vec4(p, 0., 1.); }';
 const MX_FS = `
 precision highp float;
-uniform vec2 uRes; uniform vec3 uView; uniform float uTime, uFlash, uGlyph;
+uniform vec2 uRes; uniform vec3 uView; uniform float uTime, uFlash, uGlyph, uRain;
 uniform sampler2D uTer, uFog, uAtlas;
-const vec2 GRID = vec2(160., 100.);
+const vec2 GRID = vec2(${GW}., ${GH}.);
+const vec2 WORLD = vec2(${W}., ${H}.);
 float h1(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 void main() {
   vec2 fc = vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y);
   vec2 w = (fc - uView.yz) / uView.x;
   vec3 bg = vec3(.004, .016, .009);
-  if (w.x < 0. || w.y < 0. || w.x >= 1600. || w.y >= 1000.) { gl_FragColor = vec4(bg * .5, 1.); return; }
+  if (w.x < 0. || w.y < 0. || w.x >= WORLD.x || w.y >= WORLD.y) { gl_FragColor = vec4(bg * .5, 1.); return; }
   vec2 cell = floor(w / 10.), f = fract(w / 10.);
   vec4 ter = texture2D(uTer, (cell + .5) / GRID);
   float elev = ter.r, typ = floor(ter.g * 255. / 16. + .5);
   float land = step(2.5, typ);
-  float vis = texture2D(uFog, w / vec2(1600., 1000.)).r;
+  float vis = texture2D(uFog, w / WORLD).r;
   float b0 = floor(elev * 6.);
   float bR = floor(texture2D(uTer, (cell + vec2(1.5, .5)) / GRID).r * 6.);
   float bD = floor(texture2D(uTer, (cell + vec2(.5, 1.5)) / GRID).r * 6.);
@@ -32,11 +33,11 @@ void main() {
     float fk = float(k);
     float sp = 3. + h1(vec2(cell.x, 7. + fk)) * 9.;
     float len = 6. + h1(vec2(cell.x, 3. + fk)) * 24.;
-    float total = 100. + len + h1(vec2(cell.x, 19. + fk)) * 80.;
+    float total = GRID.y + len + h1(vec2(cell.x, 19. + fk)) * 80.;
     float d = mod(uTime * sp + h1(vec2(cell.x, 11. + fk)) * total, total) - cell.y;
     if (d >= 0. && d < len) { rain = max(rain, 1. - d / len); head = max(head, step(d, 1.)); }
   }
-  float rate = .12 + h1(cell + 5.) * 1.4 + rain * 7.;
+  float rate = .12 + h1(cell + 5.) * 1.4 + rain * uRain * 7.;
   float n = h1(cell + floor(uTime * rate + h1(cell) * 10.));
   float gi = floor(n * 66.), base = 0.;
   vec3 tint = vec3(.17, 1., .47);
@@ -62,6 +63,7 @@ void main() {
   a = mix(.5, a, smoothstep(4., 8., uGlyph));
   float lit = mix(.45, 1., vis) * mix(1., .5, smoothstep(14., 34., uGlyph));   // 近看时压暗地形，让部队更醒目
   base = (base + contour * .4 * land) * lit;
+  rain *= uRain; head *= uRain;
   float r = rain * (land > .5 ? .45 : .32) * mix(.55, 1., vis) * mix(1., .55, smoothstep(14., 34., uGlyph));
   vec3 c = bg + tint * (base + r) * a;
   c += vec3(.78, 1., .88) * head * a * (land > .5 ? .75 : .55) * mix(.5, 1., vis);
@@ -89,7 +91,7 @@ function mxInit() {
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
     const loc = gl.getAttribLocation(pr, 'p');
     gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
-    for (const n of ['uRes', 'uView', 'uTime', 'uFlash', 'uGlyph', 'uTer', 'uFog', 'uAtlas']) MX.u[n] = gl.getUniformLocation(pr, n);
+    for (const n of ['uRes', 'uView', 'uTime', 'uFlash', 'uGlyph', 'uRain', 'uTer', 'uFog', 'uAtlas']) MX.u[n] = gl.getUniformLocation(pr, n);
     ['ter', 'fog', 'atlas'].forEach((k, i) => {
       const t = gl.createTexture(), filt = k === 'ter' ? gl.NEAREST : gl.LINEAR;
       gl.activeTexture(gl.TEXTURE0 + i); gl.bindTexture(gl.TEXTURE_2D, t);
@@ -149,6 +151,7 @@ function mxDraw(time, flash) {
   gl.uniform1f(MX.u.uTime, time % 1000);
   gl.uniform1f(MX.u.uFlash, flash);
   gl.uniform1f(MX.u.uGlyph, CELL * R.s * R.dpr);
+  gl.uniform1f(MX.u.uRain, R.rain);
   gl.drawArrays(gl.TRIANGLES, 0, 3);
 }
 
