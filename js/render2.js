@@ -81,7 +81,9 @@ function drawEnemies() {
   ctx.lineWidth = px(1.5);
   for (const e of S.enemies) {
     const vis = inVision(e.x, e.y);
-    if (!vis && !e.known) continue;
+    if (!vis && e.kx == null) continue;
+    // 视野外只画最后一次标定的位置（目标可能已经转移）
+    const m = vis ? e : { kind: e.kind, x: e.kx, y: e.ky };
     if (e.dead) {
       ctx.strokeStyle = rgba(COL.enemy, .3);
       ctx.beginPath(); ctx.moveTo(e.x - 5, e.y - 5); ctx.lineTo(e.x + 5, e.y + 5); ctx.moveTo(e.x + 5, e.y - 5); ctx.lineTo(e.x - 5, e.y + 5); ctx.stroke();
@@ -89,7 +91,7 @@ function drawEnemies() {
     }
     ctx.setLineDash(vis ? [] : [px(2), px(2)]);
     ctx.strokeStyle = rgba(COL.enemy, vis ? 1 : .5); ctx.fillStyle = rgba(COL.enemy, vis ? .2 : .05);
-    drawEnemyMark(ctx, e);
+    drawEnemyMark(ctx, m);
     ctx.setLineDash([]);
     if (vis) { ctx.fillStyle = rgba(COL.enemy, .8); ctx.fillRect(e.x - 8, e.y + 11, 16 * e.hp / e.maxhp, px(2)); }
   }

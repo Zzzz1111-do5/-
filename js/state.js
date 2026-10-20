@@ -12,13 +12,15 @@ const ENEMY_SPEC = {
   aa: { name: '防空炮', hp: 8 }
 };
 const LIMIT = 20 * 60;   // 作战时限（秒）
+const HOLD = 60;         // 三个目标需同时坚守的秒数
 
-function newGame(seed) {
+function newGame(seed, level) {
+  level = DIFF[level] ? level : 'hard';
   seed = seed || (Math.random() * 1e9) | 0;
   buildTerrain(seed);
   const r = rng(seed ^ 0x5f3759df);
   S = {
-    seed, t: 0, paused: true, speed: 1, nid: 1, over: null, briefed: false,
+    seed, t: 0, paused: true, ai: null, holdT: 0, speed: 1, nid: 1, over: null, briefed: false,
     ships: [], squads: [], enemies: [], planes: [], shells: [], tracers: [], fx: [],
     supply: [], rlines: [], boats: [], recon: [], ghosts: [], log: [],
     groups: { 1: [], 2: [], 3: [], 4: [] }, sel: [],
@@ -29,27 +31,30 @@ function newGame(seed) {
   };
 
   // —— 敌方部署（玩家不可见）——
-  for (let i = 0; i < 5; i++) {
-    const x = 120 + i * 240 + (r() - .5) * 90;
+  const nb = DIFF[level].bunkers, na = DIFF[level].arty;
+  for (let i = 0; i < nb; i++) {
+    const x = 120 + i * 960 / (nb - 1) + (r() - .5) * 80;
     addEnemy('bunker', x, coastAt(x) - 34 - r() * 26);
   }
-  for (let i = 0; i < 3; i++) addEnemy('arty', 200 + i * 400 + (r() - .5) * 140, 50 + r() * 80);
+  for (let i = 0; i < na; i++) addEnemy('arty', 200 + i * 800 / (na - 1) + (r() - .5) * 120, 50 + r() * 80);
   const [A, B, C] = S.objectives;
   addEnemy('aa', B.x + (r() - .5) * 120, B.y + 30 + r() * 30);
   addEnemy('aa', C.x + (r() - .5) * 100, C.y + 40 + r() * 30);
-  for (const o of S.objectives) for (let k = 0; k < 4; k++)
+  for (const o of S.objectives) for (let k = 0; k < DIFF[level].garrison; k++)
     addSquad('e', o.x + (r() - .5) * 90, o.y + (r() - .5) * 60, ['rifle', 'rifle', 'rifle']);
   for (let k = 0; k < 3; k++) {
     const x = 300 + r() * 600;
     addSquad('e', x, coastAt(x) - 60 - r() * 40, ['rifle', 'rifle', 'rifle']);
   }
 
+  aiInit(level);
+
   // —— 开局已在集结海域的舰船（示例部署）——
   const a1 = addShip('assault', 430, 715), a2 = addShip('assault', 470, 740), s1 = addShip('supply', 760, 725);
   S.groups[1] = [a1.id, a2.id];
   S.groups[2] = [s1.id];
   log('战局开始。敌方地形已投影至沙盘，敌军部署不明。', 'info');
-  log('三个目标：A 灯塔、B 炮台高地、C 指挥所。全部占领即胜利。', 'info');
+  log('三个目标：A 灯塔、B 炮台高地、C 指挥所。全部占领并坚守 60 秒即胜利。', 'info');
   return S;
 }
 

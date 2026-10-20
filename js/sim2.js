@@ -167,9 +167,13 @@ function updateObjectives(dt) {
   }
 }
 
-function checkEnd() {
+function checkEnd(dt) {
   if (S.over) return;
-  if (S.objectives.every(o => o.owner === 'p')) { S.over = 'win'; log('全部目标已占领，登陆作战胜利', 'good'); return; }
+  if (S.objectives.every(o => o.owner === 'p')) {
+    if (!S.holdT) log(`三个目标已全部占领，坚守 ${HOLD} 秒即可巩固滩头`, 'good');
+    S.holdT += dt;
+    if (S.holdT >= HOLD) { S.over = 'win'; log('滩头已巩固，登陆作战胜利', 'good'); return; }
+  } else if (S.holdT) { S.holdT = 0; log('目标被夺回，巩固计时中断', 'bad'); }
   const forces = S.squads.some(q => q.side === 'p' && q.kind === 'inf') || S.ships.some(s => alive(s) && s.load.squads > 0) ||
     S.cards.assault + S.cards.supply > 0 || S.boats.length > 0 || (S.cards.reinf > 0 && S.rlines.length > 0);
   if (!forces) { S.over = 'lose'; log('登陆部队已全部损失', 'bad'); }
@@ -179,14 +183,14 @@ function checkEnd() {
 function step(dt) {
   S.t += dt;
   computeVision();
-  updateShips(dt); updateSquads(dt); updateSupply(dt); updateEnemies(dt);
+  updateShips(dt); updateSquads(dt); updateSupply(dt); updateEnemies(dt); aiUpdate(dt);
   updateDestroyer(dt); updatePlanes(dt); updateShells(dt); updateRLines(dt); updateObjectives(dt);
   S.squads = S.squads.filter(q => q.men.length);
   for (const t of S.tracers) t.life += dt;
   S.tracers = S.tracers.filter(t => t.life < t.max);
   for (const f of S.fx) f.life += dt;
   S.fx = S.fx.filter(f => f.life < f.max);
-  checkEnd();
+  checkEnd(dt);
 }
 
 // —— 玩家指令 ——

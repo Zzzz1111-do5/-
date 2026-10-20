@@ -18,7 +18,13 @@ function computeVision() {
   for (const p of S.recon) v.push({ x: p.x, y: p.y, r: 75 });
   if (S.destroyer.state !== 'sunk') v.push({ x: S.destroyer.x, y: S.destroyer.y, r: 30 });
   VIS = v;
-  for (const e of S.enemies) if (!e.dead && inVision(e.x, e.y)) e.known = true;
+  for (const e of S.enemies) {
+    if (inVision(e.x, e.y)) { e.kx = e.x; e.ky = e.y; }
+    else if (e.kx != null && !e.dead && dist(e.kx, e.ky, e.x, e.y) > 20 && inVision(e.kx, e.ky)) {
+      e.kx = e.ky = null;
+      log(`${gridRef(e.x, e.y)} 原标定位置已无目标，敌${ENEMY_SPEC[e.kind].name}疑似转移`, 'warn', 'stale' + e.id, 15);
+    }
+  }
   for (const q of S.squads) if (q.side === 'e' && inVision(q.x, q.y)) { q.seen = S.t; q.sx = q.x; q.sy = q.y; }
 }
 function inVision(x, y, pad = 0) {
@@ -27,9 +33,11 @@ function inVision(x, y, pad = 0) {
 }
 
 // —— 伤害 ——
-function killMan(q) {
+// prefer：守军优先狙杀的角色（通讯兵）
+function killMan(q, prefer) {
   if (!q.men.length) return;
-  const role = q.men.splice(Math.floor(Math.random() * q.men.length), 1)[0];
+  const pi = prefer ? q.men.indexOf(prefer) : -1;
+  const role = q.men.splice(pi >= 0 ? pi : Math.floor(Math.random() * q.men.length), 1)[0];
   if (q.side === 'e') { S.stats.killed++; return; }
   S.stats.lost++;
   if (role === 'radio') { q.radioLost = true; log(`第 ${q.no} 小队通讯兵阵亡，${gridRef(q.x, q.y)} 视野消失`, 'bad'); }
@@ -52,7 +60,7 @@ function damageEnemy(e, dmg) {
   if (e.dead) return;
   e.hp -= dmg;
   if (e.hp > 0) return;
-  e.dead = true; e.known = true;
+  e.dead = true; e.kx = e.x; e.ky = e.y; e.moving = false;
   S.stats.structs = (S.stats.structs || 0) + 1;
   S.fx.push({ kind: 'boom', x: e.x, y: e.y, r: 34, life: 0, max: 1.4, side: 'e' });
   if (inVision(e.x, e.y)) log(`已摧毁敌方${ENEMY_SPEC[e.kind].name}（${gridRef(e.x, e.y)}）`, 'good');
@@ -65,7 +73,7 @@ function impact(x, y, pw, side) {
   for (const q of S.squads) {
     const d = dist(x, y, q.x, q.y);
     if (d >= R) continue;
-    const p = pw.men * (1 - d / R * .5) * COVER[terrainAt(q.x, q.y)];
+    const p = pw.men * (1 - d / R * .5) * COVER[terrainAt(q.x, q.y)] * (dug(q) < 1 ? .65 : 1);
     for (let k = q.men.length; k > 0; k--) if (Math.random() < p) killMan(q);
   }
   for (const s of S.ships) {
@@ -142,6 +150,9 @@ function makeSupplyLine(s, eng) {
 }
 
 // —— 步兵小队（双方共用）——
+// 守军原地 6 秒即完成掘壕
+const dug = q => q.side === 'e' && S.t - (q.movedT || 0) > 6 ? aiD().dig : 1;
+
 function nearestTarget(q, range) {
   let best = null, bd = range;
   for (const o of S.squads) if (o.side !== q.side && o.men.length) {
@@ -174,16 +185,19 @@ function moveSquad(q, gx, gy, dt) {
     const dd = dist(nx, ny, o.x, o.y);
     if (dd < 12 && dd > .01) { nx += (nx - o.x) / dd * (12 - dd) * .3; ny += (ny - o.y) / dd * (12 - dd) * .3; }
   }
-  if (q.kind === 'eng' || isLand(nx, ny)) { q.x = clamp(nx, 4, W - 4); q.y = clamp(ny, 4, H - 4); }
+  if (q.kind === 'eng' || isLand(nx, ny)) { q.x = clamp(nx, 4, W - 4); q.y = clamp(ny, 4, H - 4); q.movedT = S.t; }
 }
 
 function fireSquad(q, tg) {
   const t = tg.t, shooters = q.men.length;
   q.cd = 1.15 + Math.random() * .4;
   if (q.side === 'p') { q.ammo = Math.max(0, q.ammo - shooters); S.stats.shots += shooters; }
+  const D = aiD(), acc = q.side === 'e' ? D.acc : 1;
+  if (tg.kind === 'sq' && t.side === 'e') t.hitT = S.t;
   for (let i = 0; i < shooters; i++) {
     if (tg.kind === 'sq') {
-      if (t.men.length && Math.random() < .26 * (1 - tg.d / RANGE * .45) * COVER[terrainAt(t.x, t.y)]) killMan(t);
+      if (t.men.length && Math.random() < .26 * acc * (1 - tg.d / RANGE * .45) * COVER[terrainAt(t.x, t.y)] * dug(t))
+        killMan(t, q.side === 'e' && Math.random() < D.radio ? 'radio' : null);
     } else if (Math.random() < .55) damageEnemy(t, tg.d < 40 ? 1.4 : .6);
   }
   tracer(q.x, q.y, t.x + gauss() * 6, t.y + gauss() * 6, q.side, q.side === 'p' || inVision(q.x, q.y));
@@ -194,14 +208,21 @@ function updateSquads(dt) {
     if (!q.men.length || q.kind === 'eng') continue;
     q.cd -= dt;
     const tg = nearestTarget(q, q.side === 'e' ? 230 : RANGE);
-    if (tg && tg.d <= RANGE && q.cd <= 0 && (q.side === 'e' || q.ammo > 0)) fireSquad(q, tg);
+    // 伏击组隐蔽待机：敌人进入 75 以内或自己遭射击才开火
+    const silent = q.side === 'e' && q.hold && tg && tg.d > 75 && S.t - (q.hitT || -99) > 8;
+    if (tg && tg.d <= RANGE && q.cd <= 0 && !silent && (q.side === 'e' || q.ammo > 0)) fireSquad(q, tg);
     if (q.side === 'p') {
       if (tg && tg.d <= RANGE * .85 && q.ammo > 0) continue;   // 交火中，原地坚守
       const o = objectiveFor(q);
       if (o) moveSquad(q, o.x + q.ox * .6, o.y + q.oy * .6, dt);
-    } else if (tg && tg.d > RANGE * .8 && dist(q.home.x, q.home.y, tg.t.x, tg.t.y) < 300) {
-      moveSquad(q, tg.t.x, tg.t.y, dt);
-    } else if (!tg && dist(q.x, q.y, q.home.x, q.home.y) > 15) moveSquad(q, q.home.x, q.home.y, dt);
+      continue;
+    }
+    // 守军按 AI 指令行动
+    if (q.order === 'attack') {
+      const o = objByKey(q.obj);
+      if (!(tg && tg.d <= RANGE * .7)) moveSquad(q, o.x + q.ox * .4, o.y + q.oy * .4, dt);
+    } else if (q.px != null && dist(q.x, q.y, q.px, q.py) > 5) moveSquad(q, q.px, q.py, dt);
+    else if (q.order === 'retreat') q.order = 'hold';
   }
 }
 
@@ -212,6 +233,8 @@ function spotted(x, y) {
 }
 
 function bunkerFire(e) {
+  // 火力纪律：舰船进入 hold 距离或正在卸载才开火，不提前暴露
+  const D = aiD();
   let best = null, bd = 150;
   for (const q of S.squads) if (q.side === 'p' && q.men.length) {
     const d = dist(e.x, e.y, q.x, q.y);
@@ -219,40 +242,26 @@ function bunkerFire(e) {
   }
   for (const s of S.ships) if (alive(s) && s.state !== 'beached') {
     const d = dist(e.x, e.y, s.x, s.y);
-    if (d < bd) { bd = d; best = { t: s, k: 'ship' }; }
+    if (d < bd && (d < D.hold || s.state === 'unloading')) { bd = d; best = { t: s, k: 'ship' }; }
   }
   for (const b of S.boats) if (!b.dead) {
     const d = dist(e.x, e.y, b.x, b.y);
-    if (d < bd) { bd = d; best = { t: b, k: 'boat' }; }
+    if (d < bd && d < D.hold) { bd = d; best = { t: b, k: 'boat' }; }
   }
   if (!best) { e.cd = .8; return; }
   e.cd = .65;
   const t = best.t, vis = inVision(e.x, e.y);
-  if (best.k === 'sq') { if (Math.random() < .14 * COVER[terrainAt(t.x, t.y)]) killMan(t); }
-  else if (best.k === 'ship') { if (Math.random() < .5) damageShip(t, .35); }
+  if (best.k === 'sq') { if (Math.random() < .14 * D.acc * COVER[terrainAt(t.x, t.y)]) killMan(t, Math.random() < D.radio ? 'radio' : null); }
+  else if (best.k === 'ship') { if (Math.random() < .5 * D.acc) damageShip(t, .35); }
   else if (Math.random() < .3) { t.dead = true; S.stats.lost += 3; log('一艘增援艇被机枪击沉', 'bad', 'boat', 3); }
   tracer(e.x, e.y, t.x + gauss() * 5, t.y + gauss() * 5, 'e', vis);
   if (!vis) log(`${gridRef(t.x, t.y)} 遭机枪压制，火力来自方位约 ${fmtBrg(bearing(t.x, t.y, e.x, e.y) + gauss() * 14)}`, 'warn', 'mg' + e.id, 9);
 }
 
-function artyFire(e) {
-  e.cd = 8 + Math.random() * 4;
-  const c = [];
-  for (const s of S.ships) if (alive(s) && s.state !== 'beached' && spotted(s.x, s.y)) c.push({ x: s.x, y: s.y, w: 3 });
-  for (const q of S.squads) if (q.side === 'p' && q.men.length && spotted(q.x, q.y)) c.push({ x: q.x, y: q.y, w: q.kind === 'eng' ? 2 : 1.5 });
-  for (const L of S.supply) for (const g of L.segs) if (g.ok) c.push({ x: (g.x0 + g.x1) / 2, y: (g.y0 + g.y1) / 2, w: .25 });
-  for (const b of S.boats) if (spotted(b.x, b.y)) c.push({ x: b.x, y: b.y, w: 2 });
-  if (!c.length) return;
-  let r = Math.random() * c.reduce((a, o) => a + o.w, 0), tg = c[0];
-  for (const o of c) { r -= o.w; if (r <= 0) { tg = o; break; } }
-  fireShell(e.x, e.y, tg.x + gauss() * 24, tg.y + gauss() * 24, 'e', 'arty', 3.2, !inVision(e.x, e.y));
-}
-
 function updateEnemies(dt) {
   for (const e of S.enemies) {
-    if (e.dead || (e.cd -= dt) > 0) continue;
-    if (e.kind === 'bunker') bunkerFire(e);
-    else if (e.kind === 'arty') artyFire(e);
-    else e.cd = 1;
+    // 炮兵由 AI 火控统一调度（aiArtillery），这里只走冷却
+    if (e.dead || (e.cd -= dt) > 0 || e.kind !== 'bunker') continue;
+    bunkerFire(e);
   }
 }

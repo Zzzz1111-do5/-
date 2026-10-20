@@ -1,6 +1,6 @@
 'use strict';
 // 界面：输入、指令、编组、HUD、主循环
-const U = { tool: null, mouse: null, box: null, down: null, hoverText: '', logKey: null };
+const U = { tool: null, mouse: null, box: null, down: null, hoverText: '', logKey: null, level: 'hard' };
 const $ = id => document.getElementById(id);
 const CARDS = [
   { k: 'assault', name: '突击登陆舰', note: '15 人 · 5 个小队', key: 'Q', svg: '<polygon points="12,3 21,20 3,20"/>' },
@@ -51,8 +51,11 @@ function hoverAt(p) {
   for (const q of S.squads) if (q.side === 'p' && dist(p.x, p.y, q.x, q.y) < 9)
     return q.kind === 'eng' ? `工兵组 · ${q.men.length} 人${q.working ? ' · 抢修中' : ''}` :
       `第 ${q.no} 小队 · ${q.men.length} 人 · 弹药 ${q.ammo | 0}${q.men.includes('radio') ? '' : ' · 通讯兵阵亡'}`;
-  for (const e of S.enemies) if ((e.known || inVision(e.x, e.y)) && dist(p.x, p.y, e.x, e.y) < 12)
-    return ENEMY_SPEC[e.kind].name + (e.dead ? ' · 已摧毁' : inVision(e.x, e.y) ? '' : ' · 已标定（视野外）');
+  for (const e of S.enemies) {
+    const vis = inVision(e.x, e.y), x = vis ? e.x : e.kx, y = vis ? e.y : e.ky;
+    if (x != null && dist(p.x, p.y, x, y) < 12)
+      return ENEMY_SPEC[e.kind].name + (e.dead ? ' · 已摧毁' : vis ? (e.moving ? ' · 正在转移' : '') : ' · 已标定（视野外，可能已转移）');
+  }
   for (const q of S.squads) if (q.side === 'e' && inVision(q.x, q.y) && dist(p.x, p.y, q.x, q.y) < 9) return `敌步兵 · ${q.men.length} 人`;
   for (const o of S.objectives) if (dist(p.x, p.y, o.x, o.y) < 20) return `目标 ${o.key}「${o.name}」· ${o.owner === 'p' ? '我方控制' : '敌方控制'} · ${Math.round(o.prog * 100)}%`;
   if (p.x < 0 || p.y < 0 || p.x > W || p.y > H) return '';

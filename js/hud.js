@@ -23,7 +23,12 @@ function buildHud() {
   $('btnAim').addEventListener('click', () => setTool('aim'));
   $('btnAuto').addEventListener('click', toggleAuto);
   $('btnHelp').addEventListener('click', () => { $('brief').hidden = false; });
-  $('btnBrief').addEventListener('click', () => { S.briefed = true; $('brief').hidden = true; updateHud(); });
+  for (const b of document.querySelectorAll('#diff button')) b.addEventListener('click', () => { U.level = b.dataset.lv; updateHud(); });
+  $('btnBrief').addEventListener('click', () => {
+    // 开局前选的难度立即生效；对局中途改难度则从下一局开始
+    if (S.t === 0 && S.ai.level !== U.level) { newGame(undefined, U.level); buildTerrainLayer(); computeVision(); }
+    S.briefed = true; $('brief').hidden = true; updateHud();
+  });
   $('btnNew').addEventListener('click', e => {
     const b = e.currentTarget;
     if (b.dataset.armed) { restart(); return; }
@@ -34,7 +39,7 @@ function buildHud() {
 }
 
 function restart() {
-  newGame(); S.briefed = true; U.tool = null; U.logKey = null;
+  newGame(undefined, U.level); S.briefed = true; U.tool = null; U.logKey = null;
   buildTerrainLayer(); computeVision();
   const b = $('btnNew'); delete b.dataset.armed; b.textContent = '新战局';
   updateHud();
@@ -45,6 +50,8 @@ const STATE_TXT = { idle: '待命', move: '航行中', unloading: '卸载中', b
 function updateHud() {
   const D = S.destroyer;
   $('clock').textContent = 'T+' + fmtT(S.t);
+  $('aiLevel').textContent = DIFF[S.ai.level].name;
+  for (const b of document.querySelectorAll('#diff button')) { b.classList.toggle('on', b.dataset.lv === U.level); b.setAttribute('aria-checked', b.dataset.lv === U.level); }
   $('remain').textContent = '剩余 ' + fmtT(LIMIT - S.t);
   $('btnPause').textContent = S.paused ? '▶ 继续' : '❚❚ 暂停';
   $('btnPause').classList.toggle('hot', S.paused);
@@ -96,18 +103,20 @@ function updateHud() {
   const lk = S.log.length + '|' + (S.log[0] && S.log[0].t);
   if (lk !== U.logKey) {
     U.logKey = lk;
-    $('intel').innerHTML = S.log.slice(0, 16).map(l => `<li class="${l.kind}"><time>${fmtT(l.t)}</time>${l.msg}</li>`).join('');
+    $('intel').innerHTML = S.log.slice(0, 16).map(l => `<li class="${l.kind}"><time>${fmtT(l.t)}</time><span>${l.msg}</span></li>`).join('');
+    const first = $('intel').querySelector('li span');
+    if (first && S.t > 0) decode(first, S.log[0].msg, 450);
   }
 
   const p = S.squads.filter(q => q.side === 'p'), men = p.reduce((a, q) => a + q.men.length, 0);
-  $('force').textContent = `岸上 ${men} 人 · ${p.filter(q => q.kind === 'inf').length} 个小队`;
+  $('force').textContent = `岸上 ${men} 人 · ${p.filter(q => q.kind === 'inf').length} 个小队` + (S.holdT ? ` · 巩固 ${Math.ceil(HOLD - S.holdT)}s` : '');
 
   $('end').hidden = !S.over;
   if (S.over) {
-    $('endTitle').textContent = S.over === 'win' ? '滩头已巩固' : '登陆失败';
+    if ($('endTitle').dataset.over !== S.over) { $('endTitle').dataset.over = S.over; decode($('endTitle'), S.over === 'win' ? '滩头已巩固' : '登陆失败', 900); }
     $('endTitle').className = S.over;
     $('endStats').innerHTML = [
-      ['作战用时', fmtT(S.t)], ['占领目标', S.objectives.filter(o => o.owner === 'p').length + ' / 3'],
+      ['守军 AI', DIFF[S.ai.level].name], ['作战用时', fmtT(S.t)], ['占领目标', S.objectives.filter(o => o.owner === 'p').length + ' / 3'],
       ['我方伤亡', S.stats.lost + ' 人'], ['歼敌', S.stats.killed + ' 人'],
       ['摧毁工事', (S.stats.structs || 0) + ' 处'], ['驱逐舰暴露', S.stats.exposed + ' 次'],
       ['驱逐舰', D.state === 'sunk' ? '沉没' : `船体 ${D.hull}/3`]
@@ -116,10 +125,13 @@ function updateHud() {
 }
 
 // —— 主循环 ——
-let lastT = performance.now(), acc = 0, hudT = 0;
+let lastT = performance.now(), acc = 0, hudT = 0, ema = 1 / 60;
 function frame(now) {
   const dt = Math.min(.1, (now - lastT) / 1000);
   lastT = now;
+  // 设备跟不上时降到 1 倍像素密度，保住帧率
+  ema = ema * .95 + dt * .05;
+  if (ema > .045 && !R.dprCap && now > 5000 && (window.devicePixelRatio || 1) > 1) { R.dprCap = 1; resize(); }
   if (!S.paused && !S.over && S.briefed) {
     acc += dt * S.speed;
     while (acc >= 1 / 30) { step(1 / 30); acc -= 1 / 30; }
@@ -129,13 +141,54 @@ function frame(now) {
   requestAnimationFrame(frame);
 }
 
+// 字符解码动效：乱码逐位落定成目标文字
+function decode(el, text, dur) {
+  const t0 = performance.now(), chars = [...text];
+  const f = now => {
+    const u = Math.min(1, (now - t0) / dur);
+    el.textContent = chars.map((ch, i) => i < u * chars.length || ch === ' ' ? ch : GLYPHS[Math.random() * GLYPHS.length | 0]).join('');
+    if (u < 1) requestAnimationFrame(f);
+  };
+  requestAnimationFrame(f);
+}
+
+// 页面背景的数码雨（低透明度，减少动效偏好下关闭）
+function bgRain() {
+  const c = $('bgrain');
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const g = c.getContext('2d'), fs = 16;
+  let cols = [], last = 0;
+  const fit = () => {
+    c.width = innerWidth; c.height = innerHeight;
+    cols = Array.from({ length: Math.ceil(c.width / fs) }, () => -Math.random() * 60);
+    g.fillStyle = '#020704'; g.fillRect(0, 0, c.width, c.height);
+  };
+  fit(); addEventListener('resize', fit);
+  const tick = t => {
+    requestAnimationFrame(tick);
+    if (t - last < 60) return;
+    last = t;
+    g.fillStyle = 'rgba(2,7,4,0.14)'; g.fillRect(0, 0, c.width, c.height);
+    g.font = fs + 'px "Noto Sans SC", monospace';
+    cols.forEach((y, i) => {
+      g.fillStyle = Math.random() < .06 ? '#d8ffe8' : '#3dff8a';
+      g.fillText(GLYPHS[Math.random() * GLYPHS.length | 0], i * fs, y * fs);
+      cols[i] = y * fs > c.height && Math.random() > .97 ? 0 : y + 1;
+    });
+  };
+  requestAnimationFrame(tick);
+}
+
 function start(data) {
-  if (data && data.S) { S = data.S; buildTerrain(S.seed); } else newGame();
+  if (data && data.S && data.S.ai) { S = data.S; buildTerrain(S.seed); aiCache(); } else newGame();
+  U.level = S.ai.level;
   initRender($('cv'));
   buildHud(); bindInput();
   $('brief').hidden = !!S.briefed;
   new ResizeObserver(() => resize()).observe($('stage'));
   computeVision(); updateHud();
+  decode(document.querySelector('.brand b'), 'BEACHHEAD', 1100);
+  bgRain();
   requestAnimationFrame(frame);
 }
 

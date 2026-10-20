@@ -13,12 +13,13 @@ const toWorld = (cx, cy) => ({ x: (cx - R.ox) / R.s, y: (cy - R.oy) / R.s });
 function initRender(cv) {
   R.cv = cv; R.ctx = cv.getContext('2d');
   for (const k of ['terr', 'fog', 'b1', 'b2']) R[k] = document.createElement('canvas');
+  mxInit();
   resize();
 }
 
 function resize() {
   const box = R.cv.parentElement.getBoundingClientRect();
-  R.dpr = Math.min(2, window.devicePixelRatio || 1);
+  R.dpr = Math.min(R.dprCap || 2, window.devicePixelRatio || 1);
   R.cv.width = Math.max(1, Math.round(box.width * R.dpr));
   R.cv.height = Math.max(1, Math.round(box.height * R.dpr));
   R.s = Math.min(box.width / W, box.height / H) || 1;
@@ -26,18 +27,26 @@ function resize() {
   R.fog.width = Math.ceil(R.cv.width / 2); R.fog.height = Math.ceil(R.cv.height / 2);
   R.b1.width = Math.ceil(R.cv.width / 4); R.b1.height = Math.ceil(R.cv.height / 4);
   R.b2.width = Math.ceil(R.cv.width / 12); R.b2.height = Math.ceil(R.cv.height / 12);
+  if (MX.ok) mxResize();
   buildTerrainLayer();
 }
 
 const worldTf = (g, k = 1) => g.setTransform(R.dpr * R.s * k, 0, 0, R.dpr * R.s * k, R.dpr * R.ox * k, R.dpr * R.oy * k);
 
-// 静态地形：像素方块 + 等高亮度，参照 GitHub 像素风
+// 静态叠加层：海岸线、网格与坐标；WebGL 不可用时连像素地形一起画
 function buildTerrainLayer() {
   const c = R.terr, g = c.getContext('2d');
   c.width = R.cv.width; c.height = R.cv.height;
   g.setTransform(1, 0, 0, 1, 0, 0);
-  g.fillStyle = COL.bg; g.fillRect(0, 0, c.width, c.height);
+  g.clearRect(0, 0, c.width, c.height);
+  if (!MX.ok) { g.fillStyle = COL.bg; g.fillRect(0, 0, c.width, c.height); }
   worldTf(g);
+  if (!MX.ok) pixelCells(g);
+  drawOverlayMarks(g);
+}
+
+// 像素地形（WebGL 降级方案）
+function pixelCells(g) {
   const hr = rng(TER.seed + 7);
   for (let gy = 0; gy < GH; gy++) for (let gx = 0; gx < GW; gx++) {
     const i = gy * GW + gx, t = TER.type[i], x = gx * CELL, y = gy * CELL, j = hr();
@@ -69,10 +78,13 @@ function buildTerrainLayer() {
       g.fillRect(x + 1, y + 1, CELL - 2, 1.6);
     }
   }
+}
+
+function drawOverlayMarks(g) {
   // 海岸线
   g.beginPath();
   for (let x = 0; x <= W; x += 4) g.lineTo(x, coastAt(x));
-  g.strokeStyle = rgba(COL.g, .75); g.lineWidth = 1.4; g.stroke();
+  g.strokeStyle = rgba(COL.g, MX.ok ? .5 : .75); g.lineWidth = MX.ok ? 1 : 1.4; g.stroke();
   // 沙盘网格与坐标
   g.strokeStyle = rgba(COL.g, .07); g.lineWidth = 1;
   g.font = '10px "IBM Plex Mono", monospace'; g.fillStyle = rgba(COL.g, .45);
@@ -110,7 +122,7 @@ function bloom() {
   g2.globalCompositeOperation = 'copy'; g2.drawImage(b1, 0, 0, b2.width, b2.height);
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.globalCompositeOperation = 'lighter';
-  ctx.globalAlpha = .38; ctx.drawImage(b1, 0, 0, cv.width, cv.height);
+  ctx.globalAlpha = MX.ok ? .42 : .38; ctx.drawImage(b1, 0, 0, cv.width, cv.height);
   ctx.globalAlpha = .4; ctx.drawImage(b2, 0, 0, cv.width, cv.height);
   ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
 }
@@ -126,10 +138,21 @@ function shape(ctx, x, y, r, n, rot) {
 
 function draw(now) {
   const { ctx } = R, time = now / 1000;
+  // 近处大爆炸带来的短暂震动与闪白
+  let k = 0;
+  for (const f of S.fx) if (f.kind === 'boom' && f.life < .25) k += f.r / 30 * (1 - f.life / .25);
+  const ox = R.ox, oy = R.oy, jx = gauss() * k * 1.6 * R.s, jy = gauss() * k * 1.6 * R.s;
+  R.ox += jx; R.oy += jy;
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
-  ctx.drawImage(R.terr, 0, 0);
-  drawFog();
+  if (MX.ok) {
+    mxDraw(time, Math.min(1, k * .5));
+    ctx.drawImage(MX.cv, 0, 0);
+    ctx.drawImage(R.terr, jx * R.dpr, jy * R.dpr);
+  } else {
+    ctx.drawImage(R.terr, jx * R.dpr, jy * R.dpr);
+    drawFog();
+  }
   worldTf(ctx);
   ctx.lineCap = 'round'; ctx.lineJoin = 'round';
   drawVisionRings(time); drawLines(time); drawObjectives(time); drawEnemies(time);
@@ -138,4 +161,5 @@ function draw(now) {
   bloom();
   worldTf(ctx);
   drawLabels(time);
+  R.ox = ox; R.oy = oy;
 }

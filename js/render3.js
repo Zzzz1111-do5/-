@@ -28,6 +28,14 @@ function drawShells(time) {
       ctx.beginPath();
       for (let v = Math.max(0, u - .18); v <= u; v += .02) ctx.lineTo(...P(v));
       ctx.stroke();
+      ctx.font = font(8); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      for (let i = 1; i <= 5; i++) {
+        const v = u - i * .045;
+        if (v < 0) break;
+        const [tx, ty] = P(v);
+        ctx.fillStyle = rgba(col, .75 * (1 - i / 6));
+        ctx.fillText(GLYPHS[(i * 13 + Math.floor(s.t * 12)) % GLYPHS.length], tx, ty);
+      }
     }
     const [hx, hy] = P(u);
     ctx.fillStyle = col; ctx.beginPath(); ctx.arc(hx, hy, s.fuzzy ? 3 : 2.2, 0, 7); ctx.fill();
@@ -89,6 +97,12 @@ function drawFx() {
     for (let k = 0; k < 7; k++) {
       const a = k * 2.4 + f.x, d = f.r * 1.1 * u;
       ctx.fillRect(f.x + Math.cos(a) * d - 1.5, f.y + Math.sin(a) * d - 1.5, 3, 3);
+    }
+    ctx.font = font(9); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = rgba(COL.g, (1 - u) * .95);
+    for (let k = 0; k < 9; k++) {
+      const a = k * .7 + f.y * .13, d = f.r * (.35 + 1.3 * u);
+      ctx.fillText(GLYPHS[(k * 7 + Math.floor(f.x + f.life * 18)) % GLYPHS.length], f.x + Math.cos(a) * d, f.y + Math.sin(a) * d + u * 8);
     }
   }
 }
