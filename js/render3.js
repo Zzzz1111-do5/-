@@ -43,7 +43,7 @@ function drawShells(time) {
       }
     }
     ctx.fillStyle = col; ctx.beginPath(); ctx.arc(hx, hy, Math.max(px(1.6), Math.min(s.fuzzy ? 3 : 2.2, px(2.2))), 0, 7); ctx.fill();
-    const R0 = s.kind === 'cb' ? 22 : s.kind === 'smoke' ? 40 : POWER[s.kind].R, key = Math.round(s.x1 / 25) + ',' + Math.round(s.y1 / 25);
+    const R0 = s.kind === 'cb' ? 22 : s.kind === 'smoke' ? 40 : (POWER[s.kind] || POWER.arty).R, key = Math.round(s.x1 / 25) + ',' + Math.round(s.y1 / 25);
     if (s.side === 'p') {
       if (aim && !rings.has(key)) {
         rings.add(key);
