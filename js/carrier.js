@@ -501,7 +501,7 @@ function pickCarrier(p) {
 }
 
 // —— 绘制 ——
-const cvScale = () => Math.max(1, 64 / (CV_LEN * R.s));   // 小屏全图时放大，保证航母至少约 64px 长
+const cvScale = () => Math.max(1, 56 / (CV_LEN * R.s));   // 小屏全图时放大，保证航母至少约 56px 长
 
 function cvPath(ctx, pts) { ctx.beginPath(); for (const [u, v] of pts) ctx.lineTo(u, v); ctx.closePath(); }
 
@@ -555,9 +555,9 @@ function drawCarrier(time) {
       ctx.strokeStyle = g; ctx.lineWidth = lw(1.4);
       ctx.beginPath(); ctx.moveTo(-74, s * 9); ctx.lineTo(-190, s * (30 + 4 * Math.sin(time * 2 + s))); ctx.stroke();
     }
-    const g = ctx.createLinearGradient(-77, 0, -170, 0);
-    g.addColorStop(0, rgba('#d4fff0', .22)); g.addColorStop(1, rgba('#d4fff0', 0));
-    ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(-76, -7); ctx.lineTo(-170, -12); ctx.lineTo(-170, 12); ctx.lineTo(-76, 7); ctx.fill();
+    const g = ctx.createLinearGradient(-77, 0, -150, 0);
+    g.addColorStop(0, rgba('#d4fff0', .1)); g.addColorStop(1, rgba('#d4fff0', 0));
+    ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(-76, -6); ctx.lineTo(-150, -10); ctx.lineTo(-150, 10); ctx.lineTo(-76, 6); ctx.fill();
     ctx.strokeStyle = rgba('#d4fff0', .35); ctx.lineWidth = lw(1.2);
     for (const s of [-1, 1]) { ctx.beginPath(); ctx.moveTo(79, 0); ctx.quadraticCurveTo(70, s * 12, 52, s * 19); ctx.stroke(); }
   }
@@ -640,7 +640,7 @@ function drawCarrier(time) {
     ctx.beginPath(); ctx.ellipse(0, 0, 96, 32, 0, 0, 7); ctx.stroke(); ctx.setLineDash([]);
   }
   if (sel) {   // 选中：四角括线
-    ctx.strokeStyle = COL.sel; ctx.lineWidth = lw(1.8);
+    ctx.strokeStyle = COL.sel; ctx.lineWidth = lw(2.2);
     for (const [su, sv] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
       ctx.beginPath(); ctx.moveTo(su * 84, sv * 13); ctx.lineTo(su * 84, sv * 23); ctx.lineTo(su * 70, sv * 23); ctx.stroke();
     }
@@ -683,7 +683,7 @@ function drawCarrier(time) {
 }
 
 function drawPlanes(time) {
-  const ctx = R.ctx, c = S.cv, k = c ? cvScale() : 1, big = n => Math.max(n, px(18));
+  const ctx = R.ctx, c = S.cv, k = c ? cvScale() : 1, big = n => Math.max(n, px(20));
   ctx.fillStyle = rgba(COL.intel, .16);
   for (const r of S.recon) ctx.fillRect(r.x - 1, r.y - 1, 2, 2);
   if (AIR_TRAILS.size) { const ids = new Set(S.planes.map(p => p.id)); for (const id of [...AIR_TRAILS.keys()]) if (!ids.has(id)) AIR_TRAILS.delete(id); }
@@ -754,6 +754,13 @@ function drawPlanes(time) {
   }
 }
 
+function arrowAir(ctx, x, y, a, col) {
+  const l = px(14);
+  ctx.strokeStyle = col; ctx.setLineDash([]);
+  ctx.beginPath(); ctx.moveTo(x - Math.cos(a) * l, y - Math.sin(a) * l); ctx.lineTo(x, y);
+  ctx.moveTo(x - Math.cos(a - .5) * l * .6, y - Math.sin(a - .5) * l * .6); ctx.lineTo(x, y); ctx.lineTo(x - Math.cos(a + .5) * l * .6, y - Math.sin(a + .5) * l * .6); ctx.stroke();
+}
+
 // 出击工具预览（render3.js drawTool 调用）：侦察航带、三连弹落点、盘旋圈；无可用飞机时显示为红色
 function drawAirTool(time) {
   const t = U.tool, m = U.mouse;
@@ -764,13 +771,18 @@ function drawAirTool(time) {
   ctx.beginPath(); ctx.moveTo(ox, oy); ctx.lineTo(m.x, m.y); ctx.stroke();
   if (t === 'recon') {
     const [bx, by] = airRay(m.x, m.y, a, 700), nx = -Math.sin(a) * 100, ny = Math.cos(a) * 100;
-    ctx.fillStyle = rgba(col, .06);
+    ctx.fillStyle = rgba(col, .08);
     ctx.beginPath(); ctx.moveTo(m.x + nx, m.y + ny); ctx.lineTo(bx + nx, by + ny); ctx.lineTo(bx - nx, by - ny); ctx.lineTo(m.x - nx, m.y - ny); ctx.closePath(); ctx.fill();
     ctx.strokeStyle = rgba(col, .55); ctx.beginPath(); ctx.moveTo(m.x, m.y); ctx.lineTo(bx, by); ctx.stroke();
-    ctx.strokeStyle = rgba(col, .25); ctx.beginPath(); ctx.moveTo(m.x + nx, m.y + ny); ctx.lineTo(bx + nx, by + ny); ctx.moveTo(m.x - nx, m.y - ny); ctx.lineTo(bx - nx, by - ny); ctx.stroke();
+    ctx.strokeStyle = rgba(col, .38); ctx.beginPath(); ctx.moveTo(m.x + nx, m.y + ny); ctx.lineTo(bx + nx, by + ny); ctx.moveTo(m.x - nx, m.y - ny); ctx.lineTo(bx - nx, by - ny); ctx.stroke();
   } else if (t === 'strike') {
-    ctx.strokeStyle = rgba(ok ? COL.amber : COL.enemy, .7);
-    for (let i = 0; i < 3; i++) { const o = (i - 1) * 34; ctx.beginPath(); ctx.arc(m.x + Math.cos(a) * o, m.y + Math.sin(a) * o, POWER.bomb.R, 0, 7); ctx.stroke(); }
+    ctx.strokeStyle = rgba(ok ? COL.amber : COL.enemy, .9); ctx.lineWidth = px(1.7);
+    for (let i = 0; i < 3; i++) {
+      const o = (i - 1) * 34, bx = m.x + Math.cos(a) * o, by = m.y + Math.sin(a) * o;
+      ctx.setLineDash([px(3), px(4)]); ctx.beginPath(); ctx.arc(bx, by, POWER.bomb.R, 0, 7); ctx.stroke();
+      ctx.setLineDash([]); ctx.beginPath(); ctx.arc(bx, by, px(2.5), 0, 7); ctx.stroke();
+    }
+    arrowAir(ctx, m.x - Math.cos(a) * 90, m.y - Math.sin(a) * 90, a, rgba(ok ? COL.amber : COL.enemy, .9));
   } else {
     ctx.strokeStyle = rgba(col, .6); ctx.lineDashOffset = -time * 20;
     ctx.beginPath(); ctx.arc(m.x, m.y, 110, 0, 7); ctx.stroke(); ctx.lineDashOffset = 0;
