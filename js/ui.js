@@ -24,6 +24,7 @@ function pickAt(p) {
   }
   if (best) return best;
   if (typeof pickCarrier === 'function' && S.cv) { const c = pickCarrier(p); if (c) return c; }
+  if (typeof pickShip === 'function') { const h = pickShip(p); if (h != null) return h; }
   bd = px(18);
   for (const s of S.ships) if (alive(s)) { const d = dist(p.x, p.y, s.x, s.y); if (d < bd) { bd = d; best = s.id; } }
   if (S.dd.state !== 'sunk' && dist(p.x, p.y, S.dd.x, S.dd.y) < Math.max(bd, px(20))) best = 'DD';
@@ -59,7 +60,8 @@ function applyTool(p) {
   else if (t === 'smoke') { if (ddFire(p.x, p.y, true)) U.tool = null; }
   else if (t === 'recon' || t === 'strike' || t === 'cas') { if (launchPlane(t, p.x, p.y)) U.tool = null; }
   else if (t === 'rline') {
-    const s = S.ships.find(s => s.state === 'beached' && dist(s.x, s.y, p.x, p.y) < 25);
+    const h = typeof pickShip === 'function' ? pickShip(p) : null;
+    const s = S.ships.find(s => s.state === 'beached' && (s.id === h || dist(s.x, s.y, p.x, p.y) < 25));
     if (!s) log('点选一艘已抢滩的登陆舰作为增援线终点', 'warn', 'rl0', 2);
     else if (buildRLine(s)) U.tool = null;
   }

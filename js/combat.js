@@ -79,6 +79,8 @@ function impact(x, y, pw, side) {
     if (!e.dead && d < R * 2) e.sup = Math.min(100, (e.sup || 0) + 80 * (1 - d / (R * 2)));
     if (!e.dead && d < R + 4) damageEnemy(e, pw.struct * (1 - d / (R + 4) * .4));
   }
+  if (typeof supplyImpact === 'function') supplyImpact(x, y, R, pw);   // 补给节点（supplynet.js）
+  if (typeof armorImpact === 'function') armorImpact(x, y, R, pw, side);   // 装甲车辆（ai3.js）
   if (pw.seg) for (const L of S.supply) for (const g of L.segs)
     if (g.ok && segDist(x, y, g.x0, g.y0, g.x1, g.y1) < R * .8) { g.ok = false; g.rep = 0; log('补给线被炮火切断，工兵前往抢修', 'warn', 'segcut', 3); }
   for (const b of S.boats) if (!b.dead && dist(x, y, b.x, b.y) < R) { b.dead = true; S.stats.lost += 3 * (b.n || 1); log('一艘增援艇在途中被击沉', 'bad', 'boat', 3); }

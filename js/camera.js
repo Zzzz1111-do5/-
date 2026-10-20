@@ -12,9 +12,10 @@ function camFit(vw, vh) {
 
 function camClamp() {
   CAM.z = clamp(CAM.z, CAM.fit, CAM.fit * 12);
-  const hw = CAM.vw / 2 / CAM.z, hh = CAM.vh / 2 / CAM.z;
+  // 下方多留出底部面板的高度，航母不会被面板挡住
+  const hw = CAM.vw / 2 / CAM.z, hh = CAM.vh / 2 / CAM.z, bot = 190 / CAM.z;
   CAM.x = W <= 2 * hw ? W / 2 : clamp(CAM.x, hw, W - hw);
-  CAM.y = H <= 2 * hh ? H / 2 : clamp(CAM.y, hh, H - hh);
+  CAM.y = H + bot <= 2 * hh ? (H + bot) / 2 : clamp(CAM.y, hh, H + bot - hh);
   R.s = CAM.z;
   R.ox = CAM.vw / 2 - CAM.x * CAM.z;
   R.oy = CAM.vh / 2 - CAM.y * CAM.z;
@@ -79,6 +80,8 @@ function mmDraw() {
   for (const q of S.teams) if (q.side === 'e' ? PV[ci(q.x, q.y)] : true) dot(q.x, q.y, u * .5, q.side === 'p' ? COL.g : COL.enemy);
   for (const s of S.ships) if (alive(s)) dot(s.x, s.y, u * .8, s.state === 'beached' ? COL.gMid : COL.g);
   if (S.dd.state !== 'sunk') dot(S.dd.x, S.dd.y, u, S.dd.state === 'repair' ? COL.amber : COL.intel);
+  if (S.cv) dot(S.cv.x, S.cv.y, u * 1.3, S.cv.hp > 0 ? COL.intel : COL.amber);
+  for (const p of S.planes) if (!p.dead) dot(p.x, p.y, u * .5, COL.intel);
   const v0 = toWorld(0, 0), v1 = toWorld(CAM.vw, CAM.vh);
   g.strokeStyle = COL.sel; g.lineWidth = 1.5;
   g.strokeRect(v0.x * k, v0.y * k, (v1.x - v0.x) * k, (v1.y - v0.y) * k);

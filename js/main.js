@@ -59,6 +59,7 @@ function frame(now) {
 function start(data) {
   if (data && data.S && data.S.points && data.S.dd) {
     S = data.S; buildMap(S.seed); aiCache(); rebuildForts(); rebuildCraters(); indexUnits();
+    if (typeof initCarrier === 'function') initCarrier();
   } else newGame(undefined, 'hard');
   U.level = S.level;
   initRender($('cv'));

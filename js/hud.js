@@ -45,7 +45,8 @@ const BTN = [
   ['support', [['fire', '舰炮射击：每发 70% 暴露坐标', 'F', () => setTool('fire')], ['smoke', '烟幕弹：遮断双方视线', 'S', () => setTool('smoke')],
     ['recon', '侦察机：从航母起飞纵贯侦察', 'R', () => setTool('recon')], ['strike', '攻击机：三连弹', 'T', () => setTool('strike')],
     ['cas', '近距空中支援：战机盘旋扫射', 'V', () => setTool('cas')],
-    ['rline', '开辟增援线', 'E', () => setTool('rline')], ['auto', '驱逐舰自动掩护', 'G', toggleAuto]]]
+    ['rline', '开辟增援线', 'E', () => setTool('rline')], ['auto', '驱逐舰自动掩护', 'G', toggleAuto],
+    ['airauto', '航母自动派机：近距支援受压制的我军、空袭已标定火力点、侦察前线方向', 'J', () => toggleCvAuto()]]]
 ];
 const ASSET = { smoke: 'smoke', recon: 'recon', strike: 'strike', cas: 'cas', rline: 'rline' };
 
@@ -130,9 +131,9 @@ function updateCards() {
       b.textContent = c.s.load.teams * 3 + c.s.load.eng; set(0, c.s.hp / c.s.maxhp); set(1, 0); set(2, 0);
       st.innerHTML = svg(c.s.plan || c.s.state === 'move' ? 'move' : 'hold', 'mini');
     } else if (c.id === 'CV') {
-      const wing = S.air && S.air.wing ? S.air.wing : [], ready = wing.filter(w => w.state === 'deck').length;
-      b.textContent = ready; set(0, S.cv.hp / S.cv.maxhp); set(1, wing.length ? ready / wing.length : 0); set(2, 0);
-      st.innerHTML = svg(S.cv.moving ? 'move' : 'hold', 'mini');
+      const v = cvCard();
+      b.textContent = v.n; set(0, v.hp); set(1, v.ready); set(2, v.air);
+      state = v.state; st.innerHTML = svg(v.mini, 'mini');
     } else {
       const D = S.dd;
       b.textContent = D.hull; set(0, D.hull / 3); set(1, D.state === 'repair' ? D.repairT / D.repairDur : 1 - D.cool / 5); set(2, 0);
@@ -140,7 +141,7 @@ function updateCards() {
       st.innerHTML = svg(D.auto ? 'auto' : 'fire', 'mini');
     }
     el.classList.toggle('waver', state === 'waver'); el.classList.toggle('rout', state === 'rout');
-    el.classList.toggle('isauto', !!((c.u && c.u.auto === true) || (c.s && c.s.auto === true)));
+    el.classList.toggle('isauto', !!((c.u && c.u.auto === true) || (c.s && c.s.auto === true) || (c.id === 'CV' && S.cv.auto)));
     const g = groupOf(c.id); gp.textContent = g ? '•'.repeat(g) : '';
   });
 }
@@ -160,9 +161,9 @@ function updateHud() {
     let dis = false;
     if (grp === 'orders') dis = k === 'clear' ? !units.some(u => u.kind === 'eng') : k === 'move' ? !(hasU || ships.length || selDD() || selCV()) : k === 'ai' ? !(hasU || ships.length) : !hasU || deploy;
     if (grp === 'forms') dis = !(hasU || (deploy && ships.length));
-    if (grp === 'support') dis = deploy || (ASSET[k] && S.assets[ASSET[k]] <= 0) || ((k === 'fire' || k === 'smoke' || k === 'auto') && D.state === 'sunk');
+    if (grp === 'support') dis = deploy || (ASSET[k] && S.assets[ASSET[k]] <= 0) || ((k === 'fire' || k === 'smoke' || k === 'auto') && D.state === 'sunk') || (k === 'airauto' && !(S.cv && S.cv.hp > 0));
     el.disabled = dis;
-    el.classList.toggle('on', k === 'auto' ? D.auto : k === 'ai' ? [...units, ...ships].length > 0 && [...units, ...ships].every(o => o.auto === true) : U.tool === k || (grp === 'forms' && (units.length ? units.every(u => u.form === k) : ships.length && ships.every(s => s.form === k))));
+    el.classList.toggle('on', k === 'auto' ? D.auto : k === 'airauto' ? !!(S.cv && S.cv.auto) : k === 'ai' ? [...units, ...ships].length > 0 && [...units, ...ships].every(o => o.auto === true) : U.tool === k || (grp === 'forms' && (units.length ? units.every(u => u.form === k) : ships.length && ships.every(s => s.form === k))));
     if (ASSET[k]) $('n-' + k).textContent = S.assets[ASSET[k]] ?? 0;
   }
   $('btnRain').classList.toggle('hot', R.rain > .5); $('btnRain').style.opacity = R.rain ? 1 : .45;
@@ -181,7 +182,8 @@ function updateHud() {
     $('endTitle').className = S.over;
     const own = S.points.filter(p => p.owner === 'p').length;
     $('endStats').innerHTML = [['守军 AI', DIFF[S.level].name], ['作战用时', fmtT(S.t)], ['夺取据点', `${own} / ${S.points.length}`], ['我方伤亡', S.stats.lost + ' 人'],
-      ['歼敌', S.stats.killed + ' 人'], ['摧毁火力点', S.stats.structs + ' 处'], ['驱逐舰', D.state === 'sunk' ? '沉没' : `船体 ${D.hull}/3`]]
+      ['歼敌', S.stats.killed + ' 人'], ['摧毁火力点', S.stats.structs + ' 处'], ['驱逐舰', D.state === 'sunk' ? '沉没' : `船体 ${D.hull}/3`],
+      ['航母', S.cv ? (S.cv.hp > 0 ? `甲板 ${Math.ceil(S.cv.hp)}/${S.cv.maxhp}` : '瘫痪') : '—']]
       .map(([a, b]) => `<dt>${a}</dt><dd>${b}</dd>`).join('');
   }
 }

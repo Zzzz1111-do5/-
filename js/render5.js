@@ -58,7 +58,7 @@ function drawShipMarks() {
   const ctx = R.ctx;
   for (const s of S.ships) {
     if (!alive(s)) continue;
-    const men = s.load.teams * 3 + s.load.eng, g = groupOf(s.id), y = s.y + px(18);
+    const men = s.load.teams * 3 + s.load.eng, g = groupOf(s.id), y = s.y + (typeof shipHalfH === 'function' ? shipHalfH(s) : 14) + px(5);
     if (men) { ctx.fillStyle = rgba(COL.g, .25); ctx.fillRect(s.x - px(8), y, px(16), px(2)); ctx.fillStyle = COL.g; ctx.fillRect(s.x - px(8), y, px(16) * men / 15, px(2)); }
     if (g) pips(ctx, g, s.x, y + px(6), COL.sel);
     if (S.phase === 'deploy' && s.load.teams) {   // 预设阵型小图
@@ -67,7 +67,7 @@ function drawShipMarks() {
       for (const [x, yy] of sl) ctx.fillRect(s.x + (x - W / 2) * .22 - .9, s.y - 18 + (yy - H / 2) * .22 - .9, 1.8, 1.8);
     }
   }
-  if (S.dd.state !== 'sunk') { const g = groupOf('DD'); if (g) pips(ctx, g, S.dd.x, S.dd.y + px(32), COL.sel); }
+  if (S.dd.state !== 'sunk') { const g = groupOf('DD'); if (g) pips(ctx, g, S.dd.x, S.dd.y + (typeof shipHalfH === 'function' ? shipHalfH(S.dd) : 24) + px(8), COL.sel); }
 }
 
 function arrow(ctx, x0, y0, x1, y1, col) {

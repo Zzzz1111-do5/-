@@ -94,6 +94,7 @@ function bindInput() {
     else if (k === 'G') toggleAuto();
     else if (k === 'U') toggleAutoSel();
     else if (k === 'K') { S.sel = S.cv ? ['CV'] : []; updateHud(); }
+    else if (k === 'J' && typeof toggleCvAuto === 'function') toggleCvAuto();
     else if (k === 'Z') formNow('line');
     else if (k === 'C') formNow('wedge');
     else if (k === 'B') formNow('loose');

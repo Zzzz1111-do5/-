@@ -67,15 +67,18 @@ function rebuildForts() {
   fieldGen++;
 }
 
-// cls：'p' 我方步兵（只回避已知雷区），'e' 守军（熟悉自己的雷区），'ship' 舰船
+// cls：'p' 我方步兵（只回避已知雷区），'e' 守军（熟悉自己的雷区），'ship' 舰船，
+// 'raid' 敌袭扰分队（同守军，另外偏好林地/城镇、回避开阔地与我方视野内的格；PV 在流场计算时取快照）
 function stepCost(i, cls) {
   const t = TER.type[i];
   if (cls === 'ship') return t === T.DEEP ? (OBSC[i] === 2 ? 4 : 1) : t === T.SHOAL ? (OBSC[i] === 2 ? 6 : 1.6) : Infinity;
   const sp = TP[t].sp;
   if (!sp) return Infinity;
   let c = 1 / sp;
-  if (MINEC[i] && (cls === 'e' || MINEC[i] === 2)) c *= cls === 'e' ? 25 : 6;
-  if (WIREC[i]) c *= cls === 'e' ? 1.5 : 3;
+  const ec = cls === 'e' || cls === 'raid';
+  if (MINEC[i] && (ec || MINEC[i] === 2)) c *= ec ? 25 : 6;
+  if (WIREC[i]) c *= ec ? 1.5 : 3;
+  if (cls === 'raid') c *= (t === T.FOREST || t === T.TOWN ? .7 : t === T.FIELD || t === T.ROAD || t === T.BEACH ? 1.6 : 1) * (PV[i] ? 3 : 1);
   return c;
 }
 

@@ -33,19 +33,40 @@ function updateTeams(dt) {
   }
 }
 
-// —— 补给线：接通时为附近小组补充弹药；断点由该线工兵沿浮桥自动抢修 ——
+// —— 补给线：接通时为附近小组补充弹药、恢复士气；断点由该线工兵沿浮桥自动抢修 ——
+// 陆上补给网（supplynet.js）：接通的前沿补给点 220 以内同样补给
 function updateSupply(dt) {
+  const fed = new Set(), units = new Set();
+  const feed = q => { if (fed.has(q)) return; fed.add(q); q.ammo = Math.min(60, q.ammo + 6 * dt); if (q.u) units.add(q.u); };
   for (const L of S.supply) {
     L.connected = L.segs.every(g => g.ok);
     if (L.connected) for (const q of S.teams)
-      if (q.side === 'p' && q.kind === 'inf' && dist(q.x, q.y, L.x, L.y) < 200) q.ammo = Math.min(60, q.ammo + 6 * dt);
-    const eng = S.teams.find(q => q.id === L.eng && q.men.length);
+      if (q.side === 'p' && q.kind === 'inf' && q.men.length && dist(q.x, q.y, L.x, L.y) < 200) feed(q);
+    let eng = S.teams.find(q => q.id === L.eng && q.men.length);
+    if (!eng && !L.connected) {   // 本线工兵阵亡：由最近的空闲工兵组接手抢修
+      let bd2 = 1e9;
+      for (const q of S.teams) if (q.side === 'p' && q.kind === 'eng' && q.men.length && !q.repairing && q.order.t === 'hold' && q.order.x == null) {
+        const d = dist(q.x, q.y, L.x, L.y);
+        if (d < bd2) { bd2 = d; eng = q; }
+      }
+      if (eng) L.eng = eng.id;
+    }
     if (!eng) continue;
     let tg = null, bd = 1e9;
     for (const g of L.segs) if (!g.ok) { const d = dist(eng.x, eng.y, (g.x0 + g.x1) / 2, (g.y0 + g.y1) / 2); if (d < bd) { bd = d; tg = g; } }
     if (!tg && !eng.repairing) continue;
     if (eng.order.t !== 'hold' && !eng.repairing) continue;   // 被另派任务时不抢修
-    const go = (x, y) => { const d = dist(eng.x, eng.y, x, y), sp = Math.min(d, 22 * dt); if (d > .5) { eng.x += (x - eng.x) / d * sp; eng.y += (y - eng.y) / d * sp; eng.movedT = S.t; } return d; };
+    const go = (x, y) => {
+      let tx = x, ty = y;
+      // 人在内陆时先沿道路寻路回到滩头补给站，再沿浮桥直线前往断点
+      if (isLand(eng.x, eng.y) && dist(eng.x, eng.y, L.x, L.y) > 40) {
+        const f = field(L.x, L.y, 'p'), n = f && nextStep(f, eng.x, eng.y);
+        if (n) [tx, ty] = n; else { tx = L.x; ty = L.y; }
+      }
+      const d = dist(eng.x, eng.y, tx, ty), sp = Math.min(d, 22 * dt);
+      if (d > .5) { eng.x += (tx - eng.x) / d * sp; eng.y += (ty - eng.y) / d * sp; eng.movedT = S.t; eng.heading = Math.atan2(ty - eng.y, tx - eng.x); }
+      return dist(eng.x, eng.y, x, y);
+    };
     if (!tg) { if (go(L.x, L.y - 6) < 2) { eng.repairing = false; eng.working = false; } continue; }
     eng.repairing = true;
     if (go((tg.x0 + tg.x1) / 2, (tg.y0 + tg.y1) / 2) > 5) continue;
@@ -53,6 +74,11 @@ function updateSupply(dt) {
     tg.rep += dt * eng.men.length / 3 / 5;
     if (tg.rep >= 1) { tg.ok = true; tg.rep = 0; log('工兵修复了一段补给线', 'good', 'segfix', 3); }
   }
+  if (typeof updateSupplyNet === 'function') updateSupplyNet(dt);   // 施工、连通性、规划
+  const N = S.snet && Array.isArray(S.snet.nodes) ? S.snet.nodes.filter(n => n.connected && n.built >= 1 && !n.dead) : [];
+  if (N.length) for (const q of S.teams)
+    if (q.side === 'p' && q.kind === 'inf' && q.men.length && N.some(n => dist(q.x, q.y, n.x, n.y) < 220)) feed(q);
+  for (const id of units) { const u = UNIT_MAP.get(id); if (u && u.side === 'p') u.morale = Math.min(100, u.morale + 2 * dt); }
 }
 
 // —— 增援线：从后方到某个滩头，预备队乘艇逐批上岸 ——
@@ -80,7 +106,7 @@ function updateRLines(dt) {
     b.x = lerp(L.x0, L.x1, b.u); b.y = lerp(L.y0, L.y1, b.u);
     if (b.u < 1) continue;
     b.done = true;
-    const u = addUnit('p', 'inf', { ship: '增援', emblem: 'reserve', form: 'wedge', face: NORTH });
+    const u = addUnit('p', 'inf', { ship: '增援', emblem: 'reserve', form: 'wedge', face: NORTH, auto: true });
     for (const [x, y] of unitSlots(b.n || 1, 'wedge', L.bx, L.by - 16, NORTH, defWidth('wedge', b.n || 1))) addTeam('p', x, y, ['radio', 'rifle', 'mg'], { unit: '增援', u: u.id });
     log('增援登陆', 'good', 'reinf', 4, { x: L.bx, y: L.by });
   }
@@ -109,6 +135,7 @@ function updateVision() {
   for (const q of S.teams) if (q.side === 'p' && q.men.includes('radio')) ps.push({ x: q.x, y: q.y, r: 150 });
   for (const s of S.ships) if (alive(s)) ps.push({ x: s.x, y: s.y, r: s.state === 'beached' ? 60 : 80, h: .8 });
   if (S.dd.state !== 'sunk') ps.push({ x: S.dd.x, y: S.dd.y, r: 70, h: 1 });
+  if (typeof carrierVision === 'function') ps.push(...carrierVision());
   for (const p of S.planes) ps.push({ x: p.x, y: p.y, r: 110, h: 12 });
   S.recon = S.recon.filter(p => p.until > S.t);
   for (const p of S.recon) ps.push({ x: p.x, y: p.y, r: 100, h: 12 });
@@ -116,6 +143,7 @@ function updateVision() {
   const es = [];
   for (const q of S.teams) if (q.side === 'e') es.push({ x: q.x, y: q.y, r: 160 });
   for (const e of S.enemies) if (!e.dead) es.push({ x: e.x, y: e.y, r: e.kind === 'coastal' ? 220 : e.kind === 'bunker' ? 170 : 90, h: e.kind === 'coastal' ? 1.2 : .6 });
+  if (typeof armorVisionSources === 'function') es.push(...armorVisionSources());
   castVision(EV, es);
   // 情报记忆：看到过的火力点与工事留下标定；回头再看已空则撤销
   let forts = false;
@@ -158,11 +186,14 @@ function step(dt) {
   FBUDGET = 3;
   indexUnits();
   if ((S.visT = (S.visT ?? 0) - dt) <= 0) { S.visT = .25; updateVision(); }
-  updateShips(dt); updateDD(dt); updateTeams(dt); indexUnits(); updateUnits(dt); updateEnemies(dt); aiUpdate(dt);
+  updateShips(dt); updateDD(dt); updateTeams(dt); indexUnits(); updateUnits(dt);
+  if (typeof updateAutopilot === 'function') updateAutopilot(dt);
+  updateEnemies(dt); aiUpdate(dt);
+  if (typeof updateAI3 === 'function') updateAI3(dt);
   updatePlanes(dt); updateShells(dt); updateSupply(dt); updateRLines(dt); updatePoints(dt);
   if (S.teams.some(q => !q.men.length)) {
     S.teams = S.teams.filter(q => q.men.length);
-    S.sel = S.sel.filter(id => id === 'DD' || S.units.some(u => u.id === id) || S.ships.some(s => s.id === id));
+    S.sel = S.sel.filter(id => id === 'DD' || id === 'CV' || S.units.some(u => u.id === id) || S.ships.some(s => s.id === id));
   }
   for (const t of S.tracers) t.life += dt;
   S.tracers = S.tracers.filter(t => t.life < t.max);

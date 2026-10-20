@@ -101,15 +101,8 @@ function drawTool(time) {
   }
   if (!m || !U.tool) return;
   ctx.lineWidth = px(1.2);
-  if (U.tool === 'strike') {
-    ctx.strokeStyle = rgba(COL.amber, .7); ctx.setLineDash([px(3), px(4)]);
-    for (let i = 0; i < 3; i++) { ctx.beginPath(); ctx.arc(m.x, m.y + 34 - i * 34, POWER.bomb.R, 0, 7); ctx.stroke(); }
-    ctx.strokeStyle = rgba(COL.intel, .35); ctx.beginPath(); ctx.moveTo(m.x, H); ctx.lineTo(m.x, m.y + 70); ctx.stroke(); ctx.setLineDash([]);
-  } else if (U.tool === 'recon') {
-    ctx.fillStyle = rgba(COL.intel, .05); ctx.fillRect(m.x - 100, 0, 200, H);
-    ctx.strokeStyle = rgba(COL.intel, .55); ctx.setLineDash([px(3), px(5)]);
-    ctx.beginPath(); ctx.moveTo(m.x, 0); ctx.lineTo(m.x, H); ctx.stroke(); ctx.setLineDash([]);
-  } else if (U.tool === 'fire' || U.tool === 'smoke') {
+  if ((U.tool === 'strike' || U.tool === 'recon' || U.tool === 'cas') && typeof drawAirTool === 'function') drawAirTool(time);
+  else if (U.tool === 'fire' || U.tool === 'smoke') {
     const ok = D.state === 'ready' && dist(D.x, D.y, m.x, m.y) <= 1000;
     ctx.strokeStyle = rgba(ok ? (U.tool === 'smoke' ? COL.smoke : COL.g) : COL.enemy, .7); ctx.setLineDash([px(6), px(4)]);
     ctx.beginPath(); ctx.moveTo(D.x, D.y); ctx.lineTo(m.x, m.y); ctx.stroke(); ctx.setLineDash([]);
