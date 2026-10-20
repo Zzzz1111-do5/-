@@ -67,3 +67,19 @@ const elevAt = (x, y) => TER.elev[ci(x, y)];
 const isLand = (x, y) => !isWater(typeAt(x, y));
 const passInf = (x, y) => TP[typeAt(x, y)].sp > 0;
 const coverAt = (x, y) => TP[typeAt(x, y)].cv;
+
+// 模块挂钩：新模块向这里登记函数，主循环/渲染/输入按名调用，免得多个模块同改一处
+// newGame(opts) · step(dt) · impact(x,y,R,pw,side) · visionP()/visionE() 返回视野源数组
+// drawUnder/drawOver/drawTop(time) 世界坐标 · frame(now,dt) 每帧 · pointer(e,kind,p)/key(e) 返回 true 表示已处理
+const HOOK = { newGame: [], step: [], impact: [], visionP: [], visionE: [], drawUnder: [], drawOver: [], drawTop: [], frame: [], pointer: [], key: [] };
+const HOOK_ERR = new Set();
+function runHook(name, ...a) {
+  let hit = false;
+  for (const f of HOOK[name]) {
+    try { if (f(...a) === true) hit = true; } catch (e) {
+      if (!HOOK_ERR.has(f)) { HOOK_ERR.add(f); console.error('hook ' + name, e); }
+    }
+  }
+  return hit;
+}
+const hookSources = name => HOOK[name].flatMap(f => { try { return f() || []; } catch (e) { return []; } });

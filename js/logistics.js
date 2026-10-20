@@ -139,11 +139,13 @@ function updateVision() {
   for (const p of S.planes) ps.push({ x: p.x, y: p.y, r: 110, h: 12 });
   S.recon = S.recon.filter(p => p.until > S.t);
   for (const p of S.recon) ps.push({ x: p.x, y: p.y, r: 100, h: 12 });
+  ps.push(...hookSources('visionP'));
   castVision(PV, ps);
   const es = [];
   for (const q of S.teams) if (q.side === 'e') es.push({ x: q.x, y: q.y, r: 160 });
   for (const e of S.enemies) if (!e.dead) es.push({ x: e.x, y: e.y, r: e.kind === 'coastal' ? 220 : e.kind === 'bunker' ? 170 : 90, h: e.kind === 'coastal' ? 1.2 : .6 });
   if (typeof armorVisionSources === 'function') es.push(...armorVisionSources());
+  es.push(...hookSources('visionE'));
   castVision(EV, es);
   // 情报记忆：看到过的火力点与工事留下标定；回头再看已空则撤销
   let forts = false;
@@ -191,6 +193,7 @@ function step(dt) {
   updateEnemies(dt); aiUpdate(dt);
   if (typeof updateAI3 === 'function') updateAI3(dt);
   updatePlanes(dt); updateShells(dt); updateSupply(dt); updateRLines(dt); updatePoints(dt);
+  runHook('step', dt);
   if (S.teams.some(q => !q.men.length)) {
     S.teams = S.teams.filter(q => q.men.length);
     S.sel = S.sel.filter(id => id === 'DD' || id === 'CV' || S.units.some(u => u.id === id) || S.ships.some(s => s.id === id));

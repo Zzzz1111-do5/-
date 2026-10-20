@@ -109,11 +109,11 @@ function draw(now) {
   ctx.lineCap = 'round'; ctx.lineJoin = 'round';
   indexUnits();
   const opt = name => { const f = globalThis[name] || window[name]; if (typeof f === 'function') f(time); };
-  drawMarks(ctx); drawCraters(); drawBuildings(); drawForts(time); drawSmoke(time); drawLines(time); opt('drawSupplyNet'); drawStructures(time); opt('drawBlown');
-  drawEnemies(time); opt('drawArmor'); opt('drawAutoRoutes'); drawTeams(time); opt('drawCarrier'); drawShips(time); drawDD(time); drawPlans(time);
+  drawMarks(ctx); drawCraters(); drawBuildings(); drawForts(time); drawSmoke(time); drawLines(time); opt('drawSupplyNet'); drawStructures(time); opt('drawBlown'); runHook('drawUnder', time);
+  drawEnemies(time); opt('drawArmor'); opt('drawAutoRoutes'); drawTeams(time); opt('drawCarrier'); drawShips(time); drawDD(time); runHook('drawOver', time); drawPlans(time);
   drawShells(time); drawTracers(); drawPlanes(time); drawFx(); drawTool(time); drawFormPreview();
   bloom();
   worldTf(ctx);
-  drawBanners(time); drawShipMarks(); drawPings(time);
+  drawBanners(time); drawShipMarks(); drawPings(time); runHook('drawTop', time);
   R.ox = ox; R.oy = oy;
 }

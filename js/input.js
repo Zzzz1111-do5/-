@@ -7,6 +7,7 @@ function bindInput() {
 
   cv.addEventListener('pointerdown', e => {
     const { sx, sy } = evPos(e), p = toWorld(sx, sy);
+    if (runHook('pointer', e, 'down', p)) return;
     U.mouse = p;
     cv.setPointerCapture(e.pointerId);
     if (e.pointerType === 'touch') {
@@ -39,6 +40,7 @@ function bindInput() {
     }
     const p = toWorld(sx, sy);
     U.mouse = p;
+    if (runHook('pointer', e, 'move', p)) return;
     const F = U.fdrag;
     if (F) { if (dist(sx, sy, F.sx, F.sy) > 10) F.on = true; F.x1 = p.x; F.y1 = p.y; return; }
     const D = U.down;
@@ -49,6 +51,7 @@ function bindInput() {
 
   const up = e => {
     const { sx, sy } = evPos(e), p = toWorld(sx, sy), D = U.down, F = U.fdrag;
+    if (runHook('pointer', e, 'up', p)) return;
     if (e.pointerType === 'touch') {
       U.touches.delete(e.pointerId);
       if (U.touches.size < 2) U.pinch = null;
@@ -81,6 +84,7 @@ function bindInput() {
   window.addEventListener('keydown', e => {
     if (e.target.closest && e.target.closest('input,textarea,select')) return;
     if (e.key.startsWith('Arrow')) { KEYS.add(e.key); e.preventDefault(); return; }
+    if (runHook('key', e)) return;
     const k = e.key.toUpperCase();
     if (e.code === 'Space') { e.preventDefault(); togglePause(); }
     else if (k === 'ENTER') startBattle(), updateHud();

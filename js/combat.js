@@ -81,6 +81,7 @@ function impact(x, y, pw, side) {
   }
   if (typeof supplyImpact === 'function') supplyImpact(x, y, R, pw);   // 补给节点（supplynet.js）
   if (typeof armorImpact === 'function') armorImpact(x, y, R, pw, side);   // 装甲车辆（ai3.js）
+  runHook('impact', x, y, R, pw, side);
   if (pw.seg) for (const L of S.supply) for (const g of L.segs)
     if (g.ok && segDist(x, y, g.x0, g.y0, g.x1, g.y1) < R * .8) { g.ok = false; g.rep = 0; log('补给线被炮火切断，工兵前往抢修', 'warn', 'segcut', 3); }
   for (const b of S.boats) if (!b.dead && dist(x, y, b.x, b.y) < R) { b.dead = true; S.stats.lost += 3 * (b.n || 1); log('一艘增援艇在途中被击沉', 'bad', 'boat', 3); }
@@ -109,8 +110,10 @@ function fireShell(x0, y0, x1, y1, side, kind, dur, fuzzy, extra) {
 
 // —— 步兵交火：目标须在本方视野内或近在 50 以内 ——
 const canSee = (side, x, y, d) => d < 50 || (side === 'p' ? PV : EV)[ci(x, y)] === 1;
+// 兵种修正 mod（目录/沙盒写入，可缺省）：{ pow 命中倍率, rng 射程倍率, rof 射速倍率, sup 压制倍率 }
+const modOf = o => o.mod || {};
 function findTarget(q, range) {
-  let best = null, bd = range;
+  let best = null, bd = range * (modOf(q).rng || 1);
   for (const o of S.teams) if (o.side !== q.side && o.men.length) {
     const d = dist(q.x, q.y, o.x, o.y);
     if (d < bd && canSee(q.side, o.x, o.y, d)) { bd = d; best = { t: o, d, k: 'tm' }; }
@@ -123,14 +126,14 @@ function findTarget(q, range) {
 }
 
 function teamFire(q, tg) {
-  const D = aiD(), t = tg.t, moving = S.t - q.movedT < .3;
-  q.cd = 1.3 + Math.random() * .4;
+  const D = aiD(), t = tg.t, moving = S.t - q.movedT < .3, M = modOf(q);
+  q.cd = (1.3 + Math.random() * .4) / (M.rof || 1);
   if (q.side === 'p') {
     if (q.ammo <= 0) return;
     q.ammo = Math.max(0, q.ammo - q.men.length - (q.men.includes('mg') ? 2 : 0));
     S.stats.shots++;
   }
-  const uq = unitOf(q), acc = (q.side === 'e' ? D.acc : 1) * (1 - q.sup / 130) * (moving ? .5 : 1) * (1 - tg.d / RANGE * .5) * (uq && uq.state === 'waver' ? .8 : 1);
+  const uq = unitOf(q), acc = (q.side === 'e' ? D.acc : 1) * (1 - q.sup / 130) * (moving ? .5 : 1) * (1 - tg.d / RANGE * .5) * (uq && uq.state === 'waver' ? .8 : 1) * (M.pow || 1);
   if (tg.k === 'tm') {
     const def = coverAt(t.x, t.y) * shelter(t, q.x, q.y) * (SMOKE[ci(t.x, t.y)] ? .4 : 1);
     if (t.side === 'e') t.hitT = S.t;
@@ -138,7 +141,7 @@ function teamFire(q, tg) {
       if (m === 'eng') continue;
       const shots = m === 'mg' ? 3 : 1, ph = m === 'mg' ? .08 : m === 'radio' ? .15 : .22;
       for (let s = 0; s < shots; s++) {
-        suppress(t, m === 'mg' ? 7 : 4, q.x, q.y);
+        suppress(t, (m === 'mg' ? 7 : 4) * (M.sup || 1), q.x, q.y);
         if (t.men.length && Math.random() < ph * acc * def) killMan(t, q.side === 'e' && Math.random() < D.radio ? 'radio' : null);
       }
     }
@@ -154,8 +157,8 @@ function teamFire(q, tg) {
 
 // —— 守军固定火力：碉堡（火力纪律）与岸防重炮（雷达引导）——
 function bunkerFire(e) {
-  const D = aiD();
-  let best = null, bd = 170;
+  const D = aiD(), M = modOf(e);
+  let best = null, bd = 170 * (M.rng || 1);
   for (const q of S.teams) if (q.side === 'p' && q.men.length) {
     const d = dist(e.x, e.y, q.x, q.y);
     if (d < bd && spotted(q.x, q.y)) { bd = d; best = { t: q, k: 'tm' }; }
@@ -166,12 +169,12 @@ function bunkerFire(e) {
   }
   for (const b of S.boats) if (!b.dead) { const d = dist(e.x, e.y, b.x, b.y); if (d < bd && d < D.hold) { bd = d; best = { t: b, k: 'boat' }; } }
   if (!best) { e.cd = .8; return; }
-  e.cd = 1.2;
+  e.cd = 1.2 / (M.rof || 1);
   if (Math.random() < (e.sup || 0) / 110) return;   // 被火力压制，射手缩回掩体
   const t = best.t, vis = inVision(e.x, e.y);
   if (best.k === 'tm') for (let s = 0; s < 3; s++) {
     suppress(t, 9, e.x, e.y);
-    if (t.men.length && Math.random() < .1 * D.acc * coverAt(t.x, t.y) * shelter(t, e.x, e.y)) killMan(t, Math.random() < D.radio ? 'radio' : null);
+    if (t.men.length && Math.random() < .1 * D.acc * (M.pow || 1) * coverAt(t.x, t.y) * shelter(t, e.x, e.y)) killMan(t, Math.random() < D.radio ? 'radio' : null);
   } else if (best.k === 'ship') { if (Math.random() < .5 * D.acc) damageShip(t, .35); }
   else if (Math.random() < .3) { t.dead = true; S.stats.lost += 3 * (t.n || 1); log('一艘增援艇被机枪击沉', 'bad', 'boat', 3); }
   tracer(e.x, e.y, t.x + gauss() * 5, t.y + gauss() * 5, 'e', vis);
@@ -183,18 +186,18 @@ function radarUp() { const p = S.points.find(p => p.key === 'RD'); return p && p
 const shipSeen = (x, y, radar) => spotted(x, y) || (radar && dist(radar.x, radar.y, x, y) < 520 && !isLand(x, y));
 
 function coastalFire(e) {
-  const D = aiD(), radar = radarUp(), dd = S.dd;
+  const D = aiD(), radar = radarUp(), dd = S.dd, M = modOf(e), RG = 600 * (M.rng || 1);
   let best = null, bv = 0;
-  for (const s of S.ships) if (alive(s) && s.state !== 'beached' && dist(e.x, e.y, s.x, s.y) < 600 && shipSeen(s.x, s.y, radar)) {
+  for (const s of S.ships) if (alive(s) && s.state !== 'beached' && dist(e.x, e.y, s.x, s.y) < RG && shipSeen(s.x, s.y, radar)) {
     const v = 2 + s.load.teams * 3 + s.load.eng + (s.state === 'unloading' ? 8 : 0);
     if (v > bv) { bv = v; best = s; }
   }
-  if (dd.state !== 'sunk' && dist(e.x, e.y, dd.x, dd.y) < 600 && (S.t < dd.exposedUntil || shipSeen(dd.x, dd.y, radar)) && 6 > bv) { bv = 6; best = dd; }
+  if (dd.state !== 'sunk' && dist(e.x, e.y, dd.x, dd.y) < RG && (S.t < dd.exposedUntil || shipSeen(dd.x, dd.y, radar)) && 6 > bv) { bv = 6; best = dd; }
   // 航母（carrier.js）：600 以内且被发现、或起降作业暴露时也是目标；航速 10，提前量按此计算
   const cv = S.cv;
-  if (cv && cv.hp > 0 && dist(e.x, e.y, cv.x, cv.y) < 600 && (S.t < (cv.exposedUntil || 0) || shipSeen(cv.x, cv.y, radar)) && 7 > bv) { bv = 7; best = cv; }
+  if (cv && cv.hp > 0 && dist(e.x, e.y, cv.x, cv.y) < RG && (S.t < (cv.exposedUntil || 0) || shipSeen(cv.x, cv.y, radar)) && 7 > bv) { bv = 7; best = cv; }
   if (!best) { e.cd = 2; return; }
-  e.cd = 12 + Math.random() * 3;
+  e.cd = (12 + Math.random() * 3) / (M.rof || 1);
   const mv = best.state === 'move' || best.moving, a = Math.atan2(best.ty - best.y, best.tx - best.x), lead = mv ? (best === cv ? 10 : 26) * 3 * D.lead : 0;
   fireShell(e.x, e.y, best.x + Math.cos(a) * lead + gauss() * D.err * 1.2, best.y + Math.sin(a) * lead + gauss() * D.err * 1.2, 'e', 'coastal', 3, !inVision(e.x, e.y));
   if (e.kx == null && Math.random() < .35) { e.kx = e.x; e.ky = e.y; log('岸防重炮炮口闪光，已标定', 'warn', null, 0, e); }

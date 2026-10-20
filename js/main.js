@@ -51,6 +51,7 @@ function frame(now) {
     if (n >= 8) acc = 0;
   }
   draw(now);
+  runHook('frame', now, dt);
   if (now - hudT > 200) { hudT = now; updateHud(); }
   if (now - mmT > 200) { mmT = now; mmDraw(); }
   requestAnimationFrame(frame);

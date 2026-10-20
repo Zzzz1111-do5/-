@@ -13,13 +13,14 @@ const ENEMY_SPEC = {
 };
 const ROLE_NAME = { radio: '通讯兵', rifle: '步枪手', mg: '机枪手', eng: '工兵' };
 
-function newGame(seed, level) {
+// opts.sandbox：只生成地形，不放守军与舰队（沙盒模式自行部署）
+function newGame(seed, level, opts = {}) {
   level = DIFF[level] ? level : 'hard';
   seed = seed || (Math.random() * 1e9) | 0;
   buildMap(seed);
   const r = rng(seed ^ 0x5f3759df);
   S = {
-    seed, level, t: 0, paused: true, speed: 1, nid: 1, over: null, briefed: false, holdT: 0, ai: null, phase: 'deploy', units: [], craters: [], pings: [],
+    seed, level, mode: opts.mode || (opts.sandbox ? 'sandbox' : 'pve'), role: opts.role || 'attack', t: 0, paused: true, speed: 1, nid: 1, over: null, briefed: false, holdT: 0, ai: null, phase: 'deploy', units: [], craters: [], pings: [],
     ships: [], teams: [], enemies: [], planes: [], shells: [], tracers: [], fx: [], smoke: [],
     mines: [], wire: [], obst: [], trench: [], supply: [], rlines: [], boats: [], recon: [], log: [],
     groups: { 1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [], 8: [], 9: [] }, sel: [],
@@ -28,11 +29,13 @@ function newGame(seed, level) {
     dd: { x: W / 2, y: 1720, tx: W / 2, ty: 1720, hull: 3, state: 'ready', cool: 0, repairT: 0, repairDur: 16, auto: false, exposedUntil: 0, moving: false },
     stats: { lost: 0, killed: 0, shots: 0, exposed: 0, structs: 0 }, throttle: {}
   };
-  deployDefenses(r, DIFF[level]);
+  if (!opts.sandbox) deployDefenses(r, DIFF[level]);
   aiInit(level);
-  deployFleet();
+  if (!opts.sandbox) deployFleet();
   if (typeof initCarrier === 'function') initCarrier();
   rebuildForts(); rebuildCraters(); indexUnits();
+  runHook('newGame', opts);
+  if (opts.sandbox) return S;
   log('舰队已在集结海域就位。对岸地形已投影至沙盘，守军部署不明。', 'info');
   log(`共 ${S.points.length} 个据点。夺取指挥所并控制七成以上据点分值，坚守 ${HOLD} 秒即胜利。`, 'info');
   return S;
