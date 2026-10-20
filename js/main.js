@@ -50,7 +50,7 @@ function frame(now) {
     while (acc >= 1 / 30 && n++ < 8) { step(1 / 30); acc -= 1 / 30; }
     if (n >= 8) acc = 0;
   }
-  draw(now);
+  if (!(typeof INTRO === 'object' && INTRO.on && INTRO.cover)) draw(now);   // 开场转场完全遮住战场时不画
   runHook('frame', now, dt);
   if (now - hudT > 200) { hudT = now; updateHud(); }
   if (now - mmT > 200) { mmT = now; mmDraw(); }
@@ -58,18 +58,22 @@ function frame(now) {
 }
 
 function start(data) {
-  if (data && data.S && data.S.points && data.S.dd) {
+  const hot = !!(data && data.S && data.S.points && data.S.dd);
+  if (hot) {
     S = data.S; buildMap(S.seed); aiCache(); rebuildForts(); rebuildCraters(); indexUnits();
     if (typeof initCarrier === 'function') initCarrier();
-  } else newGame(undefined, 'hard');
+  } else { newGame(undefined, 'hard'); S.attract = true; }   // attract：开始界面背后的展示局，尚未开打
   U.level = S.level;
   initRender($('cv'));
+  if (typeof SETTINGS === 'object') R.rain = SETTINGS.rain;
   buildHud(); bindInput();
   mmInit($('mm'));
   $('brief').hidden = !!S.briefed;
   new ResizeObserver(() => resize()).observe($('stage'));
   updateVision(); updateHud();
   bgRain();
+  // 开始界面；热重载恢复的对局直接继续
+  if (typeof showMenu === 'function') { if (hot && !S.attract) MENU.game = true; else { $('brief').hidden = true; showMenu(); } }
   requestAnimationFrame(frame);
 }
 

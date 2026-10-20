@@ -94,6 +94,8 @@ function buildHud() {
 }
 
 function restart(briefed) {
+  // 新战局 / 再来一局：回到开始界面，由菜单重新选择模式与难度
+  if (briefed === true && typeof showMenu === 'function') { delete $('btnNew').dataset.armed; $('btnNew').classList.remove('hot'); showMenu(); return; }
   newGame(undefined, U.level);
   S.briefed = briefed; U.tool = null; U.logKey = null; U.cardKey = null; MX.seed = null;
   mmInit($('mm')); updateVision();

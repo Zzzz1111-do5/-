@@ -35,17 +35,18 @@ function drawBuildings() {
   }
 }
 
+// 据点旗：全图时为世界尺寸，近看时封顶约 26px 高，不再占满屏幕
 function flag(ctx, x, y, owner, vp, prog, time) {
-  const col = owner === 'p' ? COL.g : COL.enemy;
-  ctx.strokeStyle = rgba(STRUCT, .8); ctx.lineWidth = px(1.2);
-  ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y - 20); ctx.stroke();
-  const wave = Math.sin(time * 3 + x) * 1.2;
+  const col = owner === 'p' ? COL.g : COL.enemy, k = Math.min(1, px(26) / 20);
+  ctx.strokeStyle = rgba(STRUCT, .8); ctx.lineWidth = px(1.1);
+  ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y - 20 * k); ctx.stroke();
+  const wave = Math.sin(time * 3 + x) * 1.2 * k;
   ctx.fillStyle = col;
-  ctx.beginPath(); ctx.moveTo(x, y - 20); ctx.lineTo(x + 10, y - 18 + wave); ctx.lineTo(x, y - 14); ctx.closePath(); ctx.fill();
-  for (let k = 1; k < vp; k++) { ctx.beginPath(); ctx.moveTo(x, y - 14 + k * 4); ctx.lineTo(x + 5, y - 12.5 + k * 4); ctx.lineTo(x, y - 11 + k * 4); ctx.fill(); }
+  ctx.beginPath(); ctx.moveTo(x, y - 20 * k); ctx.lineTo(x + 10 * k, y - (18 - wave) * k); ctx.lineTo(x, y - 14 * k); ctx.closePath(); ctx.fill();
+  for (let i = 1; i < vp; i++) { ctx.beginPath(); ctx.moveTo(x, y - (14 - i * 4) * k); ctx.lineTo(x + 5 * k, y - (12.5 - i * 4) * k); ctx.lineTo(x, y - (11 - i * 4) * k); ctx.fill(); }
   if (owner === 'e' && prog > 0) {   // 我方正在升起的旗
-    const h = y - 2 - prog * 16;
-    ctx.fillStyle = COL.g; ctx.beginPath(); ctx.moveTo(x, h); ctx.lineTo(x - 8, h + 2); ctx.lineTo(x, h + 4); ctx.fill();
+    const h = y - (2 + prog * 16) * k;
+    ctx.fillStyle = COL.g; ctx.beginPath(); ctx.moveTo(x, h); ctx.lineTo(x - 8 * k, h + 2 * k); ctx.lineTo(x, h + 4 * k); ctx.fill();
   }
 }
 
@@ -104,36 +105,39 @@ function drawStructure(p, time) {
     for (let i = -2; i <= 2; i++) box(x + i * 6, y + (i % 2) * 2, 3.5, 3.5);
   }
   flag(ctx, x + (k === 'bridge' ? 0 : 22), y - (k === 'bridge' ? 6 : 8), p.owner, p.vp, p.prog, time);
-  if ((p.prog > 0 && p.prog < 1) || p.contested) {
-    ctx.strokeStyle = p.contested ? rgba(COL.amber, .5 + .5 * Math.sin(time * 8)) : COL.g; ctx.lineWidth = px(2.5);
+  const hot = (p.prog > 0 && p.prog < 1) || p.contested, hov = hoverNear(x, y, 45);
+  if (hot) {   // 占领进度弧（争夺中为琥珀色闪烁）
+    ctx.strokeStyle = p.contested ? rgba(COL.amber, .45 + .4 * Math.sin(time * 8)) : rgba(COL.g, .85); ctx.lineWidth = px(2);
     ctx.beginPath(); ctx.arc(x, y, 36, -1.57, -1.57 + p.prog * 6.283); ctx.stroke();
   }
-  ctx.strokeStyle = rgba(p.owner === 'p' ? COL.g : COL.enemy, .18); ctx.lineWidth = px(1); ctx.setLineDash([px(2), px(4)]);
-  ctx.beginPath(); ctx.arc(x, y, 45, 0, 7); ctx.stroke(); ctx.setLineDash([]);
+  if (hot || hov) {   // 占领半径：只在争夺中或悬停时显示
+    ctx.strokeStyle = rgba(p.owner === 'p' ? COL.g : COL.enemy, hov ? .32 : .16); ctx.lineWidth = px(1); ctx.setLineDash([px(2), px(4)]);
+    ctx.beginPath(); ctx.arc(x, y, 45, 0, 7); ctx.stroke(); ctx.setLineDash([]);
+  }
 }
-function drawStructures(time) { for (const p of S.points) drawStructure(p, time); }
+function drawStructures(time) { for (const p of S.points) if (inView(p.x, p.y, 70)) drawStructure(p, time); }
 
-// 俯视士兵：肩线、头、武器；通讯兵背天线，机枪手带脚架，工兵扛锹
+// 俯视单兵（世界尺寸：肩宽约 3.9、连枪长约 5 单位）：暗底肩部 + 实心头 + 武器线；描边按屏幕像素，放大后依然纤细
+// 通讯兵背电台与天线，机枪手枪管粗、带脚架，工兵背锹
 function drawMan(ctx, x0, y0, a, role, col, det) {
-  if (!det) { ctx.fillStyle = col; ctx.fillRect(x0 - 1.8, y0 - 1.8, 3.6, 3.6); return; }
-  ctx.save(); ctx.translate(x0, y0); ctx.scale(1.5, 1.5);
-  const c = Math.cos(a), s = Math.sin(a), x = 0, y = 0;
-  ctx.strokeStyle = col; ctx.fillStyle = col; ctx.lineWidth = .9;
-  ctx.beginPath(); ctx.moveTo(x - s * 1.7, y + c * 1.7); ctx.lineTo(x + s * 1.7, y - c * 1.7); ctx.stroke();
-  ctx.beginPath(); ctx.arc(x, y, 1, 0, 7); ctx.fill();
-  const gx = x - s * 1.1, gy = y + c * 1.1;
-  if (role === 'mg') {
-    ctx.lineWidth = 1.4; ctx.beginPath(); ctx.moveTo(gx, gy); ctx.lineTo(gx + c * 4.2, gy + s * 4.2); ctx.stroke();
-    ctx.lineWidth = .6; ctx.beginPath(); ctx.moveTo(gx + c * 3, gy + s * 3); ctx.lineTo(gx + c * 3.8 - s * 1.4, gy + s * 3.8 + c * 1.4);
-    ctx.moveTo(gx + c * 3, gy + s * 3); ctx.lineTo(gx + c * 3.8 + s * 1.4, gy + s * 3.8 - c * 1.4); ctx.stroke();
-  } else if (role === 'eng') {
-    ctx.lineWidth = .8; ctx.beginPath(); ctx.moveTo(x + s * 1.2, y - c * 1.2); ctx.lineTo(x + s * 1.2 - c * 3, y - c * 1.2 - s * 3); ctx.stroke();
-    ctx.fillRect(x + s * 1.2 - c * 3.6 - .9, y - c * 1.2 - s * 3.6 - .9, 1.8, 1.8);
-  } else {
-    ctx.lineWidth = .75; ctx.beginPath(); ctx.moveTo(gx, gy); ctx.lineTo(gx + c * 3.4, gy + s * 3.4); ctx.stroke();
-  }
+  if (!det) { const d = Math.max(px(1.8), 1.4); ctx.fillStyle = col; ctx.fillRect(x0 - d / 2, y0 - d / 2, d, d); return; }
+  const k = 1.12, lw = px(1) / k, dark = 'rgba(2,10,6,.88)';
+  ctx.save(); ctx.translate(x0, y0); ctx.rotate(a); ctx.scale(k, k);
+  ctx.lineWidth = lw; ctx.strokeStyle = col; ctx.fillStyle = dark;
   if (role === 'radio') {
-    ctx.lineWidth = .5; ctx.beginPath(); ctx.moveTo(x - c * .8, y - s * .8); ctx.lineTo(x - c * 3.6 + s * 1.2, y - s * 3.6 - c * 1.2); ctx.stroke();
+    ctx.fillRect(-1.95, -.8, .95, 1.6); ctx.strokeRect(-1.95, -.8, .95, 1.6);
+    ctx.lineWidth = lw * .8; ctx.beginPath(); ctx.moveTo(-1.7, -.7); ctx.lineTo(-3.4, -2.1); ctx.stroke(); ctx.lineWidth = lw;
+  } else if (role === 'eng') {
+    ctx.beginPath(); ctx.moveTo(-.5, -1.2); ctx.lineTo(-2.9, -1.95); ctx.stroke();
+    ctx.fillStyle = col; ctx.fillRect(-3.5, -2.45, 1, 1); ctx.fillStyle = dark;
   }
+  ctx.beginPath(); ctx.ellipse(-.1, 0, .9, 1.75, 0, 0, 7); ctx.fill();
+  ctx.globalAlpha *= .35; ctx.fillStyle = col; ctx.fill(); ctx.globalAlpha /= .35; ctx.stroke();
+  if (role === 'mg') {
+    ctx.lineWidth = lw * 1.7; ctx.beginPath(); ctx.moveTo(.2, .75); ctx.lineTo(3.9, .75); ctx.stroke();
+    ctx.lineWidth = lw * .8; ctx.beginPath(); ctx.moveTo(3.1, .75); ctx.lineTo(3.7, -.1); ctx.moveTo(3.1, .75); ctx.lineTo(3.7, 1.6); ctx.stroke();
+  } else { ctx.beginPath(); ctx.moveTo(.1, .85); ctx.lineTo(3.1, .6); ctx.stroke(); }
+  ctx.fillStyle = col; ctx.strokeStyle = dark; ctx.lineWidth = lw * .8;
+  ctx.beginPath(); ctx.arc(.2, 0, .82, 0, 7); ctx.fill(); ctx.stroke();
   ctx.restore();
 }

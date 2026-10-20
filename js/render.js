@@ -1,6 +1,6 @@
 'use strict';
 // 渲染（一）：画布、镜头变换、辉光、海岸线/网格/海滩标注、无 WebGL 时的像素地形
-const R = { cv: null, ctx: null, dpr: 1, s: 1, ox: 0, oy: 0, b1: null, b2: null, pix: null, fog: null, dprCap: 0, rain: .25 };
+const R = { cv: null, ctx: null, dpr: 1, s: 1, ox: 0, oy: 0, b1: null, b2: null, pix: null, fog: null, dprCap: 0, rain: .25, zr: 1, fig: false, view: null, lowCap: false };
 const px = n => n / R.s;
 const _rgb = {};
 function rgba(hex, a) {
@@ -16,6 +16,7 @@ function initRender(cv) {
   for (const k of ['b1', 'b2', 'fog']) R[k] = document.createElement('canvas');
   R.fog.width = GW; R.fog.height = GH;
   try { const v = localStorage.getItem('bh-rain'); if (v != null) R.rain = +v; } catch (e) { /* 存储不可用时用默认值 */ }
+  if (typeof SETTINGS === 'object' && SETTINGS && SETTINGS.quality === 'low') { R.dprCap = 1; R.lowCap = true; }
   mxInit();
   resize();
 }
@@ -75,15 +76,25 @@ function drawMarks(ctx) {
   }
 }
 
+// 辉光：全图时强、近看时弱（近看是安静的战术地图），乘以设置里的辉光强度；低画质不做
+function bloomK() {
+  const st = typeof SETTINGS === 'object' && SETTINGS ? SETTINGS : null;
+  if (st && st.quality === 'low') return 0;
+  const b = st && isFinite(st.bloom) ? st.bloom / .7 : 1;
+  return b * lerp(1, .22, smooth(1.4, 6, CAM.z / CAM.fit));
+}
+
 function bloom() {
-  const { ctx, cv, b1, b2 } = R, g1 = b1.getContext('2d'), g2 = b2.getContext('2d');
+  const k = bloomK();
+  if (k < .02) return;
+  const { ctx, cv, b1, b2 } = R, g1 = b1.getContext('2d'), g2 = b2.getContext('2d'), wide = .4 * k * (1 - smooth(3, 5.5, R.zr));   // 大范围光晕近看时去掉
   g1.imageSmoothingQuality = g2.imageSmoothingQuality = 'high';
   g1.globalCompositeOperation = 'copy'; g1.drawImage(cv, 0, 0, b1.width, b1.height);
-  g2.globalCompositeOperation = 'copy'; g2.drawImage(b1, 0, 0, b2.width, b2.height);
+  if (wide > .02) { g2.globalCompositeOperation = 'copy'; g2.drawImage(b1, 0, 0, b2.width, b2.height); }
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.globalCompositeOperation = 'lighter';
-  ctx.globalAlpha = .42; ctx.drawImage(b1, 0, 0, cv.width, cv.height);
-  ctx.globalAlpha = .4; ctx.drawImage(b2, 0, 0, cv.width, cv.height);
+  ctx.globalAlpha = Math.min(1, .42 * k); ctx.drawImage(b1, 0, 0, cv.width, cv.height);
+  if (wide > .02) { ctx.globalAlpha = Math.min(1, wide); ctx.drawImage(b2, 0, 0, cv.width, cv.height); }
   ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
 }
 
@@ -93,27 +104,45 @@ function shape(ctx, x, y, r, n, rot) {
   ctx.closePath();
 }
 
+// 每帧的细节档：zr 相对全图的倍数；fig 画出单兵小人（小人约 7px 以上才画，否则画楔形三点）；view 可视范围（剔除屏外对象）
+function lodUpdate() {
+  R.zr = CAM.z / CAM.fit; R.fig = R.s >= 1.45; R.view = viewRect();
+}
+const inView = (x, y, m = 0) => { const v = R.view; return !v || (x > v[0] - m && x < v[2] + m && y > v[1] - m && y < v[3] + m); };
+// 鼠标悬停（世界半径 r，至少 14 屏幕像素）：范围圈等只在悬停或选中时显示
+const hoverNear = (x, y, r) => !!(typeof U === 'object' && U.mouse && dist(U.mouse.x, U.mouse.y, x, y) < Math.max(r, px(14)));
+
 function draw(now) {
   const { ctx } = R, time = now / 1000;
-  // 附近大爆炸：短暂震动与闪白
+  // 附近大爆炸：短暂震动与闪白（震动幅度按屏幕像素封顶，设置可关闭）
   let k = 0;
   for (const f of S.fx) if (f.kind === 'boom' && f.life < .25 && inVision(f.x, f.y)) k += f.r / 30 * (1 - f.life / .25);
-  const ox = R.ox, oy = R.oy;
-  R.ox += gauss() * k * 1.4 * R.s; R.oy += gauss() * k * 1.4 * R.s;
+  const ox = R.ox, oy = R.oy, shake = !(typeof SETTINGS === 'object' && SETTINGS && SETTINGS.shake === false);
+  if (shake && k > 0) { const a = Math.min(k, 2.5) * 1.4 * Math.min(R.s, CAM.fit * 3); R.ox += gauss() * a; R.oy += gauss() * a; }
+  lodUpdate();
   fogBytes();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
-  if (MX.ok) { mxDraw(time, Math.min(1, k * .5)); ctx.drawImage(MX.cv, 0, 0); }
+  if (MX.ok) { mxDraw(time, Math.min(1, k * .5) * (shake ? 1 : .4)); ctx.drawImage(MX.cv, 0, 0); }
   else { ctx.fillStyle = '#010402'; ctx.fillRect(0, 0, R.cv.width, R.cv.height); worldTf(ctx); drawPixelFallback(ctx); }
   worldTf(ctx);
   ctx.lineCap = 'round'; ctx.lineJoin = 'round';
   indexUnits();
   const opt = name => { const f = globalThis[name] || window[name]; if (typeof f === 'function') f(time); };
   drawMarks(ctx); drawCraters(); drawBuildings(); drawForts(time); drawSmoke(time); drawLines(time); opt('drawSupplyNet'); drawStructures(time); opt('drawBlown'); runHook('drawUnder', time);
-  drawEnemies(time); opt('drawArmor'); opt('drawAutoRoutes'); drawTeams(time); opt('drawCarrier'); drawShips(time); drawDD(time); runHook('drawOver', time); drawPlans(time);
+  drawEnemies(time); opt('drawArmor');
+  ctx.globalAlpha = R.zr > 2.5 ? .55 : .75; opt('drawAutoRoutes'); ctx.globalAlpha = 1;   // 自动驾驶路线压暗，避免满屏虚线
+  drawTeams(time); opt('drawCarrier'); drawShips(time); drawDD(time); runHook('drawOver', time); drawPlans(time);
   drawShells(time); drawTracers(); drawPlanes(time); drawFx(); drawTool(time); drawFormPreview();
   bloom();
   worldTf(ctx);
   drawBanners(time); drawShipMarks(); drawPings(time); runHook('drawTop', time);
   R.ox = ox; R.oy = oy;
 }
+
+// 低画质：限制为 1 倍像素密度（辉光在 bloomK 中关闭）
+if (typeof onSettings === 'function') onSettings((key, v, st) => {
+  if (!R.cv || (key && key !== 'quality')) return;
+  const cap = st && st.quality === 'low' ? 1 : 0;
+  if (cap !== R.dprCap && (cap || R.lowCap)) { R.dprCap = cap; R.lowCap = !!cap; resize(); }
+});
