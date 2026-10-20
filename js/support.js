@@ -6,7 +6,6 @@ function orderDD(x, y) {
   if (dd.state === 'sunk') return false;
   if (isLand(x, y)) { log('驱逐舰只能在海上机动', 'warn', 'ddl', 2); return false; }
   Object.assign(dd, { tx: x, ty: y, moving: true });
-  log(`DD-17 驶向 ${gridRef(x, y)}`, 'info', 'ddmv', 1);
   return true;
 }
 
@@ -30,7 +29,7 @@ function ddFire(tx, ty, smoke) {
     if (guns.length) {
       const a = pick(guns);
       fireShell(a.x, a.y, dd.x, dd.y, 'e', 'cb', 4.2, !inVision(a.x, a.y), { t: -1.2 });
-      log(`驱逐舰炮口闪光暴露坐标（${gridRef(dd.x, dd.y)}），敌反炮兵射击来袭`, 'bad');
+      log('驱逐舰暴露坐标，反炮兵射击来袭', 'bad', null, 0, dd);
     } else log('驱逐舰坐标暴露，但敌方已无火炮可以还击', 'info', 'ddsafe', 4);
   } else log(`驱逐舰${smoke ? '烟幕弹' : '齐射'}，方位 ${fmtBrg(bearing(dd.x, dd.y, tx, ty))}，未暴露`, 'info', 'dd', 2);
   return true;
@@ -73,7 +72,6 @@ function launchPlane(kind, tx, ty) {
   if (S.assets[kind] <= 0) { log(kind === 'strike' ? '空袭架次已用完' : '侦察架次已用完', 'warn', 'air', 2); return false; }
   S.assets[kind]--;
   S.planes.push({ id: S.nid++, kind, x: tx, y: H + 30, tx, ty, dropped: false, aaT: 0, rt: 0 });
-  log(kind === 'strike' ? `攻击机起飞，目标 ${gridRef(tx, ty)}` : `侦察机起飞，沿 ${GRID_COLS[clamp(Math.floor(tx / 100), 0, 15)]} 列向北侦察`, 'info');
   return true;
 }
 
@@ -90,11 +88,11 @@ function updatePlanes(dt) {
     for (const a of S.enemies) {
       if (a.dead || a.kind !== 'aa' || dist(a.x, a.y, p.x, p.y) > 180) continue;
       tracer(a.x, a.y, p.x + gauss() * 14, p.y + gauss() * 14, 'e', inVision(a.x, a.y));
-      if (a.kx == null && Math.random() < .15) { a.kx = a.x; a.ky = a.y; log(`防空炮火暴露位置：${gridRef(a.x, a.y)}`, 'warn'); }
+      if (a.kx == null && Math.random() < .15) { a.kx = a.x; a.ky = a.y; log('防空炮火暴露位置', 'warn', null, 0, a); }
       if (Math.random() < (p.kind === 'strike' ? .09 : .06)) {
         p.dead = true;
         S.fx.push({ kind: 'boom', x: p.x, y: p.y, r: 22, life: 0, max: 1, side: 'p' });
-        log(`${p.kind === 'strike' ? '攻击机' : '侦察机'}在 ${gridRef(p.x, p.y)} 被防空火力击落`, 'bad');
+        log(`${p.kind === 'strike' ? '攻击机' : '侦察机'}被击落`, 'bad', null, 0, p);
         break;
       }
     }

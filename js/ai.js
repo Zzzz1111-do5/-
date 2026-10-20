@@ -2,11 +2,11 @@
 // 守军指挥官 AI：只依据己方观察哨、部队与雷达看到的情报决策，不开全图
 const DIFF = {
   normal: { name: '普通', beachBunkers: 1, beachMines: 1, coastal: 1, arty: 2, mortars: 1, aa: 2, garrison: 0, ambush: 1, reserves: 2, waves: 2, waveEvery: 240, waveSize: 2,
-    think: 2.5, err: 30, lead: .5, radio: .15, hold: 100, scoot: 3, ratio: 1.6, acc: .9, dig: .8 },
+    morale: 55, nerve: 1.2, think: 2.5, err: 30, lead: .5, radio: .15, hold: 100, scoot: 3, ratio: 1.6, acc: .9, dig: .8 },
   hard: { name: '困难', beachBunkers: 2, beachMines: 2, coastal: 2, arty: 3, mortars: 3, aa: 2, garrison: 0, ambush: 2, reserves: 4, waves: 5, waveEvery: 180, waveSize: 2,
-    think: 1.4, err: 21, lead: .85, radio: .4, hold: 120, scoot: 2, ratio: 1.25, acc: 1.05, dig: .55 },
+    morale: 65, nerve: 1, think: 1.4, err: 21, lead: .85, radio: .4, hold: 120, scoot: 2, ratio: 1.25, acc: 1.05, dig: .55 },
   hell: { name: '地狱', beachBunkers: 2, beachMines: 3, coastal: 2, arty: 4, mortars: 4, aa: 3, garrison: 1, ambush: 3, reserves: 6, waves: 7, waveEvery: 130, waveSize: 3,
-    think: .7, err: 15, lead: 1, radio: .6, hold: 130, scoot: 1, ratio: 1.05, acc: 1.2, dig: .45 }
+    morale: 80, nerve: .75, think: .7, err: 15, lead: 1, radio: .6, hold: 130, scoot: 1, ratio: 1.05, acc: 1.2, dig: .45 }
 };
 let AIC = null;   // 由地形派生的缓存（据点周围掩体格），不进 S
 const aiD = () => DIFF[S && S.level] || DIFF.hard;
@@ -26,10 +26,16 @@ function aiCache() {
   }
 }
 
-function sayOnce(key, msg, p, kind = 'warn') {
+function sayOnce(key, msg, p, kind = 'warn', at) {
   if (S.ai.said[key]) return;
   S.ai.said[key] = 1;
-  if (Math.random() < p) log(msg, kind);
+  if (Math.random() < p) log(msg, kind, null, 0, at);
+}
+
+// 调往某据点的散兵编入该据点的预备连（不超过 4 组）
+function aiUnitFor(k) {
+  return S.units.find(u => u.side === 'e' && u.obj === k && u.role === 'reserve' && u.state !== 'rout' && teamsOf(u).length < 4) ||
+    addUnit('e', 'inf', { role: 'reserve', obj: k });
 }
 
 const aiGo = (q, x, y, t, gx, gy) => { q.order = { t, x, y, gx: gx ?? x, gy: gy ?? y }; q.pathT = -9; };
@@ -38,7 +44,7 @@ function aiRout(q) {
   const p = ptByKey(q.obj) || S.points[0];
   aiGo(q, p.x + gauss() * 15, p.y - 30, 'retreat', p.x, p.y);
   q.px = null;
-  if (inVision(q.x, q.y)) log(`${gridRef(q.x, q.y)} 的敌军被压制后撤`, 'good', 'erout', 8);
+  if (inVision(q.x, q.y)) log('敌军被压制后撤', 'good', 'erout', 8, q);
 }
 
 // 据点附近、面向威胁一侧且掩护好的位置
@@ -90,8 +96,9 @@ function aiUpdate(dt) {
   if (A.waves < D.waves && S.t >= A.nextWave) {
     A.waves++; A.nextWave += D.waveEvery;
     const p = S.points.filter(p => p.owner === 'p').sort((a, b) => b.vp - a.vp)[0] || ptByKey('HQ') || S.points[0];
+    const uw = addUnit('e', 'inf', { role: 'reserve', obj: p.key });
     for (let k = 0; k < D.waveSize; k++) {
-      const q = addTeam('e', clamp(p.x + gauss() * 60, 20, W - 20), 12, ['rifle', 'rifle', 'mg'], { role: 'reserve', obj: p.key });
+      const q = addTeam('e', clamp(p.x + gauss() * 60, 20, W - 20), 12, ['rifle', 'rifle', 'mg'], { role: 'reserve', obj: p.key, u: uw.id });
       aiGo(q, p.x + gauss() * 20, p.y + gauss() * 20, 'move', p.x, p.y);
     }
     log('截获敌方无线电：北面有增援部队开来', 'warn');

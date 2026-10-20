@@ -132,58 +132,16 @@ function drawTool(time) {
   } else if (U.tool === 'rline') {
     ctx.strokeStyle = rgba(COL.intel, .5); ctx.setLineDash([px(2), px(6)]);
     ctx.beginPath(); ctx.moveTo(m.x, H - 6); ctx.lineTo(m.x, m.y); ctx.stroke(); ctx.setLineDash([]);
-  } else if ((U.tool === 'move' || U.tool === 'amove' || U.tool === 'clear')) {
-    const teams = selTeams();
-    if (teams.length > 1) {
-      const c = teams.reduce((a, q) => [a[0] + q.x / teams.length, a[1] + q.y / teams.length], [0, 0]);
-      ctx.fillStyle = rgba(COL.sel, .5);
-      for (const [x, y] of formationSlots(teams.length, m.x, m.y, Math.atan2(m.y - c[1], m.x - c[0]))) ctx.fillRect(x - 1.5, y - 1.5, 3, 3);
+  } else if (U.tool === 'move' || U.tool === 'amove' || U.tool === 'charge' || U.tool === 'clear') {
+    const units = selUnits();
+    if (units.length && !(U.fdrag && U.fdrag.on)) {
+      const cx0 = units.reduce((a, u) => a + u.x, 0) / units.length, cy0 = units.reduce((a, u) => a + u.y, 0) / units.length, f = Math.atan2(m.y - cy0, m.x - cx0);
+      ctx.fillStyle = rgba(U.tool === 'move' ? COL.sel : COL.enemy, .6);
+      for (const L of layoutUnits(units, m.x, m.y, f, null)) for (const [x, y] of L.slots) { shape(ctx, x, y, 3, 3, f); ctx.fill(); }
     }
   }
-  const col = U.tool === 'amove' ? COL.enemy : U.tool === 'move' || U.tool === 'ddmove' ? COL.sel : COL.text;
+  const col = U.tool === 'amove' || U.tool === 'charge' ? COL.enemy : U.tool === 'move' ? COL.sel : COL.text;
   ctx.strokeStyle = col;
   ctx.beginPath(); ctx.moveTo(m.x - 8, m.y); ctx.lineTo(m.x - 3, m.y); ctx.moveTo(m.x + 3, m.y); ctx.lineTo(m.x + 8, m.y);
   ctx.moveTo(m.x, m.y - 8); ctx.lineTo(m.x, m.y - 3); ctx.moveTo(m.x, m.y + 3); ctx.lineTo(m.x, m.y + 8); ctx.stroke();
-}
-
-function label(ctx, txt, x, y, col, size = 10, align = 'left') {
-  ctx.font = font(size); ctx.textAlign = align; ctx.fillStyle = col; ctx.fillText(txt, x, y);
-}
-
-function drawLabels(time) {
-  const ctx = R.ctx, D = S.dd;
-  ctx.textBaseline = 'middle';
-  for (const p of S.points) {
-    const col = p.owner === 'p' ? COL.g : COL.enemy;
-    label(ctx, p.key, p.x, p.y + px(1), col, 10, 'center');
-    label(ctx, p.name + '·' + '★'.repeat(p.vp), p.x, p.y + 30, rgba(col, .85), 10, 'center');
-  }
-  const grp = id => Object.keys(S.groups).find(k => S.groups[k].includes(id));
-  for (const s of S.ships) {
-    if (s.state === 'sunk') continue;
-    const g = grp(s.id), a = s.state === 'beached' ? .45 : .8;
-    label(ctx, s.label + (s.load.teams ? ` ×${s.load.teams * 3 + s.load.eng}` : ''), s.x + 13, s.y - 9, rgba(COL.g, a), 9);
-    if (g) label(ctx, 'G' + g, s.x - 13, s.y - 9, COL.sel, 9, 'right');
-  }
-  if (R.s > CAM.fit * 2.2) for (const q of S.teams) if (q.side === 'p') {
-    const g = grp(q.id);
-    label(ctx, (g ? 'G' + g + ' ' : '') + (q.kind === 'eng' ? '工' : q.no), q.x + 7, q.y - 7, rgba(g ? COL.sel : COL.g, .7), 8);
-  }
-  if (D.state !== 'sunk') {
-    const st = D.state === 'repair' ? `损管 ${Math.round(D.repairT / D.repairDur * 100)}%` : D.cool > 0 ? `装填 ${Math.ceil(D.cool)}s` : '就绪';
-    label(ctx, 'DD-17 驱逐舰', D.x - 22, D.y - 8, rgba(D.state === 'repair' ? COL.amber : COL.g, .85), 9, 'right');
-    label(ctx, st + (S.t < D.exposedUntil ? ' · 坐标暴露' : ''), D.x - 22, D.y + 5, rgba(S.t < D.exposedUntil ? COL.enemy : COL.text, .8), 9, 'right');
-  }
-  for (const L of S.supply) label(ctx, L.connected ? '补给站' : '补给站·断线', L.x + 9, L.y + 8, rgba(L.connected ? COL.g : COL.enemy, .8), 9);
-  for (const s of S.shells) if (s.fuzzy && s.t >= 0) label(ctx, '?', s.fx0, s.fy0, rgba(COL.enemy, .8), 12, 'center');
-  const m = U.mouse;
-  if (m && (U.tool === 'fire' || U.tool === 'smoke')) label(ctx, `方位 ${fmtBrg(bearing(D.x, D.y, m.x, m.y))} · 距离 ${Math.round(dist(D.x, D.y, m.x, m.y))} · ${gridRef(m.x, m.y)}`, m.x + 12, m.y - 12, COL.text, 10);
-  if (m && U.hoverText) {
-    ctx.font = font(10);
-    const w = ctx.measureText(U.hoverText).width + px(12), v1 = toWorld(CAM.vw, CAM.vh);
-    const x = Math.min(m.x + px(14), v1.x - w - px(4)), y = m.y + px(16);
-    ctx.fillStyle = 'rgba(2,10,6,0.88)'; ctx.fillRect(x, y, w, px(18));
-    ctx.strokeStyle = rgba(COL.g, .4); ctx.lineWidth = px(1); ctx.strokeRect(x, y, w, px(18));
-    label(ctx, U.hoverText, x + px(6), y + px(9.5), COL.text, 10);
-  }
 }

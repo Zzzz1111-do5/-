@@ -16,14 +16,9 @@ function updateTeams(dt) {
     mineCheck(q, dt);
     if (!q.men.length) continue;
     const o = q.order;
-    // 压制值过高：崩溃后撤（守军在战壕里会死守）
-    if (q.sup >= 95 && o.t !== 'retreat' && !(q.side === 'e' && q.inTrench)) {
-      if (q.side === 'p') { orderTeams([q], 0, 0, 'retreat'); log(`${teamName(q)}在火力压制下溃退`, 'bad', 'rout' + q.id, 15); }
-      else aiRout(q);
-      continue;
-    }
+    if (o.t === 'charge' && q.kind === 'inf' && q.sup < 85 && chargeTick(q, dt)) continue;
     let tg = null;
-    if (q.kind === 'inf' && o.t !== 'retreat') {
+    if (q.kind === 'inf' && o.t !== 'retreat' && o.t !== 'charge') {
       tg = findTarget(q, RANGE);
       const silent = q.side === 'e' && q.hold && tg && tg.d > 80 && S.t - q.hitT > 8;   // 伏击组隐蔽待机
       if (tg && q.cd <= 0 && !silent) teamFire(q, tg);
@@ -34,7 +29,7 @@ function updateTeams(dt) {
     }
     if (q.repairing || (q.sup >= 60 && o.t !== 'retreat') || o.t === 'hold' || o.x == null) continue;
     if (o.t === 'amove' && tg) continue;   // 攻击前进：遇敌停下交火
-    if (moveTeam(q, dt, o.t === 'retreat' ? 1.15 : o.t === 'amove' ? .9 : 1)) q.order = { t: o.t === 'clear' ? 'clear' : 'hold' };
+    if (moveTeam(q, dt, o.t === 'retreat' ? 1.15 : o.t === 'charge' ? 1.3 : o.t === 'amove' ? .9 : 1)) q.order = { t: o.t === 'clear' ? 'clear' : 'hold' };
   }
 }
 
@@ -67,13 +62,17 @@ function buildRLine(ship) {
   S.assets.rline--;
   const x0 = clamp(ship.x - (W / 2 - ship.x) * .15, 20, W - 20);
   S.rlines.push({ id: S.nid++, ship: ship.id, x0, y0: H - 6, x1: ship.x, y1: ship.y, bx: ship.bx, by: ship.by, timer: 2 });
-  log(`增援线已开辟：后方 → ${ship.label} 滩头（${gridRef(ship.bx, ship.by)}）`, 'good');
+  log('增援线已开辟', 'good', null, 0, { x: ship.bx, y: ship.by });
   return true;
 }
 
 function updateRLines(dt) {
   for (const L of S.rlines)
-    if ((L.timer -= dt) <= 0 && S.assets.reserve > 0) { L.timer = 15; S.assets.reserve--; S.boats.push({ id: S.nid++, line: L.id, u: 0, x: L.x0, y: L.y0 }); }
+    if ((L.timer -= dt) <= 0 && S.assets.reserve > 0) {
+      const n = Math.min(3, S.assets.reserve);   // 一艇载一个班（三个三人组）
+      L.timer = 20; S.assets.reserve -= n;
+      S.boats.push({ id: S.nid++, line: L.id, u: 0, x: L.x0, y: L.y0, n });
+    }
   for (const b of S.boats) {
     if (b.dead) continue;
     const L = S.rlines.find(l => l.id === b.line);
@@ -81,8 +80,9 @@ function updateRLines(dt) {
     b.x = lerp(L.x0, L.x1, b.u); b.y = lerp(L.y0, L.y1, b.u);
     if (b.u < 1) continue;
     b.done = true;
-    addTeam('p', L.bx + gauss() * 8, L.by - 8, ['radio', 'rifle', 'mg'], { unit: '增援' });
-    log(`增援小组经增援线抵达 ${gridRef(L.bx, L.by)}`, 'good', 'reinf', 4);
+    const u = addUnit('p', 'inf', { ship: '增援', emblem: 'reserve', form: 'wedge', face: NORTH });
+    for (const [x, y] of unitSlots(b.n || 1, 'wedge', L.bx, L.by - 16, NORTH, defWidth('wedge', b.n || 1))) addTeam('p', x, y, ['radio', 'rifle', 'mg'], { unit: '增援', u: u.id });
+    log('增援登陆', 'good', 'reinf', 4, { x: L.bx, y: L.by });
   }
   S.boats = S.boats.filter(b => !b.dead && !b.done);
 }
@@ -95,10 +95,10 @@ function updatePoints(dt) {
     p.contested = pT > 0 && eN;
     if (pT && !eN) {
       p.prog = Math.min(1, p.prog + dt / 15 * (pT >= 3 ? 1.5 : 1));
-      if (p.prog >= 1 && p.owner !== 'p') { p.owner = 'p'; log(`已夺取据点「${p.name}」`, 'good'); }
+      if (p.prog >= 1 && p.owner !== 'p') { p.owner = 'p'; log(`夺取${p.name}`, 'good', null, 0, p); }
     } else if (eN && !pT) {
       p.prog = Math.max(0, p.prog - dt / 15);
-      if (p.prog <= 0 && p.owner === 'p') { p.owner = 'e'; log(`据点「${p.name}」被敌军夺回`, 'bad'); }
+      if (p.prog <= 0 && p.owner === 'p') { p.owner = 'e'; log(`${p.name}被敌军夺回`, 'bad', null, 0, p); }
     }
   }
 }
@@ -123,7 +123,7 @@ function updateVision() {
     if (PV[ci(e.x, e.y)]) { e.kx = e.x; e.ky = e.y; }
     else if (e.kx != null && !e.dead && dist(e.kx, e.ky, e.x, e.y) > 20 && PV[ci(e.kx, e.ky)]) {
       e.kx = e.ky = null;
-      log(`原标定位置已无目标，敌${ENEMY_SPEC[e.kind].name}疑似转移`, 'warn', 'stale' + e.id, 15);
+      log(`标定位置已空，敌${ENEMY_SPEC[e.kind].name}疑似转移`, 'warn', 'stale' + e.id, 15, e);
     }
   }
   for (const q of S.teams) if (q.side === 'e' && PV[ci(q.x, q.y)]) { q.seen = S.t; q.sx = q.x; q.sy = q.y; }
@@ -131,7 +131,7 @@ function updateVision() {
   for (const o of S.obst) if (!o.known && PV[ci(o.x, o.y)]) { o.known = true; forts = true; }
   for (const t of S.trench) if (!t.known && t.pts.some(([x, y]) => PV[ci(x, y)])) t.known = true;
   for (const m of S.mines) if (!m.known && m.clr < 1 && PV[ci(m.x, m.y)] && Math.random() < .02) {
-    m.known = true; forts = true; log(`在 ${gridRef(m.x, m.y)} 发现雷区标志`, 'warn');
+    m.known = true; forts = true; log('发现雷区', 'warn', null, 0, m);
   }
   if (forts) rebuildForts();
 }
@@ -151,12 +151,13 @@ function checkEnd(dt) {
 
 function step(dt) {
   S.t += dt;
+  indexUnits();
   if ((S.visT = (S.visT ?? 0) - dt) <= 0) { S.visT = .25; updateVision(); }
-  updateShips(dt); updateDD(dt); updateTeams(dt); updateEnemies(dt); aiUpdate(dt);
+  updateShips(dt); updateDD(dt); updateTeams(dt); indexUnits(); updateUnits(dt); updateEnemies(dt); aiUpdate(dt);
   updatePlanes(dt); updateShells(dt); updateSupply(dt); updateRLines(dt); updatePoints(dt);
   if (S.teams.some(q => !q.men.length)) {
     S.teams = S.teams.filter(q => q.men.length);
-    S.sel = S.sel.filter(id => byId(id));
+    S.sel = S.sel.filter(id => id === 'DD' || S.units.some(u => u.id === id) || S.ships.some(s => s.id === id));
   }
   for (const t of S.tracers) t.life += dt;
   S.tracers = S.tracers.filter(t => t.life < t.max);

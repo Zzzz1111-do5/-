@@ -4,7 +4,7 @@ function aiThink(D) {
   const A = S.ai, radar = radarUp();
   const seenT = S.teams.filter(q => q.side === 'p' && spotted(q.x, q.y));
   const seenShips = S.ships.filter(s => alive(s) && s.state !== 'beached' && shipSeen(s.x, s.y, radar));
-  const foes = S.teams.filter(q => q.side === 'e' && q.men.length);
+  const foes = S.teams.filter(q => q.side === 'e' && q.men.length && !(unitOf(q) && unitOf(q).state === 'rout'));
   for (const s of S.ships)
     if ((s.state === 'unloading' || s.state === 'beached') && spotted(s.bx, s.by) && !A.reg.some(r => dist(r.x, r.y, s.bx, s.by) < 50)) A.reg.push({ x: s.bx, y: s.by });
 
@@ -24,6 +24,10 @@ function aiThink(D) {
     const def = foes.filter(q => q.obj === p.key).reduce((a, q) => a + q.men.length, 0);
     info[p.key] = { p, th, near, def, fx: w ? cx0 / w : p.x, fy: w ? cy0 / w : p.y + 250 };
   }
+  for (const u of S.units) if (u.side === 'e' && u.state !== 'rout') {
+    const I = info[u.obj];
+    u.face = u.role === 'ambush' || !I || !I.th ? SOUTH : Math.atan2(I.fy - I.p.y, I.fx - I.p.x);
+  }
   const need = k => (info[k].th + (info[k].p.owner === 'p' ? 8 : 0) + 1) / (info[k].def + 1) * Math.sqrt(info[k].p.vp);
   const keys = S.points.map(p => p.key);
 
@@ -35,7 +39,7 @@ function aiThink(D) {
     const spare = q.role === 'reserve' || (info[q.obj].th < 2 && foes.filter(o => o.obj === q.obj && o.role === 'garrison').length > 1);
     if (!spare) continue;
     info[q.obj].def -= q.men.length; info[k].def += q.men.length;
-    Object.assign(q, { obj: k, role: 'reserve', px: null });
+    Object.assign(q, { obj: k, role: 'reserve', px: null, u: aiUnitFor(k).id });
   }
 
   for (const q of foes) {
@@ -49,7 +53,7 @@ function aiThink(D) {
       const near = seenT.filter(p => dist(p.x, p.y, q.x, q.y) < 120).reduce((a, p) => a + p.men.length, 0);
       if (near > q.men.length * 2.5 || q.men.length === 1) {
         Object.assign(q, { role: 'garrison', hold: false, px: null });
-        sayOnce('fall' + q.id, `${gridRef(q.x, q.y)} 方向敌军正在后撤`, .6, 'info');
+        sayOnce('fall' + q.id, '滩头敌军正在后撤', .6, 'info', q);
       }
     }
   }
@@ -59,12 +63,14 @@ function aiThink(D) {
     const I = info[k], p = I.p, mine = foes.filter(q => q.obj === k && q.men.length > 1 && q.role !== 'ambush' && q.order.t !== 'retreat');
     const men = mine.reduce((a, q) => a + q.men.length, 0), lost = p.owner === 'p' || p.prog > .25;
     if (lost && men >= Math.max(4, I.near * D.ratio)) {
-      for (const q of mine) if (q.order.t !== 'amove') { aiGo(q, p.x + gauss() * 15, p.y + gauss() * 15, 'amove', p.x, p.y); q.px = null; }
+      const shaken = seenT.some(o => dist(o.x, o.y, p.x, p.y) < 90 && o.sup > 45);
+      const t = shaken && men >= I.near * 1.5 ? 'charge' : 'amove';
+      for (const q of mine) if (q.order.t !== t) { aiGo(q, p.x + gauss() * 15, p.y + gauss() * 15, t, p.x, p.y); q.px = null; }
       sayOnce('atk' + k + Math.floor(S.t / 90), `截获敌方通讯片段：「……向${p.name}反击……」`, .5);
       continue;
     }
     for (const q of mine) {
-      if (q.order.t === 'amove') q.order = { t: 'hold' };
+      if (q.order.t === 'amove' || q.order.t === 'charge') q.order = { t: 'hold' };
       if (q.order.t === 'move') continue;
       let spot = q.px != null ? { x: q.px, y: q.py } : null;
       if (lost) { if (!spot || dist(spot.x, spot.y, p.x, p.y) < 90) spot = stagingSpot(p, I); }

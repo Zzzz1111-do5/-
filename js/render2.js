@@ -1,8 +1,7 @@
 'use strict';
 // 渲染（二）：工事、烟幕、补给/增援线、据点、敌我单位、舰船
 // 三角形 = 登陆舰，五边形 = 驱逐舰，小方块 = 士兵，红色 = 敌方（仅视野内或已标定）
-const MO = [[0, -3.2], [-3.2, 2.4], [3.2, 2.4]];
-const isSel = id => S.sel.includes(id);
+const MO = [[0, -4.6], [-4.6, 3.4], [4.6, 3.4]];   // 三人组成三角（放大绘制以便辨认）
 
 function drawForts(time) {
   const ctx = R.ctx;
@@ -126,8 +125,8 @@ function drawEnemies(time) {
   for (const q of S.teams) {
     if (q.side !== 'e') continue;
     if (inVision(q.x, q.y)) {
-      ctx.fillStyle = COL.enemy;
-      q.men.forEach((m, i) => ctx.fillRect(q.x + MO[i][0] - 1.6, q.y + MO[i][1] - 1.6, 3.2, 3.2));
+      const a = faceOf(q), c = Math.cos(a + 1.57), s = Math.sin(a + 1.57), det = CELL * R.s >= 16;
+      q.men.forEach((m, i) => drawMan(ctx, q.x + MO[i][0] * c - MO[i][1] * s, q.y + MO[i][0] * s + MO[i][1] * c, a, m, COL.enemy, det));
       if (q.sup >= 60) { ctx.strokeStyle = rgba(COL.amber, .6); ctx.lineWidth = px(1); ctx.beginPath(); ctx.arc(q.x, q.y, 7, 0, 7); ctx.stroke(); }
     } else if (q.seen && S.t - q.seen < 8) {
       ctx.strokeStyle = rgba(COL.enemy, (1 - (S.t - q.seen) / 8) * .6); ctx.lineWidth = px(1);
@@ -140,16 +139,16 @@ function drawTeams(time) {
   const ctx = R.ctx;
   for (const q of S.teams) {
     if (q.side !== 'p') continue;
-    const sel = isSel(q.id), o = q.order, low = q.kind === 'inf' && q.ammo < 8, a = low ? .45 + .45 * Math.sin(time * 10) : 1;
+    const sel = isSel(q.u), o = q.order, low = q.kind === 'inf' && q.ammo < 8, a = low ? .45 + .45 * Math.sin(time * 10) : 1;
     if (o.x != null && (sel || o.t === 'retreat')) {
       ctx.strokeStyle = rgba(o.t === 'amove' ? COL.enemy : o.t === 'retreat' ? COL.amber : COL.sel, sel ? .6 : .3); ctx.lineWidth = px(1);
       ctx.setLineDash([px(3), px(4)]); ctx.beginPath(); ctx.moveTo(q.x, q.y); ctx.lineTo(o.x, o.y); ctx.stroke(); ctx.setLineDash([]);
     }
-    const c = Math.cos((q.heading ?? -1.57) + 1.57), s = Math.sin((q.heading ?? -1.57) + 1.57);
+    const f = faceOf(q), c = Math.cos(f + 1.57), s = Math.sin(f + 1.57), det = CELL * R.s >= 16, u = unitOf(q);
+    const col = rgba(u && u.state === 'rout' ? COL.amber : COL.g, a);
     q.men.forEach((m, i) => {
       const x = q.x + MO[i][0] * c - MO[i][1] * s, y = q.y + MO[i][0] * s + MO[i][1] * c;
-      if (m === 'eng') { ctx.strokeStyle = rgba(COL.g, a); ctx.lineWidth = px(1.2); ctx.beginPath(); ctx.arc(x, y, 1.9, 0, 7); ctx.stroke(); }
-      else { ctx.fillStyle = rgba(m === 'mg' ? '#9dffc4' : COL.g, a); ctx.fillRect(x - 1.6, y - 1.6, 3.2, 3.2); }
+      drawMan(ctx, x, y, f, m, col, det);
       if (m === 'radio') { ctx.strokeStyle = rgba(COL.g, .25 + .25 * Math.sin(time * 3 + q.id)); ctx.lineWidth = px(1); ctx.beginPath(); ctx.arc(x, y, 5, 0, 7); ctx.stroke(); }
     });
     if (q.sup > 25) {
@@ -157,7 +156,6 @@ function drawTeams(time) {
       ctx.beginPath(); ctx.arc(q.x, q.y, 8, -1.57, -1.57 + q.sup / 100 * 6.283); ctx.stroke();
     }
     if (q.working) { ctx.strokeStyle = COL.amber; ctx.lineWidth = px(1.4); ctx.beginPath(); ctx.arc(q.x, q.y, 10, time * 4, time * 4 + 2); ctx.stroke(); }
-    if (sel) { ctx.strokeStyle = COL.sel; ctx.lineWidth = px(1.3); ctx.beginPath(); ctx.arc(q.x, q.y, 11, 0, 7); ctx.stroke(); }
   }
 }
 

@@ -5,6 +5,7 @@ const SMOKE = new Uint8Array(GW * GH);
 const MINEC = new Uint8Array(GW * GH);   // 1 = 未发现的雷区，2 = 已标定雷区
 const WIREC = new Uint8Array(GW * GH);   // 铁丝网所在格
 const OBSC = new Uint8Array(GW * GH);    // 反登陆障碍：1 未发现，2 已发现
+const CRATERC = new Uint8Array(GW * GH);   // 弹坑：提供少量掩护
 let fieldGen = 0;
 const FIELDS = new Map();
 
@@ -46,6 +47,13 @@ function castVision(out, sources) {
     }
   }
 }
+
+function addCrater(x, y, r) {
+  S.craters.push({ x, y, r });
+  if (S.craters.length > 260) S.craters.shift();
+  eachCellIn(x, y, r, i => { CRATERC[i] = 1; });
+}
+function rebuildCraters() { CRATERC.fill(0); for (const c of S.craters) eachCellIn(c.x, c.y, c.r, i => { CRATERC[i] = 1; }); }
 
 // 工事网格（地雷/铁丝网/障碍）变化后重建并让寻路缓存失效
 function rebuildForts() {

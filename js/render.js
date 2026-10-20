@@ -64,19 +64,12 @@ function drawMarks(ctx) {
   for (let k = 0; k <= 16; k++) { ctx.moveTo(k * 100, 0); ctx.lineTo(k * 100, H); }
   for (let k = 0; k <= 10; k++) { ctx.moveTo(0, k * 100); ctx.lineTo(W, k * 100); }
   ctx.stroke();
-  const tl = toWorld(0, 0);
-  ctx.font = font(10); ctx.fillStyle = rgba(COL.g, .5); ctx.textBaseline = 'top'; ctx.textAlign = 'left';
-  for (let k = 0; k < 16; k++) ctx.fillText(GRID_COLS[k], k * 100 + px(4), Math.max(0, tl.y) + px(4));
-  for (let k = 0; k < 10; k++) ctx.fillText(String(k + 1), Math.max(0, tl.x) + px(4), k * 100 + px(4));
   ctx.setLineDash([px(6), px(6)]); ctx.strokeStyle = rgba(COL.g, .25);
   ctx.beginPath(); ctx.moveTo(0, STAGING_Y); ctx.lineTo(W, STAGING_Y); ctx.stroke(); ctx.setLineDash([]);
-  ctx.fillStyle = rgba(COL.g, .6); ctx.fillText('集结海域 · 我方舰队', px(12) + Math.max(0, tl.x), STAGING_Y + px(6));
-  ctx.textAlign = 'center';
-  for (const b of TER.beaches) {
+  for (const b of TER.beaches) {   // 可登陆海滩：海面上的括线标记
     const y = coastAt(b.cx) + 64;
     ctx.strokeStyle = rgba(COL.g, .35); ctx.lineWidth = px(1);
     ctx.beginPath(); ctx.moveTo(b.x0, y - 6); ctx.lineTo(b.x0, y); ctx.lineTo(b.x1, y); ctx.lineTo(b.x1, y - 6); ctx.stroke();
-    ctx.fillStyle = rgba(COL.g, .75); ctx.font = font(11); ctx.fillText(b.name, b.cx, y + px(4));
   }
 }
 
@@ -112,10 +105,12 @@ function draw(now) {
   else { ctx.fillStyle = '#010402'; ctx.fillRect(0, 0, R.cv.width, R.cv.height); worldTf(ctx); drawPixelFallback(ctx); }
   worldTf(ctx);
   ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-  drawMarks(ctx); drawForts(time); drawSmoke(time); drawLines(time); drawPoints(time); drawEnemies(time);
-  drawTeams(time); drawShips(time); drawDD(time); drawShells(time); drawTracers(); drawPlanes(time); drawFx(); drawTool(time);
+  indexUnits();
+  drawMarks(ctx); drawCraters(); drawBuildings(); drawForts(time); drawSmoke(time); drawLines(time); drawStructures(time);
+  drawEnemies(time); drawTeams(time); drawShips(time); drawDD(time); drawPlans(time);
+  drawShells(time); drawTracers(); drawPlanes(time); drawFx(); drawTool(time); drawFormPreview();
   bloom();
   worldTf(ctx);
-  drawLabels(time);
+  drawBanners(time); drawShipMarks(); drawPings(time);
   R.ox = ox; R.oy = oy;
 }

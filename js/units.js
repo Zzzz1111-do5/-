@@ -34,7 +34,6 @@ function orderShips(ships, x, y) {
     s.state = 'move';
   });
   if (blocked) log('目标处是悬崖或礁岸，无法抢滩，舰船将停在近岸海面', 'warn', 'noland', 2);
-  else log(`${ships.length} 艘舰船 → ${gridRef(x, y)}${ships.some(s => s.land) ? '（抢滩）' : ''}`, 'info', 'mv', 1);
   return ships.length;
 }
 
@@ -56,10 +55,10 @@ function updateShips(dt) {
     // 未清除的反登陆障碍
     if (OBSC[ci(s.x, s.y)]) for (const o of S.obst) if (!o.dead && dist(o.x, o.y, s.x, s.y) < 12) {
       o.dead = true; o.known = true; damageShip(s, 1.6); rebuildForts();
-      log(`${s.label} 撞上反登陆障碍（${gridRef(s.x, s.y)}）`, 'bad');
+      log(`${s.label} 撞上反登陆障碍`, 'bad', null, 0, s);
     }
     if (!sailTo(s, dt, 26)) continue;
-    if (s.land) { s.state = 'unloading'; s.ut = 0; log(`${s.label} 抢滩（${gridRef(s.bx, s.by)}），开始卸载`, 'good'); }
+    if (s.land) { s.state = 'unloading'; s.ut = 0; log(`${s.label} 抢滩`, 'good', null, 0, { x: s.bx, y: s.by }); }
     else s.state = 'idle';
   }
 }
@@ -67,13 +66,14 @@ function updateShips(dt) {
 function disembark(s) {
   s.state = 'beached';
   const n = s.load.teams;
-  for (let k = 0; k < n; k++) {
-    let x = s.bx + (k - (n - 1) / 2) * 17, y = s.by - 6 - (k % 2) * 12;
-    if (!passInf(x, y)) { x = s.bx; y = s.by; }
-    addTeam('p', x, y, ['radio', 'rifle', 'mg'], { unit: s.label });
+  if (n) {
+    // 按登陆前预设的阵型在滩头展开
+    const u = addUnit('p', 'inf', { ship: s.label, emblem: s.kind, form: s.form || 'line', face: NORTH });
+    for (const [x, y] of unitSlots(n, u.form, s.bx, s.by - 14, NORTH, defWidth(u.form, n))) addTeam('p', x, y, ['radio', 'rifle', 'mg'], { unit: s.label, u: u.id });
   }
   if (s.load.eng) {
-    const e = addTeam('p', s.bx, s.by, ['eng', 'eng', 'eng'], { unit: s.label, depot: s.id });
+    const ue = addUnit('p', 'eng', { ship: s.label, emblem: 'eng', face: NORTH });
+    const e = addTeam('p', s.bx, s.by, ['eng', 'eng', 'eng'], { unit: s.label, depot: s.id, u: ue.id });
     makeSupplyLine(s, e);
     log(`${s.label} 建立滩头补给站，补给线接通后方`, 'good');
   }
@@ -120,8 +120,6 @@ function orderTeams(teams, x, y, t) {
   const px = -Math.sin(ang), py = Math.cos(ang), key = (a, b) => a[0] * px + a[1] * py - (b[0] * px + b[1] * py);
   const ts = teams.slice().sort((a, b) => key([a.x, a.y], [b.x, b.y])), ss = slots.slice().sort(key);
   ts.forEach((q, k) => { q.order = { t, x: ss[k][0], y: ss[k][1], gx: x, gy: y }; q.pathT = -9; });
-  const nm = { move: '移动', amove: '攻击前进', clear: '排雷剪网' }[t];
-  log(`${teams.length} 个小组${nm} → ${gridRef(x, y)}（三三制队形）`, 'info', 'ord', 1);
   return teams.length;
 }
 
@@ -165,7 +163,7 @@ function mineCheck(q, dt) {
   killMan(q); q.sup = Math.min(100, q.sup + 45); q.hitT = S.t;
   S.fx.push({ kind: 'boom', x: q.x, y: q.y, r: 12, life: 0, max: .7, side: 'e' });
   if (!m.known) { m.known = true; rebuildForts(); }
-  if (q.side === 'p') log(`${teamName(q)}在 ${gridRef(q.x, q.y)} 触雷，雷区已标定`, 'bad', 'mine' + m.id, 6);
+  if (q.side === 'p') log('触雷！雷区已标定', 'bad', 'mine' + m.id, 6, q);
 }
 
 // 工兵：排雷、剪铁丝网（指令或在已知雷区附近待命时自动作业）
@@ -177,7 +175,7 @@ function engineerWork(q, dt) {
   if (m) {
     if (dist(m.x, m.y, q.x, q.y) > m.r * .5) { const o = q.order; q.order = { t: 'move', x: m.x, y: m.y + m.r * .3 }; moveTeam(q, dt, .8); q.order = o; }
     m.clr += rate / 16;
-    if (m.clr >= 1) { m.clr = 1; rebuildForts(); log(`工兵清除了 ${gridRef(m.x, m.y)} 的雷区`, 'good'); }
+    if (m.clr >= 1) { m.clr = 1; rebuildForts(); log('雷区已清除', 'good', null, 0, m); }
   }
   if (w) { w.prog = (w.prog || 0) + rate / 4; if (w.prog >= 1) { w.cut = true; w.known = true; rebuildForts(); log('工兵剪开一段铁丝网', 'good', 'wire', 3); } }
   return q.working;

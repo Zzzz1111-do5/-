@@ -60,9 +60,9 @@ void main() {
   vec2 g = vec2(mod(gi, 16.), floor(gi / 16.));
   float a = texture2D(uAtlas, (g + mix(vec2(.05), vec2(.95), f)) / vec2(16., 7.)).a;
   a = mix(.5, a, smoothstep(4., 8., uGlyph));
-  float lit = mix(.45, 1., vis);
+  float lit = mix(.45, 1., vis) * mix(1., .5, smoothstep(14., 34., uGlyph));   // 近看时压暗地形，让部队更醒目
   base = (base + contour * .4 * land) * lit;
-  float r = rain * (land > .5 ? .45 : .32) * mix(.55, 1., vis);
+  float r = rain * (land > .5 ? .45 : .32) * mix(.55, 1., vis) * mix(1., .55, smoothstep(14., 34., uGlyph));
   vec3 c = bg + tint * (base + r) * a;
   c += vec3(.78, 1., .88) * head * a * (land > .5 ? .75 : .55) * mix(.5, 1., vis);
   c += land * tint * (.025 + elev * .06 + contour * .05) * mix(.6, 1., vis);

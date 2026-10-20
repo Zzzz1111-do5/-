@@ -19,7 +19,7 @@ function newGame(seed, level) {
   buildMap(seed);
   const r = rng(seed ^ 0x5f3759df);
   S = {
-    seed, level, t: 0, paused: true, speed: 1, nid: 1, over: null, briefed: false, holdT: 0, ai: null,
+    seed, level, t: 0, paused: true, speed: 1, nid: 1, over: null, briefed: false, holdT: 0, ai: null, phase: 'deploy', units: [], craters: [], pings: [],
     ships: [], teams: [], enemies: [], planes: [], shells: [], tracers: [], fx: [], smoke: [],
     mines: [], wire: [], obst: [], trench: [], supply: [], rlines: [], boats: [], recon: [], log: [],
     groups: { 1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [], 8: [], 9: [] }, sel: [],
@@ -31,7 +31,7 @@ function newGame(seed, level) {
   deployDefenses(r, DIFF[level]);
   aiInit(level);
   deployFleet();
-  rebuildForts();
+  rebuildForts(); rebuildCraters(); indexUnits();
   log('舰队已在集结海域就位。对岸地形已投影至沙盘，守军部署不明。', 'info');
   log(`共 ${S.points.length} 个据点，全部夺取并同时控制 ${HOLD} 秒即胜利。`, 'info');
   return S;
@@ -70,9 +70,10 @@ function deployDefenses(r, D) {
       const x = D.beachBunkers === 1 ? b.cx + (r() - .5) * 40 : lerp(b.x0, b.x1, k ? .82 : .18);
       addEnemy('bunker', x, cAt(x) - 48);
     }
+    const obj = 'E' + (TER.beaches.indexOf(b) + 1), ua = addUnit('e', 'inf', { role: 'ambush', obj });
     for (let k = 0; k < D.ambush; k++) {
       const x = lerp(b.x0, b.x1, (k + .5) / D.ambush);
-      Object.assign(addTeam('e', x, cAt(x) - 62, ['rifle', 'rifle', 'mg']), { role: 'ambush', hold: true, obj: 'E' + (TER.beaches.indexOf(b) + 1) });
+      addTeam('e', x, cAt(x) - 62, ['rifle', 'rifle', 'mg'], { role: 'ambush', hold: true, obj, u: ua.id });
     }
   }
   // 岸防重炮：岬角悬崖顶
@@ -96,20 +97,23 @@ function deployDefenses(r, D) {
   }
   // 据点守备队
   for (const p of S.points) {
-    const n = Math.max(1, ({ 1: 1, 2: 2, 3: 4 })[p.vp] + D.garrison);
+    const n = Math.max(1, ({ 1: 1, 2: 2, 3: 4 })[p.vp] + D.garrison), ug = addUnit('e', 'inf', { role: 'garrison', obj: p.key });
     for (let k = 0; k < n; k++) {
       const a = k / n * 6.28 + r(), x = p.x + Math.cos(a) * 25, y = p.y + Math.sin(a) * 20;
-      if (passInf(x, y)) Object.assign(addTeam('e', x, y, ['rifle', 'rifle', 'mg']), { role: 'garrison', obj: p.key });
+      if (passInf(x, y)) addTeam('e', x, y, ['rifle', 'rifle', 'mg'], { role: 'garrison', obj: p.key, u: ug.id });
     }
   }
   const tw = S.points.find(p => p.key === 'TW') || S.points[0];
-  for (let k = 0; k < D.reserves; k++)
-    Object.assign(addTeam('e', tw.x + (r() - .5) * 60, tw.y - 30 - r() * 30, ['rifle', 'rifle', 'mg']), { role: 'reserve', obj: tw.key });
+  let ur = null;
+  for (let k = 0; k < D.reserves; k++) {
+    if (k % 3 === 0) ur = addUnit('e', 'inf', { role: 'reserve', obj: tw.key });
+    addTeam('e', tw.x + (r() - .5) * 60, tw.y - 30 - r() * 30, ['rifle', 'rifle', 'mg'], { role: 'reserve', obj: tw.key, u: ur.id });
+  }
 }
 
 function addShip(kind, x, y, label) {
   const sp = SHIP_SPEC[kind];
-  const s = { id: S.nid++, kind, label, x, y, tx: x, ty: y, hp: sp.hp, maxhp: sp.hp, state: 'idle', heading: -Math.PI / 2, ut: 0, land: false, load: { teams: sp.teams, eng: sp.eng } };
+  const s = { id: S.nid++, kind, label, x, y, tx: x, ty: y, hp: sp.hp, maxhp: sp.hp, state: 'idle', heading: -Math.PI / 2, ut: 0, land: false, plan: null, form: 'line', load: { teams: sp.teams, eng: sp.eng } };
   S.ships.push(s);
   return s;
 }
@@ -130,12 +134,14 @@ function addEnemy(kind, x, y) {
 }
 
 // kind：info / warn / bad / good；同类消息按 key 节流
-function log(msg, kind = 'info', key, gap = 5) {
+// at：事件发生位置（{x, y}），地图上会出现提示波纹，点击消息可跳转
+function log(msg, kind = 'info', key, gap = 5, at) {
   if (key) {
     if (S.throttle[key] && S.t - S.throttle[key] < gap) return;
     S.throttle[key] = S.t;
   }
-  S.log.unshift({ t: S.t, msg, kind });
+  if (at && at.x != null) { S.pings.push({ x: at.x, y: at.y, t: S.t, kind }); if (S.pings.length > 30) S.pings.shift(); }
+  S.log.unshift({ t: S.t, msg, kind, x: at && at.x, y: at && at.y, id: S.nid++ });
   if (S.log.length > 80) S.log.length = 80;
 }
 

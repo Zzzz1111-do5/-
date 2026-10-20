@@ -4,9 +4,9 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Noto+Sans+SC:wght@400;700&family=Silkscreen&display=swap">
 <style>
-/* 布局：沙盘占主区（可缩放平移），右侧小地图与情报面板，下方指挥栏。单一暗色作战台，不随主题切换 */
+/* 布局：战场铺满全屏；左上事件、顶部据点图标、右上时钟；底部左小地图、中单位卡、右指令图标（全战式）。单一暗色作战台 */
 :root {
-  --bg: #020704; --panel: rgba(4, 14, 8, .9); --line: rgba(61, 255, 138, .2); --line-hi: rgba(61, 255, 138, .55);
+  --bg: #020704; --panel: rgba(3, 12, 7, .86); --line: rgba(61, 255, 138, .22); --line-hi: rgba(61, 255, 138, .6);
   --g: #3dff8a; --g-mid: #1fa457; --enemy: #ff3d6e; --intel: #5cc8ff; --sel: #b07cff; --amber: #ffc24a;
   --text: #c6f7d8; --mute: #6c9a80;
   --f-ui: "IBM Plex Mono", "Noto Sans SC", ui-monospace, monospace;
@@ -18,224 +18,170 @@ html, body { height: 100%; }
 body { margin: 0; background: var(--bg); color: var(--text); font: 13px/1.45 var(--f-ui); overflow: hidden; }
 button { font: inherit; color: inherit; cursor: pointer; }
 button:focus-visible { outline: 2px solid var(--sel); outline-offset: 2px; }
-button:disabled { cursor: not-allowed; opacity: .35; }
-#bgrain { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 0; opacity: .18; pointer-events: none; }
-#app {
-  position: relative; z-index: 1; height: 100%; box-sizing: border-box; display: grid; gap: 8px;
-  grid-template-columns: minmax(0, 1fr) 300px; grid-template-rows: auto minmax(0, 1fr) auto;
-  grid-template-areas: "top top" "stage side" "cmd side";
-  padding-block: 8px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
-}
-#top { grid-area: top; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; }
-.brand { display: flex; align-items: baseline; gap: 10px; }
-.brand b { font: 22px/1 var(--f-px); color: var(--g); letter-spacing: .04em; text-shadow: 0 0 12px rgba(61, 255, 138, .6); }
-.brand span { font-weight: 700; font-family: "Noto Sans SC", var(--f-ui); letter-spacing: .12em; }
-.op { color: var(--mute); font-size: 12px; }
-#aiLevel { color: var(--g); font-weight: 600; }
-.clock { display: flex; flex-wrap: wrap; gap: 4px 14px; font-variant-numeric: tabular-nums; margin-left: auto; }
-#clock { color: var(--g); font-weight: 600; }
-#remain { color: var(--mute); }
-.tb { display: flex; gap: 6px; }
-.btn { background: var(--panel); border: 1px solid var(--line); padding: 5px 11px; border-radius: 4px; }
-.btn:hover:not(:disabled) { border-color: var(--line-hi); }
-.btn.hot { border-color: var(--sel); color: #e6d8ff; box-shadow: 0 0 14px rgba(176, 124, 255, .35); }
-
-#stage {
-  grid-area: stage; position: relative; min-height: 0; border: 1px solid var(--line-hi); border-radius: 6px; overflow: hidden;
-  box-shadow: 0 0 22px rgba(61, 255, 138, .16), inset 0 0 60px rgba(0, 0, 0, .8); background: var(--bg);
-}
+button:disabled { cursor: not-allowed; opacity: .3; }
+.ic { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.ic .f { fill: currentColor; stroke: none; }
+#bgrain { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 0; opacity: .15; pointer-events: none; }
+#stage { position: fixed; inset: 0; z-index: 1; background: var(--bg); }
 #cv { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: crosshair; }
 #stage::after {
   content: ""; position: absolute; inset: 0; pointer-events: none;
-  background: repeating-linear-gradient(to bottom, transparent 0 2px, rgba(0, 0, 0, .2) 2px 3px), radial-gradient(ellipse at center, transparent 55%, rgba(0, 0, 0, .55) 100%);
+  background: repeating-linear-gradient(to bottom, transparent 0 2px, rgba(0, 0, 0, .18) 2px 3px), radial-gradient(ellipse at center, transparent 60%, rgba(0, 0, 0, .6) 100%);
 }
-#pauseBand {
-  position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 2; pointer-events: none;
-  border: 1px solid var(--sel); background: rgba(10, 4, 20, .85); color: #e6d8ff; padding: 5px 14px; border-radius: 4px;
-  box-shadow: 0 0 18px rgba(176, 124, 255, .35); white-space: nowrap; font-size: 12px; max-width: calc(100% - 40px); overflow: hidden; text-overflow: ellipsis;
-}
-#pauseBand b { font-family: var(--f-px); font-weight: 400; margin-right: 8px; color: var(--sel); }
-#toolHint { position: absolute; left: 10px; bottom: 8px; z-index: 2; pointer-events: none; color: var(--text); opacity: .75; font-size: 12px; max-width: 70%; text-shadow: 0 0 6px #000; }
+.ov { position: absolute; z-index: 3; }
+.box { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 0 18px rgba(0, 0, 0, .6); }
 
-#cmd { grid-area: cmd; display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: stretch; }
-.cgrp { display: flex; flex-wrap: wrap; gap: 6px; align-items: stretch; }
-.cgrp > em { font: 10px var(--f-px); font-style: normal; color: var(--mute); writing-mode: vertical-rl; letter-spacing: .1em; align-self: center; }
-.cmd {
-  display: grid; grid-template-columns: 1fr auto; gap: 0 8px; min-width: 88px; text-align: left;
-  background: var(--panel); border: 1px solid var(--line); border-radius: 5px; padding: 5px 9px;
-}
-.cmd b { font-weight: 600; }
-.cmd kbd { font: 10px var(--f-ui); color: var(--mute); border: 1px solid var(--line); border-radius: 3px; padding: 0 4px; align-self: center; }
-.cmd small { grid-column: 1 / 3; font-size: 11px; color: var(--mute); }
-.cmd:hover:not(:disabled) { border-color: var(--line-hi); }
-.cmd.on { border-color: var(--sel); box-shadow: 0 0 14px rgba(176, 124, 255, .4); }
-#support .cmd.on { border-color: var(--g); box-shadow: 0 0 14px rgba(61, 255, 138, .35); }
+/* 顶部 */
+#feed { top: calc(10px + env(safe-area-inset-top, 0px)); left: max(16px, env(safe-area-inset-left, 0px)); margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; max-width: min(340px, 40vw); pointer-events: auto; }
+#feed li { background: var(--panel); border-left: 2px solid var(--intel); padding: 3px 8px; font-size: 12px; border-radius: 0 4px 4px 0; cursor: default; }
+#feed li[data-x] { cursor: pointer; }
+#feed li.warn { border-color: var(--amber); color: #ffe2a3; }
+#feed li.bad { border-color: var(--enemy); color: #ffc2d0; }
+#feed li.good { border-color: var(--g); color: #c9ffde; }
+#objs { top: calc(10px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); display: flex; gap: 4px; padding: 5px 6px; flex-wrap: wrap; justify-content: center; max-width: 46vw; }
+.ob { position: relative; width: 34px; height: 34px; display: grid; place-items: center; background: rgba(255, 61, 110, .08); border: 1px solid rgba(255, 61, 110, .5); border-radius: 5px; color: var(--enemy); padding: 0; }
+.ob.p { color: var(--g); border-color: var(--line-hi); background: rgba(61, 255, 138, .1); }
+.ob.hot { box-shadow: 0 0 10px var(--amber); border-color: var(--amber); }
+.ob i { position: absolute; left: 2px; bottom: 2px; height: 2px; background: var(--g); box-shadow: 0 0 4px var(--g); max-width: calc(100% - 4px); }
+.hold { align-self: center; width: 60px; height: 4px; background: rgba(61, 255, 138, .15); border-radius: 2px; overflow: hidden; }
+.hold i { display: block; height: 100%; background: var(--g); }
+#topr { top: calc(10px + env(safe-area-inset-top, 0px)); right: max(16px, env(safe-area-inset-right, 0px)); display: flex; align-items: center; gap: 6px; padding: 4px 6px; }
+#clock { font: 600 15px var(--f-ui); color: var(--g); font-variant-numeric: tabular-nums; padding: 0 6px; }
+.tb { background: transparent; border: 1px solid var(--line); border-radius: 4px; min-width: 32px; height: 30px; padding: 0 8px; }
+.tb:hover { border-color: var(--line-hi); }
+.tb.hot { border-color: var(--sel); color: #e6d8ff; box-shadow: 0 0 12px rgba(176, 124, 255, .4); }
+#pauseBand { top: 64px; left: 50%; transform: translateX(-50%); pointer-events: none; border: 1px solid var(--sel); background: rgba(10, 4, 20, .85); color: var(--sel); padding: 3px 14px; border-radius: 4px; font: 12px var(--f-px); letter-spacing: .2em; box-shadow: 0 0 18px rgba(176, 124, 255, .35); }
 
-#side { grid-area: side; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-right: 2px; }
-.pnl { border: 1px solid var(--line); border-radius: 5px; background: var(--panel); padding: 8px 10px; display: grid; gap: 6px; }
-.pnl h2 { margin: 0; font: 11px/1.2 var(--f-ui); letter-spacing: .14em; color: var(--mute); display: flex; justify-content: space-between; gap: 8px; }
-.pnl h2 em { font: 10px var(--f-px); font-style: normal; color: var(--g-mid); letter-spacing: .05em; }
-#mm { width: 100%; aspect-ratio: 16 / 10; display: block; border: 1px solid var(--line); border-radius: 3px; cursor: pointer; image-rendering: pixelated; touch-action: none; }
-.zoom { display: flex; gap: 6px; }
-.zoom .btn { flex: 1; padding: 3px 0; }
-.dim { color: var(--mute); margin: 0; font-size: 12px; }
-.warn { color: var(--amber); }
-.row { display: grid; grid-template-columns: auto auto 1fr auto; gap: 4px 8px; align-items: center; font-size: 12px; }
-.row .bar { grid-column: 1 / -1; }
-.row .dim { font-size: 11px; }
-.kv { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; font-size: 12px; align-items: center; }
-.kv span:nth-child(odd) { color: var(--mute); }
-.tri { width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-bottom: 9px solid var(--g); }
-.tri.sup { border-bottom-color: var(--intel); }
-.bar { display: block; height: 3px; background: rgba(61, 255, 138, .12); border-radius: 2px; overflow: hidden; }
-.bar i { display: block; height: 100%; background: var(--g); box-shadow: 0 0 6px var(--g); }
-#groups { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; }
-.grp { display: flex; min-width: 0; }
-.grp button { background: transparent; border: 1px solid var(--line); padding: 3px 5px; font-size: 11px; }
-.gsel { flex: 1; text-align: left; border-radius: 4px 0 0 4px; color: var(--sel); min-width: 0; white-space: nowrap; overflow: hidden; }
-.gsel span { color: var(--mute); }
-.gset { border-left: 0 !important; border-radius: 0 4px 4px 0; color: var(--mute); }
-.grp button:hover { border-color: var(--sel); }
-.dd { display: flex; align-items: center; gap: 10px; }
-#ddHull { display: flex; gap: 4px; }
-#ddHull i { width: 12px; height: 12px; clip-path: polygon(50% 0, 100% 38%, 82% 100%, 18% 100%, 0 38%); background: rgba(61, 255, 138, .15); }
-#ddHull i.on { background: var(--g); }
-.ddst { font-size: 12px; }
-.ddst.repair { color: var(--amber); }
-.ddst.sunk { color: var(--enemy); }
-#ddRepair .bar i { background: var(--amber); box-shadow: 0 0 6px var(--amber); }
-#ddExposed { color: var(--enemy); font-size: 12px; margin: 0; }
-#pts { display: grid; gap: 4px; }
-.pt { display: grid; grid-template-columns: 22px 1fr auto; gap: 1px 6px; align-items: center; font-size: 12px; }
-.pt b { color: var(--enemy); font-weight: 600; font-size: 11px; }
-.pt.p b { color: var(--g); }
-.pt em { font-style: normal; color: var(--amber); font-size: 10px; }
-.pt .bar { grid-column: 2 / 4; }
-.pt.hot span:nth-child(2) { color: var(--amber); }
-#intel { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 12px; }
-#intel li { display: grid; grid-template-columns: 42px 1fr; gap: 6px; }
-#intel time { color: var(--mute); font-variant-numeric: tabular-nums; }
-#intel .warn { color: var(--amber); }
-#intel .bad { color: var(--enemy); }
-#intel .good { color: var(--g); }
-.legend { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 10px; font-size: 11px; color: var(--mute); }
-.legend span::before { content: attr(data-g); color: var(--g); margin-right: 5px; }
-.legend span.e::before { color: var(--enemy); }
-.legend span.i::before { color: var(--intel); }
+/* 底部 */
+#bottom { left: 0; right: 0; bottom: 0; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: end;
+  padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); pointer-events: none; }
+#bottom > * { pointer-events: auto; }
+#mmBox { padding: 6px; display: grid; gap: 5px; width: 220px; }
+#mm { width: 100%; aspect-ratio: 16 / 10; display: block; border-radius: 3px; cursor: pointer; image-rendering: pixelated; touch-action: none; }
+.zoom { display: flex; gap: 5px; }
+.zoom .tb { flex: 1; height: 24px; }
+#cards { display: flex; gap: 5px; overflow-x: auto; padding: 6px; align-self: end; justify-self: center; max-width: 100%; scrollbar-width: thin; }
+.uc { position: relative; flex: 0 0 auto; width: 62px; height: 78px; display: grid; justify-items: center; align-content: start; gap: 2px; padding: 5px 4px 4px;
+  background: linear-gradient(180deg, rgba(61, 255, 138, .08), rgba(3, 12, 7, .9)); border: 1px solid var(--line); border-radius: 5px; color: var(--g); }
+.uc:hover { border-color: var(--line-hi); }
+.uc .em { width: 26px; height: 26px; filter: drop-shadow(0 0 4px rgba(61, 255, 138, .6)); }
+.uc > b { font: 600 12px var(--f-ui); color: var(--text); font-variant-numeric: tabular-nums; }
+.uc .bars { display: grid; gap: 2px; width: 100%; }
+.uc .bars > i { display: block; height: 3px; background: rgba(255, 255, 255, .08); border-radius: 1px; overflow: hidden; }
+.uc .bars > i > i { display: block; height: 100%; }
+.uc .s > i { background: var(--g); } .uc .m > i { background: var(--intel); } .uc .a > i { background: var(--amber); }
+.uc .gp { position: absolute; top: 2px; left: 4px; font-size: 9px; color: var(--sel); letter-spacing: -1px; }
+.uc .st { position: absolute; top: 3px; right: 3px; color: var(--mute); }
+.uc .mini { width: 12px; height: 12px; stroke-width: 2; }
+.uc.sel { border-color: var(--sel); box-shadow: 0 0 14px rgba(176, 124, 255, .55); background: linear-gradient(180deg, rgba(176, 124, 255, .18), rgba(3, 12, 7, .92)); }
+.uc.waver { color: var(--amber); }
+.uc.rout { color: var(--enemy); animation: blink .6s steps(2) infinite; }
+@keyframes blink { 50% { border-color: var(--enemy); } }
+#cmdBox { padding: 6px; display: grid; gap: 6px; }
+.row { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+.ib { position: relative; width: 40px; height: 40px; display: grid; place-items: center; background: rgba(61, 255, 138, .05); border: 1px solid var(--line); border-radius: 5px; color: var(--g); padding: 0; }
+.ib:hover:not(:disabled) { border-color: var(--line-hi); background: rgba(61, 255, 138, .12); }
+.ib.on { border-color: var(--sel); color: #e6d8ff; box-shadow: 0 0 12px rgba(176, 124, 255, .5); }
+#support .ib { color: var(--intel); }
+#forms .ib { color: var(--text); }
+.ib kbd { position: absolute; right: 2px; bottom: 1px; font: 8px var(--f-ui); color: var(--mute); }
+.ib em { position: absolute; left: 3px; top: 1px; font: 600 10px var(--f-ui); font-style: normal; color: var(--amber); }
+.sep { width: 1px; background: var(--line); margin: 0 3px; }
+#reserveBox { display: flex; align-items: center; gap: 6px; justify-content: flex-end; color: var(--mute); font-size: 11px; }
+#reserveBox b { color: var(--intel); }
+#deploy { top: 64px; left: 50%; transform: translateX(-50%); display: grid; justify-items: center; gap: 6px; }
+#btnStart { font: 15px var(--f-px); letter-spacing: .12em; color: var(--bg); background: var(--g); border: 0; border-radius: 6px; padding: 10px 28px; box-shadow: 0 0 26px rgba(61, 255, 138, .6); }
+#btnStart span { font: 700 14px "Noto Sans SC", var(--f-ui); letter-spacing: .2em; margin-left: 8px; }
+#deploy p { margin: 0; font-size: 12px; color: var(--text); background: var(--panel); padding: 3px 10px; border-radius: 4px; }
 
-.modal { position: fixed; inset: 0; z-index: 10; display: grid; place-items: center; background: rgba(1, 4, 2, .8); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
-.sheet {
-  max-width: 640px; max-height: calc(100% - 32px); overflow-y: auto; border: 1px solid var(--sel); border-radius: 8px; background: #07040f;
-  box-shadow: 0 0 0 4px rgba(176, 124, 255, .12), 0 0 40px rgba(176, 124, 255, .3); padding: 18px 22px; display: grid; gap: 10px;
-}
+/* 简报与结算 */
+.modal { position: fixed; inset: 0; z-index: 10; display: grid; place-items: center; background: rgba(1, 4, 2, .82); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.sheet { max-width: 680px; max-height: calc(100% - 32px); overflow-y: auto; border: 1px solid var(--sel); border-radius: 8px; background: #07040f;
+  box-shadow: 0 0 0 4px rgba(176, 124, 255, .12), 0 0 40px rgba(176, 124, 255, .3); padding: 18px 22px; display: grid; gap: 10px; }
 .sheet h1 { margin: 0; font: 26px/1.1 var(--f-px); color: var(--g); text-shadow: 0 0 14px rgba(61, 255, 138, .6); }
 .sheet h1 small { display: block; font: 700 15px/1.5 "Noto Sans SC", var(--f-ui); color: var(--text); letter-spacing: .1em; margin-top: 4px; }
-.sheet h3 { margin: 4px 0 0; font-size: 12px; color: var(--g); letter-spacing: .1em; }
 .sheet p { margin: 0; }
-.sheet ul { margin: 0; padding-left: 18px; display: grid; gap: 3px; font-size: 12.5px; }
-.sheet kbd { border: 1px solid var(--line-hi); border-radius: 3px; padding: 0 4px; font: 11px var(--f-ui); color: var(--g); }
+.legend { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px 12px; font-size: 12px; }
+.legend span { display: flex; align-items: center; gap: 6px; color: var(--text); }
+.legend .ic { color: var(--g); flex: none; }
+.legend .e .ic { color: var(--enemy); }
+.keys { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 4px 12px; font-size: 12px; color: var(--mute); }
+.keys kbd, .sheet kbd { border: 1px solid var(--line-hi); border-radius: 3px; padding: 0 4px; font: 11px var(--f-ui); color: var(--g); }
 .diff { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .diff button { background: transparent; border: 1px solid var(--line); border-radius: 5px; padding: 8px 10px; text-align: left; font-weight: 600; display: grid; gap: 2px; }
 .diff button small { font-weight: 400; font-size: 11px; color: var(--mute); }
 .diff button.on { border-color: var(--g); color: var(--g); box-shadow: 0 0 14px rgba(61, 255, 138, .3); }
-.sheet .go { justify-self: start; background: transparent; border: 1px solid var(--g); color: var(--g); padding: 7px 18px; border-radius: 4px; box-shadow: 0 0 16px rgba(61, 255, 138, .35); }
+.go { justify-self: start; background: transparent; border: 1px solid var(--g); color: var(--g); padding: 7px 18px; border-radius: 4px; box-shadow: 0 0 16px rgba(61, 255, 138, .35); }
 #endTitle.win { color: var(--g); }
 #endTitle.lose { color: var(--enemy); text-shadow: 0 0 14px rgba(255, 61, 110, .6); }
 #endStats { display: grid; grid-template-columns: auto 1fr; gap: 4px 18px; margin: 0; font-variant-numeric: tabular-nums; }
 #endStats dt { color: var(--mute); }
 #endStats dd { margin: 0; }
-@media (prefers-reduced-motion: reduce) { #bgrain { display: none; } }
+@media (prefers-reduced-motion: reduce) { #bgrain { display: none; } .uc.rout { animation: none; } }
 @media (max-width: 900px) {
   body { overflow: auto; }
-  #app { height: auto; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto; grid-template-areas: "top" "stage" "cmd" "side"; }
-  #stage { height: 62vh; min-height: 320px; }
-  #side { overflow: visible; }
-  .clock { margin-left: 0; }
-  .cmd { min-width: 0; flex: 1 1 96px; }
-  .cgrp > em { display: none; }
+  #stage { position: relative; height: 62vh; min-height: 340px; }
+  #feed { top: 56px; max-width: calc(100% - 32px); } #feed li:nth-child(n+3) { display: none; }
+  #objs { top: auto; bottom: 8px; max-width: calc(100% - 32px); flex-wrap: nowrap; overflow-x: auto; justify-content: flex-start; }
+  .ob { flex: 0 0 auto; width: 28px; height: 28px; } .ob .ic { width: 18px; height: 18px; }
+  #bottom { position: static; grid-template-columns: minmax(0, 1fr); padding-top: 8px; background: var(--bg); }
+  #mmBox { width: auto; order: 3; } #cards { justify-self: stretch; } #cmdBox { order: 2; }
+  .row { justify-content: flex-start; }
+  #deploy { top: 110px; } #deploy p { display: none; }
   .diff { grid-template-columns: minmax(0, 1fr); }
 }
 </style>
 
 <canvas id="bgrain" aria-hidden="true"></canvas>
-<div id="app">
-  <header id="top">
-    <div class="brand"><b>BEACHHEAD</b><span>滩头沙盘</span></div>
-    <span class="op">行动代号「潮汐」· 守军 AI：<b id="aiLevel">困难</b></span>
-    <div class="clock"><span id="clock">T+00:00</span><span id="remain"></span><span id="force"></span></div>
-    <div class="tb">
-      <button class="btn" id="btnPause" type="button">▶ 继续</button>
-      <button class="btn" id="btnSpeed" type="button" title="推演速度">1×</button>
-      <button class="btn" id="btnNew" type="button">新战局</button>
-      <button class="btn" id="btnHelp" type="button">简报</button>
-    </div>
-  </header>
-
-  <main id="stage">
-    <canvas id="cv" aria-label="登陆战沙盘"></canvas>
-    <div id="pauseBand" hidden><b>PAUSED</b>推演暂停 · 可从容分散编队、编组、下达指令</div>
-    <div id="toolHint"></div>
-  </main>
-
-  <section id="cmd" aria-label="指挥栏">
-    <div class="cgrp" id="orders"></div>
-    <div class="cgrp" id="support"></div>
-  </section>
-
-  <aside id="side">
-    <div class="pnl"><h2>全图 <em>MINIMAP</em></h2><canvas id="mm" aria-label="小地图，点击跳转"></canvas>
-      <div class="zoom"><button class="btn" id="zOut" type="button" aria-label="缩小">−</button><button class="btn" id="zFit" type="button">全图</button><button class="btn" id="zIn" type="button" aria-label="放大">＋</button></div></div>
-    <div class="pnl"><h2>选中 <em>SELECTION</em></h2><div id="selInfo"></div></div>
-    <div class="pnl"><h2>编组 <em>CTRL+1–9 编入 · 1–9 调出 · 连按居中</em></h2><div id="groups"></div></div>
-    <div class="pnl">
-      <h2>驱逐舰 DD-17 <em>NAVAL GUN</em></h2>
-      <div class="dd"><div id="ddHull"></div><span id="ddState" class="ddst"></span></div>
-      <div id="ddRepair" hidden><span class="dim">损管小组抢修中，期间无法提供火力掩护</span><span class="bar"><i id="ddRepairBar"></i></span></div>
-      <p id="ddExposed" hidden>坐标已暴露，敌反炮兵射击来袭</p>
-      <p class="dim">射程 1000。每次射击 70% 概率暴露坐标并遭反击；中弹 3 次沉没。按 D 选中后右键可在海上机动。</p>
-      <p class="dim" id="reserve"></p>
-    </div>
-    <div class="pnl"><h2>据点 <em>STRONGPOINTS</em></h2><div id="pts"></div></div>
-    <div class="pnl"><h2>情报 <em>INTEL</em></h2><ul id="intel"></ul></div>
-    <div class="pnl"><h2>图例 <em>LEGEND</em></h2>
-      <div class="legend">
-        <span data-g="▲">突击登陆舰</span><span data-g="◭">补给登陆舰</span>
-        <span data-g="⬠">驱逐舰</span><span data-g="■">士兵（环 = 通讯兵）</span>
-        <span data-g="○">工兵</span><span class="i" data-g="⌃">飞机</span>
-        <span class="e" data-g="×">铁丝网 / 障碍</span><span class="e" data-g="◌">雷区（已标定）</span>
-        <span class="e" data-g="■">敌军（仅视野内）</span><span class="e" data-g="?">模糊弹道来源</span>
-        <span data-g="≈">河流 / 浅滩</span><span data-g="|">悬崖（不可登陆）</span>
-      </div>
-    </div>
-  </aside>
-</div>
+<main id="stage">
+  <canvas id="cv" aria-label="登陆战沙盘"></canvas>
+  <ul id="feed" class="ov" aria-live="polite"></ul>
+  <div id="objs" class="ov box" aria-label="据点"></div>
+  <div id="topr" class="ov box">
+    <span id="clock">00:00</span>
+    <button class="tb" id="btnPause" type="button" title="暂停 / 继续（空格）">▶</button>
+    <button class="tb" id="btnSpeed" type="button" title="推演速度">1×</button>
+    <button class="tb" id="btnNew" type="button" title="新战局（再点一次确认）">↻</button>
+    <button class="tb" id="btnHelp" type="button" title="简报与操作说明">?</button>
+  </div>
+  <div id="pauseBand" class="ov" hidden>PAUSED</div>
+  <div id="deploy" class="ov" hidden>
+    <button id="btnStart" type="button">H-HOUR<span>开始战斗</span></button>
+    <p>右键集结海域内布阵 · 右键海岸预定登陆点 · 选择阵型 · Enter 开始</p>
+  </div>
+</main>
+<section id="bottom" class="ov">
+  <div id="mmBox" class="box">
+    <canvas id="mm" aria-label="小地图，点击跳转"></canvas>
+    <div class="zoom"><button class="tb" id="zOut" type="button" title="缩小">−</button><button class="tb" id="zFit" type="button" title="全图">⊡</button><button class="tb" id="zIn" type="button" title="放大">＋</button></div>
+  </div>
+  <div id="cards" class="box" aria-label="部队"></div>
+  <div id="cmdBox" class="box">
+    <div class="row" id="orders"></div>
+    <div class="row"><span id="forms" class="row"></span><span class="sep"></span><span id="reserveBox" title="后备兵力（经增援线上岸）"><svg viewBox="0 0 24 24" class="ic" aria-hidden="true"><path d="M12 4l6 7-6 7-6-7z"/></svg><b id="reserve"></b></span></div>
+    <div class="row" id="support"></div>
+  </div>
+</section>
 
 <div class="modal" id="brief" hidden>
   <div class="sheet">
     <h1>BEACHHEAD<small>滩头沙盘 · 作战简报</small></h1>
-    <p>你是登陆指挥官。舰队编成已经固定：6 艘突击登陆舰（每艘 15 人 = 5 个三人组）、2 艘补给登陆舰（4 个三人组 + 3 名工兵）、驱逐舰 DD-17、侦察机 3 架次、空袭 3 架次、烟幕弹 4 发、增援线 2 条与 6 组后备兵力。对岸地形已投影到沙盘上，守军部署看不见。</p>
-    <h3>海上：分散、调动、抢滩</h3>
-    <ul>
-      <li>拖框选舰，<kbd>Ctrl</kbd>+<kbd>1–9</kbd> 编组，右键下达航行；落点在<b>沙滩</b>即抢滩。悬崖、礁岸不能登陆，暗礁不能通过，浅滩里可能藏着反登陆障碍。</li>
-      <li>舰船被击沉时船上人员全部损失。补给舰抢滩后自动铺设补给线，工兵会自动抢修。</li>
-    </ul>
-    <h3>陆上：三三制小组夺点</h3>
-    <ul>
-      <li>每组 3 人：通讯兵、步枪手、机枪手。通讯兵点亮周围视野，他阵亡后那片视野消失。</li>
-      <li>右键移动（行进间射击）、<kbd>A</kbd> 攻击前进、<kbd>H</kbd> 坚守、<kbd>X</kbd> 撤退。多组同时下令会自动排成三三制三角队形。</li>
-      <li>小组会被火力<b>压制</b>：压制过高就趴下动不了，再高就溃退。先用机枪和舰炮压住碉堡，再从侧翼冲上去。</li>
-      <li>雷区踩到才会暴露，工兵（<kbd>C</kbd>）可排雷、剪铁丝网，爆炸也能炸开。树林、城镇、山脊会挡住视线；<kbd>V</kbd> 烟幕弹遮断双方视线。</li>
-      <li>逐个夺取据点（★ 越多越重要），全部夺取并同时控制 30 秒即胜利。时限 45 分钟。</li>
-    </ul>
-    <h3>守军 AI</h3>
-    <p class="dim">只凭自己的观察哨、雷达和部队看到的情报行动：碉堡守火力纪律，滩头有伏兵，岸防重炮由雷达引导，炮兵对移动目标打提前量、多门齐射后转移阵地，丢了据点会集结反击，狙击手优先打通讯兵，北面会陆续开来增援。夺下雷达站能让岸防炮失去远程引导。</p>
-    <div class="diff" id="diff" role="radiogroup" aria-label="守军 AI 难度">
-      <button type="button" role="radio" data-lv="normal">普通<small>守军较少，反应慢</small></button>
-      <button type="button" role="radio" data-lv="hard">困难<small>纵深防御，集火、提前量</small></button>
-      <button type="button" role="radio" data-lv="hell">地狱<small>兵力更多，几乎即时反应</small></button>
+    <p>你是登陆指挥官。舰队已在集结海域：6 艘突击登陆舰（每艘一个连，5 个三人组）、2 艘补给登陆舰（4 个三人组 + 工兵）、驱逐舰 DD-17，另有侦察、空袭、烟幕与增援。战斗开始前先排兵布阵：在集结海域里摆好舰队，给每艘船预定登陆点，选好上岸后的阵型。</p>
+    <div class="legend" id="legend"></div>
+    <div class="keys">
+      <span><kbd>左键</kbd> 选择 · 拖框多选</span><span><kbd>右键</kbd> 移动 · <b>拖拽定宽与朝向</b></span>
+      <span><kbd>A</kbd> 攻击前进 · <kbd>Q</kbd> 冲锋</span><span><kbd>H</kbd> 坚守 · <kbd>X</kbd> 撤退</span>
+      <span><kbd>Z</kbd> 横队 · <kbd>C</kbd> 三三制 · <kbd>B</kbd> 散开</span><span><kbd>Ctrl+1–9</kbd> 编组 · <kbd>1–9</kbd> 调出</span>
+      <span><kbd>F</kbd> 舰炮 · <kbd>S</kbd> 烟幕 · <kbd>D</kbd> 选驱逐舰</span><span><kbd>R</kbd> 侦察 · <kbd>T</kbd> 空袭 · <kbd>E</kbd> 增援线</span>
+      <span><kbd>N</kbd> 工兵排雷剪网</span><span><kbd>空格</kbd> 暂停 · 滚轮缩放 · 中键拖动</span>
     </div>
-    <p class="dim">操作镜头：滚轮缩放，中键或 Alt 拖动、方向键平移，点小地图跳转。触屏：单指拖动平移，双指缩放，点按选择。<kbd>空格</kbd> 随时暂停。</p>
-    <button class="go" id="btnBrief" type="button">开始部署</button>
+    <p class="keys">侧翼和背后受到攻击会让部队士气崩溃；战壕只挡正面（海面方向）的火力；冲锋前先用机枪和舰炮压住敌人。全部据点同时控制 30 秒即胜利。</p>
+    <div class="diff" id="diff" role="radiogroup" aria-label="守军 AI 难度">
+      <button type="button" role="radio" data-lv="normal">普通<small>守军较少，士气易崩</small></button>
+      <button type="button" role="radio" data-lv="hard">困难<small>纵深防御，集火、提前量</small></button>
+      <button type="button" role="radio" data-lv="hell">地狱<small>兵力更多，死战不退</small></button>
+    </div>
+    <button class="go" id="btnBrief" type="button">进入部署</button>
   </div>
 </div>
 
@@ -252,6 +198,7 @@ button:disabled { cursor: not-allowed; opacity: .35; }
 <script src="js/mapgen2.js"></script>
 <script src="js/grid.js"></script>
 <script src="js/state.js"></script>
+<script src="js/formation.js"></script>
 <script src="js/units.js"></script>
 <script src="js/combat.js"></script>
 <script src="js/support.js"></script>
@@ -263,6 +210,8 @@ button:disabled { cursor: not-allowed; opacity: .35; }
 <script src="js/render.js"></script>
 <script src="js/render2.js"></script>
 <script src="js/render3.js"></script>
+<script src="js/render4.js"></script>
+<script src="js/render5.js"></script>
 <script src="js/ui.js"></script>
 <script src="js/input.js"></script>
 <script src="js/hud.js"></script>

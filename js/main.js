@@ -44,7 +44,7 @@ function frame(now) {
   ema = ema * .95 + dt * .05;
   if (ema > .045 && !R.dprCap && now > 6000 && (window.devicePixelRatio || 1) > 1) { R.dprCap = 1; resize(); }
   camKeys(dt);
-  if (!S.paused && !S.over && S.briefed) {
+  if (S.phase === 'battle' && !S.paused && !S.over && S.briefed) {
     acc += dt * S.speed;
     let n = 0;
     while (acc >= 1 / 30 && n++ < 8) { step(1 / 30); acc -= 1 / 30; }
@@ -58,7 +58,7 @@ function frame(now) {
 
 function start(data) {
   if (data && data.S && data.S.points && data.S.dd) {
-    S = data.S; buildMap(S.seed); aiCache(); rebuildForts();
+    S = data.S; buildMap(S.seed); aiCache(); rebuildForts(); rebuildCraters(); indexUnits();
   } else newGame(undefined, 'hard');
   U.level = S.level;
   initRender($('cv'));
@@ -67,7 +67,6 @@ function start(data) {
   $('brief').hidden = !!S.briefed;
   new ResizeObserver(() => resize()).observe($('stage'));
   updateVision(); updateHud();
-  decode(document.querySelector('.brand b'), 'BEACHHEAD', 1100);
   bgRain();
   requestAnimationFrame(frame);
 }

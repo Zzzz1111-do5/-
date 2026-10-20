@@ -13,14 +13,29 @@ function killMan(q, prefer) {
   if (!q.men.length) return;
   const pi = prefer ? q.men.indexOf(prefer) : -1;
   const role = q.men.splice(pi >= 0 ? pi : Math.floor(Math.random() * q.men.length), 1)[0];
+  const u = unitOf(q);
+  if (u) { u.morale -= 5 * (S.t - u.flankT < 3 ? 1.5 : 1); u.hitT = S.t; }
   if (q.side === 'e') { S.stats.killed++; return; }
   S.stats.lost++;
-  if (role === 'radio') log(`${teamName(q)}通讯兵阵亡，${gridRef(q.x, q.y)} 视野消失`, 'bad');
+  if (role === 'radio') log('通讯兵阵亡，视野丢失', 'bad', 'radio', 4, q);
   if (!q.men.length && q.kind === 'eng') log(`${teamName(q)}全员阵亡`, 'bad');
 }
-const suppress = (q, v) => { q.sup = Math.min(100, q.sup + v); q.hitT = S.t; };
-// 掩体系数：战壕 + 原地构筑工事
-const shelter = q => (q.inTrench ? .55 : 1) * (S.t - q.movedT > 5 ? (q.side === 'e' ? aiD().dig : .75) : 1);
+// 压制：来自侧后方（偏离朝向 100° 以上）的火力压制翻倍并打击士气
+function suppress(q, v, sx, sy) {
+  if (sx != null && angDiff(Math.atan2(sy - q.y, sx - q.x), faceOf(q)) > 1.75) {
+    v *= 1.6;
+    const u = unitOf(q);
+    if (u) u.flankT = S.t;
+  }
+  q.sup = Math.min(100, q.sup + v); q.hitT = S.t;
+  const u = unitOf(q);
+  if (u) u.hitT = S.t;
+}
+// 掩体系数：战壕只挡来自海面一侧（南面）的火力；原地构筑工事；弹坑
+function shelter(q, sx, sy) {
+  const tr = q.inTrench && (sy == null || sy > q.y - 12) ? .55 : 1;
+  return tr * (S.t - q.movedT > 5 ? (q.side === 'e' ? aiD().dig : .75) : 1) * (CRATERC[ci(q.x, q.y)] ? .8 : 1);
+}
 
 function damageShip(s, dmg) {
   if (!alive(s)) return;
@@ -41,13 +56,14 @@ function damageEnemy(e, dmg) {
   Object.assign(e, { dead: true, kx: e.x, ky: e.y, moving: false });
   S.stats.structs++;
   S.fx.push({ kind: 'boom', x: e.x, y: e.y, r: 34, life: 0, max: 1.4, side: 'e' });
-  log(inVision(e.x, e.y) ? `已摧毁敌方${ENEMY_SPEC[e.kind].name}（${gridRef(e.x, e.y)}）` : `${gridRef(e.x, e.y)} 方向发生殉爆，疑似${ENEMY_SPEC[e.kind].name}被毁`, 'good');
+  log(inVision(e.x, e.y) ? `摧毁${ENEMY_SPEC[e.kind].name}` : `远处殉爆，疑似${ENEMY_SPEC[e.kind].name}被毁`, 'good', null, 0, e);
 }
 
 function impact(x, y, pw, side) {
   const R = pw.R;
   let forts = false;
   S.fx.push({ kind: 'boom', x, y, r: R, life: 0, max: .9, side });
+  if (isLand(x, y)) addCrater(x, y, R * .35);
   for (const q of S.teams) {
     const d = dist(x, y, q.x, q.y);
     if (d < R * 1.7) suppress(q, 70 * (1 - d / (R * 1.7)));
@@ -64,7 +80,7 @@ function impact(x, y, pw, side) {
   }
   if (pw.seg) for (const L of S.supply) for (const g of L.segs)
     if (g.ok && segDist(x, y, g.x0, g.y0, g.x1, g.y1) < R * .8) { g.ok = false; g.rep = 0; log('补给线被炮火切断，工兵前往抢修', 'warn', 'segcut', 3); }
-  for (const b of S.boats) if (!b.dead && dist(x, y, b.x, b.y) < R) { b.dead = true; S.stats.lost += 3; log('一艘增援艇在途中被击沉', 'bad', 'boat', 3); }
+  for (const b of S.boats) if (!b.dead && dist(x, y, b.x, b.y) < R) { b.dead = true; S.stats.lost += 3 * (b.n || 1); log('一艘增援艇在途中被击沉', 'bad', 'boat', 3); }
   // 爆破效果：炸断铁丝网、削弱雷区、摧毁障碍
   for (const w of S.wire) if (!w.cut && segDist(x, y, w.x0, w.y0, w.x1, w.y1) < R * .7) { w.cut = true; forts = true; }
   for (const m of S.mines) if (m.clr < 1 && dist(x, y, m.x, m.y) < R + m.r * .5) { m.clr = Math.min(1, m.clr + .3); forts = true; }
@@ -85,7 +101,7 @@ function fireShell(x0, y0, x1, y1, side, kind, dur, fuzzy, extra) {
   const fx0 = fuzzy ? x0 + gauss() * 70 : x0, fy0 = fuzzy ? y0 + gauss() * 70 : y0;
   S.shells.push({ x0, y0, x1, y1, fx0, fy0, t: 0, dur, side, kind, fuzzy, ...extra });
   if (!fuzzy && side === 'e') S.fx.push({ kind: 'flash', x: x0, y: y0, r: 10, life: 0, max: .4, side });
-  if (fuzzy) log(`侦测到炮弹弹道，来源方位约 ${fmtBrg(bearing(x1, y1, fx0, fy0))}，大致在 ${gridRef(fx0, fy0)}`, 'warn', 'arty', 6);
+  if (fuzzy) log(`炮击来自方位约 ${fmtBrg(bearing(x1, y1, fx0, fy0))}`, 'warn', 'arty', 6, { x: fx0, y: fy0 });
 }
 
 // —— 步兵交火：目标须在本方视野内或近在 50 以内 ——
@@ -111,15 +127,15 @@ function teamFire(q, tg) {
     q.ammo = Math.max(0, q.ammo - q.men.length - (q.men.includes('mg') ? 2 : 0));
     S.stats.shots++;
   }
-  const acc = (q.side === 'e' ? D.acc : 1) * (1 - q.sup / 130) * (moving ? .5 : 1) * (1 - tg.d / RANGE * .5);
+  const uq = unitOf(q), acc = (q.side === 'e' ? D.acc : 1) * (1 - q.sup / 130) * (moving ? .5 : 1) * (1 - tg.d / RANGE * .5) * (uq && uq.state === 'waver' ? .8 : 1);
   if (tg.k === 'tm') {
-    const def = coverAt(t.x, t.y) * shelter(t) * (SMOKE[ci(t.x, t.y)] ? .4 : 1);
+    const def = coverAt(t.x, t.y) * shelter(t, q.x, q.y) * (SMOKE[ci(t.x, t.y)] ? .4 : 1);
     if (t.side === 'e') t.hitT = S.t;
     for (const m of q.men) {
       if (m === 'eng') continue;
       const shots = m === 'mg' ? 3 : 1, ph = m === 'mg' ? .08 : m === 'radio' ? .15 : .22;
       for (let s = 0; s < shots; s++) {
-        suppress(t, m === 'mg' ? 7 : 4);
+        suppress(t, m === 'mg' ? 7 : 4, q.x, q.y);
         if (t.men.length && Math.random() < ph * acc * def) killMan(t, q.side === 'e' && Math.random() < D.radio ? 'radio' : null);
       }
     }
@@ -151,13 +167,13 @@ function bunkerFire(e) {
   if (Math.random() < (e.sup || 0) / 110) return;   // 被火力压制，射手缩回掩体
   const t = best.t, vis = inVision(e.x, e.y);
   if (best.k === 'tm') for (let s = 0; s < 3; s++) {
-    suppress(t, 9);
-    if (t.men.length && Math.random() < .1 * D.acc * coverAt(t.x, t.y) * shelter(t)) killMan(t, Math.random() < D.radio ? 'radio' : null);
+    suppress(t, 9, e.x, e.y);
+    if (t.men.length && Math.random() < .1 * D.acc * coverAt(t.x, t.y) * shelter(t, e.x, e.y)) killMan(t, Math.random() < D.radio ? 'radio' : null);
   } else if (best.k === 'ship') { if (Math.random() < .5 * D.acc) damageShip(t, .35); }
-  else if (Math.random() < .3) { t.dead = true; S.stats.lost += 3; log('一艘增援艇被机枪击沉', 'bad', 'boat', 3); }
+  else if (Math.random() < .3) { t.dead = true; S.stats.lost += 3 * (t.n || 1); log('一艘增援艇被机枪击沉', 'bad', 'boat', 3); }
   tracer(e.x, e.y, t.x + gauss() * 5, t.y + gauss() * 5, 'e', vis);
   tracer(e.x, e.y, t.x + gauss() * 9, t.y + gauss() * 9, 'e', vis);
-  if (!vis) log(`${gridRef(t.x, t.y)} 遭机枪压制，火力来自方位约 ${fmtBrg(bearing(t.x, t.y, e.x, e.y) + gauss() * 14)}`, 'warn', 'mg' + e.id, 9);
+  if (!vis) log(`遭机枪压制，方位约 ${fmtBrg(bearing(t.x, t.y, e.x, e.y) + gauss() * 14)}`, 'warn', 'mg' + e.id, 9, t);
 }
 
 function radarUp() { const p = S.points.find(p => p.key === 'RD'); return p && p.owner === 'e' ? p : null; }
@@ -175,7 +191,7 @@ function coastalFire(e) {
   e.cd = 12 + Math.random() * 3;
   const mv = best.state === 'move' || best.moving, a = Math.atan2(best.ty - best.y, best.tx - best.x), lead = mv ? 26 * 3 * D.lead : 0;
   fireShell(e.x, e.y, best.x + Math.cos(a) * lead + gauss() * D.err * 1.2, best.y + Math.sin(a) * lead + gauss() * D.err * 1.2, 'e', 'coastal', 3, !inVision(e.x, e.y));
-  if (e.kx == null && Math.random() < .35) { e.kx = e.x; e.ky = e.y; log(`观测到岸防重炮炮口闪光，已标定于 ${gridRef(e.x, e.y)}`, 'warn'); }
+  if (e.kx == null && Math.random() < .35) { e.kx = e.x; e.ky = e.y; log('岸防重炮炮口闪光，已标定', 'warn', null, 0, e); }
 }
 
 function updateEnemies(dt) {
