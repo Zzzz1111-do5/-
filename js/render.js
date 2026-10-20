@@ -1,6 +1,6 @@
 'use strict';
-// 渲染（一）：画布、像素地形、视野点亮、辉光
-const R = { cv: null, ctx: null, dpr: 1, s: 1, ox: 0, oy: 0, terr: null, fog: null, b1: null, b2: null };
+// 渲染（一）：画布、镜头变换、辉光、海岸线/网格/海滩标注、无 WebGL 时的像素地形
+const R = { cv: null, ctx: null, dpr: 1, s: 1, ox: 0, oy: 0, b1: null, b2: null, pix: null, fog: null, dprCap: 0 };
 const px = n => n / R.s;
 const _rgb = {};
 function rgba(hex, a) {
@@ -8,11 +8,13 @@ function rgba(hex, a) {
   return `rgba(${c},${a})`;
 }
 const font = n => `${px(n)}px "IBM Plex Mono", "Noto Sans SC", monospace`;
-const toWorld = (cx, cy) => ({ x: (cx - R.ox) / R.s, y: (cy - R.oy) / R.s });
+const toWorld = (sx, sy) => ({ x: (sx - R.ox) / R.s, y: (sy - R.oy) / R.s });
+const worldTf = g => g.setTransform(R.dpr * R.s, 0, 0, R.dpr * R.s, R.dpr * R.ox, R.dpr * R.oy);
 
 function initRender(cv) {
   R.cv = cv; R.ctx = cv.getContext('2d');
-  for (const k of ['terr', 'fog', 'b1', 'b2']) R[k] = document.createElement('canvas');
+  for (const k of ['b1', 'b2', 'fog']) R[k] = document.createElement('canvas');
+  R.fog.width = GW; R.fog.height = GH;
   mxInit();
   resize();
 }
@@ -22,97 +24,60 @@ function resize() {
   R.dpr = Math.min(R.dprCap || 2, window.devicePixelRatio || 1);
   R.cv.width = Math.max(1, Math.round(box.width * R.dpr));
   R.cv.height = Math.max(1, Math.round(box.height * R.dpr));
-  R.s = Math.min(box.width / W, box.height / H) || 1;
-  R.ox = (box.width - W * R.s) / 2; R.oy = (box.height - H * R.s) / 2;
-  R.fog.width = Math.ceil(R.cv.width / 2); R.fog.height = Math.ceil(R.cv.height / 2);
+  camFit(box.width, box.height);
   R.b1.width = Math.ceil(R.cv.width / 4); R.b1.height = Math.ceil(R.cv.height / 4);
   R.b2.width = Math.ceil(R.cv.width / 12); R.b2.height = Math.ceil(R.cv.height / 12);
   if (MX.ok) mxResize();
-  buildTerrainLayer();
 }
 
-const worldTf = (g, k = 1) => g.setTransform(R.dpr * R.s * k, 0, 0, R.dpr * R.s * k, R.dpr * R.ox * k, R.dpr * R.oy * k);
-
-// 静态叠加层：海岸线、网格与坐标；WebGL 不可用时连像素地形一起画
-function buildTerrainLayer() {
-  const c = R.terr, g = c.getContext('2d');
-  c.width = R.cv.width; c.height = R.cv.height;
-  g.setTransform(1, 0, 0, 1, 0, 0);
-  g.clearRect(0, 0, c.width, c.height);
-  if (!MX.ok) { g.fillStyle = COL.bg; g.fillRect(0, 0, c.width, c.height); }
-  worldTf(g);
-  if (!MX.ok) pixelCells(g);
-  drawOverlayMarks(g);
-}
-
-// 像素地形（WebGL 降级方案）
-function pixelCells(g) {
-  const hr = rng(TER.seed + 7);
-  for (let gy = 0; gy < GH; gy++) for (let gx = 0; gx < GW; gx++) {
-    const i = gy * GW + gx, t = TER.type[i], x = gx * CELL, y = gy * CELL, j = hr();
-    if (t === T.SEA) {
-      const depth = clamp((y - coastAt(x + 5)) / 380, 0, 1);
-      if ((gx + gy) % 2) continue;
-      g.fillStyle = rgba(COL.g, .05 + (1 - depth) * .12 + j * .04);
-      g.fillRect(x + 4, y + 4, 2, 2);
-      continue;
-    }
-    const e = TER.elev[i], band = Math.floor(e * 5);
-    let a = .06 + band * .05 + j * .04;
-    if (t === T.BEACH) a = .34 + j * .1;
-    if (t === T.HILL) a += .08;
-    g.fillStyle = rgba(COL.g, a);
-    if (t === T.TOWN) {
-      g.strokeStyle = rgba(COL.g, .55); g.lineWidth = 1.2;
-      g.strokeRect(x + 2, y + 2, CELL - 4, CELL - 4);
-      g.fillRect(x + 4, y + 4, 2, 2);
-    } else if (t === T.FOREST) {
-      g.fillStyle = rgba(COL.g, a * .6); g.fillRect(x + 1, y + 1, CELL - 2, CELL - 2);
-      g.fillStyle = rgba(COL.g, a + .22);
-      g.fillRect(x + 2, y + 2, 2.4, 2.4); g.fillRect(x + 6, y + 5.5, 2.4, 2.4);
-    } else g.fillRect(x + 1, y + 1, CELL - 2, CELL - 2);
-    // 等高线：与下方/右方等高带不同时描边
-    const r2 = TER.elev[i + 1] || 0, d2 = gy < GH - 1 ? TER.elev[i + GW] : 0;
-    if (t !== T.BEACH && band > 0 && (Math.floor(r2 * 5) !== band || Math.floor(d2 * 5) !== band)) {
-      g.fillStyle = rgba(COL.g, .5);
-      g.fillRect(x + 1, y + 1, CELL - 2, 1.6);
-    }
+// 降级：世界分辨率的像素地形
+function buildPixel() {
+  const c = R.pix || (R.pix = document.createElement('canvas')), g = c.getContext('2d');
+  c.width = W; c.height = H;
+  g.fillStyle = COL.bg; g.fillRect(0, 0, W, H);
+  for (let i = 0; i < GW * GH; i++) {
+    const t = TER.type[i];
+    if (t === T.DEEP) continue;
+    const a = t === T.SHOAL ? .08 : t === T.REEF ? .5 : .1 + TER.elev[i] * .45 + (t === T.ROAD || t === T.BRIDGE ? .3 : 0);
+    g.fillStyle = rgba(t === T.REEF ? COL.enemy : t === T.RIVER || t === T.SHOAL || t === T.MARSH || t === T.FORD ? COL.intel : COL.g, a);
+    g.fillRect((i % GW) * CELL + 1, Math.floor(i / GW) * CELL + 1, CELL - 2, CELL - 2);
   }
+  R.pixSeed = TER.seed;
 }
 
-function drawOverlayMarks(g) {
-  // 海岸线
-  g.beginPath();
-  for (let x = 0; x <= W; x += 4) g.lineTo(x, coastAt(x));
-  g.strokeStyle = rgba(COL.g, MX.ok ? .5 : .75); g.lineWidth = MX.ok ? 1 : 1.4; g.stroke();
-  // 沙盘网格与坐标
-  g.strokeStyle = rgba(COL.g, .07); g.lineWidth = 1;
-  g.font = '10px "IBM Plex Mono", monospace'; g.fillStyle = rgba(COL.g, .45);
-  for (let k = 0; k <= 12; k++) { g.beginPath(); g.moveTo(k * 100, 0); g.lineTo(k * 100, H); g.stroke(); if (k < 12) g.fillText('ABCDEFGHIJKL'[k], k * 100 + 4, 12); }
-  for (let k = 0; k <= 8; k++) { g.beginPath(); g.moveTo(0, k * 100); g.lineTo(W, k * 100); g.stroke(); if (k > 0 && k < 8) g.fillText(String(k + 1), 4, k * 100 + 12); }
-  // 集结海域
-  g.setLineDash([6, 6]); g.strokeStyle = rgba(COL.g, .3);
-  g.beginPath(); g.moveTo(0, STAGING_Y); g.lineTo(W, STAGING_Y); g.stroke(); g.setLineDash([]);
-  g.fillStyle = rgba(COL.g, .7); g.fillText('集结海域 · 我方', 16, STAGING_Y + 16);
-  g.fillStyle = rgba(COL.enemy, .65); g.fillText('敌占区 · 部署不明', 16, 28);
-  g.strokeStyle = rgba(COL.g, .35); g.lineWidth = 1.5; g.strokeRect(.75, .75, W - 1.5, H - 1.5);
+function drawPixelFallback(ctx) {
+  if (R.pixSeed !== TER.seed) buildPixel();
+  ctx.drawImage(R.pix, 0, 0, W, H);
+  const g = R.fog.getContext('2d'), img = g.createImageData(GW, GH);
+  for (let i = 0; i < GW * GH; i++) { img.data[i * 4 + 3] = FOGB[i] ? 0 : 140; }
+  g.putImageData(img, 0, 0);
+  ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(R.fog, 0, 0, W, H);
 }
 
-// 视野之外压暗；通讯兵 / 侦察 / 舰船所在处“点亮”
-function drawFog() {
-  const f = R.fog, g = f.getContext('2d');
-  g.setTransform(1, 0, 0, 1, 0, 0);
-  g.globalCompositeOperation = 'source-over';
-  g.clearRect(0, 0, f.width, f.height);
-  g.fillStyle = 'rgba(0,3,1,0.55)'; g.fillRect(0, 0, f.width, f.height);
-  worldTf(g, .5);
-  g.globalCompositeOperation = 'destination-out';
-  for (const c of VIS) {
-    const gr = g.createRadialGradient(c.x, c.y, c.r * .6, c.x, c.y, c.r);
-    gr.addColorStop(0, 'rgba(0,0,0,1)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
-    g.fillStyle = gr; g.beginPath(); g.arc(c.x, c.y, c.r, 0, 7); g.fill();
+function drawMarks(ctx) {
+  ctx.beginPath();
+  for (let x = 0; x <= W; x += 4) ctx.lineTo(x, coastAt(x));
+  ctx.strokeStyle = rgba(COL.g, .45); ctx.lineWidth = px(1); ctx.stroke();
+  ctx.strokeStyle = rgba(COL.g, .06);
+  ctx.beginPath();
+  for (let k = 0; k <= 16; k++) { ctx.moveTo(k * 100, 0); ctx.lineTo(k * 100, H); }
+  for (let k = 0; k <= 10; k++) { ctx.moveTo(0, k * 100); ctx.lineTo(W, k * 100); }
+  ctx.stroke();
+  const tl = toWorld(0, 0);
+  ctx.font = font(10); ctx.fillStyle = rgba(COL.g, .5); ctx.textBaseline = 'top'; ctx.textAlign = 'left';
+  for (let k = 0; k < 16; k++) ctx.fillText(GRID_COLS[k], k * 100 + px(4), Math.max(0, tl.y) + px(4));
+  for (let k = 0; k < 10; k++) ctx.fillText(String(k + 1), Math.max(0, tl.x) + px(4), k * 100 + px(4));
+  ctx.setLineDash([px(6), px(6)]); ctx.strokeStyle = rgba(COL.g, .25);
+  ctx.beginPath(); ctx.moveTo(0, STAGING_Y); ctx.lineTo(W, STAGING_Y); ctx.stroke(); ctx.setLineDash([]);
+  ctx.fillStyle = rgba(COL.g, .6); ctx.fillText('集结海域 · 我方舰队', px(12) + Math.max(0, tl.x), STAGING_Y + px(6));
+  ctx.textAlign = 'center';
+  for (const b of TER.beaches) {
+    const y = coastAt(b.cx) + 64;
+    ctx.strokeStyle = rgba(COL.g, .35); ctx.lineWidth = px(1);
+    ctx.beginPath(); ctx.moveTo(b.x0, y - 6); ctx.lineTo(b.x0, y); ctx.lineTo(b.x1, y); ctx.lineTo(b.x1, y - 6); ctx.stroke();
+    ctx.fillStyle = rgba(COL.g, .75); ctx.font = font(11); ctx.fillText(b.name, b.cx, y + px(4));
   }
-  R.ctx.drawImage(f, 0, 0, R.cv.width, R.cv.height);
 }
 
 function bloom() {
@@ -122,42 +87,33 @@ function bloom() {
   g2.globalCompositeOperation = 'copy'; g2.drawImage(b1, 0, 0, b2.width, b2.height);
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.globalCompositeOperation = 'lighter';
-  ctx.globalAlpha = MX.ok ? .42 : .38; ctx.drawImage(b1, 0, 0, cv.width, cv.height);
+  ctx.globalAlpha = .42; ctx.drawImage(b1, 0, 0, cv.width, cv.height);
   ctx.globalAlpha = .4; ctx.drawImage(b2, 0, 0, cv.width, cv.height);
   ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
 }
 
 function shape(ctx, x, y, r, n, rot) {
   ctx.beginPath();
-  for (let i = 0; i < n; i++) {
-    const a = rot + i * Math.PI * 2 / n;
-    ctx.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r);
-  }
+  for (let i = 0; i < n; i++) { const a = rot + i * Math.PI * 2 / n; ctx.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r); }
   ctx.closePath();
 }
 
 function draw(now) {
   const { ctx } = R, time = now / 1000;
-  // 近处大爆炸带来的短暂震动与闪白
+  // 附近大爆炸：短暂震动与闪白
   let k = 0;
-  for (const f of S.fx) if (f.kind === 'boom' && f.life < .25) k += f.r / 30 * (1 - f.life / .25);
-  const ox = R.ox, oy = R.oy, jx = gauss() * k * 1.6 * R.s, jy = gauss() * k * 1.6 * R.s;
-  R.ox += jx; R.oy += jy;
+  for (const f of S.fx) if (f.kind === 'boom' && f.life < .25 && inVision(f.x, f.y)) k += f.r / 30 * (1 - f.life / .25);
+  const ox = R.ox, oy = R.oy;
+  R.ox += gauss() * k * 1.4 * R.s; R.oy += gauss() * k * 1.4 * R.s;
+  fogBytes();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
-  if (MX.ok) {
-    mxDraw(time, Math.min(1, k * .5));
-    ctx.drawImage(MX.cv, 0, 0);
-    ctx.drawImage(R.terr, jx * R.dpr, jy * R.dpr);
-  } else {
-    ctx.drawImage(R.terr, jx * R.dpr, jy * R.dpr);
-    drawFog();
-  }
+  if (MX.ok) { mxDraw(time, Math.min(1, k * .5)); ctx.drawImage(MX.cv, 0, 0); }
+  else { ctx.fillStyle = '#010402'; ctx.fillRect(0, 0, R.cv.width, R.cv.height); worldTf(ctx); drawPixelFallback(ctx); }
   worldTf(ctx);
   ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-  drawVisionRings(time); drawLines(time); drawObjectives(time); drawEnemies(time);
-  drawSquads(time); drawShips(time); drawDestroyer(time); drawShells(time);
-  drawTracers(); drawPlanes(time); drawFx(); drawTool(time);
+  drawMarks(ctx); drawForts(time); drawSmoke(time); drawLines(time); drawPoints(time); drawEnemies(time);
+  drawTeams(time); drawShips(time); drawDD(time); drawShells(time); drawTracers(); drawPlanes(time); drawFx(); drawTool(time);
   bloom();
   worldTf(ctx);
   drawLabels(time);

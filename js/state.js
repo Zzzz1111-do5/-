@@ -1,103 +1,148 @@
 'use strict';
-// 战局状态与实体工厂。S 只存放纯数据，便于暂存与热更新。
+// 战局状态：固定编成的登陆舰队、守军纵深部署（工事、雷区、铁丝网、障碍、火炮、守备队）
 let S = null;
-
+const LIMIT = 45 * 60;   // 作战时限（秒）
+const HOLD = 30;         // 全部据点需同时控制的秒数
 const SHIP_SPEC = {
-  assault: { name: '突击登陆舰', hp: 6, squads: 5, eng: 0 },   // 15 人 = 5 个 3 人小队
-  supply: { name: '补给登陆舰', hp: 6, squads: 4, eng: 3 }     // 15 人 = 4 个作战小队 + 3 名工兵
+  assault: { name: '突击登陆舰', hp: 10, teams: 5, eng: 0 },     // 15 人 = 5 个三人组
+  supply: { name: '补给登陆舰', hp: 11, teams: 4, eng: 3 }       // 4 个三人组 + 3 名工兵
 };
 const ENEMY_SPEC = {
-  bunker: { name: '机枪碉堡', hp: 14 },
-  arty: { name: '岸防炮兵', hp: 10 },
-  aa: { name: '防空炮', hp: 8 }
+  bunker: { name: '机枪碉堡', hp: 16 }, coastal: { name: '岸防重炮', hp: 22 }, arty: { name: '榴弹炮阵地', hp: 10 },
+  mortar: { name: '迫击炮组', hp: 6 }, aa: { name: '防空炮', hp: 8 }
 };
-const LIMIT = 20 * 60;   // 作战时限（秒）
-const HOLD = 60;         // 三个目标需同时坚守的秒数
+const ROLE_NAME = { radio: '通讯兵', rifle: '步枪手', mg: '机枪手', eng: '工兵' };
 
 function newGame(seed, level) {
   level = DIFF[level] ? level : 'hard';
   seed = seed || (Math.random() * 1e9) | 0;
-  buildTerrain(seed);
+  buildMap(seed);
   const r = rng(seed ^ 0x5f3759df);
   S = {
-    seed, t: 0, paused: true, ai: null, holdT: 0, speed: 1, nid: 1, over: null, briefed: false,
-    ships: [], squads: [], enemies: [], planes: [], shells: [], tracers: [], fx: [],
-    supply: [], rlines: [], boats: [], recon: [], ghosts: [], log: [],
-    groups: { 1: [], 2: [], 3: [], 4: [] }, sel: [],
-    cards: { assault: 2, supply: 1, rline: 2, reinf: 8, strike: 2, recon: 2 },
-    objectives: TER.obj.map(o => ({ ...o, owner: 'e', prog: 0 })),
-    destroyer: { x: 1110, y: 765, hull: 3, state: 'ready', cool: 0, repairT: 0, repairDur: 16, auto: false, aim: null, exposedUntil: 0 },
-    stats: { lost: 0, killed: 0, shots: 0, exposed: 0 }, throttle: {}
+    seed, level, t: 0, paused: true, speed: 1, nid: 1, over: null, briefed: false, holdT: 0, ai: null,
+    ships: [], teams: [], enemies: [], planes: [], shells: [], tracers: [], fx: [], smoke: [],
+    mines: [], wire: [], obst: [], trench: [], supply: [], rlines: [], boats: [], recon: [], log: [],
+    groups: { 1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [], 8: [], 9: [] }, sel: [],
+    assets: { recon: 3, strike: 3, rline: 2, reserve: 6, smoke: 4 },
+    points: TER.points.map(p => ({ ...p, owner: 'e', prog: 0 })),
+    dd: { x: W / 2, y: 975, tx: W / 2, ty: 975, hull: 3, state: 'ready', cool: 0, repairT: 0, repairDur: 16, auto: false, exposedUntil: 0, moving: false },
+    stats: { lost: 0, killed: 0, shots: 0, exposed: 0, structs: 0 }, throttle: {}
   };
-
-  // —— 敌方部署（玩家不可见）——
-  const nb = DIFF[level].bunkers, na = DIFF[level].arty;
-  for (let i = 0; i < nb; i++) {
-    const x = 120 + i * 960 / (nb - 1) + (r() - .5) * 80;
-    addEnemy('bunker', x, coastAt(x) - 34 - r() * 26);
-  }
-  for (let i = 0; i < na; i++) addEnemy('arty', 200 + i * 800 / (na - 1) + (r() - .5) * 120, 50 + r() * 80);
-  const [A, B, C] = S.objectives;
-  addEnemy('aa', B.x + (r() - .5) * 120, B.y + 30 + r() * 30);
-  addEnemy('aa', C.x + (r() - .5) * 100, C.y + 40 + r() * 30);
-  for (const o of S.objectives) for (let k = 0; k < DIFF[level].garrison; k++)
-    addSquad('e', o.x + (r() - .5) * 90, o.y + (r() - .5) * 60, ['rifle', 'rifle', 'rifle']);
-  for (let k = 0; k < 3; k++) {
-    const x = 300 + r() * 600;
-    addSquad('e', x, coastAt(x) - 60 - r() * 40, ['rifle', 'rifle', 'rifle']);
-  }
-
+  deployDefenses(r, DIFF[level]);
   aiInit(level);
-
-  // —— 开局已在集结海域的舰船（示例部署）——
-  const a1 = addShip('assault', 430, 715), a2 = addShip('assault', 470, 740), s1 = addShip('supply', 760, 725);
-  S.groups[1] = [a1.id, a2.id];
-  S.groups[2] = [s1.id];
-  log('战局开始。敌方地形已投影至沙盘，敌军部署不明。', 'info');
-  log('三个目标：A 灯塔、B 炮台高地、C 指挥所。全部占领并坚守 60 秒即胜利。', 'info');
+  deployFleet();
+  rebuildForts();
+  log('舰队已在集结海域就位。对岸地形已投影至沙盘，守军部署不明。', 'info');
+  log(`共 ${S.points.length} 个据点，全部夺取并同时控制 ${HOLD} 秒即胜利。`, 'info');
   return S;
 }
 
-function addShip(kind, x, y) {
+// 固定编成：两个突击编队、一个补给编队、驱逐舰
+function deployFleet() {
+  const slot = (kind, x, y, label, grp) => S.groups[grp].push(addShip(kind, x, y, label).id);
+  [[380, 915], [440, 945], [500, 915]].forEach(([x, y], k) => slot('assault', x, y, 'LA-' + (k + 1), 1));
+  [[1100, 915], [1160, 945], [1220, 915]].forEach(([x, y], k) => slot('assault', x, y, 'LA-' + (k + 4), 2));
+  [[760, 935], [840, 935]].forEach(([x, y], k) => slot('supply', x, y, 'LS-' + (k + 1), 3));
+}
+
+function deployDefenses(r, D) {
+  const cAt = coastAt;
+  for (const b of TER.beaches) {
+    const w = b.x1 - b.x0;
+    // 滩顶铁丝网，出口路两侧留缺口
+    for (let x = b.x0 - 10; x < b.x1 + 10; x += 40) {
+      const x1 = Math.min(x + 40, b.x1 + 10);
+      if (Math.abs((x + x1) / 2 - b.cx) < 20) continue;
+      S.wire.push({ id: S.nid++, x0: x, y0: cAt(x) - 26, x1, y1: cAt(x1) - 26, known: false, cut: false });
+    }
+    for (let k = 0; k < D.beachMines; k++) {
+      const x = b.x0 + w * (k + .5) / D.beachMines + (r() - .5) * 20;
+      S.mines.push({ id: S.nid++, x, y: cAt(x) - 12, r: 22 + r() * 8, known: false, clr: 0 });
+    }
+    for (let k = 0; k < 6 + D.beachMines * 2; k++) {
+      const x = b.x0 + r() * w;
+      S.obst.push({ id: S.nid++, x, y: cAt(x) + 14 + r() * 34, known: false, dead: false });
+    }
+    const tr = [];
+    for (let x = b.x0 - 30; x <= b.x1 + 30; x += 22) tr.push([x, cAt(x) - 62 + (tr.length % 2 ? 6 : -6)]);
+    S.trench.push({ id: S.nid++, pts: tr, known: false });
+    for (let k = 0; k < D.beachBunkers; k++) {
+      const x = D.beachBunkers === 1 ? b.cx + (r() - .5) * 40 : lerp(b.x0, b.x1, k ? .82 : .18);
+      addEnemy('bunker', x, cAt(x) - 48);
+    }
+    for (let k = 0; k < D.ambush; k++) {
+      const x = lerp(b.x0, b.x1, (k + .5) / D.ambush);
+      Object.assign(addTeam('e', x, cAt(x) - 62, ['rifle', 'rifle', 'mg']), { role: 'ambush', hold: true, obj: 'E' + (TER.beaches.indexOf(b) + 1) });
+    }
+  }
+  // 岸防重炮：岬角悬崖顶
+  const bt = S.points.find(p => p.key === 'BT'), gunXs = bt ? [bt.x] : [];
+  for (let x = 40; x < W - 40; x += 20)
+    if (typeAt(x, coastAt(x) - 10) === T.CLIFF && gunXs.length < D.coastal && gunXs.every(g => Math.abs(g - x) > 300)) gunXs.push(x);
+  for (const x of gunXs.slice(0, D.coastal)) addEnemy('coastal', x, coastAt(x) - 45);
+  for (let i = 0; i < D.arty; i++) {
+    const x = 160 + i * (W - 320) / Math.max(1, D.arty - 1) + (r() - .5) * 100;
+    addEnemy('arty', x, clamp(coastAt(x) - 340 - r() * 80, 40, 400));
+  }
+  for (let i = 0; i < D.mortars; i++) {
+    const b = TER.beaches[i % 4], x = b.cx + (r() - .5) * 120;
+    addEnemy('mortar', x, coastAt(x) - 150 - r() * 40);
+  }
+  const aaAt = ['HQ', 'RD', 'TW'].map(k => S.points.find(p => p.key === k)).filter(Boolean);
+  for (let i = 0; i < D.aa; i++) { const p = aaAt[i % aaAt.length]; addEnemy('aa', p.x + (r() - .5) * 80, p.y + 30 + r() * 30); }
+  for (const k of ['BT', 'RD']) {
+    const p = S.points.find(p => p.key === k);
+    if (p) S.mines.push({ id: S.nid++, x: p.x + (r() - .5) * 60, y: p.y + 55, r: 24, known: false, clr: 0 });
+  }
+  // 据点守备队
+  for (const p of S.points) {
+    const n = Math.max(1, ({ 1: 1, 2: 2, 3: 4 })[p.vp] + D.garrison);
+    for (let k = 0; k < n; k++) {
+      const a = k / n * 6.28 + r(), x = p.x + Math.cos(a) * 25, y = p.y + Math.sin(a) * 20;
+      if (passInf(x, y)) Object.assign(addTeam('e', x, y, ['rifle', 'rifle', 'mg']), { role: 'garrison', obj: p.key });
+    }
+  }
+  const tw = S.points.find(p => p.key === 'TW') || S.points[0];
+  for (let k = 0; k < D.reserves; k++)
+    Object.assign(addTeam('e', tw.x + (r() - .5) * 60, tw.y - 30 - r() * 30, ['rifle', 'rifle', 'mg']), { role: 'reserve', obj: tw.key });
+}
+
+function addShip(kind, x, y, label) {
   const sp = SHIP_SPEC[kind];
-  const n = S.ships.filter(s => s.kind === kind).length + 1;
-  const s = {
-    id: S.nid++, kind, x, y, tx: x, ty: y, hp: sp.hp, maxhp: sp.hp, state: 'idle', heading: -Math.PI / 2, ut: 0,
-    label: (kind === 'assault' ? 'LA-' : 'LS-') + n, load: { squads: sp.squads, eng: sp.eng }
-  };
+  const s = { id: S.nid++, kind, label, x, y, tx: x, ty: y, hp: sp.hp, maxhp: sp.hp, state: 'idle', heading: -Math.PI / 2, ut: 0, land: false, load: { teams: sp.teams, eng: sp.eng } };
   S.ships.push(s);
   return s;
 }
 
-function addSquad(side, x, y, men, extra) {
+function addTeam(side, x, y, men, extra) {
   const q = {
-    id: S.nid++, side, x, y, home: { x, y }, men: men.slice(), ammo: 40, cd: Math.random(),
-    kind: men[0] === 'eng' ? 'eng' : 'inf', no: S.squads.filter(s => s.side === side).length + 1,
-    radioLost: false, ox: (Math.random() - .5) * 50, oy: (Math.random() - .5) * 40, ...extra
+    id: S.nid++, side, x, y, men: men.slice(), ammo: 60, cd: Math.random(), sup: 0, kind: men[0] === 'eng' ? 'eng' : 'inf',
+    no: S.teams.filter(s => s.side === side).length + 1, order: { t: 'hold' }, movedT: -99, hitT: -99, ...extra
   };
-  S.squads.push(q);
+  S.teams.push(q);
   return q;
 }
 
 function addEnemy(kind, x, y) {
-  const e = { id: S.nid++, kind, x, y, hp: ENEMY_SPEC[kind].hp, maxhp: ENEMY_SPEC[kind].hp, cd: 2 + Math.random() * 4, dead: false };
+  const e = { id: S.nid++, kind, x, y, hp: ENEMY_SPEC[kind].hp, maxhp: ENEMY_SPEC[kind].hp, cd: 2 + Math.random() * 4, dead: false, kx: null, ky: null };
   S.enemies.push(e);
   return e;
 }
 
-// kind: info / warn / bad / good；同类消息按 key 节流
+// kind：info / warn / bad / good；同类消息按 key 节流
 function log(msg, kind = 'info', key, gap = 5) {
   if (key) {
     if (S.throttle[key] && S.t - S.throttle[key] < gap) return;
     S.throttle[key] = S.t;
   }
   S.log.unshift({ t: S.t, msg, kind });
-  if (S.log.length > 60) S.log.length = 60;
+  if (S.log.length > 80) S.log.length = 80;
 }
 
 const fmtT = t => {
   t = Math.max(0, Math.floor(t));
   return String(Math.floor(t / 60)).padStart(2, '0') + ':' + String(t % 60).padStart(2, '0');
 };
-const shipById = id => S.ships.find(s => s.id === id);
+const byId = id => S.ships.find(s => s.id === id) || S.teams.find(q => q.id === id);
 const alive = s => s.state !== 'sunk';
+const teamName = q => q.kind === 'eng' ? `${q.unit || ''}工兵组` : `${q.unit ? q.unit + '·' : ''}${q.no}组`;

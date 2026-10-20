@@ -1,196 +1,132 @@
 'use strict';
-// HUD 面板、主循环与启动
+// HUD：指挥栏、侧栏面板、简报与结算、主循环与启动
+const CMD = [
+  { id: 'move', name: '移动', key: 'M', note: '行进间射击', tool: 'move' },
+  { id: 'amove', name: '攻击前进', key: 'A', note: '遇敌停下交火', tool: 'amove' },
+  { id: 'hold', name: '坚守', key: 'H', note: '就地构筑掩体', act: () => ordersNow('hold') },
+  { id: 'retreat', name: '撤退', key: 'X', note: '撤回最近滩头', act: () => ordersNow('retreat') },
+  { id: 'clear', name: '排雷剪网', key: 'C', note: '仅工兵', tool: 'clear' },
+  { id: 'unit', name: '选同船', key: '双击', note: '同一艘船的小组', act: selectUnit }
+];
+const SUP = [
+  { id: 'fire', name: '舰炮射击', key: 'F', note: '70% 暴露', tool: 'fire' },
+  { id: 'smoke', name: '烟幕弹', key: 'V', asset: 'smoke', tool: 'smoke' },
+  { id: 'recon', name: '侦察机', key: 'R', asset: 'recon', tool: 'recon' },
+  { id: 'strike', name: '空袭', key: 'T', asset: 'strike', tool: 'strike' },
+  { id: 'rline', name: '增援线', key: 'E', asset: 'rline', tool: 'rline' },
+  { id: 'auto', name: '自动掩护', key: 'G', act: toggleAuto }
+];
+
 function buildHud() {
-  $('hand').innerHTML = CARDS.map(c => `
-    <button class="card" id="card-${c.k}" data-k="${c.k}" type="button">
-      <svg viewBox="0 0 24 24" aria-hidden="true">${c.svg}</svg>
-      <span class="cn">${c.name}</span><span class="cc" id="cnt-${c.k}"></span>
-      <span class="ck">${c.key}</span><span class="cnote">${c.note}</span>
-    </button>`).join('') + `
-    <div class="card reserve"><span class="cn">增援兵力</span><span class="cc" id="cnt-reinf"></span><span class="cnote">经增援线每 14 秒一队</span></div>
-    <button class="card cmd" id="btnMove" type="button"><span class="cn">移动</span><span class="ck">M</span><span class="cnote">触屏下达移动指令</span></button>`;
-  for (const c of CARDS) $('card-' + c.k).addEventListener('click', () => { if (S.cards[c.k] > 0) setTool(c.k); });
-  $('btnMove').addEventListener('click', () => S.sel.length ? setTool('move') : log('先选中登陆舰', 'warn', 'mv', 2));
-  $('groups').innerHTML = [1, 2, 3, 4].map(n => `
-    <div class="grp"><button type="button" class="gsel" id="gsel-${n}">G${n}<span id="gcnt-${n}"></span></button>
-    <button type="button" class="gset" id="gset-${n}">编入</button></div>`).join('');
-  for (const n of [1, 2, 3, 4]) {
-    $('gsel-' + n).addEventListener('click', () => selectGroup(n));
-    $('gset-' + n).addEventListener('click', () => assignGroup(n));
-  }
+  const btn = c => `<button class="cmd" id="c-${c.id}" type="button"><b>${c.name}</b><kbd>${c.key}</kbd><small id="cn-${c.id}">${c.note || ''}</small></button>`;
+  $('orders').innerHTML = CMD.map(btn).join('');
+  $('support').innerHTML = SUP.map(btn).join('');
+  for (const c of [...CMD, ...SUP]) $('c-' + c.id).addEventListener('click', () => c.tool ? setTool(c.tool) : c.act());
+  $('groups').innerHTML = [1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => `<div class="grp"><button type="button" class="gsel" id="gsel-${n}">G${n}<span id="gcnt-${n}"></span></button><button type="button" class="gset" id="gset-${n}" title="把选中单位编入 G${n}">编入</button></div>`).join('');
+  for (let n = 1; n <= 9; n++) { $('gsel-' + n).addEventListener('click', () => selectGroup(n)); $('gset-' + n).addEventListener('click', () => assignGroup(n)); }
   $('btnPause').addEventListener('click', togglePause);
   $('btnSpeed').addEventListener('click', () => { S.speed = S.speed === 1 ? 2 : S.speed === 2 ? 4 : 1; updateHud(); });
-  $('btnAim').addEventListener('click', () => setTool('aim'));
-  $('btnAuto').addEventListener('click', toggleAuto);
   $('btnHelp').addEventListener('click', () => { $('brief').hidden = false; });
+  $('zIn').addEventListener('click', () => camZoomAt(CAM.vw / 2, CAM.vh / 2, 1.3));
+  $('zOut').addEventListener('click', () => camZoomAt(CAM.vw / 2, CAM.vh / 2, .77));
+  $('zFit').addEventListener('click', () => { CAM.z = CAM.fit; camClamp(); });
   for (const b of document.querySelectorAll('#diff button')) b.addEventListener('click', () => { U.level = b.dataset.lv; updateHud(); });
   $('btnBrief').addEventListener('click', () => {
-    // 开局前选的难度立即生效；对局中途改难度则从下一局开始
-    if (S.t === 0 && S.ai.level !== U.level) { newGame(undefined, U.level); buildTerrainLayer(); computeVision(); }
+    if (S.t === 0 && S.level !== U.level) restart(false);
     S.briefed = true; $('brief').hidden = true; updateHud();
   });
   $('btnNew').addEventListener('click', e => {
     const b = e.currentTarget;
-    if (b.dataset.armed) { restart(); return; }
+    if (b.dataset.armed) { restart(true); return; }
     b.dataset.armed = '1'; b.textContent = '确认重开';
     setTimeout(() => { delete b.dataset.armed; b.textContent = '新战局'; }, 2500);
   });
-  $('btnAgain').addEventListener('click', restart);
+  $('btnAgain').addEventListener('click', () => restart(true));
+  mmBind($('mm'));
 }
 
-function restart() {
-  newGame(undefined, U.level); S.briefed = true; U.tool = null; U.logKey = null;
-  buildTerrainLayer(); computeVision();
+function restart(briefed) {
+  newGame(undefined, U.level);
+  S.briefed = briefed; U.tool = null; U.logKey = null; MX.seed = null;
+  mmInit($('mm')); updateVision();
+  CAM.x = W / 2; CAM.y = H * .62; CAM.z = CAM.fit * 1.6; camClamp();
   const b = $('btnNew'); delete b.dataset.armed; b.textContent = '新战局';
   updateHud();
 }
 
-const STATE_TXT = { idle: '待命', move: '航行中', unloading: '卸载中', beached: '已抢滩' };
+function selSummary() {
+  const ts = selTeams(), ships = selShips(), parts = [];
+  if (ts.length) {
+    const men = ts.reduce((a, q) => a + q.men.length, 0), ammo = ts.reduce((a, q) => a + q.ammo, 0) / ts.length;
+    const pin = ts.filter(q => q.sup >= 60).length, radio = ts.filter(q => q.kind === 'inf' && !q.men.includes('radio')).length;
+    const ord = {}; for (const q of ts) ord[ORDER_NAME[q.order.t]] = (ord[ORDER_NAME[q.order.t]] || 0) + 1;
+    parts.push(`<div class="row"><b>${ts.length} 个三人组 · ${men} 人</b><span class="dim">${[...new Set(ts.map(q => q.unit))].join(' ')}</span></div>
+      <div class="kv"><span>平均弹药</span><span class="bar"><i style="width:${ammo / 60 * 100}%"></i></span>
+      <span>被压制</span><b class="${pin ? 'warn' : ''}">${pin} 组</b><span>失去通讯兵</span><b class="${radio ? 'warn' : ''}">${radio} 组</b>
+      <span>当前指令</span><b>${Object.entries(ord).map(([k, v]) => k + ' ' + v).join(' · ')}</b></div>`);
+  }
+  for (const s of ships) parts.push(`<div class="row"><span class="tri${s.kind === 'supply' ? ' sup' : ''}"></span><b>${s.label}</b>
+    <span>${{ idle: '待命', move: '航行中', unloading: '卸载中', beached: '已抢滩' }[s.state]}</span><span class="dim">载 ${s.load.teams * 3 + s.load.eng} 人</span>
+    <span class="bar"><i style="width:${Math.max(0, s.hp / s.maxhp * 100)}%"></i></span></div>`);
+  if (selDD()) parts.push(`<div class="row"><b>DD-17 驱逐舰</b><span>右键在海上机动 · F 射击 · V 烟幕</span></div>`);
+  return parts.join('') || '<p class="dim">未选中。拖框选择上岸小组或舰船，按 1–9 调出编组，D 选中驱逐舰。</p>';
+}
 
 function updateHud() {
-  const D = S.destroyer;
+  const D = S.dd;
   $('clock').textContent = 'T+' + fmtT(S.t);
-  $('aiLevel').textContent = DIFF[S.ai.level].name;
-  for (const b of document.querySelectorAll('#diff button')) { b.classList.toggle('on', b.dataset.lv === U.level); b.setAttribute('aria-checked', b.dataset.lv === U.level); }
   $('remain').textContent = '剩余 ' + fmtT(LIMIT - S.t);
+  $('aiLevel').textContent = DIFF[S.level].name;
+  for (const b of document.querySelectorAll('#diff button')) { b.classList.toggle('on', b.dataset.lv === U.level); b.setAttribute('aria-checked', b.dataset.lv === U.level); }
   $('btnPause').textContent = S.paused ? '▶ 继续' : '❚❚ 暂停';
   $('btnPause').classList.toggle('hot', S.paused);
   $('btnSpeed').textContent = S.speed + '×';
   $('pauseBand').hidden = !S.paused || !!S.over || !S.briefed;
-  for (const c of CARDS) {
-    const el = $('card-' + c.k);
-    $('cnt-' + c.k).textContent = '×' + S.cards[c.k];
-    el.disabled = S.cards[c.k] <= 0;
-    el.classList.toggle('on', U.tool === c.k);
+  const own = S.points.filter(p => p.owner === 'p').length, ashore = S.teams.filter(q => q.side === 'p').reduce((a, q) => a + q.men.length, 0);
+  $('force').textContent = `岸上 ${ashore} 人 · 据点 ${own}/${S.points.length}` + (S.holdT ? ` · 巩固 ${Math.ceil(HOLD - S.holdT)}s` : '');
+  const hasT = selTeams().length > 0, hasEng = selTeams().some(q => q.kind === 'eng');
+  for (const c of CMD) {
+    const el = $('c-' + c.id);
+    el.disabled = c.id === 'clear' ? !hasEng : c.id === 'move' ? !(hasT || selShips().length || selDD()) : !hasT;
+    el.classList.toggle('on', U.tool === c.tool && !!c.tool);
   }
-  $('cnt-reinf').textContent = S.cards.reinf + ' 队';
-  $('btnMove').classList.toggle('on', U.tool === 'move');
+  for (const c of SUP) {
+    const el = $('c-' + c.id);
+    if (c.asset) $('cn-' + c.id).textContent = '剩余 ' + S.assets[c.asset];
+    el.disabled = (c.asset && S.assets[c.asset] <= 0) || ((c.id === 'fire' || c.id === 'smoke' || c.id === 'auto') && D.state === 'sunk');
+    el.classList.toggle('on', c.id === 'auto' ? D.auto : U.tool === c.tool);
+  }
+  $('reserve').textContent = `后备兵力 ${S.assets.reserve} 组 · 经增援线每 15 秒一组`;
   $('toolHint').textContent = {
-    assault: '在下方集结海域点击放置突击登陆舰', supply: '在下方集结海域点击放置补给登陆舰',
-    rline: '点选一艘已抢滩的登陆舰，开辟增援线', strike: '点击目标点，攻击机自南向北投下三枚炸弹',
-    recon: '点击任一位置，侦察机沿该列纵贯全图', aim: '点击设定驱逐舰射向（70% 概率暴露坐标）',
-    move: '点击目标位置；落点在陆地即抢滩'
-  }[U.tool] || (S.sel.length ? '右键（或「移动」）下达移动指令 · Ctrl+数字 编组' : '拖框或点击选择登陆舰 · 空格暂停');
-
-  const ships = S.sel.map(shipById).filter(Boolean);
-  $('selInfo').innerHTML = ships.length ? ships.map(s => `
-    <div class="row"><span class="tri${s.kind === 'supply' ? ' sup' : ''}"></span><b>${s.label}</b>
-    <span>${STATE_TXT[s.state] || '已沉没'}</span><span class="dim">载 ${s.load.squads * 3 + s.load.eng} 人</span>
-    <span class="bar"><i style="width:${Math.max(0, s.hp / s.maxhp * 100)}%"></i></span></div>`).join('')
-    : '<p class="dim">未选中登陆舰。拖框选择，或按 1–4 调出编组。</p>';
-
-  for (const n of [1, 2, 3, 4]) {
-    const live = S.groups[n].filter(id => { const s = shipById(id); return s && alive(s); }).length;
-    $('gcnt-' + n).textContent = live ? ` · ${live} 艘` : ' · 空';
+    move: '右键或点击目标位置：小组按三三制队形移动；舰船落点在海滩即抢滩', amove: '点击目标：遇到敌人停下交火，清除后继续前进',
+    clear: '点击雷区或铁丝网：工兵前往排除', fire: `点击射击点（射程 1000）。每发 70% 暴露坐标`, smoke: '点击位置投放烟幕：遮断双方视线 35 秒',
+    recon: '点击任意位置：侦察机沿该列纵贯全图，留下 25 秒视野', strike: '点击目标：攻击机自南向北投三枚炸弹', rline: '点选一艘已抢滩的登陆舰作为增援线终点'
+  }[U.tool] || (S.sel.length ? '右键下达移动 · A 攻击前进 · H 坚守 · Ctrl+数字编组' : '拖框选择 · 滚轮缩放 · 中键/Alt 拖动或方向键平移 · 空格暂停');
+  $('selInfo').innerHTML = selSummary();
+  for (let n = 1; n <= 9; n++) {
+    const live = S.groups[n].filter(id => id === 'DD' ? D.state !== 'sunk' : byId(id) && (byId(id).men || alive(byId(id)))).length;
+    $('gcnt-' + n).textContent = live ? ` · ${live}` : '';
   }
-
   $('ddHull').innerHTML = [0, 1, 2].map(i => `<i class="${D.hull > i ? 'on' : ''}"></i>`).join('');
   $('ddState').textContent = D.state === 'sunk' ? '已沉没' : D.state === 'repair' ? '损管抢修中 · 无法掩护' : D.cool > 0 ? `装填中 ${Math.ceil(D.cool)}s` : '就绪';
   $('ddState').className = 'ddst ' + D.state;
   $('ddRepair').hidden = D.state !== 'repair';
   $('ddRepairBar').style.width = (D.repairT / D.repairDur * 100) + '%';
   $('ddExposed').hidden = !(S.t < D.exposedUntil);
-  $('btnAim').disabled = D.state === 'sunk';
-  $('btnAim').classList.toggle('on', U.tool === 'aim');
-  $('btnAuto').textContent = '自动掩护：' + (D.auto ? '开' : '关');
-  $('btnAuto').classList.toggle('on', D.auto);
-  $('btnAuto').disabled = D.state === 'sunk';
-
-  $('objs').innerHTML = S.objectives.map(o => `
-    <div class="obj ${o.owner}"><b>${o.key}</b><span>${o.name}</span>
-    <span class="bar"><i style="width:${o.prog * 100}%"></i></span></div>`).join('');
-
+  $('pts').innerHTML = S.points.map(p => `<div class="pt ${p.owner}${p.contested ? ' hot' : ''}"><b>${p.key}</b><span>${p.name}</span><em>${'★'.repeat(p.vp)}</em><span class="bar"><i style="width:${p.prog * 100}%"></i></span></div>`).join('');
   const lk = S.log.length + '|' + (S.log[0] && S.log[0].t);
   if (lk !== U.logKey) {
     U.logKey = lk;
-    $('intel').innerHTML = S.log.slice(0, 16).map(l => `<li class="${l.kind}"><time>${fmtT(l.t)}</time><span>${l.msg}</span></li>`).join('');
+    $('intel').innerHTML = S.log.slice(0, 18).map(l => `<li class="${l.kind}"><time>${fmtT(l.t)}</time><span>${l.msg}</span></li>`).join('');
     const first = $('intel').querySelector('li span');
     if (first && S.t > 0) decode(first, S.log[0].msg, 450);
   }
-
-  const p = S.squads.filter(q => q.side === 'p'), men = p.reduce((a, q) => a + q.men.length, 0);
-  $('force').textContent = `岸上 ${men} 人 · ${p.filter(q => q.kind === 'inf').length} 个小队` + (S.holdT ? ` · 巩固 ${Math.ceil(HOLD - S.holdT)}s` : '');
-
   $('end').hidden = !S.over;
   if (S.over) {
-    if ($('endTitle').dataset.over !== S.over) { $('endTitle').dataset.over = S.over; decode($('endTitle'), S.over === 'win' ? '滩头已巩固' : '登陆失败', 900); }
+    if ($('endTitle').dataset.over !== S.over) { $('endTitle').dataset.over = S.over; decode($('endTitle'), S.over === 'win' ? '登陆场已巩固' : '登陆失败', 900); }
     $('endTitle').className = S.over;
-    $('endStats').innerHTML = [
-      ['守军 AI', DIFF[S.ai.level].name], ['作战用时', fmtT(S.t)], ['占领目标', S.objectives.filter(o => o.owner === 'p').length + ' / 3'],
-      ['我方伤亡', S.stats.lost + ' 人'], ['歼敌', S.stats.killed + ' 人'],
-      ['摧毁工事', (S.stats.structs || 0) + ' 处'], ['驱逐舰暴露', S.stats.exposed + ' 次'],
-      ['驱逐舰', D.state === 'sunk' ? '沉没' : `船体 ${D.hull}/3`]
-    ].map(([a, b]) => `<dt>${a}</dt><dd>${b}</dd>`).join('');
+    $('endStats').innerHTML = [['守军 AI', DIFF[S.level].name], ['作战用时', fmtT(S.t)], ['夺取据点', `${own} / ${S.points.length}`], ['我方伤亡', S.stats.lost + ' 人'],
+      ['歼敌', S.stats.killed + ' 人'], ['摧毁火力点', S.stats.structs + ' 处'], ['驱逐舰暴露', S.stats.exposed + ' 次'], ['驱逐舰', D.state === 'sunk' ? '沉没' : `船体 ${D.hull}/3`]]
+      .map(([a, b]) => `<dt>${a}</dt><dd>${b}</dd>`).join('');
   }
 }
-
-// —— 主循环 ——
-let lastT = performance.now(), acc = 0, hudT = 0, ema = 1 / 60;
-function frame(now) {
-  const dt = Math.min(.1, (now - lastT) / 1000);
-  lastT = now;
-  // 设备跟不上时降到 1 倍像素密度，保住帧率
-  ema = ema * .95 + dt * .05;
-  if (ema > .045 && !R.dprCap && now > 5000 && (window.devicePixelRatio || 1) > 1) { R.dprCap = 1; resize(); }
-  if (!S.paused && !S.over && S.briefed) {
-    acc += dt * S.speed;
-    while (acc >= 1 / 30) { step(1 / 30); acc -= 1 / 30; }
-  } else computeVision();
-  draw(now);
-  if (now - hudT > 200) { hudT = now; updateHud(); }
-  requestAnimationFrame(frame);
-}
-
-// 字符解码动效：乱码逐位落定成目标文字
-function decode(el, text, dur) {
-  const t0 = performance.now(), chars = [...text];
-  const f = now => {
-    const u = Math.min(1, (now - t0) / dur);
-    el.textContent = chars.map((ch, i) => i < u * chars.length || ch === ' ' ? ch : GLYPHS[Math.random() * GLYPHS.length | 0]).join('');
-    if (u < 1) requestAnimationFrame(f);
-  };
-  requestAnimationFrame(f);
-}
-
-// 页面背景的数码雨（低透明度，减少动效偏好下关闭）
-function bgRain() {
-  const c = $('bgrain');
-  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-  const g = c.getContext('2d'), fs = 16;
-  let cols = [], last = 0;
-  const fit = () => {
-    c.width = innerWidth; c.height = innerHeight;
-    cols = Array.from({ length: Math.ceil(c.width / fs) }, () => -Math.random() * 60);
-    g.fillStyle = '#020704'; g.fillRect(0, 0, c.width, c.height);
-  };
-  fit(); addEventListener('resize', fit);
-  const tick = t => {
-    requestAnimationFrame(tick);
-    if (t - last < 60) return;
-    last = t;
-    g.fillStyle = 'rgba(2,7,4,0.14)'; g.fillRect(0, 0, c.width, c.height);
-    g.font = fs + 'px "Noto Sans SC", monospace';
-    cols.forEach((y, i) => {
-      g.fillStyle = Math.random() < .06 ? '#d8ffe8' : '#3dff8a';
-      g.fillText(GLYPHS[Math.random() * GLYPHS.length | 0], i * fs, y * fs);
-      cols[i] = y * fs > c.height && Math.random() > .97 ? 0 : y + 1;
-    });
-  };
-  requestAnimationFrame(tick);
-}
-
-function start(data) {
-  if (data && data.S && data.S.ai) { S = data.S; buildTerrain(S.seed); aiCache(); } else newGame();
-  U.level = S.ai.level;
-  initRender($('cv'));
-  buildHud(); bindInput();
-  $('brief').hidden = !!S.briefed;
-  new ResizeObserver(() => resize()).observe($('stage'));
-  computeVision(); updateHud();
-  decode(document.querySelector('.brand b'), 'BEACHHEAD', 1100);
-  bgRain();
-  requestAnimationFrame(frame);
-}
-
-window.claude?.hot?.snapshot?.(() => ({ S }));
-window.claude?.hot?.ready ? window.claude.hot.ready(start) : start(window.claude?.hot?.data ?? {});
