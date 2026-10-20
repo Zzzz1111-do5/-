@@ -1,6 +1,6 @@
 'use strict';
-// 渲染（二）：工事、烟幕、补给/增援线、据点、敌我单位、舰船
-// 三角形 = 登陆舰，五边形 = 驱逐舰，小方块 = 士兵，红色 = 敌方（仅视野内或已标定）
+// 渲染（二）：工事、烟幕、补给/增援线、据点、敌我单位
+// 舰船为俯视剪影（见 ships.js），小方块 = 士兵，红色 = 敌方（仅视野内或已标定）
 const MO = [[0, -4.6], [-4.6, 3.4], [4.6, 3.4]];   // 三人组成三角（放大绘制以便辨认）
 
 function drawForts(time) {
@@ -74,8 +74,10 @@ function drawLines(time) {
   ctx.lineWidth = px(1.2); ctx.setLineDash([px(2), px(6)]); ctx.strokeStyle = rgba(COL.intel, .45);
   for (const L of S.rlines) { ctx.beginPath(); ctx.moveTo(L.x0, L.y0); ctx.lineTo(L.x1, L.y1); ctx.stroke(); }
   ctx.setLineDash([]);
-  ctx.fillStyle = rgba(COL.intel, .9);
-  for (const b of S.boats) { const L = S.rlines.find(l => l.id === b.line); shape(ctx, b.x, b.y, 4.5, 3, Math.atan2(L.y1 - L.y0, L.x1 - L.x0)); ctx.fill(); }
+  for (const b of S.boats) {   // 增援艇：航向取所属增援线方向
+    const L = S.rlines.find(l => l.id === b.line);
+    drawBoat(ctx, b.x, b.y, L ? Math.atan2(L.y1 - L.y0, L.x1 - L.x0) : -Math.PI / 2, { n: (b.n || 1) * 3 });
+  }
 }
 
 function drawPoints(time) {
@@ -159,56 +161,4 @@ function drawTeams(time) {
   }
 }
 
-function drawShips(time) {
-  const ctx = R.ctx;
-  for (const s of S.ships) {
-    if (s.state === 'sunk') {
-      ctx.strokeStyle = rgba(COL.g, .25); ctx.lineWidth = px(1); ctx.setLineDash([px(2), px(3)]);
-      shape(ctx, s.x, s.y, 9, 3, s.heading); ctx.stroke(); ctx.setLineDash([]);
-      continue;
-    }
-    const sel = isSel(s.id), beached = s.state === 'beached';
-    if (s.state === 'move') {
-      ctx.strokeStyle = sel ? rgba(COL.sel, .7) : rgba(COL.g, .2); ctx.lineWidth = px(1); ctx.setLineDash([px(4), px(4)]);
-      ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(s.tx, s.ty); ctx.stroke(); ctx.setLineDash([]);
-      if (s.land) { ctx.beginPath(); ctx.moveTo(s.bx, s.by); ctx.lineTo(s.bx, s.by - 12); ctx.lineTo(s.bx + 7, s.by - 9); ctx.lineTo(s.bx, s.by - 6); ctx.stroke(); }
-    }
-    ctx.lineWidth = px(1.6);
-    ctx.strokeStyle = rgba(COL.g, beached ? .5 : 1); ctx.fillStyle = rgba(COL.g, beached ? .06 : .15);
-    shape(ctx, s.x, s.y, 10, 3, s.heading); ctx.fill(); ctx.stroke();
-    if (s.kind === 'supply') { ctx.fillStyle = rgba(COL.g, beached ? .5 : 1); shape(ctx, s.x, s.y, 3.6, 3, s.heading); ctx.fill(); }
-    if (s.state === 'unloading') { ctx.strokeStyle = COL.g; ctx.lineWidth = px(2); ctx.beginPath(); ctx.arc(s.x, s.y, 15, -1.57, -1.57 + s.ut / 3 * 6.283); ctx.stroke(); }
-    if (sel) {
-      ctx.strokeStyle = COL.sel; ctx.lineWidth = px(1.6);
-      for (const [dx, dy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) { ctx.beginPath(); ctx.moveTo(s.x + dx * 15, s.y + dy * 9); ctx.lineTo(s.x + dx * 15, s.y + dy * 15); ctx.lineTo(s.x + dx * 9, s.y + dy * 15); ctx.stroke(); }
-    }
-    if (!beached) for (let i = 0; i < s.maxhp; i++) {
-      ctx.fillStyle = rgba(s.hp > 3 ? COL.g : COL.enemy, s.hp >= i + 1 ? .9 : .15);
-      ctx.fillRect(s.x - 15 + i * 3, s.y + 14, 2, 2);
-    }
-  }
-}
-
-function drawDD(time) {
-  const ctx = R.ctx, D = S.dd;
-  if (D.state === 'sunk') {
-    ctx.strokeStyle = rgba(COL.g, .25); ctx.lineWidth = px(1); ctx.setLineDash([px(2), px(3)]);
-    shape(ctx, D.x, D.y, 13, 5, -1.57); ctx.stroke(); ctx.setLineDash([]);
-    return;
-  }
-  const col = D.state === 'repair' ? COL.amber : COL.g, sel = isSel('DD');
-  if (sel || U.tool === 'fire' || U.tool === 'smoke') {
-    ctx.strokeStyle = rgba(COL.g, .12); ctx.lineWidth = px(1); ctx.setLineDash([px(4), px(8)]);
-    ctx.beginPath(); ctx.arc(D.x, D.y, 1000, 0, 7); ctx.stroke(); ctx.setLineDash([]);
-  }
-  if (D.moving) { ctx.strokeStyle = rgba(COL.sel, .5); ctx.lineWidth = px(1); ctx.setLineDash([px(4), px(4)]); ctx.beginPath(); ctx.moveTo(D.x, D.y); ctx.lineTo(D.tx, D.ty); ctx.stroke(); ctx.setLineDash([]); }
-  ctx.lineWidth = px(1.8); ctx.strokeStyle = col; ctx.fillStyle = rgba(col, .15);
-  shape(ctx, D.x, D.y, 13, 5, -1.57); ctx.fill(); ctx.stroke();
-  ctx.lineWidth = px(1.2); shape(ctx, D.x, D.y, 5.5, 5, -1.57); ctx.stroke();
-  ctx.lineWidth = px(2.2);
-  if (D.state === 'repair') { ctx.beginPath(); ctx.arc(D.x, D.y, 19, -1.57, -1.57 + D.repairT / D.repairDur * 6.283); ctx.stroke(); }
-  else if (D.cool > 0) { ctx.strokeStyle = rgba(COL.g, .5); ctx.beginPath(); ctx.arc(D.x, D.y, 19, -1.57, -1.57 + (1 - D.cool / 5) * 6.283); ctx.stroke(); }
-  if (S.t < D.exposedUntil) { ctx.strokeStyle = rgba(COL.enemy, .5 + .5 * Math.sin(time * 12)); ctx.lineWidth = px(1.5); ctx.beginPath(); ctx.arc(D.x, D.y, 26, 0, 7); ctx.stroke(); }
-  if (sel) { ctx.strokeStyle = COL.sel; ctx.lineWidth = px(1.4); ctx.beginPath(); ctx.arc(D.x, D.y, 22, 0, 7); ctx.stroke(); }
-  for (let i = 0; i < 3; i++) { ctx.fillStyle = rgba(col, D.hull > i ? .95 : .15); shape(ctx, D.x - 8 + i * 8, D.y + 22, 3, 5, -1.57); ctx.fill(); }
-}
+// drawShips / drawDD / drawBoat：舰船俯视剪影已移至 ships.js

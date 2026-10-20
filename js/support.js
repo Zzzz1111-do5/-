@@ -1,5 +1,5 @@
 'use strict';
-// 支援火力：驱逐舰（机动、榴弹、烟幕、暴露与损管）、空军、炮弹结算
+// 支援火力：驱逐舰（机动、榴弹、烟幕、暴露与损管）、炮弹结算；空军在 carrier.js
 
 function orderDD(x, y) {
   const dd = S.dd;
@@ -67,38 +67,7 @@ function updateDD(dt) {
   if (best) ddFire(best.x, best.y, false);
 }
 
-// —— 空军：侦察机纵贯全图，攻击机投三连弹；都可能被防空炮击落 ——
-function launchPlane(kind, tx, ty) {
-  if (S.assets[kind] <= 0) { log(kind === 'strike' ? '空袭架次已用完' : '侦察架次已用完', 'warn', 'air', 2); return false; }
-  S.assets[kind]--;
-  S.planes.push({ id: S.nid++, kind, x: tx, y: H + 30, tx, ty, dropped: false, aaT: 0, rt: 0 });
-  return true;
-}
-
-function updatePlanes(dt) {
-  for (const p of S.planes) {
-    p.y -= 160 * dt;
-    if (p.kind === 'recon' && (p.rt -= dt) <= 0) { p.rt = .2; S.recon.push({ x: p.x, y: p.y, until: S.t + 25 }); }
-    if (p.kind === 'strike' && !p.dropped && p.y <= p.ty + 70) {
-      p.dropped = true;
-      for (let i = 0; i < 3; i++) fireShell(p.x, p.y, p.tx + gauss() * 10, p.ty + 34 - i * 34 + gauss() * 6, 'p', 'bomb', .7, false, { t: -i * .18 });
-    }
-    if ((p.aaT -= dt) > 0) continue;
-    p.aaT = .5;
-    for (const a of S.enemies) {
-      if (a.dead || a.kind !== 'aa' || dist(a.x, a.y, p.x, p.y) > 180) continue;
-      tracer(a.x, a.y, p.x + gauss() * 14, p.y + gauss() * 14, 'e', inVision(a.x, a.y));
-      if (a.kx == null && Math.random() < .15) { a.kx = a.x; a.ky = a.y; log('防空炮火暴露位置', 'warn', null, 0, a); }
-      if (Math.random() < (p.kind === 'strike' ? .09 : .06)) {
-        p.dead = true;
-        S.fx.push({ kind: 'boom', x: p.x, y: p.y, r: 22, life: 0, max: 1, side: 'p' });
-        log(`${p.kind === 'strike' ? '攻击机' : '侦察机'}被击落`, 'bad', null, 0, p);
-        break;
-      }
-    }
-  }
-  S.planes = S.planes.filter(p => !p.dead && p.y > -40);
-}
+// 空军（舰载机联队 launchPlane / updatePlanes）见 carrier.js
 
 function updateShells(dt) {
   for (const s of S.shells) {

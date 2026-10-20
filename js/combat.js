@@ -73,6 +73,7 @@ function impact(x, y, pw, side) {
   }
   for (const s of S.ships) { const d = dist(x, y, s.x, s.y); if (alive(s) && d < R + 6) damageShip(s, pw.ship * (1 - d / (R + 6) * .5)); }
   if (S.dd.state !== 'sunk' && dist(x, y, S.dd.x, S.dd.y) < R * .6) damageDD();
+  if (S.cv && typeof cvImpact === 'function') cvImpact(x, y, pw);   // 航母甲板受损（carrier.js）
   if (pw.struct) for (const e of S.enemies) {
     const d = dist(x, y, e.x, e.y);
     if (!e.dead && d < R * 2) e.sup = Math.min(100, (e.sup || 0) + 80 * (1 - d / (R * 2)));
@@ -187,9 +188,12 @@ function coastalFire(e) {
     if (v > bv) { bv = v; best = s; }
   }
   if (dd.state !== 'sunk' && dist(e.x, e.y, dd.x, dd.y) < 600 && (S.t < dd.exposedUntil || shipSeen(dd.x, dd.y, radar)) && 6 > bv) { bv = 6; best = dd; }
+  // 航母（carrier.js）：600 以内且被发现、或起降作业暴露时也是目标；航速 10，提前量按此计算
+  const cv = S.cv;
+  if (cv && cv.hp > 0 && dist(e.x, e.y, cv.x, cv.y) < 600 && (S.t < (cv.exposedUntil || 0) || shipSeen(cv.x, cv.y, radar)) && 7 > bv) { bv = 7; best = cv; }
   if (!best) { e.cd = 2; return; }
   e.cd = 12 + Math.random() * 3;
-  const mv = best.state === 'move' || best.moving, a = Math.atan2(best.ty - best.y, best.tx - best.x), lead = mv ? 26 * 3 * D.lead : 0;
+  const mv = best.state === 'move' || best.moving, a = Math.atan2(best.ty - best.y, best.tx - best.x), lead = mv ? (best === cv ? 10 : 26) * 3 * D.lead : 0;
   fireShell(e.x, e.y, best.x + Math.cos(a) * lead + gauss() * D.err * 1.2, best.y + Math.sin(a) * lead + gauss() * D.err * 1.2, 'e', 'coastal', 3, !inVision(e.x, e.y));
   if (e.kx == null && Math.random() < .35) { e.kx = e.x; e.ky = e.y; log('岸防重炮炮口闪光，已标定', 'warn', null, 0, e); }
 }

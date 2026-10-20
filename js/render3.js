@@ -1,5 +1,5 @@
 'use strict';
-// 渲染（三）：弹道、曳光、飞机、爆炸、工具预览、文字标注
+// 渲染（三）：弹道、曳光、爆炸、工具预览、文字标注（飞机在 carrier.js）
 
 function drawShells(time) {
   const ctx = R.ctx;
@@ -65,22 +65,7 @@ function drawTracers() {
   }
 }
 
-function drawPlanes(time) {
-  const ctx = R.ctx;
-  for (const p of S.planes) {
-    const k = p.kind === 'strike' ? 1.3 : 1;
-    ctx.strokeStyle = COL.intel; ctx.fillStyle = rgba(COL.intel, .2); ctx.lineWidth = px(1.6);
-    ctx.beginPath();
-    ctx.moveTo(p.x, p.y - 9 * k); ctx.lineTo(p.x - 8 * k, p.y + 6 * k); ctx.lineTo(p.x, p.y + 2 * k); ctx.lineTo(p.x + 8 * k, p.y + 6 * k);
-    ctx.closePath(); ctx.fill(); ctx.stroke();
-    if (p.kind === 'recon') {
-      ctx.strokeStyle = rgba(COL.intel, .3); ctx.lineWidth = px(1); ctx.setLineDash([px(2), px(5)]);
-      ctx.beginPath(); ctx.arc(p.x, p.y, 100, time * 2, time * 2 + 4.5); ctx.stroke(); ctx.setLineDash([]);
-    }
-  }
-  ctx.fillStyle = rgba(COL.intel, .16);
-  for (const r of S.recon) ctx.fillRect(r.x - 1, r.y - 1, 2, 2);
-}
+// drawPlanes（飞机剪影、尾迹、盘旋圈）见 carrier.js
 
 function drawFx() {
   const ctx = R.ctx;
