@@ -107,7 +107,7 @@ function drawStructure(p, time) {
   flag(ctx, x + (k === 'bridge' ? 0 : 22), y - (k === 'bridge' ? 6 : 8), p.owner, p.vp, p.prog, time);
   const hot = (p.prog > 0 && p.prog < 1) || p.contested, hov = hoverNear(x, y, 45);
   if (hot) {   // 占领进度弧（争夺中为琥珀色闪烁）
-    ctx.strokeStyle = p.contested ? rgba(COL.amber, .45 + .4 * Math.sin(time * 8)) : rgba(COL.g, .85); ctx.lineWidth = px(2);
+    ctx.strokeStyle = p.contested ? rgba(COL.amber, .4 + .3 * Math.sin(time * 6)) : rgba(COL.g, .8); ctx.lineWidth = px(1.6);
     ctx.beginPath(); ctx.arc(x, y, 36, -1.57, -1.57 + p.prog * 6.283); ctx.stroke();
   }
   if (hot || hov) {   // 占领半径：只在争夺中或悬停时显示
