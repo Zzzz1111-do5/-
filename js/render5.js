@@ -85,10 +85,11 @@ function drawShipMarks() {
     const men = s.load.teams * 3 + s.load.eng, g = groupOf(s.id), y = s.y + (typeof shipHalfH === 'function' ? shipHalfH(s) : 14) + px(5);
     if (men) { ctx.fillStyle = rgba(COL.g, .25); ctx.fillRect(s.x - px(8), y, px(16), px(2)); ctx.fillStyle = COL.g; ctx.fillRect(s.x - px(8), y, px(16) * men / 15, px(2)); }
     if (g) pips(ctx, g, s.x, y + px(6), COL.sel);
-    if (S.phase === 'deploy' && s.load.teams) {   // 预设阵型小图
+    if (S.phase === 'deploy' && s.load.teams) {   // 预设阵型小图（屏幕尺寸固定，约 30px 宽，放大后不会散成一片大方块）
       const n = s.load.teams, w = defWidth(s.form, n), sl = unitSlots(n, s.form, W / 2, H / 2, NORTH, w);
+      const k = Math.min(.22, px(30) / Math.max(1, w)), d = Math.min(1.8, px(2.4)), y0 = s.y - (typeof shipHalfH === 'function' ? shipHalfH(s) : 14) - Math.max(4, px(8));
       ctx.fillStyle = rgba(COL.sel, .85);
-      for (const [x, yy] of sl) ctx.fillRect(s.x + (x - W / 2) * .22 - .9, s.y - 18 + (yy - H / 2) * .22 - .9, 1.8, 1.8);
+      for (const [x, yy] of sl) ctx.fillRect(s.x + (x - W / 2) * k - d / 2, y0 + (yy - H / 2) * k - d / 2, d, d);
     }
   }
   if (S.dd.state !== 'sunk') { const g = groupOf('DD'); if (g) pips(ctx, g, S.dd.x, S.dd.y + (typeof shipHalfH === 'function' ? shipHalfH(S.dd) : 24) + px(8), COL.sel); }
