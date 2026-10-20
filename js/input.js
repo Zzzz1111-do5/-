@@ -92,11 +92,13 @@ function bindInput() {
     else if (k === 'X') ordersNow('retreat');
     else if (k === 'D') { S.sel = S.dd.state !== 'sunk' ? ['DD'] : []; updateHud(); }
     else if (k === 'G') toggleAuto();
+    else if (k === 'U') toggleAutoSel();
+    else if (k === 'K') { S.sel = S.cv ? ['CV'] : []; updateHud(); }
     else if (k === 'Z') formNow('line');
     else if (k === 'C') formNow('wedge');
     else if (k === 'B') formNow('loose');
     else {
-      const tools = { M: 'move', A: 'amove', Q: 'charge', N: 'clear', F: 'fire', S: 'smoke', R: 'recon', T: 'strike', E: 'rline' };
+      const tools = { M: 'move', A: 'amove', Q: 'charge', N: 'clear', F: 'fire', S: 'smoke', R: 'recon', T: 'strike', V: 'cas', E: 'rline' };
       if (tools[k]) setTool(tools[k]);
     }
   });

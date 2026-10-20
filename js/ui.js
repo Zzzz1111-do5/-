@@ -6,6 +6,7 @@ const selUnits = () => S.sel.map(id => UNIT_MAP.get(id)).filter(u => u && u.side
 const selTeams = () => selUnits().flatMap(teamsOf);
 const selShips = () => S.sel.map(id => S.ships.find(s => s.id === id)).filter(s => s && alive(s));
 const selDD = () => S.sel.includes('DD') && S.dd.state !== 'sunk';
+const selCV = () => S.sel.includes('CV') && S.cv && S.cv.hp > 0;
 const isSel = id => S.sel.includes(id);
 const movable = s => s.state === 'idle' || s.state === 'move';
 const ORDER_NAME = { hold: '坚守', move: '移动', amove: '攻击前进', charge: '冲锋', retreat: '撤退', clear: '排雷剪网' };
@@ -22,6 +23,7 @@ function pickAt(p) {
     if (Math.abs(p.x - (u.x + px(7))) < px(10) && Math.abs(p.y - top) < px(10)) return u.id;
   }
   if (best) return best;
+  if (typeof pickCarrier === 'function' && S.cv) { const c = pickCarrier(p); if (c) return c; }
   bd = px(18);
   for (const s of S.ships) if (alive(s)) { const d = dist(p.x, p.y, s.x, s.y); if (d < bd) { bd = d; best = s.id; } }
   if (S.dd.state !== 'sunk' && dist(p.x, p.y, S.dd.x, S.dd.y) < Math.max(bd, px(20))) best = 'DD';
@@ -30,9 +32,13 @@ function pickAt(p) {
 
 // 右键或工具点击；face/total 来自右键拖拽（拖出的线定宽，线的左手法向为朝向）
 function issueOrder(p, mode, face, total) {
-  if (S.phase === 'deploy') { deployOrder(selShips(), selDD(), p.x, p.y); updateHud(); return 1; }
+  if (S.phase === 'deploy') { deployOrder(selShips(), selDD(), p.x, p.y, selCV()); updateHud(); return 1; }
   const units = selUnits(), ships = selShips().filter(movable);
   let n = 0;
+  // 玩家亲自下令即转为手动指挥（自动驾驶不再接管）
+  for (const u of units) u.auto = false;
+  for (const s of ships) s.auto = false;
+  if (selCV() && typeof orderCV === 'function' && orderCV(p.x, p.y)) n++;
   if (units.length) {
     const cx0 = units.reduce((a, u) => a + u.x, 0) / units.length, cy0 = units.reduce((a, u) => a + u.y, 0) / units.length;
     const f = face ?? Math.atan2(p.y - cy0, p.x - cx0);
@@ -51,7 +57,7 @@ function applyTool(p) {
   else if (S.phase === 'deploy') log('支援火力在战斗开始后才能使用', 'warn', 'dep', 2);
   else if (t === 'fire') ddFire(p.x, p.y, false);
   else if (t === 'smoke') { if (ddFire(p.x, p.y, true)) U.tool = null; }
-  else if (t === 'recon' || t === 'strike') { if (launchPlane(t, p.x, p.y)) U.tool = null; }
+  else if (t === 'recon' || t === 'strike' || t === 'cas') { if (launchPlane(t, p.x, p.y)) U.tool = null; }
   else if (t === 'rline') {
     const s = S.ships.find(s => s.state === 'beached' && dist(s.x, s.y, p.x, p.y) < 25);
     if (!s) log('点选一艘已抢滩的登陆舰作为增援线终点', 'warn', 'rl0', 2);
@@ -61,14 +67,14 @@ function applyTool(p) {
 }
 
 function selectGroup(n) {
-  S.sel = S.groups[n].filter(id => id === 'DD' ? S.dd.state !== 'sunk' : UNIT_MAP.has(id) || S.ships.some(s => s.id === id && alive(s)));
+  S.sel = S.groups[n].filter(id => id === 'DD' ? S.dd.state !== 'sunk' : id === 'CV' ? !!S.cv : UNIT_MAP.has(id) || S.ships.some(s => s.id === id && alive(s)));
   const now = performance.now();
   if (now - (U.grpT[n] || 0) < 400 && S.sel.length) centerOnSel();
   U.grpT[n] = now;
   updateHud();
 }
 function centerOnSel() {
-  const objs = S.sel.map(id => id === 'DD' ? S.dd : UNIT_MAP.get(id) || S.ships.find(s => s.id === id)).filter(o => o && o.x != null);
+  const objs = S.sel.map(id => id === 'DD' ? S.dd : id === 'CV' ? S.cv : UNIT_MAP.get(id) || S.ships.find(s => s.id === id)).filter(o => o && o.x != null);
   if (objs.length) camCenter(objs.reduce((a, o) => a + o.x, 0) / objs.length, objs.reduce((a, o) => a + o.y, 0) / objs.length);
 }
 function assignGroup(n) {
@@ -85,6 +91,16 @@ function formNow(f) {
 }
 function togglePause() { if (!S.over && S.phase === 'battle') { S.paused = !S.paused; updateHud(); } }
 function toggleAuto() { S.dd.auto = !S.dd.auto; updateHud(); }
+// 选中部队/舰船在“自动（AI 接管）”与“手动（玩家指挥）”之间切换
+function toggleAutoSel() {
+  const items = [...selUnits(), ...selShips()];
+  if (!items.length) return;
+  const on = items.some(o => o.auto !== true);
+  for (const o of items) o.auto = on;
+  if (S.phase === 'deploy') for (const s of selShips()) s.unitAuto = on;
+  log(on ? `${items.length} 个单位交由 AI 自动指挥` : `${items.length} 个单位改为手动指挥`, 'info', 'auto', 1);
+  updateHud();
+}
 
 function finishSelect(p, add) {
   if (U.box) {
@@ -92,6 +108,7 @@ function finishSelect(p, add) {
     let ids = S.units.filter(u => u.side === 'p' && teamsOf(u).some(inB)).map(u => u.id);
     if (!ids.length) ids = S.ships.filter(s => alive(s) && (movable(s) || S.phase === 'deploy') && inB(s)).map(s => s.id);
     if (S.dd.state !== 'sunk' && inB(S.dd)) ids.push('DD');
+    if (S.cv && inB(S.cv)) ids.push('CV');
     S.sel = add ? [...new Set([...S.sel, ...ids])] : ids;
   } else {
     const id = pickAt(p);

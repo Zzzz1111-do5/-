@@ -16,6 +16,10 @@ const ICON = {
   strike: '<path d="M12 2v13M4 9l8-3 8 3M8 14l4-2 4 2"/><circle cx="12" cy="20" r="2" class="f"/>',
   rline: '<path d="M4 20L18 6" stroke-dasharray="2.5 3"/><path d="M12 5h7v7"/>',
   auto: '<path d="M12 3l7 3v6c0 4-3 7-7 9-4-2-7-5-7-9V6z"/><circle cx="12" cy="11" r="2.5" class="f"/>',
+  ai: '<circle cx="12" cy="12" r="3.5"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4M5 5l2.8 2.8M16.2 16.2L19 19M5 19l2.8-2.8M16.2 7.8L19 5"/>',
+  cas: '<path d="M12 3v12M5 10l7-3 7 3M9 15l3-1.5 3 1.5"/><circle cx="12" cy="12" r="9.5" stroke-dasharray="3 2.5"/>',
+  cv: '<path d="M3 9h15l3 3-3 3H3z"/><path d="M14 9V6h3v3"/><path d="M5 12h10" stroke-dasharray="2 2"/>',
+  rain: '<path d="M6 3v6M12 3v10M18 3v4M6 13v2M12 17v3M18 11v6"/>',
   ship: '<path d="M12 4l8 15H4z"/>', supply: '<path d="M12 4l8 15H4z"/><path class="f" d="M12 11l3 5H9z"/>',
   dd: '<path d="M12 3l8 6-3 10H7L4 9z"/><path d="M12 8l3 2.3-1.2 3.7h-3.6L9 10.3z"/>',
   assault: '<path class="f" d="M12 5l6 11H6z"/><circle cx="6" cy="20" r="1.4" class="f"/><circle cx="12" cy="20" r="1.4" class="f"/><circle cx="18" cy="20" r="1.4" class="f"/>',
@@ -34,16 +38,26 @@ const svg = (k, cls = '') => `<svg viewBox="0 0 24 24" class="ic ${cls}" aria-hi
 const BTN = [
   ['orders', [['move', '移动（右键 · 拖拽定宽与朝向）', 'M', () => setTool('move')], ['amove', '攻击前进：遇敌停下交火', 'A', () => setTool('amove')],
     ['charge', '冲锋：直扑敌阵，白刃与手榴弹', 'Q', () => setTool('charge')], ['hold', '坚守：就地构筑掩体', 'H', () => ordersNow('hold')],
-    ['retreat', '撤退至滩头', 'X', () => ordersNow('retreat')], ['clear', '工兵排雷、剪铁丝网', 'N', () => setTool('clear')]]],
+    ['retreat', '撤退至滩头', 'X', () => ordersNow('retreat')], ['clear', '工兵排雷、剪铁丝网', 'N', () => setTool('clear')],
+    ['ai', '自动 / 手动：交给 AI 指挥或亲自指挥', 'U', toggleAutoSel]]],
   ['forms', [['line', '横队：火力正面最宽', 'Z', () => formNow('line')], ['wedge', '三三制楔形：三人成组、三组成三角', 'C', () => formNow('wedge')],
     ['loose', '散开：降低炮火伤亡', 'B', () => formNow('loose')]]],
   ['support', [['fire', '舰炮射击：每发 70% 暴露坐标', 'F', () => setTool('fire')], ['smoke', '烟幕弹：遮断双方视线', 'S', () => setTool('smoke')],
-    ['recon', '侦察机：纵贯全图', 'R', () => setTool('recon')], ['strike', '空袭：三连弹', 'T', () => setTool('strike')],
+    ['recon', '侦察机：从航母起飞纵贯侦察', 'R', () => setTool('recon')], ['strike', '攻击机：三连弹', 'T', () => setTool('strike')],
+    ['cas', '近距空中支援：战机盘旋扫射', 'V', () => setTool('cas')],
     ['rline', '开辟增援线', 'E', () => setTool('rline')], ['auto', '驱逐舰自动掩护', 'G', toggleAuto]]]
 ];
-const ASSET = { smoke: 'smoke', recon: 'recon', strike: 'strike', rline: 'rline' };
+const ASSET = { smoke: 'smoke', recon: 'recon', strike: 'strike', cas: 'cas', rline: 'rline' };
 
 function buildHud() {
+  if (typeof SHIP_ICONS === 'object') Object.assign(ICON, SHIP_ICONS);
+  if (typeof CARRIER_ICONS === 'object') Object.assign(ICON, CARRIER_ICONS);
+  $('btnRain').innerHTML = svg('rain');
+  $('btnRain').addEventListener('click', () => {
+    R.rain = R.rain === 0 ? .25 : R.rain < .5 ? .7 : 0;
+    try { localStorage.setItem('bh-rain', R.rain); } catch (e) { /* 存储不可用时忽略 */ }
+    updateHud();
+  });
   for (const [grp, list] of BTN) $(grp).innerHTML = list.map(([k, tip, key]) =>
     `<button class="ib" id="b-${k}" type="button" title="${tip}（${key}）" aria-label="${tip}">${svg(k)}<kbd>${key}</kbd>${ASSET[k] ? `<em id="n-${k}"></em>` : ''}</button>`).join('');
   for (const [, list] of BTN) for (const [k, , , fn] of list) $('b-' + k).addEventListener('click', fn);
@@ -65,7 +79,7 @@ function buildHud() {
   $('btnAgain').addEventListener('click', () => restart(true));
   $('cards').addEventListener('pointerdown', e => {   // 卡片会随战况重建，用 pointerdown 保证点得中
     const c = e.target.closest('.uc'); if (!c) return;
-    const id = c.dataset.id === 'DD' ? 'DD' : +c.dataset.id;
+    const id = c.dataset.id === 'DD' || c.dataset.id === 'CV' ? c.dataset.id : +c.dataset.id;
     S.sel = e.shiftKey || e.ctrlKey ? (S.sel.includes(id) ? S.sel.filter(i => i !== id) : [...S.sel, id]) : [id];
     updateHud();
   });
@@ -92,6 +106,7 @@ function cardList() {
   for (const u of S.units) if (u.side === 'p' && teamsOf(u).length) out.push({ id: u.id, k: u.kind === 'eng' ? 'eng' : u.emblem === 'reserve' ? 'reserve' : 'assault', u });
   for (const s of S.ships) if (alive(s) && s.state !== 'beached') out.push({ id: s.id, k: s.kind === 'supply' ? 'supply' : 'ship', s });
   if (S.dd.state !== 'sunk') out.push({ id: 'DD', k: 'dd' });
+  if (S.cv && S.cv.hp > 0) out.push({ id: 'CV', k: 'cv' });
   return out;
 }
 
@@ -99,7 +114,7 @@ function updateCards() {
   const list = cardList(), key = list.map(c => c.id).join(',');
   if (key !== U.cardKey) {
     U.cardKey = key;
-    $('cards').innerHTML = list.map(c => `<button class="uc" type="button" data-id="${c.id}">${svg(c.k, 'em')}<b></b><span class="bars"><i class="s"><i></i></i><i class="m"><i></i></i><i class="a"><i></i></i></span><span class="gp"></span><span class="st"></span></button>`).join('');
+    $('cards').innerHTML = list.map(c => `<button class="uc" type="button" data-id="${c.id}">${svg(c.k, 'em')}<b></b><span class="bars"><i class="s"><i></i></i><i class="m"><i></i></i><i class="a"><i></i></i></span><span class="gp"></span><span class="st"></span>${svg('ai', 'aib')}</button>`).join('');
   }
   const els = $('cards').children;
   list.forEach((c, i) => {
@@ -114,6 +129,10 @@ function updateCards() {
     } else if (c.s) {
       b.textContent = c.s.load.teams * 3 + c.s.load.eng; set(0, c.s.hp / c.s.maxhp); set(1, 0); set(2, 0);
       st.innerHTML = svg(c.s.plan || c.s.state === 'move' ? 'move' : 'hold', 'mini');
+    } else if (c.id === 'CV') {
+      const wing = S.air && S.air.wing ? S.air.wing : [], ready = wing.filter(w => w.state === 'deck').length;
+      b.textContent = ready; set(0, S.cv.hp / S.cv.maxhp); set(1, wing.length ? ready / wing.length : 0); set(2, 0);
+      st.innerHTML = svg(S.cv.moving ? 'move' : 'hold', 'mini');
     } else {
       const D = S.dd;
       b.textContent = D.hull; set(0, D.hull / 3); set(1, D.state === 'repair' ? D.repairT / D.repairDur : 1 - D.cool / 5); set(2, 0);
@@ -121,6 +140,7 @@ function updateCards() {
       st.innerHTML = svg(D.auto ? 'auto' : 'fire', 'mini');
     }
     el.classList.toggle('waver', state === 'waver'); el.classList.toggle('rout', state === 'rout');
+    el.classList.toggle('isauto', !!((c.u && c.u.auto === true) || (c.s && c.s.auto === true)));
     const g = groupOf(c.id); gp.textContent = g ? '•'.repeat(g) : '';
   });
 }
@@ -138,13 +158,14 @@ function updateHud() {
   for (const [grp, list] of BTN) for (const [k] of list) {
     const el = $('b-' + k);
     let dis = false;
-    if (grp === 'orders') dis = k === 'clear' ? !units.some(u => u.kind === 'eng') : k === 'move' ? !(hasU || ships.length || selDD()) : !hasU || deploy;
+    if (grp === 'orders') dis = k === 'clear' ? !units.some(u => u.kind === 'eng') : k === 'move' ? !(hasU || ships.length || selDD() || selCV()) : k === 'ai' ? !(hasU || ships.length) : !hasU || deploy;
     if (grp === 'forms') dis = !(hasU || (deploy && ships.length));
     if (grp === 'support') dis = deploy || (ASSET[k] && S.assets[ASSET[k]] <= 0) || ((k === 'fire' || k === 'smoke' || k === 'auto') && D.state === 'sunk');
     el.disabled = dis;
-    el.classList.toggle('on', k === 'auto' ? D.auto : U.tool === k || (grp === 'forms' && (units.length ? units.every(u => u.form === k) : ships.length && ships.every(s => s.form === k))));
-    if (ASSET[k]) $('n-' + k).textContent = S.assets[ASSET[k]];
+    el.classList.toggle('on', k === 'auto' ? D.auto : k === 'ai' ? [...units, ...ships].length > 0 && [...units, ...ships].every(o => o.auto === true) : U.tool === k || (grp === 'forms' && (units.length ? units.every(u => u.form === k) : ships.length && ships.every(s => s.form === k))));
+    if (ASSET[k]) $('n-' + k).textContent = S.assets[ASSET[k]] ?? 0;
   }
+  $('btnRain').classList.toggle('hot', R.rain > .5); $('btnRain').style.opacity = R.rain ? 1 : .45;
   $('reserve').textContent = S.assets.reserve;
   $('objs').innerHTML = S.points.map(p => `<button type="button" class="ob ${p.owner}${p.contested ? ' hot' : ''}" data-k="${p.key}" title="${p.name}">${svg(PKIND(p.key))}<i style="width:${p.prog * 100}%"></i></button>`).join('') +
     (S.holdT ? `<span class="hold"><i style="width:${S.holdT / HOLD * 100}%"></i></span>` : '');

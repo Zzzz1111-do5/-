@@ -73,6 +73,8 @@ button:disabled { cursor: not-allowed; opacity: .3; }
 .uc .gp { position: absolute; top: 2px; left: 4px; font-size: 9px; color: var(--sel); letter-spacing: -1px; }
 .uc .st { position: absolute; top: 3px; right: 3px; color: var(--mute); }
 .uc .mini { width: 12px; height: 12px; stroke-width: 2; }
+.uc .aib { position: absolute; bottom: 3px; right: 3px; width: 11px; height: 11px; stroke-width: 2; color: var(--intel); display: none; }
+.uc.isauto .aib { display: block; }
 .uc.sel { border-color: var(--sel); box-shadow: 0 0 14px rgba(176, 124, 255, .55); background: linear-gradient(180deg, rgba(176, 124, 255, .18), rgba(3, 12, 7, .92)); }
 .uc.waver { color: var(--amber); }
 .uc.rout { color: var(--enemy); animation: blink .6s steps(2) infinite; }
@@ -141,6 +143,7 @@ button:disabled { cursor: not-allowed; opacity: .3; }
     <span id="clock">00:00</span>
     <button class="tb" id="btnPause" type="button" title="暂停 / 继续（空格）">▶</button>
     <button class="tb" id="btnSpeed" type="button" title="推演速度">1×</button>
+    <button class="tb" id="btnRain" type="button" title="数码雨：淡 / 强 / 关"></button>
     <button class="tb" id="btnNew" type="button" title="新战局（再点一次确认）">↻</button>
     <button class="tb" id="btnHelp" type="button" title="简报与操作说明">?</button>
   </div>

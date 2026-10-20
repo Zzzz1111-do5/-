@@ -84,6 +84,8 @@ function drawStructure(p, time) {
     }
     ctx.setLineDash([px(1.5), px(2.5)]); ctx.beginPath(); ctx.arc(x, y + 2, 34, Math.PI * .05, Math.PI * .95); ctx.stroke(); ctx.setLineDash([]);
     box(x, y - 14, 14, 7);
+  } else if (k === 'bridge' && typeof isBlown === 'function' && isBlown(p.key)) {
+    box(x - 9, y, 3, 14); box(x + 9, y, 3, 14);   // 桥面被炸毁，只剩桥墩（残骸由 drawBlown 绘制）
   } else if (k === 'bridge') {
     ctx.fillRect(x - 24, y - 5, 48, 10);
     ctx.beginPath(); ctx.moveTo(x - 24, y - 5); ctx.lineTo(x + 24, y - 5); ctx.moveTo(x - 24, y + 5); ctx.lineTo(x + 24, y + 5); ctx.stroke();

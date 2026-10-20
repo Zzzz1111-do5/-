@@ -15,6 +15,7 @@ function initRender(cv) {
   R.cv = cv; R.ctx = cv.getContext('2d');
   for (const k of ['b1', 'b2', 'fog']) R[k] = document.createElement('canvas');
   R.fog.width = GW; R.fog.height = GH;
+  try { const v = localStorage.getItem('bh-rain'); if (v != null) R.rain = +v; } catch (e) { /* 存储不可用时用默认值 */ }
   mxInit();
   resize();
 }
@@ -107,8 +108,9 @@ function draw(now) {
   worldTf(ctx);
   ctx.lineCap = 'round'; ctx.lineJoin = 'round';
   indexUnits();
-  drawMarks(ctx); drawCraters(); drawBuildings(); drawForts(time); drawSmoke(time); drawLines(time); drawStructures(time);
-  drawEnemies(time); drawTeams(time); drawShips(time); drawDD(time); drawPlans(time);
+  const opt = name => { const f = globalThis[name] || window[name]; if (typeof f === 'function') f(time); };
+  drawMarks(ctx); drawCraters(); drawBuildings(); drawForts(time); drawSmoke(time); drawLines(time); opt('drawSupplyNet'); drawStructures(time); opt('drawBlown');
+  drawEnemies(time); opt('drawArmor'); opt('drawAutoRoutes'); drawTeams(time); opt('drawCarrier'); drawShips(time); drawDD(time); drawPlans(time);
   drawShells(time); drawTracers(); drawPlanes(time); drawFx(); drawTool(time); drawFormPreview();
   bloom();
   worldTf(ctx);

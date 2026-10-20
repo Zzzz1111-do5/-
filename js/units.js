@@ -68,11 +68,11 @@ function disembark(s) {
   const n = s.load.teams;
   if (n) {
     // 按登陆前预设的阵型在滩头展开
-    const u = addUnit('p', 'inf', { ship: s.label, emblem: s.kind, form: s.form || 'line', face: NORTH });
+    const u = addUnit('p', 'inf', { ship: s.label, emblem: s.kind, form: s.form || 'line', face: NORTH, auto: s.unitAuto !== false });
     for (const [x, y] of unitSlots(n, u.form, s.bx, s.by - 14, NORTH, defWidth(u.form, n))) addTeam('p', x, y, ['radio', 'rifle', 'mg'], { unit: s.label, u: u.id });
   }
   if (s.load.eng) {
-    const ue = addUnit('p', 'eng', { ship: s.label, emblem: 'eng', face: NORTH });
+    const ue = addUnit('p', 'eng', { ship: s.label, emblem: 'eng', face: NORTH, auto: true });
     const e = addTeam('p', s.bx, s.by, ['eng', 'eng', 'eng'], { unit: s.label, depot: s.id, u: ue.id });
     makeSupplyLine(s, e);
     log(`${s.label} 建立滩头补给站，补给线接通后方`, 'good');

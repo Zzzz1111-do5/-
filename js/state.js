@@ -118,7 +118,7 @@ function deployDefenses(r, D) {
 
 function addShip(kind, x, y, label) {
   const sp = SHIP_SPEC[kind];
-  const s = { id: S.nid++, kind, label, x, y, tx: x, ty: y, hp: sp.hp, maxhp: sp.hp, state: 'idle', heading: -Math.PI / 2, ut: 0, land: false, plan: null, form: 'line', load: { teams: sp.teams, eng: sp.eng } };
+  const s = { id: S.nid++, kind, label, x, y, tx: x, ty: y, hp: sp.hp, maxhp: sp.hp, state: 'idle', heading: -Math.PI / 2, ut: 0, land: false, plan: null, form: 'line', auto: true, load: { teams: sp.teams, eng: sp.eng } };
   S.ships.push(s);
   return s;
 }

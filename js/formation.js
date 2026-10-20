@@ -79,7 +79,7 @@ function layoutUnits(units, x, y, face, total) {
 }
 
 // —— 部署阶段：在集结海域内重新布阵、预定登陆点、开始战斗 ——
-function deployOrder(ships, dd, x, y) {
+function deployOrder(ships, dd, x, y, cv) {
   const zone = y >= STAGING_Y && typeAt(x, y) === T.DEEP;
   ships.forEach((s, i) => {
     const k = (i - (ships.length - 1) / 2) * 32;
@@ -92,6 +92,7 @@ function deployOrder(ships, dd, x, y) {
     if (zone) Object.assign(S.dd, { x, y: clamp(y, STAGING_Y + 10, H - 12), tx: x, ty: y, plan: null });
     else if (!isLand(x, y)) S.dd.plan = { x, y };
   }
+  if (cv && S.cv && zone) Object.assign(S.cv, { x: clamp(x, 90, W - 90), y: clamp(y, STAGING_Y + 60, H - 30), tx: x, ty: y, moving: false });
 }
 
 function startBattle() {
