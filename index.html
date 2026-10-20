@@ -1,0 +1,235 @@
+<title>滩头沙盘</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Noto+Sans+SC:wght@400;700&family=Silkscreen&display=swap">
+<style>
+/* 布局：沙盘居中占满，右侧情报/指挥面板，下方手牌。单一暗色作战台，不随主题切换 */
+:root {
+  --bg: #020704; --panel: #051009; --line: rgba(61, 255, 138, .2); --line-hi: rgba(61, 255, 138, .55);
+  --g: #3dff8a; --g-mid: #1fa457; --enemy: #ff3d6e; --intel: #5cc8ff; --sel: #b07cff; --amber: #ffc24a;
+  --text: #c6f7d8; --mute: #6c9a80;
+  --f-ui: "IBM Plex Mono", "Noto Sans SC", ui-monospace, monospace;
+  --f-px: "Silkscreen", "IBM Plex Mono", monospace;
+  color-scheme: dark;
+}
+html, body { height: 100%; }
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 13px/1.45 var(--f-ui); overflow: hidden; }
+button { font: inherit; color: inherit; cursor: pointer; }
+button:focus-visible { outline: 2px solid var(--sel); outline-offset: 2px; }
+button:disabled { cursor: not-allowed; opacity: .38; }
+#app {
+  height: 100%; box-sizing: border-box; display: grid; gap: 10px;
+  grid-template-columns: minmax(0, 1fr) 300px; grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-areas: "top top" "stage side" "hand side";
+  padding-block: 10px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+
+/* 顶栏 */
+#top { grid-area: top; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; }
+.brand { display: flex; align-items: baseline; gap: 10px; }
+.brand b { font: 22px/1 var(--f-px); color: var(--g); letter-spacing: .04em; text-shadow: 0 0 12px rgba(61, 255, 138, .6); }
+.brand span { font-weight: 700; font-family: "Noto Sans SC", var(--f-ui); letter-spacing: .12em; }
+.op { color: var(--mute); font-size: 12px; }
+.clock { display: flex; gap: 14px; font-variant-numeric: tabular-nums; margin-left: auto; }
+#clock { color: var(--g); font-weight: 600; }
+#remain { color: var(--mute); }
+#force { color: var(--text); }
+.tb { display: flex; gap: 6px; }
+.btn { background: var(--panel); border: 1px solid var(--line); padding: 5px 11px; border-radius: 4px; }
+.btn:hover:not(:disabled) { border-color: var(--line-hi); }
+.btn.hot { border-color: var(--sel); color: #e6d8ff; box-shadow: 0 0 14px rgba(176, 124, 255, .35); }
+.btn.on { border-color: var(--g); color: var(--g); box-shadow: 0 0 12px rgba(61, 255, 138, .3); }
+
+/* 沙盘 */
+#stage {
+  grid-area: stage; position: relative; min-height: 0; border: 1px solid var(--line-hi); border-radius: 6px; overflow: hidden;
+  box-shadow: 0 0 22px rgba(61, 255, 138, .16), inset 0 0 60px rgba(0, 0, 0, .8); background: var(--bg);
+}
+#cv { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: crosshair; }
+#stage::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: repeating-linear-gradient(to bottom, transparent 0 2px, rgba(0, 0, 0, .22) 2px 3px),
+    radial-gradient(ellipse at center, transparent 55%, rgba(0, 0, 0, .55) 100%);
+}
+#pauseBand {
+  position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 2; pointer-events: none;
+  border: 1px solid var(--sel); background: rgba(10, 4, 20, .82); color: #e6d8ff; padding: 5px 14px; border-radius: 4px;
+  box-shadow: 0 0 18px rgba(176, 124, 255, .35); white-space: nowrap; font-size: 12px;
+}
+#pauseBand b { font-family: var(--f-px); font-weight: 400; margin-right: 8px; color: var(--sel); }
+#toolHint { position: absolute; left: 10px; bottom: 8px; z-index: 2; pointer-events: none; color: var(--mute); font-size: 12px; max-width: 60%; }
+
+/* 手牌 */
+#hand { grid-area: hand; display: flex; flex-wrap: wrap; gap: 8px; }
+.card {
+  position: relative; display: grid; grid-template-columns: auto 1fr auto; grid-template-rows: auto auto; gap: 1px 8px; align-items: center;
+  min-width: 150px; flex: 1 1 150px; text-align: left; background: var(--panel); border: 1px solid var(--line); border-radius: 5px; padding: 7px 10px;
+}
+.card svg { grid-row: span 2; width: 26px; height: 26px; fill: none; stroke: var(--g); stroke-width: 1.6; filter: drop-shadow(0 0 4px rgba(61, 255, 138, .7)); }
+.card svg .f { fill: var(--g); }
+.card .cn { font-weight: 600; }
+.card .cc { color: var(--g); font-weight: 600; font-variant-numeric: tabular-nums; }
+.card .ck { position: absolute; top: 5px; right: 7px; font-size: 10px; color: var(--mute); border: 1px solid var(--line); border-radius: 3px; padding: 0 4px; }
+.card .cc + .ck { display: none; }
+.card .cnote { grid-column: 2 / 4; font-size: 11px; color: var(--mute); }
+.card:hover:not(:disabled) { border-color: var(--line-hi); }
+.card.on { border-color: var(--sel); box-shadow: 0 0 16px rgba(176, 124, 255, .4); }
+.card.reserve { grid-template-columns: 1fr auto; border-style: dashed; }
+.card.reserve .cnote { grid-column: 1 / 3; }
+.card.cmd { grid-template-columns: 1fr auto; flex: 0 1 120px; min-width: 110px; }
+.card.cmd .cnote { grid-column: 1 / 3; }
+.card.cmd .ck { position: static; }
+
+/* 侧栏 */
+#side { grid-area: side; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding-right: 2px; }
+.pnl { border: 1px solid var(--line); border-radius: 5px; background: var(--panel); padding: 9px 11px; display: grid; gap: 7px; }
+.pnl h2 { margin: 0; font: 11px/1.2 var(--f-ui); letter-spacing: .14em; color: var(--mute); display: flex; justify-content: space-between; }
+.pnl h2 em { font: 10px var(--f-px); font-style: normal; color: var(--g-mid); letter-spacing: .05em; }
+.dim { color: var(--mute); margin: 0; font-size: 12px; }
+.row { display: grid; grid-template-columns: 12px auto 1fr auto; gap: 6px; align-items: center; font-size: 12px; }
+.row .bar { grid-column: 2 / 5; }
+.tri { width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-bottom: 9px solid var(--g); }
+.tri.sup { border-bottom-color: var(--intel); }
+.bar { display: block; height: 3px; background: rgba(61, 255, 138, .12); border-radius: 2px; overflow: hidden; }
+.bar i { display: block; height: 100%; background: var(--g); box-shadow: 0 0 6px var(--g); }
+#groups { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.grp { display: flex; }
+.grp button { background: transparent; border: 1px solid var(--line); padding: 4px 7px; font-size: 12px; }
+.gsel { flex: 1; text-align: left; border-radius: 4px 0 0 4px; color: var(--sel); }
+.gsel span { color: var(--mute); }
+.gset { border-left: 0 !important; border-radius: 0 4px 4px 0; color: var(--mute); }
+.grp button:hover { border-color: var(--sel); }
+.dd { display: flex; align-items: center; gap: 10px; }
+#ddHull { display: flex; gap: 4px; }
+#ddHull i { width: 12px; height: 12px; clip-path: polygon(50% 0, 100% 38%, 82% 100%, 18% 100%, 0 38%); background: rgba(61, 255, 138, .15); }
+#ddHull i.on { background: var(--g); }
+.ddst { font-size: 12px; }
+.ddst.repair { color: var(--amber); }
+.ddst.sunk { color: var(--enemy); }
+#ddRepair .bar i { background: var(--amber); box-shadow: 0 0 6px var(--amber); }
+#ddExposed { color: var(--enemy); font-size: 12px; margin: 0; }
+.ddbtn { display: flex; gap: 6px; }
+.ddbtn .btn { flex: 1; font-size: 12px; }
+.obj { display: grid; grid-template-columns: 16px auto 1fr; gap: 8px; align-items: center; font-size: 12px; }
+.obj b { color: var(--enemy); }
+.obj.p b { color: var(--g); }
+.obj .bar i { transition: width .2s; }
+#intel { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 12px; }
+#intel li { display: grid; grid-template-columns: 42px 1fr; gap: 6px; color: var(--text); }
+#intel time { color: var(--mute); font-variant-numeric: tabular-nums; }
+#intel .warn { color: var(--amber); }
+#intel .bad { color: var(--enemy); }
+#intel .good { color: var(--g); }
+.legend { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 10px; font-size: 11px; color: var(--mute); }
+.legend span::before { content: attr(data-g); color: var(--g); margin-right: 5px; }
+.legend span.e::before { color: var(--enemy); }
+.legend span.i::before { color: var(--intel); }
+
+/* 简报与结算 */
+.modal { position: fixed; inset: 0; z-index: 10; display: grid; place-items: center; background: rgba(1, 4, 2, .78); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.sheet {
+  max-width: 560px; max-height: calc(100% - 32px); overflow-y: auto; border: 1px solid var(--sel); border-radius: 8px; background: #07040f;
+  box-shadow: 0 0 0 4px rgba(176, 124, 255, .12), 0 0 40px rgba(176, 124, 255, .3); padding: 20px 22px; display: grid; gap: 12px;
+}
+.sheet h1 { margin: 0; font: 26px/1.1 var(--f-px); color: var(--g); text-shadow: 0 0 14px rgba(61, 255, 138, .6); }
+.sheet h1 small { display: block; font: 700 15px/1.5 "Noto Sans SC", var(--f-ui); color: var(--text); letter-spacing: .1em; margin-top: 4px; }
+.sheet p { margin: 0; color: var(--text); }
+.sheet ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; color: var(--text); font-size: 12.5px; }
+.sheet kbd { border: 1px solid var(--line-hi); border-radius: 3px; padding: 0 4px; font: 11px var(--f-ui); color: var(--g); }
+.sheet .go { justify-self: start; background: transparent; border: 1px solid var(--g); color: var(--g); padding: 7px 18px; border-radius: 4px; box-shadow: 0 0 16px rgba(61, 255, 138, .35); }
+#endTitle.win { color: var(--g); }
+#endTitle.lose { color: var(--enemy); text-shadow: 0 0 14px rgba(255, 61, 110, .6); }
+#endStats { display: grid; grid-template-columns: auto 1fr; gap: 4px 18px; margin: 0; font-variant-numeric: tabular-nums; }
+#endStats dt { color: var(--mute); }
+#endStats dd { margin: 0; }
+
+@media (max-width: 900px) {
+  body { overflow: auto; }
+  #app { height: auto; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto; grid-template-areas: "top" "stage" "hand" "side"; }
+  #stage { aspect-ratio: 3 / 2; max-width: 100%; }
+  #side { overflow: visible; }
+  .clock { margin-left: 0; }
+  .card { min-width: 130px; flex-basis: 130px; }
+}
+</style>
+
+<div id="app">
+  <header id="top">
+    <div class="brand"><b>BEACHHEAD</b><span>滩头沙盘</span></div>
+    <span class="op">行动代号「潮汐」· 局部登陆战</span>
+    <div class="clock"><span id="clock">T+00:00</span><span id="remain"></span><span id="force"></span></div>
+    <div class="tb">
+      <button class="btn" id="btnPause" type="button">▶ 继续</button>
+      <button class="btn" id="btnSpeed" type="button" title="推演速度">1×</button>
+      <button class="btn" id="btnNew" type="button">新战局</button>
+      <button class="btn" id="btnHelp" type="button">简报</button>
+    </div>
+  </header>
+
+  <main id="stage">
+    <canvas id="cv" aria-label="登陆战沙盘"></canvas>
+    <div id="pauseBand" hidden><b>PAUSED</b>推演暂停 · 可从容部署、编组、下达指令</div>
+    <div id="toolHint"></div>
+  </main>
+
+  <section id="hand" aria-label="手牌"></section>
+
+  <aside id="side">
+    <div class="pnl"><h2>选中舰船 <em>SELECT</em></h2><div id="selInfo"></div></div>
+    <div class="pnl"><h2>编组 <em>CTRL+1–4 编入 · 1–4 调出</em></h2><div id="groups"></div></div>
+    <div class="pnl">
+      <h2>驱逐舰 DD-17 <em>NAVAL GUN</em></h2>
+      <div class="dd"><div id="ddHull"></div><span id="ddState" class="ddst"></span></div>
+      <div id="ddRepair" hidden><span class="dim">损管小组抢修中，期间无法提供火力掩护</span><span class="bar"><i id="ddRepairBar"></i></span></div>
+      <p id="ddExposed" hidden>坐标已暴露，敌反炮兵射击来袭</p>
+      <div class="ddbtn"><button class="btn" id="btnAim" type="button">指定射向 F</button><button class="btn" id="btnAuto" type="button">自动掩护</button></div>
+      <p class="dim">每次射击 70% 概率暴露坐标并遭反击；中弹 3 次沉没。</p>
+    </div>
+    <div class="pnl"><h2>作战目标 <em>OBJECTIVES</em></h2><div id="objs"></div></div>
+    <div class="pnl"><h2>情报 <em>INTEL</em></h2><ul id="intel"></ul></div>
+    <div class="pnl"><h2>图例 <em>LEGEND</em></h2>
+      <div class="legend">
+        <span data-g="▲">突击登陆舰</span><span data-g="◭">补给登陆舰</span>
+        <span data-g="⬠">驱逐舰</span><span data-g="■">士兵（环 = 通讯兵）</span>
+        <span data-g="○">工兵</span><span class="i" data-g="⌃">飞机</span>
+        <span class="e" data-g="■">敌军（仅视野内）</span><span class="e" data-g="?">模糊弹道来源</span>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<div class="modal" id="brief" hidden>
+  <div class="sheet">
+    <h1>BEACHHEAD<small>滩头沙盘 · 作战简报</small></h1>
+    <p>你站在沙盘南端。北岸地形已经投影出来，但敌军部署看不见：只有通讯兵、侦察机和舰船能点亮一块区域，其余只能从模糊弹道判断火力来源。</p>
+    <ul>
+      <li>打出手牌：<kbd>Q</kbd> 突击登陆舰（15 人 = 5 个小队）、<kbd>W</kbd> 补给登陆舰（4 小队 + 3 工兵，抢滩即建补给线，工兵自动抢修）。</li>
+      <li>拖框选舰，<kbd>Ctrl</kbd>+<kbd>1–4</kbd> 编组，<kbd>1–4</kbd> 调出；右键（触屏用「移动」）下达移动，落点在陆地即抢滩。</li>
+      <li>每个小队有一名通讯兵，他阵亡后那片视野会消失。小队上岸后自行向最近的目标推进。</li>
+      <li><kbd>F</kbd> 指定驱逐舰射向。每发 70% 概率暴露坐标，中弹后损管期间不能掩护，中弹 3 次沉没。</li>
+      <li><kbd>E</kbd> 在已抢滩的舰上开辟增援线，<kbd>R</kbd> 空袭，<kbd>T</kbd> 侦察机。<kbd>空格</kbd> 随时暂停。</li>
+      <li>20 分钟内占领 A 灯塔、B 炮台高地、C 指挥所。</li>
+    </ul>
+    <button class="go" id="btnBrief" type="button">开始部署</button>
+  </div>
+</div>
+
+<div class="modal" id="end" hidden>
+  <div class="sheet">
+    <h1 id="endTitle"></h1>
+    <dl id="endStats"></dl>
+    <button class="go" id="btnAgain" type="button">再来一局</button>
+  </div>
+</div>
+
+<script src="js/world.js"></script>
+<script src="js/state.js"></script>
+<script src="js/sim.js"></script>
+<script src="js/sim2.js"></script>
+<script src="js/render.js"></script>
+<script src="js/render2.js"></script>
+<script src="js/render3.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/hud.js"></script>
