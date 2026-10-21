@@ -29,8 +29,7 @@ uniform vec2 uRes; uniform vec3 uView; uniform float uTime, uFlash, uGlyph, uRai
 uniform sampler2D uTer, uFog, uAtlas, uCol, uMk;
 const vec2 GRID = vec2(${GW}., ${GH}.);
 const vec2 WORLD = vec2(${W}., ${H}.);
-// 无三角函数的哈希（比 sin 哈希便宜，软件渲染时尤其明显）
-float h1(vec2 p) { vec3 q = fract(vec3(p.xyx) * .1031); q += dot(q, q.yzx + 33.33); return fract((q.x + q.y) * q.z); }
+float h1(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 #if MARKS
 float dotm(vec2 p, vec2 c, float r, float aa) { return 1. - smoothstep(r - aa, r + aa, length(p - c)); }
 // 地图小纹理：按地形查参数表（避免分支）。圆点用格内坐标 q，线用世界坐标 w（跨格连续）
@@ -55,7 +54,11 @@ void main() {
   vec2 w = (fc - uView.yz) / uView.x;
   vec3 bg = vec3(.004, .016, .009);
   if (w.x < 0. || w.y < 0. || w.x >= WORLD.x || w.y >= WORLD.y) { gl_FragColor = vec4(bg * .5, 1.); return; }
+#if MODE < 2
+  vec2 cell = floor(w / 10.), gc = cell, f = fract(w / 10.);   // 前两档每格一个字符（不细分）
+#else
   vec2 cell = floor(w / 10.), sw = w / 10. * uSub, gc = floor(sw), f = fract(sw);
+#endif
   vec4 ter = texture2D(uTer, (cell + .5) / GRID);
   float elev = ter.r, typ = floor(ter.g * 255. / 16. + .5);
   float land = step(2.5, typ);
@@ -74,11 +77,16 @@ void main() {
     float sp = 3. + h1(vec2(gc.x, 7. + fk)) * 9.;
     float len = 6. + h1(vec2(gc.x, 3. + fk)) * 24.;
     float total = GRID.y + len + h1(vec2(gc.x, 19. + fk)) * 80.;
-    float d = mod(mod(uTime * sp + h1(vec2(gc.x, 11. + fk)) * total, total) - gc.y, total);
+#if MODE < 2
+    float d = mod(uTime * sp + h1(vec2(gc.x, 11. + fk)) * total, total) - gc.y;
+    if (d >= 0. && d < len) { rain = max(rain, 1. - d / len); head = max(head, step(d, 1.)); }
+#else
+    float d = mod(mod(uTime * sp + h1(vec2(gc.x, 11. + fk)) * total, total) - gc.y, total);   // 细分后行数超过周期：环绕
     if (d < len) { rain = max(rain, 1. - d / len); head = max(head, step(d, 1.)); }
+#endif
   }
 #endif
-  float rate = (.12 + h1(gc + 5.) * 1.4 + rain * uRain * 7.) * mix(1., .25, uMap);
+  float rate = (.12 + h1(gc + 5.) * 1.4 + rain * uRain * 7.)${mode ? ' * mix(1., .25, uMap)' : ''};
   float n = h1(gc + floor(uTime * rate + h1(gc) * 10.));
   float gi = floor(n * 66.), base = 0.;
   vec3 tint = vec3(.17, 1., .47);
@@ -244,7 +252,7 @@ function mxZoom() {
 function mxDraw(time, flash) {
   const { gl } = MX;
   if (MX.seed !== TER.seed) mxTerrain();
-  const cpx = mxZoom(), mode = MX.map <= 0 ? 0 : MX.map < .55 ? 1 : MX.map < .985 ? 2 : 3, P = MX.P[mode], u = P.u;
+  const cpx = mxZoom(), mode = MX.map <= 0 && MX.sub === 1 ? 0 : MX.map < .55 && MX.sub === 1 ? 1 : MX.map < .985 ? 2 : 3, P = MX.P[mode], u = P.u;
   if (MX.mode !== mode) { gl.useProgram(P.pr); MX.mode = mode; }
   MX.u = u;
   mxAtlas();

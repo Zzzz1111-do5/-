@@ -87,7 +87,7 @@ function bloomK() {
 function bloom() {
   const k = bloomK();
   if (k < .02) return;
-  const { ctx, cv, b1, b2 } = R, g1 = b1.getContext('2d'), g2 = b2.getContext('2d'), wide = .4 * k * (1 - smooth(3, 5.5, R.zr));   // 大范围光晕近看时去掉
+  const { ctx, cv, b1, b2 } = R, g1 = b1.getContext('2d'), g2 = b2.getContext('2d'), wide = .4 * k * (1 - smooth(1.6, 3, R.zr));   // 大范围光晕只在接近全图时保留
   g1.imageSmoothingQuality = g2.imageSmoothingQuality = 'high';
   g1.globalCompositeOperation = 'copy'; g1.drawImage(cv, 0, 0, b1.width, b1.height);
   if (wide > .02) { g2.globalCompositeOperation = 'copy'; g2.drawImage(b1, 0, 0, b2.width, b2.height); }
