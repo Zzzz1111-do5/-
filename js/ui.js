@@ -15,6 +15,7 @@ function setTool(t) { U.tool = U.tool === t ? null : t; updateHud(); }
 function evPos(e) { const r = R.cv.getBoundingClientRect(); return { sx: e.clientX - r.left, sy: e.clientY - r.top }; }
 
 function pickAt(p) {
+  if (typeof pickVeh === 'function') { const v = pickVeh(p); if (v != null) return v; }   // 车辆（vehicles.js）：点在剪影内
   let best = null, bd = px(14);
   for (const q of S.teams) if (q.side === 'p' && q.u) { const d = dist(p.x, p.y, q.x, q.y); if (d < bd) { bd = d; best = q.u; } }
   for (const u of S.units) if (u.side === 'p' && u.x != null) {   // 点连队旗也能选中
@@ -33,7 +34,8 @@ function pickAt(p) {
 
 // 右键或工具点击；face/total 来自右键拖拽（拖出的线定宽，线的左手法向为朝向）
 function issueOrder(p, mode, face, total) {
-  if (S.phase === 'deploy') { deployOrder(selShips(), selDD(), p.x, p.y, selCV()); updateHud(); return 1; }
+  const vs = typeof selVehs === 'function' ? selVehs() : [];
+  if (S.phase === 'deploy') { deployOrder(selShips(), selDD(), p.x, p.y, selCV()); if (vs.length) vehDeployOrder(vs, p.x, p.y); updateHud(); return 1; }
   const units = selUnits(), ships = selShips().filter(movable);
   let n = 0;
   // 玩家亲自下令即转为手动指挥（自动驾驶不再接管）
@@ -49,6 +51,9 @@ function issueOrder(p, mode, face, total) {
   }
   if (ships.length) n += orderShips(ships, p.x, p.y);
   if (selDD() && orderDD(p.x, p.y)) n++;
+  // 车辆：与步兵同时下令时落在队形后方；排雷指令只给扫雷坦克
+  const vm = mode === 'clear' ? vs.filter(v => VEH_SPEC[v.type].flail) : vs;
+  if (vm.length) n += units.length && mode !== 'clear' ? vehOrderWith(vm, units, p.x, p.y, face, mode || 'move') : vehOrder(vm, p.x, p.y, mode || 'move', face);
   return n;
 }
 
@@ -69,14 +74,14 @@ function applyTool(p) {
 }
 
 function selectGroup(n) {
-  S.sel = S.groups[n].filter(id => id === 'DD' ? S.dd.state !== 'sunk' : id === 'CV' ? !!S.cv : UNIT_MAP.has(id) || S.ships.some(s => s.id === id && alive(s)));
+  S.sel = S.groups[n].filter(id => id === 'DD' ? S.dd.state !== 'sunk' : id === 'CV' ? !!S.cv : UNIT_MAP.has(id) || S.ships.some(s => s.id === id && alive(s)) || (S.veh || []).some(v => v.id === id && !v.dead));
   const now = performance.now();
   if (now - (U.grpT[n] || 0) < 400 && S.sel.length) centerOnSel();
   U.grpT[n] = now;
   updateHud();
 }
 function centerOnSel() {
-  const objs = S.sel.map(id => id === 'DD' ? S.dd : id === 'CV' ? S.cv : UNIT_MAP.get(id) || S.ships.find(s => s.id === id)).filter(o => o && o.x != null);
+  const objs = S.sel.map(id => id === 'DD' ? S.dd : id === 'CV' ? S.cv : UNIT_MAP.get(id) || S.ships.find(s => s.id === id) || (S.veh || []).find(v => v.id === id)).filter(o => o && o.x != null);
   if (objs.length) camCenter(objs.reduce((a, o) => a + o.x, 0) / objs.length, objs.reduce((a, o) => a + o.y, 0) / objs.length);
 }
 function assignGroup(n) {
@@ -85,7 +90,12 @@ function assignGroup(n) {
   S.groups[n] = S.sel.slice();
   updateHud();
 }
-const ordersNow = t => { const us = selUnits(); if (us.length) orderUnits(us, 0, 0, 0, null, t); updateHud(); };
+const ordersNow = t => {
+  const us = selUnits(), vs = typeof selVehs === 'function' ? selVehs() : [];
+  if (us.length) orderUnits(us, 0, 0, 0, null, t);
+  if (vs.length && S.phase !== 'deploy') vehOrderAll(vs, t);
+  updateHud();
+};
 function formNow(f) {
   if (S.phase === 'deploy') for (const s of selShips()) s.form = f;
   setForm(selUnits(), f);
@@ -95,7 +105,7 @@ function togglePause() { if (!S.over && S.phase === 'battle') { S.paused = !S.pa
 function toggleAuto() { S.dd.auto = !S.dd.auto; updateHud(); }
 // 选中部队/舰船在“自动（AI 接管）”与“手动（玩家指挥）”之间切换
 function toggleAutoSel() {
-  const items = [...selUnits(), ...selShips()];
+  const items = [...selUnits(), ...selShips(), ...(typeof selVehs === 'function' ? selVehs() : [])];
   if (!items.length) return;
   const on = items.some(o => o.auto !== true);
   for (const o of items) o.auto = on;
@@ -107,8 +117,9 @@ function toggleAutoSel() {
 function finishSelect(p, add) {
   if (U.box) {
     const b = U.box, inB = o => o.x >= b.x0 && o.x <= b.x1 && o.y >= b.y0 && o.y <= b.y1;
-    let ids = S.units.filter(u => u.side === 'p' && teamsOf(u).some(inB)).map(u => u.id);
-    if (!ids.length) ids = S.ships.filter(s => alive(s) && (movable(s) || S.phase === 'deploy') && inB(s)).map(s => s.id);
+    const vids = (S.veh || []).filter(v => v.side === 'p' && !v.dead && !v.lst && inB(v)).map(v => v.id);   // 车辆（vehicles.js）
+    let ids = S.phase === 'deploy' ? [] : S.units.filter(u => u.side === 'p' && teamsOf(u).some(inB)).map(u => u.id).concat(vids);
+    if (!ids.length) ids = S.ships.filter(s => alive(s) && (movable(s) || S.phase === 'deploy') && inB(s)).map(s => s.id).concat(vids);
     if (S.dd.state !== 'sunk' && inB(S.dd)) ids.push('DD');
     if (S.cv && inB(S.cv)) ids.push('CV');
     S.sel = add ? [...new Set([...S.sel, ...ids])] : ids;

@@ -95,6 +95,7 @@ function buildRLine(ship) {
 function updateRLines(dt) {
   for (const L of S.rlines)
     if ((L.timer -= dt) <= 0 && S.assets.reserve > 0) {
+      if (typeof cmdRLine === 'function' && cmdRLine(L)) continue;   // 指挥官摩擦：增援艇编队迟缓（重设 L.timer）
       const n = Math.min(3, S.assets.reserve);   // 一艇载一个班（三个三人组）
       L.timer = 20; S.assets.reserve -= n;
       S.boats.push({ id: S.nid++, line: L.id, u: 0, x: L.x0, y: L.y0, n });

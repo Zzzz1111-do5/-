@@ -4,6 +4,7 @@
 // 计划（纯数据）存于 S.autoPlan：u[连队 id] = {ph, obj, sx, sy, dx, dy, waitT, sp, job, ...}
 //   ph：idle 待命 / stage 前往集结点 / wait 集结待命 / go 攻击 / garrison 留守 / supply 回补弹药 / regroup 重整
 //   o[据点 key] = {go, t, need, pg, pgT} 攻击组状态；hard[据点 key] = 近期受挫时刻；s[舰船 id] = {b, x} 预定滩头
+// 指挥官（commander.js，可缺省）的指令：pri[据点 key] 目标加权 · mis[连队 id] 任务式指挥的既定目标 · 舰船梯队经 cmdShipTask
 const AP_THINK = 1.5, AP_WAIT = 20, AP_STAGE_MIN = 140, AP_STAGE_MAX = 180;
 const AP_ROUTES = new Map();   // 渲染缓存（不进 S）：连队 id → 路线采样点
 
@@ -19,7 +20,7 @@ const apAng = (x0, y0, x1, y1) => Math.atan2(y1 - y0, x1 - x0);
 const apNeed = est => clamp(1 + Math.floor(est / 8), 1, 3);
 const apCap = u => 35 + 65 * (u.men || 0) / Math.max(1, u.men0 || u.men || 1);   // 与 updateUnits 的士气上限一致
 const apWeak = u => (u.men || 0) <= 4 || apCap(u) < 54;
-function apIdle(pl) { Object.assign(pl, { ph: 'idle', obj: null, sx: null, sy: null, dx: null, dy: null, waitT: null, sp: null, back: null }); }
+function apIdle(pl) { Object.assign(pl, { ph: 'idle', obj: null, sx: null, sy: null, dx: null, dy: null, waitT: null, sp: null, back: null, halt: null, raid: null }); }
 
 function updateAutopilot(dt) {
   if (!S || S.phase !== 'battle' || S.over) return;
@@ -69,17 +70,26 @@ function apBeachScore(s, b, i) {
   let sc = -def * 1.3 - dist(s.x, s.y, b.cx, coastAt(b.cx)) / 260 + Math.min(fr, 30) * .08 + (own ? 2.5 : 0);
   // 补给舰：去我方兵力多、出口已占的滩头；尽量各占一处滩头（一处被炮火切断时其余仍能补给）
   const ls = S.ships.filter(o => o !== s && o.kind === 'supply' && alive(o) && o.land && o.bx >= b.x0 - 30 && o.bx <= b.x1 + 30).length;
-  if (s.kind === 'supply') sc += Math.min(fr, 30) * .12 + (own ? 3 : 0) - ls * 2.5 - (fr < 6 && !own ? 3 : 0);
+  if (s.kind === 'supply' || s.kind === 'lst') sc += Math.min(fr, 30) * .12 + (own ? 3 : 0) - ls * 2.5 - (fr < 6 && !own ? 3 : 0);
   else if (n >= 1 && n <= 4) sc += 1.2;   // 突击舰：与友舰同滩，互相支援
   return sc - Math.max(0, n - 4) * 2.2;
 }
+const apLoaded = s => !!s.load && (s.load.teams > 0 || s.load.eng > 0 || (Array.isArray(s.load.veh) && s.load.veh.length > 0));
 function apShips(P) {
   const first = S.ships.some(s => s.kind === 'assault' && (s.state === 'beached' || s.state === 'unloading'));
   let sent = 0, at = null;
   for (const s of S.ships) {
-    if (s.auto !== true || s.state !== 'idle' || !alive(s) || !s.load || !(s.load.teams > 0 || s.load.eng > 0)) continue;
+    if (s.auto !== true || s.state !== 'idle' || !alive(s) || !apLoaded(s)) continue;
     if (s.plan && isFinite(s.plan.x) && isFinite(s.plan.y)) { const pl = s.plan; s.plan = null; orderShips([s], pl.x, pl.y); continue; }
-    if (s.kind === 'supply' && !first && S.t < 45) continue;   // 补给舰等第一波突击舰上滩后再靠岸
+    // 指挥官的梯队计划：待命，或指定滩头与落点
+    const T = typeof cmdShipTask === 'function' ? cmdShipTask(s) : null;
+    if (T && T.hold) continue;
+    if (T && isFinite(T.x)) {
+      if (orderShips([s], T.x, coastAt(T.x) - 20)) { P.s[s.id] = { b: T.b, x: T.x }; sent++; at = { x: T.x, y: coastAt(T.x) }; }
+      continue;
+    }
+    if (s.kind === 'lst' && typeof vehLSTTick === 'function') continue;   // 坦克登陆舰由 vehicles.js 自行择机抢滩
+    if ((s.kind === 'supply' || s.kind === 'lst') && !first && S.t < 45) continue;   // 补给舰、坦克登陆舰等第一波突击舰上滩后再靠岸
     let best = null, bs = -Infinity, bi = -1;
     TER.beaches.forEach((b, i) => { const sc = apBeachScore(s, b, i); if (sc > bs) { bs = sc; best = b; bi = i; } });
     if (!best) continue;
@@ -124,6 +134,8 @@ function apScore(u, p, est, cnt, P) {
   if (P.hard[p.key] != null && S.t - P.hard[p.key] < 75) s -= 5;
   if (p.owner === 'p') s += 4;   // 已占据点正被反夺：回援
   if ((u.men || 0) < (u.men0 || 1) * .5) s -= est * .3;   // 残部挑软目标
+  if (P.pri && P.pri[p.key]) s += P.pri[p.key];   // 指挥官的主要方向与重点目标
+  if (P.mis && P.mis[u.id] === p.key) s += 4;     // 任务式指挥：命令未送达时按既定意图行动
   return s;
 }
 const apAutoInf = () => S.units.filter(u => u.side === 'p' && u.auto === true && u.kind === 'inf' && u.x != null && isFinite(u.x) && teamsOf(u).length);
@@ -145,7 +157,11 @@ function apAssign(P) {
   const inf = all.filter(u => u.kind === 'inf');
   const cand = S.points.filter(p => p.owner !== 'p' || p.prog < .9);
   const est = {}, cnt = {};
-  for (const p of cand) { est[p.key] = apEstimate(p); cnt[p.key] = 0; if (P.o[p.key]) P.o[p.key].need = apNeed(est[p.key]); }
+  for (const p of cand) {
+    est[p.key] = typeof cmdEst === 'function' ? cmdEst(p, apEstimate(p)) : apEstimate(p);   // 指挥官的估计带误差（情报误判）
+    cnt[p.key] = 0;
+    if (P.o[p.key]) P.o[p.key].need = Math.max(apNeed(est[p.key]), P.o[p.key].boost || 0);
+  }
   for (const u of inf) { const pl = P.u[u.id]; if (pl.obj && cnt[pl.obj] != null && pl.ph !== 'garrison') cnt[pl.obj]++; }
   const near = u => cand.reduce((a, p) => Math.min(a, dist(u.x, u.y, p.x, p.y)), Infinity);
   const free = inf.filter(u => P.u[u.id].ph === 'idle' && u.state !== 'rout').sort((a, b) => near(a) - near(b));
@@ -187,6 +203,46 @@ function apGarrison(u, p, P) {
   apMove(u, pl, p.x, p.y, apThreatDir(p), 'move');
 }
 
+// —— 指挥官指派（commander.js 经通信延迟后调用）——
+// 连队改攻指定据点（集结 → 攻击）；flank = ±1 时先到侧翼集结点，再从侧翼发起
+function apTask(u, key, flank) {
+  const P = apEnsure(), p = apPt(key);
+  if (!p || !u || u.side !== 'p' || u.auto !== true || u.state === 'rout' || !teamsOf(u).length) return false;
+  const pl = P.u[u.id] || (P.u[u.id] = { ph: 'idle', obj: null, next: S.t });
+  apIdle(pl);
+  Object.assign(pl, { ph: 'stage', obj: key, t0: S.t, men0: u.men || 0, next: S.t + .5, task: S.t });
+  if (!P.o[key]) P.o[key] = { go: false, t: 0, need: 1 };
+  if (flank) {
+    const sp = apFlankSpot(u, p, flank);
+    if (sp && apMove(u, pl, sp.x, sp.y, apAng(sp.x, sp.y, p.x, p.y), 'move')) { pl.sx = sp.x; pl.sy = sp.y; }
+    if (P.o[key].go && apGroup(key, P).every(g => P.u[g.id].ph !== 'go')) P.o[key].go = false;   // 整组撤下：重新集结后再发起
+  }
+  return true;
+}
+// 侧翼集结点：据点侧前方 120–180，不在已知雷区、铁丝网上
+function apFlankSpot(u, p, side) {
+  const a = apAng(u.x, u.y, p.x, p.y), lx = -Math.sin(a), ly = Math.cos(a);
+  for (const s of [side, -side]) for (const r of [150, 120, 185]) {
+    const x = p.x - Math.cos(a) * 100 + lx * s * r, y = p.y - Math.sin(a) * 100 + ly * s * r;
+    if (x < 10 || x > W - 10 || y < 10 || y > coastAt(clamp(x, 0, W - 1)) - 15) continue;
+    const j = nearestPassable(ci(x, y), 'p');
+    if (j < 0 || MINEC[j] === 2 || WIREC[j]) continue;
+    const cx = cellCX(j), cy = cellCY(j);
+    if (dist(cx, cy, p.x, p.y) < 105) continue;
+    return { x: cx, y: cy };
+  }
+  return null;
+}
+// 拦截渗透的袭扰分队
+function apIntercept(u, raidId) {
+  const P = apEnsure();
+  if (!u || u.auto !== true || u.state === 'rout') return false;
+  const pl = P.u[u.id] || (P.u[u.id] = { ph: 'idle', obj: null, next: S.t });
+  apIdle(pl);
+  Object.assign(pl, { ph: 'icpt', raid: raidId, icT: S.t, next: S.t });
+  return true;
+}
+
 // 集结点：沿寻路走向据点，停在距离据点 140–180 处，附近找掩护好、不在已知雷区和铁丝网上的格子
 function apStageSpot(u, p) {
   const f = field(p.x, p.y, 'p');
@@ -225,9 +281,10 @@ function apLaunch(units, p, P) {
   const cx = units.reduce((a, g) => a + g.x, 0) / units.length, cy = units.reduce((a, g) => a + g.y, 0) / units.length;
   for (const g of units) g.form = S.t - (P.u[g.id].artyT ?? -99) < 30 ? 'loose' : 'line';
   if (!orderUnits(units, p.x, p.y, apAng(cx, cy, p.x, p.y), null, 'amove')) return;
-  const O = P.o[p.key] || (P.o[p.key] = { need: units.length });
+  const O = P.o[p.key] || (P.o[p.key] = { need: units.length }), first = !O.go;
   if (!O.go) Object.assign(O, { go: true, t: S.t, pg: p.prog, pgT: S.t });
   for (const g of units) Object.assign(P.u[g.id], { ph: 'go', obj: p.key, goT: S.t, men0: g.men || 0, dx: g.tx, dy: g.ty, ordT: S.t });
+  if (first && typeof cmdOnLaunch === 'function') cmdOnLaunch(units, p);   // 摩擦：个别连队可能在调整线前停顿
 }
 
 // 占领后：留一个连队守备（指挥所必留；多连队攻击组或高价值据点），其余继续前进
@@ -321,6 +378,12 @@ function apInfantry(u, pl, P) {
       if (pl.sp && !apSpValid(pl.sp) && apSupplyPt(u.x, u.y)) apFallback(u, pl, pl.ph, Infinity, true);   // 补给点被毁或断开：换一个接通的
       return;
     }
+    case 'icpt': {   // 拦截渗透之敌：追向袭扰分队最后被看见的位置，60 秒或目标消失后归建
+      const r = (S.raids || []).find(r => r.id === pl.raid), tq = r && S.teams.find(q => r.teams.includes(q.id) && q.men.length && q.seen != null);
+      if (!tq || S.t - (pl.icT ?? S.t) > 60) { apIdle(pl); return; }
+      if (S.t - (pl.ordT ?? -99) > 6 || dist(pl.dx ?? 0, pl.dy ?? 0, tq.sx, tq.sy) > 60) apMove(u, pl, tq.sx, tq.sy, apAng(u.x, u.y, tq.sx, tq.sy), 'amove');
+      return;
+    }
     case 'garrison': {
       if (!p) { apIdle(pl); return; }
       if (p.owner !== 'p') { apLaunch([u], p, P); return; }   // 失守：就地反击
@@ -369,6 +432,8 @@ function apInfantry(u, pl, P) {
         delete P.o[p.key];
         return;
       }
+      // 停顿（指挥官催促前不自行再压上）；指挥官缺席时 45 秒后自行恢复
+      if (pl.halt != null) { if (S.t - pl.halt < 45) return; pl.halt = null; }
       const d = dist(u.x, u.y, p.x, p.y), stuck = ts.some(q => dist(q.x, q.y, p.x, p.y) < 70) && S.t - (O.pgT ?? S.t) > 25;
       if (u.morale >= 55 && d < 150 && S.t - (pl.chT ?? -99) > 15 && (apShaken(p) || stuck)) {
         if (orderUnits([u], p.x, p.y, apAng(u.x, u.y, p.x, p.y), null, 'charge')) { pl.chT = S.t; pl.ordT = S.t; if (stuck) O.pgT = S.t; }
@@ -422,7 +487,7 @@ function apEngineer(u, pl, P) {
   for (const o of S.units) if (o !== u && o.side === 'p' && o.auto === true && o.kind === 'eng' && P.u[o.id] && P.u[o.id].job) claimed.add(P.u[o.id].job.k);
   pl.skip = pl.skip && typeof pl.skip === 'object' ? pl.skip : {};
   for (const k in pl.skip) if (S.t - pl.skip[k] > 60) delete pl.skip[k];
-  const tasks = (typeof snTasks === 'function' ? snTasks() : []).concat(apMineTasks(P));
+  const tasks = (typeof snTasks === 'function' ? snTasks() : []).concat(apMineTasks(P), typeof cmdEngTasks === 'function' ? cmdEngTasks() : []);
   let best = null, bs = Infinity;
   for (const t of tasks) {
     const cur = pl.job && pl.job.k === t.k;
@@ -438,6 +503,12 @@ function apEngineer(u, pl, P) {
     const d = dist(q.x, q.y, m.x, m.y);
     if (d < m.r + 26) { if (q.order.t !== 'clear' || q.order.x != null) q.order = { t: 'clear' }; return; }   // engineerWork 接手排雷
     if (!apTeamGo(q, m.x + (q.x - m.x) / d * (m.r + 10), m.y + (q.y - m.y) / d * (m.r + 10), 'clear')) { pl.skip[best.k] = S.t; pl.job = null; }
+    return;
+  }
+  if (best.kind === 'bridge') {   // 修桥（ai3.js a3Repair）：站到本侧桥头 40 以内坚守即施工
+    const d = dist(q.x, q.y, best.x, best.y) || 1, sx = best.x + (q.x - best.x) / d * 18, sy = best.y + (q.y - best.y) / d * 18;
+    if (d > 32) { if (!apTeamGo(q, sx, sy, 'move')) { pl.skip[best.k] = S.t; pl.job = null; } }
+    else if (q.order.x != null || q.order.t !== 'hold') q.order = { t: 'hold' };
     return;
   }
   if (dist(q.x, q.y, best.x, best.y) > 12) { if (!apTeamGo(q, best.x, best.y, 'move')) { pl.skip[best.k] = S.t; pl.job = null; } }

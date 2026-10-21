@@ -55,14 +55,18 @@ function updateDD(dt) {
     return;
   }
   if (!dd.auto || dd.cool > 0) return;
+  // 指挥官火力任务（commander.js）：火力准备、烟幕、支援受阻的攻击；停止射击（误伤后）时不开火
+  const fm = typeof cmdDDMission === 'function' ? cmdDDMission(dd) : null;
+  if (fm) { if (!fm.hold) ddFire(fm.x, fm.y, !!fm.smoke); return; }
   // 自动掩护：射击视野内、靠近我方小组（但不贴脸）的敌人
   let best = null, bd = 180;
+  const safe = typeof cmdDDSafe === 'function' ? cmdDDSafe() : 55;
   const foes = S.enemies.filter(e => !e.dead).concat(S.teams.filter(q => q.side === 'e' && q.men.length));
   for (const e of foes) {
     if (!inVision(e.x, e.y) || dist(dd.x, dd.y, e.x, e.y) > 1000) continue;
     let near = 1e9;
     for (const q of S.teams) if (q.side === 'p') near = Math.min(near, dist(e.x, e.y, q.x, q.y));
-    if (near < bd && near > 55) { bd = near; best = e; }
+    if (near < bd && near > safe) { bd = near; best = e; }
   }
   if (best) ddFire(best.x, best.y, false);
 }

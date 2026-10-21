@@ -124,7 +124,7 @@ ctE('p_ranger', '游骑兵组', 'p', 'inf', 'inf_p', 18, CT_IC.ranger, [3, 0, 6,
 ctE('p_sniper', '狙击小组', 'p', 'inf', 'inf_p', 14, CT_IC.sniper, [2, 0, 4, 9, 5, 8, 2], '两人狙击组：远距离精确射杀机枪手与通讯兵，压制力弱、怕被炮火覆盖。',
   { kind: 'cargo', at: 'cargo', men: ['radio', 'rifle'], mod: { pow: 2.2, rng: 1.7, rof: .55, sup: .5 } }, { counters: ['inf_e'], weakTo: ['mortar'] });
 ctE('p_at', '反坦克火箭组', 'p', 'inf', 'inf_p', 15, CT_IC.at, [3, 0, 3, 4, 5, 5, 3], '携带火箭筒，专打装甲车辆与坦克；对步兵火力偏弱。',
-  { kind: 'cargo', at: 'cargo', men: ['radio', 'rifle', 'rifle'], mod: { at: 3, pow: .85 } }, { counters: ['veh', 'car_e'], weakTo: ['inf_e', 'mortar'] });
+  { kind: 'cargo', at: 'cargo', men: ['radio', 'rifle', 'rifle'], mod: { at: 1.5, pow: .85 } }, { counters: ['veh', 'car_e'], weakTo: ['inf_e', 'mortar'] });
 ctE('p_flame', '喷火组', 'p', 'inf', 'inf_p', 16, CT_IC.flame, [3, 0, 7, 2, 5, 5, 3], '近距离喷火，压制与杀伤极强，贴近碉堡后还能直接烧毁工事；射程很短，接近途中伤亡大。',
   { kind: 'cargo', at: 'cargo', men: ['radio', 'rifle', 'rifle'], mod: { rng: .45, sup: 2.6, pow: 1.7 }, tag: 'flame' }, { counters: ['bunker', 'trench'], weakTo: ['e_mg_nest', 'e_ambush'] });
 ctE('p_eng', '战斗工兵组', 'p', 'inf', 'eng_p', 12, CT_IC.eng, [3, 0, 1, 2, 5, 4, 3], '排除雷区、剪开铁丝网、修建补给网；本身几乎没有火力，需要步兵掩护。',
@@ -260,7 +260,7 @@ ctE('e_assault', '反击突击连', 'e', 'inf', 'inf_e', 40, CT_IC.easlt, [7, 0,
 ctE('e_sniper', '狙击手', 'e', 'inf', 'inf_e', 12, CT_IC.sniper, [2, 0, 4, 9, 3, 8, 2], '两人狙击组，优先射杀通讯兵，令登陆部队视野与指挥中断。',
   { kind: 'einf', at: 'land', role: 'garrison', teams: 1, men: ['rifle', 'rifle'], mod: { pow: 2.2, rng: 1.6, rof: .55, sup: .5 } }, { counters: ['p_fo', 'p_hq'], weakTo: ['mortar', 'p_air_cas'] });
 ctE('e_at', '反坦克小组', 'e', 'inf', 'inf_e', 20, CT_IC.at, [4, 0, 3, 4, 3, 5, 6], '两个携带反坦克火箭的小组，伏击上岸的坦克与装甲车。',
-  { kind: 'einf', at: 'land', role: 'garrison', teams: 2, men: ['rifle', 'rifle', 'rifle'], mod: { at: 3, pow: .85 } }, { counters: ['veh'], weakTo: ['p_rifle', 'p_mg'] });
+  { kind: 'einf', at: 'land', role: 'garrison', teams: 2, men: ['rifle', 'rifle', 'rifle'], mod: { at: 1.5, pow: .85 } }, { counters: ['veh'], weakTo: ['p_rifle', 'p_mg'] });
 ctE('e_militia', '民兵', 'e', 'inf', 'inf_e', 14, CT_IC.emil, [4, 0, 2, 4, 3, 5, 9], '便宜的地方武装，人数多但射击差、容易溃散；适合填充次要据点。',
   { kind: 'einf', at: 'land', role: 'garrison', teams: 3, men: ['rifle', 'rifle', 'rifle'], mod: { pow: .65, sup: .8 }, morale: 40 }, { weakTo: ['p_rifle', 'p_mg', 'veh'] });
 ctE('e_eng', '守军工兵', 'e', 'inf', 'eng_e', 15, CT_IC.eeng, [3, 0, 2, 4, 3, 5, 3], '抢修 40 以内受损的碉堡与炮位，每秒恢复少量耐久。',
@@ -294,7 +294,7 @@ ctE('e_mg_bunker', '机枪碉堡', 'e', 'fort', 'bunker', 30, CT_IC.bunker, [6, 
 ctE('e_casemate', '重型掩体', 'e', 'fort', 'bunker', 45, CT_IC.casemate, [9, 6, 6, 6, 0, 6, 4], '厚重掩体，耐久翻倍、火力更猛，射速略慢。',
   { kind: 'enemy', at: 'land', ek: 'bunker', hp: 2, mod: { pow: 1.2, rof: .9 } }, { counters: ['inf_p'], weakTo: ['p_ca', 'p_air_heavy', 'p_demo'] });
 ctE('e_at_casemate', '反坦克炮掩体', 'e', 'fort', 'bunker', 40, CT_IC.atcas, [7, 5, 4, 8, 0, 6, 3], '藏在掩体里的反坦克炮，射程远、专打装甲车辆与登陆艇；对步兵杀伤一般。',
-  { kind: 'enemy', at: 'land', ek: 'bunker', hp: 1.5, mod: { at: 3, rng: 1.3, pow: .6 } }, { counters: ['veh', 'p_lct'], weakTo: ['inf_p', 'p_dd'] });
+  { kind: 'enemy', at: 'land', ek: 'bunker', hp: 1.5, mod: { at: 1.4, rng: 1.3, pow: .6 } }, { counters: ['veh', 'p_lct'], weakTo: ['inf_p', 'p_dd'] });
 ctE('e_pillbox', '小型碉堡', 'e', 'fort', 'bunker', 18, CT_IC.pillbox, [4, 3, 4, 5, 0, 5, 2], '便宜的混凝土小堡，耐久与射程较低，用来补全交叉火力。',
   { kind: 'enemy', at: 'land', ek: 'bunker', hp: .65, mod: { rng: .85 } }, { counters: ['inf_p'], weakTo: ['p_flame', 'veh'] });
 ctE('e_flak_tower', '高射炮塔', 'e', 'fort', 'aa', 45, CT_IC.flak, [9, 5, 5, 6, 0, 5, 4], '钢筋混凝土高炮塔，耐久极高，持续威胁舰载机。',

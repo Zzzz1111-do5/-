@@ -445,6 +445,9 @@ function updateAirAuto(dt) {
   if (!c || !c.auto || c.hp <= 0 || S.phase !== 'battle') return;
   if ((c.autoT = (c.autoT ?? 2) - dt) > 0) return;
   c.autoT = 3;
+  // 指挥官的航空任务（commander.js）：H 时侦察、受阻攻击的对地支援、假目标后的复查与再次出击
+  const T = typeof cmdAirTask === 'function' ? cmdAirTask(c) : null;
+  if (T && launchPlane(T.k, T.x, T.y)) { if (typeof cmdAirLaunched === 'function') cmdAirLaunched(T, S.planes[S.planes.length - 1]); return; }
   const pT = S.teams.filter(q => q.side === 'p' && q.men.length);
   const near = (x, y, r) => pT.filter(q => dist(q.x, q.y, x, y) < r);
   const busy = (kind, x, y, r) => S.planes.some(p => p.kind === kind && !p.dead && (p.phase === 'cat' || p.phase === 'roll' || p.phase === 'out' || p.phase === 'loiter') && dist(p.cx ?? p.tx, p.cy ?? p.ty, x, y) < r);
@@ -462,11 +465,11 @@ function updateAirAuto(dt) {
     const PRI = { coastal: 5, arty: 4, aa: 3.5, mortar: 3, bunker: 2 };
     let best = null, bs = 0;
     for (const e of S.enemies) if (!e.dead && e.kx != null) {
-      if (near(e.kx, e.ky, 90).length || busy('strike', e.kx, e.ky, 70) || S.shells.some(s => s.side === 'p' && s.kind === 'bomb' && dist(s.x1, s.y1, e.kx, e.ky) < 60)) continue;
+      if (near(e.kx, e.ky, typeof cmdAirSafe === 'function' ? cmdAirSafe() : 90).length || busy('strike', e.kx, e.ky, 70) || S.shells.some(s => s.side === 'p' && s.kind === 'bomb' && dist(s.x1, s.y1, e.kx, e.ky) < 60)) continue;
       const s = (PRI[e.kind] || 1) * (e.kind === 'bunker' && !near(e.kx, e.ky, 320).length ? .3 : 1);
       if (s > bs) { bs = s; best = e; }
     }
-    if (best && launchPlane('strike', best.kx, best.ky)) return;
+    if (best && launchPlane('strike', best.kx, best.ky)) { if (typeof cmdAirLaunched === 'function') cmdAirLaunched({ k: 'strike', x: best.kx, y: best.ky, eid: best.id }, S.planes[S.planes.length - 1]); return; }
   }
   if (S.assets.recon > 0 && !S.planes.some(p => p.kind === 'recon' && !p.dead) && S.t - (c.reconT ?? -99) > 40) {
     // 前线方向：我方步兵重心；尚未登陆时用登陆舰队重心

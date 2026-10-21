@@ -53,6 +53,7 @@ const ASSET = { smoke: 'smoke', recon: 'recon', strike: 'strike', cas: 'cas', rl
 function buildHud() {
   if (typeof SHIP_ICONS === 'object') Object.assign(ICON, SHIP_ICONS);
   if (typeof CARRIER_ICONS === 'object') Object.assign(ICON, CARRIER_ICONS);
+  if (typeof VEH_ICONS === 'object') for (const k in VEH_ICONS) ICON['v_' + k] = VEH_ICONS[k];   // 车辆卡片图标（vehicles.js）
   $('btnRain').innerHTML = svg('rain');
   $('btnRain').addEventListener('click', () => {
     R.rain = R.rain === 0 ? .25 : R.rain < .5 ? .7 : 0;
@@ -89,8 +90,10 @@ function buildHud() {
   $('feed').addEventListener('click', e => { const c = e.target.closest('[data-x]'); if (c) camCenter(+c.dataset.x, +c.dataset.y); });
   mmBind($('mm'));
   const LEG = [['ship', '突击登陆舰'], ['supply', '补给登陆舰'], ['dd', '驱逐舰'], ['assault', '步兵连'], ['eng', '工兵'], ['reserve', '增援班'],
+    ...(ICON.lst ? [['lst', '坦克登陆舰']] : []), ...['tank', 'amtank', 'apc'].filter(k => ICON['v_' + k]).map(k => ['v_' + k, VEH_SPEC[k].name]),
     ['exit', '滩头出口'], ['battery', '岸防炮台'], ['radar', '雷达站'], ['bridge', '桥梁'], ['cross', '十字路口'], ['town', '镇中心'], ['village', '渔村'], ['ford', '渡口'], ['hq', '指挥所']];
-  $('legend').innerHTML = LEG.map(([k, n], i) => `<span class="${i > 5 ? 'e' : ''}">${svg(k)}${n}</span>`).join('');
+  const nf = LEG.findIndex(l => l[0] === 'exit');   // 之前为我方单位，之后为地形与目标
+  $('legend').innerHTML = LEG.map(([k, n], i) => `<span class="${i >= nf ? 'e' : ''}">${svg(k)}${n}</span>`).join('');
 }
 
 function restart(briefed) {
@@ -107,7 +110,8 @@ function restart(briefed) {
 function cardList() {
   const out = [];
   for (const u of S.units) if (u.side === 'p' && teamsOf(u).length) out.push({ id: u.id, k: u.kind === 'eng' ? 'eng' : u.emblem === 'reserve' ? 'reserve' : 'assault', u });
-  for (const s of S.ships) if (alive(s) && s.state !== 'beached') out.push({ id: s.id, k: s.kind === 'supply' ? 'supply' : 'ship', s });
+  for (const v of S.veh || []) if (v.side === 'p' && !v.dead && !v.lst) out.push({ id: v.id, k: ICON['v_' + v.type] ? 'v_' + v.type : 'ship', v });
+  for (const s of S.ships) if (alive(s) && s.state !== 'beached') out.push({ id: s.id, k: s.kind === 'supply' ? 'supply' : s.kind === 'lst' && ICON.lst ? 'lst' : 'ship', s });
   if (S.dd.state !== 'sunk') out.push({ id: 'DD', k: 'dd' });
   if (S.cv && S.cv.hp > 0) out.push({ id: 'CV', k: 'cv' });
   return out;
@@ -129,8 +133,16 @@ function updateCards() {
       b.textContent = c.u.men; set(0, c.u.men / c.u.men0); set(1, c.u.morale / 100); set(2, c.u.kind === 'eng' ? 1 : ammo / 60);
       state = c.u.state;
       st.innerHTML = svg(c.u.order === 'retreat' || c.u.state === 'rout' ? 'retreat' : c.u.order === 'charge' ? 'charge' : c.u.order === 'amove' ? 'amove' : c.u.order === 'hold' ? 'hold' : 'move', 'mini');
+    } else if (c.v) {   // 车辆：车体完好度 / 乘员（受压制程度）/ 主炮弹药；数字为剩余炮弹（运兵车为搭载人数）
+      const v = c.v, sp = VEH_SPEC[v.type], gun = sp.gun && !sp.gun.flame ? sp.ammo : 0;
+      b.textContent = gun ? v.ammo : sp.carry ? (v.ride || []).reduce((a, id) => a + ((S.teams.find(q => q.id === id) || { men: [] }).men.length), 0) : '';
+      set(0, v.hp / v.maxhp); set(1, 1 - v.sup / 100); set(2, sp.ammo ? v.ammo / sp.ammo : 1);
+      state = v.hp < v.maxhp * .35 ? 'rout' : v.immob || v.burn > 0 || v.sup > 60 ? 'waver' : 'ok';
+      const t = v.order.t;
+      st.innerHTML = svg(v.swim || t === 'move' ? 'move' : t === 'amove' ? 'amove' : t === 'retreat' ? 'retreat' : t === 'clear' ? 'clear' : 'hold', 'mini');
+      el.title = vehName(v);
     } else if (c.s) {
-      b.textContent = c.s.load.teams * 3 + c.s.load.eng; set(0, c.s.hp / c.s.maxhp); set(1, 0); set(2, 0);
+      b.textContent = c.s.load.teams * 3 + c.s.load.eng + (c.s.load.veh ? c.s.load.veh.length : 0); set(0, c.s.hp / c.s.maxhp); set(1, 0); set(2, 0);
       st.innerHTML = svg(c.s.plan || c.s.state === 'move' ? 'move' : 'hold', 'mini');
     } else if (c.id === 'CV') {
       const v = cvCard();
@@ -143,7 +155,7 @@ function updateCards() {
       st.innerHTML = svg(D.auto ? 'auto' : 'fire', 'mini');
     }
     el.classList.toggle('waver', state === 'waver'); el.classList.toggle('rout', state === 'rout');
-    el.classList.toggle('isauto', !!((c.u && c.u.auto === true) || (c.s && c.s.auto === true) || (c.id === 'CV' && S.cv.auto)));
+    el.classList.toggle('isauto', !!((c.u && c.u.auto === true) || (c.s && c.s.auto === true) || (c.v && c.v.auto === true) || (c.id === 'CV' && S.cv.auto)));
     const g = groupOf(c.id); gp.textContent = g ? '•'.repeat(g) : '';
   });
 }
@@ -157,15 +169,15 @@ function updateHud() {
   $('deploy').hidden = !deploy || !S.briefed;
   $('pauseBand').hidden = deploy || !S.paused || !!S.over || !S.briefed;
   for (const b of document.querySelectorAll('#diff button')) { b.classList.toggle('on', b.dataset.lv === U.level); b.setAttribute('aria-checked', b.dataset.lv === U.level); }
-  const units = selUnits(), ships = selShips(), hasU = units.length > 0;
+  const units = selUnits(), ships = selShips(), hasU = units.length > 0, vs = typeof selVehs === 'function' ? selVehs() : [], hasV = vs.length > 0;
   for (const [grp, list] of BTN) for (const [k] of list) {
     const el = $('b-' + k);
     let dis = false;
-    if (grp === 'orders') dis = k === 'clear' ? !units.some(u => u.kind === 'eng') : k === 'move' ? !(hasU || ships.length || selDD() || selCV()) : k === 'ai' ? !(hasU || ships.length) : !hasU || deploy;
+    if (grp === 'orders') dis = k === 'clear' ? !(units.some(u => u.kind === 'eng') || vs.some(v => VEH_SPEC[v.type].flail)) : k === 'move' ? !(hasU || hasV || ships.length || selDD() || selCV()) : k === 'ai' ? !(hasU || hasV || ships.length) : !(hasU || hasV) || deploy;
     if (grp === 'forms') dis = !(hasU || (deploy && ships.length));
     if (grp === 'support') dis = deploy || (ASSET[k] && S.assets[ASSET[k]] <= 0) || ((k === 'fire' || k === 'smoke' || k === 'auto') && D.state === 'sunk') || (k === 'airauto' && !(S.cv && S.cv.hp > 0));
     el.disabled = dis;
-    el.classList.toggle('on', k === 'auto' ? D.auto : k === 'airauto' ? !!(S.cv && S.cv.auto) : k === 'ai' ? [...units, ...ships].length > 0 && [...units, ...ships].every(o => o.auto === true) : U.tool === k || (grp === 'forms' && (units.length ? units.every(u => u.form === k) : ships.length && ships.every(s => s.form === k))));
+    el.classList.toggle('on', k === 'auto' ? D.auto : k === 'airauto' ? !!(S.cv && S.cv.auto) : k === 'ai' ? [...units, ...ships, ...vs].length > 0 && [...units, ...ships, ...vs].every(o => o.auto === true) : U.tool === k || (grp === 'forms' && (units.length ? units.every(u => u.form === k) : ships.length && ships.every(s => s.form === k))));
     if (ASSET[k]) $('n-' + k).textContent = S.assets[ASSET[k]] ?? 0;
   }
   $('btnRain').classList.toggle('hot', R.rain > .5); $('btnRain').style.opacity = R.rain ? 1 : .45;

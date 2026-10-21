@@ -3,7 +3,7 @@
 // 航迹 V 形尾浪、沉船油污、选中括角、血量点、卸载进度、炮塔随射击方向转动——全部为图形，无文字
 // 渲染侧缓存（不进 S）：平滑航向、航迹点、沉没时刻、炮塔角度、上次绘制的姿态（供点选）
 const SHIPV = { S: null, t1: 0, t2: 0, h: {}, trail: {}, sunk: {}, pose: {}, tur: [0, 0], aim: null, aimT: -99 };
-const SHIP_DIM = { assault: [32, 11], supply: [42, 13], dd: [50, 9], boat: [12, 5] };   // 长 × 宽（世界单位）
+const SHIP_DIM = { assault: [32, 11], supply: [42, 13], lst: [48, 14], dd: [50, 9], boat: [12, 5] };   // 长 × 宽（世界单位）
 const SH_DARK = 'rgba(2,10,6,.86)', SH_FOAM = '#d4fff0';
 // HUD 单位卡图标（24×24，艏向上）
 const SHIP_ICONS = {
@@ -15,6 +15,8 @@ const SHIP_ICONS = {
     '<rect x="8.4" y="17.6" width="7.2" height="3"/>',
   dd: '<path d="M12 1.5c2.4 3 3.3 6.5 3.4 10.5v8.5a2 2 0 01-2 2h-2.8a2 2 0 01-2-2V12c.1-4 1-7.5 3.4-10.5z"/><circle cx="12" cy="7.6" r="1.5"/><path d="M12 6.1V3.6M12 20.1v2"/>' +
     '<rect class="f" x="10.6" y="10" width="2.8" height="2.2" rx=".4"/><ellipse class="f" cx="12" cy="14.4" rx="1" ry="1.3"/><circle cx="12" cy="18.6" r="1.5"/>',
+  lst: '<path d="M12 1.5c3.8 1 5.6 3.8 5.7 7.2V21a1.5 1.5 0 01-1.5 1.5H7.8A1.5 1.5 0 016.3 21V8.7C6.4 5.3 8.2 2.5 12 1.5z"/><path d="M7 7.6h10"/>' +
+    '<g class="f"><rect x="9.6" y="8.8" width="4.8" height="3.4" rx=".5"/><rect x="9.6" y="13.2" width="4.8" height="3.4" rx=".5"/></g><path d="M12 10.5V7.3M12 14.9v-1.7"/><rect x="8.4" y="18" width="7.2" height="3"/>',
   boat: '<path d="M8 5.5h8v13a2.5 2.5 0 01-2.5 2.5h-3A2.5 2.5 0 018 18.5z"/><rect class="f" x="8" y="4" width="8" height="2.2"/>' +
     '<g class="f"><circle cx="10.5" cy="9.5" r=".9"/><circle cx="13.5" cy="9.5" r=".9"/><circle cx="10.5" cy="12.5" r=".9"/><circle cx="13.5" cy="12.5" r=".9"/></g><rect x="10.5" y="15.6" width="3" height="2.4"/>'
 };
@@ -68,6 +70,11 @@ function shHullPath(ctx, kind, open) {
     if (open) { ctx.quadraticCurveTo(13.6, -6.3, 15, -4.6); ctx.lineTo(15, 4.6); ctx.quadraticCurveTo(13.6, 6.3, 10, 6.5); }
     else { ctx.quadraticCurveTo(18, -6.2, 21, -1.5); ctx.lineTo(21, 1.5); ctx.quadraticCurveTo(18, 6.2, 10, 6.5); }
     ctx.lineTo(-19.6, 6.5); ctx.quadraticCurveTo(-21, 6.5, -21, 5.2);
+  } else if (kind === 'lst') {   // 坦克登陆舰：更长更宽的平底船体、钝圆艏门
+    ctx.moveTo(-24, -5.6); ctx.quadraticCurveTo(-24, -7, -22.4, -7); ctx.lineTo(13, -7);
+    if (open) { ctx.quadraticCurveTo(16.4, -6.8, 17.6, -5); ctx.lineTo(17.6, 5); ctx.quadraticCurveTo(16.4, 6.8, 13, 7); }
+    else { ctx.quadraticCurveTo(21.4, -6.6, 24, -1.8); ctx.lineTo(24, 1.8); ctx.quadraticCurveTo(21.4, 6.6, 13, 7); }
+    ctx.lineTo(-22.4, 7); ctx.quadraticCurveTo(-24, 7, -24, 5.6);
   } else if (kind === 'boat') {
     ctx.moveTo(-6, -1.8); ctx.quadraticCurveTo(-6, -2.5, -5.2, -2.5); ctx.lineTo(5.1, -2.5); ctx.lineTo(6, -2);
     ctx.lineTo(6, 2); ctx.lineTo(5.1, 2.5); ctx.lineTo(-5.2, 2.5); ctx.quadraticCurveTo(-6, 2.5, -6, 1.8);
@@ -192,6 +199,56 @@ function shLST(ctx, s, P, col, a, time) {
     ctx.setLineDash([lw(2), lw(3)]); ctx.strokeStyle = rgba(c2, .45 * al); ctx.lineWidth = lw(1);
     ctx.beginPath(); ctx.arc(30, 0, 7, time * .4, time * .4 + 6.283); ctx.stroke(); ctx.setLineDash([]);
   }
+  ctx.restore();
+}
+
+// —— 坦克登陆舰（LST）：钝圆艏门与长跳板、坦克甲板上看得见的车辆、艉部上层建筑；抢滩后车辆逐辆驶下跳板（vehicles.js）——
+function shTLS(ctx, s, P, col, a, time) {
+  const lw = v => px(v) / P.k, lod = P.L * P.k * R.s, open = s.state === 'beached' || s.state === 'unloading';
+  ctx.save(); ctx.translate(P.x, P.y); ctx.rotate(P.h); ctx.scale(P.k, P.k);
+  if (open) {   // 艏门向两侧打开，跳板伸到滩上
+    shRamp(ctx, 17.2, 4.4, 30, 4, col, a, lw, lod);
+    for (const g of [-1, 1]) {
+      ctx.beginPath(); ctx.moveTo(17.4, g * 5.2); ctx.lineTo(22.2, g * 10.6); ctx.lineTo(23.5, g * 9.7); ctx.lineTo(18.8, g * 4.4); ctx.closePath();
+      ctx.fillStyle = SH_DARK; ctx.fill(); ctx.strokeStyle = rgba(col, a); ctx.lineWidth = lw(1.1); ctx.stroke();
+    }
+  }
+  shHull(ctx, 'lst', open, col, a, lw);
+  ctx.strokeStyle = rgba(col, .6 * a); ctx.lineWidth = lw(.8);
+  ctx.beginPath();
+  if (!open) { ctx.moveTo(16.8, 0); ctx.lineTo(24, 0); }   // 艏门中缝
+  ctx.moveTo(14.6, -6.7); ctx.lineTo(14.6, 6.7); ctx.stroke();   // 艏门铰线
+  // 坦克甲板（下沉的车舱）与舱内车辆
+  ctx.fillStyle = 'rgba(0,0,0,.5)'; ctx.fillRect(-13.4, -4.7, 27.2, 9.4);
+  ctx.strokeStyle = rgba(col, .45 * a); ctx.lineWidth = lw(.8); ctx.strokeRect(-13.4, -4.7, 27.2, 9.4);
+  if (lod > 70) {   // 近景：甲板系固桩
+    ctx.fillStyle = rgba(col, .4 * a);
+    for (let x = -12; x < 13; x += 4) for (const y of [-4.1, 4.1]) ctx.fillRect(x - .3, y - .3, .6, .6);
+  }
+  const vs = (s.load && s.load.veh) || [], n = vs.length, gap = n > 1 ? Math.min(8, 20.5 / (n - 1)) : 0, sc = Math.min(1, gap ? gap / 7.4 : 1);
+  for (let i = 0; i < n; i++) shDeckVeh(ctx, vs[i], 9.6 - i * gap, 0, sc, col, a, lw, lod);
+  // 艉部上层建筑、烟囱、桅杆
+  shBox(ctx, -22.6, -5.6, 8.6, 11.2, col, a, lw(1.1));
+  ctx.fillStyle = rgba(col, .35 * a); ctx.fillRect(-14.9, -4.6, 1.1, 9.2);
+  ctx.beginPath(); ctx.ellipse(-19.4, 0, 1.7, 2.2, 0, 0, 7); ctx.fillStyle = rgba(col, .35 * a); ctx.fill(); ctx.strokeStyle = rgba(col, a); ctx.lineWidth = lw(.9); ctx.stroke();
+  if (lod >= 24) { ctx.beginPath(); ctx.moveTo(-16.4, -4); ctx.lineTo(-16.4, 4); ctx.lineWidth = lw(.7); ctx.stroke(); ctx.beginPath(); ctx.arc(-16.4, 0, .7, 0, 7); ctx.fillStyle = rgba(col, a); ctx.fill(); }
+  if (lod > 70) for (const g of [-1, 1]) {   // 舷侧的车辆人员登陆艇
+    ctx.save(); ctx.translate(-9, g * 6.2); ctx.scale(.36, .36);
+    shHullPath(ctx, 'boat'); ctx.fillStyle = SH_DARK; ctx.fill(); ctx.strokeStyle = rgba(col, .7 * a); ctx.lineWidth = lw(.6) / .36; ctx.stroke();
+    ctx.restore();
+  }
+  ctx.restore();
+}
+// 甲板上的小车辆剪影（车头朝向舰艏）
+function shDeckVeh(ctx, type, x, y, sc, col, a, lw, lod) {
+  ctx.save(); ctx.translate(x, y); ctx.scale(sc, sc);
+  const L = 6.6, B = 3.9, wheel = type === 'recon', tur = !['apc', 'spg', 'td'].includes(type);
+  ctx.strokeStyle = rgba(col, .9 * a); ctx.lineWidth = lw(.7) / sc;
+  if (!wheel) for (const g of [-1, 1]) { ctx.fillStyle = 'rgba(4,8,6,.95)'; ctx.fillRect(-L / 2, g < 0 ? -B / 2 : B / 2 - 1, L, 1); ctx.strokeRect(-L / 2, g < 0 ? -B / 2 : B / 2 - 1, L, 1); }
+  ctx.beginPath(); ctx.rect(-L / 2 + .3, -B / 2 + .8, L - .6, B - 1.6); ctx.fillStyle = SH_DARK; ctx.fill(); ctx.fillStyle = rgba(col, .18 * a); ctx.fill(); ctx.stroke();
+  if (tur) { ctx.beginPath(); ctx.arc(-.3, 0, 1.25, 0, 7); ctx.fillStyle = SH_DARK; ctx.fill(); ctx.stroke(); ctx.beginPath(); ctx.moveTo(.9, 0); ctx.lineTo(L / 2 + 1.6, 0); ctx.stroke(); }
+  else if (type !== 'apc') { ctx.beginPath(); ctx.moveTo(.4, 0); ctx.lineTo(L / 2 + 1.8, 0); ctx.stroke(); }
+  else if (lod >= 24) { ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillRect(-2.4, -.8, 3.4, 1.6); }
   ctx.restore();
 }
 
@@ -391,7 +448,7 @@ function drawShips(time) {
     if (beached) tg = shShoreNormal(s.x);   // 抢滩：舰艏垂直顶向岸线
     if (sunk && SHIPV.h[s.id] != null) tg = SHIPV.h[s.id];
     const P = shPose(s, s.id, dim[0], dim[1], tg, s.state === 'move', dt, beached);
-    list.push({ s, P, vis: shInView(P, vr), sunk, beached, kind: s.kind === 'supply' ? 'supply' : 'assault' });
+    list.push({ s, P, vis: shInView(P, vr), sunk, beached, kind: s.kind === 'supply' ? 'supply' : s.kind === 'lst' ? 'lst' : 'assault' });
   }
   // 航线与预定抢滩点
   for (const { s } of list) if (s.state === 'move' && isFinite(s.tx)) {
@@ -408,14 +465,15 @@ function drawShips(time) {
   for (const o of list) {
     if (o.sunk || !o.vis) continue;
     const a = o.s.state === 'beached' ? .6 : 1;
-    if (o.kind === 'supply') shLST(ctx, o.s, o.P, COL.g, a, time); else shLCT(ctx, o.s, o.P, COL.g, a, time);
+    if (o.kind === 'supply') shLST(ctx, o.s, o.P, COL.g, a, time); else if (o.kind === 'lst') shTLS(ctx, o.s, o.P, COL.g, a, time); else shLCT(ctx, o.s, o.P, COL.g, a, time);
   }
   for (const { s, P, vis, sunk } of list) {
     if (sunk || !vis) continue;
     if (s.hp < s.maxhp * .5) shSmoke(ctx, P, time, s.id, s.hp < s.maxhp * .3);
     if (s.state === 'unloading') {
       ctx.strokeStyle = COL.g; ctx.lineWidth = px(2);
-      ctx.beginPath(); ctx.arc(P.x, P.y, P.L * P.k * .5 + 4, -1.57, -1.57 + clamp((s.ut || 0) / 3, 0, 1) * 6.283); ctx.stroke();
+      const lv = s.kind === 'lst' ? ((s.load && s.load.veh) || []).length : 0, fu = s.kind === 'lst' ? 1 - lv / Math.max(1, lv + (s.vk || 0)) : clamp((s.ut || 0) / 3, 0, 1);   // LST：已下车辆的比例
+      ctx.beginPath(); ctx.arc(P.x, P.y, P.L * P.k * .5 + 4, -1.57, -1.57 + fu * 6.283); ctx.stroke();
     }
     if (isSel(s.id)) shBrackets(ctx, P, COL.sel);
     if (s.state !== 'beached') shPips(ctx, P, s.hp, s.maxhp);

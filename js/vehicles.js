@@ -166,7 +166,8 @@ const vehNearPt = (x, y) => { let b = null, bd = Infinity; for (const p of S.poi
 // 直线是否畅通：途经格均可通行且不慢（避开林地/沼泽，避开已知雷区）
 function vehLine(x0, y0, x1, y1, cls) {
   const n = Math.ceil(dist(x0, y0, x1, y1) / 8);
-  for (let s = 1; s <= n; s++) if (!(stepCost(ci(lerp(x0, x1, s / n), lerp(y0, y1, s / n)), cls) <= 1.6)) return false;
+  const lim = cls === 'amph' ? 1.75 : 1.6;   // 两栖：海面泅渡也算畅通
+  for (let s = 1; s <= n; s++) if (!(stepCost(ci(lerp(x0, x1, s / n), lerp(y0, y1, s / n)), cls) <= lim)) return false;
   return true;
 }
 // 沿流场往前看两格（更顺滑的转向）
@@ -677,7 +678,8 @@ function vehFerry(v) {
       log(`${vehName(v)}放下搭载的步兵`, 'info', 'vdrop' + v.id, 20, v);
       return false;
     }
-    vehGo(v, o.x, o.y, 'move'); v.ai = 'carry';
+    if (S.t - (v.carryT ?? S.t) > 70 || !vehGo(v, o.x, o.y, 'move')) { vehDropRiders(v, false); v.ferT = S.t; v.ai = 'mg'; return false; }   // 车开不过去或耽搁太久：就地下车
+    v.ai = 'carry';
     return true;
   }
   if (v.pick && v.pick.length) {   // 正去接人
@@ -711,7 +713,7 @@ function vehBoard(v) {
     if (!q || !q.men.length || q.ride) { v.pick = v.pick.filter(i => i !== id); continue; }
     if (dist(q.x, q.y, v.x, v.y) < 18 && v.ride.length < vehSp(v).carry) { v.ride.push(q.id); q.ride = v.id; v.pick = v.pick.filter(i => i !== id); }
   }
-  if (!v.pick.length) { v.pick = null; if (v.ride.length) { v.think = 0; log(`${vehName(v)}载上 ${v.ride.length} 个小组驶向前线`, 'info', 'vride' + v.id, 20, v); } }
+  if (!v.pick.length) { v.pick = null; if (v.ride.length) { v.think = 0; v.carryT = S.t; log(`${vehName(v)}载上 ${v.ride.length} 个小组驶向前线`, 'info', 'vride' + v.id, 20, v); } }
 }
 
 // 扫雷坦克：找我方步兵附近（或手动指定地点附近）的已知雷区，驶入后来回碾压直到清除
@@ -865,4 +867,349 @@ function vehOrderAll(vs, t) {
   }
   if (vs.length) log(t === 'hold' ? `${vs.length} 辆车辆就地坚守` : `${vs.length} 辆车辆后撤`, t === 'hold' ? 'info' : 'warn', 'vord', 1);
   return vs.length;
+}
+
+// ———————————————— 绘制（只在浏览器里调用）————————————————
+// 俯视剪影：履带（带滚动的履带纹）、车体、炮塔随 aim 转动、炮管后坐、炮口焰、行进扬尘、泅渡尾浪、受损冒烟起火、残骸
+// 我方绿色、敌方红色（只在看得见时画，看不见时在最后标定位置画虚线轮廓）；全图时剪影至少约 13px，放大后显示细节
+const VEHV = { S: null, trail: {} };
+const VEH_DARK = 'rgba(2,10,6,.9)', VEH_DARKE = 'rgba(28,4,10,.92)';
+const vehK = v => Math.max(1, px(13) / vehSp(v).len);
+function vehVSync() { if (VEHV.S !== S) { VEHV.S = S; VEHV.trail = {}; } }
+
+// 履带印（渲染缓存）：最近 25 秒的轨迹点
+function vehTrail(v) {
+  const tr = VEHV.trail[v.id] || (VEHV.trail[v.id] = []), l = tr[tr.length - 1];
+  if (l && (l.t > S.t || dist(l.x, l.y, v.x, v.y) > 60)) tr.length = 0;
+  const e = tr[tr.length - 1];
+  if (!v.dead && !v.swim && (!e || dist(e.x, e.y, v.x, v.y) > 3.5)) tr.push({ x: v.x, y: v.y, h: v.heading, t: S.t });
+  while (tr.length && (S.t - tr[0].t > 25 || tr.length > 90)) tr.shift();
+  return tr;
+}
+
+function vehDrawUnder(time) {
+  if (!S || !S.veh || !S.veh.length) return;
+  vehVSync();
+  const ctx = R.ctx;
+  for (const v of S.veh) {
+    const tr = vehTrail(v);
+    if (v.side === 'e' && !inVision(v.x, v.y)) continue;
+    if (R.zr > 1.6 && tr.length > 1 && inView(v.x, v.y, 300)) {   // 履带印：两条淡线
+      const o = vehSp(v).wid * .36;
+      ctx.lineWidth = px(.8);
+      for (let i = 1; i < tr.length; i++) {
+        const p0 = tr[i - 1], p1 = tr[i], f = clamp(1 - (S.t - p1.t) / 25, 0, 1);
+        if (dist(p0.x, p0.y, p1.x, p1.y) > 12) continue;
+        ctx.strokeStyle = rgba(COL.smoke, .13 * f);
+        const s0 = Math.sin(p0.h), c0 = Math.cos(p0.h), s1 = Math.sin(p1.h), c1 = Math.cos(p1.h);
+        ctx.beginPath();
+        ctx.moveTo(p0.x - s0 * o, p0.y + c0 * o); ctx.lineTo(p1.x - s1 * o, p1.y + c1 * o);
+        ctx.moveTo(p0.x + s0 * o, p0.y - c0 * o); ctx.lineTo(p1.x + s1 * o, p1.y - c1 * o);
+        ctx.stroke();
+      }
+    }
+    if (v.dead && inView(v.x, v.y, 40) && !v.swim) vehWreck(ctx, v, time);
+  }
+}
+
+function vehDrawOver(time) {
+  if (!S) return;
+  vehVSync();
+  const ctx = R.ctx;
+  for (const s of S.vshots || []) vehDrawShot(ctx, s);
+  if (!S.veh || !S.veh.length) return;
+  for (const v of S.veh) {
+    if (v.dead || v.lst) continue;
+    const vis = v.side === 'p' || inVision(v.x, v.y);
+    if (!vis && v.kx == null) continue;
+    const x = vis ? v.x : v.kx, y = vis ? v.y : v.ky;
+    if (!inView(x, y, 60)) continue;
+    const sel = v.side === 'p' && isSel(v.id);
+    if (sel) vehDrawOrder(ctx, v, time);
+    vehDraw(ctx, v, x, y, vis ? v.heading : v.kh ?? v.heading, vis ? v.aim : v.kh ?? v.heading, vis, time, sel);
+  }
+  if (S.phase === 'deploy' && typeof arrow === 'function') for (const v of S.veh) if (v.plan && !v.dead) arrow(ctx, v.x, v.y, v.plan.x, v.plan.y, rgba(isSel(v.id) ? COL.sel : COL.g, .75));
+}
+HOOK.drawUnder.push(vehDrawUnder);
+HOOK.drawOver.push(vehDrawOver);
+
+// 选中车辆：去向虚线、射程淡圈
+function vehDrawOrder(ctx, v, time) {
+  const o = v.order, sp = vehSp(v);
+  if (o.x != null && o.t !== 'hold' && dist(v.x, v.y, o.x, o.y) > 8) {
+    const col = o.t === 'amove' ? COL.enemy : o.t === 'retreat' ? COL.amber : COL.sel;
+    ctx.strokeStyle = rgba(col, .55); ctx.lineWidth = px(1); ctx.setLineDash([px(3), px(5)]);
+    ctx.beginPath(); ctx.moveTo(v.x, v.y); ctx.lineTo(o.x, o.y); ctx.stroke(); ctx.setLineDash([]);
+    const d = Math.max(px(2.5), 1.5);
+    ctx.fillStyle = rgba(col, .7); ctx.fillRect(o.x - d / 2, o.y - d / 2, d, d);
+  }
+  const g = sp.gun || sp.mg;
+  if (g) {
+    ctx.strokeStyle = rgba(COL.g, .12); ctx.lineWidth = px(1); ctx.setLineDash([px(3), px(6)]);
+    ctx.beginPath(); ctx.arc(v.x, v.y, g.range * ((v.mod && v.mod.rng) || 1), 0, 7); ctx.stroke(); ctx.setLineDash([]);
+  }
+}
+
+// 直瞄炮弹：一小段沿弹道飞行的亮线；火焰：琥珀色锥形喷流
+function vehDrawShot(ctx, s) {
+  const u = clamp(s.t / s.dur, 0, 1);
+  if (!inView(s.x1, s.y1, 80) && !inView(s.x0, s.y0, 80)) return;
+  if (s.k === 'flame') {
+    const len = dist(s.x0, s.y0, s.x1, s.y1), a = Math.atan2(s.y1 - s.y0, s.x1 - s.x0), f = Math.min(1, u * 3) * (1 - u);
+    ctx.save(); ctx.translate(s.x0, s.y0); ctx.rotate(a);
+    const gr = ctx.createLinearGradient(0, 0, len, 0);
+    gr.addColorStop(0, rgba('#fff3d6', .9 * f)); gr.addColorStop(.35, rgba(COL.amber, .75 * f)); gr.addColorStop(1, rgba(COL.enemy, .15 * f));
+    ctx.fillStyle = gr;
+    ctx.beginPath(); ctx.moveTo(0, -1); ctx.quadraticCurveTo(len * .6, -len * .1, len, -len * .16); ctx.lineTo(len, len * .16); ctx.quadraticCurveTo(len * .6, len * .1, 0, 1); ctx.closePath(); ctx.fill();
+    ctx.restore();
+    return;
+  }
+  const col = s.side === 'e' ? COL.enemy : s.k === 'ap' ? '#e9fff2' : COL.amber, x = lerp(s.x0, s.x1, u), y = lerp(s.y0, s.y1, u), b = Math.max(0, u - .35);
+  ctx.strokeStyle = rgba(col, .9); ctx.lineWidth = px(1.3);
+  ctx.beginPath(); ctx.moveTo(lerp(s.x0, s.x1, b), lerp(s.y0, s.y1, b)); ctx.lineTo(x, y); ctx.stroke();
+}
+
+// 车体（局部坐标，车头 +x，单位：世界长度）
+function vehHullPath(ctx, v) {
+  const sp = vehSp(v), hl = sp.len / 2, hb = sp.wid / 2, t = v.type;
+  ctx.beginPath();
+  if (t === 'amtank') {   // 浮箱式车体：圆弧船艏
+    ctx.moveTo(-hl, -hb * .86); ctx.lineTo(hl * .45, -hb * .86); ctx.quadraticCurveTo(hl * 1.05, -hb * .8, hl * 1.05, 0); ctx.quadraticCurveTo(hl * 1.05, hb * .8, hl * .45, hb * .86); ctx.lineTo(-hl, hb * .86);
+  } else if (t === 'recon') {   // 轮式车：楔形车头
+    ctx.moveTo(-hl, -hb * .62); ctx.lineTo(hl * .55, -hb * .62); ctx.lineTo(hl, -hb * .3); ctx.lineTo(hl, hb * .3); ctx.lineTo(hl * .55, hb * .62); ctx.lineTo(-hl, hb * .62);
+  } else if (t === 'td') {   // 低矮战斗室，前装甲大倾角
+    ctx.moveTo(-hl * .92, -hb * .7); ctx.lineTo(hl * .35, -hb * .7); ctx.lineTo(hl * .95, -hb * .4); ctx.lineTo(hl * .95, hb * .4); ctx.lineTo(hl * .35, hb * .7); ctx.lineTo(-hl * .92, hb * .7);
+  } else {
+    const f = t === 'apc' ? .7 : .78;
+    ctx.moveTo(-hl * .94, -hb * .7); ctx.lineTo(hl * f, -hb * .7); ctx.lineTo(hl * .97, -hb * .5); ctx.lineTo(hl * .97, hb * .5); ctx.lineTo(hl * f, hb * .7); ctx.lineTo(-hl * .94, hb * .7);
+  }
+  ctx.closePath();
+}
+
+function vehBody(ctx, v, col, a, det, lw, time, vis, enemy) {
+  const sp = vehSp(v), L = sp.len, B = sp.wid, hl = L / 2, hb = B / 2, t = v.type, dark = enemy ? VEH_DARKE : VEH_DARK;
+  const fillA = vis ? (det ? 1 : 0) : -1;   // -1：虚线轮廓（失去接触）
+  ctx.lineWidth = lw(1.1); ctx.strokeStyle = rgba(col, a);
+  // 行走机构
+  if (sp.wheel) {
+    for (const wx of [-hl * .58, hl * .5]) for (const s of [-1, 1]) {
+      ctx.beginPath(); ctx.rect(wx - L * .1, s * hb * .82 - B * .14, L * .2, B * .28);
+      if (fillA >= 0) { ctx.fillStyle = det ? 'rgba(4,8,6,.95)' : rgba(col, .5 * a); ctx.fill(); }
+      ctx.stroke();
+    }
+  } else {
+    const tw = B * (t === 'amtank' ? .2 : .26);
+    for (const s of [-1, 1]) {
+      const y0 = s < 0 ? -hb : hb - tw;
+      ctx.beginPath(); ctx.rect(-hl, y0, L, tw);
+      if (fillA >= 0) { ctx.fillStyle = det ? 'rgba(4,8,6,.95)' : rgba(col, .5 * a); ctx.fill(); }
+      ctx.stroke();
+      if (det && fillA >= 0) {   // 履带纹：随里程滚动
+        ctx.beginPath();
+        const g = 1.5, off = ((v.odo || 0) % g + g) % g;
+        for (let x = -hl + off; x < hl; x += g) { ctx.moveTo(x, y0 + .25); ctx.lineTo(x, y0 + tw - .25); }
+        ctx.strokeStyle = rgba(col, .35 * a); ctx.lineWidth = lw(.5); ctx.stroke();
+        ctx.strokeStyle = rgba(col, a); ctx.lineWidth = lw(1.1);
+      }
+    }
+  }
+  // 车体
+  vehHullPath(ctx, v);
+  ctx.fillStyle = fillA > 0 ? dark : fillA === 0 ? rgba(col, .3 * a) : rgba(col, .06); ctx.fill();
+  ctx.lineWidth = lw(det ? 1.1 : 1.4); ctx.stroke();
+  if (det && vis) vehDeck(ctx, v, col, a, lw, time);
+}
+
+// 近看细节：发动机格栅、舱盖、工具箱等
+function vehDeck(ctx, v, col, a, lw, time) {
+  const sp = vehSp(v), L = sp.len, B = sp.wid, hl = L / 2, hb = B / 2, t = v.type;
+  ctx.strokeStyle = rgba(col, .45 * a); ctx.lineWidth = lw(.55);
+  ctx.beginPath();
+  for (let x = -hl * .86; x < -hl * .52; x += .9) { ctx.moveTo(x, -hb * .42); ctx.lineTo(x, hb * .42); }   // 发动机格栅
+  ctx.stroke();
+  if (t === 'apc' || t === 'spg') {   // 敞开的载员舱 / 战斗室
+    const x0 = t === 'apc' ? -hl * .45 : -hl * .5, w = t === 'apc' ? L * .58 : L * .48;
+    ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillRect(x0, -hb * .5, w, B * .5 * 2);
+    ctx.strokeStyle = rgba(col, .6 * a); ctx.lineWidth = lw(.7); ctx.strokeRect(x0, -hb * .5, w, B * .5 * 2);
+    if (t === 'apc') {   // 搭载的步兵
+      const n = (v.ride || []).reduce((s, id) => { const q = S.teams.find(q => q.id === id); return s + (q ? q.men.length : 0); }, 0);
+      ctx.fillStyle = rgba(col, .9 * a);
+      for (let i = 0; i < n; i++) { ctx.beginPath(); ctx.arc(x0 + 1.3 + Math.floor(i / 2) * 2.6, (i % 2 ? 1 : -1) * hb * .24, .7, 0, 7); ctx.fill(); }
+    }
+  }
+  if (t === 'flame_tank') {   // 车尾燃料罐
+    ctx.strokeStyle = rgba(col, .7 * a); ctx.lineWidth = lw(.7);
+    for (const s of [-1, 1]) { ctx.beginPath(); ctx.arc(-hl * .78, s * hb * .3, B * .14, 0, 7); ctx.stroke(); }
+  }
+  if (t === 'mine_tank') {   // 连枷扫雷器：两根悬臂 + 旋转滚筒 + 铁链
+    const dx = hl + 4.6, spin = v.moving ? time * 14 : 0;
+    ctx.strokeStyle = rgba(col, .9 * a); ctx.lineWidth = lw(.9);
+    ctx.beginPath(); ctx.moveTo(hl * .6, -hb * .82); ctx.lineTo(dx, -hb * .82); ctx.moveTo(hl * .6, hb * .82); ctx.lineTo(dx, hb * .82); ctx.stroke();
+  }
+}
+
+// 炮塔 / 战斗室 / 炮管（随 aim 转动；开火后短暂后坐 + 炮口焰）
+function vehTurret(ctx, v, col, a, det, lw, vis, enemy, time) {
+  const sp = vehSp(v), L = sp.len, B = sp.wid, hl = L / 2, hb = B / 2, t = v.type, dark = enemy ? 'rgba(44,6,16,.96)' : 'rgba(4,18,10,.96)';
+  const since = S.t - v.fireT, rec = vis && since < .25 ? (1 - since / .25) * 1.6 : 0, ra = vehAng(v.aim - v.heading);
+  ctx.strokeStyle = rgba(col, a);
+  const barrel = (x0, len, w) => {
+    ctx.lineWidth = lw(w); ctx.beginPath(); ctx.moveTo(x0 - rec, 0); ctx.lineTo(x0 + len - rec, 0); ctx.stroke();
+    if (det && vis && (t === 'tank' || t === 'hv_tank' || t === 'td')) { ctx.lineWidth = lw(w * 1.6); ctx.beginPath(); ctx.moveTo(x0 + len - rec - 1, 0); ctx.lineTo(x0 + len - rec, 0); ctx.stroke(); }   // 炮口制退器
+    if (vis && since < .12 && !(sp.gun && sp.gun.flame)) {
+      const u = since / .12;
+      ctx.fillStyle = rgba(COL.amber, (1 - u) * .9);
+      ctx.beginPath(); ctx.moveTo(x0 + len, -1.2); ctx.lineTo(x0 + len + 5 * (1 - u * .4), 0); ctx.lineTo(x0 + len, 1.2); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = rgba('#fff3d6', 1 - u); ctx.beginPath(); ctx.arc(x0 + len + .6, 0, 1.6, 0, 7); ctx.fill();
+    }
+  };
+  const fill = () => { if (vis) { ctx.fillStyle = det ? dark : rgba(col, .55 * a); ctx.fill(); } };
+  if (!sp.tur) {   // 无炮塔：战斗室固定，炮管随小射界偏转
+    if (t === 'spg') {
+      ctx.save(); ctx.translate(-hl * .15, 0); ctx.rotate(ra);
+      ctx.beginPath(); ctx.rect(-L * .12, -hb * .52, L * .32, hb * 1.04); fill(); ctx.lineWidth = lw(1); ctx.stroke();
+      barrel(L * .18, sp.bar, 1.8);
+      ctx.restore();
+    } else if (t === 'td') {
+      ctx.beginPath(); ctx.moveTo(-hl * .5, -hb * .5); ctx.lineTo(hl * .2, -hb * .5); ctx.lineTo(hl * .55, -hb * .3); ctx.lineTo(hl * .55, hb * .3); ctx.lineTo(hl * .2, hb * .5); ctx.lineTo(-hl * .5, hb * .5); ctx.closePath();
+      fill(); ctx.lineWidth = lw(1); ctx.stroke();
+      ctx.save(); ctx.translate(hl * .5, 0); ctx.rotate(ra); barrel(0, sp.bar, 1.7); ctx.restore();
+    } else if (t === 'apc') {   // 车首机枪环
+      ctx.save(); ctx.translate(hl * .48, 0);
+      ctx.beginPath(); ctx.arc(0, 0, B * .17, 0, 7); fill(); ctx.lineWidth = lw(.9); ctx.stroke();
+      ctx.rotate(ra); ctx.lineWidth = lw(.9); ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(B * .5, 0); ctx.stroke();
+      if (vis && S.t - (v.mgT ?? -99) < .12) { ctx.fillStyle = rgba(COL.amber, .9); ctx.beginPath(); ctx.arc(B * .55, 0, .8, 0, 7); ctx.fill(); }
+      ctx.restore();
+    }
+    return;
+  }
+  const tx = t === 'amtank' ? hl * .08 : t === 'mine_tank' ? -hl * .05 : -hl * .08;
+  ctx.save(); ctx.translate(tx, 0); ctx.rotate(ra);
+  const r = sp.tur;
+  ctx.beginPath();
+  if (t === 'hv_tank') { ctx.moveTo(-r * 1, -r * .85); ctx.lineTo(r * .85, -r * .85); ctx.lineTo(r * 1.05, -r * .55); ctx.lineTo(r * 1.05, r * .55); ctx.lineTo(r * .85, r * .85); ctx.lineTo(-r * 1, r * .85); ctx.closePath(); }
+  else if (t === 'aa_veh') ctx.arc(0, 0, r, 0, 7);
+  else ctx.ellipse(0, 0, r * 1.08, r * .9, 0, 0, 7);
+  fill(); ctx.lineWidth = lw(det ? 1 : 1.3); ctx.stroke();
+  if (t === 'aa_veh') {   // 四联高射机枪
+    ctx.lineWidth = lw(.6);
+    ctx.beginPath(); for (const y of [-1.1, -.4, .4, 1.1]) { ctx.moveTo(.5, y); ctx.lineTo(r + sp.bar, y); } ctx.stroke();
+    if (vis && S.t - (v.mgT ?? -99) < .1) { ctx.fillStyle = rgba(COL.amber, .9); ctx.beginPath(); ctx.arc(r + sp.bar + .6, 0, 1.4, 0, 7); ctx.fill(); }
+    if (det) { ctx.beginPath(); ctx.arc(0, 0, r * .55, 0, 7); ctx.strokeStyle = rgba(col, .4 * a); ctx.stroke(); }
+  } else {
+    const w = t === 'hv_tank' ? 1.9 : t === 'flame_tank' ? 1.8 : t === 'lt_tank' || t === 'recon' || t === 'amtank' ? 1.1 : 1.4;
+    barrel(r * .8, sp.bar, w);
+    if (t === 'flame_tank' && vis) { ctx.fillStyle = rgba(COL.amber, .8 * a); ctx.beginPath(); ctx.arc(r * .8 + sp.bar, 0, .9, 0, 7); ctx.fill(); }   // 引火嘴
+    if (det && vis) {   // 指挥塔与舱盖
+      ctx.strokeStyle = rgba(col, .55 * a); ctx.lineWidth = lw(.6);
+      ctx.beginPath(); ctx.arc(-r * .35, -r * .3, r * .3, 0, 7); ctx.stroke();
+      if (sp.mg) { ctx.beginPath(); ctx.moveTo(-r * .1, r * .45); ctx.lineTo(r * .6, r * .45); ctx.stroke(); }   // 并列机枪
+      if (S.t - (v.mgT ?? -99) < .1) { ctx.fillStyle = rgba(COL.amber, .9); ctx.beginPath(); ctx.arc(r * .7, r * .45, .7, 0, 7); ctx.fill(); }
+    }
+  }
+  ctx.restore();
+  if (t === 'mine_tank' && vis) {   // 滚筒与铁链（画在炮塔之后，车头最前）
+    const dx = hl + 4.6, spin = v.moving ? time * 14 : 0;
+    ctx.fillStyle = dark; ctx.strokeStyle = rgba(col, a); ctx.lineWidth = lw(.9);
+    ctx.beginPath(); ctx.rect(dx - .9, -hb * 1.02, 1.8, B * 1.02); ctx.fill(); ctx.stroke();
+    if (det) {
+      ctx.strokeStyle = rgba(col, .6 * a); ctx.lineWidth = lw(.5);
+      ctx.beginPath();
+      for (let k = 0; k < 7; k++) { const y = -hb * .9 + k * B * .9 / 6, l = 1.2 + Math.abs(Math.sin(spin + k * 1.3)) * 1.8; ctx.moveTo(dx + .9, y); ctx.lineTo(dx + .9 + l, y + Math.cos(spin + k) * .4); }
+      ctx.stroke();
+    }
+  }
+}
+
+// 一辆车：扬尘 / 尾浪 → 剪影 → 冒烟起火 → 状态标记（选中括角、血条、编组点、履带损坏）
+function vehDraw(ctx, v, x, y, h, aim, vis, time, sel) {
+  const sp = vehSp(v), enemy = v.side === 'e', col = enemy ? COL.enemy : sel ? COL.g : COL.g, k = vehK(v), L = sp.len, lod = L * k * R.s, det = lod >= 34;
+  const a = vis ? (v.side === 'p' && v.ammo <= 0 && sp.gun && !sp.gun.flame ? .6 + .3 * Math.sin(time * 6) : 1) : clamp(.6 - (S.t - v.seen) / 120, .25, .6);
+  const lw = n => px(n) / k, ch = Math.cos(h), sh = Math.sin(h);
+  if (vis && v.moving && !v.swim && det) for (let i = 0; i < 4; i++) {   // 行进扬尘（近看才画）
+    const u = (time * 1.5 + i / 4 + v.id * .17) % 1, d = (L * .55 + u * 12) * k, s = Math.sin(i * 2.3 + v.id) * 3 * k;
+    ctx.fillStyle = rgba(COL.smoke, .14 * (1 - u));
+    ctx.beginPath(); ctx.arc(x - ch * d - sh * s, y - sh * d + ch * s, (1.6 + u * 4) * k, 0, 7); ctx.fill();
+  }
+  if (vis && v.swim) {   // 泅渡：V 形尾浪 + 车体周围的水线
+    const wl = (v.moving ? 1 : .4);
+    if (typeof shVWake === 'function') shVWake(ctx, x, y, h, L, sp.wid, k, typeof SH_FOAM === 'string' ? SH_FOAM : '#d4fff0', .4 * wl);
+  }
+  ctx.save(); ctx.translate(x, y); ctx.rotate(h); ctx.scale(k, k);
+  if (!vis) ctx.setLineDash([px(2.5) / k, px(2) / k]);
+  vehBody(ctx, v, col, a, det, lw, time, vis, enemy);
+  vehTurret(ctx, v, col, a, det, lw, vis, enemy, time);
+  if (vis && v.swim) {   // 水线：车体半没入水中
+    ctx.strokeStyle = rgba('#d4fff0', .35); ctx.lineWidth = lw(.8);
+    ctx.beginPath(); ctx.ellipse(0, 0, L * .56, sp.wid * .62, 0, 0, 7); ctx.stroke();
+  }
+  ctx.setLineDash([]);
+  ctx.restore();
+  if (!vis) return;
+  // 受损冒烟、起火
+  if (v.hp < v.maxhp * .5 || v.burn > 0) vehSmoke(ctx, x, y, k, time, v.id, v.burn > 0 ? .7 : .35, v.burn > 0);
+  // 选中括角
+  const half = (Math.abs(ch) * L + Math.abs(sh) * sp.wid) / 2 * k, halfY = (Math.abs(sh) * L + Math.abs(ch) * sp.wid) / 2 * k;
+  if (sel) {
+    const hx = half + px(4), hy = halfY + px(4), m = Math.max(px(3), Math.min(hx, hy) * .45);
+    ctx.strokeStyle = COL.sel; ctx.lineWidth = px(1.5);
+    ctx.beginPath();
+    for (const [dx, dy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) { ctx.moveTo(x + dx * hx, y + dy * (hy - m)); ctx.lineTo(x + dx * hx, y + dy * hy); ctx.lineTo(x + dx * (hx - m), y + dy * hy); }
+    ctx.stroke();
+  }
+  // 血条（受损或选中时显示）与编组点
+  const by = y + halfY + px(4), bw = Math.max(L * k * .9, px(12));
+  if (v.hp < v.maxhp || sel) {
+    const f = Math.max(0, v.hp) / v.maxhp;
+    ctx.fillStyle = rgba(enemy ? COL.enemy : COL.g, .22); ctx.fillRect(x - bw / 2, by, bw, px(2));
+    ctx.fillStyle = enemy ? COL.enemy : f < .35 ? COL.enemy : f < .6 ? COL.amber : COL.g; ctx.fillRect(x - bw / 2, by, bw * f, px(2));
+  }
+  if (v.immob) {   // 履带损坏：琥珀色断链标记
+    ctx.strokeStyle = rgba(COL.amber, .9); ctx.lineWidth = px(1.3);
+    const r = px(3), cx = x - bw / 2 - px(5), cy = by + px(1);
+    ctx.beginPath(); ctx.moveTo(cx - r, cy - r); ctx.lineTo(cx - r * .2, cy - r * .2); ctx.moveTo(cx + r * .2, cy + r * .2); ctx.lineTo(cx + r, cy + r); ctx.stroke();
+  }
+  if (!enemy && typeof groupOf === 'function' && typeof pips === 'function') { const g = groupOf(v.id); if (g) pips(ctx, g, x, by + px(6), COL.sel); }
+  if (!enemy && v.sup > 50 && R.fig) { ctx.fillStyle = rgba(COL.amber, .8); ctx.fillRect(x - bw / 2, by + px(3), bw * Math.min(1, v.sup / 100), px(1.2)); }   // 乘员受压制
+}
+
+function vehSmoke(ctx, x, y, k, time, seed, a0, fire) {
+  const sk = Math.sqrt(k);
+  for (let i = 0; i < 5; i++) {
+    const u = (time * .45 + i / 5 + seed * .29) % 1;
+    ctx.fillStyle = rgba(COL.smoke, a0 * .32 * (1 - u));
+    ctx.beginPath(); ctx.arc(x + Math.sin(i * 1.7 + time) * 2 * sk + u * 9 * sk, y - u * 20 * sk, (1.6 + u * 6) * sk, 0, 7); ctx.fill();
+  }
+  if (fire) for (let i = 0; i < 3; i++) {
+    const f = .5 + .5 * Math.sin(time * 17 + i * 2.1 + seed);
+    ctx.fillStyle = rgba(i ? COL.amber : '#fff3d6', (.35 + .45 * f) * (i ? 1 : .7));
+    ctx.beginPath(); ctx.arc(x + (i - 1) * 1.6 * sk, y - f * 2 * sk, (1 + f * .9) * sk * (i ? 1 : .6), 0, 7); ctx.fill();
+  }
+}
+
+// 残骸：压暗的虚线车体、炮塔歪斜、交叉线；击毁后 45 秒内冒黑烟
+function vehWreck(ctx, v, time) {
+  if (v.side === 'e' && v.kx == null && !inVision(v.x, v.y)) return;
+  const sp = vehSp(v), k = vehK(v), col = v.side === 'e' ? COL.enemy : COL.g, lw = n => px(n) / k;
+  ctx.save(); ctx.translate(v.x, v.y); ctx.rotate(v.kh ?? v.heading); ctx.scale(k, k);
+  vehHullPath(ctx, v); ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fill();
+  ctx.setLineDash([lw(2), lw(2.2)]); ctx.strokeStyle = rgba(col, .32); ctx.lineWidth = lw(1); ctx.stroke(); ctx.setLineDash([]);
+  if (sp.tur) { ctx.beginPath(); ctx.arc(sp.len * .1, sp.wid * .18, sp.tur * .9, 0, 7); ctx.strokeStyle = rgba(col, .25); ctx.stroke(); ctx.beginPath(); ctx.moveTo(sp.len * .1, sp.wid * .18); ctx.lineTo(sp.len * .1 + Math.cos(.7) * sp.bar, sp.wid * .18 + Math.sin(.7) * sp.bar); ctx.stroke(); }
+  ctx.restore();
+  const age = S.t - (v.deadT ?? -99);
+  if (age < 45) vehSmoke(ctx, v.x, v.y, k, time, v.id, 1 - age / 45, age < 12);
+}
+
+// —— 界面辅助（ui.js 调用）——
+// 点选：点在（远景放大后的）车辆剪影内，或离车辆中心 8px 以内
+function pickVeh(p) {
+  if (!S || !S.veh || !p) return null;
+  let best = null, bd = 1e9;
+  for (const v of S.veh) {
+    if (v.dead || v.side !== 'p' || v.lst) continue;
+    const sp = vehSp(v), k = vehK(v), dx = p.x - v.x, dy = p.y - v.y, c = Math.cos(v.heading), s = Math.sin(v.heading);
+    const lx = dx * c + dy * s, ly = -dx * s + dy * c, d = Math.hypot(dx, dy), m = px(3);
+    if ((Math.abs(lx) <= sp.len / 2 * k + m && Math.abs(ly) <= sp.wid / 2 * k + m) || d < px(8)) if (d < bd) { bd = d; best = v.id; }
+  }
+  return best;
 }

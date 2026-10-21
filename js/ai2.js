@@ -28,12 +28,15 @@ function aiThink(D) {
     const I = info[u.obj];
     u.face = u.role === 'ambush' || !I || !I.th ? SOUTH : Math.atan2(I.fy - I.p.y, I.fx - I.p.x);
   }
-  const need = k => (info[k].th + (info[k].p.owner === 'p' ? 8 : 0) + 1) / (info[k].def + 1) * Math.sqrt(info[k].p.vp);
+  // 指挥官（commander.js）加权：判定的主攻方向加重、佯动方向减轻
+  const bias = typeof cmdBias === 'function' ? cmdBias : () => 1;
+  const need = k => (info[k].th * bias(k) + (info[k].p.owner === 'p' ? 8 : 0) + 1) / (info[k].def + 1) * Math.sqrt(info[k].p.vp);
   const keys = S.points.map(p => p.key);
 
   // 预备队与平静据点的多余守备流向压力最大处
   for (const q of foes) {
     if (q.order.t === 'amove' || q.order.t === 'retreat' || q.role === 'ambush' || !info[q.obj]) continue;
+    if (typeof cmdHeld === 'function' && cmdHeld(q)) continue;   // 预备队尚未获准出动
     const k = keys.reduce((a, b) => need(b) > need(a) ? b : a);
     if (k === q.obj || need(k) < need(q.obj) * 1.5) continue;
     const spare = q.role === 'reserve' || (info[q.obj].th < 2 && foes.filter(o => o.obj === q.obj && o.role === 'garrison').length > 1);
@@ -60,14 +63,18 @@ function aiThink(D) {
 
   // 反击或坚守
   for (const k of keys) {
-    const I = info[k], p = I.p, mine = foes.filter(q => q.obj === k && q.men.length > 1 && q.role !== 'ambush' && q.order.t !== 'retreat');
+    const I = info[k], p = I.p;
+    let mine = foes.filter(q => q.obj === k && q.men.length > 1 && q.role !== 'ambush' && q.order.t !== 'retreat');
     const men = mine.reduce((a, q) => a + q.men.length, 0), lost = p.owner === 'p' || p.prog > .25;
     if (lost && men >= Math.max(4, I.near * D.ratio)) {
+      // 指挥官：可能逐次投入（只出动一部分），受挫后集中兵力再统一反击
+      const atk = (typeof cmdCounter === 'function' && cmdCounter(p, mine, men, I)) || mine, am = atk.reduce((a, q) => a + q.men.length, 0);
       const shaken = seenT.some(o => dist(o.x, o.y, p.x, p.y) < 90 && o.sup > 45);
-      const t = shaken && men >= I.near * 1.5 ? 'charge' : 'amove';
-      for (const q of mine) if (q.order.t !== t) { aiGo(q, p.x + gauss() * 15, p.y + gauss() * 15, t, p.x, p.y); q.px = null; }
-      sayOnce('atk' + k + Math.floor(S.t / 90), `截获敌方通讯片段：「……向${p.name}反击……」`, .5);
-      continue;
+      const t = shaken && am >= I.near * 1.5 ? 'charge' : 'amove';
+      for (const q of atk) if (q.order.t !== t) { aiGo(q, p.x + gauss() * 15, p.y + gauss() * 15, t, p.x, p.y); q.px = null; }
+      if (atk.length) sayOnce('atk' + k + Math.floor(S.t / 90), `截获敌方通讯片段：「……向${p.name}反击……」`, .5);
+      if (atk.length === mine.length) continue;
+      mine = mine.filter(q => !atk.includes(q));   // 未投入的组照常占位
     }
     for (const q of mine) {
       if (q.order.t === 'amove' || q.order.t === 'charge') q.order = { t: 'hold' };
