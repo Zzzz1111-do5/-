@@ -198,11 +198,11 @@ ctE('p_dd', '驱逐舰', 'p', 'naval', 'dd', 120, CT_IC.dd, [6, 3, 7, 9, 7, 5, 0
 ctE('p_dd_h', '重型驱逐舰', 'p', 'naval', 'dd', 150, CT_IC.ddh, [7, 3, 8, 9, 7, 5, 0], '多一座炮塔、射速更快，船体能多扛一发。',
   { kind: 'dd', at: 'sea', hull: 4, rof: 1.3, salvo: 1, rep: 15 }, { counters: ['bunker', 'coastal'], weakTo: ['coastal'] });
 ctE('p_dd_e', '护航驱逐舰', 'p', 'naval', 'dd', 90, CT_IC.dde, [4, 2, 5, 9, 8, 5, 0], '便宜的护航舰，火力较弱、损管快，额外携带 2 发烟幕弹。',
-  { kind: 'dd', at: 'sea', hull: 2, rof: .85, salvo: 1, rep: 10, smoke: 2 }, { weakTo: ['coastal'] });
+  { kind: 'dd', at: 'sea', hull: 2, rof: .85, salvo: 1, rep: 10, smoke: 2, hit: .8 }, { weakTo: ['coastal'] });
 ctE('p_cl', '轻巡洋舰', 'p', 'naval', 'dd', 200, CT_IC.cl, [8, 4, 9, 9, 6, 6, 0], '每次射击两发齐射，船体 5，能长时间压制滩头；仍会被岸防重炮威胁。',
-  { kind: 'dd', at: 'sea', hull: 5, rof: .9, salvo: 2, rep: 18 }, { counters: ['coastal', 'bunker', 'arty'], weakTo: ['coastal'] });
+  { kind: 'dd', at: 'sea', hull: 5, rof: .9, salvo: 2, rep: 18, hit: 1.1 }, { counters: ['coastal', 'bunker', 'arty'], weakTo: ['coastal'] });
 ctE('p_ca', '重巡洋舰', 'p', 'naval', 'dd', 260, CT_IC.ca, [10, 5, 10, 9, 5, 6, 0], '三发齐射的重炮舰，船体 6；昂贵但足以单舰拔除一整段岸防。',
-  { kind: 'dd', at: 'sea', hull: 6, rof: .75, salvo: 3, rep: 20 }, { counters: ['coastal', 'bunker', 'arty'] });
+  { kind: 'dd', at: 'sea', hull: 6, rof: .75, salvo: 3, rep: 20, hit: 1.2 }, { counters: ['coastal', 'bunker', 'arty'] });
 ctE('p_cv', '舰队航母', 'p', 'air', 'cv', 150, CT_IC.cv, [9, 2, 0, 0, 3, 5, 0], '搭载最多 12 架舰载机；没有航母就没有空中支援。甲板中弹会影响起降。',
   { kind: 'cv', at: 'sea', hp: 30, wing: 12 }, { weakTo: ['coastal'] });
 ctE('p_cve', '护航航母', 'p', 'air', 'cv', 90, CT_IC.cve, [6, 1, 0, 0, 3, 5, 0], '小型航母，最多 6 架舰载机，甲板更脆弱。',

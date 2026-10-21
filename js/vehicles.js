@@ -53,7 +53,8 @@ function vehCache() {
 // side 方的敌对车辆（活着的）
 const vehFoes = side => !S || !S.veh ? [] : vehCache()[side === 'e' ? 'p' : 'e'];
 const vehById = id => (S && S.veh && S.veh.find(v => v.id === id)) || null;
-const vehCls = v => v.side === 'e' ? (VEH_SPEC[v.type].amph ? 'amph' : 'vehe') : VEH_SPEC[v.type].amph ? 'amph' : 'veh';
+// 寻路类：我方两栖坦克只在泅渡、或目标/所在格是水面时用 'amph'（海陆全图流场较贵），上岸后与其他车辆共用 'veh' 流场
+const vehCls = (v, x, y) => !VEH_SPEC[v.type].amph ? (v.side === 'e' ? 'vehe' : 'veh') : v.side === 'e' || v.swim || vehWater(v.x, v.y) || (x != null && vehWater(x, y)) ? 'amph' : 'veh';
 const vehSp = v => VEH_SPEC[v.type] || VEH_SPEC.tank;
 const vehName = v => (v.side === 'e' ? '敌' : '') + vehSp(v).name + (v.side === 'p' && v.label ? ' ' + v.label : '');
 const vehWater = (x, y) => isWater(typeAt(x, y));
@@ -85,7 +86,7 @@ function vehDamage(v, dmg, pen, sx, sy, src) {
   const d = dmg * vehPenMul(pen, v.armor) * hull / (M.arm || 1);
   v.hp -= d; v.hitT = S.t; v.sup = Math.min(100, v.sup + 12 + d * 3);
   if (src === 'mine' || (d > 5 && Math.random() < .12)) {
-    if (!v.immob && !vehSp(v).wheel && Math.random() < (src === 'mine' ? .65 : .5)) {
+    if (!v.immob && !vehSp(v).wheel && !v.swim && Math.random() < (src === 'mine' ? .65 : .5)) {
       v.immob = true; v.immobT = S.t;
       if (v.side === 'p' && v.hp > 0) log(`${vehName(v)}履带被打断，无法机动`, 'bad', 'vimm' + v.id, 20, v);
     }
@@ -177,15 +178,21 @@ function vehLook(f, x, y) {
   const b = nextStep(f, a[0], a[1]);
   return b || a;
 }
+// 远距离（>60）寻路用量化到 30 的目标点：多辆车、多次下令共用流场缓存；量化点不通时退回精确目标
+function vehField(v, x, y, cls) {
+  const i = ci(v.x, v.y);
+  if (dist(v.x, v.y, x, y) > 60) { const f = field(Math.round(x / 30) * 30, Math.round(y / 30) * 30, cls); if (f && isFinite(f[i])) return f; }
+  return field(x, y, cls);
+}
 // 下令：检查可达（流场在车辆所在格有限）
 function vehReach(v, x, y) {
-  const f = field(x, y, vehCls(v));
+  const f = vehField(v, x, y, vehCls(v, x, y));
   return !!f && isFinite(f[ci(v.x, v.y)]);
 }
 function vehSetOrder(v, t, x, y, face) {
   if (t === 'hold' || x == null) { v.order = { t: 'hold', face: face ?? v.order.face }; return true; }
   x = clamp(x, 8, W - 8); y = clamp(y, 8, H - 8);
-  const cls = vehCls(v);
+  const cls = vehCls(v, x, y);
   if (!vehPass(x, y, cls)) { const j = nearestPassable(ci(x, y), cls); if (j < 0) return false; x = cellCX(j); y = cellCY(j); }
   v.order = { t, x, y, face }; v.pathT = -9; v.stuckT = 0;
   return true;
@@ -199,13 +206,13 @@ function vehDrive(v, dt, mul) {
     if (o.face != null) v.heading += clamp(vehAng(o.face - v.heading), -sp.turn * .6 * dt, sp.turn * .6 * dt);
     return;
   }
-  const d = dist(v.x, v.y, o.x, o.y), cls = vehCls(v);
+  const d = dist(v.x, v.y, o.x, o.y), cls = vehCls(v, o.x, o.y);
   if (d < 5) { v.order = { t: 'hold', face: o.face, was: o.t }; v.arrT = S.t; return true; }
   if (S.t < (v.stallT || 0)) return;
   if (S.t - (v.pathT ?? -9) > 1) { v.pathT = S.t; v.direct = vehLine(v.x, v.y, o.x, o.y, cls); }
   let tx = o.x, ty = o.y;
   if (!v.direct && d > 14) {
-    const f = field(o.x, o.y, cls);
+    const f = vehField(v, o.x, o.y, cls);
     if (f && !isFinite(f[ci(v.x, v.y)]) && vehPass(v.x, v.y, cls)) { v.order = { t: 'hold', face: o.face }; if (v.side === 'p' && !v.auto) log(`${vehName(v)}无法到达目标位置`, 'warn', 'vunr', 3, v); return; }
     const n = f && vehLook(f, v.x, v.y);
     if (n) [tx, ty] = n;
@@ -573,7 +580,8 @@ function vehThinkP(v) {
     const p = vehDepot(v);
     if (p) {
       if (v.ai !== 'repair') log(`${vehName(v)}${low ? '弹药将尽' : '受损严重'}，退回补给点${low ? '补充弹药' : '抢修'}`, 'warn', 'vrep' + v.id, 30, v);
-      v.ai = 'repair';
+      v.ai = 'repair'; v.pick = null;
+      if (v.ride && v.ride.length) { vehDropRiders(v, false); v.ferT = S.t; }   // 先放下搭载的步兵再回去抢修
       if (dist(p.x, p.y, v.x, v.y) > 45) vehGo(v, p.x, p.y + 12, 'retreat'); else v.order = { t: 'hold' };
       return;
     }
@@ -757,6 +765,17 @@ function vehThinkE(v) {
   if (inf >= 2 || best.key === 'HQ') { v.ai = 'counter'; vehGo(v, best.x + gauss() * 15, best.y - 55, 'amove', SOUTH); }
   else { v.ai = 'cover'; vehGo(v, best.x, best.y - 150, 'move', SOUTH); }
 }
+
+// 地狱难度：守军另有一辆中型坦克、一辆轻型坦克作机动预备队，停在镇子背面（沙盘模式由玩家自行摆放）
+HOOK.newGame.push(opts => {
+  if (!S || (opts && opts.sandbox) || S.mode === 'sandbox' || S.level !== 'hell') return;
+  const ks = ['T1', 'T2', 'HQ'].map(k => S.points.find(p => p.key === k)).filter(Boolean);
+  [['tank', 0], ['lt_tank', 1]].forEach(([t, i]) => {
+    const p = ks[i % ks.length]; if (!p) return;
+    const sp = typeof a3Park === 'function' && Array.isArray(S.armor) ? a3Park(p) : { x: p.x, y: p.y - 40 };
+    addVehicle('e', t, sp.x, sp.y, { auto: true });
+  });
+});
 
 // —— 坦克登陆舰（LST）——
 // 每步：沉没时舰上车辆损失；自动 LST 等第一波站稳滩头后选滩抢滩（指挥官可设 S.autoPlan.holdLST 暂缓）

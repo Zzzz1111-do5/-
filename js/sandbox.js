@@ -591,7 +591,7 @@ function sbxBuild(role) {
   if (ddI) {
     const s = sbxEntry(ddI).spawn;
     Object.assign(S.dd, { x: ddI.x, y: ddI.y, tx: ddI.x, ty: ddI.y, hull: s.hull, state: 'ready', cool: 0, repairT: 0, repairDur: s.rep || 16, auto: role === 'spectate', exposedUntil: 0, moving: false,
-      mod: { rof: s.rof || 1, salvo: s.salvo || 1 }, name: sbxEntry(ddI).name, plan: ddI.plan ? { ...ddI.plan } : null });
+      mod: { rof: s.rof || 1, salvo: s.salvo || 1, hit: s.hit || 1 }, name: sbxEntry(ddI).name, plan: ddI.plan ? { ...ddI.plan } : null });
     S.assets.smoke += 2 + (s.smoke || 0);
   } else Object.assign(S.dd, { x: -9999, y: H + 9999, tx: -9999, ty: H + 9999, hull: 0, state: 'sunk', moving: false, auto: false, plan: null, mod: null });
   if (typeof initCarrier === 'function') initCarrier();
@@ -763,6 +763,15 @@ function sbxDD() {
     }
   }
   R0.ddPrev = dd.cool;
+  // 反炮兵射击并非百发百中：机动中的舰艇难打，间瞄火炮超出射程必然落空；命中率随舰型（hit：小舰灵活、大舰目标大）
+  for (const sh of S.shells) {
+    if (sh.kind !== 'cb' || sh.sbxC) continue;
+    sh.sbxC = 1;
+    const g = S.enemies.find(e => Math.abs(e.x - sh.x0) < 2 && Math.abs(e.y - sh.y0) < 2), d = dist(sh.x0, sh.y0, dd.x, dd.y);
+    const rng = g && g.kind === 'arty' ? 1100 * ((g.mod && g.mod.rng) || 1) : 650;
+    const p = d > rng ? 0 : (g && g.kind === 'coastal' ? .7 : .45) * (dd.mod.hit || 1) * (dd.moving ? .8 : 1);
+    if (Math.random() >= p) { const a = Math.random() * 6.283, m = 45 + Math.random() * 45; Object.assign(sh, { kind: 'mortar', x1: clamp(dd.x + Math.cos(a) * m, 0, W), y1: clamp(dd.y + Math.sin(a) * m, 0, H) }); }
+  }
 }
 // 舰载机变体
 function sbxAir() {
@@ -955,9 +964,7 @@ function openSandbox(seed, keep) {
   if (typeof mmInit === 'function' && $('mm')) mmInit($('mm'));
   if (typeof U === 'object') { U.tool = null; U.logKey = null; U.cardKey = null; U.level = lv; }
   $('brief').hidden = true; $('end').hidden = true;
-  sbxUI();
-  document.body.classList.add('sbx-edit');
-  SBX.el.hidden = false;
+  sbxShow();
   if (typeof CAM === 'object' && CAM.vw > 1) {   // 全图，向右偏一点给左侧面板让位
     const wide = CAM.vw > 900;
     CAM.z = CAM.fit * (wide ? 1.15 : 1); CAM.x = W / 2 - (wide ? 150 / CAM.z : 0); CAM.y = H * .55;
@@ -967,11 +974,19 @@ function openSandbox(seed, keep) {
   if (typeof updateHud === 'function') updateHud();
   return S;
 }
+// 显示编辑器（热重载恢复到编辑阶段时由 frame 挂钩补建）
+function sbxShow() {
+  sbxUI();
+  document.body.classList.add('sbx-edit');
+  SBX.el.hidden = false;
+  sbxRender();
+}
 function closeSandbox() {
   if (typeof document === 'undefined') return;
   document.body.classList.remove('sbx-edit');
-  if (SBX.el) SBX.el.hidden = true;
-  SBX.pick = null; SBX.line = null; SBX.drag = null;
+  if (SBX.el) SBX.el.remove();
+  const old = document.getElementById('sbxPanel'); if (old) old.remove();
+  SBX.el = null; SBX.pick = null; SBX.line = null; SBX.drag = null; SBX.hover = null;
   if (typeof R === 'object' && R && R.cv) R.cv.style.cursor = '';
 }
 
@@ -1212,6 +1227,7 @@ HOOK.key.push(e => {
 });
 HOOK.frame.push(() => {
   if (sbxOn()) {
+    if (typeof document !== 'undefined' && (!SBX.el || !SBX.el.isConnected)) { const o = document.getElementById('sbxPanel'); if (o) o.remove(); SBX.el = null; sbxShow(); }
     if (!SBX.pv) { PV.fill(1); SBX.pv = true; }   // 编辑时全图可见
     if (typeof R === 'object' && R.cv) R.cv.style.cursor = SBX.drag ? 'grabbing' : SBX.pick ? 'crosshair' : SBX.hover ? 'grab' : '';
   }
