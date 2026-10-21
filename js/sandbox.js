@@ -975,9 +975,12 @@ function openSandbox(seed, keep) {
   if (typeof U === 'object') { U.tool = null; U.logKey = null; U.cardKey = null; U.level = lv; }
   $('brief').hidden = true; $('end').hidden = true;
   sbxShow();
-  if (typeof CAM === 'object' && CAM.vw > 1) {   // 全图，向右偏一点给左侧面板让位
-    const wide = CAM.vw > 900;
-    CAM.z = CAM.fit * (wide ? 1.15 : 1); CAM.x = W / 2 - (wide ? 150 / CAM.z : 0); CAM.y = H * .55;
+  if (typeof CAM === 'object' && CAM.vw > 1) {
+    if (CAM.vw > 900) { CAM.z = CAM.fit * 1.15; CAM.x = W / 2 - 150 / CAM.z; CAM.y = H * .55; }   // 全图，向右偏一点给左侧面板让位
+    else {   // 窄屏：画布只占上方，铺满高度看海岸到集结海域，横向拖动平移
+      const vis = Math.max(200, CAM.vh - 30), B = TER.beaches.slice().sort((a, b) => Math.abs(a.cx - W / 2) - Math.abs(b.cx - W / 2))[0];
+      CAM.z = clamp(vis / 1250, CAM.fit, CAM.fit * 4); CAM.x = B ? B.cx : W / 2; CAM.y = 750 + vis / CAM.z / 2;
+    }
     if (typeof camClamp === 'function') camClamp();
   }
   sbxRender();
@@ -1012,9 +1015,9 @@ function sbxCss() {
   st.textContent = `
 body.sbx-edit #cards, body.sbx-edit #cmdBox, body.sbx-edit #deploy, body.sbx-edit #pauseBand, body.sbx-edit #feed { display: none !important; }
 body.sbx-edit #bottom { grid-template-columns: minmax(0, 1fr) auto; pointer-events: none; } body.sbx-edit #mmBox { grid-column: 2; }
-#sbxPanel { position: absolute; z-index: 6; top: calc(10px + env(safe-area-inset-top, 0px)); left: max(16px, env(safe-area-inset-left, 0px)); width: 316px; max-height: calc(100% - 20px);
+#sbxPanel { box-sizing: border-box; position: absolute; z-index: 6; top: calc(10px + env(safe-area-inset-top, 0px)); left: max(16px, env(safe-area-inset-left, 0px)); width: 316px; max-height: calc(100% - 20px);
   display: flex; flex-direction: column; gap: 7px; padding: 10px; overflow-y: auto; overscroll-behavior: contain; font-size: 12px; color: var(--text); scrollbar-width: thin; }
-#sbxPanel[hidden] { display: none; }
+#sbxPanel[hidden] { display: none; } #sbxPanel > * { flex-shrink: 0; }
 #sbxPanel h2 { margin: 0; font: 13px var(--f-px, monospace); letter-spacing: .12em; color: var(--g); display: flex; justify-content: space-between; align-items: baseline; }
 #sbxPanel h2 small { font: 10px var(--f-ui, monospace); color: var(--g-mid); letter-spacing: 0; }
 .sbx-sides { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
@@ -1052,13 +1055,14 @@ body.sbx-edit #bottom { grid-template-columns: minmax(0, 1fr) auto; pointer-even
 .sbx-lv { display: inline-flex; gap: 3px; }
 .sbx-notes { border: 1px solid var(--line); border-radius: 4px; padding: 2px 8px; } .sbx-notes summary { cursor: pointer; color: var(--g-mid); padding: 2px 0; }
 .sbx-notes ol { margin: 2px 0 4px; padding-left: 24px; max-height: 150px; overflow-y: auto; line-height: 1.45; } .sbx-notes li { margin: 2px 0; }
-.sbx-go { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.sbx-go { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; position: sticky; bottom: -10px; z-index: 1; margin: 0 -10px -10px; padding: 8px 10px 10px; background: linear-gradient(rgba(2, 10, 6, .82), rgba(2, 10, 6, .96)); border-top: 1px solid var(--line); }
 .sbx-go button { background: transparent; border: 1px solid var(--g); color: var(--g); border-radius: 5px; padding: 8px 6px; font-weight: 600; box-shadow: 0 0 12px rgba(61, 255, 138, .25); }
 .sbx-go button.alt { border-color: var(--intel); color: var(--intel); box-shadow: 0 0 12px rgba(92, 200, 255, .2); }
 .sbx-hint { font-size: 10.5px; color: var(--g-mid); line-height: 1.4; }
 @media (max-width: 900px) {
-  #sbxPanel { top: auto; bottom: 8px; left: 8px; right: 8px; width: auto; max-height: 50%; }
-  body.sbx-edit #objs { display: none; } .sbx-pal { max-height: 120px; } .sbx-notes ol { max-height: 90px; }
+  #sbxPanel { position: fixed; top: auto; bottom: 0; left: 0; right: 0; width: auto; height: 38vh; max-height: none; border-radius: 10px 10px 0 0; padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)); }
+  body.sbx-edit #objs, body.sbx-edit #bottom { display: none !important; } .sbx-pal { max-height: 112px; } .sbx-notes ol { max-height: 90px; }
+  .sbx-info { min-height: 0; } .sbx-keys { display: none; } .sbx-go { bottom: calc(-10px - env(safe-area-inset-bottom, 0px)); }
 }`;
   document.head.appendChild(st);
 }
@@ -1075,8 +1079,8 @@ function sbxUI() {
     <div class="sbx-row"><button type="button" data-act="preset"></button><button type="button" class="ai" data-act="ai">AI 帮我部署</button><button type="button" data-act="clear">清空</button></div>
     <div class="sbx-row"><input type="text" inputmode="numeric" aria-label="地图种子" class="sbx-seedin"><button type="button" data-act="map">新地图</button><span class="sbx-lv" role="radiogroup" aria-label="守军 AI 水平"></span></div>
     <details class="sbx-notes" open><summary>部署思路</summary><p class="sbx-hint">点「AI 帮我部署」，由高级指挥官按地形判读完成部署并说明理由。</p><ol></ol></details>
-    <div class="sbx-go"><button type="button" data-act="spectate">观战：AI 对 AI</button><button type="button" class="alt" data-act="command">指挥进攻方</button></div>
-    <div class="sbx-hint">左键放置 · 右键 / Delete 移除 · 拖动已放置的条目可移位 · Esc 取消 · 滚轮缩放、中键拖动平移</div>`;
+    <div class="sbx-hint sbx-keys">左键放置 · 右键 / Delete 移除 · 拖动已放置的条目可移位 · Tab 切换攻守 · Esc 取消 · 滚轮缩放、中键拖动平移</div>
+    <div class="sbx-go"><button type="button" data-act="spectate">观战：AI 对 AI</button><button type="button" class="alt" data-act="command">指挥进攻方</button></div>`;
   ($('stage') || document.body).appendChild(el);
   SBX.el = el;
   el.addEventListener('click', e => {
@@ -1122,7 +1126,7 @@ function sbxPick(id) {
   }
   SBX.pick = SBX.pick === id ? null : id;
   sbxInfo(c);
-  if (SBX.pick) sbxMsg(SBX_AT[c.spawn.at] || '');
+  sbxMsg(SBX.pick ? SBX_AT[c.spawn.at] || '' : '已取消选择（再点一次图标即可重新选中）');
 }
 function sbxInfo(c) {
   if (!SBX.el) return;

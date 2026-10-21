@@ -317,9 +317,10 @@ function cmdPrepFires(main) {
   const sp = cmdDDSpot(M.x, M.y);
   if (sp && (dist(S.dd.x, S.dd.y, M.x, M.y) > 900 || cmdGuns().some(g => dist(g.x, g.y, S.dd.x, S.dd.y) < 650))) orderDD(sp.x, sp.y);
   const known = S.enemies.filter(e => !e.dead && e.kx != null && dist(e.kx, e.ky, M.x, M.y) < 420).sort((a, c) => (c.kind === 'coastal') - (a.kind === 'coastal'));
-  if (known.length) for (const e of known.slice(0, 3)) C.fm.push({ x: e.kx, y: e.ky, n: 3, t: S.t, why: 'prep' });
+  // 每次齐射都可能暴露舰位、招来反炮兵射击：火力准备只打要害，不搞长时间炮击
+  if (known.length) for (const e of known.slice(0, 2)) C.fm.push({ x: e.kx, y: e.ky, n: e.kind === 'coastal' ? 2 : 1, t: S.t, why: 'prep' });
   else {
-    C.fm.push({ x: M.x, y: M.y, n: 2, t: S.t, why: 'prep' });
+    C.fm.push({ x: M.x, y: M.y, n: 1, t: S.t, why: 'prep' });
     C.fm.push({ x: b.x0 + 20, y: coastAt(b.x0 + 20) - 45, n: 1, t: S.t, why: 'prep' }, { x: b.x1 - 20, y: coastAt(b.x1 - 20) - 45, n: 1, t: S.t, why: 'prep' });
   }
   C.smokeDue = true;
@@ -512,6 +513,12 @@ function cmdDDMission(dd) {
   const C = S.cmd.p;
   if (S.t < C.cf) return { hold: true };
   if (C.safeT && S.t > C.safeT) { C.safe = 60; C.safeT = 0; }
+  // 受损后节约射击：舰体 2/3 时齐射间隔拉长，1/3 时只执行指定火力任务（每次齐射都可能招来反炮兵射击）
+  // 只在冷却为 0 时被调用：两次调用之间有间隔，说明上次调用后开过火（装填 5 秒）
+  if (C.ddCall != null && S.t - C.ddCall > .2) C.ddLast = Math.max(C.ddLast ?? -99, C.ddCall);
+  C.ddCall = S.t;
+  const econ = dd.hull <= 1 ? 14 : dd.hull === 2 ? 9 : 0;
+  if (econ && S.t - (C.ddLast ?? -99) < econ) return { hold: true };
   while (C.fm.length) {
     const m = C.fm[0];
     if (m.n <= 0 || S.t - m.t > 100 || (m.smoke && S.assets.smoke <= 0)) { C.fm.shift(); continue; }
@@ -531,7 +538,7 @@ function cmdDDMission(dd) {
     m.n--;
     return { x, y, smoke: !!m.smoke };
   }
-  return null;
+  return dd.hull <= 1 ? { hold: true } : null;
 }
 const cmdDDSafe = () => cmdOn() && S.cmd ? Math.max(55, S.cmd.p.safe) : 55;
 const cmdAirSafe = () => cmdOn() && S.cmd ? (S.cmd.p.airSafeT > S.t ? S.cmd.p.airSafe : 90) : 90;
@@ -606,10 +613,10 @@ function cmdFiresP(C) {
       else {   // 已在最佳阵位仍被命中（多为未标定火炮）：变换阵位，打乱敌方测距
         let nx = clamp(dd.x + (Math.random() < .5 ? -1 : 1) * 170, 120, W - 120), ny = Math.min(H - 70, dd.y + 120);
         if (typeAt(nx, ny) !== T.DEEP) { nx = dd.x; ny = Math.min(H - 70, dd.y + 200); }
-        orderDD(nx, ny); acts.push('驱逐舰变换阵位，打乱敌方测距');
+        orderDD(nx, ny); acts.push('驱逐舰变换阵位');
       }
       if (g && cmdAir('strike', g.kx, g.ky, g.id)) acts.push('攻击机出击压制该炮');
-      if (dd.hull === 1) acts.push('驱逐舰仅余最后一次抗打击余量，此后只在远距阵位射击');
+      acts.push(dd.hull === 1 ? '驱逐舰仅余最后一次抗打击余量，此后只执行指定火力任务' : '驱逐舰降低射速，减少暴露');
       C.evT = S.t;
       if (acts.length) chatSay('p', `补救：${acts.join('；')}。`, { kind: 'remedy', at: sp || dd, delay: 2 });
     }
@@ -1014,17 +1021,21 @@ function cmdRLine(L) {
 // ———————————————— 敌方指挥官 ————————————————
 // 守军观察到的登陆兵力：被看见的登陆艇（按驶向的滩头）+ 已上陆的小组
 function cmdEObs() {
-  const radar = typeof radarUp === 'function' ? radarUp() : null, o = TER.beaches.map(() => ({ men: 0, ships: 0, land: 0 }));
+  const radar = typeof radarUp === 'function' ? radarUp() : null, o = TER.beaches.map(() => ({ men: 0, ships: 0, land: 0, held: 0 }));
   for (const s of S.ships) if (alive(s) && s.land && (s.state === 'move' || s.state === 'unloading') && shipSeen(s.x, s.y, radar)) {
     const bi = cmdBeachOf(s.bx ?? s.tx, 120);
     if (bi < 0) continue;
     o[bi].ships++; o[bi].men += s.load ? (s.load.teams || 0) * 3 + (s.load.eng || 0) : 0;
   }
-  // 已上陆之敌按所在扇区（滩头左右 250、纵深 700 以内）归属
-  for (const q of S.teams) if (q.side === 'p' && q.men.length && spotted(q.x, q.y) && coastAt(q.x) - q.y < 700) {
-    const bi = cmdBeachOf(q.x, 250);
+  // 已上陆之敌按其登陆的滩头归属（守军跟踪各路登陆兵力；向纵深发展后仍算原方向）；无从判断的按所在扇区；已失守的据点计入就近滩头方向
+  const from = {};
+  for (const s of S.ships) if (s.bx != null && s.land) from[s.label] = cmdBeachOf(s.bx, 200);
+  for (const q of S.teams) if (q.side === 'p' && q.men.length && spotted(q.x, q.y) && coastAt(q.x) - q.y < 1100) {
+    const u = typeof unitOf === 'function' ? unitOf(q) : null, f = u && u.ship != null ? from[u.ship] : undefined;
+    const bi = f != null && f >= 0 ? f : cmdBeachOf(q.x, 250);
     if (bi >= 0) { o[bi].men += q.men.length; o[bi].land += q.men.length; }
   }
+  for (const p of S.points) if (p.owner === 'p') { const bi = cmdBeachOf(p.x, 400); if (bi >= 0) o[bi].held++; }
   return o;
 }
 const cmdIsHome = q => !!S.cmd && S.cmd.e.home[q.id] != null && q.obj === S.cmd.e.home[q.id];
@@ -1043,6 +1054,9 @@ function cmdThinkE() {
   const E = S.cmd.e, F = CMD_FE[S.level] || CMD_FE.hard;
   if (!E.init) cmdEInit(E);
   const o = cmdEObs(), tot = o.reduce((a, x) => a + x.men, 0);
+  // 守军对各方向兵力的估计：目视数为下限，记忆缓慢衰减（约 2 分钟减半），看不见不等于没有
+  if (!Array.isArray(E.mem)) E.mem = [];
+  o.forEach((x, i) => { E.mem[i] = Math.max(x.men, (E.mem[i] || 0) * .983); x.est = Math.round(E.mem[i]); });
   if (E.guess == null) {
     if (tot > 0 && E.seenT == null) {
       E.seenT = S.t;
@@ -1072,11 +1086,11 @@ function cmdEIdentify(E, F, o) {
   if (!R.length) { E.seenT = S.t; return; }
   let g = R[0], why = '兵力最为集中';
   const hq = cmdPt('HQ'), dHQ = i => { const X = cmdExit(i); return hq ? Math.round(dist(X.x, X.y, hq.x, hq.y)) : 0; };
-  if (R.length >= 2 && R[1].men >= 8 && Math.random() < F.mis) {
+  if (R.length >= 2 && R[1].men >= Math.max(8, R[0].men * .4) && Math.random() < F.mis) {   // 兵力悬殊时不会看错
     g = R[1];
     if (hq && dHQ(g.i) < dHQ(R[0].i) - 60) why = `出口距指挥所仅 ${dHQ(g.i)} 米，威胁最大`;
     else if (g.land > 0 && R[0].land === 0) why = '已率先上陆';
-    else why = `登陆艇 ${g.ships} 艘编队密集，疑为敌主力`;
+    else why = g.ships >= 2 ? `登陆艇 ${g.ships} 艘编队密集，疑为敌主力` : '该方向登陆动作最为坚决，疑为敌主力';
   }
   E.guess = g.i; E.gT = S.t; E.commit = S.t;
   const main = S.cmd.p.plan ? S.cmd.p.plan.main : -1;
@@ -1095,19 +1109,20 @@ function cmdEIdentify(E, F, o) {
 }
 // 误判纠正：另一滩头的敌人持续明显多于判定方向，或其出口失守
 function cmdECorrect(E, F, o) {
-  const g = E.guess, R = o.map((x, i) => ({ i, ...x })).sort((a, b) => b.men - a.men), c = R[0];
-  if (!c || c.i === g) { E.fixC = 0; return; }
-  const X = cmdExit(c.i), lostX = !!X && X.owner === 'p';
+  // 方向强度：目视兵力 + 已失守据点（每处折 6 人）；收缩固守指挥所后不再纠缠主攻方向
+  const st = x => x.est + 6 * x.held, g = E.guess, R = o.map((x, i) => ({ i, ...x })).sort((a, b) => st(b) - st(a)), c = R[0];
+  if (!c || c.i === g || E.last) { E.fixC = 0; return; }
+  const X = cmdExit(c.i), lostX = !!X && X.owner === 'p', sg = st(o[g]), sc = st(c);
   // 判定方向的出口已被敌夺取：说明那里确是主攻之一，除非另一方向兵力远多于此
   const GX = cmdExit(g), gLost = !!GX && GX.owner === 'p';
-  if (S.t - E.gT < 45 || c.men < 12 || (E.fixN || 0) >= 2 || (gLost && c.men < o[g].men * 2.5)) { E.fixC = 0; return; }
-  if (c.men >= o[g].men * F.fix) E.fixC += 3; else E.fixC = Math.max(0, E.fixC - 3);
-  if (E.fixC < F.fixT && !(lostX && c.men >= 15 && c.men > o[g].men * 1.5)) return;
+  if (S.t - E.gT < 45 || c.est < 12 || (E.fixN || 0) >= 2 || (gLost && sc < Math.max(sg, 8) * Math.max(1.8, F.fix))) { E.fixC = 0; return; }
+  if (sc >= sg * F.fix) E.fixC += 3; else E.fixC = Math.max(0, E.fixC - 3);
+  if (E.fixC < F.fixT && !(lostX && c.est >= 15 && sc > sg * 1.5)) return;
   const was = g;
   E.guess = c.i; E.gT = S.t; E.fixC = 0; E.fixN = (E.fixN || 0) + 1;
   const main = S.cmd.p.plan ? S.cmd.p.plan.main : -1;
   E.wrong = main >= 0 && c.i !== main;
-  chatSay('e', `判断修正：${cmdBN(was)}${o[was].men ? `之敌仅约 ${o[was].men} 人，攻势有限` : '已不见敌兵力活动，原判主攻实为佯动'}；${cmdBN(c.i)}已上陆约 ${c.men} 人${lostX ? `并夺取${X.name}` : ''}，确认为敌主攻方向。`, { kind: 'plan', at: X });
+  chatSay('e', `判断修正：${cmdBN(was)}${o[was].est ? `之敌仅约 ${o[was].est} 人，攻势有限` : o[was].held ? '方向之敌已无后续兵力，攻势成强弩之末' : '已不见敌兵力活动，原判主攻实为佯动'}；${cmdBN(c.i)}已上陆约 ${c.est} 人${lostX ? `并夺取${X.name}` : ''}，确认为敌主攻方向。`, { kind: 'plan', at: X });
   // 从原判定方向抽调守备加强
   const W0 = cmdExit(was), mv = S.teams.filter(q => q.side === 'e' && q.men.length > 1 && q.role === 'garrison' && W0 && dist(q.x, q.y, W0.x, W0.y) < 260 && (!q.order || q.order.t !== 'amove'))
     .sort((a, b) => dist(a.x, a.y, X.x, X.y) - dist(b.x, b.y, X.x, X.y)).slice(0, 2);
@@ -1368,8 +1383,8 @@ function cmdDraw(time) {
     const route = [[b.cx, sy], [b.cx, coastAt(b.cx) + 40], [M.x, M.y]];
     if (C.ph === 'brk' || C.ph === 'cons') for (const k of C.axis.slice(0, 2)) { const p = cmdPt(k); if (p) route.push([p.x, p.y + (k === C.axis[C.axis.length - 1] ? 40 : 0)]); }
     else { const p = cmdAxis(M)[0]; if (p && cmdPt(p)) route.push([lerp(M.x, cmdPt(p).x, .45), lerp(M.y, cmdPt(p).y, .45)]); }
-    const w = Math.max(22, px(11));
-    ctx.fillStyle = rgba(COL.g, .07 * fade); ctx.strokeStyle = rgba(COL.g, .32 * fade); ctx.lineWidth = px(1.2);
+    const w = Math.max(30, px(12));
+    ctx.fillStyle = rgba(COL.g, .09 * fade); ctx.strokeStyle = rgba(COL.g, .36 * fade); ctx.lineWidth = px(1.2);
     cmdArrow(ctx, route, w); ctx.fill(); ctx.stroke();
     // 调整线：滩头出口与下一目标前的短横
     ctx.strokeStyle = rgba(COL.g, .45 * fade); ctx.lineWidth = px(1.4);
