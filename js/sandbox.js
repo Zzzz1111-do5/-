@@ -43,7 +43,10 @@ function sbxShipLoad(it) {
 const sbxOf = kind => S.sbx.items.filter(it => { const c = sbxEntry(it); return c && c.spawn.kind === kind; });
 // 驱逐舰 / 巡洋舰可部署多艘：造价最高的一艘为旗舰（S.dd，玩家可直接操纵舰炮），其余开战后编为护航舰
 const sbxFlag = () => sbxOf('dd').reduce((b, it) => !b || sbxCost(it) > sbxCost(b) ? it : b, null);
-const sbxWingCap = () => { const cv = sbxOf('cv')[0]; return cv ? sbxEntry(cv).spawn.wing : 0; };
+const sbxWingCap = () => sbxOf('cv').reduce((a, it) => a + (sbxEntry(it).spawn.wing || 0), 0);   // 多艘航母：机库容量相加
+// 航母可部署多艘：造价最高的一艘为旗舰（S.cv，可选中、控制自动派机），其余为 S.cvx
+const sbxFlagCV = () => sbxOf('cv').reduce((b, it) => !b || sbxCost(it) > sbxCost(b) ? it : b, null);
+const sbxCvObj = (it, i) => { const s = sbxEntry(it).spawn; return { x: it.x, y: it.y, tx: it.x, ty: it.y, heading: -Math.PI / 2, hp: s.hp, maxhp: s.hp, moving: false, auto: false, exposedUntil: 0, hitT: -99, cat: [0, 0], home: i + 1, name: `${sbxEntry(it).name}-${i + 2}` }; };
 const sbxWingN = () => sbxOf('wing').reduce((a, it) => a + (sbxEntry(it).spawn.n || 1), 0);
 
 // —— 放置校验：返回 {ok, why, host} ——
@@ -59,7 +62,7 @@ function sbxCheck(c, x, y, x2, y2, ignore) {
   if (s.kind === 'veh' && !sbxVehOk()) return bad('装甲车辆模块未加载');
   let cost = c.cost;
   if (s.at === 'line') cost = x2 == null ? 1 : Math.max(1, Math.round(s.per * dist(x, y, x2, y2) / 100));
-  const repl = s.kind === 'cv' ? sbxOf(s.kind).reduce((a, it) => a + sbxCost(it), 0) : 0;
+  const repl = 0;
   if (ignore) cost = 0;
   if (cost > sbxLeft(c.side) + repl) return bad(`预算不足（还剩 ${sbxLeft(c.side)} 点）`);
   if (s.at === 'none') return { ok: true };
@@ -119,12 +122,7 @@ function sbxPlace(id, x, y, x2, y2, extra) {
   if (chk.host) { chk.host.cargo = (chk.host.cargo || []).concat(id); return { ok: true, it: chk.host }; }
   const s = c.spawn;
   let note = '';
-  if (s.kind === 'cv' && sbxOf('cv').length) {   // 航母只有一艘：替换原航母，超出新机库的舰载机退回
-    S.sbx.items = S.sbx.items.filter(it => sbxEntry(it).spawn.kind !== 'cv');
-    let n = 0;
-    while (sbxWingN() > (s.wing || 0)) { const w = sbxOf('wing').pop(); S.sbx.items = S.sbx.items.filter(o => o !== w); n += sbxEntry(w).spawn.n || 1; }
-    note = '已替换原航母' + (n ? `；舰载机超出新航母机库，已退回 ${n} 架` : '');
-  }
+  if (s.kind === 'cv' && sbxOf('cv').length) note = `第 ${sbxOf('cv').length + 1} 艘航母，机库合计 ${sbxWingCap() + (s.wing || 0)} 架`;
   const pos = s.at === 'none' || s.at === 'air' ? {} : { x: sbxR(x), y: sbxR(y) };
   if (s.at === 'line') Object.assign(pos, { x2: sbxR(x2), y2: sbxR(y2) });
   const it = { id: S.sbx.nid++, cat: id, side: c.side, ...pos, ...(s.kind === 'ship' ? { cargo: [], wave: s.wave || 1 } : {}), ...extra };
@@ -160,13 +158,14 @@ function sbxClear(side) {
 // 编辑阶段：驱逐舰与航母只在买下后出现在其位置（否则移出地图）
 function sbxSync() {
   if (!S || !S.sbx || S.sbx.live) return;
-  const dd = sbxFlag(), cv = sbxOf('cv')[0];
+  const dd = sbxFlag(), cv = sbxFlagCV();
   if (dd) Object.assign(S.dd, { x: dd.x, y: dd.y, tx: dd.x, ty: dd.y, state: 'ready', moving: false, hull: sbxEntry(dd).spawn.hull });
   else Object.assign(S.dd, { x: -9999, y: H + 9999, tx: -9999, ty: H + 9999, state: 'sunk', moving: false });
   if (S.cv) {
     if (cv) Object.assign(S.cv, { x: cv.x, y: cv.y, tx: cv.x, ty: cv.y, hp: sbxEntry(cv).spawn.hp, maxhp: sbxEntry(cv).spawn.hp, moving: false });
     else Object.assign(S.cv, { x: -9999, y: H + 9999, tx: -9999, ty: H + 9999, moving: false });
   }
+  S.cvx = sbxOf('cv').filter(it => it !== cv).map(sbxCvObj);   // 其余航母在编辑阶段也画出来
   if (typeof sbxRender === 'function') sbxRender();
 }
 
@@ -635,7 +634,7 @@ function sbxBuild(role) {
   // 守方先建（守备队士气取决于难度）
   const items = SB.items.slice().sort((a, b) => (a.side === 'e' ? 0 : 1) - (b.side === 'e' ? 0 : 1));
   for (const it of items) { try { sbxSpawn(it, role, acc); } catch (e) { console.error('sandbox spawn ' + it.cat, e); } }
-  const ddI = sbxFlag(), cvI = sbxOf('cv')[0];
+  const ddI = sbxFlag(), cvI = sbxFlagCV();
   if (ddI) {
     const s = sbxEntry(ddI).spawn;
     Object.assign(S.dd, { x: ddI.x, y: ddI.y, tx: ddI.x, ty: ddI.y, hull: s.hull, state: 'ready', cool: 0, repairT: 0, repairDur: s.rep || 16, auto: role === 'spectate', exposedUntil: 0, moving: false,
@@ -654,7 +653,14 @@ function sbxBuild(role) {
   if (S.cv) {
     if (cvI) { const s = sbxEntry(cvI).spawn; Object.assign(S.cv, { x: cvI.x, y: cvI.y, tx: cvI.x, ty: cvI.y, hp: s.hp, maxhp: s.hp, moving: false, auto: role === 'spectate', exposedUntil: 0, cat: [0, 0] }); }
     else Object.assign(S.cv, { x: -9999, y: H + 9999, tx: -9999, ty: H + 9999, hp: 0, moving: false, auto: false });
-    S.air = { wing: cvI ? acc.wing.slice(0, sbxEntry(cvI).spawn.wing) : [], wrecks: [] };
+    // 其余航母：各带自己的舰载机（先装满旗舰，再依次分给其余航母）
+    const xs = sbxOf('cv').filter(it => it !== cvI);
+    S.cvx = xs.map(sbxCvObj);
+    const caps = [cvI ? sbxEntry(cvI).spawn.wing : 0, ...xs.map(it => sbxEntry(it).spawn.wing || 0)], wing = [];
+    let hi = 0, used = 0;
+    for (const w of acc.wing) { while (hi < caps.length && used >= caps[hi]) { hi++; used = 0; } if (hi >= caps.length) break; wing.push({ ...w, home: hi }); used++; }
+    S.air = { wing: cvI ? wing : [], wrecks: [] };
+    if (typeof initCarrier === 'function') initCarrier();
     if (typeof airCount === 'function') airCount();
   }
   aiInit(S.level);
@@ -1584,7 +1590,7 @@ function sbxDrawEdit(time) {
     const drag = SBX.drag && SBX.drag.it === it;
     sbxGlyph(ctx, c, it.x, it.y, drag && SBX.drag.bad ? COL.amber : col, mine ? 1 : .45, it);
   }
-  for (const it of [flag, sbxOf('cv')[0]]) { if (it && it.plan && side === 'p') { ctx.save(); ctx.strokeStyle = rgba(COL.g, .3); ctx.lineWidth = px(1); ctx.setLineDash([px(3), px(4)]); ctx.beginPath(); ctx.moveTo(it.x, it.y); ctx.lineTo(it.plan.x, it.plan.y); ctx.stroke(); ctx.restore(); } }
+  for (const it of [flag, ...sbxOf('cv')]) { if (it && it.plan && side === 'p') { ctx.save(); ctx.strokeStyle = rgba(COL.g, .3); ctx.lineWidth = px(1); ctx.setLineDash([px(3), px(4)]); ctx.beginPath(); ctx.moveTo(it.x, it.y); ctx.lineTo(it.plan.x, it.plan.y); ctx.stroke(); ctx.restore(); } }
   const h = SBX.drag ? SBX.drag.it : SBX.hover;
   if (h) {
     const c = sbxEntry(h), col = h.side === 'e' ? COL.enemy : COL.g;

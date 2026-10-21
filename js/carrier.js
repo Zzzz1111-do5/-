@@ -51,6 +51,12 @@ function cvL(x, y, c) {
   const dx = x - c.x, dy = y - c.y, ch = Math.cos(c.heading), sh = Math.sin(c.heading);
   return [dx * ch + dy * sh, -dx * sh + dy * ch];
 }
+// 多艘航母（沙盒）：S.cv 为旗舰（母舰号 0），S.cvx 为其余航母（1..n）；舰载机与飞机以 home 记所属母舰
+const cvHome = o => (o && o.home) || 0;
+const cvOf = h => h ? (S.cvx && S.cvx[h - 1]) || null : S.cv;
+const cvAll = () => [S.cv, ...(S.cvx || [])].filter(c => c && isFinite(c.x) && isFinite(c.y));
+// 临时把 S.cv 换成某艘航母执行 fn：复用以 S.cv 为准的起降、受损与绘制代码
+function withCV(c, fn) { const keep = S.cv; S.cv = c; try { return fn(); } finally { S.cv = keep; } }
 // 从 (x,y) 沿角度 a 延伸 len，但不越出地图（保持方向不变）
 function airRay(x, y, a, len, m = 30) {
   const dx = Math.cos(a), dy = Math.sin(a);
@@ -76,6 +82,16 @@ function initCarrier() {
   if (c.hitT == null) c.hitT = -99;
   if (c.auto == null) c.auto = false;
   if (c.autoT == null) c.autoT = 2;
+  if (Array.isArray(S.cvx)) S.cvx.forEach((x, i) => {   // 其余航母：补齐字段
+    x.home = i + 1;
+    if (!isFinite(x.heading)) x.heading = -Math.PI / 2;
+    if (!isFinite(x.tx) || !isFinite(x.ty)) { x.tx = x.x; x.ty = x.y; x.moving = false; }
+    if (!isFinite(x.maxhp) || x.maxhp <= 0) x.maxhp = 30;
+    if (!isFinite(x.hp)) x.hp = x.maxhp;
+    if (!Array.isArray(x.cat) || x.cat.length !== 2) x.cat = [0, 0];
+    if (x.exposedUntil == null) x.exposedUntil = 0;
+    if (x.hitT == null) x.hitT = -99;
+  });
   if (!S.air || !Array.isArray(S.air.wing)) {
     const wing = [];
     for (const type of AIR_TYPES) for (let k = 0; k < AIR_SPEC[type].n; k++) wing.push({ id: S.nid++, type, state: 'deck', rearmT: 0 });
@@ -97,8 +113,8 @@ function initCarrier() {
 
 // HUD 读取：各机型可出击（在甲板待命）的架数
 function airCount() {
-  const c = S.cv, ok = c && c.hp > 0 && S.air;
-  for (const t of AIR_TYPES) S.assets[t] = ok ? S.air.wing.filter(w => w.type === t && w.state === 'deck').length : 0;
+  const ok = S.air && cvAll().some(c => c.hp > 0), up = w => { const c = cvOf(cvHome(w)); return c && c.hp > 0; };
+  for (const t of AIR_TYPES) S.assets[t] = ok ? S.air.wing.filter(w => w.type === t && w.state === 'deck' && up(w)).length : 0;
 }
 
 const airWing = p => p.wid != null && S.air ? S.air.wing.find(w => w.id === p.wid) : null;
@@ -112,21 +128,27 @@ function airSet(p, phase) {
 // —— 出击：kind = recon / strike / cas；从甲板待命的飞机中派出一架 ——
 function launchPlane(kind, tx, ty) {
   if (!S.cv || !S.air) initCarrier();
-  const sp = AIR_SPEC[kind], c = S.cv;
+  const sp = AIR_SPEC[kind];
   if (!sp || !isFinite(tx) || !isFinite(ty)) return false;
-  if (c.hp <= 0) { log('航母飞行甲板瘫痪，舰载机无法起飞', 'warn', 'cvdead', 2); return false; }
-  const w = S.air.wing.find(w => w.type === kind && w.state === 'deck');
+  if (!cvAll().some(c => c.hp > 0)) { log('航母飞行甲板瘫痪，舰载机无法起飞', 'warn', 'cvdead', 2); return false; }
+  // 多艘航母时：从离目标最近、且有该机型待命的那艘起飞
+  let w = null, bd = Infinity;
+  for (const o of S.air.wing) if (o.type === kind && o.state === 'deck') { const c = cvOf(cvHome(o)); if (c && c.hp > 0 && dist(c.x, c.y, tx, ty) < bd) { bd = dist(c.x, c.y, tx, ty); w = o; } }
   if (!w) {
     const left = S.air.wing.filter(w => w.type === kind && w.state !== 'lost'), r = left.filter(w => w.state === 'rearm').map(w => w.rearmT);
     log(!left.length ? `${sp.name}已全部损失` : r.length ? `${sp.name}均在出击或整备中（最快 ${Math.ceil(Math.min(...r))} 秒）` : `${sp.name}均已升空`, 'warn', 'air' + kind, 2);
     return false;
   }
+  return withCV(cvOf(cvHome(w)), () => launchFrom(w, kind, sp, tx, ty));
+}
+function launchFrom(w, kind, sp, tx, ty) {
+  const c = S.cv;
   tx = clamp(tx, 10, W - 10); ty = clamp(ty, 10, H - 10);
   // 两条弹射器轮流使用：同一条间隔 2.4 秒，两条之间至少错开 1.2 秒
   const k = c.cat[0] <= c.cat[1] ? 0 : 1, at = Math.max(S.t, c.cat[k], c.cat[1 - k] - 1.2);
   c.cat[k] = at + 2.4;
   const [u0, v0] = CVG.cats[k], [x, y] = cvW(u0, v0);
-  const p = { id: S.nid++, wid: w.id, kind, phase: 'cat', wait: at - S.t, cat: k, lu: u0, lv: v0, x, y, heading: c.heading, spd: 0, alt: 0, bank: 0,
+  const p = { id: S.nid++, wid: w.id, home: cvHome(w), kind, phase: 'cat', wait: at - S.t, cat: k, lu: u0, lv: v0, x, y, heading: c.heading, spd: 0, alt: 0, bank: 0,
     tx, ty, cx: tx, cy: ty, wp: [{ x: tx, y: ty }], leg: 0, aaT: Math.random() * .5, rt: 0, gunT: 0, strafeT: 1, loiterT: 40, odir: 1, dropped: false, rtbT: 0 };
   if (kind === 'recon') {   // 侦察机：飞越目标后沿同一方向再向纵深飞 700
     const a = Math.atan2(ty - c.y, tx - c.x), [bx, by] = airRay(tx, ty, a, 700);
@@ -151,7 +173,12 @@ function updatePlanes(dt) {
   }
   for (const p of S.planes) {
     if (p.dead) continue;
-    flyPlane(p, dt);
+    let c = cvOf(cvHome(p)) || S.cv;
+    if (c.hp <= 0 && p.phase !== 'cat' && p.phase !== 'roll') {   // 母舰瘫痪：改降其他还能起降的航母
+      const alt = cvAll().find(o => o.hp > 0), w = airWing(p);
+      if (alt) { p.home = cvHome(alt); if (w) w.home = p.home; c = alt; }
+    }
+    withCV(c, () => flyPlane(p, dt));
     if (!isFinite(p.x) || !isFinite(p.y) || !isFinite(p.heading)) { airAbort(p); continue; }   // 防御：数值异常直接收回
     if (!p.dead && p.alt > .4) airAA(p, dt);
   }
@@ -191,7 +218,7 @@ function cvLanding() {
   const L = CVG.land, a = S.cv.heading + CV_LANG, [x, y] = cvW(lerp(L.u0, L.u1, CVG.td), lerp(L.v0, L.v1, CVG.td));
   return { x, y, a, dx: Math.cos(a), dy: Math.sin(a) };
 }
-const cvDeckBusy = p => S.planes.some(o => o !== p && !o.dead && (o.phase === 'final' || o.phase === 'trap'));
+const cvDeckBusy = p => S.planes.some(o => o !== p && !o.dead && cvHome(o) === cvHome(p) && (o.phase === 'final' || o.phase === 'trap'));
 
 function flyPlane(p, dt) {
   const c = S.cv, sp = AIR_SPEC[p.kind] || AIR_SPEC.strike, dead = c.hp <= 0;
@@ -389,7 +416,10 @@ function cvClear(x0, y0, x1, y1) {
 
 function updateCarrier(dt) {
   if (!S.cv || !S.air) initCarrier();
-  const c = S.cv;
+  cvMove(S.cv, dt);
+  for (const x of S.cvx || []) cvMove(x, dt);
+}
+function cvMove(c, dt) {
   if (c.stepT === S.t) return;   // 同一推演步只更新一次（step 中另有调用也无妨）
   c.stepT = S.t;
   if (c.hp <= 0) { c.moving = false; return; }
@@ -407,17 +437,18 @@ function updateCarrier(dt) {
 }
 
 // 爆炸落在舰体 30 以内：甲板受损；直接命中可能毁掉甲板上的飞机；归零即瘫痪（由 combat.js impact 调用）
-function cvImpact(x, y, pw) {
-  const c = S.cv;
+function cvImpact(x, y, pw) { for (const c of cvAll()) withCV(c, () => cvImpact1(x, y, pw)); }
+function cvImpact1(x, y, pw) {
+  const c = S.cv, h = cvHome(c), nm = c.name || '航母';
   if (!c || c.hp <= 0 || !pw || !pw.ship) return;
   const [u, v] = cvL(x, y), d = Math.hypot(Math.max(0, Math.abs(u) - 75), Math.max(0, Math.abs(v) - 13));
   if (d >= 30) return;
   c.hp = Math.max(0, c.hp - pw.ship * (1 - d / 30 * .6)); c.hitT = S.t;
   if (d === 0) {
-    for (const p of S.planes) if (!p.dead && (p.phase === 'cat' || p.phase === 'roll' || p.phase === 'trap') && dist(p.x, p.y, x, y) < 16) airLost(p, `${(AIR_SPEC[p.kind] || AIR_SPEC.strike).name}在甲板上被炸毁`);
+    for (const p of S.planes) if (!p.dead && cvHome(p) === h && (p.phase === 'cat' || p.phase === 'roll' || p.phase === 'trap') && dist(p.x, p.y, x, y) < 16) airLost(p, `${(AIR_SPEC[p.kind] || AIR_SPEC.strike).name}在甲板上被炸毁`);
     if (Math.random() < .3) {
       let best = null, bd = 40;
-      S.air.wing.forEach((w, i) => {
+      S.air.wing.filter(w => cvHome(w) === h).forEach((w, i) => {
         if (w.state !== 'deck' && w.state !== 'rearm') return;
         const s = CVG.slots[i % CVG.slots.length], dd = dist(s[0], s[1], u, v);
         if (dd < bd) { bd = dd; best = w; }
@@ -425,24 +456,25 @@ function cvImpact(x, y, pw) {
       if (best) { best.state = 'lost'; log(`${AIR_SPEC[best.type].name}在甲板上被炸毁`, 'bad', null, 0, c); }
     }
   }
-  if (c.hp > 0) { log(`航母中弹，飞行甲板受损（${Math.ceil(c.hp)}/${c.maxhp}）`, 'bad', 'cvhit', 4, c); return; }
+  if (c.hp > 0) { log(`${nm}中弹，飞行甲板受损（${Math.ceil(c.hp)}/${c.maxhp}）`, 'bad', 'cvhit' + h, 4, c); return; }
   c.moving = false;
-  for (const p of S.planes) if (p.phase === 'cat' || p.phase === 'roll') airAbort(p);
+  for (const p of S.planes) if (cvHome(p) === h && (p.phase === 'cat' || p.phase === 'roll')) airAbort(p);
   S.fx.push({ kind: 'boom', x: c.x, y: c.y, r: 60, life: 0, max: 1.6, side: 'p' });
-  log('航母遭重创，飞行甲板瘫痪，舰载机无法再起降', 'bad', null, 0, c);
+  const alt = cvAll().some(o => o !== c && o.hp > 0);
+  log(alt ? `${nm}遭重创，飞行甲板瘫痪：舰载机改由其他航母起降` : '航母遭重创，飞行甲板瘫痪，舰载机无法再起降', 'bad', null, 0, c);
+  if (alt) for (const w of S.air.wing) if (cvHome(w) === h && w.state !== 'lost' && w.state !== 'deck' && w.state !== 'rearm') w.home = cvHome(cvAll().find(o => o !== c && o.hp > 0));
   airCount();
 }
 
 // 视野来源（由 updateVision 合并到我方视野）
 function carrierVision() {
-  const c = S && S.cv;
-  return c && isFinite(c.x) ? [{ x: c.x, y: c.y, r: 90, h: 1.5 }] : [];
+  return S && S.cv ? cvAll().map(c => ({ x: c.x, y: c.y, r: 90, h: 1.5 })) : [];
 }
 
 // —— 自动派机（S.cv.auto）：对地支援压制我军的敌人、空袭已标定火力点、侦察前线方向的敌占据点 ——
 function updateAirAuto(dt) {
   const c = S.cv;
-  if (!c || !c.auto || c.hp <= 0 || S.phase !== 'battle') return;
+  if (!c || !c.auto || !cvAll().some(o => o.hp > 0) || S.phase !== 'battle') return;   // 旗舰的自动开关统管全部航母
   if ((c.autoT = (c.autoT ?? 2) - dt) > 0) return;
   c.autoT = 3;
   // 指挥官的航空任务（commander.js）：H 时侦察、受阻攻击的对地支援、假目标后的复查与再次出击
@@ -490,7 +522,7 @@ function toggleCvAuto() {
 function cvCard() {
   if (!S.cv || !S.air) initCarrier();
   const c = S.cv, live = S.air.wing.filter(w => w.state !== 'lost'), n = live.length || 1;
-  const ready = c.hp > 0 ? live.filter(w => w.state === 'deck').length : 0, up = live.filter(w => w.state === 'launch' || w.state === 'out' || w.state === 'return').length;
+  const ready = live.filter(w => w.state === 'deck' && (cvOf(cvHome(w)) || { hp: 0 }).hp > 0).length, up = live.filter(w => w.state === 'launch' || w.state === 'out' || w.state === 'return').length;
   return { n: ready, hp: clamp(c.hp / c.maxhp, 0, 1), ready: ready / n, air: up / n,
     state: c.hp <= 0 ? 'rout' : c.hp < c.maxhp * .4 || S.t < (c.exposedUntil || 0) ? 'waver' : 'ok', mini: c.auto ? 'auto' : c.moving ? 'move' : 'hold' };
 }
@@ -539,11 +571,16 @@ function drawAircraft(ctx, x, y, a, type, size, col, alpha, bank, lw, bombs) {
 }
 
 function drawCarrier(time) {
-  const c = S && S.cv;
+  if (!S || !S.cv) return;
+  drawCarrier1(time);
+  for (const x of S.cvx || []) withCV(x, () => drawCarrier1(time));
+}
+function drawCarrier1(time) {
+  const c = S && S.cv, h = cvHome(c);
   if (!c || !R.ctx || !isFinite(c.x) || !isFinite(c.y)) return;
   const ctx = R.ctx, k = cvScale(), lw = n => px(n) / k, dead = c.hp <= 0, det = CV_LEN * k * R.s;
-  const col = dead ? COL.amber : COL.g, hit = S.t - (c.hitT ?? -99) < .35, sel = typeof isSel === 'function' && isSel('CV');
-  const wing = S.air ? S.air.wing : [], deckPl = S.planes.filter(p => !p.dead && (p.phase === 'cat' || p.phase === 'roll'));
+  const col = dead ? COL.amber : COL.g, hit = S.t - (c.hitT ?? -99) < .35, sel = !h && typeof isSel === 'function' && isSel('CV');
+  const wing = S.air ? S.air.wing.filter(w => cvHome(w) === h) : [], deckPl = S.planes.filter(p => !p.dead && cvHome(p) === h && (p.phase === 'cat' || p.phase === 'roll'));
   if (c.moving && !dead) {   // 航向指示
     ctx.strokeStyle = rgba(COL.sel, sel ? .6 : .25); ctx.lineWidth = px(1); ctx.setLineDash([px(4), px(4)]);
     ctx.beginPath(); ctx.moveTo(c.x, c.y); ctx.lineTo(c.tx, c.ty); ctx.stroke(); ctx.setLineDash([]);
@@ -681,7 +718,7 @@ function drawCarrier(time) {
     }
     x += gap;
   }
-  const g = typeof groupOf === 'function' ? groupOf('CV') : 0;
+  const g = !h && typeof groupOf === 'function' ? groupOf('CV') : 0;
   if (g && typeof pips === 'function') pips(ctx, g, c.x, yy + px(7), COL.sel);
 }
 
@@ -708,7 +745,7 @@ function drawPlanes(time) {
     const sp = AIR_SPEC[p.kind] || AIR_SPEC.strike, onDeck = p.phase === 'cat' || p.phase === 'roll' || p.phase === 'trap';
     const air = clamp((p.alt || 0) * 1.6, 0, 1), size = lerp(8.5 * k, big(sp.size), air);
     let x = p.x, y = p.y;
-    if (onDeck && c && k > 1) { const [u, v] = cvL(p.x, p.y); [x, y] = cvW(u * k, v * k); }
+    if (onDeck && c && k > 1) { const cc = cvOf(cvHome(p)) || c, [u, v] = cvL(p.x, p.y, cc); [x, y] = cvW(u * k, v * k, cc); }
     if (!isFinite(x) || !isFinite(y)) continue;
     // 任务标记
     if (p.phase === 'loiter') {
@@ -768,7 +805,7 @@ function arrowAir(ctx, x, y, a, col) {
 function drawAirTool(time) {
   const t = U.tool, m = U.mouse;
   if (!m || (t !== 'recon' && t !== 'strike' && t !== 'cas')) return false;
-  const ctx = R.ctx, c = S.cv, ok = !!(S.assets && S.assets[t] > 0 && c && c.hp > 0), col = ok ? COL.intel : COL.enemy;
+  const ctx = R.ctx, c = cvAll().filter(o => o.hp > 0).sort((a, b) => dist(a.x, a.y, m.x, m.y) - dist(b.x, b.y, m.x, m.y))[0] || S.cv, ok = !!(S.assets && S.assets[t] > 0 && c && c.hp > 0), col = ok ? COL.intel : COL.enemy;
   const ox = c ? c.x : m.x, oy = c ? c.y : H, a = Math.atan2(m.y - oy, m.x - ox);
   ctx.lineWidth = px(1.2); ctx.strokeStyle = rgba(col, .35); ctx.setLineDash([px(3), px(5)]);
   ctx.beginPath(); ctx.moveTo(ox, oy); ctx.lineTo(m.x, m.y); ctx.stroke();

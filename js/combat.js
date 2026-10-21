@@ -207,7 +207,7 @@ function coastalFire(e) {
   if (dd.state !== 'sunk' && dist(e.x, e.y, dd.x, dd.y) < RG && (S.t < dd.exposedUntil || shipSeen(dd.x, dd.y, radar)) && 6 > bv) { bv = 6; best = dd; }
   // 航母（carrier.js）：600 以内且被发现、或起降作业暴露时也是目标；航速 10，提前量按此计算
   const cv = S.cv;
-  if (cv && cv.hp > 0 && dist(e.x, e.y, cv.x, cv.y) < RG && (S.t < (cv.exposedUntil || 0) || shipSeen(cv.x, cv.y, radar)) && 7 > bv) { bv = 7; best = cv; }
+  for (const c of [cv, ...(S.cvx || [])]) if (c && c.hp > 0 && dist(e.x, e.y, c.x, c.y) < RG && (S.t < (c.exposedUntil || 0) || shipSeen(c.x, c.y, radar)) && 7 > bv) { bv = 7; best = c; }   // 各艘航母
   // 我方车辆（vehicles.js）：泅渡中的两栖坦克是好靶子；上岸的车辆只在 450 以内且被看见时才打
   if (typeof vehFoes === 'function') for (const v of vehFoes('e')) {
     const d = dist(e.x, e.y, v.x, v.y), val = v.swim ? 3 : 2.2;
@@ -215,7 +215,7 @@ function coastalFire(e) {
   }
   if (!best) { e.cd = 2; return; }
   e.cd = (12 + Math.random() * 3) / (M.rof || 1);
-  const mv = best.state === 'move' || best.moving, a = best.type ? best.heading : Math.atan2(best.ty - best.y, best.tx - best.x), lead = mv ? (best === cv ? 10 : best.type ? 12 : 26) * 3 * D.lead : 0;
+  const mv = best.state === 'move' || best.moving, a = best.type ? best.heading : Math.atan2(best.ty - best.y, best.tx - best.x), lead = mv ? (best === cv || (S.cvx || []).includes(best) ? 10 : best.type ? 12 : 26) * 3 * D.lead : 0;
   fireShell(e.x, e.y, best.x + Math.cos(a) * lead + gauss() * D.err * 1.2, best.y + Math.sin(a) * lead + gauss() * D.err * 1.2, 'e', 'coastal', 3, !inVision(e.x, e.y));
   if (e.kx == null && Math.random() < .35) { e.kx = e.x; e.ky = e.y; log('岸防重炮炮口闪光，已标定', 'warn', null, 0, e); }
 }

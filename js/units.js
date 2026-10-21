@@ -155,12 +155,19 @@ function moveTeam(q, dt, mul) {
   const i = ci(q.x, q.y);
   const sp = (q.side === 'p' ? (q.kind === 'eng' ? 18 : 16) : 14) * (TP[TER.type[i]].sp || .5) * (WIREC[i] ? .3 : 1) * (q.sup > 30 ? .7 : 1) * mul * dt;
   const l = dist(q.x, q.y, tx, ty) || 1;
-  let nx = q.x + (tx - q.x) / l * Math.min(sp, l), ny = q.y + (ty - q.y) / l * Math.min(sp, l);
+  const rx = q.x + (tx - q.x) / l * Math.min(sp, l), ry = q.y + (ty - q.y) / l * Math.min(sp, l);
+  let px = 0, py = 0;
   for (const o2 of S.teams) if (o2 !== q && o2.side === q.side) {
-    const d2 = dist(nx, ny, o2.x, o2.y);
-    if (d2 < 9 && d2 > .01) { nx += (nx - o2.x) / d2 * (9 - d2) * .3; ny += (ny - o2.y) / d2 * (9 - d2) * .3; }
+    const d2 = dist(rx, ry, o2.x, o2.y);
+    if (d2 < 9 && d2 > .01) { px += (rx - o2.x) / d2 * (9 - d2) * .3; py += (ry - o2.y) / d2 * (9 - d2) * .3; }
   }
-  if (passInf(nx, ny)) { q.x = nx; q.y = ny; q.movedT = S.t; q.heading = Math.atan2(ty - q.y, tx - q.x); }
+  // 避让只横向错开，不把小组往回推（桥上对向两组否则互相顶住，整连卡死）
+  const ux = (tx - q.x) / l, uy = (ty - q.y) / l, back = px * ux + py * uy;
+  if (back < 0) { px -= back * ux; py -= back * uy; }
+  let nx = rx + px, ny = ry + py;
+  // 避让把小组推进河里时改走原步；原步也不可走（直线贴着河岸）则改按寻路场走
+  if (!passInf(nx, ny)) { nx = rx; ny = ry; if (!passInf(nx, ny)) { q.direct = false; q.pathT = S.t; return false; } }
+  q.x = nx; q.y = ny; q.movedT = S.t; q.heading = Math.atan2(ty - q.y, tx - q.x);
   return false;
 }
 

@@ -1178,7 +1178,7 @@ function cmdECorrect(E, F, o) {
   for (const k in E.ca) {
     const a = E.ca[k], p = cmdPt(k);
     if (!p || a.end || !W0 || dist(p.x, p.y, W0.x, W0.y) > 350) continue;
-    if (a.st === 'mass') { a.end = S.t; ca.push(`取消对${p.name}的集中反冲击`); } else ca.push(`${p.name}方向已发起的反击照常进行`);
+    if (a.st === 'mass') { a.end = S.t; if (E.mass && E.mass.key === k) E.mass = null; ca.push(`取消对${p.name}的集中反冲击`); } else ca.push(`${p.name}方向已发起的反击照常进行`);
   }
   chatSay('e', `决心：预备队全部转向${cmdBN(c.i)}${mv.length ? `，${cmdBN(was)}守备抽调 ${mv.length} 组加强` : ''}${ca.length ? '；' + ca.join('；') : ''}。`, { kind: 'plan', at: X, delay: 1.5 });
 }
