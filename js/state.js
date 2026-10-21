@@ -6,7 +6,8 @@ const HOLD = 30;         // 全部据点需同时控制的秒数
 const SHIP_SPEC = {
   assault: { name: '突击登陆舰', hp: 10, teams: 5, eng: 0 },     // 15 人 = 5 个三人组
   supply: { name: '补给登陆舰', hp: 11, teams: 4, eng: 3 },      // 4 个三人组 + 3 名工兵
-  lst: { name: '坦克登陆舰', hp: 14, teams: 0, eng: 0, veh: ['tank', 'tank', 'apc'] }   // 车辆经艏门跳板逐辆驶下（vehicles.js）
+  lst: { name: '坦克登陆舰', hp: 14, teams: 0, eng: 0, veh: ['tank', 'tank', 'apc'] },   // 车辆经艏门跳板逐辆驶下（vehicles.js）
+  dd: { name: '护航驱逐舰', hp: 12, teams: 0, eng: 0 }   // 沙盒中旗舰以外的驱逐舰 / 巡洋舰：只在海上机动和射击，不抢滩
 };
 const ENEMY_SPEC = {
   bunker: { name: '机枪碉堡', hp: 16 }, coastal: { name: '岸防重炮', hp: 22 }, arty: { name: '榴弹炮阵地', hp: 10 },

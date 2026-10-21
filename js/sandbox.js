@@ -41,6 +41,8 @@ function sbxShipLoad(it) {
   return { t, v };
 }
 const sbxOf = kind => S.sbx.items.filter(it => { const c = sbxEntry(it); return c && c.spawn.kind === kind; });
+// 驱逐舰 / 巡洋舰可部署多艘：造价最高的一艘为旗舰（S.dd，玩家可直接操纵舰炮），其余开战后编为护航舰
+const sbxFlag = () => sbxOf('dd').reduce((b, it) => !b || sbxCost(it) > sbxCost(b) ? it : b, null);
 const sbxWingCap = () => { const cv = sbxOf('cv')[0]; return cv ? sbxEntry(cv).spawn.wing : 0; };
 const sbxWingN = () => sbxOf('wing').reduce((a, it) => a + (sbxEntry(it).spawn.n || 1), 0);
 
@@ -57,7 +59,7 @@ function sbxCheck(c, x, y, x2, y2, ignore) {
   if (s.kind === 'veh' && !sbxVehOk()) return bad('装甲车辆模块未加载');
   let cost = c.cost;
   if (s.at === 'line') cost = x2 == null ? 1 : Math.max(1, Math.round(s.per * dist(x, y, x2, y2) / 100));
-  const repl = (s.kind === 'dd' || s.kind === 'cv') ? sbxOf(s.kind).reduce((a, it) => a + sbxCost(it), 0) : 0;
+  const repl = s.kind === 'cv' ? sbxOf(s.kind).reduce((a, it) => a + sbxCost(it), 0) : 0;
   if (ignore) cost = 0;
   if (cost > sbxLeft(c.side) + repl) return bad(`预算不足（还剩 ${sbxLeft(c.side)} 点）`);
   if (s.at === 'none') return { ok: true };
@@ -116,7 +118,7 @@ function sbxPlace(id, x, y, x2, y2, extra) {
   if (!chk.ok) return chk;
   if (chk.host) { chk.host.cargo = (chk.host.cargo || []).concat(id); return { ok: true, it: chk.host }; }
   const s = c.spawn;
-  if (s.kind === 'dd' || s.kind === 'cv') S.sbx.items = S.sbx.items.filter(it => sbxEntry(it).spawn.kind !== s.kind);
+  if (s.kind === 'cv') S.sbx.items = S.sbx.items.filter(it => sbxEntry(it).spawn.kind !== s.kind);   // 航母只有一艘
   const pos = s.at === 'none' || s.at === 'air' ? {} : { x: sbxR(x), y: sbxR(y) };
   if (s.at === 'line') Object.assign(pos, { x2: sbxR(x2), y2: sbxR(y2) });
   const it = { id: S.sbx.nid++, cat: id, side: c.side, ...pos, ...(s.kind === 'ship' ? { cargo: [], wave: s.wave || 1 } : {}), ...extra };
@@ -152,7 +154,7 @@ function sbxClear(side) {
 // 编辑阶段：驱逐舰与航母只在买下后出现在其位置（否则移出地图）
 function sbxSync() {
   if (!S || !S.sbx || S.sbx.live) return;
-  const dd = sbxOf('dd')[0], cv = sbxOf('cv')[0];
+  const dd = sbxFlag(), cv = sbxOf('cv')[0];
   if (dd) Object.assign(S.dd, { x: dd.x, y: dd.y, tx: dd.x, ty: dd.y, state: 'ready', moving: false, hull: sbxEntry(dd).spawn.hull });
   else Object.assign(S.dd, { x: -9999, y: H + 9999, tx: -9999, ty: H + 9999, state: 'sunk', moving: false });
   if (S.cv) {
@@ -597,13 +599,21 @@ function sbxBuild(role) {
   // 守方先建（守备队士气取决于难度）
   const items = SB.items.slice().sort((a, b) => (a.side === 'e' ? 0 : 1) - (b.side === 'e' ? 0 : 1));
   for (const it of items) { try { sbxSpawn(it, role, acc); } catch (e) { console.error('sandbox spawn ' + it.cat, e); } }
-  const ddI = sbxOf('dd')[0], cvI = sbxOf('cv')[0];
+  const ddI = sbxFlag(), cvI = sbxOf('cv')[0];
   if (ddI) {
     const s = sbxEntry(ddI).spawn;
     Object.assign(S.dd, { x: ddI.x, y: ddI.y, tx: ddI.x, ty: ddI.y, hull: s.hull, state: 'ready', cool: 0, repairT: 0, repairDur: s.rep || 16, auto: role === 'spectate', exposedUntil: 0, moving: false,
       mod: { rof: s.rof || 1, salvo: s.salvo || 1, hit: s.hit || 1 }, name: sbxEntry(ddI).name, plan: ddI.plan ? { ...ddI.plan } : null });
     S.assets.smoke += 2 + (s.smoke || 0);
   } else Object.assign(S.dd, { x: -9999, y: H + 9999, tx: -9999, ty: H + 9999, hull: 0, state: 'sunk', moving: false, auto: false, plan: null, mod: null });
+  // 护航舰：自动前出到滩头外海，对已发现的目标实施舰炮火力支援（玩家也可点选后改变阵位）
+  let ek = 1;
+  for (const it of sbxOf('dd')) {
+    if (it === ddI) continue;
+    const c = sbxEntry(it), s = c.spawn, hp = 6 + s.hull * 3, sh = addShip('dd', it.x, it.y, 'DD-' + ++ek);
+    Object.assign(sh, { hp, maxhp: hp, load: { teams: 0, eng: 0 }, auto: true, plan: null, sbxRole: 'naval', sbxCls: { rof: s.rof || 1, salvo: s.salvo || 1, name: c.name }, cat: c.id });
+    if (it.plan) sh.sbxTgt = { x: it.plan.x, y: it.plan.y };
+  }
   if (typeof initCarrier === 'function') initCarrier();
   if (S.cv) {
     if (cvI) { const s = sbxEntry(cvI).spawn; Object.assign(S.cv, { x: cvI.x, y: cvI.y, tx: cvI.x, ty: cvI.y, hp: s.hp, maxhp: s.hp, moving: false, auto: role === 'spectate', exposedUntil: 0, cat: [0, 0] }); }
@@ -747,6 +757,20 @@ function sbxFireShips(dt) {
         tracer(s.x, s.y, t.x + gauss() * 6, t.y + gauss() * 6, 'p', true); tracer(s.x, s.y, t.x + gauss() * 6, t.y + gauss() * 6, 'p', true);
         S.stats.shots++;
       }
+    } else if (s.sbxRole === 'naval') {   // 护航舰：滩头外 380 游弋，优先打已发现的火力点，射程 1000，我军 45 以内不射
+      if (st.go === 0 && S.t > 6) { st.go = 1; goTo(tx + ((s.id % 5) - 2) * 80, cy + 360 + (s.id % 3) * 40); }   // 各舰错开阵位
+      if (st.cd > 0) continue;
+      let t = null, bd = 1000;
+      for (const e of S.enemies) if (!e.dead && (inVision(e.x, e.y) || e.kx != null)) { const d = dist(s.x, s.y, e.x, e.y) * (e.kind === 'coastal' || e.kind === 'bunker' ? .7 : 1); if (d < bd && sbxSafe(e.x, e.y, 45)) { bd = d; t = e; } }
+      if (!t) { const q = sbxNearFoe(s.x, s.y, 1000, 0); if (q && sbxSafe(q.x, q.y, 45)) t = q; }
+      st.cd = t ? 5 / (s.sbxCls.rof || 1) : 1.5;
+      if (!t) continue;
+      const sc = 10 + dist(s.x, s.y, t.x, t.y) / 50;
+      for (let k = 0; k < (s.sbxCls.salvo || 1); k++) fireShell(s.x, s.y, t.x + gauss() * sc, t.y + gauss() * sc, 'p', 'naval', 2.2, false, { t: -k * .2 });
+      Object.assign(s, { aimX: t.x, aimY: t.y, fireT: S.t });
+      S.fx.push({ kind: 'flash', x: s.x, y: s.y, r: 14, life: 0, max: .5, side: 'p' });
+      S.stats.shots++;
+      sbxOnce('nv' + s.id, () => sbxSay('p', `命令：护航舰 ${s.label}（${s.sbxCls.name}）前出至${b.name}外海，对已发现火力点实施舰炮支援。`, 'order', { x: t.x, y: t.y }));
     } else if (s.sbxRole === 'sweep') {
       if (st.go === 0) { st.go = 1; goTo(tx, cy + 75); }
       if ((st.sw += dt) < 2.2) continue;
@@ -1087,7 +1111,7 @@ function sbxUI() {
     const b = e.target.closest('button');
     if (!b || !S || !S.sbx || S.sbx.live) return;
     const a = b.dataset.act;
-    if (b.dataset.side) { SBX.side = b.dataset.side; SBX.pick = null; SBX.line = null; SBX.cat = 'all'; }
+    if (b.dataset.side) { SBX.side = b.dataset.side; SBX.pick = null; SBX.line = null; SBX.cat = 'all'; sbxFrameSide(); }
     else if (b.dataset.cat) SBX.cat = b.dataset.cat;
     else if (b.dataset.id) sbxPick(b.dataset.id);
     else if (b.dataset.rm) { const it = S.sbx.items.find(o => o.id === +b.dataset.rm); if (it) { sbxRemove(it); sbxMsg('已移除' + sbxEntry(it).name); } }
@@ -1113,6 +1137,12 @@ function sbxGo(role) {
   if (!n.e) sbxMsg('防守方空无一人——将直接开战', false);
   sbxStart(role);
 }
+// 切换攻守方：集结海域 / 海岸不在视野内时把镜头移过去
+function sbxFrameSide() {
+  if (typeof toWorld !== 'function' || typeof camCenter !== 'function') return;
+  const a = toWorld(0, 0), b = toWorld(CAM.vw, CAM.vh), want = SBX.side === 'p' ? STAGING_Y + 60 : coastAt(CAM.x) - 180;
+  if (want < a.y + 60 || want > b.y - 160) camCenter(CAM.x, want);
+}
 function sbxMsg(t, bad) { SBX.msg = t; SBX.msgBad = !!bad; SBX.msgT = performance.now(); if (SBX.el) { const m = SBX.el.querySelector('.sbx-msg'); m.textContent = t; m.classList.toggle('bad', !!bad); } }
 function sbxPick(id) {
   const c = catalogById(id);
@@ -1124,9 +1154,9 @@ function sbxPick(id) {
     SBX.pick = null;
     return;
   }
-  SBX.pick = SBX.pick === id ? null : id;
+  SBX.pick = id;   // 保持选中，可连续放置多个；右键或 Esc 取消
   sbxInfo(c);
-  sbxMsg(SBX.pick ? SBX_AT[c.spawn.at] || '' : '已取消选择（再点一次图标即可重新选中）');
+  sbxMsg((SBX_AT[c.spawn.at] || '') + '（可连续放置，右键或 Esc 取消）');
 }
 function sbxInfo(c) {
   if (!SBX.el) return;
@@ -1184,6 +1214,7 @@ function sbxClick(p) {
     return;
   }
   const r = sbxPlace(id, p.x, p.y);
+  if (!r.ok) SBX.bad = { x: p.x, y: p.y, t: performance.now() };
   sbxMsg(r.ok ? (r.it.cargo && c.spawn.kind !== 'ship' ? `已装载到 ${sbxEntry(r.it).name}（${sbxShipLoad(r.it).t + sbxShipLoad(r.it).v} / ${sbxShipCap(r.it).t + sbxShipCap(r.it).v}）` : `已放置：${c.name}`) : r.why, !r.ok);
   sbxRender();
 }
@@ -1395,9 +1426,10 @@ function sbxDrawEdit(time) {
     ctx.save(); ctx.strokeStyle = rgba(COL.amber, .35); ctx.lineWidth = px(1); ctx.setLineDash([px(6), px(5)]);
     ctx.beginPath(); for (let x = 0; x <= W; x += 20) { const y = coastAt(x) - 300; x ? ctx.lineTo(x, y) : ctx.moveTo(x, y); } ctx.stroke(); ctx.restore();
   }
+  const flag = sbxFlag();
   for (const it of S.sbx.items) {
     const c = sbxEntry(it);
-    if (!c || it.x == null || c.spawn.kind === 'dd' || c.spawn.kind === 'cv') continue;
+    if (!c || it.x == null || it === flag || c.spawn.kind === 'cv') continue;
     const mine = it.side === side, col = it.side === 'e' ? COL.enemy : COL.g;
     if (it.plan && mine) {   // 预定登陆点
       ctx.save(); ctx.strokeStyle = rgba(COL.g, .3); ctx.lineWidth = px(1); ctx.setLineDash([px(3), px(4)]);
@@ -1407,13 +1439,17 @@ function sbxDrawEdit(time) {
     const drag = SBX.drag && SBX.drag.it === it;
     sbxGlyph(ctx, c, it.x, it.y, drag && SBX.drag.bad ? COL.amber : col, mine ? 1 : .45, it);
   }
-  for (const k of ['dd', 'cv']) { const it = sbxOf(k)[0]; if (it && it.plan && side === 'p') { ctx.save(); ctx.strokeStyle = rgba(COL.g, .3); ctx.lineWidth = px(1); ctx.setLineDash([px(3), px(4)]); ctx.beginPath(); ctx.moveTo(it.x, it.y); ctx.lineTo(it.plan.x, it.plan.y); ctx.stroke(); ctx.restore(); } }
+  for (const it of [flag, sbxOf('cv')[0]]) { if (it && it.plan && side === 'p') { ctx.save(); ctx.strokeStyle = rgba(COL.g, .3); ctx.lineWidth = px(1); ctx.setLineDash([px(3), px(4)]); ctx.beginPath(); ctx.moveTo(it.x, it.y); ctx.lineTo(it.plan.x, it.plan.y); ctx.stroke(); ctx.restore(); } }
   const h = SBX.drag ? SBX.drag.it : SBX.hover;
   if (h) {
     const c = sbxEntry(h), col = h.side === 'e' ? COL.enemy : COL.g;
     ctx.save(); ctx.strokeStyle = rgba(COL.sel, .8); ctx.lineWidth = px(1.2);
     ctx.beginPath(); ctx.arc(h.x2 != null ? (h.x + h.x2) / 2 : h.x, h.x2 != null ? (h.y + h.y2) / 2 : h.y, Math.max(10, px(13)), 0, 6.283); ctx.stroke(); ctx.restore();
     if (c.arch !== 'mines') sbxRing(ctx, h.x, h.y, sbxRange(c, h), col, .35);
+  }
+  if (SBX.bad && performance.now() - SBX.bad.t < 900) {   // 放置失败的位置
+    const B = SBX.bad, d = Math.max(7, px(10)), a = 1 - (performance.now() - B.t) / 900;
+    ctx.save(); ctx.strokeStyle = rgba(COL.enemy, a); ctx.lineWidth = px(2); ctx.beginPath(); ctx.moveTo(B.x - d, B.y - d); ctx.lineTo(B.x + d, B.y + d); ctx.moveTo(B.x - d, B.y + d); ctx.lineTo(B.x + d, B.y - d); ctx.stroke(); ctx.restore();
   }
   // 放置预览
   const m = SBX.mouse;

@@ -26,7 +26,8 @@ function orderShips(ships, x, y) {
   ships.forEach((s, i) => {
     const k = (i - (ships.length - 1) / 2) * 30, tx = clamp(x + px * k, 8, W - 8), ty = clamp(y + py * k, 8, H - 8);
     s.land = false;
-    if (isLand(tx, ty)) {
+    if (isLand(tx, ty) && s.kind === 'dd') { const j = nearestPassable(ci(tx, ty), 'ship'); s.tx = cellCX(j); s.ty = cellCY(j); }   // 护航舰不抢滩，停在近岸海面
+    else if (isLand(tx, ty)) {
       const lp = landingPoint(tx, ty);
       if (lp) Object.assign(s, { land: true, tx: lp.sx, ty: lp.sy, bx: lp.bx, by: lp.by });
       else { blocked++; const j = nearestPassable(ci(tx, ty), 'ship'); s.tx = cellCX(j); s.ty = cellCY(j); }

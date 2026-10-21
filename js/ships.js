@@ -2,7 +2,7 @@
 // 舰船俯视剪影：坦克登陆艇（突击舰）、坦克登陆舰（补给舰）、驱逐舰、增援艇
 // 航迹 V 形尾浪、沉船油污、选中括角、血量点、卸载进度、炮塔随射击方向转动——全部为图形，无文字
 // 渲染侧缓存（不进 S）：平滑航向、航迹点、沉没时刻、炮塔角度、上次绘制的姿态（供点选）
-const SHIPV = { S: null, t1: 0, t2: 0, h: {}, trail: {}, sunk: {}, pose: {}, tur: [0, 0], aim: null, aimT: -99 };
+const SHIPV = { S: null, t1: 0, t2: 0, h: {}, trail: {}, sunk: {}, pose: {}, tur: [0, 0], etur: {}, aim: null, aimT: -99 };
 const SHIP_DIM = { assault: [32, 11], supply: [42, 13], lst: [48, 14], dd: [50, 9], boat: [12, 5] };   // 长 × 宽（世界单位）
 const SH_DARK = 'rgba(2,10,6,.86)', SH_FOAM = '#d4fff0';
 // HUD 单位卡图标（24×24，艏向上）
@@ -27,7 +27,7 @@ const shWrap = a => Math.atan2(Math.sin(a), Math.cos(a));
 
 function shSync() {
   if (SHIPV.S === S) return;
-  Object.assign(SHIPV, { S, h: {}, trail: {}, sunk: {}, pose: {}, tur: [0, 0], aim: null, aimT: -99 });
+  Object.assign(SHIPV, { S, h: {}, trail: {}, sunk: {}, pose: {}, tur: [0, 0], etur: {}, aim: null, aimT: -99 });
 }
 
 // 平滑航向（寻路逐格转向会抖动）
@@ -270,7 +270,7 @@ function shTurret(ctx, x, rot, col, a, lw, lod, flash) {
   ctx.restore();
 }
 
-function shDDBody(ctx, D, P, col, a, time, flash) {
+function shDDBody(ctx, D, P, col, a, time, flash, tur = SHIPV.tur) {
   const lw = v => px(v) / P.k, lod = P.L * P.k * R.s;
   ctx.save(); ctx.translate(P.x, P.y); ctx.rotate(P.h); ctx.scale(P.k, P.k);
   shHull(ctx, 'dd', false, col, a, lw);
@@ -299,8 +299,8 @@ function shDDBody(ctx, D, P, col, a, time, flash) {
     ctx.fillStyle = rgba(col, .6 * a);
     for (const [x, y] of [[20.5, -1.1], [20.5, 1.1], [-2, -4], [-2, 4], [-18, -3.7], [-18, 3.7]]) ctx.fillRect(x - .4, y - .4, .8, .8);
   }
-  shTurret(ctx, 15, SHIPV.tur[0], col, a, lw, lod, flash);
-  shTurret(ctx, -16.5, Math.PI + SHIPV.tur[1], col, a, lw, lod, flash);
+  shTurret(ctx, 15, tur[0], col, a, lw, lod, flash);
+  shTurret(ctx, -16.5, Math.PI + tur[1], col, a, lw, lod, flash);
   ctx.restore();
 }
 
@@ -448,7 +448,7 @@ function drawShips(time) {
     if (beached) tg = shShoreNormal(s.x);   // 抢滩：舰艏垂直顶向岸线
     if (sunk && SHIPV.h[s.id] != null) tg = SHIPV.h[s.id];
     const P = shPose(s, s.id, dim[0], dim[1], tg, s.state === 'move', dt, beached);
-    list.push({ s, P, vis: shInView(P, vr), sunk, beached, kind: s.kind === 'supply' ? 'supply' : s.kind === 'lst' ? 'lst' : 'assault' });
+    list.push({ s, P, vis: shInView(P, vr), sunk, beached, kind: s.kind === 'supply' ? 'supply' : s.kind === 'lst' ? 'lst' : s.kind === 'dd' ? 'dd' : 'assault' });
   }
   // 航线与预定抢滩点
   for (const { s } of list) if (s.state === 'move' && isFinite(s.tx)) {
@@ -465,7 +465,9 @@ function drawShips(time) {
   for (const o of list) {
     if (o.sunk || !o.vis) continue;
     const a = o.s.state === 'beached' ? .6 : 1;
-    if (o.kind === 'supply') shLST(ctx, o.s, o.P, COL.g, a, time); else if (o.kind === 'lst') shTLS(ctx, o.s, o.P, COL.g, a, time); else shLCT(ctx, o.s, o.P, COL.g, a, time);
+    if (o.kind === 'supply') shLST(ctx, o.s, o.P, COL.g, a, time); else if (o.kind === 'lst') shTLS(ctx, o.s, o.P, COL.g, a, time);
+    else if (o.kind === 'dd') { const f = o.s.fireT != null && S.t - o.s.fireT < .25 ? (S.t - o.s.fireT) / .25 : null; shDDBody(ctx, o.s, o.P, COL.g, a, time, f, shEscortTur(o.s, o.P, dt)); }
+    else shLCT(ctx, o.s, o.P, COL.g, a, time);
   }
   for (const { s, P, vis, sunk } of list) {
     if (sunk || !vis) continue;
@@ -478,6 +480,16 @@ function drawShips(time) {
     if (isSel(s.id)) shBrackets(ctx, P, COL.sel);
     if (s.state !== 'beached') shPips(ctx, P, s.hp, s.maxhp);
   }
+}
+
+// 护航舰炮塔：各舰独立转向最近一次射击的目标（渲染缓存，不进 S）
+function shEscortTur(s, P, dt) {
+  const t = SHIPV.etur[s.id] || (SHIPV.etur[s.id] = [0, 0]), aim = s.fireT != null && S.t - s.fireT < 8 && isFinite(s.aimX) ? { x: s.aimX, y: s.aimY } : null;
+  for (let i = 0; i < 2; i++) {
+    const rest = i ? Math.PI : 0, tg = aim ? clamp(shWrap(Math.atan2(aim.y - P.y, aim.x - P.x) - P.h - rest), -2.5, 2.5) : 0;
+    t[i] += clamp(tg - t[i], -2.4 * dt, 2.4 * dt);
+  }
+  return t;
 }
 
 function drawDD(time) {

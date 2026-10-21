@@ -111,7 +111,7 @@ function cardList() {
   const out = [];
   for (const u of S.units) if (u.side === 'p' && teamsOf(u).length) out.push({ id: u.id, k: u.kind === 'eng' ? 'eng' : u.emblem === 'reserve' ? 'reserve' : 'assault', u });
   for (const v of S.veh || []) if (v.side === 'p' && !v.dead && !v.lst) out.push({ id: v.id, k: ICON['v_' + v.type] ? 'v_' + v.type : 'ship', v });
-  for (const s of S.ships) if (alive(s) && s.state !== 'beached') out.push({ id: s.id, k: s.kind === 'supply' ? 'supply' : s.kind === 'lst' && ICON.lst ? 'lst' : 'ship', s });
+  for (const s of S.ships) if (alive(s) && s.state !== 'beached') out.push({ id: s.id, k: s.kind === 'supply' ? 'supply' : s.kind === 'lst' && ICON.lst ? 'lst' : s.kind === 'dd' ? 'dd' : 'ship', s });
   if (S.dd.state !== 'sunk') out.push({ id: 'DD', k: 'dd' });
   if (S.cv && S.cv.hp > 0) out.push({ id: 'CV', k: 'cv' });
   return out;
