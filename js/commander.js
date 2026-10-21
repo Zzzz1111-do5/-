@@ -163,6 +163,7 @@ function cmdThinkP() {
     cmdRun(cmdStalls, C, P);
     cmdRun(cmdHalts, C, P);
     cmdRun(cmdEst0, C, P);
+    cmdRun(cmdCrisisP, C, P);
   }
   cmdRun(cmdDecoys, C);
   cmdRun(cmdThreatsP, C);
@@ -368,10 +369,10 @@ function cmdShipsP(C) {
     if (!alive(s)) {
       if (!C.sunk[s.id] && t) {
         C.sunk[s.id] = 1;
-        chatSay('p', `报告：${s.label} 被击沉${t.men ? `，舰上 ${t.men} 人损失` : ''}${s.kind === 'supply' && t.men ? '，一处滩头补给站无法建立' : ''}${s.kind === 'lst' && t.veh ? `，舰上 ${t.veh} 辆装甲车辆随舰沉没` : ''}。`, { kind: 'report', at: s, lv: 0 });
+        chatSay('p', `报告：${s.label} 被击沉${t.men ? `，舰上 ${t.men} 人损失` : ''}${s.kind === 'supply' && t.men ? '，一处滩头补给站无法建立' : ''}${s.kind === 'lst' && t.veh ? `，舰上 ${t.veh} 辆装甲车辆随舰沉没` : ''}。`, { kind: 'report', at: s, lv: t.men || t.veh ? 0 : 1 });
         const gun = S.enemies.filter(e => !e.dead && e.kind === 'coastal' && e.kx != null && dist(e.kx, e.ky, s.x, s.y) < 650).sort((a, b) => dist(a.kx, a.ky, s.x, s.y) - dist(b.kx, b.ky, s.x, s.y))[0];
-        if (gun && cmdFire(gun.kx, gun.ky, 3, 'cb')) chatSay('p', `命令：驱逐舰对 ${gridRef(gun.kx, gun.ky)} 岸防重炮实施压制射击，后续舰艇加速通过其射界。`, { kind: 'order', at: gun, delay: 1.5 });
-        else if (gun && cmdAir('strike', gun.kx, gun.ky, gun.id)) chatSay('p', `命令：攻击机出击，摧毁 ${gridRef(gun.kx, gun.ky)} 岸防重炮。`, { kind: 'order', at: gun, delay: 1.5 });
+        if (gun && cmdFire(gun.kx, gun.ky, 3, 'cb')) chatSay('p', `命令：驱逐舰对 ${gridRef(gun.kx, gun.ky)} 岸防重炮实施压制射击，后续舰艇加速通过其射界。`, { kind: 'order', at: { x: gun.kx, y: gun.ky }, delay: 1.5, key: 'gun' + gun.id, gap: 60 });
+        else if (gun && cmdAir('strike', gun.kx, gun.ky, gun.id)) chatSay('p', `命令：攻击机出击，摧毁 ${gridRef(gun.kx, gun.ky)} 岸防重炮。`, { kind: 'order', at: { x: gun.kx, y: gun.ky }, delay: 1.5, key: 'gun' + gun.id, gap: 60 });
         else if (gun && cmdAsk(gun.kx, gun.ky)) chatSay('p', `${cmdAsk(gun.kx, gun.ky)}：该岸防重炮封锁登陆航道，后续舰艇须通过其射界。`, { kind: 'order', at: { x: gun.kx, y: gun.ky }, delay: 1.5, lv: 0, key: 'askgun', gap: 60 });
       }
       continue;
@@ -675,6 +676,11 @@ function cmdPhaseP(C, P) {
   } else if (C.ph === 'brk') {
     C.axis.forEach((k, i) => { pri[k] = Math.max(pri[k] || 0, i === 0 ? 4.5 : k === 'HQ' ? 2.5 : 2.5); });
   } else for (const p of S.points) if (C.own[p.key] === 'p' && p.owner !== 'p') pri[p.key] = p.key === 'HQ' ? 6 : 3.5;
+  if (C.crisis && C.ph !== 'cons') {   // 危局：集中残余兵力于一点，其余方向停止进攻
+    const k = C.crisis.key, cp = cmdPt(k);
+    if (cp && !cmdOwned(cp)) { for (const q in pri) pri[q] = Math.min(pri[q], 1); for (const p of S.points) if (p.key !== k && !cmdOwned(p) && C.own[p.key] !== 'p') pri[p.key] = -3; pri[k] = 8; }
+    else C.crisis.key = null;
+  }
   P.pri = pri;
   P.mis = C.mission;
   let fk = null, fv = 0;
@@ -942,6 +948,41 @@ function cmdVehHelp(gx, gy, p) {
   return best;
 }
 
+// —— 危局：在岸兵力锐减、进展甚微 → 停止多路进攻，集中于一点，投入后备队 ——
+function cmdCrisisP(C, P) {
+  const now = cmdMen(cmdPInf());
+  C.peak = Math.max(C.peak || 0, now);
+  const ts = cmdPInf(), cx = ts.reduce((a, q) => a + q.x, 0) / Math.max(1, ts.length), cy = ts.reduce((a, q) => a + q.y, 0) / Math.max(1, ts.length);
+  const pickT = () => {
+    const a = C.ph === 'brk' && C.axis[0] ? cmdPt(C.axis[0]) : null;
+    if (a && dist(a.x, a.y, cx, cy) <= 600) return a;
+    return S.points.filter(p => !cmdOwned(p)).sort((a, b) => dist(a.x, a.y, cx, cy) / Math.sqrt(a.vp) - dist(b.x, b.y, cx, cy) / Math.sqrt(b.vp))[0] || null;
+  };
+  if (C.crisis) {
+    if (C.crisis.key) return;
+    // 集中目标已夺取：态势好转则恢复多路发展，否则转向下一个目标
+    if (vpShare() >= .3 || now >= C.peak * .6 || C.ph === 'cons') { C.crisis = null; chatSay('p', `判断：态势好转，在岸兵力 ${now} 人，据点分值 ${Math.round(vpShare() * 100)}%。决心：恢复多路发展。`, { kind: 'plan' }); return; }
+    const nx = pickT();
+    if (!nx) return;
+    C.crisis.key = nx.key;
+    chatSay('p', `命令：残余兵力继续集中使用，转向${nx.name}。`, { kind: 'order', at: nx });
+    return;
+  }
+  if (S.t < 150 || now >= C.peak * .45 || vpShare() >= .3 || C.ph === 'cons') return;
+  const tg = pickT();
+  if (!tg) return;
+  C.crisis = { t: S.t, key: tg.key };
+  const lossPct = Math.round((1 - now / C.peak) * 100), at = { x: tg.x, y: tg.y };
+  chatSay('p', `判断：${cmdHT()}，在岸兵力仅 ${now} 人，较峰值减少 ${lossPct}%，累计伤亡 ${S.stats.lost} 人；据点分值仅 ${Math.round(vpShare() * 100)}%，已无力多路进攻。`, { kind: 'plan', at });
+  const rein = [];
+  if (S.assets.reserve > 0 && !S.rlines.length) {
+    const sh = S.ships.filter(o => o.state === 'beached' && o.bx != null).sort((a, b) => dist(a.bx, a.by, cx, cy) - dist(b.bx, b.by, cx, cy))[0];
+    if (cmdAll() && sh && S.assets.rline > 0 && typeof buildRLine === 'function' && buildRLine(sh)) { S.rlines[S.rlines.length - 1].cmd = 1; rein.push(`开辟增援线，后备队 ${S.assets.reserve} 人经${cmdBN(cmdBeachOf(sh.bx, 200))}上陆补充`); }
+    else if (!cmdAll() && sh) rein.push(`请求开辟增援线，后备队 ${S.assets.reserve} 人待命（增援线由您直接指挥）`);
+  }
+  chatSay('p', `决心：停止多路进攻，残余兵力集中于${tg.name}方向，夺取后再图发展${rein.length ? '；' + rein.join('；') : ''}。`, { kind: 'plan', at, delay: 1.5 });
+}
+
 // —— 态势报告 ——
 function cmdSitrep(C) {
   if (S.t < C.sitT) return;
@@ -1127,7 +1168,7 @@ function cmdECounters(E) {
     if (c.st === 'go' && c.piece && S.t - c.t > 14 && (lostN >= c.men0 * .35 || broke)) {
       c.st = 'mass'; c.mT = S.t;
       E.mass = { key: k, t: S.t };
-      chatSay('e', `报告：对${p.name}的反冲击各组未能协同，逐次投入，已伤亡 ${lostN} 人，攻击受挫。`, { kind: 'friction', at: p });
+      chatSay('e', `报告：对${p.name}的反冲击各组未能协同，逐次投入，${lostN ? `已伤亡 ${lostN} 人，攻击受挫` : '遭敌火力压制被迫后撤'}。`, { kind: 'friction', at: p });
       chatSay('e', `补救：停止逐次反击，残部就地隐蔽；向${p.name}集中预备队，待兵力与炮火到位后统一反冲击。`, { kind: 'remedy', at: p, delay: 4 });
     } else if (c.st !== 'mass' && S.t - c.t > 45 && p.owner === 'p' && (lostN >= c.men0 * .5 || broke)) {
       c.end = S.t; E.fails++;
@@ -1169,11 +1210,11 @@ function cmdEEvents(E, o) {
     chatSay('e', `命令：抽调 ${r.teams.length} 组组成袭扰分队，渗透破袭敌${CMD_RAID[r.kind] || '后方'}（${gridRef(r.tx, r.ty)}）。`, { kind: 'order', at: { x: r.tx, y: r.ty }, lv: 1 });
   }
   // 装甲车
-  const going = (S.armor || []).filter(a => !a.dead && a.mode === 'go' && a.order && a.order.k);
-  for (const a of going) if (E.cars[a.id] !== a.order.k) {
-    E.cars[a.id] = a.order.k;
-    const p = cmdPt(a.order.k), home = cmdPt(a.home);
-    chatSay('e', `命令：装甲车自${home ? home.name : '后方'}出动，支援${p ? p.name : '前沿'}方向${p && p.owner === 'p' ? '反冲击' : '防御'}。`, { kind: 'order', at: a, key: 'car' + a.id, gap: 40, lv: 1 });
+  const going = (S.armor || []).filter(a => !a.dead && a.mode === 'go' && a.order && a.order.k && E.cars[a.id] !== a.order.k), grp = {};
+  for (const a of going) { E.cars[a.id] = a.order.k; const g = a.home + '>' + a.order.k; (grp[g] = grp[g] || []).push(a); }
+  for (const g in grp) {
+    const a = grp[g][0], p = cmdPt(a.order.k), home = cmdPt(a.home), n = grp[g].length;
+    chatSay('e', `命令：装甲车${n > 1 ? ` ${n} 辆` : ''}自${home ? home.name : '后方'}出动，支援${p ? p.name : '前沿'}方向${p && p.owner === 'p' ? '反冲击' : '防御'}。`, { kind: 'order', at: a, key: 'car' + g, gap: 40, lv: 1 });
   }
   if (Array.isArray(S.veh)) {
     const ev = S.veh.filter(v => v.side === 'e' && !v.dead && v.order && v.order.t && v.order.t !== 'hold');

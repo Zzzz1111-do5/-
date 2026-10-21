@@ -195,6 +195,7 @@ function sbxPresetDef() {
   const A = typeof A3D === 'object' ? A3D[S.level] || A3D.hard : { cars: 0 }, towns = ['T1', 'T2'].map(ptByKey).filter(Boolean);
   for (let k = 0; k < A.cars && towns.length; k++) { const tw = towns[k % towns.length], s = sbxSnap(tw.x + (k > 1 ? 30 : -20), tw.y - 40); if (s) add({ cat: 'e_car', x: s.x, y: s.y }); }
   for (let k = 0; k < D.waves; k++) add({ cat: 'e_wave', t: Math.round(D.waveEvery * .6 + k * D.waveEvery), n: D.waveSize });
+  sbxFitBudget('e');
   sbxSync();
   sbxSay('e', `采用「标准布防」（${D.name}）：每处海滩一线设铁丝网、障碍、雷区与碉堡，岬角配岸防重炮，据点各有守备，两镇驻机动预备队。共 ${sbxSpent('e')} 点。`, 'plan');
 }
@@ -216,8 +217,15 @@ function sbxPresetFleet() {
   for (let k = 0; k < 3; k++) add({ cat: 'p_reserve' });
   for (let k = 0; k < 2; k++) add({ cat: 'p_rline' });
   for (let k = 0; k < 2; k++) add({ cat: 'p_smoke' });
+  sbxFitBudget('p');
   sbxSync();
-  sbxSay('p', `采用「标准舰队」：两个突击编队各 5 艘登陆艇、3 艘补给舰、驱逐舰与航母联队，登陆舰由自动指挥择滩。共 ${sbxSpent('p')} 点。`, 'plan');
+  const nk = k => O.ships.filter(s => s.kind === k).length, am = sbxOf('veh').filter(it => it.side === 'p').length;
+  sbxSay('p', `采用「标准舰队」：登陆艇 ${nk('assault')} 艘分两个突击编队、补给舰 ${nk('supply')} 艘` + (nk('lst') ? `、坦克登陆舰 ${nk('lst')} 艘` : '') + (am ? `、两栖坦克 ${am} 辆` : '') + `，驱逐舰与航母联队支援，登陆舰由自动指挥择滩。共 ${sbxSpent('p')} 点。`, 'plan');
+}
+// 预设可能超出当前预算：按 250 取整抬高预算
+function sbxFitBudget(side) {
+  const sp = sbxSpent(side);
+  if (sp > S.sbx.budget[side]) S.sbx.budget[side] = Math.min(6000, Math.ceil(sp / 250) * 250);
 }
 function sbxSnap(x, y, cls) {
   x = clamp(x, 10, W - 10); y = clamp(y, 10, H - 10);
@@ -491,6 +499,13 @@ const sbxNearPt = (x, y, f) => S.points.filter(f || (() => true)).sort((a, b) =>
 const sbxPerp = (x0, y0, x1, y1) => { const l = dist(x0, y0, x1, y1) || 1, nx = -(y1 - y0) / l, ny = (x1 - x0) / l; return ny > 0 ? [-nx, -ny] : [nx, ny]; };   // 指向北（内陆）的法向
 function sbxSpot(x, y, cls) { if (passInf(x, y)) return { x, y }; const j = nearestPassable(ci(x, y), cls || 'e'); return j < 0 ? { x, y } : { x: cellCX(j), y: cellCY(j) }; }
 const SBX_LBL = {};
+// 堑壕折线：两点连线按型号加折（之字形折幅更大）
+function sbxTrenchPts(it, s) {
+  if (it.pts) return it.pts;
+  const x = it.x, y = it.y, [nx, ny] = sbxPerp(x, y, it.x2, it.y2), st = s.zz ? 26 : 22, n = Math.max(1, Math.round(dist(x, y, it.x2, it.y2) / st)), a = s.zz ? 12 : 6, pts = [];
+  for (let k = 0; k <= n; k++) { const o = (k % 2 ? 1 : -1) * (k && k < n ? a : 0); pts.push([lerp(x, it.x2, k / n) + nx * o, lerp(y, it.y2, k / n) + ny * o]); }
+  return pts;
+}
 
 function sbxSpawn(it, role, acc) {
   const c = sbxEntry(it);
@@ -514,12 +529,7 @@ function sbxSpawn(it, role, acc) {
     const n = it.n ?? s.n;
     for (let k = 0; k < n; k++) S.obst.push({ id: S.nid++, x: x + (k - (n - 1) / 2) * (s.sp || 14) + gauss() * 2, y: y + gauss() * 3, known: false, dead: false });
   } else if (s.kind === 'trench') {
-    let pts = it.pts;
-    if (!pts) {
-      const [nx, ny] = sbxPerp(x, y, it.x2, it.y2), st = s.zz ? 26 : 22, n = Math.max(1, Math.round(dist(x, y, it.x2, it.y2) / st)), a = s.zz ? 12 : 6;
-      pts = [];
-      for (let k = 0; k <= n; k++) { const o = (k % 2 ? 1 : -1) * (k && k < n ? a : 0); pts.push([lerp(x, it.x2, k / n) + nx * o, lerp(y, it.y2, k / n) + ny * o]); }
-    }
+    const pts = sbxTrenchPts(it, s);
     S.trench.push({ id: S.nid++, pts, known: false });
     if (s.ditch) for (let k = 1; k < pts.length; k++) {
       const [x0, y0] = pts[k - 1], [x1, y1] = pts[k], m = Math.max(1, Math.round(dist(x0, y0, x1, y1) / 14));
@@ -1041,7 +1051,7 @@ body.sbx-edit #bottom { grid-template-columns: minmax(0, 1fr) auto; pointer-even
 .sbx-row input { width: 92px; background: rgba(0, 0, 0, .3); border: 1px solid var(--line); border-radius: 4px; color: var(--g); padding: 3px 6px; font: 12px var(--f-ui, monospace); }
 .sbx-lv { display: inline-flex; gap: 3px; }
 .sbx-notes { border: 1px solid var(--line); border-radius: 4px; padding: 2px 8px; } .sbx-notes summary { cursor: pointer; color: var(--g-mid); padding: 2px 0; }
-.sbx-notes ol { margin: 2px 0 4px; padding-left: 16px; max-height: 150px; overflow-y: auto; line-height: 1.45; } .sbx-notes li { margin: 2px 0; }
+.sbx-notes ol { margin: 2px 0 4px; padding-left: 24px; max-height: 150px; overflow-y: auto; line-height: 1.45; } .sbx-notes li { margin: 2px 0; }
 .sbx-go { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 .sbx-go button { background: transparent; border: 1px solid var(--g); color: var(--g); border-radius: 5px; padding: 8px 6px; font-weight: 600; box-shadow: 0 0 12px rgba(61, 255, 138, .25); }
 .sbx-go button.alt { border-color: var(--intel); color: var(--intel); box-shadow: 0 0 12px rgba(92, 200, 255, .2); }
@@ -1064,7 +1074,7 @@ function sbxUI() {
     <div class="sbx-info"></div><div class="sbx-msg" role="status"></div><div class="sbx-list"></div>
     <div class="sbx-row"><button type="button" data-act="preset"></button><button type="button" class="ai" data-act="ai">AI 帮我部署</button><button type="button" data-act="clear">清空</button></div>
     <div class="sbx-row"><input type="text" inputmode="numeric" aria-label="地图种子" class="sbx-seedin"><button type="button" data-act="map">新地图</button><span class="sbx-lv" role="radiogroup" aria-label="守军 AI 水平"></span></div>
-    <details class="sbx-notes" open><summary>部署思路</summary><ol></ol></details>
+    <details class="sbx-notes" open><summary>部署思路</summary><p class="sbx-hint">点「AI 帮我部署」，由高级指挥官按地形判读完成部署并说明理由。</p><ol></ol></details>
     <div class="sbx-go"><button type="button" data-act="spectate">观战：AI 对 AI</button><button type="button" class="alt" data-act="command">指挥进攻方</button></div>
     <div class="sbx-hint">左键放置 · 右键 / Delete 移除 · 拖动已放置的条目可移位 · Esc 取消 · 滚轮缩放、中键拖动平移</div>`;
   ($('stage') || document.body).appendChild(el);
@@ -1079,7 +1089,7 @@ function sbxUI() {
     else if (b.dataset.rm) { const it = S.sbx.items.find(o => o.id === +b.dataset.rm); if (it) { sbxRemove(it); sbxMsg('已移除' + sbxEntry(it).name); } }
     else if (b.dataset.lv) { S.level = b.dataset.lv; if (typeof U === 'object') U.level = S.level; }
     else if (a === 'bud-' || a === 'bud+') S.sbx.budget[SBX.side] = clamp(S.sbx.budget[SBX.side] + (a === 'bud+' ? 250 : -250), 250, 6000);
-    else if (a === 'preset') { if (SBX.side === 'e') sbxPresetDef(); else sbxPresetFleet(); sbxMsg('已载入标准部署'); }
+    else if (a === 'preset') { const b0 = S.sbx.budget[SBX.side]; if (SBX.side === 'e') sbxPresetDef(); else sbxPresetFleet(); sbxMsg(`已载入标准部署（${sbxSpent(SBX.side)} 点）` + (S.sbx.budget[SBX.side] > b0 ? `，预算已调至 ${S.sbx.budget[SBX.side]}` : '')); }
     else if (a === 'ai') { const r = SBX.side === 'e' ? sbxAIDefend() : sbxAIAttack(); sbxMsg(SBX.side === 'e' ? `守方指挥官判断主攻方向：${r.join('、')}` : `攻方指挥官：主攻${r.main}${r.feint ? '，佯攻' + r.feint : ''}`); }
     else if (a === 'clear') { sbxClear(SBX.side); sbxMsg('已清空' + (SBX.side === 'e' ? '防守方' : '进攻方')); }
     else if (a === 'map') { const v = parseInt(el.querySelector('.sbx-seedin').value, 10); openSandbox(isFinite(v) && v > 0 && v !== S.seed ? v : (Math.random() * 1e9) | 0, true); return; }
@@ -1148,7 +1158,9 @@ function sbxRender() {
   q('.sbx-list').innerHTML = [...grp].map(([id, list]) => { const c = catalogById(id); return `<button type="button" data-rm="${list[list.length - 1].id}" title="移除一项：${sbxEsc(c.name)}">${sbxIc(c)}${sbxEsc(c.name)}${list.length > 1 ? ' ×' + list.length : ''}<i>×</i></button>`; }).join('');
   q('[data-act="preset"]').textContent = side === 'e' ? '标准布防' : '标准舰队';
   q('.sbx-lv').innerHTML = SBX_LV.map(([k, n]) => `<button type="button" role="radio" data-lv="${k}" class="${S.level === k ? 'on' : ''}" aria-checked="${S.level === k}" title="守军 AI 水平（士气、射击精度、反应速度）">${n}</button>`).join('');
-  q('.sbx-notes ol').innerHTML = (S.sbx.notes[side] || []).map(t => `<li>${sbxEsc(t)}</li>`).join('') || '<li class="sbx-hint">点「AI 帮我部署」，由高级指挥官按地形判读完成部署并说明理由。</li>';
+  const ns = S.sbx.notes[side] || [];
+  q('.sbx-notes ol').innerHTML = ns.map(t => `<li>${sbxEsc(t)}</li>`).join('');
+  q('.sbx-notes ol').hidden = !ns.length; q('.sbx-notes .sbx-hint').hidden = !!ns.length;
   const m = q('.sbx-msg'); m.textContent = SBX.msg; m.classList.toggle('bad', !!SBX.msgBad);
 }
 
@@ -1291,7 +1303,7 @@ function sbxGlyph(ctx, c, x, y, col, a, it, ghost) {
       break;
     }
     case 'wire': case 'trench': {
-      const x2 = it ? it.x2 : x, y2 = it ? it.y2 : y, P = it && it.pts ? it.pts : [[x, y], [x2, y2]];
+      const x2 = it ? it.x2 : x, y2 = it ? it.y2 : y, P = it && it.pts ? it.pts : c.arch === 'trench' && it && dist(x, y, x2, y2) > 1 ? sbxTrenchPts(it, s) : [[x, y], [x2, y2]];
       if (c.arch === 'trench') {
         ctx.lineWidth = Math.max(px(2.5), 3.5); ctx.strokeStyle = rgba(col, .35 * a);
         ctx.beginPath(); P.forEach(([px_, py_], k) => k ? ctx.lineTo(px_, py_) : ctx.moveTo(px_, py_)); ctx.stroke();
@@ -1355,7 +1367,7 @@ function sbxGlyph(ctx, c, x, y, col, a, it, ghost) {
     }
     case 'sortie': {
       const r = s.r || 70;
-      ctx.setLineDash([px(4), px(4)]); ctx.beginPath(); ctx.arc(x, y, r, 0, 6.283); ctx.stroke(); ctx.setLineDash([]);
+      ctx.globalAlpha = a * .4; ctx.setLineDash([px(3), px(5)]); ctx.beginPath(); ctx.arc(x, y, r, 0, 6.283); ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = a;
       line(x - u, y, x + u, y); line(x, y - u, x, y + u);
       break;
     }
