@@ -184,16 +184,17 @@ button:disabled { cursor: not-allowed; opacity: .3; }
 <div class="modal" id="brief" hidden>
   <div class="sheet">
     <h1>BEACHHEAD<small>滩头沙盘 · 作战简报</small></h1>
-    <p>你是登陆指挥官。舰队已在集结海域：6 艘突击登陆舰（每艘一个连，5 个三人组）、2 艘补给登陆舰（4 个三人组 + 工兵）、驱逐舰 DD-17，另有侦察、空袭、烟幕与增援。战斗开始前先排兵布阵：在集结海域里摆好舰队，给每艘船预定登陆点，选好上岸后的阵型。</p>
+    <p>你是登陆指挥官。舰队已在集结海域：10 艘突击登陆舰 LA-1～10（每艘一个连，5 个三人组）、3 艘补给登陆舰 LS-1～3（4 个三人组 + 工兵）、坦克登陆舰 LT-1（2 辆中型坦克 + 1 辆装甲运兵车）、4 辆自航泅渡的两栖坦克、驱逐舰 DD-17 与一艘航母，另有侦察、空袭、近距空中支援、烟幕与增援线。H 时之前先排兵布阵：在集结海域里摆好舰队，右键海岸给每艘船预定登陆点，选好上岸后的阵型。</p>
     <div class="legend" id="legend"></div>
     <div class="keys">
       <span><kbd>左键</kbd> 选择 · 拖框多选</span><span><kbd>右键</kbd> 移动 · <b>拖拽定宽与朝向</b></span>
-      <span><kbd>A</kbd> 攻击前进 · <kbd>Q</kbd> 冲锋</span><span><kbd>H</kbd> 坚守 · <kbd>X</kbd> 撤退</span>
+      <span><kbd>M</kbd> 移动 · <kbd>A</kbd> 攻击前进 · <kbd>Q</kbd> 冲锋</span><span><kbd>H</kbd> 坚守 · <kbd>X</kbd> 撤退</span>
       <span><kbd>Z</kbd> 横队 · <kbd>C</kbd> 三三制 · <kbd>B</kbd> 散开</span><span><kbd>Ctrl+1–9</kbd> 编组 · <kbd>1–9</kbd> 调出</span>
-      <span><kbd>F</kbd> 舰炮 · <kbd>S</kbd> 烟幕 · <kbd>D</kbd> 选驱逐舰</span><span><kbd>R</kbd> 侦察 · <kbd>T</kbd> 空袭 · <kbd>E</kbd> 增援线</span>
-      <span><kbd>N</kbd> 工兵排雷剪网</span><span><kbd>空格</kbd> 暂停 · 滚轮缩放 · 中键拖动</span>
+      <span><kbd>F</kbd> 舰炮 · <kbd>S</kbd> 烟幕 · <kbd>D</kbd> 选驱逐舰 · <kbd>G</kbd> 驱逐舰自动</span><span><kbd>R</kbd> 侦察 · <kbd>T</kbd> 空袭 · <kbd>V</kbd> 近距支援 · <kbd>E</kbd> 增援线</span>
+      <span><kbd>K</kbd> 选航母 · <kbd>J</kbd> 航母自动</span><span><kbd>U</kbd> 选中单位自动 / 手动 · <kbd>N</kbd> 工兵排雷剪网</span>
+      <span><kbd>Enter</kbd> H 时开始登陆 · <kbd>L</kbd> 通讯面板</span><span><kbd>空格</kbd> 暂停 · <kbd>Esc</kbd> 菜单 · 滚轮缩放 · 中键拖动</span>
     </div>
-    <p class="keys">侧翼和背后受到攻击会让部队士气崩溃；战壕只挡正面（海面方向）的火力；冲锋前先用机枪和舰炮压住敌人。全部据点同时控制 30 秒即胜利。</p>
+    <p class="keys">侧翼和背后受到攻击会让部队士气崩溃；战壕只挡正面（海面方向）的火力；冲锋前先用机枪和舰炮压住敌人。只有步兵能占领据点，车辆只能争夺。夺取指挥所并控制七成以上据点分值，坚守 30 秒即胜利。</p>
     <div class="diff" id="diff" role="radiogroup" aria-label="守军 AI 难度">
       <button type="button" role="radio" data-lv="normal">普通<small>守军较少，士气易崩</small></button>
       <button type="button" role="radio" data-lv="hard">困难<small>纵深防御，集火、提前量</small></button>

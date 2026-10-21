@@ -65,13 +65,13 @@ function buildHud() {
   for (const [, list] of BTN) for (const [k, , , fn] of list) $('b-' + k).addEventListener('click', fn);
   $('btnPause').addEventListener('click', togglePause);
   $('btnSpeed').addEventListener('click', () => { S.speed = S.speed === 1 ? 2 : S.speed === 2 ? 4 : 1; updateHud(); });
-  $('btnHelp').addEventListener('click', () => { $('brief').hidden = false; });
+  $('btnHelp').addEventListener('click', () => { if (S.phase === 'battle' && !S.over && !S.paused) S.paused = U.helpPause = true; $('brief').hidden = false; updateHud(); });   // 战斗中看帮助先暂停，关闭后恢复
   $('btnStart').addEventListener('click', () => { startBattle(); updateHud(); });
   $('zIn').addEventListener('click', () => camZoomAt(CAM.vw / 2, CAM.vh / 2, 1.3));
   $('zOut').addEventListener('click', () => camZoomAt(CAM.vw / 2, CAM.vh / 2, .77));
   $('zFit').addEventListener('click', () => { CAM.z = CAM.fit; camClamp(); });
   for (const b of document.querySelectorAll('#diff button')) b.addEventListener('click', () => { U.level = b.dataset.lv; updateHud(); });
-  $('btnBrief').addEventListener('click', () => { if (S.phase === 'deploy' && S.level !== U.level) restart(false); S.briefed = true; $('brief').hidden = true; updateHud(); });
+  $('btnBrief').addEventListener('click', () => { if (S.phase === 'deploy' && S.level !== U.level) restart(false); S.briefed = true; $('brief').hidden = true; if (U.helpPause) { U.helpPause = false; if (S.phase === 'battle' && !S.over) S.paused = false; } updateHud(); });
   $('btnNew').addEventListener('click', e => {
     const b = e.currentTarget;
     if (b.dataset.armed) { restart(true); return; }
@@ -100,7 +100,7 @@ function restart(briefed) {
   // 新战局 / 再来一局：回到开始界面，由菜单重新选择模式与难度
   if (briefed === true && typeof showMenu === 'function') { delete $('btnNew').dataset.armed; $('btnNew').classList.remove('hot'); showMenu(); return; }
   newGame(undefined, U.level);
-  S.briefed = briefed; U.tool = null; U.logKey = null; U.cardKey = null; MX.seed = null;
+  S.briefed = briefed; U.tool = null; U.logKey = null; U.cardKey = null; U.helpPause = false; MX.seed = null;
   mmInit($('mm')); updateVision();
   CAM.x = W / 2; CAM.y = STAGING_Y + 120; CAM.z = CAM.fit * 2.2; camClamp();
   delete $('btnNew').dataset.armed;

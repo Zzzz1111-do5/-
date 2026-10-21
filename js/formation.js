@@ -86,8 +86,10 @@ function deployOrder(ships, dd, x, y, cv) {
     if (zone) {
       const nx = clamp(x + k, 15, W - 15), ny = clamp(y + (i % 2) * 14, STAGING_Y + 10, H - 12);
       if (typeAt(nx, ny) === T.DEEP) Object.assign(s, { x: nx, y: ny, tx: nx, ty: ny, plan: null });
-    } else s.plan = { x: clamp(x + k, 8, W - 8), y };
+    } else if (s.kind === 'dd' && isLand(x + k, y)) { const j = ddStand(clamp(x + k, 8, W - 8)); s.plan = { x: cellCX(j), y: cellCY(j) }; }   // 护航舰不领登陆计划：改为滩头外海阵位
+    else s.plan = { x: clamp(x + k, 8, W - 8), y };
   });
+  if (ships.length && !zone && !isLand(x, y) && !landingPoint(x, y, 40)) log('该点不在滩头，舰船将停在海面', 'info', 'noplan', 2);
   if (dd) {
     if (zone) Object.assign(S.dd, { x, y: clamp(y, STAGING_Y + 10, H - 12), tx: x, ty: y, plan: null });
     else if (!isLand(x, y)) S.dd.plan = { x, y };

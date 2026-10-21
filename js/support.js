@@ -9,6 +9,14 @@ function orderDD(x, y) {
   return true;
 }
 
+// 打了就走：指挥官补救后（dd.scoot）每次齐射立即机动 70 以上，躲开随后落下的反炮兵炮弹
+function ddScoot(dd) {
+  if (typeof cmdCtl === 'function' && !cmdCtl(dd)) return;
+  for (let k = 0; k < 8; k++) {
+    const a = Math.random() * 6.283, nx = clamp(dd.x + Math.cos(a) * 80, 60, W - 60), ny = clamp(dd.y + Math.sin(a) * 80, 60, H - 70);
+    if (typeAt(nx, ny) === T.DEEP && dist(nx, ny, dd.x, dd.y) > 70) { orderDD(nx, ny); return; }
+  }
+}
 function ddFire(tx, ty, smoke) {
   const dd = S.dd;
   if (dd.state !== 'ready' || dd.cool > 0) {
@@ -22,6 +30,7 @@ function ddFire(tx, ty, smoke) {
   fireShell(dd.x, dd.y, tx + gauss() * sc, ty + gauss() * sc, 'p', smoke ? 'smoke' : 'naval', 2.2, false);
   if (smoke) S.assets.smoke--;
   dd.cool = 5; S.stats.shots++;
+  if (dd.scoot && !smoke) ddScoot(dd);
   S.fx.push({ kind: 'flash', x: dd.x, y: dd.y, r: 16, life: 0, max: .5, side: 'p' });
   if (Math.random() < .7) {
     dd.exposedUntil = S.t + 6; S.stats.exposed++;
@@ -35,9 +44,11 @@ function ddFire(tx, ty, smoke) {
   return true;
 }
 
-function damageDD() {
+// hit：命中来源 {kind:'cb'|'coastal'|'arty', x, y}（发射点），供指挥官判明火力来源
+function damageDD(hit) {
   const dd = S.dd;
   if (dd.state === 'sunk') return;
+  dd.lastHit = { kind: 'arty', ...hit, t: S.t };
   dd.hull--;
   S.fx.push({ kind: 'boom', x: dd.x, y: dd.y, r: 30, life: 0, max: 1.2, side: 'p' });
   if (dd.hull <= 0) { dd.state = 'sunk'; dd.moving = false; log('驱逐舰第三次中弹沉没，舰炮掩护永久丧失', 'bad'); return; }
@@ -77,12 +88,12 @@ function updateShells(dt) {
   for (const s of S.shells) {
     if ((s.t += dt) < s.dur) continue;
     s.done = true;
-    if (s.kind === 'cb') { if (dist(s.x1, s.y1, S.dd.x, S.dd.y) < 45) damageDD(); else impact(s.x1, s.y1, POWER.mortar, 'e'); }   // 机动中的驱逐舰可以躲开反炮兵射击
+    if (s.kind === 'cb') { if (dist(s.x1, s.y1, S.dd.x, S.dd.y) < 45) damageDD({ kind: 'cb', x: s.x0, y: s.y0 }); else impact(s.x1, s.y1, POWER.mortar, 'e'); }   // 机动中的驱逐舰可以躲开反炮兵射击
     else if (s.kind === 'smoke') {
       S.smoke.push({ x: s.x1, y: s.y1, r: 65, until: S.t + 35 });
       S.fx.push({ kind: 'flash', x: s.x1, y: s.y1, r: 20, life: 0, max: .6, side: 'p' });
       S.visT = 0;
-    } else impact(s.x1, s.y1, POWER[s.kind], s.side);
+    } else impact(s.x1, s.y1, POWER[s.kind], s.side, s);
   }
   S.shells = S.shells.filter(s => !s.done);
   S.smoke = S.smoke.filter(s => s.until > S.t);

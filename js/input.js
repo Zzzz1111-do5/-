@@ -83,11 +83,15 @@ function bindInput() {
   window.addEventListener('blur', () => KEYS.clear());
   window.addEventListener('keydown', e => {
     if (e.target.closest && e.target.closest('input,textarea,select')) return;
+    // 简报 / 结算浮层打开时游戏快捷键不穿透：简报上 Enter / Esc = 进入部署（或关闭帮助）；结算上只放行 Esc / F10（菜单）
+    const bf = $('brief'), en = $('end');
+    if (bf && !bf.hidden) { if ((e.key === 'Enter' && !(e.target.closest && e.target.closest('#diff'))) || e.key === 'Escape') { e.preventDefault(); $('btnBrief').click(); } return; }
+    if (en && !en.hidden) { if (e.key === 'Escape' || e.key === 'F10') runHook('key', e); return; }
     if (e.key.startsWith('Arrow')) { KEYS.add(e.key); e.preventDefault(); return; }
     if (runHook('key', e)) return;
     const k = e.key.toUpperCase();
     if (e.code === 'Space') { e.preventDefault(); togglePause(); }
-    else if (k === 'ENTER') startBattle(), updateHud();
+    else if (k === 'ENTER') { e.preventDefault(); startBattle(); updateHud(); }   // 阻止默认：不再顺带点击有焦点的 HUD 按钮
     else if (/^Digit[1-9]$/.test(e.code)) { e.preventDefault(); const n = e.code.slice(5); e.ctrlKey || e.metaKey || e.altKey ? assignGroup(n) : selectGroup(n); }
     else if (k === 'ESCAPE') { U.tool = null; S.sel = []; updateHud(); }
     else if (k === '=' || k === '+') camZoomAt(CAM.vw / 2, CAM.vh / 2, 1.25);

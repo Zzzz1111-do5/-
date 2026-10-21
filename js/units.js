@@ -2,9 +2,9 @@
 // 单位（一）：舰船航行与抢滩、步兵指令、三三制队形、寻路移动、雷区/铁丝网、工兵作业
 
 // —— 舰船 ——
-function landingPoint(x, y) {
-  let best = null, bd = 140;
-  eachCellIn(x, y, 140, i => {
+function landingPoint(x, y, r = 140) {
+  let best = null, bd = r;
+  eachCellIn(x, y, r, i => {
     if (TER.type[i] !== T.BEACH) return;
     const bx = cellCX(i), by = cellCY(i), d = dist(bx, by, x, y);
     if (d >= bd) return;
@@ -16,6 +16,8 @@ function landingPoint(x, y) {
   return best;
 }
 
+// 护航舰火力支援阵位：岸线外约 250 的海面格
+const ddStand = x => nearestPassable(ci(x, clamp(coastAt(x) + 250, 8, H - 8)), 'ship');
 function orderShips(ships, x, y) {
   ships = ships.filter(s => s.state === 'idle' || s.state === 'move');
   if (!ships.length) return 0;
@@ -26,12 +28,15 @@ function orderShips(ships, x, y) {
   ships.forEach((s, i) => {
     const k = (i - (ships.length - 1) / 2) * 30, tx = clamp(x + px * k, 8, W - 8), ty = clamp(y + py * k, 8, H - 8);
     s.land = false;
-    if (isLand(tx, ty) && s.kind === 'dd') { const j = nearestPassable(ci(tx, ty), 'ship'); s.tx = cellCX(j); s.ty = cellCY(j); }   // 护航舰不抢滩，停在近岸海面
+    if (isLand(tx, ty) && s.kind === 'dd') { const j = ddStand(tx); s.tx = cellCX(j); s.ty = cellCY(j); }   // 护航舰不抢滩，停在滩头外火力支援阵位
     else if (isLand(tx, ty)) {
       const lp = landingPoint(tx, ty);
       if (lp) Object.assign(s, { land: true, tx: lp.sx, ty: lp.sy, bx: lp.bx, by: lp.by });
       else { blocked++; const j = nearestPassable(ci(tx, ty), 'ship'); s.tx = cellCX(j); s.ty = cellCY(j); }
-    } else { s.tx = tx; s.ty = ty; }
+    } else {
+      const lp = s.kind !== 'dd' && !s.sbxRole && landingPoint(tx, ty, 40);   // 点在海岸线外沿的浅水里（距滩头 40 内）仍按抢滩处理，不在水线边空停
+      if (lp) Object.assign(s, { land: true, tx: lp.sx, ty: lp.sy, bx: lp.bx, by: lp.by }); else { s.tx = tx; s.ty = ty; }
+    }
     s.state = 'move';
   });
   if (blocked) log('目标处是悬崖或礁岸，无法抢滩，舰船将停在近岸海面', 'warn', 'noland', 2);

@@ -128,7 +128,7 @@ function cdxBuild() {
     const b = e.target.closest('[data-go]'); if (!b) return;
     const c = cdxById(b.dataset.go);
     if (c) { CDX.cat = 'all'; CDX.side = 'all'; CDX.q = ''; q('input').value = ''; cdxRender(); cdxSelect(c.id, true); }
-    else { CDX.q = cdxArch(b.dataset.go); q('input').value = CDX.q; CDX.cat = 'all'; cdxRender(); }
+    else { CDX.q = cdxArch(b.dataset.go); q('input').value = CDX.q; CDX.cat = 'all'; CDX.side = 'all'; cdxRender(); }   // 克制关系常跨阵营：清除阵营筛选
   });
   return el;
 }

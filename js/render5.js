@@ -126,7 +126,7 @@ function drawPlans(time) {
   for (const b of TER.beaches) {   // 可登陆海滩：岸线上的绿色箭头
     for (let x = b.x0 + 10; x < b.x1; x += 22) { const y = coastAt(x) + 14; ctx.strokeStyle = rgba(COL.g, .55); ctx.beginPath(); ctx.moveTo(x - 4, y + 4); ctx.lineTo(x, y); ctx.lineTo(x + 4, y + 4); ctx.stroke(); }
   }
-  for (const s of S.ships) if (s.plan) arrow(ctx, s.x, s.y, s.plan.x, s.plan.y, rgba(isSel(s.id) ? COL.sel : COL.g, .75));
+  for (const s of S.ships) if (s.plan) arrow(ctx, s.x, s.y, s.plan.x, s.plan.y, rgba(isSel(s.id) ? COL.sel : s.kind === 'dd' ? COL.intel : COL.g, .75));   // 护航舰阵位用情报色，与登陆箭头区分
   if (S.dd.plan) arrow(ctx, S.dd.x, S.dd.y, S.dd.plan.x, S.dd.plan.y, rgba(COL.intel, .75));
 }
 

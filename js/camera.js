@@ -13,8 +13,9 @@ function camFit(vw, vh) {
 function camClamp() {
   CAM.z = clamp(CAM.z, CAM.fit, Math.max(CAM.fit * 12, 4));   // 小屏（手机）全图很小，放大上限至少到每单位 4px，能看清单兵
   // 下方多留出底部面板的高度，航母不会被面板挡住
-  const hw = CAM.vw / 2 / CAM.z, hh = CAM.vh / 2 / CAM.z, bot = 190 / CAM.z;
-  CAM.x = W <= 2 * hw ? W / 2 : clamp(CAM.x, hw, W - hw);
+  // padL：左侧被浮层（沙盒编辑面板）遮住的像素宽，允许向左多卷出这么多，地图西端可移到面板右侧
+  const hw = CAM.vw / 2 / CAM.z, hh = CAM.vh / 2 / CAM.z, bot = 190 / CAM.z, pl = (CAM.padL || 0) / CAM.z;
+  CAM.x = W + pl <= 2 * hw ? (W - pl) / 2 : clamp(CAM.x, hw - pl, W - hw);
   CAM.y = H + bot <= 2 * hh ? (H + bot) / 2 : clamp(CAM.y, hh, H + bot - hh);
   R.s = CAM.z;
   R.ox = CAM.vw / 2 - CAM.x * CAM.z;

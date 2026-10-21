@@ -300,8 +300,9 @@ function startPvE(level) {
 function mnFrameDeploy() {
   const bs = TER.beaches.length ? TER.beaches : [{ cx: W / 2 }], cm = bs.reduce((a, b) => a + coastAt(b.cx), 0) / bs.length;
   const { head, foot } = mnInsets(), top = cm - 70, bot = STAGING_Y + 210;
-  CAM.z = clamp((CAM.vh - head - foot) / (bot - top), CAM.fit, CAM.fit * 2.4);
-  CAM.x = W / 2; CAM.y = top + (CAM.vh / 2 - head) / CAM.z;
+  const x0 = Math.min(...bs.map(b => b.x0 ?? b.cx)) - 60, x1 = Math.max(...bs.map(b => b.x1 ?? b.cx)) + 60;   // 横向也要装下最外侧两个滩头
+  CAM.z = clamp(Math.min((CAM.vh - head - foot) / (bot - top), CAM.vw / Math.max(1, x1 - x0)), CAM.fit, CAM.fit * 2.4);
+  CAM.x = (x0 + x1) / 2; CAM.y = top + (CAM.vh / 2 - head) / CAM.z;
   camClamp();
 }
 // 画布上方 / 下方被 HUD 浮层遮住的高度（H-HOUR 按钮此时还隐藏，临时显示量一下）
@@ -445,7 +446,7 @@ if (typeof onSettings === 'function') onSettings(() => { if (MENU.set && !MENU.s
 HOOK.key.push(e => {
   if (MENU.open || !S) return false;
   if (e.key === 'Escape' && S.briefed && !$('brief').hidden) { $('brief').hidden = true; return true; }   // ？帮助（简报）打开时 Esc 先关它
-  if (e.key === 'F10' || (e.key === 'Escape' && !U.tool && !S.sel.length && !U.fdrag && S.phase !== 'sandbox')) { e.preventDefault(); showMenu(); return true; }
+  if (e.key === 'F10' || (e.key === 'Escape' && !U.tool && !S.sel.length && !U.fdrag && (S.phase !== 'sandbox' || (typeof SBX === 'object' && !SBX.line && !SBX.pick && !SBX.drag)))) { e.preventDefault(); showMenu(); return true; }   // 沙盒编辑：无选中兵种 / 画线 / 拖动时 Esc 也开菜单
   return false;
 });
 

@@ -181,10 +181,17 @@ function checkEnd(dt) {
     S.holdT += dt;
     if (S.holdT >= HOLD) { S.over = 'win'; log('登陆场已巩固，作战胜利', 'good'); return; }
   } else if (S.holdT) { S.holdT = 0; log('有据点被夺回，巩固计时中断', 'bad'); }
-  const forces = S.teams.some(q => q.side === 'p' && q.kind === 'inf') || S.ships.some(s => alive(s) && (s.load.teams > 0 || (s.load.veh && s.load.veh.length > 0))) ||
-    S.boats.length > 0 || (S.assets.reserve > 0 && S.rlines.length > 0) || (S.veh || []).some(v => v.side === 'p' && !v.dead);   // 车辆也算剩余兵力
-  if (!forces) { S.over = 'lose'; log('登陆部队已全部损失', 'bad'); }
-  else if (S.t >= LIMIT) { S.over = 'lose'; log('作战时限已到，未能夺取全部据点', 'bad'); }
+  // 只有步兵能占领据点：车辆（含 LST 上未下的车）不算剩余兵力，否则只剩车辆时要空等到时限
+  const pin = S.teams.filter(q => q.side === 'p' && q.kind === 'inf'), more = S.ships.some(s => alive(s) && s.load.teams > 0) || S.boats.length > 0 ||
+    (S.assets.reserve > 0 && (S.rlines.length > 0 || (S.assets.rline > 0 && S.ships.some(s => alive(s) && s.state === 'beached' && s.bx != null))));   // 预备队还能经增援线上陆
+  if (!pin.length && !more) { S.over = 'lose'; log('登陆步兵已全部损失，车辆无法占领据点', 'bad'); return; }
+  if (S.t >= LIMIT) { S.over = 'lose'; log('作战时限已到，未能夺取全部据点', 'bad'); return; }
+  // 攻势顶点：无后续梯队、在岸步兵不足 2 个组且久无新进展 → 判负
+  const own = S.points.filter(p => p.owner === 'p').length, men = pin.reduce((a, q) => a + q.men.length, 0);
+  if (more || men > 6 || S.holdT || own > (S.culOwn ?? 99)) S.culT = 0; else S.culT = (S.culT || 0) + dt;
+  S.culOwn = own;
+  if (S.culT > 60 && S.culT - dt <= 60) log('在岸步兵所剩无几且无后续梯队，2 分钟内再无进展将判定攻势失败', 'bad');
+  if (S.culT >= 180) { S.over = 'lose'; log('残余兵力已无力夺取据点，攻势到达顶点', 'bad'); }
 }
 
 function step(dt) {

@@ -118,13 +118,19 @@ function sbxPlace(id, x, y, x2, y2, extra) {
   if (!chk.ok) return chk;
   if (chk.host) { chk.host.cargo = (chk.host.cargo || []).concat(id); return { ok: true, it: chk.host }; }
   const s = c.spawn;
-  if (s.kind === 'cv') S.sbx.items = S.sbx.items.filter(it => sbxEntry(it).spawn.kind !== s.kind);   // 航母只有一艘
+  let note = '';
+  if (s.kind === 'cv' && sbxOf('cv').length) {   // 航母只有一艘：替换原航母，超出新机库的舰载机退回
+    S.sbx.items = S.sbx.items.filter(it => sbxEntry(it).spawn.kind !== 'cv');
+    let n = 0;
+    while (sbxWingN() > (s.wing || 0)) { const w = sbxOf('wing').pop(); S.sbx.items = S.sbx.items.filter(o => o !== w); n += sbxEntry(w).spawn.n || 1; }
+    note = '已替换原航母' + (n ? `；舰载机超出新航母机库，已退回 ${n} 架` : '');
+  }
   const pos = s.at === 'none' || s.at === 'air' ? {} : { x: sbxR(x), y: sbxR(y) };
   if (s.at === 'line') Object.assign(pos, { x2: sbxR(x2), y2: sbxR(y2) });
   const it = { id: S.sbx.nid++, cat: id, side: c.side, ...pos, ...(s.kind === 'ship' ? { cargo: [], wave: s.wave || 1 } : {}), ...extra };
   S.sbx.items.push(it);
   sbxSync();
-  return { ok: true, it };
+  return { ok: true, it, note };
 }
 
 // 离 (x,y) 最近的一方条目：舰艇优先卸下最后装载的部队
@@ -295,7 +301,7 @@ function sbxAIDefend() {
   const ord = BS.slice().sort((a, b) => b.L - a.L), nMain = B0 >= 2400 ? 3 : 2, main = ord.slice(0, nMain), rest = ord.slice(nMain);
   const b1 = main[0], dest = B => B.dHQ < 900 ? '指挥所' : B.tw.name;
   say(`判断：${b1.b.name}宽约 ${sbxM(b1.w)} 米，出口道路直通${dest(b1)}，距指挥所约 ${sbxM(b1.dHQ)} 米，最可能是敌主攻方向；${sbxNm(main.slice(1))}次之。` +
-    (rest.length ? `${sbxNm(rest)}${rest.some(B => B.cross) ? '登陆后需渡河' : '离要地较远'}，登陆价值低。` : ''), b1.ex);
+    (rest.length ? [[rest.filter(B => B.cross), '登陆后需渡河'], [rest.filter(B => !B.cross), '离要地较远']].filter(([a]) => a.length).map(([a, t]) => sbxNm(a) + t).join('，') + '，登陆价值低。' : ''), b1.ex);
   // 1. 主防御地带核心
   const belt = (B, rich) => {
     const b = B.b, cx = b.cx, cy = coastAt(cx);
@@ -361,7 +367,8 @@ function sbxAIDefend() {
   let armor = '';
   if (sbxVehOk() && typeof VEH_SPEC === 'object' && VEH_SPEC.tank) { if (sbxTry('e_tank', hub.x + 25, hub.y - 50, 50)) armor = '中型坦克'; }
   else if (sbxTry('e_car', hub.x + 25, hub.y - 50, 50)) armor = '装甲车';
-  say(`预备队：机动预备队集结于${hub.name}，到${main[0].b.name}约 ${sbxM(dist(hub.x, hub.y, main[0].ex.x, main[0].ex.y))} 米、到${main[1].b.name}约 ${sbxM(dist(hub.x, hub.y, main[1].ex.x, main[1].ex.y))} 米，居中可两面驰援${armor ? '；配属' + armor : ''}。判明敌主攻方向后再整体投入，不零敲碎打。`, hub);
+  const hd = main.slice(0, 2).map(B => dist(hub.x, hub.y, B.ex.x, B.ex.y)), mid = Math.max(...hd) <= Math.min(...hd) * 1.5 + 60;   // 两边距离相近才说「居中」
+  say(`预备队：机动预备队集结于${hub.name}，到${main[0].b.name}约 ${sbxM(hd[0])} 米、到${main[1].b.name}约 ${sbxM(hd[1])} 米，${mid ? '居中可两面驰援' : `偏向${main[hd[0] <= hd[1] ? 0 : 1].b.name}，另一方向需提前机动`}${armor ? '；配属' + armor : ''}。判明敌主攻方向后再整体投入，不零敲碎打。`, hub);
   // 5. 指挥所守备、防空
   const hq = BS[0].hq;
   sbxTry('e_garrison', hq.x, hq.y + 20, 40);
@@ -401,6 +408,19 @@ function sbxAIDefend() {
     else sbxTry('e_mines_ap', B.b.x1 - 20, coastAt(B.b.x1 - 20) - 36, 20);
   }
   for (const p of S.points) if (sbxLeft('e') >= 12 && !S.sbx.items.some(it => it.side === 'e' && sbxEntry(it).spawn.kind === 'einf' && dist(it.x, it.y, p.x, p.y) < 90)) sbxTry('e_militia', p.x, p.y + 10, 40, { n: 2 });
+  // 10. 大预算：次要滩头也筑防御地带，主防地带加第二道阵地，增援波次与纵深坦克随预算增加
+  if (k >= 1.6) {
+    const e0 = sbxSpent('e'), up = [];
+    for (const B of rest) if (sbxLeft('e') >= 200) { belt(B, k >= 2.5); up.push(B); }
+    for (let pass = 0; pass < Math.round(2 * k) && sbxLeft('e') >= 80; pass++) for (const B of main) {
+      const x = B.b.cx + ((pass % 3) - 1) * B.w * .3, y = coastAt(x) - 140 - (pass >> 1) * 18;
+      sbxTry(pass % 2 ? 'e_casemate' : 'e_mg_bunker', x, y, 40); sbxTry('e_garrison', x, y - 30, 40);
+    }
+    if (sbxVehOk()) for (let i = 0; i < clamp(Math.round(k - 1.5), 0, 3) && sbxLeft('e') >= 60; i++) sbxTry(i % 2 ? 'e_td' : 'e_tank', hub.x + (i - 1) * 40, hub.y - 70, 60);
+    let nw = 0;
+    while (nw < clamp(Math.round(k), 0, 5) && sbxLeft('e') >= 40 && sbxTry('e_wave', 0, 0)) nw++;
+    if (sbxSpent('e') > e0) say(`纵深加强：${up.length ? sbxNm(up) + '在警戒阵地之外加筑滩头防御地带；' : ''}主防地带后方增筑第二道碉堡线并配守备排${nw ? `；另编增援波次 ${nw} 批，开战后陆续开到受威胁最大的据点` : ''}。`, b1.ex);
+  }
   sbxSync();
   say(`部署完毕：共 ${S.sbx.items.filter(it => it.side === 'e').length} 项，用去 ${sbxSpent('e')} / ${B0} 点。`, null);
   return main.map(B => B.b.name);
@@ -486,11 +506,27 @@ function sbxAIAttack() {
   // 余款：主攻登陆艇补满、追加一艘步兵登陆舰
   for (const it of w1) for (const c of ['p_rifle', 'p_mg', 'p_eng']) { const cap = sbxShipCap(it), ld = sbxShipLoad(it); if (ld.t < cap.t && sbxLeft('p') >= 14) it.cargo.push(c); }
   if (sbxLeft('p') >= 100) { const it = ship('p_lci', M, 1, 2, 1640, ['p_rifle', 'p_rifle', 'p_mg', 'p_marine', 'p_at', 'p_eng', 'p_medic', 'p_rifle'], 1, -90); if (it) w1.push(it); }
+  // 大预算：护航舰分赴主攻 / 佯攻方向外海，第二波步兵登陆舰、佯攻兵力与舰载机随预算增加
+  const esc = [];
+  for (let i = 0; i < clamp(Math.floor(k), 0, 4); i++) {
+    const B = i % 2 && F ? F : M, id = sbxLeft('p') >= 450 ? 'p_dd' : 'p_dd_e';
+    if (sbxLeft('p') < catalogById(id).cost + 40) break;
+    const p = sbxSea(B.b.cx + (i % 2 ? 60 : -170 - i * 20), 1665 + i * 18), r = sbxPlace(id, p.x, p.y);
+    if (r.ok) { r.it.plan = { x: sbxR(B.b.cx + ((i >> 1) - .5) * 80), y: sbxR(coastAt(B.b.cx) + 400) }; esc.push(B); }
+  }
+  for (let i = 0; i < clamp(Math.round(2 * (k - 1.5)), 0, 6) && sbxLeft('p') >= 160; i++) {
+    const it = ship('p_lci', M, i, 6, 1810, ['p_rifle', 'p_marine', 'p_mg', 'p_rifle', 'p_at', 'p_eng', 'p_mortar', 'p_rifle'], 2, 0);
+    if (it) w2.push(it);
+  }
+  if (F) for (let i = 0; i < clamp(Math.round(k - 1.5), 0, 2) && sbxLeft('p') >= 110; i++) { const it = ship('p_lct', F, i + 2, 4, 1600, ['p_rifle', 'p_mg', 'p_rifle', 'p_marine'], 1); if (it) feint.push(it); }
+  if (cv) for (const [id, t] of [['p_air_cas', 'cas'], ['p_air_strike', 'strike'], ['p_air_recon', 'recon'], ['p_air_cas', 'cas'], ['p_air_dive', 'strike'], ['p_air_strike', 'strike']]) { if (sbxWingN() >= sbxWingCap() || sbxLeft('p') < 80) break; buyAir(id, t); }
   sbxSync();
   const men = w1.reduce((a, it) => a + sbxShipLoad(it).t, 0) * 3;
   say(`第一波：${w1.length} 艘突击登陆艇载陆战突击组、工兵、爆破组与机枪组约 ${men} 人` + (nAm ? `，${nAm} 辆两栖坦克随波泅渡` : '') + (sw ? '，扫雷舰先行清除水际障碍' : '') + (rk ? '，火箭艇抢滩前齐射压制滩头' : '') + '。', M.ex);
-  if (w2.length || sup.length) say(`第二波：${w2.length ? (veh ? '坦克登陆舰' : '步兵登陆舰') + ' ' + w2.length + ' 艘与' : ''}补给舰 ${sup.length} 艘在集结海域待命，滩头出口夺取后（最迟 H+2.5 分钟）再靠岸，避免在泊地挤成靶子。`, null);
-  if (dd || cv) say(`火力：${dd ? sbxEntry(dd).name + '前出至' + M.b.name + '外海直接支援' : '无舰炮支援'}；${cv ? `${sbxEntry(cv).name}编 ${air.recon} 架侦察机先行照相、${air.cas} 架对地支援机随叫随到、${air.strike} 架攻击机专打已标定炮位` : '无航空兵'}。`, dd || cv);
+  const nLst = w2.filter(it => it.cat === 'p_lst').length, w2t = [nLst && `坦克登陆舰 ${nLst} 艘`, w2.length - nLst && `步兵登陆舰 ${w2.length - nLst} 艘`].filter(Boolean).join('、');
+  if (w2.length || sup.length) say(`第二波：${w2t ? w2t + '与' : ''}补给舰 ${sup.length} 艘在集结海域待命，滩头出口夺取后（最迟 H+2.5 分钟）再靠岸，避免在泊地挤成靶子。`, null);
+  const escT = esc.length ? `；另有护航舰 ${esc.length} 艘分赴${sbxNm([...new Set(esc)])}外海，对已发现火力点实施舰炮压制` : '';
+  if (dd || cv) say(`火力：${dd ? sbxEntry(dd).name + '前出至' + M.b.name + '外海直接支援' : '无舰炮支援'}${escT}；${cv ? `${sbxEntry(cv).name}编 ${air.recon} 架侦察机先行照相、${air.cas} 架对地支援机随叫随到、${air.strike} 架攻击机专打已标定炮位` : '无航空兵'}。`, dd || cv);
   const sup2 = [relay && '无线电中继减少通讯中断', '战前对' + M.b.name + '出口照相侦察', depot && '预置野战补给站加快向纵深推进', smoke && `烟幕弹 ${smoke} 发掩护抢滩`].filter(Boolean);
   say(`保障：${sup2.join('；')}。部署完毕，共用去 ${sbxSpent('p')} / ${B0} 点。`, null);
   return { main: M.b.name, feint: F && F.b.name };
@@ -638,7 +674,7 @@ function sbxStart(role) {
   SBX.last = sbxSnap('上一局部署'); sbxStore(SBX_LAST_KEY, SBX.last);   // 打完可「修改部署再战」
   sbxBuild(role);
   closeSandbox(true);
-  S.briefed = true; S.t = 0; S.over = null; S.holdT = 0;
+  S.briefed = true; S.t = 0; S.over = null; S.holdT = 0; S.culT = 0;
   if (role === 'spectate') {
     for (const u of S.units) if (u.side === 'p') u.auto = true;
     for (const s of S.ships) if (!s.sbxHold) s.auto = true;
@@ -727,12 +763,23 @@ function sbxWaves() {
   const g = go[0], n = go.length;
   sbxSay('p', g.why === 'exit' ? `命令：${g.ex.name}已夺取，第二波 ${n} 艘起航靠岸。` : g.why === 'men' ? `命令：滩头已站稳（${g.ex.name}附近我军约一个连），第二波 ${n} 艘起航。` : `命令：H+${Math.round(S.t / 60 * 10) / 10} 分钟，按时间表第二波 ${n} 艘起航，各舰注意规避岸炮。`, 'order', { x: g.ex.x, y: g.ex.y });
 }
+// 进攻方主攻滩头的 x：指挥官计划（commander.js）优先，否则取多数满载舰船预定抢滩的滩头；都没有时为 null
+function sbxMainX() {
+  const C = S.cmd && S.cmd.p, m = C && C.plan ? C.plan.main : -1;
+  if (m >= 0 && TER.beaches[m]) return TER.beaches[m].cx;
+  const cnt = new Map();
+  for (const o of S.ships) if (alive(o) && o.land && o.bx != null && !o.sbxRole && o.load && o.load.teams > 0) { const b = sbxBeachOf(o.bx); cnt.set(b, (cnt.get(b) || 0) + 1); }
+  let best = null, bn = 0;
+  for (const [b, n] of cnt) if (n > bn) { bn = n; best = b; }
+  return best ? best.cx : null;
+}
 // 火箭艇、火力支援艇、扫雷舰
 function sbxFireShips(dt) {
   for (const s of S.ships) {
     if (!s.sbxRole || !alive(s)) continue;
-    const b = s.sbxTgt ? sbxBeachOf(s.sbxTgt.x) : sbxBeachOf(s.x), tx = s.sbxTgt ? s.sbxTgt.x : b.cx, cy = coastAt(tx);
     const st = s.sbxS || (s.sbxS = { n: 0, cd: 0, go: 0, sw: 0 });
+    if (!s.sbxTgt && st.go === 0) { st.tx = sbxMainX(); if (st.tx == null && S.t < 8) continue; }   // 未指定目标：等指挥官定下主攻滩头，随主攻方向出击
+    const tx = s.sbxTgt ? s.sbxTgt.x : st.tx ?? sbxBeachOf(s.x).cx, b = sbxBeachOf(tx), cy = coastAt(tx);
     st.cd = Math.max(0, st.cd - dt);
     const goTo = (x, y) => { if (s.auto && s.state === 'idle') orderShips([s], clamp(x, 20, W - 20), y); };
     if (s.hp < s.maxhp * .35 && st.go < 9) { st.go = 9; goTo(s.x, STAGING_Y + 60); continue; }
@@ -1001,7 +1048,7 @@ function openSandbox(seed, keep) {
   $('brief').hidden = true; $('end').hidden = true;
   sbxShow();
   if (typeof CAM === 'object' && CAM.vw > 1) {
-    if (CAM.vw > 900) { CAM.z = CAM.fit * 1.15; CAM.x = W / 2 - 150 / CAM.z; CAM.y = H * .55; }   // 全图，向右偏一点给左侧面板让位
+    if (CAM.vw > 900) { CAM.z = CAM.fit * 1.15; CAM.x = W / 2 - (CAM.padL || 300) / 2 / CAM.z; CAM.y = H * .55; }   // 全图，居中于面板右侧的空余画面
     else {   // 窄屏：画布只占上方，铺满高度看海岸到集结海域，横向拖动平移
       const vis = Math.max(200, CAM.vh - 30), B = TER.beaches.slice().sort((a, b) => Math.abs(a.cx - W / 2) - Math.abs(b.cx - W / 2))[0];
       CAM.z = clamp(vis / 1250, CAM.fit, CAM.fit * 4); CAM.x = B ? B.cx : W / 2; CAM.y = 750 + vis / CAM.z / 2;
@@ -1018,6 +1065,14 @@ function sbxShow() {
   document.body.classList.add('sbx-edit');
   SBX.el.hidden = false;
   sbxRender();
+  sbxPad();
+}
+// 编辑面板在左侧时（宽屏）：镜头可向左多卷出面板宽度，西端滩头与集结海域不再压在面板下
+function sbxPad() {
+  if (typeof CAM !== 'object') return;
+  const el = sbxOn() && SBX.el && !SBX.el.hidden && typeof R === 'object' && R.cv ? SBX.el : null, r = el && el.getBoundingClientRect(), c = el && R.cv.getBoundingClientRect();
+  const v = r && r.width && r.width < c.width * .6 && r.top < c.top + c.height * .5 ? Math.max(0, Math.round(r.right - c.left + 6)) : 0;
+  if (v !== (CAM.padL || 0)) { CAM.padL = v; if (typeof camClamp === 'function') camClamp(); }
 }
 function closeSandbox() {
   if (typeof document === 'undefined') return;
@@ -1025,6 +1080,7 @@ function closeSandbox() {
   if (SBX.el) SBX.el.remove();
   const old = document.getElementById('sbxPanel'); if (old) old.remove();
   SBX.el = null; SBX.pick = null; SBX.line = null; SBX.drag = null; SBX.hover = null;
+  if (typeof CAM === 'object') CAM.padL = 0;
   if (typeof R === 'object' && R && R.cv) R.cv.style.cursor = '';
 }
 
@@ -1125,7 +1181,10 @@ function sbxUI() {
     else if (b.dataset.id) sbxPick(b.dataset.id);
     else if (b.dataset.rm) { const it = S.sbx.items.find(o => o.id === +b.dataset.rm); if (it) { sbxRemove(it); sbxMsg('已移除' + sbxEntry(it).name); } }
     else if (b.dataset.lv) { S.level = b.dataset.lv; if (typeof U === 'object') U.level = S.level; }
-    else if (a === 'bud-' || a === 'bud+') S.sbx.budget[SBX.side] = clamp(S.sbx.budget[SBX.side] + (a === 'bud+' ? 250 : -250), 250, 6000);
+    else if (a === 'bud-' || a === 'bud+') {   // 预算不能低于已部署的点数
+      const v = clamp(S.sbx.budget[SBX.side] + (a === 'bud+' ? 250 : -250), 250, 6000), sp = sbxSpent(SBX.side);
+      if (v < sp) sbxMsg(`已部署 ${sp} 点，预算不能低于此`, true); else S.sbx.budget[SBX.side] = v;
+    }
     else if (a === 'preset') { const b0 = S.sbx.budget[SBX.side]; if (SBX.side === 'e') sbxPresetDef(); else sbxPresetFleet(); sbxMsg(`已载入标准部署（${sbxSpent(SBX.side)} 点）` + (S.sbx.budget[SBX.side] > b0 ? `，预算已调至 ${S.sbx.budget[SBX.side]}` : '')); }
     else if (a === 'ai') { const r = SBX.side === 'e' ? sbxAIDefend() : sbxAIAttack(); sbxMsg(SBX.side === 'e' ? `守方指挥官判断主攻方向：${r.join('、')}` : `攻方指挥官：主攻${r.main}${r.feint ? '，佯攻' + r.feint : ''}`); }
     else if (a === 'clear') { sbxClear(SBX.side); sbxMsg('已清空' + (SBX.side === 'e' ? '防守方' : '进攻方')); }
@@ -1154,6 +1213,9 @@ function sbxGo(role) {
   const ships = S.sbx.items.some(it => it.side === 'p' && sbxEntry(it).spawn.kind === 'ship' && (sbxShipLoad(it).t || sbxEntry(it).spawn.ship === 'supply' || sbxShipLoad(it).v));
   const amph = S.sbx.items.some(it => it.side === 'p' && sbxEntry(it).spawn.kind === 'veh');
   if (!ships && !amph) { sbxMsg('进攻方没有可登陆的部队：先部署登陆舰并装载步兵（或用「AI 帮我部署」）', true); SBX.side = 'p'; sbxRender(); return; }
+  const over = ['e', 'p'].find(k => sbxLeft(k) < 0);
+  if (over) { SBX.side = over; sbxMsg(`${over === 'p' ? '进攻方' : '防守方'}超出预算 ${-sbxLeft(over)} 点：提高预算或移除部分条目`, true); sbxRender(); return; }
+  if (sbxWingN() > sbxWingCap()) { SBX.side = 'p'; sbxMsg(`舰载机 ${sbxWingN()} 架超出航母机库（${sbxWingCap()} 架）：右键移除多余飞机`, true); sbxRender(); return; }
   if (!n.e) sbxMsg('防守方空无一人——将直接开战', false);
   sbxStart(role);
 }
@@ -1270,13 +1332,13 @@ function sbxClick(p) {
   if (c.spawn.at === 'line') {
     if (!SBX.line) { const r = sbxCheck(c, p.x, p.y); if (!r.ok) { sbxMsg(r.why, true); return; } SBX.line = { x: p.x, y: p.y }; sbxMsg('再点终点（Esc 取消）'); return; }
     const r = sbxPlace(id, SBX.line.x, SBX.line.y, p.x, p.y);
-    if (r.ok) { SBX.line = null; sbxMsg(`已放置：${c.name}（${sbxCost(r.it)} 点）`); } else sbxMsg(r.why, true);
+    if (r.ok) { SBX.line = null; SBX.placedAt = { x: p.x, y: p.y }; sbxMsg(`已放置：${c.name}（${sbxCost(r.it)} 点）`); } else sbxMsg(r.why, true);
     sbxRender();
     return;
   }
   const r = sbxPlace(id, p.x, p.y);
-  if (!r.ok) SBX.bad = { x: p.x, y: p.y, t: performance.now() };
-  sbxMsg(r.ok ? (r.it.cargo && c.spawn.kind !== 'ship' ? `已装载到 ${sbxEntry(r.it).name}（${sbxShipLoad(r.it).t + sbxShipLoad(r.it).v} / ${sbxShipCap(r.it).t + sbxShipCap(r.it).v}）` : `已放置：${c.name}`) : r.why, !r.ok);
+  if (!r.ok) SBX.bad = { x: p.x, y: p.y, t: performance.now() }; else SBX.placedAt = { x: p.x, y: p.y };
+  sbxMsg(r.ok ? (r.it.cargo && c.spawn.kind !== 'ship' ? `已装载到 ${sbxEntry(r.it).name}（${sbxShipLoad(r.it).t + sbxShipLoad(r.it).v} / ${sbxShipCap(r.it).t + sbxShipCap(r.it).v}）` : `已放置：${c.name}${r.note ? '（' + r.note + '）' : ''}`) : r.why, !r.ok);
   sbxRender();
 }
 HOOK.pointer.push((e, kind, p) => {
@@ -1285,7 +1347,7 @@ HOOK.pointer.push((e, kind, p) => {
   if (e.pointerType === 'touch') {   // 触屏：单指点按放置，拖动 / 双指仍为平移缩放
     if (kind !== 'up' || !U.down || !U.down.touch || U.down.moved || U.touches.size > 1) return false;
     U.touches.delete(e.pointerId); U.pinch = null; U.down = null;
-    sbxClick(p);
+    sbxClick(p); SBX.mouse = null;   // 触屏没有悬停：点按后不留预览
     return true;
   }
   if (kind === 'down') {
@@ -1329,11 +1391,12 @@ HOOK.key.push(e => {
   const k = e.key;
   if (k === 'Escape') { if (SBX.line || SBX.pick || SBX.drag) { SBX.line = null; SBX.pick = null; SBX.drag = null; sbxRender(); return true; } return false; }
   if ((k === 'Delete' || k === 'Backspace') && SBX.mouse) { const it = sbxNearest(SBX.mouse.x, SBX.mouse.y, SBX.side, Math.max(12, px(16))); if (it) { sbxRemove(it); sbxMsg('已移除' + sbxEntry(it).name); } e.preventDefault(); return true; }
-  if (k === 'Tab' && !e.target.closest('#sbxPanel')) { SBX.side = SBX.side === 'e' ? 'p' : 'e'; SBX.pick = null; SBX.line = null; sbxRender(); e.preventDefault(); return true; }
+  if (k === 'Tab' && !e.target.closest('#sbxPanel')) { SBX.side = SBX.side === 'e' ? 'p' : 'e'; SBX.pick = null; SBX.line = null; SBX.cat = 'all'; sbxFrameSide(); sbxRender(); e.preventDefault(); return true; }
   if (k === '=' || k === '+' || k === '-' || k === 'F10') return false;
   return k.length === 1 || k === 'Enter';   // 战斗快捷键在编辑阶段无意义
 });
 HOOK.frame.push(() => {
+  if (typeof document !== 'undefined') sbxPad();
   if (sbxOn()) {
     if (typeof document !== 'undefined' && (!SBX.el || !SBX.el.isConnected)) { const o = document.getElementById('sbxPanel'); if (o) o.remove(); SBX.el = null; sbxShow(); }
     if (!SBX.pv) { PV.fill(1); SBX.pv = true; }   // 编辑时全图可见
@@ -1535,7 +1598,8 @@ function sbxDrawEdit(time) {
   }
   // 放置预览
   const m = SBX.mouse;
-  if (pick && m) {
+  if (SBX.placedAt && (!m || dist(m.x, m.y, SBX.placedAt.x, SBX.placedAt.y) * R.s > 8)) SBX.placedAt = null;   // 刚放下的条目上先不画预览（否则重叠校验失败，像是放置失败）
+  if (pick && m && !SBX.placedAt) {
     if (pick.spawn.at === 'line' && SBX.line) {
       const r = sbxCheck(pick, SBX.line.x, SBX.line.y, m.x, m.y), col = r.ok ? (pick.side === 'e' ? COL.enemy : COL.g) : COL.amber;
       sbxGlyph(ctx, pick, SBX.line.x, SBX.line.y, col, .75, { x: SBX.line.x, y: SBX.line.y, x2: m.x, y2: m.y });

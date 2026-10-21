@@ -59,7 +59,7 @@ function damageEnemy(e, dmg) {
   log(inVision(e.x, e.y) ? `摧毁${ENEMY_SPEC[e.kind].name}` : `远处殉爆，疑似${ENEMY_SPEC[e.kind].name}被毁`, 'good', null, 0, e);
 }
 
-function impact(x, y, pw, side) {
+function impact(x, y, pw, side, src) {
   const R = pw.R;
   let forts = false;
   S.fx.push({ kind: 'boom', x, y, r: R, life: 0, max: .9, side });
@@ -72,7 +72,7 @@ function impact(x, y, pw, side) {
     for (let k = q.men.length; k > 0; k--) if (Math.random() < p) killMan(q);
   }
   for (const s of S.ships) { const d = dist(x, y, s.x, s.y); if (alive(s) && d < R + 6) damageShip(s, pw.ship * (1 - d / (R + 6) * .5)); }
-  if (S.dd.state !== 'sunk' && dist(x, y, S.dd.x, S.dd.y) < R * .6) damageDD();
+  if (S.dd.state !== 'sunk' && dist(x, y, S.dd.x, S.dd.y) < R * .6) damageDD(src && src.side === 'e' ? { kind: src.kind === 'coastal' ? 'coastal' : 'arty', x: src.x0, y: src.y0 } : null);
   if (S.cv && typeof cvImpact === 'function') cvImpact(x, y, pw);   // 航母甲板受损（carrier.js）
   if (pw.struct) for (const e of S.enemies) {
     const d = dist(x, y, e.x, e.y);

@@ -60,7 +60,7 @@ function chatAt(m) {
 function chatShow(m, tab) {
   const set = typeof SETTINGS === 'object' && SETTINGS ? SETTINGS : {}, lv = set.chat || 'normal';
   if (m.side === 'e' && set.enemyChat === false) return false;
-  if (lv === 'brief' && m.kind !== 'plan' && m.kind !== 'friction' && m.kind !== 'remedy') return false;
+  if (lv === 'brief' && m.lv !== 0 && m.kind !== 'plan' && m.kind !== 'friction' && m.kind !== 'remedy') return false;   // lv0（必显：请求玩家行动、重大损失）简要模式也显示
   if (lv === 'normal' && (m.lv ?? 1) > 1) return false;
   if (tab === 'p' && m.side === 'e') return false;
   if (tab === 'e' && m.side !== 'e') return false;
@@ -179,10 +179,15 @@ function chatRender(force) {
     if (CHAT.open == null) CHAT.open = !chatPhone();
   }
   const vis = chatVisible(CHAT.tab), ids = vis.map(m => m.id), old = CHAT.ids;
-  const pre = !force && old.length <= ids.length && old.every((id, k) => ids[k] === id);
-  const fresh = pre ? vis.slice(old.length) : vis;
-  // 未读：收起时新出现的消息（当前页签口径）
-  if (pre && fresh.length && !CHAT.open) CHAT.unread += fresh.length;
+  // 只追加：旧列表的末尾（前头可能因上限被裁掉）与新列表对得上，新消息都排在旧末条之后
+  const j = old.length ? ids.lastIndexOf(old[old.length - 1]) : -1;
+  let pre = !force && (!old.length || j >= 0);
+  if (pre && j >= 0) for (let m = 0, n = Math.min(old.length, j + 1); m < n; m++) if (ids[j - m] !== old[old.length - 1 - m]) { pre = false; break; }
+  const fresh = pre ? vis.slice(j + 1) : vis;
+  // 未读：收起时新出现的消息（当前页签口径）；重建时按旧列表里没有的消息计
+  const seen = new Set(old), nNew = pre ? fresh.length : force ? 0 : ids.filter(id => !seen.has(id)).length;
+  if (nNew && !CHAT.open) CHAT.unread += nNew;
+  const keep = !pre && !force && !CHAT.stick && old.length ? CHAT.list.scrollTop : null;   // 中间插入（截获）时重建：用户在往上翻就别跳到底
   const has = S.phase === 'battle' || vis.length > 0 || (Array.isArray(S.chat) && S.chat.some(m => { const t = chatAt(m); return t != null && t <= S.t + 1e-6; }));
   CHAT.el.hidden = !CHAT.open || !has;
   if (CHAT.btn) {
@@ -205,7 +210,8 @@ function chatRender(force) {
   }
   CHAT.ids = ids;
   if (CHAT.el.hidden) return;
-  if (!pre || CHAT.stick) { CHAT.list.scrollTop = CHAT.list.scrollHeight; CHAT.pill.hidden = true; }
+  if (keep != null) { CHAT.list.scrollTop = keep; if (nNew) CHAT.pill.hidden = false; }
+  else if (!pre || CHAT.stick) { CHAT.list.scrollTop = CHAT.list.scrollHeight; CHAT.pill.hidden = true; }
   else if (fresh.length) CHAT.pill.hidden = false;
   if (!pre || fresh.length) CHAT.layT = 0;
 }
