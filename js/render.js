@@ -112,7 +112,22 @@ const inView = (x, y, m = 0) => { const v = R.view; return !v || (x > v[0] - m &
 // 鼠标悬停（世界半径 r，至少 14 屏幕像素）：范围圈等只在悬停或选中时显示
 const hoverNear = (x, y, r) => !!(typeof U === 'object' && U.mouse && dist(U.mouse.x, U.mouse.y, x, y) < Math.max(r, px(14)));
 
+// 观察视野（沙盒观战）：只换画面所用的可见格，推演与 AI 仍按各自真实视野
+// R.eye：null / 'p' 攻方视野 · 'e' 守方视野 · 'both' 双方视野（任一方看得见即显示）· 'all' 全图
+const PV_KEEP = new Uint8Array(GW * GH);
+function viewBegin() {
+  const v = R.eye;
+  if (!v || v === 'p' || !S || S.mode !== 'sandbox') return false;
+  PV_KEEP.set(PV);
+  if (v === 'all') PV.fill(1); else if (v === 'e') PV.set(EV); else for (let i = 0; i < PV.length; i++) PV[i] |= EV[i];
+  return true;
+}
+function viewEnd(on) { if (on) PV.set(PV_KEEP); }
 function draw(now) {
+  const on = viewBegin();
+  try { drawScene(now); } finally { viewEnd(on); }
+}
+function drawScene(now) {
   const { ctx } = R, time = now / 1000;
   // 附近大爆炸：短暂震动与闪白（震动幅度按屏幕像素封顶，设置可关闭）
   let k = 0;

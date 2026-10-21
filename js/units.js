@@ -150,6 +150,8 @@ function moveTeam(q, dt, mul) {
   let tx = o.x, ty = o.y;
   if (!q.direct && dd > 16) {
     const f = field(o.gx ?? o.x, o.gy ?? o.y, q.side), n = f && nextStep(f, q.x, q.y);
+    // 已走到编组中心而本组槽位不能直达（隔水、隔崖）：就地停下，免得在中心与槽位之间来回打转
+    if (f && o.gx != null && (o.gx !== o.x || o.gy !== o.y) && f[ci(q.x, q.y)] < 1) return true;
     if (n) [tx, ty] = n;
   }
   const i = ci(q.x, q.y);
@@ -165,8 +167,13 @@ function moveTeam(q, dt, mul) {
   const ux = (tx - q.x) / l, uy = (ty - q.y) / l, back = px * ux + py * uy;
   if (back < 0) { px -= back * ux; py -= back * uy; }
   let nx = rx + px, ny = ry + py;
-  // 避让把小组推进河里时改走原步；原步也不可走（直线贴着河岸）则改按寻路场走
-  if (!passInf(nx, ny)) { nx = rx; ny = ry; if (!passInf(nx, ny)) { q.direct = false; q.pathT = S.t; return false; } }
+  // 避让把小组推进河里时改走原步；原步斜切不可走格的角（卡在格角上）时沿单轴滑过；都不行则改按寻路场走
+  if (!passInf(nx, ny)) {
+    if (passInf(rx, ry)) { nx = rx; ny = ry; }
+    else if (passInf(rx, q.y)) { nx = rx; ny = q.y; }
+    else if (passInf(q.x, ry)) { nx = q.x; ny = ry; }
+    else { q.direct = false; q.pathT = S.t; return false; }
+  }
   q.x = nx; q.y = ny; q.movedT = S.t; q.heading = Math.atan2(ty - q.y, tx - q.x);
   return false;
 }

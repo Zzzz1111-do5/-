@@ -68,6 +68,10 @@ function mmInit(cv) {
 }
 
 function mmDraw() {
+  const on = typeof viewBegin === 'function' && viewBegin();
+  try { mmDraw1(); } finally { if (on) viewEnd(on); }
+}
+function mmDraw1() {
   if (!MM.cv) return;
   if (MM.seed !== TER.seed) mmInit(MM.cv);
   const g = MM.cv.getContext('2d'), k = MM.k, dot = (x, y, r, c) => { g.fillStyle = c; g.fillRect(x * k - r, y * k - r, r * 2, r * 2); };

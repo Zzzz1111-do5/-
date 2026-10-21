@@ -46,6 +46,13 @@ const sbxFlag = () => sbxOf('dd').reduce((b, it) => !b || sbxCost(it) > sbxCost(
 const sbxWingCap = () => sbxOf('cv').reduce((a, it) => a + (sbxEntry(it).spawn.wing || 0), 0);   // 多艘航母：机库容量相加
 // 航母可部署多艘：造价最高的一艘为旗舰（S.cv，可选中、控制自动派机），其余为 S.cvx
 const sbxFlagCV = () => sbxOf('cv').reduce((b, it) => !b || sbxCost(it) > sbxCost(b) ? it : b, null);
+// 舰载机分配：先装满旗舰，再依次分给其余航母（home = 母舰号）；超出合计机库的不编入
+function sbxWingPlan(list, flag) {
+  const caps = [flag ? sbxEntry(flag).spawn.wing || 0 : 0, ...sbxOf('cv').filter(it => it !== flag).map(it => sbxEntry(it).spawn.wing || 0)], out = [];
+  let hi = 0, used = 0;
+  for (const w of list) { while (hi < caps.length && used >= caps[hi]) { hi++; used = 0; } if (hi >= caps.length) break; out.push({ ...w, home: hi }); used++; }
+  return out;
+}
 const sbxCvObj = (it, i) => { const s = sbxEntry(it).spawn; return { x: it.x, y: it.y, tx: it.x, ty: it.y, heading: -Math.PI / 2, hp: s.hp, maxhp: s.hp, moving: false, auto: false, exposedUntil: 0, hitT: -99, cat: [0, 0], home: i + 1, name: `${sbxEntry(it).name}-${i + 2}` }; };
 const sbxWingN = () => sbxOf('wing').reduce((a, it) => a + (sbxEntry(it).spawn.n || 1), 0);
 
@@ -166,6 +173,8 @@ function sbxSync() {
     else Object.assign(S.cv, { x: -9999, y: H + 9999, tx: -9999, ty: H + 9999, moving: false });
   }
   S.cvx = sbxOf('cv').filter(it => it !== cv).map(sbxCvObj);   // 其余航母在编辑阶段也画出来
+  // 甲板上只停已购买的舰载机，编入轰炸机等立刻可见
+  if (S.air) S.air.wing = sbxWingPlan(sbxOf('wing').flatMap(it => { const s = sbxEntry(it).spawn; return Array.from({ length: s.n || 1 }, (_, k) => ({ id: -(it.id * 8 + k), type: s.type, state: 'deck', rearmT: 0, ...(s.v ? { v: s.v } : {}) })); }), cv);
   if (typeof sbxRender === 'function') sbxRender();
 }
 
@@ -656,10 +665,7 @@ function sbxBuild(role) {
     // 其余航母：各带自己的舰载机（先装满旗舰，再依次分给其余航母）
     const xs = sbxOf('cv').filter(it => it !== cvI);
     S.cvx = xs.map(sbxCvObj);
-    const caps = [cvI ? sbxEntry(cvI).spawn.wing : 0, ...xs.map(it => sbxEntry(it).spawn.wing || 0)], wing = [];
-    let hi = 0, used = 0;
-    for (const w of acc.wing) { while (hi < caps.length && used >= caps[hi]) { hi++; used = 0; } if (hi >= caps.length) break; wing.push({ ...w, home: hi }); used++; }
-    S.air = { wing: cvI ? wing : [], wrecks: [] };
+    S.air = { wing: cvI ? sbxWingPlan(acc.wing, cvI) : [], wrecks: [] };
     if (typeof initCarrier === 'function') initCarrier();
     if (typeof airCount === 'function') airCount();
   }
@@ -678,6 +684,7 @@ function sbxStart(role) {
   const spent = { p: sbxSpent('p'), e: sbxSpent('e') };
   S.sbx.spent = spent;
   SBX.last = sbxSnap('上一局部署'); sbxStore(SBX_LAST_KEY, SBX.last);   // 打完可「修改部署再战」
+  if (typeof R === 'object' && R) R.eye = role === 'spectate' ? 'both' : 'p';   // 观战默认看双方视野
   sbxBuild(role);
   closeSandbox(true);
   S.briefed = true; S.t = 0; S.over = null; S.holdT = 0; S.culT = 0;
@@ -1035,7 +1042,7 @@ HOOK.step.push(dt => {
   if ((S.sbxRun.aaT += dt) >= .5) { S.sbxRun.aaT = 0; sbxAA(); }
   if (S.t - (S.sbxRun.wT || 0) >= 1) { S.sbxRun.wT = S.t; sbxWaves(); }
 });
-HOOK.newGame.push(opts => { if (!(opts && opts.sandbox)) closeSandbox(); });
+HOOK.newGame.push(opts => { if (typeof R === 'object' && R) R.eye = null; if (!(opts && opts.sandbox)) closeSandbox(); });
 
 // ———————————————— 编辑器入口 ————————————————
 function openSandbox(seed, keep) {
@@ -1138,6 +1145,7 @@ body.sbx-edit #bottom { grid-template-columns: minmax(0, 1fr) auto; pointer-even
 .sbx-list button .ic { width: 15px; height: 15px; color: var(--g); } .sbx-list button i { font-style: normal; color: var(--enemy); margin-left: 2px; }
 .sbx-row { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
 .sbx-row button.on { border-color: var(--sel); color: #e6d8ff; }
+.sbx-pal button.need { opacity: .45; }
 .sbx-saves { display: grid; gap: 4px; max-height: 168px; overflow-y: auto; }
 .sbx-saves .sv { display: flex; gap: 4px; } .sbx-saves .sv button { background: transparent; border: 1px solid var(--line); border-radius: 4px; color: var(--text); font-size: 12px; text-align: left; padding: 3px 7px; }
 .sbx-saves .sv button:first-child { flex: 1; min-width: 0; } .sbx-saves .sv button:hover { border-color: var(--line-hi); }
@@ -1279,7 +1287,7 @@ function sbxPick(id) {
   SBX.line = null;
   if (c.spawn.at === 'none' || c.spawn.at === 'air') {   // 无需位置：直接编入
     const r = sbxPlace(id);
-    sbxMsg(r.ok ? `已编入：${c.name}` : r.why, !r.ok);
+    sbxMsg(r.ok ? (c.spawn.at === 'air' ? `已编入：${c.name}，停放在航母甲板（舰载机 ${sbxWingN()} / ${sbxWingCap()} 架）` : `已编入：${c.name}`) : r.why + (c.spawn.at === 'air' && !sbxOf('cv').length ? '：先在「舰艇 / 航空」里选航母放到集结海域南部，再编入飞机' : ''), !r.ok);
     SBX.pick = null;
     return;
   }
@@ -1312,7 +1320,8 @@ function sbxRender() {
   const left = bud - sp;
   q('.sbx-pal').innerHTML = pal.map(c => {
     const na = c.spawn.kind === 'veh' && !sbxVehOk(), cost = c.spawn.at === 'line' ? c.spawn.per + '/百' : c.cost;
-    return `<button type="button" role="option" data-id="${c.id}" class="${SBX.pick === c.id ? 'on' : ''}" title="${sbxEsc(c.name)}（${cost} 点）" aria-selected="${SBX.pick === c.id}" ${na || (c.spawn.at !== 'line' && c.cost > left) ? 'disabled' : ''}>${sbxIc(c)}<span>${cost}</span></button>`;
+    const need = c.spawn.at === 'air' ? (!sbxOf('cv').length ? '需先部署航母' : sbxWingN() + (c.spawn.n || 1) > sbxWingCap() ? `机库已满（${sbxWingCap()} 架），再部署一艘航母可扩充` : '') : '';
+    return `<button type="button" role="option" data-id="${c.id}" class="${SBX.pick === c.id ? 'on' : ''}${need ? ' need' : ''}" title="${sbxEsc(c.name)}（${cost} 点）${need ? '：' + need : ''}" aria-selected="${SBX.pick === c.id}" ${na || (c.spawn.at !== 'line' && c.cost > left) ? 'disabled' : ''}>${sbxIc(c)}<span>${cost}</span></button>`;
   }).join('');
   sbxInfo(SBX.pick ? catalogById(SBX.pick) : null);
   // 无需位置的条目（舰载机、后勤、增援波次）：同类合并计数，点击移除一项
@@ -1427,9 +1436,27 @@ HOOK.frame.push(() => {
   if (typeof document !== 'undefined' && $('topr')) {
     const on = !!(S && S.mode === 'sandbox' && S.sbx && S.sbx.live && sbxLast());
     if (on && !$('btnSbxBack')) sbxEditBtn('btnSbxBack', $('topr').firstElementChild, 'tb', '改部署', true);
+    const live = !!(S && S.mode === 'sandbox' && S.sbx && S.sbx.live);
+    if (live && !$('btnView')) {
+      const b = document.createElement('button');
+      b.id = 'btnView'; b.type = 'button'; b.className = 'tb'; b.title = '切换观察视野（O）：双方 / 攻方 / 守方 / 全图。只影响画面，不影响双方 AI';
+      b.addEventListener('click', sbxCycleView);
+      $('btnSbxBack') ? $('btnSbxBack').after(b) : $('topr').prepend(b);
+    }
+    if ($('btnView')) { $('btnView').hidden = !live; if (live) { const t = '视野：' + (SBX_VIEW[R.eye] || '攻方'); if ($('btnView').textContent !== t) $('btnView').textContent = t; } }
     if ($('btnSbxBack')) $('btnSbxBack').hidden = !on;
     if ($('btnSbxEdit')) $('btnSbxEdit').hidden = !(S && S.mode === 'sandbox' && sbxLast());
   }
+});
+const SBX_VIEW = { both: '双方', p: '攻方', e: '守方', all: '全图' };
+function sbxCycleView() {
+  const ks = Object.keys(SBX_VIEW), i = ks.indexOf(R.eye || 'p');
+  R.eye = ks[(i + 1) % ks.length];
+  if (typeof log === 'function') log(`观察视野：${SBX_VIEW[R.eye]}${R.eye === 'both' ? '（任一方看得见的都显示）' : R.eye === 'all' ? '（含双方都未发现的部署）' : ''}`, 'info', 'view', 0);
+}
+HOOK.key.push(e => {
+  if (!(S && S.mode === 'sandbox' && S.sbx && S.sbx.live) || e.ctrlKey || e.metaKey || e.altKey || e.key.toUpperCase() !== 'O') return false;
+  sbxCycleView(); return true;
 });
 // 「修改部署再战」：回到编辑阶段，同一地图、双方部署原样恢复
 function sbxEditBtn(id, ref, cls, text, before) {
