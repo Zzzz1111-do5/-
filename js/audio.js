@@ -125,6 +125,7 @@ function auEngine(n, pan, g) {
     AU.eng = { out, pan, o1, o2 };
   }
   const E = AU.eng, v = n ? Math.min(.4, .16 * Math.sqrt(n)) * g : 0;
+  if (!isFinite(v) || !isFinite(pan || 0)) return;
   E.out.gain.setTargetAtTime(v, t, .4);
   if (E.pan) E.pan.pan.setTargetAtTime(clamp(pan, -1, 1), t, .3);
   E.o1.frequency.setTargetAtTime(88 + Math.min(n, 6) * 2, t, 1); E.o2.frequency.setTargetAtTime(90.5 + Math.min(n, 6) * 2.3, t, 1);

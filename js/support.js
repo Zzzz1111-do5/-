@@ -77,7 +77,7 @@ function updateShells(dt) {
   for (const s of S.shells) {
     if ((s.t += dt) < s.dur) continue;
     s.done = true;
-    if (s.kind === 'cb') damageDD();
+    if (s.kind === 'cb') { if (dist(s.x1, s.y1, S.dd.x, S.dd.y) < 45) damageDD(); else impact(s.x1, s.y1, POWER.mortar, 'e'); }   // 机动中的驱逐舰可以躲开反炮兵射击
     else if (s.kind === 'smoke') {
       S.smoke.push({ x: s.x1, y: s.y1, r: 65, until: S.t + 35 });
       S.fx.push({ kind: 'flash', x: s.x1, y: s.y1, r: 20, life: 0, max: .6, side: 'p' });

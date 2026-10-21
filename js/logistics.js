@@ -200,7 +200,7 @@ function step(dt) {
   runHook('step', dt);
   if (S.teams.some(q => !q.men.length)) {
     S.teams = S.teams.filter(q => q.men.length);
-    S.sel = S.sel.filter(id => id === 'DD' || id === 'CV' || S.units.some(u => u.id === id) || S.ships.some(s => s.id === id));
+    S.sel = S.sel.filter(id => id === 'DD' || id === 'CV' || S.units.some(u => u.id === id) || S.ships.some(s => s.id === id) || (S.veh || []).some(v => v.id === id && !v.dead));
   }
   for (const t of S.tracers) t.life += dt;
   S.tracers = S.tracers.filter(t => t.life < t.max);
