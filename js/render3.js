@@ -3,7 +3,7 @@
 
 // 炮弹：弹头按屏幕像素画小点；落点圈只在瞄准工具激活时（我方）或即将落地时（敌方来袭，淡、去重）显示
 function drawShells(time) {
-  const ctx = R.ctx, tool = typeof U === 'object' ? U.tool : null, aim = tool === 'fire' || tool === 'smoke' || tool === 'strike' || tool === 'cas', rings = new Set();
+  const ctx = R.ctx, tool = typeof U === 'object' ? U.tool : null, aim = tool === 'fire' || tool === 'smoke' || tool === 'strike' || tool === 'bomber' || tool === 'cas', rings = new Set();
   for (const s of S.shells) {
     if (s.t < 0) continue;
     const u = s.t / s.dur, sx = s.fuzzy ? s.fx0 : s.x0, sy = s.fuzzy ? s.fy0 : s.y0;
@@ -128,7 +128,7 @@ function drawTool(time) {
   }
   if (!m || !U.tool) return;
   ctx.lineWidth = px(1.2);
-  if ((U.tool === 'strike' || U.tool === 'recon' || U.tool === 'cas') && typeof drawAirTool === 'function') drawAirTool(time);
+  if ((U.tool === 'strike' || U.tool === 'bomber' || U.tool === 'recon' || U.tool === 'cas') && typeof drawAirTool === 'function') drawAirTool(time);
   else if (U.tool === 'fire' || U.tool === 'smoke') {
     const ok = D.state === 'ready' && dist(D.x, D.y, m.x, m.y) <= 1000;
     ctx.strokeStyle = rgba(ok ? (U.tool === 'smoke' ? COL.smoke : COL.g) : COL.enemy, .7); ctx.setLineDash([px(6), px(4)]);

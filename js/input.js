@@ -107,7 +107,7 @@ function bindInput() {
     else if (k === 'C') formNow('wedge');
     else if (k === 'B') formNow('loose');
     else {
-      const tools = { M: 'move', A: 'amove', Q: 'charge', N: 'clear', F: 'fire', S: 'smoke', R: 'recon', T: 'strike', V: 'cas', E: 'rline' };
+      const tools = { M: 'move', A: 'amove', Q: 'charge', N: 'clear', F: 'fire', S: 'smoke', R: 'recon', T: 'strike', Y: 'bomber', V: 'cas', E: 'rline' };
       if (tools[k]) setTool(tools[k]);
     }
   });

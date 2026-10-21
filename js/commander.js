@@ -866,8 +866,10 @@ function cmdStageStall(C, P) {
     for (const u of grp) st[u.id] = P.u[u.id].t0;
     if (!p || cmdOwned(p)) continue;
     kT[key] = S.t;
+    const men = grp.reduce((a, u) => a + (u.men || 0), 0);
+    if (men < 6) { P.hard[key] = S.t; for (const u of grp) apIdle(P.u[u.id]); continue; }   // 几个人的残部：悄悄转用，不占通联
     const names = grp.map(cmdUName).join('、'), n = Math.round(S.t - Math.min(...grp.map(u => P.u[u.id].t0)));
-    const men = grp.reduce((a, u) => a + (u.men || 0), 0), est = Math.round(apEstimate(p, true)), u0 = grp[0], pl0 = P.u[u0.id];
+    const est = Math.round(apEstimate(p, true)), u0 = grp[0], pl0 = P.u[u0.id];
     const br = S.points.find(b => /^B\d/.test(b.key) && grp.some(u => dist(u.x, u.y, b.x, b.y) < 130));
     const far = Math.round(pl0.sx != null ? dist(u0.x, u0.y, pl0.sx, pl0.sy) : dist(u0.x, u0.y, p.x, p.y));
     const why = br ? `${br.name}${typeof isBlown === 'function' && isBlown(br.key) ? '已被炸毁，须绕道渡河' : '桥面狭窄，部队拥堵'}` : grp.some(u => u.state === 'waver') ? '部队士气动摇，行动迟缓' : `接近路受阻，距集结位置仍有约 ${far} 米`;
@@ -875,6 +877,7 @@ function cmdStageStall(C, P) {
     const acts = [], reach = !!field(p.x, p.y, 'p');
     if (reach && men >= Math.max(6, est * 1.2)) {
       for (const u of grp) cmdSend(u, 'launch', { key });
+      C.stall[key] = S.t;   // 新发起的攻击：受阻判定重新计时
       acts.push(`${names}不再等待集结，就地展开向${p.name}发起攻击`);
       if (cmdFoeFire(p)) acts.push(`舰炮先行压制${p.name}当面火力点`);
     } else {
@@ -937,7 +940,7 @@ function cmdSend(u, act, a) {
     chatSay('p', `补救：改用备用频率重发命令，约 ${n} 秒后确认收到。`, { kind: 'remedy', at: u, delay: 2 });
   }
   cmdLater(d, 'order', { uid: u.id, act, ...a, lost, runner: !radios && !relay });
-  (C.pend || (C.pend = {}))[u.id] = S.t + d + 2;   // 命令在途：送达前不再被另行抽调
+  (C.pend || (C.pend = {}))[u.id] = S.t + d + 30;   // 命令在途及送达后 30 秒内不再被另行抽调（免得一连两令、朝令夕改）
   return d;
 }
 

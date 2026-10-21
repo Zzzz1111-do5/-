@@ -215,10 +215,10 @@ ctE('p_air_recon_lr', '远程侦察机', 'p', 'air', 'wing', 20, CT_IC.arecon + 
   { kind: 'wing', at: 'air', type: 'recon', n: 1, v: 'lr' }, { counters: ['arty', 'coastal'], weakTo: ['e_aa_radar'] });
 ctE('p_air_strike', '攻击机', 'p', 'air', 'wing', 22, CT_IC.astrike, [3, 0, 7, 0, 8, 4, 0], '沿进场方向投下三连弹，可摧毁已标定的炮位与碉堡。',
   { kind: 'wing', at: 'air', type: 'strike', n: 1 }, { counters: ['coastal', 'arty', 'bunker'], weakTo: ['aa'] });
-ctE('p_air_dive', '俯冲轰炸机', 'p', 'air', 'wing', 26, CT_IC.astrike + ctDots(1), [3, 0, 8, 0, 8, 4, 0], '俯冲投弹，弹着散布只有普通攻击机的一半，点目标命中率高。',
-  { kind: 'wing', at: 'air', type: 'strike', n: 1, v: 'dive' }, { counters: ['coastal', 'bunker'], weakTo: ['aa'] });
-ctE('p_air_heavy', '重型轰炸机', 'p', 'air', 'wing', 34, CT_IC.heavy, [4, 0, 10, 0, 6, 3, 0], '一次投下六枚重磅炸弹，覆盖面大，适合摧毁炮兵阵地群；散布也大，危险近距时慎用。',
-  { kind: 'wing', at: 'air', type: 'strike', n: 1, v: 'heavy' }, { counters: ['arty', 'trench', 'wire'], weakTo: ['e_aa_heavy'] });
+ctE('p_air_dive', '俯冲轰炸机', 'p', 'air', 'wing', 26, CT_IC.astrike + ctDots(1), [3, 0, 8, 0, 8, 4, 0], '轰炸机（Y 键）。对点目标俯冲，投下两枚重磅炸弹，几乎正中岸防炮、碉堡；俯冲时更容易被高炮打中。',
+  { kind: 'wing', at: 'air', type: 'bomber', n: 1, v: 'dive' }, { counters: ['coastal', 'bunker'], weakTo: ['aa'] });
+ctE('p_air_heavy', '重型轰炸机', 'p', 'air', 'wing', 34, CT_IC.heavy, [4, 0, 10, 0, 6, 3, 0], '轰炸机（Y 键）。沿进场方向投下六枚重磅炸弹地毯轰炸，覆盖炮兵阵地群与堑壕；飞得高，轻型高炮不易打中；散布大，离我军 150 以内慎用。',
+  { kind: 'wing', at: 'air', type: 'bomber', n: 1, v: 'heavy' }, { counters: ['arty', 'trench', 'wire'], weakTo: ['e_aa_heavy'] });
 ctE('p_air_cas', '对地支援机', 'p', 'air', 'wing', 22, CT_IC.acas, [3, 0, 6, 0, 8, 5, 0], '在受压制的我军上空盘旋扫射，持续约 40 秒。',
   { kind: 'wing', at: 'air', type: 'cas', n: 1 }, { counters: ['inf_e', 'mortar'], weakTo: ['aa'] });
 ctE('p_air_fb', '战斗轰炸机', 'p', 'air', 'wing', 28, CT_IC.acas + ctDots(1), [3, 0, 7, 0, 9, 5, 0], '到场先投一枚炸弹再扫射，盘旋时间较短。',

@@ -44,11 +44,12 @@ const BTN = [
     ['loose', '散开：降低炮火伤亡', 'B', () => formNow('loose')]]],
   ['support', [['fire', '舰炮射击：每发 70% 暴露坐标', 'F', () => setTool('fire')], ['smoke', '烟幕弹：遮断双方视线', 'S', () => setTool('smoke')],
     ['recon', '侦察机：从航母起飞纵贯侦察', 'R', () => setTool('recon')], ['strike', '攻击机：三连弹', 'T', () => setTool('strike')],
+    ['bomber', '轰炸机：点已标定的火力点 → 俯冲轰炸机精确投弹；点其他地方 → 重型轰炸机六弹地毯轰炸', 'Y', () => setTool('bomber')],
     ['cas', '近距空中支援：战机盘旋扫射', 'V', () => setTool('cas')],
     ['rline', '开辟增援线', 'E', () => setTool('rline')], ['auto', '驱逐舰自动掩护', 'G', toggleAuto],
     ['airauto', '航母自动派机：近距支援受压制的我军、空袭已标定火力点、侦察前线方向', 'J', () => toggleCvAuto()]]]
 ];
-const ASSET = { smoke: 'smoke', recon: 'recon', strike: 'strike', cas: 'cas', rline: 'rline' };
+const ASSET = { smoke: 'smoke', recon: 'recon', strike: 'strike', cas: 'cas', bomber: 'bomber', rline: 'rline' };
 
 function buildHud() {
   if (typeof SHIP_ICONS === 'object') Object.assign(ICON, SHIP_ICONS);
@@ -177,6 +178,7 @@ function updateHud() {
     if (grp === 'forms') dis = !(hasU || (deploy && ships.length));
     if (grp === 'support') dis = deploy || (ASSET[k] && S.assets[ASSET[k]] <= 0) || ((k === 'fire' || k === 'smoke' || k === 'auto') && D.state === 'sunk') || (k === 'airauto' && !(S.cv && S.cv.hp > 0));
     el.disabled = dis;
+    if (k === 'bomber') el.hidden = !(S.air && S.air.wing.some(w => w.type === 'bomber'));   // 只有编入了轰炸机（沙盒）才显示
     el.classList.toggle('on', k === 'auto' ? D.auto : k === 'airauto' ? !!(S.cv && S.cv.auto) : k === 'ai' ? [...units, ...ships, ...vs].length > 0 && [...units, ...ships, ...vs].every(o => o.auto === true) : U.tool === k || (grp === 'forms' && (units.length ? units.every(u => u.form === k) : ships.length && ships.every(s => s.form === k))));
     if (ASSET[k]) $('n-' + k).textContent = S.assets[ASSET[k]] ?? 0;
   }
