@@ -635,6 +635,7 @@ function sbxStart(role) {
   if (!S || !S.sbx || S.sbx.live) return false;
   const spent = { p: sbxSpent('p'), e: sbxSpent('e') };
   S.sbx.spent = spent;
+  SBX.last = sbxSnap('上一局部署'); sbxStore(SBX_LAST_KEY, SBX.last);   // 打完可「修改部署再战」
   sbxBuild(role);
   closeSandbox(true);
   S.briefed = true; S.t = 0; S.over = null; S.holdT = 0;
@@ -990,7 +991,7 @@ function openSandbox(seed, keep) {
   newGame(seed, lv, { sandbox: true, mode: 'sandbox' });
   Object.assign(S, { phase: 'sandbox', briefed: true, paused: true, role: 'attack', mode: 'sandbox', armor: [] });
   S.sbx = { items: [], budget: bud, nid: 1, notes: { p: [], e: [] }, live: false };
-  Object.assign(SBX, { pick: null, line: null, lineDown: null, hover: null, drag: null, pv: false, msg: '', endKey: null });
+  Object.assign(SBX, { pick: null, line: null, lineDown: null, hover: null, drag: null, pv: false, msg: '', endKey: null, savesOpen: false });
   sbxSync();
   if (typeof document === 'undefined') return S;
   if (typeof MX === 'object' && MX) MX.seed = null;
@@ -1074,6 +1075,12 @@ body.sbx-edit #bottom { grid-template-columns: minmax(0, 1fr) auto; pointer-even
 .sbx-list button { display: inline-flex; align-items: center; gap: 3px; padding: 1px 6px 1px 3px; border: 1px solid var(--line); border-radius: 10px; background: transparent; color: var(--text); font-size: 11px; }
 .sbx-list button .ic { width: 15px; height: 15px; color: var(--g); } .sbx-list button i { font-style: normal; color: var(--enemy); margin-left: 2px; }
 .sbx-row { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
+.sbx-row button.on { border-color: var(--sel); color: #e6d8ff; }
+.sbx-saves { display: grid; gap: 4px; max-height: 168px; overflow-y: auto; }
+.sbx-saves .sv { display: flex; gap: 4px; } .sbx-saves .sv button { background: transparent; border: 1px solid var(--line); border-radius: 4px; color: var(--text); font-size: 12px; text-align: left; padding: 3px 7px; }
+.sbx-saves .sv button:first-child { flex: 1; min-width: 0; } .sbx-saves .sv button:hover { border-color: var(--line-hi); }
+.sbx-saves .sv span { display: block; font-size: 11px; color: var(--mute); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sbx-saves .sv .x { color: var(--enemy); padding: 3px 9px; }
 .sbx-row button.ai { border-color: var(--intel); color: var(--intel); }
 .sbx-row input { width: 92px; background: rgba(0, 0, 0, .3); border: 1px solid var(--line); border-radius: 4px; color: var(--g); padding: 3px 6px; font: 12px var(--f-ui, monospace); }
 .sbx-lv { display: inline-flex; gap: 3px; }
@@ -1101,6 +1108,8 @@ function sbxUI() {
     <div class="sbx-cats"></div><div class="sbx-pal" role="listbox" aria-label="兵力目录"></div>
     <div class="sbx-info"></div><div class="sbx-msg" role="status"></div><div class="sbx-list"></div>
     <div class="sbx-row"><button type="button" data-act="preset"></button><button type="button" class="ai" data-act="ai">AI 帮我部署</button><button type="button" data-act="clear">清空</button></div>
+    <div class="sbx-row"><button type="button" data-act="save">保存部署</button><button type="button" data-act="loads" aria-expanded="false">读取部署</button></div>
+    <div class="sbx-saves" hidden></div>
     <div class="sbx-row"><input type="text" inputmode="numeric" aria-label="地图种子" class="sbx-seedin"><button type="button" data-act="map">新地图</button><span class="sbx-lv" role="radiogroup" aria-label="守军 AI 水平"></span></div>
     <details class="sbx-notes" open><summary>部署思路</summary><p class="sbx-hint">点「AI 帮我部署」，由高级指挥官按地形判读完成部署并说明理由。</p><ol></ol></details>
     <div class="sbx-hint sbx-keys">左键放置 · 右键 / Delete 移除 · 拖动已放置的条目可移位 · Tab 切换攻守 · Esc 取消 · 滚轮缩放、中键拖动平移</div>
@@ -1120,6 +1129,10 @@ function sbxUI() {
     else if (a === 'preset') { const b0 = S.sbx.budget[SBX.side]; if (SBX.side === 'e') sbxPresetDef(); else sbxPresetFleet(); sbxMsg(`已载入标准部署（${sbxSpent(SBX.side)} 点）` + (S.sbx.budget[SBX.side] > b0 ? `，预算已调至 ${S.sbx.budget[SBX.side]}` : '')); }
     else if (a === 'ai') { const r = SBX.side === 'e' ? sbxAIDefend() : sbxAIAttack(); sbxMsg(SBX.side === 'e' ? `守方指挥官判断主攻方向：${r.join('、')}` : `攻方指挥官：主攻${r.main}${r.feint ? '，佯攻' + r.feint : ''}`); }
     else if (a === 'clear') { sbxClear(SBX.side); sbxMsg('已清空' + (SBX.side === 'e' ? '防守方' : '进攻方')); }
+    else if (a === 'save') { const ok = sbxSaveNow(); sbxMsg(ok ? `已保存：${sbxSaves()[0].name}（双方部署、预算与地图）` : '已保存在本页（浏览器存储不可用，刷新后会丢失）', !ok); sbxSavesShow(true); }
+    else if (a === 'loads') sbxSavesShow(!SBX.savesOpen);
+    else if (b.dataset.load != null) { const d = b.dataset.load === 'last' ? sbxLast() : sbxSaves()[+b.dataset.load]; if (sbxLoad(d)) { sbxMsg(`已读取：${b.dataset.load === 'last' ? '上一局部署' : d.name}，可以继续修改`); sbxSavesShow(false); } else sbxMsg('存档已损坏，无法读取', true); return; }
+    else if (b.dataset.del != null) { sbxDelSave(+b.dataset.del); sbxSavesShow(true); sbxMsg('已删除存档'); }
     else if (a === 'map') { const v = parseInt(el.querySelector('.sbx-seedin').value, 10); openSandbox(isFinite(v) && v > 0 && v !== S.seed ? v : (Math.random() * 1e9) | 0, true); return; }
     else if (a === 'spectate' || a === 'command') { sbxGo(a === 'spectate' ? 'spectate' : 'attack'); return; }
     sbxRender();
@@ -1129,6 +1142,13 @@ function sbxUI() {
   el.querySelector('.sbx-seedin').addEventListener('keydown', e => { if (e.key === 'Enter') el.querySelector('[data-act="map"]').click(); });
   return el;
 }
+function sbxSavesShow(on) {
+  SBX.savesOpen = on;
+  if (!SBX.el) return;
+  const box = SBX.el.querySelector('.sbx-saves'), btn = SBX.el.querySelector('[data-act="loads"]');
+  box.hidden = !on; btn.setAttribute('aria-expanded', on); btn.classList.toggle('on', on);
+  if (on) box.innerHTML = sbxSavesHtml();
+}
 function sbxGo(role) {
   const n = { p: S.sbx.items.filter(it => it.side === 'p').length, e: S.sbx.items.filter(it => it.side === 'e').length };
   const ships = S.sbx.items.some(it => it.side === 'p' && sbxEntry(it).spawn.kind === 'ship' && (sbxShipLoad(it).t || sbxEntry(it).spawn.ship === 'supply' || sbxShipLoad(it).v));
@@ -1137,6 +1157,47 @@ function sbxGo(role) {
   if (!n.e) sbxMsg('防守方空无一人——将直接开战', false);
   sbxStart(role);
 }
+// —— 部署存档：开战时自动记下「上一局部署」，也可手动保存多份（localStorage；不可用时只留在本页内存）——
+const SBX_SAVE_KEY = 'bh-sbx-saves', SBX_LAST_KEY = 'bh-sbx-last', SBX_SAVE_MAX = 20;
+const sbxClone = o => JSON.parse(JSON.stringify(o));
+function sbxStore(key, val) { try { if (val == null) localStorage.removeItem(key); else localStorage.setItem(key, JSON.stringify(val)); return true; } catch (e) { return false; } }
+function sbxFetch(key) { try { return JSON.parse(localStorage.getItem(key)); } catch (e) { return null; } }
+function sbxSnap(name) {
+  return { v: 1, name, seed: S.seed, level: S.level, budget: { ...S.sbx.budget }, items: sbxClone(S.sbx.items), notes: sbxClone(S.sbx.notes || { p: [], e: [] }),
+    spent: { p: sbxSpent('p'), e: sbxSpent('e') }, at: Date.now() };
+}
+const sbxSaves = () => { const a = sbxFetch(SBX_SAVE_KEY); return Array.isArray(a) ? a : SBX.saves || []; };
+const sbxLast = () => SBX.last || sbxFetch(SBX_LAST_KEY);
+function sbxSaveNow() {
+  const list = sbxSaves().slice();
+  list.unshift(sbxSnap(`部署 ${(list.reduce((m, d) => Math.max(m, +(/\d+$/.exec(d.name) || [0])[0]), 0)) + 1}`));
+  if (list.length > SBX_SAVE_MAX) list.length = SBX_SAVE_MAX;
+  SBX.saves = list;
+  return sbxStore(SBX_SAVE_KEY, list);
+}
+function sbxDelSave(i) { const list = sbxSaves().slice(); list.splice(i, 1); SBX.saves = list; sbxStore(SBX_SAVE_KEY, list); }
+// 读取：同一地图种子重建地形，恢复双方部署、预算、守军水平与部署思路，回到编辑阶段继续修改
+function sbxLoad(d) {
+  if (!d || !Array.isArray(d.items) || !d.seed) return false;
+  if (typeof U === 'object' && DIFF[d.level]) U.level = d.level;
+  if (S) S.level = DIFF[d.level] ? d.level : S.level;
+  const keepSide = SBX.side;
+  openSandbox(d.seed, false);
+  if (DIFF[d.level]) S.level = d.level;
+  const items = sbxClone(d.items).filter(it => catalogById(it.cat));
+  for (const it of items) if (it.cargo) it.cargo = it.cargo.filter(id => catalogById(id));
+  Object.assign(S.sbx, { items, budget: { p: (d.budget && d.budget.p) || SBX_BUDGET, e: (d.budget && d.budget.e) || SBX_BUDGET }, notes: sbxClone(d.notes || { p: [], e: [] }) });
+  S.sbx.nid = items.reduce((m, it) => Math.max(m, it.id || 0), 0) + 1;
+  SBX.side = keepSide;
+  sbxSync();
+  return true;
+}
+const sbxWhen = t => { const d = new Date(t || 0), z = n => String(n).padStart(2, '0'); return `${z(d.getMonth() + 1)}-${z(d.getDate())} ${z(d.getHours())}:${z(d.getMinutes())}`; };
+function sbxSavesHtml() {
+  const L = sbxLast(), list = sbxSaves(), row = (k, d, del) => `<div class="sv"><button type="button" data-load="${k}" title="读取后可继续修改">${sbxEsc(d.name)}<span>种子 ${d.seed} · 攻 ${d.spent ? d.spent.p : '?'} / 守 ${d.spent ? d.spent.e : '?'} 点 · ${sbxWhen(d.at)}</span></button>${del ? `<button type="button" class="x" data-del="${k}" title="删除此存档">×</button>` : ''}</div>`;
+  return (L ? row('last', { ...L, name: '上一局部署' }, false) : '') + list.map((d, i) => row(i, d, true)).join('') || '<p class="sbx-hint">还没有存档。开战时会自动记下「上一局部署」，也可随时点「保存部署」。</p>';
+}
+
 // 切换攻守方：集结海域 / 海岸不在视野内时把镜头移过去
 function sbxFrameSide() {
   if (typeof toWorld !== 'function' || typeof camCenter !== 'function') return;
@@ -1290,9 +1351,30 @@ HOOK.frame.push(() => {
       const s0 = S.sbx.spent || { p: 0, e: 0 };
       n.textContent = `沙盒${sp ? ' · 观战 AI 对 AI' : ' · 指挥进攻方'} · 进攻方 ${s0.p} 点 / 防守方 ${s0.e} 点 · 守军 AI ${DIFF[S.level].name}`;
       n.hidden = false;
+      sbxEditBtn('btnSbxEdit', $('btnAgain'), 'go', '修改部署再战');
     }
   } else if (typeof document !== 'undefined' && SBX.endKey && $('sbxEnd')) { $('sbxEnd').hidden = true; SBX.endKey = null; }
+  // 沙盒推演中：顶栏「改部署」按钮随时回到编辑（恢复开战前的部署）；其他模式下隐藏
+  if (typeof document !== 'undefined' && $('topr')) {
+    const on = !!(S && S.mode === 'sandbox' && S.sbx && S.sbx.live && sbxLast());
+    if (on && !$('btnSbxBack')) sbxEditBtn('btnSbxBack', $('topr').firstElementChild, 'tb', '改部署', true);
+    if ($('btnSbxBack')) $('btnSbxBack').hidden = !on;
+    if ($('btnSbxEdit')) $('btnSbxEdit').hidden = !(S && S.mode === 'sandbox' && sbxLast());
+  }
 });
+// 「修改部署再战」：回到编辑阶段，同一地图、双方部署原样恢复
+function sbxEditBtn(id, ref, cls, text, before) {
+  if (!ref || $(id)) return;
+  const b = document.createElement('button');
+  b.id = id; b.type = 'button'; b.className = cls; b.textContent = text; b.title = '回到沙盒编辑，恢复本局开战前的双方部署，修改后可再战';
+  b.addEventListener('click', () => {
+    const d = sbxLast();
+    if (!d) return;
+    $('end').hidden = true;
+    if (sbxLoad(d)) sbxMsg('已恢复上一局的部署：修改后点「观战」或「指挥进攻方」再战');
+  });
+  before ? ref.before(b) : ref.after(b);
+}
 
 // ———————————————— 地图绘制（只用形状与颜色，不写字）————————————————
 const SBX_HULL = { p_lct: 26, p_lci: 30, p_lcvp: 16, p_lst: 36, p_lsm: 30, p_supply: 32, p_supply_h: 32, p_rocket: 24, p_lcs: 26, p_sweep: 22 };
