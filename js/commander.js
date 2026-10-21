@@ -1530,7 +1530,7 @@ function cmdDraw(time) {
     }
     // 调整线：滩头出口与下一目标前的短横
     ctx.strokeStyle = rgba(COL.g, .45 * fade); ctx.lineWidth = px(1.4);
-    for (let i = 2; i < route.length; i++) {
+    for (let i = 1; i < route.length; i++) {
       const [x0, y0] = route[i - 1], [x1, y1] = route[i], a = Math.atan2(y1 - y0, x1 - x0), hl = w * 1.15;
       const cx = lerp(x0, x1, .82), cy = lerp(y0, y1, .82);
       ctx.beginPath(); ctx.moveTo(cx - Math.sin(a) * hl, cy + Math.cos(a) * hl); ctx.lineTo(cx + Math.sin(a) * hl, cy - Math.cos(a) * hl); ctx.stroke();
