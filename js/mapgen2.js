@@ -106,8 +106,15 @@ function finishMap(r, cAt, headland) {
   heads.sort((a, b) => b.e - a.e);
   const bats = [];
   for (const h of heads) if (bats.length < 2 && bats.every(b => Math.abs(b.x - h.x) > 700)) bats.push(h);
-  bats.forEach((h, i) => add(i ? 'BT2' : 'BT', i ? '东岸防炮台' : '岸防炮台', h.x, h.y, 2));
-  ['公路桥', '北桥', '东桥'].forEach((n, i) => { if (bridges[i]) add('B' + (i + 1), n, bridges[i].x, bridges[i].y, 2); });
+  // 地名按实际方位起：两座炮台分东西，桥按是否在沿海公路上、在图东/西半部命名（同侧两座时偏北者为北桥）
+  const westOf = (a, b) => a.x < b.x;
+  bats.forEach((h, i) => add(i ? 'BT2' : 'BT', bats.length < 2 ? '岸防炮台' : westOf(h, bats[1 - i]) ? '西岸防炮台' : '东岸防炮台', h.x, h.y, 2));
+  const bs = bridges.slice(0, 3).map(b => ({ b, road: Math.abs(b.y - rdY(b.x)) < 45, side: b.x < W / 2 ? '西' : '东' }));
+  const rd = bs.filter(o => o.road), up = bs.filter(o => !o.road);
+  for (const o of rd) o.n = rd.length < 2 ? '公路桥' : o.side + '公路桥';
+  for (const o of up) o.n = up.some(q => q !== o && q.side === o.side) ? (up.some(q => q !== o && q.side === o.side && q.b.y > o.b.y) ? '北桥' : o.side + '桥') : o.side + '桥';
+  if (rd.length === 2 && rd[0].side === rd[1].side) for (const o of rd) o.n = (rd.some(q => q !== o && q.b.x > o.b.x) ? '西' : '东') + '公路桥';
+  bs.forEach((o, i) => add('B' + (i + 1), o.n, o.b.x, o.b.y, 2));
   add('X1', '西路口', town1.x, rdY(town1.x), 1);
   add('X2', '东路口', town2.x, rdY(town2.x), 1);
   vills.forEach((v, i) => add('V' + (i + 1), i ? '东渔村' : '西渔村', v.x, v.y, 1));

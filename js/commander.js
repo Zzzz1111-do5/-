@@ -63,7 +63,7 @@ const cmdExit = i => {
   return cmdPt('E' + (i + 1)) || { key: null, name: b.name + '出口', x: b.cx, y: coastAt(b.cx) - 50, owner: 'e', prog: 0, vp: 1 };
 };
 const cmdMen = ts => ts.reduce((a, q) => a + q.men.length, 0);
-const cmdHT = () => `H+${Math.floor(S.t / 60)}分`;
+const cmdHT = () => { const m = Math.floor(S.t / 60), s = Math.floor(S.t % 60 / 10) * 10; return `H+${m}分${s ? s + '秒' : ''}`; };   // 精确到 10 秒
 const cmdLoaded = s => !!s.load && (s.load.teams > 0 || s.load.eng > 0 || (Array.isArray(s.load.veh) && s.load.veh.length > 0));
 const cmdAssault = s => s.kind !== 'supply' && s.kind !== 'lst' && !!s.load && s.load.teams > 0;
 const cmdEName = e => e.name || (ENEMY_SPEC[e.kind] && ENEMY_SPEC[e.kind].name) || '火力点';
@@ -161,6 +161,7 @@ function cmdThinkP() {
     cmdRun(cmdPhaseP, C, P);
     cmdRun(cmdPointsP, C, P);
     cmdRun(cmdStalls, C, P);
+    cmdRun(cmdStageStall, C, P);
     cmdRun(cmdHalts, C, P);
     cmdRun(cmdEst0, C, P);
     cmdRun(cmdCrisisP, C, P);
@@ -366,16 +367,24 @@ function cmdShipTask(s) {
 
 // 舰船监视：偏航登陆、击沉
 function cmdShipsP(C) {
+  if (C.empt && S.t - C.empt.t > 20) {
+    const g = C.empt, bn = g.b >= 0 ? cmdBN(g.b) : '滩头';
+    C.empt = null;
+    chatSay('p', g.ships.length === 1 ? `报告：${g.ships[0].label}（已卸载）在${bn}被击沉。` : `报告：${g.gun ? `${gridRef(g.gun.kx, g.gun.ky)} 岸防炮持续炮击${bn}，` : ''}${bn}已卸载的空船 ${g.ships.length} 艘相继被击沉（${cmdLabels(g.ships)}）。`, { kind: 'report', at: g, lv: g.ships.length >= 3 ? 1 : 2 });
+  }
   for (const s of S.ships) {
     const t = C.ship[s.id];
     if (!alive(s)) {
       if (!C.sunk[s.id] && t) {
         C.sunk[s.id] = 1;
-        chatSay('p', `报告：${s.label} 被击沉${t.men ? `，舰上 ${t.men} 人损失` : ''}${s.kind === 'supply' && t.men ? '，一处滩头补给站无法建立' : ''}${s.kind === 'lst' && t.veh ? `，舰上 ${t.veh} 辆装甲车辆随舰沉没` : ''}。`, { kind: 'report', at: s, lv: t.men || t.veh ? 0 : 1 });
+        // 已卸载的空船：合并报告（滩头空船接连被击沉时不逐艘刷屏）；没有满载舰艇待过航道时不再提「后续舰艇」
+        const empty = !t.men && !t.veh && s.kind !== 'supply', more = S.ships.some(o => alive(o) && cmdLoaded(o) && o.state !== 'beached' && o.state !== 'unloading');
         const gun = S.enemies.filter(e => !e.dead && e.kind === 'coastal' && e.kx != null && dist(e.kx, e.ky, s.x, s.y) < 650).sort((a, b) => dist(a.kx, a.ky, s.x, s.y) - dist(b.kx, b.ky, s.x, s.y))[0];
-        if (gun && cmdFire(gun.kx, gun.ky, 3, 'cb')) chatSay('p', `命令：驱逐舰对 ${gridRef(gun.kx, gun.ky)} 岸防重炮实施压制射击，后续舰艇加速通过其射界。`, { kind: 'order', at: { x: gun.kx, y: gun.ky }, delay: 1.5, key: 'gun' + gun.id, gap: 60 });
+        if (empty) { const g = C.empt || (C.empt = { t: S.t, x: s.x, y: s.y, b: cmdBeachOf(s.x, 200), ships: [], gun: null }); g.ships.push(s); g.gun = g.gun || gun; }
+        else chatSay('p', `报告：${s.label} 被击沉${t.men ? `，舰上 ${t.men} 人损失` : ''}${s.kind === 'supply' && t.men ? '，一处滩头补给站无法建立' : ''}${s.kind === 'lst' && t.veh ? `，舰上 ${t.veh} 辆装甲车辆随舰沉没` : ''}。`, { kind: 'report', at: s, lv: t.men || t.veh ? 0 : 1 });
+        if (gun && cmdFire(gun.kx, gun.ky, 3, 'cb')) chatSay('p', `命令：驱逐舰对 ${gridRef(gun.kx, gun.ky)} 岸防重炮实施压制射击，${more ? '后续舰艇加速通过其射界' : '掩护滩头'}。`, { kind: 'order', at: { x: gun.kx, y: gun.ky }, delay: 1.5, key: 'gun' + gun.id, gap: 60 });
         else if (gun && cmdAir('strike', gun.kx, gun.ky, gun.id)) chatSay('p', `命令：攻击机出击，摧毁 ${gridRef(gun.kx, gun.ky)} 岸防重炮。`, { kind: 'order', at: { x: gun.kx, y: gun.ky }, delay: 1.5, key: 'gun' + gun.id, gap: 60 });
-        else if (gun && cmdAsk(gun.kx, gun.ky)) chatSay('p', `${cmdAsk(gun.kx, gun.ky)}：该岸防重炮封锁登陆航道，后续舰艇须通过其射界。`, { kind: 'order', at: { x: gun.kx, y: gun.ky }, delay: 1.5, lv: 0, key: 'askgun', gap: 60 });
+        else if (gun && cmdAsk(gun.kx, gun.ky) && (more || !empty)) chatSay('p', `${cmdAsk(gun.kx, gun.ky)}：${more ? '该岸防重炮封锁登陆航道，后续舰艇须通过其射界' : '该岸防重炮持续炮击滩头'}。`, { kind: 'order', at: { x: gun.kx, y: gun.ky }, delay: 1.5, lv: more ? 0 : 1, key: 'askgun', gap: 150 });
       }
       continue;
     }
@@ -800,8 +809,21 @@ function cmdStallFix(C, P, key, p, grp, men, men0, lost) {
   const O = P.o[key], dur = Math.round(S.t - (O.t || S.t)), st = [];
   if (S.t - (O.pgT ?? O.t ?? S.t) > 30) st.push(`攻击 ${dur} 秒仍未突入`);
   if (lost > 0) st.push(`已伤亡 ${lost} 人`);
-  chatSay('p', `报告：${p.name}攻击受阻：${names}投入 ${men0} 人，${st.join('，') || '攻势受挫'}${why}。`, { kind: 'friction', at: p });
+  const nth = (C.stallN || (C.stallN = {}))[key] = (C.stallN[key] || 0) + 1;
+  chatSay('p', `报告：${p.name}${nth >= 2 ? `第 ${nth} 次` : ''}攻击受阻：${names}投入 ${men0} 人，${st.join('，') || '攻势受挫'}${why}。`, { kind: 'friction', at: p });
   const gx = grp.reduce((a, u) => a + u.x, 0) / grp.length, gy = grp.reduce((a, u) => a + u.y, 0) / grp.length, acts = [];
+  // 同一目标再次受阻：不再重复同样的补救，改为绕过它转攻附近较弱的据点，或暂停强攻、以火力监视
+  if (nth >= 2) {
+    P.hard[key] = S.t;
+    const alt = S.points.filter(o => o !== p && !cmdOwned(o) && !(P.hard[o.key] != null && S.t - P.hard[o.key] < 75) && dist(o.x, o.y, gx, gy) < 650 && apEstimate(o, true) < Math.max(4, men * .6))
+      .sort((a, b) => dist(a.x, a.y, gx, gy) - dist(b.x, b.y, gx, gy))[0];
+    const tgt = cmdFoeAt(p, 140), fire = !!(tgt && cmdFire(tgt.x, tgt.y, 2, 'stall'));
+    if (alt) { for (const u of grp) cmdSend(u, 'task', { key: alt.key }); acts.push(`不再正面强攻${p.name}，${names}绕过该点，转攻${alt.name}`); }
+    else { for (const u of grp) cmdSend(u, 'drop', { key }); acts.push(`暂停对${p.name}的攻击，${names}撤出接触、就近转用，${S.assets.reserve > 0 ? '待后备队上陆后再攻' : '待火力准备后再攻'}`); }
+    if (fire) acts.push(`舰炮对${p.name}实施监视射击，阻其守军出击`);
+    chatSay('p', `补救：${acts.join('；')}。`, { kind: 'remedy', at: alt || p, delay: 2 });
+    return;
+  }
   const tgt = cmdFoeAt(p, 140);
   if (tgt && cmdFire(tgt.x, tgt.y, 3, 'stall')) acts.push(`呼叫舰炮对${p.name}${cmdDir(tgt.x - gx, tgt.y - gy)}面火力点急促射 3 发`);
   else if (tgt && cmdAir('cas', tgt.x, tgt.y)) acts.push(`呼叫对地支援机压制${p.name}守军`);
@@ -830,6 +852,40 @@ function cmdStallFix(C, P, key, p, grp, men, men0, lost) {
   chatSay('p', `补救：${acts.join('；')}。`, { kind: 'remedy', at: p, delay: 2 });
 }
 
+// —— 集结迟滞：连队向目标集结 100 秒仍未进入攻击位置（桥上拥堵、桥被炸、绕行过远）——报告原因；兵力够就地发起，不够则暂缓、转用 ——
+function cmdStageStall(C, P) {
+  const st = C.stg || (C.stg = {}), kT = C.stgK || (C.stgK = {}), by = {};
+  for (const u of S.units) {
+    const pl = u.side === 'p' && u.kind === 'inf' && cmdCtl(u) && u.state !== 'rout' && u.x != null && P.u[u.id];
+    if (!pl || pl.ph !== 'stage' || pl.t0 == null || S.t - pl.t0 < 100 || st[u.id] === pl.t0 || (C.pend && C.pend[u.id] > S.t)) continue;
+    if (S.t - (kT[pl.obj] ?? -999) < 150) continue;
+    (by[pl.obj] || (by[pl.obj] = [])).push(u);
+  }
+  for (const key in by) {
+    const p = cmdPt(key), grp = by[key];
+    for (const u of grp) st[u.id] = P.u[u.id].t0;
+    if (!p || cmdOwned(p)) continue;
+    kT[key] = S.t;
+    const names = grp.map(cmdUName).join('、'), n = Math.round(S.t - Math.min(...grp.map(u => P.u[u.id].t0)));
+    const men = grp.reduce((a, u) => a + (u.men || 0), 0), est = Math.round(apEstimate(p, true)), u0 = grp[0], pl0 = P.u[u0.id];
+    const br = S.points.find(b => /^B\d/.test(b.key) && grp.some(u => dist(u.x, u.y, b.x, b.y) < 130));
+    const far = Math.round(pl0.sx != null ? dist(u0.x, u0.y, pl0.sx, pl0.sy) : dist(u0.x, u0.y, p.x, p.y));
+    const why = br ? `${br.name}${typeof isBlown === 'function' && isBlown(br.key) ? '已被炸毁，须绕道渡河' : '桥面狭窄，部队拥堵'}` : grp.some(u => u.state === 'waver') ? '部队士气动摇，行动迟缓' : `接近路受阻，距集结位置仍有约 ${far} 米`;
+    chatSay('p', `报告：${names}向${p.name}方向集结已 ${n} 秒，未能进入攻击位置：${why}。`, { kind: 'friction', at: u0 });
+    const acts = [], reach = !!field(p.x, p.y, 'p');
+    if (reach && men >= Math.max(6, est * 1.2)) {
+      for (const u of grp) cmdSend(u, 'launch', { key });
+      acts.push(`${names}不再等待集结，就地展开向${p.name}发起攻击`);
+      if (cmdFoeFire(p)) acts.push(`舰炮先行压制${p.name}当面火力点`);
+    } else {
+      P.hard[key] = S.t;
+      for (const u of grp) cmdSend(u, 'drop', { key });
+      acts.push(`暂缓攻击${p.name}（${est ? `守军约 ${est} 人，` : ''}我仅 ${men} 人${reach ? '' : '，且无路可通'}），${names}就近转用于其他方向，待兵力集中后再攻`);
+    }
+    chatSay('p', `补救：${acts.join('；')}。`, { kind: 'remedy', at: p, delay: 2 });
+  }
+}
+
 // —— 停滞不前（apLaunch 调用 cmdOnLaunch 制造；此处发现并催促）——
 function cmdOnLaunch(units, p) {
   if (!cmdOn() || !S.autoPlan) return;
@@ -856,7 +912,8 @@ function cmdHalts(C, P) {
     const d = Math.round(dist(u.x, u.y, p.x, p.y)), mates = S.units.filter(o => o !== u && o.side === 'p' && P.u[o.id] && P.u[o.id].obj === h.key && P.u[o.id].ph === 'go');
     chatSay('p', `报告：${cmdUName(u)}在${p.name}${cmdDir(u.x - p.x, u.y - p.y)}面 ${d} 米处停止前进，${h.why}${mates.length ? `，${cmdUName(mates[0])}侧翼暴露` : ''}。`, { kind: 'friction', at: u });
     cmdSend(u, 'urge', { key: h.key });
-    chatSay('p', `补救：催促${cmdUName(u)}立即前进${mates.length ? `，与${mates.map(cmdUName).join('、')}会攻${p.name}` : `，限 30 秒内突入${p.name}`}。`, { kind: 'remedy', at: u, delay: 1.5 });
+    const own = p.owner === 'p';   // 已占领但仍有争夺：是进入加强，不是突入
+    chatSay('p', `补救：催促${cmdUName(u)}立即前进${mates.length ? `，与${mates.map(cmdUName).join('、')}${own ? `会同加强${p.name}防御` : `会攻${p.name}`}` : own ? `，限 30 秒内进入${p.name}加强防御` : `，限 30 秒内突入${p.name}`}。`, { kind: 'remedy', at: u, delay: 1.5 });
   }
 }
 
@@ -887,7 +944,7 @@ function cmdSend(u, act, a) {
 // 威胁处置：炸桥、渗透、敌装甲
 function cmdThreatsP(C) {
   for (const b of S.blown || []) {
-    if (b.prog >= 1 || C.bridge[b.key]) continue;
+    if (b.prog >= 1 || C.bridge[b.key] || S.t - (b.t ?? -99) < 3) continue;   // 爆破后约 3 秒才报告（守军的炸桥命令先出）
     C.bridge[b.key] = { t: S.t };
     let u = null, bd = 400;
     for (const o of S.units) if (o.side === 'p' && o.kind === 'inf' && o.x != null) { const d = dist(o.x, o.y, b.x, b.y); if (d < bd) { bd = d; u = o; } }
@@ -913,7 +970,10 @@ function cmdThreatsP(C) {
     }
     if (u) {
       cmdSend(u, 'icpt', { raid: r.id });
-      chatSay('p', `补救：命令${cmdUName(u)}抽出兵力拦截，补给站警戒分队进入阵地。`, { kind: 'remedy', at, delay: 2 });
+      chatSay('p', `补救：命令${cmdUName(u)}抽出兵力拦截，${r.kind === 'team' ? '该小组就地固守' : `${CMD_RAID[r.kind] || '后方'}警戒分队进入阵地`}。`, { kind: 'remedy', at, delay: 2 });
+    } else {   // 无兵可抽：也要有处置
+      const f = cmdNearP(at.x, at.y).d > 70 && cmdFire(at.x, at.y, 2, 'raid'), ask = !f ? cmdAsk(at.x, at.y) : '';
+      chatSay('p', `补救：附近无兵力可抽调拦截，${r.kind === 'team' ? '该小组就地固守待援' : `${CMD_RAID[r.kind] || '后方'}警戒分队就地抗击`}${f ? `；舰炮拦阻 ${gridRef(at.x, at.y)}` : ask ? `；${ask}` : ''}。`, { kind: 'remedy', at, delay: 2 });
     }
   }
   for (const a of S.armor || []) {
@@ -923,7 +983,8 @@ function cmdThreatsP(C) {
     const near = cmdNearP(a.kx, a.ky), close = near.d < 320;
     if (cmdFire(a.kx, a.ky, 3, 'armor')) acts.push('舰炮急促射');
     if (cmdAir('strike', a.kx, a.ky)) acts.push('攻击机出击');
-    chatSay('p', `报告：${cmdWhere(a.kx, a.ky)}发现敌装甲车（${g}）${close ? `，距我前沿 ${Math.round(near.d)} 米` : ''}，轻武器无法击穿。`, { kind: 'report', at, key: 'car', gap: 30, lv: close ? 0 : 1 });
+    const wh = cmdWhere(a.kx, a.ky);
+    chatSay('p', `报告：${wh}发现敌装甲车${wh.includes(g) ? '' : `（${g}）`}${close ? `，距我前沿 ${Math.round(near.d)} 米` : ''}，轻武器无法击穿。`, { kind: 'report', at, key: 'car', gap: 30, lv: close ? 0 : 1 });
     if (acts.length) chatSay('p', `命令：${acts.join('、')}，打击 ${g} 敌装甲车${close ? '' : '，阻其向滩头机动'}。`, { kind: 'order', at, delay: 1.5, key: 'carord', gap: 30 });
     else if (!close && cmdAsk(a.kx, a.ky)) chatSay('p', `${cmdAsk(a.kx, a.ky)}：敌装甲车正向我滩头机动。`, { kind: 'order', at, delay: 1.5, key: 'carord', gap: 30, lv: 0 });
     if (close) {
@@ -976,7 +1037,7 @@ function cmdCrisisP(C, P) {
   if (C.crisis) {
     if (C.crisis.key) { cmdCrisisStall(C, ts, cx, cy); return; }
     // 集中目标已夺取：态势好转则恢复多路发展，否则转向下一个目标
-    if (vpShare() >= .3 || now >= C.peak * .6 || C.ph === 'cons') { C.crisis = null; chatSay('p', `判断：态势好转，在岸兵力 ${now} 人，据点分值 ${Math.round(vpShare() * 100)}%。决心：恢复多路发展。`, { kind: 'plan' }); return; }
+    if (vpShare() >= .3 || now >= C.peak * .6 || C.ph === 'cons') { C.crisis = null; chatSay('p', `判断：态势好转，在岸步兵 ${now} 人，据点分值 ${Math.round(vpShare() * 100)}%。决心：恢复多路发展。`, { kind: 'plan' }); return; }
     const nx = pickT();
     if (!nx) return;
     C.crisis.key = nx.key;
@@ -988,7 +1049,8 @@ function cmdCrisisP(C, P) {
   if (!tg) return;
   C.crisis = { t: S.t, key: tg.key };
   const lossPct = Math.round((1 - now / C.peak) * 100), at = { x: tg.x, y: tg.y };
-  chatSay('p', `判断：${cmdHT()}，在岸兵力仅 ${now} 人，较峰值减少 ${lossPct}%，累计伤亡 ${S.stats.lost} 人；据点分值仅 ${Math.round(vpShare() * 100)}%，已无力多路进攻。`, { kind: 'plan', at });
+  C.sitT = Math.max(C.sitT, S.t + 45);   // 危局判断已含兵力数字：同一时刻不再发态势报告
+  chatSay('p', `判断：${cmdHT()}，在岸步兵仅 ${now} 人，较峰值减少 ${lossPct}%，累计伤亡 ${S.stats.lost} 人；据点分值仅 ${Math.round(vpShare() * 100)}%，已无力多路进攻。`, { kind: 'plan', at });
   const rein = [];
   if (S.assets.reserve > 0 && !S.rlines.length) {
     const sh = S.ships.filter(o => o.state === 'beached' && o.bx != null).sort((a, b) => dist(a.bx, a.by, cx, cy) - dist(b.bx, b.by, cx, cy))[0];
@@ -1027,8 +1089,9 @@ function cmdAmmoP(C, P) {
     if (C.ammo[u.id] === pl.ph) continue;
     C.ammo[u.id] = pl.ph;
     const ts = teamsOf(u).filter(q => q.kind === 'inf'), am = ts.length ? ts.reduce((a, q) => a + q.ammo, 0) / ts.length : 60;
-    if (am >= 15 || S.t - (C.ammoT ?? -99) < 20) continue;
-    C.ammoT = S.t;
+    const au = C.ammoU || (C.ammoU = {});
+    if (am >= 15 || S.t - (C.ammoT ?? -99) < 20 || S.t - (au[u.id] ?? -999) < 150) continue;
+    C.ammoT = au[u.id] = S.t;
     const un = cmdUName(u);
     chatSay('p', `报告：${un}弹药将尽，攻击力减弱。`, { kind: 'friction', at: u, lv: 1 });
     chatSay('p', pl.ph === 'supply' && pl.sp ? `补救：${un}后撤至 ${gridRef(pl.sp.x, pl.sp.y)} 补给点补充弹药，补足后归建再攻。` : `补救：附近无接通的补给点，${un}就近隐蔽待补，工兵抢修补给线。`, { kind: 'remedy', at: pl.sp || u, delay: 2, lv: 1 });
@@ -1038,8 +1101,8 @@ function cmdAmmoP(C, P) {
 function cmdSitrep(C) {
   if (S.t < C.sitT) return;
   C.sitT = S.t + 150;
-  const now = cmdMen(S.teams.filter(q => q.side === 'p')), own = S.points.filter(p => p.owner === 'p').length;
-  chatSay('p', `报告：${cmdHT()}，我在岸兵力 ${now} 人，累计伤亡 ${S.stats.lost} 人；控制据点 ${own}/${S.points.length}（分值 ${Math.round(vpShare() * 100)}%），摧毁敌火力点 ${S.stats.structs} 处。`, { kind: 'report', lv: 1 });
+  const now = cmdMen(S.teams.filter(q => q.side === 'p')), inf = cmdMen(cmdPInf()), own = S.points.filter(p => p.owner === 'p').length;
+  chatSay('p', `报告：${cmdHT()}，我在岸兵力 ${now} 人（其中步兵 ${inf} 人），累计伤亡 ${S.stats.lost} 人；控制据点 ${own}/${S.points.length}（分值 ${Math.round(vpShare() * 100)}%），摧毁敌火力点 ${S.stats.structs} 处。`, { kind: 'report', lv: 1 });
 }
 
 // —— 增援线（logistics.js updateRLines 在放出增援艇前调用）：返回 true 表示本批推迟 ——
@@ -1122,7 +1185,8 @@ function cmdEInit(E) {
   for (const p of S.points) E.own[p.key] = p.owner;
   E.waves = S.ai ? S.ai.waves : 0;
   const tn = [...towns.keys()].map(k => cmdPt(k)).filter(Boolean).map(p => `${p.name}（${towns.get(p.key)} 组）`);
-  chatSay('e', `判断：敌舰队在南面集结海域展开，登陆方向尚不明确。决心：各滩守备就地抗登陆，预备队${tn.length ? '于' + tn.join('、') : ''}待命，判明敌主攻方向后实施反冲击。`, { kind: 'plan' });
+  const told = S.mode === 'sandbox' && S.chat.some(m => m.side === 'e' && m.kind === 'plan');   // 沙盒部署时已讲过防御思路：只简短确认
+  chatSay('e', told ? `决心：按既定部署抗登陆，预备队${tn.length ? '于' + tn.join('、') : ''}待命，敌主攻方向一经证实即实施反冲击。` : `判断：敌舰队在南面集结海域展开，登陆方向尚不明确。决心：各滩守备就地抗登陆，预备队${tn.length ? '于' + tn.join('、') : ''}待命，判明敌主攻方向后实施反冲击。`, { kind: 'plan' });
 }
 // 判明主攻方向：可能把佯攻误判为主攻（理由取自真实数字，如离指挥所更近、率先上陆）
 function cmdEIdentify(E, F, o) {
@@ -1140,7 +1204,9 @@ function cmdEIdentify(E, F, o) {
   const main = S.cmd.p.plan ? S.cmd.p.plan.main : -1;
   E.wrong = main >= 0 && g.i !== main;
   const others = R.filter(x => x.i !== g.i).slice(0, 2), X = cmdExit(g.i);
-  chatSay('e', `判断：${cmdBN(g.i)}之敌约 ${g.men} 人，${why}，判为敌主攻方向${others.length ? `；${others.map(x => `${cmdBN(x.i)}之敌约 ${x.men} 人`).join('、')}，判为牵制佯动` : ''}。`, { kind: 'plan', at: X });
+  // 误判时较大的一路看不清（烟幕、观察所被压制）：报出的是偏低的目视数，错误来自情报而不是算术
+  const oTxt = x => g !== R[0] && x.men > g.men ? `${cmdBN(x.i)}方向${pick(['烟幕遮蔽', '观察所遭舰炮压制', '视线受地形遮挡'])}，兵力不明（目视约 ${Math.max(3, Math.min(x.men, Math.round(g.men * (.45 + Math.random() * .3))))} 人）` : `${cmdBN(x.i)}之敌约 ${x.men} 人`;
+  chatSay('e', `判断：${cmdBN(g.i)}之敌约 ${g.men} 人，${why}，判为敌主攻方向${others.length ? `；${others.map(oTxt).join('、')}，判为牵制佯动` : ''}。`, { kind: 'plan', at: X });
   const towns = [...new Set(Object.values(E.home))].map(k => cmdPt(k)).filter(Boolean).sort((a, b) => dist(a.x, a.y, X.x, X.y) - dist(b.x, b.y, X.x, X.y));
   chatSay('e', `决心：${towns.length ? towns.map(p => p.name).join('、') + '预备队' : '预备队'}向${X.name}方向机动，准备反冲击；${others.length ? `${others.map(x => cmdBN(x.i)).join('、')}守备依托出口阵地阻击，伏击组按预案逐次退守出口` : '各滩守备就地阻击'}。`, { kind: 'plan', at: X, delay: 1.5 });
   // 摩擦：预备队迟出（离主攻方向最近的镇子）
@@ -1243,6 +1309,12 @@ function cmdECounters(E) {
     } else if (S.t - c.t > 120) { c.end = S.t; if (E.mass && E.mass.key === k) E.mass = null; }
   }
 }
+// 炸桥：ai3.js a3Blow 起爆时当场通知，守军的炸桥命令先于进攻方的报告（进攻方约 3 秒后报告）
+function cmdOnBlow(b) {
+  if (!cmdOn() || !S.cmd.e || S.cmd.e.roll[b.key]) return;
+  S.cmd.e.roll[b.key] = 'blown';
+  chatSay('e', `命令：工兵炸毁${b.name}，迟滞敌军向纵深发展。`, { kind: 'order', at: b, lv: 0 });
+}
 // 守军其他行动的叙述：据点得失、炸桥、袭扰、装甲车、炮兵、增援、伏击组后撤、收缩防线
 function cmdEEvents(E, o) {
   for (const p of S.points) {
@@ -1337,6 +1409,14 @@ const CMD_ACT = {
       pl.halt = null;
       u.morale = Math.min(100, (u.morale || 50) + 8);
       if (!cmdOwned(p) && typeof apLaunch === 'function') apLaunch([u], p, P);
+    } else if (a.act === 'launch') {   // 集结迟滞：不再等集结，就地发起
+      const pl = P.u[u.id], p = cmdPt(a.key);
+      if (pl && p && pl.obj === a.key && (pl.ph === 'stage' || pl.ph === 'wait') && !cmdOwned(p) && typeof apLaunch === 'function') apLaunch([u], p, P);
+    } else if (a.act === 'drop') {     // 暂缓攻击该点：连队转用，该点一段时间内不再优先
+      const pl = P.u[u.id];
+      if (!pl || pl.obj !== a.key || !['stage', 'wait', 'go'].includes(pl.ph) || typeof apIdle !== 'function') return;
+      apIdle(pl); P.hard[a.key] = S.t;
+      if (P.o[a.key] && typeof apGroup === 'function' && !apGroup(a.key, P).length) delete P.o[a.key];
     } else if (a.act === 'icpt' && typeof apIntercept === 'function') apIntercept(u, a.raid);
   },
   // 偏航登陆后的补救：就地夺取当面出口或向主力靠拢；后续舰艇修正航线
@@ -1403,12 +1483,13 @@ const CMD_ACT = {
 
 // ———————————————— 计划图形（只用图形，不写字）————————————————
 // 主攻方向粗半透明绿箭头、佯攻虚线箭头、调整线短横、当前重点目标脉动圈；敌预备队红箭头（观战或已看见时）
-function cmdArrow(ctx, pts, w) {
+// t0：起点宽度占比（<1 时箭杆由细渐粗）
+function cmdArrow(ctx, pts, w, t0 = 1) {
   if (pts.length < 2) return;
   const L = [], R2 = [];
   for (let i = 0; i < pts.length; i++) {
     const a = pts[Math.max(0, i - 1)], b = pts[Math.min(pts.length - 1, i + 1)], ang = Math.atan2(b[1] - a[1], b[0] - a[0]);
-    const hw = w * .5;
+    const hw = w * .5 * (t0 + (1 - t0) * i / (pts.length - 1));
     L.push([pts[i][0] - Math.sin(ang) * hw, pts[i][1] + Math.cos(ang) * hw]); R2.push([pts[i][0] + Math.sin(ang) * hw, pts[i][1] - Math.cos(ang) * hw]);
   }
   const n = pts.length - 1, a = Math.atan2(pts[n][1] - pts[n - 1][1], pts[n][0] - pts[n - 1][0]), hx = pts[n][0] + Math.cos(a) * w * 1.3, hy = pts[n][1] + Math.sin(a) * w * 1.3;
@@ -1430,13 +1511,23 @@ function cmdDraw(time) {
   ctx.save();
   ctx.lineJoin = 'round'; ctx.lineCap = 'round';
   if (pl && pl.main >= 0 && cmdHasP()) {
-    const M = cmdExit(pl.main), b = TER.beaches[pl.main], sy = Math.min(STAGING_Y + 20, coastAt(b.cx) + 420);
-    const route = [[b.cx, sy], [b.cx, coastAt(b.cx) + 40], [M.x, M.y]];
+    const M = cmdExit(pl.main), b = TER.beaches[pl.main], sy = Math.min(STAGING_Y + 20, coastAt(b.cx) + 420), wy = coastAt(b.cx) + 40;
+    // 海上段：细虚线航道（不再画成实心长条，免得像栈桥）；陆上段从水线起，箭杆渐粗
+    ctx.strokeStyle = rgba(COL.g, .3 * fade); ctx.lineWidth = px(1.3); ctx.setLineDash([px(7), px(6)]);
+    ctx.beginPath(); ctx.moveTo(b.cx, sy); ctx.lineTo(b.cx, wy); ctx.stroke(); ctx.setLineDash([]);
+    const route = [[b.cx, wy], [M.x, M.y]];
     if (C.ph === 'brk' || C.ph === 'cons') for (const k of C.axis.slice(0, 2)) { const p = cmdPt(k); if (p) route.push([p.x, p.y + (k === C.axis[C.axis.length - 1] ? 40 : 0)]); }
     else { const p = cmdAxis(M)[0]; if (p && cmdPt(p)) route.push([lerp(M.x, cmdPt(p).x, .45), lerp(M.y, cmdPt(p).y, .45)]); }
-    const w = Math.max(30, px(12));
+    const w = Math.max(30, px(12)), n = route.length - 1;
+    // 箭头收在目标前，不压在目标处的部队图标下面
+    if (n >= 1 && dist(route[n - 1][0], route[n - 1][1], route[n][0], route[n][1]) > w * 3) route[n] = [lerp(route[n - 1][0], route[n][0], .82), lerp(route[n - 1][1], route[n][1], .82)];
     ctx.fillStyle = rgba(COL.g, .09 * fade); ctx.strokeStyle = rgba(COL.g, .36 * fade); ctx.lineWidth = px(1.2);
-    cmdArrow(ctx, route, w); ctx.fill(); ctx.stroke();
+    cmdArrow(ctx, route, w, .55); ctx.fill(); ctx.stroke();
+    if (n >= 1) {   // 箭头描边加重
+      const [x1, y1] = route[n], [x0, y0] = route[n - 1], a = Math.atan2(y1 - y0, x1 - x0);
+      ctx.strokeStyle = rgba(COL.g, .62 * fade); ctx.lineWidth = px(1.8);
+      ctx.beginPath(); ctx.moveTo(x1 - Math.sin(a) * w * 1.05, y1 + Math.cos(a) * w * 1.05); ctx.lineTo(x1 + Math.cos(a) * w * 1.3, y1 + Math.sin(a) * w * 1.3); ctx.lineTo(x1 + Math.sin(a) * w * 1.05, y1 - Math.cos(a) * w * 1.05); ctx.stroke();
+    }
     // 调整线：滩头出口与下一目标前的短横
     ctx.strokeStyle = rgba(COL.g, .45 * fade); ctx.lineWidth = px(1.4);
     for (let i = 2; i < route.length; i++) {

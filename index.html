@@ -40,7 +40,7 @@ button:disabled { cursor: not-allowed; opacity: .3; }
 #feed li.bad { border-color: var(--enemy); color: #ffc2d0; }
 #feed li.good { border-color: var(--g); color: #c9ffde; }
 /* 据点条：夹在事件栏与右上按钮之间（两侧各留约 370px），最多两行；H-HOUR 与暂停条放在两行之下，互不遮挡 */
-#objs { top: calc(10px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); display: flex; gap: 4px; padding: 5px 6px; flex-wrap: wrap; justify-content: center; max-width: min(46vw, calc(100vw - 740px)); }
+#objs { top: calc(10px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); display: flex; gap: 4px; padding: 5px 6px; flex-wrap: wrap; justify-content: center; max-width: min(46vw, calc(100vw - 2 * var(--trw, 380px) - 14px)); }
 .ob { position: relative; width: 34px; height: 34px; display: grid; place-items: center; background: rgba(255, 61, 110, .08); border: 1px solid rgba(255, 61, 110, .5); border-radius: 5px; color: var(--enemy); padding: 0; }
 .ob.p { color: var(--g); border-color: var(--line-hi); background: rgba(61, 255, 138, .1); }
 .ob.hot { box-shadow: 0 0 10px var(--amber); border-color: var(--amber); }
@@ -124,7 +124,7 @@ button:disabled { cursor: not-allowed; opacity: .3; }
 @media (prefers-reduced-motion: reduce) { #bgrain { display: none; } .uc.rout { animation: none; } }
 /* 中等宽度：据点图标缩小，仍为两行；更窄时改为单行横向滚动 */
 @media (max-width: 1199px) and (min-width: 901px) {
-  #objs { gap: 3px; padding: 4px 5px; max-width: calc(100vw - 720px); }
+  #objs { gap: 3px; padding: 4px 5px; max-width: calc(100vw - 2 * var(--trw, 380px) - 12px); }
   .ob { width: 26px; height: 26px; } .ob .ic { width: 17px; height: 17px; }
   #deploy, #pauseBand { top: calc(84px + env(safe-area-inset-top, 0px)); }
 }

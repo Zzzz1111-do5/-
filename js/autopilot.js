@@ -401,6 +401,7 @@ function apInfantry(u, pl, P) {
         return;
       }
       const d = dist(u.x, u.y, pl.sx, pl.sy);
+      if (S.t - (pl.t0 ?? S.t) > 200) { Object.assign(pl, { ph: 'wait', waitT: S.t }); return; }   // 集结久不到位（指挥官缺席时的兜底）：就地转入待攻
       if (d < 28 || (holding && d < 70) || (nHold * 2 >= ts.length && d < 90)) { Object.assign(pl, { ph: 'wait', waitT: S.t }); return; }
       if ((holding && S.t - (pl.ordT ?? -99) > 6) || S.t - (pl.ordT ?? -99) > 100) apMove(u, pl, pl.sx, pl.sy, apAng(pl.sx, pl.sy, p.x, p.y), 'move');
       return;

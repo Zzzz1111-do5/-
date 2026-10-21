@@ -25,6 +25,7 @@ const CHAT_CSS = `
 #chat li .cm-who { font-weight: 600; color: var(--sc); }
 #chat li .cm-who em { font-style: normal; color: var(--bg); background: var(--enemy); border-radius: 2px; padding: 0 3px; margin-right: 4px; font-weight: 600; }
 #chat li time { font-variant-numeric: tabular-nums; }
+#chat li .cm-o { font-variant-numeric: tabular-nums; opacity: .7; }
 #chat li .cm-k { color: var(--kc); margin-left: auto; letter-spacing: .1em; }
 #chat li p { margin: 1px 0 0; font-size: 12px; line-height: 1.5; color: var(--text); overflow-wrap: anywhere; }
 #chat li p b { color: var(--kc); font-weight: 600; }
@@ -130,9 +131,13 @@ function chatBuild() {
   if (typeof onSettings === 'function') onSettings(() => chatRender(true));
 }
 
+// 沙盒编辑时面板默认收起（只亮未读数），免得盖住东侧海滩、重复编辑面板里的部署思路；在编辑时手动打开的才显示
+const chatEditing = () => !!S && S.mode === 'sandbox' && S.phase === 'sandbox';
+const chatOpen = () => chatEditing() ? !!CHAT.edOpen : !!CHAT.open;
 function chatToggle(v) {
-  CHAT.open = v ?? !CHAT.open;
-  if (CHAT.open) { CHAT.unread = 0; CHAT.stick = true; }
+  if (chatEditing()) CHAT.edOpen = v ?? !CHAT.edOpen;
+  else CHAT.open = v ?? !CHAT.open;
+  if (chatOpen()) { CHAT.unread = 0; CHAT.stick = true; }
   CHAT.layT = 0;
   chatRender(true);
 }
@@ -167,7 +172,8 @@ function chatRow(m) {
   const who = m.side === 'p' ? '我方指挥官' : m.side === 'e' ? '敌方指挥官' : '系统';
   const txt = chatEsc(m.text), i = txt.indexOf('：');
   const body = i > 0 && i <= 6 ? `<b>${txt.slice(0, i + 1)}</b>${txt.slice(i + 1)}` : txt;
-  li.innerHTML = `<div class="cm-h"><span class="cm-who">${ic ? '<em>截获</em>' : ''}${who}</span><time>${fmtT(m.t)}</time><span class="cm-k">${CHAT_KIND[m.kind] || ''}</span></div><p>${body}</p>`;
+  // 截获的消息按截获时刻排序：显示截获时刻，原发时刻放在后面，免得时间戳前后颠倒
+  li.innerHTML = `<div class="cm-h"><span class="cm-who">${ic ? '<em>截获</em>' : ''}${who}</span><time>${fmtT(ic && m.ic != null ? m.ic : m.t)}</time>${ic && m.ic != null ? `<span class="cm-o">原 ${fmtT(m.t)}</span>` : ''}<span class="cm-k">${CHAT_KIND[m.kind] || ''}</span></div><p>${body}</p>`;
   return li;
 }
 
@@ -175,7 +181,7 @@ function chatRow(m) {
 function chatRender(force) {
   if (!CHAT.el || !S) return;
   if (CHAT.S !== S) {   // 新战局
-    CHAT.S = S; CHAT.ids = []; CHAT.unread = 0; CHAT.list.textContent = '';
+    CHAT.S = S; CHAT.ids = []; CHAT.unread = 0; CHAT.edOpen = false; CHAT.list.textContent = '';
     if (CHAT.open == null) CHAT.open = !chatPhone();
   }
   const vis = chatVisible(CHAT.tab), ids = vis.map(m => m.id), old = CHAT.ids;
@@ -186,13 +192,15 @@ function chatRender(force) {
   const fresh = pre ? vis.slice(j + 1) : vis;
   // 未读：收起时新出现的消息（当前页签口径）；重建时按旧列表里没有的消息计
   const seen = new Set(old), nNew = pre ? fresh.length : force ? 0 : ids.filter(id => !seen.has(id)).length;
-  if (nNew && !CHAT.open) CHAT.unread += nNew;
+  const open = chatOpen();
+  if (nNew && !open) CHAT.unread += nNew;
+  else if (open && CHAT.unread) CHAT.unread = 0;
   const keep = !pre && !force && !CHAT.stick && old.length ? CHAT.list.scrollTop : null;   // 中间插入（截获）时重建：用户在往上翻就别跳到底
   const has = S.phase === 'battle' || vis.length > 0 || (Array.isArray(S.chat) && S.chat.some(m => { const t = chatAt(m); return t != null && t <= S.t + 1e-6; }));
-  CHAT.el.hidden = !CHAT.open || !has;
+  CHAT.el.hidden = !open || !has;
   if (CHAT.btn) {
-    CHAT.btn.classList.toggle('on', !!CHAT.open);
-    CHAT.badge.hidden = CHAT.open || !CHAT.unread;
+    CHAT.btn.classList.toggle('on', open);
+    CHAT.badge.hidden = open || !CHAT.unread;
     CHAT.badge.textContent = CHAT.unread > 99 ? '99+' : CHAT.unread;
   }
   for (const b of CHAT.el.querySelectorAll('.ch-tabs button')) b.classList.toggle('on', b.dataset.tab === CHAT.tab);

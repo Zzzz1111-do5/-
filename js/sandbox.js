@@ -347,7 +347,7 @@ function sbxAIDefend() {
   }
   if (guns.length) {
     const cov = BS.filter(B => guns.some(g => dist(g.x, g.y, B.b.cx, coastAt(B.b.cx) + 160) < 600));
-    say(`岸防炮：${guns.length} 门配置于岬角 / 高地（最高处高程 ${Math.round(Math.max(...guns.map(g => elevAt(g.x, g.y))) * 100)}），射界覆盖${sbxNm(cov) || '近岸航道'}的接近航道；重炮射程 600，可威胁驱逐舰与航母。`, guns[0]);
+    say(`岸防炮：${guns.length} 门配置于岬角高地（最高处高程 ${Math.round(Math.max(...guns.map(g => elevAt(g.x, g.y))) * 100)} 米），射界覆盖${sbxNm(cov) || '近岸航道'}的接近航道；重炮射程 600，可威胁驱逐舰与航母。`, guns[0]);
   }
   // 3. 炮兵：距岸 480–760 的山脊反斜面
   const arts = [];

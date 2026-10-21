@@ -182,6 +182,9 @@ function updateHud() {
   }
   $('btnRain').classList.toggle('hot', R.rain > .5); $('btnRain').style.opacity = R.rain ? 1 : .45;
   $('reserve').textContent = S.assets.reserve;
+  // 据点条居中：两侧各让出右上按钮组的宽度（--trw），免得右端压到时钟与按钮下面
+  const tr = $('topr'), trw = tr && tr.offsetWidth ? Math.ceil(innerWidth - tr.getBoundingClientRect().left + 8) : 0;
+  if (trw && trw !== U.trw) { U.trw = trw; document.documentElement.style.setProperty('--trw', trw + 'px'); }
   $('objs').innerHTML = S.points.map(p => `<button type="button" class="ob ${p.owner}${p.contested ? ' hot' : ''}" data-k="${p.key}" title="${p.name}">${svg(PKIND(p.key))}<i style="width:${p.prog * 100}%"></i></button>`).join('') +
     (S.holdT ? `<span class="hold"><i style="width:${S.holdT / HOLD * 100}%"></i></span>` : '');
   updateCards();

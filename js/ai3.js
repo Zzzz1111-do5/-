@@ -497,6 +497,7 @@ function a3Blow(p) {
   for (const i of cells) TER.type[i] = T.RIVER;
   for (const i of cells) if (Math.random() < .35) S.fx.push({ kind: 'boom', x: cellCX(i), y: cellCY(i), r: 14, life: 0, max: 1.1, side: 'e' });
   S.blown.push({ key: p.key, name: p.name, x: p.x, y: p.y, cells, prog: 0, t: S.t });
+  if (typeof cmdOnBlow === 'function') cmdOnBlow(S.blown[S.blown.length - 1]);   // 守军指挥官当场下达的炸桥命令
   // 落水者游回最近的岸边
   for (const q of S.teams) if (q.men.length && !passInf(q.x, q.y)) { const s = a3Snap(q.x, q.y, q.side === 'p' ? 'p' : 'e'); if (s) { q.x = s.x; q.y = s.y; } }
   for (const a of S.armor || []) if (!a.dead && !passInf(a.x, a.y)) { const s = a3Snap(a.x, a.y, 'e'); if (s) { a.x = s.x; a.y = s.y; } }

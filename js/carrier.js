@@ -141,6 +141,8 @@ function launchPlane(kind, tx, ty) {
   }
   return withCV(cvOf(cvHome(w)), () => launchFrom(w, kind, sp, tx, ty));
 }
+// 沙盒变体机型的名称（播报用）
+const AIR_VNAME = { heavy: '重型轰炸机', dive: '俯冲轰炸机', fb: '战斗轰炸机', heli: '武装直升机', lr: '远程侦察机' };
 function launchFrom(w, kind, sp, tx, ty) {
   const c = S.cv;
   tx = clamp(tx, 10, W - 10); ty = clamp(ty, 10, H - 10);
@@ -158,7 +160,7 @@ function launchFrom(w, kind, sp, tx, ty) {
   w.state = 'launch';
   c.exposedUntil = Math.max(c.exposedUntil || 0, S.t + 10);   // 起降作业：甲板灯光与弹射蒸汽，10 秒内易被岸防炮发现
   airCount();
-  log(`${sp.name}弹射起飞，目标方位 ${fmtBrg(bearing(c.x, c.y, tx, ty))}`, 'info', 'airup', 1.5);
+  log(`${AIR_VNAME[w.v] || sp.name}弹射起飞，目标方位 ${fmtBrg(bearing(c.x, c.y, tx, ty))}`, 'info', 'airup', 1.5);
   return true;
 }
 
