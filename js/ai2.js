@@ -118,11 +118,12 @@ function aiArtillery(D, seenT, seenShips) {
     let fired = 0;
     for (const e of guns) {
       if (fired >= n || used.has(e)) continue;
-      const mortar = e.kind === 'mortar', range = mortar ? 420 : 1100;
+      // 兵种修正 e.mod：rng 射程、pow 精度（散布反比）、rof 射速；shell 弹种、salvo 齐射发数（沙盒变体）
+      const mortar = e.kind === 'mortar', M = e.mod || {}, range = (mortar ? 420 : 1100) * (M.rng || 1);
       if (dist(e.x, e.y, t.x, t.y) > range || (mortar && t.sea)) continue;
-      const dur = mortar ? 2.2 : 3.2, err = D.err * reg * (mortar ? .8 : 1);
-      fireShell(e.x, e.y, t.x + t.vx * dur * D.lead + gauss() * err, t.y + t.vy * dur * D.lead + gauss() * err, 'e', mortar ? 'mortar' : 'arty', dur, !inVision(e.x, e.y));
-      e.cd = mortar ? 5 + Math.random() * 2 : 8 + Math.random() * 3;
+      const dur = mortar ? 2.2 : 3.2, err = D.err * reg * (mortar ? .8 : 1) / (M.pow || 1), ax = t.x + t.vx * dur * D.lead, ay = t.y + t.vy * dur * D.lead;
+      for (let k = 0; k < (M.salvo || 1); k++) fireShell(e.x, e.y, ax + gauss() * err, ay + gauss() * err, 'e', POWER[M.shell] ? M.shell : mortar ? 'mortar' : 'arty', dur + k * .22, !inVision(e.x, e.y));
+      e.cd = (mortar ? 5 + Math.random() * 2 : 8 + Math.random() * 3) / (M.rof || 1);
       e.salvos = (e.salvos || 0) + 1;
       if (e.salvos >= D.scoot + (mortar ? 1 : 0)) relocate(e);
       used.add(e); fired++;

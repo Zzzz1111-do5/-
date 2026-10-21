@@ -114,9 +114,14 @@ const canSee = (side, x, y, d) => d < 50 || (side === 'p' ? PV : EV)[ci(x, y)] =
 const modOf = o => o.mod || {};
 function findTarget(q, range) {
   let best = null, bd = range * (modOf(q).rng || 1);
-  for (const o of S.teams) if (o.side !== q.side && o.men.length) {
+  for (const o of S.teams) if (o.side !== q.side && o.men.length && !o.ride) {   // ride：搭乘装甲运兵车中
     const d = dist(q.x, q.y, o.x, o.y);
     if (d < bd && canSee(q.side, o.x, o.y, d)) { bd = d; best = { t: o, d, k: 'tm' }; }
+  }
+  // 对方车辆（vehicles.js）：轻武器只能压制乘员，优先打步兵；带反坦克手段（mod.at）的小组优先打车
+  if (typeof vehFoes === 'function') for (const v of vehFoes(q.side)) {
+    const d = dist(q.x, q.y, v.x, v.y), w = d * (modOf(q).at ? .7 : 1.5);
+    if (w < bd && canSee(q.side, v.x, v.y, d)) { bd = w; best = { t: v, d, k: 'veh' }; }
   }
   if (q.side === 'p') for (const e of S.enemies) if (!e.dead) {
     const d = dist(q.x, q.y, e.x, e.y);
@@ -145,7 +150,8 @@ function teamFire(q, tg) {
         if (t.men.length && Math.random() < ph * acc * def) killMan(t, q.side === 'e' && Math.random() < D.radio ? 'radio' : null);
       }
     }
-  } else for (const m of q.men) {
+  } else if (tg.k === 'veh') vehSmallArms(t, q, acc);
+  else for (const m of q.men) {
     if (m === 'eng') continue;
     t.sup = Math.min(100, (t.sup || 0) + (m === 'mg' ? 9 : 5));
     if (Math.random() < .45 * acc) damageEnemy(t, tg.d < 35 ? 2 : .5);
@@ -159,9 +165,14 @@ function teamFire(q, tg) {
 function bunkerFire(e) {
   const D = aiD(), M = modOf(e);
   let best = null, bd = 170 * (M.rng || 1);
-  for (const q of S.teams) if (q.side === 'p' && q.men.length) {
+  for (const q of S.teams) if (q.side === 'p' && q.men.length && !q.ride) {
     const d = dist(e.x, e.y, q.x, q.y);
     if (d < bd && spotted(q.x, q.y)) { bd = d; best = { t: q, k: 'tm' }; }
+  }
+  // 我方车辆：机枪只能压制乘员、对轻装甲偶有损伤，故优先打步兵（反坦克炮位 mod.at 例外）
+  if (typeof vehFoes === 'function') for (const v of vehFoes('e')) {
+    const d = dist(e.x, e.y, v.x, v.y), w = d * (M.at ? .7 : 1.4);
+    if (w < bd && d < 170 * (M.rng || 1) && spotted(v.x, v.y)) { bd = w; best = { t: v, k: 'veh' }; }
   }
   for (const s of S.ships) if (alive(s) && s.state !== 'beached') {
     const d = dist(e.x, e.y, s.x, s.y);
@@ -176,6 +187,7 @@ function bunkerFire(e) {
     suppress(t, 9, e.x, e.y);
     if (t.men.length && Math.random() < .1 * D.acc * (M.pow || 1) * coverAt(t.x, t.y) * shelter(t, e.x, e.y)) killMan(t, Math.random() < D.radio ? 'radio' : null);
   } else if (best.k === 'ship') { if (Math.random() < .5 * D.acc) damageShip(t, .35); }
+  else if (best.k === 'veh') vehBunkerHit(t, e, D);
   else if (Math.random() < .3) { t.dead = true; S.stats.lost += 3 * (t.n || 1); log('一艘增援艇被机枪击沉', 'bad', 'boat', 3); }
   tracer(e.x, e.y, t.x + gauss() * 5, t.y + gauss() * 5, 'e', vis);
   tracer(e.x, e.y, t.x + gauss() * 9, t.y + gauss() * 9, 'e', vis);
@@ -189,16 +201,21 @@ function coastalFire(e) {
   const D = aiD(), radar = radarUp(), dd = S.dd, M = modOf(e), RG = 600 * (M.rng || 1);
   let best = null, bv = 0;
   for (const s of S.ships) if (alive(s) && s.state !== 'beached' && dist(e.x, e.y, s.x, s.y) < RG && shipSeen(s.x, s.y, radar)) {
-    const v = 2 + s.load.teams * 3 + s.load.eng + (s.state === 'unloading' ? 8 : 0);
+    const v = 2 + s.load.teams * 3 + s.load.eng + (s.load.veh ? s.load.veh.length * 4 : 0) + (s.state === 'unloading' ? 8 : 0);
     if (v > bv) { bv = v; best = s; }
   }
   if (dd.state !== 'sunk' && dist(e.x, e.y, dd.x, dd.y) < RG && (S.t < dd.exposedUntil || shipSeen(dd.x, dd.y, radar)) && 6 > bv) { bv = 6; best = dd; }
   // 航母（carrier.js）：600 以内且被发现、或起降作业暴露时也是目标；航速 10，提前量按此计算
   const cv = S.cv;
   if (cv && cv.hp > 0 && dist(e.x, e.y, cv.x, cv.y) < RG && (S.t < (cv.exposedUntil || 0) || shipSeen(cv.x, cv.y, radar)) && 7 > bv) { bv = 7; best = cv; }
+  // 我方车辆（vehicles.js）：泅渡中的两栖坦克是好靶子；上岸的车辆只在 450 以内且被看见时才打
+  if (typeof vehFoes === 'function') for (const v of vehFoes('e')) {
+    const d = dist(e.x, e.y, v.x, v.y), val = v.swim ? 3 : 2.2;
+    if (val > bv && d < (v.swim ? RG : Math.min(RG, 450)) && (v.swim ? shipSeen(v.x, v.y, radar) : spotted(v.x, v.y))) { bv = val; best = v; }
+  }
   if (!best) { e.cd = 2; return; }
   e.cd = (12 + Math.random() * 3) / (M.rof || 1);
-  const mv = best.state === 'move' || best.moving, a = Math.atan2(best.ty - best.y, best.tx - best.x), lead = mv ? (best === cv ? 10 : 26) * 3 * D.lead : 0;
+  const mv = best.state === 'move' || best.moving, a = best.type ? best.heading : Math.atan2(best.ty - best.y, best.tx - best.x), lead = mv ? (best === cv ? 10 : best.type ? 12 : 26) * 3 * D.lead : 0;
   fireShell(e.x, e.y, best.x + Math.cos(a) * lead + gauss() * D.err * 1.2, best.y + Math.sin(a) * lead + gauss() * D.err * 1.2, 'e', 'coastal', 3, !inVision(e.x, e.y));
   if (e.kx == null && Math.random() < .35) { e.kx = e.x; e.ky = e.y; log('岸防重炮炮口闪光，已标定', 'warn', null, 0, e); }
 }

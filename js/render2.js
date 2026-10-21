@@ -110,14 +110,14 @@ function enemyMark(ctx, kind, x, y) {
   ctx.stroke();
 }
 
-// 小组本体：远看（每格不足 11px）为楔形三点，点与间距按屏幕像素固定，不会糊成一团；近看为世界尺寸的单兵小人
+// 小组本体：远看（每格不足 10px）为楔形三点，点与间距按屏幕像素（随缩放略增），不会糊成一团；近看为世界尺寸的单兵小人
 function drawTeamBody(ctx, q, f, col) {
   const c = Math.cos(f + 1.57), s = Math.sin(f + 1.57), n = q.men.length;
   if (R.fig) {
     for (let i = 0; i < n; i++) drawMan(ctx, q.x + MO[i][0] * c - MO[i][1] * s, q.y + MO[i][0] * s + MO[i][1] * c, f, q.men[i], col, true);
     return;
   }
-  const k = Math.max(1, px(2.3) / 4.6), d = Math.max(px(1.8), 1.4);
+  const k = Math.max(1, px(2.3) / 4.6), d = px(clamp(1.5 + R.s, 1.8, 2.5));
   ctx.fillStyle = col;
   for (let i = 0; i < n; i++) ctx.fillRect(q.x + (MO[i][0] * c - MO[i][1] * s) * k - d / 2, q.y + (MO[i][0] * s + MO[i][1] * c) * k - d / 2, d, d);
 }

@@ -69,9 +69,18 @@ function rebuildForts() {
 
 // cls：'p' 我方步兵（只回避已知雷区），'e' 守军（熟悉自己的雷区），'ship' 舰船，
 // 'raid' 敌袭扰分队（同守军，另外偏好林地/城镇、回避开阔地与我方视野内的格；PV 在流场计算时取快照）
+// 车辆：'veh' 我方轮履式（回避已知雷区/障碍，碾过铁丝网）、'vehe' 守军车辆（熟悉自己的雷区与障碍）、'amph' 两栖坦克（另可泅渡深海与浅滩）
+// 林地慢、沼泽很慢、悬崖/山地/河流不可通行（桥梁与渡口除外），道路最快
+const VCOST = [Infinity, Infinity, Infinity, 1.25, 4, Infinity, 1, 3, 1.5, Infinity, 5, Infinity, .8, .72, 1.4, 2.5];
 function stepCost(i, cls) {
   const t = TER.type[i];
   if (cls === 'ship') return t === T.DEEP ? (OBSC[i] === 2 ? 4 : 1) : t === T.SHOAL ? (OBSC[i] === 2 ? 6 : 1.6) : Infinity;
+  if (cls === 'veh' || cls === 'vehe' || cls === 'amph') {
+    let c = cls === 'amph' && (t === T.DEEP || t === T.SHOAL) ? 1.7 : VCOST[t];
+    if (c === Infinity || OBSC[i] === 2 || (cls === 'vehe' && OBSC[i])) return Infinity;
+    if (MINEC[i] && (cls === 'vehe' || MINEC[i] === 2)) c *= cls === 'vehe' ? 25 : 8;
+    return WIREC[i] ? c * 1.2 : c;
+  }
   const sp = TP[t].sp;
   if (!sp) return Infinity;
   let c = 1 / sp;

@@ -5,7 +5,8 @@ const LIMIT = 45 * 60;   // 作战时限（秒）
 const HOLD = 30;         // 全部据点需同时控制的秒数
 const SHIP_SPEC = {
   assault: { name: '突击登陆舰', hp: 10, teams: 5, eng: 0 },     // 15 人 = 5 个三人组
-  supply: { name: '补给登陆舰', hp: 11, teams: 4, eng: 3 }       // 4 个三人组 + 3 名工兵
+  supply: { name: '补给登陆舰', hp: 11, teams: 4, eng: 3 },      // 4 个三人组 + 3 名工兵
+  lst: { name: '坦克登陆舰', hp: 14, teams: 0, eng: 0, veh: ['tank', 'tank', 'apc'] }   // 车辆经艏门跳板逐辆驶下（vehicles.js）
 };
 const ENEMY_SPEC = {
   bunker: { name: '机枪碉堡', hp: 16 }, coastal: { name: '岸防重炮', hp: 22 }, arty: { name: '榴弹炮阵地', hp: 10 },
@@ -48,6 +49,11 @@ function deployFleet() {
   for (let k = 0; k < 5; k++) slot('assault', W * (.2 + k * .045), 1600 + (k % 2) * 46, 'LA-' + (k + 1), 1);
   for (let k = 0; k < 5; k++) slot('assault', W * (.62 + k * .045), 1600 + (k % 2) * 46, 'LA-' + (k + 6), 2);
   for (let k = 0; k < 3; k++) slot('supply', W * (.45 + k * .05), 1640, 'LS-' + (k + 1), 3);
+  // 第 4 编队：坦克登陆舰（2 辆中型坦克 + 1 辆装甲运兵车）与 4 辆自航泅渡的两栖坦克
+  const l = addShip('lst', W * .4, 1690, 'LT-1');
+  l.load.veh = SHIP_SPEC.lst.veh.slice();
+  S.groups[4].push(l.id);
+  if (typeof addVehicle === 'function') for (const x of [.25, .31, .67, .73]) S.groups[4].push(addVehicle('p', 'amtank', W * x, 1545, { auto: true }).id);
 }
 
 function deployDefenses(r, D) {

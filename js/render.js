@@ -104,9 +104,9 @@ function shape(ctx, x, y, r, n, rot) {
   ctx.closePath();
 }
 
-// 每帧的细节档：zr 相对全图的倍数；fig 画出单兵小人（小人约 7px 以上才画，否则画楔形三点）；view 可视范围（剔除屏外对象）
+// 每帧的细节档：zr 相对全图的倍数；fig 画出单兵小人（每格 ≥10px，桌面约 2.5 倍全图起；更远画楔形三点）；view 可视范围（剔除屏外对象）
 function lodUpdate() {
-  R.zr = CAM.z / CAM.fit; R.fig = R.s >= 1.45; R.view = viewRect();
+  R.zr = CAM.z / CAM.fit; R.fig = R.s >= 1; R.view = viewRect();
 }
 const inView = (x, y, m = 0) => { const v = R.view; return !v || (x > v[0] - m && x < v[2] + m && y > v[1] - m && y < v[3] + m); };
 // 鼠标悬停（世界半径 r，至少 14 屏幕像素）：范围圈等只在悬停或选中时显示

@@ -50,7 +50,11 @@ function sailTo(s, dt, speed) {
 
 function updateShips(dt) {
   for (const s of S.ships) {
-    if (s.state === 'unloading') { if ((s.ut += dt) >= 3) disembark(s); continue; }
+    if (s.state === 'unloading') {
+      if (s.kind === 'lst' && typeof vehUnload === 'function') { vehUnload(s, dt); continue; }   // 坦克登陆舰：车辆逐辆驶下跳板
+      if ((s.ut += dt) >= 3) disembark(s);
+      continue;
+    }
     if (s.state !== 'move') continue;
     // 未清除的反登陆障碍
     if (OBSC[ci(s.x, s.y)]) for (const o of S.obst) if (!o.dead && dist(o.x, o.y, s.x, s.y) < 12) {
@@ -77,7 +81,8 @@ function disembark(s) {
     makeSupplyLine(s, e);
     log(`${s.label} 建立滩头补给站，补给线接通后方`, 'good');
   }
-  s.load = { teams: 0, eng: 0 };
+  if (s.load.veh && s.load.veh.length && typeof vehDisembark === 'function') vehDisembark(s);   // 舱内仍有车辆：一次放下
+  s.load = { teams: 0, eng: 0, veh: [] };
 }
 
 function makeSupplyLine(s, eng) {

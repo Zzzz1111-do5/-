@@ -116,13 +116,16 @@ function updateRLines(dt) {
 // —— 据点：圈内只有我方步兵即推进占领；碉堡未拔除前无法占领 ——
 function updatePoints(dt) {
   for (const p of S.points) {
-    const pT = S.teams.filter(q => q.side === 'p' && q.kind === 'inf' && dist(q.x, q.y, p.x, p.y) < 45).length;
-    const eN = S.teams.some(q => q.side === 'e' && dist(q.x, q.y, p.x, p.y) < 60) || S.enemies.some(e => !e.dead && e.kind === 'bunker' && dist(e.x, e.y, p.x, p.y) < 60);
-    p.contested = pT > 0 && eN;
+    const pT = S.teams.filter(q => q.side === 'p' && q.kind === 'inf' && !q.ride && dist(q.x, q.y, p.x, p.y) < 45).length;
+    // 车辆（vehicles.js）只争夺、不占领：我方车辆在场时敌军无法夺回，敌方车辆在场时我方无法占领
+    const V = S.veh || [], pV = V.some(v => !v.dead && v.side === 'p' && dist(v.x, v.y, p.x, p.y) < 50);
+    const eN = S.teams.some(q => q.side === 'e' && dist(q.x, q.y, p.x, p.y) < 60) || S.enemies.some(e => !e.dead && e.kind === 'bunker' && dist(e.x, e.y, p.x, p.y) < 60) ||
+      V.some(v => !v.dead && v.side === 'e' && dist(v.x, v.y, p.x, p.y) < 60);
+    p.contested = (pT > 0 || pV) && eN;
     if (pT && !eN) {
       p.prog = Math.min(1, p.prog + dt / 15 * (pT >= 3 ? 1.5 : 1));
       if (p.prog >= 1 && p.owner !== 'p') { p.owner = 'p'; log(`夺取${p.name}`, 'good', null, 0, p); }
-    } else if (eN && !pT) {
+    } else if (eN && !pT && !pV) {
       p.prog = Math.max(0, p.prog - dt / 15);
       if (p.prog <= 0 && p.owner === 'p') { p.owner = 'e'; log(`${p.name}被敌军夺回`, 'bad', null, 0, p); }
     }
@@ -177,8 +180,8 @@ function checkEnd(dt) {
     S.holdT += dt;
     if (S.holdT >= HOLD) { S.over = 'win'; log('登陆场已巩固，作战胜利', 'good'); return; }
   } else if (S.holdT) { S.holdT = 0; log('有据点被夺回，巩固计时中断', 'bad'); }
-  const forces = S.teams.some(q => q.side === 'p' && q.kind === 'inf') || S.ships.some(s => alive(s) && s.load.teams > 0) ||
-    S.boats.length > 0 || (S.assets.reserve > 0 && S.rlines.length > 0);
+  const forces = S.teams.some(q => q.side === 'p' && q.kind === 'inf') || S.ships.some(s => alive(s) && (s.load.teams > 0 || (s.load.veh && s.load.veh.length > 0))) ||
+    S.boats.length > 0 || (S.assets.reserve > 0 && S.rlines.length > 0) || (S.veh || []).some(v => v.side === 'p' && !v.dead);   // 车辆也算剩余兵力
   if (!forces) { S.over = 'lose'; log('登陆部队已全部损失', 'bad'); }
   else if (S.t >= LIMIT) { S.over = 'lose'; log('作战时限已到，未能夺取全部据点', 'bad'); }
 }

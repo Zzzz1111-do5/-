@@ -16,7 +16,7 @@ function pips(ctx, n, x, y, col) {
 }
 const groupOf = id => +(Object.keys(S.groups).find(k => S.groups[k].includes(id)) || 0);
 
-// 连队旗：屏幕尺寸随缩放略变（全图小一点、近看稍大）；相互重叠时向上错开叠放，旗杆拉长指回连队
+// 连队旗：屏幕尺寸随缩放略变（全图小一点、近看稍大）；相互重叠时先左右错开、再向上叠放，旗杆/引线指回连队
 // BANNER_HITS 记录本帧旗框（世界坐标），bannerAt(p) 供点选使用
 const BANNER_HITS = [];
 function bannerAt(p) {
@@ -24,6 +24,16 @@ function bannerAt(p) {
   for (const b of BANNER_HITS) if (p.x >= b.x0 - m && p.x <= b.x1 + m && p.y >= b.y0 - m && p.y <= b.y1 + m) return b.id;
   return null;
 }
+
+// 错开后的连队旗也能点选（ui.js pickAt 只认默认位置）：鼠标左键松开、未拖框且无工具时，命中我方旗框即选中该连队
+if (typeof HOOK === 'object') HOOK.pointer.push((e, ph, p) => {
+  if (ph !== 'up' || e.pointerType === 'touch' || e.button !== 0 || S.phase === 'sandbox') return false;
+  const D = U.down, id = D && !D.pan && !U.box && !U.tool ? bannerAt(p) : null, u = id != null && UNIT_MAP.get(id);
+  if (!u || u.side !== 'p') return false;
+  S.sel = D.add ? (S.sel.includes(id) ? S.sel.filter(i => i !== id) : [...S.sel, id]) : [id];
+  U.down = null; updateHud();
+  return true;
+});
 
 function drawBanners(time) {
   const ctx = R.ctx, bk = lerp(.82, 1.12, smooth(1, 6, R.zr)), list = [], placed = [];
@@ -39,28 +49,31 @@ function drawBanners(time) {
   const fw = px(14 * bk), fh = px(10 * bk), pole = px(18 * bk), gap = px(3);
   for (const { u, ts, top, sel } of list) {
     const mine = u.side === 'p', bx = u.x, by = top - px(10 * bk), boxH = fh + (mine ? px(12 * bk) : px(5 * bk));
-    let fy = by - pole;
-    for (let lv = 0; lv < 6; lv++) {   // 与已放置的旗框重叠就上移一层
-      const y0 = fy - lv * (boxH + gap);
-      if (!placed.some(r => bx < r[2] + gap && bx + fw > r[0] - gap && y0 < r[3] + gap && y0 + boxH > r[1] - gap) || lv === 5) { fy = y0; break; }
+    let fx = bx, fy = by - pole;
+    for (let i = 0; i < 15; i++) {   // 候选位：原位、右移、左移，再上移一层……与已放置的旗框重叠就换下一个
+      const x0 = bx + [0, 1, -1][i % 3] * (fw + gap), y0 = by - pole - Math.floor(i / 3) * (boxH + gap);
+      if (!placed.some(r => x0 < r[2] + gap && x0 + fw > r[0] - gap && y0 < r[3] + gap && y0 + boxH > r[1] - gap) || i === 14) { fx = x0; fy = y0; break; }
     }
-    placed.push([bx, fy, bx + fw, fy + boxH]);
-    BANNER_HITS.push({ id: u.id, x0: bx, y0: fy, x1: bx + fw, y1: fy + fh });
+    placed.push([fx, fy, fx + fw, fy + boxH]);
+    BANNER_HITS.push({ id: u.id, x0: fx, y0: fy, x1: fx + fw, y1: fy + fh });
     let col = mine ? MORALE_COL[u.state] : COL.enemy;
     if (u.state === 'rout') col = rgba(mine ? COL.enemy : COL.amber, .4 + .6 * Math.abs(Math.sin(time * 6)));
-    ctx.strokeStyle = rgba(STRUCT, fy < by - pole - 1e-6 ? .45 : .7); ctx.lineWidth = px(1);
-    ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(bx, fy); ctx.stroke();
-    ctx.fillStyle = 'rgba(2,10,6,.88)'; ctx.fillRect(bx, fy, fw, fh);
-    ctx.strokeStyle = sel ? COL.sel : col; ctx.lineWidth = px(sel ? 1.8 : 1.1); ctx.strokeRect(bx, fy, fw, fh);
-    emblem(ctx, mine ? (u.kind === 'eng' ? 'eng' : u.emblem || 'assault') : 'enemy', bx + fw / 2, fy + fh / 2, px(3.6 * bk), col);
+    const moved = fx !== bx || fy < by - pole - 1e-6;
+    ctx.strokeStyle = rgba(STRUCT, moved ? .45 : .7); ctx.lineWidth = px(1);
+    ctx.beginPath(); ctx.moveTo(bx, by);
+    if (fx !== bx) ctx.lineTo(fx, Math.min(by, fy + boxH + px(3)));   // 引线：连队 → 旗杆下端
+    ctx.lineTo(fx, fy); ctx.stroke();
+    ctx.fillStyle = 'rgba(2,10,6,.88)'; ctx.fillRect(fx, fy, fw, fh);
+    ctx.strokeStyle = sel ? COL.sel : col; ctx.lineWidth = px(sel ? 1.8 : 1.1); ctx.strokeRect(fx, fy, fw, fh);
+    emblem(ctx, mine ? (u.kind === 'eng' ? 'eng' : u.emblem || 'assault') : 'enemy', fx + fw / 2, fy + fh / 2, px(3.6 * bk), col);
     const bw = px(1.8 * bk);
-    ctx.fillStyle = rgba(col, .25); ctx.fillRect(bx, fy + fh + px(2), fw, bw);
-    ctx.fillStyle = col; ctx.fillRect(bx, fy + fh + px(2), fw * u.men / Math.max(1, u.men0), bw);
+    ctx.fillStyle = rgba(col, .25); ctx.fillRect(fx, fy + fh + px(2), fw, bw);
+    ctx.fillStyle = col; ctx.fillRect(fx, fy + fh + px(2), fw * u.men / Math.max(1, u.men0), bw);
     if (mine) {
-      ctx.fillStyle = rgba(COL.intel, .25); ctx.fillRect(bx, fy + fh + px(2) + bw + px(1.5), fw, px(1.4));
-      ctx.fillStyle = COL.intel; ctx.fillRect(bx, fy + fh + px(2) + bw + px(1.5), fw * u.morale / 100, px(1.4));
+      ctx.fillStyle = rgba(COL.intel, .25); ctx.fillRect(fx, fy + fh + px(2) + bw + px(1.5), fw, px(1.4));
+      ctx.fillStyle = COL.intel; ctx.fillRect(fx, fy + fh + px(2) + bw + px(1.5), fw * u.morale / 100, px(1.4));
       const g = groupOf(ts[0].id);
-      if (g) pips(ctx, g, bx + fw / 2, fy + fh + px(10 * bk), COL.sel);
+      if (g) pips(ctx, g, fx + fw / 2, fy + fh + px(10 * bk), COL.sel);
     }
     if (sel) {   // 选中：四角括号框住全连 + 朝向箭头
       const xs = ts.map(q => q.x), ys = ts.map(q => q.y), pad = 7, x0 = Math.min(...xs) - pad, y0 = Math.min(...ys) - pad, x1 = Math.max(...xs) + pad, y1 = Math.max(...ys) + pad;

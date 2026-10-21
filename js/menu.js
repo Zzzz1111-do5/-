@@ -119,14 +119,29 @@ body.mn-open > :not(#bgrain):not(#stage):not(.mn-layer):not(script):not(style), 
 @media (max-width: 900px) {
   #mn .mn-main { grid-template-columns: minmax(0, 1fr); }
   #mn .mn-info { display: none; }
-  #mn .mn-lvs { grid-template-columns: minmax(0, 1fr); }
   #mn .mn-lv { min-height: 0; }
+}
+@media (max-width: 640px) { #mn .mn-lvs { grid-template-columns: minmax(0, 1fr); } }
+/* 横屏手机等矮屏：标题收小，菜单两列，难度卡片紧凑 */
+@media (max-height: 560px) {
+  #mn .mn-wrap { padding-top: 14px; padding-bottom: 10px; gap: 14px; }
+  #mn .mn-kick { display: none; } #mn h1 { font-size: 34px; } #mn .mn-en { font-size: 13px; margin-top: 0; } #mn .mn-rule { margin-top: 6px; }
+  #mn .mn-list { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 6px; }
+  #mn .mn-it { min-height: 46px; padding-top: 4px; padding-bottom: 4px; } #mn .mn-it b { font-size: 15px; } #mn .mn-it span { font-size: 11px; }
+  #mn .mn-pve { gap: 10px; } #mn .mn-pve h2 { font-size: 16px; }
+  #mn .mn-lv { padding: 8px 12px 10px; gap: 5px; min-height: 0; } #mn .mn-lv b { font-size: 18px; } #mn .mn-lv > span { font-size: 12px; }
+  #mn .mn-lv dl { font-size: 11px; gap: 1px 10px; } #mn .mn-lv .go2 { display: none; }
+  #mn .mn-back { min-height: 30px; padding: 3px 14px; }
 }
 @media (max-width: 560px) {
   #mn .mn-wrap { padding: 32px 16px 16px; gap: 20px; }
   #mn .mn-en { letter-spacing: .4em; }
   #mn .mn-it { min-height: 54px; }
   #mn footer .mn-keys { display: none; }
+  #mn .mn-pve { gap: 12px; } #mn .mn-lvs { gap: 8px; }
+  #mn .mn-lv { padding: 10px 14px 12px; gap: 6px; } #mn .mn-lv b { font-size: 20px; } #mn .mn-lv > span { font-size: 12px; }
+  #mn .mn-lv dl { grid-template-columns: auto 1fr auto 1fr; gap: 3px 8px; font-size: 11px; } #mn .mn-lv dd i { width: 5px; height: 9px; }
+  #mn .mn-lv .go2 { display: none; }
   #mnSet { padding: 0; } #mnSet .ms-win { max-height: 100vh; height: 100%; border-radius: 0; border: 0; padding: 14px 16px; }
   #mnSet .ms-row { grid-template-columns: 96px minmax(0, 1fr) 44px; gap: 8px; }
 }
@@ -177,8 +192,8 @@ function mnHi(k, snd) {
   if (!it) return;
   let body = '';
   if (k === 'cont' && S) {
-    const own = S.points.filter(p => p.owner === 'p').length, men = S.teams.filter(q => q.side === 'p').reduce((a, q) => a + q.men.length, 0);
-    body = `<p>返回当前战局，${S.phase === 'battle' ? '推演从暂停处继续' : S.phase === 'deploy' ? '继续排兵布阵' : '继续编辑部署'}。</p><dl><dt>模式</dt><dd>${S.mode === 'sandbox' ? '沙盒' : '战役 · ' + DIFF[S.level].name}</dd><dt>作战用时</dt><dd>${fmtT(S.t)}</dd><dt>我方据点</dt><dd>${own} / ${S.points.length}</dd><dt>在场兵力</dt><dd>${men} 人</dd></dl>`;
+    const pts = S.points || [], own = pts.filter(p => p.owner === 'p').length, men = (S.teams || []).filter(q => q.side === 'p').reduce((a, q) => a + q.men.length, 0);
+    body = `<p>返回当前战局，${S.phase === 'battle' ? '推演从暂停处继续' : S.phase === 'deploy' ? '继续排兵布阵' : '继续编辑部署'}。</p><dl><dt>模式</dt><dd>${S.mode === 'sandbox' ? (S.role === 'spectate' ? '沙盒 · 观战' : '沙盒') : '战役 · ' + (DIFF[S.level] ? DIFF[S.level].name : S.level)}</dd><dt>作战用时</dt><dd>${fmtT(S.t)}</dd><dt>${S.role === 'spectate' ? '进攻方据点' : '我方据点'}</dt><dd>${own} / ${pts.length}</dd><dt>在场兵力</dt><dd>${men} 人</dd></dl>`;
   } else if (k === 'pve') body = `<p>你是登陆指挥官。登陆舰队、驱逐舰与航母航空联队归你指挥，对抗据守 ${TER && TER.points ? TER.points.length : 19} 处据点的 AI 守军。先部署、再于 H 时发起登陆。</p><dl><dt>胜利条件</dt><dd>控制指挥所与七成据点分值 30 秒</dd><dt>难度</dt><dd>普通 · 困难 · 地狱</dd></dl>`;
   else if (k === 'sbx') body = `<p>在同一张海岸地图上自由部署岸防与进攻部队，按预算对抗；可以观战 AI 对 AI，也可以亲自指挥进攻方。</p><dl><dt>状态</dt><dd>${typeof openSandbox === 'function' ? '可用' : '模块加载中'}</dd></dl>`;
   else if (k === 'cdx') { const n = typeof CATALOG !== 'undefined' && Array.isArray(CATALOG) ? CATALOG.length : 0; body = `<p>查看全部兵力：步兵、装甲、火炮、航空、舰艇、工事与支援单位的属性条、定位与克制关系。</p><dl><dt>收录</dt><dd>${n ? n + ' 种单位' : '目录加载中'}</dd></dl>`; }
@@ -272,6 +287,7 @@ function startPvE(level) {
   mnHide();
   MENU.pausedBy = false; MENU.game = true; MENU.last = 'pve';
   U.level = level;
+  if (S && S.mode === 'sandbox' && typeof closeSandbox === 'function') try { closeSandbox(); } catch (e) { console.error('closeSandbox', e); }
   restart(false);
   S.mode = 'pve'; S.role = 'attack';
   mnFrameDeploy();
@@ -280,13 +296,28 @@ function startPvE(level) {
   playIntro(() => { if (S.phase === 'deploy' && !S.briefed) $('brief').hidden = false; updateHud(); });
 }
 
-// 部署镜头：同时看到海滩与集结海域的舰队（底部面板占去的高度不算）
+// 部署镜头：同时看到海滩与集结海域的舰队；上下避开压在画布上的 HUD（按实际布局测量，桌面与手机通用）
 function mnFrameDeploy() {
   const bs = TER.beaches.length ? TER.beaches : [{ cx: W / 2 }], cm = bs.reduce((a, b) => a + coastAt(b.cx), 0) / bs.length;
-  const top = cm - 70, bot = STAGING_Y + 210, wide = CAM.vw > 900, hud = wide ? 190 : 0, head = wide ? 150 : 60;   // 上方留出据点条与 H-HOUR 按钮
-  CAM.z = clamp((CAM.vh - hud - head) / (bot - top), CAM.fit * 1.4, CAM.fit * 2.4);
+  const { head, foot } = mnInsets(), top = cm - 70, bot = STAGING_Y + 210;
+  CAM.z = clamp((CAM.vh - head - foot) / (bot - top), CAM.fit, CAM.fit * 2.4);
   CAM.x = W / 2; CAM.y = top + (CAM.vh / 2 - head) / CAM.z;
   camClamp();
+}
+// 画布上方 / 下方被 HUD 浮层遮住的高度（H-HOUR 按钮此时还隐藏，临时显示量一下）
+function mnInsets() {
+  const cv = R.cv, dep = $('deploy');
+  if (!cv || !cv.getBoundingClientRect().height) return { head: 60, foot: 0 };
+  const c = cv.getBoundingClientRect(), was = dep ? dep.hidden : true;
+  if (dep) dep.hidden = false;
+  let head = 0, foot = 0;
+  for (const id of ['topr', 'feed', 'objs', 'deploy', 'bottom']) {
+    const el = $(id), r = el && el.getBoundingClientRect();
+    if (!r || !r.width || !r.height || r.bottom <= c.top || r.top >= c.bottom) continue;
+    if (r.top + r.bottom < 2 * c.top + c.height) head = Math.max(head, r.bottom - c.top); else foot = Math.max(foot, c.bottom - r.top);
+  }
+  if (dep) dep.hidden = was;
+  return { head: Math.min(head + 14, c.height * .45), foot: Math.min(foot + 6, c.height * .45) };
 }
 
 // 沙盒：先建沙盒地图，再在其上播放转场（转场显示的就是这张地图）
@@ -413,6 +444,7 @@ if (typeof onSettings === 'function') onSettings(() => { if (MENU.set && !MENU.s
 // 游戏中：无选中、无工具时 Esc（或 F10）打开菜单
 HOOK.key.push(e => {
   if (MENU.open || !S) return false;
+  if (e.key === 'Escape' && S.briefed && !$('brief').hidden) { $('brief').hidden = true; return true; }   // ？帮助（简报）打开时 Esc 先关它
   if (e.key === 'F10' || (e.key === 'Escape' && !U.tool && !S.sel.length && !U.fdrag && S.phase !== 'sandbox')) { e.preventDefault(); showMenu(); return true; }
   return false;
 });
