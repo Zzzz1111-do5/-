@@ -137,6 +137,7 @@ function drawMan(ctx, x0, y0, a, role, col, det) {
     ctx.lineWidth = lw * 1.7; ctx.beginPath(); ctx.moveTo(.2, .75); ctx.lineTo(3.9, .75); ctx.stroke();
     ctx.lineWidth = lw * .8; ctx.beginPath(); ctx.moveTo(3.1, .75); ctx.lineTo(3.7, -.1); ctx.moveTo(3.1, .75); ctx.lineTo(3.7, 1.6); ctx.stroke();
   } else { ctx.beginPath(); ctx.moveTo(.1, .85); ctx.lineTo(3.1, .6); ctx.stroke(); }
+  if (role === 'aa') { ctx.lineWidth = lw * 2.6; ctx.beginPath(); ctx.moveTo(-2.4, -1.15); ctx.lineTo(2.2, -1.15); ctx.stroke(); ctx.lineWidth = lw * .8; ctx.beginPath(); ctx.moveTo(2.2, -1.9); ctx.lineTo(2.2, -.4); ctx.stroke(); ctx.lineWidth = lw; }   // 防空导弹手：左肩扛粗短发射筒
   ctx.fillStyle = col; ctx.strokeStyle = dark; ctx.lineWidth = lw * .8;
   ctx.beginPath(); ctx.arc(.2, 0, .82, 0, 7); ctx.fill(); ctx.stroke();
   ctx.restore();

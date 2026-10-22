@@ -8,7 +8,7 @@ const ARCH_NAMES = {
   inf_p: '登陆步兵组', eng_p: '登陆工兵组', inf_e: '守备步兵', eng_e: '守军工兵', bunker: '碉堡掩体', coastal: '岸防炮', arty: '野战炮兵', mortar: '迫击炮',
   aa: '防空炮', mines: '雷区', wire: '铁丝网', obst: '反登陆障碍', trench: '堑壕', post: '观察与雷达', decoy: '假目标', depot_e: '弹药库',
   veh: '装甲车辆', car_e: '守军装甲车', ship: '登陆舰艇', fire_ship: '火力支援艇', sweep: '扫雷舰', dd: '驱护舰 / 巡洋舰', cv: '航空母舰',
-  wing: '舰载机', asset: '后勤资源', sortie: '战前出击', wave_e: '增援波次'
+  wing: '舰载机', asset: '后勤资源', sortie: '战前出击', wave_e: '增援波次', missile: '战术导弹', airfield: '野战机场', ewing: '守军航空'
 };
 
 // —— 图标（24×24 描边，与 hud.js ICON 同风格；class="f" 为实心）——
@@ -102,7 +102,16 @@ const CT_IC = {
   depot: '<rect x="4" y="11" width="16" height="10"/><path d="M4 15h16M12 11v10M12 11V2l6 2.5-6 2.5"/>', deck: '<path d="M3 20h18M6 20l2-5h8l2 5"/><path d="M12 3v9M7 8l5-2 5 2"/>',
   srecon: '<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
   sbomb: '<path d="M12 3v4"/><ellipse cx="12" cy="13" rx="4" ry="6"/><path d="M9 20l-2 2M15 20l2 2M12 19v3"/>',
-  snaval: '<path d="M4 20L17 7"/><path d="M15 3l6 6M12 21a3 3 0 0 1 6 0"/><circle class="f" cx="18" cy="6" r="1.4"/>'
+  snaval: '<path d="M4 20L17 7"/><path d="M15 3l6 6M12 21a3 3 0 0 1 6 0"/><circle class="f" cx="18" cy="6" r="1.4"/>',
+  // v7：单兵防空导弹、战术导弹、发射车、岸舰导弹、野战机场、守军攻击机 / 武装直升机
+  manpads: '<circle cx="9" cy="6.5" r="2.2"/><path d="M9 8.8v6.7M6 21l3-5.5 3 5.5M9 11.5l4.5-1.2"/><path d="M3.5 10.5L20 4.5" stroke-width="2.4"/><path d="M20.5 2.5l1.2 3.3"/>',
+  emanpads: CT_HELM + '<path d="M3 20.5l17-5.5" stroke-width="2.4"/><path d="M20.5 13l1 3.2"/>',
+  tbm: '<path d="M12 1.5l3 5v10.5l2.5 2.5v2.5h-11V19.5L9 17V6.5z"/><path d="M9 10.5h6"/><path d="M10.5 23h3" stroke-dasharray="1 1"/>',
+  tel: '<rect x="2" y="15" width="20" height="4" rx=".6"/><circle cx="6" cy="20.6" r="1.4"/><circle cx="12" cy="20.6" r="1.4"/><circle cx="18" cy="20.6" r="1.4"/><path d="M7 14.5L19 4l1.6 1.8L9 16"/><path d="M5 15V11h3"/>',
+  ascm: '<rect x="2" y="15" width="20" height="4" rx=".6"/><circle cx="6" cy="20.6" r="1.4"/><circle cx="18" cy="20.6" r="1.4"/><path d="M4 12.5L19 6.5M5.5 15L20.5 9"/><path d="M19 6.5l1.5 2.5"/>',
+  airfield: '<rect x="2" y="9.5" width="20" height="5" rx=".6"/><path d="M4.5 12h3M10.5 12h3M16.5 12h3"/><path d="M3 21.5a4 3 0 0 1 8 0z"/><path d="M15 2.5l2.5 4.5M13 4.5l4.5-.5"/>',
+  ega: '<path d="M12 2l1.8 6.5 7.2 7.5v2l-7.2-2.8-.4 3.3 2.6 2v1.5L12 20.5l-4 1.5v-1.5l2.6-2-.4-3.3L3 18v-2l7.2-7.5z"/><path d="M6 13.5v3.5M18 13.5v3.5"/>',
+  eheli: '<path d="M2 5.5h20M12 5.5v4"/><ellipse cx="12" cy="13" rx="3.5" ry="4"/><path d="M12 17v5M9 21.5h6M4 14h4.5M15.5 14H20"/>'
 };
 
 // —— 条目 —— e(id, 名称, 阵营, 分类, 原型, 点数, 图标, [耐久, 装甲, 火力, 射程, 速度, 视野, 人数], 说明, spawn, 附加)
@@ -139,6 +148,8 @@ ctE('p_mortar', '连属迫击炮组', 'p', 'inf', 'inf_p', 18, CT_IC.pmortar, [3
   { kind: 'cargo', at: 'cargo', men: ['radio', 'rifle', 'rifle'], mod: { pow: .6 }, tag: 'mortar' }, { counters: ['inf_e', 'trench'], weakTo: ['arty'] });
 ctE('p_hq', '营部指挥组', 'p', 'inf', 'inf_p', 16, CT_IC.hq, [3, 0, 2, 4, 5, 7, 3], '营指挥所：150 内的连队士气稳定、压制恢复更快；被打掉会让附近部队动摇。',
   { kind: 'cargo', at: 'cargo', men: ['radio', 'radio', 'rifle'], tag: 'hq' }, { weakTo: ['e_sniper', 'arty'] });
+ctE('p_manpads', '便携防空导弹组', 'p', 'inf', 'inf_p', 18, CT_IC.manpads, [3, 0, 2, 7, 5, 6, 3], '肩扛式防空导弹（每组 3 枚）：230–260 内击落低飞的敌攻击机与武装直升机，补给点附近每分钟补 1 枚；对地火力弱。',
+  { kind: 'cargo', at: 'cargo', men: ['radio', 'rifle', 'aa'], mod: { pow: .8 }, tag: 'manpads' }, { counters: ['e_air_ga', 'e_air_heli'], weakTo: ['inf_e', 'mortar'] });
 
 // ———— 进攻方 · 装甲（两栖车辆在集结海域自行泅渡；其余装载到坦克登陆舰）————
 ctE('p_lt_tank', '轻型坦克', 'p', 'armor', 'veh', 30, CT_IC.lt, [4, 2, 4, 5, 8, 6, 4], '机动快、价格低，可伴随步兵扫清机枪火力点；装甲薄，怕反坦克炮。',
@@ -174,15 +185,15 @@ ctE('p_dozer', '工程坦克（推土铲）', 'p', 'armor', 'veh', 44, CT_IC.doz
 
 // ———— 进攻方 · 舰艇 ————
 ctE('p_lct', '突击登陆艇 LCT', 'p', 'naval', 'ship', 20, CT_IC.lct, [5, 1, 0, 0, 5, 3, 10], '标准突击登陆艇，可装载 5 个小组；首波抢滩主力。',
-  { kind: 'ship', at: 'sea', ship: 'assault', cap: 5, hp: 10, pre: 'LA' }, { weakTo: ['coastal', 'obst', 'bunker'] });
+  { kind: 'ship', at: 'sea', ship: 'assault', cap: 5, hp: 10, pre: 'LA', def: ['p_rifle', 'p_rifle', 'p_mg', 'p_at', 'p_eng'] }, { weakTo: ['coastal', 'obst', 'bunker'] });
 ctE('p_lci', '步兵登陆舰 LCI', 'p', 'naval', 'ship', 28, CT_IC.lci, [6, 1, 0, 0, 5, 3, 10], '载 8 个小组的较大舰艇，一次送上一个加强连；目标大，抢滩时更招火。',
-  { kind: 'ship', at: 'sea', ship: 'assault', cap: 8, hp: 12, pre: 'LI' }, { weakTo: ['coastal', 'obst'] });
+  { kind: 'ship', at: 'sea', ship: 'assault', cap: 8, hp: 12, pre: 'LI', def: ['p_hq', 'p_rifle', 'p_rifle', 'p_rifle', 'p_mg', 'p_mg', 'p_at', 'p_medic'] }, { weakTo: ['coastal', 'obst'] });
 ctE('p_lcvp', '小型登陆艇 LCVP', 'p', 'naval', 'ship', 12, CT_IC.lcvp, [3, 0, 0, 0, 6, 3, 9], '只载 3 个小组的小艇，便宜、目标小，适合佯攻与分散登陆。',
-  { kind: 'ship', at: 'sea', ship: 'assault', cap: 3, hp: 6, pre: 'LV' }, { weakTo: ['bunker', 'obst'] });
+  { kind: 'ship', at: 'sea', ship: 'assault', cap: 3, hp: 6, pre: 'LV', def: ['p_rifle', 'p_rifle', 'p_mg'] }, { weakTo: ['bunker', 'obst'] });
 ctE('p_lst', '坦克登陆舰 LST', 'p', 'naval', 'ship', 35, CT_IC.lst, [8, 1, 0, 0, 4, 3, 0], '抢滩后放下首门，把装载的坦克与装甲车逐辆开上岸（最多 3 辆）；建议作为第二波。',
-  { kind: 'ship', at: 'sea', ship: 'lst', vcap: 3, hp: 16, pre: 'LT', wave: 2 }, { weakTo: ['coastal'] });
+  { kind: 'ship', at: 'sea', ship: 'lst', vcap: 3, hp: 16, pre: 'LT', wave: 2, def: ['p_tank', 'p_tank', 'p_apc'] }, { weakTo: ['coastal'] });
 ctE('p_lsm', '中型登陆舰 LSM', 'p', 'naval', 'ship', 30, CT_IC.lsm, [6, 1, 0, 0, 5, 3, 6], '载 2 辆车与 2 个小组的中型登陆舰，兼顾人员与装甲。',
-  { kind: 'ship', at: 'sea', ship: 'lst', vcap: 2, cap: 2, hp: 13, pre: 'LM', wave: 2 }, { weakTo: ['coastal'] });
+  { kind: 'ship', at: 'sea', ship: 'lst', vcap: 2, cap: 2, hp: 13, pre: 'LM', wave: 2, def: ['p_tank', 'p_apc', 'p_rifle', 'p_mg'] }, { weakTo: ['coastal'] });
 ctE('p_supply', '补给登陆舰', 'p', 'naval', 'ship', 30, CT_IC.ls, [6, 1, 0, 0, 4, 3, 10], '自带 4 个小组与 3 名工兵：抢滩后建立滩头补给站与浮桥补给线，为附近部队补充弹药、恢复士气。',
   { kind: 'ship', at: 'sea', ship: 'supply', teams: 4, eng: 3, hp: 11, pre: 'LS', wave: 2 }, { weakTo: ['arty', 'coastal'] });
 ctE('p_supply_h', '补给舰（加固）', 'p', 'naval', 'ship', 38, CT_IC.ls + ctDots(1), [8, 2, 0, 0, 4, 3, 10], '加装装甲与损管的补给舰，更能扛住岸炮，补给站更稳。',
@@ -239,6 +250,8 @@ ctE('p_depot', '野战补给站', 'p', 'support', 'asset', 30, CT_IC.depot, [3, 
   { kind: 'flag', at: 'none', key: 'depot' }, {});
 ctE('p_deck', '甲板整备队', 'p', 'support', 'asset', 20, CT_IC.deck, [0, 0, 0, 0, 0, 0, 0], '加强航母整备：舰载机着舰后重新出击的整备时间缩短 40%。',
   { kind: 'flag', at: 'none', key: 'deck' }, {});
+ctE('p_tbm', '战术导弹（2 枚）', 'p', 'support', 'missile', 60, CT_IC.tbm, [0, 0, 10, 10, 0, 0, 0], '战术弹道导弹：驱逐舰垂直发射（无驱逐舰时由战区导弹部队发射），约 6–8 秒命中，一发可摧毁碉堡或岸防炮；雷达高炮可能拦截。快捷键 I。',
+  { kind: 'asset', at: 'none', key: 'msl', add: 2 }, { counters: ['coastal', 'e_tel', 'e_ascm', 'e_airfield'], weakTo: ['e_aa_radar'] });
 ctE('p_sortie_recon', '战前空中侦察', 'p', 'support', 'sortie', 15, CT_IC.srecon, [0, 0, 0, 0, 0, 9, 0], '开战时对指定地点照相侦察 30 秒，半径约 160。',
   { kind: 'sortie', at: 'target', t: 'recon', r: 160 }, { counters: ['coastal', 'arty'] });
 ctE('p_sortie_bomb', '战前轰炸', 'p', 'support', 'sortie', 35, CT_IC.sbomb, [0, 0, 8, 0, 0, 0, 0], '开战后 6 秒内对指定地点投下 8 枚炸弹；看不见的目标也会被覆盖，但散布较大。',
@@ -265,6 +278,8 @@ ctE('e_militia', '民兵', 'e', 'inf', 'inf_e', 14, CT_IC.emil, [4, 0, 2, 4, 3, 
   { kind: 'einf', at: 'land', role: 'garrison', teams: 3, men: ['rifle', 'rifle', 'rifle'], mod: { pow: .65, sup: .8 }, morale: 40 }, { weakTo: ['p_rifle', 'p_mg', 'veh'] });
 ctE('e_eng', '守军工兵', 'e', 'inf', 'eng_e', 15, CT_IC.eeng, [3, 0, 2, 4, 3, 5, 3], '抢修 40 以内受损的碉堡与炮位，每秒恢复少量耐久。',
   { kind: 'einf', at: 'land', role: 'garrison', teams: 1, men: ['rifle', 'rifle', 'rifle'], mod: { pow: .7 }, tag: 'eeng' }, { weakTo: ['inf_p'] });
+ctE('e_manpads', '单兵防空组', 'e', 'inf', 'inf_e', 22, CT_IC.emanpads, [3, 0, 2, 7, 3, 6, 3], '携带 3 枚单兵防空导弹的守备组，专打低空盘旋的对地支援机、俯冲的攻击机与武装直升机；发射即暴露位置。',
+  { kind: 'einf', at: 'land', role: 'garrison', teams: 1, men: ['rifle', 'rifle', 'aa'], tag: 'manpads' }, { counters: ['p_air_cas', 'p_air_heli', 'p_air_dive'], weakTo: ['inf_p', 'p_mortar'] });
 
 // ———— 防守方 · 装甲 ————
 ctE('e_car', '装甲侦察车', 'e', 'armor', 'car_e', 25, CT_IC.ecar, [4, 2, 3, 5, 8, 7, 3], '轮式装甲车：在镇子待命，据点受威胁时驰援，以车载机枪扫射；轻武器打不穿。',
@@ -327,6 +342,18 @@ ctE('e_aa_heavy', '重型高炮', 'e', 'arty', 'aa', 38, CT_IC.haa, [6, 2, 6, 7,
   { kind: 'enemy', at: 'land', ek: 'aa', hp: 1.5, mod: { aa: 1.6, rng: 1.25 } }, { counters: ['wing'], weakTo: ['p_dd'] });
 ctE('e_aa_radar', '雷达高炮', 'e', 'arty', 'aa', 50, CT_IC.raa, [5, 2, 7, 8, 0, 9, 5], '火控雷达指挥的高炮群，命中率接近普通高炮两倍，并能远距离发现目标。',
   { kind: 'enemy', at: 'land', ek: 'aa', hp: 1.25, mod: { aa: 1.9, rng: 1.35 }, vis: { r: 260, h: 3 } }, { counters: ['wing'], weakTo: ['p_air_dive', 'p_dd'] });
+ctE('e_tel', '战术导弹发射车', 'e', 'arty', 'missile', 90, CT_IC.tel, [3, 1, 10, 10, 2, 0, 0], '纵深 450 以外的机动发射车，载弹 2 枚：打击滩头卸载中的登陆舰与密集部队，射程 300–1800；发射后暴露并转移阵地。',
+  { kind: 'enemy', at: 'land', ek: 'tel', minDepth: 450, n: 2 }, { counters: ['ship', 'inf_p', 'p_depot'], weakTo: ['p_tbm', 'p_air_strike', 'p_air_recon'] });
+ctE('e_ascm', '岸舰导弹连', 'e', 'arty', 'missile', 110, CT_IC.ascm, [4, 1, 10, 10, 0, 7, 0], '岸边的反舰导弹连（4 枚，两枚一组齐射）：掠海飞行打击射程 1600 内的坦克登陆舰、满载登陆舰与驱逐舰；驱逐舰近防炮可拦截，发射后暴露 90 秒。',
+  { kind: 'enemy', at: 'coast', ek: 'ascm', n: 4 }, { counters: ['p_lst', 'p_lct', 'dd'], weakTo: ['p_tbm', 'p_air_dive'] });
+
+// ———— 防守方 · 航空（需要野战机场；每座机场最多 4 架）————
+ctE('e_airfield', '野战机场', 'e', 'air', 'airfield', 50, CT_IC.airfield, [8, 1, 0, 0, 0, 0, 0], '纵深 500 以外的简易跑道：守军攻击机与武装直升机在此起降、整备；跑道被炸后暂停出击，被毁则地面飞机全部损失。',
+  { kind: 'enemy', at: 'land', ek: 'airfield', minDepth: 500 }, { weakTo: ['p_tbm', 'p_air_heavy', 'p_air_strike'] });
+ctE('e_air_ga', '对地攻击机', 'e', 'air', 'ewing', 38, CT_IC.ega, [2, 0, 7, 0, 9, 4, 0], '一次通场：6 枚火箭齐射加机炮扫射，专打卸载中的登陆舰与密集步兵；携 2 枚干扰弹，怕便携防空导弹与自行高炮。需要野战机场。',
+  { kind: 'ewing', at: 'air', type: 'ga' }, { counters: ['ship', 'inf_p'], weakTo: ['p_manpads', 'p_aa_veh', 'p_dd'] });
+ctE('e_air_heli', '武装直升机', 'e', 'air', 'ewing', 40, CT_IC.eheli, [3, 1, 6, 6, 4, 6, 0], '在 300–380 外悬停，以反坦克导弹猎杀坦克与登陆舰，再用火箭覆盖步兵；速度慢、低空，机枪也能把它打下来。需要野战机场。',
+  { kind: 'ewing', at: 'air', type: 'heli' }, { counters: ['veh', 'p_lst'], weakTo: ['p_manpads', 'p_aa_veh', 'p_mg'] });
 
 // ———— 防守方 · 工事 ————
 ctE('e_mines_ap', '防步兵雷区', 'e', 'fort', 'mines', 15, CT_IC.mine, [0, 0, 5, 0, 0, 0, 0], '半径约 24 的雷区，踩中即伤亡并暴露；工兵可以排除。',
