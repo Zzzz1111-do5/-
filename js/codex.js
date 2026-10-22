@@ -203,7 +203,7 @@ function cdxDetail() {
   const det = CDX.el.querySelector('.cdx-det'), c = cdxById(CDX.sel);
   if (!c) { det.innerHTML = ''; return; }
   const st = c.stats || {}, side = c.side || 'p';
-  const rel = (arr, cls, label) => Array.isArray(arr) && arr.length ? `<div class="${cls}"><em>${label}</em>${arr.map(k => { const o = cdxById(k); return `<button type="button" data-go="${cdxEsc(k)}">${cdxEsc(o ? o.name : cdxArch(k))}</button>`; }).join('')}</div>` : '';
+  const rel = (arr0, cls, label) => { const arr = Array.isArray(arr0) ? arr0.filter(k => !(typeof CT_WIP === 'object' && CT_WIP.has(k))) : arr0; return Array.isArray(arr) && arr.length ? `<div class="${cls}"><em>${label}</em>${arr.map(k => { const o = cdxById(k); return `<button type="button" data-go="${cdxEsc(k)}">${cdxEsc(o ? o.name : cdxArch(k))}</button>`; }).join('')}</div>` : ''; };
   det.innerHTML = `<div class="cdx-hero"><div class="cdx-big ${side}">${cdxIcon(c, '')}</div><div><h3>${cdxEsc(c.name)}</h3>
     <div class="cdx-tags"><span class="cdx-tag ${side}">${CDX_SIDE[side] || side}</span><span class="cdx-tag m">${cdxEsc(cdxCatName(c.cat))}</span>${c.arch ? `<span class="cdx-tag m">${cdxEsc(cdxArch(c.arch))}</span>` : ''}<span class="cdx-tag c">◆ ${c.cost ?? '—'} 点</span></div></div></div>
     <dl class="cdx-stats">${CDX_STATS.map(([k, n]) => `<dt>${n}</dt>${cdxBar(st[k])}<dd>${st[k] == null ? '—' : Math.round(st[k] * 10) / 10}</dd>`).join('')}</dl>
