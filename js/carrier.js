@@ -517,22 +517,23 @@ function updateAirAuto(dt) {
       const nb = near(o.x, o.y, 220);
       if (!nb.length || nb.some(q => dist(q.x, q.y, o.x, o.y) < 60) || busy('cas', o.x, o.y, 200)) continue;
       const s = nb.reduce((a, q) => a + 1 + q.sup / 50, 0);
+      if (typeof eaThreat === 'function' && eaThreat(o.x, o.y) >= 1 && s < 8) continue;   // 已知敌单兵防空：盘旋的对地支援机不去送（我方压力很大时例外）
       if (s > bs) { bs = s; best = o; }
     }
     if (best && bs >= 2 && launchPlane('cas', best.x, best.y)) return;
   }
   if (S.assets.strike > 0) {
-    const PRI = { coastal: 5, arty: 4, aa: 3.5, mortar: 3, bunker: 2 };
+    const PRI = { coastal: 5, ascm: 5, airfield: 4.5, arty: 4, aa: 3.5, mortar: 3, bunker: 2 };
     let best = null, bs = 0;
     for (const e of S.enemies) if (!e.dead && e.kx != null) {
       if (near(e.kx, e.ky, typeof cmdAirSafe === 'function' ? cmdAirSafe() : 90).length || busy('strike', e.kx, e.ky, 70) || S.shells.some(s => s.side === 'p' && s.kind === 'bomb' && dist(s.x1, s.y1, e.kx, e.ky) < 60)) continue;
-      const s = (PRI[e.kind] || 1) * (e.kind === 'bunker' && !near(e.kx, e.ky, 320).length ? .3 : 1);
+      const s = (PRI[e.kind] || 1) * (e.kind === 'bunker' && !near(e.kx, e.ky, 320).length ? .3 : 1) * (typeof eaThreat === 'function' && eaThreat(e.kx, e.ky) >= 1 ? .4 : 1);
       if (s > bs) { bs = s; best = e; }
     }
     if (best && launchPlane('strike', best.kx, best.ky)) { if (typeof cmdAirLaunched === 'function') cmdAirLaunched({ k: 'strike', x: best.kx, y: best.ky, eid: best.id }, S.planes[S.planes.length - 1]); return; }
   }
   if (S.assets.bomber > 0) {   // 轰炸机：炮兵阵地群、岸防炮、碉堡（周围已标定目标越多越优先）；我军 150 以内不投
-    const PRI = { coastal: 5, arty: 4.5, aa: 3, mortar: 3, bunker: 2.5 };
+    const PRI = { coastal: 5, airfield: 5, ascm: 4.5, arty: 4.5, aa: 3, mortar: 3, bunker: 2.5 };
     let best = null, bs = 0;
     for (const e of S.enemies) if (!e.dead && e.kx != null) {
       if (near(e.kx, e.ky, 150).length || busy('bomber', e.kx, e.ky, 90) || S.shells.some(s => s.side === 'p' && s.kind === 'bomb' && dist(s.x1, s.y1, e.kx, e.ky) < 60)) continue;

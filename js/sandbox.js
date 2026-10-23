@@ -73,6 +73,12 @@ function sbxCheck(c, x, y, x2, y2, ignore) {
   if (ignore) cost = 0;
   if (cost > sbxLeft(c.side) + repl) return bad(`预算不足（还剩 ${sbxLeft(c.side)} 点）`);
   if (s.at === 'none') return { ok: true };
+  if (s.kind === 'ewing') {
+    const nb = sbxOf('enemy').filter(it => sbxEntry(it).spawn.ek === 'airfield').length;
+    if (!nb) return bad('需要先部署一座野战机场');
+    if (sbxOf('ewing').length + 1 > nb * 4) return bad(`机场已满（每座最多 4 架，现有 ${nb} 座）`);
+    return { ok: true };
+  }
   if (s.at === 'air') {
     if (!sbxOf('cv').length) return bad('需要先部署一艘航母');
     if (sbxWingN() + (s.n || 1) > sbxWingCap()) return bad(`航母机库已满（${sbxWingCap()} 架）`);
@@ -115,7 +121,8 @@ function sbxCheck(c, x, y, x2, y2, ignore) {
   if (!sbxLandOk(x, y)) return bad('须放在海岸线以北的陆地上（不能在河里）');
   const mob = s.kind === 'einf' || s.kind === 'veh' || s.kind === 'car';
   if (mob && !(TP[t].sp > 0)) return bad('部队不能放在悬崖或不可通行地形');
-  if (s.at === 'coast' && coastAt(x) - y > 300) return bad('岸防炮须在离海岸 300 以内');
+  if (s.at === 'coast' && coastAt(x) - y > 300) return bad(s.ek === 'ascm' ? '岸舰导弹连须在离海岸 300 以内' : '岸防炮须在离海岸 300 以内');
+  if (s.minDepth && coastAt(x) - y < s.minDepth) return bad(`须放在离海岸 ${s.minDepth} 以外的纵深`);
   if (s.kind === 'enemy' || s.kind === 'post') {
     if (S.sbx.items.some(it => it !== ignore && it.side === 'e' && it.x != null && ['enemy', 'post'].includes(sbxEntry(it).spawn.kind) && dist(it.x, it.y, x, y) < 12)) return bad('与其他工事重叠');
   }
@@ -384,6 +391,21 @@ function sbxAIDefend() {
   let nAA = 0;
   for (const p of aaAt.slice(0, clamp(Math.round(2 * k), 1, 4))) if (sbxTry(nAA === 0 && k >= 1.5 ? 'e_aa_radar' : 'e_aa', p.x, p.y, 40)) nAA++;
   if (nAA) say(`防空：指挥所与岸炮、炮兵阵地配高炮 ${nAA} 门，防敌舰载机先拔岸炮、再炸预备队。`, hq);
+  // 5b. 纵深野战机场（v7）：保留直升机与攻击机各一架，专打卸载中的登陆舰与坦克；指挥所配单兵防空组
+  if (B0 >= 1800 && !(S.v7off && S.v7off.air)) {
+    let af = null;
+    for (let k = 0; k < 40 && !af; k++) { const x = clamp(hq.x + (Math.random() - .5) * 700, 80, W - 80), y = clamp(hq.y - 120 - Math.random() * 300, 60, H); if (coastAt(x) - y >= 520) af = sbxTry('e_airfield', x, y, 30); }
+    if (af) {
+      const nh = sbxPlace('e_air_heli').ok, ng = sbxPlace('e_air_ga').ok;
+      sbxTry('e_manpads', hq.x - 30, hq.y + 25, 40);
+      say(`航空：纵深 ${sbxM(coastAt(af.x) - af.y)} 米处修野战机场，保留${nh ? '武装直升机' : ''}${nh && ng ? '与' : ''}${ng ? '攻击机' : ''}各一架，专打卸载中的登陆舰与登陆后的坦克；指挥所配单兵防空组。`, af);
+    }
+  }
+  if (B0 >= 2200 && !(S.v7off && S.v7off.msl)) {
+    const g0 = guns[0] || { x: b1.b.cx + 400, y: coastAt(b1.b.cx + 400) - 150 };
+    const am = sbxTry('e_ascm', g0.x + (g0.x > b1.b.cx ? 60 : -60), g0.y + 20, 60);
+    if (am) say(`岸舰导弹连 1 个配置在岬角后侧，4 枚导弹专打海上的坦克登陆舰和满载登陆舰；发射后会暴露。`, am);
+  }
   // 6. 主攻滩头加强：反坦克炮、迫击炮、出口机枪班、反坦克雷、探照灯
   for (const B of main.slice(0, 2)) {
     const cx = B.b.cx, cy = coastAt(cx);
@@ -467,6 +489,12 @@ function sbxAIAttack() {
     ['p_ranger', 'p_ranger', 'p_rifle', 'p_mg', 'p_medic'], ['p_rifle', 'p_rifle', 'p_mg', 'p_mortar', 'p_hq'], ['p_marine', 'p_rifle', 'p_sniper', 'p_eng', 'p_mg']];
   const nW1 = clamp(Math.round(4.2 * k), 3, 8), w1 = [];
   for (let i = 0; i < nW1; i++) { const it = ship('p_lct', M, i, nW1, 1580, LOADS[i % LOADS.length], 1); if (it) w1.push(it); }
+  let nMp = 0;   // v7：敌纵深机场情况不明，第一波随船带两个便携防空组（替换最后一个小组）
+  if (B0 >= 1400 && !(S.v7off && S.v7off.air)) for (const it of w1.slice(0, 2)) if (it.cargo.length) {
+    const old = catalogById(it.cargo[it.cargo.length - 1]), add = catalogById('p_manpads').cost - (old ? old.cost : 0);
+    if (add <= sbxLeft('p')) { it.cargo[it.cargo.length - 1] = 'p_manpads'; nMp++; sbxSync(); }
+  }
+  if (nMp) say(`敌纵深机场情况不明，随第一波携带 ${nMp} 个便携防空组，防敌武装直升机与攻击机袭击滩头。`, M.ex);
   // 2. 火力支援舰
   const ddId = B0 >= 2600 ? 'p_cl' : B0 >= 1100 ? 'p_dd' : B0 >= 700 ? 'p_dd_e' : null;
   let dd = null;
@@ -561,7 +589,7 @@ function sbxSpawn(it, role, acc) {
     const e = addEnemy(s.ek, x, y);
     e.hp = e.maxhp = Math.max(1, Math.round(ENEMY_SPEC[s.ek].hp * (s.hp || 1)));
     if (s.mod) e.mod = { ...s.mod };
-    Object.assign(e, { name: c.name, cat: c.id }, s.vis ? { sbxVis: { ...s.vis } } : {}, s.decoy ? { decoy: true } : {});
+    Object.assign(e, { name: c.name, cat: c.id }, s.vis ? { sbxVis: { ...s.vis } } : {}, s.decoy ? { decoy: true } : {}, s.n ? { n: s.n } : {});
   } else if (s.kind === 'mine') {
     const r = it.r || s.r, n = s.n || 1;
     for (let k = 0; k < n; k++) S.mines.push({ id: S.nid++, x: x + (k - (n - 1) / 2) * r * 1.25, y: y + (k % 2 ? -r * .35 : 0), r, known: false, clr: s.clr || 0, ...(s.at2 ? { at: true } : {}) });
@@ -622,6 +650,7 @@ function sbxSpawn(it, role, acc) {
     sh.cat = c.id;
   } else if (s.kind === 'wing') acc.wing.push({ id: S.nid++, type: s.type, state: 'deck', rearmT: 0, ...(s.v ? { v: s.v } : {}) });
   else if (s.kind === 'asset') S.assets[s.key] = (S.assets[s.key] || 0) + s.add;
+  else if (s.kind === 'ewing') { if (typeof eaAddWing === 'function') eaAddWing(s.type); }
   else if (s.kind === 'flag') { if (s.key === 'relay') S.relay = true; else S.sbxRun[s.key] = true; }
   else if (s.kind === 'sortie') S.sbxRun.sorties.push({ k: s.t, x, y, n: s.n || 0, r: s.r || 0, at: s.t === 'naval' ? 3 : s.t === 'bomb' ? 4 : .5, done: false });
   else if (s.kind === 'ewave') { S.sbxRun.waves.push({ t: it.t ?? s.t + 60 * acc.waves, n: it.n ?? s.teams, done: false }); acc.waves++; }
@@ -636,6 +665,7 @@ function sbxBuild(role) {
   S.sbxObs = [];
   S.sbxRun = { waves: [], sorties: [], depot: false, deck: false, aaT: 0, tagT: 0, waveT: 0, ddPrev: 0, said: {} };
   S.assets = { recon: 0, strike: 0, cas: 0, rline: 1, reserve: 0, smoke: 0 };
+  S.eair = null; S.eaLight = null; S.missiles = []; S.msl = null;   // v7：守方航空、导弹从购买重建
   S.points.forEach(p => { p.owner = 'e'; p.prog = 0; p.contested = false; });
   for (const k in SBX_LBL) delete SBX_LBL[k];
   UNIT_MAP = new Map();
@@ -1101,7 +1131,7 @@ function closeSandbox() {
 }
 
 // ———————————————— 编辑器面板（DOM 注入）————————————————
-const SBX_CATS = { e: ['inf', 'armor', 'arty', 'fort', 'support'], p: ['inf', 'armor', 'naval', 'air', 'support'] };
+const SBX_CATS = { e: ['inf', 'armor', 'arty', 'air', 'fort', 'support'], p: ['inf', 'armor', 'naval', 'air', 'support'] };
 const SBX_LV = [['normal', '普通'], ['hard', '困难'], ['hell', '地狱']];
 const sbxEsc = s => String(s).replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch]);
 const sbxIc = (c, cls) => `<svg viewBox="0 0 24 24" class="ic ${cls || ''}" aria-hidden="true">${c && c.icon || ''}</svg>`;
@@ -1290,7 +1320,8 @@ function sbxPick(id) {
   SBX.line = null;
   if (c.spawn.at === 'none' || c.spawn.at === 'air') {   // 无需位置：直接编入
     const r = sbxPlace(id);
-    sbxMsg(r.ok ? (c.spawn.at === 'air' ? `已编入：${c.name}，停放在航母甲板（舰载机 ${sbxWingN()} / ${sbxWingCap()} 架）` : `已编入：${c.name}`) : r.why + (c.spawn.at === 'air' && !sbxOf('cv').length ? '：先在「舰艇 / 航空」里选航母放到集结海域南部，再编入飞机' : ''), !r.ok);
+    const ew = c.spawn.kind === 'ewing', nb = sbxOf('enemy').filter(it => sbxEntry(it).spawn.ek === 'airfield').length;
+    sbxMsg(r.ok ? (ew ? `已编入：${c.name}，停放在野战机场（${sbxOf('ewing').length} / ${nb * 4} 架）` : c.spawn.at === 'air' ? `已编入：${c.name}，停放在航母甲板（舰载机 ${sbxWingN()} / ${sbxWingCap()} 架）` : `已编入：${c.name}`) : r.why + (ew && !nb ? '：先在「航空」里选野战机场放到纵深 500 以外的平地上' : c.spawn.at === 'air' && !sbxOf('cv').length ? '：先在「舰艇 / 航空」里选航母放到集结海域南部，再编入飞机' : ''), !r.ok);
     SBX.pick = null;
     return;
   }
@@ -1323,7 +1354,8 @@ function sbxRender() {
   const left = bud - sp;
   q('.sbx-pal').innerHTML = pal.map(c => {
     const na = c.spawn.kind === 'veh' && !sbxVehOk(), cost = c.spawn.at === 'line' ? c.spawn.per + '/百' : c.cost;
-    const need = c.spawn.at === 'air' ? (!sbxOf('cv').length ? '需先部署航母' : sbxWingN() + (c.spawn.n || 1) > sbxWingCap() ? `机库已满（${sbxWingCap()} 架），再部署一艘航母可扩充` : '') : '';
+    const nb = c.spawn.kind === 'ewing' ? sbxOf('enemy').filter(it => sbxEntry(it).spawn.ek === 'airfield').length : 0;
+    const need = c.spawn.kind === 'ewing' ? (!nb ? '需先部署野战机场' : sbxOf('ewing').length >= nb * 4 ? `机场已满（每座 4 架）` : '') : c.spawn.at === 'air' ? (!sbxOf('cv').length ? '需先部署航母' : sbxWingN() + (c.spawn.n || 1) > sbxWingCap() ? `机库已满（${sbxWingCap()} 架），再部署一艘航母可扩充` : '') : '';
     return `<button type="button" role="option" data-id="${c.id}" class="${SBX.pick === c.id ? 'on' : ''}${need ? ' need' : ''}" title="${sbxEsc(c.name)}（${cost} 点）${need ? '：' + need : ''}" aria-selected="${SBX.pick === c.id}" ${na || (c.spawn.at !== 'line' && c.cost > left) ? 'disabled' : ''}>${sbxIc(c)}<span>${cost}</span></button>`;
   }).join('');
   sbxInfo(SBX.pick ? catalogById(SBX.pick) : null);

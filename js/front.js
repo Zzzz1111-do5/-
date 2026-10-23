@@ -370,3 +370,110 @@ function frSummary() {
 
 HOOK.step.push(frUpdate);
 HOOK.newGame.push(frNewGame);
+
+// —— 画面（HOOK.drawUnder）：己方前沿绿线（齿朝北）、敌前沿红线（齿朝南，情报超过 30 秒画虚线）、无人地带淡琥珀斜纹、空隙琥珀点线、孤立连队虚圈 ——
+// 全图时最醒目，放大后渐隐（近看以单兵为主）；低画质只画线
+const FRD = { x: new Float64Array(FR_NX + 2), y: new Float64Array(FR_NX + 2), fe: Array(FR_NX).fill(null) };
+const frYAt = (arr, x) => { const f = x / FR_G - .5, b = clamp(Math.floor(f), 0, FR_NX - 1), c = Math.min(FR_NX - 1, b + 1), l = arr[b], r = arr[c]; return l == null ? r : r == null ? l : lerp(l, r, clamp(f - b, 0, 1)); };
+// 一段连续的列 b0..b1：两端取与邻列的中值，二次中点平滑；tick ±1 画齿（−1 朝北）
+function frRun(ctx, arr, b0, b1, col, a, lw, tick, dash) {
+  const X = FRD.x, Y = FRD.y; let n = 0;
+  X[n] = b0 * FR_G; Y[n++] = b0 > 0 && arr[b0 - 1] != null ? (arr[b0 - 1] + arr[b0]) / 2 : arr[b0];
+  for (let b = b0; b <= b1; b++) { X[n] = frBX(b); Y[n++] = arr[b]; }
+  X[n] = (b1 + 1) * FR_G; Y[n++] = b1 < FR_NX - 1 && arr[b1 + 1] != null ? (arr[b1] + arr[b1 + 1]) / 2 : arr[b1];
+  ctx.setLineDash(dash || []); ctx.beginPath(); ctx.moveTo(X[0], Y[0]);
+  for (let i = 1; i < n - 1; i++) ctx.quadraticCurveTo(X[i], Y[i], (X[i] + X[i + 1]) / 2, (Y[i] + Y[i + 1]) / 2);
+  ctx.lineTo(X[n - 1], Y[n - 1]);
+  if (!dash) { ctx.strokeStyle = rgba(COL.bg, a * .7); ctx.lineWidth = lw + px(2.2); ctx.stroke(); }   // 暗衬边：压在绿色地形上也看得清
+  ctx.strokeStyle = rgba(col, a); ctx.lineWidth = lw; ctx.stroke();
+  if (!tick) return;
+  const L = px(4) * tick; ctx.setLineDash([]); ctx.lineWidth = lw * .8; ctx.beginPath();
+  for (let x = Math.ceil((X[0] + 8) / 45) * 45; x < X[n - 1] - 8; x += 45) { const y = frYAt(arr, x); ctx.moveTo(x, y); ctx.lineTo(x, y + L); }
+  ctx.stroke();
+}
+// 斜纹（世界坐标锚定，间距 40）填满当前裁剪区 [x0,x1]×[y0,y1]
+function frHatch(ctx, x0, x1, y0, y1, a) {
+  const h = y1 - y0; ctx.strokeStyle = rgba(COL.amber, a); ctx.lineWidth = px(1); ctx.setLineDash([]); ctx.beginPath();
+  for (let k = Math.floor((x0 - h) / 40) * 40; k < x1; k += 40) { ctx.moveTo(k, y1); ctx.lineTo(k + h, y0); }
+  ctx.stroke();
+}
+// 无人地带：fe 与 fp 之间 ≥ 20 的列连成带；犬牙交错（fe ≥ fp − 10）的列斜纹加密
+function frNml(ctx, fp, fe, fA) {
+  let b0 = -1, m0 = -1;
+  for (let b = 0; b <= FR_NX; b++) {
+    const both = b < FR_NX && fp[b] != null && fe[b] != null, on = both && fp[b] - fe[b] >= 20, mix = both && fe[b] >= fp[b] - 10;
+    if (on && b0 < 0) b0 = b;
+    if (!on && b0 >= 0) {
+      const b1 = b - 1; let y0 = Infinity, y1 = -Infinity;
+      ctx.beginPath(); ctx.moveTo(b0 * FR_G, fe[b0]);
+      for (let k = b0; k <= b1; k++) { ctx.lineTo(frBX(k), fe[k]); y0 = Math.min(y0, fe[k]); }
+      ctx.lineTo((b1 + 1) * FR_G, fe[b1]); ctx.lineTo((b1 + 1) * FR_G, fp[b1]);
+      for (let k = b1; k >= b0; k--) { ctx.lineTo(frBX(k), fp[k]); y1 = Math.max(y1, fp[k]); }
+      ctx.lineTo(b0 * FR_G, fp[b0]); ctx.closePath();
+      ctx.fillStyle = rgba(COL.amber, .045 * fA); ctx.fill();
+      ctx.save(); ctx.clip(); frHatch(ctx, b0 * FR_G, (b1 + 1) * FR_G, y0, y1, .07 * fA); ctx.restore();
+      b0 = -1;
+    }
+    if (mix && m0 < 0) m0 = b;
+    if (!mix && m0 >= 0) {
+      let y0 = Infinity, y1 = -Infinity; for (let k = m0; k < b; k++) { y0 = Math.min(y0, fp[k] - 22); y1 = Math.max(y1, fp[k] + 14); }
+      ctx.save(); ctx.beginPath(); ctx.rect(m0 * FR_G, y0, (b - m0) * FR_G, y1 - y0); ctx.clip(); frHatch(ctx, m0 * FR_G, b * FR_G, y0, y1, .12 * fA); ctx.restore();
+      m0 = -1;
+    }
+  }
+}
+// 敌前沿：连续有值的列成段，段内按情报龄切成实线 / 虚线小段
+function frEnemy(ctx, fe, fa, a, teeth) {
+  const dash = [px(5), px(4)];
+  let b0 = -1, d0 = false;
+  for (let b = 0; b <= FR_NX; b++) {
+    const on = b < FR_NX && fe[b] != null, d = on && !!fa && fa[b] != null && fa[b] > 30;
+    if (b0 >= 0 && (!on || d !== d0)) { frRun(ctx, fe, b0, b - 1, COL.enemy, a, px(1.4), teeth ? 1 : 0, d0 ? dash : null); b0 = -1; }
+    if (on && b0 < 0) { b0 = b; d0 = d; }
+  }
+}
+function frCentroid(u) { let sx = 0, sy = 0, n = 0; for (const q of teamsOf(u)) if (q.men.length && !q.ride) { sx += q.x; sy += q.y; n++; } return n ? [sx / n, sy / n] : null; }
+function frDraw(time) {
+  if (!S || S.phase !== 'battle' || !S.front || !S.front.p || !frOn() || typeof R !== 'object' || !R.ctx) return;
+  if (typeof SETTINGS === 'object' && SETTINGS && SETTINGS.front === false) return;
+  const ctx = R.ctx, F = S.front, P = F.p, spec = S.role === 'spectate', zr = CAM.z / CAM.fit, low = typeof SETTINGS === 'object' && SETTINGS && SETTINGS.quality === 'low';
+  const fA = low ? 0 : clamp((3.5 - zr) / 1.5, 0, 1), fL = clamp((6 - zr) / 3, .25, 1), teeth = zr <= 4;
+  const EF0 = spec && F.e && F.e.fe ? F.e.fe : P.fe, EA = spec ? null : P.fa, EF = FRD.fe;
+  for (let b = 0; b < FR_NX; b++) { const e = EF0[b], f = P.fp[b]; EF[b] = e == null ? null : f == null ? e : Math.min(e, f - 8); }   // 犬牙交错处敌线画在我线北侧贴边，不交叉
+  ctx.save(); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  if (fA > 0) frNml(ctx, P.fp, EF, fA);
+  frEnemy(ctx, EF, EA, .5 * fL, teeth);
+  const mainId = S.tf && S.tf.main, sec = F.sec || [];
+  for (const s of P.seg) frRun(ctx, P.fp, s.b0, s.b1, COL.g, .55 * fL, px(1.6), teeth ? -1 : 0);
+  for (const s of sec) if (s.id === mainId && P.fp[s.b0] != null && P.fp[s.b1] != null) frRun(ctx, P.fp, s.b0, s.b1, COL.g, .5 * fL, px(2.6), 0);
+  // 空隙：琥珀点线覆盖这段前沿，两端各一个指向空隙的小尖角
+  for (const g of P.gap) {
+    if (P.fp[g.b0] == null || P.fp[g.b1] == null) continue;
+    frRun(ctx, P.fp, g.b0, g.b1, COL.amber, .8 * fL, px(1.8), 0, [px(2), px(4)]);
+    const s = px(5); ctx.setLineDash([]); ctx.lineWidth = px(1.4); ctx.beginPath();
+    for (const [x, dir, b] of [[g.b0 * FR_G, 1, g.b0], [(g.b1 + 1) * FR_G, -1, g.b1]]) { const y = P.fp[b]; ctx.moveTo(x, y - s); ctx.lineTo(x + dir * s, y); ctx.lineTo(x, y + s); }
+    ctx.stroke();
+  }
+  // 孤立连队：虚线圈
+  if (P.isl && P.isl.length) {
+    ctx.strokeStyle = rgba(COL.g, .5 * fL); ctx.lineWidth = px(1.2); ctx.setLineDash([px(2), px(3)]); ctx.beginPath();
+    for (const id of P.isl) { const u = UNIT_MAP.get(id), c = u && frCentroid(u); if (c) { ctx.moveTo(c[0] + 30, c[1]); ctx.arc(c[0], c[1], 30, 0, Math.PI * 2); } }
+    ctx.stroke();
+  }
+  // 地段分界：观战，或选中的连队所在地段
+  if (sec.length) {
+    let sx = null;
+    if (!spec && S.sel && S.sel.length) { const u = UNIT_MAP.get(S.sel[0]), c = u && u.side === 'p' && frCentroid(u); if (c) sx = c[0]; }
+    if (spec || sx != null) {
+      ctx.strokeStyle = rgba(COL.g, .25 * fL); ctx.lineWidth = px(1.2); ctx.setLineDash([px(3), px(3)]); ctx.beginPath();
+      for (const s of sec) {
+        if (!spec && !(sx >= s.x0 && sx < s.x1)) continue;
+        for (const x of [s.x0, s.x1]) { const y = frYAt(P.fp, x); if (y != null) { ctx.moveTo(x, y + 4); ctx.lineTo(x, y + 28 + px(6)); } }
+      }
+      ctx.stroke();
+    }
+  }
+  if (typeof frDrawPlans === 'function') frDrawPlans(ctx, fL, spec, time);
+  ctx.setLineDash([]); ctx.restore();
+}
+HOOK.drawUnder.push(frDraw);
