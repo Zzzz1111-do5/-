@@ -64,6 +64,7 @@ function applyTool(p) {
   else if (t === 'fire') ddFire(p.x, p.y, false);
   else if (t === 'smoke') { if (ddFire(p.x, p.y, true)) U.tool = null; }
   else if (t === 'recon' || t === 'strike' || t === 'cas' || t === 'bomber' || t === 'fighter') { if (launchPlane(t, p.x, p.y)) U.tool = null; }
+  else if (t === 'para' || t === 'drop') { if (typeof paLaunch === 'function' && paLaunch(t, p.x, p.y)) U.tool = null; }   // 空降 / 空投（para.js）
   else if (t === 'rline') {
     const h = typeof pickShip === 'function' ? pickShip(p) : null;
     const s = S.ships.find(s => s.state === 'beached' && (s.id === h || dist(s.x, s.y, p.x, p.y) < 25));

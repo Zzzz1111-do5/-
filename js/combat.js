@@ -139,11 +139,20 @@ function findTarget(q, range) {
   return best;
 }
 
+function teamSupFar(q) {
+  if (S.t < (q.sfT ?? -9)) return !!q.sf;
+  q.sfT = S.t + 3;
+  const s = typeof nearestSupply === 'function' ? nearestSupply(q.x, q.y, true) : null;
+  q.sf = !s || dist(s.x, s.y, q.x, q.y) > 300;
+  return q.sf;
+}
 function teamFire(q, tg) {
   const D = aiD(), t = tg.t, moving = S.t - q.movedT < .3, M = modOf(q);
   q.cd = (1.3 + Math.random() * .4) / (M.rof || 1);
   if (q.side === 'p') {
     if (q.ammo <= 0) return;
+    // 补给远（300 以外没有接通的补给点）或断了：弹药不足 25 时放慢射速、精确射击，不足 10 时只打 90 以内的目标
+    if (q.ammo < 25 && teamSupFar(q)) { q.cd *= 1.7; if (q.ammo < 10 && tg.d > 90) return; }
     q.ammo = Math.max(0, q.ammo - q.men.length - (q.men.includes('mg') ? 2 : 0));
     S.stats.shots++;
   }
@@ -223,7 +232,7 @@ function coastalFire(e) {
     if (val > bv && d < (v.swim ? RG : Math.min(RG, 450)) && (v.swim ? shipSeen(v.x, v.y, radar) : spotted(v.x, v.y))) { bv = val; best = v; }
   }
   if (!best) { e.cd = 2; return; }
-  e.cd = (12 + Math.random() * 3) / (M.rof || 1);
+  e.cd = (12 + Math.random() * 3) / (M.rof || 1); e.fireT = S.t;   // fireT：舰炮分区射击据此把这一带标为告急（support.js navHotUpdate）
   const mv = best.state === 'move' || best.moving, a = best.type ? best.heading : Math.atan2(best.ty - best.y, best.tx - best.x), lead = mv ? (best === cv || (S.cvx || []).includes(best) ? 10 : best.type ? 12 : 26) * 3 * D.lead : 0;
   fireShell(e.x, e.y, best.x + Math.cos(a) * lead + gauss() * D.err * 1.2, best.y + Math.sin(a) * lead + gauss() * D.err * 1.2, 'e', 'coastal', 3, !inVision(e.x, e.y));
   if (e.kx == null && Math.random() < .35) { e.kx = e.x; e.ky = e.y; log('岸防重炮炮口闪光，已标定', 'warn', null, 0, e); }

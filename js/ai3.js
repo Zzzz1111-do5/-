@@ -427,22 +427,6 @@ function a3CarFire(a, D) {
   if (!vis) log(`遭装甲车机枪扫射，方位约 ${fmtBrg(bearing(best.x, best.y, a.x, a.y) + gauss() * 14)}`, 'warn', 'acmg' + a.id, 9, best);
 }
 
-// 冲锋中的我方小组：附近没有别的目标时扑向装甲车，贴近 20 以内投掷手榴弹（每组 2 点/秒）
-function a3Grenades(a, dt) {
-  let n = 0;
-  for (const q of S.teams) {
-    if (q.side !== 'p' || q.kind !== 'inf' || !q.men.length || q.order.t !== 'charge' || q.sup >= 85) continue;
-    const d = dist(q.x, q.y, a.x, a.y);
-    if (d < 20) { n++; continue; }
-    if (d > 70 || S.teams.some(o => o.side === 'e' && o.men.length && dist(o.x, o.y, q.x, q.y) < 90) || S.enemies.some(e => !e.dead && dist(e.x, e.y, q.x, q.y) < 90)) continue;
-    const sp = Math.min(d - 12, 22 * (TP[typeAt(q.x, q.y)].sp || .5) * dt), nx = q.x + (a.x - q.x) / d * sp, ny = q.y + (a.y - q.y) / d * sp;
-    if (sp > 0 && passInf(nx, ny)) { q.x = nx; q.y = ny; q.movedT = S.t; q.heading = Math.atan2(a.y - q.y, a.x - q.x); }
-  }
-  if (!n) return;
-  if (Math.random() < dt * 2.5 * n) S.fx.push({ kind: 'flash', x: a.x + gauss() * 5, y: a.y + gauss() * 5, r: 6, life: 0, max: .35, side: 'p' });
-  damageArmor(a, 2 * n * dt);
-}
-
 function damageArmor(a, dmg) {
   if (!a || a.dead || !(dmg > 0)) return;
   a.hp -= dmg; a.hitT = S.t;
@@ -471,12 +455,10 @@ function updateArmor(dt) {
   for (const a of S.armor) {
     // 我方情报：看得见就记下位置；回头再看已空则撤销标定
     if (PV[ci(a.x, a.y)] === 1) {
-      if (a.seen < 0 && !a.dead) log('发现敌装甲车：轻武器无效，用舰炮、空袭或冲锋投弹对付', 'warn', null, 0, a);
+      if (a.seen < 0 && !a.dead) log('发现敌装甲车：轻武器无效，用舰炮、空袭或反坦克火力对付，靠近步兵时会挨集束手榴弹', 'warn', null, 0, a);
       a.kx = a.x; a.ky = a.y; a.kh = a.heading; a.seen = S.t;
     } else if (a.kx != null && !a.dead && dist(a.kx, a.ky, a.x, a.y) > 20 && PV[ci(a.kx, a.ky)] === 1) a.kx = a.ky = a.kh = null;
-    if (a.dead) continue;
-    a3Grenades(a, dt);
-    if (a.dead) continue;
+    if (a.dead) continue;   // 步兵近战投弹见 vehicles.js vehGrenades（装甲车开到 28 以内才扔，步兵不扑上去）
     if ((a.think -= dt) <= 0) { a.think = 2; a3CarThink(a); }
     a3Drive(a, dt);
     if ((a.cd -= dt) <= 0) a3CarFire(a, D);

@@ -5,7 +5,7 @@
 const FR_G = 30, FR_NX = 100, FR_NY = 67, FR_N = FR_NX * FR_NY, FR_RS = [100, 120, 150, 170, 180];
 const FR_RC = { 100: 0, 120: 1, 150: 2, 170: 3, 180: 4 };
 const FR_ROLEW = { rifle: 1, mg: 1.6, radio: .7, eng: .5, aa: .8 };
-const FR_VPOW = { lt_tank: 5, tank: 8, hv_tank: 11, amtank: 5, apc: 3, spg: 4, td: 7, aa_veh: 3, recon: 2, flame_tank: 7, mine_tank: 6 };
+const FR_VPOW = { lt_tank: 5, tank: 8, hv_tank: 11, amtank: 5, apc: 3, spg: 4, td: 7, aa_veh: 3, sam_veh: 3, recon: 2, flame_tank: 7, mine_tank: 6 };
 const FR_SPOW = { bunker: 6, coastal: 3, arty: 2, mortar: 1.5, aa: 1, tel: .5, ascm: .5, airfield: 0 };
 const frOn = () => !!S && !(S.v7off && S.v7off.front);
 const frStat = (k, n = 1) => { const o = S.v7s || (S.v7s = {}); o[k] = (o[k] || 0) + n; };

@@ -6,7 +6,7 @@
 // 状态：S.tf = {mass: {据点 key: {t0, x, y, prep}}, help: {连队 id: {b, until}}, gap: {}, go: [最近发起的冲击（ai4.js frDrawPlans 画箭头）], main: 主攻地段 id, ...}
 const tfOn = () => !!S && !(S.v7off && S.v7off.tf);
 const tfStat = (k, n = 1) => { const o = S.v7s || (S.v7s = {}); o[k] = (o[k] || 0) + n; };
-const VEH_BACK7 = { lt_tank: 35, tank: 40, hv_tank: 35, amtank: 40, apc: 55, td: 70, flame_tank: 25, mine_tank: 30, recon: 60, aa_veh: 90 };
+const VEH_BACK7 = { lt_tank: 35, tank: 40, hv_tank: 35, amtank: 40, apc: 55, td: 70, flame_tank: 25, mine_tank: 30, recon: 60, aa_veh: 90, sam_veh: 110 };
 const TF_GUNV = ['lt_tank', 'tank', 'hv_tank', 'amtank', 'td', 'flame_tank', 'mine_tank'];
 function tfEnsure() { if (!S.tf || S.tf.v !== 1) S.tf = { v: 1, mass: {}, help: {}, gap: {}, go: [], thinkT: 1, bindT: 0, sitT: 150 }; return S.tf; }
 const tfUN = u => typeof cmdUName === 'function' ? cmdUName(u) : unitName(u);
@@ -27,10 +27,10 @@ function tfMass(u, p, grp, ready, exposed, pl, P, O) {
   let M = T.mass[p.key];
   if (!M) M = T.mass[p.key] = { t0: now, x: u.x, y: u.y, prep: null, said: 0 };
   const est = Math.max(2, typeof cmdEst === 'function' ? cmdEst(p, apEstimate(p)) : apEstimate(p)), req = tfReq(p);
-  let pow = 0, cx = 0, cy = 0, n = 0;
+  let pow = 0, cx = 0, cy = 0, n = 0, men = 0, crew = 0;
   for (const g of ready) {
-    for (const q of teamsOf(g)) if (q.men.length && !q.ride) { pow += tfPow(q); cx += q.x; cy += q.y; n++; }
-    for (const v of S.veh || []) if (v.buddy === g.id && !v.dead && v.side === 'p') pow += .8 * tfPowV(v);
+    for (const q of teamsOf(g)) if (q.men.length && !q.ride) { pow += tfPow(q); cx += q.x; cy += q.y; n++; men += q.men.length; }
+    for (const v of S.veh || []) if (v.buddy === g.id && !v.dead && v.side === 'p') { pow += .8 * tfPowV(v); crew += vehCrew(v); }
   }
   if (n) { M.x = cx / n; M.y = cy / n; }
   const need = req * est, beach = coastAt(u.x) - u.y < 90, Tm = beach ? 15 : 40, wait = now - M.t0, R = pow / est;
@@ -51,7 +51,7 @@ function tfMass(u, p, grp, ready, exposed, pl, P, O) {
       for (const g of grp) apIdle(P.u[g.id]);
       delete T.mass[p.key]; delete P.o[p.key];
       tfStat('tfBypass');
-      if (typeof chatSay === 'function') chatSay('p', `决心：${p.name}守备坚固（约 ${Math.round(est)} 人），我仅约 ${Math.round(pow)} 人，暂不强攻，以火力钳制，转攻他处。`, { kind: 'plan', at: p, key: 'tfbyp' + p.key, gap: 60 });
+      if (typeof chatSay === 'function') chatSay('p', `决心：${p.name}守备坚固（约 ${Math.round(est)} 人），我仅约 ${men + crew} 人，暂不强攻，以火力钳制，转攻他处。`, { kind: 'plan', at: p, key: 'tfbyp' + p.key, gap: 60 });
       return;
     }
     go = true; risk = true;
@@ -61,7 +61,7 @@ function tfMass(u, p, grp, ready, exposed, pl, P, O) {
     if (!M.said && wait > 4 && typeof chatSay === 'function') {
       M.said = 1;
       const bk = S.enemies.filter(e => !e.dead && e.kx != null && e.kind === 'bunker' && dist(e.kx, e.ky, p.x, p.y) < 120).length;
-      chatSay('p', `判断：${p.name}守军约 ${Math.round(est)} 人${bk ? `、碉堡 ${bk} 座` : ''}，我 ${ready.length} 个连约 ${Math.round(pow)} 人，兵力比 ${R.toFixed(1)}:1，不足攻坚所需 ${req}:1。决心：在出发阵地待命，抽调兵力加强${M.prep && S.dd && S.dd.state !== 'sunk' ? '，舰炮先行压制' : ''}。`, { kind: 'plan', at: p, key: 'tfmass' + p.key, gap: 45 });
+      chatSay('p', `判断：${p.name}守军约 ${Math.round(est)} 人${bk ? `、碉堡 ${bk} 座` : ''}，我 ${ready.length} 个连约 ${men + crew} 人${crew ? `（含坦克车组 ${crew} 人）` : ''}，兵力比 ${R.toFixed(1)}:1，不足攻坚所需 ${req}:1。决心：在出发阵地待命，抽调兵力加强${M.prep && S.dd && S.dd.state !== 'sunk' ? '，舰炮先行压制' : ''}。`, { kind: 'plan', at: p, key: 'tfmass' + p.key, gap: 45 });
     }
     return;
   }
@@ -206,11 +206,44 @@ function tfBind(P) {
   }
   tfLat('p');
 }
-// 同一伙伴连的车辆左右错开：±(12 + 22k)
+// —— 坦克排队形（参照坦克分队常用战斗队形，车间距约 45）——
+// 纵队：离敌尚远（最近的已知敌人 450 以外）时开进，便于沿道路机动；楔形（三角）：预期接敌（200–450），正面与两翼火力兼顾；
+// 一字横队：进入交战距离（200 以内），正面火力最大；梯队：威胁明显偏在一侧（偏离进攻轴线 50° 以上）时向该侧梯次展开，掩护暴露的侧翼
+const TF_VFORM = { column: '纵队', wedge: '楔形队形', line: '一字横队', echL: '左梯队', echR: '右梯队' }, TF_VGAP = 45;
+// 第 k 辆（0 为排长车）的槽位 [横向, 纵深（在基准点之后）]；横向以进攻方向的左侧为负
+function tfVSlot(form, k, n) {
+  const g = TF_VGAP, h = Math.ceil(k / 2), s = k % 2 ? -1 : 1;
+  if (form === 'line') return [(k - (n - 1) / 2) * g, 0];
+  if (form === 'column') return [k % 2 ? 7 : -7, k * g];
+  if (form === 'echL' || form === 'echR') return [(form === 'echL' ? -1 : 1) * k * g * .9, k * g * .7];
+  return k ? [s * h * g, h * g * .75] : [0, 0];   // 楔形：排长车在前，其余左右交替向后展开
+}
+// 按敌情选队形：x, y 车群中心，ax, ay 进攻轴线（单位向量）
+function tfVForm(side, x, y, ax, ay) {
+  const foe = side === 'p' ? 'e' : 'p', seen = (px, py) => side === 'p' ? inVision(px, py) : spotted(px, py);
+  let bd = Infinity, tx = 0, ty = 0;
+  const cand = (px, py) => { const d = dist(px, py, x, y); if (d < bd) { bd = d; tx = px; ty = py; } };
+  for (const q of S.teams) if (q.side === foe && q.men.length && !q.ride && seen(q.x, q.y)) cand(q.x, q.y);
+  for (const v of S.veh || []) if (v.side === foe && !v.dead && !v.lst && seen(v.x, v.y)) cand(v.x, v.y);
+  if (side === 'p') for (const e of S.enemies) if (!e.dead && e.kx != null) cand(e.kx, e.ky);
+  if (bd > 450) return 'column';
+  const cr = (tx - x) * ay - (ty - y) * ax, dt = (tx - x) * ax + (ty - y) * ay;   // 威胁在轴线左（cr > 0）/ 右
+  if (Math.atan2(Math.abs(cr), dt) > .87) return cr > 0 ? 'echL' : 'echR';
+  return bd > 200 ? 'wedge' : 'line';
+}
+// 同一伙伴连的车辆编成一个排：按敌情定队形，排长车（编号最小）居首，其余按队形槽位（横向 lat、纵深 fb）跟进
 function tfLat(side) {
   const by = {};
   for (const v of S.veh || []) if (v.side === side && !v.dead && v.buddy != null && v.esc) (by[v.buddy] || (by[v.buddy] = [])).push(v);
-  for (const k in by) by[k].sort((a, b) => a.id - b.id).forEach((v, i) => { v.esc.lat = (i % 2 ? 1 : -1) * (12 + 22 * Math.floor(i / 2)) * (side === 'e' ? 1.1 : 1); });
+  for (const k in by) {
+    const vs = by[k].sort((a, b) => a.id - b.id), u = UNIT_MAP.get(+k), c = u && tfCent(u);
+    if (!c) continue;
+    const [ox, oy] = tfAxisPt(vs[0], u, c), l = Math.max(1, dist(ox, oy, c[0], c[1])), ax = (ox - c[0]) / l, ay = (oy - c[1]) / l;
+    const form = vs.length < 2 ? 'line' : tfVForm(side, vs.reduce((a, v) => a + v.x, 0) / vs.length, vs.reduce((a, v) => a + v.y, 0) / vs.length, ax, ay);
+    vs.forEach((v, i) => { const [lat, fb] = tfVSlot(form, i, vs.length); Object.assign(v.esc, { lat, fb, form }); });
+    if (side === 'p' && vs.length >= 2 && vs[0].esc.form0 !== form && typeof chatSay === 'function') chatSay('p', `命令：${tfUN(u)}伴随坦克 ${vs.length} 辆变换为${TF_VFORM[form]}。`, { kind: 'order', at: vs[0], key: 'tfvf' + k, gap: 40, lv: 2 });
+    vs[0].esc.form0 = form;
+  }
 }
 // 敌步兵贴近坦克（70 内）而身边没有我方步兵（40 内）：伙伴连派最近的未被压制小组前出掩护
 function tfScreen() {
@@ -271,7 +304,7 @@ function vehEscort(v) {
   if (l < 1) { ax = 0; ay = v.side === 'p' ? -1 : 1; } else { ax /= l; ay /= l; }
   let sInf = -Infinity;
   for (const q of ts) sInf = Math.max(sInf, (q.x - cx) * ax + (q.y - cy) * ay);
-  const Fx = cx + ax * sInf, Fy = cy + ay * sInf, lx = -ay, ly = ax, back = E.back ?? 45, lat = E.lat || 0;
+  const Fx = cx + ax * sInf, Fy = cy + ay * sInf, lx = -ay, ly = ax, back = (E.back ?? 45) + (E.fb || 0), lat = E.lat || 0;   // fb：坦克排队形里的纵深位置（tfLat）
   let sx = Fx - ax * back + lx * lat, sy = Fy - ay * back + ly * lat, mode = 'ovw';
   const pinned = ts.filter(q => q.sup > 45).length >= Math.max(1, ts.length * .3);
   E.eng = null;
@@ -384,7 +417,7 @@ function tfFormOrder(F, p, fill) {
       if (!o || !q.men.length || q.ride || q.order.t === 'charge' || q.order.t === 'retreat') continue;
       const [x0, y0] = slot(o), dx = q.x - x0, dy = q.y - y0, g = G[o[2]];
       const near = Math.hypot(dx, dy) < (fill ? 30 : 16) || (dx * F.ax + dy * F.ay > -8 && Math.abs(dx * lx + dy * ly) < 20);
-      if (fill) { if (q.order.t !== 'hold' || near || q.sup >= 50 || S.t - (q.fmT ?? -99) < 8) continue; }
+      if (fill) { if (q.order.t !== 'hold' || near || q.sup >= 50 || S.t - (q.fmT ?? -99) < 8 || S.t - (q.stopT ?? -99) < 15) continue; }   // stopT：机动中遇强敌停下交火的，先打再补位
       else if (o[2] !== F.lead && near) { q.order = { t: 'hold' }; continue; }
       let x = x0, y = y0, bs = -Infinity;
       eachCellIn(x0, y0, 14, i => { const t = TER.type[i]; if (!TP[t].sp || MINEC[i] === 2 || WIREC[i]) return; const v = (1 - TP[t].cv) * 2 - dist(cellCX(i), cellCY(i), x0, y0) / 14; if (v > bs) { bs = v; x = cellCX(i); y = cellCY(i); } });

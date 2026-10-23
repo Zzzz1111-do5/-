@@ -152,12 +152,40 @@ function rallyUnit(u, ts) {
 }
 
 // —— 冲锋：直扑最近的敌人，贴身后白刃 / 手榴弹；接敌前不射击 ——
+// 不无脑冲：每秒按局部兵力判一次——冲击目标周围 45 以内的敌人（敌坦克按车组人数、装甲车折 3 人）比本组周围 45 以内的自己人（含坦克车组）多出 25% 以上、
+// 又没被压住（平均压制 < 50），或要冲的碉堡还没被压制（< 40）而身边不到 9 人，就停止冲锋、就地火力压制，12 秒内不再冲
+function chargeOdds(q, t) {
+  let own = 0, opp = 0, sup = 0;
+  for (const o of S.teams) {
+    if (!o.men.length || o.ride) continue;
+    if (o.side === q.side) { if (dist(o.x, o.y, q.x, q.y) < 45) own += o.men.length; }
+    else if (dist(o.x, o.y, t.x, t.y) < 45) { opp += o.men.length; sup += o.sup * o.men.length; }
+  }
+  const vs = typeof vehFoes === 'function' ? vehFoes(q.side) : [];
+  for (const v of vs) if (!v.lst && dist(v.x, v.y, t.x, t.y) < 60) opp += vehCrew(v);
+  for (const v of S.veh || []) if (v.side === q.side && !v.dead && !v.lst && dist(v.x, v.y, q.x, q.y) < 45) own += vehCrew(v);   // 坦克按车组人数计
+  if (q.side === 'p' && S.armor) for (const a of S.armor) if (!a.dead && dist(a.x, a.y, t.x, t.y) < 60) opp += 3;
+  return { own, opp, sup: opp ? sup / opp : 100 };
+}
+function chargeStop(q, why) {
+  q.order = { t: 'hold' }; q.chStop = S.t; v8Stat('chStop');
+  const u = unitOf(q);
+  if (q.side === 'p' && u) log(`${unitName(u)}冲锋受阻（${why}），转为就地火力压制`, 'warn', 'chstop' + u.id, 30, q);
+}
+// 返回 true：本步已处理（updateTeams 跳过后续的射击与机动——冲锋叫停时命令已改成坚守，不能再按旧的冲锋命令移动）
 function chargeTick(q, dt) {
+  if (S.t - (q.chStop ?? -99) < 12) { q.order = { t: 'hold' }; return true; }
   let best = null, bd = 90;
   for (const o of S.teams) if (o.side !== q.side && o.men.length) { const d = dist(q.x, q.y, o.x, o.y); if (d < bd) { bd = d; best = { t: o, d, k: 'tm' }; } }
   if (q.side === 'p') for (const e of S.enemies) if (!e.dead) { const d = dist(q.x, q.y, e.x, e.y); if (d < bd) { bd = d; best = { t: e, d, k: 'st' }; } }
   if (!best) return false;
   const t = best.t;
+  if ((q.chkT = (q.chkT ?? 0) - dt) <= 0) {
+    q.chkT = 1;
+    const o = chargeOdds(q, t);
+    if (best.k === 'tm' && o.opp > o.own * 1.25 && o.sup < 50) { chargeStop(q, `当面之敌约 ${o.opp} 人未被压制`); return true; }
+    if (best.k === 'st' && t.kind === 'bunker' && (t.sup || 0) < 40 && o.own < 9) { chargeStop(q, '碉堡火力未被压制'); return true; }
+  }
   if (best.d > (best.k === 'st' ? 20 : 13)) {
     const sp = 22 * (TP[typeAt(q.x, q.y)].sp || .5) * (WIREC[ci(q.x, q.y)] ? .3 : 1) * dt, l = best.d;
     const nx = q.x + (t.x - q.x) / l * sp, ny = q.y + (t.y - q.y) / l * sp;

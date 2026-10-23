@@ -6,6 +6,7 @@ function emblem(ctx, kind, x, y, r, col) {
   ctx.fillStyle = col; ctx.strokeStyle = col; ctx.lineWidth = px(1.2);
   if (kind === 'eng') { ctx.beginPath(); ctx.arc(x, y, r * .7, 0, 7); ctx.stroke(); }
   else if (kind === 'reserve') { shape(ctx, x, y, r * .8, 4, 0); ctx.fill(); }
+  else if (kind === 'para') { ctx.beginPath(); ctx.arc(x, y - r * .15, r * .85, Math.PI, 0); ctx.closePath(); ctx.fill(); ctx.beginPath(); ctx.moveTo(x - r * .85, y - r * .15); ctx.lineTo(x, y + r * .8); ctx.lineTo(x + r * .85, y - r * .15); ctx.stroke(); }   // 空降连：伞衣
   else if (kind === 'enemy') { ctx.fillRect(x - r * .55, y - r * .55, r * 1.1, r * 1.1); }
   else { shape(ctx, x, y, r * .85, 3, -1.57); ctx.fill(); if (kind === 'supply') { ctx.fillStyle = 'rgba(2,10,6,.9)'; ctx.fillRect(x - r * .5, y + r * .1, r, r * .25); } }
 }

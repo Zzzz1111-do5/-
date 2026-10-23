@@ -68,6 +68,8 @@ const isLand = (x, y) => !isWater(typeAt(x, y));
 const passInf = (x, y) => TP[typeAt(x, y)].sp > 0;
 const coverAt = (x, y) => TP[typeAt(x, y)].cv;
 
+// 行为计数（S.v7s，测试与调试用）：各模块的 xxStat 都写这里
+const v8Stat = (k, n = 1) => { if (!S) return; const o = S.v7s || (S.v7s = {}); o[k] = (o[k] || 0) + n; };
 // 模块挂钩：新模块向这里登记函数，主循环/渲染/输入按名调用，免得多个模块同改一处
 // newGame(opts) · step(dt) · impact(x,y,R,pw,side) · visionP()/visionE() 返回视野源数组
 // drawUnder/drawOver/drawTop(time) 世界坐标 · frame(now,dt) 每帧 · pointer(e,kind,p)/key(e) 返回 true 表示已处理

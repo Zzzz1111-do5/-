@@ -1,5 +1,6 @@
 'use strict';
-// 步兵抢修补给线：工兵不在位时，普通步兵也能修浮桥断段、接通运输线、重建被毁的补给点（速度约为工兵的四成）。
+// 步兵抢修补给线：工兵不在位时，普通步兵也能修浮桥断段、接通运输线、重建被毁的补给点（速度约为工兵的四成）；
+// 再没人管的断点由滩头补给站的后勤抢修队（海军工程艇 / 后勤分队，文件末尾 rpCrews）接手。
 // 一、被动：坚守中的步兵小组正站在断点上（16 以内）就顺手抢修；
 // 二、主动：断点 10 秒无工兵处理，从附近自动指挥的连队抽一个小组前去抢修，修好后归建。
 // 状态：S.rep = { since: {断点键: 首次发现时刻}, det: {断点键: 小组 id} }；小组 q.detail = {k, kind, ...}
@@ -141,5 +142,62 @@ function updateRepair(dt) {
     if (typeof chatSay === 'function') chatSay('p', `命令：工兵不在位，${nm}连抽一个小组抢修 ${gridRef(b.x, b.y)} 的${rpName(b)}断点，修复后归建。`, { kind: 'order', at: { x: b.x, y: b.y }, key: 'rp' + b.k, gap: 60 });
   }
 }
-HOOK.step.push(function rpStep(dt) { updateRepair(dt); });
+// —— 后勤抢修队：每个滩头补给站一支，海上浮桥由海军工程艇修、陆上运输线 / 补给点由后勤分队修；不占作战小组，玩家亲自指挥部队时也照常工作 ——
+// 断点断了 15 秒仍没人管（工兵、步兵都没在修；工兵领了任务或已抽人前往却 45 秒还没修好，也一并接手）就从补给站出发（艇 30、车 24 每秒），
+// 到了动手，速度约为一个工兵组的六成；断点 120 以内看得见敌步兵、或有敌炮弹正落向 60 以内时停在原地等。一次只修一处，修好再找下一处
+// 状态：S.rep.crew = { 补给线 id: { k 正在修的断点, x, y, sea 是否工程艇, work 正在施工 } }
+const RP_CREW = { wait: 15, late: 45, rate: .6, reach: 900 };
+function rpCrews(dt) {
+  const R0 = rpEnsure(), B = rpBreaks();
+  if (!R0.crew) R0.crew = {};
+  for (const id in R0.crew) if (!S.supply.some(L => L.id === +id)) delete R0.crew[id];
+  for (const L of S.supply) {
+    const c = R0.crew[L.id] || (R0.crew[L.id] = { k: null, x: L.x, y: L.y, sea: false, work: false });
+    let b = c.k ? B.find(o => o.k === c.k) : null;
+    if (!b) {
+      c.k = null; c.work = false;
+      let bd = Infinity;
+      for (const o of B) {
+        if (S.t - (R0.since[o.k] ?? S.t) < (R0.det[o.k] != null || rpEngOn(o) ? RP_CREW.late : RP_CREW.wait)) continue;
+        if (o.kind === 'seg' ? o.L !== L : dist(o.x, o.y, L.x, L.y) > RP_CREW.reach) continue;
+        if (Object.keys(R0.crew).some(id => +id !== L.id && R0.crew[id].k === o.k)) continue;
+        const d = dist(o.x, o.y, c.x, c.y);
+        if (d < bd) { bd = d; b = o; }
+      }
+      if (!b) {   // 没活：回补给站
+        const d = dist(c.x, c.y, L.x, L.y);
+        if (d > 1) { const st = Math.min(d, 26 * dt); c.x += (L.x - c.x) / d * st; c.y += (L.y - c.y) / d * st; }
+        continue;
+      }
+      c.k = b.k; c.sea = b.kind === 'seg';
+      log(`${c.sea ? '海军工程艇' : '后勤分队'}出动抢修 ${gridRef(b.x, b.y)} 的${rpName(b)}`, 'info', 'crew' + b.k, 30, b);
+    }
+    const hot = S.teams.some(q => q.side === 'e' && q.men.length && dist(q.x, q.y, b.x, b.y) < 120 && inVision(q.x, q.y)) || S.shells.some(sh => sh.side === 'e' && dist(sh.x1, sh.y1, b.x, b.y) < 60);
+    const d = dist(c.x, c.y, b.x, b.y);
+    c.work = false;
+    if (d > 6) {
+      if (!hot || d > 150) { const st = Math.min(d - 4, (c.sea ? 30 : 24) * dt); c.x += (b.x - c.x) / d * st; c.y += (b.y - c.y) / d * st; }
+      continue;
+    }
+    if (hot) continue;
+    c.work = true;
+    if (rpWork(b, dt * RP_CREW.rate, c.sea ? '海军工程艇' : '后勤分队')) { delete R0.since[b.k]; c.k = null; c.work = false; v8Stat('crewFix'); }
+  }
+}
+// 抢修队：工程艇画成小船、后勤分队画成小方块；施工时琥珀色脉动圈
+function rpDrawCrews(time) {
+  if (!S || !S.rep || !S.rep.crew || typeof R !== 'object' || !R.ctx) return;
+  const ctx = R.ctx, r = Math.max(3, px(4));
+  for (const id in S.rep.crew) {
+    const c = S.rep.crew[id];
+    if (!c.k || !inView(c.x, c.y, 30)) continue;
+    ctx.fillStyle = 'rgba(2,10,6,.92)'; ctx.strokeStyle = rgba(c.work ? COL.amber : COL.g, .95); ctx.lineWidth = px(1.3);
+    ctx.beginPath();
+    if (c.sea) ctx.ellipse(c.x, c.y, r * 1.7, r * .8, 0, 0, 7); else ctx.rect(c.x - r, c.y - r * .7, r * 2, r * 1.4);
+    ctx.fill(); ctx.stroke();
+    if (c.work) { ctx.strokeStyle = rgba(COL.amber, .35 + .35 * Math.sin(time * 6)); ctx.beginPath(); ctx.arc(c.x, c.y, r * 2.6, 0, 7); ctx.stroke(); }
+  }
+}
+HOOK.step.push(function rpStep(dt) { updateRepair(dt); if (S && S.phase === 'battle') rpCrews(dt); });
+HOOK.drawOver.push(rpDrawCrews);
 HOOK.newGame.push(function rpNewGame() { if (S) S.rep = null; });

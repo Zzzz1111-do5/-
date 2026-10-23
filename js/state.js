@@ -4,15 +4,15 @@ let S = null;
 const LIMIT = 45 * 60;   // 作战时限（秒）
 const HOLD = 30;         // 全部据点需同时控制的秒数
 const SHIP_SPEC = {
-  assault: { name: '突击登陆舰', hp: 10, teams: 5, eng: 0 },     // 15 人 = 5 个三人组
-  supply: { name: '补给登陆舰', hp: 11, teams: 4, eng: 3 },      // 4 个三人组 + 3 名工兵
-  lst: { name: '坦克登陆舰', hp: 14, teams: 0, eng: 0, veh: ['tank', 'tank', 'apc'] },   // 车辆经艏门跳板逐辆驶下（vehicles.js）
-  dd: { name: '护航驱逐舰', hp: 12, teams: 0, eng: 0 }   // 沙盒中旗舰以外的驱逐舰 / 巡洋舰：只在海上机动和射击，不抢滩
+  assault: { name: '271 型登陆艇', hp: 10, teams: 5, eng: 0 },     // 15 人 = 5 个三人组
+  supply: { name: '072 型后勤登陆舰', hp: 11, teams: 4, eng: 3 },      // 4 个三人组 + 3 名工兵
+  lst: { name: '072A 型坦克登陆舰', hp: 14, teams: 0, eng: 0, veh: ['tank', 'tank', 'apc'] },   // 车辆经艏门跳板逐辆驶下（vehicles.js）
+  dd: { name: '054A 型护卫舰', hp: 12, teams: 0, eng: 0 }   // 沙盒中旗舰以外的驱逐舰 / 护卫舰：只在海上机动和射击，不抢滩
 };
 const ENEMY_SPEC = {
-  bunker: { name: '机枪碉堡', hp: 16 }, coastal: { name: '岸防重炮', hp: 22 }, arty: { name: '榴弹炮阵地', hp: 10 },
-  mortar: { name: '迫击炮组', hp: 6 }, aa: { name: '防空炮', hp: 8 },
-  tel: { name: '战术导弹发射车', hp: 8 }, ascm: { name: '岸舰导弹连', hp: 10 }, airfield: { name: '野战机场', hp: 50 }   // v7（missile.js / eair.js）
+  bunker: { name: '机枪碉堡', hp: 16 }, coastal: { name: '岸防重炮', hp: 22 }, arty: { name: 'M777 榴弹炮阵地', hp: 10 },
+  mortar: { name: 'M252 迫击炮组', hp: 6 }, aa: { name: '防空炮（M167 火神）', hp: 8 },
+  tel: { name: 'M142 海马斯发射车', hp: 8 }, ascm: { name: 'NMESIS 岸舰导弹连', hp: 10 }, airfield: { name: '野战机场', hp: 50 }   // v7（missile.js / eair.js）；守方按美军装备命名
 };
 const ROLE_NAME = { radio: '通讯兵', rifle: '步枪手', mg: '机枪手', eng: '工兵', aa: '防空导弹手' };
 
@@ -29,7 +29,7 @@ function newGame(seed, level, opts = {}) {
     groups: { 1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [], 8: [], 9: [] }, sel: [],
     assets: { recon: 3, strike: 3, rline: 3, reserve: 9, smoke: 6 },
     points: TER.points.map(p => ({ ...p, owner: 'e', prog: 0 })),
-    dd: { x: W / 2, y: 1720, tx: W / 2, ty: 1720, hull: 3, state: 'ready', cool: 0, repairT: 0, repairDur: 16, auto: false, exposedUntil: 0, moving: false },
+    dd: { name: '052D 型驱逐舰', x: W / 2, y: 1720, tx: W / 2, ty: 1720, hull: 3, state: 'ready', cool: 0, repairT: 0, repairDur: 16, auto: false, exposedUntil: 0, moving: false },
     stats: { lost: 0, killed: 0, shots: 0, exposed: 0, structs: 0 }, throttle: {}
   };
   if (!opts.sandbox) deployDefenses(r, DIFF[level]);

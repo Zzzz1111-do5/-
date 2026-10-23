@@ -108,6 +108,8 @@ function apEstimate(p, noPrior) {
     if (dist(vis ? q.x : q.sx, vis ? q.y : q.sy, p.x, p.y) < 140) { m += q.men.length; seen = true; }
   }
   for (const e of S.enemies) if (!e.dead && e.kx != null && dist(e.kx, e.ky, p.x, p.y) < 160) { m += e.kind === 'bunker' ? 5 : e.kind === 'coastal' ? 3 : 1.5; seen = true; }
+  for (const v of S.veh || []) if (v.side === 'e' && !v.dead && v.kx != null && dist(v.kx, v.ky, p.x, p.y) < 160) { m += vehCrew(v); seen = true; }   // 守军坦克按车组人数计
+  for (const a of S.armor || []) if (!a.dead && a.kx != null && dist(a.kx, a.ky, p.x, p.y) < 160) { m += 3; seen = true; }
   if (!noPrior && !seen && !inVision(p.x, p.y) && p.owner !== 'p') m += 2 + p.vp * 2;
   return m;
 }
@@ -274,6 +276,21 @@ function apShaken(p) {
   return bk.length > 0 && bk.every(e => (e.sup || 0) > 50);
 }
 
+// 冲锋的兵力条件：本方在据点 130 以内的人数（含坦克车组）至少是据点 85 以内目视之敌（敌坦克按车组、装甲车折 3 人）的 k 倍——
+// 守敌已被压住时持平即可，否则要 1.3 倍；兵力不够就继续以火力压制，不硬冲
+function apOdds(p, k) {
+  let own = 0, opp = 0;
+  for (const q of S.teams) {
+    if (!q.men.length || q.ride) continue;
+    if (q.side === 'p') { if (dist(q.x, q.y, p.x, p.y) < 130) own += q.men.length; }
+    else if (dist(q.x, q.y, p.x, p.y) < 85 && inVision(q.x, q.y)) opp += q.men.length;
+  }
+  for (const v of S.veh || []) if (v.side === 'e' && !v.dead && dist(v.x, v.y, p.x, p.y) < 100 && inVision(v.x, v.y)) opp += vehCrew(v);
+  for (const a of S.armor || []) if (!a.dead && dist(a.x, a.y, p.x, p.y) < 100 && inVision(a.x, a.y)) opp += 3;
+  for (const v of S.veh || []) if (v.side === 'p' && !v.dead && !v.lst && dist(v.x, v.y, p.x, p.y) < 130) own += vehCrew(v);   // 我方坦克车组同样计入
+  return own >= opp * k;
+}
+
 function apLaunch(units, p, P) {
   units = units.filter(g => g.state !== 'rout' && teamsOf(g).length && g.x != null && P.u[g.id]);
   if (!units.length) return;
@@ -305,7 +322,7 @@ function apCaptured(p, P) {
 }
 
 // 回补 / 重整：去最近的接通补给点（停在其补给范围内侧），没有补给点时就地后撤一段重整
-const apSpValid = sp => sp && (sp.kind === 'depot' ? S.supply.some(L => L.id === sp.id && L.connected) :
+const apSpValid = sp => sp && (sp.kind === 'depot' ? S.supply.some(L => L.id === sp.id && L.connected) : sp.kind === 'cache' ? typeof paCacheOk === 'function' && paCacheOk(sp.id) :
   !!(S.snet && S.snet.nodes.some(n => n.id === sp.id && n.connected && n.built >= 1 && !n.dead)));
 // 最近的接通补给点；any = 没有接通的就退而求其次，去等工兵修通的补给点
 function apSupplyPt(x, y, any) {
@@ -367,6 +384,16 @@ function apInfantry(u, pl, P) {
   if (pl.obj != null && !p) { apIdle(pl); return; }
   const gar = pl.ph === 'garrison', cap = apCap(u);
   if (pl.ph !== 'supply' && pl.ph !== 'regroup') {
+    // 轮流补给：同一目标还有别的连在场掩护、又没有连在补给时，弹药不足 30 就轮到本连下去补（补给点 600 以内）；不足 15 则不等
+    const mates = Object.keys(P.u).filter(id => +id !== u.id && P.u[id].obj != null && P.u[id].obj === pl.obj);
+    if (ammo < 30 && ammo >= (gar ? 8 : 15) && pl.obj != null && mates.some(id => P.u[id].ph === pl.ph) && !mates.some(id => P.u[id].ph === 'supply')) {
+      const sp = apSupplyPt(u.x, u.y);
+      if (sp && dist(sp.x, sp.y, u.x, u.y) < 600 && apFallback(u, pl, 'supply', 600)) {
+        v8Stat('uRepTurn');
+        if (typeof chatSay === 'function') chatSay('p', `命令：${typeof cmdUName === 'function' ? cmdUName(u) : unitName(u)}轮换下去补充弹药，其余各连留在原地接替掩护。`, { kind: 'order', at: u, key: 'aprot' + pl.obj, gap: 60, lv: 2 });
+        return;
+      }
+    }
     if (ammo < (gar ? 8 : 15)) {
       if (apFallback(u, pl, 'supply', gar ? 300 : Infinity)) return;
       // 弹尽且无处补给：不在敌前干站着，退到附近掩蔽处等补给线修通
@@ -443,7 +470,7 @@ function apInfantry(u, pl, P) {
       if (pl.halt != null) { if (S.t - pl.halt < 45) return; pl.halt = null; }
       const d = dist(u.x, u.y, p.x, p.y), stuck = ts.some(q => dist(q.x, q.y, p.x, p.y) < 70) && S.t - (O.pgT ?? S.t) > 25;
       const fm = typeof tfFormOf === 'function' ? tfFormOf(u.id) : null;   // 队形推进中（tf.js 管跃进）：冲锋距离收到 110
-      if (u.morale >= 55 && d < (fm ? 110 : 150) && S.t - (pl.chT ?? -99) > 15 && (apShaken(p) || stuck)) {
+      if (u.morale >= 55 && d < (fm ? 110 : 150) && S.t - (pl.chT ?? -99) > 15 && (apShaken(p) || stuck) && apOdds(p, apShaken(p) ? 1 : 1.3)) {
         if (orderUnits([u], p.x, p.y, apAng(u.x, u.y, p.x, p.y), null, 'charge')) { pl.chT = S.t; pl.ordT = S.t; if (stuck) O.pgT = S.t; }
         return;
       }

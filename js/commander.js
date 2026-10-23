@@ -166,6 +166,7 @@ function cmdThinkP() {
     cmdRun(cmdEst0, C, P);
     cmdRun(cmdCrisisP, C, P);
     cmdRun(cmdAmmoP, C, P);
+    cmdRun(cmdJointP, C, P);
   }
   cmdRun(cmdDecoys, C);
   cmdRun(cmdThreatsP, C);
@@ -560,7 +561,7 @@ function cmdAirTask(c) {
     const a = C.air[i];
     if (S.t - a.t > 75) { C.air.splice(i--, 1); continue; }
     if (!(S.assets[a.k] > 0)) continue;
-    if (a.k !== 'recon' && cmdNearP(a.x, a.y).d < (a.k === 'cas' ? 45 : cmdAirSafe())) { if (S.t - a.t > 20) C.air.splice(i--, 1); continue; }
+    if (a.k !== 'recon' && a.k !== 'fighter' && cmdNearP(a.x, a.y).d < (a.k === 'cas' ? 45 : cmdAirSafe())) { if (S.t - a.t > 20) C.air.splice(i--, 1); continue; }   // 战斗机巡逻不对地，不受安全距离限制
     C.air.splice(i, 1);
     return a;
   }
@@ -619,7 +620,7 @@ function cmdFiresP(C) {
       const h = dd.lastHit && S.t - dd.lastHit.t < 3 ? dd.lastHit : null, cb = h && h.kind === 'cb';
       const g = h && h.kind === 'coastal' ? S.enemies.filter(e => !e.dead && e.kind === 'coastal' && dist(e.x, e.y, h.x, h.y) < 30)[0] : null, gk = g && g.kx != null;
       const src = cb ? `；火力来自 ${gridRef(h.x, h.y)} 方向敌炮兵反炮兵射击` : g ? `；火力来自 ${gk ? gridRef(g.kx, g.ky) + ' 岸防重炮' : gridRef(h.x, h.y) + ' 方向未标定的岸防炮'}` : h && h.x != null ? `；火力来自 ${gridRef(h.x, h.y)} 方向敌炮兵` : '；火力来源尚未判明';
-      chatSay('p', `报告：驱逐舰中弹，舰体 ${dd.hull}/3，损管抢修中，暂停射击${src}。`, { kind: 'friction', at: dd });
+      chatSay('p', `报告：驱逐舰中弹，舰体 ${dd.hull}/${dd.hull0 || 3}，损管抢修中，暂停射击${src}。`, { kind: 'friction', at: dd });
       const M = cmdExit(pl.main), sp = M && cmdDDSpot(M.x, M.y), acts = [];
       if (cb) { dd.scoot = true; acts.push('驱逐舰每次齐射后立即机动 70 米以上（打了就走），躲开反炮兵弹着'); }
       else if (sp && dist(sp.x, sp.y, dd.x, dd.y) > 60) { orderDD(sp.x, sp.y); acts.push(`驱逐舰全速机动至 ${gridRef(sp.x, sp.y)}，脱离其射界`); }
@@ -645,6 +646,65 @@ function cmdFiresP(C) {
   if (S.dd.state === 'sunk' && !C.ddSunk) {
     C.ddSunk = true;
     if (cmdCtl(S.dd)) chatSay('p', `报告：驱逐舰被击沉，舰炮支援丧失。${S.cv && S.cv.hp > 0 && cmdCtl(S.cv) ? '近距火力支援改由舰载航空兵承担。' : ''}`, { kind: 'report', at: S.dd, lv: 0 });
+  }
+}
+
+// —— 联合火力（海陆空协同）：每个正在攻击的目标据点，按步兵进展分两段组织火力 ——
+// 准备（攻击群离目标 180 以外）：舰炮打目标 140 以内已标定的碉堡、炮位、高炮与看得见的守敌集群（同一目标 40 秒一次），
+//   攻击机突击其中的碉堡 / 炮位；冲击（180 以内）：舰炮向目标后方 120–300 延伸，只打看得见的增援之敌，对地支援机临空压制目标 90 以内的守敌；
+// 敌机在活动时请战斗机在目标上空掩护。驱逐舰 / 航母由玩家直接指挥（PvE 未开自动）时 cmdFire / cmdAir 不受理，这里也不吭声
+const CMD_JPRI = { bunker: 5, coastal: 4.5, arty: 4, mortar: 3.5, aa: 3, ascm: 3, tel: 3 };
+function cmdJointPts() {
+  const C = S && S.cmd && S.cmd.p;
+  return C && C.jf ? Object.keys(C.jf).map(cmdPt).filter(Boolean) : [];
+}
+function cmdJointP(C, P) {
+  if (!C.jf) C.jf = {};
+  for (const key in C.jf) { const O = P.o[key], p = cmdPt(key); if (!O || !O.go || !p || p.owner === 'p') delete C.jf[key]; }
+  for (const key in P.o) {
+    const O = P.o[key], p = cmdPt(key);
+    if (!O || !O.go || !p || p.owner === 'p') continue;
+    const ts = S.units.filter(u => u.side === 'p' && P.u[u.id] && P.u[u.id].obj === key && ['stage', 'wait', 'go'].includes(P.u[u.id].ph)).flatMap(teamsOf).filter(q => q.men.length && !q.ride);
+    if (!ts.length) continue;
+    const cx = ts.reduce((a, q) => a + q.x, 0) / ts.length, cy = ts.reduce((a, q) => a + q.y, 0) / ts.length, d = Math.min(...ts.map(q => dist(q.x, q.y, p.x, p.y)));
+    if (d > 650) continue;   // 还在远处集结：先不打，免得过早暴露进攻方向
+    const J = C.jf[key] || (C.jf[key] = { t: S.t, st: null, fT: {}, airT: -99, casT: -99, ftrT: -99, liftT: -99 });
+    const st = d > 180 ? 'prep' : 'assault', acts = [];
+    if (st === 'prep') {
+      const tg = S.enemies.filter(e => !e.dead && e.kx != null && CMD_JPRI[e.kind] && dist(e.kx, e.ky, p.x, p.y) < 140).sort((a, b) => CMD_JPRI[b.kind] - CMD_JPRI[a.kind]);
+      let nf = 0;
+      for (const e of tg) {
+        if (nf >= 2 || S.t - (J.fT[e.id] ?? -99) < 40) continue;
+        if (cmdFire(e.kx, e.ky, 2, 'joint')) { J.fT[e.id] = S.t; nf++; acts.push(`舰炮压制${cmdEName(e)}`); }
+      }
+      const seen = S.teams.filter(q => q.side === 'e' && q.men.length && dist(q.x, q.y, p.x, p.y) < 100 && inVision(q.x, q.y));
+      if (!nf && seen.length >= 2 && S.t - (J.fT.tm ?? -99) > 40) {
+        const sx = seen.reduce((a, q) => a + q.x, 0) / seen.length, sy = seen.reduce((a, q) => a + q.y, 0) / seen.length;
+        if (cmdFire(sx, sy, 2, 'joint')) { J.fT.tm = S.t; acts.push(`舰炮轰击${p.name}守敌（约 ${cmdMen(seen)} 人）`); }
+      }
+      const hard = tg.find(e => e.kind === 'bunker' || e.kind === 'coastal' || e.kind === 'arty');
+      if (hard && S.t - J.airT > 60 && S.assets.strike > 0 && cmdAir('strike', hard.kx, hard.ky, hard.id)) { J.airT = S.t; acts.push(`攻击机突击${cmdEName(hard)}`); }
+    } else {
+      // 火力延伸：目标后方（背离攻击群一侧）120–300 内看得见的敌步兵 / 车辆
+      const l = Math.max(1, dist(cx, cy, p.x, p.y)), ux = (p.x - cx) / l, uy = (p.y - cy) / l;
+      const deep = S.teams.filter(q => q.side === 'e' && q.men.length && inVision(q.x, q.y)).concat((S.veh || []).filter(v => v.side === 'e' && !v.dead && inVision(v.x, v.y)))
+        .filter(o => { const s = (o.x - p.x) * ux + (o.y - p.y) * uy; return s > 120 && s < 300 && Math.abs((o.x - p.x) * -uy + (o.y - p.y) * ux) < 160; });
+      if (deep.length && S.t - J.liftT > 25) {
+        const sx = deep.reduce((a, o) => a + o.x, 0) / deep.length, sy = deep.reduce((a, o) => a + o.y, 0) / deep.length;
+        if (cmdFire(sx, sy, 2, 'lift')) { J.liftT = S.t; acts.push(`舰炮火力延伸至${p.name}后方，拦阻敌增援`); }
+      }
+      const near = S.teams.filter(q => q.side === 'e' && q.men.length && dist(q.x, q.y, p.x, p.y) < 90 && inVision(q.x, q.y));
+      if (near.length && S.t - J.casT > 60 && S.assets.cas > 0 && cmdAir('cas', p.x, p.y)) { J.casT = S.t; acts.push('对地支援机临空压制守敌'); }
+    }
+    const eAir = S.eair && ((S.eair.fly || []).some(a => !a.dead && a.alt > .2) || (S.eair.wing || []).some(w => w.state === 'ready'));
+    if (eAir && S.t - J.ftrT > 90 && !S.planes.some(o => !o.dead && o.kind === 'fighter' && o.alt > .2 && dist(o.cx ?? o.tx, o.cy ?? o.ty, p.x, p.y) < 400) && cmdAir('fighter', p.x, p.y)) { J.ftrT = S.t; acts.push('战斗机在目标上空巡逻掩护'); }
+    if (!acts.length) continue;
+    v8Stat('jf_' + st, acts.length);
+    const first = J.st !== st;
+    J.st = st;
+    const nm = p.name;
+    if (first) chatSay('p', st === 'prep' ? `命令：${nm}方向联合火力准备——${acts.join('，')}；步兵跃进至冲击出发线后火力延伸。` : `命令：${nm}冲击发起——${acts.join('，')}。`, { kind: 'order', at: p, key: 'jf' + key + st, gap: 90, lv: 1 });
+    else chatSay('p', `命令：${nm}方向${acts.join('，')}。`, { kind: 'order', at: p, key: 'jf' + key, gap: 45, lv: 2 });
   }
 }
 
@@ -1104,8 +1164,9 @@ function cmdAmmoP(C, P) {
 function cmdSitrep(C) {
   if (S.t < C.sitT) return;
   C.sitT = S.t + 150;
-  const now = cmdMen(S.teams.filter(q => q.side === 'p')), inf = cmdMen(cmdPInf()), own = S.points.filter(p => p.owner === 'p').length;
-  chatSay('p', `报告：${cmdHT()}，我在岸兵力 ${now} 人（其中步兵 ${inf} 人），累计伤亡 ${S.stats.lost} 人；控制据点 ${own}/${S.points.length}（分值 ${Math.round(vpShare() * 100)}%），摧毁敌火力点 ${S.stats.structs} 处。`, { kind: 'report', lv: 1 });
+  const nv = (S.veh || []).filter(v => v.side === 'p' && !v.dead && !v.lst && isLand(v.x, v.y)), crew = nv.reduce((a, v) => a + vehCrew(v), 0);
+  const now = cmdMen(S.teams.filter(q => q.side === 'p')) + crew, inf = cmdMen(cmdPInf()), own = S.points.filter(p => p.owner === 'p').length;
+  chatSay('p', `报告：${cmdHT()}，我在岸兵力 ${now} 人（其中步兵 ${inf} 人${crew ? `，坦克等车辆 ${nv.length} 辆、车组 ${crew} 人` : ''}），累计伤亡 ${S.stats.lost} 人；控制据点 ${own}/${S.points.length}（分值 ${Math.round(vpShare() * 100)}%），摧毁敌火力点 ${S.stats.structs} 处。`, { kind: 'report', lv: 1 });
 }
 
 // —— 增援线（logistics.js updateRLines 在放出增援艇前调用）：返回 true 表示本批推迟 ——
@@ -1144,6 +1205,10 @@ function cmdEObs() {
     const u = typeof unitOf === 'function' ? unitOf(q) : null, f = u && u.ship != null ? from[u.ship] : undefined;
     const bi = f != null && f >= 0 ? f : cmdBeachOf(q.x, 250);
     if (bi >= 0) { o[bi].men += q.men.length; o[bi].land += q.men.length; }
+  }
+  for (const v of S.veh || []) if (v.side === 'p' && !v.dead && !v.lst && spotted(v.x, v.y) && coastAt(v.x) - v.y < 1100) {   // 坦克按车组人数计入
+    const bi = cmdBeachOf(v.x, 250);
+    if (bi >= 0) { o[bi].men += vehCrew(v); o[bi].land += vehCrew(v); }
   }
   for (const p of S.points) if (p.owner === 'p') { const bi = cmdBeachOf(p.x, 400); if (bi >= 0) o[bi].held++; }
   return o;

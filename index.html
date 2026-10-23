@@ -70,6 +70,16 @@ button:disabled { cursor: not-allowed; opacity: .3; }
   padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); pointer-events: none; }
 #bottom > * { pointer-events: auto; }
 #mmBox { padding: 6px; display: grid; gap: 5px; width: 220px; }
+/* 型号卡（info.js）：小地图上方 */
+#info { left: max(16px, env(safe-area-inset-left, 0px)); bottom: calc(196px + env(safe-area-inset-bottom, 0px)); width: min(330px, calc(100vw - 32px)); padding: 8px 10px 9px; font-size: 12px; pointer-events: auto; }
+#info header { display: flex; align-items: baseline; gap: 8px; margin-bottom: 5px; }
+#info header b { color: var(--g); font-size: 13px; }
+#info header span { color: var(--mute); font-size: 11px; flex: 1; }
+#info .ic-x { background: transparent; border: 0; color: var(--mute); font-size: 16px; line-height: 1; cursor: pointer; padding: 0 2px; }
+#info dl { margin: 0; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px 10px; }
+#info dt { color: var(--mute); white-space: nowrap; }
+#info dd { margin: 0; overflow-wrap: anywhere; }
+#info em { color: var(--amber); font-style: normal; }
 #mm { width: 100%; aspect-ratio: 16 / 10; display: block; border-radius: 3px; cursor: pointer; image-rendering: pixelated; touch-action: none; }
 .zoom { display: flex; gap: 5px; }
 .zoom .tb { flex: 1; height: 24px; }
@@ -174,6 +184,7 @@ button:disabled { cursor: not-allowed; opacity: .3; }
     <button class="tb" id="btnHelp" type="button" title="简报与操作说明">?</button>
   </div>
   <div id="pauseBand" class="ov" hidden>PAUSED</div>
+  <div id="info" class="ov box" hidden aria-live="polite"></div>
   <div id="deploy" class="ov" hidden>
     <button id="btnStart" type="button">H-HOUR<span>开始战斗</span></button>
     <p>右键集结海域内布阵 · 右键海岸预定登陆点 · 选择阵型 · Enter 开始</p>
@@ -195,7 +206,7 @@ button:disabled { cursor: not-allowed; opacity: .3; }
 <div class="modal" id="brief" hidden>
   <div class="sheet">
     <h1>DARKSWORD<small>暗剑 · 作战简报</small></h1>
-    <p>你是登陆指挥官。舰队已在集结海域：10 艘突击登陆舰 LA-1～10（每艘一个连，5 个三人组）、3 艘补给登陆舰 LS-1～3（4 个三人组 + 工兵）、坦克登陆舰 LT-1（2 辆中型坦克 + 1 辆装甲运兵车）、4 辆自航泅渡的两栖坦克、驱逐舰 DD-17 与一艘航母，另有侦察、空袭、近距空中支援、烟幕与增援线。H 时之前先排兵布阵：在集结海域里摆好舰队，右键海岸给每艘船预定登陆点，选好上岸后的阵型。</p>
+    <p>你是登陆指挥官。舰队已在集结海域：10 艘 271 型登陆艇 LA-1～10（每艘一个连，5 个三人组）、3 艘 072 型后勤登陆舰 LS-1～3（4 个三人组 + 工兵）、072A 型坦克登陆舰 LT-1（2 辆 ZTZ-96B 主战坦克 + 1 辆 ZBD-05 两栖步兵战车）、4 辆自航泅渡的 ZTD-05 两栖突击车、052D 型驱逐舰 DD-17 与 003 型航母，另有侦察、空袭、近距空中支援、烟幕、增援线，以及运-20 空降兵连（Shift+P）与空投补给（Shift+O）。守军装备美制武器。点选单位可查看型号。H 时之前先排兵布阵：在集结海域里摆好舰队，右键海岸给每艘船预定登陆点，选好上岸后的阵型。</p>
     <div class="legend" id="legend"></div>
     <div class="keys">
       <span><kbd>左键</kbd> 选择 · 拖框多选</span><span><kbd>右键</kbd> 移动 · <b>拖拽定宽与朝向</b></span>
@@ -250,6 +261,7 @@ button:disabled { cursor: not-allowed; opacity: .3; }
 <script src="js/missile.js"></script>
 <script src="js/eair.js"></script>
 <script src="js/airwar.js"></script>
+<script src="js/para.js"></script>
 <script src="js/matrix.js"></script>
 <script src="js/camera.js"></script>
 <script src="js/render.js"></script>
@@ -262,6 +274,7 @@ button:disabled { cursor: not-allowed; opacity: .3; }
 <script src="js/ui.js"></script>
 <script src="js/input.js"></script>
 <script src="js/hud.js"></script>
+<script src="js/info.js"></script>
 <script src="js/chat.js"></script>
 <script src="js/audio.js"></script>
 <script src="js/codex.js"></script>

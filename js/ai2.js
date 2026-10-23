@@ -17,6 +17,11 @@ function aiThink(D) {
       if (d < 350) { const k = (350 - d) / 350; th += q.men.length * k; cx0 += q.x * k; cy0 += q.y * k; w += k; }
       if (d < 120) near += q.men.length;
     }
+    for (const v of S.veh || []) if (v.side === 'p' && !v.dead && !v.lst && spotted(v.x, v.y)) {   // 坦克：车组人数计入，威胁加权 1.5（火力远强于同样人数的步兵）
+      const d = dist(v.x, v.y, p.x, p.y), c = vehCrew(v);
+      if (d < 350) { const k = (350 - d) / 350; th += c * 1.5 * k; cx0 += v.x * k; cy0 += v.y * k; w += k; }
+      if (d < 120) near += c;
+    }
     for (const s of seenShips) {
       const d = dist(s.x, s.y, p.x, p.y);
       if (d < 450 && s.load.teams) { const k = (450 - d) / 450 * .6; th += s.load.teams * 3 * k; cx0 += s.x * k; cy0 += s.y * k; w += k; }
@@ -39,7 +44,7 @@ function aiThink(D) {
   for (const q of foes) {
     if (q.order.t === 'amove' || q.order.t === 'retreat' || q.role === 'ambush' || !info[q.obj]) continue;
     if (typeof cmdHeld === 'function' && cmdHeld(q)) continue;   // 预备队尚未获准出动
-    if (a4 && (a4Busy(q) || q.role === 'reserve')) continue;   // 预备队由 ai4 整连调动，不再一组一组地抽
+    if (a4) continue;   // 有 ai4：预备队整连机动、平静据点的多余守备由远方抽调编成支队成建制机动，不再一组一组地抽（逐次添油）
     const k = keys.reduce((a, b) => need(b) > need(a) ? b : a);
     if (k === q.obj || need(k) < need(q.obj) * 1.5) continue;
     const spare = q.role === 'reserve' || (info[q.obj].th < 2 && foes.filter(o => o.obj === q.obj && o.role === 'garrison').length > 1);

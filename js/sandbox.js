@@ -242,7 +242,7 @@ function sbxPresetDef() {
   sbxSync();
   sbxSay('e', `采用「标准布防」（${D.name}）：每处海滩一线设铁丝网、障碍、雷区与碉堡，岬角配岸防重炮，据点各有守备，两镇驻机动预备队。共 ${sbxSpent('e')} 点。`, 'plan');
 }
-const SBX_VEH_ID = { lt_tank: 'p_lt_tank', tank: 'p_tank', hv_tank: 'p_hv_tank', amtank: 'p_amtank', apc: 'p_apc', spg: 'p_spg', td: 'p_td', aa_veh: 'p_aa_veh', recon: 'p_recon', flame_tank: 'p_flame_tank', mine_tank: 'p_mine_tank' };
+const SBX_VEH_ID = { lt_tank: 'p_lt_tank', tank: 'p_tank', hv_tank: 'p_hv_tank', amtank: 'p_amtank', apc: 'p_apc', spg: 'p_spg', td: 'p_td', aa_veh: 'p_aa_veh', sam_veh: 'p_sam_veh', recon: 'p_recon', flame_tank: 'p_flame_tank', mine_tank: 'p_mine_tank' };
 function sbxPresetFleet() {
   sbxClear('p');
   const O = sbxScratch(() => deployFleet());
@@ -410,7 +410,8 @@ function sbxAIDefend() {
   const aaAt = [{ x: hq.x + 40, y: hq.y + 35 }, ...guns.slice(0, 2).map(g => ({ x: g.x + 40, y: g.y - 40 })), ...(art.length ? [{ x: art[0].x - 40, y: art[0].y - 20 }] : [])];
   let nAA = 0;
   for (const p of aaAt.slice(0, clamp(Math.round(2 * k), 1, 4))) if (sbxTry(nAA === 0 && k >= 1.5 ? 'e_aa_radar' : 'e_aa', p.x, p.y, 40)) nAA++;
-  if (nAA) say(`防空：指挥所与岸炮、炮兵阵地配高炮 ${nAA} 门，防敌舰载机先拔岸炮、再炸预备队。`, hq);
+  const sv = k >= 1.5 && sbxVehOk() && typeof VEH_SPEC === 'object' && VEH_SPEC.sam_veh && sbxTry('e_sam_veh', hq.x - 45, hq.y - 25, 50);
+  if (nAA || sv) say(`防空：指挥所与岸炮、炮兵阵地配高炮 ${nAA} 门${sv ? '；指挥所后方配弹炮防空车 1 辆，打敌机、拦截敌战术导弹' : ''}，防敌舰载机先拔岸炮、再炸预备队。`, hq);
   // 5b. 纵深野战机场（v7）：保留直升机与攻击机各一架，专打卸载中的登陆舰与坦克；指挥所配单兵防空组
   if (B0 >= 1800 && !(S.v7off && S.v7off.air)) {
     let af = null;
@@ -550,7 +551,7 @@ function sbxAIAttack() {
   const w2 = [];
   const nL = B0 >= 2200 ? 2 : B0 >= 1250 ? 1 : 0;
   for (let i = 0; i < nL; i++) {
-    const it = veh ? ship('p_lst', M, i, nL, 1760, i ? ['p_tank', 'p_apc', 'p_spg'] : ['p_tank', 'p_tank76', 'p_apc'], 2, 60) :
+    const it = veh ? ship('p_lst', M, i, nL, 1760, i ? ['p_tank', B0 >= 3000 && VEH_SPEC.sam_veh ? 'p_sam_veh' : 'p_apc', 'p_spg'] : ['p_tank', 'p_tank76', 'p_apc'], 2, 60) :
       ship('p_lci', M, i, nL, 1760, ['p_rifle', 'p_rifle', 'p_rifle', 'p_mg', 'p_at', 'p_medic', 'p_mortar', 'p_rifle'], 2, 60);
     if (it) w2.push(it);
   }
@@ -562,6 +563,7 @@ function sbxAIAttack() {
   const relay = B0 >= 1150 && sbxPlace('p_relay').ok;
   if (cv) { buyAir('p_air_strike', 'strike'); if (k >= 1) (k >= 1.3 ? buyAir('p_air_dive', 'bomber') : buyAir('p_air_strike', 'strike')); buyAir('p_air_cas', 'cas'); }
   const depot = B0 >= 1400 && sbxPlace('p_depot').ok;
+  const para = B0 >= 2500 && sbxPlace('p_para').ok, drop = B0 >= 1800 && sbxPlace('p_airdrop').ok;
   if (B0 >= 1600) { sbxPlace('p_reserve'); sbxPlace('p_rline'); }
   if (B0 >= 1800) sbxTry('p_sortie_naval', M.ex.x, M.ex.y, 30);
   if (cv && B0 >= 2000) { sbxPlace('p_deck'); buyAir('p_air_heli', 'cas'); buyAir('p_air_heavy', 'bomber'); }
@@ -589,7 +591,8 @@ function sbxAIAttack() {
   if (w2.length || sup.length) say(`第二波：${w2t ? w2t + '与' : ''}补给舰 ${sup.length} 艘在集结海域待命，滩头出口夺取后（最迟 H+2.5 分钟）再靠岸，避免在泊地挤成靶子。`, null);
   const escT = esc.length ? `；另有护航舰 ${esc.length} 艘分赴${sbxNm([...new Set(esc)])}外海，对已发现火力点实施舰炮压制` : '';
   if (dd || cv) say(`火力：${dd ? sbxEntry(dd).name + '前出至' + M.b.name + '外海直接支援' : '无舰炮支援'}${escT}；${cv ? `${sbxEntry(cv).name}编 ${air.recon} 架侦察机先行照相、${air.cas} 架对地支援机随叫随到、${air.strike} 架攻击机专打已标定炮位${air.bomber ? `、${air.bomber} 架轰炸机轰炸炮兵阵地与岸炮` : ''}${air.fighter ? `、${air.fighter} 架战斗机巡逻夺取制空权` : ''}` : '无航空兵'}。`, dd || cv);
-  const sup2 = [relay && '无线电中继减少通讯中断', '战前对' + M.b.name + '出口照相侦察', depot && '预置野战补给站加快向纵深推进', smoke && `烟幕弹 ${smoke} 发掩护抢滩`].filter(Boolean);
+  const sup2 = [relay && '无线电中继减少通讯中断', '战前对' + M.b.name + '出口照相侦察', depot && '预置野战补给站加快向纵深推进', smoke && `烟幕弹 ${smoke} 发掩护抢滩`,
+    para && '空降伞兵连待命，攻势展开后在主攻目标后方伞降夹击', drop && '空投补给 2 次，接济断了补给线的部队'].filter(Boolean);
   say(`保障：${sup2.join('；')}。部署完毕，共用去 ${sbxSpent('p')} / ${B0} 点。`, null);
   return { main: M.b.name, feint: F && F.b.name };
 }
@@ -703,7 +706,7 @@ function sbxBuild(role) {
   const ddI = sbxFlag(), cvI = sbxFlagCV();
   if (ddI) {
     const s = sbxEntry(ddI).spawn;
-    Object.assign(S.dd, { x: ddI.x, y: ddI.y, tx: ddI.x, ty: ddI.y, hull: s.hull, state: 'ready', cool: 0, repairT: 0, repairDur: s.rep || 16, auto: role === 'spectate', exposedUntil: 0, moving: false,
+    Object.assign(S.dd, { x: ddI.x, y: ddI.y, tx: ddI.x, ty: ddI.y, hull: s.hull, hull0: s.hull, state: 'ready', cool: 0, repairT: 0, repairDur: s.rep || 16, auto: role === 'spectate', exposedUntil: 0, moving: false,
       mod: { rof: s.rof || 1, salvo: s.salvo || 1, hit: s.hit || 1 }, name: sbxEntry(ddI).name, plan: ddI.plan ? { ...ddI.plan } : null });
     S.assets.smoke += 2 + (s.smoke || 0);
   } else Object.assign(S.dd, { x: -9999, y: H + 9999, tx: -9999, ty: H + 9999, hull: 0, state: 'sunk', moving: false, auto: false, plan: null, mod: null });
@@ -717,7 +720,7 @@ function sbxBuild(role) {
   }
   if (typeof initCarrier === 'function') initCarrier();
   if (S.cv) {
-    if (cvI) { const s = sbxEntry(cvI).spawn; Object.assign(S.cv, { x: cvI.x, y: cvI.y, tx: cvI.x, ty: cvI.y, hp: s.hp, maxhp: s.hp, moving: false, auto: role === 'spectate', exposedUntil: 0, cat: [0, 0] }); }
+    if (cvI) { const s = sbxEntry(cvI).spawn; Object.assign(S.cv, { x: cvI.x, y: cvI.y, tx: cvI.x, ty: cvI.y, hp: s.hp, maxhp: s.hp, moving: false, auto: role === 'spectate', exposedUntil: 0, cat: [0, 0], name: sbxEntry(cvI).name }); }
     else Object.assign(S.cv, { x: -9999, y: H + 9999, tx: -9999, ty: H + 9999, hp: 0, moving: false, auto: false });
     // 其余航母：各带自己的舰载机（先装满旗舰，再依次分给其余航母）
     const xs = sbxOf('cv').filter(it => it !== cvI);
@@ -887,14 +890,21 @@ function sbxFireShips(dt) {
     } else if (s.sbxRole === 'naval') {   // 护航舰：滩头外 380 游弋，优先打已发现的火力点，射程 1000，我军 45 以内不射
       if (st.go === 0 && S.t > 6) { st.go = 1; goTo(tx + ((s.id % 5) - 2) * 80, cy + 360 + (s.id % 3) * 40); }   // 各舰错开阵位
       if (st.cd > 0) continue;
+      // 分区射击（support.js navWeight）：优先本舰责任区，别的舰 6 秒内打过的不重复打，告急区可转火支援
+      if (typeof navHotUpdate === 'function') navHotUpdate();
+      const nw = (x, y) => typeof navWeight === 'function' ? navWeight(s, x, y) : 1;
       let t = null, bd = 1000;
-      for (const e of S.enemies) if (!e.dead && (inVision(e.x, e.y) || e.kx != null)) { const d = dist(s.x, s.y, e.x, e.y) * (e.kind === 'coastal' || e.kind === 'bunker' ? .7 : 1); if (d < bd && sbxSafe(e.x, e.y, 45)) { bd = d; t = e; } }
-      if (!t) { const q = sbxNearFoe(s.x, s.y, 1000, 0); if (q && sbxSafe(q.x, q.y, 45)) t = q; }
+      for (const e of S.enemies) if (!e.dead && (inVision(e.x, e.y) || e.kx != null)) {
+        const w = nw(e.x, e.y), d = dist(s.x, s.y, e.x, e.y) * (e.kind === 'coastal' || e.kind === 'bunker' ? .7 : 1);
+        if (w && d / w < bd && d < 1000 && sbxSafe(e.x, e.y, 45)) { bd = d / w; t = e; }
+      }
+      if (!t) { const q = sbxNearFoe(s.x, s.y, 1000, 0); if (q && sbxSafe(q.x, q.y, 45) && nw(q.x, q.y)) t = q; }
       st.cd = t ? 5 / (s.sbxCls.rof || 1) : 1.5;
       if (!t) continue;
       const sc = 10 + dist(s.x, s.y, t.x, t.y) / 50;
       for (let k = 0; k < (s.sbxCls.salvo || 1); k++) { const pt = safeAim('p', t.x, t.y, sc, POWER.naval.R, 55); if (pt) fireShell(s.x, s.y, pt[0], pt[1], 'p', 'naval', 2.2, false, { t: -k * .2 }); }
       Object.assign(s, { aimX: t.x, aimY: t.y, fireT: S.t });
+      if (typeof navMark === 'function') navMark(s, t.x, t.y);
       S.fx.push({ kind: 'flash', x: s.x, y: s.y, r: 14, life: 0, max: .5, side: 'p' });
       S.stats.shots++;
       sbxOnce('nv' + s.id, () => sbxSay('p', `命令：护航舰 ${s.label}（${s.sbxCls.name}）前出至${b.name}外海，对已发现火力点实施舰炮支援。`, 'order', { x: t.x, y: t.y }));

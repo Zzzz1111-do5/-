@@ -2,11 +2,11 @@
 // 航空母舰与舰载机联队：甲板弹射起飞、侦察 / 空袭 / 对地支援三种任务、防空火力、舰尾进近着舰与整备；
 // 航母机动与受损（岸防炮可打）；绘制航母、甲板停机、飞机剪影（无文字）
 const AIR_SPEC = {
-  recon: { name: '侦察机', n: 2, aa: .06, spd: 190, size: 17 },
-  strike: { name: '攻击机', n: 4, aa: .09, spd: 180, size: 15 },
-  cas: { name: '对地支援机', n: 4, aa: .09, spd: 170, size: 15 },
+  recon: { name: '空警-600 侦察机', n: 2, aa: .06, spd: 190, size: 17 },
+  strike: { name: '歼-15 攻击机', n: 4, aa: .09, spd: 180, size: 15 },
+  cas: { name: '攻击-2 对地支援无人机', n: 4, aa: .09, spd: 170, size: 15 },
   bomber: { name: '轰炸机', n: 0, aa: .07, spd: 150, size: 22 },   // 沙盒购买：重型轰炸机（地毯轰炸）/ 俯冲轰炸机（点目标）
-  fighter: { name: '舰载战斗机', n: 2, aa: .05, spd: 230, size: 15 }   // 制空（airwar.js）：在指定空域巡逻，拦截敌机、夺取制空权
+  fighter: { name: '歼-15 舰载战斗机', n: 2, aa: .05, spd: 230, size: 15 }   // 制空（airwar.js）：在指定空域巡逻，拦截敌机、夺取制空权
 };
 const AIR_TYPES = ['recon', 'strike', 'cas', 'bomber', 'fighter'];
 const AIR_TURN = 1.5;      // 最大转弯角速度（弧度/秒）：巡航转弯半径约 120
@@ -39,7 +39,7 @@ const AIR_SIL = {
 };
 // 变体机型的剪影与名称（沙盒）
 const airSilKey = (type, v) => v === 'dive' || v === 'fb' || v === 'heli' ? v : type;
-const AIR_VNAME = { heavy: '重型轰炸机', dive: '俯冲轰炸机', fb: '战斗轰炸机', heli: '武装直升机', lr: '远程侦察机', adv: '先进制空战斗机' };
+const AIR_VNAME = { heavy: '轰-6K 轰炸机', dive: '攻击-11 无人攻击机', fb: '歼-15T 战斗攻击机', heli: '直-10 武装直升机', lr: '无侦-7 侦察机', adv: '歼-35 隐身战斗机' };   // 进攻方按解放军装备命名
 const airName = (type, v) => AIR_VNAME[v] || (AIR_SPEC[type] || AIR_SPEC.strike).name;
 // HUD 图标（24×24，描边风格，与 hud.js ICON 一致）
 const CARRIER_ICONS = {
@@ -207,6 +207,11 @@ function updatePlanes(dt) {
   }
   for (const p of S.planes) {
     if (p.dead) continue;
+    if (p.kind === 'transport') {   // 战区运输机（para.js）：不归航母，照样挨高炮
+      if (typeof paFly === 'function') paFly(p, dt); else p.dead = true;
+      if (!p.dead && p.alt > .4) airAA(p, dt);
+      continue;
+    }
     let c = cvOf(cvHome(p)) || S.cv;
     if (c.hp <= 0 && p.phase !== 'cat' && p.phase !== 'roll') {   // 母舰瘫痪：改降其他还能起降的航母
       const alt = cvAll().find(o => o.hp > 0), w = airWing(p);

@@ -1,8 +1,8 @@
 'use strict';
 // 战术导弹（v7）：进攻方战术弹道导弹——驱逐舰垂直发射，驱逐舰沉没时由战区导弹部队发射；
-// 弹道飞行、末段可被雷达高炮拦截、命中按 POWER.tbm 结算；HUD 按钮（I 键）、AI 用弹、绘制（只用形状）。
+// 弹道飞行、末段可被雷达高炮与守军弹炮防空车拦截、命中按 POWER.tbm 结算；HUD 按钮（I 键）、AI 用弹、绘制（只用形状）。
 // 守方战术导弹发射车（e_tel）：纵深机动阵地，载弹 2 枚，打卸载中的登陆舰、滩头补给站与密集部队（射程 300–1800）；
-// 发射即暴露，随即转移阵地；末段可被我方驱逐舰舰空导弹拦截；守方弹头不伤自家工事（POWER.etbm）。
+// 发射即暴露，随即转移阵地；末段可被我方驱逐舰舰空导弹与弹炮防空车拦截；守方弹头不伤自家工事（POWER.etbm）。
 // 接口按 SPEC-v7：msOn / msLaunch / msFireP / msCommandP；岸舰导弹、单兵防空导弹在此基础上扩展。
 POWER.tbm = { men: .9, ship: 6, struct: 24, seg: true, R: 40 };
 POWER.etbm = { men: .9, ship: 6, struct: 0, seg: true, R: 40 };
@@ -132,23 +132,24 @@ function msSam(m, dt) {
 }
 function msSamHit(m, T) {
   const k = m.tgt.k;
+  const samv = m.src === 'samv';   // 弹炮防空车（vehicles.js vehSam）：单发命中率随弹带来（m.pk）
   if (k === 'msl') {   // 拦截来袭导弹
-    if (Math.random() < (m.pk || .35)) { T.done = T.icp = true; msPuff(T.x, T.y, 'p', true); msStat('mslIcpt'); msIcpt(T, '舰空导弹'); } else msPuff(m.x, m.y, m.side);
+    if (Math.random() < (m.pk || .35)) { T.done = T.icp = true; msPuff(T.x, T.y, m.side, true); msStat('mslIcpt'); msIcpt(T, samv ? '弹炮防空车' : '舰空导弹'); } else msPuff(m.x, m.y, m.side);
     return;
   }
   let base, flare = 1;
   const aam = m.src === 'aam';   // 战斗机空空导弹（airwar.js）：单发命中率随弹带来（m.pk）
   if (k === 'plane') {
-    base = aam ? m.pk : T.kind === 'recon' ? .3 : T.v === 'heli' ? .62 : T.kind === 'bomber' && T.v !== 'dive' ? .32 : .42;
+    base = aam || samv ? m.pk : T.kind === 'recon' ? .3 : T.v === 'heli' ? .62 : T.kind === 'bomber' && T.v !== 'dive' ? .32 : .42;
     if (!T.samN) { T.samN = 1; flare = .6; MSV.fl.push({ x: T.x, y: T.y, t: S.t }); }   // 第一枚多半被干扰弹骗走
   } else {
-    base = aam ? m.pk : m.src === 'dd' || m.src === 'esc' ? (T.type === 'heli' ? .55 : .6) : T.type === 'heli' ? .62 : .42;
+    base = aam || samv ? m.pk : m.src === 'dd' || m.src === 'esc' ? (T.type === 'heli' ? .55 : .6) : T.type === 'heli' ? .62 : .42;
     if (T.flares > 0) { T.flares--; flare = .6; MSV.fl.push({ x: T.x, y: T.y, t: S.t }); }
   }
   if (Math.random() < base * (1 - clamp(m.sup || 0, 0, 100) / 150) * flare) {
     msStat('aaKill');
-    if (k === 'plane') { if (typeof airLost === 'function') airLost(T, `${typeof airName === 'function' ? airName(T.kind, T.v) : '飞机'}被敌${aam ? '歼击机空空导弹' : '单兵防空导弹'}击落`); }
-    else if (typeof eaLost === 'function') eaLost(T, aam ? 'aam' : m.src === 'dd' || m.src === 'esc' ? 'sam' : 'manpads');
+    if (k === 'plane') { if (typeof airLost === 'function') airLost(T, `${typeof airName === 'function' ? airName(T.kind, T.v) : '飞机'}被敌${aam ? '歼击机空空导弹' : samv ? '弹炮防空车' : '单兵防空导弹'}击落`); }
+    else if (typeof eaLost === 'function') eaLost(T, aam ? 'aam' : samv ? 'samv' : m.src === 'dd' || m.src === 'esc' ? 'sam' : 'manpads');
     if (aam && typeof awScore === 'function') awScore(m.side);
   } else msPuff(m.x, m.y, m.side);
 }
@@ -267,9 +268,10 @@ function msTelE() {
     e.n = (e.n ?? 2) - 1; e.telT = S.t + (MS_TEL[S.level] || 60); e.fireT = S.t; e.scoot = S.t + 7; e.kx = e.x; e.ky = e.y;   // 发射即暴露
     msStat('telLaunch');
     const sec = Math.round(m.dur + 1.5), where = typeof cmdWhere === 'function' ? cmdWhere(e.x, e.y) : gridRef(e.x, e.y), dd = msDefShips().some(o => dist(o.x, o.y, tx, ty) < 650);
+    const sv = (S.veh || []).some(v => v.side === 'p' && !v.dead && v.type === 'sam_veh' && (v.samN ?? 1) > 0 && dist(v.x, v.y, tx, ty) < 450), icp = [dd && '驱逐舰舰空导弹', sv && '弹炮防空车'].filter(Boolean).join('与');
     log(`导弹预警：敌战术弹道导弹来袭，目标${T.nm}，约 ${sec} 秒后落地；发射车位置已标定`, 'bad', 'telw', 3, { x: tx, y: ty });
     if (typeof chatSay === 'function') {
-      chatSay('sys', `导弹预警：敌战术弹道导弹 1 枚自${where}发射，目标${T.nm}，约 ${sec} 秒后落地${dd ? '；驱逐舰舰空导弹准备拦截' : ''}。`, { kind: 'intel', at: { x: tx, y: ty }, key: 'telw', gap: 6 });
+      chatSay('sys', `导弹预警：敌战术弹道导弹 1 枚自${where}发射，目标${T.nm}，约 ${sec} 秒后落地${icp ? `；${icp}准备拦截` : ''}。`, { kind: 'intel', at: { x: tx, y: ty }, key: 'telw', gap: 6 });
       chatSay('e', `命令：战术导弹发射车对${T.nm}实施导弹突击，发射后立即转移阵地（余弹 ${e.n} 枚）。`, { kind: 'order', at: { x: tx, y: ty }, key: 'telo' + e.id, gap: 20, lv: 1 });
     }
   }
@@ -341,10 +343,11 @@ function msCommandP(dt) {
   const pT = S.teams.filter(q => q.side === 'p' && q.men.length), atSea = S.ships.some(s => s.state !== 'sunk' && s.state !== 'beached' && s.load && s.load.teams > 0);
   const VAL = { coastal: atSea ? 10 : 5, tel: 9, ascm: atSea ? 10 : 6, airfield: 8, arty: 4, aa: 3, mortar: 2.5, bunker: 2 };
   let best = null, bv = 0;
+  const JP = typeof cmdJointPts === 'function' ? cmdJointPts() : [];   // 联合火力：正在攻击的目标据点附近的火力点优先
   for (const e of S.enemies) {
     if (e.dead || e.kx == null || !VAL[e.kind]) continue;
     if (pT.some(q => dist(q.x, q.y, e.kx, e.ky) < 60) || S.missiles.some(m => m.side === 'p' && dist(m.tx, m.ty, e.kx, e.ky) < 50)) continue;
-    const v = VAL[e.kind] * (e.kind === 'bunker' && pT.some(q => dist(q.x, q.y, e.kx, e.ky) < 260) ? 2.5 : 1);
+    const v = VAL[e.kind] * (e.kind === 'bunker' && pT.some(q => dist(q.x, q.y, e.kx, e.ky) < 260) ? 2.5 : 1) * (JP.some(p => dist(p.x, p.y, e.kx, e.ky) < 220) ? 1.6 : 1);
     if (v > bv) { bv = v; best = e; }
   }
   if (!best || bv < 5) return;

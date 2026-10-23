@@ -55,7 +55,7 @@ function damageDD(hit) {
   S.fx.push({ kind: 'boom', x: dd.x, y: dd.y, r: 30, life: 0, max: 1.2, side: 'p' });
   if (dd.hull <= 0) { dd.state = 'sunk'; dd.moving = false; log('驱逐舰第三次中弹沉没，舰炮掩护永久丧失', 'bad'); return; }
   dd.state = 'repair'; dd.repairT = 0;
-  log(`驱逐舰中弹（船体 ${dd.hull}/3），损管抢修中，暂停火力掩护`, 'bad');
+  log(`驱逐舰中弹（船体 ${dd.hull}/${dd.hull0 || 3}），损管抢修中，暂停火力掩护`, 'bad');
 }
 
 function updateDD(dt) {
@@ -69,9 +69,10 @@ function updateDD(dt) {
   }
   if (!dd.auto || dd.cool > 0) return;
   // 指挥官火力任务（commander.js）：火力准备、烟幕、支援受阻的攻击；停止射击（误伤后）时不开火
+  navHotUpdate();
   const fm = typeof cmdDDMission === 'function' ? cmdDDMission(dd) : null;
-  if (fm) { if (!fm.hold) ddFire(fm.x, fm.y, !!fm.smoke, true); return; }
-  // 自动掩护：射击视野内、靠近我方小组（但不贴脸）的敌人
+  if (fm) { if (!fm.hold && ddFire(fm.x, fm.y, !!fm.smoke, true) && !fm.smoke) navMark(dd, fm.x, fm.y); return; }
+  // 自动掩护：射击视野内、靠近我方小组（但不贴脸）的敌人；按责任区加权，别的舰刚打过的不重复打
   let best = null, bd = 180;
   const safe = typeof cmdDDSafe === 'function' ? cmdDDSafe() : 55;
   const foes = S.enemies.filter(e => !e.dead).concat(S.teams.filter(q => q.side === 'e' && q.men.length));
@@ -79,9 +80,56 @@ function updateDD(dt) {
     if (!inVision(e.x, e.y) || dist(dd.x, dd.y, e.x, e.y) > 1000) continue;
     let near = 1e9;
     for (const q of S.teams) if (q.side === 'p') near = Math.min(near, dist(e.x, e.y, q.x, q.y));
-    if (near < bd && near > safe) { bd = near; best = e; }
+    const w = navWeight(dd, e.x, e.y);
+    if (!w || near <= safe) continue;
+    if (near / w < bd) { bd = near / w; best = e; }
   }
-  if (best) ddFire(best.x, best.y, false, true);
+  if (best && ddFire(best.x, best.y, false, true)) navMark(dd, best.x, best.y);
+}
+
+// —— 舰炮火力分配（旗舰驱逐舰 + 沙盒护航舰）：分区负责、不重复打、告急区集中支援 ——
+// 责任区：按各舰当前位置的东西顺序，把海岸正面在相邻两舰之间的中点处分段，各舰优先打本区的目标；
+// 不重复打：别的舰 6 秒内打过的点 40 以内不再打（同一目标不需要几艘舰同时打）；本区没有目标时才打相邻区；
+// 集中支援：某区我军步兵被压制（120 以内 3 个组以上压制 > 50）或有岸防炮在 6 秒内开过火，标为告急 25 秒——
+//   相邻的舰可以转火支援，与本区舰一起打同一个区域（此时不受「不重复打」限制）
+// 状态：S.nav = { aim: [{x, y, t, id}] 近 6 秒各舰的弹着点, hot: [{x, y, until, why}], hotT }
+function navShips() {
+  const out = [];
+  if (S.dd && S.dd.state !== 'sunk' && isFinite(S.dd.x) && S.dd.x > -999) out.push({ o: S.dd, id: 'DD', x: S.dd.x });
+  for (const s of S.ships) if (s.kind === 'dd' && s.sbxRole === 'naval' && alive(s)) out.push({ o: s, id: s.id, x: s.x });
+  return out.sort((a, b) => a.x - b.x);
+}
+function navEnsure() { if (!S.nav) S.nav = { aim: [], hot: [], hotT: 0 }; return S.nav; }
+function navHotUpdate() {
+  const N = navEnsure();
+  if (S.t < N.hotT) return;
+  N.hotT = S.t + 2;
+  N.hot = N.hot.filter(h => h.until > S.t);
+  const add = (x, y, why) => { const h = N.hot.find(o => dist(o.x, o.y, x, y) < 150); if (h) h.until = S.t + 25; else N.hot.push({ x: Math.round(x), y: Math.round(y), until: S.t + 25, why }); };
+  for (const q of S.teams) if (q.side === 'p' && q.men.length && q.sup > 50 && S.teams.filter(o => o.side === 'p' && o.men.length && o.sup > 50 && dist(o.x, o.y, q.x, q.y) < 120).length >= 3) add(q.x, q.y, 'pin');
+  for (const e of S.enemies) if (!e.dead && e.kind === 'coastal' && e.kx != null && S.t - (e.fireT ?? -99) < 6) add(e.kx, e.ky, 'gun');
+}
+// 某舰打 (x, y) 的权重：0 = 不打；本区 1、告急区 1.3、相邻区 .35
+function navWeight(o, x, y) {
+  const L = navShips();
+  if (L.length < 2) return 1;
+  const N = navEnsure(), i = L.findIndex(s => s.o === o);
+  if (i < 0) return 1;
+  const lo = i ? (L[i - 1].x + L[i].x) / 2 : -Infinity, hi = i < L.length - 1 ? (L[i].x + L[i + 1].x) / 2 : Infinity;
+  const own = x >= lo && x < hi, hot = N.hot.some(h => h.until > S.t && dist(h.x, h.y, x, y) < 150);
+  if (!hot && N.aim.some(a => a.id !== (o === S.dd ? 'DD' : o.id) && S.t - a.t < 6 && dist(a.x, a.y, x, y) < 40)) return 0;
+  return own ? (hot ? 1.3 : 1) : hot ? 1.3 : .35;
+}
+function navMark(o, x, y) {
+  const N = navEnsure(), id = o === S.dd ? 'DD' : o.id;
+  N.aim = N.aim.filter(a => S.t - a.t < 6);
+  N.aim.push({ x: Math.round(x), y: Math.round(y), t: S.t, id });
+  // 转火支援：打的是告急区且不在本舰责任区，报一声
+  const L = navShips(), i = L.findIndex(s => s.o === o);
+  if (L.length < 2 || i < 0 || typeof chatSay !== 'function') return;
+  const lo = i ? (L[i - 1].x + L[i].x) / 2 : -Infinity, hi = i < L.length - 1 ? (L[i].x + L[i + 1].x) / 2 : Infinity;
+  const h = N.hot.find(o2 => o2.until > S.t && dist(o2.x, o2.y, x, y) < 150);
+  if (h && (x < lo || x >= hi)) chatSay('p', `命令：${o === S.dd ? (S.dd.name || '驱逐舰') : o.label}转火支援相邻责任区，集中舰炮压制 ${gridRef(h.x, h.y)} ${h.why === 'gun' ? '开火的岸防炮' : '压制我步兵的火力点'}。`, { kind: 'order', at: { x: h.x, y: h.y }, key: 'navsup' + id, gap: 120, lv: 2 });
 }
 
 // 空军（舰载机联队 launchPlane / updatePlanes）见 carrier.js

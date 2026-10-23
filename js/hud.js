@@ -47,14 +47,17 @@ const BTN = [
     ['bomber', '轰炸机：点已标定的火力点 → 俯冲轰炸机精确投弹；点其他地方 → 重型轰炸机六弹地毯轰炸', 'Y', () => setTool('bomber')],
     ['cas', '近距空中支援：战机盘旋扫射', 'V', () => setTool('cas')],
     ['fighter', '战斗机：在指定空域巡逻 90 秒，拦截敌机、夺取制空权', 'W', () => setTool('fighter')],
+    ['para', '空降伞兵：两架运输机向指定地点空投一个连（4 组 12 人），落地后自动夺取附近据点', '⇧P', () => setTool('para')],
+    ['drop', '空投补给：运输机投下 3 箱弹药，附近步兵与车辆就地补充（4 分钟内有效）', '⇧O', () => setTool('drop')],
     ['rline', '开辟增援线', 'E', () => setTool('rline')], ['auto', '驱逐舰自动掩护', 'G', toggleAuto],
     ['airauto', '航母自动派机：近距支援受压制的我军、空袭已标定火力点、侦察前线方向', 'J', () => toggleCvAuto()]]]
 ];
-const ASSET = { smoke: 'smoke', recon: 'recon', strike: 'strike', cas: 'cas', bomber: 'bomber', fighter: 'fighter', rline: 'rline' };
+const ASSET = { smoke: 'smoke', recon: 'recon', strike: 'strike', cas: 'cas', bomber: 'bomber', fighter: 'fighter', rline: 'rline', para: 'para', drop: 'drop' };
 
 function buildHud() {
   if (typeof SHIP_ICONS === 'object') Object.assign(ICON, SHIP_ICONS);
   if (typeof CARRIER_ICONS === 'object') Object.assign(ICON, CARRIER_ICONS);
+  if (typeof PA_ICONS === 'object') Object.assign(ICON, PA_ICONS);   // 空降 / 空投（para.js）
   if (typeof VEH_ICONS === 'object') for (const k in VEH_ICONS) ICON['v_' + k] = VEH_ICONS[k];   // 车辆卡片图标（vehicles.js）
   $('btnRain').innerHTML = svg('rain');
   $('btnRain').addEventListener('click', () => {
@@ -221,8 +224,9 @@ function updateHud() {
     $('endTitle').className = S.over;
     const own = S.points.filter(p => p.owner === 'p').length;
     $('endStats').innerHTML = [['守军 AI', DIFF[S.level].name], ['作战用时', fmtT(S.t)], ['夺取据点', `${own} / ${S.points.length}`], ['我方伤亡', S.stats.lost + ' 人'],
-      ['歼敌', S.stats.killed + ' 人'], ['摧毁火力点', S.stats.structs + ' 处'], ['驱逐舰', D.state === 'sunk' ? '沉没' : `船体 ${D.hull}/3`],
+      ['歼敌', S.stats.killed + ' 人'], ['摧毁火力点', S.stats.structs + ' 处'], ['驱逐舰', D.state === 'sunk' ? '沉没' : `船体 ${D.hull}/${D.hull0 || 3}`],
       ['航母', S.cv ? (S.cv.hp > 0 ? `甲板 ${Math.ceil(S.cv.hp)}/${S.cv.maxhp}` : '瘫痪') : '—']]
       .map(([a, b]) => `<dt>${a}</dt><dd>${b}</dd>`).join('');
   }
+  if (typeof infoOnSel === 'function') infoOnSel();   // 型号卡（info.js）跟随选择
 }

@@ -29,8 +29,22 @@ function updateTeams(dt) {
     }
     if (q.repairing || (q.sup >= 60 && o.t !== 'retreat') || o.t === 'hold' || o.x == null) continue;
     if (o.t === 'amove' && tg) continue;   // 攻击前进：遇敌停下交火
+    if (o.t === 'move' && q.kind === 'inf' && !q.detail && tg && tg.d < 70 && teamBlocked(q, tg)) { q.order = { t: 'hold' }; q.stopT = S.t; v8Stat('tmBlk'); continue; }
     if (moveTeam(q, dt, o.t === 'retreat' ? 1.15 : o.t === 'charge' ? 1.3 : o.t === 'amove' ? .9 : 1)) q.order = { t: o.t === 'clear' ? 'clear' : 'hold' };
   }
+}
+
+// 机动中前进方向上 70 以内撞见敌人：有炮的敌车辆、没被压制的碉堡、或兵力不比本方少又没被压住（平均压制 < 50）的敌步兵
+// ——停下交火，不硬往人堆里走（攻击前进 amove 本来就遇敌即停；这里管普通机动 move，如队形跃进、调动）
+function teamBlocked(q, tg) {
+  const o = q.order, t = tg.t;
+  if (angDiff(Math.atan2(t.y - q.y, t.x - q.x), Math.atan2(o.y - q.y, o.x - q.x)) > 1.3) return false;
+  if (dist(t.x, t.y, o.x, o.y) > dist(q.x, q.y, o.x, o.y) + 20) return false;   // 敌人不在去路上
+  if (tg.k === 'veh') return !!(typeof vehSp === 'function' && vehSp(t).gun);
+  if (tg.k === 'st') return t.kind === 'bunker' && (t.sup || 0) < 40;
+  if (tg.k !== 'tm') return false;
+  const c = chargeOdds(q, t);
+  return c.opp >= c.own && c.sup < 50;
 }
 
 // —— 补给线：接通时为附近小组补充弹药、恢复士气；断点由该线工兵沿浮桥自动抢修 ——

@@ -61,6 +61,7 @@ function supplyPoints(connectedOnly) {
   if (!S) return out;
   for (const L of S.supply) if (!connectedOnly || L.connected) out.push({ kind: 'depot', id: L.id, x: L.x, y: L.y, root: L.id, connected: !!L.connected });
   if (S.snet) for (const n of S.snet.nodes) if (snLive(n) && (!connectedOnly || n.connected)) out.push({ kind: 'node', id: n.id, x: n.x, y: n.y, root: n.root, connected: !!n.connected });
+  if (S.para && S.para.ca) for (const k of S.para.ca) if (k.amt > 0) out.push({ kind: 'cache', id: k.id, x: k.x, y: k.y, root: null, connected: true });   // 空投补给点（para.js）
   return out;
 }
 function nearestSupply(x, y, connectedOnly) {
