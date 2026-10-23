@@ -1,15 +1,18 @@
 <title>滩头沙盘</title>
 <meta name="claude:viewport-fit-sides" content="cover">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Noto+Sans+SC:wght@400;700&family=Silkscreen&display=swap">
 <style>
+/* 字体随游戏打包（fonts/，tools/subset_fonts.py 裁剪生成，SIL OFL 1.1）：国内与离线都能显示；缺的字落到系统中文字体 */
+@font-face { font-family: "Noto Sans SC"; font-weight: 400; font-display: swap; src: url(fonts/NotoSansSC-Regular.woff2) format("woff2"); }
+@font-face { font-family: "Noto Sans SC"; font-weight: 600 700; font-display: swap; src: url(fonts/NotoSansSC-Bold.woff2) format("woff2"); }
+@font-face { font-family: "IBM Plex Mono"; font-weight: 400; font-display: swap; src: url(fonts/IBMPlexMono-Regular.woff2) format("woff2"); }
+@font-face { font-family: "IBM Plex Mono"; font-weight: 600 700; font-display: swap; src: url(fonts/IBMPlexMono-SemiBold.woff2) format("woff2"); }
+@font-face { font-family: "Silkscreen"; font-weight: 400; font-display: swap; src: url(fonts/Silkscreen-Regular.woff2) format("woff2"); }
 /* 布局：战场铺满全屏；左上事件、顶部据点图标、右上时钟；底部左小地图、中单位卡、右指令图标（全战式）。单一暗色作战台 */
 :root {
   --bg: #020704; --panel: rgba(3, 12, 7, .86); --line: rgba(61, 255, 138, .22); --line-hi: rgba(61, 255, 138, .6);
   --g: #3dff8a; --g-mid: #1fa457; --enemy: #ff3d6e; --intel: #5cc8ff; --sel: #b07cff; --amber: #ffc24a;
   --text: #c6f7d8; --mute: #6c9a80;
-  --f-ui: "IBM Plex Mono", "Noto Sans SC", ui-monospace, monospace;
+  --f-ui: "IBM Plex Mono", "Noto Sans SC", "Microsoft YaHei", "PingFang SC", ui-monospace, monospace;
   --f-px: "Silkscreen", "IBM Plex Mono", monospace;
   color-scheme: dark;
 }
