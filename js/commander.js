@@ -1292,6 +1292,7 @@ function cmdECounters(E) {
     const c = E.ca[k], p = cmdPt(k);
     if (!p) { delete E.ca[k]; continue; }
     if (c.end) { if (S.t - c.end > 60) delete E.ca[k]; continue; }
+    if (typeof a4OwnsPt === 'function' && a4On() && a4OwnsPt(k)) { c.end = S.t; if (E.mass && E.mass.key === k) E.mass = null; continue; }   // ai4 已接管该据点的反冲击（ai4.js 自己报告）
     if (p.owner === 'e' && p.prog < .3) {
       c.end = S.t;
       if (E.mass && E.mass.key === k) E.mass = null;

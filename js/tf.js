@@ -3,7 +3,7 @@
 // 等待时先请舰炮准备；② 友邻互相支援：连队遭压制时，附近空闲连队前出到侧翼以侧射火力支援；③ 前沿空隙补位；
 // ④ 步坦协同：坦克 / 装甲车与步兵连绑定，停在步兵线后 35–55、左右错开；步兵被压制时前出敲掉压制火力点，但绝不超出步兵线 30；
 //    敌步兵贴近坦克时，伙伴连派一个小组掩护。执行器 vehEscort 双方共用（守方的绑定由 ai4.js 负责）。
-// 状态：S.tf = {mass: {据点 key: {t0, x, y, prep}}, help: {连队 id: {b, until}}, gap: {}, go: [最近发起的冲击（画箭头）], ...}
+// 状态：S.tf = {mass: {据点 key: {t0, x, y, prep}}, help: {连队 id: {b, until}}, gap: {}, go: [最近发起的冲击（ai4.js frDrawPlans 画箭头）], main: 主攻地段 id, ...}
 const tfOn = () => !!S && !(S.v7off && S.v7off.tf);
 const tfStat = (k, n = 1) => { const o = S.v7s || (S.v7s = {}); o[k] = (o[k] || 0) + n; };
 const VEH_BACK7 = { lt_tank: 35, tank: 40, hv_tank: 35, amtank: 40, apc: 55, td: 70, flame_tank: 25, mine_tank: 30, recon: 60, aa_veh: 90 };
@@ -71,9 +71,10 @@ function tfMass(u, p, grp, ready, exposed, pl, P, O) {
   tfStat('tfLaunch'); tfStat('tfLaunchU', units.length);
   const nv = (S.veh || []).filter(v => !v.dead && v.side === 'p' && units.some(g => g.id === v.buddy) && TF_GUNV.includes(v.type)).length;
   if (nv) tfStat('tfLaunchV', nv);
-  T.go.push({ x0: M.x, y0: M.y, x1: p.x, y1: p.y, t: now });
+  T.go.push({ x0: M.x, y0: M.y, x1: p.x, y1: p.y, t: now, key: p.key });
   if (T.go.length > 6) T.go.shift();
-  if (typeof chatSay === 'function') chatSay('p', `命令：${units.map(tfUN).join('、')}向${p.name}统一发起冲击（约 ${Math.round(pow)} 人对 ${Math.round(est)} 人${risk ? '，兵力不足，接受风险' : ''}）${nv ? `，坦克 ${nv} 辆在步兵线后抵近支援` : ''}。`, { kind: 'order', at: p, key: 'tfgo' + p.key, gap: 20, lv: 1 });
+  const F = T.fm && T.fm[p.key], fm = F && F.ph === 'adv' ? `，成${F.fn}队形分两个梯次交替跃进` : '';
+  if (typeof chatSay === 'function') chatSay('p', `命令：${units.map(tfUN).join('、')}向${p.name}统一发起冲击（约 ${Math.round(pow)} 人对 ${Math.round(est)} 人${risk ? '，兵力不足，接受风险' : ''}）${fm}${nv ? `，坦克 ${nv} 辆在步兵线后抵近支援` : ''}。`, { kind: 'order', at: p, key: 'tfgo' + p.key, gap: 20, lv: 1 });
 }
 
 // —— ② 友邻支援：连队遭压制（4 秒内挨打、平均压制 ≥ 40），350 内的空闲连队前出到压制源侧翼 110–130 处侧射 ——
@@ -308,6 +309,112 @@ function vehEscort(v) {
   return false;   // 到不了：交回原有逻辑
 }
 
+// —— ⑤ 队形进攻：统一发起后，攻击组沿进攻轴线成队形展开（开阔地三三制楔形、城镇 / 林地横队、挨炮时散开），
+//    分两个梯次交替跃进：一个梯次停下以火力掩护，另一个梯次跃进约 45 米到前方掩蔽处，再互换；
+//    以最慢的组为准同步推进（被压制、卡住的组超时不等），不让个别组冲到前面孤立；推进到冲击出发线后统一冲击
+// 状态：S.tf.fm[据点 key] = {ox, oy 出发线中心, ax, ay 轴线, L 推进总长, sE: [两个梯次的推进距离], lead 正在跃进的梯次, bT, n 跃进次数,
+//        ph: adv 推进 / assault 冲击, u: [连队 id], q: {组 id: [横向, 纵深, 梯次]}, w0, w1 队形横向范围, fn 队形名}
+const TF_BOUND = 45, TF_FN = { wedge: '三三制楔形', line: '横队', loose: '散开' };
+// 连内第 i 组相对连中心的 [横向, 纵深]（与 formation.js unitSlots 同一套队形，但不钳到地图内、不找可通行格）
+function tfSlotOff(i, n, form, width) {
+  const sc = width / defWidth(form, n);
+  if (form === 'wedge') { const tri = [[0, 0], [-1, 1], [1, 1]], [a1, b1] = tri[i % 3], [a2, b2] = tri[Math.floor(i / 3) % 3]; return [(a1 * 14 + a2 * 42) * sc, (b1 * 13 + b2 * 36) * sc + Math.floor(i / 9) * 60]; }
+  const sp = n > 1 ? width / (n - 1) : 0;
+  return [-width / 2 + i * sp, form === 'loose' ? (i % 2) * 22 : 0];
+}
+// 本连队正在队形推进中（autopilot 不再自行重下攻击前进令，冲锋距离收到 110）
+function tfFormOf(id) {
+  const F = S.tf && S.tf.fm;
+  if (!F) return null;
+  for (const k in F) if (F[k].ph === 'adv' && F[k].u.includes(id)) return F[k];
+  return null;
+}
+// 发起（autopilot.js apLaunch 调用）：返回 true 表示已按队形下达第一次跃进，否则由 apLaunch 直接攻击前进
+function tfFormGo(units, p, cx, cy, P) {
+  if (!tfOn()) return false;
+  const T = tfEnsure(), d = dist(cx, cy, p.x, p.y);
+  if (!T.fm) T.fm = {};
+  let F = T.fm[p.key];
+  if (F && F.ph !== 'adv') return false;
+  if (!F) {
+    if (d - 55 < TF_BOUND * 1.3) return false;   // 已在冲击距离内：直接攻击前进
+    const ax = (p.x - cx) / d, ay = (p.y - cy) / d, arty = units.some(g => P.u[g.id] && S.t - (P.u[g.id].artyT ?? -99) < 30);
+    const form = arty ? 'loose' : coverAt(p.x, p.y) < .75 ? 'line' : 'wedge';
+    F = T.fm[p.key] = { ox: cx, oy: cy, ax, ay, L: Math.round(d - 55), sE: [0, 0], lead: 0, bT: S.t, n: 0, ph: 'adv', u: [], q: {}, w0: 0, w1: 0, form, fn: TF_FN[form] };
+  }
+  const lx = -F.ay, ly = F.ax, face = Math.atan2(F.ay, F.ax), proj = (x, y) => (x - F.ox) * lx + (y - F.oy) * ly;
+  const add = units.filter(u => !F.u.includes(u.id) && teamsOf(u).length).sort((a, b) => proj(a.x, a.y) - proj(b.x, b.y));
+  if (!add.length) return true;
+  const ws = add.map(u => { u.form = F.form; return defWidth(F.form, teamsOf(u).length); }), gap = 26;
+  // 首批：沿出发线居中展开；后到的连：接在现有队形更靠近自己的一侧
+  let off;
+  if (!F.u.length) off = -(ws.reduce((a, b) => a + b, 0) + gap * (add.length - 1)) / 2;
+  else off = proj(add[0].x, add[0].y) < (F.w0 + F.w1) / 2 ? F.w0 - gap - ws.reduce((a, b) => a + b + gap, -gap) : F.w1 + gap;
+  add.forEach((u, i) => {
+    const w = ws[i], lat = off + w / 2, ts = teamsOf(u).filter(q => q.men.length && !q.ride);
+    off += w + gap;
+    F.w0 = Math.min(F.w0, lat - w / 2); F.w1 = Math.max(F.w1, lat + w / 2);
+    // 连内槽位 → 轴线坐标 [横向（加上连的横向位置）, 在推进线之后的纵深]；组与槽位按横向顺序配对
+    const sl = ts.map((q, k) => { const [a, b] = tfSlotOff(k, ts.length, F.form, w); return [a + lat, b]; });
+    const tsS = ts.slice().sort((a, b) => proj(a.x, a.y) - proj(b.x, b.y)); sl.sort((a, b) => a[0] - b[0]);
+    const multi = F.u.length + add.length > 1, ue = (F.u.length + i) % 2;
+    tsS.forEach((q, k) => { F.q[q.id] = [Math.round(sl[k][0]), Math.round(sl[k][1]), multi ? ue : k % 2]; });
+    F.u.push(u.id);
+    Object.assign(u, { face, order: 'amove', tx: p.x, ty: p.y });
+  });
+  if (F.n === 0) { F.sE[F.lead] = TF_BOUND; F.bT = S.t; }
+  tfFormOrder(F, p);
+  tfStat('fmGo', add.length);
+  return true;
+}
+// 下令：跃进梯次 → 前方槽位附近掩护最好的格（行进间射击）；掩护梯次已到位的停下以火力掩护
+function tfFormOrder(F, p) {
+  const lx = -F.ay, ly = F.ax;
+  for (const id of F.u) {
+    const u = UNIT_MAP.get(id), pl = S.autoPlan && S.autoPlan.u && S.autoPlan.u[id];
+    if (!u || u.state === 'rout' || !pl || pl.ph !== 'go' || (pl.halt != null && S.t - pl.halt < 45)) continue;
+    for (const q of teamsOf(u)) {
+      const o = F.q[q.id];
+      if (!o || !q.men.length || q.ride || q.order.t === 'charge' || q.order.t === 'retreat') continue;
+      const s = F.sE[o[2]] - o[1], x0 = F.ox + F.ax * s + lx * o[0], y0 = F.oy + F.ay * s + ly * o[0];
+      let x = x0, y = y0, bs = -Infinity;
+      eachCellIn(x0, y0, 14, i => { const t = TER.type[i]; if (!TP[t].sp || MINEC[i] === 2 || WIREC[i]) return; const v = (1 - TP[t].cv) * 2 - dist(cellCX(i), cellCY(i), x0, y0) / 14; if (v > bs) { bs = v; x = cellCX(i); y = cellCY(i); } });
+      if (o[2] === F.lead) { q.order = { t: 'move', x, y, gx: p.x, gy: p.y }; q.pathT = -9; }
+      else if (dist(q.x, q.y, x, y) < 16) q.order = { t: 'hold' };
+    }
+  }
+}
+// 每秒：跃进梯次都到位（或被压制、停下超过 6 秒、跃进超过 25 秒）→ 互换梯次，前移 45；推进到冲击出发线 → 统一冲击
+function tfForm(P) {
+  const T = tfEnsure();
+  if (!T.fm) return;
+  for (const k in T.fm) {
+    const F = T.fm[k], p = apPt(k), O = P.o[k];
+    if (!p || !O || !O.go || apTaken(p)) { delete T.fm[k]; continue; }
+    if (F.ph !== 'adv') { if (!F.u.some(id => P.u[id] && P.u[id].obj === k)) delete T.fm[k]; continue; }
+    const us = F.u.map(id => UNIT_MAP.get(id)).filter(u => u && u.state !== 'rout' && P.u[u.id] && P.u[u.id].ph === 'go' && P.u[u.id].obj === k);
+    if (!us.length) { delete T.fm[k]; continue; }
+    if (us.some(u => S.t - (P.u[u.id].chT ?? -99) < 15)) { F.ph = 'assault'; continue; }   // autopilot 已下令冲锋
+    const lx = -F.ay, ly = F.ax, mv = us.flatMap(u => teamsOf(u)).filter(q => q.men.length && !q.ride && F.q[q.id] && F.q[q.id][2] === F.lead);
+    const at = q => { const o = F.q[q.id], s = F.sE[o[2]] - o[1]; return dist(q.x, q.y, F.ox + F.ax * s + lx * o[0], F.oy + F.ay * s + ly * o[0]) < 18; };
+    const done = mv.every(q => at(q) || q.sup >= 60 || (q.order.t === 'hold' && S.t - q.movedT > 6) || q.order.t === 'charge');
+    if (!done && S.t - F.bT < 25) continue;
+    const front = Math.max(F.sE[0], F.sE[1]);
+    if (front >= F.L) {   // 推进到冲击出发线：统一冲击
+      F.ph = 'assault';
+      const cx = us.reduce((a, g) => a + g.x, 0) / us.length, cy = us.reduce((a, g) => a + g.y, 0) / us.length;
+      orderUnits(us, p.x, p.y, apAng(cx, cy, p.x, p.y), null, 'amove');
+      for (const g of us) { P.u[g.id].ordT = S.t; P.u[g.id].dx = p.x; P.u[g.id].dy = p.y; }
+      tfStat('fmAssault');
+      if (typeof chatSay === 'function') chatSay('p', `命令：${us.map(tfUN).join('、')}已交替跃进 ${F.n + 1} 次推进至冲击出发线，向${p.name}发起冲击！`, { kind: 'order', at: p, key: 'tffm' + k, gap: 30, lv: 1 });
+      continue;
+    }
+    F.lead = 1 - F.lead; F.sE[F.lead] = Math.min(F.L, front + TF_BOUND); F.bT = S.t; F.n++;
+    tfFormOrder(F, p);
+    tfStat('fmBound');
+  }
+}
+
 // —— 态势简报（每 150 秒，用战线模型）——
 function tfSitrep() {
   if (typeof frSummary !== 'function' || !S.front || typeof chatSay !== 'function') return;
@@ -317,15 +424,27 @@ function tfSitrep() {
   chatSay('p', `判断：登陆场正面约 ${Math.round(f.w / 10) * 10} 米、纵深约 ${Math.round(f.depth / 10) * 10} 米，分 ${f.seg} 段${g.length ? `；${g.map(o => tfWhere(o.x, o.y) + '约 ' + Math.round(o.w / 10) * 10 + ' 米空隙').join('、')}` : '，正面连贯'}。`, { kind: 'report', key: 'tfsit', gap: 100, lv: 1 });
 }
 
+// 主攻地段（战线图上加粗）：指挥官主攻滩头所在地段中我兵力最强的一段；没有登陆计划时取接敌地段中兵力最强的
+function tfMain() {
+  const sec = typeof frSectors === 'function' ? frSectors() : null;
+  if (!sec || !sec.length) return null;
+  const pl = S.cmd && S.cmd.p && S.cmd.p.plan, main = pl && pl.main >= 0 ? pl.main : -1;
+  let L = main >= 0 ? sec.filter(s => s.beach === main) : [];
+  if (!L.length) L = sec.filter(s => s.kind === 'contact');
+  if (!L.length) L = sec;
+  return L.reduce((a, s) => s.pw > a.pw ? s : a).id;
+}
+
 function tfThink(dt) {
   if (!S || S.phase !== 'battle' || S.over || !tfOn()) return;
   const T = tfEnsure();
   if ((T.thinkT -= dt) > 0) return;
   T.thinkT = 1;
+  if ((T.mainT = (T.mainT ?? 0) - 1) <= 0) { T.mainT = 5; T.main = tfMain(); }
   const P = S.autoPlan && S.autoPlan.u ? S.autoPlan : null;
   if (!P) return;
   for (const k in T.mass) if (!P.o[k] || S.t - T.mass[k].t0 > 120) delete T.mass[k];
-  tfExpire(P); tfHelp(P); tfGap(P); tfScreen();
+  tfExpire(P); tfHelp(P); tfGap(P); tfScreen(); tfForm(P);
   if ((T.bindT -= 1) <= 0) { T.bindT = 3; tfBind(P); }
   if ((T.sitT -= 1) <= 0) { T.sitT = 150; tfSitrep(); }
 }

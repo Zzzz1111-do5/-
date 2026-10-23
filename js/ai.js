@@ -33,9 +33,9 @@ function sayOnce(key, msg, p, kind = 'warn', at) {
   if (Math.random() < p) log(msg, kind, null, 0, at);
 }
 
-// 调往某据点的散兵编入该据点的预备连（不超过 4 组）
+// 调往某据点的散兵编入该据点的预备连（不超过 4 组）；正由 ai4 整连调动 / 反冲击的连不编（散兵不会跟着走，反而拖住整连）
 function aiUnitFor(k) {
-  return S.units.find(u => u.side === 'e' && u.obj === k && u.role === 'reserve' && u.state !== 'rout' && teamsOf(u).length < 4) ||
+  return S.units.find(u => u.side === 'e' && u.obj === k && u.role === 'reserve' && u.state !== 'rout' && teamsOf(u).length < 4 && !(typeof a4UnitBusy === 'function' && a4UnitBusy(u.id))) ||
     addUnit('e', 'inf', { role: 'reserve', obj: k });
 }
 
@@ -90,7 +90,7 @@ function relocate(e) {
 function aiUpdate(dt) {
   const A = S.ai, D = aiD();
   for (const e of S.enemies) if (e.moving && !e.dead) {
-    const d = dist(e.x, e.y, e.mx, e.my), sp = Math.min(d, 9 * dt);
+    const d = dist(e.x, e.y, e.mx, e.my), sp = Math.min(d, (e.mspd || 9) * dt);   // 火炮牵引转移 9；导弹发射车开得快（mspd）
     if (d < 1) { e.moving = false; e.cd = Math.max(e.cd, 2); continue; }
     e.x += (e.mx - e.x) / d * sp; e.y += (e.my - e.y) / d * sp;
   }

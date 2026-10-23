@@ -13,6 +13,7 @@ function gunScan() {
 }
 // 炮口朝向：最近射击方向；没打过时岸炮、火炮朝海（南），高炮缓慢搜索或跟踪最近的飞机
 function gunAim(e, time) {
+  if (e.kind === 'tel') return e.th ?? Math.PI / 2;   // 发射车：车头朝行驶 / 发射方向（missile.js）
   if (e.kind === 'aa') {
     let best = null, bd = 300;
     for (const p of S.planes || []) if (!p.dead && p.alt > .3) { const d = dist(p.x, p.y, e.x, e.y); if (d < bd) { bd = d; best = p; } }
@@ -50,7 +51,7 @@ function gunFlash(ctx, x, y, a, len, k) {   // 炮口焰：k 0–1 随时间衰�
 // 主入口：返回 true 表示已按模型绘制（render2.js drawEnemies 调用）
 function gunModel(ctx, e, x, y, vis, time) {
   if (R.s < .75) return false;   // 约 2 倍全图以上才画模型
-  const K = { coastal: 1, arty: 1, mortar: 1, aa: 1, bunker: 1 };
+  const K = { coastal: 1, arty: 1, mortar: 1, aa: 1, bunker: 1, tel: 1 };
   if (!K[e.kind]) return false;
   if (GUNV.S !== S || GUNV.t !== time) { gunScan(); GUNV.t = time; }
   const a = gunAim(e, time), col = rgba(COL.enemy, vis ? .95 : .4), dim = rgba(COL.enemy, vis ? .45 : .2), con = rgba(STRUCT, vis ? .3 : .12);
@@ -149,6 +150,27 @@ function gunModel(ctx, e, x, y, vis, time) {
     ctx.restore();
     ctx.fillStyle = dim; for (const [u, v] of [[-3, -2], [2, 3], [-2, 3.5], [3, -3]]) ctx.fillRect(x + u - .5, y + v - .5, 1, 1);   // 伪装网结
     if (fk) gunFlash(ctx, x, y, sa, 10.5, fk * .9);
+  } else if (e.kind === 'tel') {
+    // 战术导弹发射车：四轴重型底盘 + 驾驶室；停车后液压臂把导弹竖起（俯视投影缩短成一点），点火后放下空架，随即转移阵地
+    const ft = S.t - (e.fireT ?? -99), up = e.moving ? 0 : ft < 1.5 ? ft / 1.5 : ft < 3.5 ? 1 - (ft - 1.5) / 2 : 0, loaded = (e.n ?? 2) > 0 || ft < 1.5, L = 15 * (1 - .82 * up);
+    ctx.save(); ctx.translate(x, y); ctx.rotate(a);
+    ctx.fillStyle = dark; ctx.strokeStyle = col; ctx.lineWidth = px(1.2);
+    ctx.fillRect(-10, -3.2, 17, 6.4); ctx.strokeRect(-10, -3.2, 17, 6.4);   // 车体
+    ctx.fillRect(7, -3, 4.2, 6); ctx.strokeRect(7, -3, 4.2, 6);   // 驾驶室
+    ctx.fillStyle = dim; for (const u of [-8, -4.5, 1, 4.5]) for (const v of [-4, 3]) ctx.fillRect(u, v, 2.6, 1);   // 车轮
+    ctx.strokeStyle = dim; ctx.lineWidth = px(1); ctx.strokeRect(-9.5, -1.6, Math.max(2, L), 3.2);   // 起竖臂
+    if (loaded) {
+      ctx.strokeStyle = col; ctx.lineWidth = 1.8; ctx.lineCap = 'butt';
+      ctx.beginPath(); ctx.moveTo(-9.5, 0); ctx.lineTo(-9.5 + L, 0); ctx.stroke(); ctx.lineCap = 'round';
+      ctx.fillStyle = rgba('#ffffff', vis ? .9 : .4); ctx.beginPath(); ctx.arc(-9.5 + L, 0, up > .6 ? 1.4 : .9, 0, 7); ctx.fill();   // 弹头
+    }
+    ctx.restore();
+    if (vis && ft >= 1.5 && ft < 2.6) {   // 点火：车尾尾焰与扬起的烟尘
+      const k = 1 - (ft - 1.5) / 1.1, bx = x - Math.cos(a) * 10, by = y - Math.sin(a) * 10;
+      ctx.fillStyle = rgba('#fff3d6', .85 * k); ctx.beginPath(); ctx.arc(bx, by, 3 + 3 * k, 0, 7); ctx.fill();
+      ctx.fillStyle = rgba(COL.smoke, .35 * k); ctx.beginPath(); ctx.arc(bx, by, 10 + 10 * (1 - k), 0, 7); ctx.fill();
+    }
+    if (vis && !e.moving) gunCrew(ctx, x, y, a, [[-4, -7], [3, 7, 'radio']], col);
   }
   ctx.restore();
   return true;

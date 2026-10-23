@@ -523,7 +523,7 @@ function updateAirAuto(dt) {
     if (best && bs >= 2 && launchPlane('cas', best.x, best.y)) return;
   }
   if (S.assets.strike > 0) {
-    const PRI = { coastal: 5, ascm: 5, airfield: 4.5, arty: 4, aa: 3.5, mortar: 3, bunker: 2 };
+    const PRI = { coastal: 5, ascm: 5, tel: 5, airfield: 4.5, arty: 4, aa: 3.5, mortar: 3, bunker: 2 };
     let best = null, bs = 0;
     for (const e of S.enemies) if (!e.dead && e.kx != null) {
       if (near(e.kx, e.ky, typeof cmdAirSafe === 'function' ? cmdAirSafe() : 90).length || busy('strike', e.kx, e.ky, 70) || S.shells.some(s => s.side === 'p' && s.kind === 'bomb' && dist(s.x1, s.y1, e.kx, e.ky) < 60)) continue;
@@ -533,7 +533,7 @@ function updateAirAuto(dt) {
     if (best && launchPlane('strike', best.kx, best.ky)) { if (typeof cmdAirLaunched === 'function') cmdAirLaunched({ k: 'strike', x: best.kx, y: best.ky, eid: best.id }, S.planes[S.planes.length - 1]); return; }
   }
   if (S.assets.bomber > 0) {   // 轰炸机：炮兵阵地群、岸防炮、碉堡（周围已标定目标越多越优先）；我军 150 以内不投
-    const PRI = { coastal: 5, airfield: 5, ascm: 4.5, arty: 4.5, aa: 3, mortar: 3, bunker: 2.5 };
+    const PRI = { coastal: 5, airfield: 5, ascm: 4.5, tel: 4.5, arty: 4.5, aa: 3, mortar: 3, bunker: 2.5 };
     let best = null, bs = 0;
     for (const e of S.enemies) if (!e.dead && e.kx != null) {
       if (near(e.kx, e.ky, 150).length || busy('bomber', e.kx, e.ky, 90) || S.shells.some(s => s.side === 'p' && s.kind === 'bomb' && dist(s.x1, s.y1, e.kx, e.ky) < 60)) continue;

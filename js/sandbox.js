@@ -406,6 +406,11 @@ function sbxAIDefend() {
     const am = sbxTry('e_ascm', g0.x + (g0.x > b1.b.cx ? 60 : -60), g0.y + 20, 60);
     if (am) say(`岸舰导弹连 1 个配置在岬角后侧，4 枚导弹专打海上的坦克登陆舰和满载登陆舰；发射后会暴露。`, am);
   }
+  if (B0 >= 2600 && !(S.v7off && S.v7off.msl)) {
+    let tel = null;
+    for (let k = 0; k < 40 && !tel; k++) { const x = clamp(hq.x + (Math.random() - .5) * 900, 80, W - 80), y = clamp(hq.y - 40 - Math.random() * 320, 40, H); if (coastAt(x) - y >= 480) tel = sbxTry('e_tel', x, y, 40); }
+    if (tel) say(`纵深 ${sbxM(coastAt(tel.x) - tel.y)} 米处配置战术导弹发射车 1 辆（2 枚），专打抢滩卸载中的登陆舰与滩头补给站，每次发射后立即转移阵地。`, tel);
+  }
   // 6. 主攻滩头加强：反坦克炮、迫击炮、出口机枪班、反坦克雷、探照灯
   for (const B of main.slice(0, 2)) {
     const cx = B.b.cx, cy = coastAt(cx);
@@ -1611,6 +1616,13 @@ function sbxGlyph(ctx, c, x, y, col, a, it, ghost) {
       if (c.arch === 'fire_ship') { ctx.fillStyle = col; ctx.beginPath(); ctx.arc(0, -L * .15, 1.8, 0, 6.283); ctx.fill(); }
       if (c.arch === 'sweep') { ctx.setLineDash([2, 2]); ctx.beginPath(); ctx.moveTo(-hw, L / 2); ctx.lineTo(-hw - 6, L / 2 + 8); ctx.moveTo(hw, L / 2); ctx.lineTo(hw + 6, L / 2 + 8); ctx.stroke(); ctx.setLineDash([]); }
       ctx.restore();
+      break;
+    }
+    case 'missile': {   // 发射车 / 岸舰导弹连：车体 + 斜立的发射筒；进攻方的战术导弹（资产）只是一个点
+      if (s.kind !== 'enemy') { dot(0, 0, u * .6); break; }
+      ctx.beginPath(); ctx.rect(x - u, y - u * .35, u * 2, u * .7); ctx.fill(); ctx.stroke();
+      line(x - u * .6, y - u * .35, x + u * .8, y - u * 1.35, lw * 1.5);
+      if (s.ek === 'ascm') line(x - u * .6, y + u * .05, x + u * .8, y - u * .95, lw * 1.5);
       break;
     }
     case 'sortie': {

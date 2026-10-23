@@ -1,8 +1,12 @@
 'use strict';
 // 战术导弹（v7）：进攻方战术弹道导弹——驱逐舰垂直发射，驱逐舰沉没时由战区导弹部队发射；
 // 弹道飞行、末段可被雷达高炮拦截、命中按 POWER.tbm 结算；HUD 按钮（I 键）、AI 用弹、绘制（只用形状）。
-// 接口按 SPEC-v7：msOn / msLaunch / msFireP / msCommandP；守方发射车、岸舰导弹、单兵防空导弹在此基础上扩展。
+// 守方战术导弹发射车（e_tel）：纵深机动阵地，载弹 2 枚，打卸载中的登陆舰、滩头补给站与密集部队（射程 300–1800）；
+// 发射即暴露，随即转移阵地；末段可被我方驱逐舰舰空导弹拦截；守方弹头不伤自家工事（POWER.etbm）。
+// 接口按 SPEC-v7：msOn / msLaunch / msFireP / msCommandP；岸舰导弹、单兵防空导弹在此基础上扩展。
 POWER.tbm = { men: .9, ship: 6, struct: 24, seg: true, R: 40 };
+POWER.etbm = { men: .9, ship: 6, struct: 0, seg: true, R: 40 };
+const MS_TEL = { normal: 75, hard: 60, hell: 45 };   // 守方发射车两次发射的间隔（秒）
 const msOn = () => !!S && !(S.v7off && S.v7off.msl);
 const MS_STOCK = { normal: 3, hard: 2, hell: 2 };
 const MSV = { S: null, trail: new Map(), rings: [], fl: [] };   // fl：干扰弹（仅画面）   // 渲染缓存（不进 S）：尾迹点、命中扩散环
@@ -19,7 +23,7 @@ HOOK.newGame.push(function msNewGame(opts) {
   if (!S) return;
   S.missiles = []; S.msl = { p: { used: 0, hit: 0 }, warn: [] };
   S.assets.msl = opts && opts.sandbox ? 0 : MS_STOCK[S.level] ?? 2;   // 沙盒的导弹从目录购买（p_tbm）
-  if (!(opts && opts.sandbox) && msOn() && S.level === 'hell') msPlaceAscm(4);   // 战役地狱难度：侧翼岬角一个岸舰导弹连
+  if (!(opts && opts.sandbox) && msOn() && S.level === 'hell') { msPlaceAscm(4); msPlaceTel(); }   // 战役地狱难度：侧翼岬角一个岸舰导弹连、纵深一辆战术导弹发射车
 });
 
 // 发射一枚：tgt = {x, y}；opts.delay 秒后才真正升空，opts.src 记发射平台
@@ -75,14 +79,28 @@ function msStep(dt) {
       }
       if (m.done) continue;
     }
+    // 守方来袭弹道导弹：落点 650 以内的我方驱逐舰（旗舰 / 护航舰）在末段发射一枚舰空导弹拦截
+    if (m.side === 'e' && u > .62 && !m.samTry) {
+      const s = msDefShips().filter(o => dist(o.x, o.y, m.tx, m.ty) < 650 && (o.o.samCd || 0) <= S.t).sort((a, b) => dist(a.x, a.y, m.tx, m.ty) - dist(b.x, b.y, m.tx, m.ty))[0];
+      if (s) {
+        m.samTry = true; s.o.samCd = S.t + 1.5;
+        msLaunch('sam', 'p', s.x, s.y, { x: m.x, y: m.y }, { tgt: { k: 'msl', id: m.id }, src: s.esc ? 'esc' : 'dd', spd: 720, dur: 2.2, pk: s.esc ? .25 : .35 });
+        msStat('abmTbm');
+      }
+    }
     if (u >= 1) {
       m.done = true;
-      impact(m.tx, m.ty, POWER.tbm, m.side);
+      const before = m.side === 'e' ? S.teams.filter(q => q.side === 'p').reduce((a, q) => a + q.men.length, 0) : 0;
+      impact(m.tx, m.ty, m.side === 'e' ? POWER.etbm : POWER.tbm, m.side);
       S.fx.push({ kind: 'boom', x: m.tx, y: m.ty, r: 52, life: 0, max: 1.5, side: m.side });
       if (m.side === 'p') {
         S.msl.p.hit++;
         const hit = S.enemies.filter(e => e.dead && dist(e.x, e.y, m.tx, m.ty) < 50);
         log(hit.length ? `战术导弹命中，摧毁${msName(hit[0])}` : '战术导弹命中目标区', 'good', null, 0, { x: m.tx, y: m.ty });
+      } else {
+        const k = before - S.teams.filter(q => q.side === 'p').reduce((a, q) => a + q.men.length, 0);
+        msStat('telHit'); if (k > 0) msStat('telKill', k);
+        log(`敌战术导弹在${typeof cmdWhere === 'function' ? cmdWhere(m.tx, m.ty) : gridRef(m.tx, m.ty)}爆炸${k > 0 ? `，我 ${k} 人伤亡` : ''}`, 'bad', null, 0, { x: m.tx, y: m.ty });
       }
     }
   }
@@ -133,7 +151,7 @@ function msSamHit(m, T) {
   } else msPuff(m.x, m.y, m.side);
 }
 function msIcpt(T, how) {
-  if (T.side === 'e') log(`${how}拦截一枚来袭的岸舰导弹`, 'good', 'icpt', 1.5, { x: T.x, y: T.y });
+  if (T.side === 'e') log(`${how}拦截一枚来袭的${T.kind === 'tbm' ? '战术弹道导弹' : '岸舰导弹'}`, 'good', 'icpt', 1.5, { x: T.x, y: T.y });
   else log('我方导弹被拦截', 'bad', 'icptp', 2, { x: T.x, y: T.y });
 }
 
@@ -230,6 +248,68 @@ function msCommandE(dt) {
       chatSay('e', `命令：岸舰导弹连齐射 ${n} 枚，打击海上${best.nm}。`, { kind: 'order', at: { x: best.x, y: best.y }, key: 'ascmo', gap: 20 });
     }
   }
+  msTelE();
+}
+// —— 守方战术导弹发射车（msCommandE 每秒调用）：发射 7 秒后转移阵地；冷却完毕、有弹、未被压制时，打守方看得见的最高价值目标 ——
+//    卸载中的坦克登陆舰 12、卸载中的登陆舰 9 + 载员组数、滩头补给站 8、前沿补给点 5+、45 内集结 10 人以上的步兵 人数·0.7；够 7 分才打
+function msTelE() {
+  for (const e of S.enemies) {
+    if (e.kind !== 'tel' || e.dead) continue;
+    if (e.scoot != null && S.t >= e.scoot && !e.moving) { e.scoot = null; msTelMove(e); continue; }
+    if (e.moving || e.scoot != null || !((e.n ?? 2) > 0) || (e.telT || 0) > S.t || (e.sup || 0) > 60) continue;
+    const T = msTelPick(e);
+    if (!T) continue;
+    const tx = clamp(T.x + gauss() * 10, 0, W), ty = clamp(T.y + gauss() * 10, 0, H);
+    e.th = Math.atan2(ty - e.y, tx - e.x);   // 车头转向目标，起竖 1.5 秒后点火
+    const m = msLaunch('tbm', 'e', e.x, e.y, { x: tx, y: ty }, { src: e.id, delay: 1.5 });
+    e.n = (e.n ?? 2) - 1; e.telT = S.t + (MS_TEL[S.level] || 60); e.fireT = S.t; e.scoot = S.t + 7; e.kx = e.x; e.ky = e.y;   // 发射即暴露
+    msStat('telLaunch');
+    const sec = Math.round(m.dur + 1.5), where = typeof cmdWhere === 'function' ? cmdWhere(e.x, e.y) : gridRef(e.x, e.y), dd = msDefShips().some(o => dist(o.x, o.y, tx, ty) < 650);
+    log(`导弹预警：敌战术弹道导弹来袭，目标${T.nm}，约 ${sec} 秒后落地；发射车位置已标定`, 'bad', 'telw', 3, { x: tx, y: ty });
+    if (typeof chatSay === 'function') {
+      chatSay('sys', `导弹预警：敌战术弹道导弹 1 枚自${where}发射，目标${T.nm}，约 ${sec} 秒后落地${dd ? '；驱逐舰舰空导弹准备拦截' : ''}。`, { kind: 'intel', at: { x: tx, y: ty }, key: 'telw', gap: 6 });
+      chatSay('e', `命令：战术导弹发射车对${T.nm}实施导弹突击，发射后立即转移阵地（余弹 ${e.n} 枚）。`, { kind: 'order', at: { x: tx, y: ty }, key: 'telo' + e.id, gap: 20, lv: 1 });
+    }
+  }
+}
+function msTelPick(e) {
+  let best = null, bv = 7;
+  const add = (x, y, v, nm) => {
+    if (v <= bv) return;
+    const d = dist(e.x, e.y, x, y);
+    if (d < 300 || d > 1800 || ownNear('e', x, y, 75) || S.missiles.some(m => m.side === 'e' && m.kind === 'tbm' && !m.done && dist(m.tx, m.ty, x, y) < 60)) return;
+    bv = v; best = { x, y, nm };
+  };
+  for (const s of S.ships) if (alive(s) && s.state === 'unloading' && spotted(s.x, s.y)) add(s.x, s.y, s.kind === 'lst' ? 12 : 9 + ((s.load && s.load.teams) || 0), `正在卸载的 ${s.label}`);
+  for (const L of S.supply) if (L.connected && spotted(L.x, L.y)) add(L.x, L.y, 8, '滩头补给站');
+  if (typeof supplyTargets === 'function') for (const t of supplyTargets() || []) if (t && t.kind === 'node' && spotted(t.x, t.y)) add(t.x, t.y, 5 + (t.value || 1), '前沿补给点');
+  const pT = S.teams.filter(q => q.side === 'p' && q.men.length && !q.ride && spotted(q.x, q.y));
+  for (const q of pT) { let m = 0; for (const o of pT) if (dist(o.x, o.y, q.x, q.y) < 45) m += o.men.length; if (m >= 10) add(q.x, q.y, m * .7, `约 ${m} 人的集结部队`); }
+  return best;
+}
+// 转移阵地：150–280 外的新位置（离海岸 450 以外、可通行；道路 / 平地开得快，掩护好的更好），车速 16
+function msTelMove(e) {
+  let best = null, bs = -Infinity;
+  for (let i = 0; i < 18; i++) {
+    const a = Math.random() * 6.283, r = 150 + Math.random() * 130, x = clamp(e.x + Math.cos(a) * r, 40, W - 40), y = clamp(e.y + Math.sin(a) * r, 30, H - 30);
+    if (!passInf(x, y) || coastAt(x) - y < 450) continue;
+    const t = typeAt(x, y), sc = (t === T.ROAD ? 1 : t === T.FIELD ? .6 : 0) + (1 - coverAt(x, y)) * 1.5 + Math.random() * .3;
+    if (sc > bs) { bs = sc; best = { x, y }; }
+  }
+  if (!best) return;
+  Object.assign(e, { moving: true, mx: best.x, my: best.y, mspd: 16, th: Math.atan2(best.y - e.y, best.x - e.x) });
+  msStat('telMove');
+}
+// 战役（地狱）：指挥所以北纵深（离海岸 520 以外）一辆发射车，载弹 2 枚
+function msPlaceTel() {
+  for (let k = 0; k < 300; k++) {
+    const x = 120 + Math.random() * (W - 240), y = 40 + Math.random() * 640;
+    if (!passInf(x, y) || coastAt(x) - y < 520 || S.points.some(p => dist(p.x, p.y, x, y) < 100) || S.enemies.some(o => dist(o.x, o.y, x, y) < 60)) continue;
+    const e = addEnemy('tel', x, y);
+    e.n = 2; e.th = Math.PI / 2;
+    return e;
+  }
+  return null;
 }
 // 战役（困难 / 地狱）：在侧翼岬角布置一个岸舰导弹连（困难 2 枚，地狱 4 枚）
 function msPlaceAscm(n) {

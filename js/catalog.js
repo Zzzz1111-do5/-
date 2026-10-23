@@ -395,8 +395,8 @@ ctE('e_ammo', '弹药库', 'e', 'support', 'depot_e', 25, CT_IC.ammo, [4, 0, 0, 
 ctE('e_wave', '增援波次', 'e', 'support', 'wave_e', 30, CT_IC.ewave, [0, 0, 4, 0, 0, 0, 9], '开战约 4 分钟后，三个小组从北面开到受威胁最大的据点。可叠加，每次晚 1 分钟。',
   { kind: 'ewave', at: 'none', teams: 3, t: 240 }, { counters: ['inf_p'] });
 
-// v7 守方导弹、机场与守方航空、单兵防空尚未接入推演：先不出现在沙盒与图鉴（对应模块完成后删掉这一行过滤）
-const CT_WIP = new Set(['e_tel']);   // 守方战术导弹发射车尚未实装
+// 尚未接入推演的条目：先不出现在沙盒与图鉴（codex.js 也据此过滤关联条目）；v7 的条目已全部接入
+const CT_WIP = new Set();
 for (let i = CATALOG.length - 1; i >= 0; i--) if (CT_WIP.has(CATALOG[i].id)) CATALOG.splice(i, 1);
 
 const CATALOG_MAP = new Map(CATALOG.map(c => [c.id, c]));

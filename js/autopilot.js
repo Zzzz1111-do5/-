@@ -279,8 +279,11 @@ function apLaunch(units, p, P) {
   if (!units.length) return;
   if (!field(p.x, p.y, 'p')) { P.hard[p.key] = S.t; for (const g of units) apIdle(P.u[g.id]); return; }
   const cx = units.reduce((a, g) => a + g.x, 0) / units.length, cy = units.reduce((a, g) => a + g.y, 0) / units.length;
-  for (const g of units) g.form = S.t - (P.u[g.id].artyT ?? -99) < 30 ? 'loose' : 'line';
-  if (!orderUnits(units, p.x, p.y, apAng(cx, cy, p.x, p.y), null, 'amove')) return;
+  // v7 队形进攻（tf.js）：成队形交替跃进到冲击出发线；已在冲击距离内或未启用时直接攻击前进
+  if (!(typeof tfFormGo === 'function' && tfFormGo(units, p, cx, cy, P))) {
+    for (const g of units) g.form = S.t - (P.u[g.id].artyT ?? -99) < 30 ? 'loose' : 'line';
+    if (!orderUnits(units, p.x, p.y, apAng(cx, cy, p.x, p.y), null, 'amove')) return;
+  }
   const O = P.o[p.key] || (P.o[p.key] = { need: units.length }), first = !O.go;
   if (!O.go) Object.assign(O, { go: true, t: S.t, pg: p.prog, pgT: S.t });
   for (const g of units) Object.assign(P.u[g.id], { ph: 'go', obj: p.key, goT: S.t, men0: g.men || 0, dx: g.tx, dy: g.ty, ordT: S.t });
@@ -437,10 +440,12 @@ function apInfantry(u, pl, P) {
       // 停顿（指挥官催促前不自行再压上）；指挥官缺席时 45 秒后自行恢复
       if (pl.halt != null) { if (S.t - pl.halt < 45) return; pl.halt = null; }
       const d = dist(u.x, u.y, p.x, p.y), stuck = ts.some(q => dist(q.x, q.y, p.x, p.y) < 70) && S.t - (O.pgT ?? S.t) > 25;
-      if (u.morale >= 55 && d < 150 && S.t - (pl.chT ?? -99) > 15 && (apShaken(p) || stuck)) {
+      const fm = typeof tfFormOf === 'function' ? tfFormOf(u.id) : null;   // 队形推进中（tf.js 管跃进）：冲锋距离收到 110
+      if (u.morale >= 55 && d < (fm ? 110 : 150) && S.t - (pl.chT ?? -99) > 15 && (apShaken(p) || stuck)) {
         if (orderUnits([u], p.x, p.y, apAng(u.x, u.y, p.x, p.y), null, 'charge')) { pl.chT = S.t; pl.ordT = S.t; if (stuck) O.pgT = S.t; }
         return;
       }
+      if (fm) return;
       if (holding && d > 35 && S.t - (pl.ordT ?? -99) > 6) apLaunch([u], p, P);   // 指令走完仍未占领：再次压上
       return;
     }
