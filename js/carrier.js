@@ -68,6 +68,22 @@ function cvL(x, y, c) {
 const cvHome = o => (o && o.home) || 0;
 const cvOf = h => h ? (S.cvx && S.cvx[h - 1]) || null : S.cv;
 const cvAll = () => [S.cv, ...(S.cvx || [])].filter(c => c && isFinite(c.x) && isFinite(c.y));
+// 甲板停机位分配（只供绘制与甲板中弹用）：前 12 架各有固定机位；联队超过 12 架时其余待命 / 整备的飞机在机库，
+// 甲板有空位就按顺序补上，补上后位置不再变。返回 Map(飞机 id → 机位序号)，wing = 这艘航母的全部舰载机
+const CV_PARK = new WeakMap();
+function cvPark(c, wing) {
+  const n = CVG.slots.length, on = w => w.state === 'deck' || w.state === 'rearm', m = CV_PARK.get(c) || new Map();
+  for (const id of [...m.keys()]) if (!wing.some(w => w.id === id && on(w))) m.delete(id);
+  const used = new Set(m.values());
+  wing.forEach((w, i) => { if (i < n && on(w) && !m.has(w.id) && !used.has(i)) { m.set(w.id, i); used.add(i); } });
+  for (let j = 0, i = 0; j < n && i < wing.length; j++) {
+    if (used.has(j)) continue;
+    while (i < wing.length && (!on(wing[i]) || m.has(wing[i].id))) i++;
+    if (i < wing.length) { m.set(wing[i].id, j); used.add(j); i++; }
+  }
+  CV_PARK.set(c, m);
+  return m;
+}
 // 临时把 S.cv 换成某艘航母执行 fn：复用以 S.cv 为准的起降、受损与绘制代码
 function withCV(c, fn) { const keep = S.cv; S.cv = c; try { return fn(); } finally { S.cv = keep; } }
 // 从 (x,y) 沿角度 a 延伸 len，但不越出地图（保持方向不变）
@@ -481,11 +497,11 @@ function cvImpact1(x, y, pw) {
     for (const p of S.planes) if (!p.dead && cvHome(p) === h && (p.phase === 'cat' || p.phase === 'roll' || p.phase === 'trap') && dist(p.x, p.y, x, y) < 16) airLost(p, `${(AIR_SPEC[p.kind] || AIR_SPEC.strike).name}在甲板上被炸毁`);
     if (Math.random() < .3) {
       let best = null, bd = 40;
-      S.air.wing.filter(w => cvHome(w) === h).forEach((w, i) => {
-        if (w.state !== 'deck' && w.state !== 'rearm') return;
-        const s = CVG.slots[i % CVG.slots.length], dd = dist(s[0], s[1], u, v);
-        if (dd < bd) { bd = dd; best = w; }
-      });
+      const wing = S.air.wing.filter(w => cvHome(w) === h);
+      for (const [id, j] of cvPark(c, wing)) {   // 只有停在甲板上的会被炸到，机库里的不受影响
+        const s = CVG.slots[j], dd = dist(s[0], s[1], u, v);
+        if (dd < bd) { bd = dd; best = wing.find(w => w.id === id); }
+      }
       if (best) { best.state = 'lost'; log(`${AIR_SPEC[best.type].name}在甲板上被炸毁`, 'bad', null, 0, c); }
     }
   }
@@ -705,25 +721,27 @@ function drawCarrier1(time) {
     ctx.beginPath(); ctx.moveTo(14 - Math.cos(ra) * 3, 14 - Math.sin(ra) * 3); ctx.lineTo(14 + Math.cos(ra) * 3, 14 + Math.sin(ra) * 3); ctx.stroke();
     ctx.fillStyle = rgba(dead ? COL.enemy : COL.g, .5 + .5 * Math.sin(time * 4)); ctx.beginPath(); ctx.arc(1, 14, lw(1.6), 0, 7); ctx.fill();
   }
-  // 甲板停机：待命（青）、整备中（琥珀 + 进度）、空位
-  wing.forEach((w, i) => {
-    const [u, v, r] = CVG.slots[i % CVG.slots.length];
-    if (w.state === 'deck' || w.state === 'rearm') {
+  // 甲板停机：待命（青）、整备中（琥珀 + 进度）、空位（机位原主出击中 ＋、已损失 ×）；机库里的飞机不画，只在舰下状态点里
+  const park = cvPark(c, wing), slotOf = new Map([...park].map(([id, j]) => [j, id]));
+  for (let j = 0; j < Math.min(CVG.slots.length, wing.length); j++) {
+    const [u, v, r] = CVG.slots[j], id = slotOf.get(j), w = id != null ? wing.find(o => o.id === id) : null;
+    if (w) {
       const rearm = w.state === 'rearm', cl = rearm ? COL.amber : COL.intel;
-      if (det < 80) { ctx.fillStyle = rgba(cl, rearm ? .55 : .9); ctx.fillRect(u - 2.6, v - 2.6, 5.2, 5.2); return; }
+      if (det < 80) { ctx.fillStyle = rgba(cl, rearm ? .55 : .9); ctx.fillRect(u - 2.6, v - 2.6, 5.2, 5.2); continue; }
       drawAircraft(ctx, u, v, r, airSilKey(w.type, w.v), w.type === 'bomber' ? 10.5 : 8.5, cl, rearm ? .7 : 1, 0, lw(1.1), (w.type === 'strike' || w.type === 'bomber') && !rearm);
       if (rearm && det >= 160) {
         ctx.strokeStyle = rgba(COL.amber, .8); ctx.lineWidth = lw(1.4);
         ctx.beginPath(); ctx.arc(u, v, 5.6, -1.57, -1.57 + (1 - clamp(w.rearmT / AIR_REARM, 0, 1)) * 6.283); ctx.stroke();
       }
     } else if (det >= 160) {
-      ctx.strokeStyle = rgba(w.state === 'lost' ? COL.enemy : STRUCT, .22); ctx.lineWidth = lw(1);
+      const lost = wing[j].state === 'lost';
+      ctx.strokeStyle = rgba(lost ? COL.enemy : STRUCT, .22); ctx.lineWidth = lw(1);
       ctx.beginPath();
-      if (w.state === 'lost') { ctx.moveTo(u - 2.5, v - 2.5); ctx.lineTo(u + 2.5, v + 2.5); ctx.moveTo(u + 2.5, v - 2.5); ctx.lineTo(u - 2.5, v + 2.5); }
+      if (lost) { ctx.moveTo(u - 2.5, v - 2.5); ctx.lineTo(u + 2.5, v + 2.5); ctx.moveTo(u + 2.5, v - 2.5); ctx.lineTo(u - 2.5, v + 2.5); }
       else { ctx.moveTo(u - 3, v); ctx.lineTo(u + 3, v); ctx.moveTo(u, v - 2); ctx.lineTo(u, v + 2); }
       ctx.stroke();
     }
-  });
+  }
   if (dead) {   // 甲板火灾
     CVG.fires.forEach(([u, v], i) => {
       const r = 7 + 2.5 * Math.sin(time * 9 + i * 1.7), g = ctx.createRadialGradient(u, v, 0, u, v, r);

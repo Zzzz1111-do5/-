@@ -2,7 +2,7 @@
 // 沙盒模式：同一张海岸地图上按预算自由部署岸防与进攻部队（CATALOG 条目），可让「高级指挥官」AI 替任一方部署并在聊天框说明理由；
 // 开战时把部署条目转换为引擎对象，观战 AI 对 AI 或亲自指挥进攻方。部署数据 S.sbx = {items, budget, notes, ...}（纯 JSON）。
 // 条目字段：{id, cat(目录 id), side, x, y, x2, y2, cargo:[目录 id], plan:{x,y}, wave, n(兵组/数量覆盖), r(雷区半径), pts(折线), t(增援时刻)}
-const SBX_BUDGET = 1500;
+const SBX_BUDGET = 1500, SBX_BUDGET_MAX = 10000;   // 每方初始预算 · 预算上限
 const SBX = { el: null, side: 'e', cat: 'all', pick: null, hover: null, line: null, lineDown: null, drag: null, mouse: null, tip: null, msg: '', msgT: 0, pv: false, endKey: null };
 const sbxEntry = it => it && typeof catalogById === 'function' ? catalogById(it.cat) : null;
 const sbxOn = () => !!(S && S.phase === 'sandbox' && S.sbx);
@@ -268,7 +268,7 @@ function sbxPresetFleet() {
 // 预设可能超出当前预算：按 250 取整抬高预算
 function sbxFitBudget(side) {
   const sp = sbxSpent(side);
-  if (sp > S.sbx.budget[side]) S.sbx.budget[side] = Math.min(6000, Math.ceil(sp / 250) * 250);
+  if (sp > S.sbx.budget[side]) S.sbx.budget[side] = Math.min(SBX_BUDGET_MAX, Math.ceil(sp / 250) * 250);
 }
 function sbxSnap(x, y, cls) {
   x = clamp(x, 10, W - 10); y = clamp(y, 10, H - 10);
@@ -1234,7 +1234,7 @@ function sbxUI() {
   el.id = 'sbxPanel'; el.className = 'box ov'; el.setAttribute('aria-label', '沙盒部署'); el.hidden = true;
   el.innerHTML = `<h2>沙盒部署<small class="sbx-seed"></small></h2>
     <div class="sbx-sides" role="tablist"></div>
-    <div class="sbx-bud"><span>预算</span><div class="sbx-bar"><i></i></div><span><button class="tb" type="button" data-act="bud-" title="预算 −250">−</button> <button class="tb" type="button" data-act="bud+" title="预算 ＋250">＋</button></span></div>
+    <div class="sbx-bud"><span>预算</span><div class="sbx-bar"><i></i></div><span><button class="tb" type="button" data-act="bud-" title="预算 −250（3000 以上 −500）">−</button> <button class="tb" type="button" data-act="bud+" title="预算 ＋250（3000 以上 ＋500，最高 10000）">＋</button></span></div>
     <div class="sbx-cats"></div><div class="sbx-pal" role="listbox" aria-label="兵力目录"></div>
     <div class="sbx-info"></div><div class="sbx-msg" role="status"></div><div class="sbx-list"></div>
     <div class="sbx-row"><button type="button" data-act="preset"></button><button type="button" class="ai" data-act="ai">AI 帮我部署</button><button type="button" data-act="clear">清空</button></div>
@@ -1255,8 +1255,9 @@ function sbxUI() {
     else if (b.dataset.id) sbxPick(b.dataset.id);
     else if (b.dataset.rm) { const it = S.sbx.items.find(o => o.id === +b.dataset.rm); if (it) { sbxRemove(it); sbxMsg('已移除' + sbxEntry(it).name); } }
     else if (b.dataset.lv) { S.level = b.dataset.lv; if (typeof U === 'object') U.level = S.level; }
-    else if (a === 'bud-' || a === 'bud+') {   // 预算不能低于已部署的点数
-      const v = clamp(S.sbx.budget[SBX.side] + (a === 'bud+' ? 250 : -250), 250, 6000), sp = sbxSpent(SBX.side);
+    else if (a === 'bud-' || a === 'bud+') {   // 预算不能低于已部署的点数；3000 以上每次 500
+      const cur = S.sbx.budget[SBX.side], up = a === 'bud+', st = (up ? cur >= 3000 : cur > 3000) ? 500 : 250;
+      const v = clamp(cur + (up ? st : -st), 250, SBX_BUDGET_MAX), sp = sbxSpent(SBX.side);
       if (v < sp) sbxMsg(`已部署 ${sp} 点，预算不能低于此`, true); else S.sbx.budget[SBX.side] = v;
     }
     else if (a === 'preset') { const b0 = S.sbx.budget[SBX.side]; if (SBX.side === 'e') sbxPresetDef(); else sbxPresetFleet(); sbxMsg(`已载入标准部署（${sbxSpent(SBX.side)} 点）` + (S.sbx.budget[SBX.side] > b0 ? `，预算已调至 ${S.sbx.budget[SBX.side]}` : '')); }
@@ -1651,7 +1652,7 @@ function sbxGlyph(ctx, c, x, y, col, a, it, ghost) {
       const f = it ? sbxAirFit(it) : (typeof eaRunwayFit === 'function' && eaRunwayFit(x, y, 380, sbxAirAvoid(null))) || { h: 0, s: -1 };
       ctx.save(); ctx.translate(x, y); ctx.rotate(f.h); ctx.scale(1, f.s); ctx.lineWidth = lw;
       ctx.fillRect(-150, -9, 300, 18); ctx.strokeRect(-150, -9, 300, 18);
-      ctx.strokeRect(-138, 30.5, 276, 7); ctx.strokeRect(-78, 44, 156, 34); ctx.strokeRect(85, 47, 37, 29);
+      ctx.strokeRect(-138, 30.5, 276, 7); ctx.strokeRect(-128, 44, 256, 74); ctx.strokeRect(132, 80, 30, 32);
       for (const u of [-135, -45, 45, 135]) { ctx.beginPath(); ctx.moveTo(u, 9); ctx.lineTo(u, 30.5); ctx.stroke(); }
       ctx.setLineDash([px(5), px(4)]); ctx.beginPath(); ctx.moveTo(-126, 0); ctx.lineTo(126, 0); ctx.stroke(); ctx.setLineDash([]);
       ctx.restore();

@@ -15,19 +15,20 @@ const EA_GUNV = ['tank', 'hv_tank', 'td', 'flame_tank', 'lt_tank', 'amtank', 'mi
 const eaAng = a => Math.atan2(Math.sin(a), Math.cos(a));
 
 // —— 野战机场（固定建模，世界尺寸）：300×18 跑道（入口斑马线、接地区标志、中线）、平行滑行道与 4 条联络道、
-//    停机坪 6 个带防爆墙的机位、机库、塔台、油库、直升机坪。跑道方向在选址时按地形定（e.rh），停机坪在离海更远的一侧（e.rs）
-// 局部坐标：u 沿跑道方向，v 垂直于跑道、指向停机坪一侧；跑道 |u| ≤ 150、|v| ≤ 9，滑行道 v = 34，停机坪 v 44–78、|u| ≤ 78
-const EA_RW = { L: 300, hw: 9, cap: 6 };   // cap：每座机场的机位数
-const EA_STAND = [-62.5, -37.5, -12.5, 12.5, 37.5, 62.5].map(u => [u, 63]);   // 机位（机头朝滑行道）
-const EA_PAD = [140, 62];   // 直升机坪
-const EA_EYE = [[-140, 0], [-70, 0], [0, 0], [70, 0], [140, 0], [-50, 60], [50, 60], [110, 60]];   // 判断机场是否被看见的采样点
+//    停机坪两排共 20 个带防爆墙的机位、机库、塔台、油库、直升机坪。跑道方向在选址时按地形定（e.rh），停机坪在离海更远的一侧（e.rs）
+// 局部坐标：u 沿跑道方向，v 垂直于跑道、指向停机坪一侧；跑道 |u| ≤ 150、|v| ≤ 9，滑行道 v = 34，停机坪 v 44–118、|u| ≤ 128
+// （两排机位之间是机坪滑行道 v ≈ 82，西端联络道接主滑行道）；塔台、油库在西侧，直升机坪、机库在东侧
+const EA_RW = { L: 300, hw: 9, cap: 20 };   // cap：每座机场的机位数
+const EA_STAND = [63, 103].flatMap(v => Array.from({ length: 10 }, (_, k) => [-112.5 + 25 * k, v]));   // 机位：前排开口朝主滑行道、后排开口朝机坪滑行道（机头都朝 -v）
+const EA_PAD = [143, 62];   // 直升机坪
+const EA_EYE = [[-140, 0], [-70, 0], [0, 0], [70, 0], [140, 0], [-100, 63], [0, 63], [100, 63], [-60, 103], [60, 103], [147, 96]];   // 判断机场是否被看见的采样点
 function eaW(b, u, v) { const h = b.rh || 0, s = b.rs || 1, c = Math.cos(h), n = Math.sin(h); return [b.x + c * u - n * v * s, b.y + n * u + c * v * s]; }
 function eaL(b, x, y) { const h = b.rh || 0, s = b.rs || 1, c = Math.cos(h), n = Math.sin(h), dx = x - b.x, dy = y - b.y; return [dx * c + dy * n, (-dx * n + dy * c) * s]; }
 const eaBaseSeen = b => EA_EYE.some(([u, v]) => { const [x, y] = eaW(b, u, v); return inVision(x, y); });
 // 设施（跑道、滑行道、停机坪与机库、直升机坪）到点的距离：局部坐标里到几块矩形的最近距离
 function eaFacDist(b, x, y) {
   const [u, v] = eaL(b, x, y), box = (u0, u1, v0, v1) => Math.hypot(Math.max(0, u0 - u, u - u1), Math.max(0, v0 - v, v - v1));
-  return Math.min(box(-150, 150, -11, 11), box(-135, 135, 9, 38), box(-125, 125, 38, 80), box(130, 150, 52, 72));
+  return Math.min(box(-150, 150, -11, 11), box(-139, 139, 9, 38), box(-139, 128, 37, 118), box(132, 162, 52, 112), box(-166, -143, 44, 114));
 }
 // 跑道选址：在 (x, y) 处试 12 个方向 × 停机坪两侧：跑道、滑行道、停机坪都落在可用陆地上（不跨水、河、悬崖、山地，不出图），
 // 跑道离海处处不少于 minD，不压 avoid 里的据点 / 工事 {x, y, r}；返回地形最平整、离海最远、停机坪背海的方案 {h, s, sc}，放不下返回 null
@@ -49,10 +50,10 @@ function eaRunwayFit(x, y, minD = 380, avoid) {
         return false;
       };
       for (let u = -150; u <= 150 && !bad; u += 15) for (const v of [-8, 0, 8, 34]) if (at(u, v, 1)) break;
-      for (let u = -75; u <= 145 && !bad; u += 22) for (const v of [50, 70]) if (at(u, v, .5)) break;
+      for (let u = -160; u <= 160 && !bad; u += 20) for (const v of [50, 80, 110]) if (at(u, v, .5)) break;
       if (bad || depth < minD) continue;
-      const [x0, y0] = P(-150, 0), [x1, y1] = P(150, 0), [ax, ay] = P(30, 60);
-      if (avoid && avoid.some(o => segDist(o.x, o.y, x0, y0, x1, y1) < o.r + 12 || dist(o.x, o.y, ax, ay) < o.r + 80)) continue;
+      const [x0, y0] = P(-150, 0), [x1, y1] = P(150, 0), [a0x, a0y] = P(-155, 80), [a1x, a1y] = P(155, 80), [ax, ay] = P(0, 80);
+      if (avoid && avoid.some(o => segDist(o.x, o.y, x0, y0, x1, y1) < o.r + 12 || segDist(o.x, o.y, a0x, a0y, a1x, a1y) < o.r + 42)) continue;
       const sc = -soft * 1.2 + (coastAt(ax) - ay > coastAt(x) - y ? 2 : 0) + Math.min(depth, 700) / 200;
       if (!best || sc > best.sc) best = { h, s, sc };
     }
@@ -143,7 +144,7 @@ function eaStep(dt) {
   }
   const E = S.eair;
   if (E) {
-    // 机场被毁：机位（每座 6 个）不够的地面飞机随之损失
+    // 机场被毁：机位（每座 EA_RW.cap 个）不够的地面飞机随之损失
     const cap = eaBases().length * EA_RW.cap, gnd = E.wing.filter(w => w.state === 'ready' || w.state === 'rearm');
     let over = E.wing.filter(w => w.state !== 'lost').length - cap, lost = 0;
     for (let i = gnd.length - 1; i >= 0 && over > 0; i--, over--) { gnd[i].state = 'lost'; lost++; }
@@ -546,7 +547,7 @@ function eaImpact(x, y, R, pw, side) {
   if (side !== 'p' || !eaOn()) return;
   for (const b of eaBases()) {
     const [u, v] = eaL(b, x, y);
-    if (Math.abs(u) > 160 + R && (v < -20 - R || v > 90 + R)) continue;
+    if (Math.abs(u) > 170 + R || v < -20 - R || v > 125 + R) continue;
     if (Math.abs(u) < 150 + R * .3 && Math.abs(v) < EA_RW.hw + R * .4) {
       b.cratT = Math.max(b.cratT || 0, S.t + 60);
       (b.rc || (b.rc = [])).push({ u: Math.round(clamp(u, -146, 146)), v: Math.round(clamp(v, -7, 7)), r: Math.round(clamp(R * .22, 3, 9)) });
@@ -640,20 +641,22 @@ function eaDrawBase(ctx, b, vis, time) {
   ctx.save();
   ctx.translate(b.x, b.y); ctx.rotate(b.rh || 0); ctx.scale(1, b.rs || 1);
   ctx.lineJoin = 'miter'; ctx.setLineDash(dash);
-  ctx.fillStyle = `rgba(0,0,0,${.26 * a})`; ctx.fillRect(-162, -18, 324, 118);   // 推平的场区
+  ctx.fillStyle = `rgba(0,0,0,${.26 * a})`; ctx.fillRect(-170, -18, 340, 142);   // 推平的场区
   // 跑道：道肩 + 道面
   ctx.fillStyle = slab; ctx.fillRect(-152, -11.5, 304, 23);
   ctx.fillStyle = pave; ctx.fillRect(-150, -9, 300, 18);
   ctx.strokeStyle = edge; ctx.lineWidth = px(1.4); ctx.strokeRect(-150, -9, 300, 18);
-  // 滑行道、联络道、停机坪、直升机坪底板
+  // 滑行道、联络道（含西端通往机坪滑行道的一条）、两排机位的停机坪、直升机坪底板
   ctx.fillStyle = slab;
   ctx.fillRect(-138.5, 30.5, 277, 7);
   for (const u of [-135, -45, 45, 135]) ctx.fillRect(u - 3.5, 9, 7, 22);
   for (const u of [-40, 40]) ctx.fillRect(u - 4, 37, 8, 8);
-  ctx.fillRect(-78, 44, 156, 34); ctx.fillRect(130, 52, 20, 20);
+  ctx.fillRect(-138.5, 37, 10.5, 54);
+  ctx.fillRect(-128, 44, 256, 74); ctx.fillRect(133, 52, 20, 20);
   ctx.strokeStyle = con; ctx.lineWidth = px(1);
-  ctx.strokeRect(-78, 44, 156, 34); ctx.strokeRect(130, 52, 20, 20);
-  ctx.beginPath(); ctx.moveTo(-138.5, 30.5); ctx.lineTo(138.5, 30.5); ctx.moveTo(-138.5, 37.5); ctx.lineTo(138.5, 37.5); ctx.stroke();
+  ctx.strokeRect(-128, 44, 256, 74); ctx.strokeRect(133, 52, 20, 20);
+  ctx.beginPath(); ctx.moveTo(-138.5, 30.5); ctx.lineTo(138.5, 30.5); ctx.moveTo(-128, 37.5); ctx.lineTo(138.5, 37.5);
+  ctx.moveTo(-138.5, 30.5); ctx.lineTo(-138.5, 91); ctx.lineTo(-128, 91); ctx.stroke();
   if (det >= 110) {
     ctx.setLineDash([]); ctx.fillStyle = paint; ctx.strokeStyle = paint; ctx.lineWidth = Math.max(.7, px(1));
     if (!dead) { ctx.setLineDash([7, 6]); ctx.beginPath(); ctx.moveTo(-126, 0); ctx.lineTo(126, 0); ctx.stroke(); ctx.setLineDash([]); }   // 跑道中线
@@ -661,7 +664,8 @@ function eaDrawBase(ctx, b, vis, time) {
       for (const v of [-7.5, -5, -2.5, 2.5, 5, 7.5]) ctx.fillRect(e > 0 ? 138 : -147, v - .6, 9, 1.2);   // 入口斑马线
       for (const v of [-4.5, 4.5]) ctx.fillRect(e * 116 - 6, v - 1, 12, 2);   // 接地区标志
     }
-    ctx.strokeStyle = rgba(COL.amber, .35 * a); ctx.setLineDash([4, 4]); ctx.beginPath(); ctx.moveTo(-132, 34); ctx.lineTo(132, 34); ctx.stroke();   // 滑行道中线
+    ctx.strokeStyle = rgba(COL.amber, .35 * a); ctx.setLineDash([4, 4]); ctx.beginPath(); ctx.moveTo(-132, 34); ctx.lineTo(132, 34);   // 滑行道中线
+    ctx.moveTo(-133, 40); ctx.lineTo(-133, 82.5); ctx.lineTo(124, 82.5); ctx.stroke();   // 联络道 → 机坪滑行道中线
     ctx.setLineDash(dash);
     ctx.strokeStyle = con; ctx.lineWidth = Math.max(1, px(2.2));   // 机位：U 形防爆墙，开口朝滑行道
     for (const [u, v] of EA_STAND) { ctx.beginPath(); ctx.moveTo(u - 11, v - 13); ctx.lineTo(u - 11, v + 12); ctx.lineTo(u + 11, v + 12); ctx.lineTo(u + 11, v - 13); ctx.stroke(); }
@@ -670,16 +674,16 @@ function eaDrawBase(ctx, b, vis, time) {
   }
   // 机库（拱顶，门朝滑行道）、塔台（顶上旋转的雷达）、油库（三个油罐与防火堤）
   ctx.fillStyle = dark; ctx.strokeStyle = edge; ctx.lineWidth = px(1.3);
-  ctx.fillRect(85, 47, 37, 29); ctx.strokeRect(85, 47, 37, 29);
-  ctx.fillRect(-100, 46, 10, 10); ctx.strokeRect(-100, 46, 10, 10);
+  ctx.fillRect(132, 80, 30, 32); ctx.strokeRect(132, 80, 30, 32);
+  ctx.fillRect(-156, 44, 10, 10); ctx.strokeRect(-156, 44, 10, 10);
   ctx.strokeStyle = con; ctx.lineWidth = px(1);
-  ctx.strokeRect(-126, 53, 23, 22);
-  for (const [u, v] of [[-119.5, 59], [-109.5, 59], [-114.5, 69]]) { ctx.beginPath(); ctx.arc(u, v, 4.2, 0, 7); ctx.fillStyle = dark; ctx.fill(); ctx.strokeStyle = edge; ctx.stroke(); }
+  ctx.strokeRect(-166, 92, 23, 22);
+  for (const [u, v] of [[-159.5, 98], [-149.5, 98], [-154.5, 108]]) { ctx.beginPath(); ctx.arc(u, v, 4.2, 0, 7); ctx.fillStyle = dark; ctx.fill(); ctx.strokeStyle = edge; ctx.stroke(); }
   if (det >= 110) {
-    ctx.strokeStyle = con; ctx.beginPath(); for (let u = 90; u < 122; u += 5) { ctx.moveTo(u, 47); ctx.lineTo(u, 76); } ctx.stroke();   // 拱顶肋
-    ctx.strokeStyle = paint; ctx.lineWidth = Math.max(1, px(2)); ctx.beginPath(); ctx.moveTo(89, 47); ctx.lineTo(118, 47); ctx.stroke();   // 机库大门
+    ctx.strokeStyle = con; ctx.beginPath(); for (let u = 137; u < 160; u += 5) { ctx.moveTo(u, 80); ctx.lineTo(u, 112); } ctx.stroke();   // 拱顶肋
+    ctx.strokeStyle = paint; ctx.lineWidth = Math.max(1, px(2)); ctx.beginPath(); ctx.moveTo(136, 80); ctx.lineTo(158, 80); ctx.stroke();   // 机库大门
     const ra = dead ? 0 : time * 2.4;
-    ctx.strokeStyle = edge; ctx.lineWidth = px(1); ctx.beginPath(); ctx.arc(-95, 51, 2.6, 0, 7); ctx.moveTo(-95, 51); ctx.lineTo(-95 + Math.cos(ra) * 4.5, 51 + Math.sin(ra) * 4.5); ctx.stroke();
+    ctx.strokeStyle = edge; ctx.lineWidth = px(1); ctx.beginPath(); ctx.arc(-151, 49, 2.6, 0, 7); ctx.moveTo(-151, 49); ctx.lineTo(-151 + Math.cos(ra) * 4.5, 49 + Math.sin(ra) * 4.5); ctx.stroke();
   }
   // 停在机位上的飞机：待命亮、整备中暗 + 进度弧
   if (!dead && typeof drawAircraft === 'function') for (const P of eaParked(b)) {
@@ -701,12 +705,12 @@ function eaDrawBase(ctx, b, vis, time) {
     ctx.fillStyle = rgba(COL.amber, .75 * a); ctx.fillRect(-150, -17, 300 * (1 - clamp((b.cratT - S.t) / 60, 0, 1)), Math.max(1.5, px(2.5)));
   }
   if (vis && !dead && f < 1) {   // 耐久条（停机坪外侧）
-    ctx.fillStyle = rgba(COL.enemy, .2); ctx.fillRect(-40, 86, 80, Math.max(1.5, px(2.5)));
-    ctx.fillStyle = rgba(COL.enemy, .85); ctx.fillRect(-40, 86, 80 * f, Math.max(1.5, px(2.5)));
+    ctx.fillStyle = rgba(COL.enemy, .2); ctx.fillRect(-40, 120, 80, Math.max(1.5, px(2.5)));
+    ctx.fillStyle = rgba(COL.enemy, .85); ctx.fillRect(-40, 120, 80 * f, Math.max(1.5, px(2.5)));
   }
   ctx.restore();
   // 受损过半 / 被毁：机库、油库、跑道中段起火，黑烟向东北飘（世界坐标）
-  if (vis && (dead || f < .5)) for (const [u, v, k] of [[103, 61, .5], [-114, 64, .25], [0, 0, 0]]) {
+  if (vis && (dead || f < .5)) for (const [u, v, k] of [[147, 96, .5], [-154.5, 103, .25], [0, 0, 0]]) {
     if (!dead && f > k) continue;
     const [x, y] = eaW(b, u, v), fl = 6 + 2.5 * Math.sin(time * 9 + u), g = ctx.createRadialGradient(x, y, 0, x, y, fl);
     g.addColorStop(0, 'rgba(255,243,214,.85)'); g.addColorStop(.4, rgba(COL.amber, .7)); g.addColorStop(1, rgba(COL.enemy, 0));
