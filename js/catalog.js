@@ -347,8 +347,8 @@ ctE('e_tel', '战术导弹发射车', 'e', 'arty', 'missile', 90, CT_IC.tel, [3,
 ctE('e_ascm', '岸舰导弹连', 'e', 'arty', 'missile', 110, CT_IC.ascm, [4, 1, 10, 10, 0, 7, 0], '岸边的反舰导弹连（4 枚，两枚一组齐射）：掠海飞行打击射程 1600 内的坦克登陆舰、满载登陆舰与驱逐舰；驱逐舰近防炮可拦截，发射后暴露 90 秒。',
   { kind: 'enemy', at: 'coast', ek: 'ascm', n: 4 }, { counters: ['p_lst', 'p_lct', 'dd'], weakTo: ['p_tbm', 'p_air_dive'] });
 
-// ———— 防守方 · 航空（需要野战机场；每座机场最多 4 架）————
-ctE('e_airfield', '野战机场', 'e', 'air', 'airfield', 50, CT_IC.airfield, [8, 1, 0, 0, 0, 0, 0], '纵深 500 以外的简易跑道：守军攻击机与武装直升机在此起降、整备；跑道被炸后暂停出击，被毁则地面飞机全部损失。',
+// ———— 防守方 · 航空（需要野战机场；每座机场 6 个机位）————
+ctE('e_airfield', '野战机场', 'e', 'air', 'airfield', 50, CT_IC.airfield, [8, 1, 0, 0, 0, 0, 0], '纵深 500 以外修建的野战机场：300 米跑道、平行滑行道、6 个带防爆墙的机位、机库、塔台与直升机坪（放下时按地形自动定跑道方向，需要一大块平整陆地）。固定翼飞机沿跑道滑跑起降；跑道中弹后 60 秒无法起降，机位上的飞机可能被炸毁，机场被毁则地面飞机全部损失。',
   { kind: 'enemy', at: 'land', ek: 'airfield', minDepth: 500 }, { weakTo: ['p_tbm', 'p_air_heavy', 'p_air_strike'] });
 ctE('e_air_ga', '对地攻击机', 'e', 'air', 'ewing', 38, CT_IC.ega, [2, 0, 7, 0, 9, 4, 0], '一次通场：6 枚火箭齐射加机炮扫射，专打卸载中的登陆舰与密集步兵；携 2 枚干扰弹，怕便携防空导弹与自行高炮。需要野战机场。',
   { kind: 'ewing', at: 'air', type: 'ga' }, { counters: ['ship', 'inf_p'], weakTo: ['p_manpads', 'p_aa_veh', 'p_dd'] });

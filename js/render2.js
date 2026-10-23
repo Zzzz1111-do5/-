@@ -139,6 +139,7 @@ function drawEnemies(time) {
   const ctx = R.ctx;
   ctx.lineWidth = px(1.4);
   for (const e of S.enemies) {
+    if (e.kind === 'airfield' && typeof eaDrawBase === 'function' && eaOn()) continue;   // 野战机场按世界尺寸在 drawUnder 里画（eair.js）
     const vis = inVision(e.x, e.y);
     if (!vis && e.kx == null) continue;
     const x = vis ? e.x : e.kx, y = vis ? e.y : e.ky;
