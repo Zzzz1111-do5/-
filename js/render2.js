@@ -143,6 +143,7 @@ function drawEnemies(time) {
     if (!vis && e.kx == null) continue;
     const x = vis ? e.x : e.kx, y = vis ? e.y : e.ky;
     if (!inView(x, y, 30)) continue;
+    if (e.dead && typeof gunModel === 'function' && gunModel(ctx, e, x, y, vis, time)) continue;   // 近看：炮位残骸（guns.js）
     if (e.dead) {
       ctx.strokeStyle = rgba(COL.enemy, .28); ctx.lineWidth = px(1.2);
       ctx.beginPath(); ctx.moveTo(x - 5, y - 5); ctx.lineTo(x + 5, y + 5); ctx.moveTo(x + 5, y - 5); ctx.lineTo(x - 5, y + 5); ctx.stroke();
@@ -151,8 +152,8 @@ function drawEnemies(time) {
     }
     ctx.setLineDash(vis ? [] : [px(2), px(2)]);
     ctx.strokeStyle = rgba(COL.enemy, vis ? .95 : .45); ctx.fillStyle = vis ? 'rgba(30,4,10,.8)' : rgba(COL.enemy, .05);
-    enemyMark(ctx, e.kind, x, y);
-    ctx.setLineDash([]);
+    if (!(typeof gunModel === 'function' && gunModel(ctx, e, x, y, vis, time))) enemyMark(ctx, e.kind, x, y);   // 近看：火炮建模（guns.js）
+    ctx.setLineDash([]); ctx.lineWidth = px(1.4);
     if (vis && e.hp < e.maxhp) {   // 受损才显示血条
       const w = 16, yb = y + 12;
       ctx.fillStyle = rgba(COL.enemy, .2); ctx.fillRect(x - w / 2, yb, w, px(2));

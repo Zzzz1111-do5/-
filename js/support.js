@@ -17,7 +17,8 @@ function ddScoot(dd) {
     if (typeAt(nx, ny) === T.DEEP && dist(nx, ny, dd.x, dd.y) > 70) { orderDD(nx, ny); return; }
   }
 }
-function ddFire(tx, ty, smoke) {
+// ai：AI 指挥的射击（自动掩护、指挥官火力任务）——落点必须避开自己人；玩家手动射击不受限
+function ddFire(tx, ty, smoke, ai) {
   const dd = S.dd;
   if (dd.state !== 'ready' || dd.cool > 0) {
     log(dd.state === 'sunk' ? '驱逐舰已沉没' : dd.state === 'repair' ? '驱逐舰损管中，无法射击' : `舰炮装填中（${Math.ceil(dd.cool)}s）`, 'warn', 'ddno', 2);
@@ -26,8 +27,9 @@ function ddFire(tx, ty, smoke) {
   const d = dist(dd.x, dd.y, tx, ty);
   if (d > 1000) { log('超出舰炮射程（1000）', 'warn', 'ddr', 2); return false; }
   if (smoke && S.assets.smoke <= 0) { log('烟幕弹已用完', 'warn', 'sm', 2); return false; }
-  const sc = 10 + d / 50;
-  fireShell(dd.x, dd.y, tx + gauss() * sc, ty + gauss() * sc, 'p', smoke ? 'smoke' : 'naval', 2.2, false);
+  const sc = 10 + d / 50, pt = ai && !smoke ? safeAim('p', tx, ty, sc, POWER.naval.R, 55) : [tx + gauss() * sc, ty + gauss() * sc];
+  if (!pt) return false;   // 危险近距：自己人在落区，这一轮不打
+  fireShell(dd.x, dd.y, pt[0], pt[1], 'p', smoke ? 'smoke' : 'naval', 2.2, false);
   if (smoke) S.assets.smoke--;
   dd.cool = 5; S.stats.shots++;
   if (dd.scoot && !smoke) ddScoot(dd);
@@ -68,7 +70,7 @@ function updateDD(dt) {
   if (!dd.auto || dd.cool > 0) return;
   // 指挥官火力任务（commander.js）：火力准备、烟幕、支援受阻的攻击；停止射击（误伤后）时不开火
   const fm = typeof cmdDDMission === 'function' ? cmdDDMission(dd) : null;
-  if (fm) { if (!fm.hold) ddFire(fm.x, fm.y, !!fm.smoke); return; }
+  if (fm) { if (!fm.hold) ddFire(fm.x, fm.y, !!fm.smoke, true); return; }
   // 自动掩护：射击视野内、靠近我方小组（但不贴脸）的敌人
   let best = null, bd = 180;
   const safe = typeof cmdDDSafe === 'function' ? cmdDDSafe() : 55;
@@ -79,7 +81,7 @@ function updateDD(dt) {
     for (const q of S.teams) if (q.side === 'p') near = Math.min(near, dist(e.x, e.y, q.x, q.y));
     if (near < bd && near > safe) { bd = near; best = e; }
   }
-  if (best) ddFire(best.x, best.y, false);
+  if (best) ddFire(best.x, best.y, false, true);
 }
 
 // 空军（舰载机联队 launchPlane / updatePlanes）见 carrier.js

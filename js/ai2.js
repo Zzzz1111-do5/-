@@ -129,7 +129,9 @@ function aiArtillery(D, seenT, seenShips) {
       const mortar = e.kind === 'mortar', M = e.mod || {}, range = (mortar ? 420 : 1100) * (M.rng || 1);
       if (dist(e.x, e.y, t.x, t.y) > range || (mortar && t.sea)) continue;
       const dur = mortar ? 2.2 : 3.2, err = D.err * reg * (mortar ? .8 : 1) / (M.pow || 1), ax = t.x + t.vx * dur * D.lead, ay = t.y + t.vy * dur * D.lead;
-      for (let k = 0; k < (M.salvo || 1); k++) fireShell(e.x, e.y, ax + gauss() * err, ay + gauss() * err, 'e', POWER[M.shell] ? M.shell : mortar ? 'mortar' : 'arty', dur + k * .22, !inVision(e.x, e.y));
+      const kind = POWER[M.shell] ? M.shell : mortar ? 'mortar' : 'arty', R0 = POWER[kind].R;
+      if (ownNear('e', ax, ay, R0 + err * 1.6)) continue;   // 危险近距：自己人在散布范围内，换目标（火箭炮散布大，留的距离也大）
+      for (let k = 0; k < (M.salvo || 1); k++) { const pt = safeAim('e', ax, ay, err, R0); if (pt) fireShell(e.x, e.y, pt[0], pt[1], 'e', kind, dur + k * .22, !inVision(e.x, e.y)); }
       e.cd = (mortar ? 5 + Math.random() * 2 : 8 + Math.random() * 3) / (M.rof || 1);
       e.salvos = (e.salvos || 0) + 1;
       if (e.salvos >= D.scoot + (mortar ? 1 : 0)) relocate(e);

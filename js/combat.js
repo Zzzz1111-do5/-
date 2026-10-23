@@ -101,6 +101,14 @@ function tracer(sx, sy, tx, ty, side, srcVisible) {
   if (S.tracers.length > 300) S.tracers.splice(0, S.tracers.length - 300);
 }
 
+// 危险近距：side 方的步兵或车辆在 (x,y) r 以内——自家间瞄火力（火炮、火箭、迫击炮）开火前检查，避免炸到自己人
+const ownNear = (side, x, y, r) => S.teams.some(q => q.side === side && q.men.length && dist(q.x, q.y, x, y) < r) || (S.veh || []).some(v => v.side === side && !v.dead && dist(v.x, v.y, x, y) < r);
+// 采样一个不会落到自己人头上的弹着点（散布 sc、杀伤半径 R，另留 margin 给飞行期间的移动）；4 次都不安全返回 null
+function safeAim(side, x, y, sc, R, margin = 20) {
+  for (let i = 0; i < 4; i++) { const ax = x + gauss() * sc, ay = y + gauss() * sc; if (!ownNear(side, ax, ay, R + margin)) return [ax, ay]; }
+  return null;
+}
+
 function fireShell(x0, y0, x1, y1, side, kind, dur, fuzzy, extra) {
   const fx0 = fuzzy ? x0 + gauss() * 70 : x0, fy0 = fuzzy ? y0 + gauss() * 70 : y0;
   S.shells.push({ x0, y0, x1, y1, fx0, fy0, t: 0, dur, side, kind, fuzzy, ...extra });

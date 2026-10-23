@@ -799,8 +799,17 @@ function sbxFireShips(dt) {
     if (s.sbxRole === 'rocket') {
       if (st.go === 0) { st.go = 1; goTo(tx, cy + 240); }
       if (st.go === 1 && s.state === 'idle' && st.cd <= 0 && dist(s.x, s.y, tx, cy) < 720) {
-        const n = 18;
-        for (let k = 0; k < n; k++) fireShell(s.x, s.y, clamp(tx + gauss() * 80, 0, W), cy - 30 + gauss() * 45, 'p', 'mortar', 1.5 + k * .07, false);
+        // 我军已上滩：火箭弹落区前推到我军最前沿以北 190；太深打不到就停射。每发再检查一次危险近距
+        const fr = S.teams.filter(q => q.side === 'p' && q.men.length && Math.abs(q.x - tx) < 260).reduce((m, q) => Math.min(m, q.y), Infinity);
+        const ay = Math.min(cy - 30, fr - 190);
+        if (cy - ay > 520) { st.cd = 8; sbxOnce('rkh' + s.id, () => log(`${s.label} 前方是我军，火箭停止齐射`, 'warn', null, 0, { x: tx, y: cy })); continue; }
+        let n = 0;
+        for (let k = 0; k < 18; k++) {
+          const x = clamp(tx + gauss() * 60, 0, W), y = ay + gauss() * 35;
+          if (ownNear('p', x, y, POWER.mortar.R + 45)) continue;
+          fireShell(s.x, s.y, x, y, 'p', 'mortar', 1.5 + k * .07, false); n++;
+        }
+        if (!n) { st.cd = 6; continue; }
         S.fx.push({ kind: 'flash', x: s.x, y: s.y, r: 18, life: 0, max: .6, side: 'p' });
         st.n++; st.cd = 38; S.stats.shots += n;
         log(`${s.label} 火箭齐射覆盖${b.name}`, 'info', 'rkt' + s.id, 5, { x: tx, y: cy });
@@ -813,7 +822,7 @@ function sbxFireShips(dt) {
         const t = sbxNearFoe(s.x, s.y, 380, 0);
         st.cd = t ? 3.2 : 1;
         if (!t) continue;
-        if (t.men) { if (sbxSafe(t.x, t.y, 30)) fireShell(s.x, s.y, t.x + gauss() * 10, t.y + gauss() * 10, 'p', 'mortar', 1.1, false); }
+        if (t.men) { const pt = safeAim('p', t.x, t.y, 10, POWER.mortar.R); if (pt) fireShell(s.x, s.y, pt[0], pt[1], 'p', 'mortar', 1.1, false); }
         else { damageEnemy(t, .9); t.sup = Math.max(t.sup || 0, 70); }
         tracer(s.x, s.y, t.x + gauss() * 6, t.y + gauss() * 6, 'p', true); tracer(s.x, s.y, t.x + gauss() * 6, t.y + gauss() * 6, 'p', true);
         S.stats.shots++;
@@ -827,7 +836,7 @@ function sbxFireShips(dt) {
       st.cd = t ? 5 / (s.sbxCls.rof || 1) : 1.5;
       if (!t) continue;
       const sc = 10 + dist(s.x, s.y, t.x, t.y) / 50;
-      for (let k = 0; k < (s.sbxCls.salvo || 1); k++) fireShell(s.x, s.y, t.x + gauss() * sc, t.y + gauss() * sc, 'p', 'naval', 2.2, false, { t: -k * .2 });
+      for (let k = 0; k < (s.sbxCls.salvo || 1); k++) { const pt = safeAim('p', t.x, t.y, sc, POWER.naval.R, 55); if (pt) fireShell(s.x, s.y, pt[0], pt[1], 'p', 'naval', 2.2, false, { t: -k * .2 }); }
       Object.assign(s, { aimX: t.x, aimY: t.y, fireT: S.t });
       S.fx.push({ kind: 'flash', x: s.x, y: s.y, r: 14, life: 0, max: .5, side: 'p' });
       S.stats.shots++;
@@ -854,7 +863,7 @@ function sbxDD() {
     if (dd.mod.salvo > 1) for (const sh of S.shells) {
       if (sh.side !== 'p' || sh.kind !== 'naval' || sh.sbxS || dist(sh.x0, sh.y0, dd.x, dd.y) > 30) continue;
       sh.sbxS = 1;
-      for (let k = 1; k < dd.mod.salvo; k++) S.shells.push({ ...sh, x1: clamp(sh.x1 + gauss() * 16, 0, W), y1: clamp(sh.y1 + gauss() * 16, 0, H), t: sh.t - k * .2, sbxS: 1 });
+      for (let k = 1; k < dd.mod.salvo; k++) { const pt = safeAim('p', sh.x1, sh.y1, 16, POWER.naval.R, 55); if (pt) S.shells.push({ ...sh, x1: clamp(pt[0], 0, W), y1: clamp(pt[1], 0, H), t: sh.t - k * .2, sbxS: 1 }); }
     }
   }
   R0.ddPrev = dd.cool;
@@ -942,8 +951,9 @@ function sbxTags(dt) {
     } else if (q.sbxTag === 'mortar') {
       if ((q.sbxCd = (q.sbxCd ?? 2) - t) > 0 || q.ammo < 6 || q.sup > 60) continue;
       const tg = sbxNearFoe(q.x, q.y, 380, 50);
-      if (!tg || !sbxSafe(tg.x, tg.y, 28)) { q.sbxCd = 1; continue; }
-      fireShell(q.x, q.y, tg.x + gauss() * 16, tg.y + gauss() * 16, 'p', 'mortar', 2.2, false);
+      const pt = tg && safeAim('p', tg.x, tg.y, 16, POWER.mortar.R);
+      if (!pt) { q.sbxCd = 1; continue; }
+      fireShell(q.x, q.y, pt[0], pt[1], 'p', 'mortar', 2.2, false);
       q.ammo -= 3; q.sbxCd = 7; S.stats.shots++;
     } else if (q.sbxTag === 'demo' || q.sbxTag === 'flame') {
       if (q.sup > 75) continue;

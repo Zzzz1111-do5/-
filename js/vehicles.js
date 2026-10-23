@@ -343,8 +343,9 @@ function vehShoot(v, tg) {
     return;
   }
   if (g.ind) {   // 间瞄：落点散布随距离增大
-    const sc = 12 + tg.d * .05;
-    fireShell(mx, my, tg.x + gauss() * sc, tg.y + gauss() * sc, v.side, 'spg', 1.6 + tg.d / 400, false);
+    const sc = 12 + tg.d * .05, pt = safeAim(v.side, tg.x, tg.y, sc, POWER.spg.R);
+    if (!pt) return;   // 危险近距：自己人在落区附近，不开火
+    fireShell(mx, my, pt[0], pt[1], v.side, 'spg', 1.6 + tg.d / 400, false);
     S.fx.push({ kind: 'flash', x: mx, y: my, r: 12, life: 0, max: .4, side: v.side });
     return;
   }
