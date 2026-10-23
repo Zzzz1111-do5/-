@@ -154,7 +154,7 @@ function mnBuild() {
   el.id = 'mn'; el.className = 'mn-layer'; el.hidden = true;
   el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', '主菜单');
   el.innerHTML = `<div class="mn-wrap">
-  <header><div class="mn-kick">AMPHIBIOUS ASSAULT SANDTABLE // v6</div><h1 id="mnT">滩头沙盘</h1><div class="mn-en" id="mnE">BEACHHEAD</div><div class="mn-rule"></div></header>
+  <header><div class="mn-kick">AMPHIBIOUS ASSAULT SANDTABLE // v6</div><h1 id="mnT">暗剑</h1><div class="mn-en" id="mnE">DARKSWORD</div><div class="mn-rule"></div></header>
   <div class="mn-views">
     <div class="mn-main"><nav class="mn-list" role="menu" aria-label="主菜单">${MN_ITEMS.map(([k, n, en, d]) =>
     `<button type="button" role="menuitem" class="mn-it" data-k="${k}">${mnSvg(k)}<div><b>${n}<small>${en}</small></b><span>${d}</span></div><kbd></kbd></button>`).join('')}</nav>
@@ -246,7 +246,7 @@ function showMenu(view) {
   first.classList.add('on');
   el.querySelector('#mnSeed').textContent = S ? `SEED ${S.seed}` : '';
   typeof lyPush === 'function' && lyPush(el, mnKey);
-  if (typeof decode === 'function') { decode(el.querySelector('#mnT'), '滩头沙盘', 700); decode(el.querySelector('#mnE'), 'BEACHHEAD', 1000); }
+  if (typeof decode === 'function') { decode(el.querySelector('#mnT'), '暗剑', 700); decode(el.querySelector('#mnE'), 'DARKSWORD', 1000); }
   mnView(view === 'pve' ? 'pve' : 'main', true);
   if (typeof updateHud === 'function' && typeof $ === 'function' && $('clock')) updateHud();
 }
