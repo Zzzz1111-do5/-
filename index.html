@@ -40,11 +40,19 @@ button:disabled { cursor: not-allowed; opacity: .3; }
 #feed li.bad { border-color: var(--enemy); color: #ffc2d0; }
 #feed li.good { border-color: var(--g); color: #c9ffde; }
 /* 据点条：夹在事件栏与右上按钮之间（两侧各留约 370px），最多两行；H-HOUR 与暂停条放在两行之下，互不遮挡 */
-#objs { top: calc(10px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); display: flex; gap: 4px; padding: 5px 6px; flex-wrap: wrap; justify-content: center; max-width: min(46vw, calc(100vw - 2 * var(--trw, 380px) - 14px)); }
+#objs { top: calc(10px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); display: flex; gap: 4px; padding: 5px 6px; flex-wrap: wrap; justify-content: center; max-width: min(calc(46vw + 24px), calc(100vw - 2 * var(--trw, 380px) - 14px)); }
 .ob { position: relative; width: 34px; height: 34px; display: grid; place-items: center; background: rgba(255, 61, 110, .08); border: 1px solid rgba(255, 61, 110, .5); border-radius: 5px; color: var(--enemy); padding: 0; }
 .ob.p { color: var(--g); border-color: var(--line-hi); background: rgba(61, 255, 138, .1); }
 .ob.hot { box-shadow: 0 0 10px var(--amber); border-color: var(--amber); }
 .ob i { position: absolute; left: 2px; bottom: 2px; height: 2px; background: var(--g); box-shadow: 0 0 4px var(--g); max-width: calc(100% - 4px); }
+/* 收起按钮：展开时是条首的小箭头；收起后整条缩成一行摘要（未攻占数 / 争夺 / 坚守倒计时），P 键切换 */
+#objList { display: contents; }
+.obt { flex: 0 0 auto; min-width: 20px; height: 34px; padding: 0 4px; display: inline-flex; align-items: center; justify-content: center; background: transparent; border: 1px dashed var(--line); border-radius: 5px; color: var(--mute); font: 12px var(--f-ui); white-space: nowrap; cursor: pointer; }
+.obt:hover { border-color: var(--line-hi); color: var(--text); }
+.obt b { color: var(--enemy); font-weight: 600; }
+.obt em { font-style: normal; color: var(--amber); }
+#objs.min #objList { display: none; }
+#objs.min .obt { height: 24px; padding: 0 8px; border: 0; color: var(--text); }
 .hold { position: absolute; left: 30%; right: 30%; bottom: 1px; height: 3px; background: rgba(61, 255, 138, .15); border-radius: 2px; overflow: hidden; }
 .hold i { display: block; height: 100%; background: var(--g); }
 #topr { top: calc(10px + env(safe-area-inset-top, 0px)); right: max(16px, env(safe-area-inset-right, 0px)); display: flex; align-items: center; gap: 6px; padding: 4px 6px; }
@@ -125,7 +133,7 @@ button:disabled { cursor: not-allowed; opacity: .3; }
 /* 中等宽度：据点图标缩小，仍为两行；更窄时改为单行横向滚动 */
 @media (max-width: 1199px) and (min-width: 901px) {
   #objs { gap: 3px; padding: 4px 5px; max-width: calc(100vw - 2 * var(--trw, 380px) - 12px); }
-  .ob { width: 26px; height: 26px; } .ob .ic { width: 17px; height: 17px; }
+  .ob { width: 26px; height: 26px; } .ob .ic { width: 17px; height: 17px; } .obt { height: 26px; }
   #deploy, #pauseBand { top: calc(84px + env(safe-area-inset-top, 0px)); }
 }
 @media (max-width: 1009px) and (min-width: 901px) {
@@ -139,7 +147,7 @@ button:disabled { cursor: not-allowed; opacity: .3; }
   #feed { top: 56px; max-width: calc(100% - 32px); } #feed li:nth-child(n+3) { display: none; }
   #feed li { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #objs { top: auto; bottom: 8px; max-width: calc(100% - 32px); flex-wrap: nowrap; overflow-x: auto; justify-content: flex-start; }
-  .ob { flex: 0 0 auto; width: 28px; height: 28px; } .ob .ic { width: 18px; height: 18px; }
+  .ob { flex: 0 0 auto; width: 28px; height: 28px; } .ob .ic { width: 18px; height: 18px; } .obt { height: 28px; }
   #bottom { position: static; grid-template-columns: minmax(0, 1fr); padding-top: 8px; background: var(--bg); }
   #mmBox { width: auto; order: 3; } #cards { justify-self: stretch; } #cmdBox { order: 2; }
   .row { justify-content: flex-start; }
@@ -153,7 +161,7 @@ button:disabled { cursor: not-allowed; opacity: .3; }
 <main id="stage">
   <canvas id="cv" aria-label="登陆战沙盘"></canvas>
   <ul id="feed" class="ov" aria-live="polite"></ul>
-  <div id="objs" class="ov box" aria-label="据点"></div>
+  <div id="objs" class="ov box" aria-label="据点"><button type="button" id="objTog" class="obt" aria-expanded="true" title="收起据点栏（P）">▴</button><div id="objList"></div></div>
   <div id="topr" class="ov box">
     <span id="clock">00:00</span>
     <button class="tb" id="btnPause" type="button" title="暂停 / 继续（空格）">▶</button>
@@ -190,9 +198,9 @@ button:disabled { cursor: not-allowed; opacity: .3; }
       <span><kbd>左键</kbd> 选择 · 拖框多选</span><span><kbd>右键</kbd> 移动 · <b>拖拽定宽与朝向</b></span>
       <span><kbd>M</kbd> 移动 · <kbd>A</kbd> 攻击前进 · <kbd>Q</kbd> 冲锋</span><span><kbd>H</kbd> 坚守 · <kbd>X</kbd> 撤退</span>
       <span><kbd>Z</kbd> 横队 · <kbd>C</kbd> 三三制 · <kbd>B</kbd> 散开</span><span><kbd>Ctrl+1–9</kbd> 编组 · <kbd>1–9</kbd> 调出</span>
-      <span><kbd>F</kbd> 舰炮 · <kbd>S</kbd> 烟幕 · <kbd>D</kbd> 选驱逐舰 · <kbd>G</kbd> 驱逐舰自动</span><span><kbd>R</kbd> 侦察 · <kbd>T</kbd> 空袭 · <kbd>V</kbd> 近距支援 · <kbd>E</kbd> 增援线</span>
+      <span><kbd>F</kbd> 舰炮 · <kbd>S</kbd> 烟幕 · <kbd>D</kbd> 选驱逐舰 · <kbd>G</kbd> 驱逐舰自动</span><span><kbd>R</kbd> 侦察 · <kbd>T</kbd> 空袭 · <kbd>V</kbd> 近距支援 · <kbd>W</kbd> 战斗机巡逻 · <kbd>E</kbd> 增援线</span>
       <span><kbd>K</kbd> 选航母 · <kbd>J</kbd> 航母自动</span><span><kbd>U</kbd> 选中单位自动 / 手动 · <kbd>N</kbd> 工兵排雷剪网</span>
-      <span><kbd>Enter</kbd> H 时开始登陆 · <kbd>L</kbd> 通讯面板</span><span><kbd>空格</kbd> 暂停 · <kbd>Esc</kbd> 菜单 · 滚轮缩放 · 中键拖动</span>
+      <span><kbd>Enter</kbd> H 时开始登陆 · <kbd>L</kbd> 通讯面板 · <kbd>P</kbd> 收起据点栏</span><span><kbd>空格</kbd> 暂停 · <kbd>Esc</kbd> 菜单 · 滚轮缩放 · 中键拖动</span>
     </div>
     <p class="keys">侧翼和背后受到攻击会让部队士气崩溃；战壕只挡正面（海面方向）的火力；冲锋前先用机枪和舰炮压住敌人。只有步兵能占领据点，车辆只能争夺。夺取指挥所并控制七成以上据点分值，坚守 30 秒即胜利。</p>
     <div class="diff" id="diff" role="radiogroup" aria-label="守军 AI 难度">
@@ -238,6 +246,7 @@ button:disabled { cursor: not-allowed; opacity: .3; }
 <script src="js/ai4.js"></script>
 <script src="js/missile.js"></script>
 <script src="js/eair.js"></script>
+<script src="js/airwar.js"></script>
 <script src="js/matrix.js"></script>
 <script src="js/camera.js"></script>
 <script src="js/render.js"></script>

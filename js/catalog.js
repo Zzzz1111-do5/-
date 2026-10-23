@@ -96,6 +96,7 @@ const CT_IC = {
   arecon: CT_AIR.recon || '<path d="M12 2v19M2.5 11.5L12 10l9.5 1.5M8.5 20.5L12 19l3.5 1.5"/>',
   astrike: CT_AIR.strike || '<path d="M12 2l1.6 5 7.4 7v2l-7.4-2.6-.4 5 2.8 2v1.6L12 21l-4 1.4v-1.6l2.8-2-.4-5L3 16v-2l7.4-7z"/>',
   acas: CT_AIR.cas || '<path d="M12 3v17M3 10.5h18M7.5 20h9"/>',
+  aftr: CT_AIR.fighter || '<path d="M12 2l1.4 5.6 7.6 6.4v2l-7.6-2.2-.3 3.8 2.6 2v1.6L12 20.4l-3.7 1.2V20l2.6-2-.3-3.8L3 16v-2l7.6-6.4z"/>',
   heavy: '<path d="M12 2v20M1.5 11h21M8 21h8"/><path d="M5 11v3M9 11v3M15 11v3M19 11v3"/>', heli: '<path d="M2 6h20M12 6v4"/><ellipse cx="12" cy="13" rx="3.5" ry="4"/><path d="M12 17v5M9 21h6"/>',
   reserve: '<path class="f" d="M12 3l6 7-6 7-6-7z"/><path d="M5 21h14"/>', rline: '<path d="M4 20L18 6" stroke-dasharray="2.5 3"/><path d="M12 5h7v7"/>',
   smoke: '<path d="M7 18a4 4 0 010-8 5 5 0 019.5-1.5A4 4 0 1117 18z"/>', relay: '<path d="M12 22V9M8 22h8M12 9l-5-6M12 9l5-6"/><path d="M5 13a8 8 0 0 1 0-8M19 13a8 8 0 0 0 0-8"/>',
@@ -111,7 +112,8 @@ const CT_IC = {
   ascm: '<rect x="2" y="15" width="20" height="4" rx=".6"/><circle cx="6" cy="20.6" r="1.4"/><circle cx="18" cy="20.6" r="1.4"/><path d="M4 12.5L19 6.5M5.5 15L20.5 9"/><path d="M19 6.5l1.5 2.5"/>',
   airfield: '<rect x="2" y="9.5" width="20" height="5" rx=".6"/><path d="M4.5 12h3M10.5 12h3M16.5 12h3"/><path d="M3 21.5a4 3 0 0 1 8 0z"/><path d="M15 2.5l2.5 4.5M13 4.5l4.5-.5"/>',
   ega: '<path d="M12 2l1.8 6.5 7.2 7.5v2l-7.2-2.8-.4 3.3 2.6 2v1.5L12 20.5l-4 1.5v-1.5l2.6-2-.4-3.3L3 18v-2l7.2-7.5z"/><path d="M6 13.5v3.5M18 13.5v3.5"/>',
-  eheli: '<path d="M2 5.5h20M12 5.5v4"/><ellipse cx="12" cy="13" rx="3.5" ry="4"/><path d="M12 17v5M9 21.5h6M4 14h4.5M15.5 14H20"/>'
+  eheli: '<path d="M2 5.5h20M12 5.5v4"/><ellipse cx="12" cy="13" rx="3.5" ry="4"/><path d="M12 17v5M9 21.5h6M4 14h4.5M15.5 14H20"/>',
+  eftr: '<path d="M12 2l1.4 5.6 7.6 6.4v2l-7.6-2.2-.3 3.8 2.6 2v1.6L12 20.4l-3.7 1.2V20l2.6-2-.3-3.8L3 16v-2l7.6-6.4z"/><path d="M7 20.5h10" stroke-dasharray="1.5 1.5"/>'
 };
 
 // —— 条目 —— e(id, 名称, 阵营, 分类, 原型, 点数, 图标, [耐久, 装甲, 火力, 射程, 速度, 视野, 人数], 说明, spawn, 附加)
@@ -234,6 +236,10 @@ ctE('p_air_cas', '对地支援机', 'p', 'air', 'wing', 22, CT_IC.acas, [3, 0, 6
   { kind: 'wing', at: 'air', type: 'cas', n: 1 }, { counters: ['inf_e', 'mortar'], weakTo: ['aa'] });
 ctE('p_air_fb', '战斗轰炸机', 'p', 'air', 'wing', 28, CT_IC.acas + ctDots(1), [3, 0, 7, 0, 9, 5, 0], '到场先投一枚炸弹再扫射，盘旋时间较短。',
   { kind: 'wing', at: 'air', type: 'cas', n: 1, v: 'fb' }, { counters: ['inf_e', 'bunker'], weakTo: ['aa'] });
+ctE('p_air_ftr', '舰载战斗机', 'p', 'air', 'wing', 26, CT_IC.aftr, [3, 0, 6, 7, 10, 7, 0], '制空战斗机（W 键）：在指定空域巡逻 90 秒，以 4 枚空空导弹与机炮拦截敌攻击机、武装直升机与歼击机，夺取制空权；我方掌握制空权后敌机难以出动。航母自动派机时会自动起飞拦截。',
+  { kind: 'wing', at: 'air', type: 'fighter', n: 1 }, { counters: ['e_air_ga', 'e_air_heli', 'e_air_ftr'], weakTo: ['p_air_ftr_adv', 'e_aa_radar'] });
+ctE('p_air_ftr_adv', '先进制空战斗机', 'p', 'air', 'wing', 36, CT_IC.aftr + ctDots(1), [4, 0, 8, 8, 10, 8, 0], '战斗机（W 键）。携 6 枚空空导弹、命中率更高，空战中明显占优；价格较高。',
+  { kind: 'wing', at: 'air', type: 'fighter', n: 1, v: 'adv' }, { counters: ['e_air_ftr', 'e_air_ga', 'e_air_heli'], weakTo: ['e_aa_radar'] });
 ctE('p_air_heli', '武装直升机', 'p', 'air', 'wing', 30, CT_IC.heli, [3, 1, 6, 0, 5, 6, 0], '低空悬停时间长达 70 秒，扫射压制更强；速度慢。',
   { kind: 'wing', at: 'air', type: 'cas', n: 1, v: 'heli' }, { counters: ['inf_e', 'mortar'], weakTo: ['aa', 'e_aa_heavy'] });
 
@@ -354,6 +360,9 @@ ctE('e_air_ga', '对地攻击机', 'e', 'air', 'ewing', 38, CT_IC.ega, [2, 0, 7,
   { kind: 'ewing', at: 'air', type: 'ga' }, { counters: ['ship', 'inf_p'], weakTo: ['p_manpads', 'p_aa_veh', 'p_dd'] });
 ctE('e_air_heli', '武装直升机', 'e', 'air', 'ewing', 40, CT_IC.eheli, [3, 1, 6, 6, 4, 6, 0], '在 300–380 外悬停，以反坦克导弹猎杀坦克与登陆舰，再用火箭覆盖步兵；速度慢、低空，机枪也能把它打下来。需要野战机场。',
   { kind: 'ewing', at: 'air', type: 'heli' }, { counters: ['veh', 'p_lst'], weakTo: ['p_manpads', 'p_aa_veh', 'p_mg'] });
+
+ctE('e_air_ftr', '守军歼击机', 'e', 'air', 'ewing', 40, CT_IC.eftr, [3, 0, 6, 7, 10, 7, 0], '从野战机场起飞，在防区上空巡逻、拦截敌舰载机，以 4 枚空空导弹与机炮与敌战斗机争夺制空权；我方掌握制空权后攻击机与直升机出击更频繁。需要野战机场。',
+  { kind: 'ewing', at: 'air', type: 'ftr' }, { counters: ['p_air_cas', 'p_air_strike', 'p_air_ftr', 'wing'], weakTo: ['p_air_ftr_adv', 'p_dd', 'p_tbm'] });
 
 // ———— 防守方 · 工事 ————
 ctE('e_mines_ap', '防步兵雷区', 'e', 'fort', 'mines', 15, CT_IC.mine, [0, 0, 5, 0, 0, 0, 0], '半径约 24 的雷区，踩中即伤亡并暴露；工兵可以排除。',

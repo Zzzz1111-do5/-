@@ -383,6 +383,22 @@ function frDrawPlans(ctx, fL, spec, time) {
     }
     ctx.strokeStyle = rgba(COL.g, .4 * fL); ctx.lineWidth = px(1.2); ctx.setLineDash([px(1.5), px(4)]);
     ctx.beginPath(); seg(F.L, 1.15); ctx.stroke(); ctx.setLineDash([]);
+    // 队形：各组的位置画成指向进攻方向的三角，同一梯次按横向顺序连成队形线——楔形 / 横队 / 散开一眼看得出；
+    // 跃进梯次实心亮、掩护梯次空心暗
+    const r = Math.max(4, px(5.5)), live = new Set(S.teams.filter(q => q.side === 'p' && q.men.length).map(q => q.id)), pts = [[], []];
+    for (const id in F.q) {
+      if (!live.has(+id)) continue;
+      const o = F.q[id], s = F.sE[o[2]] - o[1];
+      pts[o[2]].push([o[0], F.ox + F.ax * s + lx * o[0], F.oy + F.ay * s + ly * o[0]]);
+    }
+    for (let e = 0; e < 2; e++) {
+      const on = e === F.lead, P = pts[e].sort((a, b) => a[0] - b[0]);
+      if (P.length > 1) { ctx.strokeStyle = rgba(COL.g, (on ? .6 : .35) * fL); ctx.lineWidth = px(on ? 1.6 : 1.1); ctx.setLineDash(on ? [] : [px(3), px(3)]); ctx.beginPath(); P.forEach(([, x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.stroke(); ctx.setLineDash([]); }
+      for (const [, x, y] of P) {
+        ctx.beginPath(); ctx.moveTo(x + F.ax * r * 1.6, y + F.ay * r * 1.6); ctx.lineTo(x - F.ax * r + lx * r, y - F.ay * r + ly * r); ctx.lineTo(x - F.ax * r - lx * r, y - F.ay * r - ly * r); ctx.closePath();
+        if (on) { ctx.fillStyle = rgba(COL.g, .95 * fL); ctx.fill(); } else { ctx.strokeStyle = rgba(COL.g, .75 * fL); ctx.lineWidth = px(1.4); ctx.stroke(); }
+      }
+    }
   }
   const C = S.ai && S.ai.co;
   if (!spec || !C) return;

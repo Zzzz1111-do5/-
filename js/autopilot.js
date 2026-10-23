@@ -280,13 +280,15 @@ function apLaunch(units, p, P) {
   if (!field(p.x, p.y, 'p')) { P.hard[p.key] = S.t; for (const g of units) apIdle(P.u[g.id]); return; }
   const cx = units.reduce((a, g) => a + g.x, 0) / units.length, cy = units.reduce((a, g) => a + g.y, 0) / units.length;
   // v7 队形进攻（tf.js）：成队形交替跃进到冲击出发线；已在冲击距离内或未启用时直接攻击前进
-  if (!(typeof tfFormGo === 'function' && tfFormGo(units, p, cx, cy, P))) {
+  const fm = typeof tfFormGo === 'function' ? tfFormGo(units, p, cx, cy, P) : null;
+  if (!fm) {
     for (const g of units) g.form = S.t - (P.u[g.id].artyT ?? -99) < 30 ? 'loose' : 'line';
     if (!orderUnits(units, p.x, p.y, apAng(cx, cy, p.x, p.y), null, 'amove')) return;
   }
   const O = P.o[p.key] || (P.o[p.key] = { need: units.length }), first = !O.go;
   if (!O.go) Object.assign(O, { go: true, t: S.t, pg: p.prog, pgT: S.t });
   for (const g of units) Object.assign(P.u[g.id], { ph: 'go', obj: p.key, goT: S.t, men0: g.men || 0, dx: g.tx, dy: g.ty, ordT: S.t });
+  if (fm) tfFormOrder(fm, p);   // 各连转入 go 后再下第一次跃进令（tfFormOrder 只管 go 阶段的连）
   if (first && typeof cmdOnLaunch === 'function') cmdOnLaunch(units, p);   // 摩擦：个别连队可能在调整线前停顿
 }
 

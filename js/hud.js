@@ -46,10 +46,11 @@ const BTN = [
     ['recon', '侦察机：从航母起飞纵贯侦察', 'R', () => setTool('recon')], ['strike', '攻击机：三连弹', 'T', () => setTool('strike')],
     ['bomber', '轰炸机：点已标定的火力点 → 俯冲轰炸机精确投弹；点其他地方 → 重型轰炸机六弹地毯轰炸', 'Y', () => setTool('bomber')],
     ['cas', '近距空中支援：战机盘旋扫射', 'V', () => setTool('cas')],
+    ['fighter', '战斗机：在指定空域巡逻 90 秒，拦截敌机、夺取制空权', 'W', () => setTool('fighter')],
     ['rline', '开辟增援线', 'E', () => setTool('rline')], ['auto', '驱逐舰自动掩护', 'G', toggleAuto],
     ['airauto', '航母自动派机：近距支援受压制的我军、空袭已标定火力点、侦察前线方向', 'J', () => toggleCvAuto()]]]
 ];
-const ASSET = { smoke: 'smoke', recon: 'recon', strike: 'strike', cas: 'cas', bomber: 'bomber', rline: 'rline' };
+const ASSET = { smoke: 'smoke', recon: 'recon', strike: 'strike', cas: 'cas', bomber: 'bomber', fighter: 'fighter', rline: 'rline' };
 
 function buildHud() {
   if (typeof SHIP_ICONS === 'object') Object.assign(ICON, SHIP_ICONS);
@@ -88,6 +89,8 @@ function buildHud() {
   });
   $('cards').addEventListener('dblclick', () => centerOnSel());
   $('objs').addEventListener('click', e => { const c = e.target.closest('[data-k]'); if (c) { const p = S.points.find(p => p.key === c.dataset.k); camCenter(p.x, p.y); } });
+  try { U.objMin = localStorage.getItem('bh-objs') === '1'; } catch (e) { /* 存储不可用时默认展开 */ }
+  $('objTog').addEventListener('click', () => objsToggle());
   $('feed').addEventListener('click', e => { const c = e.target.closest('[data-x]'); if (c) camCenter(+c.dataset.x, +c.dataset.y); });
   mmBind($('mm'));
   const LEG = [['ship', '突击登陆舰'], ['supply', '补给登陆舰'], ['dd', '驱逐舰'], ['assault', '步兵连'], ['eng', '工兵'], ['reserve', '增援班'],
@@ -95,6 +98,14 @@ function buildHud() {
     ['exit', '滩头出口'], ['battery', '岸防炮台'], ['radar', '雷达站'], ['bridge', '桥梁'], ['cross', '十字路口'], ['town', '镇中心'], ['village', '渔村'], ['ford', '渡口'], ['hq', '指挥所']];
   const nf = LEG.findIndex(l => l[0] === 'exit');   // 之前为我方单位，之后为地形与目标
   $('legend').innerHTML = LEG.map(([k, n], i) => `<span class="${i >= nf ? 'e' : ''}">${svg(k)}${n}</span>`).join('');
+}
+
+// 据点栏收起 / 展开（按钮或 P 键），选择存在本地，下次打开沿用
+function objsToggle(v) {
+  U.objMin = v ?? !U.objMin;
+  try { localStorage.setItem('bh-objs', U.objMin ? '1' : '0'); } catch (e) { /* 存储不可用时只在本页有效 */ }
+  U.objTxt = null;
+  updateHud();
 }
 
 function restart(briefed) {
@@ -179,6 +190,7 @@ function updateHud() {
     if (grp === 'support') dis = deploy || (ASSET[k] && S.assets[ASSET[k]] <= 0) || ((k === 'fire' || k === 'smoke' || k === 'auto') && D.state === 'sunk') || (k === 'airauto' && !(S.cv && S.cv.hp > 0));
     el.disabled = dis;
     if (k === 'bomber') el.hidden = !(S.air && S.air.wing.some(w => w.type === 'bomber'));   // 只有编入了轰炸机（沙盒）才显示
+    if (k === 'fighter') el.hidden = !(S.air && S.air.wing.some(w => w.type === 'fighter'));
     el.classList.toggle('on', k === 'auto' ? D.auto : k === 'airauto' ? !!(S.cv && S.cv.auto) : k === 'ai' ? [...units, ...ships, ...vs].length > 0 && [...units, ...ships, ...vs].every(o => o.auto === true) : U.tool === k || (grp === 'forms' && (units.length ? units.every(u => u.form === k) : ships.length && ships.every(s => s.form === k))));
     if (ASSET[k]) $('n-' + k).textContent = S.assets[ASSET[k]] ?? 0;
   }
@@ -187,8 +199,16 @@ function updateHud() {
   // 据点条居中：两侧各让出右上按钮组的宽度（--trw），免得右端压到时钟与按钮下面
   const tr = $('topr'), trw = tr && tr.offsetWidth ? Math.ceil(innerWidth - tr.getBoundingClientRect().left + 8) : 0;
   if (trw && trw !== U.trw) { U.trw = trw; document.documentElement.style.setProperty('--trw', trw + 'px'); }
-  $('objs').innerHTML = S.points.map(p => `<button type="button" class="ob ${p.owner}${p.contested ? ' hot' : ''}" data-k="${p.key}" title="${p.name}">${svg(PKIND(p.key))}<i style="width:${p.prog * 100}%"></i></button>`).join('') +
+  $('objList').innerHTML = U.objMin ? '' : S.points.map(p => `<button type="button" class="ob ${p.owner}${p.contested ? ' hot' : ''}" data-k="${p.key}" title="${p.name}">${svg(PKIND(p.key))}<i style="width:${p.prog * 100}%"></i></button>`).join('') +
     (S.holdT ? `<span class="hold"><i style="width:${S.holdT / HOLD * 100}%"></i></span>` : '');
+  // 收起时按钮上显示摘要：还有几个据点未攻占、是否有据点在争夺、坚守倒计时
+  const left = S.points.filter(p => p.owner !== 'p').length, hot = S.points.some(p => p.contested);
+  const ot = U.objMin ? `<span>据点 未攻占 <b>${left}</b>/${S.points.length}${hot ? ' · <em>争夺中</em>' : ''}${S.holdT ? ` · 坚守 ${Math.max(0, Math.ceil(HOLD - S.holdT))} 秒` : ''} ▾</span>` : '▴';
+  if (ot !== U.objTxt) {
+    const b = $('objTog');
+    U.objTxt = ot; b.innerHTML = ot; b.title = U.objMin ? '展开据点栏（P）' : '收起据点栏（P）'; b.setAttribute('aria-expanded', String(!U.objMin));
+    $('objs').classList.toggle('min', !!U.objMin);
+  }
   updateCards();
   const lk = S.log.length && S.log[0].id;
   if (lk !== U.logKey || S.t - (U.feedT || 0) > 1) {

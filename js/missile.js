@@ -120,7 +120,7 @@ function msTgtObj(t) {
 }
 const msTgtName = t => !t ? '目标' : t.k === 'dd' ? '驱逐舰' : t.k === 'cv' ? '航母' : t.k === 'ship' ? ((S.ships.find(o => o.id === t.id) || {}).label || '舰船') : '目标';
 
-// 防空导弹（单兵 / 舰空）：纯追踪，380（舰空 560）每秒，超时自毁；进入 12 以内结算毁伤
+// 防空导弹（单兵 / 舰空 / 战斗机空空导弹）：纯追踪，380（舰空 560、空空 640）每秒，超时自毁；进入 12 以内结算毁伤
 function msSam(m, dt) {
   const T = msTgtObj(m.tgt);
   if (!T || m.t > m.dur) { m.done = true; msPuff(m.x, m.y, m.side); return; }
@@ -137,17 +137,19 @@ function msSamHit(m, T) {
     return;
   }
   let base, flare = 1;
+  const aam = m.src === 'aam';   // 战斗机空空导弹（airwar.js）：单发命中率随弹带来（m.pk）
   if (k === 'plane') {
-    base = T.kind === 'recon' ? .3 : T.v === 'heli' ? .62 : T.kind === 'bomber' && T.v !== 'dive' ? .32 : .42;
+    base = aam ? m.pk : T.kind === 'recon' ? .3 : T.v === 'heli' ? .62 : T.kind === 'bomber' && T.v !== 'dive' ? .32 : .42;
     if (!T.samN) { T.samN = 1; flare = .6; MSV.fl.push({ x: T.x, y: T.y, t: S.t }); }   // 第一枚多半被干扰弹骗走
   } else {
-    base = m.src === 'dd' || m.src === 'esc' ? (T.type === 'heli' ? .55 : .6) : T.type === 'heli' ? .62 : .42;
+    base = aam ? m.pk : m.src === 'dd' || m.src === 'esc' ? (T.type === 'heli' ? .55 : .6) : T.type === 'heli' ? .62 : .42;
     if (T.flares > 0) { T.flares--; flare = .6; MSV.fl.push({ x: T.x, y: T.y, t: S.t }); }
   }
   if (Math.random() < base * (1 - clamp(m.sup || 0, 0, 100) / 150) * flare) {
     msStat('aaKill');
-    if (k === 'plane') { if (typeof airLost === 'function') airLost(T, `${typeof airName === 'function' ? airName(T.kind, T.v) : '飞机'}被敌单兵防空导弹击落`); }
-    else if (typeof eaLost === 'function') eaLost(T, m.src === 'dd' || m.src === 'esc' ? 'sam' : 'manpads');
+    if (k === 'plane') { if (typeof airLost === 'function') airLost(T, `${typeof airName === 'function' ? airName(T.kind, T.v) : '飞机'}被敌${aam ? '歼击机空空导弹' : '单兵防空导弹'}击落`); }
+    else if (typeof eaLost === 'function') eaLost(T, aam ? 'aam' : m.src === 'dd' || m.src === 'esc' ? 'sam' : 'manpads');
+    if (aam && typeof awScore === 'function') awScore(m.side);
   } else msPuff(m.x, m.y, m.side);
 }
 function msIcpt(T, how) {

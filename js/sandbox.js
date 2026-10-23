@@ -417,9 +417,9 @@ function sbxAIDefend() {
     // 300 米跑道要一大块平整陆地：先在指挥所以北找，找不到再放宽到整个纵深
     for (let k = 0; k < 120 && !af; k++) { const w = k < 60 ? 900 : 2400, x = clamp(hq.x + (Math.random() - .5) * w, 170, W - 170), y = clamp(hq.y - 60 - Math.random() * 500, 50, H); if (coastAt(x) - y >= 500) af = sbxTry('e_airfield', x, y, 60); }
     if (af) {
-      const nh = sbxPlace('e_air_heli').ok, ng = sbxPlace('e_air_ga').ok;
+      const nh = sbxPlace('e_air_heli').ok, ng = sbxPlace('e_air_ga').ok, nf = B0 >= 2200 && sbxPlace('e_air_ftr').ok;
       sbxTry('e_manpads', hq.x - 30, hq.y + 25, 40);
-      say(`航空：纵深 ${sbxM(coastAt(af.x) - af.y)} 米处修野战机场，保留${nh ? '武装直升机' : ''}${nh && ng ? '与' : ''}${ng ? '攻击机' : ''}各一架，专打卸载中的登陆舰与登陆后的坦克；指挥所配单兵防空组。`, af);
+      say(`航空：纵深 ${sbxM(coastAt(af.x) - af.y)} 米处修野战机场，保留${nh ? '武装直升机' : ''}${nh && ng ? '与' : ''}${ng ? '攻击机' : ''}各一架，专打卸载中的登陆舰与登陆后的坦克${nf ? '；另配歼击机一架，拦截敌舰载机、争夺制空权' : ''}；指挥所配单兵防空组。`, af);
     }
   }
   if (B0 >= 2200 && !(S.v7off && S.v7off.msl)) {
@@ -531,10 +531,10 @@ function sbxAIAttack() {
   sbxTry('p_sortie_recon', M.ex.x, M.ex.y - 60, 30);
   // 4. 航母与舰载机：侦察优先、对地支援为主
   const cvId = B0 >= 1300 ? 'p_cv' : B0 >= 800 ? 'p_cve' : null;
-  let cv = null, air = { recon: 0, cas: 0, strike: 0, bomber: 0 };
+  let cv = null, air = { recon: 0, cas: 0, strike: 0, bomber: 0, fighter: 0 };
   if (cvId) { const p = sbxSea(clamp(M.b.cx, 200, W - 200), CARRIER_Y - 20); const r = sbxPlace(cvId, p.x, Math.max(p.y, STAGING_Y + 60)); if (r.ok) cv = r.it; }
   const buyAir = (id, t) => { if (sbxPlace(id).ok) { air[t]++; return true; } return false; };
-  if (cv) { buyAir('p_air_recon', 'recon'); buyAir('p_air_cas', 'cas'); buyAir('p_air_cas', 'cas'); if (k >= 1) buyAir('p_air_recon_lr', 'recon'); }
+  if (cv) { buyAir('p_air_recon', 'recon'); buyAir('p_air_cas', 'cas'); buyAir('p_air_cas', 'cas'); if (k >= 1) buyAir('p_air_recon_lr', 'recon'); if (k >= 1.2) buyAir('p_air_ftr', 'fighter'); }
   // 5. 两栖坦克、火箭艇、扫雷舰
   let nAm = 0;
   if (veh && typeof VEH_SPEC === 'object' && VEH_SPEC.amtank) for (let i = 0; i < clamp(Math.round(2.4 * k), 1, 5); i++) {
@@ -581,14 +581,14 @@ function sbxAIAttack() {
     if (it) w2.push(it);
   }
   if (F) for (let i = 0; i < clamp(Math.round(k - 1.5), 0, 2) && sbxLeft('p') >= 110; i++) { const it = ship('p_lct', F, i + 2, 4, 1600, ['p_rifle', 'p_mg', 'p_rifle', 'p_marine'], 1); if (it) feint.push(it); }
-  if (cv) for (const [id, t] of [['p_air_cas', 'cas'], ['p_air_strike', 'strike'], ['p_air_recon', 'recon'], ['p_air_cas', 'cas'], ['p_air_dive', 'bomber'], ['p_air_strike', 'strike']]) { if (sbxWingN() >= sbxWingCap() || sbxLeft('p') < 80) break; buyAir(id, t); }
+  if (cv) for (const [id, t] of [['p_air_cas', 'cas'], ['p_air_ftr', 'fighter'], ['p_air_strike', 'strike'], ['p_air_recon', 'recon'], ['p_air_cas', 'cas'], ['p_air_dive', 'bomber'], ['p_air_strike', 'strike']]) { if (sbxWingN() >= sbxWingCap() || sbxLeft('p') < 80) break; buyAir(id, t); }
   sbxSync();
   const men = w1.reduce((a, it) => a + sbxShipLoad(it).t, 0) * 3;
   say(`第一波：${w1.length} 艘突击登陆艇载陆战突击组、工兵、爆破组与机枪组约 ${men} 人` + (nAm ? `，${nAm} 辆两栖坦克随波泅渡` : '') + (sw ? '，扫雷舰先行清除水际障碍' : '') + (rk ? '，火箭艇抢滩前齐射压制滩头' : '') + '。', M.ex);
   const nLst = w2.filter(it => it.cat === 'p_lst').length, w2t = [nLst && `坦克登陆舰 ${nLst} 艘`, w2.length - nLst && `步兵登陆舰 ${w2.length - nLst} 艘`].filter(Boolean).join('、');
   if (w2.length || sup.length) say(`第二波：${w2t ? w2t + '与' : ''}补给舰 ${sup.length} 艘在集结海域待命，滩头出口夺取后（最迟 H+2.5 分钟）再靠岸，避免在泊地挤成靶子。`, null);
   const escT = esc.length ? `；另有护航舰 ${esc.length} 艘分赴${sbxNm([...new Set(esc)])}外海，对已发现火力点实施舰炮压制` : '';
-  if (dd || cv) say(`火力：${dd ? sbxEntry(dd).name + '前出至' + M.b.name + '外海直接支援' : '无舰炮支援'}${escT}；${cv ? `${sbxEntry(cv).name}编 ${air.recon} 架侦察机先行照相、${air.cas} 架对地支援机随叫随到、${air.strike} 架攻击机专打已标定炮位${air.bomber ? `、${air.bomber} 架轰炸机轰炸炮兵阵地与岸炮` : ''}` : '无航空兵'}。`, dd || cv);
+  if (dd || cv) say(`火力：${dd ? sbxEntry(dd).name + '前出至' + M.b.name + '外海直接支援' : '无舰炮支援'}${escT}；${cv ? `${sbxEntry(cv).name}编 ${air.recon} 架侦察机先行照相、${air.cas} 架对地支援机随叫随到、${air.strike} 架攻击机专打已标定炮位${air.bomber ? `、${air.bomber} 架轰炸机轰炸炮兵阵地与岸炮` : ''}${air.fighter ? `、${air.fighter} 架战斗机巡逻夺取制空权` : ''}` : '无航空兵'}。`, dd || cv);
   const sup2 = [relay && '无线电中继减少通讯中断', '战前对' + M.b.name + '出口照相侦察', depot && '预置野战补给站加快向纵深推进', smoke && `烟幕弹 ${smoke} 发掩护抢滩`].filter(Boolean);
   say(`保障：${sup2.join('；')}。部署完毕，共用去 ${sbxSpent('p')} / ${B0} 点。`, null);
   return { main: M.b.name, feint: F && F.b.name };

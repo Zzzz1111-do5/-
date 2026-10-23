@@ -6,8 +6,10 @@
 const eaOn = () => !!S && !(S.v7off && S.v7off.air);
 const eaStat = (k, n = 1) => { const o = S.v7s || (S.v7s = {}); o[k] = (o[k] || 0) + n; };
 POWER.erk = { men: .45, ship: 2, struct: 0, seg: false, R: 18 };   // 机载火箭（守方只打进攻方，不伤自家工事）
-const EA_DIFF = { normal: { wing: ['heli'], first: 210, gap: 150 }, hard: { wing: ['ga', 'heli'], first: 150, gap: 100 }, hell: { wing: ['ga', 'ga', 'heli'], first: 100, gap: 70 } };
-const EA_SPEC = { ga: { name: '攻击机', spd: 200, turn: 1.4, hp: 1, flares: 2 }, heli: { name: '武装直升机', spd: 90, turn: 2.4, hp: 2, flares: 1 } };
+const EA_DIFF = { normal: { wing: ['heli'], first: 210, gap: 150 }, hard: { wing: ['ga', 'heli', 'ftr'], first: 150, gap: 100 }, hell: { wing: ['ga', 'ga', 'heli', 'ftr', 'ftr'], first: 100, gap: 70 } };
+const EA_SPEC = { ga: { name: '攻击机', spd: 200, turn: 1.4, hp: 1, flares: 2 }, heli: { name: '武装直升机', spd: 90, turn: 2.4, hp: 2, flares: 1 },
+  ftr: { name: '歼击机', spd: 240, turn: 1.9, hp: 1, flares: 2 } };   // 歼击机：巡逻、拦截、争夺制空权（airwar.js）
+const EA_TRAILS = new Map();   // 仅渲染用：固定翼尾迹点（不进 S）
 const EA_MANPADS = { normal: 0, hard: 1, hell: 2 };   // 战役守军单兵防空组数
 const EA_GUNV = ['tank', 'hv_tank', 'td', 'flame_tank', 'lt_tank', 'amtank', 'mine_tank'];
 const eaAng = a => Math.atan2(Math.sin(a), Math.cos(a));
@@ -147,7 +149,7 @@ function eaStep(dt) {
     for (let i = gnd.length - 1; i >= 0 && over > 0; i--, over--) { gnd[i].state = 'lost'; lost++; }
     if (lost && !cap && !E.said.base) { E.said.base = 1; log('敌野战机场被毁，停在地面的敌机全部损失', 'good'); }
     for (const w of E.wing) if (w.state === 'rearm' && (w.rearmT -= dt) <= 0) w.state = 'ready';
-    for (const a of E.fly) if (!a.dead) { if (a.ph === 'roll') eaRoll(a, dt); else if (a.type === 'heli') eaFlyHeli(a, dt); else eaFlyGA(a, dt); }
+    for (const a of E.fly) if (!a.dead) { if (a.ph === 'roll') eaRoll(a, dt); else if (a.type === 'heli') eaFlyHeli(a, dt); else if (a.type === 'ftr' && typeof awFlyE === 'function') awFlyE(a, dt); else eaFlyGA(a, dt); }
     E.fly = E.fly.filter(a => !a.dead);
     eaProj(dt);
     for (const w of E.wr) if (!w.hit && S.t - w.t >= 2) { w.hit = true; const x = w.x + Math.cos(w.h) * w.spd * 2, y = w.y + Math.sin(w.h) * w.spd * 2; S.fx.push({ kind: isLand(x, y) ? 'boom' : 'flash', x, y, r: 14, life: 0, max: .8, side: 'e' }); }
@@ -459,7 +461,7 @@ function eaLost(a, how) {
   S.fx.push({ kind: 'boom', x: a.x, y: a.y, r: 20, life: 0, max: 1, side: 'e' });
   if (E) E.wr.push({ x: a.x, y: a.y, h: a.heading, spd: Math.min(70, a.spd * .4 + 10), t: S.t, type: a.type, hit: false });
   eaStat('eaLost');
-  const nm = EA_SPEC[a.type].name, by = { manpads: '便携防空导弹', sam: '舰空导弹', aa: '自行高炮', mg: '机枪火力', ciws: '舰上近防炮' }[how] || '防空火力';
+  const nm = EA_SPEC[a.type].name, by = { manpads: '便携防空导弹', sam: '舰空导弹', aa: '自行高炮', mg: '机枪火力', ciws: '舰上近防炮', aam: '我方战斗机空空导弹', gun: '我方战斗机机炮' }[how] || '防空火力';
   log(`${by}击落敌${nm}`, 'good', null, 0, a);
   if (typeof chatSay === 'function') {
     chatSay('p', `报告：${by}击落敌${nm} 1 架。`, { kind: 'report', at: { x: a.x, y: a.y }, key: 'eakill' + a.id, gap: 5 });
@@ -514,17 +516,19 @@ function eaThink() {
   // 两次出击间隔 gap 秒；另一机种可提前一半时间出动（直升机与攻击机各打各的）；固定翼要有跑道完好的机场，直升机从直升机坪起飞不受弹坑影响
   const ready = E.wing.filter(w => w.state === 'ready' && (w.type === 'heli' || open.length) && S.t >= E.first && (S.t >= E.nextT || (E.lastType && w.type !== E.lastType && S.t >= E.nextT - E.gap / 2)));
   if (!ready.length) return;
-  let best = null, bs = 6, bw = null;
+  // 制空权（airwar.js）：敌方掌握时只打高价值目标、不进敌战斗机巡逻区；我方掌握时出击间隔缩短
+  const AW = typeof awState === 'function' ? awState() : null, capP = AW === 'p' ? S.planes.filter(p => !p.dead && p.kind === 'fighter' && (p.phase === 'loiter' || p.phase === 'out')) : [];
+  let best = null, bs = AW === 'p' ? 10 : 6, bw = null;
   for (const t of eaTargets()) for (const type of ['heli', 'ga']) {
     const w = ready.find(w => w.type === type);
-    if (!w) continue;
+    if (!w || capP.some(p => dist(p.cx, p.cy, t.x, t.y) < 500)) continue;
     const s = t.v * EA_PREF[type][t.k];
     if (s >= bs) { bs = s; best = t; bw = w; }
   }
   if (!best) return;
   const b = eaNearBase(best.x, best.y, bw.type === 'heli' ? all : open), sp = EA_SPEC[bw.type];
   const a = eaNewAir(b, bw, best.x, best.y, { tgt: { k: best.k, id: best.id }, ammo: 1, atgm: bw.type === 'heli' ? 2 : 0, rk: bw.type === 'heli' ? 2 : 0 });
-  bw.state = 'out'; E.fly.push(a); E.nextT = S.t + E.gap; E.lastType = bw.type;
+  bw.state = 'out'; E.fly.push(a); E.nextT = S.t + E.gap * (AW === 'e' ? .6 : 1); E.lastType = bw.type;
   eaStat('eaSortie');
   if (typeof chatSay === 'function') chatSay('e', `命令：${sp.name}一个架次出击，打击${eaWhere(best.x, best.y)}的${best.nm}。`, { kind: 'order', at: { x: best.x, y: best.y }, lv: 1, key: 'easort', gap: 15 });
 }
@@ -590,14 +594,24 @@ function eaDraw(time) {
     const age = S.t - w.t, x = w.x + Math.cos(w.h) * w.spd * age, y = w.y + Math.sin(w.h) * w.spd * age;
     if (!spec && !inVision(x, y)) continue;
     ctx.strokeStyle = rgba(COL.smoke, .35); ctx.lineWidth = px(3); ctx.beginPath(); ctx.moveTo(w.x, w.y); ctx.lineTo(x, y); ctx.stroke();
-    if (typeof drawAircraft === 'function') drawAircraft(ctx, x, y, w.h + age * 5, w.type === 'heli' ? 'heli' : 'strike', 14 * (1 - age * .2), COL.enemy, .6 * (1 - age / 2.4), 0, lw);
+    if (typeof drawAircraft === 'function') drawAircraft(ctx, x, y, w.h + age * 5, w.type === 'heli' ? 'heli' : w.type === 'ftr' ? 'fighter' : 'strike', 14 * (1 - age * .2), COL.enemy, .6 * (1 - age / 2.4), 0, lw);
   }
-  // 飞机：地面投影 + 剪影；直升机加旋转的主旋翼
+  // 飞机：固定翼尾迹 + 地面投影 + 剪影；直升机加旋转的主旋翼；歼击机开炮时机头口焰
+  if (EA_TRAILS.size) { const ids = new Set(E.fly.map(a => a.id)); for (const id of [...EA_TRAILS.keys()]) if (!ids.has(id)) EA_TRAILS.delete(id); }
   for (const a of E.fly) {
     if (a.dead || !(spec || a.pv || inVision(a.x, a.y))) continue;
     const heli = a.type === 'heli', size = Math.max(heli ? 15 : 17, px(heli ? 17 : 19));
+    if (!heli && a.alt > .2) {
+      let tr = EA_TRAILS.get(a.id);
+      if (!tr) EA_TRAILS.set(a.id, tr = []);
+      const l = tr[tr.length - 1];
+      if (!l || dist(l[0], l[1], a.x, a.y) > 6) { tr.push([a.x, a.y]); if (tr.length > 22) tr.shift(); }
+      ctx.lineWidth = px(1.2);
+      for (let i = 1; i < tr.length; i++) { ctx.strokeStyle = rgba(COL.enemy, .15 * i / tr.length); ctx.beginPath(); ctx.moveTo(tr[i - 1][0], tr[i - 1][1]); ctx.lineTo(tr[i][0], tr[i][1]); ctx.stroke(); }
+    }
     ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.beginPath(); ctx.ellipse(a.x + a.alt * 14, a.y + a.alt * 22, size * .35, size * .22, a.heading, 0, 7); ctx.fill();
-    if (typeof drawAircraft === 'function') drawAircraft(ctx, a.x, a.y, a.heading, heli ? 'heli' : 'strike', size, COL.enemy, 1, a.bank || 0, lw);
+    if (typeof drawAircraft === 'function') drawAircraft(ctx, a.x, a.y, a.heading, heli ? 'heli' : a.type === 'ftr' ? 'fighter' : 'strike', size, COL.enemy, 1, a.bank || 0, lw);
+    if (a.gunT > 0) { const nx = a.x + Math.cos(a.heading) * size * .55, ny = a.y + Math.sin(a.heading) * size * .55; ctx.fillStyle = rgba('#fff3d6', .5 + .5 * Math.sin(time * 60)); ctx.beginPath(); ctx.arc(nx, ny, size * .14, 0, 7); ctx.fill(); }
     if (heli) {
       const r = size * 9.5 / 21, cx = a.x + Math.cos(a.heading) * size * 1.5 / 21, cy = a.y + Math.sin(a.heading) * size * 1.5 / 21, ang = time * 22 + a.id;
       ctx.strokeStyle = rgba(COL.enemy, .6); ctx.lineWidth = px(1.2); ctx.beginPath();

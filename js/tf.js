@@ -329,7 +329,7 @@ function tfFormOf(id) {
   for (const k in F) if (F[k].ph === 'adv' && F[k].u.includes(id)) return F[k];
   return null;
 }
-// 发起（autopilot.js apLaunch 调用）：返回 true 表示已按队形下达第一次跃进，否则由 apLaunch 直接攻击前进
+// 发起（autopilot.js apLaunch 调用）：返回队形（apLaunch 把各连转入 go 后用 tfFormOrder 下第一次跃进令），否则由 apLaunch 直接攻击前进
 function tfFormGo(units, p, cx, cy, P) {
   if (!tfOn()) return false;
   const T = tfEnsure(), d = dist(cx, cy, p.x, p.y);
@@ -344,12 +344,15 @@ function tfFormGo(units, p, cx, cy, P) {
   }
   const lx = -F.ay, ly = F.ax, face = Math.atan2(F.ay, F.ax), proj = (x, y) => (x - F.ox) * lx + (y - F.oy) * ly;
   const add = units.filter(u => !F.u.includes(u.id) && teamsOf(u).length).sort((a, b) => proj(a.x, a.y) - proj(b.x, b.y));
-  if (!add.length) return true;
+  if (!add.length) return F;
   const ws = add.map(u => { u.form = F.form; return defWidth(F.form, teamsOf(u).length); }), gap = 26;
-  // 首批：沿出发线居中展开；后到的连：接在现有队形更靠近自己的一侧
+  // 首批：沿出发线居中展开；后到的连：接在现有队形更靠近自己的一侧——本就在更外侧的就地展开，不横穿过来收拢（最多离开现有队形 120 米）
   let off;
-  if (!F.u.length) off = -(ws.reduce((a, b) => a + b, 0) + gap * (add.length - 1)) / 2;
-  else off = proj(add[0].x, add[0].y) < (F.w0 + F.w1) / 2 ? F.w0 - gap - ws.reduce((a, b) => a + b + gap, -gap) : F.w1 + gap;
+  const sw = ws.reduce((a, b) => a + b + gap, -gap), own = proj(add[0].x, add[0].y) - ws[0] / 2;
+  if (!F.u.length) off = -sw / 2;
+  else if (own + sw / 2 < (F.w0 + F.w1) / 2) { const tight = F.w0 - gap - sw; off = Math.max(tight - 120, Math.min(tight, own)); }
+  else off = Math.min(F.w1 + gap + 120, Math.max(F.w1 + gap, own));
+  const base = F.u.length;
   add.forEach((u, i) => {
     const w = ws[i], lat = off + w / 2, ts = teamsOf(u).filter(q => q.men.length && !q.ride);
     off += w + gap;
@@ -357,30 +360,35 @@ function tfFormGo(units, p, cx, cy, P) {
     // 连内槽位 → 轴线坐标 [横向（加上连的横向位置）, 在推进线之后的纵深]；组与槽位按横向顺序配对
     const sl = ts.map((q, k) => { const [a, b] = tfSlotOff(k, ts.length, F.form, w); return [a + lat, b]; });
     const tsS = ts.slice().sort((a, b) => proj(a.x, a.y) - proj(b.x, b.y)); sl.sort((a, b) => a[0] - b[0]);
-    const multi = F.u.length + add.length > 1, ue = (F.u.length + i) % 2;
+    const multi = base + add.length > 1, ue = (base + i) % 2;   // 多个连：按连分梯次；单个连：连内按组交替
     tsS.forEach((q, k) => { F.q[q.id] = [Math.round(sl[k][0]), Math.round(sl[k][1]), multi ? ue : k % 2]; });
     F.u.push(u.id);
     Object.assign(u, { face, order: 'amove', tx: p.x, ty: p.y });
   });
   if (F.n === 0) { F.sE[F.lead] = TF_BOUND; F.bT = S.t; }
-  tfFormOrder(F, p);
   tfStat('fmGo', add.length);
-  return true;
+  return F;
 }
-// 下令：跃进梯次 → 前方槽位附近掩护最好的格（行进间射击）；掩护梯次已到位的停下以火力掩护
-function tfFormOrder(F, p) {
+// 下令：跃进梯次 → 前方槽位附近掩护最好的格（行进间射击）；掩护梯次在位（或已在槽位之前、横向没偏开）的停下以火力掩护，
+//      落在后面或偏到一侧的先补位。fill：每秒的补位检查——只把停下来却离位置太远、没被压制的组再派回位置（每组 8 秒一次）
+function tfFormOrder(F, p, fill) {
   const lx = -F.ay, ly = F.ax;
   for (const id of F.u) {
     const u = UNIT_MAP.get(id), pl = S.autoPlan && S.autoPlan.u && S.autoPlan.u[id];
     if (!u || u.state === 'rout' || !pl || pl.ph !== 'go' || (pl.halt != null && S.t - pl.halt < 45)) continue;
+    // 寻路目标取本连该梯次各槽位的中心（和 orderUnits 用连的目的地中心一样）：不能取据点——桥被炸后会沿去据点的路绕远
+    const slot = o => { const s = F.sE[o[2]] - o[1]; return [F.ox + F.ax * s + lx * o[0], F.oy + F.ay * s + ly * o[0]]; }, G = [[0, 0, 0], [0, 0, 0]];
+    for (const q of teamsOf(u)) { const o = F.q[q.id]; if (o && q.men.length) { const [x, y] = slot(o), g = G[o[2]]; g[0] += x; g[1] += y; g[2]++; } }
     for (const q of teamsOf(u)) {
       const o = F.q[q.id];
       if (!o || !q.men.length || q.ride || q.order.t === 'charge' || q.order.t === 'retreat') continue;
-      const s = F.sE[o[2]] - o[1], x0 = F.ox + F.ax * s + lx * o[0], y0 = F.oy + F.ay * s + ly * o[0];
+      const [x0, y0] = slot(o), dx = q.x - x0, dy = q.y - y0, g = G[o[2]];
+      const near = Math.hypot(dx, dy) < (fill ? 30 : 16) || (dx * F.ax + dy * F.ay > -8 && Math.abs(dx * lx + dy * ly) < 20);
+      if (fill) { if (q.order.t !== 'hold' || near || q.sup >= 50 || S.t - (q.fmT ?? -99) < 8) continue; }
+      else if (o[2] !== F.lead && near) { q.order = { t: 'hold' }; continue; }
       let x = x0, y = y0, bs = -Infinity;
       eachCellIn(x0, y0, 14, i => { const t = TER.type[i]; if (!TP[t].sp || MINEC[i] === 2 || WIREC[i]) return; const v = (1 - TP[t].cv) * 2 - dist(cellCX(i), cellCY(i), x0, y0) / 14; if (v > bs) { bs = v; x = cellCX(i); y = cellCY(i); } });
-      if (o[2] === F.lead) { q.order = { t: 'move', x, y, gx: p.x, gy: p.y }; q.pathT = -9; }
-      else if (dist(q.x, q.y, x, y) < 16) q.order = { t: 'hold' };
+      q.order = { t: 'move', x, y, gx: Math.round(g[0] / g[2]), gy: Math.round(g[1] / g[2]) }; q.pathT = -9; q.fmT = S.t;
     }
   }
 }
@@ -398,7 +406,7 @@ function tfForm(P) {
     const lx = -F.ay, ly = F.ax, mv = us.flatMap(u => teamsOf(u)).filter(q => q.men.length && !q.ride && F.q[q.id] && F.q[q.id][2] === F.lead);
     const at = q => { const o = F.q[q.id], s = F.sE[o[2]] - o[1]; return dist(q.x, q.y, F.ox + F.ax * s + lx * o[0], F.oy + F.ay * s + ly * o[0]) < 18; };
     const done = mv.every(q => at(q) || q.sup >= 60 || (q.order.t === 'hold' && S.t - q.movedT > 6) || q.order.t === 'charge');
-    if (!done && S.t - F.bT < 25) continue;
+    if (!done && S.t - F.bT < 25) { tfFormOrder(F, p, true); continue; }
     const front = Math.max(F.sE[0], F.sE[1]);
     if (front >= F.L) {   // 推进到冲击出发线：统一冲击
       F.ph = 'assault';
