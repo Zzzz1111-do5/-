@@ -15,6 +15,7 @@ const ptByKey = k => S.points.find(p => p.key === k);
 function aiInit(level) {
   S.ai = { level, cd: 2, waves: 0, nextWave: DIFF[level].waveEvery * .6, reg: [], said: {} };
   aiCache();
+  if (typeof a4Init === 'function') a4Init();   // v7 守方协同状态（ai4.js）
 }
 
 function aiCache() {

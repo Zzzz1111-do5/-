@@ -28,6 +28,7 @@ function suppress(q, v, sx, sy) {
     if (u) u.flankT = S.t;
   }
   q.sup = Math.min(100, q.sup + v); q.hitT = S.t;
+  if (sx != null) { q.supX = sx; q.supY = sy; q.supT = S.t; }   // 最近一次压制来源（坦克据此找火力点）
   const u = unitOf(q);
   if (u) u.hitT = S.t;
 }

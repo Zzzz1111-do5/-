@@ -107,7 +107,7 @@ function a3Spot() {
 function a3Sources() {
   const seenP = a3SeenP();
   return S.teams.filter(q => {
-    if (q.side !== 'e' || q.role !== 'reserve' || q.men.length < 2 || q.raid) return false;
+    if (q.side !== 'e' || q.role !== 'reserve' || q.men.length < 2 || q.raid || (typeof a4Busy === 'function' && a4Busy(q))) return false;
     if (q.order.t !== 'hold' && q.order.t !== 'move') return false;
     if (S.t - q.hitT < 30 || q.sup > 20) return false;
     const u = unitOf(q);

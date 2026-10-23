@@ -413,6 +413,7 @@ function apInfantry(u, pl, P) {
       const grp = apGroup(p.key, P), ready = grp.filter(g => P.u[g.id].ph === 'wait');
       // 不在滩头或炮火下干等：滩头上、刚挨炮击或被压制时立即发起
       const exposed = coastAt(u.x) - u.y < 90 || S.t - (pl.artyT ?? -99) < 6 || ts.reduce((a, q) => a + q.sup, 0) / ts.length > 40;
+      if (typeof tfOn === 'function' && tfOn()) { tfMass(u, p, grp, ready, exposed, pl, P, O); return; }   // v7：按兵力比凑足再统一发起（tf.js）
       if (exposed || ready.length >= Math.min(O.need || 1, grp.length) || S.t - (pl.waitT ?? S.t) >= AP_WAIT) apLaunch(exposed ? [u] : ready, p, P);
       return;
     }

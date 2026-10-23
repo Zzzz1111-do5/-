@@ -24,6 +24,8 @@ function aiThink(D) {
     const def = foes.filter(q => q.obj === p.key).reduce((a, q) => a + q.men.length, 0);
     info[p.key] = { p, th, near, def, fx: w ? cx0 / w : p.x, fy: w ? cy0 / w : p.y + 250 };
   }
+  const a4 = typeof a4On === 'function' && a4On() && !!(S.ai.co);   // v7 守方协同（ai4.js）：预备队整连机动、有计划的反冲击、借兵侧射
+  if (a4) for (const k in info) S.ai.co.thr[k] = [Math.round(info[k].fx), Math.round(info[k].fy), +info[k].th.toFixed(1), info[k].near];
   for (const u of S.units) if (u.side === 'e' && u.state !== 'rout') {
     const I = info[u.obj];
     u.face = u.role === 'ambush' || !I || !I.th ? SOUTH : Math.atan2(I.fy - I.p.y, I.fx - I.p.x);
@@ -37,10 +39,11 @@ function aiThink(D) {
   for (const q of foes) {
     if (q.order.t === 'amove' || q.order.t === 'retreat' || q.role === 'ambush' || !info[q.obj]) continue;
     if (typeof cmdHeld === 'function' && cmdHeld(q)) continue;   // 预备队尚未获准出动
+    if (a4 && (a4Busy(q) || q.role === 'reserve')) continue;   // 预备队由 ai4 整连调动，不再一组一组地抽
     const k = keys.reduce((a, b) => need(b) > need(a) ? b : a);
     if (k === q.obj || need(k) < need(q.obj) * 1.5) continue;
     const spare = q.role === 'reserve' || (info[q.obj].th < 2 && foes.filter(o => o.obj === q.obj && o.role === 'garrison').length > 1);
-    if (!spare) continue;
+    if (!spare || (a4 && Math.abs(info[k].p.x - info[q.obj].p.x) > 600)) continue;   // 守备只沿内线就近调剂
     info[q.obj].def -= q.men.length; info[k].def += q.men.length;
     Object.assign(q, { obj: k, role: 'reserve', px: null, u: aiUnitFor(k).id });
   }
@@ -64,9 +67,10 @@ function aiThink(D) {
   // 反击或坚守
   for (const k of keys) {
     const I = info[k], p = I.p;
-    let mine = foes.filter(q => q.obj === k && q.men.length > 1 && q.role !== 'ambush' && q.order.t !== 'retreat');
+    let mine = foes.filter(q => q.obj === k && q.men.length > 1 && q.role !== 'ambush' && q.order.t !== 'retreat' && !(a4 && a4Busy(q)));
     const men = mine.reduce((a, q) => a + q.men.length, 0), lost = p.owner === 'p' || p.prog > .25;
-    if (lost && men >= Math.max(4, I.near * D.ratio)) {
+    // 仓促反击：有计划反冲击的据点交给计划；否则至少两个组、人数够兵力比才出击（不一组一组地送）
+    if (lost && !(a4 && a4OwnsPt(k)) && (a4 ? mine.length >= 2 && men >= Math.max(6, I.near * D.ratio) : men >= Math.max(4, I.near * D.ratio))) {
       // 指挥官：可能逐次投入（只出动一部分），受挫后集中兵力再统一反击
       const atk = (typeof cmdCounter === 'function' && cmdCounter(p, mine, men, I)) || mine, am = atk.reduce((a, q) => a + q.men.length, 0);
       const shaken = seenT.some(o => dist(o.x, o.y, p.x, p.y) < 90 && o.sup > 45);
@@ -115,6 +119,8 @@ function aiArtillery(D, seenT, seenShips) {
     const L = S.rlines.find(l => l.id === b.line), a = Math.atan2(L.y1 - L.y0, L.x1 - L.x0);
     T.push({ x: b.x, y: b.y, v: 4, vx: Math.cos(a) * 40, vy: Math.sin(a) * 40, sea: true });
   }
+  const FO = typeof a4Focus === 'function' ? a4Focus() : null;   // 反冲击火力准备 / 延伸射击（ai4.js）
+  if (FO) for (const t of T) if (dist(t.x, t.y, FO.x, FO.y) < FO.r) t.v = t.v * 3 + 4;
   for (const t of T) for (const sh of S.shells) if (sh.side === 'e' && dist(sh.x1, sh.y1, t.x, t.y) < 40) t.v *= .35;
   T.sort((a, b) => b.v - a.v);
   const used = new Set();

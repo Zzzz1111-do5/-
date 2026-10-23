@@ -288,7 +288,8 @@ function vehGunTarget(v) {
     const d = dist(v.x, v.y, x, y);
     if (d > R0 || (g.min && d < g.min)) return;
     if (!g.ind && !vehSees(v, x, y, d)) return;
-    const s = val / (1 + d / R0);
+    const eng = v.esc && v.esc.eng && S.t < v.esc.eng.until && dist(x, y, v.esc.eng.x, v.esc.eng.y) < 25;   // 步坦协同：优先打压制伙伴步兵的火力点
+    const s = val / (1 + d / R0) * (eng ? 2.2 : 1);
     if (s > bs) { bs = s; best = { t, k, x, y, d }; }
   };
   if (!g.flame) {
@@ -591,6 +592,7 @@ function vehThinkP(v) {
   if (v.swim || vehWater(v.x, v.y)) { vehLanding(v); return; }
   if (sp.carry && vehFerry(v)) return;
   if (sp.flail && vehSweep(v, true)) return;
+  if (v.buddy != null && v.esc && typeof tfOn === 'function' && tfOn() && typeof vehEscort === 'function' && vehEscort(v)) return;   // v7 步坦协同（tf.js）
   vehSupport(v);
 }
 
@@ -754,6 +756,7 @@ function vehThinkE(v) {
   }
   if (v.immob) { v.order = { t: 'hold', face: SOUTH }; return; }
   if (v.hp < v.maxhp * .3) { v.ai = 'back'; vehGo(v, v.hx, v.hy, 'retreat', SOUTH); return; }
+  if (v.buddy != null && v.esc && typeof a4On === 'function' && a4On() && typeof vehEscort === 'function' && vehEscort(v)) return;   // v7：随步兵行动（ai4.js 绑定）
   let best = null, bs = -Infinity;
   for (const p of S.points) {
     const d = dist(v.x, v.y, p.x, p.y), lost = p.owner === 'p';
