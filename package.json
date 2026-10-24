@@ -1,0 +1,18 @@
+{
+  "name": "darksword",
+  "version": "1.0.0",
+  "private": true,
+  "description": "暗剑 Darksword：两栖登陆作战沙盘（安卓版由 Capacitor 打包）",
+  "scripts": {
+    "build": "node tools/build_www.mjs",
+    "sync": "node tools/build_www.mjs && npx cap sync android",
+    "open": "npx cap open android"
+  },
+  "dependencies": {
+    "@capacitor/android": "8.5.3",
+    "@capacitor/core": "8.5.3"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.5.3"
+  }
+}
