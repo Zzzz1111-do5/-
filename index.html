@@ -168,6 +168,40 @@ button:disabled { cursor: not-allowed; opacity: .3; }
   #pauseBand { top: auto; bottom: 58px; }
   .diff { grid-template-columns: minmax(0, 1fr); }
 }
+/* 手机横屏（高度矮）：战场铺满整屏，底栏仍浮在下方，各面板缩小；覆盖上面「窄屏」的竖屏布局 */
+@media (orientation: landscape) and (max-height: 520px) {
+  body { overflow: hidden; }
+  #stage { position: fixed; inset: 0; height: auto; min-height: 0; }
+  #bottom { position: fixed; grid-template-columns: auto minmax(0, 1fr) auto; gap: 6px; padding-top: 0; background: transparent;
+    padding-bottom: calc(4px + env(safe-area-inset-bottom, 0px)); padding-left: max(8px, env(safe-area-inset-left, 0px)); padding-right: max(8px, env(safe-area-inset-right, 0px)); }
+  #mmBox { width: 128px; order: 0; padding: 4px; gap: 3px; } #cmdBox { order: 0; padding: 4px; gap: 4px; } #cards { justify-self: center; padding: 4px; }
+  .zoom .tb { height: 22px; min-width: 0; }
+  .uc { width: 48px; height: 60px; padding: 3px 2px 2px; } .uc .em { width: 20px; height: 20px; } .uc > b { font-size: 11px; }
+  .ib { width: 36px; height: 36px; } .row { gap: 3px; justify-content: flex-end; }
+  #feed { top: calc(6px + env(safe-area-inset-top, 0px)); left: max(8px, env(safe-area-inset-left, 0px)); max-width: min(260px, 30vw); }
+  #feed li { font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } #feed li:nth-child(n+3) { display: none; }
+  #objs { top: calc(6px + env(safe-area-inset-top, 0px)); bottom: auto; left: 50%; transform: translateX(-50%); flex-wrap: nowrap; overflow-x: auto; justify-content: flex-start; max-width: 38vw; padding: 3px 4px; }
+  .ob { flex: 0 0 auto; width: 24px; height: 24px; } .ob .ic { width: 16px; height: 16px; } .obt { height: 24px; }
+  #topr { top: calc(6px + env(safe-area-inset-top, 0px)); right: max(8px, env(safe-area-inset-right, 0px)); gap: 3px; padding: 2px 4px; }
+  #topr .tb { height: 28px; min-width: 28px; padding: 0 5px; } #clock { font-size: 13px; padding: 0 3px; }
+  #deploy, #pauseBand { top: calc(44px + env(safe-area-inset-top, 0px)); bottom: auto; } #deploy p { display: none; }
+  #info { bottom: calc(110px + env(safe-area-inset-bottom, 0px)); left: max(8px, env(safe-area-inset-left, 0px)); max-height: 46vh; overflow-y: auto; }
+  .sheet { padding: 12px 16px; max-height: calc(100% - 16px); } .sheet h1 { font-size: 20px; }
+  #btnBrief, #btnAgain { position: sticky; bottom: 0; background: #07040f; }
+}
+#selX { display: none; position: fixed; z-index: 4; right: max(8px, env(safe-area-inset-right, 0px)); bottom: calc(150px + env(safe-area-inset-bottom, 0px)); place-items: center; min-width: 44px; height: 36px; padding: 0 10px;
+  background: var(--panel); border: 1px solid var(--sel); border-radius: 18px; color: #e6d8ff; font-size: 12px; }
+/* 触屏：不显示键盘快捷键角标与键盘说明，换成手势说明；长按不弹系统菜单、不选中文字 */
+.touch-keys { display: none; }
+@media (pointer: coarse) {
+  .ib kbd { display: none; }
+  body { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+  .sheet .keys:not(p) { display: none; }
+  .touch-keys { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 4px 12px; font-size: 12px; color: var(--mute); }
+  .touch-keys b { color: var(--g); font-weight: 600; }
+  #selX { display: grid; }
+}
+#selX[hidden] { display: none; }
 .ct-load { display: grid; gap: 8px; font-size: 12px; line-height: 1.5; }
 .ct-load > b { color: var(--amber); font-weight: 600; }
 .ct-load section { border: 1px solid var(--line); border-radius: 4px; padding: 6px 8px; background: rgba(0, 0, 0, .18); }
@@ -198,6 +232,7 @@ button:disabled { cursor: not-allowed; opacity: .3; }
     <p>右键集结海域内布阵 · 右键海岸预定登陆点 · 选择阵型 · Enter 开始</p>
   </div>
 </main>
+<button id="selX" type="button" hidden aria-label="取消选择">✕ 取消选择</button>
 <section id="bottom" class="ov">
   <div id="mmBox" class="box">
     <canvas id="mm" aria-label="小地图，点击跳转"></canvas>
@@ -223,6 +258,12 @@ button:disabled { cursor: not-allowed; opacity: .3; }
       <span><kbd>F</kbd> 舰炮 · <kbd>S</kbd> 烟幕 · <kbd>D</kbd> 选驱逐舰 · <kbd>G</kbd> 驱逐舰自动</span><span><kbd>R</kbd> 侦察 · <kbd>T</kbd> 空袭 · <kbd>V</kbd> 近距支援 · <kbd>W</kbd> 战斗机巡逻 · <kbd>E</kbd> 增援线</span>
       <span><kbd>K</kbd> 选航母 · <kbd>J</kbd> 航母自动</span><span><kbd>U</kbd> 选中单位自动 / 手动 · <kbd>N</kbd> 工兵排雷剪网</span>
       <span><kbd>Enter</kbd> H 时开始登陆 · <kbd>L</kbd> 通讯面板 · <kbd>P</kbd> 收起据点栏</span><span><kbd>空格</kbd> 暂停 · <kbd>Esc</kbd> 菜单 · 滚轮缩放 · 中键拖动</span>
+    </div>
+    <div class="touch-keys">
+      <span><b>点</b>部队 / 舰船：选中（再点一次取消）</span><span>选中后<b>点地面</b>：移动过去</span>
+      <span>选中后<b>长按地面</b>：攻击前进</span><span><b>长按后拖动</b>：框选多支部队</span>
+      <span><b>单指拖</b>：平移地图 · <b>双指捏</b>：缩放</span><span>下方按钮：阵型、坚守、撤退、舰炮、空袭等</span>
+      <span>沙盒里<b>长按</b>条目：删除（继续拖动连续删除）</span><span>右上 ▶ 暂停 / 继续，≡ 菜单</span>
     </div>
     <p class="keys">侧翼和背后受到攻击会让部队士气崩溃；战壕只挡正面（海面方向）的火力；冲锋前先用机枪和舰炮压住敌人。只有步兵能占领据点，车辆只能争夺。夺取指挥所并控制七成以上据点分值，坚守 30 秒即胜利。</p>
     <div class="diff" id="diff" role="radiogroup" aria-label="守军 AI 难度">

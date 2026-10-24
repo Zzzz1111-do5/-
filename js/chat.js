@@ -50,7 +50,7 @@ const CHAT_CSS = `
 `;
 
 const chatEsc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
-const chatPhone = () => typeof matchMedia === 'function' && matchMedia('(max-width: 900px)').matches;
+const chatPhone = () => typeof matchMedia === 'function' && matchMedia('(max-width: 900px), (orientation: landscape) and (max-height: 520px)').matches;   // 竖屏窄屏或手机横屏
 // PvE（玩家进攻）里敌方通话只能截获；沙盒（玩家自己部署了守军）与观战直接可见
 const chatPve = () => !!S && S.mode !== 'sandbox' && S.role !== 'spectate';
 // 消息出现在面板上的时刻；null = 不出现（未被截获）
