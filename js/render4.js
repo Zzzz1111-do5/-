@@ -84,15 +84,20 @@ function flag(ctx, x, y, owner, vp, prog, time) {
 }
 
 function drawStructure(p, time) {
-  const ctx = R.ctx, k = PKIND(p.key), x = p.x, y = p.y;
-  ctx.strokeStyle = rgba(STRUCT, .8); ctx.fillStyle = 'rgba(2,10,6,.8)'; ctx.lineWidth = px(1.4);
-  const box = (bx, by, w, h) => { ctx.fillRect(bx - w / 2, by - h / 2, w, h); ctx.strokeRect(bx - w / 2, by - h / 2, w, h); };
+  const ctx = R.ctx, k = PKIND(p.key), x = p.x, y = p.y, real = realLook();
+  // 写实：混凝土工事（灰色实体、深色边线、东南向投影），围栏为细虚线；数码：白色线稿
+  ctx.strokeStyle = real ? 'rgba(28,28,26,.8)' : rgba(STRUCT, .8); ctx.fillStyle = real ? '#8f8b82' : 'rgba(2,10,6,.8)'; ctx.lineWidth = px(real ? 1 : 1.4);
+  const box = (bx, by, w, h) => {
+    if (real) { ctx.save(); ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.fillRect(bx - w / 2 + 1.2, by - h / 2 + 1.2, w, h); ctx.restore(); }
+    ctx.fillRect(bx - w / 2, by - h / 2, w, h); ctx.strokeRect(bx - w / 2, by - h / 2, w, h);
+    if (real) { ctx.save(); ctx.fillStyle = 'rgba(255,255,255,.14)'; ctx.fillRect(bx - w / 2, by - h / 2, w, Math.min(1.2, h / 3)); ctx.restore(); }
+  };
   if (k === 'exit') {
     for (const sx of [-17, 17]) { ctx.beginPath(); ctx.arc(x + sx, y, 6, 0, Math.PI); ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.beginPath(); ctx.moveTo(x + sx - 3, y + 3); ctx.lineTo(x + sx + 3, y + 3); ctx.stroke(); }
-    for (let i = -3; i <= 3; i++) if (i) { const tx = x + i * 8; ctx.beginPath(); ctx.moveTo(tx - 2.5, y + 14); ctx.lineTo(tx, y + 9); ctx.lineTo(tx + 2.5, y + 14); ctx.closePath(); ctx.stroke(); }
+    for (let i = -3; i <= 3; i++) if (i) { const tx = x + i * 8; ctx.beginPath(); ctx.moveTo(tx - 2.5, y + 14); ctx.lineTo(tx, y + 9); ctx.lineTo(tx + 2.5, y + 14); ctx.closePath(); if (real) ctx.fill(); ctx.stroke(); }   // 龙牙（混凝土锥）
   } else if (k === 'hq') {
     ctx.setLineDash([px(5), px(2)]); ctx.strokeRect(x - 28, y - 20, 56, 40); ctx.setLineDash([]);
-    ctx.fillStyle = 'rgba(2,10,6,1)'; ctx.fillRect(x - 6, y + 18, 12, 4);
+    ctx.fillStyle = real ? '#6e6a62' : 'rgba(2,10,6,1)'; ctx.fillRect(x - 6, y + 18, 12, 4); if (real) ctx.fillStyle = '#7d8064';
     box(x - 12, y - 6, 18, 12); box(x + 12, y - 8, 12, 9); box(x + 10, y + 8, 16, 8);
     ctx.beginPath(); ctx.moveTo(x - 20, y + 12); ctx.lineTo(x - 20, y - 14); ctx.moveTo(x - 24, y - 10); ctx.lineTo(x - 16, y - 10); ctx.stroke();
     ctx.fillStyle = rgba(COL.enemy, .5 + .5 * Math.sin(time * 5)); ctx.fillRect(x - 21, y - 16, 2, 2);
@@ -152,8 +157,9 @@ function drawStructures(time) { for (const p of S.points) if (inView(p.x, p.y, 7
 
 // 俯视单兵（世界尺寸：肩宽约 3.9、连枪长约 5 单位）：暗底肩部 + 实心头 + 武器线；描边按屏幕像素，放大后依然纤细
 // 通讯兵背电台与天线，机枪手枪管粗、带脚架，工兵背锹
-function drawMan(ctx, x0, y0, a, role, col, det) {
+function drawMan(ctx, x0, y0, a, role, col, det, side) {
   if (!det) { const d = Math.max(px(1.8), 1.4); ctx.fillStyle = col; ctx.fillRect(x0 - d / 2, y0 - d / 2, d, d); return; }
+  if (realLook()) { drawManReal(ctx, x0, y0, a, role, col, side); return; }
   const k = 1.12, lw = px(1) / k, dark = 'rgba(2,10,6,.88)';
   ctx.save(); ctx.translate(x0, y0); ctx.rotate(a); ctx.scale(k, k);
   ctx.lineWidth = lw; ctx.strokeStyle = col; ctx.fillStyle = dark;

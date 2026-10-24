@@ -1319,7 +1319,9 @@ function vehDeck(ctx, v, col, a, lw, time) {
 
 // 炮塔 / 战斗室 / 炮管（随 aim 转动；开火后短暂后坐 + 炮口焰）
 function vehTurret(ctx, v, col, a, det, lw, vis, enemy, time) {
-  const sp = vehSp(v), L = sp.len, B = sp.wid, hl = L / 2, hb = B / 2, t = v.type, dark = enemy ? 'rgba(44,6,16,.96)' : 'rgba(4,18,10,.96)';
+  const real = vis && typeof realLook === 'function' && realLook();   // 写实：炮塔用涂装、炮管与边线用深色金属
+  if (real) col = RL_EDGE;
+  const sp = vehSp(v), L = sp.len, B = sp.wid, hl = L / 2, hb = B / 2, t = v.type, dark = real ? rlPal(v.side).tur : enemy ? 'rgba(44,6,16,.96)' : 'rgba(4,18,10,.96)';
   const since = S.t - v.fireT, rec = vis && since < .25 ? (1 - since / .25) * 1.6 : 0, ra = vehAng(v.aim - v.heading);
   ctx.strokeStyle = rgba(col, a);
   const barrel = (x0, len, w) => {
@@ -1332,7 +1334,7 @@ function vehTurret(ctx, v, col, a, det, lw, vis, enemy, time) {
       ctx.fillStyle = rgba('#fff3d6', 1 - u); ctx.beginPath(); ctx.arc(x0 + len + .6, 0, 1.6, 0, 7); ctx.fill();
     }
   };
-  const fill = () => { if (vis) { ctx.fillStyle = det ? dark : rgba(col, .55 * a); ctx.fill(); } };
+  const fill = () => { if (vis) { ctx.fillStyle = real ? (det ? rlLit(ctx, v.heading, L * .5, B * .7, dark) : dark) : det ? dark : rgba(col, .55 * a); ctx.fill(); } };
   if (!sp.tur) {   // 无炮塔：战斗室固定，炮管随小射界偏转
     if (t === 'spg') {
       ctx.save(); ctx.translate(-hl * .15, 0); ctx.rotate(ra);
@@ -1414,7 +1416,8 @@ function vehDraw(ctx, v, x, y, h, aim, vis, time, sel) {
   }
   ctx.save(); ctx.translate(x, y); ctx.rotate(h); ctx.scale(k, k);
   if (!vis) ctx.setLineDash([px(2.5) / k, px(2) / k]);
-  vehBody(ctx, v, col, a, det, lw, time, vis, enemy);
+  if (typeof realLook === 'function' && realLook()) vehBodyReal(ctx, v, col, a, det, lw, time, vis, enemy);
+  else vehBody(ctx, v, col, a, det, lw, time, vis, enemy);
   vehTurret(ctx, v, col, a, det, lw, vis, enemy, time);
   if (vis && v.swim) {   // 水线：车体半没入水中
     ctx.strokeStyle = rgba('#d4fff0', .35); ctx.lineWidth = lw(.8);
@@ -1468,6 +1471,12 @@ function vehSmoke(ctx, x, y, k, time, seed, a0, fire) {
 function vehWreck(ctx, v, time) {
   if (v.side === 'e' && v.kx == null && !inVision(v.x, v.y)) return;
   const sp = vehSp(v), k = vehK(v), col = v.side === 'e' ? COL.enemy : COL.g, lw = n => px(n) / k;
+  if (typeof realLook === 'function' && realLook()) {
+    vehWreckReal(ctx, v, sp, k);
+    const age = S.t - (v.deadT ?? -99);
+    if (age < 45) vehSmoke(ctx, v.x, v.y, k, time, v.id, 1 - age / 45, age < 12);
+    return;
+  }
   ctx.save(); ctx.translate(v.x, v.y); ctx.rotate(v.kh ?? v.heading); ctx.scale(k, k);
   vehHullPath(ctx, v); ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fill();
   ctx.setLineDash([lw(2), lw(2.2)]); ctx.strokeStyle = rgba(col, .32); ctx.lineWidth = lw(1); ctx.stroke(); ctx.setLineDash([]);

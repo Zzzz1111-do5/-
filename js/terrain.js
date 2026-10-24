@@ -211,7 +211,7 @@ void main() {
     sea *= .9 + .2 * wv;
     sea *= 1. + .05 * sin(dpt * .12 - t * .9 + vn(w * .01) * 6.) * det * smoothstep(20., 80., dpt);   // 涌浪：长条明暗
     float gn = vn(w * .45 + t * vec2(.6, .3)) * vn(w * .57 - t * vec2(.4, .5));   // 阳光碎光：细小，像素大于光斑时不画
-    sea += vec3(.5, .55, .55) * smoothstep(.5, .78, gn) * .22 * (1. - smoothstep(.3, .7, pw)) * smoothstep(15., 120., dpt);
+    sea += vec3(.4, .45, .45) * smoothstep(.55, .85, gn) * .07 * (1. - smoothstep(.25, .5, pw)) * smoothstep(15., 120., dpt);
     // 河口：入海的泥沙水
     sea = mix(sea, vec3(.3, .42, .38), smoothstep(.08, .4, C.g) * .55 * smoothstep(45., 0., dpt));
     // 暗礁：水下礁盘 + 一圈白浪

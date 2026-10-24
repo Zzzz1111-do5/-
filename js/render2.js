@@ -5,6 +5,7 @@ const MO = [[0, -4.6], [-4.6, 3.4], [4.6, 3.4]];   // 三人组成三角（世�
 
 function drawForts(time) {
   const ctx = R.ctx;
+  if (realLook()) return drawFortsReal(ctx, time);
   ctx.lineWidth = px(1.2);
   for (const t of S.trench) if (t.known) {
     ctx.strokeStyle = rgba(COL.enemy, .4); ctx.lineWidth = px(2);
@@ -129,7 +130,7 @@ function faceDraw(q) {
 function drawTeamBody(ctx, q, f, col) {
   const c = Math.cos(f + 1.57), s = Math.sin(f + 1.57), n = q.men.length;
   if (R.fig) {
-    for (let i = 0; i < n; i++) drawMan(ctx, q.x + MO[i][0] * c - MO[i][1] * s, q.y + MO[i][0] * s + MO[i][1] * c, f, q.men[i], col, true);
+    for (let i = 0; i < n; i++) drawMan(ctx, q.x + MO[i][0] * c - MO[i][1] * s, q.y + MO[i][0] * s + MO[i][1] * c, f, q.men[i], col, true, q.side);
     return;
   }
   const k = Math.max(1, px(2.3) / 4.6), d = px(clamp(1.5 + R.s, 1.8, 2.5));

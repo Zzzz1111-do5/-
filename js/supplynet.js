@@ -371,9 +371,10 @@ function drawSupplyNet(time) {
       if (near) {
         const a = Math.atan2(P[i][1] - P[i - 1][1], P[i][0] - P[i - 1][0]);
         ctx.save(); ctx.translate(x, y); ctx.rotate(a);
-        ctx.fillStyle = 'rgba(2,10,6,.9)'; ctx.fillRect(-3, -1.6, 6, 3.2);
-        ctx.strokeStyle = rgba(COL.g, .9); ctx.lineWidth = px(1); ctx.strokeRect(-3, -1.6, 6, 3.2);
-        ctx.fillStyle = rgba(COL.g, .9); ctx.fillRect(1.6, -1.6, 1.4, 3.2);
+        const rl = realLook();   // 写实：运输线上的橄榄绿卡车
+        ctx.fillStyle = rl ? '#5c663d' : 'rgba(2,10,6,.9)'; ctx.fillRect(-3, -1.6, 6, 3.2);
+        ctx.strokeStyle = rl ? 'rgba(0,0,0,.55)' : rgba(COL.g, .9); ctx.lineWidth = px(1); ctx.strokeRect(-3, -1.6, 6, 3.2);
+        ctx.fillStyle = rl ? RLP.p.hull : rgba(COL.g, .9); ctx.fillRect(1.6, -1.6, 1.4, 3.2);
         ctx.restore();
       } else { ctx.fillStyle = rgba(COL.g, .9); ctx.fillRect(x - px(1.5), y - px(1.5), px(3), px(3)); }
     }

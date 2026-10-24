@@ -788,7 +788,8 @@ function eaDrawBases(time) {
 function eaDrawBase(ctx, b, vis, time, own) {
   const det = EA_RW.L * R.s, dead = b.dead, a = vis ? 1 : .5, f = clamp(b.hp / b.maxhp, 0, 1), C0 = own ? COL.g : COL.enemy;
   const edge = rgba(dead ? COL.smoke : C0, (dead ? .4 : .85) * a), con = rgba(STRUCT, .42 * a), paint = rgba('#e8fff0', .5 * a);
-  const pave = `rgba(16,20,18,${.93 * a})`, slab = `rgba(30,36,33,${.9 * a})`, dark = `rgba(2,10,6,${.92 * a})`, dash = vis ? [] : [px(4), px(3)];
+  const rl = realLook();   // 写实：沥青跑道、水泥滑行道与机坪、白色标线
+  const pave = rl ? `rgba(66,68,68,${.97 * a})` : `rgba(16,20,18,${.93 * a})`, slab = rl ? `rgba(138,135,126,${.95 * a})` : `rgba(30,36,33,${.9 * a})`, dark = rl ? `rgba(58,60,58,${.95 * a})` : `rgba(2,10,6,${.92 * a})`, dash = vis ? [] : [px(4), px(3)];
   ctx.save();
   ctx.translate(b.x, b.y); ctx.rotate(b.rh || 0); ctx.scale(1, b.rs || 1);
   ctx.lineJoin = 'miter'; ctx.setLineDash(dash);

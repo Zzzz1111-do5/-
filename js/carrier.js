@@ -936,16 +936,23 @@ function airShape(ctx, type) {
 
 // 飞机剪影：轮廓 + 各型细节（预警机雷达圆盘、歼-20 外倾双垂尾与鸭翼、轰-6K 翼根发动机、A-10 尾部双发、连翼机的中空、V 尾、旋翼与短翼）；攻击机挂弹
 function drawAircraft(ctx, x, y, a, type, size, col, alpha, bank, lw, bombs) {
-  const sc = size / 21;
+  const sc = size / 21, real = typeof realLook === 'function' && realLook();
   ctx.save(); ctx.translate(x, y); ctx.rotate(a); ctx.scale(sc, sc * (1 - .32 * Math.min(1, Math.abs(bank || 0))));
   airShape(ctx, type);
-  ctx.fillStyle = `rgba(2,10,6,${.88 * alpha})`; ctx.fill();
-  ctx.strokeStyle = rgba(col, alpha); ctx.lineWidth = lw / sc; ctx.stroke();
+  if (real) {   // 写实：按机型涂装（受光渐变）、深色细节线、阵营细边
+    const ga = ctx.globalAlpha;
+    ctx.fillStyle = rlLit(ctx, a, 22, 18, rlAirPaint(type)); ctx.globalAlpha = ga * alpha; ctx.fill(); ctx.globalAlpha = ga;
+    ctx.strokeStyle = rgba(col, alpha * .8); ctx.lineWidth = lw / sc * .8; ctx.stroke();
+    ctx.strokeStyle = `rgba(20,22,24,${.55 * alpha})`;
+  } else {
+    ctx.fillStyle = `rgba(2,10,6,${.88 * alpha})`; ctx.fill();
+    ctx.strokeStyle = rgba(col, alpha); ctx.lineWidth = lw / sc; ctx.stroke();
+  }
   ctx.lineWidth = lw / sc * .7;
   const seg = (...p) => { ctx.beginPath(); for (let i = 0; i < p.length; i += 4) { ctx.moveTo(p[i], p[i + 1]); ctx.lineTo(p[i + 2], p[i + 3]); } ctx.stroke(); };
   if (type !== 'heli' && type !== 'uh60' && type !== 'gj11' && type !== 'wz7') seg(8.5, 0, 4.5, 0);   // 座舱
   if (type === 'kj600') {   // 背负雷达圆盘 + 两台涡桨
-    ctx.beginPath(); ctx.arc(-1.8, 0, 3.6, 0, 7); ctx.fillStyle = `rgba(2,10,6,${alpha})`; ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.arc(-1.8, 0, 3.6, 0, 7); ctx.fillStyle = real ? `rgba(214,218,218,${alpha})` : `rgba(2,10,6,${alpha})`; ctx.fill(); ctx.stroke();
     seg(-5.4, 0, 1.8, 0);
     for (const s of [-1, 1]) ctx.strokeRect(1.2, s * 4.4 - .8, 3.4, 1.6);
   } else if (type === 'wz7') {   // 连翼中间是空的
@@ -975,7 +982,7 @@ function drawAircraft(ctx, x, y, a, type, size, col, alpha, bank, lw, bombs) {
     for (const s of [-1, 1]) for (const y of [4.2, 8]) ctx.strokeRect(1.4, s * y - .8, 3.2, 1.6);
   }
   if (bombs) {
-    ctx.fillStyle = rgba(COL.amber, alpha);
+    ctx.fillStyle = real ? `rgba(70,74,64,${alpha})` : rgba(COL.amber, alpha);
     for (const s of [-1, 0, 1]) { ctx.beginPath(); ctx.ellipse(-1.5 + Math.abs(s) * .5, s * 4.6, 1.6, .8, 0, 0, 7); ctx.fill(); }
   }
   ctx.restore();
@@ -997,12 +1004,14 @@ function drawCarrier1(time) {
     ctx.beginPath(); ctx.moveTo(c.x, c.y); ctx.lineTo(c.tx, c.ty); ctx.stroke(); ctx.setLineDash([]);
     ctx.beginPath(); ctx.arc(c.tx, c.ty, px(5), 0, 7); ctx.stroke();
   }
+  const real = typeof realLook === 'function' && realLook();
   ctx.save();
   ctx.translate(c.x, c.y); ctx.rotate(c.heading); ctx.scale(k, k);
   if (c.moving && !dead) {   // 舰尾 V 形尾流与舰首浪
     for (const s of [-1, 1]) {
       const g = ctx.createLinearGradient(-77, 0, -190, 0);
-      g.addColorStop(0, rgba(COL.intel, .35)); g.addColorStop(1, rgba(COL.intel, 0));
+      const wc = real ? '#eef3f2' : COL.intel;
+      g.addColorStop(0, rgba(wc, .35)); g.addColorStop(1, rgba(wc, 0));
       ctx.strokeStyle = g; ctx.lineWidth = lw(1.4);
       ctx.beginPath(); ctx.moveTo(-74, s * 9); ctx.lineTo(-190, s * (30 + 4 * Math.sin(time * 2 + s))); ctx.stroke();
     }
@@ -1016,7 +1025,7 @@ function drawCarrier1(time) {
   ctx.save(); ctx.translate(4 * Math.sin(c.heading) + 3 * Math.cos(c.heading), 4 * Math.cos(c.heading) - 3 * Math.sin(c.heading));
   cvPath(ctx, CVG.deck); ctx.fillStyle = 'rgba(0,0,0,.45)'; ctx.fill(); ctx.restore();
   cvPath(ctx, CVG.deck);
-  ctx.fillStyle = 'rgba(2,10,6,.9)'; ctx.fill();
+  ctx.fillStyle = real ? rlLit(ctx, c.heading, 150, 36, '#4d5357') : 'rgba(2,10,6,.9)'; ctx.fill();   // 写实：深灰飞行甲板
   ctx.strokeStyle = hit ? rgba('#ffffff', .95) : rgba(col, dead ? .65 : .95); ctx.lineWidth = lw(hit ? 2.6 : 1.6); ctx.stroke();
   const L = CVG.land, nx = -(L.v1 - L.v0) / CV_LLEN, ny = (L.u1 - L.u0) / CV_LLEN;
   if (det >= 70) {
@@ -1052,7 +1061,7 @@ function drawCarrier1(time) {
     ctx.strokeRect(-62, 9.5, 10, 5); ctx.strokeRect(22, -14.5, 9, 5);
   }
   // 舰岛：右舷上层建筑、烟囱、桅杆与旋转雷达
-  ctx.fillStyle = 'rgba(2,10,6,1)'; ctx.strokeStyle = rgba(STRUCT, dead ? .5 : .85); ctx.lineWidth = lw(1.3);
+  ctx.fillStyle = real ? '#8f969b' : 'rgba(2,10,6,1)'; ctx.strokeStyle = real ? 'rgba(0,0,0,.55)' : rgba(STRUCT, dead ? .5 : .85); ctx.lineWidth = lw(1.3);
   ctx.beginPath(); ctx.moveTo(-4, 11); ctx.lineTo(18, 11); ctx.lineTo(21, 13.5); ctx.lineTo(18, 17); ctx.lineTo(-4, 17); ctx.closePath(); ctx.fill(); ctx.stroke();
   if (det >= 70) {
     ctx.lineWidth = lw(1); ctx.strokeRect(5, 12.3, 5, 3.4);

@@ -201,12 +201,21 @@ function trkDraw(time) {
     if (t.ph === 'idle' && !t.dead) continue;   // 在补给站待命的不画（站里有车的意思已由补给站图标表达）
     if (!inView(t.x, t.y, 20)) continue;
     ctx.save(); ctx.translate(t.x, t.y); ctx.rotate(t.h); ctx.scale(k, k);
-    const col = t.dead ? COL.enemy : COL.g, a = t.dead ? .5 : .95, full = !t.dead && (t.ph === 'load' || t.ph === 'out' || t.ph === 'drop');
+    const col = t.dead ? COL.enemy : COL.g, a = t.dead ? .5 : .95, full = !t.dead && (t.ph === 'load' || t.ph === 'out' || t.ph === 'drop'), real = realLook();
+    if (real) {   // 写实：橄榄绿军用卡车、帆布篷货厢，烧毁后发黑
+      ctx.fillStyle = 'rgba(0,0,0,.28)'; ctx.fillRect(-5.2, -1.4, 11.6, 4.4);
+      ctx.fillStyle = '#262622'; for (const u of [-3.8, -1.2, 3.4]) for (const s of [-1, 1]) ctx.fillRect(u - 1, s * 2.6 - .5, 2, 1);
+      ctx.strokeStyle = 'rgba(0,0,0,.55)'; ctx.lineWidth = px(.7) / k;
+      ctx.fillStyle = t.dead ? '#2a2723' : full ? '#6b7449' : '#5c663d'; ctx.fillRect(-6, -2.2, 8.4, 4.4); ctx.strokeRect(-6, -2.2, 8.4, 4.4);   // 货厢篷布
+      ctx.fillStyle = t.dead ? '#24221e' : RLP.p.hull; ctx.fillRect(3, -1.9, 3, 3.8); ctx.strokeRect(3, -1.9, 3, 3.8);   // 驾驶室
+      if (!t.dead) { ctx.fillStyle = 'rgba(160,190,200,.55)'; ctx.fillRect(5.3, -1.5, .6, 3); ctx.strokeStyle = rgba(COL.g, .7); ctx.lineWidth = px(.8) / k; ctx.strokeRect(-6, -2.2, 12, 4.4); }   // 风挡、阵营细边
+    } else {
     ctx.fillStyle = 'rgba(2,10,6,.9)'; ctx.strokeStyle = rgba(col, a); ctx.lineWidth = px(1.1) / k;
     for (const u of [-3.8, -1.2, 3.4]) for (const s of [-1, 1]) ctx.fillRect(u - 1, s * 2.6 - .5, 2, 1);   // 三轴车轮
     ctx.fillRect(-6, -2.2, 8.4, 4.4); ctx.strokeRect(-6, -2.2, 8.4, 4.4);   // 货厢
     ctx.fillRect(3, -1.9, 3, 3.8); ctx.strokeRect(3, -1.9, 3, 3.8);         // 驾驶室
     if (full) { ctx.fillStyle = rgba(COL.amber, .85); for (const u of [-5, -2.6, -.2]) ctx.fillRect(u, -1.3, 1.9, 2.6); }
+    }
     ctx.restore();
     if (t.dead) { const g = (S.t - t.deadT) % 1; ctx.fillStyle = rgba(COL.smoke, .25 * (1 - g)); ctx.beginPath(); ctx.arc(t.x + g * 6, t.y - g * 10, 4 + g * 6, 0, 7); ctx.fill(); }
     else if (t.ph === 'drop' && t.job && (t.job.k === 'build' || t.job.k === 'fix')) {   // 卸器材建点 / 抢修运输线：进度环
