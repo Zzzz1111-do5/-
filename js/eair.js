@@ -21,7 +21,7 @@ const eaFtr = t => t === 'ftr' || t === 'f22';   // 歼击机（空战由 airwar
 // 攻击-2 察打一体无人机在中空待机（alt > .8）：单兵防空导弹、高炮够不着，只怕防空车的导弹与歼击机
 const eaHighUav = o => !!o && o.kind === 'cas' && (!o.v || o.v === 'gj2') && o.alt > .8;
 const eaHigh = o => !!o && (o.kind === 'fighter' ? o.alt > .6 && !['cat', 'roll', 'trap', 'final'].includes(o.phase) : eaFtr(o.type) && o.alt > .6);
-const EA_SIL = { ga: 'a10', heli: 'heli', uh60: 'uh60', c17: 'transport', ftr: 'f35', f22: 'f22' };
+const EA_SIL = { ga: 'a10', heli: 'ah64', uh60: 'uh60', c17: 'c17', ftr: 'f35', f22: 'f22' };
 const eaSil = t => EA_SIL[t] || 'a10';
 const EA_TRAILS = new Map();   // 仅渲染用：固定翼尾迹点（不进 S）
 const EA_MANPADS = { normal: 0, hard: 1, hell: 2 };   // 战役守军单兵防空组数

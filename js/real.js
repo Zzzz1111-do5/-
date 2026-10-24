@@ -126,9 +126,11 @@ const RL_GUN = { col: 'rgba(30,30,26,.92)', dim: 'rgba(0,0,0,.38)', con: 'rgba(1
 function rlAirPaint(type) {
   if (type === 'j20' || type === 'j35' || type === 'j36' || type === 'f22' || type === 'f35' || type === 'gj11') return '#5f6870';
   if (type === 'a10') return '#5c6660';
-  if (type === 'heli') return '#56603f';
+  if (type === 'heli' || type === 'z10') return '#5d6650';
+  if (type === 'ah64') return '#3f4433';
   if (type === 'uh60') return '#3f4536';
-  if (type === 'h6k' || type === 'kj600' || type === 'transport' || type === 'c17' || type === 'gj2' || type === 'wz7') return '#a4acb1';
+  if (type === 'c17') return '#7d858a';
+  if (type === 'h6k' || type === 'kj600' || type === 'transport' || type === 'y20' || type === 'gj2' || type === 'wz7') return '#a4acb1';
   return '#8a949a';
 }
 

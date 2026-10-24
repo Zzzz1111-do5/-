@@ -20,7 +20,7 @@ const AIR_MDL = {
   gj11: { name: '攻击-11 隐身无人攻击机', sil: 'gj11', spd: 200, aa: .08, size: 16, stealth: .5 },
   h6k: { name: '轰-6K 轰炸机', sil: 'h6k', spd: 165, aa: .07, size: 24, land: true },
   gj2: { name: '攻击-2 察打一体无人机', sil: 'gj2', spd: 140, aa: .09, size: 17, land: true, loiter: 60, agm: 'ba7', agmN: 4, agmR: 320 },   // 长航时：盘旋 60 秒；4 枚蓝箭-7 空地导弹
-  z10: { name: '直-10 武装直升机', sil: 'heli', spd: 110, aa: .09, size: 15, agm: 'hj10', agmN: 8, agmR: 280 },   // 8 枚红箭-10 反坦克导弹
+  z10: { name: '直-10 武装直升机', sil: 'z10', spd: 110, aa: .09, size: 15, agm: 'hj10', agmN: 8, agmR: 280 },   // 8 枚红箭-10 反坦克导弹
   j20: { name: '歼-20 隐身战斗机', sil: 'j20', spd: 265, aa: .05, size: 17, land: true, stealth: .35, aam: 6, aamR: 560, pkK: 1.15 },   // 4 枚霹雳-15 + 2 枚霹雳-10
   // 彩蛋（j36.js）：歼-36。官方未公布参数，按公开估算：机长约 23 米、翼展约 19 米、最大起飞重量约 55 吨（歼-20 约 37 吨）、三发、主弹舱长约 7.6 米、作战半径约 3000 公里；
   //   体型大、无尾 → 转弯慢（turn）、不带航炮；全向隐身更好、机头大雷达看得更远（radar）、留空时间长（cap 秒）。挂载按弹舱尺寸推测：aamL / aamLR = 霹雳-17 远程空空导弹
@@ -63,7 +63,13 @@ const AIR_SIL = {
   gj11: [[8, 0], [5, 2], [-3, 10.5], [-5, 10.5], [-5.6, 8], [-3.6, 6], [-7, 3.4], [-9, 0]],   // 飞翼，W 形后缘
   gj2: [[9, 0], [8, .9], [1.6, 1], [1.1, 10.5], [-.8, 10.5], [-1.2, 1], [-7, .7], [-9.6, 3.6], [-10.6, 3.6], [-9.2, .5], [-10, 0]],   // 细长机身、大展弦比直翼、V 形尾翼
   h6k: [[11.5, 0], [10, 1.2], [4, 1.6], [2.4, 2.9], [-1, 11.2], [-3.1, 11.2], [-2.6, 3], [-6, 1.6], [-8.6, 4.6], [-10.2, 4.6], [-10, 1], [-11.5, 0]],   // 后掠中单翼，翼根两台发动机
-  heli: [[8, 0], [7, 1.6], [3, 2.6], [-2, 2.4], [-4, 1], [-11, .6], [-12, 3], [-13, 3], [-12.5, 0]],   // 武装直升机：机身 + 尾梁（旋翼另画）
+  heli: [[8.6, 0], [8, 1], [5, 1.3], [1, 1.5], [.6, 1.6], [.4, 3.6], [-1.2, 3.6], [-1.4, 1.6], [-3.5, 1.1], [-10.5, .45], [-10.8, 2.4], [-12, 2.4], [-12.2, .4], [-12.8, 0]],   // 直-10：细长串列座舱机身、短翼、细尾梁、尾端平尾（旋翼另画）
+  z10: [[8.6, 0], [8, 1], [5, 1.3], [1, 1.5], [.6, 1.6], [.4, 3.6], [-1.2, 3.6], [-1.4, 1.6], [-3.5, 1.1], [-10.5, .45], [-10.8, 2.4], [-12, 2.4], [-12.2, .4], [-12.8, 0]],
+  ah64: [[8.4, 0], [7.8, 1], [5, 1.25], [2.4, 1.3], [1.6, 2.25], [.7, 2.35], [.55, 4.3], [-1.35, 4.3], [-1.45, 2.35], [-2.7, 2.15], [-3.7, .9], [-10.6, .45], [-10.9, 2.7], [-12.1, 2.7], [-12.2, .4], [-12.8, 0]],   // AH-64：两侧发动机短舱鼓出、短翼挂地狱火、尾端全动平尾
+  uh60: [[8, 0], [7.4, 1.6], [4.5, 2.5], [-2, 2.5], [-4, 1.2], [-11, .55], [-11.2, 2.8], [-12.4, 2.8], [-12.5, .5], [-13, 0]],   // UH-60：宽机舱、长尾梁、尾端平尾
+  transport: [[11.6, 0], [10.8, 1.1], [8.2, 1.7], [3, 1.8], [2.6, 1.8], [-3, 11.6], [-4.4, 11.6], [-1.6, 1.8], [-7.6, 1.5], [-8.6, 1.2], [-11, 5.4], [-12.1, 5.4], [-11.4, .7], [-12.4, 0]],   // 运-20：上单翼、四发、T 尾（翼展略大于机长）
+  y20: [[11.6, 0], [10.8, 1.1], [8.2, 1.7], [3, 1.8], [2.6, 1.8], [-3, 11.6], [-4.4, 11.6], [-1.6, 1.8], [-7.6, 1.5], [-8.6, 1.2], [-11, 5.4], [-12.1, 5.4], [-11.4, .7], [-12.4, 0]],
+  c17: [[11.4, 0], [10.6, 1.2], [8, 1.9], [2.6, 2], [2.2, 2], [-4.4, 10.9], [-4.6, 11.4], [-5.6, 11.2], [-1.4, 2], [-7.4, 1.6], [-8.4, 1.3], [-10.8, 5.2], [-12, 5.2], [-11.4, .8], [-12.2, 0]],   // C-17：后掠更大、翼梢小翼、T 尾
   // 守方（美军）
   f35: [[10.4, 0], [8, 1], [3.6, 1.8], [.4, 2.2], [-3.6, 7.2], [-5.4, 7.2], [-5.6, 2.4], [-7, 2.3], [-9, 4.6], [-10.2, 4.6], [-9.6, 1.4], [-10.6, 0]],   // 单发，菱形梯形翼，双垂尾
   a10: [[10, 0], [8, 1], [3.2, 1.2], [2.6, 9.4], [-.6, 9.4], [-1.2, 1.4], [-7, 1.3], [-8.4, 4.8], [-10.4, 4.8], [-10, 1], [-10.6, 0]],   // 平直下单翼，尾部背负双发、双垂尾
@@ -1039,8 +1045,7 @@ function cvPath(ctx, pts) { ctx.beginPath(); for (const [u, v] of pts) ctx.lineT
 
 function airShape(ctx, type) {
   const h = AIR_SIL[type] || AIR_SIL.j35;
-  if (type === 'heli') { ctx.beginPath(); ctx.ellipse(1.5, 0, 6.5, 2.6, 0, 0, 7); ctx.moveTo(-4, .7); ctx.lineTo(-12.5, .5); ctx.lineTo(-12.5, -.5); ctx.lineTo(-4, -.7); return; }
-  if (type === 'uh60') { ctx.beginPath(); ctx.ellipse(1.5, 0, 7, 3.4, 0, 0, 7); ctx.moveTo(-4.5, 1); ctx.lineTo(-12.5, .6); ctx.lineTo(-12.5, -.6); ctx.lineTo(-4.5, -1); return; }   // 黑鹰：机身更宽（运兵舱）
+   // 黑鹰：机身更宽（运兵舱）
   ctx.beginPath();
   for (const [x, y] of h) ctx.lineTo(x, y);
   for (let i = h.length - 1; i >= 0; i--) ctx.lineTo(h[i][0], -h[i][1]);
@@ -1063,7 +1068,18 @@ function drawAircraft(ctx, x, y, a, type, size, col, alpha, bank, lw, bombs) {
   }
   ctx.lineWidth = lw / sc * .7;
   const seg = (...p) => { ctx.beginPath(); for (let i = 0; i < p.length; i += 4) { ctx.moveTo(p[i], p[i + 1]); ctx.lineTo(p[i + 2], p[i + 3]); } ctx.stroke(); };
-  if (type !== 'heli' && type !== 'uh60' && type !== 'gj11' && type !== 'wz7') seg(8.5, 0, 4.5, 0);   // 座舱
+  const heliT = type === 'heli' || type === 'z10' || type === 'ah64' || type === 'uh60', bigT = type === 'transport' || type === 'y20' || type === 'c17' || type === 'h6k' || type === 'kj600';
+  if (!heliT && type !== 'gj11' && type !== 'wz7' && type !== 'gj2' && !real) seg(8.5, 0, 4.5, 0);   // 座舱
+  if (real) {   // 写实细节：座舱玻璃（有人机）、尾喷口、机身中线
+    if (!heliT && !bigT && type !== 'gj11' && type !== 'wz7' && type !== 'gj2') {
+      ctx.fillStyle = `rgba(52,78,94,${alpha})`; ctx.beginPath(); ctx.ellipse(6.6, 0, type === 'a10' ? 1.3 : 1.8, .62, 0, 0, 7); ctx.fill();
+      ctx.fillStyle = `rgba(210,230,240,${.35 * alpha})`; ctx.beginPath(); ctx.ellipse(7, -.18, .7, .2, 0, 0, 7); ctx.fill();
+      const nz = type === 'f35' ? [0] : type === 'j36' ? [] : type === 'a10' ? [] : [-.75, .75];
+      ctx.fillStyle = `rgba(28,28,26,${alpha})`; for (const y of nz) { ctx.beginPath(); ctx.arc(-10.6, y, .62, 0, 7); ctx.fill(); }
+    } else if (bigT || heliT) { ctx.fillStyle = `rgba(40,58,68,${alpha})`; ctx.beginPath(); ctx.ellipse(heliT ? 6.6 : 10.2, 0, heliT ? 1.4 : .9, heliT ? .75 : 1, 0, 0, 7); ctx.fill(); }   // 风挡
+    ctx.strokeStyle = `rgba(20,22,24,${.25 * alpha})`; seg(9, 0, -9, 0);
+    ctx.strokeStyle = `rgba(20,22,24,${.55 * alpha})`;
+  }
   if (type === 'kj600') {   // 背负雷达圆盘 + 两台涡桨
     ctx.beginPath(); ctx.arc(-1.8, 0, 3.6, 0, 7); ctx.fillStyle = real ? `rgba(214,218,218,${alpha})` : `rgba(2,10,6,${alpha})`; ctx.fill(); ctx.stroke();
     seg(-5.4, 0, 1.8, 0);
@@ -1088,11 +1104,21 @@ function drawAircraft(ctx, x, y, a, type, size, col, alpha, bank, lw, bombs) {
     for (const s of [-1, 1]) seg(-8.2, s * .4, -10.2, s * 3.6);
   } else if (type === 'gj11') {   // 背部进气口
     ctx.strokeRect(1, -1, 3, 2);
-  } else if (type === 'heli' || type === 'uh60') {   // 主旋翼 + 短翼挂架（黑鹰是外挂架）
-    seg(-.5, type === 'uh60' ? -5 : -4.2, -.5, type === 'uh60' ? 5 : 4.2);
-    ctx.setLineDash([2.2, 1.6]); ctx.beginPath(); ctx.arc(1.5, 0, 9.5, 0, 7); ctx.stroke(); ctx.setLineDash([]);
-  } else if (type === 'transport') {   // 运-20：四台发动机
-    for (const s of [-1, 1]) for (const y of [4.2, 8]) ctx.strokeRect(1.4, s * y - .8, 3.2, 1.6);
+  } else if (heliT) {   // 主旋翼（写实：转动的半透明桨盘 + 桨叶；数码：虚线圆）+ 短翼挂架
+    if (type === 'ah64' && real) { ctx.fillStyle = `rgba(60,62,56,${alpha})`; for (const s of [-1, 1]) for (const x of [-.1, -.8]) ctx.fillRect(x - .25, s * 3.9 - .45, .5, .9); }   // 地狱火
+    if (real) {
+      const tt = (typeof S === 'object' && S ? S.t : 0) * 22, nb = type === 'ah64' || type === 'uh60' ? 4 : 5, Rr = type === 'uh60' ? 10.5 : 9.5;
+      ctx.fillStyle = `rgba(24,26,24,${.16 * alpha})`; ctx.beginPath(); ctx.arc(.4, 0, Rr, 0, 7); ctx.fill();
+      ctx.strokeStyle = `rgba(22,22,20,${.5 * alpha})`; ctx.lineWidth = lw / sc * .9;
+      ctx.beginPath(); for (let i = 0; i < nb; i++) { const b = tt + i * 6.283 / nb; ctx.moveTo(.4, 0); ctx.lineTo(.4 + Math.cos(b) * Rr, Math.sin(b) * Rr); } ctx.stroke();
+      ctx.fillStyle = `rgba(24,26,24,${.2 * alpha})`; ctx.beginPath(); ctx.arc(-12.2, 1.4, 1.5, 0, 7); ctx.fill();   // 尾桨
+    } else {
+      seg(-.5, type === 'uh60' ? -5 : -4.2, -.5, type === 'uh60' ? 5 : 4.2);
+      ctx.setLineDash([2.2, 1.6]); ctx.beginPath(); ctx.arc(1.5, 0, 9.5, 0, 7); ctx.stroke(); ctx.setLineDash([]);
+    }
+  } else if (type === 'transport' || type === 'y20' || type === 'c17') {   // 四台涡扇发动机吊舱
+    if (real) { ctx.fillStyle = `rgba(90,96,100,${alpha})`; for (const s of [-1, 1]) for (const y of [4.4, 8.1]) ctx.fillRect(type === 'c17' ? .4 - (y - 4.4) * .25 : 1.2 - (y - 4.4) * .2, s * y - .7, 3, 1.4); }
+    else for (const s of [-1, 1]) for (const y of [4.2, 8]) ctx.strokeRect(1.4, s * y - .8, 3.2, 1.6);
   }
   if (bombs) {
     ctx.fillStyle = real ? `rgba(70,74,64,${alpha})` : rgba(COL.amber, alpha);
