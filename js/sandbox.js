@@ -456,10 +456,12 @@ function sbxAIDefend() {
     // 300 米跑道要一大块平整陆地：先在指挥所以北找，找不到再放宽到整个纵深
     for (let k = 0; k < 120 && !af; k++) { const w = k < 60 ? 900 : 2400, x = clamp(hq.x + (Math.random() - .5) * w, 170, W - 170), y = clamp(hq.y - 60 - Math.random() * 500, 50, H); if (coastAt(x) - y >= 500) af = sbxTry('e_airfield', x, y, 60); }
     if (af) {
-      const nh = sbxPlace('e_air_heli').ok, ng = sbxPlace('e_air_ga').ok, nf = B0 >= 2200 && sbxPlace('e_air_ftr').ok, n22 = B0 >= 3000 && sbxPlace('e_air_f22').ok;
+      const buyN = (id, n) => { let k = 0; for (let i = 0; i < n; i++) if (sbxPlace(id).ok) k++; return k; };   // 预算越大，机队越大
+      const nh = buyN('e_air_heli', 1 + (B0 >= 3000) + (B0 >= 6000)), ng = buyN('e_air_ga', 1 + (B0 >= 3000) + (B0 >= 6000)), nf = buyN('e_air_ftr', (B0 >= 2200) + (B0 >= 4000) + (B0 >= 8000)), n22 = buyN('e_air_f22', (B0 >= 3000) + (B0 >= 7000));
       sbxTry('e_manpads', hq.x - 30, hq.y + 25, 40);
       sbxTry('e_garrison', af.x - 60, af.y + 40, 60);   // 机场警卫：机场也是据点，防敌空降夺取（abn.js）
-      say(`航空：纵深 ${sbxM(coastAt(af.x) - af.y)} 米处修野战机场，保留${nh ? '武装直升机' : ''}${nh && ng ? '与' : ''}${ng ? '攻击机' : ''}各一架，专打卸载中的登陆舰与登陆后的坦克${nf ? `；另配${n22 ? 'F-35A、F-22A 歼击机各' : '歼击机'}一架，拦截敌舰载机、争夺制空权` : ''}；指挥所配单兵防空组。`, af);
+      const fw = [nf && `F-35A ${nf} 架`, n22 && `F-22A ${n22} 架`].filter(Boolean).join('、');
+      say(`航空：纵深 ${sbxM(coastAt(af.x) - af.y)} 米处修野战机场，${[nh && `武装直升机 ${nh} 架`, ng && `攻击机 ${ng} 架`].filter(Boolean).join('、')}，成双机、四机编队专打卸载中的登陆舰与登陆后的坦克${fw ? `；歼击机 ${fw}，拦截敌舰载机、争夺制空权` : ''}；机场与指挥所配警卫和单兵防空组。`, af);
     }
   }
   if (B0 >= 2200 && !(S.v7off && S.v7off.msl)) {

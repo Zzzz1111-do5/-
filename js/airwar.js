@@ -200,15 +200,15 @@ function awThinkE() {
   const vsF = foes.some(t => t.ftr);
   ready.sort((a, b) => ((b.type === 'f22') - (a.type === 'f22')) * (vsF ? 1 : -1));
   const up = E.fly.filter(a => !a.dead && eaFtr(a.type) && (a.ph === 'out' || a.ph === 'cap' || a.ph === 'roll')).length;
-  const want = foes.length ? Math.min(3, Math.ceil(foes.length / 2) + (foes.some(t => t.ftr) ? 1 : 0)) : S.t - A.seenP < 120 ? 1 : 0;
-  if (up >= want || S.t - A.lnE < 4) return;
+  const want = foes.length ? Math.min(4, Math.ceil(foes.length / 2) + (foes.some(t => t.ftr) ? 2 : 0)) : S.t - A.seenP < 120 ? (ready.length + up >= 4 ? 2 : 1) : 0;   // 敌机越多、有敌战斗机时派得越多（最多 4 架）
+  if (up >= want || S.t - A.lnE < 3) return;
   let cx, cy;
   if (foes.length) { cx = foes.reduce((s, t) => s + t.x, 0) / foes.length; cy = foes.reduce((s, t) => s + t.y, 0) / foes.length; }
   else ({ x: cx, y: cy } = awCapE());
   if (awFleetCover(cx, cy, AW_CAP)) ({ x: cx, y: cy } = awCapE());
   cx = clamp(cx, 60, W - 60); cy = clamp(cy, 60, H - 60);
   // 双机编队：要两架以上、或对面有战斗机时，两架一起起飞（挂载按型号见 EA_FTR）
-  const n = Math.min(ready.length, want - up >= 2 || vsF ? 2 : 1);
+  const n = Math.min(ready.length, 4, Math.max(2, want - up));   // 至少双机，最多四机
   for (let i = 0; i < n; i++) {
     const w = ready[i], L = EA_FTR[w.type], b = eaNearBase(cx, cy, open), a = eaNewAir(b, w, cx, cy, { cx, cy, capT: 80, aam: L.aam, gun: L.gun, aamR: L.aamR, pkK: L.pkK, gunK: L.gunK || 1, odir: i ? -1 : 1 });
     w.state = 'out'; E.fly.push(a);
@@ -217,7 +217,7 @@ function awThinkE() {
   awStat('ftrE', n);
   if (ready.slice(0, n).some(w => w.type === 'f22')) awStat('f22E');
   const nm = [...new Set(ready.slice(0, n).map(w => EA_SPEC[w.type].name))].join('与');
-  if (typeof chatSay === 'function') chatSay('e', foes.length ? `命令：${nm}${n > 1 ? '双机' : '一个架次'}紧急起飞，拦截${awWhere(cx, cy)}上空的敌机（${foes.length} 架）。` : `命令：${nm}${n > 1 ? '双机' : '一个架次'}起飞，在${awWhere(cx, cy)}上空巡逻，掩护防区。`, { kind: 'order', at: { x: cx, y: cy }, key: 'awE', gap: 15, lv: 1 });
+  if (typeof chatSay === 'function') chatSay('e', foes.length ? `命令：${nm}${n > 3 ? '四机' : n > 2 ? '三机' : n > 1 ? '双机' : '一个架次'}紧急起飞，拦截${awWhere(cx, cy)}上空的敌机（${foes.length} 架）。` : `命令：${nm}${n > 3 ? '四机' : n > 2 ? '三机' : n > 1 ? '双机' : '一个架次'}起飞，在${awWhere(cx, cy)}上空巡逻，掩护防区。`, { kind: 'order', at: { x: cx, y: cy }, key: 'awE', gap: 15, lv: 1 });
 }
 function awCapE() {
   const thr = S.ai && S.ai.co && S.ai.co.thr;
