@@ -14,7 +14,7 @@ function setClean(k, v) {
   if (typeof d === 'boolean') return typeof v === 'boolean' ? v : v === 'true' ? true : v === 'false' ? false : undefined;
   if (k === 'quality') return v === 'low' || v === 'high' ? v : undefined;
   if (k === 'chat') return v === 'brief' || v === 'normal' || v === 'verbose' ? v : undefined;
-  if (k === 'musicStyle') return v === 'march' || v === 'ambient' ? v : undefined;
+  if (k === 'musicStyle') return v === 'march' || v === 'ambient' || v === 'custom' ? v : undefined;
   return undefined;
 }
 

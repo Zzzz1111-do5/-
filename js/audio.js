@@ -318,8 +318,9 @@ function auMusicTick() {
   const c = AU.ctx, M = AU.mus;
   if (!M) return;
   if (M.next < c.currentTime - .4) M.next = c.currentTime + .05;   // 标签页挂起后不补播
-  const march = (SETTINGS.musicStyle || 'march') === 'march';
-  if (march !== M.march) { M.march = march; M.step = 0; M.dr.gain.setTargetAtTime(march ? 0 : .32, c.currentTime, 1.2); }
+  const sty = SETTINGS.musicStyle || 'march', cust = sty === 'custom', march = sty === 'march';
+  if (sty !== M.sty) { M.sty = sty; M.step = 0; M.dr.gain.setTargetAtTime(sty === 'ambient' ? .32 : 0, c.currentTime, 1.2); if (!cust) auBgmStop(); }
+  if (cust) { auBgmTick(); return; }
   if (march) { auMarchTick(M); return; }
   const I = AU.inten, st = 60 / lerp(56, 86, I) / 2;   // 八分音符时值
   M.delay.delayTime.setTargetAtTime(st * 3, c.currentTime, .5);
@@ -352,21 +353,22 @@ function auMusicStep(t, st, I) {
   }
 }
 
-// —— 战歌（原创军乐进行曲，WebAudio 实时合成）：4/4 拍，主歌 D 小调（悲壮）→ 副歌转降 B / F 大调（激昂），16 小节一循环；
-//    军鼓（第 4 小节滚奏）、大鼓 1、3 拍，大号 / 低音提琴「嘭—恰」根音五音，铜管齐奏主旋律、圆号三度和声，副歌男声合唱「啊」，段落转换处定音鼓滚奏、副歌起拍镲。
-//    随场合变化（AU.inten）：菜单——圆号独奏慢板；部署——军鼓进行 + 低音；战斗——全编制，越激烈越快（112→128 BPM）、加弦乐跳弓、合唱与镲；
-//    胜利——号角短曲；失败——慢板、低八度、无鼓 ——
-// 旋律：每小节 [音高(MIDI) | null 休止, 时值（八分音符数）]，每小节合计 8
+// —— 进行曲（原创军乐，WebAudio 实时合成）：D 大调 2/4 进行曲，16 小节一循环，明亮昂扬；
+//    军鼓（第 4 小节滚奏）、大鼓重拍，大号「嘭—恰」根音五音，铜管齐奏主旋律、圆号三度和声，段落转换处定音鼓滚奏、副歌起拍镲。
+//    随场合变化（AU.inten）：菜单——轻军鼓 + 铜管；部署——加低音；战斗——全编制，越激烈越快（120→134 BPM）、加弦乐跳弓与镲；
+//    胜利——号角短曲；失败——慢板、低八度、无鼓。
+//    另可在设置里导入一首本机的歌当背景音乐（auBgm*，存在本浏览器的 IndexedDB）——
+// 旋律（D 大调，明亮昂扬）：每小节 [音高(MIDI) | null 休止, 时值（八分音符数）]，每小节合计 8
 const AU_MEL = [
-  [[62, 3], [62, 1], [65, 2], [69, 2]], [[74, 4], [72, 2], [69, 2]], [[70, 3], [69, 1], [67, 2], [65, 2]], [[67, 4], [64, 2], [60, 2]],
-  [[62, 3], [62, 1], [65, 2], [69, 2]], [[70, 3], [69, 1], [67, 2], [74, 2]], [[73, 4], [69, 2], [64, 2]], [[69, 6], [null, 2]],
-  [[74, 2], [77, 4], [74, 2]], [[72, 3], [69, 1], [72, 4]], [[76, 3], [74, 1], [72, 2], [67, 2]], [[69, 6], [69, 1], [70, 1]],
-  [[74, 2], [77, 4], [79, 2]], [[81, 4], [79, 2], [77, 2]], [[76, 3], [73, 1], [76, 2], [81, 2]], [[74, 6], [null, 2]]
+  [[62, 1], [66, 1], [69, 2], [69, 1], [69, 1], [74, 2]], [[74, 3], [73, 1], [71, 2], [69, 2]], [[71, 1], [71, 1], [74, 2], [71, 2], [67, 2]], [[69, 6], [null, 2]],
+  [[62, 1], [66, 1], [69, 2], [69, 1], [69, 1], [74, 2]], [[78, 3], [76, 1], [74, 2], [71, 2]], [[76, 2], [74, 1], [73, 1], [71, 2], [73, 2]], [[74, 6], [null, 2]],
+  [[79, 3], [79, 1], [78, 2], [76, 2]], [[78, 4], [74, 2], [69, 2]], [[76, 3], [76, 1], [74, 2], [73, 2]], [[76, 4], [69, 2], [73, 2]],
+  [[79, 3], [79, 1], [81, 2], [79, 2]], [[78, 3], [76, 1], [74, 2], [78, 2]], [[76, 2], [76, 1], [78, 1], [76, 2], [73, 2]], [[74, 6], [null, 2]]
 ];
-// 每小节和弦（根音 MIDI、和弦音相对根音的半音）：Dm Dm B♭ C Dm Gm A A ｜ B♭ F C Dm B♭ F A Dm
-const AU_HAR = [[50, [0, 3, 7]], [50, [0, 3, 7]], [46, [0, 4, 7]], [48, [0, 4, 7]], [50, [0, 3, 7]], [43, [0, 3, 7]], [45, [0, 4, 7]], [45, [0, 4, 7]],
-  [46, [0, 4, 7]], [41, [0, 4, 7]], [48, [0, 4, 7]], [50, [0, 3, 7]], [46, [0, 4, 7]], [41, [0, 4, 7]], [45, [0, 4, 7]], [50, [0, 3, 7]]];
-const auMarchBpm = (I, over) => over === 'lose' ? 72 : I < .1 ? 84 : I < .25 ? 104 : lerp(112, 128, clamp((I - .25) / .75, 0, 1));
+// 每小节和弦（根音 MIDI、和弦音相对根音的半音）：D D G A D Bm A D ｜ G D Em A G D A D
+const AU_HAR = [[50, [0, 4, 7]], [50, [0, 4, 7]], [43, [0, 4, 7]], [45, [0, 4, 7]], [50, [0, 4, 7]], [47, [0, 3, 7]], [45, [0, 4, 7]], [50, [0, 4, 7]],
+  [43, [0, 4, 7]], [50, [0, 4, 7]], [52, [0, 3, 7]], [45, [0, 4, 7]], [43, [0, 4, 7]], [50, [0, 4, 7]], [45, [0, 4, 7]], [50, [0, 4, 7]]];
+const auMarchBpm = (I, over) => over === 'lose' ? 80 : I < .1 ? 100 : I < .25 ? 112 : lerp(120, 134, clamp((I - .25) / .75, 0, 1));
 function auMarchTick(M) {
   const c = AU.ctx, I = AU.inten, ov = S && S.over ? (S.over === 'win' ? 'win' : 'lose') : null;
   if (ov !== M.ov) { if (ov === 'win') auFanfare(c.currentTime + .1); M.ov = ov; }
@@ -413,16 +415,6 @@ function auCrash(t, vel) {
   const n = auNoiseSrc(t, 1.8), hp = auFilt('highpass', 5200), g = auEnv(t, .004, vel, 1.6);
   n.connect(hp); hp.connect(g); g.connect(AU.bus.music);
 }
-// 男声合唱「啊」：锯齿波过两个共振峰（约 700 / 1150 Hz）
-function auChoir(t, notes, dur, vel) {
-  const c = AU.ctx, f1 = auFilt('bandpass', 700, 5), f2 = auFilt('bandpass', 1150, 6), g = c.createGain();
-  g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(vel, t + dur * .25); g.gain.setValueAtTime(vel, t + dur * .8); g.gain.exponentialRampToValueAtTime(.0001, t + dur * 1.05);
-  for (const m of notes) for (const det of [-6, 6]) {
-    const o = c.createOscillator(); o.type = 'sawtooth'; o.frequency.value = auMtof(m); o.detune.value = det + (Math.random() - .5) * 6;
-    o.connect(f1); o.connect(f2); o.start(t); o.stop(t + dur * 1.1);
-  }
-  const mix = c.createGain(); mix.gain.value = 1.6; f1.connect(mix); f2.connect(mix); mix.connect(g); g.connect(AU.bus.music);
-}
 function auFanfare(t) {   // 胜利号角：D 大调分解和弦上行，长音收束
   const st = .16;
   [[62, 1], [66, 1], [69, 1], [74, 3], [69, 1], [74, 5]].reduce((a, [m, d]) => { auBrass(a, m, d * st, .06, 2600); auBrass(a, m - 12, d * st, .03, 1400); return a + d * st; }, t);
@@ -434,9 +426,9 @@ function auMarchStep(t, st, I, ov) {
   let p0 = 0;
   for (const [m, d] of AU_MEL[bar]) {
     if (p0 === pos && m != null) {
-      const mm = lose ? m - 12 : m, bright = menu || lose ? 1100 : 1500 + I * 1700, vel = (menu ? .028 : .034 + I * .016) * (chorus ? 1.1 : 1);
+      const mm = lose ? m - 12 : m, bright = lose ? 1100 : 1900 + I * 1600, vel = (menu ? .03 : .036 + I * .016) * (chorus ? 1.1 : 1);
       auBrass(t, mm, d * st * .92, vel, bright);
-      if (!menu && !lose && (chorus || I > .45)) {   // 圆号和声：旋律下方最近的和弦音
+      if (!lose && (chorus || I > .45)) {   // 圆号和声：旋律下方最近的和弦音
         const pcs = ch[1].map(iv => (ch[0] + iv) % 12);
         let h = mm - 3; for (let k = 0; k < 6 && !pcs.includes(((h % 12) + 12) % 12); k++) h--;
         auBrass(t, h, d * st * .92, vel * .55, bright * .7);
@@ -445,12 +437,11 @@ function auMarchStep(t, st, I, ov) {
     p0 += d;
   }
   // 低音「嘭—恰」：根音（第 1、3 拍）、五音（第 2、4 拍）
-  if (!menu && pos % 2 === 0) auTuba(t, ch[0] - 12 + (pos % 4 === 2 ? 7 : 0), st * 1.4, (lose ? .05 : .07) * (pos % 4 ? .75 : 1));
-  else if (menu && pos === 0) auTuba(t, ch[0] - 12, st * 7, .035);
-  if (lose || menu) return;
+  if (pos % 2 === 0) auTuba(t, ch[0] - 12 + (pos % 4 === 2 ? 7 : 0), st * 1.4, (lose ? .05 : menu ? .05 : .07) * (pos % 4 ? .75 : 1));
+  if (lose) return;
   // 鼓：军鼓（重拍、反拍 + 十六分装饰音；每 4 小节最后一拍滚奏）、大鼓 1、3 拍
-  const sv = .05 + I * .07, roll = bar % 4 === 3 && pos >= 6;
-  if (I >= .1) {
+  const sv = .045 + I * .07, roll = bar % 4 === 3 && pos >= 6;
+  {
     if (pos === 0 || pos === 4) { auSnare(t, sv); auKick(t, .16 + I * .12); }
     else if (pos % 2 === 0) auSnare(t, sv * .65);
     else if (I > .35) { auSnare(t, sv * .4); auSnare(t + st / 2, sv * .45); }
@@ -458,11 +449,67 @@ function auMarchStep(t, st, I, ov) {
   }
   // 段落转换：定音鼓滚奏；副歌起拍：镲
   if ((bar === 7 || bar === 15) && pos >= 4) for (let k = 0; k < 4; k++) auTimp(t + st * k / 4, (.08 + I * .1) * (.6 + (pos - 4) * .1 + k * .03));
-  if ((bar === 8 || bar === 0) && pos === 0 && I > .45) auCrash(t, .025 + I * .03);
+  if ((bar === 8 || bar === 0) && pos === 0 && I > .2) auCrash(t, .02 + I * .03);
   // 弦乐跳弓：和弦根音、五音八分音符
   if (I > .4) { const o = AU.ctx.createOscillator(), lp = auFilt('lowpass', 1300, 1), g = auEnv(t, .01, .012 + I * .01, st * .6); o.type = 'sawtooth'; o.frequency.value = auMtof(ch[0] + (pos % 2 ? 7 : 12)); o.connect(lp); lp.connect(g); g.connect(AU.bus.music); o.start(t); o.stop(t + st); }
-  // 副歌：男声合唱，每小节一个和弦
-  if (chorus && pos === 0 && I > .5) auChoir(t, ch[1].map(iv => ch[0] + iv), st * 8, .022 + I * .015);
+}
+
+// —— 导入的背景音乐：玩家自己选的本机音频文件，解码后循环播放；文件存在本浏览器的 IndexedDB，下次打开自动载入 ——
+AU.cust = { buf: null, name: '', src: null, g: null, tried: false, busy: false };
+function auBgmDb() {
+  return new Promise((res, rej) => {
+    try { const r = indexedDB.open('bh-bgm', 1); r.onupgradeneeded = () => r.result.createObjectStore('f'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }
+    catch (e) { rej(e); }
+  });
+}
+async function auBgmStore(rec) {   // rec = {blob, name} 或 null（清除）
+  try {
+    const db = await auBgmDb();
+    await new Promise((res, rej) => { const tx = db.transaction('f', 'readwrite'), st = tx.objectStore('f'); if (rec) st.put(rec, 'bgm'); else st.delete('bgm'); tx.oncomplete = res; tx.onerror = () => rej(tx.error); });
+    return true;
+  } catch (e) { return false; }
+}
+async function auBgmStored() {
+  try { const db = await auBgmDb(); return await new Promise(res => { const r = db.transaction('f').objectStore('f').get('bgm'); r.onsuccess = () => res(r.result || null); r.onerror = () => res(null); }); }
+  catch (e) { return null; }
+}
+const auBgmName = () => AU.cust.name;
+// 选了文件（设置面板调用）：解码、保存、切到「我的歌」；返回 {ok, why}
+async function auBgmImport(file) {
+  if (!file) return { ok: false, why: '没有选择文件' };
+  auInit();
+  if (!AU.ctx) return { ok: false, why: '浏览器不支持网页音频' };
+  try {
+    const buf = await AU.ctx.decodeAudioData(await file.arrayBuffer());
+    auBgmStop(); AU.cust.buf = buf; AU.cust.name = file.name.replace(/\.[^.]+$/, ''); AU.cust.tried = true;
+    const saved = await auBgmStore({ blob: file, name: AU.cust.name });
+    return { ok: true, saved };
+  } catch (e) { return { ok: false, why: '这个文件解不开（换 mp3 / m4a / ogg / wav 试试）' }; }
+}
+async function auBgmForget() { auBgmStop(); AU.cust.buf = null; AU.cust.name = ''; await auBgmStore(null); }
+async function auBgmLoad() {
+  AU.cust.tried = true; AU.cust.busy = true;
+  const rec = await auBgmStored();
+  if (rec && rec.blob && AU.ctx) { try { AU.cust.buf = await AU.ctx.decodeAudioData(await rec.blob.arrayBuffer()); AU.cust.name = rec.name || ''; } catch (e) { AU.cust.buf = null; } }
+  AU.cust.busy = false;
+  if (typeof mnSetSync === 'function' && typeof MENU === 'object' && MENU.set) mnSetSync();
+}
+function auBgmTick() {
+  const C = AU.cust;
+  if (!C.buf) { if (!C.tried && !C.busy) auBgmLoad(); return; }
+  if (C.src) return;
+  const c = AU.ctx, s = c.createBufferSource(), g = c.createGain();
+  s.buffer = C.buf; s.loop = true;
+  g.gain.setValueAtTime(.0001, c.currentTime); g.gain.exponentialRampToValueAtTime(.32, c.currentTime + 1.2);   // 成品歌曲比合成音乐响得多：压低一些，不盖过枪炮声
+  s.connect(g); g.connect(AU.bus.music); s.start();
+  C.src = s; C.g = g;
+}
+function auBgmStop() {
+  const C = AU.cust;
+  if (!C.src || !AU.ctx) return;
+  const t = AU.ctx.currentTime, s = C.src;
+  C.g.gain.setTargetAtTime(.0001, t, .25); try { s.stop(t + 1.2); } catch (e) { /* 已停 */ }
+  C.src = null; C.g = null;
 }
 
 if (typeof document !== 'undefined') {

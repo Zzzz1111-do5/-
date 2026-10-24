@@ -108,6 +108,11 @@ body.mn-open > :not(#bgrain):not(#stage):not(.mn-layer):not(script):not(style), 
 #mnSet .ms-seg button { background: transparent; border: 0; padding: 5px 14px; color: var(--mute); min-height: 30px; }
 #mnSet .ms-seg button + button { border-left: 1px solid var(--line); }
 #mnSet .ms-seg button[aria-pressed="true"] { color: var(--g); background: rgba(61, 255, 138, .14); }
+#mnSet .ms-file { display: flex; gap: 6px; justify-self: start; }
+#mnSet .ms-fbtn, #mnSet .ms-fclr { border: 1px solid var(--line); border-radius: 5px; padding: 4px 12px; color: var(--g); background: rgba(61, 255, 138, .06); cursor: pointer; font-size: 13px; min-height: 30px; display: inline-flex; align-items: center; }
+#mnSet .ms-fclr { color: var(--mute); background: transparent; }
+#mnSet .ms-fbtn:focus-within { outline: 2px solid var(--g); }
+#mnSet .ms-fname { color: var(--mute); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #mnSet .ms-sw { justify-self: start; position: relative; width: 46px; height: 24px; border-radius: 12px; border: 1px solid var(--line); background: rgba(255, 255, 255, .04); padding: 0; }
 #mnSet .ms-sw::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: var(--mute); transition: left .15s, background .15s; }
 #mnSet .ms-sw[aria-checked="true"] { border-color: var(--line-hi); background: rgba(61, 255, 138, .16); }
@@ -359,7 +364,7 @@ function mnKey(e) {
 
 // —— 设置面板 ——
 const MN_SET = [
-  ['音量', 'VOLUME', [['master', '主音量', 'vol'], ['music', '音乐', 'vol'], ['musicStyle', '音乐风格', [['march', '战歌'], ['ambient', '氛围']], '战歌：原创军乐进行曲，战况越激烈编制越全'], ['sfx', '音效', 'vol'], ['radio', '无线电通话', 'vol']]],
+  ['音量', 'VOLUME', [['master', '主音量', 'vol'], ['music', '音乐', 'vol'], ['musicStyle', '背景音乐', [['march', '进行曲'], ['custom', '我的歌'], ['ambient', '氛围']], '进行曲：明亮的军乐，战况越激烈编制越全；我的歌：用下面导入的歌'], ['bgm', '导入音乐', 'file', '选一首你设备上的歌（mp3 / m4a / ogg / wav），循环播放；只保存在你自己的浏览器里'], ['sfx', '音效', 'vol'], ['radio', '无线电通话', 'vol']]],
   ['画面', 'DISPLAY', [['rain', '数码雨密度', 'rain'], ['bloom', '辉光强度', 'pct'], ['quality', '画质', [['high', '高'], ['low', '低']]], ['shake', '屏幕震动', 'sw'], ['front', '战线与态势图形', 'sw', '显示双方战线、无人地带、空隙、突击群调整线']]],
   ['流程', 'FLOW', [['intro', '开场转场', 'sw', '从国家全图推近到战场，约 7 秒']]],
   ['AI 指挥官通讯', 'COMMANDER CHAT', [['chat', '通讯详略', [['brief', '简要'], ['normal', '标准'], ['verbose', '详细']]], ['enemyChat', '显示敌方（截获）', 'sw', '战役中敌方通话以「截获」形式延迟出现']]]
@@ -374,7 +379,8 @@ function mnSetBuild() {
   el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true'); el.setAttribute('aria-label', '设置');
   const row = ([k, n, ty, note]) => {
     let ctl;
-    if (ty === 'sw') ctl = `<button type="button" class="ms-sw" role="switch" data-k="${k}" aria-label="${n}"></button><span></span>`;
+    if (ty === 'file') ctl = `<div class="ms-file"><label class="ms-fbtn"><input type="file" accept="audio/*" data-file="${k}" hidden>选择文件…</label><button type="button" class="ms-fclr" data-fclr="${k}">清除</button></div><span class="ms-fname" data-fn="${k}"></span>`;
+    else if (ty === 'sw') ctl = `<button type="button" class="ms-sw" role="switch" data-k="${k}" aria-label="${n}"></button><span></span>`;
     else if (Array.isArray(ty)) ctl = `<div class="ms-seg" role="group" aria-label="${n}">${ty.map(([v, l]) => `<button type="button" data-k="${k}" data-v="${v}">${l}</button>`).join('')}</div><span></span>`;
     else ctl = `<input type="range" id="ms-${k}" data-k="${k}" min="0" max="1" step="0.05" aria-label="${n}"><output for="ms-${k}" data-o="${k}"></output>`;
     return `<div class="ms-row"><label ${ty === 'vol' || ty === 'pct' || ty === 'rain' ? `for="ms-${k}"` : ''}>${n}</label>${ctl}${note ? `<span class="ms-note">${note}</span>` : ''}</div>`;
@@ -384,11 +390,26 @@ function mnSetBuild() {
     <footer><button type="button" class="ms-reset">恢复默认</button><button type="button" class="go ms-ok">完成</button></footer></div>`;
   document.body.appendChild(el);
   el.addEventListener('input', e => { const i = e.target.closest('input[type=range]'); if (i) { setSetting(i.dataset.k, +i.value); mnSetSync(); } });
-  el.addEventListener('change', e => { const i = e.target.closest('input[type=range]'); if (i && typeof auTest === 'function') auTest(i.dataset.k); });
+  el.addEventListener('change', async e => {
+    const f = e.target.closest('input[type=file]');
+    if (f) {   // 导入背景音乐
+      const fn = el.querySelector('[data-fn="bgm"]'), file = f.files && f.files[0];
+      if (!file || typeof auBgmImport !== 'function') return;
+      fn.textContent = '正在载入…';
+      const r = await auBgmImport(file);
+      f.value = '';
+      if (r.ok) { setSetting('musicStyle', 'custom'); fn.textContent = `♪ ${auBgmName()}${r.saved ? '' : '（本次有效，浏览器不让保存）'}`; }
+      else fn.textContent = r.why;
+      mnSetSync();
+      return;
+    }
+    const i = e.target.closest('input[type=range]'); if (i && typeof auTest === 'function') auTest(i.dataset.k);
+  });
   el.addEventListener('click', e => {
     const b = e.target.closest('button');
     if (!b) return;
-    if (b.classList.contains('ms-sw')) setSetting(b.dataset.k, !SETTINGS[b.dataset.k]);
+    if (b.dataset.fclr) { if (typeof auBgmForget === 'function') auBgmForget().then(mnSetSync); if (SETTINGS.musicStyle === 'custom') setSetting('musicStyle', 'march'); }
+    else if (b.classList.contains('ms-sw')) setSetting(b.dataset.k, !SETTINGS[b.dataset.k]);
     else if (b.dataset.v) setSetting(b.dataset.k, b.dataset.v);
     else if (b.classList.contains('ms-reset')) resetSettings();
     else if (b.classList.contains('ms-x') || b.classList.contains('ms-ok')) { closeSettings(); return; }
@@ -408,6 +429,8 @@ function mnSetSync() {
   }
   for (const b of el.querySelectorAll('.ms-sw')) b.setAttribute('aria-checked', !!SETTINGS[b.dataset.k]);
   for (const b of el.querySelectorAll('.ms-seg button')) b.setAttribute('aria-pressed', SETTINGS[b.dataset.k] === b.dataset.v);
+  const fn = el.querySelector('[data-fn="bgm"]');
+  if (fn && fn.textContent !== '正在载入…') fn.textContent = typeof auBgmName === 'function' && auBgmName() ? `♪ ${auBgmName()}` : '还没有导入';
 }
 
 function openSettings() {
