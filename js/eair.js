@@ -303,10 +303,24 @@ function eaTrack(a) {
   if (a.tgt.k !== 'pt' && !o) { a.lost = true; return; }
   if (o && (spotted(o.x, o.y) || dist(o.x, o.y, a.x, a.y) < 160)) { a.tx = o.x; a.ty = o.y; }
 }
+// —— 编队飞行：僚机按长机的位置与航向保持队形（长机右后、左后依次排开的楔形 / 梯队），离自己的目标近了（或长机转入攻击、返航）再散开各自攻击；
+//    长机起飞后头几秒放慢等僚机跟上（a.join）——
+const EA_SLOT = [[0, 0], [-24, 20], [-24, -20], [-48, 40], [-48, -40], [-72, 60]];
+function eaForm(a, dt, brk) {
+  const L = S.eair.fly.find(o => o.id === a.lead && !o.dead);
+  if (!L || (L.ph !== 'out' && L.ph !== 'roll') || L.tg || (brk && dist(a.x, a.y, a.tx, a.ty) < brk)) { if (!L || L.ph !== 'roll') a.lead = null; return false; }
+  if (L.ph === 'roll') return false;
+  const [sx0, sy0] = EA_SLOT[Math.min(a.slot || 1, EA_SLOT.length - 1)], k = a.type === 'heli' ? .8 : 1, h = L.heading, c = Math.cos(h), n = Math.sin(h);
+  const px = L.x + c * sx0 * k - n * sy0 * k, py = L.y + n * sx0 * k + c * sy0 * k, err = (px - a.x) * c + (py - a.y) * n, sp = EA_SPEC[a.type];
+  eaSteer(a, px + c * 40, py + n * 40, dt, clamp(L.spd + err * .9, L.spd * .6, sp.spd * 1.5));
+  a.alt += (L.alt - a.alt) * Math.min(1, dt * 2);
+  return true;
+}
 function eaFlyGA(a, dt) {
+  if (a.ph === 'out' && a.lead != null && eaForm(a, dt, 460)) return;
   if (a.ph === 'out' || a.ph === 'attack') {
     eaTrack(a);
-    const d = eaSteer(a, a.tx, a.ty, dt);
+    const d = eaSteer(a, a.tx, a.ty, dt, a.ph === 'out' && a.join > S.t ? EA_SPEC[a.type].spd * .7 : undefined);
     a.alt = a.ph === 'attack' ? Math.max(.35, a.alt - dt * .25) : Math.min(.7, a.alt + dt * .4);
     if (a.ph === 'out' && d < 420) { a.ph = 'attack'; eaSpotSay(a); }
     if (a.ph === 'attack') {
@@ -322,13 +336,14 @@ function eaFlyGA(a, dt) {
 }
 // 直升机：在目标与机场连线上、离目标 340 处悬停（守方一侧），面向目标开火
 function eaStandoff(a) {
-  const b = eaNearBase(a.x, a.y) || { x: a.tx, y: 0 }, d = Math.max(1, dist(a.tx, a.ty, b.x, b.y)), r = Math.min(340, d * .8);
-  let x = a.tx + (b.x - a.tx) / d * r, y = a.ty + (b.y - a.ty) / d * r;
+  const b = eaNearBase(a.x, a.y) || { x: a.tx, y: 0 }, d = Math.max(1, dist(a.tx, a.ty, b.x, b.y)), r = Math.min(340, d * .8), o = ((a.slot || 0) % 2 ? 1 : -1) * Math.ceil((a.slot || 0) / 2) * 38;   // 编队各机横向错开悬停
+  let x = a.tx + (b.x - a.tx) / d * r - (b.y - a.ty) / d * o, y = a.ty + (b.y - a.ty) / d * r + (b.x - a.tx) / d * o;
   x = clamp(x, 20, W - 20); y = clamp(y, 20, H - 20);
   a.sx = x; a.sy = y; a.stx = a.tx; a.sty = a.ty;
 }
 function eaFlyHeli(a, dt) {
   a.alt = a.ph === 'rtb' ? Math.min(.3, a.alt + dt * .25) : Math.min(.3, a.alt + dt * .25);
+  if (a.ph === 'out' && a.lead != null && eaForm(a, dt, 480)) return;
   if (a.ph === 'out') {
     eaTrack(a);
     if (a.sx == null || dist(a.tx, a.ty, a.stx, a.sty) > 80) eaStandoff(a);
@@ -565,6 +580,42 @@ function eaTargets() {
   }
   return out;
 }
+// 一个编队起飞：fl 待命飞机（第一架为长机），tgt(i) 第 i 架的目标；僚机编入长机队形（eaForm），长机放慢等僚机集合
+function eaPkg(b, fl, tgt) {
+  const E = S.eair;
+  let lead = null;
+  fl.forEach((w, i) => {
+    const T = tgt(i);
+    const a = eaNewAir(b, w, T.x + (i % 2 ? gauss() * 20 : 0), T.y + (i % 2 ? gauss() * 20 : 0), { tgt: { k: T.k, id: T.id }, ammo: 1, atgm: w.type === 'heli' ? 2 : 0, rk: w.type === 'heli' ? 2 : 0 });
+    if (i) { a.lead = lead.id; a.slot = i; if (a.wait == null) { a.x += 14 * i; a.y += i % 2 ? 8 : -8; } }   // 直升机并排离坪；固定翼按跑道排队依次滑跑
+    else { lead = a; a.join = S.t + (a.wait || 0) + 4 + 3.5 * (fl.length - 1); }
+    w.state = 'out'; E.fly.push(a);
+  });
+  // 综合打击群：攻击机编队、三机以上的武装直升机编队都配歼击机扫荡与护航（airwar.js）
+  if (lead && typeof awEscortE === 'function' && (fl[0].type === 'ga' || fl.length >= 3)) { const T = tgt(0); awEscortE(T.x, T.y, `${EA_SPEC[fl[0].type].name}编队`, lead); }
+  return lead;
+}
+// 总攻 / 反冲击的航空火力（ai5.js 调用）：待命的武装直升机（最多 5 架）、攻击机（最多 4 架）各编一个队同时出动，打 (x, y) 一带的目标；不受出击间隔限制
+function eaMass(x, y, nm) {
+  const E = S.eair;
+  if (!E || !eaOn()) return 0;
+  const all = eaBases(), open = eaOpen();
+  if (!all.length) return 0;
+  const tg = eaTargets().filter(t => dist(t.x, t.y, x, y) < 400 && t.v > 0).sort((p, q) => q.v - p.v), pt = { k: 'pt', x, y, v: 6, nm: nm || '总攻目标' };
+  let n = 0;
+  const said = [];
+  for (const type of ['heli', 'ga']) {
+    const ws = E.wing.filter(w => w.state === 'ready' && w.type === type && (type === 'heli' || open.length)).slice(0, type === 'heli' ? 5 : 4);
+    if (!ws.length) continue;
+    eaPkg(eaNearBase(x, y, type === 'heli' ? all : open), ws, i => tg[Math.floor(i / 2) % Math.max(1, tg.length)] || pt);
+    n += ws.length; said.push(`${EA_SPEC[type].name} ${ws.length} 架`);
+  }
+  if (!n) return 0;
+  E.nextT = Math.max(E.nextT, S.t + E.gap * .5);
+  eaStat('eaMass', n);
+  if (typeof chatSay === 'function') chatSay('e', `命令：${said.join('、')}编队同时出击，支援${eaWhere(x, y)}方向的${nm || '总攻'}，打掉当面之敌的坦克和集结的步兵。`, { kind: 'order', at: { x, y }, lv: 0 });
+  return n;
+}
 const EA_PREF = { heli: { veh: 1.3, ship: 1.1, team: .9, pt: .8 }, ga: { veh: 1, ship: 1.3, team: 1.2, pt: 1.1 } };
 function eaThink() {
   const E = S.eair, all = eaBases(), open = eaOpen();
@@ -590,12 +641,7 @@ function eaThink() {
   const fl = [bw, ...same.slice(0, bw.type === 'heli' ? 4 : four ? 3 : 1)];
   const T2 = four ? eaTargets().filter(t => !(t.k === best.k && t.id === best.id) && dist(t.x, t.y, best.x, best.y) > 80 && dist(t.x, t.y, best.x, best.y) < 600 && t.v * EA_PREF[bw.type][t.k] >= bs * .5)
     .sort((p, q) => q.v * EA_PREF[bw.type][q.k] - p.v * EA_PREF[bw.type][p.k])[0] : null;
-  fl.forEach((w, i) => {
-    const T = i >= 2 && T2 ? T2 : best;
-    const a = eaNewAir(b, w, T.x + (i % 2 ? gauss() * 20 : 0), T.y + (i % 2 ? gauss() * 20 : 0), { tgt: { k: T.k, id: T.id }, ammo: 1, atgm: bw.type === 'heli' ? 2 : 0, rk: bw.type === 'heli' ? 2 : 0 });
-    if (i) { if (a.wait != null) a.wait += i % 2 ? 2 : 0; else { a.x += 14 * i; a.y += i % 2 ? 8 : -8; } }   // 固定翼僚机错开 2 秒滑跑
-    w.state = 'out'; E.fly.push(a);
-  });
+  eaPkg(b, fl, i => i >= 2 && T2 ? T2 : best);
   E.nextT = S.t + E.gap * (AW === 'e' ? .6 : 1) * (fl.length > 2 ? 1.25 : fl.length > 1 ? 1.1 : 1); E.lastType = bw.type;
   eaStat('eaSortie', fl.length);
   if (typeof chatSay === 'function') chatSay('e', `命令：${sp.name}${fl.length > 1 ? ['', '', '双机', '三机', '四机', '五机'][fl.length] + '编队' : '一个架次'}出击，打击${eaWhere(best.x, best.y)}的${best.nm}${T2 ? `，其中一部打击${eaWhere(T2.x, T2.y)}的${T2.nm}` : ''}。`, { kind: 'order', at: { x: best.x, y: best.y }, lv: 1, key: 'easort', gap: 15 });

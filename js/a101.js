@@ -20,8 +20,21 @@ const A101_LOAD = [
   { sq: ['jav', 'jav'], veh: [{ type: 'td', mdl: 'JLTV 陶式反坦克车' }, { type: 'td', mdl: 'JLTV 陶式反坦克车' }, { type: 'sam_veh', mdl: 'AN/TWQ-1 复仇者防空车', samX: { n: 12, cd: 1.6, regen: 20, range: 600, pkK: 1.15 } },
     { type: 'sam_veh', mdl: 'AN/TWQ-1 复仇者防空车', samX: { n: 12, cd: 1.6, regen: 20, range: 600, pkK: 1.15 } }, { type: 'recon', mdl: 'M1097 悍马（M2 机枪）' }] }
 ];
-const A101_MEN = A101_LOAD.reduce((a, L) => a + L.sq.reduce((b, k) => b + A101_SQ[k].length, 0), 0);
-const A101_VEH = A101_LOAD.reduce((a, L) => a + (L.veh || []).length, 0);
+// 沙盒（v13）：机械化空降战斗群——6 架 C-17A：伞兵两个连 + 中 / 重型坦克、步兵战车、防空车，4 架 AH-64E 随队先到空降场压制
+const A101_SAM = { n: 12, cd: 1.6, regen: 20, range: 600, pkK: 1.15 };
+const A101_MECH = [
+  { sq: ['lead', 'rifle', 'rifle', 'mg', 'rifle', 'jav', 'stg', 'rifle'] },
+  { sq: ['lead', 'rifle', 'rifle', 'mg', 'rifle', 'jav', 'stg', 'rifle'] },
+  { sq: [], veh: [{ type: 'hv_tank', mdl: 'M1A2 SEPv3 艾布拉姆斯' }, { type: 'apc', mdl: 'M2A3 布雷德利' }] },
+  { sq: [], veh: [{ type: 'hv_tank', mdl: 'M1A2 SEPv3 艾布拉姆斯' }, { type: 'apc', mdl: 'M2A3 布雷德利' }] },
+  { sq: ['jav'], veh: [{ type: 'tank', mdl: 'M1A1 艾布拉姆斯' }, { type: 'tank', mdl: 'M1A1 艾布拉姆斯' }] },
+  { sq: ['jav'], veh: [{ type: 'sam_veh', mdl: 'AN/TWQ-1 复仇者防空车', samX: A101_SAM }, { type: 'sam_veh', mdl: 'AN/TWQ-1 复仇者防空车', samX: A101_SAM }] }
+];
+const A101_ESC = 4;   // 随队 AH-64E
+const a101Load = () => S && S.mode === 'sandbox' ? A101_MECH : A101_LOAD;
+const a101Men = L0 => L0.reduce((a, L) => a + L.sq.reduce((b, k) => b + A101_SQ[k].length, 0), 0);
+const a101Veh = L0 => L0.reduce((a, L) => a + (L.veh || []).length, 0);
+const A101_MEN = a101Men(A101_LOAD), A101_VEH = a101Veh(A101_LOAD);
 
 function a101Ensure() {
   if (S.e101 && Array.isArray(S.e101.ch)) return S.e101;
@@ -62,20 +75,28 @@ function a101Think() {
   const E1 = a101Ensure();
   if (E1.lift || !(E1.n > 0) || S.t < E1.next || typeof eaEnsure !== 'function') return;
   if (S.teams.filter(q => q.side === 'p' && q.men.length && isLand(q.x, q.y)).length < 5) return;
-  const p = a101Obj(), dz = p && a101DZ(p);
+  if (!E1.force && typeof a5Hold === 'function' && a5Hold()) return;   // 留着配合总攻（ai5.js）
+  const p = E1.force ? ptByKey(E1.force) || a101Obj() : a101Obj(), dz = p && a101DZ(p);
+  E1.force = null;
   if (!dz) { E1.next = S.t + 10; return; }
-  const E = eaEnsure(), id = S.nid++, sp = EA_SPEC.c17;
+  const E = eaEnsure(), id = S.nid++, sp = EA_SPEC.c17, LD = a101Load(), men = a101Men(LD), nv = a101Veh(LD);
   E1.lift = { id, dz, key: p.key, t: S.t, land: 0, veh: 0, lost: 0, us: [], vs: [] };
   E1.n--; E1.next = S.t + A101.gap;
-  // 品字形编队：长机在前，两架僚机在后方两侧；沿南北向航线飞越空降场
-  A101_LOAD.forEach((L, k) => {
-    const lx = dz.x + (k ? (k === 1 ? -60 : 60) : 0), y0 = -60 - (k ? 90 : 0);
+  // 楔形编队：长机在前，僚机依次在后方两侧；沿南北向航线飞越空降场
+  LD.forEach((L, k) => {
+    const row = Math.ceil(k / 2), lx = dz.x + (k ? (k % 2 ? -60 : 60) * row : 0), y0 = -60 - row * 90;
     E.fly.push({ id: S.nid++, type: 'c17', lift: id, k, x: lx, y: y0, heading: Math.PI / 2, spd: sp.spd, alt: .6, bank: 0, hp: sp.hp, flares: sp.flares,
       ph: 'in', lx, ly: dz.y + (k ? 25 : 0), sq: L.sq.slice(), veh: (L.veh || []).slice(), rel: 0, t: S.t, pv: false });
   });
   if (typeof v8Stat === 'function') v8Stat('a101Go');
+  const mech = LD === A101_MECH;
+  if (mech) for (let k = 0; k < A101_ESC; k++) {   // 随队阿帕奇：从北面先到，在空降场外悬停，打靠近空降场的我军
+    const h = EA_SPEC.heli;
+    E.fly.push({ id: S.nid++, wid: null, type: 'heli', base: null, spd: h.spd, bank: 0, x: clamp(dz.x + (k - 1.5) * 40, 20, W - 20), y: -30 - (k % 2) * 25, heading: Math.PI / 2, alt: .3, ph: 'out', tx: dz.x, ty: dz.y,
+      tgt: { k: 'pt' }, flares: h.flares, hp: h.hp, t: S.t, pv: false, ammo: 1, atgm: 3, rk: 3, slot: k, esc101: true });
+  }
   const wh = typeof cmdWhere === 'function' ? cmdWhere(dz.x, dz.y) : gridRef(dz.x, dz.y);
-  if (typeof chatSay === 'function') chatSay('e', `命令：第 101 空降师空降战斗群，3 架 C-17A 在${wh}伞降——伞兵 ${A101_MEN} 人，重装空投 JLTV 陶式反坦克车 2 辆、复仇者防空车 2 辆、悍马 1 辆；落地集结后${p.owner === 'p' ? `反冲击${p.name}` : `增援${p.name}`}。`, { kind: 'order', at: dz, lv: 0 });
+  if (typeof chatSay === 'function') chatSay('e', mech ? `命令：第 101 空降师机械化空降战斗群，${LD.length} 架 C-17A 在${wh}空降——伞兵 ${men} 人，重装空投 M1A2 主战坦克 2 辆、M1A1 主战坦克 2 辆、M2A3 布雷德利 2 辆、复仇者防空车 2 辆；${A101_ESC} 架 AH-64E 随队先到空降场压制；落地集结后${p.owner === 'p' ? `反冲击${p.name}` : `增援${p.name}`}。` : `命令：第 101 空降师空降战斗群，3 架 C-17A 在${wh}伞降——伞兵 ${men} 人，重装空投 JLTV 陶式反坦克车 2 辆、复仇者防空车 2 辆、悍马 1 辆；落地集结后${p.owner === 'p' ? `反冲击${p.name}` : `增援${p.name}`}。`, { kind: 'order', at: dz, lv: 0 });
 }
 // 飞行：in 进场 → 飞越空降场时按顺序放出伞兵（每 0.18 秒一个班）与重装平台 → out 北返出图
 function a101Fly(a, dt) {
@@ -112,7 +133,7 @@ function a101Release(a) {
     L.said = true;
     const wh = typeof cmdWhere === 'function' ? cmdWhere(a.x, a.y) : gridRef(a.x, a.y);
     if (spotted(a.x, a.y) || inVision(a.x, a.y)) log(`敌 C-17 运输机编队在${wh}大规模空降，判断为美军第 101 空降师`, 'bad', null, 0, { x: a.x, y: a.y });
-    if (typeof chatSay === 'function') chatSay('p', `报告：${wh}上空 3 架 C-17 运输机正在空投，伞兵与重装平台成串落下，判断为美军第 101 空降师主力！命令：防空火力、战斗机全力拦截，就近部队向空降场开火，趁其集结前打掉。`, { kind: 'report', at: { x: a.x, y: a.y }, key: 'a101s', gap: 60, lv: 0 });
+    if (typeof chatSay === 'function') chatSay('p', `报告：${wh}上空 ${S.eair ? S.eair.fly.filter(o => o.type === 'c17' && o.lift === a.lift && !o.dead).length : 3} 架 C-17 运输机正在空投，伞兵与重装平台成串落下，判断为美军第 101 空降师主力！命令：防空火力、战斗机全力拦截，就近部队向空降场开火，趁其集结前打掉。`, { kind: 'report', at: { x: a.x, y: a.y }, key: 'a101s', gap: 60, lv: 0 });
   }
 }
 // 下降：东北风飘移；伞兵每 0.5 秒挨一次我方地面火力（150 内没被压住的我步兵、220 内的自行高炮 / 弹炮防空车）
@@ -135,7 +156,7 @@ function a101Chutes(dt) {
   if (E1.ch.some(c => c.done)) E1.ch = E1.ch.filter(c => !c.done);
 }
 function a101Unit(L, pk) {
-  const p = S.points.find(o => o.key === L.key) || S.points[0], i = pk === 2 ? 0 : pk;
+  const p = S.points.find(o => o.key === L.key) || S.points[0], i = pk === 1 ? 1 : 0;
   if (L.us[i] != null && UNIT_MAP.get(L.us[i])) return UNIT_MAP.get(L.us[i]);
   const n = (S.e101.done || 0) * 2 + i + 1;
   const u = addUnit('e', 'inf', { role: 'reserve', obj: p.key, form: 'wedge', a4n: `第 101 空降师 ${n} 连`, morale: 92, elite: true });

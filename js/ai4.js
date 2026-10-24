@@ -49,7 +49,7 @@ function a4UnitBusy(id) {
   const C = S && S.ai && S.ai.co;
   if (!C) return false;
   const r = C.res[id];
-  return !!(r && (r.st === 'move' || r.st === 'stand')) || !!a4Plan(C, id) || !!(C.dr && C.dr[id]);
+  return !!(r && (r.st === 'move' || r.st === 'stand')) || !!a4Plan(C, id) || !!(C.dr && C.dr[id]) || (typeof a5Has === 'function' && a5Has(id));   // 总攻集团（ai5.js）
 }
 // 该据点的反冲击由 ai4 掌握：有进行中的计划，或刚放弃 / 受挫（冷却期内不再仓促反击，与「暂不反冲击」的决心一致）
 const a4OwnsPt = k => { const C = S && S.ai && S.ai.co; return !!C && (C.ca.some(c => c.key === k && !c.end) || (C.hold && C.hold[k] > S.t)); };
@@ -57,6 +57,8 @@ const a4OwnsPt = k => { const C = S && S.ai && S.ai.co; return !!C && (C.ca.some
 function a4Focus() {
   const C = S && S.ai && S.ai.co;
   if (!C) return null;
+  const f5 = typeof a5Focus === 'function' ? a5Focus() : null;   // 总攻的火力准备 / 延伸优先（ai5.js）
+  if (f5) return f5;
   let lift = null;
   for (const c of C.ca) {
     if (c.end) continue;
@@ -143,7 +145,7 @@ function a4Res(C, info) {
   const need = k => { const I = info[k]; return I ? (I.th * bias(k) + 1) / (I.def + 1) * Math.sqrt(I.p.vp || 1) : 0; };
   let best = null, bs = .5;
   for (const u of S.units) {
-    if (u.side !== 'e' || u.kind !== 'inf' || u.role !== 'reserve' || u.state === 'rout' || C.res[u.id] || C.dr[u.id] || a4Plan(C, u.id) || a4Fresh(u)) continue;   // 行军中的机动支队到齐前、刚接到任务的连 40 秒内不改派
+    if (u.side !== 'e' || u.kind !== 'inf' || u.role !== 'reserve' || u.state === 'rout' || C.res[u.id] || C.dr[u.id] || a4Plan(C, u.id) || a4Fresh(u) || (typeof a5Has === 'function' && a5Has(u.id))) continue;   // 行军中的机动支队到齐前、刚接到任务的连 40 秒内不改派
     const ts = a4Ts(u), c = a4Cent(u);
     if (!c || a4Men(ts) < 4 || ts.some(q => q.raid || q.role !== 'reserve' || a4Held(q) || C.fl[q.id])) continue;
     const cur = need(u.obj) * 1.5;
@@ -273,7 +275,7 @@ function a4Draw(C, info) {
   // 只从同一片地域抽（离最近的抽出据点 520 以内）：能就近集合成队，不从全图各处各走各的
   const donors = donors0.filter(J => dist(J.p.x, J.p.y, donors0[0].p.x, donors0[0].p.y) <= 520);
   for (const J of donors) {
-    const g = S.teams.filter(q => q.side === 'e' && q.obj === J.p.key && q.role === 'garrison' && q.men.length >= 2 && !q.hold && !q.raid && q.order.t !== 'retreat' && !a4Busy(q) && !(unitOf(q) && unitOf(q).state === 'rout'));
+    const g = S.teams.filter(q => q.side === 'e' && q.obj === J.p.key && q.role === 'garrison' && q.men.length >= 2 && !q.hold && !q.afG && !q.raid && q.order.t !== 'retreat' && !a4Busy(q) && !(unitOf(q) && unitOf(q).state === 'rout'));
     const take = Math.min(g.length - (J.p.key === 'HQ' ? 2 : 1), Math.floor(g.length / 2));
     if (take <= 0) continue;
     g.sort((a, b) => dist(a.x, a.y, K.p.x, K.p.y) - dist(b.x, b.y, K.p.x, K.p.y)).slice(0, Math.min(take, 9 - pick.length)).forEach(q => pick.push(q));
@@ -282,7 +284,7 @@ function a4Draw(C, info) {
   }
   // 车辆池：离主攻方向 300 以外、450 以内没有敌人、没在反冲击或别的支队里的车（坦克 / 战车、防空车分开）
   const quietV = v => !S.teams.some(q => q.side === 'p' && q.men.length && dist(q.x, q.y, v.x, v.y) < 450) && !vehFoes('e').some(o => dist(o.x, o.y, v.x, v.y) < 500);
-  const freeV = (S.veh || []).filter(v => v.side === 'e' && !v.dead && v.auto !== false && !v.immob && !v.lst && isLand(v.x, v.y) && v.hp >= v.maxhp * .5 && v.ai !== 'resup' && v.ai !== 'back' &&
+  const freeV = (S.veh || []).filter(v => v.side === 'e' && !v.dead && !v.afD && v.auto !== false && !v.immob && !v.lst && isLand(v.x, v.y) && v.hp >= v.maxhp * .5 && v.ai !== 'resup' && v.ai !== 'back' &&
     !(v.cmd && S.t < (v.cmd.until ?? 0)) && (v.buddy == null || (C.res[v.buddy] && !a4Plan(C, v.buddy) && info[C.res[v.buddy].key] && info[C.res[v.buddy].key].th < 1.5)) && dist(v.x, v.y, K.p.x, K.p.y) > 300 && quietV(v))
     .sort((a, b) => dist(a.x, a.y, K.p.x, K.p.y) - dist(b.x, b.y, K.p.x, K.p.y));
   const isAAv = v => !!(vehSp(v).aa || (v.mod && v.mod.cram)), GV = freeV.filter(v => !isAAv(v) && v.type !== 'spg' && v.type !== 'recon'), AV = freeV.filter(isAAv);
@@ -360,7 +362,7 @@ function a4Ca(C, info, D) {
     // 可用兵力：在此待机的连队优先，其次 800 以内空闲的预备连（须经指挥官放行）；最多 3 个连
     const need = Math.max(8, Math.round(Math.max(I.near, 3) * D.ratio * A.need)), cand = [];
     for (const u of S.units) {
-      if (u.side !== 'e' || u.kind !== 'inf' || u.state === 'rout' || a4Plan(C, u.id) || C.dr[u.id]) continue;
+      if (u.side !== 'e' || u.kind !== 'inf' || u.state === 'rout' || a4Plan(C, u.id) || C.dr[u.id] || (k !== 'HQ' && typeof a5Has === 'function' && a5Has(u.id))) continue;   // 总攻集团不拿来零散反冲击（指挥所告急除外）
       const ts = a4Ts(u), c = a4Cent(u);
       if (!c || a4Men(ts) < 3 || ts.some(q => q.raid || a4Held(q) || C.fl[q.id])) continue;
       const r = C.res[u.id], stand = r && r.key === k, d = dist(c[0], c[1], p.x, p.y);
@@ -431,6 +433,7 @@ function a4CaGo(C, c, p, I) {
   c.st = 'go'; c.goT = S.t; c.men0 = men;
   for (const q of ts) { aiGo(q, p.x + gauss() * 15, p.y + gauss() * 15, 'amove', p.x, p.y); q.px = null; }
   const nv = (S.veh || []).filter(v => v.side === 'e' && !v.dead && v.buddy != null && c.units.includes(v.buddy) && A4_GUNV.includes(v.type)).length;
+  if (men >= 12 && typeof eaMass === 'function') eaMass(p.x, p.y, `向${p.name}的反冲击`);   // 陆空协同：反冲击发起时航空兵同时出击
   a4Stat('caGo');
   chatSay('e', `命令：火力延伸！${c.nm.join('、')}（${ts.length} 组 ${men} 人${I && I.near ? `，对敌约 ${I.near} 人` : ''}）向${p.name}统一发起反冲击${nv ? `，${nv} 辆坦克在步兵线后伴随支援` : ''}。`, { kind: 'order', at: p, lv: 0 });
 }
@@ -508,7 +511,7 @@ function a4Flank(C, info) {
     for (const j in info) {
       const J = info[j];
       if (j === k || J.p.owner !== 'e' || J.th >= 1.5 || J.near > 0 || dist(J.p.x, J.p.y, p.x, p.y) > 520) continue;
-      const g = S.teams.filter(q => q.side === 'e' && q.obj === j && q.role === 'garrison' && q.men.length >= 2 && !q.hold && !q.raid && q.order.t !== 'retreat' && !a4Busy(q) && !(unitOf(q) && unitOf(q).state === 'rout'));
+      const g = S.teams.filter(q => q.side === 'e' && q.obj === j && q.role === 'garrison' && q.men.length >= 2 && !q.hold && !q.afG && !q.raid && q.order.t !== 'retreat' && !a4Busy(q) && !(unitOf(q) && unitOf(q).state === 'rout'));
       if (g.length < 2) continue;
       for (const q of g) { const d = dist(q.x, q.y, ax, ay); if (d < bs) { bs = d; best = { q, J }; } }
     }
@@ -536,11 +539,12 @@ function a4Flank(C, info) {
 // —— ④ 步坦协同：绑定（每 3 秒）。反冲击连优先（发起中的最优先），其次机动 / 待机中的预备连；每连最多 2 辆炮车 + 1 辆装甲车 ——
 function a4Bind(C) {
   const kind = v => A4_GUNV.includes(v.type) ? 'g' : v.type === 'apc' ? 'a' : 'o', cap = { g: 2, a: 1, o: 1 };
-  const vs = (S.veh || []).filter(v => v.side === 'e' && !v.dead && v.auto !== false && !v.immob && !v.lst && v.type !== 'spg' && v.type !== 'aa_veh' && v.type !== 'sam_veh' && v.hp >= v.maxhp * .3 && isLand(v.x, v.y));
+  const vs = (S.veh || []).filter(v => v.side === 'e' && !v.dead && !v.afD && v.auto !== false && !v.immob && !v.lst && v.type !== 'spg' && v.type !== 'aa_veh' && v.type !== 'sam_veh' && v.hp >= v.maxhp * .3 && isLand(v.x, v.y));
   const want = new Map();
   for (const c of C.ca) if (!c.end) for (const id of c.units) want.set(id, c.st === 'go' ? 3 : 2);
   for (const id in C.res) if (!want.has(+id)) want.set(+id, 1);
-  for (const id in C.dr) if (!want.has(+id)) want.set(+id, 1.5);   // 抽调行军中的机动支队：远处闲着的车辆跟着一起走
+  for (const id in C.dr) if (!want.has(+id)) want.set(+id, 1.5);
+  if (S.ai.g5 && typeof a5Has === 'function') for (const id of S.ai.g5.units) if (a5Has(id)) want.set(id, 2.6);   // 总攻集团的连优先配坦克   // 抽调行军中的机动支队：远处闲着的车辆跟着一起走
   for (const v of S.veh || []) if (v.side === 'e' && v.buddy != null && (!vs.includes(v) || !want.has(v.buddy) || !UNIT_MAP.get(v.buddy))) { v.buddy = null; v.esc = null; }
   const load = {};
   for (const v of vs) if (v.buddy != null) { const L = load[v.buddy] || (load[v.buddy] = { g: 0, a: 0, o: 0 }); L[kind(v)]++; }

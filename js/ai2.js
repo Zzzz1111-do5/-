@@ -86,6 +86,7 @@ function aiThink(D) {
       mine = mine.filter(q => !atk.includes(q));   // 未投入的组照常占位
     }
     for (const q of mine) {
+      if (q.afG) continue;   // 机场常驻守备队守自己的外围阵地（afdef.js）
       if (q.order.t === 'amove' || q.order.t === 'charge') q.order = { t: 'hold' };
       if (q.order.t === 'move') continue;
       let spot = q.px != null ? { x: q.px, y: q.py } : null;

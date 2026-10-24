@@ -368,7 +368,14 @@ function sbxAlong(id, xa, xb, yOff, seg, gapX, gapW) {
 // —— 守方：判断主攻方向 → 主防御地带 → 岸炮 → 反斜面炮兵 → 居中预备队 → 防空 → 警戒 → 守备 ——
 function sbxAIDefend() {
   sbxClear('e');
-  const B0 = S.sbx.budget.e, k = B0 / SBX_BUDGET, BS = sbxBeaches(), say = (t, at) => sbxSay('e', t, 'plan', at);
+  const B0 = S.sbx.budget.e, BS = sbxBeaches(), say = (t, at) => sbxSay('e', t, 'plan', at);
+  // 纵深野战机场（含防御体系 1500 点）：大预算先修，其余兵力按剩下的预算配
+  let af0 = null;
+  if (B0 >= 4500 && !(S.v7off && S.v7off.air) && BS[0] && BS[0].hq) {
+    const hq0 = BS[0].hq;   // 300 米跑道要一大块平整陆地：先在指挥所以北找，找不到再放宽到整个纵深
+    for (let i = 0; i < 120 && !af0; i++) { const w = i < 60 ? 900 : 2400, x = clamp(hq0.x + (Math.random() - .5) * w, 170, W - 170), y = clamp(hq0.y - 60 - Math.random() * 500, 50, H); if (coastAt(x) - y >= 500) af0 = sbxTry('e_airfield', x, y, 60); }
+  }
+  const k = (B0 - (af0 ? 1500 : 0)) / SBX_BUDGET;
   for (const B of BS) B.L = B.w / 190 + 1.6 * (1 - B.dHQ / 2200) + (B.dTown < 650 ? .5 : 0) - .45 * B.cross - .25 * B.bat.length + (Math.random() - .5) * .25;
   const ord = BS.slice().sort((a, b) => b.L - a.L), nMain = B0 >= 2400 ? 3 : 2, main = ord.slice(0, nMain), rest = ord.slice(nMain);
   const b1 = main[0], dest = B => B.dHQ < 900 ? '指挥所' : B.tw.name;
@@ -451,17 +458,14 @@ function sbxAIDefend() {
   if (k >= 2 && sbxVehOk()) sbxTry('e_lpws', hq.x + 40, hq.y - 20, 50);   // 大预算：指挥所旁放陆基密集阵，拦截舰炮、迫击炮、火箭弹
   if (nAA || sv) say(`防空：指挥所与岸炮、炮兵阵地配高炮 ${nAA} 门${sv ? '；指挥所后方配弹炮防空车 1 辆，打敌机、拦截敌战术导弹' : ''}，防敌舰载机先拔岸炮、再炸预备队。`, hq);
   // 5b. 纵深野战机场（v7）：保留直升机与攻击机各一架，专打卸载中的登陆舰与坦克；指挥所配单兵防空组
-  if (B0 >= 1800 && !(S.v7off && S.v7off.air)) {
-    let af = null;
-    // 300 米跑道要一大块平整陆地：先在指挥所以北找，找不到再放宽到整个纵深
-    for (let k = 0; k < 120 && !af; k++) { const w = k < 60 ? 900 : 2400, x = clamp(hq.x + (Math.random() - .5) * w, 170, W - 170), y = clamp(hq.y - 60 - Math.random() * 500, 50, H); if (coastAt(x) - y >= 500) af = sbxTry('e_airfield', x, y, 60); }
-    if (af) {
+  if (af0) {   // 机场已在开头修好（含雷达、防空车、高炮、巡逻车、常驻守备队）
+    const af = af0;
+    {
       const buyN = (id, n) => { let k = 0; for (let i = 0; i < n; i++) if (sbxPlace(id).ok) k++; return k; };   // 预算越大，机队越大
       const nh = buyN('e_air_heli', B0 >= 3000 ? 5 : 2), ng = buyN('e_air_ga', 1 + (B0 >= 3000) + (B0 >= 6000)), nf = buyN('e_air_ftr', (B0 >= 2200) + (B0 >= 4000) + (B0 >= 8000)), n22 = buyN('e_air_f22', (B0 >= 3000) + (B0 >= 7000));
       sbxTry('e_manpads', hq.x - 30, hq.y + 25, 40);
-      sbxTry('e_garrison', af.x - 60, af.y + 40, 60);   // 机场警卫：机场也是据点，防敌空降夺取（abn.js）
       const fw = [nf && `F-35A ${nf} 架`, n22 && `F-22A ${n22} 架`].filter(Boolean).join('、');
-      say(`航空：纵深 ${sbxM(coastAt(af.x) - af.y)} 米处修野战机场，${[nh && `武装直升机 ${nh} 架`, ng && `攻击机 ${ng} 架`].filter(Boolean).join('、')}，成双机、四机编队专打卸载中的登陆舰与登陆后的坦克${fw ? `；歼击机 ${fw}，拦截敌舰载机、争夺制空权` : ''}；机场与指挥所配警卫和单兵防空组。`, af);
+      say(`航空：纵深 ${sbxM(coastAt(af.x) - af.y)} 米处修野战机场，${[nh && `武装直升机 ${nh} 架`, ng && `攻击机 ${ng} 架`].filter(Boolean).join('、')}，成双机、四机编队专打卸载中的登陆舰与登陆后的坦克${fw ? `；歼击机 ${fw}，拦截敌舰载机、争夺制空权` : ''}；机场自带雷达、防空车、高炮、巡逻车与常驻守备队，指挥所配单兵防空组。`, af);
     }
   }
   if (B0 >= 2200 && !(S.v7off && S.v7off.msl)) {
@@ -518,7 +522,7 @@ function sbxAIDefend() {
     let nw = 0;
     while (nw < clamp(Math.round(k), 0, 5) && sbxLeft('e') >= 40 && sbxTry('e_wave', 0, 0)) nw++;
     let na = 0;   // 第 101 空降师：大预算才编（每批 4 架黑鹰）
-    while (na < clamp(Math.round(k - 1.5), 0, 2) && sbxLeft('e') >= 320 && sbxTry('e_101', 0, 0)) na++;
+    while (na < clamp(Math.round(k - 2.5), 0, 2) && sbxLeft('e') >= 2900 && sbxTry('e_101', 0, 0)) na++;   // 机械化空降很贵：大预算才买
     if (sbxSpent('e') > e0) say(`纵深加强：${up.length ? sbxNm(up) + '在警戒阵地之外加筑滩头防御地带；' : ''}主防地带后方增筑第二道碉堡线并配守备排${nw ? `；另编增援波次 ${nw} 批，开战后陆续开到受威胁最大的据点` : ''}${na ? `；第 101 空降师 C-17 空降战斗群 ${na} 波待命，敌上岸后在纵深伞降反冲击` : ''}。`, b1.ex);
   }
   sbxSync();

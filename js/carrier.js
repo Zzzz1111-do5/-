@@ -220,6 +220,8 @@ function airWingTgt(kind, tx, ty) {
   return e ? [e.kx, e.ky] : [tx, ty];
 }
 function airPkg(kind, tx, ty, pref) {
+  const G = kind === 'bomber' ? airBomberGate(tx, ty, pref) : null;
+  if (kind === 'bomber' && !G) return false;
   if (!launchPlane(kind, tx, ty, pref)) return false;
   const lead = S.planes[S.planes.length - 1], fl = [lead];
   lead.pkg = lead.id;
@@ -228,6 +230,7 @@ function airPkg(kind, tx, ty, pref) {
     if (!launchPlane(kind, x, y, pref)) break;
     const p = S.planes[S.planes.length - 1]; p.pkg = lead.id; fl.push(p);
   }
+  if (kind === 'bomber') { airBomberGroup(lead, fl, tx, ty, G); return lead; }
   const A = S.airw, threat = A && (A.st === 'e' || A.st === 'c' || S.t - (A.seenE ?? -1e9) < 120);
   let esc = null;
   if (kind !== 'fighter' && kind !== 'recon' && threat && S.assets.fighter > 0 && airReady('fighter')
@@ -243,6 +246,115 @@ function airPkg(kind, tx, ty, pref) {
     if (typeof chatSay === 'function') chatSay('p', `命令：${nm.split(' ')[0]}${fl.length > 1 ? '双机编队' : ''}出击${typeof cmdWhere === 'function' ? cmdWhere(tx, ty) : ''}${esc ? `，${en}${ne > 1 ? '双机' : '一架'}随队护航，先清空目标上空敌机` : ''}。`, { kind: 'order', at: { x: tx, y: ty }, key: 'airpkg', gap: 20, lv: 1 });
   }
   return lead;
+}
+// —— 轰炸机突击群（解放军体系作战：预警指挥 + 防空压制 + 制空护航 + 突击）：轰炸机一律不单独出动——
+//    ① 先导扫荡：歼-20 双机先飞到目标与敌机场之间的空域，清除敌歼击机；
+//    ② 防空压制：目标 320 以内有已知敌防空，先派歼-35 防空压制型打掉；
+//    ③ 随队护航：一对战斗机贴着轰炸机长机飞（awFlyP 读 p.escOf），敌机逼近轰炸机就迎击；
+//    ④ 轰炸机先在敌防空圈外的待机点盘旋，扫荡到位、防空压掉（最多等 45 秒）再进入投弹航路（airHoldP）；
+//    空中有空警-600 时护航机发现距离更远（airwar.js awAew）。
+//    没有能起飞的护航机：请求排队，等护航机整备（最多 60 秒，airBomberQueue）；全军没有战斗机：只在我方掌握制空权、或敌方没有歼击机时出动 ——
+const airFtrUp = () => S.air.wing.filter(w => w.type === 'fighter' && w.state !== 'lost');
+const airFtrDeck = () => S.air.wing.filter(w => w.type === 'fighter' && w.state === 'deck' && !(w.af && !(typeof abAfOpen === 'function' && abAfOpen())) && (airLandW(w) || (cvOf(cvHome(w)) || { hp: 0 }).hp > 0)).length;
+// 在空、没在接敌、弹药够的巡逻战斗机（可改派去护航轰炸机）
+const airFtrFree = () => S.planes.filter(p => !p.dead && p.kind === 'fighter' && (p.phase === 'loiter' || p.phase === 'out') && !p.tg && p.escOf == null && !p.sweep && (p.aam || 0) >= 2 && p.alt > .5);
+const airEFtr = () => !!(S.eair && (S.eair.wing.some(w => (w.type === 'ftr' || w.type === 'f22') && w.state !== 'lost') || S.eair.fly.some(a => !a.dead && (a.type === 'ftr' || a.type === 'f22'))));
+// 目标 r 以内已知的敌防空（高炮阵地、防空车、近 2 分钟暴露过的单兵防空）
+function airAAKnown(x, y, r) {
+  const out = [];
+  for (const e of S.enemies) if (!e.dead && (e.kind === 'aa') && e.kx != null && dist(e.kx, e.ky, x, y) < r) out.push({ x: e.kx, y: e.ky, k: 'enemy', id: e.id });
+  for (const v of S.veh || []) if (v.side === 'e' && !v.dead && (v.type === 'aa_veh' || v.type === 'sam_veh') && (inVision(v.x, v.y) || (v.seen != null && S.t - v.seen < 60)) && dist(v.x, v.y, x, y) < r) out.push({ x: v.x, y: v.y, k: 'veh', id: v.id });
+  if (typeof eaThreat === 'function' && eaThreat(x, y) >= 1) out.push({ x, y, k: 'manpads' });
+  return out;
+}
+function airBomberGate(tx, ty, pref) {
+  const say = (t, k) => { log(t, 'warn', 'bgate', 4, { x: tx, y: ty }); if (typeof chatSay === 'function') chatSay('p', t, { kind: 'report', at: { x: tx, y: ty }, key: 'bgate' + k, gap: 40, lv: 1 }); };
+  if (!airFtrUp().length) {
+    const A = S.airw;
+    if (airEFtr() && !(A && A.st === 'p')) { say('轰炸机没有战斗机护航，敌歼击机仍在、我方未掌握制空权——轰炸机暂不出动，改由舰炮、导弹打击。', 'n'); return null; }
+    return { noEsc: true };
+  }
+  if (airFtrDeck() || airFtrFree().length) { S.air.bq = null; return { noEsc: false }; }
+  const Q = S.air.bq;
+  if (Q && S.t - Q.t > 60) { S.air.bq = null; return { noEsc: true, late: true }; }   // 等了一分钟：不再等，轰炸机按防区外方式出动
+  if (!Q) {
+    S.air.bq = { x: tx, y: ty, pref, t: S.t };
+    const r = S.air.wing.filter(w => w.type === 'fighter' && w.state === 'rearm').map(w => w.rearmT);
+    say(`轰炸机等护航战斗机一起出动（护航机整备中${r.length ? `，最快 ${Math.ceil(Math.min(...r))} 秒` : ''}）；最多等 60 秒。`, 'w');
+  }
+  return null;
+}
+// 排队的轰炸任务：每秒看一次护航机好了没有
+function airBomberQueue(dt) {
+  if (!S || S.phase !== 'battle' || S.over || !S.air || !S.air.bq) return;
+  if ((S.air.bqT = (S.air.bqT || 0) - dt) > 0) return;
+  S.air.bqT = 1;
+  const Q = S.air.bq;
+  if (!(S.assets.bomber > 0) || !airReady('bomber')) { S.air.bq = null; return; }
+  if (airFtrDeck() || airFtrFree().length || S.t - Q.t > 60) airPkg('bomber', Q.x, Q.y, Q.pref);
+}
+function airBomberGroup(lead, fl, tx, ty, G) {
+  const pk = lead.id, said = [];
+  let nSw = 0, nEsc = 0, nSd = 0;
+  const tag = (o, ex) => Object.assign(o, { pkg: pk }, ex);
+  if (!G.noEsc) {
+    const nf = airFtrDeck(), eF = airEFtr();
+    // 先导扫荡：有三架以上待命、或敌有歼击机且有两架以上待命时，先派双机去目标与敌机场之间
+    if (eF && nf >= 3 || nf >= 4) {
+      const af = S.enemies.filter(e => e.kind === 'airfield' && !e.dead && e.kx != null).sort((a, b) => dist(a.kx, a.ky, tx, ty) - dist(b.kx, b.ky, tx, ty))[0];
+      let sx = tx, sy = ty - 160;
+      if (af) { const d = Math.max(1, dist(tx, ty, af.kx, af.ky)), k = Math.min(300, d * .45) / d; sx = tx + (af.kx - tx) * k; sy = ty + (af.ky - ty) * k; }
+      sx = clamp(sx, 60, W - 60); sy = clamp(sy, 60, H - 60);
+      for (let i = 0; i < 2 && airFtrDeck() > 2 - i - (nf >= 4 ? 0 : 1); i++) if (launchPlane('fighter', sx, sy)) { tag(S.planes[S.planes.length - 1], { sweep: true, esc: true, odir: i ? -1 : 1, capT: 75 }); nSw++; }
+    }
+    // 随队护航：一对战斗机贴着轰炸机长机；甲板上没有就把在空巡逻、没接敌的战斗机改派过来
+    for (let i = 0; i < 2 && airFtrDeck(); i++) if (launchPlane('fighter', clamp(tx, 60, W - 60), clamp(ty, 60, H - 60))) { tag(S.planes[S.planes.length - 1], { esc: true, escOf: pk, slot: i + 1, odir: i ? -1 : 1, capT: 45 }); nEsc++; }
+    if (nEsc < 2) for (const f of airFtrFree().sort((a, b) => dist(a.x, a.y, lead.x, lead.y) - dist(b.x, b.y, lead.x, lead.y)).slice(0, 2 - nEsc)) {
+      tag(f, { esc: true, escOf: pk, slot: nEsc + 1, capT: Math.max(f.capT || 0, 45) }); if (f.phase === 'loiter') airSet(f, 'out'); f.retask = true; nEsc++;
+    }
+  }
+  // 防空压制：目标附近已知敌防空，派歼-35 防空压制型先打（最多两架）
+  const aa = airAAKnown(tx, ty, 320).filter(o => o.k !== 'manpads');
+  for (const o of aa.slice(0, 2)) {
+    if (!(S.assets.strike > 0) || !S.air.wing.some(w => w.type === 'strike' && w.state === 'deck')) break;
+    if (launchPlane('strike', o.x, o.y, 'sead')) { tag(S.planes[S.planes.length - 1], { seadP: true }); nSd++; }
+  }
+  // 待机点：目标向我方一侧 330（避开已知防空圈），扫荡与压制完成前在这里盘旋
+  if (nSw || nSd || nEsc) {   // 有护航就先在待机点会合
+    let hx = tx, hy = Math.min(H - 60, ty + 330);
+    const th = airAAKnown(tx, ty, 700);
+    for (let i = 0; i < 8 && th.some(o => dist(o.x, o.y, hx, hy) < 260); i++) hy = Math.min(H - 40, hy + 50);
+    for (const b of fl) b.hold = { x: clamp(hx + (b === lead ? 0 : 40), 40, W - 40), y: hy, t0: S.t, until: S.t + (nSd ? 50 : nSw ? 35 : 28), pkg: pk };
+  }
+  lead.pkg = pk;
+  for (const b of fl) b.pkg = pk;
+  if (typeof v8Stat === 'function') v8Stat('bomberPkg');
+  if (typeof awStat === 'function') { awStat('bSweep', nSw); awStat('bEsc', nEsc); awStat('bSead', nSd); if (!nSw && !nEsc) awStat('bNoEsc'); }
+  const fn = (S.planes.find(p => p.pkg === pk && p.kind === 'fighter') || {}).v, fnm = airName('fighter', fn).split(' ')[0], bnm = airName('bomber', lead.v).split(' ')[0];
+  if (nSw) said.push(`${fnm} ${nSw} 架前出扫荡`);
+  if (nSd) said.push(`歼-35 防空压制型 ${nSd} 架先打敌防空`);
+  if (nEsc) said.push(`${fnm} ${nEsc} 架随队护航${S.planes.some(p => p.pkg === pk && p.retask) ? '（由空中巡逻改派）' : ''}`);
+  if (awAewUp()) said.push('空警-600 预警引导');
+  const txt = `突击群编成：${bnm} ${fl.length} 架${said.length ? '，' + said.join('，') : G.late ? '（护航机整备未完，轰炸机不进敌防空圈，投完立即脱离）' : '（敌无歼击机威胁，单独出动）'}`;
+  log(txt, 'info', 'bpkg', 4, { x: tx, y: ty });
+  if (typeof chatSay === 'function') chatSay('p', `命令：${txt}${lead.hold ? '。轰炸机先在防空圈外待机，扫荡与压制完成后进入投弹航路' : ''}。`, { kind: 'order', at: { x: tx, y: ty }, key: 'bpkg', gap: 15, lv: 1 });
+}
+const awAewUp = () => typeof awAew === 'function' && !!awAew();
+// 轰炸机待机：扫荡机到位（巡逻或已接敌）、目标附近已知防空打掉、压制机投弹完毕，或待机时间到，才进入投弹航路
+function airHoldP(p, dt, speed) {
+  const H0 = p.hold, mates = S.planes.filter(o => !o.dead && o.pkg === H0.pkg);
+  const sw = mates.filter(o => o.sweep), swOk = !sw.length || sw.some(o => o.phase === 'loiter' || o.tg);
+  const sd = mates.some(o => o.seadP && o.phase === 'out' && !o.dropped);
+  const aa = airAAKnown(p.tx, p.ty, 320).filter(o => o.k !== 'manpads').length;
+  const es = mates.filter(o => o.escOf === H0.pkg), escOk = !es.length || es.some(o => dist(o.x, o.y, p.x, p.y) < 170);   // 护航机已到身边
+  if (S.t > H0.until || (S.t - H0.t0 > 4 && swOk && !sd && !aa && escOk)) {
+    p.hold = null;
+    if (p.id === H0.pkg && typeof chatSay === 'function') chatSay('p', `报告：${escOk && es.length ? '护航机已会合，' : ''}${swOk ? (sw.length ? '扫荡机已控制目标空域' : '目标空域无敌机') : '扫荡未完'}${aa ? `，目标附近仍有 ${aa} 处敌防空` : '，敌防空已压制'}——轰炸机进入投弹航路。`, { kind: 'report', at: { x: p.tx, y: p.ty }, key: 'bhold', gap: 20, lv: 2 });
+    return false;
+  }
+  p.alt = Math.min(1, p.alt + dt / 2.2); speed(150);
+  if (dist(p.x, p.y, H0.x, H0.y) > 130) airSteer(p, H0.x, H0.y, dt); else airOrbit(p, H0.x, H0.y, 90, p.odir || 1, dt);
+  return true;
 }
 // 新飞机的公共字段
 function airNew(w, kind, x, y, heading, tx, ty, extra) {
@@ -285,6 +397,7 @@ function updatePlanes(dt) {
   if (!S.cv || !S.air) initCarrier();
   updateCarrier(dt);
   updateAirAuto(dt);
+  airBomberQueue(dt);
   for (const w of S.air.wing) if (w.state === 'rearm' && (w.rearmT -= dt) <= 0) {
     w.state = 'deck'; w.rearmT = 0;
     if (airLandW(w)) log(`${airName(w.type, w.v)}在${w.af ? '夺取的机场' : '战区机场'}加油挂弹完毕，可以再次出击`, 'good', 'rearm' + w.type + (w.v || ''), 8);
@@ -380,6 +493,7 @@ function flyPlane(p, dt) {
       if (p.y < STAGING_Y && (p.rt -= dt) <= 0) { p.rt = .2; S.recon.push({ x: p.x, y: p.y, until: S.t + 25 }); }
       if (p.leg >= p.wp.length) airSet(p, 'rtb');
     } else if (p.kind === 'strike' || p.kind === 'bomber') {
+      if (p.hold && !p.dropped && airHoldP(p, dt, speed)) return;   // 突击群：防空圈外待机
       const dive = p.kind === 'bomber' && p.v === 'dive', heavy = p.kind === 'bomber' && !dive, std = p.kind === 'strike' && M.std;   // 歼-35：防区外投放精确制导弹药
       if (!p.dropped) {
         const df = Math.abs(airAng(Math.atan2(p.ty - p.y, p.tx - p.x) - p.heading)), d = airSteer(p, p.tx, p.ty, dt);
