@@ -457,7 +457,7 @@ function sbxAIDefend() {
     for (let k = 0; k < 120 && !af; k++) { const w = k < 60 ? 900 : 2400, x = clamp(hq.x + (Math.random() - .5) * w, 170, W - 170), y = clamp(hq.y - 60 - Math.random() * 500, 50, H); if (coastAt(x) - y >= 500) af = sbxTry('e_airfield', x, y, 60); }
     if (af) {
       const buyN = (id, n) => { let k = 0; for (let i = 0; i < n; i++) if (sbxPlace(id).ok) k++; return k; };   // 预算越大，机队越大
-      const nh = buyN('e_air_heli', 1 + (B0 >= 3000) + (B0 >= 6000)), ng = buyN('e_air_ga', 1 + (B0 >= 3000) + (B0 >= 6000)), nf = buyN('e_air_ftr', (B0 >= 2200) + (B0 >= 4000) + (B0 >= 8000)), n22 = buyN('e_air_f22', (B0 >= 3000) + (B0 >= 7000));
+      const nh = buyN('e_air_heli', B0 >= 3000 ? 5 : 2), ng = buyN('e_air_ga', 1 + (B0 >= 3000) + (B0 >= 6000)), nf = buyN('e_air_ftr', (B0 >= 2200) + (B0 >= 4000) + (B0 >= 8000)), n22 = buyN('e_air_f22', (B0 >= 3000) + (B0 >= 7000));
       sbxTry('e_manpads', hq.x - 30, hq.y + 25, 40);
       sbxTry('e_garrison', af.x - 60, af.y + 40, 60);   // 机场警卫：机场也是据点，防敌空降夺取（abn.js）
       const fw = [nf && `F-35A ${nf} 架`, n22 && `F-22A ${n22} 架`].filter(Boolean).join('、');

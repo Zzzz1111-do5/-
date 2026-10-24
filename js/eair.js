@@ -7,8 +7,9 @@ const eaOn = () => !!S && !(S.v7off && S.v7off.air);
 const eaStat = (k, n = 1) => { const o = S.v7s || (S.v7s = {}); o[k] = (o[k] || 0) + n; };
 POWER.erk = { men: .45, ship: 2, struct: 0, seg: false, R: 18 };   // 机载火箭（守方只打进攻方，不伤自家工事）
 // 战役各难度：机队、首次出击时刻、两次出击的间隔（v13 出动更快、机队更大）
-const EA_DIFF = { normal: { wing: ['heli', 'heli', 'ga'], first: 120, gap: 80 }, hard: { wing: ['ga', 'ga', 'heli', 'heli', 'ftr', 'ftr'], first: 80, gap: 50 },
-  hell: { wing: ['ga', 'ga', 'ga', 'heli', 'heli', 'heli', 'ftr', 'ftr', 'f22', 'f22'], first: 55, gap: 35 } };
+const EA_H5 = ['heli', 'heli', 'heli', 'heli', 'heli'];   // 阿帕奇 5 架，一次全部出动
+const EA_DIFF = { normal: { wing: [...EA_H5, 'ga'], first: 120, gap: 80 }, hard: { wing: ['ga', 'ga', ...EA_H5, 'ftr', 'ftr'], first: 80, gap: 50 },
+  hell: { wing: ['ga', 'ga', 'ga', ...EA_H5, 'ftr', 'ftr', 'f22', 'f22'], first: 55, gap: 35 } };
 // 守方（美军）：A-10C 慢而皮实（钛合金座舱浴盆，挨一发还能飞），AH-64E，F-35A 隐身（我方雷达发现距离打折），F-22A 更隐身、超音速巡航、推力矢量
 const EA_SPEC = { ga: { name: 'A-10C 攻击机', spd: 170, turn: 1.4, hp: 2, flares: 2 }, heli: { name: 'AH-64E 武装直升机', spd: 90, turn: 2.4, hp: 2, flares: 1 },
   uh60: { name: 'UH-60M 黑鹰运输直升机', spd: 85, turn: 2.2, hp: 2, flares: 1 },
@@ -584,8 +585,9 @@ function eaThink() {
   if (!best) return;
   const b = eaNearBase(best.x, best.y, bw.type === 'heli' ? all : open), sp = EA_SPEC[bw.type];
   // 编队：同型还有一架待命就双机（僚机打同一目标、错开 2 秒）；同型待命 4 架以上、目标价值高就四机——第二个双机打附近另一个目标；直升机并排离坪
-  const same = ready.filter(w => w !== bw && w.type === bw.type), four = same.length >= 3 && bs >= 8;
-  const fl = [bw, ...same.slice(0, four ? 3 : 1)];
+  // 阿帕奇：待命的一次最多 5 架一起出（不等目标价值）
+  const same = ready.filter(w => w !== bw && w.type === bw.type), four = bw.type === 'heli' ? same.length >= 2 : same.length >= 3 && bs >= 8;
+  const fl = [bw, ...same.slice(0, bw.type === 'heli' ? 4 : four ? 3 : 1)];
   const T2 = four ? eaTargets().filter(t => !(t.k === best.k && t.id === best.id) && dist(t.x, t.y, best.x, best.y) > 80 && dist(t.x, t.y, best.x, best.y) < 600 && t.v * EA_PREF[bw.type][t.k] >= bs * .5)
     .sort((p, q) => q.v * EA_PREF[bw.type][q.k] - p.v * EA_PREF[bw.type][p.k])[0] : null;
   fl.forEach((w, i) => {
@@ -596,7 +598,7 @@ function eaThink() {
   });
   E.nextT = S.t + E.gap * (AW === 'e' ? .6 : 1) * (fl.length > 2 ? 1.25 : fl.length > 1 ? 1.1 : 1); E.lastType = bw.type;
   eaStat('eaSortie', fl.length);
-  if (typeof chatSay === 'function') chatSay('e', `命令：${sp.name}${fl.length > 2 ? '四机编队' : fl.length > 1 ? '双机编队' : '一个架次'}出击，打击${eaWhere(best.x, best.y)}的${best.nm}${T2 ? `，另一个双机打击${eaWhere(T2.x, T2.y)}的${T2.nm}` : ''}。`, { kind: 'order', at: { x: best.x, y: best.y }, lv: 1, key: 'easort', gap: 15 });
+  if (typeof chatSay === 'function') chatSay('e', `命令：${sp.name}${fl.length > 1 ? ['', '', '双机', '三机', '四机', '五机'][fl.length] + '编队' : '一个架次'}出击，打击${eaWhere(best.x, best.y)}的${best.nm}${T2 ? `，其中一部打击${eaWhere(T2.x, T2.y)}的${T2.nm}` : ''}。`, { kind: 'order', at: { x: best.x, y: best.y }, lv: 1, key: 'easort', gap: 15 });
 }
 // 已知（被我方看到发射过）的敌单兵防空组：攻方派机时避开
 function eaThreat(x, y) {
