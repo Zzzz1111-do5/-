@@ -527,7 +527,7 @@ function apEngineer(u, pl, P) {
   let best = null, bs = Infinity;
   for (const t of tasks) {
     const cur = pl.job && pl.job.k === t.k;
-    if ((claimed.has(t.k) && !cur) || pl.skip[t.k] != null || apDanger(t.x, t.y) || apShelling(t.x, t.y, 70)) continue;
+    if ((claimed.has(t.k) && !cur) || pl.skip[t.k] != null || apDanger(t.x, t.y) || apShelling(t.x, t.y, 70) || (typeof cbWait === 'function' && cbWait(t.x, t.y))) continue;   // 打补给线的炮正被反炮兵射击：等打掉再修
     const s = t.pri + dist(q.x, q.y, t.x, t.y) / 400 - (cur ? .6 : 0);   // 已接手的任务优先保持
     if (s < bs) { bs = s; best = t; }
   }

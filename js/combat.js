@@ -83,11 +83,13 @@ function impact(x, y, pw, side, src) {
     if (!e.dead && d < R * 2) e.sup = Math.min(100, (e.sup || 0) + 80 * (1 - d / (R * 2)));
     if (!e.dead && d < R + 4) damageEnemy(e, pw.struct * (1 - d / (R + 4) * .4));
   }
-  if (typeof supplyImpact === 'function') supplyImpact(x, y, R, pw);   // 补给节点（supplynet.js）
+  if (typeof supplyImpact === 'function') supplyImpact(x, y, R, pw, side, src);   // 补给节点（supplynet.js）
   if (typeof armorImpact === 'function') armorImpact(x, y, R, pw, side);   // 装甲车辆（ai3.js）
   runHook('impact', x, y, R, pw, side);
+  let segHit = false;
   if (pw.seg) for (const L of S.supply) for (const g of L.segs)
-    if (g.ok && segDist(x, y, g.x0, g.y0, g.x1, g.y1) < R * .8) { g.ok = false; g.rep = 0; log('补给线被炮火切断，工兵前往抢修', 'warn', 'segcut', 3); }
+    if (g.ok && segDist(x, y, g.x0, g.y0, g.x1, g.y1) < R * .8) { g.ok = false; g.rep = 0; segHit = true; log('补给线被炮火切断，工兵前往抢修', 'warn', 'segcut', 3); }
+  if (segHit && side === 'e' && typeof cbSupplyHit === 'function') cbSupplyHit(src, x, y);   // 是哪门炮打的补给线（cbat.js）
   for (const b of S.boats) if (!b.dead && dist(x, y, b.x, b.y) < R) { b.dead = true; S.stats.lost += 3 * (b.n || 1); log('一艘增援艇在途中被击沉', 'bad', 'boat', 3); }
   // 爆破效果：炸断铁丝网、削弱雷区、摧毁障碍
   for (const w of S.wire) if (!w.cut && segDist(x, y, w.x0, w.y0, w.x1, w.y1) < R * .7) { w.cut = true; forts = true; }

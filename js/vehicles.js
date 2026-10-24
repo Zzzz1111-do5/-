@@ -157,7 +157,7 @@ function vehImpact(x, y, R0, pw, side) {
 HOOK.impact.push(vehImpact);
 
 // 车炮榴弹的威力（供 impact 使用）：对碉堡伤害大，杀伤半径中等
-const vehPW = (he, side) => ({ men: .28 + .1 * he, ship: .5 * he, struct: 2.4 * he, seg: false, R: 9 + 4 * he, veh: true, pen: 1, side });
+const vehPW = (he, side) => ({ men: .38 + .14 * he, ship: .5 * he, struct: 2.4 * he, seg: false, R: 11 + 5 * he, veh: true, pen: 1, side });   // 坦克榴弹：中型坦克杀伤半径约 18
 // 自行火炮的间瞄炮弹走通用炮弹结算（support.js updateShells → POWER[kind]）
 if (typeof POWER === 'object' && POWER && !POWER.spg) POWER.spg = { men: .42, ship: 1.5, struct: 4, seg: false, R: 24 };
 const vehNearPt = (x, y) => { let b = null, bd = Infinity; for (const p of S.points) { const d = dist(p.x, p.y, x, y); if (d < bd) { bd = d; b = p; } } return b; };
@@ -393,10 +393,12 @@ function vehGunTarget(v) {
     if (e.kind === 'bunker' && S.teams.some(q => q.side === 'p' && q.sup > 40 && dist(q.x, q.y, e.x, e.y) < 180)) val += 2;   // 正在压制我方步兵的碉堡
     consider(e, 'st', e.x, e.y, val * (g.flame ? 1.6 : at ? .7 : 1));
   }
-  if (!at || g.ind) for (const q of S.teams) if (q.side === foe && q.men.length && !q.ride) {
+  if (!(at && v.type === 'td') || g.ind) for (const q of S.teams) if (q.side === foe && q.men.length && !q.ride) {   // 重型坦克也用榴弹打步兵，只有坦克歼击车专打装甲
     if (g.ind && !(q.side === 'e' ? inVision(q.x, q.y) : spotted(q.x, q.y))) continue;
     if (v.cons && !g.ind && dist(v.x, v.y, q.x, q.y) > 80) continue;   // 节约弹药：主炮只打车辆、工事与贴近的步兵，远处的步兵交给机枪
-    consider(q, 'tm', q.x, q.y, (.8 + q.men.length * .15) * (g.flame && q.inTrench ? 2.4 : 1) * (g.ind ? .6 : 1));
+    let near = 0;   // 一发榴弹能罩住的人数：成堆的步兵优先
+    for (const o of S.teams) if (o !== q && o.side === foe && o.men.length && !o.ride && dist(o.x, o.y, q.x, q.y) < 22) near += o.men.length;
+    consider(q, 'tm', q.x, q.y, (1 + q.men.length * .2 + near * .12) * (g.flame && q.inTrench ? 2.4 : 1) * (g.ind ? .6 : 1) * (at ? .8 : 1));
   }
   return best;
 }
@@ -477,8 +479,8 @@ function vehMg(v, tg) {
   const def = coverAt(q.x, q.y) * shelter(q, v.x, v.y) * (SMOKE[ci(q.x, q.y)] ? .4 : 1);
   if (q.side === 'e') q.hitT = S.t;
   for (let s = 0; s < m.n; s++) {
-    suppress(q, (m.quad ? 9 : 7) * (M.sup || 1), v.x, v.y);
-    if (q.men.length && Math.random() < (m.quad ? .1 : .085) * acc * def) killMan(q, v.side === 'e' && Math.random() < D.radio ? 'radio' : null);
+    suppress(q, (m.quad ? 9 : 8.5) * (M.sup || 1), v.x, v.y);
+    if (q.men.length && Math.random() < (m.quad ? .1 : .11) * acc * def) killMan(q, v.side === 'e' && Math.random() < D.radio ? 'radio' : null);
   }
   const vis = v.side === 'p' || inVision(v.x, v.y);
   tracer(v.x, v.y, q.x + gauss() * 5, q.y + gauss() * 5, v.side, vis);

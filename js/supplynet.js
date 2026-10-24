@@ -311,17 +311,18 @@ function hitSupply(t, dmg) {
 }
 
 // 炮弹/炸弹落点（由 impact() 调用）：R 内的补给点受损，R*0.8 内经过的运输线被切断
-function supplyImpact(x, y, R, pw) {
+function supplyImpact(x, y, R, pw, side, src) {
   if (!S || !S.snet || !S.snet.nodes.length || !(R > 0)) return;
   const base = pw ? (pw.struct || (pw.ship ? pw.ship * 2.5 : 0) || 4) : 5;
-  let cut = false;
+  let cut = false, hit = false;
   for (const n of S.snet.nodes) {
     if (!snLive(n)) continue;
     const d = dist(x, y, n.x, n.y);
-    if (d < R) snDamage(n, base * (1 - d / R * .5));
+    if (d < R) { snDamage(n, base * (1 - d / R * .5)); hit = true; }
     if (snLive(n) && !n.cut && n.path && n.path.length > 1 && polyDist(x, y, n.path) < R * .8) { n.cut = true; n.rep = 0; cut = true; }
   }
   if (cut) log('前沿运输线被炮火切断，工兵前往抢修', 'warn', 'sncut', 6, { x, y });
+  if ((cut || hit) && side === 'e' && typeof cbSupplyHit === 'function') cbSupplyHit(src, x, y);   // 是哪门炮打的补给线（cbat.js）
 }
 
 // —— 渲染（仅图形）：运输线（虚线道路、接通时有车队光点、被切断时红色闪烁）、补给点（堆叠的物资箱）、规划中的虚影 ——

@@ -73,7 +73,7 @@ function trkJob(t, L, T) {
   for (const n of N) {
     if (n.root !== L.id || !isFinite(n.x)) continue;
     if (n.dead) { if (trkReach(n.parent) && !taken('build', n.id) && !snDanger(n.x, n.y, 110) && 3.5 > bs) { bs = 3.5; best = { k: 'build', id: n.id, n }; } continue; }
-    if (snLive(n) && n.cut && trkReach(n.parent) && !taken('fix', n.id)) { const m = snMid(n); if (!snDanger(m[0], m[1], 110) && 4 > bs) { bs = 4; best = { k: 'fix', id: n.id, n, m }; } continue; }
+    if (snLive(n) && n.cut && trkReach(n.parent) && !taken('fix', n.id)) { const m = snMid(n); if (!snDanger(m[0], m[1], 110) && !(typeof cbWait === 'function' && cbWait(m[0], m[1])) && 4 > bs) { bs = 4; best = { k: 'fix', id: n.id, n, m }; } continue; }   // 反炮兵火力在途：等打掉那门炮再修
     if (!snLive(n) && n.built < 1 && trkReach(n.parent) && !taken('build', n.id) && !snDanger(n.x, n.y, 110) && 3 > bs) { bs = 3; best = { k: 'build', id: n.id, n }; }
     else if (n.connected && trkStock(n) < .75 && !taken('feed', n.id)) { const s = 1 + (1 - trkStock(n)) * 2 + trkUsers(n) * .3; if (s > bs) { bs = s; best = { k: 'feed', id: n.id, n }; } }
   }
