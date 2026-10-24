@@ -350,7 +350,7 @@ function awAutoP() {
   if (!launchPlane('fighter', cx, cy)) return false;
   awStat('ftrP');
   const lead = S.planes[S.planes.length - 1];
-  if ((want - up >= 2 || foes.some(t => t.ftr)) && typeof airReady === 'function' && airReady('fighter') && launchPlane('fighter', cx, cy)) { const p = S.planes[S.planes.length - 1]; p.odir = -1; p.pkg = lead.id; lead.pkg = lead.id; awStat('ftrP'); }   // 双机编队
+  // 双机编队：僚机由 launchPlane 自动带出（carrier.js airFlight，不占机库）
   const nm = typeof airName === 'function' ? airName('fighter', (S.planes[S.planes.length - 1] || {}).v) : '战斗机';
   if (typeof chatSay === 'function') chatSay('p', foes.length ? `命令：${nm}起飞，拦截${awWhere(cx, cy)}上空的敌机（${foes.length} 架）。` : `命令：${nm}起飞，在${awWhere(cx, cy)}上空巡逻，掩护登陆场与对地支援机。`, { kind: 'order', at: { x: cx, y: cy }, key: 'awP', gap: 15, lv: 1 });
   return true;
