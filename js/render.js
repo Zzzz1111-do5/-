@@ -1,5 +1,5 @@
 'use strict';
-// 渲染（一）：画布、镜头变换、辉光、海岸线/网格/海滩标注、无 WebGL 时的像素地形
+// 渲染（一）：画布、镜头变换、辉光、海岸线/网格/海滩标注、无 WebGL 时的像素地形；画面风格 SETTINGS.look：real 写实地形（terrain.js）· matrix 数码矩阵（matrix.js），各自首次用到时才建 WebGL
 const R = { cv: null, ctx: null, dpr: 1, s: 1, ox: 0, oy: 0, b1: null, b2: null, pix: null, fog: null, dprCap: 0, rain: .25, zr: 1, fig: false, view: null, lowCap: false };
 const px = n => n / R.s;
 const _rgb = {};
@@ -8,6 +8,7 @@ function rgba(hex, a) {
   return `rgba(${c},${a})`;
 }
 const font = n => `${px(n)}px "IBM Plex Mono", "Noto Sans SC", monospace`;
+const realLook = () => !(typeof SETTINGS === 'object' && SETTINGS && SETTINGS.look === 'matrix');
 const toWorld = (sx, sy) => ({ x: (sx - R.ox) / R.s, y: (sy - R.oy) / R.s });
 const worldTf = g => g.setTransform(R.dpr * R.s, 0, 0, R.dpr * R.s, R.dpr * R.ox, R.dpr * R.oy);
 
@@ -17,7 +18,6 @@ function initRender(cv) {
   R.fog.width = GW; R.fog.height = GH;
   try { const v = localStorage.getItem('bh-rain'); if (v != null) R.rain = +v; } catch (e) { /* 存储不可用时用默认值 */ }
   if (typeof SETTINGS === 'object' && SETTINGS && SETTINGS.quality === 'low') { R.dprCap = 1; R.lowCap = true; }
-  mxInit();
   resize();
 }
 
@@ -30,6 +30,7 @@ function resize() {
   R.b1.width = Math.ceil(R.cv.width / 4); R.b1.height = Math.ceil(R.cv.height / 4);
   R.b2.width = Math.ceil(R.cv.width / 12); R.b2.height = Math.ceil(R.cv.height / 12);
   if (MX.ok) mxResize();
+  if (TRX.ok) trxResize();
 }
 
 // 降级：世界分辨率的像素地形
@@ -59,6 +60,13 @@ function drawPixelFallback(ctx) {
 }
 
 function drawMarks(ctx) {
+  if (realLook()) {   // 写实：海岸、网格都在地形里，只留集结线与登陆海滩括线
+    ctx.lineWidth = px(1); ctx.setLineDash([px(6), px(6)]); ctx.strokeStyle = 'rgba(235,242,248,.2)';
+    ctx.beginPath(); ctx.moveTo(0, STAGING_Y); ctx.lineTo(W, STAGING_Y); ctx.stroke(); ctx.setLineDash([]);
+    ctx.strokeStyle = 'rgba(235,242,248,.4)';
+    for (const b of TER.beaches) { const y = coastAt(b.cx) + 64; ctx.beginPath(); ctx.moveTo(b.x0, y - 6); ctx.lineTo(b.x0, y); ctx.lineTo(b.x1, y); ctx.lineTo(b.x1, y - 6); ctx.stroke(); }
+    return;
+  }
   ctx.beginPath();
   for (let x = 0; x <= W; x += 4) ctx.lineTo(x, coastAt(x));
   ctx.strokeStyle = rgba(COL.g, .45); ctx.lineWidth = px(1); ctx.stroke();
@@ -79,7 +87,7 @@ function drawMarks(ctx) {
 // 辉光：全图时强、近看时弱（近看是安静的战术地图），乘以设置里的辉光强度；低画质不做
 function bloomK() {
   const st = typeof SETTINGS === 'object' && SETTINGS ? SETTINGS : null;
-  if (st && st.quality === 'low') return 0;
+  if ((st && st.quality === 'low') || realLook()) return 0;
   const b = st && isFinite(st.bloom) ? st.bloom / .7 : 1;
   return b * lerp(1, .22, smooth(1.4, 6, CAM.z / CAM.fit));
 }
@@ -138,8 +146,16 @@ function drawScene(now) {
   fogBytes();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
-  if (MX.ok) { mxDraw(time, Math.min(1, k * .5) * (shake ? 1 : .4)); ctx.drawImage(MX.cv, 0, 0); }
-  else { ctx.fillStyle = '#010402'; ctx.fillRect(0, 0, R.cv.width, R.cv.height); worldTf(ctx); drawPixelFallback(ctx); }
+  const flash = Math.min(1, k * .5) * (shake ? 1 : .4);
+  if (realLook()) {
+    if (!TRX.tried) { trxInit(); if (TRX.ok) trxResize(); }
+    if (TRX.ok) { trxDraw(time, flash); ctx.drawImage(TRX.cv, 0, 0); }
+    else { ctx.fillStyle = '#05101a'; ctx.fillRect(0, 0, R.cv.width, R.cv.height); worldTf(ctx); trxFallback(ctx); }
+  } else {
+    if (!MX.tried) { mxInit(); if (MX.ok) mxResize(); }
+    if (MX.ok) { mxDraw(time, flash); ctx.drawImage(MX.cv, 0, 0); }
+    else { ctx.fillStyle = '#010402'; ctx.fillRect(0, 0, R.cv.width, R.cv.height); worldTf(ctx); drawPixelFallback(ctx); }
+  }
   worldTf(ctx);
   ctx.lineCap = 'round'; ctx.lineJoin = 'round';
   indexUnits();

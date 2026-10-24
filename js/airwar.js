@@ -420,7 +420,7 @@ function awHud() {
     st.textContent = `#airsup { left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; padding: 3px 10px; font-size: 12px; pointer-events: none; }
 #airsup[hidden] { display: none; } #airsup .ic { width: 16px; height: 16px; } #airsup b { font-weight: 400; color: var(--mute); }
 #airsup .aw-bar { position: relative; width: 140px; height: 6px; border-radius: 3px; border: 1px solid var(--line);
-  background: linear-gradient(90deg, rgba(61, 255, 138, .6), rgba(61, 255, 138, .08) 36%, rgba(255, 194, 74, .14) 50%, rgba(255, 61, 110, .08) 64%, rgba(255, 61, 110, .6)); }
+  background: linear-gradient(90deg, rgba(var(--g-rgb), .6), rgba(var(--g-rgb), .08) 36%, rgba(var(--amber-rgb), .14) 50%, rgba(var(--enemy-rgb), .08) 64%, rgba(var(--enemy-rgb), .6)); }
 #airsup .aw-bar i { position: absolute; top: -4px; width: 3px; height: 12px; margin-left: -1.5px; background: #fff; box-shadow: 0 0 6px #fff; border-radius: 1px; transition: left .25s; }
 #airsup em { font-style: normal; min-width: 4.5em; } #airsup.p em { color: var(--g); } #airsup.e em { color: var(--enemy); } #airsup.c em { color: var(--amber); } #airsup.n em { color: var(--mute); }`;
     document.head.appendChild(st);

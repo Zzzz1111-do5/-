@@ -286,7 +286,7 @@ function itrDraw(t) {
   g.setLineDash([]);
   // 陆地
   g.beginPath(); cs.forEach(([X, Y]) => g.lineTo(SX(X), SY(Y))); g.lineTo(vw + 10, SY(top)); g.lineTo(-10, SY(top)); g.closePath();
-  g.fillStyle = 'rgba(61,255,138,.035)'; g.fill();
+  g.fillStyle = rgba(COL.g, .035); g.fill();
   // 本国国土（略亮）与国界
   const cAlpha = 1 - smooth(1.6, 3.6, zl);
   g.save(); g.beginPath();
@@ -296,13 +296,13 @@ function itrDraw(t) {
     for (let X = sc.XW; X <= sc.XE; X += Math.max(step, 1)) g.lineTo(SX(X), SY(sc.coast(X, Math.max(minWl, 2))));
     for (const [X, Y] of sc.border) g.lineTo(SX(X), SY(Y));
   }
-  g.closePath(); g.fillStyle = 'rgba(61,255,138,.05)'; g.fill(); g.clip();
+  g.closePath(); g.fillStyle = rgba(COL.g, .05); g.fill(); g.clip();
   if (cAlpha > .01) {   // 省界
     g.globalAlpha = fade * cAlpha * smooth(.3, 1.1, t);
-    g.strokeStyle = 'rgba(61,255,138,.22)'; g.lineWidth = 1; g.setLineDash([5, 4]);
+    g.strokeStyle = rgba(COL.g, .22); g.lineWidth = 1; g.setLineDash([5, 4]);
     for (const pts of sc.edges) { g.beginPath(); pts.forEach(([X, Y], i) => i ? g.lineTo(SX(X), SY(Y)) : g.moveTo(SX(X), SY(Y))); g.stroke(); }
     g.setLineDash([]);
-    g.strokeStyle = 'rgba(61,255,138,.1)';   // 公路
+    g.strokeStyle = rgba(COL.g, .1);   // 公路
     for (const [a, b] of sc.roads) { g.beginPath(); g.moveTo(SX(a.X), SY(a.Y)); g.lineTo(SX(b.X), SY(b.Y)); g.stroke(); }
     g.strokeStyle = 'rgba(92,200,255,.35)'; g.lineWidth = 1.2;   // 河流
     for (const pts of sc.rivers) { g.beginPath(); pts.forEach(([X, Y], i) => i ? g.lineTo(SX(X), SY(Y)) : g.moveTo(SX(X), SY(Y))); g.stroke(); }
@@ -310,8 +310,8 @@ function itrDraw(t) {
   g.restore();
   g.globalAlpha = fade * (1 - smooth(1.5, 3, zl));
   g.beginPath(); sc.border.forEach(([X, Y], i) => i ? g.lineTo(SX(X), SY(Y)) : g.moveTo(SX(X), SY(Y)));
-  g.setLineDash([7, 4, 1.5, 4]); g.strokeStyle = 'rgba(61,255,138,.5)'; g.lineWidth = 1.2; g.stroke();
-  g.strokeStyle = 'rgba(61,255,138,.18)'; g.lineWidth = 1;   // 邻国国界
+  g.setLineDash([7, 4, 1.5, 4]); g.strokeStyle = rgba(COL.g, .5); g.lineWidth = 1.2; g.stroke();
+  g.strokeStyle = rgba(COL.g, .18); g.lineWidth = 1;   // 邻国国界
   for (const pts of sc.nbr) { g.beginPath(); pts.forEach(([X, Y], i) => i ? g.lineTo(SX(X), SY(Y)) : g.moveTo(SX(X), SY(Y))); g.stroke(); }
   g.setLineDash([]);
   // 区域底图（程序化地形）与战场地形：放大到区域尺度后淡入
@@ -326,7 +326,7 @@ function itrDraw(t) {
     if (stage >= 2) {   // 战场方格（与沙盘一致：100 米）
       const gs = 100 * ITR_K * s;
       if (gs > 14) {
-        g.globalAlpha = ra * .5 * smooth(14, 40, gs); g.strokeStyle = 'rgba(61,255,138,.1)'; g.lineWidth = 1; g.beginPath();
+        g.globalAlpha = ra * .5 * smooth(14, 40, gs); g.strokeStyle = rgba(COL.g, .1); g.lineWidth = 1; g.beginPath();
         for (let x = 0; x <= W; x += 100) { g.moveTo(SX(sc.BX + x * ITR_K), SY(sc.BY)); g.lineTo(SX(sc.BX + x * ITR_K), SY(sc.BY + sc.BH)); }
         for (let y = 0; y <= H; y += 100) { g.moveTo(SX(sc.BX), SY(sc.BY + y * ITR_K)); g.lineTo(SX(sc.BX + sc.BW), SY(sc.BY + y * ITR_K)); }
         g.stroke();
@@ -340,7 +340,7 @@ function itrDraw(t) {
   g.strokeStyle = rgba(COL.g, .85 - ra * .35); g.lineWidth = 1.4; g.shadowColor = COL.g; g.shadowBlur = 8; g.stroke(); g.shadowBlur = 0;
   // 海岛
   g.globalAlpha = fade * (1 - smooth(2, 4, zl));
-  g.strokeStyle = rgba(COL.g, .6); g.fillStyle = 'rgba(61,255,138,.05)'; g.lineWidth = 1;
+  g.strokeStyle = rgba(COL.g, .6); g.fillStyle = rgba(COL.g, .05); g.lineWidth = 1;
   for (const pts of sc.isles) { g.beginPath(); pts.forEach(([X, Y]) => g.lineTo(SX(X), SY(Y))); g.closePath(); g.fill(); g.stroke(); }
   itrGraticule(g, sc, cam, SX, SY, vw, vh, fade * (1 - ra * .6));
   itrCities(g, sc, t, SX, SY, cAlpha * fade);
@@ -351,7 +351,7 @@ function itrDraw(t) {
   g.globalAlpha = 1;
   g.drawImage(INTRO.fx.c, 0, 0, vw, vh);
   const sy = ((t * .3) % 1.3 - .15) * vh;   // 缓慢下扫的亮带
-  const bar = g.createLinearGradient(0, sy - 40, 0, sy + 2); bar.addColorStop(0, 'rgba(61,255,138,0)'); bar.addColorStop(1, 'rgba(61,255,138,.035)');
+  const bar = g.createLinearGradient(0, sy - 40, 0, sy + 2); bar.addColorStop(0, rgba(COL.g, 0)); bar.addColorStop(1, rgba(COL.g, .035));
   g.fillStyle = bar; g.fillRect(0, sy - 40, vw, 42);
   itrHud(g, sc, cam, t, stage, zu, vw, vh);
   itrSounds(t, stage);
@@ -521,7 +521,7 @@ function itrDissolve(g, p, vw, vh, fr) {
   g.globalCompositeOperation = 'source-over';
   for (let k = 0; k < cols * rows; k++) {
     const d = th[k] - p;
-    if (d > 0 && d < .07) { g.globalAlpha = 1 - d / .07; g.fillStyle = d < .03 ? '#d8ffe8' : COL.g; g.fillText(G[(gl[k] * G.length + p * 40) % G.length | 0], (k % cols + .5) * ts, (Math.floor(k / cols) + .5) * ts); }
+    if (d > 0 && d < .07 && !realLook()) { g.globalAlpha = 1 - d / .07; g.fillStyle = d < .03 ? '#d8ffe8' : COL.g; g.fillText(G[(gl[k] * G.length + p * 40) % G.length | 0], (k % cols + .5) * ts, (Math.floor(k / cols) + .5) * ts); }
   }
   g.textAlign = 'left'; g.globalAlpha = 1;
 }

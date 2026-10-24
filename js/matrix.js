@@ -2,7 +2,7 @@
 // 数码雨：WebGL 着色器把地形渲染成字符矩阵。每种地形用不同字符与色调，叠加下落代码流与视野明暗
 // 近看时：字符按缩放细分（屏幕上约 9–18px），对比度逐渐淡出，过渡为安静的着色战术地图（地形底色、山体阴影、等高线、林/沼/田小纹理）
 // 四个着色器变体（按缩放切换，只算需要的部分）：0 纯数码矩阵（全图）· 1 矩阵→地图过渡（只混底色）· 2 过渡后段（加等高线与地形小纹理）· 3 纯地图（不算代码流）
-const MX = { ok: false, gl: null, cv: null, P: [], u: {}, tex: {}, seed: null, gp: 0, sub: 1, map: 0, der: false, mode: -1 };
+const MX = { ok: false, tried: false, gl: null, cv: null, P: [], u: {}, tex: {}, seed: null, gp: 0, sub: 1, map: 0, der: false, mode: -1 };
 const KANA = 'アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲンガギグゲゴザジズゼゾダヂ';
 const SYMS = '=+-*:.<>|¦_"!#$%&()[]{}~^/Z@;?';
 const SPECIAL = '~≈x^|‖#=·+:-*/\\%';   // 96 起：浅滩 河流 暗礁 礁岸 悬崖 悬崖 桥 路 路 …
@@ -142,6 +142,7 @@ void main() {
 }`;
 
 function mxInit() {
+  MX.tried = true;
   try {
     const cv = document.createElement('canvas');
     const gl = cv.getContext('webgl', { antialias: false, preserveDrawingBuffer: true, premultipliedAlpha: false });

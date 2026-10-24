@@ -51,7 +51,7 @@ const MM_COL = ['#03140c', '#0a3326', '#7a1f33', '#5fae7a', '#3e6b52', '#9be3b5'
   '#11433d', '#1d6f8a', '#e6fff0', '#7fe0a4', '#57c987', '#2a8fa8'];
 
 function mmInit(cv) {
-  MM.cv = cv;
+  MM.cv = cv; MM.real = realLook();
   const w = cv.clientWidth || 268;
   cv.width = Math.round(w * (window.devicePixelRatio || 1)); cv.height = Math.round(cv.width * H / W);
   MM.k = cv.width / W;
@@ -59,9 +59,16 @@ function mmInit(cv) {
   MM.base.width = GW; MM.base.height = GH;
   const g = MM.base.getContext('2d'), img = g.createImageData(GW, GH);
   for (let i = 0; i < GW * GH; i++) {
-    const t = TER.type[i], c = MM_COL[t], e = isWater(t) ? 1 : .55 + TER.elev[i] * .6;
-    img.data[i * 4] = parseInt(c.slice(1, 3), 16) * e; img.data[i * 4 + 1] = parseInt(c.slice(3, 5), 16) * e;
-    img.data[i * 4 + 2] = parseInt(c.slice(5, 7), 16) * e; img.data[i * 4 + 3] = 255;
+    const t = TER.type[i];
+    if (MM.real) {   // 写实：与地形同一套底色，海按离岸距离加深
+      const c = TRX_FLAT[t], e = isWater(t) ? 1 - clamp((cellCY(i) - coastAt(cellCX(i))) / 900, 0, .6) : .8 + TER.elev[i] * .4;
+      for (let j = 0; j < 3; j++) img.data[i * 4 + j] = c[j] * e;
+    } else {
+      const c = MM_COL[t], e = isWater(t) ? 1 : .55 + TER.elev[i] * .6;
+      img.data[i * 4] = parseInt(c.slice(1, 3), 16) * e; img.data[i * 4 + 1] = parseInt(c.slice(3, 5), 16) * e;
+      img.data[i * 4 + 2] = parseInt(c.slice(5, 7), 16) * e;
+    }
+    img.data[i * 4 + 3] = 255;
   }
   g.putImageData(img, 0, 0);
   MM.seed = TER.seed;
@@ -73,11 +80,11 @@ function mmDraw() {
 }
 function mmDraw1() {
   if (!MM.cv) return;
-  if (MM.seed !== TER.seed) mmInit(MM.cv);
+  if (MM.seed !== TER.seed || MM.real !== realLook()) mmInit(MM.cv);
   const g = MM.cv.getContext('2d'), k = MM.k, dot = (x, y, r, c) => { g.fillStyle = c; g.fillRect(x * k - r, y * k - r, r * 2, r * 2); };
-  g.imageSmoothingEnabled = false;
+  g.imageSmoothingEnabled = MM.real;
   g.drawImage(MM.base, 0, 0, MM.cv.width, MM.cv.height);
-  g.fillStyle = 'rgba(0,4,2,.45)';
+  g.fillStyle = MM.real ? 'rgba(8,12,18,.5)' : 'rgba(0,4,2,.45)';
   for (let gy = 0; gy < GH; gy += 2) for (let gx = 0; gx < GW; gx += 2) if (!PV[gy * GW + gx]) g.fillRect(gx * CELL * k, gy * CELL * k, CELL * 2 * k, CELL * 2 * k);
   const u = Math.max(1.5, k * 6);
   for (const p of S.points) { g.strokeStyle = p.owner === 'p' ? COL.g : COL.enemy; g.lineWidth = 1.5; g.strokeRect(p.x * k - u * 1.4, p.y * k - u * 1.4, u * 2.8, u * 2.8); }

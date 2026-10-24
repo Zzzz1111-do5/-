@@ -27,34 +27,35 @@ const mnSfx = k => { if (typeof auUi === 'function') auUi(k); };
 
 const MN_CSS = `
 body.mn-open #bgrain { z-index: 30; opacity: .42; }
+:root[data-look="real"] #mnSet .ms-row[data-only="matrix"] { display: none; }
 body.mn-open > :not(#bgrain):not(#stage):not(.mn-layer):not(script):not(style), body.mn-open #stage > :not(#cv) { visibility: hidden; }
 #diff { display: none; }
 #mn { position: fixed; inset: 0; z-index: 40; overflow-y: auto; color: var(--text); font-family: var(--f-ui);
-  background: linear-gradient(90deg, rgba(1, 4, 2, .82), rgba(1, 4, 2, .5) 55%, rgba(1, 4, 2, .3)), radial-gradient(ellipse at 50% 50%, transparent 55%, rgba(0, 0, 0, .55)), repeating-linear-gradient(to bottom, transparent 0 2px, rgba(0, 0, 0, .22) 2px 3px); }
+  background: linear-gradient(90deg, rgba(var(--bg-rgb), .82), rgba(var(--bg-rgb), .5) 55%, rgba(var(--bg-rgb), .3)), radial-gradient(ellipse at 50% 50%, transparent 55%, rgba(0, 0, 0, .55)), repeating-linear-gradient(to bottom, transparent 0 2px, rgba(0, 0, 0, .22) 2px 3px); }
 #mn .mn-wrap { min-height: 100%; box-sizing: border-box; display: flex; flex-direction: column; gap: 28px;
   padding: max(6vh, 28px) max(9vw, 20px) 22px; padding-left: max(9vw, 20px, env(safe-area-inset-left, 0px)); }
 #mn header { display: grid; gap: 2px; margin-top: auto; }
 #mn footer { margin-top: auto; }
 #mn .mn-kick { font: 10px var(--f-px); letter-spacing: .3em; color: var(--mute); }
 #mn h1 { margin: 0; font: 700 clamp(44px, 7vw, 84px)/1.05 "Noto Sans SC", var(--f-ui); letter-spacing: .16em; color: var(--g);
-  text-shadow: 0 0 18px rgba(61, 255, 138, .55), 0 0 2px rgba(216, 255, 232, .8); }
+  text-shadow: 0 0 18px rgba(var(--g-rgb), .55), 0 0 2px rgba(216, 255, 232, .8); }
 #mn .mn-en { font: clamp(15px, 1.8vw, 22px) var(--f-px); letter-spacing: .62em; color: rgba(198, 247, 216, .75); margin-top: 4px; }
-#mn .mn-rule { height: 1px; width: min(520px, 80vw); margin-top: 14px; background: linear-gradient(90deg, var(--g), rgba(61, 255, 138, 0)); box-shadow: 0 0 8px var(--g); }
+#mn .mn-rule { height: 1px; width: min(520px, 80vw); margin-top: 14px; background: linear-gradient(90deg, var(--g), rgba(var(--g-rgb), 0)); box-shadow: 0 0 8px var(--g); }
 #mn .mn-main { display: grid; grid-template-columns: minmax(260px, 380px) minmax(0, 400px); gap: 28px; align-items: start; }
 #mn .mn-list { display: grid; gap: 8px; }
 #mn .mn-it { position: relative; display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; align-items: center; gap: 12px; text-align: left; min-height: 58px; padding: 8px 14px 8px 10px;
-  background: linear-gradient(90deg, rgba(3, 12, 7, .82), rgba(3, 12, 7, .55)); border: 1px solid var(--line); border-radius: 6px; color: var(--text); transition: border-color .15s, background .15s, transform .15s; }
+  background: linear-gradient(90deg, rgba(var(--pn-rgb), .82), rgba(var(--pn-rgb), .55)); border: 1px solid var(--line); border-radius: 6px; color: var(--text); transition: border-color .15s, background .15s, transform .15s; }
 #mn .mn-it .ic { width: 26px; height: 26px; color: var(--g); justify-self: center; }
 #mn .mn-it b { display: block; font: 700 17px/1.25 "Noto Sans SC", var(--f-ui); letter-spacing: .06em; }
 #mn .mn-it b small { font: 10px var(--f-px); color: var(--mute); letter-spacing: .18em; margin-left: 10px; }
 #mn .mn-it span { display: block; font-size: 12px; color: var(--mute); margin-top: 1px; }
 #mn .mn-it kbd { font: 11px var(--f-ui); color: var(--mute); border: 1px solid var(--line); border-radius: 3px; padding: 0 5px; }
 #mn .mn-it::before { content: ""; position: absolute; left: -1px; top: 10px; bottom: 10px; width: 3px; border-radius: 2px; background: var(--g); opacity: 0; box-shadow: 0 0 8px var(--g); transition: opacity .15s; }
-#mn .mn-it:hover, #mn .mn-it:focus-visible, #mn .mn-it.on { border-color: var(--line-hi); background: linear-gradient(90deg, rgba(61, 255, 138, .14), rgba(3, 12, 7, .6)); transform: translateX(4px); outline: none; }
+#mn .mn-it:hover, #mn .mn-it:focus-visible, #mn .mn-it.on { border-color: var(--line-hi); background: linear-gradient(90deg, rgba(var(--g-rgb), .14), rgba(var(--pn-rgb), .6)); transform: translateX(4px); outline: none; }
 #mn .mn-it.on::before, #mn .mn-it:focus-visible::before { opacity: 1; }
 #mn .mn-it.on kbd { color: var(--g); border-color: var(--line-hi); }
-#mn .mn-it[data-k="cont"] { border-color: rgba(176, 124, 255, .45); } #mn .mn-it[data-k="cont"] .ic { color: var(--sel); }
-#mn .mn-info { position: relative; padding: 16px 18px; background: rgba(3, 12, 7, .78); border: 1px solid var(--line); border-radius: 6px; display: grid; gap: 10px; min-height: 150px; }
+#mn .mn-it[data-k="cont"] { border-color: rgba(var(--sel-rgb), .45); } #mn .mn-it[data-k="cont"] .ic { color: var(--sel); }
+#mn .mn-info { position: relative; padding: 16px 18px; background: rgba(var(--pn-rgb), .78); border: 1px solid var(--line); border-radius: 6px; display: grid; gap: 10px; min-height: 150px; }
 #mn .mn-info::before, #mn .mn-info::after { content: ""; position: absolute; width: 10px; height: 10px; border: 2px solid var(--g); }
 #mn .mn-info::before { left: -1px; top: -1px; border-right: 0; border-bottom: 0; } #mn .mn-info::after { right: -1px; bottom: -1px; border-left: 0; border-top: 0; }
 #mn .mn-info h2 { margin: 0; font: 11px var(--f-px); letter-spacing: .25em; color: var(--g); }
@@ -66,7 +67,7 @@ body.mn-open > :not(#bgrain):not(#stage):not(.mn-layer):not(script):not(style), 
 #mn .mn-pve h2 small { font: 10px var(--f-px); color: var(--mute); letter-spacing: .25em; }
 #mn .mn-lvs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
 #mn .mn-lv { --c: var(--g); position: relative; display: grid; gap: 10px; align-content: start; text-align: left; padding: 16px 16px 14px; min-height: 210px;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--c) 10%, transparent), rgba(3, 12, 7, .82) 60%); border: 1px solid color-mix(in srgb, var(--c) 35%, transparent); border-radius: 6px; color: var(--text); transition: transform .15s, box-shadow .15s, border-color .15s; }
+  background: linear-gradient(180deg, color-mix(in srgb, var(--c) 10%, transparent), rgba(var(--pn-rgb), .82) 60%); border: 1px solid color-mix(in srgb, var(--c) 35%, transparent); border-radius: 6px; color: var(--text); transition: transform .15s, box-shadow .15s, border-color .15s; }
 #mn .mn-lv:hover, #mn .mn-lv:focus-visible, #mn .mn-lv.on { border-color: var(--c); box-shadow: 0 0 22px color-mix(in srgb, var(--c) 35%, transparent); transform: translateY(-3px); outline: none; }
 #mn .mn-lv b { font: 700 24px "Noto Sans SC", var(--f-ui); color: var(--c); letter-spacing: .12em; display: flex; align-items: baseline; justify-content: space-between; }
 #mn .mn-lv b small { font: 11px var(--f-px); letter-spacing: .25em; color: var(--mute); }
@@ -84,9 +85,9 @@ body.mn-open > :not(#bgrain):not(#stage):not(.mn-layer):not(script):not(style), 
 #mn .mn-toast { position: fixed; left: 50%; bottom: 60px; transform: translateX(-50%); background: rgba(20, 12, 3, .92); border: 1px solid var(--amber); color: #ffe2a3; padding: 6px 16px; border-radius: 4px; font-size: 13px; pointer-events: none; }
 #btnMenu .ic { width: 18px; height: 18px; vertical-align: middle; }
 /* 设置面板 */
-#mnSet { position: fixed; inset: 0; z-index: 46; display: grid; place-items: center; background: rgba(1, 4, 2, .7); padding: 16px; }
+#mnSet { position: fixed; inset: 0; z-index: 46; display: grid; place-items: center; background: rgba(var(--bg-rgb), .7); padding: 16px; }
 #mnSet .ms-win { width: min(600px, 100%); max-height: calc(100vh - 32px); overflow-y: auto; box-sizing: border-box; background: rgba(4, 11, 8, .97); border: 1px solid var(--line-hi); border-radius: 8px;
-  box-shadow: 0 0 0 4px rgba(61, 255, 138, .06), 0 0 40px rgba(61, 255, 138, .16); padding: 16px 20px 18px; display: grid; gap: 6px; scrollbar-width: thin; }
+  box-shadow: 0 0 0 4px rgba(var(--g-rgb), .06), 0 0 40px rgba(var(--g-rgb), .16); padding: 16px 20px 18px; display: grid; gap: 6px; scrollbar-width: thin; }
 #mnSet header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
 #mnSet h2 { margin: 0; font: 700 20px "Noto Sans SC", var(--f-ui); color: var(--g); letter-spacing: .12em; display: flex; gap: 10px; align-items: baseline; }
 #mnSet h2 small { font: 10px var(--f-px); color: var(--mute); letter-spacing: .25em; }
@@ -98,24 +99,24 @@ body.mn-open > :not(#bgrain):not(#stage):not(.mn-layer):not(script):not(style), 
 #mnSet .ms-row > label, #mnSet .ms-row > span:first-child { font-family: "Noto Sans SC", var(--f-ui); font-size: 13px; }
 #mnSet .ms-row output { text-align: right; font-variant-numeric: tabular-nums; color: var(--g); font-size: 12px; }
 #mnSet input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 22px; background: transparent; margin: 0; cursor: pointer; }
-#mnSet input[type=range]::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: linear-gradient(90deg, var(--g) var(--v, 50%), rgba(61, 255, 138, .14) var(--v, 50%)); }
-#mnSet input[type=range]::-moz-range-track { height: 4px; border-radius: 2px; background: rgba(61, 255, 138, .14); }
+#mnSet input[type=range]::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: linear-gradient(90deg, var(--g) var(--v, 50%), rgba(var(--g-rgb), .14) var(--v, 50%)); }
+#mnSet input[type=range]::-moz-range-track { height: 4px; border-radius: 2px; background: rgba(var(--g-rgb), .14); }
 #mnSet input[type=range]::-moz-range-progress { height: 4px; border-radius: 2px; background: var(--g); }
-#mnSet input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; margin-top: -6px; border-radius: 50%; background: #031208; border: 2px solid var(--g); box-shadow: 0 0 8px rgba(61, 255, 138, .6); }
-#mnSet input[type=range]::-moz-range-thumb { width: 12px; height: 12px; border-radius: 50%; background: #031208; border: 2px solid var(--g); }
+#mnSet input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; margin-top: -6px; border-radius: 50%; background: var(--bg); border: 2px solid var(--g); box-shadow: 0 0 8px rgba(var(--g-rgb), .6); }
+#mnSet input[type=range]::-moz-range-thumb { width: 12px; height: 12px; border-radius: 50%; background: var(--bg); border: 2px solid var(--g); }
 #mnSet input[type=range]:focus-visible { outline: 2px solid var(--sel); outline-offset: 2px; }
 #mnSet .ms-seg { display: flex; border: 1px solid var(--line); border-radius: 5px; overflow: hidden; justify-self: start; }
 #mnSet .ms-seg button { background: transparent; border: 0; padding: 5px 14px; color: var(--mute); min-height: 30px; }
 #mnSet .ms-seg button + button { border-left: 1px solid var(--line); }
-#mnSet .ms-seg button[aria-pressed="true"] { color: var(--g); background: rgba(61, 255, 138, .14); }
+#mnSet .ms-seg button[aria-pressed="true"] { color: var(--g); background: rgba(var(--g-rgb), .14); }
 #mnSet .ms-file { display: flex; gap: 6px; justify-self: start; }
-#mnSet .ms-fbtn, #mnSet .ms-fclr { border: 1px solid var(--line); border-radius: 5px; padding: 4px 12px; color: var(--g); background: rgba(61, 255, 138, .06); cursor: pointer; font-size: 13px; min-height: 30px; display: inline-flex; align-items: center; }
+#mnSet .ms-fbtn, #mnSet .ms-fclr { border: 1px solid var(--line); border-radius: 5px; padding: 4px 12px; color: var(--g); background: rgba(var(--g-rgb), .06); cursor: pointer; font-size: 13px; min-height: 30px; display: inline-flex; align-items: center; }
 #mnSet .ms-fclr { color: var(--mute); background: transparent; }
 #mnSet .ms-fbtn:focus-within { outline: 2px solid var(--g); }
 #mnSet .ms-fname { color: var(--mute); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #mnSet .ms-sw { justify-self: start; position: relative; width: 46px; height: 24px; border-radius: 12px; border: 1px solid var(--line); background: rgba(255, 255, 255, .04); padding: 0; }
 #mnSet .ms-sw::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: var(--mute); transition: left .15s, background .15s; }
-#mnSet .ms-sw[aria-checked="true"] { border-color: var(--line-hi); background: rgba(61, 255, 138, .16); }
+#mnSet .ms-sw[aria-checked="true"] { border-color: var(--line-hi); background: rgba(var(--g-rgb), .16); }
 #mnSet .ms-sw[aria-checked="true"]::after { left: 25px; background: var(--g); box-shadow: 0 0 8px var(--g); }
 #mnSet .ms-note { grid-column: 2 / -1; font-size: 11px; color: var(--mute); margin-top: -6px; }
 #mnSet footer { display: flex; justify-content: space-between; margin-top: 12px; gap: 10px; }
@@ -150,7 +151,13 @@ body.mn-open > :not(#bgrain):not(#stage):not(.mn-layer):not(script):not(style), 
   #mnSet { padding: 0; } #mnSet .ms-win { max-height: 100vh; height: 100%; border-radius: 0; border: 0; padding: 14px 16px; }
   #mnSet .ms-row { grid-template-columns: 96px minmax(0, 1fr) 44px; gap: 8px; }
 }
-@media (prefers-reduced-motion: reduce) { #mn .mn-it, #mn .mn-lv { transition: none; } }`;
+@media (prefers-reduced-motion: reduce) { #mn .mn-it, #mn .mn-lv { transition: none; } }
+/* 写实画面：去扫描线与霓虹辉光，标题白字压暗影 */
+:root[data-look="real"] #mn { background: linear-gradient(90deg, rgba(var(--bg-rgb), .86), rgba(var(--bg-rgb), .52) 55%, rgba(var(--bg-rgb), .25)), radial-gradient(ellipse at 50% 50%, transparent 55%, rgba(0, 0, 0, .5)); }
+:root[data-look="real"] #mn h1 { color: #f2f5f7; text-shadow: 0 2px 14px rgba(0, 0, 0, .6); }
+:root[data-look="real"] #mn .mn-en { color: rgba(230, 237, 242, .7); }
+:root[data-look="real"] #mn .mn-rule { box-shadow: none; }
+:root[data-look="real"] #mn .mn-it::before { box-shadow: none; }`;
 
 function mnBuild() {
   if (MENU.el) return MENU.el;
@@ -202,7 +209,7 @@ function mnHi(k, snd) {
   } else if (k === 'pve') body = `<p>你是登陆指挥官。登陆舰队、驱逐舰与航母航空联队归你指挥，对抗据守 ${TER && TER.points ? TER.points.length : 19} 处据点的 AI 守军。先部署、再于 H 时发起登陆。</p><dl><dt>胜利条件</dt><dd>控制指挥所与七成据点分值 30 秒</dd><dt>难度</dt><dd>普通 · 困难 · 地狱</dd></dl>`;
   else if (k === 'sbx') body = `<p>在同一张海岸地图上自由部署岸防与进攻部队，按预算对抗；可以观战 AI 对 AI，也可以亲自指挥进攻方。</p><dl><dt>状态</dt><dd>${typeof openSandbox === 'function' ? '可用' : '模块加载中'}</dd></dl>`;
   else if (k === 'cdx') { const n = typeof CATALOG !== 'undefined' && Array.isArray(CATALOG) ? CATALOG.length : 0; body = `<p>查看全部兵力：步兵、装甲、火炮、航空、舰艇、工事与支援单位的属性条、定位与克制关系。</p><dl><dt>收录</dt><dd>${n ? n + ' 种单位' : '目录加载中'}</dd></dl>`; }
-  else if (k === 'set') body = `<p>主音量、音乐、音效、无线电；数码雨、辉光、画质、屏幕震动；开场转场；AI 指挥官通讯详略。</p><dl><dt>当前</dt><dd>主音量 ${Math.round(SETTINGS.master * 100)}% · 画质${SETTINGS.quality === 'low' ? '低' : '高'}</dd></dl>`;
+  else if (k === 'set') body = `<p>主音量、音乐、音效、无线电；画面风格（写实 / 数码）、画质、屏幕震动；开场转场；AI 指挥官通讯详略。</p><dl><dt>当前</dt><dd>主音量 ${Math.round(SETTINGS.master * 100)}% · 画质${SETTINGS.quality === 'low' ? '低' : '高'}</dd></dl>`;
   info.innerHTML = `<h2>${it[2]}</h2>${body}`;
 }
 function mnLvHi(b) {
@@ -365,7 +372,7 @@ function mnKey(e) {
 // —— 设置面板 ——
 const MN_SET = [
   ['音量', 'VOLUME', [['master', '主音量', 'vol'], ['music', '音乐', 'vol'], ['musicStyle', '背景音乐', [['march', '进行曲'], ['custom', '我的歌'], ['ambient', '氛围']], '进行曲：明亮的军乐，战况越激烈编制越全；我的歌：用下面导入的歌'], ['bgm', '导入音乐', 'file', '选一首你设备上的歌（mp3 / m4a / ogg / wav），循环播放；只保存在你自己的浏览器里'], ['sfx', '音效', 'vol'], ['radio', '无线电通话', 'vol']]],
-  ['画面', 'DISPLAY', [['rain', '数码雨密度', 'rain'], ['bloom', '辉光强度', 'pct'], ['quality', '画质', [['high', '高'], ['low', '低']]], ['shake', '屏幕震动', 'sw'], ['front', '战线与态势图形', 'sw', '显示双方战线、无人地带、空隙、突击群调整线']]],
+  ['画面', 'DISPLAY', [['look', '画面风格', [['real', '写实'], ['matrix', '数码']], '写实：真实地形与配色（我方蓝、敌方红）；数码：原来的字符矩阵风格'], ['rain', '数码雨密度', 'rain'], ['bloom', '辉光强度', 'pct'], ['quality', '画质', [['high', '高'], ['low', '低']]], ['shake', '屏幕震动', 'sw'], ['front', '战线与态势图形', 'sw', '显示双方战线、无人地带、空隙、突击群调整线']]],
   ['流程', 'FLOW', [['intro', '开场转场', 'sw', '从国家全图推近到战场，约 7 秒']]],
   ['AI 指挥官通讯', 'COMMANDER CHAT', [['chat', '通讯详略', [['brief', '简要'], ['normal', '标准'], ['verbose', '详细']]], ['enemyChat', '显示敌方（截获）', 'sw', '战役中敌方通话以「截获」形式延迟出现']]]
 ];
@@ -383,7 +390,7 @@ function mnSetBuild() {
     else if (ty === 'sw') ctl = `<button type="button" class="ms-sw" role="switch" data-k="${k}" aria-label="${n}"></button><span></span>`;
     else if (Array.isArray(ty)) ctl = `<div class="ms-seg" role="group" aria-label="${n}">${ty.map(([v, l]) => `<button type="button" data-k="${k}" data-v="${v}">${l}</button>`).join('')}</div><span></span>`;
     else ctl = `<input type="range" id="ms-${k}" data-k="${k}" min="0" max="1" step="0.05" aria-label="${n}"><output for="ms-${k}" data-o="${k}"></output>`;
-    return `<div class="ms-row"><label ${ty === 'vol' || ty === 'pct' || ty === 'rain' ? `for="ms-${k}"` : ''}>${n}</label>${ctl}${note ? `<span class="ms-note">${note}</span>` : ''}</div>`;
+    return `<div class="ms-row"${k === 'rain' || k === 'bloom' ? ' data-only="matrix"' : ''}><label ${ty === 'vol' || ty === 'pct' || ty === 'rain' ? `for="ms-${k}"` : ''}>${n}</label>${ctl}${note ? `<span class="ms-note">${note}</span>` : ''}</div>`;
   };
   el.innerHTML = `<div class="ms-win"><header><h2>设置<small>SETTINGS</small></h2><button type="button" class="ms-x" aria-label="关闭" title="关闭（Esc）">×</button></header>
     ${MN_SET.map(([h, en, rows]) => `<h3>${h} · ${en}</h3>${rows.map(row).join('')}`).join('')}

@@ -9,20 +9,53 @@ function drawCraters() {
   const ctx = R.ctx, [x0, y0, x1, y1] = viewRect();
   for (const c of S.craters) {
     if (c.x < x0 || c.x > x1 || c.y < y0 || c.y > y1) continue;
+    if (realLook()) {   // 弹坑：焦黑坑底 + 翻起的土圈
+      ctx.fillStyle = 'rgba(112,94,66,.5)'; ctx.beginPath(); ctx.ellipse(c.x, c.y, c.r * 1.25, c.r * 1.05, 0, 0, 7); ctx.fill();
+      ctx.fillStyle = 'rgba(28,22,16,.72)'; ctx.beginPath(); ctx.ellipse(c.x + c.r * .08, c.y + c.r * .08, c.r * .85, c.r * .7, 0, 0, 7); ctx.fill();
+      continue;
+    }
     ctx.fillStyle = 'rgba(0,0,0,.5)'; ctx.beginPath(); ctx.ellipse(c.x, c.y, c.r, c.r * .8, 0, 0, 7); ctx.fill();
     ctx.strokeStyle = rgba(COL.g, .18); ctx.lineWidth = px(1); ctx.stroke();
   }
 }
 
-// 城镇格画成房屋轮廓（屋脊线），近看才画
+// 城镇格画成房屋：数码风格为轮廓 + 屋脊线；写实风格为俯视屋顶（坡屋顶两坡明暗、平顶女儿墙），带东南向投影。近看才画
+// 屋顶配色：红瓦、灰瓦、蓝色彩钢、水泥平顶、深色瓦
+const ROOF = [[158, 74, 52], [120, 118, 112], [72, 104, 138], [170, 166, 156], [92, 84, 78], [176, 96, 64]];
 function drawBuildings() {
   if (CELL * R.s < 5) return;
   if (TOWN_SEED !== TER.seed) {
     TOWN_SEED = TER.seed; TOWN_CELLS = [];
     const hr = rng(TER.seed + 11);
-    for (let i = 0; i < GW * GH; i++) if (TER.type[i] === T.TOWN) TOWN_CELLS.push({ x: cellCX(i), y: cellCY(i), w: 5 + hr() * 3, h: 4 + hr() * 3, r: hr() < .5 });
+    for (let i = 0; i < GW * GH; i++) if (TER.type[i] === T.TOWN) TOWN_CELLS.push({ x: cellCX(i), y: cellCY(i), w: 5 + hr() * 3, h: 4 + hr() * 3, r: hr() < .5, c: (hr() * ROOF.length) | 0, f: hr() < .3, dx: (hr() - .5) * 2, dy: (hr() - .5) * 2 });
   }
   const ctx = R.ctx, [x0, y0, x1, y1] = viewRect();
+  if (realLook()) {
+    const sh = .45 + .9 * smooth(5, 14, CELL * R.s);
+    ctx.fillStyle = 'rgba(10,14,8,.38)';
+    for (const b of TOWN_CELLS) {
+      if (b.x < x0 || b.x > x1 || b.y < y0 || b.y > y1) continue;
+      const w = b.r ? b.h : b.w, h = b.r ? b.w : b.h;
+      ctx.fillRect(b.x + b.dx - w / 2 + sh, b.y + b.dy - h / 2 + sh, w, h);
+    }
+    for (const b of TOWN_CELLS) {
+      if (b.x < x0 || b.x > x1 || b.y < y0 || b.y > y1) continue;
+      const w = b.r ? b.h : b.w, h = b.r ? b.w : b.h, x = b.x + b.dx - w / 2, y = b.y + b.dy - h / 2, c = ROOF[b.f ? 3 : b.c];
+      const tone = k => `rgb(${c[0] * k | 0},${c[1] * k | 0},${c[2] * k | 0})`;
+      if (b.f) {   // 平顶：女儿墙一圈亮边
+        ctx.fillStyle = tone(.86); ctx.fillRect(x, y, w, h);
+        ctx.fillStyle = tone(1.04); ctx.fillRect(x + .7, y + .7, w - 1.4, h - 1.4);
+        ctx.fillStyle = tone(.9); ctx.fillRect(x + 1.4, y + 1.4, w - 2.8, h - 2.8);
+      } else if (w > h) {   // 坡屋顶：北坡受光、南坡背光
+        ctx.fillStyle = tone(1.12); ctx.fillRect(x, y, w, h / 2);
+        ctx.fillStyle = tone(.74); ctx.fillRect(x, y + h / 2, w, h / 2);
+      } else {   // 西坡受光、东坡背光
+        ctx.fillStyle = tone(1.1); ctx.fillRect(x, y, w / 2, h);
+        ctx.fillStyle = tone(.76); ctx.fillRect(x + w / 2, y, w / 2, h);
+      }
+    }
+    return;
+  }
   ctx.lineWidth = px(1);
   for (const b of TOWN_CELLS) {
     if (b.x < x0 || b.x > x1 || b.y < y0 || b.y > y1) continue;

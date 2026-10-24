@@ -8,6 +8,16 @@ const COL = {
   bg: '#020704', g: '#3dff8a', gMid: '#1fa457', gDim: '#0f4a29', enemy: '#ff3d6e',
   intel: '#5cc8ff', sel: '#b07cff', amber: '#ffc24a', text: '#c6f7d8', smoke: '#9fb8a8'
 };
+// 画面风格：real 写实（默认，我方蓝、敌方红，颜色贴近真实地图）· matrix 数码矩阵（原配色）。切换时改写 COL 并给 <html> 标 data-look 供 CSS 换色
+const COL_LOOK = {
+  matrix: { ...COL },
+  real: { bg: '#0b1014', g: '#52a8ff', gMid: '#2f7fd0', gDim: '#1d4a7a', enemy: '#ff4848', intel: '#8fdcff', sel: '#c78cff', amber: '#ffbb38', text: '#e6edf2', smoke: '#b4afa6' }
+};
+function applyLook(look) {
+  const k = look === 'matrix' ? 'matrix' : 'real';
+  Object.assign(COL, COL_LOOK[k]);
+  if (typeof document !== 'undefined' && document.documentElement) document.documentElement.dataset.look = k;
+}
 const T = { DEEP: 0, SHOAL: 1, REEF: 2, BEACH: 3, ROCKS: 4, CLIFF: 5, FIELD: 6, FOREST: 7, HILL: 8, MOUNT: 9, MARSH: 10, RIVER: 11, BRIDGE: 12, ROAD: 13, TOWN: 14, FORD: 15 };
 // n 名称 · sp 步兵速度系数（0 = 不可通行）· cv 受击系数 · bl 遮挡视线的附加高度（格）
 const TP = [

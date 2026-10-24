@@ -61,8 +61,8 @@ const LV_CSS = `
 #lvSel .lv-ch h3 span { margin-left: 8px; color: var(--mute, #7fa98d); font-weight: 400; font-size: 12px; }
 #lvSel .lv-ch p { margin: 0; color: var(--mute, #7fa98d); font-size: 12px; line-height: 1.5; }
 #lvSel .lv-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 8px; }
-#lvSel .lv-card { text-align: left; display: grid; gap: 4px; padding: 10px 12px; border: 1px solid var(--line, #1d4a2e); border-radius: 6px; background: rgba(61, 255, 138, .04); color: var(--text, #cfe9d8); min-height: 44px; cursor: pointer; }
-#lvSel .lv-card:hover:not(:disabled), #lvSel .lv-card:focus-visible { border-color: var(--g, #3dff8a); background: rgba(61, 255, 138, .1); }
+#lvSel .lv-card { text-align: left; display: grid; gap: 4px; padding: 10px 12px; border: 1px solid var(--line, #1d4a2e); border-radius: 6px; background: rgba(var(--g-rgb), .04); color: var(--text, #cfe9d8); min-height: 44px; cursor: pointer; }
+#lvSel .lv-card:hover:not(:disabled), #lvSel .lv-card:focus-visible { border-color: var(--g, #3dff8a); background: rgba(var(--g-rgb), .1); }
 #lvSel .lv-card:disabled { opacity: .4; cursor: not-allowed; }
 #lvSel .lv-card b { font-size: 14px; }
 #lvSel .lv-card b i { font-style: normal; color: var(--mute, #7fa98d); margin-right: 6px; font-size: 12px; }
@@ -72,7 +72,7 @@ const LV_CSS = `
 #lvSel .lv-x { background: transparent; border: 1px solid var(--line, #1d4a2e); border-radius: 5px; color: var(--text, #cfe9d8); padding: 4px 12px; min-height: 32px; }
 #sbxPanel.lvl .sbx-sides button.e, #sbxPanel.lvl [data-act="bud-"], #sbxPanel.lvl [data-act="bud+"], #sbxPanel.lvl [data-act="save"], #sbxPanel.lvl [data-act="loads"],
 #sbxPanel.lvl .sbx-seedin, #sbxPanel.lvl [data-act="map"], #sbxPanel.lvl .sbx-lv, #sbxPanel.lvl [data-act="preset"] { display: none; }
-#sbxPanel .sbx-lvhead { display: grid; gap: 3px; padding: 6px 8px; border: 1px solid var(--line, #1d4a2e); border-radius: 5px; background: rgba(61, 255, 138, .05); }
+#sbxPanel .sbx-lvhead { display: grid; gap: 3px; padding: 6px 8px; border: 1px solid var(--line, #1d4a2e); border-radius: 5px; background: rgba(var(--g-rgb), .05); }
 #sbxPanel .sbx-lvhead b { color: var(--g, #3dff8a); font-size: 13px; }
 #sbxPanel .sbx-lvhead span { font-size: 12px; color: var(--mute, #7fa98d); line-height: 1.45; }`;
 function lvOpen() {
