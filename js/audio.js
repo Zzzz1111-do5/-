@@ -312,12 +312,15 @@ function auMusicStart() {
   // 噪声脉冲
   const nz = c.createBufferSource(), nbp = auFilt('bandpass', 900, 1.3), ng = c.createGain();
   nz.buffer = AU.noise; nz.loop = true; ng.gain.value = 0; nz.connect(nbp); nbp.connect(ng); ng.connect(bus); nz.start();
-  AU.mus = { next: t + .2, step: 0, delay: dl, dlpf, ng, nbp };
+  AU.mus = { next: t + .2, step: 0, delay: dl, dlpf, ng, nbp, dr };
 }
 function auMusicTick() {
   const c = AU.ctx, M = AU.mus;
   if (!M) return;
   if (M.next < c.currentTime - .4) M.next = c.currentTime + .05;   // 标签页挂起后不补播
+  const march = (SETTINGS.musicStyle || 'march') === 'march';
+  if (march !== M.march) { M.march = march; M.step = 0; M.dr.gain.setTargetAtTime(march ? 0 : .32, c.currentTime, 1.2); }
+  if (march) { auMarchTick(M); return; }
   const I = AU.inten, st = 60 / lerp(56, 86, I) / 2;   // 八分音符时值
   M.delay.delayTime.setTargetAtTime(st * 3, c.currentTime, .5);
   M.dlpf.frequency.setTargetAtTime(160 + I * 520, c.currentTime, 1.5);
@@ -347,6 +350,119 @@ function auMusicStep(t, st, I) {
     const o = c.createOscillator(), g = auEnv(t, .004, .2 * (I - .4), .32);
     o.frequency.setValueAtTime(64, t); o.frequency.exponentialRampToValueAtTime(30, t + .3); o.connect(g); g.connect(bus); o.start(t); o.stop(t + .4);
   }
+}
+
+// —— 战歌（原创军乐进行曲，WebAudio 实时合成）：4/4 拍，主歌 D 小调（悲壮）→ 副歌转降 B / F 大调（激昂），16 小节一循环；
+//    军鼓（第 4 小节滚奏）、大鼓 1、3 拍，大号 / 低音提琴「嘭—恰」根音五音，铜管齐奏主旋律、圆号三度和声，副歌男声合唱「啊」，段落转换处定音鼓滚奏、副歌起拍镲。
+//    随场合变化（AU.inten）：菜单——圆号独奏慢板；部署——军鼓进行 + 低音；战斗——全编制，越激烈越快（112→128 BPM）、加弦乐跳弓、合唱与镲；
+//    胜利——号角短曲；失败——慢板、低八度、无鼓 ——
+// 旋律：每小节 [音高(MIDI) | null 休止, 时值（八分音符数）]，每小节合计 8
+const AU_MEL = [
+  [[62, 3], [62, 1], [65, 2], [69, 2]], [[74, 4], [72, 2], [69, 2]], [[70, 3], [69, 1], [67, 2], [65, 2]], [[67, 4], [64, 2], [60, 2]],
+  [[62, 3], [62, 1], [65, 2], [69, 2]], [[70, 3], [69, 1], [67, 2], [74, 2]], [[73, 4], [69, 2], [64, 2]], [[69, 6], [null, 2]],
+  [[74, 2], [77, 4], [74, 2]], [[72, 3], [69, 1], [72, 4]], [[76, 3], [74, 1], [72, 2], [67, 2]], [[69, 6], [69, 1], [70, 1]],
+  [[74, 2], [77, 4], [79, 2]], [[81, 4], [79, 2], [77, 2]], [[76, 3], [73, 1], [76, 2], [81, 2]], [[74, 6], [null, 2]]
+];
+// 每小节和弦（根音 MIDI、和弦音相对根音的半音）：Dm Dm B♭ C Dm Gm A A ｜ B♭ F C Dm B♭ F A Dm
+const AU_HAR = [[50, [0, 3, 7]], [50, [0, 3, 7]], [46, [0, 4, 7]], [48, [0, 4, 7]], [50, [0, 3, 7]], [43, [0, 3, 7]], [45, [0, 4, 7]], [45, [0, 4, 7]],
+  [46, [0, 4, 7]], [41, [0, 4, 7]], [48, [0, 4, 7]], [50, [0, 3, 7]], [46, [0, 4, 7]], [41, [0, 4, 7]], [45, [0, 4, 7]], [50, [0, 3, 7]]];
+const auMarchBpm = (I, over) => over === 'lose' ? 72 : I < .1 ? 84 : I < .25 ? 104 : lerp(112, 128, clamp((I - .25) / .75, 0, 1));
+function auMarchTick(M) {
+  const c = AU.ctx, I = AU.inten, ov = S && S.over ? (S.over === 'win' ? 'win' : 'lose') : null;
+  if (ov !== M.ov) { if (ov === 'win') auFanfare(c.currentTime + .1); M.ov = ov; }
+  const st = 60 / auMarchBpm(I, ov) / 2;
+  while (M.next < c.currentTime + .3) { auMarchStep(M.next, st, I, ov); M.next += st; M.step++; }
+}
+// 铜管：三支失谐锯齿波 + 低八度方波，滤波器包络模拟「吹响」的亮度；长音带颤音
+function auBrass(t, m, dur, vel, bright, dest) {
+  const c = AU.ctx, f = auMtof(m), lp = auFilt('lowpass', 400, 1.2), g = c.createGain(), d = Math.max(.08, dur);
+  lp.frequency.setValueAtTime(380, t); lp.frequency.exponentialRampToValueAtTime(bright, t + .045); lp.frequency.exponentialRampToValueAtTime(bright * .62, t + Math.min(.3, d * .6));
+  g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(vel, t + .03); g.gain.setValueAtTime(vel * .82, t + d * .7); g.gain.exponentialRampToValueAtTime(.0001, t + d + .12);
+  const vib = d > .45 ? c.createOscillator() : null, vg = vib ? c.createGain() : null;
+  if (vib) { vib.frequency.value = 5.2; vg.gain.setValueAtTime(0, t); vg.gain.linearRampToValueAtTime(f * .006, t + .35); vib.connect(vg); vib.start(t); vib.stop(t + d + .15); }
+  for (const [ty, det, k, mul] of [['sawtooth', -9, .5, 1], ['sawtooth', 0, .55, 1], ['sawtooth', 9, .5, 1], ['square', 0, .25, .5]]) {
+    const o = c.createOscillator(), og = c.createGain();
+    o.type = ty; o.frequency.value = f * mul; o.detune.value = det; og.gain.value = k;
+    if (vg) vg.connect(o.frequency);
+    o.connect(og); og.connect(lp); o.start(t); o.stop(t + d + .15);
+  }
+  lp.connect(g); g.connect(dest || AU.bus.music);
+}
+// 大号 / 低音提琴：短促的「嘭」
+function auTuba(t, m, dur, vel) {
+  const c = AU.ctx, o = c.createOscillator(), o2 = c.createOscillator(), lp = auFilt('lowpass', 420, 1.5), g = auEnv(t, .02, vel, dur);
+  o.type = 'sawtooth'; o.frequency.value = auMtof(m); o2.type = 'sine'; o2.frequency.value = auMtof(m);
+  o.connect(lp); o2.connect(lp); lp.connect(g); g.connect(AU.bus.music); o.start(t); o2.start(t); o.stop(t + dur + .1); o2.stop(t + dur + .1);
+}
+function auSnare(t, vel) {
+  const c = AU.ctx, n = auNoiseSrc(t, .2), bp = auFilt('bandpass', 1900, .7), hp = auFilt('highpass', 700), g = auEnv(t, .002, vel, .13);
+  n.connect(bp); bp.connect(hp); hp.connect(g); g.connect(AU.bus.music);
+  const o = c.createOscillator(), og = auEnv(t, .002, vel * .5, .06);
+  o.type = 'triangle'; o.frequency.setValueAtTime(220, t); o.frequency.exponentialRampToValueAtTime(150, t + .05); o.connect(og); og.connect(AU.bus.music); o.start(t); o.stop(t + .1);
+}
+function auKick(t, vel) {
+  const c = AU.ctx, o = c.createOscillator(), g = auEnv(t, .004, vel, .38);
+  o.frequency.setValueAtTime(95, t); o.frequency.exponentialRampToValueAtTime(42, t + .3); o.connect(g); g.connect(AU.bus.music); o.start(t); o.stop(t + .45);
+}
+function auTimp(t, vel, m = 38) {
+  const c = AU.ctx, o = c.createOscillator(), g = auEnv(t, .006, vel, .55), lp = auFilt('lowpass', 300);
+  o.frequency.setValueAtTime(auMtof(m) * 1.04, t); o.frequency.exponentialRampToValueAtTime(auMtof(m), t + .08);
+  o.connect(lp); lp.connect(g); g.connect(AU.bus.music); o.start(t); o.stop(t + .65);
+}
+function auCrash(t, vel) {
+  const n = auNoiseSrc(t, 1.8), hp = auFilt('highpass', 5200), g = auEnv(t, .004, vel, 1.6);
+  n.connect(hp); hp.connect(g); g.connect(AU.bus.music);
+}
+// 男声合唱「啊」：锯齿波过两个共振峰（约 700 / 1150 Hz）
+function auChoir(t, notes, dur, vel) {
+  const c = AU.ctx, f1 = auFilt('bandpass', 700, 5), f2 = auFilt('bandpass', 1150, 6), g = c.createGain();
+  g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(vel, t + dur * .25); g.gain.setValueAtTime(vel, t + dur * .8); g.gain.exponentialRampToValueAtTime(.0001, t + dur * 1.05);
+  for (const m of notes) for (const det of [-6, 6]) {
+    const o = c.createOscillator(); o.type = 'sawtooth'; o.frequency.value = auMtof(m); o.detune.value = det + (Math.random() - .5) * 6;
+    o.connect(f1); o.connect(f2); o.start(t); o.stop(t + dur * 1.1);
+  }
+  const mix = c.createGain(); mix.gain.value = 1.6; f1.connect(mix); f2.connect(mix); mix.connect(g); g.connect(AU.bus.music);
+}
+function auFanfare(t) {   // 胜利号角：D 大调分解和弦上行，长音收束
+  const st = .16;
+  [[62, 1], [66, 1], [69, 1], [74, 3], [69, 1], [74, 5]].reduce((a, [m, d]) => { auBrass(a, m, d * st, .06, 2600); auBrass(a, m - 12, d * st, .03, 1400); return a + d * st; }, t);
+  auCrash(t, .05); auTimp(t, .2); auTimp(t + st * 3, .22);
+}
+function auMarchStep(t, st, I, ov) {
+  const M = AU.mus, s = M.step % 128, bar = s >> 3, pos = s & 7, ch = AU_HAR[bar], chorus = bar >= 8, lose = ov === 'lose', menu = I < .1;
+  // 主旋律（菜单与失败：圆号音色、暗；战斗：铜管齐奏、亮）
+  let p0 = 0;
+  for (const [m, d] of AU_MEL[bar]) {
+    if (p0 === pos && m != null) {
+      const mm = lose ? m - 12 : m, bright = menu || lose ? 1100 : 1500 + I * 1700, vel = (menu ? .028 : .034 + I * .016) * (chorus ? 1.1 : 1);
+      auBrass(t, mm, d * st * .92, vel, bright);
+      if (!menu && !lose && (chorus || I > .45)) {   // 圆号和声：旋律下方最近的和弦音
+        const pcs = ch[1].map(iv => (ch[0] + iv) % 12);
+        let h = mm - 3; for (let k = 0; k < 6 && !pcs.includes(((h % 12) + 12) % 12); k++) h--;
+        auBrass(t, h, d * st * .92, vel * .55, bright * .7);
+      }
+    }
+    p0 += d;
+  }
+  // 低音「嘭—恰」：根音（第 1、3 拍）、五音（第 2、4 拍）
+  if (!menu && pos % 2 === 0) auTuba(t, ch[0] - 12 + (pos % 4 === 2 ? 7 : 0), st * 1.4, (lose ? .05 : .07) * (pos % 4 ? .75 : 1));
+  else if (menu && pos === 0) auTuba(t, ch[0] - 12, st * 7, .035);
+  if (lose || menu) return;
+  // 鼓：军鼓（重拍、反拍 + 十六分装饰音；每 4 小节最后一拍滚奏）、大鼓 1、3 拍
+  const sv = .05 + I * .07, roll = bar % 4 === 3 && pos >= 6;
+  if (I >= .1) {
+    if (pos === 0 || pos === 4) { auSnare(t, sv); auKick(t, .16 + I * .12); }
+    else if (pos % 2 === 0) auSnare(t, sv * .65);
+    else if (I > .35) { auSnare(t, sv * .4); auSnare(t + st / 2, sv * .45); }
+    if (roll) for (let k = 1; k < 4; k++) auSnare(t + st * k / 4, sv * (.5 + k * .15));
+  }
+  // 段落转换：定音鼓滚奏；副歌起拍：镲
+  if ((bar === 7 || bar === 15) && pos >= 4) for (let k = 0; k < 4; k++) auTimp(t + st * k / 4, (.08 + I * .1) * (.6 + (pos - 4) * .1 + k * .03));
+  if ((bar === 8 || bar === 0) && pos === 0 && I > .45) auCrash(t, .025 + I * .03);
+  // 弦乐跳弓：和弦根音、五音八分音符
+  if (I > .4) { const o = AU.ctx.createOscillator(), lp = auFilt('lowpass', 1300, 1), g = auEnv(t, .01, .012 + I * .01, st * .6); o.type = 'sawtooth'; o.frequency.value = auMtof(ch[0] + (pos % 2 ? 7 : 12)); o.connect(lp); lp.connect(g); g.connect(AU.bus.music); o.start(t); o.stop(t + st); }
+  // 副歌：男声合唱，每小节一个和弦
+  if (chorus && pos === 0 && I > .5) auChoir(t, ch[1].map(iv => ch[0] + iv), st * 8, .022 + I * .015);
 }
 
 if (typeof document !== 'undefined') {

@@ -1,6 +1,6 @@
 'use strict';
 // 设置：音量、显示、流程、AI 指挥官聊天。存 localStorage 'bh-settings'（兼容旧的 'bh-rain'）；无 DOM，可在 Node 中运行
-const SETTINGS_DEF = { master: .8, music: .45, sfx: .8, radio: .6, rain: .25, bloom: .7, quality: 'high', intro: true, chat: 'normal', enemyChat: true, shake: true, front: true };
+const SETTINGS_DEF = { master: .8, music: .45, musicStyle: 'march', sfx: .8, radio: .6, rain: .25, bloom: .7, quality: 'high', intro: true, chat: 'normal', enemyChat: true, shake: true, front: true };
 const SETTINGS = { ...SETTINGS_DEF };
 const SET_FNS = [];
 const SET_KEY = 'bh-settings';
@@ -14,6 +14,7 @@ function setClean(k, v) {
   if (typeof d === 'boolean') return typeof v === 'boolean' ? v : v === 'true' ? true : v === 'false' ? false : undefined;
   if (k === 'quality') return v === 'low' || v === 'high' ? v : undefined;
   if (k === 'chat') return v === 'brief' || v === 'normal' || v === 'verbose' ? v : undefined;
+  if (k === 'musicStyle') return v === 'march' || v === 'ambient' ? v : undefined;
   return undefined;
 }
 

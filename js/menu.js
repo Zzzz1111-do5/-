@@ -359,7 +359,7 @@ function mnKey(e) {
 
 // —— 设置面板 ——
 const MN_SET = [
-  ['音量', 'VOLUME', [['master', '主音量', 'vol'], ['music', '音乐', 'vol'], ['sfx', '音效', 'vol'], ['radio', '无线电通话', 'vol']]],
+  ['音量', 'VOLUME', [['master', '主音量', 'vol'], ['music', '音乐', 'vol'], ['musicStyle', '音乐风格', [['march', '战歌'], ['ambient', '氛围']], '战歌：原创军乐进行曲，战况越激烈编制越全'], ['sfx', '音效', 'vol'], ['radio', '无线电通话', 'vol']]],
   ['画面', 'DISPLAY', [['rain', '数码雨密度', 'rain'], ['bloom', '辉光强度', 'pct'], ['quality', '画质', [['high', '高'], ['low', '低']]], ['shake', '屏幕震动', 'sw'], ['front', '战线与态势图形', 'sw', '显示双方战线、无人地带、空隙、突击群调整线']]],
   ['流程', 'FLOW', [['intro', '开场转场', 'sw', '从国家全图推近到战场，约 7 秒']]],
   ['AI 指挥官通讯', 'COMMANDER CHAT', [['chat', '通讯详略', [['brief', '简要'], ['normal', '标准'], ['verbose', '详细']]], ['enemyChat', '显示敌方（截获）', 'sw', '战役中敌方通话以「截获」形式延迟出现']]]
