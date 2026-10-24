@@ -69,16 +69,23 @@ function vehBodyReal(ctx, v, col, a, det, lw, time, vis, enemy) {
 function vehWreckReal(ctx, v, sp, k) {
   const L = sp.len, B = sp.wid, M = typeof rlModelOf === 'function' ? rlModelOf(v) : null;
   ctx.save(); ctx.translate(v.x, v.y); ctx.rotate(v.kh ?? v.heading); ctx.scale(k, k);
-  if (M) {   // 按实车外形的烧毁车体：发黑、锈斑、炮塔歪斜
-    const sm = L / M.L;
+  if (M && typeof sprGet === 'function') {   // 按实车贴图的烧毁车体：整体熏黑、锈斑，炮塔歪斜
+    const sm = L / M.L, burn = draw => P => {
+      draw(P); const g = P.g;
+      g.save(); g.globalCompositeOperation = 'source-atop';
+      g.fillStyle = 'rgba(24,21,17,.82)'; g.fillRect(-20, -20, 40, 40);
+      const r = rng(M.L * 97 | 0);
+      for (let i = 0; i < 7; i++) { g.fillStyle = `rgba(${110 + r() * 30 | 0},${55 + r() * 20 | 0},30,${.25 + r() * .25})`; g.beginPath(); g.ellipse((r() - .5) * M.L * .8, (r() - .5) * M.B * .8, .3 + r() * .7, .2 + r() * .5, r() * 3, 0, 7); g.fill(); }
+      g.restore();
+    };
+    const HS = sprGet('wreck:' + M.key, 'n', M.L + 1, M.B + .6, burn(M.H)), TS = M.T ? sprGet('wreckT:' + M.key, 'n', 6.5, 4.2, burn(M.T)) : null;
     ctx.save(); ctx.scale(sm, sm);
-    ctx.beginPath(); M.hull.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.closePath();
-    ctx.fillStyle = '#25221d'; ctx.fill(); ctx.strokeStyle = 'rgba(0,0,0,.6)'; ctx.lineWidth = px(.8) / k / sm; ctx.stroke();
-    ctx.fillStyle = 'rgba(110,62,34,.55)'; ctx.beginPath(); ctx.ellipse(-M.L * .15, M.B * .1, M.L * .2, M.B * .22, .4, 0, 7); ctx.fill();
-    if (M.tur) {
+    sprShadow(ctx, HS, 0, 0, 1, 0, v.kh ?? v.heading, .5 / sm, .5);
+    sprDraw(ctx, HS, 0, 0, 1);
+    if (TS) {
       ctx.translate(M.tur.x + .4, (M.tur.y || 0) + .5); ctx.rotate(.7);
-      ctx.beginPath(); M.tur.p.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.closePath(); ctx.fillStyle = '#1c1a16'; ctx.fill(); ctx.stroke();
-      if (M.tur.g) { ctx.fillStyle = '#1c1a16'; ctx.fillRect(M.tur.g[0], -M.tur.g[2] / 2, M.tur.g[1] * .8, M.tur.g[2]); }
+      if (M.gun) { const gn = M.gun; ctx.strokeStyle = '#1b1915'; ctx.lineWidth = Math.max(gn.r || .1, .09) * 2; ctx.lineCap = 'butt'; ctx.beginPath(); ctx.moveTo(gn.x0, gn.oy || 0); ctx.lineTo(gn.x0 + gn.len * .85, gn.oy || 0); ctx.stroke(); }
+      sprDraw(ctx, TS, 0, 0, 1);
     }
     ctx.restore(); ctx.restore();
     return;
