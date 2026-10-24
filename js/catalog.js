@@ -191,15 +191,15 @@ ctE('p_dozer', 'GCZ-110 重型工程车', 'p', 'armor', 'veh', 44, CT_IC.dozer, 
   { kind: 'veh', at: 'vcargo', type: 'mine_tank', mod: { pow: .7 }, tag: 'dozer' }, { counters: ['obst', 'wire'], weakTo: ['e_at_casemate'] });
 
 // ———— 进攻方 · 舰艇 ————
-ctE('p_lct', '271 型登陆艇', 'p', 'naval', 'ship', 20, CT_IC.lct, [5, 1, 0, 0, 5, 3, 10], '标准突击登陆艇，可装载 5 个小组；首波抢滩主力。',
+ctE('p_lct', '271 型登陆艇', 'p', 'naval', 'ship', 20, CT_IC.lct, [5, 1, 0, 0, 5, 3, 10], '标准突击登陆艇，满载 5 个小组：放下就自带步枪组 ×2、机枪组、反坦克组、工兵组（兵员点数另计，右键可卸下换兵种）；首波抢滩主力。',
   { kind: 'ship', at: 'sea', ship: 'assault', cap: 5, hp: 10, pre: 'LA', def: ['p_rifle', 'p_rifle', 'p_mg', 'p_at', 'p_eng'] }, { weakTo: ['coastal', 'obst', 'bunker'] });
-ctE('p_lci', '074A 型登陆舰', 'p', 'naval', 'ship', 28, CT_IC.lci, [6, 1, 0, 0, 5, 3, 10], '载 8 个小组的较大舰艇，一次送上一个加强连；目标大，抢滩时更招火。',
+ctE('p_lci', '074A 型登陆舰', 'p', 'naval', 'ship', 28, CT_IC.lci, [6, 1, 0, 0, 5, 3, 10], '载 8 个小组的较大舰艇，放下就自带一个加强连（营部、步枪组 ×3、机枪组 ×2、反坦克组、卫生组），一次送上；目标大，抢滩时更招火。',
   { kind: 'ship', at: 'sea', ship: 'assault', cap: 8, hp: 12, pre: 'LI', def: ['p_hq', 'p_rifle', 'p_rifle', 'p_rifle', 'p_mg', 'p_mg', 'p_at', 'p_medic'] }, { weakTo: ['coastal', 'obst'] });
-ctE('p_lcvp', '人员登陆艇', 'p', 'naval', 'ship', 12, CT_IC.lcvp, [3, 0, 0, 0, 6, 3, 9], '只载 3 个小组的小艇，便宜、目标小，适合佯攻与分散登陆。',
+ctE('p_lcvp', '人员登陆艇', 'p', 'naval', 'ship', 12, CT_IC.lcvp, [3, 0, 0, 0, 6, 3, 9], '只载 3 个小组的小艇，自带步枪组 ×2 与机枪组；便宜、目标小，适合佯攻与分散登陆。',
   { kind: 'ship', at: 'sea', ship: 'assault', cap: 3, hp: 6, pre: 'LV', def: ['p_rifle', 'p_rifle', 'p_mg'] }, { weakTo: ['bunker', 'obst'] });
 ctE('p_lst', '072A 型坦克登陆舰', 'p', 'naval', 'ship', 35, CT_IC.lst, [8, 1, 0, 0, 4, 3, 0], '抢滩后放下首门，把装载的坦克与装甲车逐辆开上岸（最多 3 辆）；建议作为第二波。',
   { kind: 'ship', at: 'sea', ship: 'lst', vcap: 3, hp: 16, pre: 'LT', wave: 2, def: ['p_tank', 'p_tank', 'p_apc'] }, { weakTo: ['coastal'] });
-ctE('p_lsm', '073A 型中型登陆舰', 'p', 'naval', 'ship', 30, CT_IC.lsm, [6, 1, 0, 0, 5, 3, 6], '载 2 辆车与 2 个小组的中型登陆舰，兼顾人员与装甲。',
+ctE('p_lsm', '073A 型中型登陆舰', 'p', 'naval', 'ship', 30, CT_IC.lsm, [6, 1, 0, 0, 5, 3, 6], '载 2 辆车与 2 个小组的中型登陆舰，兼顾人员与装甲：自带步枪组与机枪组，车辆自选装载。',
   { kind: 'ship', at: 'sea', ship: 'lst', vcap: 2, cap: 2, hp: 13, pre: 'LM', wave: 2, def: ['p_tank', 'p_apc', 'p_rifle', 'p_mg'] }, { weakTo: ['coastal'] });
 ctE('p_supply', '072 型后勤登陆舰', 'p', 'naval', 'ship', 30, CT_IC.ls, [6, 1, 0, 0, 4, 3, 10], '自带 4 个小组与 3 名工兵：抢滩后建立滩头补给站与浮桥补给线，为附近部队补充弹药、恢复士气。',
   { kind: 'ship', at: 'sea', ship: 'supply', teams: 4, eng: 3, hp: 11, pre: 'LS', wave: 2 }, { weakTo: ['arty', 'coastal'] });

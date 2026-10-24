@@ -197,10 +197,138 @@ function cmdBeachInfo(i, ships) {
   }
   for (const m of S.mines) if (m.known && m.clr < 1 && m.x > b.x0 - 30 && m.x < b.x1 + 30 && Math.abs(m.y - coastAt(m.x)) < 80) { def += 1; kn.mine = (kn.mine || 0) + 1; }
   const fd = ships.length ? ships.reduce((a, s) => a + dist(s.x, s.y, b.cx, coastAt(b.cx)), 0) / ships.length : 500;
+  const fm = ships.length ? Math.max(...ships.map(s => dist(s.x, s.y, b.cx, coastAt(b.cx)))) : 500;   // 最远一艘：整个梯队同时抵滩要等它
   let town = null, td = Infinity;
   for (const k of ['T1', 'T2']) { const p = cmdPt(k); if (p) { const d = dist(p.x, p.y, E.x, E.y); if (d < td) { td = d; town = p; } } }
-  const score = w / 35 - dHQ / 260 + Math.min(road, 18) / 9 - def * 1.3 - bats.length * 1.6 - fd / 800;
-  return { i, b, E, w, dHQ, road, bats, def, kn, fd, town, td, score };
+  const th = cmdThreat(i);   // 侦察查明的守军（步兵、反坦克、装甲）
+  const score = w / 35 - dHQ / 260 + Math.min(road, 18) / 9 - def * 1.3 - bats.length * 1.6 - fd / 800 - fm / 600 - th.men / 8 - th.at * .5 - (th.n.mg || 0) * .5;
+  return { i, b, E, w, dHQ, road, bats, def, kn, fd, town, td, th, score };
+}
+// 滩头 i 当面已知的守军威胁（滩头正面两侧外延 120、纵深 380 以内）：at 对坦克（反坦克组、反坦克炮位、守军坦克 / 歼击车、反坦克雷、岸防炮），
+// inf 对步兵（碉堡、机枪组、迫击炮 / 榴弹炮、雷区、步兵），men 看到的守军人数，n 各类计数
+function cmdThreat(i) {
+  const b = TER.beaches[i], T = { at: 0, inf: 0, men: 0, n: {} };
+  if (!b) return T;
+  const cx = b.cx, cy = coastAt(cx), inZ = (x, y, r = 380) => x > b.x0 - 120 && x < b.x1 + 120 && y > cy - r && y < cy + 40;
+  const add = (k, a, f) => { T.n[k] = (T.n[k] || 0) + 1; T.at += a; T.inf += f; };
+  for (const e of S.enemies) if (!e.dead && e.kx != null) {
+    if (e.kind === 'coastal') { if (dist(e.kx, e.ky, cx, cy) < 650) add('coastal', 1, 2); }
+    else if (!inZ(e.kx, e.ky)) continue;
+    else if (e.mod && e.mod.at) add('atgun', 2.5, 1);
+    else if (e.kind === 'bunker') add('bunker', .3, 2.5);
+    else if (e.kind === 'mortar' || e.kind === 'arty') add('arty', .2, 1.2);
+  }
+  for (const q of S.teams) if (q.side === 'e' && q.men.length && q.seen != null && S.t - q.seen < 120 && inZ(q.sx ?? q.x, q.sy ?? q.y)) {
+    T.men += q.men.length;
+    if (q.mod && q.mod.at) add('atteam', 1.5, .6);
+    else if (q.men.includes('mg')) add('mg', 0, 1);
+    else add('inf', 0, .4);
+  }
+  for (const v of S.veh || []) if (v.side === 'e' && !v.dead && v.kx != null && inZ(v.kx, v.ky, 520)) add('tank', VEH_SPEC[v.type] && VEH_SPEC[v.type].gun ? 2.5 : .6, 1);
+  for (const a of S.armor || []) if (!a.dead && a.kx != null && inZ(a.kx, a.ky, 520)) add('car', .6, 1);
+  for (const m of S.mines) if (m.known && m.clr < 1 && inZ(m.x, m.y, 160)) add(m.at ? 'atmine' : 'mine', m.at ? 1 : 0, m.at ? 0 : 1);
+  return T;
+}
+const CMD_THN = { bunker: '碉堡', atgun: '反坦克炮位', atteam: '反坦克组', mg: '机枪组', tank: '坦克 / 战车', car: '装甲车', arty: '炮位', coastal: '岸防重炮', atmine: '反坦克雷区', mine: '雷区' };
+const cmdThText = T => Object.keys(CMD_THN).filter(k => T.n[k]).map(k => `${CMD_THN[k]} ${T.n[k]}`).join('、');
+
+// —— 登陆前侦察（自己定登陆点时）：H 时舰船与两栖车辆在集结海域待命，侦察机沿海岸照相；
+//    照完（或 45 秒）再定主攻滩头。没有侦察机：只按地形与已知情报判读，等 8 秒驱逐舰雷达、观察报告汇总 ——
+const CMD_SC = { max: 45, wait: 8, gap: 160 };
+function cmdScoutP(C) {
+  if (C.sc && C.sc.done) return false;
+  const B = TER.beaches.slice().sort((a, b) => a.cx - b.cx);
+  if (!C.sc) {
+    C.sc = { t0: S.t, done: false, pids: [] };
+    if (B.length && S.cv && cmdCtl(S.cv) && typeof launchPlane === 'function') {
+      // 两架各照一半海岸、从中间分头向两端飞（贴滩头纵深 90，照得到滩顶的碉堡与机枪阵地），比一架从头飞到尾快一倍；只有一架时全程照
+      const xa = clamp(B[0].x0 - 80, 40, W - 40), xb = clamp(B[B.length - 1].x1 + 80, 40, W - 40), xm = (xa + xb) / 2;
+      const legs = S.assets && S.assets.recon >= 2 ? [[xm - 60, xa, 90], [xm + 60, xb, 90]] : [[xa, xb, 90]];
+      for (const [a, b, dy] of legs) {
+        if (!(S.assets && S.assets.recon > 0) || !launchPlane('recon', a, coastAt(a) - dy)) break;
+        const p = S.planes[S.planes.length - 1], n = Math.max(2, Math.ceil(Math.abs(b - a) / CMD_SC.gap));
+        p.wp = Array.from({ length: n + 1 }, (_, k) => { const x = lerp(a, b, k / n); return { x: Math.round(x), y: Math.round(clamp(coastAt(x) - dy, 30, H - 30)) }; });
+        p.leg = 0; p.scout = true;
+        C.sc.pids.push(p.id);
+      }
+    }
+    const n = C.sc.pids.length, mid = B.length ? { x: (B[0].cx + B[B.length - 1].cx) / 2, y: coastAt((B[0].cx + B[B.length - 1].cx) / 2) } : undefined;
+    chatSay('p', n ? `命令：H 时已到。各登陆舰艇、两栖车辆在集结海域待命，先派 ${n} 架侦察机沿岸照相${n > 1 ? '（从中段分头向东西两端飞）' : ''}，查明各滩头火力配系后再定登陆点。`
+      : '判断：没有侦察机可用，只能依据地形与已掌握的情报判读各滩头。命令：各舰艇稍候，待驱逐舰雷达与观察报告汇总后定登陆点。', { kind: 'order', at: mid });
+    if (typeof v8Stat === 'function') v8Stat(n ? 'scoutAir' : 'scoutNone');
+  }
+  const R = C.sc, up = R.pids.some(id => S.planes.some(p => p.id === id && !p.dead && ['cat', 'roll', 'out'].includes(p.phase)));
+  if (R.pids.length ? up && S.t - R.t0 < CMD_SC.max : S.t - R.t0 < CMD_SC.wait) return true;
+  R.done = true; R.t1 = S.t;
+  return false;
+}
+// 侦察结果：按滩头汇总（主攻、佯攻与守备最强的一处）
+function cmdScoutSay(B, main, feint) {
+  const C = S.cmd.p;
+  if (!C.sc || !C.sc.pids.length) return;
+  const pick = [main, feint, ...B.slice().sort((a, c) => (c.th.at + c.th.inf) - (a.th.at + a.th.inf)).map(x => x.i)].filter((i, k, a) => i >= 0 && a.indexOf(i) === k).slice(0, 3);
+  const txt = pick.map(i => { const T = B[i].th, t = cmdThText(T); return `${B[i].b.name}${t ? `发现${t}${T.men ? `，守军约 ${T.men} 人` : ''}` : '未见守军火力点'}`; });
+  chatSay('p', `报告：侦察机照相判读完毕（用时 ${Math.round(C.sc.t1 - C.sc.t0)} 秒）——${txt.join('；')}。`, { kind: 'intel', at: cmdExit(main) });
+}
+// 登陆正面：n 艘沿滩头横向展开、间距 24–60，尽量用满整段滩头（两端各留 14）——大部队在一块宽正面上同时抢滩，不挤成一团
+function cmdLandX(b, k, n) {
+  const w = b.x1 - b.x0 - 28, sp = n > 1 ? clamp(w / (n - 1), 24, 60) : 0;
+  return clamp(b.cx + (k - (n - 1) / 2) * sp, b.x0 + 14, b.x1 - 14);
+}
+
+// —— 坦克先上还是步兵先上（定下主攻滩头后）：按当面已知威胁——
+//    反坦克火力强 → 步兵先上，清掉反坦克组与炮位，装甲等出口打开（或反坦克火力肃清）再上；
+//    主要是碉堡、机枪而反坦克火力弱 → 坦克先上（机枪打不动坦克，主炮拔碉堡），步兵 8 秒后跟进；其余步坦同时上陆。
+//    两栖车辆、坦克登陆舰、突击舰（含佯攻）按各自航速倒推出发时间：同一梯队同时抵滩，不零零散散地往上送 ——
+const CMD_ARM = { lag: 8, follow: 20, lstOut: 4, shipV: 21 };   // shipV：舰船实际平均航速（含加速、绕行），用来估算抵滩时间
+function cmdArmP(C, go) {
+  const main = C.plan.main, b = TER.beaches[main], T = cmdThreat(main), cy = coastAt(b.cx);
+  const amph = (S.veh || []).filter(v => v.side === 'p' && !v.dead && cmdCtl(v) && !v.lst && (v.swim || vehWater(v.x, v.y)));
+  const lst = cmdShipsOf(C, 'lst').filter(s => s.state === 'idle' && !C.ship[s.id].rel);
+  const nArm = amph.filter(v => vehSp(v).gun).length + lst.reduce((a, s) => a + (s.load && Array.isArray(s.load.veh) ? s.load.veh.length : (SHIP_SPEC.lst.veh || []).length), 0);
+  const arm = !nArm ? 'none' : T.at >= 3 && T.at >= T.inf * .5 ? 'inf' : T.inf >= 3 && T.at <= 1.5 ? 'tank' : 'mix';
+  C.arm = arm; C.armTh = T;
+  const sh = r => cmdShipsOf(C, r).filter(s => s.state === 'idle' && C.ship[s.id].rel && !C.ship[s.id].sent);
+  const eta = (o, x, sp) => dist(o.x, o.y, x, coastAt(x) - 20) / sp;
+  const w1 = sh('w1'), fe = sh('fe');   // 第一波（含拓宽到相邻滩头的一翼）同时抵滩
+  const xOf = s => { const t = C.ship[s.id], bb = TER.beaches[t.b]; return cmdLandX(bb, t.k || 0, t.n || 1); };
+  const vSp = v => Math.max(4, vehSp(v).speed * (vehSp(v).swimK || .6));
+  const sE = Math.max(0, ...w1.map(s => eta(s, xOf(s), CMD_ARM.shipV)));
+  // 离得太远（比突击舰晚到 45 秒以上）的两栖车辆、坦克登陆舰不拖累整个梯队：随即出发，作为后续跟进
+  const vx = amph.map((v, k) => cmdLandX(b, k + .5, amph.length + 1)), near = e => e <= sE + 45;
+  const vEt = amph.map((v, k) => Math.abs(v.x - vx[k]) > 90 ? (Math.abs(v.x - vx[k]) + Math.abs(v.y - coastAt(vx[k]))) / vSp(v) : eta(v, vx[k], vSp(v)));   // 横向远的先在集结海域横移（vehLanding）
+  const vE = Math.max(0, ...vEt.filter(near));
+  const lEt = lst.map(s => eta(s, b.cx, CMD_ARM.shipV) + CMD_ARM.lstOut), lE = Math.max(0, ...lEt.filter(near));
+  // A = 突击舰抵滩时刻；At = 装甲抵滩时刻
+  let A, At;
+  if (arm === 'tank') { At = go + Math.max(vE, lE); A = Math.max(At + CMD_ARM.lag, go + sE); }
+  else if (arm === 'mix') { A = At = go + Math.max(sE, vE, lE); }
+  else { A = go + sE; At = A + CMD_ARM.follow; }
+  for (const s of [...w1, ...fe]) C.ship[s.id].go = +Math.max(go, A - eta(s, xOf(s), CMD_ARM.shipV)).toFixed(1);
+  C.veh = C.veh || {};
+  amph.forEach((v, k) => { C.veh[v.id] = { go: +Math.max(go, At - vEt[k]).toFixed(1), x: Math.round(vx[k]) }; });
+  if (arm === 'tank' || arm === 'mix') lst.forEach((s, k) => Object.assign(C.ship[s.id], { rel: true, b: main, k: k + .5, n: lst.length + 1, go: +Math.max(go, At - lEt[k]).toFixed(1) }));
+  C.landA = A;
+  return { arm, T, A, At, nA: amph.length, nL: lst.length };
+}
+function cmdSayArm(C, R) {
+  const M = cmdExit(C.plan.main), b = TER.beaches[C.plan.main], T = R.T, t = cmdThText(T);
+  const armTxt = [R.nA && `${R.nA} 辆两栖车辆`, R.nL && `坦克登陆舰 ${R.nL} 艘`].filter(Boolean).join('、');
+  const why = t ? `当面已知${t}` : '当面未发现守军火力点';
+  if (R.arm === 'tank') chatSay('p', `决心：坦克先上。${why}，反坦克火力弱，机枪碉堡打不动坦克——${armTxt}先行抵滩，以主炮拔除碉堡、机枪；步兵在装甲抵滩 ${CMD_ARM.lag} 秒后跟进，同时抢滩。`, { kind: 'plan', at: M, delay: 5 });
+  else if (R.arm === 'inf') chatSay('p', `决心：步兵先上。${why}，反坦克火力强，装甲先上去就是送靶子——第一波步兵（含反坦克、爆破组）同时抢滩，先清掉反坦克组与炮位${R.nA ? `，两栖车辆在步兵抵滩 ${CMD_ARM.follow} 秒后跟进` : ''}${R.nL ? '；坦克登陆舰待出口夺取或反坦克火力肃清后再靠岸' : ''}。`, { kind: 'plan', at: M, delay: 5 });
+  else if (R.arm === 'mix') chatSay('p', `决心：步坦同时上陆。${why}，反坦克与机枪火力都有——${armTxt}与第一波步兵按航速错开出发，同时抵滩，步兵掩护坦克防近战反坦克，坦克压制碉堡。`, { kind: 'plan', at: M, delay: 5 });
+  if (typeof v8Stat === 'function') v8Stat('arm_' + R.arm);
+  void b;
+}
+// vehicles.js vehLanding 调用：受指挥的两栖车辆何时出发、在哪上陆；返回 null 不干预 / {hold} 待命 / {x} 上陆点
+function cmdAmphTask(v) {
+  if (!S || !S.cmd || S.phase !== 'battle' || S.over || !cmdCtl(v)) return null;
+  const C = S.cmd.p;
+  if (C.sc && !C.sc.done) return { hold: true };
+  const t = C.veh && C.veh[v.id];
+  if (!t) return C.sc && !C.plan ? { hold: true } : null;
+  return S.t < t.go ? { hold: true } : { x: t.x };
 }
 
 // —— 作战计划（H 时）：主攻 / 佯攻、梯队编组、火力准备、侦察 ——
@@ -209,9 +337,10 @@ function cmdPlanP() {
   if (C.plan) return C.plan;
   const ctl = S.ships.filter(s => alive(s) && cmdCtl(s) && cmdLoaded(s)), as = ctl.filter(cmdAssault);
   if (!TER.beaches.length || !as.length) { C.plan = { main: -1, feint: -1, t: S.t, mode: 'none' }; return C.plan; }   // 突击舰都由玩家亲自指挥：待部队上陆后再接手（cmdAdoptP）
-  const B = TER.beaches.map((b, i) => cmdBeachInfo(i, as));
   const pre = as.filter(s => s.state === 'move' && s.land);
-  let main, feint = -1, mode;
+  if (!(pre.length && pre.length >= as.length * .5) && cmdScoutP(C)) return null;   // 自己定登陆点：先侦察，照完再定
+  const B = TER.beaches.map((b, i) => cmdBeachInfo(i, as));
+  let main, feint = -1, mode, fl = [];
   if (pre.length && pre.length >= as.length * .5) {   // 已有登陆计划（玩家或沙盒部署时预定）：据此确定主要方向
     mode = 'pre';
     const cnt = B.map(() => 0);
@@ -221,18 +350,21 @@ function cmdPlanP() {
     if (m2 > 0) feint = cnt.findIndex((n, i) => i !== main && n === m2);
   } else {
     mode = 'self';
-    main = B.reduce((a, x) => x.score > a.score ? x : a).i;
+    // 部署时的预定登陆点（沙盒观战）只作参考：侦察之后按情报重新比较，预定滩头加 1.5 分
+    const hint = B.map(() => 0);
+    for (const s of as) if (s.sbxHint) { const bi = cmdBeachOf(s.sbxHint.x); if (bi >= 0) hint[bi]++; }
+    const hm = Math.max(...hint), sc = x => x.score + (hm > 0 && hint[x.i] === hm ? 1.5 : 0);
+    main = B.reduce((a, x) => sc(x) > sc(a) ? x : a).i;
     const M = B[main];
-    let bf = -Infinity;
-    for (const x of B) {
-      if (x.i === main) continue;
+    // 佯攻：离主攻方向远、守备弱、不那么要紧的滩头（只去一小股）；按优劣排好，下面拓宽正面占用了首选时顺延
+    fl = B.filter(x => x.i !== main).map(x => {
       const dx = Math.abs(x.b.cx - M.b.cx);
-      const sc = -x.def * 1.2 - x.bats.length + Math.min(dx, 1200) / 500 - (dx < 420 ? 3 : 0) + (x.town && M.town && x.town.key !== M.town.key ? 1.2 : 0) - x.fd / 900;
-      if (sc > bf) { bf = sc; feint = x.i; }
-    }
+      return { i: x.i, sc: -x.def * 1.2 - x.bats.length - x.th.men / 6 + Math.min(dx, 1200) / 500 - (dx < 420 ? 3 : 0) + (x.town && M.town && x.town.key !== M.town.key ? 1.2 : 0) - x.fd / 900 };
+    }).sort((a, c) => c.sc - a.sc);
+    feint = fl.length ? fl[0].i : -1;
   }
   C.plan = { main, feint, t: S.t, mode };
-  const R = { w1: [], fe: [], w2: [], sup: [], lst: [] }, prep = cmdCtl(S.dd) && S.dd.state !== 'sunk', go = +(S.t + (prep && mode === 'self' ? 8 : 0)).toFixed(2);
+  const R = { w1: [], w1b: [], fe: [], w2: [], sup: [], lst: [] }, prep = cmdCtl(S.dd) && S.dd.state !== 'sunk', go = +(S.t + (prep && mode === 'self' ? 8 : 0)).toFixed(2);
   for (const s of ctl) {
     let r = null;
     if (s.kind === 'supply') r = 'sup';
@@ -244,19 +376,32 @@ function cmdPlanP() {
     R[r].push(s);
   }
   if (mode === 'self') {
-    const idle = as.filter(s => !C.ship[s.id] && s.state === 'idle'), n = idle.length;
-    const nf = feint < 0 ? 0 : n >= 7 ? 2 : n >= 4 ? 1 : 0, n2 = n >= 8 ? 2 : n >= 6 ? 1 : 0;
-    const fb = feint >= 0 ? TER.beaches[feint] : null, mb = TER.beaches[main], dm = s => dist(s.x, s.y, mb.cx, coastAt(mb.cx));
-    if (fb) idle.sort((a, b) => dist(a.x, a.y, fb.cx, coastAt(fb.cx)) - dist(b.x, b.y, fb.cx, coastAt(fb.cx)));
+    // 大部队一次上去：突击舰几乎全部编入第一波，在主攻滩头整段正面同时抢滩；佯攻只派最小的一艘（舰多时两艘），第二波只在舰船很多、滩头摆不下时才留
+    const idle = as.filter(s => !C.ship[s.id] && s.state === 'idle'), n = idle.length, mb = TER.beaches[main];
+    const slots = b => Math.max(6, Math.floor((b.x1 - b.x0 - 28) / 24) + 1);   // 一处滩头能同时抢滩的舰数（间距 24 以上）
+    // 舰多、一处滩头摆不下（会剩 3 艘以上）：把正面拓宽到相邻滩头（520 以内、守备不比主攻滩头强太多、不多挨岸防炮台），与主攻同时抢滩，而不是留在海上当第二波；
+    // 相邻滩头原定为佯攻方向的，佯攻顺延到下一处
+    const adj = n - 1 - slots(mb) >= 3 ? B.filter(x => x.i !== main && Math.abs(x.b.cx - mb.cx) < 520 && x.score > B[main].score - 8 && x.th.men < B[main].th.men + 20 && x.bats.length <= B[main].bats.length).sort((a, c) => c.score - a.score)[0] : null;
+    if (adj && adj.i === feint) { const f2 = fl.find(f => f.i !== adj.i); feint = f2 ? f2.i : -1; C.plan.feint = feint; }
+    const nf = feint < 0 ? 0 : n >= 12 ? 2 : n >= 4 ? 1 : 0, n2 = Math.max(0, n - nf - slots(mb) - (adj ? slots(adj.b) : 0));
+    const fb = feint >= 0 ? TER.beaches[feint] : null, dm = s => dist(s.x, s.y, mb.cx, coastAt(mb.cx)), cap = s => (s.load && s.load.teams) || 0;
+    if (fb) idle.sort((a, b) => cap(a) - cap(b) || dist(a.x, a.y, fb.cx, coastAt(fb.cx)) - dist(b.x, b.y, fb.cx, coastAt(fb.cx)));
     const fe = idle.splice(0, nf);
     idle.sort((a, b) => dm(b) - dm(a));
-    const w2 = idle.splice(0, n2), w1 = idle.sort((a, b) => a.x - b.x);
+    const w2 = idle.splice(0, n2), ab = adj ? adj.b : null, da = s => ab ? dist(s.x, s.y, ab.cx, coastAt(ab.cx)) - dm(s) : 0;
+    const w1b = adj ? idle.sort((a, b) => da(a) - da(b)).splice(0, Math.min(slots(ab), Math.max(0, idle.length - slots(mb)))) : [];   // 离相邻滩头更近的去拓宽的一翼
+    const w1 = idle.sort((a, b) => a.x - b.x);
     const put = (list, r, b) => list.sort((a, c) => a.x - c.x).forEach((s, k) => { C.ship[s.id] = { r, b, k, n: list.length, rel: r !== 'w2', sent: false, go: r === 'w2' ? null : go }; R[r].push(s); });
     put(w1, 'w1', main); put(fe, 'fe', feint); put(w2, 'w2', main);
+    if (w1b.length) { put(w1b, 'w1', adj.i); C.plan.wide = adj.i; R.w1b = w1b; }
   }
+  const A = mode === 'self' ? cmdArmP(C, go) : null;
+  if (!A) C.landA = S.t + 40;   // 既定计划：舰船已在途，约 40 秒抵滩
+  if (mode === 'self') cmdScoutSay(B, main, feint);
   cmdSayPlan(B, R, mode, prep);
   if (prep) cmdPrepFires(main);
-  if (S.cv && cmdCtl(S.cv) && S.cv.hp > 0) {
+  if (A) cmdSayArm(C, A);
+  if (S.cv && cmdCtl(S.cv) && S.cv.hp > 0 && !(C.sc && C.sc.pids.length)) {
     const M = cmdExit(main), F = feint >= 0 ? cmdExit(feint) : null;
     C.air.push({ k: 'recon', x: M.x, y: M.y - 60, t: S.t });
     if (F) C.air.push({ k: 'recon', x: F.x, y: F.y - 60, t: S.t });
@@ -291,27 +436,31 @@ function cmdSayPlan(B, R, mode, prep) {
   if (M.fd === fMin && why.length < 4) why.push('距集结区最近');
   const susp = B.filter(x => x.bats.length && x.i !== main).map(x => x.b.name);
   const at = { x: M.E.x, y: M.E.y }, P = { kind: 'plan' };
-  const told = S.chat.some(m => m.side === 'p' && m.kind === 'plan');   // 部署时（沙盒「AI 帮我部署」）已讲明作战意图：只下达执行命令
+  const told = !(S.cmd.p.sc && S.cmd.p.sc.pids.length) && S.chat.some(m => m.side === 'p' && m.kind === 'plan');   // 侦察后另定的决心照常讲明   // 部署时（沙盒「AI 帮我部署」）已讲明作战意图：只下达执行命令
   if (told) { /* 不重复判断与决心 */ } else if (mode === 'pre') {
     const n1 = R.w1.filter(s => S.cmd.p.ship[s.id].b === main).length;
     chatSay('p', `判断：按既定登陆计划，${n1} 艘登陆舰指向${M.b.name}${F ? `，${R.fe.length} 艘指向${F.b.name}` : ''}。守军火力配系不明，${M.b.name}出口距指挥所 ${M.dHQ} 米。`, { ...P, at });
     chatSay('p', `决心：以${M.b.name}为主要突击方向${F ? `，${F.b.name}为助攻，牵制${F.town ? F.town.name : '当面'}之敌` : ''}。`, { ...P, at, delay: 1.2 });
   } else {
-    chatSay('p', `判断：守军沿岸纵深设防，滩头火力配系不明。可选登陆滩 ${B.length} 处，${M.b.name}正面宽 ${M.w} 米、出口距指挥所 ${M.dHQ} 米${M.road >= 6 ? '，背后有公路纵深' : ''}。${susp.length ? `${susp.slice(0, 2).join('、')}两侧岬角有岸防炮台，抵近时须防侧射。` : ''}`, { ...P, at });
-    chatSay('p', `决心：主攻${M.b.name}${F ? `，佯攻${F.b.name}` : ''}。`, { ...P, at, delay: 1.2 });
+    const sc = S.cmd.p.sc && S.cmd.p.sc.pids.length;
+    chatSay('p', `判断：${sc ? '据侦察照相判读' : '守军沿岸纵深设防，滩头火力配系不明'}。可选登陆滩 ${B.length} 处，${M.b.name}正面宽 ${M.w} 米、出口距指挥所 ${M.dHQ} 米${M.road >= 6 ? '，背后有公路纵深' : ''}${sc ? `，当面${cmdThText(M.th) ? '已知' + cmdThText(M.th) : '未见守军火力点'}` : ''}。${susp.length ? `${susp.slice(0, 2).join('、')}两侧岬角有岸防炮台，抵近时须防侧射。` : ''}`, { ...P, at });
+    chatSay('p', `决心：主攻${M.b.name}，大部队在整段滩头正面同时抢滩${F ? `；只以一小股佯攻${F.b.name}` : ''}。`, { ...P, at, delay: 1.2 });
     chatSay('p', `理由：${M.b.name}${why.slice(0, 3).join('、')}${F ? `；${F.b.name}距主攻方向 ${Math.round(Math.abs(F.b.cx - M.b.cx))} 米，佯攻可牵制${F.town ? F.town.name + '方向的' : '当面'}预备队` : ''}。`, { ...P, at, delay: 2.4 });
   }
   const parts = [];
-  if (R.w1.length) parts.push(`${cmdLabels(R.w1)}为第一波${mode === 'pre' ? '' : `直取${M.b.name}`}`);
-  if (R.fe.length && F) parts.push(`${cmdLabels(R.fe)}佯攻${F.b.name}`);
+  const w1a = R.w1.filter(s => !R.w1b.includes(s)), wB = w1a.length > 1 ? Math.round(Math.abs(cmdLandX(M.b, w1a.length - 1, w1a.length) - cmdLandX(M.b, 0, w1a.length))) : 0;
+  if (w1a.length) parts.push(`${cmdLabels(w1a)}为第一波${mode === 'pre' ? '' : `直取${M.b.name}${wB ? `，沿约 ${wB} 米正面一字展开、同时抵滩` : ''}`}`);
+  if (R.w1b.length) { const wb = S.cmd.p.plan.wide; parts.push(`${cmdLabels(R.w1b)}为第一波${wb != null && TER.beaches[wb].cx > M.b.cx ? '右' : '左'}翼，在相邻的${cmdBN(wb)}同时抢滩，把登陆正面拓宽到约 ${Math.round(Math.abs(TER.beaches[wb].cx - M.b.cx) + (M.b.x1 - M.b.x0) / 2 + (TER.beaches[wb].x1 - TER.beaches[wb].x0) / 2)} 米`); }
+  if (R.fe.length && F) parts.push(`${cmdLabels(R.fe)}佯攻${F.b.name}，与主攻同时抵滩，牵制守军`);
   if (R.w2.length) parts.push(`${cmdLabels(R.w2)}为第二波，待${M.E.name}夺取后跟进`);
   if (R.sup.length) parts.push(`补给舰${cmdLabels(R.sup)}待第一波上滩后建立补给站`);
-  if (R.lst.length) parts.push(`坦克登陆舰${cmdLabels(R.lst)}待出口打开后卸载装甲`);
+  const ar = S.cmd.p.arm;
+  if (R.lst.length) parts.push(ar === 'tank' || ar === 'mix' ? `坦克登陆舰${cmdLabels(R.lst)}${ar === 'tank' ? '先行' : '与第一波同时'}抵滩卸载装甲` : `坦克登陆舰${cmdLabels(R.lst)}待出口打开${ar === 'inf' ? '或反坦克火力肃清' : ''}后卸载装甲`);
   if (parts.length) chatSay('p', `命令：${told ? 'H 时已到，按既定部署执行。' : ''}${parts.join('；')}。`, { kind: 'order', at, delay: told ? .5 : 3.6, lv: 0 });
-  if (prep) chatSay('p', `命令：驱逐舰对${M.b.name}出口及两翼可疑火力点实施火力准备，第一波 H+8 秒出发，抵近时施放烟幕。`, { kind: 'order', at, delay: 4.8 });
-  if (S.cv && cmdCtl(S.cv) && S.cv.hp > 0) chatSay('p', `命令：航母派侦察机先行侦察${M.b.name}${F ? '、' + F.b.name : ''}，攻击机待命打击已标定火炮。`, { kind: 'order', at, delay: 6 });
+  if (prep) chatSay('p', `命令：驱逐舰对${M.b.name}出口及两翼${mode === 'self' && S.cmd.p.sc && S.cmd.p.sc.pids.length ? '已查明' : '可疑'}火力点实施火力准备，抵近时施放烟幕。`, { kind: 'order', at, delay: 4.8 });
+  if (S.cv && cmdCtl(S.cv) && S.cv.hp > 0 && !(S.cmd.p.sc && S.cmd.p.sc.pids.length)) chatSay('p', `命令：航母派侦察机先行侦察${M.b.name}${F ? '、' + F.b.name : ''}，攻击机待命打击已标定火炮。`, { kind: 'order', at, delay: 6 });
   const veh = (Array.isArray(S.veh) ? S.veh : []).filter(v => v.side === 'p' && !v.dead && cmdCtl(v));
-  if (veh.length) chatSay('p', `命令：${veh.length} 辆装甲车辆随第一波在${M.b.name}上陆，伴随步兵攻击，不得脱离步兵单独突入。`, { kind: 'order', at, delay: 7.2 });
+  if (veh.length && mode !== 'self') chatSay('p', `命令：${veh.length} 辆装甲车辆随第一波在${M.b.name}上陆，伴随步兵攻击，不得脱离步兵单独突入。`, { kind: 'order', at, delay: 7.2 });
 }
 
 // 火力准备：已知目标逐一急促射；没有已知目标时对出口与两翼可疑位置概略射击
@@ -336,6 +485,7 @@ function cmdShipTask(s) {
   if (!Cm || !cmdCtl(s)) return null;
   const C = Cm.p;
   if (!C.plan) cmdRun(cmdPlanP);
+  if (C.sc && !C.sc.done) return { hold: true };   // 登陆前侦察中：集结海域待命
   if (!C.plan || C.plan.main < 0) return null;
   let t = C.ship[s.id];
   if (!t) {   // 计划之后加入的舰船：编入第二梯队
@@ -346,7 +496,7 @@ function cmdShipTask(s) {
   if (!t.rel || (t.go != null && S.t < t.go) || (t.late && S.t < t.late)) return { hold: true };
   const b = TER.beaches[t.b];
   if (!b) return null;
-  let x = clamp(b.cx + ((t.k || 0) - ((t.n || 1) - 1) / 2) * 30, b.x0 + 12, b.x1 - 12);
+  let x = cmdLandX(b, t.k || 0, t.n || 1);
   t.px = Math.round(x); t.sent = true;
   // 偏航：沿岸流、涌浪、导航失误；修正航线后（navFix）一段时间内概率降低
   const pd = CMD_FP.drift * cmdRK() * (S.t - C.navFix < 150 ? .35 : 1);
@@ -414,7 +564,19 @@ const cmdOwned = E => !!E && E.owner === 'p' && E.prog >= .99;
 function cmdWaves(C) {
   const pl = C.plan, main = pl.main, E = cmdExit(main), own = cmdOwned(E), am = cmdAshore(main);
   const w2 = cmdShipsOf(C, 'w2').filter(s => !C.ship[s.id].rel && s.state === 'idle');
-  if (w2.length && (own || (S.t > 100 && am >= 25) || S.t > 190)) {
+  // 不添油：第一波在主攻滩头站不住（H+190 秒仍不足 8 人、出口未夺取），第二波不再往同一处送——改向守备最弱、最好已有我军立足的滩头，先火力准备 25 秒再一起上
+  const dA = S.t - (C.landA ?? 0);   // 第一波抵滩后过了多久
+  if (w2.length && !own && dA > 150 && am < 8 && !C.w2re) {
+    C.w2re = S.t;
+    const B = TER.beaches.map((b, i) => ({ i, sc: cmdBeachInfo(i, w2).score + (cmdAshore(i) >= 6 ? 3 : 0) + (cmdOwned(cmdExit(i)) ? 4 : 0) - (i === main ? 2.5 : 0) }));
+    const tb = B.reduce((a, x) => x.sc > a.sc ? x : a).i, at = cmdExit(tb), L = cmdLabels(w2);
+    C.w2 = { b: tb, t: S.t };
+    w2.sort((a, b) => a.x - b.x).forEach((s, k) => Object.assign(C.ship[s.id], { rel: true, b: tb, k, n: w2.length, go: +(S.t + 25).toFixed(1) }));
+    cmdPrepFires(tb);
+    for (const e of S.enemies) if (!e.dead && e.kx != null && dist(e.kx, e.ky, at.x, at.y) < 300 && ['bunker', 'coastal', 'mortar'].includes(e.kind)) cmdAir('strike', e.kx, e.ky, e.id);
+    chatSay('p', `判断：${cmdBN(main)}第一波伤亡惨重，滩头仅剩 ${am} 人，${E.name}未能夺取。决心：不再向${cmdBN(main)}添油；第二波 ${L} ${tb === main ? '在原滩头' : '改向' + cmdBN(tb)}，舰炮、攻击机先行压制 25 秒，再成建制同时抢滩。`, { kind: 'plan', at });
+    if (typeof v8Stat === 'function') v8Stat('w2Re');
+  } else if (w2.length && (own || (dA > 60 && am >= 25) || (dA > 150 && am >= 8))) {
     const F = pl.feint >= 0 ? cmdExit(pl.feint) : null, af = pl.feint >= 0 ? cmdAshore(pl.feint) : 0;
     const exploit = !own && cmdOwned(F) && af >= 10, tb = exploit ? pl.feint : main, L = cmdLabels(w2);
     C.w2 = { b: tb, t: S.t };
@@ -424,7 +586,7 @@ function cmdWaves(C) {
       chatSay('p', `判断：${cmdBN(pl.feint)}方向守军薄弱，佯攻分队已夺取${F.name}；${cmdBN(main)}方向受阻，滩头仅 ${am} 人。`, { kind: 'plan', at });
       chatSay('p', `决心：扩张战果，第二波 ${L} 改向${cmdBN(pl.feint)}上陆，由该方向向纵深发展。`, { kind: 'plan', at, delay: 1.2 });
     } else if (own) chatSay('p', `命令：${E.name}已在我手，第二波 ${L} 即刻出发，向${cmdBN(tb)}上陆。`, { kind: 'order', at, lv: 0 });
-    else if (S.t <= 190) chatSay('p', `判断：${E.name}尚未夺取，但滩头已有 ${am} 人立足。决心：第二波 ${L} 提前投入${cmdBN(tb)}，加强突击力量。`, { kind: 'plan', at });
+    else if (dA <= 150) chatSay('p', `判断：${E.name}尚未夺取，但滩头已有 ${am} 人立足。决心：第二波 ${L} 提前投入${cmdBN(tb)}，加强突击力量。`, { kind: 'plan', at });
     else chatSay('p', `判断：${cmdHT()}，${E.name}仍未夺取，滩头兵力 ${am} 人。决心：不再等待，第二波 ${L} 投入${cmdBN(tb)}。`, { kind: 'plan', at });
     // 摩擦：后续梯队迟滞
     if (Math.random() < CMD_FP.late * cmdRK()) {
@@ -437,7 +599,7 @@ function cmdWaves(C) {
   // 补给舰：第一波上滩、滩头有人接应后出发；尽量分到兵力最多的两处滩头
   const sup = cmdShipsOf(C, 'sup').filter(s => !C.ship[s.id].rel && s.state === 'idle');
   const first = S.ships.some(s => s.kind !== 'supply' && s.kind !== 'lst' && (s.state === 'beached' || s.state === 'unloading'));
-  if (sup.length && ((first && am >= 6) || S.t > 70)) {
+  if (sup.length && ((first && am >= 6) || S.t > (C.landA ?? 40) + 30)) {   // 第一波抵滩后再靠岸（侦察、装甲先行会推迟抵滩时刻）
     const cand = TER.beaches.map((b, i) => ({ i, n: cmdAshore(i) + (cmdOwned(cmdExit(i)) ? 8 : 0) + (i === main ? 15 : 0) })).filter(x => x.n >= 6).sort((a, b) => b.n - a.n);
     if (!cand.length) cand.push({ i: main, n: 0 });
     const plan = {};
@@ -446,13 +608,16 @@ function cmdWaves(C) {
     chatSay('p', `命令：补给舰${Object.keys(plan).map(i => `${cmdLabels(plan[i])}驶向${cmdBN(+i)}`).join('，')}，建立滩头补给站。`, { kind: 'order', at: cmdExit(cand[0].i) });
   }
   // 坦克登陆舰：出口在我手中（或时间已到）才卸载装甲
+  //   步兵先上（C.arm === 'inf'）时：滩头已有 15 人以上、出口附近已知的反坦克组 / 炮位 / 守军坦克都已肃清，也可提前靠岸；
+  //   时间到了但滩头没站住（不足 8 人）不送——坦克登陆舰在没有步兵掩护的滩头卸载就是送靶子
   const lst = cmdShipsOf(C, 'lst').filter(s => !C.ship[s.id].rel && s.state === 'idle');
   if (lst.length) {
     const ownB = TER.beaches.map((b, i) => i).filter(i => cmdOwned(cmdExit(i))).sort((a, b) => cmdAshore(b) - cmdAshore(a));
-    if (ownB.length || S.t > 240) {
-      const tb = ownB.includes(main) ? main : ownB[0] ?? main;
+    const atClear = C.arm === 'inf' && am >= 15 && !(cmdThreat(main).at >= 1.5);
+    if (ownB.length || atClear || (S.t > 240 && am >= 8)) {
+      const tb = ownB.includes(main) || atClear ? main : ownB[0] ?? main;
       lst.forEach((s, k) => Object.assign(C.ship[s.id], { rel: true, b: tb, k, n: lst.length }));
-      chatSay('p', `命令：坦克登陆舰 ${cmdLabels(lst)} 出发，在${cmdBN(tb)}卸载装甲${ownB.length ? `，${cmdExit(tb).name}已在我手` : '；出口未通，装甲上陆后先支援步兵夺取出口'}。`, { kind: 'order', at: cmdExit(tb) });
+      chatSay('p', `命令：坦克登陆舰 ${cmdLabels(lst)} 出发，在${cmdBN(tb)}卸载装甲${ownB.includes(tb) ? `，${cmdExit(tb).name}已在我手` : atClear ? '，滩头步兵已站稳并肃清当面反坦克火力' : '；出口未通，装甲上陆后先支援步兵夺取出口'}。`, { kind: 'order', at: cmdExit(tb) });
     }
   }
 }
@@ -522,7 +687,7 @@ function cmdNearP(x, y) {
 function cmdDDMission(dd) {
   if (!cmdOn() || !cmdCtl(dd)) return null;
   const C = S.cmd.p;
-  if (S.t < C.cf) return { hold: true };
+  if (S.t < C.cf || (C.sc && !C.sc.done)) return { hold: true };   // 侦察照相期间不开火，不过早暴露主攻方向
   if (C.safeT && S.t > C.safeT) { C.safe = 60; C.safeT = 0; }
   // 受损后节约射击：舰体 2/3 时齐射间隔拉长，1/3 时只执行指定火力任务（每次齐射都可能招来反炮兵射击）
   // 只在冷却为 0 时被调用：两次调用之间有间隔，说明上次调用后开过火（装填 5 秒）
@@ -1075,7 +1240,7 @@ function cmdVehHelp(gx, gy, p) {
   if (!Array.isArray(S.veh)) return null;
   let best = null, bd = 650;
   for (const v of S.veh) {
-    if (v.side !== 'p' || v.dead || v.immob || v.swim || v.lst || !cmdCtl(v) || (v.cmd && S.t < (v.cmd.until ?? 0))) continue;
+    if (v.side !== 'p' || v.dead || v.immob || v.swim || v.lst || vehWater(v.x, v.y) || !cmdCtl(v) || (v.cmd && S.t < (v.cmd.until ?? 0))) continue;   // 还在集结海域的两栖车辆归登陆计划掌握
     if (typeof VEH_SPEC === 'object' && VEH_SPEC[v.type] && !VEH_SPEC[v.type].gun) continue;
     if (v.hp < v.maxhp * .4) continue;
     const d = dist(v.x, v.y, gx, gy);

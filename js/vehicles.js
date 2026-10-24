@@ -9,7 +9,7 @@ const VEH_SPEC = {
   lt_tank: { crew: 3, fuel: 3200, name: '轻型坦克', code: 'LT', hp: 26, armor: 1, speed: 25, turn: 2.2, gun: { range: 200, rof: 3.2, he: 1, ap: 1.5 }, mg: { range: 170, n: 3 }, sight: 165, amph: false, carry: 0, len: 14, wid: 8, tur: 3.2, bar: 7, ammo: 40 },
   tank: { crew: 4, fuel: 2800, name: '中型坦克', code: 'MT', hp: 40, armor: 2, speed: 20, turn: 1.7, gun: { range: 230, rof: 4, he: 1.5, ap: 2.3 }, mg: { range: 170, n: 3 }, sight: 160, amph: false, carry: 0, len: 17, wid: 9.5, tur: 4, bar: 9, ammo: 40 },
   hv_tank: { crew: 4, fuel: 2200, name: '重型坦克', code: 'HT', hp: 62, armor: 3, speed: 16, turn: 1.2, gun: { range: 250, rof: 5.4, he: 2, ap: 3.2 }, mg: { range: 170, n: 3 }, sight: 150, amph: false, carry: 0, len: 20, wid: 11, tur: 4.8, bar: 11, ammo: 36 },
-  amtank: { crew: 4, fuel: 2400, name: '两栖坦克', code: 'AM', hp: 24, armor: 1, speed: 19, turn: 1.8, gun: { range: 180, rof: 3.6, he: 1.1, ap: 1.3 }, mg: { range: 160, n: 2 }, sight: 150, amph: true, carry: 0, len: 15, wid: 9, tur: 3.4, bar: 6.5, ammo: 34 },
+  amtank: { crew: 4, fuel: 2400, swimK: 1.25, name: '两栖坦克', code: 'AM', hp: 24, armor: 1, speed: 19, turn: 1.8, gun: { range: 180, rof: 3.6, he: 1.1, ap: 1.3 }, mg: { range: 160, n: 2 }, sight: 150, amph: true, carry: 0, len: 15, wid: 9, tur: 3.4, bar: 6.5, ammo: 34 },
   apc: { crew: 2, fuel: 3500, name: '装甲运兵车', code: 'AP', hp: 24, armor: 1, speed: 25, turn: 2.2, gun: null, mg: { range: 180, n: 5 }, sight: 150, amph: false, carry: 2, len: 15, wid: 8, tur: 0, bar: 0, ammo: 0 },
   spg: { crew: 4, fuel: 2600, name: '自行火炮', code: 'SP', hp: 22, armor: 1, speed: 16, turn: 1.4, gun: { range: 620, min: 110, rof: 7.5, he: 2.2, ap: 0, ind: true }, mg: null, sight: 130, amph: false, carry: 0, len: 17, wid: 9, tur: 0, bar: 10, ammo: 30 },
   td: { crew: 4, fuel: 2800, name: '坦克歼击车', code: 'TD', hp: 34, armor: 2, speed: 20, turn: 1.6, gun: { range: 270, rof: 4.6, he: .9, ap: 3.6, arc: .45 }, mg: null, sight: 160, amph: false, carry: 0, len: 17, wid: 9.5, tur: 0, bar: 12, ammo: 36 },
@@ -254,7 +254,8 @@ function vehDrive(v, dt, mul) {
   const turn = sp.turn * (v.swim ? .6 : 1) * dt;
   v.heading += clamp(da, -turn, turn);
   const t = TER.type[ci(v.x, v.y)], climb = v.climbT != null && S.t - v.climbT < 2.5 ? .5 : 1;
-  let vel = sp.speed * (VEH_TSP[t] || .4) * climb * (v.sup > 60 ? .75 : 1) * ((v.mod && v.mod.spd) || 1) * mul * (dir < 0 ? .45 : 1);
+  const tk = sp.swimK && isWater(t) ? (v.side === 'e' ? .6 : sp.swimK) : VEH_TSP[t];   // 水上：ZTD-05 滑行艇体，航速与登陆艇相当；守方 AAV-7 只有约一半
+  let vel = sp.speed * (tk || .4) * climb * (v.sup > 60 ? .75 : 1) * ((v.mod && v.mod.spd) || 1) * mul * (dir < 0 ? .45 : 1);
   vel *= Math.abs(da) > 1 ? .12 : 1 - Math.abs(da) * .55;   // 大角度时原地转向
   const step = Math.min(vel * dt, d);
   let nx = v.x + Math.cos(v.heading) * dir * step, ny = v.y + Math.sin(v.heading) * dir * step;
@@ -734,7 +735,14 @@ function vehThinkP(v) {
 
 // 泅渡中的两栖坦克：驶向友舰抢滩处旁边的滩头（玩家预定了上陆点则照计划）
 function vehLanding(v) {
-  const o = v.order;
+  const o = v.order, g = typeof cmdAmphTask === 'function' ? cmdAmphTask(v) : null;   // 受指挥官掌握：侦察期间待命，按决心的出发时刻驶向指定上陆点
+  if (g && g.hold) { if (o.t !== 'hold') v.order = { t: 'hold' }; return; }
+  if (g && isFinite(g.x)) {
+    // 离上陆点横向较远：先在集结海域（深水）里横向机动到滩头正南，再向北泅渡——不贴着海岸走，免得半路爬上别的岬角、单车上岸
+    if (Math.abs(v.x - g.x) > 90 && v.y > STAGING_Y - 80) { vehGo(v, g.x, clamp(v.y, STAGING_Y + 15, H - 30), 'move'); return; }
+    if (!vehGo(v, g.x, coastAt(g.x) - 40, 'move')) vehGo(v, g.x, coastAt(g.x) - 20, 'move');
+    return;
+  }
   if (o.x != null && o.t !== 'hold' && !vehWater(o.x, o.y)) return;
   let best = null, bd = Infinity;
   for (const s of S.ships) if (alive(s) && s.land && s.bx != null && (s.state === 'move' || s.state === 'unloading' || s.state === 'beached')) {

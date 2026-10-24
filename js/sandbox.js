@@ -111,6 +111,19 @@ function sbxCheck(c, x, y, x2, y2, ignore) {
       const cap = sbxShipCap(it), ld = sbxShipLoad(it), d = dist(x, y, it.x, it.y);
       if (d < bd && (veh ? cap.v > ld.v : cap.t > ld.t)) { bd = d; host = it; }
     }
+    if (!host && !veh) {   // 运兵船已满员（自带士兵）：点兵种 = 单独替换其中一个组（从第一个起轮流换）
+      let full = null, fd = bd;
+      for (const it of S.sbx.items) if (it.side === 'p' && sbxShipCap(it).t > 0) { const d = dist(x, y, it.x, it.y); if (d < fd) { fd = d; full = it; } }
+      if (full) {
+        const slots = (full.cargo || []).map((id, i) => [id, i]).filter(([id]) => { const k = catalogById(id); return k && k.spawn.kind === 'cargo'; });
+        const f0 = full.fix || 0, j = Array.from({ length: slots.length }, (_, k) => (f0 + k) % slots.length).find(k => slots[k][0] !== c.id);   // 跳过已经是这个兵种的组
+        const [oid, oi] = j != null ? slots[j] : [];
+        if (j != null) full.fix = j;
+        const old = oid && catalogById(oid);
+        if (old && c.cost - old.cost > sbxLeft(c.side)) return bad(`预算不足（还剩 ${sbxLeft(c.side)} 点）`);
+        if (old) return { ok: true, host: full, swap: oi, old };
+      }
+    }
     return host ? { ok: true, host } : bad(veh ? '附近没有空余车位的坦克登陆舰' : '附近没有空余运力的登陆舰（步兵须装载上舰）');
   }
   if (s.at === 'sea') {
@@ -153,6 +166,7 @@ function sbxCheck(c, x, y, x2, y2, ignore) {
 function sbxPlace(id, x, y, x2, y2, extra) {
   const c = catalogById(id), chk = sbxCheck(c, x, y, x2, y2);
   if (!chk.ok) return chk;
+  if (chk.host && chk.swap != null) { chk.host.cargo[chk.swap] = id; chk.host.fix = (chk.host.fix || 0) + 1; sbxSync(); return { ok: true, it: chk.host, old: chk.old }; }
   if (chk.host) { chk.host.cargo = (chk.host.cargo || []).concat(id); return { ok: true, it: chk.host }; }
   const s = c.spawn;
   let note = '';
@@ -163,6 +177,21 @@ function sbxPlace(id, x, y, x2, y2, extra) {
   S.sbx.items.push(it);
   sbxSync();
   return { ok: true, it, note };
+}
+
+// 运兵船自带士兵：玩家放下登陆舰艇时按编制（目录 spawn.def 里的步兵组）装满，点数照算；装甲车辆仍由玩家自选。
+// 想换兵种：右键先卸下（从最后装的卸起），再点兵种装上。返回装上的组数
+function sbxAutoLoad(it) {
+  const s = sbxEntry(it).spawn;
+  if (s.kind !== 'ship' || !s.cap || !Array.isArray(s.def)) return 0;
+  let n = 0;
+  for (const id of s.def) {
+    const c = catalogById(id);
+    if (!c || c.spawn.kind !== 'cargo' || sbxShipLoad(it).t >= s.cap || sbxLeft(it.side) < c.cost) continue;
+    it.cargo.push(id); n++;
+  }
+  if (n) sbxSync();
+  return n;
 }
 
 // 离 (x,y) 最近的一方条目：舰艇优先卸下最后装载的部队
@@ -501,7 +530,7 @@ function sbxAIAttack() {
   const risky = BS.filter(B => B.bat.length && B !== M);
   say(`判断：守军部署不明，只能从地形判读。${M.b.name}宽约 ${sbxM(M.w)} 米，出口道路直通${M.dHQ < 900 ? '指挥所' : M.tw.name}，距指挥所约 ${sbxM(M.dHQ)} 米，${M.cross ? '途中需过河' : '无需渡河'}` +
     (risky.length ? `；${sbxNm(risky)}紧邻岬角炮台，正面强攻代价大。` : '。'), M.ex);
-  if (F) say(`决心：主攻${M.b.name}，佯攻${F.b.name}。理由：${M.b.name}正面宽、纵深直通目标；${F.b.name}距主攻方向约 ${sbxM(Math.abs(F.b.cx - M.b.cx))} 米，佯攻可牵制${F.tw.name}方向守军预备队，使其不敢全力增援主攻方向。`, F.ex);
+  if (F) say(`初步决心：拟主攻${M.b.name}，以一小股佯攻${F.b.name}；开战后先派侦察机沿岸照相，按侦察结果最终定登陆点，大部队在整段滩头正面同时抢滩。理由：${M.b.name}正面宽、纵深直通目标；${F.b.name}距主攻方向约 ${sbxM(Math.abs(F.b.cx - M.b.cx))} 米，佯攻可牵制${F.tw.name}方向守军预备队，使其不敢全力增援主攻方向。`, F.ex);
   const plan = (B, i, n, sp) => { const x = clamp(B.b.cx + (i - (n - 1) / 2) * (sp || 26), B.b.x0 + 12, B.b.x1 - 12); return { x: sbxR(x), y: sbxR(coastAt(x) - 20) }; };
   const ship = (id, B, i, n, row, cargo, wave, dx) => {
     const p = sbxSea(B.b.cx + (dx || 0) + (i - (n - 1) / 2) * 34, (row || 1580) + (i % 2) * 36), r = sbxPlace(id, p.x, p.y);
@@ -544,9 +573,9 @@ function sbxAIAttack() {
   }
   const rk = B0 >= 1100 ? ship('p_rocket', M, 0, 1, 1550, null, 1, -110) : null;
   const sw = B0 >= 950 ? ship('p_sweep', M, 0, 1, 1540, null, 1, 110) : null;
-  // 6. 佯攻：两艘小艇
+  // 6. 佯攻：一艘小艇（不重要的方向，只求牵制）
   const feint = [];
-  if (F) for (let i = 0; i < 2; i++) { const it = ship(k >= 1.2 ? 'p_lct' : 'p_lcvp', F, i, 2, 1600, ['p_rifle', 'p_mg', 'p_rifle'], 1); if (it) feint.push(it); }
+  if (F) for (let i = 0; i < 1; i++) { const it = ship(k >= 1.2 ? 'p_lct' : 'p_lcvp', F, i, 2, 1600, ['p_rifle', 'p_mg', 'p_rifle'], 1); if (it) feint.push(it); }
   // 7. 第二波：坦克登陆舰（或步兵登陆舰）、第二艘补给舰
   const w2 = [];
   const nL = B0 >= 2200 ? 2 : B0 >= 1250 ? 1 : 0;
@@ -578,11 +607,11 @@ function sbxAIAttack() {
     const p = sbxSea(B.b.cx + (i % 2 ? 60 : -170 - i * 20), 1665 + i * 18), r = sbxPlace(id, p.x, p.y);
     if (r.ok) { r.it.plan = { x: sbxR(B.b.cx + ((i >> 1) - .5) * 80), y: sbxR(coastAt(B.b.cx) + 400) }; esc.push(B); }
   }
-  for (let i = 0; i < clamp(Math.round(2 * (k - 1.5)), 0, 6) && sbxLeft('p') >= 160; i++) {
-    const it = ship('p_lci', M, i, 6, 1810, ['p_rifle', 'p_marine', 'p_mg', 'p_rifle', 'p_at', 'p_eng', 'p_mortar', 'p_rifle'], 2, 0);
-    if (it) w2.push(it);
+  for (let i = 0; i < clamp(Math.round(2 * (k - 1.5)), 0, 6) && sbxLeft('p') >= 160; i++) {   // 大预算：多出来的步兵登陆舰也编进第一波，大部队一次上去
+    const it = ship('p_lci', M, i, 6, 1810, ['p_rifle', 'p_marine', 'p_mg', 'p_rifle', 'p_at', 'p_eng', 'p_mortar', 'p_rifle'], 1, 0);
+    if (it) w1.push(it);
   }
-  if (F) for (let i = 0; i < clamp(Math.round(k - 1.5), 0, 2) && sbxLeft('p') >= 110; i++) { const it = ship('p_lct', F, i + 2, 4, 1600, ['p_rifle', 'p_mg', 'p_rifle', 'p_marine'], 1); if (it) feint.push(it); }
+  if (F && k >= 3) { const it = ship('p_lct', F, 1, 2, 1600, ['p_rifle', 'p_mg', 'p_rifle', 'p_marine'], 1); if (it) feint.push(it); }
   if (cv) for (const [id, t] of [['p_air_cas', 'cas'], ['p_air_ftr', 'fighter'], ['p_air_strike', 'strike'], ['p_air_recon', 'recon'], ['p_air_cas', 'cas'], ['p_air_dive', 'bomber'], ['p_air_strike', 'strike']]) { if (sbxWingN() >= sbxWingCap() || sbxLeft('p') < 80) break; buyAir(id, t); }
   sbxSync();
   const men = w1.reduce((a, it) => a + sbxShipLoad(it).t, 0) * 3;
@@ -658,7 +687,7 @@ function sbxSpawn(it, role, acc) {
     const v = addVehicle(c.side, s.type, x, y, { auto: true });
     if (!v) return;
     if (s.mod) v.mod = { ...(v.mod || {}), ...s.mod };
-    Object.assign(v, { sbxV: c.id }, s.tag ? { sbxTag: s.tag } : {}, it.plan ? { plan: { ...it.plan } } : {});
+    Object.assign(v, { sbxV: c.id }, s.tag ? { sbxTag: s.tag } : {}, it.plan ? (role === 'spectate' && sbxCmd() && c.side === 'p' ? { sbxHint: { ...it.plan } } : { plan: { ...it.plan } }) : {});
   } else if (s.kind === 'ship') {
     const lst = s.ship === 'lst', kind = lst && !SHIP_SPEC.lst ? 'supply' : s.ship, pre = s.pre || 'LA';
     SBX_LBL[pre] = (SBX_LBL[pre] || 0) + 1;
@@ -671,10 +700,9 @@ function sbxSpawn(it, role, acc) {
     if (inf.length) sh.sbxCargo = inf;
     if (vs.length) sh.sbxVeh = vs.map(k => ({ id: k.id, type: k.spawn.type, mod: k.spawn.mod || null, tag: k.spawn.tag || null }));
     if (s.role) { Object.assign(sh, { sbxRole: s.role, load: { teams: 0, eng: 0 } }); if (it.plan) sh.sbxTgt = { x: it.plan.x }; }
-    else if (role === 'spectate' && (it.wave || 1) > 1) {
-      // 观战第二波：有指挥官（commander.js）时不预定登陆点，由其按梯队待命、择机投入；否则由本模块扣留到出口夺取
-      if (!sbxCmd()) Object.assign(sh, { sbxPlan: it.plan ? { ...it.plan } : null, sbxHold: true, auto: false });
-    } else if (it.plan) sh.plan = { ...it.plan };
+    else if (role === 'spectate' && sbxCmd()) { if (it.plan) sh.sbxHint = { ...it.plan }; }   // 观战：指挥官先派侦察机照相、再定登陆点与梯队，部署时的预定点只作参考
+    else if (role === 'spectate' && (it.wave || 1) > 1) Object.assign(sh, { sbxPlan: it.plan ? { ...it.plan } : null, sbxHold: true, auto: false });   // 无指挥官：本模块扣留到出口夺取
+    else if (it.plan) sh.plan = { ...it.plan };
     if (kind === 'assault') sh.form = 'wedge';
     S.groups[s.role ? 5 : kind === 'supply' ? 3 : lst ? 4 : (it.wave || 1) > 1 ? 2 : 1].push(sh.id);
     sh.cat = c.id;
@@ -1252,7 +1280,7 @@ function sbxUI() {
     <div class="sbx-saves" hidden></div>
     <div class="sbx-row"><input type="text" inputmode="numeric" aria-label="地图种子" class="sbx-seedin"><button type="button" data-act="map">新地图</button><span class="sbx-lv" role="radiogroup" aria-label="守军 AI 水平"></span></div>
     <details class="sbx-notes" open><summary>部署思路</summary><p class="sbx-hint">点「AI 帮我部署」，由高级指挥官按地形判读完成部署并说明理由。</p><ol></ol></details>
-    <div class="sbx-hint sbx-keys">左键放置 · 右键 / Delete 移除 · 拖动已放置的条目可移位 · Tab 切换攻守 · Esc 取消 · 滚轮缩放、中键拖动平移</div>
+    <div class="sbx-hint sbx-keys">左键放置（按住拖动可连续放置）· 运兵船自带满编步兵，选兵种点船可逐个替换 · 右键 / Delete 移除 · 拖动已放置的条目可移位 · Tab 切换攻守 · Esc 取消 · 滚轮缩放、中键拖动平移</div>
     <div class="sbx-go"><button type="button" data-act="spectate">观战：AI 对 AI</button><button type="button" class="alt" data-act="command">指挥进攻方</button></div>`;
   ($('stage') || document.body).appendChild(el);
   SBX.el = el;
@@ -1365,7 +1393,7 @@ function sbxPick(id) {
   }
   SBX.pick = id;   // 保持选中，可连续放置多个；右键或 Esc 取消
   sbxInfo(c);
-  sbxMsg((SBX_AT[c.spawn.at] || '') + '（可连续放置，右键或 Esc 取消）');
+  sbxMsg((SBX_AT[c.spawn.at] || '') + '（可连续点放，也可按住左键拖动连放；右键或 Esc 取消）');
 }
 function sbxInfo(c) {
   if (!SBX.el) return;
@@ -1410,6 +1438,18 @@ function sbxRender() {
 }
 
 // ———————————————— 地图上的放置交互 ————————————————
+// 拖动连续放置：哪些放置方式支持，以及两个之间的间距（世界单位，按条目大小）
+const SBX_PAINT = { land: 1, coast: 1, sea: 1, shore: 1, target: 1, cargo: 1, vcargo: 1 };
+function sbxPaintGap(c) {
+  const s = c.spawn;
+  if (s.at === 'cargo' || s.at === 'vcargo') return 24;
+  if (s.at === 'sea') return s.kind === 'cv' ? 170 : s.kind === 'dd' ? 60 : 30;
+  if (s.kind === 'mine') return Math.max(24, (s.r || 20) * 2.2 * (s.n || 1));
+  if (s.ek === 'airfield') return 400;
+  if (s.kind === 'einf') return 30;
+  if (s.kind === 'veh' || s.kind === 'car') return 28;
+  return 26;
+}
 function sbxClick(p) {
   const id = SBX.pick, c = id && catalogById(id);
   if (!c) {   // 未选兵种：点中已放置条目即可拖动
@@ -1426,7 +1466,10 @@ function sbxClick(p) {
   }
   const r = sbxPlace(id, p.x, p.y);
   if (!r.ok) SBX.bad = { x: p.x, y: p.y, t: performance.now() }; else SBX.placedAt = { x: p.x, y: p.y };
-  sbxMsg(r.ok ? (r.it.cargo && c.spawn.kind !== 'ship' ? `已装载到 ${sbxEntry(r.it).name}（${sbxShipLoad(r.it).t + sbxShipLoad(r.it).v} / ${sbxShipCap(r.it).t + sbxShipCap(r.it).v}）` : `已放置：${c.name}${r.note ? '（' + r.note + '）' : ''}`) : r.why, !r.ok);
+  const nl = r.ok && c.spawn.kind === 'ship' ? sbxAutoLoad(r.it) : 0;
+  const crew = nl ? `，自带 ${nl} 个步兵组 ${nl * 3} 人（共 ${sbxCost(r.it)} 点；想换哪个组，选兵种点这艘船即可逐个替换）` : '';
+  if (r.ok && r.old) sbxMsg(`已替换：${sbxEntry(r.it).name}上的${r.old.name} → ${c.name}（${sbxCost(r.it)} 点）`);
+  else sbxMsg(r.ok ? (r.it.cargo && c.spawn.kind !== 'ship' ? `已装载到 ${sbxEntry(r.it).name}（${sbxShipLoad(r.it).t + sbxShipLoad(r.it).v} / ${sbxShipCap(r.it).t + sbxShipCap(r.it).v}）` : `已放置：${c.name}${crew}${r.note ? '（' + r.note + '）' : ''}`) : r.why, !r.ok);
   sbxRender();
 }
 HOOK.pointer.push((e, kind, p) => {
@@ -1450,9 +1493,20 @@ HOOK.pointer.push((e, kind, p) => {
     const c = SBX.pick && catalogById(SBX.pick);
     if (c && c.spawn.at === 'line' && !SBX.line) { const r = sbxCheck(c, p.x, p.y); if (r.ok) { SBX.line = { x: p.x, y: p.y }; SBX.lineDown = { sx: e.clientX, sy: e.clientY }; } else sbxMsg(r.why, true); return true; }
     sbxClick(p);
+    if (c && SBX_PAINT[c.spawn.at]) SBX.paint = { x: p.x, y: p.y, gap: sbxPaintGap(c) };   // 按住左键滑动：沿轨迹连续放置
     return true;
   }
   if (kind === 'move') {
+    if (SBX.paint) {
+      if (!(e.buttons & 1) || !SBX.pick) { SBX.paint = null; return false; }
+      const P = SBX.paint, d = dist(P.x, P.y, p.x, p.y);
+      if (d >= P.gap) {   // 拖得快时沿线补点，间距均匀
+        const n = Math.floor(d / P.gap);
+        for (let k = 1; k <= n; k++) sbxClick({ x: lerp(P.x, p.x, k * P.gap / d), y: lerp(P.y, p.y, k * P.gap / d) });
+        P.x = lerp(P.x, p.x, n * P.gap / d); P.y = lerp(P.y, p.y, n * P.gap / d);
+      }
+      return true;
+    }
     if (SBX.drag) {
       const D = SBX.drag, c = sbxEntry(D.it), r = sbxCheck(c, p.x, p.y, null, null, D.it);
       D.moved = true; D.bad = !r.ok;
@@ -1463,6 +1517,7 @@ HOOK.pointer.push((e, kind, p) => {
     return false;
   }
   if (kind === 'up') {
+    if (SBX.paint) { SBX.paint = null; return true; }
     if (SBX.drag) { const D = SBX.drag; SBX.drag = null; if (D.moved) { sbxMsg(D.bad ? '该处不能放置，已停在最后的有效位置' : `已移动：${sbxEntry(D.it).name}`, D.bad); sbxRender(); } return true; }
     if (SBX.lineDown && SBX.line) {   // 按住拖拽画线
       const L = SBX.lineDown; SBX.lineDown = null;
