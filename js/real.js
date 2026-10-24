@@ -67,8 +67,22 @@ function vehBodyReal(ctx, v, col, a, det, lw, time, vis, enemy) {
 
 // 残骸：烧黑的车体、锈色斑、歪斜的炮塔
 function vehWreckReal(ctx, v, sp, k) {
-  const L = sp.len, B = sp.wid;
+  const L = sp.len, B = sp.wid, M = typeof rlModelOf === 'function' ? rlModelOf(v) : null;
   ctx.save(); ctx.translate(v.x, v.y); ctx.rotate(v.kh ?? v.heading); ctx.scale(k, k);
+  if (M) {   // 按实车外形的烧毁车体：发黑、锈斑、炮塔歪斜
+    const sm = L / M.L;
+    ctx.save(); ctx.scale(sm, sm);
+    ctx.beginPath(); M.hull.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.closePath();
+    ctx.fillStyle = '#25221d'; ctx.fill(); ctx.strokeStyle = 'rgba(0,0,0,.6)'; ctx.lineWidth = px(.8) / k / sm; ctx.stroke();
+    ctx.fillStyle = 'rgba(110,62,34,.55)'; ctx.beginPath(); ctx.ellipse(-M.L * .15, M.B * .1, M.L * .2, M.B * .22, .4, 0, 7); ctx.fill();
+    if (M.tur) {
+      ctx.translate(M.tur.x + .4, (M.tur.y || 0) + .5); ctx.rotate(.7);
+      ctx.beginPath(); M.tur.p.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.closePath(); ctx.fillStyle = '#1c1a16'; ctx.fill(); ctx.stroke();
+      if (M.tur.g) { ctx.fillStyle = '#1c1a16'; ctx.fillRect(M.tur.g[0], -M.tur.g[2] / 2, M.tur.g[1] * .8, M.tur.g[2]); }
+    }
+    ctx.restore(); ctx.restore();
+    return;
+  }
   vehHullPath(ctx, v); ctx.fillStyle = '#25221d'; ctx.fill();
   ctx.fillStyle = 'rgba(110,62,34,.55)'; ctx.beginPath(); ctx.ellipse(-L * .15, B * .1, L * .2, B * .22, .4, 0, 7); ctx.fill();
   ctx.strokeStyle = 'rgba(0,0,0,.6)'; ctx.lineWidth = px(.8) / k; vehHullPath(ctx, v); ctx.stroke();

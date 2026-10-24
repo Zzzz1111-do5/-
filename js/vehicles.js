@@ -1416,9 +1416,13 @@ function vehDraw(ctx, v, x, y, h, aim, vis, time, sel) {
   }
   ctx.save(); ctx.translate(x, y); ctx.rotate(h); ctx.scale(k, k);
   if (!vis) ctx.setLineDash([px(2.5) / k, px(2) / k]);
-  if (typeof realLook === 'function' && realLook()) vehBodyReal(ctx, v, col, a, det, lw, time, vis, enemy);
-  else vehBody(ctx, v, col, a, det, lw, time, vis, enemy);
-  vehTurret(ctx, v, col, a, det, lw, vis, enemy, time);
+  const rm = vis && typeof realLook === 'function' && realLook() && typeof rlModelOf === 'function' ? rlModelOf(v) : null;   // 写实：按实车外形建模（models.js）
+  if (rm) rlVehModel(ctx, v, rm, h, aim, det, lw, a, col, time);
+  else {
+    if (typeof realLook === 'function' && realLook()) vehBodyReal(ctx, v, col, a, det, lw, time, vis, enemy);
+    else vehBody(ctx, v, col, a, det, lw, time, vis, enemy);
+    vehTurret(ctx, v, col, a, det, lw, vis, enemy, time);
+  }
   if (vis && v.swim) {   // 水线：车体半没入水中
     ctx.strokeStyle = rgba('#d4fff0', .35); ctx.lineWidth = lw(.8);
     ctx.beginPath(); ctx.ellipse(0, 0, L * .56, sp.wid * .62, 0, 0, 7); ctx.stroke();
