@@ -23,7 +23,7 @@ function drawCraters() {
 // 屋顶配色：红瓦、灰瓦、蓝色彩钢、水泥平顶、深色瓦
 const ROOF = [[158, 74, 52], [120, 118, 112], [72, 104, 138], [170, 166, 156], [92, 84, 78], [176, 96, 64]];
 function drawBuildings() {
-  if (CELL * R.s < 5) return;
+  if (CELL * R.s < (realLook() ? 2.5 : 5)) return;   // 写实：全图时房屋是一簇簇小色块，像卫星图上的村镇
   if (TOWN_SEED !== TER.seed) {
     TOWN_SEED = TER.seed; TOWN_CELLS = [];
     const hr = rng(TER.seed + 11);

@@ -26,8 +26,8 @@ float fbm(vec2 p, float pw) {
   return s / ${lite ? '.875' : '.96875'};
 }
 // 农田：先分成约 260 单位的田区（泰森格），每个田区一个固定朝向，区内是笔直的矩形地块（行高 30、列宽 30–64），每块一种作物
-// 返回颜色，ed 为到田埂 / 田区边界的距离（世界单位）
-vec3 farm(vec2 w, float pw, out float ed) {
+// 返回颜色；ed 为到田埂 / 田区边界的距离（世界单位），wc 为本块地中心（世界坐标，用来整块决定有没有这块地），fk 为本块随机数
+vec3 farm(vec2 w, float pw, out float ed, out vec2 wc, out float fk) {
   vec2 p = w / 260., i = floor(p), f = fract(p), id0 = i;
   float d1 = 9., d2 = 9.;
   for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) {
@@ -37,14 +37,17 @@ vec3 farm(vec2 w, float pw, out float ed) {
   }
   float zb = (sqrt(d2) - sqrt(d1)) * 130.;   // 约等于到田区边界的距离
   float ang = (h21(id0 + 2.7) - .5) * 1.3, ca = cos(ang), sa = sin(ang);
-  vec2 q = vec2(ca * w.x + sa * w.y, -sa * w.x + ca * w.y) + h22(id0) * 200.;
-  float ry = floor(q.y / 30.), hr = h21(vec2(ry, 7.) + id0), cw = 30. + 34. * hr, qx = q.x + hr * 97.;
-  vec2 id = vec2(floor(qx / cw), ry) + id0 * 31.;
+  vec2 o = h22(id0) * 200., q = vec2(ca * w.x + sa * w.y, -sa * w.x + ca * w.y) + o;
+  float ry = floor(q.y / 30.), hr = h21(vec2(ry, 7.) + id0), cw = 30. + 34. * hr, qx = q.x + hr * 97., cx = floor(qx / cw);
+  vec2 id = vec2(cx, ry) + id0 * 31.;
   float fx = fract(qx / cw), fy = fract(q.y / 30.);
   ed = min(min(min(fx, 1. - fx) * cw, min(fy, 1. - fy) * 30.), zb);
+  vec2 qc = vec2((cx + .5) * cw - hr * 97., (ry + .5) * 30.) - o;
+  wc = vec2(ca * qc.x - sa * qc.y, sa * qc.x + ca * qc.y);
   float k = h21(id + 13.1), k2 = h21(id + 5.3);
-  vec3 c = k < .26 ? vec3(.42, .54, .24) : k < .48 ? vec3(.33, .45, .19) : k < .62 ? vec3(.67, .61, .34) : k < .78 ? vec3(.46, .37, .26) : k < .9 ? vec3(.52, .53, .33) : vec3(.38, .5, .3);
-  c *= .9 + .2 * k2;
+  fk = h21(id + 21.7);
+  vec3 c = k < .26 ? vec3(.41, .52, .24) : k < .48 ? vec3(.33, .44, .2) : k < .62 ? vec3(.6, .57, .34) : k < .78 ? vec3(.45, .38, .27) : k < .9 ? vec3(.5, .51, .32) : vec3(.38, .48, .29);
+  c *= .92 + .16 * k2;
   float rows = sin((k2 < .5 ? q.x : q.y) * 2.4) * (1. - smoothstep(.15, .3, pw));   // 垄沟：只在很近时淡淡可见
   return c * (1. + rows * .03) * (.94 + .12 * vn(w * .09));
 }
@@ -55,8 +58,9 @@ float coastY(float x) {
   return uCoast.x + mix(a.x * 65280. + a.y * 255., b.x * 65280. + b.y * 255., fx - i) / 65535. * uCoast.y;
 }
 #if !LITE
-// 林冠：泰森格里每格一棵树（半径约 2–3.3 世界单位），按格随机决定有无（林缘稀疏）；树冠按西北光源做球面明暗
-vec3 canopy(vec2 w, float dens) {
+// 林冠：泰森格里每格一棵树（半径约 2–3.3 世界单位），按密度随机决定有无（林缘逐渐稀疏成散树）；树冠按西北光源做球面明暗
+// 返回 rgb 树冠颜色、a 覆盖度（树冠外为 0，露出下面的地面）
+vec4 canopy(vec2 w, float dens) {
   vec2 p = w / 5.2, i = floor(p), f = fract(p), br = vec2(0.);
   float best = 9., bh = 0.;
   for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) {
@@ -66,8 +70,20 @@ vec3 canopy(vec2 w, float dens) {
   }
   float inside = 1. - smoothstep(.82, 1.02, best);
   float lit = clamp(.72 + .42 * dot(br, vec2(-.68, -.73)) + .22 * sqrt(max(0., 1. - best * best)), .38, 1.35);
-  vec3 crown = mix(vec3(.15, .26, .1), vec3(.29, .4, .17), bh) * lit;
-  return mix(vec3(.1, .14, .07), crown, inside);
+  return vec4(mix(vec3(.15, .26, .1), vec3(.29, .4, .17), bh) * lit, inside);
+}
+// 礁石 / 山岩：泰森格里每格一块石头（约 3 世界单位），按西北光源做明暗，石缝发暗
+vec3 stones(vec2 w, vec3 base) {
+  vec2 p = w / 3.2, i = floor(p), f = fract(p), br = vec2(0.);
+  float d1 = 9., d2 = 9., bh = 0.;
+  for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) {
+    vec2 g = vec2(float(x), float(y)), r = g + h22(i + g) - f;
+    float d = dot(r, r);
+    if (d < d1) { d2 = d1; d1 = d; br = -r; bh = h21(i + g + 4.); } else if (d < d2) d2 = d;
+  }
+  float crev = smoothstep(0., .18, sqrt(d2) - sqrt(d1));
+  float lit = clamp(.8 + .5 * dot(br, vec2(-.68, -.73)), .55, 1.3);
+  return base * (.82 + .3 * bh) * lit * mix(.55, 1., crev);
 }
 #endif
 void main() {
@@ -84,80 +100,98 @@ void main() {
   float cy = coastY(w.x), slope = (coastY(w.x + 6.) - coastY(w.x - 6.)) / 12.;
   float sd = (cy - w.y) / sqrt(1. + slope * slope) + (vn(w * .07) - .5) * 5.;
   float land = smoothstep(-pw, pw, sd);
+  // 材质边缘：权重加多尺度噪声后取一条窄过渡带（约 1–2 个像素），边缘清楚但形状自然
+  float eb = .03 + pw * .02;
   vec3 c = vec3(0.);
   // —— 陆地 ——（各材质只在权重非零处计算）
   if (land > .001) {
-    float e = A.r, n1 = fbm(w * .02, pw * .02), n2 = vn(w * .11);
-    vec3 grass = mix(vec3(.31, .39, .18), vec3(.5, .53, .3), n1) * (.94 + .12 * n2);
+    float e = A.r, n1 = fbm(w * .02, pw * .02), n2 = vn(w * .11), n3 = pw < 1.2 ? vn(w * .4) : .5;
+    float nz = (n1 - .5) * .32 + (n2 - .5) * .12 + (n3 - .5) * .06;
+    vec3 grass = mix(vec3(.34, .41, .2), vec3(.47, .51, .29), n1) * (.95 + .1 * n2);
     vec3 lc = grass;
-    float fm = smoothstep(.25, .55, A.a * smoothstep(.4, .6, vn(w * .0035 + 3.) + .25 - e * .6));
-    if (fm > .002) {
-      float ed = 99.;
-      lc = mix(lc, farm(w, pw, ed), fm);
-      float hedge = (1. - smoothstep(.6, 1.5 + pw * .5, ed)) * fm * (1. - smoothstep(2.5, 5., pw));
-      lc = mix(lc, mix(vec3(.24, .3, .14), vec3(.55, .5, .38), step(.6, h21(floor(w / 40.)))), hedge * .75);
+    // 农田：整块地决定有无（按地块中心的田地权重），边缘一圈地块颜色偏向荒草，交界是田埂而不是渐隐
+    if (A.a > .03) {
+      float ed = 99., fk = 0.; vec2 wc = w;
+      vec3 crop = farm(w, pw, ed, wc, fk);
+      vec4 Ac = texture2D(uA, wc / WORLD);
+      float fp = Ac.a * smoothstep(.4, .6, vn(wc * .0035 + 3.) + .25 - Ac.r * .6) + (fk - .5) * .3;
+      float on = step(.4, fp), wild = 1. - smoothstep(.4, .75, fp);
+      crop = mix(crop, mix(grass, vec3(.5, .5, .32), .35), wild * .55);
+      lc = mix(lc, crop, on);
+      float hedge = on * (1. - smoothstep(.6, 1.5 + pw * .5, ed)) * (1. - smoothstep(2.5, 5., pw));
+      lc = mix(lc, mix(vec3(.25, .31, .15), vec3(.52, .48, .36), step(.6, h21(floor(wc / 40.)))), hedge * .7);
     }
-    // 丘陵：干草与灌丛
-    float hl = smoothstep(.3, .65, D.r + (n1 - .5) * .4);
-    if (hl > .002) lc = mix(lc, mix(vec3(.44, .45, .27), vec3(.27, .34, .16), smoothstep(.45, .7, fbm(w * .035 + 9., pw * .035))), hl);
+    // 丘陵：偏干的草坡，色差小，边缘随噪声走；近看点缀灌丛（画在林地那一步）
+    float hl = smoothstep(.4 - eb * 2., .4 + eb * 2., D.r + nz);
+    if (hl > .002) lc = mix(lc, mix(vec3(.45, .47, .29), vec3(.39, .43, .24), n2) * (.95 + .1 * n1), hl * .85);
     // 沼泽：橄榄色芦苇地夹水洼
-    float ms = smoothstep(.3, .6, B.b + (n1 - .5) * .3);
+    float ms = smoothstep(.42 - eb, .42 + eb, B.b + nz);
     if (ms > .002) {
-      float pool = smoothstep(.54, .6, fbm(w * .06 + 3., pw * .06));
-      lc = mix(lc, mix(vec3(.33, .37, .22) * (.9 + .2 * vn(w * .5)), vec3(.13, .21, .21), pool), ms);
+      float pool = smoothstep(.54, .58, fbm(w * .06 + 3., pw * .06));
+      lc = mix(lc, mix(vec3(.34, .38, .22) * (.9 + .2 * vn(w * .5)), vec3(.14, .22, .22), pool), ms);
     }
-    // 林地
-    float fo = smoothstep(.25, .55, A.g + (n1 - .5) * .45);
-    if (fo > .002) {
-      vec3 far = mix(vec3(.15, .25, .1), vec3(.24, .34, .15), fbm(w * .05 + 7., pw * .05));
+    // 山地：先是灌木坡（随高程渐深），岩石只在高处、按噪声成片露出，不是整块灰色
+    float mt = smoothstep(.3, .6, D.a + nz * .5);
+    if (mt > .002) lc = mix(lc, mix(vec3(.3, .36, .19), vec3(.24, .3, .15), n2), mt * .8);
+    float rk = max(smoothstep(.42 - eb, .42 + eb, B.g + nz), smoothstep(.55 - eb, .55 + eb, D.a * (.32 + .22 * smoothstep(.85, 1., e)) + (fbm(w * .03 + 5., pw * .03) - .5) * 1.6 + nz * .3));
+    float cl = smoothstep(.4 - eb, .4 + eb, B.a + nz * .5);
+    // 林地：林内是暗色林下地面；林缘的树一棵棵变稀，散树之间露出草地
+    float fv = A.g + nz * 1.1;
+    float fo = smoothstep(.42 - eb, .42 + eb, fv);
+    if (fv > .2 || hl > .05 || mt > .05) {
+      vec3 far = mix(vec3(.16, .26, .1), vec3(.25, .35, .16), fbm(w * .05 + 7., pw * .05));
+      vec3 fl = mix(lc, mix(lc, vec3(.12, .16, .08), fo), 1.);
 #if LITE
-      vec3 fcol = far;
+      lc = mix(lc, far, fo);
 #else
-      vec3 fcol = mix(canopy(w, clamp(A.g * 1.6, 0., 1.)), far, smoothstep(.7, 1.7, pw));
+      float near = 1. - smoothstep(.7, 1.7, pw);
+      vec4 cn = near > 0. ? canopy(w, max(smoothstep(.22, .46, fv), max(hl * .1, mt * .45 * (1. - rk)))) : vec4(0.);
+      lc = mix(mix(lc, far, fo), mix(fl, cn.rgb, cn.a), near);
 #endif
-      lc = mix(lc, fcol, fo);
     }
-    // 岩石 / 山地 / 悬崖
-    float rk = smoothstep(.3, .6, B.g + D.a + (n1 - .5) * .35), cl = smoothstep(.3, .6, B.a);
+    // 岩石 / 山地 / 悬崖：灰褐岩面，近看有石块明暗；海边礁岩靠水一侧被打湿发暗
     if (rk + cl > .002) {
       float rn = fbm(w * .07 + 21., pw * .07);
-      vec3 rock = mix(vec3(.34, .32, .28), vec3(.52, .49, .43), rn);
-      rock = mix(rock, vec3(.3, .35, .2), smoothstep(.55, .72, fbm(w * .025 + 2., pw * .025)) * (1. - D.a * .5) * .7);
-      lc = mix(lc, rock, rk);
-      lc = mix(lc, mix(vec3(.3, .28, .25), vec3(.47, .44, .39), rn), cl);
+      vec3 rock = mix(vec3(.4, .38, .34), vec3(.58, .55, .5), rn);
+#if !LITE
+      if (pw < 1.3) rock = mix(stones(w * mix(1., .45, mt), rock), rock, smoothstep(.6, 1.3, pw));   // 山上的岩块比海边礁石大
+#endif
+      rock = mix(rock, vec3(.32, .37, .21), smoothstep(.6, .74, fbm(w * .025 + 2., pw * .025)) * .5);
+      rock *= mix(.72, 1., smoothstep(0., 6., sd));
+      lc = mix(lc, rock, max(rk, cl));
     }
     // 城镇地面（房屋另画）：硬化地面夹小菜园
-    float tw = smoothstep(.3, .6, A.b + (n2 - .5) * .3);
+    float tw = smoothstep(.42 - eb, .42 + eb, A.b + nz * .8);
     if (tw > .002) {
       vec3 town = mix(vec3(.43, .42, .38), vec3(.52, .5, .45), vn(w * .2));
-      lc = mix(lc, mix(town, vec3(.36, .45, .22), smoothstep(.62, .72, vn(w * .06 + 8.)) * .8), tw);
+      lc = mix(lc, mix(town, vec3(.36, .45, .22), smoothstep(.64, .7, vn(w * .06 + 8.)) * .8), tw);
     }
-    // 沙滩：干沙 → 湿沙
-    float sn = smoothstep(.25, .55, B.r + (n2 - .5) * .25) * smoothstep(-2., 1., sd);
+    // 沙滩：干沙 → 靠水的湿沙
+    float sn = smoothstep(.36 - eb, .36 + eb, B.r + nz * .7) * smoothstep(-2., 1., sd);
     if (sn > .002) {
-      vec3 sand = mix(vec3(.78, .7, .5), vec3(.88, .81, .62), fbm(w * .05 + 13., pw * .05));
-      lc = mix(lc, mix(vec3(.55, .51, .4), sand, smoothstep(1., 9., sd)), sn);
+      vec3 sand = mix(vec3(.78, .7, .5), vec3(.87, .8, .61), fbm(w * .05 + 13., pw * .05));
+      lc = mix(lc, mix(vec3(.58, .53, .41), sand, smoothstep(1., 9., sd)), sn);
     }
     // 山体阴影：高程梯度，西北高处来光
     float dx = texture2D(uA, uv + vec2(1. / GRID.x, 0.)).r - texture2D(uA, uv - vec2(1. / GRID.x, 0.)).r;
     float dy = texture2D(uA, uv + vec2(0., 1. / GRID.y)).r - texture2D(uA, uv - vec2(0., 1. / GRID.y)).r;
     vec3 N = normalize(vec3(-dx * 9., -dy * 9., 1.)), L = normalize(vec3(-.55, -.65, .62));
-    float sh = clamp(dot(N, L) / L.z, .42, 1.4);
-    lc *= mix(1., sh, .9) * (.95 + e * .12);
-    // 河流（含桥下、渡口）与河岸
-    float rvW = C.g, rv = smoothstep(.2, .3, rvW), bank = smoothstep(.1, .2, rvW) * (1. - rv);
-    lc = mix(lc, vec3(.42, .38, .28), bank * .8);
+    float sh = clamp(dot(N, L) / L.z, .55, 1.35);
+    lc *= mix(1., sh, .85) * (.95 + e * .12);
+    // 河流（含桥下、渡口）与河岸；河口一直通到海里
+    float rvW = C.g, rv = smoothstep(.22 - eb * .5, .22 + eb * .5, rvW), bank = smoothstep(.12, .2, rvW) * (1. - rv);
+    lc = mix(lc, vec3(.42, .38, .28), bank * .75);
     if (rv > .002) {
-      vec3 river = mix(vec3(.17, .29, .29), vec3(.24, .37, .35), vn(w * .15 + vec2(0., -t * .6)));
+      vec3 river = mix(vec3(.18, .3, .3), vec3(.25, .37, .35), vn(w * .15 + vec2(0., -t * .6)));
       lc = mix(lc, mix(river, vec3(.42, .5, .44), smoothstep(.2, .5, D.b) * .6), rv);
     }
     // 道路：水泥路面 + 土路肩；桥面两侧压暗
-    float rdW = C.r, rd = smoothstep(.22, .32, rdW), sho = smoothstep(.12, .22, rdW) * (1. - rd);
-    lc = mix(lc, vec3(.47, .42, .33), sho * .7 * (1. - rv));
+    float rdW = C.r, rd = smoothstep(.27 - eb * .5, .27 + eb * .5, rdW), sho = smoothstep(.15, .25, rdW) * (1. - rd);
+    lc = mix(lc, vec3(.47, .42, .33), sho * .6 * (1. - rv));
     float bg = smoothstep(.15, .3, C.b), rdm = max(rd, bg * rv);
     if (rdm > .002) {
       vec3 road = mix(vec3(.6, .58, .54), vec3(.68, .66, .62), vn(w * .3)) * (1. - .08 * smoothstep(.6, 1., vn(w * .9)));
-      lc = mix(lc, mix(vec3(.1, .1, .1), road, smoothstep(.25, .4, rdW)), rdm);
+      lc = mix(lc, mix(road, vec3(.12, .12, .11), bg * rv * (1. - smoothstep(.25, .4, rdW))), rdm);   // 只有桥面两侧有阴影
     }
     // 近看的细碎颗粒（草叶、土粒），像素大于颗粒时淡出
     float gr = 0.;
@@ -174,8 +208,11 @@ void main() {
     float det = 1. - smoothstep(1.5, 4., pw);
     float wv = vn(w * .045 + vec2(t * .12, t * .05)) * .6 + vn(w * .11 - vec2(t * .15, -t * .08)) * .4;
     sea *= .9 + .2 * wv;
-    float gn = vn(w * .13 + t * vec2(.3, .16)) * vn(w * .17 - t * vec2(.2, .27));   // 阳光反光：波长约 7 单位，像素大于半个波长就不画（远看不闪）
-    sea += vec3(.5, .55, .55) * smoothstep(.42, .75, gn) * .35 * (1. - smoothstep(.8, 2., pw)) * smoothstep(15., 120., dpt);
+    sea *= 1. + .05 * sin(dpt * .12 - t * .9 + vn(w * .01) * 6.) * det * smoothstep(20., 80., dpt);   // 涌浪：长条明暗
+    float gn = vn(w * .45 + t * vec2(.6, .3)) * vn(w * .57 - t * vec2(.4, .5));   // 阳光碎光：细小，像素大于光斑时不画
+    sea += vec3(.5, .55, .55) * smoothstep(.5, .78, gn) * .22 * (1. - smoothstep(.3, .7, pw)) * smoothstep(15., 120., dpt);
+    // 河口：入海的泥沙水
+    sea = mix(sea, vec3(.3, .42, .38), smoothstep(.08, .4, C.g) * .55 * smoothstep(45., 0., dpt));
     // 暗礁：水下礁盘 + 一圈白浪
     float rf = smoothstep(.3, .55, C.a + (vn(w * .08) - .5) * .4);
     if (rf > .002) sea = mix(sea, mix(vec3(.22, .57, .56), vec3(.3, .44, .38), smoothstep(.5, .72, fbm(w * .09, pw * .09))), rf * .7);
@@ -184,7 +221,6 @@ void main() {
     float bands = sin(dpt * .42 - t * 1.7 + vn(w * .03) * 7.);
     foam += smoothstep(16., 0., dpt) * smoothstep(.6, .97, bands) * (.45 + .55 * vn(w * .35 + t * .5));
     foam += smoothstep(3.5, 0., dpt) * (.55 + .45 * vn(w * .5 - t * .6));
-    foam += smoothstep(80., 30., dpt) * smoothstep(.93, 1., bands) * .22 * det * smoothstep(.45, .75, vn(w * .05 + t * .08));   // 外海浪涌：断续的白线
     sea = mix(sea, vec3(.9, .93, .92), clamp(foam, 0., 1.) * .85);
     c = mix(sea, c, land);
   }
@@ -256,6 +292,13 @@ function trxWeights() {
     m.sand[i] = t === T.BEACH; m.rock[i] = t === T.ROCKS; m.marsh[i] = t === T.MARSH; m.cliff[i] = t === T.CLIFF;
     m.road[i] = t === T.ROAD || t === T.BRIDGE; m.river[i] = t === T.RIVER || t === T.FORD || t === T.BRIDGE; m.bridge[i] = t === T.BRIDGE;
     m.reef[i] = t === T.REEF; m.hill[i] = t === T.HILL; m.shoal[i] = t === T.SHOAL || t === T.REEF; m.ford[i] = t === T.FORD; m.mount[i] = t === T.MOUNT;
+  }
+  for (let i = 0; i < N - GW; i++) if (m.river[i] && !m.bridge[i] && isWater(ty[i + GW])) {   // 河口：入海处向南延伸 4 格并逐渐变宽
+    const gx = i % GW, gy = (i / GW) | 0;
+    for (let k = 1; k <= 4; k++) for (let dx = -(k >> 1); dx <= k >> 1; dx++) {
+      const x = gx + dx, y = gy + k;
+      if (x >= 0 && x < GW && y < GH) m.river[y * GW + x] = 1;
+    }
   }
   for (const k of ['elev', 'town', 'sand', 'cliff', 'road', 'river', 'bridge', 'ford']) trxBlur(m[k], 1);
   for (const k of ['forest', 'field', 'rock', 'marsh', 'reef', 'hill', 'mount']) trxBlur(m[k], 2);
