@@ -425,6 +425,18 @@ ctE('e_tel', 'M142 海马斯（ATACMS）', 'e', 'arty', 'missile', 90, CT_IC.tel
 ctE('e_ascm', 'NMESIS 岸舰导弹连（NSM）', 'e', 'arty', 'missile', 110, CT_IC.ascm, [4, 1, 10, 10, 0, 7, 0], '岸边的反舰导弹连（4 枚，两枚一组齐射）：掠海飞行打击射程 1600 内的坦克登陆舰、满载登陆舰与驱逐舰；驱逐舰近防炮可拦截，发射后暴露 90 秒。',
   { kind: 'enemy', at: 'coast', ek: 'ascm', n: 4 }, { counters: ['p_lst', 'p_lct', 'dd'], weakTo: ['p_tbm', 'p_air_dive'] });
 
+// ———— 防守方 · 水面舰艇（navy.js；放在本方海岸外的深水区）————
+ctE('e_lcs', 'LCS 独立级濒海战斗舰', 'e', 'naval', 'eship', 110, CT_IC.lcs, [4, 1, 5, 6, 10, 5, 0], '三体船型、40 节高速：8 枚 NSM 海军打击导弹（射程 1300），拉姆近防导弹；没有区域防空，扛不住饱和攻击。',
+  { kind: 'eship', at: 'esea', cls: 'lcs' }, { counters: ['p_lct', 'p_lst', 'p_supply'], weakTo: ['p_dd', 'p_air_strike'] });
+ctE('e_ffg', 'FFG-62 星座级护卫舰', 'e', 'naval', 'eship', 190, CT_IC.dde, [6, 2, 7, 8, 7, 6, 0], '16 枚 NSM 反舰导弹（射程 1300）、32 单元垂发（标准-2 / ESSM）、57 毫米炮、拉姆近防导弹；SPY-6 缩小型雷达。',
+  { kind: 'eship', at: 'esea', cls: 'ffg' }, { counters: ['p_lst', 'p_dd_e', 'p_air_strike'], weakTo: ['p_cl', 'p_air_heavy'] });
+ctE('e_ddg', 'DDG-51 阿利·伯克级驱逐舰（Flight IIA）', 'e', 'naval', 'eship', 260, CT_IC.dd, [8, 3, 8, 9, 7, 8, 0], '宙斯盾舰：SPY-1D 雷达、96 单元垂发（标准-2 / 标准-6 / ESSM 拦截来袭导弹与飞机）、8 枚鱼叉、127 毫米炮、密集阵近防炮。',
+  { kind: 'eship', at: 'esea', cls: 'ddg' }, { counters: ['p_air_strike', 'p_air_heavy', 'p_dd'], weakTo: ['p_cl', 'p_tbm'] });
+ctE('e_ddg3', 'DDG-125 阿利·伯克级驱逐舰（Flight III）', 'e', 'naval', 'eship', 320, CT_IC.ddh, [8, 3, 8, 10, 7, 10, 0], '最新批次：SPY-6 雷达看得更远，标准-6 更多，区域防空最强。',
+  { kind: 'eship', at: 'esea', cls: 'ddg3' }, { counters: ['p_air_strike', 'p_air_heavy', 'p_cl'], weakTo: ['p_ca'] });
+ctE('e_cg', 'CG-47 提康德罗加级巡洋舰', 'e', 'naval', 'eship', 300, CT_IC.cl, [9, 3, 8, 9, 6, 8, 0], '122 单元垂发、两门 127 毫米炮：编队防空指挥舰，耐打。',
+  { kind: 'eship', at: 'esea', cls: 'cg' }, { counters: ['p_air_strike', 'p_air_heavy'], weakTo: ['p_ca', 'p_tbm'] });
+
 // ———— 防守方 · 航空（需要野战机场；每座机场 50 个机位）————
 ctE('e_airfield', '野战机场（含防御体系）', 'e', 'air', 'airfield', 1500, CT_IC.airfield, [9, 1, 6, 6, 0, 8, 26], '纵深 500 以外修建的大型野战机场，自带一整套防御体系：AN/TPS-80 雷达站（对空预警）、跑道两端各一辆 M-SHORAD 防空车、停机坪后方一套 LPWS 陆基密集阵、滑行道外侧两门 M167 火神高炮；两辆巡逻车沿机场外围固定路线巡逻，发现靠近的敌人就迎上去；常驻守备队两个排（6 个组，含 2 个毒刺组）守在外围阵地，专守机场、不被抽调。机场本体：300 米跑道、平行滑行道、五排共 50 个带防爆墙的机位（每排一条机坪滑行道）、机库、塔台与直升机坪（放下时按地形自动定跑道方向，需要一大块平整陆地）。固定翼飞机沿跑道滑跑起降；跑道中弹后 60 秒无法起降，机位上的飞机可能被炸毁，机场被毁则地面飞机全部损失。受损后地勤自动抢修（附近有敌或刚挨炸时停工）；被毁约 4 分钟后可重建到四成耐久，停放的飞机不能恢复。',
   { kind: 'enemy', at: 'land', ek: 'airfield', minDepth: 500 }, { weakTo: ['p_tbm', 'p_air_heavy', 'p_air_strike'] });

@@ -112,6 +112,15 @@ function sbxCheck(c, x, y, x2, y2, ignore) {
   }
   if (!(x > 8 && x < W - 8 && y > 8 && y < H - 8)) return bad('超出地图');
   const t = typeAt(x, y);
+  if (S.lv && S.lv.kind !== 'landing' && s.kind === 'ship') return bad(S.lv.kind === 'naval' ? '海战关不带登陆舰艇' : '陆战关：滩头已巩固，不需要登陆舰艇');
+  if (S.lv && S.lv.kind === 'naval' && (s.at === 'cargo' || s.at === 'vcargo')) return bad('海战关不带登陆部队');
+  if (S.lv && S.lv.kind === 'ground' && (s.at === 'cargo' || s.at === 'vcargo')) {   // 陆战关：步兵、车辆直接放在滩头阵地里
+    const d = coastAt(x) - y;
+    if (!isLand(x, y) || d < 15 || d > LV_ZONE) return bad(`放在滩头阵地里（海岸线以北 ${LV_ZONE} 以内的陆地）`);
+    if (!(TP[t].sp > 0) || !passInf(x, y)) return bad('不可通行的地形');
+    if (S.sbx.items.some(it => it !== ignore && it.side === 'p' && it.x != null && ['cargo', 'vcargo'].includes(sbxEntry(it).spawn.at) && dist(it.x, it.y, x, y) < 12)) return bad('太挤了');
+    return { ok: true };
+  }
   if (s.at === 'cargo' || s.at === 'vcargo') {
     const veh = s.at === 'vcargo';
     let host = null, bd = Math.max(70, typeof px === 'function' && typeof R === 'object' && R.s ? px(26) : 70);
@@ -139,6 +148,13 @@ function sbxCheck(c, x, y, x2, y2, ignore) {
     if (y < STAGING_Y - 100) return bad('只能放在集结海域（虚线以南）');
     if (s.kind === 'cv' && y < STAGING_Y + 40) return bad('航母须停在集结海域纵深（更南）');
     if (S.sbx.items.some(it => it !== ignore && it.side === 'p' && it.x != null && sbxEntry(it).spawn.at === 'sea' && dist(it.x, it.y, x, y) < 16)) return bad('与其他舰艇重叠');
+    return { ok: true };
+  }
+  if (s.at === 'esea') {   // 守方舰艇：本方海岸外、集结海域以北的深水区
+    if (t !== T.DEEP) return bad('只能放在深水区');
+    if (y > STAGING_Y - 120) return bad('守方舰艇放在集结海域虚线以北 120 外');
+    if (y - coastAt(x) < 70) return bad('离海岸太近（70 以外）');
+    if (S.sbx.items.some(it => it !== ignore && it.side === 'e' && it.x != null && sbxEntry(it).spawn.at === 'esea' && dist(it.x, it.y, x, y) < 45)) return bad('与其他舰艇太近（45 以外）');
     return { ok: true };
   }
   if (s.at === 'target') return isLand(x, y) ? { ok: true } : bad('目标须在陆地上');
@@ -779,6 +795,8 @@ function sbxSpawn(it, role, acc) {
     if (s.ek === 'airfield') { const f = sbxAirFit(it); e.rh = f.h; e.rs = f.s; }   // 跑道方向与编辑时的预览一致
     if (s.mod) e.mod = { ...s.mod };
     Object.assign(e, { name: c.name, cat: c.id }, s.vis ? { sbxVis: { ...s.vis } } : {}, s.decoy ? { decoy: true } : {}, s.n ? { n: s.n } : {});
+  } else if (s.kind === 'eship') {
+    if (typeof navyAdd === 'function') navyAdd(s.cls, x, y, c.name);
   } else if (s.kind === 'mine') {
     const r = it.r || s.r, n = s.n || 1;
     for (let k = 0; k < n; k++) S.mines.push({ id: S.nid++, x: x + (k - (n - 1) / 2) * r * 1.25, y: y + (k % 2 ? -r * .35 : 0), r, known: false, clr: s.clr || 0, ...(s.at2 ? { at: true } : {}) });
@@ -856,6 +874,7 @@ function sbxBuild(role) {
   S.sbxRun = { waves: [], sorties: [], depot: false, deck: false, aaT: 0, tagT: 0, waveT: 0, ddPrev: 0, said: {} };
   S.assets = { recon: 0, strike: 0, cas: 0, rline: 1, reserve: 0, smoke: 0 };
   S.eair = null; S.eaLight = null; S.missiles = []; S.msl = null;   // v7：守方航空、导弹从购买重建
+  S.eships = []; S.navy = null; S.afd = null;   // 守方舰艇（navy.js）、机场防御（afdef.js）从购买重建
   S.points = S.points.filter(p => p.key !== 'AF');   // 上一局按机场加入的据点（abn.js）按这一局的机场重建
   S.ab = null; S.abBase = null;
   S.points.forEach(p => { p.owner = 'e'; p.prog = 0; p.contested = false; });
@@ -872,6 +891,7 @@ function sbxBuild(role) {
     try { sbxSpawn(it, role, acc); } catch (e) { console.error('sandbox spawn ' + it.cat, e); }
   }
   if (!afOk && typeof abMakeAF === 'function') abMakeAF();
+  if (S.lv && S.lv.kind === 'ground' && typeof lvGroundSpawn === 'function') lvGroundSpawn(items);   // 陆战关：滩头阵地上的部队、补给站，滩头出口归我
   const ddI = sbxFlag(), cvI = sbxFlagCV();
   if (ddI) {
     const s = sbxEntry(ddI).spawn;
@@ -1366,7 +1386,7 @@ function closeSandbox() {
 }
 
 // ———————————————— 编辑器面板（DOM 注入）————————————————
-const SBX_CATS = { e: ['inf', 'armor', 'arty', 'air', 'fort', 'support'], p: ['inf', 'armor', 'naval', 'air', 'support'] };
+const SBX_CATS = { e: ['inf', 'armor', 'arty', 'naval', 'air', 'fort', 'support'], p: ['inf', 'armor', 'naval', 'air', 'support'] };
 const SBX_LV = [['normal', '普通'], ['hard', '困难'], ['hell', '地狱']];
 const sbxEsc = s => String(s).replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch]);
 const sbxIc = (c, cls) => `<svg viewBox="0 0 24 24" class="ic ${cls || ''}" aria-hidden="true">${c && c.icon || ''}</svg>`;
@@ -1508,7 +1528,9 @@ function sbxGo(role) {
   const n = { p: S.sbx.items.filter(it => it.side === 'p').length, e: S.sbx.items.filter(it => it.side === 'e').length };
   const ships = S.sbx.items.some(it => it.side === 'p' && sbxEntry(it).spawn.kind === 'ship' && (sbxShipLoad(it).t || sbxEntry(it).spawn.ship === 'supply' || sbxShipLoad(it).v));
   const amph = S.sbx.items.some(it => it.side === 'p' && sbxEntry(it).spawn.kind === 'veh');
-  if (!ships && !amph) { sbxMsg('进攻方没有可登陆的部队：先部署登陆舰并装载步兵（或用「AI 帮我部署」）', true); SBX.side = 'p'; sbxRender(); return; }
+  const lvk = S.lv && S.lv.kind, ashore = S.sbx.items.some(it => it.side === 'p' && it.x != null && !it.host && ['cargo', 'vcargo'].includes(sbxEntry(it).spawn.at));
+  if (lvk === 'naval') { if (!S.sbx.items.some(it => it.side === 'p' && ['dd', 'cv'].includes(sbxEntry(it).spawn.kind))) { sbxMsg('海战至少要部署一艘驱逐舰 / 护卫舰或航母', true); SBX.side = 'p'; sbxRender(); return; } }
+  else if (!ships && !amph && !(lvk === 'ground' && ashore)) { sbxMsg(lvk === 'ground' ? '先在滩头阵地（虚线区域）部署步兵或坦克' : '进攻方没有可登陆的部队：先部署登陆舰并装载步兵（或用「AI 帮我部署」）', true); SBX.side = 'p'; sbxRender(); return; }
   const over = ['e', 'p'].find(k => sbxLeft(k) < 0);
   if (over) { SBX.side = over; sbxMsg(`${over === 'p' ? '进攻方' : '防守方'}超出预算 ${-sbxLeft(over)} 点：提高预算或移除部分条目`, true); sbxRender(); return; }
   if (sbxWingN() > sbxWingCap()) { SBX.side = 'p'; sbxMsg(`舰载机 ${sbxWingN()} 架超出航母机库（${sbxWingCap()} 架）：右键移除多余飞机`, true); sbxRender(); return; }
@@ -1956,9 +1978,14 @@ function sbxDrawEdit(time) {
     ctx.beginPath(); for (let x = 0; x <= W; x += 20) { const y = coastAt(x) - 300; x ? ctx.lineTo(x, y) : ctx.moveTo(x, y); } ctx.stroke(); ctx.restore();
   }
   const flag = sbxFlag();
+  if (S.lv && S.lv.kind === 'ground') {   // 陆战关：滩头阵地（攻方部署区）
+    ctx.save(); ctx.fillStyle = rgba(COL.g, .06); ctx.strokeStyle = rgba(COL.g, .4); ctx.lineWidth = px(1); ctx.setLineDash([px(8), px(6)]);
+    ctx.beginPath(); for (let x = 0; x <= W; x += 20) { const y = coastAt(x) - LV_ZONE; x ? ctx.lineTo(x, y) : ctx.moveTo(x, y); } for (let x = W; x >= 0; x -= 20) ctx.lineTo(x, coastAt(x)); ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.restore();
+  }
   for (const it of S.sbx.items) {
     const c = sbxEntry(it);
     if (!c || it.x == null || it === flag || c.spawn.kind === 'cv') continue;
+    if (S.lv && it.side === 'e') continue;   // 闯关：看不到守方部署（只有情报圈，levels.js 画）
     const mine = it.side === side, col = it.side === 'e' ? COL.enemy : COL.g;
     if (it.plan && mine) {   // 预定登陆点
       ctx.save(); ctx.strokeStyle = rgba(COL.g, .3); ctx.lineWidth = px(1); ctx.setLineDash([px(3), px(4)]);

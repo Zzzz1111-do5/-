@@ -121,6 +121,8 @@ const MS_PGM = {
   yj21: { nm: '鹰击-21 高超音速导弹', spd: 900, z: .9, dmg: 60, pen: 4, st: 40, icp: .06, pw: { men: .95, ship: 8, struct: 0, seg: true, R: 42, vb: 14, veh: true } },
   gbu53: { nm: 'GBU-53/B 风暴破坏者小直径炸弹', spd: 200, z: .5, dmg: 30, pen: 3.6, st: 12, icp: .3, pw: { men: .6, ship: 2.5, struct: 0, seg: false, R: 16, vb: 5, veh: true } },   // F-35A 内埋 4 枚：三模导引头，防区外打活动车辆
   agm65: { nm: 'AGM-65 小牛空地导弹', spd: 320, z: .3, dmg: 32, pen: 3.8, st: 10, icp: 0, pw: { men: .5, ship: 3, struct: 0, seg: false, R: 16, vb: 5, veh: true } },   // A-10C：防区外打车辆、舰艇
+  yj12: { nm: '鹰击-12 超音速反舰导弹', spd: 600, z: .2, dmg: 50, pen: 4, st: 30, icp: .1, pw: { men: .8, ship: 7, struct: 0, seg: true, R: 32, vb: 10, veh: true } },   // 轰-6K 挂载，末段 4 马赫掠海
+  yj83k: { nm: '鹰击-83K 空舰导弹', spd: 260, z: .06, dmg: 36, pen: 3.6, st: 18, icp: .3, pw: { men: .6, ship: 4, struct: 0, seg: true, R: 22, vb: 6, veh: true } },   // 歼-35 / 歼-15 挂载，亚音速掠海
   ls6: { nm: '雷石-6 滑翔制导炸弹', spd: 220, z: .55, dmg: 50, pen: 4, st: 30, icp: .35, pw: { men: .9, ship: 6, struct: 0, seg: true, R: 30, vb: 10, veh: true } }   // 歼-36 打击型：500 公斤级，高空投放滑翔，慢、可被近程防空拦截
 };
 function msPgmTgt(t) {
@@ -128,6 +130,7 @@ function msPgmTgt(t) {
   if (t.k === 'veh') { const v = (S.veh || []).find(o => o.id === t.id); return v && !v.dead ? v : null; }
   if (t.k === 'enemy') { const e = S.enemies.find(o => o.id === t.id); return e && !e.dead ? e : null; }
   if (t.k === 'armor') { const a = (S.armor || []).find(o => o.id === t.id); return a && !a.dead ? a : null; }
+  if (t.k === 'eship') return typeof navyById === 'function' ? (o => o && !o.dead ? o : null)(navyById(t.id)) : null;   // 敌水面舰艇（navy.js）
   return null;
 }
 // 发射一枚：T = {x, y, k?, id?}；from = 发射平台说明
@@ -143,8 +146,10 @@ function msPgmFly(m, dt) {
   const d = dist(m.x, m.y, m.tx, m.ty), v = W0.sprint && d < W0.sr ? W0.sprint : W0.spd, st = v * dt;
   m.hd = Math.atan2(m.ty - m.y, m.tx - m.x);
   m.z = W0.z * (d < 120 ? Math.max(.1, d / 120) : Math.min(1, m.t * 2));
+  if (m.tgt && m.tgt.k === 'eship' && typeof navyDefend === 'function' && navyDefend(m)) return;   // 敌舰分层拦截
   if (d > Math.max(8, st)) { m.x += Math.cos(m.hd) * st; m.y += Math.sin(m.hd) * st; return; }
   m.done = true; m.x = m.tx; m.y = m.ty;
+  if (m.tgt && m.tgt.k === 'eship') { if (T && dist(T.x, T.y, m.tx, m.ty) < 24 && typeof navyHit === 'function') navyHit(T, m); else S.fx.push({ kind: 'flash', x: m.tx, y: m.ty, r: 10, life: 0, max: .5, side: m.side }); msStat('pgmHit'); return; }
   impact(m.tx, m.ty, W0.pw, m.side);
   if (T && dist(T.x, T.y, m.tx, m.ty) < 16) {
     if (m.tgt.k === 'veh') vehDamage(T, W0.dmg, W0.pen, m.x0, m.y0, 'atgm');
@@ -180,7 +185,7 @@ function msSam(m, dt) {
 }
 function msSamHit(m, T) {
   const k = m.tgt.k;
-  const samv = m.src === 'samv';   // 弹炮防空车（vehicles.js vehSam）：单发命中率随弹带来（m.pk）
+  const samv = m.src === 'samv' || m.src === 'eship';   // eship：敌舰舰空导弹（navy.js），单发命中率随弹带来   // 弹炮防空车（vehicles.js vehSam）：单发命中率随弹带来（m.pk）
   if (k === 'msl') {   // 拦截来袭导弹
     if (Math.random() < (m.pk || .35)) { T.done = T.icp = true; msPuff(T.x, T.y, m.side, true); msStat('mslIcpt'); msIcpt(T, samv ? '弹炮防空车' : '舰空导弹'); } else msPuff(m.x, m.y, m.side);
     return;
@@ -197,7 +202,7 @@ function msSamHit(m, T) {
   }
   if (Math.random() < base * (1 - clamp(m.sup || 0, 0, 100) / 150) * flare) {
     msStat('aaKill');
-    if (k === 'plane') { if (typeof airLost === 'function') airLost(T, `${typeof airName === 'function' ? airName(T.kind, T.v) : '飞机'}被敌${aam ? '歼击机空空导弹' : samv ? '弹炮防空车' : '单兵防空导弹'}击落`); }
+    if (k === 'plane') { if (typeof airLost === 'function') airLost(T, `${typeof airName === 'function' ? airName(T.kind, T.v) : '飞机'}被敌${aam ? '歼击机空空导弹' : m.src === 'eship' ? '舰空导弹' : samv ? '弹炮防空车' : '单兵防空导弹'}击落`); }
     else if (typeof eaLost === 'function') eaLost(T, aam ? (m.lr ? 'aaml' : 'aam') : samv ? 'samv' : m.src === 'dd' || m.src === 'esc' ? 'sam' : 'manpads');
     if (aam && typeof awScore === 'function') awScore(m.side);
   } else msPuff(m.x, m.y, m.side);

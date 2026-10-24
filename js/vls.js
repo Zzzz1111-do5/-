@@ -51,6 +51,7 @@ function vlsShips() {
 const vlsLeft = k => vlsShips().reduce((a, s) => a + ((vlsOf(s.o) || {})[k] || 0), 0);
 // 打 (x, y) 用哪种弹：w = 'lacm'（自动选） / cj10 / yj18 / yj21；kind = 目标种类（可空）
 function vlsWeapon(w, kind) {
+  if (kind === 'eship') return (w === 'yj21' || w === 'yj18') && vlsLeft(w) > 0 ? w : ['yj18', 'yj21'].find(k => vlsLeft(k) > 0) || null;   // 打舰只用反舰导弹
   if (w !== 'lacm') return w;
   const top = ['ascm', 'tel', 'airfield'].includes(kind) || (kind === 'coastal' && typeof S === 'object' && S.ships.some(s => alive(s) && s.load && s.load.teams > 0));
   const coast = kind === 'coastal' || kind === 'ascm' || kind === 'aa';   // 沿岸硬目标、有防空掩护的目标：超音速的鹰击-18A 更难被拦
@@ -70,6 +71,7 @@ function vlsTgtAt(x, y) {
   for (const e of S.enemies) if (!e.dead) { const d = dist(e.x, e.y, x, y); if (d < bd) { bd = d; best = { k: 'enemy', id: e.id, x: e.x, y: e.y, kind: e.kind }; } }
   for (const v of S.veh || []) if (v.side === 'e' && !v.dead) { const d = dist(v.x, v.y, x, y); if (d < bd) { bd = d; best = { k: 'veh', id: v.id, x: v.x, y: v.y }; } }
   for (const a of S.armor || []) if (!a.dead) { const d = dist(a.x, a.y, x, y); if (d < bd) { bd = d; best = { k: 'armor', id: a.id, x: a.x, y: a.y }; } }
+  for (const e of S.eships || []) if (!e.dead) { const d = dist(e.x, e.y, x, y); if (d < Math.max(bd, 60)) { bd = d; best = { k: 'eship', id: e.id, x: e.x, y: e.y, kind: 'eship' }; } }   // 敌水面舰艇（navy.js）
   return best;
 }
 // 发射：返回实际发射枚数

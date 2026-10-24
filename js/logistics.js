@@ -196,6 +196,7 @@ const victoryHeld = () => S.points.some(p => p.key === 'HQ' && p.owner === 'p') 
 
 function checkEnd(dt) {
   if (S.over) return;
+  if (S.lv && S.lv.kind === 'naval') return;   // 海战关：胜负由 navy.js 判（击沉敌舰吨位）
   if (victoryHeld()) {
     if (!S.holdT) log(`已控制指挥所与七成据点分值，坚守 ${HOLD} 秒即胜利`, 'good');
     S.holdT += dt;

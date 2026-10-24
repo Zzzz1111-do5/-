@@ -494,6 +494,7 @@ function flyPlane(p, dt) {
       if (p.leg >= p.wp.length) airSet(p, 'rtb');
     } else if (p.kind === 'strike' || p.kind === 'bomber') {
       if (p.hold && !p.dropped && airHoldP(p, dt, speed)) return;   // 突击群：防空圈外待机
+      if (p.asm && !p.dropped && typeof navyPlaneAsm === 'function' && navyPlaneAsm(p, dt, speed)) return;   // 挂反舰导弹打敌舰（navy.js）
       const dive = p.kind === 'bomber' && p.v === 'dive', heavy = p.kind === 'bomber' && !dive, std = p.kind === 'strike' && M.std;   // 歼-35：防区外投放精确制导弹药
       if (!p.dropped) {
         const df = Math.abs(airAng(Math.atan2(p.ty - p.y, p.tx - p.x) - p.heading)), d = airSteer(p, p.tx, p.ty, dt);
