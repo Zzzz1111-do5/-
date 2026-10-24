@@ -8,6 +8,9 @@
 // ④ 步坦协同：守方车辆绑定反冲击连 / 机动中的预备连（执行器 tf.js vehEscort 双方共用），轴线 = 反冲击目标或威胁方向（a4Axis）
 // ⑤ 远方抽调：判明敌主攻方向后，从平静的远方据点抽出多余守备（每处至少留一个组、最多抽一半），凑够 3 组 6 人以上才编成机动支队，
 //    沿内线开到受威胁据点后方、敌人看不见的集结地域，到齐后转为 ① 的待机预备队统一投入；凑不够就不派，不逐次添油
+// 协调规则（v12）：集结地 / 待机地选在敌直射火力（140）与已知敌人 190 以外、掩护好的地方（a4Stage），不在敌眼皮底下扎堆；
+//   待机的预备队在据点被突入、守备被压制或兵力明显不足时就进入阵地（不等失守再反冲击）；一个连接到任务后 40 秒内不改派（u.a4T）；
+//   远方抽调先在抽出地域就近集合（a4Draw st = asm），到齐了再沿避开敌人的路线成队形行军，不各走各的
 // 接口：ai2.js 写 thr、询问 a4Busy / a4OwnsPt / a4Focus；ai3.js 抽袭扰分队前询问 a4Busy；front.js 战线图调 frDrawPlans
 // 状态（纯 JSON）：S.ai.co = { v, thr: {据点: [fx, fy, 威胁, 120 内敌人数]}, ca: [反冲击], res: {连队 id: 机动}, fl: {小组 id: 侧射}, dr: {支队 id: 抽调行军}, cool: {}, thinkT, bindT }
 const a4On = () => !!S && !(S.v7off && S.v7off.co);
@@ -86,8 +89,27 @@ function a4Move(u, x, y, face, t = 'move') {
   if (!ts.length) return false;
   const sl = formationSlots(ts.length, x, y, face);
   ts.forEach((q, i) => { aiGo(q, sl[i][0], sl[i][1], t, x, y); q.px = null; });
-  u.face = face;
+  u.face = face; u.a4T = S.t;
   return true;
+}
+const a4Fresh = u => S.t - (u.a4T ?? -99) < 40;   // 刚接到任务：40 秒内不改派
+// 已知（守方看得见）的敌人：步兵组与车辆
+const a4Foes = () => [...S.teams.filter(q => q.side === 'p' && q.men.length && spotted(q.x, q.y)), ...(S.veh || []).filter(v => v.side === 'p' && !v.dead && !v.lst && spotted(v.x, v.y))];
+const a4FoeD = (F, x, y) => F.reduce((m, o) => Math.min(m, dist(o.x, o.y, x, y)), 1e9);
+// 集结 / 待机地：据点背向威胁一侧 r0–r1、可通行、离已知敌人 190 以外（敌步兵直射 140、机枪再远一些）、掩护好、离海岸 200 以外；
+// 都不理想时取离敌最远的一处
+function a4Stage(p, I, r0 = 200, r1 = 300) {
+  const away = Math.atan2(p.y - I.fy, p.x - I.fx), F = a4Foes();
+  let best = null, bs = -Infinity;
+  for (let i = 0; i < 30; i++) {
+    const a = away + (i / 30 - .5) * 2.6, r = r0 + (i % 5) / 4 * (r1 - r0);
+    const x = clamp(p.x + Math.cos(a) * r, 20, W - 20), y = clamp(p.y + Math.sin(a) * r, 20, H - 20);
+    if (!passInf(x, y)) continue;
+    const fd = a4FoeD(F, x, y);
+    const sc = (1 - coverAt(x, y)) * 2 - (fd < 190 ? 5 : fd < 260 ? 1.5 : 0) + Math.min(fd, 400) / 400 - (coastAt(x) - y < 200 ? 1.5 : 0) - (r - r0) / 300 + Math.random() * .2;
+    if (sc > bs) { bs = sc; best = { x, y }; }
+  }
+  return best || stagingSpot(p, I);
 }
 
 // —— ① 预备队整连机动 ——
@@ -100,12 +122,16 @@ function a4Res(C, info) {
       if ((c && dist(c[0], c[1], r.x, r.y) < 45) || ts.every(q => q.order.t === 'hold') || S.t - r.t > 150) { r.st = 'stand'; r.t = S.t; }
       continue;
     }
-    // 待机：据点吃紧（120 内敌兵力超过守备 1.3 倍）→ 进入阵地加强；压力消失 60 秒 → 就地转入防御
-    if (p.owner === 'e' && p.prog < .25 && I && I.near >= Math.max(3, I.def * 1.3)) {
+    // 待机：据点吃紧就进入阵地加强，不等失守——敌已突入（占领进度 > 0）、当面之敌不少于守备（只算本据点自己的守备，不算待机的连）、
+    //   守备被压制（平均压制 > 50）或守备只剩不到一个组而敌人在逼近；压力消失 60 秒 → 就地转入防御
+    const gar = S.teams.filter(q => q.side === 'e' && q.men.length && q.obj === r.key && q.u !== +id && !C.res[q.u] && !(unitOf(q) && unitOf(q).state === 'rout'));
+    const gm = a4Men(gar), gsup = gar.length ? gar.reduce((a, q) => a + q.sup, 0) / gar.length : 0;
+    if (p.owner === 'e' && p.prog < .25 && I && I.th >= 1.5 && (p.prog > .02 || I.near >= Math.max(3, gm * .8) || gsup > 50 || (gm < 3 && I.th >= 3))) {
       delete C.res[id];
-      for (const q of ts) q.px = null;
+      const T = C.thr[r.key], fx = T ? T[0] : p.x, fy = T ? T[1] : p.y + 200, l = Math.hypot(fx - p.x, fy - p.y) || 1;
+      a4Move(u, p.x + (fx - p.x) / l * 20, p.y + (fy - p.y) / l * 20, Math.atan2(fy - p.y, fx - p.x));   // 整连进入阵地，到位后由 ai2 按工事布位
       a4Stat('a4Reinf');
-      chatSay('e', `命令：${a4Name(u)}进入${p.name}阵地，加强防御。`, { kind: 'order', at: p, key: 'a4rf' + id, gap: 60, lv: 1 });
+      chatSay('e', `命令：${a4Name(u)}整连进入${p.name}阵地加强防御${p.prog > .02 ? '，把突入之敌打出去' : ''}。`, { kind: 'order', at: p, key: 'a4rf' + id, gap: 60, lv: 1 });
       continue;
     }
     if (I && I.th >= 1.5) r.calm = S.t;
@@ -117,7 +143,7 @@ function a4Res(C, info) {
   const need = k => { const I = info[k]; return I ? (I.th * bias(k) + 1) / (I.def + 1) * Math.sqrt(I.p.vp || 1) : 0; };
   let best = null, bs = .5;
   for (const u of S.units) {
-    if (u.side !== 'e' || u.kind !== 'inf' || u.role !== 'reserve' || u.state === 'rout' || C.res[u.id] || C.dr[u.id] || a4Plan(C, u.id)) continue;   // 行军中的机动支队到齐前不改派
+    if (u.side !== 'e' || u.kind !== 'inf' || u.role !== 'reserve' || u.state === 'rout' || C.res[u.id] || C.dr[u.id] || a4Plan(C, u.id) || a4Fresh(u)) continue;   // 行军中的机动支队到齐前、刚接到任务的连 40 秒内不改派
     const ts = a4Ts(u), c = a4Cent(u);
     if (!c || a4Men(ts) < 4 || ts.some(q => q.raid || q.role !== 'reserve' || a4Held(q) || C.fl[q.id])) continue;
     const cur = need(u.obj) * 1.5;
@@ -131,13 +157,25 @@ function a4Res(C, info) {
     }
   }
   if (!best) return;
-  const { u, k, I, ts } = best, p = I.p, nm = a4Name(u), sp = stagingSpot(p, I), face = Math.atan2(I.fy - sp.y, I.fx - sp.x);
+  const { u, k, I, ts } = best, p = I.p, nm = a4Name(u), sp = a4Stage(p, I, 150, 240), face = Math.atan2(I.fy - sp.y, I.fx - sp.x);   // 待机地：据点后方、敌直射火力以外
   for (const q of ts) q.obj = k;
   u.obj = k;
   if (!a4Move(u, sp.x, sp.y, face)) return;
   C.res[u.id] = { st: 'move', key: k, x: Math.round(sp.x), y: Math.round(sp.y), t: S.t };
   a4Stat('a4Res');
   chatSay('e', `命令：${nm}整连（${ts.length} 组 ${a4Men(ts)} 人）向${p.name}后方机动待命，准备加强防御或反冲击。`, { kind: 'order', at: p, key: 'a4res' + u.id, gap: 60, lv: 1 });
+}
+
+// 外来的整连（第 101 空降师机降落地、集合完毕）：据点还在手里 → 开到据点后方待机（①），吃紧时整连进入阵地；
+// 已失守 / 被突入 → 不设冷却，留给反冲击计划（②）就近抽用
+function a4Adopt(u, key) {
+  const C = a4C(), p = ptByKey(key);
+  if (!C || !u || !p) return false;
+  if (p.owner === 'p' || p.prog > .25) { u.a4T = -99; return true; }
+  const T = C.thr[key], I = { p, fx: T ? T[0] : p.x, fy: T ? T[1] : p.y + 200 }, sp = a4Stage(p, I, 150, 240);
+  if (!a4Move(u, sp.x, sp.y, Math.atan2(I.fy - sp.y, I.fx - sp.x))) return false;
+  C.res[u.id] = { st: 'move', key, x: Math.round(sp.x), y: Math.round(sp.y), t: S.t };
+  return true;
 }
 
 // —— ⑤ 远方抽调 ——
@@ -186,7 +224,7 @@ function a4DrMarch(r, u, ts) {
   for (const q of ts) if (q.drS && q.order.t === 'hold' && dist(q.x, q.y, q.drS[0], q.drS[1]) > 35 && S.t - (q.stopT ?? -99) > 15 && S.t - (q.drT ?? -99) > 10 && q.sup < 50) { aiGo(q, q.drS[0], q.drS[1], 'move', wx, wy); q.drT = S.t; }
   if (r.wi < WP.length - 1) {
     const ok = ts.filter(q => q.drS && dist(q.x, q.y, q.drS[0], q.drS[1]) < 30).length;
-    if (ok >= Math.ceil(ts.length * .75) || S.t - r.wT > 25) r.wi++;
+    if (ok >= Math.ceil(ts.length * .75) || S.t - r.wT > 40) r.wi++;   // 等跟上的组：四分之三到位才跃进下一个路标
   }
   // 防空车：队形后方中央
   const rx = c[0] - Math.cos(face) * 50, ry = c[1] - Math.sin(face) * 50;
@@ -201,6 +239,14 @@ function a4Draw(C, info) {
   for (const id in C.dr) {
     const r = C.dr[id], u = UNIT_MAP.get(+id), ts = u ? a4Ts(u) : [], p = ptByKey(r.key);
     if (!u || !ts.length || u.state === 'rout' || !p) { delete C.dr[id]; continue; }
+    if (r.st === 'asm') {   // 集合：八成的组到了集合点 70 以内（或 50 秒）再出发，沿避开敌人的路线行军
+      const inA = ts.filter(q => dist(q.x, q.y, r.ax, r.ay) < 70).length;
+      if (inA < Math.ceil(ts.length * .8) && S.t - r.t < 50) continue;
+      Object.assign(r, { st: 'march', t: S.t, wi: 0, wIs: null, wp: a4Route(r.ax, r.ay, r.x, r.y), T: Math.round(dist(r.ax, r.ay, r.x, r.y) / 9 + 45) });
+      a4Stat('a4DrAsm');
+      chatSay('e', `报告：${a4Name(u)}已在${a4Where(r.ax, r.ay)}集合（${inA} 组），成楔形队形出发。`, { kind: 'report', at: { x: r.ax, y: r.ay }, key: 'a4asm' + id, gap: 60, lv: 2 });
+      continue;
+    }
     a4DrMarch(r, u, ts);
     const at = ts.filter(q => dist(q.x, q.y, r.x, r.y) < 70), fin = (r.wi || 0) >= (r.wp ? r.wp.length - 1 : 0);
     if (!((fin && at.length >= Math.max(Math.min(3, ts.length), Math.ceil(ts.length * .75))) || (S.t - r.t > r.T && at.length >= Math.ceil(ts.length / 2)) || S.t - r.t > r.T * 1.8)) continue;
@@ -222,8 +268,10 @@ function a4Draw(C, info) {
   const K = ranked[0].I, K2o = ranked.find(o => o.I !== K && o.s >= .5 && dist(o.I.p.x, o.I.p.y, K.p.x, K.p.y) > 300), K2 = K2o ? K2o.I : null;
   // 步兵池：平静据点（威胁 < 1.5、近处无敌、离主攻方向 250 以外）的守备组，每点至少留一个（指挥所两个），最多抽一半，合计不超过 9 组
   const pick = [], from = [];
-  const donors = Object.values(info).filter(J => J !== K && J.p.owner === 'e' && J.p.prog < .1 && J.th < 1.5 && !J.near && dist(J.p.x, J.p.y, K.p.x, K.p.y) > 250)
+  const donors0 = Object.values(info).filter(J => J !== K && J.p.owner === 'e' && J.p.prog < .1 && J.th < 1.5 && !J.near && dist(J.p.x, J.p.y, K.p.x, K.p.y) > 250)
     .sort((a, b) => dist(a.p.x, a.p.y, K.p.x, K.p.y) - dist(b.p.x, b.p.y, K.p.x, K.p.y));
+  // 只从同一片地域抽（离最近的抽出据点 520 以内）：能就近集合成队，不从全图各处各走各的
+  const donors = donors0.filter(J => dist(J.p.x, J.p.y, donors0[0].p.x, donors0[0].p.y) <= 520);
   for (const J of donors) {
     const g = S.teams.filter(q => q.side === 'e' && q.obj === J.p.key && q.role === 'garrison' && q.men.length >= 2 && !q.hold && !q.raid && q.order.t !== 'retreat' && !a4Busy(q) && !(unitOf(q) && unitOf(q).state === 'rout'));
     const take = Math.min(g.length - (J.p.key === 'HQ' ? 2 : 1), Math.floor(g.length / 2));
@@ -260,21 +308,42 @@ function a4Draw(C, info) {
   const ok = groups.filter(g => g.big ? g.ts.length >= 3 && a4Men(g.ts) >= 6 : g.ts.length >= 2 && g.gv.length + g.av.length >= 1);
   if (!ok.length) return;   // 凑不够一个像样的支队：不派（不逐次添油）
   const txt = [];
+  const F = a4Foes();
+  const made = [];
   for (const g of ok) {
-    const T = g.K, sp = g.flank ? a4Rally(T.p, { fx: T.fx + 180, fy: T.fy }) : a4Rally(T.p, T), face = Math.atan2(T.fy - sp.y, T.fx - sp.x), n = (C.drN = (C.drN || 0) + 1);
+    const T = g.K;
+    // 集合点：抽出各组的中心附近、可通行、离已知敌人 260 以外
+    const gx = g.ts.reduce((a, q) => a + q.x, 0) / g.ts.length, gy = g.ts.reduce((a, q) => a + q.y, 0) / g.ts.length;
+    let A = null, ab = -Infinity;
+    for (let i = 0; i < 20; i++) {
+      const a = i * 2.4, rr = i ? 20 + i * 6 : 0, x = clamp(gx + Math.cos(a) * rr, 20, W - 20), y = clamp(gy + Math.sin(a) * rr, 20, H - 20);
+      if (!passInf(x, y)) continue;
+      const sc = Math.min(a4FoeD(F, x, y), 400) / 100 - rr / 60 + (1 - coverAt(x, y));
+      if (sc > ab) { ab = sc; A = { x, y }; }
+    }
+    if (!A) continue;
+    // 集结地域与路线：路线经过已知敌人 200 以内就换到侧翼的集结地域；都不行就不派
+    let sp = null, route = null;
+    for (const cand of [g.flank ? a4Rally(T.p, { fx: T.fx + 180, fy: T.fy }) : a4Rally(T.p, T), a4Rally(T.p, { fx: T.fx - 220, fy: T.fy }), a4Rally(T.p, { fx: T.fx + 220, fy: T.fy })]) {
+      const wp = a4Route(A.x, A.y, cand.x, cand.y);
+      if (wp.every(([x, y]) => a4FoeD(F, x, y) > 200)) { sp = cand; route = wp; break; }
+    }
+    if (!sp) { a4Stat('a4DrBlocked'); continue; }
+    const face = Math.atan2(T.fy - sp.y, T.fx - sp.x), n = (C.drN = (C.drN || 0) + 1);
     const u = addUnit('e', 'inf', { role: 'reserve', obj: T.p.key, face, form: 'wedge' });
     u.a4n = g.big ? `机动支队${n > 1 ? n : ''}` : `快速分队${n > 1 ? n : ''}`;
-    const c = [g.ts.reduce((a, q) => a + q.x, 0) / g.ts.length, g.ts.reduce((a, q) => a + q.y, 0) / g.ts.length];
     for (const q of g.ts) Object.assign(q, { u: u.id, role: 'reserve', obj: T.p.key, px: null, drS: null });
     g.gv.forEach((v, k) => { v.buddy = u.id; v.esc = { back: (typeof VEH_BACK7 === 'object' && VEH_BACK7[v.type]) || 45, lat: (k - (g.gv.length - 1) / 2) * 34, mode: 'travel' }; v.cmd = null; });
-    const far = Math.max(...g.ts.map(q => dist(q.x, q.y, sp.x, sp.y)));
-    C.dr[u.id] = { st: 'march', key: T.p.key, x: Math.round(sp.x), y: Math.round(sp.y), face, t: S.t, T: Math.round(far / 9 + 45), from, wp: a4Route(c[0], c[1], sp.x, sp.y), wi: 0, aa: g.av.map(v => v.id), vn: g.gv.length + g.av.length, big: g.big };
+    C.dr[u.id] = { st: 'asm', ax: Math.round(A.x), ay: Math.round(A.y), key: T.p.key, x: Math.round(sp.x), y: Math.round(sp.y), face, t: S.t, T: 999, from, wp: route, wi: 0, aa: g.av.map(v => v.id), vn: g.gv.length + g.av.length, big: g.big };
+    a4Move(u, A.x, A.y, face);   // 先就近集合
+    made.push(g);
     a4Stat('a4Draw'); a4Stat('a4DrMen', a4Men(g.ts)); if (g.gv.length) a4Stat('a4DrVeh', g.gv.length); if (g.av.length || g.ts.some(isAA)) a4Stat('a4DrAA');
     const tag = [g.ts.some(isAT) && '反坦克组', g.ts.some(isAA) && '毒刺防空组'].filter(Boolean), vs = {};
     for (const v of [...g.gv, ...g.av]) vs[vehModel(v)] = (vs[vehModel(v)] || 0) + 1;
     const comp = [`步兵 ${g.ts.length} 组 ${a4Men(g.ts)} 人${tag.length ? `（含${tag.join('、')}）` : ''}`, ...Object.keys(vs).map(k => `${k} ${vs[k]} 辆`)].join('、');
-    txt.push(`${u.a4n}：${comp}，成楔形队形${g.av.length ? '、防空车随后掩护' : g.ts.some(isAA) ? '、毒刺组随队对空' : ''}，经内线向${T.p.name}后方${a4Where(sp.x, sp.y)}${g.flank ? '侧翼' : ''}集结`);
+    txt.push(`${u.a4n}：${comp}，先在${a4Where(A.x, A.y)}集合，再成楔形队形${g.av.length ? '、防空车随后掩护' : g.ts.some(isAA) ? '、毒刺组随队对空' : ''}，避开敌人经内线向${T.p.name}后方${a4Where(sp.x, sp.y)}${g.flank ? '侧翼' : ''}集结`);
   }
+  if (!made.length) return;
   C.drT = S.t + 60;
   chatSay('e', `判断：${K.p.name}方向吃紧（当面之敌约 ${Math.max(K.near, Math.round(K.th))} 人），${from.join('、') || '后方'}方向未见敌情。决心：从${from.join('、') || '后方'}抽调兵力，按步、坦、防空合成编组——${txt.join('；')}。到齐后统一投入，不逐次添油。`, { kind: 'plan', at: K.p, lv: 1 });
 }
@@ -295,7 +364,7 @@ function a4Ca(C, info, D) {
       const ts = a4Ts(u), c = a4Cent(u);
       if (!c || a4Men(ts) < 3 || ts.some(q => q.raid || a4Held(q) || C.fl[q.id])) continue;
       const r = C.res[u.id], stand = r && r.key === k, d = dist(c[0], c[1], p.x, p.y);
-      if (!stand && (u.role !== 'reserve' || d > 800 || (r && info[r.key] && info[r.key].th >= 4 && info[r.key].p.owner === 'e'))) continue;   // 正在别处顶住压力的不抽
+      if (!stand && (u.role !== 'reserve' || d > 800 || a4Fresh(u) || (r && info[r.key] && info[r.key].th >= 2 && info[r.key].p.owner === 'e'))) continue;   // 正在别处顶住压力的、刚接到别的任务的不抽
       cand.push({ u, d: stand ? -1 : d, men: a4Men(ts) });
     }
     cand.sort((a, b) => a.d - b.d);
@@ -303,7 +372,7 @@ function a4Ca(C, info, D) {
     let men = 0;
     for (const o of cand) { if (men >= need * 1.2 || pick.length >= 3) break; pick.push(o); men += o.men; }
     if (!pick.length || men < need * .6) { C.cool[k] = S.t + 20; continue; }   // 兵力不够：交给 ai2 的仓促反击 / 坚守，20 秒后再看
-    const sp = stagingSpot(p, I), face = Math.atan2(p.y - sp.y, p.x - sp.x);
+    const sp = a4Stage(p, I, 200, 300), face = Math.atan2(p.y - sp.y, p.x - sp.x);   // 出发阵地：敌直射火力以外，不在敌眼皮底下扎堆
     // 集结时限按最远一个连的行军路程估算（守军步兵约 9–14 每秒），不在部队还在路上时就放弃
     const far = Math.max(...pick.map(o => { const cc = a4Cent(o.u); return cc ? dist(cc[0], cc[1], sp.x, sp.y) : 0; }));
     const c = { id: S.nid++, key: k, st: 'mass', t: S.t, units: pick.map(o => o.u.id), nm: pick.map(o => a4Name(o.u)), need, men0: men, x: Math.round(sp.x), y: Math.round(sp.y), end: null,
@@ -323,6 +392,9 @@ function a4CaTick(C, c, info, A) {
     if (!lost) { a4CaEnd(C, c, 'cancel', p, us); return; }   // 敌已退出 / 被仓促反击夺回
     const am = a4Men(live.filter(q => dist(q.x, q.y, c.x, c.y) < 90)), mT = c.massT || A.mass;
     if (men < c.need * .45 && S.t - c.t > 15) { a4CaEnd(C, c, 'weak', p, us, 0, am); return; }   // 途中伤亡、溃散，已凑不够
+    // 在出发阵地挨打（多数人到了以后又伤亡三成以上）：人够就立即发起，不够就撤，不站着挨打
+    if (c.arr == null && am >= men * .6) c.arr = men;
+    if (c.arr != null && men < c.arr * .7) { if (am >= c.need * .6) a4CaGo(C, c, p, info[c.key]); else a4CaEnd(C, c, 'weak', p, us, 0, am); return; }
     if (c.st === 'mass') {
       if (am < c.need * .5 && S.t - c.t < mT * .6) return;
       c.st = 'prep'; c.prepT = S.t;
@@ -385,13 +457,32 @@ function a4CaEnd(C, c, why, p, us, lostN = 0, am = 0) {
     if (why === 'fail') a4Move(u, c.x, c.y, face, 'retreat');
     C.res[u.id] = { st: why === 'fail' ? 'move' : 'stand', key: c.key, x: c.x, y: c.y, t: S.t };
   }
+  if (why === 'weak') {   // 兵力不足：转到敌人下一步最可能攻击的、还在手里的邻近据点后方待机（吃紧时整连进入阵地，①）；没有就撤到敌火力以外
+    const T = C.thr[c.key], fx = T ? T[0] : p.x, fy = T ? T[1] : p.y + 200;
+    let nx = null, nb = -Infinity;
+    for (const o of S.points) {
+      if (o.owner !== 'e' || o.prog > .25 || o.key === c.key) continue;
+      const d = dist(o.x, o.y, p.x, p.y);
+      if (d > 650) continue;
+      const sc = (o.vp || 1) * 1.2 - d / 250 + ((C.thr[o.key] || [0, 0, 0])[2] > 1.5 ? 1 : 0);
+      if (sc > nb) { nb = sc; nx = o; }
+    }
+    const tp = nx || p, TT = C.thr[tp.key], I = { fx: TT && TT[2] > .5 ? TT[0] : fx, fy: TT && TT[2] > .5 ? TT[1] : fy }, s2 = a4Stage(tp, I, nx ? 150 : 280, nx ? 240 : 400), f2 = Math.atan2(I.fy - s2.y, I.fx - s2.x);
+    for (const u of us) if (u.state !== 'rout' && a4Ts(u).length) {
+      a4Move(u, s2.x, s2.y, f2);
+      if (nx) { u.obj = nx.key; for (const q of a4Ts(u)) q.obj = nx.key; }
+      C.res[u.id] = { st: 'move', key: tp.key, x: Math.round(s2.x), y: Math.round(s2.y), t: S.t };
+    }
+    c.fall = nx ? nx.name : null;
+  }
   if (why === 'fail') {
     a4Stat('caFail');
     chatSay('e', lostN ? `报告：向${p.name}反冲击受挫，伤亡 ${lostN} 人，残部撤回出发阵地。` : `报告：向${p.name}反冲击遭敌火力压制，未能接近，各分队撤回出发阵地。`, { kind: 'report', at: p, lv: 1 });
   } else if (why === 'weak') {
     a4Stat('caWeak');
     const live = us.filter(u => u.state !== 'rout').reduce((a, u) => a + a4Men(a4Ts(u)), 0);
-    chatSay('e', `判断：反冲击兵力不足（${am ? `出发阵地仅约 ${am} 人` : `集结途中遭敌火力杀伤，尚能战斗的约 ${live} 人`}，需 ${c.need} 人）。决心：暂不反冲击，各分队就近组织防御，阻敌向纵深发展。`, { kind: 'plan', at: { x: c.x, y: c.y }, lv: 1, key: 'a4weak' + c.key, gap: 120 });
+    if (!live && !am) { chatSay('e', `报告：向${p.name}反冲击的分队在集结途中被打散，取消反冲击。`, { kind: 'report', at: { x: c.x, y: c.y }, lv: 1, key: 'a4weak' + c.key, gap: 120 }); return; }
+    chatSay('e', `判断：反冲击兵力不足（${am ? `出发阵地仅约 ${am} 人` : `集结途中遭敌火力杀伤，尚能战斗的约 ${live} 人`}，需 ${c.need} 人）。决心：暂不反冲击，${c.fall ? `各分队转到${c.fall}后方待机，敌攻${c.fall}时整连进入阵地` : '各分队撤到敌火力以外组织防御'}，阻敌向纵深发展。`, { kind: 'plan', at: { x: c.x, y: c.y }, lv: 1, key: 'a4weak' + c.key, gap: 120 });
   }
 }
 

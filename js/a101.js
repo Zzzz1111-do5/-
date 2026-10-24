@@ -103,7 +103,10 @@ function a101Unload(a, L) {
   if (L && !L.u) { L.u = addUnit('e', 'inf', { role: 'reserve', obj: p.key, form: 'wedge', a4n: '第 101 空降师', morale: 88 }).id; }
   const uid = L ? L.u : addUnit('e', 'inf', { role: 'reserve', obj: p.key }).id;
   const q = addTeam('e', a.x + gauss() * 6, a.y + gauss() * 6, a.men, { role: 'reserve', obj: p.key, u: uid, a101: true, ...(a.mod ? { mod: { ...a.mod } } : {}) });
-  aiGo(q, p.x + gauss() * 25, p.y + gauss() * 25, 'move', p.x, p.y);
+  const lz = L ? L.lz : { x: a.x, y: a.y }, k = L ? L.land : 0;
+  aiGo(q, lz.x + (k % 2 ? 18 : -18), lz.y - 10 + (k >> 1) * 18, 'move', p.x, p.y);   // 先在机降场就地集合、占领环形阵地，整连到齐再投入（a101Step → a4Adopt）
+  const uu = UNIT_MAP.get(uid);
+  if (uu) uu.a4T = S.t;   // 集合期间 ai4 不改派
   a.men = null;
   if (L) L.land++;
   if (typeof v8Stat === 'function') v8Stat('a101Men', q.men.length);
@@ -131,6 +134,8 @@ function a101Step(dt) {
   const L = E1.lift;
   if (L && S.t - L.t > 3 && !(S.eair && S.eair.fly.some(a => a.type === 'uh60' && a.lift === L.id && !a.dead))) {
     E1.lift = null; E1.done++;
+    const u = L.u != null ? UNIT_MAP.get(L.u) : null;
+    if (u && typeof a4Adopt === 'function') a4Adopt(u, L.key);   // 整连交给守方协同：开到据点后方待机，或加入反冲击
     if (typeof chatSay === 'function') chatSay('e', `报告：第 101 空降师机降${L.land ? `完成，${L.land} 个班落地` : '失败'}${L.lost ? `，${L.lost} 人随直升机损失` : ''}。`, { kind: 'report', lv: 1 });
   }
   a101Think();
