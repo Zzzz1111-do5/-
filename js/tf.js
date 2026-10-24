@@ -263,7 +263,7 @@ function tfScreen() {
     for (const q of S.teams) if (q.side === 'e' && q.men.length && inVision(q.x, q.y)) { const d = dist(q.x, q.y, v.x, v.y); if (d < td) { td = d; th = q; } }
     if (!th || S.teams.some(q => q.side === 'p' && q.men.length && !q.ride && dist(q.x, q.y, v.x, v.y) < 40)) continue;
     const u = UNIT_MAP.get(v.buddy);
-    if (!u) continue;
+    if (!u || u.auto !== true) continue;   // 玩家手动指挥的连不抽组
     const q = teamsOf(u).filter(q => q.men.length && !q.ride && q.sup < 45 && q.order.t !== 'charge' && !(q.scr && q.scr.until > S.t)).sort((a, b) => dist(a.x, a.y, v.x, v.y) - dist(b.x, b.y, v.x, v.y))[0];
     if (!q || dist(q.x, q.y, v.x, v.y) > 220) continue;
     const a = Math.atan2(th.y - v.y, th.x - v.x), x = v.x + Math.cos(a) * 20, y = v.y + Math.sin(a) * 20;

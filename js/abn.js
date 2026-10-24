@@ -534,12 +534,12 @@ function abPerimeter() {
       const s = (1 - coverAt(x, y)) * 3 - Math.abs(r - 140) / 60 + Math.random() * .2;
       if (s > bs) { bs = s; best = { x, y }; }
     }
-    if (best) { const pl = P.u[us[1].id] || (P.u[us[1].id] = {}); Object.assign(pl, { ph: 'ab', obj: null, next: S.t + 2 }); apMove(us[1], pl, best.x, best.y, dir, 'move'); A.blk = { u: us[1].id, x: Math.round(best.x), y: Math.round(best.y), a: dir }; }
+    if (best && us[1].auto !== false) { const pl = P.u[us[1].id] || (P.u[us[1].id] = {}); Object.assign(pl, { ph: 'ab', obj: null, next: S.t + 2 }); apMove(us[1], pl, best.x, best.y, dir, 'move'); A.blk = { u: us[1].id, x: Math.round(best.x), y: Math.round(best.y), a: dir }; }
   }
-  for (const u of us.slice(2)) if (typeof apGarrison === 'function') apGarrison(u, af, P);
+  for (const u of us.slice(2)) if (u.auto !== false && typeof apGarrison === 'function') apGarrison(u, af, P);   // 玩家手动指挥的连不接管
   // 工兵组去跑道
   const b = S.abBase;
-  if (b) for (const q of S.teams) if (q.side === 'p' && q.men.length && q.ab === 'eng' && typeof apTeamGo === 'function') { const [x, y] = eaW(b, gauss() * 60, 14); apTeamGo(q, x, y, 'move'); }
+  if (b) for (const q of S.teams) if (q.side === 'p' && q.men.length && q.ab === 'eng' && !(unitOf(q) && unitOf(q).auto === false) && typeof apTeamGo === 'function') { const [x, y] = eaW(b, gauss() * 60, 14); apTeamGo(q, x, y, 'move'); }
 }
 // 敌人最可能来的方向：已知敌人（机场 900 以内）的重心，没有就朝敌指挥所
 function abThreatDir(af) {
@@ -645,7 +645,7 @@ function abThink() {
       if (atRv < ts.length * .7 && S.t - A.t < AB.asm) return;
       if (!A.go && !abStrong(af, us)) {
         A.st = 'dfd'; A.t = S.t;
-        for (const u of us) { const pl = apEnsure().u[u.id]; if (pl) apMove(u, pl, (A.rv[A.us.indexOf(u.id)] || A.dz).x, (A.rv[A.us.indexOf(u.id)] || A.dz).y, A.face ?? NORTH, 'move'); }
+        for (const u of us) { const pl = apEnsure().u[u.id]; if (pl && u.auto !== false) apMove(u, pl, (A.rv[A.us.indexOf(u.id)] || A.dz).x, (A.rv[A.us.indexOf(u.id)] || A.dz).y, A.face ?? NORTH, 'move'); }
         abSay('p', `判断：落地兵力约 ${abMen(us)} 人，机场守敌估计 ${Math.round(abEst(af))} 人，兵力不足以强攻。决心：就地固守空降场，火力削弱机场守敌，待兵力占优或主力靠近再攻。`, { kind: 'plan', at: A.dz, lv: 0 });
         return;
       }

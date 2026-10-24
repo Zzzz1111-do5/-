@@ -39,9 +39,10 @@ function issueOrder(p, mode, face, total) {
   const units = selUnits(), ships = selShips().filter(movable);
   let n = 0;
   // 玩家亲自下令即转为手动指挥（自动驾驶不再接管）
-  for (const u of units) u.auto = false;
-  for (const s of ships) s.auto = false;
-  if (selCV() && typeof orderCV === 'function' && orderCV(p.x, p.y)) n++;
+  // man：玩家亲自指挥过——观战时指挥官也不再收回（commander.js cmdForceAuto / cmdCtl）；按 U 交还 AI
+  for (const u of units) { u.auto = false; u.man = true; }
+  for (const s of ships) { s.auto = false; s.man = true; }
+  if (selCV() && typeof orderCV === 'function' && orderCV(p.x, p.y)) { n++; if (S.cv) { S.cv.auto = false; S.cv.man = true; } }
   if (units.length) {
     const cx0 = units.reduce((a, u) => a + u.x, 0) / units.length, cy0 = units.reduce((a, u) => a + u.y, 0) / units.length;
     const f = face ?? Math.atan2(p.y - cy0, p.x - cx0);
@@ -50,7 +51,7 @@ function issueOrder(p, mode, face, total) {
     else n += orderUnits(us, p.x, p.y, f, total, mode || 'move');
   }
   if (ships.length) n += orderShips(ships, p.x, p.y);
-  if (selDD() && orderDD(p.x, p.y)) n++;
+  if (selDD() && orderDD(p.x, p.y)) { n++; S.dd.auto = false; S.dd.man = true; }
   // 车辆：与步兵同时下令时落在队形后方；排雷指令只给扫雷坦克
   const vm = mode === 'clear' ? vs.filter(v => VEH_SPEC[v.type].flail) : vs;
   if (vm.length) n += units.length && mode !== 'clear' ? vehOrderWith(vm, units, p.x, p.y, face, mode || 'move') : vehOrder(vm, p.x, p.y, mode || 'move', face);
@@ -104,13 +105,13 @@ function formNow(f) {
   updateHud();
 }
 function togglePause() { if (!S.over && S.phase === 'battle') { S.paused = !S.paused; updateHud(); } }
-function toggleAuto() { S.dd.auto = !S.dd.auto; updateHud(); }
+function toggleAuto() { S.dd.auto = !S.dd.auto; S.dd.man = !S.dd.auto; updateHud(); }
 // 选中部队/舰船在“自动（AI 接管）”与“手动（玩家指挥）”之间切换
 function toggleAutoSel() {
   const items = [...selUnits(), ...selShips(), ...(typeof selVehs === 'function' ? selVehs() : [])];
   if (!items.length) return;
   const on = items.some(o => o.auto !== true);
-  for (const o of items) o.auto = on;
+  for (const o of items) { o.auto = on; o.man = !on; }
   if (S.phase === 'deploy') for (const s of selShips()) s.unitAuto = on;
   log(on ? `${items.length} 个单位交由 AI 自动指挥` : `${items.length} 个单位改为手动指挥`, 'info', 'auto', 1);
   updateHud();

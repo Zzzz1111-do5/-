@@ -553,6 +553,7 @@ function vehTick(v, dt) {
   if (S.t - v.hitT > 2) v.sup = Math.max(0, v.sup - 14 * dt);
   if (v.burn > 0) { v.burn -= dt; v.sup = Math.min(100, v.sup + 20 * dt); vehDamage(v, .55 * dt, 9, v.x, v.y, 'fire'); if (v.dead) return; }
   if (v.immob && S.t - v.hitT > 25 && S.t - v.immobT > 30) { v.immob = false; if (v.side === 'p') log(`${vehName(v)}乘员抢修好履带`, 'good', 'vfix' + v.id, 10, v); }
+  if (v.ramp) { vehRampTick(v, dt); return; }   // 正在开下跳板：不寻路、不开火
   vehDepotTick(v, dt);
   vehRiders(v);
   if (v.pick) vehBoard(v);
@@ -1005,14 +1006,47 @@ function vehUnload(s, dt) {
   s.ut = .4;
   vehOffload(s, L.veh.shift(), (s.vk = (s.vk || 0) + 1) - 1);
 }
+// 车辆下船：先出现在舰内车辆甲板上，沿船首方向开下跳板（v.ramp，期间不寻路、不开火），上滩后开到滩头集结位置（vehStageSpot）
 function vehOffload(s, type, k) {
-  const h = Math.atan2(s.by - s.y, s.bx - s.x), bx = s.bx ?? s.x, by = s.by ?? s.y;
-  const v = addVehicle('p', type, bx, by, { auto: s.unitAuto !== false, heading: h, aim: h, ship: s.label });
-  v.climbT = S.t; v.movedT = S.t;
-  const lat = ((k % 3) - 1) * 26, x = bx + Math.cos(h + Math.PI / 2) * lat - Math.sin(h) * 0, y = by - 48 - Math.floor(k / 3) * 18;
-  vehSetOrder(v, 'move', x, y);
-  log(`${s.label} 放下跳板：${vehSp(v).name}驶上滩头`, 'good', 'lstv' + s.id, 2, v);
+  const bx = s.bx ?? s.x, by = s.by ?? s.y, h = Math.atan2(by - s.y, bx - s.x), L = ((typeof SHIP_DIM === 'object' && SHIP_DIM[s.kind]) || [48])[0];
+  const c = Math.cos(h), n = Math.sin(h), bowX = s.x + c * L * .45, bowY = s.y + n * L * .45, x0 = s.x - c * L * .1, y0 = s.y - n * L * .1;
+  const ahead = (bx - bowX) * c + (by - bowY) * n;
+  let x1 = ahead > 6 ? bx + c * 6 : bowX + c * 18, y1 = ahead > 6 ? by + n * 6 : bowY + n * 18;
+  // 跳板终点要落在车辆能走的陆地上（滩头障碍、浅滩格往前找；找不到就取最近的可通行格）
+  let ok = false;
+  for (let d = 0; d <= 48 && !ok; d += 4) { const x = x1 + c * d, y = y1 + n * d; if (isLand(x, y) && vehPass(x, y, 'veh')) { x1 = x; y1 = y; ok = true; } }
+  if (!ok) { const j = nearestPassable(ci(x1, y1), 'veh'); if (j >= 0) { x1 = cellCX(j); y1 = cellCY(j); } }
+  const v = addVehicle('p', type, x0, y0, { auto: s.unitAuto !== false, heading: h, aim: h, ship: s.label });
+  v.x = x0; v.y = y0;   // addVehicle 会把落在水里的车挪到可通行格：这里要的就是舰内位置
+  v.ramp = { t0: S.t, x0, y0, x1, y1, h, k, dur: clamp(dist(x0, y0, x1, y1) / 20, 1.8, 4) };
+  v.climbT = S.t; v.movedT = S.t; v.order = { t: 'hold' };
+  log(`${s.label} 放下跳板：${vehSp(v).name}驶下跳板`, 'good', 'lstv' + s.id, 2, v);
   return v;
+}
+function vehRampTick(v, dt) {
+  const R = v.ramp, u = clamp((S.t - R.t0) / R.dur, 0, 1), e = u * u * (3 - 2 * u);
+  v.x = lerp(R.x0, R.x1, e); v.y = lerp(R.y0, R.y1, e); v.heading = v.aim = R.h; v.movedT = S.t;
+  if (u < 1) return;
+  v.ramp = null; v.climbT = S.t;
+  const p = vehStageSpot(v, R);
+  vehSetOrder(v, 'move', p.x, p.y);
+}
+// 滩头集结位置：上滩点向内陆 70–130、掩蔽好、不和已下船的车挤在一起、避开已知雷区与敌反坦克火力；同一艘船的车左右错开
+function vehStageSpot(v, R) {
+  const c = Math.cos(R.h), n = Math.sin(R.h), px = -n, py = c, pref = ((R.k % 3) - 1) * 32;
+  const ats = S.teams.filter(q => q.side === 'e' && q.men.length && inVision(q.x, q.y) && (q.men.includes('at') || (q.mod && q.mod.at)));
+  const evs = (S.veh || []).filter(o => o.side === 'e' && !o.dead && inVision(o.x, o.y) && vehSp(o).gun && !vehSp(o).gun.ind);
+  let best = null, bs = -Infinity;
+  for (const d of [70, 90, 110, 130]) for (const lat of [-64, -40, -20, 0, 20, 40, 64]) {
+    const x = clamp(R.x1 + c * d + px * lat, 10, W - 10), y = clamp(R.y1 + n * d + py * lat, 10, H - 10), i = ci(x, y);
+    if (!isLand(x, y) || !vehPass(x, y, 'veh') || (typeof MINEC !== 'undefined' && MINEC[i] === 2)) continue;
+    let sc = coverAt(x, y) * 3 - Math.abs(lat - pref) / 50 - Math.abs(d - 95) / 60;
+    for (const o of S.veh) if (o !== v && o.side === 'p' && !o.dead) { const ox = o.order && o.order.x != null ? o.order.x : o.x, oy = o.order && o.order.y != null ? o.order.y : o.y; if (dist(ox, oy, x, y) < 28) sc -= 3; }
+    for (const q of ats) { const dd = dist(q.x, q.y, x, y); if (dd < 260) sc -= (260 - dd) / 60; }
+    for (const o of evs) { const dd = dist(o.x, o.y, x, y); if (dd < 420) sc -= (420 - dd) / 140; }
+    if (sc > bs) { bs = sc; best = { x, y }; }
+  }
+  return best || { x: R.x1 + c * 60, y: R.y1 + n * 60 };
 }
 // 直接下船（disembark 时仍有车辆在舱内）：一次全部放下
 function vehDisembark(s) {
@@ -1046,7 +1080,7 @@ function vehOrder(vs, x, y, t, face) {
   let n = 0, bad = 0;
   srt.forEach((v, i) => {
     const k = (i - (srt.length - 1) / 2) * 26, tx = x + lx * k, ty = y + ly * k;
-    v.auto = false; v.ai = null; v.cmd = null; v.clearAt = t === 'clear' && vehSp(v).flail ? { x: tx, y: ty } : null;
+    v.auto = false; v.man = true; v.ai = null; v.cmd = null; v.clearAt = t === 'clear' && vehSp(v).flail ? { x: tx, y: ty } : null;
     if (vehReach(v, tx, ty) || vehReach(v, x, y)) { vehSetOrder(v, t === 'clear' ? (vehSp(v).flail ? 'clear' : 'move') : t, tx, ty, face); n++; } else bad++;
   });
   if (bad) log(`${bad} 辆车辆无法到达该位置`, 'warn', 'vunreach', 2);
@@ -1062,7 +1096,7 @@ function vehOrderWith(vs, units, x, y, face, t) {
 // 坚守 / 后撤（后撤到最近的补给点或搁滩舰船，近距离倒车）
 function vehOrderAll(vs, t) {
   for (const v of vs) {
-    v.auto = false; v.ai = null; v.cmd = null; v.clearAt = null;
+    v.auto = false; v.man = true; v.ai = null; v.cmd = null; v.clearAt = null;
     if (t === 'hold') { v.order = { t: 'hold', face: v.heading }; continue; }
     const p = vehDepot(v), bh = S.ships.filter(s => s.state === 'beached').sort((a, b) => dist(a.bx, a.by, v.x, v.y) - dist(b.bx, b.by, v.x, v.y))[0];
     const g = p && (!bh || dist(p.x, p.y, v.x, v.y) < dist(bh.bx, bh.by, v.x, v.y) + 100) ? { x: p.x, y: p.y + 15 } : bh ? { x: bh.bx, y: bh.by - 30 } : { x: v.x, y: Math.min(v.y + 120, coastAt(v.x) - 20) };

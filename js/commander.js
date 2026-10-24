@@ -52,7 +52,7 @@ function cmdInit() {
   return S.cmd;
 }
 const cmdAll = () => !!S && S.role === 'spectate';
-const cmdCtl = o => !!o && (cmdAll() || o.auto === true);
+const cmdCtl = o => !!o && !o.man && (cmdAll() || o.auto === true);   // man：玩家亲自下过令的单位，AI 不接管
 const cmdOn = () => !!S && S.phase === 'battle' && !S.over && !!S.cmd;
 const cmdRK = () => S && S.relay ? .5 : 1;
 const cmdPt = k => (k != null && S.points.find(p => p.key === k)) || null;
@@ -175,12 +175,12 @@ function cmdThinkP() {
   cmdRun(cmdSitrep, C);
 }
 // 观战：指挥官接管全部资产
-function cmdForceAuto() {
-  for (const u of S.units) if (u.side === 'p') u.auto = true;
-  for (const s of S.ships) s.auto = true;
-  if (S.dd) S.dd.auto = true;
-  if (S.cv) S.cv.auto = true;
-  if (Array.isArray(S.veh)) for (const v of S.veh) if (v.side === 'p') v.auto = true;
+function cmdForceAuto() {   // 玩家亲自下过令的（man）除外：不和玩家抢指挥权
+  for (const u of S.units) if (u.side === 'p' && !u.man) u.auto = true;
+  for (const s of S.ships) if (!s.man) s.auto = true;
+  if (S.dd && !S.dd.man) S.dd.auto = true;
+  if (S.cv && !S.cv.man) S.cv.auto = true;
+  if (Array.isArray(S.veh)) for (const v of S.veh) if (v.side === 'p' && !v.man) v.auto = true;
 }
 
 // —— 滩头评估：只用开战时可知的情报（地形、据点位置、已标定的火力点）——
