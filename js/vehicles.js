@@ -481,6 +481,7 @@ function vehSam(v, dt) {
   for (const m of S.missiles || []) {
     if (m.done || m.t < 0 || m.side !== foe || (m.svTry && m.svTry.includes(v.id))) continue;
     if (m.kind === 'tbm') { if (m.t / m.dur < .5 || dist(v.x, v.y, m.tx, m.ty) > M.icp) continue; }
+    else if (m.kind === 'pgm') { const W0 = typeof MS_PGM === 'object' && MS_PGM[m.w]; if (!W0 || !W0.icp || dist(v.x, v.y, m.x, m.y) > M.icp) continue; }   // 巡航导弹（亚音速好打，超音速、高超音速难打）；空地导弹飞行时间太短，来不及
     else if (m.kind !== 'asm' || dist(v.x, v.y, m.x, m.y) > M.icp) continue;
     const d = dist(v.x, v.y, m.x, m.y);
     if (d < bd) { bd = d; tg = m; k = 'msl'; }
@@ -492,7 +493,7 @@ function vehSam(v, dt) {
     if (!tg) return;
     k = v.side === 'p' ? 'eair' : 'plane';
   }
-  msLaunch('sam', v.side, v.x, v.y, { x: tg.x, y: tg.y }, { tgt: { k, id: tg.id }, src: 'samv', spd: 620, dur: 3, pk: k === 'msl' ? (tg.kind === 'tbm' ? .5 : .55) : .6, sup: v.sup });
+  msLaunch('sam', v.side, v.x, v.y, { x: tg.x, y: tg.y }, { tgt: { k, id: tg.id }, src: 'samv', spd: 620, dur: 3, pk: k === 'msl' ? (tg.kind === 'tbm' ? (tg.nuke ? .2 : .5) : tg.kind === 'pgm' ? MS_PGM[tg.w].icp : .55) : .6, sup: v.sup });
   v.samN--; v.samCd = M.cd; v.aim = Math.atan2(tg.y - v.y, tg.x - v.x); v.samT = S.t;
   S.fx.push({ kind: 'flash', x: v.x, y: v.y, r: 8, life: 0, max: .4, side: v.side });
   if (v.side === 'e') { v.kx = v.x; v.ky = v.y; v.kh = v.heading; v.seen = S.t; }   // 导弹尾焰暴露发射车

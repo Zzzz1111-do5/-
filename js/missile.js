@@ -1,5 +1,5 @@
 'use strict';
-// 战术导弹（v7）：进攻方战术弹道导弹——驱逐舰垂直发射，驱逐舰沉没时由战区导弹部队发射；
+// 战术导弹（v7）：进攻方战术弹道导弹（东风-15B）——战区火箭军发射（v12 起驱逐舰垂发改为 vls.js 的巡航 / 反舰导弹）；
 // 弹道飞行、末段可被雷达高炮与守军弹炮防空车拦截、命中按 POWER.tbm 结算；HUD 按钮（I 键）、AI 用弹、绘制（只用形状）。
 // 守方战术导弹发射车（e_tel）：纵深机动阵地，载弹 2 枚，打卸载中的登陆舰、滩头补给站与密集部队（射程 300–1800）；
 // 发射即暴露，随即转移阵地；末段可被我方驱逐舰舰空导弹与弹炮防空车拦截；守方弹头不伤自家工事（POWER.etbm）。
@@ -31,7 +31,7 @@ function msLaunch(kind, side, x0, y0, tgt, opts = {}) {
   msEnsure();
   const d = dist(x0, y0, tgt.x, tgt.y), dur = opts.dur || (kind === 'tbm' ? 5 + d / 600 : 2.2);
   const m = { id: S.nid++, kind, side, x0, y0, x: x0, y: y0, z: 0, tx: tgt.x, ty: tgt.y, t: -(opts.delay || 0), dur, tgt: opts.tgt || null, ph: opts.delay ? 'wait' : 'boost', icp: false, src: opts.src || null,
-    spd: opts.spd || null, pk: opts.pk || null, sup: opts.sup || 0 };
+    spd: opts.spd || null, pk: opts.pk || null, sup: opts.sup || 0, w: opts.w || null };
   S.missiles.push(m);
   return m;
 }
@@ -42,11 +42,11 @@ function msFireP(x, y, ai) {
   if (!msOn() || S.phase !== 'battle') { if (!ai) log('战术导弹在 H 时之后才能使用', 'warn', 'msl0', 2); return false; }
   if (!(S.assets.msl > 0)) { if (!ai) log('战术导弹已用完', 'warn', 'msl0', 2); return false; }
   if (!isLand(x, y)) { if (!ai) log('战术导弹只能打击陆上目标', 'warn', 'msl1', 2); return false; }
-  const tx = clamp(x + gauss() * 8, 0, W), ty = clamp(y + gauss() * 8, 0, H), dd = S.dd, ship = dd && dd.state !== 'sunk' && isFinite(dd.x);
-  const m = ship ? msLaunch('tbm', 'p', dd.x, dd.y, { x: tx, y: ty }, { src: 'dd' }) : msLaunch('tbm', 'p', tx, H + 60, { x: tx, y: ty }, { src: 'theatre', delay: 6 });
+  // 东风-15B 由战区火箭军从地图南缘以外发射（驱逐舰的垂发导弹另见 vls.js）
+  const tx = clamp(x + gauss() * 8, 0, W), ty = clamp(y + gauss() * 8, 0, H);
+  const m = msLaunch('tbm', 'p', tx, H + 60, { x: tx, y: ty }, { src: 'theatre', delay: 4 });
   S.assets.msl--; S.msl.p.used++; S.stats.shots++;
-  if (ship) S.fx.push({ kind: 'flash', x: dd.x, y: dd.y, r: 18, life: 0, max: .6, side: 'p' });
-  log(ship ? `驱逐舰垂直发射战术导弹，约 ${Math.round(m.dur)} 秒后命中` : `战区导弹部队发射战术导弹，约 ${Math.round(m.dur + 6)} 秒后命中`, 'info', null, 0, { x: tx, y: ty });
+  log(`战区火箭军发射东风-15B 战术导弹，约 ${Math.round(m.dur + 4)} 秒后命中`, 'info', null, 0, { x: tx, y: ty });
   return true;
 }
 
@@ -61,6 +61,7 @@ function msStep(dt) {
     if (m.ph === 'wait') { m.ph = 'boost'; if (m.kind === 'asm') S.fx.push({ kind: 'flash', x: m.x0, y: m.y0, r: 12, life: 0, max: .5, side: m.side }); }
     if (m.kind === 'sam') { msSam(m, dt); continue; }
     if (m.kind === 'asm') { msAsm(m, dt); continue; }
+    if (m.kind === 'pgm') { msPgmFly(m, dt); continue; }
     const u = clamp(m.t / m.dur, 0, 1);
     m.x = lerp(m.x0, m.tx, u); m.y = lerp(m.y0, m.ty, u); m.z = Math.sin(Math.PI * u) * (m.kind === 'tbm' ? 1 : .15);
     if (m.t > 1) m.ph = u > .8 ? 'term' : 'mid';
@@ -69,10 +70,10 @@ function msStep(dt) {
       m.aaTry = true;
       for (const a of S.enemies) {
         if (a.dead || a.kind !== 'aa' || dist(a.x, a.y, m.tx, m.ty) > 200) continue;
-        if (Math.random() < .1 * ((a.mod && a.mod.aa) || 1) * (1 - (a.sup || 0) / 130)) {
+        if (Math.random() < .1 * ((a.mod && a.mod.aa) || 1) * (1 - (a.sup || 0) / 130) * (m.nuke ? .5 : 1)) {
           m.done = m.icp = true;
           S.fx.push({ kind: 'flash', x: m.x, y: m.y - 20, r: 14, life: 0, max: .7, side: 'e' });
-          log('战术导弹在末段被敌防空火力拦截', 'bad', null, 0, { x: m.x, y: m.y });
+          log(m.nuke ? '战术核弹在末段被敌防空火力拦截，未能起爆' : '战术导弹在末段被敌防空火力拦截', 'bad', null, 0, { x: m.x, y: m.y });
           if (a.kx == null) { a.kx = a.x; a.ky = a.y; }
           break;
         }
@@ -81,13 +82,14 @@ function msStep(dt) {
     }
     // 守方来袭弹道导弹：落点 650 以内的我方驱逐舰（旗舰 / 护航舰）在末段发射一枚舰空导弹拦截
     if (m.side === 'e' && u > .62 && !m.samTry) {
-      const s = msDefShips().filter(o => dist(o.x, o.y, m.tx, m.ty) < 650 && (o.o.samCd || 0) <= S.t).sort((a, b) => dist(a.x, a.y, m.tx, m.ty) - dist(b.x, b.y, m.tx, m.ty))[0];
-      if (s) {
+      const s = msDefShips().filter(o => dist(o.x, o.y, m.tx, m.ty) < 650 && (o.o.samCd || 0) <= S.t && (typeof vlsHas !== 'function' || vlsHas(o.o, 'sam'))).sort((a, b) => dist(a.x, a.y, m.tx, m.ty) - dist(b.x, b.y, m.tx, m.ty))[0];
+      if (s && (typeof vlsUse !== 'function' || vlsUse(s.o, 'sam'))) {
         m.samTry = true; s.o.samCd = S.t + 1.5;
         msLaunch('sam', 'p', s.x, s.y, { x: m.x, y: m.y }, { tgt: { k: 'msl', id: m.id }, src: s.esc ? 'esc' : 'dd', spd: 720, dur: 2.2, pk: s.esc ? .25 : .35 });
         msStat('abmTbm');
       }
     }
+    if (u >= 1 && m.nuke) { m.done = true; if (typeof nukeBlast === 'function') nukeBlast(m.tx, m.ty, m.side); continue; }   // 战术核弹（nuke.js）
     if (u >= 1) {
       m.done = true;
       const before = m.side === 'e' ? S.teams.filter(q => q.side === 'p').reduce((a, q) => a + q.men.length, 0) : 0;
@@ -105,6 +107,49 @@ function msStep(dt) {
     }
   }
   S.missiles = S.missiles.filter(m => !m.done);
+}
+
+// —— 精确制导对地弹药（v12）：kind = 'pgm'，m.w = 弹种。对地支援机 / 直升机的空地导弹（carrier.js airAgm）、驱逐舰垂发的对陆 / 反舰导弹（vls.js）共用 ——
+//    追踪目标（车辆 veh / 工事 enemy / 装甲车 armor / 固定点 pt），到达后：小范围爆炸（impact，不伤本方车辆）+ 对目标直接毁伤（穿深 pen）；
+//    spd 巡航速度、sprint 末段冲刺速度（距目标 sr 以内）、z 飞行高度（画面）、icp 敌弹炮防空车 / 陆基密集阵的单发拦截率（0 = 拦不住）
+const MS_PGM = {
+  kd88: { nm: 'KD-88 空地导弹', spd: 300, z: .35, dmg: 34, pen: 3.6, st: 12, icp: 0, pw: { men: .7, ship: 3, struct: 0, seg: false, R: 22, vb: 6, veh: true } },
+  ba7: { nm: '蓝箭-7 空地导弹', spd: 330, z: .3, dmg: 24, pen: 3.4, st: 7, icp: 0, pw: { men: .5, ship: 2, struct: 0, seg: false, R: 14, vb: 4, veh: true } },
+  hj10: { nm: '红箭-10 反坦克导弹', spd: 300, z: .25, dmg: 26, pen: 3.8, st: 6, icp: 0, pw: { men: .45, ship: 1.5, struct: 0, seg: false, R: 12, vb: 3, veh: true } },
+  cj10: { nm: '长剑-10 对陆巡航导弹', spd: 150, z: .08, dmg: 40, pen: 3.4, st: 22, icp: .5, pw: { men: .85, ship: 5, struct: 0, seg: true, R: 34, vb: 10, veh: true } },
+  yj18: { nm: '鹰击-18A 导弹', spd: 180, sprint: 620, sr: 260, z: .06, dmg: 44, pen: 3.8, st: 24, icp: .22, pw: { men: .85, ship: 6, struct: 0, seg: true, R: 32, vb: 10, veh: true } },
+  yj21: { nm: '鹰击-21 高超音速导弹', spd: 900, z: .9, dmg: 60, pen: 4, st: 40, icp: .06, pw: { men: .95, ship: 8, struct: 0, seg: true, R: 42, vb: 14, veh: true } }
+};
+function msPgmTgt(t) {
+  if (!t) return null;
+  if (t.k === 'veh') { const v = (S.veh || []).find(o => o.id === t.id); return v && !v.dead ? v : null; }
+  if (t.k === 'enemy') { const e = S.enemies.find(o => o.id === t.id); return e && !e.dead ? e : null; }
+  if (t.k === 'armor') { const a = (S.armor || []).find(o => o.id === t.id); return a && !a.dead ? a : null; }
+  return null;
+}
+// 发射一枚：T = {x, y, k?, id?}；from = 发射平台说明
+function msPgm(w, side, x0, y0, T, src, delay = 0) {
+  const W0 = MS_PGM[w];
+  if (!W0) return null;
+  return msLaunch('pgm', side, x0, y0, { x: T.x, y: T.y }, { tgt: T.k && T.id != null ? { k: T.k, id: T.id } : null, src, delay, dur: 60, w });
+}
+function msPgmFly(m, dt) {
+  const W0 = MS_PGM[m.w || (m.w = 'cj10')], T = msPgmTgt(m.tgt);
+  if (T) { m.tx = T.x; m.ty = T.y; }
+  if (m.t > m.dur) { m.done = true; return; }
+  const d = dist(m.x, m.y, m.tx, m.ty), v = W0.sprint && d < W0.sr ? W0.sprint : W0.spd, st = v * dt;
+  m.hd = Math.atan2(m.ty - m.y, m.tx - m.x);
+  m.z = W0.z * (d < 120 ? Math.max(.1, d / 120) : Math.min(1, m.t * 2));
+  if (d > Math.max(8, st)) { m.x += Math.cos(m.hd) * st; m.y += Math.sin(m.hd) * st; return; }
+  m.done = true; m.x = m.tx; m.y = m.ty;
+  impact(m.tx, m.ty, W0.pw, m.side);
+  if (T && dist(T.x, T.y, m.tx, m.ty) < 16) {
+    if (m.tgt.k === 'veh') vehDamage(T, W0.dmg, W0.pen, m.x0, m.y0, 'atgm');
+    else if (m.tgt.k === 'enemy') { damageEnemy(T, W0.st); T.sup = 100; }
+    else if (m.tgt.k === 'armor' && typeof damageArmor === 'function') damageArmor(T, W0.dmg);
+  }
+  msStat('pgmHit');
+  S.fx.push({ kind: 'boom', x: m.tx, y: m.ty, r: W0.pw.R * 1.2, life: 0, max: 1, side: m.side });
 }
 
 // —— 目标解算：tgt = {k, id}；k ∈ plane（我方舰载机）/ eair（守方飞机）/ msl（导弹）/ ship / dd / cv ——
@@ -196,7 +241,7 @@ function msDefend(m) {
   // 外层：舰空导弹（每枚来袭导弹只分配一枚拦截弹）
   if (!m.samTry) for (const s of D) {
     const r = s.esc ? 600 : 750, d = dist(m.x, m.y, s.x, s.y);
-    if (d > r || d < 140 || !cover(s) || (s.o.samCd || 0) > S.t) continue;
+    if (d > r || d < 140 || !cover(s) || (s.o.samCd || 0) > S.t || (typeof vlsUse === 'function' && !vlsUse(s.o, 'sam'))) continue;
     m.samTry = true; s.o.samCd = S.t + 1.5;
     msLaunch('sam', 'p', s.x, s.y, { x: m.x, y: m.y }, { tgt: { k: 'msl', id: m.id }, src: s.esc ? 'esc' : 'dd', spd: 560, dur: 2.5, pk: s.esc ? .3 : .35 });
     msStat('abm');
@@ -365,7 +410,7 @@ function msHud() {
   if (!b) {
     if (typeof ICON === 'object' && !ICON.msl) ICON.msl = MS_ICON;
     b = document.createElement('button');
-    b.className = 'ib'; b.id = 'b-msl'; b.type = 'button'; b.title = '战术导弹：舰载垂直发射，约 6–8 秒命中（I）'; b.setAttribute('aria-label', '战术导弹');
+    b.className = 'ib'; b.id = 'b-msl'; b.type = 'button'; b.title = '战术导弹：东风-15B，战区火箭军发射，约 10 秒命中（I）'; b.setAttribute('aria-label', '战术导弹');
     b.innerHTML = `<svg viewBox="0 0 24 24" class="ic" aria-hidden="true">${MS_ICON}</svg><kbd>I</kbd><em id="n-msl"></em>`;
     b.addEventListener('click', msTool);
     const ref = $('b-bomber') || $('b-strike');

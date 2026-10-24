@@ -853,6 +853,7 @@ function cmdSeadP(C) {
     const sead = S.air && S.air.wing.some(w => w.type === 'strike' && w.v === 'sead' && w.state === 'deck');
     if (cmdFire(s.x, s.y, 2, 'sead')) acts.push(`舰炮压制 ${gridRef(s.x, s.y)} ${nm}`);
     if (S.assets.strike > 0 && cmdAir('strike', s.x, s.y, s.k === 'gun' ? s.id : null)) { const a = C.air[C.air.length - 1]; if (a && sead) a.pref = 'sead'; acts.push(`${sead ? '防空压制型歼-35 以反辐射导弹' : '歼-35 以精确制导炸弹'}打击该${nm}`); }
+    else if (s.w >= 1.5 && typeof vlsFire === 'function' && vlsCan('yj18', s.x, s.y) && vlsFire('yj18', s.x, s.y, 1, 'sead')) acts.push(`驱逐舰垂发鹰击-18A（超音速）打击该${nm}`);
     else if (s.w >= 1.5 && S.assets.msl > 0 && typeof msFireP === 'function' && (cmdAll() || cmdCtl(S.dd)) && msFireP(s.x, s.y, true)) acts.push(`战术导弹打击该${nm}`);
   }
   if (typeof v8Stat === 'function' && acts.length) v8Stat('seadTask');

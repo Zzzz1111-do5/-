@@ -511,7 +511,9 @@ function sbxAIDefend() {
     if (sbxVehOk()) for (let i = 0; i < clamp(Math.round(k - 1.5), 0, 3) && sbxLeft('e') >= 60; i++) sbxTry(i % 2 ? 'e_td' : 'e_tank', hub.x + (i - 1) * 40, hub.y - 70, 60);
     let nw = 0;
     while (nw < clamp(Math.round(k), 0, 5) && sbxLeft('e') >= 40 && sbxTry('e_wave', 0, 0)) nw++;
-    if (sbxSpent('e') > e0) say(`纵深加强：${up.length ? sbxNm(up) + '在警戒阵地之外加筑滩头防御地带；' : ''}主防地带后方增筑第二道碉堡线并配守备排${nw ? `；另编增援波次 ${nw} 批，开战后陆续开到受威胁最大的据点` : ''}。`, b1.ex);
+    let na = 0;   // 第 101 空降师：大预算才编（每批 4 架黑鹰）
+    while (na < clamp(Math.round(k - 1.5), 0, 2) && sbxLeft('e') >= 90 && sbxTry('e_101', 0, 0)) na++;
+    if (sbxSpent('e') > e0) say(`纵深加强：${up.length ? sbxNm(up) + '在警戒阵地之外加筑滩头防御地带；' : ''}主防地带后方增筑第二道碉堡线并配守备排${nw ? `；另编增援波次 ${nw} 批，开战后陆续开到受威胁最大的据点` : ''}${na ? `；第 101 空降师空中突击连 ${na} 批待命，敌上岸后机降反冲击` : ''}。`, b1.ex);
   }
   sbxSync();
   say(`部署完毕：共 ${S.sbx.items.filter(it => it.side === 'e').length} 项，用去 ${sbxSpent('e')} / ${B0} 点。`, null);
@@ -893,6 +895,27 @@ function sbxMainX() {
   for (const [b, n] of cnt) if (n > bn) { bn = n; best = b; }
   return best ? best.cx : null;
 }
+// 火箭艇的目标：滩头正面（主攻滩头 x ± 320、海岸线以北 420 内）已知的火力点、铁丝网与看得见的守军，按 60 以内的总价值找最密集的两处；
+// 离我军 110 以内的不打，射程 720 外的不打，总价值不到 2 的不值得一轮齐射
+function sbxRkTargets(s, tx, cy) {
+  const C = [], V = { bunker: 3, coastal: 2.5, mortar: 2, arty: 2, aa: 1.5, ascm: 2, tel: 2 };
+  const ok = (x, y) => Math.abs(x - tx) < 320 && y > cy - 420 && y < cy + 20 && dist(s.x, s.y, x, y) < 720;
+  for (const e of S.enemies) if (!e.dead && e.kx != null && ok(e.kx, e.ky)) C.push({ x: e.kx, y: e.ky, v: V[e.kind] || 1 });
+  for (const w of S.wire) if (w.known && !w.cut) { const x = (w.x0 + w.x1) / 2, y = (w.y0 + w.y1) / 2; if (ok(x, y)) C.push({ x, y, v: .8 }); }
+  for (const q of S.teams) if (q.side === 'e' && q.men.length) {
+    const vis = inVision(q.x, q.y), x = vis ? q.x : q.sx, y = vis ? q.y : q.sy;
+    if ((vis || (q.seen != null && S.t - q.seen < 20)) && x != null && ok(x, y)) C.push({ x, y, v: q.men.length * .6 });
+  }
+  const pT = S.teams.filter(q => q.side === 'p' && q.men.length);
+  const sc = C.filter(c => !pT.some(q => dist(q.x, q.y, c.x, c.y) < 110)).map(c => {
+    let v = 0, x = 0, y = 0;
+    for (const o of C) if (dist(o.x, o.y, c.x, c.y) < 60) { v += o.v; x += o.x * o.v; y += o.y * o.v; }
+    return { x: x / v, y: y / v, v };
+  }).filter(c => c.v >= 2).sort((a, b) => b.v - a.v);
+  const out = [];
+  for (const c of sc) if (!out.some(o => dist(o.x, o.y, c.x, c.y) < 80)) { out.push(c); if (out.length >= 2) break; }
+  return out;
+}
 // 火箭艇、火力支援艇、扫雷舰
 function sbxFireShips(dt) {
   for (const s of S.ships) {
@@ -906,17 +929,23 @@ function sbxFireShips(dt) {
     if (s.sbxRole === 'rocket') {
       if (st.go === 0) { st.go = 1; goTo(tx, cy + 240); }
       if (st.go === 1 && s.state === 'idle' && st.cd <= 0 && dist(s.x, s.y, tx, cy) < 720) {
-        // 我军已上滩：火箭弹落区前推到我军最前沿以北 190；太深打不到就停射。每发再检查一次危险近距
-        const fr = S.teams.filter(q => q.side === 'p' && q.men.length && Math.abs(q.x - tx) < 260).reduce((m, q) => Math.min(m, q.y), Infinity);
-        const ay = Math.min(cy - 30, fr - 190);
-        if (cy - ay > 520) { st.cd = 8; sbxOnce('rkh' + s.id, () => log(`${s.label} 前方是我军，火箭停止齐射`, 'warn', null, 0, { x: tx, y: cy })); continue; }
+        // 只打有东西的地方：找已知敌火力点、铁丝网、看得见（或 20 秒内见过）的守军最密集的一处（离我军 110 以外、射程 720 内）；
+        // 火箭分给最好的两处，散布收小；没有值得打的目标就不射（不空射），等 90 秒仍没有就回航。每发再检查一次危险近距
+        st.arr = st.arr ?? S.t;
+        const T = sbxRkTargets(s, tx, cy);
+        if (!T.length) {
+          st.cd = 3;
+          if (S.t - st.arr > 90 && st.n === 0) { st.go = 2; goTo(s.x, STAGING_Y + 40); sbxOnce('rkno' + s.id, () => log(`${s.label} 滩头没有发现值得齐射的目标，火箭艇返航待命`, 'info', null, 0, { x: tx, y: cy })); }
+          continue;
+        }
         let n = 0;
         for (let k = 0; k < 18; k++) {
-          const x = clamp(tx + gauss() * 60, 0, W), y = ay + gauss() * 35;
+          const t = T[k < 12 || T.length < 2 ? 0 : 1], x = clamp(t.x + gauss() * 32, 0, W), y = t.y + gauss() * 20;
           if (ownNear('p', x, y, POWER.mortar.R + 45)) continue;
           fireShell(s.x, s.y, x, y, 'p', 'mortar', 1.5 + k * .07, false); n++;
         }
         if (!n) { st.cd = 6; continue; }
+        v8Stat('rkSalvo');
         S.fx.push({ kind: 'flash', x: s.x, y: s.y, r: 18, life: 0, max: .6, side: 'p' });
         st.n++; st.cd = 38; S.stats.shots += n;
         log(`${s.label} 火箭齐射覆盖${b.name}`, 'info', 'rkt' + s.id, 5, { x: tx, y: cy });

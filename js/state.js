@@ -29,7 +29,7 @@ function newGame(seed, level, opts = {}) {
     groups: { 1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [], 8: [], 9: [] }, sel: [],
     assets: { recon: 3, strike: 3, rline: 3, reserve: 9, smoke: 6 },
     points: TER.points.map(p => ({ ...p, owner: 'e', prog: 0 })),
-    dd: { name: '052D 型驱逐舰', x: W / 2, y: 1720, tx: W / 2, ty: 1720, hull: 3, state: 'ready', cool: 0, repairT: 0, repairDur: 16, auto: false, exposedUntil: 0, moving: false },
+    dd: { name: '055 型驱逐舰', x: W / 2, y: 1720, tx: W / 2, ty: 1720, hull: 3, state: 'ready', cool: 0, repairT: 0, repairDur: 16, auto: false, exposedUntil: 0, moving: false },
     stats: { lost: 0, killed: 0, shots: 0, exposed: 0, structs: 0 }, throttle: {}
   };
   if (!opts.sandbox) deployDefenses(r, DIFF[level]);

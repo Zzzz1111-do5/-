@@ -5,8 +5,8 @@
 const SHIPV = { S: null, t1: 0, t2: 0, h: {}, trail: {}, sunk: {}, pose: {}, tur: [0, 0], etur: {}, aim: null, aimT: -99 };
 const SHIP_DIM = { assault: [32, 11], supply: [42, 13], lst: [48, 14], dd: [50, 9], boat: [12, 5] };   // 长 × 宽（世界单位）
 const SH_DARK = 'rgba(2,10,6,.86)', SH_FOAM = '#d4fff0';
-// HUD 单位卡图标（侧视，照真实舰型，icons.js）：271 型登陆艇、072 型后勤登陆舰、052D、072A、人员登陆艇
-const SHIP_ICONS = typeof WI === 'object' ? { ship: WI.t271, supply: WI.t072, dd: WI.t052d, lst: WI.t072a, boat: WI.lcvp } : {};
+// HUD 单位卡图标（侧视，照真实舰型，icons.js）：271 型登陆艇、072 型后勤登陆舰、055 / 052D、072A、人员登陆艇
+const SHIP_ICONS = typeof WI === 'object' ? { ship: WI.t271, supply: WI.t072, dd: WI.t055, lst: WI.t072a, boat: WI.lcvp } : {};
 
 // 远景放大：保证船体在适配缩放下仍有约 18px 长（各舰同一比例，保持大小关系）
 const shipK = () => clamp(18 / (32 * R.s), 1, 2.6);

@@ -41,6 +41,13 @@ function awSeen(side, x, y, st = 1) {
   for (const o of S.sbxObs || []) if (!o.dead && o.kind === 'e_radar' && dist(o.x, o.y, x, y) < o.r * 1.4 * k) return true;
   return false;
 }
+// 我方舰队防空伞：驱逐舰舰空导弹 650（护航舰 550）、航母 450 以内（m 为外扩余量）；舰空导弹打光的舰不算
+// 守方歼击机不追进来、不在里面设巡逻点，守方攻击机 / 直升机也不单机闯进来送
+function awFleetCover(x, y, m = 0) {
+  if (typeof msDefShips === 'function') for (const s of msDefShips()) if ((typeof vlsHas !== 'function' || vlsHas(s.o, 'sam')) && dist(s.x, s.y, x, y) < (s.esc ? 550 : 650) + m) return true;
+  if (typeof cvAll === 'function') for (const c of cvAll()) if (c.hp > 0 && dist(c.x, c.y, x, y) < 450 + m) return true;
+  return false;
+}
 // 追踪：瞄准目标的提前位置（按目标速度与距离，最多 1.2 秒），转弯率 turn（战斗机比攻击机灵活）
 function awPursue(f, T, dt, turn) {
   const d = dist(f.x, f.y, T.x, T.y), lead = Math.min(1.2, d / Math.max(120, f.spd * 1.5)), h = T.heading ?? 0, v = T.spd || 0;
@@ -57,12 +64,13 @@ function awFight(f, side, dt) {
   f.awT = .5;
   const foes = awFoes(side), A = awEnsure();
   let T = null;
-  if (f.tg) { const t = foes.find(o => o.k === f.tg.k && o.o.id === f.tg.id); if (t && awSeen(side, t.x, t.y, t.st) && dist(t.x, t.y, f.cx, f.cy) < AW_LEASH) T = t; }
+  const deep = t => side === 'e' && awFleetCover(t.x, t.y, 60);   // 守方：目标进了我舰队防空伞就放掉，不追进去送
+  if (f.tg) { const t = foes.find(o => o.k === f.tg.k && o.o.id === f.tg.id); if (t && awSeen(side, t.x, t.y, t.st) && dist(t.x, t.y, f.cx, f.cy) < AW_LEASH && !deep(t)) T = t; }
   if (!T || S.t - (f.tgT || 0) > 3) {
     let bs = T ? dist(f.x, f.y, T.x, T.y) * (T.ftr ? .6 : .8) : Infinity;
     for (const t of foes) {
       const d = dist(f.x, f.y, t.x, t.y);
-      if (d > AW_RNG || dist(t.x, t.y, f.cx, f.cy) > AW_LEASH || !awSeen(side, t.x, t.y, t.st)) continue;
+      if (d > AW_RNG || dist(t.x, t.y, f.cx, f.cy) > AW_LEASH || !awSeen(side, t.x, t.y, t.st) || deep(t)) continue;
       const s = d * (t.ftr ? .6 : t.type === 'recon' ? 1.1 : .8);
       if (s < bs) { bs = s; T = t; }
     }
@@ -115,8 +123,9 @@ function awFlyE(a, dt) {
   awFight(a, 'e', dt);
   const T = a.tg && awTgt(a.tg);
   if (T) { a.spd += clamp(sp.spd * 1.12 - a.spd, -60 * dt, 50 * dt); awPursue(a, T, dt, sp.turn); }
+  else if (awFleetCover(a.x, a.y, 30)) { a.spd += clamp(sp.spd * 1.1 - a.spd, -60 * dt, 50 * dt); eaSteer(a, a.cx, a.cy, dt); if (!a.brk) { a.brk = true; awStat('ftrBreakE'); } }   // 误入我舰队防空伞：加速脱离
   else if (a.ph === 'out') { if (eaSteer(a, a.cx, a.cy, dt) < AW_CAP + 40) a.ph = 'cap'; }
-  else { const g = Math.atan2(a.y - a.cy, a.x - a.cx) + .55; eaSteer(a, a.cx + Math.cos(g) * AW_CAP, a.cy + Math.sin(g) * AW_CAP, dt, 160); }
+  else { const g = Math.atan2(a.y - a.cy, a.x - a.cx) + .55 * (a.odir || 1); eaSteer(a, a.cx + Math.cos(g) * AW_CAP, a.cy + Math.sin(g) * AW_CAP, dt, 160); }
   if (a.ph === 'cap' && (a.capT -= dt) <= 0) a.ph = 'rtb';
   else if (!(a.aam > 0) && !(a.gun > 0)) a.ph = 'rtb';
 }
@@ -127,8 +136,9 @@ function awThinkE() {
   const E = S.eair;
   if (!E || typeof eaOpen !== 'function' || !(typeof eaOn === 'function' && eaOn())) return;
   const ready = E.wing.filter(w => w.type === 'ftr' && w.state === 'ready'), open = eaOpen(), A = awEnsure();
-  const foes = awFoes('e').filter(t => awSeen('e', t.x, t.y));
-  if (foes.length) A.seenP = S.t;
+  const seen = awFoes('e').filter(t => awSeen('e', t.x, t.y));
+  if (seen.length) A.seenP = S.t;
+  const foes = seen.filter(t => !awFleetCover(t.x, t.y, AW_CAP));   // 在我舰队防空伞里（刚起飞、正着舰）的不去拦
   if (!ready.length || !open.length) return;
   const up = E.fly.filter(a => !a.dead && a.type === 'ftr' && (a.ph === 'out' || a.ph === 'cap' || a.ph === 'roll')).length;
   const want = foes.length ? Math.min(3, Math.ceil(foes.length / 2) + (foes.some(t => t.ftr) ? 1 : 0)) : S.t - A.seenP < 120 ? 1 : 0;
@@ -136,11 +146,17 @@ function awThinkE() {
   let cx, cy;
   if (foes.length) { cx = foes.reduce((s, t) => s + t.x, 0) / foes.length; cy = foes.reduce((s, t) => s + t.y, 0) / foes.length; }
   else ({ x: cx, y: cy } = awCapE());
+  if (awFleetCover(cx, cy, AW_CAP)) ({ x: cx, y: cy } = awCapE());
   cx = clamp(cx, 60, W - 60); cy = clamp(cy, 60, H - 60);
-  const w = ready[0], b = eaNearBase(cx, cy, open), a = eaNewAir(b, w, cx, cy, { cx, cy, capT: 80, aam: 4, gun: 30, aamR: 480, pkK: 1.1 });   // F-35A：4 枚 AIM-120D
-  w.state = 'out'; E.fly.push(a); A.lnE = S.t;
-  awStat('ftrE');
-  if (typeof chatSay === 'function') chatSay('e', foes.length ? `命令：歼击机一个架次紧急起飞，拦截${awWhere(cx, cy)}上空的敌机（${foes.length} 架）。` : `命令：歼击机一个架次起飞，在${awWhere(cx, cy)}上空巡逻，掩护防区。`, { kind: 'order', at: { x: cx, y: cy }, key: 'awE', gap: 15, lv: 1 });
+  // 双机编队：要两架以上、或对面有战斗机时，两架一起起飞（F-35A：4 枚 AIM-120D）
+  const n = Math.min(ready.length, want - up >= 2 || foes.some(t => t.ftr) ? 2 : 1);
+  for (let i = 0; i < n; i++) {
+    const w = ready[i], b = eaNearBase(cx, cy, open), a = eaNewAir(b, w, cx, cy, { cx, cy, capT: 80, aam: 4, gun: 30, aamR: 480, pkK: 1.1, odir: i ? -1 : 1 });
+    w.state = 'out'; E.fly.push(a);
+  }
+  A.lnE = S.t;
+  awStat('ftrE', n);
+  if (typeof chatSay === 'function') chatSay('e', foes.length ? `命令：歼击机${n > 1 ? '双机' : '一个架次'}紧急起飞，拦截${awWhere(cx, cy)}上空的敌机（${foes.length} 架）。` : `命令：歼击机${n > 1 ? '双机' : '一个架次'}起飞，在${awWhere(cx, cy)}上空巡逻，掩护防区。`, { kind: 'order', at: { x: cx, y: cy }, key: 'awE', gap: 15, lv: 1 });
 }
 function awCapE() {
   const thr = S.ai && S.ai.co && S.ai.co.thr;
@@ -163,8 +179,11 @@ function awAutoP() {
   let cx, cy;
   if (foes.length) { cx = foes.reduce((s, t) => s + t.x, 0) / foes.length; cy = foes.reduce((s, t) => s + t.y, 0) / foes.length; }
   else ({ x: cx, y: cy } = awCapP());
-  if (!launchPlane('fighter', clamp(cx, 60, W - 60), clamp(cy, 60, H - 60))) return false;
+  cx = clamp(cx, 60, W - 60); cy = clamp(cy, 60, H - 60);
+  if (!launchPlane('fighter', cx, cy)) return false;
   awStat('ftrP');
+  const lead = S.planes[S.planes.length - 1];
+  if ((want - up >= 2 || foes.some(t => t.ftr)) && typeof airReady === 'function' && airReady('fighter') && launchPlane('fighter', cx, cy)) { const p = S.planes[S.planes.length - 1]; p.odir = -1; p.pkg = lead.id; lead.pkg = lead.id; awStat('ftrP'); }   // 双机编队
   const nm = typeof airName === 'function' ? airName('fighter', (S.planes[S.planes.length - 1] || {}).v) : '战斗机';
   if (typeof chatSay === 'function') chatSay('p', foes.length ? `命令：${nm}起飞，拦截${awWhere(cx, cy)}上空的敌机（${foes.length} 架）。` : `命令：${nm}起飞，在${awWhere(cx, cy)}上空巡逻，掩护登陆场与对地支援机。`, { kind: 'order', at: { x: cx, y: cy }, key: 'awP', gap: 15, lv: 1 });
   return true;

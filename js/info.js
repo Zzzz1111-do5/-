@@ -67,13 +67,19 @@ function infoVeh(v, enemy) {
 function infoShip(s) {
   const c = s.cat && typeof catalogById === 'function' && catalogById(s.cat), sp = SHIP_SPEC[s.kind] || {};
   const L = s.load || {}, veh = Array.isArray(L.veh) ? L.veh.length : 0;
+  const V = s.kind === 'dd' && typeof vlsOf === 'function' ? vlsOf(s) : null;
   return { t: `${s.label || ''} ${c ? c.name : sp.name || '舰船'}`, s: s.kind === 'dd' ? '护航舰' : '登陆舰艇',
-    rows: [['舰体', `${Math.ceil(s.hp)}/${s.maxhp || sp.hp || '?'}`], (L.teams || L.eng) && ['载员', `${(L.teams || 0) * 3 + (L.eng || 0)} 人`], veh && ['载车', `${veh} 辆`], ['状态', infoEsc({ idle: '待命', move: '航行', unloading: '卸载', beached: '已抢滩', sunk: '沉没' }[s.state] || s.state || '')]] };
+    rows: [['舰体', `${Math.ceil(s.hp)}/${s.maxhp || sp.hp || '?'}`], V && ['垂发', infoEsc(`${VLS_CLS[s.vlsC].cells} 单元：${vlsText(s)}`)], (L.teams || L.eng) && ['载员', `${(L.teams || 0) * 3 + (L.eng || 0)} 人`], veh && ['载车', `${veh} 辆`], ['状态', infoEsc({ idle: '待命', move: '航行', unloading: '卸载', beached: '已抢滩', sunk: '沉没' }[s.state] || s.state || '')]] };
 }
 function infoDD() {
   const d = S.dd;
-  return { t: `${d.name || '052D 型驱逐舰'} DD-17`, s: '旗舰（舰炮火力支援）',
-    rows: [['舰体', d.state === 'sunk' ? '沉没' : `${d.hull}/${d.hull0 || 3}`], ['主炮', '130 毫米舰炮'], ['烟幕弹', `${S.assets.smoke ?? 0} 发`], ['战术导弹', `${S.assets.msl ?? 0} 枚（东风-15B / 舰射型）`],
+  const V = typeof vlsOf === 'function' && d.state !== 'sunk' ? vlsOf(d) : null, C = V && VLS_CLS[d.vlsC];
+  return { t: `${d.name || '055 型驱逐舰'} DD-101`, s: '旗舰（舰炮火力支援、垂发导弹）',
+    rows: [['舰体', d.state === 'sunk' ? '沉没' : `${d.hull}/${d.hull0 || 3}`], ['主炮', '130 毫米舰炮'], ['烟幕弹', `${S.assets.smoke ?? 0} 发`],
+      V && ['垂发', infoEsc(`${C.cells} 单元：${vlsText(d)}${d.vls0.yu8 ? ` · 鱼-8 ${V.yu8}` : ''}`)],
+      V && (V.cj10 != null || V.yj18 != null) && ['对陆导弹', infoEsc(`亚音速：长剑-10 ${V.cj10 ?? 0}；超音速：鹰击-18A ${V.yj18 ?? 0}、鹰击-21 ${V.yj21 ?? 0}`)],
+      S.aor && ['补给舰', infoEsc(`${AOR.name}${S.aor.st === 'go' ? '驶来' : S.aor.st === 'rep' ? `补给中 ${Math.round(S.aor.p * 100)}%` : '返航'}`)],
+      ['战术导弹', `${S.assets.msl ?? 0} 枚（东风-15B，战区火箭军）`],
       ['状态', d.state === 'repair' ? '损管抢修中' : d.state === 'sunk' ? '—' : d.cool > 0 ? '装填中' : '待命'], ['指挥', d.auto ? '自动掩护' : '手动']] };
 }
 function infoCV() {

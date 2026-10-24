@@ -132,7 +132,7 @@ if (typeof WI === 'object') Object.assign(CT_IC, {
   lct: WI.t271, lci: WI.t074a, lcvp: WI.lcvp, lst: WI.t072a, lsm: WI.t073a, ls: WI.t072, rlct: WI.rkboat, lcs: WI.gunboat, sweep: WI.t082,
   dd: WI.t052d, ddh: WI.t052d + ctDots(1), dde: WI.t054a, cl: WI.t055, ca: WI.t055 + ctDots(1), cv: WI.t003, cve: WI.t075,
   arecon: WI.kj600, awz7: WI.wz7, astrike: WI.j35, aj35: WI.j35, agj11: WI.gj11, aj15: WI.j15, acas: WI.gj2, aftr: WI.j20, heavy: WI.h6k, heli: WI.z10,
-  ega: WI.a10, eheli: WI.ah64, eftr: WI.f35, tbm: WI.df15b, hj12: WI.hj12, lcac: WI.lcac
+  ega: WI.a10, eheli: WI.ah64, eftr: WI.f35, tbm: WI.df15b, hj12: WI.hj12, lcac: WI.lcac, nuke: WI.nuke, uh60: WI.uh60
 });
 
 // —— 条目 —— e(id, 名称, 阵营, 分类, 原型, 点数, 图标, [耐久, 装甲, 火力, 射程, 速度, 视野, 人数], 说明, spawn, 附加)
@@ -233,15 +233,15 @@ ctE('p_lcs', '火力支援艇', 'p', 'naval', 'fire_ship', 32, CT_IC.lcs, [5, 1,
   { kind: 'ship', at: 'sea', ship: 'assault', cap: 0, hp: 9, pre: 'GS', role: 'gun' }, { counters: ['inf_e', 'bunker'], weakTo: ['coastal'] });
 ctE('p_sweep', '082Ⅱ型扫雷舰', 'p', 'naval', 'sweep', 30, CT_IC.sweep, [4, 1, 0, 0, 5, 4, 0], '驶往目标滩头近岸，清除水下障碍并标定滩头雷区，为登陆艇开辟航道。',
   { kind: 'ship', at: 'sea', ship: 'assault', cap: 0, hp: 8, pre: 'MS', role: 'sweep' }, { counters: ['obst', 'mines'], weakTo: ['coastal'] });
-ctE('p_dd', '052C 型驱逐舰', 'p', 'naval', 'dd', 120, CT_IC.dd, [6, 3, 7, 9, 7, 5, 0], '标准驱逐舰：舰炮射程 1000，可打烟幕弹；开火时会暴露位置招来反炮兵射击。全舰队只能编入一艘驱护舰或巡洋舰。',
+ctE('p_dd', '052C 型驱逐舰', 'p', 'naval', 'dd', 120, CT_IC.dd, [6, 3, 7, 9, 7, 5, 0], '标准驱逐舰：舰炮射程 1000，可打烟幕弹；开火时会暴露位置招来反炮兵射击。48 个垂发单元全装红旗-9 舰空导弹（无对陆导弹）。',
   { kind: 'dd', at: 'sea', hull: 3, rof: 1, salvo: 1, rep: 16 }, { counters: ['bunker', 'coastal'], weakTo: ['coastal'] });
-ctE('p_dd_h', '052D 型驱逐舰', 'p', 'naval', 'dd', 150, CT_IC.ddh, [7, 3, 8, 9, 7, 5, 0], '多一座炮塔、射速更快，船体能多扛一发。',
+ctE('p_dd_h', '052D 型驱逐舰', 'p', 'naval', 'dd', 150, CT_IC.ddh, [7, 3, 8, 9, 7, 5, 0], '射速更快，船体能多扛一发。64 个垂发单元：红旗-9B 32、长剑-10 12、鹰击-18A 12、鱼-8 8。',
   { kind: 'dd', at: 'sea', hull: 4, rof: 1.3, salvo: 1, rep: 15 }, { counters: ['bunker', 'coastal'], weakTo: ['coastal'] });
-ctE('p_dd_e', '054A 型护卫舰', 'p', 'naval', 'dd', 90, CT_IC.dde, [4, 2, 5, 9, 8, 5, 0], '便宜的护航舰，火力较弱、损管快，额外携带 2 发烟幕弹。',
+ctE('p_dd_e', '054A 型护卫舰', 'p', 'naval', 'dd', 90, CT_IC.dde, [4, 2, 5, 9, 8, 5, 0], '便宜的护航舰，火力较弱、损管快，额外携带 2 发烟幕弹。32 个垂发单元装红旗-16 中程舰空导弹。',
   { kind: 'dd', at: 'sea', hull: 2, rof: .85, salvo: 1, rep: 10, smoke: 2, hit: .8 }, { weakTo: ['coastal'] });
-ctE('p_cl', '055 型驱逐舰', 'p', 'naval', 'dd', 200, CT_IC.cl, [8, 4, 9, 9, 6, 6, 0], '每次射击两发齐射，船体 5，能长时间压制滩头；仍会被岸防重炮威胁。',
+ctE('p_cl', '055 型驱逐舰', 'p', 'naval', 'dd', 200, CT_IC.cl, [8, 4, 9, 9, 6, 6, 0], '每次射击两发齐射，船体 5。112 个垂发单元：红旗-9B 56、长剑-10（亚音速）24、鹰击-18A（超音速）16、鹰击-21（高超音速）8、鱼-8 8；打光由 901 型补给舰补给。',
   { kind: 'dd', at: 'sea', hull: 5, rof: .9, salvo: 2, rep: 18, hit: 1.1 }, { counters: ['coastal', 'bunker', 'arty'], weakTo: ['coastal'] });
-ctE('p_ca', '055 型驱逐舰（加强火力型）', 'p', 'naval', 'dd', 260, CT_IC.ca, [10, 5, 10, 9, 5, 6, 0], '三发齐射的重炮舰，船体 6；昂贵但足以单舰拔除一整段岸防。',
+ctE('p_ca', '055 型驱逐舰（加强火力型）', 'p', 'naval', 'dd', 260, CT_IC.ca, [10, 5, 10, 9, 5, 6, 0], '三发齐射的重炮舰，船体 6；垂发配比同 055 型（112 单元）。',
   { kind: 'dd', at: 'sea', hull: 6, rof: .75, salvo: 3, rep: 20, hit: 1.2 }, { counters: ['coastal', 'bunker', 'arty'] });
 ctE('p_cv', '003 型航母（福建舰）', 'p', 'air', 'cv', 150, CT_IC.cv, [9, 2, 0, 0, 3, 5, 0], '搭载最多 30 架舰载机（甲板停 12 架，其余在机库待命）；没有航母就没有空中支援。甲板中弹会影响起降。',
   { kind: 'cv', at: 'sea', hp: 30, wing: 30 }, { weakTo: ['coastal'] });
@@ -283,8 +283,10 @@ ctE('p_depot', '野战补给站', 'p', 'support', 'asset', 30, CT_IC.depot, [3, 
   { kind: 'flag', at: 'none', key: 'depot' }, {});
 ctE('p_deck', '甲板整备队', 'p', 'support', 'asset', 20, CT_IC.deck, [0, 0, 0, 0, 0, 0, 0], '加强航母整备：舰载机着舰后重新出击的整备时间缩短 40%。',
   { kind: 'flag', at: 'none', key: 'deck' }, {});
-ctE('p_tbm', '东风-15B 战术导弹（2 枚）', 'p', 'support', 'missile', 60, CT_IC.tbm, [0, 0, 10, 10, 0, 0, 0], '战术弹道导弹：驱逐舰垂直发射（无驱逐舰时由战区导弹部队发射），约 6–8 秒命中，一发可摧毁碉堡或岸防炮；雷达高炮可能拦截。快捷键 I。',
+ctE('p_tbm', '东风-15B 战术导弹（2 枚）', 'p', 'support', 'missile', 60, CT_IC.tbm, [0, 0, 10, 10, 0, 0, 0], '战术弹道导弹：战区火箭军发射，约 10 秒命中，一发可摧毁碉堡或岸防炮；雷达高炮可能拦截。快捷键 I。（驱逐舰自带的垂发巡航 / 超音速导弹按 Y）',
   { kind: 'asset', at: 'none', key: 'msl', add: 2 }, { counters: ['coastal', 'e_tel', 'e_ascm', 'e_airfield'], weakTo: ['e_aa_radar'] });
+ctE('p_nuke', '战术核弹（低当量，1 枚）', 'p', 'support', 'missile', 1200, CT_IC.nuke, [0, 0, 10, 10, 0, 0, 0], '单独购买的战术核武器：战区火箭军发射，约 15 秒落地（发射即向全战场发出核打击预警）。爆心 60 米内一切人员、车辆、工事、舰船毁灭，140 米内重创，280 米内压制、士气崩溃；不分敌我，落点 300 米内有我军就拒绝发射。留下约 2 分 30 秒的辐射区，进入的人员持续伤亡。末段仍可能被拦截。支援栏「核」按钮。',
+  { kind: 'asset', at: 'none', key: 'nuke', add: 1 }, { counters: ['coastal', 'arty', 'bunker', 'inf_e'], weakTo: ['e_aa_radar'] });
 ctE('p_para', '空降兵连（运-20 投送）', 'p', 'support', 'asset', 90, CT_IC.para, [3, 0, 4, 5, 6, 6, 9], '两架战区运输机从海上飞来，在指定地点空投 4 个组 12 人（含一个反坦克组），落地后编成空降连，自动夺取附近据点、与正面夹击。运输机会被高炮、防空导弹与敌机击落，伞兵下降时也会挨打。快捷键 Shift+P。',
   { kind: 'asset', at: 'none', key: 'para', add: 1 }, { counters: ['arty', 'mortar', 'coastal'], weakTo: ['aa', 'e_air_ftr'] });
 ctE('p_airdrop', '空投补给（运-20，2 次）', 'p', 'support', 'asset', 30, CT_IC.drop, [0, 0, 0, 0, 0, 0, 0], '运输机向指定地点投下 3 箱弹药，形成 4 分钟的临时补给点：附近步兵与车辆就地补充弹药，补给线被切断也能接着打。快捷键 Shift+O。',
@@ -438,6 +440,8 @@ ctE('e_ammo', '弹药库', 'e', 'support', 'depot_e', 25, CT_IC.ammo, [4, 0, 0, 
   { kind: 'post', at: 'land', r: 0, h: 0, hp: 6, ammo: 1 }, { counters: ['arty'], weakTo: ['p_air_strike', 'p_sortie_bomb'] });
 ctE('e_wave', '增援波次', 'e', 'support', 'wave_e', 30, CT_IC.ewave, [0, 0, 4, 0, 0, 0, 9], '开战约 4 分钟后，三个小组从北面开到受威胁最大的据点。可叠加，每次晚 1 分钟。',
   { kind: 'ewave', at: 'none', teams: 3, t: 240 }, { counters: ['inf_p'] });
+ctE('e_101', '第 101 空降师 · 空中突击连（UH-60M ×4）', 'e', 'support', 'asset', 70, CT_IC.uh60, [3, 0, 5, 4, 8, 5, 12], '我军上岸后，4 架 UH-60M 黑鹰从北面低空飞来，在受威胁最大的据点后方（避开已知防空）机降 4 个班 12 人（含一个标枪反坦克班），编成空降连增援或反冲击；门边机枪压制机降场。黑鹰在途中可被便携防空导弹、高炮、舰空导弹和战斗机击落，机上的兵随之损失。每买一份多一批，两批间隔 2.5 分钟。',
+  { kind: 'asset', at: 'none', key: 'e101', add: 1 }, { counters: ['p_para', 'inf_p'], weakTo: ['p_manpads', 'p_aa_veh', 'p_air_ftr'] });
 
 // 尚未接入推演的条目：先不出现在沙盒与图鉴（codex.js 也据此过滤关联条目）；v7 的条目已全部接入
 const CT_WIP = new Set();
