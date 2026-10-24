@@ -18,6 +18,8 @@ const EA_SPEC = { ga: { name: 'A-10C 攻击机', spd: 170, turn: 1.4, hp: 2, fla
   f22: { name: 'F-22A 猛禽战斗机', spd: 285, turn: 2.4, hp: 1, flares: 3, stealth: .3 } };   // 制空专用：6 枚 AIM-120D + 2 枚 AIM-9X、雷达看得更远（airwar.js EA_FTR）
 const eaFtr = t => t === 'ftr' || t === 'f22';   // 歼击机（空战由 airwar.js 接管）
 // 在巡逻高度上的战斗机（双方）：便携防空导弹、高炮、机枪、近防炮都够不着，只有舰空 / 车载防空导弹和对方战斗机能打
+// 攻击-2 察打一体无人机在中空待机（alt > .8）：单兵防空导弹、高炮够不着，只怕防空车的导弹与歼击机
+const eaHighUav = o => !!o && o.kind === 'cas' && (!o.v || o.v === 'gj2') && o.alt > .8;
 const eaHigh = o => !!o && (o.kind === 'fighter' ? o.alt > .6 && !['cat', 'roll', 'trap', 'final'].includes(o.phase) : eaFtr(o.type) && o.alt > .6);
 const EA_SIL = { ga: 'a10', heli: 'heli', uh60: 'uh60', c17: 'transport', ftr: 'f35', f22: 'f22' };
 const eaSil = t => EA_SIL[t] || 'a10';
@@ -322,10 +324,19 @@ function eaFlyGA(a, dt) {
     eaTrack(a);
     const d = eaSteer(a, a.tx, a.ty, dt, a.ph === 'out' && a.join > S.t ? EA_SPEC[a.type].spd * .7 : undefined);
     a.alt = a.ph === 'attack' ? Math.max(.35, a.alt - dt * .25) : Math.min(.7, a.alt + dt * .4);
-    if (a.ph === 'out' && d < 420) { a.ph = 'attack'; eaSpotSay(a); }
+    if (a.type === 'ga') eaAim9(a);
+    // 真实战法：导弹告警就放干扰弹脱离；AGM-65 小牛在 380 外先打车辆 / 舰船；目标附近有我方已知防空，打完小牛即走，不进去通场；没小牛又防空太强就放弃
+    const thr = typeof airThreats === 'function' ? airThreatAt(airThreats('e'), a.tx, a.ty, 30) : 0;
+    if (typeof airMslWarn === 'function' && airMslWarn('e', 'eair', a.id) && a.ph === 'attack') { a.ph = 'egress'; a.egT = 2.5; a.pass = (a.pass || 0) + 1; eaStat('gaBreak'); }
+    else if (a.mav > 0 && d < 380 && (a.tgt.k === 'veh' || a.tgt.k === 'ship') && S.t >= (a.mavT || 0) && Math.abs(eaAng(Math.atan2(a.ty - a.y, a.tx - a.x) - a.heading)) < .6) {
+      eaATGM(a); a.mav--; a.mavT = S.t + 1.4; eaStat('eaMav');
+      log(`敌 A-10C 在 ${Math.round(d)} 米外发射 AGM-65 小牛导弹`, 'bad', 'eamav', 8, a);
+      if (!a.mav && thr >= 1) { a.ph = 'egress'; a.egT = 2.5; a.ammo = 0; eaStat('gaStandoff'); }
+    } else if (a.ph === 'out' && d < 700 && (!(a.mav > 0) || (a.tgt.k !== 'veh' && a.tgt.k !== 'ship')) && thr >= 2) { a.ph = 'rtb'; eaStat('gaAbort'); if (typeof chatSay === 'function') chatSay('e', `报告：${EA_SPEC[a.type].name}发现目标上空敌防空火力很强，小牛已打光，放弃通场返航。`, { kind: 'report', at: a, key: 'gaab', gap: 30, lv: 2 }); return; }
+    if (a.ph === 'out' && d < 420) { a.ph = 'attack'; eaSpotSay(a); if (thr >= 1) a.pass = Math.max(a.pass || 0, 1); }   // 有防空：只通场一次
     if (a.ph === 'attack') {
       const df = Math.abs(eaAng(Math.atan2(a.ty - a.y, a.tx - a.x) - a.heading));
-      if (d < 190 && df < .3 && a.ammo > 0) { eaRockets(a, 6, 20, .6, a.tx, a.ty); eaStrafe(a); a.ammo = 0; a.ph = 'egress'; a.egT = 3; }
+      if (d < 190 && df < .3 && a.ammo > 0) { if (!a.rkDone) { eaRockets(a, 6, 20, .6, a.tx, a.ty); a.rkDone = true; } eaStrafe(a); a.ammo--; a.ph = 'egress'; a.egT = 3; }   // 第一次通场火箭 + 机炮，之后只用机炮
       else if (d < 140 && df > 1.2) { a.ph = 'egress'; a.egT = 2.5; a.pass = (a.pass || 0) + 1; }   // 冲过头：拉起重新进入
     }
   } else if (a.ph === 'egress') {
@@ -336,8 +347,10 @@ function eaFlyGA(a, dt) {
 }
 // 直升机：在目标与机场连线上、离目标 340 处悬停（守方一侧），面向目标开火
 function eaStandoff(a) {
-  const b = eaNearBase(a.x, a.y) || { x: a.tx, y: 0 }, d = Math.max(1, dist(a.tx, a.ty, b.x, b.y)), r = Math.min(340, d * .8), o = ((a.slot || 0) % 2 ? 1 : -1) * Math.ceil((a.slot || 0) / 2) * 38;   // 编队各机横向错开悬停
+  const b = eaNearBase(a.x, a.y) || { x: a.tx, y: 0 }, d = Math.max(1, dist(a.tx, a.ty, b.x, b.y)), r = Math.min(340, d * .8), o = ((a.slot || 0) % 2 ? 1 : -1) * Math.ceil((a.slot || 0) / 2) * 38 + Math.sin((a.hop || 0) * 1.9) * 110;   // 编队各机横向错开悬停；换位时再错开
   let x = a.tx + (b.x - a.tx) / d * r - (b.y - a.ty) / d * o, y = a.ty + (b.y - a.ty) / d * r + (b.x - a.tx) / d * o;
+  // 真实战法：悬停点避开我方已知防空圈，优先林地 / 高地遮蔽（地狱火射程内）
+  if (typeof airSafePos === 'function') { const p = airSafePos(a.tx, a.ty, r, airThreats('e'), x, y, 30, (px, py) => coverAt(px, py) * 2 + (elevAt(px, py) - elevAt(a.tx, a.ty)) * 3); if (p) { x = p.x; y = p.y; } }
   x = clamp(x, 20, W - 20); y = clamp(y, 20, H - 20);
   a.sx = x; a.sy = y; a.stx = a.tx; a.sty = a.ty;
 }
@@ -352,6 +365,7 @@ function eaFlyHeli(a, dt) {
     if (a.lost && !eaRetarget(a)) a.ph = 'rtb';
   } else if (a.ph === 'loiter') {
     eaTrack(a);
+    if (typeof airMslWarn === 'function' && airMslWarn('e', 'eair', a.id)) { a.hop = (a.hop || 0) + 1; a.ph = 'out'; a.sx = null; eaStat('heliBreak'); return; }   // 导弹告警：放干扰弹、低飞换位
     a.spd = Math.max(0, a.spd - 60 * dt);
     const want = Math.atan2(a.ty - a.y, a.tx - a.x);
     a.heading = eaAng(a.heading + clamp(eaAng(want - a.heading), -2 * dt, 2 * dt)); a.bank = 0;
@@ -364,7 +378,7 @@ function eaHeliFire(a) {
   if (a.lost && !eaRetarget(a)) { a.ph = 'rtb'; return; }
   const d = dist(a.x, a.y, a.tx, a.ty);
   if (d > 430) { a.ph = 'out'; a.sx = null; return; }
-  if (a.atgm > 0 && (a.tgt.k === 'veh' || a.tgt.k === 'ship')) { eaATGM(a); a.atgm--; return; }
+  if (a.atgm > 0 && (a.tgt.k === 'veh' || a.tgt.k === 'ship')) { eaATGM(a); a.atgm--; if (((a.shots = (a.shots || 0) + 1)) % 2 === 0) { a.hop = (a.hop || 0) + 1; a.ph = 'out'; a.sx = null; eaStat('heliHopE'); } return; }   // 每打两发换一个悬停点
   if (a.rk > 0) {
     let tg = null, bm = 0;   // 火箭：目标附近（或机下 380 以内）最密集的步兵
     for (const q of S.teams) {
@@ -418,10 +432,32 @@ function eaATGM(a) {
   S.eair.proj.push({ k: 'atgm', x0: a.x, y0: a.y, x: a.x, y: a.y, tx: o.x, ty: o.y, t: 0, dur: Math.max(.6, dist(a.x, a.y, o.x, o.y) / 260), tgt: { ...a.tgt } });
   eaStat('eaAtk');
 }
-// 扫射：目标 30 以内的我方小组受压制（无直接杀伤），曳光示意
+// 扫射：A-10C 的 GAU-8「复仇者」30 毫米机炮——目标 32 以内的我方小组重压制、有伤亡（掩体里少些），26 以内的车辆挨贫铀穿甲弹（轻装甲打得穿，主战坦克只伤皮毛）；其他机型只压制
 function eaStrafe(a) {
-  for (const q of S.teams) if (q.side === 'p' && q.men.length && !q.ride && dist(q.x, q.y, a.tx, a.ty) < 30) suppress(q, 30, a.x, a.y);
-  for (let i = 0; i < 4; i++) tracer(a.x, a.y, a.tx + gauss() * 14, a.ty + gauss() * 14, 'e', true);
+  const gau = a.type === 'ga';
+  for (const q of S.teams) if (q.side === 'p' && q.men.length && !q.ride && dist(q.x, q.y, a.tx, a.ty) < (gau ? 32 : 30)) {
+    suppress(q, gau ? 55 : 30, a.x, a.y);
+    if (gau && Math.random() < .35 * (1 - coverAt(q.x, q.y) * .5)) killMan(q);
+  }
+  if (gau) for (const v of S.veh || []) if (v.side === 'p' && !v.dead && !v.lst && dist(v.x, v.y, a.tx, a.ty) < 26) vehDamage(v, 12, 2.3, a.x, a.y, 'gau8');
+  for (let i = 0; i < (gau ? 7 : 4); i++) tracer(a.x, a.y, a.tx + gauss() * 14, a.ty + gauss() * 14, 'e', true);
+  if (gau) eaStat('gau8');
+}
+// A-10C 自卫：2 枚 AIM-9X「响尾蛇」空空导弹，打 260 以内、机头前方、低空的我方直升机 / 无人机 / 对地支援机
+function eaAim9(a) {
+  if (!(a.aim9 > 0) || S.t < (a.aimT || 0)) return;
+  a.aimT = S.t + .5;
+  let tg = null, bd = 260;
+  for (const p of S.planes || []) {
+    if (p.dead || p.alt < .15 || p.alt > .95 || (p.kind !== 'cas' && p.kind !== 'strike') || ['cat', 'roll', 'trap', 'final'].includes(p.phase)) continue;
+    const d = dist(a.x, a.y, p.x, p.y);
+    if (d > bd || Math.abs(eaAng(Math.atan2(p.y - a.y, p.x - a.x) - a.heading)) > 1 || S.missiles.some(m => !m.done && m.side === 'e' && m.tgt && m.tgt.k === 'plane' && m.tgt.id === p.id)) continue;
+    bd = d; tg = p;
+  }
+  if (!tg) return;
+  msLaunch('sam', 'e', a.x, a.y, { x: tg.x, y: tg.y }, { tgt: { k: 'plane', id: tg.id }, src: 'aam', spd: 560, dur: 1.8, pk: tg.v === 'heli' ? .6 : .5 });
+  a.aim9--; a.aimT = S.t + 3; eaStat('aim9');
+  log(`敌 A-10C 发射 AIM-9 响尾蛇导弹，攻击我${typeof airName === 'function' ? airName(tg.kind, tg.v).split(' ')[0] : '飞机'}`, 'bad', 'aim9', 6, a);
 }
 const eaMenNear = (x, y, r) => { let n = 0; for (const q of S.teams) if (q.side === 'p' && dist(q.x, q.y, x, y) < r) n += q.men.length; return n; };
 function eaProj(dt) {
@@ -436,7 +472,7 @@ function eaProj(dt) {
       if (u < 1) continue;
       p.done = true;
       if (o && Math.random() < .8) {
-        if (p.tgt.k === 'veh') { vehDamage(o, 22, 3, p.x0, p.y0, 'atgm'); log(`${vehName(o)}被敌直升机反坦克导弹击中`, 'bad', 'eatgm' + o.id, 4, o); }
+        if (p.tgt.k === 'veh') { vehDamage(o, 50, 4, p.x0, p.y0, 'atgm'); log(`${vehName(o)}被敌直升机反坦克导弹击中`, 'bad', 'eatgm' + o.id, 4, o); }   // 地狱火：攻顶，一发基本打掉一辆坦克
         else if (p.tgt.k === 'ship') { log(`${o.label} 被敌直升机反坦克导弹击中`, 'bad', 'eatgms' + o.id, 4, o); damageShip(o, 3); }
         S.fx.push({ kind: 'boom', x: p.tx, y: p.ty, r: 12, life: 0, max: .7, side: 'e' });
       } else S.fx.push({ kind: 'flash', x: p.tx + gauss() * 10, y: p.ty + gauss() * 10, r: 8, life: 0, max: .5, side: 'e' });
@@ -470,7 +506,7 @@ function eaAA() {
     let tg = null, bd = Infinity, k = null;
     if (q.side === 'e') {
       for (const p of S.planes) {
-        if (p.dead || !(p.alt > .25) || ['cat', 'roll', 'trap', 'final'].includes(p.phase) || eaHigh(p)) continue;
+        if (p.dead || !(p.alt > .25) || ['cat', 'roll', 'trap', 'final'].includes(p.phase) || eaHigh(p) || eaHighUav(p)) continue;
         const r = (p.v === 'heli' ? 260 : p.kind === 'bomber' && p.v !== 'dive' ? 150 : 230) * ((typeof airStealth === 'function' ? airStealth(p) : 1) < 1 ? .8 : 1), d = dist(p.x, p.y, q.x, q.y);   // 隐身机红外特征也小些
         if (d < r && d < bd && !busy('e', 'plane', p.id)) { bd = d; tg = p; k = 'plane'; }
       }
@@ -586,7 +622,7 @@ function eaPkg(b, fl, tgt) {
   let lead = null;
   fl.forEach((w, i) => {
     const T = tgt(i);
-    const a = eaNewAir(b, w, T.x + (i % 2 ? gauss() * 20 : 0), T.y + (i % 2 ? gauss() * 20 : 0), { tgt: { k: T.k, id: T.id }, ammo: 1, atgm: w.type === 'heli' ? 2 : 0, rk: w.type === 'heli' ? 2 : 0 });
+    const a = eaNewAir(b, w, T.x + (i % 2 ? gauss() * 20 : 0), T.y + (i % 2 ? gauss() * 20 : 0), { tgt: { k: T.k, id: T.id }, ammo: 1, atgm: w.type === 'heli' ? 2 : 0, rk: w.type === 'heli' ? 2 : 0, mav: w.type === 'ga' ? 2 : 0, aim9: w.type === 'ga' ? 2 : 0, ...(w.type === 'ga' ? { ammo: 2 } : {}) });   // A-10C：2 枚 AGM-65、2 枚 AIM-9X、机炮两次通场
     if (i) { a.lead = lead.id; a.slot = i; if (a.wait == null) { a.x += 14 * i; a.y += i % 2 ? 8 : -8; } }   // 直升机并排离坪；固定翼按跑道排队依次滑跑
     else { lead = a; a.join = S.t + (a.wait || 0) + 4 + 3.5 * (fl.length - 1); }
     w.state = 'out'; E.fly.push(a);

@@ -81,7 +81,7 @@ function addVehicle(side, type, x, y, extra) {
 const vehPenMul = (pen, armor) => pen >= armor ? 1 : pen >= armor - 1 ? .3 + .7 * (pen - armor + 1) : .06;
 function vehDamage(v, dmg, pen, sx, sy, src) {
   if (!v || v.dead || !(dmg > 0)) return 0;
-  const M = v.mod || {}, hull = v.order.t === 'hold' && S.t - v.movedT > 4 && !v.swim ? .75 : 1;   // 坚守：车体半埋（hull-down）
+  const M = v.mod || {}, top = src === 'atgm' || src === 'top', hull = !top && v.order.t === 'hold' && S.t - v.movedT > 4 && !v.swim ? .75 : 1;   // 坚守：车体半埋（hull-down）；攻顶的反坦克导弹不吃这个
   const d = dmg * vehPenMul(pen, v.armor) * hull / (M.arm || 1);
   v.hp -= d; v.hitT = S.t; v.sup = Math.min(100, v.sup + 12 + d * 3);
   if (src === 'mine' || (d > 5 && Math.random() < .12)) {
@@ -129,7 +129,7 @@ function vehSmallArms(v, q, acc) {
     v.sup = Math.min(100, v.sup + (m === 'mg' ? 5 : 2.5) * (M.sup || 1));
     if (v.armor < 1 && Math.random() < (m === 'mg' ? .25 : .12) * acc) vehDamage(v, 1, 0, q.x, q.y, 'small');
   }
-  if (M.at && Math.random() < .35 * acc * Math.min(2, M.at)) vehDamage(v, 9 * M.at, M.atPen || 2.4, q.x, q.y, 'at');   // atPen：攻顶的红箭-12 / 标枪 3.4，打得穿主战坦克顶甲
+  if (M.at && Math.random() < .35 * acc * Math.min(2, M.at)) vehDamage(v, ((M.atPen || 0) >= 3.4 ? 22 : 13) * M.at, M.atPen || 2.4, q.x, q.y, (M.atPen || 0) >= 3.4 ? 'top' : 'at');   // atPen：攻顶的红箭-12 / 标枪 3.4，打得穿主战坦克顶甲
   v.hitT = S.t;
 }
 // 碉堡机枪：对轻装甲（armor ≤ 1）有小概率造成损伤；反坦克炮位（mod.at）是真正的威胁
@@ -137,7 +137,7 @@ function vehBunkerHit(v, e, D) {
   const M = modOf(e);
   v.sup = Math.min(100, v.sup + 9); v.hitT = S.t;
   if (v.armor <= 1 && Math.random() < .1 * D.acc * (M.pow || 1)) vehDamage(v, 2.5, 1, e.x, e.y, 'mg');
-  if (M.at && Math.random() < .4 * D.acc) vehDamage(v, 12 * M.at, 2.6, e.x, e.y, 'at');
+  if (M.at && Math.random() < .4 * D.acc) vehDamage(v, ((M.atPen || 0) >= 3.4 ? 22 : 15) * M.at, M.atPen || 2.6, e.x, e.y, (M.atPen || 0) >= 3.4 ? 'top' : 'at');
 }
 
 // 爆炸（impact 钩子）：舰炮、岸防炮、榴弹炮、炸弹、地雷伤及一切车辆；本方车炮榴弹不误伤本方车辆
@@ -151,7 +151,7 @@ function vehImpact(x, y, R0, pw, side) {
     const d = dist(x, y, v.x, v.y);
     if (d >= r) continue;
     v.sup = Math.min(100, v.sup + 30 * (1 - d / r));
-    vehDamage(v, base * (1 - d / r * .6), d < r * .35 ? pen : pen - 1, x, y, 'he');
+    vehDamage(v, base * (1 - d / r * .6) * (d < r * .35 ? 1.3 : 1), d < r * .35 ? pen : pen - 1, x, y, 'he');   // 近炸 / 直接命中更狠
   }
 }
 HOOK.impact.push(vehImpact);
@@ -463,7 +463,7 @@ function vehShots(dt) {
     // 穿甲弹：命中则按穿深计算伤害，未命中只在地面溅起尘土
     S.fx.push({ kind: 'flash', x: s.x1, y: s.y1, r: s.hit ? 9 : 5, life: 0, max: .35, side: s.side });
     if (!s.hit) continue;
-    const dmg = 7 + s.ap * 3;
+    const dmg = 12 + s.ap * 7;   // 穿甲弹：主战坦克两发、重型坦克两到三发
     if (s.tk === 'car') { const a = (S.armor || []).find(a => a.id === s.tg); if (a) damageArmor(a, dmg); }
     else { const o = vehById(s.tg); if (o) vehDamage(o, dmg, s.ap, s.x0, s.y0, 'ap'); }
   }
@@ -493,7 +493,7 @@ function vehAA(v, dt) {
   if (!sp.aa || v.side !== 'e' || !S.planes || !S.planes.length || (v.aaT = (v.aaT || 0) - dt) > 0) return;
   v.aaT = .6;
   for (const p of S.planes) {
-    if (p.dead || !(p.alt > .4) || (typeof eaHigh === 'function' && eaHigh(p)) || dist(v.x, v.y, p.x, p.y) > sp.aa) continue;   // 巡逻高度上的战斗机够不着
+    if (p.dead || !(p.alt > .4) || (typeof eaHigh === 'function' && (eaHigh(p) || eaHighUav(p))) || dist(v.x, v.y, p.x, p.y) > sp.aa) continue;   // 巡逻高度上的战斗机、中空的无人机够不着
     tracer(v.x, v.y, p.x + gauss() * 14, p.y + gauss() * 14, 'e', inVision(v.x, v.y));
     v.aim = Math.atan2(p.y - v.y, p.x - v.x); v.mgT = S.t;
     if (Math.random() < .12 * (1 - v.sup / 130) * (typeof airStealth === 'function' ? (1 + airStealth(p)) / 2 : 1) && typeof airLost === 'function') { airLost(p, `${typeof airName === 'function' ? airName(p.kind, p.v) : '我机'}被敌${vehModel(v)}击落`); break; }

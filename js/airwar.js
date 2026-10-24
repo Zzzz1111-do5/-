@@ -47,6 +47,35 @@ function awSeen(side, x, y, st = 1) {
   if (typeof afdRadarSees === 'function' && afdRadarSees(x, y, k)) return true;   // 机场雷达站（afdef.js）
   return false;
 }
+// —— 防空威胁图（真实战法：每架飞机在保全自己的前提下打击目标）——
+// side 方飞机眼中已知的对方防空圈 [{x, y, r, w, k}]：进攻方看已标定的高炮、看见过的防空车、近 90 秒暴露的单兵防空、发现的敌舰；守方看见到的我方防空车、暴露过的单兵防空、我方舰队防空伞
+function airThreats(side) {
+  const out = [];
+  if (side === 'p') {
+    if (typeof airAASites === 'function') for (const a of airAASites()) out.push({ x: a.x, y: a.y, r: a.k === 'gun' ? 200 : a.k === 'mp' ? 240 : (a.o.samX && a.o.samX.range) || (a.o.type === 'sam_veh' ? 520 : 240), w: a.w, k: a.k });
+    for (const e of S.eships || []) if (!e.dead && S.t - (e.det ?? -99) < 30 && typeof NV_CLS === 'object' && NV_CLS[e.cls].samR) out.push({ x: e.kx ?? e.x, y: e.ky ?? e.y, r: NV_CLS[e.cls].samR, w: 3, k: 'ship' });
+  } else {
+    for (const v of S.veh || []) if (v.side === 'p' && !v.dead && (vehSp(v).aa || v.type === 'sam_veh') && spotted(v.x, v.y)) out.push({ x: v.x, y: v.y, r: v.type === 'sam_veh' ? (v.samX && v.samX.range) || 520 : vehSp(v).aa || 230, w: v.type === 'sam_veh' ? 2 : 1.3, k: 'veh' });
+    for (const q of S.teams) if (q.side === 'p' && q.men.length && q.men.includes('aa') && q.aaSeenE != null && S.t - q.aaSeenE < 120) out.push({ x: q.x, y: q.y, r: 240, w: .8, k: 'mp' });
+    if (typeof msDefShips === 'function') for (const s of msDefShips()) out.push({ x: s.x, y: s.y, r: s.esc ? 550 : 650, w: 3, k: 'ship' });
+  }
+  return out;
+}
+const airThreatAt = (T, x, y, m = 0) => T.reduce((a, t) => a + (dist(t.x, t.y, x, y) < t.r + m ? t.w : 0), 0);
+// 目标 (tx, ty) 周围半径 rng 的圆上，偏向 (fx, fy) 一侧，找离已知防空圈最远的发射 / 待机点（risk = 仍在其中的威胁值）
+function airSafePos(tx, ty, rng, T, fx, fy, m = 40, bonus) {
+  let best = null, bs = -Infinity;
+  const a0 = fx != null ? Math.atan2(fy - ty, fx - tx) : Math.PI / 2;
+  for (let i = 0; i < 18; i++) {
+    const a = a0 + (i % 2 ? 1 : -1) * Math.ceil(i / 2) * .35, x = clamp(tx + Math.cos(a) * rng, 30, W - 30), y = clamp(ty + Math.sin(a) * rng, 30, H - 30);
+    const risk = airThreatAt(T, x, y, m), s = -risk * 10 - Math.abs(Math.atan2(Math.sin(a - a0), Math.cos(a - a0))) * .5 + (bonus ? bonus(x, y) : 0);
+    if (s > bs) { bs = s; best = { x, y, risk }; }
+  }
+  return best;
+}
+// 导弹告警：有对方防空导弹正飞向这架飞机
+const airMslWarn = (side, k, id) => S.missiles.some(m => m.kind === 'sam' && m.side !== side && !m.done && m.t >= 0 && m.tgt && m.tgt.k === k && m.tgt.id === id);
+
 // 在空的空警-600 预警机（舰载预警机，carrier.js recon 默认型号）
 const awAew = () => (S.planes || []).find(p => !p.dead && p.kind === 'recon' && (p.v || 'kj600') === 'kj600' && p.alt > .4) || null;
 // 我方舰队防空伞：驱逐舰舰空导弹 650（护航舰 550）、航母 450 以内（m 为外扩余量）；舰空导弹打光的舰不算

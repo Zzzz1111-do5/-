@@ -62,13 +62,14 @@ function a5Rally(T) {
 }
 // 可编入总攻的连：机动预备队（含落地集合完的第 101 空降师）、到位的抽调支队；不抽守备队、正在反冲击的、行军中的；指挥所旁留一个预备连
 function a5Pool(G) {
-  const C = a4C(), hq = S.points.find(p => p.key === 'HQ' && p.owner === 'e'), out = [];
+  const C = a4C(), hq = S.points.find(p => p.key === 'HQ' && p.owner === 'e'), out = [], F = a4Foes();
   for (const u of S.units) {
     if (u.side !== 'e' || u.kind !== 'inf' || u.role !== 'reserve' || u.state === 'rout' || G.units.includes(u.id) || C.dr[u.id]) continue;
     const pl = a4Plan(C, u.id);
     if (pl && pl.st === 'go') continue;
-    const ts = a4Ts(u);
+    const ts = a4Ts(u), c = a4Cent(u);
     if (a4Men(ts) < 3 || ts.some(q => q.raid || a4Held(q) || C.fl[q.id])) continue;
+    if (c && a4FoeD(F, c[0], c[1]) < 220) continue;   // 正在交战的连抽不出来，硬抽只会在路上被打散
     out.push(u);
   }
   if (A5.keepHQ && hq && out.length >= 3) {   // 总预备队留一个连在指挥所
@@ -98,7 +99,7 @@ function a5Recruit(G, us) {
   }
 }
 const a5Men = G => a5Units(G).reduce((a, u) => a + a4Men(a4Ts(u)), 0);
-const a5Arrived = (G, x, y, r) => a5Units(G).reduce((a, u) => a + a4Men(a4Ts(u).filter(q => dist(q.x, q.y, x, y) < r)), 0);
+const a5Arrived = (G, x, y, r) => a5Units(G).reduce((a, u) => a + a4Men(a4Ts(u).filter(q => dist(q.x, q.y, x, y) < r)), 0);   // r：集结地域半径
 function a5SetTarget(G, p) {
   G.key = p.key; G.tx = p.x; G.ty = p.y;
   const R = a5Rally(p) || { x: p.x, y: p.y - 340 };
@@ -138,9 +139,9 @@ function a5Think() {
       if (!p0 || (p0.owner === 'e' && p0.prog < .1)) { if (p1) a5SetTarget(G, p1); else { a5Release(G, 'cancel'); return; } }
       const pool = a5Pool(G);
       if (pool.length) { a5Recruit(G, pool); a5Say(`命令：${pool.map(a4Name).join('、')}编入总攻集团，到${a4Where(G.x, G.y)}隐蔽集结，不得零散投入。`, { kind: 'order', at: { x: G.x, y: G.y }, key: 'a5rec', gap: 25, lv: 1 }); }
-      const T = ptByKey(G.key), our = a5Our(T.x, T.y, 300), men = a5Arrived(G, G.x, G.y, 130);
+      const T = ptByKey(G.key), our = a5Our(T.x, T.y, 300), men = a5Arrived(G, G.x, G.y, 180);
       const tot = a5Men(G), ready = men >= tot * .7 && men >= A5.oppMen && men >= our.men * 1.1;   // 七成到位、对目标之敌占优就不再干等
-      const strong = men >= Math.max(A5.minMen, our.men * A5.need) || ready, chance = (our.ammo < 25 || our.shaky > .3) && men >= Math.max(A5.oppMen, our.men), late = S.t - G.t > A5.max && (men >= A5.oppMen || (S.t - G.t > A5.max + 40 && tot >= A5.oppMen));   // 等太久：编入的兵力够就直接向冲击出发阵地开进会合
+      const strong = men >= Math.max(A5.minMen, our.men * A5.need) || ready, chance = (our.ammo < 25 || our.shaky > .3) && men >= Math.max(A5.oppMen, our.men), late = S.t - G.t > A5.max && (men >= A5.oppMen || tot >= Math.min(A5.oppMen, 14));   // 等太久：各连从所在位置直接向冲击出发阵地开进，向心合击
       if (!(strong || chance || late)) return;
       G.st = 'prep'; G.t = S.t; G.men0 = a5Men(G);
       // 冲击出发阵地：目标前 160，按连分成两三个方向
