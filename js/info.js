@@ -48,7 +48,7 @@ function infoUnit(u) {
   const am = ts.reduce((a, q) => a + q.ammo, 0) / ts.length, cons = ts.some(q => q.sf && q.ammo < 25), pl = S.autoPlan && S.autoPlan.u && S.autoPlan.u[u.id];
   const models = [...new Set(ts.map(infoTeamModel))];
   const st = u.state === 'rout' ? '溃退' : u.state === 'waver' ? '动摇' : '稳定', ph = pl ? INFO_PH[pl.ph] || pl.ph : null, obj = pl && pl.obj ? (S.points.find(p => p.key === pl.obj) || {}).name : null;
-  return { t: unitName(u), s: u.kind === 'eng' ? '工兵分队' : u.emblem === 'para' ? '空降兵（运-20 投送）' : '步兵分队',
+  return { t: unitName(u), s: u.kind === 'eng' ? '工兵分队' : u.emblem === 'para' ? '海军陆战队蛟龙突击队（特种部队，运-20 伞降）' : '步兵分队',
     rows: [['编成', `${ts.length} 个组 ${men} 人`], ['小组型号', infoEsc(models.join('、'))], ['兵员与武器', infoEsc(infoMen(ts, 'p').join('；'))],
       ['弹药', `平均 ${Math.round(am)}/60${cons ? ' · <em>补给远，节约弹药</em>' : ''}`], ['士气', `${Math.round(u.morale)}（${st}）`],
       ['指挥', u.auto ? `自动${ph ? ` · ${ph}${obj ? ' ' + infoEsc(obj) : ''}` : ''}` : '手动']] };

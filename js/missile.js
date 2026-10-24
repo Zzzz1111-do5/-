@@ -31,7 +31,7 @@ function msLaunch(kind, side, x0, y0, tgt, opts = {}) {
   msEnsure();
   const d = dist(x0, y0, tgt.x, tgt.y), dur = opts.dur || (kind === 'tbm' ? 5 + d / 600 : 2.2);
   const m = { id: S.nid++, kind, side, x0, y0, x: x0, y: y0, z: 0, tx: tgt.x, ty: tgt.y, t: -(opts.delay || 0), dur, tgt: opts.tgt || null, ph: opts.delay ? 'wait' : 'boost', icp: false, src: opts.src || null,
-    spd: opts.spd || null, pk: opts.pk || null, sup: opts.sup || 0, w: opts.w || null };
+    spd: opts.spd || null, pk: opts.pk || null, sup: opts.sup || 0, w: opts.w || null, ...(opts.lr ? { lr: true } : {}) };   // lr：远程空空导弹（歼-36 的霹雳-17）
   S.missiles.push(m);
   return m;
 }
@@ -118,7 +118,8 @@ const MS_PGM = {
   hj10: { nm: '红箭-10 反坦克导弹', spd: 300, z: .25, dmg: 26, pen: 3.8, st: 6, icp: 0, pw: { men: .45, ship: 1.5, struct: 0, seg: false, R: 12, vb: 3, veh: true } },
   cj10: { nm: '长剑-10 对陆巡航导弹', spd: 150, z: .08, dmg: 40, pen: 3.4, st: 22, icp: .5, pw: { men: .85, ship: 5, struct: 0, seg: true, R: 34, vb: 10, veh: true } },
   yj18: { nm: '鹰击-18A 导弹', spd: 180, sprint: 620, sr: 260, z: .06, dmg: 44, pen: 3.8, st: 24, icp: .22, pw: { men: .85, ship: 6, struct: 0, seg: true, R: 32, vb: 10, veh: true } },
-  yj21: { nm: '鹰击-21 高超音速导弹', spd: 900, z: .9, dmg: 60, pen: 4, st: 40, icp: .06, pw: { men: .95, ship: 8, struct: 0, seg: true, R: 42, vb: 14, veh: true } }
+  yj21: { nm: '鹰击-21 高超音速导弹', spd: 900, z: .9, dmg: 60, pen: 4, st: 40, icp: .06, pw: { men: .95, ship: 8, struct: 0, seg: true, R: 42, vb: 14, veh: true } },
+  ls6: { nm: '雷石-6 滑翔制导炸弹', spd: 220, z: .55, dmg: 50, pen: 4, st: 30, icp: .35, pw: { men: .9, ship: 6, struct: 0, seg: true, R: 30, vb: 10, veh: true } }   // 歼-36 打击型：500 公斤级，高空投放滑翔，慢、可被近程防空拦截
 };
 function msPgmTgt(t) {
   if (!t) return null;
@@ -187,6 +188,7 @@ function msSamHit(m, T) {
   if (k === 'plane') {
     base = (aam || samv ? m.pk : T.kind === 'recon' ? .3 : T.v === 'heli' ? .62 : T.kind === 'bomber' && T.v !== 'dive' ? .32 : .42) * (aam ? 1 : (1 + (typeof airStealth === 'function' ? airStealth(T) : 1)) / 2);   // 隐身机：防空导弹难以锁定
     if (!T.samN) { T.samN = 1; flare = .6; MSV.fl.push({ x: T.x, y: T.y, t: S.t }); }   // 第一枚多半被干扰弹骗走
+    else if (T.flares > 0) { T.flares--; flare = .55; MSV.fl.push({ x: T.x, y: T.y, t: S.t }); }   // 运-20 等带了多组干扰弹的（abn.js）
   } else {
     base = (aam || samv ? m.pk : m.src === 'dd' || m.src === 'esc' ? (T.type === 'heli' ? .55 : .6) : T.type === 'heli' ? .62 : .42) * (aam ? 1 : (1 + ((typeof EA_SPEC === 'object' && EA_SPEC[T.type] && EA_SPEC[T.type].stealth) || 1)) / 2);   // F-35A 隐身
     if (T.flares > 0) { T.flares--; flare = .6; MSV.fl.push({ x: T.x, y: T.y, t: S.t }); }
@@ -194,7 +196,7 @@ function msSamHit(m, T) {
   if (Math.random() < base * (1 - clamp(m.sup || 0, 0, 100) / 150) * flare) {
     msStat('aaKill');
     if (k === 'plane') { if (typeof airLost === 'function') airLost(T, `${typeof airName === 'function' ? airName(T.kind, T.v) : '飞机'}被敌${aam ? '歼击机空空导弹' : samv ? '弹炮防空车' : '单兵防空导弹'}击落`); }
-    else if (typeof eaLost === 'function') eaLost(T, aam ? 'aam' : samv ? 'samv' : m.src === 'dd' || m.src === 'esc' ? 'sam' : 'manpads');
+    else if (typeof eaLost === 'function') eaLost(T, aam ? (m.lr ? 'aaml' : 'aam') : samv ? 'samv' : m.src === 'dd' || m.src === 'esc' ? 'sam' : 'manpads');
     if (aam && typeof awScore === 'function') awScore(m.side);
   } else msPuff(m.x, m.y, m.side);
 }

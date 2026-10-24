@@ -190,8 +190,8 @@ function tfBind(P) {
   const cap = { g: 2, a: 1, o: 1 };
   const vs = (S.veh || []).filter(v => v.side === 'p' && !v.dead && !v.lst && v.auto && !v.swim && !v.immob && v.type !== 'spg' && isLand(v.x, v.y));
   for (const v of S.veh || []) if (v.side === 'p' && v.buddy != null && !vs.includes(v)) { v.buddy = null; v.esc = null; }
-  // 先保留仍有效的绑定；守点的连队附近 350 内没有敌情时不占着坦克（免得坦克陪着守点的步兵在半路趴着），交还车辆自动驾驶去支援进攻
-  const quiet = u => P.u[u.id].ph === 'garrison' && !tfFoeNear(u, 350);
+  // 先保留仍有效的绑定；守点 / 填空隙的连队附近 350 内没有敌情时不占着坦克（免得坦克陪着守点的步兵在半路趴着），交还车辆自动驾驶去支援进攻
+  const quiet = u => (P.u[u.id].ph === 'garrison' || P.u[u.id].ph === 'gap') && !tfFoeNear(u, 350);   // 守点、填空隙的连队附近没敌情：坦克去支援进攻
   for (const v of vs) {
     const u = v.buddy != null && units.find(o => o.id === v.buddy), k = kindOf(v), L = u && (load[u.id] || (load[u.id] = { g: 0, a: 0, o: 0 }));
     if (u && L[k] < cap[k] && v.ai !== 'repair' && !quiet(u)) L[k]++; else { if (u && quiet(u)) tfStat('tfFree'); v.buddy = null; v.esc = null; }
@@ -331,7 +331,15 @@ function vehEscort(v) {
       E.eng = { x: pin.x, y: pin.y, until: S.t + 4 };
     }
   }
-  E.mode = mode; v.ai = mode === 'engage' ? 'engage' : 'escort';
+  // 压前观察射击：步兵在攻击（go / help / gap）而车上射程内没有目标、前方已知敌人就在射程外一点——把阵位往前提到步兵线后 10，够得着就打（不越过步兵线）
+  if (mode === 'ovw' && v.side === 'p' && sp.gun && !sp.gun.ind && S.autoPlan && S.autoPlan.u[u.id] && ['go', 'help', 'gap'].includes(S.autoPlan.u[u.id].ph)) {
+    const tg = tfPinner(v, ts, Fx, Fy) || (() => { let b = null, bd = sp.gun.range + 160; for (const e of S.enemies) if (!e.dead && e.kx != null) { const d = dist(e.kx, e.ky, Fx, Fy); if (d < bd) { bd = d; b = { x: e.kx, y: e.ky }; } } return b; })();
+    if (tg) {
+      const gap = dist(sx, sy, tg.x, tg.y) - sp.gun.range * .85;
+      if (gap > 0) { const nb = Math.max(10, back - gap); sx = Fx - ax * nb + lx * lat; sy = Fy - ay * nb + ly * lat; mode = 'fwd'; }
+    }
+  }
+  E.mode = mode; v.ai = mode === 'engage' ? 'engage' : mode === 'fwd' ? 'overwatch' : 'escort';
   sx = clamp(sx, 10, W - 10); sy = clamp(sy, 10, H - 10);
   // 硬规则：车在步兵线前方（交战时 30 以外、平时 8 以外）立即退回阵位
   const vp = (v.x - cx) * ax + (v.y - cy) * ay, ahead = vp > sInf + (mode === 'engage' ? 38 : 8);

@@ -42,7 +42,7 @@ function nukeBlast(x, y, side) {
   for (const q of S.teams) {
     if (!q.men.length) continue;
     const d = dist(x, y, q.x, q.y);
-    if (d < NK.r0) { while (q.men.length) killMan(q); continue; }
+    if (d < NK.r0) { while (q.men.length) killMan(q, null, true); continue; }
     if (d < NK.r1) { const p = .75 * (.4 + .6 * fall(d, NK.r0, NK.r1)) * (q.inTrench ? .6 : 1); for (let k = q.men.length; k > 0; k--) if (Math.random() < p) killMan(q); }
     if (d < NK.r2 && q.men.length) { suppress(q, 100 * fall(d, 0, NK.r2) + 30, x, y); const u = unitOf(q); if (u) u.morale = Math.max(0, u.morale - 60 * fall(d, 0, NK.r2)); }
   }

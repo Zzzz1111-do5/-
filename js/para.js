@@ -1,19 +1,30 @@
 'use strict';
 // 空降（v8）：战区运输机从南面海上飞来，向指定地点空投伞兵或补给（Shift+P 空降伞兵，Shift+O 空投补给；字母键都已有用途）。
 // 运输机走 S.planes（kind 'transport'，carrier.js updatePlanes 交给 paFly）：敌高炮、单兵防空导弹、弹炮防空车与歼击机都会打它。
-// 伞兵：两架运输机各载 2 个三人组（第二架的一组带火箭筒），飞到空降场上空依次跳伞（散布 σ 28，随东北风飘），开伞下降 5 秒——
-//   下降中挨地面火力会有伤亡，落进水里的组全部损失；运输机在跳伞前被击落，机上的组一并损失。落地后编成「空降连」，交自动指挥就近夺取据点
+// 伞兵（v13 起为海军陆战队「蛟龙突击队」）：两架运-20 各载 3 个三人组共 18 人——突击组 ×2、红箭-12 反坦克组、双机枪火力组、
+//   QBU-202 狙击组、前卫-2 防空组；高跳低开，散布小（σ 16）、下降快（4 秒），空中挨打的概率减半。
+//   特种部队加成（JL_MOD）：射击精度 1.6 倍、射速 1.3 倍、射程 1.2 倍、压制力 1.4 倍；防弹插板与战斗素养——致命一击有 45% 只是负伤（combat.js killMan mod.hard）；
+//   被压制程度减半（mod.calm）；连队士气 100、伤亡和压制对士气的打击减半（u.elite）。
+//   落进水里的组全部损失；运输机在跳伞前被击落，机上的组一并损失。落地后编成「蛟龙突击队」，交自动指挥就近夺取据点
 // 补给：一架运输机投下 3 个弹药箱，落地后成为空投补给点（每箱 120 份弹药、4 分钟内有效）：120 以内的我方步兵每秒补 6 份弹药、恢复士气，
 //   90 以内停着的车辆补炮弹；也算补给点（supplynet.js supplyPoints：自动指挥的连队弹药不足会来这里补）；敌人先到（30 以内无我方）就被缴获
 // AI（观战，或航母开了自动派机）：攻势展开后向正在攻击的目标后方空降一次，与正面夹击；有连队弹药告急、又离接通的补给点很远时空投补给
 // 状态：S.para = { tr: 在途运输机, ch: 下降中的伞兵组 / 弹药箱, ca: 空投补给点, n: 架次编号, aiT, dropT }；S.assets.para / S.assets.drop 剩余次数
-const PA = { spd: 140, alt: .55, jump: 5, sig: 28, crate: 120, life: 240, feed: 6, r: 120, rv: 90 };
-const PA_STICKS = [[['radio', 'rifle', 'mg'], ['rifle', 'rifle', 'mg']], [['radio', 'rifle', 'rifle'], ['rifle', 'rifle', 'mg']]];
+const PA = { spd: 140, alt: .55, jump: 5, sig: 28, crate: 120, life: 240, feed: 6, r: 120, rv: 90, jlJump: 4, jlSig: 16 };
+// 蛟龙突击队：每架运-20 的三个组 {men, role}
+const PA_STICKS = [
+  [{ men: ['radio', 'rifle', 'mg'], role: 'assault' }, { men: ['rifle', 'rifle', 'mg'], role: 'assault' }, { men: ['rifle', 'rifle', 'rifle'], role: 'at' }],
+  [{ men: ['rifle', 'mg', 'mg'], role: 'mg' }, { men: ['rifle', 'rifle', 'rifle'], role: 'sniper' }, { men: ['rifle', 'aa', 'rifle'], role: 'aa' }]
+];
+const JL_MOD = { pow: 1.6, rof: 1.3, rng: 1.2, sup: 1.4, hard: .45, calm: .5 };
+const JL_ROLE = { assault: {}, mg: { sup: 1.9 }, at: { at: 1.8, atPen: 3.4, rng: 1.5 }, sniper: { rng: 1.9, pow: 2.3, rof: .8 }, aa: {} };
+const JL_NM = { assault: '突击组', mg: '火力组', at: '红箭-12 反坦克组', sniper: 'QBU-202 狙击组', aa: '前卫-2 防空组' };
 const PA_ICONS = {
   para: '<path d="M4 11a8 6.5 0 0 1 16 0z"/><path d="M4 11l8 7 8-7M9 11l3 7 3-7"/><circle class="f" cx="12" cy="19.6" r="1.7"/>',
   drop: '<path d="M4 9a8 6 0 0 1 16 0z"/><path d="M4 9l5 6.5M20 9l-5 6.5"/><rect x="8.5" y="15" width="7" height="6" rx=".6"/><path d="M8.5 18h7M12 15v6"/>'
 };
 if (typeof AIR_SPEC === 'object' && !AIR_SPEC.transport) AIR_SPEC.transport = { name: '运-20 运输机', n: 0, aa: .07, spd: PA.spd, size: 26 };
+const paMen = i => PA_STICKS[i].reduce((a, o) => a + o.men.length, 0);
 if (typeof AIR_SIL === 'object' && !AIR_SIL.transport) AIR_SIL.transport = [[11, 0], [10, 1.6], [5, 2.1], [3.2, 11.8], [.2, 11.8], [-.6, 2.1], [-7.5, 1.6], [-8.6, 5.4], [-10.6, 5.4], [-10.2, 1], [-11, 0]];
 
 function paEnsure() {
@@ -44,15 +55,16 @@ function paLaunch(kind, x, y, ai) {
     const sx = clamp(x + (i - (n - 1) / 2) * 50 + gauss() * 20, 40, W - 40), sy = H + 60 + i * 30;
     const p = { id: S.nid++, kind: 'transport', x: sx, y: sy, heading: -Math.PI / 2, spd: PA.spd, alt: PA.alt, bank: 0, phase: 'in', tx: x, ty: y, cx: x, cy: y, ox: 1, dropped: false };
     S.planes.push(p);
-    P.tr.push({ id: p.id, k: kind, ev, i, dz: { x: Math.round(x), y: Math.round(y) }, dropped: false, men: kind === 'para' ? PA_STICKS[i].reduce((a, m) => a + m.length, 0) : 0 });
+    P.tr.push({ id: p.id, k: kind, ev, i, dz: { x: Math.round(x), y: Math.round(y) }, dropped: false, men: kind === 'para' ? paMen(i) : 0 });
   }
   const sec = Math.max(5, Math.round((H + 60 - y) / PA.spd));
-  log(kind === 'para' ? `空降：两架运输机载伞兵 12 人从海上飞来，约 ${sec} 秒后在 ${gridRef(x, y)} 跳伞` : `空投：运输机载弹药 3 箱，约 ${sec} 秒后在 ${gridRef(x, y)} 投下`, 'info', null, 0, { x, y });
+  log(kind === 'para' ? `空降：两架运-20 载蛟龙突击队 ${paMen(0) + paMen(1)} 人从海上飞来，约 ${sec} 秒后在 ${gridRef(x, y)} 高跳低开` : `空投：运输机载弹药 3 箱，约 ${sec} 秒后在 ${gridRef(x, y)} 投下`, 'info', null, 0, { x, y });
   return true;
 }
 
 // carrier.js updatePlanes 对运输机调用：飞向空降场 → 跳伞 / 投箱 → 掉头飞回海上（飞出图外即返航，不算损失）
 function paFly(p, dt) {
+  if (p.ab && typeof abFly === 'function') { abFly(p, dt); return; }   // 空降兵营伞降 / 机降（abn.js）
   if (p.phase === 'in') {
     airSteer(p, p.tx, p.ty, dt);
     if (dist(p.x, p.y, p.tx, p.ty) < 40 || (p.y < p.ty - 10 && Math.abs(p.x - p.tx) < 80)) { p.dropped = true; p.phase = 'out'; p.ox = p.x < W / 2 ? 1 : -1; paRelease(p); }
@@ -65,16 +77,16 @@ function paRelease(p) {
   const P = paEnsure(), r = P.tr.find(o => o.id === p.id);
   if (!r) return;
   r.dropped = true;
-  if (r.k === 'para') PA_STICKS[r.i].forEach((men, j) => P.ch.push({ k: 'team', ev: r.ev, men: men.slice(), at: r.i === 1 && j === 0, x: p.x + gauss() * PA.sig, y: p.y + gauss() * PA.sig, t: -j * .7, hT: 0 }));
+  if (r.k === 'para') PA_STICKS[r.i].forEach((o, j) => P.ch.push({ k: 'team', ev: r.ev, men: o.men.slice(), role: o.role, x: p.x + gauss() * PA.jlSig, y: p.y + gauss() * PA.jlSig, t: -j * .5, hT: 0 }));
   else for (let j = 0; j < 3; j++) P.ch.push({ k: 'crate', ev: r.ev, x: p.x + gauss() * PA.sig * .7, y: p.y + gauss() * PA.sig * .7, t: -j * .5 });
-  log(r.k === 'para' ? '伞兵开始跳伞' : '弹药箱已投下', 'info', 'padrop' + r.ev, 5, p);
+  log(r.k === 'para' ? '蛟龙突击队开始跳伞' : '弹药箱已投下', 'info', 'padrop' + r.ev, 5, p);
 }
 
 // 着陆：落水全组损失；落在悬崖、山地等不可通行处就近找 30 以内可走的格，找不到同样损失
 function paLand(c) {
   const P = S.para;
   let x = clamp(c.x, 10, W - 10), y = clamp(c.y, 10, H - 10);
-  const lost = why => { if (c.k === 'team' && c.men.length) { S.stats.lost += c.men.length; log(`一个伞兵组${why}，${c.men.length} 人损失`, 'bad', 'palost', 5, { x, y }); } };
+  const lost = why => { if (c.k === 'team' && c.men.length) { S.stats.lost += c.men.length; log(`蛟龙突击队一个组${why}，${c.men.length} 人损失`, 'bad', 'palost', 5, { x, y }); } };
   if (isWater(typeAt(x, y))) { lost('落入水中'); return; }
   if (!passInf(x, y)) {
     const j = nearestPassable(ci(x, y), 'p');
@@ -90,11 +102,10 @@ function paLand(c) {
   let u = S.units.find(o => o.side === 'p' && o.paEv === c.ev);
   if (!u) {
     const n = S.units.filter(o => o.side === 'p' && o.emblem === 'para').length + 1;
-    u = addUnit('p', 'inf', { ship: n > 1 ? `空降${n}` : '空降', emblem: 'para', form: 'wedge', face: NORTH, auto: true, paEv: c.ev, morale: 85 });
+    u = addUnit('p', 'inf', { ship: n > 1 ? `蛟龙突击队${n}` : '蛟龙突击队', emblem: 'para', form: 'wedge', face: NORTH, auto: true, paEv: c.ev, morale: 100, elite: true });
     log(`${unitName(u)}着陆，正在集结`, 'good', null, 0, { x, y });
   }
-  const at = c.at && typeof catalogById === 'function' && catalogById('p_at');
-  addTeam('p', x, y, c.men, { unit: u.ship, u: u.id, ammo: 60, sup: 20, ...(at ? { mod: { ...at.spawn.mod } } : {}) });
+  addTeam('p', x, y, c.men, { unit: u.ship, u: u.id, ammo: 60, sup: 10, jl: c.role || 'assault', mod: { ...JL_MOD, ...(JL_ROLE[c.role] || {}) } });
   v8Stat('paMen', c.men.length);
 }
 
@@ -121,10 +132,11 @@ function paStep(dt) {
       let pk = 0, src = null;
       for (const q of S.teams) if (q.side === 'e' && q.men.length && q.sup < 70 && dist(q.x, q.y, c.x, c.y) < 150) { pk += .04 * q.men.length / 3; src = src || q; }
       for (const e of S.enemies) if (!e.dead && e.kind === 'aa' && (e.sup || 0) < 60 && dist(e.x, e.y, c.x, c.y) < 190) { pk += .08; src = e; }
-      if (src) tracer(src.x, src.y, c.x + gauss() * 4, c.y - (1 - c.t / PA.jump) * 34, 'e', inVision(src.x, src.y));
+      if (src) tracer(src.x, src.y, c.x + gauss() * 4, c.y - (1 - c.t / (c.role ? PA.jlJump : PA.jump)) * 34, 'e', inVision(src.x, src.y));
+      if (c.role) pk *= .5;   // 蛟龙突击队：高跳低开，空中暴露时间短
       if (pk && Math.random() < pk) { c.men.splice(Math.floor(Math.random() * c.men.length), 1); S.stats.lost++; if (!c.men.length) log('一个伞兵组在空中被敌火力全部击中', 'bad', 'pakill', 6, c); }
     }
-    if (c.t < PA.jump) continue;
+    if (c.t < (c.role ? PA.jlJump : PA.jump)) continue;
     c.done = true;
     paLand(c);
   }
@@ -177,7 +189,7 @@ function paAI(dt) {
         if (x < 40 || x > W - 40 || y < 40 || !isLand(x, y) || !passInf(x, y)) continue;
         if (S.enemies.some(e => !e.dead && e.kind === 'aa' && e.kx != null && dist(e.kx, e.ky, x, y) < 220)) continue;
         if (S.teams.some(q => q.side === 'e' && q.men.length && inVision(q.x, q.y) && dist(q.x, q.y, x, y) < 80)) continue;
-        if (paLaunch('para', x, y, true)) say(`命令：空降连在${p.name}后方 ${gridRef(x, y)} 伞降，与正面进攻部队前后夹击${p.name}。`, { x, y });
+        if (paLaunch('para', x, y, true)) say(`命令：蛟龙突击队在${p.name}后方 ${gridRef(x, y)} 高跳低开，与正面进攻部队前后夹击${p.name}。`, { x, y });
         break outer;
       }
     }
@@ -224,7 +236,7 @@ function paDraw(time) {
   }
   for (const c of P.ch) {
     if (c.t < 0 || !inView(c.x, c.y, 60)) continue;
-    const u = clamp(c.t / PA.jump, 0, 1), h = (1 - u) * 34, x = c.x, y = c.y - h;
+    const u = clamp(c.t / (c.role ? PA.jlJump : PA.jump), 0, 1), h = (1 - u) * 34, x = c.x, y = c.y - h;
     ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.beginPath(); ctx.ellipse(c.x, c.y, r * .9, r * .45, 0, 0, 7); ctx.fill();   // 地面投影
     ctx.fillStyle = 'rgba(2,10,6,.85)'; ctx.strokeStyle = rgba(COL.g, .95); ctx.lineWidth = px(1.2);
     ctx.beginPath(); ctx.arc(x, y - r * 1.6, r, Math.PI, 0); ctx.closePath(); ctx.fill(); ctx.stroke();   // 伞衣

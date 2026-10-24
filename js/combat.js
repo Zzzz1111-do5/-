@@ -9,12 +9,14 @@ const POWER = {
   bomb: { men: .75, ship: 3, struct: 9, seg: false, R: 34 }
 };
 
-function killMan(q, prefer) {
+// 精锐（mod.hard）：防弹插板、单兵战斗素养——致命一击有一定几率只是负伤、继续战斗（force：核爆等必死的场合）
+function killMan(q, prefer, force) {
   if (!q.men.length) return;
+  if (!force && q.mod && q.mod.hard && Math.random() < q.mod.hard) { q.sup = Math.min(100, q.sup + 8); if (typeof v8Stat === 'function') v8Stat('hardSave'); return; }
   const pi = prefer ? q.men.indexOf(prefer) : -1;
   const role = q.men.splice(pi >= 0 ? pi : Math.floor(Math.random() * q.men.length), 1)[0];
   const u = unitOf(q);
-  if (u) { u.morale -= 5 * (S.t - u.flankT < 3 ? 1.5 : 1); u.hitT = S.t; }
+  if (u) { u.morale -= 5 * (S.t - u.flankT < 3 ? 1.5 : 1) * (u.elite ? .5 : 1); u.hitT = S.t; }   // 精锐连队：伤亡对士气的打击减半
   if (q.side === 'e') { S.stats.killed++; return; }
   S.stats.lost++;
   if (role === 'radio') log('通讯兵阵亡，视野丢失', 'bad', 'radio', 4, q);
@@ -22,6 +24,7 @@ function killMan(q, prefer) {
 }
 // 压制：来自侧后方（偏离朝向 100° 以上）的火力压制翻倍并打击士气
 function suppress(q, v, sx, sy) {
+  if (q.mod && q.mod.calm) v *= q.mod.calm;   // 精锐：被压制的程度打折
   if (sx != null && angDiff(Math.atan2(sy - q.y, sx - q.x), faceOf(q)) > 1.75) {
     v *= 1.6;
     const u = unitOf(q);

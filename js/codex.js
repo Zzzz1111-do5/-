@@ -208,6 +208,7 @@ function cdxDetail() {
     <div class="cdx-tags"><span class="cdx-tag ${side}">${CDX_SIDE[side] || side}</span><span class="cdx-tag m">${cdxEsc(cdxCatName(c.cat))}</span>${c.arch ? `<span class="cdx-tag m">${cdxEsc(cdxArch(c.arch))}</span>` : ''}<span class="cdx-tag c">◆ ${c.cost ?? '—'} 点</span></div></div></div>
     <dl class="cdx-stats">${CDX_STATS.map(([k, n]) => `<dt>${n}</dt>${cdxBar(st[k])}<dd>${st[k] == null ? '—' : Math.round(st[k] * 10) / 10}</dd>`).join('')}</dl>
     <p class="cdx-desc">${cdxEsc(c.desc || '暂无说明。')}</p>
+    ${typeof ctLoadHtml === 'function' ? ctLoadHtml(c, cdxEsc) : ''}
     ${c.counters || c.weakTo ? `<div class="cdx-rel">${rel(c.counters, 'up', '克制')}${rel(c.weakTo, 'dn', '被克制')}</div>` : ''}
     <div class="cdx-hint"><kbd>←↑→↓</kbd> 浏览 · <kbd>[</kbd><kbd>]</kbd> 切换分类 · <kbd>/</kbd> 搜索 · <kbd>Esc</kbd> 关闭</div>`;
 }

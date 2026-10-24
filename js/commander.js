@@ -107,7 +107,7 @@ function cmdUName(u) {
   if (u.side !== 'p') return '敌军';
   if (u.kind === 'eng') return `${u.ship || ''}工兵组`;
   if (u.ship && Array.isArray(S.veh) && S.veh.some(v => v.label === u.ship)) return `${u.ship}车组`;
-  if (u.ship && u.ship !== '增援') return `${u.ship}连`;
+  if (u.ship && u.ship !== '增援') return /队\d*$/.test(u.ship) ? u.ship : `${u.ship}连`;
   const C = S.cmd.p;
   if (!C.alias[u.id]) C.alias[u.id] = ++C.rc;
   return `增援${C.alias[u.id]}连`;
@@ -290,7 +290,8 @@ function cmdArmP(C, go) {
   const arm = !nArm ? 'none' : T.at >= 3 && T.at >= T.inf * .5 ? 'inf' : T.inf >= 3 && T.at <= 1.5 ? 'tank' : 'mix';
   C.arm = arm; C.armTh = T;
   const sh = r => cmdShipsOf(C, r).filter(s => s.state === 'idle' && C.ship[s.id].rel && !C.ship[s.id].sent);
-  const eta = (o, x, sp) => dist(o.x, o.y, x, coastAt(x) - 20) / (sp * (o.spdK || 1));   // 气垫登陆艇 spdK 2.2
+  // 航程：横向远的先在深水航道里横移、再垂直抵滩（units.js shipLaneWP），按两段折线算
+  const eta = (o, x, sp) => (Math.abs(o.x - x) >= 140 && typeof shipLaneY === 'function' ? Math.abs(o.x - x) + Math.abs(o.y - shipLaneY(x)) * (o.y > shipLaneY(x) ? .6 : 1) + (shipLaneY(x) - coastAt(x) + 20) : dist(o.x, o.y, x, coastAt(x) - 20)) / (sp * (o.spdK || 1));   // 气垫登陆艇 spdK 2.2
   const w1 = sh('w1'), fe = sh('fe');   // 第一波（含拓宽到相邻滩头的一翼）同时抵滩
   const xOf = s => { const t = C.ship[s.id], bb = TER.beaches[t.b]; return cmdLandX(bb, t.k || 0, t.n || 1); };
   const vSp = v => Math.max(4, vehSp(v).speed * (vehSp(v).swimK || .6));

@@ -4,7 +4,8 @@
 // parent = 上级节点 id（null 表示直接连到滩头补给站）；root = 所属 S.supply 补给线 id；path = 从上级到本节点的运输线
 // 节点接通 = 已建成、未被摧毁、到上级的运输线未被切断、上级接通（或所属滩头补给线接通）
 // SN_STEP：新补给点离上一个点约几格——有补给卡车（trucks.js）往前运，点可以设得更远、链可以更长
-const SN_R = 220, SN_MAX = 24, SN_HP = 10, SN_FAR = 260, SN_STEP = 26, SN_STOCK0 = .35;
+const SN_R = 220, SN_MAX = 30, SN_HP = 10, SN_FAR = 220, SN_STEP = 26, SN_STOCK0 = .35;
+const SN_FRONTS = 3, SN_AHEAD = 2;   // 同时跟进的进攻方向数 · 每个方向最多先规划几段（前一段建成后卡车接着建下一段）
 
 function snEnsure() {
   if (!S.snet || typeof S.snet !== 'object' || !Array.isArray(S.snet.nodes)) S.snet = { nodes: [], planT: 0, front: null };
@@ -61,7 +62,7 @@ function supplyPoints(connectedOnly) {
   const out = [];
   if (!S) return out;
   for (const L of S.supply) if (!connectedOnly || L.connected) out.push({ kind: 'depot', id: L.id, x: L.x, y: L.y, root: L.id, connected: !!L.connected });
-  if (S.snet) for (const n of S.snet.nodes) if (snLive(n) && (!connectedOnly || n.connected)) out.push({ kind: 'node', id: n.id, x: n.x, y: n.y, root: n.root, connected: !!n.connected, stock: n.stock ?? 1 });
+  if (S.snet) for (const n of S.snet.nodes) if (snLive(n) && isFinite(n.x) && isFinite(n.y) && (!connectedOnly || n.connected)) out.push({ kind: 'node', id: n.id, x: n.x, y: n.y, root: n.root, connected: !!n.connected, stock: n.stock ?? 1 });
   if (S.para && S.para.ca) for (const k of S.para.ca) if (k.amt > 0) out.push({ kind: 'cache', id: k.id, x: k.x, y: k.y, root: null, connected: true });   // 空投补给点（para.js）
   return out;
 }
@@ -81,14 +82,10 @@ function snDanger(x, y, r) {
   return false;
 }
 
-// —— 规划：前线 = 远离补给（>260）的我方步兵主力；从最近的接通补给点沿寻路方向延伸约 17 格设新补给点 ——
-function snPlan() {
-  const net = snEnsure(), N = net.nodes;
-  snPrune();
-  net.front = null;
-  if (!S.teams.some(q => q.side === 'p' && q.kind === 'eng' && q.men.length) && !(typeof trkAny === 'function' && trkAny())) return;   // 工兵全部阵亡、也没有补给卡车：无人施工
-  const pts = supplyPoints(true);
-  if (!pts.length) return;
+// —— 规划：补给线跟着推进线走——远离补给（> SN_FAR）的我方步兵按地域分成几个进攻方向（各取兵力最集中的一群，最多 SN_FRONTS 个）；
+//    每个方向从离它最近的补给点（接通的，或已规划、正在建的链尾）沿寻路方向延伸约 SN_STEP 格设新补给点，一个方向最多先规划 SN_AHEAD 段，
+//    卡车 / 工兵按顺序一段段建过去，不用等前一段建好才规划下一段 ——
+function snFronts(pts) {
   const far = [];
   for (const u of S.units) {
     if (u.side !== 'p' || u.kind !== 'inf' || u.state === 'rout' || u.x == null || !isFinite(u.x) || !teamsOf(u).length) continue;
@@ -96,44 +93,63 @@ function snPlan() {
     for (const p of pts) d = Math.min(d, dist(p.x, p.y, u.x, u.y));
     if (d > SN_FAR) far.push({ x: u.x, y: u.y, m: Math.max(1, u.men || 1) });
   }
-  if (!far.length) return;
-  // 取兵力最集中的一群作为前线
-  let core = far[0], cm = 0;
-  for (const a of far) { let m = 0; for (const b of far) if (dist(a.x, a.y, b.x, b.y) < 320) m += b.m; if (m > cm) { cm = m; core = a; } }
-  let fx = 0, fy = 0, fm = 0;
-  for (const b of far) if (dist(core.x, core.y, b.x, b.y) < 320) { fx += b.x * b.m; fy += b.y * b.m; fm += b.m; }
-  const front = { x: fx / fm, y: fy / fm };
-  net.front = front;
-  const planned = N.filter(n => !n.dead && n.built < 1);
-  if (N.length >= SN_MAX || planned.length >= 2 || planned.some(n => dist(n.x, n.y, front.x, front.y) < 430)) return;
-  const f = field(front.x, front.y, 'p');
-  if (!f) return;
-  let an = null, ad = Infinity;
-  for (const p of pts) { const v = f[ci(p.x, p.y)]; if (v < ad) { ad = v; an = p; } }
-  if (!an || !isFinite(ad)) return;
-  let x = an.x, y = an.y;
-  const path = [[x, y]], trail = [[x, y]];
-  for (let k = 1; k <= SN_STEP; k++) {
-    const n = nextStep(f, x, y);
-    if (!n) break;
-    [x, y] = n;
-    trail.push([x, y]);
-    if (dist(x, y, front.x, front.y) < 110) break;
+  const out = [];
+  while (far.length && out.length < SN_FRONTS) {
+    let core = far[0], cm = 0;
+    for (const a of far) { let m = 0; for (const b of far) if (dist(a.x, a.y, b.x, b.y) < 320) m += b.m; if (m > cm) { cm = m; core = a; } }
+    let fx = 0, fy = 0, fm = 0;
+    for (let i = far.length - 1; i >= 0; i--) { const b = far[i]; if (dist(core.x, core.y, b.x, b.y) < 320) { fx += b.x * b.m; fy += b.y * b.m; fm += b.m; far.splice(i, 1); } }
+    if (fm >= 3) out.push({ x: fx / fm, y: fy / fm, m: fm });
   }
-  // 避开已知雷区、铁丝网与敌情：沿来路回退
-  while (trail.length > 1) {
-    const [tx, ty] = trail[trail.length - 1], i = ci(tx, ty);
-    if (TP[TER.type[i]].sp && MINEC[i] !== 2 && !WIREC[i] && !snDanger(tx, ty, 110)) break;
-    trail.pop();
+  return out;
+}
+function snPlan() {
+  const net = snEnsure(), N = net.nodes;
+  snPrune();
+  net.front = null;
+  if (!S.teams.some(q => q.side === 'p' && q.kind === 'eng' && q.men.length) && !(typeof trkAny === 'function' && trkAny())) return;   // 工兵全部阵亡、也没有补给卡车：无人施工
+  const pts = supplyPoints(true);
+  if (!pts.length) return;
+  const fronts = snFronts(pts);
+  if (!fronts.length) return;
+  net.front = fronts[0];
+  net.fronts = fronts.map(f => ({ x: Math.round(f.x), y: Math.round(f.y) }));
+  for (const front of fronts) {
+    if (N.length >= SN_MAX) return;
+    const f = field(front.x, front.y, 'p');
+    if (!f) continue;
+    // 起点：离前线（寻路距离）最近的接通补给点，或本方向已规划 / 在建的链尾（链尾的上级必须能接上）
+    const pend = N.filter(n => !n.dead && n.built < 1 && isFinite(n.x));
+    const ahead = pend.filter(n => isFinite(f[ci(n.x, n.y)]) && f[ci(n.x, n.y)] < Infinity && dist(n.x, n.y, front.x, front.y) < 700);
+    if (ahead.length >= SN_AHEAD) continue;
+    let an = null, ad = Infinity;
+    for (const p of pts) { const v = f[ci(p.x, p.y)]; if (v < ad) { ad = v; an = p; } }
+    for (const n of ahead) { const v = f[ci(n.x, n.y)]; if (v < ad) { ad = v; an = { kind: 'node', id: n.id, x: n.x, y: n.y, root: n.root }; } }
+    if (!an || !isFinite(ad) || dist(an.x, an.y, front.x, front.y) < 150) continue;
+    let x = an.x, y = an.y;
+    const path = [[x, y]], trail = [[x, y]];
+    for (let k = 1; k <= SN_STEP; k++) {
+      const n = nextStep(f, x, y);
+      if (!n) break;
+      [x, y] = n;
+      trail.push([x, y]);
+      if (dist(x, y, front.x, front.y) < 110) break;
+    }
+    // 避开已知雷区、铁丝网与敌情：沿来路回退
+    while (trail.length > 1) {
+      const [tx, ty] = trail[trail.length - 1], i = ci(tx, ty);
+      if (TP[TER.type[i]].sp && MINEC[i] !== 2 && !WIREC[i] && !snDanger(tx, ty, 110)) break;
+      trail.pop();
+    }
+    [x, y] = trail[trail.length - 1];
+    if (dist(x, y, an.x, an.y) < 80 || N.some(n => !n.dead && dist(n.x, n.y, x, y) < 70)) continue;
+    for (let k = 3; k < trail.length - 1; k += 3) path.push(trail[k]);
+    path.push([x, y]);
+    const node = { id: S.nid++, x, y, parent: an.kind === 'node' ? an.id : null, root: an.root, hp: SN_HP, maxhp: SN_HP, built: 0, cut: false, dead: false, connected: false, rep: 0, sab: 0, path, t: S.t, deadT: null, stock: SN_STOCK0 };
+    N.push(node);
+    v8Stat('snPlan');
+    log('工兵规划前沿补给点，补给线跟进', 'info', 'snplan', 40, { x, y });
   }
-  [x, y] = trail[trail.length - 1];
-  if (dist(x, y, an.x, an.y) < 80) return;
-  if (N.some(n => !n.dead && dist(n.x, n.y, x, y) < 70)) return;
-  for (let k = 3; k < trail.length - 1; k += 3) path.push(trail[k]);
-  path.push([x, y]);
-  const node = { id: S.nid++, x, y, parent: an.kind === 'node' ? an.id : null, root: an.root, hp: SN_HP, maxhp: SN_HP, built: 0, cut: false, dead: false, connected: false, rep: 0, sab: 0, path, t: S.t, deadT: null, stock: SN_STOCK0 };
-  N.push(node);
-  log('工兵规划前沿补给点', 'info', 'snplan', 40, { x, y });
 }
 
 // 清理：长期无人施工且前线已远离的规划点、被毁后已无人需要的补给点（只删叶子节点）
@@ -143,7 +159,7 @@ function snPrune() {
     const hasKid = new Set(N.filter(n => n.parent != null).map(n => n.parent));
     const near = (n, r) => S.units.some(u => u.side === 'p' && u.kind === 'inf' && u.x != null && dist(u.x, u.y, n.x, n.y) < r);
     const drop = N.filter(n => !hasKid.has(n.id) && (
-      !snRootLine(n) || (n.parent != null && !snById(n.parent)) ||
+      !isFinite(n.x) || !isFinite(n.y) || !snRootLine(n) || (n.parent != null && !snById(n.parent)) ||
       (!n.dead && n.built <= 0 && S.t - n.t > 60 && !near(n, 450)) ||
       (n.dead && n.built <= 0 && S.t - (n.deadT ?? n.t) > 60 && !near(n, 350))));
     if (!drop.length) break;

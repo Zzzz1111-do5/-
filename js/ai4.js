@@ -399,7 +399,7 @@ function a4CaTick(C, c, info, A) {
       if (am < c.need * .5 && S.t - c.t < mT * .6) return;
       c.st = 'prep'; c.prepT = S.t;
       c.guns = S.enemies.some(e => !e.dead && !e.moving && (e.kind === 'arty' || e.kind === 'mortar') && dist(e.x, e.y, p.x, p.y) < (e.kind === 'mortar' ? 420 : 1100) * ((e.mod && e.mod.rng) || 1));
-      const air = !!(S.eair && S.eair.wing && S.eair.wing.some(w => w.state === 'ready' && w.type !== 'ftr'));
+      const air = !!(S.eair && S.eair.wing && S.eair.wing.some(w => w.state === 'ready' && !eaFtr(w.type)));
       chatSay('e', `命令：${c.guns ? `炮兵对${p.name}实施火力准备` : `${p.name}方向没有炮兵支援，各分队以直射火力压制`}${air ? '，航空兵出动支援' : ''}；反冲击各分队在出发阵地待命。`, { kind: 'order', at: p, lv: 1 });
       return;
     }

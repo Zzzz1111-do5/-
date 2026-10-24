@@ -63,11 +63,13 @@ const sbxWingN = () => sbxOf('wing').reduce((a, it) => a + (sbxEntry(it).spawn.l
 
 // —— 野战机场（eair.js 固定建模）：选址避开据点、其他工事与别的机场；条目缓存跑道方向 _fit，位置变了才重算 ——
 const sbxEaCap = () => typeof EA_RW === 'object' ? EA_RW.cap : 4;
+// 限购（catalog lim = {g 组, n 上限}）：同组条目已编入的数量（ignore：正在拖动的那一项不算）
+const sbxLimN = (c, ignore) => S.sbx.items.filter(it => it !== ignore && it.side === c.side && ((sbxEntry(it) || {}).lim || {}).g === c.lim.g).length;
 function sbxAirAvoid(ignore) {
   const o = S.points.map(p => ({ x: p.x, y: p.y, r: 50 }));
   for (const it of S.sbx.items) {
     const c = it !== ignore && it.side === 'e' && it.x != null ? sbxEntry(it) : null;
-    if (c && (c.spawn.kind === 'enemy' || c.spawn.kind === 'post')) o.push({ x: it.x, y: it.y, r: c.spawn.ek === 'airfield' ? 150 : 15 });
+    if (c && (c.spawn.kind === 'enemy' || c.spawn.kind === 'post')) o.push({ x: it.x, y: it.y, r: c.spawn.ek === 'airfield' ? 260 : 15 });   // 机场停机坪五排深：两座机场离远一点
   }
   return o;
 }
@@ -95,6 +97,7 @@ function sbxCheck(c, x, y, x2, y2, ignore) {
   const repl = 0;
   if (ignore) cost = 0;
   if (cost > sbxLeft(c.side) + repl) return bad(`预算不足（还剩 ${sbxLeft(c.side)} 点）`);
+  if (c.lim && sbxLimN(c, ignore) >= c.lim.n) return bad(`${c.lim.nm}限购 ${c.lim.n} 架（两种型号合计），已经编入 ${sbxLimN(c, ignore)} 架`);
   if (s.at === 'none') return { ok: true };
   if (s.kind === 'ewing') {
     const nb = sbxOf('enemy').filter(it => sbxEntry(it).spawn.ek === 'airfield').length;
@@ -270,7 +273,7 @@ function sbxPresetDef() {
     add({ cat: SBX_ROLE[u.role] || 'e_garrison', x: sbxR(ts.reduce((a, q) => a + q.x, 0) / ts.length), y: sbxR(ts.reduce((a, q) => a + q.y, 0) / ts.length), n: ts.length });
   }
   const A = typeof A3D === 'object' ? A3D[S.level] || A3D.hard : { cars: 0 }, towns = ['T1', 'T2'].map(ptByKey).filter(Boolean);
-  for (let k = 0; k < A.cars && towns.length; k++) { const tw = towns[k % towns.length], s = sbxSnap(tw.x + (k > 1 ? 30 : -20), tw.y - 40); if (s) add({ cat: 'e_car', x: s.x, y: s.y }); }
+  for (let k = 0; k < A.cars && towns.length; k++) { const tw = towns[k % towns.length], s = sbxSnapXY(tw.x + (k > 1 ? 30 : -20), tw.y - 40); if (s) add({ cat: 'e_car', x: s.x, y: s.y }); }
   for (let k = 0; k < D.waves; k++) add({ cat: 'e_wave', t: Math.round(D.waveEvery * .6 + k * D.waveEvery), n: D.waveSize });
   sbxFitBudget('e');
   sbxSync();
@@ -304,7 +307,7 @@ function sbxFitBudget(side) {
   const sp = sbxSpent(side);
   if (sp > S.sbx.budget[side]) S.sbx.budget[side] = Math.min(SBX_BUDGET_MAX, Math.ceil(sp / 250) * 250);
 }
-function sbxSnap(x, y, cls) {
+function sbxSnapXY(x, y, cls) {   // 吸附到最近的可通行陆地格（与下面存档用的 sbxSnap(name) 不同名，免得被覆盖）
   x = clamp(x, 10, W - 10); y = clamp(y, 10, H - 10);
   const j = nearestPassable(ci(x, y), cls || 'e');
   if (j < 0) return null;
@@ -453,9 +456,10 @@ function sbxAIDefend() {
     // 300 米跑道要一大块平整陆地：先在指挥所以北找，找不到再放宽到整个纵深
     for (let k = 0; k < 120 && !af; k++) { const w = k < 60 ? 900 : 2400, x = clamp(hq.x + (Math.random() - .5) * w, 170, W - 170), y = clamp(hq.y - 60 - Math.random() * 500, 50, H); if (coastAt(x) - y >= 500) af = sbxTry('e_airfield', x, y, 60); }
     if (af) {
-      const nh = sbxPlace('e_air_heli').ok, ng = sbxPlace('e_air_ga').ok, nf = B0 >= 2200 && sbxPlace('e_air_ftr').ok;
+      const nh = sbxPlace('e_air_heli').ok, ng = sbxPlace('e_air_ga').ok, nf = B0 >= 2200 && sbxPlace('e_air_ftr').ok, n22 = B0 >= 3000 && sbxPlace('e_air_f22').ok;
       sbxTry('e_manpads', hq.x - 30, hq.y + 25, 40);
-      say(`航空：纵深 ${sbxM(coastAt(af.x) - af.y)} 米处修野战机场，保留${nh ? '武装直升机' : ''}${nh && ng ? '与' : ''}${ng ? '攻击机' : ''}各一架，专打卸载中的登陆舰与登陆后的坦克${nf ? '；另配歼击机一架，拦截敌舰载机、争夺制空权' : ''}；指挥所配单兵防空组。`, af);
+      sbxTry('e_garrison', af.x - 60, af.y + 40, 60);   // 机场警卫：机场也是据点，防敌空降夺取（abn.js）
+      say(`航空：纵深 ${sbxM(coastAt(af.x) - af.y)} 米处修野战机场，保留${nh ? '武装直升机' : ''}${nh && ng ? '与' : ''}${ng ? '攻击机' : ''}各一架，专打卸载中的登陆舰与登陆后的坦克${nf ? `；另配${n22 ? 'F-35A、F-22A 歼击机各' : '歼击机'}一架，拦截敌舰载机、争夺制空权` : ''}；指挥所配单兵防空组。`, af);
     }
   }
   if (B0 >= 2200 && !(S.v7off && S.v7off.msl)) {
@@ -512,8 +516,8 @@ function sbxAIDefend() {
     let nw = 0;
     while (nw < clamp(Math.round(k), 0, 5) && sbxLeft('e') >= 40 && sbxTry('e_wave', 0, 0)) nw++;
     let na = 0;   // 第 101 空降师：大预算才编（每批 4 架黑鹰）
-    while (na < clamp(Math.round(k - 1.5), 0, 2) && sbxLeft('e') >= 90 && sbxTry('e_101', 0, 0)) na++;
-    if (sbxSpent('e') > e0) say(`纵深加强：${up.length ? sbxNm(up) + '在警戒阵地之外加筑滩头防御地带；' : ''}主防地带后方增筑第二道碉堡线并配守备排${nw ? `；另编增援波次 ${nw} 批，开战后陆续开到受威胁最大的据点` : ''}${na ? `；第 101 空降师空中突击连 ${na} 批待命，敌上岸后机降反冲击` : ''}。`, b1.ex);
+    while (na < clamp(Math.round(k - 1.5), 0, 2) && sbxLeft('e') >= 320 && sbxTry('e_101', 0, 0)) na++;
+    if (sbxSpent('e') > e0) say(`纵深加强：${up.length ? sbxNm(up) + '在警戒阵地之外加筑滩头防御地带；' : ''}主防地带后方增筑第二道碉堡线并配守备排${nw ? `；另编增援波次 ${nw} 批，开战后陆续开到受威胁最大的据点` : ''}${na ? `；第 101 空降师 C-17 空降战斗群 ${na} 波待命，敌上岸后在纵深伞降反冲击` : ''}。`, b1.ex);
   }
   sbxSync();
   say(`部署完毕：共 ${S.sbx.items.filter(it => it.side === 'e').length} 项，用去 ${sbxSpent('e')} / ${B0} 点。`, null);
@@ -632,6 +636,8 @@ function sbxAIAttack() {
   if (F && k >= 3) { const it = ship('p_lct', F, 1, 2, 1600, ['p_rifle', 'p_mg', 'p_rifle', 'p_marine'], 1); if (it) feint.push(it); }
   if (cv) for (const [id, t] of [['p_air_fb', 'cas'], ['p_air_strike', 'strike'], ['p_air_ftr_adv', 'strike'], ['p_air_recon', 'recon'], ['p_air_fb', 'cas'], ['p_air_dive', 'bomber'], ['p_air_strike', 'strike']]) { if (sbxWingN() >= sbxWingCap() || sbxLeft('p') < 80) break; buyAir(id, t); }
   for (const [id, t] of [['p_air_ftr', 'fighter'], ['p_air_cas', 'cas']]) { if (sbxLeft('p') < 120) break; buyAir(id, t); }   // 大预算：再加战区歼-20、攻击-2
+  if (sbxLeft('p') >= 1200) buyAir('p_air_j36', 'fighter');   // 超大预算还有富余：一架歼-36 制空型
+  if (sbxOf('enemy').some(it => sbxEntry(it).spawn.ek === 'airfield') && sbxLeft('p') >= 300 && sbxPlace('p_abn').ok) say('空降：空降兵营一个，待主力在滩头站稳、航线上的防空打掉后伞降夺取敌野战机场，修通跑道后机降轻型坦克，我方飞机就近起降。', null);
   sbxSync();
   const men = w1.reduce((a, it) => a + sbxShipLoad(it).t, 0) * 3;
   say(`第一波：${w1.length} 艘突击登陆艇载陆战突击组、工兵、爆破组与机枪组约 ${men} 人` + (nAm ? `，${nAm} 辆两栖坦克随波泅渡` : '') + (nAc ? `，${nAc} 艘 726 型气垫艇各载一辆坦克` : '') + (sw ? '，扫雷舰先行清除水际障碍' : '') + (rk ? '，火箭艇抢滩前齐射压制滩头' : '') + '。', M.ex);
@@ -745,13 +751,22 @@ function sbxBuild(role) {
   S.sbxRun = { waves: [], sorties: [], depot: false, deck: false, aaT: 0, tagT: 0, waveT: 0, ddPrev: 0, said: {} };
   S.assets = { recon: 0, strike: 0, cas: 0, rline: 1, reserve: 0, smoke: 0 };
   S.eair = null; S.eaLight = null; S.missiles = []; S.msl = null;   // v7：守方航空、导弹从购买重建
+  S.points = S.points.filter(p => p.key !== 'AF');   // 上一局按机场加入的据点（abn.js）按这一局的机场重建
+  S.ab = null; S.abBase = null;
   S.points.forEach(p => { p.owner = 'e'; p.prog = 0; p.contested = false; });
   for (const k in SBX_LBL) delete SBX_LBL[k];
   UNIT_MAP = new Map();
   const acc = { wing: [], waves: 0 };
   // 守方先建（守备队士气取决于难度）
-  const items = SB.items.slice().sort((a, b) => (a.side === 'e' ? 0 : 1) - (b.side === 'e' ? 0 : 1));
-  for (const it of items) { try { sbxSpawn(it, role, acc); } catch (e) { console.error('sandbox spawn ' + it.cat, e); } }
+  // 守方工事（含机场）→ 据点「野战机场」→ 守方部队（就近据点可能是机场）→ 进攻方
+  const rank = it => it.side !== 'e' ? 2 : ((sbxEntry(it) || {}).spawn || {}).kind === 'enemy' ? 0 : 1;
+  const items = SB.items.slice().sort((a, b) => rank(a) - rank(b));
+  let afOk = false;
+  for (const it of items) {
+    if (!afOk && rank(it) > 0) { afOk = true; if (typeof abMakeAF === 'function') abMakeAF(); }
+    try { sbxSpawn(it, role, acc); } catch (e) { console.error('sandbox spawn ' + it.cat, e); }
+  }
+  if (!afOk && typeof abMakeAF === 'function') abMakeAF();
   const ddI = sbxFlag(), cvI = sbxFlagCV();
   if (ddI) {
     const s = sbxEntry(ddI).spawn;
@@ -849,6 +864,7 @@ function sbxCargo() {
       mor += sp.morale || 80; nm++;
     });
     if (nm) u.morale = Math.round(mor / nm);
+    if (ts.filter(q => q.cat === 'p_ranger').length * 2 > ts.length) u.elite = true;   // 一半以上是蛟龙突击队小组：按精锐连队算士气
     if (eng.length) { const ue = addUnit('p', 'eng', { ship: s.label, emblem: 'eng', face: NORTH, auto: u.auto }); for (const q of eng) q.u = ue.id; }
     indexUnits();
   }
@@ -1049,7 +1065,7 @@ function sbxAA() {
     if (a.dead || a.kind !== 'aa' || !a.mod || a.moving) continue;
     const ext = 190 * (a.mod.rng || 1), m = a.mod.aa || 1;
     for (const p of S.planes) {
-      if (p.dead || !(p.alt > .4)) continue;
+      if (p.dead || !(p.alt > .4) || (typeof eaHigh === 'function' && eaHigh(p))) continue;
       const d = dist(a.x, a.y, p.x, p.y);
       if (d > ext) continue;
       const sp = (typeof AIR_SPEC === 'object' && AIR_SPEC[p.kind]) || { aa: .08, name: '飞机' }, pr = sp.aa * (d <= 190 ? m - 1 : m) * (1 - (a.sup || 0) / 130);
@@ -1158,7 +1174,7 @@ function sbxTimed(dt) {
       sbxSay('e', `命令：增援第 ${k} 波 ${wv.n} 个小组由北面开往${p.name}。`, 'order', p);
     }
     if (R0.depot && !R0.depotDone && S.supply.length && typeof snEnsure === 'function') {
-      const L = S.supply[0], sp = sbxSnap(L.x, L.y - 150, 'p');
+      const L = S.supply[0], sp = sbxSnapXY(L.x, L.y - 150, 'p');
       if (sp) {
         R0.depotDone = true;
         snEnsure().nodes.push({ id: S.nid++, x: sp.x, y: sp.y, parent: null, root: L.id, hp: SN_HP, maxhp: SN_HP, built: 1, cut: false, dead: false, connected: false, rep: 0, sab: 0, path: [[L.x, L.y], [sp.x, sp.y]], t: S.t, deadT: null });
@@ -1448,7 +1464,8 @@ function sbxInfo(c) {
   const box = SBX.el.querySelector('.sbx-info');
   if (!c) { box.innerHTML = `<p class="h">从目录中选择一种兵力，然后在地图上放置。${SBX.side === 'p' ? '步兵与非两栖车辆须装载到登陆舰上。' : ''}</p>`; return; }
   const arch = typeof ARCH_NAMES === 'object' ? ARCH_NAMES[c.arch] || '' : '', cost = c.spawn.at === 'line' ? `${c.spawn.per} 点 / 100 长` : `${c.cost} 点`;
-  box.innerHTML = `<b>${sbxEsc(c.name)}</b><em>◆ ${cost}</em><span class="h"> · ${sbxEsc(arch)}</span><p>${sbxEsc(c.desc)}</p><p class="h">${sbxEsc(SBX_AT[c.spawn.at] || '')}</p>`;
+  const ld = typeof ctLoadHtml === 'function' ? ctLoadHtml(c, sbxEsc) : '';
+  box.innerHTML = `<b>${sbxEsc(c.name)}</b><em>◆ ${cost}</em><span class="h"> · ${sbxEsc(arch)}</span><p>${sbxEsc(c.desc)}</p>${ld ? `<details class="sbx-ld"><summary>挂载与参数</summary>${ld}</details>` : ''}<p class="h">${sbxEsc(SBX_AT[c.spawn.at] || '')}</p>`;
 }
 function sbxRender() {
   if (!SBX.el || !S || !S.sbx || typeof document === 'undefined') return;
@@ -1469,7 +1486,7 @@ function sbxRender() {
   q('.sbx-pal').innerHTML = pal.map(c => {
     const na = c.spawn.kind === 'veh' && !sbxVehOk(), cost = c.spawn.at === 'line' ? c.spawn.per + '/百' : c.cost;
     const nb = c.spawn.kind === 'ewing' ? sbxOf('enemy').filter(it => sbxEntry(it).spawn.ek === 'airfield').length : 0;
-    const need = c.spawn.kind === 'ewing' ? (!nb ? '需先部署野战机场' : sbxOf('ewing').length >= nb * sbxEaCap() ? `机场已满（每座 ${sbxEaCap()} 个机位）` : '') : c.spawn.at === 'air' ? (!sbxOf('cv').length ? '需先部署航母' : sbxWingN() + (c.spawn.n || 1) > sbxWingCap() ? `机库已满（${sbxWingCap()} 架），再部署一艘航母可扩充` : '') : '';
+    const need = c.lim && sbxLimN(c) >= c.lim.n ? `限购 ${c.lim.n} 架，已满` : c.spawn.kind === 'ewing' ? (!nb ? '需先部署野战机场' : sbxOf('ewing').length >= nb * sbxEaCap() ? `机场已满（每座 ${sbxEaCap()} 个机位）` : '') : c.spawn.at === 'air' ? (!sbxOf('cv').length ? '需先部署航母' : sbxWingN() + (c.spawn.n || 1) > sbxWingCap() ? `机库已满（${sbxWingCap()} 架），再部署一艘航母可扩充` : '') : '';
     return `<button type="button" role="option" data-id="${c.id}" class="${SBX.pick === c.id ? 'on' : ''}${need ? ' need' : ''}" title="${sbxEsc(c.name)}（${cost} 点）${need ? '：' + need : ''}" aria-selected="${SBX.pick === c.id}" ${na || (c.spawn.at !== 'line' && c.cost > left) ? 'disabled' : ''}>${sbxIc(c)}<span>${cost}</span></button>`;
   }).join('');
   sbxInfo(SBX.pick ? catalogById(SBX.pick) : null);

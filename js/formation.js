@@ -24,7 +24,7 @@ const unitOf = q => UNIT_MAP.get(q.u);
 const angDiff = (a, b) => { const d = Math.abs(a - b) % 6.2832; return d > 3.1416 ? 6.2832 - d : d; };
 // 朝向：刚开过火（2.5 秒内）就面朝所打的目标——边走边打、后撤时也面朝敌人；否则行进中朝前进方向，停下朝连队正面
 const faceOf = q => q.fx != null && S.t - (q.fT ?? -9) < 2.5 ? Math.atan2(q.fy - q.y, q.fx - q.x) : S.t - q.movedT < .5 && q.heading != null ? q.heading : unitOf(q) ? unitOf(q).face : SOUTH;
-const unitName = u => u.side === 'p' ? (u.kind === 'eng' ? `${u.ship || ''}工兵` : `${u.ship || '增援'}连`) : '敌军';
+const unitName = u => u.side === 'p' ? (u.kind === 'eng' ? `${u.ship || ''}工兵` : /队\d*$/.test(u.ship || '') ? u.ship : `${u.ship || '增援'}连`) : '敌军';   // 「蛟龙突击队」这类本身是队名的不再加「连」
 
 function defWidth(form, n) { return form === 'loose' ? Math.max(20, n * 34) : form === 'wedge' ? 28 + (n > 3 ? 84 : 0) : Math.max(16, n * 20); }
 
@@ -126,7 +126,7 @@ function updateUnits(dt) {
     const sup = ts.reduce((a, q) => a + q.sup, 0) / ts.length, hit = S.t - u.hitT < 3;
     // 溃退到位（撤到落脚点、趴在掩蔽处 12 秒以上）：压制的影响减半以上，军官、骨干收拢溃兵——不会一直卡在 0
     const settled = u.state === 'rout' && S.t - (u.routT ?? 0) > 12 && ts.every(q => !q.order || q.order.t !== 'retreat');
-    let dm = -sup / 100 * (settled ? 2 : 5);
+    let dm = -sup / 100 * (settled ? 2 : 5) * (u.elite ? .5 : 1);   // 精锐连队（蛟龙突击队等）：压制下士气掉得慢
     if (S.t - u.flankT < 3) dm -= 4;
     if (!hit) dm += u.order === 'hold' ? 5 : 2.5;
     if (settled) dm += hit ? 2 : 3;

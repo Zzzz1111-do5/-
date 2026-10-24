@@ -1,34 +1,47 @@
 'use strict';
-// 美军第 101 空降师（空中突击）：UH-60M「黑鹰」机降增援（守方）——
-//   战役：困难 1 批、地狱 2 批；沙盒：守方目录「第 101 空降师 · 空中突击连」，每买一份多一批。开战 A101.first 秒后才可用，两批间隔 A101.gap 秒。
-//   守方 AI：我军上岸后，挑受威胁最大的己方据点（或刚被我军夺取、值得反冲击的据点），在其内陆一侧 140–300、离我军 220 以外、
-//     避开已知我方防空（暴露过的便携防空组、自行高炮 / 弹炮防空车）的平地选机降场；
-//   4 架 UH-60M 从地图北缘低空飞来（两两编队），每架载一个班（3 个步枪 / 机枪班 + 1 个标枪反坦克班），落地 4 秒下完人立即北返；
-//     下机的部队编成「101 空降师」连，归入守方预备队增援 / 反冲击（ai2 / ai4 接管）。门边机枪在降落时压制机降场 150 以内看得见的我军。
-//   黑鹰进 S.eair.fly（type = uh60），我方便携防空导弹、自行高炮、弹炮防空车、舰空导弹与战斗机都能把它打下来，机上的班随之损失；
-//     中弹未坠的放弃机降、带兵返航。
-// 状态：S.e101 = { n 剩余批次, next 下一批最早时刻, lift: {id, lz, key, t, n 架数, land 已落地, lost 损失人数} | null, done 已完成批次 }
-const A101 = { first: { normal: 200, hard: 150, hell: 110 }, gap: 150, n: { normal: 0, hard: 1, hell: 2 }, lzMin: 140, lzMax: 300, safe: 220, aaR: 330, helos: 4 };
-const A101_MEN = [['rifle', 'rifle', 'mg'], ['rifle', 'mg', 'rifle'], ['rifle', 'rifle', 'mg'], ['rifle', 'rifle', 'rifle']];   // 最后一个班带标枪
-const A101_ICON = typeof WI === 'object' && WI.uh60 ? WI.uh60 : '';
+// 美军第 101 空降师（守方）：3 架 C-17A「环球霸王 III」编队空降一个战斗群——
+//   伞兵 54 人：两架各 8 个班（步枪 / 机枪班 ×5、M240 火力班、标枪反坦克班、毒刺防空班），第三架 2 个标枪班 + 重装空投 5 辆车：
+//   JLTV 陶式反坦克车 ×2、AN/TWQ-1 复仇者防空车 ×2（加强：备弹 12 枚、装填快、射程远）、M1097 悍马（M2 机枪）×1。
+//   精锐加成（A101.mod）：精度 1.25 倍、射速 1.1 倍；防弹插板让两成的致命伤只是负伤；被压制程度打八折；连队士气 92、按精锐连队算。
+//   战役：困难 1 波、地狱 2 波；沙盒：守方目录「第 101 空降师 · C-17 空降战斗群」，每买一份多一波。开战 A101.first 秒后才可用，两波间隔 A101.gap 秒。
+//   守方 AI：我军上岸后，挑受威胁最大的己方据点（或刚被我军夺取、值得反冲击的据点），在其内陆一侧 180–360、离我军 260 以外、
+//     避开已知我方防空的平地选空降场；C-17 从地图北缘进场，飞越空降场时依次放出伞兵与重装平台，随即北返；
+//   伞兵下降 5 秒、重装平台 7 秒，下降中挨我方地面火力；落地先在空降场集合，再整连交给守方协同（ai4.js a4Adopt）增援或反冲击。
+//   C-17 进 S.eair.fly（type = c17，4 点耐久、3 组干扰弹）：我方战斗机、舰空导弹、弹炮防空车、便携防空导弹都能打，跳伞前被击落机上人员装备全损。
+// 状态：S.e101 = { n 剩余波数, next 下一波最早时刻, lift: {id, dz, key, t, land 落地班数, veh 落地车数, lost 损失人数, us: [连 id], vs: [车 id]} | null, ch: [下降中], done }
+const A101 = { first: { normal: 200, hard: 150, hell: 110 }, gap: 160, n: { normal: 0, hard: 1, hell: 2 }, dzMin: 180, dzMax: 360, safe: 260, aaR: 360,
+  mod: { pow: 1.25, rof: 1.1, hard: .2, calm: .8 }, jump: 5, heavy: 7, sig: 22 };
+const A101_SQ = { rifle: ['rifle', 'rifle', 'mg'], lead: ['radio', 'rifle', 'mg'], mg: ['rifle', 'mg', 'mg'], jav: ['rifle', 'rifle', 'rifle'], stg: ['rifle', 'aa', 'rifle'] };
+const A101_ROLE = { jav: { at: 1.6, atPen: 3.4, rng: 1.5 }, mg: { sup: 1.4 } };
+// 每架的装载：班（按跳伞顺序）与重装平台
+const A101_LOAD = [
+  { sq: ['lead', 'rifle', 'rifle', 'mg', 'rifle', 'jav', 'stg', 'rifle'] },
+  { sq: ['lead', 'rifle', 'rifle', 'mg', 'rifle', 'jav', 'stg', 'rifle'] },
+  { sq: ['jav', 'jav'], veh: [{ type: 'td', mdl: 'JLTV 陶式反坦克车' }, { type: 'td', mdl: 'JLTV 陶式反坦克车' }, { type: 'sam_veh', mdl: 'AN/TWQ-1 复仇者防空车', samX: { n: 12, cd: 1.6, regen: 20, range: 600, pkK: 1.15 } },
+    { type: 'sam_veh', mdl: 'AN/TWQ-1 复仇者防空车', samX: { n: 12, cd: 1.6, regen: 20, range: 600, pkK: 1.15 } }, { type: 'recon', mdl: 'M1097 悍马（M2 机枪）' }] }
+];
+const A101_MEN = A101_LOAD.reduce((a, L) => a + L.sq.reduce((b, k) => b + A101_SQ[k].length, 0), 0);
+const A101_VEH = A101_LOAD.reduce((a, L) => a + (L.veh || []).length, 0);
 
 function a101Ensure() {
-  if (S.e101) return S.e101;
+  if (S.e101 && Array.isArray(S.e101.ch)) return S.e101;
   const lv = S.level || 'hard', sbx = S.mode === 'sandbox';
-  return (S.e101 = { n: sbx ? (S.assets && S.assets.e101) || 0 : A101.n[lv] || 0, next: (A101.first[lv] || 150) * (sbx ? .8 : 1), lift: null, done: 0 });
+  return (S.e101 = { n: sbx ? (S.assets && S.assets.e101) || 0 : A101.n[lv] || 0, next: (A101.first[lv] || 150) * (sbx ? .8 : 1), lift: null, ch: [], done: 0 });
 }
-// 机降场：据点 p 内陆一侧，按离据点近、离我军远、隐蔽好打分
-function a101LZ(p) {
+// 空降场：据点 p 内陆一侧，按离据点近、离我军远、隐蔽好、地势开阔（伞兵好落）打分
+function a101DZ(p) {
   const pT = S.teams.filter(q => q.side === 'p' && q.men.length);
   const aa = [...S.teams.filter(q => q.side === 'p' && q.men.length && q.men.includes('aa') && q.aaSeenE != null && S.t - q.aaSeenE < 180),
     ...(S.veh || []).filter(v => v.side === 'p' && !v.dead && (v.type === 'aa_veh' || v.type === 'sam_veh') && spotted(v.x, v.y))];
   let best = null, bs = -Infinity;
-  for (let k = 0; k < 60; k++) {
-    const a = -Math.PI / 2 + gauss() * .7, r = A101.lzMin + Math.random() * (A101.lzMax - A101.lzMin), x = clamp(p.x + Math.cos(a) * r, 40, W - 40), y = clamp(p.y + Math.sin(a) * r, 40, H - 40);
-    if (!isLand(x, y) || !passInf(x, y) || coastAt(x) - y < 120) continue;
+  for (let k = 0; k < 80; k++) {
+    const a = -Math.PI / 2 + gauss() * .7, r = A101.dzMin + Math.random() * (A101.dzMax - A101.dzMin), x = clamp(p.x + Math.cos(a) * r, 60, W - 60), y = clamp(p.y + Math.sin(a) * r, 60, H - 60);
+    if (!isLand(x, y) || !passInf(x, y) || coastAt(x) - y < 160) continue;
     const dp = pT.length ? Math.min(...pT.map(q => dist(q.x, q.y, x, y))) : 999;
     if (dp < A101.safe || aa.some(o => dist(o.x, o.y, x, y) < A101.aaR)) continue;
-    const s = -dist(x, y, p.x, p.y) / 100 + Math.min(dp, 500) / 150 + coverAt(x, y) * .5 + Math.random() * .3;
+    let open = 0;
+    for (let j = 0; j < 8; j++) { const ox = x + Math.cos(j * .785) * 50, oy = y + Math.sin(j * .785) * 50; if (isLand(ox, oy) && passInf(ox, oy)) open++; }
+    const s = -dist(x, y, p.x, p.y) / 120 + Math.min(dp, 600) / 160 + open * .25 + Math.random() * .3;
     if (s > bs) { bs = s; best = { x: Math.round(x), y: Math.round(y) }; }
   }
   return best;
@@ -48,98 +61,166 @@ function a101Obj() {
 function a101Think() {
   const E1 = a101Ensure();
   if (E1.lift || !(E1.n > 0) || S.t < E1.next || typeof eaEnsure !== 'function') return;
-  const ashore = S.teams.filter(q => q.side === 'p' && q.men.length && isLand(q.x, q.y)).length;
-  if (ashore < 5) return;
-  const p = a101Obj(), lz = p && a101LZ(p);
-  if (!lz) { E1.next = S.t + 10; return; }
-  const E = eaEnsure(), id = S.nid++;
-  E1.lift = { id, lz, key: p.key, t: S.t, n: A101.helos, land: 0, lost: 0, u: null };
+  if (S.teams.filter(q => q.side === 'p' && q.men.length && isLand(q.x, q.y)).length < 5) return;
+  const p = a101Obj(), dz = p && a101DZ(p);
+  if (!dz) { E1.next = S.t + 10; return; }
+  const E = eaEnsure(), id = S.nid++, sp = EA_SPEC.c17;
+  E1.lift = { id, dz, key: p.key, t: S.t, land: 0, veh: 0, lost: 0, us: [], vs: [] };
   E1.n--; E1.next = S.t + A101.gap;
-  for (let k = 0; k < A101.helos; k++) {
-    const side = k % 2 ? 1 : -1, row = k >> 1, x0 = clamp(lz.x + side * (30 + row * 10) + gauss() * 20, 40, W - 40);
-    const lx = lz.x + side * (14 + row * 8), ly = lz.y + row * 16 - 8;
-    E.fly.push({ id: S.nid++, type: 'uh60', lift: id, k, x: x0, y: -40 - row * 70, heading: Math.atan2(ly + 40, lx - x0), spd: EA_SPEC.uh60.spd, alt: .25, bank: 0, hp: EA_SPEC.uh60.hp, flares: EA_SPEC.uh60.flares,
-      ph: 'in', lx, ly, men: A101_MEN[k].slice(), mod: k === 3 ? { at: 1.5, atPen: 3.4, rng: 1.6, pow: .8 } : null, t: S.t, pv: false });
-  }
+  // 品字形编队：长机在前，两架僚机在后方两侧；沿南北向航线飞越空降场
+  A101_LOAD.forEach((L, k) => {
+    const lx = dz.x + (k ? (k === 1 ? -60 : 60) : 0), y0 = -60 - (k ? 90 : 0);
+    E.fly.push({ id: S.nid++, type: 'c17', lift: id, k, x: lx, y: y0, heading: Math.PI / 2, spd: sp.spd, alt: .6, bank: 0, hp: sp.hp, flares: sp.flares,
+      ph: 'in', lx, ly: dz.y + (k ? 25 : 0), sq: L.sq.slice(), veh: (L.veh || []).slice(), rel: 0, t: S.t, pv: false });
+  });
   if (typeof v8Stat === 'function') v8Stat('a101Go');
-  const wh = typeof cmdWhere === 'function' ? cmdWhere(lz.x, lz.y) : gridRef(lz.x, lz.y);
-  if (typeof chatSay === 'function') chatSay('e', `命令：第 101 空降师一个空中突击连，${A101.helos} 架 UH-60M 黑鹰低空机降${wh}，增援${p.name}${p.owner === 'p' ? '、发起反冲击' : ''}。`, { kind: 'order', at: lz, lv: 0 });
+  const wh = typeof cmdWhere === 'function' ? cmdWhere(dz.x, dz.y) : gridRef(dz.x, dz.y);
+  if (typeof chatSay === 'function') chatSay('e', `命令：第 101 空降师空降战斗群，3 架 C-17A 在${wh}伞降——伞兵 ${A101_MEN} 人，重装空投 JLTV 陶式反坦克车 2 辆、复仇者防空车 2 辆、悍马 1 辆；落地集结后${p.owner === 'p' ? `反冲击${p.name}` : `增援${p.name}`}。`, { kind: 'order', at: dz, lv: 0 });
 }
-// 飞行：in 低空进场（两两编队）→ land 悬停落地（门边机枪压制）→ 下人 → out 北返出图
+// 飞行：in 进场 → 飞越空降场时按顺序放出伞兵（每 0.18 秒一个班）与重装平台 → out 北返出图
 function a101Fly(a, dt) {
-  const E1 = a101Ensure(), L = E1.lift && E1.lift.id === a.lift ? E1.lift : null, sp = EA_SPEC.uh60;
-  if (a.ph === 'rtb') a.ph = a.men ? 'abort' : 'out';   // 中弹：带兵返航（eaAA 把受伤的飞机设成 rtb）
-  if (a.ph === 'in') {
-    a.alt = Math.min(.25, a.alt + dt * .2);
+  const sp = EA_SPEC[a.type] || EA_SPEC.c17;
+  if (a.type !== 'c17') { a.dead = true; return; }   // 旧存档里的黑鹰：直接收回
+  const left = a.sq.length + a.veh.length;
+  if (a.ph === 'rtb') a.ph = left && dist(a.x, a.y, a.lx, a.ly) < 320 ? 'in' : left ? 'abort' : 'out';   // 中弹：离空降场近就硬着头皮投完，远就带着人北返
+  if (a.ph === 'in' || a.ph === 'drop') {
+    a.alt = Math.min(.6, a.alt + dt * .2);
     const d = dist(a.x, a.y, a.lx, a.ly);
-    eaSteer(a, a.lx, a.ly, dt, d < 120 ? Math.max(8, d * .6) : sp.spd);
-    if (d < 160) a101Guns(a, dt);
-    if (d < 10) { a.ph = 'land'; a.lt = 0; }
-  } else if (a.ph === 'land') {
-    a.spd = Math.max(0, a.spd - 40 * dt); a.alt = Math.max(.03, a.alt - dt * .12); a.lt += dt;
-    a101Guns(a, dt);
-    if (a.men && a.lt > 2) a101Unload(a, L);
-    if (a.lt > 4) a.ph = 'out';
-  } else {
-    a.alt = Math.min(.25, a.alt + dt * .15);
-    eaSteer(a, a.x + (a.k % 2 ? 40 : -40), -120, dt, sp.spd);
-    if (a.y < -40) { a.dead = true; a.home = true; if (a.ph === 'abort' && typeof v8Stat === 'function') v8Stat('a101Abort'); }
+    if (a.ph === 'in') { eaSteer(a, a.lx, a.ly + 200, dt, sp.spd); if (d < 90 || a.y > a.ly - 20) { a.ph = 'drop'; a.rT = 0; } }
+    else {
+      eaSteer(a, a.lx, a.ly + 400, dt, sp.spd * .85);
+      if ((a.rT -= dt) <= 0) { a.rT = .18; a101Release(a); }
+      if (!a.sq.length && !a.veh.length) a.ph = 'out';
+    }
+    if (a.y > H - 60) a.ph = 'out';
+    return;
+  }
+  a.alt = Math.min(.7, a.alt + dt * .1);
+  eaSteer(a, a.x + (a.k === 1 ? -150 : a.k === 2 ? 150 : 0), -200, dt, sp.spd);
+  if (a.y < -50) { a.dead = true; a.home = true; if (a.ph === 'abort' && typeof v8Stat === 'function') v8Stat('a101Abort'); }
+}
+function a101Release(a) {
+  const E1 = a101Ensure(), L = E1.lift && E1.lift.id === a.lift ? E1.lift : null;
+  if (a.sq.length) {
+    const k = a.sq.shift();
+    E1.ch.push({ k: 'team', lift: a.lift, pk: a.k, role: k, men: A101_SQ[k].slice(), x: a.x + gauss() * A101.sig, y: a.y + gauss() * A101.sig, t: 0, hT: 0 });
+  } else if (a.veh.length) {
+    const v = a.veh.shift();
+    E1.ch.push({ k: 'veh', lift: a.lift, pk: a.k, v, x: a.x + gauss() * A101.sig * .6, y: a.y + gauss() * A101.sig * .6, t: 0, hT: 0 });
+  }
+  if (L && !L.said) {
+    L.said = true;
+    const wh = typeof cmdWhere === 'function' ? cmdWhere(a.x, a.y) : gridRef(a.x, a.y);
+    if (spotted(a.x, a.y) || inVision(a.x, a.y)) log(`敌 C-17 运输机编队在${wh}大规模空降，判断为美军第 101 空降师`, 'bad', null, 0, { x: a.x, y: a.y });
+    if (typeof chatSay === 'function') chatSay('p', `报告：${wh}上空 3 架 C-17 运输机正在空投，伞兵与重装平台成串落下，判断为美军第 101 空降师主力！命令：防空火力、战斗机全力拦截，就近部队向空降场开火，趁其集结前打掉。`, { kind: 'report', at: { x: a.x, y: a.y }, key: 'a101s', gap: 60, lv: 0 });
   }
 }
-// 门边机枪（M240）：150 以内看得见的我军小组，每 0.7 秒一个点射
-function a101Guns(a, dt) {
-  if ((a.gT = (a.gT ?? .5) - dt) > 0) return;
-  a.gT = .7;
-  let tg = null, bd = 150;
-  for (const q of S.teams) if (q.side === 'p' && q.men.length && !q.ride) { const d = dist(q.x, q.y, a.x, a.y); if (d < bd && spotted(q.x, q.y)) { bd = d; tg = q; } }
-  if (!tg) return;
-  suppress(tg, 12, a.x, a.y);
-  if (Math.random() < .06 * coverAt(tg.x, tg.y) / .9) killMan(tg);
-  tracer(a.x, a.y, tg.x + gauss() * 6, tg.y + gauss() * 6, 'e', inVision(a.x, a.y));
-  a.gunT = .3;
-}
-function a101Unload(a, L) {
-  const p = L && S.points.find(o => o.key === L.key) || S.points[0];
-  if (L && !L.u) { L.u = addUnit('e', 'inf', { role: 'reserve', obj: p.key, form: 'wedge', a4n: '第 101 空降师', morale: 88 }).id; }
-  const uid = L ? L.u : addUnit('e', 'inf', { role: 'reserve', obj: p.key }).id;
-  const q = addTeam('e', a.x + gauss() * 6, a.y + gauss() * 6, a.men, { role: 'reserve', obj: p.key, u: uid, a101: true, ...(a.mod ? { mod: { ...a.mod } } : {}) });
-  const lz = L ? L.lz : { x: a.x, y: a.y }, k = L ? L.land : 0;
-  aiGo(q, lz.x + (k % 2 ? 18 : -18), lz.y - 10 + (k >> 1) * 18, 'move', p.x, p.y);   // 先在机降场就地集合、占领环形阵地，整连到齐再投入（a101Step → a4Adopt）
-  const uu = UNIT_MAP.get(uid);
-  if (uu) uu.a4T = S.t;   // 集合期间 ai4 不改派
-  a.men = null;
-  if (L) L.land++;
-  if (typeof v8Stat === 'function') v8Stat('a101Men', q.men.length);
-  S.fx.push({ kind: 'flash', x: a.x, y: a.y, r: 10, life: 0, max: .5, side: 'e' });
-  if (L && L.land === 1) {
-    if (spotted(a.x, a.y) || inVision(a.x, a.y)) log(`敌直升机在${typeof cmdWhere === 'function' ? cmdWhere(a.x, a.y) : gridRef(a.x, a.y)}机降，敌第 101 空降师部队落地`, 'bad', null, 0, { x: a.x, y: a.y });
-    if (typeof chatSay === 'function') chatSay('p', `报告：${typeof cmdWhere === 'function' ? cmdWhere(a.x, a.y) : gridRef(a.x, a.y)}发现敌直升机机降，判断为美军第 101 空降师空中突击分队，正向${p.name}运动。`, { kind: 'report', at: { x: a.x, y: a.y }, key: 'a101s', gap: 60, lv: 0 });
+// 下降：东北风飘移；伞兵每 0.5 秒挨一次我方地面火力（150 内没被压住的我步兵、220 内的自行高炮 / 弹炮防空车）
+function a101Chutes(dt) {
+  const E1 = a101Ensure();
+  for (const c of E1.ch) {
+    c.t += dt; c.x += 3 * dt; c.y -= 2 * dt;
+    if (c.k === 'team' && c.men.length && (c.hT -= dt) <= 0) {
+      c.hT = .5;
+      let pk = 0, src = null;
+      for (const q of S.teams) if (q.side === 'p' && q.men.length && q.sup < 70 && !q.ride && dist(q.x, q.y, c.x, c.y) < 150) { pk += .04 * q.men.length / 3; src = src || q; }
+      for (const v of S.veh || []) if (v.side === 'p' && !v.dead && (v.type === 'aa_veh' || v.type === 'sam_veh') && dist(v.x, v.y, c.x, c.y) < 220) { pk += .1; src = v; }
+      if (src) tracer(src.x, src.y, c.x + gauss() * 4, c.y - (1 - c.t / A101.jump) * 34, 'p', true);
+      if (pk && Math.random() < pk) { c.men.splice(Math.floor(Math.random() * c.men.length), 1); S.stats.killed++; const L = E1.lift; if (L && L.id === c.lift) L.lost++; if (typeof v8Stat === 'function') v8Stat('a101AirKill'); }
+    }
+    if (c.t < (c.k === 'veh' ? A101.heavy : A101.jump)) continue;
+    c.done = true;
+    a101Land(c);
   }
+  if (E1.ch.some(c => c.done)) E1.ch = E1.ch.filter(c => !c.done);
 }
-// 被击落（eaLost 调用）：机上的班随之损失
-function a101Down(a) {
-  const E1 = a101Ensure(), L = E1.lift && E1.lift.id === a.lift ? E1.lift : null, n = a.men ? a.men.length : 0;
+function a101Unit(L, pk) {
+  const p = S.points.find(o => o.key === L.key) || S.points[0], i = pk === 2 ? 0 : pk;
+  if (L.us[i] != null && UNIT_MAP.get(L.us[i])) return UNIT_MAP.get(L.us[i]);
+  const n = (S.e101.done || 0) * 2 + i + 1;
+  const u = addUnit('e', 'inf', { role: 'reserve', obj: p.key, form: 'wedge', a4n: `第 101 空降师 ${n} 连`, morale: 92, elite: true });
+  L.us[i] = u.id; u.a4T = S.t;
+  return u;
+}
+function a101Land(c) {
+  const E1 = a101Ensure(), L = E1.lift && E1.lift.id === c.lift ? E1.lift : null;
+  let x = clamp(c.x, 10, W - 10), y = clamp(c.y, 10, H - 10);
+  const n = c.k === 'team' ? c.men.length : 0;
+  if (isWater(typeAt(x, y))) { if (L) L.lost += n; return; }
+  if (!passInf(x, y)) {
+    const j = nearestPassable(ci(x, y), c.k === 'veh' ? 'vehe' : 'e');
+    if (j < 0 || dist(cellCX(j), cellCY(j), x, y) > 30) { if (L) L.lost += n; return; }
+    x = cellCX(j); y = cellCY(j);
+  }
+  if (!L) return;
+  const p = S.points.find(o => o.key === L.key) || S.points[0];
+  if (c.k === 'veh') {
+    const v = addVehicle('e', c.v.type, x, y, { auto: true, mdl: c.v.mdl, ...(c.v.samX ? { samX: { ...c.v.samX } } : {}), a101: true });
+    if (!v) return;
+    v.hx = L.dz.x; v.hy = L.dz.y; v.home = L.key;
+    L.vs.push(v.id); L.veh++;
+    if (typeof v8Stat === 'function') v8Stat('a101Veh');
+    return;
+  }
   if (!n) return;
-  a.men = null;
-  if (L) { L.lost += n; L.down = (L.down || 0) + 1; }
-  if (typeof v8Stat === 'function') v8Stat('a101Lost', n);
-  log(`敌黑鹰直升机被击落，机上 ${n} 名空降兵全部损失`, 'good', null, 0, { x: a.x, y: a.y });
+  const u = a101Unit(L, c.pk), k = L.land;
+  const q = addTeam('e', x, y, c.men, { role: 'reserve', obj: p.key, u: u.id, a101: true, mod: { ...A101.mod, ...(A101_ROLE[c.role] || {}) } });
+  if (q.men.includes('aa')) q.aam = 3;
+  const a = k * 2.4, r = 14 + (k % 6) * 6;   // 空降场集合：围成一圈占领环形阵地
+  aiGo(q, L.dz.x + Math.cos(a) * r, L.dz.y + Math.sin(a) * r, 'move', p.x, p.y);
+  L.land++;
+  if (typeof v8Stat === 'function') v8Stat('a101Men', q.men.length);
 }
-// 每秒：一批结束（全部落地后返航 / 被击落）就清掉并报告；然后 AI 决策下一批
+// 被击落（eaLost 调用）：机上剩下的人员与装备全损
+function a101Down(a) {
+  const E1 = a101Ensure(), L = E1.lift && E1.lift.id === a.lift ? E1.lift : null;
+  const n = (a.sq || []).reduce((s, k) => s + A101_SQ[k].length, 0), nv = (a.veh || []).length;
+  a.sq = []; a.veh = [];
+  if (!n && !nv) return;
+  if (L) L.lost += n;
+  if (typeof v8Stat === 'function') { v8Stat('a101Lost', n); v8Stat('c17Down'); }
+  const what = [n && `${n} 名伞兵`, nv && `${nv} 辆空投车辆`].filter(Boolean).join('和');
+  log(`敌 C-17 运输机被击落，机上${what}全部损失`, 'good', null, 0, { x: a.x, y: a.y });
+  if (typeof chatSay === 'function') chatSay('p', `报告：击落敌 C-17 运输机 1 架，机上${what}随机损失。`, { kind: 'report', at: { x: a.x, y: a.y }, key: 'c17d' + a.id, gap: 5 });
+}
+// 每秒：下降中的伞兵 / 平台每步处理；一波结束（运输机都回去或被击落、全部落地）后集合 15 秒，整连交给守方协同
 function a101Step(dt) {
   if (!S || S.phase !== 'battle' || S.over || !(typeof eaOn === 'function' && eaOn())) return;
   const E1 = a101Ensure();
+  if (E1.ch.length) a101Chutes(dt);
   if ((E1.thT = (E1.thT ?? 1) - dt) > 0) return;
   E1.thT = 1;
   const L = E1.lift;
-  if (L && S.t - L.t > 3 && !(S.eair && S.eair.fly.some(a => a.type === 'uh60' && a.lift === L.id && !a.dead))) {
-    E1.lift = null; E1.done++;
-    const u = L.u != null ? UNIT_MAP.get(L.u) : null;
-    if (u && typeof a4Adopt === 'function') a4Adopt(u, L.key);   // 整连交给守方协同：开到据点后方待机，或加入反冲击
-    if (typeof chatSay === 'function') chatSay('e', `报告：第 101 空降师机降${L.land ? `完成，${L.land} 个班落地` : '失败'}${L.lost ? `，${L.lost} 人随直升机损失` : ''}。`, { kind: 'report', lv: 1 });
+  if (L && S.t - L.t > 3 && !E1.ch.some(c => c.lift === L.id) && !(S.eair && S.eair.fly.some(a => a.type === 'c17' && a.lift === L.id && !a.dead))) {
+    if (L.endT == null) {
+      L.endT = S.t;
+      if (typeof chatSay === 'function') chatSay('e', `报告：第 101 空降师空降${L.land ? `完成，${L.land} 个班、${L.veh} 辆车落地，正在空降场集合` : '失败'}${L.lost ? `，空中损失 ${L.lost} 人` : ''}。`, { kind: 'report', lv: 1, at: L.dz });
+    } else if (S.t - L.endT > 15) {   // 集合完毕：各连交给守方协同；车辆跟着连队（ai4 a4Bind）
+      E1.lift = null; E1.done++;
+      for (const id of L.us) { const u = id != null ? UNIT_MAP.get(id) : null; if (u && typeof a4Adopt === 'function') a4Adopt(u, L.key); }
+      for (const id of L.vs) { const v = typeof vehById === 'function' ? vehById(id) : null; if (v && !v.dead && L.us[0] != null && v.type !== 'sam_veh') { v.buddy = L.us[0]; v.esc = { back: 45, lat: 0, mode: 'travel' }; } }
+    }
   }
   a101Think();
 }
 
+// 下降中的伞兵（敌方红色伞衣）与重装平台（三具大伞 + 平台）
+function a101Draw() {
+  const E1 = S && S.e101;
+  if (!E1 || !E1.ch || !E1.ch.length || typeof R !== 'object' || !R.ctx) return;
+  const ctx = R.ctx, r = Math.max(4, px(5));
+  for (const c of E1.ch) {
+    if (!inView(c.x, c.y, 60)) continue;   // 天上的伞衣老远就看得见：双方都画
+    const T = c.k === 'veh' ? A101.heavy : A101.jump, u = clamp(c.t / T, 0, 1), h = (1 - u) * 40, x = c.x, y = c.y - h, big = c.k === 'veh';
+    ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.beginPath(); ctx.ellipse(c.x, c.y, r * (big ? 1.6 : .9), r * (big ? .8 : .45), 0, 0, 7); ctx.fill();
+    ctx.fillStyle = 'rgba(16,4,6,.85)'; ctx.strokeStyle = rgba(COL.enemy, .95); ctx.lineWidth = px(1.2);
+    const cs = big ? [-1, 0, 1] : [0];
+    for (const o of cs) { ctx.beginPath(); ctx.arc(x + o * r * 1.8, y - r * (big ? 2.4 : 1.6), r * (big ? 1.2 : 1), Math.PI, 0); ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.beginPath(); ctx.moveTo(x + o * r * 1.8 - r, y - r * (big ? 2.4 : 1.6)); ctx.lineTo(x, y); ctx.lineTo(x + o * r * 1.8 + r, y - r * (big ? 2.4 : 1.6)); ctx.stroke(); }
+    if (big) { ctx.fillStyle = rgba(COL.enemy, .9); ctx.fillRect(x - r * .9, y - r * .3, r * 1.8, r * .9); }
+    else { ctx.fillStyle = rgba(COL.enemy, .95); ctx.beginPath(); ctx.arc(x, y, Math.max(1.5, px(2)), 0, 7); ctx.fill(); }
+  }
+}
+
 HOOK.step.push(a101Step);
+HOOK.drawOver.push(a101Draw);
 HOOK.newGame.push(() => { if (S) S.e101 = null; });

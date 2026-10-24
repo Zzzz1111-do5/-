@@ -1,11 +1,12 @@
 'use strict';
 // 补给卡车（陕汽 SX2190 6×6 军用越野卡车，载重 5 吨）：从滩头补给站沿运输线把弹药、油料运到前沿补给点——有了卡车，补给线就能拉得更长。
 //   前沿补给点有存量（stock 0..1，一车 0.7）：步兵补弹药、车辆补炮弹和加油都要消耗存量，见底的点不再补给，等卡车送到；
-//   卡车还给规划中的前沿补给点运预制器材（没有工兵也能在 10 秒内卸成一个补给点），给油尽趴窝的车辆送油（加到五成）。
+//   卡车还给规划中的前沿补给点运预制器材（没有工兵也能在 10 秒内卸成一个补给点），给油尽趴窝的车辆送油（加到五成）；
+//   v12：也能拉着抢修器材去接通被切断的运输线（8 秒）、重建被毁的补给点——补给链断了不必干等工兵。
 //   卡车没有装甲：90 以内看得见它的敌步兵、170 以内的碉堡、220 以内的敌战车、炮弹 / 炸弹落点 14 以内都可能把它打掉；
 //   每条接通的滩头补给线最多 2 + 前沿点数 / 3 辆（不超过 6），打掉一辆 25 秒后补一辆。
 // 状态：S.trk = { v: 1, list: [{id, root, x, y, h, ph: idle|load|out|drop|back, t, job: {k: feed|build|fuel, id}, pts, i, dead, deadT}], spT: {线 id: 可补车时刻}, thT }
-const TRK = { spd: 30, load: 5, drop: 4, build: 10, give: .7, fuel: .5, gap: 25, cap: 6, near: 90, rng: 260, model: '陕汽 SX2190 越野卡车' };
+const TRK = { spd: 30, load: 5, drop: 4, build: 10, fix: 8, give: .7, fuel: .5, gap: 25, cap: 6, near: 90, rng: 260, model: '陕汽 SX2190 越野卡车' };
 const trkOn = () => !!S && S.phase === 'battle' && !S.over;
 function trkEnsure() { if (!S.trk || S.trk.v !== 1) S.trk = { v: 1, list: [], spT: {}, thT: 0 }; return S.trk; }
 const trkAny = () => !!(S && S.trk && S.trk.list.some(t => !t.dead));
@@ -64,13 +65,15 @@ function trkThink(T) {
   for (const t of T.list) if (!t.dead && t.ph !== 'idle' && t.ph !== 'load') trkThreat(t);
 }
 
-// 派活：送油（趴窝车辆）> 建点（规划中、上级已接通）> 补存量（接通的点里最缺、用户最多的）；同一件活只派一辆
+// 派活：送油（趴窝车辆）> 抢修被切断的运输线 > 重建被毁的点 > 建点（规划中、上级已接通）> 补存量（接通的点里最缺、用户最多的）；同一件活只派一辆
 function trkJob(t, L, T) {
   const N = S.snet ? S.snet.nodes : [], taken = (k, id) => T.list.some(o => o !== t && !o.dead && o.job && o.job.k === k && o.job.id === id);
   let best = null, bs = 0;
   for (const s of trkStranded(L)) if (!taken('fuel', s.v.id) && 5 > bs) { bs = 5; best = { k: 'fuel', id: s.v.id, via: s.via }; }
   for (const n of N) {
-    if (n.root !== L.id || n.dead) continue;
+    if (n.root !== L.id || !isFinite(n.x)) continue;
+    if (n.dead) { if (trkReach(n.parent) && !taken('build', n.id) && !snDanger(n.x, n.y, 110) && 3.5 > bs) { bs = 3.5; best = { k: 'build', id: n.id, n }; } continue; }
+    if (snLive(n) && n.cut && trkReach(n.parent) && !taken('fix', n.id)) { const m = snMid(n); if (!snDanger(m[0], m[1], 110) && 4 > bs) { bs = 4; best = { k: 'fix', id: n.id, n, m }; } continue; }
     if (!snLive(n) && n.built < 1 && trkReach(n.parent) && !taken('build', n.id) && !snDanger(n.x, n.y, 110) && 3 > bs) { bs = 3; best = { k: 'build', id: n.id, n }; }
     else if (n.connected && trkStock(n) < .75 && !taken('feed', n.id)) { const s = 1 + (1 - trkStock(n)) * 2 + trkUsers(n) * .3; if (s > bs) { bs = s; best = { k: 'feed', id: n.id, n }; } }
   }
@@ -82,6 +85,11 @@ function trkJob(t, L, T) {
     pts = best.via.n ? trkRoute(L, best.via.n) : [[L.x, L.y]];
     if (!pts) return;
     pts.push([v.x, v.y]);
+  } else if (best.k === 'fix') {   // 开到上级，再沿这段运输线开到断点
+    const par = best.n.parent != null ? snById(best.n.parent) : null;
+    pts = par ? trkRoute(L, par) : [[L.x, L.y]];
+    if (!pts) return;
+    pts.push([best.m[0], best.m[1]]);
   } else pts = trkRoute(L, best.n);
   if (!pts || pts.length < 2) return;
   Object.assign(t, { job: { k: best.k, id: best.id }, pts, i: 1, ph: 'load', t: S.t });
@@ -117,15 +125,28 @@ function trkValid(t) {
   if (!j) return false;
   if (j.k === 'fuel') { const v = vehById(j.id); return !!v && !v.dead && (v.fuel ?? 1) <= .05; }
   const n = snById(j.id);
-  if (!n || n.dead) return false;
-  return j.k === 'build' ? !snLive(n) && trkReach(n.parent) : n.connected;
+  if (!n) return false;
+  if (j.k === 'build') return !snLive(n) && trkReach(n.parent);   // 新建或重建（被毁的点）
+  if (j.k === 'fix') return snLive(n) && n.cut && trkReach(n.parent);
+  return !n.dead && n.connected;
 }
 function trkDrop(t, dt) {
   const j = t.job, el = S.t - t.t;
   if (!j || !trkValid(t) && j.k !== 'build') { trkBack(t); return; }
+  if (j.k === 'fix') {
+    const n = snById(j.id);
+    if (!n || !snLive(n) || !n.cut) { trkBack(t); return; }
+    n.rep = Math.max(n.rep || 0, el / TRK.fix);
+    if (n.rep < 1) return;
+    n.cut = false; n.rep = 0; n.sab = 0;
+    log('补给卡车拉来抢修器材，接通了被切断的运输线', 'good', 'trkfix', 8, { x: t.x, y: t.y });
+    v8Stat('trkFix');
+    trkBack(t); return;
+  }
   if (j.k === 'build') {
     const n = snById(j.id);
-    if (!n || n.dead) { trkBack(t); return; }
+    if (!n) { trkBack(t); return; }
+    if (n.dead) Object.assign(n, { dead: false, built: 0 });   // 重建：从零开始
     if (!snLive(n)) {
       n.built = Math.min(1, (n.built || 0) + dt / TRK.build);
       if (n.built < 1) return;
@@ -188,9 +209,9 @@ function trkDraw(time) {
     if (full) { ctx.fillStyle = rgba(COL.amber, .85); for (const u of [-5, -2.6, -.2]) ctx.fillRect(u, -1.3, 1.9, 2.6); }
     ctx.restore();
     if (t.dead) { const g = (S.t - t.deadT) % 1; ctx.fillStyle = rgba(COL.smoke, .25 * (1 - g)); ctx.beginPath(); ctx.arc(t.x + g * 6, t.y - g * 10, 4 + g * 6, 0, 7); ctx.fill(); }
-    else if (t.ph === 'drop' && t.job && t.job.k === 'build') {   // 卸器材建点：进度环
+    else if (t.ph === 'drop' && t.job && (t.job.k === 'build' || t.job.k === 'fix')) {   // 卸器材建点 / 抢修运输线：进度环
       const n = snById(t.job.id);
-      if (n) { ctx.strokeStyle = COL.amber; ctx.lineWidth = px(1.6); ctx.beginPath(); ctx.arc(t.x, t.y, 9 * k, -1.57, -1.57 + (n.built || 0) * 6.283); ctx.stroke(); }
+      if (n) { ctx.strokeStyle = COL.amber; ctx.lineWidth = px(1.6); ctx.beginPath(); ctx.arc(t.x, t.y, 9 * k, -1.57, -1.57 + clamp(t.job.k === 'fix' ? n.rep || 0 : n.built || 0, 0, 1) * 6.283); ctx.stroke(); }
     }
   }
 }

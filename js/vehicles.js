@@ -18,14 +18,16 @@ const VEH_SPEC = {
   sam_veh: { crew: 3, fuel: 5400, name: '弹炮防空车', code: 'SA', hp: 22, armor: 1, speed: 22, turn: 2, gun: null, mg: { range: 200, n: 4, quad: true }, aa: 260, sam: { range: 520, n: 8, cd: 2.5, regen: 30, icp: 450 }, sight: 200, amph: false, carry: 0, len: 15, wid: 9, tur: 3.8, bar: 5, ammo: 0 },
   recon: { crew: 3, fuel: 8100, name: '侦察车', code: 'RC', hp: 14, armor: 1, speed: 34, turn: 2.6, gun: null, mg: { range: 160, n: 2 }, sight: 285, amph: false, carry: 0, wheel: true, len: 12, wid: 6.5, tur: 2.4, bar: 3, ammo: 0 },
   flame_tank: { crew: 4, fuel: 4300, name: '喷火坦克', code: 'FL', hp: 40, armor: 2, speed: 18, turn: 1.6, gun: { range: 95, rof: 1.1, he: 0, ap: 0, flame: true }, mg: { range: 150, n: 2 }, sight: 150, amph: false, carry: 0, len: 17, wid: 9.5, tur: 3.8, bar: 6, ammo: 40 },
-  mine_tank: { crew: 4, fuel: 4000, name: '扫雷坦克', code: 'MC', hp: 40, armor: 2, speed: 15, turn: 1.4, gun: { range: 200, rof: 4.6, he: 1.3, ap: 2 }, mg: { range: 150, n: 2 }, sight: 150, amph: false, carry: 0, flail: true, len: 17, wid: 10, tur: 3.8, bar: 8, ammo: 30 }
+  mine_tank: { crew: 4, fuel: 4000, name: '扫雷坦克', code: 'MC', hp: 40, armor: 2, speed: 15, turn: 1.4, gun: { range: 200, rof: 4.6, he: 1.3, ap: 2 }, mg: { range: 150, n: 2 }, sight: 150, amph: false, carry: 0, flail: true, len: 17, wid: 10, tur: 3.8, bar: 8, ammo: 30 },
+  // 伞兵战车（空降兵重装空投，abn.js）：轻、快，30 毫米机关炮能打轻装甲，挡不住坦克炮
+  abv: { crew: 3, fuel: 6000, name: '伞兵战车', code: 'AB', hp: 18, armor: 1, speed: 30, turn: 2.4, gun: { range: 210, rof: 1.1, he: .8, ap: 1.3 }, mg: { range: 170, n: 3 }, sight: 170, amph: false, carry: 1, len: 13, wid: 7.5, tur: 2.8, bar: 6, ammo: 40 }
 };
 // 各地形的车速系数（下标同 T）：道路最快，林地、沼泽、礁岸很慢；深海/浅滩只对两栖坦克有意义（泅渡 60%）
 const VEH_TSP = [.6, .6, 0, .75, .3, 0, 1, .4, .75, 0, .25, 0, 1, 1.3, .7, .45];
 const VEH_ORDER = { move: '机动', amove: '攻击前进', hold: '坚守', retreat: '后撤', clear: '扫雷开路' };
 // HUD 单位卡图标（侧视，按进攻方型号，icons.js）；hud.js 以 'v_' + 类型 合入 ICON
 const VEH_ICONS = typeof WI === 'object' ? { lt_tank: WI.ztq15, tank: WI.ztz96b, hv_tank: WI.ztz99a, amtank: WI.ztd05, apc: WI.zbd05, spg: WI.plz07, td: WI.ptl02,
-  aa_veh: WI.pgz07, sam_veh: WI.pgl625, recon: WI.zbl08, flame_tank: WI.zbd04a, mine_tank: WI.ztz96m } : {};
+  aa_veh: WI.pgz07, sam_veh: WI.pgl625, recon: WI.zbl08, flame_tank: WI.zbd04a, mine_tank: WI.ztz96m, abv: WI.zbd05 } : {};
 
 // —— 创建与查询 ——
 // 只在本步内有效的分方缓存，供 combat.js 每个小组每步查询（避免反复 filter）
@@ -45,11 +47,11 @@ const vehSp = v => VEH_SPEC[v.type] || VEH_SPEC.tank;
 // 型号：进攻方按解放军装备、守方按美军装备；沙盒按目录条目（同一车型可有改型）
 const VEH_MODEL = {
   p: { lt_tank: 'ZTQ-15 轻型坦克', tank: 'ZTZ-96B 主战坦克', hv_tank: 'ZTZ-99A 主战坦克', amtank: 'ZTD-05 两栖突击车', apc: 'ZBD-05 两栖步兵战车', spg: 'PLZ-07 自行榴弹炮', td: 'PTL-02 突击炮',
-    aa_veh: 'PGZ-07 自行高炮', sam_veh: 'PGL-625 弹炮防空车', recon: '08 式侦察车', flame_tank: 'ZBD-04A 温压火箭突击车', mine_tank: '96 式扫雷坦克' },
+    aa_veh: 'PGZ-07 自行高炮', sam_veh: 'PGL-625 弹炮防空车', recon: '08 式侦察车', flame_tank: 'ZBD-04A 温压火箭突击车', mine_tank: '96 式扫雷坦克', abv: 'ZBD-03 伞兵战车' },
   e: { lt_tank: 'M10 布克轻型坦克', tank: 'M1A1 艾布拉姆斯', hv_tank: 'M1A2 SEPv3 艾布拉姆斯', amtank: 'AAV-7 两栖突击车', apc: 'M2A3 布雷德利', spg: 'M109A7 帕拉丁', td: 'M1134 斯特赖克反坦克车',
     aa_veh: 'M163 火神自行高炮', sam_veh: 'M-SHORAD 防空车', recon: 'M1127 斯特赖克侦察车', flame_tank: 'M1150 突击破障车', mine_tank: 'M1150 突击破障车（扫雷）' }
 };
-const vehModel = v => { const c = v.sbxV && typeof catalogById === 'function' && catalogById(v.sbxV); return (c && c.name) || (VEH_MODEL[v.side] || VEH_MODEL.p)[v.type] || vehSp(v).name; };
+const vehModel = v => { if (v.mdl) return v.mdl; const c = v.sbxV && typeof catalogById === 'function' && catalogById(v.sbxV); return (c && c.name) || (VEH_MODEL[v.side] || VEH_MODEL.p)[v.type] || vehSp(v).name; };   // mdl：个别车辆的型号名（空投的 JLTV、复仇者等）
 const vehName = v => (v.side === 'e' ? '敌' : '') + vehModel(v) + (v.side === 'p' && v.label ? ' ' + v.label : '');
 // 车组人数：坦克也算人数（在场兵力、态势报告、双方兵力估计与兵力比都计入）
 const vehCrew = v => (VEH_SPEC[v.type] || VEH_SPEC.tank).crew || 3;
@@ -168,12 +170,14 @@ function vehLine(x0, y0, x1, y1, cls) {
   for (let s = 1; s <= n; s++) if (!(stepCost(ci(lerp(x0, x1, s / n), lerp(y0, y1, s / n)), cls) <= lim)) return false;
   return true;
 }
-// 沿流场往前看两格（更顺滑的转向）
-function vehLook(f, x, y) {
+// 沿流场往前看两格（更顺滑的转向）；两格外的点直线过去会擦过不可通行的格（河、悬崖的拐角）就只看一格——免得车顶着拐角原地打转
+function vehLook(f, x, y, cls) {
   const a = nextStep(f, x, y);
   if (!a) return null;
   const b = nextStep(f, a[0], a[1]);
-  return b || a;
+  if (!b) return a;
+  if (cls) { const n = Math.ceil(dist(x, y, b[0], b[1]) / 4); for (let k = 1; k <= n; k++) if (stepCost(ci(lerp(x, b[0], k / n), lerp(y, b[1], k / n)), cls) === Infinity) return a; }
+  return b;
 }
 // 远距离（>60）寻路用量化到 30 的目标点：多辆车、多次下令共用流场缓存；量化点不通时退回精确目标
 function vehField(v, x, y, cls) {
@@ -219,6 +223,16 @@ function vehDrive(v, dt, mul) {
   }
   const d = dist(v.x, v.y, o.x, o.y), cls = vehCls(v, o.x, o.y);
   if (d < 5) { v.order = { t: 'hold', face: o.face, was: o.t }; v.arrT = S.t; return true; }
+  // 目标点已被本方别的车停着占了：到了附近就算到位（不绕着别人的车打转）
+  if (d < 32 && S.veh.some(o2 => o2 !== v && !o2.dead && o2.side === v.side && !o2.lst && o2.order.t === 'hold' && dist(o2.x, o2.y, o.x, o.y) < (sp.len + vehSp(o2).len) * .5 + 6)) { v.order = { t: 'hold', face: o.face, was: o.t }; v.arrT = S.t; v8Stat('vehArrOcc'); return true; }
+  // 进展看门狗：6 秒内离目标没近 6 以上（又不是在等敌步兵、撞障碍、没油）——近的就地停下，远的换条路
+  const PG = v.pg && v.pg.ox === o.x && v.pg.oy === o.y ? v.pg : (v.pg = { ox: o.x, oy: o.y, d, t: S.t });
+  if (d < PG.d - 6) { PG.d = d; PG.t = S.t; }
+  else if (S.t - PG.t > 6 && !v.blk && S.t >= (v.stallT || 0) && (v.fuel ?? 1) > 0) {
+    PG.d = d; PG.t = S.t; v8Stat('vehNoProg');
+    if (d < 70) { v.order = { t: 'hold', face: o.face, was: o.t }; v.arrT = S.t; return true; }
+    v.pathT = -9; v.direct = false; v.sideT = S.t + 2.5; v.sideS = v.id % 2 ? 1 : -1;   // 换路：先侧向让开 2.5 秒
+  }
   if (S.t < (v.stallT || 0)) return;
   if ((v.fuel ?? 1) <= 0) { if (v.side === 'p') log(`${vehName(v)}油料耗尽，原地停车待补`, 'bad', 'vfuel' + v.id, 30, v); return; }   // 油尽：能打不能走
   if (d > 20 && vehBlocked(v, o)) return;   // 前方是没被压住的敌步兵：停车以火力解决
@@ -227,10 +241,11 @@ function vehDrive(v, dt, mul) {
   if (!v.direct && d > 14) {
     const f = vehField(v, o.x, o.y, cls);
     if (f && !isFinite(f[ci(v.x, v.y)]) && vehPass(v.x, v.y, cls)) { v.order = { t: 'hold', face: o.face }; if (v.side === 'p' && !v.auto) log(`${vehName(v)}无法到达目标位置`, 'warn', 'vunr', 3, v); return; }
-    const n = f && vehLook(f, v.x, v.y);
+    const n = f && vehLook(f, v.x, v.y, cls);
     if (n) [tx, ty] = n;
   }
-  const want = Math.atan2(ty - v.y, tx - v.x);
+  let want = Math.atan2(ty - v.y, tx - v.x);
+  if (S.t < (v.sideT ?? 0)) want += v.sideS * 1.1;   // 侧向让开（看门狗 / 前方有本方车辆）
   // 倒车：后撤且距离近，或目标就在身后不远
   let da = vehAng(want - v.heading), dir = 1;
   if ((o.t === 'retreat' && d < 110 && Math.abs(da) > 1.6) || (Math.abs(da) > 2.5 && d < 45)) { dir = -1; da = vehAng(want + Math.PI - v.heading); }
@@ -242,16 +257,32 @@ function vehDrive(v, dt, mul) {
   vel *= Math.abs(da) > 1 ? .12 : 1 - Math.abs(da) * .55;   // 大角度时原地转向
   const step = Math.min(vel * dt, d);
   let nx = v.x + Math.cos(v.heading) * dir * step, ny = v.y + Math.sin(v.heading) * dir * step;
-  // 与本方车辆保持间距：两车之间留出约 6 的空隙（原先几乎车贴车）
+  // 与本方车辆保持间距（留约 6 的空隙）：只向侧面滑开，不往回顶——两车对顶时编号大的那辆让路，向自己一侧错开（以前对称地互相推，挤在一起原地打转）
+  const hx = Math.cos(v.heading) * dir, hy = Math.sin(v.heading) * dir;
   for (const o2 of S.veh) if (o2 !== v && !o2.dead && o2.side === v.side && !o2.lst) {
     const d2 = dist(nx, ny, o2.x, o2.y), m = (sp.len + vehSp(o2).len) * .5 + 6;
-    if (d2 < m && d2 > .01) { nx += (nx - o2.x) / d2 * (m - d2) * .25; ny += (ny - o2.y) / d2 * (m - d2) * .25; }
+    if (d2 >= m || d2 <= .01) continue;
+    const px = (nx - o2.x) / d2, py = (ny - o2.y) / d2, along = px * hx + py * hy;
+    let qx = px - hx * along, qy = py - hy * along, ql = Math.hypot(qx, qy);
+    if (ql < .25) { const sg = v.id > o2.id ? 1 : -1; qx = -hy * sg; qy = hx * sg; ql = 1; }   // 正对着：侧移让路
+    nx += qx / ql * (m - d2) * .3; ny += qy / ql * (m - d2) * .3;
+    if (along < -.3 && v.id > o2.id) { nx -= hx * step * .5; ny -= hy * step * .5; if (S.t >= (v.sideT ?? 0) && Math.random() < dt) { v.sideT = S.t + 1.5; v.sideS = (v.id % 2 ? 1 : -1); } }   // 对方挡在正前方：减速并侧绕
   }
   const here = vehPass(v.x, v.y, cls);
   if (vehPass(nx, ny, cls) || !here) { v.x = nx; v.y = ny; }
   else if (vehPass(nx, v.y, cls)) v.x = nx;   // 斜穿格角受阻时沿单轴滑过
   else if (vehPass(v.x, ny, cls)) v.y = ny;
-  else { v.stuckT = (v.stuckT || 0) + dt; if (v.stuckT > 4) { v.pathT = -9; v.direct = false; v.stuckT = 0; } return; }
+  else {   // 正前方被格角挡住（寻路的前瞻点斜着过墙角）：依次试左右偏 30° / 60° / 90°，哪边能走先从哪边绕过去
+    const st2 = Math.max(step, sp.speed * .25 * dt), sg = v.id % 2 ? 1 : -1;
+    let ok = false;
+    for (const a2 of [.52, -.52, 1.05, -1.05, 1.57, -1.57]) {
+      const h2 = v.heading + a2 * sg, mx = v.x + Math.cos(h2) * dir * st2, my = v.y + Math.sin(h2) * dir * st2;
+      if (vehPass(mx, my, cls)) { v.x = mx; v.y = my; v.heading += clamp(a2 * sg, -turn, turn); ok = true; break; }
+    }
+    if (!ok) { v.stuckT = (v.stuckT || 0) + dt; if (v.stuckT > 4) { v.pathT = -9; v.direct = false; v.stuckT = 0; } return; }
+    v8Stat('vehSlide');
+  }
+  v.heading = vehAng(v.heading);
   v.moving = step > .01; v.movedT = S.t; v.odo += step * dir;
   v.fuel = Math.max(0, (v.fuel ?? 1) - step * (v.swim ? (sp.swimK ? 1.2 : 2) : 1) / (sp.fuel || 5000));   // 泅渡耗油：ZTD-05 喷水推进 1.2 倍，其余 2 倍
   return false;
@@ -460,7 +491,7 @@ function vehAA(v, dt) {
   if (!sp.aa || v.side !== 'e' || !S.planes || !S.planes.length || (v.aaT = (v.aaT || 0) - dt) > 0) return;
   v.aaT = .6;
   for (const p of S.planes) {
-    if (p.dead || !(p.alt > .4) || dist(v.x, v.y, p.x, p.y) > sp.aa) continue;
+    if (p.dead || !(p.alt > .4) || (typeof eaHigh === 'function' && eaHigh(p)) || dist(v.x, v.y, p.x, p.y) > sp.aa) continue;   // 巡逻高度上的战斗机够不着
     tracer(v.x, v.y, p.x + gauss() * 14, p.y + gauss() * 14, 'e', inVision(v.x, v.y));
     v.aim = Math.atan2(p.y - v.y, p.x - v.x); v.mgT = S.t;
     if (Math.random() < .12 * (1 - v.sup / 130) * (typeof airStealth === 'function' ? (1 + airStealth(p)) / 2 : 1) && typeof airLost === 'function') { airLost(p, `${typeof airName === 'function' ? airName(p.kind, p.v) : '我机'}被敌${vehModel(v)}击落`); break; }
@@ -471,7 +502,7 @@ function vehAA(v, dt) {
 // 先拦来袭导弹——落点在 icp 以内、已过半程的敌战术弹道导弹，或飞到 icp 以内的敌岸舰导弹，每车对每枚导弹只拦一次；
 // 再打 range 以内的敌机（每架同时只挂一枚本方导弹）。守方发射会暴露位置
 function vehSam(v, dt) {
-  const M = vehSp(v).sam;
+  const M0 = vehSp(v).sam, M = M0 && v.samX ? { ...M0, ...v.samX } : M0;   // samX：个别车辆的加强（第 101 空降师的复仇者防空车：备弹多、装填快、射程远）
   if (!M || typeof msLaunch !== 'function' || v.lst || v.swim) return;
   if (v.samN == null) v.samN = M.n;
   if (v.samN < M.n && (v.samR = (v.samR || 0) + dt) >= M.regen) { v.samR = 0; v.samN++; }
@@ -489,11 +520,11 @@ function vehSam(v, dt) {
   if (tg) (tg.svTry || (tg.svTry = [])).push(v.id);
   else {
     const air = v.side === 'p' ? (S.eair && S.eair.fly || []).filter(a => !a.dead && a.alt > .1) : (S.planes || []).filter(p => !p.dead && p.alt > .25 && !['cat', 'roll', 'trap', 'final'].includes(p.phase));
-    for (const a of air) { const d = dist(v.x, v.y, a.x, a.y); if (d < M.range && d < bd && !mine(v.side === 'p' ? 'eair' : 'plane', a.id)) { bd = d; tg = a; } }
+    for (const a of air) { const d = dist(v.x, v.y, a.x, a.y); if (d < M.range && d < bd && !(typeof eaHigh === 'function' && eaHigh(a)) && !mine(v.side === 'p' ? 'eair' : 'plane', a.id)) { bd = d; tg = a; } }   // 近程红外弹够不着巡逻高度上的战斗机
     if (!tg) return;
     k = v.side === 'p' ? 'eair' : 'plane';
   }
-  msLaunch('sam', v.side, v.x, v.y, { x: tg.x, y: tg.y }, { tgt: { k, id: tg.id }, src: 'samv', spd: 620, dur: 3, pk: k === 'msl' ? (tg.kind === 'tbm' ? (tg.nuke ? .2 : .5) : tg.kind === 'pgm' ? MS_PGM[tg.w].icp : .55) : .6, sup: v.sup });
+  msLaunch('sam', v.side, v.x, v.y, { x: tg.x, y: tg.y }, { tgt: { k, id: tg.id }, src: 'samv', spd: 620, dur: 3, pk: (k === 'msl' ? (tg.kind === 'tbm' ? (tg.nuke ? .2 : .5) : tg.kind === 'pgm' ? MS_PGM[tg.w].icp : .55) : .6) * (M.pkK || 1), sup: v.sup });
   v.samN--; v.samCd = M.cd; v.aim = Math.atan2(tg.y - v.y, tg.x - v.x); v.samT = S.t;
   S.fx.push({ kind: 'flash', x: v.x, y: v.y, r: 8, life: 0, max: .4, side: v.side });
   if (v.side === 'e') { v.kx = v.x; v.ky = v.y; v.kh = v.heading; v.seen = S.t; }   // 导弹尾焰暴露发射车
@@ -603,7 +634,7 @@ function vehDepots() {
   if (typeof supplyPoints === 'function') return supplyPoints(true).filter(p => p.stock == null || p.stock > .03);   // 存量见底的前沿点不去
   return S.supply.filter(L => L.connected).map(L => ({ x: L.x, y: L.y }));
 }
-function vehDepot(v) { let b = null, bd = Infinity; for (const p of vehDepots()) { const d = dist(p.x, p.y, v.x, v.y); if (d < bd) { bd = d; b = p; } } return b; }
+function vehDepot(v) { const av = v.repAvoid && S.t - v.repAvoid.t < 60 ? v.repAvoid : null; let b = null, bd = Infinity; for (const p of vehDepots()) { if (av && dist(p.x, p.y, av.x, av.y) < 30) continue; const d = dist(p.x, p.y, v.x, v.y); if (d < bd) { bd = d; b = p; } } return b; }   // repAvoid：刚在那里等不到补给的点，60 秒内不再去
 // 我方在补给点（含空投补给点）90 以内停车：抢修、补炮弹（每秒 2 发）、加油（20 秒加满）；油尽的车：400 以内有接通的补给点就派油罐车送油（每秒 1%）
 // 守方依托己方据点 150 以内或出发位置补给（守军有预置的弹药与油料）
 function vehDepotTick(v, dt) {
@@ -686,6 +717,7 @@ function vehGo(v, x, y, t, face) {
   const o = v.order;
   if (o.x != null && o.t === t && dist(o.rx ?? o.x, o.ry ?? o.y, x, y) < 22) return true;   // 与原请求点比较（去向可能被错开过）
   if (o.t === 'hold' && dist(v.x, v.y, x, y) < 18) return true;
+  if (o.t === 'hold' && o.was && S.t - (v.arrT ?? -99) < 10 && v.pg && dist(v.pg.ox, v.pg.oy, x, y) < 25 && dist(v.x, v.y, x, y) < 75) return true;   // 刚因目标被占 / 没进展停下：同一去向 10 秒内不再硬挤
   if (!vehReach(v, x, y)) return false;
   return vehSetOrder(v, t, x, y, face);
 }
@@ -700,7 +732,7 @@ function vehThinkP(v) {
   // 弹药不足一成、油料不足一成二或重创则不等，立即撤。补满（弹药、油料八成五，车体七成二）才归建
   v.cons = vehAmmoF(v) < .5 && (() => { const d = vehDepot(v); return !d || dist(d.x, d.y, v.x, v.y) > 500; })();   // 补给远 / 断：节约弹药（vehGunTarget / vehShoot）
   const am = vehAmmoF(v), fu = v.fuel ?? 1, crit = v.hp < v.maxhp * .35 || am <= .1 || fu <= .12, want = am < .4 || fu < .3 || v.hp < v.maxhp * .5;
-  if ((crit || (want && !vehMates(v).some(o => o.ai === 'repair'))) && !v.swim && v.ai !== 'repair') {
+  if ((crit || (want && !vehMates(v).some(o => o.ai === 'repair') && S.t - (v.repSkip ?? -99) > 60)) && !v.swim && v.ai !== 'repair') {   // 刚从等不到补给的点回来：60 秒内不为轮换补给再下去
     const p = vehDepot(v);
     if (p) {
       const why = am <= .4 ? '弹药不足' : fu < .3 ? '油料不足' : '受损';
@@ -711,8 +743,14 @@ function vehThinkP(v) {
   }
   if (v.ai === 'repair') {
     const p = vehDepot(v);
-    if (v.hp >= v.maxhp * .72 && am >= .85 && fu >= .85) v.ai = null;
+    // 在补给点干等：20 秒没补上多少（点上没存货、卡车还没到）——够打就先回去打，不够就换去更后面的补给站
+    const lvl = am + fu + v.hp / v.maxhp;
+    if (p && dist(p.x, p.y, v.x, v.y) <= 45) { if (!v.repW || lvl > v.repW.l + .06) v.repW = { l: lvl, t: S.t }; } else v.repW = null;
+    const stale = v.repW && S.t - v.repW.t > 20;
+    if (v.hp >= v.maxhp * .72 && am >= .85 && fu >= .85) { v.ai = null; v.repW = null; }
     else if (!p) v.ai = null;   // 补给点没了：带着剩下的弹药继续打
+    else if (stale && am >= .3 && fu >= .25 && v.hp >= v.maxhp * .4) { v.ai = null; v.repW = null; v.repSkip = S.t; v8Stat('vRepStale'); log(`${vehName(v)}在补给点等不到补给，带着现有弹药回到战斗`, 'warn', 'vrepst' + v.id, 60, v); }
+    else if (stale) { const far = vehDepots().filter(o => dist(o.x, o.y, p.x, p.y) > 60 && (o.stock == null || o.stock > .2)).sort((a, b) => dist(a.x, a.y, v.x, v.y) - dist(b.x, b.y, v.x, v.y))[0]; if (far) { v.repAvoid = { x: p.x, y: p.y, t: S.t }; vehGo(v, far.x, far.y + 12, 'retreat'); v.repW = null; return; } v.order = { t: 'hold' }; return; }
     else { if (dist(p.x, p.y, v.x, v.y) > 45) vehGo(v, p.x, p.y + 12, 'retreat'); else v.order = { t: 'hold' }; return; }
   }
   if (v.swim || vehWater(v.x, v.y)) { vehLanding(v); return; }

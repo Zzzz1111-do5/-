@@ -106,7 +106,7 @@ function vlsCommandP(dt) {
   const JP = typeof cmdJointPts === 'function' ? cmdJointPts() : [];
   let best = null, bv = 0;
   for (const e of S.enemies) {
-    if (e.dead || e.kx == null || !VLS_VAL[e.kind]) continue;
+    if (e.dead || e.kx == null || !VLS_VAL[e.kind] || (e.kind === 'airfield' && typeof abKeep === 'function' && abKeep())) continue;   // 打算空降夺取的机场：不炸毁（abn.js）
     if (pT.some(q => dist(q.x, q.y, e.kx, e.ky) < 70) || S.missiles.some(m => m.side === 'p' && !m.done && dist(m.tx, m.ty, e.kx, e.ky) < 50)
       || S.shells.some(s => s.side === 'p' && !s.done && dist(s.x1, s.y1, e.kx, e.ky) < 50)) continue;
     const v = VLS_VAL[e.kind] * (e.kind === 'coastal' && atSea ? 1.5 : 1) * (e.kind === 'bunker' && pT.some(q => dist(q.x, q.y, e.kx, e.ky) < 280) ? 2.2 : 1) * (JP.some(p => dist(p.x, p.y, e.kx, e.ky) < 220) ? 1.5 : 1);

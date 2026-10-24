@@ -43,11 +43,25 @@ function orderShips(ships, x, y) {
   return ships.length;
 }
 
+// 航道：目的地在近岸（离岸 SHIP_LANE 以内）而横向还差得远时，先在深水航道（离岸约 SHIP_LANE）里横向机动到目的地正前方，再垂直驶向海岸——
+// 不贴着海岸线航行（以前按最短路线斜插过去，一路离岸七八十米从别的滩头守军眼前经过）。返回航道上的下一个路标，或 null（直接驶向目的地）
+const SHIP_LANE = 340;
+function shipLaneY(x) { const c = coastAt(clamp(x, 0, W - 1)); for (let o = SHIP_LANE; o < SHIP_LANE + 220; o += 20) if (typeAt(x, c + o) === T.DEEP) return c + o; return c + SHIP_LANE + 220; }
+function shipLaneWP(s) {
+  const dx = s.tx - s.x, toff = s.ty - coastAt(clamp(s.tx, 0, W - 1));
+  if (Math.abs(dx) < 140 || toff > SHIP_LANE - 40) return null;
+  const x = clamp(s.x + Math.sign(dx) * Math.min(Math.abs(dx), 160), 20, W - 20), ly = shipLaneY(x), cur = shipLaneY(s.x);
+  if (s.y < cur - 30) return [clamp(s.x + Math.sign(dx) * 30, 20, W - 20), cur + 20];   // 已经贴岸：先退回航道
+  return [x, Math.max(ly, Math.min(s.y, ly + 150))];   // 航道深度上下 150 以内横向机动
+}
+const shipClear = (x0, y0, x1, y1) => { const n = Math.ceil(dist(x0, y0, x1, y1) / 10); for (let k = 1; k <= n; k++) if (stepCost(ci(lerp(x0, x1, k / n), lerp(y0, y1, k / n)), 'ship') === Infinity) return false; return true; };
 function sailTo(s, dt, speed) {
   const d = dist(s.x, s.y, s.tx, s.ty);
   if (d < 2) return true;
   let tx = s.tx, ty = s.ty;
-  if (d > 20) { const f = field(s.tx, s.ty, 'ship'), n = f && nextStep(f, s.x, s.y); if (n) [tx, ty] = n; }
+  const wp = shipLaneWP(s);
+  if (wp && shipClear(s.x, s.y, wp[0], wp[1])) { [tx, ty] = wp; s.lane = true; }
+  else if (d > 20) { s.lane = false; const f = field(s.tx, s.ty, 'ship'), n = f && nextStep(f, s.x, s.y); if (n) [tx, ty] = n; }
   const sp = speed * (typeAt(s.x, s.y) === T.SHOAL ? .55 : 1) * dt, l = dist(s.x, s.y, tx, ty) || 1;
   s.heading = Math.atan2(ty - s.y, tx - s.x);
   s.x += (tx - s.x) / l * Math.min(sp, l); s.y += (ty - s.y) / l * Math.min(sp, l);

@@ -21,10 +21,14 @@ const AIR_MDL = {
   h6k: { name: '轰-6K 轰炸机', sil: 'h6k', spd: 165, aa: .07, size: 24, land: true },
   gj2: { name: '攻击-2 察打一体无人机', sil: 'gj2', spd: 140, aa: .09, size: 17, land: true, loiter: 60, agm: 'ba7', agmN: 4, agmR: 320 },   // 长航时：盘旋 60 秒；4 枚蓝箭-7 空地导弹
   z10: { name: '直-10 武装直升机', sil: 'heli', spd: 110, aa: .09, size: 15, agm: 'hj10', agmN: 8, agmR: 280 },   // 8 枚红箭-10 反坦克导弹
-  j20: { name: '歼-20 隐身战斗机', sil: 'j20', spd: 265, aa: .05, size: 17, land: true, stealth: .35, aam: 6, aamR: 560, pkK: 1.15 }   // 4 枚霹雳-15 + 2 枚霹雳-10
+  j20: { name: '歼-20 隐身战斗机', sil: 'j20', spd: 265, aa: .05, size: 17, land: true, stealth: .35, aam: 6, aamR: 560, pkK: 1.15 },   // 4 枚霹雳-15 + 2 枚霹雳-10
+  // 彩蛋（j36.js）：歼-36。官方未公布参数，按公开估算：机长约 23 米、翼展约 19 米、最大起飞重量约 55 吨（歼-20 约 37 吨）、三发、主弹舱长约 7.6 米、作战半径约 3000 公里；
+  //   体型大、无尾 → 转弯慢（turn）、不带航炮；全向隐身更好、机头大雷达看得更远（radar）、留空时间长（cap 秒）。挂载按弹舱尺寸推测：aamL / aamLR = 霹雳-17 远程空空导弹
+  j36: { name: '歼-36 第六代战斗机（制空型）', sil: 'j36', spd: 300, aa: .02, size: 18, land: true, stealth: .2, aam: 6, aamR: 560, aamL: 2, aamLR: 900, pkK: 1.2, radar: 900, turn: 1.7, cap: 240, gun: 0 },
+  j36s: { name: '歼-36 第六代战斗机（打击型）', sil: 'j36', spd: 300, aa: .02, size: 18, land: true, stealth: .2, aam: 4, aamR: 560, pkK: 1.2, radar: 900, turn: 1.7, cap: 240, gun: 0, agm: 'ls6', agmN: 4, agmR: 900 }
 };
 const AIR_BASEM = { recon: 'kj600', strike: 'j35', cas: 'gj2', bomber: 'h6k', fighter: 'j20' };
-const AIR_VMODEL = { lr: 'wz7', dive: 'gj11', heavy: 'h6k', fb: 'j15t', heli: 'z10', sead: 'j35s', adv: 'j20' };   // adv：旧存档里的先进战斗机
+const AIR_VMODEL = { lr: 'wz7', dive: 'gj11', heavy: 'h6k', fb: 'j15t', heli: 'z10', sead: 'j35s', adv: 'j20', j36: 'j36', j36s: 'j36s' };   // adv：旧存档里的先进战斗机
 const airMdlKey = (type, v) => AIR_VMODEL[v] || AIR_BASEM[type];
 const airMdl = (type, v) => AIR_MDL[airMdlKey(type, v)] || {};   // 运输机（para.js）等没有型号表的返回空
 const airSpec = (type, v) => ({ ...(AIR_SPEC[type] || AIR_SPEC.strike), ...airMdl(type, v) });
@@ -62,9 +66,12 @@ const AIR_SIL = {
   heli: [[8, 0], [7, 1.6], [3, 2.6], [-2, 2.4], [-4, 1], [-11, .6], [-12, 3], [-13, 3], [-12.5, 0]],   // 武装直升机：机身 + 尾梁（旋翼另画）
   // 守方（美军）
   f35: [[10.4, 0], [8, 1], [3.6, 1.8], [.4, 2.2], [-3.6, 7.2], [-5.4, 7.2], [-5.6, 2.4], [-7, 2.3], [-9, 4.6], [-10.2, 4.6], [-9.6, 1.4], [-10.6, 0]],   // 单发，菱形梯形翼，双垂尾
-  a10: [[10, 0], [8, 1], [3.2, 1.2], [2.6, 9.4], [-.6, 9.4], [-1.2, 1.4], [-7, 1.3], [-8.4, 4.8], [-10.4, 4.8], [-10, 1], [-10.6, 0]]   // 平直下单翼，尾部背负双发、双垂尾
+  a10: [[10, 0], [8, 1], [3.2, 1.2], [2.6, 9.4], [-.6, 9.4], [-1.2, 1.4], [-7, 1.3], [-8.4, 4.8], [-10.4, 4.8], [-10, 1], [-10.6, 0]],   // 平直下单翼，尾部背负双发、双垂尾
+  f22: [[10.6, 0], [8.2, .9], [4.6, 1.8], [2.6, 2.4], [1.6, 2.6], [-2.8, 7.4], [-4.6, 7.4], [-6.1, 2.8], [-6.6, 2.6], [-8.6, 5.4], [-9.8, 5.4], [-10.1, 1.6], [-10.6, 1.2], [-10.6, 0]],   // 菱形翼（后缘前掠）、全动平尾、二元矢量喷管
+  // 彩蛋
+  j36: [[12.6, 0], [10.6, .8], [8.2, 1.6], [5.6, 2.6], [1, 5.4], [-5.8, 10.3], [-7.4, 10.3], [-6.4, 6], [-10.6, 2.8], [-11.6, 2.2], [-12.2, 1.2], [-12.2, 0]]   // 歼-36：无尾双菱形翼（翼尖切尖、后缘 W 形），机长 : 翼展约 23 : 19，与歼-20 同一比例尺
 };
-// 剪影键：按型号；守方 type（ga / heli / ftr）另映射
+// 剪影键：按型号；守方 type（ga / heli / ftr / f22）另映射
 const airSilKey = (type, v) => type === 'ga' ? 'a10' : type === 'ftr' ? 'f35' : AIR_SIL[type] && !AIR_BASEM[type] ? type : airMdl(type, v).sil || 'j35';
 const airName = (type, v) => airMdl(type, v).name || (AIR_SPEC[type] || {}).name || '飞机';
 // HUD 图标（24×24，描边风格，与 hud.js ICON 一致）
@@ -163,7 +170,7 @@ function initCarrier() {
 
 // HUD 读取：各机型可出击（在甲板待命）的架数
 function airCount() {
-  const up = w => airLandW(w) || (() => { const c = cvOf(cvHome(w)); return c && c.hp > 0; })();   // 陆基飞机不看航母
+  const up = w => w.af ? typeof abAfOpen === 'function' && abAfOpen() : airLandW(w) || (() => { const c = cvOf(cvHome(w)); return c && c.hp > 0; })();   // 陆基飞机不看航母；停在夺取的机场上的要跑道能用（abn.js）
   for (const t of AIR_TYPES) S.assets[t] = S.air ? S.air.wing.filter(w => w.type === t && w.state === 'deck' && up(w)).length : 0;
 }
 
@@ -187,9 +194,10 @@ function launchPlane(kind, tx, ty, pref) {
   const want = pref || (kind === 'bomber' ? (S.enemies.some(e => !e.dead && e.kx != null && dist(e.kx, e.ky, tx, ty) < 40) ? 'dive' : 'heavy') : null);
   let w = null, bd = Infinity;
   for (const o of S.air.wing) if (o.type === kind && o.state === 'deck') {
-    const land = airLandW(o), c = land ? null : cvOf(cvHome(o));
+    const land = airLandW(o), c = land ? null : cvOf(cvHome(o)), af = o.af && S.abBase;
     if (!land && !(c && c.hp > 0)) continue;
-    const d = (land ? H - ty + 300 : dist(c.x, c.y, tx, ty)) + (want && (o.v || (kind === 'bomber' ? 'heavy' : null)) !== want ? 1e4 : 0);
+    if (o.af && !(typeof abAfOpen === 'function' && abAfOpen())) continue;   // 停在夺取的机场上、跑道用不了的起不来
+    const d = (af ? dist(af.x, af.y, tx, ty) : land ? H - ty + 300 : dist(c.x, c.y, tx, ty)) + (want && (o.v || (kind === 'bomber' ? 'heavy' : null)) !== want ? 1e4 : 0);
     if (d < bd) { bd = d; w = o; }
   }
   if (!w) {
@@ -197,6 +205,7 @@ function launchPlane(kind, tx, ty, pref) {
     log(!left.length ? `${sp.name}已全部损失` : r.length ? `${sp.name}均在出击或整备中（最快 ${Math.ceil(Math.min(...r))} 秒）` : `${sp.name}均已升空`, 'warn', 'air' + kind, 2);
     return false;
   }
+  if (w.af && typeof abTakeoff === 'function') return abTakeoff(w, kind, tx, ty);   // 从夺取的机场起飞（abn.js）
   return airLandW(w) ? launchLand(w, kind, tx, ty) : withCV(cvOf(cvHome(w)), () => launchFrom(w, kind, sp, tx, ty));
 }
 // —— 编队出击（机群）：攻击机、对地支援机、轰炸机至少双机——长机打指定目标，僚机打附近另一个已标定目标（没有就同一目标补投 / 并肩压制）；
@@ -240,7 +249,7 @@ function airNew(w, kind, x, y, heading, tx, ty, extra) {
   const M = airMdl(kind, w.v), p = { id: S.nid++, wid: w.id, home: cvHome(w), kind, v: w.v || null, x, y, heading, spd: 0, alt: 0, bank: 0,
     tx, ty, cx: tx, cy: ty, wp: [{ x: tx, y: ty }], leg: 0, aaT: Math.random() * .5, rt: 0, gunT: 0, strafeT: 1, loiterT: M.loiter || 40, odir: 1, dropped: false, rtbT: 0, ...extra };
   if (kind === 'recon') { const a = Math.atan2(ty - y, tx - x), [bx, by] = airRay(tx, ty, a, 700); p.wp.push({ x: bx, y: by }); }   // 侦察机：飞越目标后沿同一方向再向纵深飞 700
-  if (kind === 'fighter') Object.assign(p, { aam: M.aam || 4, gun: 40, capT: 90, aamR: M.aamR || 480, pkK: M.pkK || 1 });   // 空空导弹 · 机炮点射次数 · 巡逻秒数（airwar.js）
+  if (kind === 'fighter') Object.assign(p, { aam: M.aam || 4, gun: M.gun ?? 40, capT: M.cap || 90, aamR: M.aamR || 480, pkK: M.pkK || 1, aamL: M.aamL || 0, aamLR: M.aamLR || 0, radar: M.radar || 520, aam0: (M.aam || 4) + (M.aamL || 0) });   // 空空导弹 · 机炮点射次数 · 巡逻秒数 · 远程弹 · 机载雷达（airwar.js）
   if (M.agm) p.agmN = M.agmN;   // 空地导弹（airAgm）
   return p;
 }
@@ -278,7 +287,7 @@ function updatePlanes(dt) {
   updateAirAuto(dt);
   for (const w of S.air.wing) if (w.state === 'rearm' && (w.rearmT -= dt) <= 0) {
     w.state = 'deck'; w.rearmT = 0;
-    if (airLandW(w)) log(`${airName(w.type, w.v)}在战区机场加油挂弹完毕，可以再次出击`, 'good', 'rearm' + w.type + (w.v || ''), 8);
+    if (airLandW(w)) log(`${airName(w.type, w.v)}在${w.af ? '夺取的机场' : '战区机场'}加油挂弹完毕，可以再次出击`, 'good', 'rearm' + w.type + (w.v || ''), 8);
     else if (S.cv.hp > 0) log(`${airName(w.type, w.v)}整备完毕`, 'good', 'rearm' + w.type + (w.v || ''), 8);
   }
   for (const p of S.planes) {
@@ -339,6 +348,7 @@ function flyPlane(p, dt) {
   const c = S.cv, sp = airSpec(p.kind, p.v), dead = c.hp <= 0, M = airMdl(p.kind, p.v);
   const speed = v => { p.spd += clamp(v - p.spd, -70 * dt, 45 * dt); };
   p.gunT = Math.max(0, (p.gunT || 0) - dt);
+  if (p.afPh && typeof abPlaneFly === 'function' && abPlaneFly(p, dt, speed)) return;   // 在夺取的机场起降（abn.js）
   if (!Array.isArray(p.wp) || !p.wp.length) p.wp = [{ x: isFinite(p.tx) ? p.tx : p.x, y: isFinite(p.ty) ? p.ty : p.y }];
   // 甲板阶段：弹射器上等待 → 滑跑加速离舰（随航母移动，用局部坐标）
   if (p.phase === 'cat' || p.phase === 'roll') {
@@ -401,10 +411,11 @@ function flyPlane(p, dt) {
     if ((p.loiterT -= dt) <= 0) airSet(p, 'rtb');
     return;
   }
-  if (p.land) {   // 陆基飞机：向南飞出地图，回战区机场加油挂弹（100 秒后再出击）
+  if (p.land) {   // 陆基飞机：向南飞出地图，回战区机场加油挂弹（100 秒后再出击）；夺取了敌机场、有油料就改降那里（abn.js）
+    if (typeof abRtbLand === 'function' && abRtbLand(p) && abPlaneFly(p, dt, speed)) return;
     p.alt = Math.min(1, p.alt + dt / 3); speed(sp.spd);
     airSteer(p, clamp(p.x, 40, W - 40), H + 60, dt, true);
-    if (p.y > H + 15) { p.dead = true; const w = airWing(p); if (w && w.state !== 'lost') { w.state = 'rearm'; w.rearmT = AIR_REARM_LAND; } }
+    if (p.y > H + 15) { p.dead = true; const w = airWing(p); if (w && w.state !== 'lost') { w.state = 'rearm'; w.rearmT = AIR_REARM_LAND; w.af = false; } }
     return;
   }
   // —— 返航：rtb 飞到舰尾一侧的顺风点（偏离中线约两个转弯半径）→ final 转弯切入斜角甲板中线下滑 → trap 着舰；
@@ -550,6 +561,7 @@ function casStrafe(p) {
 function airAA(p, dt) {
   if ((p.aaT = (p.aaT || 0) - dt) > 0) return;
   p.aaT = .5;
+  if (typeof eaHigh === 'function' && eaHigh(p)) return;   // 战斗机在巡逻高度：高炮够不着
   const sp = airSpec(p.kind, p.v), st = sp.stealth ? (1 + sp.stealth) / 2 : 1;   // 隐身机：雷达高炮难以跟踪，光学瞄准仍可能打中
   for (const a of S.enemies) {
     if (a.dead || a.kind !== 'aa' || dist(a.x, a.y, p.x, p.y) > 190) continue;
@@ -692,7 +704,7 @@ function updateAirAuto(dt) {
   if (S.assets.strike > 0 && !awBad) {
     const PRI = { coastal: 5, ascm: 5, tel: 5, airfield: 4.5, arty: 4, aa: 3.5, mortar: 3, bunker: 2 };   // 歼-35 在时高炮阵地（防空）优先级再乘 1.8
     let best = null, bs = 0;
-    for (const e of S.enemies) if (!e.dead && e.kx != null) {
+    for (const e of S.enemies) if (!e.dead && e.kx != null && !(e.kind === 'airfield' && typeof abKeep === 'function' && abKeep())) {   // 打算空降夺取的机场不炸（abn.js）
       if (near(e.kx, e.ky, typeof cmdAirSafe === 'function' ? cmdAirSafe() : 90).length || busy('strike', e.kx, e.ky, 70) || S.shells.some(s => s.side === 'p' && s.kind === 'bomb' && dist(s.x1, s.y1, e.kx, e.ky) < 60)) continue;
       const stl = S.air.wing.some(w => w.type === 'strike' && w.state === 'deck' && airMdl('strike', w.v).stealth);   // 歼-35 隐身：不怕防空圈
       const s = (PRI[e.kind] || 1) * (e.kind === 'bunker' && !near(e.kx, e.ky, 320).length ? .3 : 1) * (!stl && typeof eaThreat === 'function' && eaThreat(e.kx, e.ky) >= 1 ? .4 : 1) * (e.kind === 'aa' && stl ? 1.8 : 1);
@@ -704,7 +716,7 @@ function updateAirAuto(dt) {
   if (S.assets.bomber > 0 && !awBad) {   // 轰炸机：炮兵阵地群、岸防炮、碉堡（周围已标定目标越多越优先）；我军 150 以内不投
     const PRI = { coastal: 5, airfield: 5, ascm: 4.5, tel: 4.5, arty: 4.5, aa: 3, mortar: 3, bunker: 2.5 };
     let best = null, bs = 0;
-    for (const e of S.enemies) if (!e.dead && e.kx != null) {
+    for (const e of S.enemies) if (!e.dead && e.kx != null && !(e.kind === 'airfield' && typeof abKeep === 'function' && abKeep())) {
       if (near(e.kx, e.ky, 150).length || busy('bomber', e.kx, e.ky, 90) || S.shells.some(s => s.side === 'p' && s.kind === 'bomb' && dist(s.x1, s.y1, e.kx, e.ky) < 60)) continue;
       const s = (PRI[e.kind] || 1) + .8 * S.enemies.filter(o => o !== e && !o.dead && o.kx != null && dist(o.kx, o.ky, e.kx, e.ky) < 90).length;
       if (s > bs) { bs = s; best = e; }
@@ -778,6 +790,12 @@ function drawAircraft(ctx, x, y, a, type, size, col, alpha, bank, lw, bombs) {
     for (const s of [-1, 1]) seg(-6, s * 1.9, -9.6, s * 3);
   } else if (type === 'j35' || type === 'f35' || type === 'j15') {   // 双垂尾
     for (const s of [-1, 1]) seg(-5.6, s * 1.6, -9.2, s * 2.3);
+  } else if (type === 'f22') {   // 外倾双垂尾 + 进气口
+    for (const s of [-1, 1]) seg(-4.6, s * 2.1, -8.4, s * 3.4, 3.4, s * 1.9, 1.4, s * 2.5);
+  } else if (type === 'j36') {   // 背部进气口 + 三台发动机的扁平喷口，翼尖开裂式方向舵，无垂尾
+    ctx.strokeRect(-.6, -1, 3.4, 2);
+    for (const y of [-1.7, 0, 1.7]) ctx.strokeRect(-12, y - .5, 1.5, 1);
+    for (const s of [-1, 1]) seg(-6.2, s * 9.4, -7.4, s * 9.4);
   } else if (type === 'h6k') {   // 翼根两台发动机
     for (const s of [-1, 1]) ctx.strokeRect(-1.8, s * 3.2 - .9, 6, 1.8);
   } else if (type === 'a10') {   // 尾部背负双发 + 双垂尾

@@ -120,6 +120,7 @@ function aiArtillery(D, seenT, seenShips) {
   // 陆上补给网：被看见的补给站与运输线也是炮击目标
   if (typeof supplyTargets === 'function') for (const t of supplyTargets())
     if ((t.kind === 'node' || t.kind === 'edge') && spotted(t.x, t.y)) T.push({ x: t.x, y: t.y, v: 1.5 + (t.value || 1), vx: 0, vy: 0 });
+  if (typeof abeArtyTargets === 'function') T.push(...abeArtyTargets());   // 被我方夺取的机场跑道（abn.js）
   for (const b of S.boats) if (!b.dead && spotted(b.x, b.y)) {
     const L = S.rlines.find(l => l.id === b.line), a = Math.atan2(L.y1 - L.y0, L.x1 - L.x0);
     T.push({ x: b.x, y: b.y, v: 4, vx: Math.cos(a) * 40, vy: Math.sin(a) * 40, sea: true });

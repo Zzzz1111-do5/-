@@ -132,7 +132,7 @@ if (typeof WI === 'object') Object.assign(CT_IC, {
   lct: WI.t271, lci: WI.t074a, lcvp: WI.lcvp, lst: WI.t072a, lsm: WI.t073a, ls: WI.t072, rlct: WI.rkboat, lcs: WI.gunboat, sweep: WI.t082,
   dd: WI.t052d, ddh: WI.t052d + ctDots(1), dde: WI.t054a, cl: WI.t055, ca: WI.t055 + ctDots(1), cv: WI.t003, cve: WI.t075,
   arecon: WI.kj600, awz7: WI.wz7, astrike: WI.j35, aj35: WI.j35, agj11: WI.gj11, aj15: WI.j15, acas: WI.gj2, aftr: WI.j20, heavy: WI.h6k, heli: WI.z10,
-  ega: WI.a10, eheli: WI.ah64, eftr: WI.f35, tbm: WI.df15b, hj12: WI.hj12, lcac: WI.lcac, nuke: WI.nuke, uh60: WI.uh60
+  ega: WI.a10, eheli: WI.ah64, eftr: WI.f35, ef22: WI.f22, aj36: WI.j36, tbm: WI.df15b, hj12: WI.hj12, lcac: WI.lcac, nuke: WI.nuke, uh60: WI.uh60, c17: WI.c17
 });
 
 // —— 条目 —— e(id, 名称, 阵营, 分类, 原型, 点数, 图标, [耐久, 装甲, 火力, 射程, 速度, 视野, 人数], 说明, spawn, 附加)
@@ -149,8 +149,8 @@ ctE('p_mg', '机枪组（QJY-201 通用机枪）', 'p', 'inf', 'inf_p', 13, CT_I
   { kind: 'cargo', at: 'cargo', men: ['radio', 'mg', 'mg'], mod: { sup: 1.35, pow: .9 } }, { counters: ['inf_e'], weakTo: ['mortar', 'arty'] });
 ctE('p_marine', '陆战队突击组', 'p', 'inf', 'inf_p', 14, CT_IC.marine, [3, 0, 5, 5, 6, 6, 3], '经过抢滩训练的陆战队员，射速与命中更高、士气坚韧；价格稍贵。',
   { kind: 'cargo', at: 'cargo', men: ['radio', 'rifle', 'mg'], mod: { pow: 1.15, rof: 1.15 }, morale: 90 }, { counters: ['inf_e', 'p_rifle'], weakTo: ['bunker'] });
-ctE('p_ranger', '蛟龙突击队小组', 'p', 'inf', 'inf_p', 18, CT_IC.ranger, [3, 0, 6, 6, 6, 7, 3], '精锐突击队，射程与精度俱佳，最不容易溃退，适合攻打岸防炮台等要点。',
-  { kind: 'cargo', at: 'cargo', men: ['radio', 'rifle', 'mg'], mod: { pow: 1.3, rng: 1.1, rof: 1.1 }, morale: 98 }, { counters: ['coastal', 'inf_e'], weakTo: ['arty'] });
+ctE('p_ranger', '蛟龙突击队小组', 'p', 'inf', 'inf_p', 24, CT_IC.ranger, [5, 1, 9, 7, 6, 7, 3], '海军陆战队特种部队：精度 1.6 倍、射速 1.3 倍、射程 1.2 倍，防弹插板让近一半的致命伤只是负伤，几乎压不住、最不容易溃退，适合攻打岸防炮台等要点。',
+  { kind: 'cargo', at: 'cargo', men: ['radio', 'rifle', 'mg'], mod: { pow: 1.6, rng: 1.2, rof: 1.3, sup: 1.4, hard: .45, calm: .5 }, morale: 100 }, { counters: ['coastal', 'inf_e'], weakTo: ['arty'] });
 ctE('p_sniper', '狙击小组（QBU-202）', 'p', 'inf', 'inf_p', 14, CT_IC.sniper, [2, 0, 4, 9, 5, 8, 2], '两人狙击组：远距离精确射杀机枪手与通讯兵，压制力弱、怕被炮火覆盖。',
   { kind: 'cargo', at: 'cargo', men: ['radio', 'rifle'], mod: { pow: 2.2, rng: 1.7, rof: .55, sup: .5 } }, { counters: ['inf_e'], weakTo: ['mortar'] });
 ctE('p_at', '反坦克火箭组（PF-98）', 'p', 'inf', 'inf_p', 15, CT_IC.at, [3, 0, 3, 4, 5, 5, 3], '携带火箭筒，专打装甲车辆与坦克；对步兵火力偏弱。',
@@ -267,6 +267,39 @@ ctE('p_air_fb', '歼-15T 舰载战斗机', 'p', 'air', 'wing', 28, CT_IC.aj15, [
   { kind: 'wing', at: 'air', type: 'cas', n: 1, v: 'fb' }, { counters: ['inf_e', 'bunker'], weakTo: ['aa'] });
 ctE('p_air_ftr', '歼-20 隐身战斗机（战区）', 'p', 'air', 'wing', 36, CT_IC.aftr, [3, 0, 7, 9, 10, 8, 0], '制空战斗机（W 键），从战区机场起飞、不占航母机库：在指定空域巡逻 90 秒，4 枚霹雳-15（射程比敌 AIM-120 远）加 2 枚霹雳-10 拦截敌攻击机、武装直升机与 F-35A；隐身，敌雷达很晚才发现它。掌握制空权后敌机难以出动。',
   { kind: 'wing', at: 'none', type: 'fighter', n: 1, land: true }, { counters: ['e_air_ga', 'e_air_heli', 'e_air_ftr'], weakTo: ['e_aa_radar'] });
+// 武器与机体参数记录（v13）：公开资料与估算（官方大多没有公布，数字有出入时取常见说法并注明），g = 游戏里的取值。目前用于歼-36 的挂载表（图鉴、沙盒条目）
+const WPN = {
+  pl15: { nm: '霹雳-15', kind: '中远程空空导弹', guide: '惯导 + 双向数据链中段修正，末段主动相控阵（AESA）雷达导引头（也有被动模式）', motor: '双脉冲固体火箭发动机',
+    len: '约 4.0 米（3996 毫米）', dia: '203 毫米', mass: '约 210 公斤（出口型 PL-15E 公布值）', rng: '出口型 PL-15E 公布 145 公里；本型各方估计 200–300 公里不等', spd: '4 马赫以上（也有 5 马赫的说法，估算）',
+    note: '为隐身战斗机内埋弹舱设计，控制舵面截短；歼-20 主弹舱挂 4 枚', g: '射程 560（还要飞进本机雷达对目标的锁定距离），间隔 1.2 秒连射，命中率随目标类型与隐身打折' },
+  pl17: { nm: '霹雳-17', kind: '超远程空空导弹', guide: '惯导 + 卫星导航 + 数据链中段制导，末段主动相控阵雷达 + 红外复合导引头', motor: '双脉冲固体火箭发动机',
+    len: '约 6 米', dia: '未公开', mass: '未公开', rng: '估计 300–500 公里（英国皇家联合军种研究所称 400 公里级）', spd: '4 马赫以上（估算）',
+    note: '主要用来打预警机、加油机这类大而笨的高价值目标，不是为了和战斗机格斗；平时由歼-16 外挂，歼-20 弹舱放不下；歼-36 主弹舱长约 7.6 米，内埋两枚属推测；也有人称它霹雳-20 / PL-XX', g: '射程 900；打运输机、攻击机、直升机命中率 ×1.15，打战斗机 ×0.75；在霹雳-15 射程外或霹雳-15 打光时才用' },
+  ls6: { nm: '雷石-6', kind: '滑翔制导炸弹（加装套件）', guide: '惯导 + 卫星导航（改型可选激光、红外或景象匹配末制导）', motor: '无动力滑翔（2024 年珠海航展展出过加装涡喷发动机的增程方案）',
+    len: '随弹体', dia: '随弹体', mass: '有 50 / 100 / 250 / 500 公斤级四种', rng: '公开资料没有可靠数字（高空投放可滑翔数十公里）', spd: '亚音速滑翔',
+    note: '给普通航弹加装弹翼与制导组件的增程精确制导套件；游戏里歼-36 打击型挂 500 公斤级，内埋属推测', g: '投放距离 900，爆炸半径 30、对工事毁伤 30；飞得慢，敌防空车、陆基密集阵每次拦截有 35% 把握' }
+};
+// 机体参数（公开估算）
+const AIRDATA = {
+  j36: [['首次曝光', '2024 年 12 月 26 日在成都被拍到试飞，由一架歼-20S 伴飞；「歼-36」是外界按机头编号 36011 起的称呼'], ['研制', '成都飞机工业集团（外界判断）'],
+    ['布局', '无尾双菱形（改进型三角）翼，翼尖开裂式方向舵；扁平尾喷口'], ['机长', '约 22.5–23 米（歼-20 约 21 米）'], ['翼展', '约 19 米（另有 24 米的估算）'],
+    ['最大起飞重量', '约 50–60 吨，常见估算 55 吨（歼-20 约 37 吨）'], ['发动机', '3 台涡扇：两侧各一个进气道，背部一个进气道；型号未公开'],
+    ['弹舱', '主弹舱长约 7.6 米；两侧小弹舱是否存在还没有定论'], ['作战半径', '估计约 3000 公里'], ['座舱', '有并列双座和单座两种说法'], ['官方参数', '未公布，以上均为公开报道中的估算'],
+    ['游戏里', '隐身系数 0.2（F-22A 0.3、歼-20 0.35）；机载雷达 900（歼-20 520）；速度 300；转弯慢（1.7，歼-20 2.3）、不带航炮，敌战斗机逼近 300 就加速拉开；一次巡逻 4 分钟；陆基，不占航母机库']]
+};
+// 挂载表 HTML（图鉴详情、沙盒条目说明共用）：c.load = [[武器键, 枚数], ...]，c.air = AIRDATA 键
+function ctLoadHtml(c, esc) {
+  if (!c || !(c.load || c.air)) return '';
+  const row = (k, v) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`;
+  const w = (c.load || []).map(([k, n]) => { const o = WPN[k]; return o ? `<section><h4>${esc(o.nm)} ×${n}<small>${esc(o.kind)}</small></h4><dl>${row('制导', o.guide)}${row('动力', o.motor)}${row('弹长', o.len)}${row('弹径', o.dia)}${row('重量', o.mass)}${row('射程', o.rng)}${row('速度', o.spd)}${row('说明', o.note)}${row('游戏里', o.g)}</dl></section>` : ''; }).join('');
+  const a = c.air && AIRDATA[c.air] ? `<section><h4>机体<small>公开估算</small></h4><dl>${AIRDATA[c.air].map(([k, v]) => row(k, v)).join('')}</dl></section>` : '';
+  return `<div class="ct-load"><b>挂载与参数（挂载按弹舱尺寸推测）</b>${w}${a}</div>`;
+}
+// 歼-36（v13）：官方未公布参数，外形尺寸按公开估算，挂载按弹舱尺寸推测；很贵，两种型号合计限购 2 架（lim）
+ctE('p_air_j36', '歼-36 第六代战斗机（制空型）', 'p', 'air', 'wing', 500, CT_IC.aj36 || CT_IC.aftr, [4, 0, 9, 10, 10, 10, 0], '成飞的第六代隐身战斗机原型机（2024 年 12 月 26 日首次被拍到试飞；「歼-36」是外界按机头编号 36011 起的称呼，官方没有公布任何参数）。按公开估算：机长约 23 米、翼展约 19 米、最大起飞重量约 55 吨（歼-20 约 37 吨），无尾双菱形翼，三台涡扇（两侧进气加一个背部进气），主弹舱长约 7.6 米，作战半径约 3000 公里。游戏里：比 F-22A 更难被发现（敌机要飞到约 200 以内才锁得住它），机头大雷达 900 外就能锁定普通目标、550 外锁定 F-35A；主弹舱按尺寸推测挂 2 枚霹雳-17 远程空空导弹（射程 900，打运输机、攻击机这种大目标最准）加 6 枚霹雳-15；一次巡逻 4 分钟，从战区机场起飞、不占航母机库。体型大又没有尾翼，转弯慢、不带航炮：敌战斗机逼近就加速拉开，不进缠斗。很贵，两种型号合计限购 2 架。',
+  { kind: 'wing', at: 'none', type: 'fighter', n: 1, v: 'j36', land: true }, { counters: ['e_air_f22', 'e_air_ftr', 'e_air_ga', 'e_air_heli', 'e_101'], weakTo: [], lim: { g: 'j36', n: 2, nm: '歼-36' }, load: [['pl17', 2], ['pl15', 6]], air: 'j36' });
+ctE('p_air_j36s', '歼-36 第六代战斗机（打击型）', 'p', 'air', 'wing', 520, CT_IC.aj36 || CT_IC.aftr, [4, 0, 10, 10, 10, 10, 0], '同一机体换对地挂载（按弹舱尺寸推测）：4 枚雷石-6 滑翔制导炸弹加 4 枚霹雳-15。巡逻时在 900 以内自己挑已发现的高价值目标，一个一个用滑翔炸弹敲掉：防空炮、防空车、导弹发射车、岸舰导弹、岸炮、炮兵、机场跑道；遇到敌战斗机用霹雳-15 自卫、不进缠斗。滑翔炸弹飞得慢，敌防空车和陆基密集阵有机会拦下。其余性能同制空型。很贵，两种型号合计限购 2 架。',
+  { kind: 'wing', at: 'none', type: 'fighter', n: 1, v: 'j36s', land: true }, { counters: ['aa', 'e_aa_radar', 'e_sam_veh', 'e_aa_veh', 'e_tel', 'e_ascm', 'coastal', 'arty', 'e_airfield'], weakTo: ['e_air_f22', 'e_lpws'], lim: { g: 'j36', n: 2, nm: '歼-36' }, load: [['ls6', 4], ['pl15', 4]], air: 'j36' });
 ctE('p_air_heli', '直-10 武装直升机', 'p', 'air', 'wing', 30, CT_IC.heli, [3, 1, 6, 0, 5, 6, 0], '对地支援（V 键）。从两栖攻击舰起飞：低空悬停时间长达 70 秒，扫射压制更强；速度慢。',
   { kind: 'wing', at: 'air', type: 'cas', n: 1, v: 'heli' }, { counters: ['inf_e', 'mortar'], weakTo: ['aa', 'e_aa_heavy'] });
 
@@ -287,7 +320,9 @@ ctE('p_tbm', '东风-15B 战术导弹（2 枚）', 'p', 'support', 'missile', 60
   { kind: 'asset', at: 'none', key: 'msl', add: 2 }, { counters: ['coastal', 'e_tel', 'e_ascm', 'e_airfield'], weakTo: ['e_aa_radar'] });
 ctE('p_nuke', '战术核弹（低当量，1 枚）', 'p', 'support', 'missile', 1200, CT_IC.nuke, [0, 0, 10, 10, 0, 0, 0], '单独购买的战术核武器：战区火箭军发射，约 15 秒落地（发射即向全战场发出核打击预警）。爆心 60 米内一切人员、车辆、工事、舰船毁灭，140 米内重创，280 米内压制、士气崩溃；不分敌我，落点 300 米内有我军就拒绝发射。留下约 2 分 30 秒的辐射区，进入的人员持续伤亡。末段仍可能被拦截。支援栏「核」按钮。',
   { kind: 'asset', at: 'none', key: 'nuke', add: 1 }, { counters: ['coastal', 'arty', 'bunker', 'inf_e'], weakTo: ['e_aa_radar'] });
-ctE('p_para', '空降兵连（运-20 投送）', 'p', 'support', 'asset', 90, CT_IC.para, [3, 0, 4, 5, 6, 6, 9], '两架战区运输机从海上飞来，在指定地点空投 4 个组 12 人（含一个反坦克组），落地后编成空降连，自动夺取附近据点、与正面夹击。运输机会被高炮、防空导弹与敌机击落，伞兵下降时也会挨打。快捷键 Shift+P。',
+ctE('p_abn', '空降兵营（运-20 伞降夺取机场）', 'p', 'support', 'asset', 260, '<path d="M4 9a8 6 0 0 1 16 0z"/><path d="M4 9l8 6 8-6M9 9l3 6 3-6"/><circle class="f" cx="12" cy="16.2" r="1.5"/><rect x="2" y="19" width="20" height="3" rx=".5"/><path d="M5 20.5h2M11 20.5h2M17 20.5h2"/>', [5, 1, 8, 7, 7, 7, 60], '解放军空降兵一个营，专门用来夺取敌野战机场（敌方要有机场）：4 架运-20 从海上进场，伞降 60 人（三个连，含突击、机枪、红箭-12 反坦克、前卫防空和工兵组），并重装空投 ZBD-03 伞兵战车 2 辆、弹药 3 箱。夺取后工兵抢修跑道（守军炸过的要两分多钟），修通后运-20 依次机降 ZTQ-15 轻型坦克 2 辆、机降步兵连和弹药油料；有了油料，我方陆基飞机（歼-20、歼-36、轰-6K、攻击-2 等）改在这里降落整备，45 秒就能再出击。AI 指挥时会等主力在滩头站稳、先打掉航线上的防空再空降，并让主力向机场方向打通会师。快捷键 Shift+K，点敌机场附近。',
+  { kind: 'asset', at: 'none', key: 'abn', add: 1 }, { counters: ['e_airfield', 'e_air_ga', 'e_air_heli', 'e_air_ftr', 'e_air_f22'], weakTo: ['aa', 'e_aa_radar', 'e_sam_veh', 'e_air_f22'] });
+ctE('p_para', '蛟龙突击队（运-20 伞降）', 'p', 'support', 'asset', 140, CT_IC.para, [6, 1, 9, 8, 7, 8, 18], '海军陆战队特种部队：两架运-20 从海上飞来，高跳低开 6 个组 18 人——突击组 ×2、双机枪火力组、红箭-12 反坦克组、QBU-202 狙击组、前卫-2 防空组。射击精度 1.6 倍、射速 1.3 倍，防弹插板让近一半的致命伤只是负伤，被压制和伤亡对士气的打击减半；落地后自动夺取附近据点、与正面夹击。运输机仍可能被高炮、防空导弹与敌机击落。快捷键 Shift+P。',
   { kind: 'asset', at: 'none', key: 'para', add: 1 }, { counters: ['arty', 'mortar', 'coastal'], weakTo: ['aa', 'e_air_ftr'] });
 ctE('p_airdrop', '空投补给（运-20，2 次）', 'p', 'support', 'asset', 30, CT_IC.drop, [0, 0, 0, 0, 0, 0, 0], '运输机向指定地点投下 3 箱弹药，形成 4 分钟的临时补给点：附近步兵与车辆就地补充弹药，补给线被切断也能接着打。快捷键 Shift+O。',
   { kind: 'asset', at: 'none', key: 'drop', add: 2 }, { weakTo: ['aa'] });
@@ -390,8 +425,8 @@ ctE('e_tel', 'M142 海马斯（ATACMS）', 'e', 'arty', 'missile', 90, CT_IC.tel
 ctE('e_ascm', 'NMESIS 岸舰导弹连（NSM）', 'e', 'arty', 'missile', 110, CT_IC.ascm, [4, 1, 10, 10, 0, 7, 0], '岸边的反舰导弹连（4 枚，两枚一组齐射）：掠海飞行打击射程 1600 内的坦克登陆舰、满载登陆舰与驱逐舰；驱逐舰近防炮可拦截，发射后暴露 90 秒。',
   { kind: 'enemy', at: 'coast', ek: 'ascm', n: 4 }, { counters: ['p_lst', 'p_lct', 'dd'], weakTo: ['p_tbm', 'p_air_dive'] });
 
-// ———— 防守方 · 航空（需要野战机场；每座机场 20 个机位）————
-ctE('e_airfield', '野战机场', 'e', 'air', 'airfield', 50, CT_IC.airfield, [8, 1, 0, 0, 0, 0, 0], '纵深 500 以外修建的野战机场：300 米跑道、平行滑行道、两排共 20 个带防爆墙的机位、机库、塔台与直升机坪（放下时按地形自动定跑道方向，需要一大块平整陆地）。固定翼飞机沿跑道滑跑起降；跑道中弹后 60 秒无法起降，机位上的飞机可能被炸毁，机场被毁则地面飞机全部损失。受损后地勤自动抢修（附近有敌或刚挨炸时停工）；被毁约 4 分钟后可重建到四成耐久，停放的飞机不能恢复。',
+// ———— 防守方 · 航空（需要野战机场；每座机场 50 个机位）————
+ctE('e_airfield', '野战机场', 'e', 'air', 'airfield', 150, CT_IC.airfield, [9, 1, 0, 0, 0, 0, 0], '纵深 500 以外修建的大型野战机场：300 米跑道、平行滑行道、五排共 50 个带防爆墙的机位（每排一条机坪滑行道）、机库、塔台与直升机坪（放下时按地形自动定跑道方向，需要一大块平整陆地）。固定翼飞机沿跑道滑跑起降；跑道中弹后 60 秒无法起降，机位上的飞机可能被炸毁，机场被毁则地面飞机全部损失。受损后地勤自动抢修（附近有敌或刚挨炸时停工）；被毁约 4 分钟后可重建到四成耐久，停放的飞机不能恢复。',
   { kind: 'enemy', at: 'land', ek: 'airfield', minDepth: 500 }, { weakTo: ['p_tbm', 'p_air_heavy', 'p_air_strike'] });
 ctE('e_air_ga', 'A-10C 雷电 II 攻击机', 'e', 'air', 'ewing', 38, CT_IC.ega, [2, 0, 7, 0, 9, 4, 0], '一次通场：6 枚火箭齐射加机炮扫射，专打卸载中的登陆舰与密集步兵；携 2 枚干扰弹，怕便携防空导弹与自行高炮。需要野战机场。',
   { kind: 'ewing', at: 'air', type: 'ga' }, { counters: ['ship', 'inf_p'], weakTo: ['p_manpads', 'p_aa_veh', 'p_dd'] });
@@ -400,6 +435,8 @@ ctE('e_air_heli', 'AH-64E 阿帕奇', 'e', 'air', 'ewing', 40, CT_IC.eheli, [3, 
 
 ctE('e_air_ftr', 'F-35A 闪电 II 战斗机', 'e', 'air', 'ewing', 40, CT_IC.eftr, [3, 0, 6, 7, 10, 7, 0], '从野战机场起飞，在防区上空巡逻、拦截敌舰载机，以 4 枚空空导弹与机炮与敌战斗机争夺制空权；我方掌握制空权后攻击机与直升机出击更频繁。需要野战机场。',
   { kind: 'ewing', at: 'air', type: 'ftr' }, { counters: ['p_air_cas', 'p_air_strike', 'p_air_ftr', 'wing'], weakTo: ['p_air_ftr', 'p_dd', 'p_tbm'] });
+ctE('e_air_f22', 'F-22A 猛禽战斗机', 'e', 'air', 'ewing', 75, CT_IC.ef22 || CT_IC.eftr, [3, 0, 8, 8, 10, 8, 0], '美军最强的空优战斗机：比 F-35A 更难被雷达发现，超音速巡航、推力矢量，转弯追击更快；内埋 6 枚 AIM-120D 与 2 枚 AIM-9X（F-35A 只有 4 枚），AN/APG-77 雷达看得更远。有敌战斗机时打头阵，平时留在机场待命，让 F-35A 去巡逻。价格接近两架 F-35A。需要野战机场。',
+  { kind: 'ewing', at: 'air', type: 'f22' }, { counters: ['p_air_ftr', 'p_air_cas', 'p_air_strike', 'wing'], weakTo: ['p_dd', 'p_tbm'] });
 
 // ———— 防守方 · 工事 ————
 ctE('e_mines_ap', '防步兵雷区', 'e', 'fort', 'mines', 15, CT_IC.mine, [0, 0, 5, 0, 0, 0, 0], '半径约 24 的雷区，踩中即伤亡并暴露；工兵可以排除。',
@@ -440,7 +477,7 @@ ctE('e_ammo', '弹药库', 'e', 'support', 'depot_e', 25, CT_IC.ammo, [4, 0, 0, 
   { kind: 'post', at: 'land', r: 0, h: 0, hp: 6, ammo: 1 }, { counters: ['arty'], weakTo: ['p_air_strike', 'p_sortie_bomb'] });
 ctE('e_wave', '增援波次', 'e', 'support', 'wave_e', 30, CT_IC.ewave, [0, 0, 4, 0, 0, 0, 9], '开战约 4 分钟后，三个小组从北面开到受威胁最大的据点。可叠加，每次晚 1 分钟。',
   { kind: 'ewave', at: 'none', teams: 3, t: 240 }, { counters: ['inf_p'] });
-ctE('e_101', '第 101 空降师 · 空中突击连（UH-60M ×4）', 'e', 'support', 'asset', 70, CT_IC.uh60, [3, 0, 5, 4, 8, 5, 12], '我军上岸后，4 架 UH-60M 黑鹰从北面低空飞来，在受威胁最大的据点后方（避开已知防空）机降 4 个班 12 人（含一个标枪反坦克班），编成空降连增援或反冲击；门边机枪压制机降场。黑鹰在途中可被便携防空导弹、高炮、舰空导弹和战斗机击落，机上的兵随之损失。每买一份多一批，两批间隔 2.5 分钟。',
+ctE('e_101', '第 101 空降师 · C-17 空降战斗群', 'e', 'support', 'asset', 260, CT_IC.c17, [7, 1, 8, 6, 8, 6, 54], '我军上岸后，3 架 C-17A 环球霸王 III 从北面飞来，在受威胁最大的据点后方（避开已知防空）空降 18 个班 54 人——步枪 / 机枪班、M240 火力班、标枪反坦克班、毒刺防空班，外加重装空投 JLTV 陶式反坦克车 2 辆、复仇者防空车 2 辆（加强：备弹 12 枚、射程远）、悍马 1 辆。伞兵为精锐：精度 1.25 倍、两成致命伤只是负伤、不易被压制；落地在空降场集合后整连增援或反冲击。运输机与下降中的伞兵会挨我方防空火力与战斗机，跳伞前被击落则机上人员装备全损。每买一份多一波，两波间隔约 2.7 分钟。',
   { kind: 'asset', at: 'none', key: 'e101', add: 1 }, { counters: ['p_para', 'inf_p'], weakTo: ['p_manpads', 'p_aa_veh', 'p_air_ftr'] });
 
 // 尚未接入推演的条目：先不出现在沙盒与图鉴（codex.js 也据此过滤关联条目）；v7 的条目已全部接入

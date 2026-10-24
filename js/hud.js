@@ -47,17 +47,19 @@ const BTN = [
     ['bomber', '轰炸机：点已标定的火力点 → 攻击-11 隐身无人机俯冲精确投弹；点其他地方 → 轰-6K 六弹地毯轰炸', 'Y', () => setTool('bomber')],
     ['cas', '近距空中支援：攻击-2 无人机 / 歼-15T / 直-10 盘旋压制', 'V', () => setTool('cas')],
     ['fighter', '战斗机：歼-20 从战区机场起飞，在指定空域巡逻 90 秒，拦截敌机、夺取制空权', 'W', () => setTool('fighter')],
-    ['para', '空降伞兵：两架运输机向指定地点空投一个连（4 组 12 人），落地后自动夺取附近据点', '⇧P', () => setTool('para')],
+    ['para', '蛟龙突击队：两架运-20 向指定地点高跳低开 6 个组 18 人（突击、火力、反坦克、狙击、防空），特种部队火力强、抗打、不易溃退，落地后自动夺取附近据点', '⇧P', () => setTool('para')],
     ['drop', '空投补给：运输机投下 3 箱弹药，附近步兵与车辆就地补充（4 分钟内有效）', '⇧O', () => setTool('drop')],
+    ['abn', '空降夺取机场：4 架运-20 伞降空降兵营 60 人与 ZBD-03 伞兵战车 2 辆，夺取敌野战机场后机降轻型坦克，我方飞机可在那里降落整备（点敌机场附近）', '⇧K', () => setTool('abn')],
     ['rline', '开辟增援线', 'E', () => setTool('rline')], ['auto', '驱逐舰自动掩护', 'G', toggleAuto],
     ['airauto', '航母自动派机：近距支援受压制的我军、空袭已标定火力点、侦察前线方向', 'J', () => toggleCvAuto()]]]
 ];
-const ASSET = { smoke: 'smoke', recon: 'recon', strike: 'strike', cas: 'cas', bomber: 'bomber', fighter: 'fighter', rline: 'rline', para: 'para', drop: 'drop' };
+const ASSET = { smoke: 'smoke', recon: 'recon', strike: 'strike', cas: 'cas', bomber: 'bomber', fighter: 'fighter', rline: 'rline', para: 'para', drop: 'drop', abn: 'abn' };
 
 function buildHud() {
   if (typeof SHIP_ICONS === 'object') Object.assign(ICON, SHIP_ICONS);
   if (typeof CARRIER_ICONS === 'object') Object.assign(ICON, CARRIER_ICONS);
   if (typeof PA_ICONS === 'object') Object.assign(ICON, PA_ICONS);   // 空降 / 空投（para.js）
+  if (typeof AB_ICONS === 'object') Object.assign(ICON, AB_ICONS);   // 空降夺取机场（abn.js）
   if (typeof VEH_ICONS === 'object') for (const k in VEH_ICONS) ICON['v_' + k] = VEH_ICONS[k];   // 车辆卡片图标（vehicles.js）
   $('btnRain').innerHTML = svg('rain');
   $('btnRain').addEventListener('click', () => {

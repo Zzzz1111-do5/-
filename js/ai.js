@@ -20,7 +20,7 @@ function aiInit(level) {
 
 function aiCache() {
   AIC = { cover: {} };
-  for (const p of TER.points) {
+  for (const p of (typeof S === 'object' && S && S.points) || TER.points) {   // 含开战后加入的据点（abn.js 野战机场）
     const spots = [];
     eachCellIn(p.x, p.y, 55, i => { const t = TER.type[i]; if (TP[t].sp) spots.push({ x: cellCX(i), y: cellCY(i), c: 1 - TP[t].cv }); });
     AIC.cover[p.key] = spots;
@@ -52,7 +52,7 @@ function aiRout(q) {
 function aiSpot(q, p, fx, fy) {
   const dx0 = fx - p.x, dy0 = fy - p.y, l = Math.hypot(dx0, dy0) || 1;
   let best = null, bs = -1e9;
-  for (const s of AIC.cover[p.key]) {
+  for (const s of AIC.cover[p.key] || []) {
     const dx = s.x - p.x, dy = s.y - p.y, dd = Math.hypot(dx, dy) || 1;
     const crowd = S.teams.some(o => o !== q && o.side === 'e' && o.px != null && dist(o.px, o.py, s.x, s.y) < 14);
     const sc = s.c * 2 + (dx * dx0 + dy * dy0) / dd / l * .8 - (crowd ? 3 : 0) - dd / 110 + Math.random() * .1;
