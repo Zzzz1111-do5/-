@@ -355,8 +355,8 @@ function cmdPlanP() {
     // 部署时的预定登陆点（沙盒观战）只作参考：侦察之后按情报重新比较，预定滩头加 1.5 分
     const hint = B.map(() => 0);
     for (const s of as) if (s.sbxHint) { const bi = cmdBeachOf(s.sbxHint.x); if (bi >= 0) hint[bi]++; }
-    const hm = Math.max(...hint), sc = x => x.score + (hm > 0 && hint[x.i] === hm ? 1.5 : 0);
-    main = B.reduce((a, x) => sc(x) > sc(a) ? x : a).i;
+    const hm = Math.max(...hint), sc = x => x.score + (hm > 0 && hint[x.i] === hm ? 1.5 : 0), LP = S.landPref;
+    main = LP && LP.main >= 0 && B[LP.main] ? LP.main : B.reduce((a, x) => sc(x) > sc(a) ? x : a).i;   // 上级指定了主攻方向（沙盒 / 闯关）就照办
     const M = B[main];
     // 佯攻：离主攻方向远、守备弱、不那么要紧的滩头（只去一小股）；按优劣排好，下面拓宽正面占用了首选时顺延
     fl = B.filter(x => x.i !== main).map(x => {
@@ -364,8 +364,9 @@ function cmdPlanP() {
       return { i: x.i, sc: -x.def * 1.2 - x.bats.length - x.th.men / 6 + Math.min(dx, 1200) / 500 - (dx < 420 ? 3 : 0) + (x.town && M.town && x.town.key !== M.town.key ? 1.2 : 0) - x.fd / 900 };
     }).sort((a, c) => c.sc - a.sc);
     feint = fl.length ? fl[0].i : -1;
+    if (LP && LP.feint !== -2 && LP.feint !== main && (LP.feint === -1 || B[LP.feint])) { feint = LP.feint; fl = feint >= 0 ? [fl.find(f => f.i === feint), ...fl.filter(f => f.i !== feint)].filter(Boolean) : []; }
   }
-  C.plan = { main, feint, t: S.t, mode };
+  C.plan = { main, feint, t: S.t, mode, forced: !!(S.landPref && mode === 'self') };
   const R = { w1: [], w1b: [], fe: [], w2: [], sup: [], lst: [] }, prep = cmdCtl(S.dd) && S.dd.state !== 'sunk', go = +(S.t + (prep && mode === 'self' ? 8 : 0)).toFixed(2);
   for (const s of ctl) {
     let r = null;
@@ -383,7 +384,7 @@ function cmdPlanP() {
     const slots = b => Math.max(6, Math.floor((b.x1 - b.x0 - 28) / 24) + 1);   // 一处滩头能同时抢滩的舰数（间距 24 以上）
     // 舰多、一处滩头摆不下（会剩 3 艘以上）：把正面拓宽到相邻滩头（520 以内、守备不比主攻滩头强太多、不多挨岸防炮台），与主攻同时抢滩，而不是留在海上当第二波；
     // 相邻滩头原定为佯攻方向的，佯攻顺延到下一处
-    const adj = n - 1 - slots(mb) >= 3 ? B.filter(x => x.i !== main && Math.abs(x.b.cx - mb.cx) < 520 && x.score > B[main].score - 8 && x.th.men < B[main].th.men + 20 && x.bats.length <= B[main].bats.length).sort((a, c) => c.score - a.score)[0] : null;
+    const adj = n - 1 - slots(mb) >= 3 ? B.filter(x => x.i !== main && !(S.landPref && S.landPref.feint >= 0 && x.i === S.landPref.feint) && Math.abs(x.b.cx - mb.cx) < 520 && x.score > B[main].score - 8 && x.th.men < B[main].th.men + 20 && x.bats.length <= B[main].bats.length).sort((a, c) => c.score - a.score)[0] : null;
     if (adj && adj.i === feint) { const f2 = fl.find(f => f.i !== adj.i); feint = f2 ? f2.i : -1; C.plan.feint = feint; }
     const nf = feint < 0 ? 0 : n >= 12 ? 2 : n >= 4 ? 1 : 0, n2 = Math.max(0, n - nf - slots(mb) - (adj ? slots(adj.b) : 0));
     const fb = feint >= 0 ? TER.beaches[feint] : null, dm = s => dist(s.x, s.y, mb.cx, coastAt(mb.cx)), cap = s => (s.load && s.load.teams) || 0;

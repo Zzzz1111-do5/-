@@ -3,7 +3,7 @@
 // 开战时把部署条目转换为引擎对象，观战 AI 对 AI 或亲自指挥进攻方。部署数据 S.sbx = {items, budget, notes, ...}（纯 JSON）。
 // 条目字段：{id, cat(目录 id), side, x, y, x2, y2, cargo:[目录 id], plan:{x,y}, wave, n(兵组/数量覆盖), r(雷区半径), pts(折线), t(增援时刻)}
 const SBX_BUDGET = 1500, SBX_BUDGET_MAX = 30000;   // 每方初始预算 · 预算上限
-const SBX = { el: null, side: 'e', cat: 'all', pick: null, hover: null, line: null, lineDown: null, drag: null, mouse: null, tip: null, msg: '', msgT: 0, pv: false, endKey: null };
+const SBX = { sty: { e: 'bal', p: 'bal' }, dir: { main: -1, feint: -2 }, erase: null, el: null, side: 'e', cat: 'all', pick: null, hover: null, line: null, lineDown: null, drag: null, mouse: null, tip: null, msg: '', msgT: 0, pv: false, endKey: null };
 const sbxEntry = it => it && typeof catalogById === 'function' ? catalogById(it.cat) : null;
 const sbxOn = () => !!(S && S.phase === 'sandbox' && S.sbx);
 const sbxLive = () => !!(S && S.mode === 'sandbox' && S.sbx && S.sbx.live);
@@ -366,7 +366,7 @@ function sbxAlong(id, xa, xb, yOff, seg, gapX, gapW) {
 }
 
 // —— 守方：判断主攻方向 → 主防御地带 → 岸炮 → 反斜面炮兵 → 居中预备队 → 防空 → 警戒 → 守备 ——
-function sbxAIDefend() {
+function sbxAIDefendBase() {
   sbxClear('e');
   const B0 = S.sbx.budget.e, BS = sbxBeaches(), say = (t, at) => sbxSay('e', t, 'plan', at);
   // 纵深野战机场（含防御体系 1500 点）：大预算先修，其余兵力按剩下的预算配
@@ -526,8 +526,7 @@ function sbxAIDefend() {
     if (sbxSpent('e') > e0) say(`纵深加强：${up.length ? sbxNm(up) + '在警戒阵地之外加筑滩头防御地带；' : ''}主防地带后方增筑第二道碉堡线并配守备排${nw ? `；另编增援波次 ${nw} 批，开战后陆续开到受威胁最大的据点` : ''}${na ? `；第 101 空降师 C-17 空降战斗群 ${na} 波待命，敌上岸后在纵深伞降反冲击` : ''}。`, b1.ex);
   }
   sbxSync();
-  say(`部署完毕：共 ${S.sbx.items.filter(it => it.side === 'e').length} 项，用去 ${sbxSpent('e')} / ${B0} 点。`, null);
-  return main.map(B => B.b.name);
+  return { names: main.map(B => B.b.name), main, rest, hub, hq, belt, art, guns, b1, say, cands, B0 };
 }
 
 // —— 攻方：判读地形 → 选主攻与佯攻 → 编成三个梯队与火力、航空、保障 → 集结海域对位展开并预定登陆点 ——
@@ -538,17 +537,18 @@ function sbxSea(x, y) {
   }
   return { x, y };
 }
-function sbxAIAttack() {
+function sbxAIAttackBase(mi, fi) {
   sbxClear('p');
   const B0 = S.sbx.budget.p, k = B0 / SBX_BUDGET, BS = sbxBeaches(), say = (t, at) => sbxSay('p', t, 'plan', at), veh = sbxVehOk();
   for (const B of BS) B.A = B.w / 190 + 1.4 * (1 - B.dHQ / 2200) + (B.dTown < 650 ? .4 : 0) - .4 * B.cross - .6 * B.bat.length - .015 * B.cliff + (Math.random() - .5) * .2;
-  const ord = BS.slice().sort((a, b) => b.A - a.A), M = ord[0];
+  const ord = BS.slice().sort((a, b) => b.A - a.A), forced = mi != null && mi >= 0 && !!BS[mi], M = forced ? BS[mi] : ord[0];   // 玩家指定了主攻方向就照办
   const far = ord.filter(B => Math.abs(B.b.cx - M.b.cx) > 650);
-  const F = far.sort((a, b) => (b.A + (b.tw !== M.tw ? .5 : 0)) - (a.A + (a.tw !== M.tw ? .5 : 0)))[0] || ord[1];
+  const F = fi === -1 ? null : fi != null && fi >= 0 && BS[fi] && BS[fi] !== M ? BS[fi] : far.sort((a, b) => (b.A + (b.tw !== M.tw ? .5 : 0)) - (a.A + (a.tw !== M.tw ? .5 : 0)))[0] || ord.find(B => B !== M);
   const risky = BS.filter(B => B.bat.length && B !== M);
   say(`判断：守军部署不明，只能从地形判读。${M.b.name}宽约 ${sbxM(M.w)} 米，出口道路直通${M.dHQ < 900 ? '指挥所' : M.tw.name}，距指挥所约 ${sbxM(M.dHQ)} 米，${M.cross ? '途中需过河' : '无需渡河'}` +
     (risky.length ? `；${sbxNm(risky)}紧邻岬角炮台，正面强攻代价大。` : '。'), M.ex);
-  if (F) say(`初步决心：拟主攻${M.b.name}，以一小股佯攻${F.b.name}；开战后先派侦察机沿岸照相，按侦察结果最终定登陆点，大部队在整段滩头正面同时抢滩。理由：${M.b.name}正面宽、纵深直通目标；${F.b.name}距主攻方向约 ${sbxM(Math.abs(F.b.cx - M.b.cx))} 米，佯攻可牵制${F.tw.name}方向守军预备队，使其不敢全力增援主攻方向。`, F.ex);
+  if (forced) say(`决心（按上级指定）：主攻${M.b.name}${F ? `，一小股佯攻${F.b.name}` : '，不组织佯攻'}；开战后侦察机照相只用于标定火力点，登陆方向不再改变，大部队在整段滩头正面同时抢滩。`, M.ex);
+  else if (F) say(`初步决心：拟主攻${M.b.name}，以一小股佯攻${F.b.name}；开战后先派侦察机沿岸照相，按侦察结果最终定登陆点，大部队在整段滩头正面同时抢滩。理由：${M.b.name}正面宽、纵深直通目标；${F.b.name}距主攻方向约 ${sbxM(Math.abs(F.b.cx - M.b.cx))} 米，佯攻可牵制${F.tw.name}方向守军预备队，使其不敢全力增援主攻方向。`, F.ex);
   const plan = (B, i, n, sp) => { const x = clamp(B.b.cx + (i - (n - 1) / 2) * (sp || 26), B.b.x0 + 12, B.b.x1 - 12); return { x: sbxR(x), y: sbxR(coastAt(x) - 20) }; };
   const ship = (id, B, i, n, row, cargo, wave, dx) => {
     const p = sbxSea(B.b.cx + (dx || 0) + (i - (n - 1) / 2) * 34, (row || 1580) + (i % 2) * 36), r = sbxPlace(id, p.x, p.y);
@@ -653,8 +653,107 @@ function sbxAIAttack() {
   if (dd || cv) say(`火力：${dd ? sbxEntry(dd).name + '前出至' + M.b.name + '外海直接支援' : '无舰炮支援'}${escT}；${cv ? `${sbxEntry(cv).name}编 ${air.recon} 架侦察机先行照相、${air.cas} 架对地支援机随叫随到、${air.strike} 架攻击机专打已标定炮位${air.bomber ? `、${air.bomber} 架轰炸机轰炸炮兵阵地与岸炮` : ''}${air.fighter ? `、${air.fighter} 架战斗机巡逻夺取制空权` : ''}` : '无航空兵'}。`, dd || cv);
   const sup2 = [relay && '无线电中继减少通讯中断', '战前对' + M.b.name + '出口照相侦察', depot && '预置野战补给站加快向纵深推进', smoke && `烟幕弹 ${smoke} 发掩护抢滩`,
     para && '空降伞兵连待命，攻势展开后在主攻目标后方伞降夹击', drop && '空投补给 2 次，接济断了补给线的部队'].filter(Boolean);
-  say(`保障：${sup2.join('；')}。部署完毕，共用去 ${sbxSpent('p')} / ${B0} 点。`, null);
-  return { main: M.b.name, feint: F && F.b.name };
+  say(`保障：${sup2.join('；')}。`, null);
+  return { main: M.b.name, feint: F && F.b.name, M, F, cv, ship, plan, veh, say, buyAir, B0 };
+}
+
+// —— 部署方案（同一预算不同配比）：先按（1 − share）的预算做基本部署，再把留出的预算花在这个方案的主力上 ——
+const SBX_STY = {
+  e: { bal: { nm: '均衡纵深', share: 0, d: '滩头防御、岸炮、炮兵、预备队、防空按地形均衡配置' },
+    armor: { nm: '装甲机动防御', share: .45, d: '工事从简，大批坦克、坦克歼击车、步兵战车与防空车编成装甲突击群，敌上岸后集中反突击' },
+    air: { nm: '空地一体', share: .5, d: '纵深大机场与大机队（武装直升机、攻击机、歼击机），防空车撑伞，陆空协同打击滩头' },
+    fort: { nm: '要塞防御', share: .4, d: '各滩头都筑防御地带，加第二、三道碉堡线、反坦克炮、雷场与炮兵，层层消耗' },
+    deep: { nm: '纵深反击', share: .45, d: '前沿轻兵警戒，纵深集中强大预备队、坦克与机械化空降，放敌上岸后合围反击' } },
+  p: { bal: { nm: '均衡', share: 0, d: '步兵登陆艇为主，舰炮、航空兵、坦克登陆舰均衡配置' },
+    armor: { nm: '装甲突击', share: .4, d: '坦克登陆舰、气垫艇载重型坦克、两栖突击车，坦克先上岸打开缺口' },
+    air: { nm: '空中优势', share: .45, d: '航母与战区航空兵：歼-20 夺制空权，歼-35 防空压制，轰-6K 轰炸纵深，再登陆' },
+    vert: { nm: '立体登陆', share: .4, d: '正面登陆规模小，空降兵夺机场、蛟龙突击队伞降敌后、直升机机降，上下夹击' },
+    fire: { nm: '火力先导', share: .45, d: '055 / 052D 驱逐舰、火箭艇、东风-15B 与舰炮火力准备，先砸烂滩头再上' } }
+};
+function sbxLoop(ids, place, minLeft, max = 60) {   // 按顺序循环购买，买不下就跳过；返回各型号数量
+  const n = {};
+  let fail = 0, i = 0;
+  while (i < max && fail < ids.length * 2) {
+    const id = ids[i % ids.length], c = catalogById(id);
+    i++;
+    if (!c || sbxLeft(c.side) < Math.max(minLeft, c.cost)) { fail++; continue; }
+    if (place(id, i)) { n[id] = (n[id] || 0) + 1; fail = 0; } else fail++;
+  }
+  return n;
+}
+const sbxCnt = n => Object.entries(n).map(([id, k]) => `${catalogById(id).name.replace(/（.*?）/g, '')} ${k}`).join('、');
+function sbxDefStyle(style, R0) {
+  const { main, rest, hub, hq, belt, art, say, cands } = R0, hubs = (cands || [hub]).filter(Boolean).slice(0, 3);
+  const near = (p, i, r = 70) => ({ x: p.x + Math.cos(i * 2.1) * r, y: p.y - 40 - Math.abs(Math.sin(i * 2.1)) * r });
+  if (style === 'armor' && sbxVehOk()) {
+    const n = sbxLoop(['e_hv_tank', 'e_tank', 'e_td', 'e_apc', 'e_tank', 'e_sam_veh', 'e_hv_tank', 'e_aa_veh', 'e_recon'], (id, i) => { const p = near(hubs[i % hubs.length], i); return sbxTry(id, p.x, p.y, 60); }, 22, 80);
+    say(`方案「装甲机动防御」：滩头只留基本工事，编成装甲突击群（${sbxCnt(n)}）集结于${hubs.map(p => p.name).join('、')}，敌上岸立足未稳时集中实施装甲反突击，防空车随队撑伞。`, hubs[0]);
+  } else if (style === 'air') {
+    let af = sbxOf('enemy').find(it => sbxEntry(it).spawn.ek === 'airfield');
+    for (let k = 0; k < 120 && !af; k++) { const w = k < 60 ? 900 : 2400, x = clamp(hq.x + (Math.random() - .5) * w, 170, W - 170), y = clamp(hq.y - 60 - Math.random() * 500, 50, H); if (coastAt(x) - y >= 500) af = sbxTry('e_airfield', x, y, 60); }
+    const n = af ? sbxLoop(['e_air_heli', 'e_air_ga', 'e_air_ftr', 'e_air_heli', 'e_air_f22', 'e_air_ga', 'e_sam_veh'], (id, i) => id === 'e_sam_veh' ? sbxTry(id, hq.x + (i % 2 ? 50 : -50), hq.y - 30, 60) : sbxPlace(id).ok, 38, 70) : {};
+    say(`方案「空地一体」：${af ? '纵深野战机场（自带雷达、防空、巡逻与守备）' : '找不到修机场的平地，'}集中航空兵（${sbxCnt(n) || '无'}），武装直升机与攻击机编队配歼击机护航打滩头，防空车守指挥所与机场。`, af || hq);
+  } else if (style === 'fort') {
+    const ups = [];
+    for (const B of [...main, ...rest]) { if (sbxLeft('e') < 120) break; belt(B, true); ups.push(B); }
+    const n = sbxLoop(['e_casemate', 'e_mg_bunker', 'e_at_casemate', 'e_mines_dense', 'e_garrison', 'e_mortar', 'e_how'], (id, i) => {
+      const B = main[i % main.length], x = B.b.cx + ((i % 5) - 2) * B.w * .18, y = coastAt(x) - (id === 'e_how' ? 520 : id === 'e_mortar' ? 220 : 150 + (i % 3) * 40);
+      return sbxTry(id, x, y, 50);
+    }, 15, 90);
+    say(`方案「要塞防御」：${sbxNm(ups)}都筑滩头防御地带，主攻方向再加纵深碉堡线与火力点（${sbxCnt(n)}），层层消耗登陆之敌。`, main[0].ex);
+  } else if (style === 'deep') {
+    const n = sbxLoop(['e_reserve', 'e_tank', 'e_assault', 'e_apc', 'e_hv_tank', 'e_sam_veh', 'e_wave'], (id, i) => { if (id === 'e_wave') return !!sbxTry(id, 0, 0); const p = near(hubs[i % hubs.length], i, 90); return sbxTry(id, p.x, p.y, 60); }, 24, 60);
+    const ab = sbxLeft('e') >= 2600 && sbxTry('e_101', 0, 0);
+    say(`方案「纵深反击」：前沿轻兵警戒迟滞，纵深集中预备队与坦克（${sbxCnt(n)}）${ab ? '，第 101 空降师机械化空降战斗群待命' : ''}；放敌上岸、拉长补给线后，从${hubs.map(p => p.name).join('、')}合围反击。`, hubs[0]);
+  }
+}
+function sbxAIDefend(style = 'bal') {
+  const Btot = S.sbx.budget.e, DS = SBX_STY.e[style] || SBX_STY.e.bal;
+  S.sbx.budget.e = Btot - Math.round(Btot * DS.share);
+  let R0;
+  try { R0 = sbxAIDefendBase(); } finally { S.sbx.budget.e = Btot; }
+  if (DS.share) sbxDefStyle(style, R0);
+  sbxSync();
+  R0.say(`部署完毕（方案「${DS.nm}」）：共 ${S.sbx.items.filter(it => it.side === 'e').length} 项，用去 ${sbxSpent('e')} / ${Btot} 点。`, null);
+  return R0.names;
+}
+function sbxAttStyle(style, R0) {
+  const { M, F, ship, veh, say, buyAir } = R0;
+  if (style === 'armor' && veh) {
+    let nl = 0, nc = 0, na = 0;
+    for (let i = 0; i < 12 && sbxLeft('p') >= 160; i++) if (ship('p_lst', M, i, 4, 1790 + (i >> 2) * 30, ['p_hv_tank', 'p_tank', 'p_ifv'], 1, 30)) nl++;
+    for (let i = 0; i < 6 && sbxLeft('p') >= 110; i++) if (ship('p_lcac', M, i, 4, 1620, ['p_hv_tank'], 1, -60)) nc++;
+    for (let i = 0; i < 10 && sbxLeft('p') >= 45; i++) { const p = sbxSea(M.b.cx + (i - 4) * 30, 1560), r = sbxPlace('p_amtank', p.x, p.y); if (r.ok) { r.it.plan = R0.plan(M, i, 10, 18); na++; } }
+    say(`方案「装甲突击」：坦克登陆舰 ${nl} 艘（ZTZ-99A、96B 与步兵战车）、726 型气垫艇 ${nc} 艘各载一辆 99A、两栖突击车 ${na} 辆随第一波抢滩，坦克先上岸撕开缺口，步兵跟进。`, M.ex);
+  } else if (style === 'air') {
+    if (!sbxOf('cv').length) { const p = sbxSea(clamp(M.b.cx, 200, W - 200), CARRIER_Y - 20); sbxPlace('p_cv', p.x, Math.max(p.y, STAGING_Y + 60)); }
+    if (sbxLeft('p') >= 900 && !(catalogById('p_air_j36').lim && sbxLimN(catalogById('p_air_j36')) >= 2)) buyAir('p_air_j36', 'fighter');
+    const n = sbxLoop(['p_air_ftr', 'p_air_ftr_adv', 'p_air_heavy', 'p_air_strike', 'p_air_ftr', 'p_air_dive', 'p_air_heavy', 'p_air_cas'], id => sbxPlace(id).ok, 22, 70);
+    say(`方案「空中优势」：先夺制空权再登陆——${sbxCnt(n)}；歼-20 先扫荡敌歼击机，歼-35 防空压制型拔掉防空，轰-6K 编组护航轰炸岸炮、炮兵与机场。`, M.ex);
+  } else if (style === 'vert') {
+    const af = sbxOf('enemy').some(it => sbxEntry(it).spawn.ek === 'airfield');
+    const abn = af && sbxLeft('p') >= 260 && !S.sbx.items.some(it => it.cat === 'p_abn') && sbxPlace('p_abn').ok;
+    let cve = sbxOf('cv').find(it => it.cat === 'p_cve');
+    if (!cve) { const p = sbxSea(clamp(M.b.cx + 260, 200, W - 200), CARRIER_Y - 10); const r = sbxPlace('p_cve', p.x, Math.max(p.y, STAGING_Y + 60)); if (r.ok) cve = r.it; }
+    const n = sbxLoop(['p_para', 'p_air_heli', 'p_airdrop', 'p_air_heli', 'p_para'], id => sbxPlace(id).ok, 30, 24);
+    say(`方案「立体登陆」：正面登陆规模压小，${abn ? '空降兵营伞降夺取敌野战机场；' : ''}${sbxCnt(n)}——蛟龙突击队在主攻目标后方伞降、直升机机降，与正面登陆上下夹击。`, M.ex);
+  } else if (style === 'fire') {
+    let nd = 0, nr = 0;
+    for (let i = 0; i < 6 && sbxLeft('p') >= 220; i++) { const id = i % 3 === 2 ? 'p_dd_h' : 'p_ca', p = sbxSea(M.b.cx + (i - 2.5) * 90, 1690 + (i % 2) * 30), r = sbxPlace(id, p.x, p.y); if (r.ok) { r.it.plan = { x: sbxR(M.b.cx + (i - 2.5) * 60), y: sbxR(coastAt(M.b.cx) + 420) }; nd++; } }
+    for (let i = 0; i < 6 && sbxLeft('p') >= 60; i++) if (ship('p_rocket', M, i, 6, 1555, null, 1, 0)) nr++;
+    const n = sbxLoop(['p_tbm', 'p_smoke', 'p_sortie_bomb', 'p_tbm'], id => id.startsWith('p_sortie') ? !!sbxTry(id, M.ex.x, M.ex.y, 30) : sbxPlace(id).ok, 12, 16);
+    say(`方案「火力先导」：055 / 052D 驱逐舰 ${nd} 艘前出、火箭艇 ${nr} 艘、${sbxCnt(n)}；H 时前集中舰炮、垂发导弹与战术导弹火力准备，先砸烂滩头工事与岸炮再抢滩。`, M.ex);
+  }
+}
+function sbxAIAttack(style = 'bal', mi = -1, fi = -2) {
+  const Btot = S.sbx.budget.p, DS = SBX_STY.p[style] || SBX_STY.p.bal;
+  S.sbx.budget.p = Btot - Math.round(Btot * DS.share);
+  let R0;
+  try { R0 = sbxAIAttackBase(mi >= 0 ? mi : null, fi === -2 ? null : fi); } finally { S.sbx.budget.p = Btot; }
+  if (DS.share) sbxAttStyle(style, R0);
+  sbxSync();
+  R0.say(`部署完毕（方案「${DS.nm}」）：共用去 ${sbxSpent('p')} / ${Btot} 点。`, null);
+  return { main: R0.main, feint: R0.feint };
 }
 
 // ———————————————— 开战：条目 → 引擎对象 ————————————————
@@ -816,6 +915,7 @@ function sbxStart(role) {
   SBX.last = sbxSnap('上一局部署'); sbxStore(SBX_LAST_KEY, SBX.last);   // 打完可「修改部署再战」
   if (typeof R === 'object' && R) R.eye = role === 'spectate' ? 'both' : 'p';   // 观战默认看双方视野
   sbxBuild(role);
+  S.landPref = SBX.dir.main >= 0 || SBX.dir.feint !== -2 ? { main: SBX.dir.main, feint: SBX.dir.feint } : null;   // 指定的登陆方向：攻方指挥官照办（commander.js cmdPlanP）
   closeSandbox(true);
   S.briefed = true; S.t = 0; S.over = null; S.holdT = 0; S.culT = 0;
   if (role === 'spectate') {
@@ -1312,6 +1412,9 @@ body.sbx-edit #bottom { grid-template-columns: minmax(0, 1fr) auto; pointer-even
 .sbx-list button { display: inline-flex; align-items: center; gap: 3px; padding: 1px 6px 1px 3px; border: 1px solid var(--line); border-radius: 10px; background: transparent; color: var(--text); font-size: 11px; }
 .sbx-list button .ic { width: 15px; height: 15px; color: var(--g); } .sbx-list button i { font-style: normal; color: var(--enemy); margin-left: 2px; }
 .sbx-row { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
+.sbx-plan label { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--mute); }
+.sbx-plan select { background: rgba(0, 0, 0, .35); border: 1px solid var(--line); border-radius: 4px; color: var(--text); font-size: 12px; padding: 3px 4px; max-width: 130px; }
+.sbx-styd { margin: 0; }
 .sbx-row button.on { border-color: var(--sel); color: #e6d8ff; }
 .sbx-pal button.need { opacity: .45; }
 .sbx-saves { display: grid; gap: 4px; max-height: 168px; overflow-y: auto; }
@@ -1346,14 +1449,24 @@ function sbxUI() {
     <div class="sbx-cats"></div><div class="sbx-pal" role="listbox" aria-label="兵力目录"></div>
     <div class="sbx-info"></div><div class="sbx-msg" role="status"></div><div class="sbx-list"></div>
     <div class="sbx-row"><button type="button" data-act="preset"></button><button type="button" class="ai" data-act="ai">AI 帮我部署</button><button type="button" data-act="clear">清空</button></div>
+    <div class="sbx-row sbx-plan"><label>方案<select data-sel="sty"></select></label><label class="sbx-dir">主攻<select data-sel="main"></select></label><label class="sbx-dir">佯攻<select data-sel="feint"></select></label></div>
+    <p class="sbx-hint sbx-styd"></p>
     <div class="sbx-row"><button type="button" data-act="save">保存部署</button><button type="button" data-act="loads" aria-expanded="false">读取部署</button></div>
     <div class="sbx-saves" hidden></div>
     <div class="sbx-row"><input type="text" inputmode="numeric" aria-label="地图种子" class="sbx-seedin"><button type="button" data-act="map">新地图</button><span class="sbx-lv" role="radiogroup" aria-label="守军 AI 水平"></span></div>
     <details class="sbx-notes" open><summary>部署思路</summary><p class="sbx-hint">点「AI 帮我部署」，由高级指挥官按地形判读完成部署并说明理由。</p><ol></ol></details>
-    <div class="sbx-hint sbx-keys">左键放置（按住拖动可连续放置）· 运兵船自带满编步兵，选兵种点船可逐个替换 · 右键 / Delete 移除 · 拖动已放置的条目可移位 · Tab 切换攻守 · Esc 取消 · 滚轮缩放、中键拖动平移</div>
+    <div class="sbx-hint sbx-keys">左键放置（按住拖动可连续放置）· 运兵船自带满编步兵，选兵种点船可逐个替换 · 右键 / Delete 移除（按住右键拖动连续移除） · 拖动已放置的条目可移位 · Tab 切换攻守 · Esc 取消 · 滚轮缩放、中键拖动平移</div>
     <div class="sbx-go"><button type="button" data-act="spectate">观战：AI 对 AI</button><button type="button" class="alt" data-act="command">指挥进攻方</button></div>`;
   ($('stage') || document.body).appendChild(el);
   SBX.el = el;
+  el.addEventListener('change', e => {
+    const sel = e.target.closest('select[data-sel]');
+    if (!sel || !S || !S.sbx || S.sbx.live) return;
+    const k = sel.dataset.sel, v = sel.value;
+    if (k === 'sty') SBX.sty[SBX.side] = v;
+    else SBX.dir[k] = +v;
+    sbxRender();
+  });
   el.addEventListener('click', e => {
     const b = e.target.closest('button');
     if (!b || !S || !S.sbx || S.sbx.live) return;
@@ -1369,7 +1482,7 @@ function sbxUI() {
       if (v < sp) sbxMsg(`已部署 ${sp} 点，预算不能低于此`, true); else S.sbx.budget[SBX.side] = v;
     }
     else if (a === 'preset') { const b0 = S.sbx.budget[SBX.side]; if (SBX.side === 'e') sbxPresetDef(); else sbxPresetFleet(); sbxMsg(`已载入标准部署（${sbxSpent(SBX.side)} 点）` + (S.sbx.budget[SBX.side] > b0 ? `，预算已调至 ${S.sbx.budget[SBX.side]}` : '')); }
-    else if (a === 'ai') { const r = SBX.side === 'e' ? sbxAIDefend() : sbxAIAttack(); sbxMsg(SBX.side === 'e' ? `守方指挥官判断主攻方向：${r.join('、')}` : `攻方指挥官：主攻${r.main}${r.feint ? '，佯攻' + r.feint : ''}`); }
+    else if (a === 'ai') { const st = SBX.sty[SBX.side], r = SBX.side === 'e' ? sbxAIDefend(st) : sbxAIAttack(st, SBX.dir.main, SBX.dir.feint); sbxMsg(SBX.side === 'e' ? `「${SBX_STY.e[st].nm}」部署完毕；判断敌主攻方向：${r.join('、')}` : `「${SBX_STY.p[st].nm}」部署完毕：主攻${r.main}${r.feint ? '，佯攻' + r.feint : '，不佯攻'}`); }
     else if (a === 'clear') { sbxClear(SBX.side); sbxMsg('已清空' + (SBX.side === 'e' ? '防守方' : '进攻方')); }
     else if (a === 'save') { const ok = sbxSaveNow(); sbxMsg(ok ? `已保存：${sbxSaves()[0].name}（双方部署、预算与地图）` : '已保存在本页（浏览器存储不可用，刷新后会丢失）', !ok); sbxSavesShow(true); }
     else if (a === 'loads') sbxSavesShow(!SBX.savesOpen);
@@ -1501,6 +1614,15 @@ function sbxRender() {
   for (const it of S.sbx.items) if (it.side === side && it.x == null) { const g = grp.get(it.cat) || []; g.push(it); grp.set(it.cat, g); }
   q('.sbx-list').innerHTML = [...grp].map(([id, list]) => { const c = catalogById(id); return `<button type="button" data-rm="${list[list.length - 1].id}" title="移除一项：${sbxEsc(c.name)}">${sbxIc(c)}${sbxEsc(c.name)}${list.length > 1 ? ' ×' + list.length : ''}<i>×</i></button>`; }).join('');
   q('[data-act="preset"]').textContent = side === 'e' ? '标准布防' : '标准舰队';
+  const ST = SBX_STY[side], sty = SBX.sty[side] in ST ? SBX.sty[side] : 'bal', opt = (v, l, on) => `<option value="${v}"${on ? ' selected' : ''}>${sbxEsc(l)}</option>`;
+  q('[data-sel="sty"]').innerHTML = Object.entries(ST).map(([k, o]) => opt(k, o.nm, k === sty)).join('');
+  q('.sbx-styd').textContent = ST[sty].d + (ST[sty].share ? `（约 ${Math.round(ST[sty].share * 100)}% 预算投入主力）` : '');
+  const BN = (TER.beaches || []).map((b, i) => [i, b.name]);
+  if (SBX.dir.main >= BN.length) SBX.dir.main = -1;
+  if (SBX.dir.feint >= BN.length || (SBX.dir.feint >= 0 && SBX.dir.feint === SBX.dir.main)) SBX.dir.feint = -2;
+  q('[data-sel="main"]').innerHTML = opt(-1, '自动（AI 判断）', SBX.dir.main < 0) + BN.map(([i, n]) => opt(i, n, SBX.dir.main === i)).join('');
+  q('[data-sel="feint"]').innerHTML = opt(-2, '自动', SBX.dir.feint === -2) + opt(-1, '不佯攻', SBX.dir.feint === -1) + BN.filter(([i]) => i !== SBX.dir.main).map(([i, n]) => opt(i, n, SBX.dir.feint === i)).join('');
+  for (const l of el.querySelectorAll('.sbx-dir')) l.hidden = side !== 'p';
   q('.sbx-lv').innerHTML = SBX_LV.map(([k, n]) => `<button type="button" role="radio" data-lv="${k}" class="${S.level === k ? 'on' : ''}" aria-checked="${S.level === k}" title="守军 AI 水平（士气、射击精度、反应速度）">${n}</button>`).join('');
   const ns = S.sbx.notes[side] || [];
   q('.sbx-notes ol').innerHTML = ns.map(t => `<li>${sbxEsc(t)}</li>`).join('');
@@ -1558,6 +1680,7 @@ HOOK.pointer.push((e, kind, p) => {
       if (SBX.line || SBX.pick) { SBX.line = null; SBX.pick = null; sbxRender(); return true; }
       const it = sbxNearest(p.x, p.y, SBX.side, Math.max(12, px(16)));
       if (it) { sbxRemove(it); sbxMsg('已移除' + sbxEntry(it).name); }
+      SBX.erase = { x: p.x, y: p.y, n: it ? 1 : 0 };   // 按住右键拖动：沿轨迹连续移除
       return true;
     }
     if (e.button !== 0) return false;
@@ -1568,6 +1691,17 @@ HOOK.pointer.push((e, kind, p) => {
     return true;
   }
   if (kind === 'move') {
+    if (SBX.erase) {
+      if (!(e.buttons & 2)) { SBX.erase = null; return false; }
+      const E = SBX.erase, r = Math.max(12, px(16)), d = dist(E.x, E.y, p.x, p.y), n = Math.max(1, Math.ceil(d / (r * .6)));
+      for (let k = 1; k <= n; k++) {   // 拖得快时沿线补查，不漏掉
+        const x = lerp(E.x, p.x, k / n), y = lerp(E.y, p.y, k / n);
+        for (let j = 0; j < 4; j++) { const it = sbxNearest(x, y, SBX.side, r); if (!it || !sbxRemove(it)) break; E.n++; }
+      }
+      E.x = p.x; E.y = p.y;
+      if (E.n) sbxMsg(`已移除 ${E.n} 项`);
+      return true;
+    }
     if (SBX.paint) {
       if (!(e.buttons & 1) || !SBX.pick) { SBX.paint = null; return false; }
       const P = SBX.paint, d = dist(P.x, P.y, p.x, p.y);
@@ -1588,6 +1722,7 @@ HOOK.pointer.push((e, kind, p) => {
     return false;
   }
   if (kind === 'up') {
+    if (SBX.erase) { SBX.erase = null; sbxRender(); return true; }
     if (SBX.paint) { SBX.paint = null; return true; }
     if (SBX.drag) { const D = SBX.drag; SBX.drag = null; if (D.moved) { sbxMsg(D.bad ? '该处不能放置，已停在最后的有效位置' : `已移动：${sbxEntry(D.it).name}`, D.bad); sbxRender(); } return true; }
     if (SBX.lineDown && SBX.line) {   // 按住拖拽画线
