@@ -72,7 +72,8 @@ function impact(x, y, pw, side, src) {
     const d = dist(x, y, q.x, q.y);
     if (d < R * 1.7) suppress(q, 70 * (1 - d / (R * 1.7)));
     if (d >= R) continue;
-    const p = pw.men * (1 - d / R * .5) * coverAt(q.x, q.y) * shelter(q);
+    const cs = coverAt(q.x, q.y) * shelter(q), dh = pw.direct && dist(pw.direct.x, pw.direct.y, q.x, q.y) < 6;   // 直瞄榴弹正中该组：战壕、掩体挡不住多少，只按开方减免
+    const p = pw.men * (1 - d / R * .5) * (dh ? Math.sqrt(cs) : cs);
     for (let k = q.men.length; k > 0; k--) if (Math.random() < p) killMan(q);
   }
   for (const s of S.ships) { const d = dist(x, y, s.x, s.y); if (alive(s) && d < R + 6) damageShip(s, pw.ship * (1 - d / (R + 6) * .5)); }

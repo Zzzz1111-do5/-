@@ -157,7 +157,7 @@ function vehImpact(x, y, R0, pw, side) {
 HOOK.impact.push(vehImpact);
 
 // 车炮榴弹的威力（供 impact 使用）：对碉堡伤害大，杀伤半径中等
-const vehPW = (he, side) => ({ men: .38 + .14 * he, ship: .5 * he, struct: 2.4 * he, seg: false, R: 11 + 5 * he, veh: true, pen: 1, side });   // 坦克榴弹：中型坦克杀伤半径约 18
+const vehPW = (he, side) => ({ men: .5 + .2 * he, ship: .5 * he, struct: 2.4 * he, seg: false, R: 11 + 5 * he, veh: true, pen: 1, side });   // 坦克榴弹：中型坦克杀伤半径约 18，每人基础杀伤 0.8
 // 自行火炮的间瞄炮弹走通用炮弹结算（support.js updateShells → POWER[kind]）
 if (typeof POWER === 'object' && POWER && !POWER.spg) POWER.spg = { men: .42, ship: 1.5, struct: 4, seg: false, R: 24 };
 const vehNearPt = (x, y) => { let b = null, bd = Infinity; for (const p of S.points) { const d = dist(p.x, p.y, x, y); if (d < bd) { bd = d; b = p; } } return b; };
@@ -459,7 +459,7 @@ function vehShots(dt) {
     if ((s.t += dt) < s.dur) continue;
     s.done = true;
     if (s.k === 'flame') continue;
-    if (s.k === 'he') { impact(s.x1, s.y1, vehPW(s.he, s.side), s.side); continue; }
+    if (s.k === 'he') { impact(s.x1, s.y1, s.hit && s.tk === 'tm' ? { ...vehPW(s.he, s.side), direct: { x: s.x1, y: s.y1 } } : vehPW(s.he, s.side), s.side); continue; }   // 正中小组：掩体只按开方减免（combat.js impact）
     // 穿甲弹：命中则按穿深计算伤害，未命中只在地面溅起尘土
     S.fx.push({ kind: 'flash', x: s.x1, y: s.y1, r: s.hit ? 9 : 5, life: 0, max: .35, side: s.side });
     if (!s.hit) continue;

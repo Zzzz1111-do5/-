@@ -14,8 +14,8 @@ const AIR_SPEC = {
 const AIR_MDL = {
   kj600: { name: '空警-600 舰载预警机', sil: 'kj600', spd: 175, aa: .06, size: 19 },
   wz7: { name: '无侦-7 高空无人侦察机', sil: 'wz7', spd: 175, aa: .02, size: 19, land: true },   // 两万米高空，高炮够不着
-  j35: { name: '歼-35 隐身舰载战斗机', sil: 'j35', spd: 240, aa: .09, size: 15, stealth: .4, std: 170 },   // 内埋精确制导炸弹，防区外投放
-  j35s: { name: '歼-35 隐身舰载战斗机（防空压制型）', sil: 'j35', spd: 240, aa: .09, size: 15, stealth: .4, std: 300, sead: true },   // 反辐射导弹，专打敌防空
+  j35: { name: '歼-35 隐身舰载战斗机', sil: 'j35', spd: 240, aa: .09, size: 15, stealth: .4, std: 170, gbN: 6, arW: 'ft8', arR: 260 },   // 内埋 6 枚飞腾-8 小直径制导炸弹：先防区外打指定目标，余弹自主武装侦察（airArFly）
+  j35s: { name: '歼-35 隐身舰载战斗机（防空压制型）', sil: 'j35', spd: 240, aa: .09, size: 15, stealth: .4, std: 300, sead: true, gbN: 4, arW: 'ld10', arR: 400 },   // 4 枚雷电-10 反辐射导弹，专打敌防空，余弹自主搜索防空
   j15t: { name: '歼-15T 舰载战斗机', sil: 'j15', spd: 225, aa: .09, size: 16, agm: 'kd88', agmN: 2, agmR: 380 },   // 2 枚 KD-88 空地导弹（防区外）
   gj11: { name: '攻击-11 隐身无人攻击机', sil: 'gj11', spd: 200, aa: .08, size: 16, stealth: .5 },
   h6k: { name: '轰-6K 轰炸机', sil: 'h6k', spd: 165, aa: .07, size: 24, land: true },
@@ -554,13 +554,15 @@ function flyPlane(p, dt) {
       if (p.hold && !p.dropped && airHoldP(p, dt, speed)) return;   // 突击群：防空圈外待机
       if (p.asm && !p.dropped && typeof navyPlaneAsm === 'function' && navyPlaneAsm(p, dt, speed)) return;   // 挂反舰导弹打敌舰（navy.js）
       const dive = p.kind === 'bomber' && p.v === 'dive', heavy = p.kind === 'bomber' && !dive, std = p.kind === 'strike' && M.std;   // 歼-35：防区外投放精确制导弹药
+      if (std && p.gbN == null) { p.gbN = M.gbN || 2; p.acx = p.tx; p.acy = p.ty; p.arLeft = 50; }
+      if (p.ar) { airArFly(p, dt, speed, M, sp); return; }   // 歼-35 自主武装侦察
       if (!p.dropped) {
         const df = Math.abs(airAng(Math.atan2(p.ty - p.y, p.tx - p.x) - p.heading)), d = airSteer(p, p.tx, p.ty, dt);
         if (dive && d < 280 && df < .5) { p.diving = true; speed(235); p.alt = Math.max(.32, p.alt - dt * .9); }   // 俯冲：压低高度加速
         if (std ? d < M.std && df < .3 : dive ? d < 42 : heavy ? d < 95 && df < .3 : d < 80 && df < .35) (std ? guidedDrop : p.kind === 'bomber' ? bomberDrop : strikeDrop)(p);
-      } else if (p.std) {   // 投完立即掉头，不飞进敌防空圈
+      } else if (p.std) {   // 投完立即掉头，不飞进敌防空圈；弹舱还有弹就转入自主武装侦察
         airSteer(p, p.x - Math.cos(p.heading) * 300, Math.min(H - 40, p.y + 300), dt, true);
-        if ((p.egT -= dt) <= 0) airSet(p, 'rtb');
+        if ((p.egT -= dt) <= 0) { if (M.gbN && p.gbN > 0) { p.ar = true; p.arT = 0; } else airSet(p, 'rtb'); }
       } else {
         airSteer(p, p.x + Math.cos(p.heading) * 200, p.y + Math.sin(p.heading) * 200, dt);
         if ((p.egT -= dt) <= 0) { p.diving = false; airSet(p, 'rtb'); }
@@ -649,10 +651,62 @@ function guidedDrop(p) {
   const M = airMdl(p.kind, p.v);
   let tx = p.tx, ty = p.ty;
   if (M.sead) { let bd = 140; for (const a of airAASites()) { const d = dist(a.x, a.y, p.tx, p.ty); if (d < bd) { bd = d; tx = a.x; ty = a.y; } } }
-  const d = dist(p.x, p.y, tx, ty);
-  for (let i = 0; i < 2; i++) fireShell(p.x, p.y, clamp(tx + gauss() * 4, 0, W), clamp(ty + gauss() * 4, 0, H), 'p', 'bomb', .4 + d / 260, false, { t: -i * .3, gd: true });
+  const d = dist(p.x, p.y, tx, ty), n = Math.min(2, p.gbN ?? 2);
+  for (let i = 0; i < n; i++) fireShell(p.x, p.y, clamp(tx + gauss() * 4, 0, W), clamp(ty + gauss() * 4, 0, H), 'p', 'bomb', .4 + d / 260, false, { t: -i * .3, gd: true });
+  if (p.gbN != null) p.gbN -= n;
   if (typeof v8Stat === 'function') v8Stat(M.sead ? 'seadArm' : 'gdrop');
   log(M.sead ? `${M.name}在防区外发射反辐射导弹，压制敌防空` : `${M.name}在防区外投放精确制导炸弹`, 'info', 'gdrop', 10, { x: tx, y: ty });
+}
+
+// 歼-35 武装侦察：投完指定目标后弹舱还有弹，就在任务区（初始目标 480 以内）用光电 / 雷达自主搜索打击——
+//   普通型：飞腾-8 打战车、炮位、碉堡、发射车（硬目标两枚，车辆一枚，能追运动目标）；防空压制型：雷电-10 专打防空。
+//   防空太密的目标不碰（隐身也有限度）；在防区外（arR）对准发射后立即转开；弹打完或巡逻超时（约 50 秒）返航
+const AR_V = { tank: 6, hv_tank: 6.5, td: 5.5, lt_tank: 5, apc: 4.5, amtank: 4.5, aa_veh: 5.5, sam_veh: 6, spg: 5, recon: 3, flame_tank: 5.5, mine_tank: 4 };
+const AR_E = { bunker: 4.5, coastal: 5.5, arty: 5, mortar: 3.5, aa: 5.5, tel: 7, ascm: 7 };
+function airArPick(p, M) {
+  const own = (x, y) => S.teams.some(q => q.side === 'p' && q.men.length && dist(q.x, q.y, x, y) < 45);
+  const taken = (x, y) => S.missiles.some(m => !m.done && m.side === 'p' && m.kind === 'pgm' && dist(m.tx, m.ty, x, y) < 20)
+    || S.planes.some(o => o !== p && !o.dead && o.arTg && dist(o.arTg.x, o.arTg.y, x, y) < 20);
+  let best = null, bs = 0;
+  const cand = (k, o, x, y, v, hard) => {
+    if (!v || dist(x, y, p.acx, p.acy) > 480 || own(x, y) || taken(x, y)) return;
+    if (!M.sead && airAAAt(x, y, 260) > 3) return;
+    const s = v / (1 + dist(p.x, p.y, x, y) / 500);
+    if (s > bs) { bs = s; best = { k, id: o.id, x, y, hard }; }
+  };
+  if (M.sead) {
+    for (const a of airAASites()) if (a.k !== 'mp') cand(a.k === 'veh' ? 'veh' : 'enemy', a.o, a.x, a.y, a.w * 3, false);
+    return best;
+  }
+  for (const v of S.veh || []) if (v.side === 'e' && !v.dead) { const sv = inVision(v.x, v.y); if (sv || v.kx != null) cand('veh', v, sv ? v.x : v.kx, sv ? v.y : v.ky, AR_V[v.type] || 3, false); }
+  for (const a of S.armor || []) if (!a.dead && inVision(a.x, a.y)) cand('armor', a, a.x, a.y, 4.5, false);
+  for (const e of S.enemies) if (!e.dead && e.kx != null) cand('enemy', e, e.kx, e.ky, AR_E[e.kind], e.kind === 'bunker' || e.kind === 'coastal');
+  return best;
+}
+function airArFly(p, dt, speed, M, sp) {
+  speed(sp.spd * .85);
+  p.alt = Math.min(1, p.alt + dt / 3);
+  p.arLeft -= dt;
+  if (!(p.gbN > 0) || p.arLeft <= 0) {
+    p.ar = false; p.arTg = null; airSet(p, 'rtb');
+    if (p.gbN > 0) log(`${airName(p.kind, p.v).split(' ')[0]}任务区内没有可打的目标，带弹返航`, 'info', 'arrtb', 8);
+    return;
+  }
+  if ((p.arBrk || 0) > S.t) { airSteer(p, p.bx, p.by, dt, true); return; }   // 刚发射：转开，不飞临目标上空
+  if (!p.arTg || (p.arT || 0) < S.t) { p.arTg = airArPick(p, M); p.arT = S.t + 1.5; }
+  const G = p.arTg, T = G && (G.k ? msPgmTgt(G) : null);
+  if (!T) { p.arTg = null; airOrbit(p, p.acx, p.acy + 120, 280, p.odir || 1, dt); return; }
+  const tx = G.k === 'veh' && T.side === 'e' && !inVision(T.x, T.y) && T.kx != null ? T.kx : T.x, ty = G.k === 'veh' && T.side === 'e' && !inVision(T.x, T.y) && T.ky != null ? T.ky : T.y;
+  const d = airSteer(p, tx, ty, dt), df = Math.abs(airAng(Math.atan2(ty - p.y, tx - p.x) - p.heading));
+  if (d < (M.arR || 260) && df < .6) {
+    const n = Math.min(G.hard ? 2 : 1, p.gbN), W0 = M.arW || 'ft8';
+    for (let i = 0; i < n; i++) msPgm(W0, 'p', p.x, p.y, { k: G.k, id: G.id, x: tx, y: ty }, p.kind, i * .35);
+    p.gbN -= n; p.arTg = null; p.arT = S.t + 2; p.arBrk = S.t + 1.6;
+    p.bx = p.x - (tx - p.x); p.by = Math.min(H - 40, p.y - (ty - p.y) + 120);
+    if (typeof v8Stat === 'function') v8Stat('arStrike');
+    const nm = G.k === 'veh' ? (typeof vehName === 'function' ? vehName(T) : '敌战车') : G.k === 'armor' ? '敌装甲车' : (ENEMY_SPEC[T.kind] || {}).name || '目标';
+    log(`${airName(p.kind, p.v).split(' ')[0]}自主发现${nm}，发射${MS_PGM[W0].nm}${n > 1 ? ' ×' + n : ''}（余 ${p.gbN} 枚）`, 'info', 'ar' + p.id, 3, { x: tx, y: ty });
+  }
 }
 
 // 轰炸机投弹：俯冲轰炸机两枚重磅弹几乎正中目标；重型轰炸机沿进场方向六弹地毯轰炸（间隔 26）

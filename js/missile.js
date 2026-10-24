@@ -123,6 +123,8 @@ const MS_PGM = {
   agm65: { nm: 'AGM-65 小牛空地导弹', spd: 320, z: .3, dmg: 46, pen: 3.8, st: 10, icp: 0, pw: { men: .5, ship: 3, struct: 0, seg: false, R: 16, vb: 5, veh: true } },   // A-10C：防区外打车辆、舰艇
   yj12: { nm: '鹰击-12 超音速反舰导弹', spd: 600, z: .2, dmg: 50, pen: 4, st: 30, icp: .1, pw: { men: .8, ship: 7, struct: 0, seg: true, R: 32, vb: 10, veh: true } },   // 轰-6K 挂载，末段 4 马赫掠海
   yj83k: { nm: '鹰击-83K 空舰导弹', spd: 260, z: .06, dmg: 36, pen: 3.6, st: 18, icp: .3, pw: { men: .6, ship: 4, struct: 0, seg: true, R: 22, vb: 6, veh: true } },   // 歼-35 / 歼-15 挂载，亚音速掠海
+  ft8: { nm: '飞腾-8 小直径制导炸弹', spd: 200, z: .5, dmg: 40, pen: 3.6, st: 12, icp: .3, pw: { men: .6, ship: 2.5, struct: 0, seg: false, R: 16, vb: 5, veh: true } },   // 歼-35 内埋：约 100 公斤级，GPS/INS + 末端成像，能打运动中的车辆
+  ld10: { nm: '雷电-10 反辐射导弹', spd: 420, z: .6, dmg: 34, pen: 3, st: 10, icp: .1, pw: { men: .5, ship: 2, struct: 0, seg: false, R: 14, vb: 4, veh: true } },   // 歼-35 防空压制型：追防空雷达辐射源
   ls6: { nm: '雷石-6 滑翔制导炸弹', spd: 220, z: .55, dmg: 50, pen: 4, st: 30, icp: .35, pw: { men: .9, ship: 6, struct: 0, seg: true, R: 30, vb: 10, veh: true } }   // 歼-36 打击型：500 公斤级，高空投放滑翔，慢、可被近程防空拦截
 };
 function msPgmTgt(t) {
