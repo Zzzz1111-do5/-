@@ -90,7 +90,8 @@ void main() {
   vec2 fc = vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y);
   vec2 w = (fc - uView.yz) / uView.x;
   float pw = 1. / uView.x, t = uTime;
-  if (w.x < 0. || w.y < 0. || w.x >= WORLD.x || w.y >= WORLD.y) { gl_FragColor = vec4(.02, .05, .08, 1.); return; }
+  // 地图边界外照样画（南边是外海，东西两侧按边缘延伸），只略微压暗，放大到边缘不会露出黑底
+  float outD = length(max(max(-w, w - WORLD), 0.));
   // 边界扰动：材质边缘不沿格子走
   vec2 wq = w + (vec2(vn(w * .045), vn(w * .045 + 31.7)) - .5) * 6.;
   vec2 uv = wq / WORLD, uv0 = w / WORLD, uvr = (w + (wq - w) * .3) / WORLD;
@@ -224,6 +225,7 @@ void main() {
     sea = mix(sea, vec3(.9, .93, .92), clamp(foam, 0., 1.) * .85);
     c = mix(sea, c, land);
   }
+  c *= mix(1., .78, smoothstep(0., 160., outD));
   // 视野外：去饱和、压暗、偏冷
   float lum = dot(c, vec3(.3, .59, .11));
   c = mix(mix(vec3(lum), c, .35) * vec3(.84, .9, .98) * .62, c, vis);
@@ -377,4 +379,24 @@ function trxFallback(ctx) {
   for (let i = 0; i < GW * GH; i++) img.data[i * 4 + 3] = FOGB[i] ? 0 : 120;
   g.putImageData(img, 0, 0);
   ctx.drawImage(R.fog, 0, 0, W, H);
+}
+
+// 整张地图的写实地形快照（开场转场用）：宽 wpx 像素、全视野、无战争迷雾；画完把着色器画布还原成战场尺寸
+function trxSnapshot(wpx) {
+  if (!TRX.tried) trxInit();
+  if (!TRX.ok || typeof TER !== 'object' || !TER) return null;
+  const { gl } = TRX, hp = Math.round(wpx * H / W), cv = TRX.cv;
+  if (TRX.seed !== TER.seed) trxTerrain();
+  cv.width = wpx; cv.height = hp; gl.viewport(0, 0, wpx, hp);
+  const P = TRX.P[0], u = P.u;
+  gl.useProgram(P.pr); TRX.cur = P;
+  gl.activeTexture(gl.TEXTURE5); gl.bindTexture(gl.TEXTURE_2D, TRX.tex.fog);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE, 1, 1, 0, gl.LUMINANCE, gl.UNSIGNED_BYTE, new Uint8Array([255]));
+  gl.uniform2f(u.uRes, wpx, hp); gl.uniform3f(u.uView, wpx / W, 0, 0); gl.uniform2f(u.uCoast, TRX.c0, TRX.cr);
+  gl.uniform1f(u.uTime, 0); gl.uniform1f(u.uFlash, 0);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+  const out = document.createElement('canvas');
+  out.width = wpx; out.height = hp; out.getContext('2d').drawImage(cv, 0, 0);
+  if (R.cv) trxResize(); else { cv.width = 1; cv.height = 1; }
+  return out;
 }

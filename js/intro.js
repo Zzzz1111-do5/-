@@ -1,5 +1,6 @@
 'use strict';
 // 开场转场：虚构国家全图（S.seed 生成）→ 指数放大到海岸目标区 → 收束到当前战场镜头，再以字符溶解交给实时画面
+// 写实画面（realLook）下改为卫星图式：深蓝海、近岸浅水带、绿褐地表、白色国界省界，战场一块用写实地形快照，结尾淡出交给实时画面
 // 独立画布浮层，约 7 秒；点击 / Esc / 空格 / 回车跳过；SETTINGS.intro === false 时直接跳过
 // 坐标：国家单位 CU，1 CU ≈ 333 米；战场 1 世界单位 = 1 米，ITR_K = 每世界单位的 CU
 const INTRO = { on: false, el: null, g: null, sc: null, raf: 0, t0: 0, skip: 0, done: null, cue: new Set(), dpr: 1, fx: null };
@@ -117,21 +118,63 @@ function itrScene() {
   }
   const cname = nm(2, '') + ['共和国', '联邦', '王国'][r() * 3 | 0], op = ITR_OPS[r() * ITR_OPS.length | 0];
   const sc = { coast, cBig, XT, BX, BY, BW, BH, XW, XE, border, nbr, box: [bx0, by0, bx1, by1], edges: [...edges.values()], cities, roads, rivers, isles, cname, op, lon0: 118 + r() * 14, lat0: 30 + r() * 12 };
-  sc.ter = itrRaster();
+  sc.real = typeof realLook === 'function' && realLook();
+  sc.ter = (sc.real && typeof trxSnapshot === 'function' && itrFeather(trxSnapshot(1200), .1)) || itrRaster(sc.real);
   sc.reg = itrRegion(sc, r);
+  if (sc.real) sc.pat = itrLandPat();
   return sc;
+}
+
+// 四边羽化（destination-in 渐变），便于与周围区域底图衔接
+function itrFeather(c, m) {
+  if (!c) return null;
+  const b = c.getContext('2d');
+  b.globalCompositeOperation = 'destination-in';
+  for (const [x0, y0, x1, y1] of [[0, 0, c.width, 0], [0, 0, 0, c.height]]) {
+    const gr = b.createLinearGradient(x0, y0, x1, y1);
+    gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(m, '#000'); gr.addColorStop(1 - m, '#000'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+    b.fillStyle = gr; b.fillRect(0, 0, c.width, c.height);
+  }
+  b.globalCompositeOperation = 'source-over';
+  return c;
+}
+
+// 写实：国家尺度的地表纹理（可平铺的多层值噪声：草地、林地、农田裸地、零星城镇亮点），随地图平移缩放
+function itrLandPat() {
+  const N = 512, c = document.createElement('canvas'), g = c.getContext('2d'), img = g.createImageData(N, N), d = img.data, r = rng(9157);
+  c.width = c.height = N;
+  const L = [8, 16, 32, 64].map(n => { const a = new Float32Array(n * n); for (let i = 0; i < a.length; i++) a[i] = r(); return { n, a }; });
+  const sm = t => t * t * (3 - 2 * t);
+  const smp = ({ n, a }, u, v) => {
+    const x = u * n, y = v * n, i = Math.floor(x), j = Math.floor(y), fx = sm(x - i), fy = sm(y - j);
+    const A = (ii, jj) => a[((jj % n + n) % n) * n + ((ii % n + n) % n)];
+    const a0 = A(i, j) + (A(i + 1, j) - A(i, j)) * fx, a1 = A(i, j + 1) + (A(i + 1, j + 1) - A(i, j + 1)) * fx;
+    return a0 + (a1 - a0) * fy;
+  };
+  const mix3 = (a, b, k) => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k];
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    const u = x / N, v = y / N;
+    const f = smp(L[0], u, v) * .5 + smp(L[1], u, v) * .28 + smp(L[2], u, v) * .14 + smp(L[3], u, v) * .08;
+    const h = smp(L[1], u + .37, v + .61) * .55 + smp(L[2], u + .13, v + .29) * .3 + smp(L[3], u, v + .5) * .15;
+    let col = mix3([86, 104, 56], [100, 114, 64], smp(L[3], u + .5, v));
+    col = mix3(col, [122, 120, 80], smooth(.5, .72, h) * .6);             // 农田 / 干草地
+    col = mix3(col, [58, 82, 40], smooth(.44, .66, f) * .85);             // 林地
+    d.set([col[0], col[1], col[2], 255], (y * N + x) * 4);
+  }
+  g.putImageData(img, 0, 0);
+  return c;
 }
 
 // 地形配色（暗色战术图）：与实时画面亮度接近，交叉淡化时不跳
 const ITR_RGB = [[2, 9, 6], [4, 22, 17], [26, 12, 17], [32, 78, 50], [20, 52, 35], [52, 116, 76], [8, 30, 18], [10, 42, 23], [17, 56, 33], [30, 78, 50],
   [9, 36, 32], [14, 62, 78], [120, 200, 150], [32, 90, 58], [50, 120, 78], [20, 88, 104]];
-// 战场地形：按格取色（高程明暗），放大 4 倍平滑后四边羽化，便于与周围区域底图衔接
-function itrRaster() {
+// 战场地形：按格取色（高程明暗），放大 4 倍平滑后四边羽化，便于与周围区域底图衔接（写实画面无 WebGL 时用写实底色）
+function itrRaster(real) {
   if (typeof TER !== 'object' || !TER) return null;
-  const c = document.createElement('canvas'), g = c.getContext('2d'), img = g.createImageData(GW, GH);
+  const c = document.createElement('canvas'), g = c.getContext('2d'), img = g.createImageData(GW, GH), pal = real && typeof TRX_FLAT === 'object' ? TRX_FLAT : ITR_RGB;
   c.width = GW; c.height = GH;
   for (let i = 0; i < GW * GH; i++) {
-    const t = TER.type[i], cc = ITR_RGB[t] || ITR_RGB[0], e = t <= 2 ? 1 : .7 + TER.elev[i] * .7;
+    const t = TER.type[i], cc = pal[t] || pal[0], e = t <= 2 ? 1 : (real ? .85 : .7) + TER.elev[i] * (real ? .3 : .7);
     img.data[i * 4] = cc[0] * e; img.data[i * 4 + 1] = cc[1] * e; img.data[i * 4 + 2] = cc[2] * e; img.data[i * 4 + 3] = 255;
   }
   g.putImageData(img, 0, 0);
@@ -156,7 +199,7 @@ function itrRegion(sc, r) {
   c.width = PX; c.height = PY;
   const cy = new Float32Array(PX);
   for (let i = 0; i < PX; i++) cy[i] = sc.coast(x0 + (i + .5) / PX * RW, .08);
-  return { c, g, x0, y0, w: RW, h: RH, PX, PY, cy, row: 0, done: false, img: g.createImageData(PX, PY), el: new Float32Array(PX * PY),
+  return { c, g, x0, y0, w: RW, h: RH, PX, PY, cy, row: 0, done: false, real: sc.real, img: g.createImageData(PX, PY), el: new Float32Array(PX * PY),
     n1: valueNoise(r, 14, 10), n2: valueNoise(r, 48, 32), nf: valueNoise(r, 30, 20) };
 }
 function itrRegionStep(R0, rows) {
@@ -165,7 +208,14 @@ function itrRegionStep(R0, rows) {
   for (let j = R0.row; j < end; j++) for (let i = 0; i < PX; i++) {
     const Y = R0.y0 + (j + .5) / PY * h, u = i / PX, v = j / PY, dc = cy[i] - Y, k = j * PX + i;
     let col;
-    if (dc <= 0) { el[k] = -1; col = -dc < .25 ? ITR_RGB[1] : [2, 8 + 7 * Math.exp(dc / 2), 6 + 5 * Math.exp(dc / 2)]; }
+    if (R0.real) {   // 写实：近岸浅绿蓝 → 外海深蓝；陆地草绿 / 林地 / 丘陵 / 山岩，高程提亮，无等高线
+      if (dc <= 0) { const k2 = Math.exp(dc / 1.2); col = [16 + 44 * k2, 62 + 78 * k2, 94 + 40 * k2]; }
+      else {
+        const e = clamp(n1(u, v) * .75 + n2(u, v) * .35 - .25 + Math.min(.25, dc / 40), 0, 1), sh = .86 + e * .3;
+        col = dc < .08 ? TRX_FLAT[3] : e > .78 ? TRX_FLAT[9] : e > .58 ? TRX_FLAT[8] : nf(u, v) > .62 ? TRX_FLAT[7] : TRX_FLAT[6];
+        col = [col[0] * sh, col[1] * sh, col[2] * sh];
+      }
+    } else if (dc <= 0) { el[k] = -1; col = -dc < .25 ? ITR_RGB[1] : [2, 8 + 7 * Math.exp(dc / 2), 6 + 5 * Math.exp(dc / 2)]; }
     else {
       const e = el[k] = clamp(n1(u, v) * .75 + n2(u, v) * .35 - .25 + Math.min(.25, dc / 40), 0, 1), sh = .75 + e * .45;
       col = dc < .08 ? ITR_RGB[4] : e > .78 ? ITR_RGB[9] : e > .58 ? ITR_RGB[8] : nf(u, v) > .62 ? ITR_RGB[7] : ITR_RGB[6];
@@ -189,14 +239,14 @@ function itrRegionStep(R0, rows) {
   R0.done = true; R0.img = null; R0.el = null;
 }
 
-// 预渲染：扫描线与暗角
-function itrFx(w, h, dpr) {
+// 预渲染：扫描线与暗角（写实画面只有暗角）
+function itrFx(w, h, dpr, real) {
   const c = document.createElement('canvas'), g = c.getContext('2d');
   c.width = w * dpr; c.height = h * dpr;
   g.fillStyle = 'rgba(0,0,0,.22)';
-  for (let y = 0; y < c.height; y += 3 * dpr) g.fillRect(0, y, c.width, dpr);
+  if (!real) for (let y = 0; y < c.height; y += 3 * dpr) g.fillRect(0, y, c.width, dpr);
   const v = g.createRadialGradient(c.width / 2, c.height / 2, Math.min(c.width, c.height) * .35, c.width / 2, c.height / 2, Math.hypot(c.width, c.height) * .55);
-  v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,.7)');
+  v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, real ? 'rgba(0,0,0,.45)' : 'rgba(0,0,0,.7)');
   g.fillStyle = v; g.fillRect(0, 0, c.width, c.height);
   return { c, w, h, dpr };
 }
@@ -209,7 +259,7 @@ function playIntro(onDone) {
   try { sc = itrScene(); } catch (e) { console.error('intro', e); fin(); return; }
   const el = INTRO.el = document.createElement('canvas');
   el.className = 'mn-layer'; el.setAttribute('aria-label', '开场转场，点击跳过');
-  el.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;z-index:60;cursor:pointer;touch-action:none;background:#010402';
+  el.style.cssText = `position:fixed;inset:0;width:100%;height:100%;z-index:60;cursor:pointer;touch-action:none;background:${sc.real ? '#08203a' : '#010402'}`;
   document.body.appendChild(el);
   Object.assign(INTRO, { on: true, g: el.getContext('2d'), sc, t0: performance.now(), skip: 0, done: fin, cue: new Set(), fx: null, tiles: null, stageT: {}, cover: true });
   el.addEventListener('pointerdown', e => { e.preventDefault(); itrSkip(); });
@@ -262,7 +312,8 @@ function itrFrame(now) {
 function itrDraw(t) {
   const el = INTRO.el, g = INTRO.g, sc = INTRO.sc, dpr = Math.min(2, window.devicePixelRatio || 1), vw = innerWidth, vh = innerHeight;
   if (el.width !== Math.round(vw * dpr) || el.height !== Math.round(vh * dpr)) { el.width = Math.round(vw * dpr); el.height = Math.round(vh * dpr); INTRO.fx = null; INTRO.tiles = null; }
-  if (!INTRO.fx) INTRO.fx = itrFx(vw, vh, dpr);
+  const real = sc.real;
+  if (!INTRO.fx) INTRO.fx = itrFx(vw, vh, dpr, real);
   const cr = R.cv ? R.cv.getBoundingClientRect() : { left: 0, top: 0, width: vw, height: vh }, fr = { x: cr.left, y: cr.top, w: cr.width || vw, h: cr.height || vh };
   const cam = INTRO.cam = itrCam(t, vw, vh, fr), { s } = cam, ox = fr.x + fr.w / 2, oy = fr.y + fr.h / 2;
   const SX = X => (X - cam.cx) * s + ox, SY = Y => (Y - cam.cy) * s + oy, X0 = cam.cx - ox / s, X1 = cam.cx + (vw - ox) / s, Y0 = cam.cy - oy / s;
@@ -271,22 +322,41 @@ function itrDraw(t) {
   const fade = smooth(0, .45, t);
   g.setTransform(dpr, 0, 0, dpr, 0, 0);
   g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
-  g.fillStyle = '#010402'; g.fillRect(0, 0, vw, vh);
+  g.fillStyle = real ? '#08203a' : '#010402'; g.fillRect(0, 0, vw, vh);
   g.lineCap = 'round'; g.lineJoin = 'round';
   // 海岸采样（按屏幕 2px 步长，倍频随缩放增加 → 越放大细节越多）
   const step = 2 / s, minWl = 6 / s, cs = [];
   for (let X = X0 - step * 2; X <= X1 + step * 2; X += step) cs.push([X, sc.coast(X, minWl)]);
   const top = Y0 - 50 / s;
-  // 海面：等深线（屏幕固定间距，点线）
   g.globalAlpha = fade;
-  for (const [off, a] of [[12, .14], [30, .07], [58, .04]]) {
-    g.beginPath(); cs.forEach(([X, Y], i) => i ? g.lineTo(SX(X), SY(Y) + off) : g.moveTo(SX(X), SY(Y) + off));
-    g.setLineDash([2, 5]); g.strokeStyle = rgba(COL.g, a); g.lineWidth = 1; g.stroke();
+  const coastPath = () => { g.beginPath(); cs.forEach(([X, Y], i) => i ? g.lineTo(SX(X), SY(Y)) : g.moveTo(SX(X), SY(Y))); };
+  if (real) {   // 海面：近岸浅水带（沿海岸线的宽描边，陆地一侧随后被陆地盖住）
+    coastPath();
+    for (const [w, a] of [[46, .08], [24, .12], [10, .2], [4, .3]]) { g.strokeStyle = `rgba(52,150,158,${a})`; g.lineWidth = w; g.stroke(); }
+  } else {   // 海面：等深线（屏幕固定间距，点线）
+    for (const [off, a] of [[12, .14], [30, .07], [58, .04]]) {
+      g.beginPath(); cs.forEach(([X, Y], i) => i ? g.lineTo(SX(X), SY(Y) + off) : g.moveTo(SX(X), SY(Y) + off));
+      g.setLineDash([2, 5]); g.strokeStyle = rgba(COL.g, a); g.lineWidth = 1; g.stroke();
+    }
+    g.setLineDash([]);
   }
-  g.setLineDash([]);
-  // 陆地
+  // 陆地（写实：地表纹理随地图缩放平移）
+  // 写实地表：同一张纹理按 600 / 60 / 6 国家单位三种尺度叠加，越放大越显出细一级的斑块，不会只看到一层被拉糊的大色块
+  const landFill = (cu = 600) => {
+    if (!real || !sc.pat) return rgba(COL.g, .035);
+    const p = g.createPattern(sc.pat, 'repeat'), k = s * cu / sc.pat.width;
+    if (p && p.setTransform && typeof DOMMatrix === 'function') p.setTransform(new DOMMatrix([k, 0, 0, k, SX(cu * .37), SY(cu * .61)]));
+    return p || '#5a6c38';
+  };
+  const landLayers = () => {
+    g.fillStyle = landFill(600); g.fill();
+    if (!real) return;
+    const ga = g.globalAlpha;
+    for (const [cu, a] of [[60, .4 * smooth(1.5, 5, s * 60 / 512)], [6, .35 * smooth(1.5, 5, s * 6 / 512)]]) if (a > .01) { g.globalAlpha = ga * a; g.fillStyle = landFill(cu); g.fill(); }
+    g.globalAlpha = ga;
+  };
   g.beginPath(); cs.forEach(([X, Y]) => g.lineTo(SX(X), SY(Y))); g.lineTo(vw + 10, SY(top)); g.lineTo(-10, SY(top)); g.closePath();
-  g.fillStyle = rgba(COL.g, .035); g.fill();
+  landLayers();
   // 本国国土（略亮）与国界
   const cAlpha = 1 - smooth(1.6, 3.6, zl);
   g.save(); g.beginPath();
@@ -296,27 +366,27 @@ function itrDraw(t) {
     for (let X = sc.XW; X <= sc.XE; X += Math.max(step, 1)) g.lineTo(SX(X), SY(sc.coast(X, Math.max(minWl, 2))));
     for (const [X, Y] of sc.border) g.lineTo(SX(X), SY(Y));
   }
-  g.closePath(); g.fillStyle = rgba(COL.g, .05); g.fill(); g.clip();
+  g.closePath(); g.fillStyle = real ? 'rgba(255,244,214,.05)' : rgba(COL.g, .05); g.fill(); g.clip();
   if (cAlpha > .01) {   // 省界
     g.globalAlpha = fade * cAlpha * smooth(.3, 1.1, t);
-    g.strokeStyle = rgba(COL.g, .22); g.lineWidth = 1; g.setLineDash([5, 4]);
+    g.strokeStyle = real ? 'rgba(255,255,255,.3)' : rgba(COL.g, .22); g.lineWidth = 1; g.setLineDash([5, 4]);
     for (const pts of sc.edges) { g.beginPath(); pts.forEach(([X, Y], i) => i ? g.lineTo(SX(X), SY(Y)) : g.moveTo(SX(X), SY(Y))); g.stroke(); }
     g.setLineDash([]);
-    g.strokeStyle = rgba(COL.g, .1);   // 公路
+    g.strokeStyle = real ? 'rgba(232,222,196,.45)' : rgba(COL.g, .1);   // 公路
     for (const [a, b] of sc.roads) { g.beginPath(); g.moveTo(SX(a.X), SY(a.Y)); g.lineTo(SX(b.X), SY(b.Y)); g.stroke(); }
-    g.strokeStyle = 'rgba(92,200,255,.35)'; g.lineWidth = 1.2;   // 河流
+    g.strokeStyle = real ? 'rgba(62,128,168,.85)' : 'rgba(92,200,255,.35)'; g.lineWidth = 1.2;   // 河流
     for (const pts of sc.rivers) { g.beginPath(); pts.forEach(([X, Y], i) => i ? g.lineTo(SX(X), SY(Y)) : g.moveTo(SX(X), SY(Y))); g.stroke(); }
   }
   g.restore();
   g.globalAlpha = fade * (1 - smooth(1.5, 3, zl));
   g.beginPath(); sc.border.forEach(([X, Y], i) => i ? g.lineTo(SX(X), SY(Y)) : g.moveTo(SX(X), SY(Y)));
-  g.setLineDash([7, 4, 1.5, 4]); g.strokeStyle = rgba(COL.g, .5); g.lineWidth = 1.2; g.stroke();
-  g.strokeStyle = rgba(COL.g, .18); g.lineWidth = 1;   // 邻国国界
+  g.setLineDash([7, 4, 1.5, 4]); g.strokeStyle = real ? 'rgba(255,255,255,.75)' : rgba(COL.g, .5); g.lineWidth = 1.2; g.stroke();
+  g.strokeStyle = real ? 'rgba(255,255,255,.35)' : rgba(COL.g, .18); g.lineWidth = 1;   // 邻国国界
   for (const pts of sc.nbr) { g.beginPath(); pts.forEach(([X, Y], i) => i ? g.lineTo(SX(X), SY(Y)) : g.moveTo(SX(X), SY(Y))); g.stroke(); }
   g.setLineDash([]);
   // 区域底图（程序化地形）与战场地形：放大到区域尺度后淡入
-  const R0 = sc.reg, rg = smooth(260, 900, R0.w * s);
-  itrRegionStep(R0, t < 1.5 ? 24 : 1e4);
+  const R0 = sc.reg, rg = real ? 0 : smooth(260, 900, R0.w * s);   // 写实画面不用区域底图（放大后成块），由多尺度地表纹理接替
+  if (!real) itrRegionStep(R0, t < 1.5 ? 24 : 1e4);
   // 纹素放大后淡出，避免块状
   if (rg > .01 && R0.done) { g.globalAlpha = rg * .9 * (1 - .6 * smooth(3, 9, R0.w * s / R0.PX)); g.drawImage(R0.c, SX(R0.x0), SY(R0.y0), R0.w * s, R0.h * s); }
   const ra = smooth(Math.log(36), Math.log(vw * .35), Math.log(rectPx));
@@ -326,7 +396,7 @@ function itrDraw(t) {
     if (stage >= 2) {   // 战场方格（与沙盘一致：100 米）
       const gs = 100 * ITR_K * s;
       if (gs > 14) {
-        g.globalAlpha = ra * .5 * smooth(14, 40, gs); g.strokeStyle = rgba(COL.g, .1); g.lineWidth = 1; g.beginPath();
+        g.globalAlpha = ra * .5 * smooth(14, 40, gs) * (real ? 0 : 1); g.strokeStyle = rgba(COL.g, .1); g.lineWidth = 1; g.beginPath();
         for (let x = 0; x <= W; x += 100) { g.moveTo(SX(sc.BX + x * ITR_K), SY(sc.BY)); g.lineTo(SX(sc.BX + x * ITR_K), SY(sc.BY + sc.BH)); }
         for (let y = 0; y <= H; y += 100) { g.moveTo(SX(sc.BX), SY(sc.BY + y * ITR_K)); g.lineTo(SX(sc.BX + sc.BW), SY(sc.BY + y * ITR_K)); }
         g.stroke();
@@ -337,11 +407,12 @@ function itrDraw(t) {
   g.globalAlpha = 1;
   const draw = clamp(t / 1.2, 0, 1), nDraw = Math.max(2, Math.round(cs.length * itrEase(draw)));
   g.beginPath(); for (let i = 0; i < nDraw; i++) { const [X, Y] = cs[i]; i ? g.lineTo(SX(X), SY(Y)) : g.moveTo(SX(X), SY(Y)); }
-  g.strokeStyle = rgba(COL.g, .85 - ra * .35); g.lineWidth = 1.4; g.shadowColor = COL.g; g.shadowBlur = 8; g.stroke(); g.shadowBlur = 0;
+  if (real) { g.strokeStyle = `rgba(236,226,192,${.6 * (1 - ra)})`; g.lineWidth = 1; g.stroke(); }
+  else { g.strokeStyle = rgba(COL.g, .85 - ra * .35); g.lineWidth = 1.4; g.shadowColor = COL.g; g.shadowBlur = 8; g.stroke(); g.shadowBlur = 0; }
   // 海岛
   g.globalAlpha = fade * (1 - smooth(2, 4, zl));
-  g.strokeStyle = rgba(COL.g, .6); g.fillStyle = rgba(COL.g, .05); g.lineWidth = 1;
-  for (const pts of sc.isles) { g.beginPath(); pts.forEach(([X, Y]) => g.lineTo(SX(X), SY(Y))); g.closePath(); g.fill(); g.stroke(); }
+  g.strokeStyle = real ? 'rgba(236,226,192,.7)' : rgba(COL.g, .6); g.fillStyle = rgba(COL.g, .05); g.lineWidth = 1;
+  for (const pts of sc.isles) { g.beginPath(); pts.forEach(([X, Y]) => g.lineTo(SX(X), SY(Y))); g.closePath(); if (real) landLayers(); else g.fill(); g.stroke(); }
   itrGraticule(g, sc, cam, SX, SY, vw, vh, fade * (1 - ra * .6));
   itrCities(g, sc, t, SX, SY, cAlpha * fade);
   itrBeaches(g, sc, SX, SY, rectPx, vw);
@@ -350,9 +421,11 @@ function itrDraw(t) {
   // 屏幕效果
   g.globalAlpha = 1;
   g.drawImage(INTRO.fx.c, 0, 0, vw, vh);
-  const sy = ((t * .3) % 1.3 - .15) * vh;   // 缓慢下扫的亮带
-  const bar = g.createLinearGradient(0, sy - 40, 0, sy + 2); bar.addColorStop(0, rgba(COL.g, 0)); bar.addColorStop(1, rgba(COL.g, .035));
-  g.fillStyle = bar; g.fillRect(0, sy - 40, vw, 42);
+  if (!real) {
+    const sy = ((t * .3) % 1.3 - .15) * vh;   // 缓慢下扫的亮带
+    const bar = g.createLinearGradient(0, sy - 40, 0, sy + 2); bar.addColorStop(0, rgba(COL.g, 0)); bar.addColorStop(1, rgba(COL.g, .035));
+    g.fillStyle = bar; g.fillRect(0, sy - 40, vw, 42);
+  }
   itrHud(g, sc, cam, t, stage, zu, vw, vh);
   itrSounds(t, stage);
   if (t > ITR_T.hold) itrDissolve(g, (t - ITR_T.hold) / (ITR_T.end - ITR_T.hold), vw, vh, fr);
@@ -370,12 +443,12 @@ function itrGraticule(g, sc, cam, SX, SY, vw, vh, a) {
   const l0 = lonAt(cam.cx - vw / cam.s), l1 = lonAt(cam.cx + vw / cam.s), b0 = latAt(cam.cy + vh / cam.s), b1 = latAt(cam.cy - vh / cam.s);
   g.font = '10px "IBM Plex Mono", monospace'; g.lineWidth = 1;
   for (const [st, al, lab] of [[fine, .07 * fa, false], [coarse, .13, true]]) {
-    g.globalAlpha = a; g.strokeStyle = rgba(COL.g, al); g.beginPath();
+    g.globalAlpha = a; g.strokeStyle = sc.real ? `rgba(255,255,255,${al * .8})` : rgba(COL.g, al); g.beginPath();
     for (let lon = Math.ceil(l0 / st) * st; lon <= l1; lon += st) { const x = SX(Xof(lon)); g.moveTo(x, 0); g.lineTo(x, vh); }
     for (let lat = Math.ceil(b0 / st) * st; lat <= b1; lat += st) { const y = SY(Yof(lat)); g.moveTo(0, y); g.lineTo(vw, y); }
     g.stroke();
     if (lab) {
-      g.fillStyle = rgba(COL.g, .4); g.textBaseline = 'top';
+      g.fillStyle = sc.real ? 'rgba(255,255,255,.55)' : rgba(COL.g, .4); g.textBaseline = 'top';
       for (let lon = Math.ceil(l0 / st) * st; lon <= l1; lon += st) { const x = SX(Xof(lon)); if (x > 230 && x < vw - 230) g.fillText(itrDeg(lon, 'E'), x + 3, 70); }
       g.textBaseline = 'bottom';
       for (let lat = Math.ceil(b0 / st) * st; lat <= b1; lat += st) { const y = SY(Yof(lat)); if (y > 90 && y < vh - 70) g.fillText(itrDeg(lat, 'N'), 8, y - 2); }
@@ -395,10 +468,16 @@ function itrCities(g, sc, t, SX, SY, a) {
     if (k <= 0) return;
     const x = SX(c.X), y = SY(c.Y), r = (c.lv === 0 ? 4 : c.lv === 1 ? 2.8 : 1.6) * (1 + (1 - k) * 1.5);
     g.globalAlpha = a * k;
-    g.fillStyle = c.lv === 2 ? rgba(COL.g, .55) : COL.g;
-    g.beginPath(); g.arc(x, y, r, 0, 6.283); g.fill();
-    if (c.lv === 0) { g.strokeStyle = rgba(COL.g, .8); g.lineWidth = 1; g.beginPath(); g.arc(x, y, 8, 0, 6.283); g.stroke(); shape(g, x, y, 12, 4, Math.PI / 4); g.strokeStyle = rgba(COL.g, .3); g.stroke(); }
-    if (c.name) { g.fillStyle = rgba(COL.text, c.lv ? .55 : .85); g.fillText(c.lv ? c.name : '★ ' + c.name, x + 10, y); }
+    const cc = sc.real ? '#ffffff' : COL.g;
+    g.fillStyle = c.lv === 2 ? rgba(cc, .6) : cc;
+    if (sc.real) { g.strokeStyle = 'rgba(0,0,0,.55)'; g.lineWidth = 1.2; }
+    g.beginPath(); g.arc(x, y, r, 0, 6.283); g.fill(); if (sc.real) g.stroke();
+    if (c.lv === 0) { g.strokeStyle = rgba(cc, .8); g.lineWidth = 1; g.beginPath(); g.arc(x, y, 8, 0, 6.283); g.stroke(); shape(g, x, y, 12, 4, Math.PI / 4); g.strokeStyle = rgba(cc, .3); g.stroke(); }
+    if (c.name) {
+      if (sc.real) { g.shadowColor = 'rgba(0,0,0,.8)'; g.shadowBlur = 3; }
+      g.fillStyle = rgba(sc.real ? '#ffffff' : COL.text, c.lv ? (sc.real ? .8 : .55) : .9); g.fillText(c.lv ? c.name : '★ ' + c.name, x + 10, y);
+      g.shadowBlur = 0;
+    }
   });
 }
 
@@ -431,7 +510,7 @@ function itrReticle(g, sc, cam, t, SX, SY, vw, vh, fr) {
   const lock = smooth(ITR_T.zoom1 - .5, ITR_T.zoom1, t), col = lock > .5 ? COL.g : COL.enemy;
   const k = (1 - app) * 3 + 1, bw = hw * k, bh = hh * k, L = Math.min(18, bw * .5, bh * .5) + Math.max(0, Math.min(bw, bh) * .04);
   g.globalAlpha = app * (1 - smooth(ITR_T.hold, ITR_T.hold + .3, t));
-  g.strokeStyle = col; g.lineWidth = 1.6; g.shadowColor = col; g.shadowBlur = 6;
+  g.strokeStyle = col; g.lineWidth = 1.6; g.shadowColor = col; g.shadowBlur = sc.real ? 0 : 6;
   g.beginPath();
   for (const [sx, sy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) { const x = cx + sx * bw, y = cy + sy * bh; g.moveTo(x - sx * L, y); g.lineTo(x, y); g.lineTo(x, y - sy * L); }
   g.stroke(); g.shadowBlur = 0;
@@ -455,7 +534,7 @@ function itrHud(g, sc, cam, t, stage, zu, vw, vh) {
   g.fillStyle = COL.g; g.fillRect(pad, pad + 2, 3, 30);
   g.font = `700 ${mob ? 16 : 19}px "Noto Sans SC", sans-serif`; g.textBaseline = 'top'; g.fillStyle = COL.text;
   g.fillText(itrDecode(T[0], t - st.t, .35), pad + 12, pad);
-  g.font = '10px "Silkscreen", "IBM Plex Mono", monospace'; g.fillStyle = rgba(COL.g, .7);
+  g.font = sc.real ? '10px "IBM Plex Mono", monospace' : '10px "Silkscreen", "IBM Plex Mono", monospace'; g.fillStyle = rgba(COL.g, .7);
   g.fillText(itrDecode(T[1], t - st.t, .5), pad + 12, pad + (mob ? 21 : 25));
   g.textAlign = 'right'; g.font = `600 ${mob ? 12 : 14}px "Noto Sans SC", sans-serif`; g.fillStyle = COL.text;
   g.fillText(itrDecode(sc.cname, t, .6), vw - pad, pad);
@@ -487,6 +566,7 @@ function itrDecode(str, dt, dur) {
   if (dt >= dur) return str;
   if (dt <= 0) return '';
   const n = str.length, k = Math.floor(dt / dur * n), gl = typeof GLYPHS === 'string' ? GLYPHS : '01';
+  if (INTRO.sc && INTRO.sc.real) return str.slice(0, k + 1);   // 写实：逐字打出，不闪乱码
   let s = str.slice(0, k);
   for (let i = k; i < Math.min(n, k + 6); i++) s += str[i] === ' ' ? ' ' : gl[Math.random() * gl.length | 0];
   return s;
@@ -507,6 +587,7 @@ function itrSounds(t, stage) {
 
 // 溶解：屏幕分块，按离中心距离加随机先后挖空，挖空前闪一个字符
 function itrDissolve(g, p, vw, vh, fr) {
+  if (INTRO.sc && INTRO.sc.real) { INTRO.el.style.opacity = String(1 - itrSine(clamp(p, 0, 1))); return; }   // 写实：整体淡出到实时画面
   const ts = vw < 600 ? 22 : 28;
   if (!INTRO.tiles) {
     const cols = Math.ceil(vw / ts), rows = Math.ceil(vh / ts), th = new Float32Array(cols * rows), cx = fr.x + fr.w / 2, cy = fr.y + fr.h / 2, md = Math.hypot(vw, vh) / 2;
