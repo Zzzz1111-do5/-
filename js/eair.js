@@ -7,8 +7,9 @@ const eaOn = () => !!S && !(S.v7off && S.v7off.air);
 const eaStat = (k, n = 1) => { const o = S.v7s || (S.v7s = {}); o[k] = (o[k] || 0) + n; };
 POWER.erk = { men: .45, ship: 2, struct: 0, seg: false, R: 18 };   // 机载火箭（守方只打进攻方，不伤自家工事）
 const EA_DIFF = { normal: { wing: ['heli'], first: 210, gap: 150 }, hard: { wing: ['ga', 'heli', 'ftr'], first: 150, gap: 100 }, hell: { wing: ['ga', 'ga', 'heli', 'ftr', 'ftr'], first: 100, gap: 70 } };
-const EA_SPEC = { ga: { name: 'A-10C 攻击机', spd: 200, turn: 1.4, hp: 1, flares: 2 }, heli: { name: 'AH-64E 武装直升机', spd: 90, turn: 2.4, hp: 2, flares: 1 },
-  ftr: { name: 'F-35A 战斗机', spd: 240, turn: 1.9, hp: 1, flares: 2 } };   // 守方按美军装备命名   // 歼击机：巡逻、拦截、争夺制空权（airwar.js）
+// 守方（美军）：A-10C 慢而皮实（钛合金座舱浴盆，挨一发还能飞），AH-64E，F-35A 隐身（我方雷达发现距离打折）
+const EA_SPEC = { ga: { name: 'A-10C 攻击机', spd: 170, turn: 1.4, hp: 2, flares: 2 }, heli: { name: 'AH-64E 武装直升机', spd: 90, turn: 2.4, hp: 2, flares: 1 },
+  ftr: { name: 'F-35A 战斗机', spd: 240, turn: 1.9, hp: 1, flares: 2, stealth: .45 } };   // 守方按美军装备命名   // 歼击机：巡逻、拦截、争夺制空权（airwar.js）
 const EA_TRAILS = new Map();   // 仅渲染用：固定翼尾迹点（不进 S）
 const EA_MANPADS = { normal: 0, hard: 1, hell: 2 };   // 战役守军单兵防空组数
 const EA_GUNV = ['tank', 'hv_tank', 'td', 'flame_tank', 'lt_tank', 'amtank', 'mine_tank'];
@@ -442,7 +443,7 @@ function eaAA() {
     if (q.side === 'e') {
       for (const p of S.planes) {
         if (p.dead || !(p.alt > .25) || ['cat', 'roll', 'trap', 'final'].includes(p.phase)) continue;
-        const r = p.v === 'heli' ? 260 : p.kind === 'bomber' && p.v !== 'dive' ? 150 : 230, d = dist(p.x, p.y, q.x, q.y);
+        const r = (p.v === 'heli' ? 260 : p.kind === 'bomber' && p.v !== 'dive' ? 150 : 230) * ((typeof airStealth === 'function' ? airStealth(p) : 1) < 1 ? .8 : 1), d = dist(p.x, p.y, q.x, q.y);   // 隐身机红外特征也小些
         if (d < r && d < bd && !busy('e', 'plane', p.id)) { bd = d; tg = p; k = 'plane'; }
       }
     } else for (const a of fly) {
@@ -633,7 +634,7 @@ function eaDraw(time) {
     const age = S.t - w.t, x = w.x + Math.cos(w.h) * w.spd * age, y = w.y + Math.sin(w.h) * w.spd * age;
     if (!spec && !inVision(x, y)) continue;
     ctx.strokeStyle = rgba(COL.smoke, .35); ctx.lineWidth = px(3); ctx.beginPath(); ctx.moveTo(w.x, w.y); ctx.lineTo(x, y); ctx.stroke();
-    if (typeof drawAircraft === 'function') drawAircraft(ctx, x, y, w.h + age * 5, w.type === 'heli' ? 'heli' : w.type === 'ftr' ? 'fighter' : 'strike', 14 * (1 - age * .2), COL.enemy, .6 * (1 - age / 2.4), 0, lw);
+    if (typeof drawAircraft === 'function') drawAircraft(ctx, x, y, w.h + age * 5, w.type === 'heli' ? 'heli' : w.type === 'ftr' ? 'f35' : 'a10', 14 * (1 - age * .2), COL.enemy, .6 * (1 - age / 2.4), 0, lw);
   }
   // 飞机：固定翼尾迹 + 地面投影 + 剪影；直升机加旋转的主旋翼；歼击机开炮时机头口焰
   if (EA_TRAILS.size) { const ids = new Set(E.fly.map(a => a.id)); for (const id of [...EA_TRAILS.keys()]) if (!ids.has(id)) EA_TRAILS.delete(id); }
@@ -649,7 +650,7 @@ function eaDraw(time) {
       for (let i = 1; i < tr.length; i++) { ctx.strokeStyle = rgba(COL.enemy, .15 * i / tr.length); ctx.beginPath(); ctx.moveTo(tr[i - 1][0], tr[i - 1][1]); ctx.lineTo(tr[i][0], tr[i][1]); ctx.stroke(); }
     }
     ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.beginPath(); ctx.ellipse(a.x + a.alt * 14, a.y + a.alt * 22, size * .35, size * .22, a.heading, 0, 7); ctx.fill();
-    if (typeof drawAircraft === 'function') drawAircraft(ctx, a.x, a.y, a.heading, heli ? 'heli' : a.type === 'ftr' ? 'fighter' : 'strike', size, COL.enemy, 1, a.bank || 0, lw);
+    if (typeof drawAircraft === 'function') drawAircraft(ctx, a.x, a.y, a.heading, heli ? 'heli' : a.type === 'ftr' ? 'f35' : 'a10', size, COL.enemy, 1, a.bank || 0, lw);
     if (a.gunT > 0) { const nx = a.x + Math.cos(a.heading) * size * .55, ny = a.y + Math.sin(a.heading) * size * .55; ctx.fillStyle = rgba('#fff3d6', .5 + .5 * Math.sin(time * 60)); ctx.beginPath(); ctx.arc(nx, ny, size * .14, 0, 7); ctx.fill(); }
     if (heli) {
       const r = size * 9.5 / 21, cx = a.x + Math.cos(a.heading) * size * 1.5 / 21, cy = a.y + Math.sin(a.heading) * size * 1.5 / 21, ang = time * 22 + a.id;
@@ -726,7 +727,7 @@ function eaDrawBase(ctx, b, vis, time) {
   // 停在机位上的飞机：待命亮、整备中暗 + 进度弧
   if (!dead && typeof drawAircraft === 'function') for (const P of eaParked(b)) {
     const w = P.w, ready = w.state === 'ready';
-    drawAircraft(ctx, P.u, P.v, -Math.PI / 2, w.type === 'heli' ? 'heli' : w.type === 'ftr' ? 'fighter' : 'strike', w.type === 'heli' ? 13 : 14, COL.enemy, (ready ? .9 : .45) * a, 0, px(1));
+    drawAircraft(ctx, P.u, P.v, -Math.PI / 2, w.type === 'heli' ? 'heli' : w.type === 'ftr' ? 'f35' : 'a10', w.type === 'heli' ? 13 : 14, COL.enemy, (ready ? .9 : .45) * a, 0, px(1));
     if (!ready && det >= 110) { ctx.strokeStyle = rgba(COL.amber, .8 * a); ctx.lineWidth = px(1.4); ctx.beginPath(); ctx.arc(P.u, P.v, 9, -1.57, -1.57 + (1 - clamp(w.rearmT / 60, 0, 1)) * 6.283); ctx.stroke(); }
   }
   // 跑道弹坑；封闭期间琥珀色虚线框住道面，下沿是抢修进度

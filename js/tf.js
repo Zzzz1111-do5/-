@@ -174,6 +174,15 @@ function tfGap(P) {
 
 // —— ④ 步坦协同：绑定（每 3 秒）——
 // 炮车 / 装甲车绑到正在进攻（集结、待攻、攻击、支援）的自动步兵连：每连最多 2 辆炮车 + 1 辆装甲车；已有伙伴且仍有效就不换
+// 连队 r 以内有没有敌情（看得见或近期见过的敌步兵、已发现的敌车辆、已标定的火力点）
+function tfFoeNear(u, r) {
+  const c = tfCent(u);
+  if (!c) return false;
+  const [x, y] = c, foe = u.side === 'p' ? 'e' : 'p';
+  if (S.teams.some(q => q.side === foe && q.men.length && (inVision(q.x, q.y) || (q.seen != null && S.t - q.seen < 30)) && dist(q.x, q.y, x, y) < r)) return true;
+  if ((S.veh || []).some(v => v.side === foe && !v.dead && v.kx != null && dist(v.kx, v.ky, x, y) < r)) return true;
+  return u.side === 'p' && S.enemies.some(e => !e.dead && e.kx != null && dist(e.kx, e.ky, x, y) < r);
+}
 function tfBind(P) {
   const units = S.units.filter(u => u.side === 'p' && u.kind === 'inf' && u.auto === true && u.state !== 'rout' && P.u[u.id] && ['stage', 'wait', 'go', 'help', 'gap', 'garrison'].includes(P.u[u.id].ph) && tfCent(u));
   const load = {};
@@ -181,10 +190,11 @@ function tfBind(P) {
   const cap = { g: 2, a: 1, o: 1 };
   const vs = (S.veh || []).filter(v => v.side === 'p' && !v.dead && !v.lst && v.auto && !v.swim && !v.immob && v.type !== 'spg' && isLand(v.x, v.y));
   for (const v of S.veh || []) if (v.side === 'p' && v.buddy != null && !vs.includes(v)) { v.buddy = null; v.esc = null; }
-  // 先保留仍有效的绑定
+  // 先保留仍有效的绑定；守点的连队附近 350 内没有敌情时不占着坦克（免得坦克陪着守点的步兵在半路趴着），交还车辆自动驾驶去支援进攻
+  const quiet = u => P.u[u.id].ph === 'garrison' && !tfFoeNear(u, 350);
   for (const v of vs) {
     const u = v.buddy != null && units.find(o => o.id === v.buddy), k = kindOf(v), L = u && (load[u.id] || (load[u.id] = { g: 0, a: 0, o: 0 }));
-    if (u && L[k] < cap[k] && (v.ai !== 'repair')) L[k]++; else { v.buddy = null; v.esc = null; }
+    if (u && L[k] < cap[k] && v.ai !== 'repair' && !quiet(u)) L[k]++; else { if (u && quiet(u)) tfStat('tfFree'); v.buddy = null; v.esc = null; }
   }
   for (const v of vs) {
     if (v.buddy != null || v.ai === 'repair' || v.ride && v.ride.length || v.pick) continue;
@@ -192,7 +202,7 @@ function tfBind(P) {
     let best = null, bs = -Infinity;
     for (const u of units) {
       const L = load[u.id] || { g: 0, a: 0, o: 0 }, c = tfCent(u), ph = P.u[u.id].ph;
-      if (L[k] >= cap[k]) continue;
+      if (L[k] >= cap[k] || quiet(u)) continue;
       const d = dist(v.x, v.y, c[0], c[1]);
       if (d > 900) continue;
       const s = -d / 100 + (ph === 'go' || ph === 'wait' ? 2.5 : ph === 'stage' || ph === 'help' ? 1.5 : 0) - (L.g + L.a) * 1.2;
@@ -325,8 +335,11 @@ function vehEscort(v) {
   sx = clamp(sx, 10, W - 10); sy = clamp(sy, 10, H - 10);
   // 硬规则：车在步兵线前方（交战时 30 以外、平时 8 以外）立即退回阵位
   const vp = (v.x - cx) * ax + (v.y - cy) * ay, ahead = vp > sInf + (mode === 'engage' ? 38 : 8);
-  if (!ahead && E.sx != null && dist(E.sx, E.sy, sx, sy) < 20 && v.order.x != null && dist(v.order.x, v.order.y, E.hx ?? sx, E.hy ?? sy) < 30) return true;
-  if (!ahead && E.sx != null && dist(E.sx, E.sy, sx, sy) < 20 && v.order.t === 'hold' && dist(v.x, v.y, E.hx ?? sx, E.hy ?? sy) < 25) return true;
+  // 阵位随步兵小幅晃动（35 以内）不重新下令，车到阵位 30 以内也不再挪——免得坦克在步兵身后来回倒腾、白白烧油
+  const keep = mode === 'engage' ? 20 : 35;
+  if (!ahead && E.sx != null && dist(E.sx, E.sy, sx, sy) < keep && v.order.x != null && dist(v.order.x, v.order.y, E.hx ?? sx, E.hy ?? sy) < 30) return true;
+  if (!ahead && E.sx != null && dist(E.sx, E.sy, sx, sy) < keep && v.order.t === 'hold' && dist(v.x, v.y, E.hx ?? sx, E.hy ?? sy) < 30) return true;
+  if (!ahead && mode !== 'engage' && v.order.t === 'hold' && dist(v.x, v.y, sx, sy) < 30) { E.sx = sx; E.sy = sy; return true; }
   E.sx = sx; E.sy = sy;
   // 车体半埋：阵位 20 以内掩护最好的可通行格（避开弹坑减速只给小奖励）
   let hx = sx, hy = sy, bs = -Infinity;

@@ -78,6 +78,7 @@ const CT_IC = {
   apc: '<path d="M6 21V7l2-3h8l2 3v14z"/><path d="M8.5 9h7M8.5 13h7M8.5 17h7"/>', ifv: '<path d="M6 21V7l2-3h8l2 3v14z"/><rect x="9.5" y="10" width="5" height="5"/><path d="M12 10V4.5"/>',
   spg: '<path d="M5.5 21V6h13v15z"/><path d="M8 12h8v6H8z"/><path d="M12 12V2" stroke-width="2"/><circle class="f" cx="12" cy="2.5" r="1"/>',
   td: '<path d="M5.5 21V9l3-4h7l3 4v12z"/><path d="M12 9V1" stroke-width="2"/>', aav: ctTank(5, 6.5, 2.8, 0) + '<path d="M10.8 10.7V3M13.2 10.7V3"/>',
+  cram: CT_WHEEL + '<path d="M7 5h10l2 3v11l-2 2H7l-2-2V8z"/><circle cx="12" cy="11" r="3.2"/><path d="M12 7.8V2.5M10.6 8.2l-.8-4.6M13.4 8.2l.8-4.6"/><circle class="f" cx="12" cy="11" r="1"/>',
   samv: ctTank(5, 6.5, 2.2, 0) + '<path d="M11.2 11.3V3.5M12.8 11.3V3.5"/><rect x="7.6" y="10" width="1.8" height="5" rx=".4"/><rect x="14.6" y="10" width="1.8" height="5" rx=".4"/><path d="M9.8 18h4.4"/>',
   rcn: CT_WHEEL + '<path d="M8 5h8l2 3v10l-2 2H8l-2-2V8z"/><circle cx="12" cy="12" r="2"/><path d="M12 10V4"/>',
   flt: ctTank(5.5, 7, 3, 4) + '<path d="M12 6.5c-1.5-1-1.5-3 0-4.5 1.5 1.5 1.5 3.5 0 4.5z"/>', mnt: ctTank(5.5, 6.5, 2.6, 3) + '<rect x="5" y="1.5" width="14" height="3"/><path d="M8 4.5v2M16 4.5v2"/>',
@@ -118,6 +119,21 @@ const CT_IC = {
   eheli: '<path d="M2 5.5h20M12 5.5v4"/><ellipse cx="12" cy="13" rx="3.5" ry="4"/><path d="M12 17v5M9 21.5h6M4 14h4.5M15.5 14H20"/>',
   eftr: '<path d="M12 2l1.4 5.6 7.6 6.4v2l-7.6-2.2-.3 3.8 2.6 2v1.6L12 20.4l-3.7 1.2V20l2.6-2-.3-3.8L3 16v-2l7.6-6.4z"/><path d="M7 20.5h10" stroke-dasharray="1.5 1.5"/>'
 };
+// 照真实装备外形重画的图标（icons.js）：单兵武器、装甲车辆、火炮、舰艇侧视，飞机俯视
+if (typeof WI === 'object') Object.assign(CT_IC, {
+  rifle: WI.qbz191, mg: WI.qjy201, marine: WI.qbz191 + '<path d="M3 21.5q2.25-2 4.5 0t4.5 0 4.5 0 4.5 0"/>', ranger: WI.qbz191 + '<path class="f" d="M20 2.6l1.6 1.6L20 5.8l-1.6-1.6z"/>',
+  sniper: WI.qbu202, at: WI.pf98, flame: WI.pf97, pmortar: WI.pp87, manpads: WI.qw2,
+  egar: WI.m4a1, emg: WI.m240, emanpads: WI.stinger, esniper: WI.m2010, eat: WI.javelin,
+  lt: WI.ztq15, tank: WI.ztz96b, tank76: WI.ztz96b + ctDots(1), hv: WI.ztz99a, amt: WI.ztd05, amh: WI.ztd05f, apc: WI.zsl92b, ifv: WI.zbd05, spg: WI.plz07, td: WI.ptl02,
+  aav: WI.pgz07, samv: WI.pgl625, cram: WI.ld2000, rcn: WI.zbl08, flt: WI.zbd04a, mnt: WI.ztz96m, dozer: WI.gcz110,
+  ecar: WI.m1117, m10: WI.m10, m1a1: WI.m1a1, m1a2: WI.m1a2, m1134: WI.m1134, m109: WI.m109, m2a3: WI.m2a3, m163: WI.m163, mshorad: WI.mshorad, lpws: WI.lpws, m1127: WI.m1127, m1150: WI.m1150,
+  fgun: WI.m119, how: WI.m777, hhow: WI.m110, rkt: WI.m270, mortar: WI.m252, hmortar: WI.m120, aa: WI.m167, haa: WI.bofors, raa: WI.cram, tel: WI.himars, ascm: WI.nmesis, radar: WI.tps80,
+  ecoastl: WI.m119 + '<path d="M3 21.5q2.25-1.6 4.5 0t4.5 0 4.5 0 4.5 0" stroke-dasharray="1.4 1.4"/>', ecoastm: WI.m777 + '<path d="M13 21.5q2.25-1.6 4.5 0t4.5 0" stroke-dasharray="1.4 1.4"/>',
+  lct: WI.t271, lci: WI.t074a, lcvp: WI.lcvp, lst: WI.t072a, lsm: WI.t073a, ls: WI.t072, rlct: WI.rkboat, lcs: WI.gunboat, sweep: WI.t082,
+  dd: WI.t052d, ddh: WI.t052d + ctDots(1), dde: WI.t054a, cl: WI.t055, ca: WI.t055 + ctDots(1), cv: WI.t003, cve: WI.t075,
+  arecon: WI.kj600, awz7: WI.wz7, astrike: WI.j35, aj35: WI.j35, agj11: WI.gj11, aj15: WI.j15, acas: WI.gj2, aftr: WI.j20, heavy: WI.h6k, heli: WI.z10,
+  ega: WI.a10, eheli: WI.ah64, eftr: WI.f35, tbm: WI.df15b, hj12: WI.hj12, lcac: WI.lcac
+});
 
 // —— 条目 —— e(id, 名称, 阵营, 分类, 原型, 点数, 图标, [耐久, 装甲, 火力, 射程, 速度, 视野, 人数], 说明, spawn, 附加)
 const CATALOG = [];
@@ -139,6 +155,8 @@ ctE('p_sniper', '狙击小组（QBU-202）', 'p', 'inf', 'inf_p', 14, CT_IC.snip
   { kind: 'cargo', at: 'cargo', men: ['radio', 'rifle'], mod: { pow: 2.2, rng: 1.7, rof: .55, sup: .5 } }, { counters: ['inf_e'], weakTo: ['mortar'] });
 ctE('p_at', '反坦克火箭组（PF-98）', 'p', 'inf', 'inf_p', 15, CT_IC.at, [3, 0, 3, 4, 5, 5, 3], '携带火箭筒，专打装甲车辆与坦克；对步兵火力偏弱。',
   { kind: 'cargo', at: 'cargo', men: ['radio', 'rifle', 'rifle'], mod: { at: 1.5, pow: .85 } }, { counters: ['veh', 'car_e'], weakTo: ['inf_e', 'mortar'] });
+ctE('p_hj12', '红箭-12 反坦克导弹组', 'p', 'inf', 'inf_p', 22, CT_IC.hj12, [3, 0, 4, 8, 5, 6, 3], '发射后不管的攻顶反坦克导弹：射程比火箭筒远得多（约 270），从顶部击穿主战坦克，专打 M1A2、布雷德利与反坦克车；对步兵火力弱，价格较贵。',
+  { kind: 'cargo', at: 'cargo', men: ['radio', 'rifle', 'rifle'], mod: { at: 2, atPen: 3.4, rng: 1.6, pow: .7 } }, { counters: ['e_tank', 'e_hv_tank', 'e_td', 'e_apc', 'car_e'], weakTo: ['inf_e', 'mortar'] });
 ctE('p_flame', '温压火箭组（PF-97）', 'p', 'inf', 'inf_p', 16, CT_IC.flame, [3, 0, 7, 2, 5, 5, 3], 'PF-97 单兵温压火箭：近距发射温压弹，对碉堡、堑壕毁灭性，压制与杀伤极强；射程很短，接近途中伤亡大。',
   { kind: 'cargo', at: 'cargo', men: ['radio', 'rifle', 'rifle'], mod: { rng: .45, sup: 2.6, pow: 1.7 }, tag: 'flame' }, { counters: ['bunker', 'trench'], weakTo: ['e_mg_nest', 'e_ambush'] });
 ctE('p_eng', '战斗工兵组', 'p', 'inf', 'eng_p', 12, CT_IC.eng, [3, 0, 1, 2, 5, 4, 3], '排除雷区、剪开铁丝网、修建补给网；本身几乎没有火力，需要步兵掩护。',
@@ -181,6 +199,8 @@ ctE('p_aa_veh', 'PGZ-07 双 35 毫米自行高炮', 'p', 'armor', 'veh', 35, CT_
   { kind: 'veh', at: 'vcargo', type: 'aa_veh' }, { counters: ['inf_e'], weakTo: ['e_at_casemate', 'arty'] });
 ctE('p_sam_veh', 'PGL-625 弹炮结合防空车', 'p', 'armor', 'veh', 55, CT_IC.samv, [4, 1, 6, 8, 6, 7, 3], '双联装机关炮加 8 枚近程防空导弹：机炮打 260 内的飞机，导弹打 520 内的飞机，还能拦截落向附近 450 以内的战术弹道导弹与飞近的岸舰导弹；每 30 秒补装一枚导弹。装甲薄，跟在步兵后面。',
   { kind: 'veh', at: 'vcargo', type: 'sam_veh' }, { counters: ['e_air_ga', 'e_air_heli', 'e_air_ftr', 'e_tel', 'e_ascm'], weakTo: ['e_at_casemate', 'arty'] });
+ctE('p_ld2000', 'LD-2000 陆基近防炮', 'p', 'armor', 'veh', 50, CT_IC.cram, [4, 1, 5, 6, 6, 6, 3], '1130 型 11 管 30 毫米近防炮装上 8×8 越野车：在空中打掉 260 以内落向我军的榴弹、迫击炮弹、火箭弹，也打低空飞机；不能对付坦克，跟在步兵、补给点、指挥所旁边最有用。',
+  { kind: 'veh', at: 'vcargo', type: 'aa_veh', mod: { cram: 1 } }, { counters: ['e_how', 'e_mortar', 'e_rkt', 'arty', 'mortar'], weakTo: ['e_tank', 'inf_e'] });
 ctE('p_recon', '08 式轮式侦察车', 'p', 'armor', 'veh', 22, CT_IC.rcn, [3, 1, 2, 4, 9, 9, 3], '轮式侦察车：速度快、视野远，用来发现纵深火力点；一碰就伤。',
   { kind: 'veh', at: 'vcargo', type: 'recon' }, { counters: ['arty', 'mortar'], weakTo: ['bunker', 'e_at'] });
 ctE('p_flame_tank', 'ZBD-04A 温压火箭突击车', 'p', 'armor', 'veh', 50, CT_IC.flt, [6, 3, 8, 3, 5, 5, 4], '解放军没有喷火坦克，这里改为步兵战车底盘的温压火箭车：近距发射温压弹，对碉堡与堑壕极具毁灭性；射程短，必须抵近。',
@@ -199,6 +219,8 @@ ctE('p_lcvp', '人员登陆艇', 'p', 'naval', 'ship', 12, CT_IC.lcvp, [3, 0, 0,
   { kind: 'ship', at: 'sea', ship: 'assault', cap: 3, hp: 6, pre: 'LV', def: ['p_rifle', 'p_rifle', 'p_mg'] }, { weakTo: ['bunker', 'obst'] });
 ctE('p_lst', '072A 型坦克登陆舰', 'p', 'naval', 'ship', 35, CT_IC.lst, [8, 1, 0, 0, 4, 3, 0], '抢滩后放下首门，把装载的坦克与装甲车逐辆开上岸（最多 3 辆）；建议作为第二波。',
   { kind: 'ship', at: 'sea', ship: 'lst', vcap: 3, hp: 16, pre: 'LT', wave: 2, def: ['p_tank', 'p_tank', 'p_apc'] }, { weakTo: ['coastal'] });
+ctE('p_lcac', '726 型气垫登陆艇', 'p', 'naval', 'ship', 34, CT_IC.lcac, [4, 1, 0, 0, 10, 3, 0], '气垫登陆艇：航速是普通登陆艇的两倍多，从水面障碍、浅滩上直接冲上滩头，载 1 辆坦克或装甲车，让装甲最先抵滩；艇体单薄，挨不住岸炮。',
+  { kind: 'ship', at: 'sea', ship: 'lst', vcap: 1, hp: 8, pre: 'LC', spdK: 2.2, hover: true, def: ['p_tank'] }, { counters: ['obst', 'e_tetra', 'e_hedgehog'], weakTo: ['coastal', 'e_how'] });
 ctE('p_lsm', '073A 型中型登陆舰', 'p', 'naval', 'ship', 30, CT_IC.lsm, [6, 1, 0, 0, 5, 3, 6], '载 2 辆车与 2 个小组的中型登陆舰，兼顾人员与装甲：自带步枪组与机枪组，车辆自选装载。',
   { kind: 'ship', at: 'sea', ship: 'lst', vcap: 2, cap: 2, hp: 13, pre: 'LM', wave: 2, def: ['p_tank', 'p_apc', 'p_rifle', 'p_mg'] }, { weakTo: ['coastal'] });
 ctE('p_supply', '072 型后勤登陆舰', 'p', 'naval', 'ship', 30, CT_IC.ls, [6, 1, 0, 0, 4, 3, 10], '自带 4 个小组与 3 名工兵：抢滩后建立滩头补给站与浮桥补给线，为附近部队补充弹药、恢复士气。',
@@ -227,25 +249,25 @@ ctE('p_cve', '075 型两栖攻击舰', 'p', 'air', 'cv', 90, CT_IC.cve, [6, 1, 0
   { kind: 'cv', at: 'sea', hp: 18, wing: 6 }, { weakTo: ['coastal'] });
 
 // ———— 进攻方 · 舰载机（需要航母，无需位置）————
-ctE('p_air_recon', '空警-600 预警侦察机', 'p', 'air', 'wing', 15, CT_IC.arecon, [2, 0, 0, 0, 9, 10, 0], '纵贯飞越敌岸照相侦察，揭示火力点；易被高炮击落。',
+ctE('p_air_recon', '空警-600 舰载预警机', 'p', 'air', 'wing', 15, CT_IC.arecon, [2, 0, 0, 0, 7, 10, 0], '福建舰弹射起飞的固定翼预警机：纵贯飞越敌岸照相侦察、揭示火力点；涡桨机慢，易被高炮击落。',
   { kind: 'wing', at: 'air', type: 'recon', n: 1 }, { counters: ['arty', 'coastal'], weakTo: ['aa'] });
-ctE('p_air_recon_lr', '无侦-7 高空侦察机', 'p', 'air', 'wing', 20, CT_IC.arecon + ctDots(1), [3, 0, 0, 0, 9, 10, 0], '高空远程侦察，照相成果保留更久、覆盖更宽。',
-  { kind: 'wing', at: 'air', type: 'recon', n: 1, v: 'lr' }, { counters: ['arty', 'coastal'], weakTo: ['e_aa_radar'] });
-ctE('p_air_strike', '歼-15 舰载攻击机', 'p', 'air', 'wing', 22, CT_IC.astrike, [3, 0, 7, 0, 8, 4, 0], '沿进场方向投下三连弹，可摧毁已标定的炮位与碉堡。',
-  { kind: 'wing', at: 'air', type: 'strike', n: 1 }, { counters: ['coastal', 'arty', 'bunker'], weakTo: ['aa'] });
-ctE('p_air_dive', '攻击-11 隐身无人攻击机', 'p', 'air', 'wing', 26, CT_IC.astrike + ctDots(1), [3, 0, 8, 0, 8, 4, 0], '轰炸机（Y 键）。对点目标俯冲，投下两枚重磅炸弹，几乎正中岸防炮、碉堡；俯冲时更容易被高炮打中。',
+ctE('p_air_recon_lr', '无侦-7 高空无人侦察机（战区）', 'p', 'air', 'wing', 20, CT_IC.awz7, [3, 0, 0, 0, 7, 10, 0], '菱形连翼的高空长航时无人机，从战区机场起飞、不占航母机库：在两万米高空飞过，高炮够不着，照相带更宽、成果保留更久。',
+  { kind: 'wing', at: 'none', type: 'recon', n: 1, v: 'lr', land: true }, { counters: ['arty', 'coastal'], weakTo: ['e_air_ftr'] });
+ctE('p_air_strike', '歼-35 隐身舰载战斗机', 'p', 'air', 'wing', 30, CT_IC.aj35, [3, 0, 7, 6, 9, 5, 0], '攻击机（T 键）。隐身舰载战斗机：内埋弹舱的精确制导炸弹在目标 170 外投放后立即掉头，不飞进敌防空圈；雷达难发现、防空难打中。',
+  { kind: 'wing', at: 'air', type: 'strike', n: 1 }, { counters: ['coastal', 'arty', 'bunker', 'aa'], weakTo: ['e_air_ftr'] });
+ctE('p_air_ftr_adv', '歼-35（防空压制型）', 'p', 'air', 'wing', 32, CT_IC.aj35 + ctDots(1), [3, 0, 7, 8, 9, 6, 0], '攻击机（T 键）。挂反辐射导弹的歼-35：在 300 外自动瞄准目标附近已知的敌高炮、防空车与暴露的防空导弹组，为对地支援机、攻击机打开空中通道；指挥员会在敌防空强的地域先派它去。',
+  { kind: 'wing', at: 'air', type: 'strike', n: 1, v: 'sead' }, { counters: ['aa', 'e_aa_radar', 'e_sam_veh', 'e_aa_veh', 'e_manpads'], weakTo: ['e_air_ftr'] });
+ctE('p_air_dive', '攻击-11 隐身无人攻击机', 'p', 'air', 'wing', 26, CT_IC.agj11, [3, 0, 8, 0, 8, 4, 0], '轰炸机（Y 键）。飞翼布局的隐身无人攻击机：对点目标俯冲，投下两枚重磅炸弹，几乎正中岸防炮、碉堡；俯冲时更容易被高炮打中。',
   { kind: 'wing', at: 'air', type: 'bomber', n: 1, v: 'dive' }, { counters: ['coastal', 'bunker'], weakTo: ['aa'] });
-ctE('p_air_heavy', '轰-6K 轰炸机', 'p', 'air', 'wing', 34, CT_IC.heavy, [4, 0, 10, 0, 6, 3, 0], '轰炸机（Y 键）。沿进场方向投下六枚重磅炸弹地毯轰炸，覆盖炮兵阵地群与堑壕；飞得高，轻型高炮不易打中；散布大，离我军 150 以内慎用。',
-  { kind: 'wing', at: 'air', type: 'bomber', n: 1, v: 'heavy' }, { counters: ['arty', 'trench', 'wire'], weakTo: ['e_aa_heavy'] });
-ctE('p_air_cas', '攻击-2 察打一体无人机', 'p', 'air', 'wing', 22, CT_IC.acas, [3, 0, 6, 0, 8, 5, 0], '在受压制的我军上空盘旋扫射，持续约 40 秒。',
-  { kind: 'wing', at: 'air', type: 'cas', n: 1 }, { counters: ['inf_e', 'mortar'], weakTo: ['aa'] });
-ctE('p_air_fb', '歼-15T 战斗攻击机', 'p', 'air', 'wing', 28, CT_IC.acas + ctDots(1), [3, 0, 7, 0, 9, 5, 0], '到场先投一枚炸弹再扫射，盘旋时间较短。',
+ctE('p_air_heavy', '轰-6K 轰炸机（战区）', 'p', 'air', 'wing', 34, CT_IC.heavy, [4, 0, 10, 0, 6, 3, 0], '轰炸机（Y 键）。陆基中程轰炸机，从战区机场起飞、不占航母机库：沿进场方向投下六枚重磅炸弹地毯轰炸炮兵阵地群与堑壕；飞得高，轻型高炮不易打中；散布大，离我军 150 以内慎用。',
+  { kind: 'wing', at: 'none', type: 'bomber', n: 1, v: 'heavy', land: true }, { counters: ['arty', 'trench', 'wire'], weakTo: ['e_aa_heavy', 'e_air_ftr'] });
+ctE('p_air_cas', '攻击-2 察打一体无人机（战区）', 'p', 'air', 'wing', 22, CT_IC.acas, [3, 0, 6, 0, 5, 7, 0], '对地支援（V 键）。长航时察打一体无人机，从战区机场起飞、不占航母机库：在受压制的我军上空盘旋 60 秒，用机载导弹点名守军。',
+  { kind: 'wing', at: 'none', type: 'cas', n: 1, land: true }, { counters: ['inf_e', 'mortar'], weakTo: ['aa', 'e_manpads'] });
+ctE('p_air_fb', '歼-15T 舰载战斗机', 'p', 'air', 'wing', 28, CT_IC.aj15, [3, 0, 7, 0, 9, 5, 0], '对地支援（V 键）。福建舰弹射型歼-15：到场先投一枚炸弹再扫射，盘旋时间较短。',
   { kind: 'wing', at: 'air', type: 'cas', n: 1, v: 'fb' }, { counters: ['inf_e', 'bunker'], weakTo: ['aa'] });
-ctE('p_air_ftr', '歼-15 舰载战斗机', 'p', 'air', 'wing', 26, CT_IC.aftr, [3, 0, 6, 7, 10, 7, 0], '制空战斗机（W 键）：在指定空域巡逻 90 秒，以 4 枚空空导弹与机炮拦截敌攻击机、武装直升机与歼击机，夺取制空权；我方掌握制空权后敌机难以出动。航母自动派机时会自动起飞拦截。',
-  { kind: 'wing', at: 'air', type: 'fighter', n: 1 }, { counters: ['e_air_ga', 'e_air_heli', 'e_air_ftr'], weakTo: ['p_air_ftr_adv', 'e_aa_radar'] });
-ctE('p_air_ftr_adv', '歼-35 隐身舰载战斗机', 'p', 'air', 'wing', 36, CT_IC.aftr + ctDots(1), [4, 0, 8, 8, 10, 8, 0], '战斗机（W 键）。携 6 枚空空导弹、命中率更高，空战中明显占优；价格较高。',
-  { kind: 'wing', at: 'air', type: 'fighter', n: 1, v: 'adv' }, { counters: ['e_air_ftr', 'e_air_ga', 'e_air_heli'], weakTo: ['e_aa_radar'] });
-ctE('p_air_heli', '直-10 武装直升机', 'p', 'air', 'wing', 30, CT_IC.heli, [3, 1, 6, 0, 5, 6, 0], '低空悬停时间长达 70 秒，扫射压制更强；速度慢。',
+ctE('p_air_ftr', '歼-20 隐身战斗机（战区）', 'p', 'air', 'wing', 36, CT_IC.aftr, [3, 0, 7, 9, 10, 8, 0], '制空战斗机（W 键），从战区机场起飞、不占航母机库：在指定空域巡逻 90 秒，4 枚霹雳-15（射程比敌 AIM-120 远）加 2 枚霹雳-10 拦截敌攻击机、武装直升机与 F-35A；隐身，敌雷达很晚才发现它。掌握制空权后敌机难以出动。',
+  { kind: 'wing', at: 'none', type: 'fighter', n: 1, land: true }, { counters: ['e_air_ga', 'e_air_heli', 'e_air_ftr'], weakTo: ['e_aa_radar'] });
+ctE('p_air_heli', '直-10 武装直升机', 'p', 'air', 'wing', 30, CT_IC.heli, [3, 1, 6, 0, 5, 6, 0], '对地支援（V 键）。从两栖攻击舰起飞：低空悬停时间长达 70 秒，扫射压制更强；速度慢。',
   { kind: 'wing', at: 'air', type: 'cas', n: 1, v: 'heli' }, { counters: ['inf_e', 'mortar'], weakTo: ['aa', 'e_aa_heavy'] });
 
 // ———— 进攻方 · 支援 ————
@@ -285,10 +307,10 @@ ctE('e_reserve', '机动预备队（步兵连）', 'e', 'inf', 'inf_e', 28, CT_I
   { kind: 'einf', at: 'land', role: 'reserve', teams: 3, men: ['rifle', 'rifle', 'mg'] }, { counters: ['p_rifle'], weakTo: ['p_air_cas', 'veh'] });
 ctE('e_assault', '反击突击连', 'e', 'inf', 'inf_e', 40, CT_IC.easlt, [7, 0, 6, 5, 4, 6, 10], '四个精锐小组，士气高、射击准，用于夺回失守的据点。',
   { kind: 'einf', at: 'land', role: 'reserve', teams: 4, men: ['rifle', 'mg', 'mg'], mod: { pow: 1.15 }, morale: 92 }, { counters: ['p_rifle', 'p_eng'], weakTo: ['p_air_cas', 'arty'] });
-ctE('e_sniper', '狙击手（M2010）', 'e', 'inf', 'inf_e', 12, CT_IC.sniper, [2, 0, 4, 9, 3, 8, 2], '两人狙击组，优先射杀通讯兵，令登陆部队视野与指挥中断。',
+ctE('e_sniper', '狙击手（M2010）', 'e', 'inf', 'inf_e', 12, CT_IC.esniper, [2, 0, 4, 9, 3, 8, 2], '两人狙击组，优先射杀通讯兵，令登陆部队视野与指挥中断。',
   { kind: 'einf', at: 'land', role: 'garrison', teams: 1, men: ['rifle', 'rifle'], mod: { pow: 2.2, rng: 1.6, rof: .55, sup: .5 } }, { counters: ['p_fo', 'p_hq'], weakTo: ['mortar', 'p_air_cas'] });
-ctE('e_at', '标枪反坦克组（FGM-148）', 'e', 'inf', 'inf_e', 20, CT_IC.at, [4, 0, 3, 4, 3, 5, 6], '两个携带反坦克火箭的小组，伏击上岸的坦克与装甲车。',
-  { kind: 'einf', at: 'land', role: 'garrison', teams: 2, men: ['rifle', 'rifle', 'rifle'], mod: { at: 1.5, pow: .85 } }, { counters: ['veh'], weakTo: ['p_rifle', 'p_mg'] });
+ctE('e_at', '标枪反坦克组（FGM-148）', 'e', 'inf', 'inf_e', 20, CT_IC.eat, [4, 0, 3, 4, 3, 5, 6], '两个标枪导弹组：发射后不管、攻顶，射程约 270，从顶部击穿上岸的坦克与装甲车。',
+  { kind: 'einf', at: 'land', role: 'garrison', teams: 2, men: ['rifle', 'rifle', 'rifle'], mod: { at: 1.5, atPen: 3.4, rng: 1.6, pow: .8 } }, { counters: ['veh'], weakTo: ['p_rifle', 'p_mg'] });
 ctE('e_militia', '国民警卫队步兵', 'e', 'inf', 'inf_e', 14, CT_IC.emil, [4, 0, 2, 4, 3, 5, 9], '便宜的地方武装，人数多但射击差、容易溃散；适合填充次要据点。',
   { kind: 'einf', at: 'land', role: 'garrison', teams: 3, men: ['rifle', 'rifle', 'rifle'], mod: { pow: .65, sup: .8 }, morale: 40 }, { weakTo: ['p_rifle', 'p_mg', 'veh'] });
 ctE('e_eng', '守军工兵', 'e', 'inf', 'eng_e', 15, CT_IC.eeng, [3, 0, 2, 4, 3, 5, 3], '抢修 40 以内受损的碉堡与炮位，每秒恢复少量耐久。',
@@ -299,25 +321,27 @@ ctE('e_manpads', '毒刺防空组（FIM-92）', 'e', 'inf', 'inf_e', 22, CT_IC.e
 // ———— 防守方 · 装甲 ————
 ctE('e_car', 'M1117 装甲警戒车', 'e', 'armor', 'car_e', 25, CT_IC.ecar, [4, 2, 3, 5, 8, 7, 3], '轮式装甲车：在镇子待命，据点受威胁时驰援，以车载机枪扫射；轻武器打不穿。',
   { kind: 'car', at: 'land' }, { counters: ['p_rifle', 'p_eng'], weakTo: ['p_at', 'p_td', 'p_air_strike'] });
-ctE('e_lt_tank', 'M10 布克轻型坦克', 'e', 'armor', 'veh', 30, CT_IC.lt, [4, 2, 4, 5, 8, 6, 4], '快速机动的轻坦克，作为预备队反击滩头。',
+ctE('e_lt_tank', 'M10 布克轻型坦克', 'e', 'armor', 'veh', 30, CT_IC.m10, [4, 2, 4, 5, 8, 6, 4], '快速机动的轻坦克，作为预备队反击滩头。',
   { kind: 'veh', at: 'land', type: 'lt_tank' }, { counters: ['inf_p'], weakTo: ['p_at', 'p_td'] });
-ctE('e_tank', 'M1A1 艾布拉姆斯主战坦克', 'e', 'armor', 'veh', 45, CT_IC.tank, [6, 3, 6, 6, 6, 6, 5], '主力反击坦克，与步兵协同时对登陆部队威胁极大。',
+ctE('e_tank', 'M1A1 艾布拉姆斯主战坦克', 'e', 'armor', 'veh', 45, CT_IC.m1a1, [6, 3, 6, 6, 6, 6, 5], '主力反击坦克，与步兵协同时对登陆部队威胁极大。',
   { kind: 'veh', at: 'land', type: 'tank' }, { counters: ['inf_p', 'p_lt_tank'], weakTo: ['p_td', 'p_air_strike', 'p_dd'] });
-ctE('e_hv_tank', 'M1A2 SEPv3 艾布拉姆斯', 'e', 'armor', 'veh', 72, CT_IC.hv, [9, 4, 8, 6, 4, 5, 5], '120 毫米滑膛炮、贫铀复合装甲，正面几乎打不穿；车重 70 吨，空袭与舰炮是克星。',
+ctE('e_hv_tank', 'M1A2 SEPv3 艾布拉姆斯', 'e', 'armor', 'veh', 72, CT_IC.m1a2, [9, 4, 8, 6, 4, 5, 5], '120 毫米滑膛炮、贫铀复合装甲，正面几乎打不穿；车重 70 吨，空袭与舰炮是克星。',
   { kind: 'veh', at: 'land', type: 'hv_tank' }, { counters: ['p_tank', 'inf_p'], weakTo: ['p_air_dive', 'p_ca'] });
-ctE('e_td', 'M1134 斯特赖克反坦克车', 'e', 'armor', 'veh', 48, CT_IC.td, [5, 3, 7, 8, 5, 5, 4], '隐蔽在出口后方，专打上岸的坦克。',
+ctE('e_td', 'M1134 斯特赖克反坦克车', 'e', 'armor', 'veh', 48, CT_IC.m1134, [5, 3, 7, 8, 5, 5, 4], '隐蔽在出口后方，专打上岸的坦克。',
   { kind: 'veh', at: 'land', type: 'td' }, { counters: ['p_tank', 'p_amtank'], weakTo: ['inf_p', 'arty'] });
-ctE('e_spg', 'M109A7 帕拉丁自行榴弹炮', 'e', 'armor', 'veh', 48, CT_IC.spg, [4, 1, 7, 9, 5, 4, 4], '机动的炮兵：对已发现的目标间接射击，打完就换位。',
+ctE('e_spg', 'M109A7 帕拉丁自行榴弹炮', 'e', 'armor', 'veh', 48, CT_IC.m109, [4, 1, 7, 9, 5, 4, 4], '机动的炮兵：对已发现的目标间接射击，打完就换位。',
   { kind: 'veh', at: 'land', type: 'spg' }, { counters: ['inf_p'], weakTo: ['p_air_strike', 'p_recon'] });
-ctE('e_apc', 'M2A3 布雷德利步兵战车', 'e', 'armor', 'veh', 28, CT_IC.apc, [5, 2, 2, 4, 7, 5, 2], '车载机枪支援反击，轻武器打不穿。',
+ctE('e_apc', 'M2A3 布雷德利步兵战车', 'e', 'armor', 'veh', 28, CT_IC.m2a3, [5, 2, 2, 4, 7, 5, 2], '车载机枪支援反击，轻武器打不穿。',
   { kind: 'veh', at: 'land', type: 'apc' }, { counters: ['inf_p'], weakTo: ['p_at', 'veh'] });
-ctE('e_aa_veh', 'M163 火神自行高炮', 'e', 'armor', 'veh', 34, CT_IC.aav, [4, 1, 6, 5, 6, 5, 4], '伴随预备队的机动高炮，也能平射压制步兵。',
+ctE('e_aa_veh', 'M163 火神自行高炮', 'e', 'armor', 'veh', 34, CT_IC.m163, [4, 1, 6, 5, 6, 5, 4], '伴随预备队的机动高炮，也能平射压制步兵。',
   { kind: 'veh', at: 'land', type: 'aa_veh' }, { counters: ['wing', 'inf_p'], weakTo: ['p_tank', 'p_dd'] });
-ctE('e_sam_veh', 'M-SHORAD 防空车（斯特赖克）', 'e', 'armor', 'veh', 52, CT_IC.samv, [4, 1, 6, 8, 6, 7, 3], '弹炮合一的机动防空车：机关炮与近程导弹打 520 内的敌机，还能拦截落向附近的敌战术导弹；放在指挥所、机场、炮兵阵地附近最有用，导弹尾焰会暴露位置。',
+ctE('e_sam_veh', 'M-SHORAD 防空车（斯特赖克）', 'e', 'armor', 'veh', 52, CT_IC.mshorad, [4, 1, 6, 8, 6, 7, 3], '弹炮合一的机动防空车：机关炮与近程导弹打 520 内的敌机，还能拦截落向附近的敌战术导弹；放在指挥所、机场、炮兵阵地附近最有用，导弹尾焰会暴露位置。',
   { kind: 'veh', at: 'land', type: 'sam_veh' }, { counters: ['wing', 'p_tbm'], weakTo: ['p_tank', 'p_air_dive'] });
-ctE('e_recon', 'M1127 斯特赖克侦察车', 'e', 'armor', 'veh', 22, CT_IC.rcn, [3, 1, 2, 4, 9, 9, 3], '快速侦察，为炮兵指示目标。',
+ctE('e_lpws', 'LPWS 陆基密集阵（C-RAM）', 'e', 'armor', 'veh', 50, CT_IC.lpws, [4, 1, 5, 6, 3, 6, 3], '陆基型“密集阵”20 毫米近防炮：在空中打掉 260 以内落下的舰炮炮弹、迫击炮弹与火箭弹，保护指挥所、机场与炮兵阵地；开火曳光会暴露位置。',
+  { kind: 'veh', at: 'land', type: 'aa_veh', mod: { cram: 1 } }, { counters: ['p_dd', 'p_mortar', 'p_rocket', 'p_spg'], weakTo: ['p_tank', 'p_air_strike'] });
+ctE('e_recon', 'M1127 斯特赖克侦察车', 'e', 'armor', 'veh', 22, CT_IC.m1127, [3, 1, 2, 4, 9, 9, 3], '快速侦察，为炮兵指示目标。',
   { kind: 'veh', at: 'land', type: 'recon' }, { counters: ['p_eng'], weakTo: ['p_mg', 'veh'] });
-ctE('e_flame_tank', 'M1150 突击破障车', 'e', 'armor', 'veh', 48, CT_IC.flt, [6, 3, 8, 3, 5, 5, 4], '美军没有喷火坦克，这里改为艾布拉姆斯底盘的突击破障车：近距发射直列爆破装药与温压弹，对挤在一起的登陆部队与工事极其致命。',
+ctE('e_flame_tank', 'M1150 突击破障车', 'e', 'armor', 'veh', 48, CT_IC.m1150, [6, 3, 8, 3, 5, 5, 4], '美军没有喷火坦克，这里改为艾布拉姆斯底盘的突击破障车：近距发射直列爆破装药与温压弹，对挤在一起的登陆部队与工事极其致命。',
   { kind: 'veh', at: 'land', type: 'flame_tank' }, { counters: ['inf_p'], weakTo: ['p_td', 'p_at'] });
 
 // ———— 防守方 · 碉堡与火炮 ————
@@ -331,9 +355,9 @@ ctE('e_pillbox', '小型碉堡', 'e', 'fort', 'bunker', 18, CT_IC.pillbox, [4, 3
   { kind: 'enemy', at: 'land', ek: 'bunker', hp: .65, mod: { rng: .85 } }, { counters: ['inf_p'], weakTo: ['p_flame', 'veh'] });
 ctE('e_flak_tower', '高射炮塔', 'e', 'fort', 'aa', 45, CT_IC.flak, [9, 5, 5, 6, 0, 5, 4], '钢筋混凝土高炮塔，耐久极高，持续威胁舰载机。',
   { kind: 'enemy', at: 'land', ek: 'aa', hp: 3, mod: { aa: 1.3 } }, { counters: ['wing'], weakTo: ['p_ca'] });
-ctE('e_coastal_l', '轻型岸防炮（M119 105 毫米）', 'e', 'arty', 'coastal', 35, CT_IC.coastal + ctBars(1), [5, 3, 5, 6, 0, 7, 4], '中小口径速射岸炮，射程较近但射速快，专打登陆艇。',
+ctE('e_coastal_l', '轻型岸防炮（M119 105 毫米）', 'e', 'arty', 'coastal', 35, CT_IC.ecoastl + ctBars(1), [5, 3, 5, 6, 0, 7, 4], '中小口径速射岸炮，射程较近但射速快，专打登陆艇。',
   { kind: 'enemy', at: 'coast', ek: 'coastal', hp: .65, mod: { rof: 1.7, rng: .8 } }, { counters: ['p_lct', 'p_lcvp'], weakTo: ['p_dd', 'p_air_strike'] });
-ctE('e_coastal_m', '中型岸防炮（M777 155 毫米）', 'e', 'arty', 'coastal', 48, CT_IC.coastal + ctBars(2), [6, 4, 7, 8, 0, 7, 5], '兼顾射速与射程的岸炮。',
+ctE('e_coastal_m', '中型岸防炮（M777 155 毫米）', 'e', 'arty', 'coastal', 48, CT_IC.ecoastm + ctBars(2), [6, 4, 7, 8, 0, 7, 5], '兼顾射速与射程的岸炮。',
   { kind: 'enemy', at: 'coast', ek: 'coastal', hp: .85, mod: { rof: 1.25, rng: .92 } }, { counters: ['ship'], weakTo: ['p_dd', 'p_air_strike'] });
 ctE('e_coastal_h', '岸防重炮', 'e', 'arty', 'coastal', 60, CT_IC.coastal + ctBars(3), [8, 5, 9, 9, 0, 8, 6], '射程 600 的重炮，可威胁驱逐舰与航母；雷达站在时可夜视海面。',
   { kind: 'enemy', at: 'coast', ek: 'coastal', hp: 1 }, { counters: ['dd', 'cv', 'ship'], weakTo: ['p_ranger', 'p_air_dive', 'p_ca'] });
@@ -373,7 +397,7 @@ ctE('e_air_heli', 'AH-64E 阿帕奇', 'e', 'air', 'ewing', 40, CT_IC.eheli, [3, 
   { kind: 'ewing', at: 'air', type: 'heli' }, { counters: ['veh', 'p_lst'], weakTo: ['p_manpads', 'p_aa_veh', 'p_mg'] });
 
 ctE('e_air_ftr', 'F-35A 闪电 II 战斗机', 'e', 'air', 'ewing', 40, CT_IC.eftr, [3, 0, 6, 7, 10, 7, 0], '从野战机场起飞，在防区上空巡逻、拦截敌舰载机，以 4 枚空空导弹与机炮与敌战斗机争夺制空权；我方掌握制空权后攻击机与直升机出击更频繁。需要野战机场。',
-  { kind: 'ewing', at: 'air', type: 'ftr' }, { counters: ['p_air_cas', 'p_air_strike', 'p_air_ftr', 'wing'], weakTo: ['p_air_ftr_adv', 'p_dd', 'p_tbm'] });
+  { kind: 'ewing', at: 'air', type: 'ftr' }, { counters: ['p_air_cas', 'p_air_strike', 'p_air_ftr', 'wing'], weakTo: ['p_air_ftr', 'p_dd', 'p_tbm'] });
 
 // ———— 防守方 · 工事 ————
 ctE('e_mines_ap', '防步兵雷区', 'e', 'fort', 'mines', 15, CT_IC.mine, [0, 0, 5, 0, 0, 0, 0], '半径约 24 的雷区，踩中即伤亡并暴露；工兵可以排除。',

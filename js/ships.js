@@ -5,21 +5,8 @@
 const SHIPV = { S: null, t1: 0, t2: 0, h: {}, trail: {}, sunk: {}, pose: {}, tur: [0, 0], etur: {}, aim: null, aimT: -99 };
 const SHIP_DIM = { assault: [32, 11], supply: [42, 13], lst: [48, 14], dd: [50, 9], boat: [12, 5] };   // 长 × 宽（世界单位）
 const SH_DARK = 'rgba(2,10,6,.86)', SH_FOAM = '#d4fff0';
-// HUD 单位卡图标（24×24，艏向上）
-const SHIP_ICONS = {
-  ship: '<path d="M7 4.5h10V20a2 2 0 01-2 2H9a2 2 0 01-2-2z"/><rect class="f" x="7" y="3" width="10" height="2.2" rx=".4"/><rect x="9" y="7.2" width="6" height="8.4" rx=".5"/>' +
-    '<g class="f"><circle cx="10.6" cy="9.2" r=".9"/><circle cx="13.4" cy="9.2" r=".9"/><circle cx="10.6" cy="11.5" r=".9"/><circle cx="13.4" cy="11.5" r=".9"/><circle cx="10.6" cy="13.8" r=".9"/><circle cx="13.4" cy="13.8" r=".9"/></g>' +
-    '<rect class="f" x="9.4" y="17.4" width="5.2" height="2.6" rx=".4"/>',
-  supply: '<path d="M12 2c3.6 1 5.4 4 5.5 7.5v11a1.5 1.5 0 01-1.5 1.5H8a1.5 1.5 0 01-1.5-1.5v-11C6.6 6 8.4 3 12 2z"/><path d="M12 2.6v4.4M7 8.4h10"/>' +
-    '<g class="f"><rect x="8.5" y="10.2" width="3" height="2.4"/><rect x="12.5" y="10.2" width="3" height="2.4"/><rect x="8.5" y="13.6" width="3" height="2.4"/><rect x="12.5" y="13.6" width="3" height="2.4"/></g>' +
-    '<rect x="8.4" y="17.6" width="7.2" height="3"/>',
-  dd: '<path d="M12 1.5c2.4 3 3.3 6.5 3.4 10.5v8.5a2 2 0 01-2 2h-2.8a2 2 0 01-2-2V12c.1-4 1-7.5 3.4-10.5z"/><circle cx="12" cy="7.6" r="1.5"/><path d="M12 6.1V3.6M12 20.1v2"/>' +
-    '<rect class="f" x="10.6" y="10" width="2.8" height="2.2" rx=".4"/><ellipse class="f" cx="12" cy="14.4" rx="1" ry="1.3"/><circle cx="12" cy="18.6" r="1.5"/>',
-  lst: '<path d="M12 1.5c3.8 1 5.6 3.8 5.7 7.2V21a1.5 1.5 0 01-1.5 1.5H7.8A1.5 1.5 0 016.3 21V8.7C6.4 5.3 8.2 2.5 12 1.5z"/><path d="M7 7.6h10"/>' +
-    '<g class="f"><rect x="9.6" y="8.8" width="4.8" height="3.4" rx=".5"/><rect x="9.6" y="13.2" width="4.8" height="3.4" rx=".5"/></g><path d="M12 10.5V7.3M12 14.9v-1.7"/><rect x="8.4" y="18" width="7.2" height="3"/>',
-  boat: '<path d="M8 5.5h8v13a2.5 2.5 0 01-2.5 2.5h-3A2.5 2.5 0 018 18.5z"/><rect class="f" x="8" y="4" width="8" height="2.2"/>' +
-    '<g class="f"><circle cx="10.5" cy="9.5" r=".9"/><circle cx="13.5" cy="9.5" r=".9"/><circle cx="10.5" cy="12.5" r=".9"/><circle cx="13.5" cy="12.5" r=".9"/></g><rect x="10.5" y="15.6" width="3" height="2.4"/>'
-};
+// HUD 单位卡图标（侧视，照真实舰型，icons.js）：271 型登陆艇、072 型后勤登陆舰、052D、072A、人员登陆艇
+const SHIP_ICONS = typeof WI === 'object' ? { ship: WI.t271, supply: WI.t072, dd: WI.t052d, lst: WI.t072a, boat: WI.lcvp } : {};
 
 // 远景放大：保证船体在适配缩放下仍有约 18px 长（各舰同一比例，保持大小关系）
 const shipK = () => clamp(18 / (32 * R.s), 1, 2.6);

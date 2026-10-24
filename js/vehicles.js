@@ -4,45 +4,28 @@
 // 推演部分（本文件上半）不碰 DOM，可在 Node 无头运行；绘制与界面函数只在浏览器里被调用
 
 // armor 0–3：能伤到它的东西（≥1 轻武器无效，只压制乘员）；gun.ap 为穿深（对照 armor），he 为榴弹威力；speed 世界单位/秒；turn 弧度/秒
-// 剪影：len 车长、wid 车宽、tur 炮塔半径（0 = 无炮塔/固定战斗室）、bar 炮管长；crew 车组人数（计入兵力、伤亡）；fuel 满油行程（世界单位，泅渡耗油加倍）
+// 剪影：len 车长、wid 车宽、tur 炮塔半径（0 = 无炮塔/固定战斗室）、bar 炮管长；crew 车组人数（计入兵力、伤亡）；fuel 满油行程（世界单位，约够一场战斗来回两趟；泅渡耗油加倍，ZTD-05 只多两成）
 const VEH_SPEC = {
-  lt_tank: { crew: 3, fuel: 3200, name: '轻型坦克', code: 'LT', hp: 26, armor: 1, speed: 25, turn: 2.2, gun: { range: 200, rof: 3.2, he: 1, ap: 1.5 }, mg: { range: 170, n: 3 }, sight: 165, amph: false, carry: 0, len: 14, wid: 8, tur: 3.2, bar: 7, ammo: 40 },
-  tank: { crew: 4, fuel: 2800, name: '中型坦克', code: 'MT', hp: 40, armor: 2, speed: 20, turn: 1.7, gun: { range: 230, rof: 4, he: 1.5, ap: 2.3 }, mg: { range: 170, n: 3 }, sight: 160, amph: false, carry: 0, len: 17, wid: 9.5, tur: 4, bar: 9, ammo: 40 },
-  hv_tank: { crew: 4, fuel: 2200, name: '重型坦克', code: 'HT', hp: 62, armor: 3, speed: 16, turn: 1.2, gun: { range: 250, rof: 5.4, he: 2, ap: 3.2 }, mg: { range: 170, n: 3 }, sight: 150, amph: false, carry: 0, len: 20, wid: 11, tur: 4.8, bar: 11, ammo: 36 },
-  amtank: { crew: 4, fuel: 2400, swimK: 1.25, name: '两栖坦克', code: 'AM', hp: 24, armor: 1, speed: 19, turn: 1.8, gun: { range: 180, rof: 3.6, he: 1.1, ap: 1.3 }, mg: { range: 160, n: 2 }, sight: 150, amph: true, carry: 0, len: 15, wid: 9, tur: 3.4, bar: 6.5, ammo: 34 },
-  apc: { crew: 2, fuel: 3500, name: '装甲运兵车', code: 'AP', hp: 24, armor: 1, speed: 25, turn: 2.2, gun: null, mg: { range: 180, n: 5 }, sight: 150, amph: false, carry: 2, len: 15, wid: 8, tur: 0, bar: 0, ammo: 0 },
-  spg: { crew: 4, fuel: 2600, name: '自行火炮', code: 'SP', hp: 22, armor: 1, speed: 16, turn: 1.4, gun: { range: 620, min: 110, rof: 7.5, he: 2.2, ap: 0, ind: true }, mg: null, sight: 130, amph: false, carry: 0, len: 17, wid: 9, tur: 0, bar: 10, ammo: 30 },
-  td: { crew: 4, fuel: 2800, name: '坦克歼击车', code: 'TD', hp: 34, armor: 2, speed: 20, turn: 1.6, gun: { range: 270, rof: 4.6, he: .9, ap: 3.6, arc: .45 }, mg: null, sight: 160, amph: false, carry: 0, len: 17, wid: 9.5, tur: 0, bar: 12, ammo: 36 },
-  aa_veh: { crew: 3, fuel: 3000, name: '自行高炮', code: 'AA', hp: 20, armor: 1, speed: 22, turn: 2, gun: null, mg: { range: 200, n: 8, quad: true }, aa: 230, sight: 170, amph: false, carry: 0, len: 14, wid: 8.5, tur: 3.6, bar: 5, ammo: 0 },
+  lt_tank: { crew: 3, fuel: 5800, name: '轻型坦克', code: 'LT', hp: 26, armor: 1, speed: 25, turn: 2.2, gun: { range: 200, rof: 3.2, he: 1, ap: 1.5 }, mg: { range: 170, n: 3 }, sight: 165, amph: false, carry: 0, len: 14, wid: 8, tur: 3.2, bar: 7, ammo: 40 },
+  tank: { crew: 4, fuel: 5000, name: '中型坦克', code: 'MT', hp: 40, armor: 2, speed: 20, turn: 1.7, gun: { range: 230, rof: 4, he: 1.5, ap: 2.3 }, mg: { range: 170, n: 3 }, sight: 160, amph: false, carry: 0, len: 17, wid: 9.5, tur: 4, bar: 9, ammo: 40 },
+  hv_tank: { crew: 4, fuel: 4000, name: '重型坦克', code: 'HT', hp: 62, armor: 3, speed: 16, turn: 1.2, gun: { range: 250, rof: 5.4, he: 2, ap: 3.2 }, mg: { range: 170, n: 3 }, sight: 150, amph: false, carry: 0, len: 20, wid: 11, tur: 4.8, bar: 11, ammo: 36 },
+  amtank: { crew: 4, fuel: 4300, swimK: 1.25, name: '两栖坦克', code: 'AM', hp: 24, armor: 1, speed: 19, turn: 1.8, gun: { range: 180, rof: 3.6, he: 1.1, ap: 1.3 }, mg: { range: 160, n: 2 }, sight: 150, amph: true, carry: 0, len: 15, wid: 9, tur: 3.4, bar: 6.5, ammo: 34 },
+  apc: { crew: 2, fuel: 6300, name: '装甲运兵车', code: 'AP', hp: 24, armor: 1, speed: 25, turn: 2.2, gun: null, mg: { range: 180, n: 5 }, sight: 150, amph: false, carry: 2, len: 15, wid: 8, tur: 0, bar: 0, ammo: 0 },
+  spg: { crew: 4, fuel: 4700, name: '自行火炮', code: 'SP', hp: 22, armor: 1, speed: 16, turn: 1.4, gun: { range: 620, min: 110, rof: 7.5, he: 2.2, ap: 0, ind: true }, mg: null, sight: 130, amph: false, carry: 0, len: 17, wid: 9, tur: 0, bar: 10, ammo: 30 },
+  td: { crew: 4, fuel: 5000, name: '坦克歼击车', code: 'TD', hp: 34, armor: 2, speed: 20, turn: 1.6, gun: { range: 270, rof: 4.6, he: .9, ap: 3.6, arc: .45 }, mg: null, sight: 160, amph: false, carry: 0, len: 17, wid: 9.5, tur: 0, bar: 12, ammo: 36 },
+  aa_veh: { crew: 3, fuel: 5400, name: '自行高炮', code: 'AA', hp: 20, armor: 1, speed: 22, turn: 2, gun: null, mg: { range: 200, n: 8, quad: true }, aa: 230, sight: 170, amph: false, carry: 0, len: 14, wid: 8.5, tur: 3.6, bar: 5, ammo: 0 },
   // 弹炮防空车：双联装机关炮（对空 aa、对地 mg）+ 近程防空导弹 sam（射程、载弹、两发间隔、每枚补装秒数），能拦截来袭导弹（vehSam）
-  sam_veh: { crew: 3, fuel: 3000, name: '弹炮防空车', code: 'SA', hp: 22, armor: 1, speed: 22, turn: 2, gun: null, mg: { range: 200, n: 4, quad: true }, aa: 260, sam: { range: 520, n: 8, cd: 2.5, regen: 30, icp: 450 }, sight: 200, amph: false, carry: 0, len: 15, wid: 9, tur: 3.8, bar: 5, ammo: 0 },
-  recon: { crew: 3, fuel: 4500, name: '侦察车', code: 'RC', hp: 14, armor: 1, speed: 34, turn: 2.6, gun: null, mg: { range: 160, n: 2 }, sight: 285, amph: false, carry: 0, wheel: true, len: 12, wid: 6.5, tur: 2.4, bar: 3, ammo: 0 },
-  flame_tank: { crew: 4, fuel: 2400, name: '喷火坦克', code: 'FL', hp: 40, armor: 2, speed: 18, turn: 1.6, gun: { range: 95, rof: 1.1, he: 0, ap: 0, flame: true }, mg: { range: 150, n: 2 }, sight: 150, amph: false, carry: 0, len: 17, wid: 9.5, tur: 3.8, bar: 6, ammo: 40 },
-  mine_tank: { crew: 4, fuel: 2200, name: '扫雷坦克', code: 'MC', hp: 40, armor: 2, speed: 15, turn: 1.4, gun: { range: 200, rof: 4.6, he: 1.3, ap: 2 }, mg: { range: 150, n: 2 }, sight: 150, amph: false, carry: 0, flail: true, len: 17, wid: 10, tur: 3.8, bar: 8, ammo: 30 }
+  sam_veh: { crew: 3, fuel: 5400, name: '弹炮防空车', code: 'SA', hp: 22, armor: 1, speed: 22, turn: 2, gun: null, mg: { range: 200, n: 4, quad: true }, aa: 260, sam: { range: 520, n: 8, cd: 2.5, regen: 30, icp: 450 }, sight: 200, amph: false, carry: 0, len: 15, wid: 9, tur: 3.8, bar: 5, ammo: 0 },
+  recon: { crew: 3, fuel: 8100, name: '侦察车', code: 'RC', hp: 14, armor: 1, speed: 34, turn: 2.6, gun: null, mg: { range: 160, n: 2 }, sight: 285, amph: false, carry: 0, wheel: true, len: 12, wid: 6.5, tur: 2.4, bar: 3, ammo: 0 },
+  flame_tank: { crew: 4, fuel: 4300, name: '喷火坦克', code: 'FL', hp: 40, armor: 2, speed: 18, turn: 1.6, gun: { range: 95, rof: 1.1, he: 0, ap: 0, flame: true }, mg: { range: 150, n: 2 }, sight: 150, amph: false, carry: 0, len: 17, wid: 9.5, tur: 3.8, bar: 6, ammo: 40 },
+  mine_tank: { crew: 4, fuel: 4000, name: '扫雷坦克', code: 'MC', hp: 40, armor: 2, speed: 15, turn: 1.4, gun: { range: 200, rof: 4.6, he: 1.3, ap: 2 }, mg: { range: 150, n: 2 }, sight: 150, amph: false, carry: 0, flail: true, len: 17, wid: 10, tur: 3.8, bar: 8, ammo: 30 }
 };
 // 各地形的车速系数（下标同 T）：道路最快，林地、沼泽、礁岸很慢；深海/浅滩只对两栖坦克有意义（泅渡 60%）
 const VEH_TSP = [.6, .6, 0, .75, .3, 0, 1, .4, .75, 0, .25, 0, 1, 1.3, .7, .45];
 const VEH_ORDER = { move: '机动', amove: '攻击前进', hold: '坚守', retreat: '后撤', clear: '扫雷开路' };
-// HUD 图标（24×24 俯视、车头向上）；hud.js 以 'v_' + 类型 合入 ICON
-const VEH_ICONS = (() => {
-  const trk = (x0, x1, y0 = 4, y1 = 21) => `<rect x="${x0}" y="${y0}" width="${x1 - x0}" height="${y1 - y0}" rx=".8"/>`;
-  const tr2 = (w = 3) => trk(12 - 7.5, 12 - 7.5 + w) + trk(12 + 7.5 - w, 12 + 7.5);
-  const tur = (r, y = 13) => `<circle cx="12" cy="${y}" r="${r}"/>`, gun = (y0, y1, w = '') => `<path d="M12 ${y0}V${y1}"${w}/>`;
-  return {
-    lt_tank: tr2(2.6) + `<rect x="7.6" y="6" width="8.8" height="14" rx=".6"/>` + tur(2.6) + gun(10.4, 3.5),
-    tank: tr2() + `<path d="M8 7l1.5-2h5L16 7v13H8z"/>` + tur(3.4) + gun(9.6, 1.5),
-    hv_tank: trk(3.5, 7.2, 3, 22) + trk(16.8, 20.5, 3, 22) + `<path d="M7.6 6l1.6-2.2h5.6L16.4 6v15H7.6z"/>` + `<rect x="8.4" y="9" width="7.2" height="8" rx="1.6"/>` + gun(9, 1, ' stroke-width="2.4"'),
-    amtank: `<path d="M12 2.5c3 1.2 5.5 3.6 6 7V21H6V9.5c.5-3.4 3-5.8 6-7z"/>` + tur(2.9, 13.5) + gun(10.6, 4.2) + `<path d="M6 18h12"/>`,
-    apc: tr2(2.4) + `<path d="M7.5 7.5L9.5 4h5l2 3.5V20h-9z"/>` + `<g class="f"><circle cx="10.4" cy="13" r=".9"/><circle cx="13.6" cy="13" r=".9"/><circle cx="10.4" cy="16.4" r=".9"/><circle cx="13.6" cy="16.4" r=".9"/></g>` + `<circle cx="12" cy="8.4" r="1.3"/>`,
-    spg: tr2() + `<rect x="8" y="5" width="8" height="15" rx=".6"/>` + `<rect x="9" y="12" width="6" height="6.5"/>` + gun(12, 1.5, ' stroke-width="2"'),
-    td: tr2() + `<path d="M8 9l2-4h4l2 4v11H8z"/>` + gun(8, .8, ' stroke-width="2"') + `<path d="M9.5 13h5"/>`,
-    aa_veh: tr2(2.6) + `<rect x="7.6" y="6" width="8.8" height="14" rx=".6"/>` + tur(3.2, 14) + `<path d="M10.6 11.4V5M13.4 11.4V5M9.6 12.5V6.8M14.4 12.5V6.8"/>`,
-    sam_veh: tr2(2.6) + `<rect x="7.6" y="6" width="8.8" height="14" rx=".6"/>` + tur(2.6, 13.5) + `<path d="M11.2 11V4.5M12.8 11V4.5"/>` + `<rect x="8.2" y="9.5" width="1.8" height="5" rx=".4"/><rect x="14" y="9.5" width="1.8" height="5" rx=".4"/>` + `<path d="M10 18.3h4"/>`,
-    recon: `<path d="M8.5 5.5L10 3.5h4l1.5 2V20h-7z"/>` + `<g class="f"><rect x="5.6" y="6" width="2.4" height="4" rx=".8"/><rect x="16" y="6" width="2.4" height="4" rx=".8"/><rect x="5.6" y="15" width="2.4" height="4" rx=".8"/><rect x="16" y="15" width="2.4" height="4" rx=".8"/></g>` + tur(2.2, 12.5) + gun(10.3, 6.5),
-    flame_tank: tr2() + `<path d="M8 7l1.5-2h5L16 7v13H8z"/>` + tur(3.2, 13.5) + gun(10.3, 5.5, ' stroke-width="2.2"') + `<path d="M10 4.5c.6-1.6 1.4-2.4 2-2.8.6.4 1.4 1.2 2 2.8"/>`,
-    mine_tank: tr2() + `<path d="M8 9l1.5-2h5L16 9v12H8z"/>` + tur(3, 14.5) + gun(11.5, 7) + `<path d="M5 4.5h14M9 4.5V7M15 4.5V7"/>` + `<path d="M6 2.5v4M9 2.5v4M12 2.5v4M15 2.5v4M18 2.5v4" stroke-dasharray="1 1"/>`
-  };
-})();
+// HUD 单位卡图标（侧视，按进攻方型号，icons.js）；hud.js 以 'v_' + 类型 合入 ICON
+const VEH_ICONS = typeof WI === 'object' ? { lt_tank: WI.ztq15, tank: WI.ztz96b, hv_tank: WI.ztz99a, amtank: WI.ztd05, apc: WI.zbd05, spg: WI.plz07, td: WI.ptl02,
+  aa_veh: WI.pgz07, sam_veh: WI.pgl625, recon: WI.zbl08, flame_tank: WI.zbd04a, mine_tank: WI.ztz96m } : {};
 
 // —— 创建与查询 ——
 // 只在本步内有效的分方缓存，供 combat.js 每个小组每步查询（避免反复 filter）
@@ -144,7 +127,7 @@ function vehSmallArms(v, q, acc) {
     v.sup = Math.min(100, v.sup + (m === 'mg' ? 5 : 2.5) * (M.sup || 1));
     if (v.armor < 1 && Math.random() < (m === 'mg' ? .25 : .12) * acc) vehDamage(v, 1, 0, q.x, q.y, 'small');
   }
-  if (M.at && Math.random() < .35 * acc * Math.min(2, M.at)) vehDamage(v, 9 * M.at, 2.4, q.x, q.y, 'at');
+  if (M.at && Math.random() < .35 * acc * Math.min(2, M.at)) vehDamage(v, 9 * M.at, M.atPen || 2.4, q.x, q.y, 'at');   // atPen：攻顶的红箭-12 / 标枪 3.4，打得穿主战坦克顶甲
   v.hitT = S.t;
 }
 // 碉堡机枪：对轻装甲（armor ≤ 1）有小概率造成损伤；反坦克炮位（mod.at）是真正的威胁
@@ -270,7 +253,7 @@ function vehDrive(v, dt, mul) {
   else if (vehPass(v.x, ny, cls)) v.y = ny;
   else { v.stuckT = (v.stuckT || 0) + dt; if (v.stuckT > 4) { v.pathT = -9; v.direct = false; v.stuckT = 0; } return; }
   v.moving = step > .01; v.movedT = S.t; v.odo += step * dir;
-  v.fuel = Math.max(0, (v.fuel ?? 1) - step * (v.swim ? 2 : 1) / (sp.fuel || 3000));
+  v.fuel = Math.max(0, (v.fuel ?? 1) - step * (v.swim ? (sp.swimK ? 1.2 : 2) : 1) / (sp.fuel || 5000));   // 泅渡耗油：ZTD-05 喷水推进 1.2 倍，其余 2 倍
   return false;
 }
 
@@ -480,7 +463,7 @@ function vehAA(v, dt) {
     if (p.dead || !(p.alt > .4) || dist(v.x, v.y, p.x, p.y) > sp.aa) continue;
     tracer(v.x, v.y, p.x + gauss() * 14, p.y + gauss() * 14, 'e', inVision(v.x, v.y));
     v.aim = Math.atan2(p.y - v.y, p.x - v.x); v.mgT = S.t;
-    if (Math.random() < .12 * (1 - v.sup / 130) && typeof airLost === 'function') { airLost(p, `${typeof airName === 'function' ? airName(p.kind, p.v) : '我机'}被敌${vehModel(v)}击落`); break; }
+    if (Math.random() < .12 * (1 - v.sup / 130) * (typeof airStealth === 'function' ? (1 + airStealth(p)) / 2 : 1) && typeof airLost === 'function') { airLost(p, `${typeof airName === 'function' ? airName(p.kind, p.v) : '我机'}被敌${vehModel(v)}击落`); break; }
   }
 }
 
@@ -616,7 +599,7 @@ HOOK.step.push(dt => { if (S && S.phase === 'battle') vehGrenades(dt); });
 
 // 补给点（滩头补给站与陆上补给网节点）：停车抢修与补充弹药
 function vehDepots() {
-  if (typeof supplyPoints === 'function') return supplyPoints(true);
+  if (typeof supplyPoints === 'function') return supplyPoints(true).filter(p => p.stock == null || p.stock > .03);   // 存量见底的前沿点不去
   return S.supply.filter(L => L.connected).map(L => ({ x: L.x, y: L.y }));
 }
 function vehDepot(v) { let b = null, bd = Infinity; for (const p of vehDepots()) { const d = dist(p.x, p.y, v.x, v.y); if (d < bd) { bd = d; b = p; } } return b; }
@@ -633,12 +616,17 @@ function vehDepotTick(v, dt) {
     return;
   }
   const p = vehDepot(v), d = p ? dist(p.x, p.y, v.x, v.y) : Infinity;
-  if ((v.fuel ?? 1) <= 0 && d < 400) { v.fuel = .01; log(`油罐车向油尽的${vehName(v)}送油`, 'info', 'vtank' + v.id, 30, v); }
-  else if ((v.fuel ?? 1) < .2 && d < 400 && !v.moving && d > 90) v.fuel = Math.min(.2, v.fuel + .01);
+  // 油尽：有补给卡车时由卡车送油（trucks.js）；没有卡车时 400 以内有接通的补给点就靠人力送一点油，够开回去
+  if (!(typeof trkAny === 'function' && trkAny())) {
+    if ((v.fuel ?? 1) <= 0 && d < 400) { v.fuel = .01; log(`补给分队向油尽的${vehName(v)}人力送油`, 'info', 'vtank' + v.id, 30, v); }
+    else if ((v.fuel ?? 1) < .2 && d < 400 && !v.moving && d > 90) v.fuel = Math.min(.2, v.fuel + .01);
+  }
   if (v.moving || d > 90) return;
   if (v.hp < v.maxhp * .8 && S.t - v.hitT > 6) v.hp = Math.min(v.maxhp * .8, v.hp + 1.2);
+  const a0 = v.ammo, f0 = v.fuel ?? 1;
   if (v.ammo < sp.ammo) v.ammo = Math.min(sp.ammo, v.ammo + 2);
   v.fuel = Math.min(1, (v.fuel ?? 1) + .05);
+  if (p.kind === 'node') { const n = snById(p.id); if (n) n.stock = Math.max(0, (n.stock ?? 1) - (v.ammo - a0) * .006 - (v.fuel - f0) * .25); }   // 前沿点的存量：一车炮弹约 0.25、加满油 0.25
   if (v.immob && S.t - v.hitT > 8) { v.immob = false; log(`${vehName(v)}在补给点修复履带`, 'good', 'vfix' + v.id, 10, v); }
 }
 // 同排（同一伙伴连 / 同一进攻目标）的车辆
@@ -906,6 +894,7 @@ function vehThinkE(v) {
   const am = vehAmmoF(v), fu = v.fuel ?? 1;
   if (v.ai === 'resup' && am >= .8 && fu >= .8) v.ai = null;
   if (v.ai === 'resup' || ((am < .25 || fu < .2) && (am <= .02 || fu < .1 || !vehMates(v).some(o => o.ai === 'resup')))) { v.ai = 'resup'; vehGo(v, v.hx, v.hy, 'retreat', SOUTH); return; }
+  if (v.cmd && S.t < (v.cmd.until ?? 0) && v.cmd.x != null) { v.ai = v.cmd.ai || 'cmd'; vehGo(v, v.cmd.x, v.cmd.y, v.cmd.t || 'move', v.cmd.face); return; }   // 守方指挥（ai4.js）：防空车随支队掩护
   if (v.buddy != null && v.esc && typeof a4On === 'function' && a4On() && typeof vehEscort === 'function' && vehEscort(v)) return;   // v7：随步兵行动（ai4.js 绑定）
   let best = null, bs = -Infinity;
   for (const p of S.points) {

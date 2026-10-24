@@ -1,13 +1,36 @@
 'use strict';
 // 航空母舰与舰载机联队：甲板弹射起飞、侦察 / 空袭 / 对地支援三种任务、防空火力、舰尾进近着舰与整备；
 // 航母机动与受损（岸防炮可打）；绘制航母、甲板停机、飞机剪影（无文字）
+// 任务类型（每种任务默认用哪个型号见 AIR_BASEM，变体见 AIR_VMODEL）；n = 战役默认架数
 const AIR_SPEC = {
-  recon: { name: '空警-600 侦察机', n: 2, aa: .06, spd: 190, size: 17 },
-  strike: { name: '歼-15 攻击机', n: 4, aa: .09, spd: 180, size: 15 },
-  cas: { name: '攻击-2 对地支援无人机', n: 4, aa: .09, spd: 170, size: 15 },
-  bomber: { name: '轰炸机', n: 0, aa: .07, spd: 150, size: 22 },   // 沙盒购买：重型轰炸机（地毯轰炸）/ 俯冲轰炸机（点目标）
-  fighter: { name: '歼-15 舰载战斗机', n: 2, aa: .05, spd: 230, size: 15 }   // 制空（airwar.js）：在指定空域巡逻，拦截敌机、夺取制空权
+  recon: { name: '侦察机', n: 2, aa: .06, spd: 190, size: 17 },
+  strike: { name: '攻击机', n: 4, aa: .09, spd: 180, size: 15 },
+  cas: { name: '对地支援机', n: 4, aa: .09, spd: 170, size: 15 },
+  bomber: { name: '轰炸机', n: 0, aa: .07, spd: 150, size: 22 },   // 沙盒购买：轰-6K（地毯轰炸）/ 攻击-11（俯冲精确投弹）
+  fighter: { name: '战斗机', n: 2, aa: .05, spd: 230, size: 15 }   // 制空（airwar.js）：在指定空域巡逻，拦截敌机、夺取制空权
 };
+// 型号：名称、剪影、巡航速度、被高炮打中的基础概率、画面尺寸；land = 陆基（战区机场出动，从地图南缘飞来，不占航母机位，往返加油挂弹 100 秒）；
+// stealth = 隐身（敌雷达发现距离、防空命中按此打折）；std = 防区外投放距离（精确制导炸弹 / 反辐射导弹）；aam / aamR / pkK = 空空导弹数、射程、命中修正；loiter = 盘旋秒数
+const AIR_MDL = {
+  kj600: { name: '空警-600 舰载预警机', sil: 'kj600', spd: 175, aa: .06, size: 19 },
+  wz7: { name: '无侦-7 高空无人侦察机', sil: 'wz7', spd: 175, aa: .02, size: 19, land: true },   // 两万米高空，高炮够不着
+  j35: { name: '歼-35 隐身舰载战斗机', sil: 'j35', spd: 240, aa: .09, size: 15, stealth: .4, std: 170 },   // 内埋精确制导炸弹，防区外投放
+  j35s: { name: '歼-35 隐身舰载战斗机（防空压制型）', sil: 'j35', spd: 240, aa: .09, size: 15, stealth: .4, std: 300, sead: true },   // 反辐射导弹，专打敌防空
+  j15t: { name: '歼-15T 舰载战斗机', sil: 'j15', spd: 225, aa: .09, size: 16 },
+  gj11: { name: '攻击-11 隐身无人攻击机', sil: 'gj11', spd: 200, aa: .08, size: 16, stealth: .5 },
+  h6k: { name: '轰-6K 轰炸机', sil: 'h6k', spd: 165, aa: .07, size: 24, land: true },
+  gj2: { name: '攻击-2 察打一体无人机', sil: 'gj2', spd: 140, aa: .09, size: 17, land: true, loiter: 60 },   // 长航时：盘旋 60 秒
+  z10: { name: '直-10 武装直升机', sil: 'heli', spd: 110, aa: .09, size: 15 },
+  j20: { name: '歼-20 隐身战斗机', sil: 'j20', spd: 265, aa: .05, size: 17, land: true, stealth: .35, aam: 6, aamR: 560, pkK: 1.15 }   // 4 枚霹雳-15 + 2 枚霹雳-10
+};
+const AIR_BASEM = { recon: 'kj600', strike: 'j35', cas: 'gj2', bomber: 'h6k', fighter: 'j20' };
+const AIR_VMODEL = { lr: 'wz7', dive: 'gj11', heavy: 'h6k', fb: 'j15t', heli: 'z10', sead: 'j35s', adv: 'j20' };   // adv：旧存档里的先进战斗机
+const airMdlKey = (type, v) => AIR_VMODEL[v] || AIR_BASEM[type];
+const airMdl = (type, v) => AIR_MDL[airMdlKey(type, v)] || {};   // 运输机（para.js）等没有型号表的返回空
+const airSpec = (type, v) => ({ ...(AIR_SPEC[type] || AIR_SPEC.strike), ...airMdl(type, v) });
+const airLandW = w => !!(w && airMdl(w.type, w.v).land);
+const airStealth = o => (o && airMdl(o.kind || o.type, o.v).stealth) || 1;   // 飞机（p.kind）或编队记录（w.type）
+const AIR_REARM_LAND = 100;   // 陆基飞机：飞回战区机场加油挂弹再飞回来
 const AIR_TYPES = ['recon', 'strike', 'cas', 'bomber', 'fighter'];
 const AIR_TURN = 1.5;      // 最大转弯角速度（弧度/秒）：巡航转弯半径约 120
 const AIR_REARM = 45;      // 着舰后整备时间（秒）
@@ -26,31 +49,29 @@ const CVG = {
 };
 const CV_LLEN = Math.hypot(CVG.land.u1 - CVG.land.u0, CVG.land.v1 - CVG.land.v0);
 const CV_LANG = Math.atan2(CVG.land.v1 - CVG.land.v0, CVG.land.u1 - CVG.land.u0);
-// 舰载机俯视剪影（半边轮廓，机头 +x，长、翼展均约 21）
+// 飞机俯视剪影（半边轮廓，机头 +x，长、翼展均约 21；按真实机型的平面形状）
 const AIR_SIL = {
-  recon: [[10, 0], [8, 1], [3, 1.3], [2.5, 10.5], [0, 10.5], [-.5, 1.3], [-7, 1], [-8.5, 4], [-10, 4], [-9.6, .6], [-10.5, 0]],
-  strike: [[10.5, 0], [7, 1], [3, 1.6], [-3, 8.5], [-5.5, 8.8], [-4.5, 2.2], [-7, 2], [-9.5, 5], [-11, 5], [-10, 1.2], [-10.5, 0]],
-  cas: [[9.5, 0], [7, 1.3], [2, 1.5], [1.5, 9.5], [-1.5, 9.5], [-2, 1.6], [-6, 1.4], [-7, 4.6], [-10, 4.6], [-10, 1], [-11, 0]],
-  bomber: [[11, 0], [9, 1.3], [3.5, 1.6], [2.5, 11.5], [-1, 11.5], [-2.5, 1.6], [-8, 1.3], [-9, 5.2], [-11, 5.2], [-10.6, .8], [-11.5, 0]],   // 重型轰炸机：长直翼四发
-  dive: [[10, 0], [8, 1.1], [3, 1.4], [1.2, 5.2], [.6, 9.8], [-2, 9.8], [-1.6, 5.2], [-2.6, 1.4], [-7, 1.1], [-8.5, 4.2], [-10, 4.2], [-9.6, .6], [-10.5, 0]],   // 俯冲轰炸机：倒海鸥翼
-  fb: [[11, 0], [8, 1], [2.5, 1.4], [-3.5, 7.8], [-6, 7.8], [-5, 1.8], [-8, 1.6], [-10, 4.2], [-11, 4.2], [-10.5, .8], [-11, 0]],
-  fighter: [[11, 0], [9, .9], [4, 1.3], [-1, 6.5], [-4.5, 7.5], [-4, 2.2], [-7.5, 2], [-9.5, 4.4], [-11, 4.4], [-10.3, 1], [-11, 0]],   // 制空战斗机：大后掠翼（双垂尾另画）
-  heli: [[8, 0], [7, 1.6], [3, 2.6], [-2, 2.4], [-4, 1], [-11, .6], [-12, 3], [-13, 3], [-12.5, 0]]   // 武装直升机：机身 + 尾梁（旋翼另画）
+  kj600: [[10, 0], [8.4, 1.2], [3, 1.4], [2.4, 10.5], [-.6, 10.5], [-1.2, 1.4], [-7, 1.1], [-7.8, 4.6], [-9.6, 4.6], [-9.4, .8], [-10, 0]],   // 上单翼双发涡桨 + 背负雷达圆盘
+  wz7: [[9, 0], [7.4, 1], [3, 1.2], [-4.6, 9.8], [-5.8, 9.6], [-8.4, 2.4], [-10, 1], [-10.5, 0]],   // 菱形连翼（前翼后掠、后翼前掠在翼尖相接）
+  j35: [[11, 0], [8.4, 1], [4, 1.7], [.8, 2.1], [-3.2, 7.6], [-5.2, 7.6], [-5.2, 2.6], [-7, 2.4], [-9.2, 5], [-10.6, 5], [-10.2, 1.6], [-11, 0]],   // 梯形翼 + 平尾，双发双垂尾
+  j15: [[11.5, 0], [9, 1], [5, 1.4], [3, 2.7], [.2, 3], [-4, 9.2], [-5.6, 9.2], [-5, 3], [-7, 3], [-9.6, 6.6], [-11.2, 6.6], [-10.6, 2.4], [-11.6, 1.8], [-11.6, 0]],   // 侧卫系：大边条、后掠翼、双发
+  j20: [[11.5, 0], [9.4, .8], [6.4, 1.3], [5.2, 1.4], [3.4, 4.4], [2.6, 4.4], [2.8, 1.6], [1.4, 1.8], [-6, 8.6], [-7.6, 8.6], [-6.6, 2.2], [-8.6, 2], [-10.8, 1.6], [-11.4, 0]],   // 鸭翼 + 三角翼，长机身
+  gj11: [[8, 0], [5, 2], [-3, 10.5], [-5, 10.5], [-5.6, 8], [-3.6, 6], [-7, 3.4], [-9, 0]],   // 飞翼，W 形后缘
+  gj2: [[9, 0], [8, .9], [1.6, 1], [1.1, 10.5], [-.8, 10.5], [-1.2, 1], [-7, .7], [-9.6, 3.6], [-10.6, 3.6], [-9.2, .5], [-10, 0]],   // 细长机身、大展弦比直翼、V 形尾翼
+  h6k: [[11.5, 0], [10, 1.2], [4, 1.6], [2.4, 2.9], [-1, 11.2], [-3.1, 11.2], [-2.6, 3], [-6, 1.6], [-8.6, 4.6], [-10.2, 4.6], [-10, 1], [-11.5, 0]],   // 后掠中单翼，翼根两台发动机
+  heli: [[8, 0], [7, 1.6], [3, 2.6], [-2, 2.4], [-4, 1], [-11, .6], [-12, 3], [-13, 3], [-12.5, 0]],   // 武装直升机：机身 + 尾梁（旋翼另画）
+  // 守方（美军）
+  f35: [[10.4, 0], [8, 1], [3.6, 1.8], [.4, 2.2], [-3.6, 7.2], [-5.4, 7.2], [-5.6, 2.4], [-7, 2.3], [-9, 4.6], [-10.2, 4.6], [-9.6, 1.4], [-10.6, 0]],   // 单发，菱形梯形翼，双垂尾
+  a10: [[10, 0], [8, 1], [3.2, 1.2], [2.6, 9.4], [-.6, 9.4], [-1.2, 1.4], [-7, 1.3], [-8.4, 4.8], [-10.4, 4.8], [-10, 1], [-10.6, 0]]   // 平直下单翼，尾部背负双发、双垂尾
 };
-// 变体机型的剪影与名称（沙盒）
-const airSilKey = (type, v) => v === 'dive' || v === 'fb' || v === 'heli' ? v : type;
-const AIR_VNAME = { heavy: '轰-6K 轰炸机', dive: '攻击-11 无人攻击机', fb: '歼-15T 战斗攻击机', heli: '直-10 武装直升机', lr: '无侦-7 侦察机', adv: '歼-35 隐身战斗机' };   // 进攻方按解放军装备命名
-const airName = (type, v) => AIR_VNAME[v] || (AIR_SPEC[type] || AIR_SPEC.strike).name;
+// 剪影键：按型号；守方 type（ga / heli / ftr）另映射
+const airSilKey = (type, v) => type === 'ga' ? 'a10' : type === 'ftr' ? 'f35' : AIR_SIL[type] && !AIR_BASEM[type] ? type : airMdl(type, v).sil || 'j35';
+const airName = (type, v) => airMdl(type, v).name || (AIR_SPEC[type] || {}).name || '飞机';
 // HUD 图标（24×24，描边风格，与 hud.js ICON 一致）
-const CARRIER_ICONS = {
-  cv: '<path d="M10 2h4l2 3v15.5l-1 1.5H9l-1-1.5V16l-2.5-1.5v-4L8 9V5z"/><path d="M9.2 20.5L7 11" stroke-dasharray="1.6 1.6"/><path d="M11 4v5M13 4v5"/><rect class="f" x="13.8" y="11" width="1.8" height="4.5"/>',
-  recon: '<path d="M12 2v19M2.5 11.5L12 10l9.5 1.5M8.5 20.5L12 19l3.5 1.5"/><circle cx="12" cy="13" r="3"/>',
-  strike: '<path d="M12 2l1.6 5 7.4 7v2l-7.4-2.6-.4 5 2.8 2v1.6L12 21l-4 1.4v-1.6l2.8-2-.4-5L3 16v-2l7.4-7z"/><circle class="f" cx="8" cy="15.5" r="1"/><circle class="f" cx="16" cy="15.5" r="1"/>',
-  cas: '<path d="M12 3v17M3 10.5h18M7.5 20h9M7.5 18v4M16.5 18v4"/><rect x="8.6" y="13" width="2" height="3.5"/><rect x="13.4" y="13" width="2" height="3.5"/>',
-  bomber: '<path d="M12 2.5v18M2 10.6l10-1.1 10 1.1v1.8l-10-.6-10 .6zM8 20.5l4-1.3 4 1.3"/><path d="M5.6 9.6v3.2M8.6 9.4v3.4M15.4 9.4v3.4M18.4 9.6v3.2"/><circle class="f" cx="12" cy="15.5" r="1.1"/>',
-  airauto: '<path d="M12 5l1 3.5 5 4v1.5l-5-1.8-.3 3.3 1.8 1.3v1.2L12 17l-2.5 1v-1.2l1.8-1.3-.3-3.3-5 1.8v-1.5l5-4z"/><path d="M4.5 8.5A8.5 8.5 0 0 1 10 3.3M19.5 15.5A8.5 8.5 0 0 1 14 20.7"/>',
-  fighter: '<path d="M12 2l1.4 5.6 7.6 6.4v2l-7.6-2.2-.3 3.8 2.6 2v1.6L12 20.4l-3.7 1.2V20l2.6-2-.3-3.8L3 16v-2l7.6-6.4z"/><path d="M10.4 18.4l-1.2 2.4M13.6 18.4l1.2 2.4"/>'
-};
+const CARRIER_ICONS = typeof WI === 'object' ? {   // 照真实机型画（icons.js）：福建舰、空警-600、歼-35、攻击-2、轰-6K、歼-20
+  cv: WI.t003, recon: WI.kj600, strike: WI.j35, cas: WI.gj2, bomber: WI.h6k, fighter: WI.j20,
+  airauto: '<path d="M12 5l1 3.5 5 4v1.5l-5-1.8-.3 3.3 1.8 1.3v1.2L12 17l-2.5 1v-1.2l1.8-1.3-.3-3.3-5 1.8v-1.5l5-4z"/><path d="M4.5 8.5A8.5 8.5 0 0 1 10 3.3M19.5 15.5A8.5 8.5 0 0 1 14 20.7"/>'
+} : {};
 
 const airAng = a => Math.atan2(Math.sin(a), Math.cos(a));
 // 航母局部坐标 ↔ 世界坐标
@@ -142,8 +163,8 @@ function initCarrier() {
 
 // HUD 读取：各机型可出击（在甲板待命）的架数
 function airCount() {
-  const ok = S.air && cvAll().some(c => c.hp > 0), up = w => { const c = cvOf(cvHome(w)); return c && c.hp > 0; };
-  for (const t of AIR_TYPES) S.assets[t] = ok ? S.air.wing.filter(w => w.type === t && w.state === 'deck' && up(w)).length : 0;
+  const up = w => airLandW(w) || (() => { const c = cvOf(cvHome(w)); return c && c.hp > 0; })();   // 陆基飞机不看航母
+  for (const t of AIR_TYPES) S.assets[t] = S.air ? S.air.wing.filter(w => w.type === t && w.state === 'deck' && up(w)).length : 0;
 }
 
 const airWing = p => p.wid != null && S.air ? S.air.wing.find(w => w.id === p.wid) : null;
@@ -155,16 +176,20 @@ function airSet(p, phase) {
 }
 
 // —— 出击：kind = recon / strike / cas；从甲板待命的飞机中派出一架 ——
-function launchPlane(kind, tx, ty) {
+// pref：想要的变体（如 'sead' 防空压制型歼-35）；没有就用同任务的其他型号
+function launchPlane(kind, tx, ty, pref) {
   if (!S.cv || !S.air) initCarrier();
   const sp = AIR_SPEC[kind];
   if (!sp || !isFinite(tx) || !isFinite(ty)) return false;
-  if (!cvAll().some(c => c.hp > 0)) { log('航母飞行甲板瘫痪，舰载机无法起飞', 'warn', 'cvdead', 2); return false; }
-  // 多艘航母时：从离目标最近、且有该机型待命的那艘起飞
-  const pref = kind === 'bomber' ? (S.enemies.some(e => !e.dead && e.kx != null && dist(e.kx, e.ky, tx, ty) < 40) ? 'dive' : 'heavy') : null;
+  const cvOk = cvAll().some(c => c.hp > 0);
+  if (!cvOk && !S.air.wing.some(o => o.type === kind && o.state === 'deck' && airLandW(o))) { log('航母飞行甲板瘫痪，舰载机无法起飞', 'warn', 'cvdead', 2); return false; }
+  // 多艘航母时：从离目标最近、且有该机型待命的那艘起飞；陆基飞机从战区机场（地图南缘以外）飞来，算作稍远
+  const want = pref || (kind === 'bomber' ? (S.enemies.some(e => !e.dead && e.kx != null && dist(e.kx, e.ky, tx, ty) < 40) ? 'dive' : 'heavy') : null);
   let w = null, bd = Infinity;
   for (const o of S.air.wing) if (o.type === kind && o.state === 'deck') {
-    const c = cvOf(cvHome(o)), d = c && c.hp > 0 ? dist(c.x, c.y, tx, ty) + (pref && (o.v || 'heavy') !== pref ? 1e4 : 0) : Infinity;
+    const land = airLandW(o), c = land ? null : cvOf(cvHome(o));
+    if (!land && !(c && c.hp > 0)) continue;
+    const d = (land ? H - ty + 300 : dist(c.x, c.y, tx, ty)) + (want && (o.v || (kind === 'bomber' ? 'heavy' : null)) !== want ? 1e4 : 0);
     if (d < bd) { bd = d; w = o; }
   }
   if (!w) {
@@ -172,7 +197,26 @@ function launchPlane(kind, tx, ty) {
     log(!left.length ? `${sp.name}已全部损失` : r.length ? `${sp.name}均在出击或整备中（最快 ${Math.ceil(Math.min(...r))} 秒）` : `${sp.name}均已升空`, 'warn', 'air' + kind, 2);
     return false;
   }
-  return withCV(cvOf(cvHome(w)), () => launchFrom(w, kind, sp, tx, ty));
+  return airLandW(w) ? launchLand(w, kind, tx, ty) : withCV(cvOf(cvHome(w)), () => launchFrom(w, kind, sp, tx, ty));
+}
+// 新飞机的公共字段
+function airNew(w, kind, x, y, heading, tx, ty, extra) {
+  const M = airMdl(kind, w.v), p = { id: S.nid++, wid: w.id, home: cvHome(w), kind, v: w.v || null, x, y, heading, spd: 0, alt: 0, bank: 0,
+    tx, ty, cx: tx, cy: ty, wp: [{ x: tx, y: ty }], leg: 0, aaT: Math.random() * .5, rt: 0, gunT: 0, strafeT: 1, loiterT: M.loiter || 40, odir: 1, dropped: false, rtbT: 0, ...extra };
+  if (kind === 'recon') { const a = Math.atan2(ty - y, tx - x), [bx, by] = airRay(tx, ty, a, 700); p.wp.push({ x: bx, y: by }); }   // 侦察机：飞越目标后沿同一方向再向纵深飞 700
+  if (kind === 'fighter') Object.assign(p, { aam: M.aam || 4, gun: 40, capT: 90, aamR: M.aamR || 480, pkK: M.pkK || 1 });   // 空空导弹 · 机炮点射次数 · 巡逻秒数（airwar.js）
+  return p;
+}
+// 陆基飞机（歼-20、轰-6K、无侦-7、攻击-2）：从战区机场起飞，由地图南缘进入战场
+function launchLand(w, kind, tx, ty) {
+  tx = clamp(tx, 10, W - 10); ty = clamp(ty, 10, H - 10);
+  const x = clamp(tx + gauss() * 120, 60, W - 60), M = airMdl(kind, w.v);
+  const p = airNew(w, kind, x, H + 10, -Math.PI / 2, tx, ty, { phase: 'out', land: true, alt: 1, spd: M.spd || AIR_SPEC[kind].spd });
+  S.planes.push(p);
+  w.state = 'out';
+  airCount();
+  log(`${airName(kind, w.v)}从战区机场起飞，目标方位 ${fmtBrg(bearing(x, H, tx, ty))}`, 'info', 'airup', 1.5);
+  return true;
 }
 function launchFrom(w, kind, sp, tx, ty) {
   const c = S.cv;
@@ -181,13 +225,7 @@ function launchFrom(w, kind, sp, tx, ty) {
   const k = c.cat[0] <= c.cat[1] ? 0 : 1, at = Math.max(S.t, c.cat[k], c.cat[1 - k] - 1.2);
   c.cat[k] = at + 2.4;
   const [u0, v0] = CVG.cats[k], [x, y] = cvW(u0, v0);
-  const p = { id: S.nid++, wid: w.id, home: cvHome(w), kind, v: w.v || null, phase: 'cat', wait: at - S.t, cat: k, lu: u0, lv: v0, x, y, heading: c.heading, spd: 0, alt: 0, bank: 0,
-    tx, ty, cx: tx, cy: ty, wp: [{ x: tx, y: ty }], leg: 0, aaT: Math.random() * .5, rt: 0, gunT: 0, strafeT: 1, loiterT: 40, odir: 1, dropped: false, rtbT: 0 };
-  if (kind === 'recon') {   // 侦察机：飞越目标后沿同一方向再向纵深飞 700
-    const a = Math.atan2(ty - c.y, tx - c.x), [bx, by] = airRay(tx, ty, a, 700);
-    p.wp.push({ x: bx, y: by });
-  }
-  if (kind === 'fighter') Object.assign(p, { aam: w.v === 'adv' ? 6 : 4, gun: 40, capT: 90 });   // 空空导弹 · 机炮点射次数 · 巡逻秒数（airwar.js）
+  const p = airNew(w, kind, x, y, c.heading, tx, ty, { phase: 'cat', wait: at - S.t, cat: k, lu: u0, lv: v0 });
   S.planes.push(p);
   w.state = 'launch';
   c.exposedUntil = Math.max(c.exposedUntil || 0, S.t + 10);   // 起降作业：甲板灯光与弹射蒸汽，10 秒内易被岸防炮发现
@@ -203,7 +241,8 @@ function updatePlanes(dt) {
   updateAirAuto(dt);
   for (const w of S.air.wing) if (w.state === 'rearm' && (w.rearmT -= dt) <= 0) {
     w.state = 'deck'; w.rearmT = 0;
-    if (S.cv.hp > 0) log(`${airName(w.type, w.v)}整备完毕`, 'good', 'rearm' + w.type + (w.v || ''), 8);
+    if (airLandW(w)) log(`${airName(w.type, w.v)}在战区机场加油挂弹完毕，可以再次出击`, 'good', 'rearm' + w.type + (w.v || ''), 8);
+    else if (S.cv.hp > 0) log(`${airName(w.type, w.v)}整备完毕`, 'good', 'rearm' + w.type + (w.v || ''), 8);
   }
   for (const p of S.planes) {
     if (p.dead) continue;
@@ -213,7 +252,7 @@ function updatePlanes(dt) {
       continue;
     }
     let c = cvOf(cvHome(p)) || S.cv;
-    if (c.hp <= 0 && p.phase !== 'cat' && p.phase !== 'roll') {   // 母舰瘫痪：改降其他还能起降的航母
+    if (!p.land && c.hp <= 0 && p.phase !== 'cat' && p.phase !== 'roll') {   // 母舰瘫痪：改降其他还能起降的航母
       const alt = cvAll().find(o => o.hp > 0), w = airWing(p);
       if (alt) { p.home = cvHome(alt); if (w) w.home = p.home; c = alt; }
     }
@@ -260,7 +299,7 @@ function cvLanding() {
 const cvDeckBusy = p => S.planes.some(o => o !== p && !o.dead && cvHome(o) === cvHome(p) && (o.phase === 'final' || o.phase === 'trap'));
 
 function flyPlane(p, dt) {
-  const c = S.cv, sp = AIR_SPEC[p.kind] || AIR_SPEC.strike, dead = c.hp <= 0;
+  const c = S.cv, sp = airSpec(p.kind, p.v), dead = c.hp <= 0, M = airMdl(p.kind, p.v);
   const speed = v => { p.spd += clamp(v - p.spd, -70 * dt, 45 * dt); };
   p.gunT = Math.max(0, (p.gunT || 0) - dt);
   if (!Array.isArray(p.wp) || !p.wp.length) p.wp = [{ x: isFinite(p.tx) ? p.tx : p.x, y: isFinite(p.ty) ? p.ty : p.y }];
@@ -294,11 +333,14 @@ function flyPlane(p, dt) {
       if (p.y < STAGING_Y && (p.rt -= dt) <= 0) { p.rt = .2; S.recon.push({ x: p.x, y: p.y, until: S.t + 25 }); }
       if (p.leg >= p.wp.length) airSet(p, 'rtb');
     } else if (p.kind === 'strike' || p.kind === 'bomber') {
-      const dive = p.kind === 'bomber' && p.v === 'dive', heavy = p.kind === 'bomber' && !dive;
+      const dive = p.kind === 'bomber' && p.v === 'dive', heavy = p.kind === 'bomber' && !dive, std = p.kind === 'strike' && M.std;   // 歼-35：防区外投放精确制导弹药
       if (!p.dropped) {
         const df = Math.abs(airAng(Math.atan2(p.ty - p.y, p.tx - p.x) - p.heading)), d = airSteer(p, p.tx, p.ty, dt);
         if (dive && d < 280 && df < .5) { p.diving = true; speed(235); p.alt = Math.max(.32, p.alt - dt * .9); }   // 俯冲：压低高度加速
-        if (dive ? d < 42 : heavy ? d < 95 && df < .3 : d < 80 && df < .35) (p.kind === 'bomber' ? bomberDrop : strikeDrop)(p);
+        if (std ? d < M.std && df < .3 : dive ? d < 42 : heavy ? d < 95 && df < .3 : d < 80 && df < .35) (std ? guidedDrop : p.kind === 'bomber' ? bomberDrop : strikeDrop)(p);
+      } else if (p.std) {   // 投完立即掉头，不飞进敌防空圈
+        airSteer(p, p.x - Math.cos(p.heading) * 300, Math.min(H - 40, p.y + 300), dt, true);
+        if ((p.egT -= dt) <= 0) airSet(p, 'rtb');
       } else {
         airSteer(p, p.x + Math.cos(p.heading) * 200, p.y + Math.sin(p.heading) * 200, dt);
         if ((p.egT -= dt) <= 0) { p.diving = false; airSet(p, 'rtb'); }
@@ -307,7 +349,7 @@ function flyPlane(p, dt) {
       const d = airSteer(p, p.tx, p.ty, dt);
       if (d < 150) {
         const cross = Math.cos(p.heading) * (p.ty - p.y) - Math.sin(p.heading) * (p.tx - p.x);
-        Object.assign(p, { cx: p.tx, cy: p.ty, odir: cross >= 0 ? 1 : -1, loiterT: 40, strafeT: .8 });
+        Object.assign(p, { cx: p.tx, cy: p.ty, odir: cross >= 0 ? 1 : -1, loiterT: M.loiter || 40, strafeT: .8 });
         airSet(p, 'loiter');
       }
     }
@@ -318,6 +360,12 @@ function flyPlane(p, dt) {
     airOrbit(p, p.cx, p.cy, 110, p.odir || 1, dt);
     if ((p.strafeT -= dt) <= 0) p.strafeT = casStrafe(p) ? 1.5 : .5;
     if ((p.loiterT -= dt) <= 0) airSet(p, 'rtb');
+    return;
+  }
+  if (p.land) {   // 陆基飞机：向南飞出地图，回战区机场加油挂弹（100 秒后再出击）
+    p.alt = Math.min(1, p.alt + dt / 3); speed(sp.spd);
+    airSteer(p, clamp(p.x, 40, W - 40), H + 60, dt, true);
+    if (p.y > H + 15) { p.dead = true; const w = airWing(p); if (w && w.state !== 'lost') { w.state = 'rearm'; w.rearmT = AIR_REARM_LAND; } }
     return;
   }
   // —— 返航：rtb 飞到舰尾一侧的顺风点（偏离中线约两个转弯半径）→ final 转弯切入斜角甲板中线下滑 → trap 着舰；
@@ -371,6 +419,28 @@ function strikeDrop(p) {
   }
 }
 
+// 已知的敌防空（我方情报）：高炮阵地、防空车（M163、M-SHORAD、LPWS）、近 90 秒暴露过的毒刺组；w = 威胁分
+function airAASites() {
+  const out = [];
+  if (!S) return out;
+  for (const e of S.enemies) if (!e.dead && e.kind === 'aa' && e.kx != null) out.push({ x: e.kx, y: e.ky, w: (e.mod && e.mod.aa ? 1.6 : 1) * ((e.sup || 0) > 50 ? .5 : 1), k: 'gun', id: e.id, o: e });
+  for (const v of S.veh || []) if (v.side === 'e' && !v.dead && v.kx != null && (vehSp(v).aa || (v.mod && v.mod.cram))) out.push({ x: v.kx, y: v.ky, w: v.type === 'sam_veh' ? 2 : 1.3, k: 'veh', id: 'v' + v.id, o: v });
+  for (const q of S.teams) if (q.side === 'e' && q.men.length && q.men.includes('aa') && q.aaSeen != null && S.t - q.aaSeen < 90) out.push({ x: q.aax, y: q.aay, w: .8, k: 'mp', id: 'q' + q.id, o: q });
+  return out;
+}
+const airAAAt = (x, y, r = 300) => airAASites().reduce((a, s) => a + (dist(s.x, s.y, x, y) < r ? s.w : 0), 0);
+// 歼-35：防区外投放两枚精确制导炸弹（散布很小）；防空压制型发射反辐射导弹，自动对准目标 140 以内已知的敌防空
+function guidedDrop(p) {
+  p.dropped = true; p.std = true; p.egT = 2.5;
+  const M = airMdl(p.kind, p.v);
+  let tx = p.tx, ty = p.ty;
+  if (M.sead) { let bd = 140; for (const a of airAASites()) { const d = dist(a.x, a.y, p.tx, p.ty); if (d < bd) { bd = d; tx = a.x; ty = a.y; } } }
+  const d = dist(p.x, p.y, tx, ty);
+  for (let i = 0; i < 2; i++) fireShell(p.x, p.y, clamp(tx + gauss() * 4, 0, W), clamp(ty + gauss() * 4, 0, H), 'p', 'bomb', .4 + d / 260, false, { t: -i * .3, gd: true });
+  if (typeof v8Stat === 'function') v8Stat(M.sead ? 'seadArm' : 'gdrop');
+  log(M.sead ? `${M.name}在防区外发射反辐射导弹，压制敌防空` : `${M.name}在防区外投放精确制导炸弹`, 'info', 'gdrop', 10, { x: tx, y: ty });
+}
+
 // 轰炸机投弹：俯冲轰炸机两枚重磅弹几乎正中目标；重型轰炸机沿进场方向六弹地毯轰炸（间隔 26）
 function bomberDrop(p) {
   p.dropped = true; p.egT = 1.6;
@@ -414,13 +484,13 @@ function casStrafe(p) {
 function airAA(p, dt) {
   if ((p.aaT = (p.aaT || 0) - dt) > 0) return;
   p.aaT = .5;
-  const sp = AIR_SPEC[p.kind] || AIR_SPEC.strike;
+  const sp = airSpec(p.kind, p.v), st = sp.stealth ? (1 + sp.stealth) / 2 : 1;   // 隐身机：雷达高炮难以跟踪，光学瞄准仍可能打中
   for (const a of S.enemies) {
     if (a.dead || a.kind !== 'aa' || dist(a.x, a.y, p.x, p.y) > 190) continue;
     tracer(a.x, a.y, p.x + gauss() * 14, p.y + gauss() * 14, 'e', inVision(a.x, a.y));
     if (a.kx == null && Math.random() < .15) { a.kx = a.x; a.ky = a.y; log('防空炮火暴露位置', 'warn', null, 0, a); }
     const k = p.kind === 'bomber' ? (p.v === 'dive' ? (p.diving ? 1.3 : 1) : .75) : 1;
-    if (Math.random() < sp.aa * k * (1 - (a.sup || 0) / 130)) { airLost(p, `${airName(p.kind, p.v)}被击落`); break; }
+    if (Math.random() < sp.aa * k * st * (1 - (a.sup || 0) / 130)) { airLost(p, `${airName(p.kind, p.v)}被击落`); break; }
   }
 }
 
@@ -499,15 +569,15 @@ function cvImpact1(x, y, pw) {
   if (d >= 30) return;
   c.hp = Math.max(0, c.hp - pw.ship * (1 - d / 30 * .6)); c.hitT = S.t;
   if (d === 0) {
-    for (const p of S.planes) if (!p.dead && cvHome(p) === h && (p.phase === 'cat' || p.phase === 'roll' || p.phase === 'trap') && dist(p.x, p.y, x, y) < 16) airLost(p, `${(AIR_SPEC[p.kind] || AIR_SPEC.strike).name}在甲板上被炸毁`);
+    for (const p of S.planes) if (!p.dead && cvHome(p) === h && (p.phase === 'cat' || p.phase === 'roll' || p.phase === 'trap') && dist(p.x, p.y, x, y) < 16) airLost(p, `${airName(p.kind, p.v)}在甲板上被炸毁`);
     if (Math.random() < .3) {
       let best = null, bd = 40;
-      const wing = S.air.wing.filter(w => cvHome(w) === h);
+      const wing = S.air.wing.filter(w => cvHome(w) === h && !airLandW(w));
       for (const [id, j] of cvPark(c, wing)) {   // 只有停在甲板上的会被炸到，机库里的不受影响
         const s = CVG.slots[j], dd = dist(s[0], s[1], u, v);
         if (dd < bd) { bd = dd; best = wing.find(w => w.id === id); }
       }
-      if (best) { best.state = 'lost'; log(`${AIR_SPEC[best.type].name}在甲板上被炸毁`, 'bad', null, 0, c); }
+      if (best) { best.state = 'lost'; log(`${airName(best.type, best.v)}在甲板上被炸毁`, 'bad', null, 0, c); }
     }
   }
   if (c.hp > 0) { log(`${nm}中弹，飞行甲板受损（${Math.ceil(c.hp)}/${c.maxhp}）`, 'bad', 'cvhit' + h, 4, c); return; }
@@ -528,7 +598,7 @@ function carrierVision() {
 // —— 自动派机（S.cv.auto）：对地支援压制我军的敌人、空袭已标定火力点、侦察前线方向的敌占据点 ——
 function updateAirAuto(dt) {
   const c = S.cv;
-  if (!c || !c.auto || !cvAll().some(o => o.hp > 0) || S.phase !== 'battle') return;   // 旗舰的自动开关统管全部航母
+  if (!c || !c.auto || S.phase !== 'battle' || (!cvAll().some(o => o.hp > 0) && !S.air.wing.some(w => airLandW(w) && w.state !== 'lost'))) return;   // 旗舰的自动开关统管全部航母（含战区陆基飞机）
   if ((c.autoT = (c.autoT ?? 2) - dt) > 0) return;
   c.autoT = 3;
   if (typeof awAutoP === 'function' && awAutoP()) return;   // 制空（airwar.js）：先派战斗机拦截 / 巡逻
@@ -536,7 +606,7 @@ function updateAirAuto(dt) {
   const awBad = typeof awState === 'function' && awState() === 'e' && !S.planes.some(p => !p.dead && p.kind === 'fighter' && p.alt > .3);
   // 指挥官的航空任务（commander.js）：H 时侦察、受阻攻击的对地支援、假目标后的复查与再次出击
   const T = typeof cmdAirTask === 'function' ? cmdAirTask(c) : null;
-  if (T && launchPlane(T.k, T.x, T.y)) { if (typeof cmdAirLaunched === 'function') cmdAirLaunched(T, S.planes[S.planes.length - 1]); return; }
+  if (T && launchPlane(T.k, T.x, T.y, T.pref)) { if (typeof cmdAirLaunched === 'function') cmdAirLaunched(T, S.planes[S.planes.length - 1]); return; }
   const pT = S.teams.filter(q => q.side === 'p' && q.men.length);
   const near = (x, y, r) => pT.filter(q => dist(q.x, q.y, x, y) < r);
   const busy = (kind, x, y, r) => S.planes.some(p => p.kind === kind && !p.dead && (p.phase === 'cat' || p.phase === 'roll' || p.phase === 'out' || p.phase === 'loiter') && dist(p.cx ?? p.tx, p.cy ?? p.ty, x, y) < r);
@@ -547,16 +617,18 @@ function updateAirAuto(dt) {
       if (!nb.length || nb.some(q => dist(q.x, q.y, o.x, o.y) < 60) || busy('cas', o.x, o.y, 200)) continue;
       const s = nb.reduce((a, q) => a + 1 + q.sup / 50, 0);
       if (typeof eaThreat === 'function' && eaThreat(o.x, o.y) >= 1 && s < 8) continue;   // 已知敌单兵防空：盘旋的对地支援机不去送（我方压力很大时例外）
+      if (typeof cmdAirClosed === 'function' && cmdAirClosed(o.x, o.y) && s < 10) continue;   // 已知敌防空强：先由舰炮、导弹、歼-35 打掉（commander.js cmdSeadP）
       if (s > bs) { bs = s; best = o; }
     }
     if (best && bs >= (awBad ? 6 : 2) && launchPlane('cas', best.x, best.y)) return;
   }
   if (S.assets.strike > 0 && !awBad) {
-    const PRI = { coastal: 5, ascm: 5, tel: 5, airfield: 4.5, arty: 4, aa: 3.5, mortar: 3, bunker: 2 };
+    const PRI = { coastal: 5, ascm: 5, tel: 5, airfield: 4.5, arty: 4, aa: 3.5, mortar: 3, bunker: 2 };   // 歼-35 在时高炮阵地（防空）优先级再乘 1.8
     let best = null, bs = 0;
     for (const e of S.enemies) if (!e.dead && e.kx != null) {
       if (near(e.kx, e.ky, typeof cmdAirSafe === 'function' ? cmdAirSafe() : 90).length || busy('strike', e.kx, e.ky, 70) || S.shells.some(s => s.side === 'p' && s.kind === 'bomb' && dist(s.x1, s.y1, e.kx, e.ky) < 60)) continue;
-      const s = (PRI[e.kind] || 1) * (e.kind === 'bunker' && !near(e.kx, e.ky, 320).length ? .3 : 1) * (typeof eaThreat === 'function' && eaThreat(e.kx, e.ky) >= 1 ? .4 : 1);
+      const stl = S.air.wing.some(w => w.type === 'strike' && w.state === 'deck' && airMdl('strike', w.v).stealth);   // 歼-35 隐身：不怕防空圈
+      const s = (PRI[e.kind] || 1) * (e.kind === 'bunker' && !near(e.kx, e.ky, 320).length ? .3 : 1) * (!stl && typeof eaThreat === 'function' && eaThreat(e.kx, e.ky) >= 1 ? .4 : 1) * (e.kind === 'aa' && stl ? 1.8 : 1);
       if (s > bs) { bs = s; best = e; }
     }
     if (best && launchPlane('strike', best.kx, best.ky)) { if (typeof cmdAirLaunched === 'function') cmdAirLaunched({ k: 'strike', x: best.kx, y: best.ky, eid: best.id }, S.planes[S.planes.length - 1]); return; }
@@ -589,7 +661,7 @@ function toggleCvAuto() {
 // 单位卡数据（hud.js updateCards 使用）
 function cvCard() {
   if (!S.cv || !S.air) initCarrier();
-  const c = S.cv, live = S.air.wing.filter(w => w.state !== 'lost'), n = live.length || 1;
+  const c = S.cv, live = S.air.wing.filter(w => w.state !== 'lost' && !airLandW(w)), n = live.length || 1;
   const ready = live.filter(w => w.state === 'deck' && (cvOf(cvHome(w)) || { hp: 0 }).hp > 0).length, up = live.filter(w => w.state === 'launch' || w.state === 'out' || w.state === 'return').length;
   return { n: ready, hp: clamp(c.hp / c.maxhp, 0, 1), ready: ready / n, air: up / n,
     state: c.hp <= 0 ? 'rout' : c.hp < c.maxhp * .4 || S.t < (c.exposedUntil || 0) ? 'waver' : 'ok', mini: c.auto ? 'auto' : c.moving ? 'move' : 'hold' };
@@ -609,15 +681,15 @@ const cvScale = () => Math.max(1, 56 / (CV_LEN * R.s));   // 小屏全图时放�
 function cvPath(ctx, pts) { ctx.beginPath(); for (const [u, v] of pts) ctx.lineTo(u, v); ctx.closePath(); }
 
 function airShape(ctx, type) {
-  const h = AIR_SIL[type] || AIR_SIL.strike;
-  if (type === 'heli') { ctx.beginPath(); ctx.ellipse(1.5, 0, 6.5, 2.8, 0, 0, 7); ctx.moveTo(-4, .7); ctx.lineTo(-12.5, .5); ctx.lineTo(-12.5, -.5); ctx.lineTo(-4, -.7); return; }
+  const h = AIR_SIL[type] || AIR_SIL.j35;
+  if (type === 'heli') { ctx.beginPath(); ctx.ellipse(1.5, 0, 6.5, 2.6, 0, 0, 7); ctx.moveTo(-4, .7); ctx.lineTo(-12.5, .5); ctx.lineTo(-12.5, -.5); ctx.lineTo(-4, -.7); return; }
   ctx.beginPath();
   for (const [x, y] of h) ctx.lineTo(x, y);
   for (let i = h.length - 1; i >= 0; i--) ctx.lineTo(h[i][0], -h[i][1]);
   ctx.closePath();
 }
 
-// 飞机剪影：机身 + 机翼 + 尾翼；侦察机带雷达圆盘，对地支援机带双发动机舱，攻击机挂弹
+// 飞机剪影：轮廓 + 各型细节（预警机雷达圆盘、歼-20 外倾双垂尾与鸭翼、轰-6K 翼根发动机、A-10 尾部双发、连翼机的中空、V 尾、旋翼与短翼）；攻击机挂弹
 function drawAircraft(ctx, x, y, a, type, size, col, alpha, bank, lw, bombs) {
   const sc = size / 21;
   ctx.save(); ctx.translate(x, y); ctx.rotate(a); ctx.scale(sc, sc * (1 - .32 * Math.min(1, Math.abs(bank || 0))));
@@ -625,20 +697,31 @@ function drawAircraft(ctx, x, y, a, type, size, col, alpha, bank, lw, bombs) {
   ctx.fillStyle = `rgba(2,10,6,${.88 * alpha})`; ctx.fill();
   ctx.strokeStyle = rgba(col, alpha); ctx.lineWidth = lw / sc; ctx.stroke();
   ctx.lineWidth = lw / sc * .7;
-  ctx.beginPath(); ctx.moveTo(8.5, 0); ctx.lineTo(4, 0); ctx.stroke();   // 座舱
-  if (type === 'recon') {
-    ctx.beginPath(); ctx.arc(-1.5, 0, 3.4, 0, 7); ctx.fillStyle = `rgba(2,10,6,${alpha})`; ctx.fill(); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(-4.9, 0); ctx.lineTo(1.9, 0); ctx.stroke();
-  } else if (type === 'cas') {
-    for (const s of [-1, 1]) ctx.strokeRect(-6.5, s * 2.9 - 1, 3.4, 2);
-  } else if (type === 'bomber') {   // 四台发动机
-    for (const s of [-1, 1]) for (const y of [4.2, 8]) ctx.strokeRect(1.2, s * y - .8, 3.2, 1.6);
-  } else if (type === 'dive') {   // 机翼下的俯冲减速板
-    ctx.beginPath(); for (const s of [-1, 1]) { ctx.moveTo(-.8, s * 6.2); ctx.lineTo(-.8, s * 8.6); } ctx.stroke();
-  } else if (type === 'heli') {   // 主旋翼
+  const seg = (...p) => { ctx.beginPath(); for (let i = 0; i < p.length; i += 4) { ctx.moveTo(p[i], p[i + 1]); ctx.lineTo(p[i + 2], p[i + 3]); } ctx.stroke(); };
+  if (type !== 'heli' && type !== 'gj11' && type !== 'wz7') seg(8.5, 0, 4.5, 0);   // 座舱
+  if (type === 'kj600') {   // 背负雷达圆盘 + 两台涡桨
+    ctx.beginPath(); ctx.arc(-1.8, 0, 3.6, 0, 7); ctx.fillStyle = `rgba(2,10,6,${alpha})`; ctx.fill(); ctx.stroke();
+    seg(-5.4, 0, 1.8, 0);
+    for (const s of [-1, 1]) ctx.strokeRect(1.2, s * 4.4 - .8, 3.4, 1.6);
+  } else if (type === 'wz7') {   // 连翼中间是空的
+    for (const s of [-1, 1]) { ctx.beginPath(); ctx.moveTo(.4, s * 1.5); ctx.lineTo(-4.2, s * 8.4); ctx.lineTo(-7.4, s * 2.4); ctx.stroke(); }
+  } else if (type === 'j20') {   // 外倾双垂尾
+    for (const s of [-1, 1]) seg(-6, s * 1.9, -9.6, s * 3);
+  } else if (type === 'j35' || type === 'f35' || type === 'j15') {   // 双垂尾
+    for (const s of [-1, 1]) seg(-5.6, s * 1.6, -9.2, s * 2.3);
+  } else if (type === 'h6k') {   // 翼根两台发动机
+    for (const s of [-1, 1]) ctx.strokeRect(-1.8, s * 3.2 - .9, 6, 1.8);
+  } else if (type === 'a10') {   // 尾部背负双发 + 双垂尾
+    for (const s of [-1, 1]) { ctx.strokeRect(-6.4, s * 2.6 - .9, 3.6, 1.8); seg(-9.4, s * 4.8, -10.6, s * 4.8); }
+  } else if (type === 'gj2') {   // V 形尾翼
+    for (const s of [-1, 1]) seg(-8.2, s * .4, -10.2, s * 3.6);
+  } else if (type === 'gj11') {   // 背部进气口
+    ctx.strokeRect(1, -1, 3, 2);
+  } else if (type === 'heli') {   // 主旋翼 + 短翼挂架
+    seg(-.5, -4.2, -.5, 4.2);
     ctx.setLineDash([2.2, 1.6]); ctx.beginPath(); ctx.arc(1.5, 0, 9.5, 0, 7); ctx.stroke(); ctx.setLineDash([]);
-  } else if (type === 'fighter') {   // 外倾双垂尾
-    ctx.beginPath(); for (const s of [-1, 1]) { ctx.moveTo(-6.5, s * 1.7); ctx.lineTo(-10, s * 2.4); } ctx.stroke();
+  } else if (type === 'transport') {   // 运-20：四台发动机
+    for (const s of [-1, 1]) for (const y of [4.2, 8]) ctx.strokeRect(1.4, s * y - .8, 3.2, 1.6);
   }
   if (bombs) {
     ctx.fillStyle = rgba(COL.amber, alpha);
@@ -657,7 +740,7 @@ function drawCarrier1(time) {
   if (!c || !R.ctx || !isFinite(c.x) || !isFinite(c.y)) return;
   const ctx = R.ctx, k = cvScale(), lw = n => px(n) / k, dead = c.hp <= 0, det = CV_LEN * k * R.s;
   const col = dead ? COL.amber : COL.g, hit = S.t - (c.hitT ?? -99) < .35, sel = !h && typeof isSel === 'function' && isSel('CV');
-  const wing = S.air ? S.air.wing.filter(w => cvHome(w) === h) : [], deckPl = S.planes.filter(p => !p.dead && cvHome(p) === h && (p.phase === 'cat' || p.phase === 'roll'));
+  const wing = S.air ? S.air.wing.filter(w => cvHome(w) === h && !airLandW(w)) : [], deckPl = S.planes.filter(p => !p.dead && cvHome(p) === h && (p.phase === 'cat' || p.phase === 'roll'));
   if (c.moving && !dead) {   // 航向指示
     ctx.strokeStyle = rgba(COL.sel, sel ? .6 : .25); ctx.lineWidth = px(1); ctx.setLineDash([px(4), px(4)]);
     ctx.beginPath(); ctx.moveTo(c.x, c.y); ctx.lineTo(c.tx, c.ty); ctx.stroke(); ctx.setLineDash([]);
@@ -733,7 +816,7 @@ function drawCarrier1(time) {
     if (w) {
       const rearm = w.state === 'rearm', cl = rearm ? COL.amber : COL.intel;
       if (det < 80) { ctx.fillStyle = rgba(cl, rearm ? .55 : .9); ctx.fillRect(u - 2.6, v - 2.6, 5.2, 5.2); continue; }
-      drawAircraft(ctx, u, v, r, airSilKey(w.type, w.v), w.type === 'bomber' ? 10.5 : 8.5, cl, rearm ? .7 : 1, 0, lw(1.1), (w.type === 'strike' || w.type === 'bomber') && !rearm);
+      drawAircraft(ctx, u, v, r, airSilKey(w.type, w.v), w.type === 'bomber' ? 10.5 : 8.5, cl, rearm ? .7 : 1, 0, lw(1.1), w.type === 'bomber' && !rearm);
       if (rearm && det >= 160) {
         ctx.strokeStyle = rgba(COL.amber, .8); ctx.lineWidth = lw(1.4);
         ctx.beginPath(); ctx.arc(u, v, 5.6, -1.57, -1.57 + (1 - clamp(w.rearmT / AIR_REARM, 0, 1)) * 6.283); ctx.stroke();
@@ -819,11 +902,11 @@ function drawPlanes(time) {
       ctx.fillStyle = rgba(COL.smoke, .3 * (1 - j / 7)); ctx.beginPath(); ctx.arc(sx, sy, px(2) + j * 1.2, 0, 7); ctx.fill();
     }
     const [x, y] = airWreckPos(w, age);
-    drawAircraft(ctx, x, y, w.h + age * 5, airSilKey(w.kind, w.v), big((AIR_SPEC[w.kind] || AIR_SPEC.strike).size) * (1 - u * .55), COL.amber, 1 - u * .6, Math.sin(age * 9), px(1.3), false);
+    drawAircraft(ctx, x, y, w.h + age * 5, airSilKey(w.kind, w.v), big(airSpec(w.kind, w.v).size) * (1 - u * .55), COL.amber, 1 - u * .6, Math.sin(age * 9), px(1.3), false);
   }
   for (const p of S.planes) {
     if (p.dead) continue;
-    const sp = AIR_SPEC[p.kind] || AIR_SPEC.strike, onDeck = p.phase === 'cat' || p.phase === 'roll' || p.phase === 'trap';
+    const sp = airSpec(p.kind, p.v), onDeck = p.phase === 'cat' || p.phase === 'roll' || p.phase === 'trap';
     const air = clamp((p.alt || 0) * 1.6, 0, 1), size = lerp(8.5 * k, big(sp.size), air);
     let x = p.x, y = p.y;
     if (onDeck && c && k > 1) { const cc = cvOf(cvHome(p)) || c, [u, v] = cvL(p.x, p.y, cc); [x, y] = cvW(u * k, v * k, cc); }
@@ -867,7 +950,7 @@ function drawPlanes(time) {
       ctx.save(); ctx.translate(x + o * .7, y + o); ctx.rotate(p.heading); ctx.scale(sc, sc * (1 - .32 * Math.min(1, Math.abs(p.bank || 0))));
       airShape(ctx, airSilKey(p.kind, p.v)); ctx.fillStyle = `rgba(0,0,0,${.38 * air})`; ctx.fill(); ctx.restore();
     }
-    drawAircraft(ctx, x, y, p.heading, airSilKey(p.kind, p.v), size, COL.intel, 1, p.bank, px(1.4), (p.kind === 'strike' || p.kind === 'bomber') && !p.dropped);
+    drawAircraft(ctx, x, y, p.heading, airSilKey(p.kind, p.v), size, COL.intel, 1, p.bank, px(1.4), p.kind === 'bomber' && !p.dropped);   // 歼-35 内埋弹舱：不画外挂炸弹
     if (p.gunT > 0) {   // 机炮口焰
       const nx = x + Math.cos(p.heading) * size * .55, ny = y + Math.sin(p.heading) * size * .55;
       ctx.fillStyle = rgba('#fff3d6', .5 + .5 * Math.sin(time * 60)); ctx.beginPath(); ctx.arc(nx, ny, size * .14, 0, 7); ctx.fill();
@@ -886,8 +969,9 @@ function arrowAir(ctx, x, y, a, col) {
 function drawAirTool(time) {
   const t = U.tool, m = U.mouse;
   if (!m || (t !== 'recon' && t !== 'strike' && t !== 'cas' && t !== 'bomber' && t !== 'fighter')) return false;
-  const ctx = R.ctx, c = cvAll().filter(o => o.hp > 0).sort((a, b) => dist(a.x, a.y, m.x, m.y) - dist(b.x, b.y, m.x, m.y))[0] || S.cv, ok = !!(S.assets && S.assets[t] > 0 && c && c.hp > 0), col = ok ? COL.intel : COL.enemy;
-  const ox = c ? c.x : m.x, oy = c ? c.y : H, a = Math.atan2(m.y - oy, m.x - ox);
+  const land = S.air && S.air.wing.some(w => w.type === t && w.state === 'deck' && airLandW(w));   // 陆基飞机不需要航母
+  const ctx = R.ctx, c = cvAll().filter(o => o.hp > 0).sort((a, b) => dist(a.x, a.y, m.x, m.y) - dist(b.x, b.y, m.x, m.y))[0] || S.cv, ok = !!(S.assets && S.assets[t] > 0 && (land || (c && c.hp > 0))), col = ok ? COL.intel : COL.enemy;
+  const ox = land || !c || !(c.hp > 0) ? m.x : c.x, oy = land || !c || !(c.hp > 0) ? H : c.y, a = Math.atan2(m.y - oy, m.x - ox);
   ctx.lineWidth = px(1.2); ctx.strokeStyle = rgba(col, .35); ctx.setLineDash([px(3), px(5)]);
   ctx.beginPath(); ctx.moveTo(ox, oy); ctx.lineTo(m.x, m.y); ctx.stroke();
   if (t === 'recon') {
@@ -907,6 +991,13 @@ function drawAirTool(time) {
       ctx.setLineDash([]); ctx.beginPath(); ctx.arc(bx, by, px(2.5), 0, 7); ctx.stroke();
     }
     arrowAir(ctx, m.x - Math.cos(a) * 110, m.y - Math.sin(a) * 110, a, rgba(ok ? COL.amber : COL.enemy, .9));
+  } else if (t === 'strike' && (() => { const w = S.air && S.air.wing.find(o => o.type === 'strike' && o.state === 'deck'); return airMdl('strike', w ? w.v : null).std; })()) {   // 歼-35：精确制导，防区外投放
+    const w = S.air.wing.find(o => o.type === 'strike' && o.state === 'deck'), M = airMdl('strike', w ? w.v : null);
+    ctx.strokeStyle = rgba(ok ? COL.amber : COL.enemy, .9); ctx.lineWidth = px(1.7);
+    ctx.setLineDash([]); ctx.beginPath(); ctx.arc(m.x, m.y, 10, 0, 7); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(m.x - 14, m.y); ctx.lineTo(m.x + 14, m.y); ctx.moveTo(m.x, m.y - 14); ctx.lineTo(m.x, m.y + 14); ctx.stroke();
+    ctx.setLineDash([px(4), px(4)]); ctx.beginPath(); ctx.arc(m.x, m.y, M.std, a + Math.PI - .5, a + Math.PI + .5); ctx.stroke();   // 投放线：飞机在这里投弹后掉头
+    arrowAir(ctx, m.x - Math.cos(a) * (M.std + 40), m.y - Math.sin(a) * (M.std + 40), a, rgba(ok ? COL.amber : COL.enemy, .9));
   } else if (t === 'strike') {
     ctx.strokeStyle = rgba(ok ? COL.amber : COL.enemy, .9); ctx.lineWidth = px(1.7);
     for (let i = 0; i < 3; i++) {

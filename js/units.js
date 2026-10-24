@@ -63,11 +63,11 @@ function updateShips(dt) {
     }
     if (s.state !== 'move') continue;
     // 未清除的反登陆障碍
-    if (OBSC[ci(s.x, s.y)]) for (const o of S.obst) if (!o.dead && dist(o.x, o.y, s.x, s.y) < 12) {
+    if (OBSC[ci(s.x, s.y)] && !s.hover) for (const o of S.obst) if (!o.dead && dist(o.x, o.y, s.x, s.y) < 12) {   // 气垫艇（hover）从障碍上越过
       o.dead = true; o.known = true; damageShip(s, 1.6); rebuildForts();
       log(`${s.label} 撞上反登陆障碍`, 'bad', null, 0, s);
     }
-    if (!sailTo(s, dt, 26)) continue;
+    if (!sailTo(s, dt, 26 * (s.spdK || 1))) continue;   // spdK：气垫登陆艇约 2.2 倍
     if (s.land) { s.state = 'unloading'; s.ut = 0; log(`${s.label} 抢滩`, 'good', null, 0, { x: s.bx, y: s.by }); }
     else s.state = 'idle';
   }
@@ -112,16 +112,28 @@ function formationSlots(n, x, y, ang) {
   return out;
 }
 
+// 撤退落脚点：退到搁滩舰船旁，但在滩顶 25–55 内找掩蔽最好的地方趴下（弹坑、堤坎、林缘），各组错开——不在水线上挤成一团挨打
+function retreatSpot(bx, by, k) {
+  let best = [bx, by], bc = Infinity;
+  const a0 = (k || 0) * 2.4;
+  for (let i = 0; i < 12; i++) {
+    const a = a0 + i * .52, r = 25 + (i % 3) * 15, x = clamp(bx + Math.cos(a) * r, 5, W - 5), y = clamp(by - Math.abs(Math.sin(a)) * r, 5, H - 5);
+    if (!isLand(x, y) || !passInf(x, y)) continue;
+    const c = coverAt(x, y) + i * .004;
+    if (c < bc) { bc = c; best = [x, y]; }
+  }
+  return best;
+}
 // t：move 移动（行进间射击）/ amove 攻击前进（遇敌停下交火）/ hold 坚守 / retreat 撤退 / clear 工兵排雷剪网
 function orderTeams(teams, x, y, t) {
   if (!teams.length) return 0;
   if (t === 'hold') { for (const q of teams) q.order = { t: 'hold' }; log(`${teams.length} 个小组原地坚守`, 'info', 'ord', 1); return teams.length; }
   if (t === 'retreat') {
-    for (const q of teams) {
+    teams.forEach((q, k) => {
       const bh = S.ships.filter(s => s.state === 'beached').sort((a, b) => dist(a.bx, a.by, q.x, q.y) - dist(b.bx, b.by, q.x, q.y))[0];
-      const tx = bh ? bh.bx : q.x, ty = bh ? bh.by - 10 : Math.min(q.y + 80, coastAt(q.x) - 10);
+      const bx = bh ? bh.bx : q.x, by = bh ? bh.by - 10 : Math.min(q.y + 80, coastAt(q.x) - 10), [tx, ty] = retreatSpot(bx, by, k);
       q.order = { t: 'retreat', x: tx, y: ty, gx: tx, gy: ty };
-    }
+    });
     log(`${teams.length} 个小组撤向滩头`, 'warn', 'ord', 1);
     return teams.length;
   }
@@ -152,7 +164,11 @@ function moveTeam(q, dt, mul) {
     const f = field(o.gx ?? o.x, o.gy ?? o.y, q.side), n = f && nextStep(f, q.x, q.y);
     // 已走到编组中心而本组槽位不能直达（隔水、隔崖）：就地停下，免得在中心与槽位之间来回打转
     if (f && o.gx != null && (o.gx !== o.x || o.gy !== o.y) && f[ci(q.x, q.y)] < 1) return true;
-    if (n) [tx, ty] = n;
+    if (n) {
+      [tx, ty] = n;
+      // 寻路场是逐格的：往前多看两格，能直线走到就直接朝那里走，路线顺直，不左右来回拐
+      for (let k = 0; k < 2; k++) { const m = nextStep(f, tx, ty); if (!m || !clearLine(q.x, q.y, m[0], m[1], q.side)) break; [tx, ty] = m; }
+    }
   }
   const i = ci(q.x, q.y);
   const sp = (q.side === 'p' ? (q.kind === 'eng' ? 18 : 16) : 14) * (TP[TER.type[i]].sp || .5) * (WIREC[i] ? .3 : 1) * (q.sup > 30 ? .7 : 1) * mul * dt;

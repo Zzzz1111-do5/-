@@ -3,7 +3,8 @@
 // S.snet.nodes：{id, x, y, parent, root, hp, maxhp, built(0..1), cut, dead, connected, rep, sab, path:[[x,y]...], t, deadT}
 // parent = 上级节点 id（null 表示直接连到滩头补给站）；root = 所属 S.supply 补给线 id；path = 从上级到本节点的运输线
 // 节点接通 = 已建成、未被摧毁、到上级的运输线未被切断、上级接通（或所属滩头补给线接通）
-const SN_R = 220, SN_MAX = 14, SN_HP = 10, SN_FAR = 260;
+// SN_STEP：新补给点离上一个点约几格——有补给卡车（trucks.js）往前运，点可以设得更远、链可以更长
+const SN_R = 220, SN_MAX = 24, SN_HP = 10, SN_FAR = 260, SN_STEP = 26, SN_STOCK0 = .35;
 
 function snEnsure() {
   if (!S.snet || typeof S.snet !== 'object' || !Array.isArray(S.snet.nodes)) S.snet = { nodes: [], planT: 0, front: null };
@@ -60,13 +61,14 @@ function supplyPoints(connectedOnly) {
   const out = [];
   if (!S) return out;
   for (const L of S.supply) if (!connectedOnly || L.connected) out.push({ kind: 'depot', id: L.id, x: L.x, y: L.y, root: L.id, connected: !!L.connected });
-  if (S.snet) for (const n of S.snet.nodes) if (snLive(n) && (!connectedOnly || n.connected)) out.push({ kind: 'node', id: n.id, x: n.x, y: n.y, root: n.root, connected: !!n.connected });
+  if (S.snet) for (const n of S.snet.nodes) if (snLive(n) && (!connectedOnly || n.connected)) out.push({ kind: 'node', id: n.id, x: n.x, y: n.y, root: n.root, connected: !!n.connected, stock: n.stock ?? 1 });
   if (S.para && S.para.ca) for (const k of S.para.ca) if (k.amt > 0) out.push({ kind: 'cache', id: k.id, x: k.x, y: k.y, root: null, connected: true });   // 空投补给点（para.js）
   return out;
 }
+// 最近的补给点；只要接通的时，存量见底（等卡车）的前沿点不算
 function nearestSupply(x, y, connectedOnly) {
   let best = null, bd = Infinity;
-  for (const p of supplyPoints(connectedOnly)) { const d = dist(p.x, p.y, x, y); if (d < bd) { bd = d; best = p; } }
+  for (const p of supplyPoints(connectedOnly)) { if (connectedOnly && p.stock != null && p.stock <= .03) continue; const d = dist(p.x, p.y, x, y); if (d < bd) { bd = d; best = p; } }
   return best;
 }
 
@@ -84,7 +86,7 @@ function snPlan() {
   const net = snEnsure(), N = net.nodes;
   snPrune();
   net.front = null;
-  if (!S.teams.some(q => q.side === 'p' && q.kind === 'eng' && q.men.length)) return;   // 工兵全部阵亡：无人施工
+  if (!S.teams.some(q => q.side === 'p' && q.kind === 'eng' && q.men.length) && !(typeof trkAny === 'function' && trkAny())) return;   // 工兵全部阵亡、也没有补给卡车：无人施工
   const pts = supplyPoints(true);
   if (!pts.length) return;
   const far = [];
@@ -111,7 +113,7 @@ function snPlan() {
   if (!an || !isFinite(ad)) return;
   let x = an.x, y = an.y;
   const path = [[x, y]], trail = [[x, y]];
-  for (let k = 1; k <= 17; k++) {
+  for (let k = 1; k <= SN_STEP; k++) {
     const n = nextStep(f, x, y);
     if (!n) break;
     [x, y] = n;
@@ -129,7 +131,7 @@ function snPlan() {
   if (N.some(n => !n.dead && dist(n.x, n.y, x, y) < 70)) return;
   for (let k = 3; k < trail.length - 1; k += 3) path.push(trail[k]);
   path.push([x, y]);
-  const node = { id: S.nid++, x, y, parent: an.kind === 'node' ? an.id : null, root: an.root, hp: SN_HP, maxhp: SN_HP, built: 0, cut: false, dead: false, connected: false, rep: 0, sab: 0, path, t: S.t, deadT: null };
+  const node = { id: S.nid++, x, y, parent: an.kind === 'node' ? an.id : null, root: an.root, hp: SN_HP, maxhp: SN_HP, built: 0, cut: false, dead: false, connected: false, rep: 0, sab: 0, path, t: S.t, deadT: null, stock: SN_STOCK0 };
   N.push(node);
   log('工兵规划前沿补给点', 'info', 'snplan', 40, { x, y });
 }
@@ -165,7 +167,7 @@ function snWork(dt) {
         if (dist(q.x, q.y, n.x, n.y) >= 16) continue;
         n.built = Math.min(1, (n.built || 0) + rate / 15);
         if (n.built >= 1) {
-          Object.assign(n, { dead: false, hp: n.maxhp, cut: false, rep: 0, sab: 0 });
+          Object.assign(n, { dead: false, hp: n.maxhp, cut: false, rep: 0, sab: 0, stock: Math.max(n.stock ?? 0, SN_STOCK0) });   // 工兵随身带来的一点存量，其余靠卡车
           log('前沿补给点建成', 'good', 'snbuilt', 3, n);
         }
       } else if (n.cut) {
@@ -337,7 +339,7 @@ function drawSupplyNet(time) {
     }
     ctx.setLineDash([px(7), px(4)]); ctx.lineWidth = px(2);
     ctx.strokeStyle = n.connected ? rgba(COL.g, .75) : rgba(COL.amber, .45); line(P); ctx.stroke();
-    if (!n.connected) continue;
+    if (!n.connected || typeof trkDraw === 'function') continue;   // 有补给卡车模块时画真实的卡车（trucks.js）
     // 车队：沿运输线向前线移动的光点（近看为小卡车）
     const L = [0];
     for (let i = 1; i < P.length; i++) L.push(L[i - 1] + dist(P[i - 1][0], P[i - 1][1], P[i][0], P[i][1]));
@@ -394,7 +396,12 @@ function snDrawNode(ctx, n, time) {
   if (!live) {   // 建造 / 重建进度
     ctx.strokeStyle = rgba(COL.amber, .35); ctx.lineWidth = px(1); ctx.beginPath(); ctx.arc(x, y, s * 1.45, 0, 7); ctx.stroke();
     if (n.built > 0) { ctx.strokeStyle = COL.amber; ctx.lineWidth = px(2.2); ctx.beginPath(); ctx.arc(x, y, s * 1.45, -1.57, -1.57 + n.built * 6.283); ctx.stroke(); }
-  } else if (n.hp < n.maxhp) {
+  } else {   // 存量条（卡车送来的弹药、油料）：见底时闪红
+    const w = s * 1.8, yb = y - s * 1.35, st = clamp(n.stock ?? 1, 0, 1);
+    ctx.fillStyle = 'rgba(2,10,6,.7)'; ctx.fillRect(x - w / 2, yb, w, px(2.2));
+    ctx.fillStyle = st <= .03 ? rgba(COL.enemy, .5 + .4 * Math.sin(time * 8)) : st < .3 ? COL.amber : rgba(COL.g, .9); ctx.fillRect(x - w / 2, yb, st <= .03 ? w : w * st, px(2.2));
+  }
+  if (live && n.hp < n.maxhp) {
     const w = s * 1.8, yb = y + s * 1.15;
     ctx.fillStyle = rgba(COL.enemy, .35); ctx.fillRect(x - w / 2, yb, w, px(2));
     ctx.fillStyle = n.hp < n.maxhp * .4 ? COL.enemy : COL.amber; ctx.fillRect(x - w / 2, yb, w * clamp(n.hp / n.maxhp, 0, 1), px(2));

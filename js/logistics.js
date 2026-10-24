@@ -89,9 +89,15 @@ function updateSupply(dt) {
     if (tg.rep >= 1) { tg.ok = true; tg.rep = 0; log('工兵修复了一段补给线', 'good', 'segfix', 3); }
   }
   if (typeof updateSupplyNet === 'function') updateSupplyNet(dt);   // 施工、连通性、规划
-  const N = S.snet && Array.isArray(S.snet.nodes) ? S.snet.nodes.filter(n => n.connected && n.built >= 1 && !n.dead) : [];
-  if (N.length) for (const q of S.teams)
-    if (q.side === 'p' && q.kind === 'inf' && q.men.length && N.some(n => dist(q.x, q.y, n.x, n.y) < 220)) feed(q);
+  // 前沿补给点：接通且有存量才补；补弹药消耗存量（满存量约够 12 个组从空补满，见底等补给卡车，trucks.js）
+  const N = S.snet && Array.isArray(S.snet.nodes) ? S.snet.nodes.filter(n => n.connected && n.built >= 1 && !n.dead && (n.stock ?? 1) > .03) : [];
+  if (N.length) for (const q of S.teams) {
+    if (q.side !== 'p' || q.kind !== 'inf' || !q.men.length || fed.has(q)) continue;
+    const n = N.find(n => dist(q.x, q.y, n.x, n.y) < 220);
+    if (!n) continue;
+    if (q.ammo < 60) n.stock = Math.max(0, (n.stock ?? 1) - 6 * dt / 700);
+    feed(q);
+  }
   for (const id of units) { const u = UNIT_MAP.get(id); if (u && u.side === 'p') u.morale = Math.min(100, u.morale + 2 * dt); }
 }
 

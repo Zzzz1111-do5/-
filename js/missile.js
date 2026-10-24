@@ -140,10 +140,10 @@ function msSamHit(m, T) {
   let base, flare = 1;
   const aam = m.src === 'aam';   // 战斗机空空导弹（airwar.js）：单发命中率随弹带来（m.pk）
   if (k === 'plane') {
-    base = aam || samv ? m.pk : T.kind === 'recon' ? .3 : T.v === 'heli' ? .62 : T.kind === 'bomber' && T.v !== 'dive' ? .32 : .42;
+    base = (aam || samv ? m.pk : T.kind === 'recon' ? .3 : T.v === 'heli' ? .62 : T.kind === 'bomber' && T.v !== 'dive' ? .32 : .42) * (aam ? 1 : (1 + (typeof airStealth === 'function' ? airStealth(T) : 1)) / 2);   // 隐身机：防空导弹难以锁定
     if (!T.samN) { T.samN = 1; flare = .6; MSV.fl.push({ x: T.x, y: T.y, t: S.t }); }   // 第一枚多半被干扰弹骗走
   } else {
-    base = aam || samv ? m.pk : m.src === 'dd' || m.src === 'esc' ? (T.type === 'heli' ? .55 : .6) : T.type === 'heli' ? .62 : .42;
+    base = (aam || samv ? m.pk : m.src === 'dd' || m.src === 'esc' ? (T.type === 'heli' ? .55 : .6) : T.type === 'heli' ? .62 : .42) * (aam ? 1 : (1 + ((typeof EA_SPEC === 'object' && EA_SPEC[T.type] && EA_SPEC[T.type].stealth) || 1)) / 2);   // F-35A 隐身
     if (T.flares > 0) { T.flares--; flare = .6; MSV.fl.push({ x: T.x, y: T.y, t: S.t }); }
   }
   if (Math.random() < base * (1 - clamp(m.sup || 0, 0, 100) / 150) * flare) {
@@ -358,7 +358,7 @@ function msCommandP(dt) {
 }
 
 // —— HUD：支援栏注入导弹按钮（I 键）；工具状态下左键点地面发射 ——
-const MS_ICON = '<path d="M12 2.5l2 4v10l-2 2-2-2v-10z"/><path d="M10 13.5l-3 3v2l3-1.5M14 13.5l3 3v2l-3-1.5"/><path d="M11 20.5l1 1.5 1-1.5"/>';
+const MS_ICON = typeof WI === 'object' ? WI.df15b : '<path d="M12 2.5l2 4v10l-2 2-2-2v-10z"/>';   // 东风-15B
 function msHud() {
   if (typeof document === 'undefined' || typeof $ !== 'function' || !$('support') || !S) return;
   let b = $('b-msl');

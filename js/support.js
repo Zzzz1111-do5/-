@@ -136,6 +136,7 @@ function navMark(o, x, y) {
 
 function updateShells(dt) {
   for (const s of S.shells) {
+    if (s.done) continue;   // 已被近防炮在空中打掉（ciws.js）
     if ((s.t += dt) < s.dur) continue;
     s.done = true;
     if (s.kind === 'cb') { if (dist(s.x1, s.y1, S.dd.x, S.dd.y) < 45) damageDD({ kind: 'cb', x: s.x0, y: s.y0 }); else impact(s.x1, s.y1, POWER.mortar, 'e'); }   // 机动中的驱逐舰可以躲开反炮兵射击

@@ -22,7 +22,8 @@ function indexUnits() {
 const teamsOf = u => UNIT_TEAMS.get(u.id) || [];
 const unitOf = q => UNIT_MAP.get(q.u);
 const angDiff = (a, b) => { const d = Math.abs(a - b) % 6.2832; return d > 3.1416 ? 6.2832 - d : d; };
-const faceOf = q => S.t - q.movedT < .5 && q.heading != null ? q.heading : unitOf(q) ? unitOf(q).face : SOUTH;
+// 朝向：刚开过火（2.5 秒内）就面朝所打的目标——边走边打、后撤时也面朝敌人；否则行进中朝前进方向，停下朝连队正面
+const faceOf = q => q.fx != null && S.t - (q.fT ?? -9) < 2.5 ? Math.atan2(q.fy - q.y, q.fx - q.x) : S.t - q.movedT < .5 && q.heading != null ? q.heading : unitOf(q) ? unitOf(q).face : SOUTH;
 const unitName = u => u.side === 'p' ? (u.kind === 'eng' ? `${u.ship || ''}工兵` : `${u.ship || '增援'}连`) : '敌军';
 
 function defWidth(form, n) { return form === 'loose' ? Math.max(20, n * 34) : form === 'wedge' ? 28 + (n > 3 ? 84 : 0) : Math.max(16, n * 20); }
@@ -123,30 +124,39 @@ function updateUnits(dt) {
     u.men = men; u.men0 = Math.max(u.men0 || 0, men);
     u.x = ts.reduce((a, q) => a + q.x, 0) / ts.length; u.y = ts.reduce((a, q) => a + q.y, 0) / ts.length;
     const sup = ts.reduce((a, q) => a + q.sup, 0) / ts.length, hit = S.t - u.hitT < 3;
-    let dm = -sup / 100 * 5;
+    // 溃退到位（撤到落脚点、趴在掩蔽处 12 秒以上）：压制的影响减半以上，军官、骨干收拢溃兵——不会一直卡在 0
+    const settled = u.state === 'rout' && S.t - (u.routT ?? 0) > 12 && ts.every(q => !q.order || q.order.t !== 'retreat');
+    let dm = -sup / 100 * (settled ? 2 : 5);
     if (S.t - u.flankT < 3) dm -= 4;
     if (!hit) dm += u.order === 'hold' ? 5 : 2.5;
+    if (settled) dm += hit ? 2 : 3;
+    // 友邻：在侧的友军打气，溃逃的友军动摇军心——只影响还没溃的部队，最多扣 3（溃兵挤在一起不再互相拖到 0）
     let fr = 0;
-    for (const o of S.units) if (o !== u && !o.dead && o.side === u.side && o.x != null && dist(o.x, o.y, u.x, u.y) < 150) fr += o.state === 'rout' ? -3 : 1;
-    dm += Math.min(3, fr);
+    for (const o of S.units) if (o !== u && !o.dead && o.side === u.side && o.x != null && dist(o.x, o.y, u.x, u.y) < 150) fr += o.state === 'rout' ? (u.state === 'rout' ? 0 : -1.5) : 1;
+    dm += clamp(fr, -3, 3);
     if (u.side === 'p' && ts.every(q => q.kind !== 'inf' || q.ammo < 5)) dm -= 1.5;
     if (u.side === 'e' && dm < 0) dm *= D.nerve;
     const cap = 35 + 65 * men / u.men0;
     u.morale = clamp(u.morale + dm * dt, 0, cap);
-    if (u.state !== 'rout' && u.morale < 22) routUnit(u, ts);
-    else if (u.state === 'rout') { if (u.morale > Math.min(45, cap * .8) && !hit) rallyUnit(u, ts); }
+    // 刚重整的部队 25 秒内只有士气跌到 6 以下才会再溃（避免溃—整—溃来回跳）
+    if (u.state !== 'rout' && u.morale < (S.t - (u.rallyT ?? -99) < 25 ? 6 : 22)) routUnit(u, ts);
+    else if (u.state === 'rout') {
+      // 背水一战：在滩头趴了 25 秒，退无可退，士气回到 30（或上限六成）就算还在挨打也重整
+      const last = settled && S.t - (u.routT ?? 0) > 25;
+      if ((u.morale > Math.min(45, cap * .8) && !hit) || (last && u.morale > Math.min(30, cap * .6))) rallyUnit(u, ts);
+    }
     else u.state = u.morale < 50 ? 'waver' : 'ok';
   }
   if (S.units.some(u => u.dead)) S.units = S.units.filter(u => !u.dead);
 }
 
 function routUnit(u, ts) {
-  u.state = 'rout';
+  u.state = 'rout'; u.routT = S.t;
   if (u.side === 'p') { orderTeams(ts, 0, 0, 'retreat'); log(`${unitName(u)}溃退`, 'bad', 'rt' + u.id, 20, u); }
   else { for (const q of ts) aiRout(q); if (inVision(u.x, u.y)) log('敌军阵线崩溃', 'good', 'ert' + u.id, 20, u); }
 }
 function rallyUnit(u, ts) {
-  u.state = 'waver'; u.order = 'hold';
+  u.state = 'waver'; u.order = 'hold'; u.rallyT = S.t; v8Stat('rally');
   for (const q of ts) q.order = { t: 'hold' };
   if (u.side === 'p') log(`${unitName(u)}重整完毕`, 'info', 'rl' + u.id, 20, u);
 }

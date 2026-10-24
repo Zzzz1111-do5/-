@@ -116,6 +116,15 @@ function enemyMark(ctx, kind, x, y) {
   ctx.stroke();
 }
 
+// 画面上的小组朝向：向 faceOf 平滑转过去（每帧最多约 0.2 弧度），不随寻路的每一步左右乱转
+const TFACE = new WeakMap();
+function faceDraw(q) {
+  const f = faceOf(q), o = TFACE.get(q);
+  if (o == null || !isFinite(o)) { TFACE.set(q, f); return f; }
+  const d = Math.atan2(Math.sin(f - o), Math.cos(f - o)), n = o + clamp(d, -.2, .2);
+  TFACE.set(q, n);
+  return n;
+}
 // 小组本体：远看（每格不足 10px）为楔形三点，点与间距按屏幕像素（随缩放略增），不会糊成一团；近看为世界尺寸的单兵小人
 function drawTeamBody(ctx, q, f, col) {
   const c = Math.cos(f + 1.57), s = Math.sin(f + 1.57), n = q.men.length;
@@ -168,7 +177,7 @@ function drawEnemies(time) {
   for (const q of S.teams) {
     if (q.side !== 'e' || !inView(q.x, q.y, 12)) continue;
     if (inVision(q.x, q.y)) {
-      drawTeamBody(ctx, q, faceOf(q), !R.fig && q.sup >= 60 ? rgba(COL.amber, .9) : COL.enemy);
+      drawTeamBody(ctx, q, faceDraw(q), !R.fig && q.sup >= 60 ? rgba(COL.amber, .9) : COL.enemy);
       supMark(ctx, q);
     } else if (q.seen && S.t - q.seen < 8) {   // 刚失去接触：淡出的小虚线菱形
       ctx.strokeStyle = rgba(COL.enemy, (1 - (S.t - q.seen) / 8) * .5); ctx.lineWidth = px(1); ctx.setLineDash([px(2), px(2)]);
@@ -197,7 +206,7 @@ function drawTeams(time) {
     if (q.side !== 'p' || !inView(q.x, q.y, 12)) continue;
     const low = q.kind === 'inf' && q.ammo < 8, a = low ? .55 + .4 * Math.sin(time * 8) : 1, u = unitOf(q);
     const col = rgba(!R.fig && q.sup >= 60 ? COL.amber : u && u.state === 'rout' ? COL.amber : COL.g, a);
-    drawTeamBody(ctx, q, faceOf(q), col);
+    drawTeamBody(ctx, q, faceDraw(q), col);
     supMark(ctx, q);
     if (q.working) {   // 工兵作业：小小的旋转弧
       const r = R.fig ? 7.5 : px(5.5);

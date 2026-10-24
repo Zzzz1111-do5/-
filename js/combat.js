@@ -149,6 +149,7 @@ function teamSupFar(q) {
 function teamFire(q, tg) {
   const D = aiD(), t = tg.t, moving = S.t - q.movedT < .3, M = modOf(q);
   q.cd = (1.3 + Math.random() * .4) / (M.rof || 1);
+  q.fx = t.x; q.fy = t.y; q.fT = S.t;   // 朝向所打的目标（formation.js faceOf）
   if (q.side === 'p') {
     if (q.ammo <= 0) return;
     // 补给远（300 以外没有接通的补给点）或断了：弹药不足 25 时放慢射速、精确射击，不足 10 时只打 90 以内的目标

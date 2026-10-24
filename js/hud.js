@@ -43,10 +43,10 @@ const BTN = [
   ['forms', [['line', '横队：火力正面最宽', 'Z', () => formNow('line')], ['wedge', '三三制楔形：三人成组、三组成三角', 'C', () => formNow('wedge')],
     ['loose', '散开：降低炮火伤亡', 'B', () => formNow('loose')]]],
   ['support', [['fire', '舰炮射击：每发 70% 暴露坐标', 'F', () => setTool('fire')], ['smoke', '烟幕弹：遮断双方视线', 'S', () => setTool('smoke')],
-    ['recon', '侦察机：从航母起飞纵贯侦察', 'R', () => setTool('recon')], ['strike', '攻击机：三连弹', 'T', () => setTool('strike')],
-    ['bomber', '轰炸机：点已标定的火力点 → 俯冲轰炸机精确投弹；点其他地方 → 重型轰炸机六弹地毯轰炸', 'Y', () => setTool('bomber')],
-    ['cas', '近距空中支援：战机盘旋扫射', 'V', () => setTool('cas')],
-    ['fighter', '战斗机：在指定空域巡逻 90 秒，拦截敌机、夺取制空权', 'W', () => setTool('fighter')],
+    ['recon', '侦察机：空警-600 舰载预警机 / 无侦-7 高空无人机纵贯照相侦察', 'R', () => setTool('recon')], ['strike', '攻击机：歼-35 隐身战斗机在目标 170 外投放精确制导炸弹后掉头（防空压制型在 300 外发射反辐射导弹打敌防空）', 'T', () => setTool('strike')],
+    ['bomber', '轰炸机：点已标定的火力点 → 攻击-11 隐身无人机俯冲精确投弹；点其他地方 → 轰-6K 六弹地毯轰炸', 'Y', () => setTool('bomber')],
+    ['cas', '近距空中支援：攻击-2 无人机 / 歼-15T / 直-10 盘旋压制', 'V', () => setTool('cas')],
+    ['fighter', '战斗机：歼-20 从战区机场起飞，在指定空域巡逻 90 秒，拦截敌机、夺取制空权', 'W', () => setTool('fighter')],
     ['para', '空降伞兵：两架运输机向指定地点空投一个连（4 组 12 人），落地后自动夺取附近据点', '⇧P', () => setTool('para')],
     ['drop', '空投补给：运输机投下 3 箱弹药，附近步兵与车辆就地补充（4 分钟内有效）', '⇧O', () => setTool('drop')],
     ['rline', '开辟增援线', 'E', () => setTool('rline')], ['auto', '驱逐舰自动掩护', 'G', toggleAuto],
@@ -122,11 +122,13 @@ function restart(briefed) {
   updateHud();
 }
 
+// 沙盒单位：单位卡用目录条目的图标（同一车型的不同型号各有图标）
+const catIc = id => { const c = id && typeof catalogById === 'function' && catalogById(id); if (!c || !c.icon) return null; ICON['c_' + id] = c.icon; return 'c_' + id; };
 function cardList() {
   const out = [];
   for (const u of S.units) if (u.side === 'p' && teamsOf(u).length) out.push({ id: u.id, k: u.kind === 'eng' ? 'eng' : u.emblem === 'reserve' ? 'reserve' : 'assault', u });
-  for (const v of S.veh || []) if (v.side === 'p' && !v.dead && !v.lst) out.push({ id: v.id, k: ICON['v_' + v.type] ? 'v_' + v.type : 'ship', v });
-  for (const s of S.ships) if (alive(s) && s.state !== 'beached') out.push({ id: s.id, k: s.kind === 'supply' ? 'supply' : s.kind === 'lst' && ICON.lst ? 'lst' : s.kind === 'dd' ? 'dd' : 'ship', s });
+  for (const v of S.veh || []) if (v.side === 'p' && !v.dead && !v.lst) out.push({ id: v.id, k: catIc(v.sbxV) || (ICON['v_' + v.type] ? 'v_' + v.type : 'ship'), v });
+  for (const s of S.ships) if (alive(s) && s.state !== 'beached') out.push({ id: s.id, k: catIc(s.cat) || (s.kind === 'supply' ? 'supply' : s.kind === 'lst' && ICON.lst ? 'lst' : s.kind === 'dd' ? 'dd' : 'ship'), s });
   if (S.dd.state !== 'sunk') out.push({ id: 'DD', k: 'dd' });
   if (S.cv && S.cv.hp > 0) out.push({ id: 'CV', k: 'cv' });
   return out;

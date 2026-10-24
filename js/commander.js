@@ -168,6 +168,7 @@ function cmdThinkP() {
     cmdRun(cmdAmmoP, C, P);
     cmdRun(cmdJointP, C, P);
   }
+  cmdRun(cmdSeadP, C);
   cmdRun(cmdDecoys, C);
   cmdRun(cmdThreatsP, C);
   cmdRun(cmdVeh, C);
@@ -289,7 +290,7 @@ function cmdArmP(C, go) {
   const arm = !nArm ? 'none' : T.at >= 3 && T.at >= T.inf * .5 ? 'inf' : T.inf >= 3 && T.at <= 1.5 ? 'tank' : 'mix';
   C.arm = arm; C.armTh = T;
   const sh = r => cmdShipsOf(C, r).filter(s => s.state === 'idle' && C.ship[s.id].rel && !C.ship[s.id].sent);
-  const eta = (o, x, sp) => dist(o.x, o.y, x, coastAt(x) - 20) / sp;
+  const eta = (o, x, sp) => dist(o.x, o.y, x, coastAt(x) - 20) / (sp * (o.spdK || 1));   // 气垫登陆艇 spdK 2.2
   const w1 = sh('w1'), fe = sh('fe');   // 第一波（含拓宽到相邻滩头的一翼）同时抵滩
   const xOf = s => { const t = C.ship[s.id], bb = TER.beaches[t.b]; return cmdLandX(bb, t.k || 0, t.n || 1); };
   const vSp = v => Math.max(4, vehSp(v).speed * (vehSp(v).swimK || .6));
@@ -727,6 +728,7 @@ function cmdAirTask(c) {
     if (S.t - a.t > 75) { C.air.splice(i--, 1); continue; }
     if (!(S.assets[a.k] > 0)) continue;
     if (a.k !== 'recon' && a.k !== 'fighter' && cmdNearP(a.x, a.y).d < (a.k === 'cas' ? 45 : cmdAirSafe())) { if (S.t - a.t > 20) C.air.splice(i--, 1); continue; }   // 战斗机巡逻不对地，不受安全距离限制
+    if (a.k === 'cas' && cmdAirClosed(a.x, a.y)) continue;   // 敌防空没压掉：对地支援机先不进去（先打防空，cmdSeadP）
     C.air.splice(i, 1);
     return a;
   }
@@ -811,6 +813,55 @@ function cmdFiresP(C) {
   if (S.dd.state === 'sunk' && !C.ddSunk) {
     C.ddSunk = true;
     if (cmdCtl(S.dd)) chatSay('p', `报告：驱逐舰被击沉，舰炮支援丧失。${S.cv && S.cv.hp > 0 && cmdCtl(S.cv) ? '近距火力支援改由舰载航空兵承担。' : ''}`, { kind: 'report', at: S.dd, lv: 0 });
+  }
+}
+
+// —— 先打防空（压制 / 摧毁敌防空）：航空兵要去的地域——正在攻击的目标据点、主攻滩头出口、我军步兵前沿——600 以内已知的敌防空
+//    （高炮阵地、M163 / M-SHORAD / LPWS、暴露过的毒刺组，carrier.js airAASites）合计威胁 ≥ 1.5 时：先以舰炮、战术导弹、
+//    防空压制型歼-35（反辐射导弹，防区外 300 发射）或普通歼-35（精确制导炸弹）打掉；没压掉之前，对地支援机、攻击机不进这片空域
+//    （carrier.js updateAirAuto 用 cmdAirClosed 查询）。同一处防空 35 秒内只派一次，压掉后报告"航空兵可以进入" ——
+function cmdSeadZones(C) {
+  const Z = [];
+  for (const p of typeof cmdJointPts === 'function' ? cmdJointPts() : []) Z.push({ x: p.x, y: p.y, nm: p.name });
+  if (C.plan && C.plan.main >= 0) { const E = cmdExit(C.plan.main); if (E) Z.push({ x: E.x, y: E.y, nm: E.name }); }
+  const inf = cmdPInf().filter(q => isLand(q.x, q.y));
+  if (inf.length) Z.push({ x: inf.reduce((a, q) => a + q.x, 0) / inf.length, y: inf.reduce((a, q) => a + q.y, 0) / inf.length - 120, nm: '我军前沿' });
+  return Z;
+}
+// 某点上空是否因敌防空暂不派对地支援机 / 攻击机（隐身的歼-35 不受限）
+function cmdAirClosed(x, y) {
+  if (!cmdOn() || !S.cmd || typeof airAAAt !== 'function') return false;
+  return airAAAt(x, y, 280) >= 1.5;
+}
+function cmdSeadP(C) {
+  if (typeof airAASites !== 'function' || S.t < (C.seadT ?? 0)) return;
+  C.seadT = S.t + 4;
+  const sites = airAASites();
+  if (!sites.length) { C.seadOn = null; return; }
+  const Z = cmdSeadZones(C), hot = [];
+  for (const z of Z) { const w = sites.reduce((a, s) => a + (dist(s.x, s.y, z.x, z.y) < 600 ? s.w : 0), 0); if (w >= 1.5) hot.push({ ...z, w }); }
+  C.sead = C.sead || {};
+  if (!hot.length) {
+    if (C.seadOn) { chatSay('p', `报告：${C.seadOn}一带已知的敌防空已被压制，航空兵可以进入。`, { kind: 'report', key: 'seadok', gap: 40 }); C.seadOn = null; }
+    return;
+  }
+  const z = hot.sort((a, b) => b.w - a.w)[0], acts = [];
+  const tgt = sites.filter(s => dist(s.x, s.y, z.x, z.y) < 600 && (C.sead[s.id] || 0) <= S.t).sort((a, b) => b.w - a.w).slice(0, 2);
+  for (const s of tgt) {
+    C.sead[s.id] = S.t + 35;
+    const nm = s.k === 'veh' ? (typeof vehModel === 'function' ? vehModel(s.o) : '防空车') : s.k === 'mp' ? '毒刺防空组' : '高炮阵地';
+    const sead = S.air && S.air.wing.some(w => w.type === 'strike' && w.v === 'sead' && w.state === 'deck');
+    if (cmdFire(s.x, s.y, 2, 'sead')) acts.push(`舰炮压制 ${gridRef(s.x, s.y)} ${nm}`);
+    if (S.assets.strike > 0 && cmdAir('strike', s.x, s.y, s.k === 'gun' ? s.id : null)) { const a = C.air[C.air.length - 1]; if (a && sead) a.pref = 'sead'; acts.push(`${sead ? '防空压制型歼-35 以反辐射导弹' : '歼-35 以精确制导炸弹'}打击该${nm}`); }
+    else if (s.w >= 1.5 && S.assets.msl > 0 && typeof msFireP === 'function' && (cmdAll() || cmdCtl(S.dd)) && msFireP(s.x, s.y, true)) acts.push(`战术导弹打击该${nm}`);
+  }
+  if (typeof v8Stat === 'function' && acts.length) v8Stat('seadTask');
+  if (acts.length) {
+    const kn = {};
+    for (const s of sites) if (dist(s.x, s.y, z.x, z.y) < 600) { const k = s.k === 'veh' ? (typeof vehModel === 'function' ? vehModel(s.o) : '防空车') : s.k === 'mp' ? '毒刺组' : '高炮阵地'; kn[k] = (kn[k] || 0) + 1; }
+    if (C.seadOn !== z.nm) chatSay('p', `判断：${z.nm}上空已知敌防空较强（${Object.keys(kn).map(k => k + ' ' + kn[k]).join('、')}）。决心：先打敌防空，压掉之前对地支援机、攻击机不进这片空域。`, { kind: 'plan', at: z, key: 'sead' + z.nm, gap: 60 });
+    chatSay('p', `命令：${acts.join('；')}。`, { kind: 'order', at: z, key: 'seadord', gap: 12, lv: 1 });
+    C.seadOn = z.nm;
   }
 }
 
