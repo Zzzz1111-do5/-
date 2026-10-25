@@ -334,7 +334,17 @@ function v3Overlay(ctx, time) {
     ctx.fillStyle = rgba(COL.bg, .75 * q.al); ctx.strokeStyle = rgba(col, q.al); ctx.lineWidth = 1.4;
     ctx.beginPath(); ctx.moveTo(q.x, q.y - r); ctx.lineTo(q.x + r, q.y); ctx.lineTo(q.x, q.y + r); ctx.lineTo(q.x - r, q.y); ctx.closePath(); ctx.fill(); ctx.stroke();
     if (p.owner === 'e' && p.prog > 0) { ctx.fillStyle = rgba(COL.g, q.al); ctx.fillRect(q.x - r, q.y + r + 2, r * 2 * p.prog, 2); }
-    if (near && q.f < .5) label(p.name, q.x, q.y - r - 4, COL.text, q.al * .85);
+    if (q.f < .6) label(p.name, q.x, q.y - r - 4, COL.text, q.al * .85);   // 地名（通联里说的据点名）一直标着，压住了就让近处的
+  }
+  // 海滩名（海面上）、方格号（近看时贴在地面每格左上角，与通联里的「D7 方格」对应）
+  for (const b of TER.beaches) { const q = v3Proj(b.cx, coastAt(b.cx) + 70, 0); if (q && q.f < .7) label(b.name, q.x, q.y, COL.amber, .75 * (1 - q.f)); }
+  if (near) {
+    const gx0 = Math.floor(CAM.x / 200), gy0 = Math.floor(CAM.y / 200);
+    for (let gx = gx0 - 3; gx <= gx0 + 3; gx++) for (let gy = gy0 - 3; gy <= gy0 + 3; gy++) {
+      if (gx < 0 || gy < 0 || gx * 200 >= W || gy * 200 >= H) continue;
+      const x = gx * 200 + 14, y = gy * 200 + 16, q = v3Proj(x, y, v3Ht(x, y));
+      if (q && q.f < .5) label(gridRef(x, y), q.x, q.y, COL.g, .45 * (1 - q.f));
+    }
   }
   // 战斗群（编制标号）
   for (const G of S.bgs || []) {

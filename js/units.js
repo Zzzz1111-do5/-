@@ -96,10 +96,10 @@ function sailTo(s, dt, speed) {
   let tx = s.tx, ty = s.ty;
   const wp = shipLaneWP(s);
   if (wp && shipClear(s.x, s.y, wp[0], wp[1])) { [tx, ty] = wp; s.lane = true; }
-  else if (d > 20) {   // 沿流场往前看最多 8 格，取直线可达的最远一点当航路点（只看下一格会走成之字形）
+  else if (d > 20) {   // 沿路点（grid.js pathStep）往前看最多 8 格，取直线可达的最远一点当航路点（只看下一格会走成之字形）
     s.lane = false;
-    const f = field(s.tx, s.ty, 'ship');
-    if (f) { let px = s.x, py = s.y; for (let k = 0; k < 8; k++) { const n = nextStep(f, px, py); if (!n || !shipClear(s.x, s.y, n[0], n[1])) break; [px, py] = n; } if (px !== s.x || py !== s.y) [tx, ty] = [px, py]; else { const n = nextStep(f, s.x, s.y); if (n) [tx, ty] = n; } }
+    const r = pathStep(s, s.tx, s.ty, 'ship', () => field(s.tx, s.ty, 'ship'), shipClear, 8, 60);
+    if (r && r.x != null) [tx, ty] = [r.x, r.y];
   }
   let sp = speed * (typeAt(s.x, s.y) === T.SHOAL ? .55 : 1) * dt, want = Math.atan2(ty - s.y, tx - s.x);
   // 被挡住 6 秒没有进展的船暂时不避让，保证能靠岸
@@ -232,15 +232,11 @@ function moveTeam(q, dt, mul) {
   if (dd < 3) return true;
   if (S.t - (q.pathT ?? -9) > 1) { q.pathT = S.t; q.direct = clearLine(q.x, q.y, o.x, o.y, q.side); }
   let tx = o.x, ty = o.y;
-  if (!q.direct && dd > 16) {
-    const f = field(o.gx ?? o.x, o.gy ?? o.y, q.side), n = f && nextStep(f, q.x, q.y);
+  if (!q.direct && dd > 16) {   // 沿路点走（grid.js pathStep：取一次流场管 50 格；往前多看两个路点，能直线走到就直接朝那里走）
+    const gx = o.gx ?? o.x, gy = o.gy ?? o.y, r = pathStep(q, gx, gy, q.side, () => field(gx, gy, q.side), (x0, y0, x1, y1) => clearLine(x0, y0, x1, y1, q.side));
     // 已走到编组中心而本组槽位不能直达（隔水、隔崖）：就地停下，免得在中心与槽位之间来回打转
-    if (f && o.gx != null && (o.gx !== o.x || o.gy !== o.y) && f[ci(q.x, q.y)] < 1) return true;
-    if (n) {
-      [tx, ty] = n;
-      // 寻路场是逐格的：往前多看两格，能直线走到就直接朝那里走，路线顺直，不左右来回拐
-      for (let k = 0; k < 2; k++) { const m = nextStep(f, tx, ty); if (!m || !clearLine(q.x, q.y, m[0], m[1], q.side)) break; [tx, ty] = m; }
-    }
+    if (r && r.end && o.gx != null && (o.gx !== o.x || o.gy !== o.y)) return true;
+    if (r && r.x != null) [tx, ty] = [r.x, r.y];
   }
   const i = ci(q.x, q.y);
   const crawl = q.prone ? (o.t === 'retreat' || o.dodge ? .75 : o.t === 'charge' || o.t === 'amove' ? .6 : .4) : 1;   // 卧倒：匍匐 / 短促跃进

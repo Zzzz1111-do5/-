@@ -66,7 +66,7 @@ function rpRelease(q, back) {
   q.detail = null; q.repairing = false; q.working = false;
   if (!back) return;
   const u = unitOf(q);   // 归建：回到本连附近，等下一道命令
-  if (u && u.x != null && field(u.x, u.y, 'p')) q.order = { t: 'move', x: u.x + gauss() * 8, y: u.y + gauss() * 8, gx: u.x, gy: u.y };
+  if (u && u.x != null && fieldOk(u.x, u.y, 'p')) q.order = { t: 'move', x: u.x + gauss() * 8, y: u.y + gauss() * 8, gx: u.x, gy: u.y };
   else q.order = { t: 'hold' };
 }
 

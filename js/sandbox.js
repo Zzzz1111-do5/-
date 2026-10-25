@@ -379,6 +379,18 @@ function sbxTry(id, x, y, r, extra) {
   return null;
 }
 function sbxLineTry(id, x0, y0, x1, y1) { const r = sbxPlace(id, x0, y0, x1, y1); return r.ok ? r.it : null; }
+// 预备队、机动车辆的隐蔽集结位置：(x, y) 附近 r 以内的林地、城镇、丘陵（隐蔽伪装，conceal.js），离已放的东西 22 以上；找不到就用原位置
+function sbxCoverAt(x, y, r = 90) {
+  let best = null, bs = -Infinity;
+  for (let k = 0; k < 60; k++) {
+    const a = k * 2.4, d = 6 + k * r / 60, px = clamp(x + Math.cos(a) * d, 20, W - 20), py = clamp(y + Math.sin(a) * d, 20, H - 20);
+    if (!isLand(px, py) || !passInf(px, py) || coverAt(px, py) > .65 || coastAt(px) - py < 120) continue;
+    if (S.sbx.items.some(it => it.x != null && dist(it.x, it.y, px, py) < 22)) continue;
+    const s = -coverAt(px, py) * 2 - d / r;
+    if (s > bs) { bs = s; best = { x: px, y: py }; }
+  }
+  return best || { x, y };
+}
 // 沿海岸曲线分段放置线状工事：yOff 为相对海岸线的高度（负 = 内陆）
 function sbxAlong(id, xa, xb, yOff, seg, gapX, gapW) {
   let n = 0;
@@ -713,8 +725,8 @@ function sbxDefStyle(style, R0) {
   const near = (p, i, r = 70) => ({ x: p.x + Math.cos(i * 2.1) * r, y: p.y - 40 - Math.abs(Math.sin(i * 2.1)) * r });
   if (style === 'bal') {   // 机动反击群：坦克、步兵战车、步兵连、反坦克车、防空车按比例编配，分在两三个枢纽
     const ids = sbxVehOk() ? ['e_tank', 'e_apc', 'e_reserve', 'e_td', 'e_tank', 'e_assault', 'e_sam_veh', 'e_hv_tank', 'e_apc', 'e_reserve', 'e_aa_veh'] : ['e_reserve', 'e_assault', 'e_car', 'e_reserve', 'e_at'];
-    const n = sbxLoop(ids, (id, i) => { const p = near(hubs[i % hubs.length], i, 80); return sbxTry(id, p.x, p.y, 60); }, 24, 80);
-    say(`机动反击群（${sbxCnt(n)}）分别集结于${hubs.map(p => p.name).join('、')}：判明敌主攻方向后成建制向滩头出口反突击，趁敌坦克、补给还没上岸把登陆场压回海里。`, hubs[0]);
+    const n = sbxLoop(ids, (id, i) => { const p0 = near(hubs[i % hubs.length], i, 80), p = sbxCoverAt(p0.x, p0.y); return sbxTry(id, p.x, p.y, 40); }, 24, 80);
+    say(`机动反击群（${sbxCnt(n)}）分别在${hubs.map(p => p.name).join('、')}附近的林地、村镇里隐蔽集结，熄火伪装、不暴露：判明敌主攻方向后成建制向滩头出口反突击，趁敌坦克、补给还没上岸把登陆场压回海里。`, hubs[0]);
   } else if (style === 'armor' && sbxVehOk()) {
     const n = sbxLoop(['e_hv_tank', 'e_tank', 'e_td', 'e_apc', 'e_tank', 'e_sam_veh', 'e_hv_tank', 'e_aa_veh', 'e_recon'], (id, i) => { const p = near(hubs[i % hubs.length], i); return sbxTry(id, p.x, p.y, 60); }, 22, 80);
     say(`方案「装甲机动防御」：滩头只留基本工事，编成装甲突击群（${sbxCnt(n)}）集结于${hubs.map(p => p.name).join('、')}，敌上岸立足未稳时集中实施装甲反突击，防空车随队撑伞。`, hubs[0]);
@@ -745,7 +757,7 @@ function sbxAIDefend(style = 'bal') {
   if (DS.share) sbxDefStyle(style, R0);
   // 余款不留：补步兵连、坦克、守备排（放在枢纽附近，作预备队）
   const hubs = (R0.cands || [R0.hub]).filter(Boolean).slice(0, 3);
-  if (hubs.length) sbxLoop(sbxVehOk() ? ['e_reserve', 'e_tank', 'e_garrison', 'e_apc'] : ['e_reserve', 'e_garrison'], (id, i) => { const p = hubs[i % hubs.length]; return sbxTry(id, p.x + Math.cos(i * 1.7) * 60, p.y - 50 - Math.abs(Math.sin(i * 1.7)) * 60, 60); }, 14, 60);
+  if (hubs.length) sbxLoop(sbxVehOk() ? ['e_reserve', 'e_tank', 'e_garrison', 'e_apc'] : ['e_reserve', 'e_garrison'], (id, i) => { const h = hubs[i % hubs.length], p = sbxCoverAt(h.x + Math.cos(i * 1.7) * 60, h.y - 50 - Math.abs(Math.sin(i * 1.7)) * 60); return sbxTry(id, p.x, p.y, 40); }, 14, 60);
   sbxSync();
   R0.say(`部署完毕（方案「${DS.nm}」）：共 ${S.sbx.items.filter(it => it.side === 'e').length} 项，用去 ${sbxSpent('e')} / ${Btot} 点。`, null);
   return R0.names;

@@ -45,7 +45,7 @@ const pick = arr => arr[Math.floor(Math.random() * arr.length)];
 const bearing = (ax, ay, bx, by) => (Math.atan2(bx - ax, ay - by) * 180 / Math.PI + 360) % 360;
 const fmtBrg = b => String(Math.round(b) % 360).padStart(3, '0') + '°';
 const GRID_COLS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-const gridRef = (x, y) => GRID_COLS[clamp(Math.floor(x / 200), 0, 14)] + (clamp(Math.floor(y / 200), 0, 9) + 1);
+const gridRef = (x, y) => GRID_COLS[clamp(Math.floor(x / 200), 0, Math.ceil(W / 200) - 1)] + (clamp(Math.floor(y / 200), 0, Math.ceil(H / 200) - 1) + 1);   // 200 一格：列 A–U 自西向东，行 1–14 自北向南（地图上有标注，places.js）
 
 function segDist(px, py, x0, y0, x1, y1) {
   const dx = x1 - x0, dy = y1 - y0, l2 = dx * dx + dy * dy || 1;

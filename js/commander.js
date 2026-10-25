@@ -1153,7 +1153,7 @@ function cmdStageStall(C, P) {
     const far = Math.round(pl0.sx != null ? dist(u0.x, u0.y, pl0.sx, pl0.sy) : dist(u0.x, u0.y, p.x, p.y));
     const why = br ? `${br.name}${typeof isBlown === 'function' && isBlown(br.key) ? '已被炸毁，须绕道渡河' : '桥面狭窄，部队拥堵'}` : grp.some(u => u.state === 'waver') ? '部队士气动摇，行动迟缓' : `接近路受阻，距集结位置仍有约 ${far} 米`;
     chatSay('p', `报告：${names}向${p.name}方向集结已 ${n} 秒，未能进入攻击位置：${why}。`, { kind: 'friction', at: u0 });
-    const acts = [], reach = !!field(p.x, p.y, 'p');
+    const acts = [], reach = fieldOk(p.x, p.y, 'p');
     if (reach && men >= Math.max(6, est * 1.2)) {
       for (const u of grp) cmdSend(u, 'launch', { key });
       C.stall[key] = S.t;   // 新发起的攻击：受阻判定重新计时

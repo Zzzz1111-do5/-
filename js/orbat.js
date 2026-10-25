@@ -28,7 +28,7 @@ function bgSlots(G, mode) {
   const fx = Math.cos(G.face), fy = Math.sin(G.face), px = -fy, py = fx;
   const at = (x, y) => { let sx = clamp(G.ax + fx * x * lon + px * y * lat, 15, W - 15), sy = clamp(G.ay + fy * x * lon + py * y * lat, 15, H - 15); return [sx, sy]; };
   const wid = Math.max(1, us.length) * 95;
-  us.forEach((u, i) => { const [x, y] = at(0, (i - (us.length - 1) / 2) * 95); out.push({ m: u, k: 'u', x, y }); });
+  us.forEach((u, i) => { let [x, y] = at(0, (i - (us.length - 1) / 2) * 95); if (!passInf(x, y)) { const j = nearestPassable(ci(x, y), G.side); if (j >= 0) { x = cellCX(j); y = cellCY(j); } } out.push({ m: u, k: 'u', x, y }); });   // 连的位置落在河里、崖上：挪到最近的可走格
   const tk = vs.filter(v => BG_TANK.includes(v.type)), ifv = vs.filter(v => v.type === 'apc'), td = vs.filter(v => v.type === 'td' || v.type === 'recon');
   const aa = vs.filter(v => v.type === 'sam_veh' || v.type === 'aa_veh'), art = vs.filter(v => v.type === 'spg'), rest = vs.filter(v => ![...tk, ...ifv, ...td, ...aa, ...art].includes(v));
   // 车辆位置吸附到该车能开到的最近格（河、悬崖、密林里的位置开不进去，整群会一直等它）
@@ -70,8 +70,10 @@ function bgOrder(G, sl, t) {
     if (s.k === 'u') {
       const u = s.m, ts = teamsOf(u).filter(q => q.men.length && !q.ride);
       if (!ts.length) continue;
-      if (u.bgX != null && dist(u.bgX, u.bgY, s.x, s.y) < BG.reorder && u.bgT2 === t) continue;
-      u.bgX = s.x; u.bgY = s.y; u.bgT2 = t; u.face = G.face;
+      // 位置没变就不重下——但有组离位置 40 以上却停着（中途遇敌停下、提前「到达」等），8 秒后重新下令，不让全群干等
+      const idle = t !== 'hold' && S.t - (u.bgOT ?? -99) > 8 && ts.some(q => (q.order.t === 'hold' || q.order.x == null) && q.sup < 60 && dist(q.x, q.y, s.x, s.y) > 40);
+      if (u.bgX != null && dist(u.bgX, u.bgY, s.x, s.y) < BG.reorder && u.bgT2 === t && !idle) continue;
+      u.bgX = s.x; u.bgY = s.y; u.bgT2 = t; u.face = G.face; u.bgOT = S.t;
       const fs = formationSlots(ts.length, s.x, s.y, G.face);
       ts.forEach((q, i) => { if (t === 'hold' && dist(q.x, q.y, fs[i][0], fs[i][1]) < 6) return; aiGo(q, fs[i][0], fs[i][1], t === 'hold' ? 'move' : t, fx, fy); q.px = null; });
     } else {
@@ -82,15 +84,19 @@ function bgOrder(G, sl, t) {
   }
 }
 // 掉队：成员离自己位置的距离，取第 75 百分位（连队按各组平均位置算）——一两辆卡住的车不拖住全群；
-// 连队全部到位才算（步兵是主体，不能把步兵甩下）
+// 连队全部到位才算（步兵是主体，不能把步兵甩下）；但掉队 20 秒还没靠近 10 的成员算卡住（隔水、交火走不开、走走停停），不再等它，随后跟进
 function bgLag(G, sl) {
-  const ds = [];
+  const ds = [], lp = G.lp || (G.lp = {});
   let inf = 0;
   for (const s of sl) {
     let x, y;
-    if (s.k === 'u') { const ts = teamsOf(s.m).filter(q => q.men.length && !q.ride); if (!ts.length) continue; x = ts.reduce((a, q) => a + q.x, 0) / ts.length; y = ts.reduce((a, q) => a + q.y, 0) / ts.length; inf = Math.max(inf, dist(x, y, s.x, s.y)); }
+    if (s.k === 'u') { const ts = teamsOf(s.m).filter(q => q.men.length && !q.ride); if (!ts.length) continue; x = ts.reduce((a, q) => a + q.x, 0) / ts.length; y = ts.reduce((a, q) => a + q.y, 0) / ts.length; }
     else { x = s.m.x; y = s.m.y; }
-    ds.push(dist(x, y, s.x, s.y));
+    const k = s.k + s.m.id, r = lp[k], d = dist(x, y, s.x, s.y);
+    if (!r || d <= BG.lag || d < r[0] - 10) lp[k] = [d, S.t];
+    else if (S.t - r[1] > 20) continue;
+    if (s.k === 'u') inf = Math.max(inf, d);
+    ds.push(d);
   }
   if (!ds.length) return 0;
   ds.sort((a, b) => a - b);

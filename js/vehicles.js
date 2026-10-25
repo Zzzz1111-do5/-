@@ -176,22 +176,17 @@ function vehLook(f, x, y, cls) {
   if (!a) return null;
   const b = nextStep(f, a[0], a[1]);
   if (!b) return a;
-  if (cls) { const n = Math.ceil(dist(x, y, b[0], b[1]) / 4); for (let k = 1; k <= n; k++) if (stepCost(ci(lerp(x, b[0], k / n), lerp(y, b[1], k / n)), cls) === Infinity) return a; }
-  return b;
+  return !cls || vehClear(x, y, b[0], b[1], cls) ? b : a;
 }
+const vehClear = (x0, y0, x1, y1, cls) => { const n = Math.ceil(dist(x0, y0, x1, y1) / 4); for (let k = 1; k <= n; k++) if (stepCost(ci(lerp(x0, x1, k / n), lerp(y0, y1, k / n)), cls) === Infinity) return false; return true; };
 // 远距离寻路用量化的目标点（>60 量化到 30，>240 量化到 80）：多辆车、多次下令共用流场缓存（每张流场要整图算一遍）；量化点不通时退回精确目标
 function vehField(v, x, y, cls) {
   const i = ci(v.x, v.y), d = dist(v.x, v.y, x, y);
   if (d > 60) { const q = d > 240 ? 80 : 30, f = field(Math.round(x / q) * q, Math.round(y / q) * q, cls); if (f && isFinite(f[i])) return f; }
   return field(x, y, cls);
 }
-// 下令：检查可达（流场在车辆所在格有限）；近距离先在小窗口里查（不占全图流场缓存），窗口里绕不过去再查全图
-function vehReach(v, x, y) {
-  const cls = vehCls(v, x, y);
-  if (dist(v.x, v.y, x, y) < 120) { const L = localField(v.x, v.y, x, y, cls); if (L && isFinite(localAt(L, v.x, v.y))) return true; }
-  const f = vehField(v, x, y, cls);
-  return !!f && isFinite(f[ci(v.x, v.y)]);
-}
+// 下令：检查可达（车辆所在格与目标同属一片连通区域，grid.js reachable——不为判断可达整图算流场）
+const vehReach = (v, x, y) => reachable(v.x, v.y, x, y, vehCls(v, x, y));
 // 近距离绕行（100 以内、直线不畅）：小窗口局部流场取前方两格，0.6 秒更新一次；窗口里不通返回 null（改用全图流场）
 function vehLocalStep(v, o, cls) {
   const c = v.lp;
@@ -246,7 +241,7 @@ function vehDrive(v, dt, mul) {
   else if (S.t - PG.t > 6 && !v.blk && S.t >= (v.stallT || 0) && (v.fuel ?? 1) > 0) {
     PG.d = d; PG.t = S.t; v8Stat('vehNoProg');
     if (d < 70) { v.order = { t: 'hold', face: o.face, was: o.t }; v.arrT = S.t; return true; }
-    v.pathT = -9; v.direct = false; v.sideT = S.t + 2.5; v.sideS = v.id % 2 ? 1 : -1;   // 换路：先侧向让开 2.5 秒
+    v.pathT = -9; v.direct = false; v.fpth = null; v.sideT = S.t + 2.5; v.sideS = v.id % 2 ? 1 : -1;   // 换路：先侧向让开 2.5 秒
   }
   if (S.t < (v.stallT || 0)) return;
   if ((v.fuel ?? 1) <= 0) { if (v.side === 'p') log(`${vehName(v)}油料耗尽，原地停车待补`, 'bad', 'vfuel' + v.id, 30, v); return; }   // 油尽：能打不能走
@@ -255,16 +250,15 @@ function vehDrive(v, dt, mul) {
   let tx = o.x, ty = o.y;
   const ln = !v.direct && d > 14 && d <= 100 ? vehLocalStep(v, o, cls) : null;
   if (ln) [tx, ty] = ln;
-  else if (!v.direct && d > 14) {
-    const f = vehField(v, o.x, o.y, cls);
-    if (f && !isFinite(f[ci(v.x, v.y)]) && vehPass(v.x, v.y, cls)) { v.order = { t: 'hold', face: o.face }; if (v.side === 'p' && !v.auto) log(`${vehName(v)}无法到达目标位置`, 'warn', 'vunr', 3, v); return; }
-    const n = f && vehLook(f, v.x, v.y, cls);
-    if (n) [tx, ty] = n;
+  else if (!v.direct && d > 14) {   // 沿路点走（grid.js pathStep：取一次流场管 50 格，不每帧查整图流场）
+    const r = pathStep(v, o.x, o.y, cls, () => vehField(v, o.x, o.y, cls), (x0, y0, x1, y1) => vehClear(x0, y0, x1, y1, cls));
+    if (r && r.no && vehPass(v.x, v.y, cls)) { v.order = { t: 'hold', face: o.face }; if (v.side === 'p' && !v.auto) log(`${vehName(v)}无法到达目标位置`, 'warn', 'vunr', 3, v); return; }
+    if (r && r.x != null) [tx, ty] = [r.x, r.y];
   }
   let want = Math.atan2(ty - v.y, tx - v.x);
   if (S.t < (v.sideT ?? 0)) want += v.sideS * 1.1;   // 侧向让开（看门狗 / 前方有本方车辆）
   // 与本方车辆保持间距：前方有车就转向绕开、靠得太近就减速停车让行——车只沿车头方向走，不横着平移（以前侧推车身，看着像滑步）
-  let slow = 1;
+  let slow = 1, park = null;
   { const fx = Math.cos(v.heading), fy = Math.sin(v.heading);
     for (const o2 of S.veh) {
       if (o2 === v || o2.dead || o2.side !== v.side || o2.lst) continue;
@@ -273,7 +267,9 @@ function vehDrive(v, dt, mul) {
       const along = (dx * fx + dy * fy) / d2, lat = (dy * fx - dx * fy) / d2;
       if (along < .25) continue;   // 在侧后方：由对方让
       want -= (Math.abs(lat) < .15 ? 1 : Math.sign(lat)) * clamp((m + 12 - d2) / 12, 0, 1) * along * .9;   // 正前方偏哪边就往另一边转；正对着一律右转错开
-      if (d2 < m && (v.id > o2.id || !o2.moving)) slow = Math.min(slow, clamp((d2 - m * .55) / (m * .45), 0, 1));
+      // 让行：编号小的先走；停着的车只让真正停下的（自己也在让行的不算——两车互相等就谁也走不了）
+      const parked = !o2.moving && !(o2.yieldT > 0) && (o2.order.t === 'hold' || o2.order.x == null);
+      if (d2 < m && (v.id > o2.id || parked)) { slow = Math.min(slow, clamp((d2 - m * .55) / (m * .45), 0, 1)); if (parked && along > .6) park = o2; }
     } }
   // 倒车：后撤且距离近，或目标就在身后不远
   let da = vehAng(want - v.heading), dir = 1;
@@ -286,6 +282,7 @@ function vehDrive(v, dt, mul) {
   vel *= Math.abs(da) > 1 ? .12 : 1 - Math.abs(da) * .55;   // 大角度时原地转向
   if (slow < 1 && dir > 0) {   // 前车挡着：让行，等太久就侧绕
     v.yieldT = (v.yieldT || 0) + dt;
+    if (park && v.yieldT > 1.5) vehGiveWay(park, v);
     if (v.yieldT > 3 && S.t >= (v.sideT ?? 0)) { v.sideT = S.t + 1.5; v.sideS = v.id % 2 ? 1 : -1; v.yieldT = 0; }
   } else v.yieldT = 0;
   const step = Math.min(vel * dt * (dir > 0 ? slow : 1), d);
@@ -311,6 +308,35 @@ function vehDrive(v, dt, mul) {
   return false;
 }
 
+// 让路：停着的自动车辆挡住了本方行进中的车，往对方去路的侧面挪开 30（滩头出口、路口不再堵成一团）；玩家亲自下令停着的车不动
+function vehGiveWay(o, v) {
+  if (!o.auto || o.man || o.fixed || o.immob || o.lst || S.t < (o.gwT ?? -99)) return;
+  o.gwT = S.t + 6;
+  const fx = Math.cos(v.heading), fy = Math.sin(v.heading), s = Math.sign((o.y - v.y) * fx - (o.x - v.x) * fy) || (o.id % 2 ? 1 : -1), cls = vehCls(o);
+  for (const k of [30, 45, -30]) {
+    const x = o.x - fy * k * s + fx * 6, y = o.y + fx * k * s + fy * 6;
+    if (vehPass(x, y, cls)) { vehSetOrder(o, 'move', x, y, o.order.face ?? o.heading); v8Stat('vehGiveWay'); return; }
+  }
+}
+// 车身重叠（中心距不到两车半长之和的 0.8）：各自沿连线挪开，每秒最多 10——挤在一起的车不会叠成一团、互相卡死
+function vehSep(v, dt) {
+  if (v.lst || v.ramp || v.swim || v.immob || v.fixed) return;
+  const sp = vehSp(v), cls = vehCls(v);
+  let px = 0, py = 0;
+  for (const o of S.veh) {
+    if (o === v || o.dead || o.side !== v.side || o.lst || o.ramp) continue;
+    const dx = v.x - o.x, dy = v.y - o.y;
+    if (Math.abs(dx) > 30 || Math.abs(dy) > 30) continue;
+    const d = Math.hypot(dx, dy), m = (sp.len + vehSp(o).len) * .4;
+    if (d >= m) continue;
+    const a = d > .3 ? Math.atan2(dy, dx) : v.id * 2.4;
+    px += Math.cos(a) * (m - d) * .5; py += Math.sin(a) * (m - d) * .5;
+  }
+  const l = Math.hypot(px, py);
+  if (l < .05) return;
+  const k = Math.min(l, 10 * dt) / l, nx = v.x + px * k, ny = v.y + py * k;
+  if (vehPass(nx, ny, cls)) { v.x = nx; v.y = ny; }
+}
 // 停着的车与本方车辆贴得太近（车身间隙不足 4）：编号大的那辆每秒挪开 6，把已经挤成一团的慢慢摊开
 function vehSpread(v, dt) {
   if (v.immob || v.lst || v.swim) return;
@@ -620,6 +646,7 @@ function vehTick(v, dt) {
   // 机动：攻击前进遇到主炮目标即停车射击
   const o = v.order, hold = o.t === 'amove' && ((tg && (!g || tg.d < g.range * .92)) || (!g && v.mtg && sp.mg && v.mtg.d < sp.mg.range * .8));
   if (!hold) vehDrive(v, dt, o.t === 'retreat' ? 1.1 : 1); else v.moving = false;
+  vehSep(v, dt);
   vehTerrain(v, dt);
   if (v.side === 'e') { if (PV[ci(v.x, v.y)]) { if (v.seen < 0) log(`发现敌${vehModel(v)}`, 'warn', null, 0, v); v.kx = v.x; v.ky = v.y; v.kh = v.heading; v.seen = S.t; } else if (v.kx != null && dist(v.kx, v.ky, v.x, v.y) > 20 && PV[ci(v.kx, v.ky)]) v.kx = v.ky = v.kh = null; }
 }

@@ -296,7 +296,7 @@ function apOdds(p, k) {
 function apLaunch(units, p, P) {
   units = units.filter(g => g.state !== 'rout' && teamsOf(g).length && g.x != null && P.u[g.id]);
   if (!units.length) return;
-  if (!field(p.x, p.y, 'p')) { P.hard[p.key] = S.t; for (const g of units) apIdle(P.u[g.id]); return; }
+  if (!fieldOk(p.x, p.y, 'p')) { P.hard[p.key] = S.t; for (const g of units) apIdle(P.u[g.id]); return; }
   const cx = units.reduce((a, g) => a + g.x, 0) / units.length, cy = units.reduce((a, g) => a + g.y, 0) / units.length;
   // v7 队形进攻（tf.js）：成队形交替跃进到冲击出发线；已在冲击距离内或未启用时直接攻击前进
   const fm = typeof tfFormGo === 'function' ? tfFormGo(units, p, cx, cy, P) : null;

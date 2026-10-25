@@ -119,6 +119,92 @@ const NDX = NB.map(n => n[0]), NDY = NB.map(n => n[1]), NDM = NB.map(n => n[2]);
 let FBUDGET = 3, FCOUNT = 0;   // FCOUNT：累计重算次数（性能统计）
 const COSTS = new Map();
 const HEAP_N = new Int32Array(GW * GH * 8), HEAP_P = new Float64Array(GW * GH * 8);
+// 通行代价按地形版本缓存（同一版本内多个流场共用，大地图上省掉每次整图重算）；raid 依赖实时视野，每次重算
+function costArr(cls, gen) {
+  let C = COSTS.get(cls);
+  if (!C || C.gen !== gen || cls === 'raid') { C = { gen, a: (C && C.a) || new Float64Array(GW * GH) }; for (let k = 0; k < GW * GH; k++) C.a[k] = stepCost(k, cls); COSTS.set(cls, C); }
+  return C.a;
+}
+// 连通分量（按通行类别、地形版本缓存，交战中 3 秒内照用）：能不能开到只看两格是否同属一片，不必为了判断可达整图算一遍流场
+const COMPS = new Map();
+function compOf(cls, fresh) {
+  const gen = FGEN[fgKey(cls)], now = typeof S === 'object' && S && S.phase === 'battle' && isFinite(S.t) ? S.t : null;
+  let C = COMPS.get(cls);
+  if (C && (C.gen === gen || (!fresh && now != null && C.t != null && now - C.t >= 0 && now - C.t < 3))) return C.a;
+  const cost = costArr(cls, gen), a = (C && C.a) || new Int32Array(GW * GH), st = HEAP_N;
+  a.fill(0);
+  let id = 0;
+  for (let k0 = 0; k0 < GW * GH; k0++) {
+    if (a[k0] || cost[k0] === Infinity) continue;
+    a[k0] = ++id; let n = 0; st[n++] = k0;
+    while (n) {
+      const i = st[--n], gx = i % GW, gy = (i / GW) | 0;
+      for (let k = 0; k < 8; k++) {
+        const nx = gx + NDX[k], ny = gy + NDY[k];
+        if (nx < 0 || ny < 0 || nx >= GW || ny >= GH) continue;
+        const j = ny * GW + nx;
+        if (!a[j] && cost[j] !== Infinity) { a[j] = id; st[n++] = j; }
+      }
+    }
+  }
+  COMPS.set(cls, { gen, t: now, a });
+  return a;
+}
+// (x0, y0) 能否走到 (x1, y1)（目标不可通行时按最近的可通行格，与 field 一致）
+function reachable(x0, y0, x1, y1, cls) {
+  const j = nearestPassable(ci(x1, y1), cls);
+  if (j < 0) return false;
+  const i = ci(x0, y0), a = compOf(cls);
+  if (a[i] > 0 && a[i] === a[j]) return true;
+  const b = compOf(cls, true);   // 判不通时用最新地形再确认（3 秒内的旧分量可能还没算上刚炸开的通路）
+  return b[i] > 0 && b[i] === b[j];
+}
+// 目标点附近有可通行格（field 不会返回 null）——只判断这个时不必真去算流场
+const fieldOk = (x, y, cls) => nearestPassable(ci(x, y), cls) >= 0;
+// A* 寻路（单位自己的路线：代价与流场相同，启发值按最便宜的地形（公路）× 1.2 加权——只搜起终点之间的一小片，比整图流场快几十倍）
+// 返回途经各格中心 [x, y, x, y, …]（不含起点格，起点即终点为空数组）；搜了 maxN 格还没到返回 null（改用流场）
+const AS_G = new Float64Array(GW * GH), AS_FROM = new Int32Array(GW * GH), AS_SEEN = new Uint32Array(GW * GH);
+let AS_STAMP = 0;
+function astar(s, g, cls, maxN = 40000) {
+  if (g < 0) return null;
+  if (s === g) return [];
+  const cost = costArr(cls, FGEN[fgKey(cls)]), stamp = ++AS_STAMP, mc = (cls === 'ship' ? 1 : .72) * 1.2, gx = g % GW, gy = (g / GW) | 0;
+  const h = i => { const dx = Math.abs(i % GW - gx), dy = Math.abs(((i / GW) | 0) - gy); return (Math.max(dx, dy) + .414 * Math.min(dx, dy)) * mc; };
+  let n = 0, cnt = 0, found = false;
+  const push = (i, p) => {
+    let k = n++;
+    while (k > 0) { const pa = (k - 1) >> 1; if (HEAP_P[pa] <= p) break; HEAP_N[k] = HEAP_N[pa]; HEAP_P[k] = HEAP_P[pa]; k = pa; }
+    HEAP_N[k] = i; HEAP_P[k] = p;
+  };
+  AS_SEEN[s] = stamp; AS_G[s] = 0; AS_FROM[s] = -1; push(s, h(s));
+  while (n) {
+    const i = HEAP_N[0], p = HEAP_P[0], li = HEAP_N[--n], lp = HEAP_P[n];
+    let k = 0;
+    for (;;) {
+      let c = 2 * k + 1;
+      if (c >= n) break;
+      if (c + 1 < n && HEAP_P[c + 1] < HEAP_P[c]) c++;
+      if (HEAP_P[c] >= lp) break;
+      HEAP_N[k] = HEAP_N[c]; HEAP_P[k] = HEAP_P[c]; k = c;
+    }
+    HEAP_N[k] = li; HEAP_P[k] = lp;
+    if (i === g) { found = true; break; }
+    if (p > AS_G[i] + h(i) || ++cnt > maxN) { if (cnt > maxN) break; continue; }
+    const ix = i % GW, iy = (i / GW) | 0, c0 = cost[i];
+    for (let k2 = 0; k2 < 8; k2++) {
+      const nx = ix + NDX[k2], ny = iy + NDY[k2];
+      if (nx < 0 || ny < 0 || nx >= GW || ny >= GH) continue;
+      const j = ny * GW + nx, cj = cost[j];
+      if (cj === Infinity) continue;
+      const nd = AS_G[i] + (cj + c0) * .5 * NDM[k2];
+      if ((AS_SEEN[j] !== stamp || nd < AS_G[j]) && n < HEAP_N.length) { AS_SEEN[j] = stamp; AS_G[j] = nd; AS_FROM[j] = i; push(j, nd + h(j)); }
+    }
+  }
+  if (!found) return null;
+  const out = [];
+  for (let i = g; i !== s; i = AS_FROM[i]) out.push(cellCY(i), cellCX(i));
+  return out.reverse();
+}
 function field(tx, ty, cls) {
   const ti = nearestPassable(ci(tx, ty), cls);
   if (ti < 0) return null;
@@ -128,10 +214,7 @@ function field(tx, ty, cls) {
   FBUDGET--; FCOUNT++;
   const d = f ? f.d : new Float64Array(GW * GH);
   d.fill(Infinity);
-  // 通行代价按地形版本缓存（同一版本内多个流场共用，大地图上省掉每次整图重算）；raid 依赖实时视野，每次重算
-  let C = COSTS.get(cls);
-  if (!C || C.gen !== gen || cls === 'raid') { C = { gen, a: (C && C.a) || new Float64Array(GW * GH) }; for (let k = 0; k < GW * GH; k++) C.a[k] = stepCost(k, cls); COSTS.set(cls, C); }
-  const cost = C.a;
+  const cost = costArr(cls, gen);
   let n = 0;
   const push = (i, p) => {
     let k = n++;
@@ -216,6 +299,44 @@ function localNext(L, x, y) {
     if (L.d[j] < bv) { bv = L.d[j]; best = j; }
   }
   return best < 0 ? null : [((best % L.w) + L.gx0) * CELL + CELL / 2, (((best / L.w) | 0) + L.gy0) * CELL + CELL / 2];
+}
+
+// 路点缓存（每个单位 u.fpth 一条）：从流场沿下降方向取出前方最多 50 格的路点，单位照着走；走完、偏离 off（默认 30）以上、
+// 地形版本变了 3 秒以上才重新取（最快 0.8 秒一次）——不再每帧都查整图流场（目标点一多，流场缓存装不下，每帧都整图重算，画面卡顿）
+// fget()：取流场；look(x0, y0, x1, y1)：能否直线走到（往前最多看 ahead 个路点，路线顺直）
+// 返回 null 没有流场 / { no } 走不到 / { end } 已在流场终点格 / { x, y } 下一个瞄准点
+function pathStep(u, tx, ty, cls, fget, look, ahead = 2, off = 30) {
+  const gen = FGEN[fgKey(cls)];
+  let P = u.fpth;
+  if (P && (P.tx !== tx || P.ty !== ty || P.cls !== cls)) P = null;
+  if (P) {
+    while (P.i < P.p.length && dist(u.x, u.y, P.p[P.i], P.p[P.i + 1]) < 12) P.i += 2;
+    const bad = (P.i >= P.p.length && !P.full) || (P.i < P.p.length && dist(u.x, u.y, P.p[P.i], P.p[P.i + 1]) > off) || (P.gen !== gen && S.t - P.t > 3);
+    if (bad && S.t - P.t > .8) P = null;
+  }
+  if (!P) {
+    const i0 = ci(u.x, u.y), cost = costArr(cls, gen);
+    let p = null, full = true;
+    if (cost[i0] !== Infinity && cls !== 'raid') {   // 先看连通、再用 A* 只搜起终点之间的一片；单位站在不可通行格上（被挤进河边等）仍按流场下降走出来
+      if (!reachable(u.x, u.y, tx, ty, cls)) { u.fpth = null; return { no: true }; }
+      p = astar(i0, nearestPassable(ci(tx, ty), cls), cls);
+      if (p && !p.length) { u.fpth = null; return { end: true }; }
+    }
+    if (!p) {
+      const f = fget();
+      if (!f) { u.fpth = null; return null; }
+      if (!isFinite(f[i0])) { u.fpth = null; return { no: true }; }
+      if (f[i0] < 1) { u.fpth = null; return { end: true }; }
+      p = []; full = false;
+      let x = u.x, y = u.y;
+      for (let k = 0; k < 50; k++) { const s = nextStep(f, x, y); if (!s) { full = true; break; } [x, y] = s; p.push(x, y); }
+    }
+    P = u.fpth = { tx, ty, cls, gen, t: S.t, p, i: 0, full };
+  }
+  if (P.i >= P.p.length) return P.full ? { end: true } : null;
+  let x = P.p[P.i], y = P.p[P.i + 1];
+  for (let k = 2; k <= ahead * 2 && P.i + k < P.p.length; k += 2) { const nx = P.p[P.i + k], ny = P.p[P.i + k + 1]; if (!look(u.x, u.y, nx, ny)) break; x = nx; y = ny; }
+  return { x, y };
 }
 
 // 沿流场下降一步：返回下一格中心，已在目标格返回 null

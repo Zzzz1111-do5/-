@@ -267,7 +267,7 @@ function tfScreen() {
     const q = teamsOf(u).filter(q => q.men.length && !q.ride && q.sup < 45 && q.order.t !== 'charge' && !(q.scr && q.scr.until > S.t)).sort((a, b) => dist(a.x, a.y, v.x, v.y) - dist(b.x, b.y, v.x, v.y))[0];
     if (!q || dist(q.x, q.y, v.x, v.y) > 220) continue;
     const a = Math.atan2(th.y - v.y, th.x - v.x), x = v.x + Math.cos(a) * 20, y = v.y + Math.sin(a) * 20;
-    if (!passInf(x, y) || !field(x, y, 'p')) continue;
+    if (!passInf(x, y) || !fieldOk(x, y, 'p')) continue;
     q.order = { t: 'amove', x, y, gx: x, gy: y }; q.pathT = -9; q.scr = { v: v.id, until: S.t + 10 };
     tfStat('scr');
     if (typeof chatSay === 'function') chatSay('p', `命令：${vehName(v)}遭敌步兵抵近，${tfUN(u)}派一个小组上前掩护坦克。`, { kind: 'order', at: v, key: 'tfscr' + v.id, gap: 45, lv: 2 });

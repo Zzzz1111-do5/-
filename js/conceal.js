@@ -8,9 +8,11 @@
 // 战前工事：守方在开战前早已构筑阵地——敌步兵还没上岸到 CVL.prepR 以内时，守方静止的小组挖坑快 CVL.prepK 倍（几秒就进入挖好的散兵坑）
 // 守方火炮、迫击炮、高炮、岸防炮、发射车也一样：伪装网下、坑道里，没开火（e.fireT）、没转移阵地时，只有对方地面部队 CVL.rs 以内才看得见；
 //   开火后 CVL.sfire 秒内暴露（炮口闪光、尾焰）——标定了的坐标照样记着（e.kx），转移阵地后要重新找
-const CVL = { r: 70, rv: 60, still: 6, fire: 8, cover: .65, pit: .5, prepR: 320, prepK: 8, cell: 100, rs: 90, sfire: 12 };
+const CVL = { r: 70, rv: 60, still: 6, fire: 8, cover: .65, pit: .5, prepR: 320, prepK: 8, cell: 100, rs: 90, sfire: 12, vstill: 8 };
 const CVL_ST = { arty: 1, mortar: 1, aa: 1, coastal: 1, tel: 1, ascm: 1 };
 const cvlStHid = e => !e.dead && CVL_ST[e.kind] && !e.decoy && !e.moving && S.t - (e.fireT ?? -99) >= CVL.sfire;
+// 车辆（双方）：停在林地、城镇、丘陵里熄火伪装 CVL.vstill 秒以上、没开过炮 / 机枪 / 导弹，空中、海上看不出来，地面部队 CVL.rs 以内才看得见；开阔地上的车照样一眼看见
+const cvlVHid = v => !v.dead && !v.lst && !v.swim && !v.fixed && S.t - (v.movedT ?? -99) >= CVL.vstill && S.t - Math.max(v.fireT ?? -99, v.mgT ?? -99, v.samT ?? -99) >= CVL.sfire && isLand(v.x, v.y) && coverAt(v.x, v.y) <= CVL.cover;
 const CVL_DISP = new Uint8Array(GW * GH);
 let CVL_CLR = [];   // 上次抹掉的格（画面掩码复位用）
 
@@ -45,11 +47,11 @@ function cvlApply() {
     // 同格里还有暴露目标（没隐蔽的小组、车辆、工事）就不抹
     const hide = [], keep = new Set();
     for (const q of S.teams) if (q.side === side && q.men.length && !q.ride) { if (cvlHid(q)) hide.push(q); else keep.add(ci(q.x, q.y)); }
-    for (const v of S.veh || []) if (v.side === side && !v.dead) keep.add(ci(v.x, v.y));
+    for (const v of S.veh || []) if (v.side === side && !v.dead) { if (cvlVHid(v)) hide.push(v); else keep.add(ci(v.x, v.y)); }
     if (side === 'e') for (const e of S.enemies) if (!e.dead) { if (cvlStHid(e)) hide.push(e); else keep.add(ci(e.x, e.y)); }
     for (const q of hide) {
       const i = ci(q.x, q.y);
-      if (!vis[i] || keep.has(i) || near(q.x, q.y, q.kind && !q.men ? CVL.rs : 0)) continue;
+      if (!vis[i] || keep.has(i) || near(q.x, q.y, q.men ? 0 : CVL.rs)) continue;   // 工事、车辆按 CVL.rs 算发现距离
       vis[i] = 0;
       if (side === 'e') { CVL_DISP[i] = 1; CVL_CLR.push(i); }
     }
