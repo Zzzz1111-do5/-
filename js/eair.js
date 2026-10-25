@@ -762,7 +762,7 @@ function eaDraw(time) {
   const ctx = R.ctx, E = S.eair, spec = S.role === 'spectate', lw = px(1.3);
   // 弹药（机场与停在机位上的飞机在地面层画：afbase.js eaDrawBases）
   for (const p of E.proj) {
-    if (p.t < 0 || p.done) continue;
+    if (p.t < 0 || p.done || R.fx3d) continue;   // 3D 时立体画（v3fx.js）
     if (!spec && !inVision(p.tx, p.ty) && !inVision(p.x0, p.y0)) continue;
     if (p.k === 'rk') {
       const u = clamp(p.t / p.dur, 0, 1), x = lerp(p.x0, p.tx, u), y = lerp(p.y0, p.ty, u), a = Math.atan2(p.ty - p.y0, p.tx - p.x0);

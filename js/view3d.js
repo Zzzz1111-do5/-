@@ -342,6 +342,7 @@ function v3Init() {
 
 // 镜头：画面中心（CAM.x, CAM.y）为目标点；距离按平面地图的缩放换算，使画面中心的比例与平面时相同
 function v3Camera() {
+  if (typeof V3O === 'object' && V3O.on) return v3oCamera();   // 观察者模式（v3obs.js）
   const th = V3.tilt, ps = V3.yaw, D = (CAM.vh / CAM.z) / (2 * Math.tan(V3_FOV / 2));
   const T = [CAM.x, -CAM.y, v3Ht(CAM.x, CAM.y)];
   const E = [T[0] + D * Math.sin(th) * Math.sin(ps), T[1] - D * Math.sin(th) * Math.cos(ps), T[2] + D * Math.cos(th)];
@@ -388,6 +389,7 @@ function v3Draw(now) {
   else if (typeof afb3dSig === 'function' && (V3.achk = (V3.achk || 0) - 1) <= 0 && (V3.achk = 30) && afb3dSig() !== V3.asig) v3Bld();   // 机场刚被发现 / 夺取
   // 转向 / 俯仰缓动
   V3.yaw += Math.atan2(Math.sin(V3.yawT - V3.yaw), Math.cos(V3.yawT - V3.yaw)) * .18; V3.tilt += (V3.tiltT - V3.tilt) * .18;
+  if (typeof V3O === 'object' && V3O.on) v3oStep(now);
   const C = v3Camera(), box = V3.box = v3Box();
   // 俯视贴图：分辨率取画面中心的比例与贴图上限中较小者
   const cap = Math.min(V3.maxTex, R.lowCap || (SETTINGS && SETTINGS.quality === 'low') ? 1280 : V3.coarse ? 1600 : 2048, Math.max(1024, Math.max(R.cv.width, R.cv.height) * 1.3));   // 屏外俯视画布最长边（按屏幕大小，手机、低画质更小）
@@ -399,13 +401,14 @@ function v3Draw(now) {
   if (top.width !== tw || top.height !== th) { top.width = tw; top.height = th; }
   const K = { cv: R.cv, ctx: R.ctx, s: R.s, ox: R.ox, oy: R.oy, dpr: R.dpr, vw: CAM.vw, vh: CAM.vh, z: CAM.z, x: CAM.x, y: CAM.y };
   V3.drawing = true;
+  R.fx3d = typeof v3Fx === 'function' && !(SETTINGS && SETTINGS.models3d === false);   // 弹道在 3D 里立体画（v3fx.js），贴图里不再画
   try {
     R.cv = top; R.ctx = top.getContext('2d'); R.dpr = 1;
     CAM.vw = tw; CAM.vh = th; CAM.z = R.s = sTop; CAM.x = box[0] + box[2] / 2; CAM.y = box[1] + box[3] / 2;
     R.ox = -box[0] * sTop; R.oy = -box[1] * sTop;
     drawScene(now);
   } finally {
-    V3.drawing = false;
+    V3.drawing = false; R.fx3d = false;
     Object.assign(R, { cv: K.cv, ctx: K.ctx, s: K.s, ox: K.ox, oy: K.oy, dpr: K.dpr });
     Object.assign(CAM, { vw: K.vw, vh: K.vh, z: K.z, x: K.x, y: K.y });
   }
@@ -450,6 +453,7 @@ function v3Draw(now) {
     gl.disableVertexAttribArray(ab.p); gl.disableVertexAttribArray(ab.n); gl.disableVertexAttribArray(ab.e);
   }
   if (typeof v3Units === 'function' && !(SETTINGS && SETTINGS.models3d === false)) { gl.disableVertexAttribArray(V3.a.p); gl.disableVertexAttribArray(V3.a.n); v3Units(C, box); }   // 兵种立体模型（v3units.js）
+  if (typeof v3Fx === 'function' && !(SETTINGS && SETTINGS.models3d === false)) { gl.disableVertexAttribArray(V3.a.p); gl.disableVertexAttribArray(V3.a.n); v3Fx(C); }   // 立体弹道（v3fx.js）
   const ctx = R.ctx;
   ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalCompositeOperation = 'copy'; ctx.drawImage(V3.cv, 0, 0); ctx.restore();
   v3Overlay(ctx, now / 1000);
@@ -532,6 +536,7 @@ function v3Overlay(ctx, time) {
   if (S.eair) for (const a of S.eair.fly) if (!a.dead && (spec || a.pv) && isFinite(a.x) && a.ph !== 'roll') air(a.x, a.y, a.alt, a.heading, COL.enemy);
   if (typeof hqMarks3 === 'function') hqMarks3(ctx, stem);   // 旅标：立在旅的上空（hq.js）
   if (typeof shOverlay3D === 'function') shOverlay3D(ctx, (x, y, h) => v3Proj(x, y, v3Ht(x, y) + h));   // 士兵喊话气泡（shout.js）
+  if (typeof v3oOverlay === 'function') v3oOverlay(ctx);   // 观察者模式的准星
   ctx.restore();
 }
 

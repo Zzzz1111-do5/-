@@ -476,6 +476,7 @@ function msDraw(time) {
   for (const m of S.missiles || []) {
     if (m.t < 0 || m.done) continue;
     live.add(m.id);
+    if (R.fx3d) continue;   // 3D 时导弹立体画（v3fx.js）
     if (m.kind !== 'tbm') { msDrawSmall(ctx, m); continue; }
     const u = clamp(m.t / m.dur, 0, 1), lift = m.z * 90, x = m.x, y = m.y - lift;
     const ux = lerp(m.x0, m.tx, Math.min(1, u + .02)), uy = lerp(m.y0, m.ty, Math.min(1, u + .02)) - Math.sin(Math.PI * Math.min(1, u + .02)) * 90 * (m.kind === 'tbm' ? 1 : .15);

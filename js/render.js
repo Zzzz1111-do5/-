@@ -168,7 +168,8 @@ function drawScene(now) {
   drawEnemies(time); opt('drawArmor');
   ctx.globalAlpha = R.zr > 2.5 ? .55 : .75; opt('drawAutoRoutes'); ctx.globalAlpha = 1;   // 自动驾驶路线压暗，避免满屏虚线
   drawTeams(time); opt('drawCarrier'); drawShips(time); drawDD(time); runHook('drawOver', time); drawPlans(time);
-  drawShells(time); drawTracers(); drawPlanes(time); drawFx(); drawTool(time); drawFormPreview();
+  if (!R.fx3d) { drawShells(time); drawTracers(); }   // 3D 时弹道立体画（v3fx.js）
+  drawPlanes(time); drawFx(); drawTool(time); drawFormPreview();
   bloom();
   worldTf(ctx);
   drawBanners(time); drawShipMarks(); drawPings(time); runHook('drawTop', time);

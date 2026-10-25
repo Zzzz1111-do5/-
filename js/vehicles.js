@@ -1219,7 +1219,7 @@ function vehDrawOver(time) {
   if (!S) return;
   vehVSync();
   const ctx = R.ctx;
-  for (const s of S.vshots || []) vehDrawShot(ctx, s);
+  if (!R.fx3d) for (const s of S.vshots || []) vehDrawShot(ctx, s);   // 3D 时立体画（v3fx.js）
   for (const g of S.gren || []) vehDrawGren(ctx, g);
   if (!S.veh || !S.veh.length) return;
   vehDrawPlatoons(ctx);
