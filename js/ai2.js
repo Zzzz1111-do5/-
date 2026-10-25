@@ -4,7 +4,7 @@ function aiThink(D) {
   const A = S.ai, radar = radarUp();
   const seenT = S.teams.filter(q => q.side === 'p' && spotted(q.x, q.y));
   const seenShips = S.ships.filter(s => alive(s) && s.state !== 'beached' && shipSeen(s.x, s.y, radar));
-  const foes = S.teams.filter(q => q.side === 'e' && q.men.length && !(unitOf(q) && unitOf(q).state === 'rout'));
+  const foes = S.teams.filter(q => q.side === 'e' && q.men.length && !q.bg && !(unitOf(q) && unitOf(q).state === 'rout'));   // 战斗群成员（orbat.js）由战斗群统一指挥
   for (const s of S.ships)
     if ((s.state === 'unloading' || s.state === 'beached') && spotted(s.bx, s.by) && !A.reg.some(r => dist(r.x, r.y, s.bx, s.by) < 50)) A.reg.push({ x: s.bx, y: s.by });
 
