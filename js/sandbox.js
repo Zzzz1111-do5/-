@@ -13,7 +13,7 @@ const sbxCmd = () => typeof cmdShipTask === 'function';   // 指挥官模块（a
 
 // 参谋笔记：写进聊天框（chat.js），同时留在沙盒面板「部署思路」里
 function sbxSay(side, text, kind, at) {
-  if (typeof chatSay === 'function') { try { chatSay(side, text, { kind: kind || 'plan', at: at && isFinite(at.x) ? { x: at.x, y: at.y } : undefined }); } catch (e) { /* 聊天模块异常不影响部署 */ } }
+  if (typeof chatSay === 'function') { try { chatSay(side, text, { kind: kind || 'plan', lv: 2, at: at && isFinite(at.x) ? { x: at.x, y: at.y } : undefined }); } catch (e) { /* 聊天模块异常不影响部署 */ } }   // 部署思路只进详档（编辑面板里也有），开战后通联常规档只看司令命令
   if (S && S.sbx && S.sbx.notes) { const L = S.sbx.notes[side] || (S.sbx.notes[side] = []); L.push(text); if (L.length > 40) L.shift(); }
 }
 
@@ -516,6 +516,15 @@ function sbxAIDefendBase() {
     for (let k = 0; k < 40 && !tel; k++) { const x = clamp(hq.x + (Math.random() - .5) * 900, 80, W - 80), y = clamp(hq.y - 40 - Math.random() * 320, 40, H); if (coastAt(x) - y >= 480) tel = sbxTry('e_tel', x, y, 40); }
     if (tel) say(`纵深 ${sbxM(coastAt(tel.x) - tel.y)} 米处配置战术导弹发射车 1 辆（2 枚），专打抢滩卸载中的登陆舰与滩头补给站，每次发射后立即转移阵地。`, tel);
   }
+  // 反航母体系（antiship.js）：大预算才配——巡逻机找航母，「堤丰」导弹连打航母，更大的预算再加一艘攻击核潜艇
+  if (B0 >= 6000 && !(S.v7off && S.v7off.msl)) {
+    let ty = null;
+    for (let k = 0; k < 40 && !ty; k++) { const x = clamp(hq.x + (Math.random() - .5) * 1100, 80, W - 80), y = clamp(hq.y - 40 - Math.random() * 360, 40, H); if (coastAt(x) - y >= 520) ty = sbxTry('e_typhon', x, y, 40); }
+    const p8 = ty && sbxPlace('e_p8').ok;
+    let sub = null;
+    if (ty && B0 >= 9000) for (let k = 0; k < 30 && !sub; k++) { const x = 300 + Math.random() * (W - 600); sub = sbxTry('e_ssn', x, coastAt(x) + 140 + Math.random() * 200, 40); }
+    if (ty) say(`反航母：纵深 ${sbxM(coastAt(ty.x) - ty.y)} 米处配置「堤丰」导弹连（16 枚战斧海上打击型）${p8 ? '，P-8A 巡逻机在外海搜索敌航母为它指示目标' : ''}${sub ? '；攻击核潜艇潜伏外海，伺机用重型鱼雷攻击敌航母编队' : ''}。`, ty);
+  }
   // 6. 主攻滩头加强：反坦克炮、迫击炮、出口机枪班、反坦克雷、探照灯
   for (const B of main.slice(0, 2)) {
     const cx = B.b.cx, cy = coastAt(cx);
@@ -758,6 +767,7 @@ function sbxAIDefend(style = 'bal') {
   // 余款不留：补步兵连、坦克、守备排（放在枢纽附近，作预备队）
   const hubs = (R0.cands || [R0.hub]).filter(Boolean).slice(0, 3);
   if (hubs.length) sbxLoop(sbxVehOk() ? ['e_reserve', 'e_tank', 'e_garrison', 'e_apc'] : ['e_reserve', 'e_garrison'], (id, i) => { const h = hubs[i % hubs.length], p = sbxCoverAt(h.x + Math.cos(i * 1.7) * 60, h.y - 50 - Math.abs(Math.sin(i * 1.7)) * 60); return sbxTry(id, p.x, p.y, 40); }, 14, 60);
+  (S.sbx.aiSty || (S.sbx.aiSty = {})).e = style;   // 指挥体系（hq.js）按部署方案定战术
   sbxSync();
   R0.say(`部署完毕（方案「${DS.nm}」）：共 ${S.sbx.items.filter(it => it.side === 'e').length} 项，用去 ${sbxSpent('e')} / ${Btot} 点。`, null);
   return R0.names;
@@ -826,6 +836,8 @@ function sbxSpawn(it, role, acc) {
     Object.assign(e, { name: c.name, cat: c.id }, s.vis ? { sbxVis: { ...s.vis } } : {}, s.decoy ? { decoy: true } : {}, s.n ? { n: s.n } : {});
   } else if (s.kind === 'eship') {
     if (typeof navyAdd === 'function') navyAdd(s.cls, x, y, c.name);
+  } else if (s.kind === 'esub') {
+    if (typeof asSubAdd === 'function') asSubAdd(x, y, c.name);
   } else if (s.kind === 'mine') {
     const r = it.r || s.r, n = s.n || 1;
     for (let k = 0; k < n; k++) S.mines.push({ id: S.nid++, x: x + (k - (n - 1) / 2) * r * 1.25, y: y + (k % 2 ? -r * .35 : 0), r, known: false, clr: s.clr || 0, ...(s.at2 ? { at: true } : {}) });
@@ -903,7 +915,7 @@ function sbxBuild(role) {
   S.sbxRun = { waves: [], sorties: [], depot: false, deck: false, aaT: 0, tagT: 0, waveT: 0, ddPrev: 0, said: {} };
   S.assets = { recon: 0, strike: 0, cas: 0, rline: 1, reserve: 0, smoke: 0 };
   S.eair = null; S.eaLight = null; S.missiles = []; S.msl = null; S.b2 = null;   // v7：守方航空、导弹、B-2A 机群从购买重建
-  S.eships = []; S.navy = null; S.afd = null;   // 守方舰艇（navy.js）、机场防御（afdef.js）从购买重建
+  S.eships = []; S.navy = null; S.afd = null; S.subs = []; S.torps = []; S.asea = null; S.asP8 = null;   // 反航母体系（antiship.js）从购买重建   // 守方舰艇（navy.js）、机场防御（afdef.js）从购买重建
   S.points = S.points.filter(p => p.key !== 'AF');   // 上一局按机场加入的据点（abn.js）按这一局的机场重建
   S.ab = null; S.abBase = null;
   S.points.forEach(p => { p.owner = 'e'; p.prog = 0; p.contested = false; });

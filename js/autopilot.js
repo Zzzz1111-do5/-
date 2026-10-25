@@ -624,7 +624,7 @@ function drawAutoRoutes(time) {
       else { tx = u.tx ?? pl.dx; ty = u.ty ?? pl.dy; }
     }
     const col = pl.ph === 'go' ? COL.enemy : pl.ph === 'supply' || pl.ph === 'regroup' || eng ? COL.intel : COL.g;
-    if (tx != null && isFinite(tx) && isFinite(ty) && dist(u.x, u.y, tx, ty) > 20) {
+    if (tx != null && isFinite(tx) && isFinite(ty) && dist(u.x, u.y, tx, ty) > 20 && (on || !(typeof hqOn === 'function' && hqOn()))) {   // 指挥体系开着：满屏的连队路线只在选中时画，大方向看旅的箭头
       const pts = apRoute(u, tx, ty), d0 = dist(u.x, u.y, tx, ty);
       const path = [[u.x, u.y]];
       for (let i = 1; i < pts.length; i++) if (dist(pts[i][0], pts[i][1], tx, ty) < d0 - 6 || i === pts.length - 1) path.push(pts[i]);

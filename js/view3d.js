@@ -291,6 +291,7 @@ function v3Draw(now) {
     gl.drawElements(gl.TRIANGLES, V3.bn, gl.UNSIGNED_SHORT, 0);
     gl.disableVertexAttribArray(ab.p); gl.disableVertexAttribArray(ab.n); gl.disableVertexAttribArray(ab.e);
   }
+  if (typeof v3Units === 'function' && !(SETTINGS && SETTINGS.models3d === false)) { gl.disableVertexAttribArray(V3.a.p); gl.disableVertexAttribArray(V3.a.n); v3Units(C, box); }   // 兵种立体模型（v3units.js）
   const ctx = R.ctx;
   ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalCompositeOperation = 'copy'; ctx.drawImage(V3.cv, 0, 0); ctx.restore();
   v3Overlay(ctx, now / 1000);
@@ -364,6 +365,7 @@ function v3Overlay(ctx, time) {
     if (!q) return;
     const g = v3Ht(x, y), p2 = v3Proj(x + Math.cos(hd) * 12, y + Math.sin(hd) * 12, g + z);
     const a = p2 ? Math.atan2(p2.y - q.y, p2.x - q.x) : 0;
+    if (typeof V3U === 'object' && V3U.ok && !(SETTINGS && SETTINGS.models3d === false)) return;   // 立体模型已经画了飞机，这里只留垂线
     ctx.save(); ctx.translate(q.x, q.y); ctx.rotate(a);
     ctx.fillStyle = rgba(col, q.al); ctx.beginPath(); ctx.moveTo(7, 0); ctx.lineTo(-5, -4.5); ctx.lineTo(-2.5, 0); ctx.lineTo(-5, 4.5); ctx.closePath(); ctx.fill();
     ctx.restore();

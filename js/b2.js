@@ -14,7 +14,11 @@
 // 情报：只打守方看得见（spotted）的目标；瞄准点 60 以内有自己人不投
 // 状态（纯 JSON）：S.b2 = { g: [{ id, n 剩余架数, st: 'base' | 'out', next 下次出动时刻, k 出击次数 }] }；
 //   飞机在 S.eair.fly（type 'b2'，g 机群 id，no 机号，load 挂载，aims 瞄准点 [x, y, k?, id?]，i 已投 / 已射枚数）
-const B2 = { first: 150, gap: 300, retry: 15, spd: 200, alt: .95, turn: .8, hp: 3, rel: 260, every: .12, jEvery: .35, safe: 60, gps: 4, edge: 90 };
+const B2 = { first: 120, gap: 240, retry: 15, spd: 200, alt: .95, turn: .8, hp: 3, rel: 260, every: .12, jEvery: .35, safe: 60, gps: 4, edge: 90 };
+// 压制（v14）：每枚 JDAM 落地除了杀伤半径内的毁伤，还有大得多的冲击波与心理震撼——RS 以内的敌步兵被死死压住、连队士气大跌，
+//   车辆乘员被震晕（压制）；连续落弹沿航线一路滚过去（地毯式覆盖），爆点留下火球与久久不散的烟尘。
+//   弹多目标少时不再「其余几架补投同样的点」：GBU-38 在敌集结处按 26 的间距铺满覆盖面（藏在掩体里看不见的也一起覆盖）
+const B2_SHOCK = { gbu38: { rs: 120, sup: 95, mor: 10 }, gbu31: { rs: 190, sup: 100, mor: 18 } };
 const B2_LOAD = {
   gbu38: { nm: 'GBU-38/B 500 磅 JDAM', n: 80 },
   gbu31: { nm: 'GBU-31(V)3/B 2000 磅 JDAM', n: 16 },
@@ -48,6 +52,8 @@ function b2Call(x, y, who) {
 function b2Cands() {
   const soft = [], hard = [], sea = [], C = S.b2 && S.b2.call && S.t - S.b2.call.t < 240 ? S.b2.call : null;
   for (const q of S.teams) if (q.side === 'p' && q.men.length && !q.ride && isLand(q.x, q.y) && b2Seen(q.x, q.y)) soft.push([q.x, q.y, q.men.length]);
+  const M = S.hq && S.hq.e && S.hq.e.mem;   // 守方司令记得的敌位置（指挥体系 hq.js，60 秒内）：GPS 坐标交给 B-2，打折计价值
+  if (M) for (const k in M) { const m = M[k]; if (S.t - m[3] < 60 && isLand(m[0], m[1]) && !soft.some(o => Math.abs(o[0] - m[0]) < 20 && Math.abs(o[1] - m[1]) < 20)) soft.push([m[0], m[1], m[2] * .6]); }
   for (const v of S.veh || []) {
     if (v.side !== 'p' || v.dead || v.lst || !b2Seen(v.x, v.y)) continue;
     if (!isLand(v.x, v.y)) continue;
@@ -71,6 +77,45 @@ function b2Pick(list, n, rMin, per) {
   for (let r = 1; r < per && out.length && out.length < n; r++) for (const o of out.slice(0, out.length)) { if (out.length >= n) break; if (o[2] >= 6) out.push(o); }
   return out;
 }
+// 地毯式覆盖：瞄准点不够一架的载弹量时，在敌人扎堆的地方（价值高的点 90 以内）按 26 的间距铺点，直到把弹投满
+function b2Carpet(aims, all, n) {
+  const out = aims.slice();
+  if (!out.length) return out;
+  const hubs = all.slice().sort((a, b) => b[2] - a[2]).slice(0, 12);
+  for (let ring = 1; ring <= 3 && out.length < n; ring++) for (const h of hubs) {
+    const r = ring * 30, k = Math.round(6.283 * r / 26);
+    for (let i = 0; i < k && out.length < n; i++) {
+      const a = i / k * 6.283 + ring, x = h[0] + Math.cos(a) * r, y = h[1] + Math.sin(a) * r;
+      if (!isLand(x, y) || b2Own(x, y) || out.some(o => Math.abs(o[0] - x) < 18 && Math.abs(o[1] - y) < 18)) continue;
+      out.push([x, y, 1]);
+    }
+  }
+  return out;
+}
+// 落弹（missile.js 精确制导弹药落地时调用）：冲击波压制、士气震撼、车组震晕，火球与烟尘
+function b2Blast(x, y, w) {
+  const K = B2_SHOCK[w];
+  if (!K) return;
+  const hitU = new Set();
+  for (const q of S.teams) {
+    if (q.side !== 'p' || !q.men.length || q.ride) continue;
+    const d = dist(q.x, q.y, x, y);
+    if (d >= K.rs) continue;
+    suppress(q, K.sup * (1 - d / K.rs * .6));
+    q.proneT = S.t; q.b2Pin = S.t + 20;   // 炸懵了：20 秒内压制不低于 65（趴着抬不起头、不能前进）
+    const u = unitOf(q);
+    if (u && !hitU.has(u.id) && S.t - (u.b2T ?? -99) > 4) { hitU.add(u.id); u.b2T = S.t; u.morale = Math.max(0, u.morale - K.mor * (1 - d / K.rs)); u.hitT = S.t; }
+  }
+  for (const v of S.veh || []) if (v.side === 'p' && !v.dead && !v.lst) { const d = dist(v.x, v.y, x, y); if (d < K.rs * .55) { v.sup = Math.min(100, v.sup + 60 * (1 - d / (K.rs * .55))); v.hitT = S.t; } }
+  S.fx.push({ kind: 'b2', x, y, r: K.rs, life: 0, max: 2.4, side: 'e', w });
+  const D = S.b2dust || (S.b2dust = []);
+  D.push({ x: Math.round(x + gauss() * 6), y: Math.round(y + gauss() * 6), t: S.t, r: w === 'gbu31' ? 48 : 30 });
+  if (D.length > 260) D.splice(0, D.length - 260);
+  if (S.t - (S.b2shoutT ?? -99) > 6 && typeof shout === 'function') {   // 挨炸的连喊一嗓子
+    const q = S.teams.find(q => q.side === 'p' && q.men.length && dist(q.x, q.y, x, y) < K.rs);
+    if (q && unitOf(q)) { S.b2shoutT = S.t; shout(unitOf(q), pick(['B-2 地毯轰炸！趴下！', '天上全是炸弹！', '隐蔽！炸弹一路砸过来了！']), { side: 'p' }); }
+  }
+}
 // 投弹顺序：从进入点开始就近串成一条航线
 function b2Route(aims, x, y) {
   const left = aims.slice(), out = [];
@@ -81,12 +126,17 @@ function b2Route(aims, x, y) {
 function b2Plan() {
   const C = b2Cands(), plan = [];
   const jassm = b2Pick(C.sea, B2_LOAD.jassm.n, 0, 6).flatMap(o => Array(o[3] === 'cv' ? 6 : o[3] === 'dd' ? 4 : 2).fill(o)).slice(0, B2_LOAD.jassm.n);
-  const g31 = b2Pick(C.hard, B2_LOAD.gbu31.n, 14, 2), g38 = b2Pick(C.soft.concat(C.hard), B2_LOAD.gbu38.n, 12, 2);
+  const g31 = b2Pick(C.hard, B2_LOAD.gbu31.n, 14, 2), land = C.soft.concat(C.hard);
   if (jassm.length) plan.push({ load: 'jassm', aims: jassm });
   if (g31.length) plan.push({ load: 'gbu31', aims: g31 });
-  while (plan.length < 3 && (g38.length || g31.length)) plan.push(g38.length >= 4 || !g31.length ? { load: 'gbu38', aims: g38 } : { load: 'gbu31', aims: g31 });
+  // 其余几架都挂 GBU-38：按架数一起铺覆盖面，再按东西向分给各架（各炸一片，不重复投同一个点）
+  const n38 = land.length ? 3 - plan.length : 0;
+  if (n38 > 0) {
+    const all = b2Carpet(b2Pick(land, B2_LOAD.gbu38.n * n38, 12, 2), land, B2_LOAD.gbu38.n * n38).sort((a, b) => a[0] - b[0]);
+    for (let k = 0; k < n38; k++) { const part = all.slice(Math.round(k * all.length / n38), Math.round((k + 1) * all.length / n38)); if (part.length) plan.push({ load: 'gbu38', aims: part }); }
+  }
   if (!plan.length) return null;
-  while (plan.length < 3) plan.push({ ...plan[plan.length - 1] });   // 目标少：其余几架同样分工、补投
+  while (plan.length < 3) plan.push({ ...plan[plan.length - 1] });   // 只有海上目标：其余几架同样分工、补射
   return plan.slice(0, 3);
 }
 
@@ -172,3 +222,37 @@ function b2Step() {
   }
 }
 HOOK.step.push(b2Step);
+HOOK.step.push(() => { if (S && S.b2dust && S.b2dust.length) for (const q of S.teams) if (q.b2Pin > S.t && q.men.length) q.sup = Math.max(q.sup, 65); });
+
+// —— 画面：重磅炸弹的火球、冲击波（drawFx 画外圈）与久久不散的烟尘 ——
+HOOK.drawUnder.push(function b2DrawDust() {
+  const D = S && S.b2dust;
+  if (!D || !D.length || typeof R !== 'object' || !R.ctx) return;
+  const ctx = R.ctx;
+  ctx.save();
+  for (const d of D) {
+    const age = S.t - d.t, k = 1 - age / 45;
+    if (k <= 0 || !inView(d.x, d.y, d.r * 2)) continue;
+    const r = d.r * (1 + age / 30), dx = age * 1.2, g = ctx.createRadialGradient(d.x + dx, d.y - age * .5, 0, d.x + dx, d.y - age * .5, r);
+    g.addColorStop(0, `rgba(58,50,42,${.42 * k})`); g.addColorStop(.6, `rgba(70,62,54,${.22 * k})`); g.addColorStop(1, 'rgba(70,62,54,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(d.x + dx, d.y - age * .5, r, 0, 6.283); ctx.fill();
+  }
+  ctx.restore();
+  if (S.t - (S.b2dustT ?? 0) > 5) { S.b2dustT = S.t; S.b2dust = D.filter(d => S.t - d.t < 45); }
+});
+HOOK.drawOver.push(function b2DrawBlast() {
+  if (!S || !S.fx || typeof R !== 'object' || !R.ctx) return;
+  const ctx = R.ctx;
+  for (const f of S.fx) {
+    if (f.kind !== 'b2' || !inView(f.x, f.y, f.r)) continue;
+    const u = f.life / f.max;
+    if (u < .35) {   // 火球
+      const r = (f.w === 'gbu31' ? 46 : 30) * (.5 + u * 1.6), a = 1 - u / .35, g = ctx.createRadialGradient(f.x, f.y, 0, f.x, f.y, r);
+      g.addColorStop(0, `rgba(255,248,220,${.95 * a})`); g.addColorStop(.35, `rgba(255,170,60,${.85 * a})`); g.addColorStop(.75, `rgba(200,70,20,${.5 * a})`); g.addColorStop(1, 'rgba(120,40,10,0)');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(f.x, f.y, r, 0, 6.283); ctx.fill();
+    }
+    // 第二道冲击波：贴地扩散的淡圈，到压制半径为止
+    ctx.strokeStyle = `rgba(255,214,150,${(1 - u) * .5})`; ctx.lineWidth = px(2.2 * (1 - u) + .6);
+    ctx.beginPath(); ctx.arc(f.x, f.y, f.r * Math.min(1, u * 1.8), 0, 6.283); ctx.stroke();
+  }
+});

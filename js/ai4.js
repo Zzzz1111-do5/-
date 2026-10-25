@@ -73,7 +73,7 @@ function a4Focus() {
       lift = { x: p.x + ux * 150, y: p.y + uy * 150, r: 90 };
     }
   }
-  return lift || (typeof brFocus === 'function' ? brFocus() : null);   // 没有反冲击火力任务：支援交战中的战斗群（brain.js）
+  return lift || (typeof hqFocus === 'function' ? hqFocus() : null) || (typeof brFocus === 'function' ? brFocus() : null);   // 没有反冲击火力任务：支援交战中的战斗群（brain.js）
 }
 // 守方车辆的伴随轴线（tf.js tfAxisPt）：反冲击目标；机动 / 待机中的连队对着所去据点的威胁方向；否则朝海
 function a4Axis(v, u, c) {
@@ -600,6 +600,7 @@ HOOK.step.push(a4Think);
 //   预备队整连机动、借兵侧射为细虚线
 function frDrawPlans(ctx, fL, spec, time) {
   if (!S) return;
+  if (typeof hqOn === 'function' && hqOn()) return;   // 作战箭头统一由指挥体系画（hq.js hqDraw）
   const arrow = typeof cmdArrow === 'function' ? cmdArrow : null, G = S.tf && Array.isArray(S.tf.go) ? S.tf.go : [];
   ctx.setLineDash([]);
   if (arrow) for (const g of G) {

@@ -39,7 +39,7 @@ const isWater = t => t <= T.REEF;
 const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
 const lerp = (a, b, t) => a + (b - a) * t;
 const smooth = (a, b, v) => { const t = clamp((v - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
-const dist = (ax, ay, bx, by) => Math.hypot(bx - ax, by - ay);
+const dist = (ax, ay, bx, by) => { const dx = bx - ax, dy = by - ay; return Math.sqrt(dx * dx + dy * dy); };   // 不用 Math.hypot：V8 里慢好几倍，推演里调用极多
 const gauss = () => (Math.random() + Math.random() + Math.random() - 1.5) / 1.5;
 const pick = arr => arr[Math.floor(Math.random() * arr.length)];
 const bearing = (ax, ay, bx, by) => (Math.atan2(bx - ax, ay - by) * 180 / Math.PI + 360) % 360;

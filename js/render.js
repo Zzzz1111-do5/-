@@ -139,7 +139,7 @@ function drawScene(now) {
   const { ctx } = R, time = now / 1000;
   // 附近大爆炸：短暂震动与闪白（震动幅度按屏幕像素封顶，设置可关闭）
   let k = 0;
-  for (const f of S.fx) if (f.kind === 'boom' && f.life < .25 && inVision(f.x, f.y)) k += f.r / 30 * (1 - f.life / .25);
+  for (const f of S.fx) if ((f.kind === 'boom' || f.kind === 'b2') && f.life < .25 && inVision(f.x, f.y)) k += (f.kind === 'b2' ? f.r / 60 : f.r / 30) * (1 - f.life / .25);   // B-2 重磅炸弹震得更厉害
   const ox = R.ox, oy = R.oy, shake = !(typeof SETTINGS === 'object' && SETTINGS && SETTINGS.shake === false);
   if (shake && k > 0) { const a = Math.min(k, 2.5) * 1.4 * Math.min(R.s, CAM.fit * 3); R.ox += gauss() * a; R.oy += gauss() * a; }
   lodUpdate();
