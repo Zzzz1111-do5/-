@@ -194,6 +194,15 @@ const RLM = {
       P.disc(-.2, 0, .78, '#d4d6d1'); P.disc(-.2, 0, .5, '#c4c6c1');   // 雷达罩（白色圆顶）
       P.box(-.95, 0, .5, 1.25, '#5d6064', { r: .1 });
     } },
+  // M903 爱国者发射车：HEMTT 8×8 牵引车 + M860 半挂车，车上可旋转、俯仰的发射架（俯视为并排两列的四联装发射筒）
+  m903: { L: 12, B: 2.9, run: 'w', tur: { x: -2.3 }, hull: rlBox(12, 2.9, .1),
+    H: P => rlWhl(P, { L: 12, B: 2.9, hull: rlBox(12, 2.9, .1), ax: [5, 3.9, 2.8, -2.4, -3.6, -4.8], wl: 1.1, ww: .44, seed: 31,
+      extra: P => { rlCab(P, 5.1, 1.6, 2.7); P.box(3.4, 0, 1.4, 2.5, '#5d6064', { r: .08 }); P.grille(2.8, -.9, 4, .9, 6); P.box(-1.2, 0, 7.6, 2.5, P.shade(P.paint, .9), { r: .1 }); } }),
+    T: P => {
+      P.box(0, 0, 6.2, 2.5, P.shade(P.paint, 1.02), { r: .12, ao: .3 });
+      for (const y of [-.62, .62]) P.box(0, y, 6, 1.1, P.shade(P.paint, .92), { r: .1 });
+      for (const y of [-.62, .62]) P.disc(3, y, .38, '#3b3d3a');   // 发射筒前盖
+    } },
   zbl08: { L: 8, B: 3, run: 'w', tur: { x: .2 }, hull: rlWedge(8, 3, .6), mast: [-1.6, 0, .4],
     gun: { x0: .85, len: 2.2, r: .045, br: 1 },
     H: P => rlWhl(P, { L: 8, B: 3, hull: rlWedge(8, 3, .6), ax: [2.7, 1.4, -1, -2.3], wl: 1.05, ww: .4, drv: [2.85, -.8], seed: 22,
@@ -386,7 +395,7 @@ function rlGunSpr(gun, side) {
 // 型号 → 模型：按型号名（沙盒目录名、空投车辆的 mdl）匹配，否则按阵营 + 车型
 const RLM_NAME = [[/99A/, 'ztz99a'], [/96 式扫雷/, 'ztz96m'], [/GCZ/, 'gcz110'], [/96B/, 'ztz96b'], [/ZTQ-15/, 'ztq15'], [/ZTD-05/, 'ztd05'], [/ZBD-05/, 'zbd05'], [/ZSL-92/, 'zsl92b'], [/PLZ-07/, 'plz07'], [/PTL-02/, 'ptl02'],
   [/PGZ-07/, 'pgz07'], [/PGL-625/, 'pgl625'], [/LD-2000/, 'ld2000'], [/08 式/, 'zbl08'], [/ZBD-04A/, 'zbd04a'], [/ZBD-03/, 'zbd03'],
-  [/M1A2/, 'm1a2'], [/M1A1/, 'm1a1'], [/M10 /, 'm10'], [/AAV/, 'aav7'], [/M2A3|布雷德利/, 'm2a3'], [/M109/, 'm109'], [/M1134/, 'm1134'], [/M1127/, 'm1127'], [/M-SHORAD/, 'mshorad'],
+  [/M1A2/, 'm1a2'], [/M1A1/, 'm1a1'], [/M10 /, 'm10'], [/AAV/, 'aav7'], [/M2A3|布雷德利/, 'm2a3'], [/M109/, 'm109'], [/M1134/, 'm1134'], [/M1127/, 'm1127'], [/M-SHORAD/, 'mshorad'], [/M903|爱国者/, 'm903'],
   [/M163/, 'm163'], [/M1150/, 'm1150'], [/LPWS|密集阵/, 'lpws'], [/JLTV/, 'jltv'], [/复仇者/, 'avenger'], [/M1117/, 'm1117']];
 const RLM_TYPE = { p: { lt_tank: 'ztq15', tank: 'ztz96b', hv_tank: 'ztz99a', amtank: 'ztd05', apc: 'zbd05', spg: 'plz07', td: 'ptl02', aa_veh: 'pgz07', sam_veh: 'pgl625', recon: 'zbl08', flame_tank: 'zbd04a', mine_tank: 'ztz96m', abv: 'zbd03' },
   e: { lt_tank: 'm10', tank: 'm1a1', hv_tank: 'm1a2', amtank: 'aav7', apc: 'm2a3', spg: 'm109', td: 'm1134', aa_veh: 'm163', sam_veh: 'mshorad', recon: 'm1127', flame_tank: 'm1150', mine_tank: 'm1150', abv: 'm2a3' } };

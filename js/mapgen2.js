@@ -39,6 +39,13 @@ function finishMap(r, cAt, headland) {
   for (const v of vills) blob(v, 40, .75);
   blob(town1, 64, .8); blob(town2, 58, .8); blob(hq, 52, .82);
   if (town3) blob(town3, 56, .8);
+  // 空军基地（守方机场，地图自带）：指挥所一带纵深里找一块放得下跑道与整个场区（航站楼、营房、弹药库、爱国者阵地、围栏）的地；
+  // 场区内的树林、沼泽、丘陵清成平地，稍后修一条进场公路
+  TER.af = typeof eaRunwayFit === 'function' ? afSite(r, [...vills, town1, town2, town3, hq].filter(Boolean), hq) : null;
+  if (TER.af) for (let u = AF_BOX.u0; u <= AF_BOX.u1; u += 5) for (let v = AF_BOX.v0; v <= AF_BOX.v1; v += 5) {
+    const [x, y] = afWorld(TER.af, u, v), i = ci(x, y), t = type[i];
+    if (t === T.FOREST || t === T.MARSH || t === T.HILL) { type[i] = T.FIELD; TER.elev[i] = Math.min(TER.elev[i], .5); }
+  }
   TER.towns = { vills, town1, town2, town3, hq };
 
   // 道路：海岸公路、滩头出口路、通往两个镇子与指挥所的主干道；跨河处成为桥梁
@@ -75,6 +82,16 @@ function finishMap(r, cAt, headland) {
     road([[town3.x, town3.y], via(town3, hq, 160), [hq.x, hq.y]]);
   }
   for (const v of vills) road([[v.x, v.y], [v.x, rdY(v.x)]]);
+  if (TER.af) {   // 机场进场公路：南门 → 最近的镇子 / 指挥所
+    const [gx, gy] = afWorld(TER.af, 0, AF_BOX.v1 - 5), [ox, oy] = afWorld(TER.af, 0, AF_BOX.v1 + 30);
+    const tn = [hq, town1, town2, town3].filter(Boolean).reduce((a, b) => dist(b.x, b.y, gx, gy) < dist(a.x, a.y, gx, gy) ? b : a);
+    // 镇子在场区侧面或跑道那一边时，公路出南门后沿围栏外侧绕过去，不穿过场区
+    const af = TER.af, c = Math.cos(af.h), n = Math.sin(af.h), dx = tn.x - af.x, dy = tn.y - af.y, lu = dx * c + dy * n, lv = (-dx * n + dy * c) * af.s, sg = lu >= 0 ? 1 : -1;
+    const pts = [[gx, gy], [ox, oy]];
+    if (lv < AF_BOX.v1 + 30) { pts.push(afWorld(af, sg * (AF_BOX.u1 + 60), AF_BOX.v1 + 30)); if (lv < AF_BOX.v0) pts.push(afWorld(af, sg * (AF_BOX.u1 + 60), AF_BOX.v0 - 20)); }
+    pts.push([tn.x, tn.y]);
+    road(pts);
+  }
 
   const bridges = [];
   for (const i of bridgeCells) {
@@ -164,4 +181,36 @@ function bldOut(x, y, m = 1.2) {
     moved = true;
   }
   return moved ? [x, y] : null;
+}
+
+// —— 空军基地选址（地图生成时调用）——
+// 场区范围（机场局部坐标：u 沿跑道、v 向停机坪一侧）：跑道两侧各 275，跑道外侧 90 到停机坪后方 310（航站楼、营房、弹药库、爱国者阵地与围栏）
+const AF_BOX = { u0: -275, u1: 275, v0: -90, v1: 310 };
+function afWorld(af, u, v) { const c = Math.cos(af.h), n = Math.sin(af.h); return [af.x + c * u - n * v * af.s, af.y + n * u + c * v * af.s]; }
+function afSite(r, towns, hq) {
+  const avoid = towns.map(p => ({ x: p.x, y: p.y, r: 70 }));
+  const ok = af => {
+    for (let u = AF_BOX.u0; u <= AF_BOX.u1; u += 25) for (let v = AF_BOX.v0; v <= AF_BOX.v1; v += 25) {
+      const [x, y] = afWorld(af, u, v);
+      if (x < 15 || x > W - 15 || y < 15 || y > H - 15) return false;
+      const t = typeAt(x, y);
+      if (isWater(t) || t === T.RIVER || t === T.CLIFF || t === T.MOUNT || t === T.BRIDGE || t === T.TOWN) return false;
+    }
+    return !towns.some(p => { const [cx, cy] = afWorld(af, 0, 110); return dist(p.x, p.y, cx, cy) < 330; });
+  };
+  let best = null, bs = -1e9;
+  for (let pass = 0; pass < 2 && !best; pass++) {   // 先在指挥所一带找，找不到再放宽到整个纵深
+    const span = pass ? W : 800 * MAP_K;
+    for (let dx = -span; dx <= span; dx += 60) for (let y = 80; y <= (pass ? H : hq.y + 450); y += 45) {
+      const x = clamp(hq.x + dx, 300, W - 300);
+      if (coastAt(x) - y < 520) continue;
+      const f = eaRunwayFit(x, y, 450, avoid);
+      if (!f) continue;
+      const af = { x: Math.round(x), y: Math.round(y), h: f.h, s: f.s };
+      if (!ok(af)) continue;
+      const sc = f.sc - Math.abs(dx) / 450 + r() * 1.2;
+      if (sc > bs) { bs = sc; best = af; }
+    }
+  }
+  return best;
 }

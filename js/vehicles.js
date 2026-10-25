@@ -215,7 +215,7 @@ function vehFreeSpot(v, x, y, cls) {
 function vehDrive(v, dt, mul) {
   const o = v.order, sp = vehSp(v);
   v.moving = false;
-  if (v.immob || v.lst) return;
+  if (v.immob || v.lst || v.fixed) return;   // fixed：机场等固定阵地上的防空装备，不机动
   if (o.t === 'hold' || o.x == null) {   // 停车：转向指定朝向（坚守时车体正对威胁）
     if (o.face != null) v.heading += clamp(vehAng(o.face - v.heading), -sp.turn * .6 * dt, sp.turn * .6 * dt);
     vehSpread(v, dt);
@@ -531,7 +531,7 @@ function vehSam(v, dt) {
   if (tg) (tg.svTry || (tg.svTry = [])).push(v.id);
   else {
     const air = v.side === 'p' ? (S.eair && S.eair.fly || []).filter(a => !a.dead && a.alt > .1) : (S.planes || []).filter(p => !p.dead && p.alt > .25 && !['cat', 'roll', 'trap', 'final'].includes(p.phase));
-    for (const a of air) { const d = dist(v.x, v.y, a.x, a.y); if (d < M.range && d < bd && !(typeof eaHigh === 'function' && eaHigh(a)) && !mine(v.side === 'p' ? 'eair' : 'plane', a.id)) { bd = d; tg = a; } }   // 近程红外弹够不着巡逻高度上的战斗机
+    for (const a of air) { const d = dist(v.x, v.y, a.x, a.y); if (d < M.range && d < bd && !(!M.hi && typeof eaHigh === 'function' && eaHigh(a)) && !mine(v.side === 'p' ? 'eair' : 'plane', a.id)) { bd = d; tg = a; } }   // 近程红外弹够不着巡逻高度上的战斗机（hi：爱国者等中远程防空够得着）
     if (!tg) return;
     k = v.side === 'p' ? 'eair' : 'plane';
   }

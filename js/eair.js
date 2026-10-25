@@ -107,6 +107,11 @@ const eaWhere = (x, y) => typeof cmdWhere === 'function' ? cmdWhere(x, y) : grid
 
 // —— 战役：在指挥所以北纵深找一块放得下 300 米跑道的平整陆地修野战机场；按难度配飞机、守军单兵防空组；我方两个连各带一个便携防空组 ——
 function eaPlaceBase() {
+  if (TER.af) {   // 地图自带的空军基地（mapgen2.js afSite）
+    const e = addEnemy('airfield', TER.af.x, TER.af.y);
+    e.rh = TER.af.h; e.rs = TER.af.s; e.mapAF = true;
+    return e;
+  }
   const hq = S.points.find(p => p.key === 'HQ') || S.points.reduce((a, p) => p.y < a.y ? p : a, S.points[0]);
   const avoid = [...S.points.map(p => ({ x: p.x, y: p.y, r: 50 })), ...S.enemies.map(e => ({ x: e.x, y: e.y, r: 15 }))];
   let best = null, bs = -1e9;
@@ -779,11 +784,68 @@ function eaDrawBases(time) {
   if (!S || !eaOn() || typeof R !== 'object' || !R.ctx) return;
   const ctx = R.ctx, spec = S.role === 'spectate';
   for (const b of S.enemies) {
-    if (b.kind !== 'airfield' || !inView(b.x, b.y, 220)) continue;
+    if (b.kind !== 'airfield' || !inView(b.x, b.y, 340)) continue;
     const vis = spec || eaBaseSeen(b);
     if (vis || b.kx != null) eaDrawBase(ctx, b, vis, time);
   }
   if (S.abBase && inView(S.abBase.x, S.abBase.y, 220)) eaDrawBase(ctx, S.abBase, true, time, true);   // 我方夺取的机场（abn.js）
+}
+// 场区配套设施（机场局部坐标，画在跑道 / 停机坪之上、飞机之下）：围栏与南门、巡逻便道、航站楼（基地指挥楼）与停车场、营房、
+// 弹药库（覆土掩体 + 土堤）、爱国者导弹阵地（发射车掩体、AN/MPQ-65 雷达、指挥车）、机场监视雷达、高炮沙袋掩体、防空车土堤
+// 场区底层：草地、巡逻便道、围栏（画在跑道之前）
+function eaDrawGround(ctx, a, rl, con) {
+  ctx.save(); ctx.setLineDash([]);
+  // 场区：围栏里是修剪过的草地（盖住地形上的农田）
+  ctx.fillStyle = rl ? `rgba(108,124,74,${.9 * a})` : `rgba(4,14,9,${.85 * a})`; ctx.fillRect(-272, -88, 544, 396);
+  // 巡逻便道（碎石）
+  ctx.strokeStyle = rl ? `rgba(150,140,118,${.55 * a})` : rgba(COL.gDim, .5 * a); ctx.lineWidth = 4; ctx.beginPath();
+  for (const [u, v] of AFD_WP) ctx.lineTo(u, v);
+  ctx.closePath(); ctx.stroke();
+  // 围栏（南门留口）
+  ctx.strokeStyle = con; ctx.lineWidth = Math.max(.6, px(1)); ctx.setLineDash([3, 2.5]);
+  ctx.beginPath(); ctx.moveTo(-9, 308); ctx.lineTo(-272, 308); ctx.lineTo(-272, -88); ctx.lineTo(272, -88); ctx.lineTo(272, 308); ctx.lineTo(9, 308); ctx.stroke(); ctx.setLineDash([]);
+  ctx.restore();
+}
+function eaDrawFac(ctx, b, a, det, rl, edge, con, dark, time) {
+  const roof = rl ? `rgba(118,116,108,${.96 * a})` : dark, roof2 = rl ? `rgba(92,90,84,${.96 * a})` : dark, earth = rl ? `rgba(104,98,70,${.9 * a})` : rgba(COL.gDim, .8 * a);
+  const bag = rl ? `rgba(150,138,100,${.95 * a})` : rgba(COL.gMid, .6 * a), lot = rl ? `rgba(96,98,96,${.9 * a})` : `rgba(14,20,17,${.9 * a})`;
+  ctx.save(); ctx.setLineDash([]);
+  // 航站楼（基地指挥楼）与停车场、门岗
+  ctx.fillStyle = lot; ctx.fillRect(-50, 276, 100, 20); ctx.fillRect(-5, 296, 10, 13);
+  ctx.fillStyle = roof; ctx.fillRect(-56, 250, 112, 22); ctx.strokeStyle = edge; ctx.lineWidth = px(1.2); ctx.strokeRect(-56, 250, 112, 22);
+  ctx.fillStyle = roof2; ctx.fillRect(-56, 259.5, 112, 3);   // 屋脊
+  ctx.fillStyle = dark; ctx.fillRect(-12, 300, 6, 5); ctx.strokeRect(-12, 300, 6, 5);
+  if (det >= 110) {
+    ctx.strokeStyle = rl ? `rgba(120,170,190,${.8 * a})` : rgba(COL.intel, .5 * a); ctx.lineWidth = px(1.2); ctx.beginPath(); ctx.moveTo(-50, 272.5); ctx.lineTo(50, 272.5); ctx.stroke();   // 玻璃幕墙
+    ctx.strokeStyle = rl ? `rgba(230,230,220,${.5 * a})` : rgba(COL.text, .3 * a); ctx.lineWidth = px(.8); ctx.beginPath();
+    for (let u = -46; u <= 46; u += 6) { ctx.moveTo(u, 278); ctx.lineTo(u, 284); ctx.moveTo(u, 288); ctx.lineTo(u, 294); } ctx.stroke();   // 车位线
+  }
+  // 营房：三栋
+  ctx.fillStyle = roof; ctx.strokeStyle = edge; ctx.lineWidth = px(1.1);
+  for (let k = 0; k < 3; k++) { const u = 72 + k * 22; ctx.fillRect(u, 250, 16, 28); ctx.strokeRect(u, 250, 16, 28); ctx.fillStyle = roof2; ctx.fillRect(u + 7, 250, 2, 28); ctx.fillStyle = roof; }
+  // 弹药库：四座覆土掩体（拱顶 + 门），外围土堤
+  ctx.strokeStyle = earth; ctx.lineWidth = 3; ctx.strokeRect(-250, 196, 66, 78);
+  for (let k = 0; k < 4; k++) {
+    const u = -242 + (k % 2) * 30, v = 204 + Math.floor(k / 2) * 36;
+    ctx.fillStyle = earth; ctx.beginPath(); ctx.ellipse(u + 9, v + 12, 9, 12, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = dark; ctx.fillRect(u + 6, v - 1, 6, 3);
+  }
+  // 爱国者阵地：发射车 U 形土堤、雷达、指挥车
+  ctx.strokeStyle = earth; ctx.lineWidth = 2.6;
+  for (const [u, v] of AFD_PAT) { ctx.beginPath(); ctx.moveTo(u - 10, v - 9); ctx.lineTo(u - 10, v + 9); ctx.lineTo(u + 10, v + 9); ctx.lineTo(u + 10, v - 9); ctx.stroke(); }
+  ctx.fillStyle = dark; ctx.strokeStyle = edge; ctx.lineWidth = px(1);
+  ctx.fillRect(228, 262, 12, 6); ctx.strokeRect(228, 262, 12, 6);   // AN/MPQ-65 雷达车
+  ctx.fillStyle = rl ? `rgba(70,74,70,${a})` : rgba(COL.enemy, .5 * a); ctx.fillRect(229, 258.5, 10, 3);   // 相控阵天线面
+  ctx.fillStyle = dark; ctx.fillRect(205, 262, 8, 4); ctx.strokeRect(205, 262, 8, 4);   // 交战控制站
+  // 机场监视雷达：小楼 + 旋转天线
+  ctx.fillStyle = roof; ctx.fillRect(200, -76, 10, 10); ctx.strokeRect(200, -76, 10, 10);
+  { const ra = b.dead ? 0 : time * 1.6; ctx.strokeStyle = rl ? `rgba(210,212,206,${a})` : edge; ctx.lineWidth = Math.max(1, px(1.6)); ctx.beginPath(); ctx.moveTo(205 - Math.cos(ra) * 7, -71 - Math.sin(ra) * 7); ctx.lineTo(205 + Math.cos(ra) * 7, -71 + Math.sin(ra) * 7); ctx.stroke(); }
+  // 高炮沙袋掩体（圆环）、M-SHORAD 与陆基密集阵的土堤
+  ctx.strokeStyle = bag; ctx.lineWidth = 2.2;
+  for (const [u, v] of AFD_GUN) { ctx.beginPath(); ctx.arc(u, v, 7, .5, Math.PI * 2 - .5); ctx.stroke(); }
+  ctx.strokeStyle = earth; ctx.lineWidth = 2.6;
+  for (const [u, v] of [[-190, 50], [190, 50], [-150, 152]]) { ctx.beginPath(); ctx.moveTo(u - 9, v - 8); ctx.lineTo(u - 9, v + 8); ctx.lineTo(u + 9, v + 8); ctx.lineTo(u + 9, v - 8); ctx.stroke(); }
+  ctx.restore();
 }
 function eaDrawBase(ctx, b, vis, time, own) {
   const det = EA_RW.L * R.s, dead = b.dead, a = vis ? 1 : .5, f = clamp(b.hp / b.maxhp, 0, 1), C0 = own ? COL.g : COL.enemy;
@@ -793,6 +855,7 @@ function eaDrawBase(ctx, b, vis, time, own) {
   ctx.save();
   ctx.translate(b.x, b.y); ctx.rotate(b.rh || 0); ctx.scale(1, b.rs || 1);
   ctx.lineJoin = 'miter'; ctx.setLineDash(dash);
+  eaDrawGround(ctx, a, rl, con); ctx.setLineDash(dash);
   ctx.fillStyle = `rgba(0,0,0,${.26 * a})`; ctx.fillRect(-170, -18, 340, EA_APRON + 26);   // 推平的场区
   // 跑道：道肩 + 道面
   ctx.fillStyle = slab; ctx.fillRect(-152, -11.5, 304, 23);
@@ -838,6 +901,7 @@ function eaDrawBase(ctx, b, vis, time, own) {
     const ra = dead ? 0 : time * 2.4;
     ctx.strokeStyle = edge; ctx.lineWidth = px(1); ctx.beginPath(); ctx.arc(-151, 49, 2.6, 0, 7); ctx.moveTo(-151, 49); ctx.lineTo(-151 + Math.cos(ra) * 4.5, 49 + Math.sin(ra) * 4.5); ctx.stroke();
   }
+  eaDrawFac(ctx, b, a, det, rl, edge, con, dark, time);
   // 停在机位上的飞机：待命亮、整备中暗 + 进度弧
   if (own && !dead && typeof drawAircraft === 'function' && typeof abParked === 'function') abParked().forEach((w, k) => {   // 我方停在机场整备的飞机
     if (k >= EA_STAND.length) return;

@@ -133,7 +133,7 @@ function lvNavalDefend(L) {
   for (let i = 0; i < (L.ascm || 0); i++) { const x = cx + (i ? 380 : -380); sbxTry('e_ascm', x, coastAt(x) - 90, 90); }
   if (L.af) {
     const hq = ptByKey('HQ') || S.points[0];
-    let af = null;
+    let af = S.sbx.items.find(it => it.fixed && it.cat === 'e_airfield') || null;   // 地图自带空军基地
     for (let k = 0; k < 120 && !af; k++) { const w = k < 60 ? 900 : 2400, x = clamp(hq.x + (Math.random() - .5) * w, 170, W - 170), y = clamp(hq.y - 60 - Math.random() * 500, 50, H); if (coastAt(x) - y >= 500) af = sbxTry('e_airfield', x, y, 60); }
     if (af) for (const id of ['e_air_ftr', 'e_air_ftr', 'e_air_f22', 'e_air_f22', 'e_air_ga', 'e_air_ga']) sbxPlace(id);
   }

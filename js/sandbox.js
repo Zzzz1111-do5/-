@@ -20,7 +20,7 @@ function sbxSay(side, text, kind, at) {
 // —— 点数 ——
 function sbxCost(it) {
   const c = sbxEntry(it);
-  if (!c) return 0;
+  if (!c || it.fixed) return 0;   // 地图自带设施（空军基地）不花预算
   const s = c.spawn;
   if (s.at === 'line') {
     let len = 0;
@@ -74,6 +74,7 @@ function sbxAirAvoid(ignore) {
   return o;
 }
 function sbxAirFit(it) {
+  if (it.fixed && TER.af) return { x: it.x, y: it.y, h: TER.af.h, s: TER.af.s };   // 地图自带的空军基地：跑道方向按地图
   if (it._fit && it._fit.x === it.x && it._fit.y === it.y) return it._fit;
   const f = typeof eaRunwayFit === 'function' ? eaRunwayFit(it.x, it.y, 380, sbxAirAvoid(it)) || eaRunwayFit(it.x, it.y, 300) : null;
   return (it._fit = { x: it.x, y: it.y, h: f ? f.h : 0, s: f ? f.s : -1 });
@@ -230,14 +231,20 @@ function sbxNearest(x, y, side, r) {
 }
 function sbxRemove(it) {
   if (!it) return false;
+  if (it.fixed) { sbxMsg('空军基地是地图自带设施，不能移除', true); return false; }
   if (it.cargo && it.cargo.length) it.cargo.pop();
   else S.sbx.items = S.sbx.items.filter(o => o !== it);
   if (sbxEntry(it).spawn.kind === 'cv' && !sbxOf('cv').length) S.sbx.items = S.sbx.items.filter(o => sbxEntry(o).spawn.kind !== 'wing' || sbxEntry(o).spawn.land);
   sbxSync();
   return true;
 }
+// 地图自带的空军基地：作为守方锁定条目放在地图选好的位置（不花预算、不能移除或拖动），开战时照常建出机场与整套防御
+function sbxMapAF() {
+  if (!S || !S.sbx || !TER.af || S.sbx.items.some(it => it.fixed && it.cat === 'e_airfield')) return;
+  S.sbx.items.unshift({ id: S.sbx.nid++, cat: 'e_airfield', side: 'e', x: TER.af.x, y: TER.af.y, fixed: true });
+}
 function sbxClear(side) {
-  S.sbx.items = S.sbx.items.filter(it => it.side !== side);
+  S.sbx.items = S.sbx.items.filter(it => it.side !== side || it.fixed);
   S.sbx.notes[side] = [];
   sbxSync();
 }
@@ -387,11 +394,11 @@ function sbxAIDefendBase() {
   const B0 = S.sbx.budget.e, BS = sbxBeaches(), say = (t, at) => sbxSay('e', t, 'plan', at);
   // 纵深野战机场（含防御体系 1500 点）：大预算先修，其余兵力按剩下的预算配
   let af0 = null;
-  if (B0 >= 4500 && !(S.v7off && S.v7off.air) && BS[0] && BS[0].hq) {
+  if (!TER.af && B0 >= 4500 && !(S.v7off && S.v7off.air) && BS[0] && BS[0].hq) {
     const hq0 = BS[0].hq;   // 300 米跑道要一大块平整陆地：先在指挥所以北找，找不到再放宽到整个纵深
     for (let i = 0; i < 120 && !af0; i++) { const w = i < 60 ? 900 : 2400, x = clamp(hq0.x + (Math.random() - .5) * w, 170, W - 170), y = clamp(hq0.y - 60 - Math.random() * 500, 50, H); if (coastAt(x) - y >= 500) af0 = sbxTry('e_airfield', x, y, 60); }
   }
-  const k = (B0 - (af0 ? 1500 : 0)) / SBX_BUDGET;
+  const k = (B0 - (af0 && !af0.fixed ? 1500 : 0)) / SBX_BUDGET;
   for (const B of BS) B.L = B.w / 190 + 1.6 * (1 - B.dHQ / 2200) + (B.dTown < 650 ? .5 : 0) - .45 * B.cross - .25 * B.bat.length + (Math.random() - .5) * .25;
   const ord = BS.slice().sort((a, b) => b.L - a.L), nMain = B0 >= 2400 ? 3 : 2, main = ord.slice(0, nMain), rest = ord.slice(nMain);
   const b1 = main[0], dest = B => B.dHQ < 900 ? '指挥所' : B.tw.name;
@@ -1339,6 +1346,7 @@ function openSandbox(seed, keep) {
   newGame(seed, lv, { sandbox: true, mode: 'sandbox' });
   Object.assign(S, { phase: 'sandbox', briefed: true, paused: true, role: 'attack', mode: 'sandbox', armor: [] });
   S.sbx = { items: [], budget: bud, nid: 1, notes: { p: [], e: [] }, live: false };
+  sbxMapAF();
   Object.assign(SBX, { pick: null, line: null, lineDown: null, hover: null, drag: null, pv: false, msg: '', endKey: null, savesOpen: false });
   sbxSync();
   if (typeof document === 'undefined') return S;
@@ -1568,6 +1576,8 @@ function sbxLoad(d) {
   for (const it of items) if (it.cargo) it.cargo = it.cargo.filter(id => catalogById(id));
   Object.assign(S.sbx, { items, budget: { p: (d.budget && d.budget.p) || SBX_BUDGET, e: (d.budget && d.budget.e) || SBX_BUDGET }, notes: sbxClone(d.notes || { p: [], e: [] }) });
   S.sbx.nid = items.reduce((m, it) => Math.max(m, it.id || 0), 0) + 1;
+  if (TER.af) S.sbx.items = S.sbx.items.filter(it => it.cat !== 'e_airfield');   // 旧存档里买的机场：换成地图自带的空军基地
+  sbxMapAF();
   SBX.side = keepSide;
   sbxSync();
   return true;
@@ -1622,7 +1632,7 @@ function sbxRender() {
   const cats = SBX_CATS[side];
   if (SBX.cat !== 'all' && !cats.includes(SBX.cat)) SBX.cat = 'all';
   q('.sbx-cats').innerHTML = ['all', ...cats].map(k => `<button type="button" class="${SBX.cat === k ? 'on' : ''}" data-cat="${k}">${k === 'all' ? '全部' : CAT_NAMES[k]}</button>`).join('');
-  const pal = CATALOG.filter(c => (c.side === side || c.side === 'both') && (SBX.cat === 'all' || c.cat === SBX.cat));
+  const pal = CATALOG.filter(c => (c.side === side || c.side === 'both') && (SBX.cat === 'all' || c.cat === SBX.cat) && !(c.id === 'e_airfield' && TER.af));   // 地图自带空军基地：不再出售
   const left = bud - sp;
   q('.sbx-pal').innerHTML = pal.map(c => {
     const na = c.spawn.kind === 'veh' && !sbxVehOk(), cost = c.spawn.at === 'line' ? c.spawn.per + '/百' : c.cost;
@@ -1669,7 +1679,7 @@ function sbxClick(p) {
   const id = SBX.pick, c = id && catalogById(id);
   if (!c) {   // 未选兵种：点中已放置条目即可拖动
     const it = sbxNearest(p.x, p.y, SBX.side, Math.max(12, px(14)));
-    if (it && it.x2 == null && !it.pts) SBX.drag = { it, x0: it.x, y0: it.y, moved: false };
+    if (it && it.x2 == null && !it.pts && !it.fixed) SBX.drag = { it, x0: it.x, y0: it.y, moved: false };
     return;
   }
   if (c.spawn.at === 'line') {
