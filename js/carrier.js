@@ -409,7 +409,12 @@ function airCasFly(p, dt, speed) {
     if (p.run.shot && d > 120 || S.t - p.run.t > 9) { p.run = null; p.runCd = S.t + 7; }
     return;
   }
-  airAgm(p);
+  const fired = airAgm(p);
+  // 直-10：没有导弹目标（或导弹打光）时，悬停用 23 毫米机炮打目标一带的步兵和火力点（射程 280 内，每 2.5 秒一个点射）
+  if (heli && !fired && S.t >= (p.gunT2 || 0) && (p.ammoG ?? (p.ammoG = 12)) > 0) {
+    const sv = { x: p.x, y: p.y }, near = [...S.teams.filter(q => q.side === 'e' && q.men.length && inVision(q.x, q.y)), ...S.enemies.filter(e => !e.dead && inVision(e.x, e.y))].some(o => dist(o.x, o.y, sv.x, sv.y) < 280 && dist(o.x, o.y, p.cx, p.cy) <= 160);
+    if (near && casStrafe(p)) { p.ammoG--; p.gunT2 = S.t + 2.5; }
+  }
   if (gun && S.t >= (p.runCd || 0) && p.tRisk < .5) {
     let best = null, bd = 1e9;
     const pT = S.teams.filter(q => q.side === 'p' && q.men.length);
@@ -748,7 +753,7 @@ const AGM_V = { tank: 6, td: 5.5, hv_tank: 6.5, lt_tank: 5, apc: 4.5, amtank: 4.
 const AGM_E = { bunker: 4.5, coastal: 5, arty: 4.5, mortar: 3.5, aa: 5, tel: 6, ascm: 6 };
 function airAgm(p) {
   const M = airMdl(p.kind, p.v);
-  if (!M.agm || !(p.agmN > 0) || (p.agmT || 0) > S.t || typeof msPgm !== 'function' || p.alt < .4) return;
+  if (!M.agm || !(p.agmN > 0) || (p.agmT || 0) > S.t || typeof msPgm !== 'function' || p.alt < (p.v === 'heli' ? .2 : .4)) return false;   // 直-10 悬停高度约 0.3：照样能打
   p.agmT = S.t + 1;
   const cx = p.cx ?? p.tx, cy = p.cy ?? p.ty, own = (x, y) => S.teams.some(q => q.side === 'p' && q.men.length && dist(q.x, q.y, x, y) < 40);
   const flying = (k, id) => S.missiles.some(m => m.kind === 'pgm' && !m.done && m.side === 'p' && m.tgt && m.tgt.k === k && m.tgt.id === id);
@@ -762,12 +767,13 @@ function airAgm(p) {
   for (const v of S.veh || []) if (v.side === 'e' && !v.dead) cand('veh', v, AGM_V[v.type] || 3);
   for (const a of S.armor || []) if (!a.dead) cand('armor', a, 4.5);
   for (const e of S.enemies) if (!e.dead) cand('enemy', e, AGM_E[e.kind]);
-  if (!best) return;
+  if (!best) return false;
   msPgm(M.agm, 'p', p.x, p.y, best, p.kind);
   p.agmN--; p.agmT = S.t + 2.5;
   if (typeof v8Stat === 'function') v8Stat('agm');
   const nm = best.k === 'veh' ? (typeof vehName === 'function' ? vehName(best.o) : '敌战车') : best.k === 'armor' ? '敌装甲车' : (ENEMY_SPEC[best.o.kind] || {}).name || '目标';
   log(`${airName(p.kind, p.v).split(' ')[0]}发射${MS_PGM[M.agm].nm}，打击${nm}（余 ${p.agmN} 枚）`, 'info', 'agm' + p.id, 2, best);
+  return true;
 }
 function casStrafe(p) {
   const pT = S.teams.filter(q => q.side === 'p' && q.men.length), safe = (x, y) => !pT.some(q => dist(q.x, q.y, x, y) <= 45);
