@@ -162,7 +162,7 @@ function drawScene(now) {
   ctx.lineCap = 'round'; ctx.lineJoin = 'round';
   indexUnits();
   const opt = name => { const f = globalThis[name] || window[name]; if (typeof f === 'function') f(time); };
-  drawMarks(ctx); drawCraters(); drawBuildings(); drawForts(time); drawSmoke(time); drawLines(time); opt('drawSupplyNet'); drawStructures(time); opt('drawBlown'); runHook('drawUnder', time);
+  runHook('drawGround', time); drawMarks(ctx); drawCraters(); drawBuildings(); drawForts(time); drawSmoke(time); drawLines(time); opt('drawSupplyNet'); drawStructures(time); opt('drawBlown'); runHook('drawUnder', time);
   drawEnemies(time); opt('drawArmor');
   ctx.globalAlpha = R.zr > 2.5 ? .55 : .75; opt('drawAutoRoutes'); ctx.globalAlpha = 1;   // 自动驾驶路线压暗，避免满屏虚线
   drawTeams(time); opt('drawCarrier'); drawShips(time); drawDD(time); runHook('drawOver', time); drawPlans(time);

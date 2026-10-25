@@ -120,9 +120,27 @@ function v3Mesh() {
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, c);
 }
 
-// 房屋几何：每栋一个方块（屋顶 + 四面墙），高度按类型（平顶楼房高、坡顶民房矮）放大 1.6 倍，坐落在地面高度上
+// 房屋几何：每栋一个方块（屋顶 + 四面墙），高度按类型（平顶楼房高、坡顶民房矮）放大 1.6 倍，坐落在地面高度上；
+// 机场建筑（afbase.js：机库、机堡、塔台、营房、油罐等，任意朝向的多边形柱体，塔台玻璃顶与水塔水箱架空）排在前面，机场被发现 / 夺取时重建
 function v3Bld() {
   const gl = V3.gl, L = typeof townBld === 'function' ? townBld().list : [], vb = [], ib = [];
+  const A = typeof afb3dBlocks === 'function' ? afb3dBlocks() : [];
+  V3.asig = typeof afb3dSig === 'function' ? afb3dSig() : '';
+  for (const k of A) {
+    const n = k.pts.length, P = k.pts.map(([x, y]) => [x, -y]), g = Math.min(...k.pts.map(([x, y]) => v3Ht(x, y))) - .5, z0 = g + k.z0 * 1.6, top = g + k.z * 1.6;
+    const cx = P.reduce((a, p) => a + p[0], 0) / n, cy = P.reduce((a, p) => a + p[1], 0) / n, b0 = vb.length / 8;
+    vb.push(cx, cy, top, 0, 0, 1, .5, .5);   // 顶面：从中心扇形三角化，边缘的 e 取 0（棱线发光）
+    for (const [x, y] of P) vb.push(x, y, top, 0, 0, 1, 0, .5);
+    for (let i = 0; i < n; i++) ib.push(b0, b0 + 1 + i, b0 + 1 + (i + 1) % n);
+    for (let i = 0; i < n; i++) {   // 墙：法线朝外
+      const [x0, y0] = P[i], [x1, y1] = P[(i + 1) % n], l = Math.hypot(x1 - x0, y1 - y0) || 1;
+      let nx = (y1 - y0) / l, ny = -(x1 - x0) / l;
+      if (((x0 + x1) / 2 - cx) * nx + ((y0 + y1) / 2 - cy) * ny < 0) { nx = -nx; ny = -ny; }
+      const q = vb.length / 8;
+      vb.push(x0, y0, z0, nx, ny, 0, 0, 0, x1, y1, z0, nx, ny, 0, 1, 0, x1, y1, top, nx, ny, 0, 1, 1, x0, y0, top, nx, ny, 0, 0, 1);
+      ib.push(q, q + 1, q + 2, q, q + 2, q + 3);
+    }
+  }
   for (const b of L) {
     if (vb.length / 8 > 65000 - 24) break;
     const w = (b.r ? b.h : b.w) / 2, h = (b.r ? b.w : b.h) / 2, cx = b.x + b.dx, cy = b.y + b.dy, g = v3Ht(cx, cy) - .5;
@@ -216,6 +234,7 @@ function v3Draw(now) {
   if (!V3.ok) { V3.on = false; return false; }
   const gl = V3.gl;
   if (V3.seed !== TER.seed || (typeof trxSig === 'function' && (V3.chk = (V3.chk || 0) - 1) <= 0 && (V3.chk = 60) && trxSig() !== V3.sig)) v3Mesh();
+  else if (typeof afb3dSig === 'function' && (V3.achk = (V3.achk || 0) - 1) <= 0 && (V3.achk = 30) && afb3dSig() !== V3.asig) v3Bld();   // 机场刚被发现 / 夺取
   // 转向 / 俯仰缓动
   V3.yaw += Math.atan2(Math.sin(V3.yawT - V3.yaw), Math.cos(V3.yawT - V3.yaw)) * .18; V3.tilt += (V3.tiltT - V3.tilt) * .18;
   const C = v3Camera(), box = V3.box = v3Box();
@@ -259,7 +278,7 @@ function v3Draw(now) {
   gl.enableVertexAttribArray(V3.a.p); gl.vertexAttribPointer(V3.a.p, 3, gl.FLOAT, false, 24, 0);
   gl.enableVertexAttribArray(V3.a.n); gl.vertexAttribPointer(V3.a.n, 3, gl.FLOAT, false, 24, 12);
   gl.drawElements(gl.TRIANGLES, V3.n, gl.UNSIGNED_SHORT, 0);
-  if (V3.bn && V3.pb) {   // 城镇房屋
+  if (V3.bn && V3.pb) {   // 城镇房屋、机场建筑
     const ub = V3.ub, ab = V3.ab;
     gl.useProgram(V3.pb);
     gl.uniformMatrix4fv(ub.uM, false, C.M); gl.uniform3f(ub.uEye, C.E[0], C.E[1], C.E[2]);

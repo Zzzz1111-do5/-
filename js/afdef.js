@@ -16,11 +16,16 @@ function afdAt(b, u, v, cls) {
   if (!ok) { const j = nearestPassable(ci(x, y), cls === 'inf' ? 'e' : 'vehe'); if (j >= 0) { x = cellCX(j); y = cellCY(j); } }
   return [Math.round(x), Math.round(y)];
 }
-// 机场外围巡逻路线：沿围栏内侧绕场区一圈（十个路标）
-const AFD_WP = [[-245, -70], [0, -72], [245, -70], [258, 60], [258, 180], [160, 296], [0, 300], [-160, 296], [-258, 180], [-258, 60]];
-// 高炮阵地（机场局部坐标）、爱国者发射车阵位与导弹参数（射程 1300、拦截来袭导弹 900 内、能打巡逻高度上的战斗机）
-const AFD_GUN = [[-120, -42], [120, -42], [-240, 120], [240, 120]];
-const AFD_PAT = [[222, 214], [250, 248]];
+// 阵位（机场局部坐标，与 afbase.js 的版图一致，那里也画出各阵位的土堤、沙袋）
+// 巡逻路线：沿围栏内侧的巡逻道绕场区一圈（十个路标）
+const AFD_WP = [[-490, -160], [0, -160], [490, -160], [526, 60], [526, 330], [490, 598], [0, 598], [-490, 598], [-526, 330], [-526, 60]];
+// 火神高炮：跑道外侧两门、塔台消防站后方与直升机起降坪后方各一门；爱国者发射车阵位（东南角导弹连）；M-SHORAD（跑道两端外侧）；陆基密集阵（机库东侧）；
+// AN/TPS-80 雷达站（跑道外侧西端）；常驻守备队工事（跑道外侧四处、正门门岗、西端）
+const AFD_GUN = [[-250, -62], [250, -62], [-205, 222], [300, 268]];
+const AFD_PAT = [[392, 432], [498, 432]];
+const AFD_SHO = [[-430, -72], [430, -72]], AFD_LPWS = [180, 256], AFD_RAD = [-360, -122];
+const AFD_POST = [[-330, -62], [330, -62], [16, 596], [-120, -62], [120, -62], [-500, 150]];
+// 爱国者导弹参数（射程 1300、拦截来袭导弹 900 内、能打巡逻高度上的战斗机）
 const AFD_PAC = { n: 12, cd: 2, regen: 40, range: 1300, icp: 900, pkK: 1.4, hi: true };
 // 地勤抢修：雷达、高炮、防空阵地被毁后，场区安静（附近 AFD_FIX.foe 内没有我方部队、AFD_FIX.quiet 秒没挨打）时抢修车开过去，修 AFD_FIX.t 秒恢复
 const AFD_FIX = { foe: 420 * AF_K, quiet: 20, t: 45 };
@@ -28,19 +33,19 @@ function afdBuild(b) {
   const D = afdEnsure(), sbx = S.mode === 'sandbox', B = D.bases[b.id] = { pat: [], aa: [], wp: AFD_WP.map(([u, v]) => afdAt(b, u, v)) };
   b.afD = true;
   // 雷达站
-  const [rx, ry] = afdAt(b, -255, -95, 'inf');
+  const [rx, ry] = afdAt(b, AFD_RAD[0], AFD_RAD[1], 'inf');
   D.radar.push({ id: S.nid++, x: rx, y: ry, r: AFD.radar, h: 4, hp: 8, maxhp: 8, dead: false, kx: null, ky: null, af: b.id });
   // 高炮：滑行道外侧两门、场区东西两侧各一门，都在沙袋掩体里（AFD_GUN）
   B.guns = [];
   for (const [u, v] of AFD_GUN) { const [x, y] = afdAt(b, u, v, 'inf'), e = addEnemy('aa', x, y); e.afD = b.id; B.guns.push({ id: e.id, u, v }); }
-  // 固定防空阵地（v.fixed：不机动，坏了由地勤修 / 换装）：跑道两端 M-SHORAD、停机坪西侧 LPWS、东北角爱国者导弹连（两部发射车）
+  // 固定防空阵地（v.fixed：不机动，坏了由地勤修 / 换装）：跑道两端 M-SHORAD、机库东侧 LPWS、营区一角的爱国者导弹连（两部发射车）
   if (typeof addVehicle === 'function' && typeof VEH_SPEC === 'object') {
     const put = (type, u, v, ex) => { const [x, y] = afdAt(b, u, v), o = addVehicle('e', type, x, y, { auto: true, afD: b.id, fixed: true, ...ex }); if (o) { o.hx = o.x; o.hy = o.y; o.heading = (b.rh || 0) - Math.PI / 2 * (b.rs || 1); B.aa.push({ id: o.id, x: o.x, y: o.y, u, v, type, ex }); } return o; };
     if (VEH_SPEC.sam_veh) {
-      put('sam_veh', -190, 50, { sbxV: 'e_sam_veh' }); put('sam_veh', 190, 50, { sbxV: 'e_sam_veh' });
+      for (const [u, v] of AFD_SHO) put('sam_veh', u, v, { sbxV: 'e_sam_veh' });
       for (const [u, v] of AFD_PAT) put('sam_veh', u, v, { mdl: 'M903 爱国者发射车（PAC-3 MSE）', samX: { ...AFD_PAC } });
     }
-    if (VEH_SPEC.aa_veh) put('aa_veh', -150, 152, { sbxV: 'e_lpws', mod: { cram: 1 } });
+    if (VEH_SPEC.aa_veh) put('aa_veh', AFD_LPWS[0], AFD_LPWS[1], { sbxV: 'e_lpws', mod: { cram: 1 } });
     // 巡逻车：两辆从路线两头相向巡逻
     const rt = VEH_SPEC.recon ? 'recon' : 'apc';
     for (let i = 0; i < 2; i++) {
@@ -48,13 +53,13 @@ function afdBuild(b) {
       if (o) { o.hx = o.x; o.hy = o.y; B.pat.push(o.id); }
     }
   }
-  // 常驻守备队：跑道外侧、停机坪后方的阵地；两组带毒刺
+  // 常驻守备队：跑道外侧、正门、西端的阵地（面朝场外）；两组带毒刺
   const P = S.points.find(p => p.key === 'AF' && p.af === b.id) || S.points.slice().sort((a, c) => dist(a.x, a.y, b.x, b.y) - dist(c.x, c.y, b.x, b.y))[0];
   if (!P) return;
-  const n = sbx ? AFD.sbxG : AFD.cpG, posts = [[-170, -32], [170, -32], [8, 300], [-60, -34], [60, -34], [-205, 160]].slice(0, n);   // 第三个阵位是南门门岗
+  const n = sbx ? AFD.sbxG : AFD.cpG, posts = AFD_POST.slice(0, n);   // 第三个阵位是正门门岗
   const u = addUnit('e', 'inf', { role: 'garrison', obj: P.key, a4n: '机场常驻守备队' });
   posts.forEach(([pu, pv], i) => {
-    const [x, y] = afdAt(b, pu, pv, 'inf'), [cx, cy] = eaW(b, 0, 60);
+    const [x, y] = afdAt(b, pu, pv, 'inf'), [cx, cy] = eaW(b, 0, 200);
     const men = i === 1 || i === 2 ? ['rifle', 'aa', 'rifle'] : ['rifle', 'rifle', 'mg'];
     const q = addTeam('e', x, y, men, { role: 'garrison', obj: P.key, u: u.id, afG: b.id, afPost: { x, y, fx: x + (x - cx), fy: y + (y - cy) } });
     if (men.includes('aa')) q.aam = 3;
@@ -146,7 +151,7 @@ function afdFix(dt) {
       if (!quiet || S.t < (B.fixN ?? 0)) continue;
       const list = afdBroken(b, B);
       if (!list.length) continue;
-      const [hx, hy] = eaW(b, 147, 96), w = list.sort((p, q) => dist(p.x, p.y, hx, hy) - dist(q.x, q.y, hx, hy))[0];
+      const [hx, hy] = eaW(b, 120, 285), w = list.sort((p, q) => dist(p.x, p.y, hx, hy) - dist(q.x, q.y, hx, hy))[0];   // 抢修车从东侧维修机库后面出发
       B.fix = { ...w, t: 0, sx: hx, sy: hy };
       if (eaBaseSeen(b) || S.role === 'spectate') log(`敌机场地勤出动抢修${w.nm}`, 'warn', 'afdfix' + b.id, 40, w);
       continue;

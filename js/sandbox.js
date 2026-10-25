@@ -69,7 +69,7 @@ function sbxAirAvoid(ignore) {
   const o = S.points.map(p => ({ x: p.x, y: p.y, r: 50 }));
   for (const it of S.sbx.items) {
     const c = it !== ignore && it.side === 'e' && it.x != null ? sbxEntry(it) : null;
-    if (c && (c.spawn.kind === 'enemy' || c.spawn.kind === 'post')) o.push({ x: it.x, y: it.y, r: c.spawn.ek === 'airfield' ? 260 * AF_K : 15 });   // 机场停机坪五排深：两座机场离远一点
+    if (c && (c.spawn.kind === 'enemy' || c.spawn.kind === 'post')) o.push({ x: it.x, y: it.y, r: c.spawn.ek === 'airfield' ? 260 * AF_K : 15 });   // 机场场区约 1100 × 800：两座机场离远一点
   }
   return o;
 }
@@ -179,8 +179,8 @@ function sbxCheck(c, x, y, x2, y2, ignore) {
   if (mob && !(TP[t].sp > 0)) return bad('部队不能放在悬崖或不可通行地形');
   if (s.at === 'coast' && coastAt(x) - y > 300) return bad(s.ek === 'ascm' ? '岸舰导弹连须在离海岸 300 以内' : '岸防炮须在离海岸 300 以内');
   if (s.minDepth && coastAt(x) - y < s.minDepth) return bad(`须放在离海岸 ${s.minDepth} 以外的纵深`);
-  if (s.ek === 'airfield' && typeof eaRunwayFit === 'function' && !eaRunwayFit(x, y, 380, sbxAirAvoid(ignore))) return bad('这里放不下 300 米长的跑道：需要平整的陆地（不跨水、河、悬崖、山地），也不能压在据点或其他工事上');
-  if ((s.kind === 'enemy' || s.kind === 'post') && s.ek !== 'airfield' && sbxOnAirfield(x, y, ignore)) return bad('不能压在机场的跑道、滑行道或停机坪上');
+  if (s.ek === 'airfield' && typeof eaRunwayFit === 'function' && !eaRunwayFit(x, y, 380, sbxAirAvoid(ignore))) return bad('这里放不下机场：920 米跑道与约 1100 × 800 的场区都要落在平整的陆地上（不跨水、河、悬崖、山地），也不能压在据点或其他工事上');
+  if ((s.kind === 'enemy' || s.kind === 'post') && s.ek !== 'airfield' && sbxOnAirfield(x, y, ignore)) return bad('不能压在机场的跑道、滑行道、停机坪、机库群、油库或弹药库上');
   if (s.kind === 'enemy' || s.kind === 'post') {
     if (S.sbx.items.some(it => it !== ignore && it.side === 'e' && it.x != null && ['enemy', 'post'].includes(sbxEntry(it).spawn.kind) && dist(it.x, it.y, x, y) < 12)) return bad('与其他工事重叠');
   }
@@ -1954,14 +1954,9 @@ function sbxGlyph(ctx, c, x, y, col, a, it, ghost) {
       if (s.ek === 'ascm') line(x - u * .6, y + u * .05, x + u * .8, y - u * .95, lw * 1.5);
       break;
     }
-    case 'airfield': {   // 野战机场：按世界尺寸画跑道、滑行道、停机坪与机库轮廓（方向即开战后的跑道方向）
+    case 'airfield': {   // 野战机场：按世界尺寸画跑道、滑行道、停机坪、建筑轮廓与围栏（方向即开战后的跑道方向，afbase.js）
       const f = it ? sbxAirFit(it) : (typeof eaRunwayFit === 'function' && eaRunwayFit(x, y, 380, sbxAirAvoid(null))) || { h: 0, s: -1 };
-      ctx.save(); ctx.translate(x, y); ctx.rotate(f.h); ctx.scale(1, f.s); ctx.lineWidth = lw;
-      ctx.fillRect(-150, -9, 300, 18); ctx.strokeRect(-150, -9, 300, 18);
-      ctx.strokeRect(-138, 30.5, 276, 7); ctx.strokeRect(-128, 44, 256, 74); ctx.strokeRect(132, 80, 30, 32);
-      for (const u of [-135, -45, 45, 135]) { ctx.beginPath(); ctx.moveTo(u, 9); ctx.lineTo(u, 30.5); ctx.stroke(); }
-      ctx.setLineDash([px(5), px(4)]); ctx.beginPath(); ctx.moveTo(-126, 0); ctx.lineTo(126, 0); ctx.stroke(); ctx.setLineDash([]);
-      ctx.restore();
+      if (typeof afbPreview === 'function') afbPreview(ctx, x, y, f, lw);
       break;
     }
     case 'sortie': {

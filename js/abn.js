@@ -65,12 +65,12 @@ function abFoeNear(x, y, r) {
 }
 const abMenNear = (side, x, y, r) => S.teams.reduce((a, q) => a + (q.side === side && q.men.length && !q.ride && dist(q.x, q.y, x, y) < r ? q.men.length : 0), 0);
 
-// —— 据点「野战机场」：放在停机坪西侧、塔台附近（局部坐标 u −100、v 62）；战役另配机场警卫队与防空 ——
+// —— 据点「野战机场」：放在主停机坪西侧、塔台附近（局部坐标 u −185、v 150）；战役另配机场警卫队与防空 ——
 function abMakeAF() {
   if (!S || abAF()) return abAF();
   const b = S.enemies.find(e => e.kind === 'airfield' && !e.dead);
   if (!b || typeof eaW !== 'function') return null;
-  let [x, y] = eaW(b, -100, 62);
+  let [x, y] = eaW(b, -185, 150);
   if (!passInf(x, y)) { const j = nearestPassable(ci(x, y), 'e'); if (j >= 0) { x = cellCX(j); y = cellCY(j); } }
   const p = { key: 'AF', name: '野战机场', x: Math.round(x), y: Math.round(y), vp: 2, owner: 'e', prog: 0, af: b.id };
   S.points.push(p);
@@ -88,8 +88,8 @@ function abGarrison(p) {
     const q = addTeam('e', x, y, men, { role: 'garrison', obj: 'AF', u: u.id });
     if (men.includes('aa')) q.aam = 3;
   }
-  if (lv !== 'normal' && b) {   // 跑道东段配一门防空炮，掩护起降
-    let [x, y] = eaW(b, 115, 42);
+  if (lv !== 'normal' && b) {   // 跑道东段外侧配一门防空炮，掩护起降
+    let [x, y] = eaW(b, 180, -45);
     if (!passInf(x, y)) { const j = nearestPassable(ci(x, y), 'e'); if (j >= 0) { x = cellCX(j); y = cellCY(j); } }
     addEnemy('aa', x, y);
   }
@@ -351,9 +351,9 @@ function abLand(c) {
 // —— 机降：运-20 沿跑道进近 → 落地减速到跑道中段 → 卸载 → 继续滑跑起飞 → 回海上 ——
 // 跑道两端里取进近点更靠南（我方一侧）的一端作入口；dir = 着陆方向（局部 u 增加为 +1）
 function abRwy(b) {
-  const [ex, ey] = eaW(b, -150, 0), [wx, wy] = eaW(b, 150, 0), ux = (wx - ex) / (300 * AF_K), uy = (wy - ey) / (300 * AF_K);
+  const L = EA_RW.hl, [ex, ey] = eaW(b, -L, 0), [wx, wy] = eaW(b, L, 0), ux = (wx - ex) / (2 * L), uy = (wy - ey) / (2 * L);
   const fA = { x: ex - ux * 380, y: ey - uy * 380 }, fB = { x: wx + ux * 380, y: wy + uy * 380 };
-  return fA.y >= fB.y ? { dir: 1, u0: -150, fix: fA, hx: ux, hy: uy } : { dir: -1, u0: 150, fix: fB, hx: -ux, hy: -uy };
+  return fA.y >= fB.y ? { dir: 1, u0: -L, fix: fA, hx: ux, hy: uy } : { dir: -1, u0: L, fix: fB, hx: -ux, hy: -uy };
 }
 function abAlLaunch(k) {
   const b = S.abBase, R0 = abRwy(b), L = AB_AL[k];
@@ -369,7 +369,7 @@ function abAlFly(p, dt) {
   const R0 = b ? abRwy(b) : null;
   if (p.phase === 'app') {
     const d = airSteer(p, R0.fix.x, R0.fix.y, dt);
-    if (d < 60) p.phase = 'fin';
+    if (d < 60 && abAfOpen()) p.phase = 'fin';   // 跑道不能用就在进近点附近盘旋等待
     if (!abAfOpen() && S.t - p.t0 > 90) { out(); log('机场跑道迟迟无法使用，运-20 带着货物返航', 'warn', null, 0, p); }
     return;
   }
@@ -384,10 +384,10 @@ function abAlFly(p, dt) {
   if (p.phase === 'roll' || p.phase === 'tko') {
     const tko = p.phase === 'tko';
     p.spd = tko ? Math.min(150, p.spd + 45 * dt) : Math.max(0, p.spd - 40 * dt);
-    p.ru += R0.dir * Math.max(tko ? 0 : 8, p.spd) * dt / AF_K;
+    p.ru += R0.dir * Math.max(tko ? 0 : 8, p.spd) * dt;
     [p.x, p.y] = eaW(b, p.ru, 0); p.heading = Math.atan2(R0.hy, R0.hx); p.alt = tko ? Math.max(0, (p.spd - 110) / 120) : 0;
     if (!tko && (p.spd <= 9 || Math.abs(p.ru) < 8)) { p.phase = 'unl'; p.uT = AB.unload; p.spd = 0; }
-    if (tko && (p.spd >= 140 || Math.abs(p.ru) > 145)) { p.phase = 'out'; p.ox = p.x < W / 2 ? 1 : -1; p.alt = .3; }
+    if (tko && (p.spd >= 140 || Math.abs(p.ru) > EA_RW.hl - 15)) { p.phase = 'out'; p.ox = p.x < W / 2 ? 1 : -1; p.alt = .3; }
     return;
   }
   if (p.phase === 'unl') {
@@ -402,7 +402,9 @@ function abUnload(p) {
   const A = S.ab, b = S.abBase, L = AB_AL[p.alk];
   if (!b || !L || p.unl) return;
   p.unl = true;
-  const at = k => { let [x, y] = eaW(b, -30 + k * 22, 52); if (!passInf(x, y)) { const j = nearestPassable(ci(x, y), 'p'); if (j >= 0) { x = cellCX(j); y = cellCY(j); } } return [x, y]; };
+  // 从运-20 尾部舱门开下来：停在跑道与滑行道之间的草地上，沿跑道往后一字排开
+  const R0 = abRwy(b), u0 = clamp(p.ru ?? 0, -EA_RW.hl + 40, EA_RW.hl - 40);
+  const at = k => { let [x, y] = eaW(b, clamp(u0 - R0.dir * (16 + k * 20), -EA_RW.hl + 10, EA_RW.hl - 10), 44); if (!passInf(x, y)) { const j = nearestPassable(ci(x, y), 'p'); if (j >= 0) { x = cellCX(j); y = cellCY(j); } } return [x, y]; };
   (L.veh || []).forEach((t, k) => { const [x, y] = at(k); const v = addVehicle('p', t, x, y, { auto: true, ab: true }); if (v) A.vs.push(v.id); });
   if (L.sq) {
     const u = addUnit('p', 'inf', { ship: '机降', emblem: 'para', form: 'line', face: A.face ?? NORTH, auto: true, morale: 85, elite: true, ab: 9 });
@@ -448,7 +450,7 @@ function abPlaneFly(p, dt, speed) {
     return true;
   }
   if (p.afPh === 'roll') {   // 落地滑跑，停到跑道中段后滑进机位整备
-    p.spd = Math.max(0, p.spd - 70 * dt); p.ru += R0.dir * Math.max(10, p.spd) * dt / AF_K;
+    p.spd = Math.max(0, p.spd - 70 * dt); p.ru += R0.dir * Math.max(10, p.spd) * dt;
     [p.x, p.y] = eaW(b, p.ru, 0); p.heading = Math.atan2(R0.hy, R0.hx); p.alt = 0; p.bank = 0;
     if (p.spd <= 12 || Math.abs(p.ru) < 10) {
       p.dead = true;
@@ -461,7 +463,7 @@ function abPlaneFly(p, dt, speed) {
     return true;
   }
   if (p.afPh === 'tko') {   // 从机场起飞：沿跑道加速，滑跑 250 或速度够了离地，转入出航
-    speed(airSpec(p.kind, p.v).spd); const st = Math.max(30, p.spd) * dt; p.ru += R0.dir * st / AF_K; p.rd = (p.rd || 0) + st;
+    speed(airSpec(p.kind, p.v).spd); const st = Math.max(30, p.spd) * dt; p.ru += R0.dir * st; p.rd = (p.rd || 0) + st;
     [p.x, p.y] = eaW(b, p.ru, 0); p.heading = Math.atan2(R0.hy, R0.hx); p.alt = Math.max(0, (p.spd - 120) / 140);
     if (p.rd > 250 || p.spd > 200) { p.afPh = null; p.alt = Math.max(p.alt, .2); }
     return true;
@@ -539,7 +541,7 @@ function abPerimeter() {
   for (const u of us.slice(2)) if (u.auto !== false && typeof apGarrison === 'function') apGarrison(u, af, P);   // 玩家手动指挥的连不接管
   // 工兵组去跑道
   const b = S.abBase;
-  if (b) for (const q of S.teams) if (q.side === 'p' && q.men.length && q.ab === 'eng' && !(unitOf(q) && unitOf(q).auto === false) && typeof apTeamGo === 'function') { const [x, y] = eaW(b, gauss() * 60, 14); apTeamGo(q, x, y, 'move'); }
+  if (b) for (const q of S.teams) if (q.side === 'p' && q.men.length && q.ab === 'eng' && !(unitOf(q) && unitOf(q).auto === false) && typeof apTeamGo === 'function') { const [x, y] = eaW(b, gauss() * 240, 26); apTeamGo(q, x, y, 'move'); }
 }
 // 敌人最可能来的方向：已知敌人（机场 900 以内）的重心，没有就朝敌指挥所
 function abThreatDir(af) {
@@ -780,7 +782,7 @@ function abeArtyTargets() {
   const out = [], b = S && S.abBase;
   if (!b || b.dead) return out;
   const busy = S.planes.some(p => !p.dead && ((p.ab === 'land' && p.phase !== 'out') || p.afPh));
-  const [x, y] = eaW(b, gauss() * 70, 0);
+  const [x, y] = eaW(b, gauss() * 280, 0);
   out.push({ x, y, v: busy ? 9 : abAfOpen() ? 3.5 : 1, vx: 0, vy: 0 });
   return out;
 }
@@ -795,15 +797,20 @@ HOOK.impact.push(function abImpact(x, y, R, pw, side) {
   const b = S && S.abBase;
   if (!b || side !== 'e' || typeof eaL !== 'function') return;
   const [u, v] = eaL(b, x, y);
-  if (Math.abs(u) > 155 || Math.abs(v) > 12 + R / AF_K * .5) return;
+  if (Math.abs(u) > EA_RW.hl + 10 || Math.abs(v) > 20 + R * .5) return;
   const eng = S.teams.some(q => q.side === 'p' && q.men.length && q.ab === 'eng' && dist(q.x, q.y, b.x, b.y) < 170), fix = eng ? AB.fixEng : AB.fix;
   b.cratT = Math.max(b.cratT || 0, S.t + fix); b.fixD = fix;
-  (b.rc = b.rc || []).push({ u, v, r: Math.min(8, 3 + R * .2) });
+  (b.rc = b.rc || []).push({ u: clamp(u, -EA_RW.hl + 5, EA_RW.hl - 5), v: clamp(v, -13, 13), r: Math.min(12, 4 + R * .25) });
   if (b.rc.length > 12) b.rc.shift();
   abStat('abRwHit');
   log('夺取的机场跑道中弹，暂停起降，工兵抢修', 'warn', 'abrw', 15, { x, y });
   // 停在机位上的我方飞机被炸
-  if (S.air) for (const [k, w] of abParked().entries()) { const [px, py] = eaW(b, EA_STAND[k][0], EA_STAND[k][1]); if (dist(px, py, x, y) < R * .6 + 8 && Math.random() < .5) { w.state = 'lost'; log(`停在机场的${airName(w.type, w.v)}被炮火击毁`, 'bad', null, 0, { x: px, y: py }); } }
+  if (S.air) for (const [k, w] of abParked().entries()) {   // 机堡里的挡得住大部分破片
+    const st = EA_STAND[k];
+    if (!st) break;
+    const [px, py] = eaW(b, st[0], st[1]), has = st[3] === 'has';
+    if (dist(px, py, x, y) < (has ? R * .35 + 3 : R * .6 + 8) && Math.random() < (has ? .3 : .5)) { w.state = 'lost'; log(`停在机场的${airName(w.type, w.v)}被炮火击毁`, 'bad', null, 0, { x: px, y: py }); }
+  }
 });
 // 停在夺取的机场上的我方飞机（按机位顺序）
 const abParked = () => S.air ? S.air.wing.filter(w => w.af && (w.state === 'deck' || w.state === 'rearm')) : [];

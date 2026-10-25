@@ -2,7 +2,7 @@
 // 常量、工具函数、地形类型表
 // 地图尺度：边长是最初 3000 × 2000 版的 MAP_K 倍（面积约 2 倍）。地形大特征、纵深、海面位置按它换算；武器射程等真实距离不变
 const MAP_K = 1.4;
-const AF_K = 2;   // 空军基地尺度：机场局部坐标（eaW / eaL）放大的倍数——跑道 600、场区约 1100 × 800（面积为最初的 4 倍）
+const AF_K = 2;   // 空军基地场区尺度：场区世界范围 = AF_BOX（mapgen2.js）× AF_K，约 1100 × 800（面积为最初的 4 倍）；场内设施按真实比例布置（afbase.js），机场局部坐标 eaW / eaL 与世界同一尺度
 const W = 4200, H = 2800, CELL = 10, GW = W / CELL, GH = H / CELL;
 const SEA = y => H - (2000 - y) * MAP_K;   // 旧版（高 2000）海面上的 y 换算到现在的地图：集结海域、船位、航母
 const STAGING_Y = SEA(1500);      // 我方舰队集结海域上沿（航母在更南边）
@@ -88,8 +88,8 @@ const coverAt = (x, y) => TP[typeAt(x, y)].cv;
 const v8Stat = (k, n = 1) => { if (!S) return; const o = S.v7s || (S.v7s = {}); o[k] = (o[k] || 0) + n; };
 // 模块挂钩：新模块向这里登记函数，主循环/渲染/输入按名调用，免得多个模块同改一处
 // newGame(opts) · step(dt) · impact(x,y,R,pw,side) · visionP()/visionE() 返回视野源数组
-// drawUnder/drawOver/drawTop(time) 世界坐标 · frame(now,dt) 每帧 · pointer(e,kind,p)/key(e) 返回 true 表示已处理
-const HOOK = { newGame: [], step: [], impact: [], visionP: [], visionE: [], drawUnder: [], drawOver: [], drawTop: [], frame: [], pointer: [], key: [] };
+// drawGround（地面层：先于弹坑、战壕、据点）/drawUnder/drawOver/drawTop(time) 世界坐标 · frame(now,dt) 每帧 · pointer(e,kind,p)/key(e) 返回 true 表示已处理
+const HOOK = { newGame: [], step: [], impact: [], visionP: [], visionE: [], drawGround: [], drawUnder: [], drawOver: [], drawTop: [], frame: [], pointer: [], key: [] };
 const HOOK_ERR = new Set();
 function runHook(name, ...a) {
   let hit = false;

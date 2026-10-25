@@ -192,7 +192,7 @@ function bldOut(x, y, m = 1.2) {
 }
 
 // —— 空军基地选址（地图生成时调用）——
-// 场区范围（机场局部坐标：u 沿跑道、v 向停机坪一侧）：跑道两侧各 275，跑道外侧 90 到停机坪后方 310（航站楼、营房、弹药库、爱国者阵地与围栏）
+// 场区范围（u 沿跑道、v 向营区一侧，× AF_K 为世界尺寸）：跑道两侧各 275 × 2，跑道外侧 90 × 2 到营区后方 310 × 2（场内设施见 afbase.js，局部坐标与世界同尺度）
 const AF_BOX = { u0: -275, u1: 275, v0: -90, v1: 310 };
 function afWorld(af, u, v) { const c = Math.cos(af.h), n = Math.sin(af.h); return [af.x + (c * u - n * v * af.s) * AF_K, af.y + (n * u + c * v * af.s) * AF_K]; }
 function afSite(r, towns, hq) {
