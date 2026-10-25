@@ -269,7 +269,7 @@ function v3Cls() {
   gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D, V3.cls2); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, GW, GH, 0, gl.RGBA, gl.UNSIGNED_BYTE, b);
 }
 // 3D 地图用数码风画地面吗（黑绿画面；设置里可关）
-const v3Mx = () => typeof greenLook === 'function' && greenLook() && !(typeof SETTINGS === 'object' && SETTINGS && SETTINGS.matrix3d === false);
+const v3Mx = () => typeof SETTINGS === 'object' && !!SETTINGS && (SETTINGS.look === 'green' || SETTINGS.look === 'matrix') && SETTINGS.matrix3d !== false;   // 黑绿、数码两种画面都用数码风地面
 
 // 房屋几何：每栋一个方块（屋顶 + 四面墙），高度按类型（平顶楼房高、坡顶民房矮）放大 1.6 倍，坐落在地面高度上；
 // 机场建筑（afbase.js：机库、机堡、塔台、营房、油罐等，任意朝向的多边形柱体，塔台玻璃顶与水塔水箱架空）排在前面，机场被发现 / 夺取时重建
