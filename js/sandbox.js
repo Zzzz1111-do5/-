@@ -13,7 +13,7 @@ const sbxCmd = () => typeof cmdShipTask === 'function';   // 指挥官模块（a
 
 // 参谋笔记：写进聊天框（chat.js），同时留在沙盒面板「部署思路」里
 function sbxSay(side, text, kind, at) {
-  if (typeof chatSay === 'function') { try { chatSay(side, text, { kind: kind || 'plan', at: at && isFinite(at.x) ? { x: at.x, y: at.y } : undefined }); } catch (e) { /* 聊天模块异常不影响部署 */ } }
+  if (typeof chatSay === 'function') { try { chatSay(side, text, { kind: kind || 'plan', lv: 2, at: at && isFinite(at.x) ? { x: at.x, y: at.y } : undefined }); } catch (e) { /* 聊天模块异常不影响部署 */ } }   // 部署思路只进详档（编辑面板里也有），开战后通联常规档只看司令命令
   if (S && S.sbx && S.sbx.notes) { const L = S.sbx.notes[side] || (S.sbx.notes[side] = []); L.push(text); if (L.length > 40) L.shift(); }
 }
 

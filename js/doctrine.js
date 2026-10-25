@@ -27,9 +27,13 @@ const DOCTRINE = {
   'atk|mech|fort': {form: 'echL', arm: 'front', wid: 1, bound: 1, pace: 1, prep: 15, flank: 0, press: 1.8, ret: 0.7},
   'atk|mech|inf': {form: 'echL', arm: 'rear', wid: 1, bound: 0, pace: 0.8, prep: 30, flank: 0.25, press: 1.3, ret: 0.7},
   'atk|mech|mixed': {form: 'echR', arm: 'front', wid: 1, bound: 0, pace: 0.8, prep: 30, flank: 0.34, press: 1.8, ret: 0.3},
+  'def|armor|inf': {arm: 'front', wid: 0.7, press: 2.4, ret: 0.7, depth: 0},
   'def|inf|armor': {arm: 'mixed', wid: 1, press: 1.3, ret: 0.5, depth: 0.25},
   'def|inf|inf': {arm: 'front', wid: 1, press: 1.6, ret: 0.5, depth: 0},
-  'def|inf|mixed': {arm: 'mixed', wid: 1.4, press: 1.2, ret: 0.3, depth: 0.25}
+  'def|inf|mixed': {arm: 'mixed', wid: 1.4, press: 1.2, ret: 0.3, depth: 0.25},
+  'def|mech|armor': {arm: 'rear', wid: 1.4, press: 1.6, ret: 0.5, depth: 0.25},
+  'def|mech|inf': {arm: 'front', wid: 1, press: 1.2, ret: 0.3, depth: 0},
+  'def|mech|mixed': {arm: 'rear', wid: 1, press: 1.6, ret: 0.7, depth: 0}
 };
 function docOf(task, own, foe) {
   const k = `${task}|${own}|${foe}`, d = DOCTRINE[k] || DOCTRINE[`${task}|${own}|mixed`];

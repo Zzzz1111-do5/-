@@ -102,7 +102,7 @@ function b2Blast(x, y, w) {
     const d = dist(q.x, q.y, x, y);
     if (d >= K.rs) continue;
     suppress(q, K.sup * (1 - d / K.rs * .6));
-    q.proneT = S.t;
+    q.proneT = S.t; q.b2Pin = S.t + 20;   // 炸懵了：20 秒内压制不低于 65（趴着抬不起头、不能前进）
     const u = unitOf(q);
     if (u && !hitU.has(u.id) && S.t - (u.b2T ?? -99) > 4) { hitU.add(u.id); u.b2T = S.t; u.morale = Math.max(0, u.morale - K.mor * (1 - d / K.rs)); u.hitT = S.t; }
   }
@@ -222,6 +222,7 @@ function b2Step() {
   }
 }
 HOOK.step.push(b2Step);
+HOOK.step.push(() => { if (S && S.b2dust && S.b2dust.length) for (const q of S.teams) if (q.b2Pin > S.t && q.men.length) q.sup = Math.max(q.sup, 65); });
 
 // —— 画面：重磅炸弹的火球、冲击波（drawFx 画外圈）与久久不散的烟尘 ——
 HOOK.drawUnder.push(function b2DrawDust() {
