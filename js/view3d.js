@@ -41,6 +41,25 @@ void main() {
   gl_FragColor = vec4(mix(c, bg, smoothstep(uFog.x, uFog.y, vD)), 1.);
 }`;
 
+// 城镇房屋：挤出成立体方块——屋顶取俯视贴图（与平面画面同一张），墙面暗绿，棱线发光
+const V3_BVS = `attribute vec3 p; attribute vec3 n; attribute vec2 e;
+uniform mat4 uM; uniform vec3 uEye;
+varying vec3 vP, vN; varying vec2 vE; varying float vD;
+void main() { vP = p; vN = n; vE = e; vD = distance(p, uEye); gl_Position = uM * vec4(p, 1.); }`;
+const V3_BFS = `precision mediump float;
+uniform sampler2D uTop, uBase; uniform vec4 uBox; uniform vec2 uWorld, uFog;
+varying vec3 vP, vN; varying vec2 vE; varying float vD;
+void main() {
+  vec2 w = vec2(vP.x, -vP.y), uv = (w - uBox.xy) / uBox.zw;
+  vec3 N = normalize(vN), bg = vec3(.004, .02, .011);
+  float lit = clamp(dot(N, normalize(vec3(-.45, .55, .7))), 0., 1.);
+  vec3 c = N.z > .5 ? ((uv.x > 0. && uv.y > 0. && uv.x < 1. && uv.y < 1.) ? texture2D(uTop, uv).rgb : texture2D(uBase, w / uWorld).rgb) * (.75 + .45 * lit)
+    : vec3(.015, .085, .045) * (.55 + 1.1 * lit);
+  float ed = min(min(vE.x, 1. - vE.x), min(vE.y, 1. - vE.y));
+  c += vec3(.12, .68, .36) * (1. - smoothstep(.02, .1, ed)) * (N.z > .5 ? .55 : .9);
+  gl_FragColor = vec4(mix(c, bg, smoothstep(uFog.x, uFog.y, vD)), 1.);
+}`;
+
 // —— 3D 数学（列主序 4×4）——
 const v3Sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
 const v3Dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
@@ -88,6 +107,7 @@ function v3Mesh() {
   gl.bindBuffer(gl.ARRAY_BUFFER, V3.buf); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(verts), gl.STATIC_DRAW);
   gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, V3.ib); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(idx), gl.STATIC_DRAW);
   V3.n = idx.length; V3.seed = TER.seed; V3.sig = typeof trxSig === 'function' ? trxSig() : null;
+  v3Bld();
   // 底图（俯视贴图以外的远处）：小地图同款黑绿配色，每格一个像素
   const c = document.createElement('canvas'), g = c.getContext('2d'), img = g.createImageData(GW, GH);
   for (let i = 0; i < GW * GH; i++) {
@@ -98,6 +118,27 @@ function v3Mesh() {
   g.putImageData(img, 0, 0);
   gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, V3.base);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, c);
+}
+
+// 房屋几何：每栋一个方块（屋顶 + 四面墙），高度按类型（平顶楼房高、坡顶民房矮）放大 1.6 倍，坐落在地面高度上
+function v3Bld() {
+  const gl = V3.gl, L = typeof townBld === 'function' ? townBld().list : [], vb = [], ib = [];
+  for (const b of L) {
+    if (vb.length / 8 > 65000 - 24) break;
+    const w = (b.r ? b.h : b.w) / 2, h = (b.r ? b.w : b.h) / 2, cx = b.x + b.dx, cy = b.y + b.dy, g = v3Ht(cx, cy) - .5;
+    const top = g + (b.f ? 9 + (Math.abs(Math.sin(cx * 12.9 + cy * 7.3)) * 7) : 5 + (Math.abs(Math.sin(cx * 3.1 + cy * 5.7)) * 3)) * 1.6;
+    const X0 = cx - w, X1 = cx + w, Y0 = -(cy - h), Y1 = -(cy + h);   // GL 坐标：y 取负（北为正）
+    const quad = (pts, n) => { const k = vb.length / 8; pts.forEach(([x, y, z], i) => vb.push(x, y, z, n[0], n[1], n[2], i === 1 || i === 2 ? 1 : 0, i >= 2 ? 1 : 0)); ib.push(k, k + 1, k + 2, k, k + 2, k + 3); };
+    quad([[X0, Y0, top], [X1, Y0, top], [X1, Y1, top], [X0, Y1, top]], [0, 0, 1]);
+    quad([[X0, Y0, g], [X1, Y0, g], [X1, Y0, top], [X0, Y0, top]], [0, 1, 0]);    // 北墙
+    quad([[X1, Y1, g], [X0, Y1, g], [X0, Y1, top], [X1, Y1, top]], [0, -1, 0]);   // 南墙
+    quad([[X1, Y0, g], [X1, Y1, g], [X1, Y1, top], [X1, Y0, top]], [1, 0, 0]);    // 东墙
+    quad([[X0, Y1, g], [X0, Y0, g], [X0, Y0, top], [X0, Y1, top]], [-1, 0, 0]);   // 西墙
+  }
+  if (!V3.bb) { V3.bb = gl.createBuffer(); V3.bi = gl.createBuffer(); }
+  gl.bindBuffer(gl.ARRAY_BUFFER, V3.bb); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vb), gl.STATIC_DRAW);
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, V3.bi); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(ib), gl.STATIC_DRAW);
+  V3.bn = ib.length;
 }
 
 function v3Init() {
@@ -114,6 +155,14 @@ function v3Init() {
     if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(pr));
     const u = {}, a = { p: gl.getAttribLocation(pr, 'p'), n: gl.getAttribLocation(pr, 'n') };
     for (const k of ['uM', 'uEye', 'uTop', 'uBase', 'uBox', 'uWorld', 'uFog', 'uSea']) u[k] = gl.getUniformLocation(pr, k);
+    const pb = gl.createProgram();
+    gl.attachShader(pb, sh(gl.VERTEX_SHADER, V3_BVS)); gl.attachShader(pb, sh(gl.FRAGMENT_SHADER, V3_BFS));
+    gl.linkProgram(pb);
+    if (!gl.getProgramParameter(pb, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(pb));
+    const ub = {}, ab = { p: gl.getAttribLocation(pb, 'p'), n: gl.getAttribLocation(pb, 'n'), e: gl.getAttribLocation(pb, 'e') };
+    for (const k of ['uM', 'uEye', 'uTop', 'uBase', 'uBox', 'uWorld', 'uFog']) ub[k] = gl.getUniformLocation(pb, k);
+    gl.useProgram(pb); gl.uniform1i(ub.uTop, 0); gl.uniform1i(ub.uBase, 1);
+    Object.assign(V3, { pb, ub, ab });
     const mk = (unit, filt) => { const t = gl.createTexture(); gl.activeTexture(gl.TEXTURE0 + unit); gl.bindTexture(gl.TEXTURE_2D, t); for (const [p, v] of [[gl.TEXTURE_MIN_FILTER, filt], [gl.TEXTURE_MAG_FILTER, filt], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D, p, v); return t; };
     Object.assign(V3, { gl, cv, pr, u, a, tex: mk(0, gl.LINEAR), base: mk(1, gl.LINEAR), top: document.createElement('canvas'), coarse: V3.coarse ?? (typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches), maxTex: Math.min(4096, gl.getParameter(gl.MAX_TEXTURE_SIZE) || 2048), ok: true });
     gl.useProgram(pr);
@@ -208,6 +257,19 @@ function v3Draw(now) {
   gl.enableVertexAttribArray(V3.a.p); gl.vertexAttribPointer(V3.a.p, 3, gl.FLOAT, false, 24, 0);
   gl.enableVertexAttribArray(V3.a.n); gl.vertexAttribPointer(V3.a.n, 3, gl.FLOAT, false, 24, 12);
   gl.drawElements(gl.TRIANGLES, V3.n, gl.UNSIGNED_SHORT, 0);
+  if (V3.bn && V3.pb) {   // 城镇房屋
+    const ub = V3.ub, ab = V3.ab;
+    gl.useProgram(V3.pb);
+    gl.uniformMatrix4fv(ub.uM, false, C.M); gl.uniform3f(ub.uEye, C.E[0], C.E[1], C.E[2]);
+    gl.uniform4f(ub.uBox, box[0], box[1], box[2], box[3]); gl.uniform2f(ub.uWorld, W, H); gl.uniform2f(ub.uFog, C.D * 1.3, C.D * 2.8);
+    gl.bindBuffer(gl.ARRAY_BUFFER, V3.bb); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, V3.bi);
+    gl.disableVertexAttribArray(V3.a.p); gl.disableVertexAttribArray(V3.a.n);
+    gl.enableVertexAttribArray(ab.p); gl.vertexAttribPointer(ab.p, 3, gl.FLOAT, false, 32, 0);
+    gl.enableVertexAttribArray(ab.n); gl.vertexAttribPointer(ab.n, 3, gl.FLOAT, false, 32, 12);
+    gl.enableVertexAttribArray(ab.e); gl.vertexAttribPointer(ab.e, 2, gl.FLOAT, false, 32, 24);
+    gl.drawElements(gl.TRIANGLES, V3.bn, gl.UNSIGNED_SHORT, 0);
+    gl.disableVertexAttribArray(ab.p); gl.disableVertexAttribArray(ab.n); gl.disableVertexAttribArray(ab.e);
+  }
   const ctx = R.ctx;
   ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalCompositeOperation = 'copy'; ctx.drawImage(V3.cv, 0, 0); ctx.restore();
   v3Overlay(ctx, now / 1000);
