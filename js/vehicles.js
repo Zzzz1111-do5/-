@@ -1002,23 +1002,28 @@ function vehUnload(s, dt) {
   s.vinit = true;
   s.ut = (s.ut || 0) + dt;
   if (!L.veh.length) { if (s.ut >= 1.5) disembark(s); return; }
-  if (s.ut < 2.6) return;
-  s.ut = .4;
-  vehOffload(s, L.veh.shift(), (s.vk = (s.vk || 0) + 1) - 1);
+  if (s.ut < (s.vk ? 1.5 : 2.6)) return;   // 首辆等艏门放下；之后至少间隔 1.5 秒
+  // 一辆一辆下：上一辆走完跳板、离开跳板口一个车长以上，下一辆才出舱（被挡住超过 12 秒就不再等）
+  const p = s.lastV != null && S.veh.find(o => o.id === s.lastV);
+  if (p && !p.dead && s.ut < 12 && (p.ramp || dist(p.x, p.y, p.rx ?? p.x, p.ry ?? p.y) < vehSp(p).len + 8)) return;
+  s.ut = 0;
+  s.lastV = vehOffload(s, L.veh.shift(), (s.vk = (s.vk || 0) + 1) - 1).id;
 }
 // 车辆下船：先出现在舰内车辆甲板上，沿船首方向开下跳板（v.ramp，期间不寻路、不开火），上滩后开到滩头集结位置（vehStageSpot）
 function vehOffload(s, type, k) {
   const bx = s.bx ?? s.x, by = s.by ?? s.y, h = Math.atan2(by - s.y, bx - s.x), L = ((typeof SHIP_DIM === 'object' && SHIP_DIM[s.kind]) || [48])[0];
   const c = Math.cos(h), n = Math.sin(h), bowX = s.x + c * L * .45, bowY = s.y + n * L * .45, x0 = s.x - c * L * .1, y0 = s.y - n * L * .1;
   const ahead = (bx - bowX) * c + (by - bowY) * n;
-  let x1 = ahead > 6 ? bx + c * 6 : bowX + c * 18, y1 = ahead > 6 ? by + n * 6 : bowY + n * 18;
+  const off = ((k % 3) - 1) * 5;   // 跳板终点按车序左右错开，前后两辆不压在同一点
+  let x1 = (ahead > 6 ? bx + c * 6 : bowX + c * 18) - n * off, y1 = (ahead > 6 ? by + n * 6 : bowY + n * 18) + c * off;
   // 跳板终点要落在车辆能走的陆地上（滩头障碍、浅滩格往前找；找不到就取最近的可通行格）
   let ok = false;
   for (let d = 0; d <= 48 && !ok; d += 4) { const x = x1 + c * d, y = y1 + n * d; if (isLand(x, y) && vehPass(x, y, 'veh')) { x1 = x; y1 = y; ok = true; } }
   if (!ok) { const j = nearestPassable(ci(x1, y1), 'veh'); if (j >= 0) { x1 = cellCX(j); y1 = cellCY(j); } }
   const v = addVehicle('p', type, x0, y0, { auto: s.unitAuto !== false, heading: h, aim: h, ship: s.label });
   v.x = x0; v.y = y0;   // addVehicle 会把落在水里的车挪到可通行格：这里要的就是舰内位置
-  v.ramp = { t0: S.t, x0, y0, x1, y1, h, k, dur: clamp(dist(x0, y0, x1, y1) / 20, 1.8, 4) };
+  v.ramp = { t0: S.t, x0, y0, x1, y1, h, k, dur: clamp(dist(x0, y0, x1, y1) / 20, 1.8, 3) };
+  v.rx = x1; v.ry = y1;
   v.climbT = S.t; v.movedT = S.t; v.order = { t: 'hold' };
   log(`${s.label} 放下跳板：${vehSp(v).name}驶下跳板`, 'good', 'lstv' + s.id, 2, v);
   return v;
@@ -1033,15 +1038,19 @@ function vehRampTick(v, dt) {
 }
 // 滩头集结位置：上滩点向内陆 70–130、掩蔽好、不和已下船的车挤在一起、避开已知雷区与敌反坦克火力；同一艘船的车左右错开
 function vehStageSpot(v, R) {
-  const c = Math.cos(R.h), n = Math.sin(R.h), px = -n, py = c, pref = ((R.k % 3) - 1) * 32;
+  const c = Math.cos(R.h), n = Math.sin(R.h), px = -n, py = c, pref = ((R.k % 3) - 1) * 45;
   const ats = S.teams.filter(q => q.side === 'e' && q.men.length && inVision(q.x, q.y) && (q.men.includes('at') || (q.mod && q.mod.at)));
   const evs = (S.veh || []).filter(o => o.side === 'e' && !o.dead && inVision(o.x, o.y) && vehSp(o).gun && !vehSp(o).gun.ind);
   let best = null, bs = -Infinity;
-  for (const d of [70, 90, 110, 130]) for (const lat of [-64, -40, -20, 0, 20, 40, 64]) {
+  for (const d of [70, 90, 110, 130, 150]) for (const lat of [-100, -75, -50, -25, 0, 25, 50, 75, 100]) {
     const x = clamp(R.x1 + c * d + px * lat, 10, W - 10), y = clamp(R.y1 + n * d + py * lat, 10, H - 10), i = ci(x, y);
     if (!isLand(x, y) || !vehPass(x, y, 'veh') || (typeof MINEC !== 'undefined' && MINEC[i] === 2)) continue;
     let sc = coverAt(x, y) * 3 - Math.abs(lat - pref) / 50 - Math.abs(d - 95) / 60;
-    for (const o of S.veh) if (o !== v && o.side === 'p' && !o.dead) { const ox = o.order && o.order.x != null ? o.order.x : o.x, oy = o.order && o.order.y != null ? o.order.y : o.y; if (dist(ox, oy, x, y) < 28) sc -= 3; }
+    // 摊开：离别的车（含其去向）40 以内重扣、60 以内轻扣，几艘船的车在滩头排成间隔 40 左右的横队
+    for (const o of S.veh) if (o !== v && o.side === 'p' && !o.dead) {
+      const ox = o.order && o.order.x != null ? o.order.x : o.x, oy = o.order && o.order.y != null ? o.order.y : o.y, dd = Math.min(dist(ox, oy, x, y), dist(o.x, o.y, x, y));
+      if (dd < 40) sc -= 4 - dd / 20; else if (dd < 60) sc -= 1.2;
+    }
     for (const q of ats) { const dd = dist(q.x, q.y, x, y); if (dd < 260) sc -= (260 - dd) / 60; }
     for (const o of evs) { const dd = dist(o.x, o.y, x, y); if (dd < 420) sc -= (420 - dd) / 140; }
     if (sc > bs) { bs = sc; best = { x, y }; }

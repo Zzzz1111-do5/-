@@ -16,6 +16,36 @@ function landingPoint(x, y, r = 140) {
   return best;
 }
 
+// 抢滩点：沿岸线左右找一处不和别的登陆舰（已抢滩或正驶向滩头）船宽重叠的位置——舰艏并排靠岸，不叠在一起
+const shipW = s => ((typeof SHIP_DIM === 'object' && SHIP_DIM[s.kind]) || [32, 11])[1];
+function beachSlot(s, x, y, r) {
+  const taken = S.ships.filter(o => o !== s && alive(o) && o.land && o.bx != null && (o.state === 'move' || o.state === 'unloading' || o.state === 'beached'));
+  let first = null, seen = new Set();
+  for (let k = 0; k <= 12; k++) for (const sg of k ? [1, -1] : [1]) {
+    const ox = clamp(x + sg * k * 14, 8, W - 8), lp = landingPoint(ox, k ? coastAt(ox) : y, k ? 140 : r);
+    if (!lp || seen.has(lp.bx + ',' + lp.by)) continue;
+    seen.add(lp.bx + ',' + lp.by); first = first || lp;
+    if (!taken.some(o => Math.abs(o.bx - lp.bx) < (shipW(s) + shipW(o)) / 2 + 5 && Math.abs(o.by - lp.by) < 40)) return lp;
+  }
+  return first;
+}
+// 舰船避碰：船体按沿舰轴的三个圆近似；与别的船重叠时向侧面滑开（搁滩 / 停泊的船不动，由驶来的船让开）
+function shipSep(s) {
+  const L = ((typeof SHIP_DIM === 'object' && SHIP_DIM[s.kind]) || [32, 11]), c = Math.cos(s.heading), n = Math.sin(s.heading);
+  for (const o of S.ships) {
+    if (o === s || !alive(o) || o.kind === 'boat' || dist(o.x, o.y, s.x, s.y) > 60) continue;
+    const M = (typeof SHIP_DIM === 'object' && SHIP_DIM[o.kind]) || [32, 11], oc = Math.cos(o.heading ?? 0), on = Math.sin(o.heading ?? 0);
+    const still = o.state !== 'move' || o.id < s.id, rr = (L[1] + M[1]) / 2 + 2;
+    for (const a of [-.33, 0, .33]) for (const b of [-.33, 0, .33]) {
+      const ax = s.x + c * L[0] * a, ay = s.y + n * L[0] * a, bx = o.x + oc * M[0] * b, by = o.y + on * M[0] * b, d = dist(ax, ay, bx, by);
+      if (d >= rr || d < .01) continue;
+      const k = (rr - d) * (still ? .5 : .25);
+      s.x += (ax - bx) / d * k; s.y += (ay - by) / d * k;
+    }
+  }
+  if (!isWater(typeAt(s.x, s.y)) && s.state === 'move' && !s.land) { const j = nearestPassable(ci(s.x, s.y), 'ship'); if (j >= 0) { s.x = cellCX(j); s.y = cellCY(j); } }
+}
+
 // 护航舰火力支援阵位：岸线外约 250 的海面格
 const ddStand = x => nearestPassable(ci(x, clamp(coastAt(x) + 250, 8, H - 8)), 'ship');
 function orderShips(ships, x, y) {
@@ -30,11 +60,11 @@ function orderShips(ships, x, y) {
     s.land = false;
     if (isLand(tx, ty) && s.kind === 'dd') { const j = ddStand(tx); s.tx = cellCX(j); s.ty = cellCY(j); }   // 护航舰不抢滩，停在滩头外火力支援阵位
     else if (isLand(tx, ty)) {
-      const lp = landingPoint(tx, ty);
+      const lp = beachSlot(s, tx, ty);
       if (lp) Object.assign(s, { land: true, tx: lp.sx, ty: lp.sy, bx: lp.bx, by: lp.by });
       else { blocked++; const j = nearestPassable(ci(tx, ty), 'ship'); s.tx = cellCX(j); s.ty = cellCY(j); }
     } else {
-      const lp = s.kind !== 'dd' && !s.sbxRole && landingPoint(tx, ty, 40);   // 点在海岸线外沿的浅水里（距滩头 40 内）仍按抢滩处理，不在水线边空停
+      const lp = s.kind !== 'dd' && !s.sbxRole && beachSlot(s, tx, ty, 40);   // 点在海岸线外沿的浅水里（距滩头 40 内）仍按抢滩处理，不在水线边空停
       if (lp) Object.assign(s, { land: true, tx: lp.sx, ty: lp.sy, bx: lp.bx, by: lp.by }); else { s.tx = tx; s.ty = ty; }
     }
     s.state = 'move';
@@ -65,6 +95,7 @@ function sailTo(s, dt, speed) {
   const sp = speed * (typeAt(s.x, s.y) === T.SHOAL ? .55 : 1) * dt, l = dist(s.x, s.y, tx, ty) || 1;
   s.heading = Math.atan2(ty - s.y, tx - s.x);
   s.x += (tx - s.x) / l * Math.min(sp, l); s.y += (ty - s.y) / l * Math.min(sp, l);
+  if (s.kind !== 'boat' && d > 12) shipSep(s);   // 快到抢滩点时不再推开，免得被挤离滩头
   return false;
 }
 
