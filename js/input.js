@@ -14,7 +14,7 @@ function bindInput() {
       U.touches.set(e.pointerId, { sx, sy });
       if (U.touches.size === 2) {
         const [a, b] = [...U.touches.values()];
-        U.pinch = { d: dist(a.sx, a.sy, b.sx, b.sy), mx: (a.sx + b.sx) / 2, my: (a.sy + b.sy) / 2 };
+        U.pinch = { d: dist(a.sx, a.sy, b.sx, b.sy), mx: (a.sx + b.sx) / 2, my: (a.sy + b.sy) / 2, an: Math.atan2(b.sy - a.sy, b.sx - a.sx) };
         U.down = null;
       } else U.down = { sx, sy, x: p.x, y: p.y, touch: true, moved: false };
       return;
@@ -34,7 +34,9 @@ function bindInput() {
         const [a, b] = [...U.touches.values()], d = dist(a.sx, a.sy, b.sx, b.sy), mx = (a.sx + b.sx) / 2, my = (a.sy + b.sy) / 2;
         camPan(mx - U.pinch.mx, my - U.pinch.my);
         camZoomAt(mx, my, d / U.pinch.d);
-        U.pinch = { d, mx, my };
+        const an = Math.atan2(b.sy - a.sy, b.sx - a.sx);
+        if (typeof V3 === 'object' && V3.on && U.pinch.an != null) { const da = Math.atan2(Math.sin(an - U.pinch.an), Math.cos(an - U.pinch.an)); V3.yawT -= da; V3.yaw = V3.yawT; }   // 3D：双指旋转转向
+        U.pinch = { d, mx, my, an };
         return;
       }
     }

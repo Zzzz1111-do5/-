@@ -9,7 +9,7 @@ function rgba(hex, a) {
 }
 const font = n => `${px(n)}px "IBM Plex Mono", "Noto Sans SC", monospace`;
 const realLook = () => !(typeof SETTINGS === 'object' && SETTINGS && SETTINGS.look === 'matrix');
-const toWorld = (sx, sy) => ({ x: (sx - R.ox) / R.s, y: (sy - R.oy) / R.s });
+const toWorld = (sx, sy) => typeof V3 === 'object' && V3.on && !V3.drawing ? v3Pick(sx, sy) : ({ x: (sx - R.ox) / R.s, y: (sy - R.oy) / R.s });   // 3D 立体地图：视线与地形求交（view3d.js）
 const worldTf = g => g.setTransform(R.dpr * R.s, 0, 0, R.dpr * R.s, R.dpr * R.ox, R.dpr * R.oy);
 
 function initRender(cv) {
@@ -133,7 +133,7 @@ function viewBegin() {
 function viewEnd(on) { if (on) PV.set(PV_KEEP); }
 function draw(now) {
   const on = viewBegin();
-  try { drawScene(now); } finally { viewEnd(on); }
+  try { if (!(typeof V3 === 'object' && (V3.on || v3Att()) && !V3.drawing && v3Can() && v3Draw(now))) drawScene(now); } finally { viewEnd(on); }   // 3D 立体地图（view3d.js）在屏外按俯视画好再贴到地形上
 }
 function drawScene(now) {
   const { ctx } = R, time = now / 1000;
@@ -149,10 +149,12 @@ function drawScene(now) {
   const flash = Math.min(1, k * .5) * (shake ? 1 : .4);
   if (realLook()) {
     if (!TRX.tried) { trxInit(); if (TRX.ok) trxResize(); }
+    if (TRX.ok && (TRX.cv.width !== R.cv.width || TRX.cv.height !== R.cv.height)) trxResize();   // 3D 地图的屏外俯视画布与屏幕大小不同
     if (TRX.ok) { trxDraw(time, flash); ctx.drawImage(TRX.cv, 0, 0); }
     else { ctx.fillStyle = '#05101a'; ctx.fillRect(0, 0, R.cv.width, R.cv.height); worldTf(ctx); trxFallback(ctx); }
   } else {
     if (!MX.tried) { mxInit(); if (MX.ok) mxResize(); }
+    if (MX.ok && (MX.cv.width !== R.cv.width || MX.cv.height !== R.cv.height)) mxResize();
     if (MX.ok) { mxDraw(time, flash); ctx.drawImage(MX.cv, 0, 0); }
     else { ctx.fillStyle = '#010402'; ctx.fillRect(0, 0, R.cv.width, R.cv.height); worldTf(ctx); drawPixelFallback(ctx); }
   }

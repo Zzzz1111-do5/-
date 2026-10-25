@@ -31,13 +31,18 @@ function camZoomAt(sx, sy, k) {
   camClamp();
 }
 
-function camPan(dx, dy) { CAM.x -= dx / CAM.z; CAM.y -= dy / CAM.z; camClamp(); }
+function camPan(dx, dy) { if (typeof V3 === 'object' && V3.on) { v3Pan(dx, dy); return; } CAM.x -= dx / CAM.z; CAM.y -= dy / CAM.z; camClamp(); }   // 3D：按镜头转向换算
 function camCenter(x, y) { CAM.x = x; CAM.y = y; camClamp(); }
 
 // 方向键平移（每帧调用）
 const KEYS = new Set();
 function camKeys(dt) {
   const v = 700 * dt / CAM.z * CAM.fit;
+  if (typeof V3 === 'object' && V3.on) {   // 3D：方向键按镜头转向平移（屏幕上的左右上下）
+    const k = v * CAM.z, dx = (KEYS.has('ArrowLeft') ? k : 0) - (KEYS.has('ArrowRight') ? k : 0), dy = (KEYS.has('ArrowUp') ? k : 0) - (KEYS.has('ArrowDown') ? k : 0);
+    if (dx || dy) v3Pan(dx, dy);
+    return;
+  }
   if (KEYS.has('ArrowLeft')) CAM.x -= v;
   if (KEYS.has('ArrowRight')) CAM.x += v;
   if (KEYS.has('ArrowUp')) CAM.y -= v;
@@ -94,9 +99,15 @@ function mmDraw1() {
   if (S.dd.state !== 'sunk') dot(S.dd.x, S.dd.y, u, S.dd.state === 'repair' ? COL.amber : COL.intel);
   for (const c of [S.cv, ...(S.cvx || [])]) if (c) dot(c.x, c.y, u * 1.3, c.hp > 0 ? COL.intel : COL.amber);
   for (const p of S.planes) if (!p.dead) dot(p.x, p.y, u * .5, COL.intel);
-  const v0 = toWorld(0, 0), v1 = toWorld(CAM.vw, CAM.vh);
   g.strokeStyle = COL.sel; g.lineWidth = 1.5;
-  g.strokeRect(v0.x * k, v0.y * k, (v1.x - v0.x) * k, (v1.y - v0.y) * k);
+  if (typeof V3 === 'object' && V3.on && V3.cam) {   // 3D 立体地图：画面四角的视线落点围成的梯形
+    g.beginPath();
+    for (const [sx, sy] of [[0, CAM.vh * .08], [CAM.vw, CAM.vh * .08], [CAM.vw, CAM.vh], [0, CAM.vh]]) { const p = toWorld(sx, sy); g.lineTo(clamp(p.x, 0, W) * k, clamp(p.y, 0, H) * k); }
+    g.closePath(); g.stroke();
+  } else {
+    const v0 = toWorld(0, 0), v1 = toWorld(CAM.vw, CAM.vh);
+    g.strokeRect(v0.x * k, v0.y * k, (v1.x - v0.x) * k, (v1.y - v0.y) * k);
+  }
 }
 
 function mmBind(cv) {
