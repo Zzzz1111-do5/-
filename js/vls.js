@@ -93,6 +93,7 @@ function vlsFire(w, x, y, n = 1, why, player) {
   if (typeof v8Stat === 'function') v8Stat('vlsFire', fired);
   const W0 = MS_PGM[k], eta = Math.round(1.5 + dist(sh.x, sh.y, x, y) / (W0.sprint ? (W0.spd + W0.sprint) / 2 : W0.spd));
   log(`${sh.nm}垂直发射 ${fired} 枚${vlsNmS(k)}，约 ${eta} 秒命中；余 ${vlsLeft(k)} 枚`, 'info', null, 0, { x, y });
+  if (typeof shout === 'function' && sh.o) shout(sh.o, `垂发 ${fired} 枚${vlsNmS(k)}！`);   // 发射舰头顶喊话（shout.js）
   return fired;
 }
 
@@ -121,7 +122,7 @@ function vlsCommandP(dt) {
   const cover = (S.veh || []).some(v => v.side === 'e' && !v.dead && (v.type === 'sam_veh' || (v.mod && v.mod.cram)) && dist(v.x, v.y, best.kx, best.ky) < 450);
   const n = (k === 'cj10' && cover ? 2 : 1) + (best.kind === 'airfield' ? 1 : 0);
   const f = vlsFire(k, best.kx, best.ky, n, 'ai');
-  if (f && typeof chatSay === 'function') chatSay('p', `命令：驱逐舰垂发 ${f} 枚${vlsNmS(k)}，打击${typeof cmdWhere === 'function' ? cmdWhere(best.kx, best.ky) : gridRef(best.kx, best.ky)}的${(ENEMY_SPEC[best.kind] || {}).name || '目标'}${cover && k === 'cj10' ? '（敌有弹炮防空掩护，双发）' : ''}。`, { kind: 'order', at: { x: best.kx, y: best.ky }, key: 'vls' + best.id, gap: 60, lv: 1 });
+  if (f && typeof chatSay === 'function') chatSay('p', `命令：驱逐舰垂发 ${f} 枚${vlsNmS(k)}，打击${typeof cmdWhere === 'function' ? cmdWhere(best.kx, best.ky) : gridRef(best.kx, best.ky)}的${(ENEMY_SPEC[best.kind] || {}).name || '目标'}${cover && k === 'cj10' ? '（敌有弹炮防空掩护，双发）' : ''}。`, { kind: 'order', at: { x: best.kx, y: best.ky }, key: 'vls' + best.id, gap: 60, lv: 2 });
 }
 
 // —— 901 型综合补给舰：S.aor = {x, y, h, st: 'go' | 'rep' | 'back', to: 'DD' | 舰 id, p 进度, n 已补给舰次} ——

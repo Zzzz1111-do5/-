@@ -863,7 +863,7 @@ function cmdSeadP(C) {
     const kn = {};
     for (const s of sites) if (dist(s.x, s.y, z.x, z.y) < 600) { const k = s.k === 'veh' ? (typeof vehModel === 'function' ? vehModel(s.o) : '防空车') : s.k === 'mp' ? '毒刺组' : '高炮阵地'; kn[k] = (kn[k] || 0) + 1; }
     if (C.seadOn !== z.nm) chatSay('p', `判断：${z.nm}上空已知敌防空较强（${Object.keys(kn).map(k => k + ' ' + kn[k]).join('、')}）。决心：先打敌防空，压掉之前对地支援机、攻击机不进这片空域。`, { kind: 'plan', at: z, key: 'sead' + z.nm, gap: 60 });
-    chatSay('p', `命令：${acts.join('；')}。`, { kind: 'order', at: z, key: 'seadord', gap: 12, lv: 1 });
+    chatSay('p', `命令：${acts.join('；')}。`, { kind: 'order', at: z, key: 'seadord', gap: 12, lv: 2 });
     C.seadOn = z.nm;
   }
 }
@@ -922,7 +922,7 @@ function cmdJointP(C, P) {
     const first = J.st !== st;
     J.st = st;
     const nm = p.name;
-    if (first) chatSay('p', st === 'prep' ? `命令：${nm}方向联合火力准备——${acts.join('，')}；步兵跃进至冲击出发线后火力延伸。` : `命令：${nm}冲击发起——${acts.join('，')}。`, { kind: 'order', at: p, key: 'jf' + key + st, gap: 90, lv: 1 });
+    if (first) chatSay('p', st === 'prep' ? `命令：${nm}方向联合火力准备——${acts.join('，')}；步兵跃进至冲击出发线后火力延伸。` : `命令：${nm}冲击发起——${acts.join('，')}。`, { kind: 'order', at: p, key: 'jf' + key + st, gap: 90, lv: 2 });
     else chatSay('p', `命令：${nm}方向${acts.join('，')}。`, { kind: 'order', at: p, key: 'jf' + key, gap: 45, lv: 2 });
   }
 }
@@ -999,7 +999,8 @@ function cmdPointsP(C, P) {
       let u = null, bd = 200;
       for (const o of S.units) if (o.side === 'p' && o.kind === 'inf' && o.x != null) { const d = dist(o.x, o.y, p.x, p.y); if (d < bd) { bd = d; u = o; } }
       const next = C.ph === 'brk' && C.axis[0] === p.key ? cmdPt(C.axis[1]) : null;
-      chatSay('p', `报告：${u ? cmdUName(u) : '我部'}夺取${p.name}。${next ? `命令：继续向${next.name}发展。` : ''}`, { kind: 'report', at: p, lv: p.vp >= 2 || next ? 1 : 2 });
+      chatSay('p', `报告：${u ? cmdUName(u) : '我部'}夺取${p.name}。${next ? `命令：继续向${next.name}发展。` : ''}`, { kind: 'report', at: p, lv: 2 });
+      if (u && typeof shout === 'function') shout(u, `拿下${p.name}！`);   // 夺点由连队自己喊（shout.js），通联里只留详档
     } else {
       if (S.t - (C.lostT[p.key] ?? -99) < 60) continue;
       C.lostT[p.key] = S.t;
@@ -1375,8 +1376,9 @@ function cmdAmmoP(C, P) {
     if (am >= 15 || S.t - (C.ammoT ?? -99) < 20 || S.t - (au[u.id] ?? -999) < 150) continue;
     C.ammoT = au[u.id] = S.t;
     const un = cmdUName(u);
-    chatSay('p', `报告：${un}弹药将尽，攻击力减弱。`, { kind: 'friction', at: u, lv: 1 });
-    chatSay('p', pl.ph === 'supply' && pl.sp ? `补救：${un}后撤至 ${gridRef(pl.sp.x, pl.sp.y)} 补给点补充弹药，补足后归建再攻。` : `补救：附近无接通的补给点，${un}就近隐蔽待补，工兵抢修补给线。`, { kind: 'remedy', at: pl.sp || u, delay: 2, lv: 1 });
+    chatSay('p', `报告：${un}弹药将尽，攻击力减弱。`, { kind: 'friction', at: u, lv: 2 });
+    if (typeof shout === 'function') { shout(u, '弹药快打光了！'); shout(u, pl.ph === 'supply' && pl.sp ? '回补给点补弹药！' : '就地隐蔽，等补给！', { delay: 2.5 }); }
+    chatSay('p', pl.ph === 'supply' && pl.sp ? `补救：${un}后撤至 ${gridRef(pl.sp.x, pl.sp.y)} 补给点补充弹药，补足后归建再攻。` : `补救：附近无接通的补给点，${un}就近隐蔽待补，工兵抢修补给线。`, { kind: 'remedy', at: pl.sp || u, delay: 2, lv: 2 });
   }
 }
 // —— 态势报告 ——
@@ -1495,7 +1497,7 @@ function cmdEIdentify(E, F, o) {
   const oTxt = x => g !== R[0] && x.men > g.men ? `${cmdBN(x.i)}方向${pick(['烟幕遮蔽', '观察所遭舰炮压制', '视线受地形遮挡'])}，兵力不明（目视约 ${Math.max(3, Math.min(x.men, Math.round(g.men * (.45 + Math.random() * .3))))} 人）` : `${cmdBN(x.i)}之敌约 ${x.men} 人`;
   chatSay('e', `判断：${cmdBN(g.i)}之敌约 ${g.men} 人，${why}，判为敌主攻方向${others.length ? `；${others.map(oTxt).join('、')}，判为牵制佯动` : ''}。`, { kind: 'plan', at: X });
   const towns = [...new Set(Object.values(E.home))].map(k => cmdPt(k)).filter(Boolean).sort((a, b) => dist(a.x, a.y, X.x, X.y) - dist(b.x, b.y, X.x, X.y));
-  chatSay('e', `决心：${towns.length ? towns.map(p => p.name).join('、') + '预备队' : '预备队'}向${X.name}方向机动，准备反冲击；${others.length ? `${others.map(x => cmdBN(x.i)).join('、')}守备依托出口阵地阻击，伏击组按预案逐次退守出口` : '各滩守备就地阻击'}。`, { kind: 'plan', at: X, delay: 1.5 });
+  chatSay('e', `决心：${towns.length > 4 ? `${towns.slice(0, 3).map(p => p.name).join('、')}等 ${towns.length} 处预备队` : towns.length ? towns.map(p => p.name).join('、') + '预备队' : '预备队'}向${X.name}方向机动，准备反冲击；${others.length ? `${others.map(x => cmdBN(x.i)).join('、')}守备依托出口阵地阻击，伏击组按预案逐次退守出口` : '各滩守备就地阻击'}。`, { kind: 'plan', at: X, delay: 1.5 });
   // 摩擦：预备队迟出（离主攻方向最近的镇子）
   if (towns.length && Math.random() < F.late) {
     const tw = towns[0], n = Math.round(F.lateT * (.75 + Math.random() * .5));
@@ -1609,7 +1611,7 @@ function cmdEEvents(E, o) {
     const was = E.own[p.key] || 'e', now = p.owner;
     if (was === now) continue;
     E.own[p.key] = now;
-    if (now === 'p') chatSay('e', `报告：${p.name}失守。`, { kind: 'report', at: p, lv: p.vp >= 2 ? 1 : 2 });
+    if (now === 'p') { chatSay('e', `报告：${p.name}失守。`, { kind: 'report', at: p, lv: 2 }); if (typeof shout === 'function') shout({ x: p.x, y: p.y }, `${p.name}失守！`, { side: 'e' }); }
   }
   const lostV = S.points.filter(p => p.owner === 'p').reduce((a, p) => a + p.vp, 0) / Math.max(1, S.points.reduce((a, p) => a + p.vp, 0));
   if (!E.last && lostV >= .45) {

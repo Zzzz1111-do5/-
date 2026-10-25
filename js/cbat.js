@@ -88,7 +88,8 @@ function cbFix(sh, radar, opt) {
   if (acts.length && typeof v8Stat === 'function') v8Stat(sup ? 'cbSupFire' : 'cbFire');
   if (typeof chatSay === 'function') {
     if (sup) chatSay('p', `判断：补给线在${typeof cmdWhere === 'function' ? cmdWhere(sup.x, sup.y) : gridRef(sup.x, sup.y)}已第 ${sup.n} 次被炮击，${how}测定是${wh}的敌${nm}打的。决心：先打掉这门炮——${acts.length ? `命令：${acts.join('、')}实施反炮兵射击；工兵与卡车等炮打掉再抢修，免得修好又被打断。` : ask.length ? ask[0] + '（反炮兵射击）。' : '暂无可用火力，炮位标定在案，航空兵出动时优先打击。'}`, { kind: acts.length ? 'plan' : 'report', at: { x, y }, key: 'cbs' + e.id, gap: 30, lv: 0 });
-    else chatSay('p', `报告：${how === '驱逐舰雷达' ? '驱逐舰雷达跟踪来袭炮弹弹道' : '前沿分队声测'}，测定敌${nm}阵地在${wh}。${acts.length ? `命令：${acts.join('、')}实施反炮兵射击，打掉这门炮，免得它反复切断补给线。` : ask.length ? ask[0] + '（反炮兵射击）。' : '暂无可用火力，标定在案，航空兵出动时优先打击。'}`, { kind: acts.length ? 'order' : 'report', at: { x, y }, key: 'cb' + e.id, gap: 40, lv: 1 });
+    else chatSay('p', `报告：${how === '驱逐舰雷达' ? '驱逐舰雷达跟踪来袭炮弹弹道' : '前沿分队声测'}，测定敌${nm}阵地在${wh}。${acts.length ? `命令：${acts.join('、')}实施反炮兵射击，打掉这门炮，免得它反复切断补给线。` : ask.length ? ask[0] + '（反炮兵射击）。' : '暂无可用火力，标定在案，航空兵出动时优先打击。'}`, { kind: acts.length ? 'order' : 'report', at: { x, y }, key: 'cb' + e.id, gap: 40, lv: 2 });
+    if (acts.length && typeof shout === 'function') shout(how === '驱逐舰雷达' && S.dd && S.dd.state !== 'sunk' ? S.dd : { x, y, side: 'p' }, `测定敌${nm}阵地，反炮兵射击！`);
   }
   return acts.length;
 }

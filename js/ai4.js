@@ -31,6 +31,8 @@ const a4Ts = u => teamsOf(u).filter(q => q.men.length && !q.ride);
 function a4Cent(u) { let x = 0, y = 0, n = 0; for (const q of a4Ts(u)) { x += q.x; y += q.y; n++; } return n ? [x / n, y / n] : null; }
 // 连队称呼按第一次被调动时的驻地（「镇中心预备队」），之后不随任务改名
 const a4Name = u => u.a4n || (u.a4n = ((ptByKey(u.obj) || {}).name || '') + (u.role === 'reserve' ? '预备队' : '守备队'));
+// 番号列表合并重名（西路口预备队、西路口预备队、西镇预备队 → 西路口预备队 2 个连、西镇预备队），通联不再一长串重复
+const a4Names = list => { const n = new Map(); for (const s of list) n.set(s, (n.get(s) || 0) + 1); return [...n].map(([s, k]) => k > 1 ? `${s} ${k} 个连` : s).join('、'); };
 const a4Where = (x, y) => typeof cmdWhere === 'function' ? cmdWhere(x, y) : gridRef(x, y);
 const a4Plan = (C, id) => C.ca.find(c => !c.end && c.units.includes(id));
 const a4Held = q => typeof cmdHeld === 'function' && cmdHeld(q);
@@ -133,7 +135,8 @@ function a4Res(C, info) {
       const T = C.thr[r.key], fx = T ? T[0] : p.x, fy = T ? T[1] : p.y + 200, l = Math.hypot(fx - p.x, fy - p.y) || 1;
       a4Move(u, p.x + (fx - p.x) / l * 20, p.y + (fy - p.y) / l * 20, Math.atan2(fy - p.y, fx - p.x));   // 整连进入阵地，到位后由 ai2 按工事布位
       a4Stat('a4Reinf');
-      chatSay('e', `命令：${a4Name(u)}整连进入${p.name}阵地加强防御${p.prog > .02 ? '，把突入之敌打出去' : ''}。`, { kind: 'order', at: p, key: 'a4rf' + id, gap: 60, lv: 1 });
+      chatSay('e', `命令：${a4Name(u)}整连进入${p.name}阵地加强防御${p.prog > .02 ? '，把突入之敌打出去' : ''}。`, { kind: 'order', at: p, key: 'a4rf' + id, gap: 60, lv: 2 });
+      if (typeof shout === 'function') shout(u, p.prog > .02 ? `进${p.name}，把突入之敌打出去！` : `进${p.name}阵地加强防御！`);
       continue;
     }
     if (I && I.th >= 1.5) r.calm = S.t;
@@ -165,7 +168,8 @@ function a4Res(C, info) {
   if (!a4Move(u, sp.x, sp.y, face)) return;
   C.res[u.id] = { st: 'move', key: k, x: Math.round(sp.x), y: Math.round(sp.y), t: S.t };
   a4Stat('a4Res');
-  chatSay('e', `命令：${nm}整连（${ts.length} 组 ${a4Men(ts)} 人）向${p.name}后方机动待命，准备加强防御或反冲击。`, { kind: 'order', at: p, key: 'a4res' + u.id, gap: 60, lv: 1 });
+  chatSay('e', `命令：${nm}整连（${ts.length} 组 ${a4Men(ts)} 人）向${p.name}后方机动待命，准备加强防御或反冲击。`, { kind: 'order', at: p, key: 'a4res' + u.id, gap: 60, lv: 2 });
+  if (typeof shout === 'function') shout(u, `向${p.name}后方机动待命！`);
 }
 
 // 外来的整连（第 101 空降师机降落地、集合完毕）：据点还在手里 → 开到据点后方待机（①），吃紧时整连进入阵地；
@@ -382,7 +386,7 @@ function a4Ca(C, info, D) {
     for (const o of pick) { delete C.res[o.u.id]; for (const q of a4Ts(o.u)) q.obj = k; o.u.obj = k; a4Move(o.u, sp.x, sp.y, face); }
     C.ca.push(c);
     a4Stat('caPlan');
-    chatSay('e', `判断：${p.name}${p.owner === 'p' ? '失守' : '被敌突入'}${I.near ? `，突入之敌约 ${I.near} 人` : ''}。决心：以${c.nm.join('、')}（约 ${men} 人）在${a4Where(sp.x, sp.y)}集结，炮火准备后统一反冲击，夺回${p.name}。`, { kind: 'plan', at: p, lv: p.vp >= 2 ? 0 : 1 });
+    chatSay('e', `判断：${p.name}${p.owner === 'p' ? '失守' : '被敌突入'}${I.near ? `，突入之敌约 ${I.near} 人` : ''}。决心：以${a4Names(c.nm)}（约 ${men} 人）在${a4Where(sp.x, sp.y)}集结，炮火准备后统一反冲击，夺回${p.name}。`, { kind: 'plan', at: p, lv: p.vp >= 2 ? 0 : 1 });
     if (C.ca.filter(o => !o.end).length >= 2) return;
   }
 }
@@ -435,7 +439,7 @@ function a4CaGo(C, c, p, I) {
   const nv = (S.veh || []).filter(v => v.side === 'e' && !v.dead && v.buddy != null && c.units.includes(v.buddy) && A4_GUNV.includes(v.type)).length;
   if (men >= 12 && typeof eaMass === 'function') eaMass(p.x, p.y, `向${p.name}的反冲击`);   // 陆空协同：反冲击发起时航空兵同时出击
   a4Stat('caGo');
-  chatSay('e', `命令：火力延伸！${c.nm.join('、')}（${ts.length} 组 ${men} 人${I && I.near ? `，对敌约 ${I.near} 人` : ''}）向${p.name}统一发起反冲击${nv ? `，${nv} 辆坦克在步兵线后伴随支援` : ''}。`, { kind: 'order', at: p, lv: 0 });
+  chatSay('e', `命令：火力延伸！${a4Names(c.nm)}（${ts.length} 组 ${men} 人${I && I.near ? `，对敌约 ${I.near} 人` : ''}）向${p.name}统一发起反冲击${nv ? `，${nv} 辆坦克在步兵线后伴随支援` : ''}。`, { kind: 'order', at: p, lv: 0 });
 }
 function a4CaEnd(C, c, why, p, us, lostN = 0, am = 0) {
   c.end = S.t; c.why = why;
@@ -531,7 +535,8 @@ function a4Flank(C, info) {
     aiGo(q, cell.x, cell.y, 'amove'); q.px = null;
     C.cool['f' + k] = S.t + 60;
     a4Stat('a4Flank');
-    chatSay('e', `命令：${best.J.p.name}守备抽一个组前出至${p.name}之敌${side > 0 ? '右' : '左'}翼，以侧射火力支援${p.name}。`, { kind: 'order', at: cell, key: 'a4fl' + k, gap: 45, lv: 1 });
+    chatSay('e', `命令：${best.J.p.name}守备抽一个组前出至${p.name}之敌${side > 0 ? '右' : '左'}翼，以侧射火力支援${p.name}。`, { kind: 'order', at: cell, key: 'a4fl' + k, gap: 45, lv: 2 });
+    if (typeof shout === 'function') shout(q, `前出${side > 0 ? '右' : '左'}翼侧射支援！`);
     if (Object.keys(C.fl).length >= A.flank) return;
   }
 }

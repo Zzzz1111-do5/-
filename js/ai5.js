@@ -138,7 +138,7 @@ function a5Think() {
       const p0 = ptByKey(G.key), p1 = a5Target({ x: G.x, y: G.y });
       if (!p0 || (p0.owner === 'e' && p0.prog < .1)) { if (p1) a5SetTarget(G, p1); else { a5Release(G, 'cancel'); return; } }
       const pool = a5Pool(G);
-      if (pool.length) { a5Recruit(G, pool); a5Say(`命令：${pool.map(a4Name).join('、')}编入总攻集团，到${a4Where(G.x, G.y)}隐蔽集结，不得零散投入。`, { kind: 'order', at: { x: G.x, y: G.y }, key: 'a5rec', gap: 25, lv: 1 }); }
+      if (pool.length) { a5Recruit(G, pool); a5Say(`命令：${a4Names(pool.map(a4Name))}编入总攻集团，到${a4Where(G.x, G.y)}隐蔽集结，不得零散投入。`, { kind: 'order', at: { x: G.x, y: G.y }, key: 'a5rec', gap: 25, lv: 1 }); }
       const T = ptByKey(G.key), our = a5Our(T.x, T.y, 300), men = a5Arrived(G, G.x, G.y, 180);
       const tot = a5Men(G), ready = men >= tot * .7 && men >= A5.oppMen && men >= our.men * 1.1;   // 七成到位、对目标之敌占优就不再干等
       const strong = men >= Math.max(A5.minMen, our.men * A5.need) || ready, chance = (our.ammo < 25 || our.shaky > .3) && men >= Math.max(A5.oppMen, our.men), late = S.t - G.t > A5.max && (men >= A5.oppMen || tot >= Math.min(A5.oppMen, 14));   // 等太久：各连从所在位置直接向冲击出发阵地开进，向心合击

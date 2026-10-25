@@ -231,7 +231,7 @@ function brDissolve(G, why) {
 function brRetask(B, G, M, why) {
   G.key = M.p.key; G.st = 'move'; G.stT = S.t; G.calm = S.t; G.taskT = S.t; G.agg = M.lost ? 1.2 : 1.6;
   for (const u of bgUnits(G)) { u.obj = M.p.key; for (const q of teamsOf(u)) q.obj = M.p.key; }
-  bgSay(G, `${why}奉命${M.lost ? `向${M.p.name}反冲击` : `转到${M.p.name}方向加强防御`}，全群成行军队形开进。`);
+  bgSay(G, `${why}奉命${M.lost ? `向${M.p.name}反冲击` : `转到${M.p.name}方向加强防御`}，全群成行军队形开进。`, null, 'order', M.lost ? `转向${M.p.name}反冲击！` : `转向${M.p.name}加强防御！`);
   brLog(B, `retask ${G.name} → ${M.p.key}`);
 }
 // 复盘（每 6 秒，每个战斗群）
@@ -373,7 +373,7 @@ function brDeployP(B, G, why) {
   }
   for (const v of bgVehs(G)) Object.assign(v, { cmd: null, bgG: null });
   G.dead = true; G.done = true;
-  bgSay(G, go ? `${why}各连展开，按攻击队形向${p.name}发起攻击，坦克在步兵线后伴随。` : `${p ? p.name : '目标'}已被友邻夺取，各连就地待命，另行分配任务。`, null, 'order');
+  bgSay(G, go ? `${why}各连展开，按攻击队形向${p.name}发起攻击，坦克在步兵线后伴随。` : `${p ? p.name : '目标'}已被友邻夺取，各连就地待命，另行分配任务。`, null, 'order', go ? `展开，向${p.name}攻击！` : '目标已被友邻拿下，待命');
   brLog(B, `deploy ${G.name} ${go ? '→ ' + G.key : 'idle'}`);
 }
 function brReviewP(B, G) {

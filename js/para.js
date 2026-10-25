@@ -208,7 +208,7 @@ function paAI(dt) {
     }
     if (best) {
       const x = clamp(best.x, 40, W - 40), y = clamp(best.y + 30, 40, H - 40);
-      if (isLand(x, y) && passInf(x, y) && paLaunch('drop', x, y, true)) { P.dropT = S.t; say(`命令：${unitName(best)}弹药告急、远离补给点，运输机向 ${gridRef(x, y)} 空投弹药 3 箱。`, { x, y }); }
+      if (isLand(x, y) && passInf(x, y) && paLaunch('drop', x, y, true)) { P.dropT = S.t; if (typeof chatSay === 'function') chatSay('p', `命令：${unitName(best)}弹药告急、远离补给点，运输机向 ${gridRef(x, y)} 空投弹药 3 箱。`, { kind: 'order', at: { x, y }, lv: 2 }); if (typeof shout === 'function') shout(best, '弹药告急，请求空投！'); }
     }
   }
 }

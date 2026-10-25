@@ -54,15 +54,18 @@ button:disabled { cursor: not-allowed; opacity: .3; }
 #feed li.warn { border-color: var(--amber); color: #ffe2a3; }
 #feed li.bad { border-color: var(--enemy); color: #ffc2d0; }
 #feed li.good { border-color: var(--g); color: var(--g-hi); }
-/* 据点条：夹在事件栏与右上按钮之间（两侧各留约 370px），最多两行；H-HOUR 与暂停条放在两行之下，互不遮挡 */
-#objs { top: calc(10px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); display: flex; gap: 4px; padding: 5px 6px; flex-wrap: wrap; justify-content: center; max-width: min(calc(46vw + 24px), calc(100vw - 2 * var(--trw, 380px) - 14px)); }
-.ob { position: relative; width: 34px; height: 34px; display: grid; place-items: center; background: rgba(var(--enemy-rgb), .08); border: 1px solid rgba(var(--enemy-rgb), .5); border-radius: 5px; color: var(--enemy); padding: 0; }
+/* 据点条：夹在左上事件栏与右上按钮组（--trw，hud.js 量出）之间、在这段空当里居中，横向宽条最多两行（放不下就横向滚动）——
+   不再挤成三列一长条压在地图中间；H-HOUR 与暂停条放在下面，互不遮挡 */
+#objs { top: calc(10px + env(safe-area-inset-top, 0px)); left: calc(max(16px, env(safe-area-inset-left, 0px)) + min(300px, 26vw) + 10px); right: calc(var(--trw, 380px) + 4px); width: fit-content; max-width: none; margin: 0 auto;
+  display: flex; gap: 2px; padding: 4px 5px; flex-wrap: wrap; justify-content: center; }
+.ob { position: relative; width: 24px; height: 24px; display: grid; place-items: center; background: rgba(var(--enemy-rgb), .08); border: 1px solid rgba(var(--enemy-rgb), .5); border-radius: 5px; color: var(--enemy); padding: 0; }
+.ob .ic { width: 16px; height: 16px; }
 .ob.p { color: var(--g); border-color: var(--line-hi); background: rgba(var(--g-rgb), .1); }
 .ob.hot { box-shadow: 0 0 10px var(--amber); border-color: var(--amber); }
 .ob i { position: absolute; left: 2px; bottom: 2px; height: 2px; background: var(--g); box-shadow: 0 0 4px var(--g); max-width: calc(100% - 4px); }
 /* 收起按钮：展开时是条首的小箭头；收起后整条缩成一行摘要（未攻占数 / 争夺 / 坚守倒计时），P 键切换 */
 #objList { display: contents; }
-.obt { flex: 0 0 auto; min-width: 20px; height: 34px; padding: 0 4px; display: inline-flex; align-items: center; justify-content: center; background: transparent; border: 1px dashed var(--line); border-radius: 5px; color: var(--mute); font: 12px var(--f-ui); white-space: nowrap; cursor: pointer; }
+.obt { flex: 0 0 auto; min-width: 20px; height: 24px; padding: 0 4px; display: inline-flex; align-items: center; justify-content: center; background: transparent; border: 1px dashed var(--line); border-radius: 5px; color: var(--mute); font: 12px var(--f-ui); white-space: nowrap; cursor: pointer; }
 .obt:hover { border-color: var(--line-hi); color: var(--text); }
 .obt b { color: var(--enemy); font-weight: 600; }
 .obt em { font-style: normal; color: var(--amber); }
@@ -114,7 +117,11 @@ button:disabled { cursor: not-allowed; opacity: .3; }
 .uc.waver { color: var(--amber); }
 .uc.rout { color: var(--enemy); animation: blink .6s steps(2) infinite; }
 @keyframes blink { 50% { border-color: var(--enemy); } }
-#cmdBox { padding: 6px; display: grid; gap: 6px; }
+/* 指令按钮：不再垫一整块深色底板（左半边空着也挡地图），只有按钮自己有底，空当点得到地图 */
+#cmdBox { padding: 0; display: grid; gap: 4px; justify-items: end; pointer-events: none !important; }
+#cmdBox .ib, #reserveBox { pointer-events: auto; background: rgba(var(--pn-rgb), .88); box-shadow: 0 0 10px rgba(0, 0, 0, .5); }
+#cmdBox .sep { width: 4px; background: transparent; margin: 0; }
+#reserveBox { border: 1px solid var(--line); border-radius: 5px; padding: 0 7px; height: 40px; }
 .row { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
 .ib { position: relative; width: 40px; height: 40px; display: grid; place-items: center; background: rgba(var(--g-rgb), .05); border: 1px solid var(--line); border-radius: 5px; color: var(--g); padding: 0; }
 .ib:hover:not(:disabled) { border-color: var(--line-hi); background: rgba(var(--g-rgb), .12); }
@@ -157,12 +164,12 @@ button:disabled { cursor: not-allowed; opacity: .3; }
 @media (prefers-reduced-motion: reduce) { #bgrain { display: none; } .uc.rout { animation: none; } }
 /* 中等宽度：据点图标缩小，仍为两行；更窄时改为单行横向滚动 */
 @media (max-width: 1199px) and (min-width: 901px) {
-  #objs { gap: 3px; padding: 4px 5px; max-width: calc(100vw - 2 * var(--trw, 380px) - 12px); }
-  .ob { width: 26px; height: 26px; } .ob .ic { width: 17px; height: 17px; } .obt { height: 26px; }
+  #objs { gap: 3px; padding: 4px 5px; }
+  .ob { width: 24px; height: 24px; } .ob .ic { width: 16px; height: 16px; } .obt { height: 24px; }
   #deploy, #pauseBand { top: calc(84px + env(safe-area-inset-top, 0px)); }
 }
 @media (max-width: 1009px) and (min-width: 901px) {
-  #objs { flex-wrap: nowrap; overflow-x: auto; justify-content: flex-start; scrollbar-width: none; }
+  #objs { flex-wrap: nowrap; overflow-x: auto; justify-content: flex-start; scrollbar-width: none; max-height: none; width: auto; }
   .ob { flex: 0 0 auto; }
   #deploy, #pauseBand { top: calc(56px + env(safe-area-inset-top, 0px)); }
 }
@@ -171,7 +178,7 @@ button:disabled { cursor: not-allowed; opacity: .3; }
   #stage { position: relative; height: 62vh; min-height: 340px; }
   #feed { top: 56px; max-width: calc(100% - 32px); } #feed li:nth-child(n+3) { display: none; }
   #feed li { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  #objs { top: auto; bottom: 8px; max-width: calc(100% - 32px); flex-wrap: nowrap; overflow-x: auto; justify-content: flex-start; }
+  #objs { top: auto; bottom: 8px; left: 16px; right: 16px; width: auto; max-width: none; max-height: none; flex-wrap: nowrap; overflow-x: auto; justify-content: flex-start; }
   .ob { flex: 0 0 auto; width: 28px; height: 28px; } .ob .ic { width: 18px; height: 18px; } .obt { height: 28px; }
   #bottom { position: static; grid-template-columns: minmax(0, 1fr); padding-top: 8px; background: var(--bg); }
   #mmBox { width: auto; order: 3; } #cards { justify-self: stretch; } #cmdBox { order: 2; }
@@ -192,7 +199,7 @@ button:disabled { cursor: not-allowed; opacity: .3; }
   .ib { width: 36px; height: 36px; } .row { gap: 3px; justify-content: flex-end; }
   #feed { top: calc(6px + env(safe-area-inset-top, 0px)); left: max(8px, env(safe-area-inset-left, 0px)); max-width: min(260px, 30vw); }
   #feed li { font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } #feed li:nth-child(n+3) { display: none; }
-  #objs { top: calc(6px + env(safe-area-inset-top, 0px)); bottom: auto; left: 50%; transform: translateX(-50%); flex-wrap: nowrap; overflow-x: auto; justify-content: flex-start; max-width: 38vw; padding: 3px 4px; }
+  #objs { top: calc(6px + env(safe-area-inset-top, 0px)); bottom: auto; left: calc(max(8px, env(safe-area-inset-left, 0px)) + min(260px, 30vw) + 6px); right: calc(var(--trw, 380px) + 2px); width: auto; max-width: none; max-height: none; flex-wrap: nowrap; overflow-x: auto; justify-content: flex-start; padding: 3px 4px; }
   .ob { flex: 0 0 auto; width: 24px; height: 24px; } .ob .ic { width: 16px; height: 16px; } .obt { height: 24px; }
   #topr { top: calc(6px + env(safe-area-inset-top, 0px)); right: max(8px, env(safe-area-inset-right, 0px)); gap: 3px; padding: 2px 4px; }
   #topr .tb { height: 28px; min-width: 28px; padding: 0 5px; } #clock { font-size: 13px; padding: 0 3px; }
@@ -251,9 +258,8 @@ button:disabled { cursor: not-allowed; opacity: .3; }
     <div class="zoom"><button class="tb" id="zOut" type="button" title="缩小">−</button><button class="tb" id="zFit" type="button" title="全图">⊡</button><button class="tb" id="zIn" type="button" title="放大">＋</button></div>
   </div>
   <div id="cards" class="box" aria-label="部队"></div>
-  <div id="cmdBox" class="box">
-    <div class="row" id="orders"></div>
-    <div class="row"><span id="forms" class="row"></span><span class="sep"></span><span id="reserveBox" title="后备兵力（经增援线上岸）"><svg viewBox="0 0 24 24" class="ic" aria-hidden="true"><path d="M12 4l6 7-6 7-6-7z"/></svg><b id="reserve"></b></span></div>
+  <div id="cmdBox">
+    <div class="row"><span class="row" id="orders"></span><span class="sep"></span><span id="forms" class="row"></span><span class="sep"></span><span id="reserveBox" title="后备兵力（经增援线上岸）"><svg viewBox="0 0 24 24" class="ic" aria-hidden="true"><path d="M12 4l6 7-6 7-6-7z"/></svg><b id="reserve"></b></span></div>
     <div class="row" id="support"></div>
   </div>
 </section>
@@ -339,6 +345,7 @@ button:disabled { cursor: not-allowed; opacity: .3; }
 <script src="js/orbat.js"></script>
 <script src="js/brain.js"></script>
 <script src="js/places.js"></script>
+<script src="js/shout.js"></script>
 <script src="js/a101.js"></script>
 <script src="js/abn.js"></script>
 <script src="js/matrix.js"></script>

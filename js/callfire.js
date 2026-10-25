@@ -79,8 +79,10 @@ function cfStep(dt) {
     const at = { x: Math.round(c.x), y: Math.round(c.y) }, wh = cmdWhere(c.x, c.y);
     F.calls.push({ ...at, t: S.t, a: O[0] ? O[0].a : null, eta: O[0] ? O[0].eta : 0, by: nm });
     v8Stat('cfCall');
-    chatSay('p', `报告：${nm}在${wh}发现敌密集火力点（${cfDesc(c)}），距我 ${Math.round(od)} 米，请求火力支援。`, { kind: 'report', at, key: 'cfr' + Math.round(c.x / 150) + '_' + Math.round(c.y / 150), gap: 40, lv: 1 });
-    if (!O.length) { chatSay('p', `答复：${nm}，附近暂无可用的支援火力，就地隐蔽、以建制火力压制，等待舰炮或航空兵。`, { kind: 'remedy', at, delay: 1.5, key: 'cfnone', gap: 40, lv: 1 }); v8Stat('cfNone'); continue; }
+    chatSay('p', `报告：${nm}在${wh}发现敌密集火力点（${cfDesc(c)}），距我 ${Math.round(od)} 米，请求火力支援。`, { kind: 'report', at, key: 'cfr' + Math.round(c.x / 150) + '_' + Math.round(c.y / 150), gap: 40, lv: 2 });
+    const who = u || obs, sh = (t, o) => typeof shout === 'function' && shout(who, t, o);   // 请求、答复由前沿连队自己喊（shout.js），通联里只留详档
+    sh('发现敌火力点，请求火力支援！');
+    if (!O.length) { chatSay('p', `答复：${nm}，附近暂无可用的支援火力，就地隐蔽、以建制火力压制，等待舰炮或航空兵。`, { kind: 'remedy', at, delay: 1.5, key: 'cfnone', gap: 40, lv: 2 }); sh('没有支援火力，就地隐蔽压制！', { delay: 2.5 }); v8Stat('cfNone'); continue; }
     const o = O[0];
     v8Stat('cf_' + o.a);
     if (o.a === 'cas') {
@@ -93,7 +95,8 @@ function cfStep(dt) {
     else if (o.a === 'strike') airPkg('strike', at.x, at.y);
     if (typeof navEnsure === 'function' && (o.a === 'naval' || o.a === 'ask')) { const N = navEnsure(); N.hot.push({ ...at, until: S.t + 25, why: 'pin' }); }   // 沙盒护航舰也转火
     const eta = Math.max(2, Math.round(o.eta)), alt = O.slice(1).map(x => CF_NM[x.a]).filter((v, i, a) => a.indexOf(v) === i).slice(0, 2);
-    chatSay('p', o.a === 'ask' ? `${cmdAsk(at.x, at.y)}：${nm}被敌密集火力压制。` : `命令：${CF_NM[o.a]}${o.a === 'cas' ? '转场' : ''}支援${nm}，打击${wh}的敌火力点，约 ${eta} 秒后到达${alt.length ? `（${alt.join('、')}较慢，暂不动用）` : ''}。`, { kind: 'order', at, delay: 1.5, key: 'cfo' + at.x + '_' + at.y, gap: 30, lv: 1 });
+    chatSay('p', o.a === 'ask' ? `${cmdAsk(at.x, at.y)}：${nm}被敌密集火力压制。` : `命令：${CF_NM[o.a]}${o.a === 'cas' ? '转场' : ''}支援${nm}，打击${wh}的敌火力点，约 ${eta} 秒后到达${alt.length ? `（${alt.join('、')}较慢，暂不动用）` : ''}。`, { kind: 'order', at, delay: 1.5, key: 'cfo' + at.x + '_' + at.y, gap: 30, lv: o.a === 'ask' ? 1 : 2 });
+    if (o.a !== 'ask') sh(`${CF_NM[o.a]}约 ${eta} 秒后到！`, { delay: 2.5 });
   }
 }
 

@@ -61,7 +61,7 @@ function chatAt(m) {
 function chatShow(m, tab) {
   const set = typeof SETTINGS === 'object' && SETTINGS ? SETTINGS : {}, lv = set.chat || 'normal';
   if (m.side === 'e' && set.enemyChat === false) return false;
-  if (lv === 'brief' && m.lv !== 0 && m.kind !== 'plan' && m.kind !== 'friction' && m.kind !== 'remedy') return false;   // lv0（必显：请求玩家行动、重大损失）简要模式也显示
+  if (lv === 'brief' && !(m.lv === 0 || ((m.lv ?? 1) <= 1 && (m.kind === 'plan' || m.kind === 'friction' || m.kind === 'remedy')))) return false;   // lv0（必显：请求玩家行动、重大损失）简要模式也显示
   if (lv === 'normal' && (m.lv ?? 1) > 1) return false;
   if (tab === 'p' && m.side === 'e') return false;
   if (tab === 'e' && m.side !== 'e') return false;

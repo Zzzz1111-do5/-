@@ -370,6 +370,7 @@ function v3Overlay(ctx, time) {
   };
   for (const p of S.planes || []) if (!p.dead && isFinite(p.x)) air(p.x, p.y, p.alt, p.heading, COL.g);
   if (S.eair) for (const a of S.eair.fly) if (!a.dead && (spec || a.pv) && isFinite(a.x) && a.ph !== 'roll') air(a.x, a.y, a.alt, a.heading, COL.enemy);
+  if (typeof shOverlay3D === 'function') shOverlay3D(ctx, (x, y, h) => v3Proj(x, y, v3Ht(x, y) + h));   // 士兵喊话气泡（shout.js）
   ctx.restore();
 }
 

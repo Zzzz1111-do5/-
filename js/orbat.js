@@ -115,7 +115,11 @@ function bgAdvance(G, gx, gy, step) {
   return false;
 }
 
-function bgSay(G, text, at, kind = 'order') { if (typeof chatSay === 'function') chatSay(G.side, `${G.cmd}（${G.name}）：${text}`, { kind, at: at || { x: G.ax, y: G.ay }, key: 'bg' + G.id + kind + G.st, gap: 25 }); }
+// 战斗群指挥员的口令：头顶喊一句短话（shout.js，short 不给就取第一句），完整的话只记在通联详档（战斗群失去战斗力的报告仍在常规档）
+function bgSay(G, text, at, kind = 'order', short) {
+  if (typeof chatSay === 'function') chatSay(G.side, `${G.cmd}（${G.name}）：${text}`, { kind, at: at || { x: G.ax, y: G.ay }, key: 'bg' + G.id + kind + G.st, gap: 25, lv: kind === 'report' ? 1 : 2 });
+  if (typeof shout === 'function') { const s = short || text.split(/[，。；]/)[0]; shout(at && at.men ? at : G, /[！？]$/.test(s) ? s : s + '！', { side: G.side }); }
+}
 
 function bgThink(G) {
   const us = bgUnits(G), vs = bgVehs(G);
@@ -125,14 +129,14 @@ function bgThink(G) {
   if (G.st === 'asm') {
     const sl = bgSlots(G, 'fight'); bgOrder(G, sl, 'move');
     const lg = bgLag(G, sl);
-    if (lg < 45 || S.t - G.stT > (G.asmT || BG.asm)) { G.st = 'move'; G.stT = S.t; bgSay(G, `${lg < 45 ? '集合完毕' : '集合时限已到，大部已到，未到齐的随后跟进'}，全群成行军队形向${(ptByKey(G.key) || {}).name || '任务地域'}开进。`); }   // asmT：按最远一个成员的路程算的集合时限（brain.js）
+    if (lg < 45 || S.t - G.stT > (G.asmT || BG.asm)) { G.st = 'move'; G.stT = S.t; bgSay(G, `${lg < 45 ? '集合完毕' : '集合时限已到，大部已到，未到齐的随后跟进'}，全群成行军队形向${(ptByKey(G.key) || {}).name || '任务地域'}开进。`, null, 'order', `${lg < 45 ? '集合完毕' : '不等了'}，向${(ptByKey(G.key) || {}).name || '任务地域'}开进！`); }   // asmT：按最远一个成员的路程算的集合时限（brain.js）
     return;
   }
   if (near.length && G.st !== 'fight') { G.st = 'fight'; G.stT = S.t; bgSay(G, `前方发现敌人 ${near.length} 股，就地展开成战斗队形。`, near[0]); }
   if (G.st === 'fight' && !near.length && S.t - G.stT > 15) { G.st = 'move'; G.stT = S.t; }
   const mode = G.st === 'move' ? 'march' : 'fight', sl0 = bgSlots(G, mode), lag = bgLag(G, sl0);
   if (G.st === 'move') {
-    if (lag < BG.lag && bgAdvance(G, goal.x, goal.y, BG.pace)) { G.st = 'hold'; G.stT = S.t; G.face = goal.face; bgSay(G, '到达任务地域，按防御队形展开、构筑工事。'); }
+    if (lag < BG.lag && bgAdvance(G, goal.x, goal.y, BG.pace)) { G.st = 'hold'; G.stT = S.t; G.face = goal.face; bgSay(G, '到达任务地域，按防御队形展开、构筑工事。', null, 'order', '到了，展开构筑工事！'); }
   } else if (G.st === 'fight') {
     const ours = us.reduce((a, u) => a + teamsOf(u).reduce((b, q) => b + q.men.length, 0), 0) + vs.reduce((a, v) => a + bgPow(v), 0);
     const theirs = near.reduce((a, o) => a + bgPow(o), 0), r = ours / Math.max(1, theirs);
@@ -140,7 +144,7 @@ function bgThink(G) {
     const fa = Math.atan2(c[1] - G.ay, c[0] - G.ax);
     G.face = G.face + clamp(Math.atan2(Math.sin(fa - G.face), Math.cos(fa - G.face)), -.35, .35);
     if (r > (G.agg || 1.6) && lag < BG.lag) { bgAdvance(G, c[0], c[1], BG.pace * .6); G.amove = true; }   // 占优：成战斗队形向敌推进（反冲击任务 agg 1.2）
-    else if (r < .6) { G.ax -= Math.cos(G.face) * 6; G.ay -= Math.sin(G.face) * 6; G.amove = false; if (S.t - (G.wT ?? -99) > 30) { G.wT = S.t; bgSay(G, `敌我兵力约 ${r.toFixed(1)} 比 1，交替掩护后撤重整。`); } }
+    else if (r < .6) { G.ax -= Math.cos(G.face) * 6; G.ay -= Math.sin(G.face) * 6; G.amove = false; if (S.t - (G.wT ?? -99) > 30) { G.wT = S.t; bgSay(G, `敌我兵力约 ${r.toFixed(1)} 比 1，交替掩护后撤重整。`, null, 'order', '敌众我寡，交替掩护后撤！'); } }
     else G.amove = false;
   } else if (G.st === 'hold') {
     if (dist(G.ax, G.ay, goal.x, goal.y) > 60) { G.st = 'move'; G.stT = S.t; }   // 任务变了（据点易手）
@@ -176,7 +180,7 @@ function bgRecon(G) {
     if (seen.length && S.t - (q.repT ?? -99) > 40) {
       q.repT = S.t;
       const men = seen.reduce((a, o) => a + o.men.length, 0), vs = (S.veh || []).filter(v => v.side !== G.side && !v.dead && dist(v.x, v.y, q.x, q.y) < BG.recR).length;
-      bgSay(G, `侦察组报告：${typeof cmdWhere === 'function' ? cmdWhere(q.x, q.y) : gridRef(q.x, q.y)}一带发现敌步兵约 ${men} 人${vs ? `、车辆 ${vs} 辆` : ''}。`, q, 'intel');
+      bgSay(G, `侦察组报告：${typeof cmdWhere === 'function' ? cmdWhere(q.x, q.y) : gridRef(q.x, q.y)}一带发现敌步兵约 ${men} 人${vs ? `、车辆 ${vs} 辆` : ''}。`, q, 'intel', `发现敌步兵约 ${men} 人${vs ? `、车 ${vs} 辆` : ''}！`);
     }
   });
 }

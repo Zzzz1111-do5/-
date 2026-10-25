@@ -74,7 +74,8 @@ function tfMass(u, p, grp, ready, exposed, pl, P, O) {
   T.go.push({ x0: M.x, y0: M.y, x1: p.x, y1: p.y, t: now, key: p.key });
   if (T.go.length > 6) T.go.shift();
   const F = T.fm && T.fm[p.key], fm = F && F.ph === 'adv' ? `，成${F.fn}队形分两个梯次交替跃进` : '';
-  if (typeof chatSay === 'function') chatSay('p', `命令：${units.map(tfUN).join('、')}向${p.name}统一发起冲击（约 ${Math.round(pow)} 人对 ${Math.round(est)} 人${risk ? '，兵力不足，接受风险' : ''}）${fm}${nv ? `，坦克 ${nv} 辆在步兵线后抵近支援` : ''}。`, { kind: 'order', at: p, key: 'tfgo' + p.key, gap: 20, lv: 1 });
+  if (typeof chatSay === 'function') chatSay('p', `命令：${units.map(tfUN).join('、')}向${p.name}统一发起冲击（约 ${Math.round(pow)} 人对 ${Math.round(est)} 人${risk ? '，兵力不足，接受风险' : ''}）${fm}${nv ? `，坦克 ${nv} 辆在步兵线后抵近支援` : ''}。`, { kind: 'order', at: p, key: 'tfgo' + p.key, gap: 20, lv: 2 });
+  if (typeof shout === 'function') for (const g of units) shout(g, `向${p.name}冲击！`);   // 连队自己喊（shout.js），通联里只留详档
 }
 
 // —— ② 友邻支援：连队遭压制（4 秒内挨打、平均压制 ≥ 40），350 内的空闲连队前出到压制源侧翼 110–130 处侧射 ——
@@ -122,7 +123,8 @@ function tfHelp(P) {
     tfStat('sreq'); tfStat('sreqHelp');
     if (typeof chatSay === 'function') {
       const lr = (Math.cos(a0 + side * 1.22) * -Math.sin(a0) + Math.sin(a0 + side * 1.22) * Math.cos(a0)) > 0 ? '右' : '左';
-      chatSay('p', `报告：${tfUN(u)}遭${src.k}压制；命令：${tfUN(best.g)}向其${lr}翼前出，以侧射火力支援。`, { kind: 'order', at: { x: c[0], y: c[1] }, key: 'tfhelp' + u.id, gap: 40, lv: 1 });
+      chatSay('p', `报告：${tfUN(u)}遭${src.k}压制；命令：${tfUN(best.g)}向其${lr}翼前出，以侧射火力支援。`, { kind: 'order', at: { x: c[0], y: c[1] }, key: 'tfhelp' + u.id, gap: 40, lv: 2 });
+      if (typeof shout === 'function') { shout(u, `遭${src.k}压制，请求支援！`); shout(best.g, `向${lr}翼前出支援！`, { delay: 1.2 }); }
     }
     if (Object.values(T.help).filter(h => h.until > S.t).length >= 2) return;
   }
@@ -166,8 +168,9 @@ function tfGap(P) {
     T.gap[k] = S.t + 90;
     tfStat('gapFill');
     if (typeof chatSay === 'function') {
-      chatSay('p', `报告：${tfWhere(g.x, g.y)}一带出现约 ${Math.round(g.w / 10) * 10} 米空隙，侧翼暴露。`, { kind: 'friction', at: { x: g.x, y: g.y }, key: 'tfgap' + k, gap: 60 });
-      chatSay('p', `补救：${tfUN(best)}进至空隙占领阵地，与两翼连成一线。`, { kind: 'remedy', at: { x: g.x, y: g.y }, key: 'tfgapr' + k, gap: 60 });
+      chatSay('p', `报告：${tfWhere(g.x, g.y)}一带出现约 ${Math.round(g.w / 10) * 10} 米空隙，侧翼暴露。`, { kind: 'friction', at: { x: g.x, y: g.y }, key: 'tfgap' + k, gap: 60, lv: 2 });
+      chatSay('p', `补救：${tfUN(best)}进至空隙占领阵地，与两翼连成一线。`, { kind: 'remedy', at: { x: g.x, y: g.y }, key: 'tfgapr' + k, gap: 60, lv: 2 });
+      if (typeof shout === 'function') shout(best, '侧翼有空隙，上去填补！');
     }
   }
 }
@@ -468,7 +471,8 @@ function tfForm(P) {
       orderUnits(us, p.x, p.y, apAng(cx, cy, p.x, p.y), null, 'amove');
       for (const g of us) { P.u[g.id].ordT = S.t; P.u[g.id].dx = p.x; P.u[g.id].dy = p.y; }
       tfStat('fmAssault');
-      if (typeof chatSay === 'function') chatSay('p', `命令：${us.map(tfUN).join('、')}已交替跃进 ${F.n + 1} 次推进至冲击出发线，向${p.name}发起冲击！`, { kind: 'order', at: p, key: 'tffm' + k, gap: 30, lv: 1 });
+      if (typeof chatSay === 'function') chatSay('p', `命令：${us.map(tfUN).join('、')}已交替跃进 ${F.n + 1} 次推进至冲击出发线，向${p.name}发起冲击！`, { kind: 'order', at: p, key: 'tffm' + k, gap: 30, lv: 2 });
+      if (typeof shout === 'function') for (const g of us) shout(g, `冲击出发线到了，冲啊！`);
       continue;
     }
     F.lead = 1 - F.lead; F.sE[F.lead] = Math.min(F.L, front + TF_BOUND); F.bT = S.t; F.n++;

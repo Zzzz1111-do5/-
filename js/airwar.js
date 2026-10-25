@@ -487,6 +487,8 @@ function awHud() {
   AW_UI.t = now;
   const o = $('objs'), r = o && o.getBoundingClientRect(), top = (r && r.height ? Math.round(r.bottom + 6) : 56) + 'px';
   if (el.style.top !== top) el.style.top = top;
+  const pb = $('pauseBand'), pt = Math.round(el.getBoundingClientRect().bottom + 6) + 'px';   // 暂停条放到制空权条下面，不叠在一起
+  if (pb && pb.style.top !== pt) pb.style.top = pt;
   el.className = 'ov box ' + A.st;
   el.querySelector('i').style.left = (50 - A.v * 50).toFixed(1) + '%';   // v = +1（我方）在左端
   const t = A.st === 'p' ? '我方掌握' : A.st === 'e' ? '敌方掌握' : A.st === 'n' ? '无人掌握' : '争夺中', em = el.querySelector('em');
