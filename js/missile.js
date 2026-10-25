@@ -125,6 +125,8 @@ const MS_PGM = {
   yj83k: { nm: '鹰击-83K 空舰导弹', spd: 260, z: .06, dmg: 36, pen: 3.6, st: 18, icp: .3, pw: { men: .6, ship: 4, struct: 0, seg: true, R: 22, vb: 6, veh: true } },   // 歼-35 / 歼-15 挂载，亚音速掠海
   ft8: { nm: '飞腾-8 小直径制导炸弹', spd: 200, z: .5, dmg: 40, pen: 3.6, st: 12, icp: .3, pw: { men: .6, ship: 2.5, struct: 0, seg: false, R: 16, vb: 5, veh: true } },   // 歼-35 内埋：约 100 公斤级，GPS/INS + 末端成像，能打运动中的车辆
   ld10: { nm: '雷电-10 反辐射导弹', spd: 420, z: .6, dmg: 34, pen: 3, st: 10, icp: .1, pw: { men: .5, ship: 2, struct: 0, seg: false, R: 14, vb: 4, veh: true } },   // 歼-35 防空压制型：追防空雷达辐射源
+  yj62: { nm: '鹰击-62 反舰 / 对陆巡航导弹', spd: 170, z: .07, dmg: 40, pen: 3.6, st: 22, icp: .45, pw: { men: .8, ship: 5, struct: 0, seg: true, R: 30, vb: 9, veh: true } },   // 052C 舰面倾斜发射架 8 枚，亚音速掠海
+  yj83: { nm: '鹰击-83 反舰导弹', spd: 260, z: .06, dmg: 36, pen: 3.6, st: 18, icp: .3, pw: { men: .6, ship: 4, struct: 0, seg: true, R: 22, vb: 6, veh: true } },   // 054A 舰面发射筒 8 枚，亚音速掠海、末段高速
   ls6: { nm: '雷石-6 滑翔制导炸弹', spd: 220, z: .55, dmg: 50, pen: 4, st: 30, icp: .35, pw: { men: .9, ship: 6, struct: 0, seg: true, R: 30, vb: 10, veh: true } }   // 歼-36 打击型：500 公斤级，高空投放滑翔，慢、可被近程防空拦截
 };
 function msPgmTgt(t) {
@@ -245,8 +247,8 @@ function msAsm(m, dt) {
 }
 // 返回 true 表示本步已被拦截
 function msDefend(m) {
-  const D = msDefShips();
-  if (!D.length) return false;
+  const D = msDefShips(), C = typeof cvDefs === 'function' ? cvDefs() : [], DC = [...D, ...C];
+  if (!DC.length) return false;
   const T = msTgtObj(m.tgt);
   const cover = s => !T || T === s.o || dist(T.x, T.y, s.x, s.y) < 400;
   // 外层：舰空导弹（每枚来袭导弹只分配一枚拦截弹）
@@ -258,16 +260,25 @@ function msDefend(m) {
     msStat('abm');
     break;
   }
+  // 中层：航母红旗-10（每枚来袭导弹只分配一枚）
+  if (!m.hqTry) for (const s of C) {
+    const d = dist(m.x, m.y, s.x, s.y);
+    if (d > CV_DEF.hqR || d < CV_DEF.hqMin || !cover(s) || (s.o.hqCd || 0) > S.t || !(s.o.hq10 > 0)) continue;
+    m.hqTry = true; s.o.hqCd = S.t + CV_DEF.hqCd; s.o.hq10--;
+    msLaunch('sam', 'p', s.x, s.y, { x: m.x, y: m.y }, { tgt: { k: 'msl', id: m.id }, src: 'cv', spd: 600, dur: 1.6, pk: CV_DEF.hqPk });
+    msStat('cvHq10');
+    break;
+  }
   // 内层：近防炮——来袭导弹进入 300 时打一个 0.4 秒长点射（曳光），结束时判定
   if (m.cw) {
-    if (S.t < m.cw.until) { const s = D.find(o => o.id === m.cw.id); if (s) for (let i = 0; i < 2; i++) tracer(s.x, s.y, m.x + gauss() * 5, m.y + gauss() * 5, 'p', true); return false; }
+    if (S.t < m.cw.until) { const s = DC.find(o => o.id === m.cw.id); if (s) for (let i = 0; i < 2; i++) tracer(s.x, s.y, m.x + gauss() * 5, m.y + gauss() * 5, 'p', true); return false; }
     const ok = m.cw.ok; m.cw = null;
     if (ok) { m.done = m.icp = true; msPuff(m.x, m.y, 'p', true); msStat('ciws'); msIcpt(m, '近防炮'); return true; }
   }
-  if (!m.cw) for (const s of D) {
+  if (!m.cw) for (const s of DC) {
     if ((m.cwN || []).includes(s.id) || dist(m.x, m.y, s.x, s.y) > 300 || !cover(s)) continue;
     const many = S.missiles.filter(o => o.kind === 'asm' && o.side === m.side && !o.done && o.t >= 0 && dist(o.x, o.y, s.x, s.y) < 300).length >= 2;
-    const p = (s.esc ? .4 : .55 * (S.dd.hull >= 3 ? 1 : .8)) * (many ? .7 : 1);
+    const p = (s.cv ? CV_DEF.cwPk : s.esc ? .4 : .55 * (S.dd.hull >= 3 ? 1 : .8)) * (many ? (s.cv ? .85 : .7) : 1);   // 航母三座近防炮：同时来几枚也顶得住
     (m.cwN || (m.cwN = [])).push(s.id);
     m.cw = { until: S.t + .4, ok: Math.random() < p, id: s.id };
     break;

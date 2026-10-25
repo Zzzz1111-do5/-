@@ -94,6 +94,37 @@ function awPursue(f, T, dt, turn) {
   f.x += Math.cos(f.heading) * f.spd * dt; f.y += Math.sin(f.heading) * f.spd * dt;
 }
 
+// —— 五代机（隐身，st < 1）的超视距战法：只打远距离——进入射程发射导弹后偏开约 50° 侧转（目标留在雷达扫描范围边缘、降低接近速度），
+//    敌机逼近 AW_BVR.min 以内就转身加速拖开，不进入格斗、不用机炮；导弹打光即返航（现实中的「发射—侧转—脱离」）——
+const AW_BVR = { crank: .9, crankT: 5, min: 260, ext: 420, idle: 30, step: 320 };
+const awFifth = (side, f) => side === 'p' ? !!((typeof airSpec === 'function' ? airSpec('fighter', f.v) : {}).stealth) : !!((EA_SPEC[f.type] || {}).stealth);
+// 返回 [朝向点 x, y, 速度倍数]；不需要特殊机动时返回 null（照常飞向目标、进到射程就发射）
+function awBvrMove(f, T) {
+  const d = dist(f.x, f.y, T.x, T.y), a = Math.atan2(T.y - f.y, T.x - f.x);
+  if (d < AW_BVR.min || f.extT > S.t) {
+    if (!(f.extT > S.t)) { f.extT = S.t + 3; awStat('bvrExtend'); }
+    return [f.x - Math.cos(a) * AW_BVR.ext, f.y - Math.sin(a) * AW_BVR.ext, 1.15];
+  }
+  if (f.crankT > S.t) { const b = a + AW_BVR.crank * (f.crankS || 1); return [f.x + Math.cos(b) * 300, f.y + Math.sin(b) * 300, 1.05]; }
+  return null;
+}
+// 巡逻 AW_BVR.idle 秒都没目标：巡逻点向敌方空域前推（避开已知防空圈）主动找敌机，不在自己头上空转
+function awSweep(f, side) {
+  f.idleT = (f.idleT || 0) + .5;
+  if (f.idleT < AW_BVR.idle) return;
+  f.idleT = 0;
+  const T = typeof airThreats === 'function' ? airThreats(side) : [];
+  const goal = side === 'p' ? (S.enemies.find(e => e.kind === 'airfield' && !e.dead && e.kx != null) || { x: f.cx, y: Math.max(80, f.cy - 600) }) : { x: f.cx, y: Math.min(H - 80, f.cy + 600) };
+  const a = Math.atan2(goal.y - f.cy, goal.x - f.cx);
+  for (const k of [1, .6, .3]) {
+    const x = clamp(f.cx + Math.cos(a) * AW_BVR.step * k, 60, W - 60), y = clamp(f.cy + Math.sin(a) * AW_BVR.step * k, 60, H - 60);
+    if (airThreatAt(T, x, y, 80) > 0 || (side === 'e' && awFleetCover(x, y, 80))) continue;
+    f.cx = x; f.cy = y; awStat('capSweep' + side);
+    if (side === 'p' && typeof chatSay === 'function') chatSay('p', `报告：${typeof airName === 'function' ? airName('fighter', f.v) : '战斗机'}巡逻空域内无敌情，前出至${awWhere(x, y)}上空扫荡搜索敌机。`, { kind: 'report', at: { x, y }, key: 'sweep', gap: 40, lv: 2 });
+    return;
+  }
+}
+
 // —— 空战（每架战斗机每 0.5 秒）：选目标（对方战斗机优先，其次攻击机 / 轰炸机 / 直升机，侦察机最后，同类取近；离巡逻中心太远的不追），
 //    中距空空导弹（130–480、机头 ±40° 以内、同一目标同时只打一枚、间隔 3 秒）与近距机炮（95 以内、机头 ±20°）——
 function awFight(f, side, dt) {
@@ -115,7 +146,9 @@ function awFight(f, side, dt) {
     f.tgT = S.t;
   }
   f.tg = T ? { k: T.k, id: T.o.id } : null;
-  if (!T) return;
+  if (!T) { if (f.cx != null && !f.escOf && f.lead == null && f.wm == null) awSweep(f, side); return; }
+  f.idleT = 0;
+  const g5 = f.g5 ?? (f.g5 = awFifth(side, f));
   if (side === 'p') A.seenE = S.t; else A.seenP = S.t;
   const d = dist(f.x, f.y, T.x, T.y), off = Math.abs(awAng(Math.atan2(T.y - f.y, T.x - f.x) - f.heading));
   // 中距弹：射程按弹种（霹雳-15 560、AIM-120 480）；隐身目标要飞进本机雷达的锁定距离（雷达距离 × 隐身系数 × 1.6）才能发射，命中打八五折
@@ -130,15 +163,17 @@ function awFight(f, side, dt) {
       msLaunch('sam', side, f.x, f.y, { x: T.x, y: T.y }, { tgt: { k: T.k, id: T.o.id }, src: 'aam', spd: 640, dur: 2.6, pk });
       f.aam--; f.aamT = S.t + gap;
       awStat(side === 'p' ? 'aamP' : 'aamE');
+      if (g5) { f.crankT = S.t + AW_BVR.crankT; f.crankS = Math.random() < .5 ? 1 : -1; }   // 五代机：发射后侧转
     } else if (f.aamL > 0 && d < aLR) {
       const pk = (AW_PK[T.type] || .5) * (T.ftr ? .75 : 1.15) * (f.pkK || 1) * st;
       msLaunch('sam', side, f.x, f.y, { x: T.x, y: T.y }, { tgt: { k: T.k, id: T.o.id }, src: 'aam', spd: 760, dur: Math.max(2.6, d / 640 + 1), pk, lr: true });
       f.aamL--; f.aamT = S.t + gap;
       awStat('aamL');
+      if (g5) { f.crankT = S.t + AW_BVR.crankT; f.crankS = Math.random() < .5 ? 1 : -1; }
       log(`歼-36 发射霹雳-17 远程空空导弹，攻击 ${Math.round(d)} 米外的敌${(EA_SPEC[T.type] || {}).name || '机'}（余 ${f.aamL} 枚）`, 'info', 'aaml' + f.id, 3, T);
     }
   }
-  if (d < 95 && off < .35 && (f.gun || 0) > 0) {
+  if (!g5 && d < 95 && off < .35 && (f.gun || 0) > 0) {   // 五代机不进格斗、不用机炮
     f.gun--; f.gunT = .35;
     for (let i = 0; i < 2; i++) tracer(f.x, f.y, T.x + gauss() * 6, T.y + gauss() * 6, side, true);
     if (Math.random() < (T.ftr ? .1 : .17) * (f.gunK || 1) * (T.type === 'f22' ? .35 : T.o.v === 'j36' || T.o.v === 'j36s' ? 1.4 : 1)) {   // F-22A 推力矢量：缠斗中难被咬住；歼-36 体型大、无尾，被咬住就难甩掉
@@ -180,11 +215,16 @@ function awFlyP(p, dt, speed) {
     const a = Math.atan2(p.y - T.y, p.x - T.x);
     airSteer(p, clamp(p.x + Math.cos(a) * 400, 40, W - 40), clamp(p.y + Math.sin(a) * 400, 40, H - 40), dt, true);
   }
-  else if (T) { speed(sp.spd * 1.12); awPursue(p, T, dt, sp.turn || 2.3); p.ext = false; }
+  else if (T) {
+    const mv = sp.stealth ? awBvrMove(p, T) : null;
+    if (mv) { speed(sp.spd * mv[2]); airSteer(p, clamp(mv[0], 40, W - 40), clamp(mv[1], 40, H - 40), dt, true); }
+    else { speed(sp.spd * 1.12); awPursue(p, T, dt, sp.turn || 2.3); }
+    p.ext = false;
+  }
   else if (p.phase === 'out') { speed(sp.spd); if (airSteer(p, p.cx, p.cy, dt) < AW_CAP + 40) { airSet(p, 'loiter'); p.odir = p.odir || 1; } }
   else { speed(150); airOrbit(p, p.cx, p.cy, AW_CAP, p.odir || 1, dt); }
   if (p.phase === 'loiter' && (p.capT -= dt) <= 0) airSet(p, 'rtb');
-  else if (!(p.aam > 0) && !(p.aamL > 0) && !(p.gun > 0) && !(p.agmN > 0)) airSet(p, 'rtb');
+  else if (!(p.aam > 0) && !(p.aamL > 0) && !(p.agmN > 0) && (sp.stealth || !(p.gun > 0))) airSet(p, 'rtb');   // 五代机导弹打光就回，不拿机炮去格斗
 }
 // 歼-36 首次进入战区：双方通报（每局一次）
 function awJ36(p) {
@@ -228,13 +268,15 @@ function awFlyE(a, dt) {
   awFight(a, 'e', dt);
   const T = a.tg && awTgt(a.tg);
   if (!T && a.sdb > 0 && (a.sdbT || 0) <= S.t) awSdbE(a);
-  if (T) { a.spd += clamp(sp.spd * 1.12 - a.spd, -60 * dt, 50 * dt); awPursue(a, T, dt, sp.turn); }
+  const mv = T && sp.stealth ? awBvrMove(a, T) : null;
+  if (mv) { a.spd += clamp(sp.spd * mv[2] - a.spd, -60 * dt, 50 * dt); eaSteer(a, clamp(mv[0], 40, W - 40), clamp(mv[1], 40, H - 40), dt); }
+  else if (T) { a.spd += clamp(sp.spd * 1.12 - a.spd, -60 * dt, 50 * dt); awPursue(a, T, dt, sp.turn); }
   else if (awFleetCover(a.x, a.y, 30)) { a.spd += clamp(sp.spd * 1.1 - a.spd, -60 * dt, 50 * dt); eaSteer(a, a.cx, a.cy, dt); if (!a.brk) { a.brk = true; awStat('ftrBreakE'); } }   // 误入我舰队防空伞：加速脱离
   else if (a.ph === 'out' && a.lead != null && eaForm(a, dt)) { /* 僚机保持编队 */ }
   else if (a.ph === 'out') { if (eaSteer(a, a.cx, a.cy, dt, a.join > S.t ? sp.spd * .75 : undefined) < AW_CAP + 40) a.ph = 'cap'; }
   else { const g = Math.atan2(a.y - a.cy, a.x - a.cx) + .55 * (a.odir || 1); eaSteer(a, a.cx + Math.cos(g) * AW_CAP, a.cy + Math.sin(g) * AW_CAP, dt, 160); }
   if (a.ph === 'cap' && (a.capT -= dt) <= 0) a.ph = 'rtb';
-  else if (!(a.aam > 0) && !(a.gun > 0)) a.ph = 'rtb';
+  else if (!(a.aam > 0) && (sp.stealth || !(a.gun > 0))) a.ph = 'rtb';
 }
 
 // —— 守方派歼击机（每秒）：发现敌机就起飞拦截（敌机越多、有敌战斗机时派得越多，最多 3 架）；近 2 分钟见过敌机就保持一架巡逻；

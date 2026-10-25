@@ -48,6 +48,14 @@ function buildMap(seed) {
   const hills = [massif, { x: W * .5 + (r() - .5) * 600 * MAP_K, y: 120 + r() * 80 * MAP_K, r: 200 * Math.sqrt(MAP_K), h: .75 }];
   for (let i = 0; i < Math.round(12 * MAP_K * MAP_K); i++) hills.push({ x: 100 + r() * (W - 200), y: 100 + r() * (C0 - 400), r: 60 + r() * 70, h: .2 + r() * .3 });
   const ridgeY = x => cAt(x) - 420 * MAP_K + 60 * Math.sin(x / 260 + ph[5]);
+  // 空军基地预留地块（地图自带设施，场区约 1100 × 800）：跑道东西向，放在主河一侧的北部纵深；
+  // 场区里推平成平地，流到场区里的支流改从场区南面才发源
+  const afr = afReserve(rivers, main, cAt, r);
+  if (afr) for (const [k, rv] of rivers.entries()) {
+    if (k === main || rv.mx < afr.x0 - 160 || rv.mx > afr.x1 + 160) continue;
+    rv.top = Math.max(rv.top, afr.y1 + 40);
+    for (let gy = 0; gy < GH; gy++) if (gy * CELL + 5 < rv.top) rv.rx[gy] = -1e9;
+  }
 
   const type = new Uint8Array(GW * GH), elev = new Float32Array(GW * GH);
   for (let gy = 0; gy < GH; gy++) for (let gx = 0; gx < GW; gx++) {
@@ -68,6 +76,8 @@ function buildMap(seed) {
     e *= lerp(.35, 1, smooth(10, 130, rd));                              // 河谷
     e = clamp(e, 0, 1);
     elev[i] = e;
+    const inAF = afr && x > afr.x0 && x < afr.x1 && y > afr.y0 && y < afr.y1 && rd >= rw;
+    if (inAF) { e = .28 + (e - .28) * .12; elev[i] = e; type[i] = T.FIELD; continue; }   // 机场场区：推平
     let t;
     if (rd < rw) t = T.RIVER;
     else if (d < 24) t = b >= 0 ? T.BEACH : headland(x) ? T.CLIFF : nearMouth(x, 70) ? T.MARSH : T.ROCKS;
@@ -78,6 +88,21 @@ function buildMap(seed) {
     else t = T.FIELD;
     type[i] = t;
   }
-  TER = { seed, type, elev, coast, beaches, mouths, rivers, massif, bridges: [], fords: [], points: [] };
+  TER = { seed, type, elev, coast, beaches, mouths, rivers, massif, bridges: [], fords: [], points: [], af: afr ? { x: afr.x, y: afr.y, h: afr.h, s: afr.s } : null, afr };
   finishMap(r, cAt, headland);
+}
+
+// 空军基地预留：场区（AF_BOX × AF_K）放在主河哪一侧更宽就放哪一侧，北缘离地图上沿 80，跑道东西向、停机坪朝北（s = -1）；
+// 返回 {x, y, h, s} 与外接矩形 x0..x1、y0..y1，放不下（场区南缘离海不到 300）返回 null
+function afReserve(rivers, main, cAt, r) {
+  const yc = 80 + AF_BOX.v1 * AF_K + 20, y0 = yc - AF_BOX.v1 * AF_K, y1 = yc - AF_BOX.v0 * AF_K, hw = (AF_BOX.u1 + 15) * AF_K;
+  const rv = rivers[main];
+  let lo = Infinity, hi = -Infinity;
+  for (let gy = Math.max(0, Math.floor(y0 / CELL)); gy <= Math.min(GH - 1, Math.ceil(y1 / CELL)); gy++) { const x = rv.rx[gy]; if (x > -1e8) { lo = Math.min(lo, x); hi = Math.max(hi, x); } }
+  if (!isFinite(lo)) { lo = rv.mx; hi = rv.mx; }
+  const L = [60 + hw, lo - 170 - hw], Rr = [hi + 170 + hw, W - 60 - hw], I = L[1] - L[0] >= Rr[1] - Rr[0] ? L : Rr;
+  if (I[1] < I[0]) return null;
+  const xc = Math.round(I[0] + (I[1] - I[0]) * (.25 + r() * .5));   // 可用范围里随机偏一点，不每张图都在同一处
+  if (cAt(xc - hw) - y1 < 300 || cAt(xc + hw) - y1 < 300 || cAt(xc) - y1 < 300) return null;
+  return { x: xc, y: Math.round(yc), h: 0, s: -1, x0: xc - hw, x1: xc + hw, y0: y0 - 20, y1: y1 + 20 };
 }

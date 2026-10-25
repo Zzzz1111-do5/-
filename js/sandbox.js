@@ -69,7 +69,7 @@ function sbxAirAvoid(ignore) {
   const o = S.points.map(p => ({ x: p.x, y: p.y, r: 50 }));
   for (const it of S.sbx.items) {
     const c = it !== ignore && it.side === 'e' && it.x != null ? sbxEntry(it) : null;
-    if (c && (c.spawn.kind === 'enemy' || c.spawn.kind === 'post')) o.push({ x: it.x, y: it.y, r: c.spawn.ek === 'airfield' ? 260 : 15 });   // 机场停机坪五排深：两座机场离远一点
+    if (c && (c.spawn.kind === 'enemy' || c.spawn.kind === 'post')) o.push({ x: it.x, y: it.y, r: c.spawn.ek === 'airfield' ? 260 * AF_K : 15 });   // 机场停机坪五排深：两座机场离远一点
   }
   return o;
 }
@@ -260,6 +260,9 @@ function sbxSync() {
     else Object.assign(S.cv, { x: -9999, y: H + 9999, tx: -9999, ty: H + 9999, moving: false });
   }
   S.cvx = sbxOf('cv').filter(it => it !== cv).map(sbxCvObj);   // 其余航母在编辑阶段也画出来
+  // 其余驱逐舰 / 护卫舰：编辑阶段也按舰形画出来（预览舰，开战时 sbxBuild 清空 S.ships 后按部署重建）——以前只剩一个小圆点
+  S.ships = S.ships.filter(s => !s.sbxPv);
+  for (const it of sbxOf('dd')) if (it !== dd) { const c = sbxEntry(it), s = addShip('dd', it.x, it.y, 'DD'); Object.assign(s, { sbxPv: true, auto: false, load: { teams: 0, eng: 0 }, sbxCls: { name: c.name }, cat: c.id }); }
   // 甲板上只停已购买的舰载机，编入轰炸机等立刻可见
   if (S.air) S.air.wing = sbxWingPlan(sbxOf('wing').flatMap(it => { const s = sbxEntry(it).spawn; return Array.from({ length: s.n || 1 }, (_, k) => ({ id: -(it.id * 8 + k), type: s.type, state: 'deck', rearmT: 0, ...(s.v ? { v: s.v } : {}) })); }), cv);
   if (typeof sbxRender === 'function') sbxRender();

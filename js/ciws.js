@@ -19,6 +19,7 @@ function cwGuns(side) {
     out.push({ o: v, x: v.x, y: v.y, r, k: cram ? 1.35 : 1, cd: cram ? .5 : .8, nm: vehModel(v) });
   }
   if (side === 'p' && typeof msDefShips === 'function') for (const s of msDefShips()) out.push({ o: s.o, x: s.x, y: s.y, r: 70, k: 1.1, cd: .6, nm: s.esc ? (s.o.label || '护卫舰') : (S.dd.name || '驱逐舰'), ship: true });
+  if (side === 'p' && typeof cvDefs === 'function') for (const s of cvDefs()) out.push({ o: s.o, x: s.x, y: s.y, r: 90, k: 1.2, cd: .4, nm: s.o.name || '航母', ship: true });   // 航母 1130 型近防炮
   return out;
 }
 

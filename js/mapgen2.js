@@ -32,6 +32,14 @@ function finishMap(r, cAt, headland) {
   const hq = awayRiver({ x: (TER.massif.x < W / 2 ? W * .68 : W * .32) + (r() - .5) * 300 * MAP_K, y: 150 + r() * 70 * MAP_K }, 80);
   let town3 = null;
   if (MAP_K > 1.2) { const x3 = hq.x < W / 2 ? W * (.7 + r() * .1) : W * (.2 + r() * .1); town3 = awayRiver({ x: x3, y: clamp(cAt(x3) - 1000 * MAP_K, 180, cAt(x3) - 700) }, 95); }
+  // 镇子、指挥所不压在预留的空军基地上：挪到场区南面或东西两侧
+  const AR = TER.afr;
+  if (AR) for (const p of [town1, town2, town3, hq].filter(Boolean)) {
+    if (p.x < AR.x0 - 90 || p.x > AR.x1 + 90 || p.y < AR.y0 - 90 || p.y > AR.y1 + 90) continue;
+    const cand = [[p.x, AR.y1 + 140], [AR.x0 - 150, p.y], [AR.x1 + 150, p.y], [p.x, AR.y1 + 260]];
+    const ok = cand.find(([x, y]) => x > 80 && x < W - 80 && y > 60 && cAt(x) - y > 260 && !isWater(typeAt(x, y)) && typeAt(x, y) !== T.RIVER);
+    if (ok) { p.x = ok[0]; p.y = ok[1]; awayRiver(p, 90); }
+  }
   const blob = (p, rad, dens) => eachCell(p.x, p.y, rad, i => {
     const t = type[i];
     if (!isWater(t) && t !== T.RIVER && t !== T.BEACH && t !== T.CLIFF && r() < dens) type[i] = T.TOWN;
@@ -41,9 +49,9 @@ function finishMap(r, cAt, headland) {
   if (town3) blob(town3, 56, .8);
   // 空军基地（守方机场，地图自带）：指挥所一带纵深里找一块放得下跑道与整个场区（航站楼、营房、弹药库、爱国者阵地、围栏）的地；
   // 场区内的树林、沼泽、丘陵清成平地，稍后修一条进场公路
-  TER.af = typeof eaRunwayFit === 'function' ? afSite(r, [...vills, town1, town2, town3, hq].filter(Boolean), hq) : null;
+  if (!TER.af && typeof eaRunwayFit === 'function') TER.af = afSite(r, [...vills, town1, town2, town3, hq].filter(Boolean), hq);   // 地形阶段没预留成（极少）才另找
   if (TER.af) for (let u = AF_BOX.u0; u <= AF_BOX.u1; u += 5) for (let v = AF_BOX.v0; v <= AF_BOX.v1; v += 5) {
-    const [x, y] = afWorld(TER.af, u, v), i = ci(x, y), t = type[i];
+    const [x, y] = afWorld(TER.af, u, v), i = ci(x, y), t = type[i];   // 局部步长 5 × AF_K
     if (t === T.FOREST || t === T.MARSH || t === T.HILL) { type[i] = T.FIELD; TER.elev[i] = Math.min(TER.elev[i], .5); }
   }
   TER.towns = { vills, town1, town2, town3, hq };
@@ -86,7 +94,7 @@ function finishMap(r, cAt, headland) {
     const [gx, gy] = afWorld(TER.af, 0, AF_BOX.v1 - 5), [ox, oy] = afWorld(TER.af, 0, AF_BOX.v1 + 30);
     const tn = [hq, town1, town2, town3].filter(Boolean).reduce((a, b) => dist(b.x, b.y, gx, gy) < dist(a.x, a.y, gx, gy) ? b : a);
     // 镇子在场区侧面或跑道那一边时，公路出南门后沿围栏外侧绕过去，不穿过场区
-    const af = TER.af, c = Math.cos(af.h), n = Math.sin(af.h), dx = tn.x - af.x, dy = tn.y - af.y, lu = dx * c + dy * n, lv = (-dx * n + dy * c) * af.s, sg = lu >= 0 ? 1 : -1;
+    const af = TER.af, c = Math.cos(af.h), n = Math.sin(af.h), dx = (tn.x - af.x) / AF_K, dy = (tn.y - af.y) / AF_K, lu = dx * c + dy * n, lv = (-dx * n + dy * c) * af.s, sg = lu >= 0 ? 1 : -1;
     const pts = [[gx, gy], [ox, oy]];
     if (lv < AF_BOX.v1 + 30) { pts.push(afWorld(af, sg * (AF_BOX.u1 + 60), AF_BOX.v1 + 30)); if (lv < AF_BOX.v0) pts.push(afWorld(af, sg * (AF_BOX.u1 + 60), AF_BOX.v0 - 20)); }
     pts.push([tn.x, tn.y]);
@@ -186,7 +194,7 @@ function bldOut(x, y, m = 1.2) {
 // —— 空军基地选址（地图生成时调用）——
 // 场区范围（机场局部坐标：u 沿跑道、v 向停机坪一侧）：跑道两侧各 275，跑道外侧 90 到停机坪后方 310（航站楼、营房、弹药库、爱国者阵地与围栏）
 const AF_BOX = { u0: -275, u1: 275, v0: -90, v1: 310 };
-function afWorld(af, u, v) { const c = Math.cos(af.h), n = Math.sin(af.h); return [af.x + c * u - n * v * af.s, af.y + n * u + c * v * af.s]; }
+function afWorld(af, u, v) { const c = Math.cos(af.h), n = Math.sin(af.h); return [af.x + (c * u - n * v * af.s) * AF_K, af.y + (n * u + c * v * af.s) * AF_K]; }
 function afSite(r, towns, hq) {
   const avoid = towns.map(p => ({ x: p.x, y: p.y, r: 70 }));
   const ok = af => {
@@ -196,7 +204,7 @@ function afSite(r, towns, hq) {
       const t = typeAt(x, y);
       if (isWater(t) || t === T.RIVER || t === T.CLIFF || t === T.MOUNT || t === T.BRIDGE || t === T.TOWN) return false;
     }
-    return !towns.some(p => { const [cx, cy] = afWorld(af, 0, 110); return dist(p.x, p.y, cx, cy) < 330; });
+    return !towns.some(p => { const [cx, cy] = afWorld(af, 0, 110); return dist(p.x, p.y, cx, cy) < 280 * AF_K; });
   };
   let best = null, bs = -1e9;
   for (let pass = 0; pass < 2 && !best; pass++) {   // 先在指挥所一带找，找不到再放宽到整个纵深

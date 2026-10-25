@@ -531,7 +531,8 @@ function vehSam(v, dt) {
   if (tg) (tg.svTry || (tg.svTry = [])).push(v.id);
   else {
     const air = v.side === 'p' ? (S.eair && S.eair.fly || []).filter(a => !a.dead && a.alt > .1) : (S.planes || []).filter(p => !p.dead && p.alt > .25 && !['cat', 'roll', 'trap', 'final'].includes(p.phase));
-    for (const a of air) { const d = dist(v.x, v.y, a.x, a.y); if (d < M.range && d < bd && !(!M.hi && typeof eaHigh === 'function' && eaHigh(a)) && !mine(v.side === 'p' ? 'eair' : 'plane', a.id)) { bd = d; tg = a; } }   // 近程红外弹够不着巡逻高度上的战斗机（hi：爱国者等中远程防空够得着）
+    for (const a of air) { const d = dist(v.x, v.y, a.x, a.y), st = v.side === 'e' && typeof airStealth === 'function' ? airStealth(a) : 1, rr = M.range * (M.hi ? Math.min(1, st * 1.2) : (1 + st) / 2);   // 隐身：雷达制导（爱国者）发现距离按隐身系数打折，红外制导（毒刺）打折一半
+      if (d < rr && d < bd && !(!M.hi && typeof eaHigh === 'function' && eaHigh(a)) && !mine(v.side === 'p' ? 'eair' : 'plane', a.id)) { bd = d; tg = a; } }   // 近程红外弹够不着巡逻高度上的战斗机（hi：爱国者等中远程防空够得着）
     if (!tg) return;
     k = v.side === 'p' ? 'eair' : 'plane';
   }

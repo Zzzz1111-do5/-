@@ -351,7 +351,7 @@ function abLand(c) {
 // —— 机降：运-20 沿跑道进近 → 落地减速到跑道中段 → 卸载 → 继续滑跑起飞 → 回海上 ——
 // 跑道两端里取进近点更靠南（我方一侧）的一端作入口；dir = 着陆方向（局部 u 增加为 +1）
 function abRwy(b) {
-  const [ex, ey] = eaW(b, -150, 0), [wx, wy] = eaW(b, 150, 0), ux = (wx - ex) / 300, uy = (wy - ey) / 300;
+  const [ex, ey] = eaW(b, -150, 0), [wx, wy] = eaW(b, 150, 0), ux = (wx - ex) / (300 * AF_K), uy = (wy - ey) / (300 * AF_K);
   const fA = { x: ex - ux * 380, y: ey - uy * 380 }, fB = { x: wx + ux * 380, y: wy + uy * 380 };
   return fA.y >= fB.y ? { dir: 1, u0: -150, fix: fA, hx: ux, hy: uy } : { dir: -1, u0: 150, fix: fB, hx: -ux, hy: -uy };
 }
@@ -384,7 +384,7 @@ function abAlFly(p, dt) {
   if (p.phase === 'roll' || p.phase === 'tko') {
     const tko = p.phase === 'tko';
     p.spd = tko ? Math.min(150, p.spd + 45 * dt) : Math.max(0, p.spd - 40 * dt);
-    p.ru += R0.dir * Math.max(tko ? 0 : 8, p.spd) * dt;
+    p.ru += R0.dir * Math.max(tko ? 0 : 8, p.spd) * dt / AF_K;
     [p.x, p.y] = eaW(b, p.ru, 0); p.heading = Math.atan2(R0.hy, R0.hx); p.alt = tko ? Math.max(0, (p.spd - 110) / 120) : 0;
     if (!tko && (p.spd <= 9 || Math.abs(p.ru) < 8)) { p.phase = 'unl'; p.uT = AB.unload; p.spd = 0; }
     if (tko && (p.spd >= 140 || Math.abs(p.ru) > 145)) { p.phase = 'out'; p.ox = p.x < W / 2 ? 1 : -1; p.alt = .3; }
@@ -448,7 +448,7 @@ function abPlaneFly(p, dt, speed) {
     return true;
   }
   if (p.afPh === 'roll') {   // 落地滑跑，停到跑道中段后滑进机位整备
-    p.spd = Math.max(0, p.spd - 70 * dt); p.ru += R0.dir * Math.max(10, p.spd) * dt;
+    p.spd = Math.max(0, p.spd - 70 * dt); p.ru += R0.dir * Math.max(10, p.spd) * dt / AF_K;
     [p.x, p.y] = eaW(b, p.ru, 0); p.heading = Math.atan2(R0.hy, R0.hx); p.alt = 0; p.bank = 0;
     if (p.spd <= 12 || Math.abs(p.ru) < 10) {
       p.dead = true;
@@ -461,7 +461,7 @@ function abPlaneFly(p, dt, speed) {
     return true;
   }
   if (p.afPh === 'tko') {   // 从机场起飞：沿跑道加速，滑跑 250 或速度够了离地，转入出航
-    speed(airSpec(p.kind, p.v).spd); const st = Math.max(30, p.spd) * dt; p.ru += R0.dir * st; p.rd = (p.rd || 0) + st;
+    speed(airSpec(p.kind, p.v).spd); const st = Math.max(30, p.spd) * dt; p.ru += R0.dir * st / AF_K; p.rd = (p.rd || 0) + st;
     [p.x, p.y] = eaW(b, p.ru, 0); p.heading = Math.atan2(R0.hy, R0.hx); p.alt = Math.max(0, (p.spd - 120) / 140);
     if (p.rd > 250 || p.spd > 200) { p.afPh = null; p.alt = Math.max(p.alt, .2); }
     return true;
@@ -795,7 +795,7 @@ HOOK.impact.push(function abImpact(x, y, R, pw, side) {
   const b = S && S.abBase;
   if (!b || side !== 'e' || typeof eaL !== 'function') return;
   const [u, v] = eaL(b, x, y);
-  if (Math.abs(u) > 155 || Math.abs(v) > 12 + R * .5) return;
+  if (Math.abs(u) > 155 || Math.abs(v) > 12 + R / AF_K * .5) return;
   const eng = S.teams.some(q => q.side === 'p' && q.men.length && q.ab === 'eng' && dist(q.x, q.y, b.x, b.y) < 170), fix = eng ? AB.fixEng : AB.fix;
   b.cratT = Math.max(b.cratT || 0, S.t + fix); b.fixD = fix;
   (b.rc = b.rc || []).push({ u, v, r: Math.min(8, 3 + R * .2) });

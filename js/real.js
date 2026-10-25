@@ -142,7 +142,7 @@ const RL_GUN = { col: 'rgba(30,30,26,.92)', dim: 'rgba(0,0,0,.38)', con: 'rgba(1
 
 // 飞机涂装：隐身战机深灰、大型机浅灰、A-10 深灰绿、直升机橄榄绿、无人机浅灰
 function rlAirPaint(type) {
-  if (type === 'j20' || type === 'j35' || type === 'j36' || type === 'f22' || type === 'f35' || type === 'gj11') return '#5f6870';
+  if (type === 'j20' || type === 'j35' || type === 'j36' || type === 'j50' || type === 'f22' || type === 'f35' || type === 'gj11') return '#5f6870';
   if (type === 'a10') return '#5c6660';
   if (type === 'heli' || type === 'z10') return '#5d6650';
   if (type === 'ah64') return '#3f4433';

@@ -2,7 +2,8 @@
 // 驱逐舰垂直发射系统与 901 型综合补给舰（v12）
 // 装弹按公开资料估计的典型配比（导弹分两类：超音速——鹰击-18A 末段 3 马赫冲刺、鹰击-21 高超音速；普通（亚音速）——长剑-10 巡航导弹）：
 //   055 型（112 单元）：红旗-9B 远程舰空导弹 56 · 长剑-10 对陆巡航导弹 24 · 鹰击-18A 16 · 鹰击-21 8 · 鱼-8 反潜导弹 8
-//   052D 型（64 单元）：红旗-9B 32 · 长剑-10 12 · 鹰击-18A 12 · 鱼-8 8；052C 型（48 单元）：红旗-9 48；054A 型（32 单元）：红旗-16 32
+//   052D 型（64 单元）：红旗-9B 32 · 长剑-10 12 · 鹰击-18A 12 · 鱼-8 8；052C 型（48 单元）：红旗-9 48 + 舰面发射架鹰击-62 8；
+//   054A 型（32 单元）：红旗-16 32 + 舰面发射筒鹰击-83 8——每艘驱护舰都有对海 / 对陆导弹
 // 用途：舰空导弹——打敌机、拦截来袭导弹（eair.js / missile.js 每发一枚先 vlsUse(舰, 'sam')，打光了就只剩近防炮）；
 //   对陆——长剑-10（便宜量大，敌弹炮防空车 / 密集阵能拦）打纵深固定目标与步兵呼叫的火力点（callfire.js）；
 //   鹰击-18A（掠海亚音速巡航、末段超音速冲刺）打岸防炮、岸舰导弹、沿岸防空；鹰击-21（高超音速、几乎拦不住）只留给岸舰导弹连、发射车、机场、岸防重炮。
@@ -11,12 +12,12 @@
 const VLS_CLS = {
   '055': { cells: 112, load: { sam: 56, cj10: 24, yj18: 16, yj21: 8, yu8: 8 }, sam: '红旗-9B' },
   '052D': { cells: 64, load: { sam: 32, cj10: 12, yj18: 12, yu8: 8 }, sam: '红旗-9B' },
-  '052C': { cells: 48, load: { sam: 48 }, sam: '红旗-9' },
-  '054A': { cells: 32, load: { sam: 32 }, sam: '红旗-16' }
+  '052C': { cells: 48, load: { sam: 48, yj62: 8 }, sam: '红旗-9' },
+  '054A': { cells: 32, load: { sam: 32, yj83: 8 }, sam: '红旗-16' }
 };
-const VLS_NM = { sam: '舰空导弹', cj10: '长剑-10', yj18: '鹰击-18A', yj21: '鹰击-21', yu8: '鱼-8' };
-const VLS_SUP = { yj18: '超音速', yj21: '高超音速', cj10: '亚音速' };
-const VLS_LAND = ['cj10', 'yj18', 'yj21'];
+const VLS_NM = { sam: '舰空导弹', cj10: '长剑-10', yj18: '鹰击-18A', yj21: '鹰击-21', yu8: '鱼-8', yj62: '鹰击-62', yj83: '鹰击-83' };
+const VLS_SUP = { yj18: '超音速', yj21: '高超音速', cj10: '亚音速', yj62: '亚音速', yj83: '亚音速' };
+const VLS_LAND = ['cj10', 'yj18', 'yj21', 'yj62', 'yj83'];
 const vlsNmS = k => MS_PGM[k].nm.includes(VLS_SUP[k]) ? MS_PGM[k].nm : `${MS_PGM[k].nm}（${VLS_SUP[k]}）`;   // 名称 + 速度类别（已含就不重复）
 const VLS_ICON = typeof WI === 'object' && WI.t055 ? WI.t055 : '<path d="M3 15h18l-2 3H5z"/>';
 const AOR = { spd: 26, dur: 25, near: 50, name: '901 型综合补给舰（呼伦湖号）' };
@@ -51,11 +52,11 @@ function vlsShips() {
 const vlsLeft = k => vlsShips().reduce((a, s) => a + ((vlsOf(s.o) || {})[k] || 0), 0);
 // 打 (x, y) 用哪种弹：w = 'lacm'（自动选） / cj10 / yj18 / yj21；kind = 目标种类（可空）
 function vlsWeapon(w, kind) {
-  if (kind === 'eship') return (w === 'yj21' || w === 'yj18') && vlsLeft(w) > 0 ? w : ['yj18', 'yj21'].find(k => vlsLeft(k) > 0) || null;   // 打舰只用反舰导弹
+  if (kind === 'eship') return ['yj21', 'yj18', 'yj83', 'yj62'].includes(w) && vlsLeft(w) > 0 ? w : ['yj18', 'yj83', 'yj62', 'yj21'].find(k => vlsLeft(k) > 0) || null;   // 打舰只用反舰导弹
   if (w !== 'lacm') return w;
   const top = ['ascm', 'tel', 'airfield'].includes(kind) || (kind === 'coastal' && typeof S === 'object' && S.ships.some(s => alive(s) && s.load && s.load.teams > 0));
   const coast = kind === 'coastal' || kind === 'ascm' || kind === 'aa';   // 沿岸硬目标、有防空掩护的目标：超音速的鹰击-18A 更难被拦
-  const order = top ? ['yj21', 'yj18', 'cj10'] : coast ? ['yj18', 'cj10', 'yj21'] : ['cj10', 'yj18'];
+  const order = top ? ['yj21', 'yj18', 'cj10', 'yj62', 'yj83'] : coast ? ['yj18', 'yj83', 'cj10', 'yj62', 'yj21'] : ['cj10', 'yj62', 'yj83', 'yj18'];
   return order.find(k => vlsLeft(k) > 0) || null;
 }
 function vlsPick(w, x, y, ctlOnly) {

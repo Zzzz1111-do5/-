@@ -24,11 +24,14 @@ const AIR_MDL = {
   j20: { name: '歼-20 隐身战斗机', sil: 'j20', spd: 265, aa: .05, size: 17, land: true, stealth: .35, aam: 6, aamR: 560, pkK: 1.15 },   // 4 枚霹雳-15 + 2 枚霹雳-10
   // 彩蛋（j36.js）：歼-36。官方未公布参数，按公开估算：机长约 23 米、翼展约 19 米、最大起飞重量约 55 吨（歼-20 约 37 吨）、三发、主弹舱长约 7.6 米、作战半径约 3000 公里；
   //   体型大、无尾 → 转弯慢（turn）、不带航炮；全向隐身更好、机头大雷达看得更远（radar）、留空时间长（cap 秒）。挂载按弹舱尺寸推测：aamL / aamLR = 霹雳-17 远程空空导弹
+  // 歼-50（外界称呼，沈飞第六代原型机，2024 年 12 月 26 日被拍到试飞；λ 形无尾翼、双发）：外界推测会发展舰载型。官方无任何参数，按公开估算——
+  // 比歼-36 小、可上航母（占机库），隐身 0.22、雷达 800、6 枚霹雳-15 + 2 枚霹雳-10，不带航炮，只打超视距
+  j50: { name: '歼-50 第六代舰载战斗机', sil: 'j50', spd: 290, aa: .03, size: 16, stealth: .22, aam: 8, aamR: 560, pkK: 1.18, radar: 800, turn: 1.9, gun: 0 },
   j36: { name: '歼-36 第六代战斗机（制空型）', sil: 'j36', spd: 300, aa: .02, size: 18, land: true, stealth: .2, aam: 6, aamR: 560, aamL: 2, aamLR: 900, pkK: 1.2, radar: 900, turn: 1.7, cap: 240, gun: 0 },
   j36s: { name: '歼-36 第六代战斗机（打击型）', sil: 'j36', spd: 300, aa: .02, size: 18, land: true, stealth: .2, aam: 4, aamR: 560, pkK: 1.2, radar: 900, turn: 1.7, cap: 240, gun: 0, agm: 'ls6', agmN: 4, agmR: 900 }
 };
 const AIR_BASEM = { recon: 'kj600', strike: 'j35', cas: 'gj2', bomber: 'h6k', fighter: 'j20' };
-const AIR_VMODEL = { lr: 'wz7', dive: 'gj11', heavy: 'h6k', fb: 'j15t', heli: 'z10', sead: 'j35s', adv: 'j20', j36: 'j36', j36s: 'j36s' };   // adv：旧存档里的先进战斗机
+const AIR_VMODEL = { lr: 'wz7', dive: 'gj11', heavy: 'h6k', fb: 'j15t', heli: 'z10', sead: 'j35s', adv: 'j20', j36: 'j36', j36s: 'j36s', j50: 'j50' };   // adv：旧存档里的先进战斗机
 const airMdlKey = (type, v) => AIR_VMODEL[v] || AIR_BASEM[type];
 const airMdl = (type, v) => AIR_MDL[airMdlKey(type, v)] || {};   // 运输机（para.js）等没有型号表的返回空
 const airSpec = (type, v) => ({ ...(AIR_SPEC[type] || AIR_SPEC.strike), ...airMdl(type, v) });
@@ -75,6 +78,7 @@ const AIR_SIL = {
   a10: [[10, 0], [8, 1], [3.2, 1.2], [2.6, 9.4], [-.6, 9.4], [-1.2, 1.4], [-7, 1.3], [-8.4, 4.8], [-10.4, 4.8], [-10, 1], [-10.6, 0]],   // 平直下单翼，尾部背负双发、双垂尾
   f22: [[10.6, 0], [8.2, .9], [4.6, 1.8], [2.6, 2.4], [1.6, 2.6], [-2.8, 7.4], [-4.6, 7.4], [-6.1, 2.8], [-6.6, 2.6], [-8.6, 5.4], [-9.8, 5.4], [-10.1, 1.6], [-10.6, 1.2], [-10.6, 0]],   // 菱形翼（后缘前掠）、全动平尾、二元矢量喷管
   // 彩蛋
+  j50: [[11, 0], [8.6, .9], [5, 1.8], [1.6, 2.4], [-4.4, 8.2], [-6, 8.2], [-5.4, 5.2], [-8.4, 3.4], [-10.2, 2.4], [-9.6, 0]],   // 歼-50：λ 形无尾翼，后缘锯齿
   j36: [[12.6, 0], [10.6, .8], [8.2, 1.6], [5.6, 2.6], [1, 5.4], [-5.8, 10.3], [-7.4, 10.3], [-6.4, 6], [-10.6, 2.8], [-11.6, 2.2], [-12.2, 1.2], [-12.2, 0]]   // 歼-36：无尾双菱形翼（翼尖切尖、后缘 W 形），机长 : 翼展约 23 : 19，与歼-20 同一比例尺
 };
 // 剪影键：按型号；守方 type（ga / heli / ftr / f22）另映射
@@ -102,6 +106,12 @@ function cvL(x, y, c) {
 const cvHome = o => (o && o.home) || 0;
 const cvOf = h => h ? (S.cvx && S.cvx[h - 1]) || null : S.cv;
 const cvAll = () => [S.cv, ...(S.cvx || [])].filter(c => c && isFinite(c.x) && isFinite(c.y));
+// 航母自卫火力（按辽宁 / 山东舰实装）：3 座 1130 型近防炮（内层 300 以内，能同时对付几个目标）+ 4 座红旗-10 近程防空导弹发射装置
+// （共 72 枚，射程 320）——拦截来袭反舰导弹、打靠近的敌机；近防炮也打落向航母的炮弹（ciws.js）
+const CV_DEF = { hq10: 72, hqR: 320, hqMin: 40, hqCd: .9, hqPk: .5, cwR: 300, cwPk: .6 };
+function cvDefs() {
+  return cvAll().filter(c => c.hp > 0 && c.x > -999).map((c, i) => { if (c.hq10 == null) c.hq10 = CV_DEF.hq10; return { o: c, x: c.x, y: c.y, id: 'CV' + i, cv: true }; });
+}
 // 甲板停机位分配（只供绘制与甲板中弹用）：前 12 架各有固定机位；联队超过 12 架时其余待命 / 整备的飞机在机库，
 // 甲板有空位就按顺序补上，补上后位置不再变。返回 Map(飞机 id → 机位序号)，wing = 这艘航母的全部舰载机
 const CV_PARK = new WeakMap();
@@ -1189,7 +1199,7 @@ function drawCarrier1(time) {
     ctx.strokeStyle = on ? rgba(COL.amber, .55 + .4 * Math.sin(time * 14)) : rgba(STRUCT, det >= 70 ? .3 : .18);
     ctx.lineWidth = lw(on ? 2.2 : 1);
     ctx.beginPath(); ctx.moveTo(u0, v0); ctx.lineTo(u1 - 2, v0); ctx.stroke();
-    if (on && on.phase === 'roll') {   // 弹射蒸汽
+    if (on && on.phase === 'roll' && isFinite(on.lu)) {   // 弹射蒸汽（编队僚机等没有甲板坐标的不画）
       const g = ctx.createLinearGradient(u0, v0, on.lu, v0);
       g.addColorStop(0, rgba('#d4fff0', 0)); g.addColorStop(1, rgba('#d4fff0', .5));
       ctx.strokeStyle = g; ctx.lineWidth = lw(4); ctx.beginPath(); ctx.moveTo(u0, v0); ctx.lineTo(on.lu, v0); ctx.stroke();

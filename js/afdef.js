@@ -5,7 +5,7 @@
 //   对地：两辆巡逻车沿机场外围固定路线相向巡逻，发现靠近机场的敌人就迎上去；常驻守备队（沙盒两个排、战役一个排）守在跑道与停机坪外围的阵地上，
 //         只守机场：不被抽去反冲击、支队、总攻（ai2 / ai4 / ai5 读 q.afG、v.afD）；机场据点丢了才随反击夺回。
 // 状态：S.afd = { v: 1, bases: {机场 id: {pat: [车 id], aa: [{id, x, y}], wp: [[x, y]]}}, radar: [{id, x, y, r, h, hp, maxhp, dead, kx, ky, af}], thT }
-const AFD = { radar: 480, air: 670, patR: 300, sbxG: 6, cpG: 3 };
+const AFD = { radar: 480, air: 670, patR: 300 * AF_K, sbxG: 6, cpG: 3 };
 const afdOn = () => !!(S && S.phase === 'battle' && S.enemies);
 function afdEnsure() { if (!S.afd || S.afd.v !== 1) S.afd = { v: 1, bases: {}, radar: [], thT: 0 }; return S.afd; }
 // 机场局部坐标（u 沿跑道、v 向停机坪一侧）→ 可通行的世界坐标
@@ -23,7 +23,7 @@ const AFD_GUN = [[-120, -42], [120, -42], [-240, 120], [240, 120]];
 const AFD_PAT = [[222, 214], [250, 248]];
 const AFD_PAC = { n: 12, cd: 2, regen: 40, range: 1300, icp: 900, pkK: 1.4, hi: true };
 // 地勤抢修：雷达、高炮、防空阵地被毁后，场区安静（附近 AFD_FIX.foe 内没有我方部队、AFD_FIX.quiet 秒没挨打）时抢修车开过去，修 AFD_FIX.t 秒恢复
-const AFD_FIX = { foe: 420, quiet: 20, t: 45 };
+const AFD_FIX = { foe: 420 * AF_K, quiet: 20, t: 45 };
 function afdBuild(b) {
   const D = afdEnsure(), sbx = S.mode === 'sandbox', B = D.bases[b.id] = { pat: [], aa: [], wp: AFD_WP.map(([u, v]) => afdAt(b, u, v)) };
   b.afD = true;

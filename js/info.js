@@ -88,7 +88,8 @@ function infoCV() {
   for (const o of w) if (o.state !== 'lost') { const n = typeof airName === 'function' ? airName(o.type, o.v) : o.type; types[n] = (types[n] || 0) + 1; }
   return { t: c.name || '003 型航母（福建舰）', s: '航空母舰',
     rows: [['甲板', `${Math.ceil(c.hp)}/${c.maxhp}`], ['舰载机', `${w.length - cnt('lost')} 架（甲板待命 ${cnt('deck')}、整备 ${cnt('rearm')}、出击 ${cnt('out')}、损失 ${cnt('lost')}）`],
-      ['机型', infoEsc(Object.entries(types).map(([k, n]) => `${k} ×${n}`).join('、') || '—')], ['派机', c.auto ? '自动' : '手动']] };
+      ['机型', infoEsc(Object.entries(types).map(([k, n]) => `${k} ×${n}`).join('、') || '—')],
+      ['自卫火力', `1130 型近防炮 ×3、红旗-10 防空导弹 ×4 座（余 ${c.hq10 ?? (typeof CV_DEF === 'object' ? CV_DEF.hq10 : 72)} 枚）——拦截来袭导弹、打靠近的敌机`], ['派机', c.auto ? '自动' : '手动']] };
 }
 function infoEnemyTeam(q) {
   const vis = S.role === 'spectate' || inVision(q.x, q.y);
@@ -101,12 +102,37 @@ function infoEnemySt(e) {
     rows: [!e.dead && vis && ['耐久', `约 ${infoPct(e.hp / ((ENEMY_SPEC[e.kind] || {}).hp || e.hp || 1))}`], !e.dead && ['状态', (e.sup || 0) > 50 ? '被压制' : e.moving ? '转移阵地' : '正常'], e.kind === 'tel' && ['载弹', `${e.n ?? 2} 枚`], e.kind === 'ascm' && ['载弹', `${e.n ?? 4} 枚`]] };
 }
 
+// 飞机参数卡：我方（S.planes）与敌机（S.eair.fly）
+const INFO_AIRK = { fighter: '制空', strike: '对地攻击', cas: '近距空中支援', bomber: '轰炸', recon: '侦察 / 预警', transport: '运输' };
+const INFO_AIRPH = { cat: '弹射起飞', roll: '起飞滑跑', out: '出航', loiter: '巡逻 / 待机', rtb: '返航', trap: '着舰', final: '进近', land: '着陆', cap: '空中巡逻', atk: '攻击', hold: '盘旋待命', app: '进近', drop: '空投', abort: '放弃任务返航' };
+const infoStl = st => st ? `隐身（雷达发现距离约为普通飞机的 ${Math.round(Math.min(1, st * 1.2) * 100)}%）` : '非隐身';
+function infoPlane(p) {
+  const sp = typeof airSpec === 'function' ? airSpec(p.kind, p.v) : {}, nm = typeof airName === 'function' ? airName(p.kind, p.v) : p.kind;
+  const wpn = [p.aam > 0 && `中远程空空导弹 ${p.aam} 枚`, p.aamL > 0 && `远程空空导弹（霹雳-17）${p.aamL} 枚`, p.gbN > 0 && `制导炸弹 / 导弹 ${p.gbN} 枚`, p.agmN > 0 && `对地导弹 / 滑翔炸弹 ${p.agmN} 枚`,
+    !sp.stealth && p.gun > 0 && `航炮 ${p.gun} 发`].filter(Boolean).join('；');
+  return { t: nm, s: `${INFO_AIRK[p.kind] || p.kind}${p.wm != null ? ' · 僚机' : p.free ? ' · 编队支援' : ''}`,
+    rows: [['状态', infoEsc(INFO_AIRPH[p.phase] || p.phase || '')], ['速度', `${Math.round(p.spd || 0)}（最大 ${sp.spd || '?'}）`], ['隐身', infoEsc(infoStl(sp.stealth))],
+      sp.radar && ['机载雷达', `发现距离 ${sp.radar}`], wpn && ['挂载', infoEsc(wpn)], p.flares != null && ['干扰弹', `${p.flares} 组`],
+      sp.stealth && p.kind === 'fighter' && ['空战打法', '超视距：发射后侧转保持照射，敌机逼近就拖开，不进格斗'], ['起降', sp.land ? '战区陆基机场' : '航母']] };
+}
+function infoEair(a) {
+  const sp = (typeof EA_SPEC === 'object' && EA_SPEC[a.type]) || {}, F = typeof EA_FTR === 'object' && EA_FTR[a.type];
+  const wpn = [a.aam > 0 && `AIM-120D 空空导弹 ${a.aam} 枚`, a.sdb > 0 && `GBU-53/B 小直径炸弹 ${a.sdb} 枚`, a.mav > 0 && `AGM-65 小牛导弹 ${a.mav} 枚`, a.rk > 0 && `火箭弹 ${a.rk} 组`, a.atgm > 0 && `地狱火导弹 ${a.atgm} 组`,
+    !sp.stealth && a.gun > 0 && `航炮 ${a.gun} 发`].filter(Boolean).join('；');
+  return { t: '敌 ' + (sp.name || a.type), s: S.role === 'spectate' || inVision(a.x, a.y) ? '目视' : '雷达发现',
+    rows: [['状态', infoEsc(INFO_AIRPH[a.ph] || a.ph || '')], ['耐久', `${a.hp ?? '?'}/${sp.hp ?? '?'}`], ['速度', `${Math.round(a.spd || 0)}（最大 ${sp.spd || '?'}）`], ['隐身', infoEsc(infoStl(sp.stealth))],
+      F && ['机载雷达', `发现距离 ${F.radar}`], wpn && ['挂载', infoEsc(wpn)], a.flares != null && ['干扰弹', `${a.flares} 组`],
+      sp.stealth && F && ['空战打法', '超视距：发射后侧转，被逼近就拖开'], a.type === 'c17' && ['机上', `${(a.sq || []).length} 个班、${(a.veh || []).length} 辆空投车辆`]] };
+}
+
 function infoPick() {
   if (U.info) {
     const I = U.info;
     if (I.k === 'team') { const q = S.teams.find(o => o.id === I.id && o.men.length); return q && infoEnemyTeam(q); }
     if (I.k === 'veh') { const v = vehById(I.id); return v && !v.dead && infoVeh(v, true); }
     if (I.k === 'st') { const e = S.enemies.find(o => o.id === I.id); return e && infoEnemySt(e); }
+    if (I.k === 'plane') { const p = (S.planes || []).find(o => o.id === I.id && !o.dead); return p && infoPlane(p); }
+    if (I.k === 'eair') { const a = S.eair && S.eair.fly.find(o => o.id === I.id && !o.dead); return a && infoEair(a); }
     if (I.k === 'car') { const a = (S.armor || []).find(o => o.id === I.id && !o.dead); return a && { t: '敌 M1117 装甲警戒车', s: '目视', rows: [['主武器', '40 毫米榴弹发射器＋12.7 毫米机枪'], ['车体', `约 ${infoPct(a.hp / a.maxhp)}`]] }; }
     return null;
   }
@@ -146,6 +172,9 @@ if (typeof HOOK === 'object') {
     for (const v of S.veh || []) if (v.side === 'e' && !v.dead && (spec || inVision(v.x, v.y) || v.kx != null)) cand('veh', v.id, spec || inVision(v.x, v.y) ? v.x : v.kx, spec || inVision(v.x, v.y) ? v.y : v.ky);
     for (const o of S.enemies) if (spec || inVision(o.x, o.y) || o.kx != null) cand('st', o.id, o.kx ?? o.x, o.ky ?? o.y);
     for (const a of S.armor || []) if (!a.dead && (spec || inVision(a.x, a.y))) cand('car', a.id, a.x, a.y);
+    bd = Math.min(bd, r) * 1.4;   // 飞机画得大：点中范围宽一点，并且优先于地面目标
+    for (const o of S.planes || []) if (!o.dead && o.alt > .05) cand('plane', o.id, o.x, o.y);
+    if (S.eair) for (const a of S.eair.fly) if (!a.dead && (spec || inVision(a.x, a.y) || (typeof awSeen === 'function' && awSeen('p', a.x, a.y, (EA_SPEC[a.type] || {}).stealth || 1)))) cand('eair', a.id, a.x, a.y);
     U.info = best;
     infoRender(true);
     return false;
