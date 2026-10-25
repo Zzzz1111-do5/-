@@ -23,7 +23,7 @@ const bgRecs = G => G.rec.map(id => S.teams.find(q => q.id === id)).filter(q => 
 
 // 队形位置（世界坐标）：返回 [{m 成员, k 'u'|'v', x, y}]
 function bgSlots(G, mode) {
-  const us = bgUnits(G), vs = bgVehs(G), out = [];
+  const us = bgUnits(G).filter(u => u.state !== 'rout'), vs = bgVehs(G), out = [];   // 溃退的连先撤下去重整，不排进队形、不拖住全群
   const march = mode === 'march', lat = march ? .45 : 1, lon = march ? 1.5 : 1;
   const fx = Math.cos(G.face), fy = Math.sin(G.face), px = -fy, py = fx;
   const at = (x, y) => { let sx = clamp(G.ax + fx * x * lon + px * y * lat, 15, W - 15), sy = clamp(G.ay + fy * x * lon + py * y * lat, 15, H - 15); return [sx, sy]; };
@@ -55,6 +55,7 @@ const bgPow = o => o.men ? o.men.length : BG_TANK.includes(o.type) ? 6 : 3;   //
 function bgGoal(G) {
   const p = ptByKey(G.key);
   if (!p) return { x: G.ax, y: G.ay, face: G.face };
+  if (G.gx != null) return { x: G.gx, y: G.gy, face: Math.atan2(p.y - G.gy, p.x - G.gx) };   // 指定了攻击出发位置（攻方战斗群，brain.js）
   const mine = p.owner === G.side && p.prog < .25;
   if (!mine) return { x: p.x, y: p.y, face: Math.atan2(p.y - G.ay, p.x - G.ax), atk: true };
   const T = G.side === 'e' && S.ai && S.ai.co && S.ai.co.thr && S.ai.co.thr[p.key];
@@ -75,6 +76,7 @@ function bgOrder(G, sl, t) {
       ts.forEach((q, i) => { if (t === 'hold' && dist(q.x, q.y, fs[i][0], fs[i][1]) < 6) return; aiGo(q, fs[i][0], fs[i][1], t === 'hold' ? 'move' : t, fx, fy); q.px = null; });
     } else {
       const v = s.m;
+      if (v.ai === 'repair' || v.ai === 'resup' || vehAmmoF(v) < .25 || (v.fuel ?? 1) < .2 || v.hp < v.maxhp * .35) continue;   // 该回去补给 / 抢修的车交给车辆 AI，补好再归队
       v.cmd = { x: s.x, y: s.y, t: t === 'amove' && v.type !== 'spg' && v.type !== 'sam_veh' ? 'amove' : 'move', face: G.face, until: S.t + 4, ai: 'bg' };
     }
   }
@@ -116,7 +118,8 @@ function bgThink(G) {
   const goal = bgGoal(G);
   if (G.st === 'asm') {
     const sl = bgSlots(G, 'fight'); bgOrder(G, sl, 'move');
-    if (bgLag(G, sl) < 45 || S.t - G.stT > BG.asm) { G.st = 'move'; G.stT = S.t; bgSay(G, `集合完毕，全群成行军队形向${(ptByKey(G.key) || {}).name || '任务地域'}开进。`); }
+    const lg = bgLag(G, sl);
+    if (lg < 45 || S.t - G.stT > (G.asmT || BG.asm)) { G.st = 'move'; G.stT = S.t; bgSay(G, `${lg < 45 ? '集合完毕' : '集合时限已到，大部已到，未到齐的随后跟进'}，全群成行军队形向${(ptByKey(G.key) || {}).name || '任务地域'}开进。`); }   // asmT：按最远一个成员的路程算的集合时限（brain.js）
     return;
   }
   if (near.length && G.st !== 'fight') { G.st = 'fight'; G.stT = S.t; bgSay(G, `前方发现敌人 ${near.length} 股，就地展开成战斗队形。`, near[0]); }
@@ -130,7 +133,7 @@ function bgThink(G) {
     const c = near.reduce((a, o) => [a[0] + o.x / near.length, a[1] + o.y / near.length], [0, 0]);
     const fa = Math.atan2(c[1] - G.ay, c[0] - G.ax);
     G.face = G.face + clamp(Math.atan2(Math.sin(fa - G.face), Math.cos(fa - G.face)), -.35, .35);
-    if (r > 1.6 && lag < BG.lag) { bgAdvance(G, c[0], c[1], BG.pace * .6); G.amove = true; }   // 占优：成战斗队形向敌推进
+    if (r > (G.agg || 1.6) && lag < BG.lag) { bgAdvance(G, c[0], c[1], BG.pace * .6); G.amove = true; }   // 占优：成战斗队形向敌推进（反冲击任务 agg 1.2）
     else if (r < .6) { G.ax -= Math.cos(G.face) * 6; G.ay -= Math.sin(G.face) * 6; G.amove = false; if (S.t - (G.wT ?? -99) > 30) { G.wT = S.t; bgSay(G, `敌我兵力约 ${r.toFixed(1)} 比 1，交替掩护后撤重整。`); } }
     else G.amove = false;
   } else if (G.st === 'hold') {
@@ -181,7 +184,8 @@ function bgStep(dt) {
     if (!G.dead) bgRecon(G);
   }
   if (S.bgs.some(G => G.dead)) {
-    for (const G of S.bgs) if (G.dead) { for (const u of bgUnits(G)) { u.role = 'reserve'; for (const q of teamsOf(u)) { q.bg = null; q.role = 'reserve'; } } for (const v of bgVehs(G)) v.cmd = null; }
+    // done：已由编组的一方（brain.js）自行安置
+    for (const G of S.bgs) if (G.dead && !G.done) { for (const u of bgUnits(G)) { u.role = 'reserve'; for (const q of teamsOf(u)) { q.bg = null; q.role = 'reserve'; } } for (const v of bgVehs(G)) v.cmd = null; }
     S.bgs = S.bgs.filter(G => !G.dead);
   }
 }
@@ -194,9 +198,13 @@ HOOK.visionP.push(() => S && S.bgs ? S.bgs.filter(G => G.side === 'p').flatMap(G
 function bgDraw() {
   if (!S || !S.bgs || !S.bgs.length || R.s > 3) return;
   const ctx = R.ctx;
+  const at = [];
   for (const G of S.bgs) {
     if (G.side === 'e' && !(S.role === 'spectate' || R.eye === 'all') && !spotted(G.ax, G.ay)) continue;
-    const col = G.side === 'p' ? COL.g : COL.enemy, w = px(22), h = px(14), x = G.ax, y = G.ay;
+    const col = G.side === 'p' ? COL.g : COL.enemy, w = px(22), h = px(14), x = G.ax;
+    let y = G.ay;
+    while (at.some(o => Math.abs(o[0] - x) < w * 1.2 && Math.abs(o[1] - y) < h * 2.6)) y += h * 2.8;   // 两个战斗群在同一处集合：标号上下错开，不叠在一起
+    at.push([x, y]);
     ctx.save(); ctx.strokeStyle = col; ctx.fillStyle = rgba(COL.bg, .7); ctx.lineWidth = px(1.4);
     ctx.fillRect(x - w / 2, y - h / 2, w, h); ctx.strokeRect(x - w / 2, y - h / 2, w, h);
     ctx.beginPath(); ctx.moveTo(x - w / 2, y + h / 2); ctx.lineTo(x + w / 2, y - h / 2); ctx.moveTo(x - w / 2, y - h / 2); ctx.lineTo(x + w / 2, y + h / 2); ctx.stroke();   // 步兵记号

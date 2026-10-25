@@ -188,7 +188,7 @@ function tfBind(P) {
   const load = {};
   const kindOf = v => TF_GUNV.includes(v.type) ? 'g' : v.type === 'apc' ? 'a' : 'o';
   const cap = { g: 2, a: 1, o: 1 };
-  const vs = (S.veh || []).filter(v => v.side === 'p' && !v.dead && !v.lst && v.auto && !v.swim && !v.immob && v.type !== 'spg' && isLand(v.x, v.y));
+  const vs = (S.veh || []).filter(v => v.side === 'p' && !v.dead && !v.lst && v.auto && !v.swim && !v.immob && v.type !== 'spg' && v.bgG == null && isLand(v.x, v.y));   // 战斗群的车由战斗群指挥
   for (const v of S.veh || []) if (v.side === 'p' && v.buddy != null && !vs.includes(v)) { v.buddy = null; v.esc = null; }
   // 先保留仍有效的绑定；守点 / 填空隙的连队附近 350 内没有敌情时不占着坦克（免得坦克陪着守点的步兵在半路趴着），交还车辆自动驾驶去支援进攻
   const quiet = u => (P.u[u.id].ph === 'garrison' || P.u[u.id].ph === 'gap') && !tfFoeNear(u, 350);   // 守点、填空隙的连队附近没敌情：坦克去支援进攻

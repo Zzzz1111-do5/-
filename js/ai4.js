@@ -71,7 +71,7 @@ function a4Focus() {
       lift = { x: p.x + ux * 150, y: p.y + uy * 150, r: 90 };
     }
   }
-  return lift;
+  return lift || (typeof brFocus === 'function' ? brFocus() : null);   // 没有反冲击火力任务：支援交战中的战斗群（brain.js）
 }
 // 守方车辆的伴随轴线（tf.js tfAxisPt）：反冲击目标；机动 / 待机中的连队对着所去据点的威胁方向；否则朝海
 function a4Axis(v, u, c) {
@@ -259,7 +259,7 @@ function a4Draw(C, info) {
     a4Stat('a4DrRdy');
     chatSay('e', `报告：${a4Name(u)}已在${a4Where(r.x, r.y)}集结完毕（到达 ${at.length} 组 ${a4Men(at)} 人${r.vn ? `，车辆 ${r.vn} 辆` : ''}），归${p.name}方向统一指挥，准备加强防御或反冲击。`, { kind: 'report', at: { x: r.x, y: r.y }, lv: 1 });
   }
-  if (S.t < (C.drT || 0) || Object.keys(C.dr).length >= 3) return;
+  if (S.t < (C.drT || 0) || Object.keys(C.dr).length >= 3 || (typeof brOn === 'function' && brOn('e'))) return;   // 守方大脑（brain.js）开着时由它统一抽调编组
   C.drT = S.t + 12;
   // 敌主攻方向：指挥官已判明主攻方向（无指挥官时看威胁持续最大处）；受压最大的据点（威胁 × 判断权重 / 守备）
   const E = typeof cmdOn === 'function' && cmdOn() && S.cmd && S.cmd.e;
@@ -425,7 +425,7 @@ function a4CaTick(C, c, info, A) {
 function a4CaGo(C, c, p, I) {
   // 原据点守备的残部（就近在出发阵地附近的）一并投入
   for (const u of S.units) {
-    if (u.side !== 'e' || u.kind !== 'inf' || u.state === 'rout' || c.units.includes(u.id) || a4Plan(C, u.id)) continue;
+    if (u.side !== 'e' || u.kind !== 'inf' || u.state === 'rout' || u.role === 'bg' || c.units.includes(u.id) || a4Plan(C, u.id)) continue;   // 战斗群的连归战斗群指挥
     const ts = a4Ts(u);
     if (ts.length && ts.every(q => q.obj === c.key && !q.raid && !C.fl[q.id]) && ts.some(q => dist(q.x, q.y, p.x, p.y) < 320)) { c.units.push(u.id); delete C.res[u.id]; }
   }
@@ -539,7 +539,7 @@ function a4Flank(C, info) {
 // —— ④ 步坦协同：绑定（每 3 秒）。反冲击连优先（发起中的最优先），其次机动 / 待机中的预备连；每连最多 2 辆炮车 + 1 辆装甲车 ——
 function a4Bind(C) {
   const kind = v => A4_GUNV.includes(v.type) ? 'g' : v.type === 'apc' ? 'a' : 'o', cap = { g: 2, a: 1, o: 1 };
-  const vs = (S.veh || []).filter(v => v.side === 'e' && !v.dead && !v.afD && v.auto !== false && !v.immob && !v.lst && v.type !== 'spg' && v.type !== 'aa_veh' && v.type !== 'sam_veh' && v.hp >= v.maxhp * .3 && isLand(v.x, v.y));
+  const vs = (S.veh || []).filter(v => v.side === 'e' && !v.dead && !v.afD && v.bgG == null && v.auto !== false && !v.immob && !v.lst && v.type !== 'spg' && v.type !== 'aa_veh' && v.type !== 'sam_veh' && v.hp >= v.maxhp * .3 && isLand(v.x, v.y));
   const want = new Map();
   for (const c of C.ca) if (!c.end) for (const id of c.units) want.set(id, c.st === 'go' ? 3 : 2);
   for (const id in C.res) if (!want.has(+id)) want.set(+id, 1);

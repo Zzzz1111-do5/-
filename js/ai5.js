@@ -93,7 +93,7 @@ function a5Recruit(G, us) {
   // 防空车掩护集结地域（最多 2 辆）
   for (const v of S.veh || []) {
     if (G.aa.length >= 2) break;
-    if (v.side !== 'e' || v.dead || v.afD || (v.type !== 'aa_veh' && v.type !== 'sam_veh') || G.aa.includes(v.id) || v.immob || dist(v.x, v.y, G.x, G.y) > 1200) continue;
+    if (v.side !== 'e' || v.dead || v.afD || v.bgG != null || (v.type !== 'aa_veh' && v.type !== 'sam_veh') || G.aa.includes(v.id) || v.immob || dist(v.x, v.y, G.x, G.y) > 1200) continue;
     G.aa.push(v.id);
     v.cmd = { t: 'move', x: Math.round(G.x - G.ux * 50), y: Math.round(G.y - G.uy * 50), face: Math.atan2(G.uy, G.ux), until: S.t + 600, ai: 'aacov' };
   }

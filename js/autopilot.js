@@ -1,8 +1,8 @@
 'use strict';
 // 自动指挥：auto === true 的舰船自行选滩抢滩；步兵连自选据点 → 集结 → 攻击前进 → 冲锋 → 留守 / 继续推进，
-// 弹药不足或动摇时退回最近的接通补给点，恢复后继续；工兵自动修建补给网、抢修运输线、排除进攻路线上的已知雷区
+// 弹药不足或动摇时退回最近的接通补给点，恢复后继续；工兵自动修建补给网、抢修运输线、排除进攻路线上的已知雷区，没活干时跟进保障
 // 计划（纯数据）存于 S.autoPlan：u[连队 id] = {ph, obj, sx, sy, dx, dy, waitT, sp, job, ...}
-//   ph：idle 待命 / stage 前往集结点 / wait 集结待命 / go 攻击 / garrison 留守 / supply 回补弹药 / regroup 重整
+//   ph：idle 待命 / stage 前往集结点 / wait 集结待命 / go 攻击 / garrison 留守 / supply 回补弹药 / regroup 重整 / bg 编入战斗群（brain.js，由战斗群指挥）
 //   o[据点 key] = {go, t, need, pg, pgT} 攻击组状态；hard[据点 key] = 近期受挫时刻；s[舰船 id] = {b, x} 预定滩头
 // 指挥官（commander.js，可缺省）的指令：pri[据点 key] 目标加权 · mis[连队 id] 任务式指挥的既定目标 · 舰船梯队经 cmdShipTask
 const AP_THINK = 1.5, AP_WAIT = 20, AP_STAGE_MIN = 140, AP_STAGE_MAX = 180;
@@ -201,7 +201,7 @@ function apMove(u, pl, x, y, face, t) {
 
 function apGarrison(u, p, P) {
   const pl = P.u[u.id];
-  Object.assign(pl, { ph: 'garrison', obj: p.key, sx: null, sy: null, waitT: null, sp: null, back: null });
+  Object.assign(pl, { ph: 'garrison', obj: p.key, sx: null, sy: null, waitT: null, sp: null, back: null, garT: S.t });
   apMove(u, pl, p.x, p.y, apThreatDir(p), 'move');
 }
 
@@ -211,6 +211,7 @@ function apTask(u, key, flank) {
   const P = apEnsure(), p = apPt(key);
   if (!p || !u || u.side !== 'p' || u.auto !== true || u.state === 'rout' || !teamsOf(u).length) return false;
   const pl = P.u[u.id] || (P.u[u.id] = { ph: 'idle', obj: null, next: S.t });
+  if (pl.ph === 'bg') return false;   // 战斗群行军中：到攻击出发位置展开后才归各连自己打
   apIdle(pl);
   Object.assign(pl, { ph: 'stage', obj: key, t0: S.t, men0: u.men || 0, next: S.t + .5, task: S.t });
   if (!P.o[key]) P.o[key] = { go: false, t: 0, need: 1 };
@@ -240,6 +241,7 @@ function apIntercept(u, raidId) {
   const P = apEnsure();
   if (!u || u.auto !== true || u.state === 'rout') return false;
   const pl = P.u[u.id] || (P.u[u.id] = { ph: 'idle', obj: null, next: S.t });
+  if (pl.ph === 'bg') return false;
   apIdle(pl);
   Object.assign(pl, { ph: 'icpt', raid: raidId, icT: S.t, next: S.t });
   return true;
@@ -375,7 +377,7 @@ function apResume(u, pl, P) {
 }
 
 function apInfantry(u, pl, P) {
-  if (u.state === 'rout') return;
+  if (u.state === 'rout' || pl.ph === 'bg') return;
   const ts = teamsOf(u);
   if (!ts.length) return;
   const inf = ts.filter(q => q.kind === 'inf'), ammo = inf.length ? inf.reduce((a, q) => a + q.ammo, 0) / inf.length : 60;
@@ -531,7 +533,7 @@ function apEngineer(u, pl, P) {
     const s = t.pri + dist(q.x, q.y, t.x, t.y) / 400 - (cur ? .6 : 0);   // 已接手的任务优先保持
     if (s < bs) { bs = s; best = t; }
   }
-  if (!best) { pl.job = null; return; }   // 无事可做：原地待命
+  if (!best) { pl.job = null; apEngFollow(u, q, pl, P); return; }   // 无事可做：跟进保障
   pl.job = { k: best.k, kind: best.kind, x: best.x, y: best.y };
   if (best.kind === 'mine') {
     const m = S.mines.find(m => m.id === best.id);
@@ -549,6 +551,24 @@ function apEngineer(u, pl, P) {
   }
   if (dist(q.x, q.y, best.x, best.y) > 12) { if (!apTeamGo(q, best.x, best.y, 'move')) { pl.skip[best.k] = S.t; pl.job = null; } }
   else if (q.order.x != null || q.order.t !== 'hold') q.order = { t: 'hold' };   // 到位：updateSupplyNet 计施工进度
+}
+
+// 跟进保障：没有活干的工兵跟在离自己最近的进攻连队后方约 130（背向目标一侧、敌火力以外），到时就近排雷、剪网、修路，不在滩头干等
+function apEngFollow(u, q, pl, P) {
+  let best = null, bd = 1400;
+  for (const g of S.units) {
+    const gp = P.u[g.id];
+    if (g.side !== 'p' || g.kind !== 'inf' || g.auto !== true || g.state === 'rout' || g.x == null || !gp || !['stage', 'wait', 'go', 'bg'].includes(gp.ph)) continue;
+    const d = dist(g.x, g.y, q.x, q.y);
+    if (d < bd) { bd = d; best = { g, gp }; }
+  }
+  if (!best) { pl.fol = null; return; }
+  const { g, gp } = best, p = apPt(gp.obj), a = p ? apAng(g.x, g.y, p.x, p.y) : NORTH;
+  let x = g.x - Math.cos(a) * 130 + (u.id % 3 - 1) * 25, y = g.y - Math.sin(a) * 130;
+  if (apDanger(x, y)) { x = g.x - Math.cos(a) * 200; y = g.y - Math.sin(a) * 200; }
+  pl.fol = g.id;
+  if (dist(q.x, q.y, x, y) < 45 || (q.order.x != null && dist(q.order.x, q.order.y, x, y) < 45 && S.t - (pl.folT ?? -99) < 15)) return;
+  if (apTeamGo(q, x, y, 'move')) pl.folT = S.t;
 }
 
 // —— 渲染（仅图形）：自动连队的计划路线（虚线流动箭头）、集结点标记与等待倒计时、攻击目标角框、自动指挥标记 ——
