@@ -272,7 +272,7 @@ function awFlyE(a, dt) {
   if (mv) { a.spd += clamp(sp.spd * mv[2] - a.spd, -60 * dt, 50 * dt); eaSteer(a, clamp(mv[0], 40, W - 40), clamp(mv[1], 40, H - 40), dt); }
   else if (T) { a.spd += clamp(sp.spd * 1.12 - a.spd, -60 * dt, 50 * dt); awPursue(a, T, dt, sp.turn); }
   else if (awFleetCover(a.x, a.y, 30)) { a.spd += clamp(sp.spd * 1.1 - a.spd, -60 * dt, 50 * dt); eaSteer(a, a.cx, a.cy, dt); if (!a.brk) { a.brk = true; awStat('ftrBreakE'); } }   // 误入我舰队防空伞：加速脱离
-  else if (a.ph === 'out' && a.lead != null && eaForm(a, dt)) { /* 僚机保持编队 */ }
+  else if (a.ph === 'out' && a.lead != null && eaForm(a, dt)) { /* 跟着长机保持编队 */ }
   else if (a.ph === 'out') { if (eaSteer(a, a.cx, a.cy, dt, a.join > S.t ? sp.spd * .75 : undefined) < AW_CAP + 40) a.ph = 'cap'; }
   else { const g = Math.atan2(a.y - a.cy, a.x - a.cx) + .55 * (a.odir || 1); eaSteer(a, a.cx + Math.cos(g) * AW_CAP, a.cy + Math.sin(g) * AW_CAP, dt, 160); }
   if (a.ph === 'cap' && (a.capT -= dt) <= 0) a.ph = 'rtb';
@@ -301,13 +301,13 @@ function awThinkE() {
   else ({ x: cx, y: cy } = awCapE());
   if (awFleetCover(cx, cy, AW_CAP)) ({ x: cx, y: cy } = awCapE());
   cx = clamp(cx, 60, W - 60); cy = clamp(cy, 60, H - 60);
-  // 双机编队：每架在册飞机带一架僚机（僚机不占在册数量，eair.js eaPkg 同一规则）；要四机就出两架在册飞机（挂载按型号见 EA_FTR）
-  const k = Math.min(ready.length, Math.ceil(Math.min(4, Math.max(2, want - up)) / 2)), fl = ready.slice(0, k).flatMap(w => [w, { id: null, type: w.type, free: true }]), n = fl.length;
+  // 编队：派出的都是在册飞机——待命的有两架以上就成双机起飞（最多四机），只剩一架就单机（挂载按型号见 EA_FTR）
+  const n = Math.min(ready.length, 4, Math.max(2, want - up)), fl = ready.slice(0, n);
   let lead = null;
   for (let i = 0; i < n; i++) {
     const w = fl[i], L = EA_FTR[w.type], b = eaNearBase(cx, cy, open), a = eaNewAir(b, w, cx, cy, { cx, cy, capT: 80, aam: L.aam, gun: L.gun, aamR: L.aamR, pkK: L.pkK, gunK: L.gunK || 1, odir: i ? -1 : 1 });
     if (i) { a.lead = lead.id; a.slot = i; } else { lead = a; a.join = S.t + (a.wait || 0) + 3 + 3.5 * (n - 1); }   // 双机 / 四机编队（eair.js eaForm）
-    if (w.free) a.free = true; else w.state = 'out';
+    w.state = 'out';
     E.fly.push(a);
   }
   A.lnE = S.t;
@@ -333,18 +333,13 @@ function awEscortE(x, y, nm, pl) {   // pl：被护航编队的长机（攻击�
   let cx = clamp(x, 60, W - 60), cy = clamp(y, 60, H - 60);
   const b = eaNearBase(cx, cy, open);
   for (let i = 0; i < 12 && awFleetCover(cx, cy, AW_CAP); i++) { const l = Math.max(1, dist(cx, cy, b.x, b.y)); cx += (b.x - cx) / l * 60; cy += (b.y - cy) / l * 60; }   // 巡逻点不设在我舰队防空伞里
-  // 每架在册护航机带一架僚机：F-22A 双机前出扫荡，F-35A 双机随队护航（僚机不占在册数量）
+  // 在册的护航机：F-22A 前出扫荡，F-35A 随队护航
   fl.forEach((w, i) => {
     const L = EA_FTR[w.type], sweep = w.type === 'f22' && fl.length > 1 && i === 0;
-    let el = null;
-    for (const m of [w, { id: null, type: w.type, free: true }]) {
-      const a = eaNewAir(b, m, cx, cy, { cx: sweep ? clamp(cx, 60, W - 60) : cx, cy: sweep ? clamp(cy + 90, 60, H - 60) : cy, capT: 75, aam: L.aam, gun: L.gun, aamR: L.aamR, pkK: L.pkK, gunK: L.gunK || 1, odir: m.free ? -1 : 1, role: sweep ? 'sweep' : 'esc', sdb: w.type === 'ftr' ? 4 : 0 });
-      if (!sweep && pl && pl.type === 'ga' && !pl.dead) { a.lead = pl.id; a.slot = m.free ? 5 : 4; }   // 随队护航：在攻击机编队左后方（eaForm 槽位 4、5）
-      else if (el) { a.lead = el.id; a.slot = 1; }
-      else el = a;
-      if (m.free) a.free = true; else w.state = 'out';
-      E.fly.push(a);
-    }
+    const a = eaNewAir(b, w, cx, cy, { cx: sweep ? clamp(cx, 60, W - 60) : cx, cy: sweep ? clamp(cy + 90, 60, H - 60) : cy, capT: 75, aam: L.aam, gun: L.gun, aamR: L.aamR, pkK: L.pkK, gunK: L.gunK || 1, odir: i ? -1 : 1, role: sweep ? 'sweep' : 'esc', sdb: w.type === 'ftr' ? 4 : 0 });
+    if (!sweep && pl && pl.type === 'ga' && !pl.dead) { a.lead = pl.id; a.slot = 4; }   // 随队护航：在攻击机编队左后方（eaForm 槽位 4）
+    w.state = 'out';
+    E.fly.push(a);
   });
   if (!fl.length) return 0;
   awEscSay(fl, cx, cy, nm);
@@ -402,7 +397,6 @@ function awAutoP() {
   if (!launchPlane('fighter', cx, cy)) return false;
   awStat('ftrP');
   const lead = S.planes[S.planes.length - 1];
-  // 双机编队：僚机由 launchPlane 自动带出（carrier.js airFlight，不占机库）
   const nm = typeof airName === 'function' ? airName('fighter', (S.planes[S.planes.length - 1] || {}).v) : '战斗机';
   if (typeof chatSay === 'function') chatSay('p', foes.length ? `命令：${nm}起飞，拦截${awWhere(cx, cy)}上空的敌机（${foes.length} 架）。` : `命令：${nm}起飞，在${awWhere(cx, cy)}上空巡逻，掩护登陆场与对地支援机。`, { kind: 'order', at: { x: cx, y: cy }, key: 'awP', gap: 15, lv: 1 });
   return true;

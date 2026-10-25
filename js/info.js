@@ -110,7 +110,7 @@ function infoPlane(p) {
   const sp = typeof airSpec === 'function' ? airSpec(p.kind, p.v) : {}, nm = typeof airName === 'function' ? airName(p.kind, p.v) : p.kind;
   const wpn = [p.aam > 0 && `中远程空空导弹 ${p.aam} 枚`, p.aamL > 0 && `远程空空导弹（霹雳-17）${p.aamL} 枚`, p.gbN > 0 && `制导炸弹 / 导弹 ${p.gbN} 枚`, p.agmN > 0 && `对地导弹 / 滑翔炸弹 ${p.agmN} 枚`,
     !sp.stealth && p.gun > 0 && `航炮 ${p.gun} 发`].filter(Boolean).join('；');
-  return { t: nm, s: `${INFO_AIRK[p.kind] || p.kind}${p.wm != null ? ' · 僚机' : p.free ? ' · 编队支援' : ''}`,
+  return { t: nm, s: `${INFO_AIRK[p.kind] || p.kind}`,
     rows: [['状态', infoEsc(INFO_AIRPH[p.phase] || p.phase || '')], ['速度', `${Math.round(p.spd || 0)}（最大 ${sp.spd || '?'}）`], ['隐身', infoEsc(infoStl(sp.stealth))],
       sp.radar && ['机载雷达', `发现距离 ${sp.radar}`], wpn && ['挂载', infoEsc(wpn)], p.flares != null && ['干扰弹', `${p.flares} 组`],
       sp.stealth && p.kind === 'fighter' && ['空战打法', '超视距：发射后侧转保持照射，敌机逼近就拖开，不进格斗'], ['起降', sp.land ? '战区陆基机场' : '航母']] };
