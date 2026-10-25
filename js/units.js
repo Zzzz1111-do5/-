@@ -20,14 +20,16 @@ function landingPoint(x, y, r = 140) {
 const shipW = s => ((typeof SHIP_DIM === 'object' && SHIP_DIM[s.kind]) || [32, 11])[1];
 function beachSlot(s, x, y, r) {
   const taken = S.ships.filter(o => o !== s && alive(o) && o.land && o.bx != null && (o.state === 'move' || o.state === 'unloading' || o.state === 'beached'));
-  let first = null, seen = new Set();
+  let best = null, bn = Infinity, seen = new Set();
   for (let k = 0; k <= 12; k++) for (const sg of k ? [1, -1] : [1]) {
     const ox = clamp(x + sg * k * 14, 8, W - 8), lp = landingPoint(ox, k ? coastAt(ox) : y, k ? 140 : r);
     if (!lp || seen.has(lp.bx + ',' + lp.by)) continue;
-    seen.add(lp.bx + ',' + lp.by); first = first || lp;
-    if (!taken.some(o => Math.abs(o.bx - lp.bx) < (shipW(s) + shipW(o)) / 2 + 5 && Math.abs(o.by - lp.by) < 40)) return lp;
+    seen.add(lp.bx + ',' + lp.by);
+    const n = taken.filter(o => Math.abs(o.bx - lp.bx) < (shipW(s) + shipW(o)) / 2 + 5 && Math.abs(o.by - lp.by) < 40).length;
+    if (!n) return lp;
+    if (n < bn) { bn = n; best = lp; }   // 滩头全满：挑最不挤的位置
   }
-  return first;
+  return best;
 }
 // 舰船避碰：船体按沿舰轴的三个圆近似；与别的船重叠时向侧面滑开（搁滩 / 停泊的船不动，由驶来的船让开）
 function shipSep(s) {
@@ -95,7 +97,9 @@ function sailTo(s, dt, speed) {
   const sp = speed * (typeAt(s.x, s.y) === T.SHOAL ? .55 : 1) * dt, l = dist(s.x, s.y, tx, ty) || 1;
   s.heading = Math.atan2(ty - s.y, tx - s.x);
   s.x += (tx - s.x) / l * Math.min(sp, l); s.y += (ty - s.y) / l * Math.min(sp, l);
-  if (s.kind !== 'boat' && d > 12) shipSep(s);   // 快到抢滩点时不再推开，免得被挤离滩头
+  // 被挡住 6 秒没有进展的船暂时不避碰，保证能靠岸
+  if (S.t - (s.pkT ?? -99) > 6) { if (s.land && s.pkD != null && s.pkD - d < 3) s.noSep = S.t + 15; s.pkT = S.t; s.pkD = d; }
+  if (s.kind !== 'boat' && d > 12 && !(s.noSep > S.t)) shipSep(s);   // 快到抢滩点时不再推开，免得被挤离滩头
   return false;
 }
 
@@ -104,6 +108,12 @@ function updateShips(dt) {
     if (s.state === 'unloading') {
       if (s.kind === 'lst' && typeof vehUnload === 'function') { vehUnload(s, dt); continue; }   // 坦克登陆舰：车辆逐辆驶下跳板
       if ((s.ut += dt) >= 3) disembark(s);
+      continue;
+    }
+    // 坦克登陆舰卸空后退出滩头、回到近岸海面待命，把抢滩位置让给后续舰艇（拉着增援线的船留下）
+    if (s.state === 'beached' && s.kind === 'lst' && alive(s) && !apLoadedShip(s) && S.t - (s.beT ?? S.t) > 15 && !(S.rlines || []).some(l => l.ship === s.id)) {
+      const j = nearestPassable(ci(s.x, clamp(coastAt(s.x) + 170, 8, H - 8)), 'ship');
+      if (j >= 0) { Object.assign(s, { land: false, bx: null, by: null, tx: cellCX(j), ty: cellCY(j), state: 'move', pkD: null }); log(`${s.label} 卸载完毕，退出滩头`, 'info', 'lstout' + s.id, 30, s); }
       continue;
     }
     if (s.state !== 'move') continue;
@@ -118,8 +128,9 @@ function updateShips(dt) {
   }
 }
 
+const apLoadedShip = s => !!s.load && (s.load.teams > 0 || s.load.eng > 0 || (Array.isArray(s.load.veh) && s.load.veh.length > 0));
 function disembark(s) {
-  s.state = 'beached';
+  s.state = 'beached'; s.beT = S.t;
   const n = s.load.teams;
   if (n) {
     // 按登陆前预设的阵型在滩头展开
