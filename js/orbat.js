@@ -196,7 +196,7 @@ HOOK.visionP.push(() => S && S.bgs ? S.bgs.filter(G => G.side === 'p').flatMap(G
 
 // 画面：战斗群标号（北约式方框 + 编制记号「X」旅 /「III」团）与名称，远看时显示
 function bgDraw() {
-  if (!S || !S.bgs || !S.bgs.length || R.s > 3) return;
+  if (!S || !S.bgs || !S.bgs.length || R.s > 3 || (typeof V3 === 'object' && V3.drawing)) return;   // 3D 立体地图里标号立在地形上方（view3d.js），地面上不再重复画
   const ctx = R.ctx;
   const at = [];
   for (const G of S.bgs) {

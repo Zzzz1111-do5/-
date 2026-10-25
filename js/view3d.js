@@ -221,7 +221,9 @@ function v3Draw(now) {
   const C = v3Camera(), box = V3.box = v3Box();
   // 俯视贴图：分辨率取画面中心的比例与贴图上限中较小者
   const cap = Math.min(V3.maxTex, R.lowCap || (SETTINGS && SETTINGS.quality === 'low') ? 1280 : V3.coarse ? 1600 : 2048, Math.max(1024, Math.max(R.cv.width, R.cv.height) * 1.3));   // 屏外俯视画布最长边（按屏幕大小，手机、低画质更小）
-  const sTop = Math.min(CAM.z * (R.dprCap ? 1 : Math.min(2, window.devicePixelRatio || 1)), cap / Math.max(box[2], box[3]));
+  // 跟不上（主循环帧间隔滑动平均超过 40ms）就把屏外画布逐步缩小，最低 45%；流畅后再慢慢放大
+  if (typeof ema === 'number') V3.capK = clamp((V3.capK || 1) * (ema > .04 ? .985 : ema < .022 ? 1.004 : 1), .45, 1);
+  const sTop = Math.min(CAM.z * (R.dprCap ? 1 : Math.min(2, window.devicePixelRatio || 1)), cap * (V3.capK || 1) / Math.max(box[2], box[3]));
   const tw = Math.max(64, Math.round(box[2] * sTop)), th = Math.max(64, Math.round(box[3] * sTop));
   const top = V3.top;
   if (top.width !== tw || top.height !== th) { top.width = tw; top.height = th; }
@@ -288,7 +290,13 @@ function v3Proj(x, y, z) {
 function v3Overlay(ctx, time) {
   ctx.save(); ctx.setTransform(R.dpr, 0, 0, R.dpr, 0, 0);
   ctx.lineCap = 'round'; ctx.font = '11px "IBM Plex Mono", "Noto Sans SC", monospace'; ctx.textAlign = 'center';
-  const near = CAM.z / CAM.fit > 2.2, spec = S.role === 'spectate' || R.eye === 'all';
+  const near = CAM.z / CAM.fit > 2.2, spec = S.role === 'spectate' || R.eye === 'all', used = [];
+  // 名称标签：和已画的标签重叠就不画（近处的先画，远处的让位）
+  const label = (t, x, y, col, al) => {
+    const w = ctx.measureText(t).width + 4, r = [x - w / 2, y - 11, x + w / 2, y + 2];
+    if (used.some(o => r[0] < o[2] && r[2] > o[0] && r[1] < o[3] && r[3] > o[1])) return;
+    used.push(r); ctx.fillStyle = rgba(col, al); ctx.fillText(t, x, y);
+  };
   const stem = (x, y, hgt, col, a) => {
     const g = v3Ht(x, y), p0 = v3Proj(x, y, g), p1 = v3Proj(x, y, g + hgt);
     if (!p0 || !p1 || p1.f > .97) return null;
@@ -298,15 +306,16 @@ function v3Overlay(ctx, time) {
     ctx.fillStyle = rgba(col, al * .8); ctx.beginPath(); ctx.arc(p0.x, p0.y, 1.6, 0, 7); ctx.fill();
     return { ...p1, al };
   };
-  // 据点
-  for (const p of S.points) {
+  // 据点（离镜头近的先画，名称优先）
+  const C = V3.cam, byNear = (a, b) => dist(a.x, -a.y, C.E[0], C.E[1]) - dist(b.x, -b.y, C.E[0], C.E[1]);
+  for (const p of S.points.slice().sort(byNear)) {
     const col = p.owner === 'p' ? COL.g : COL.enemy, q = stem(p.x, p.y, 34 + (p.vp || 1) * 8, col, .9);
     if (!q) continue;
     const r = 4 + (p.vp || 1);
     ctx.fillStyle = rgba(COL.bg, .75 * q.al); ctx.strokeStyle = rgba(col, q.al); ctx.lineWidth = 1.4;
     ctx.beginPath(); ctx.moveTo(q.x, q.y - r); ctx.lineTo(q.x + r, q.y); ctx.lineTo(q.x, q.y + r); ctx.lineTo(q.x - r, q.y); ctx.closePath(); ctx.fill(); ctx.stroke();
     if (p.owner === 'e' && p.prog > 0) { ctx.fillStyle = rgba(COL.g, q.al); ctx.fillRect(q.x - r, q.y + r + 2, r * 2 * p.prog, 2); }
-    if (near && q.f < .5) { ctx.fillStyle = rgba(COL.text, q.al * .85); ctx.fillText(p.name, q.x, q.y - r - 4); }
+    if (near && q.f < .5) label(p.name, q.x, q.y - r - 4, COL.text, q.al * .85);
   }
   // 战斗群（编制标号）
   for (const G of S.bgs || []) {
@@ -318,7 +327,7 @@ function v3Overlay(ctx, time) {
     ctx.fillRect(q.x - w / 2, q.y - h / 2, w, h); ctx.strokeRect(q.x - w / 2, q.y - h / 2, w, h);
     ctx.beginPath(); ctx.moveTo(q.x - w / 2, q.y + h / 2); ctx.lineTo(q.x + w / 2, q.y - h / 2); ctx.moveTo(q.x - w / 2, q.y - h / 2); ctx.lineTo(q.x + w / 2, q.y + h / 2); ctx.stroke();
     ctx.fillStyle = rgba(col, q.al); ctx.fillText(G.ech || 'X', q.x, q.y - h / 2 - 3);
-    if (near && q.f < .6) { ctx.fillStyle = rgba(COL.text, q.al * .85); ctx.fillText(G.name, q.x, q.y + h / 2 + 11); }
+    if (near && q.f < .6) label(G.name, q.x, q.y + h / 2 + 11, COL.text, q.al * .85);
   }
   // 飞机：离地高度按 alt（0–1）放大，机头朝向按投影
   const air = (x, y, alt, hd, col) => {
@@ -349,8 +358,9 @@ function v3Toggle(on = !V3.on) {
   if (on && !v3Can()) return;
   if (on && !V3.tried) v3Init();
   V3.on = on && V3.ok;
-  const b = typeof $ === 'function' && $('btn3d');
+  const b = typeof $ === 'function' && $('btn3d'), c = typeof $ === 'function' && $('v3ctl');
   if (b) { b.classList.toggle('on', V3.on); b.setAttribute('aria-pressed', V3.on ? 'true' : 'false'); }
+  if (c) c.hidden = !V3.on;
   if (!V3.on && typeof trxResize === 'function' && TRX.ok) trxResize();
   if (typeof log === 'function' && S && S.t != null) log(V3.on ? '3D 立体地图：中键拖动转向 / 俯仰，< > 转向，; \' 俯仰' : '平面地图', 'info', 'v3', 1);
 }
@@ -394,8 +404,21 @@ function v3Button() {
   b.addEventListener('click', () => v3Toggle());
   const help = document.getElementById('btnHelp');
   help.parentNode.insertBefore(b, help);
+  // 3D 时显示的转向 / 俯仰按钮（手机没有键盘、中键）
+  const c = document.createElement('div');
+  c.id = 'v3ctl'; c.className = 'ov box'; c.hidden = true; c.setAttribute('role', 'group'); c.setAttribute('aria-label', '3D 镜头');
+  for (const [t, ti, f] of [['⟲', '向左转（<）', () => v3Turn(-1)], ['⟳', '向右转（>）', () => v3Turn(1)], ['⤒', '抬高视角、更俯视（;）', () => v3Tilt(-1)], ['⤓', '压低视角、更平视（\'）', () => v3Tilt(1)]]) {
+    const k = document.createElement('button');
+    k.type = 'button'; k.className = 'tb'; k.textContent = t; k.title = ti; k.setAttribute('aria-label', ti);
+    k.addEventListener('click', f);
+    c.appendChild(k);
+  }
+  document.getElementById('stage').appendChild(c);
   const st = document.createElement('style');
-  st.textContent = '#btn3d.on { color: var(--bg); background: var(--g); border-color: var(--g); }';
+  st.textContent = '#btn3d.on { color: var(--bg); background: var(--g); border-color: var(--g); }' +
+    '#v3ctl { top: calc(58px + env(safe-area-inset-top, 0px)); right: max(16px, env(safe-area-inset-right, 0px)); display: flex; gap: 4px; padding: 4px; }' +
+    '#v3ctl[hidden] { display: none; } #v3ctl .tb { min-width: 34px; font-size: 16px; }' +
+    '@media (max-height: 520px) { #v3ctl { top: calc(44px + env(safe-area-inset-top, 0px)); right: max(8px, env(safe-area-inset-right, 0px)); } #v3ctl .tb { height: 28px; min-width: 30px; } }';
   document.head.appendChild(st);
 }
 if (typeof document !== 'undefined') { if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', v3Button); else setTimeout(v3Button, 0); }
