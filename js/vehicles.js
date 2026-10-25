@@ -280,6 +280,7 @@ function vehDrive(v, dt, mul) {
   const tk = sp.swimK && isWater(t) ? (v.side === 'e' ? .6 : sp.swimK) : VEH_TSP[t];   // 水上：ZTD-05 滑行艇体，航速与登陆艇相当；守方 AAV-7 只有约一半
   let vel = sp.speed * (tk || .4) * climb * (v.sup > 60 ? .75 : 1) * ((v.mod && v.mod.spd) || 1) * mul * (dir < 0 ? .45 : 1);
   vel *= Math.abs(da) > 1 ? .12 : 1 - Math.abs(da) * .55;   // 大角度时原地转向
+  if (v.cmd && v.cmd.cap && S.t < (v.cmd.until ?? 0)) vel = Math.min(vel, v.cmd.cap);   // 团的队形整体移动：车速跟锚点（hq.js regOrder）
   if (slow < 1 && dir > 0) {   // 前车挡着：让行，等太久就侧绕
     v.yieldT = (v.yieldT || 0) + dt;
     if (park && v.yieldT > 1.5) vehGiveWay(park, v);
@@ -1222,8 +1223,10 @@ function vehDrawOver(time) {
   for (const g of S.gren || []) vehDrawGren(ctx, g);
   if (!S.veh || !S.veh.length) return;
   vehDrawPlatoons(ctx);
+  const agg = typeof hqAggHide === 'function';
   for (const v of S.veh) {
     if (v.dead || v.lst) continue;
+    if (agg && !isSel(v.id) && hqAggHide('v', v.id)) continue;   // 远看：编进团的车画成排符号（hq.js）
     const vis = v.side === 'p' || inVision(v.x, v.y);
     if (!vis && v.kx == null) continue;
     const x = vis ? v.x : v.kx, y = vis ? v.y : v.ky;

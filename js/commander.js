@@ -32,7 +32,7 @@ function chatSay(side, text, opts) {
   const t = S.t + Math.max(0, +opts.delay || 0);
   const m = { id: S.nid++, t, side: side === 'e' || side === 'sys' ? side : 'p', kind, text: String(text), x: at ? Math.round(at.x) : null, y: at ? Math.round(at.y) : null,
     lv: opts.lv ?? (kind === 'plan' || kind === 'friction' || kind === 'remedy' ? 0 : 1) };
-  if (S.hq && S.hq.on && !opts.hq) m.lv = Math.max(m.lv, 2);   // 指挥体系（hq.js）开着：常规档只看司令对旅的命令，其余都进详档
+  if (S.hq && S.hq.on && !opts.hq) m.lv = Math.max(m.lv, 2);   // 指挥体系（hq.js）开着：常规档只看双方司令的大战术，其余都进详档
   if (opts.hq) m.hq = true;
   // PvE 里敌方通话只能截获：约四成，滞后 15–30 秒（面板据此显示；观战时实时显示）
   if (m.side === 'e') m.ic = Math.random() < (m.lv === 0 ? .45 : m.lv === 1 ? .38 : .3) ? +(t + 15 + Math.random() * 15).toFixed(2) : null;

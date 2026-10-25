@@ -365,7 +365,7 @@ function v3Overlay(ctx, time) {
     if (!q) return;
     const g = v3Ht(x, y), p2 = v3Proj(x + Math.cos(hd) * 12, y + Math.sin(hd) * 12, g + z);
     const a = p2 ? Math.atan2(p2.y - q.y, p2.x - q.x) : 0;
-    if (typeof V3U === 'object' && V3U.ok && !(SETTINGS && SETTINGS.models3d === false)) return;   // 立体模型已经画了飞机，这里只留垂线
+    if (typeof V3M === 'object' && V3M.ok && !(SETTINGS && SETTINGS.models3d === false)) return;   // 立体模型已经画了飞机，这里只留垂线
     ctx.save(); ctx.translate(q.x, q.y); ctx.rotate(a);
     ctx.fillStyle = rgba(col, q.al); ctx.beginPath(); ctx.moveTo(7, 0); ctx.lineTo(-5, -4.5); ctx.lineTo(-2.5, 0); ctx.lineTo(-5, 4.5); ctx.closePath(); ctx.fill();
     ctx.restore();

@@ -98,7 +98,7 @@ function sbxCheck(c, x, y, x2, y2, ignore) {
   const repl = 0;
   if (ignore) cost = 0;
   if (cost > sbxLeft(c.side) + repl) return bad(`预算不足（还剩 ${sbxLeft(c.side)} 点）`);
-  if (c.lim && sbxLimN(c, ignore) >= c.lim.n) return bad(`${c.lim.nm}限购 ${c.lim.n} 架（两种型号合计），已经编入 ${sbxLimN(c, ignore)} 架`);
+  if (c.lim && sbxLimN(c, ignore) >= c.lim.n) return bad(`${c.lim.nm}限购 ${c.lim.n} ${c.lim.u || '架'}，已经编入 ${sbxLimN(c, ignore)} ${c.lim.u || '架'}`);
   if (s.at === 'none') return { ok: true };
   if (s.kind === 'ewing') {
     const nb = sbxOf('enemy').filter(it => sbxEntry(it).spawn.ek === 'airfield').length;
@@ -569,7 +569,7 @@ function sbxAIDefendBase() {
     let nw = 0;
     while (nw < clamp(Math.round(k), 0, 5) && sbxLeft('e') >= 40 && sbxTry('e_wave', 0, 0)) nw++;
     let na = 0;   // 第 101 空降师：大预算才编（每批 4 架黑鹰）
-    while (na < clamp(Math.round(k - 2.5), 0, 2) && sbxLeft('e') >= 2900 && sbxTry('e_101', 0, 0)) na++;   // 机械化空降很贵：大预算才买
+    if (k >= 3 && sbxLeft('e') >= 2900 && sbxTry('e_101', 0, 0)) na++;   // 机械化空降很贵：大预算才买，限购一份
     if (sbxSpent('e') > e0) say(`纵深加强：${up.length ? sbxNm(up) + '在警戒阵地之外加筑滩头防御地带；' : ''}主防地带后方增筑第二道碉堡线并配守备排${nw ? `；另编增援波次 ${nw} 批，开战后陆续开到受威胁最大的据点` : ''}${na ? `；第 101 空降师 C-17 空降战斗群 ${na} 波待命，敌上岸后在纵深伞降反冲击` : ''}。`, b1.ex);
   }
   sbxSync();
@@ -1672,7 +1672,7 @@ function sbxRender() {
   q('.sbx-pal').innerHTML = pal.map(c => {
     const na = c.spawn.kind === 'veh' && !sbxVehOk(), cost = c.spawn.at === 'line' ? c.spawn.per + '/百' : c.cost;
     const nb = c.spawn.kind === 'ewing' ? sbxOf('enemy').filter(it => sbxEntry(it).spawn.ek === 'airfield').length : 0;
-    const need = c.lim && sbxLimN(c) >= c.lim.n ? `限购 ${c.lim.n} 架，已满` : c.spawn.kind === 'ewing' ? (!nb ? '需先部署野战机场' : sbxOf('ewing').length >= nb * sbxEaCap() ? `机场已满（每座 ${sbxEaCap()} 个机位）` : '') : c.spawn.at === 'air' ? (!sbxOf('cv').length ? '需先部署航母' : sbxWingN() + (c.spawn.n || 1) > sbxWingCap() ? `机库已满（${sbxWingCap()} 架），再部署一艘航母可扩充` : '') : '';
+    const need = c.lim && sbxLimN(c) >= c.lim.n ? `限购 ${c.lim.n} ${c.lim.u || '架'}，已满` : c.spawn.kind === 'ewing' ? (!nb ? '需先部署野战机场' : sbxOf('ewing').length >= nb * sbxEaCap() ? `机场已满（每座 ${sbxEaCap()} 个机位）` : '') : c.spawn.at === 'air' ? (!sbxOf('cv').length ? '需先部署航母' : sbxWingN() + (c.spawn.n || 1) > sbxWingCap() ? `机库已满（${sbxWingCap()} 架），再部署一艘航母可扩充` : '') : '';
     return `<button type="button" role="option" data-id="${c.id}" class="${SBX.pick === c.id ? 'on' : ''}${need ? ' need' : ''}" title="${sbxEsc(c.name)}（${cost} 点）${need ? '：' + need : ''}" aria-selected="${SBX.pick === c.id}" ${na || (c.spawn.at !== 'line' && c.cost > left) ? 'disabled' : ''}>${sbxIc(c)}<span>${cost}</span></button>`;
   }).join('');
   sbxInfo(SBX.pick ? catalogById(SBX.pick) : null);
