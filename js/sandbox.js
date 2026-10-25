@@ -288,7 +288,7 @@ function sbxPresetDef() {
     if (!ts.length) continue;
     add({ cat: SBX_ROLE[u.role] || 'e_garrison', x: sbxR(ts.reduce((a, q) => a + q.x, 0) / ts.length), y: sbxR(ts.reduce((a, q) => a + q.y, 0) / ts.length), n: ts.length });
   }
-  const A = typeof A3D === 'object' ? A3D[S.level] || A3D.hard : { cars: 0 }, towns = ['T1', 'T2'].map(ptByKey).filter(Boolean);
+  const A = typeof A3D === 'object' ? A3D[S.level] || A3D.hard : { cars: 0 }, towns = ['T1', 'T2', 'T3'].map(ptByKey).filter(Boolean);
   for (let k = 0; k < A.cars && towns.length; k++) { const tw = towns[k % towns.length], s = sbxSnapXY(tw.x + (k > 1 ? 30 : -20), tw.y - 40); if (s) add({ cat: 'e_car', x: s.x, y: s.y }); }
   for (let k = 0; k < D.waves; k++) add({ cat: 'e_wave', t: Math.round(D.waveEvery * .6 + k * D.waveEvery), n: D.waveSize });
   sbxFitBudget('e');
@@ -306,7 +306,7 @@ function sbxPresetFleet() {
     if (s.kind === 'lst' && sbxVehOk()) for (const v of (s.load.veh || [])) if (SBX_VEH_ID[v]) it.cargo.push(SBX_VEH_ID[v]);
   }
   if (sbxVehOk()) for (const v of O.veh || []) if (v.side === 'p' && SBX_VEH_ID[v.type] && typeAt(v.x, v.y) === T.DEEP) add({ cat: SBX_VEH_ID[v.type], x: sbxR(v.x), y: sbxR(v.y) });
-  add({ cat: 'p_dd', x: W / 2, y: 1720 });
+  add({ cat: 'p_dd', x: W / 2, y: SEA(1720) });
   add({ cat: 'p_cv', x: W / 2, y: CARRIER_Y });
   const wing = typeof AIR_SPEC === 'object' ? AIR_SPEC : { recon: { n: 2 }, strike: { n: 4 }, cas: { n: 4 } };
   for (const [t, id] of [['recon', 'p_air_recon'], ['strike', 'p_air_strike'], ['cas', 'p_air_cas']]) for (let k = 0; k < wing[t].n; k++) add({ cat: id });
@@ -348,7 +348,7 @@ function sbxCross(x0, y0, x1, y1) {   // 直线路径上需要渡河的次数
   return n;
 }
 function sbxBeaches() {
-  const hq = ptByKey('HQ') || S.points[0], towns = ['T1', 'T2'].map(ptByKey).filter(Boolean), bats = ['BT', 'BT2'].map(ptByKey).filter(Boolean);
+  const hq = ptByKey('HQ') || S.points[0], towns = ['T1', 'T2', 'T3'].map(ptByKey).filter(Boolean), bats = ['BT', 'BT2'].map(ptByKey).filter(Boolean);
   return TER.beaches.map((b, i) => {
     const ex = ptByKey('E' + (i + 1)) || { x: b.cx, y: coastAt(b.cx) - 50, name: b.name + '出口', key: 'E' + (i + 1) }, w = b.x1 - b.x0;
     const tw = towns.slice().sort((a, c) => dist(a.x, a.y, ex.x, ex.y) - dist(c.x, c.y, ex.x, ex.y))[0] || hq;
@@ -455,7 +455,7 @@ function sbxAIDefendBase() {
   if (art.length) say(`炮兵：${art.length} 个炮兵阵地设在距岸约 ${sbxM(art.reduce((s, a) => s + a.d, 0) / art.length)} 米的山脊反斜面，避开舰炮直瞄，射程仍覆盖${sbxNm(main)}与泊地；打几轮就转移。`, art[0]);
   for (const a of art) delete a.d;
   // 4. 机动预备队：选到各主攻滩头最远距离最小的镇子 / 路口
-  const cands = ['T1', 'T2', 'X1', 'X2', 'HQ'].map(ptByKey).filter(Boolean);
+  const cands = ['T1', 'T2', 'T3', 'X1', 'X2', 'HQ'].map(ptByKey).filter(Boolean);
   const cost = p => Math.max(...main.slice(0, 2).map(B => dist(p.x, p.y, B.ex.x, B.ex.y) + 280 * sbxCross(p.x, p.y, B.ex.x, B.ex.y)));
   const hub = cands.sort((a, b) => cost(a) - cost(b))[0] || BS[0].hq;
   sbxTry('e_reserve', hub.x, hub.y - 30, 40);
@@ -567,7 +567,7 @@ function sbxAIAttackBase(mi, fi) {
   else if (F) say(`初步决心：拟主攻${M.b.name}，以一小股佯攻${F.b.name}；开战后先派侦察机沿岸照相，按侦察结果最终定登陆点，大部队在整段滩头正面同时抢滩。理由：${M.b.name}正面宽、纵深直通目标；${F.b.name}距主攻方向约 ${sbxM(Math.abs(F.b.cx - M.b.cx))} 米，佯攻可牵制${F.tw.name}方向守军预备队，使其不敢全力增援主攻方向。`, F.ex);
   const plan = (B, i, n, sp) => { const x = clamp(B.b.cx + (i - (n - 1) / 2) * (sp || 26), B.b.x0 + 12, B.b.x1 - 12); return { x: sbxR(x), y: sbxR(coastAt(x) - 20) }; };
   const ship = (id, B, i, n, row, cargo, wave, dx) => {
-    const p = sbxSea(B.b.cx + (dx || 0) + (i - (n - 1) / 2) * 34, (row || 1580) + (i % 2) * 36), r = sbxPlace(id, p.x, p.y);
+    const p = sbxSea(B.b.cx + (dx || 0) + (i - (n - 1) / 2) * 34, SEA(row || 1580) + (i % 2) * 36), r = sbxPlace(id, p.x, p.y);
     if (!r.ok) return null;
     r.it.plan = plan(B, i, n); r.it.wave = wave || 1;
     for (const c of cargo || []) { const cc = catalogById(c); if (cc && (cc.spawn.kind !== 'veh' || veh) && sbxLeft('p') >= cc.cost) r.it.cargo.push(c); }
@@ -592,7 +592,7 @@ function sbxAIAttackBase(mi, fi) {
   // 2. 火力支援舰
   const ddId = B0 >= 2600 ? 'p_cl' : B0 >= 1100 ? 'p_dd' : B0 >= 700 ? 'p_dd_e' : null;
   let dd = null;
-  if (ddId) { const p = sbxSea(M.b.cx + 140, 1650); const r = sbxPlace(ddId, p.x, p.y); if (r.ok) { dd = r.it; dd.plan = { x: sbxR(M.b.cx + 90), y: sbxR(coastAt(M.b.cx) + 430) }; } }
+  if (ddId) { const p = sbxSea(M.b.cx + 140, SEA(1650)); const r = sbxPlace(ddId, p.x, p.y); if (r.ok) { dd = r.it; dd.plan = { x: sbxR(M.b.cx + 90), y: sbxR(coastAt(M.b.cx) + 430) }; } }
   // 3. 补给舰（第二波）
   const sup = [];
   { const it = ship('p_supply', M, 0, 2, 1720, null, 2, -40); if (it) sup.push(it); }
@@ -608,7 +608,7 @@ function sbxAIAttackBase(mi, fi) {
   // 5. 两栖坦克、火箭艇、扫雷舰
   let nAm = 0;
   if (veh && typeof VEH_SPEC === 'object' && VEH_SPEC.amtank) for (let i = 0; i < clamp(Math.round(2.4 * k), 1, 5); i++) {
-    const p = sbxSea(M.b.cx + (i - 1) * 40, 1545), r = sbxPlace(i % 2 && k >= 1.2 ? 'p_amtank_how' : 'p_amtank', p.x, p.y);
+    const p = sbxSea(M.b.cx + (i - 1) * 40, SEA(1545)), r = sbxPlace(i % 2 && k >= 1.2 ? 'p_amtank_how' : 'p_amtank', p.x, p.y);
     if (r.ok) { r.it.plan = plan(M, i, 3, 40); nAm++; }
   }
   const rk = B0 >= 1100 ? ship('p_rocket', M, 0, 1, 1550, null, 1, -110) : null;
@@ -648,7 +648,7 @@ function sbxAIAttackBase(mi, fi) {
   for (let i = 0; i < clamp(Math.floor(k), 0, 4); i++) {
     const B = i % 2 && F ? F : M, id = sbxLeft('p') >= 450 ? 'p_dd' : 'p_dd_e';
     if (sbxLeft('p') < catalogById(id).cost + 40) break;
-    const p = sbxSea(B.b.cx + (i % 2 ? 60 : -170 - i * 20), 1665 + i * 18), r = sbxPlace(id, p.x, p.y);
+    const p = sbxSea(B.b.cx + (i % 2 ? 60 : -170 - i * 20), SEA(1665 + i * 18)), r = sbxPlace(id, p.x, p.y);
     if (r.ok) { r.it.plan = { x: sbxR(B.b.cx + ((i >> 1) - .5) * 80), y: sbxR(coastAt(B.b.cx) + 400) }; esc.push(B); }
   }
   for (let i = 0; i < clamp(Math.round(2 * (k - 1.5)), 0, 6) && sbxLeft('p') >= 160; i++) {   // 大预算：多出来的步兵登陆舰也编进第一波，大部队一次上去
@@ -739,7 +739,7 @@ function sbxAttStyle(style, R0) {
     let nl = 0, nc = 0, na = 0;
     for (let i = 0; i < 12 && sbxLeft('p') >= 160; i++) if (ship('p_lst', M, i, 4, 1790 + (i >> 2) * 30, ['p_hv_tank', 'p_tank', 'p_ifv'], 1, 30)) nl++;
     for (let i = 0; i < 6 && sbxLeft('p') >= 110; i++) if (ship('p_lcac', M, i, 4, 1620, ['p_hv_tank'], 1, -60)) nc++;
-    for (let i = 0; i < 10 && sbxLeft('p') >= 45; i++) { const p = sbxSea(M.b.cx + (i - 4) * 30, 1560), r = sbxPlace('p_amtank', p.x, p.y); if (r.ok) { r.it.plan = R0.plan(M, i, 10, 18); na++; } }
+    for (let i = 0; i < 10 && sbxLeft('p') >= 45; i++) { const p = sbxSea(M.b.cx + (i - 4) * 30, SEA(1560)), r = sbxPlace('p_amtank', p.x, p.y); if (r.ok) { r.it.plan = R0.plan(M, i, 10, 18); na++; } }
     say(`方案「装甲突击」：坦克登陆舰 ${nl} 艘（ZTZ-99A、96B 与步兵战车）、726 型气垫艇 ${nc} 艘各载一辆 99A、两栖突击车 ${na} 辆随第一波抢滩，坦克先上岸撕开缺口，步兵跟进。`, M.ex);
   } else if (style === 'air') {
     if (!sbxOf('cv').length) { const p = sbxSea(clamp(M.b.cx, 200, W - 200), CARRIER_Y - 20); sbxPlace('p_cv', p.x, Math.max(p.y, STAGING_Y + 60)); }
@@ -755,7 +755,7 @@ function sbxAttStyle(style, R0) {
     say(`方案「立体登陆」：正面登陆规模压小，${abn ? '空降兵营伞降夺取敌野战机场；' : ''}${sbxCnt(n)}——蛟龙突击队在主攻目标后方伞降、直升机机降，与正面登陆上下夹击。`, M.ex);
   } else if (style === 'fire') {
     let nd = 0, nr = 0;
-    for (let i = 0; i < 6 && sbxLeft('p') >= 220; i++) { const id = i % 3 === 2 ? 'p_dd_h' : 'p_ca', p = sbxSea(M.b.cx + (i - 2.5) * 90, 1690 + (i % 2) * 30), r = sbxPlace(id, p.x, p.y); if (r.ok) { r.it.plan = { x: sbxR(M.b.cx + (i - 2.5) * 60), y: sbxR(coastAt(M.b.cx) + 420) }; nd++; } }
+    for (let i = 0; i < 6 && sbxLeft('p') >= 220; i++) { const id = i % 3 === 2 ? 'p_dd_h' : 'p_ca', p = sbxSea(M.b.cx + (i - 2.5) * 90, SEA(1690 + (i % 2) * 30)), r = sbxPlace(id, p.x, p.y); if (r.ok) { r.it.plan = { x: sbxR(M.b.cx + (i - 2.5) * 60), y: sbxR(coastAt(M.b.cx) + 420) }; nd++; } }
     for (let i = 0; i < 6 && sbxLeft('p') >= 60; i++) if (ship('p_rocket', M, i, 6, 1555, null, 1, 0)) nr++;
     const n = sbxLoop(['p_tbm', 'p_smoke', 'p_sortie_bomb', 'p_tbm'], id => id.startsWith('p_sortie') ? !!sbxTry(id, M.ex.x, M.ex.y, 30) : sbxPlace(id).ok, 12, 16);
     say(`方案「火力先导」：055 / 052D 驱逐舰 ${nd} 艘前出、火箭艇 ${nr} 艘、${sbxCnt(n)}；H 时前集中舰炮、垂发导弹与战术导弹火力准备，先砸烂滩头工事与岸炮再抢滩。`, M.ex);
@@ -827,7 +827,7 @@ function sbxSpawn(it, role, acc) {
       addTeam('e', sp.x, sp.y, s.men, { role, obj: p.key, u: u.id, ...(role === 'ambush' ? { hold: true } : {}), ...(s.mod ? { mod: { ...s.mod } } : {}), ...(s.tag ? { sbxTag: s.tag } : {}), cat: c.id });
     }
   } else if (s.kind === 'car') {
-    const home = sbxNearPt(x, y, p => ['T1', 'T2', 'HQ', 'X1', 'X2'].includes(p.key));
+    const home = sbxNearPt(x, y, p => ['T1', 'T2', 'T3', 'HQ', 'X1', 'X2'].includes(p.key));
     S.armor.push({ id: S.nid++, x, y, heading: SOUTH, aim: SOUTH, hp: 30, maxhp: 30, cd: 1 + Math.random(), order: null, dead: false, kx: null, ky: null, kh: null, seen: -99,
       px: x, py: y, home: home.key, mode: 'park', moving: false, think: Math.random() * 2, fireT: -99, hitT: -99, hurt: false, deadT: null });
   } else if (s.kind === 'veh') {

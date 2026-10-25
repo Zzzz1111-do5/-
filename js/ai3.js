@@ -335,7 +335,7 @@ function updateRaids(dt) {
 
 // ———————————————— 装甲车 ————————————————
 function a3CarInit() {
-  const D = a3D(), towns = ['T1', 'T2'].map(k => ptByKey(k)).filter(Boolean);
+  const D = a3D(), towns = ['T1', 'T2', 'T3'].map(k => ptByKey(k)).filter(Boolean);
   if (!towns.length) { const hq = ptByKey('HQ') || S.points[0]; if (hq) towns.push(hq); }
   S.armor = [];
   if (!towns.length) return;

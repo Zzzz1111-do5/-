@@ -217,7 +217,7 @@ function checkEnd(dt) {
 
 function step(dt) {
   S.t += dt;
-  FBUDGET = 3;
+  FBUDGET = MAP_K > 1.2 ? 2 : 3;
   indexUnits();
   if ((S.visT = (S.visT ?? 0) - dt) <= 0) { S.visT = .25; updateVision(); }
   updateShips(dt); updateDD(dt); updateTeams(dt); indexUnits(); updateUnits(dt);

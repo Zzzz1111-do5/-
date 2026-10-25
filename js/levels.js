@@ -137,7 +137,7 @@ function lvNavalDefend(L) {
     for (let k = 0; k < 120 && !af; k++) { const w = k < 60 ? 900 : 2400, x = clamp(hq.x + (Math.random() - .5) * w, 170, W - 170), y = clamp(hq.y - 60 - Math.random() * 500, 50, H); if (coastAt(x) - y >= 500) af = sbxTry('e_airfield', x, y, 60); }
     if (af) for (const id of ['e_air_ftr', 'e_air_ftr', 'e_air_f22', 'e_air_f22', 'e_air_ga', 'e_air_ga']) sbxPlace(id);
   }
-  for (const p of ['HQ', 'T1', 'T2'].map(ptByKey).filter(Boolean)) sbxTry('e_garrison', p.x, p.y + 15, 40);
+  for (const p of ['HQ', 'T1', 'T2', 'T3'].map(ptByKey).filter(Boolean)) sbxTry('e_garrison', p.x, p.y + 15, 40);
   sbxSync();
 }
 // 陆战：先按风格正常布防，再把滩头一线（海岸 260 以内）的工事、岸炮撤掉，把点数投到内陆要点的防御上

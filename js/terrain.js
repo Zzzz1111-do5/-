@@ -52,9 +52,11 @@ vec3 farm(vec2 w, float pw, out float ed, out vec2 wc, out float fk) {
   return c * (1. + rows * .03) * (.94 + .12 * vn(w * .09));
 }
 // 海岸线 y：16 位（高低两字节）存储，最近点采样后手动线性插值，避免 8 位量化在岸边浪线上出现竖条
+// 每 2 个世界单位一个采样（纹理宽 W/2+1，不超过手机常见的 4096 上限）
+const float KN = ${W / 2}.;
 float coastY(float x) {
-  float fx = clamp(x, 0., WORLD.x), i = floor(fx);
-  vec2 a = texture2D(uK, vec2((i + .5) / (WORLD.x + 1.), .5)).ra, b = texture2D(uK, vec2((min(i + 1., WORLD.x) + .5) / (WORLD.x + 1.), .5)).ra;
+  float fx = clamp(x, 0., WORLD.x) * .5, i = floor(fx);
+  vec2 a = texture2D(uK, vec2((i + .5) / (KN + 1.), .5)).ra, b = texture2D(uK, vec2((min(i + 1., KN) + .5) / (KN + 1.), .5)).ra;
   return uCoast.x + mix(a.x * 65280. + a.y * 255., b.x * 65280. + b.y * 255., fx - i) / 65535. * uCoast.y;
 }
 #if !LITE
@@ -92,6 +94,7 @@ void main() {
   float pw = 1. / uView.x, t = uTime;
   // 地图边界外照样画（南边是外海，东西两侧按边缘延伸），只略微压暗，放大到边缘不会露出黑底
   float outD = length(max(max(-w, w - WORLD), 0.));
+  w = vec2(WORLD.x - abs(WORLD.x - abs(w.x)), abs(w.y));   // 东西两侧、北侧按边界镜像（以前截在边缘像素上，拉成一道道横条）
   // 边界扰动：材质边缘不沿格子走
   vec2 wq = w + (vec2(vn(w * .045), vn(w * .045 + 31.7)) - .5) * 6.;
   vec2 uv = wq / WORLD, uv0 = w / WORLD, uvr = (w + (wq - w) * .3) / WORLD;
@@ -324,13 +327,13 @@ function trxTerrain() {
     gl.activeTexture(gl.TEXTURE0 + i); gl.bindTexture(gl.TEXTURE_2D, TRX.tex[k]);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, GW, GH, 0, gl.RGBA, gl.UNSIGNED_BYTE, w[k]);
   });
-  // 海岸线：W+1 个采样，按本图最高 / 最低点归一化到 16 位（亮度 = 高字节、透明度 = 低字节）
-  const co = TER.coast; let lo = 1e9, hi = -1e9;
+  // 海岸线：每 2 个世界单位一个采样（共 W/2+1 个），按本图最高 / 最低点归一化到 16 位（亮度 = 高字节、透明度 = 低字节）
+  const co = TER.coast, KN = W / 2; let lo = 1e9, hi = -1e9;
   for (let x = 0; x <= W; x++) { lo = Math.min(lo, co[x]); hi = Math.max(hi, co[x]); }
-  const cr = Math.max(1, hi - lo), k = new Uint8Array((W + 1) * 2);
-  for (let x = 0; x <= W; x++) { const v = Math.round((co[x] - lo) / cr * 65535); k[x * 2] = v >> 8; k[x * 2 + 1] = v & 255; }
+  const cr = Math.max(1, hi - lo), k = new Uint8Array((KN + 1) * 2);
+  for (let j = 0; j <= KN; j++) { const v = Math.round((co[Math.min(W, j * 2)] - lo) / cr * 65535); k[j * 2] = v >> 8; k[j * 2 + 1] = v & 255; }
   gl.activeTexture(gl.TEXTURE4); gl.bindTexture(gl.TEXTURE_2D, TRX.tex.k);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE_ALPHA, W + 1, 1, 0, gl.LUMINANCE_ALPHA, gl.UNSIGNED_BYTE, k);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE_ALPHA, KN + 1, 1, 0, gl.LUMINANCE_ALPHA, gl.UNSIGNED_BYTE, k);
   Object.assign(TRX, { seed: TER.seed, sig: trxSig(), c0: lo, cr });
 }
 

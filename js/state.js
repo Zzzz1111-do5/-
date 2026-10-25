@@ -29,7 +29,7 @@ function newGame(seed, level, opts = {}) {
     groups: { 1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [], 8: [], 9: [] }, sel: [],
     assets: { recon: 3, strike: 3, rline: 3, reserve: 9, smoke: 6 },
     points: TER.points.map(p => ({ ...p, owner: 'e', prog: 0 })),
-    dd: { name: '055 型驱逐舰', x: W / 2, y: 1720, tx: W / 2, ty: 1720, hull: 3, state: 'ready', cool: 0, repairT: 0, repairDur: 16, auto: false, exposedUntil: 0, moving: false },
+    dd: { name: '055 型驱逐舰', x: W / 2, y: SEA(1720), tx: W / 2, ty: SEA(1720), hull: 3, state: 'ready', cool: 0, repairT: 0, repairDur: 16, auto: false, exposedUntil: 0, moving: false },
     stats: { lost: 0, killed: 0, shots: 0, exposed: 0, structs: 0 }, throttle: {}
   };
   if (!opts.sandbox) deployDefenses(r, DIFF[level]);
@@ -48,14 +48,14 @@ function newGame(seed, level, opts = {}) {
 // 登陆兵力：10 × 15 + 3 × 15 = 195 人，另有 9 组（27 人）后备经增援线上岸
 function deployFleet() {
   const slot = (kind, x, y, label, grp) => S.groups[grp].push(addShip(kind, x, y, label).id);
-  for (let k = 0; k < 5; k++) slot('assault', W * (.2 + k * .045), 1600 + (k % 2) * 46, 'LA-' + (k + 1), 1);
-  for (let k = 0; k < 5; k++) slot('assault', W * (.62 + k * .045), 1600 + (k % 2) * 46, 'LA-' + (k + 6), 2);
-  for (let k = 0; k < 3; k++) slot('supply', W * (.45 + k * .05), 1640, 'LS-' + (k + 1), 3);
+  for (let k = 0; k < 5; k++) slot('assault', W * (.2 + k * .045), SEA(1600) + (k % 2) * 46, 'LA-' + (k + 1), 1);
+  for (let k = 0; k < 5; k++) slot('assault', W * (.62 + k * .045), SEA(1600) + (k % 2) * 46, 'LA-' + (k + 6), 2);
+  for (let k = 0; k < 3; k++) slot('supply', W * (.45 + k * .05), SEA(1640), 'LS-' + (k + 1), 3);
   // 第 4 编队：坦克登陆舰（2 辆中型坦克 + 1 辆装甲运兵车）与 4 辆自航泅渡的两栖坦克
-  const l = addShip('lst', W * .4, 1690, 'LT-1');
+  const l = addShip('lst', W * .4, SEA(1690), 'LT-1');
   l.load.veh = SHIP_SPEC.lst.veh.slice();
   S.groups[4].push(l.id);
-  if (typeof addVehicle === 'function') for (const x of [.25, .31, .67, .73]) S.groups[4].push(addVehicle('p', 'amtank', W * x, 1545, { auto: true }).id);
+  if (typeof addVehicle === 'function') for (const x of [.25, .31, .67, .73]) S.groups[4].push(addVehicle('p', 'amtank', W * x, SEA(1545), { auto: true }).id);
 }
 
 function deployDefenses(r, D) {
@@ -102,7 +102,7 @@ function deployDefenses(r, D) {
     const b = TER.beaches[i % TER.beaches.length], x = b.cx + (r() - .5) * 140;
     addEnemy('mortar', x, coastAt(x) - 160 - r() * 50);
   }
-  const aaAt = ['HQ', 'RD', 'T1', 'T2'].map(k => S.points.find(p => p.key === k)).filter(Boolean);
+  const aaAt = ['HQ', 'RD', 'T1', 'T2', 'T3'].map(k => S.points.find(p => p.key === k)).filter(Boolean);
   for (let i = 0; i < D.aa; i++) { const p = aaAt[i % aaAt.length]; addEnemy('aa', p.x + (r() - .5) * 80, p.y + 30 + r() * 30); }
   for (const k of ['BT', 'BT2', 'RD']) {
     const p = S.points.find(p => p.key === k);
@@ -117,7 +117,7 @@ function deployDefenses(r, D) {
     }
   }
   // 机动预备队：分驻两个镇子
-  const towns = ['T1', 'T2'].map(k => S.points.find(p => p.key === k)).filter(Boolean);
+  const towns = ['T1', 'T2', 'T3'].map(k => S.points.find(p => p.key === k)).filter(Boolean);
   if (!towns.length) towns.push(S.points[0]);
   let ur = null;
   for (let k = 0; k < D.reserves; k++) {

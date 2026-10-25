@@ -200,7 +200,7 @@ function cmdBeachInfo(i, ships) {
   const fd = ships.length ? ships.reduce((a, s) => a + dist(s.x, s.y, b.cx, coastAt(b.cx)), 0) / ships.length : 500;
   const fm = ships.length ? Math.max(...ships.map(s => dist(s.x, s.y, b.cx, coastAt(b.cx)))) : 500;   // 最远一艘：整个梯队同时抵滩要等它
   let town = null, td = Infinity;
-  for (const k of ['T1', 'T2']) { const p = cmdPt(k); if (p) { const d = dist(p.x, p.y, E.x, E.y); if (d < td) { td = d; town = p; } } }
+  for (const k of ['T1', 'T2', 'T3']) { const p = cmdPt(k); if (p) { const d = dist(p.x, p.y, E.x, E.y); if (d < td) { td = d; town = p; } } }
   const th = cmdThreat(i);   // 侦察查明的守军（步兵、反坦克、装甲）
   const score = w / 35 - dHQ / 260 + Math.min(road, 18) / 9 - def * 1.3 - bats.length * 1.6 - fd / 800 - fm / 600 - th.men / 8 - th.at * .5 - (th.n.mg || 0) * .5;
   return { i, b, E, w, dHQ, road, bats, def, kn, fd, town, td, th, score };

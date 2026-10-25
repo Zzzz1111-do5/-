@@ -1,8 +1,11 @@
 'use strict';
 // 常量、工具函数、地形类型表
-const W = 3000, H = 2000, CELL = 10, GW = W / CELL, GH = H / CELL;
-const STAGING_Y = 1500;           // 我方舰队集结海域上沿（航母在更南边）
-const CARRIER_Y = 1880;
+// 地图尺度：边长是最初 3000 × 2000 版的 MAP_K 倍（面积约 2 倍）。地形大特征、纵深、海面位置按它换算；武器射程等真实距离不变
+const MAP_K = 1.4;
+const W = 4200, H = 2800, CELL = 10, GW = W / CELL, GH = H / CELL;
+const SEA = y => H - (2000 - y) * MAP_K;   // 旧版（高 2000）海面上的 y 换算到现在的地图：集结海域、船位、航母
+const STAGING_Y = SEA(1500);      // 我方舰队集结海域上沿（航母在更南边）
+const CARRIER_Y = SEA(1880);
 const ELEV_H = 6;                 // 高程 1.0 对应的视线高度（格）
 const COL = {
   bg: '#020704', g: '#3dff8a', gMid: '#1fa457', gDim: '#0f4a29', enemy: '#ff3d6e',

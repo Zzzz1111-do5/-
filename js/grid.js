@@ -108,6 +108,7 @@ const NDX = NB.map(n => n[0]), NDY = NB.map(n => n[1]), NDM = NB.map(n => n[2]);
 
 // 流场缓存：地形/工事变化只让版本号递增；每个推演步最多重算 FBUDGET 个，超出时先用旧流场，避免大地图卡顿
 let FBUDGET = 3;
+const COSTS = new Map();
 const HEAP_N = new Int32Array(GW * GH * 8), HEAP_P = new Float64Array(GW * GH * 8);
 function field(tx, ty, cls) {
   const ti = nearestPassable(ci(tx, ty), cls);
@@ -117,8 +118,10 @@ function field(tx, ty, cls) {
   FBUDGET--;
   const d = f ? f.d : new Float64Array(GW * GH);
   d.fill(Infinity);
-  const cost = new Float64Array(GW * GH);
-  for (let k = 0; k < GW * GH; k++) cost[k] = stepCost(k, cls);
+  // 通行代价按地形版本缓存（同一版本内多个流场共用，大地图上省掉每次整图重算）；raid 依赖实时视野，每次重算
+  let C = COSTS.get(cls);
+  if (!C || C.gen !== fieldGen || cls === 'raid') { C = { gen: fieldGen, a: (C && C.a) || new Float64Array(GW * GH) }; for (let k = 0; k < GW * GH; k++) C.a[k] = stepCost(k, cls); COSTS.set(cls, C); }
+  const cost = C.a;
   let n = 0;
   const push = (i, p) => {
     let k = n++;

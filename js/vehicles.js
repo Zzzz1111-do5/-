@@ -934,7 +934,7 @@ function vehSweep(v, auto) {
 // —— 守军车辆 AI：机动预备队停在镇子；附近据点受威胁且有步兵在场时反击，否则在据点后方车体半埋坚守 ——
 function vehThinkE(v) {
   if (!v.home) {
-    const ks = ['T1', 'T2', 'HQ'].map(k => S.points.find(p => p.key === k)).filter(Boolean);
+    const ks = ['T1', 'T2', 'T3', 'HQ'].map(k => S.points.find(p => p.key === k)).filter(Boolean);
     let h = null, bd = Infinity;
     for (const p of ks.length ? ks : S.points) { const d = dist(p.x, p.y, v.x, v.y); if (d < bd) { bd = d; h = p; } }
     v.home = h ? h.key : null; v.hx = v.x; v.hy = v.y;
@@ -963,7 +963,7 @@ function vehThinkE(v) {
 // 地狱难度：守军另有一辆中型坦克、一辆轻型坦克作机动预备队，停在镇子背面（沙盘模式由玩家自行摆放）
 HOOK.newGame.push(opts => {
   if (!S || (opts && opts.sandbox) || S.mode === 'sandbox' || S.level !== 'hell') return;
-  const ks = ['T1', 'T2', 'HQ'].map(k => S.points.find(p => p.key === k)).filter(Boolean);
+  const ks = ['T1', 'T2', 'T3', 'HQ'].map(k => S.points.find(p => p.key === k)).filter(Boolean);
   [['tank', 0], ['lt_tank', 1]].forEach(([t, i]) => {
     const p = ks[i % ks.length]; if (!p) return;
     const sp = typeof a3Park === 'function' && Array.isArray(S.armor) ? a3Park(p) : { x: p.x, y: p.y - 40 };
