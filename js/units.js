@@ -226,7 +226,9 @@ function clearLine(x0, y0, x1, y1, side) {
 }
 
 function moveTeam(q, dt, mul) {
-  const o = q.order, dd = dist(q.x, q.y, o.x, o.y);
+  const o = q.order;
+  if (!o.bf) { o.bf = true; const b = bldOut(o.x, o.y); if (b && passInf(b[0], b[1])) [o.x, o.y] = b; }   // 落脚点在房子里：改到墙根街边
+  const dd = dist(q.x, q.y, o.x, o.y);
   if (dd < 3) return true;
   if (S.t - (q.pathT ?? -9) > 1) { q.pathT = S.t; q.direct = clearLine(q.x, q.y, o.x, o.y, q.side); }
   let tx = o.x, ty = o.y;
@@ -241,7 +243,8 @@ function moveTeam(q, dt, mul) {
     }
   }
   const i = ci(q.x, q.y);
-  const sp = (q.side === 'p' ? (q.kind === 'eng' ? 18 : 16) : 14) * (TP[TER.type[i]].sp || .5) * (WIREC[i] ? .3 : 1) * (q.sup > 30 ? .7 : 1) * mul * dt;
+  const crawl = q.prone ? (o.t === 'retreat' || o.dodge ? .75 : o.t === 'charge' || o.t === 'amove' ? .6 : .4) : 1;   // 卧倒：匍匐 / 短促跃进
+  const sp = (q.side === 'p' ? (q.kind === 'eng' ? 18 : 16) : 14) * (TP[TER.type[i]].sp || .5) * (WIREC[i] ? .3 : 1) * (q.sup > 30 ? .7 : 1) * crawl * mul * dt;
   const l = dist(q.x, q.y, tx, ty) || 1;
   const rx = q.x + (tx - q.x) / l * Math.min(sp, l), ry = q.y + (ty - q.y) / l * Math.min(sp, l);
   let px = 0, py = 0;
@@ -260,6 +263,8 @@ function moveTeam(q, dt, mul) {
     else if (passInf(q.x, ry)) { nx = q.x; ny = ry; }
     else { q.direct = false; q.pathT = S.t; return false; }
   }
+  const bo = bldOut(nx, ny, .6);   // 避让推进了房子：贴墙走
+  if (bo && passInf(bo[0], bo[1])) [nx, ny] = bo;
   q.x = nx; q.y = ny; q.movedT = S.t; q.heading = Math.atan2(ty - q.y, tx - q.x);
   return false;
 }

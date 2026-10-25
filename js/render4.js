@@ -24,11 +24,7 @@ function drawCraters() {
 const ROOF = [[158, 74, 52], [120, 118, 112], [72, 104, 138], [170, 166, 156], [92, 84, 78], [176, 96, 64]];
 function drawBuildings() {
   if (CELL * R.s < (realLook() ? 2.5 : 5)) return;   // 写实：全图时房屋是一簇簇小色块，像卫星图上的村镇
-  if (TOWN_SEED !== TER.seed) {
-    TOWN_SEED = TER.seed; TOWN_CELLS = [];
-    const hr = rng(TER.seed + 11);
-    for (let i = 0; i < GW * GH; i++) if (TER.type[i] === T.TOWN) TOWN_CELLS.push({ x: cellCX(i), y: cellCY(i), w: 5 + hr() * 3, h: 4 + hr() * 3, r: hr() < .5, c: (hr() * ROOF.length) | 0, f: hr() < .3, dx: (hr() - .5) * 2, dy: (hr() - .5) * 2 });
-  }
+  if (TOWN_SEED !== TER.seed) { TOWN_SEED = TER.seed; TOWN_CELLS = townBld().list; }
   const ctx = R.ctx, [x0, y0, x1, y1] = viewRect();
   if (realLook()) {
     const sh = .45 + .9 * smooth(5, 14, CELL * R.s);
@@ -157,12 +153,21 @@ function drawStructures(time) { for (const p of S.points) if (inView(p.x, p.y, 7
 
 // 俯视单兵（世界尺寸：肩宽约 3.9、连枪长约 5 单位）：暗底肩部 + 实心头 + 武器线；描边按屏幕像素，放大后依然纤细
 // 通讯兵背电台与天线，机枪手枪管粗、带脚架，工兵背锹
-function drawMan(ctx, x0, y0, a, role, col, det, side) {
+// prone：卧倒——身体顺着朝向趴平，两腿分开在后，枪朝前
+function drawMan(ctx, x0, y0, a, role, col, det, side, prone) {
   if (!det) { const d = Math.max(px(1.8), 1.4); ctx.fillStyle = col; ctx.fillRect(x0 - d / 2, y0 - d / 2, d, d); return; }
-  if (realLook()) { drawManReal(ctx, x0, y0, a, role, col, side); return; }
+  if (realLook()) { drawManReal(ctx, x0, y0, a, role, col, side, prone); return; }
   const k = 1.12, lw = px(1) / k, dark = 'rgba(2,10,6,.88)';
   ctx.save(); ctx.translate(x0, y0); ctx.rotate(a); ctx.scale(k, k);
   ctx.lineWidth = lw; ctx.strokeStyle = col; ctx.fillStyle = dark;
+  if (prone) {
+    ctx.beginPath(); ctx.moveTo(-2.4, -.35); ctx.lineTo(-4.5, -1); ctx.moveTo(-2.4, .35); ctx.lineTo(-4.5, 1); ctx.stroke();   // 两腿
+    ctx.beginPath(); ctx.ellipse(-1.1, 0, 1.75, .78, 0, 0, 7); ctx.fill();
+    ctx.globalAlpha *= .35; ctx.fillStyle = col; ctx.fill(); ctx.globalAlpha /= .35; ctx.stroke();
+    ctx.lineWidth = lw * (role === 'mg' ? 1.7 : 1.05); ctx.beginPath(); ctx.moveTo(.6, .3); ctx.lineTo(3.8, .3); ctx.stroke();
+    ctx.fillStyle = col; ctx.strokeStyle = dark; ctx.lineWidth = lw * .8; ctx.beginPath(); ctx.arc(.75, 0, .78, 0, 7); ctx.fill(); ctx.stroke();
+    ctx.restore(); return;
+  }
   if (role === 'radio') {
     ctx.fillRect(-1.95, -.8, .95, 1.6); ctx.strokeRect(-1.95, -.8, .95, 1.6);
     ctx.lineWidth = lw * .8; ctx.beginPath(); ctx.moveTo(-1.7, -.7); ctx.lineTo(-3.4, -2.1); ctx.stroke(); ctx.lineWidth = lw;

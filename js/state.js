@@ -135,6 +135,8 @@ function addShip(kind, x, y, label) {
 }
 
 function addTeam(side, x, y, men, extra) {
+  const bo = typeof bldOut === 'function' && bldOut(x, y);   // 出生点在房子里：挪到墙根
+  if (bo) [x, y] = bo;
   const q = {
     id: S.nid++, side, x, y, men: men.slice(), ammo: 60, cd: Math.random(), sup: 0, kind: men[0] === 'eng' ? 'eng' : 'inf',
     no: S.teams.filter(s => s.side === side).length + 1, order: { t: 'hold' }, movedT: -99, hitT: -99, ...extra

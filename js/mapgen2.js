@@ -133,3 +133,35 @@ function finishMap(r, cAt, headland) {
   TER.fords.forEach((f, i) => add('F' + (i + 1), ew(TER.fords.length, i) + '渡口', f.x, f.y, 1));
   TER.points = P;
 }
+
+// 城镇格里的房屋：每格一栋，位置、尺寸、朝向、屋顶色按地图种子固定。渲染画房子、步兵站位避开房子都用这一份
+let BLD = null;
+function townBld() {
+  if (BLD && BLD.seed === TER.seed) return BLD;
+  BLD = { seed: TER.seed, list: [], at: new Map() };
+  const hr = rng(TER.seed + 11);
+  for (let i = 0; i < GW * GH; i++) if (TER.type[i] === T.TOWN) {
+    const b = { x: cellCX(i), y: cellCY(i), w: 5 + hr() * 3, h: 4 + hr() * 3, r: hr() < .5, c: (hr() * 6) | 0, f: hr() < .3, dx: (hr() - .5) * 2, dy: (hr() - .5) * 2 };   // c：屋顶色（6 种）
+    BLD.list.push(b); BLD.at.set(i, b);
+  }
+  return BLD;
+}
+// 点落在房子里：推到最近的墙外（留 m 的余量，贴着墙根站），相邻格的房子也查；不在房子里返回 null
+function bldOut(x, y, m = 1.2) {
+  if (!TER) return null;
+  const gx0 = Math.floor(x / CELL), gy0 = Math.floor(y / CELL);
+  let moved = false;
+  for (let pass = 0; pass < 3; pass++) {
+    let hit = null;
+    for (let gy = gy0 - 1; gy <= gy0 + 1 && !hit; gy++) for (let gx = gx0 - 1; gx <= gx0 + 1 && !hit; gx++) {
+      if (gx < 0 || gy < 0 || gx >= GW || gy >= GH || TER.type[gy * GW + gx] !== T.TOWN) continue;
+      const b = townBld().at.get(gy * GW + gx), hw = (b.r ? b.h : b.w) / 2 + m, hh = (b.r ? b.w : b.h) / 2 + m, cx = b.x + b.dx, cy = b.y + b.dy;
+      if (Math.abs(x - cx) < hw && Math.abs(y - cy) < hh) hit = { cx, cy, hw, hh };
+    }
+    if (!hit) break;
+    const ex = hit.hw - Math.abs(x - hit.cx), ey = hit.hh - Math.abs(y - hit.cy);
+    if (ex < ey) x = hit.cx + (x >= hit.cx ? 1 : -1) * hit.hw; else y = hit.cy + (y >= hit.cy ? 1 : -1) * hit.hh;
+    moved = true;
+  }
+  return moved ? [x, y] : null;
+}

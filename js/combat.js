@@ -38,7 +38,9 @@ function suppress(q, v, sx, sy) {
 // 掩体系数：战壕只挡来自海面一侧（南面）的火力；原地构筑工事；弹坑
 function shelter(q, sx, sy) {
   const tr = q.inTrench && (sy == null || sy > q.y - 12) ? .55 : 1;
-  return tr * (S.t - q.movedT > 5 ? (q.side === 'e' ? aiD().dig : .75) : 1) * (CRATERC[ci(q.x, q.y)] ? .8 : 1);
+  const still = S.t - q.movedT > 5 ? (q.side === 'e' ? aiD().dig : .75) : 1;
+  const dg = typeof digShelter === 'function' ? digShelter(q, sx != null, still) : still;   // 散兵坑与卧倒（dig.js），与简易隐蔽取强者
+  return tr * dg * (CRATERC[ci(q.x, q.y)] ? .8 : 1);
 }
 
 function damageShip(s, dmg) {

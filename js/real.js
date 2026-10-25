@@ -101,10 +101,21 @@ function vehWreckReal(ctx, v, sp, k) {
 }
 
 // 俯视单兵（局部坐标，+x 朝前）：投影、脚下阵营淡圈、背包、军装肩背、钢盔、武器
-function drawManReal(ctx, x0, y0, a, role, col, side) {
+function drawManReal(ctx, x0, y0, a, role, col, side, prone) {
   const P = rlPal(side), k = 1.12, lw = px(1) / k;
   ctx.save(); ctx.translate(x0, y0); ctx.rotate(a); ctx.scale(k, k);
   ctx.strokeStyle = col; ctx.lineWidth = lw * .9;
+  if (prone) {   // 卧倒：贴地趴平（影子很淡）、两腿分开、背包在背上、枪朝前
+    ctx.beginPath(); ctx.ellipse(-1.2, 0, 3.4, 2.1, 0, 0, 7); ctx.stroke();
+    const [sx, sy] = rlLocal(a, .25, .25);
+    ctx.fillStyle = 'rgba(0,0,0,.2)'; ctx.beginPath(); ctx.ellipse(-1.1 + sx, sy, 2, .95, 0, 0, 7); ctx.fill();
+    ctx.strokeStyle = P.uni; ctx.lineWidth = lw * 1.9; ctx.beginPath(); ctx.moveTo(-2.4, -.35); ctx.lineTo(-4.5, -1.05); ctx.moveTo(-2.4, .35); ctx.lineTo(-4.5, 1.05); ctx.stroke();
+    ctx.fillStyle = P.uni; ctx.strokeStyle = 'rgba(0,0,0,.45)'; ctx.lineWidth = lw * .5; ctx.beginPath(); ctx.ellipse(-1.1, 0, 1.75, .8, 0, 0, 7); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = P.pack; ctx.fillRect(-1.9, -.5, 1.1, 1);
+    ctx.strokeStyle = RL_EDGE; ctx.lineWidth = lw * (role === 'mg' ? 1.6 : 1.05); ctx.beginPath(); ctx.moveTo(.5, .3); ctx.lineTo(3.8, .3); ctx.stroke();
+    ctx.fillStyle = P.helm; ctx.strokeStyle = 'rgba(0,0,0,.5)'; ctx.lineWidth = lw * .6; ctx.beginPath(); ctx.arc(.75, 0, .78, 0, 7); ctx.fill(); ctx.stroke();
+    ctx.restore(); return;
+  }
   ctx.beginPath(); ctx.ellipse(0, 0, 2.5, 2.3, 0, 0, 7); ctx.stroke();   // 阵营淡圈（col 已含透明度 / 溃退时的琥珀色）
   const [sx, sy] = rlLocal(a, .55, .55);
   ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.beginPath(); ctx.ellipse(-.1 + sx, sy, .95, 1.8, 0, 0, 7); ctx.fill();
