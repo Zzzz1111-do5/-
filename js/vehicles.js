@@ -246,6 +246,18 @@ function vehDrive(v, dt, mul) {
   }
   let want = Math.atan2(ty - v.y, tx - v.x);
   if (S.t < (v.sideT ?? 0)) want += v.sideS * 1.1;   // 侧向让开（看门狗 / 前方有本方车辆）
+  // 与本方车辆保持间距：前方有车就转向绕开、靠得太近就减速停车让行——车只沿车头方向走，不横着平移（以前侧推车身，看着像滑步）
+  let slow = 1;
+  { const fx = Math.cos(v.heading), fy = Math.sin(v.heading);
+    for (const o2 of S.veh) {
+      if (o2 === v || o2.dead || o2.side !== v.side || o2.lst) continue;
+      const dx = o2.x - v.x, dy = o2.y - v.y, d2 = Math.hypot(dx, dy), m = (sp.len + vehSp(o2).len) * .5 + 6;
+      if (d2 > m + 12 || d2 < .01) continue;
+      const along = (dx * fx + dy * fy) / d2, lat = (dy * fx - dx * fy) / d2;
+      if (along < .25) continue;   // 在侧后方：由对方让
+      want -= (Math.abs(lat) < .15 ? 1 : Math.sign(lat)) * clamp((m + 12 - d2) / 12, 0, 1) * along * .9;   // 正前方偏哪边就往另一边转；正对着一律右转错开
+      if (d2 < m && (v.id > o2.id || !o2.moving)) slow = Math.min(slow, clamp((d2 - m * .55) / (m * .45), 0, 1));
+    } }
   // 倒车：后撤且距离近，或目标就在身后不远
   let da = vehAng(want - v.heading), dir = 1;
   if ((o.t === 'retreat' && d < 110 && Math.abs(da) > 1.6) || (Math.abs(da) > 2.5 && d < 45)) { dir = -1; da = vehAng(want + Math.PI - v.heading); }
@@ -255,23 +267,17 @@ function vehDrive(v, dt, mul) {
   const tk = sp.swimK && isWater(t) ? (v.side === 'e' ? .6 : sp.swimK) : VEH_TSP[t];   // 水上：ZTD-05 滑行艇体，航速与登陆艇相当；守方 AAV-7 只有约一半
   let vel = sp.speed * (tk || .4) * climb * (v.sup > 60 ? .75 : 1) * ((v.mod && v.mod.spd) || 1) * mul * (dir < 0 ? .45 : 1);
   vel *= Math.abs(da) > 1 ? .12 : 1 - Math.abs(da) * .55;   // 大角度时原地转向
-  const step = Math.min(vel * dt, d);
-  let nx = v.x + Math.cos(v.heading) * dir * step, ny = v.y + Math.sin(v.heading) * dir * step;
-  // 与本方车辆保持间距（留约 6 的空隙）：只向侧面滑开，不往回顶——两车对顶时编号大的那辆让路，向自己一侧错开（以前对称地互相推，挤在一起原地打转）
-  const hx = Math.cos(v.heading) * dir, hy = Math.sin(v.heading) * dir;
-  for (const o2 of S.veh) if (o2 !== v && !o2.dead && o2.side === v.side && !o2.lst) {
-    const d2 = dist(nx, ny, o2.x, o2.y), m = (sp.len + vehSp(o2).len) * .5 + 6;
-    if (d2 >= m || d2 <= .01) continue;
-    const px = (nx - o2.x) / d2, py = (ny - o2.y) / d2, along = px * hx + py * hy;
-    let qx = px - hx * along, qy = py - hy * along, ql = Math.hypot(qx, qy);
-    if (ql < .25) { const sg = v.id > o2.id ? 1 : -1; qx = -hy * sg; qy = hx * sg; ql = 1; }   // 正对着：侧移让路
-    nx += qx / ql * (m - d2) * .3; ny += qy / ql * (m - d2) * .3;
-    if (along < -.3 && v.id > o2.id) { nx -= hx * step * .5; ny -= hy * step * .5; if (S.t >= (v.sideT ?? 0) && Math.random() < dt) { v.sideT = S.t + 1.5; v.sideS = (v.id % 2 ? 1 : -1); } }   // 对方挡在正前方：减速并侧绕
-  }
+  if (slow < 1 && dir > 0) {   // 前车挡着：让行，等太久就侧绕
+    v.yieldT = (v.yieldT || 0) + dt;
+    if (v.yieldT > 3 && S.t >= (v.sideT ?? 0)) { v.sideT = S.t + 1.5; v.sideS = v.id % 2 ? 1 : -1; v.yieldT = 0; }
+  } else v.yieldT = 0;
+  const step = Math.min(vel * dt * (dir > 0 ? slow : 1), d);
+  const nx = v.x + Math.cos(v.heading) * dir * step, ny = v.y + Math.sin(v.heading) * dir * step;
   const here = vehPass(v.x, v.y, cls);
+  const axis = (x, y) => { v.heading += clamp(vehAng(Math.atan2((y - v.y) * dir, (x - v.x) * dir) - v.heading), -turn, turn); v.x = x; v.y = y; };   // 沿墙滑过时车头跟着转向实际走的方向
   if (vehPass(nx, ny, cls) || !here) { v.x = nx; v.y = ny; }
-  else if (vehPass(nx, v.y, cls)) v.x = nx;   // 斜穿格角受阻时沿单轴滑过
-  else if (vehPass(v.x, ny, cls)) v.y = ny;
+  else if (vehPass(nx, v.y, cls)) axis(nx, v.y);   // 斜穿格角受阻时沿单轴滑过
+  else if (vehPass(v.x, ny, cls)) axis(v.x, ny);
   else {   // 正前方被格角挡住（寻路的前瞻点斜着过墙角）：依次试左右偏 30° / 60° / 90°，哪边能走先从哪边绕过去
     const st2 = Math.max(step, sp.speed * .25 * dt), sg = v.id % 2 ? 1 : -1;
     let ok = false;
@@ -296,8 +302,11 @@ function vehSpread(v, dt) {
     if (o === v || o.dead || o.side !== v.side || o.lst || o.id > v.id) continue;
     const d = dist(v.x, v.y, o.x, o.y), m = (sp.len + vehSp(o).len) * .5 + 4;
     if (d >= m) continue;
-    const a = d > .5 ? Math.atan2(v.y - o.y, v.x - o.x) : v.id * 2.4, st = Math.min(m - d, 6 * dt), nx = v.x + Math.cos(a) * st, ny = v.y + Math.sin(a) * st;
-    if (vehPass(nx, ny, cls)) { v.x = nx; v.y = ny; }
+    // 只沿车身前后挪（倒车或前进），对方正好在侧面时先原地转一点车头——不横着平移
+    const a = d > .5 ? Math.atan2(v.y - o.y, v.x - o.x) : v.id * 2.4, s = Math.cos(a - v.heading);
+    if (Math.abs(s) < .35) { v.heading = vehAng(v.heading + sp.turn * .5 * dt * (Math.sin(a - v.heading) > 0 ? -1 : 1)); return; }
+    const st = Math.min(m - d, 6 * dt) * Math.sign(s), nx = v.x + Math.cos(v.heading) * st, ny = v.y + Math.sin(v.heading) * st;
+    if (vehPass(nx, ny, cls)) { v.x = nx; v.y = ny; v.moving = true; v.odo += Math.abs(st); }
     return;
   }
 }
@@ -1030,7 +1039,9 @@ function vehOffload(s, type, k) {
 }
 function vehRampTick(v, dt) {
   const R = v.ramp, u = clamp((S.t - R.t0) / R.dur, 0, 1), e = u * u * (3 - 2 * u);
-  v.x = lerp(R.x0, R.x1, e); v.y = lerp(R.y0, R.y1, e); v.heading = v.aim = R.h; v.movedT = S.t;
+  const px = v.x, py = v.y;
+  v.x = lerp(R.x0, R.x1, e); v.y = lerp(R.y0, R.y1, e); v.heading = v.aim = Math.atan2(R.y1 - R.y0, R.x1 - R.x0); v.movedT = S.t; v.moving = u < 1;
+  v.odo = (v.odo || 0) + dist(px, py, v.x, v.y);   // 履带随行驶滚动
   if (u < 1) return;
   v.ramp = null; v.climbT = S.t;
   const p = vehStageSpot(v, R);

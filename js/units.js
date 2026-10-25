@@ -31,21 +31,23 @@ function beachSlot(s, x, y, r) {
   }
   return best;
 }
-// 舰船避碰：船体按沿舰轴的三个圆近似；与别的船重叠时向侧面滑开（搁滩 / 停泊的船不动，由驶来的船让开）
-function shipSep(s) {
-  const L = ((typeof SHIP_DIM === 'object' && SHIP_DIM[s.kind]) || [32, 11]), c = Math.cos(s.heading), n = Math.sin(s.heading);
+// 舰船避碰：前方航路上有别的船（停着的，或编号小、有优先权的）就转向绕开、靠近了减速让行；不推挤船身（以前推来推去看着像抽搐）
+const shipDim = s => (typeof SHIP_DIM === 'object' && SHIP_DIM[s.kind]) || [32, 11];
+function shipAvoid(s, want) {
+  const L = shipDim(s), fx = Math.cos(s.heading ?? want), fy = Math.sin(s.heading ?? want);
+  let slow = 1;
   for (const o of S.ships) {
-    if (o === s || !alive(o) || o.kind === 'boat' || dist(o.x, o.y, s.x, s.y) > 60) continue;
-    const M = (typeof SHIP_DIM === 'object' && SHIP_DIM[o.kind]) || [32, 11], oc = Math.cos(o.heading ?? 0), on = Math.sin(o.heading ?? 0);
-    const still = o.state !== 'move' || o.id < s.id, rr = (L[1] + M[1]) / 2 + 2;
-    for (const a of [-.33, 0, .33]) for (const b of [-.33, 0, .33]) {
-      const ax = s.x + c * L[0] * a, ay = s.y + n * L[0] * a, bx = o.x + oc * M[0] * b, by = o.y + on * M[0] * b, d = dist(ax, ay, bx, by);
-      if (d >= rr || d < .01) continue;
-      const k = (rr - d) * (still ? .5 : .25);
-      s.x += (ax - bx) / d * k; s.y += (ay - by) / d * k;
-    }
+    if (o === s || !alive(o) || o.kind === 'boat') continue;
+    const dx = o.x - s.x, dy = o.y - s.y, d = Math.hypot(dx, dy), M = shipDim(o), look = (L[0] + M[0]) * .5 + 14;
+    if (d > look || d < .01) continue;
+    const along = dx * fx + dy * fy, lat = dy * fx - dx * fy, oh = o.heading ?? 0;
+    const half = (L[1] + M[1]) * .5 + 4 + Math.abs(Math.sin(oh - (s.heading ?? want))) * M[0] * .5;   // 对方横着时占的宽度更大
+    if (along <= 0 || Math.abs(lat) > half) continue;
+    if (o.state === 'move' && o.id > s.id) continue;   // 对方会让我
+    want -= (Math.abs(lat) < 2 ? 1 : Math.sign(lat)) * .5 * clamp(1 - along / look, 0, 1);
+    slow = Math.min(slow, clamp((along - (L[0] + M[0]) * .5 * .7) / 14, 0, 1));
   }
-  if (!isWater(typeAt(s.x, s.y)) && s.state === 'move' && !s.land) { const j = nearestPassable(ci(s.x, s.y), 'ship'); if (j >= 0) { s.x = cellCX(j); s.y = cellCY(j); } }
+  return [want, slow];
 }
 
 // 护航舰火力支援阵位：岸线外约 250 的海面格
@@ -86,6 +88,7 @@ function shipLaneWP(s) {
   if (s.y < cur - 30) return [clamp(s.x + Math.sign(dx) * 30, 20, W - 20), cur + 20];   // 已经贴岸：先退回航道
   return [x, Math.max(ly, Math.min(s.y, ly + 150))];   // 航道深度上下 150 以内横向机动
 }
+const vehAngS = a => Math.atan2(Math.sin(a), Math.cos(a));
 const shipClear = (x0, y0, x1, y1) => { const n = Math.ceil(dist(x0, y0, x1, y1) / 10); for (let k = 1; k <= n; k++) if (stepCost(ci(lerp(x0, x1, k / n), lerp(y0, y1, k / n)), 'ship') === Infinity) return false; return true; };
 function sailTo(s, dt, speed) {
   const d = dist(s.x, s.y, s.tx, s.ty);
@@ -93,13 +96,24 @@ function sailTo(s, dt, speed) {
   let tx = s.tx, ty = s.ty;
   const wp = shipLaneWP(s);
   if (wp && shipClear(s.x, s.y, wp[0], wp[1])) { [tx, ty] = wp; s.lane = true; }
-  else if (d > 20) { s.lane = false; const f = field(s.tx, s.ty, 'ship'), n = f && nextStep(f, s.x, s.y); if (n) [tx, ty] = n; }
-  const sp = speed * (typeAt(s.x, s.y) === T.SHOAL ? .55 : 1) * dt, l = dist(s.x, s.y, tx, ty) || 1;
-  s.heading = Math.atan2(ty - s.y, tx - s.x);
-  s.x += (tx - s.x) / l * Math.min(sp, l); s.y += (ty - s.y) / l * Math.min(sp, l);
-  // 被挡住 6 秒没有进展的船暂时不避碰，保证能靠岸
-  if (S.t - (s.pkT ?? -99) > 6) { if (s.land && s.pkD != null && s.pkD - d < 3) s.noSep = S.t + 15; s.pkT = S.t; s.pkD = d; }
-  if (s.kind !== 'boat' && d > 12 && !(s.noSep > S.t)) shipSep(s);   // 快到抢滩点时不再推开，免得被挤离滩头
+  else if (d > 20) {   // 沿流场往前看最多 8 格，取直线可达的最远一点当航路点（只看下一格会走成之字形）
+    s.lane = false;
+    const f = field(s.tx, s.ty, 'ship');
+    if (f) { let px = s.x, py = s.y; for (let k = 0; k < 8; k++) { const n = nextStep(f, px, py); if (!n || !shipClear(s.x, s.y, n[0], n[1])) break; [px, py] = n; } if (px !== s.x || py !== s.y) [tx, ty] = [px, py]; else { const n = nextStep(f, s.x, s.y); if (n) [tx, ty] = n; } }
+  }
+  let sp = speed * (typeAt(s.x, s.y) === T.SHOAL ? .55 : 1) * dt, want = Math.atan2(ty - s.y, tx - s.x);
+  // 被挡住 6 秒没有进展的船暂时不避让，保证能靠岸
+  if (S.t - (s.pkT ?? -99) > 6) { if (s.pkD != null && s.pkD - d < 3) s.noSep = S.t + 15; s.pkT = S.t; s.pkD = d; }
+  if (s.kind !== 'boat' && !(s.noSep > S.t)) { let k; [want, k] = shipAvoid(s, want); sp *= k; }
+  // 船头按转向速度慢慢转过去，船只沿船头方向走；离目标很近时直接对准靠上去
+  s.wf = s.wf == null ? want : vehAngS(s.wf + vehAngS(want - s.wf) * Math.min(1, dt * 3));   // 目标航向先平滑，避免避让、换航路点时来回摆
+  const turn = (s.kind === 'boat' ? 2.2 : s.spdK > 1 ? 1.4 : .9) * dt, da = vehAngS(s.wf - (s.heading ?? want));
+  if (Math.abs(da) > .01 && d >= 14) s.heading = vehAngS((s.heading ?? want) + clamp(da, -turn, turn));   // 最后十几米保持船头不动直接靠上去
+  if (d < 14) { const l = d || 1; s.x += (s.tx - s.x) / l * Math.min(sp, l); s.y += (s.ty - s.y) / l * Math.min(sp, l); return false; }
+  const v = sp * (Math.abs(da) > 1.2 ? .3 : 1 - Math.abs(da) * .45);
+  const nx = s.x + Math.cos(s.heading) * v, ny = s.y + Math.sin(s.heading) * v;
+  if (stepCost(ci(nx, ny), 'ship') < Infinity || stepCost(ci(s.x, s.y), 'ship') === Infinity) { s.x = nx; s.y = ny; }
+  else { const l = dist(s.x, s.y, tx, ty) || 1; s.x += (tx - s.x) / l * Math.min(v, l); s.y += (ty - s.y) / l * Math.min(v, l); }   // 船头前方是浅滩礁石：沿航路点走
   return false;
 }
 
