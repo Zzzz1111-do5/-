@@ -116,6 +116,7 @@ function a101Think() {
       tgt: { k: 'pt' }, flares: h.flares, hp: h.hp, t: S.t, pv: false, ammo: 1, atgm: 3, rk: 3, slot: k, esc101: true });
   }
   const wh = typeof cmdWhere === 'function' ? cmdWhere(dz.x, dz.y) : gridRef(dz.x, dz.y);
+  if (typeof b2Call === 'function') b2Call(p.x, p.y, '第 101 空降师');   // 优先呼叫 B-2A：空降前先炸目标一带的敌人（b2.js）
   if (typeof chatSay === 'function') chatSay('e', `命令：第 101 空降师${mech ? '机械化' : ''}空降战斗群，${LD.length} 架 C-17A 三机一队、纵列在${wh}空降——伞兵 ${men} 人，重装空投${a101VehText(LD)}${mech ? `；${A101_ESC} 架 AH-64E 随队先到空降场压制` : ''}；落地集结后${p.owner === 'p' ? `反冲击${p.name}` : `增援${p.name}`}。`, { kind: 'order', at: dz, lv: 0 });
 }
 // 飞行：in 进场 → 飞越空降场时按顺序放出伞兵（每 0.18 秒一个班）与重装平台 → out 北返出图
@@ -243,12 +244,42 @@ function a101Step(dt) {
       E1.lift = null; E1.done++;
       const p = ptByKey(L.key), n = E1.done;
       const G = bgNew('e', `101 师第 ${n} 旅战斗队`, '旅长', { us: [L.us[0], L.us[1]].filter(id => id != null), vs: L.vs.slice(), rec: (L.rec || []).slice(), ax: L.dz.x, ay: L.dz.y, key: L.key, ech: 'X',
-        face: p ? Math.atan2(p.y - L.dz.y, p.x - L.dz.x) : Math.PI / 2 });
+        face: p ? Math.atan2(p.y - L.dz.y, p.x - L.dz.x) : Math.PI / 2, a101: true, agg: 1, ret: .35, asmT: 40 });   // 精锐：兵力相当就攻，打到只剩对面三成半才后撤；集合最多等 40 秒
       if (L.us[2] != null) { const ur = UNIT_MAP.get(L.us[2]); if (ur) ur.bgId = G.id; }
-      bgSay(G, `全群在空降场集合，侦察组 ${G.rec.length} 个先行前出侦察敌情。`);
+      a101Aim(G, true);
     }
   }
+  for (const G of S.bgs || []) if (G.a101 && !G.dead) a101Aim(G);
   a101Think();
+}
+
+// 101 旅战斗队的目标（每 6 秒看一次）：就近的敌集团（守方大脑记着的，1100 以内、5 人以上，人多的优先）——直接打它；
+//   没有就去夺最近的、被我军占着或正在争夺的据点；都没有就去受威胁最大的己方据点。
+//   目标定了就咬住：敌集团还在（300 以内还有一股）、据点还没夺回就不换，只跟着敌集团挪；交战中不换；目标变了在通联里说清楚；交战中呼叫 B-2A
+function a101Aim(G, first) {
+  if (!first && S.t - (G.aimT ?? -99) < 6) return;
+  G.aimT = S.t;
+  const B = S.br && S.br.e, near = (x, y) => S.points.slice().sort((a, b) => dist(a.x, a.y, x, y) - dist(b.x, b.y, x, y))[0];
+  const cl = (B && B.cl || []).filter(c => c.n >= 5 && dist(c.x, c.y, G.ax, G.ay) < 1100).sort((a, b) => (dist(a.x, a.y, G.ax, G.ay) - a.n * 12) - (dist(b.x, b.y, G.ax, G.ay) - b.n * 12));
+  if (!first && G.st === 'fight' && S.t - (G.b2T ?? -99) > 90 && typeof b2Call === 'function') { G.b2T = S.t; b2Call(G.gx ?? G.ax, G.gy ?? G.ay, G.name); }
+  if (!first && G.tgtK) {   // 咬住现在的目标
+    if (G.gx != null) { const c = (B && B.cl || []).find(c => c.n >= 3 && dist(c.x, c.y, G.gx, G.gy) < 300); if (c) { G.gx = Math.round(c.x); G.gy = Math.round(c.y); return; } }
+    else { const p = ptByKey(G.key); if (p && (G.tgtK === 'own' ? p.owner === 'e' && S.t - G.tgtT < 90 : p.owner === 'p' || p.prog > .25)) return; }
+    if (G.st === 'fight') return;
+  }
+  let T = null;
+  if (cl[0]) { const p = near(cl[0].x, cl[0].y); T = { x: cl[0].x, y: cl[0].y, key: p.key, n: cl[0].n, nm: typeof cmdWhere === 'function' ? cmdWhere(cl[0].x, cl[0].y) : p.name }; }
+  else {
+    const p = S.points.filter(p => p.owner === 'p' || p.prog > .25).sort((a, b) => dist(a.x, a.y, G.ax, G.ay) - dist(b.x, b.y, G.ax, G.ay))[0] || a101Obj();
+    if (p) T = { key: p.key, nm: p.name, own: p.owner === 'e' && p.prog <= .25 };
+  }
+  if (!T) return;
+  const changed = first || T.key !== G.key || (T.x != null) !== (G.gx != null) || (T.x != null && dist(T.x, T.y, G.gx, G.gy) > 150);
+  G.key = T.key; G.tgtK = T.x != null ? 'cl' : T.own ? 'own' : 'pt'; G.tgtT = S.t;
+  if (T.x != null) { G.gx = Math.round(T.x); G.gy = Math.round(T.y); } else G.gx = G.gy = null;
+  for (const u of bgUnits(G)) { u.obj = T.key; for (const q of teamsOf(u)) q.obj = T.key; }
+  if (changed && G.st === 'hold') { G.st = 'move'; G.stT = S.t; }
+  if (changed) bgSay(G, `${first ? `全群在空降场集合，侦察组 ${G.rec.length} 个先行前出。` : ''}目标：${T.x != null ? `${T.nm}之敌约 ${T.n} 人` : T.own ? `加强${T.nm}` : `夺回${T.nm}`}。全旅成战斗队形攻击前进，不给敌人站稳的时间！`, null, 'order', T.x != null ? `目标${T.nm}之敌，攻击前进！` : T.own ? `向${T.nm}前进！` : `夺回${T.nm}！`);
 }
 
 // 下降中的伞兵（敌方红色伞衣）与重装平台（三具大伞 + 平台）

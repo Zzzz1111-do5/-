@@ -7,7 +7,7 @@
 // 移动：锚点沿寻路场向任务点推进，速度跟最慢的成员走；有成员离自己的位置 70 以上就停下等，不各走各的
 // 接敌：锚点 300 内发现敌人就展开成战斗队形、正面朝敌；兵力比占优继续推进，劣势后撤重整
 // 侦察组（rec）：单独前出 300–450 到林地 / 高地观察，视野 380 并入本方视野；敌人逼近 150 就换观察点
-const BG = { asm: 50, lag: 70, pace: 9, contact: 300, reorder: 12, recR: 380, recFar: 450, recNear: 300 };
+const BG = { asm: 50, lag: 90, pace: 9, contact: 300, reorder: 12, recR: 380, recFar: 450, recNear: 300 };
 const BG_TANK = ['hv_tank', 'tank', 'lt_tank', 'amtank'];
 
 const bgOf = id => (S.bgs || []).find(G => G.id === id);
@@ -21,6 +21,21 @@ const bgUnits = G => G.us.map(id => UNIT_MAP.get(id)).filter(u => u && teamsOf(u
 const bgVehs = G => G.vs.map(id => vehById(id)).filter(v => v && !v.dead);
 const bgRecs = G => G.rec.map(id => S.teams.find(q => q.id === id)).filter(q => q && q.men.length);
 
+// 吸附到与锚点同一岸（同一片连通区域，grid.js compOf）的最近可走格：队形位置落在河里时，不会被挪到河对岸让那个连绕远路过河
+function bgSnap(G, x, y, cls) {
+  const lab = compOf(cls), i0 = ci(G.ax, G.ay), a0 = lab[i0] || lab[Math.max(0, nearestPassable(i0, cls))] || 0;
+  const i = ci(x, y);
+  if (lab[i] && (!a0 || lab[i] === a0)) return [x, y];
+  const gx = i % GW, gy = (i / GW) | 0;
+  for (let r = 1; r <= 15; r++) for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+    if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+    const nx = gx + dx, ny = gy + dy;
+    if (nx < 0 || ny < 0 || nx >= GW || ny >= GH) continue;
+    const j = ny * GW + nx;
+    if (lab[j] && (!a0 || lab[j] === a0)) return [cellCX(j), cellCY(j)];
+  }
+  return [x, y];
+}
 // 队形位置（世界坐标）：返回 [{m 成员, k 'u'|'v', x, y}]
 function bgSlots(G, mode) {
   const us = bgUnits(G).filter(u => u.state !== 'rout'), vs = bgVehs(G), out = [];   // 溃退的连先撤下去重整，不排进队形、不拖住全群
@@ -28,12 +43,12 @@ function bgSlots(G, mode) {
   const fx = Math.cos(G.face), fy = Math.sin(G.face), px = -fy, py = fx;
   const at = (x, y) => { let sx = clamp(G.ax + fx * x * lon + px * y * lat, 15, W - 15), sy = clamp(G.ay + fy * x * lon + py * y * lat, 15, H - 15); return [sx, sy]; };
   const wid = Math.max(1, us.length) * 95;
-  us.forEach((u, i) => { let [x, y] = at(0, (i - (us.length - 1) / 2) * 95); if (!passInf(x, y)) { const j = nearestPassable(ci(x, y), G.side); if (j >= 0) { x = cellCX(j); y = cellCY(j); } } out.push({ m: u, k: 'u', x, y }); });   // 连的位置落在河里、崖上：挪到最近的可走格
+  us.forEach((u, i) => { const [x, y] = bgSnap(G, ...at(0, (i - (us.length - 1) / 2) * 95), G.side); out.push({ m: u, k: 'u', x, y }); });   // 连的位置落在河里、崖上：挪到同一岸最近的可走格
   const tk = vs.filter(v => BG_TANK.includes(v.type)), ifv = vs.filter(v => v.type === 'apc'), td = vs.filter(v => v.type === 'td' || v.type === 'recon');
   const aa = vs.filter(v => v.type === 'sam_veh' || v.type === 'aa_veh'), art = vs.filter(v => v.type === 'spg'), rest = vs.filter(v => ![...tk, ...ifv, ...td, ...aa, ...art].includes(v));
   // 车辆位置吸附到该车能开到的最近格（河、悬崖、密林里的位置开不进去，整群会一直等它）
   const vcls = G.side === 'e' ? 'vehe' : 'veh';
-  const snap = (sx, sy) => { if (vehPass(sx, sy, vcls)) return [sx, sy]; const j = nearestPassable(ci(sx, sy), vcls); return j >= 0 ? [cellCX(j), cellCY(j)] : [sx, sy]; };
+  const snap = (sx, sy) => bgSnap(G, sx, sy, vcls);
   const row = (list, x, w) => list.forEach((v, i) => { const [sx, sy] = snap(...at(x, list.length > 1 ? (i / (list.length - 1) - .5) * w : 0)); out.push({ m: v, k: 'v', x: sx, y: sy }); });
   row(tk, march ? 70 : 55, Math.max(wid, tk.length * 26));
   row(ifv, -28, wid * .8);
@@ -83,7 +98,7 @@ function bgOrder(G, sl, t) {
     }
   }
 }
-// 掉队：成员离自己位置的距离，取第 75 百分位（连队按各组平均位置算）——一两辆卡住的车不拖住全群；
+// 掉队：成员离自己位置的距离，取第 60 百分位（连队按各组平均位置算）——一两辆卡住的车不拖住全群；
 // 连队全部到位才算（步兵是主体，不能把步兵甩下）；但掉队 20 秒还没靠近 10 的成员算卡住（隔水、交火走不开、走走停停），不再等它，随后跟进
 function bgLag(G, sl) {
   const ds = [], lp = G.lp || (G.lp = {});
@@ -100,7 +115,7 @@ function bgLag(G, sl) {
   }
   if (!ds.length) return 0;
   ds.sort((a, b) => a - b);
-  return Math.max(inf, ds[Math.floor((ds.length - 1) * .75)]);
+  return Math.max(inf, ds[Math.floor((ds.length - 1) * .6)]);   // 车辆按第 60 百分位：主体到位就走，几辆排队过桥的随后跟上
 }
 // 锚点沿寻路场前进一步（最多 step），返回是否到达
 function bgAdvance(G, gx, gy, step) {
@@ -121,9 +136,43 @@ function bgSay(G, text, at, kind = 'order', short) {
   if (typeof shout === 'function') { const s = short || text.split(/[，。；]/)[0]; shout(at && at.men ? at : G, /[！？]$/.test(s) ? s : s + '！', { side: G.side }); }
 }
 
+// 河两岸：桥被炸、附近没有渡口，一部分成员跟锚点不在同一片连通区域（grid.js compOf），永远走不过来——
+//   锚点挪到人多的一岸，过不去的连、车脱离战斗群交回原来的指挥（守方由大脑重新抽调，攻方交还自动指挥），全群照常行动，不再整营干等
+function bgSplit(G) {
+  if (S.t - (G.spT ?? -99) < 5) return;
+  G.spT = S.t;
+  const lab = compOf(G.side), us = bgUnits(G), vs = bgVehs(G), live = u => teamsOf(u).filter(q => q.men.length && !q.ride);
+  const bank = u => { const n = new Map(); for (const q of live(u)) { const l = lab[ci(q.x, q.y)]; if (l) n.set(l, (n.get(l) || 0) + q.men.length); } return [...n].sort((a, b) => b[1] - a[1])[0]; };   // 连的大部分在哪一岸
+  const men = new Map();
+  for (const u of us) { const b = bank(u); if (b) men.set(b[0], (men.get(b[0]) || 0) + b[1]); }
+  let a0 = lab[ci(G.ax, G.ay)];
+  const big = [...men].sort((a, b) => b[1] - a[1])[0];
+  if (big && (!a0 || (men.get(a0) || 0) < big[1] * .5)) {   // 锚点在人少的一岸（或在河里）：挪到人多一岸各组的中心
+    const ts = us.flatMap(live).filter(q => lab[ci(q.x, q.y)] === big[0]), cx = ts.reduce((a, q) => a + q.x, 0) / ts.length, cy = ts.reduce((a, q) => a + q.y, 0) / ts.length;
+    a0 = big[0];
+    const p = ts.slice().sort((a, b) => dist(a.x, a.y, cx, cy) - dist(b.x, b.y, cx, cy))[0];
+    G.ax = p.x; G.ay = p.y;
+  }
+  if (!a0) return;
+  const cutU = us.filter(u => { const b = bank(u); return b && b[0] !== a0; });
+  const cutV = vs.filter(v => !reachable(v.x, v.y, G.ax, G.ay, vehCls(v, G.ax, G.ay)));
+  if (!cutU.length && !cutV.length) return;
+  if (cutU.length >= us.length && cutV.length >= vs.length) return;   // 全都过不去（锚点本身孤立）：不拆
+  for (const u of cutU) {
+    G.us = G.us.filter(id => id !== u.id);
+    u.role = 'reserve'; u.bgX = null;
+    for (const q of teamsOf(u)) { q.bg = null; q.role = 'reserve'; q.px = null; }
+    if (typeof shout === 'function') shout(u, '隔着河过不去，就地归建！');
+  }
+  for (const v of cutV) { G.vs = G.vs.filter(id => id !== v.id); v.bgG = null; v.cmd = null; }
+  bgSay(G, `${[cutU.length && `${cutU.length} 个连`, cutV.length && `${cutV.length} 辆车`].filter(Boolean).join('、')}被河隔开、过不去，脱离本群就地归建；其余继续行动。`, null, 'order', '隔河的部队不等了，继续前进！');
+  if (typeof v8Stat === 'function') v8Stat('bgSplit');
+}
+
 function bgThink(G) {
   const us = bgUnits(G), vs = bgVehs(G);
   if (!us.length && !vs.length) { G.dead = true; bgSay(G, '战斗群已失去战斗力。', null, 'report'); return; }
+  bgSplit(G);
   const foes = bgFoes(G), near = foes.filter(o => dist(o.x, o.y, G.ax, G.ay) < BG.contact);
   const goal = bgGoal(G);
   if (G.st === 'asm') {
@@ -143,8 +192,9 @@ function bgThink(G) {
     const c = near.reduce((a, o) => [a[0] + o.x / near.length, a[1] + o.y / near.length], [0, 0]);
     const fa = Math.atan2(c[1] - G.ay, c[0] - G.ax);
     G.face = G.face + clamp(Math.atan2(Math.sin(fa - G.face), Math.cos(fa - G.face)), -.35, .35);
-    if (r > (G.agg || 1.6) && lag < BG.lag) { bgAdvance(G, c[0], c[1], BG.pace * .6); G.amove = true; }   // 占优：成战斗队形向敌推进（反冲击任务 agg 1.2）
-    else if (r < .6) { G.ax -= Math.cos(G.face) * 6; G.ay -= Math.sin(G.face) * 6; G.amove = false; if (S.t - (G.wT ?? -99) > 30) { G.wT = S.t; bgSay(G, `敌我兵力约 ${r.toFixed(1)} 比 1，交替掩护后撤重整。`, null, 'order', '敌众我寡，交替掩护后撤！'); } }
+    if (r > (G.agg || 1.6) && lag < BG.lag * 1.4) { bgAdvance(G, c[0], c[1], BG.pace * .6); G.amove = true; }   // 战斗队形本来就散得开：掉队标准放宽   // 占优：成战斗队形向敌推进（反冲击任务 agg 1.2）
+    else if (r < (G.ret ?? .6)) { G.ax -= Math.cos(G.face) * 6;   // ret：多劣势才后撤（精锐的 101 空降师 .35）
+      G.ay -= Math.sin(G.face) * 6; G.amove = false; if (S.t - (G.wT ?? -99) > 30) { G.wT = S.t; bgSay(G, `敌我兵力约 ${r.toFixed(1)} 比 1，交替掩护后撤重整。`, null, 'order', '敌众我寡，交替掩护后撤！'); } }
     else G.amove = false;
   } else if (G.st === 'hold') {
     if (dist(G.ax, G.ay, goal.x, goal.y) > 60) { G.st = 'move'; G.stT = S.t; }   // 任务变了（据点易手）

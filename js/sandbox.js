@@ -902,7 +902,7 @@ function sbxBuild(role) {
   S.sbxObs = [];
   S.sbxRun = { waves: [], sorties: [], depot: false, deck: false, aaT: 0, tagT: 0, waveT: 0, ddPrev: 0, said: {} };
   S.assets = { recon: 0, strike: 0, cas: 0, rline: 1, reserve: 0, smoke: 0 };
-  S.eair = null; S.eaLight = null; S.missiles = []; S.msl = null;   // v7：守方航空、导弹从购买重建
+  S.eair = null; S.eaLight = null; S.missiles = []; S.msl = null; S.b2 = null;   // v7：守方航空、导弹、B-2A 机群从购买重建
   S.eships = []; S.navy = null; S.afd = null;   // 守方舰艇（navy.js）、机场防御（afdef.js）从购买重建
   S.points = S.points.filter(p => p.key !== 'AF');   // 上一局按机场加入的据点（abn.js）按这一局的机场重建
   S.ab = null; S.abBase = null;

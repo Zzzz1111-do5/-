@@ -153,6 +153,7 @@ function rlAirPaint(type) {
   if (type === 'ah64') return '#3f4433';
   if (type === 'uh60') return '#3f4536';
   if (type === 'c17') return '#7d858a';
+  if (type === 'b2') return '#4a5056';   // B-2A：深灰吸波涂层
   if (type === 'h6k' || type === 'kj600' || type === 'transport' || type === 'y20' || type === 'gj2' || type === 'wz7') return '#a4acb1';
   return '#8a949a';
 }

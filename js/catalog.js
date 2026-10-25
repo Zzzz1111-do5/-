@@ -132,7 +132,7 @@ if (typeof WI === 'object') Object.assign(CT_IC, {
   lct: WI.t271, lci: WI.t074a, lcvp: WI.lcvp, lst: WI.t072a, lsm: WI.t073a, ls: WI.t072, rlct: WI.rkboat, lcs: WI.gunboat, sweep: WI.t082,
   dd: WI.t052d, ddh: WI.t052d + ctDots(1), dde: WI.t054a, cl: WI.t055, ca: WI.t055 + ctDots(1), cv: WI.t003, cve: WI.t075,
   arecon: WI.kj600, awz7: WI.wz7, astrike: WI.j35, aj35: WI.j35, agj11: WI.gj11, aj15: WI.j15, acas: WI.gj2, aftr: WI.j20, heavy: WI.h6k, heli: WI.z10,
-  ega: WI.a10, eheli: WI.ah64, eftr: WI.f35, ef22: WI.f22, aj36: WI.j36, aj50: WI.j50, tbm: WI.df15b, hj12: WI.hj12, lcac: WI.lcac, nuke: WI.nuke, uh60: WI.uh60, c17: WI.c17
+  ega: WI.a10, eheli: WI.ah64, eftr: WI.f35, ef22: WI.f22, aj36: WI.j36, aj50: WI.j50, tbm: WI.df15b, hj12: WI.hj12, lcac: WI.lcac, nuke: WI.nuke, uh60: WI.uh60, c17: WI.c17, b2: WI.b2
 });
 
 // —— 条目 —— e(id, 名称, 阵营, 分类, 原型, 点数, 图标, [耐久, 装甲, 火力, 射程, 速度, 视野, 人数], 说明, spawn, 附加)
@@ -458,6 +458,8 @@ ctE('e_air_ftr', 'F-35A 闪电 II 战斗机', 'e', 'air', 'ewing', 40, CT_IC.eft
   { kind: 'ewing', at: 'air', type: 'ftr' }, { counters: ['p_air_cas', 'p_air_strike', 'p_air_ftr', 'wing'], weakTo: ['p_air_ftr', 'p_dd', 'p_tbm'] });
 ctE('e_air_f22', 'F-22A 猛禽战斗机', 'e', 'air', 'ewing', 75, CT_IC.ef22 || CT_IC.eftr, [3, 0, 8, 8, 10, 8, 0], '美军最强的空优战斗机：比 F-35A 更难被雷达发现，超音速巡航、推力矢量，转弯追击更快；内埋 6 枚 AIM-120D 与 2 枚 AIM-9X（F-35A 只有 4 枚），AN/APG-77 雷达看得更远。有敌战斗机时打头阵，平时留在机场待命，让 F-35A 去巡逻。价格接近两架 F-35A。需要野战机场。',
   { kind: 'ewing', at: 'air', type: 'f22' }, { counters: ['p_air_ftr', 'p_air_cas', 'p_air_strike', 'wing'], weakTo: ['p_dd', 'p_tbm'] });
+ctE('e_b2', 'B-2A 幽灵隐身轰炸机群（3 架）', 'e', 'air', 'asset', 3200, CT_IC.b2, [6, 0, 10, 10, 8, 2, 0], '美国空军战略隐身轰炸机，三机一组从本土远程奔袭，不需要机场。约 12000 米高空突防，雷达很难发现：高炮、单兵防空导弹与弹炮防空车够不着，只怕舰空导弹近距锁定和歼击机。两个内置弹舱载弹约 18 吨，三架按目标分工——GBU-38/B 500 磅 JDAM 80 枚（一次通场独立攻击 80 个瞄准点，炸上岸的步兵与车辆）、GBU-31 2000 磅钻地 JDAM 16 枚（炸抢滩的登陆舰与坦克）、AGM-158B JASSM-ER 隐身巡航导弹 16 枚（防区外打驱逐舰、航母）。敌军上岸后出击，打完返航，约 5 分钟后再来一波；只打守军看得见的目标。',
+  { kind: 'asset', at: 'none', key: 'eb2', add: 1 }, { counters: ['p_lst', 'p_tank', 'p_rifle', 'p_dd', 'p_cv'], weakTo: ['p_air_ftr', 'p_air_j36', 'p_dd'] });
 
 // ———— 防守方 · 工事 ————
 ctE('e_mines_ap', '防步兵雷区', 'e', 'fort', 'mines', 15, CT_IC.mine, [0, 0, 5, 0, 0, 0, 0], '半径约 24 的雷区，踩中即伤亡并暴露；工兵可以排除。',

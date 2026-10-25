@@ -165,7 +165,7 @@ function brFormE(B, K) {
   indexUnits();
   const far = Math.max(...ts.map(q => dist(q.x, q.y, A.x, A.y)), ...vs.map(v => dist(v.x, v.y, A.x, A.y) / 2));   // 集合时限按最远一个组的路程（步兵约 9 / 秒）
   const G = bgNew('e', nm, BR_ECH[ech][1], { us, vs: vs.map(v => v.id), rec: rec ? [rec.id] : [], ax: Math.round(A.x), ay: Math.round(A.y), key: p.key, ech, br: true,
-    face: Math.atan2(p.y - A.y, p.x - A.x), p0: pw, agg: M.lost ? 1.2 : 1.6, calm: S.t, asmT: Math.round(clamp(far / 9 + 20, 50, 150)) });
+    face: Math.atan2(p.y - A.y, p.x - A.x), p0: pw, agg: M.lost ? 1 : 1.3, calm: S.t, asmT: Math.round(clamp(far / 9 + 20, 50, 150)) });   // 反冲击兵力相当就打，加强防御的占优三成就压上去
   for (const v of vs) Object.assign(v, { bgG: G.id, cmd: null, buddy: null, esc: null });
   B.formT = S.t;
   const from = [...new Set(area.map(o => o.p.name))].slice(0, 3).join('、'), vc = {};
@@ -205,7 +205,7 @@ function brFormArmorE(B, K) {
   }
   const far = Math.max(...vs.map(v => dist(v.x, v.y, A.x, A.y) / 2), ...(ts.length >= 2 ? ts : []).map(q => dist(q.x, q.y, A.x, A.y)));
   const G = bgNew('e', nm, '营长', { us, vs: vs.map(v => v.id), rec: [], ax: Math.round(A.x), ay: Math.round(A.y), key: p.key, ech: 'II', br: true, arm: true,
-    face: Math.atan2(p.y - A.y, p.x - A.x), p0: pw, agg: M.lost ? 1.1 : 1.4, calm: S.t, asmT: Math.round(clamp(far / 9 + 20, 40, 120)) });
+    face: Math.atan2(p.y - A.y, p.x - A.x), p0: pw, agg: M.lost ? 1 : 1.2, calm: S.t, asmT: Math.round(clamp(far / 9 + 20, 40, 120)) });
   for (const v of vs) Object.assign(v, { bgG: G.id, cmd: null, buddy: null, esc: null });
   B.formT = S.t;
   const vc = {};
@@ -229,7 +229,7 @@ function brDissolve(G, why) {
 }
 // 转用：换任务据点，重新成行军队形开进
 function brRetask(B, G, M, why) {
-  G.key = M.p.key; G.st = 'move'; G.stT = S.t; G.calm = S.t; G.taskT = S.t; G.agg = M.lost ? 1.2 : 1.6;
+  G.key = M.p.key; G.st = 'move'; G.stT = S.t; G.calm = S.t; G.taskT = S.t; G.agg = M.lost ? 1 : 1.3;
   for (const u of bgUnits(G)) { u.obj = M.p.key; for (const q of teamsOf(u)) q.obj = M.p.key; }
   bgSay(G, `${why}奉命${M.lost ? `向${M.p.name}反冲击` : `转到${M.p.name}方向加强防御`}，全群成行军队形开进。`, null, 'order', M.lost ? `转向${M.p.name}反冲击！` : `转向${M.p.name}加强防御！`);
   brLog(B, `retask ${G.name} → ${M.p.key}`);
@@ -349,7 +349,7 @@ function brFormP(B) {
   const p = M.p, A = { x: Math.round(cx), y: Math.round(cy) }, gp = brAtkPos(A, p, 300), n = ++B.n, ech = us.length >= 4 ? 'III' : us.length >= 2 ? 'II' : 'I', nm = `合成第 ${n} ${BR_ECH[ech][0]}`;
   const far = Math.max(...us.map(id => { const u = UNIT_MAP.get(id); return u ? dist(u.x, u.y, A.x, A.y) : 0; }));
   const G = bgNew('p', nm, BR_ECH[ech][1], { us, vs: vs.map(v => v.id), rec: [], ax: A.x, ay: A.y, key: p.key, ech, br: true, gx: gp.x, gy: gp.y,
-    face: Math.atan2(gp.y - A.y, gp.x - A.x), p0: pw, agg: 1.4, asmT: Math.round(clamp(far / 9 + 20, 50, 150)) });
+    face: Math.atan2(gp.y - A.y, gp.x - A.x), p0: pw, agg: 1.2, asmT: Math.round(clamp(far / 9 + 20, 50, 150)) });
   for (const v of vs) Object.assign(v, { bgG: G.id, cmd: null, buddy: null, esc: null });
   B.formT = S.t;
   const vc = {};

@@ -127,7 +127,10 @@ const MS_PGM = {
   ld10: { nm: '雷电-10 反辐射导弹', spd: 420, z: .6, dmg: 34, pen: 3, st: 10, icp: .1, pw: { men: .5, ship: 2, struct: 0, seg: false, R: 14, vb: 4, veh: true } },   // 歼-35 防空压制型：追防空雷达辐射源
   yj62: { nm: '鹰击-62 反舰 / 对陆巡航导弹', spd: 170, z: .07, dmg: 40, pen: 3.6, st: 22, icp: .45, pw: { men: .8, ship: 5, struct: 0, seg: true, R: 30, vb: 9, veh: true } },   // 052C 舰面倾斜发射架 8 枚，亚音速掠海
   yj83: { nm: '鹰击-83 反舰导弹', spd: 260, z: .06, dmg: 36, pen: 3.6, st: 18, icp: .3, pw: { men: .6, ship: 4, struct: 0, seg: true, R: 22, vb: 6, veh: true } },   // 054A 舰面发射筒 8 枚，亚音速掠海、末段高速
-  ls6: { nm: '雷石-6 滑翔制导炸弹', spd: 220, z: .55, dmg: 50, pen: 4, st: 30, icp: .35, pw: { men: .9, ship: 6, struct: 0, seg: true, R: 30, vb: 10, veh: true } }   // 歼-36 打击型：500 公斤级，高空投放滑翔，慢、可被近程防空拦截
+  ls6: { nm: '雷石-6 滑翔制导炸弹', spd: 220, z: .55, dmg: 50, pen: 4, st: 30, icp: .35, pw: { men: .9, ship: 6, struct: 0, seg: true, R: 30, vb: 10, veh: true } },   // 歼-36 打击型：500 公斤级，高空投放滑翔，慢、可被近程防空拦截
+  // B-2A 投放的联合直接攻击弹药（b2.js）：从约 12000 米高空投下、GPS / 惯导滑翔约 6 秒落地；不跟踪活动目标（按投放时的坐标打）
+  gbu38: { nm: 'GBU-38/B 500 磅 JDAM', spd: 45, z: .9, dmg: 30, pen: 3, st: 0, icp: .15, pw: { men: .8, ship: 2.2, struct: 0, seg: true, R: 20, vb: 9, pen: 2, veh: true } },
+  gbu31: { nm: 'GBU-31(V)3/B 2000 磅 JDAM', spd: 45, z: .9, dmg: 60, pen: 4, st: 0, icp: .1, pw: { men: .95, ship: 9, struct: 0, seg: true, R: 34, vb: 22, pen: 4, veh: true } }
 };
 function msPgmTgt(t) {
   if (!t) return null;
@@ -235,13 +238,13 @@ function msAsm(m, dt) {
   const w = d < 200 ? Math.sin(m.t * 9) * 6 : 0;
   m.x = m.bx - Math.sin(m.hd) * w; m.y = m.by + Math.cos(m.hd) * w;
   if (m.side === 'e' && msDefend(m)) return;
-  if (d > Math.max(10, st)) { if (m.t > 14) { m.done = true; msPuff(m.x, m.y, m.side); } return; }
+  if (d > Math.max(10, st)) { if (m.t > (m.life || 14)) { m.done = true; msPuff(m.x, m.y, m.side); } return; }   // life：远程发射的（B-2 的 JASSM-ER）飞得久
   m.done = true;
   if (!T) { S.fx.push({ kind: 'flash', x: m.x, y: m.y, r: 12, life: 0, max: .6, side: m.side }); return; }
   S.fx.push({ kind: 'boom', x: m.x, y: m.y, r: 26, life: 0, max: 1.1, side: m.side });
   msStat('ascmHit');
   const k = m.tgt.k;
-  if (k === 'ship') { log(`${T.label} 被岸舰导弹击中`, 'bad', null, 0, T); damageShip(T, 7); }
+  if (k === 'ship') { log(`${T.label} 被${m.nm || '岸舰导弹'}击中`, 'bad', null, 0, T); damageShip(T, 7); }
   else if (k === 'dd') { damageDD({ kind: 'coastal', x: m.x0, y: m.y0 }); damageDD({ kind: 'coastal', x: m.x0, y: m.y0 }); }
   else if (k === 'cv' && typeof cvImpact === 'function') cvImpact(T.x, T.y, { men: 0, ship: 6, struct: 0, R: 20 });
 }
@@ -256,7 +259,7 @@ function msDefend(m) {
     const r = s.esc ? 600 : 750, d = dist(m.x, m.y, s.x, s.y);
     if (d > r || d < 140 || !cover(s) || (s.o.samCd || 0) > S.t || (typeof vlsUse === 'function' && !vlsUse(s.o, 'sam'))) continue;
     m.samTry = true; s.o.samCd = S.t + 1.5;
-    msLaunch('sam', 'p', s.x, s.y, { x: m.x, y: m.y }, { tgt: { k: 'msl', id: m.id }, src: s.esc ? 'esc' : 'dd', spd: 560, dur: 2.5, pk: s.esc ? .3 : .35 });
+    msLaunch('sam', 'p', s.x, s.y, { x: m.x, y: m.y }, { tgt: { k: 'msl', id: m.id }, src: s.esc ? 'esc' : 'dd', spd: 560, dur: 2.5, pk: (s.esc ? .3 : .35) * (m.lo ? .6 : 1) });   // lo：低可探测的隐身巡航导弹（JASSM-ER），雷达锁得晚
     msStat('abm');
     break;
   }
@@ -265,7 +268,7 @@ function msDefend(m) {
     const d = dist(m.x, m.y, s.x, s.y);
     if (d > CV_DEF.hqR || d < CV_DEF.hqMin || !cover(s) || (s.o.hqCd || 0) > S.t || !(s.o.hq10 > 0)) continue;
     m.hqTry = true; s.o.hqCd = S.t + CV_DEF.hqCd; s.o.hq10--;
-    msLaunch('sam', 'p', s.x, s.y, { x: m.x, y: m.y }, { tgt: { k: 'msl', id: m.id }, src: 'cv', spd: 600, dur: 1.6, pk: CV_DEF.hqPk });
+    msLaunch('sam', 'p', s.x, s.y, { x: m.x, y: m.y }, { tgt: { k: 'msl', id: m.id }, src: 'cv', spd: 600, dur: 1.6, pk: CV_DEF.hqPk * (m.lo ? .6 : 1) });
     msStat('cvHq10');
     break;
   }
@@ -280,7 +283,7 @@ function msDefend(m) {
     const many = S.missiles.filter(o => o.kind === 'asm' && o.side === m.side && !o.done && o.t >= 0 && dist(o.x, o.y, s.x, s.y) < 300).length >= 2;
     const p = (s.cv ? CV_DEF.cwPk : s.esc ? .4 : .55 * (S.dd.hull >= 3 ? 1 : .8)) * (many ? (s.cv ? .85 : .7) : 1);   // 航母三座近防炮：同时来几枚也顶得住
     (m.cwN || (m.cwN = [])).push(s.id);
-    m.cw = { until: S.t + .4, ok: Math.random() < p, id: s.id };
+    m.cw = { until: S.t + .4, ok: Math.random() < p * (m.lo ? .75 : 1), id: s.id };
     break;
   }
   return false;
