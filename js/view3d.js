@@ -1,5 +1,5 @@
 'use strict';
-// 3D 立体地图（黑绿画风）：右上角「3D」按钮或 L 键切换，沙盒编辑时不可用
+// 3D 立体地图（黑绿画风）：右上角「3D」按钮或 Shift + L 切换，沙盒编辑时不可用
 // 画法：地形按高程做成立体网格（每 2 格一个顶点，高程放大 V3_HZ 倍，海面平铺，四周有沙盘围边）；
 //   当前整帧战场（地形、单位、标记，已过黑绿着色器）先在屏外按俯视画好，作为贴图披在地形上；
 //   再叠加西北来光的山体明暗、等高线（每 14 一条，每 5 条加粗）、200 一格的方格网、远处渐暗
@@ -387,7 +387,7 @@ HOOK.pointer.push((e, kind) => {
 });
 HOOK.key.push(e => {
   const k = e.key;
-  if (k === 'l' || k === 'L') { v3Toggle(); return true; }
+  if ((k === 'l' || k === 'L') && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) { v3Toggle(); return true; }   // 单按 L 是通讯面板（chat.js）
   if (!V3.on) return false;
   if (k === ',' || k === '<') { v3Turn(-1); return true; }
   if (k === '.' || k === '>') { v3Turn(1); return true; }
@@ -400,7 +400,7 @@ HOOK.key.push(e => {
 function v3Button() {
   if (typeof document === 'undefined' || !document.getElementById('topr') || document.getElementById('btn3d')) return;
   const b = document.createElement('button');
-  b.id = 'btn3d'; b.className = 'tb'; b.type = 'button'; b.textContent = '3D'; b.title = '3D 立体地图（L）'; b.setAttribute('aria-pressed', 'false');
+  b.id = 'btn3d'; b.className = 'tb'; b.type = 'button'; b.textContent = '3D'; b.title = '3D 立体地图（Shift + L）'; b.setAttribute('aria-pressed', 'false');
   b.addEventListener('click', () => v3Toggle());
   const help = document.getElementById('btnHelp');
   help.parentNode.insertBefore(b, help);

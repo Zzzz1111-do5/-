@@ -250,7 +250,7 @@ if (typeof document !== 'undefined') {
   HOOK.frame.push(chatFrame);
   HOOK.drawTop.push(chatDrawHl);
   HOOK.key.push(e => {
-    if (e.ctrlKey || e.metaKey || e.altKey || (e.key !== 'l' && e.key !== 'L')) return false;
+    if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey || (e.key !== 'l' && e.key !== 'L')) return false;   // Shift + L 是 3D 立体地图（view3d.js）
     if (typeof MENU === 'object' && MENU.open) return false;
     chatToggle();
     return true;
