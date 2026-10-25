@@ -12,13 +12,15 @@ const COL = {
   bg: '#020704', g: '#3dff8a', gMid: '#1fa457', gDim: '#0f4a29', enemy: '#ff3d6e',
   intel: '#5cc8ff', sel: '#b07cff', amber: '#ffc24a', text: '#c6f7d8', smoke: '#9fb8a8'
 };
-// 画面风格：real 写实（默认，我方蓝、敌方红，颜色贴近真实地图）· matrix 数码矩阵（原配色）。切换时改写 COL 并给 <html> 标 data-look 供 CSS 换色
+// 画面风格：green 黑绿（默认：写实画面的轮廓与模型 + 黑底绿色磷光，look.js 后处理）· real 写实（我方蓝、敌方红，颜色贴近真实地图）· matrix 数码矩阵（原配色）。
+// 切换时改写 COL 并给 <html> 标 data-look 供 CSS 换色（黑绿画面的界面沿用数码矩阵的绿色配色）
 const COL_LOOK = {
   matrix: { ...COL },
+  green: { ...COL },
   real: { bg: '#0b1014', g: '#52a8ff', gMid: '#2f7fd0', gDim: '#1d4a7a', enemy: '#ff4848', intel: '#8fdcff', sel: '#c78cff', amber: '#ffbb38', text: '#e6edf2', smoke: '#b4afa6' }
 };
 function applyLook(look) {
-  const k = look === 'matrix' ? 'matrix' : 'real';
+  const k = look === 'matrix' || look === 'real' ? look : 'green';
   Object.assign(COL, COL_LOOK[k]);
   if (typeof document !== 'undefined' && document.documentElement) document.documentElement.dataset.look = k;
 }

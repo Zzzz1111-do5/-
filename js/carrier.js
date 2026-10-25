@@ -1069,7 +1069,7 @@ function drawAircraft(ctx, x, y, a, type, size, col, alpha, bank, lw, bombs) {
   airShape(ctx, type);
   if (real) {   // 写实：按机型涂装（受光渐变）、深色细节线、阵营细边
     const ga = ctx.globalAlpha;
-    ctx.fillStyle = rlLit(ctx, a, 22, 18, rlAirPaint(type)); ctx.globalAlpha = ga * alpha; ctx.fill(); ctx.globalAlpha = ga;
+    ctx.fillStyle = rlLit(ctx, a, 22, 18, col === COL.enemy ? lkPaint(rlAirPaint(type), 'e') : rlAirPaint(type)); ctx.globalAlpha = ga * alpha; ctx.fill(); ctx.globalAlpha = ga;   // 黑绿画面：敌机暗红
     ctx.strokeStyle = rgba(col, alpha * .8); ctx.lineWidth = lw / sc * .8; ctx.stroke();
     ctx.strokeStyle = `rgba(20,22,24,${.55 * alpha})`;
   } else {

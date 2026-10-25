@@ -23,7 +23,7 @@ function bgRain() {
   fit(); addEventListener('resize', fit);
   const tick = t => {
     requestAnimationFrame(tick);
-    if (t - last < 60 || (typeof realLook === 'function' && realLook())) return;   // 写实画面不显示数码雨
+    if (t - last < 60 || (typeof realLook === 'function' && realLook() && !(typeof greenLook === 'function' && greenLook()))) return;   // 写实画面不显示数码雨（黑绿画面照常）
     last = t;
     g.fillStyle = 'rgba(2,7,4,0.14)'; g.fillRect(0, 0, c.width, c.height);
     g.font = fs + 'px "Noto Sans SC", monospace';

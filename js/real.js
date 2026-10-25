@@ -6,7 +6,10 @@ const RLP = {
   e: { hull: '#8a7e5a', tur: '#968a65', dark: '#665d43', uni: '#867c5b', helm: '#7a7051', pack: '#625a42' }
 };
 const RL_EDGE = '#24251f';   // 边线、炮管、履带等深色金属
-const rlPal = side => RLP[side === 'e' ? 'e' : 'p'];
+// 黑绿画面（look.js）：敌方换成同样明暗的暗红涂装，过着色器时保留红色、一眼分清敌我
+const RLP_G = { e: Object.fromEntries(Object.entries(RLP.e).map(([k, v]) => [k, v])) };
+const rlPal = side => side === 'e' ? (typeof greenLook === 'function' && greenLook() ? rlPalG() : RLP.e) : RLP.p;
+function rlPalG() { if (!RLP_G.ok) { for (const k in RLP.e) RLP_G.e[k] = lkPaint(RLP.e[k], 'e'); RLP_G.ok = true; } return RLP_G.e; }
 const _rlc = {};
 // 颜色按系数提亮 / 压暗（缓存）
 function rlShade(hex, k) {
@@ -139,6 +142,8 @@ function drawManReal(ctx, x0, y0, a, role, col, side, prone) {
 
 // 火炮阵地等线稿模型的写实配色：描边色 → 深色金属，暗底 → 涂装 / 混凝土
 const RL_GUN = { col: 'rgba(30,30,26,.92)', dim: 'rgba(0,0,0,.38)', con: 'rgba(150,146,136,.95)', dark: '#857a57', sand: '#a8966e', concrete: '#8c887e' };
+// 火炮阵地都是守方的：黑绿画面里涂装、混凝土换成暗红
+const rlGun = () => typeof greenLook === 'function' && greenLook() ? (RL_GUN.g || (RL_GUN.g = { ...RL_GUN, con: 'rgba(170,70,60,.95)', dark: lkPaint(RL_GUN.dark, 'e'), sand: lkPaint(RL_GUN.sand, 'e'), concrete: lkPaint(RL_GUN.concrete, 'e') })) : RL_GUN;
 
 // 飞机涂装：隐身战机深灰、大型机浅灰、A-10 深灰绿、直升机橄榄绿、无人机浅灰
 function rlAirPaint(type) {

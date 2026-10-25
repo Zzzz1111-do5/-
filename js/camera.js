@@ -51,7 +51,7 @@ const MM_COL = ['#03140c', '#0a3326', '#7a1f33', '#5fae7a', '#3e6b52', '#9be3b5'
   '#11433d', '#1d6f8a', '#e6fff0', '#7fe0a4', '#57c987', '#2a8fa8'];
 
 function mmInit(cv) {
-  MM.cv = cv; MM.real = realLook();
+  MM.cv = cv; MM.real = realLook() && !(typeof greenLook === 'function' && greenLook());   // 黑绿画面的小地图用数码矩阵的配色
   const w = cv.clientWidth || 268;
   cv.width = Math.round(w * (window.devicePixelRatio || 1)); cv.height = Math.round(cv.width * H / W);
   MM.k = cv.width / W;
@@ -80,7 +80,7 @@ function mmDraw() {
 }
 function mmDraw1() {
   if (!MM.cv) return;
-  if (MM.seed !== TER.seed || MM.real !== realLook()) mmInit(MM.cv);
+  if (MM.seed !== TER.seed || MM.real !== (realLook() && !(typeof greenLook === 'function' && greenLook()))) mmInit(MM.cv);
   const g = MM.cv.getContext('2d'), k = MM.k, dot = (x, y, r, c) => { g.fillStyle = c; g.fillRect(x * k - r, y * k - r, r * 2, r * 2); };
   g.imageSmoothingEnabled = MM.real;
   g.drawImage(MM.base, 0, 0, MM.cv.width, MM.cv.height);

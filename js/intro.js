@@ -118,7 +118,7 @@ function itrScene() {
   }
   const cname = nm(2, '') + ['共和国', '联邦', '王国'][r() * 3 | 0], op = ITR_OPS[r() * ITR_OPS.length | 0];
   const sc = { coast, cBig, XT, BX, BY, BW, BH, XW, XE, border, nbr, box: [bx0, by0, bx1, by1], edges: [...edges.values()], cities, roads, rivers, isles, cname, op, lon0: 118 + r() * 14, lat0: 30 + r() * 12 };
-  sc.real = typeof realLook === 'function' && realLook();
+  sc.real = typeof realLook === 'function' && realLook() && !(typeof greenLook === 'function' && greenLook());   // 黑绿画面的开场沿用数码风格
   sc.ter = (sc.real && typeof trxSnapshot === 'function' && itrFeather(trxSnapshot(1200), .1)) || itrRaster(sc.real);
   sc.reg = itrRegion(sc, r);
   if (sc.real) sc.pat = itrLandPat();

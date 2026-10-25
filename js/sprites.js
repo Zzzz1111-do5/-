@@ -8,7 +8,8 @@ const SPR_PPM = 24;
 const SPR_MAT = {
   p: { paint: '#5f6c41', camo: ['#4b5733', '#77754d', '#3e4630'], canvas: '#6a6a4a', dirt: '#5a4c36' },
   e: { paint: '#8e8260', camo: null, canvas: '#857c5f', dirt: '#6b5d43' },
-  n: { paint: '#7f878c', camo: null, canvas: '#7a7f80', dirt: '#55595a' }   // 海军灰
+  n: { paint: '#7f878c', camo: null, canvas: '#7a7f80', dirt: '#55595a' },   // 海军灰
+  eg: { paint: '#cf2f22', camo: null, canvas: '#b0301f', dirt: '#7e231a' }    // 黑绿画面里的敌方：暗红涂装（look.js 着色器保留红色）
 };
 const SPR_RUBBER = '#272724', SPR_METAL = '#4b4d49', SPR_STEEL = '#6e706b', SPR_GLASS = '#2e4653', SPR_DARK = '#1d1e1b';
 
@@ -217,6 +218,7 @@ function sprPainter(g, side) {
 
 // 生成并缓存一张贴图：w × h 米、原点在中心（ox、oy 为原点在贴图中的像素位置），draw(P)
 function sprGet(key, side, w, h, draw, ppm = SPR_PPM) {
+  if (side === 'e' && typeof greenLook === 'function' && greenLook()) side = 'eg';   // 黑绿画面：敌方用暗红涂装（另存一份贴图）
   const k = key + ':' + side + ':' + ppm;
   let s = SPR.m.get(k);
   if (s) return s;

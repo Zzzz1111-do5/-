@@ -34,7 +34,7 @@ function gunCrew(ctx, x, y, a, pts, col) {
 // 沙袋环：一圈小圆角块；open 为缺口方向（弧度），不设则为整圈
 function gunSandbags(ctx, x, y, r, open, col) {
   const n = Math.max(8, Math.round(r * 1.4)), gap = open == null ? 0 : .9;
-  ctx.fillStyle = realLook() ? RL_GUN.sand : 'rgba(2,10,6,.85)'; ctx.strokeStyle = realLook() ? 'rgba(70,58,40,.8)' : col; ctx.lineWidth = px(1);
+  ctx.fillStyle = realLook() ? rlGun().sand : 'rgba(2,10,6,.85)'; ctx.strokeStyle = realLook() ? 'rgba(70,58,40,.8)' : col; ctx.lineWidth = px(1);
   for (let i = 0; i < n; i++) {
     const a = i / n * 6.283;
     if (open != null && Math.abs(Math.atan2(Math.sin(a - open), Math.cos(a - open))) < gap) continue;
@@ -55,16 +55,16 @@ function gunModel(ctx, e, x, y, vis, time) {
   if (!K[e.kind]) return false;
   if (GUNV.S !== S || GUNV.t !== time) { gunScan(); GUNV.t = time; }
   const real = vis && realLook();   // 写实：深色金属描边、沙色 / 混凝土底，不再是发光线稿
-  const a = gunAim(e, time), col = real ? RL_GUN.col : rgba(COL.enemy, vis ? .95 : .4), dim = real ? RL_GUN.dim : rgba(COL.enemy, vis ? .45 : .2), con = real ? RL_GUN.con : rgba(STRUCT, vis ? .3 : .12);
+  const a = gunAim(e, time), col = real ? rlGun().col : rgba(COL.enemy, vis ? .95 : .4), dim = real ? rlGun().dim : rgba(COL.enemy, vis ? .45 : .2), con = real ? rlGun().con : rgba(STRUCT, vis ? .3 : .12);
   const ft = S.t - (GUNV.fire[e.id] ?? -99), fk = vis && ft < .3 ? 1 - ft / .3 : 0, rec = vis && ft < .45 ? (1 - ft / .45) * 2.2 : 0;
-  const dark = real ? RL_GUN.dark : 'rgba(30,4,10,.85)';
+  const dark = real ? rlGun().dark : 'rgba(30,4,10,.85)';
   ctx.save();
   if (!vis) ctx.setLineDash([px(2), px(2)]);
   ctx.lineWidth = px(1.2);
   if (e.dead) { gunWreck(ctx, e, x, y, a); ctx.restore(); return true; }
   if (e.kind === 'coastal') {
     // 圆形混凝土炮台 + 环形炮座 + 旋转炮塔与长炮管
-    ctx.fillStyle = real ? RL_GUN.concrete : 'rgba(2,10,6,.9)'; ctx.strokeStyle = con; ctx.lineWidth = px(3);
+    ctx.fillStyle = real ? rlGun().concrete : 'rgba(2,10,6,.9)'; ctx.strokeStyle = con; ctx.lineWidth = px(3);
     ctx.beginPath(); ctx.arc(x, y, 13, 0, 7); ctx.fill(); ctx.stroke();
     ctx.lineWidth = px(1); ctx.strokeStyle = dim; ctx.setLineDash([px(2), px(3)]); ctx.beginPath(); ctx.arc(x, y, 9.5, 0, 7); ctx.stroke(); ctx.setLineDash(vis ? [] : [px(2), px(2)]);
     ctx.fillStyle = dark; ctx.strokeStyle = con; ctx.lineWidth = px(1.2);
@@ -141,7 +141,7 @@ function gunModel(ctx, e, x, y, vis, time) {
   } else if (e.kind === 'bunker') {
     // 机枪碉堡：厚墙混凝土工事（圆角方形）、朝射向的射孔与伸出的枪管、伪装点
     const sa = Math.round(a / (Math.PI / 2)) * (Math.PI / 2);   // 射孔开在最接近射向的那面墙
-    ctx.fillStyle = real ? RL_GUN.concrete : 'rgba(2,10,6,.92)'; ctx.strokeStyle = con; ctx.lineWidth = px(3);
+    ctx.fillStyle = real ? rlGun().concrete : 'rgba(2,10,6,.92)'; ctx.strokeStyle = con; ctx.lineWidth = px(3);
     ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x - 8, y - 8, 16, 16, 3) : ctx.rect(x - 8, y - 8, 16, 16); ctx.fill(); ctx.stroke();
     ctx.strokeStyle = col; ctx.lineWidth = px(1.2);
     ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x - 5.5, y - 5.5, 11, 11, 2) : ctx.rect(x - 5.5, y - 5.5, 11, 11); ctx.stroke();

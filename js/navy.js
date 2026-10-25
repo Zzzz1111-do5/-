@@ -255,9 +255,9 @@ function navyDraw(time) {
     ctx.globalAlpha = ghost ? .35 : 1 - sink * .85;
     if (!e.dead && !ghost && e.spd > 4) { ctx.strokeStyle = realLook() ? 'rgba(238,243,242,.35)' : rgba(COL.enemy, .25); ctx.lineWidth = px(1.2); ctx.beginPath(); ctx.moveTo(-L / 2, -B / 3); ctx.lineTo(-L / 2 - e.spd * 1.6, -B * 1.2); ctx.moveTo(-L / 2, B / 3); ctx.lineTo(-L / 2 - e.spd * 1.6, B * 1.2); ctx.stroke(); }
     const real = realLook() && !ghost;   // 写实：美国海军灰舰体、深色甲板设备、细红边
-    ctx.fillStyle = real ? rlLit(ctx, e.heading, L, B, '#7f878d') : rgba(COL.enemy, .22); ctx.strokeStyle = COL.enemy; ctx.lineWidth = px(real ? 1 : 1.3);
+    ctx.fillStyle = real ? rlLit(ctx, e.heading, L, B, lkPaint('#7f878d', 'e')) : rgba(COL.enemy, .22); ctx.strokeStyle = COL.enemy; ctx.lineWidth = px(real ? 1 : 1.3);
     ctx.beginPath(); ctx.moveTo(L / 2, 0); ctx.lineTo(L * .22, -B / 2); ctx.lineTo(-L / 2, -B / 2 * .9); ctx.lineTo(-L / 2, B / 2 * .9); ctx.lineTo(L * .22, B / 2); ctx.closePath(); ctx.fill(); ctx.stroke();
-    if (real) { ctx.strokeStyle = 'rgba(28,32,34,.85)'; ctx.fillStyle = '#9aa2a7'; } else ctx.fillStyle = rgba(COL.enemy, .55);
+    if (real) { ctx.strokeStyle = 'rgba(28,32,34,.85)'; ctx.fillStyle = lkPaint('#9aa2a7', 'e'); } else ctx.fillStyle = rgba(COL.enemy, .55);
     ctx.fillRect(-L * .08, -B * .3, L * .2, B * .6);   // 舰桥 / 相控阵雷达
     ctx.strokeRect(L * .18, -B * .22, L * .12, B * .44);   // 前垂发
     if (e.cls !== 'lcs') ctx.strokeRect(-L * .34, -B * .22, L * .12, B * .44);   // 后垂发

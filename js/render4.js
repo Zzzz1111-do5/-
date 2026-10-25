@@ -22,12 +22,13 @@ function drawCraters() {
 // 城镇格画成房屋：数码风格为轮廓 + 屋脊线；写实风格为俯视屋顶（坡屋顶两坡明暗、平顶女儿墙），带东南向投影。近看才画
 // 屋顶配色：红瓦、灰瓦、蓝色彩钢、水泥平顶、深色瓦
 const ROOF = [[158, 74, 52], [120, 118, 112], [72, 104, 138], [170, 166, 156], [92, 84, 78], [176, 96, 64]];
+const ROOF_G = ROOF.map(c => { const l = c[0] * .3 + c[1] * .59 + c[2] * .11; return [l, l, l]; });   // 黑绿画面：屋顶只留明暗（红瓦不能和敌方红色混在一起）
 function drawBuildings() {
   if (CELL * R.s < (realLook() ? 2.5 : 5)) return;   // 写实：全图时房屋是一簇簇小色块，像卫星图上的村镇
   if (TOWN_SEED !== TER.seed) { TOWN_SEED = TER.seed; TOWN_CELLS = townBld().list; }
   const ctx = R.ctx, [x0, y0, x1, y1] = viewRect();
   if (realLook()) {
-    const sh = .45 + .9 * smooth(5, 14, CELL * R.s);
+    const sh = .45 + .9 * smooth(5, 14, CELL * R.s), gl = typeof greenLook === 'function' && greenLook();
     ctx.fillStyle = 'rgba(10,14,8,.38)';
     for (const b of TOWN_CELLS) {
       if (b.x < x0 || b.x > x1 || b.y < y0 || b.y > y1) continue;
@@ -36,7 +37,7 @@ function drawBuildings() {
     }
     for (const b of TOWN_CELLS) {
       if (b.x < x0 || b.x > x1 || b.y < y0 || b.y > y1) continue;
-      const w = b.r ? b.h : b.w, h = b.r ? b.w : b.h, x = b.x + b.dx - w / 2, y = b.y + b.dy - h / 2, c = ROOF[b.f ? 3 : b.c];
+      const w = b.r ? b.h : b.w, h = b.r ? b.w : b.h, x = b.x + b.dx - w / 2, y = b.y + b.dy - h / 2, c = (gl ? ROOF_G : ROOF)[b.f ? 3 : b.c];
       const tone = k => `rgb(${c[0] * k | 0},${c[1] * k | 0},${c[2] * k | 0})`;
       if (b.f) {   // 平顶：女儿墙一圈亮边
         ctx.fillStyle = tone(.86); ctx.fillRect(x, y, w, h);

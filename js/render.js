@@ -169,6 +169,7 @@ function drawScene(now) {
   worldTf(ctx);
   drawBanners(time); drawShipMarks(); drawPings(time); runHook('drawTop', time);
   R.ox = ox; R.oy = oy;
+  if (typeof greenLook === 'function') { if (greenLook()) lkPost(); else if (LK.css) lkCss(false); }   // 黑绿画面：整帧过着色器（look.js）
 }
 
 // 低画质：限制为 1 倍像素密度（辉光在 bloomK 中关闭）
