@@ -1415,7 +1415,7 @@ function cmdEObs() {
   for (const s of S.ships) if (alive(s) && s.land && (s.state === 'move' || s.state === 'unloading') && shipSeen(s.x, s.y, radar)) {
     const bi = cmdBeachOf(s.bx ?? s.tx, 120);
     if (bi < 0) continue;
-    o[bi].ships++; o[bi].men += s.load ? (s.load.teams || 0) * 3 + (s.load.eng || 0) : 0;
+    o[bi].ships++; o[bi].men += s.load ? (s.load.teams || 0) * 3 + (s.load.eng || 0) + (Array.isArray(s.load.veh) ? s.load.veh.length * 6 : 0) : 0;   // 坦克登陆舰、气垫艇载的坦克每辆折 6 人（与 brain.js 同口径）
   }
   // 已上陆之敌按其登陆的滩头归属（守军跟踪各路登陆兵力；向纵深发展后仍算原方向）；无从判断的按所在扇区；已失守的据点计入就近滩头方向
   const from = {};
@@ -1425,9 +1425,9 @@ function cmdEObs() {
     const bi = f != null && f >= 0 ? f : cmdBeachOf(q.x, 250);
     if (bi >= 0) { o[bi].men += q.men.length; o[bi].land += q.men.length; }
   }
-  for (const v of S.veh || []) if (v.side === 'p' && !v.dead && !v.lst && spotted(v.x, v.y) && coastAt(v.x) - v.y < 1100) {   // 坦克按车组人数计入
-    const bi = cmdBeachOf(v.x, 250);
-    if (bi >= 0) { o[bi].men += vehCrew(v); o[bi].land += vehCrew(v); }
+  for (const v of S.veh || []) if (v.side === 'p' && !v.dead && !v.lst && spotted(v.x, v.y) && coastAt(v.x) - v.y < 1100) {   // 有炮的坦克 / 战车按车组人数的两倍计入（火力远强于同样人数的步兵），其余按车组
+    const bi = cmdBeachOf(v.x, 250), k = vehCrew(v) * (vehSp(v).gun ? 2 : 1);
+    if (bi >= 0) { o[bi].men += k; o[bi].land += k; }
   }
   for (const p of S.points) if (p.owner === 'p') { const bi = cmdBeachOf(p.x, 400); if (bi >= 0) o[bi].held++; }
   return o;

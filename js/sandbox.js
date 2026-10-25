@@ -540,7 +540,7 @@ function sbxAIDefendBase() {
   if (k >= 1.6) {
     const e0 = sbxSpent('e'), up = [];
     for (const B of rest) if (sbxLeft('e') >= 200) { belt(B, k >= 2.5); up.push(B); }
-    for (let pass = 0; pass < Math.round(2 * k) && sbxLeft('e') >= 80; pass++) for (const B of main) {
+    for (let pass = 0; pass < Math.min(3, Math.round(2 * k)) && sbxLeft('e') >= 80; pass++) for (const B of main) {   // 第二道碉堡线：每个主攻滩头最多 3 处（多了只是给舰炮当靶子）
       const x = B.b.cx + ((pass % 3) - 1) * B.w * .3, y = coastAt(x) - 140 - (pass >> 1) * 18;
       sbxTry(pass % 2 ? 'e_casemate' : 'e_mg_bunker', x, y, 40); sbxTry('e_garrison', x, y - 30, 40);
     }
@@ -685,7 +685,7 @@ function sbxAIAttackBase(mi, fi) {
 
 // —— 部署方案（同一预算不同配比）：先按（1 − share）的预算做基本部署，再把留出的预算花在这个方案的主力上 ——
 const SBX_STY = {
-  e: { bal: { nm: '均衡纵深', share: 0, d: '滩头防御、岸炮、炮兵、预备队、防空按地形均衡配置' },
+  e: { bal: { nm: '均衡纵深', share: .38, d: '滩头防御、岸炮、炮兵、防空按地形配置，纵深另编步坦合成的机动反击群，敌上岸立足未稳时反突击' },
     armor: { nm: '装甲机动防御', share: .45, d: '工事从简，大批坦克、坦克歼击车、步兵战车与防空车编成装甲突击群，敌上岸后集中反突击' },
     air: { nm: '空地一体', share: .5, d: '纵深大机场与大机队（武装直升机、攻击机、歼击机），防空车撑伞，陆空协同打击滩头' },
     fort: { nm: '要塞防御', share: .4, d: '各滩头都筑防御地带，加第二、三道碉堡线、反坦克炮、雷场与炮兵，层层消耗' },
@@ -711,7 +711,11 @@ const sbxCnt = n => Object.entries(n).map(([id, k]) => `${catalogById(id).name.r
 function sbxDefStyle(style, R0) {
   const { main, rest, hub, hq, belt, art, say, cands } = R0, hubs = (cands || [hub]).filter(Boolean).slice(0, 3);
   const near = (p, i, r = 70) => ({ x: p.x + Math.cos(i * 2.1) * r, y: p.y - 40 - Math.abs(Math.sin(i * 2.1)) * r });
-  if (style === 'armor' && sbxVehOk()) {
+  if (style === 'bal') {   // 机动反击群：坦克、步兵战车、步兵连、反坦克车、防空车按比例编配，分在两三个枢纽
+    const ids = sbxVehOk() ? ['e_tank', 'e_apc', 'e_reserve', 'e_td', 'e_tank', 'e_assault', 'e_sam_veh', 'e_hv_tank', 'e_apc', 'e_reserve', 'e_aa_veh'] : ['e_reserve', 'e_assault', 'e_car', 'e_reserve', 'e_at'];
+    const n = sbxLoop(ids, (id, i) => { const p = near(hubs[i % hubs.length], i, 80); return sbxTry(id, p.x, p.y, 60); }, 24, 80);
+    say(`机动反击群（${sbxCnt(n)}）分别集结于${hubs.map(p => p.name).join('、')}：判明敌主攻方向后成建制向滩头出口反突击，趁敌坦克、补给还没上岸把登陆场压回海里。`, hubs[0]);
+  } else if (style === 'armor' && sbxVehOk()) {
     const n = sbxLoop(['e_hv_tank', 'e_tank', 'e_td', 'e_apc', 'e_tank', 'e_sam_veh', 'e_hv_tank', 'e_aa_veh', 'e_recon'], (id, i) => { const p = near(hubs[i % hubs.length], i); return sbxTry(id, p.x, p.y, 60); }, 22, 80);
     say(`方案「装甲机动防御」：滩头只留基本工事，编成装甲突击群（${sbxCnt(n)}）集结于${hubs.map(p => p.name).join('、')}，敌上岸立足未稳时集中实施装甲反突击，防空车随队撑伞。`, hubs[0]);
   } else if (style === 'air') {
@@ -739,6 +743,9 @@ function sbxAIDefend(style = 'bal') {
   let R0;
   try { R0 = sbxAIDefendBase(); } finally { S.sbx.budget.e = Btot; }
   if (DS.share) sbxDefStyle(style, R0);
+  // 余款不留：补步兵连、坦克、守备排（放在枢纽附近，作预备队）
+  const hubs = (R0.cands || [R0.hub]).filter(Boolean).slice(0, 3);
+  if (hubs.length) sbxLoop(sbxVehOk() ? ['e_reserve', 'e_tank', 'e_garrison', 'e_apc'] : ['e_reserve', 'e_garrison'], (id, i) => { const p = hubs[i % hubs.length]; return sbxTry(id, p.x + Math.cos(i * 1.7) * 60, p.y - 50 - Math.abs(Math.sin(i * 1.7)) * 60, 60); }, 14, 60);
   sbxSync();
   R0.say(`部署完毕（方案「${DS.nm}」）：共 ${S.sbx.items.filter(it => it.side === 'e').length} 项，用去 ${sbxSpent('e')} / ${Btot} 点。`, null);
   return R0.names;
@@ -1205,6 +1212,7 @@ function sbxAA() {
       const d = dist(a.x, a.y, p.x, p.y);
       if (d > ext) continue;
       const sp = (typeof AIR_SPEC === 'object' && AIR_SPEC[p.kind]) || { aa: .08, name: '飞机' }, pr = sp.aa * (d <= 190 ? m - 1 : m) * (1 - (a.sup || 0) / 130);
+      a.fireT = S.t;
       if (d > 190) tracer(a.x, a.y, p.x + gauss() * 14, p.y + gauss() * 14, 'e', inVision(a.x, a.y));
       if (pr > 0 && Math.random() < pr) { airLost(p, `${sp.name}被${a.name || '高炮'}击落`); break; }
     }

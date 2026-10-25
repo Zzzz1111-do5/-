@@ -179,16 +179,31 @@ function vehLook(f, x, y, cls) {
   if (cls) { const n = Math.ceil(dist(x, y, b[0], b[1]) / 4); for (let k = 1; k <= n; k++) if (stepCost(ci(lerp(x, b[0], k / n), lerp(y, b[1], k / n)), cls) === Infinity) return a; }
   return b;
 }
-// 远距离（>60）寻路用量化到 30 的目标点：多辆车、多次下令共用流场缓存；量化点不通时退回精确目标
+// 远距离寻路用量化的目标点（>60 量化到 30，>240 量化到 80）：多辆车、多次下令共用流场缓存（每张流场要整图算一遍）；量化点不通时退回精确目标
 function vehField(v, x, y, cls) {
-  const i = ci(v.x, v.y);
-  if (dist(v.x, v.y, x, y) > 60) { const f = field(Math.round(x / 30) * 30, Math.round(y / 30) * 30, cls); if (f && isFinite(f[i])) return f; }
+  const i = ci(v.x, v.y), d = dist(v.x, v.y, x, y);
+  if (d > 60) { const q = d > 240 ? 80 : 30, f = field(Math.round(x / q) * q, Math.round(y / q) * q, cls); if (f && isFinite(f[i])) return f; }
   return field(x, y, cls);
 }
-// 下令：检查可达（流场在车辆所在格有限）
+// 下令：检查可达（流场在车辆所在格有限）；近距离先在小窗口里查（不占全图流场缓存），窗口里绕不过去再查全图
 function vehReach(v, x, y) {
-  const f = vehField(v, x, y, vehCls(v, x, y));
+  const cls = vehCls(v, x, y);
+  if (dist(v.x, v.y, x, y) < 120) { const L = localField(v.x, v.y, x, y, cls); if (L && isFinite(localAt(L, v.x, v.y))) return true; }
+  const f = vehField(v, x, y, cls);
   return !!f && isFinite(f[ci(v.x, v.y)]);
+}
+// 近距离绕行（100 以内、直线不畅）：小窗口局部流场取前方两格，0.6 秒更新一次；窗口里不通返回 null（改用全图流场）
+function vehLocalStep(v, o, cls) {
+  const c = v.lp;
+  if (c && c.ox === o.x && c.oy === o.y && S.t - c.t < .6 && dist(v.x, v.y, c.x, c.y) > 4) return [c.x, c.y];
+  const L = localField(v.x, v.y, o.x, o.y, cls);
+  if (!L || !isFinite(localAt(L, v.x, v.y))) { v.lp = null; return null; }
+  let a = localNext(L, v.x, v.y);
+  if (!a) { v.lp = null; return null; }
+  const b = localNext(L, a[0], a[1]);
+  if (b && vehLine(v.x, v.y, b[0], b[1], cls)) a = b;
+  v.lp = { x: a[0], y: a[1], t: S.t, ox: o.x, oy: o.y };
+  return a;
 }
 function vehSetOrder(v, t, x, y, face) {
   if (t === 'hold' || x == null) { v.order = { t: 'hold', face: face ?? v.order.face }; return true; }
@@ -238,7 +253,9 @@ function vehDrive(v, dt, mul) {
   if (d > 20 && vehBlocked(v, o)) return;   // 前方是没被压住的敌步兵：停车以火力解决
   if (S.t - (v.pathT ?? -9) > 1) { v.pathT = S.t; v.direct = vehLine(v.x, v.y, o.x, o.y, cls); }
   let tx = o.x, ty = o.y;
-  if (!v.direct && d > 14) {
+  const ln = !v.direct && d > 14 && d <= 100 ? vehLocalStep(v, o, cls) : null;
+  if (ln) [tx, ty] = ln;
+  else if (!v.direct && d > 14) {
     const f = vehField(v, o.x, o.y, cls);
     if (f && !isFinite(f[ci(v.x, v.y)]) && vehPass(v.x, v.y, cls)) { v.order = { t: 'hold', face: o.face }; if (v.side === 'p' && !v.auto) log(`${vehName(v)}无法到达目标位置`, 'warn', 'vunr', 3, v); return; }
     const n = f && vehLook(f, v.x, v.y, cls);

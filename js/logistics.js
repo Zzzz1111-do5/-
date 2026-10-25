@@ -20,7 +20,8 @@ function updateTeams(dt) {
     let tg = null;
     if (q.kind === 'inf' && o.t !== 'retreat' && o.t !== 'charge') {
       tg = findTarget(q, RANGE);
-      const silent = q.side === 'e' && q.hold && tg && tg.d > 80 && S.t - q.hitT > 8;   // 伏击组隐蔽待机
+      // 伏击组隐蔽待机；隐蔽在工事里的守军（conceal.js）守火力纪律——敌步兵进到 105 以内（或自己挨打）才开火，不在远处为一点战果暴露阵地
+      const silent = q.side === 'e' && tg && S.t - q.hitT > 8 && (q.hold ? tg.d > 80 : tg.k === 'tm' && tg.d > 105 && o.t === 'hold' && typeof cvlHid === 'function' && cvlHid(q));
       if (tg && q.cd <= 0 && !silent) teamFire(q, tg);
     }
     if (q.kind === 'eng' && !q.repairing && (o.t === 'clear' || o.t === 'hold') && o.x == null) {
@@ -171,6 +172,7 @@ function updateVision() {
   if (typeof armorVisionSources === 'function') es.push(...armorVisionSources());
   es.push(...hookSources('visionE'));
   castVision(EV, es);
+  if (typeof cvlApply === 'function') cvlApply();   // 伪装隐蔽：没被近处发现的隐蔽小组从对方视野里抹掉（conceal.js）
   // 情报记忆：看到过的火力点与工事留下标定；回头再看已空则撤销
   let forts = false;
   for (const e of S.enemies) {

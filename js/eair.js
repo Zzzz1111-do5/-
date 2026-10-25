@@ -19,8 +19,11 @@ const EA_SPEC = { ga: { name: 'A-10C 攻击机', spd: 170, turn: 1.4, hp: 2, fla
 const eaFtr = t => t === 'ftr' || t === 'f22';   // 歼击机（空战由 airwar.js 接管）
 // 在巡逻高度上的战斗机（双方）：便携防空导弹、高炮、机枪、近防炮都够不着，只有舰空 / 车载防空导弹和对方战斗机能打
 // 攻击-2 察打一体无人机在中空待机（alt > .8）：单兵防空导弹、高炮够不着，只怕防空车的导弹与歼击机
+// 高空飞行的空警-600（约 9000 米）、无侦-7（约 18000 米）与高跳低开的运-20（蛟龙突击队，p.halo）：比毒刺类近程防空的射高（约 3800 米）高得多——
+//   高炮、单兵防空导弹、弹炮防空车都够不着，只有爱国者等中远程防空（M.hi）与歼击机能打；起降阶段除外
 const eaHighUav = o => !!o && o.kind === 'cas' && (!o.v || o.v === 'gj2') && o.alt > .8;
-const eaHigh = o => !!o && (o.kind === 'fighter' ? o.alt > .6 && !['cat', 'roll', 'trap', 'final'].includes(o.phase) : eaFtr(o.type) && o.alt > .6);
+const eaHighAlt = o => !!o && ((o.kind === 'recon' && o.alt > .6) || (o.kind === 'transport' && !!o.halo && o.alt > .5)) && !['cat', 'roll', 'trap', 'final', 'hold'].includes(o.phase);
+const eaHigh = o => !!o && (o.kind === 'fighter' ? o.alt > .6 && !['cat', 'roll', 'trap', 'final'].includes(o.phase) : o.kind === 'recon' || o.kind === 'transport' ? eaHighAlt(o) : eaFtr(o.type) && o.alt > .6);
 const EA_SIL = { ga: 'a10', heli: 'ah64', uh60: 'uh60', c17: 'c17', ftr: 'f35', f22: 'f22' };
 const eaSil = t => EA_SIL[t] || 'a10';
 const EA_TRAILS = new Map();   // 仅渲染用：固定翼尾迹点（不进 S）

@@ -309,7 +309,7 @@ function msCommandE(dt) {
     if (!best) continue;
     const n = Math.min(2, e.n ?? 4), d = dist(e.x, e.y, best.x, best.y);
     for (let i = 0; i < n; i++) msLaunch('asm', 'e', e.x + gauss() * 4, e.y + gauss() * 4, { x: best.x, y: best.y }, { tgt: { k: best.k, id: best.id }, delay: i * .7, src: e.id, spd: 260 });
-    e.n = (e.n ?? 4) - n; e.ascT = S.t + 45; e.kx = e.x; e.ky = e.y;   // 发射即暴露
+    e.n = (e.n ?? 4) - n; e.ascT = S.t + 45; e.fireT = S.t; e.kx = e.x; e.ky = e.y;   // 发射即暴露
     msStat('ascm', n);
     const sec = Math.round(d / 260);
     log(`导弹预警：${n} 枚岸舰导弹来袭，目标${best.nm}，约 ${sec} 秒到达`, 'bad', 'ascmw', 3, { x: best.x, y: best.y });

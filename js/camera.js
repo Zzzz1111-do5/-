@@ -90,7 +90,7 @@ function mmDraw1() {
   g.imageSmoothingEnabled = MM.real;
   g.drawImage(MM.base, 0, 0, MM.cv.width, MM.cv.height);
   g.fillStyle = MM.real ? 'rgba(8,12,18,.5)' : 'rgba(0,4,2,.45)';
-  for (let gy = 0; gy < GH; gy += 2) for (let gx = 0; gx < GW; gx += 2) if (!PV[gy * GW + gx]) g.fillRect(gx * CELL * k, gy * CELL * k, CELL * 2 * k, CELL * 2 * k);
+  for (let gy = 0; gy < GH; gy += 2) for (let gx = 0; gx < GW; gx += 2) if (!PV[gy * GW + gx] && !(typeof CVL_DISP === 'object' && CVL_DISP[gy * GW + gx])) g.fillRect(gx * CELL * k, gy * CELL * k, CELL * 2 * k, CELL * 2 * k);
   const u = Math.max(1.5, k * 6);
   for (const p of S.points) { g.strokeStyle = p.owner === 'p' ? COL.g : COL.enemy; g.lineWidth = 1.5; g.strokeRect(p.x * k - u * 1.4, p.y * k - u * 1.4, u * 2.8, u * 2.8); }
   for (const e of S.enemies) if (e.kx != null && !e.dead) dot(e.kx, e.ky, u * .7, COL.enemy);

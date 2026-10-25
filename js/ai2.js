@@ -91,7 +91,7 @@ function aiThink(D) {
       if (q.order.t === 'move') continue;
       let spot = q.px != null ? { x: q.px, y: q.py } : null;
       if (lost) { if (!spot || dist(spot.x, spot.y, p.x, p.y) < 90) spot = stagingSpot(p, I); }
-      else if (!spot || S.t - (q.posT || 0) > 15 || dist(spot.x, spot.y, p.x, p.y) > 70) { spot = aiSpot(q, p, I.fx, I.fy); q.posT = S.t; }
+      else if (!spot || S.t - (q.posT || 0) > 15 || dist(spot.x, spot.y, p.x, p.y) > 70) { const ns = aiSpot(q, p, I.fx, I.fy); q.posT = S.t; if (!aiSpotKeep(q, p, spot, ns, I.fx, I.fy)) spot = ns; }
       q.px = spot.x; q.py = spot.y;
       if (dist(q.x, q.y, spot.x, spot.y) > 6) aiGo(q, spot.x, spot.y, 'move', p.x, p.y);
     }
@@ -107,8 +107,10 @@ function aiArtillery(D, seenT, seenShips) {
   for (const s of seenShips) {
     const men = s.load.teams * 3 + s.load.eng, mv = s.state === 'move', a = s.heading;
     const v = s.state === 'unloading' ? (men + 6) * 1.5 : mv ? men + 2 : men * 1.2 + 2;
-    T.push({ x: s.x, y: s.y, v, vx: mv ? Math.cos(a) * 26 : 0, vy: mv ? Math.sin(a) * 26 : 0, sea: true });
+    T.push({ x: s.x, y: s.y, v, vx: mv ? Math.cos(a) * 26 : 0, vy: mv ? Math.sin(a) * 26 : 0, sea: true, mv });
   }
+  // 火力纪律：敌人还没上岸、炮位还没暴露（未被标定）时，不为在海上机动的舰船、小目标暴露自己——等它们抢滩卸载、步兵上滩再打（标定好的滩头诸元）
+  const quiet = !S.ships.some(s => alive(s) && (s.state === 'unloading' || s.state === 'beached')) && !seenT.some(q => isLand(q.x, q.y));
   for (const q of seenT) {
     let m = 0;
     for (const o of seenT) if (dist(o.x, o.y, q.x, q.y) < 32) m += o.men.length;
@@ -141,11 +143,12 @@ function aiArtillery(D, seenT, seenShips) {
       // 兵种修正 e.mod：rng 射程、pow 精度（散布反比）、rof 射速；shell 弹种、salvo 齐射发数（沙盒变体）
       const mortar = e.kind === 'mortar', M = e.mod || {}, range = (mortar ? 420 : 1100) * (M.rng || 1);
       if (dist(e.x, e.y, t.x, t.y) > range || (mortar && t.sea)) continue;
+      if (e.kx == null && ((quiet && t.mv) || t.v < 4)) continue;   // 隐蔽的炮位守火力纪律
       const dur = mortar ? 2.2 : 3.2, err = D.err * reg * (mortar ? .8 : 1) / (M.pow || 1), ax = t.x + t.vx * dur * D.lead, ay = t.y + t.vy * dur * D.lead;
       const kind = POWER[M.shell] ? M.shell : mortar ? 'mortar' : 'arty', R0 = POWER[kind].R;
       if (ownNear('e', ax, ay, R0 + err * 1.6)) continue;   // 危险近距：自己人在散布范围内，换目标（火箭炮散布大，留的距离也大）
       for (let k = 0; k < (M.salvo || 1); k++) { const pt = safeAim('e', ax, ay, err, R0); if (pt) fireShell(e.x, e.y, pt[0], pt[1], 'e', kind, dur + k * .22, !inVision(e.x, e.y)); }
-      e.cd = (mortar ? 5 + Math.random() * 2 : 8 + Math.random() * 3) / (M.rof || 1);
+      e.cd = (mortar ? 5 + Math.random() * 2 : 8 + Math.random() * 3) / (M.rof || 1); e.fireT = S.t;   // 开火即暴露（conceal.js）
       e.salvos = (e.salvos || 0) + 1;
       if (e.salvos >= D.scoot + (mortar ? 1 : 0)) relocate(e);
       used.add(e); fired++;

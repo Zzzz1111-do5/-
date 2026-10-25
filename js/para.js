@@ -53,7 +53,7 @@ function paLaunch(kind, x, y, ai) {
   const n = kind === 'para' ? 2 : 1, ev = ++P.n;
   for (let i = 0; i < n; i++) {
     const sx = clamp(x + (i - (n - 1) / 2) * 50 + gauss() * 20, 40, W - 40), sy = H + 60 + i * 30;
-    const p = { id: S.nid++, kind: 'transport', x: sx, y: sy, heading: -Math.PI / 2, spd: PA.spd, alt: PA.alt, bank: 0, phase: 'in', tx: x, ty: y, cx: x, cy: y, ox: 1, dropped: false };
+    const p = { id: S.nid++, kind: 'transport', x: sx, y: sy, heading: -Math.PI / 2, spd: PA.spd, alt: PA.alt, bank: 0, phase: 'in', tx: x, ty: y, cx: x, cy: y, ox: 1, dropped: false, halo: kind === 'para' };   // 高跳低开：运输机在近程防空射高以上（eair.js eaHigh）
     S.planes.push(p);
     P.tr.push({ id: p.id, k: kind, ev, i, dz: { x: Math.round(x), y: Math.round(y) }, dropped: false, men: kind === 'para' ? paMen(i) : 0 });
   }

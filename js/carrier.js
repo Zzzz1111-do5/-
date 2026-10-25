@@ -795,7 +795,7 @@ function airAA(p, dt) {
   const sp = airSpec(p.kind, p.v), st = sp.stealth ? (1 + sp.stealth) / 2 : 1;   // 隐身机：雷达高炮难以跟踪，光学瞄准仍可能打中
   for (const a of S.enemies) {
     if (a.dead || a.kind !== 'aa' || dist(a.x, a.y, p.x, p.y) > 190) continue;
-    tracer(a.x, a.y, p.x + gauss() * 14, p.y + gauss() * 14, 'e', inVision(a.x, a.y));
+    tracer(a.x, a.y, p.x + gauss() * 14, p.y + gauss() * 14, 'e', inVision(a.x, a.y)); a.fireT = S.t;   // 开火即暴露（conceal.js）
     if (a.kx == null && Math.random() < .15) { a.kx = a.x; a.ky = a.y; log('防空炮火暴露位置', 'warn', null, 0, a); }
     const k = p.kind === 'bomber' ? (p.v === 'dive' ? (p.diving ? 1.3 : 1) : .75) : 1;
     if (Math.random() < sp.aa * k * st * (1 - (a.sup || 0) / 130)) { airLost(p, `${airName(p.kind, p.v)}被击落`); break; }

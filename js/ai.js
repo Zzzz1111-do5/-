@@ -48,17 +48,28 @@ function aiRout(q) {
   if (inVision(q.x, q.y)) log('敌军被压制后撤', 'good', 'erout', 8, q);
 }
 
-// 据点附近、面向威胁一侧且掩护好的位置
+// 据点附近、面向威胁一侧且掩护好的位置：能挖散兵坑的地方（道路、桥梁、城镇以外）挖好后约相当于林地的掩护；
+// 各组散开（18 以内重罚、30 以内轻罚）——挤在一处，一发舰炮（杀伤半径 36）就能打掉几个组
+function aiSpotSc(q, p, s, fx, fy) {
+  const dx0 = fx - p.x, dy0 = fy - p.y, l = Math.hypot(dx0, dy0) || 1, dx = s.x - p.x, dy = s.y - p.y, dd = Math.hypot(dx, dy) || 1;
+  let crowd = 0;
+  for (const o of S.teams) if (o !== q && o.side === 'e' && o.px != null && o.men.length) { const d = dist(o.px, o.py, s.x, s.y); if (d < 18) crowd += 2.5; else if (d < 30) crowd += .8; }
+  const t = typeAt(s.x, s.y), dig = t !== T.TOWN && t !== T.ROAD && t !== T.BRIDGE ? .45 : 0;
+  return Math.max(s.c ?? 1 - coverAt(s.x, s.y), dig) * 2 + (dx * dx0 + dy * dy0) / dd / l * .8 - crowd - dd / 110;
+}
 function aiSpot(q, p, fx, fy) {
-  const dx0 = fx - p.x, dy0 = fy - p.y, l = Math.hypot(dx0, dy0) || 1;
   let best = null, bs = -1e9;
   for (const s of AIC.cover[p.key] || []) {
-    const dx = s.x - p.x, dy = s.y - p.y, dd = Math.hypot(dx, dy) || 1;
-    const crowd = S.teams.some(o => o !== q && o.side === 'e' && o.px != null && dist(o.px, o.py, s.x, s.y) < 14);
-    const sc = s.c * 2 + (dx * dx0 + dy * dy0) / dd / l * .8 - (crowd ? 3 : 0) - dd / 110 + Math.random() * .1;
+    const sc = aiSpotSc(q, p, s, fx, fy) + Math.random() * .1;
     if (sc > bs) { bs = sc; best = s; }
   }
   return best || p;
+}
+// 不来回挪位：换到新位置要比现在明显好（已在挖好的坑里再加一截）——每挪一次就暴露（conceal.js）、坑也白挖了
+function aiSpotKeep(q, p, cur, nx, fx, fy) {
+  if (!cur || dist(cur.x, cur.y, p.x, p.y) > 70 || dist(q.x, q.y, cur.x, cur.y) > 8) return false;
+  const h = typeof digHole === 'function' ? digHole(q) : null;
+  return aiSpotSc(q, p, nx, fx, fy) - aiSpotSc(q, p, cur, fx, fy) < .6 + (h && h.d > .5 ? .8 : 0);
 }
 
 function stagingSpot(p, I) {
