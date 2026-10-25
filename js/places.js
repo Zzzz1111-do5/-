@@ -1,18 +1,19 @@
 'use strict';
 // 地名标注（固定机制）：通联里说到的地名都能在地图上找到——据点名（西镇、白滩出口、中公路桥…）、海滩名（白滩、蓝滩…）、
 //   200 一格的方格网与方格号（「D7 方格」：列 A、B、C… 自西向东，行 1、2、3… 自北向南，与 core.js gridRef 一致）
-// 平面地图：方格线画在地面层；方格号近看时标在每格左上角，远看时沿画面上沿、左沿标列号、行号（像地图的图廓）；
+// 平面地图：近看时格角画小十字、每格左上角标方格号，远看时只沿画面上沿、左沿标列号、行号（像地图的图廓）；
 //   据点名写在据点下方，海滩名写在海面括线下方；字号按屏幕像素固定，带深色描边，压在单位、地形上也看得清；远看时互相压住的名称让位
 // 3D 立体地图里的地名由 view3d.js v3Overlay 画（这里在画 3D 贴图时不画字，免得字被透视拉歪）
 const PL = { cell: 200, near: 110 };
 
+// 方格网不画整条线（满屏横竖线太乱）：只在拉近、标方格号时于格角画小十字
 function plGrid() {
-  if (!S || !TER || (typeof V3 === 'object' && V3.drawing)) return;   // 3D 的方格网在着色器里
-  const ctx = R.ctx, v = R.view || [0, 0, W, H], c = PL.cell;
-  ctx.save(); ctx.strokeStyle = rgba(COL.g, .18); ctx.lineWidth = px(1); ctx.setLineDash([px(10), px(5)]);
+  if (!S || !TER || (typeof V3 === 'object' && V3.drawing) || PL.cell * R.s < PL.near) return;   // 3D 的方格网在着色器里
+  const ctx = R.ctx, v = R.view || [0, 0, W, H], c = PL.cell, a = px(6);
+  ctx.save(); ctx.strokeStyle = rgba(COL.g, .4); ctx.lineWidth = px(1);
   ctx.beginPath();
-  for (let x = Math.max(c, Math.ceil(v[0] / c) * c); x <= Math.min(W - 1, v[2]); x += c) { ctx.moveTo(x, Math.max(0, v[1])); ctx.lineTo(x, Math.min(H, v[3])); }
-  for (let y = Math.max(c, Math.ceil(v[1] / c) * c); y <= Math.min(H - 1, v[3]); y += c) { ctx.moveTo(Math.max(0, v[0]), y); ctx.lineTo(Math.min(W, v[2]), y); }
+  for (let x = Math.max(c, Math.ceil(v[0] / c) * c); x <= Math.min(W - 1, v[2]); x += c)
+    for (let y = Math.max(c, Math.ceil(v[1] / c) * c); y <= Math.min(H - 1, v[3]); y += c) { ctx.moveTo(x - a, y); ctx.lineTo(x + a, y); ctx.moveTo(x, y - a); ctx.lineTo(x, y + a); }
   ctx.stroke(); ctx.restore();
 }
 
