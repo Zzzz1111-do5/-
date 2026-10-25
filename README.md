@@ -1,3 +1,3 @@
-# 抢滩登陆沙盘推演
+# 暗剑 Darksword · 网页版
 
-网页版：直接打开 index.html，或访问 GitHub Pages 地址。本分支只放网页文件，由开发分支 claude/beachhead-sandtable 生成。
+本分支只放网页文件（GitHub Pages），由开发分支用 tools/publish_pages.sh 生成，不要直接改。

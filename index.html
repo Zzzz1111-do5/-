@@ -1,5 +1,10 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="format-detection" content="telephone=no">
 <title>暗剑 Darksword</title>
-<meta name="claude:viewport-fit-sides" content="cover">
 <style>
 /* 字体随游戏打包（fonts/，tools/subset_fonts.py 裁剪生成，SIL OFL 1.1）：国内与离线都能显示；缺的字落到系统中文字体 */
 @font-face { font-family: "Noto Sans SC"; font-weight: 400; font-display: swap; src: url(fonts/NotoSansSC-Regular.woff2) format("woff2"); }
@@ -230,6 +235,8 @@ button:disabled { cursor: not-allowed; opacity: .3; }
 .ct-load dt { color: var(--mute); white-space: nowrap; } .ct-load dd { margin: 0; color: var(--text); min-width: 0; }
 .sbx-ld { margin-top: 4px; } .sbx-ld summary { cursor: pointer; color: var(--amber); } .sbx-ld .ct-load { margin-top: 6px; max-height: 40vh; overflow-y: auto; }
 </style>
+</head>
+<body>
 
 <canvas id="bgrain" aria-hidden="true"></canvas>
 <main id="stage">
@@ -375,3 +382,6 @@ button:disabled { cursor: not-allowed; opacity: .3; }
 <script src="js/sandbox.js"></script>
 <script src="js/menu.js"></script>
 <script src="js/main.js"></script>
+
+</body>
+</html>
