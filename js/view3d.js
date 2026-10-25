@@ -14,30 +14,82 @@ const V3_VS = `attribute vec3 p; attribute vec3 n;
 uniform mat4 uM; uniform vec3 uEye;
 varying vec3 vP, vN; varying float vD;
 void main() { vP = p; vN = n; vD = distance(p, uEye); gl_Position = uM * vec4(p, 1.); }`;
+// 黑客帝国式数码风（黑绿画面）：地形网格的每个面都画出发光的网格线（粗糙的多边形地形反而像数字模型）、按等高线分层的明暗台阶，
+//   地面上一列列下落的点阵字符流（「数字雨」，向海的方向流下去、字形不断变换、头部最亮、拖着渐暗的尾巴），海面是暗色的字符雨与扫描线，
+//   沙盘围边与房屋墙面上字符竖着往下落；字小到看不清时只留亮度带，不闪烁
+const V3_MX = `
+float mxH(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+// 一格里的点阵字形（5 × 7 个圆点，按格子与时间换字）；px：一格在屏幕上有几个像素，太小就只给平均亮度
+float mxGlyph(vec2 cell, vec2 f, float t, float px) {
+  float id = mod(floor(t * (.6 + mxH(cell) * 2.2)), 61.);
+  vec2 g = floor(f * vec2(5., 7.)), q = fract(f * vec2(5., 7.)) - .5;
+  float on = step(.48, mxH(cell * 1.7 + g * 13.1 + id * 7.3));
+  float m = step(.08, f.x) * step(f.x, .92) * step(.06, f.y) * step(f.y, .94);
+  float dd = on * m * (1. - smoothstep(.22, .48, length(q)));
+  return mix(.26, dd, smoothstep(5., 12., px));
+}
+// 字符雨：沿 v 方向流动的一列列字符（cell 格子号，f 格内坐标）；返回亮度（头部 > 1）
+float mxRain(vec2 cell, vec2 f, float t, float px) {
+  float col = cell.x, sp = 4. + mxH(vec2(col, 1.)) * 9., len = 12. + mxH(vec2(col, 2.)) * 30.;
+  float d = mod(t * sp + mxH(vec2(col, 3.)) * 140. - cell.y, 90.);
+  float tr = (d < len ? 1. - d / len : 0.) * step(.15, mxH(vec2(col, 4.)));
+  float hd = 1. - smoothstep(0., 1.2, d);
+  return mxGlyph(cell, f, t, px) * (tr * tr * .9 + hd * 1.6);
+}`;
 const V3_FS = der => `${der ? '#extension GL_OES_standard_derivatives : enable\n#define DER 1\n' : ''}precision mediump float;
-uniform sampler2D uTop, uBase; uniform vec4 uBox; uniform vec2 uWorld; uniform vec2 uFog; uniform float uSea;
+uniform sampler2D uTop, uBase; uniform vec4 uBox; uniform vec2 uWorld; uniform vec2 uFog; uniform float uSea, uT, uMx;
 varying vec3 vP, vN; varying float vD;
+${V3_MX}
 void main() {
   vec2 w = vec2(vP.x, -vP.y);
   vec3 bg = vec3(.004, .02, .011);
-  if (vN.z < -.5) { gl_FragColor = vec4(mix(vec3(.01, .07, .035), bg, smoothstep(uFog.x, uFog.y, vD)), 1.); return; }   // 沙盘围边（法线朝下作标记）
+#ifdef DER
+  float pw = max(length(fwidth(w)), 1e-3);
+#else
+  float pw = vD * .0015;
+#endif
+  if (vN.z < -.5) {   // 沙盘围边（法线朝下作标记）：数码风下字符沿侧壁往下落
+    vec3 c0 = vec3(.01, .07, .035);
+    if (uMx > .5) { vec2 u = vec2(vP.x + vP.y, -vP.z) / vec2(9., 12.); c0 = c0 * .6 + vec3(.15, .95, .45) * mxRain(floor(u), fract(u), uT, 9. / pw) * .55; }
+    gl_FragColor = vec4(mix(c0, bg, smoothstep(uFog.x, uFog.y, vD)), 1.); return;
+  }
   vec2 uv = (w - uBox.xy) / uBox.zw;
   vec3 c = (uv.x > 0. && uv.y > 0. && uv.x < 1. && uv.y < 1.) ? texture2D(uTop, uv).rgb : texture2D(uBase, w / uWorld).rgb;
   vec3 N = normalize(vN);
   float lit = clamp(dot(N, normalize(vec3(-.45, .55, .7))), 0., 1.);
-  c *= .5 + .75 * lit;
-  // 等高线与方格网：陆地上每 14 一条等高线，每 5 条加粗；海上只画方格
   float h = vP.z;
+  if (uMx > .5) {
+    // 明暗按等高线分台阶（数字化的阶梯感），再叠发光网格与字符雨
+    float band = floor(h / 14.);
+    c *= (.42 + .62 * floor(lit * 5. + .5) / 5.) * (.92 + .08 * mod(band, 2.));
+  } else c *= .5 + .75 * lit;
+  // 等高线与方格网：陆地上每 14 一条等高线，每 5 条加粗；海上只画方格
 #ifdef DER
-  float fw = max(fwidth(h / 14.), .001), fg = max(fwidth(w.x / 200.), fwidth(w.y / 200.));
+  float fw = max(fwidth(h / 14.), .001), fg = max(fwidth(w.x / 200.), fwidth(w.y / 200.)), fm = max(fwidth(w.x / 20.), fwidth(w.y / 20.));
 #else
-  float fw = .04, fg = .01;
+  float fw = .04, fg = .01, fm = .1;
 #endif
   float t = h / 14., e = .5 - abs(fract(t) - .5), major = 1. - step(.5, mod(floor(t + .5), 5.));
-  float cl = (1. - smoothstep(0., fw * (1.2 + major), e)) * step(uSea, h) * (.35 + .4 * major);
+  float land = step(uSea, h);
+  float cl = (1. - smoothstep(0., fw * (1.2 + major), e)) * land * (.35 + .4 * major);
   vec2 g = abs(fract(w / 200.) - .5);
   float gl = (1. - smoothstep(0., fg * 1.5, .5 - max(g.x, g.y))) * .16;
   c += vec3(.12, .62, .32) * (cl + gl);
+  if (uMx > .5) {
+    // 地形网格线：每 20（两格一个顶点）一条，就是地形多边形的边——近处清楚、远处淡去
+    vec2 m = abs(fract(w / 20.) - .5);
+    float ml = (1. - smoothstep(0., fm * 1.4, .5 - max(m.x, m.y))) * (1. - smoothstep(.06, .25, fm)) * (.07 + .09 * land);
+    // 网格交点上的亮点（点阵）
+    float pt = (1. - smoothstep(0., fm * 2.2, length(m - .5) * 1.)) * (1. - smoothstep(.04, .2, fm)) * .35;
+    c += vec3(.14, .8, .42) * (ml + pt);
+    // 字符雨：字格 9 × 12，向海的方向（世界 y 增大）流下去；陆地上淡一些，不盖住地图上的部队
+    // 两档字格：近处 9 × 12，远看字太小就换 27 × 36 的大字，平滑过渡
+    vec2 cu = w / vec2(9., 12.), cu2 = w / vec2(27., 36.);
+    float r = mix(mxRain(floor(cu), fract(cu), uT, 9. / pw), mxRain(floor(cu2) + 500., fract(cu2), uT * .6, 27. / pw), smoothstep(7., 3.5, 9. / pw));
+    c += vec3(.16, 1., .5) * r * mix(.55, .3, land) + vec3(.6, 1., .8) * max(r - 1., 0.) * .3;
+    // 海面：横向扫描线
+    if (land < .5) c += vec3(.02, .12, .07) * (.5 + .5 * sin(w.y * .35 - uT * 3.)) * .5;
+  }
   gl_FragColor = vec4(mix(c, bg, smoothstep(uFog.x, uFog.y, vD)), 1.);
 }`;
 
@@ -47,8 +99,9 @@ uniform mat4 uM; uniform vec3 uEye;
 varying vec3 vP, vN; varying vec2 vE; varying float vD;
 void main() { vP = p; vN = n; vE = e; vD = distance(p, uEye); gl_Position = uM * vec4(p, 1.); }`;
 const V3_BFS = `precision mediump float;
-uniform sampler2D uTop, uBase; uniform vec4 uBox; uniform vec2 uWorld, uFog;
+uniform sampler2D uTop, uBase; uniform vec4 uBox; uniform vec2 uWorld, uFog; uniform float uT, uMx;
 varying vec3 vP, vN; varying vec2 vE; varying float vD;
+${V3_MX}
 void main() {
   vec2 w = vec2(vP.x, -vP.y), uv = (w - uBox.xy) / uBox.zw;
   vec3 N = normalize(vN), bg = vec3(.004, .02, .011);
@@ -57,6 +110,11 @@ void main() {
     : vec3(.015, .085, .045) * (.55 + 1.1 * lit);
   float ed = min(min(vE.x, 1. - vE.x), min(vE.y, 1. - vE.y));
   c += vec3(.12, .68, .36) * (1. - smoothstep(.02, .1, ed)) * (N.z > .5 ? .55 : .9);
+  if (uMx > .5 && N.z < .5) {   // 数码风：墙面上的字符竖着往下落（字格 4 × 5，楼越高字越多）
+    vec2 u = vec2((vP.x * N.y - vP.y * N.x), -vP.z) / vec2(4., 5.);
+    float px = 4. / max(vD * .0015, 1e-3);
+    c = c * .7 + vec3(.15, .95, .45) * mxRain(floor(u), fract(u), uT * 1.3, px) * .6;
+  }
   gl_FragColor = vec4(mix(c, bg, smoothstep(uFog.x, uFog.y, vD)), 1.);
 }`;
 
@@ -172,13 +230,13 @@ function v3Init() {
     gl.linkProgram(pr);
     if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(pr));
     const u = {}, a = { p: gl.getAttribLocation(pr, 'p'), n: gl.getAttribLocation(pr, 'n') };
-    for (const k of ['uM', 'uEye', 'uTop', 'uBase', 'uBox', 'uWorld', 'uFog', 'uSea']) u[k] = gl.getUniformLocation(pr, k);
+    for (const k of ['uM', 'uEye', 'uTop', 'uBase', 'uBox', 'uWorld', 'uFog', 'uSea', 'uT', 'uMx']) u[k] = gl.getUniformLocation(pr, k);
     const pb = gl.createProgram();
     gl.attachShader(pb, sh(gl.VERTEX_SHADER, V3_BVS)); gl.attachShader(pb, sh(gl.FRAGMENT_SHADER, V3_BFS));
     gl.linkProgram(pb);
     if (!gl.getProgramParameter(pb, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(pb));
     const ub = {}, ab = { p: gl.getAttribLocation(pb, 'p'), n: gl.getAttribLocation(pb, 'n'), e: gl.getAttribLocation(pb, 'e') };
-    for (const k of ['uM', 'uEye', 'uTop', 'uBase', 'uBox', 'uWorld', 'uFog']) ub[k] = gl.getUniformLocation(pb, k);
+    for (const k of ['uM', 'uEye', 'uTop', 'uBase', 'uBox', 'uWorld', 'uFog', 'uT', 'uMx']) ub[k] = gl.getUniformLocation(pb, k);
     gl.useProgram(pb); gl.uniform1i(ub.uTop, 0); gl.uniform1i(ub.uBase, 1);
     Object.assign(V3, { pb, ub, ab });
     const mk = (unit, filt) => { const t = gl.createTexture(); gl.activeTexture(gl.TEXTURE0 + unit); gl.bindTexture(gl.TEXTURE_2D, t); for (const [p, v] of [[gl.TEXTURE_MIN_FILTER, filt], [gl.TEXTURE_MAG_FILTER, filt], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D, p, v); return t; };
@@ -274,6 +332,8 @@ function v3Draw(now) {
   gl.uniform2f(u.uWorld, W, H);
   gl.uniform2f(u.uFog, C.D * 1.3, C.D * 2.8);
   gl.uniform1f(u.uSea, 1.5);
+  const mx = typeof greenLook === 'function' && greenLook() && !(SETTINGS && SETTINGS.matrix3d === false) ? 1 : 0, tm = (now / 1000) % 3600;   // 黑绿画面：黑客帝国式数码风
+  gl.uniform1f(u.uT, tm); gl.uniform1f(u.uMx, mx);
   gl.bindBuffer(gl.ARRAY_BUFFER, V3.buf); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, V3.ib);
   gl.enableVertexAttribArray(V3.a.p); gl.vertexAttribPointer(V3.a.p, 3, gl.FLOAT, false, 24, 0);
   gl.enableVertexAttribArray(V3.a.n); gl.vertexAttribPointer(V3.a.n, 3, gl.FLOAT, false, 24, 12);
@@ -283,6 +343,7 @@ function v3Draw(now) {
     gl.useProgram(V3.pb);
     gl.uniformMatrix4fv(ub.uM, false, C.M); gl.uniform3f(ub.uEye, C.E[0], C.E[1], C.E[2]);
     gl.uniform4f(ub.uBox, box[0], box[1], box[2], box[3]); gl.uniform2f(ub.uWorld, W, H); gl.uniform2f(ub.uFog, C.D * 1.3, C.D * 2.8);
+    gl.uniform1f(ub.uT, tm); gl.uniform1f(ub.uMx, mx);
     gl.bindBuffer(gl.ARRAY_BUFFER, V3.bb); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, V3.bi);
     gl.disableVertexAttribArray(V3.a.p); gl.disableVertexAttribArray(V3.a.n);
     gl.enableVertexAttribArray(ab.p); gl.vertexAttribPointer(ab.p, 3, gl.FLOAT, false, 32, 0);
@@ -372,6 +433,7 @@ function v3Overlay(ctx, time) {
   };
   for (const p of S.planes || []) if (!p.dead && isFinite(p.x)) air(p.x, p.y, p.alt, p.heading, COL.g);
   if (S.eair) for (const a of S.eair.fly) if (!a.dead && (spec || a.pv) && isFinite(a.x) && a.ph !== 'roll') air(a.x, a.y, a.alt, a.heading, COL.enemy);
+  if (typeof hqMarks3 === 'function') hqMarks3(ctx, stem);   // 旅标：立在旅的上空（hq.js）
   if (typeof shOverlay3D === 'function') shOverlay3D(ctx, (x, y, h) => v3Proj(x, y, v3Ht(x, y) + h));   // 士兵喊话气泡（shout.js）
   ctx.restore();
 }

@@ -648,10 +648,14 @@ function hqTacE(us, vs) {
 //   诱敌深入：合成团分成东、西两个旅（两翼合围）
 function hqOrgE(H) {
   const { us, vs } = hqPoolE();
-  if (!us.length && !vs.length) { H.live = true; H.tac = { k: 'fort', ...HQ_TAC_E.fort }; return; }
-  const k = hqTacE(us, vs);
+  if (!us.length && !vs.length) { H.live = true; H.tac = { k: 'fort', ...HQ_TAC_E.fort }; H.doc = { ...CMD_BASE }; return; }
+  // 司令战法（cmddoc.js，司令训练场训练出来的）：按机动兵力编成查表；训练场里由 S.cmdFix 指定
+  const D = H.doc = S.cmdFix ? { ...CMD_BASE, ...S.cmdFix, key: 'fix' } : typeof cmdDocOf === 'function' ? cmdDocOf('e', cmdForceKey(us, vs)) : { ...CMD_BASE };
+  let k = D.tac && HQ_TAC_E[D.tac] ? D.tac : hqTacE(us, vs);
+  if (k === 'deep' && us.length + vs.length / 3 < 5) k = 'bal';
   H.tac = { k, ...HQ_TAC_E[k], t: S.t };
-  const tmp = hqNewBde('e', 0, '机动旅', 'mobile', null), regs = hqMakeRegs('e', tmp, us, vs, k === 'armor' ? 'mass' : 'mix', true);
+  const mass = k === 'armor' || !!D.mass;
+  const tmp = hqNewBde('e', 0, '机动旅', 'mobile', null), regs = hqMakeRegs('e', tmp, us, vs, mass ? 'mass' : 'mix', true);
   S.hq.e.bdes = S.hq.e.bdes.filter(B => B !== tmp);
   const mkB = (part, no, nm) => {
     if (!part.length) return null;
@@ -664,13 +668,19 @@ function hqOrgE(H) {
   };
   regs.sort((a, b) => a.ax - b.ax);
   const split = (L, nb, nm0) => { for (let i = 0; i < nb; i++) mkB(L.slice(Math.round(i * L.length / nb), Math.round((i + 1) * L.length / nb)), H.bdes.length + 1, nm0(H.bdes.length + 1, i, nb)); };
-  if (k === 'armor' && regs.some(G => G.arm)) {
+  const nbAuto = n => Math.min(n, D.nb || (n >= 7 ? 3 : n >= 4 ? 2 : 1));
+  if (mass && regs.some(G => G.arm)) {
     mkB(regs.filter(G => G.arm), 1, '装甲第1旅');
     const rest = regs.filter(G => !G.arm);
-    split(rest, rest.length >= 5 ? 2 : 1, no => `合成第${no}旅`);
+    split(rest, Math.min(rest.length, D.nb ? Math.max(1, D.nb - 1) : rest.length >= 5 ? 2 : 1), no => `合成第${no}旅`);
   } else if (k === 'deep' && regs.length >= 2) {
     split(regs, 2, (no, i) => `${i ? '东' : '西'}翼第${no}旅`);
-  } else split(regs, regs.length >= 7 ? 3 : regs.length >= 4 ? 2 : 1, (no, i, nb) => { const L = regs.slice(Math.round(i * regs.length / nb), Math.round((i + 1) * regs.length / nb)); return `${L.every(G => G.arm) ? '装甲' : L.some(G => bgVehs(G).some(hqTank)) ? '合成' : '步兵'}第${no}旅`; });
+  } else split(regs, nbAuto(regs.length), (no, i, nb) => { const L = regs.slice(Math.round(i * regs.length / nb), Math.round((i + 1) * regs.length / nb)); return `${L.every(G => G.arm) ? '装甲' : L.some(G => bgVehs(G).some(hqTank)) ? '合成' : '步兵'}第${no}旅`; });
+  // 战役预备队：留离海最远（离指挥所最近）的一个旅不动，等第一次反击受挫或敌突入纵深才投入
+  if (D.resv && H.bdes.length >= 2 && k !== 'deep') {
+    const hp = hqPt('HQ') || { x: W / 2, y: 0 }, R0 = H.bdes.slice().sort((a, b) => dist(a.home.x, a.home.y, hp.x, hp.y) - dist(b.home.x, b.home.y, hp.x, hp.y))[0];
+    R0.res = true; R0.name = R0.name.replace(/第(\d+)旅/, '预备第$1旅');
+  }
   H.live = true;
   hqBig('e', 'tac', `本次作战采取「${H.tac.nm}」——${H.tac.d}。机动兵力编成${H.bdes.map(B => B.name).join('、')}。`);
   for (const B of H.bdes) {
@@ -679,7 +689,8 @@ function hqOrgE(H) {
     if (k === 'fort') {   // 就近加强最要紧的滩头出口
       const E = hqNearPt('e', B.home, p => /^E\d/.test(p.key)) || P;
       hqOrder('e', B, { v: 'defend', objs: [E.key] }, `占领${E.name}后方阵地，加强${E.name}防御，严防敌突破。`);
-    } else hqOrder('e', B, { v: 'reserve', objs: [P.key], at: B.home }, `在${P.name}一带隐蔽待机，判明敌主攻方向后听令反冲击。`);
+    } else if (B.res) { const Q = hqPt('HQ') || P; hqOrder('e', B, { v: 'reserve', objs: [Q.key], at: B.home }, `作为战役预备队在${Q.name}一带隐蔽待机，没有命令不得投入。`); }
+    else hqOrder('e', B, { v: 'reserve', objs: [P.key], at: B.home }, `在${P.name}一带隐蔽待机，判明敌主攻方向后听令反冲击。`);
   }
 }
 function hqNearPt(side, at, f) {
@@ -689,11 +700,11 @@ function hqNearPt(side, at, f) {
 function hqCmdE(H) {
   hqIntel(H, 'e');
   const bf = hqBeachForce(H).sort((a, b) => b.n - a.n), top = bf[0], sec = bf[1];
-  const tac = H.tac.k, mob = H.bdes.filter(B => hqRegs('e', B).length);
-  // ① 判明主攻方向：某滩头之敌明显多于其他（或已上陆两成以上），一旦判明就定下来；只有别处之敌超过它 2.5 倍、持续 60 秒才改判
+  const tac = H.tac.k, mob = H.bdes.filter(B => hqRegs('e', B).length), D = H.doc || CMD_BASE, [dN, dR, dT] = CMD_DET[D.det] || CMD_DET.mid;
+  // ① 判明主攻方向：某滩头之敌明显多于其他（或已上陆够多），一旦判明就定下来；只有别处之敌超过它 2.5 倍、持续 60 秒才改判（快慢按司令战法 det）
   if (top && top.n >= 12) {
     if (H.main == null) {
-      if (top.n >= 30 || top.n >= (sec ? sec.n : 0) * 1.6 || S.t > 240) { H.main = top.i; H.mainT = S.t; H.mainN = top.n; }
+      if (top.n >= dN || top.n >= (sec ? sec.n : 0) * dR || S.t > dT) { H.main = top.i; H.mainT = S.t; H.mainN = top.n; }
     } else if (top.i !== H.main) {
       const cur = bf.find(o => o.i === H.main);
       if (top.n > (cur ? cur.n : 0) * 2.5 + 10) { H.swT = H.swT ?? S.t; if (S.t - H.swT > 60) { H.main = top.i; H.mainT = S.t; H.swT = null; H.reMain = true; } } else H.swT = null;
@@ -705,6 +716,7 @@ function hqCmdE(H) {
   const sorted = mob.slice().sort((a, b) => dist(hqBdeAt(a).x, hqBdeAt(a).y, E.x, E.y) - dist(hqBdeAt(b).x, hqBdeAt(b).y, E.x, E.y));
   const bn = cmdBN(H.main);
   const enemyIn = hqMemNear(H, exitPt.x, exitPt.y - 150, 400).n;   // 已突入出口以北纵深的敌人
+  for (const p of S.points) if (p.owner === 'p') (H.lostPt || (H.lostPt = {}))[p.key] = 1;
   // 大战术的阶段：判明主攻方向 → 按既定战术转入反击（诱敌深入先放敌突入，再两翼合围）
   const stage = { bal: `机动旅集中向${exitPt.name}反冲击，趁敌立足未稳压回海里`, armor: `装甲旅集中，从侧翼向${exitPt.name}反突击`, fort: `就近加强${exitPt.name}，以局部反冲击消灭突入之敌`,
     deep: `前沿迟滞、放敌突入，两翼旅在${exitPt.name}两侧待机合围` }[tac];
@@ -713,8 +725,14 @@ function hqCmdE(H) {
   if (H.said) H.said['main' + H.main] = H.said['main' + H.main] ?? S.t;
   if (tac === 'deep' && (enemyIn >= 25 || hqMine('p', exitPt) || S.t - H.mainT >= 300)) hqBig('e', 'deep2', `敌已突入纵深。两翼旅同时出击，合围${exitPt.name}一带之敌。`, exitPt);
   if (mob.length && mob.every(B => B.spent)) hqBig('e', 'spent', '机动兵力伤亡过大，全线转入防御，依托既设阵地坚守。');
+  // 战役预备队：第一梯队的反击受挫（打残或撤下来）、敌突入纵深、或反击打了四分钟还没拿下，才投入
+  const front = sorted.filter(B => !B.res), resGo = sorted.some(B => B.res) && (front.every(B => B.spent || hqRegs('e', B).some(G => G.st === 'withdraw')) || enemyIn >= 40 || (S.t - H.mainT > 240 && hqMine('p', exitPt)));
+  if (resGo) hqBig('e', 'resv', `第一梯队反击受挫、敌向纵深发展，投入战役预备队向${exitPt.name}反冲击。`, exitPt);
   // ② 按战术给机动旅下反冲击 / 加强防御的命令（每个旅只在决心变化时下令）
-  for (const [k, B] of sorted.entries()) {
+  let kk = -1;
+  for (const B of sorted) {
+    if (B.res && !resGo) continue;
+    const k = B.res ? 0 : ++kk;   // 预备队投入时按第一梯队对待
     const pw = hqRegs('e', B).reduce((a, G) => a + hqRegPow(G).tot, 0), p0 = B.p0 || (B.p0 = pw);
     if (B.spent) continue;
     if (pw < p0 * .35) {   // 打残了：转入防御，不再派反冲击
@@ -725,8 +743,9 @@ function hqCmdE(H) {
     if (B.ord && B.ord.v === 'counter' && !B.ord.done && !H.reMain) continue;   // 反冲击既定，不改
     if (B.ord && B.ord.v === 'counter' && B.ord.done) {
       const th = hqThreat('e', exitPt);
-      hqOrder('e', B, { v: 'defend', objs: [exitPt.key], face: th }, `${exitPt.name}已夺回，就地转入防御，巩固${bn}滩头阵地。`);
-      hqBig('e', 'won' + exitPt.key, `${exitPt.name}已夺回，反击告一段落：各旅就地转入防御，巩固${bn}滩头阵地。`, exitPt);
+      const back = H.lostPt && H.lostPt[exitPt.key] ? '已夺回' : '已稳住';   // 丢过才叫夺回
+      hqOrder('e', B, { v: 'defend', objs: [exitPt.key], face: th }, `${exitPt.name}${back}，就地转入防御，巩固${bn}滩头阵地。`);
+      hqBig('e', 'won' + exitPt.key, `${exitPt.name}${back}，反击告一段落：各旅就地转入防御，巩固${bn}滩头阵地。`, exitPt);
       continue;
     }
     if (tac === 'fort') {
@@ -738,11 +757,11 @@ function hqCmdE(H) {
       hqOrder('e', B, { v: 'reserve', objs: [exitPt.key], at }, `敌主攻${bn}。在${hqWhere(at.x, at.y)}隐蔽待机，放敌突入后从${side > 0 ? '东' : '西'}翼合围。`);
       continue;
     }
-    if (k === 0 || tac === 'armor' || tac === 'deep' || (k === 1 && mob.length >= 3)) {
+    if (k === 0 || tac === 'armor' || tac === 'deep' || D.ctr === 'all' || (k === 1 && mob.length >= 3 && D.ctr !== 'echelon')) {
       const via = tac === 'deep' || (tac === 'armor' && k > 0) ? (k % 2 ? '东' : '西') + '翼' : '';
       hqOrder('e', B, { v: 'counter', objs: [exitPt.key] }, `敌主攻${bn}。${via ? `从${via}` : ''}向${exitPt.name}反冲击，歼灭登陆之敌，恢复滩头阵地。`);
     } else {
-      const L = sorted[0];
+      const L = front[0] || sorted[0];
       hqOrder('e', B, { v: 'follow', objs: [exitPt.key], lead: L.id }, `作为第二梯队，跟进${L.name}，准备投入${exitPt.name}方向。`);
     }
   }
@@ -839,6 +858,87 @@ function hqLate(H) {
   }
 }
 
+// ———————————————— 归属：每个兵都有建制（连 → 团 → 旅） ————————————————
+// 编进机动团的连按团、旅；其余的也都有建制，不留散兵：
+//   守方：据点守备、伏击组、民兵、警卫队按地段编守备团（某滩守备团 / 纵深守备团 / 机场守备营），统归「海防守备旅」；
+//     碉堡、机枪巢、岸炮、炮兵、迫击炮、高炮、导弹发射车等阵地上的兵也归所在地段的守备团（炮兵、导弹阵地归「火力群」）；
+//     第 101 空降师自成一个旅级单位；突击队（raider）归海防守备旅直属
+//   攻方：没编进团的连（刚上岸的、留守据点的警戒分队、空降兵、弃车乘员）归登陆滩头所属旅的直属分队，编团时再编进团；
+//     玩家指挥攻方时也按登陆滩头编成登陆旅（只是建制，不替玩家下命令）
+//   没有连的散兵组（打散的、弃车乘员）编进就近的同方连队；附近没有就编成收容连
+// 记在 u.org = { b 旅名, r 团名, k 'reg' 机动团 / 'gar' 守备 / 'att' 旅直属 / 'aux' 独立单位 }，阵地记在 e.org；每 2 秒刷新
+function hqSector(x, y) {
+  if (typeof eaBases === 'function' && eaBases().some(b => dist(b.x, b.y, x, y) < 700)) return { k: 'af', nm: '机场守备营' };
+  const B = TER.beaches || [];
+  let bi = -1, bd = 1e9;
+  B.forEach((b, i) => { const d = Math.abs(clamp(x, b.x0, b.x1) - x) + Math.max(0, coastAt(clamp(x, 0, W - 1)) - y) * .8; if (d < bd) { bd = d; bi = i; } });
+  return bi >= 0 && bd < 650 ? { k: 'b' + bi, nm: `${B[bi].name}守备团` } : { k: 'deep', nm: '纵深守备团' };
+}
+function hqAffil() {
+  if (!S || !S.hq) return;
+  // ① 散兵组：编进就近的同方连队（300 以内、同兵种）；附近没有就编成收容连
+  let changed = false;
+  for (const q of S.teams) {
+    if (!q.men.length || q.ride || UNIT_MAP.get(q.u)) continue;
+    const near = S.units.filter(u => u.side === q.side && u.kind === (q.kind === 'eng' ? 'eng' : 'inf') && u.state !== 'rout' && teamsOf(u).some(o => o.men.length)).map(u => [u, dist(u.x ?? q.x, u.y ?? q.y, q.x, q.y)]).sort((a, b) => a[1] - b[1])[0];
+    if (near && near[1] < 300) { q.u = near[0].id; if (near[0].role) Object.assign(q, { role: near[0].role, obj: near[0].obj }); }
+    else {
+      const p = S.points.slice().sort((a, b) => dist(a.x, a.y, q.x, q.y) - dist(b.x, b.y, q.x, q.y))[0];
+      const u = q.side === 'e' ? addUnit('e', 'inf', { role: 'garrison', obj: p && p.key, a4n: `${p ? p.name : ''}收容连` }) : addUnit('p', q.kind === 'eng' ? 'eng' : 'inf', { ship: '收容', auto: true, form: 'line' });
+      q.u = u.id; u.x = q.x; u.y = q.y;
+      if (q.side === 'e') Object.assign(q, { role: 'garrison', obj: p && p.key });
+    }
+    changed = true;
+  }
+  if (changed) indexUnits();
+  for (const side of ['e', 'p']) {
+    const H = S.hq[side];
+    if (!H) continue;
+    const reg = new Map();
+    const vreg = new Map();
+    for (const G of S.bgs || []) if (!G.dead && G.side === side) {
+      const B = G.reg ? hqBdeOf(G) : null, o = { b: B ? B.name : side === 'e' ? '海防守备旅' : '', r: G.name, k: G.reg ? 'reg' : 'bg' };
+      for (const id of G.us) reg.set(id, o);
+      for (const id of G.vs) vreg.set(id, o);
+    }
+    const vlive = (S.veh || []).filter(v => v.side === side && !v.dead && !v.lst);
+    const live = S.units.filter(u => u.side === side && teamsOf(u).some(q => q.men.length));
+    if (side === 'e') {
+      for (const u of live) {
+        if (reg.has(u.id)) { u.org = reg.get(u.id); continue; }
+        if (u.a101) { u.org = { b: '第101空降师', r: u.a4n || '空降连', k: 'aux' }; continue; }
+        if (u.role === 'raider') { u.org = { b: '海防守备旅', r: '旅直属突击队', k: 'gar' }; continue; }
+        const P = hqPt(u.obj), c = P || u, sc = hqSector(c.x, c.y);
+        u.org = { b: '海防守备旅', r: sc.nm, k: 'gar' };
+      }
+      for (const v of vlive) v.org = vreg.get(v.id) || (v.a101 ? { b: '第101空降师', r: '空降装甲分队', k: 'aux' } : { b: '海防守备旅', r: v.afD ? '机场守备营' : v.mod && v.mod.cram ? '旅防空群' : hqSector(v.x, v.y).nm, k: 'gar' });
+      for (const e of S.enemies) if (!e.dead && e.kind !== 'airfield') { const sc = hqSector(e.x, e.y), fire = ['arty', 'mortar', 'tel', 'ascm', 'typhon', 'coastal'].includes(e.kind); e.org = { b: '海防守备旅', r: fire ? '旅火力群' : sc.nm, k: 'gar' }; }
+    } else {
+      // 攻方：登陆旅按滩头；AI 指挥时用司令编的旅，玩家指挥时按登陆滩头编（只是建制）
+      const bdes = H.bdes.filter(B => B.beach != null);
+      const adm = H.adm || (H.adm = {});
+      const bdeAt = (x, y) => {
+        if (bdes.length) return bdes.slice().sort((a, b) => { const A = cmdExit(a.beach), Bx = cmdExit(b.beach); return dist(A.x, A.y, x, y) - dist(Bx.x, Bx.y, x, y); })[0].name;
+        const Bs = TER.beaches || [];
+        let bi = 0, bd = 1e9;
+        Bs.forEach((b, i) => { const d = Math.abs(clamp(x, b.x0, b.x1) - x); if (d < bd) { bd = d; bi = i; } });
+        return adm[bi] || (adm[bi] = `登陆第${Object.keys(adm).length + 1}旅（${(Bs[bi] || {}).name || ''}）`);
+      };
+      for (const u of live) {
+        if (reg.has(u.id)) { u.org = reg.get(u.id); continue; }
+        const ts = teamsOf(u).filter(q => q.men.length), x = ts.reduce((a, q) => a + q.x, 0) / ts.length, y = ts.reduce((a, q) => a + q.y, 0) / ts.length;
+        // 工兵、警戒分队配属最近的团（700 以内）；其余归旅直属，等编团
+        const G = (S.bgs || []).filter(G => G.reg && !G.dead && G.side === 'p' && dist(G.ax, G.ay, x, y) < 700).sort((a, b) => dist(a.ax, a.ay, x, y) - dist(b.ax, b.ay, x, y))[0];
+        const what = u.emblem === 'para' || u.ab != null ? '空降分队' : /警戒/.test(u.ship || '') ? '警戒分队' : u.emblem === 'crew' ? '车组（弃车乘员）' : u.kind === 'eng' ? '工兵分队' : null;
+        if (G && what && what !== '空降分队') { const B = hqBdeOf(G); u.org = { b: B ? B.name : bdeAt(x, y), r: `${G.name}配属${what}`, k: 'att' }; continue; }
+        u.org = { b: bdeAt(x, y), r: `旅直属${what || '（待编团）'}`, k: 'att' };
+      }
+      for (const v of vlive) v.org = vreg.get(v.id) || { b: bdeAt(v.x, v.y), r: hqTank(v) ? '旅直属坦克分队' : hqAA(v) ? '旅直属防空分队' : '旅直属装甲分队', k: 'att' };
+    }
+  }
+}
+const hqOrgName = u => u && u.org ? `${u.org.b}${u.org.b && u.org.r ? ' · ' : ''}${u.org.r}` : '';
+
 // ———————————————— 主循环 ————————————————
 function hqInit() {
   if (!S || S.hq) return;
@@ -863,6 +963,7 @@ function hqStep(dt) {
       for (const B of H.bdes) hqBdeThink(B);
     } catch (e) { if (!HQ.err) { HQ.err = 1; console.error('hq', e); } }
   }
+  if ((S.hq.affT = (S.hq.affT ?? 0) - dt) <= 0) { S.hq.affT = 2; try { hqAffil(); } catch (e) { if (!HQ.err2) { HQ.err2 = 1; console.error('hq affil', e); } } }   // 归属：双方都刷新（玩家指挥攻方时也按滩头编登陆旅）
 }
 HOOK.newGame.push(() => { if (S) S.hq = null; });
 HOOK.step.push(dt => { if (S && S.phase === 'battle' && !S.hq && !(S.v7off && S.v7off.hq)) hqInit(); hqStep(dt); });
@@ -962,8 +1063,44 @@ function hqDraw() {
       if (zr > 1.6) ctx.fillText(G.name, x, y + h / 2 + px(10));
     }
   }
-  for (const m of marks) hqBdeMark(ctx, m.B, m.c, m.tag, m.col);   // 旅标最后画，压在箭头与团标上面
+  if (!(typeof V3 === 'object' && V3.drawing)) for (const m of marks) hqBdeMark(ctx, m.B, m.c, m.tag, m.col);   // 旅标最后画，压在箭头与团标上面（3D 地图里另外立在旅的上空：hqMarks3）
   ctx.restore();
+}
+// 3D 地图里的旅标（view3d.js v3Overlay 调用，屏幕空间）：旅的中心立一根 110 高的杆，杆顶一块番号牌，不随透视变形、远近都看得清
+function hqMarks3(ctx, stem) {
+  if (!hqOn()) return;
+  const spec = S.role === 'spectate' || R.eye === 'all' || R.eye === 'both' || R.eye === 'e';
+  for (const side of ['p', 'e']) {
+    const H = S.hq[side];
+    if (!H || !H.live || (side === 'e' && !spec) || (side === 'p' && S.role !== 'spectate')) continue;
+    const col = side === 'p' ? COL.g : COL.enemy;
+    for (const B of H.bdes) {
+      if (!B.ord || !hqObj(B) || !hqRegs(side, B).length) continue;
+      const c = hqBdeAt(B), q = c && stem(c.x, c.y, 110, col, 1);
+      if (!q) continue;
+      let inf = 0, veh = 0;
+      for (const G of hqRegs(side, B)) { const P = hqRegPow(G); inf += P.inf; veh += P.veh; }
+      const t = veh >= (inf + veh) * .6 ? 'armor' : veh >= (inf + veh) * .25 ? 'mech' : 'inf', verb = HQ_VERB[B.ord.v] || '';
+      ctx.save(); ctx.globalAlpha = Math.max(.35, q.al);
+      ctx.font = 'bold 14px "IBM Plex Mono", "Noto Sans SC", monospace'; const w1 = ctx.measureText(B.name).width;
+      ctx.font = '11px "IBM Plex Mono", "Noto Sans SC", monospace'; const w2 = verb ? ctx.measureText(verb).width + 8 : 0;
+      const fw = 22, fh = 15, W0 = fw + 8 + w1 + w2 + 16, h0 = 26, x0 = q.x - W0 / 2, yc = q.y - h0 / 2;
+      ctx.fillStyle = rgba(COL.bg, .9); ctx.fillRect(x0, yc - h0 / 2, W0, h0);
+      ctx.strokeStyle = rgba(col, 1); ctx.lineWidth = 1.6; ctx.strokeRect(x0, yc - h0 / 2, W0, h0);
+      ctx.fillStyle = rgba(col, .9); ctx.fillRect(x0, yc - h0 / 2, 3, h0);
+      const fx = x0 + 8 + fw / 2, fy = yc + 2.5;
+      ctx.lineWidth = 1.3; ctx.strokeRect(fx - fw / 2, fy - fh / 2, fw, fh);
+      ctx.beginPath();
+      if (t !== 'armor') { ctx.moveTo(fx - fw / 2, fy + fh / 2); ctx.lineTo(fx + fw / 2, fy - fh / 2); ctx.moveTo(fx - fw / 2, fy - fh / 2); ctx.lineTo(fx + fw / 2, fy + fh / 2); }
+      if (t !== 'inf') ctx.ellipse(fx, fy, fw * .32, fh * .3, 0, 0, 6.283);
+      ctx.stroke();
+      ctx.fillStyle = rgba(col, 1); ctx.font = 'bold 8px "IBM Plex Mono", monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic'; ctx.fillText('X', fx, fy - fh / 2 - 1.5);
+      ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+      ctx.font = 'bold 14px "IBM Plex Mono", "Noto Sans SC", monospace'; ctx.fillText(B.name, fx + fw / 2 + 7, yc + .5);
+      if (verb) { ctx.font = '11px "IBM Plex Mono", "Noto Sans SC", monospace'; ctx.fillStyle = rgba(col, .75); ctx.fillText(verb, fx + fw / 2 + 7 + w1 + 8, yc + 1); }
+      ctx.restore();
+    }
+  }
 }
 // 旅标：每个旅头顶一块番号牌——北约式兵种框（步兵 ×、装甲椭圆、机步两者都有）上加旅级记号「X」，旁边大字写番号与当前任务；
 //   牌子立在全旅最北（屏幕上方）那支部队的头顶，一根引线落到旅的中心；大小按屏幕像素固定，远近都看得清
@@ -1018,12 +1155,17 @@ function hqAggSet() {
   if (HQ.aggK === k) return HQ.agg;
   HQ.aggK = k;
   const u = new Set(), v = new Set(), spec = S.role === 'spectate' || R.eye === 'all' || R.eye === 'both' || R.eye === 'e';
-  if (hqAggOn()) for (const G of S.bgs || []) {
-    if (!G.reg || G.dead || !S.hq[G.side] || !S.hq[G.side].live || (G.side === 'p' && S.role !== 'spectate') || (G.side === 'e' && !spec)) continue;   // 敌方的编制看不见：只有观战时才合成符号
-    for (const id of G.us) u.add(id);
-    for (const id of G.vs) v.add(id);
+  const ok = side => side === 'p' ? S.role === 'spectate' : spec;   // 敌方的编制看不见：只有观战时才合成符号
+  const rest = [];
+  if (hqAggOn()) {
+    for (const G of S.bgs || []) {
+      if (!G.reg || G.dead || !S.hq[G.side] || !S.hq[G.side].live || !ok(G.side)) continue;
+      for (const id of G.us) u.add(id);
+      for (const id of G.vs) v.add(id);
+    }
+    for (const o of S.units) if (o.org && o.org.k !== 'reg' && ok(o.side) && !u.has(o.id) && teamsOf(o).some(q => q.men.length && !q.ride)) { u.add(o.id); rest.push(o); }   // 守备团、旅直属、独立单位的连也画成连符号
   }
-  return (HQ.agg = { u, v });
+  return (HQ.agg = { u, v, rest });
 }
 // 单兵单车画不画（render2.js drawTeams / drawEnemies、vehicles.js vehDrawOver 调用）
 const hqAggHide = (k, id) => hqAggOn() && hqAggSet()[k].has(id);
@@ -1070,6 +1212,16 @@ function hqAggDraw() {
       if (inView(x, y, 30)) hqAggSym(ctx, x, y, t, '•••', col, f, L.length);
     }
   }
+  // 没编进机动团的连（守备团、旅直属、101）：连符号；同一个团的连中心标团名
+  const grp = new Map();
+  for (const u of A.rest) {
+    const [x, y] = regUnitAt(u), col = u.side === 'p' ? COL.g : COL.enemy;
+    if (inView(x, y, 30)) hqAggSym(ctx, x, y, 'inf', 'I', col, u.face, 0);
+    const k = u.side + u.org.b + u.org.r, g = grp.get(k) || (grp.set(k, { n: 0, x: 0, y: 0, col, t: u.org.r }), grp.get(k));
+    g.n++; g.x += x; g.y += y;
+  }
+  ctx.font = font(10); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  for (const g of grp.values()) { const x = g.x / g.n, y = g.y / g.n - px(16); if (!inView(x, y, 60)) continue; ctx.fillStyle = rgba(COL.bg, .7); const w = ctx.measureText(g.t).width + px(8); ctx.fillRect(x - w / 2, y - px(7), w, px(14)); ctx.fillStyle = rgba(g.col, .9); ctx.fillText(g.t, x, y); }
   ctx.restore();
 }
 HOOK.drawOver.unshift(hqAggDraw);   // 先画分队符号，团标、旅标与箭头压在上面

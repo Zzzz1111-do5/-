@@ -323,7 +323,9 @@ function eaTrack(a) {
 const EA_SLOT = [[0, 0], [-24, 20], [-24, -20], [-48, 40], [-48, -40], [-72, 60]];
 function eaForm(a, dt, brk) {
   const L = S.eair.fly.find(o => o.id === a.lead && !o.dead);
-  if (!L || (L.ph !== 'out' && L.ph !== 'roll') || L.tg || (brk && dist(a.x, a.y, a.tx, a.ty) < brk)) { if (!L || L.ph !== 'roll') a.lead = null; return false; }
+  if (L && L.ph === 'rtb' && eaFtr(a.type) && !a.tg) a.ph = 'rtb';   // 歼击机长机返航：僚机跟着回
+  const capOk = L && L.ph === 'cap' && eaFtr(L.type);   // 歼击机双机巡逻：僚机跟着长机飞跑马场航线
+  if (!L || (L.ph !== 'out' && L.ph !== 'roll' && !capOk) || L.tg || a.tg || (brk && dist(a.x, a.y, a.tx, a.ty) < brk)) { if (!L || L.ph !== 'roll') a.lead = null; return false; }
   if (L.ph === 'roll') return false;
   const [sx0, sy0] = EA_SLOT[Math.min(a.slot || 1, EA_SLOT.length - 1)], k = a.type === 'heli' ? .8 : 1, h = L.heading, c = Math.cos(h), n = Math.sin(h);
   const px = L.x + c * sx0 * k - n * sy0 * k, py = L.y + n * sx0 * k + c * sy0 * k, err = (px - a.x) * c + (py - a.y) * n, sp = EA_SPEC[a.type];
@@ -333,6 +335,7 @@ function eaForm(a, dt, brk) {
 }
 function eaFlyGA(a, dt) {
   if (a.ph === 'out' && a.lead != null && eaForm(a, dt, 460)) return;
+  if (a.ph === 'out' && typeof atoIngressE === 'function' && atoIngressE(a, dt)) return;   // 先飞到起始点（ato.js 固定进入航线）
   if (a.ph === 'out' || a.ph === 'attack') {
     eaTrack(a);
     const d = eaSteer(a, a.tx, a.ty, dt, a.ph === 'out' && a.join > S.t ? EA_SPEC[a.type].spd * .7 : undefined);
@@ -370,6 +373,7 @@ function eaStandoff(a) {
 function eaFlyHeli(a, dt) {
   a.alt = a.ph === 'rtb' ? Math.min(.3, a.alt + dt * .25) : Math.min(.3, a.alt + dt * .25);
   if (a.ph === 'out' && a.lead != null && eaForm(a, dt, 480)) return;
+  if (a.ph === 'out' && typeof atoIngressE === 'function' && atoIngressE(a, dt)) return;   // 先飞到起始点（ato.js）
   if (a.ph === 'out') {
     eaTrack(a);
     if (a.sx == null || dist(a.tx, a.ty, a.stx, a.sty) > 80) eaStandoff(a);
@@ -414,6 +418,7 @@ function eaRetarget(a) {
 }
 // 返航：固定翼回跑道完好的最近机场（都被炸了就回最近的、在上空等抢修）走进近着陆；直升机回直升机坪悬停降落
 function eaRtb(a, dt) {
+  if (typeof atoEgressE === 'function' && atoEgressE(a, dt)) return;   // 返航先走出航点（ato.js），不原路折返
   const fw = a.type !== 'heli';
   let b = a.lb != null ? S.enemies.find(e => e.id === a.lb && !e.dead) : null;
   if (!b || (fw && b.cratT > S.t && a.ph !== 'land')) { b = eaNearBase(a.x, a.y, eaOpen()) || eaNearBase(a.x, a.y); a.lb = b ? b.id : null; }
@@ -659,7 +664,7 @@ function eaPkg(b, fl, tgt) {
 // 总攻 / 反冲击的航空火力（ai5.js 调用）：待命的武装直升机（最多 5 架）、攻击机（最多 4 架）各编一个队同时出动，打 (x, y) 一带的目标；不受出击间隔限制
 function eaMass(x, y, nm) {
   const E = S.eair;
-  if (!E || !eaOn()) return 0;
+  if (!E || !eaOn() || (typeof atoPhase === 'function' && atoPhase('e') < 3)) return 0;   // 空中作战计划：近距支援阶段才配合总攻
   const all = eaBases(), open = eaOpen();
   if (!all.length) return 0;
   const tg = eaTargets().filter(t => dist(t.x, t.y, x, y) < 400 && t.v > 0).sort((p, q) => q.v - p.v), pt = { k: 'pt', x, y, v: 6, nm: nm || '总攻目标' };
@@ -682,12 +687,15 @@ function eaThink() {
   const E = S.eair, all = eaBases(), open = eaOpen();
   if (!all.length) return;
   // 两次出击间隔 gap 秒；另一机种可提前一半时间出动（直升机与攻击机各打各的）；固定翼要有跑道完好的机场，直升机从直升机坪起飞不受弹坑影响
-  const ready = E.wing.filter(w => w.state === 'ready' && (w.type === 'heli' || open.length) && S.t >= E.first && (S.t >= E.nextT || (E.lastType && w.type !== E.lastType && S.t >= E.nextT - E.gap / 2)));
+  // 空中作战计划（ato.js）：第一阶段不出对地飞机；第二阶段只出 A-10C 打防空车；第三阶段全部放开
+  const ph = typeof atoPhase === 'function' ? atoPhase('e') : 3;
+  if (ph < 2) return;
+  const ready = E.wing.filter(w => w.state === 'ready' && (ph >= 3 || w.type === 'ga') && (w.type === 'heli' || open.length) && S.t >= E.first && (S.t >= E.nextT || (E.lastType && w.type !== E.lastType && S.t >= E.nextT - E.gap / 2)));
   if (!ready.length) return;
   // 制空权（airwar.js）：敌方掌握时只打高价值目标、不进敌战斗机巡逻区；我方掌握时出击间隔缩短
   const AW = typeof awState === 'function' ? awState() : null, capP = AW === 'p' ? S.planes.filter(p => !p.dead && p.kind === 'fighter' && (p.phase === 'loiter' || p.phase === 'out')) : [];
   let best = null, bs = AW === 'p' ? 10 : 6, bw = null;
-  for (const t of eaTargets()) for (const type of ['heli', 'ga']) {
+  for (const t of ph === 2 ? atoSeadTgtE() : eaTargets()) for (const type of ph === 2 ? ['ga'] : ['heli', 'ga']) {
     const w = ready.find(w => w.type === type);
     if (!w || capP.some(p => dist(p.cx, p.cy, t.x, t.y) < 500)) continue;
     if (t.fc && ready.filter(o => o.type === type).length < 2) continue;   // 舰队防空伞里的目标：凑不齐双机不去

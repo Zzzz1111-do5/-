@@ -724,13 +724,13 @@ function cmdDDMission(dd) {
 const cmdDDSafe = () => cmdOn() && S.cmd ? Math.max(55, S.cmd.p.safe) : 55;
 const cmdAirSafe = () => cmdOn() && S.cmd ? (S.cmd.p.airSafeT > S.t ? S.cmd.p.airSafe : 90) : 90;
 // carrier.js updateAirAuto 调用：取出一个可执行的航空任务
-function cmdAirTask(c) {
+function cmdAirTask(c, ok) {   // ok：空中作战计划的闸门（ato.js），本阶段不放行的请求留在队里
   if (!cmdOn() || !cmdCtl(c)) return null;
   const C = S.cmd.p;
   for (let i = 0; i < C.air.length; i++) {
     const a = C.air[i];
     if (S.t - a.t > 75) { C.air.splice(i--, 1); continue; }
-    if (!(S.assets[a.k] > 0)) continue;
+    if (!(S.assets[a.k] > 0) || (ok && !ok(a))) continue;
     if (a.k !== 'recon' && a.k !== 'fighter' && cmdNearP(a.x, a.y).d < (a.k === 'cas' ? 45 : cmdAirSafe())) { if (S.t - a.t > 20) C.air.splice(i--, 1); continue; }   // 战斗机巡逻不对地，不受安全距离限制
     if (a.k === 'cas' && cmdAirClosed(a.x, a.y)) continue;   // 敌防空没压掉：对地支援机先不进去（先打防空，cmdSeadP）
     C.air.splice(i, 1);

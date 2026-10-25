@@ -49,7 +49,7 @@ function infoUnit(u) {
   const models = [...new Set(ts.map(infoTeamModel))];
   const st = u.state === 'rout' ? '溃退' : u.state === 'waver' ? '动摇' : '稳定', ph = pl ? INFO_PH[pl.ph] || pl.ph : null, obj = pl && pl.obj ? (S.points.find(p => p.key === pl.obj) || {}).name : null;
   return { t: unitName(u), s: u.kind === 'eng' ? '工兵分队' : u.emblem === 'para' ? '海军陆战队蛟龙突击队（特种部队，运-20 伞降）' : '步兵分队',
-    rows: [['编成', `${ts.length} 个组 ${men} 人`], ['小组型号', infoEsc(models.join('、'))], ['兵员与武器', infoEsc(infoMen(ts, 'p').join('；'))],
+    rows: [u.org && ['隶属', infoEsc(hqOrgName(u))], ['编成', `${ts.length} 个组 ${men} 人`], ['小组型号', infoEsc(models.join('、'))], ['兵员与武器', infoEsc(infoMen(ts, 'p').join('；'))],
       ['弹药', `平均 ${Math.round(am)}/60${cons ? ' · <em>补给远，节约弹药</em>' : ''}`], ['士气', `${Math.round(u.morale)}（${st}）`],
       ['指挥', u.auto ? `自动${ph ? ` · ${ph}${obj ? ' ' + infoEsc(obj) : ''}` : ''}` : '手动']] };
 }
@@ -61,7 +61,7 @@ function infoVeh(v, enemy) {
   const st = [v.ai === 'repair' && '轮换补给中', v.cons && '补给远，节约弹药', fu <= 0 && '油料耗尽', v.immob && '履带被打断', v.burn > 0 && '起火', v.blk && '前方有敌步兵，停车以火力解决'].filter(Boolean);
   const form = v.esc && v.esc.form ? v.esc.form : v.vform;
   return { t: vehName(v), s: v.lst ? '在坦克登陆舰上' : v.swim ? '泅渡中' : '装甲车辆',
-    rows: [['主武器', infoEsc(gun)], sp.sam && ['防空导弹', `${v.samN ?? sp.sam.n}/${sp.sam.n} 枚`], ['车组', `${vehCrew(v)} 人`], ['车体', `${Math.ceil(v.hp)}/${v.maxhp}（装甲等级 ${v.armor}）`],
+    rows: [v.org && ['隶属', infoEsc(hqOrgName(v))], ['主武器', infoEsc(gun)], sp.sam && ['防空导弹', `${v.samN ?? sp.sam.n}/${sp.sam.n} 枚`], ['车组', `${vehCrew(v)} 人`], ['车体', `${Math.ceil(v.hp)}/${v.maxhp}（装甲等级 ${v.armor}）`],
       ['炮弹', am], ['油料', infoPct(fu)], form && typeof TF_VFORM === 'object' && ['队形', TF_VFORM[form] || form], ['状态', st.length ? infoEsc(st.join('、')) : '正常'], ['指挥', v.auto ? '自动' : '手动']] };
 }
 function infoShip(s) {
