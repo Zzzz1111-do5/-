@@ -23,7 +23,7 @@ const VEH_SPEC = {
   abv: { crew: 3, fuel: 6000, name: '伞兵战车', code: 'AB', hp: 18, armor: 1, speed: 30, turn: 2.4, gun: { range: 210, rof: 1.1, he: .8, ap: 1.3 }, mg: { range: 170, n: 3 }, sight: 170, amph: false, carry: 1, len: 13, wid: 7.5, tur: 2.8, bar: 6, ammo: 40 }
 };
 // 各地形的车速系数（下标同 T）：道路最快，林地、沼泽、礁岸很慢；深海/浅滩只对两栖坦克有意义（泅渡 60%）
-const VEH_TSP = [.6, .6, 0, .75, .3, 0, 1, .4, .75, 0, .25, 0, 1, 1.3, .7, .45];
+const VEH_TSP = [.6, .6, 0, .75, .3, 0, 1, .4, .75, 0, .25, .25, 1, 1.3, .7, .45];   // 河流：涉水两成五（两栖车辆六成，vehMove）
 const VEH_ORDER = { move: '机动', amove: '攻击前进', hold: '坚守', retreat: '后撤', clear: '扫雷开路' };
 // HUD 单位卡图标（侧视，按进攻方型号，icons.js）；hud.js 以 'v_' + 类型 合入 ICON
 const VEH_ICONS = typeof WI === 'object' ? { lt_tank: WI.ztq15, tank: WI.ztz96b, hv_tank: WI.ztz99a, amtank: WI.ztd05, apc: WI.zbd05, spg: WI.plz07, td: WI.ptl02,
@@ -277,7 +277,7 @@ function vehDrive(v, dt, mul) {
   const turn = sp.turn * (v.swim ? .6 : 1) * dt;
   v.heading += clamp(da, -turn, turn);
   const t = TER.type[ci(v.x, v.y)], climb = v.climbT != null && S.t - v.climbT < 2.5 ? .5 : 1;
-  const tk = sp.swimK && isWater(t) ? (v.side === 'e' ? .6 : sp.swimK) : VEH_TSP[t];   // 水上：ZTD-05 滑行艇体，航速与登陆艇相当；守方 AAV-7 只有约一半
+  const tk = sp.swimK && isWater(t) ? (v.side === 'e' ? .6 : sp.swimK) : t === T.RIVER ? (sp.amph ? RIVER_WADE.amph : RIVER_WADE.veh) : VEH_TSP[t];   // 水上：ZTD-05 滑行艇体，航速与登陆艇相当；守方 AAV-7 只有约一半
   let vel = sp.speed * (tk || .4) * climb * (v.sup > 60 ? .75 : 1) * ((v.mod && v.mod.spd) || 1) * mul * (dir < 0 ? .45 : 1);
   vel *= Math.abs(da) > 1 ? .12 : 1 - Math.abs(da) * .55;   // 大角度时原地转向
   if (v.cmd && v.cmd.cap && S.t < (v.cmd.until ?? 0)) vel = Math.min(vel, v.cmd.cap);   // 团的队形整体移动：车速跟锚点（hq.js regOrder）

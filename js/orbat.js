@@ -24,15 +24,15 @@ const bgRecs = G => G.rec.map(id => S.teams.find(q => q.id === id)).filter(q => 
 // 吸附到与锚点同一岸（同一片连通区域，grid.js compOf）的最近可走格：队形位置落在河里时，不会被挪到河对岸让那个连绕远路过河
 function bgSnap(G, x, y, cls) {
   const lab = compOf(cls), i0 = ci(G.ax, G.ay), a0 = lab[i0] || lab[Math.max(0, nearestPassable(i0, cls))] || 0;
-  const i = ci(x, y);
-  if (lab[i] && (!a0 || lab[i] === a0)) return [x, y];
+  const i = ci(x, y), wet = j => TER.type[j] === T.RIVER;   // 河可以涉水过，但队形位置不放在河里
+  if (lab[i] && !wet(i) && (!a0 || lab[i] === a0)) return [x, y];
   const gx = i % GW, gy = (i / GW) | 0;
   for (let r = 1; r <= 15; r++) for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
     if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
     const nx = gx + dx, ny = gy + dy;
     if (nx < 0 || ny < 0 || nx >= GW || ny >= GH) continue;
     const j = ny * GW + nx;
-    if (lab[j] && (!a0 || lab[j] === a0)) return [cellCX(j), cellCY(j)];
+    if (lab[j] && !wet(j) && (!a0 || lab[j] === a0)) return [cellCX(j), cellCY(j)];
   }
   return [x, y];
 }

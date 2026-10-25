@@ -197,7 +197,7 @@ function chargeTick(q, dt) {
     if (best.k === 'st' && t.kind === 'bunker' && (t.sup || 0) < 40 && o.own < 9) { chargeStop(q, '碉堡火力未被压制'); return true; }
   }
   if (best.d > (best.k === 'st' ? 20 : 13)) {
-    const sp = 22 * (TP[typeAt(q.x, q.y)].sp || .5) * (WIREC[ci(q.x, q.y)] ? .3 : 1) * dt, l = best.d;
+    const sp = 22 * (spInf(typeAt(q.x, q.y)) || .5) * (WIREC[ci(q.x, q.y)] ? .3 : 1) * dt, l = best.d;
     const nx = q.x + (t.x - q.x) / l * sp, ny = q.y + (t.y - q.y) / l * sp;
     if (passInf(nx, ny)) { q.x = nx; q.y = ny; q.movedT = S.t; q.heading = Math.atan2(t.y - q.y, t.x - q.x); }
     return true;
