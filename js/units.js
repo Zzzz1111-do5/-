@@ -220,7 +220,7 @@ function clearLine(x0, y0, x1, y1, side) {
   const n = Math.ceil(dist(x0, y0, x1, y1) / 8);
   for (let s = 1; s <= n; s++) {
     const i = ci(lerp(x0, x1, s / n), lerp(y0, y1, s / n));
-    if (!TP[TER.type[i]].sp || WIREC[i] || (MINEC[i] && (side === 'e' || MINEC[i] === 2))) return false;
+    if (!spInf(TER.type[i]) || WIREC[i] || (MINEC[i] && (side === 'e' || MINEC[i] === 2))) return false;
   }
   return true;
 }
@@ -240,7 +240,7 @@ function moveTeam(q, dt, mul) {
   }
   const i = ci(q.x, q.y);
   const crawl = q.prone ? (o.t === 'retreat' || o.dodge ? .75 : o.t === 'charge' || o.t === 'amove' ? .6 : .4) : 1;   // 卧倒：匍匐 / 短促跃进
-  const sp = (q.side === 'p' ? (q.kind === 'eng' ? 18 : 16) : 14) * (TP[TER.type[i]].sp || .5) * (WIREC[i] ? .3 : 1) * (q.sup > 30 ? .7 : 1) * crawl * mul * dt;
+  const sp = (q.side === 'p' ? (q.kind === 'eng' ? 18 : 16) : 14) * (spInf(TER.type[i]) || .5) * (WIREC[i] ? .3 : 1) * (q.sup > 30 ? .7 : 1) * crawl * mul * dt;
   const l = dist(q.x, q.y, tx, ty) || 1;
   const rx = q.x + (tx - q.x) / l * Math.min(sp, l), ry = q.y + (ty - q.y) / l * Math.min(sp, l);
   let px = 0, py = 0;
@@ -252,11 +252,11 @@ function moveTeam(q, dt, mul) {
   const ux = (tx - q.x) / l, uy = (ty - q.y) / l, back = px * ux + py * uy;
   if (back < 0) { px -= back * ux; py -= back * uy; }
   let nx = rx + px, ny = ry + py;
-  // 避让把小组推进河里时改走原步；原步斜切不可走格的角（卡在格角上）时沿单轴滑过；都不行则改按寻路场走
-  if (!passInf(nx, ny)) {
-    if (passInf(rx, ry)) { nx = rx; ny = ry; }
-    else if (passInf(rx, q.y)) { nx = rx; ny = q.y; }
-    else if (passInf(q.x, ry)) { nx = q.x; ny = ry; }
+  // 避让把小组推到不能走的格时改走原步；原步斜切不可走格的角（卡在格角上）时沿单轴滑过；都不行则改按寻路场走（河流可以涉水，算能走）
+  if (!wadeInf(nx, ny)) {
+    if (wadeInf(rx, ry)) { nx = rx; ny = ry; }
+    else if (wadeInf(rx, q.y)) { nx = rx; ny = q.y; }
+    else if (wadeInf(q.x, ry)) { nx = q.x; ny = ry; }
     else { q.direct = false; q.pathT = S.t; return false; }
   }
   const bo = bldOut(nx, ny, .6);   // 避让推进了房子：贴墙走

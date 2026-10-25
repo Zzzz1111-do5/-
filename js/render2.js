@@ -180,8 +180,10 @@ function drawEnemies(time) {
       ctx.beginPath(); ctx.arc(x, y, 11 + px(2), -2.4, -.74); ctx.stroke();
     }
   }
+  const agg = typeof hqAggHide === 'function';
   for (const q of S.teams) {
     if (q.side !== 'e' || !inView(q.x, q.y, 12)) continue;
+    if (agg && hqAggHide('u', q.u)) continue;   // 远看：编进团的连画成分队符号（hq.js）
     if (inVision(q.x, q.y)) {
       drawTeamBody(ctx, q, faceDraw(q), !R.fig && q.sup >= 60 ? rgba(COL.amber, .9) : COL.enemy);
       supMark(ctx, q);
@@ -208,8 +210,10 @@ function drawTeams(time) {
     const d = Math.max(px(2), 1.2);
     for (const q of ts) if (inView(q.order.x, q.order.y)) ctx.fillRect(q.order.x - d / 2, q.order.y - d / 2, d, d);
   }
+  const agg = typeof hqAggHide === 'function';
   for (const q of S.teams) {
     if (q.side !== 'p' || !inView(q.x, q.y, 12)) continue;
+    if (agg && hqAggHide('u', q.u)) continue;   // 远看：编进团的连画成分队符号（hq.js）
     const low = q.kind === 'inf' && q.ammo < 8, a = low ? .55 + .4 * Math.sin(time * 8) : 1, u = unitOf(q);
     const col = rgba(!R.fig && q.sup >= 60 ? COL.amber : u && u.state === 'rout' ? COL.amber : COL.g, a);
     drawTeamBody(ctx, q, faceDraw(q), col);

@@ -81,7 +81,11 @@ const cellCY = i => Math.floor(i / GW) * CELL + CELL / 2;
 const typeAt = (x, y) => TER.type[ci(x, y)];
 const elevAt = (x, y) => TER.elev[ci(x, y)];
 const isLand = (x, y) => !isWater(typeAt(x, y));
-const passInf = (x, y) => TP[typeAt(x, y)].sp > 0;
+const passInf = (x, y) => TP[typeAt(x, y)].sp > 0;   // 能站：落脚点、队形位置只取这些格（河里不站人、不停车）
+// 渡河：所有兵种都能涉水过河，只是慢——步兵、车辆在河里只有平地速度的两成五，两栖车辆六成；寻路照样优先走桥和渡口
+const RIVER_WADE = { inf: .25, veh: .25, amph: .6 };
+const wadeInf = (x, y) => { const t = typeAt(x, y); return TP[t].sp > 0 || t === T.RIVER; };   // 能走（含涉水）
+const spInf = t => TP[t].sp || (t === T.RIVER ? RIVER_WADE.inf : 0);   // 步兵在这种地形上的速度系数
 const coverAt = (x, y) => TP[typeAt(x, y)].cv;
 
 // 行为计数（S.v7s，测试与调试用）：各模块的 xxStat 都写这里

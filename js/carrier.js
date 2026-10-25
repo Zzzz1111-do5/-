@@ -409,7 +409,12 @@ function airCasFly(p, dt, speed) {
     if (p.run.shot && d > 120 || S.t - p.run.t > 9) { p.run = null; p.runCd = S.t + 7; }
     return;
   }
-  airAgm(p);
+  const fired = airAgm(p);
+  // 直-10：没有导弹目标（或导弹打光）时，悬停用 23 毫米机炮打目标一带的步兵和火力点（射程 280 内，每 2.5 秒一个点射）
+  if (heli && !fired && S.t >= (p.gunT2 || 0) && (p.ammoG ?? (p.ammoG = 12)) > 0) {
+    const sv = { x: p.x, y: p.y }, near = [...S.teams.filter(q => q.side === 'e' && q.men.length && inVision(q.x, q.y)), ...S.enemies.filter(e => !e.dead && inVision(e.x, e.y))].some(o => dist(o.x, o.y, sv.x, sv.y) < 280 && dist(o.x, o.y, p.cx, p.cy) <= 160);
+    if (near && casStrafe(p)) { p.ammoG--; p.gunT2 = S.t + 2.5; }
+  }
   if (gun && S.t >= (p.runCd || 0) && p.tRisk < .5) {
     let best = null, bd = 1e9;
     const pT = S.teams.filter(q => q.side === 'p' && q.men.length);
@@ -514,10 +519,11 @@ function airSteer(p, tx, ty, dt, free) {
   p.x += Math.cos(p.heading) * p.spd * dt; p.y += Math.sin(p.heading) * p.spd * dt;
   return d;
 }
-// 绕圆盘旋：瞄准圆周上前方的点（dir = 1 顺时针）
+// 待机 / 巡逻：跑马场航线（ato.js atoRace：两头转弯、中间直飞，长边与海岸线平行），不在空中原地打转
 function airOrbit(p, cx, cy, R, dir, dt) {
   const d = dist(p.x, p.y, cx, cy);
-  if (d > R * 2.2) return airSteer(p, cx, cy, dt);
+  if (d > R * 2.6) return airSteer(p, cx, cy, dt);
+  if (typeof atoRace === 'function') return atoRace(p, cx, cy, R, dir, (x, y) => airSteer(p, x, y, dt, true));
   const a = Math.atan2(p.y - cy, p.x - cx) + dir * .55;
   return airSteer(p, cx + Math.cos(a) * R, cy + Math.sin(a) * R, dt, true);
 }
@@ -554,6 +560,12 @@ function flyPlane(p, dt) {
     }
     return;
   }
+  // 编队与航线（ato.js）：僚机保持在长机右后 / 左后；长机先飞到岸线进入口（起飞后放慢等僚机集合）
+  if (typeof atoFormP === 'function' && p.lead != null && (p.phase === 'out' || (p.kind === 'fighter' && p.phase === 'loiter'))) {
+    if (p.kind === 'fighter' && typeof awFight === 'function') awFight(p, 'p', dt);   // 僚机也一直搜索敌机，接敌就散开
+    if (atoFormP(p, dt, speed)) return;
+  }
+  if (p.phase === 'out' && typeof atoIngressP === 'function' && atoIngressP(p, dt, speed)) return;
   if (p.kind === 'fighter' && (p.phase === 'out' || p.phase === 'loiter') && typeof awFlyP === 'function') { awFlyP(p, dt, speed); return; }   // 战斗机巡逻 / 拦截（airwar.js）
   if (p.phase === 'out') {
     p.alt = Math.min(1, p.alt + dt / 2.2); speed(sp.spd);
@@ -590,6 +602,7 @@ function flyPlane(p, dt) {
     return;
   }
   if (p.phase === 'loiter') { airCasFly(p, dt, speed); return; }
+  if (p.phase === 'rtb' && typeof atoEgressP === 'function' && atoEgressP(p, dt, speed)) return;   // 返航先走出口（ato.js），不原路折返
   if (p.land) {   // 陆基飞机：向南飞出地图，回战区机场加油挂弹（100 秒后再出击）；夺取了敌机场、有油料就改降那里（abn.js）
     if (typeof abRtbLand === 'function' && abRtbLand(p) && abPlaneFly(p, dt, speed)) return;
     p.alt = Math.min(1, p.alt + dt / 3); speed(sp.spd);
@@ -740,7 +753,7 @@ const AGM_V = { tank: 6, td: 5.5, hv_tank: 6.5, lt_tank: 5, apc: 4.5, amtank: 4.
 const AGM_E = { bunker: 4.5, coastal: 5, arty: 4.5, mortar: 3.5, aa: 5, tel: 6, ascm: 6 };
 function airAgm(p) {
   const M = airMdl(p.kind, p.v);
-  if (!M.agm || !(p.agmN > 0) || (p.agmT || 0) > S.t || typeof msPgm !== 'function' || p.alt < .4) return;
+  if (!M.agm || !(p.agmN > 0) || (p.agmT || 0) > S.t || typeof msPgm !== 'function' || p.alt < (p.v === 'heli' ? .2 : .4)) return false;   // 直-10 悬停高度约 0.3：照样能打
   p.agmT = S.t + 1;
   const cx = p.cx ?? p.tx, cy = p.cy ?? p.ty, own = (x, y) => S.teams.some(q => q.side === 'p' && q.men.length && dist(q.x, q.y, x, y) < 40);
   const flying = (k, id) => S.missiles.some(m => m.kind === 'pgm' && !m.done && m.side === 'p' && m.tgt && m.tgt.k === k && m.tgt.id === id);
@@ -754,12 +767,13 @@ function airAgm(p) {
   for (const v of S.veh || []) if (v.side === 'e' && !v.dead) cand('veh', v, AGM_V[v.type] || 3);
   for (const a of S.armor || []) if (!a.dead) cand('armor', a, 4.5);
   for (const e of S.enemies) if (!e.dead) cand('enemy', e, AGM_E[e.kind]);
-  if (!best) return;
+  if (!best) return false;
   msPgm(M.agm, 'p', p.x, p.y, best, p.kind);
   p.agmN--; p.agmT = S.t + 2.5;
   if (typeof v8Stat === 'function') v8Stat('agm');
   const nm = best.k === 'veh' ? (typeof vehName === 'function' ? vehName(best.o) : '敌战车') : best.k === 'armor' ? '敌装甲车' : (ENEMY_SPEC[best.o.kind] || {}).name || '目标';
   log(`${airName(p.kind, p.v).split(' ')[0]}发射${MS_PGM[M.agm].nm}，打击${nm}（余 ${p.agmN} 枚）`, 'info', 'agm' + p.id, 2, best);
+  return true;
 }
 function casStrafe(p) {
   const pT = S.teams.filter(q => q.side === 'p' && q.men.length), safe = (x, y) => !pT.some(q => dist(q.x, q.y, x, y) <= 45);
@@ -914,13 +928,15 @@ function updateAirAuto(dt) {
   // 敌方掌握制空权、我又没有战斗机在空：攻击机与轰炸机暂缓，对地支援只在我军压力很大时出动
   const awBad = typeof awState === 'function' && awState() === 'e' && !S.planes.some(p => !p.dead && p.kind === 'fighter' && p.alt > .3);
   // 指挥官的航空任务（commander.js）：H 时侦察、受阻攻击的对地支援、假目标后的复查与再次出击
-  const T = typeof cmdAirTask === 'function' ? cmdAirTask(c) : null;
+  // 空中作战计划（ato.js）：AI 指挥时按阶段放行——①只出战斗机与侦察机 ②攻击机只打已知敌防空 ③全部放开
+  const ph = typeof atoPhase === 'function' ? atoPhase('p') : 3, okA = (k, x, y) => typeof atoOk !== 'function' || atoOk('p', k, k === 'strike' && atoIsAAP(x, y));
+  const T = typeof cmdAirTask === 'function' ? cmdAirTask(c, a => okA(a.k, a.x, a.y)) : null;
   const L = T && airPkg(T.k, T.x, T.y, T.pref);
-  if (L) { if (typeof cmdAirLaunched === 'function') cmdAirLaunched(T, L); return; }
+  if (L) { if (typeof atoWing === 'function' && (T.k === 'strike' || T.k === 'cas')) atoWing(L, T.k, T.x, T.y, T.pref); if (typeof cmdAirLaunched === 'function') cmdAirLaunched(T, L); return; }
   const pT = S.teams.filter(q => q.side === 'p' && q.men.length);
   const near = (x, y, r) => pT.filter(q => dist(q.x, q.y, x, y) < r);
   const busy = (kind, x, y, r) => S.planes.some(p => p.kind === kind && !p.dead && (p.phase === 'cat' || p.phase === 'roll' || p.phase === 'out' || p.phase === 'loiter') && dist(p.cx ?? p.tx, p.cy ?? p.ty, x, y) < r);
-  if (S.assets.cas > 0 && pT.length) {
+  if (S.assets.cas > 0 && pT.length && ph >= 3) {
     let best = null, bs = 0;
     for (const o of S.teams) if (o.side === 'e' && o.men.length && inVision(o.x, o.y)) {
       const nb = near(o.x, o.y, 220);
@@ -930,21 +946,27 @@ function updateAirAuto(dt) {
       if (typeof cmdAirClosed === 'function' && cmdAirClosed(o.x, o.y) && s < 10) continue;   // 已知敌防空强：先由舰炮、导弹、歼-35 打掉（commander.js cmdSeadP）
       if (s > bs) { bs = s; best = o; }
     }
-    if (best && bs >= (awBad ? 6 : 2) && airPkg('cas', best.x, best.y)) return;
+    const Lc = best && bs >= (awBad ? 6 : 2) && airPkg('cas', best.x, best.y);
+    if (Lc) { if (typeof atoWing === 'function') atoWing(Lc, 'cas', best.x, best.y); return; }
   }
-  if (S.assets.strike > 0 && !awBad) {
+  const seadUp = S.planes.filter(o => !o.dead && o.kind === 'strike' && o.phase !== 'rtb').length, seadV = S.air.wing.some(w => w.type === 'strike' && w.v === 'sead' && w.state === 'deck');
+  if (S.assets.strike > 0 && !awBad && ph >= 2 && !(ph === 2 && seadUp >= 2)) {   // 压制防空阶段：同时最多两架
     const PRI = { coastal: 5, ascm: 5, tel: 5, airfield: 4.5, arty: 4, aa: 3.5, mortar: 3, bunker: 2 };   // 歼-35 在时高炮阵地（防空）优先级再乘 1.8
     let best = null, bs = 0;
     for (const e of S.enemies) if (!e.dead && e.kx != null && !(e.kind === 'airfield' && typeof abKeep === 'function' && abKeep())) {   // 打算空降夺取的机场不炸（abn.js）
+      if (ph === 2 && (e.kind !== 'aa' || (!seadV && airAAAt(e.kx, e.ky, 300) > 1.4))) continue;   // 压制防空阶段：只打防空；没有防空压制型时只打孤立的防空点，不往防空网里送
       if (near(e.kx, e.ky, typeof cmdAirSafe === 'function' ? cmdAirSafe() : 90).length || busy('strike', e.kx, e.ky, 70) || S.shells.some(s => s.side === 'p' && s.kind === 'bomb' && dist(s.x1, s.y1, e.kx, e.ky) < 60)) continue;
       const stl = S.air.wing.some(w => w.type === 'strike' && w.state === 'deck' && airMdl('strike', w.v).stealth);   // 歼-35 隐身：不怕防空圈
       const s = (PRI[e.kind] || 1) * (e.kind === 'bunker' && !near(e.kx, e.ky, 320).length ? .3 : 1) * (!stl && typeof eaThreat === 'function' && eaThreat(e.kx, e.ky) >= 1 ? .4 : 1) * (e.kind === 'aa' && stl ? 1.8 : 1);
       if (s > bs) { bs = s; best = e; }
     }
-    const L = best && airPkg('strike', best.kx, best.ky);
-    if (L) { if (typeof cmdAirLaunched === 'function') cmdAirLaunched({ k: 'strike', x: best.kx, y: best.ky, eid: best.id }, L); return; }
+    // 压制防空阶段：已知的敌防空车也打（防空压制型歼-35 优先）
+    if (ph === 2 && !best && typeof airAASites === 'function') { const v = airAASites().filter(s => s.k === 'veh' && !near(s.x, s.y, 90).length && !busy('strike', s.x, s.y, 70) && (seadV || airAAAt(s.x, s.y, 300) <= 2.1)).sort((a, b) => b.w - a.w)[0]; if (v) best = { kx: v.x, ky: v.y, id: null, sead: true }; }
+    const pref = ph === 2 && S.air.wing.some(w => w.type === 'strike' && w.v === 'sead' && w.state === 'deck') ? 'sead' : undefined;
+    const L = best && airPkg('strike', best.kx, best.ky, pref);
+    if (L) { if (typeof atoWing === 'function') atoWing(L, 'strike', best.kx, best.ky, pref); if (typeof cmdAirLaunched === 'function' && best.id != null) cmdAirLaunched({ k: 'strike', x: best.kx, y: best.ky, eid: best.id }, L); return; }
   }
-  if (S.assets.bomber > 0 && !awBad) {   // 轰炸机：炮兵阵地群、岸防炮、碉堡（周围已标定目标越多越优先）；我军 150 以内不投
+  if (S.assets.bomber > 0 && !awBad && ph >= 3) {   // 轰炸机：炮兵阵地群、岸防炮、碉堡（周围已标定目标越多越优先）；我军 150 以内不投
     const PRI = { coastal: 5, airfield: 5, ascm: 4.5, tel: 4.5, arty: 4.5, aa: 3, mortar: 3, bunker: 2.5 };
     let best = null, bs = 0;
     for (const e of S.enemies) if (!e.dead && e.kx != null && !(e.kind === 'airfield' && typeof abKeep === 'function' && abKeep())) {

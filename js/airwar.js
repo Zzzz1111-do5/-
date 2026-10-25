@@ -272,8 +272,9 @@ function awFlyE(a, dt) {
   if (mv) { a.spd += clamp(sp.spd * mv[2] - a.spd, -60 * dt, 50 * dt); eaSteer(a, clamp(mv[0], 40, W - 40), clamp(mv[1], 40, H - 40), dt); }
   else if (T) { a.spd += clamp(sp.spd * 1.12 - a.spd, -60 * dt, 50 * dt); awPursue(a, T, dt, sp.turn); }
   else if (awFleetCover(a.x, a.y, 30)) { a.spd += clamp(sp.spd * 1.1 - a.spd, -60 * dt, 50 * dt); eaSteer(a, a.cx, a.cy, dt); if (!a.brk) { a.brk = true; awStat('ftrBreakE'); } }   // 误入我舰队防空伞：加速脱离
-  else if (a.ph === 'out' && a.lead != null && eaForm(a, dt)) { /* 跟着长机保持编队 */ }
+  else if ((a.ph === 'out' || a.ph === 'cap') && a.lead != null && eaForm(a, dt)) { /* 跟着长机保持编队（巡逻时也一起飞跑马场航线） */ }
   else if (a.ph === 'out') { if (eaSteer(a, a.cx, a.cy, dt, a.join > S.t ? sp.spd * .75 : undefined) < AW_CAP + 40) a.ph = 'cap'; }
+  else if (typeof atoRace === 'function') atoRace(a, a.cx, a.cy, AW_CAP, a.odir || 1, (x, y) => eaSteer(a, x, y, dt, 160));   // 巡逻：跑马场航线（ato.js）
   else { const g = Math.atan2(a.y - a.cy, a.x - a.cx) + .55 * (a.odir || 1); eaSteer(a, a.cx + Math.cos(g) * AW_CAP, a.cy + Math.sin(g) * AW_CAP, dt, 160); }
   if (a.ph === 'cap' && (a.capT -= dt) <= 0) a.ph = 'rtb';
   else if (!(a.aam > 0) && (sp.stealth || !(a.gun > 0))) a.ph = 'rtb';
@@ -294,7 +295,7 @@ function awThinkE() {
   ready.sort((a, b) => ((b.type === 'f22') - (a.type === 'f22')) * (vsF ? 1 : -1));
   const up = E.fly.filter(a => !a.dead && eaFtr(a.type) && (a.ph === 'out' || a.ph === 'cap' || a.ph === 'roll')).length;
   const g5 = S.ai && S.ai.g5 && (S.ai.g5.st === 'prep' || S.ai.g5.st === 'go');
-  const want = Math.max(g5 ? 2 : 0, foes.length ? Math.min(4, Math.ceil(foes.length / 2) + (foes.some(t => t.ftr) ? 2 : 0)) : S.t - A.seenP < 120 ? (ready.length + up >= 4 ? 2 : 1) : 0);   // 敌机越多、有敌战斗机时派得越多（最多 4 架）；总攻时至少双机掩护
+  const want = Math.max(g5 ? 2 : 0, typeof atoPhase === 'function' && atoPhase('e') === 1 && atoFtrP() ? 2 : 0, foes.length ? Math.min(4, Math.ceil(foes.length / 2) + (foes.some(t => t.ftr) ? 2 : 0)) : S.t - A.seenP < 120 ? (ready.length + up >= 4 ? 2 : 1) : 0);   // 敌机越多、有敌战斗机时派得越多（最多 4 架）；总攻时至少双机掩护
   if (up >= want || S.t - A.lnE < 3) return;
   let cx, cy;
   if (foes.length) { cx = foes.reduce((s, t) => s + t.x, 0) / foes.length; cy = foes.reduce((s, t) => s + t.y, 0) / foes.length; }
@@ -354,7 +355,7 @@ function awEscSay(fl, x, y, nm) {
 // F-35A 防区外压制防空：420 以内、我方看得见的敌防空车（弹炮 / 导弹防空车、近防炮车），一次一枚，间隔 2.5 秒
 function awSdbE(a) {
   a.sdbT = S.t + 1;
-  if (typeof msPgm !== 'function') return;
+  if (typeof msPgm !== 'function' || (typeof atoOk === 'function' && !atoOk('e', 'sdb', true))) return;   // 空中作战计划：第一阶段只争制空权
   let best = null, bd = 420;
   for (const v of S.veh || []) {
     if (v.side !== 'p' || v.dead || (v.type !== 'aa_veh' && v.type !== 'sam_veh') || !spotted(v.x, v.y)) continue;
@@ -389,6 +390,7 @@ function awAutoP() {
   const known = S.enemies.some(e => e.kind === 'airfield' && !e.dead && e.kx != null);
   let want = foes.length ? Math.min(3, Math.ceil(foes.length / 2) + (foes.some(t => t.ftr) ? 1 : 0)) : known || S.t - A.seenE < 120 ? 1 : 0;
   if (A.st === 'e') want = Math.max(want, 2);
+  if (typeof atoPhase === 'function' && atoPhase('p') === 1) want = Math.max(want, 2);   // 夺取制空权阶段：至少一个双机编队在空
   if (up >= want) return false;
   let cx, cy;
   if (foes.length) { cx = foes.reduce((s, t) => s + t.x, 0) / foes.length; cy = foes.reduce((s, t) => s + t.y, 0) / foes.length; }
@@ -397,6 +399,7 @@ function awAutoP() {
   if (!launchPlane('fighter', cx, cy)) return false;
   awStat('ftrP');
   const lead = S.planes[S.planes.length - 1];
+  if (typeof atoWing === 'function' && want - up >= 2) atoWing(lead, 'fighter', cx, cy);   // 双机编队：长机带僚机
   const nm = typeof airName === 'function' ? airName('fighter', (S.planes[S.planes.length - 1] || {}).v) : '战斗机';
   if (typeof chatSay === 'function') chatSay('p', foes.length ? `命令：${nm}起飞，拦截${awWhere(cx, cy)}上空的敌机（${foes.length} 架）。` : `命令：${nm}起飞，在${awWhere(cx, cy)}上空巡逻，掩护登陆场与对地支援机。`, { kind: 'order', at: { x: cx, y: cy }, key: 'awP', gap: 15, lv: 1 });
   return true;
