@@ -158,6 +158,7 @@ function msPgmFly(m, dt) {
   m.done = true; m.x = m.tx; m.y = m.ty;
   if (m.tgt && m.tgt.k === 'eship') { if (T && dist(T.x, T.y, m.tx, m.ty) < 24 && typeof navyHit === 'function') navyHit(T, m); else S.fx.push({ kind: 'flash', x: m.tx, y: m.ty, r: 10, life: 0, max: .5, side: m.side }); msStat('pgmHit'); return; }
   impact(m.tx, m.ty, W0.pw, m.side);
+  if (m.src === 'b2' && typeof b2Blast === 'function') b2Blast(m.tx, m.ty, m.w);   // B-2 的重磅炸弹：大范围冲击波压制（b2.js）
   if (T && dist(T.x, T.y, m.tx, m.ty) < 16) {
     if (m.tgt.k === 'veh') vehDamage(T, W0.dmg, W0.pen, m.x0, m.y0, 'atgm');
     else if (m.tgt.k === 'enemy') { damageEnemy(T, W0.st); T.sup = 100; }
@@ -244,9 +245,9 @@ function msAsm(m, dt) {
   S.fx.push({ kind: 'boom', x: m.x, y: m.y, r: 26, life: 0, max: 1.1, side: m.side });
   msStat('ascmHit');
   const k = m.tgt.k;
-  if (k === 'ship') { log(`${T.label} 被${m.nm || '岸舰导弹'}击中`, 'bad', null, 0, T); damageShip(T, 7); }
-  else if (k === 'dd') { damageDD({ kind: 'coastal', x: m.x0, y: m.y0 }); damageDD({ kind: 'coastal', x: m.x0, y: m.y0 }); }
-  else if (k === 'cv' && typeof cvImpact === 'function') cvImpact(T.x, T.y, { men: 0, ship: 6, struct: 0, R: 20 });
+  if (k === 'ship') { log(`${T.label} 被${m.nm || '岸舰导弹'}击中`, 'bad', null, 0, T); damageShip(T, m.dmg || 7); }
+  else if (k === 'dd') { damageDD({ kind: 'coastal', x: m.x0, y: m.y0 }); damageDD({ kind: 'coastal', x: m.x0, y: m.y0 }); if ((m.dmg || 0) >= 9) damageDD({ kind: 'coastal', x: m.x0, y: m.y0 }); }
+  else if (k === 'cv' && typeof cvImpact === 'function') cvImpact(T.x, T.y, { men: 0, ship: m.dmg || 6, struct: 0, R: 20 });   // dmg：重型战斗部（战斧海上打击型）
 }
 // 返回 true 表示本步已被拦截
 function msDefend(m) {

@@ -221,7 +221,7 @@ HOOK.step.push(a5Step);
 // —— 观战时画：集结地域虚线圈、主攻箭头 ——
 HOOK.drawOver.push(function a5Draw(time) {
   const G = S && S.ai && S.ai.g5;
-  if (!G || !G.key || !['build', 'prep', 'go'].includes(G.st) || S.role !== 'spectate' || typeof R !== 'object' || !R.ctx) return;
+  if (!G || !G.key || !['build', 'prep', 'go'].includes(G.st) || S.role !== 'spectate' || typeof R !== 'object' || !R.ctx || (typeof hqOn === 'function' && hqOn())) return;
   const ctx = R.ctx;
   ctx.save();
   ctx.strokeStyle = rgba(COL.enemy, .5 + .2 * Math.sin(time * 3)); ctx.lineWidth = px(1.6); ctx.setLineDash([px(6), px(5)]);

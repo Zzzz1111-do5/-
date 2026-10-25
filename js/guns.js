@@ -13,7 +13,7 @@ function gunScan() {
 }
 // 炮口朝向：最近射击方向；没打过时岸炮、火炮朝海（南），高炮缓慢搜索或跟踪最近的飞机
 function gunAim(e, time) {
-  if (e.kind === 'tel') return e.th ?? Math.PI / 2;   // 发射车：车头朝行驶 / 发射方向（missile.js）
+  if (e.kind === 'tel' || e.kind === 'typhon') return e.th ?? Math.PI / 2;   // 发射车：车头朝行驶 / 发射方向（missile.js）
   if (e.kind === 'aa') {
     let best = null, bd = 300;
     for (const p of S.planes || []) if (!p.dead && p.alt > .3) { const d = dist(p.x, p.y, e.x, e.y); if (d < bd) { bd = d; best = p; } }
@@ -151,7 +151,7 @@ function gunModel(ctx, e, x, y, vis, time) {
     ctx.restore();
     ctx.fillStyle = dim; for (const [u, v] of [[-3, -2], [2, 3], [-2, 3.5], [3, -3]]) ctx.fillRect(x + u - .5, y + v - .5, 1, 1);   // 伪装网结
     if (fk) gunFlash(ctx, x, y, sa, 10.5, fk * .9);
-  } else if (e.kind === 'tel') {
+  } else if (e.kind === 'tel' || e.kind === 'typhon') {
     // 战术导弹发射车：四轴重型底盘 + 驾驶室；停车后液压臂把导弹竖起（俯视投影缩短成一点），点火后放下空架，随即转移阵地
     const ft = S.t - (e.fireT ?? -99), up = e.moving ? 0 : ft < 1.5 ? ft / 1.5 : ft < 3.5 ? 1 - (ft - 1.5) / 2 : 0, loaded = (e.n ?? 2) > 0 || ft < 1.5, L = 15 * (1 - .82 * up);
     ctx.save(); ctx.translate(x, y); ctx.rotate(a);

@@ -12,7 +12,8 @@ const SHIP_SPEC = {
 const ENEMY_SPEC = {
   bunker: { name: '机枪碉堡', hp: 16 }, coastal: { name: '岸防重炮', hp: 22 }, arty: { name: 'M777 榴弹炮阵地', hp: 10 },
   mortar: { name: 'M252 迫击炮组', hp: 6 }, aa: { name: '防空炮（M167 火神）', hp: 8 },
-  tel: { name: 'M142 海马斯发射车', hp: 8 }, ascm: { name: 'NMESIS 岸舰导弹连', hp: 10 }, airfield: { name: '野战机场', hp: 50 }   // v7（missile.js / eair.js）；守方按美军装备命名
+  tel: { name: 'M142 海马斯发射车', hp: 8 }, ascm: { name: 'NMESIS 岸舰导弹连', hp: 10 }, airfield: { name: '野战机场', hp: 50 },
+  typhon: { name: '「堤丰」陆基中程导弹连', hp: 12 }   // 反航母（antiship.js）   // v7（missile.js / eair.js）；守方按美军装备命名
 };
 const ROLE_NAME = { radio: '通讯兵', rifle: '步枪手', mg: '机枪手', eng: '工兵', aa: '防空导弹手' };
 

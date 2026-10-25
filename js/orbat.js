@@ -240,7 +240,7 @@ function bgStep(dt) {
   for (const G of S.bgs) {
     if (G.dead || (G.thT -= dt) > 0) continue;
     G.thT = 1;
-    bgThink(G);
+    if (G.reg && typeof regThink === 'function') regThink(G); else bgThink(G);   // 团（hq.js）由团长按战法表指挥
     if (!G.dead) bgRecon(G);
   }
   if (S.bgs.some(G => G.dead)) {
@@ -260,6 +260,7 @@ function bgDraw() {
   const ctx = R.ctx;
   const at = [];
   for (const G of S.bgs) {
+    if (G.reg) continue;   // 团的标号由指挥体系画（hq.js hqDraw）
     if (G.side === 'e' && !(S.role === 'spectate' || R.eye === 'all') && !spotted(G.ax, G.ay)) continue;
     const col = G.side === 'p' ? COL.g : COL.enemy, w = px(22), h = px(14), x = G.ax;
     let y = G.ay;

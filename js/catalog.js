@@ -458,6 +458,13 @@ ctE('e_air_ftr', 'F-35A 闪电 II 战斗机', 'e', 'air', 'ewing', 40, CT_IC.eft
   { kind: 'ewing', at: 'air', type: 'ftr' }, { counters: ['p_air_cas', 'p_air_strike', 'p_air_ftr', 'wing'], weakTo: ['p_air_ftr', 'p_dd', 'p_tbm'] });
 ctE('e_air_f22', 'F-22A 猛禽战斗机', 'e', 'air', 'ewing', 75, CT_IC.ef22 || CT_IC.eftr, [3, 0, 8, 8, 10, 8, 0], '美军最强的空优战斗机：比 F-35A 更难被雷达发现，超音速巡航、推力矢量，转弯追击更快；内埋 6 枚 AIM-120D 与 2 枚 AIM-9X（F-35A 只有 4 枚），AN/APG-77 雷达看得更远。有敌战斗机时打头阵，平时留在机场待命，让 F-35A 去巡逻。价格接近两架 F-35A。需要野战机场。',
   { kind: 'ewing', at: 'air', type: 'f22' }, { counters: ['p_air_ftr', 'p_air_cas', 'p_air_strike', 'wing'], weakTo: ['p_dd', 'p_tbm'] });
+// ———— 防守方 · 反航母体系（antiship.js）：巡逻机找到航母 → 堤丰导弹连 / 攻击核潜艇打击 ————
+ctE('e_p8', 'P-8A 海神海上巡逻机（2 架轮换）', 'e', 'air', 'asset', 380, CT_IC.arecon, [3, 0, 0, 0, 5, 10, 0], '反航母体系的眼睛：在本方海岸外高空巡逻，APY-10 雷达搜索 1500 以内的海面，把敌航母、驱逐舰的位置报给「堤丰」导弹连与潜艇。飞得慢、目标大，敌歼击机和驱逐舰舰空导弹够得着就会打它，被击落后另一架约 4 分钟后接班。不需要机场。',
+  { kind: 'asset', at: 'none', key: 'ep8', add: 1 }, { counters: ['p_cv', 'p_dd'], weakTo: ['p_air_ftr', 'p_air_j36', 'p_dd'] });
+ctE('e_typhon', '「堤丰」陆基中程导弹连（战斧海上打击型）', 'e', 'arty', 'missile', 420, CT_IC.tel, [4, 1, 10, 10, 2, 0, 0], '纵深 500 以外的发射车：16 枚战斧 Block V 海上打击型巡航导弹，射程覆盖全图，每次 4 枚齐射，专打航母，其次驱逐舰。要靠巡逻机（或岸上直接看见）提供目标位置；亚音速，可被航母红旗-10、近防炮与驱逐舰舰空导弹拦截，但每枚命中伤害很重。发射即暴露。',
+  { kind: 'enemy', at: 'land', ek: 'typhon', minDepth: 500, n: 16 }, { counters: ['p_cv', 'p_dd'], weakTo: ['p_tbm', 'p_air_strike', 'p_air_j36'] });
+ctE('e_ssn', 'SSN-774 弗吉尼亚级攻击核潜艇', 'e', 'naval', 'esub', 520, CT_IC.lcs, [5, 2, 10, 6, 4, 6, 0], '潜航慢速接近敌航母编队（被动声呐 1300 内听得到航母），进到 460 内发射 Mk 48 重型鱼雷，每次 4 条、共 12 条，打完一轮就规避装填。敌驱逐舰声呐 380 内会逐渐发现它并用反潜鱼雷攻击，发射鱼雷后暴露 20 秒；没有驱逐舰护航的航母几乎拿它没办法。',
+  { kind: 'esub', at: 'esea' }, { counters: ['p_cv', 'p_dd', 'p_lst'], weakTo: ['p_dd', 'p_dd_e'] });
 ctE('e_b2', 'B-2A 幽灵隐身轰炸机群（3 架）', 'e', 'air', 'asset', 3200, CT_IC.b2, [6, 0, 10, 10, 8, 2, 0], '美国空军战略隐身轰炸机，三机一组从本土远程奔袭，不需要机场。约 12000 米高空突防，雷达很难发现：高炮、单兵防空导弹与弹炮防空车够不着，只怕舰空导弹近距锁定和歼击机。两个内置弹舱载弹约 18 吨，三架按目标分工——GBU-38/B 500 磅 JDAM 80 枚（一次通场独立攻击 80 个瞄准点，炸上岸的步兵与车辆）、GBU-31 2000 磅钻地 JDAM 16 枚（炸抢滩的登陆舰与坦克）、AGM-158B JASSM-ER 隐身巡航导弹 16 枚（防区外打驱逐舰、航母）。敌军上岸后出击，打完返航，约 5 分钟后再来一波；只打守军看得见的目标。',
   { kind: 'asset', at: 'none', key: 'eb2', add: 1 }, { counters: ['p_lst', 'p_tank', 'p_rifle', 'p_dd', 'p_cv'], weakTo: ['p_air_ftr', 'p_air_j36', 'p_dd'] });
 

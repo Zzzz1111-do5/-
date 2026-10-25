@@ -27,15 +27,26 @@ function smokeMask() {
 }
 
 // 射线投射：地表坡度不低于此前最高遮挡坡度即可见
+// 同一位置（6 以内）、视高相同、视距不更远的源不重复投射（同一个连挤在一处的几个组、编队的飞机）
+const VIS_DIR = new Map();
+function visDirs(n) {
+  let d = VIS_DIR.get(n);
+  if (!d) { d = new Float64Array(n * 2); for (let k = 0; k < n; k++) { const a = k / n * 6.2832; d[k * 2] = Math.cos(a); d[k * 2 + 1] = Math.sin(a); } VIS_DIR.set(n, d); }
+  return d;
+}
 function castVision(out, sources) {
   out.fill(0);
+  const done = [];
   for (const s of sources) {
+    const h = s.h || .35;
+    if (done.some(o => o.h === h && o.r >= s.r && Math.abs(o.x - s.x) < 6 && Math.abs(o.y - s.y) < 6)) continue;
+    done.push({ x: s.x, y: s.y, r: s.r, h });
     const gx0 = s.x / CELL, gy0 = s.y / CELL, i0 = ci(s.x, s.y), rc = s.r / CELL;
-    const eye = (isWater(TER.type[i0]) ? 0 : TER.elev[i0] * ELEV_H) + (s.h || .35);
+    const eye = (isWater(TER.type[i0]) ? 0 : TER.elev[i0] * ELEV_H) + h;
     out[i0] = 1;
-    const n = Math.ceil(rc * 7.5);
+    const n = Math.ceil(rc * 7.5), D = visDirs(n);
     for (let k = 0; k < n; k++) {
-      const a = k / n * 6.2832, dx = Math.cos(a), dy = Math.sin(a);
+      const dx = D[k * 2], dy = D[k * 2 + 1];
       let maxS = -1e9;
       for (let st = 1; st <= rc; st += .7) {
         const fx = gx0 + dx * st, fy = gy0 + dy * st;
