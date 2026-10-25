@@ -147,7 +147,9 @@ function drawScene(now) {
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
   const flash = Math.min(1, k * .5) * (shake ? 1 : .4);
-  if (realLook()) {
+  const mx3 = typeof V3 === 'object' && V3.drawing && typeof v3Mx === 'function' && v3Mx();   // 3D 数码风：地面由 3D 着色器画，贴图只要单位、标号这些（底色黑）
+  if (mx3) { ctx.fillStyle = '#000'; ctx.fillRect(0, 0, R.cv.width, R.cv.height); worldTf(ctx); }
+  else if (realLook()) {
     if (!TRX.tried) { trxInit(); if (TRX.ok) trxResize(); }
     if (TRX.ok && (TRX.cv.width !== R.cv.width || TRX.cv.height !== R.cv.height)) trxResize();   // 3D 地图的屏外俯视画布与屏幕大小不同
     if (TRX.ok) { trxDraw(time, flash); ctx.drawImage(TRX.cv, 0, 0); }
@@ -162,7 +164,7 @@ function drawScene(now) {
   ctx.lineCap = 'round'; ctx.lineJoin = 'round';
   indexUnits();
   const opt = name => { const f = globalThis[name] || window[name]; if (typeof f === 'function') f(time); };
-  runHook('drawGround', time); drawMarks(ctx); drawCraters(); drawBuildings(); drawForts(time); drawSmoke(time); drawLines(time); opt('drawSupplyNet'); drawStructures(time); opt('drawBlown'); runHook('drawUnder', time);
+  runHook('drawGround', time); drawMarks(ctx); drawCraters(); if (!mx3) drawBuildings(); drawForts(time); drawSmoke(time); drawLines(time); opt('drawSupplyNet'); drawStructures(time); opt('drawBlown'); runHook('drawUnder', time);
   drawEnemies(time); opt('drawArmor');
   ctx.globalAlpha = R.zr > 2.5 ? .55 : .75; opt('drawAutoRoutes'); ctx.globalAlpha = 1;   // 自动驾驶路线压暗，避免满屏虚线
   drawTeams(time); opt('drawCarrier'); drawShips(time); drawDD(time); runHook('drawOver', time); drawPlans(time);
