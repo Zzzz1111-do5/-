@@ -133,9 +133,9 @@ void main() {
   // 沙滩细密点、礁石 / 悬崖稀疏亮点
   float bc = smoothstep(.3, .7, k2.g), rk = smoothstep(.25, .6, k2.b);
   vec2 q3 = floor(w / 3.), f3 = fract(w / 3.) - .5;
-  c += G * bc * step(.55, mxH(q3)) * (1. - smoothstep(.12, .22, length(f3))) * .3;
+  c += G * bc * mix(step(.55, mxH(q3)) * (1. - smoothstep(.12, .22, length(f3))), .05, smoothstep(.15, .45, FW(w.x / 3.))) * .3;   // 远看点挤成一片时取平均亮度，不闪
   vec2 q6 = floor(w / 6.), f6 = fract(w / 6.) - .5;
-  c += G * rk * step(.7, mxH(q6 + 3.1)) * (1. - smoothstep(.15, .3, length(f6))) * .55;
+  c += G * rk * mix(step(.7, mxH(q6 + 3.1)) * (1. - smoothstep(.15, .3, length(f6))), .045, smoothstep(.15, .45, FW(w.x / 6.))) * .55;
   // 树林：成片缓慢闪变的点阵字符，边缘一道亮线
   float fo = smoothstep(.3, .7, k1.g);
   if (k1.g > .05) {
