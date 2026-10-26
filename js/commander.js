@@ -816,7 +816,8 @@ function cmdFiresP(C) {
   }
   if (S.dd.state === 'sunk' && !C.ddSunk) {
     C.ddSunk = true;
-    if (cmdCtl(S.dd)) chatSay('p', `报告：驱逐舰被击沉，舰炮支援丧失。${S.cv && S.cv.hp > 0 && cmdCtl(S.cv) ? '近距火力支援改由舰载航空兵承担。' : ''}`, { kind: 'report', at: S.dd, lv: 0 });
+    const esc = S.ships.filter(s => s.kind === 'dd' && alive(s));
+    if (cmdCtl(S.dd)) chatSay('p', `报告：${S.dd.name || '驱逐舰'}被击沉，${esc.length ? `旗舰舰炮支援丧失，改由护航舰 ${esc.map(s => s.label).join('、')} 担负舰炮、垂发火力` : '舰炮支援丧失'}。${S.cv && S.cv.hp > 0 && cmdCtl(S.cv) ? '近距火力支援改由舰载航空兵承担。' : ''}`, { kind: 'report', at: S.dd, lv: 0 });
   }
 }
 
@@ -854,10 +855,11 @@ function cmdSeadP(C) {
   for (const s of tgt) {
     C.sead[s.id] = S.t + 35;
     const nm = s.k === 'veh' ? (typeof vehModel === 'function' ? vehModel(s.o) : '防空车') : s.k === 'mp' ? '毒刺防空组' : '高炮阵地';
+    let who = '';
     const sead = S.air && S.air.wing.some(w => w.type === 'strike' && w.v === 'sead' && w.state === 'deck');
     if (cmdFire(s.x, s.y, 2, 'sead')) acts.push(`舰炮压制 ${gridRef(s.x, s.y)} ${nm}`);
     if (S.assets.strike > 0 && cmdAir('strike', s.x, s.y, s.k === 'gun' ? s.id : null)) { const a = C.air[C.air.length - 1]; if (a && sead) a.pref = 'sead'; acts.push(`${sead ? '防空压制型歼-35 以反辐射导弹' : '歼-35 以精确制导炸弹'}打击该${nm}`); }
-    else if (s.w >= 1.5 && typeof vlsFire === 'function' && vlsCan('yj18', s.x, s.y) && vlsFire('yj18', s.x, s.y, 1, 'sead')) acts.push(`驱逐舰垂发鹰击-18A（超音速）打击该${nm}`);
+    else if (s.w >= 1.5 && typeof vlsFire === 'function' && vlsCan('yj18', s.x, s.y) && (who = vlsWho('yj18', s.x, s.y)) && vlsFire('yj18', s.x, s.y, 1, 'sead')) acts.push(`${who}垂发鹰击-18A（超音速）打击该${nm}`);
     else if (s.w >= 1.5 && S.assets.msl > 0 && typeof msFireP === 'function' && (cmdAll() || cmdCtl(S.dd)) && msFireP(s.x, s.y, true)) acts.push(`战术导弹打击该${nm}`);
   }
   if (typeof v8Stat === 'function' && acts.length) v8Stat('seadTask');

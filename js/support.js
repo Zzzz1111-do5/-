@@ -87,6 +87,9 @@ function updateDD(dt) {
   if (best && ddFire(best.x, best.y, false, true)) navMark(dd, best.x, best.y);
 }
 
+// 舰炮还在不在：旗舰驱逐舰没沉，或沙盒护航舰（驱逐舰 / 护卫舰）还有——通联、喊话按这个说，都沉了就不再提舰炮
+const ddUp = () => !!S.dd && S.dd.state !== 'sunk' && isFinite(S.dd.x) && S.dd.x > -999;
+const navGunUp = () => ddUp() || (S.ships || []).some(s => s.kind === 'dd' && alive(s));
 // —— 舰炮火力分配（旗舰驱逐舰 + 沙盒护航舰）：分区负责、不重复打、告急区集中支援 ——
 // 责任区：按各舰当前位置的东西顺序，把海岸正面在相邻两舰之间的中点处分段，各舰优先打本区的目标；
 // 不重复打：别的舰 6 秒内打过的点 40 以内不再打（同一目标不需要几艘舰同时打）；本区没有目标时才打相邻区；

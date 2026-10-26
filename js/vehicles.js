@@ -1233,6 +1233,7 @@ function vehDrawOver(time) {
     if (!inView(x, y, 60)) continue;
     const sel = v.side === 'p' && isSel(v.id);
     if (sel) vehDrawOrder(ctx, v, time);
+    if (R.m3d && vis && typeof rlModelOf === 'function') { const M = rlModelOf(v); if (M && RLM[M.key]) continue; }   // 3D：车是立体模型（v3units.js）
     vehDraw(ctx, v, x, y, vis ? v.heading : v.kh ?? v.heading, vis ? v.aim : v.kh ?? v.heading, vis, time, sel);
   }
   if (S.phase === 'deploy' && typeof arrow === 'function') for (const v of S.veh) if (v.plan && !v.dead) arrow(ctx, v.x, v.y, v.plan.x, v.plan.y, rgba(isSel(v.id) ? COL.sel : COL.g, .75));

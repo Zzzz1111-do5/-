@@ -123,7 +123,8 @@ function saDelayStart(G, L, brk) {
   saStat(brk ? 'saBreak' : 'saDelay');
   if (S.t - (G.saSayT ?? -99) < 40) return;   // 通联里同一个团 40 秒内只说一次
   G.saSayT = S.t;
-  const Lm = R0.link != null && bgOf(R0.link), to = Lm ? `向${Lm.name}靠拢、与主力汇合` : G.side === 'p' ? '往海边撤到舰炮掩护下' : '往纵深撤到炮兵掩护下';
+  const Lm = R0.link != null && bgOf(R0.link), arty = G.side === 'e' && S.enemies.some(e => !e.dead && (e.kind === 'arty' || e.kind === 'mortar'));
+  const to = Lm ? `向${Lm.name}靠拢、与主力汇合` : G.side === 'p' ? (typeof navGunUp === 'function' && navGunUp() ? '往海边撤到舰炮掩护下' : '往海边撤回滩头阵地') : arty ? '往纵深撤到炮兵掩护下' : '往纵深撤回二线阵地';
   if (typeof bgSay === 'function') bgSay(G, brk ? `${L.odds < 1 ? `伤亡过大、打不过（有效兵力比约 ${L.odds.toFixed(1)}）` : '本团伤亡过大、已无力再战'}，放烟幕脱离接触，${to}。` : `敌我有效兵力约 ${L.odds.toFixed(1)} 比 1，交替掩护、边打边撤，${to}，沿途叫火力消耗追兵。`, null, 'order', brk ? '放烟幕，脱离接触！' : '交替掩护，边打边撤！');
 }
 // 一步边打边撤：返回 { sl 带 t 的槽位, done 结束原因 }；slotsFn 给出当前锚点的战斗队形（regSlots / bgSlots）

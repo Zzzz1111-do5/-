@@ -222,6 +222,7 @@ HOOK.drawOver.push(function asDraw(time) {
   const ctx = R.ctx, spec = S.role === 'spectate' || R.eye === 'all' || R.eye === 'e' || R.eye === 'both';
   for (const s of S.subs || []) {
     if (s.dead || !(spec || asSubSeen(s)) || !inView(s.x, s.y, 40)) continue;
+    if (R.m3d) { if (asSubSeen(s)) { ctx.strokeStyle = rgba(COL.enemy, .5 + .3 * Math.sin(time * 5)); ctx.lineWidth = px(1); ctx.setLineDash([px(3), px(3)]); ctx.beginPath(); ctx.arc(s.x, s.y, 26, 0, 6.283); ctx.stroke(); ctx.setLineDash([]); } continue; }   // 3D：艇体在水下立体画（v3units.js）
     ctx.save(); ctx.translate(s.x, s.y); ctx.rotate(s.heading);
     ctx.globalAlpha = asSubSeen(s) ? .95 : .55;
     ctx.fillStyle = rgba(COL.enemy, .35); ctx.strokeStyle = rgba(COL.enemy, .95); ctx.lineWidth = px(1.2);

@@ -1070,8 +1070,9 @@ function hqDraw() {
       marks.push({ B, c, tag, col });
     }
     // 团：北约式方框（步兵 ×、装甲椭圆、机步两者都有）+「III」，近看时显示团号
-    const far = typeof hqFar === 'function' && hqFar();
+    const far = typeof hqFar === 'function' && hqFar(), in3 = typeof V3 === 'object' && V3.drawing;
     for (const G of hqRegs(side)) {
+      if (in3) break;   // 3D：团标立在地形上方（view3d.js 战斗群标号），地面上不再画一层扁的
       if (side === 'e' && !spec && !spotted(G.ax, G.ay)) continue;
       const w = px(20), h = px(13), t = G.type || 'inf';
       let x = G.ax, y = G.ay;

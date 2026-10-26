@@ -65,6 +65,8 @@ function vlsPick(w, x, y, ctlOnly) {
   return best;
 }
 const vlsCan = (w, x, y) => { const k = vlsWeapon(w, null); return !!k && !!vlsPick(k, x, y, true); };
+// 将由哪艘舰发射（通联、喊话点名：旗舰沉了以后是哪艘护航舰在打，不笼统说「驱逐舰」）
+const vlsWho = (w, x, y) => { const k = vlsWeapon(w, null), s = k && vlsPick(k, x, y, true); return s ? (s.o === S.dd ? (S.dd.name || '驱逐舰') : s.nm) : '驱逐舰'; };
 const vlsEta = (w, x, y) => { const k = vlsWeapon(w, null), s = k && vlsPick(k, x, y, true), W0 = MS_PGM[k]; return s ? 1.5 + dist(s.x, s.y, x, y) / (W0.sprint ? (W0.spd + W0.sprint) / 2 : W0.spd) : 99; };
 // 目标对象：点附近 40 以内的工事 / 战车 / 装甲车（打活目标），否则打这一点
 function vlsTgtAt(x, y) {
@@ -121,8 +123,8 @@ function vlsCommandP(dt) {
   if (!k) return;
   const cover = (S.veh || []).some(v => v.side === 'e' && !v.dead && (v.type === 'sam_veh' || (v.mod && v.mod.cram)) && dist(v.x, v.y, best.kx, best.ky) < 450);
   const n = (k === 'cj10' && cover ? 2 : 1) + (best.kind === 'airfield' ? 1 : 0);
-  const f = vlsFire(k, best.kx, best.ky, n, 'ai');
-  if (f && typeof chatSay === 'function') chatSay('p', `命令：驱逐舰垂发 ${f} 枚${vlsNmS(k)}，打击${typeof cmdWhere === 'function' ? cmdWhere(best.kx, best.ky) : gridRef(best.kx, best.ky)}的${(ENEMY_SPEC[best.kind] || {}).name || '目标'}${cover && k === 'cj10' ? '（敌有弹炮防空掩护，双发）' : ''}。`, { kind: 'order', at: { x: best.kx, y: best.ky }, key: 'vls' + best.id, gap: 60, lv: 2 });
+  const who = vlsWho(k, best.kx, best.ky), f = vlsFire(k, best.kx, best.ky, n, 'ai');
+  if (f && typeof chatSay === 'function') chatSay('p', `命令：${who}垂发 ${f} 枚${vlsNmS(k)}，打击${typeof cmdWhere === 'function' ? cmdWhere(best.kx, best.ky) : gridRef(best.kx, best.ky)}的${(ENEMY_SPEC[best.kind] || {}).name || '目标'}${cover && k === 'cj10' ? '（敌有弹炮防空掩护，双发）' : ''}。`, { kind: 'order', at: { x: best.kx, y: best.ky }, key: 'vls' + best.id, gap: 60, lv: 2 });
 }
 
 // —— 901 型综合补给舰：S.aor = {x, y, h, st: 'go' | 'rep' | 'back', to: 'DD' | 舰 id, p 进度, n 已补给舰次} ——

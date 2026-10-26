@@ -60,6 +60,14 @@ function cfOptions(c, near) {
   return O.sort((a, b) => a.eta - b.eta);
 }
 
+// 没有可用火力时让前沿等什么：只说还在的（舰炮没了就不提舰炮）
+function cfWait() {
+  const w = [];
+  if (typeof navGunUp === 'function' && navGunUp()) w.push('舰炮');
+  if ((S.cv && S.cv.hp > 0) || (S.planes || []).some(p => !p.dead && (p.kind === 'cas' || p.kind === 'strike')) || (typeof airLandW === 'function' && S.air && S.air.wing.some(o => o.state !== 'lost' && airLandW(o)))) w.push('航空兵');
+  return w.length ? `，等待${w.join('或')}` : '，组织爆破组逐个拔除';
+}
+let vlsShooter = '驱逐舰';
 function cfStep(dt) {
   if (!S || S.phase !== 'battle' || S.over || !cmdOn()) return;
   const F = S.cf || (S.cf = { t: 0, calls: [] });
@@ -82,7 +90,7 @@ function cfStep(dt) {
     chatSay('p', `报告：${nm}在${wh}发现敌密集火力点（${cfDesc(c)}），距我 ${Math.round(od)} 米，请求火力支援。`, { kind: 'report', at, key: 'cfr' + Math.round(c.x / 150) + '_' + Math.round(c.y / 150), gap: 40, lv: 2 });
     const who = u || obs, sh = (t, o) => typeof shout === 'function' && shout(who, t, o);   // 请求、答复由前沿连队自己喊（shout.js），通联里只留详档
     sh('发现敌火力点，请求火力支援！');
-    if (!O.length) { chatSay('p', `答复：${nm}，附近暂无可用的支援火力，就地隐蔽、以建制火力压制，等待舰炮或航空兵。`, { kind: 'remedy', at, delay: 1.5, key: 'cfnone', gap: 40, lv: 2 }); sh('没有支援火力，就地隐蔽压制！', { delay: 2.5 }); v8Stat('cfNone'); continue; }
+    if (!O.length) { chatSay('p', `答复：${nm}，附近暂无可用的支援火力，就地隐蔽、以建制火力压制${cfWait()}。`, { kind: 'remedy', at, delay: 1.5, key: 'cfnone', gap: 40, lv: 2 }); sh('没有支援火力，就地隐蔽压制！', { delay: 2.5 }); v8Stat('cfNone'); continue; }
     const o = O[0];
     v8Stat('cf_' + o.a);
     if (o.a === 'cas') {
@@ -90,13 +98,13 @@ function cfStep(dt) {
       Object.assign(p, { tx: at.x, ty: at.y, cx: at.x, cy: at.y, wp: [{ ...at }], leg: 0, loiterT: Math.max(p.loiterT || 0, 25), strafeT: .5 });
       if (p.phase === 'loiter') airSet(p, 'out');
     } else if (o.a === 'naval') { cmdFire(at.x, at.y, c.w >= 12 ? 4 : 3, 'call'); const C = S.cmd.p, i = C.fm.findIndex(m => m.why === 'call' && m.x === at.x && m.y === at.y); if (i > 0) C.fm.unshift(C.fm.splice(i, 1)[0]); }
-    else if (o.a === 'vls') vlsFire('lacm', at.x, at.y, c.bk ? 2 : 1, 'call');
+    else if (o.a === 'vls') { vlsShooter = vlsWho('lacm', at.x, at.y); vlsFire('lacm', at.x, at.y, c.bk ? 2 : 1, 'call'); }
     else if (o.a === 'deck') airPkg('cas', at.x, at.y);
     else if (o.a === 'strike') airPkg('strike', at.x, at.y);
     if (typeof navEnsure === 'function' && (o.a === 'naval' || o.a === 'ask')) { const N = navEnsure(); N.hot.push({ ...at, until: S.t + 25, why: 'pin' }); }   // 沙盒护航舰也转火
-    const eta = Math.max(2, Math.round(o.eta)), alt = O.slice(1).map(x => CF_NM[x.a]).filter((v, i, a) => a.indexOf(v) === i).slice(0, 2);
-    chatSay('p', o.a === 'ask' ? `${cmdAsk(at.x, at.y)}：${nm}被敌密集火力压制。` : `命令：${CF_NM[o.a]}${o.a === 'cas' ? '转场' : ''}支援${nm}，打击${wh}的敌火力点，约 ${eta} 秒后到达${alt.length ? `（${alt.join('、')}较慢，暂不动用）` : ''}。`, { kind: 'order', at, delay: 1.5, key: 'cfo' + at.x + '_' + at.y, gap: 30, lv: o.a === 'ask' ? 1 : 2 });
-    if (o.a !== 'ask') sh(`${CF_NM[o.a]}约 ${eta} 秒后到！`, { delay: 2.5 });
+    const eta = Math.max(2, Math.round(o.eta)), alt = O.slice(1).map(x => CF_NM[x.a]).filter((v, i, a) => a.indexOf(v) === i).slice(0, 2), fnm = o.a === 'vls' ? vlsShooter + '垂发导弹' : CF_NM[o.a];
+    chatSay('p', o.a === 'ask' ? `${cmdAsk(at.x, at.y)}：${nm}被敌密集火力压制。` : `命令：${fnm}${o.a === 'cas' ? '转场' : ''}支援${nm}，打击${wh}的敌火力点，约 ${eta} 秒后到达${alt.length ? `（${alt.join('、')}较慢，暂不动用）` : ''}。`, { kind: 'order', at, delay: 1.5, key: 'cfo' + at.x + '_' + at.y, gap: 30, lv: o.a === 'ask' ? 1 : 2 });
+    if (o.a !== 'ask') sh(`${o.a === 'vls' ? '垂发导弹' : CF_NM[o.a]}约 ${eta} 秒后到！`, { delay: 2.5 });
   }
 }
 

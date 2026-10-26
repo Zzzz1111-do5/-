@@ -730,7 +730,7 @@ function v3Units(C, box) {
     plane(p, p.heading, 0, key, sz, p.bank);
   }
   const EA_K = { ga: ['a10', 18], heli: ['ah64', 16], uh60: ['uh60', 17], c17: ['c17', 30], ftr: ['f35', 17], f22: ['f22', 18], b2: ['b2', 34], p8: ['p8', 26] };
-  if (S.eair) for (const a of S.eair.fly) if (!a.dead && isFinite(a.x) && a.ph !== 'roll' && (spec || a.pv) && inB(a.x, a.y, 220)) { const [key, sz] = EA_K[a.type] || ['f35', 17]; plane(a, a.heading, 1, key, sz, a.bank); }
+  if (S.eair) for (const a of S.eair.fly) if (!a.dead && isFinite(a.x) && a.ph !== 'roll' && (spec || a.pv || seen(a.x, a.y)) && inB(a.x, a.y, 220)) { const [key, sz] = EA_K[a.type] || ['f35', 17]; plane(a, a.heading, 1, key, sz, a.bank); }
   // —— 画 ——
   gl.useProgram(V3M.pr);
   gl.uniformMatrix4fv(V3M.u.uM, false, C.M);

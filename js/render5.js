@@ -39,6 +39,7 @@ if (typeof HOOK === 'object') HOOK.pointer.push((e, ph, p) => {
 function drawBanners(time) {
   const ctx = R.ctx, bk = lerp(.82, 1.12, smooth(1, 6, R.zr)), list = [], placed = [];
   BANNER_HITS.length = 0;
+  if (typeof V3 === 'object' && V3.drawing) return;   // 3D：连旗贴在地面上是扁的「倒影」，番号由立着的旅 / 团标表示（hq.js hqMarks3）
   const agg = typeof hqAggHide === 'function';
   for (const u of S.units) {
     if (u.x == null || !inView(u.x, u.y, 80)) continue;
