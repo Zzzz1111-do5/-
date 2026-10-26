@@ -129,7 +129,7 @@ function drawFortsReal(ctx, time) {
     ctx.strokeStyle = 'rgba(38,30,22,.9)'; ctx.lineWidth = 2; ctx.stroke();      // 壕底
   }
   ctx.lineWidth = px(.9);
-  for (const w of S.wire) if (w.known) {
+  for (const w of S.wire) if (w.known && !R.m3d) {   // 3D：铁丝网、海滩障碍是立体模型（v3units.js）
     const L = dist(w.x0, w.y0, w.x1, w.y1), n = Math.max(3, Math.round(L / 2.2)), ux = (w.x1 - w.x0) / L, uy = (w.y1 - w.y0) / L;
     ctx.strokeStyle = w.cut ? 'rgba(70,70,66,.35)' : 'rgba(58,58,54,.9)';
     ctx.beginPath();
@@ -150,7 +150,7 @@ function drawFortsReal(ctx, time) {
     }
     if (m.clr > 0) { ctx.strokeStyle = COL.amber; ctx.lineWidth = px(1.6); ctx.beginPath(); ctx.arc(m.x, m.y, m.r + px(3), -1.57, -1.57 + m.clr * 6.283); ctx.stroke(); ctx.lineWidth = px(1); }
   }
-  for (const o of S.obst) if (o.known && !o.dead) {
+  for (const o of S.obst) if (o.known && !o.dead && !R.m3d) {
     ctx.strokeStyle = 'rgba(0,0,0,.3)'; ctx.lineWidth = 1.1;
     ctx.beginPath(); ctx.moveTo(o.x - 2.4, o.y - 1.6); ctx.lineTo(o.x + 3.6, o.y + 4.4); ctx.moveTo(o.x + 3.6, o.y - 1.6); ctx.lineTo(o.x - 2.4, o.y + 4.4); ctx.stroke();   // 投影
     ctx.strokeStyle = '#3a3936'; ctx.lineWidth = 1;

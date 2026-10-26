@@ -12,7 +12,7 @@ function drawForts(time) {
     ctx.beginPath(); for (const [x, y] of t.pts) ctx.lineTo(x, y); ctx.stroke();
   }
   ctx.lineWidth = px(1.1);
-  for (const w of S.wire) if (w.known) {
+  for (const w of S.wire) if (w.known && !R.m3d) {   // 3D：铁丝网、海滩障碍是立体模型（v3units.js）
     const n = Math.max(2, Math.round(dist(w.x0, w.y0, w.x1, w.y1) / 7));
     ctx.strokeStyle = rgba(COL.enemy, w.cut ? .18 : .7);
     ctx.beginPath();
@@ -35,7 +35,7 @@ function drawForts(time) {
     if (m.clr > 0) { ctx.strokeStyle = COL.amber; ctx.lineWidth = px(1.6); ctx.beginPath(); ctx.arc(m.x, m.y, m.r + px(3), -1.57, -1.57 + m.clr * 6.283); ctx.stroke(); ctx.lineWidth = px(1); }
   }
   ctx.strokeStyle = rgba(COL.enemy, .7); ctx.lineWidth = px(1.1);
-  for (const o of S.obst) if (o.known && !o.dead) {
+  for (const o of S.obst) if (o.known && !o.dead && !R.m3d) {
     ctx.beginPath(); ctx.moveTo(o.x - 3, o.y - 3); ctx.lineTo(o.x + 3, o.y + 3); ctx.moveTo(o.x + 3, o.y - 3); ctx.lineTo(o.x - 3, o.y + 3); ctx.stroke();
   }
 }
@@ -162,6 +162,7 @@ function drawEnemies(time) {
     if (!vis && e.kx == null) continue;
     const x = vis ? e.x : e.kx, y = vis ? e.y : e.ky;
     if (!inView(x, y, 30)) continue;
+    if (e.dead && R.m3d) continue;   // 3D：被毁阵地是立体残骸（v3units.js）
     if (e.dead && typeof gunModel === 'function' && gunModel(ctx, e, x, y, vis, time)) continue;   // 近看：炮位残骸（guns.js）
     if (e.dead) {
       ctx.strokeStyle = rgba(COL.enemy, .28); ctx.lineWidth = px(1.2);

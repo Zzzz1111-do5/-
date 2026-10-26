@@ -103,6 +103,8 @@ function v3Fx(C) {
     if (m.t < 0 || m.done || !isFinite(m.x)) continue;
     live.add(m.id);
     if (!inB(m.x, m.y, 400) || (m.side === 'e' && !seen(m.x, m.y))) continue;
+    const rp = typeof airRelPos === 'function' ? airRelPos(m, true) : null;   // 刚离机（airmdl.js）：没点火前是立体弹体（v3units.js），点火后光点从挂点接上弹道
+    if (rp) { V3F.trail.delete(m.id); if (rp.lit) { const q = v3fP(rp.x, rp.y, airRelZ(rp, m)); v3fSpark(out, C, q, 2.2 + rp.e * 1.4, V3F_COL.amber); } continue; }
     const z = v3AltZ(m.x, m.y, m.z * (m.kind === 'tbm' ? 620 : 230), -2.6, 2), p = v3fP(m.x, m.y, z);   // 与飞机同一套高度：低空沿地形包络、高空按海拔
     let tr = V3F.trail.get(m.id);
     if (!tr) V3F.trail.set(m.id, tr = []);

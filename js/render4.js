@@ -82,6 +82,7 @@ function flag(ctx, x, y, owner, vp, prog, time) {
 
 function drawStructure(p, time) {
   const ctx = R.ctx, k = PKIND(p.key), x = p.x, y = p.y, real = realLook();
+  if (R.m3d && typeof V3_PT === 'object' && V3_PT.includes(k)) { drawStructureMarks(ctx, p, x, y, time); return; }   // 3D：建筑是立体模型（v3units.js），据点标记由立着的菱形标表示，贴图里只留占领进度
   // 写实：混凝土工事（灰色实体、深色边线、东南向投影），围栏为细虚线；数码：白色线稿
   ctx.strokeStyle = real ? 'rgba(28,28,26,.8)' : rgba(STRUCT, .8); ctx.fillStyle = real ? '#8f8b82' : 'rgba(2,10,6,.8)'; ctx.lineWidth = px(real ? 1 : 1.4);
   const box = (bx, by, w, h) => {
@@ -139,7 +140,11 @@ function drawStructure(p, time) {
   } else if (k === 'ford') {
     for (let i = -2; i <= 2; i++) box(x + i * 6, y + (i % 2) * 2, 3.5, 3.5);
   }
-  flag(ctx, x + (k === 'bridge' ? 0 : 22), y - (k === 'bridge' ? 6 : 8), p.owner, p.vp, p.prog, time);
+  if (!R.m3d) flag(ctx, x + (k === 'bridge' ? 0 : 22), y - (k === 'bridge' ? 6 : 8), p.owner, p.vp, p.prog, time);
+  drawStructureMarks(ctx, p, x, y, time);
+}
+// 占领进度弧、占领半径（争夺中或悬停时）
+function drawStructureMarks(ctx, p, x, y, time) {
   const hot = (p.prog > 0 && p.prog < 1) || p.contested, hov = hoverNear(x, y, 45);
   if (hot) {   // 占领进度弧（争夺中为琥珀色闪烁）
     ctx.strokeStyle = p.contested ? rgba(COL.amber, .4 + .3 * Math.sin(time * 6)) : rgba(COL.g, .8); ctx.lineWidth = px(1.6);

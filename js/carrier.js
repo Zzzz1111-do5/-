@@ -1245,7 +1245,7 @@ function drawCarrier1(time) {
       if (w) {
         const rearm = w.state === 'rearm', cl = rearm ? COL.amber : COL.intel;
         if (det < 80) { ctx.fillStyle = rgba(cl, rearm ? .55 : .9); ctx.fillRect(u - 2.6, v - 2.6, 5.2, 5.2); continue; }
-        drawAircraft(ctx, u, v, r, airSilKey(w.type, w.v), w.type === 'bomber' ? 10.5 : 8.5, cl, rearm ? .7 : 1, 0, lw(1.1), w.type === 'bomber' && !rearm);
+        drawAircraft(ctx, u, v, r, airSilKey(w.type, w.v), w.type === 'bomber' ? 10.5 : 8.5, cl, rearm ? .7 : 1, 0, lw(1.1), w.type === 'bomber' && !rearm, { fold: true, still: true, t: time });   // 停在甲板上：外翼折起
         if (rearm && det >= 160) {
           ctx.strokeStyle = rgba(COL.amber, .8); ctx.lineWidth = lw(1.4);
           ctx.beginPath(); ctx.arc(u, v, 5.6, -1.57, -1.57 + (1 - clamp(w.rearmT / AIR_REARM, 0, 1)) * 6.283); ctx.stroke();
@@ -1286,6 +1286,7 @@ function drawCarrier1(time) {
       ctx.fillStyle = g; ctx.beginPath(); ctx.arc(sx, sy, r, 0, 7); ctx.fill();
     }
   }
+  if (R.m3d) return;   // 3D：耐久与联队状态看底部单位卡，不在海面上铺一条平的状态条
   // 舰体下方：甲板耐久条 + 联队状态点（侦察 ○、攻击 △、对地支援 ◇）
   const ey = (78 * Math.abs(Math.sin(c.heading)) + 19 * Math.abs(Math.cos(c.heading))) * k;
   const bw = clamp(100 * k, px(46), px(130)), by = c.y + ey + px(7), f = clamp(c.hp / c.maxhp, 0, 1);
@@ -1381,7 +1382,8 @@ function drawPlanes(time) {
       ctx.save(); ctx.translate(x + o * .7, y + o); ctx.rotate(p.heading); ctx.scale(sc, sc * (1 - .32 * Math.min(1, Math.abs(p.bank || 0))));
       airShape(ctx, airSilKey(p.kind, p.v)); ctx.fillStyle = `rgba(0,0,0,${.38 * air})`; ctx.fill(); ctx.restore();
     }
-    drawAircraft(ctx, x, y, p.heading, airSilKey(p.kind, p.v), size, COL.intel, 1, p.bank, px(1.4), p.kind === 'bomber' && !p.dropped);   // 歼-35 内埋弹舱：不画外挂炸弹
+    const rs = typeof airRelState === 'function' ? airRelState('p', p.id) : null;   // 弹舱开度、外挂消耗（airmdl.js）
+    drawAircraft(ctx, x, y, p.heading, airSilKey(p.kind, p.v), size, COL.intel, 1, p.bank, px(1.4), p.kind === 'bomber' && !p.dropped, { t: time, ab: p.phase === 'roll' || (p.phase === 'cat' && (p.wait ?? 9) < .8), ...rs });   // 歼-35 内埋弹舱：不画外挂炸弹
     if (p.gunT > 0) {   // 机炮口焰
       const nx = x + Math.cos(p.heading) * size * .55, ny = y + Math.sin(p.heading) * size * .55;
       ctx.fillStyle = rgba('#fff3d6', .5 + .5 * Math.sin(time * 60)); ctx.beginPath(); ctx.arc(nx, ny, size * .14, 0, 7); ctx.fill();
