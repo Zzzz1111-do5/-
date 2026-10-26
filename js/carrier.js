@@ -380,13 +380,31 @@ function airHoldP(p, dt, speed) {
 //   导弹告警：放干扰弹、转向背离来袭方向、放弃这次攻击航路；目标附近防空太强、又没有导弹可用：直接返航，不去送 ——
 function airCasHold(p) {
   const M = airMdl(p.kind, p.v), uav = !p.v || p.v === 'gj2', heli = p.v === 'heli';
-  let T = typeof airThreats === 'function' ? airThreats('p').filter(t => dist(t.x, t.y, p.cx, p.cy) < 1000) : [];
+  let T = (heli && typeof heliT === 'function' ? heliT('p', p) : typeof airThreats === 'function' ? airThreats('p') : []).filter(t => dist(t.x, t.y, p.cx, p.cy) < 1000);   // 直升机：连机组自己挨打记下的火力点一起算（airwar.js）
   if (uav) T = T.filter(t => t.k === 'ship' || t.r >= 400);   // 中空：只怕防空导弹
   const R = M.agmR ? M.agmR * .85 : 220, home = { x: p.cx, y: Math.min(H - 40, p.cy + 400) };
   p.hop = (p.hop || 0);
-  const sp = airSafePos(p.cx, p.cy, R, T, home.x + (heli ? Math.sin(p.hop * 1.7) * 300 : 0), home.y, heli ? 30 : 50, heli ? (x, y) => coverAt(x, y) * 2 : null) || { x: home.x, y: home.y, risk: 0 };
-  p.hp = { x: sp.x, y: sp.y, risk: sp.risk, t: S.t };
+  if (heli && typeof heliSpot === 'function') {   // 直-10：悬停点必须完全在已知防空圈外（红箭-10 射程内放远一点也行），找不到就不进去
+    const sp = heliSpot(p.cx, p.cy, R, (M.agmR || 280) * .97, T, home.x + Math.sin(p.hop * 1.7) * 300, home.y, (x, y) => coverAt(x, y) * 2);
+    p.noSafe = !sp;
+    p.hp = sp ? { x: sp.x, y: sp.y, risk: 0, t: S.t } : { x: home.x, y: home.y, risk: 9, t: S.t };
+  } else {
+    const sp = airSafePos(p.cx, p.cy, R, T, home.x, home.y, 50, null) || { x: home.x, y: home.y, risk: 0 };
+    p.hp = { x: sp.x, y: sp.y, risk: sp.risk, t: S.t };
+  }
   p.tRisk = typeof airThreatAt === 'function' ? airThreatAt(T, p.cx, p.cy, 30) : 0;
+}
+// 直升机：目标周围没有防空圈外的悬停点（或挨打两次）就返航，不硬闯
+function airHeliAbort(p, why) {
+  log(`直-10：${why}，返航`, 'warn', 'heliab' + p.id, 20, p);
+  if (typeof v8Stat === 'function') v8Stat('heliAbort');
+  airSet(p, 'rtb');
+}
+// 直升机飞向 (x, y)：直线穿过已知防空圈就先飞绕行点（airwar.js heliVia）
+function airHeliGo(p, x, y, dt, hard) {
+  const v = typeof heliVia === 'function' ? heliVia(p.x, p.y, x, y, heliT('p', p).filter(t => dist(t.x, t.y, p.x, p.y) < 1400)) : null;
+  if (v) { airSteer(p, v.x, v.y, dt, true); return Infinity; }
+  return airSteer(p, x, y, dt, hard);
 }
 function airCasFly(p, dt, speed) {
   const M = airMdl(p.kind, p.v), sp = airSpec(p.kind, p.v), uav = !p.v || p.v === 'gj2', heli = p.v === 'heli';
@@ -395,13 +413,19 @@ function airCasFly(p, dt, speed) {
   p.alt = Math.min(uav ? 1 : heli ? .3 : .85, p.alt + dt / 2);
   // 导弹告警：放干扰弹、背离来袭方向全速脱离 3 秒，放弃本次航路
   if (typeof airMslWarn === 'function' && airMslWarn('p', 'plane', p.id)) {
+    if (heli && typeof heliShotAt === 'function') { const m = S.missiles.find(o => o.kind === 'sam' && o.side === 'e' && !o.done && o.tgt && o.tgt.k === 'plane' && o.tgt.id === p.id); if (m) heliShotAt(p, m.x0, m.y0, 280, 1); }   // 记下导弹从哪儿打来的
     if (!(p.brk > S.t)) { p.brk = S.t + 3; p.run = null; if (typeof v8Stat === 'function') v8Stat('casBreak'); if (typeof MSV === 'object') MSV.fl.push({ x: p.x, y: p.y, t: S.t }); log(`${airName(p.kind, p.v).split(' ')[0]}导弹告警：放干扰弹、机动规避`, 'warn', 'casbrk' + p.id, 8, p); }
   }
   if (p.brk > S.t) {
     const m = S.missiles.find(o => o.kind === 'sam' && o.side === 'e' && !o.done && o.tgt && o.tgt.k === 'plane' && o.tgt.id === p.id), a = m ? Math.atan2(p.y - m.y, p.x - m.x) : p.heading;
     speed(sp.spd * 1.1); airSteer(p, clamp(p.x + Math.cos(a) * 300, 30, W - 30), clamp(p.y + Math.sin(a) * 300, 30, H - 30), dt, true);
-    if (S.t > p.brk - .1) airCasHold(p);
+    if (S.t > p.brk - .1) { airCasHold(p); if (heli && ((p.shotN || 0) >= HELI.hits || p.noSafe)) { airHeliAbort(p, (p.shotN || 0) >= HELI.hits ? '两次遭敌防空火力射击' : '周边都在敌防空火力覆盖下'); return; } }
     return;
+  }
+  // 直升机遭地面火力射击（高炮、机枪）：换一个避开火力点的悬停点；挨打两次返航
+  if (heli && p.shotT != null && S.t - p.shotT < .6 && p.shotSeen !== p.shotT) {
+    p.shotSeen = p.shotT; airCasHold(p);
+    if ((p.shotN || 0) >= HELI.hits || p.noSafe) { airHeliAbort(p, (p.shotN || 0) >= HELI.hits ? '两次遭敌防空火力射击' : '周边都在敌防空火力覆盖下'); return; }
   }
   const hasAgm = M.agm && p.agmN > 0, gun = !uav && !heli;
   // 目标附近防空太强、手上又没有防区外武器：返航
@@ -431,7 +455,7 @@ function airCasFly(p, dt, speed) {
   }
   if (heli) {   // 悬停：到了就停住、机头对准目标；每打两发换个悬停点
     const d = dist(p.x, p.y, p.hp.x, p.hp.y);
-    if (d > 18) { speed(sp.spd * .8); airSteer(p, p.hp.x, p.hp.y, dt, true); }
+    if (d > 18) { speed(sp.spd * .8); airHeliGo(p, p.hp.x, p.hp.y, dt, true); }
     else { speed(0); const want = Math.atan2(p.cy - p.y, p.cx - p.x); p.heading += clamp(Math.atan2(Math.sin(want - p.heading), Math.cos(want - p.heading)), -1.5 * dt, 1.5 * dt); p.bank = 0; }
     if (p.agmN != null) { if (p.n0 == null) p.n0 = p.agmN; if (p.n0 - p.agmN >= 2) { p.n0 = p.agmN; p.hop++; airCasHold(p); if (typeof v8Stat === 'function') v8Stat('heliHop'); } }
     return;
@@ -615,13 +639,20 @@ function flyPlane(p, dt) {
     } else {
       // 对地支援：先飞到任务区外的待机点（避开已知防空圈），到了转入待机（airCasFly）
       if (!p.hp) { Object.assign(p, { cx: p.tx, cy: p.ty, loiterT: M.loiter || 40, strafeT: .8 }); airCasHold(p); }
-      const d = airSteer(p, p.hp.x, p.hp.y, dt);
+      const heli = p.v === 'heli';
+      if (heli && S.t - p.hp.t > 3) airCasHold(p);   // 直升机途中每 3 秒按新发现的防空重算悬停点
+      if (heli && p.noSafe) { airHeliAbort(p, '目标周边都在敌防空火力覆盖下，找不到安全的悬停发射位置'); return; }
+      const d = heli ? airHeliGo(p, p.hp.x, p.hp.y, dt) : airSteer(p, p.hp.x, p.hp.y, dt);
       if (dist(p.x, p.y, p.tx, p.ty) < (M.agmR || 0) + 60 && airAgm(p) && p.wave == null) p.wave = S.t;   // 进入导弹射程就先发射，不必等飞临目标上空
       if (d < 70) { const cross = Math.cos(p.heading) * (p.hp.y - p.y) - Math.sin(p.heading) * (p.hp.x - p.x); p.odir = cross >= 0 ? 1 : -1; airSet(p, 'loiter'); }
     }
     return;
   }
   if (p.phase === 'loiter') { airCasFly(p, dt, speed); return; }
+  if (p.phase === 'rtb' && p.v === 'heli' && typeof heliVia === 'function' && c && isFinite(c.x)) {   // 直升机返航也绕开已知防空圈（先出圈）
+    const v = heliVia(p.x, p.y, c.x, c.y, heliT('p', p).filter(t => dist(t.x, t.y, p.x, p.y) < 1400));
+    if (v) { speed(sp.spd); airSteer(p, v.x, v.y, dt, true); return; }
+  }
   if (p.phase === 'rtb' && typeof atoEgressP === 'function' && atoEgressP(p, dt, speed)) return;   // 返航先走出口（ato.js），不原路折返
   if (p.land) {   // 陆基飞机：向南飞出地图，回战区机场加油挂弹（100 秒后再出击）；夺取了敌机场、有油料就改降那里（abn.js）
     if (typeof abRtbLand === 'function' && abRtbLand(p) && abPlaneFly(p, dt, speed)) return;
@@ -832,6 +863,7 @@ function airAA(p, dt) {
   for (const a of S.enemies) {
     if (a.dead || a.kind !== 'aa' || dist(a.x, a.y, p.x, p.y) > 190) continue;
     tracer(a.x, a.y, p.x + gauss() * 14, p.y + gauss() * 14, 'e', inVision(a.x, a.y)); a.fireT = S.t;   // 开火即暴露（conceal.js）
+    if (p.v === 'heli' && typeof heliShotAt === 'function') heliShotAt(p, a.x, a.y, 210, 1.2);   // 直升机机组看得见曳光从哪来
     if (a.kx == null && Math.random() < .15) { a.kx = a.x; a.ky = a.y; log('防空炮火暴露位置', 'warn', null, 0, a); }
     const k = p.kind === 'bomber' ? (p.v === 'dive' ? (p.diving ? 1.3 : 1) : .75) : 1;
     if (Math.random() < sp.aa * k * st * (1 - (a.sup || 0) / 130)) { airLost(p, `${airName(p.kind, p.v)}被击落`); break; }

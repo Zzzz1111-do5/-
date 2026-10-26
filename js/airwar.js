@@ -96,6 +96,54 @@ function airSafePos(tx, ty, rng, T, fx, fy, m = 40, bonus) {
   }
   return best;
 }
+// —— 直升机防空规避（双方通用）：低空慢速的直升机最怕高炮、单兵防空导弹和野战防空导弹，真实战法是「不进防空圈」——
+//   ① 悬停发射点：目标周围找不到已知防空圈（外加 50 余量）以外的点，就不进去——换目标或返航，不挑一个「最不坏」的点硬闯
+//   ② 进出航线：从当前位置到悬停点的直线穿过已知防空圈，就从圈外绕（圈外 1.25 倍半径的航路点）；本身在圈里先径直出圈
+//   ③ 遭到射击（高炮曳光、导弹告警、机枪）：机组看得见火力从哪来，把那一点记成威胁 60 秒，马上离开、换一个避开它的点；
+//      同一架挨打第二次就返航
+const HELI = { m: 50, mem: 60, hits: 2 };
+// 这架直升机眼中的威胁：本方掌握的已知防空 + 机组自己挨打记下的火力点
+function heliT(side, h) {
+  const T = typeof airThreats === 'function' ? airThreats(side) : [];
+  if (h && h.dz) { h.dz = h.dz.filter(z => S.t - z.t < HELI.mem); for (const z of h.dz) T.push({ x: z.x, y: z.y, r: z.r, w: z.w || 1, k: 'dz' }); }
+  return T;
+}
+// 挨打：记下火力点（同一处 60 以内合并），4 秒内的连续射击只算一次
+function heliShotAt(h, x, y, r, w) {
+  if (!h || !isFinite(x) || !isFinite(y)) return;
+  const dz = h.dz || (h.dz = []), o = dz.find(z => dist(z.x, z.y, x, y) < 60);
+  if (o) { o.t = S.t; o.r = Math.max(o.r, r); } else dz.push({ x: Math.round(x), y: Math.round(y), r, w: w || 1, t: S.t });
+  if (S.t - (h.shotT ?? -99) > 4) h.shotN = (h.shotN || 0) + 1;
+  h.shotT = S.t;
+}
+// 悬停发射点：目标周围 rng（打不到就放大到 rMax）的圆上、偏向 (fx, fy) 一侧，找一个完全在已知防空圈外的点；找不到返回 null
+function heliSpot(tx, ty, rng, rMax, T, fx, fy, bonus) {
+  for (const r of [rng, (rng + rMax) / 2, rMax]) {
+    const p = airSafePos(tx, ty, r, T, fx, fy, HELI.m, bonus);
+    if (p && p.risk <= 0) return p;
+  }
+  return null;
+}
+// 绕行航路点：(x0, y0) → (x1, y1) 的直线穿过某个防空圈（r + m）时，返回圈外的绕行点；直线干净返回 null
+function heliVia(x0, y0, x1, y1, T, m = HELI.m) {
+  let best = null, bt = Infinity;
+  const L = dist(x0, y0, x1, y1) || 1, ux = (x1 - x0) / L, uy = (y1 - y0) / L;
+  for (const t of T) {
+    const R0 = t.r + m, d0 = dist(x0, y0, t.x, t.y);
+    if (dist(x1, y1, t.x, t.y) < R0) continue;   // 终点本身在圈里（悬停点已避开，只会是返航点之类）：不绕，也不往外躲（否则在圈边来回）
+    if (d0 < R0) { const k = R0 * 1.12 / Math.max(1, d0); return { x: clamp(t.x + (x0 - t.x) * k, 20, W - 20), y: clamp(t.y + (y0 - t.y) * k, 20, H - 20), out: true }; }   // 已在圈里：先径直出圈
+    const s = clamp((t.x - x0) * ux + (t.y - y0) * uy, 0, L), cx = x0 + ux * s, cy = y0 + uy * s;
+    if (dist(cx, cy, t.x, t.y) >= R0 || s >= bt) continue;
+    let nx = cx - t.x, ny = cy - t.y, nl = Math.hypot(nx, ny);
+    if (nl < 1) { nx = -uy; ny = ux; nl = 1; }   // 穿心而过：先试左边
+    const at = sg => ({ x: clamp(t.x + nx / nl * R0 * 1.25 * sg, 20, W - 20), y: clamp(t.y + ny / nl * R0 * 1.25 * sg, 20, H - 20) });
+    let wp = at(1);
+    const r1 = airThreatAt(T, wp.x, wp.y, m * .5);
+    if (r1 > 0) { const w2 = at(-1); if (airThreatAt(T, w2.x, w2.y, m * .5) < r1) wp = w2; }   // 这一侧也有防空：走另一侧
+    bt = s; best = wp;
+  }
+  return best;
+}
 // 导弹告警：有对方防空导弹正飞向这架飞机
 const airMslWarn = (side, k, id) => S.missiles.some(m => m.kind === 'sam' && m.side !== side && !m.done && m.t >= 0 && m.tgt && m.tgt.k === k && m.tgt.id === id);
 
