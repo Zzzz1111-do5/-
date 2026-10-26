@@ -207,7 +207,7 @@ function regOrder(G, sl, t0) {
   for (const s of sl) {
     const t = s.t || t0;
     if (s.k === 'u') {
-      const u = s.m, ts = teamsOf(u).filter(q => q.men.length && !q.ride);
+      const u = s.m, ts = teamsOf(u).filter(q => q.men.length && !q.ride && !q.rc);   // 借出去当侦察分队的组不管（recon.js）
       if (!ts.length) continue;
       const idle = t !== 'hold' && S.t - (u.bgOT ?? -99) > 8 && ts.some(q => (q.order.t === 'hold' || q.order.x == null) && q.sup < 60 && dist(q.x, q.y, s.x, s.y) > 40);
       if (u.bgX != null && dist(u.bgX, u.bgY, s.x, s.y) < BG.reorder && u.bgT2 === t && !idle) continue;
@@ -216,7 +216,7 @@ function regOrder(G, sl, t0) {
       ts.forEach((q, i) => { if (t === 'hold' && dist(q.x, q.y, fs[i][0], fs[i][1]) < 6) return; aiGo(q, fs[i][0], fs[i][1], t === 'hold' ? 'move' : t, fx, fy); q.px = null; });
     } else {
       const v = s.m;
-      if (v.ai === 'repair' || v.ai === 'resup' || vehAmmoF(v) < .25 || (v.fuel ?? 1) < .2 || v.hp < v.maxhp * .35) continue;   // 该补给 / 抢修的车交给车辆 AI
+      if (v.rc || v.ai === 'repair' || v.ai === 'resup' || vehAmmoF(v) < .25 || (v.fuel ?? 1) < .2 || v.hp < v.maxhp * .35) continue;   // 侦察分队（recon.js）、该补给 / 抢修的车交给各自的控制
       // 队形整体移动：锚点在走时，目标放在槽位前方一小段、车速压到锚点的速度（落后就稍快追上，超前就放慢），整排匀速前进
       let x = s.x, y = s.y, cap = null;
       if (G.vel > 1.5 && t !== 'hold' && G.st !== 'withdraw') {   // 后撤时锚点往背后跳，不往正面（敌人方向）超前
@@ -242,7 +242,7 @@ function regGoal(G) {
   return { T, p, x: T.x ?? G.ax, y: T.y ?? G.ay, face: T.face ?? G.face };
 }
 function regSet(G, st, why) { if (G.st === st) return; G.st = st; G.stT = S.t; G.stWhy = why || null; G.bnd = null; G.wd = null; }
-const regUnitAt = u => { const ts = teamsOf(u).filter(q => q.men.length && !q.ride); return ts.length ? [ts.reduce((a, q) => a + q.x, 0) / ts.length, ts.reduce((a, q) => a + q.y, 0) / ts.length] : [u.x, u.y]; };
+const regUnitAt = u => { const ts = teamsOf(u).filter(q => q.men.length && !q.ride && !q.rc); return ts.length ? [ts.reduce((a, q) => a + q.x, 0) / ts.length, ts.reduce((a, q) => a + q.y, 0) / ts.length] : [u.x, u.y]; };
 function regThink(G) {
   const us = bgUnits(G), vs = bgVehs(G);
   if (!us.length && !vs.length) { G.dead = true; G.done = true; return; }
@@ -754,6 +754,11 @@ function hqCmdE(H) {
       continue;
     }
     if (B.ord && B.ord.v === 'counter' && !B.ord.done && !H.reMain) continue;   // 反冲击既定，不改
+    if (B.ord && B.ord.v === 'counter' && B.ord.done && B.ord.rc) {   // 侦察后反冲击的据点夺回了：就地转入防御
+      const P = hqObj(B);
+      if (P) hqOrder('e', B, { v: 'defend', objs: [P.key], face: hqThreat('e', P) }, `${P.name}已夺回，就地转入防御。`);
+      continue;
+    }
     if (B.ord && B.ord.v === 'counter' && B.ord.done) {
       const th = hqThreat('e', exitPt);
       const back = H.lostPt && H.lostPt[exitPt.key] ? '已夺回' : '已稳住';   // 丢过才叫夺回
@@ -973,6 +978,7 @@ function hqStep(dt) {
         // 开战后新出现的机动兵力（增援波次、乘员弃车）：编进最近的旅
         if (S.t - (H.lateT ?? 0) > 20) { H.lateT = S.t; hqLate(H); }
       } else hqCmdP(H);
+      if (typeof rcThink === 'function') rcThink(H, side);   // 战场沉寂：派侦察、按侦察到的敌情打破僵持（recon.js）
       for (const B of H.bdes) hqBdeThink(B);
     } catch (e) { if (!HQ.err) { HQ.err = 1; console.error('hq', e); } }
   }
@@ -1278,7 +1284,7 @@ function hqAggSet() {
     for (const G of S.bgs || []) {
       if (!G.reg || G.dead || !S.hq[G.side] || !S.hq[G.side].live || !ok(G.side)) continue;
       for (const id of G.us) u.add(id);
-      for (const id of G.vs) v.add(id);
+      for (const id of G.vs) { const o = vehById(id); if (!o || !o.rc) v.add(id); }   // 侦察分队的车单独画
     }
     for (const o of S.units) if (o.org && o.org.k !== 'reg' && ok(o.side) && !u.has(o.id) && teamsOf(o).some(q => q.men.length && !q.ride)) { u.add(o.id); rest.push(o); }   // 守备团、旅直属、独立单位的连也画成连符号
     if (hqFar()) for (const o of S.veh || []) if (!o.dead && !o.lst && o.org && ok(o.side) && !v.has(o.id) && (o.side === 'p' || spec)) { v.add(o.id); restV.push(o); }   // 全图附近：团以外的车也并进所属的团
