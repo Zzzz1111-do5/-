@@ -480,7 +480,7 @@ function v3Draw(now) {
   V3.drawing = true;
   R.fx3d = typeof v3Fx === 'function' && !(SETTINGS && SETTINGS.models3d === false);   // 弹道在 3D 里立体画（v3fx.js），贴图里不再画
   // 有立体模型的东西（飞机、车辆、舰船、阵地，近看时的步兵）贴图里不再画平面图标——否则地面上多一层「倒影」
-  R.m3d = R.fx3d && typeof V3M === 'object' && !!V3M.ok; R.m3dNear = K.z / CAM.fit > 2.2;
+  R.m3d = R.fx3d && typeof V3M === 'object' && !!V3M.ok; R.m3dNear = K.z / CAM.fit > 1.15 || sTop >= 1;   // 贴图里会画出单兵小人的距离（R.fig）起就改用立体士兵，地面上不留平的小人
   try {
     R.cv = top; R.ctx = top.getContext('2d'); R.dpr = 1;
     CAM.vw = tw; CAM.vh = th; CAM.z = R.s = sTop; CAM.x = box[0] + box[2] / 2; CAM.y = box[1] + box[3] / 2;
