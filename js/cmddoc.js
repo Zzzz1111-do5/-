@@ -12,6 +12,7 @@
 const CMD_BASE = { tac: null, nb: 0, mass: 0, resv: 0, det: 'mid', ctr: 'echelon' };
 const CMD_DET = { fast: [12, 1.3, 150], mid: [30, 1.6, 240], slow: [45, 2.2, 330] };
 const CMD_DOC = {
+  'e|armor': {tac: 'deep', nb: 1, mass: 0, resv: 0, det: 'mid', ctr: 'echelon'},
   'e|inf': {tac: 'fort', nb: 0, mass: 0, resv: 0, det: 'slow', ctr: 'echelon'},
   'e|mech': {tac: 'armor', nb: 3, mass: 0, resv: 0, det: 'slow', ctr: 'all'}
 };
