@@ -461,28 +461,60 @@ function v3mEShip(cls, L, B) {
   mbLoop(M, H, fb + .03, .9);
   return M;
 }
-// 航母（舰体坐标 u 向舰首、v 向右舷）：003 型福建舰——外飘的飞行甲板（carrier.js CVG.deck）、右舷舰岛与一体化桅杆、两部升降机，
-//   两条弹射器、斜角着舰区与拦阻索画成发光标线；075 型两栖攻击舰为直通甲板，舰岛偏后，甲板上标直升机起降点
+// 航母（舰体坐标 u 向舰首、v 向右舷）：003 型福建舰——舰体（舰首露出甲板前缘）上压着外飘的飞行甲板（carrier.js CVG），
+//   右舷中部紧凑舰岛（舰桥、一体化桅杆四面相控阵、后部烟囱）、舰岛前后两部舷侧升降机、舷外平台上的红旗-10 与 1130 近防炮；
+//   舰首两部 + 斜角甲板一部电磁弹射器（带偏流板）、斜角着舰区、四道拦阻索、光学助降装置画成发光标线；
+//   075 型两栖攻击舰为直通甲板，舰岛偏后，甲板上标直升机起降点
 function v3mCarrier(lhd) {
-  const M = mbNew(), D = typeof CVG === 'object' ? CVG.deck : [[77, 0], [-77, 13], [-77, -13]], zh = 6.2, zd = 7.4;
-  mbPrism(M, D.map(([u, v]) => [u * .97, v * .74]), 0, zh, .75, { taper: .4 });
+  const M = mbNew(), D = typeof CVG === 'object' ? CVG.deck : [[77, 0], [-77, 13], [-77, -13]], zh = 6.2, zd = 7.4, z = zd + .03;
+  if (lhd || typeof CVG !== 'object') {
+    mbPrism(M, D.map(([u, v]) => [u * .97, v * .74]), 0, zh, .75, { taper: .4 });
+    mbPrism(M, D, zh, zd, .85, { top: .6 });
+    const isl = [-38, -8, 11, 15.5];
+    v3mDeck(M, isl[0], isl[1], isl[2], isl[3], zd, zd + 5, .9, true);
+    v3mDeck(M, isl[0] + 4, isl[1] - 2, isl[2] + .6, isl[3] - .6, zd + 5, zd + 9.5, .95, true);
+    mbPrism(M, mbRect(isl[0] + 7, isl[1] - 5, isl[2] + 1.2, isl[3] - 1.2), zd + 9.5, zd + 15, .9, { taper: 1.2 });
+    mbLine(M, [isl[0] + 9, (isl[2] + isl[3]) / 2, zd + 15], [isl[0] + 9, (isl[2] + isl[3]) / 2, zd + 19.5], 1);
+    mbLoop(M, D, z, .9);
+    mbLine(M, [76, 0, z], [-60, 0, z], .5);
+    for (let k = 0; k < 6; k++) mbLoop(M, mbCirc(50 - k * 22, -4, 3, 10), z, .8);
+    for (const u of [-30, 20]) mbLoop(M, mbRect(u - 5, u + 5, 9, 15), z, .7);
+    return M;
+  }
+  mbPrism(M, CVG.hull, 0, zh, .75, { taper: .4 });
   mbPrism(M, D, zh, zd, .85, { top: .6 });
-  const isl = lhd ? [-38, -8, 11, 15.5] : [-14, 10, 11.5, 16.5];
-  v3mDeck(M, isl[0], isl[1], isl[2], isl[3], zd, zd + 5, .9, true);
-  v3mDeck(M, isl[0] + 4, isl[1] - 2, isl[2] + .6, isl[3] - .6, zd + 5, zd + 9.5, .95, true);
-  mbPrism(M, mbRect(isl[0] + 7, isl[1] - 5, isl[2] + 1.2, isl[3] - 1.2), zd + 9.5, zd + 15, .9, { taper: 1.2 });
-  mbLine(M, [isl[0] + 9, (isl[2] + isl[3]) / 2, zd + 15], [isl[0] + 9, (isl[2] + isl[3]) / 2, zd + 19.5], 1);
-  const z = zd + .03;
+  for (const [a0, a1, b0, b1] of CVG.elev) { mbBox(M, a1, a0, b0, b1, zh + .3, zd, .85, { top: .6 }); mbLoop(M, mbRect(a1 + .7, a0 - .7, b0 + .7, b1 - .7), z, .7); }
+  for (const [u, v, kd] of CVG.weap) {   // 舷外平台：红旗-10 发射箱 / 1130 近防炮
+    const sg = Math.sign(v) || 1;
+    mbPrism(M, mbCirc(u, v, 1.9, 10).map(([x, y]) => [x, v + (y - v) * .85]), zh - .8, zh + .2, .8);
+    if (kd === 'hq10') mbBox(M, u - 1, u + 1, v - .75, v + .75, zh + .2, zh + 1.6, .95, { taper: .1 });
+    else { mbTube(M, [u, v, zh + .2], [u, v, zh + 1.3], .8, .7, 10, .9); mbTube(M, [u, v + sg * .4, zh + .9], [u, v + sg * 2.2, zh + 1.1], .14, .12, 6, .6); }
+  }
+  // 舰岛：底座 → 舰桥（窗带发光）→ 一体化桅杆（四面相控阵）→ 桅顶；后部烟囱
+  mbPrism(M, CVG.isl, zd, zd + 5, .9, { taper: .15 });
+  const up = [[4, 14.6], [4, 17.4], [2.6, 18.8], [-4.4, 18.8], [-4.4, 14.6]];
+  mbPrism(M, up, zd + 5, zd + 10, .95, { taper: .12 });
+  mbBox(M, 3.9, 4.06, 15, 17.1, zd + 8, zd + 9.2, -1);
+  const mast = [[3, 15.2], [3, 17.2], [2, 18.2], [-3.6, 18.2], [-3.6, 15.2]];
+  mbPrism(M, mast, zd + 10, zd + 16.5, .9, { taper: .7 });
+  for (const [p0, p1] of [[[3.1, 15.6], [3.1, 16.9]], [[-3.7, 15.6], [-3.7, 17.8]], [[-2.8, 15.1], [1.6, 15.1]], [[-2.8, 18.3], [1.2, 18.3]]]) mbLoop(M, [[p0[0], p0[1]], [p1[0], p1[1]]], zd + 13, 1);
+  mbLine(M, [-.6, 16.7, zd + 16.5], [-.6, 16.7, zd + 20], 1);
+  mbBox(M, -.75, -.45, 15.3, 18.1, zd + 18.6, zd + 19, .95);
+  mbPrism(M, [[-5.4, 14.8], [-5.4, 18.6], [-9.2, 18.6], [-9.8, 18], [-9.8, 15.4], [-9.2, 14.8]], zd + 5, zd + 12.5, .85, { taper: .3 });
+  for (const v of [15.9, 17.5]) mbLoop(M, mbCirc(-7.5, v, .7, 8).map(([x, y]) => [-7.5 + (x + 7.5) * 1.9, y]), zd + 12.53, .5);
+  // 甲板标线：外缘、舰首直通中线、斜角着舰区（边线、中线、四道拦阻索、前端安全线）、三部弹射器与偏流板、光学助降装置
   mbLoop(M, D, z, .9);
-  mbLine(M, [76, 0, z], [-60, 0, z], .5);
-  if (!lhd && typeof CVG === 'object') {
-    for (const [u0, v0, u1] of CVG.cats) { mbLine(M, [u0, v0, z], [u1, v0, z], 1); mbLine(M, [u0, v0 - .8, z], [u0, v0 + .8, z], 1); }
-    const Ld = CVG.land, a = Math.atan2(Ld.v1 - Ld.v0, Ld.u1 - Ld.u0), nx = -Math.sin(a) * 5, ny = Math.cos(a) * 5;
-    mbLine(M, [Ld.u0, Ld.v0, z], [Ld.u1, Ld.v1, z], 1);
-    for (const s of [-1, 1]) mbLine(M, [Ld.u0 + nx * s, Ld.v0 + ny * s, z], [Ld.u1 + nx * s, Ld.v1 + ny * s, z], .6);
-    for (let k = 0; k < 4; k++) { const u = Ld.u0 + 8 + k * 2.2, v = Ld.v0 + (u - Ld.u0) * Math.tan(a); mbLine(M, [u - Math.sin(a) * 4, v + Math.cos(a) * 4 * 0 - 4, z], [u + Math.sin(a) * 4, v + 4, z], .8); }
-  } else for (let k = 0; k < 6; k++) mbLoop(M, mbCirc(50 - k * 22, -4, 3, 10), z, .8);
-  for (const u of [-30, 20]) mbLoop(M, mbRect(u - 5, u + 5, 9, 15), z, .7);
+  mbLine(M, [74, .5, z], [24, .5, z], .5);
+  const Ld = CVG.land, ll = Math.hypot(Ld.u1 - Ld.u0, Ld.v1 - Ld.v0), nx = -(Ld.v1 - Ld.v0) / ll, ny = (Ld.u1 - Ld.u0) / ll;
+  mbLine(M, [Ld.u0, Ld.v0, z], [Ld.u1, Ld.v1, z], 1);
+  for (const sd of [-8, 8]) mbLine(M, [Ld.u0 + nx * sd, Ld.v0 + ny * sd, z], [Ld.u1 + nx * sd, Ld.v1 + ny * sd, z], .6);
+  mbLine(M, [Ld.u1 + nx * 8, Ld.v1 + ny * 8, z], [Ld.u1 - nx * 8, Ld.v1 - ny * 8, z], .8);
+  for (const t of [.1, .14, .18, .22]) { const u = lerp(Ld.u0, Ld.u1, t), v = lerp(Ld.v0, Ld.v1, t); mbLine(M, [u + nx * 6, v + ny * 6, z], [u - nx * 6, v - ny * 6, z], .8); }
+  for (const [u0, v0, u1] of CVG.cats) { mbLine(M, [u0, v0, z], [u1 - 2, v0, z], 1); mbBox(M, u0 - 3.4, u0 - 2.3, v0 - 2.4, v0 + 2.4, zd, zd + .35, .8); }
+  const [[a0, b0], [a1, b1]] = CVG.cat3, cl = Math.hypot(a1 - a0, b1 - b0), dx = (a1 - a0) / cl, dy = (b1 - b0) / cl;
+  mbLine(M, [a0, b0, z], [a1, b1, z], 1);
+  mbPrism(M, [[-2.3, -2.4], [-2.3, 2.4], [-3.4, 2.4], [-3.4, -2.4]].map(([p, q]) => [a0 + dx * p - dy * q, b0 + dy * p + dx * q]), zd, zd + .35, .8);
+  mbBox(M, CVG.lso[0] - 1, CVG.lso[0] + 1, CVG.lso[1] - .5, CVG.lso[1] + .5, zd, zd + .9, -1);
   return M;
 }
 // 攻击核潜艇：雪茄形艇体、指挥台围壳与围壳舵、X 形尾舵
