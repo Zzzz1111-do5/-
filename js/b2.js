@@ -170,9 +170,9 @@ function b2Down(a) {
 
 // —— 飞行 ——
 function b2Turn(a, tx, ty, dt) {
-  const want = Math.atan2(ty - a.y, tx - a.x), da = eaAng(want - a.heading), t = B2.turn * dt;
-  a.heading = eaAng(a.heading + clamp(da, -t, t)); a.bank = clamp(da, -.6, .6);
-  a.x += Math.cos(a.heading) * a.spd * dt; a.y += Math.sin(a.heading) * a.spd * dt;
+  const want = Math.atan2(ty - a.y, tx - a.x), da = eaAng(want - a.heading), k = airK(a);
+  a.heading = eaAng(a.heading + airYaw(a, da, B2.turn, dt)); a.bank = clamp(a.hr / B2.turn, -.6, .6);   // 平滑转向、地速减半（carrier.js）
+  a.x += Math.cos(a.heading) * a.spd * k * dt; a.y += Math.sin(a.heading) * a.spd * k * dt;
 }
 function b2Fly(a, dt) {
   if (a.ph === 'rtb') {   // 中弹（eaAA 置 rtb）：放弃攻击，从图边飞出

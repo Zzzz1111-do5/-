@@ -10,7 +10,7 @@
 //   离目标近了、接敌、长机返航才散开各打各的。
 // 航线：攻方舰载机走固定的进出航线——岸线上的几个出入口（航路点），按目标选进入口、换一个相邻的出口返航，不原路折返；
 //   守方飞机从机场出发先飞到目标背海一侧的起始点（IP）再进入，返航从另一侧的出航点离开。
-// 巡逻 / 待机：跑马场航线（两头转弯、中间直飞，长边与海岸线平行），不在空中原地打转（carrier.js airOrbit、airwar.js awFlyE）
+// 巡逻 / 待机：不兜圈子——到了巡逻点沿岸线方向直飞一段（atoLeg）就返航，打完一波也返航；只有返航等着舰时在航母边飞跑马场航线（carrier.js airOrbit）
 const ATO = { t1: 180, t2: 120, think: 2, gates: 6, gateOff: 140, race: 2.4 };
 const ATO_NM = { 1: '夺取制空权', 2: '压制防空', 3: '近距支援' };
 
@@ -100,6 +100,16 @@ function atoRace(p, cx, cy, R, dir, steer) {
   if (d < Math.max(70, R * .4)) p.rk ^= 1;
   return d;
 }
+
+// 巡逻 / 待机改为一次通过的直线航段（不在空中兜圈子）：飞到巡逻点后沿岸线方向（东西向，顺着来时机头一侧、地图边留够余地）再直飞 len，
+//   飞完就返航；这一段上照样搜索、接敌（carrier.js airCasFly、airwar.js awFlyP / awFlyE）
+function atoLeg(p, cx, cy, len) {
+  const room = s => s > 0 ? W - 60 - cx : cx - 60;
+  let s = Math.cos(p.heading || 0) >= 0 ? 1 : -1;
+  if (room(s) < len * .6 && room(-s) > room(s)) s = -s;
+  return { x: clamp(cx + s * len, 60, W - 60), y: clamp(cy, 60, H - 60) };
+}
+const ATO_LEG = { ftr: 1200, cas: 700 };
 
 // —— 攻方编队：僚机保持在长机右后 / 左后（长机在 out 阶段、没接敌、没投弹）；离自己的目标近了、长机接敌或返航就散开 ——
 const ATO_SLOT = [[0, 0], [-30, 32], [-30, -32], [-60, 64], [-60, -64]];

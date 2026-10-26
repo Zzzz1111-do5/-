@@ -91,13 +91,15 @@ function rebuildForts() {
 // 'raid' 敌袭扰分队（同守军，另外偏好林地/城镇、回避开阔地与我方视野内的格；PV 在流场计算时取快照）
 // 车辆：'veh' 我方轮履式（回避已知雷区/障碍，碾过铁丝网）、'vehe' 守军车辆（熟悉自己的雷区与障碍）、'amph' 两栖坦克（另可泅渡深海与浅滩）
 // 林地慢、沼泽很慢、悬崖 / 山地不可通行，河流可以涉水（很慢：步兵代价 4、车辆 6、两栖车辆 2.5，所以照样优先走桥和渡口），道路最快
-const VCOST = [Infinity, Infinity, Infinity, 1.25, 4, Infinity, 1, 3, 1.5, Infinity, 5, 6, .8, .72, 1.4, 2.5];
+// 车辆爬坡：高地越高越难开（高程 0.5 起每高 0.1 代价加五成）；高程超过 VEH_ELEV 的山头（三维里看就是高山）坦克、车辆一律上不去，只能走公路过山
+const VCOST = [Infinity, Infinity, Infinity, 1.25, 4, Infinity, 1, 3, 1.5, Infinity, 5, 6, .8, .72, 1.4, 2.5], VEH_ELEV = .68;
 function stepCost(i, cls) {
   const t = TER.type[i];
   if (cls === 'ship') return t === T.DEEP ? (OBSC[i] === 2 ? 4 : 1) : t === T.SHOAL ? (OBSC[i] === 2 ? 6 : 1.6) : Infinity;
   if (cls === 'veh' || cls === 'vehe' || cls === 'amph') {
     let c = cls === 'amph' && (t === T.DEEP || t === T.SHOAL) ? 1.7 : cls === 'amph' && t === T.RIVER ? 2.5 : VCOST[t];
     if (c === Infinity || OBSC[i] === 2 || (cls === 'vehe' && OBSC[i])) return Infinity;
+    if (t === T.HILL) { const e = TER.elev[i]; if (e > VEH_ELEV) return Infinity; c *= 1 + (e - .5) * 5; }
     if (MINEC[i] && (cls === 'vehe' || MINEC[i] === 2)) c *= cls === 'vehe' ? 25 : 8;
     return WIREC[i] ? c * 1.2 : c;
   }

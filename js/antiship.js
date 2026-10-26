@@ -87,9 +87,9 @@ function asP8Fly(a, dt) {
 }
 // 通用转向（eair 的飞机都用这个手感）
 function eaTurnTo(a, tx, ty, dt) {
-  const want = Math.atan2(ty - a.y, tx - a.x), da = Math.atan2(Math.sin(want - a.heading), Math.cos(want - a.heading)), t = .6 * dt;
-  a.heading += clamp(da, -t, t); a.bank = clamp(da, -.5, .5);
-  a.x += Math.cos(a.heading) * a.spd * dt; a.y += Math.sin(a.heading) * a.spd * dt;
+  const want = Math.atan2(ty - a.y, tx - a.x), da = Math.atan2(Math.sin(want - a.heading), Math.cos(want - a.heading)), k = airK(a);
+  a.heading += airYaw(a, da, .6, dt); a.bank = clamp(a.hr / .6, -.5, .5);   // 平滑转向、地速减半（carrier.js）
+  a.x += Math.cos(a.heading) * a.spd * k * dt; a.y += Math.sin(a.heading) * a.spd * k * dt;
 }
 
 // ———————————————— ② 堤丰导弹连 ————————————————

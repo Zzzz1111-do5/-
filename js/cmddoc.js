@@ -11,7 +11,9 @@
 //   ctr 反击方式：all 各旅同时反冲击 · echelon 最近的旅反冲击、其余作第二梯队跟进
 const CMD_BASE = { tac: null, nb: 0, mass: 0, resv: 0, det: 'mid', ctr: 'echelon' };
 const CMD_DET = { fast: [12, 1.3, 150], mid: [30, 1.6, 240], slow: [45, 2.2, 330] };
-const CMD_DOC = {};
+const CMD_DOC = {
+  'e|inf': {tac: 'fort', nb: 0, mass: 0, resv: 0, det: 'slow', ctr: 'echelon'}
+};
 // 机动兵力的编成键
 function cmdForceKey(us, vs) {
   const inf = us.reduce((a, u) => a + teamsOf(u).reduce((b, q) => b + q.men.length, 0), 0), veh = vs.reduce((a, v) => a + (typeof bgPow === 'function' ? bgPow(v) : 4), 0), f = veh / Math.max(1, inf + veh);

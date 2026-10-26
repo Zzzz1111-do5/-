@@ -487,6 +487,34 @@ function v3mRotor(n = 4, r = 7.5) {   // 主旋翼：桨叶 + 桨毂，桨盘外
 }
 
 // ———————————————— 守方阵地（世界单位） ————————————————
+// 降落伞：伞衣是一块块平面拼成的穹顶（10 瓣 × 3 圈，伞顶留透气孔），伞绳从伞衣边汇到吊点；
+//   下面挂伞兵（躯干、背包、两腿）、弹药箱，或重装空投平台（车辆，三具主伞）
+function v3mChute(kind) {
+  const M = mbNew(), canopy = (cx, cy, z, R) => {
+    const n = 10, lat = [[.18, 1], [.62, .8], [.92, .42], [1, 0]], ring = (f, h) => Array.from({ length: n }, (_, i) => { const a = i / n * 6.2832; return [cx + Math.cos(a) * R * f, cy + Math.sin(a) * R * f, z + h * R * .55]; });
+    for (let k = 0; k < lat.length - 1; k++) {
+      const A = ring(...lat[k]), B = ring(...lat[k + 1]);
+      for (let i = 0; i < n; i++) { const j = (i + 1) % n; mbQuad(M, A[i], A[j], B[j], B[i], k === 1 ? .8 : 1, [cx, cy, z - R]); }
+    }
+    return ring(1, 0);
+  };
+  if (kind === 'veh') {
+    const hook = [0, 0, -9];
+    for (const [ox, oy] of [[-3.2, -2], [3.2, -2], [0, 3.2]]) { const rim = canopy(ox, oy, 0, 4.2); for (let i = 0; i < rim.length; i += 2) mbLine(M, rim[i], hook, .7); }
+    mbBox(M, -2.6, 2.6, -1.4, 1.4, -11.2, -10.2, .55);   // 空投平台
+    mbBox(M, -2.2, 2.2, -1.2, 1.2, -10.2, -8.9, .85, { taper: .15 });   // 车辆（裹着的外形）
+    mbLine(M, [-2.2, -1.2, -8.9], hook, .6); mbLine(M, [2.2, 1.2, -8.9], hook, .6);
+    return M;
+  }
+  const rim = canopy(0, 0, 0, 3.2), hook = [0, 0, -5.4];
+  for (const p of rim) mbLine(M, p, hook, .7);
+  if (kind === 'crate') { mbBox(M, -.6, .6, -.6, .6, -6.7, -5.5, .8); mbLine(M, [-.6, 0, -5.5], [.6, 0, -5.5], 1); return M; }
+  mbBox(M, -.22, .22, -.18, .18, -6.5, -5.6, 1, { taper: .03 });   // 躯干
+  mbBox(M, -.4, -.2, -.16, .16, -6.4, -5.8, .55);   // 背包
+  mbPrism(M, mbCirc(0, 0, .14, 8), -5.6, -5.3, 1.05, { taper: .04 });   // 头盔
+  for (const sy of [-1, 1]) mbTube(M, [0, sy * .1, -6.5], [.08, sy * .14, -7.3], .07, .06, 6, .9);   // 两腿
+  return M;
+}
 function v3mFort(kind) {
   const M = mbNew();
   if (kind === 'bunker') {   // 混凝土碉堡：倒角厚墙、正面射孔（发光）、顶上伪装网线
@@ -682,18 +710,27 @@ function v3Units(C, box) {
     const a = typeof gunAim === 'function' ? gunAim(e, t) : (e.th ?? 1.57);
     v3mAdd('st:' + e.kind, () => v3mFort(e.kind), e.x, e.y, v3Ht(e.x, e.y), a, 1, e.dead ? 2 : 1);
   }
-  // 飞机：高度与 3D 地图里的标识一致（离地 30 + 高度 × 200），按滚转角倾斜；直升机主旋翼转动
-  const plane = (x, y, alt, hd, sd, key, sz, bank) => {
-    const z = v3Ht(x, y) + 30 + clamp(alt ?? 1, 0, 1) * 200, k = sz / 21;
+  // 降落伞（para.js 伞兵 / 补给、abn.js 空降兵、a101.js 美军 101 空降师）：从运输机高度按下降进度落到地面，伞衣轻轻摆动
+  const chutes = (L, jump, sd) => { for (const c of L || []) {   // 天上的伞衣老远就看得见：双方都画（与平面画面一致）
+    if (c.done || !(c.t >= 0) || !isFinite(c.x) || !inB(c.x, c.y) || (c.k === 'team' && !(c.men && c.men.length))) continue;
+    const f = clamp(1 - c.t / jump(c), 0, 1), z = v3Ht(c.x, c.y) + 1.5 + f * 120 + (c.k === 'veh' ? 11.3 : 7.4) * 2.2, id = c.id ?? (c.x * 7 + c.y * 3);
+    v3mAdd('chute:' + c.k, () => v3mChute(c.k), c.x, c.y, z, Math.sin(id) * 3, 2.2, sd, Math.sin(t * 1.3 + id) * .09);
+  } };
+  if (S.para && typeof PA === 'object') chutes(S.para.ch, c => c.k === 'crate' ? PA.jump : c.role ? PA.jlJump : PA.jump, 0);
+  if (S.ab && typeof AB === 'object') chutes(S.ab.ch, c => c.k === 'veh' ? AB.heavy : AB.jump, 0);
+  if (S.e101 && typeof A101 === 'object') chutes(S.e101.ch, c => c.k === 'veh' ? A101.heavy : A101.jump, 1);
+  // 飞机：高度与 3D 地图里的标识一致（view3d.js v3AirZ：甲板上贴着甲板，空中按高度），按滚转角倾斜；直升机主旋翼转动
+  const plane = (o, hd, sd, key, sz, bank) => {
+    const x = o.x, y = o.y, z = v3AirZ(o), k = sz / 21;
     v3mAdd('pl:' + key, () => v3mPlane(key), x, y, z, hd || 0, k, sd, bank || 0);
     if (V3_PLANE_TAIL[key] === 'heli') v3mAdd('rotor', () => v3mRotor(4, 7.5), x + Math.cos(hd || 0) * 1.2 * k, y + Math.sin(hd || 0) * 1.2 * k, z + 2.7 * k, t * 22, k, sd);
   };
   for (const p of S.planes || []) if (!p.dead && isFinite(p.x) && inB(p.x, p.y, 220)) {
     const key = typeof airSilKey === 'function' ? airSilKey(p.kind, p.v) : 'j35', sz = (typeof airMdl === 'function' && airMdl(p.kind, p.v).size) || ((typeof AIR_SPEC === 'object' && AIR_SPEC[p.kind]) || {}).size || 15;
-    plane(p.x, p.y, p.alt, p.heading, 0, key, sz, p.bank);
+    plane(p, p.heading, 0, key, sz, p.bank);
   }
   const EA_K = { ga: ['a10', 18], heli: ['ah64', 16], uh60: ['uh60', 17], c17: ['c17', 30], ftr: ['f35', 17], f22: ['f22', 18], b2: ['b2', 34], p8: ['p8', 26] };
-  if (S.eair) for (const a of S.eair.fly) if (!a.dead && isFinite(a.x) && a.ph !== 'roll' && (spec || a.pv) && inB(a.x, a.y, 220)) { const [key, sz] = EA_K[a.type] || ['f35', 17]; plane(a.x, a.y, a.alt, a.heading, 1, key, sz, a.bank); }
+  if (S.eair) for (const a of S.eair.fly) if (!a.dead && isFinite(a.x) && a.ph !== 'roll' && (spec || a.pv) && inB(a.x, a.y, 220)) { const [key, sz] = EA_K[a.type] || ['f35', 17]; plane(a, a.heading, 1, key, sz, a.bank); }
   // —— 画 ——
   gl.useProgram(V3M.pr);
   gl.uniformMatrix4fv(V3M.u.uM, false, C.M);
