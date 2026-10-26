@@ -108,7 +108,7 @@ function digDraw() {
   const hs = S.holes;
   if (!hs || !hs.length || R.s < .8) return;
   const ctx = R.ctx, [x0, y0, x1, y1] = viewRect(), real = realLook();
-  const vis = h => h.side === 'p' || S.role === 'spectate' || R.eye === 'all' || (typeof SEEN !== 'undefined' && SEEN[ci(h.x, h.y)]);
+  const vis = h => h.side === 'p' || specAll() || R.eye === 'all' || (typeof SEEN !== 'undefined' && SEEN[ci(h.x, h.y)]);
   ctx.save(); ctx.lineCap = 'round';
   for (const [p, q] of digLinks()) {   // 交通壕：先画土，再画壕底
     if (!vis(p) || Math.max(p.x, q.x) < x0 || Math.min(p.x, q.x) > x1 || Math.max(p.y, q.y) < y0 || Math.min(p.y, q.y) > y1) continue;

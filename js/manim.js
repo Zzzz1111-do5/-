@@ -346,7 +346,7 @@ function manDrawDead(ctx, d, real, col) {
 // 遗体层（render2.js drawTeams 在活人之前调用）：守方的只画看得见的
 function manDrawCorpses(ctx) {
   if (!S || MANV.S !== S || !MANV.dead.length || !R.fig) return;
-  const real = typeof realLook === 'function' && realLook(), spec = S.role === 'spectate' || R.eye === 'all' || R.eye === 'both' || R.eye === 'e';
+  const real = typeof realLook === 'function' && realLook(), spec = specAll() || R.eye === 'all' || R.eye === 'both' || R.eye === 'e';
   let drop = 0;
   for (const d of MANV.dead) {
     if (S.t - d.t0 > 65) { drop++; continue; }

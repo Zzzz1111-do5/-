@@ -581,7 +581,7 @@ function awHud() {
 // —— 绘制：进攻方战斗机的巡逻圈（青色虚线缓转，外圈弧为剩余巡逻时间）与锁定线；守方歼击机的巡逻圈只在观战时画，锁定线在看得见时画 ——
 function awDraw(time) {
   if (!S || typeof R !== 'object' || !R.ctx) return;
-  const ctx = R.ctx, spec = S.role === 'spectate';
+  const ctx = R.ctx, spec = specAll();
   ctx.save(); ctx.lineWidth = px(1.1);
   for (const p of S.planes || []) {
     if (p.dead || p.kind !== 'fighter') continue;

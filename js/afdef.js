@@ -153,7 +153,7 @@ function afdFix(dt) {
       if (!list.length) continue;
       const [hx, hy] = eaW(b, 120, 285), w = list.sort((p, q) => dist(p.x, p.y, hx, hy) - dist(q.x, q.y, hx, hy))[0];   // 抢修车从东侧维修机库后面出发
       B.fix = { ...w, t: 0, sx: hx, sy: hy };
-      if (eaBaseSeen(b) || S.role === 'spectate') log(`敌机场地勤出动抢修${w.nm}`, 'warn', 'afdfix' + b.id, 40, w);
+      if (eaBaseSeen(b) || specAll()) log(`敌机场地勤出动抢修${w.nm}`, 'warn', 'afdfix' + b.id, 40, w);
       continue;
     }
     const F = B.fix;
@@ -171,7 +171,7 @@ function afdFix(dt) {
       const k = B.pat.indexOf(F.id), [x, y] = B.wp[0], o = addVehicle('e', VEH_SPEC.recon ? 'recon' : 'apc', x, y, { auto: true, afD: b.id, afW: 0, afDir: k % 2 ? -1 : 1, mdl: '机场巡逻车（M1127）' });
       if (o && k >= 0) { o.hx = o.x; o.hy = o.y; B.pat[k] = o.id; }
     }
-    if (eaBaseSeen(b) || S.role === 'spectate') log(`敌机场${F.nm}抢修完毕`, 'warn', 'afdok' + b.id, 20, F);
+    if (eaBaseSeen(b) || specAll()) log(`敌机场${F.nm}抢修完毕`, 'warn', 'afdok' + b.id, 20, F);
     v8Stat('afdFix');
     B.fix = null; B.fixN = S.t + 4;
   }
@@ -184,7 +184,7 @@ function afdDrawFix(time) {
     const F = S.afd.bases[id].fix;
     if (!F || !inView(F.x, F.y, 40)) continue;
     const b = S.enemies.find(e => e.id === +id);
-    if (!b || !(S.role === 'spectate' || R.eye === 'all' || inVision(F.x, F.y))) continue;
+    if (!b || !(specAll() || R.eye === 'all' || inVision(F.x, F.y))) continue;
     const u = clamp(F.t / 8, 0, 1), e = u * u * (3 - 2 * u), x = lerp(F.sx, F.x + 6, e), y = lerp(F.sy, F.y + 6, e), a = Math.atan2(F.y - F.sy, F.x - F.sx);
     if (!R.m3d) {   // 3D：抢修车是立体模型（v3units.js），贴图里只留焊花与进度
     ctx.save(); ctx.translate(x, y); ctx.rotate(u < 1 ? a : a + .6);
@@ -218,7 +218,7 @@ HOOK.impact.push((x, y, R, pw, side) => {
 // 雷达站：观战或已发现时画出天线符号与（观战时）探测圈
 HOOK.drawOver.push(function afdDraw() {
   if (!S || !S.afd || typeof R !== 'object' || !R.ctx) return;
-  const ctx = R.ctx, spec = S.role === 'spectate', u = Math.max(5, px(6));
+  const ctx = R.ctx, spec = specAll(), u = Math.max(5, px(6));
   for (const r of S.afd.radar) {
     if (!spec && !inVision(r.x, r.y) && r.kx == null) continue;
     const col = r.dead ? COL.smoke : COL.enemy;

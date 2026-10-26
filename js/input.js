@@ -1,5 +1,9 @@
 'use strict';
 // 事件：左键点选/框选，右键下令（拖拽 = 阵型宽度与朝向），中键或 Alt 拖动平移，滚轮缩放，触屏单指平移、双指缩放
+// 编队指挥模式（thpanel.js thuActive：沙盒编辑以外的战役 / 推演）：不再点选、下令单个部队——左键点部队看型号卡并选中它所属的团，
+//   左键拖动平移地图，右键只取消穿插选目标；WASD 与方向键移动视角（3D 按镜头朝向）；舰船、航母、支援火力、编组的快捷键都不再有
+const WASD = { KeyW: 'ArrowUp', KeyA: 'ArrowLeft', KeyS: 'ArrowDown', KeyD: 'ArrowRight' };
+const thUI = () => typeof thuActive === 'function' && thuActive();
 function bindInput() {
   const cv = R.cv;
   cv.addEventListener('contextmenu', e => e.preventDefault());
@@ -20,8 +24,9 @@ function bindInput() {
       return;
     }
     if (e.button === 1 || (e.button === 0 && e.altKey)) { U.down = { sx, sy, pan: true }; return; }
-    if (e.button === 2) { U.fdrag = { sx, sy, x0: p.x, y0: p.y, x1: p.x, y1: p.y, on: false }; return; }
+    if (e.button === 2) { if (thUI()) { if (typeof thuCancel === 'function') thuCancel(); return; } U.fdrag = { sx, sy, x0: p.x, y0: p.y, x1: p.x, y1: p.y, on: false }; return; }
     if (e.button !== 0) return;
+    if (thUI()) { U.down = { sx, sy, x: p.x, y: p.y, add: e.shiftKey || e.ctrlKey, th: true }; return; }
     if (U.tool) { applyTool(p); return; }
     U.down = { sx, sy, x: p.x, y: p.y, add: e.shiftKey || e.ctrlKey };
   });
@@ -47,7 +52,7 @@ function bindInput() {
     if (F) { if (dist(sx, sy, F.sx, F.sy) > 10) F.on = true; F.x1 = p.x; F.y1 = p.y; return; }
     const D = U.down;
     if (!D) return;
-    if (D.pan || (D.touch && (D.moved || dist(sx, sy, D.sx, D.sy) > 8))) { if (D.touch) D.moved = true; camPan(sx - D.sx, sy - D.sy); D.sx = sx; D.sy = sy; return; }
+    if (D.pan || ((D.touch || D.th) && (D.moved || dist(sx, sy, D.sx, D.sy) > (D.th ? 5 : 8)))) { if (D.touch || D.th) D.moved = true; camPan(sx - D.sx, sy - D.sy); D.sx = sx; D.sy = sy; return; }
     if (dist(sx, sy, D.sx, D.sy) > 6) U.box = { x0: Math.min(p.x, D.x), y0: Math.min(p.y, D.y), x1: Math.max(p.x, D.x), y1: Math.max(p.y, D.y) };
   });
 
@@ -57,7 +62,7 @@ function bindInput() {
     if (e.pointerType === 'touch') {
       U.touches.delete(e.pointerId);
       if (U.touches.size < 2) U.pinch = null;
-      if (D && D.touch && !D.moved) { U.mouse = p; U.tool ? applyTool(p) : finishSelect(p, false); }
+      if (D && D.touch && !D.moved) { U.mouse = p; thUI() ? thuClick(p, false) : U.tool ? applyTool(p) : finishSelect(p, false); }
       U.down = null;
       return;
     }
@@ -74,14 +79,15 @@ function bindInput() {
     }
     U.down = null;
     if (!D || D.pan) return;
+    if (D.th) { if (!D.moved) thuClick(p, D.add); return; }
     finishSelect(p, D.add);
   };
   cv.addEventListener('pointerup', up);
   cv.addEventListener('pointercancel', e => { U.touches.delete(e.pointerId); U.pinch = null; U.down = null; U.box = null; U.fdrag = null; });
   cv.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse') U.mouse = null; });
-  cv.addEventListener('dblclick', () => centerOnSel());
+  cv.addEventListener('dblclick', () => { if (thUI()) { const F = typeof thF === 'function' && THU.sel.size ? thF([...THU.sel][0]) : null; if (F) thuCenter(F); } else centerOnSel(); });
 
-  window.addEventListener('keyup', e => KEYS.delete(e.key));
+  window.addEventListener('keyup', e => { KEYS.delete(e.key); if (WASD[e.code]) KEYS.delete(WASD[e.code]); });
   window.addEventListener('blur', () => KEYS.clear());
   window.addEventListener('keydown', e => {
     if (e.target.closest && e.target.closest('input,textarea,select')) return;
@@ -90,8 +96,21 @@ function bindInput() {
     if (bf && !bf.hidden) { if ((e.key === 'Enter' && !(e.target.closest && e.target.closest('#diff'))) || e.key === 'Escape') { e.preventDefault(); $('btnBrief').click(); } return; }
     if (en && !en.hidden) { if (e.key === 'Escape' || e.key === 'F10') runHook('key', e); return; }
     if (e.key.startsWith('Arrow')) { KEYS.add(e.key); e.preventDefault(); return; }
+    // WASD：前后左右移动视角（3D 观察者模式里 WASD 归观察者飞行）
+    if (WASD[e.code] && !e.ctrlKey && !e.metaKey && !e.altKey && !(typeof V3O === 'object' && V3O.on) && !(e.target.closest && e.target.closest('#sbxPanel'))) { KEYS.add(WASD[e.code]); e.preventDefault(); return; }
+    // 编队指挥模式：支援火力、空降、导弹这些直接操控的快捷键不再有
+    if (thUI() && (/^Key[IY]$/.test(e.code) || (e.shiftKey && /^Key[KPO]$/.test(e.code)))) { e.preventDefault(); return; }
     if (runHook('key', e)) return;
     const k = e.key.toUpperCase();
+    if (thUI()) {
+      if (e.code === 'Space') { e.preventDefault(); togglePause(); }
+      else if (k === 'ENTER') { e.preventDefault(); startBattle(); updateHud(); }
+      else if (k === 'ESCAPE') { if (!(typeof thuCancel === 'function' && thuCancel())) { THU.sel.clear(); THU.key = ''; if (typeof thuRender === 'function') thuRender(true); } }
+      else if (k === '=' || k === '+') camZoomAt(CAM.vw / 2, CAM.vh / 2, 1.25);
+      else if (k === '-') camZoomAt(CAM.vw / 2, CAM.vh / 2, .8);
+      else if (k === 'P') objsToggle();
+      return;
+    }
     if (e.code === 'Space') { e.preventDefault(); togglePause(); }
     else if (k === 'ENTER') { e.preventDefault(); startBattle(); updateHud(); }   // 阻止默认：不再顺带点击有焦点的 HUD 按钮
     else if (/^Digit[1-9]$/.test(e.code)) { e.preventDefault(); const n = e.code.slice(5); e.ctrlKey || e.metaKey || e.altKey ? assignGroup(n) : selectGroup(n); }

@@ -101,6 +101,13 @@ function deployOrder(ships, dd, x, y, cv) {
 function startBattle() {
   if (S.phase !== 'deploy') return;
   S.phase = 'battle'; S.paused = false;
+  if (S.role === 'spectate') {   // AI 接管全部兵力：舰船自选滩头抢滩，驱逐舰、航母、车辆、各连自动
+    for (const u of S.units) if (u.side === 'p') u.auto = true;
+    for (const s of S.ships) if (!s.sbxHold) s.auto = true;
+    for (const v of S.veh || []) if (v.side === 'p') v.auto = true;
+    if (S.dd) S.dd.auto = S.dd.state !== 'sunk';
+    if (S.cv) S.cv.auto = S.cv.hp > 0;
+  }
   for (const s of S.ships) if (s.plan) { orderShips([s], s.plan.x, s.plan.y); s.plan = null; }
   if (S.dd.plan) { orderDD(S.dd.plan.x, S.dd.plan.y); S.dd.plan = null; }
   if (typeof vehStartBattle === 'function') vehStartBattle();   // 车辆的预定上陆点（vehicles.js）

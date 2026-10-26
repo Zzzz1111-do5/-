@@ -60,7 +60,7 @@ function v3Fx(C) {
   if (!V3F.ok) return;
   if (V3F.S !== S) { V3F.S = S; V3F.trail.clear(); }
   const out = [], E = C.E, box = V3.box || [0, 0, W, H], inB = (x, y, m = 200) => x > box[0] - m && x < box[0] + box[2] + m && y > box[1] - m && y < box[1] + box[3] + m;
-  const spec = S.role === 'spectate' || (typeof R === 'object' && (R.eye === 'all' || R.eye === 'both' || R.eye === 'e'));
+  const spec = specAll() || (typeof R === 'object' && (R.eye === 'all' || R.eye === 'both' || R.eye === 'e'));
   const seen = (x, y) => spec || inVision(x, y);
   const g = (x, y) => v3Ht(clamp(x, 0, W - 1), clamp(y, 0, H - 1));
   // —— 炮弹与炸弹 ——

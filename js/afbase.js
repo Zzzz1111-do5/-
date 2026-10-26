@@ -362,7 +362,7 @@ function afbParked(b, own) {
 // 地面层（drawGround，先于弹坑、战壕、据点与部队）：整座机场与停放的飞机；看不见但已标定的机场半透明
 function eaDrawBases(time) {
   if (!S || typeof eaOn !== 'function' || !eaOn() || typeof R !== 'object' || !R.ctx) return;
-  const ctx = R.ctx, spec = S.role === 'spectate';
+  const ctx = R.ctx, spec = specAll();
   for (const b of S.enemies) {
     if (b.kind !== 'airfield' || !inView(b.x, b.y, 820)) continue;
     const vis = spec || eaBaseSeen(b);
@@ -497,7 +497,7 @@ function afbRwyNum(ctx, b, a, rl) {
 // 跑道封闭、耐久 / 重建进度、起火冒烟（drawUnder：压在部队之下、地面之上）
 function eaDrawBaseFx(time) {
   if (!S || typeof eaOn !== 'function' || !eaOn() || typeof R !== 'object' || !R.ctx) return;
-  const ctx = R.ctx, spec = S.role === 'spectate';
+  const ctx = R.ctx, spec = specAll();
   const list = S.enemies.filter(b => b.kind === 'airfield' && inView(b.x, b.y, 820) && (spec || eaBaseSeen(b) || b.kx != null)).map(b => [b, spec || eaBaseSeen(b), false]);
   if (S.abBase && inView(S.abBase.x, S.abBase.y, 820)) list.push([S.abBase, true, true]);
   for (const [b, vis, own] of list) {
@@ -544,7 +544,7 @@ function afbPreview(ctx, x, y, f, lw) {
 // 3D 立体地图的建筑块（view3d.js）：看得见 / 已标定的机场与我方夺取的机场；世界坐标角点 + 高度（z0 起、z 止）
 function afb3dBases() {
   if (!S || !S.enemies || typeof eaOn !== 'function' || !eaOn()) return [];
-  const spec = S.role === 'spectate' || (typeof R === 'object' && R.eye === 'all');
+  const spec = specAll() || (typeof R === 'object' && R.eye === 'all');
   const out = S.enemies.filter(e => e.kind === 'airfield' && !e.dead && (spec || e.kx != null));
   if (S.abBase && !S.abBase.dead) out.push(S.abBase);
   return out;

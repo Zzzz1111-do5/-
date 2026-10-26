@@ -44,14 +44,24 @@ const AIR_REARM = 45;      // 着舰后整备时间（秒）
 const AIR_TRAILS = new Map();   // 仅渲染用：飞机尾迹点（不进 S）
 const CV_LEN = 150;
 // 航母局部坐标：u 指向舰首，v 指向右舷（绘制时 rotate(heading) 后 x = u、y = v）
+// 003 型福建舰（长 316 米、飞行甲板宽约 76 米，按 CV_LEN 150 缩放，约 0.47 单位 / 米）：舰首宽阔的甲板前缘、右舷舷边平直，
+//   左舷斜角甲板向外飘出到全舰最宽处；三部电磁弹射器（舰首两部、斜角甲板上一部）、四道拦阻索、右舷两部舷侧升降机（舰岛前后各一）、
+//   右舷中部的紧凑舰岛（一体化桅杆四面相控阵 + 烟囱）、左舷中部光学助降装置、舷外平台上的红旗-10 与 1130 近防炮
 const CVG = {
-  deck: [[77, 0], [70, 7], [46, 14], [-20, 15], [-74, 13], [-77, 8], [-77, -8], [-70, -12], [-30, -15], [20, -18], [34, -14], [60, -9]],
-  cats: [[8, -3, 76], [8, 4, 76]],              // 舰首两条弹射器：起点 u、v、离舰 u
+  deck: [[76.5, -4.5], [76, 6], [72, 9.5], [62, 12.4], [48, 14], [30, 14.4], [-70, 14.4], [-75, 13.6], [-76.5, 11], [-76.5, -9.5], [-74.5, -12.6], [-56, -13.6],
+    [-40, -15.6], [-16, -19.6], [8, -22.2], [27, -22.8], [32, -20.6], [37, -15], [48, -12], [62, -9], [71, -6.6]],
+  hull: [[79, 0], [74, 4.6], [62, 8.2], [44, 9.6], [-62, 9.6], [-74, 8.8], [-77, 7.4], [-77, -7.4], [-74, -8.8], [-62, -9.6], [44, -9.6], [62, -8.2], [74, -4.6]],   // 甲板下的舰体（舰首露出甲板前缘）
+  cats: [[8, -3, 76], [8, 4, 76]],              // 舰首两部弹射器：起点 u、v、离舰 u（起飞用这两部）
+  cat3: [[-10.7, -12.1], [26, -18.4]],          // 斜角甲板上的第三部弹射器（与着舰区重叠，回收作业时不用）
   land: { u0: -70, v0: 2, u1: 24, v1: -14 },     // 斜角着舰区中线（舰尾 → 左舷前方）
   td: .15,                                        // 接地点在着舰中线上的位置
+  isl: [[5.2, 13.8], [5.2, 17.6], [3.4, 19.6], [-8.6, 19.6], [-10.4, 18], [-10.4, 13.8]],   // 舰岛（右舷中部）
+  elev: [[18.6, 8.4, 14.2, 21], [-17.8, -28, 14.2, 21]],   // 舷侧升降机 [前 u, 后 u, 内 v, 外 v]：舰岛前、后各一
+  lso: [-38, -15.4],                              // 光学助降装置
+  weap: [[57, 14.8, 'hq10'], [56, -11.6, 'hq10'], [66, -9.4, 'ciws'], [-72, 15.2, 'hq10'], [-70, -13.8, 'hq10'], [-62, -14.6, 'ciws'], [-40, 15.4, 'ciws']],   // 舷外平台
   // 停机位 [u, v, 机头相对舰首的角度]：侦察 2、攻击 4、对地支援 4、战斗机 2
-  slots: [[50, -9.5, 2.2], [41, -10.5, 2.2], [56, 9, -2.2], [47, 10.5, -2.2], [38, 11.5, -2.2], [29, 12, -2.2],
-    [-10, 11, -2.2], [-20, 11, -2.2], [-30, 11, -2.2], [-40, 11, -2.2], [-50, 11, -2.2], [-60, 10.5, -2.2]],
+  slots: [[50, -8.6, 2.2], [41, -9.6, 2.2], [58, 8.8, -2.2], [49, 10.4, -2.2], [40, 11.4, -2.2], [31, 11.8, -2.2],
+    [-14, 10.6, -2.2], [-23, 10.6, -2.2], [-32, 10.6, -2.2], [-41, 10.6, -2.2], [-50, 10.6, -2.2], [-59, 10.3, -2.2]],
   fires: [[-30, 5], [12, -9], [44, 4], [-58, -4]]
 };
 const CV_LLEN = Math.hypot(CVG.land.u1 - CVG.land.u0, CVG.land.v1 - CVG.land.v0);
@@ -1156,6 +1166,19 @@ function drawAircraft(ctx, x, y, a, type, size, col, alpha, bank, lw, bombs, o) 
   ctx.restore();
 }
 
+// 舷外武器平台：红旗-10 近程防空导弹发射箱 / 1130 近防炮（炮管指向舷外）
+function cvWeap(ctx, u, v, kd, real, col, lw) {
+  const s = Math.sign(v) || 1, stk = real ? 'rgba(0,0,0,.5)' : rgba(col, .6);
+  ctx.save(); ctx.translate(u, v);
+  ctx.beginPath(); ctx.ellipse(0, 0, 2.2, 1.7, 0, 0, 7); ctx.fillStyle = real ? '#5d6367' : 'rgba(2,10,6,.9)'; ctx.fill(); ctx.strokeStyle = stk; ctx.lineWidth = lw(.8); ctx.stroke();
+  if (kd === 'hq10') { ctx.beginPath(); ctx.rect(-1, -.75, 2, 1.5); ctx.fillStyle = real ? '#b9bfc2' : 'rgba(2,10,6,1)'; ctx.fill(); ctx.stroke(); }
+  else {
+    ctx.beginPath(); ctx.arc(0, 0, .85, 0, 7); ctx.fillStyle = real ? '#a6adb2' : 'rgba(2,10,6,1)'; ctx.fill(); ctx.stroke();
+    ctx.strokeStyle = real ? 'rgba(40,44,46,.95)' : rgba(col, .9); ctx.lineWidth = lw(1.1); ctx.beginPath(); ctx.moveTo(0, s * .5); ctx.lineTo(0, s * 2.1); ctx.stroke();
+  }
+  ctx.restore();
+}
+
 function drawCarrier(time) {
   if (!S || !S.cv) return;
   drawCarrier1(time);
@@ -1190,53 +1213,88 @@ function drawCarrier1(time) {
     for (const s of [-1, 1]) { ctx.beginPath(); ctx.moveTo(79, 0); ctx.quadraticCurveTo(70, s * 12, 52, s * 19); ctx.stroke(); }
   }
   if (!R.m3d || dead) {   // 3D：航母与甲板上的飞机是立体模型（v3units.js），贴图里只留尾流与选中、暴露标记
-    // 舰体投影与飞行甲板
+    const mk = a => real ? `rgba(232,232,222,${a})` : rgba(STRUCT, a * .6), yel = a => real ? `rgba(214,186,78,${a})` : rgba(COL.amber, a * .7);
+    const deckFill = () => real ? rlLit(ctx, c.heading, 150, 36, '#4d5357') : 'rgba(2,10,6,.9)', edgeCol = hit ? rgba('#ffffff', .95) : rgba(col, dead ? .65 : .95);
+    // 投影：舰体、飞行甲板、舷侧升降机
     ctx.save(); ctx.translate(4 * Math.sin(c.heading) + 3 * Math.cos(c.heading), 4 * Math.cos(c.heading) - 3 * Math.sin(c.heading));
-    cvPath(ctx, CVG.deck); ctx.fillStyle = 'rgba(0,0,0,.45)'; ctx.fill(); ctx.restore();
+    ctx.fillStyle = 'rgba(0,0,0,.45)'; cvPath(ctx, CVG.deck); ctx.fill(); cvPath(ctx, CVG.hull); ctx.fill();
+    for (const [a0, a1, b0, b1] of CVG.elev) ctx.fillRect(a1, b0, a0 - a1, b1 - b0);
+    ctx.restore();
+    // 舰体（舰首露出飞行甲板前缘）与舷外武器平台（红旗-10、1130 近防炮）
+    cvPath(ctx, CVG.hull); ctx.fillStyle = real ? rlLit(ctx, c.heading, 150, 20, '#5d6367') : 'rgba(2,10,6,.9)'; ctx.fill();
+    ctx.strokeStyle = real ? 'rgba(0,0,0,.5)' : rgba(col, .55); ctx.lineWidth = lw(1); ctx.stroke();
+    if (det >= 70) for (const [u, v, kd] of CVG.weap) cvWeap(ctx, u, v, kd, real, col, lw);
+    // 飞行甲板
     cvPath(ctx, CVG.deck);
-    ctx.fillStyle = real ? rlLit(ctx, c.heading, 150, 36, '#4d5357') : 'rgba(2,10,6,.9)'; ctx.fill();   // 写实：深灰飞行甲板
-    ctx.strokeStyle = hit ? rgba('#ffffff', .95) : rgba(col, dead ? .65 : .95); ctx.lineWidth = lw(hit ? 2.6 : 1.6); ctx.stroke();
+    ctx.fillStyle = deckFill(); ctx.fill();   // 写实：深灰飞行甲板
+    ctx.strokeStyle = edgeCol; ctx.lineWidth = lw(hit ? 2.6 : 1.6); ctx.stroke();
+    // 右舷两部舷侧升降机（舰岛前后各一），外伸出舷边
+    for (const [a0, a1, b0, b1] of CVG.elev) {
+      ctx.beginPath(); ctx.rect(a1, b0, a0 - a1, b1 - b0); ctx.fillStyle = deckFill(); ctx.fill();
+      ctx.strokeStyle = edgeCol; ctx.lineWidth = lw(1.2); ctx.stroke();
+      if (det >= 120) { ctx.setLineDash([lw(3), lw(2)]); ctx.strokeStyle = yel(.55); ctx.lineWidth = lw(1); ctx.strokeRect(a1 + .7, b0 + .7, a0 - a1 - 1.4, b1 - b0 - 1.4); ctx.setLineDash([]); }
+    }
     const L = CVG.land, nx = -(L.v1 - L.v0) / CV_LLEN, ny = (L.u1 - L.u0) / CV_LLEN;
     if (det >= 70) {
-      // 斜角着舰区：两侧边线、中线虚线、拦阻索
-      ctx.strokeStyle = rgba(col, .35); ctx.lineWidth = lw(1);
+      // 斜角着舰区：两侧边线、中线虚线、四道拦阻索
+      ctx.strokeStyle = mk(.55); ctx.lineWidth = lw(1);
       ctx.beginPath();
       for (const s of [-8, 8]) { ctx.moveTo(L.u0 + nx * s, L.v0 + ny * s); ctx.lineTo(L.u1 + nx * s, L.v1 + ny * s); }
       ctx.stroke();
-      ctx.setLineDash([lw(5), lw(4)]); ctx.strokeStyle = rgba(STRUCT, .45);
+      ctx.setLineDash([lw(5), lw(4)]); ctx.strokeStyle = mk(.6);
       ctx.beginPath(); ctx.moveTo(L.u0, L.v0); ctx.lineTo(L.u1, L.v1); ctx.stroke(); ctx.setLineDash([]);
-      ctx.strokeStyle = rgba(STRUCT, .3);
+      ctx.strokeStyle = mk(.5);
       ctx.beginPath();
       for (const t of [.1, .14, .18, .22]) { const u = lerp(L.u0, L.u1, t), v = lerp(L.v0, L.v1, t); ctx.moveTo(u + nx * 6, v + ny * 6); ctx.lineTo(u - nx * 6, v - ny * 6); }
       ctx.stroke();
-      // 舰首轴向中线
-      ctx.setLineDash([lw(4), lw(4)]); ctx.strokeStyle = rgba(STRUCT, .25);
-      ctx.beginPath(); ctx.moveTo(-74, 6); ctx.lineTo(-30, 6); ctx.stroke(); ctx.setLineDash([]);
+      // 直通甲板中线（舰首）、着舰区前端的安全线
+      ctx.setLineDash([lw(4), lw(4)]); ctx.strokeStyle = mk(.35);
+      ctx.beginPath(); ctx.moveTo(74, .5); ctx.lineTo(24, .5); ctx.stroke(); ctx.setLineDash([]);
+      ctx.strokeStyle = yel(.6); ctx.lineWidth = lw(1.2);
+      ctx.beginPath(); ctx.moveTo(L.u1 + nx * 8, L.v1 + ny * 8); ctx.lineTo(L.u1 - nx * 8, L.v1 - ny * 8); ctx.stroke();
+      // 光学助降装置（左舷中部）
+      const [lu, lv] = CVG.lso;
+      ctx.fillStyle = real ? '#2e3236' : 'rgba(2,10,6,1)'; ctx.fillRect(lu - 1, lv - .5, 2, 1);
+      ctx.fillStyle = rgba(COL.amber, .9); ctx.fillRect(lu - .3, lv - .4, .6, .8);
     }
-    // 弹射器：有飞机待射或滑跑时发光
+    // 弹射器：舰首两部（有飞机待射或滑跑时发光）+ 斜角甲板一部；每部起点后方一块偏流板
+    const catCol = on => on ? rgba(COL.amber, .55 + .4 * Math.sin(time * 14)) : real ? `rgba(28,30,32,${det >= 70 ? .75 : .5})` : rgba(STRUCT, det >= 70 ? .3 : .18);
     for (let i = 0; i < 2; i++) {
       const [u0, v0, u1] = CVG.cats[i], on = deckPl.find(p => (p.cat || 0) === i && (p.phase === 'roll' || p.wait < 1.2));
-      ctx.strokeStyle = on ? rgba(COL.amber, .55 + .4 * Math.sin(time * 14)) : rgba(STRUCT, det >= 70 ? .3 : .18);
+      ctx.strokeStyle = catCol(on);
       ctx.lineWidth = lw(on ? 2.2 : 1);
       ctx.beginPath(); ctx.moveTo(u0, v0); ctx.lineTo(u1 - 2, v0); ctx.stroke();
+      if (det >= 70) { ctx.fillStyle = real ? (on ? '#7d8489' : '#3f4448') : rgba(STRUCT, on ? .5 : .25); ctx.fillRect(u0 - 3.4, v0 - 2.4, 1.1, 4.8); }
       if (on && on.phase === 'roll' && isFinite(on.lu)) {   // 弹射蒸汽（没有甲板坐标的不画）
         const g = ctx.createLinearGradient(u0, v0, on.lu, v0);
         g.addColorStop(0, rgba('#d4fff0', 0)); g.addColorStop(1, rgba('#d4fff0', .5));
         ctx.strokeStyle = g; ctx.lineWidth = lw(4); ctx.beginPath(); ctx.moveTo(u0, v0); ctx.lineTo(on.lu, v0); ctx.stroke();
       }
     }
-    if (det >= 160) {   // 升降机
-      ctx.strokeStyle = rgba(STRUCT, .22); ctx.lineWidth = lw(1);
-      ctx.strokeRect(-62, 9.5, 10, 5); ctx.strokeRect(22, -14.5, 9, 5);
+    {
+      const [[a0, b0], [a1, b1]] = CVG.cat3, l = Math.hypot(a1 - a0, b1 - b0), dx = (a1 - a0) / l, dy = (b1 - b0) / l;
+      ctx.strokeStyle = catCol(false); ctx.lineWidth = lw(1);
+      ctx.beginPath(); ctx.moveTo(a0, b0); ctx.lineTo(a1, b1); ctx.stroke();
+      if (det >= 70) { ctx.fillStyle = real ? '#3f4448' : rgba(STRUCT, .25); ctx.beginPath(); for (const [p, q] of [[-2.3, -2.4], [-2.3, 2.4], [-3.4, 2.4], [-3.4, -2.4]]) ctx.lineTo(a0 + dx * p - dy * q, b0 + dy * p + dx * q); ctx.closePath(); ctx.fill(); }
     }
-    // 舰岛：右舷上层建筑、烟囱、桅杆与旋转雷达
-    ctx.fillStyle = real ? '#8f969b' : 'rgba(2,10,6,1)'; ctx.strokeStyle = real ? 'rgba(0,0,0,.55)' : rgba(STRUCT, dead ? .5 : .85); ctx.lineWidth = lw(1.3);
-    ctx.beginPath(); ctx.moveTo(-4, 11); ctx.lineTo(18, 11); ctx.lineTo(21, 13.5); ctx.lineTo(18, 17); ctx.lineTo(-4, 17); ctx.closePath(); ctx.fill(); ctx.stroke();
+    // 舰岛（右舷中部）：舰桥与一体化桅杆（四面相控阵）、后部烟囱、桅顶雷达与航行灯
+    const I = CVG.isl, istk = real ? 'rgba(0,0,0,.55)' : rgba(STRUCT, dead ? .5 : .85);
+    if (real) { ctx.save(); ctx.translate(5 * Math.sin(c.heading) + 5 * Math.cos(c.heading), 5 * Math.cos(c.heading) - 5 * Math.sin(c.heading)); cvPath(ctx, I); ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.fill(); ctx.restore(); }
+    cvPath(ctx, I); ctx.fillStyle = real ? rlLit(ctx, c.heading, 16, 6, '#8f969b') : 'rgba(2,10,6,1)'; ctx.fill();
+    ctx.strokeStyle = istk; ctx.lineWidth = lw(1.3); ctx.stroke();
     if (det >= 70) {
-      ctx.lineWidth = lw(1); ctx.strokeRect(5, 12.3, 5, 3.4);
+      const up = [[4, 14.6], [4, 17.4], [2.6, 18.8], [-4.4, 18.8], [-4.4, 14.6]];
+      cvPath(ctx, up); ctx.fillStyle = real ? '#a7aeb3' : 'rgba(2,10,6,1)'; ctx.fill(); ctx.lineWidth = lw(1); ctx.stroke();
+      ctx.strokeStyle = real ? '#2f3d47' : rgba(STRUCT, .85); ctx.lineWidth = .55;   // 相控阵面：前、右前斜面、后、左
+      ctx.beginPath(); ctx.moveTo(4.1, 15.1); ctx.lineTo(4.1, 17); ctx.moveTo(3.7, 17.9); ctx.lineTo(2.9, 18.8); ctx.moveTo(-4.5, 15.2); ctx.lineTo(-4.5, 18.2); ctx.moveTo(-3.6, 14.5); ctx.lineTo(1.4, 14.5); ctx.stroke();
+      cvPath(ctx, [[-5.4, 14.8], [-5.4, 18.6], [-9.2, 18.6], [-9.8, 18], [-9.8, 15.4], [-9.2, 14.8]]);   // 烟囱
+      ctx.fillStyle = real ? '#7d8489' : 'rgba(2,10,6,1)'; ctx.fill(); ctx.strokeStyle = istk; ctx.lineWidth = lw(1); ctx.stroke();
+      ctx.fillStyle = real ? 'rgba(18,18,18,.9)' : rgba(STRUCT, .35);
+      for (const v of [15.9, 17.5]) { ctx.beginPath(); ctx.ellipse(-7.5, v, 1.4, .65, 0, 0, 7); ctx.fill(); }
       const ra = dead ? 0 : time * 3;
-      ctx.beginPath(); ctx.moveTo(14 - Math.cos(ra) * 3, 14 - Math.sin(ra) * 3); ctx.lineTo(14 + Math.cos(ra) * 3, 14 + Math.sin(ra) * 3); ctx.stroke();
-      ctx.fillStyle = rgba(dead ? COL.enemy : COL.g, .5 + .5 * Math.sin(time * 4)); ctx.beginPath(); ctx.arc(1, 14, lw(1.6), 0, 7); ctx.fill();
+      ctx.strokeStyle = real ? 'rgba(30,32,34,.95)' : rgba(STRUCT, .85); ctx.lineWidth = lw(1.1);
+      ctx.beginPath(); ctx.moveTo(-.6 - Math.cos(ra) * 1.6, 16.7 - Math.sin(ra) * 1.6); ctx.lineTo(-.6 + Math.cos(ra) * 1.6, 16.7 + Math.sin(ra) * 1.6); ctx.stroke();
+      ctx.fillStyle = rgba(dead ? COL.enemy : COL.g, .5 + .5 * Math.sin(time * 4)); ctx.beginPath(); ctx.arc(1.8, 16.7, lw(1.6), 0, 7); ctx.fill();
     }
     // 甲板停机：待命（青）、整备中（琥珀 + 进度）、空位（机位原主出击中 ＋、已损失 ×）；机库里的飞机不画，只在舰下状态点里
     const park = cvPark(c, wing), slotOf = new Map([...park].map(([id, j]) => [j, id]));

@@ -301,7 +301,8 @@ function bgStep(dt) {
   for (const G of S.bgs) {
     if (G.dead || (G.thT -= dt) > 0) continue;
     G.thT = 1;
-    if (G.reg && typeof regThink === 'function') regThink(G); else bgThink(G);   // 团（hq.js）由团长按战法表指挥
+    if (G.th && typeof thRegThink === 'function') thRegThink(G);   // 战区编成的团（theater.js）：沿战线的命令自己摆，其余交团长
+    else if (G.reg && typeof regThink === 'function') regThink(G); else bgThink(G);   // 团（hq.js）由团长按战法表指挥
     if (!G.dead) bgRecon(G);
   }
   if (S.bgs.some(G => G.dead)) {
@@ -322,7 +323,7 @@ function bgDraw() {
   const at = [];
   for (const G of S.bgs) {
     if (G.reg) continue;   // 团的标号由指挥体系画（hq.js hqDraw）
-    if (G.side === 'e' && !(S.role === 'spectate' || R.eye === 'all') && !spotted(G.ax, G.ay)) continue;
+    if (G.side === 'e' && !(specAll() || R.eye === 'all') && !spotted(G.ax, G.ay)) continue;
     const col = G.side === 'p' ? COL.g : COL.enemy, w = px(22), h = px(14), x = G.ax;
     let y = G.ay;
     while (at.some(o => Math.abs(o[0] - x) < w * 1.2 && Math.abs(o[1] - y) < h * 2.6)) y += h * 2.8;   // 两个战斗群在同一处集合：标号上下错开，不叠在一起

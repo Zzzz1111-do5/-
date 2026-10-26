@@ -156,7 +156,8 @@ function apGarrisonSpot(u, P) {
 function apAssign(P) {
   const all = S.units.filter(u => u.side === 'p' && u.auto === true && u.x != null && isFinite(u.x) && teamsOf(u).length);
   for (const u of all) if (!P.u[u.id]) P.u[u.id] = { ph: 'idle', obj: null, next: S.t + Math.random() * AP_THINK };
-  const inf = all.filter(u => u.kind === 'inf');
+  // 战区指挥（theater.js）开着：步兵连由师 / 旅 / 团沿战线指挥，不再各自挑据点（只有空降兵、突击队仍自己选目标）
+  const inf = all.filter(u => u.kind === 'inf' && !(typeof thOn === 'function' && thOn('p') && !thAir(u)));
   const cand = S.points.filter(p => p.owner !== 'p' || p.prog < .9);
   const est = {}, cnt = {};
   for (const p of cand) {

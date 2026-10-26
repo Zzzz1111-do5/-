@@ -313,7 +313,7 @@ HOOK.step.push(rcStep);
 // —— 画面：侦察分队（眼睛标记 + 去观察点的虚线）、据点上的敌情标注（侦：敌≈N）——观战时双方都画，平时只画看得见的 ——
 function rcDraw() {
   if (!S || !S.hq) return;
-  const spec = S.role === 'spectate' || R.eye === 'all' || R.eye === 'both' || R.eye === 'e', ctx = R.ctx, in3 = typeof V3 === 'object' && V3.drawing;   // 3D：只留去观察点的虚线，标记和字贴在地上是扁的
+  const spec = specAll() || R.eye === 'all' || R.eye === 'both' || R.eye === 'e', ctx = R.ctx, in3 = typeof V3 === 'object' && V3.drawing;   // 3D：只留去观察点的虚线，标记和字贴在地上是扁的
   ctx.save();
   for (const side of ['p', 'e']) {
     const H = S.hq[side];

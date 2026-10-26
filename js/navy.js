@@ -245,7 +245,7 @@ HOOK.visionE.push(() => S && S.eships ? nvAlive().map(e => ({ x: e.x, y: e.y, r:
 // —— 绘制：船体（尖艏）、上层建筑、垂发区、舰炮；航迹；耐久；沉没下沉 ——
 function navyDraw(time) {
   if (!S || !S.eships || !S.eships.length || typeof R !== 'object' || !R.ctx) return;
-  const ctx = R.ctx, spec = S.role === 'spectate', k = typeof shipK === 'function' ? shipK() : 1;
+  const ctx = R.ctx, spec = specAll(), k = typeof shipK === 'function' ? shipK() : 1;
   for (const e of S.eships) {
     const known = spec || S.t - (e.det ?? -99) < 4, ghost = !known && e.kx != null && !e.dead;
     if (!known && !ghost && !(e.dead && S.t - e.sinkT < 12 && e.kx != null)) continue;

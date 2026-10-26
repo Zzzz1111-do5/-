@@ -586,9 +586,11 @@ function a4Think(dt) {
     info[p.key] = { p, fx: T ? T[0] : p.x, fy: T ? T[1] : p.y + 250, th: T ? T[2] : 0, near: T ? T[3] : 0, def: 0 };
   }
   for (const q of S.teams) if (q.side === 'e' && q.men.length && info[q.obj] && !(unitOf(q) && unitOf(q).state === 'rout')) info[q.obj].def += q.men.length;
-  a4Ca(C, info, aiD());
-  a4Res(C, info);
-  a4Draw(C, info);
+  if (!(typeof thOn === 'function' && thOn('e'))) {   // 战区指挥（theater.js）开着：反冲击、预备队机动、抽调支队都由师 / 旅 / 团统一指挥
+    a4Ca(C, info, aiD());
+    a4Res(C, info);
+    a4Draw(C, info);
+  }
   a4Flank(C, info);
   if ((C.bindT -= 1.5) <= 0) { C.bindT = 3; a4Bind(C); }
 }
@@ -600,7 +602,7 @@ HOOK.step.push(a4Think);
 //   预备队整连机动、借兵侧射为细虚线
 function frDrawPlans(ctx, fL, spec, time) {
   if (!S) return;
-  if (typeof hqOn === 'function' && hqOn()) return;   // 作战箭头统一由指挥体系画（hq.js hqDraw）
+  if ((typeof hqOn === 'function' && hqOn()) || (typeof thOn === 'function' && thOn())) return;   // 作战箭头统一由指挥体系画（hq.js hqDraw / theater）
   const arrow = typeof cmdArrow === 'function' ? cmdArrow : null, G = S.tf && Array.isArray(S.tf.go) ? S.tf.go : [];
   ctx.setLineDash([]);
   if (arrow) for (const g of G) {

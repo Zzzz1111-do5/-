@@ -242,7 +242,7 @@ function eaRepair(dt) {
     if (!b.dead) {
       b.rb = null; b.deadE = null;
       if (b.hp < b.maxhp && quiet) {
-        if (!b.fixing) { b.fixing = true; if (eaBaseSeen(b) || S.role === 'spectate') log('敌野战机场地勤正在抢修受损设施', 'warn', 'eafix' + b.id, 90, b); }
+        if (!b.fixing) { b.fixing = true; if (eaBaseSeen(b) || specAll()) log('敌野战机场地勤正在抢修受损设施', 'warn', 'eafix' + b.id, 90, b); }
         b.hp = Math.min(b.maxhp, b.hp + EA_FIX.rate * dt);
       } else b.fixing = false;
       b.hp0 = b.hp;
@@ -260,7 +260,7 @@ function eaRepair(dt) {
     Object.assign(b, { dead: false, hp: b.maxhp * EA_FIX.hp, hp0: b.maxhp * EA_FIX.hp, rb: null, deadE: null, rc: [], cratT: 0 });
     if (S.eair) S.eair.said.base = 0;
     eaStat('eaRebuilt');
-    log(eaBaseSeen(b) || S.role === 'spectate' ? '敌野战机场抢修完毕，跑道恢复起降' : '侦听到敌机场方向恢复飞行活动，疑似机场已修复', 'warn', null, 0, b);
+    log(eaBaseSeen(b) || specAll() ? '敌野战机场抢修完毕，跑道恢复起降' : '侦听到敌机场方向恢复飞行活动，疑似机场已修复', 'warn', null, 0, b);
     if (typeof chatSay === 'function') chatSay('e', `报告：野战机场重建完毕（耐久恢复至 ${Math.round(EA_FIX.hp * 100)}%），跑道恢复起降。`, { kind: 'report', at: b, lv: 1 });
   }
 }
@@ -654,7 +654,7 @@ function eaSpotSay(a) {
   a.said = true;
   const nm = EA_SPEC[a.type].name, o = eaTgtObj(a.tgt), what = !o ? '前沿阵地' : a.tgt.k === 'ship' ? `${o.label}登陆舰` : a.tgt.k === 'veh' ? vehName(o) : '步兵';
   if (typeof chatSay !== 'function') return;
-  if (!a.pv && S.role !== 'spectate') return;
+  if (!a.pv && !specAll()) return;
   chatSay('p', `报告：敌${nm}出现在${eaWhere(a.x, a.y)}，正扑向我${what}。`, { kind: 'report', at: { x: a.x, y: a.y }, key: 'easpot', gap: 25 });
   let n = 0;
   for (const q of S.teams) if (q.side === 'p' && q.men.includes('aa') && (q.aam ?? 3) > 0 && dist(q.x, q.y, a.tx, a.ty) < 450) {
@@ -806,7 +806,7 @@ function eaVision() {
 // —— 绘制 ——
 function eaDraw(time) {
   if (!S || !S.eair || !eaOn() || typeof R !== 'object' || !R.ctx) return;
-  const ctx = R.ctx, E = S.eair, spec = S.role === 'spectate', lw = px(1.3);
+  const ctx = R.ctx, E = S.eair, spec = specAll(), lw = px(1.3);
   // 弹药（机场与停在机位上的飞机在地面层画：afbase.js eaDrawBases）
   for (const p of E.proj) {
     if (p.t < 0 || p.done || R.fx3d) continue;   // 3D 时立体画（v3fx.js）
