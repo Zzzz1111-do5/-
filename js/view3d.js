@@ -552,7 +552,7 @@ function v3Proj(x, y, z) {
 function v3Overlay(ctx, time) {
   ctx.save(); ctx.setTransform(R.dpr, 0, 0, R.dpr, 0, 0);
   ctx.lineCap = 'round'; ctx.font = '11px "IBM Plex Mono", "Noto Sans SC", monospace'; ctx.textAlign = 'center';
-  const near = CAM.z / CAM.fit > 2.2, spec = S.role === 'spectate' || R.eye === 'all', used = [];
+  const near = CAM.z / CAM.fit > 2.2, spec = specAll() || R.eye === 'all', used = [];
   // 名称标签：和已画的标签重叠就不画（近处的先画，远处的让位）
   const label = (t, x, y, col, al) => {
     const w = ctx.measureText(t).width + 4, r = [x - w / 2, y - 11, x + w / 2, y + 2];

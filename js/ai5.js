@@ -117,7 +117,7 @@ function a5Release(G, why) {
 }
 
 function a5Think() {
-  if (!S || S.phase !== 'battle' || S.over || !a5On() || !S.ai.co) return;
+  if (!S || S.phase !== 'battle' || S.over || !a5On() || !S.ai.co || (typeof thOn === 'function' && thOn('e'))) return;   // 战区指挥开着：总攻由守方战区按战线组织
   const G = a5G();
   const ashore = S.teams.filter(q => q.side === 'p' && q.men.length && isLand(q.x, q.y)).reduce((a, q) => a + q.men.length, 0);
   switch (G.st) {

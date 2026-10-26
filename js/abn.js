@@ -774,7 +774,7 @@ function abeDeny(b, af) {
     else if (w.state === 'rearm') { w.state = 'lost'; burn++; }
   }
   abStat('abeDeny');
-  log(inVision(b.x, b.y) || S.role === 'spectate' ? '敌军炸毁机场跑道、焚毁油库' : '机场方向接连传来大爆炸，疑似敌军自行破坏机场', 'warn', null, 0, b);
+  log(inVision(b.x, b.y) || specAll() ? '敌军炸毁机场跑道、焚毁油库' : '机场方向接连传来大爆炸，疑似敌军自行破坏机场', 'warn', null, 0, b);
   abSay('e', `决心：机场守不住了。命令：工兵炸毁跑道、焚毁油库，不给敌人留下可用的机场；${fly ? `能飞的 ${fly} 架飞机立即转场后方机场；` : ''}${burn ? `整备中的 ${burn} 架就地破坏；` : ''}警卫队边打边撤，预备队组织反冲击。`, { kind: 'plan', at: af, lv: 0 });
 }
 // 守方炮兵的额外目标（ai2.js aiArtillery 读取）：我方占着的机场——运输机进近 / 落地、飞机起降时打跑道，平时打得少

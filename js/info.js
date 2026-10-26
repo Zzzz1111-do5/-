@@ -62,7 +62,7 @@ function infoUnit(u) {
       ['指挥', u.auto ? `自动${ph ? ` · ${ph}${obj ? ' ' + infoEsc(obj) : ''}` : ''}` : '手动']] };
 }
 function infoVeh(v, enemy) {
-  const sp = vehSp(v), gun = (INFO_GUN[v.side] || INFO_GUN.p)[v.type] || '', vis = !enemy || S.role === 'spectate' || inVision(v.x, v.y);
+  const sp = vehSp(v), gun = (INFO_GUN[v.side] || INFO_GUN.p)[v.type] || '', vis = !enemy || specAll() || inVision(v.x, v.y);
   if (enemy) return { t: '敌 ' + vehModel(v), s: vis ? '目视' : '已标定位置（未在视野内）',
     rows: [['隶属', infoEsc(infoVOrg(v))], ['主武器', infoEsc(gun)], ['车组', `${vehCrew(v)} 人`], vis && ['车体', `约 ${infoPct(v.hp / v.maxhp)}`], v.immob && ['状态', '履带被打断']] };
   const am = sp.gun && sp.ammo ? `${Math.round(v.ammo)}/${sp.ammo} 发` : '机枪（弹药充足）', fu = v.fuel ?? 1;
@@ -100,13 +100,13 @@ function infoCV() {
       ['自卫火力', `1130 型近防炮 ×3、红旗-10 防空导弹 ×4 座（余 ${c.hq10 ?? (typeof CV_DEF === 'object' ? CV_DEF.hq10 : 72)} 枚）——拦截来袭导弹、打靠近的敌机`], ['派机', c.auto ? '自动' : '手动']] };
 }
 function infoEnemyTeam(q) {
-  const vis = S.role === 'spectate' || inVision(q.x, q.y);
+  const vis = specAll() || inVision(q.x, q.y);
   const u = unitOf(q), i = u ? S.units.filter(o => o.side === u.side && o.org && u.org && o.org.r === u.org.r).indexOf(u) : 0;
   return { t: '敌 ' + infoTeamModel(q), s: vis ? '目视' : '最后发现位置',
     rows: [['隶属', infoEsc(u ? infoOrg(u, Math.max(0, i)) : '海防守备旅（散兵）')], ['人数', vis ? `${q.men.length} 人` : '不明'], vis && ['兵员与武器', infoEsc(infoMen([q], 'e').join('；'))], vis && ['状态', q.sup > 60 ? '被压制' : q.sup > 30 ? '受到压制' : '正常']] };
 }
 function infoEnemySt(e) {
-  const vis = S.role === 'spectate' || inVision(e.x, e.y), nm = e.name || (ENEMY_SPEC[e.kind] || {}).name || '火力点';
+  const vis = specAll() || inVision(e.x, e.y), nm = e.name || (ENEMY_SPEC[e.kind] || {}).name || '火力点';
   return { t: '敌 ' + nm, s: e.dead ? '已摧毁' : vis ? '目视' : '已标定',
     rows: [['隶属', infoEsc(e.org ? [e.org.b, e.org.r].filter(Boolean).join(' · ') : '海防守备旅 · 旅火力群')], !e.dead && vis && ['耐久', `约 ${infoPct(e.hp / ((ENEMY_SPEC[e.kind] || {}).hp || e.hp || 1))}`], !e.dead && ['状态', (e.sup || 0) > 50 ? '被压制' : e.moving ? '转移阵地' : '正常'], e.kind === 'tel' && ['载弹', `${e.n ?? 2} 枚`], e.kind === 'ascm' && ['载弹', `${e.n ?? 4} 枚`], e.kind === 'typhon' && ['载弹', `战斧 ${e.n ?? 16} 枚`]] };
 }
@@ -130,7 +130,7 @@ function infoEair(a) {
   const sp = (typeof EA_SPEC === 'object' && EA_SPEC[a.type]) || {}, F = typeof EA_FTR === 'object' && EA_FTR[a.type];
   const wpn = [a.aam > 0 && `AIM-120D 空空导弹 ${a.aam} 枚`, a.sdb > 0 && `GBU-53/B 小直径炸弹 ${a.sdb} 枚`, a.mav > 0 && `AGM-65 小牛导弹 ${a.mav} 枚`, a.rk > 0 && `火箭弹 ${a.rk} 组`, a.atgm > 0 && `地狱火导弹 ${a.atgm} 组`,
     !sp.stealth && a.gun > 0 && `航炮 ${a.gun} 发`].filter(Boolean).join('；');
-  return { t: '敌 ' + (sp.name || a.type), s: S.role === 'spectate' || inVision(a.x, a.y) ? '目视' : '雷达发现',
+  return { t: '敌 ' + (sp.name || a.type), s: specAll() || inVision(a.x, a.y) ? '目视' : '雷达发现',
     rows: [['状态', infoEsc(INFO_AIRPH[a.ph] || a.ph || '')], ['耐久', `${a.hp ?? '?'}/${sp.hp ?? '?'}`], ['速度', `${Math.round(a.spd || 0)}（最大 ${sp.spd || '?'}）`], ['隐身', infoEsc(infoStl(sp.stealth) + infoExp(a))],
       F && ['机载雷达', `发现距离 ${F.radar}`], wpn && ['挂载', infoEsc(wpn)], a.flares != null && ['干扰弹', `${a.flares} 组`],
       sp.stealth && F && ['空战打法', '超视距：发射后侧转，被逼近就拖开'], a.type === 'c17' && ['机上', `${(a.sq || []).length} 个班、${(a.veh || []).length} 辆空投车辆`]] };
@@ -176,7 +176,7 @@ if (typeof HOOK === 'object') {
   // 点敌方目标：不改选择，只显示它的型号卡；点自己的单位或空地时清掉
   HOOK.pointer.push((e, ph, p) => {
     if (ph !== 'up' || e.button !== 0 || !S || S.phase === 'sandbox' || U.tool || U.box || !p) return false;
-    const r = Math.max(14, px(16)), spec = S.role === 'spectate';
+    const r = Math.max(14, px(16)), spec = specAll();
     let best = null, bd = r;
     const cand = (k, id, x, y) => { const d = dist(p.x, p.y, x, y); if (d < bd) { bd = d; best = { k, id }; } };
     for (const q of S.teams) if (q.side === 'e' && q.men.length && (spec || inVision(q.x, q.y))) cand('team', q.id, q.x, q.y);

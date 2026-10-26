@@ -238,7 +238,7 @@ HOOK.step.push(dt => {
 // 潜艇：看得见（观战 / 被我方发现）时画艇体；鱼雷：水下细白尾迹
 HOOK.drawOver.push(function asDraw(time) {
   if (!S || typeof R !== 'object' || !R.ctx) return;
-  const ctx = R.ctx, spec = S.role === 'spectate' || R.eye === 'all' || R.eye === 'e' || R.eye === 'both';
+  const ctx = R.ctx, spec = specAll() || R.eye === 'all' || R.eye === 'e' || R.eye === 'both';
   for (const s of S.subs || []) {
     if (s.dead || !(spec || asSubSeen(s)) || !inView(s.x, s.y, 40)) continue;
     if (R.m3d) { if (asSubSeen(s)) { ctx.strokeStyle = rgba(COL.enemy, .5 + .3 * Math.sin(time * 5)); ctx.lineWidth = px(1); ctx.setLineDash([px(3), px(3)]); ctx.beginPath(); ctx.arc(s.x, s.y, 26, 0, 6.283); ctx.stroke(); ctx.setLineDash([]); } continue; }   // 3D：艇体在水下立体画（v3units.js）

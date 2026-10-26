@@ -436,7 +436,7 @@ function frCentroid(u) { let sx = 0, sy = 0, n = 0; for (const q of teamsOf(u)) 
 function frDraw(time) {
   if (!S || S.phase !== 'battle' || !S.front || !S.front.p || !frOn() || typeof R !== 'object' || !R.ctx) return;
   if (typeof SETTINGS === 'object' && SETTINGS && SETTINGS.front === false) return;
-  const ctx = R.ctx, F = S.front, P = F.p, spec = S.role === 'spectate', zr = CAM.z / CAM.fit, low = typeof SETTINGS === 'object' && SETTINGS && SETTINGS.quality === 'low';
+  const ctx = R.ctx, F = S.front, P = F.p, spec = specAll(), zr = CAM.z / CAM.fit, low = typeof SETTINGS === 'object' && SETTINGS && SETTINGS.quality === 'low';
   const fA = low ? 0 : clamp((3.5 - zr) / 1.5, 0, 1), fL = clamp((6 - zr) / 3, .25, 1), teeth = zr <= 4;
   const EF0 = spec && F.e && F.e.fe ? F.e.fe : P.fe, EA = spec ? null : P.fa, EF = FRD.fe;
   for (let b = 0; b < FR_NX; b++) { const e = EF0[b], f = P.fp[b]; EF[b] = e == null ? null : f == null ? e : Math.min(e, f - 8); }   // 犬牙交错处敌线画在我线北侧贴边，不交叉

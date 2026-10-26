@@ -159,7 +159,7 @@ function cmdThinkP() {
   cmdRun(cmdShipsP, C);
   cmdRun(cmdWaves, C);
   cmdRun(cmdFiresP, C);
-  if (P) {
+  if (P && !(typeof thOn === 'function' && thOn('p'))) {   // 战区指挥（theater.js）开着：陆上的阶段、目标、危局都由战区按战线组织
     cmdRun(cmdPhaseP, C, P);
     cmdRun(cmdPointsP, C, P);
     cmdRun(cmdStalls, C, P);
@@ -1441,7 +1441,7 @@ function cmdEObs() {
 const cmdIsHome = q => !!S.cmd && S.cmd.e.home[q.id] != null && q.obj === S.cmd.e.home[q.id];
 // ai2.js 预备队调动时询问：这个组是否还被扣着（判明主攻方向前 / 迟出摩擦）
 function cmdHeld(q) {
-  if (!cmdOn() || q.role !== 'reserve' || !cmdIsHome(q)) return false;
+  if ((typeof thOn === 'function' && thOn('e')) || !cmdOn() || q.role !== 'reserve' || !cmdIsHome(q)) return false;
   const E = S.cmd.e;
   if (E.rel[q.id]) return false;
   if (E.commit == null) return S.t < 75;   // 判明主攻方向之前不轻动（最多扣 75 秒）
@@ -1457,7 +1457,8 @@ function cmdThinkE() {
   // 守军对各方向兵力的估计：目视数为下限，记忆缓慢衰减（约 2 分钟减半），看不见不等于没有
   if (!Array.isArray(E.mem)) E.mem = [];
   o.forEach((x, i) => { E.mem[i] = Math.max(x.men, (E.mem[i] || 0) * .983); x.est = Math.round(E.mem[i]); });
-  if (E.guess == null) {
+  if (typeof thOn === 'function' && thOn('e')) { /* 战区指挥（theater.js）判明登陆场、统一指挥机动兵力 */ }
+  else if (E.guess == null) {
     if (tot > 0 && E.seenT == null) {
       E.seenT = S.t;
       const list = o.map((x, i) => ({ i, ...x })).filter(x => x.ships > 0).sort((a, b) => b.ships - a.ships);
@@ -1467,7 +1468,7 @@ function cmdThinkE() {
     else if (E.seenT == null && S.t > 75 && E.commit == null) { E.commit = S.t; chatSay('e', '判断：敌登陆方向仍未判明。决心：预备队前出至公路枢纽，随时机动。', { kind: 'plan' }); }
   } else cmdECorrect(E, F, o);
   cmdEBias(E, o);
-  cmdRun(cmdECounters, E);
+  if (!(typeof thOn === 'function' && thOn('e'))) cmdRun(cmdECounters, E);
   cmdRun(cmdEEvents, E, o);
 }
 function cmdEInit(E) {

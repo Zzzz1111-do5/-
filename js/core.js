@@ -87,6 +87,8 @@ const RIVER_WADE = { inf: .25, veh: .25, amph: .6 };
 const wadeInf = (x, y) => { const t = typeAt(x, y); return TP[t].sp > 0 || t === T.RIVER; };   // 能走（含涉水）
 const spInf = t => TP[t].sp || (t === T.RIVER ? RIVER_WADE.inf : 0);   // 步兵在这种地形上的速度系数
 const coverAt = (x, y) => TP[typeAt(x, y)].cv;
+// 观战看全图：双方都交给 AI、玩家不指挥任何一方时才算（指挥模式 S.ctl 下各级仍由 AI 执行，但玩家只看本方视野）
+const specAll = () => !!S && S.role === 'spectate' && !S.ctl;
 
 // 行为计数（S.v7s，测试与调试用）：各模块的 xxStat 都写这里
 const v8Stat = (k, n = 1) => { if (!S) return; const o = S.v7s || (S.v7s = {}); o[k] = (o[k] || 0) + n; };

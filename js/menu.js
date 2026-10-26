@@ -301,7 +301,7 @@ function startPvE(level) {
   U.level = level;
   if (S && S.mode === 'sandbox' && typeof closeSandbox === 'function') try { closeSandbox(); } catch (e) { console.error('closeSandbox', e); }
   restart(false);
-  S.mode = 'pve'; S.role = 'attack';
+  S.mode = 'pve'; S.role = 'spectate'; S.ctl = 'p';   // 战役：舰船、航母、各连由 AI 执行，玩家在编队面板给攻方的师 / 旅 / 团下令（thpanel.js）
   mnFrameDeploy();
   $('brief').hidden = true;
   updateHud();
@@ -476,7 +476,7 @@ if (typeof onSettings === 'function') onSettings(() => { if (MENU.set && !MENU.s
 HOOK.key.push(e => {
   if (MENU.open || !S) return false;
   if (e.key === 'Escape' && S.briefed && !$('brief').hidden) { $('brief').hidden = true; return true; }   // ？帮助（简报）打开时 Esc 先关它
-  if (e.key === 'F10' || (e.key === 'Escape' && !U.tool && !S.sel.length && !U.fdrag && (S.phase !== 'sandbox' || (typeof SBX === 'object' && !SBX.line && !SBX.pick && !SBX.drag)))) { e.preventDefault(); showMenu(); return true; }   // 沙盒编辑：无选中兵种 / 画线 / 拖动时 Esc 也开菜单
+  if (e.key === 'F10' || (e.key === 'Escape' && !U.tool && !S.sel.length && !U.fdrag && !(typeof thuActive === 'function' && thuActive() && (THU.sel.size || THU.pick)) && (S.phase !== 'sandbox' || (typeof SBX === 'object' && !SBX.line && !SBX.pick && !SBX.drag)))) { e.preventDefault(); showMenu(); return true; }   // 沙盒编辑：无选中兵种 / 画线 / 拖动时 Esc 也开菜单
   return false;
 });
 

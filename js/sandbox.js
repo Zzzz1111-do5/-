@@ -971,10 +971,13 @@ function sbxBuild(role) {
 // 开战：spectate 观战 AI 对 AI；attack 亲自指挥进攻方（进入常规部署阶段）
 function sbxStart(role) {
   if (!S || !S.sbx || S.sbx.live) return false;
+  // 「指挥进攻方」也是双方 AI 接管全部兵力（舰船、航母、连队都不能直接操控），玩家只在编队面板（thpanel.js）给攻方的师 / 旅 / 团下令
+  const ctl = role !== 'spectate' ? 'p' : null;
+  role = 'spectate';
   const spent = { p: sbxSpent('p'), e: sbxSpent('e') };
   S.sbx.spent = spent;
   SBX.last = sbxSnap('上一局部署'); sbxStore(SBX_LAST_KEY, SBX.last);   // 打完可「修改部署再战」
-  if (typeof R === 'object' && R) R.eye = role === 'spectate' ? 'both' : 'p';   // 观战默认看双方视野
+  if (typeof R === 'object' && R) R.eye = ctl ? 'p' : 'both';   // 观战默认看双方视野；指挥进攻方只看攻方视野
   sbxBuild(role);
   S.landPref = SBX.dir.main >= 0 || SBX.dir.feint !== -2 ? { main: SBX.dir.main, feint: SBX.dir.feint } : null;   // 指定的登陆方向：攻方指挥官照办（commander.js cmdPlanP）
   closeSandbox(true);
@@ -985,9 +988,10 @@ function sbxStart(role) {
     if (Array.isArray(S.veh)) for (const v of S.veh) if (v.side === 'p') v.auto = true;
     S.dd.auto = S.dd.state !== 'sunk'; if (S.cv) S.cv.auto = S.cv.hp > 0 || !!(S.air && S.air.wing.some(w => typeof airLandW === 'function' && airLandW(w)));
     S.phase = 'deploy';
+    S.ctl = ctl;
     startBattle();
     S.paused = false;
-    log('沙盒观战：双方指挥官 AI 接管全部兵力', 'info');
+    log(ctl ? '沙盒：你是攻方战区司令——在左侧编队面板给师、旅、团下令（推进 / 穿插 / 坚守 / 后撤 / 预备队），舰船与各连由 AI 执行' : '沙盒观战：双方指挥官 AI 接管全部兵力', 'info');
   } else {
     S.phase = 'deploy'; S.paused = true;
     log('沙盒：进攻方由你指挥。预定登陆点后按 H-HOUR 开始。', 'info');

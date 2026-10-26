@@ -1282,7 +1282,7 @@ function vehDrawShot(ctx, s) {
 function vehDrawPlatoons(ctx) {
   const G = {};
   for (const v of S.veh) {
-    if (v.dead || v.lst || v.swim || (v.side === 'e' && S.role !== 'spectate')) continue;
+    if (v.dead || v.lst || v.swim || (v.side === 'e' && !specAll())) continue;
     const k = v.buddy != null && v.esc ? 'b' + v.buddy : v.side === 'p' && v.sk != null && v.auto ? 's' + v.sk : null;
     if (k) (G[v.side + k] || (G[v.side + k] = [])).push(v);
   }
@@ -1302,7 +1302,7 @@ function vehDrawPlatoons(ctx) {
 // 手榴弹：亮点沿抛物线（最高约 10）飞向目标；守方的只在视野内画
 function vehDrawGren(ctx, g) {
   const u = clamp(g.t / g.dur, 0, 1), x = lerp(g.x0, g.x1, u), y = lerp(g.y0, g.y1, u) - Math.sin(Math.PI * u) * 10;
-  if (!inView(x, y, 20) || (g.side === 'e' && S.role !== 'spectate' && !inVision(x, y))) return;
+  if (!inView(x, y, 20) || (g.side === 'e' && !specAll() && !inVision(x, y))) return;
   ctx.fillStyle = rgba(g.side === 'e' ? COL.enemy : '#e9fff2', .95);
   ctx.beginPath(); ctx.arc(x, y, Math.max(1.2, px(1.8)), 0, 7); ctx.fill();
 }

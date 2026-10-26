@@ -1080,7 +1080,7 @@ function v3Units(C, box) {
   if (!V3M.ok) return;
   for (const L of V3M.inst.values()) L.d.length = 0;
   const [bx, by, bw, bh] = box, inB = (x, y, m = 40) => x > bx - m && x < bx + bw + m && y > by - m && y < by + bh + m;
-  const spec = S.role === 'spectate' || (typeof R === 'object' && (R.eye === 'all' || R.eye === 'both' || R.eye === 'e')), near = !!R.m3dNear, t = performance.now() / 1000;   // near：画得出单兵的距离就用立体士兵（view3d.js）
+  const spec = specAll() || (typeof R === 'object' && (R.eye === 'all' || R.eye === 'both' || R.eye === 'e')), near = !!R.m3dNear, t = performance.now() / 1000;   // near：画得出单兵的距离就用立体士兵（view3d.js）
   const seen = (x, y) => inVision(x, y);
   // 车辆：车体 + 炮塔（随瞄准转）+ 炮塔后的雷达（转）
   for (const v of S.veh || []) {

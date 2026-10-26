@@ -262,7 +262,7 @@ function auScan(play) {
 }
 // 和聊天面板的过滤一致：PvE 里敌方通话只在截获时由面板提示，这里不响
 function auChatHeard(m) {
-  if (m.side === 'e' && (S.mode !== 'sandbox' && S.role !== 'spectate' || !SETTINGS.enemyChat)) return false;
+  if (m.side === 'e' && (S.mode !== 'sandbox' && !specAll() || !SETTINGS.enemyChat)) return false;
   if (SETTINGS.chat === 'brief' && !['plan', 'friction', 'remedy'].includes(m.kind)) return false;
   return true;
 }

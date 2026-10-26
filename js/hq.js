@@ -580,7 +580,7 @@ function hqKeepGuard(u) {
 //   坦克：mix（合成）按各团步兵连数配坦克排（就近、三辆一排），步兵太少配不完的坦克另编装甲团；mass（装甲集中）坦克全部另编装甲团（每团至多九辆）；
 //   步战车随步兵（按连数配）；防空车每团一辆（装甲团优先）；自行火炮编进最大的团（旅炮兵群）；反坦克车、侦察车等分给各团护侧翼。
 //   一辆坦克都不落下；只有车辆没有步兵时全部编成装甲团
-function hqMakeRegs(side, B, us, vs, mode = 'mix', quiet = false) {
+function hqMakeRegs(side, B, us, vs, mode = 'mix', quiet = false, mk = null) {   // mk(us, vs, at)：另一套指挥体系（theater.js）自己建团
   const T = vs.filter(hqTank), IFV = vs.filter(v => v.type === 'apc' || v.type === 'abv'), AA = vs.filter(hqAA), ART = vs.filter(v => v.type === 'spg');
   const OTH = vs.filter(v => !T.includes(v) && !IFV.includes(v) && !AA.includes(v) && !ART.includes(v));
   const cen = L => ({ x: L.reduce((a, o) => a + o.x, 0) / L.length, y: L.reduce((a, o) => a + o.y, 0) / L.length });
@@ -626,7 +626,7 @@ function hqMakeRegs(side, B, us, vs, mode = 'mix', quiet = false) {
   for (const r of regs) {
     if (!r.us.length && !r.vs.length) continue;
     const at = hqSlot(side, r.us.length ? r.c.x : cen(r.vs).x, r.us.length ? r.c.y : cen(r.vs).y);
-    const G = hqNewReg(side, B, r.us, r.vs, at);
+    const G = mk ? mk(r.us, r.vs, at) : hqNewReg(side, B, r.us, r.vs, at);
     G.arm = r.arm;
     made.push(G);
   }
@@ -1033,7 +1033,7 @@ function hqArrow(ctx, pts, w, fill, stroke, dash) {
 function hqDraw() {
   if (!hqOn() || typeof R === 'undefined' || !R.ctx || (typeof V3 === 'object' && V3.drawing && false)) return;
   const ctx = R.ctx, zr = typeof CAM === 'object' && CAM.fit ? CAM.z / CAM.fit : 1, A0 = clamp(1.25 - zr / 7, .3, 1);
-  const spec = S.role === 'spectate' || R.eye === 'all' || R.eye === 'both' || R.eye === 'e';
+  const spec = specAll() || R.eye === 'all' || R.eye === 'both' || R.eye === 'e';
   ctx.save(); ctx.lineJoin = 'round'; ctx.lineCap = 'round';
   const marks = [];
   for (const side of ['p', 'e']) {
@@ -1258,7 +1258,7 @@ function hqMarks3(ctx, stem) {
     if (SG) { ctx.strokeStyle = rgba(COL.amber, 1); ctx.lineWidth = 2.6; for (const [x, y] of hqRegPts(SG)) { const q = v3Proj(x, y, v3Ht(x, y) + 2); if (q && q.f < .95) { ctx.beginPath(); ctx.arc(q.x, q.y, 12, 0, 6.283); ctx.stroke(); } } }
     ctx.restore();
   }
-  const spec = S.role === 'spectate' || R.eye === 'all' || R.eye === 'both' || R.eye === 'e', occ3 = [];
+  const spec = specAll() || R.eye === 'all' || R.eye === 'both' || R.eye === 'e', occ3 = [];
   for (const side of ['p', 'e']) {
     const H = S.hq[side];
     if (!H || !H.live || (side === 'e' && !spec) || (side === 'p' && S.role !== 'spectate')) continue;
@@ -1358,7 +1358,7 @@ function hqAggSet() {
   const k = S.t + ':' + R.zr;
   if (HQ.aggK === k) return HQ.agg;
   HQ.aggK = k;
-  const u = new Set(), v = new Set(), spec = S.role === 'spectate' || R.eye === 'all' || R.eye === 'both' || R.eye === 'e';
+  const u = new Set(), v = new Set(), spec = specAll() || R.eye === 'all' || R.eye === 'both' || R.eye === 'e';
   const ok = side => side === 'p' ? S.role === 'spectate' : spec;   // 敌方的编制看不见：只有观战时才合成符号
   const rest = [], restV = [];
   if (hqAggOn()) {
