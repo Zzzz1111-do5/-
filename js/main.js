@@ -40,9 +40,9 @@ let lastT = performance.now(), acc = 0, hudT = 0, mmT = 0, ema = 1 / 60;
 function frame(now) {
   const dt = Math.min(.1, (now - lastT) / 1000);
   lastT = now;
-  // 设备跟不上时降到 1 倍像素密度
+  // 设备跟不上（平均帧间隔超过约 38ms，低于 26 帧）时降到 1 倍像素密度
   ema = ema * .95 + dt * .05;
-  if (ema > .045 && !R.dprCap && now > 6000 && (window.devicePixelRatio || 1) > 1) { R.dprCap = 1; resize(); }
+  if (ema > .038 && !R.dprCap && now > 6000 && (window.devicePixelRatio || 1) > 1) { R.dprCap = 1; resize(); }
   camKeys(dt);
   if (S.phase === 'battle' && !S.paused && !S.over && S.briefed) {
     acc += dt * S.speed;

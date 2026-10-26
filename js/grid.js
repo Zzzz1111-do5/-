@@ -34,27 +34,40 @@ function visDirs(n) {
   if (!d) { d = new Float64Array(n * 2); for (let k = 0; k < n; k++) { const a = k / n * 6.2832; d[k * 2] = Math.cos(a); d[k * 2 + 1] = Math.sin(a); } VIS_DIR.set(n, d); }
   return d;
 }
+// 每格的地面视线高度、遮挡顶高（地面 + 林地 / 城镇 / 悬崖的附加高度），只随地图变（炸桥、修桥是河流 ↔ 桥梁，两者都是 0 遮挡、同一高程）
+const VIS_G = new Float64Array(GW * GH), VIS_B = new Float64Array(GW * GH), VIS_KEY = { ter: null, seed: null };
+function visPrep() {
+  if (VIS_KEY.ter === TER && VIS_KEY.seed === TER.seed) return;
+  VIS_KEY.ter = TER; VIS_KEY.seed = TER.seed;
+  for (let i = 0; i < GW * GH; i++) { const t = TER.type[i], g = isWater(t) ? 0 : TER.elev[i] * ELEV_H; VIS_G[i] = g; VIS_B[i] = g + TP[t].bl; }
+}
+const VIS_ST = [1];   // 射线步长 1, 1.7, 2.4 …（格），与逐次累加 .7 得到的值完全相同；视距更远时再往后补
 function castVision(out, sources) {
   out.fill(0);
+  visPrep();
   const done = [];
   for (const s of sources) {
     const h = s.h || .35;
-    if (done.some(o => o.h === h && o.r >= s.r && Math.abs(o.x - s.x) < 6 && Math.abs(o.y - s.y) < 6)) continue;
+    let dup = false;
+    for (const o of done) if (o.h === h && o.r >= s.r && Math.abs(o.x - s.x) < 6 && Math.abs(o.y - s.y) < 6) { dup = true; break; }
+    if (dup) continue;
     done.push({ x: s.x, y: s.y, r: s.r, h });
     const gx0 = s.x / CELL, gy0 = s.y / CELL, i0 = ci(s.x, s.y), rc = s.r / CELL;
-    const eye = (isWater(TER.type[i0]) ? 0 : TER.elev[i0] * ELEV_H) + h;
+    const eye = VIS_G[i0] + h;
     out[i0] = 1;
     const n = Math.ceil(rc * 7.5), D = visDirs(n);
+    while (VIS_ST[VIS_ST.length - 1] + .7 <= rc) VIS_ST.push(VIS_ST[VIS_ST.length - 1] + .7);
+    let ns = 0;
+    while (ns < VIS_ST.length && VIS_ST[ns] <= rc) ns++;
     for (let k = 0; k < n; k++) {
       const dx = D[k * 2], dy = D[k * 2 + 1];
       let maxS = -1e9;
-      for (let st = 1; st <= rc; st += .7) {
-        const fx = gx0 + dx * st, fy = gy0 + dy * st;
+      for (let j = 0; j < ns; j++) {
+        const st = VIS_ST[j], fx = gx0 + dx * st, fy = gy0 + dy * st;
         if (fx < 0 || fy < 0 || fx >= GW || fy >= GH) break;
-        const i = (fy | 0) * GW + (fx | 0), t = TER.type[i];
-        const ground = isWater(t) ? 0 : TER.elev[i] * ELEV_H;
-        if ((ground - eye) / st >= maxS - .02) out[i] = 1;
-        const top = (ground + TP[t].bl - eye) / st;
+        const i = (fy | 0) * GW + (fx | 0);
+        if ((VIS_G[i] - eye) / st >= maxS - .02) out[i] = 1;
+        const top = (VIS_B[i] - eye) / st;
         if (top > maxS) maxS = top;
         if (SMOKE[i]) break;
       }

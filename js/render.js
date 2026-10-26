@@ -1,6 +1,6 @@
 'use strict';
 // 渲染（一）：画布、镜头变换、辉光、海岸线/网格/海滩标注、无 WebGL 时的像素地形；画面风格 SETTINGS.look：real 写实地形（terrain.js）· matrix 数码矩阵（matrix.js），各自首次用到时才建 WebGL
-const R = { cv: null, ctx: null, dpr: 1, s: 1, ox: 0, oy: 0, b1: null, b2: null, pix: null, fog: null, dprCap: 0, rain: .25, zr: 1, fig: false, view: null, lowCap: false };
+const R = { cv: null, ctx: null, dpr: 1, s: 1, ox: 0, oy: 0, shx: 0, shy: 0, b1: null, b2: null, pix: null, fog: null, dprCap: 0, rain: .25, zr: 1, fig: false, view: null, lowCap: false };
 const px = n => n / R.s;
 const _rgb = {};
 function rgba(hex, a) {
@@ -141,7 +141,8 @@ function drawScene(now) {
   let k = 0;
   for (const f of S.fx) if ((f.kind === 'boom' || f.kind === 'b2') && f.life < .25 && inVision(f.x, f.y)) k += (f.kind === 'b2' ? f.r / 60 : f.r / 30) * (1 - f.life / .25);   // B-2 重磅炸弹震得更厉害
   const ox = R.ox, oy = R.oy, shake = !(typeof SETTINGS === 'object' && SETTINGS && SETTINGS.shake === false);
-  if (shake && k > 0) { const a = Math.min(k, 2.5) * 1.4 * Math.min(R.s, CAM.fit * 3); R.ox += gauss() * a; R.oy += gauss() * a; }
+  if (shake && k > 0) { const a = Math.min(k, 2.5) * 1.4 * Math.min(R.s, CAM.fit * 3), d = R.dpr || 1; R.ox += Math.round(gauss() * a * d) / d; R.oy += Math.round(gauss() * a * d) / d; }
+  R.shx = R.ox - ox; R.shy = R.oy - oy;   // 这一帧的震动偏移（取整到设备像素）：地形缓存按不带震动的镜头存，震动时整像素平移着读（terrain.js）
   lodUpdate();
   fogBytes();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -173,7 +174,7 @@ function drawScene(now) {
   bloom();
   worldTf(ctx);
   drawBanners(time); drawShipMarks(); drawPings(time); runHook('drawTop', time);
-  R.ox = ox; R.oy = oy;
+  R.ox = ox; R.oy = oy; R.shx = R.shy = 0;
   if (typeof greenLook === 'function') { if (greenLook()) lkPost(); else if (LK.css) lkCss(false); }   // 黑绿画面：整帧过着色器（look.js）
 }
 
