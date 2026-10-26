@@ -13,7 +13,7 @@ function gunScan() {
 }
 // 炮口朝向：最近射击方向；没打过时岸炮、火炮朝海（南），高炮缓慢搜索或跟踪最近的飞机
 function gunAim(e, time) {
-  if (e.kind === 'tel' || e.kind === 'typhon') return e.th ?? Math.PI / 2;   // 发射车：车头朝行驶 / 发射方向（missile.js）
+  if (e.kind === 'tel' || e.kind === 'typhon' || e.kind === 'ascm') return e.th ?? Math.PI / 2;   // 发射车：车头朝行驶 / 发射方向（missile.js、antiship.js 的车阵与导弹出口按同一个朝向）
   if (e.kind === 'aa') {
     let best = null, bd = 300;
     for (const p of S.planes || []) if (!p.dead && p.alt > .3) { const d = dist(p.x, p.y, e.x, e.y); if (d < bd) { bd = d; best = p; } }
@@ -51,7 +51,7 @@ function gunFlash(ctx, x, y, a, len, k) {   // 炮口焰：k 0–1 随时间衰�
 // 主入口：返回 true 表示已按模型绘制（render2.js drawEnemies 调用）
 function gunModel(ctx, e, x, y, vis, time) {
   if (R.s < .75) return false;   // 约 2 倍全图以上才画模型
-  const K = { coastal: 1, arty: 1, mortar: 1, aa: 1, bunker: 1, tel: 1 };
+  const K = { coastal: 1, arty: 1, mortar: 1, aa: 1, bunker: 1, tel: 1, typhon: 1, ascm: 1 };
   if (!K[e.kind]) return false;
   if (GUNV.S !== S || GUNV.t !== time) { gunScan(); GUNV.t = time; }
   const real = vis && realLook();   // 写实：深色金属描边、沙色 / 混凝土底，不再是发光线稿
@@ -151,7 +151,7 @@ function gunModel(ctx, e, x, y, vis, time) {
     ctx.restore();
     ctx.fillStyle = dim; for (const [u, v] of [[-3, -2], [2, 3], [-2, 3.5], [3, -3]]) ctx.fillRect(x + u - .5, y + v - .5, 1, 1);   // 伪装网结
     if (fk) gunFlash(ctx, x, y, sa, 10.5, fk * .9);
-  } else if (e.kind === 'tel' || e.kind === 'typhon') {
+  } else if (e.kind === 'tel') {
     // 战术导弹发射车：四轴重型底盘 + 驾驶室；停车后液压臂把导弹竖起（俯视投影缩短成一点），点火后放下空架，随即转移阵地
     const ft = S.t - (e.fireT ?? -99), up = e.moving ? 0 : ft < 1.5 ? ft / 1.5 : ft < 3.5 ? 1 - (ft - 1.5) / 2 : 0, loaded = (e.n ?? 2) > 0 || ft < 1.5, L = 15 * (1 - .82 * up);
     ctx.save(); ctx.translate(x, y); ctx.rotate(a);
@@ -172,9 +172,141 @@ function gunModel(ctx, e, x, y, vis, time) {
       ctx.fillStyle = rgba(COL.smoke, .35 * k); ctx.beginPath(); ctx.arc(bx, by, 10 + 10 * (1 - k), 0, 7); ctx.fill();
     }
     if (vis && !e.moving) gunCrew(ctx, x, y, a, [[-4, -7], [3, 7, 'radio']], col);
-  }
+  } else if (e.kind === 'typhon') tyModel(ctx, e, x, y, a, vis, col, dim, dark, real);
+  else if (e.kind === 'ascm') ascModel(ctx, e, x, y, a, vis, col, dim, dark, real);
   ctx.restore();
   return true;
+}
+
+// 局部坐标里的矩形（u 沿车头方向、v 向右）
+const gunRect = (ctx, u0, u1, v0, v1) => ctx.rect(Math.min(u0, u1), Math.min(v0, v1), Math.abs(u1 - u0), Math.abs(v1 - v0));
+// 地面投影：光从西北来，每单位高度向东南偏 0.3（afbase.js 同一套）；换成车阵局部坐标
+const gunSh = a => [.3 * (Math.cos(a) + Math.sin(a)), .3 * (Math.cos(a) - Math.sin(a))];
+// 发射后的燃气：一团灰白烟，随风（向东）飘散变大
+function gunPuff(ctx, u, v, age, life, r0, a) {
+  if (age < 0 || age > life) return;
+  const k = age / life, wu = Math.cos(a) * 1.4 * age, wv = -Math.sin(a) * 1.4 * age;
+  ctx.fillStyle = rgba(COL.smoke, .5 * (1 - k)); ctx.beginPath(); ctx.arc(u + wu, v + wv, r0 + age * 2.6, 0, 7); ctx.fill();
+}
+function gunFlare(ctx, u, v, k, r) {   // 点火白光：k 1 → 0
+  ctx.fillStyle = rgba('#fff3d6', .95 * k); ctx.beginPath(); ctx.arc(u, v, r * (.6 + .4 * k), 0, 7); ctx.fill();
+  ctx.fillStyle = rgba(COL.amber, .55 * k); ctx.beginPath(); ctx.arc(u, v, r * 1.8 * (.7 + .3 * k), 0, 7); ctx.fill();
+}
+
+// 「堤丰」导弹连（车阵见 antiship.js TY_RIG）：4 套发射单元并排——HEMTT 牵引车（全宽驾驶室、风挡、后视镜、排气管、四轴八轮）
+//   + M870 拖车（鹅颈、三轴、展开的四个液压支腿），拖车上卧着 Mk 41 四联装发射箱（侧面加强筋、箱口端盖）；
+//   发射前箱子绕拖车尾部铰点起竖到垂直：卧着看见侧面，竖起来看见箱顶 2×2 四个单元格的舱盖，地上拖出长长的投影；
+//   点火前舱盖打开（黑），点火瞬间白光、燃气从箱顶冒出随风飘散、地面一圈冲击波；打空的发射单元尾部地面留下烧蚀痕；
+//   车阵后方是营指挥车（方舱、鞭状天线、卫星天线）与发电车，电缆连到车阵
+function tyModel(ctx, e, x, y, a, vis, col, dim, dark, real) {
+  const R0 = TY_RIG, [su, sv] = gunSh(a), fired = AS.ty.n - (e.n ?? AS.ty.n), ft = e.fireT != null ? S.t - e.fireT : 99, glass = real ? 'rgba(150,190,210,.9)' : rgba(col, .9);
+  ctx.save(); ctx.translate(x, y); ctx.rotate(a);
+  ctx.lineWidth = px(1.1);
+  // 连部：营指挥车与发电车（车阵后方左右）
+  ctx.fillStyle = 'rgba(0,0,0,.28)'; ctx.beginPath(); gunRect(ctx, -33 + su * 3, -21 + su * 3, -9.2 + sv * 3, -4.6 + sv * 3); gunRect(ctx, -31 + su * 1.6, -25.5 + su * 1.6, 4.8 + sv * 1.6, 8.4 + sv * 1.6); ctx.fill();
+  ctx.fillStyle = dark; ctx.strokeStyle = col;
+  ctx.beginPath(); gunRect(ctx, -24.2, -21, -9, -4.8); ctx.fill(); ctx.stroke();   // 驾驶室
+  ctx.beginPath(); gunRect(ctx, -33, -24.6, -9.2, -4.6); ctx.fill(); ctx.stroke();   // 方舱
+  ctx.strokeStyle = glass; ctx.lineWidth = px(1.4); ctx.beginPath(); ctx.moveTo(-21.25, -8.5); ctx.lineTo(-21.25, -5.3); ctx.stroke(); ctx.lineWidth = px(1.1);
+  ctx.strokeStyle = dim; ctx.beginPath(); ctx.arc(-27.6, -6.9, 1.25, 0, 7); ctx.moveTo(-27.6, -6.9); ctx.lineTo(-26.2, -8.1); ctx.stroke();   // 卫星天线
+  ctx.fillStyle = col; ctx.beginPath(); ctx.arc(-31.6, -8.3, .45, 0, 7); ctx.arc(-31.6, -5.5, .45, 0, 7); ctx.fill();   // 鞭状天线座
+  ctx.fillStyle = dark; ctx.strokeStyle = col; ctx.beginPath(); gunRect(ctx, -31, -25.5, 4.8, 8.4); ctx.fill(); ctx.stroke();   // 发电车
+  ctx.strokeStyle = dim; ctx.beginPath(); for (let u = -30; u < -26; u += 1.1) { ctx.moveTo(u, 5.4); ctx.lineTo(u, 7.8); } ctx.moveTo(-25.5, 6.6); ctx.lineTo(-23.6, 6.6); ctx.stroke();
+  ctx.setLineDash([px(1.5), px(2)]); ctx.beginPath(); ctx.moveTo(-25.5, 7.6); ctx.quadraticCurveTo(-20, 9, -17, (R0.n - 1) / 2 * R0.gap * .5); ctx.moveTo(-28, 4.8); ctx.quadraticCurveTo(-27, -1, -24.6, -4.6); ctx.stroke(); ctx.setLineDash(vis ? [] : [px(2), px(2)]);   // 电缆
+  for (let k = 0; k < R0.n; k++) {
+    const v0 = (k - (R0.n - 1) / 2) * R0.gap, th = tyErect(e, k), sn = Math.sin(th), cs = Math.cos(th), cur = e.tyL === k && ft < R0.up + R0.hold + R0.down, spent = (k + 1) * 4 <= fired && !cur;
+    ctx.save(); ctx.translate(0, v0);
+    if (spent || (cur && ft > R0.up)) { const g = ctx.createRadialGradient(R0.piv - R0.T / 2, 0, 0, R0.piv - R0.T / 2, 0, 7); g.addColorStop(0, 'rgba(0,0,0,.55)'); g.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(R0.piv - R0.T / 2, 0, 7, 0, 7); ctx.fill(); }   // 烧蚀痕
+    ctx.fillStyle = 'rgba(0,0,0,.28)'; ctx.beginPath(); gunRect(ctx, -17 + su * 2.2, 15 + su * 2.2, -2.4 + sv * 2.2, 2.4 + sv * 2.2); ctx.fill();   // 车的投影
+    // 拖车：甲板、横梁、三轴车轮、液压支腿
+    ctx.fillStyle = dim; ctx.beginPath();
+    for (const u of [-10.6, -12.8, -15]) for (const s of [-1, 1]) gunRect(ctx, u - 1.05, u + 1.05, s * 2.4, s * 3.3);
+    for (const u of [13.4, 11, 4.6, 2.3]) for (const s of [-1, 1]) gunRect(ctx, u - 1.05, u + 1.05, s * 1.95, s * 2.85);
+    ctx.fill();
+    if (!e.moving) { ctx.strokeStyle = dim; ctx.beginPath(); for (const u of [-16.2, -1.8]) for (const s of [-1, 1]) { ctx.moveTo(u, s * 2.4); ctx.lineTo(u, s * 4); } ctx.stroke(); ctx.fillStyle = dim; ctx.beginPath(); for (const u of [-16.2, -1.8]) for (const s of [-1, 1]) gunRect(ctx, u - .65, u + .65, s * 3.8, s * 4.9); ctx.fill(); }
+    ctx.fillStyle = dark; ctx.strokeStyle = col;
+    ctx.beginPath(); gunRect(ctx, -17, -.5, -2.4, 2.4); ctx.fill(); ctx.stroke();
+    ctx.strokeStyle = dim; ctx.beginPath(); for (let u = -15; u < -1; u += 2.1) { ctx.moveTo(u, -2.4); ctx.lineTo(u, 2.4); } ctx.stroke();
+    // 牵引车：车架、绞盘箱、驾驶室（风挡、后视镜、顶舱盖）、排气管；鹅颈压在第五轮上
+    ctx.strokeStyle = col; ctx.fillStyle = dark;
+    ctx.beginPath(); gunRect(ctx, -.5, 9.8, -1.9, 1.9); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); gunRect(ctx, 9.6, 15, -2.35, 2.35); ctx.fill(); ctx.stroke();
+    ctx.strokeStyle = glass; ctx.lineWidth = px(1.5); ctx.beginPath(); ctx.moveTo(14.7, -2); ctx.lineTo(14.7, 2); ctx.stroke(); ctx.lineWidth = px(1.1);
+    ctx.fillStyle = dim; ctx.beginPath(); gunRect(ctx, 13.6, 14.4, -2.35, -2.95); gunRect(ctx, 13.6, 14.4, 2.35, 2.95); gunRect(ctx, 5.8, 8.6, -1.9, -.7); ctx.fill();
+    ctx.beginPath(); ctx.arc(9.15, 1.7, .55, 0, 7); ctx.fill();
+    ctx.strokeStyle = dim; ctx.beginPath(); ctx.arc(12.1, -.9, .62, 0, 7); ctx.stroke();
+    ctx.fillStyle = dark; ctx.strokeStyle = dim; ctx.beginPath(); gunRect(ctx, -.5, 4.4, -1.8, 1.8); ctx.fill(); ctx.stroke();
+    // Mk 41 四联装发射箱：卧着 → 竖起（侧面 + 箱顶舱盖），先画地上的投影
+    const pu = R0.piv, L = R0.L, T = R0.T, E1 = pu + L * cs, E0 = E1 - T * sn, S0 = pu - T * sn;
+    if (sn > .02) { const h = L * sn + T * cs * .5, ut = E1 - T * sn * .5; ctx.fillStyle = `rgba(0,0,0,${.34 * sn})`; ctx.beginPath(); ctx.moveTo(pu, -2.2); ctx.lineTo(pu, 2.2); ctx.lineTo(ut + su * h, 2.2 + sv * h); ctx.lineTo(ut + su * h, -2.2 + sv * h); ctx.closePath(); ctx.fill(); }
+    ctx.fillStyle = dark; ctx.strokeStyle = col;
+    if (cs > .03) {
+      ctx.beginPath(); gunRect(ctx, S0, E0, -2.2, 2.2); ctx.fill(); ctx.stroke();
+      ctx.strokeStyle = dim; ctx.beginPath(); for (let j = 1; j < 6; j++) { const u = S0 + (E0 - S0) * j / 6; ctx.moveTo(u, -2.2); ctx.lineTo(u, 2.2); } ctx.moveTo(S0, 0); ctx.lineTo(E0, 0); ctx.stroke();
+      ctx.strokeStyle = col; ctx.lineWidth = px(1.6); ctx.beginPath(); ctx.moveTo(E0, -2.2); ctx.lineTo(E0, 2.2); ctx.stroke(); ctx.lineWidth = px(1.1);
+    }
+    if (sn > .03) {
+      ctx.fillStyle = real ? rlGun().concrete : 'rgba(10,20,14,.95)'; ctx.strokeStyle = col; ctx.beginPath(); gunRect(ctx, E0, E1, -2.2, 2.2); ctx.fill(); ctx.stroke();
+      for (let i = 0; i < 4; i++) {
+        const w0 = i < 2 ? 0 : T / 2, ua = E1 - (w0 + T / 2) * sn + .18 * sn, ub = E1 - w0 * sn - .18 * sn, va = i % 2 ? .18 : -2.02, vb = i % 2 ? 2.02 : -.18;
+        const tf = R0.up + i * AS.ty.every, dt = ft - tf, open = cur && dt > -.45 && dt < 1.4, used = (cur && dt >= 1.4) || spent;
+        ctx.fillStyle = open ? '#000' : used ? 'rgba(0,0,0,.6)' : dark; ctx.strokeStyle = open ? col : dim;
+        ctx.beginPath(); gunRect(ctx, ua, ub, va, vb); ctx.fill(); ctx.stroke();
+        if (cur && vis && dt >= 0 && dt < .3) gunFlare(ctx, (ua + ub) / 2, (va + vb) / 2, 1 - dt / .3, 3.2);
+      }
+    }
+    ctx.restore();
+    if (cur && vis) for (let i = 0; i < 4; i++) {   // 燃气与地面冲击波
+      const dt = ft - (R0.up + i * AS.ty.every), cu = pu - T * (i < 2 ? .25 : .75), cv = v0 + (i % 2 ? .25 : -.25) * T;
+      gunPuff(ctx, cu, cv, dt, 6, 2.2, a);
+      if (dt >= 0 && dt < 1.1) { ctx.strokeStyle = rgba(COL.smoke, .45 * (1 - dt / 1.1)); ctx.lineWidth = px(1.2); ctx.beginPath(); ctx.arc(cu, cv, 3 + dt * 16, 0, 7); ctx.stroke(); }
+    }
+  }
+  ctx.restore();
+  if (vis) gunCrew(ctx, x, y, a, [[-20, -11], [-19.5, -2.8, 'radio'], [-23, 10]], col);
+}
+
+// NMESIS 岸舰导弹连（车阵见 missile.js ASC_RIG）：2 辆 ROGUE-Fires 无人发射车（JLTV 底盘、没有驾驶室，车头只有传感器吊舱与摄像头杆）
+//   各载 2 联装 NSM 发射箱，卧放时箱口朝车头；发射前转台转向目标、发射箱以尾部为轴仰起，箱口白光、车尾助推器燃气；
+//   车阵后方一辆有人驾驶的 JLTV 遥控指挥车（风挡、车顶卫通天线罩）
+function ascModel(ctx, e, x, y, a, vis, col, dim, dark, real) {
+  const R0 = ASC_RIG, [su, sv] = gunSh(a), ft = e.fireT != null ? S.t - e.fireT : 99, glass = real ? 'rgba(150,190,210,.9)' : rgba(col, .9);
+  ctx.save(); ctx.translate(x, y); ctx.rotate(a);
+  ctx.lineWidth = px(1.1);
+  // 指挥车
+  ctx.fillStyle = 'rgba(0,0,0,.28)'; ctx.beginPath(); gunRect(ctx, -19 + su * 2.4, -8.6 + su * 2.4, -2.4 + sv * 2.4, 2.4 + sv * 2.4); ctx.fill();
+  ctx.fillStyle = dim; ctx.beginPath(); for (const u of [-10.8, -16.6]) for (const s of [-1, 1]) gunRect(ctx, u - 1.1, u + 1.1, s * 2.3, s * 3.1); ctx.fill();
+  ctx.fillStyle = dark; ctx.strokeStyle = col; ctx.beginPath(); ctx.moveTo(-19, -2.4); ctx.lineTo(-9.4, -2.4); ctx.lineTo(-8.6, -1.6); ctx.lineTo(-8.6, 1.6); ctx.lineTo(-9.4, 2.4); ctx.lineTo(-19, 2.4); ctx.closePath(); ctx.fill(); ctx.stroke();
+  ctx.strokeStyle = dim; ctx.beginPath(); ctx.moveTo(-11.6, -2.4); ctx.lineTo(-11.6, 2.4); ctx.moveTo(-15.6, -2.4); ctx.lineTo(-15.6, 2.4); ctx.stroke();
+  ctx.strokeStyle = glass; ctx.lineWidth = px(1.4); ctx.beginPath(); ctx.moveTo(-11.9, -2); ctx.lineTo(-11.9, 2); ctx.stroke(); ctx.lineWidth = px(1.1);
+  ctx.strokeStyle = dim; ctx.beginPath(); ctx.arc(-13.8, 0, 1, 0, 7); ctx.stroke();
+  for (let k = 0; k < R0.n; k++) {
+    const v0 = (k - (R0.n - 1) / 2) * R0.gap, P = ascPose(e, k), cur = e.ascL === k && ft < R0.up + R0.hold + R0.down;
+    ctx.save(); ctx.translate(0, v0);
+    ctx.fillStyle = 'rgba(0,0,0,.28)'; ctx.beginPath(); gunRect(ctx, -6.2 + su * 2, 6.2 + su * 2, -2.5 + sv * 2, 2.5 + sv * 2); ctx.fill();
+    ctx.fillStyle = dim; ctx.beginPath(); for (const u of [4.3, -3.6]) for (const s of [-1, 1]) gunRect(ctx, u - 1.2, u + 1.2, s * 2.4, s * 3.3); ctx.fill();
+    // 车体：倒角车头、发动机盖、格栅；没有驾驶室，只有传感器吊舱与摄像头杆
+    ctx.fillStyle = dark; ctx.strokeStyle = col; ctx.beginPath(); ctx.moveTo(-6.2, -2.5); ctx.lineTo(5.4, -2.5); ctx.lineTo(6.2, -1.7); ctx.lineTo(6.2, 1.7); ctx.lineTo(5.4, 2.5); ctx.lineTo(-6.2, 2.5); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.strokeStyle = dim; ctx.beginPath(); gunRect(ctx, 2.6, 5.8, -2.1, 2.1); for (let v = -1.4; v <= 1.4; v += .7) { ctx.moveTo(5.85, v); ctx.lineTo(6.15, v); } ctx.stroke();
+    ctx.fillStyle = dim; ctx.beginPath(); gunRect(ctx, .5, 2.2, -1.2, 1.2); ctx.fill(); ctx.beginPath(); ctx.arc(2, 1.75, .5, 0, 7); ctx.fill();
+    // 转台与 2 联装发射箱（仰起时投影变短、地上拖出影子）
+    const cu = -3.4, l = R0.L * Math.cos(P.el), h = R0.L * Math.sin(P.el);
+    ctx.strokeStyle = dim; ctx.beginPath(); ctx.arc(cu, 0, 1.9, 0, 7); ctx.stroke();
+    ctx.save(); ctx.translate(cu, 0); ctx.rotate(P.tr); ctx.translate(R0.piv - cu, 0);
+    if (h > .3) { ctx.fillStyle = `rgba(0,0,0,${.3 * Math.min(1, h / 4)})`; ctx.beginPath(); ctx.moveTo(0, -1.5); ctx.lineTo(0, 1.5); ctx.lineTo(l + su * h, 1.5 + sv * h); ctx.lineTo(l + su * h, -1.5 + sv * h); ctx.closePath(); ctx.fill(); }
+    for (let i = 0; i < 2; i++) {
+      const va = i ? .08 : -1.48, vb = i ? 1.48 : -.08, dt = ft - (R0.up + i * .7);
+      ctx.fillStyle = dark; ctx.strokeStyle = col; ctx.beginPath(); gunRect(ctx, 0, l, va, vb); ctx.fill(); ctx.stroke();
+      ctx.strokeStyle = dim; ctx.beginPath(); for (const f of [.3, .62]) { ctx.moveTo(l * f, va); ctx.lineTo(l * f, vb); } ctx.stroke();
+      ctx.strokeStyle = cur && dt >= 0 ? rgba(COL.smoke, .9) : col; ctx.lineWidth = px(1.6); ctx.beginPath(); ctx.moveTo(l, va); ctx.lineTo(l, vb); ctx.stroke(); ctx.lineWidth = px(1.1);
+      if (cur && vis && dt >= 0 && dt < .3) { gunFlare(ctx, l, (va + vb) / 2, 1 - dt / .3, 2.6); gunFlare(ctx, -.6, (va + vb) / 2, (1 - dt / .3) * .7, 2); }
+      if (cur && vis) { gunPuff(ctx, -1.5 - Math.max(0, dt) * 2, (va + vb) / 2, dt, 4, 1.8, 0); }
+    }
+    ctx.restore();
+    ctx.restore();
+  }
+  ctx.restore();
+  if (vis) gunCrew(ctx, x, y, a, [[-14, -5], [-15.5, 4.6, 'radio']], col);
 }
 
 // 被摧毁：焦黑弹坑、散落的掩体块、折断的炮管

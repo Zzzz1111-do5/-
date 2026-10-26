@@ -539,12 +539,81 @@ function v3mFort(kind) {
     mbBox(M, -2, 2.2, -1.6, 1.6, 1.4, 3.6, .9, { taper: .3 });
     for (let i = 0; i < 6; i++) { const a = i / 6 * 6.2832; mbTube(M, [1.8, Math.cos(a) * .3, 3 + Math.sin(a) * .3], [7.4, Math.cos(a) * .3, 4.2 + Math.sin(a) * .3], .08, .08, 4, .6, false); }
     mbPrism(M, mbCirc(-1.2, 1.9, .9, 8), 2.4, 3.6, .8);
-  } else {   // 导弹发射车（海马斯 / 堤丰 / NMESIS）：车轮、底盘、驾驶室（舷窗）、发射箱
+  } else if (kind === 'typhon') v3mTyphon(M);
+  else if (kind === 'ascm') v3mAscm(M);
+  else {   // 导弹发射车（海马斯）：车轮、底盘、驾驶室（舷窗）、发射箱
     for (const x of [-6, -2.5, 3.5]) for (const s of [-1, 1]) mbTube(M, [x, s * 2.6, 1.2], [x, s * 3.4, 1.2], 1.2, 1.2, 10, .4);
     mbBox(M, -9, 7, -2.6, 2.6, 1, 2.4, .8);
     v3mDeck(M, 4, 8, -2.7, 2.7, 1.2, 5.2, .9, true);
     const n = kind === 'typhon' ? 4 : kind === 'ascm' ? 2 : 1;
     for (let i = 0; i < n; i++) { const y = (i - (n - 1) / 2) * 1.6; mbSide(M, [[-9, 2.6], [2.5, 2.6], [2.5, 4.4], [-9, 4.4]], y - .7, y + .7, .85); mbLine(M, [2.55, y - .5, 3.5], [2.55, y + .5, 3.5], 1); }
+  }
+  return M;
+}
+
+// 车轮：沿车宽方向的短圆管（u 车头方向坐标，v 车轮外侧，r 半径）
+function v3mWheel(M, u, v, r, w = .9) { const s = Math.sign(v) || 1; mbTube(M, [u, v - s * w, r], [u, v, r], r, r, 10, .4); }
+// 「堤丰」车阵（antiship.js TY_RIG，与二维同一套尺寸）：4 套 HEMTT 牵引车 + M870 拖车（发射箱单独实例，按起竖角转），营指挥车、发电车
+function v3mTyphon(M) {
+  const R0 = TY_RIG;
+  for (let k = 0; k < R0.n; k++) {
+    const v0 = (k - (R0.n - 1) / 2) * R0.gap;
+    for (const u of [13.4, 11, 4.6, 2.3]) for (const s of [-1, 1]) v3mWheel(M, u, v0 + s * 2.75, 1.1);
+    for (const u of [-10.6, -12.8, -15]) for (const s of [-1, 1]) v3mWheel(M, u, v0 + s * 3.2, 1);
+    mbBox(M, -.5, 9.8, v0 - 1.9, v0 + 1.9, 1.1, 2.3, .8);   // 牵引车车架
+    v3mDeck(M, 9.6, 15, v0 - 2.35, v0 + 2.35, 1.2, 5, .9, true);   // 全宽驾驶室（风挡发光）
+    mbBox(M, 5.8, 8.6, v0 - 1.9, v0 - .7, 2.3, 3.4, .7);   // 绞盘箱
+    mbTube(M, [9.15, v0 + 1.7, 2.3], [9.15, v0 + 1.7, 5.6], .28, .24, 6, .6);   // 排气管
+    mbBox(M, -17, -.5, v0 - 2.4, v0 + 2.4, 1.6, 2.4, .75);   // 拖车甲板
+    for (let u = -15; u < -1; u += 2.1) mbLine(M, [u, v0 - 2.4, 2.42], [u, v0 + 2.4, 2.42], .6);
+    mbBox(M, -.5, 4.4, v0 - 1.8, v0 + 1.8, 2.3, 3.3, .8, { taper: .2 });   // 鹅颈
+    for (const u of [-16.2, -1.8]) for (const s of [-1, 1]) { mbBox(M, u - .25, u + .25, v0 + s * 2.4 - (s < 0 ? 1.7 : 0), v0 + s * 2.4 + (s > 0 ? 1.7 : 0), 1.7, 2.1, .6); mbBox(M, u - .65, u + .65, v0 + s * 4.35 - .55, v0 + s * 4.35 + .55, 0, 1.9, .55); }   // 液压支腿
+  }
+  mbBox(M, -33, -24.6, -9.2, -4.6, 1, 6.4, .8, { taper: .15 });   // 营指挥车方舱
+  v3mDeck(M, -24.2, -21, -9, -4.8, 1, 4.6, .9, true);
+  mbLine(M, [-31.6, -8.3, 6.4], [-31.6, -8.3, 13], .9); mbLine(M, [-31.6, -5.5, 6.4], [-31.6, -5.5, 11], .9);   // 鞭状天线
+  mbPrism(M, mbCirc(-27.6, -6.9, 1.25, 10), 6.4, 6.9, .7, { taper: .4 });   // 卫星天线
+  mbBox(M, -31, -25.5, 4.8, 8.4, .8, 3.6, .75);   // 发电车
+  for (let u = -30; u < -26; u += 1.1) mbLine(M, [u, 4.75, 1.6], [u, 4.75, 3.2], .7);
+  for (const u of [-23, -29.5]) for (const s of [-1, 1]) v3mWheel(M, u, -6.9 + s * 2.6, .9, .7);
+  for (const s of [-1, 1]) v3mWheel(M, -28.2, 6.6 + s * 2, .8, .6);
+}
+// 堤丰的 Mk 41 四联装发射箱：沿 -y 卧放（y = 0 是拖车尾部的铰点），按滚转角绕铰点竖起；箱顶 2×2 单元格舱盖缝发光
+function v3mTyBox() {
+  const M = mbNew(), R0 = TY_RIG, L = R0.L, T = R0.T;
+  mbBox(M, -T / 2, T / 2, -L, 0, 0, T, .8);
+  for (let j = 1; j < 6; j++) { const y = -L * j / 6; mbLoop(M, [[-T / 2 - .02, y], [T / 2 + .02, y], [T / 2 + .02, y], [-T / 2 - .02, y]], T + .02, .6); mbLine(M, [-T / 2 - .02, y, 0], [-T / 2 - .02, y, T], .6); mbLine(M, [T / 2 + .02, y, 0], [T / 2 + .02, y, T], .6); }
+  const y = -L - .03;
+  mbLine(M, [0, y, .2], [0, y, T - .2], 1.1); mbLine(M, [-T / 2 + .2, y, T / 2], [T / 2 - .2, y, T / 2], 1.1);
+  mbLoop(M, [[-T / 2 + .15, y], [T / 2 - .15, y]], 0, 1);
+  for (const z of [.15, T - .15]) mbLine(M, [-T / 2 + .15, y, z], [T / 2 - .15, y, z], 1.1);
+  for (const x of [-T / 2 + .15, T / 2 - .15]) mbLine(M, [x, y, .15], [x, y, T - .15], 1.1);
+  return M;
+}
+// NMESIS 车阵（missile.js ASC_RIG）：2 辆 ROGUE-Fires 无人发射车（没有驾驶室，车头传感器吊舱、摄像头杆），后方 JLTV 遥控指挥车；发射箱单独实例
+function v3mAscm(M) {
+  const R0 = ASC_RIG;
+  for (let k = 0; k < R0.n; k++) {
+    const v0 = (k - (R0.n - 1) / 2) * R0.gap;
+    for (const u of [4.3, -3.6]) for (const s of [-1, 1]) v3mWheel(M, u, v0 + s * 2.85, 1.2);
+    mbPrism(M, [[-6.2, v0 - 2.5], [5.4, v0 - 2.5], [6.2, v0 - 1.7], [6.2, v0 + 1.7], [5.4, v0 + 2.5], [-6.2, v0 + 2.5]], 1.3, 2.6, .8);
+    mbBox(M, 2.6, 5.8, v0 - 2.1, v0 + 2.1, 2.6, 3.3, .85, { taper: .3 });   // 发动机盖
+    mbBox(M, .5, 2.2, v0 - 1.2, v0 + 1.2, 2.6, 3.8, .7);   // 传感器吊舱
+    mbTube(M, [2, v0 + 1.75, 2.6], [2, v0 + 1.75, 5.2], .14, .12, 5, .7); mbBox(M, 1.75, 2.25, v0 + 1.5, v0 + 2, 5.2, 5.6, -.8);   // 摄像头杆
+    mbPrism(M, mbCirc(-3.4, v0, 1.9, 12), 2.6, 3.1, .7);   // 转台
+  }
+  for (const u of [-10.8, -16.6]) for (const s of [-1, 1]) v3mWheel(M, u, s * 2.7, 1.1);
+  mbPrism(M, [[-19, -2.4], [-9.4, -2.4], [-8.6, -1.6], [-8.6, 1.6], [-9.4, 2.4], [-19, 2.4]], 1.2, 2.6, .8);
+  v3mDeck(M, -15.6, -11.6, -2.3, 2.3, 2.6, 4.8, .9, true);
+  mbPrism(M, mbCirc(-13.8, 0, 1, 10), 4.8, 5.6, .75, { taper: .4 });   // 卫通天线罩
+}
+// NMESIS 的 2 联装 NSM 发射箱：沿 -y 卧放（y = 0 是尾部转轴），按滚转角仰起；箱口端盖发光
+function v3mAscCan() {
+  const M = mbNew(), L = ASC_RIG.L;
+  for (const [x0, x1] of [[-1.48, -.08], [.08, 1.48]]) {
+    mbBox(M, x0, x1, -L, 0, 0, 1.3, .8);
+    for (const f of [.3, .62]) mbLoop(M, [[x0 - .02, -L * f], [x1 + .02, -L * f]], 1.32, .6);
+    mbLine(M, [x0 + .1, -L - .03, .65], [x1 - .1, -L - .03, .65], 1.1); mbLine(M, [(x0 + x1) / 2, -L - .03, .1], [(x0 + x1) / 2, -L - .03, 1.2], 1.1);
   }
   return M;
 }
@@ -707,8 +776,16 @@ function v3Units(C, box) {
   for (const e of S.enemies) {
     if (e.kind === 'airfield' || !inB(e.x, e.y) || (e.dead && e.kind !== 'bunker')) continue;
     if (!seen(e.x, e.y) && e.kx == null) continue;
-    const a = typeof gunAim === 'function' ? gunAim(e, t) : (e.th ?? 1.57);
-    v3mAdd('st:' + e.kind, () => v3mFort(e.kind), e.x, e.y, v3Ht(e.x, e.y), a, 1, e.dead ? 2 : 1);
+    const a = typeof gunAim === 'function' ? gunAim(e, t) : (e.th ?? 1.57), z0 = v3Ht(e.x, e.y), ca = Math.cos(a), sa = Math.sin(a), at = (u, v) => [e.x + u * ca - v * sa, e.y + u * sa + v * ca];
+    v3mAdd('st:' + e.kind, () => v3mFort(e.kind), e.x, e.y, z0, a, 1, e.dead ? 2 : 1);
+    if (!e.dead && e.kind === 'typhon' && typeof TY_RIG === 'object') for (let k = 0; k < TY_RIG.n; k++) {   // 发射箱：绕拖车尾部铰点起竖（antiship.js tyErect）
+      const [px0, py0] = at(TY_RIG.piv, (k - (TY_RIG.n - 1) / 2) * TY_RIG.gap);
+      v3mAdd('ty:box', v3mTyBox, px0, py0, z0 + 2.4, a + Math.PI / 2, 1, 1, tyErect(e, k));
+    }
+    if (!e.dead && e.kind === 'ascm' && typeof ASC_RIG === 'object') for (let k = 0; k < ASC_RIG.n; k++) {   // 发射箱：转台转向目标、仰起（missile.js ascPose）
+      const P = ascPose(e, k), v0 = (k - (ASC_RIG.n - 1) / 2) * ASC_RIG.gap, b = a + P.tr, [cx, cy] = at(-3.4, v0), o = ASC_RIG.piv + 3.4;
+      v3mAdd('asc:can', v3mAscCan, cx + Math.cos(b) * o, cy + Math.sin(b) * o, z0 + 3.1, b + Math.PI / 2, 1, 1, P.el);
+    }
   }
   // 降落伞（para.js 伞兵 / 补给、abn.js 空降兵、a101.js 美军 101 空降师）：从运输机高度按下降进度落到地面，伞衣轻轻摆动
   const chutes = (L, jump, sd) => { for (const c of L || []) {   // 天上的伞衣老远就看得见：双方都画（与平面画面一致）

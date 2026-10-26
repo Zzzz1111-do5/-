@@ -107,7 +107,8 @@ function enemyMark(ctx, kind, x, y) {
   else if (kind === 'coastal') { ctx.rect(x - 8, y - 8, 16, 16); ctx.fill(); ctx.stroke(); ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y + 20); }
   else if (kind === 'arty') { shape(ctx, x, y, 8, 4, 0); ctx.fill(); ctx.stroke(); ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y + 13); }
   else if (kind === 'mortar') { ctx.arc(x, y, 5, 0, 7); ctx.fill(); ctx.stroke(); ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + 4, y - 8); }
-  else if (kind === 'tel' || kind === 'typhon') { ctx.rect(x - 7, y - 2.5, 14, 5); ctx.fill(); ctx.stroke(); ctx.beginPath(); ctx.moveTo(x - 4, y - 2.5); ctx.lineTo(x + 6, y - 10); ctx.moveTo(x - 7, y - 2.5); ctx.lineTo(x - 7, y - 5); }   // 发射车：车体 + 斜立的起竖臂
+  else if (kind === 'typhon') { ctx.rect(x - 9, y - 4, 18, 8); ctx.fill(); ctx.stroke(); ctx.beginPath(); ctx.rect(x - 7.5, y - 2.6, 5.2, 5.2); ctx.moveTo(x - 4.9, y - 2.6); ctx.lineTo(x - 4.9, y + 2.6); ctx.moveTo(x - 7.5, y); ctx.lineTo(x - 2.3, y); ctx.moveTo(x, y - 2.6); ctx.lineTo(x + 7.5, y - 2.6); ctx.moveTo(x, y + 2.6); ctx.lineTo(x + 7.5, y + 2.6); }   // 堤丰：拖车 + 四联装发射箱（2×2 单元格）
+  else if (kind === 'tel') { ctx.rect(x - 7, y - 2.5, 14, 5); ctx.fill(); ctx.stroke(); ctx.beginPath(); ctx.moveTo(x - 4, y - 2.5); ctx.lineTo(x + 6, y - 10); ctx.moveTo(x - 7, y - 2.5); ctx.lineTo(x - 7, y - 5); }   // 发射车：车体 + 斜立的起竖臂
   else if (kind === 'ascm') { ctx.rect(x - 8, y - 3, 16, 6); ctx.fill(); ctx.stroke(); ctx.beginPath(); ctx.moveTo(x - 6, y - 4); ctx.lineTo(x + 8, y - 10); ctx.moveTo(x - 6, y - .5); ctx.lineTo(x + 8, y - 6.5); }   // 岸舰导弹：两根平行发射筒
   else if (kind === 'airfield') {   // 野战机场：40×8 跑道 + 虚线中线
     ctx.rect(x - 20, y - 4, 40, 8); ctx.fill(); ctx.stroke();

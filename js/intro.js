@@ -1,11 +1,12 @@
 'use strict';
-// 开场转场：虚构国家全图（S.seed 生成）→ 指数放大到海岸目标区 → 收束到当前战场镜头，再以字符溶解交给实时画面
-// 写实画面（realLook）下改为卫星图式：深蓝海、近岸浅水带、绿褐地表、白色国界省界，战场一块用写实地形快照，结尾淡出交给实时画面
+// 开场转场：虚构国家全图（S.seed 生成）→ 指数放大到海岸目标区 → 收束到当前战场镜头；变焦后半程起实时战场画面按地理范围贴进镜头、逐渐变实，
+//   镜头停稳时与浮层下的实时画面完全重合，再整体淡出交给实时画面（界面同时淡入）
+// 写实画面（realLook）下改为卫星图式：深蓝海、近岸浅水带、绿褐地表、白色国界省界，战场一块用写实地形快照
 // 独立画布浮层，约 7 秒；点击 / Esc / 空格 / 回车跳过；SETTINGS.intro === false 时直接跳过
 // 坐标：国家单位 CU，1 CU ≈ 333 米；战场 1 世界单位 = 1 米，ITR_K = 每世界单位的 CU
 const INTRO = { on: false, el: null, g: null, sc: null, raf: 0, t0: 0, skip: 0, done: null, cue: new Set(), dpr: 1, fx: null };
 const ITR_K = .003;
-const ITR_T = { zoom0: 1.7, zoom1: 5.75, hold: 6.25, end: 7.15 };
+const ITR_T = { zoom0: 1.7, live: 4.35, zoom1: 5.75, hold: 6.2, end: 7.2 };   // live：起把实时战场画面贴进镜头、逐渐变实
 const ITR_SYL = '瓦兰萨尔诺维卡塔莫里斯克托埃门德拉贝加索科纳西奥巴琉恩泽';
 const ITR_OPS = ['怒涛', '铁锚', '破晓', '断潮', '长弓', '惊蛰', '赤礁', '海燕', '雷鸣', '曙光'];
 const itrEase = u => u < .5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2;
@@ -261,7 +262,7 @@ function playIntro(onDone) {
   el.className = 'mn-layer'; el.setAttribute('aria-label', '开场转场，点击跳过');
   el.style.cssText = `position:fixed;inset:0;width:100%;height:100%;z-index:60;cursor:pointer;touch-action:none;background:${sc.real ? '#08203a' : '#010402'}`;
   document.body.appendChild(el);
-  Object.assign(INTRO, { on: true, g: el.getContext('2d'), sc, t0: performance.now(), skip: 0, done: fin, cue: new Set(), fx: null, tiles: null, stageT: {}, cover: true });
+  Object.assign(INTRO, { on: true, g: el.getContext('2d'), sc, t0: performance.now(), skip: 0, done: fin, cue: new Set(), fx: null, stageT: {}, cover: true });
   el.addEventListener('pointerdown', e => { e.preventDefault(); itrSkip(); });
   itrLy(el, e => { if (e.key === 'Escape' || e.key === ' ' || e.key === 'Enter') { e.preventDefault(); itrSkip(); } });
   // 最终取景：当前战场镜头在国家坐标里的矩形，屏幕上对齐战场画布
@@ -303,15 +304,15 @@ function itrFrame(now) {
   if (!INTRO.on) return;
   INTRO.raf = requestAnimationFrame(itrFrame);
   let t = INTRO.freeze != null ? INTRO.freeze : (now - INTRO.t0) / 1000;   // freeze：测试截图用
-  if (INTRO.skip) t = Math.max(t, ITR_T.end - .35 + (t - INTRO.skip));   // 跳过：直接进入最后 0.35 秒的溶解
+  if (INTRO.skip) t = Math.max(t, ITR_T.end - .45 + (t - INTRO.skip));   // 跳过：直接进入最后 0.45 秒的淡出
   if (t >= ITR_T.end) { itrStop(true); return; }
-  INTRO.cover = t < ITR_T.hold - .1;   // 浮层完全不透明时主循环可跳过战场绘制
+  INTRO.cover = t < ITR_T.live - .25;   // 浮层完全遮住、又还用不到实时画面时，主循环可跳过战场绘制
   try { itrDraw(t); } catch (e) { console.error('intro', e); itrStop(true); }
 }
 
 function itrDraw(t) {
   const el = INTRO.el, g = INTRO.g, sc = INTRO.sc, dpr = Math.min(2, window.devicePixelRatio || 1), vw = innerWidth, vh = innerHeight;
-  if (el.width !== Math.round(vw * dpr) || el.height !== Math.round(vh * dpr)) { el.width = Math.round(vw * dpr); el.height = Math.round(vh * dpr); INTRO.fx = null; INTRO.tiles = null; }
+  if (el.width !== Math.round(vw * dpr) || el.height !== Math.round(vh * dpr)) { el.width = Math.round(vw * dpr); el.height = Math.round(vh * dpr); INTRO.fx = null; }
   const real = sc.real;
   if (!INTRO.fx) INTRO.fx = itrFx(vw, vh, dpr, real);
   const cr = R.cv ? R.cv.getBoundingClientRect() : { left: 0, top: 0, width: vw, height: vh }, fr = { x: cr.left, y: cr.top, w: cr.width || vw, h: cr.height || vh };
@@ -403,8 +404,15 @@ function itrDraw(t) {
       }
     }
   }
-  // 海岸线：入场时自西向东描出
-  g.globalAlpha = 1;
+  // 实时画面接管：变焦后半程起，把主画布（实时战场）按它的地理范围贴进转场镜头、逐渐变实——镜头收束到最终取景时正好铺满屏幕，
+  //   和浮层下面的实时画面像素对齐，之后整个浮层淡出，只剩界面淡入，看不出接缝
+  const lv = itrSine(clamp((t - ITR_T.live) / (ITR_T.zoom1 + .15 - ITR_T.live), 0, 1));
+  if (lv > .005 && R.cv && R.cv.width && typeof toWorld === 'function') {
+    const v0 = toWorld(0, 0), v1 = toWorld(CAM.vw, CAM.vh), x0 = SX(sc.BX + v0.x * ITR_K), y0 = SY(sc.BY + v0.y * ITR_K), x1 = SX(sc.BX + v1.x * ITR_K), y1 = SY(sc.BY + v1.y * ITR_K);
+    g.globalAlpha = lv; g.drawImage(R.cv, x0, y0, x1 - x0, y1 - y0);
+  }
+  // 海岸线：入场时自西向东描出（实时画面接管后淡去）
+  g.globalAlpha = 1 - lv;
   const draw = clamp(t / 1.2, 0, 1), nDraw = Math.max(2, Math.round(cs.length * itrEase(draw)));
   g.beginPath(); for (let i = 0; i < nDraw; i++) { const [X, Y] = cs[i]; i ? g.lineTo(SX(X), SY(Y)) : g.moveTo(SX(X), SY(Y)); }
   if (real) { g.strokeStyle = `rgba(236,226,192,${.6 * (1 - ra)})`; g.lineWidth = 1; g.stroke(); }
@@ -413,14 +421,15 @@ function itrDraw(t) {
   g.globalAlpha = fade * (1 - smooth(2, 4, zl));
   g.strokeStyle = real ? 'rgba(236,226,192,.7)' : rgba(COL.g, .6); g.fillStyle = rgba(COL.g, .05); g.lineWidth = 1;
   for (const pts of sc.isles) { g.beginPath(); pts.forEach(([X, Y]) => g.lineTo(SX(X), SY(Y))); g.closePath(); if (real) landLayers(); else g.fill(); g.stroke(); }
-  itrGraticule(g, sc, cam, SX, SY, vw, vh, fade * (1 - ra * .6));
+  itrGraticule(g, sc, cam, SX, SY, vw, vh, fade * (1 - ra * .6) * (1 - lv));
   itrCities(g, sc, t, SX, SY, cAlpha * fade);
   itrBeaches(g, sc, SX, SY, rectPx, vw);
-  if (stage === 3) itrShips(g, sc, SX, SY, ra);
+  if (stage === 3) itrShips(g, sc, SX, SY, ra * (1 - lv));
   itrReticle(g, sc, cam, t, SX, SY, vw, vh, fr);
-  // 屏幕效果
-  g.globalAlpha = 1;
+  // 屏幕效果（扫描线、暗角；实时画面接管后跟着淡掉）
+  g.globalAlpha = 1 - lv * .85;
   g.drawImage(INTRO.fx.c, 0, 0, vw, vh);
+  g.globalAlpha = 1;
   if (!real) {
     const sy = ((t * .3) % 1.3 - .15) * vh;   // 缓慢下扫的亮带
     const bar = g.createLinearGradient(0, sy - 40, 0, sy + 2); bar.addColorStop(0, rgba(COL.g, 0)); bar.addColorStop(1, rgba(COL.g, .035));
@@ -428,7 +437,7 @@ function itrDraw(t) {
   }
   itrHud(g, sc, cam, t, stage, zu, vw, vh);
   itrSounds(t, stage);
-  if (t > ITR_T.hold) itrDissolve(g, (t - ITR_T.hold) / (ITR_T.end - ITR_T.hold), vw, vh, fr);
+  if (t > ITR_T.hold) itrDissolve(g, (t - ITR_T.hold) / (ITR_T.end - ITR_T.hold));
 }
 
 // 经纬网：按缩放挑选间距（5° … 10″），粗细两级交替淡入
@@ -585,24 +594,8 @@ function itrSounds(t, stage) {
   itrCue('out', t, ITR_T.hold, () => { if (typeof auWhoosh === 'function') auWhoosh(.8, false, .22); });
 }
 
-// 溶解：屏幕分块，按离中心距离加随机先后挖空，挖空前闪一个字符
-function itrDissolve(g, p, vw, vh, fr) {
-  if (INTRO.sc && INTRO.sc.real) { INTRO.el.style.opacity = String(1 - itrSine(clamp(p, 0, 1))); return; }   // 写实：整体淡出到实时画面
-  const ts = vw < 600 ? 22 : 28;
-  if (!INTRO.tiles) {
-    const cols = Math.ceil(vw / ts), rows = Math.ceil(vh / ts), th = new Float32Array(cols * rows), cx = fr.x + fr.w / 2, cy = fr.y + fr.h / 2, md = Math.hypot(vw, vh) / 2;
-    for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) th[j * cols + i] = .74 * Math.hypot((i + .5) * ts - cx, (j + .5) * ts - cy) / md + .2 * Math.random();
-    INTRO.tiles = { cols, rows, th, gl: Array.from({ length: cols * rows }, () => Math.random()) };
-  }
-  const { cols, rows, th, gl } = INTRO.tiles, G = typeof GLYPHS === 'string' ? GLYPHS : '01';
-  g.globalAlpha = 1; g.font = `${ts * .55}px "Noto Sans SC", monospace`; g.textAlign = 'center'; g.textBaseline = 'middle';
-  g.globalCompositeOperation = 'destination-out'; g.beginPath();
-  for (let k = 0; k < cols * rows; k++) if (p > th[k]) g.rect((k % cols) * ts, Math.floor(k / cols) * ts, ts, ts);
-  g.fill();
-  g.globalCompositeOperation = 'source-over';
-  for (let k = 0; k < cols * rows; k++) {
-    const d = th[k] - p;
-    if (d > 0 && d < .07 && !realLook()) { g.globalAlpha = 1 - d / .07; g.fillStyle = d < .03 ? '#d8ffe8' : COL.g; g.fillText(G[(gl[k] * G.length + p * 40) % G.length | 0], (k % cols + .5) * ts, (Math.floor(k / cols) + .5) * ts); }
-  }
-  g.textAlign = 'left'; g.globalAlpha = 1;
+// 收尾：浮层整体淡出
+function itrDissolve(g, p) {
+  // 浮层里已经是对齐好的实时画面（itrDraw 的「实时画面接管」）：整体淡出，界面随之淡入
+  INTRO.el.style.opacity = String(1 - itrSine(clamp(p, 0, 1)));
 }

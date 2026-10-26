@@ -555,15 +555,18 @@ function apEngineer(u, pl, P) {
 
 // 跟进保障：没有活干的工兵跟在离自己最近的进攻连队后方约 130（背向目标一侧、敌火力以外），到时就近排雷、剪网、修路，不在滩头干等
 function apEngFollow(u, q, pl, P) {
+  const ok = g => !!g && g.side === 'p' && g.kind === 'inf' && g.auto === true && g.state !== 'rout' && g.x != null && !!P.u[g.id] && ['stage', 'wait', 'go', 'bg'].includes(P.u[g.id].ph);
   let best = null, bd = 1400;
   for (const g of S.units) {
-    const gp = P.u[g.id];
-    if (g.side !== 'p' || g.kind !== 'inf' || g.auto !== true || g.state === 'rout' || g.x == null || !gp || !['stage', 'wait', 'go', 'bg'].includes(gp.ph)) continue;
+    if (!ok(g)) continue;
     const d = dist(g.x, g.y, q.x, q.y);
-    if (d < bd) { bd = d; best = { g, gp }; }
+    if (d < bd) { bd = d; best = g; }
   }
+  // 跟定一个连：原来跟的那个连还能跟、又没比最近的远出太多，就继续跟它——否则两个连离得差不多远时，工兵每走几步「最近的连」就换一个，来回掉头
+  const cur = pl.fol != null ? UNIT_MAP.get(pl.fol) : null;
+  if (ok(cur) && (!best || dist(cur.x, cur.y, q.x, q.y) < bd * 1.6 + 150)) best = cur;
   if (!best) { pl.fol = null; return; }
-  const { g, gp } = best, p = apPt(gp.obj), a = p ? apAng(g.x, g.y, p.x, p.y) : NORTH;
+  const g = best, gp = P.u[g.id], p = apPt(gp.obj), a = p ? apAng(g.x, g.y, p.x, p.y) : NORTH;
   let x = g.x - Math.cos(a) * 130 + (u.id % 3 - 1) * 25, y = g.y - Math.sin(a) * 130;
   if (apDanger(x, y)) { x = g.x - Math.cos(a) * 200; y = g.y - Math.sin(a) * 200; }
   pl.fol = g.id;

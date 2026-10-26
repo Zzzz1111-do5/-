@@ -98,16 +98,25 @@ function hqNewReg(side, B, us, vs, at) {
 
 // ———————————————— 团长：队形 ————————————————
 // 锚点坐标系：x 向前、y 向右；锚点是第一线步兵的中心
+// 左右顺序要「黏」住：编成没变、正面没大转（65° 以内），就沿用上次排好的顺序——每次都按当前位置重排的话，
+//   两个连（两辆车）并排走、一交叉，左右阵位就对调，两边又各自往对方那边走，看上去就是来回左右摇摆
+function regLatOrder(G, key, list, lat, idOf = o => o.id) {
+  const M = G.lat || (G.lat = {}), ids = list.map(idOf), P = M[key];
+  if (P && P.ids.length === ids.length && P.ids.every(id => ids.includes(id)) && Math.abs(Math.atan2(Math.sin(G.face - P.f), Math.cos(G.face - P.f))) < 1.15) return P.ids.map(id => list[ids.indexOf(id)]);
+  const out = list.slice().sort((a, b) => lat(a) - lat(b));
+  M[key] = { ids: out.map(idOf), f: +G.face.toFixed(3) };
+  return out;
+}
 function regSlots(G, mode) {
   const D = G.doc || DOC_BASE, us = bgUnits(G).filter(u => u.state !== 'rout'), vs = bgVehs(G), out = [];
   const fx = Math.cos(G.face), fy = Math.sin(G.face), px = -fy, py = fx;
   const at = (x, y) => [clamp(G.ax + fx * x + px * y, 15, W - 15), clamp(G.ay + fy * x + py * y, 15, H - 15)];
-  const lat = o => (o.x - G.ax) * px + (o.y - G.ay) * py;
+  const lat = o => (o.x - G.ax) * px + (o.y - G.ay) * py, ulat = u => { const [x, y] = regUnitAt(u); return (x - G.ax) * px + (y - G.ay) * py; };
   const vcls = G.side === 'e' ? 'vehe' : 'veh';
   const put = (m, k, x, y, t) => { const [sx, sy] = bgSnap(G, ...at(x, y), k === 'u' ? G.side : vcls); out.push({ m, k, x: sx, y: sy, t }); };
   const tk = vs.filter(hqTank), ifv = vs.filter(v => v.type === 'apc' || v.type === 'abv'), td = vs.filter(v => v.type === 'td' || v.type === 'recon');
   const aa = vs.filter(hqAA), art = vs.filter(v => v.type === 'spg'), rest = vs.filter(v => ![...tk, ...ifv, ...td, ...aa, ...art].includes(v));
-  const row = (list, x, w, t) => list.slice().sort((a, b) => lat(a) - lat(b)).forEach((v, i) => put(v, 'v', x, list.length > 1 ? (i / (list.length - 1) - .5) * w : 0, t));
+  const row = (list, x, w, t, key) => regLatOrder(G, key || 'r' + x, list, lat).forEach((v, i) => put(v, 'v', x, list.length > 1 ? (i / (list.length - 1) - .5) * w : 0, t));
   if (mode === 'march') {   // 行军纵队：前卫坦克在前，各连依次跟进（间隔 70），步战车夹在连间，防空居中，火炮殿后
     let x = 0;
     tk.slice(0, 2).forEach((v, i) => put(v, 'v', 60 - i * 22, 0));
@@ -120,14 +129,14 @@ function regSlots(G, mode) {
   }
   if (mode === 'sweep') {
     const n = us.length;
-    us.slice().sort((a, b) => lat(a) - lat(b)).forEach((u, i) => { const a = (i / Math.max(1, n) - .5) * 2.6, r = n > 1 ? 55 : 0; put(u, 'u', Math.cos(a) * r * .6, Math.sin(a) * r * 1.4); });
+    regLatOrder(G, 'sw', us, ulat).forEach((u, i) => { const a = (i / Math.max(1, n) - .5) * 2.6, r = n > 1 ? 55 : 0; put(u, 'u', Math.cos(a) * r * .6, Math.sin(a) * r * 1.4); });
     vs.forEach((v, i) => put(v, 'v', -70 - (i % 2) * 25, (i / Math.max(1, vs.length - 1) - .5) * 160));
     return out;
   }
   // 战斗 / 防御 / 待机：按战法表的队形展开——各连、各坦克排按团的队形（横队 / 楔形 / 倒楔形 / 梯形）摆在正面上，
   //   坦克排内部也成队形（楔形、横队……）；坦克在步兵前（装甲先导）、与步兵交错、还是在后面火力掩护，按战法表
   const hold = mode === 'hold', res = mode === 'reserve', sp = 95 * (res ? .65 : D.wid), form = hold ? 'line' : res ? 'wedge' : D.form;
-  const sorted = us.slice().sort((a, b) => lat(a) - lat(b));
+  const sorted = regLatOrder(G, 'u', us, ulat);
   let fl = [];
   if (!hold && !res && G.flk && D.flank > 0 && sorted.length >= 3) {   // 迂回：最外侧一两个连从侧翼包抄
     const k = Math.max(1, Math.round(sorted.length * D.flank));
@@ -155,9 +164,9 @@ function regSlots(G, mode) {
   const wid = Math.max(1, n) * sp;
   fl.forEach((u, j) => put(u, 'u', G.st === 'assault' ? 40 : -20, G.flk * (wid / 2 + 170 + j * 70)));
   // 步战车：跟在所属的连后面（下车步兵的火力支援），多出来的在二线
-  const ifvL = ifv.slice().sort((a, b) => lat(a) - lat(b));
+  const ifvL = regLatOrder(G, 'ifv', ifv, lat);
   sorted.forEach((u, j) => { const v = ifvL.shift(); if (v) putE(v, 'v', formX(j) - (hold ? 40 : 30), (j - half) * sp + 16, j % 2); });
-  if (ifvL.length) row(ifvL, hold ? -60 : -50, wid * .8);
+  if (ifvL.length) row(ifvL, hold ? -60 : -50, wid * .8, undefined, 'ifv2');
   // 坦克：三辆一排，排内成队形；各排按团的队形摆在正面上
   const pls = regPlatoonsG(G, tk, lat), np = pls.length, arm = D.arm;
   const tx = hold ? (arm === 'front' ? 25 : -55) : arm === 'front' ? 60 : arm === 'rear' ? -70 : 6;
@@ -170,9 +179,9 @@ function regSlots(G, mode) {
     pl.forEach((v, k) => putE(v, 'v', cx + off[k][0], cy + off[k][1], i % 2));
   });
   td.forEach((v, i) => put(v, 'v', hold ? -10 : 15, (i % 2 ? 1 : -1) * (wid / 2 + 40 + Math.floor(i / 2) * 25)));
-  row(aa, -100, Math.min(140, aa.length * 40));
-  row(art, -260, Math.min(100, art.length * 35));
-  row(rest, -70, 60);
+  row(aa, -100, Math.min(140, aa.length * 40), undefined, 'aa');
+  row(art, -260, Math.min(100, art.length * 35), undefined, 'art');
+  row(rest, -70, 60, undefined, 'rest');
   return out;
 }
 // 坦克排固定编制：团里的坦克有增减才重新分排（G.plts 记各排车辆 id），各排按当前横向位置从左到右排
@@ -181,7 +190,7 @@ function regPlatoonsG(G, tk, lat) {
   if (G.pltK !== key) { G.pltK = key; G.plts = regPlatoons(tk, lat).map(pl => pl.map(v => v.id)); }
   const by = new Map(tk.map(v => [v.id, v])), pls = G.plts.map(ids => ids.map(id => by.get(id)).filter(Boolean)).filter(pl => pl.length);
   const ml = pl => pl.reduce((a, v) => a + lat(v), 0) / pl.length;
-  return pls.sort((a, b) => ml(a) - ml(b));
+  return regLatOrder(G, 'pl', pls, ml, pl => pl[0].id);   // 各排的左右顺序同样黏住
 }
 // 坦克分排：按横向位置三辆一排（四辆以内一个排）
 function regPlatoons(list, lat) {
@@ -252,6 +261,9 @@ function regThink(G) {
   const { T, p, x: tx, y: ty, face: tf } = regGoal(G);
   const look = p ? { x: p.x, y: p.y } : { x: G.ax + Math.cos(G.face) * 250, y: G.ay + Math.sin(G.face) * 250 };
   const F = hqFoe(G.side, (G.ax + look.x) / 2, (G.ay + look.y) / 2, 420), near = hqFoe(G.side, G.ax, G.ay, 320);
+  // 接敌记忆与平滑的敌人中心：敌人一时被挡住看不见，不算脱离接触；敌人中心逐步跟，不随看见谁跳来跳去（就地反冲击、转正面都用它）
+  if (near.n) { G.nearT = S.t; G.nx = G.nx == null || S.t - (G.nearT0 ?? -99) > 6 ? near.x : lerp(G.nx, near.x, .35); G.ny = G.ny == null || S.t - (G.nearT0 ?? -99) > 6 ? near.y : lerp(G.ny, near.y, .35); G.nearT0 = S.t; }
+  const inContact = S.t - (G.nearT ?? -99) < 8;
   const atk = T.v === 'attack' || T.v === 'counter';
   G.foeT = F.n ? F.t : 'inf';
   G.doc = G.docFix ? { ...DOC_BASE, ...G.docFix, key: 'fix' } : docOf(atk || G.st === 'assault' ? 'atk' : 'def', G.type, G.foeT);   // docFix：训练场指定的打法
@@ -337,23 +349,24 @@ function regThink(G) {
     }
     case 'hold': {   // 防御 / 巩固：占领阵地；敌人逼近而我占优就地反冲击，劣势后撤
       mode = 'hold'; ot = 'hold';
-      if (dist(G.ax, G.ay, tx, ty) > 70 && !G.won) { regSet(G, 'move'); break; }
+      // 离任务位置远了才开回去——但正在接敌（8 秒内见过敌人）就地打，不开走：否则「开进」一接敌又转「防御」，两个状态每次都来回切，队形横队 / 纵队来回换，部队来回摆
+      if (dist(G.ax, G.ay, tx, ty) > 70 && !G.won && !inContact && S.t - G.stT > 4) { regSet(G, 'move'); break; }
       if (G.won && atk && p && !hqMine(G.side, p) && S.t - G.stT > 10 && r >= D.ret) { regSet(G, 'clear'); break; }   // 巩固中目标又被夺：肃清
-      if (near.n) regFace(G, near.x, near.y); else G.face = G.face + clamp(Math.atan2(Math.sin(tf - G.face), Math.cos(tf - G.face)), -.2, .2);
+      if (near.n) regFace(G, G.nx ?? near.x, G.ny ?? near.y); else G.face = G.face + clamp(Math.atan2(Math.sin(tf - G.face), Math.cos(tf - G.face)), -.2, .2);
       if (near.n >= 3 && r < D.ret * .8 && wdOk) { regSet(G, 'withdraw', 'pressed'); G.wx = null; break; }
-      if (near.n >= 3 && near.fort === 0 && r >= D.press * 1.2 && dist(near.x, near.y, G.ax, G.ay) < 260) { G.cx0 = G.ax; G.cy0 = G.ay; regSet(G, 'local'); }
+      if (near.n >= 3 && near.fort === 0 && r >= D.press * 1.2 && dist(near.x, near.y, G.ax, G.ay) < 260 && S.t - (G.locEnd ?? -99) > 15) { G.cx0 = G.ax; G.cy0 = G.ay; regSet(G, 'local'); }   // 刚收回来 15 秒内不再冲
       break;
     }
-    case 'local': {   // 就地反冲击：不离开阵地 220 以上，40 秒或打退了就回来
+    case 'local': {   // 就地反冲击：不离开阵地 220 以上，40 秒、打退了（6 秒不见敌人）或打不过就回来
       ot = 'amove';
-      if (!near.n || S.t - G.stT > 40 || dist(G.ax, G.ay, G.cx0, G.cy0) > 220 || r < D.ret) { regSet(G, 'hold'); G.won = G.won || null; break; }
-      regFace(G, near.x, near.y); bgAdvance(G, near.x, near.y, BG.pace * .6);
+      if (!inContact || S.t - (G.nearT ?? -99) > 6 || S.t - G.stT > 40 || dist(G.ax, G.ay, G.cx0, G.cy0) > 220 || r < D.ret) { regSet(G, 'hold'); G.locEnd = S.t; G.won = G.won || null; break; }
+      if (near.n) { regFace(G, G.nx, G.ny); bgAdvance(G, G.nx, G.ny, BG.pace * .6); }
       break;
     }
     case 'reserve': {   // 待机：在集结地域隐蔽，正面朝威胁方向
       mode = 'reserve'; ot = 'hold';
       if (dist(G.ax, G.ay, tx, ty) > 80) { regSet(G, 'move'); break; }
-      if (near.n >= 4) { regFace(G, near.x, near.y); regSet(G, r >= D.press ? 'local' : 'hold'); G.cx0 = G.ax; G.cy0 = G.ay; }
+      if (near.n >= 4) { regFace(G, G.nx ?? near.x, G.ny ?? near.y); regSet(G, r >= D.press && S.t - (G.locEnd ?? -99) > 15 ? 'local' : 'hold'); G.cx0 = G.ax; G.cy0 = G.ay; }
       break;
     }
     case 'withdraw': {   // 后撤：边打边撤（sa.js saDelay）——两组交替掩护，往主力 / 大后方撤，一路叫火力消耗追兵；摆脱、与主力汇合或撤够了就重整
@@ -1032,9 +1045,10 @@ function hqDraw() {
     for (const B of H.bdes) {
       const O = B.ord, P = hqObj(B);
       if (!O || !P) continue;
-      const c = hqBdeAt(B);
+      const Hu = hqBdeHull(B), c = Hu ? { x: Hu.x, y: Hu.y } : hqBdeAt(B);   // 画在部队实际所在处（团的锚点行军时会跑在前面）
       if (!c) continue;
       const Rs = hqRegs(side, B), pw = Rs.reduce((a, G) => a + hqRegPow(G).tot, 0), w = Math.max(px(11), clamp(20 + pw * .12, 26, 50)), a = A0;
+      if (!Rs.length || pw <= 0) continue;   // 还没有一个团上岸（部队在海上）、或已打光：不画空的箭头和集结圈
       const tag = HQ_VERB[O.v] || '';
       if (O.v === 'attack' || O.v === 'counter' || O.v === 'feint') {
         const rest = (O.objs || []).slice((O.i || 0) + 1).map(hqPt).filter(Boolean);
@@ -1061,10 +1075,10 @@ function hqDraw() {
         ctx.stroke();
         ctx.lineWidth = px(1.6);
         for (let k = 1; k < 8; k++) { const t = k / 8 - .5, bow = (1 - 4 * t * t) * 22, x = cx + lx * t * L + Math.cos(th) * bow, y = cy + ly * t * L + Math.sin(th) * bow; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + Math.cos(th) * 14, y + Math.sin(th) * 14); ctx.stroke(); }
-      } else {   // 待机 / 跟进：集结地域虚线椭圆，跟进再画一支细虚线箭头指向目标方向
-        const r = 70 + Rs.length * 45;
+      } else {   // 待机 / 跟进：集结地域虚线椭圆——按全旅成员的实际位置画（把人圈在里面），跟进再画一支细虚线箭头指向目标方向
+        const E = Hu || { x: c.x, y: c.y, rx: 70 + Rs.length * 45, ry: (70 + Rs.length * 45) * .62 };
         ctx.strokeStyle = rgba(col, .75 * a); ctx.lineWidth = px(1.5); ctx.setLineDash([px(6), px(5)]);
-        ctx.beginPath(); ctx.ellipse(c.x, c.y, r, r * .62, 0, 0, 6.283); ctx.stroke(); ctx.setLineDash([]);
+        ctx.beginPath(); ctx.ellipse(E.x, E.y, E.rx, E.ry, 0, 0, 6.283); ctx.stroke(); ctx.setLineDash([]);
         if (O.v === 'follow') { const d = dist(c.x, c.y, P.x, P.y), e = d > 200 ? [lerp(c.x, P.x, (d - 160) / d), lerp(c.y, P.y, (d - 160) / d)] : null; if (e) { ctx.lineWidth = px(1.1); hqArrow(ctx, [[c.x, c.y], e], w * .5, null, rgba(col, .55 * a), [px(5), px(5)]); } }
       }
       marks.push({ B, c, tag, col });
@@ -1101,6 +1115,14 @@ function hqSelB() {
   if (!B || !hqRegs(k.side, B).length) { HQ.selB = null; hqPanel(); return null; }
   return B;
 }
+// 全旅成员实际占的范围：中心 + 横竖半径（取八成成员所在的范围，再留一点边），没上岸的不算
+function hqBdeHull(B) {
+  const P = hqSelPts(B);
+  if (P.length < 2) return null;
+  const x = P.reduce((a, p) => a + p[0], 0) / P.length, y = P.reduce((a, p) => a + p[1], 0) / P.length;
+  const q = arr => { arr.sort((a, b) => a - b); return arr[Math.min(arr.length - 1, Math.floor(arr.length * .85))]; };
+  return { x, y, rx: clamp(q(P.map(p => Math.abs(p[0] - x))) + 35, 55, 320), ry: clamp(q(P.map(p => Math.abs(p[1] - y))) + 30, 45, 260) };
+}
 // 全旅成员的位置：各组、各车
 function hqSelPts(B) {
   const out = [];
@@ -1115,9 +1137,18 @@ function hqSelDraw(ctx) {
   const B = hqSelB();
   if (!B) return;
   ctx.save(); ctx.strokeStyle = rgba(COL.sel, .95); ctx.lineWidth = px(1.8);
-  const r = Math.max(px(7), 7);
+  const r = Math.max(px(7), 7), G = hqSelG(B);
   for (const [x, y] of hqSelPts(B)) if (inView(x, y, 20)) { ctx.beginPath(); ctx.arc(x, y, r, 0, 6.283); ctx.stroke(); }
+  if (G) { ctx.strokeStyle = rgba(COL.amber, 1); ctx.lineWidth = px(2.4); for (const [x, y] of hqRegPts(G)) if (inView(x, y, 20)) { ctx.beginPath(); ctx.arc(x, y, r + px(2), 0, 6.283); ctx.stroke(); } }
   ctx.restore();
+}
+// 面板里点开的团（属于选中的旅）与它的成员位置
+const hqSelG = B => HQ.selG != null && B ? hqRegs(B.side, B).find(G => G.id === HQ.selG) || null : null;
+function hqRegPts(G) {
+  const out = [];
+  for (const u of bgUnits(G)) for (const q of teamsOf(u)) if (q.men.length && !q.ride) out.push([q.x, q.y]);
+  for (const v of bgVehs(G)) out.push([v.x, v.y]);
+  return out;
 }
 function hqPanel() {
   if (typeof document === 'undefined' || !document.getElementById) return;
@@ -1126,8 +1157,8 @@ function hqPanel() {
   if (!B) { if (el) el.hidden = true; return; }
   if (!el) {
     el = document.createElement('div'); el.id = 'bdeInfo'; el.className = 'ov box';
-    el.style.cssText = 'top:calc(60px + env(safe-area-inset-top,0px));right:max(16px,env(safe-area-inset-right,0px));width:min(380px,calc(100vw - 32px));max-height:60vh;overflow-y:auto;padding:8px 10px;font-size:12px;pointer-events:auto;z-index:6';
-    el.addEventListener('click', e => { if (e.target.closest('.bx')) { HQ.selB = null; hqPanel(); } });
+    el.style.cssText = 'top:calc(60px + env(safe-area-inset-top,0px));right:max(16px,env(safe-area-inset-right,0px));width:min(440px,calc(100vw - 32px));max-height:66vh;overflow-y:auto;padding:8px 10px;font-size:12px;pointer-events:auto;z-index:6';
+    el.addEventListener('click', e => { if (e.target.closest('.bx')) { HQ.selB = null; HQ.selG = null; hqPanel(); return; } hqPanelClick(e); });
     (document.getElementById('stage') || document.body).appendChild(el);
   }
   el.hidden = false;
@@ -1136,10 +1167,12 @@ function hqPanel() {
   const Rs = hqRegs(B.side, B);
   let inf = 0, veh = 0, p0 = 0, tk = 0, nv = 0;
   for (const G of Rs) { const Pw = hqRegPow(G); inf += Pw.inf; veh += Pw.veh; p0 += G.p0 || Pw.tot; tk += bgVehs(G).filter(hqTank).length; nv += bgVehs(G).length; }
-  const pct = v => Math.round(v * 100) + '%';
+  const pct = v => Math.round(v * 100) + '%', open = HQ.openG || (HQ.openG = {});
   const rows = Rs.map(G => {
-    const Pw = hqRegPow(G), D = G.doc || {};
-    return `<tr><td><b>${esc(G.name)}</b>${G.arm ? '<br><small>装甲团</small>' : ''}</td><td>${esc(hqOrgText(G).split('：')[1] || '')}</td><td>${esc(HQ_ST[G.st] || G.st || '')}${G.bnd ? '<br><small>跃进—掩护</small>' : ''}</td><td>${esc([HQ_FORM[D.form], HQ_ARM[D.arm]].filter(Boolean).join('、'))}</td><td>${pct(Pw.tot / Math.max(1, G.p0 || Pw.tot))}</td></tr>`;
+    const Pw = hqRegPow(G), D = G.doc || {}, op = !!open[G.id], T = G.task && hqPt(G.task.key);
+    let r = `<tr data-g="${G.id}" style="cursor:pointer${HQ.selG === G.id ? ';background:rgba(255,194,74,.12)' : ''}" title="点开看各连、各车"><td style="white-space:nowrap"><b>${op ? '▾' : '▸'} ${esc(G.name)}</b>${G.arm ? '<br><small>装甲团</small>' : ''}</td><td>${esc(hqOrgText(G).split('：')[1] || '')}</td><td style="white-space:nowrap">${esc(HQ_ST[G.st] || G.st || '')}${G.bnd ? '<br><small>跃进—掩护</small>' : ''}${T ? `<br><small>${esc(T.name)}</small>` : ''}</td><td>${esc([HQ_FORM[D.form], HQ_ARM[D.arm]].filter(Boolean).join('、'))}</td><td>${pct(Pw.tot / Math.max(1, G.p0 || Pw.tot))}</td></tr>`;
+    if (op) r += `<tr><td colspan="5" style="padding:2px 0 6px 12px">${hqRegDetail(G, esc)}</td></tr>`;
+    return r;
   }).join('');
   const col = B.side === 'p' ? 'var(--g)' : 'var(--enemy)';
   el.innerHTML = `<header style="display:flex;align-items:baseline;gap:8px;margin-bottom:6px"><b style="color:${col};font-size:14px">${esc(B.name)}</b><span style="color:var(--mute);flex:1">${B.side === 'p' ? '攻方' : '守方'} · ${B.res ? '战役预备队' : B.role === 'feint' ? '佯攻旅' : '机动旅'}</span><button type="button" class="bx" aria-label="关闭" style="background:transparent;border:0;color:var(--mute);font-size:16px">×</button></header>` +
@@ -1150,7 +1183,51 @@ function hqPanel() {
     `<dt style="color:var(--mute)">战斗力</dt><dd style="margin:0">${pct((inf + veh) / Math.max(1, p0))}（初始的）${B.spent ? ' · 已打残，转入防御' : ''}</dd>` +
     (H.doc && B.side === 'e' ? `<dt style="color:var(--mute)">司令战法</dt><dd style="margin:0">${esc(H.doc.key || '默认')}${H.doc.resv ? ' · 留预备队' : ''} · 判明主攻${{ fast: '快', mid: '中', slow: '慢' }[H.doc.det] || ''} · ${H.doc.ctr === 'all' ? '各旅同时反击' : '梯次投入'}</dd>` : '') +
     `</dl><table style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr style="color:var(--mute);text-align:left"><th>团</th><th>编成</th><th>状态</th><th>队形</th><th>战力</th></tr></thead><tbody>${rows}</tbody></table>` +
-    `<p style="margin:6px 0 0;color:var(--mute);font-size:11px">全旅成员已在地图上用紫色圈标出 · 再点一次番号牌或 × 关闭</p>`;
+    `<p style="margin:6px 0 0;color:var(--mute);font-size:11px">点团展开到连、车（该团成员改用琥珀色圈）· 点连 / 车在地图上找到它 · 全旅成员用紫色圈标出 · 再点一次番号牌或 × 关闭</p>`;
+}
+// 团展开：各连（人数、状态、在干什么）与各车（型号、车体）——点一行在地图上找到它
+const HQ_USTATE = { rout: '溃退', waver: '动摇' };
+function hqUName(u, i) {
+  if (!u) return '';
+  if (u.side === 'p') return typeof cmdUName === 'function' && S.cmd && S.cmd.p ? cmdUName(u) : unitName(u);
+  return u.a4n || `第${i + 1}连`;
+}
+function hqRegDetail(G, esc) {
+  const us = bgUnits(G), vs = bgVehs(G), it = (k, id, a, b) => `<div data-${k}="${id}" style="display:flex;gap:6px;cursor:pointer;padding:1px 0"><span style="flex:1">${a}</span><span style="color:var(--mute)">${b}</span></div>`;
+  const out = [];
+  us.forEach((u, i) => {
+    const ts = teamsOf(u).filter(q => q.men.length), men = ts.reduce((a, q) => a + q.men.length, 0), pl = u.side === 'p' && S.autoPlan && S.autoPlan.u && S.autoPlan.u[u.id];
+    const sup = ts.some(q => q.sup >= 60), job = ts.some(q => q.rc) ? '侦察' : ts.some(q => q.ride) ? '乘车' : sup ? '被压制' : pl && typeof INFO_PH === 'object' ? INFO_PH[pl.ph] || '' : '';
+    out.push(it('u', u.id, `${u.kind === 'eng' ? '⚒' : '●'} ${esc(hqUName(u, i))}`, `${ts.length} 组 ${men} 人${HQ_USTATE[u.state] ? ' · ' + HQ_USTATE[u.state] : ''}${job ? ' · ' + esc(job) : ''}`));
+  });
+  for (const v of vs) out.push(it('v', v.id, `▣ ${esc(vehName(v))}`, `车体 ${pct0(v.hp / Math.max(1, v.maxhp))}${v.immob ? ' · 履带断' : ''}`));
+  return out.length ? out.join('') : '<div style="color:var(--mute)">（全团已无可战兵力）</div>';
+}
+const pct0 = v => Math.round(clamp(v, 0, 1) * 100) + '%';
+// 面板里的点击：团行展开 / 收起（地图上这个团的成员改用琥珀色圈）；连、车行把镜头移过去并选中（敌方的显示型号卡）
+function hqPanelClick(e) {
+  const t = e.target.closest ? e.target : null;
+  if (!t) return false;
+  const g = t.closest('[data-g]'), u = t.closest('[data-u]'), v = t.closest('[data-v]');
+  if (u || v) {
+    const o = u ? UNIT_MAP.get(+u.dataset.u) : vehById(+v.dataset.v);
+    if (!o) return true;
+    const ts = u ? teamsOf(o).filter(q => q.men.length) : [], x = u ? ts.reduce((a, q) => a + q.x, 0) / Math.max(1, ts.length) : o.x, y = u ? ts.reduce((a, q) => a + q.y, 0) / Math.max(1, ts.length) : o.y;
+    if (isFinite(x) && isFinite(y)) { if (CAM.z < CAM.fit * 3) CAM.z = CAM.fit * 3; camCenter(x, y); }
+    if (o.side === 'p' && S.role !== 'spectate') { S.sel = [o.id]; if (typeof U === 'object') U.info = null; }
+    else if (typeof U === 'object') { S.sel = []; U.info = u ? (ts[0] ? { k: 'team', id: ts[0].id } : null) : { k: 'veh', id: o.id }; }
+    if (typeof updateHud === 'function') updateHud();
+    if (typeof infoRender === 'function') infoRender(true);
+    return true;
+  }
+  if (g) {
+    const id = +g.dataset.g, open = HQ.openG || (HQ.openG = {});
+    open[id] = !open[id];
+    HQ.selG = open[id] ? id : HQ.selG === id ? null : HQ.selG;
+    hqPanel();
+    return true;
+  }
+  return false;
 }
 // 点击番号牌：选中 / 取消这个旅
 HOOK.pointer.push((e, kind, p) => {
@@ -1161,11 +1238,12 @@ HOOK.pointer.push((e, kind, p) => {
   const h = L.find(o => x >= o.r[0] && x <= o.r[2] && y >= o.r[1] && y <= o.r[3]);
   if (!h) return false;
   HQ.selB = HQ.selB && HQ.selB.id === h.B.id ? null : { side: h.B.side, id: h.B.id };
+  HQ.selG = null;
   hqPanel();
   return true;
 });
 HOOK.frame.push(() => { if (HQ.selB && S && (S.t - (HQ.panT ?? -9) > 1 || S.t < (HQ.panT ?? 0))) { HQ.panT = S.t; hqSelB(); hqPanel(); } });
-HOOK.newGame.push(() => { HQ.selB = null; hqPanel(); });
+HOOK.newGame.push(() => { HQ.selB = null; HQ.selG = null; HQ.openG = {}; hqPanel(); });
 
 // 3D 地图里的旅标（view3d.js v3Overlay 调用，屏幕空间）：旅的中心立一根 110 高的杆，杆顶一块番号牌，不随透视变形、远近都看得清
 function hqMarks3(ctx, stem) {
@@ -1176,6 +1254,8 @@ function hqMarks3(ctx, stem) {
   if (SB) {
     ctx.save(); ctx.strokeStyle = rgba(COL.sel, .95); ctx.lineWidth = 2;
     for (const [x, y] of hqSelPts(SB)) { const q = v3Proj(x, y, v3Ht(x, y) + 2); if (q && q.f < .95) { ctx.beginPath(); ctx.arc(q.x, q.y, 9, 0, 6.283); ctx.stroke(); } }
+    const SG = hqSelG(SB);
+    if (SG) { ctx.strokeStyle = rgba(COL.amber, 1); ctx.lineWidth = 2.6; for (const [x, y] of hqRegPts(SG)) { const q = v3Proj(x, y, v3Ht(x, y) + 2); if (q && q.f < .95) { ctx.beginPath(); ctx.arc(q.x, q.y, 12, 0, 6.283); ctx.stroke(); } } }
     ctx.restore();
   }
   const spec = S.role === 'spectate' || R.eye === 'all' || R.eye === 'both' || R.eye === 'e', occ3 = [];
@@ -1185,7 +1265,7 @@ function hqMarks3(ctx, stem) {
     const col = side === 'p' ? COL.g : COL.enemy;
     for (const B of H.bdes) {
       if (!B.ord || !hqObj(B) || !hqRegs(side, B).length) continue;
-      const c = hqBdeAt(B), q = c && stem(c.x, c.y, 110, col, 1);
+      const Hu = hqBdeHull(B), c = Hu ? { x: Hu.x, y: Hu.y } : hqBdeAt(B), q = c && stem(c.x, c.y, 110, col, 1);
       if (!q) continue;
       let inf = 0, veh = 0;
       for (const G of hqRegs(side, B)) { const P = hqRegPow(G); inf += P.inf; veh += P.veh; }
