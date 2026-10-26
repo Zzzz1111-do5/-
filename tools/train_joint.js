@@ -88,7 +88,7 @@ const stat = (C, idx) => { const v = idx.map(i => C.sc[i]).filter(x => x != null
     };
     const cands = [{ d: { ...cur[lv][side] }, sc: {}, raw: {}, inc: true }];
     while (cands.length < NC) { const d = Object.fromEntries(Object.keys(SPACE[lv]).map(q => [q, pickR(SPACE[lv][q], r)])); if (!cands.some(c => keyOf(lv, c.d) === keyOf(lv, d))) cands.push({ d, sc: {}, raw: {} }); }
-    let alive = cands, used = pass * 6;   // 复训时换一批新局面
+    let alive = cands.slice(), used = pass * 6;   // 复训时换一批新局面
     const rounds = [2, 2, 2], base = used;
     for (const [ri, nAdd] of rounds.entries()) {
       const idx = Array.from({ length: nAdd }, (_, j) => used + j); used += nAdd;

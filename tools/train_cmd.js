@@ -94,7 +94,7 @@ const stat = (C, idx) => { const v = idx.map(i => C.sc[i]).filter(Boolean).map(r
     if (table[tk]) cands.push({ d: { ...base, ...table[tk] }, sc: {} });
     while (cands.length < NC) { const d = Object.fromEntries(Object.keys(SPACE).map(q => [q, pickR(SPACE[q], r)])); if (!cands.some(c => keyOf(c.d) === keyOf(d))) cands.push({ d, sc: {} }); }
     // 逐轮淘汰：每轮新加局面、留前一半；最后一轮加冠军的变异
-    let alive = cands, used = 0;
+    let alive = cands.slice(), used = 0;
     const rounds = [2, 3, 3];
     for (const [ri, nAdd] of rounds.entries()) {
       const idx = Array.from({ length: nAdd }, (_, j) => used + j); used += nAdd;

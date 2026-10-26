@@ -76,7 +76,7 @@ const avg = (C, idx, k) => { const v = idx.map(i => C.sc[i]).filter(Boolean).map
   const t0 = Date.now(), r = rng(20261026);
   const cands = [{ d: { ...cur }, sc: {} }, { d: { agg: 1, ret: .35, pick: 99 }, sc: {}, old: true }];   // 现在的打法、旧参数（硬拼到三成半才撤、什么敌人都敢打）
   while (cands.length < NC) { const d = Object.fromEntries(Object.keys(SPACE).map(q => [q, pickR(SPACE[q], r)])); if (!cands.some(c => keyOf(c.d) === keyOf(d))) cands.push({ d, sc: {} }); }
-  let alive = cands, used = 0;
+  let alive = cands.slice(), used = 0;
   const rounds = [3, 3, 3];
   for (const [ri, nAdd] of rounds.entries()) {
     const idx = Array.from({ length: nAdd }, (_, j) => used + j); used += nAdd;
@@ -90,7 +90,7 @@ const avg = (C, idx, k) => { const v = idx.map(i => C.sc[i]).filter(Boolean).map
     const all = Array.from({ length: used }, (_, j) => j);
     alive.sort((a, b) => stat(b, all).rob - stat(a, all).rob);
     console.log(`第 ${ri + 1} 轮（${used} 个局面）：` + alive.map(C => { const s = stat(C, all); return `${JSON.stringify(C.d).replace(/"/g, '')} ${s.rob.toFixed(1)}(${s.m.toFixed(1)}±${s.sd.toFixed(1)})${C.mut ? '*' : C.old ? '旧' : ''}`; }).join(' | ') + `  ${((Date.now() - t0) / 60000).toFixed(1)} 分钟`);
-    if (ri < rounds.length - 1) alive = alive.slice(0, Math.max(2, Math.ceil(alive.length / 2)));
+    if (ri < rounds.length - 1) { alive = alive.slice(0, Math.max(2, Math.ceil(alive.length / 2))); if (!alive.includes(cands[1])) alive.push(cands[1]); }   // 旧参数一直留着当对照
   }
   const all = Array.from({ length: used }, (_, j) => j), best = alive[0], bs = stat(best, all), b0 = cands[1], s0 = stat(b0, all);
   const wins = all.filter(i => best.sc[i] && b0.sc[i] && best.sc[i].s > b0.sc[i].s).length;
