@@ -1063,12 +1063,96 @@ function hqDraw() {
       if (zr > 1.6) ctx.fillText(G.name, x, y + h / 2 + px(10));
     }
   }
-  if (!(typeof V3 === 'object' && V3.drawing)) for (const m of marks) hqBdeMark(ctx, m.B, m.c, m.tag, m.col);   // 旅标最后画，压在箭头与团标上面（3D 地图里另外立在旅的上空：hqMarks3）
+  if (!(typeof V3 === 'object' && V3.drawing)) { HQ.hit2 = []; hqSelDraw(ctx); for (const m of marks) hqBdeMark(ctx, m.B, m.c, m.tag, m.col); }   // 旅标最后画，压在箭头与团标上面（3D 地图里另外立在旅的上空：hqMarks3）
   ctx.restore();
 }
+// ———————————————— 点开番号牌：旅的配置面板 + 高亮全旅成员 ————————————————
+const HQ_ST = { asm: '集结', move: '开进', deploy: '展开', assault: '冲击', clear: '肃清', regroup: '重整', hold: '防御', local: '就地反冲击', reserve: '待机', withdraw: '后撤' };
+const HQ_FORM = { line: '横队', wedge: '楔形', vee: '倒楔形', echL: '左梯形', echR: '右梯形' }, HQ_ARM = { front: '坦克在前', mixed: '步坦交错', rear: '坦克在后掩护' };
+function hqSelB() {
+  const k = HQ.selB;
+  if (!k || !hqOn() || !S.hq[k.side]) return null;
+  const B = S.hq[k.side].bdes.find(o => o.id === k.id);
+  if (!B || !hqRegs(k.side, B).length) { HQ.selB = null; hqPanel(); return null; }
+  return B;
+}
+// 全旅成员的位置：各组、各车
+function hqSelPts(B) {
+  const out = [];
+  for (const G of hqRegs(B.side, B)) {
+    for (const u of bgUnits(G)) for (const q of teamsOf(u)) if (q.men.length && !q.ride) out.push([q.x, q.y]);
+    for (const v of bgVehs(G)) out.push([v.x, v.y]);
+  }
+  return out;
+}
+// 平面：成员外一圈亮环
+function hqSelDraw(ctx) {
+  const B = hqSelB();
+  if (!B) return;
+  ctx.save(); ctx.strokeStyle = rgba(COL.sel, .95); ctx.lineWidth = px(1.8);
+  const r = Math.max(px(7), 7);
+  for (const [x, y] of hqSelPts(B)) if (inView(x, y, 20)) { ctx.beginPath(); ctx.arc(x, y, r, 0, 6.283); ctx.stroke(); }
+  ctx.restore();
+}
+function hqPanel() {
+  if (typeof document === 'undefined' || !document.getElementById) return;
+  let el = document.getElementById('bdeInfo');
+  const B = HQ.selB && S && S.hq && S.hq[HQ.selB.side] ? S.hq[HQ.selB.side].bdes.find(o => o.id === HQ.selB.id) : null;
+  if (!B) { if (el) el.hidden = true; return; }
+  if (!el) {
+    el = document.createElement('div'); el.id = 'bdeInfo'; el.className = 'ov box';
+    el.style.cssText = 'top:calc(60px + env(safe-area-inset-top,0px));right:max(16px,env(safe-area-inset-right,0px));width:min(380px,calc(100vw - 32px));max-height:60vh;overflow-y:auto;padding:8px 10px;font-size:12px;pointer-events:auto;z-index:6';
+    el.addEventListener('click', e => { if (e.target.closest('.bx')) { HQ.selB = null; hqPanel(); } });
+    (document.getElementById('stage') || document.body).appendChild(el);
+  }
+  el.hidden = false;
+  const esc = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+  const H = S.hq[B.side], O = B.ord || {}, P = hqObj(B), rest = (O.objs || []).slice((O.i || 0) + 1).map(k => (hqPt(k) || {}).name).filter(Boolean);
+  const Rs = hqRegs(B.side, B);
+  let inf = 0, veh = 0, p0 = 0, tk = 0, nv = 0;
+  for (const G of Rs) { const Pw = hqRegPow(G); inf += Pw.inf; veh += Pw.veh; p0 += G.p0 || Pw.tot; tk += bgVehs(G).filter(hqTank).length; nv += bgVehs(G).length; }
+  const pct = v => Math.round(v * 100) + '%';
+  const rows = Rs.map(G => {
+    const Pw = hqRegPow(G), D = G.doc || {};
+    return `<tr><td><b>${esc(G.name)}</b>${G.arm ? '<br><small>装甲团</small>' : ''}</td><td>${esc(hqOrgText(G).split('：')[1] || '')}</td><td>${esc(HQ_ST[G.st] || G.st || '')}${G.bnd ? '<br><small>跃进—掩护</small>' : ''}</td><td>${esc([HQ_FORM[D.form], HQ_ARM[D.arm]].filter(Boolean).join('、'))}</td><td>${pct(Pw.tot / Math.max(1, G.p0 || Pw.tot))}</td></tr>`;
+  }).join('');
+  const col = B.side === 'p' ? 'var(--g)' : 'var(--enemy)';
+  el.innerHTML = `<header style="display:flex;align-items:baseline;gap:8px;margin-bottom:6px"><b style="color:${col};font-size:14px">${esc(B.name)}</b><span style="color:var(--mute);flex:1">${B.side === 'p' ? '攻方' : '守方'} · ${B.res ? '战役预备队' : B.role === 'feint' ? '佯攻旅' : '机动旅'}</span><button type="button" class="bx" aria-label="关闭" style="background:transparent;border:0;color:var(--mute);font-size:16px">×</button></header>` +
+    `<dl style="display:grid;grid-template-columns:auto minmax(0,1fr);gap:2px 10px;margin:0 0 6px">` +
+    `<dt style="color:var(--mute)">任务</dt><dd style="margin:0">${esc(HQ_VERB[O.v] || '—')}${P ? ' ' + esc(P.name) : ''}${rest.length ? `，尔后 ${esc(rest.join('、'))}` : ''}${O.done ? '（已完成）' : ''}</dd>` +
+    `<dt style="color:var(--mute)">司令战术</dt><dd style="margin:0">${esc(H.tac ? H.tac.nm : '—')}</dd>` +
+    `<dt style="color:var(--mute)">编成</dt><dd style="margin:0">${Rs.length} 个团 · 步兵 ${inf} 人 · 车辆 ${nv} 辆（坦克 ${tk}）</dd>` +
+    `<dt style="color:var(--mute)">战斗力</dt><dd style="margin:0">${pct((inf + veh) / Math.max(1, p0))}（初始的）${B.spent ? ' · 已打残，转入防御' : ''}</dd>` +
+    (H.doc && B.side === 'e' ? `<dt style="color:var(--mute)">司令战法</dt><dd style="margin:0">${esc(H.doc.key || '默认')}${H.doc.resv ? ' · 留预备队' : ''} · 判明主攻${{ fast: '快', mid: '中', slow: '慢' }[H.doc.det] || ''} · ${H.doc.ctr === 'all' ? '各旅同时反击' : '梯次投入'}</dd>` : '') +
+    `</dl><table style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr style="color:var(--mute);text-align:left"><th>团</th><th>编成</th><th>状态</th><th>队形</th><th>战力</th></tr></thead><tbody>${rows}</tbody></table>` +
+    `<p style="margin:6px 0 0;color:var(--mute);font-size:11px">全旅成员已在地图上用紫色圈标出 · 再点一次番号牌或 × 关闭</p>`;
+}
+// 点击番号牌：选中 / 取消这个旅
+HOOK.pointer.push((e, kind, p) => {
+  if (kind !== 'down' || e.button !== 0 || !hqOn() || (typeof V3O === 'object' && V3O.on)) return false;
+  const in3 = typeof V3 === 'object' && V3.on, L = in3 ? HQ.hit3 : HQ.hit2;
+  if (!L || !L.length) return false;
+  const { sx, sy } = evPos(e), x = in3 ? sx : p.x, y = in3 ? sy : p.y;
+  const h = L.find(o => x >= o.r[0] && x <= o.r[2] && y >= o.r[1] && y <= o.r[3]);
+  if (!h) return false;
+  HQ.selB = HQ.selB && HQ.selB.id === h.B.id ? null : { side: h.B.side, id: h.B.id };
+  hqPanel();
+  return true;
+});
+HOOK.frame.push(() => { if (HQ.selB && S && (S.t - (HQ.panT ?? -9) > 1 || S.t < (HQ.panT ?? 0))) { HQ.panT = S.t; hqSelB(); hqPanel(); } });
+HOOK.newGame.push(() => { HQ.selB = null; hqPanel(); });
+
 // 3D 地图里的旅标（view3d.js v3Overlay 调用，屏幕空间）：旅的中心立一根 110 高的杆，杆顶一块番号牌，不随透视变形、远近都看得清
 function hqMarks3(ctx, stem) {
+  HQ.hit3 = [];
   if (!hqOn()) return;
+  // 选中旅的成员：屏幕上一圈亮环
+  const SB = hqSelB();
+  if (SB) {
+    ctx.save(); ctx.strokeStyle = rgba(COL.sel, .95); ctx.lineWidth = 2;
+    for (const [x, y] of hqSelPts(SB)) { const q = v3Proj(x, y, v3Ht(x, y) + 2); if (q && q.f < .95) { ctx.beginPath(); ctx.arc(q.x, q.y, 9, 0, 6.283); ctx.stroke(); } }
+    ctx.restore();
+  }
   const spec = S.role === 'spectate' || R.eye === 'all' || R.eye === 'both' || R.eye === 'e';
   for (const side of ['p', 'e']) {
     const H = S.hq[side];
@@ -1085,8 +1169,9 @@ function hqMarks3(ctx, stem) {
       ctx.font = 'bold 14px "IBM Plex Mono", "Noto Sans SC", monospace'; const w1 = ctx.measureText(B.name).width;
       ctx.font = '11px "IBM Plex Mono", "Noto Sans SC", monospace'; const w2 = verb ? ctx.measureText(verb).width + 8 : 0;
       const fw = 22, fh = 15, W0 = fw + 8 + w1 + w2 + 16, h0 = 26, x0 = q.x - W0 / 2, yc = q.y - h0 / 2;
+      HQ.hit3.push({ B, r: [x0, yc - h0 / 2, x0 + W0, yc + h0 / 2] });
       ctx.fillStyle = rgba(COL.bg, .9); ctx.fillRect(x0, yc - h0 / 2, W0, h0);
-      ctx.strokeStyle = rgba(col, 1); ctx.lineWidth = 1.6; ctx.strokeRect(x0, yc - h0 / 2, W0, h0);
+      ctx.strokeStyle = rgba(SB && SB.id === B.id ? COL.sel : col, 1); ctx.lineWidth = SB && SB.id === B.id ? 2.6 : 1.6; ctx.strokeRect(x0, yc - h0 / 2, W0, h0);
       ctx.fillStyle = rgba(col, .9); ctx.fillRect(x0, yc - h0 / 2, 3, h0);
       const fx = x0 + 8 + fw / 2, fy = yc + 2.5;
       ctx.lineWidth = 1.3; ctx.strokeRect(fx - fw / 2, fy - fh / 2, fw, fh);
@@ -1132,6 +1217,8 @@ function hqBdeMark(ctx, B, c, verb, col) {
   if (t !== 'inf') ctx.ellipse(fx, fy, fw * .32, fh * .3, 0, 0, 6.283);
   ctx.stroke();
   ctx.fillStyle = rgba(col, 1); ctx.font = `bold ${font(8)}`; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic'; ctx.fillText('X', fx, fy - fh / 2 - px(1.5));
+  (HQ.hit2 || (HQ.hit2 = [])).push({ B, r: [x0, yc - h0 / 2, x0 + W0, yc + h0 / 2] });   // 点击番号牌（hqPick）
+  if (HQ.selB && HQ.selB.id === B.id) { ctx.strokeStyle = rgba(COL.sel, 1); ctx.lineWidth = px(2.4); ctx.strokeRect(x0 - px(2), yc - h0 / 2 - px(2), W0 + px(4), h0 + px(4)); }
   // 番号与任务
   ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
   ctx.font = `bold ${font(14)}`; ctx.fillStyle = rgba(col, 1); ctx.fillText(B.name, fx + fw / 2 + px(7), yc + px(.5));
