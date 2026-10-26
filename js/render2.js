@@ -131,11 +131,13 @@ function faceDraw(q) {
 function drawTeamBody(ctx, q, f, col) {
   const c = Math.cos(f + 1.57), s = Math.sin(f + 1.57), n = q.men.length;
   if (R.fig) {
+    const T = manTeam(q), real = realLook();   // 动作状态（manim.js）
     for (let i = 0; i < n; i++) {
       let mx = q.x + MO[i][0] * c - MO[i][1] * s, my = q.y + MO[i][0] * s + MO[i][1] * c;
       const bo = bldOut(mx, my, .5);   // 小人落在房子轮廓里：画在墙根
       if (bo) [mx, my] = bo;
-      drawMan(ctx, mx, my, f, q.men[i], col, true, q.side, q.prone);
+      const kind = manKind(q, i, q.men[i]);
+      manDraw(ctx, mx, my, f, kind, col, q.side, manAn(q, T, i, kind), real);
     }
     return;
   }

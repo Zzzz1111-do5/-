@@ -152,38 +152,8 @@ function drawStructure(p, time) {
 }
 function drawStructures(time) { for (const p of S.points) if (inView(p.x, p.y, 70)) drawStructure(p, time); }
 
-// 俯视单兵（世界尺寸：肩宽约 3.9、连枪长约 5 单位）：暗底肩部 + 实心头 + 武器线；描边按屏幕像素，放大后依然纤细
-// 通讯兵背电台与天线，机枪手枪管粗、带脚架，工兵背锹
-// prone：卧倒——身体顺着朝向趴平，两腿分开在后，枪朝前
+// 俯视单兵（静态姿势：炮组等；小组里的士兵带整套动作，见 manim.js）——远看只画一个点
 function drawMan(ctx, x0, y0, a, role, col, det, side, prone) {
   if (!det) { const d = Math.max(px(1.8), 1.4); ctx.fillStyle = col; ctx.fillRect(x0 - d / 2, y0 - d / 2, d, d); return; }
-  if (realLook()) { drawManReal(ctx, x0, y0, a, role, col, side, prone); return; }
-  const k = 1.12, lw = px(1) / k, dark = 'rgba(2,10,6,.88)';
-  ctx.save(); ctx.translate(x0, y0); ctx.rotate(a); ctx.scale(k, k);
-  ctx.lineWidth = lw; ctx.strokeStyle = col; ctx.fillStyle = dark;
-  if (prone) {
-    ctx.beginPath(); ctx.moveTo(-2.4, -.35); ctx.lineTo(-4.5, -1); ctx.moveTo(-2.4, .35); ctx.lineTo(-4.5, 1); ctx.stroke();   // 两腿
-    ctx.beginPath(); ctx.ellipse(-1.1, 0, 1.75, .78, 0, 0, 7); ctx.fill();
-    ctx.globalAlpha *= .35; ctx.fillStyle = col; ctx.fill(); ctx.globalAlpha /= .35; ctx.stroke();
-    ctx.lineWidth = lw * (role === 'mg' ? 1.7 : 1.05); ctx.beginPath(); ctx.moveTo(.6, .3); ctx.lineTo(3.8, .3); ctx.stroke();
-    ctx.fillStyle = col; ctx.strokeStyle = dark; ctx.lineWidth = lw * .8; ctx.beginPath(); ctx.arc(.75, 0, .78, 0, 7); ctx.fill(); ctx.stroke();
-    ctx.restore(); return;
-  }
-  if (role === 'radio') {
-    ctx.fillRect(-1.95, -.8, .95, 1.6); ctx.strokeRect(-1.95, -.8, .95, 1.6);
-    ctx.lineWidth = lw * .8; ctx.beginPath(); ctx.moveTo(-1.7, -.7); ctx.lineTo(-3.4, -2.1); ctx.stroke(); ctx.lineWidth = lw;
-  } else if (role === 'eng') {
-    ctx.beginPath(); ctx.moveTo(-.5, -1.2); ctx.lineTo(-2.9, -1.95); ctx.stroke();
-    ctx.fillStyle = col; ctx.fillRect(-3.5, -2.45, 1, 1); ctx.fillStyle = dark;
-  }
-  ctx.beginPath(); ctx.ellipse(-.1, 0, .9, 1.75, 0, 0, 7); ctx.fill();
-  ctx.globalAlpha *= .35; ctx.fillStyle = col; ctx.fill(); ctx.globalAlpha /= .35; ctx.stroke();
-  if (role === 'mg') {
-    ctx.lineWidth = lw * 1.7; ctx.beginPath(); ctx.moveTo(.2, .75); ctx.lineTo(3.9, .75); ctx.stroke();
-    ctx.lineWidth = lw * .8; ctx.beginPath(); ctx.moveTo(3.1, .75); ctx.lineTo(3.7, -.1); ctx.moveTo(3.1, .75); ctx.lineTo(3.7, 1.6); ctx.stroke();
-  } else { ctx.beginPath(); ctx.moveTo(.1, .85); ctx.lineTo(3.1, .6); ctx.stroke(); }
-  if (role === 'aa') { ctx.lineWidth = lw * 2.6; ctx.beginPath(); ctx.moveTo(-2.4, -1.15); ctx.lineTo(2.2, -1.15); ctx.stroke(); ctx.lineWidth = lw * .8; ctx.beginPath(); ctx.moveTo(2.2, -1.9); ctx.lineTo(2.2, -.4); ctx.stroke(); ctx.lineWidth = lw; }   // 防空导弹手：左肩扛粗短发射筒
-  ctx.fillStyle = col; ctx.strokeStyle = dark; ctx.lineWidth = lw * .8;
-  ctx.beginPath(); ctx.arc(.2, 0, .82, 0, 7); ctx.fill(); ctx.stroke();
-  ctx.restore();
+  manDraw(ctx, x0, y0, a, role, col, side, prone ? { ...MAN_IDLE, prone: true } : null, realLook());
 }

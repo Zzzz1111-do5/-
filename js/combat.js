@@ -13,8 +13,9 @@ const POWER = {
 function killMan(q, prefer, force) {
   if (!q.men.length) return;
   if (!force && q.mod && q.mod.hard && Math.random() < q.mod.hard) { q.sup = Math.min(100, q.sup + 8); if (typeof v8Stat === 'function') v8Stat('hardSave'); return; }
-  const pi = prefer ? q.men.indexOf(prefer) : -1;
-  const role = q.men.splice(pi >= 0 ? pi : Math.floor(Math.random() * q.men.length), 1)[0];
+  const pi = prefer ? q.men.indexOf(prefer) : -1, idx = pi >= 0 ? pi : Math.floor(Math.random() * q.men.length);
+  if (typeof manDied === 'function') manDied(q, idx, q.men[idx]);   // 画面：这个人倒地（manim.js，只记在画面缓存里）
+  const role = q.men.splice(idx, 1)[0];
   const u = unitOf(q);
   if (u) { u.morale -= 5 * (S.t - u.flankT < 3 ? 1.5 : 1) * (u.elite ? .5 : 1); u.hitT = S.t; }   // 精锐连队：伤亡对士气的打击减半
   if (q.side === 'e') { S.stats.killed++; return; }
