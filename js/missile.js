@@ -205,7 +205,7 @@ function msSamHit(m, T) {
     if (!T.samN) { T.samN = 1; flare = .6; MSV.fl.push({ x: T.x, y: T.y, t: S.t }); }   // 第一枚多半被干扰弹骗走
     else if (T.flares > 0) { T.flares--; flare = .55; MSV.fl.push({ x: T.x, y: T.y, t: S.t }); }   // 运-20 等带了多组干扰弹的（abn.js）
   } else {
-    base = (aam || samv ? m.pk : m.src === 'dd' || m.src === 'esc' ? (T.type === 'heli' ? .55 : .6) : T.type === 'heli' ? .62 : .42) * (aam ? 1 : (1 + ((typeof EA_SPEC === 'object' && EA_SPEC[T.type] && EA_SPEC[T.type].stealth) || 1)) / 2);   // F-35A 隐身
+    base = (aam || samv ? m.pk : m.src === 'dd' || m.src === 'esc' ? (T.type === 'heli' ? .55 : .6) : T.type === 'heli' ? .62 : .42) * (aam ? 1 : (1 + (typeof eaStl === 'function' ? eaStl(T) : (typeof EA_SPEC === 'object' && EA_SPEC[T.type] && EA_SPEC[T.type].stealth) || 1)) / 2);   // F-35A 隐身（久留暴露后打折变少）
     if (T.flares > 0) { T.flares--; flare = .6; MSV.fl.push({ x: T.x, y: T.y, t: S.t }); }
   }
   if (Math.random() < base * (1 - clamp(m.sup || 0, 0, 100) / 150) * flare) {

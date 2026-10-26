@@ -206,6 +206,15 @@ function v3H0(gx, gy) {
   return isWater(TER.type[i]) ? -3 : TER.elev[i] * V3_HZ + 2;
 }
 // 世界坐标 (x, y) 处的地面高度（双线性插值）
+// 飞机在 3D 里的绝对高度（模型、垂线、标识共用）：舰载机在甲板上（弹射、滑跑、拦阻）贴着飞行甲板，海上起降以甲板为基准；
+//   其余以地面 / 海面为基准——高度 alt 0.05 以下贴着基准面，往上每 1.0 约 230（直升机悬停 0.3 约离地 60）
+const V3_DECK = -2.6 + 7.4 + .55;
+function v3AirZ(o) {
+  const ph = o.phase || o.ph, g = Math.max(v3Ht(o.x, o.y), -2.6);
+  if (o.kind && (ph === 'cat' || ph === 'roll' || ph === 'trap')) return V3_DECK;
+  const base = o.kind && !o.land && !o.afPh && g < V3_DECK ? V3_DECK : g + 1.5;
+  return base + Math.max(0, clamp(o.alt ?? 1, 0, 1) - .05) * 230;
+}
 function v3Ht(x, y) {
   if (!V3.hf) return 0;
   const fx = clamp(x / (CELL * V3_ST), 0, V3.nx - 1.001), fy = clamp(y / (CELL * V3_ST), 0, V3.ny - 1.001), i = Math.floor(fx), j = Math.floor(fy), u = fx - i, v = fy - j, H = V3.hf, n = V3.nx;
@@ -522,18 +531,18 @@ function v3Overlay(ctx, time) {
     if (near && q.f < .6) label(G.name, q.x, q.y + h / 2 + 11, COL.text, q.al * .85);
   }
   // 飞机：离地高度按 alt（0–1）放大，机头朝向按投影
-  const air = (x, y, alt, hd, col) => {
-    const z = 30 + clamp(alt ?? 1, 0, 1) * 200, q = stem(x, y, z, col, .9);
+  const air = (o, col) => {
+    const x = o.x, y = o.y, hd = o.heading || 0, Z = v3AirZ(o), g = v3Ht(x, y), z = Z - g, q = stem(x, y, z, col, .9);
     if (!q) return;
-    const g = v3Ht(x, y), p2 = v3Proj(x + Math.cos(hd) * 12, y + Math.sin(hd) * 12, g + z);
+    const p2 = v3Proj(x + Math.cos(hd) * 12, y + Math.sin(hd) * 12, Z);
     const a = p2 ? Math.atan2(p2.y - q.y, p2.x - q.x) : 0;
     if (typeof V3M === 'object' && V3M.ok && !(SETTINGS && SETTINGS.models3d === false)) return;   // 立体模型已经画了飞机，这里只留垂线
     ctx.save(); ctx.translate(q.x, q.y); ctx.rotate(a);
     ctx.fillStyle = rgba(col, q.al); ctx.beginPath(); ctx.moveTo(7, 0); ctx.lineTo(-5, -4.5); ctx.lineTo(-2.5, 0); ctx.lineTo(-5, 4.5); ctx.closePath(); ctx.fill();
     ctx.restore();
   };
-  for (const p of S.planes || []) if (!p.dead && isFinite(p.x)) air(p.x, p.y, p.alt, p.heading, COL.g);
-  if (S.eair) for (const a of S.eair.fly) if (!a.dead && (spec || a.pv) && isFinite(a.x) && a.ph !== 'roll') air(a.x, a.y, a.alt, a.heading, COL.enemy);
+  for (const p of S.planes || []) if (!p.dead && isFinite(p.x) && p.phase !== 'cat' && p.phase !== 'roll' && p.phase !== 'trap') air(p, COL.g);   // 甲板上的不画垂线
+  if (S.eair) for (const a of S.eair.fly) if (!a.dead && (spec || a.pv) && isFinite(a.x) && a.ph !== 'roll') air(a, COL.enemy);
   if (typeof hqMarks3 === 'function') hqMarks3(ctx, stem);   // 旅标：立在旅的上空（hq.js）
   if (typeof shOverlay3D === 'function') shOverlay3D(ctx, (x, y, h) => v3Proj(x, y, v3Ht(x, y) + h));   // 士兵喊话气泡（shout.js）
   if (typeof v3oOverlay === 'function') v3oOverlay(ctx);   // 观察者模式的准星

@@ -682,18 +682,18 @@ function v3Units(C, box) {
     const a = typeof gunAim === 'function' ? gunAim(e, t) : (e.th ?? 1.57);
     v3mAdd('st:' + e.kind, () => v3mFort(e.kind), e.x, e.y, v3Ht(e.x, e.y), a, 1, e.dead ? 2 : 1);
   }
-  // 飞机：高度与 3D 地图里的标识一致（离地 30 + 高度 × 200），按滚转角倾斜；直升机主旋翼转动
-  const plane = (x, y, alt, hd, sd, key, sz, bank) => {
-    const z = v3Ht(x, y) + 30 + clamp(alt ?? 1, 0, 1) * 200, k = sz / 21;
+  // 飞机：高度与 3D 地图里的标识一致（view3d.js v3AirZ：甲板上贴着甲板，空中按高度），按滚转角倾斜；直升机主旋翼转动
+  const plane = (o, hd, sd, key, sz, bank) => {
+    const x = o.x, y = o.y, z = v3AirZ(o), k = sz / 21;
     v3mAdd('pl:' + key, () => v3mPlane(key), x, y, z, hd || 0, k, sd, bank || 0);
     if (V3_PLANE_TAIL[key] === 'heli') v3mAdd('rotor', () => v3mRotor(4, 7.5), x + Math.cos(hd || 0) * 1.2 * k, y + Math.sin(hd || 0) * 1.2 * k, z + 2.7 * k, t * 22, k, sd);
   };
   for (const p of S.planes || []) if (!p.dead && isFinite(p.x) && inB(p.x, p.y, 220)) {
     const key = typeof airSilKey === 'function' ? airSilKey(p.kind, p.v) : 'j35', sz = (typeof airMdl === 'function' && airMdl(p.kind, p.v).size) || ((typeof AIR_SPEC === 'object' && AIR_SPEC[p.kind]) || {}).size || 15;
-    plane(p.x, p.y, p.alt, p.heading, 0, key, sz, p.bank);
+    plane(p, p.heading, 0, key, sz, p.bank);
   }
   const EA_K = { ga: ['a10', 18], heli: ['ah64', 16], uh60: ['uh60', 17], c17: ['c17', 30], ftr: ['f35', 17], f22: ['f22', 18], b2: ['b2', 34], p8: ['p8', 26] };
-  if (S.eair) for (const a of S.eair.fly) if (!a.dead && isFinite(a.x) && a.ph !== 'roll' && (spec || a.pv) && inB(a.x, a.y, 220)) { const [key, sz] = EA_K[a.type] || ['f35', 17]; plane(a.x, a.y, a.alt, a.heading, 1, key, sz, a.bank); }
+  if (S.eair) for (const a of S.eair.fly) if (!a.dead && isFinite(a.x) && a.ph !== 'roll' && (spec || a.pv) && inB(a.x, a.y, 220)) { const [key, sz] = EA_K[a.type] || ['f35', 17]; plane(a, a.heading, 1, key, sz, a.bank); }
   // —— 画 ——
   gl.useProgram(V3M.pr);
   gl.uniformMatrix4fv(V3M.u.uM, false, C.M);

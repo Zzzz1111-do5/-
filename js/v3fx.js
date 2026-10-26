@@ -117,7 +117,7 @@ function v3Fx(C) {
   // —— 直升机的火箭、反坦克导弹（从机上射向地面）——
   if (S.eair) for (const p of S.eair.proj || []) {
     if (p.t < 0 || p.done || (!spec && !inVision(p.tx, p.ty) && !inVision(p.x0, p.y0)) || !inB(p.tx, p.ty, 100)) continue;
-    const za = g(p.x0, p.y0) + 30 + .3 * 200, zb = g(p.tx, p.ty) + 1;
+    const za = g(p.x0, p.y0) + 1.5 + .25 * 230, zb = g(p.tx, p.ty) + 1;   // 直升机悬停高度（view3d.js v3AirZ）
     if (p.k === 'rk') {
       const u = clamp(p.t / p.dur, 0, 1), f = v => v3fP(lerp(p.x0, p.tx, v), lerp(p.y0, p.ty, v), lerp(za, zb, v));
       v3fTrail(out, E, f, Math.max(0, u - .12), u, 3, 1.6, V3F_COL.e);

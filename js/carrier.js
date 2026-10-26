@@ -36,7 +36,7 @@ const airMdlKey = (type, v) => AIR_VMODEL[v] || AIR_BASEM[type];
 const airMdl = (type, v) => AIR_MDL[airMdlKey(type, v)] || {};   // 运输机（para.js）等没有型号表的返回空
 const airSpec = (type, v) => ({ ...(AIR_SPEC[type] || AIR_SPEC.strike), ...airMdl(type, v) });
 const airLandW = w => !!(w && airMdl(w.type, w.v).land);
-const airStealth = o => (o && airMdl(o.kind || o.type, o.v).stealth) || 1;   // 飞机（p.kind）或编队记录（w.type）
+const airStealth = o => { const b = (o && airMdl(o.kind || o.type, o.v).stealth) || 1; return o && o.exp > 0 && typeof awStl === 'function' ? awStl(o, b) : b; };   // 飞机（p.kind）或编队记录（w.type）；在敌雷达下待久了隐身打折（airwar.js awStl）
 const AIR_REARM_LAND = 100;   // 陆基飞机：飞回战区机场加油挂弹再飞回来
 const AIR_TYPES = ['recon', 'strike', 'cas', 'bomber', 'fighter'];
 const AIR_TURN = 1.5;      // 最大转弯角速度（弧度/秒）：巡航转弯半径约 120
@@ -365,8 +365,12 @@ function airHoldP(p, dt, speed) {
     if (p.id === H0.pkg && typeof chatSay === 'function') chatSay('p', `报告：${escOk && es.length ? '护航机已会合，' : ''}${swOk ? (sw.length ? '扫荡机已控制目标空域' : '目标空域无敌机') : '扫荡未完'}${aa ? `，目标附近仍有 ${aa} 处敌防空` : '，敌防空已压制'}——轰炸机进入投弹航路。`, { kind: 'report', at: { x: p.tx, y: p.ty }, key: 'bhold', gap: 20, lv: 2 });
     return false;
   }
-  p.alt = Math.min(1, p.alt + dt / 2.2); speed(150);
-  if (dist(p.x, p.y, H0.x, H0.y) > 130) airSteer(p, H0.x, H0.y, dt); else airOrbit(p, H0.x, H0.y, 90, p.odir || 1, dt);
+  p.alt = Math.min(1, p.alt + dt / 2.2);
+  // 到待机点前正常飞；到了以后低速朝目标直飞（不盘旋），飞到防空圈边上（离目标比待机点近 260）还没放行就按时间到处理
+  if (!H0.at && dist(p.x, p.y, H0.x, H0.y) < 130) { H0.at = true; H0.d0 = dist(H0.x, H0.y, p.tx, p.ty); }
+  if (!H0.at) { speed(150); airSteer(p, H0.x, H0.y, dt); return true; }
+  speed(110); airSteer(p, p.tx, p.ty, dt);
+  if (dist(p.x, p.y, p.tx, p.ty) < H0.d0 - 260) H0.until = Math.min(H0.until, S.t);
   return true;
 }
 // —— 对地支援的真实战法：不在目标上空绕圈等着挨打——
@@ -405,15 +409,18 @@ function airCasFly(p, dt, speed) {
   // 扫射航路：冲向目标、近距扫射一次、立即拉起回待机点
   if (p.run) {
     speed(sp.spd); const d = airSteer(p, p.run.x, p.run.y, dt, true);
-    if (d < 70 && !p.run.shot) { p.run.shot = true; casStrafe(p); if (typeof v8Stat === 'function') v8Stat('casRun'); }
+    if (d < 70 && !p.run.shot) { p.run.shot = true; casStrafe(p); if (p.wave == null) p.wave = S.t; if (typeof v8Stat === 'function') v8Stat('casRun'); }
     if (p.run.shot && d > 120 || S.t - p.run.t > 9) { p.run = null; p.runCd = S.t + 7; }
     return;
   }
   const fired = airAgm(p);
+  if (fired && p.wave == null) p.wave = S.t;
+  // 打完一波就返航：第一次开火后，固定翼再打 6 秒（把这一波的导弹打完）、直升机打完 4 发，然后返航，不在目标区上空兜圈子等下一个目标
+  if (p.wave != null && !p.run && (heli ? (p.wv0 ?? (p.wv0 = (p.agmN || 0) + 1)) - (p.agmN || 0) >= 4 || !(p.agmN > 0) && !(p.ammoG > 0) || S.t - p.wave > 16 : S.t - p.wave > 6)) { airSet(p, 'rtb'); return; }
   // 直-10：没有导弹目标（或导弹打光）时，悬停用 23 毫米机炮打目标一带的步兵和火力点（射程 280 内，每 2.5 秒一个点射）
   if (heli && !fired && S.t >= (p.gunT2 || 0) && (p.ammoG ?? (p.ammoG = 12)) > 0) {
     const sv = { x: p.x, y: p.y }, near = [...S.teams.filter(q => q.side === 'e' && q.men.length && inVision(q.x, q.y)), ...S.enemies.filter(e => !e.dead && inVision(e.x, e.y))].some(o => dist(o.x, o.y, sv.x, sv.y) < 280 && dist(o.x, o.y, p.cx, p.cy) <= 160);
-    if (near && casStrafe(p)) { p.ammoG--; p.gunT2 = S.t + 2.5; }
+    if (near && casStrafe(p)) { p.ammoG--; p.gunT2 = S.t + 2.5; if (p.wave == null) p.wave = S.t; }
   }
   if (gun && S.t >= (p.runCd || 0) && p.tRisk < .5) {
     let best = null, bd = 1e9;
@@ -429,8 +436,10 @@ function airCasFly(p, dt, speed) {
     if (p.agmN != null) { if (p.n0 == null) p.n0 = p.agmN; if (p.n0 - p.agmN >= 2) { p.n0 = p.agmN; p.hop++; airCasHold(p); if (typeof v8Stat === 'function') v8Stat('heliHop'); } }
     return;
   }
+  // 固定翼：在待机点沿岸线方向直飞一段搜索目标（不盘旋），飞完还没找到可打的就返航
+  if (!p.leg2) p.leg2 = atoLeg(p, p.hp.x, p.hp.y, ATO_LEG.cas);
   speed(uav ? 120 : 140);
-  airOrbit(p, p.hp.x, p.hp.y, uav ? 90 : 70, p.odir || 1, dt);
+  if (airSteer(p, p.leg2.x, p.leg2.y, dt) < 70) { if (p.wave == null) log(`${airName(p.kind, p.v).split(' ')[0]}任务区内没有发现可打的目标，返航`, 'info', 'casnone', 15, p); airSet(p, 'rtb'); }
 }
 // 新飞机的公共字段
 function airNew(w, kind, x, y, heading, tx, ty, extra) {
@@ -507,16 +516,27 @@ function updatePlanes(dt) {
 
 // 转向飞行：限制角速度；固定目标落在转弯圈内时先直飞拉开（带回差，避免贴着转弯圈绕圈）
 // free：追踪前方移动的引导点（盘旋、最后进近）时不做此判断
+// 飞机的地速：速度表（spd）乘 AIR_K——空中的飞机比原来慢一半（离地 / 着舰前后逐渐过渡到真实速度，起降滑跑不变）
+const AIR_K = .5;
+const airK = o => !o || o.alt == null || o.alt >= .25 ? AIR_K : lerp(1, AIR_K, clamp(o.alt / .25, 0, 1));
+// 平滑转向（双方所有飞机共用）：想要的角速度按航向偏差成比例（快对准时自然收小，不过冲、不来回摆），
+//   角速度的变化有上限（压坡度、改出都要时间）——航迹是连续的圆弧，不走折线 / 波浪；返回这一步转过的角度
+function airYaw(o, df, rate, dt) {
+  const w = Math.abs(df) < .004 ? 0 : clamp(df * 2.2, -rate, rate), a = rate * 2.6 * dt, h = o.hr || 0;
+  o.hr = clamp(w, h - a, h + a);
+  return o.hr * dt;
+}
 function airSteer(p, tx, ty, dt, free) {
-  const d = dist(p.x, p.y, tx, ty), df = airAng(Math.atan2(ty - p.y, tx - p.x) - p.heading), spd = Math.max(20, p.spd);
-  let turn = clamp(df, -AIR_TURN * dt, AIR_TURN * dt);
-  if (!free && Math.abs(df) > .15) {
+  const d = dist(p.x, p.y, tx, ty), df = airAng(Math.atan2(ty - p.y, tx - p.x) - p.heading), k = airK(p), spd = Math.max(20, p.spd) * k;
+  let want = df;
+  if (!free && Math.abs(df) > .15) {   // 目标在转弯圆里面：先直飞拉开距离再转，不绕着目标打转
     const r = spd / AIR_TURN, s = df > 0 ? 1 : -1, ox = p.x - Math.sin(p.heading) * r * s, oy = p.y + Math.cos(p.heading) * r * s;
-    if (dist(ox, oy, tx, ty) < r * (p.ext ? 1.4 : 1.02)) { turn = 0; p.ext = true; } else p.ext = false;
+    if (dist(ox, oy, tx, ty) < r * (p.ext ? 1.4 : 1.02)) { want = 0; p.ext = true; } else p.ext = false;
   } else p.ext = false;
+  const turn = airYaw(p, want, AIR_TURN, dt);
   p.heading = airAng(p.heading + turn);
-  p.bank = lerp(p.bank || 0, dt > 0 ? turn / (AIR_TURN * dt) : 0, Math.min(1, dt * 6));
-  p.x += Math.cos(p.heading) * p.spd * dt; p.y += Math.sin(p.heading) * p.spd * dt;
+  p.bank = lerp(p.bank || 0, clamp(p.hr / AIR_TURN, -1, 1), Math.min(1, dt * 6));
+  p.x += Math.cos(p.heading) * p.spd * k * dt; p.y += Math.sin(p.heading) * p.spd * k * dt;
   return d;
 }
 // 待机 / 巡逻：跑马场航线（ato.js atoRace：两头转弯、中间直飞，长边与海岸线平行），不在空中原地打转
@@ -596,7 +616,7 @@ function flyPlane(p, dt) {
       // 对地支援：先飞到任务区外的待机点（避开已知防空圈），到了转入待机（airCasFly）
       if (!p.hp) { Object.assign(p, { cx: p.tx, cy: p.ty, loiterT: M.loiter || 40, strafeT: .8 }); airCasHold(p); }
       const d = airSteer(p, p.hp.x, p.hp.y, dt);
-      if (dist(p.x, p.y, p.tx, p.ty) < (M.agmR || 0) + 60) airAgm(p);   // 进入导弹射程就先发射，不必等飞临目标上空
+      if (dist(p.x, p.y, p.tx, p.ty) < (M.agmR || 0) + 60 && airAgm(p) && p.wave == null) p.wave = S.t;   // 进入导弹射程就先发射，不必等飞临目标上空
       if (d < 70) { const cross = Math.cos(p.heading) * (p.hp.y - p.y) - Math.sin(p.heading) * (p.hp.x - p.x); p.odir = cross >= 0 ? 1 : -1; airSet(p, 'loiter'); }
     }
     return;
@@ -721,14 +741,15 @@ function airArFly(p, dt, speed, M, sp) {
   if ((p.arBrk || 0) > S.t) { airSteer(p, p.bx, p.by, dt, true); return; }   // 刚发射：转开，不飞临目标上空
   if (!p.arTg || (p.arT || 0) < S.t) { p.arTg = airArPick(p, M); p.arT = S.t + 1.5; }
   const G = p.arTg, T = G && (G.k ? msPgmTgt(G) : null);
-  if (!T) { p.arTg = null; airOrbit(p, p.acx, p.acy + 120, 280, p.odir || 1, dt); return; }
+  if (!T) { p.arTg = null; p.arLeft = Math.min(p.arLeft, 0); return; }   // 没有可打的目标：返航（不在任务区上空兜圈子）
   const tx = G.k === 'veh' && T.side === 'e' && !inVision(T.x, T.y) && T.kx != null ? T.kx : T.x, ty = G.k === 'veh' && T.side === 'e' && !inVision(T.x, T.y) && T.ky != null ? T.ky : T.y;
   const d = airSteer(p, tx, ty, dt), df = Math.abs(airAng(Math.atan2(ty - p.y, tx - p.x) - p.heading));
   if (d < (M.arR || 260) && df < .6) {
     const n = Math.min(G.hard ? 2 : 1, p.gbN), W0 = M.arW || 'ft8';
     for (let i = 0; i < n; i++) msPgm(W0, 'p', p.x, p.y, { k: G.k, id: G.id, x: tx, y: ty }, p.kind, i * .35);
     p.gbN -= n; p.arTg = null; p.arT = S.t + 2; p.arBrk = S.t + 1.6;
-    p.bx = p.x - (tx - p.x); p.by = Math.min(H - 40, p.y - (ty - p.y) + 120);
+    p.bx = clamp(p.x + Math.cos(p.heading) * 200, 40, W - 40); p.by = Math.min(H - 40, p.y + 300);   // 发射后向本方一侧转开
+    if ((p.arN = (p.arN || 0) + 1) >= 2) p.arLeft = Math.min(p.arLeft, 1.6);   // 武装侦察只打两个目标：打完这一波就返航
     if (typeof v8Stat === 'function') v8Stat('arStrike');
     const nm = G.k === 'veh' ? (typeof vehName === 'function' ? vehName(T) : '敌战车') : G.k === 'armor' ? '敌装甲车' : (ENEMY_SPEC[T.kind] || {}).name || '目标';
     log(`${airName(p.kind, p.v).split(' ')[0]}自主发现${nm}，发射${MS_PGM[W0].nm}${n > 1 ? ' ×' + n : ''}（余 ${p.gbN} 枚）`, 'info', 'ar' + p.id, 3, { x: tx, y: ty });
@@ -807,7 +828,7 @@ function airAA(p, dt) {
   if ((p.aaT = (p.aaT || 0) - dt) > 0) return;
   p.aaT = .5;
   if (typeof eaHigh === 'function' && (eaHigh(p) || eaHighUav(p))) return;   // 战斗机在巡逻高度、无人机在中空：高炮够不着
-  const sp = airSpec(p.kind, p.v), st = sp.stealth ? (1 + sp.stealth) / 2 : 1;   // 隐身机：雷达高炮难以跟踪，光学瞄准仍可能打中
+  const sp = airSpec(p.kind, p.v), s0 = airStealth(p), st = s0 < 1 ? (1 + s0) / 2 : 1;   // 隐身机：雷达高炮难以跟踪，光学瞄准仍可能打中（久留暴露后打折变少）
   for (const a of S.enemies) {
     if (a.dead || a.kind !== 'aa' || dist(a.x, a.y, p.x, p.y) > 190) continue;
     tracer(a.x, a.y, p.x + gauss() * 14, p.y + gauss() * 14, 'e', inVision(a.x, a.y)); a.fireT = S.t;   // 开火即暴露（conceal.js）
