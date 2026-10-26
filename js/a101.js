@@ -11,7 +11,7 @@
 // 状态：S.e101 = { n 剩余波数, next 下一波最早时刻, lift: {id, dz, key, t, land 落地班数, veh 落地车数, lost 损失人数, us: [连 id], vs: [车 id]} | null, ch: [下降中], done }
 // 101 的打法（精锐）：agg 有效兵力比（sa.js saLook）到多少就压上去（跃进—掩护前进）；ret 低于多少就交替掩护撤退、向主力靠拢；
 //   两者之间就近占掩蔽地形以逸待劳；pick 挑打击目标时敌集团人数不超过本群战斗力的多少倍（打得过的才去打，打不过的去加强己方据点）
-const A101_TAC = { agg: 1.25, ret: .75, pick: 1.3 };
+const A101_TAC = { agg: 1, ret: 0.9, pick: 99 };
 const A101 = { first: { normal: 200, hard: 150, hell: 110 }, gap: 160, n: { normal: 0, hard: 1, hell: 2 }, dzMin: 180, dzMax: 360, safe: 260, aaR: 360,
   mod: { pow: 1.25, rof: 1.1, hard: .2, calm: .8 }, jump: 5, heavy: 7, sig: 22 };
 const A101_SQ = { rifle: ['rifle', 'rifle', 'mg'], lead: ['radio', 'rifle', 'mg'], mg: ['rifle', 'mg', 'mg'], jav: ['rifle', 'rifle', 'rifle'], stg: ['rifle', 'aa', 'rifle'], rec: ['radio', 'rifle', 'rifle'] };
