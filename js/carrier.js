@@ -380,7 +380,7 @@ function airHoldP(p, dt, speed) {
 //   导弹告警：放干扰弹、转向背离来袭方向、放弃这次攻击航路；目标附近防空太强、又没有导弹可用：直接返航，不去送 ——
 function airCasHold(p) {
   const M = airMdl(p.kind, p.v), uav = !p.v || p.v === 'gj2', heli = p.v === 'heli';
-  let T = (heli && typeof heliT === 'function' ? heliT('p', p) : typeof airThreats === 'function' ? airThreats('p') : []).filter(t => dist(t.x, t.y, p.cx, p.cy) < 1000);   // 直升机：连机组自己挨打记下的火力点一起算（airwar.js）
+  let T = (heli && typeof heliT === 'function' ? heliT('p', p) : typeof airThreats === 'function' ? airThreats('p') : []).filter(t => dist(t.x, t.y, p.cx, p.cy) < t.r + 600);   // 直升机：连机组自己挨打记下的火力点一起算（airwar.js）；按圈的半径筛，远程防空（爱国者）圆心远也照样覆盖目标区
   if (uav) T = T.filter(t => t.k === 'ship' || t.r >= 400);   // 中空：只怕防空导弹
   const R = M.agmR ? M.agmR * .85 : 220, home = { x: p.cx, y: Math.min(H - 40, p.cy + 400) };
   p.hop = (p.hop || 0);
@@ -402,7 +402,7 @@ function airHeliAbort(p, why) {
 }
 // 直升机飞向 (x, y)：直线穿过已知防空圈就先飞绕行点（airwar.js heliVia）
 function airHeliGo(p, x, y, dt, hard) {
-  const v = typeof heliVia === 'function' ? heliVia(p.x, p.y, x, y, heliT('p', p).filter(t => dist(t.x, t.y, p.x, p.y) < 1400)) : null;
+  const v = typeof heliVia === 'function' ? heliVia(p.x, p.y, x, y, heliT('p', p).filter(t => dist(t.x, t.y, p.x, p.y) < t.r + 900)) : null;
   if (v) { airSteer(p, v.x, v.y, dt, true); return Infinity; }
   return airSteer(p, x, y, dt, hard);
 }
@@ -650,7 +650,7 @@ function flyPlane(p, dt) {
   }
   if (p.phase === 'loiter') { airCasFly(p, dt, speed); return; }
   if (p.phase === 'rtb' && p.v === 'heli' && typeof heliVia === 'function' && c && isFinite(c.x)) {   // 直升机返航也绕开已知防空圈（先出圈）
-    const v = heliVia(p.x, p.y, c.x, c.y, heliT('p', p).filter(t => dist(t.x, t.y, p.x, p.y) < 1400));
+    const v = heliVia(p.x, p.y, c.x, c.y, heliT('p', p).filter(t => dist(t.x, t.y, p.x, p.y) < t.r + 900));
     if (v) { speed(sp.spd); airSteer(p, v.x, v.y, dt, true); return; }
   }
   if (p.phase === 'rtb' && typeof atoEgressP === 'function' && atoEgressP(p, dt, speed)) return;   // 返航先走出口（ato.js），不原路折返
@@ -1076,9 +1076,14 @@ function airShape(ctx, type) {
 }
 
 // 飞机剪影：轮廓 + 各型细节（预警机雷达圆盘、歼-20 外倾双垂尾与鸭翼、轰-6K 翼根发动机、A-10 尾部双发、连翼机的中空、V 尾、旋翼与短翼）；攻击机挂弹
-function drawAircraft(ctx, x, y, a, type, size, col, alpha, bank, lw, bombs) {
+// o（可缺省）：精细模型的状态——t 时间、ab 加力、fold 机翼折起、st 外挂剩余比例、bay / sbay 弹舱开度、still 停放（旋翼不转）
+function drawAircraft(ctx, x, y, a, type, size, col, alpha, bank, lw, bombs, o) {
   const sc = size / 21, real = typeof realLook === 'function' && realLook();
   ctx.save(); ctx.translate(x, y); ctx.rotate(a); ctx.scale(sc, sc * (1 - .32 * Math.min(1, Math.abs(bank || 0))));
+  if (typeof airDetail === 'function' && typeof AIRD === 'object' && AIRD[type]) {   // 屏幕上够大（机长约 26 像素以上）就画精细模型（airmdl.js）
+    const T = ctx.getTransform(), ppu = Math.hypot(T.a, T.b) / ((typeof R === 'object' && R.dpr) || 1);
+    if (ppu * 22 >= 26 && airDetail(ctx, type, a, real, col, alpha, lw / sc, type === 'h6k' && bombs != null ? { st: bombs ? 1 : 0, ...o } : o)) { ctx.restore(); return; }
+  }
   airShape(ctx, type);
   if (real) {   // 写实：按机型涂装（受光渐变）、深色细节线、阵营细边
     const ga = ctx.globalAlpha;

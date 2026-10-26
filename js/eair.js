@@ -388,7 +388,7 @@ function eaHeliAbort(a, why) {
 }
 // 直升机飞向 (x, y)：直线穿过我方已知防空圈就先飞绕行点
 function eaHeliGo(a, x, y, dt, sp) {
-  const v = typeof heliVia === 'function' ? heliVia(a.x, a.y, x, y, heliT('e', a).filter(t => dist(t.x, t.y, a.x, a.y) < 1400)) : null;
+  const v = typeof heliVia === 'function' ? heliVia(a.x, a.y, x, y, heliT('e', a).filter(t => dist(t.x, t.y, a.x, a.y) < t.r + 900)) : null;
   if (v) { eaSteer(a, v.x, v.y, dt); return Infinity; }
   return eaSteer(a, x, y, dt, sp);
 }
@@ -458,7 +458,7 @@ function eaRetarget(a, safe) {   // safe：只挑悬停点能在防空圈外的�
 // 返航：固定翼回跑道完好的最近机场（都被炸了就回最近的、在上空等抢修）走进近着陆；直升机回直升机坪悬停降落
 function eaRtb(a, dt) {
   if (a.type === 'heli' && typeof heliVia === 'function') {   // 直升机返航：先绕出 / 绕开我方已知防空圈
-    const b0 = eaNearBase(a.x, a.y), v = b0 ? heliVia(a.x, a.y, b0.x, b0.y, heliT('e', a).filter(t => dist(t.x, t.y, a.x, a.y) < 1400)) : null;
+    const b0 = eaNearBase(a.x, a.y), v = b0 ? heliVia(a.x, a.y, b0.x, b0.y, heliT('e', a).filter(t => dist(t.x, t.y, a.x, a.y) < t.r + 900)) : null;
     if (v) { eaSteer(a, v.x, v.y, dt); return; }
   }
   if (typeof atoEgressE === 'function' && atoEgressE(a, dt)) return;   // 返航先走出航点（ato.js），不原路折返
