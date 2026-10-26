@@ -1049,9 +1049,12 @@ function hqDraw() {
       marks.push({ B, c, tag, col });
     }
     // 团：北约式方框（步兵 ×、装甲椭圆、机步两者都有）+「III」，近看时显示团号
+    const far = typeof hqFar === 'function' && hqFar();
     for (const G of hqRegs(side)) {
       if (side === 'e' && !spec && !spotted(G.ax, G.ay)) continue;
-      const w = px(20), h = px(13), x = G.ax, y = G.ay, t = G.type || 'inf';
+      const w = px(20), h = px(13), t = G.type || 'inf';
+      let x = G.ax, y = G.ay;
+      if (far) { [x, y] = hqPlace(G.ax, G.ay, w * 1.1, h * 1.7); if (dist(x, y, G.ax, G.ay) > px(3)) { ctx.strokeStyle = rgba(col, .45); ctx.lineWidth = px(.9); ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(G.ax, G.ay); ctx.stroke(); } }
       ctx.strokeStyle = rgba(col, .95 * Math.max(.6, A0)); ctx.fillStyle = rgba(COL.bg, .72); ctx.lineWidth = px(1.3);
       ctx.fillRect(x - w / 2, y - h / 2, w, h); ctx.strokeRect(x - w / 2, y - h / 2, w, h);
       ctx.beginPath();
@@ -1063,7 +1066,7 @@ function hqDraw() {
       if (zr > 1.6) ctx.fillText(G.name, x, y + h / 2 + px(10));
     }
   }
-  if (!(typeof V3 === 'object' && V3.drawing)) { HQ.hit2 = []; hqSelDraw(ctx); for (const m of marks) hqBdeMark(ctx, m.B, m.c, m.tag, m.col); }   // 旅标最后画，压在箭头与团标上面（3D 地图里另外立在旅的上空：hqMarks3）
+  if (!(typeof V3 === 'object' && V3.drawing)) { HQ.hit2 = []; HQ.occB = []; hqSelDraw(ctx); for (const m of marks) hqBdeMark(ctx, m.B, m.c, m.tag, m.col); }   // 旅标最后画，压在箭头与团标上面（3D 地图里另外立在旅的上空：hqMarks3）
   ctx.restore();
 }
 // ———————————————— 点开番号牌：旅的配置面板 + 高亮全旅成员 ————————————————
@@ -1153,7 +1156,7 @@ function hqMarks3(ctx, stem) {
     for (const [x, y] of hqSelPts(SB)) { const q = v3Proj(x, y, v3Ht(x, y) + 2); if (q && q.f < .95) { ctx.beginPath(); ctx.arc(q.x, q.y, 9, 0, 6.283); ctx.stroke(); } }
     ctx.restore();
   }
-  const spec = S.role === 'spectate' || R.eye === 'all' || R.eye === 'both' || R.eye === 'e';
+  const spec = S.role === 'spectate' || R.eye === 'all' || R.eye === 'both' || R.eye === 'e', occ3 = [];
   for (const side of ['p', 'e']) {
     const H = S.hq[side];
     if (!H || !H.live || (side === 'e' && !spec) || (side === 'p' && S.role !== 'spectate')) continue;
@@ -1168,7 +1171,11 @@ function hqMarks3(ctx, stem) {
       ctx.save(); ctx.globalAlpha = Math.max(.35, q.al);
       ctx.font = 'bold 14px "IBM Plex Mono", "Noto Sans SC", monospace'; const w1 = ctx.measureText(B.name).width;
       ctx.font = '11px "IBM Plex Mono", "Noto Sans SC", monospace'; const w2 = verb ? ctx.measureText(verb).width + 8 : 0;
-      const fw = 22, fh = 15, W0 = fw + 8 + w1 + w2 + 16, h0 = 26, x0 = q.x - W0 / 2, yc = q.y - h0 / 2;
+      const fw = 22, fh = 15, W0 = fw + 8 + w1 + w2 + 16, h0 = 26, x0 = q.x - W0 / 2;
+      let yc = q.y - h0 / 2;
+      for (let k = 0; k < 6; k++) { const r = occ3.find(r => x0 < r[2] && x0 + W0 > r[0] && yc - h0 / 2 < r[3] + 3 && yc + h0 / 2 > r[1] - 3); if (!r) break; yc = r[1] - h0 / 2 - 5; }   // 不和别的旅标叠在一起
+      occ3.push([x0, yc - h0 / 2, x0 + W0, yc + h0 / 2]);
+      if (yc < q.y - h0 / 2 - 1) { ctx.strokeStyle = rgba(col, .5 * q.al); ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(q.x, q.y); ctx.lineTo(q.x, yc + h0 / 2); ctx.stroke(); }
       HQ.hit3.push({ B, r: [x0, yc - h0 / 2, x0 + W0, yc + h0 / 2] });
       ctx.fillStyle = rgba(COL.bg, .9); ctx.fillRect(x0, yc - h0 / 2, W0, h0);
       ctx.strokeStyle = rgba(SB && SB.id === B.id ? COL.sel : col, 1); ctx.lineWidth = SB && SB.id === B.id ? 2.6 : 1.6; ctx.strokeRect(x0, yc - h0 / 2, W0, h0);
@@ -1198,10 +1205,15 @@ function hqBdeMark(ctx, B, c, verb, col) {
   }
   if (!n) return;
   const t = veh >= (inf + veh) * .6 ? 'armor' : veh >= (inf + veh) * .25 ? 'mech' : 'inf';
-  const yb = top - px(14), yc = yb - px(20), fw = px(22), fh = px(15);
+  const yb = top - px(14), fw = px(22), fh = px(15);
+  let yc = yb - px(20);
   ctx.font = `bold ${font(14)}`; const w1 = ctx.measureText(B.name).width;
   ctx.font = font(11); const w2 = verb ? ctx.measureText(verb).width + px(8) : 0;
   const W0 = fw + px(8) + w1 + w2 + px(16), x0 = c.x - W0 / 2, h0 = px(26);
+  // 和已画的旅标重叠：往上挪到它的上面（引线跟着拉长）
+  const occ = HQ.occB || (HQ.occB = []);
+  for (let k = 0; k < 6; k++) { const r = occ.find(r => x0 < r[2] && x0 + W0 > r[0] && yc - h0 / 2 < r[3] + px(3) && yc + h0 / 2 > r[1] - px(3)); if (!r) break; yc = r[1] - h0 / 2 - px(5); }
+  occ.push([x0, yc - h0 / 2, x0 + W0, yc + h0 / 2]);
   // 引线
   ctx.strokeStyle = rgba(col, .85); ctx.lineWidth = px(1.2); ctx.setLineDash([px(3), px(3)]);
   ctx.beginPath(); ctx.moveTo(c.x, yc + h0 / 2); ctx.lineTo(c.x, Math.max(yc + h0 / 2, c.y - px(4))); ctx.stroke(); ctx.setLineDash([]);
@@ -1235,15 +1247,18 @@ HOOK.drawOver.push(hqDraw);
 // 缩小到 HQ_AGG 倍全图以下：编进团的连、坦克排、团属车辆（步战车、防空车、自行火炮按种类各一个）不再一个个画单兵单车，
 //   改画北约式分队符号（连「I」、排「•••」；步兵 ×、装甲椭圆、机步两者、防空拱形、炮兵实心点），立在分队的中心，朝向画一根短线；
 //   放大才画单车单兵。观战时双方都画，平时只画看得见的
-const HQ_AGG = 1.8;
+// 再缩到 HQ_FAR 倍以下（全图附近）：只画团一级——机动团的团符号（hqDraw）、守备团 / 旅直属 / 配属分队按所属的团合成一个符号，
+//   连、排符号与团名标签都不画；符号互相避让（hqPlace），旅标也不叠在一起
+const HQ_AGG = 1.8, HQ_FAR = 1.35;
 const hqAggOn = () => hqOn() && typeof R === 'object' && R.zr < HQ_AGG && !(typeof SETTINGS === 'object' && SETTINGS && SETTINGS.agg === false) && !(typeof V3 === 'object' && V3.drawing);
+const hqFar = () => hqAggOn() && R.zr < HQ_FAR;
 function hqAggSet() {
   const k = S.t + ':' + R.zr;
   if (HQ.aggK === k) return HQ.agg;
   HQ.aggK = k;
   const u = new Set(), v = new Set(), spec = S.role === 'spectate' || R.eye === 'all' || R.eye === 'both' || R.eye === 'e';
   const ok = side => side === 'p' ? S.role === 'spectate' : spec;   // 敌方的编制看不见：只有观战时才合成符号
-  const rest = [];
+  const rest = [], restV = [];
   if (hqAggOn()) {
     for (const G of S.bgs || []) {
       if (!G.reg || G.dead || !S.hq[G.side] || !S.hq[G.side].live || !ok(G.side)) continue;
@@ -1251,8 +1266,17 @@ function hqAggSet() {
       for (const id of G.vs) v.add(id);
     }
     for (const o of S.units) if (o.org && o.org.k !== 'reg' && ok(o.side) && !u.has(o.id) && teamsOf(o).some(q => q.men.length && !q.ride)) { u.add(o.id); rest.push(o); }   // 守备团、旅直属、独立单位的连也画成连符号
+    if (hqFar()) for (const o of S.veh || []) if (!o.dead && !o.lst && o.org && ok(o.side) && !v.has(o.id) && (o.side === 'p' || spec)) { v.add(o.id); restV.push(o); }   // 全图附近：团以外的车也并进所属的团
   }
-  return (HQ.agg = { u, v, rest });
+  return (HQ.agg = { u, v, rest, restV });
+}
+// 远看时符号互相避让（世界坐标，w × h 为符号外框）：和已画的重叠就绕着原位一圈圈找空位；返回 [x, y]
+function hqPlace(x, y, w, h) {
+  const L = HQ.occ || (HQ.occ = []), hit = (a, b) => L.some(r => Math.abs(r[0] - a) < (r[2] + w) / 2 && Math.abs(r[1] - b) < (r[3] + h) / 2);
+  let px0 = x, py0 = y;
+  for (let k = 1; k <= 3 && hit(px0, py0); k++) for (let a = 0; a < 8; a++) { const tx = x + Math.cos(a * .785 - 1.571) * w * 1.15 * k, ty = y + Math.sin(a * .785 - 1.571) * h * 1.45 * k; if (!hit(tx, ty)) { px0 = tx; py0 = ty; break; } }
+  L.push([px0, py0, w, h]);
+  return [px0, py0];
 }
 // 单兵单车画不画（render2.js drawTeams / drawEnemies、vehicles.js vehDrawOver 调用）
 const hqAggHide = (k, id) => hqAggOn() && hqAggSet()[k].has(id);
@@ -1273,11 +1297,31 @@ function hqAggSym(ctx, x, y, t, ech, col, face, n) {
   if (face != null) { ctx.beginPath(); ctx.moveTo(x + Math.cos(face) * w * .55, y + Math.sin(face) * h * .55); ctx.lineTo(x + Math.cos(face) * w * .95, y + Math.sin(face) * h * 1.1); ctx.stroke(); }
 }
 function hqAggDraw() {
+  HQ.occ = [];
   if (!S || !hqAggOn()) return;
   const A = hqAggSet();
   if (!A.u.size && !A.v.size) return;
   const ctx = R.ctx;
   ctx.save();
+  if (hqFar()) {   // 全图附近：团以外的连与车按所属的团合成一个符号（机动团的团符号由 hqDraw 画）
+    const grp = new Map(), add = (o, x, y, inf, veh) => {
+      const k = o.side + '|' + o.org.b + '|' + o.org.r, g = grp.get(k) || (grp.set(k, { side: o.side, nm: o.org.r, n: 0, x: 0, y: 0, inf: 0, veh: 0 }), grp.get(k));
+      g.n++; g.x += x; g.y += y; g.inf += inf; g.veh += veh;
+    };
+    for (const u of A.rest) { const [x, y] = regUnitAt(u); add(u, x, y, teamsOf(u).reduce((a, q) => a + q.men.length, 0), 0); }
+    for (const v of A.restV) add(v, v.x, v.y, 0, typeof bgPow === 'function' ? bgPow(v) : 4);
+    const w = px(17), h = px(11);
+    for (const g of grp.values()) {
+      const x = g.x / g.n, y = g.y / g.n;
+      if (!inView(x, y, 40)) continue;
+      const t = g.veh >= (g.inf + g.veh) * .6 ? 'armor' : g.veh >= (g.inf + g.veh) * .25 ? 'mech' : 'inf', ech = /营|群/.test(g.nm) ? 'II' : /连|组|队|分队|员/.test(g.nm) ? 'I' : 'III';
+      const [sx, sy] = hqPlace(x, y, w * 1.1, h * 1.6), col = g.side === 'p' ? COL.g : COL.enemy;
+      if (dist(sx, sy, x, y) > px(3)) { ctx.strokeStyle = rgba(col, .4); ctx.lineWidth = px(.8); ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(x, y); ctx.stroke(); }
+      hqAggSym(ctx, sx, sy, t, ech, col, null, 0);
+    }
+    ctx.restore();
+    return;
+  }
   for (const G of S.bgs || []) {
     if (!G.reg || G.dead || !G.us.concat(G.vs).some(id => A.u.has(id) || A.v.has(id))) continue;
     const col = G.side === 'p' ? COL.g : COL.enemy, f = G.face;
@@ -1308,7 +1352,15 @@ function hqAggDraw() {
     g.n++; g.x += x; g.y += y;
   }
   ctx.font = font(10); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  for (const g of grp.values()) { const x = g.x / g.n, y = g.y / g.n - px(16); if (!inView(x, y, 60)) continue; ctx.fillStyle = rgba(COL.bg, .7); const w = ctx.measureText(g.t).width + px(8); ctx.fillRect(x - w / 2, y - px(7), w, px(14)); ctx.fillStyle = rgba(g.col, .9); ctx.fillText(g.t, x, y); }
+  const lab = [];   // 团名标签互相压住的就不写（大的团先写）
+  for (const g of [...grp.values()].sort((a, b) => b.n - a.n)) {
+    const x = g.x / g.n, y = g.y / g.n - px(16);
+    if (!inView(x, y, 60)) continue;
+    const w = ctx.measureText(g.t).width + px(8), r = [x - w / 2, y - px(7), x + w / 2, y + px(7)];
+    if (lab.some(o => r[0] < o[2] && r[2] > o[0] && r[1] < o[3] && r[3] > o[1])) continue;
+    lab.push(r);
+    ctx.fillStyle = rgba(COL.bg, .7); ctx.fillRect(r[0], r[1], w, px(14)); ctx.fillStyle = rgba(g.col, .9); ctx.fillText(g.t, x, y);
+  }
   ctx.restore();
 }
 HOOK.drawOver.unshift(hqAggDraw);   // 先画分队符号，团标、旅标与箭头压在上面

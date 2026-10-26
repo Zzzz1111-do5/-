@@ -39,8 +39,10 @@ if (typeof HOOK === 'object') HOOK.pointer.push((e, ph, p) => {
 function drawBanners(time) {
   const ctx = R.ctx, bk = lerp(.82, 1.12, smooth(1, 6, R.zr)), list = [], placed = [];
   BANNER_HITS.length = 0;
+  const agg = typeof hqAggHide === 'function';
   for (const u of S.units) {
     if (u.x == null || !inView(u.x, u.y, 80)) continue;
+    if (agg && !(u.side === 'p' && isSel(u.id)) && hqAggHide('u', u.id)) continue;   // 远看已画成分队 / 团符号（hq.js）：不再每个连插一面旗
     const ts = teamsOf(u);
     if (!ts.length || (u.side === 'e' && !ts.some(q => inVision(q.x, q.y)))) continue;
     list.push({ u, ts, top: Math.min(...ts.map(q => q.y)), sel: u.side === 'p' && isSel(u.id) });

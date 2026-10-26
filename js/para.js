@@ -238,6 +238,7 @@ function paDraw(time) {
     if (c.t < 0 || !inView(c.x, c.y, 60)) continue;
     const u = clamp(c.t / (c.role ? PA.jlJump : PA.jump), 0, 1), h = (1 - u) * 34, x = c.x, y = c.y - h;
     ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.beginPath(); ctx.ellipse(c.x, c.y, r * .9, r * .45, 0, 0, 7); ctx.fill();   // 地面投影
+    if (R.fx3d) continue;   // 3D 时伞衣立体画（v3units.js），贴图里只留地面投影
     if (realLook()) { ctx.fillStyle = c.k === 'crate' || c.k === 'veh' ? '#d9d6c8' : '#6d7650'; ctx.strokeStyle = 'rgba(30,32,26,.75)'; ctx.lineWidth = px(.9); }   // 写实：橄榄绿人员伞、白色货运伞
     else { ctx.fillStyle = 'rgba(2,10,6,.85)'; ctx.strokeStyle = rgba(COL.g, .95); ctx.lineWidth = px(1.2); }
     ctx.beginPath(); ctx.arc(x, y - r * 1.6, r, Math.PI, 0); ctx.closePath(); ctx.fill(); ctx.stroke();   // 伞衣
