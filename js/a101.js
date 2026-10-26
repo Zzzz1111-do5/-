@@ -9,6 +9,9 @@
 //   伞兵下降 5 秒、重装平台 7 秒，下降中挨我方地面火力；落地先在空降场集合，再整连交给守方协同（ai4.js a4Adopt）增援或反冲击。
 //   C-17 进 S.eair.fly（type = c17，4 点耐久、3 组干扰弹）：我方战斗机、舰空导弹、弹炮防空车、便携防空导弹都能打，跳伞前被击落机上人员装备全损。
 // 状态：S.e101 = { n 剩余波数, next 下一波最早时刻, lift: {id, dz, key, t, land 落地班数, veh 落地车数, lost 损失人数, us: [连 id], vs: [车 id]} | null, ch: [下降中], done }
+// 101 的打法（精锐）：agg 有效兵力比（sa.js saLook）到多少就压上去（跃进—掩护前进）；ret 低于多少就交替掩护撤退、向主力靠拢；
+//   两者之间就近占掩蔽地形以逸待劳；pick 挑打击目标时敌集团人数不超过本群战斗力的多少倍（打得过的才去打，打不过的去加强己方据点）
+const A101_TAC = { agg: 1.25, ret: .75, pick: 1.3 };
 const A101 = { first: { normal: 200, hard: 150, hell: 110 }, gap: 160, n: { normal: 0, hard: 1, hell: 2 }, dzMin: 180, dzMax: 360, safe: 260, aaR: 360,
   mod: { pow: 1.25, rof: 1.1, hard: .2, calm: .8 }, jump: 5, heavy: 7, sig: 22 };
 const A101_SQ = { rifle: ['rifle', 'rifle', 'mg'], lead: ['radio', 'rifle', 'mg'], mg: ['rifle', 'mg', 'mg'], jav: ['rifle', 'rifle', 'rifle'], stg: ['rifle', 'aa', 'rifle'], rec: ['radio', 'rifle', 'rifle'] };
@@ -244,7 +247,7 @@ function a101Step(dt) {
       E1.lift = null; E1.done++;
       const p = ptByKey(L.key), n = E1.done;
       const G = bgNew('e', `101 师第 ${n} 旅战斗队`, '旅长', { us: [L.us[0], L.us[1]].filter(id => id != null), vs: L.vs.slice(), rec: (L.rec || []).slice(), ax: L.dz.x, ay: L.dz.y, key: L.key, ech: 'X',
-        face: p ? Math.atan2(p.y - L.dz.y, p.x - L.dz.x) : Math.PI / 2, a101: true, agg: 1, ret: .35, asmT: 40 });   // 精锐：兵力相当就攻，打到只剩对面三成半才后撤；集合最多等 40 秒
+        face: p ? Math.atan2(p.y - L.dz.y, p.x - L.dz.x) : Math.PI / 2, a101: true, agg: A101_TAC.agg, ret: A101_TAC.ret, asmT: 40 });   // 精锐：占优就跃进—掩护压上去，敌众我寡交替撤退、向主力靠拢；集合最多等 40 秒
       if (L.us[2] != null) { const ur = UNIT_MAP.get(L.us[2]); if (ur) ur.bgId = G.id; }
       a101Aim(G, true);
     }
@@ -258,9 +261,16 @@ function a101Step(dt) {
 //   目标定了就咬住：敌集团还在（300 以内还有一股）、据点还没夺回就不换，只跟着敌集团挪；交战中不换；目标变了在通联里说清楚；交战中呼叫 B-2A
 function a101Aim(G, first) {
   if (!first && S.t - (G.aimT ?? -99) < 6) return;
+  if (!first && (G.st === 'delay' || G.st === 'link')) return;   // 边打边撤、与主力汇合中：不另找目标（sa.js）
   G.aimT = S.t;
   const B = S.br && S.br.e, near = (x, y) => S.points.slice().sort((a, b) => dist(a.x, a.y, x, y) - dist(b.x, b.y, x, y))[0];
-  const cl = (B && B.cl || []).filter(c => c.n >= 5 && dist(c.x, c.y, G.ax, G.ay) < 1100).sort((a, b) => (dist(a.x, a.y, G.ax, G.ay) - a.n * 12) - (dist(b.x, b.y, G.ax, G.ay) - b.n * 12));
+  const pw = typeof hqRegPow === 'function' ? hqRegPow(G).tot : 40;
+  // 顺风打得过的才去打：敌集团人数不超过本群战斗力的 pick 倍；都打不过（逆风）就去加强受威胁的己方据点，与守军合兵
+  const cl = (B && B.cl || []).filter(c => c.n >= 5 && dist(c.x, c.y, G.ax, G.ay) < 1100 && c.n <= pw * A101_TAC.pick).sort((a, b) => (dist(a.x, a.y, G.ax, G.ay) - a.n * 12) - (dist(b.x, b.y, G.ax, G.ay) - b.n * 12));
+  if (!cl.length && !first && (B && B.cl || []).some(c => c.n > pw * A101_TAC.pick && dist(c.x, c.y, G.ax, G.ay) < 700)) {
+    const own = S.points.filter(p => p.owner === 'e' && p.prog <= .25).sort((a, b) => dist(a.x, a.y, G.ax, G.ay) - dist(b.x, b.y, G.ax, G.ay))[0];
+    if (own && G.key !== own.key) { G.key = own.key; G.tgtK = 'own'; G.tgtT = S.t; G.gx = G.gy = null; for (const u of bgUnits(G)) { u.obj = own.key; for (const q of teamsOf(u)) q.obj = own.key; } if (G.st === 'hold') { G.st = 'move'; G.stT = S.t; } if (typeof v8Stat === 'function') v8Stat('a101Turtle'); bgSay(G, `当面之敌兵力远超我群，不硬拼——转去加强${own.name}，与守军合兵固守，等敌人来攻再打。`, null, 'order', `转去加强${own.name}！`); return; }
+  }
   if (!first && G.st === 'fight' && S.t - (G.b2T ?? -99) > 90 && typeof b2Call === 'function') { G.b2T = S.t; b2Call(G.gx ?? G.ax, G.gy ?? G.ay, G.name); }
   if (!first && G.tgtK) {   // 咬住现在的目标
     if (G.gx != null) { const c = (B && B.cl || []).find(c => c.n >= 3 && dist(c.x, c.y, G.gx, G.gy) < 300); if (c) { G.gx = Math.round(c.x); G.gy = Math.round(c.y); return; } }

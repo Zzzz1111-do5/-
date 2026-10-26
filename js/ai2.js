@@ -87,6 +87,7 @@ function aiThink(D) {
     }
     for (const q of mine) {
       if (q.afG) continue;   // 机场常驻守备队守自己的外围阵地（afdef.js）
+      if (q.saFall && q.saFall.until > S.t) continue;   // 正在交替掩护退回二线（sa.js saGarrison）
       if (q.order.t === 'amove' || q.order.t === 'charge') q.order = { t: 'hold' };
       if (q.order.t === 'move') continue;
       let spot = q.px != null ? { x: q.px, y: q.py } : null;
