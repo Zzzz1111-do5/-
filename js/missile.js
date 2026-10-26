@@ -540,6 +540,7 @@ function msDraw(time) {
 }
 // 防空导弹：白亮点 + 短尾迹；岸舰导弹：小弹体贴海飞行 + 海面投影，目标舰周围红色虚线警示圈
 function msDrawSmall(ctx, m) {
+  if (typeof airRelDraw === 'function' && airRelDraw(ctx, m)) { MSV.trail.delete(m.id); return; }   // 刚离机：从弹舱 / 挂架落下、点火（airmdl.js）
   const col = m.side === 'p' ? COL.g : COL.enemy, sam = m.kind === 'sam', x = m.x, y = m.y - m.z * 30;
   let tr = MSV.trail.get(m.id);
   if (!tr) MSV.trail.set(m.id, tr = []);

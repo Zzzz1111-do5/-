@@ -200,6 +200,7 @@ function trkDraw(time) {
   for (const t of S.trk.list) {
     if (t.ph === 'idle' && !t.dead) continue;   // 在补给站待命的不画（站里有车的意思已由补给站图标表达）
     if (!inView(t.x, t.y, 20)) continue;
+    if (!R.m3d) {   // 3D：卡车是立体模型（v3units.js），贴图里只留冒烟与进度环
     ctx.save(); ctx.translate(t.x, t.y); ctx.rotate(t.h); ctx.scale(k, k);
     const col = t.dead ? COL.enemy : COL.g, a = t.dead ? .5 : .95, full = !t.dead && (t.ph === 'load' || t.ph === 'out' || t.ph === 'drop'), real = realLook();
     if (real) {   // 写实：橄榄绿军用卡车、帆布篷货厢，烧毁后发黑
@@ -217,6 +218,7 @@ function trkDraw(time) {
     if (full) { ctx.fillStyle = rgba(COL.amber, .85); for (const u of [-5, -2.6, -.2]) ctx.fillRect(u, -1.3, 1.9, 2.6); }
     }
     ctx.restore();
+    }
     if (t.dead) { const g = (S.t - t.deadT) % 1; ctx.fillStyle = rgba(COL.smoke, .25 * (1 - g)); ctx.beginPath(); ctx.arc(t.x + g * 6, t.y - g * 10, 4 + g * 6, 0, 7); ctx.fill(); }
     else if (t.ph === 'drop' && t.job && (t.job.k === 'build' || t.job.k === 'fix')) {   // 卸器材建点 / 抢修运输线：进度环
       const n = snById(t.job.id);

@@ -186,11 +186,13 @@ function afdDrawFix(time) {
     const b = S.enemies.find(e => e.id === +id);
     if (!b || !(S.role === 'spectate' || R.eye === 'all' || inVision(F.x, F.y))) continue;
     const u = clamp(F.t / 8, 0, 1), e = u * u * (3 - 2 * u), x = lerp(F.sx, F.x + 6, e), y = lerp(F.sy, F.y + 6, e), a = Math.atan2(F.y - F.sy, F.x - F.sx);
+    if (!R.m3d) {   // 3D：抢修车是立体模型（v3units.js），贴图里只留焊花与进度
     ctx.save(); ctx.translate(x, y); ctx.rotate(u < 1 ? a : a + .6);
     ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.fillRect(-2.6, -1.1, 6, 3.2);
     ctx.fillStyle = '#b89a3a'; ctx.fillRect(-3, -1.5, 6, 3); ctx.fillStyle = '#6d6a5a'; ctx.fillRect(1.2, -1.3, 1.6, 2.6);   // 车厢 + 驾驶室
     ctx.fillStyle = rgba(COL.amber, .5 + .5 * Math.sin(time * 9)); ctx.beginPath(); ctx.arc(1.9, 0, .55, 0, 7); ctx.fill();
     ctx.restore();
+    }
     if (u >= 1) for (let i = 0; i < 3; i++) {   // 电焊火花
       const ph = (time * 3 + i * .37) % 1, sx = F.x + Math.cos(i * 2.1 + time) * 2.5 * ph, sy = F.y + Math.sin(i * 2.1 + time) * 2.5 * ph;
       ctx.fillStyle = rgba('#fff3d6', 1 - ph); ctx.fillRect(sx - .3, sy - .3, .6, .6);
@@ -220,6 +222,7 @@ HOOK.drawOver.push(function afdDraw() {
   for (const r of S.afd.radar) {
     if (!spec && !inVision(r.x, r.y) && r.kx == null) continue;
     const col = r.dead ? COL.smoke : COL.enemy;
+    if (R.m3d) { if (spec && !r.dead && R.s > CAM.fit * 1.5) { ctx.save(); ctx.globalAlpha = .12; ctx.strokeStyle = col; ctx.lineWidth = px(1.4); ctx.setLineDash([px(4), px(4)]); ctx.beginPath(); ctx.arc(r.x, r.y, r.r, 0, 7); ctx.stroke(); ctx.restore(); } continue; }   // 3D：雷达站是立体模型（v3units.js），只留探测圈
     ctx.save(); ctx.globalAlpha = r.dead ? .35 : inVision(r.x, r.y) || spec ? .9 : .5; ctx.strokeStyle = col; ctx.fillStyle = col; ctx.lineWidth = px(1.4);
     ctx.beginPath(); ctx.arc(r.x, r.y, u * .45, 0, 7); ctx.fill();
     ctx.beginPath(); ctx.arc(r.x, r.y, u * 1.2, -2.6, -.5); ctx.stroke();

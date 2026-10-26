@@ -562,6 +562,7 @@ function drawArmor(time) {
   a3DrawRaids(ctx, time);
   for (const a of S.armor || []) {
     const vis = inVision(a.x, a.y);
+    if (R.m3d && (vis || S.role === 'spectate' || R.eye === 'all')) continue;   // 3D：看得见的装甲车（含残骸）是立体模型（v3units.js），只留标定位置的虚线轮廓
     if (a.dead) { if (vis || a.kx != null) a3Wreck(ctx, a, time); continue; }
     if (vis) a3Car(ctx, a.x, a.y, a.heading, a.aim ?? a.heading, true, a, time);
     else if (a.kx != null) a3Car(ctx, a.kx, a.ky, a.kh ?? a.heading, a.kh ?? a.heading, false, a, time);

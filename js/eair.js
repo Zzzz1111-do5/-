@@ -842,9 +842,9 @@ function eaDraw(time) {
       for (let i = 1; i < tr.length; i++) { ctx.strokeStyle = rgba(COL.enemy, .15 * i / tr.length); ctx.beginPath(); ctx.moveTo(tr[i - 1][0], tr[i - 1][1]); ctx.lineTo(tr[i][0], tr[i][1]); ctx.stroke(); }
     }
     ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.beginPath(); ctx.ellipse(a.x + a.alt * 14, a.y + a.alt * 22, size * .35, size * .22, a.heading, 0, 7); ctx.fill();
-    if (typeof drawAircraft === 'function') drawAircraft(ctx, a.x, a.y, a.heading, eaSil(a.type), size, COL.enemy, 1, a.bank || 0, lw);
+    if (typeof drawAircraft === 'function') drawAircraft(ctx, a.x, a.y, a.heading, eaSil(a.type), size, COL.enemy, 1, a.bank || 0, lw, undefined, { t: time, ...(typeof airRelState === 'function' ? airRelState('e', a.id) : null) });   // 弹舱开度、外挂消耗（airmdl.js）
     if (a.gunT > 0) { const nx = a.x + Math.cos(a.heading) * size * .55, ny = a.y + Math.sin(a.heading) * size * .55; ctx.fillStyle = rgba('#fff3d6', .5 + .5 * Math.sin(time * 60)); ctx.beginPath(); ctx.arc(nx, ny, size * .14, 0, 7); ctx.fill(); }
-    if (heli) {
+    if (heli && !(typeof AIRD === 'object' && AIRD[eaSil(a.type)] && size * R.s >= 26)) {   // 精细模型自己画旋翼（airmdl.js）
       const r = size * 9.5 / 21, cx = a.x + Math.cos(a.heading) * size * 1.5 / 21, cy = a.y + Math.sin(a.heading) * size * 1.5 / 21, ang = time * 22 + a.id;
       ctx.strokeStyle = rgba(COL.enemy, .6); ctx.lineWidth = px(1.2); ctx.beginPath();
       for (let k = 0; k < 2; k++) { const b = ang + k * Math.PI / 2; ctx.moveTo(cx - Math.cos(b) * r, cy - Math.sin(b) * r); ctx.lineTo(cx + Math.cos(b) * r, cy + Math.sin(b) * r); }

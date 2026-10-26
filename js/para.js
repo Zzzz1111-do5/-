@@ -251,8 +251,10 @@ function paDraw(time) {
     ctx.strokeStyle = rgba(COL.g, .22); ctx.lineWidth = px(1); ctx.setLineDash([px(2), px(5)]);
     ctx.beginPath(); ctx.arc(k.x, k.y, PA.r, 0, 7); ctx.stroke(); ctx.setLineDash([]);
     ctx.fillStyle = 'rgba(2,10,6,.9)'; ctx.strokeStyle = rgba(COL.amber, .95); ctx.lineWidth = px(1.3);
-    ctx.fillRect(k.x - r, k.y - r * .7, r * 2, r * 1.4); ctx.strokeRect(k.x - r, k.y - r * .7, r * 2, r * 1.4);
-    ctx.beginPath(); ctx.moveTo(k.x - r, k.y); ctx.lineTo(k.x + r, k.y); ctx.moveTo(k.x, k.y - r * .7); ctx.lineTo(k.x, k.y + r * .7); ctx.stroke();
+    if (!R.m3d) {   // 3D：弹药箱堆是立体模型（v3units.js），贴图里只留补给范围与余量条
+      ctx.fillRect(k.x - r, k.y - r * .7, r * 2, r * 1.4); ctx.strokeRect(k.x - r, k.y - r * .7, r * 2, r * 1.4);
+      ctx.beginPath(); ctx.moveTo(k.x - r, k.y); ctx.lineTo(k.x + r, k.y); ctx.moveTo(k.x, k.y - r * .7); ctx.lineTo(k.x, k.y + r * .7); ctx.stroke();
+    }
     const f = clamp(k.amt / (PA.crate * 3), 0, 1), w = r * 3;
     ctx.fillStyle = rgba(COL.amber, .25); ctx.fillRect(k.x - w / 2, k.y + r * 1.2, w, Math.max(1.5, px(2)));
     ctx.fillStyle = rgba(COL.amber, .9); ctx.fillRect(k.x - w / 2, k.y + r * 1.2, w * f, Math.max(1.5, px(2)));

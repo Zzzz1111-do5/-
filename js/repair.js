@@ -192,9 +192,11 @@ function rpDrawCrews(time) {
     const c = S.rep.crew[id];
     if (!c.k || !inView(c.x, c.y, 30)) continue;
     ctx.fillStyle = 'rgba(2,10,6,.92)'; ctx.strokeStyle = rgba(c.work ? COL.amber : COL.g, .95); ctx.lineWidth = px(1.3);
-    ctx.beginPath();
-    if (c.sea) ctx.ellipse(c.x, c.y, r * 1.7, r * .8, 0, 0, 7); else ctx.rect(c.x - r, c.y - r * .7, r * 2, r * 1.4);
-    ctx.fill(); ctx.stroke();
+    if (!R.m3d) {   // 3D：抢修车 / 抢修艇是立体模型（v3units.js），贴图里只留作业闪圈
+      ctx.beginPath();
+      if (c.sea) ctx.ellipse(c.x, c.y, r * 1.7, r * .8, 0, 0, 7); else ctx.rect(c.x - r, c.y - r * .7, r * 2, r * 1.4);
+      ctx.fill(); ctx.stroke();
+    }
     if (c.work) { ctx.strokeStyle = rgba(COL.amber, .35 + .35 * Math.sin(time * 6)); ctx.beginPath(); ctx.arc(c.x, c.y, r * 2.6, 0, 7); ctx.stroke(); }
   }
 }

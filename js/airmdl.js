@@ -332,8 +332,14 @@ function airDetail(ctx, type, a, real, col, alpha, lw, o) {
 // 外挂清单（左右镜像）：o.st 为剩余比例，从外侧往里先打掉
 function adStores(D, o) {
   if (!D.st) return [];
-  const all = [];
+  let all = [];
   for (const [x, y, k] of D.st) for (const s of y ? [1, -1] : [1]) all.push({ x, y: y * s, k, n: k === 'atgm4' ? 4 : 1, w: Math.abs(y) });
+  if (o.used) for (const k in o.used) {   // 打掉的：同类里从外侧往里、左右交替
+    let u = o.used[k];
+    const L = all.filter(s => s.k === k).sort((p, q) => q.w - p.w || q.y - p.y);
+    for (const s of L) { if (u <= 0) break; const d = Math.min(s.n, u); s.n -= d; u -= d; }
+    all = all.filter(s => s.n > 0);
+  }
   const frac = o.st == null ? 1 : clamp(o.st, 0, 1);
   if (frac >= 1) return all;
   const tot = all.reduce((a, s) => a + s.n, 0);
@@ -464,4 +470,125 @@ function adDome(ctx, d, real, col, lw, t, ly) {
   const b = t * .6;
   ctx.save(); ctx.translate(x, 0); ctx.rotate(b); ctx.strokeStyle = real ? 'rgba(40,44,46,.55)' : rgba(col, .5); ctx.lineWidth = r * .16;
   ctx.beginPath(); ctx.arc(0, 0, r * .62, -.8, .8); ctx.stroke(); ctx.beginPath(); ctx.arc(0, 0, r * .62, Math.PI - .8, Math.PI + .8); ctx.stroke(); ctx.restore();
+}
+
+// —— 发射 / 投弹的画面（只是画面，不进 S）——
+//   内埋弹舱：先开舱（0.15 秒），弹从舱里落下、拖在机后（0.4 秒）后点火，再在 0.55 秒内追上真实弹道，舱门随后关上；
+//   侧弹舱（歼-20 / F-22 的近距格斗弹）：舱门打开、挂架把弹推出舱外，在舱外点火；外挂：弹从挂架脱离后点火，挂架上少一枚
+// AIRV.ev：飞机键（阵营 + id）→ { ts 最近几次发射 [{t0, k}], rel 外挂消耗 [{t, sk}], w 弹种 }；AIRV.mv：导弹 id → 挂点与时刻
+const AIR_REL = { open: .15, ign: .4, done: .95 };
+const AIR_GND = new Set(['dd', 'esc', 'cv', 'samv', 'manpads', 'eship', 'vls', 'theatre']);   // 舰艇 / 地面发射的，不是飞机
+const AIR_W = { ft8: 'bomb', gbu53: 'bomb', gbu38: 'bomb', gbu31: 'bomb', ls6: 'bomb', yj12: 'cm', yj83k: 'cm', yj18: 'cm' };
+const AIR_SK = { aam: ['aam'], agm: ['atgm4', 'agm', 'asm', 'pod', 'cm'], cm: ['cm', 'asm'], bomb: ['bomb', 'cm'] };   // 弹种 → 从哪类挂点上取
+const airRelW = m => m.kind === 'sam' ? 'aam' : m.kind === 'asm' ? 'cm' : AIR_W[m.w] || 'agm';
+function airRelReset() { AIRV.S = S; AIRV.ev = new Map(); AIRV.mv = new Map(); AIRV.last = -1; AIRV.st = null; AIRV.proj = new WeakSet(); }
+function airRelScan() {
+  if (!S || !Array.isArray(S.missiles)) return;
+  if (AIRV.S !== S) airRelReset();
+  const L = S.missiles, top = L.length ? L[L.length - 1].id : -1, pj = S.eair && S.eair.proj, pn = pj ? pj.length : 0;
+  if (AIRV.st === S.t && AIRV.top === top && AIRV.pn === pn) return;
+  AIRV.st = S.t; AIRV.top = top; AIRV.pn = pn;
+  for (let i = L.length - 1; i >= 0; i--) {   // 新导弹都在数组尾部
+    const m = L[i];
+    if (m.id <= AIRV.last) break;
+    if (m.done || AIR_GND.has(m.src) || typeof m.src === 'number' || !(m.src === 'aam' || m.kind === 'pgm' || m.kind === 'asm')) continue;
+    airRelNew(m);
+  }
+  if (top > AIRV.last) AIRV.last = top;
+  if (pj) for (const p of pj) if (p.k === 'atgm' && !AIRV.proj.has(p)) { AIRV.proj.add(p); airRelNew({ id: null, side: 'e', x0: p.x0, y0: p.y0, t: p.t, kind: 'pgm', w: 'hellfire', tx: p.tx, ty: p.ty }); }   // 阿帕奇的地狱火（eair.js 的投射物）
+  if (AIRV.mv.size > 80) for (const [id, r] of AIRV.mv) if (S.t - r.t0 > 3) AIRV.mv.delete(id);
+}
+// 发射平台：同阵营、发射点 70 以内最近的空中飞机
+function airRelNew(m) {
+  const side = m.side, L = side === 'p' ? S.planes || [] : (S.eair && S.eair.fly) || [];
+  let best = null, bd = 70;
+  for (const o of L) {
+    if (o.dead || o.phase === 'cat' || o.phase === 'roll' || o.phase === 'trap' || o.ph === 'roll') continue;
+    const d = dist(o.x, o.y, m.x0, m.y0);
+    if (d < bd) { bd = d; best = o; }
+  }
+  if (!best) return;
+  const type = side === 'p' ? (typeof airSilKey === 'function' ? airSilKey(best.kind, best.v) : null) : typeof eaSil === 'function' ? eaSil(best.type) : null, D = AIRD[type];
+  if (!D) return;
+  const pk = side + best.id, t0 = S.t - (m.t || 0), w = airRelW(m);
+  let ev = AIRV.ev.get(pk);
+  if (!ev) AIRV.ev.set(pk, ev = { ts: [], rel: [], n: 0, w });
+  let k = 'ext', ox = 0, oy = 0, sk = null;
+  const s = ev.n % 2 ? 1 : -1;
+  if (D.bay || D.sbay) {
+    k = D.sbay && w === 'aam' && !m.lr && dist(m.x0, m.y0, m.tx, m.ty) < 320 ? 'side' : D.bay ? 'main' : 'side';
+    if (k === 'main') { const [x0, x1, hw, yc] = D.bay; ox = (x0 + x1) / 2; oy = yc ? yc * s : hw * .45 * s; }
+    else { const [x0, x1, y] = D.sbay; ox = (x0 + x1) / 2; oy = (y + .75) * s; }
+  } else if (D.st) {   // 外挂：同类挂点里还剩的最外侧一枚
+    const used = airUsed(ev, t0 + 1), kinds = AIR_SK[w] || AIR_SK.agm, left = adStores(D, { used });
+    const c = left.filter(o => kinds.includes(o.k)).sort((p, q) => q.w - p.w || (p.y > 0 ? -1 : 1) * s)[0];
+    if (c) { ox = c.x; oy = c.y; sk = c.k; }
+  }
+  ev.n++; ev.w = w;
+  ev.ts.push({ t0, k }); if (ev.ts.length > 10) ev.ts.shift();
+  if (sk) { ev.rel.push({ t: t0, sk }); if (ev.rel.length > 40) ev.rel.shift(); }
+  if (m.id != null) AIRV.mv.set(m.id, { pk, side, id: best.id, t0, ox, oy, k, w, type });
+}
+// 到时刻 t 为止各类外挂打掉了几枚
+function airUsed(ev, t) { const u = {}; for (const r of ev.rel) if (t >= r.t + .08) u[r.sk] = (u[r.sk] || 0) + 1; return u; }
+// 画飞机时要的状态：弹舱开度、外挂消耗、弹舱里的弹种
+function airRelState(side, id) {
+  airRelScan();
+  const ev = AIRV.ev && AIRV.ev.get(side + id);
+  if (!ev) return null;
+  let bay = 0, sbay = 0;
+  for (const e of ev.ts) {
+    const u = S.t - e.t0, k = u < 0 ? 0 : u < AIR_REL.open ? u / AIR_REL.open : u < .55 ? 1 : u < .9 ? 1 - (u - .55) / .35 : 0;
+    if (e.k === 'main') bay = Math.max(bay, k); else if (e.k === 'side') sbay = Math.max(sbay, k);
+  }
+  return { bay, sbay, used: airUsed(ev, S.t), bayW: ev.w, bayN: bay > 0 ? (S.t - ev.ts[ev.ts.length - 1].t0 < AIR_REL.open ? undefined : 0) : 0 };
+}
+// 二维画飞机时用的尺寸（与 drawPlanes / eair.js 一致）
+function airDrawSize(o, side) {
+  if (side === 'p') { const sp = typeof airSpec === 'function' ? airSpec(o.kind, o.v) : { size: 15 }; return Math.max(sp.size, px(20)); }
+  const heli = o.type === 'heli' || o.type === 'uh60', big = o.type === 'c17' || o.type === 'b2';
+  return big ? Math.max(28, px(30)) : Math.max(heli ? 15 : 17, px(heli ? 17 : 19));
+}
+// 刚离机的弹此刻该画在哪：{ x, y, h 机头方向, sc 机体比例, u 离机秒数, lit 已点火, o 飞机, r 记录 }；过了这段返回 null
+function airRelPos(m, three) {
+  if (!AIRV.mv || m.done) return null;
+  airRelScan();
+  const r = AIRV.mv.get(m.id);
+  if (!r) return null;
+  const u = S.t - r.t0;
+  if (u < 0 || u > AIR_REL.done) return null;
+  const L = r.side === 'p' ? S.planes || [] : (S.eair && S.eair.fly) || [], o = L.find(p => p.id === r.id);
+  if (!o || o.dead) return null;
+  const h = o.heading || 0, c = Math.cos(h), sn = Math.sin(h), sc = three ? airSize3(o, r.side) / 21 : airDrawSize(o, r.side) / 21;
+  const back = r.k === 'side' ? 0 : 2.2 * Math.max(0, u - .1) ** 2 * 6, out = r.k === 'side' ? 0 : .6 * Math.max(0, u - .1);   // 落下后被气流往后、往外带
+  const lx = r.ox - back, ly = r.oy + Math.sign(r.oy || 1) * out, bx = o.x + (lx * c - ly * sn) * sc, by = o.y + (lx * sn + ly * c) * sc;
+  const e = sm01((u - AIR_REL.ign) / (AIR_REL.done - AIR_REL.ign));
+  return { x: lerp(bx, m.x, e), y: lerp(by, m.y, e), h: Math.atan2(lerp(Math.sin(h), Math.sin(m.hd ?? h), e), lerp(c, Math.cos(m.hd ?? h), e)), sc, u, e, lit: u >= AIR_REL.ign, o, r };
+}
+// 3D 高度：机腹下的挂点 → 落下 → 点火后接上导弹自己的高度（与 v3fx.js 同一套）
+function airRelZ(P, m) {
+  const zp = v3AirZ(P.o) - 1 * P.sc - (P.r.k === 'side' ? 0 : 16 * Math.max(0, P.u - .12) ** 2), zm = v3AltZ(m.x, m.y, m.z * (m.kind === 'tbm' ? 620 : 230), -2.6, 2);
+  return lerp(zp, zm, P.e);
+}
+// 3D 里飞机的尺寸（v3units.js 的 plane()）
+function airSize3(o, side) {
+  if (side === 'p') return (typeof airMdl === 'function' && airMdl(o.kind, o.v).size) || ((typeof AIR_SPEC === 'object' && AIR_SPEC[o.kind]) || {}).size || 15;
+  return ({ ga: 18, heli: 16, uh60: 17, c17: 30, ftr: 17, f22: 18, b2: 34, p8: 26 })[o.type] || 17;
+}
+// 二维：离机阶段画弹体（落下时不点火，点火后尾焰），返回 true 表示已经画了
+function airRelDraw(ctx, m) {
+  const P = airRelPos(m, false);
+  if (!P) return false;
+  const real = typeof realLook === 'function' && realLook(), col = m.side === 'p' ? COL.intel : COL.enemy, sk = P.r.w === 'aam' ? 'aam' : P.r.w === 'bomb' ? 'bomb' : P.r.w === 'cm' ? 'cm' : 'agm';
+  if (P.u < (P.r.k === 'main' ? AIR_REL.open : .05)) return true;   // 还在舱里 / 挂架上（飞机自己画）
+  ctx.save(); ctx.translate(P.x, P.y); ctx.rotate(P.h); ctx.scale(P.sc, P.sc);
+  if (P.lit) {   // 点火：尾焰 + 一团烟
+    const k = Math.min(1, (P.u - AIR_REL.ign) / .12), L = (AD_ST[sk] || AD_ST.agm)[0];
+    const g = ctx.createLinearGradient(-L / 2, 0, -L / 2 - 4 * k, 0); g.addColorStop(0, 'rgba(255,245,210,.95)'); g.addColorStop(.4, 'rgba(255,160,60,.75)'); g.addColorStop(1, 'rgba(255,100,40,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(-L / 2, -.25); ctx.lineTo(-L / 2 - 4 * k, 0); ctx.lineTo(-L / 2, .25); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = 'rgba(220,220,215,.35)'; ctx.beginPath(); ctx.arc(-L / 2 - 1.2, 0, .8 + k, 0, 7); ctx.fill();
+  }
+  adStore(ctx, sk, 0, 0, real, col, px(1) / P.sc, 1);
+  ctx.restore();
+  return true;
 }

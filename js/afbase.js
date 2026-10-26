@@ -456,9 +456,10 @@ function eaDrawBase(ctx, b, vis, time, own) {
 // 停放的飞机：机堡里的先画（拱顶盖住后半截，机头伸出门外），停机线与直升机位的后画；整备中的暗、外加进度弧；
 // 写实近看：停机线上整备中的飞机旁边停一辆加油车、机头前一台电源车
 function afbPlanes(ctx, park, has, d1, rl) {
+  if (R.m3d) return;   // 3D：停放的飞机是立体模型（v3units.js）
   for (const p of park) {
     if ((p.k === 'has') !== has) continue;
-    drawAircraft(ctx, p.u, p.v, p.a, p.sil, p.size, p.col, p.ready ? .95 : .5, 0, px(1));
+    drawAircraft(ctx, p.u, p.v, p.a, p.sil, p.size, p.col, p.ready ? .95 : .5, 0, px(1), undefined, { still: true });   // 停放：旋翼不转
   }
   if (has || !d1) return;
   if (rl) for (const p of park) if (!p.ready && p.k === 'line') {
