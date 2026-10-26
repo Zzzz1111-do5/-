@@ -751,11 +751,7 @@ function v3mChute(kind) {
   const rim = canopy(0, 0, 0, 3.2), hook = [0, 0, -5.4];
   for (const p of rim) mbLine(M, p, hook, .7);
   if (kind === 'crate') { mbBox(M, -.6, .6, -.6, .6, -6.7, -5.5, .8); mbLine(M, [-.6, 0, -5.5], [.6, 0, -5.5], 1); return M; }
-  mbBox(M, -.22, .22, -.18, .18, -6.5, -5.6, 1, { taper: .03 });   // 躯干
-  mbBox(M, -.4, -.2, -.16, .16, -6.4, -5.8, .55);   // 背包
-  mbPrism(M, mbCirc(0, 0, .14, 8), -5.6, -5.3, 1.05, { taper: .04 });   // 头盔
-  for (const sy of [-1, 1]) mbTube(M, [0, sy * .1, -6.5], [.08, sy * .14, -7.3], .07, .06, 6, .9);   // 两腿
-  return M;
+  return M;   // 人：伞衣下另挂立体士兵（v3mMan，与地面上的士兵同一套模型）
 }
 function v3mFort(kind) {
   const M = mbNew();
@@ -1052,7 +1048,7 @@ function v3Units(C, box) {
   if (!V3M.ok) return;
   for (const L of V3M.inst.values()) L.d.length = 0;
   const [bx, by, bw, bh] = box, inB = (x, y, m = 40) => x > bx - m && x < bx + bw + m && y > by - m && y < by + bh + m;
-  const spec = S.role === 'spectate' || (typeof R === 'object' && (R.eye === 'all' || R.eye === 'both' || R.eye === 'e')), near = CAM.z / CAM.fit > 2.2, t = performance.now() / 1000;
+  const spec = S.role === 'spectate' || (typeof R === 'object' && (R.eye === 'all' || R.eye === 'both' || R.eye === 'e')), near = !!R.m3dNear, t = performance.now() / 1000;   // near：画得出单兵的距离就用立体士兵（view3d.js）
   const seen = (x, y) => inVision(x, y);
   // 车辆：车体 + 炮塔（随瞄准转）+ 炮塔后的雷达（转）
   for (const v of S.veh || []) {
@@ -1070,7 +1066,7 @@ function v3Units(C, box) {
       if (V.rad && !v.dead) { const [rx, ry, rr, rz] = V.rad, ca = Math.cos(aim), sa = Math.sin(aim); v3mAdd('rad:' + rr, () => v3mRadar(rr), px0 + (rx * ca - ry * sa) * k, py0 + (rx * sa + ry * ca) * k, z + (rz + .45) * k, t * 3 + v.id, k, sd); }
     }
   }
-  // 步兵（近看才画）：三人按二维画面的三角站位，按兵种建模、按动作选姿态帧（manim.js：走 / 跑四帧、跪射、卧倒、匍匐），开火时枪口焰
+  // 步兵（画得出单兵的距离都是立体模型，地面贴图里不再画平的小人）：三人按二维画面的三角站位，按兵种建模、按动作选姿态帧（manim.js：走 / 跑四帧、跪射、卧倒、匍匐），开火时枪口焰
   if (near) for (const q of S.teams) {
     if (!q.men.length || q.ride || q.boarded || !inB(q.x, q.y) || (q.side === 'e' && !seen(q.x, q.y))) continue;
     const f = typeof faceDraw === 'function' ? faceDraw(q) : faceOf(q), c = Math.cos(f + 1.57), s = Math.sin(f + 1.57), sd = q.side === 'e' ? 1 : 0, T = typeof manTeam === 'function' ? manTeam(q) : null;
@@ -1136,10 +1132,14 @@ function v3Units(C, box) {
     }
   }
   // 降落伞（para.js 伞兵 / 补给、abn.js 空降兵、a101.js 美军 101 空降师）：从运输机高度按下降进度落到地面，伞衣轻轻摆动
+  // 伞随风匀速飘（三处都是每秒 x + 3、y − 2），落点在整个下降过程中不变：朝向、摆动相位、地面高度都按落点取——按伞的当前坐标取会随飘移每帧变，伞衣和伞兵来回甩
   const chutes = (L, jump, sd) => { for (const c of L || []) {   // 天上的伞衣老远就看得见：双方都画（与平面画面一致）
     if (c.done || !(c.t >= 0) || !isFinite(c.x) || !inB(c.x, c.y) || (c.k === 'team' && !(c.men && c.men.length))) continue;
-    const f = clamp(1 - c.t / jump(c), 0, 1), z = v3Ht(c.x, c.y) + 1.5 + f * 120 + (c.k === 'veh' ? 11.3 : 7.4) * 2.2, id = c.id ?? (c.x * 7 + c.y * 3);
-    v3mAdd('chute:' + c.k, () => v3mChute(c.k), c.x, c.y, z, Math.sin(id) * 3, 2.2, sd, Math.sin(t * 1.3 + id) * .09);
+    const T = jump(c), r = Math.max(0, T - c.t), lx = c.x + 3 * r, ly = c.y - 2 * r, f = clamp(1 - c.t / T, 0, 1), id = c.id ?? (lx * 7 + ly * 3);
+    const a = Math.sin(id) * 3, roll = Math.sin(t * 1.3 + id) * .09, man = c.k === 'team', hang = 5.4 * 2.2 + 1.85 * V3_MAN;   // hang：伞衣顶到伞兵脚底
+    const z = v3Ht(lx, ly) + f * 120 + (man ? hang : 1.5 + (c.k === 'veh' ? 11.3 : 7.4) * 2.2);   // 伞兵着陆那一刻脚正好踩到地面
+    v3mAdd('chute:' + c.k, () => v3mChute(c.k), c.x, c.y, z, a, 2.2, sd, roll);
+    if (man) { const s = Math.sin(roll) * hang; v3mAdd('man:rifle:st', () => v3mMan('rifle', 'st'), c.x + s * Math.sin(a), c.y - s * Math.cos(a), z - Math.cos(roll) * hang, a, V3_MAN, sd, roll); }   // 吊在伞下的伞兵：和伞衣同一个摆（绕伞衣顶转），吊索始终连在头顶
   } };
   if (S.para && typeof PA === 'object') chutes(S.para.ch, c => c.k === 'crate' ? PA.jump : c.role ? PA.jlJump : PA.jump, 0);
   if (S.ab && typeof AB === 'object') chutes(S.ab.ch, c => c.k === 'veh' ? AB.heavy : AB.jump, 0);
