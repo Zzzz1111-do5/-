@@ -7,3 +7,4 @@ android/build/
 android/local.properties
 *.keystore
 *.jks
+tools/.cache/

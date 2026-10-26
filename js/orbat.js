@@ -1,7 +1,7 @@
 'use strict';
 // 编制与战斗群（旅 / 团战斗队，固定机制部分）：成建制、按队形行动，对地、对空、地面推进能力齐全
 // 战斗群 G（S.bgs，纯 JSON）：{ id, side, name, cmd 指挥员, us: [连 id], vs: [车 id], rec: [侦察组 id], st, ax, ay 锚点, face, key 任务据点, t, stT, thT }
-//   st：asm 集合 → move 行军 → fight 接敌（战斗队形）→ hold 到达后防御
+//   st：asm 集合 → move 行军 → fight 接敌（战斗队形）→ hold 到达后防御；delay 边打边撤（sa.js）→ link 与主力汇合
 // 队形（锚点坐标系：x 向前、y 向右）：步兵连并排居中；主战坦克在步兵前方一线；步战车在步兵身后；反坦克车护两翼；防空车在中后；
 //   自行火炮在后方 230；行军时横向收拢、纵向拉长（前卫坦克在前、火炮殿后）
 // 移动：锚点沿寻路场向任务点推进，速度跟最慢的成员走；有成员离自己的位置 70 以上就停下等，不各走各的
@@ -79,9 +79,10 @@ function bgGoal(G) {
 }
 
 // 下令：成员开到自己的队形位置（离得远或位置变了才重下）
-function bgOrder(G, sl, t) {
+function bgOrder(G, sl, t0) {
   const fx = G.ax + Math.cos(G.face) * 300, fy = G.ay + Math.sin(G.face) * 300;
   for (const s of sl) {
+    const t = s.t || t0;   // 槽位可逐个指定（边打边撤时掩护组 hold、后撤组 move）
     if (s.k === 'u') {
       const u = s.m, ts = teamsOf(u).filter(q => q.men.length && !q.ride);
       if (!ts.length) continue;
@@ -181,9 +182,30 @@ function bgThink(G) {
     if (lg < 45 || S.t - G.stT > (G.asmT || BG.asm)) { G.st = 'move'; G.stT = S.t; bgSay(G, `${lg < 45 ? '集合完毕' : '集合时限已到，大部已到，未到齐的随后跟进'}，全群成行军队形向${(ptByKey(G.key) || {}).name || '任务地域'}开进。`, null, 'order', `${lg < 45 ? '集合完毕' : '不等了'}，向${(ptByKey(G.key) || {}).name || '任务地域'}开进！`); }   // asmT：按最远一个成员的路程算的集合时限（brain.js）
     return;
   }
-  if (near.length && G.st !== 'fight') { G.st = 'fight'; G.stT = S.t; bgSay(G, `前方发现敌人 ${near.length} 股，就地展开成战斗队形。`, near[0]); }
-  if (G.st === 'fight' && !near.length && S.t - G.stT > 15) { G.st = 'move'; G.stT = S.t; }
+  if (near.length && G.st !== 'fight' && G.st !== 'delay' && G.st !== 'link') { G.st = 'fight'; G.stT = S.t; G.ov = null; bgSay(G, `前方发现敌人 ${near.length} 股，就地展开成战斗队形。`, near[0]); }
+  if (G.st === 'fight' && !near.length && S.t - G.stT > 15) { G.st = 'move'; G.stT = S.t; G.ov = null; }
   const mode = G.st === 'move' ? 'march' : 'fight', sl0 = bgSlots(G, mode), lag = bgLag(G, sl0);
+  const L = typeof saLook === 'function' ? saLook(G) : null;   // 态势感知（sa.js）
+  let custom = null;
+  G.saRet = G.ret ?? .6;
+  if (G.st === 'delay') {   // 边打边撤（sa.js saDelay）：两组交替掩护，往主力 / 大后方撤，一路叫火力
+    const res = saDelay(G, L, () => bgSlots(G, 'fight'));
+    custom = res.sl;
+    if (res.done) {
+      if (res.link) { G.st = 'link'; G.linkId = res.link.id; G.stT = S.t; saStat('bgLink'); }
+      else { G.st = 'fight'; G.stT = S.t; }
+    }
+  } else if (G.st === 'link') {   // 与主力汇合：在主力身边（偏开 120）展开，兵力合起来够了再一起打回去
+    const M = bgOf(G.linkId);
+    if (!M || M.dead || !L) { G.st = 'move'; G.stT = S.t; }
+    else {
+      const a = Math.atan2(G.ay - M.ay, G.ax - M.ax), tx = M.ax + Math.cos(a) * 120, ty = M.ay + Math.sin(a) * 120;
+      if (dist(G.ax, G.ay, tx, ty) > 40) { const keep = G.face; bgAdvance(G, tx, ty, BG.pace); G.face = keep; }
+      if (isFinite(L.fx)) { const fa = Math.atan2(L.fy - G.ay, L.fx - G.ax); G.face += clamp(Math.atan2(Math.sin(fa - G.face), Math.cos(fa - G.face)), -.3, .3); }
+      if (S.t - G.stT > 20 && L.odds >= (G.agg || 1.6) * .9) { G.st = 'move'; G.stT = S.t; bgSay(G, '与主力汇合后兵力已占优，一起打回去！', null, 'order', '兵力够了，打回去！'); saStat('bgLinkGo'); }
+      else if (S.t - G.stT > 120 && !L.theirs) { G.st = 'move'; G.stT = S.t; }
+    }
+  }
   if (G.st === 'move') {
     if (lag < BG.lag && bgAdvance(G, goal.x, goal.y, BG.pace)) { G.st = 'hold'; G.stT = S.t; G.face = goal.face; bgSay(G, '到达任务地域，按防御队形展开、构筑工事。', null, 'order', '到了，展开构筑工事！'); }
   } else if (G.st === 'fight') {
@@ -192,15 +214,54 @@ function bgThink(G) {
     const c = near.reduce((a, o) => [a[0] + o.x / near.length, a[1] + o.y / near.length], [0, 0]);
     const fa = Math.atan2(c[1] - G.ay, c[0] - G.ax);
     G.face = G.face + clamp(Math.atan2(Math.sin(fa - G.face), Math.cos(fa - G.face)), -.35, .35);
-    if (r > (G.agg || 1.6) && lag < BG.lag * 1.4) { bgAdvance(G, c[0], c[1], BG.pace * .6); G.amove = true; }   // 战斗队形本来就散得开：掉队标准放宽   // 占优：成战斗队形向敌推进（反冲击任务 agg 1.2）
-    else if (r < (G.ret ?? .6)) { G.ax -= Math.cos(G.face) * 6;   // ret：多劣势才后撤（精锐的 101 空降师 .35）
-      G.ay -= Math.sin(G.face) * 6; G.amove = false; if (S.t - (G.wT ?? -99) > 30) { G.wT = S.t; bgSay(G, `敌我兵力约 ${r.toFixed(1)} 比 1，交替掩护后撤重整。`, null, 'order', '敌众我寡，交替掩护后撤！'); } }
-    else G.amove = false;
+    const odds = L ? L.odds : r, pw0 = G.p0 || (G.p0 = ours);
+    if (L && odds < (G.ret ?? .6) && near.length && (S.t - (G.wdEnd ?? -99) > 30 || odds < (G.ret ?? .6) * .5)) {   // 打不过：边打边撤（伤亡过大就放烟幕脱离接触）；刚撤完 30 秒内不再撤
+      G.st = 'delay'; G.stT = S.t; G.wd = null; G.ov = null; G.amove = false;
+      saDelayStart(G, L, odds < (G.ret ?? .6) * saP(G.side).brk && ours < pw0 * SA.brkPw);
+      custom = saDelay(G, L, () => bgSlots(G, 'fight')).sl;
+    } else if (odds > (G.agg || 1.6) && lag < BG.lag * 1.4) {   // 占优：成战斗队形向敌推进（反冲击任务 agg 1.2）
+      if (G.a101 && L) custom = bgOverwatch(G, c[0], c[1]);   // 101：跃进—掩护，一组前进一组掩护
+      else bgAdvance(G, c[0], c[1], BG.pace * .6);
+      G.amove = true;
+    } else {
+      G.amove = false;
+      if (G.a101 && L && S.t - (G.covT ?? -99) > 20) { G.covT = S.t; bgCoverPos(G, L); }   // 101 均势：就近占掩蔽好的地形，以逸待劳，标枪等敌人进来
+    }
+    if (!L && r < (G.ret ?? .6)) { G.ax -= Math.cos(G.face) * 6; G.ay -= Math.sin(G.face) * 6; G.amove = false; }
   } else if (G.st === 'hold') {
     if (dist(G.ax, G.ay, goal.x, goal.y) > 60) { G.st = 'move'; G.stT = S.t; }   // 任务变了（据点易手）
   }
   if (!passInf(G.ax, G.ay)) { const j = nearestPassable(ci(G.ax, G.ay), G.side); if (j >= 0) { G.ax = cellCX(j); G.ay = cellCY(j); } }
-  bgOrder(G, bgSlots(G, mode), G.st === 'fight' && G.amove ? 'amove' : G.st === 'hold' ? 'hold' : 'move');
+  bgOrder(G, custom || bgSlots(G, mode), G.st === 'fight' && G.amove ? 'amove' : G.st === 'hold' || G.st === 'link' ? 'hold' : 'move');
+}
+// 跃进—掩护前进（101 顺风时）：成员按序号分两组，一组前进一跃（90）时另一组停在原地掩护，到位后互换、超越前进；返回带 t 的槽位
+function bgOverwatch(G, gx, gy) {
+  const O = G.ov || (G.ov = { h: 0, t: S.t - 99, d: 99, fr: {} });
+  const tag = sl => { let i = 0; for (const s of sl) s.g = i++ % 2; return sl; };
+  let sl = tag(bgSlots(G, 'fight'));
+  const key = s => s.k + s.m.id, mv = sl.filter(s => s.g === O.h), lag = mv.length ? bgLag(G, mv) : 0;
+  if ((O.d >= 90 && lag < 35) || S.t - O.t > 25) {
+    O.h ^= 1; O.t = S.t; O.d = 0; O.fr = {};
+    for (const s of sl) if (s.g !== O.h) O.fr[key(s)] = s.k === 'u' ? regUnitAt(s.m) : [s.m.x, s.m.y];
+  }
+  if (O.d < 90) { const x0 = G.ax, y0 = G.ay; bgAdvance(G, gx, gy, BG.pace * .8); O.d += dist(x0, y0, G.ax, G.ay); }
+  sl = tag(bgSlots(G, 'fight'));
+  return sl.map(s => { const f = s.g !== O.h && O.fr[key(s)]; return f ? { ...s, x: f[0], y: f[1], t: 'hold' } : { ...s, t: 'amove' }; });
+}
+// 占掩蔽地形（101 均势时）：锚点 140 以内、不往敌人那边多靠 30、林地 / 城镇 / 高处，挪过去就地防御
+function bgCoverPos(G, L) {
+  const de = dist(G.ax, G.ay, L.fx, L.fy);
+  let best = null, bs = (1 - coverAt(G.ax, G.ay)) * 2 + (TER.elev[ci(G.ax, G.ay)] || 0) * 1.5 + .25;
+  for (let k = 0; k < 18; k++) {
+    const a = k / 18 * 6.283, r = 60 + (k % 3) * 40, x = clamp(G.ax + Math.cos(a) * r, 20, W - 20), y = clamp(G.ay + Math.sin(a) * r, 20, H - 20);
+    if (!passInf(x, y) || dist(x, y, L.fx, L.fy) < de - 30) continue;
+    const sc = (1 - coverAt(x, y)) * 2 + (TER.elev[ci(x, y)] || 0) * 1.5 - r / 400;
+    if (sc > bs) { bs = sc; best = { x, y }; }
+  }
+  if (!best) return;
+  G.ax = best.x; G.ay = best.y;
+  if (typeof saStat === 'function') saStat('bgCover');
+  bgSay(G, '敌我兵力相当，就近占领有利地形，以逸待劳，等敌人进入标枪射程再打。', null, 'order', '占领有利地形，等他们进来！');
 }
 
 // —— 侦察组：前出观察 ——

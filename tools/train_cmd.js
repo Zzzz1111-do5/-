@@ -9,7 +9,7 @@
 //   ③ 稳健打分：每局按「时间平均守住的据点（按分值）+ 最后守住的据点 + 敌损失 − 我损失」打分，候选的总分取「平均 − 0.4 × 标准差」，
 //      不要偶尔大胜、经常大败的打法；
 //   ④ 多地图、多种攻方打法（均衡、装甲突击、火力先导），四个进程并行，局面分出胜负就提前结束
-// 结果写进 js/cmddoc.js 的 CMD_DOC，过程记在 docs/cmd_train.md
+// 结果写进 js/cmddoc.js 的 CMD_DOC，过程记在 docs/cmd_train.md；每局结果缓存在 tools/.cache/（断点续训，见 runJob）
 const { fork } = require('child_process');
 const fs = require('fs'), path = require('path');
 const ROOT = path.resolve(__dirname, '..');
@@ -57,7 +57,19 @@ for (let i = 0; i < NW; i++) {
   workers.push(w);
 }
 function pump() { for (const w of workers) if (!w.busy && queue.length) { const j = queue.shift(); w.busy = true; w.send(j); } }
-const runJob = job => new Promise(res => { const id = ++jid; wait.set(id, res); queue.push({ ...job, id }); pump(); });
+// 断点续训：每局结果按「局面 + 战法 + 代码指纹（js/ 源码的哈希，训练结果 cmddoc.js 本身除外）」记进缓存文件，进程被打断后重跑时已打过的局直接取结果；代码改了指纹变，旧结果自动作废
+const CACHE = process.env.CMDT_CACHE || path.join(ROOT, 'tools', '.cache', 'train_cmd.json');
+const FP = require('crypto').createHash('sha1').update(fs.readdirSync(path.join(ROOT, 'js')).filter(f => f !== 'cmddoc.js').sort().map(f => fs.readFileSync(path.join(ROOT, 'js', f), 'utf8')).join('\n')).digest('hex').slice(0, 12);
+let cache = {};
+try { const c = JSON.parse(fs.readFileSync(CACHE, 'utf8')); if (c.fp === FP) cache = c.r || {}; } catch (e) { /* 没有缓存 */ }
+let cacheDirty = 0;
+const cacheSave = () => { try { fs.mkdirSync(path.dirname(CACHE), { recursive: true }); fs.writeFileSync(CACHE, JSON.stringify({ fp: FP, r: cache })); cacheDirty = 0; } catch (e) { console.error('缓存写不进去', e.message); } };
+const runJob = job => {
+  const k = JSON.stringify(job);
+  if (cache[k]) return Promise.resolve(cache[k]);
+  return new Promise(res => { const id = ++jid; wait.set(id, r => { if (r && !r.err) { cache[k] = r; if (++cacheDirty >= 1) cacheSave(); } res(r); }); queue.push({ ...job, id }); pump(); });
+};
+console.log(`代码指纹 ${FP}，缓存里已有 ${Object.keys(cache).length} 局`);
 
 // 局面：编成键 k 的第 i 个局面（地图、部署方案、攻方打法、随机数种子都由 i 决定，各候选共用）
 function scene(k, i) { const ds = KEYS[k][i % KEYS[k].length]; return { seed: MAPS[i % MAPS.length], dsty: ds, asty: ATK[Math.floor(i / 2) % ATK.length], rng: 1000 + i * 7919, bud: BUD, T }; }

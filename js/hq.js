@@ -5,7 +5,8 @@
 // 旅（hqBde）：把司令的命令分给各团——进攻：第一梯队一两个团左右并进、其余为第二梯队跟进；防御：前沿一线团、纵深一个团；
 //   待机：各团在集结地域隐蔽；反冲击：各团先到攻击出发位置，到齐（或时限到）同时发起
 // 团（regThink，团长）：在 orbat.js 战斗群上扩展，按战法表（doctrine.js docOf：命令 × 本团编成 × 当面敌情）选队形与打法——
-//   集合 → 行军纵队 → 展开（攻击出发位置）→ 火力准备 → 冲击（交替跃进、迂回）→ 巩固；防御：占领阵地、就地反冲击、劣势后撤重整
+//   集合 → 行军纵队 → 展开（攻击出发位置）→ 火力准备 → 冲击（交替跃进、迂回）→ 巩固；防御：占领阵地、就地反冲击、劣势边打边撤（sa.js）后重整；
+//   打不打得过看态势感知（sa.js saLook 的有效兵力比），不只数当面的人头
 // 守备部队（守备排、伏击组、碉堡、炮兵）不编团，仍由原来的守军 AI 在阵地上打；开了指挥体系，旧的零散调兵（brain.js）关掉
 // 状态（纯 JSON）：S.hq = { on, e: 司令, p: 司令 }；司令 = { tac 战术, bdes: [旅], n 团编号, mem 敌情记忆, main 判明的主攻滩头, said }
 //   旅 = { id, side, no, name, role, regs: [团 id], ord: { v, objs, i, why }, ordT, st }；团 = S.bgs 里 reg 为真的战斗群（bde 旅 id，task 旅给的任务）
@@ -218,7 +219,7 @@ function regOrder(G, sl, t0) {
       if (v.ai === 'repair' || v.ai === 'resup' || vehAmmoF(v) < .25 || (v.fuel ?? 1) < .2 || v.hp < v.maxhp * .35) continue;   // 该补给 / 抢修的车交给车辆 AI
       // 队形整体移动：锚点在走时，目标放在槽位前方一小段、车速压到锚点的速度（落后就稍快追上，超前就放慢），整排匀速前进
       let x = s.x, y = s.y, cap = null;
-      if (G.vel > 1.5 && t !== 'hold') {
+      if (G.vel > 1.5 && t !== 'hold' && G.st !== 'withdraw') {   // 后撤时锚点往背后跳，不往正面（敌人方向）超前
         const fx2 = Math.cos(G.face), fy2 = Math.sin(G.face), lead = Math.min(40, G.vel * 3), ahead = (v.x - s.x) * fx2 + (v.y - s.y) * fy2, dS = dist(v.x, v.y, s.x, s.y);
         [x, y] = bgSnap(G, s.x + fx2 * lead, s.y + fy2 * lead, G.side === 'e' ? 'vehe' : 'veh');
         if (dS < 45) cap = ahead > 4 ? G.vel * .7 : ahead < -12 ? G.vel * 1.4 : G.vel * 1.05;
@@ -240,7 +241,7 @@ function regGoal(G) {
   const p = hqPt(T.key);
   return { T, p, x: T.x ?? G.ax, y: T.y ?? G.ay, face: T.face ?? G.face };
 }
-function regSet(G, st, why) { if (G.st === st) return; G.st = st; G.stT = S.t; G.stWhy = why || null; G.bnd = null; }
+function regSet(G, st, why) { if (G.st === st) return; G.st = st; G.stT = S.t; G.stWhy = why || null; G.bnd = null; G.wd = null; }
 const regUnitAt = u => { const ts = teamsOf(u).filter(q => q.men.length && !q.ride); return ts.length ? [ts.reduce((a, q) => a + q.x, 0) / ts.length, ts.reduce((a, q) => a + q.y, 0) / ts.length] : [u.x, u.y]; };
 function regThink(G) {
   const us = bgUnits(G), vs = bgVehs(G);
@@ -254,7 +255,9 @@ function regThink(G) {
   const atk = T.v === 'attack' || T.v === 'counter';
   G.foeT = F.n ? F.t : 'inf';
   G.doc = G.docFix ? { ...DOC_BASE, ...G.docFix, key: 'fix' } : docOf(atk || G.st === 'assault' ? 'atk' : 'def', G.type, G.foeT);   // docFix：训练场指定的打法
-  const D = G.doc, r = pw.tot / Math.max(1, near.n);
+  // 兵力比：态势感知（sa.js saLook）——当面敌人连同刚钻进隐蔽处的、敌增援趋势、友邻、火力支援、地形一起算的有效兵力比
+  const D = G.doc, L = typeof saLook === 'function' ? saLook(G, pw, near) : null, r = L ? L.odds : pw.tot / Math.max(1, near.n);
+  G.saRet = D.ret;
   // 任务变了：重新开进
   if (T.k !== G.tk) { G.tk = T.k; if (G.st !== 'asm') regSet(G, 'move'); G.flk = 0; }
   const ax0 = G.ax, ay0 = G.ay;
@@ -263,8 +266,11 @@ function regThink(G) {
     if (bgLag(G, sl) < 45 || S.t - G.stT > (G.asmT || 40)) regSet(G, 'move');
     return;
   }
-  if (pw.tot < (G.p0 || pw.tot) * .25 && G.st !== 'withdraw') { regSet(G, 'withdraw', 'weak'); G.wx = null; }
-  let mode = 'fight', ot = 'move';
+  // 打残了（不到两成五）且有敌人压上来、打不过：撤；打不过又伤亡过大：脱离接触。刚撤完 30 秒内不再撤（除非被压得更狠），不来回折腾
+  const wdOk = G.st !== 'withdraw' && (S.t - (G.wdEnd ?? -99) > 30 || r < D.ret * .5);
+  if (wdOk && pw.tot < (G.p0 || pw.tot) * .25 && near.n >= 3 && r < D.press) { regSet(G, 'withdraw', 'weak'); G.wx = null; }
+  else if (wdOk && L && near.n >= 3 && r < D.ret * saP(G.side).brk && pw.tot < (G.p0 || pw.tot) * SA.brkPw) { regSet(G, 'withdraw', 'break'); G.wx = null; }
+  let mode = 'fight', ot = 'move', custom = null;
   switch (G.st) {
     case 'move': {   // 行军：沿寻路场开向任务位置；途中接敌按任务处置
       mode = 'march';
@@ -292,7 +298,7 @@ function regThink(G) {
       ot = 'amove';
       const gx = p ? p.x : tx, gy = p ? p.y : ty;
       regFace(G, gx, gy);
-      if (near.n && r < D.ret) { regSet(G, 'withdraw', 'repulsed'); G.wx = null; G.fail = S.t; break; }
+      if (near.n && r < D.ret && wdOk) { regSet(G, 'withdraw', 'repulsed'); G.wx = null; G.fail = S.t; break; }
       // 跃进—掩护：两组分队交替，一组跃进 90 时另一组停在原地掩护；跃进的一组到位后互换（掩护组从原地出发、超越前进）
       let sl = regSlots(G, 'fight');
       if ((D.bound || near.n >= 3) && sl.some(s => s.g === 0) && sl.some(s => s.g === 1)) {   // 战法要求、或已与敌接触：跃进—掩护
@@ -317,7 +323,7 @@ function regThink(G) {
     case 'clear': {   // 肃清：冲到目标后各连在目标一带搜索前进，把藏在工事里的守敌找出来打掉，直到目标真正到手
       ot = 'amove'; mode = 'sweep';
       if (p) { G.ax = p.x; G.ay = p.y; }
-      if (near.n >= 3 && r < D.ret) { regSet(G, 'withdraw', 'repulsed'); G.wx = null; G.fail = S.t; break; }
+      if (near.n >= 3 && r < D.ret && wdOk) { regSet(G, 'withdraw', 'repulsed'); G.wx = null; G.fail = S.t; break; }
       if (!p || hqMine(G.side, p)) { G.won = S.t; regSet(G, 'hold', 'took'); }
       else if (S.t - G.stT > 60) { G.won = null; regSet(G, 'regroup'); }
       break;
@@ -325,7 +331,7 @@ function regThink(G) {
     case 'regroup': {   // 重整：退下来的就地整顿 25 秒，进攻任务再叫一次火力、重新展开攻击（至多三次）
       mode = 'hold'; ot = 'hold';
       if (near.n) regFace(G, near.x, near.y);
-      if (near.n >= 3 && r < D.ret * .7) { regSet(G, 'withdraw', 'pressed'); G.wx = null; break; }
+      if (near.n >= 3 && r < D.ret * .7 && wdOk) { regSet(G, 'withdraw', 'pressed'); G.wx = null; break; }
       if (S.t - G.stT > 25) { G.tries = (G.tries || 0) + 1; regSet(G, atk && G.tries < 3 ? 'deploy' : 'hold'); G.prepT = 0; }
       break;
     }
@@ -334,7 +340,7 @@ function regThink(G) {
       if (dist(G.ax, G.ay, tx, ty) > 70 && !G.won) { regSet(G, 'move'); break; }
       if (G.won && atk && p && !hqMine(G.side, p) && S.t - G.stT > 10 && r >= D.ret) { regSet(G, 'clear'); break; }   // 巩固中目标又被夺：肃清
       if (near.n) regFace(G, near.x, near.y); else G.face = G.face + clamp(Math.atan2(Math.sin(tf - G.face), Math.cos(tf - G.face)), -.2, .2);
-      if (near.n >= 3 && r < D.ret * .8) { regSet(G, 'withdraw', 'pressed'); G.wx = null; break; }
+      if (near.n >= 3 && r < D.ret * .8 && wdOk) { regSet(G, 'withdraw', 'pressed'); G.wx = null; break; }
       if (near.n >= 3 && near.fort === 0 && r >= D.press * 1.2 && dist(near.x, near.y, G.ax, G.ay) < 260) { G.cx0 = G.ax; G.cy0 = G.ay; regSet(G, 'local'); }
       break;
     }
@@ -350,7 +356,14 @@ function regThink(G) {
       if (near.n >= 4) { regFace(G, near.x, near.y); regSet(G, r >= D.press ? 'local' : 'hold'); G.cx0 = G.ax; G.cy0 = G.ay; }
       break;
     }
-    case 'withdraw': {   // 后撤：交替掩护退 250，到位后重整
+    case 'withdraw': {   // 后撤：边打边撤（sa.js saDelay）——两组交替掩护，往主力 / 大后方撤，一路叫火力消耗追兵；摆脱、与主力汇合或撤够了就重整
+      if (L && typeof saDelay === 'function') {
+        if (!G.wd) saDelayStart(G, L, G.stWhy === 'break' || G.stWhy === 'weak');
+        const res = saDelay(G, L, () => regSlots(G, 'fight'));
+        custom = res.sl;
+        if (res.done) { G.won = null; G.fail = S.t; G.wdEnd = S.t; if (!atk || res.done === 'link') { G.task = { ...T, x: Math.round(G.ax), y: Math.round(G.ay) }; G.tk = T.k; } regSet(G, 'regroup'); }
+        break;
+      }
       if (G.wx == null) { const a = G.face + Math.PI; let x = G.ax + Math.cos(a) * 250, y = G.ay + Math.sin(a) * 250; if (!passInf(x, y)) { const j = nearestPassable(ci(x, y), G.side); if (j >= 0) { x = cellCX(j); y = cellCY(j); } } G.wx = x; G.wy = y; }
       const keep = G.face;
       if (bgAdvance(G, G.wx, G.wy, BG.pace * .8) || S.t - G.stT > 40) { G.face = keep; G.won = null; regSet(G, 'regroup'); if (!atk) { G.task = { ...T, x: Math.round(G.ax), y: Math.round(G.ay) }; G.tk = T.k; } G.fail = S.t; }
@@ -360,7 +373,7 @@ function regThink(G) {
   }
   if (!passInf(G.ax, G.ay)) { const j = nearestPassable(ci(G.ax, G.ay), G.side); if (j >= 0) { G.ax = cellCX(j); G.ay = cellCY(j); } }
   G.vel = Math.min(30, dist(ax0, ay0, G.ax, G.ay));   // 锚点这一秒走了多远：车辆按这个速度跟着走（regOrder），不跑到位就停、停了再走
-  regOrder(G, regSlots(G, mode), G.st === 'withdraw' ? 'move' : ot);
+  regOrder(G, custom || regSlots(G, mode), G.st === 'withdraw' ? 'move' : ot);
 }
 // 迂回方向：目标两侧哪边敌人少、掩护好
 function hqFlankSide(G, p) {
@@ -406,7 +419,7 @@ function hqBdeThink(B) {
   }
   const P = hqObj(B);
   if (!P) return;
-  const key = `${O.v}:${P.key}:${O.i || 0}`;
+  const key = `${O.v}:${P.key}:${O.i || 0}`, BD = typeof bdeDoc === 'function' ? bdeDoc(B.side) : { atk: HQ.attack, fol: HQ.follow, sync: 60, pass: .4, dep: 260 };   // 协同参数（jointdoc.js）
   if (O.v === 'attack' || O.v === 'counter' || O.v === 'feint') {
     if (O.done) {   // 最后一个目标已拿下：就地巩固
       const th = hqThreat(B.side, P);
@@ -414,7 +427,7 @@ function hqBdeThink(B) {
       return;
     }
     // 攻击出发位置：从旅的位置沿路走到离目标 340；第一梯队一两个团左右展开，第二梯队在后 420 跟进
-    if (B.atkK !== key || !B.atk) { B.atkK = key; B.atk = hqApproach(B.side, c.x, c.y, P, HQ.attack); B.goT = null; }
+    if (B.atkK !== key || !B.atk) { B.atkK = key; B.atk = hqApproach(B.side, c.x, c.y, P, BD.atk); B.goT = null; }
     const A = B.atk, a = Math.atan2(P.y - A.y, P.x - A.x), lx = -Math.sin(a), ly = Math.cos(a);
     const n1 = O.v === 'feint' ? Rs.length : Rs.length >= 3 ? 2 : Rs.length === 2 && hqRegPow(Rs[1]).tot > hqRegPow(Rs[0]).tot * .45 ? 2 : 1;
     const e1 = Rs.slice(0, n1), e2 = Rs.slice(n1);
@@ -427,15 +440,15 @@ function hqBdeThink(B) {
     }
     // 同时发起：第一梯队都到攻击出发位置（或等满 60 秒）
     const allReady = e1.every(G => G.st === 'assault' || G.ready || G.st === 'hold' && G.won);
-    if (!B.goT && (allReady || S.t - (B.atkT ?? (B.atkT = S.t)) > 60)) B.goT = S.t;
+    if (!B.goT && (allReady || S.t - (B.atkT ?? (B.atkT = S.t)) > BD.sync)) B.goT = S.t;
     for (const G of e1) G.task.go = !!B.goT;
     if (B.atkK !== B.goK) { B.goK = B.atkK; B.atkT = S.t; B.goT = null; for (const G of e1) G.task.go = false; }
     e2.forEach((G, i) => {
       // 第一梯队受挫（后撤或兵力不足四成）：第二梯队超越接替冲击；否则在后跟进
-      const lead = e1.find(o => o.st === 'withdraw' || hqRegPow(o).tot < (o.p0 || 1) * .4);
+      const lead = e1.find(o => o.st === 'withdraw' || hqRegPow(o).tot < (o.p0 || 1) * BD.pass);
       if (lead && !B.pass) { B.pass = S.t; }
       if (B.pass && S.t - B.pass < 240 && i === 0) { const s = hqSlot(B.side, A.x, A.y); G.task = { k: key + ':pass', v: 'attack', key: P.key, x: Math.round(s.x), y: Math.round(s.y), face: a, go: true, ech: 1 }; return; }
-      const o = (i - (e2.length - 1) / 2) * 150, s = hqSlot(B.side, A.x - Math.cos(a) * HQ.follow + lx * o, A.y - Math.sin(a) * HQ.follow + ly * o);
+      const o = (i - (e2.length - 1) / 2) * 150, s = hqSlot(B.side, A.x - Math.cos(a) * BD.fol + lx * o, A.y - Math.sin(a) * BD.fol + ly * o);
       G.task = { k: key + ':2', v: 'follow', key: P.key, x: Math.round(s.x), y: Math.round(s.y), face: a, ech: 2 };
     });
   } else if (O.v === 'defend' || O.v === 'block') {
@@ -444,7 +457,7 @@ function hqBdeThink(B) {
     Rs.forEach((G, i) => {
       let s;
       if (i < n1) { const o = (i - (n1 - 1) / 2) * 230; s = hqSlot(B.side, P.x + Math.cos(th) * 60 + lx * o, P.y + Math.sin(th) * 60 + ly * o); }
-      else s = hqSlot(B.side, P.x - Math.cos(th) * 260, P.y - Math.sin(th) * 260);
+      else s = hqSlot(B.side, P.x - Math.cos(th) * BD.dep, P.y - Math.sin(th) * BD.dep);
       G.task = { k: key + ':' + i, v: i < n1 ? 'defend' : 'reserve', key: P.key, x: Math.round(s.x), y: Math.round(s.y), face: th };
     });
   } else if (O.v === 'reserve' || O.v === 'follow') {
@@ -969,6 +982,8 @@ HOOK.newGame.push(() => { if (S) S.hq = null; });
 HOOK.step.push(dt => { if (S && S.phase === 'battle' && !S.hq && !(S.v7off && S.v7off.hq)) hqInit(); hqStep(dt); });
 // 守方炮兵火力：反冲击的火力准备优先（ai4.js a4Focus 调用）
 function hqFocus() {
+  const Dl = (S.bgs || []).find(G => G.side === 'e' && !G.dead && G.fireReq && G.fireReq.sa && S.t - G.fireReq.t < 20);   // 边打边撤的团 / 战斗群叫的火力最优先（sa.js）：打追兵
+  if (Dl) return { x: Dl.fireReq.x, y: Dl.fireReq.y, r: 80 };
   if (!hqSideOn('e')) return null;
   const R = hqRegs('e').filter(G => G.fireReq && S.t - G.fireReq.t < 40 && (G.st === 'deploy' || G.st === 'assault'))[0];
   if (R) return { x: R.fireReq.x, y: R.fireReq.y, r: 90 };
