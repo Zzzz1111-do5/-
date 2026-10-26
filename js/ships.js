@@ -468,7 +468,7 @@ function drawShips(time) {
   for (const o of list) if (o.sunk && o.vis) shWreck(ctx, o.P, o.kind, o.s.id, time);
   for (const o of list) if (!o.sunk && o.vis) shWake(ctx, o.P, .9);
   for (const o of list) {
-    if (o.sunk || !o.vis) continue;
+    if (o.sunk || !o.vis || R.m3d) continue;   // 3D：舰体是立体模型（v3units.js），贴图里只留尾浪
     const a = o.s.state === 'beached' ? .6 : 1;
     if (o.kind === 'supply') shLST(ctx, o.s, o.P, dcol, a, time); else if (o.kind === 'lst') shTLS(ctx, o.s, o.P, dcol, a, time);
     else if (o.kind === 'dd') { const f = o.s.fireT != null && S.t - o.s.fireT < .25 ? (S.t - o.s.fireT) / .25 : null; shDDBody(ctx, o.s, o.P, dcol, a, time, f, shEscortTur(o.s, o.P, dt)); }
@@ -523,7 +523,7 @@ function drawDD(time) {
   }
   if (!shInView(P, viewRect())) return;
   shWake(ctx, P, .9);
-  shDDBody(ctx, D, P, bcol, 1, time, flash);
+  if (!R.m3d) shDDBody(ctx, D, P, bcol, 1, time, flash);
   if (D.state === 'repair') shSmoke(ctx, P, time, 7, true);
   const rr = P.L * P.k * .5 + 6;
   ctx.lineWidth = px(2.2);

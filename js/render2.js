@@ -168,7 +168,8 @@ function drawEnemies(time) {
     }
     ctx.setLineDash(vis ? [] : [px(2), px(2)]);
     ctx.strokeStyle = rgba(COL.enemy, vis ? .95 : .45); ctx.fillStyle = vis ? 'rgba(30,4,10,.8)' : rgba(COL.enemy, .05);
-    if (!(typeof gunModel === 'function' && gunModel(ctx, e, x, y, vis, time))) enemyMark(ctx, e.kind, x, y);   // 近看：火炮建模（guns.js）
+    if (R.m3d) { /* 3D：阵地画成立体模型（v3units.js），贴图里只留血条、压制标记 */ }
+    else if (!(typeof gunModel === 'function' && gunModel(ctx, e, x, y, vis, time))) enemyMark(ctx, e.kind, x, y);   // 近看：火炮建模（guns.js）
     ctx.setLineDash([]); ctx.lineWidth = px(1.4);
     if (vis && e.hp < e.maxhp) {   // 受损才显示血条
       const w = 16, yb = y + 12;
@@ -185,7 +186,7 @@ function drawEnemies(time) {
     if (q.side !== 'e' || !inView(q.x, q.y, 12)) continue;
     if (agg && !q.rc && hqAggHide('u', q.u)) continue;   // 远看：编进团的连画成分队符号（hq.js）
     if (inVision(q.x, q.y)) {
-      drawTeamBody(ctx, q, faceDraw(q), !R.fig && q.sup >= 60 ? rgba(COL.amber, .9) : COL.enemy);
+      if (!(R.m3d && R.m3dNear)) drawTeamBody(ctx, q, faceDraw(q), !R.fig && q.sup >= 60 ? rgba(COL.amber, .9) : COL.enemy);   // 3D 近看：步兵是立体小人
       supMark(ctx, q);
     } else if (q.seen && S.t - q.seen < 8) {   // 刚失去接触：淡出的小虚线菱形
       ctx.strokeStyle = rgba(COL.enemy, (1 - (S.t - q.seen) / 8) * .5); ctx.lineWidth = px(1); ctx.setLineDash([px(2), px(2)]);
@@ -216,7 +217,7 @@ function drawTeams(time) {
     if (agg && !q.rc && hqAggHide('u', q.u)) continue;   // 远看：编进团的连画成分队符号（hq.js）
     const low = q.kind === 'inf' && q.ammo < 8, a = low ? .55 + .4 * Math.sin(time * 8) : 1, u = unitOf(q);
     const col = rgba(!R.fig && q.sup >= 60 ? COL.amber : u && u.state === 'rout' ? COL.amber : COL.g, a);
-    drawTeamBody(ctx, q, faceDraw(q), col);
+    if (!(R.m3d && R.m3dNear)) drawTeamBody(ctx, q, faceDraw(q), col);
     supMark(ctx, q);
     if (q.working) {   // 工兵作业：小小的旋转弧
       const r = R.fig ? 7.5 : px(5.5);

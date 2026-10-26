@@ -790,6 +790,7 @@ function eaDraw(time) {
   if (EA_TRAILS.size) { const ids = new Set(E.fly.map(a => a.id)); for (const id of [...EA_TRAILS.keys()]) if (!ids.has(id)) EA_TRAILS.delete(id); }
   for (const a of E.fly) {
     if (a.dead || !(spec || a.pv || inVision(a.x, a.y))) continue;
+    if (R.m3d && a.ph !== 'roll') continue;   // 3D：立体模型（v3units.js）
     const heli = a.type === 'heli' || a.type === 'uh60', big = a.type === 'c17' || a.type === 'b2', size = big ? Math.max(28, px(30)) : Math.max(heli ? 15 : 17, px(heli ? 17 : 19));
     if (!heli && a.alt > .2) {
       let tr = EA_TRAILS.get(a.id);

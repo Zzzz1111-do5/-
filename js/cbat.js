@@ -74,13 +74,13 @@ function cbFix(sh, radar, opt) {
   e.kx = x; e.ky = y; if (sh.k === 'veh') { e.kh = e.heading; e.seen = S.t; }
   S.cb.fixT[e.id] = S.t;
   if (typeof v8Stat === 'function') v8Stat(sup ? 'cbSupFix' : 'cbFix');
-  const nm = sh.k === 'veh' ? (typeof vehModel === 'function' ? vehModel(e) : '敌自行火炮') : (ENEMY_SPEC[e.kind] || {}).name || '敌炮兵', wh = typeof cmdWhere === 'function' ? cmdWhere(x, y) : gridRef(x, y);
-  const how = sup ? (radar ? '弹坑分析与驱逐舰雷达' : '后勤分队弹坑分析') : radar ? '驱逐舰雷达' : '前沿声测';
+  const nm = sh.k === 'veh' ? (typeof vehModel === 'function' ? vehModel(e) : '敌自行火炮') : (ENEMY_SPEC[e.kind] || {}).name || '敌炮兵', nmP = /阵地$/.test(nm) ? nm : nm + '阵地', wh = typeof cmdWhere === 'function' ? cmdWhere(x, y) : gridRef(x, y);
+  const rn = radar && (typeof ddUp === 'function' && ddUp() ? '驱逐舰' : '护航舰'), how = sup ? (radar ? `弹坑分析与${rn}雷达` : '后勤分队弹坑分析') : radar ? `${rn}雷达` : '前沿声测';
   log(`${how}测定敌炮位：${wh}（${nm}）${sup ? '——就是它在打补给线' : ''}`, 'good', null, 0, { x, y });
   const acts = [], ask = [];
   const C = S.cmd && S.cmd.p;
   // 反炮兵射击：精度高、来得快的先上；打补给线的炮垂发两发、攻击机同时出动
-  if (typeof vlsCan === 'function' && vlsCan('lacm', x, y)) { const f = vlsFire('lacm', x, y, sup ? 2 : 1, 'cb'); if (f) acts.push(`驱逐舰垂发导弹 ${f} 枚`); }
+  if (typeof vlsCan === 'function' && vlsCan('lacm', x, y)) { const who = vlsWho('lacm', x, y), f = vlsFire('lacm', x, y, sup ? 2 : 1, 'cb'); if (f) acts.push(`${who}垂发导弹 ${f} 枚`); }
   if ((!acts.length || sup) && C && typeof cmdAir === 'function' && S.assets.strike > 0 && cmdAir('strike', x, y, sh.k === 'enemy' ? e.id : null)) acts.push('攻击机');
   if (!acts.length && C && typeof cmdFire === 'function' && S.dd && S.dd.state !== 'sunk' && dist(S.dd.x, S.dd.y, x, y) < 990 && cmdFire(x, y, sup ? 4 : 3, 'cb')) acts.push('舰炮急促射');
   if (!acts.length && S.assets.msl > 0 && typeof msFireP === 'function' && (typeof cmdCtl !== 'function' || cmdCtl(S.dd) || S.role === 'spectate') && msFireP(x, y, true)) acts.push('东风-15B 战术导弹');
@@ -88,8 +88,8 @@ function cbFix(sh, radar, opt) {
   if (acts.length && typeof v8Stat === 'function') v8Stat(sup ? 'cbSupFire' : 'cbFire');
   if (typeof chatSay === 'function') {
     if (sup) chatSay('p', `判断：补给线在${typeof cmdWhere === 'function' ? cmdWhere(sup.x, sup.y) : gridRef(sup.x, sup.y)}已第 ${sup.n} 次被炮击，${how}测定是${wh}的敌${nm}打的。决心：先打掉这门炮——${acts.length ? `命令：${acts.join('、')}实施反炮兵射击；工兵与卡车等炮打掉再抢修，免得修好又被打断。` : ask.length ? ask[0] + '（反炮兵射击）。' : '暂无可用火力，炮位标定在案，航空兵出动时优先打击。'}`, { kind: acts.length ? 'plan' : 'report', at: { x, y }, key: 'cbs' + e.id, gap: 30, lv: 0 });
-    else chatSay('p', `报告：${how === '驱逐舰雷达' ? '驱逐舰雷达跟踪来袭炮弹弹道' : '前沿分队声测'}，测定敌${nm}阵地在${wh}。${acts.length ? `命令：${acts.join('、')}实施反炮兵射击，打掉这门炮，免得它反复切断补给线。` : ask.length ? ask[0] + '（反炮兵射击）。' : '暂无可用火力，标定在案，航空兵出动时优先打击。'}`, { kind: acts.length ? 'order' : 'report', at: { x, y }, key: 'cb' + e.id, gap: 40, lv: 2 });
-    if (acts.length && typeof shout === 'function') shout(how === '驱逐舰雷达' && S.dd && S.dd.state !== 'sunk' ? S.dd : { x, y, side: 'p' }, `测定敌${nm}阵地，反炮兵射击！`);
+    else chatSay('p', `报告：${radar ? `${how}跟踪来袭炮弹弹道` : '前沿分队声测'}，测定敌${nmP}在${wh}。${acts.length ? `命令：${acts.join('、')}实施反炮兵射击，打掉这门炮，免得它反复切断补给线。` : ask.length ? ask[0] + '（反炮兵射击）。' : '暂无可用火力，标定在案，航空兵出动时优先打击。'}`, { kind: acts.length ? 'order' : 'report', at: { x, y }, key: 'cb' + e.id, gap: 40, lv: 2 });
+    if (acts.length && typeof shout === 'function') shout(radar && typeof ddUp === 'function' && ddUp() ? S.dd : { x, y, side: 'p' }, `测定敌${nmP}，反炮兵射击！`);
   }
   return acts.length;
 }

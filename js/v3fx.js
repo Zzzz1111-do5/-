@@ -70,7 +70,7 @@ function v3Fx(C) {
     if (s.side === 'e' && !s.fuzzy && !seen(s.x1, s.y1) && !seen(sx, sy)) continue;
     const d = dist(sx, sy, s.x1, s.y1), z0 = g(sx, sy) + 3, z1 = g(s.x1, s.y1);
     let f;
-    if (s.kind === 'bomb') { const zt = z1 + 230; f = v => v3fP(lerp(sx, s.x1, v), lerp(sy, s.y1, v), z1 + (zt - z1) * (1 - v * v)); }   // 炸弹：从飞机高度加速落下
+    if (s.kind === 'bomb') { const zt = Math.max(z1 + 60, v3AltZ(sx, sy, .95 * 230, -2.6, 1.5)); f = v => v3fP(lerp(sx, s.x1, v), lerp(sy, s.y1, v), z1 + (zt - z1) * (1 - v * v)); }   // 炸弹：从飞机高度（按海拔平飞）加速落下
     else { const apex = s.kind === 'mortar' ? Math.min(320, d * .75) : Math.min(420, d * .32); f = v => v3fP(lerp(sx, s.x1, v), lerp(sy, s.y1, v), lerp(z0, z1, v) + Math.sin(Math.PI * v) * apex); }
     const col = s.kind === 'smoke' ? V3F_COL.smoke : s.kind === 'bomb' ? V3F_COL.amber : s.side === 'p' ? V3F_COL.p : V3F_COL.e;
     v3fTrail(out, E, f, Math.max(0, u - .1), u, 6, s.kind === 'bomb' ? 2.2 : 1.8, col);
@@ -103,7 +103,7 @@ function v3Fx(C) {
     if (m.t < 0 || m.done || !isFinite(m.x)) continue;
     live.add(m.id);
     if (!inB(m.x, m.y, 400) || (m.side === 'e' && !seen(m.x, m.y))) continue;
-    const z = g(m.x, m.y) + 2 + (m.kind === 'tbm' ? m.z * 620 : m.kind === 'pgm' ? m.z * 230 : m.z * 230), p = v3fP(m.x, m.y, z);
+    const z = v3AltZ(m.x, m.y, m.z * (m.kind === 'tbm' ? 620 : 230), -2.6, 2), p = v3fP(m.x, m.y, z);   // 与飞机同一套高度：低空沿地形包络、高空按海拔
     let tr = V3F.trail.get(m.id);
     if (!tr) V3F.trail.set(m.id, tr = []);
     const last = tr[tr.length - 1];
@@ -117,7 +117,7 @@ function v3Fx(C) {
   // —— 直升机的火箭、反坦克导弹（从机上射向地面）——
   if (S.eair) for (const p of S.eair.proj || []) {
     if (p.t < 0 || p.done || (!spec && !inVision(p.tx, p.ty) && !inVision(p.x0, p.y0)) || !inB(p.tx, p.ty, 100)) continue;
-    const za = g(p.x0, p.y0) + 1.5 + .25 * 230, zb = g(p.tx, p.ty) + 1;   // 直升机悬停高度（view3d.js v3AirZ）
+    const za = v3AltZ(p.x0, p.y0, .25 * 230, -2.6, 1.5), zb = g(p.tx, p.ty) + 1;   // 直升机悬停高度（view3d.js v3AirZ）
     if (p.k === 'rk') {
       const u = clamp(p.t / p.dur, 0, 1), f = v => v3fP(lerp(p.x0, p.tx, v), lerp(p.y0, p.ty, v), lerp(za, zb, v));
       v3fTrail(out, E, f, Math.max(0, u - .12), u, 3, 1.6, V3F_COL.e);

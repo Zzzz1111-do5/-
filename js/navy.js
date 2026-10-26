@@ -191,10 +191,10 @@ function nvThinkP(N) {
     const need = Math.ceil(tgt.hp / 24) + 1 + (NV_CLS[tgt.cls].sam > 30 ? 2 : 1) - inb;
     if (need > 0) {
       const strong = NV_CLS[tgt.cls].sam > 30 && typeof vlsLeft === 'function' && vlsLeft('yj21') > 0;
-      const n = vlsFire(strong ? 'yj21' : 'yj18', tgt.x, tgt.y, Math.min(4, need), 'asuw') || vlsFire(strong ? 'yj18' : 'yj21', tgt.x, tgt.y, Math.min(4, need), 'asuw');
+      const who = typeof vlsWho === 'function' ? vlsWho(strong ? 'yj21' : 'yj18', tgt.x, tgt.y) : '驱逐舰', n = vlsFire(strong ? 'yj21' : 'yj18', tgt.x, tgt.y, Math.min(4, need), 'asuw') || vlsFire(strong ? 'yj18' : 'yj21', tgt.x, tgt.y, Math.min(4, need), 'asuw');
       if (n) {
         N.vlsT = S.t + 6; nvStat('nvVls', n);
-        if (typeof chatSay === 'function') chatSay('p', `命令：驱逐舰垂发${strong ? '鹰击-21 高超音速' : '鹰击-18A 超音速'}反舰导弹 ${n} 枚，饱和攻击敌${tgt.nm}。`, { kind: 'order', at: tgt, key: 'nvvls', gap: 12, lv: 1 });
+        if (typeof chatSay === 'function') chatSay('p', `命令：${who}垂发${strong ? '鹰击-21 高超音速' : '鹰击-18A 超音速'}反舰导弹 ${n} 枚，饱和攻击敌${tgt.nm}。`, { kind: 'order', at: tgt, key: 'nvvls', gap: 12, lv: 1 });
       }
     }
   }
@@ -254,6 +254,7 @@ function navyDraw(time) {
     ctx.save(); ctx.translate(x, y); ctx.rotate(e.heading);
     ctx.globalAlpha = ghost ? .35 : 1 - sink * .85;
     if (!e.dead && !ghost && e.spd > 4) { ctx.strokeStyle = realLook() ? 'rgba(238,243,242,.35)' : rgba(COL.enemy, .25); ctx.lineWidth = px(1.2); ctx.beginPath(); ctx.moveTo(-L / 2, -B / 3); ctx.lineTo(-L / 2 - e.spd * 1.6, -B * 1.2); ctx.moveTo(-L / 2, B / 3); ctx.lineTo(-L / 2 - e.spd * 1.6, B * 1.2); ctx.stroke(); }
+    if (R.m3d && known && !e.dead) { ctx.restore(); continue; }   // 3D：舰体是立体模型（v3units.js），贴图里只留尾浪
     const real = realLook() && !ghost;   // 写实：美国海军灰舰体、深色甲板设备、细红边
     ctx.fillStyle = real ? rlLit(ctx, e.heading, L, B, lkPaint('#7f878d', 'e')) : rgba(COL.enemy, .22); ctx.strokeStyle = COL.enemy; ctx.lineWidth = px(real ? 1 : 1.3);
     ctx.beginPath(); ctx.moveTo(L / 2, 0); ctx.lineTo(L * .22, -B / 2); ctx.lineTo(-L / 2, -B / 2 * .9); ctx.lineTo(-L / 2, B / 2 * .9); ctx.lineTo(L * .22, B / 2); ctx.closePath(); ctx.fill(); ctx.stroke();

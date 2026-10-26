@@ -312,8 +312,8 @@ HOOK.step.push(rcStep);
 
 // —— 画面：侦察分队（眼睛标记 + 去观察点的虚线）、据点上的敌情标注（侦：敌≈N）——观战时双方都画，平时只画看得见的 ——
 function rcDraw() {
-  if (!S || !S.hq || (typeof V3 === 'object' && V3.drawing && false)) return;
-  const spec = S.role === 'spectate' || R.eye === 'all' || R.eye === 'both' || R.eye === 'e', ctx = R.ctx;
+  if (!S || !S.hq) return;
+  const spec = S.role === 'spectate' || R.eye === 'all' || R.eye === 'both' || R.eye === 'e', ctx = R.ctx, in3 = typeof V3 === 'object' && V3.drawing;   // 3D：只留去观察点的虚线，标记和字贴在地上是扁的
   ctx.save();
   for (const side of ['p', 'e']) {
     const H = S.hq[side];
@@ -324,6 +324,7 @@ function rcDraw() {
       if (!o || !inView(o.x, o.y, 300)) continue;
       const tx = P.st === 'back' ? null : P.op;
       if (tx) { ctx.strokeStyle = rgba(col, .55); ctx.lineWidth = px(1.2); ctx.setLineDash([px(4), px(4)]); ctx.beginPath(); ctx.moveTo(o.x, o.y); ctx.lineTo(tx.x, tx.y); ctx.stroke(); ctx.setLineDash([]); }
+      if (in3) continue;
       // 眼睛标记
       const x = o.x, y = o.y - px(16), w = px(8), h = px(4.5);
       ctx.fillStyle = rgba(COL.bg, .85); ctx.beginPath(); ctx.ellipse(x, y, w + px(2), h + px(2), 0, 0, 6.283); ctx.fill();
@@ -332,7 +333,8 @@ function rcDraw() {
       ctx.fillStyle = rgba(col, .95); ctx.beginPath(); ctx.arc(x, y, px(2), 0, 6.283); ctx.fill();
       if (R.zr > 1.6) { ctx.font = font(9); ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'; ctx.fillText(P.st === 'back' ? '侦察·撤回' : P.st === 'look' ? '侦察·观察' : '侦察', x, y - h - px(3)); }
     }
-    // 敌情标注：近 RC.stale 秒侦察到的据点
+    // 敌情标注：近 RC.stale 秒侦察到的据点（全图远看时字太小、挤在据点名下面，不画）
+    if (in3 || R.zr < 1.4) continue;
     ctx.font = font(9); ctx.textAlign = 'center'; ctx.textBaseline = 'top';
     for (const p of S.points) {
       const m = H.rc.pt[p.key];

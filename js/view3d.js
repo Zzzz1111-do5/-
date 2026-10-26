@@ -226,14 +226,45 @@ function v3H0(gx, gy) {
   return isWater(TER.type[i]) ? -3 : TER.elev[i] * V3_HZ + 2;
 }
 // 世界坐标 (x, y) 处的地面高度（双线性插值）
-// 飞机在 3D 里的绝对高度（模型、垂线、标识共用）：舰载机在甲板上（弹射、滑跑、拦阻）贴着飞行甲板，海上起降以甲板为基准；
-//   其余以地面 / 海面为基准——高度 alt 0.05 以下贴着基准面，往上每 1.0 约 230（直升机悬停 0.3 约离地 60）
+// 飞机在 3D 里的绝对高度（模型、标识、机上射出的弹共用）：舰载机在甲板上（弹射、滑跑、拦阻）贴着飞行甲板，海上起降以甲板为基准；
+//   高度 alt 0.05 以下贴着基准面（地面 / 甲板），往上每 1.0 约 230（直升机悬停 0.3 约离地 60）——见 v3AltZ：高空按海拔平飞，不随山起伏
 const V3_DECK = -2.6 + 7.4 + .55;
 function v3AirZ(o) {
-  const ph = o.phase || o.ph, g = Math.max(v3Ht(o.x, o.y), -2.6);
+  const ph = o.phase || o.ph;
   if (o.kind && (ph === 'cat' || ph === 'roll' || ph === 'trap')) return V3_DECK;
-  const base = o.kind && !o.land && !o.afPh && g < V3_DECK ? V3_DECK : g + 1.5;
-  return base + Math.max(0, clamp(o.alt ?? 1, 0, 1) - .05) * 230;
+  return v3AltZ(o.x, o.y, Math.max(0, clamp(o.alt ?? 1, 0, 1) - .05) * 230, o.kind && !o.land && !o.afPh ? V3_DECK - 1.5 : -2.6, 1.5);
+}
+// 离地高度 h → 绝对高度：贴地时按脚下实际地面（lo 是海上的最低基准：舰载机 = 飞行甲板，其余 = 海面），一离地参考面就换成平滑的地形包络
+//   （v3Env，不跟着每个小山包上下抖），越高越接近海拔基准——220 以上完全按海拔平飞；低空过山时沿包络平缓爬升、越过山脊再下来
+const sm01 = v => { v = clamp(v, 0, 1); return v * v * (3 - 2 * v); };
+function v3AltZ(x, y, h, lo, lift) {
+  const g = Math.max(v3Ht(x, y), lo);
+  if (!(h > 0)) return g + lift;
+  const F = Math.max(v3Env(x, y), g), gr = lerp(g, F, sm01(h / 20));
+  return Math.max(h + lift + lerp(gr, lo, sm01(h / 220)), g + lift + Math.min(h, 6));
+}
+// 地形包络：每 40 一个点，取 140 以内的最高地面，再在 80 内取平均——比实际地形略宽、略高，处处平缓
+const V3_ENV = 40;
+function v3EnvBuild() {
+  const nx = Math.ceil(W / V3_ENV) + 1, ny = Math.ceil(H / V3_ENV) + 1, A = new Float32Array(nx * ny), B = new Float32Array(nx * ny);
+  const hf = V3.hf, hn = V3.nx, hm = V3.ny, sp = CELL * V3_ST, r = Math.ceil(140 / sp);
+  for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
+    const ci = Math.round(i * V3_ENV / sp), cj = Math.round(j * V3_ENV / sp);
+    let m = -3;
+    for (let b = Math.max(0, cj - r); b <= Math.min(hm - 1, cj + r); b++) for (let a = Math.max(0, ci - r); a <= Math.min(hn - 1, ci + r); a++) if ((a - ci) ** 2 + (b - cj) ** 2 <= r * r && hf[b * hn + a] > m) m = hf[b * hn + a];
+    A[j * nx + i] = m;
+  }
+  for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
+    let s = 0, n = 0;
+    for (let b = j - 2; b <= j + 2; b++) for (let a = i - 2; a <= i + 2; a++) if (a >= 0 && b >= 0 && a < nx && b < ny && (a - i) ** 2 + (b - j) ** 2 <= 4) { s += A[b * nx + a]; n++; }
+    B[j * nx + i] = s / n;
+  }
+  V3.env = B; V3.enx = nx; V3.eny = ny;
+}
+function v3Env(x, y) {
+  if (!V3.env) return v3Ht(x, y);
+  const fx = clamp(x / V3_ENV, 0, V3.enx - 1.001), fy = clamp(y / V3_ENV, 0, V3.eny - 1.001), i = Math.floor(fx), j = Math.floor(fy), u = fx - i, v = fy - j, E = V3.env, n = V3.enx;
+  return lerp(lerp(E[j * n + i], E[j * n + i + 1], u), lerp(E[(j + 1) * n + i], E[(j + 1) * n + i + 1], u), v);
 }
 function v3Ht(x, y) {
   if (!V3.hf) return 0;
@@ -277,6 +308,7 @@ function v3Mesh() {
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, c);
   v3Cls();
   v3HtTex();
+  v3EnvBuild();
 }
 // 数码高程贴图（每个网格面一个像素，不插值）：R 高度台阶级数（每 15 一级）/ 16 · G 坦克上不去（山地，或高程超过 grid.js VEH_ELEV 的高地）· B 水面
 function v3HtTex() {
@@ -447,13 +479,15 @@ function v3Draw(now) {
   const K = { cv: R.cv, ctx: R.ctx, s: R.s, ox: R.ox, oy: R.oy, dpr: R.dpr, vw: CAM.vw, vh: CAM.vh, z: CAM.z, x: CAM.x, y: CAM.y };
   V3.drawing = true;
   R.fx3d = typeof v3Fx === 'function' && !(SETTINGS && SETTINGS.models3d === false);   // 弹道在 3D 里立体画（v3fx.js），贴图里不再画
+  // 有立体模型的东西（飞机、车辆、舰船、阵地，近看时的步兵）贴图里不再画平面图标——否则地面上多一层「倒影」
+  R.m3d = R.fx3d && typeof V3M === 'object' && !!V3M.ok; R.m3dNear = K.z / CAM.fit > 2.2;
   try {
     R.cv = top; R.ctx = top.getContext('2d'); R.dpr = 1;
     CAM.vw = tw; CAM.vh = th; CAM.z = R.s = sTop; CAM.x = box[0] + box[2] / 2; CAM.y = box[1] + box[3] / 2;
     R.ox = -box[0] * sTop; R.oy = -box[1] * sTop;
     drawScene(now);
   } finally {
-    V3.drawing = false; R.fx3d = false;
+    V3.drawing = false; R.fx3d = false; R.m3d = false;
     Object.assign(R, { cv: K.cv, ctx: K.ctx, s: K.s, ox: K.ox, oy: K.oy, dpr: K.dpr });
     Object.assign(CAM, { vw: K.vw, vh: K.vh, z: K.z, x: K.x, y: K.y });
   }
@@ -569,11 +603,11 @@ function v3Overlay(ctx, time) {
   }
   // 飞机：离地高度按 alt（0–1）放大，机头朝向按投影
   const air = (o, col) => {
+    if (typeof V3M === 'object' && V3M.ok && !(SETTINGS && SETTINGS.models3d === false)) return;   // 立体模型已经画了飞机：不再画到地面的垂线（看着假）
     const x = o.x, y = o.y, hd = o.heading || 0, Z = v3AirZ(o), g = v3Ht(x, y), z = Z - g, q = stem(x, y, z, col, .9);
     if (!q) return;
     const p2 = v3Proj(x + Math.cos(hd) * 12, y + Math.sin(hd) * 12, Z);
     const a = p2 ? Math.atan2(p2.y - q.y, p2.x - q.x) : 0;
-    if (typeof V3M === 'object' && V3M.ok && !(SETTINGS && SETTINGS.models3d === false)) return;   // 立体模型已经画了飞机，这里只留垂线
     ctx.save(); ctx.translate(q.x, q.y); ctx.rotate(a);
     ctx.fillStyle = rgba(col, q.al); ctx.beginPath(); ctx.moveTo(7, 0); ctx.lineTo(-5, -4.5); ctx.lineTo(-2.5, 0); ctx.lineTo(-5, 4.5); ctx.closePath(); ctx.fill();
     ctx.restore();
