@@ -11,7 +11,7 @@ globalThis.T101 = {
     Object.assign(A101_TAC, job.tac);   // 候选打法
     S.assets = S.assets || {}; S.assets.e101 = 1; S.e101 = null;
     const E1 = a101Ensure(); E1.n = 1; E1.next = job.drop;
-    T101.st = { held: 0, n: 0, seenP: {}, vP: {}, a: {}, av: {}, link: 0, delay: 0, fire: 0 };
+    T101.st = { held: 0, n: 0, seenP: {}, vP: {}, a: {}, av: {}, link: 0, delay: 0, fire: 0, drop: job.drop };
   },
   held() {
     let a = 0, b = 0;
@@ -42,6 +42,8 @@ globalThis.T101 = {
     while (S.t - t0 < T && !S.over) {
       for (let i = 0; i < 30; i++) { step(1 / 30); if (S.over) break; }
       if (++k % 5 === 0) { T101.st.held += T101.held(); T101.st.n++; T101.track(); }
+      const E1 = S.e101;   // 到了空降时刻还没走（守方在等总攻）：指定去受威胁最大的据点，保证每局都空降
+      if (E1 && E1.n > 0 && !E1.lift && S.t > T101.st.drop + 15 && !E1.force) { const p = a101Obj() || S.points.find(o => o.owner === 'p') || S.points[0]; E1.force = p && p.key; }
     }
     T101.track();
     const st = T101.st, lp = 1 - T101.left(st.seenP, st.vP).f, A = T101.left(st.a, st.av), v = S.v7s || {};
