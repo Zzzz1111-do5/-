@@ -93,6 +93,24 @@ function eaTurnTo(a, tx, ty, dt) {
 }
 
 // ———————————————— ② 堤丰导弹连 ————————————————
+// 车阵（二维 / 三维建模与导弹出口共用；局部坐标 x 向车头、y 向右，单位为世界长度）：4 套发射单元并排（间隔 9）——
+//   HEMTT M983A4 牵引车 + M870 拖车，拖车上卧着 Mk 41 四联装发射箱；发射前箱子绕拖车尾部的铰点起竖到垂直（up 秒），
+//   箱顶 2×2 四个发射单元格逐个开盖点火，打完再竖 hold 秒、down 秒放平。一次齐射 4 枚 = 一套发射单元打空（16 枚 = 4 套）；
+//   连部（营指挥车 BOC）与发电车在车阵后方
+const TY_RIG = { n: 4, gap: 9, piv: -12.6, L: 13, T: 4.4, up: 3, hold: 5, down: 3 };
+const tyA = e => e.th ?? Math.PI / 2;
+const tySm = v => { v = clamp(v, 0, 1); return v * v * (3 - 2 * v); };
+// 第 k 套发射单元第 i 个单元格（箱子竖直时箱顶）的世界坐标
+function tyCell(e, k, i) {
+  const a = tyA(e), u = TY_RIG.piv - TY_RIG.T * (i < 2 ? .25 : .75), v = (k - (TY_RIG.n - 1) / 2) * TY_RIG.gap + (i % 2 ? .25 : -.25) * TY_RIG.T;
+  return { x: e.x + u * Math.cos(a) - v * Math.sin(a), y: e.y + u * Math.sin(a) + v * Math.cos(a) };
+}
+// 第 k 套发射单元的起竖角：0 卧倒 … π/2 竖直
+function tyErect(e, k) {
+  if (e.tyL !== k || e.fireT == null) return 0;
+  const R0 = TY_RIG, ft = S.t - e.fireT;
+  return Math.PI / 2 * (ft < 0 ? 0 : ft < R0.up ? tySm(ft / R0.up) : ft < R0.up + R0.hold ? 1 : tySm(1 - (ft - R0.up - R0.hold) / R0.down));
+}
 function asTyphon() {
   const P = asPicture(), seenNow = asSeaAll().filter(o => spotted(o.x, o.y));
   const known = [...P, ...seenNow.filter(o => !P.some(p => p.k === o.k && p.id === o.id))];
@@ -101,12 +119,13 @@ function asTyphon() {
     const inb = o => S.missiles.filter(m => m.kind === 'asm' && !m.done && m.tgt && m.tgt.k === o.k && m.tgt.id === o.id).length;
     const T = known.filter(o => o.k === 'cv' || o.k === 'dd' || (o.k === 'ship' && o.v >= 7)).sort((a, b) => b.v - a.v).find(o => inb(o) < 4);
     if (!T) continue;
-    const n = Math.min(AS.ty.salvo, e.n ?? AS.ty.n);
+    const n = Math.min(AS.ty.salvo, e.n ?? AS.ty.n), k = Math.floor((AS.ty.n - (e.n ?? AS.ty.n)) / AS.ty.salvo) % TY_RIG.n;   // 轮到第 k 套发射单元
     for (let i = 0; i < n; i++) {
-      const m = msLaunch('asm', 'e', e.x + gauss() * 5, e.y + gauss() * 5, { x: T.x, y: T.y }, { tgt: { k: T.k, id: T.id }, delay: i * AS.ty.every, src: e.id, spd: AS.ty.spd });
+      const c = tyCell(e, k, i);   // 从竖起的发射箱顶上的单元格垂直射出
+      const m = msLaunch('asm', 'e', c.x, c.y, { x: T.x, y: T.y }, { tgt: { k: T.k, id: T.id }, delay: TY_RIG.up + i * AS.ty.every, src: e.id, spd: AS.ty.spd });
       Object.assign(m, { nm: '战斧 Block V 海上打击型', life: 60, dmg: AS.ty.dmg });
     }
-    e.n = (e.n ?? AS.ty.n) - n; e.tyT = S.t + AS.ty.gap; e.fireT = S.t; e.kx = e.x; e.ky = e.y;   // 发射即暴露
+    e.n = (e.n ?? AS.ty.n) - n; e.tyT = S.t + AS.ty.gap; e.fireT = S.t; e.tyL = k; e.kx = e.x; e.ky = e.y;   // 发射即暴露
     if (typeof msStat === 'function') msStat('typhon', n);
     log(`导弹预警：${n} 枚战斧海上打击型巡航导弹来袭，目标${T.nm}`, 'bad', 'tyw', 8, { x: T.x, y: T.y });
     if (typeof chatSay === 'function') chatSay('e', `命令：「堤丰」导弹连齐射 ${n} 枚战斧 Block V，打击${T.nm}。`, { kind: 'order', at: { x: T.x, y: T.y }, lv: 1 });

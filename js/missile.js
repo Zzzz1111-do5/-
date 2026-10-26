@@ -290,6 +290,25 @@ function msDefend(m) {
   return false;
 }
 
+// NMESIS 车阵（二维 / 三维建模与导弹出口共用；局部坐标 x 向车头、y 向右）：2 辆 ROGUE-Fires 无人发射车（JLTV 底盘、没有驾驶室）并排，
+//   各载 2 联装 NSM 发射箱（卧放时箱口朝车头）；发射前转台转向目标、发射箱以尾部为轴仰起 35°（up 秒），两枚间隔 0.7 秒射出，
+//   一次齐射 2 枚 = 一辆车打空（4 枚 = 2 辆）；后方一辆有人驾驶的 JLTV 遥控指挥车
+const ASC_RIG = { n: 2, gap: 12, piv: -5.2, L: 8.6, el: .6, up: 2, hold: 3, down: 2 };
+const ascA = e => e.th ?? Math.PI / 2;
+// 第 k 辆发射车此刻的仰角与转台转角（相对车头）；full：完全展开时
+function ascPose(e, k, full) {
+  if (!full && (e.ascL !== k || e.fireT == null)) return { el: 0, tr: 0 };
+  const R0 = ASC_RIG, ft = full ? R0.up : S.t - e.fireT, sm = v => { v = clamp(v, 0, 1); return v * v * (3 - 2 * v); };
+  const f = ft < 0 ? 0 : ft < R0.up ? sm(ft / R0.up) : ft < R0.up + R0.hold ? 1 : sm(1 - (ft - R0.up - R0.hold) / R0.down);
+  const az = e.ascAz ?? ascA(e), rel = Math.atan2(Math.sin(az - ascA(e)), Math.cos(az - ascA(e)));
+  return { el: R0.el * f, tr: rel * Math.min(1, f * 1.6) };
+}
+// 第 k 辆车第 i 个发射箱口（展开到位时）的世界坐标
+function ascMuzzle(e, k, i) {
+  const a = ascA(e), P = ascPose(e, k, true), v0 = (k - (ASC_RIG.n - 1) / 2) * ASC_RIG.gap, b = a + P.tr, l = ASC_RIG.L * Math.cos(P.el), o = (i ? .75 : -.75);
+  const px0 = e.x + ASC_RIG.piv * Math.cos(a) - v0 * Math.sin(a), py0 = e.y + ASC_RIG.piv * Math.sin(a) + v0 * Math.cos(a);
+  return { x: px0 + Math.cos(b) * l - Math.sin(b) * o, y: py0 + Math.sin(b) * l + Math.cos(b) * o };
+}
 // —— 守方岸舰导弹连：两枚一组齐射，间隔 45 秒，射程 1600；只打海上航行 / 待命的舰船（已抢滩的不打） ——
 function msCommandE(dt) {
   if (!S || S.phase !== 'battle') return;
@@ -311,8 +330,9 @@ function msCommandE(dt) {
       else if (!best && typeof cvAll === 'function') cvAll().forEach((c, h) => { if (!best && c.hp > 0 && dist(e.x, e.y, c.x, c.y) < 1600 && seen(c.x, c.y)) { bv = 5; best = { k: 'cv', id: cvHome(c) || h, x: c.x, y: c.y, nm: c.name || '航母' }; } });
     }
     if (!best) continue;
-    const n = Math.min(2, e.n ?? 4), d = dist(e.x, e.y, best.x, best.y);
-    for (let i = 0; i < n; i++) msLaunch('asm', 'e', e.x + gauss() * 4, e.y + gauss() * 4, { x: best.x, y: best.y }, { tgt: { k: best.k, id: best.id }, delay: i * .7, src: e.id, spd: 260 });
+    const n = Math.min(2, e.n ?? 4), d = dist(e.x, e.y, best.x, best.y), k = Math.floor((4 - (e.n ?? 4)) / 2) % ASC_RIG.n;   // 轮到第 k 辆发射车
+    e.ascL = k; e.ascAz = Math.atan2(best.y - e.y, best.x - e.x);
+    for (let i = 0; i < n; i++) { const c = ascMuzzle(e, k, i); msLaunch('asm', 'e', c.x, c.y, { x: best.x, y: best.y }, { tgt: { k: best.k, id: best.id }, delay: ASC_RIG.up + i * .7, src: e.id, spd: 260 }); }
     e.n = (e.n ?? 4) - n; e.ascT = S.t + 45; e.fireT = S.t; e.kx = e.x; e.ky = e.y;   // 发射即暴露
     msStat('ascm', n);
     const sec = Math.round(d / 260);
