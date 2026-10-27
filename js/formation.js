@@ -23,7 +23,8 @@ const teamsOf = u => UNIT_TEAMS.get(u.id) || [];
 const unitOf = q => UNIT_MAP.get(q.u);
 const angDiff = (a, b) => { const d = Math.abs(a - b) % 6.2832; return d > 3.1416 ? 6.2832 - d : d; };
 // 朝向：刚开过火（2.5 秒内）就面朝所打的目标——边走边打、后撤时也面朝敌人；否则行进中朝前进方向，停下朝排正面
-const faceOf = q => q.fx != null && S.t - (q.fT ?? -9) < 2.5 ? Math.atan2(q.fy - q.y, q.fx - q.x) : S.t - q.movedT < .5 && q.heading != null ? q.heading : unitOf(q) ? unitOf(q).face : SOUTH;
+// 朝向：刚开过火朝着目标；正在赶路（真的在走，不是到位后的几米小修正——q.hT 只在离落脚点 8 米以上时更新）朝着行进方向；否则按连队朝向
+const faceOf = q => q.fx != null && S.t - (q.fT ?? -9) < 2.5 ? Math.atan2(q.fy - q.y, q.fx - q.x) : S.t - (q.hT ?? q.movedT ?? -9) < .8 && q.heading != null ? q.heading : unitOf(q) ? unitOf(q).face : SOUTH;
 const unitName = u => u.side === 'p' ? (u.kind === 'eng' ? `${u.ship || ''}工兵` : /队\d*$/.test(u.ship || '') ? u.ship : `${u.ship || '增援'}排`) : '敌军';   // 「蛟龙突击队」这类本身是队名的不再加「排」
 
 function defWidth(form, n) { return form === 'loose' ? Math.max(20, n * 34) : form === 'wedge' ? 28 + (n > 3 ? 84 : 0) : Math.max(16, n * 20); }

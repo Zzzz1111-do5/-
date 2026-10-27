@@ -261,7 +261,8 @@ function moveTeam(q, dt, mul) {
   }
   const bo = bldOut(nx, ny, .6);   // 避让推进了房子：贴墙走
   if (bo && passInf(bo[0], bo[1])) [nx, ny] = bo;
-  q.x = nx; q.y = ny; q.movedT = S.t; q.heading = Math.atan2(ty - q.y, tx - q.x);
+  q.x = nx; q.y = ny; q.movedT = S.t;
+  if (dd > 8 || q.heading == null) { q.heading = Math.atan2(ty - q.y, tx - q.x); q.hT = S.t; }   // 离落脚点几米内的小幅修正不转身（否则槽位一挪，三个人就绕着小组中心来回甩）
   return false;
 }
 

@@ -122,12 +122,13 @@ function enemyMark(ctx, kind, x, y) {
 
 // 画面上的小组朝向：向 faceOf 平滑转过去（每帧最多约 0.2 弧度），不随寻路的每一步左右乱转
 const TFACE = new WeakMap();
+// 画面朝向：按真实时间限制转身速度（每秒约 3 弧度），与帧率无关；一次只在同一帧算一遍（2D、3D、贴图多次调用不重复转）
 function faceDraw(q) {
-  const f = faceOf(q), o = TFACE.get(q);
-  if (o == null || !isFinite(o)) { TFACE.set(q, f); return f; }
-  const d = Math.atan2(Math.sin(f - o), Math.cos(f - o)), n = o + clamp(d, -.2, .2);
-  TFACE.set(q, n);
-  return n;
+  const f = faceOf(q), o = TFACE.get(q), now = typeof performance === 'object' ? performance.now() / 1000 : 0;
+  if (!o || !isFinite(o.a)) { TFACE.set(q, { a: f, t: now }); return f; }
+  const dt = clamp(now - o.t, 0, .1);
+  if (dt > 0) { const d = Math.atan2(Math.sin(f - o.a), Math.cos(f - o.a)); o.a += clamp(d, -3 * dt, 3 * dt); o.t = now; }
+  return o.a;
 }
 // 小组本体：远看（每格不足 10px）为楔形三点，点与间距按屏幕像素（随缩放略增），不会糊成一团；近看为世界尺寸的单兵小人
 function drawTeamBody(ctx, q, f, col) {
