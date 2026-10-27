@@ -10,8 +10,8 @@ const POOL = pool(Math.max(1, Math.min(4, require('os').cpus().length)));   // ä
 const ROOT = path.resolve(__dirname, '..');
 
 const SPACE = {
-  p: { ech: [0, .15, .25, .33], adv: [1.2, 1.5, 2, 2.5], prep: [0, 8, 15, 25] },
-  e: { res: [0, .15, .25, .35], ctr: [1.5, 2, 2.5, 3], prep: [0, 8, 15], commit: [1.2, 1.5, 2], det: [15, 30, 45] }
+  p: { ech: [0, .15, .25, .33], adv: [1.2, 1.5, 2, 2.5], prep: [0, 6, 12, 20] },
+  e: { res: [0, .15, .25, .35], ctr: [1.5, 2, 2.5, 3], prep: [0, 6, 12, 20], commit: [1.2, 1.5, 2], det: [15, 30, 45] }
 };
 const DEF = { p: { ech: .25, adv: 1.5, prep: 12 }, e: { res: .25, ctr: 2, prep: 12, commit: 1.5, det: 30 } };
 const T = +(process.env.T || 480);

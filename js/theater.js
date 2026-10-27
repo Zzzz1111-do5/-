@@ -679,7 +679,7 @@ function thResE(T, cols, dc) {
   const lost = S.points.filter(p => p.owner === 'p' || p.prog > .25).sort((a, b) => dist(a.x, a.y, best.x, best.y) - dist(b.x, b.y, best.x, best.y))[0];
   const tgt = lost && dist(lost.x, lost.y, best.x, best.y) < 500 ? { x: lost.x, y: lost.y, key: lost.key, nm: lost.name } : { x: best.x, y: best.y, key: null, nm: typeof cmdWhere === 'function' ? cmdWhere(best.x, best.y) : gridRef(best.x, best.y) };
   for (const R of rs) { R.rsv = false; R.aiSp = true; thSend(R, { v: 'spear', x: Math.round(tgt.x), y: Math.round(tgt.y), key: tgt.key, src: 'ai' }, TH.dly.div + TH.dly.reg); }
-  T.rsp = { ids: rs.map(R => R.id), key: tgt.key, t: S.t };
+  T.rsp = { ids: rs.map(R => R.id), key: tgt.key, x: Math.round(tgt.x), y: Math.round(tgt.y), t: S.t };
   if (dc.prep > 0) S.th.e.focus = { x: Math.round(tgt.x), y: Math.round(tgt.y), r: 140, until: S.t + dc.prep + 15 };
   thStat(crisis && !(main && r >= dc.ctr) ? 'thCommitCrisis' : 'thCommit');
   if (typeof chatSay === 'function') chatSay('e', crisis && !(main && r >= dc.ctr) ? `一线吃紧（当面之敌约 ${Math.round(foeAll)}，我约 ${Math.round(ownAll)}），预备队${rs.map(R => R.name).join('、')}投入，向${tgt.nm}反冲击。` : `判明敌主攻在${tgt.nm}一带（约 ${Math.round(best.foe)} 人），预备队${rs.map(R => R.name).join('、')}集中反冲击，我约 ${r.toFixed(1)} 倍于敌，炮兵先打 ${dc.prep} 秒。`, { kind: 'plan', at: tgt, lv: 0 });

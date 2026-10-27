@@ -78,6 +78,14 @@ globalThis.DOCT = {
       }
     }
     D.imp = D.imp.filter(o => S.t - o.t < 90);
+    // 守方预备队投入时打的是不是敌主攻：目标 400 以内的敌登陆兵力占全部已上陆敌兵力的比例（投入那一刻量一次）
+    const sp = S.th && S.th.e && S.th.e.rsp;
+    if (sp && sp.x != null && D.rspT !== sp.t) {
+      D.rspT = sp.t;
+      let a = 0, b = 0;
+      for (const o of DOCT.ground()) if (o.side === 'p') { b += o.w; if (dist(o.x, o.y, sp.x, sp.y) < 400) a += o.w; }
+      if (b > 0) DOCT.add('aim_e', a / b);
+    }
   },
   sample5() {
     // 步坦协同：地面上的坦克 80 以内有本方步兵
@@ -120,7 +128,7 @@ globalThis.DOCT = {
         if (v === 'reserve' || v === 'follow') res += o.w;
       }
       DOCT.add('depth_e', deep / tm);
-      if (since < 240) DOCT.add('res_e', res / tm);
+      if (since < 60) DOCT.add('res_e', res / tm);
       if (D.resCommit == null && since > 20 && res / tm < .05) D.resCommit = Math.round(since);
     }
     // 防空伞：地面兵力在本方防空 350 以内的占比
