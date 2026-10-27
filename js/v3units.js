@@ -539,7 +539,7 @@ function v3mEShip(cls, L, B) {
 //   舰岛（右舷中后部）：底层甲板室、尾部烟囱（两个排烟口）、四面有源相控阵层、驾驶室（玻璃窗带）、八角形一体化桅杆与顶部天线罩
 //   甲板：三条电磁弹射器滑轨、斜角着舰区边线与中线、三道拦阻索、安全线、舰首舰尾舷号；四角近防炮 / 红旗-10 舷台、左舷后部着舰指挥官平台
 //   升降机平台、偏流板另外实例化（会动）；075 型两栖攻击舰（lhd）用直通甲板、舰岛偏后、甲板标直升机起降点
-const V3_CVB = [[150, 0], [138, 8], [118, 14], [90, 18], [50, 20], [-80, 20], [-130, 19], [-150, 17], [-155, 12], [-155, -12], [-150, -17], [-130, -19], [-80, -20], [50, -20], [90, -18], [118, -14], [138, -8]];
+const V3_CVB = [[154, 0], [140, 7], [112, 14], [80, 18.5], [40, 20], [-80, 20], [-140, 19], [-155, 16.5], [-155, -16.5], [-140, -19], [-80, -20], [40, -20], [80, -18.5], [112, -14], [140, -7]];   // 水线：飞剪型舰首、方尾
 const V3_ZH = 12;   // 舰体外飘到这个高度，再往上是飞行甲板（含舷台）
 // 七段式数字（舷号）：P(x, y) 把字格坐标（x 0–1 宽、y 0–1 高）换成 3D 点
 function v3mDigits(M, str, P, s = 1) {
@@ -549,8 +549,14 @@ function v3mDigits(M, str, P, s = 1) {
 function v3mCarrier(lhd) {
   const M = mbNew(), C = typeof CVG === 'object' ? CVG : null, D = C ? C.deck : [[158, 0], [-158, 30], [-158, -30]], zh = V3_ZH, zd = C ? C.zd : 17;
   // 舰体：水线轮廓 → 外飘的上沿（逐点连成侧面），上面压着飞行甲板
-  const T = V3_CVB.map(([u, v]) => [u + (u > 100 ? 6 : u < -140 ? -2 : 0), v * 1.35]), ctr = [0, 0, zh / 2];
-  for (let i = 0; i < V3_CVB.length; i++) { const j = (i + 1) % V3_CVB.length; mbQuad(M, [V3_CVB[i][0], V3_CVB[i][1], 0], [V3_CVB[j][0], V3_CVB[j][1], 0], [T[j][0], T[j][1], zh], [T[i][0], T[i][1], zh], .74, ctr); }
+  // 两段折面：水线 → 舷侧折角线（硬舭，稍外飘）→ 上沿大幅外飘接飞行甲板；折角线描一道亮边，舷侧不是圆滑的一整块
+  const T = V3_CVB.map(([u, v]) => [u + (u > 100 ? 6 : u < -140 ? -2 : 0), v * 1.35]), K = V3_CVB.map(([u, v]) => [u + (u > 100 ? 2.5 : u < -140 ? -1 : 0), v * 1.1]), zk = zh * .55, ctr = [0, 0, zh / 2];
+  for (let i = 0; i < V3_CVB.length; i++) {
+    const j = (i + 1) % V3_CVB.length;
+    mbQuad(M, [V3_CVB[i][0], V3_CVB[i][1], 0], [V3_CVB[j][0], V3_CVB[j][1], 0], [K[j][0], K[j][1], zk], [K[i][0], K[i][1], zk], .7, ctr);
+    mbQuad(M, [K[i][0], K[i][1], zk], [K[j][0], K[j][1], zk], [T[j][0], T[j][1], zh], [T[i][0], T[i][1], zh], .78, ctr);
+  }
+  mbLoop(M, K, zk + .02, .55);
   mbPrism(M, D, zh, zd, .7, { top: .5, bottom: true });   // 飞行甲板与舷台
   mbLine(M, [-156, -14, zh - 1], [-156, 14, zh - 1], .5);   // 舰尾甲板（飞行甲板下的系泊甲板）
   mbBox(M, -157, -153, -13, 13, zh - 4, zh, .15);
@@ -579,8 +585,8 @@ function v3mCarrier(lhd) {
     v3mDeck(M, u0 + 16, u1 - 4, v0 + 1.4, v1 - 1.4, zd + 12, zd + 15.5, .95, true);   // 驾驶室（玻璃窗带）
     mbBox(M, u0 + 17, u0 + 30, v0 + 1.3, v0 + 1.45, zd + 13.1, zd + 14.5, -1);   // 舰岛朝甲板一侧：飞行指挥所窗
     const mu = u0 + 23, mz = zd + 15.5;
-    mbPrism(M, mbCirc(mu, vm, 3, 8).map(([x, y]) => [x, y]), mz, mz + 11, .9, { taper: 1.3 });   // 一体化桅杆（八角柱，向上收窄）
-    mbPrism(M, mbCirc(mu, vm, 1.4, 12), mz + 11, mz + 13.2, 1, { taper: .9 });   // 顶部天线罩
+    mbPrism(M, [[mu + 3.4, vm], [mu + 1.6, vm - 2.8], [mu - 2.6, vm - 2.8], [mu - 3.4, vm], [mu - 2.6, vm + 2.8], [mu + 1.6, vm + 2.8]], mz, mz + 11, .9, { taper: 1.3 });   // 一体化桅杆（前尖的六棱台，平面阵面，向上收窄）
+    mbBox(M, mu - 1.5, mu + 1.5, vm - 1.3, vm + 1.3, mz + 11, mz + 13.2, 1, { taper: .5 });   // 顶部方形天线罩
     mbLine(M, [mu, vm, mz + 13.2], [mu, vm, mz + 17.5], .9); mbLine(M, [mu, vm - 3.6, mz + 8.5], [mu, vm + 3.6, mz + 8.5], .8);   // 天线、横桁
     for (const a of [.39, 1.96, 3.53, 5.1]) { const x = mu + Math.cos(a) * 2.25, y = vm + Math.sin(a) * 2.25; mbLine(M, [x, y, mz + 2], [x, y, mz + 7], .6); }   // 桅杆面上的小型阵面
   }
@@ -640,8 +646,8 @@ const V3_AIRZ = .25;
 const V3_GEAR = 1.9;   // 放下起落架时机身中心离地的高度（机型单位）：停在甲板 / 地面上的飞机按它抬高
 const V3_NUP = { a10: .95, ah64: .25, h6k: 0, z10: .7, heli: .7, uh60: .85, j15: -.05, kj600: -.6 };   // 「up」短舱的中心高度（相对机身中心）
 function v3AirSec(D) {   // 截面：上半 kt、下半 kb（乘半宽），facet 棱线六边形
-  const facet = !!(D.glass === 'gold' || D.flat);
-  return D.flat ? { kt: .38, kb: .26, facet } : facet ? { kt: .55, kb: .4, facet } : D.heli ? { kt: .95, kb: .8, facet } : D.hi || D.tt ? { kt: .9, kb: .85, facet } : { kt: .72, kb: .6, facet };
+  const facet = !!(D.glass === 'gold' || D.flat || D.heli);
+  return D.flat ? { kt: .38, kb: .26, facet } : D.heli ? { kt: .95, kb: .8, facet, sh: 'heli' } : facet ? { kt: .55, kb: .4, facet } : D.hi || D.tt ? { kt: .9, kb: .85, facet } : { kt: .72, kb: .6, facet };
 }
 function mbTriN(M, a, b, c, na, nb, nc, s, e = [0, 0, 0]) {   // 每个顶点各自的法线（平滑明暗）
   const k = [e[0] ? 0 : 1, e[1] ? 0 : 1, e[2] ? 0 : 1];
@@ -649,8 +655,8 @@ function mbTriN(M, a, b, c, na, nb, nc, s, e = [0, 0, 0]) {   // 每个顶点各
 }
 function v3mLoft(M, prof, sec, s) {
   const zc = V3_AIRZ, P = prof.map(([x, w], i) => [x, Math.max(w, i === 0 ? .05 : .08)]), n = P.length;
-  const S6 = [[1, 0], [.55, 1], [-.55, 1], [-1, 0], [-.6, -1], [.6, -1]], SE = Array.from({ length: 14 }, (_, i) => { const a = i / 14 * 6.2832; return [Math.cos(a), Math.sin(a)]; });
-  const SEC = sec.facet ? S6 : SE, kz = cz => cz > 0 ? sec.kt : sec.kb;
+  const S6 = [[1, 0], [.55, 1], [-.55, 1], [-1, 0], [-.6, -1], [.6, -1]], S8 = [[1, -.15], [1, .42], [.6, 1], [-.6, 1], [-1, .42], [-1, -.15], [-.62, -1], [.62, -1]], SE = Array.from({ length: 14 }, (_, i) => { const a = i / 14 * 6.2832; return [Math.cos(a), Math.sin(a)]; });
+  const SEC = sec.sh === 'heli' ? S8 : sec.facet ? S6 : SE, kz = cz => cz > 0 ? sec.kt : sec.kb;   // 直升机：竖直平侧板、斜切的肩部与机腹（武装直升机的多面体机身），不是圆筒
   const ring = (x, w) => SEC.map(([cy, cz]) => [x, w * cy, zc + w * cz * kz(cz)]);
   const slope = i => { const a = P[Math.max(0, i - 1)], b = P[Math.min(n - 1, i + 1)]; return (b[1] - a[1]) / ((b[0] - a[0]) || -1); };
   const nrm = (i, k) => { const [cy, cz] = SEC[k], v = [-slope(i) * .7, cy, cz / Math.max(.3, kz(cz))], l = Math.hypot(...v) || 1; return [v[0] / l, v[1] / l, v[2] / l]; };
@@ -699,8 +705,9 @@ function v3mAir(key, fold, opt = {}) {
   // 短舱：翼下吊舱 / 机身旁（A-10 尾部、阿帕奇两侧、轰-6K 翼根、直升机顶部、歼-15 两台发动机）
   for (const [x0, x1, y, r, k] of D.nac || []) for (const sg of [1, -1]) {
     const z = k === 'dn' ? zw - r * .95 : zc + (V3_NUP[key] ?? .3);
-    mbTube(M, [x0, y * sg, z], [x1, y * sg, z], r * .9, r * .78, 12, .88);
-    mbTube(M, [x0 + .05, y * sg, z], [x0 - .15, y * sg, z], r * .62, r * .62, 10, .2);   // 进气口（暗）
+    const ns = D.heli ? 6 : 12;   // 直升机发动机舱：六棱的整流罩（有棱有角）
+    mbTube(M, [x0, y * sg, z], [x1, y * sg, z], r * .9, r * .78, ns, .88);
+    mbTube(M, [x0 + .05, y * sg, z], [x0 - .15, y * sg, z], r * .62, r * .62, D.heli ? 6 : 10, .2);   // 进气口（暗）
     if (k === 'dn') mbBox(M, x0 - (x0 - x1) * .65, x1 + .4, y * sg - .1, y * sg + .1, z + r * .7, zw, .7);   // 吊挂
   }
   // 平尾 / T 形尾、垂尾
@@ -721,7 +728,7 @@ function v3mAir(key, fold, opt = {}) {
   // 座舱：气泡（玻璃）、串列双座、大飞机风挡
   if (D.cp) {
     const [x0, x1, w, kd] = D.cp, cx = (x0 + x1) / 2, rx = (x1 - x0) / 2, zb = topAt(cx);
-    const dome = (cx, rx, ry, z0, h, T = M) => mbPrism(T, mbCirc(0, 0, 1, 14).map(([a, b]) => [cx + a * rx, b * ry]), z0, z0 + h, -.85, { taper: Math.min(rx, ry) * .7 });
+    const dome = (cx, rx, ry, z0, h, T = M) => mbPrism(T, (D.heli ? [[1, 0], [.45, .8], [-.55, 1], [-1, .7], [-1, -.7], [-.55, -1], [.45, -.8]] : mbCirc(0, 0, 1, 14)).map(([a, b]) => [cx + a * rx, b * ry]), z0, z0 + h, -.85, { taper: Math.min(rx, ry) * (D.heli ? .55 : .7) });   // 直升机：平板玻璃拼成的多面座舱盖
     if (kd === 'tandem') { dome(x1 - rx * .5, rx * .48, w * .85, zb - .15, w * .8); dome(x0 + rx * .5, rx * .5, w, zb - .05, w * .95); }
     else if (kd === 'win') mbPrism(M, [[x1, -w * .55], [x1 + .25, 0], [x1, w * .55], [x0, w], [x0, -w]], zb - top * .3, zb - top * .05, -.85, { taper: .15 });
     else if ((opt.cpo || 0) > .02) {   // 座舱盖打开：后铰链往上掀，露出座舱里的弹射座椅
