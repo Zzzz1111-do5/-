@@ -146,6 +146,13 @@ function findTarget(q, range) {
     const d = dist(q.x, q.y, v.x, v.y), w = d * (modOf(q).at ? .7 : 1.5);
     if (w < bd && canSee(q.side, v.x, v.y, d)) { bd = w; best = { t: v, d, k: 'veh' }; }
   }
+  // 机场上停放的敌机（afgnd.js）：不还手，同样远时先打会还手的
+  if (typeof afgList === 'function') for (const a of afgList(q.side)) {
+    const dx = a.x - qx, dy = a.y - qy, lim = bd / 1.25;
+    if (dx >= lim || dx <= -lim || dy >= lim || dy <= -lim) continue;
+    const d = dist(qx, qy, a.x, a.y);
+    if (d * 1.25 < bd && canSee(q.side, a.x, a.y, d)) { bd = d * 1.25; best = { t: a, d, k: 'ac' }; }
+  }
   if (q.side === 'p') for (const e of S.enemies) if (!e.dead) {
     const dx = e.x - qx, dy = e.y - qy;
     if (dx >= bd || dx <= -bd || dy >= bd || dy <= -bd) continue;
@@ -186,6 +193,7 @@ function teamFire(q, tg) {
       }
     }
   } else if (tg.k === 'veh') vehSmallArms(t, q, acc);
+  else if (tg.k === 'ac') { if (typeof afgHit === 'function') afgHit(t, q, acc, tg.d); }   // 机场上停放的飞机（afgnd.js）
   else for (const m of q.men) {
     if (m === 'eng') continue;
     t.sup = Math.min(100, (t.sup || 0) + (m === 'mg' ? 9 : 5));

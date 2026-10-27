@@ -805,13 +805,7 @@ HOOK.impact.push(function abImpact(x, y, R, pw, side) {
   if (b.rc.length > 12) b.rc.shift();
   abStat('abRwHit');
   log('夺取的机场跑道中弹，暂停起降，工兵抢修', 'warn', 'abrw', 15, { x, y });
-  // 停在机位上的我方飞机被炸
-  if (S.air) for (const [k, w] of abParked().entries()) {   // 机堡里的挡得住大部分破片
-    const st = EA_STAND[k];
-    if (!st) break;
-    const [px, py] = eaW(b, st[0], st[1]), has = st[3] === 'has';
-    if (dist(px, py, x, y) < (has ? R * .35 + 3 : R * .6 + 8) && Math.random() < (has ? .3 : .5)) { w.state = 'lost'; log(`停在机场的${airName(w.type, w.v)}被炮火击毁`, 'bad', null, 0, { x: px, y: py }); }
-  }
+  // 停在机位上的我方飞机被炸：afgnd.js afgImpact（机位在场区里，不在跑道上）
 });
 // 停在夺取的机场上的我方飞机（按机位顺序）
 const abParked = () => S.air ? S.air.wing.filter(w => w.af && (w.state === 'deck' || w.state === 'rearm')) : [];

@@ -1092,6 +1092,7 @@ function eaImpact(x, y, R, pw, side) {
       const d = Math.hypot(u - P.u, v - P.v), has = P.k === 'has';
       if (d < (has ? R * .35 + 3 : R * .6 + 8) && Math.random() < (has ? .3 : d < 12 ? .85 : .4)) {
         P.w.state = 'lost';
+        if (typeof afgWreck === 'function') afgWreck(b, P, eaSil(P.w.type), P.w.type === 'heli' ? 13 : P.w.type === 'f22' ? 15 : 14);   // 机位上留下残骸（afgnd.js）
         if (eaBaseSeen(b)) log(`敌${EA_SPEC[P.w.type].name}在机位上被炸毁`, 'good', null, 0, { x, y });
       }
     }
