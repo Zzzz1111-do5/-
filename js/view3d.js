@@ -589,12 +589,20 @@ function v3FcInit() {
   V3.fc = v3FcFromOrbit(CAM.x, CAM.y, tz, D, th, ps);
 }
 const v3Gnd = (x, y) => Math.max(v3Ht(clamp(x, 0, W - 1), clamp(y, 0, H - 1)), -2.6, typeof cvCamZ === 'function' ? cvCamZ(x, y) ?? -99 : -99);
+// 镜头离最近的东西有多远：脚下的地面 / 甲板，空中的飞机、直升机（近裁剪面按它定）
+function v3NearGap(F) {
+  let g = Math.max(.5, F.z - v3Gnd(F.x, F.y));
+  const near = o => { if (!o || o.dead || !isFinite(o.x)) return; const d = Math.hypot(o.x - F.x, o.y - F.y); if (d < g + 40) g = Math.min(g, Math.max(.5, Math.hypot(d, v3AirZ(o) - F.z) - 20)); };   // 减去半个翼展
+  for (const p of (S && S.planes) || []) near(p);
+  if (S && S.eair) for (const a of S.eair.fly || []) near(a);
+  return g;
+}
 function v3FcCamera() {
   const F = V3.fc || (v3FcInit(), V3.fc), cp = Math.cos(F.pitch), f = [cp * Math.cos(F.yaw), -cp * Math.sin(F.yaw), Math.sin(F.pitch)];   // 视线方向（GL 坐标）
   const E = [F.x, -F.y, F.z], z = [-f[0], -f[1], -f[2]], x = v3Norm(v3Cross([0, 0, 1], z)), y = v3Cross(z, x);
   const view = new Float32Array([x[0], y[0], z[0], 0, x[1], y[1], z[1], 0, x[2], y[2], z[2], 0, -v3Dot(x, E), -v3Dot(y, E), -v3Dot(z, E), 1]);
   const D = clamp(F.d || 600, 80, 5000), rd = v3RD(), fog = v3Fog(D, rd);
-  const asp = CAM.vw / Math.max(1, CAM.vh), fo = 1 / Math.tan(V3_FOV / 2), n = clamp(D * .012, .8, 25), fa = Math.max(D * 9, fog[1] * 1.5), nf = 1 / (n - fa);
+  const asp = CAM.vw / Math.max(1, CAM.vh), fo = 1 / Math.tan(V3_FOV / 2), n = clamp(Math.min(D * .012, v3NearGap(F) * .45), .3, 25), fa = Math.max(D * 9, fog[1] * 1.5), nf = 1 / (n - fa);   // 近裁剪面：离最近的东西（地面、飞机）越近越小，凑近飞机不会被切掉
   const proj = new Float32Array([fo / asp, 0, 0, 0, 0, fo, 0, 0, 0, 0, (fa + n) * nf, -1, 0, 0, 2 * fa * n * nf, 0]);
   return (V3.cam = { E, x, y, z, D, rd, fog, asp, M: v3Mul(proj, view) });
 }
