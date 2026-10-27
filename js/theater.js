@@ -641,6 +641,7 @@ function thResE(T, cols, dc) {
     if (!sp.go && live.length && (live.every(R => { const G = thG(R); return G.st === 'reserve' && dist(G.ax, G.ay, sp.ax, sp.ay) < 160; }) || S.t - sp.t > 75)) {
       sp.go = S.t;
       thStat('thSync');
+      if (dc.prep > 0) S.th.e.focus = { x: sp.x, y: sp.y, r: 140, until: S.t + dc.prep + 30 };   // 炮火准备在离开集结地域、向目标开进时打，冲击前后一直压着
       if (typeof chatSay === 'function') chatSay('e', `预备队${live.length > 1 ? ` ${live.length} 个营` : ''}${S.t - sp.t > 75 ? '时限已到' : '已在集结地域会合'}，同时向${p ? p.name : '敌登陆场'}开进反冲击。`, { kind: 'order', at: sp, lv: 1 });
     }
     if (!live.length || (p && hqMine('e', p)) || S.t - sp.t > 240) {
@@ -689,7 +690,6 @@ function thResE(T, cols, dc) {
   const dd = Math.max(1, dist(tgt.x, tgt.y, cx, cy)), ar = Math.min(380, dd), s0 = hqSlot('e', tgt.x + (cx - tgt.x) / dd * ar, tgt.y + (cy - tgt.y) / dd * ar), asm = hqCover('e', s0.x, s0.y);
   for (const R of rs) { R.rsv = false; R.aiSp = true; thSend(R, { v: 'spear', x: Math.round(tgt.x), y: Math.round(tgt.y), key: tgt.key, src: 'ai', sync: id }, TH.dly.div + TH.dly.reg); }
   T.rsp = { id, ids: rs.map(R => R.id), key: tgt.key, x: Math.round(tgt.x), y: Math.round(tgt.y), ax: Math.round(asm.x), ay: Math.round(asm.y), t: S.t, go: null };
-  if (dc.prep > 0) S.th.e.focus = { x: Math.round(tgt.x), y: Math.round(tgt.y), r: 140, until: S.t + dc.prep + 15 };
   thStat(crisis && !(main && r >= dc.ctr) ? 'thCommitCrisis' : 'thCommit');
   if (typeof chatSay === 'function') chatSay('e', crisis && !(main && r >= dc.ctr) ? `一线吃紧（当面之敌约 ${Math.round(foeAll)}，我约 ${Math.round(ownAll)}），预备队${rs.map(R => R.name).join('、')}投入，向${tgt.nm}反冲击。` : `判明敌主攻在${tgt.nm}一带（约 ${Math.round(best.foe)} 人），预备队${rs.map(R => R.name).join('、')}集中反冲击，我约 ${r.toFixed(1)} 倍于敌，炮兵先打 ${dc.prep} 秒。`, { kind: 'plan', at: tgt, lv: 0 });
 }
@@ -891,6 +891,7 @@ function thLine(G, F, v, O) {
     }
     const u = line.filter(o => !taken.has(o)).sort((a, b) => Math.abs(regUnitAt(a)[0] - p.x) - Math.abs(regUnitAt(b)[0] - p.x))[0];
     if (u) taken.set(u, p);
+    if (u && side === 'e' && !thFocusE()) S.th.e.focus = { x: p.x, y: p.y, r: 120, until: S.t + 20 };   // 就地反冲击也要炮兵先压住据点里的敌人
   }
   // 一排里各排按占地比例分完整段正面，排中心放在各自那一份的中点
   const rowXs = R0 => { const tot = R0.reduce((a, u) => a + needW(u), 0); let acc = 0; return R0.map(u => { const w = needW(u), f = (acc + w / 2) / tot; acc += w; return xs[Math.min(xs.length - 1, Math.floor(f * xs.length))]; }); };
