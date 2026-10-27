@@ -32,7 +32,12 @@ function grade(r, side) {
 }
 const keyOf = c => JSON.stringify(c);
 const pickR = a => a[Math.floor(Math.random() * a.length)];
+// 每局成绩按「候选 × 对手 × 局面 × 代码指纹（js/ 与测量脚本的哈希）」存盘（tools/.cache/train_real.json）：进程被打断后重跑，打过的局直接取；代码改了指纹变，旧成绩作废
+const FP = (() => { const h = require('crypto').createHash('sha1'); for (const f of fs.readdirSync(path.join(ROOT, 'js')).sort()) h.update(fs.readFileSync(path.join(ROOT, 'js', f))); for (const f of ['doctrine_scene.js', 'headless.js']) h.update(fs.readFileSync(path.join(__dirname, f))); return h.digest('hex').slice(0, 12) + '|' + T; })();
+const CF = path.join(__dirname, '.cache', 'train_real.json');
 const cache = new Map();   // 候选 × 局面 → 成绩
+try { const o = JSON.parse(fs.readFileSync(CF, 'utf8')); if (o.fp === FP) for (const [k, v] of o.r) cache.set(k, v); } catch (e) { /* 没有缓存 */ }
+function save() { try { fs.mkdirSync(path.dirname(CF), { recursive: true }); fs.writeFileSync(CF, JSON.stringify({ fp: FP, r: [...cache].map(([k, v]) => [k, v && !v.err ? { m: { ...v.m, ep: undefined }, o: v.o } : v]) })); } catch (e) { /* 存不了就算了 */ } }
 async function play(side, cands, other, scenes) {
   const jobs = [], refs = [];
   for (const c of cands) for (const si of scenes) {
@@ -40,7 +45,7 @@ async function play(side, cands, other, scenes) {
     if (cache.has(k)) continue;
     jobs.push({ ...scene(si), fix: side === 'p' ? { p: c, e: other } : { p: other, e: c } }); refs.push({ k, c, si });
   }
-  if (jobs.length) { const rs = await Promise.all(jobs.map(j => POOL.run(j))); rs.forEach((r, i) => cache.set(refs[i].k, r)); }
+  if (jobs.length) await Promise.all(jobs.map((j, i) => POOL.run(j).then(r => { cache.set(refs[i].k, r); save(); })));
   return cands.map(c => {
     const gs = scenes.map(si => grade(cache.get(keyOf(c) + '|' + keyOf(other) + '|' + si), side)).filter(Boolean);
     const m = a => a.reduce((x, y) => x + y, 0) / Math.max(1, a.length), s = gs.map(g => g.s), mu = m(s), sd = Math.sqrt(m(s.map(v => (v - mu) ** 2)));
@@ -74,7 +79,8 @@ async function train(side, other, nC) {
 
 (async () => {
   const which = process.argv[2] || 'both', nC = +(process.argv[3] || 10), t0 = Date.now(), out = [];
-  let P = { ...DEF.p }, E = { ...DEF.e };
+  // 对手参数可指定：PFIX / EFIX（JSON），例如单练守方时用练好的攻方参数
+  let P = process.env.PFIX ? JSON.parse(process.env.PFIX) : { ...DEF.p }, E = process.env.EFIX ? JSON.parse(process.env.EFIX) : { ...DEF.e };
   if (which === 'p' || which === 'both') { const r = await train('p', E, nC); P = r.best.c; out.push(['p', r]); }
   if (which === 'e' || which === 'both') { const r = await train('e', P, nC); E = r.best.c; out.push(['e', r]); }
   const md = [`\n## ${new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 16).replace('T', ' ')}（每局 ${T} 秒，用时 ${Math.round((Date.now() - t0) / 60000)} 分钟）\n`,
