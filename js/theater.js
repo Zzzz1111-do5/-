@@ -22,8 +22,9 @@ const TH = { org: 2, think: 4, dly: { div: 5, bde: 3, reg: 2 }, bound: 130, lead
 //   攻方：ech 留作第二梯队的营占上陆营数的比例（联合登陆战役：第一梯队约三分之二）· adv 由坚守恢复推进要的兵力比（推进中掉到它的七成就转入坚守）·
 //         prep 由坚守转入推进前的火力准备秒数（舰炮、垂发导弹打当面已知火力点，到点再推进）
 //   守方：res 登陆场出现后留作战役预备队的机动营比例（美军机动防御：机动兵力的 1/9–1/3）· ctr 向海反击要的兵力比 ·
-//         prep 反击前的炮火准备秒数 · commit 一线吃紧到什么程度（当面敌兵力 / 一线兵力）不等判明主攻就投入预备队
-const TH_DOC = { p: { ech: .25, adv: 1.5, prep: 12 }, e: { res: .25, ctr: 2, prep: 12, commit: 1.2 } };
+//         prep 反击前的炮火准备秒数 · commit 一线吃紧到什么程度（当面敌兵力 / 当面全部守军，含守备队与工事）不等判明主攻就投入预备队 ·
+//         det 判明敌主攻要的上陆兵力（一段里已知敌兵力达到它、又比别处多五成）
+const TH_DOC = { p: { ech: .25, adv: 1.5, prep: 12 }, e: { res: .25, ctr: 2, prep: 12, commit: 1.5, det: 30 } };
 const thDoc = side => ({ ...TH_DOC[side], ...(S && S.thFix && S.thFix[side] || {}) });
 const TH_V = { auto: '自动', advance: '推进', spear: '穿插', hold: '坚守', retreat: '后撤', reserve: '预备队', follow: '第二梯队', ext: '独立作战' };
 const TH_LV = { thr: '战区', div: '师', bde: '团', reg: '营' };
@@ -480,6 +481,7 @@ function thThinkP(T) {
     }
   }
   thEchP(T, dc);
+  thPrepPts(T, dc);
   // 后备队：滩头站稳后开辟增援线，把后备队经抢滩的舰船送上岸补进战线
   if (S.t > 150 && S.assets && S.assets.reserve > 0 && S.assets.rline > 0 && !(S.rlines || []).length && typeof buildRLine === 'function') {
     const c = thAt(divs.slice().sort((a, b) => thPow(b) - thPow(a))[0]) || { x: W / 2, y: H / 2 };
@@ -564,6 +566,31 @@ function thPrepFire(side, D, secs) {
   thStat('thPrepE');
   return pick.length;
 }
+// 攻方：战线推到离敌据点 380 以内、据点一带有已知敌兵力（3 人以上）时，对它打一次火力准备（同一据点 90 秒内不重复）；
+//   打的是据点 180 以内的已知敌火力点，危险近距由舰炮任务（commander.js）自己把关
+function thPrepPts(T, dc) {
+  if (!(dc.prep > 0)) return;
+  const done = T.prepK || (T.prepK = {});
+  for (const p of S.points) {
+    if ((p.owner === 'p' && p.prog >= .99) || S.t - (done[p.key] ?? -999) < 90) continue;
+    const ly = thLineY('p', p.x);
+    if (ly == null || ly - p.y < 0 || ly - p.y > 380 || frKnown('p', p.x, p.y, 180).foe < 3) continue;
+    done[p.key] = S.t;
+    const its = [];
+    for (const e of S.enemies) if (!e.dead && e.kx != null && dist(e.kx, e.ky, p.x, p.y) < 180) its.push({ x: e.kx, y: e.ky, hard: true });
+    for (const q of S.teams) if (q.side === 'e' && q.men.length && inVision(q.x, q.y) && dist(q.x, q.y, p.x, p.y) < 180) its.push({ x: q.x, y: q.y });
+    let n = 0;
+    for (const k of its.slice(0, 3)) {
+      if (typeof cmdFire === 'function' && S.cmd && S.cmd.p && cmdFire(k.x, k.y, 2, 'prep')) n++;
+      if (k.hard && typeof vlsCan === 'function' && vlsCan('lacm', k.x, k.y) && vlsFire('lacm', k.x, k.y, 1, 'prep')) n++;
+    }
+    if (typeof navEnsure === 'function') navEnsure().hot.push({ x: p.x, y: p.y, until: S.t + dc.prep + 15, why: 'prep' });
+    if (n || its.length) {
+      thStat('thPrepPt');
+      if (typeof chatSay === 'function') chatSay('p', `战线逼近${p.name}，冲击前先对它打火力准备。`, { kind: 'order', at: p, lv: 1, key: 'thpp' + p.key, gap: 60 });
+    }
+  }
+}
 // 守方炮兵的火力重点（ai2.js aiArtillery 对 r 以内的目标加权）
 function thFocusE() { const f = S && S.th && S.th.e && S.th.e.focus; return f && S.t < f.until ? f : null; }
 // 攻方第二梯队：上陆的营够四个以上时，按 ech 留出营在一线后 200 跟进（先挑最弱、需要整补的）；
@@ -630,19 +657,23 @@ function thResE(T, cols, dc) {
     return;
   }
   if (!rs.length) return;
-  // 敌主攻：沿登陆场每 300 米量一处已知敌兵力，取最大的一处
-  let best = null, foeAll = 0;
+  // 敌主攻：沿登陆场每 300 米量一处已知敌兵力（frKnown：守方所知），取最大的一处；当面守军按全部守方兵力算（守备队、碉堡也在顶）
+  const win = [];
+  let foeAll = 0, ownAll = 0;
   for (let i = 0; i < cols.length; i += 10) {
     const x = frBX(cols[Math.min(cols.length - 1, i + 5)]), fy = thFoeY('e', x);
     if (fy == null) continue;
-    const f = frKnown('e', x, fy, 260).foe;
-    foeAll += f;
-    if (!best || f > best.foe) best = { x, y: fy, foe: f };
+    const k = frKnown('e', x, fy, 260);
+    foeAll += k.foe; ownAll += k.own;
+    win.push({ x, y: fy, foe: k.foe });
   }
-  if (!best) return;
+  if (!win.length) return;
+  win.sort((a, b) => b.foe - a.foe);
+  const best = win[0], other = win.find(o => Math.abs(o.x - best.x) > 450);
   const rp = rs.reduce((a, R) => a + thPow(R), 0), line = regs.filter(R => !R.rsv && thInLine(R));
-  const lp = line.reduce((a, R) => a + thPow(R), 0), near = line.filter(R => { const c = thAt(R); return c && dist(c.x, c.y, best.x, best.y) < 450; }).reduce((a, R) => a + thPow(R), 0);
-  const main = best.foe >= 12 && S.t - T.seen0 > 45, r = (rp + near) / Math.max(1, best.foe), crisis = foeAll > lp * dc.commit;
+  const near = line.filter(R => { const c = thAt(R); return c && dist(c.x, c.y, best.x, best.y) < 450; }).reduce((a, R) => a + thPow(R), 0);
+  // 判明主攻：这一段的敌兵力够 det、又比别处（450 以外）多五成；一线吃紧：当面敌兵力超过当面全部守军的 commit 倍
+  const main = best.foe >= dc.det && (!other || best.foe >= other.foe * 1.5), r = (rp + near) / Math.max(1, best.foe), crisis = foeAll > Math.max(1, ownAll) * dc.commit;
   if (!(main && r >= dc.ctr) && !crisis) return;
   // 目标：离敌主攻最近的已失守据点，没有就直接打敌登陆场
   const lost = S.points.filter(p => p.owner === 'p' || p.prog > .25).sort((a, b) => dist(a.x, a.y, best.x, best.y) - dist(b.x, b.y, best.x, best.y))[0];
@@ -651,7 +682,7 @@ function thResE(T, cols, dc) {
   T.rsp = { ids: rs.map(R => R.id), key: tgt.key, t: S.t };
   if (dc.prep > 0) S.th.e.focus = { x: Math.round(tgt.x), y: Math.round(tgt.y), r: 140, until: S.t + dc.prep + 15 };
   thStat(crisis && !(main && r >= dc.ctr) ? 'thCommitCrisis' : 'thCommit');
-  if (typeof chatSay === 'function') chatSay('e', crisis && !(main && r >= dc.ctr) ? `一线吃紧（当面之敌约 ${Math.round(foeAll)}），预备队${rs.map(R => R.name).join('、')}投入，向${tgt.nm}反冲击。` : `判明敌主攻在${tgt.nm}一带（约 ${Math.round(best.foe)} 人），预备队${rs.map(R => R.name).join('、')}集中反冲击，我约 ${r.toFixed(1)} 倍于敌，炮兵先打 ${dc.prep} 秒。`, { kind: 'plan', at: tgt, lv: 0 });
+  if (typeof chatSay === 'function') chatSay('e', crisis && !(main && r >= dc.ctr) ? `一线吃紧（当面之敌约 ${Math.round(foeAll)}，我约 ${Math.round(ownAll)}），预备队${rs.map(R => R.name).join('、')}投入，向${tgt.nm}反冲击。` : `判明敌主攻在${tgt.nm}一带（约 ${Math.round(best.foe)} 人），预备队${rs.map(R => R.name).join('、')}集中反冲击，我约 ${r.toFixed(1)} 倍于敌，炮兵先打 ${dc.prep} 秒。`, { kind: 'plan', at: tgt, lv: 0 });
 }
 
 // 穿插（AI）：兵力占优、前方空虚的地段，派装甲（机械化）营向战线后方的敌据点突击；同时只派一个，打下来或打不动就收回
@@ -835,6 +866,13 @@ function thLine(G, F, v, O) {
     const ahead = (p.y - cy(p.x)) * dir;
     if (ahead < -80 || ahead > (v === 'advance' && !fb && !stall ? 260 : 60)) continue;
     if (pl != null && p.y < thPL(pl, p.x) - 40) continue;
+    if (side === 'e') {   // 守方就地反冲击：本营在据点 300 以内的兵力对当面已知之敌够 ctr 倍才派，不够就封堵、等预备队（不一个排一个排地往里送）
+      const foe = frKnown('e', p.x, p.y, 180).foe;
+      let own = 0;
+      for (const o of line) { const [ux, uy] = regUnitAt(o); if (dist(ux, uy, p.x, p.y) < 300) own += teamsOf(o).reduce((b, q) => b + q.men.length, 0); }
+      for (const vh of vs) if (dist(vh.x, vh.y, p.x, p.y) < 300) own += bgPow(vh);
+      if (foe > 0 && own < foe * thDoc('e').ctr) continue;
+    }
     const u = line.filter(o => !taken.has(o)).sort((a, b) => Math.abs(regUnitAt(a)[0] - p.x) - Math.abs(regUnitAt(b)[0] - p.x))[0];
     if (u) taken.set(u, p);
   }

@@ -67,7 +67,11 @@ globalThis.DOCT = {
           const foe = side === 'p' ? 'e' : 'p', own = DOCT.pow(side, p.x, p.y, 260), opp = DOCT.pow(foe, p.x, p.y, 200);
           const req = side === 'p' ? (DOCT.fort(p.x, p.y, 150) ? 3 : coverAt(p.x, p.y) < .75 ? 2 : 1.5) : 2;
           const who = {};   // 冲上去的是谁（诊断用）：守备队 / 伏击组 / 预备队 / 战斗群（营）
-          for (const q of S.teams) if (q.side === side && q.men.length && !q.ride && dist(q.x, q.y, p.x, p.y) < 260) { const k = (S.bgs || []).some(G => !G.dead && G.us.includes(q.u)) ? 'bg' : q.role || 'none'; who[k] = (who[k] || 0) + q.men.length; }
+          for (const q of S.teams) if (q.side === side && q.men.length && !q.ride && dist(q.x, q.y, p.x, p.y) < 260) {
+            const G = (S.bgs || []).find(G => !G.dead && G.us.includes(q.u)), F = G && G.th && typeof thF === 'function' ? thF(G.th) : null;
+            const k = G ? (F ? 'th:' + thOrdOf(F).v + (F.aiSp ? '*' : '') : 'bg') : (q.ca ? 'a4ca' : q.role || 'none');
+            who[k] = (who[k] || 0) + q.men.length;
+          }
           D.ep.push({ side, key: p.key, t: Math.round(S.t), r: +(own / Math.max(1, opp)).toFixed(2), req, opp, prep: DOCT.fires(side, p.x, p.y, 220, S.t - 60, S.t) >= 2, solo: own < 10, who });
         }
         L[p.key] = S.t;
@@ -97,11 +101,13 @@ globalThis.DOCT = {
       for (let i = 0; i < xs.length; i++) { s += xs[i].w; while (xs[i].x - xs[j].x > win) { s -= xs[j].w; j++; } best = Math.max(best, s); }
       DOCT.add('conc_p', best / tp);
     }
-    // 攻方梯队：上陆一分钟后，前沿以后 150 外（第二梯队、预备队）的兵力占比
+    // 攻方梯队：上陆一分钟后，第二梯队、预备队占全部登陆兵力的比例——前沿以后 150 外的岸上兵力，加上还在海上待命、
+    //   载着部队没抢滩的登陆舰（登陆作战的第二梯队本来就是后续上陆的舰船）
     if (since > 60 && tp >= 20 && S.front && S.front.p) {
-      let back = 0;
+      let back = 0, sea = 0;
       for (const o of P) { const f = frFront('p', o.x).fp; if (f != null && o.y > f + 150) back += o.w; }
-      DOCT.add('ech_p', back / tp);
+      for (const sh of S.ships) if (alive(sh) && sh.state !== 'beached' && sh.load) sea += (sh.load.teams || 0) * 3 + (sh.load.eng || 0) + (Array.isArray(sh.load.veh) ? sh.load.veh.length * 6 : 0);
+      DOCT.add('ech_p', (back + sea) / (tp + sea));
     }
     // 守方：机动兵力的纵深配置、判明主攻前的预备队
     const M = E.filter(DOCT.manE), tm = sum(M);
@@ -184,6 +190,7 @@ globalThis.DOCT = {
     }
     m.commit_e = D.resCommit;
     m.ep = D.ep;
+    m.st = Object.fromEntries(Object.entries(S.v7s || {}).filter(([k]) => /^th/.test(k)));   // 战区条令规则的触发次数（诊断）
     let hv = 0, tv = 0;
     for (const p of S.points) { const v = p.vp || 1; tv += v; if (p.owner === 'p' && p.prog >= .99) hv += v; }
     const o = { pts: +(hv / Math.max(1, tv)).toFixed(3), lp: +DOCT.loss('p').toFixed(3), le: +DOCT.loss('e').toFixed(3), over: S.over, t: Math.round(S.t), land: D.land == null ? null : Math.round(D.land) };

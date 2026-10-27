@@ -11,9 +11,9 @@ const ROOT = path.resolve(__dirname, '..');
 
 const SPACE = {
   p: { ech: [0, .15, .25, .33], adv: [1.2, 1.5, 2, 2.5], prep: [0, 8, 15, 25] },
-  e: { res: [0, .15, .25, .35], ctr: [1.5, 2, 2.5, 3], prep: [0, 8, 15], commit: [1, 1.2, 1.5] }
+  e: { res: [0, .15, .25, .35], ctr: [1.5, 2, 2.5, 3], prep: [0, 8, 15], commit: [1.2, 1.5, 2], det: [15, 30, 45] }
 };
-const DEF = { p: { ech: .25, adv: 1.5, prep: 12 }, e: { res: .25, ctr: 2, prep: 12, commit: 1.2 } };
+const DEF = { p: { ech: .25, adv: 1.5, prep: 12 }, e: { res: .25, ctr: 2, prep: 12, commit: 1.5, det: 30 } };
 const T = +(process.env.T || 480);
 
 // 局面：沙盒 AI 对 AI（双方各 5000 点）与战役（普通 / 困难），按序号确定
