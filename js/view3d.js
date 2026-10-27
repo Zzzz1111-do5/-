@@ -824,9 +824,11 @@ function v3Overlay(ctx, time) {
   }
   // 战斗群（编制标号）
   for (const G of S.bgs || []) {
-    if (G.dead || (G.side === 'e' && !spec && !spotted(G.ax, G.ay))) continue;
+    if (G.dead) continue;
+    const c = bgAt(G);   // 部队实际所在处（不是队形锚点）
+    if (G.side === 'e' && !spec && !spotted(c.x, c.y)) continue;
     if ((G.th || G.thx) && typeof thMarks3 === 'function' && typeof thOn === 'function' && thOn()) continue;   // 战区编队的营、连由番号牌标（thpanel.js thMarks3）
-    const col = G.side === 'p' ? COL.g : COL.enemy, q = stem(G.ax, G.ay, 70, col, 1);
+    const col = G.side === 'p' ? COL.g : COL.enemy, q = stem(c.x, c.y, 70, col, 1);
     if (!q) continue;
     const w = 20, h = 13;
     ctx.fillStyle = rgba(COL.bg, .8 * q.al); ctx.strokeStyle = rgba(col, q.al); ctx.lineWidth = 1.3;

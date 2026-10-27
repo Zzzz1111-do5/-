@@ -1087,10 +1087,11 @@ function hqDraw() {
     const far = typeof hqFar === 'function' && hqFar(), in3 = typeof V3 === 'object' && V3.drawing;
     for (const G of hqRegs(side)) {
       if (in3) break;   // 3D：营标立在地形上方（view3d.js 战斗群标号），地面上不再画一层扁的
-      if (side === 'e' && !spec && !spotted(G.ax, G.ay)) continue;
+      const c = bgAt(G);   // 营标画在部队实际所在处（锚点行军时跑在前面）
+      if (side === 'e' && !spec && !spotted(c.x, c.y)) continue;
       const w = px(20), h = px(13), t = G.type || 'inf';
-      let x = G.ax, y = G.ay;
-      if (far) { [x, y] = hqPlace(G.ax, G.ay, w * 1.1, h * 1.7); if (dist(x, y, G.ax, G.ay) > px(3)) { ctx.strokeStyle = rgba(col, .45); ctx.lineWidth = px(.9); ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(G.ax, G.ay); ctx.stroke(); } }
+      let x = c.x, y = c.y;
+      if (far) { [x, y] = hqPlace(c.x, c.y, w * 1.1, h * 1.7); if (dist(x, y, c.x, c.y) > px(3)) { ctx.strokeStyle = rgba(col, .45); ctx.lineWidth = px(.9); ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(c.x, c.y); ctx.stroke(); } }
       ctx.strokeStyle = rgba(col, .95 * Math.max(.6, A0)); ctx.fillStyle = rgba(COL.bg, .72); ctx.lineWidth = px(1.3);
       ctx.fillRect(x - w / 2, y - h / 2, w, h); ctx.strokeRect(x - w / 2, y - h / 2, w, h);
       ctx.beginPath();
@@ -1117,8 +1118,10 @@ function hqSelB() {
 }
 // 全团成员实际占的范围：中心 + 横竖半径（取八成成员所在的范围，再留一点边），没上岸的不算
 function hqBdeHull(B) {
-  const P = hqSelPts(B);
-  if (P.length < 2) return null;
+  const P0 = hqSelPts(B);
+  if (P0.length < 2) return null;
+  const md = k => { const a = P0.map(p => p[k]).sort((a, b) => a - b); return a[a.length >> 1]; }, mx = md(0), my = md(1);
+  const P1 = P0.filter(p => dist(p[0], p[1], mx, my) < 600), P = P1.length >= 2 ? P1 : P0;   // 离全团中位点 600 以外的掉队者不把团标、集结圈拉偏
   const x = P.reduce((a, p) => a + p[0], 0) / P.length, y = P.reduce((a, p) => a + p[1], 0) / P.length;
   const q = arr => { arr.sort((a, b) => a - b); return arr[Math.min(arr.length - 1, Math.floor(arr.length * .85))]; };
   return { x, y, rx: clamp(q(P.map(p => Math.abs(p[0] - x))) + 35, 55, 320), ry: clamp(q(P.map(p => Math.abs(p[1] - y))) + 30, 45, 260) };
