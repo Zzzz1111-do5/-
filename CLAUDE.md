@@ -1,0 +1,36 @@
+# 暗剑 Darksword · 给 Claude 的项目说明
+
+## 沟通
+- 用户说中文：回复、提交说明、代码注释、游戏内文字一律用中文。
+- README.md 是仓库建立时留下的，与本项目无关；项目说明以本文件和 docs/ 为准。
+
+## 项目是什么
+- 两栖登陆作战沙盘游戏，浏览器运行：index.html 按顺序加载 js/ 下的普通脚本（共享全局变量，没有构建步骤）。
+- 安卓版用 Capacitor 打包（android/、capacitor.config.json；`npm run build` 生成 www/，`npm run sync` 同步到安卓工程）。
+- 网页版：`bash tools/publish_pages.sh` 生成 www/ 并推到 gh-pages 分支（GitHub Pages）。
+
+## 代码约定
+- 全部状态在全局 `S`（纯 JSON，可存档）；类型数组、渲染缓存放在 S 之外，S 换了就重建。
+- 模块之间用 core.js 的 `HOOK`（newGame / step / impact / visionP / visionE / drawUnder / drawOver / drawTop / frame / pointer / key）挂接；调用后加载的文件里的函数，先判断 `typeof fn === 'function'`。
+- 每个文件开头 `'use strict';`；两格缩进、单引号、分号，紧凑写法；注释用简短中文，写清楚为什么这么做。
+- 通联（chatSay）说话要像人：不加「命令：」「判断：」之类的公文标签，一条最多两三句，数字用推演里的真实数字。
+
+## AI：要求与现状
+- 改 AI 之前先读 docs/ai_requirements.md（用户原话整理的硬性要求 + 实现对照），改完同步更新其中的「实现对照」。
+- 默认对局的指挥体系是 js/theater.js（战区 → 师 → 团 → 营，钢铁雄心式战线推演）。它启用时关掉旧的 hq.js 司令与团（S.v7off.hq）、brain.js（br）、tf.js（tf）。所以：
+  - 默认对局里不生效：js/cmddoc.js（hq.js 守方司令战法表）、js/jointdoc.js 的 BDE_DOC（hq.js 团的协同）；
+  - 仍然生效：hq.js 的营长状态机 regThink（穿插、预备队、第二梯队）与 js/doctrine.js 团长战法表、js/sa.js 的态势感知与边打边撤（SA_DOC）。
+- 战区司令的条令参数在 js/theater.js 的 `TH_DOC`（攻方：第二梯队比例、恢复推进的兵力比、火力准备；守方：战役预备队比例、反击兵力比、炮火准备、吃紧投入门槛、判明主攻门槛），由 tools/train_real.js 训练，记录在 docs/real_train.md。改 `TH_DOC` 时同步改 tools/train_real.js 的 `DEF`（训练场把它当「现行参数」比较）。
+
+## 测试与训练（Node 无头运行；tools/headless.js 按 index.html 的顺序加载 js/）
+- 语法检查：`for f in js/*.js; do node --check $f || echo FAIL $f; done`
+- 条令符合度：`node tools/doctrine_eval.js [局数（最多 20）] [每局秒数]`。沙盒 AI 对 AI 加战役，测双方「打得像不像真的」：冲击前火力准备、局部兵力比、主攻集中、梯队、零打碎敲、步坦协同、防空伞、兵力闲置、守方预备队与纵深、反冲击兵力比等，对照条令目标范围打分，并报结局。改 AI 前后各跑一次对比。随机性大：10 局之间差几个百分点属正常波动；守方反冲击每局只有一两次，相关指标至少看 20 局。
+- 训练场（同一局面配对比较、逐轮淘汰、冠军变异复赛，稳健分 = 平均 − 0.4 × 标准差，四个进程并行；成绩缓存在 tools/.cache/，不进仓库，代码改了自动作废）：
+  - tools/train_real.js：战区司令 TH_DOC，打分一半胜负、一半条令符合度（`PFIX` / `EFIX` 环境变量指定对手参数）；
+  - tools/train_reg.js：团长战法（js/doctrine.js）；tools/train_101.js：101 空降师；tools/train_joint.js、tools/train_cmd.js：hq.js 体系（默认对局里不生效）。
+  - 一次训练常要一两个小时，放后台跑；中途打断可以重跑，已打过的局直接读缓存。
+- 浏览器检查：Playwright 已全局安装（`NODE_PATH=$(npm root -g)`），打开 `file://…/index.html`，调用 `startPvE('hard')` 或 `mnSandbox()` 后用 `step(1 / 30)` 同步推演，截图、看 pageerror。
+
+## 分支与协作
+- 可能同时有几个 Claude 会话在改这个仓库，各自在 `claude/*` 分支上；main 只有初始提交。
+- 开工前先 `git fetch`，找最新的开发分支，在它的基础上改；不要和正在推送的会话同时改同一批核心文件（theater.js、hq.js、brain.js、sandbox.js 等）。

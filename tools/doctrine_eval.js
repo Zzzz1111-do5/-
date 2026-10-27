@@ -76,11 +76,16 @@ function pool(n) {
     close: () => workers.forEach(w => w.kill())
   };
 }
+// 前 10 局：6 局沙盒 + 4 局战役（与早先的基线相同）；要更多局时再加 6 局沙盒 + 4 局战役（新地图）
 function defaultJobs(maxN, T) {
-  const jobs = [], MAPS = [777, 4242, 9001, 31337, 2024, 555], DS = ['bal', 'armor', 'deep', 'fort'], AS = ['bal', 'armor', 'fire'];
+  const jobs = [], DS = ['bal', 'armor', 'deep', 'fort'], AS = ['bal', 'armor', 'fire'];
   let r = 1;
-  MAPS.forEach((seed, i) => jobs.push({ mode: 'sbx', seed, dsty: DS[i % DS.length], asty: AS[i % AS.length], bud: 5000, T, rng: r++ }));
-  for (const [seed, level] of [[11, 'normal'], [22, 'hard'], [33, 'normal'], [44, 'hard']]) jobs.push({ mode: 'pve', seed, level, T, rng: r++ });
+  for (const [MAPS, PVE] of [[[777, 4242, 9001, 31337, 2024, 555], [[11, 'normal'], [22, 'hard'], [33, 'normal'], [44, 'hard']]],
+    [[8080, 1234, 4321, 6060, 7171, 9999], [[55, 'normal'], [66, 'hard'], [77, 'normal'], [88, 'hard']]]]) {
+    const k = r > 1 ? 1 : 0;   // 第二组换一下部署方案与打法的搭配
+    MAPS.forEach((seed, i) => jobs.push({ mode: 'sbx', seed, dsty: DS[(i + k) % DS.length], asty: AS[(i + 2 * k) % AS.length], bud: 5000, T, rng: r++ }));
+    for (const [seed, level] of PVE) jobs.push({ mode: 'pve', seed, level, T, rng: r++ });
+  }
   return jobs.slice(0, maxN);
 }
 async function evalJobs(jobs, fix, nw = 4) {

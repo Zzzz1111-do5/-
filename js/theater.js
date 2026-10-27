@@ -24,7 +24,7 @@ const TH = { org: 2, think: 4, dly: { div: 5, bde: 3, reg: 2 }, bound: 130, lead
 //   守方：res 登陆场出现后留作战役预备队的机动营比例（美军机动防御：机动兵力的 1/9–1/3）· ctr 向海反击要的兵力比 ·
 //         prep 反击前的炮火准备秒数 · commit 一线吃紧到什么程度（当面敌兵力 / 当面全部守军，含守备队与工事）不等判明主攻就投入预备队 ·
 //         det 判明敌主攻要的上陆兵力（一段里已知敌兵力达到它、又比别处多五成）
-const TH_DOC = { p: { ech: .25, adv: 1.5, prep: 12 }, e: { res: .25, ctr: 2, prep: 12, commit: 1.5, det: 30 } };
+const TH_DOC = { p: { ech: .25, adv: 2, prep: 0 }, e: { res: .25, ctr: 2, prep: 12, commit: 1.5, det: 15 } };   // 2026-10-27 训练结果（docs/real_train.md）
 const thDoc = side => ({ ...TH_DOC[side], ...(S && S.thFix && S.thFix[side] || {}) });
 const TH_V = { auto: '自动', advance: '推进', spear: '穿插', hold: '坚守', retreat: '后撤', reserve: '预备队', follow: '第二梯队', ext: '独立作战' };
 const TH_LV = { thr: '战区', div: '师', bde: '团', reg: '营' };
@@ -636,9 +636,14 @@ function thResE(T, cols, dc) {
   if (T.seen0 == null) T.seen0 = S.t;
   const regs = thDivs('e').flatMap(thRegsOf).filter(R => thG(R) && !R.man);
   const sp = T.rsp;
-  if (sp) {   // 预备队反冲击进行中
+  if (sp) {   // 预备队反冲击进行中：各营到齐（在攻击出发位置展开就位）或 75 秒到了，同时发起
     const p = sp.key ? S.points.find(o => o.key === sp.key) : null, live = sp.ids.map(thF).filter(R => R && thG(R));
-    if (!live.length || (p && hqMine('e', p)) || S.t - sp.t > 200) {
+    if (!sp.go && live.length && (live.every(R => { const G = thG(R); return G.st === 'reserve' && dist(G.ax, G.ay, sp.ax, sp.ay) < 160; }) || S.t - sp.t > 75)) {
+      sp.go = S.t;
+      thStat('thSync');
+      if (typeof chatSay === 'function') chatSay('e', `预备队${live.length > 1 ? ` ${live.length} 个营` : ''}${S.t - sp.t > 75 ? '时限已到' : '已在集结地域会合'}，同时向${p ? p.name : '敌登陆场'}开进反冲击。`, { kind: 'order', at: sp, lv: 1 });
+    }
+    if (!live.length || (p && hqMine('e', p)) || S.t - sp.t > 240) {
       for (const R of live) { R.aiSp = false; const B = thF(R.par); thSend(R, { ...thOrdOf(B || R), src: 'ai' }); }
       T.rsp = null; T.resT = S.t;
     }
@@ -678,8 +683,12 @@ function thResE(T, cols, dc) {
   // 目标：离敌主攻最近的已失守据点，没有就直接打敌登陆场
   const lost = S.points.filter(p => p.owner === 'p' || p.prog > .25).sort((a, b) => dist(a.x, a.y, best.x, best.y) - dist(b.x, b.y, best.x, best.y))[0];
   const tgt = lost && dist(lost.x, lost.y, best.x, best.y) < 500 ? { x: lost.x, y: lost.y, key: lost.key, nm: lost.name } : { x: best.x, y: best.y, key: null, nm: typeof cmdWhere === 'function' ? cmdWhere(best.x, best.y) : gridRef(best.x, best.y) };
-  for (const R of rs) { R.rsv = false; R.aiSp = true; thSend(R, { v: 'spear', x: Math.round(tgt.x), y: Math.round(tgt.y), key: tgt.key, src: 'ai' }, TH.dly.div + TH.dly.reg); }
-  T.rsp = { ids: rs.map(R => R.id), key: tgt.key, x: Math.round(tgt.x), y: Math.round(tgt.y), t: S.t };
+  const id = 'R' + Math.round(S.t * 10);
+  // 集结地域：目标朝预备队一侧 380（预备队本来就更近就地会合），挑隐蔽处
+  const rc = rs.map(thAt).filter(Boolean), cx = rc.reduce((a, o) => a + o.x, 0) / Math.max(1, rc.length), cy = rc.reduce((a, o) => a + o.y, 0) / Math.max(1, rc.length);
+  const dd = Math.max(1, dist(tgt.x, tgt.y, cx, cy)), ar = Math.min(380, dd), s0 = hqSlot('e', tgt.x + (cx - tgt.x) / dd * ar, tgt.y + (cy - tgt.y) / dd * ar), asm = hqCover('e', s0.x, s0.y);
+  for (const R of rs) { R.rsv = false; R.aiSp = true; thSend(R, { v: 'spear', x: Math.round(tgt.x), y: Math.round(tgt.y), key: tgt.key, src: 'ai', sync: id }, TH.dly.div + TH.dly.reg); }
+  T.rsp = { id, ids: rs.map(R => R.id), key: tgt.key, x: Math.round(tgt.x), y: Math.round(tgt.y), ax: Math.round(asm.x), ay: Math.round(asm.y), t: S.t, go: null };
   if (dc.prep > 0) S.th.e.focus = { x: Math.round(tgt.x), y: Math.round(tgt.y), r: 140, until: S.t + dc.prep + 15 };
   thStat(crisis && !(main && r >= dc.ctr) ? 'thCommitCrisis' : 'thCommit');
   if (typeof chatSay === 'function') chatSay('e', crisis && !(main && r >= dc.ctr) ? `一线吃紧（当面之敌约 ${Math.round(foeAll)}，我约 ${Math.round(ownAll)}），预备队${rs.map(R => R.name).join('、')}投入，向${tgt.nm}反冲击。` : `判明敌主攻在${tgt.nm}一带（约 ${Math.round(best.foe)} 人），预备队${rs.map(R => R.name).join('、')}集中反冲击，我约 ${r.toFixed(1)} 倍于敌，炮兵先打 ${dc.prep} 秒。`, { kind: 'plan', at: tgt, lv: 0 });
@@ -735,6 +744,13 @@ function thRegThink(G) {
     const p = O.key ? S.points.find(o => o.key === O.key) : S.points.find(o => dist(o.x, o.y, O.x, O.y) < 90), tx = p ? p.x : O.x, ty = p ? p.y : O.y;
     const d = dist(G.ax, G.ay, tx, ty), a = Math.atan2(ty - G.ay, tx - G.ax), st = p && d > 260 ? 200 : 0;
     const k = `sp:${Math.round(tx)}:${Math.round(ty)}`;
+    // 集中反冲击（守方战役预备队）：发起信号之前先到敌火力范围外的集结地域会合（营长按「预备队」执行：到位后隐蔽待命），到齐后同时开进、展开、冲击
+    const sp = O.sync && S.th[G.side] && S.th[G.side].rsp && S.th[G.side].rsp.id === O.sync ? S.th[G.side].rsp : null;
+    if (sp && !sp.go && sp.ax != null) {
+      const ka = `asm:${sp.ax}:${sp.ay}`;
+      if (!G.task || G.task.k !== ka) G.task = { k: ka, v: 'reserve', x: sp.ax, y: sp.ay, face: Math.atan2(ty - sp.ay, tx - sp.ax) };
+      return regThink(G);
+    }
     if (!G.task || G.task.k !== k) G.task = { k, v: 'attack', key: p ? p.key : null, x: Math.round(tx - Math.cos(a) * st), y: Math.round(ty - Math.sin(a) * st), face: a, go: true };
     return regThink(G);
   }
