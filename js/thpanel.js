@@ -6,7 +6,7 @@
 //   地图上：编队标号（远看画师、近看画营连）、地段分界、命令箭头（推进宽箭头、穿插长箭头、后撤回头箭头、坚守弧线、预备队虚圈）、
 //     攻方阶段线；选中的编队高亮它的战线地段，并用虚线连到下级
 //   玩家不能直接操控舰船、航母、单个排：左键点部队只显示型号卡，并在面板里选中它所属的营；左键拖动 / WASD / 方向键移动视角
-const THU = { sel: new Set(), open: {}, side: 'p', pick: null, min: null, t: 0, hit: [], key: '' };
+const THU = { sel: new Set(), open: {}, side: 'p', pick: null, min: null, t: 0, hit: [], hit3: [], key: '' };
 const THU_ST = { asm: '集结', move: '开进', deploy: '展开', assault: '交战', clear: '肃清', regroup: '重整', hold: '防御', local: '就地反冲击', reserve: '待机', withdraw: '后撤' };
 const THU_ORD = [['advance', '推进', '整条地段战线一步步往前压，据点随战线推进夺取'], ['spear', '穿插', '选中后点地图上的目标：最能打的一个营（装甲优先）向目标突击，其余跟着推进'],
   ['hold', '坚守', '就地挖工事坚守地段战线'], ['retreat', '后撤', '后撤约 240 米再坚守'], ['reserve', '预备队', '撤出战线，到后方隐蔽集结待命'], ['auto', '自动', '交还战区 AI 统一指挥']];
@@ -212,25 +212,36 @@ function thuCancel() { if (THU.pick) { THU.pick = null; THU.key = ''; thuRender(
 // ———————————————— 画面 ————————————————
 // 北约式标号：步兵 ×、装甲椭圆、机步两者都有；上方编制记号，下方兵力条；选中的琥珀色描边
 function thuMark(ctx, x, y, F, col, sel, a) {
-  const big = F.lvl === 'div', w = px(big ? 28 : 22), h = px(big ? 18 : 15), G = F.lvl === 'reg' ? thG(F) : null;
+  // 番号牌（营 / 连 / 师都一样）：左边北约兵种框（步兵 ×、装甲椭圆、机步两者都有）上加编制记号，右边番号、当前命令，底边兵力条；
+  //   按屏幕像素定大小，立在部队头顶，引线落到部队位置
+  const big = F.lvl === 'div', G = F.lvl === 'reg' ? thG(F) : null;
   const t = G ? G.type || 'inf' : (() => { let v = 0, n = 0; for (const R of thRegsOf(F)) { const g = thG(R); if (g) { const P = hqRegPow(g); v += P.veh; n += P.tot; } } return v / Math.max(1, n) >= .6 ? 'armor' : v / Math.max(1, n) >= .25 ? 'mech' : 'inf'; })();
+  const fw = px(big ? 22 : 18), fh = px(big ? 15 : 12), verb = thVerb(thOrdOf(F)) + (F.box && F.box.length ? ' ⏳' : ''), named = CAM.z / CAM.fit > 1.2 || big;
   ctx.globalAlpha = a;
-  ctx.fillStyle = rgba(COL.bg, .78); ctx.fillRect(x - w / 2, y - h / 2, w, h);
-  if (sel) { ctx.strokeStyle = rgba(COL.amber, .9); ctx.lineWidth = px(3); ctx.strokeRect(x - w / 2 - px(2), y - h / 2 - px(2), w + px(4), h + px(4)); }
-  ctx.strokeStyle = rgba(col, .95); ctx.lineWidth = px(1.4); ctx.strokeRect(x - w / 2, y - h / 2, w, h);
+  ctx.font = 'bold ' + font(big ? 12 : 11); const w1 = named ? ctx.measureText(F.name).width : 0;
+  ctx.font = font(9); const w2 = named ? ctx.measureText(verb).width : 0;
+  const W0 = fw + px(10) + (named ? Math.max(w1, w2) + px(8) : 0), H0 = px(big ? 30 : 26), x0 = x - W0 / 2, y0 = y - H0 / 2;
+  ctx.fillStyle = rgba(COL.bg, .85); ctx.fillRect(x0, y0, W0, H0);
+  ctx.strokeStyle = sel ? COL.amber : rgba(col, .95); ctx.lineWidth = px(sel ? 2.4 : 1.3); ctx.strokeRect(x0, y0, W0, H0);
+  ctx.fillStyle = rgba(col, .9); ctx.fillRect(x0, y0, px(2.5), H0);
+  const fx = x0 + px(5) + fw / 2, fy = y + px(3);
+  ctx.strokeStyle = rgba(col, .95); ctx.lineWidth = px(1.2); ctx.strokeRect(fx - fw / 2, fy - fh / 2, fw, fh);
   ctx.beginPath();
-  if (t !== 'armor') { ctx.moveTo(x - w / 2, y + h / 2); ctx.lineTo(x + w / 2, y - h / 2); ctx.moveTo(x - w / 2, y - h / 2); ctx.lineTo(x + w / 2, y + h / 2); }
-  if (t !== 'inf') ctx.ellipse(x, y, w * .32, h * .3, 0, 0, 6.283);
+  if (t !== 'armor') { ctx.moveTo(fx - fw / 2, fy + fh / 2); ctx.lineTo(fx + fw / 2, fy - fh / 2); ctx.moveTo(fx - fw / 2, fy - fh / 2); ctx.lineTo(fx + fw / 2, fy + fh / 2); }
+  if (t !== 'inf') ctx.ellipse(fx, fy, fw * .32, fh * .3, 0, 0, 6.283);
   ctx.stroke();
-  ctx.fillStyle = rgba(col, .95); ctx.font = font(big ? 10 : 9); ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
-  ctx.fillText(F.lvl === 'div' ? 'XX' : F.lvl === 'bde' ? 'III' : F.ech || 'II', x, y - h / 2 - px(2.5));
+  ctx.fillStyle = rgba(col, .95); ctx.font = 'bold ' + font(big ? 9 : 8); ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+  ctx.fillText(F.lvl === 'div' ? 'XX' : F.lvl === 'bde' ? 'III' : F.ech || 'II', fx, fy - fh / 2 - px(1.5));
+  if (named) {
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.font = 'bold ' + font(big ? 12 : 11); ctx.fillText(F.name, fx + fw / 2 + px(5), y - px(5));
+    ctx.font = font(9); ctx.fillStyle = F.man ? COL.amber : rgba(col, .75); ctx.fillText(verb, fx + fw / 2 + px(5), y + px(7));
+  }
   const p0 = F.lvl === 'reg' ? F.p0 || 1 : thP0(F) || 1, s = clamp(thPow(F) / p0, 0, 1);
-  ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillRect(x - w / 2, y + h / 2 + px(1.5), w, px(3));
-  ctx.fillStyle = s > .5 ? rgba(col, .95) : s > .25 ? COL.amber : COL.enemy; ctx.fillRect(x - w / 2, y + h / 2 + px(1.5), w * s, px(3));
-  if (CAM.z / CAM.fit > 1.5 || big) { ctx.fillStyle = rgba(col, .9); ctx.font = font(9); ctx.fillText(F.name, x, y + h / 2 + px(13)); }
-  if (F.box && F.box.length) { ctx.fillStyle = COL.amber; ctx.font = font(9); ctx.fillText('⏳', x + w / 2 + px(7), y - h / 2 + px(2)); }
-  ctx.globalAlpha = 1;
-  THU.hit.push({ F, r: [x - w / 2 - px(3), y - h / 2 - px(12), x + w / 2 + px(3), y + h / 2 + px(5)] });
+  ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillRect(x0 + px(2.5), y0 + H0 - px(2.5), W0 - px(2.5), px(2.5));
+  ctx.fillStyle = s > .5 ? rgba(col, .95) : s > .25 ? COL.amber : COL.enemy; ctx.fillRect(x0 + px(2.5), y0 + H0 - px(2.5), (W0 - px(2.5)) * s, px(2.5));
+  ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'; ctx.globalAlpha = 1;
+  THU.hit.push({ F, r: [x0 - px(2), y0 - px(2), x0 + W0 + px(2), y0 + H0 + px(2)] });
 }
 // 命令箭头（从标号出发）：推进 = 向前的宽箭头；穿插 = 指向目标的长箭头 + 小旗；后撤 = 回头箭头；坚守 = 正面的弧线；预备队 / 第二梯队 = 虚圈
 function thuArrow(ctx, F, x, y, col, a, side) {
@@ -282,8 +293,9 @@ function thuDraw(time) {
     for (const F of list) {
       const c = F.lvl === 'reg' ? (G => ({ x: G.ax, y: G.ay }))(thG(F)) : thAt(F);
       if (!c || !vis(c.x, c.y)) continue;
-      const sel = THU.sel.has(F.id) || [...THU.sel].some(id => { const P = thF(id); return P && thuAnc(P, F); }), y = c.y - thDir(side) * px(22);
-      thuArrow(ctx, F, c.x, y, col, mine ? .9 : .55, side);
+      const sel = THU.sel.has(F.id) || [...THU.sel].some(id => { const P = thF(id); return P && thuAnc(P, F); }), y = c.y - px(30);   // 番号牌都立在部队头顶（屏幕上方）
+      ctx.strokeStyle = rgba(col, mine ? .5 : .35); ctx.lineWidth = px(1); ctx.beginPath(); ctx.moveTo(c.x, c.y); ctx.lineTo(c.x, y + px(13)); ctx.stroke();   // 引线
+      thuArrow(ctx, F, c.x, thDir(side) < 0 ? y - px(15) : c.y, col, mine ? .9 : .55, side);   // 箭头从牌子上沿（向北推进）或部队位置（向南）出发，不压住番号
       thuMark(ctx, c.x, y, F, col, sel, mine ? 1 : .7);
     }
   }
@@ -321,4 +333,64 @@ HOOK.step.push(dt => {
     for (const id of G.us) { const u = UNIT_MAP.get(id); if (u) u.org = org; }
     for (const id of G.vs) { const v = vehById(id); if (v) v.org = org; }
   }
+});
+
+// 3D：每个营（连）头顶立一块番号牌——北约兵种框（步兵 ×、装甲椭圆、机步两者都有）上加编制记号（II 营 / I 连），旁边写番号、当前命令，
+//   下面一条兵力条；引线落到营的位置。远看（镜头拉远）只立师的牌子。牌子按屏幕像素定大小，远近都看得清；互相不叠；点牌子选中这个编队
+function thMarks3(ctx, stem) {
+  THU.hit3 = [];
+  if (!thOn() || !thuActive()) return;
+  const far = CAM.z / CAM.fit < 2.1, occ = [], C = V3.cam, list = [];
+  for (const side of ['p', 'e']) {
+    const R0 = thRoot(side);
+    if (!R0) continue;
+    const mine = !S.ctl || side === S.ctl, col = side === 'p' ? COL.g : COL.enemy;
+    for (const F of far ? thKids(R0).filter(D => thRegsOf(D).some(thG)) : thRegsOf(R0).filter(thG)) {
+      const c = F.lvl === 'reg' ? (G => ({ x: G.ax, y: G.ay }))(thG(F)) : thAt(F);
+      if (!c || !(mine || (side === 'e' ? inVision(c.x, c.y) : spotted(c.x, c.y)))) continue;
+      list.push({ F, c, col, d: C ? dist(c.x, -c.y, C.E[0], C.E[1]) : 0 });
+    }
+  }
+  list.sort((a, b) => a.d - b.d);
+  for (const { F, c, col } of list) {
+    const q = stem(c.x, c.y, F.lvl === 'div' ? 90 : 55, col, 1);
+    if (!q) continue;
+    const G = F.lvl === 'reg' ? thG(F) : null, sel = THU.sel.has(F.id) || [...THU.sel].some(id => { const P = thF(id); return P && thuAnc(P, F); });
+    const t = G ? G.type || 'inf' : (() => { let v = 0, n = 0; for (const R of thRegsOf(F)) { const g = thG(R); if (g) { const P = hqRegPow(g); v += P.veh; n += P.tot; } } return v / Math.max(1, n) >= .6 ? 'armor' : v / Math.max(1, n) >= .25 ? 'mech' : 'inf'; })();
+    const ech = F.lvl === 'div' ? 'XX' : F.lvl === 'bde' ? 'III' : F.ech || 'II', verb = thVerb(thOrdOf(F)) + (F.box && F.box.length ? ' ⏳' : '');
+    ctx.save(); ctx.globalAlpha = Math.max(.4, q.al);
+    ctx.font = 'bold 13px "IBM Plex Mono", "Noto Sans SC", monospace'; const w1 = ctx.measureText(F.name).width;
+    ctx.font = '11px "IBM Plex Mono", "Noto Sans SC", monospace'; const w2 = ctx.measureText(verb).width;
+    const fw = 22, fh = 15, W0 = fw + 8 + Math.max(w1, w2) + 14, h0 = 34, x0 = q.x - W0 / 2;
+    let yc = q.y - h0 / 2;
+    for (let k = 0; k < 6; k++) { const r = occ.find(r => x0 < r[2] && x0 + W0 > r[0] && yc - h0 / 2 < r[3] + 3 && yc + h0 / 2 > r[1] - 3); if (!r) break; yc = r[1] - h0 / 2 - 5; }
+    occ.push([x0, yc - h0 / 2, x0 + W0, yc + h0 / 2]);
+    if (yc < q.y - h0 / 2 - 1) { ctx.strokeStyle = rgba(col, .5 * q.al); ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(q.x, q.y); ctx.lineTo(q.x, yc + h0 / 2); ctx.stroke(); }
+    THU.hit3.push({ F, r: [x0, yc - h0 / 2, x0 + W0, yc + h0 / 2] });
+    ctx.fillStyle = rgba(COL.bg, .9); ctx.fillRect(x0, yc - h0 / 2, W0, h0);
+    ctx.strokeStyle = sel ? COL.amber : rgba(col, 1); ctx.lineWidth = sel ? 2.6 : 1.5; ctx.strokeRect(x0, yc - h0 / 2, W0, h0);
+    ctx.fillStyle = rgba(col, .9); ctx.fillRect(x0, yc - h0 / 2, 3, h0);
+    const fx = x0 + 8 + fw / 2, fy = yc + 3;
+    ctx.strokeStyle = rgba(col, 1); ctx.lineWidth = 1.3; ctx.strokeRect(fx - fw / 2, fy - fh / 2, fw, fh);
+    ctx.beginPath();
+    if (t !== 'armor') { ctx.moveTo(fx - fw / 2, fy + fh / 2); ctx.lineTo(fx + fw / 2, fy - fh / 2); ctx.moveTo(fx - fw / 2, fy - fh / 2); ctx.lineTo(fx + fw / 2, fy + fh / 2); }
+    if (t !== 'inf') ctx.ellipse(fx, fy, fw * .32, fh * .3, 0, 0, 6.283);
+    ctx.stroke();
+    ctx.fillStyle = rgba(col, 1); ctx.font = 'bold 8px "IBM Plex Mono", monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic'; ctx.fillText(ech, fx, fy - fh / 2 - 1.5);
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.font = 'bold 13px "IBM Plex Mono", "Noto Sans SC", monospace'; ctx.fillText(F.name, fx + fw / 2 + 7, yc - 6);
+    ctx.font = '11px "IBM Plex Mono", "Noto Sans SC", monospace'; ctx.fillStyle = F.man ? COL.amber : rgba(col, .78); ctx.fillText(verb, fx + fw / 2 + 7, yc + 8);
+    const p0 = F.lvl === 'reg' ? F.p0 || 1 : thP0(F) || 1, st = clamp(thPow(F) / p0, 0, 1);
+    ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillRect(x0 + 3, yc + h0 / 2 - 3, W0 - 3, 3);
+    ctx.fillStyle = st > .5 ? rgba(col, .95) : st > .25 ? COL.amber : COL.enemy; ctx.fillRect(x0 + 3, yc + h0 / 2 - 3, (W0 - 3) * st, 3);
+    ctx.restore();
+  }
+}
+// 3D：点番号牌选中编队（Shift / Ctrl 多选）
+HOOK.pointer.push((e, kind) => {
+  if (kind !== 'down' || e.button !== 0 || !thuActive() || typeof V3 !== 'object' || !V3.on || (typeof V3O === 'object' && V3O.on) || !THU.hit3 || !THU.hit3.length) return false;
+  const { sx, sy } = evPos(e), h = THU.hit3.find(o => sx >= o.r[0] && sx <= o.r[2] && sy >= o.r[1] && sy <= o.r[3]);
+  if (!h) return false;
+  thuSelect(h.F, e.shiftKey || e.ctrlKey);
+  return true;
 });
