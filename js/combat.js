@@ -17,7 +17,7 @@ function killMan(q, prefer, force) {
   if (typeof manDied === 'function') manDied(q, idx, q.men[idx]);   // 画面：这个人倒地（manim.js，只记在画面缓存里）
   const role = q.men.splice(idx, 1)[0];
   const u = unitOf(q);
-  if (u) { u.morale -= 5 * (S.t - u.flankT < 3 ? 1.5 : 1) * (u.elite ? .5 : 1); u.hitT = S.t; }   // 精锐连队：伤亡对士气的打击减半
+  if (u) { u.morale -= 5 * (S.t - u.flankT < 3 ? 1.5 : 1) * (u.elite ? .5 : 1); u.hitT = S.t; }   // 精锐排：伤亡对士气的打击减半
   if (q.side === 'e') { S.stats.killed++; return; }
   S.stats.lost++;
   if (role === 'radio') log('通讯兵阵亡，视野丢失', 'bad', 'radio', 4, q);

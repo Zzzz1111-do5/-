@@ -43,7 +43,7 @@ float mxRain(vec2 cell, vec2 f, float t, float px) {
 //   河流是暗色水道、两岸亮线，水道里的字符顺流而下；海岸线一道亮光；没看见的地方压暗（战争迷雾）；字符雨照常落下。
 //   单位、标号、箭头、弹坑等仍来自俯视贴图（这时贴图底色是黑的，叠加上去）
 const V3_FS = der => `${der ? '#extension GL_OES_standard_derivatives : enable\n#define DER 1\n' : ''}precision mediump float;
-uniform sampler2D uTop, uBase, uCls, uCls2, uFogT, uHt; uniform vec4 uBox; uniform vec2 uWorld, uGrid, uHG; uniform vec2 uFog; uniform float uSea, uT, uMx;
+uniform sampler2D uTop, uBase, uCls, uCls2, uFogT, uHt, uLf; uniform vec4 uBox; uniform vec2 uWorld, uGrid, uHG; uniform vec2 uFog; uniform float uSea, uT, uMx;
 varying vec3 vP, vN; varying float vD;
 ${V3_MX}
 #ifdef DER
@@ -144,23 +144,31 @@ void main() {
     c += G * (.025 + (gg - .26 * (1. - smoothstep(5., 12., 6.5 / pw)) * .55) * .2) * fo;   // 暗暗的一片，字点微亮（远看不糊成亮块）
     c += G * (1. - smoothstep(0., max(FW(k1.g), .004) * 1.6, abs(k1.g - .5))) * .16;   // 导数取下限：掩码平在 0.5 附近的小片林地不会整片发亮
   }
+  // 河流、道路按中心线距离场画（uLf：R 到路中心 / 12 米、G 到河中心 / 半宽 / 2.5、B 路半宽 / 8；4 倍网格精度，边是光滑的曲线）
+  vec4 LF = texture2D(uLf, cu);
+  vec2 el = ex / 4.;
   // 河流：暗色水道、两岸亮线，水道里的字符顺流而下
-  if (k1.b > .06) {
-    float rv = k1.b, band = smoothstep(.2, .4, rv);
-    vec2 tg = mxTan(uCls, cu, ex, 2), nr = vec2(tg.y, -tg.x);
+  float rq = LF.g * 2.5;
+  if (rq < 1.6) {
+    float band = 1. - smoothstep(.92, 1.04, rq);
+    vec2 gr = vec2(texture2D(uLf, cu + vec2(el.x, 0.)).g - texture2D(uLf, cu - vec2(el.x, 0.)).g, texture2D(uLf, cu + vec2(0., el.y)).g - texture2D(uLf, cu - vec2(0., el.y)).g);
+    vec2 tg = normalize(vec2(-gr.y, gr.x) + vec2(0., 1e-4)); if (tg.y < 0.) tg = -tg;   // 顺流（向海，y 增大）
+    vec2 nr = vec2(tg.y, -tg.x);
     c = mix(c, vec3(.0, .022, .028), band * .85);
-    c += vec3(.15, .95, .7) * (1. - smoothstep(0., max(FW(rv), .004) * 1.5, abs(rv - .26))) * .6;
+    c += vec3(.15, .95, .7) * (1. - smoothstep(0., max(FW(rq), .01) * 1.5, abs(rq - 1.))) * .6;
     vec2 q = vec2(dot(w, nr) / 4.5, dot(w, tg) / 5.5 - uT * 1.6);
     c += vec3(.2, 1., .8) * mxGlyph(floor(q), fract(q), uT, 4.5 / pw) * band * .5;
   }
   // 道路：带亮边的通道，中线上一段段「数据包」沿路流动
-  if (k1.r > .06) {
-    float rd = k1.r, band = smoothstep(.22, .4, rd);
-    vec2 tg = mxTan(uCls, cu, ex, 0);
+  float dR = LF.r * 12., hwR = max(LF.b * 8., 1.5);
+  if (dR < hwR + 2.) {
+    float band = 1. - smoothstep(hwR - .3, hwR + .3, dR);
+    vec2 gd = vec2(texture2D(uLf, cu + vec2(el.x, 0.)).r - texture2D(uLf, cu - vec2(el.x, 0.)).r, texture2D(uLf, cu + vec2(0., el.y)).r - texture2D(uLf, cu - vec2(0., el.y)).r);
+    vec2 tg = normalize(vec2(-gd.y, gd.x) + vec2(1e-4, 0.));
     float sl = dot(w, tg);
     c = mix(c, vec3(.008, .05, .03), band * .75);
-    c += G * (1. - smoothstep(0., max(FW(rd), .004) * 1.4, abs(rd - .28))) * .6;
-    float pk = step(.62, fract(sl / 18. - uT * .7 + mxH(floor(w / 60.)))) * smoothstep(.4, .5, rd);
+    c += G * (1. - smoothstep(0., max(FW(dR), .05) * 1.4, abs(dR - hwR))) * .6;
+    float pk = step(.62, fract(sl / 18. - uT * .7 + mxH(floor(w / 60.)))) * (1. - smoothstep(.6, 1.2, dR));
     c += vec3(.55, 1., .75) * pk * .75;
   }
   // 字符雨：两档字格（近处 9 × 12，远看换 27 × 36），向海的方向流下去
@@ -344,6 +352,7 @@ function v3Cls() {
   for (let i = 0; i < N; i++) for (let k = 0; k < 4; k++) { a[i * 4 + k] = Math.round(C[k][i] * 255); b[i * 4 + k] = Math.round(C[4 + k][i] * 255); }
   gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, V3.cls); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, GW, GH, 0, gl.RGBA, gl.UNSIGNED_BYTE, a);
   gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D, V3.cls2); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, GW, GH, 0, gl.RGBA, gl.UNSIGNED_BYTE, b);
+  if (typeof terLines === 'function') { const lf = terLines(); gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1); gl.activeTexture(gl.TEXTURE6); gl.bindTexture(gl.TEXTURE_2D, V3.lf); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, lf.w, lf.h, 0, gl.RGBA, gl.UNSIGNED_BYTE, lf.d); }   // 道路、河流的中心线距离场（terrain.js）
 }
 // 3D 地图用数码风画地面吗（黑绿画面；设置里可关）
 const v3Mx = () => typeof SETTINGS === 'object' && !!SETTINGS && (SETTINGS.look === 'green' || SETTINGS.look === 'matrix') && SETTINGS.matrix3d !== false;   // 黑绿、数码两种画面都用数码风地面
@@ -400,7 +409,7 @@ function v3Init() {
     gl.linkProgram(pr);
     if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(pr));
     const u = {}, a = { p: gl.getAttribLocation(pr, 'p'), n: gl.getAttribLocation(pr, 'n') };
-    for (const k of ['uM', 'uEye', 'uTop', 'uBase', 'uCls', 'uCls2', 'uFogT', 'uHt', 'uBox', 'uWorld', 'uGrid', 'uHG', 'uFog', 'uSea', 'uT', 'uMx']) u[k] = gl.getUniformLocation(pr, k);
+    for (const k of ['uM', 'uEye', 'uTop', 'uBase', 'uCls', 'uCls2', 'uFogT', 'uHt', 'uLf', 'uBox', 'uWorld', 'uGrid', 'uHG', 'uFog', 'uSea', 'uT', 'uMx']) u[k] = gl.getUniformLocation(pr, k);
     const pb = gl.createProgram();
     gl.attachShader(pb, sh(gl.VERTEX_SHADER, V3_BVS)); gl.attachShader(pb, sh(gl.FRAGMENT_SHADER, V3_BFS));
     gl.linkProgram(pb);
@@ -410,9 +419,9 @@ function v3Init() {
     gl.useProgram(pb); gl.uniform1i(ub.uTop, 0); gl.uniform1i(ub.uBase, 1);
     Object.assign(V3, { pb, ub, ab });
     const mk = (unit, filt) => { const t = gl.createTexture(); gl.activeTexture(gl.TEXTURE0 + unit); gl.bindTexture(gl.TEXTURE_2D, t); for (const [p, v] of [[gl.TEXTURE_MIN_FILTER, filt], [gl.TEXTURE_MAG_FILTER, filt], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D, p, v); return t; };
-    Object.assign(V3, { gl, cv, pr, u, a, tex: mk(0, gl.LINEAR), base: mk(1, gl.LINEAR), cls: mk(2, gl.LINEAR), cls2: mk(3, gl.LINEAR), fog: mk(4, gl.LINEAR), ht: mk(5, gl.NEAREST), top: document.createElement('canvas'), coarse: V3.coarse ?? (typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches), maxTex: Math.min(4096, gl.getParameter(gl.MAX_TEXTURE_SIZE) || 2048), ok: true });
+    Object.assign(V3, { gl, cv, pr, u, a, tex: mk(0, gl.LINEAR), base: mk(1, gl.LINEAR), cls: mk(2, gl.LINEAR), cls2: mk(3, gl.LINEAR), fog: mk(4, gl.LINEAR), ht: mk(5, gl.NEAREST), lf: mk(6, gl.LINEAR), top: document.createElement('canvas'), coarse: V3.coarse ?? (typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches), maxTex: Math.min(4096, gl.getParameter(gl.MAX_TEXTURE_SIZE) || 2048), ok: true });
     gl.useProgram(pr);
-    gl.uniform1i(u.uTop, 0); gl.uniform1i(u.uBase, 1); gl.uniform1i(u.uCls, 2); gl.uniform1i(u.uCls2, 3); gl.uniform1i(u.uFogT, 4); gl.uniform1i(u.uHt, 5);
+    gl.uniform1i(u.uTop, 0); gl.uniform1i(u.uBase, 1); gl.uniform1i(u.uCls, 2); gl.uniform1i(u.uCls2, 3); gl.uniform1i(u.uFogT, 4); gl.uniform1i(u.uHt, 5); gl.uniform1i(u.uLf, 6);
     gl.enable(gl.DEPTH_TEST);
   } catch (e) { V3.ok = false; console.warn('3D 地图不可用', e); }
 }
@@ -614,7 +623,7 @@ function v3Overlay(ctx, time) {
   };
   for (const p of S.planes || []) if (!p.dead && isFinite(p.x) && p.phase !== 'cat' && p.phase !== 'roll' && p.phase !== 'trap') air(p, COL.g);   // 甲板上的不画垂线
   if (S.eair) for (const a of S.eair.fly) if (!a.dead && (spec || a.pv) && isFinite(a.x) && a.ph !== 'roll') air(a, COL.enemy);
-  if (typeof hqMarks3 === 'function') hqMarks3(ctx, stem);   // 旅标：立在旅的上空（hq.js）
+  if (typeof hqMarks3 === 'function') hqMarks3(ctx, stem);   // 团标：立在团的上空（hq.js）
   if (typeof shOverlay3D === 'function') shOverlay3D(ctx, (x, y, h) => v3Proj(x, y, v3Ht(x, y) + h));   // 士兵喊话气泡（shout.js）
   if (typeof v3oOverlay === 'function') v3oOverlay(ctx);   // 观察者模式的准星
   ctx.restore();

@@ -193,16 +193,16 @@ function gunFlare(ctx, u, v, k, r) {   // 点火白光：k 1 → 0
   ctx.fillStyle = rgba(COL.amber, .55 * k); ctx.beginPath(); ctx.arc(u, v, r * 1.8 * (.7 + .3 * k), 0, 7); ctx.fill();
 }
 
-// 「堤丰」导弹连（车阵见 antiship.js TY_RIG）：4 套发射单元并排——HEMTT 牵引车（全宽驾驶室、风挡、后视镜、排气管、四轴八轮）
+// 「堤丰」导弹排（车阵见 antiship.js TY_RIG）：4 套发射单元并排——HEMTT 牵引车（全宽驾驶室、风挡、后视镜、排气管、四轴八轮）
 //   + M870 拖车（鹅颈、三轴、展开的四个液压支腿），拖车上卧着 Mk 41 四联装发射箱（侧面加强筋、箱口端盖）；
 //   发射前箱子绕拖车尾部铰点起竖到垂直：卧着看见侧面，竖起来看见箱顶 2×2 四个单元格的舱盖，地上拖出长长的投影；
 //   点火前舱盖打开（黑），点火瞬间白光、燃气从箱顶冒出随风飘散、地面一圈冲击波；打空的发射单元尾部地面留下烧蚀痕；
-//   车阵后方是营指挥车（方舱、鞭状天线、卫星天线）与发电车，电缆连到车阵
+//   车阵后方是连指挥车（方舱、鞭状天线、卫星天线）与发电车，电缆连到车阵
 function tyModel(ctx, e, x, y, a, vis, col, dim, dark, real) {
   const R0 = TY_RIG, [su, sv] = gunSh(a), fired = AS.ty.n - (e.n ?? AS.ty.n), ft = e.fireT != null ? S.t - e.fireT : 99, glass = real ? 'rgba(150,190,210,.9)' : rgba(col, .9);
   ctx.save(); ctx.translate(x, y); ctx.rotate(a);
   ctx.lineWidth = px(1.1);
-  // 连部：营指挥车与发电车（车阵后方左右）
+  // 排部：连指挥车与发电车（车阵后方左右）
   ctx.fillStyle = 'rgba(0,0,0,.28)'; ctx.beginPath(); gunRect(ctx, -33 + su * 3, -21 + su * 3, -9.2 + sv * 3, -4.6 + sv * 3); gunRect(ctx, -31 + su * 1.6, -25.5 + su * 1.6, 4.8 + sv * 1.6, 8.4 + sv * 1.6); ctx.fill();
   ctx.fillStyle = dark; ctx.strokeStyle = col;
   ctx.beginPath(); gunRect(ctx, -24.2, -21, -9, -4.8); ctx.fill(); ctx.stroke();   // 驾驶室
@@ -266,7 +266,7 @@ function tyModel(ctx, e, x, y, a, vis, col, dim, dark, real) {
   if (vis) gunCrew(ctx, x, y, a, [[-20, -11], [-19.5, -2.8, 'radio'], [-23, 10]], col);
 }
 
-// NMESIS 岸舰导弹连（车阵见 missile.js ASC_RIG）：2 辆 ROGUE-Fires 无人发射车（JLTV 底盘、没有驾驶室，车头只有传感器吊舱与摄像头杆）
+// NMESIS 岸舰导弹排（车阵见 missile.js ASC_RIG）：2 辆 ROGUE-Fires 无人发射车（JLTV 底盘、没有驾驶室，车头只有传感器吊舱与摄像头杆）
 //   各载 2 联装 NSM 发射箱，卧放时箱口朝车头；发射前转台转向目标、发射箱以尾部为轴仰起，箱口白光、车尾助推器燃气；
 //   车阵后方一辆有人驾驶的 JLTV 遥控指挥车（风挡、车顶卫通天线罩）
 function ascModel(ctx, e, x, y, a, vis, col, dim, dark, real) {

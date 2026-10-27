@@ -1,15 +1,15 @@
 'use strict';
-// 战役指挥（真 AI，双方的团长 / 旅长这一层）：只用本方看得见、记得住的敌情，决定兵往哪里调、编成什么、去干什么；
+// 战役指挥（真 AI，双方的营长 / 团长这一层）：只用本方看得见、记得住的敌情，决定兵往哪里调、编成什么、去干什么；
 // 怎么走、怎么展开、怎么保持队形交给战斗群控制器（orbat.js，固定机制）
 // ① 敌情判断（brIntel）：记住 90 秒内看见过的敌步兵与车辆的最后位置（再看那里已经没有了就划掉），相距 260 以内的连成一个敌集团，
 //    兵力按每人 1、坦克 6、其余车辆 3 估算，看不全的部分按 1.2 倍补；主攻集团取最强的一股——守方以指挥官（commander.js）判定的主攻方向为准，
 //    实际兵力悬殊（两倍以上）时以实情为准；有记忆，新的一股不比原主攻强三成以上不改判，不来回跳
 // ② 兵力账（brPoolE）：据点威胁 = 各敌集团兵力 × 距离衰减（800 以外为 0）；威胁低于 2、550 以内没见过敌人的为平静地域，
 //    其守备、伏击组与空闲的预备队除每处留一个警戒组（指挥所两个）外都可以抽；车辆抽空闲、没在交战的
-// ③ 编组（brFormE）：同一地域（520 以内，凑不够放宽到 900）抽出的兵编成合成战斗群——步兵每 3 组一个连，一个连为加强连、两三个连为营、
-//    四个连以上为团；配坦克 / 步战车 / 反坦克车、防空车、自行火炮（原来配属给这些连的坦克随连一起走）；缺反坦克、防空的从别处补
+// ③ 编组（brFormE）：同一地域（520 以内，凑不够放宽到 900）抽出的兵编成合成战斗群——步兵每 3 组一个排，一个排为加强排、两三个排为连、
+//    四个排以上为营；配坦克 / 步战车 / 反坦克车、防空车、自行火炮（原来配属给这些排的坦克随排一起走）；缺反坦克、防空的从别处补
 //    （没有防空车就带毒刺组，再没有就请战斗机在其上空巡逻，airwar.js awCapBG）；7 组以上抽一个组当侦察组前出；
-//    步兵抽不够而空闲坦克 / 战车有 4 辆以上时编装甲特遣营（brFormArmorE）；交战斗群控制器成建制集合、行军、展开，不三三两两地走
+//    步兵抽不够而空闲坦克 / 战车有 4 辆以上时编装甲特遣连（brFormArmorE）；交战斗群控制器成建制集合、行军、展开，不三三两两地走
 // ④ 任务（brMissionE）：据点失守、兵力有对面 1.3 倍以上 → 反冲击夺回；否则加强受威胁最大的据点（在它前方占领阵地）；
 //    复盘（每 6 秒）：任务方向平静 60 秒而别处吃紧 → 转用；任务据点失守而兵力不足 → 改到附近据点阻击；伤亡过六成 → 残部转入就近据点防御；
 //    决心不轻改——转用后 45 秒内、离任务据点 600 以外都不改（兵力只有对面一半除外），不来回调头
@@ -17,7 +17,7 @@
 // 状态（纯 JSON）：S.br = { e: { mem: {id: [x, y, 兵力, t]}, cl: [敌集团], main: [x, y, 兵力], n 已编组数, formT, thT, log: [] } }
 const BR = { think: 6, start: 45, memT: 90, link: 260, fog: 1.2, thrR: 800, quiet: 2, quietR: 550, area: 520, area2: 900, minTeams: 5, minMen: 12, maxTeams: 12,
   maxG: 5, gap: 30, recAt: 7, ca: 1.3, block: .8, retask: 60, firm: 45, weak: .4, relP: 60 };
-const BR_ECH = { I: ['连（加强）', '连长'], II: ['营', '营长'], III: ['团', '团长'], X: ['旅', '旅长'] };   // 编制记号 → 番号后缀、指挥员（一个连为加强连，两三个连为营，四个连以上为团）
+const BR_ECH = { I: ['排（加强）', '排长'], II: ['连', '连长'], III: ['营', '营长'], X: ['团', '团长'] };   // 编制记号 → 番号后缀、指挥员（一个排为加强排，两三个排为连，四个排以上为营）
 const brOn = side => !!S && !(S.v7off && S.v7off.br) && (side !== 'e' || (typeof a4On === 'function' && a4On()));
 const brB = side => { if (!S.br) S.br = {}; return S.br[side] || (S.br[side] = { mem: {}, cl: [], main: null, n: 0, formT: -99, thT: 3, log: [] }); };
 const brVis = side => side === 'e' ? spotted : inVision;
@@ -125,7 +125,7 @@ function brFormE(B, K) {
   if (ts.length < BR.minTeams - 1 || brMen(ts) < BR.minMen - 2) return false;
   const cx = ts.reduce((a, q) => a + q.x, 0) / ts.length, cy = ts.reduce((a, q) => a + q.y, 0) / ts.length;
   const big = ts.length >= 9, vp = brVehPoolE(B, cx, cy, 1100).sort((a, b) => dist(a.x, a.y, cx, cy) - dist(b.x, b.y, cx, cy));
-  const uOld = new Set(ts.map(q => q.u)), att = (S.veh || []).filter(v => v.side === 'e' && !v.dead && v.buddy != null && uOld.has(v.buddy) && v.bgG == null && !v.fixed && !v.afD);   // 抽出的连原来配属的坦克随连一起走
+  const uOld = new Set(ts.map(q => q.u)), att = (S.veh || []).filter(v => v.side === 'e' && !v.dead && v.buddy != null && uOld.has(v.buddy) && v.bgG == null && !v.fixed && !v.afD);   // 抽出的排原来配属的坦克随排一起走
   const take = (f, n) => vp.filter(f).slice(0, n);
   const vs = [...att, ...take(v => BG_TANK.includes(v.type) || v.type === 'td' || v.type === 'flame_tank', big ? 4 : 2), ...take(v => v.type === 'apc' || v.type === 'recon', big ? 2 : 1), ...take(brIsAA, big ? 2 : 1), ...take(v => v.type === 'spg', 2)]
     .filter((v, i, a) => a.indexOf(v) === i);
@@ -152,12 +152,12 @@ function brFormE(B, K) {
   if (!A) return false;
   const ri = ts.length >= BR.recAt ? ts.findIndex(q => !brTAA(q) && !brTAT(q)) : -1, rec = ri >= 0 ? ts.splice(ri, 1)[0] : null, n = ++B.n;
   const nc = Math.max(1, Math.round(ts.length / 3)), ech = nc >= 4 ? 'III' : nc >= 2 ? 'II' : 'I', nm = `机动第 ${n} ${BR_ECH[ech][0]}`;
-  // 步兵按离任务点远近排开，每 3 组一个连（最后一个连 2–4 组）
+  // 步兵按离任务点远近排开，每 3 组一个排（最后一个排 2–4 组）
   const p = M.p, srt = ts.slice().sort((a, b) => dist(a.x, a.y, p.x, p.y) - dist(b.x, b.y, p.x, p.y)), us = [];
   for (let c = 0; c < nc; c++) {
     const part = srt.slice(Math.round(c * srt.length / nc), Math.round((c + 1) * srt.length / nc));
     if (!part.length) continue;
-    const u = addUnit('e', 'inf', { role: 'bg', obj: p.key, form: 'wedge', a4n: `${nm}${c + 1} 连`, a4T: S.t });
+    const u = addUnit('e', 'inf', { role: 'bg', obj: p.key, form: 'wedge', a4n: `${nm}${c + 1} 排`, a4T: S.t });
     for (const q of part) Object.assign(q, { u: u.id, role: 'bg', bg: true, obj: p.key, hold: false, px: null });
     us.push(u.id);
   }
@@ -170,7 +170,7 @@ function brFormE(B, K) {
   B.formT = S.t;
   const from = [...new Set(area.map(o => o.p.name))].slice(0, 3).join('、'), vc = {};
   for (const v of vs) vc[vehModel(v)] = (vc[vehModel(v)] || 0) + 1;
-  const comp = [`步兵 ${nc} 个连 ${ts.length + (rec ? 1 : 0)} 组 ${brMen(ts) + (rec ? rec.men.length : 0)} 人`, ...Object.keys(vc).map(k => `${k} ${vc[k]} 辆`)].join('、');
+  const comp = [`步兵 ${nc} 个排 ${ts.length + (rec ? 1 : 0)} 组 ${brMen(ts) + (rec ? rec.men.length : 0)} 人`, ...Object.keys(vc).map(k => `${k} ${vc[k]} 辆`)].join('、');
   const lacks = [!vs.some(brIsAA) && !ts.some(brTAA) && '防空', !vs.some(v => BG_TANK.includes(v.type) || v.type === 'td') && !ts.some(brTAT) && '反坦克'].filter(Boolean);
   const est = M.lost ? Math.max(4, brNear(B, p.x, p.y, 260)) : Math.round(brThr(B, p.x, p.y));
   chatSay('e', `判断：敌主力集团约 ${K.n} 人（按兵力折算）在${brWhere(K.x, K.y)}，${M.lost ? `已占${p.name}，当面约 ${est} 人` : `威胁${p.name}`}；${from}方向未见敌情。` +
@@ -181,7 +181,7 @@ function brFormE(B, K) {
   return true;
 }
 
-// 装甲特遣营：步兵抽不够、但空闲的坦克 / 战车有 4 辆以上（装甲机动防御的守方常见）——以坦克为主体，就近带上能抽的步兵（最多一个连）和防空车
+// 装甲特遣连：步兵抽不够、但空闲的坦克 / 战车有 4 辆以上（装甲机动防御的守方常见）——以坦克为主体，就近带上能抽的步兵（最多一个排）和防空车
 function brFormArmorE(B, K) {
   const vp = brVehPoolE(B, K.x, K.y, 2600), ar = vp.filter(v => BG_TANK.includes(v.type) || v.type === 'td' || v.type === 'flame_tank' || v.type === 'apc');
   if (ar.length < 4) return false;
@@ -196,15 +196,15 @@ function brFormArmorE(B, K) {
   if (!M) return false;
   let A = { x: cx, y: cy };
   if (!vehPass(A.x, A.y, 'vehe')) { const j = nearestPassable(ci(A.x, A.y), 'vehe'); if (j >= 0) A = { x: cellCX(j), y: cellCY(j) }; }
-  const p = M.p, n = ++B.n, nm = `装甲第 ${n} 营`, us = [];
+  const p = M.p, n = ++B.n, nm = `装甲第 ${n} 连`, us = [];
   if (ts.length >= 2) {
-    const u = addUnit('e', 'inf', { role: 'bg', obj: p.key, form: 'wedge', a4n: `${nm}步兵连`, a4T: S.t });
+    const u = addUnit('e', 'inf', { role: 'bg', obj: p.key, form: 'wedge', a4n: `${nm}步兵排`, a4T: S.t });
     for (const q of ts) Object.assign(q, { u: u.id, role: 'bg', bg: true, obj: p.key, hold: false, px: null });
     us.push(u.id);
     indexUnits();
   }
   const far = Math.max(...vs.map(v => dist(v.x, v.y, A.x, A.y) / 2), ...(ts.length >= 2 ? ts : []).map(q => dist(q.x, q.y, A.x, A.y)));
-  const G = bgNew('e', nm, '营长', { us, vs: vs.map(v => v.id), rec: [], ax: Math.round(A.x), ay: Math.round(A.y), key: p.key, ech: 'II', br: true, arm: true,
+  const G = bgNew('e', nm, '连长', { us, vs: vs.map(v => v.id), rec: [], ax: Math.round(A.x), ay: Math.round(A.y), key: p.key, ech: 'II', br: true, arm: true,
     face: Math.atan2(p.y - A.y, p.x - A.x), p0: pw, agg: M.lost ? 1 : 1.2, calm: S.t, asmT: Math.round(clamp(far / 9 + 20, 40, 120)) });
   for (const v of vs) Object.assign(v, { bgG: G.id, cmd: null, buddy: null, esc: null });
   B.formT = S.t;
@@ -225,7 +225,7 @@ function brDissolve(G, why) {
   for (const q of bgRecs(G)) { const u = unitOf(q); if (u) Object.assign(u, { role: 'garrison', obj: p && p.key }); Object.assign(q, { role: 'garrison', bg: null, obj: p && p.key, px: null, recon: null }); }
   for (const v of bgVehs(G)) Object.assign(v, { cmd: null, bgG: null, hx: v.x, hy: v.y });
   G.dead = true; G.done = true;
-  bgSay(G, why === 'weak' ? `伤亡过大（剩约 ${Math.round(brPow(G) / Math.max(1, G.p0) * 100)}%），残部转入${p ? p.name : '就近'}防御。` : `任务完成，各连编入${p ? p.name : '就近据点'}守备。`, null, 'report');
+  bgSay(G, why === 'weak' ? `伤亡过大（剩约 ${Math.round(brPow(G) / Math.max(1, G.p0) * 100)}%），残部转入${p ? p.name : '就近'}防御。` : `任务完成，各排编入${p ? p.name : '就近据点'}守备。`, null, 'report');
 }
 // 转用：换任务据点，重新成行军队形开进
 function brRetask(B, G, M, why) {
@@ -266,9 +266,9 @@ function brThinkE(B) {
   if (!brFormE(B, K)) brFormArmorE(B, K);
 }
 
-// —— 攻方：夺下据点后闲着的连（平静据点的留守连只留一个警戒组）与空闲的坦克、防空车编成合成营 / 团，成建制开到下一个目标前约 300 的
-//    攻击出发位置；到位或途中接敌就展开——各连交回自动指挥（autopilot.js）按队形集结、统一发起攻击，车辆交回步坦协同（tf.js）——
-// 可抽的连：没任务的（不含残部）；平静据点的留守连（据点估计无敌、威胁低于 2、550 内没见过敌人，指挥所除外）
+// —— 攻方：夺下据点后闲着的排（平静据点的留守排只留一个警戒组）与空闲的坦克、防空车编成合成连 / 营，成建制开到下一个目标前约 300 的
+//    攻击出发位置；到位或途中接敌就展开——各排交回自动指挥（autopilot.js）按队形集结、统一发起攻击，车辆交回步坦协同（tf.js）——
+// 可抽的排：没任务的（不含残部）；平静据点的留守排（据点估计无敌、威胁低于 2、550 内没见过敌人，指挥所除外）
 function brPoolP(B) {
   const P = S.autoPlan, out = [];
   if (!P || !P.u) return out;
@@ -290,7 +290,7 @@ function brVehPoolP(B, x, y, r) {
     !(v.ride && v.ride.length) && !v.pick && v.hp >= v.maxhp * .5 && vehAmmoF(v) >= .4 && (v.fuel ?? 1) >= .35 && !(v.cmd && S.t < (v.cmd.until ?? 0)) && !(v.mod && v.mod.cram) &&
     dist(v.x, v.y, x, y) < r && !brNear(B, v.x, v.y, 450));
 }
-// 目标：没拿下、离抽调地域 380 以外的据点（近的各连自己就打了）——价值、指挥官的主要方向、已有多少连在攻、估计守敌
+// 目标：没拿下、离抽调地域 380 以外的据点（近的各排自己就打了）——价值、指挥官的主要方向、已有多少排在攻、估计守敌
 function brMissionP(B, pw, from) {
   const P = S.autoPlan || {}, pri = P.pri || {}, C = S.cmd && S.cmd.p, axis = C && C.ph === 'brk' && Array.isArray(C.axis) ? C.axis : [];
   let best = null, bs = -Infinity;
@@ -317,15 +317,15 @@ function brAtkPos(A, p, r) {
 function brFormP(B) {
   const pool = brPoolP(B);
   if (!pool.length) return false;
-  // 抽调地域：以离敌最近的一个连为中心 600 以内的连
+  // 抽调地域：以离敌最近的一个排为中心 600 以内的排
   const K = B.cl[0], seed = pool.slice().sort((a, b) => (K ? dist(a.u.x, a.u.y, K.x, K.y) : 0) - (K ? dist(b.u.x, b.u.y, K.x, K.y) : 0))[0];
   const area = pool.filter(o => dist(o.u.x, o.u.y, seed.u.x, seed.u.y) < 600).slice(0, 4);
   const cx = area.reduce((a, o) => a + o.u.x, 0) / area.length, cy = area.reduce((a, o) => a + o.u.y, 0) / area.length;
   const vp = brVehPoolP(B, cx, cy, 900).sort((a, b) => dist(a.x, a.y, cx, cy) - dist(b.x, b.y, cx, cy)), take = (f, n) => vp.filter(f).slice(0, n);
-  const ids = new Set(area.map(o => o.u.id)), att = (S.veh || []).filter(v => v.side === 'p' && !v.dead && v.auto && !v.man && v.buddy != null && ids.has(v.buddy) && v.bgG == null && v.ai !== 'repair');   // 各连配属的坦克随连一起走
+  const ids = new Set(area.map(o => o.u.id)), att = (S.veh || []).filter(v => v.side === 'p' && !v.dead && v.auto && !v.man && v.buddy != null && ids.has(v.buddy) && v.bgG == null && v.ai !== 'repair');   // 各排配属的坦克随排一起走
   const vs = [...att, ...take(v => BG_TANK.includes(v.type) || v.type === 'td', 3), ...take(v => v.type === 'apc' || v.type === 'ifv' || v.type === 'recon', 2), ...take(brIsAA, 1), ...take(v => v.type === 'spg', 1)]
     .filter((v, i, a) => a.indexOf(v) === i);
-  // 留守连：留离据点最近的一个组当警戒组（单独成一个小分队守点），其余编入
+  // 留守排：留离据点最近的一个组当警戒组（单独成一个小分队守点），其余编入
   const men = o => o.pl.ph === 'garrison' ? brMen(teamsOf(o.u)) - (teamsOf(o.u).length > 1 ? teamsOf(o.u)[0].men.length : 0) : brMen(teamsOf(o.u));
   const inf = area.reduce((a, o) => a + men(o), 0), pw = inf + vs.reduce((a, v) => a + bgPow(v), 0);
   if (inf < BR.minMen || (area.length < 2 && vs.length < 2)) return false;
@@ -354,15 +354,15 @@ function brFormP(B) {
   B.formT = S.t;
   const vc = {};
   for (const v of vs) vc[vehModel(v)] = (vc[vehModel(v)] || 0) + 1;
-  const comp = [`步兵 ${us.length} 个连 ${inf} 人`, ...Object.keys(vc).map(k => `${k} ${vc[k]} 辆`)].join('、');
+  const comp = [`步兵 ${us.length} 个排 ${inf} 人`, ...Object.keys(vc).map(k => `${k} ${vc[k]} 辆`)].join('、');
   const aa = vs.some(brIsAA) || us.some(id => teamsOf(UNIT_MAP.get(id)).some(brTAA));
-  chatSay('p', `判断：${p.name}守敌约 ${Math.round(M.est)} 人，${brWhere(cx, cy)}一带我 ${us.length} 个连已无当面之敌。决心：编成${nm}（${comp}${aa ? '' : '，无伴随防空，请航空兵掩护'}），` +
+  chatSay('p', `判断：${p.name}守敌约 ${Math.round(M.est)} 人，${brWhere(cx, cy)}一带我 ${us.length} 个排已无当面之敌。决心：编成${nm}（${comp}${aa ? '' : '，无伴随防空，请航空兵掩护'}），` +
     `成行军队形向${p.name}开进，到${brWhere(gp.x, gp.y)}攻击出发位置展开，按攻击队形发起攻击。`, { kind: 'plan', at: p, lv: 1 });
   brLog(B, `form ${nm} ${comp} → ${p.key} est${Math.round(M.est)}`);
   if (typeof tfStat === 'function') { tfStat('brFormP'); tfStat('brVehP', vs.length); }
   return true;
 }
-// 展开：各连交回自动指挥向目标攻击（目标已拿下就重新分配），车辆交回步坦协同
+// 展开：各排交回自动指挥向目标攻击（目标已拿下就重新分配），车辆交回步坦协同
 function brDeployP(B, G, why) {
   const P = apEnsure(), p = ptByKey(G.key), go = p && !apTaken(p);
   for (const u of bgUnits(G)) {
@@ -373,7 +373,7 @@ function brDeployP(B, G, why) {
   }
   for (const v of bgVehs(G)) Object.assign(v, { cmd: null, bgG: null });
   G.dead = true; G.done = true;
-  bgSay(G, go ? `${why}各连展开，按攻击队形向${p.name}发起攻击，坦克在步兵线后伴随。` : `${p ? p.name : '目标'}已被友邻夺取，各连就地待命，另行分配任务。`, null, 'order', go ? `展开，向${p.name}攻击！` : '目标已被友邻拿下，待命');
+  bgSay(G, go ? `${why}各排展开，按攻击队形向${p.name}发起攻击，坦克在步兵线后伴随。` : `${p ? p.name : '目标'}已被友邻夺取，各排就地待命，另行分配任务。`, null, 'order', go ? `展开，向${p.name}攻击！` : '目标已被友邻拿下，待命');
   brLog(B, `deploy ${G.name} ${go ? '→ ' + G.key : 'idle'}`);
 }
 function brReviewP(B, G) {
@@ -384,7 +384,7 @@ function brReviewP(B, G) {
   else if (G.st === 'fight') brDeployP(B, G, '前出途中接敌，');
   else if (S.t - G.t > 300) brDeployP(B, G, '');
 }
-// 留守连在平静据点守了 60 秒以上、又凑不成战斗群：留一个警戒组守点，主力交回自动指挥继续向纵深发展（指挥官下令巩固时不动）
+// 留守排在平静据点守了 60 秒以上、又凑不成战斗群：留一个警戒组守点，主力交回自动指挥继续向纵深发展（指挥官下令巩固时不动）
 function brFreeP(B) {
   const C = S.cmd && S.cmd.p;
   if (C && C.ph === 'cons') return;
@@ -397,7 +397,7 @@ function brFreeP(B) {
   indexUnits();
   apIdle(o.pl);
   brLog(B, `free ${o.u.ship || o.u.id} @${gp.key}`);
-  if (typeof chatSay === 'function') chatSay('p', `命令：${typeof cmdUName === 'function' ? cmdUName(o.u) : '留守连'}留一个组在${gp.name}警戒，主力继续向纵深发展。`, { kind: 'order', at: gp, key: 'brfree' + o.u.id, gap: 60, lv: 2 });
+  if (typeof chatSay === 'function') chatSay('p', `命令：${typeof cmdUName === 'function' ? cmdUName(o.u) : '留守排'}留一个组在${gp.name}警戒，主力继续向纵深发展。`, { kind: 'order', at: gp, key: 'brfree' + o.u.id, gap: 60, lv: 2 });
 }
 function brThinkP(B) {
   brIntel(B, 'p');

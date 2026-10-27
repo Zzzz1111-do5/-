@@ -113,7 +113,7 @@ const eaOpen = () => eaBases().filter(b => !(b.cratT > S.t));   // 跑道完好�
 function eaNearBase(x, y, list) { let b = null, bd = Infinity; for (const e of list || eaBases()) { const d = dist(e.x, e.y, x, y); if (d < bd) { bd = d; b = e; } } return b; }
 const eaWhere = (x, y) => typeof cmdWhere === 'function' ? cmdWhere(x, y) : gridRef(x, y);
 
-// —— 战役：在指挥所以北纵深找一块放得下 300 米跑道的平整陆地修野战机场；按难度配飞机、守军单兵防空组；我方两个连各带一个便携防空组 ——
+// —— 战役：在指挥所以北纵深找一块放得下 300 米跑道的平整陆地修野战机场；按难度配飞机、守军单兵防空组；我方两个排各带一个便携防空组 ——
 function eaPlaceBase() {
   if (TER.af) {   // 地图自带的空军基地（mapgen2.js afSite）
     const e = addEnemy('airfield', TER.af.x, TER.af.y);
@@ -192,7 +192,7 @@ function eaStep(dt) {
 // 没有守方航空时也要跑单兵防空（守方打我方舰载机）：只用一个计时器
 function eaEnsureLight() { if (!S.eaLight) S.eaLight = { aaT: 0 }; return S.eaLight; }
 
-// 战役：LA-3、LS-1 抢滩后，本连最后一个小组的机枪手换成防空导弹手
+// 战役：LA-3、LS-1 抢滩后，本排最后一个小组的机枪手换成防空导弹手
 function eaConvert() {
   for (const s of S.ships) {
     if (!s.aaN || s.aaDone || s.state !== 'beached') continue;

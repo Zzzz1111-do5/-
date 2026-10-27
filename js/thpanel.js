@@ -1,14 +1,14 @@
 'use strict';
 // 编队面板与战线画面（钢铁雄心式，配合 theater.js）：
-//   左侧竖排本方的师 / 旅 / 团 / 营卡片——编制记号、番号、当前命令、兵力条、组织度条、状态（人数、车数）、命令传达中的倒计时；
+//   左侧竖排本方的师 / 团 / 营 / 连卡片——编制记号、番号、当前命令、兵力条、组织度条、状态（人数、车数）、命令传达中的倒计时；
 //   点卡片选中（Shift / Ctrl 多选），▸ 展开下级，双击把镜头移过去；下令：推进 · 穿插（再点地图选目标）· 坚守 · 后撤 · 预备队 · 自动（交还战区）
 //   观战（双方都由 AI 指挥）时面板只看不下令，可切换看攻方 / 守方
-//   地图上：编队标号（远看画师、近看画团营）、地段分界、命令箭头（推进宽箭头、穿插长箭头、后撤回头箭头、坚守弧线、预备队虚圈）、
+//   地图上：编队标号（远看画师、近看画营连）、地段分界、命令箭头（推进宽箭头、穿插长箭头、后撤回头箭头、坚守弧线、预备队虚圈）、
 //     攻方阶段线；选中的编队高亮它的战线地段，并用虚线连到下级
-//   玩家不能直接操控舰船、航母、单个连队：左键点部队只显示型号卡，并在面板里选中它所属的团；左键拖动 / WASD / 方向键移动视角
+//   玩家不能直接操控舰船、航母、单个排：左键点部队只显示型号卡，并在面板里选中它所属的营；左键拖动 / WASD / 方向键移动视角
 const THU = { sel: new Set(), open: {}, side: 'p', pick: null, min: null, t: 0, hit: [], key: '' };
 const THU_ST = { asm: '集结', move: '开进', deploy: '展开', assault: '交战', clear: '肃清', regroup: '重整', hold: '防御', local: '就地反冲击', reserve: '待机', withdraw: '后撤' };
-const THU_ORD = [['advance', '推进', '整条地段战线一步步往前压，据点随战线推进夺取'], ['spear', '穿插', '选中后点地图上的目标：最能打的一个团（装甲优先）向目标突击，其余跟着推进'],
+const THU_ORD = [['advance', '推进', '整条地段战线一步步往前压，据点随战线推进夺取'], ['spear', '穿插', '选中后点地图上的目标：最能打的一个营（装甲优先）向目标突击，其余跟着推进'],
   ['hold', '坚守', '就地挖工事坚守地段战线'], ['retreat', '后撤', '后撤约 240 米再坚守'], ['reserve', '预备队', '撤出战线，到后方隐蔽集结待命'], ['auto', '自动', '交还战区 AI 统一指挥']];
 const thuActive = () => !!S && S.phase === 'battle';   // 编队指挥模式：不再点选 / 下令单个部队
 const thuCan = () => !!S && !!S.ctl && S.phase === 'battle' && THU.side === S.ctl;
@@ -114,7 +114,7 @@ function thuStat(F) {
 }
 function thuRow(F) {
   const e = F.side === 'e', O = thOrdOf(F), p0 = F.lvl === 'reg' ? F.p0 || 1 : thP0(F) || 1, str = thPow(F) / p0, org = thOrg(F) / 100;
-  const men = thMen(F), nv = thVehN(F), ech = F.lvl === 'div' ? 'XX' : F.lvl === 'bde' ? 'X' : F.ech || 'III';
+  const men = thMen(F), nv = thVehN(F), ech = F.lvl === 'div' ? 'XX' : F.lvl === 'bde' ? 'III' : F.ech || 'II';
   const kids = F.lvl === 'reg' ? [] : thKids(F).filter(K => thRegsOf(K).length), open = THU.open[F.id] !== false;
   const tx = F.box && F.box.length ? `⏳ 传达中 ${Math.max(0, Math.ceil(F.box[0].at - S.t))}s` : '';
   const chip = `${F.man ? '✋' : ''}${thVerb(O)}`;
@@ -122,7 +122,7 @@ function thuRow(F) {
     `<i class="th-car">${kids.length ? (open ? '▾' : '▸') : ''}</i><span class="th-ech">${ech}</span><span class="th-nm" title="${F.name}">${F.name}</span>` +
     `<span class="th-chip${F.man ? ' pl' : ''}" title="${F.man ? '玩家命令' : '战区 AI'}">${chip}</span>` +
     `<div class="th-bar"><span title="兵力 ${thuPct(str)}%"><i style="width:${thuPct(str)}%"></i></span><span class="org" title="组织度 ${thuPct(org)}%"><i style="width:${thuPct(org)}%"></i></span></div>` +
-    `<span class="th-st">${thuStat(F)} · ${men} 人${nv ? ` · ${nv} 车` : ''}${F.lvl !== 'reg' && kids.length ? ` · ${kids.length} 个${F.lvl === 'div' ? '旅' : '团营'}` : ''}</span><span class="th-tx">${tx}</span></div>`;
+    `<span class="th-st">${thuStat(F)} · ${men} 人${nv ? ` · ${nv} 车` : ''}${F.lvl !== 'reg' && kids.length ? ` · ${kids.length} 个${F.lvl === 'div' ? '团' : '营连'}` : ''}</span><span class="th-tx">${tx}</span></div>`;
 }
 function thuRows(side) {
   const R = thRoot(side);
@@ -151,7 +151,7 @@ function thuRender(force) {
   for (const b of sw.querySelectorAll('button')) b.classList.toggle('on', b.dataset.side === THU.side);
   const R = thRoot(THU.side), T = S.th[THU.side];
   el.querySelector('#thTitle').textContent = `${R ? R.name : '战区'}${THU.side === 'p' && T ? ` · 阶段线 ${T.k}` : ''}`;
-  const rows = thuRows(THU.side) || `<div class="th-empty">${THU.side === 'p' ? '部队还在海上：上岸后按地段编成师、旅、团。' : '机动兵力编组中。'}</div>`;
+  const rows = thuRows(THU.side) || `<div class="th-empty">${THU.side === 'p' ? '部队还在海上：上岸后按地段编成师、团、营。' : '机动兵力编组中。'}</div>`;
   const list = el.querySelector('.th-list');
   if (force || rows !== THU.key) { const top = list.scrollTop; list.innerHTML = rows; list.scrollTop = top; THU.key = rows; }
   const can = thuCan(), has = [...THU.sel].some(id => { const F = thF(id); return F && F.side === S.ctl; });
@@ -162,13 +162,13 @@ function thuRender(force) {
 }
 HOOK.frame.push(() => {
   if (!S) return;
-  if (thuActive() && S.sel && S.sel.length) S.sel = [];   // 部署时选中的舰船 / 连开战后不再留着（编队指挥模式下不能直接操控）
+  if (thuActive() && S.sel && S.sel.length) S.sel = [];   // 部署时选中的舰船 / 排开战后不再留着（编队指挥模式下不能直接操控）
   const now = performance.now(); if (now - THU.t < 400) return; THU.t = now; thuRender(false);
 });
 HOOK.newGame.push(() => { THU.sel.clear(); THU.pick = null; THU.open = {}; THU.key = ''; thuRender(true); });
 
 // ———————————————— 地图点击 ————————————————
-// 左键：穿插选目标 → 编队标号 → 部队（显示型号卡、选中它所属的团）→ 空地取消选择
+// 左键：穿插选目标 → 编队标号 → 部队（显示型号卡、选中它所属的营）→ 空地取消选择
 function thuClick(p, add) {
   if (!S || !p) return;
   if (THU.pick === 'spear' && thuCan()) {
@@ -223,7 +223,7 @@ function thuMark(ctx, x, y, F, col, sel, a) {
   if (t !== 'inf') ctx.ellipse(x, y, w * .32, h * .3, 0, 0, 6.283);
   ctx.stroke();
   ctx.fillStyle = rgba(col, .95); ctx.font = font(big ? 10 : 9); ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
-  ctx.fillText(F.lvl === 'div' ? 'XX' : F.lvl === 'bde' ? 'X' : F.ech || 'III', x, y - h / 2 - px(2.5));
+  ctx.fillText(F.lvl === 'div' ? 'XX' : F.lvl === 'bde' ? 'III' : F.ech || 'II', x, y - h / 2 - px(2.5));
   const p0 = F.lvl === 'reg' ? F.p0 || 1 : thP0(F) || 1, s = clamp(thPow(F) / p0, 0, 1);
   ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillRect(x - w / 2, y + h / 2 + px(1.5), w, px(3));
   ctx.fillStyle = s > .5 ? rgba(col, .95) : s > .25 ? COL.amber : COL.enemy; ctx.fillRect(x - w / 2, y + h / 2 + px(1.5), w * s, px(3));
@@ -269,7 +269,7 @@ function thuDraw(time) {
     if (!R0) continue;
     const col = side === 'p' ? COL.g : COL.enemy, mine = !S.ctl || side === S.ctl;
     const vis = (x, y) => mine || (side === 'e' ? inVision(x, y) : spotted(x, y));
-    // 地段分界：本方战线上各团（营）地段的接缝画短竖线，师的接缝画长
+    // 地段分界：本方战线上各营（连）地段的接缝画短竖线，师的接缝画长
     if (mine && !far) for (const D of thKids(R0)) {
       for (const F of thRegsOf(D)) if (F.cols && F.cols.length) {
         const xb = F.cols[0] * FR_G, y = thLineY(side, xb + 15);
@@ -309,7 +309,7 @@ function thuDraw(time) {
   ctx.restore();
 }
 HOOK.drawOver.push(thuDraw);
-// 隶属（型号卡）：编进战区编队的连、车每 2 秒刷新「师 · 旅 / 团」
+// 隶属（型号卡）：编进战区编队的排、车每 2 秒刷新「师 · 团 / 营」
 HOOK.step.push(dt => {
   if (!S || !S.th || (THU.affT = (THU.affT ?? 0) - dt) > 0) return;
   THU.affT = 2;

@@ -452,7 +452,7 @@ function awCapE() {
   const G = S.ai && S.ai.g5;
   if (G && G.key && (G.st === 'prep' || G.st === 'go')) return { x: G.tx, y: Math.min(G.ty + 80, coastAt(G.tx) + 60) };   // 总攻时：在主攻目标上空掩护
   const bg = typeof brIsAA === 'function' ? awCapBG('e') : null;
-  if (bg) return { x: clamp(bg.x, 60, W - 60), y: Math.min(bg.y, coastAt(clamp(bg.x, 0, W - 1)) + 60) };   // 没有伴随防空的机动营 / 团：在它上空掩护
+  if (bg) return { x: clamp(bg.x, 60, W - 60), y: Math.min(bg.y, coastAt(clamp(bg.x, 0, W - 1)) + 60) };   // 没有伴随防空的机动连 / 营：在它上空掩护
   const thr = S.ai && S.ai.co && S.ai.co.thr;
   let best = null, bt = 0;
   if (thr) for (const p of S.points) { const T = thr[p.key]; if (T && T[2] > bt) { bt = T[2]; best = p; } }

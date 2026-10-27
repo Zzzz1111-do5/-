@@ -1,9 +1,9 @@
 'use strict';
 // 进攻方协同（v7）：① 攻击组凑足兵力再统一发起（按兵力比，攻坚 3:1、近战地形 2:1、开阔地 1.5:1；超时接受风险或绕开）、
-// 等待时先请舰炮准备；② 友邻互相支援：连队遭压制时，附近空闲连队前出到侧翼以侧射火力支援；③ 前沿空隙补位；
-// ④ 步坦协同：坦克 / 装甲车与步兵连绑定，停在步兵线后 35–55、左右错开；步兵被压制时前出敲掉压制火力点，但绝不超出步兵线 30；
-//    敌步兵贴近坦克时，伙伴连派一个小组掩护。执行器 vehEscort 双方共用（守方的绑定由 ai4.js 负责）。
-// 状态：S.tf = {mass: {据点 key: {t0, x, y, prep}}, help: {连队 id: {b, until}}, gap: {}, go: [最近发起的冲击（ai4.js frDrawPlans 画箭头）], main: 主攻地段 id, ...}
+// 等待时先请舰炮准备；② 友邻互相支援：排遭压制时，附近空闲排前出到侧翼以侧射火力支援；③ 前沿空隙补位；
+// ④ 步坦协同：坦克 / 装甲车与步兵排绑定，停在步兵线后 35–55、左右错开；步兵被压制时前出敲掉压制火力点，但绝不超出步兵线 30；
+//    敌步兵贴近坦克时，伙伴排派一个小组掩护。执行器 vehEscort 双方共用（守方的绑定由 ai4.js 负责）。
+// 状态：S.tf = {mass: {据点 key: {t0, x, y, prep}}, help: {排 id: {b, until}}, gap: {}, go: [最近发起的冲击（ai4.js frDrawPlans 画箭头）], main: 主攻地段 id, ...}
 const tfOn = () => !!S && !(S.v7off && S.v7off.tf);
 const tfStat = (k, n = 1) => { const o = S.v7s || (S.v7s = {}); o[k] = (o[k] || 0) + n; };
 const VEH_BACK7 = { lt_tank: 35, tank: 40, hv_tank: 35, amtank: 40, apc: 55, td: 70, flame_tank: 25, mine_tank: 30, recon: 60, aa_veh: 90, sam_veh: 110 };
@@ -57,11 +57,11 @@ function tfMass(u, p, grp, ready, exposed, pl, P, O) {
     go = true; risk = true;
   }
   if (!go) {
-    O.boost = Math.min(4, Math.max(O.boost || 0, grp.length + 1));   // 请求加强：分配时向此点多派连队
+    O.boost = Math.min(4, Math.max(O.boost || 0, grp.length + 1));   // 请求加强：分配时向此点多派排
     if (!M.said && wait > 4 && typeof chatSay === 'function') {
       M.said = 1;
       const bk = S.enemies.filter(e => !e.dead && e.kx != null && e.kind === 'bunker' && dist(e.kx, e.ky, p.x, p.y) < 120).length;
-      chatSay('p', `判断：${p.name}守军约 ${Math.round(est)} 人${bk ? `、碉堡 ${bk} 座` : ''}，我 ${ready.length} 个连约 ${men + crew} 人${crew ? `（含坦克车组 ${crew} 人）` : ''}，兵力比 ${R.toFixed(1)}:1，不足攻坚所需 ${req}:1。决心：在出发阵地待命，抽调兵力加强${M.prep && S.dd && S.dd.state !== 'sunk' ? '，舰炮先行压制' : ''}。`, { kind: 'plan', at: p, key: 'tfmass' + p.key, gap: 45 });
+      chatSay('p', `判断：${p.name}守军约 ${Math.round(est)} 人${bk ? `、碉堡 ${bk} 座` : ''}，我 ${ready.length} 个排约 ${men + crew} 人${crew ? `（含坦克车组 ${crew} 人）` : ''}，兵力比 ${R.toFixed(1)}:1，不足攻坚所需 ${req}:1。决心：在出发阵地待命，抽调兵力加强${M.prep && S.dd && S.dd.state !== 'sunk' ? '，舰炮先行压制' : ''}。`, { kind: 'plan', at: p, key: 'tfmass' + p.key, gap: 45 });
     }
     return;
   }
@@ -75,10 +75,10 @@ function tfMass(u, p, grp, ready, exposed, pl, P, O) {
   if (T.go.length > 6) T.go.shift();
   const F = T.fm && T.fm[p.key], fm = F && F.ph === 'adv' ? `，成${F.fn}队形分两个梯次交替跃进` : '';
   if (typeof chatSay === 'function') chatSay('p', `命令：${units.map(tfUN).join('、')}向${p.name}统一发起冲击（约 ${Math.round(pow)} 人对 ${Math.round(est)} 人${risk ? '，兵力不足，接受风险' : ''}）${fm}${nv ? `，坦克 ${nv} 辆在步兵线后抵近支援` : ''}。`, { kind: 'order', at: p, key: 'tfgo' + p.key, gap: 20, lv: 2 });
-  if (typeof shout === 'function') for (const g of units) shout(g, `向${p.name}冲击！`);   // 连队自己喊（shout.js），通联里只留详档
+  if (typeof shout === 'function') for (const g of units) shout(g, `向${p.name}冲击！`);   // 排自己喊（shout.js），通联里只留详档
 }
 
-// —— ② 友邻支援：连队遭压制（4 秒内挨打、平均压制 ≥ 40），350 内的空闲连队前出到压制源侧翼 110–130 处侧射 ——
+// —— ② 友邻支援：排遭压制（4 秒内挨打、平均压制 ≥ 40），350 内的空闲排前出到压制源侧翼 110–130 处侧射 ——
 function tfSource(u, c) {
   let best = null, bd = 280;
   for (const q of S.teams) if (q.side === 'e' && q.men.length && inVision(q.x, q.y)) { const d = dist(q.x, q.y, c[0], c[1]); if (d < bd) { bd = d; best = { x: q.x, y: q.y, k: '敌火力' }; } }
@@ -105,7 +105,7 @@ function tfHelp(P) {
       if (d < bd) { bd = d; best = { g, gc, pl }; }
     }
     if (!best) continue;
-    // 侧射阵位：压制源周围、与“被压制连队 → 压制源”方向成 70°、靠近支援连队的一侧
+    // 侧射阵位：压制源周围、与“被压制排 → 压制源”方向成 70°、靠近支援排的一侧
     const a0 = Math.atan2(c[1] - src.y, c[0] - src.x);
     let spot = null, sd = Infinity, side = 1;
     for (const s of [1, -1]) {
@@ -143,7 +143,7 @@ function tfExpire(P) {
   }
 }
 
-// —— ③ 前沿空隙：登陆场正面出现宽 200 以上（或当面有敌 4 人以上）的空隙，抽空闲连队进至空隙占领阵地 ——
+// —— ③ 前沿空隙：登陆场正面出现宽 200 以上（或当面有敌 4 人以上）的空隙，抽空闲排进至空隙占领阵地 ——
 function tfGap(P) {
   const F = S.front && S.front.p;
   if (!F || !F.gap || !F.gap.length) return;
@@ -176,8 +176,8 @@ function tfGap(P) {
 }
 
 // —— ④ 步坦协同：绑定（每 3 秒）——
-// 炮车 / 装甲车绑到正在进攻（集结、待攻、攻击、支援）的自动步兵连：每连最多 2 辆炮车 + 1 辆装甲车；已有伙伴且仍有效就不换
-// 连队 r 以内有没有敌情（看得见或近期见过的敌步兵、已发现的敌车辆、已标定的火力点）
+// 炮车 / 装甲车绑到正在进攻（集结、待攻、攻击、支援）的自动步兵排：每排最多 2 辆炮车 + 1 辆装甲车；已有伙伴且仍有效就不换
+// 排 r 以内有没有敌情（看得见或近期见过的敌步兵、已发现的敌车辆、已标定的火力点）
 function tfFoeNear(u, r) {
   const c = tfCent(u);
   if (!c) return false;
@@ -193,8 +193,8 @@ function tfBind(P) {
   const cap = { g: 2, a: 1, o: 1 };
   const vs = (S.veh || []).filter(v => v.side === 'p' && !v.dead && !v.lst && v.auto && !v.swim && !v.immob && v.type !== 'spg' && v.bgG == null && isLand(v.x, v.y));   // 战斗群的车由战斗群指挥
   for (const v of S.veh || []) if (v.side === 'p' && v.buddy != null && !vs.includes(v)) { v.buddy = null; v.esc = null; }
-  // 先保留仍有效的绑定；守点 / 填空隙的连队附近 350 内没有敌情时不占着坦克（免得坦克陪着守点的步兵在半路趴着），交还车辆自动驾驶去支援进攻
-  const quiet = u => (P.u[u.id].ph === 'garrison' || P.u[u.id].ph === 'gap') && !tfFoeNear(u, 350);   // 守点、填空隙的连队附近没敌情：坦克去支援进攻
+  // 先保留仍有效的绑定；守点 / 填空隙的排附近 350 内没有敌情时不占着坦克（免得坦克陪着守点的步兵在半路趴着），交还车辆自动驾驶去支援进攻
+  const quiet = u => (P.u[u.id].ph === 'garrison' || P.u[u.id].ph === 'gap') && !tfFoeNear(u, 350);   // 守点、填空隙的排附近没敌情：坦克去支援进攻
   for (const v of vs) {
     const u = v.buddy != null && units.find(o => o.id === v.buddy), k = kindOf(v), L = u && (load[u.id] || (load[u.id] = { g: 0, a: 0, o: 0 }));
     if (u && L[k] < cap[k] && v.ai !== 'repair' && !quiet(u)) L[k]++; else { if (u && quiet(u)) tfStat('tfFree'); v.buddy = null; v.esc = null; }
@@ -244,7 +244,7 @@ function tfVForm(side, x, y, ax, ay) {
   if (Math.atan2(Math.abs(cr), dt) > .87) return cr > 0 ? 'echL' : 'echR';
   return bd > 200 ? 'wedge' : 'line';
 }
-// 同一伙伴连的车辆编成一个排：按敌情定队形，排长车（编号最小）居首，其余按队形槽位（横向 lat、纵深 fb）跟进
+// 同一伙伴排的车辆编成一个排：按敌情定队形，排长车（编号最小）居首，其余按队形槽位（横向 lat、纵深 fb）跟进
 function tfLat(side) {
   const by = {};
   for (const v of S.veh || []) if (v.side === side && !v.dead && v.buddy != null && v.esc) (by[v.buddy] || (by[v.buddy] = [])).push(v);
@@ -258,7 +258,7 @@ function tfLat(side) {
     vs[0].esc.form0 = form;
   }
 }
-// 敌步兵贴近坦克（70 内）而身边没有我方步兵（40 内）：伙伴连派最近的未被压制小组前出掩护
+// 敌步兵贴近坦克（70 内）而身边没有我方步兵（40 内）：伙伴排派最近的未被压制小组前出掩护
 function tfScreen() {
   for (const v of S.veh || []) {
     if (v.side !== 'p' || v.dead || v.buddy == null || !v.esc) continue;
@@ -266,7 +266,7 @@ function tfScreen() {
     for (const q of S.teams) if (q.side === 'e' && q.men.length && inVision(q.x, q.y)) { const d = dist(q.x, q.y, v.x, v.y); if (d < td) { td = d; th = q; } }
     if (!th || S.teams.some(q => q.side === 'p' && q.men.length && !q.ride && dist(q.x, q.y, v.x, v.y) < 40)) continue;
     const u = UNIT_MAP.get(v.buddy);
-    if (!u || u.auto !== true) continue;   // 玩家手动指挥的连不抽组
+    if (!u || u.auto !== true) continue;   // 玩家手动指挥的排不抽组
     const q = teamsOf(u).filter(q => q.men.length && !q.ride && q.sup < 45 && q.order.t !== 'charge' && !(q.scr && q.scr.until > S.t)).sort((a, b) => dist(a.x, a.y, v.x, v.y) - dist(b.x, b.y, v.x, v.y))[0];
     if (!q || dist(q.x, q.y, v.x, v.y) > 220) continue;
     const a = Math.atan2(th.y - v.y, th.x - v.x), x = v.x + Math.cos(a) * 20, y = v.y + Math.sin(a) * 20;
@@ -278,7 +278,7 @@ function tfScreen() {
 }
 
 // —— 步坦协同执行器（双方共用；vehicles.js 的 vehThinkP / vehThinkE 在思考周期调用）——
-// 轴线：我方 = 伙伴连的目标据点；守方 = 反冲击计划的目标 / 威胁方向（ai4.js 的 a4Axis）
+// 轴线：我方 = 伙伴排的目标据点；守方 = 反冲击计划的目标 / 威胁方向（ai4.js 的 a4Axis）
 function tfAxisPt(v, u, c) {
   if (v.side === 'e') return typeof a4Axis === 'function' ? a4Axis(v, u, c) : [c[0], c[1] + 200];
   const P = S.autoPlan && S.autoPlan.u, pl = P && P[u.id], p = pl && pl.obj ? apPt(pl.obj) : null;
@@ -370,23 +370,23 @@ function vehEscort(v) {
 //    分两个梯次交替跃进：一个梯次停下以火力掩护，另一个梯次跃进约 45 米到前方掩蔽处，再互换；
 //    以最慢的组为准同步推进（被压制、卡住的组超时不等），不让个别组冲到前面孤立；推进到冲击出发线后统一冲击
 // 状态：S.tf.fm[据点 key] = {ox, oy 出发线中心, ax, ay 轴线, L 推进总长, sE: [两个梯次的推进距离], lead 正在跃进的梯次, bT, n 跃进次数,
-//        ph: adv 推进 / assault 冲击, u: [连队 id], q: {组 id: [横向, 纵深, 梯次]}, w0, w1 队形横向范围, fn 队形名}
+//        ph: adv 推进 / assault 冲击, u: [排 id], q: {组 id: [横向, 纵深, 梯次]}, w0, w1 队形横向范围, fn 队形名}
 const TF_BOUND = 45, TF_FN = { wedge: '三三制楔形', line: '横队', loose: '散开' };
-// 连内第 i 组相对连中心的 [横向, 纵深]（与 formation.js unitSlots 同一套队形，但不钳到地图内、不找可通行格）
+// 排内第 i 组相对排中心的 [横向, 纵深]（与 formation.js unitSlots 同一套队形，但不钳到地图内、不找可通行格）
 function tfSlotOff(i, n, form, width) {
   const sc = width / defWidth(form, n);
   if (form === 'wedge') { const tri = [[0, 0], [-1, 1], [1, 1]], [a1, b1] = tri[i % 3], [a2, b2] = tri[Math.floor(i / 3) % 3]; return [(a1 * 14 + a2 * 42) * sc, (b1 * 13 + b2 * 36) * sc + Math.floor(i / 9) * 60]; }
   const sp = n > 1 ? width / (n - 1) : 0;
   return [-width / 2 + i * sp, form === 'loose' ? (i % 2) * 22 : 0];
 }
-// 本连队正在队形推进中（autopilot 不再自行重下攻击前进令，冲锋距离收到 110）
+// 本排正在队形推进中（autopilot 不再自行重下攻击前进令，冲锋距离收到 110）
 function tfFormOf(id) {
   const F = S.tf && S.tf.fm;
   if (!F) return null;
   for (const k in F) if (F[k].ph === 'adv' && F[k].u.includes(id)) return F[k];
   return null;
 }
-// 发起（autopilot.js apLaunch 调用）：返回队形（apLaunch 把各连转入 go 后用 tfFormOrder 下第一次跃进令），否则由 apLaunch 直接攻击前进
+// 发起（autopilot.js apLaunch 调用）：返回队形（apLaunch 把各排转入 go 后用 tfFormOrder 下第一次跃进令），否则由 apLaunch 直接攻击前进
 function tfFormGo(units, p, cx, cy, P) {
   if (!tfOn()) return false;
   const T = tfEnsure(), d = dist(cx, cy, p.x, p.y);
@@ -403,7 +403,7 @@ function tfFormGo(units, p, cx, cy, P) {
   const add = units.filter(u => !F.u.includes(u.id) && teamsOf(u).length).sort((a, b) => proj(a.x, a.y) - proj(b.x, b.y));
   if (!add.length) return F;
   const ws = add.map(u => { u.form = F.form; return defWidth(F.form, teamsOf(u).length); }), gap = 26;
-  // 首批：沿出发线居中展开；后到的连：接在现有队形更靠近自己的一侧——本就在更外侧的就地展开，不横穿过来收拢（最多离开现有队形 120 米）
+  // 首批：沿出发线居中展开；后到的排：接在现有队形更靠近自己的一侧——本就在更外侧的就地展开，不横穿过来收拢（最多离开现有队形 120 米）
   let off;
   const sw = ws.reduce((a, b) => a + b + gap, -gap), own = proj(add[0].x, add[0].y) - ws[0] / 2;
   if (!F.u.length) off = -sw / 2;
@@ -414,10 +414,10 @@ function tfFormGo(units, p, cx, cy, P) {
     const w = ws[i], lat = off + w / 2, ts = teamsOf(u).filter(q => q.men.length && !q.ride);
     off += w + gap;
     F.w0 = Math.min(F.w0, lat - w / 2); F.w1 = Math.max(F.w1, lat + w / 2);
-    // 连内槽位 → 轴线坐标 [横向（加上连的横向位置）, 在推进线之后的纵深]；组与槽位按横向顺序配对
+    // 排内槽位 → 轴线坐标 [横向（加上排的横向位置）, 在推进线之后的纵深]；组与槽位按横向顺序配对
     const sl = ts.map((q, k) => { const [a, b] = tfSlotOff(k, ts.length, F.form, w); return [a + lat, b]; });
     const tsS = ts.slice().sort((a, b) => proj(a.x, a.y) - proj(b.x, b.y)); sl.sort((a, b) => a[0] - b[0]);
-    const multi = base + add.length > 1, ue = (base + i) % 2;   // 多个连：按连分梯次；单个连：连内按组交替
+    const multi = base + add.length > 1, ue = (base + i) % 2;   // 多个排：按排分梯次；单个排：排内按组交替
     tsS.forEach((q, k) => { F.q[q.id] = [Math.round(sl[k][0]), Math.round(sl[k][1]), multi ? ue : k % 2]; });
     F.u.push(u.id);
     Object.assign(u, { face, order: 'amove', tx: p.x, ty: p.y });
@@ -433,7 +433,7 @@ function tfFormOrder(F, p, fill) {
   for (const id of F.u) {
     const u = UNIT_MAP.get(id), pl = S.autoPlan && S.autoPlan.u && S.autoPlan.u[id];
     if (!u || u.state === 'rout' || !pl || pl.ph !== 'go' || (pl.halt != null && S.t - pl.halt < 45)) continue;
-    // 寻路目标取本连该梯次各槽位的中心（和 orderUnits 用连的目的地中心一样）：不能取据点——桥被炸后会沿去据点的路绕远
+    // 寻路目标取本排该梯次各槽位的中心（和 orderUnits 用排的目的地中心一样）：不能取据点——桥被炸后会沿去据点的路绕远
     const slot = o => { const s = F.sE[o[2]] - o[1]; return [F.ox + F.ax * s + lx * o[0], F.oy + F.ay * s + ly * o[0]]; }, G = [[0, 0, 0], [0, 0, 0]];
     for (const q of teamsOf(u)) { const o = F.q[q.id]; if (o && q.men.length) { const [x, y] = slot(o), g = G[o[2]]; g[0] += x; g[1] += y; g[2]++; } }
     for (const q of teamsOf(u)) {

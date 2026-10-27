@@ -18,7 +18,7 @@
 //   飞机在 S.eair.fly（type 'b2'，g 机群 id，no 机号，load 挂载，aims 瞄准点 [x, y, k?, id?]，i 已投 / 已射枚数）
 // n 一组架数 · minT 开战后最早出动 · need 出动门槛（看得见的上岸之敌价值合计：步兵每人 1、坦克 6、车辆 3、抢滩舰 7~10）· needLost 据点失守后的门槛
 const B2 = { n: 5, minT: 240, need: 90, needLost: 50, retry: 10, spd: 200, alt: .95, turn: .8, hp: 3, rel: 260, every: .12, jEvery: .35, safe: 60, gps: 4, edge: 90 };
-// 压制（v14）：每枚 JDAM 落地除了杀伤半径内的毁伤，还有大得多的冲击波与心理震撼——RS 以内的敌步兵被死死压住、连队士气大跌，
+// 压制（v14）：每枚 JDAM 落地除了杀伤半径内的毁伤，还有大得多的冲击波与心理震撼——RS 以内的敌步兵被死死压住、排士气大跌，
 //   车辆乘员被震晕（压制）；连续落弹沿航线一路滚过去（地毯式覆盖），爆点留下火球与久久不散的烟尘。
 //   弹多目标少时不再「其余几架补投同样的点」：GBU-38 在敌集结处按 26 的间距铺满覆盖面（藏在掩体里看不见的也一起覆盖）
 const B2_SHOCK = { gbu38: { rs: 120, sup: 95, mor: 10 }, gbu31: { rs: 190, sup: 100, mor: 18 } };
@@ -113,7 +113,7 @@ function b2Blast(x, y, w) {
   const D = S.b2dust || (S.b2dust = []);
   D.push({ x: Math.round(x + gauss() * 6), y: Math.round(y + gauss() * 6), t: S.t, r: w === 'gbu31' ? 48 : 30 });
   if (D.length > 260) D.splice(0, D.length - 260);
-  if (S.t - (S.b2shoutT ?? -99) > 6 && typeof shout === 'function') {   // 挨炸的连喊一嗓子
+  if (S.t - (S.b2shoutT ?? -99) > 6 && typeof shout === 'function') {   // 挨炸的排喊一嗓子
     const q = S.teams.find(q => q.side === 'p' && q.men.length && dist(q.x, q.y, x, y) < K.rs);
     if (q && unitOf(q)) { S.b2shoutT = S.t; shout(unitOf(q), pick(['B-2 地毯轰炸！趴下！', '天上全是炸弹！', '隐蔽！炸弹一路砸过来了！']), { side: 'p' }); }
   }

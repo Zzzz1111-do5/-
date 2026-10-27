@@ -3,7 +3,7 @@
 // ① P-8A「海神」海上巡逻机（e_p8，航空，2 架轮换）：在本方海岸外海上空巡逻，APY-10 雷达搜索 1500 以内的海面，
 //    每 8 秒把我方航母、驱逐舰、登陆舰的位置（带 60 左右的误差）报给守方——这就是「海情」（S.asea）。它飞得慢、目标大，
 //    我方歼击机与驱逐舰舰空导弹够得着就会打它；被击落后另一架约 4 分钟后接班
-// ② 「堤丰」陆基中程导弹连（e_typhon，火炮，纵深 500 以外）：战斧 Block V 海上打击型，亚音速掠海、射程覆盖全图、主动雷达末制导，
+// ② 「堤丰」陆基中程导弹排（e_typhon，火炮，纵深 500 以外）：战斧 Block V 海上打击型，亚音速掠海、射程覆盖全图、主动雷达末制导，
 //    每次 4 枚齐射，16 枚打完为止；只打海情里的目标（航母优先，其次驱逐舰）——没有巡逻机、岸上又看不见，就找不到航母。
 //    航母的红旗-10、近防炮和驱逐舰舰空导弹层层拦截；每枚命中航母扣 9（重型战斗部）
 // ③ SSN-774「弗吉尼亚」级攻击核潜艇（e_ssn，海军）：潜航慢速（安静）接近航母编队，被动声呐 1300 内听到航母，
@@ -54,7 +54,7 @@ function asP8Step() {
     P.n--; P.next = S.t + AS.p8.gap;
     const x = clamp(W / 2 + gauss() * 600, 300, W - 300);
     E.fly.push({ id: S.nid++, type: 'p8', x, y: -80, heading: Math.PI / 2, spd: AS.p8.spd, alt: AS.p8.alt, bank: 0, hp: AS.p8.hp, flares: 2, t: S.t, pv: false, ph: 'in', scanT: 0 });
-    if (typeof chatSay === 'function') chatSay('e', '命令：P-8A 海上巡逻机起飞，搜索敌航母编队位置，为「堤丰」导弹连与潜艇指示目标。', { kind: 'order', lv: 1 });
+    if (typeof chatSay === 'function') chatSay('e', '命令：P-8A 海上巡逻机起飞，搜索敌航母编队位置，为「堤丰」导弹排与潜艇指示目标。', { kind: 'order', lv: 1 });
   }
 }
 // 巡逻：沿海岸外 260 的一条东西向航线来回（离我方驱逐舰远的一段），每 8 秒雷达扫一次
@@ -92,11 +92,11 @@ function eaTurnTo(a, tx, ty, dt) {
   a.x += Math.cos(a.heading) * a.spd * k * dt; a.y += Math.sin(a.heading) * a.spd * k * dt;
 }
 
-// ———————————————— ② 堤丰导弹连 ————————————————
+// ———————————————— ② 堤丰导弹排 ————————————————
 // 车阵（二维 / 三维建模与导弹出口共用；局部坐标 x 向车头、y 向右，单位为世界长度）：4 套发射单元并排（间隔 9）——
 //   HEMTT M983A4 牵引车 + M870 拖车，拖车上卧着 Mk 41 四联装发射箱；发射前箱子绕拖车尾部的铰点起竖到垂直（up 秒），
 //   箱顶 2×2 四个发射单元格逐个开盖点火，打完再竖 hold 秒、down 秒放平。一次齐射 4 枚 = 一套发射单元打空（16 枚 = 4 套）；
-//   连部（营指挥车 BOC）与发电车在车阵后方
+//   排部（连指挥车 BOC）与发电车在车阵后方
 const TY_RIG = { n: 4, gap: 9, piv: -12.6, L: 13, T: 4.4, up: 3, hold: 5, down: 3 };
 const tyA = e => e.th ?? Math.PI / 2;
 const tySm = v => { v = clamp(v, 0, 1); return v * v * (3 - 2 * v); };
@@ -128,7 +128,7 @@ function asTyphon() {
     e.n = (e.n ?? AS.ty.n) - n; e.tyT = S.t + AS.ty.gap; e.fireT = S.t; e.tyL = k; e.kx = e.x; e.ky = e.y;   // 发射即暴露
     if (typeof msStat === 'function') msStat('typhon', n);
     log(`导弹预警：${n} 枚战斧海上打击型巡航导弹来袭，目标${T.nm}`, 'bad', 'tyw', 8, { x: T.x, y: T.y });
-    if (typeof chatSay === 'function') chatSay('e', `命令：「堤丰」导弹连齐射 ${n} 枚战斧 Block V，打击${T.nm}。`, { kind: 'order', at: { x: T.x, y: T.y }, lv: 1 });
+    if (typeof chatSay === 'function') chatSay('e', `命令：「堤丰」导弹排齐射 ${n} 枚战斧 Block V，打击${T.nm}。`, { kind: 'order', at: { x: T.x, y: T.y }, lv: 1 });
   }
 }
 

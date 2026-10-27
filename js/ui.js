@@ -1,5 +1,5 @@
 'use strict';
-// 选择与指令：选中的是连队（单位）、舰船与驱逐舰；部署阶段右键为布阵或预定登陆点
+// 选择与指令：选中的是排（单位）、舰船与驱逐舰；部署阶段右键为布阵或预定登陆点
 const U = { tool: null, mouse: null, box: null, down: null, fdrag: null, hoverText: '', logKey: null, level: 'hard', touches: new Map(), pinch: null, grpT: {} };
 const $ = id => document.getElementById(id);
 const selUnits = () => S.sel.map(id => UNIT_MAP.get(id)).filter(u => u && u.side === 'p' && teamsOf(u).length);
@@ -18,7 +18,7 @@ function pickAt(p) {
   if (typeof pickVeh === 'function') { const v = pickVeh(p); if (v != null) return v; }   // 车辆（vehicles.js）：点在剪影内
   let best = null, bd = px(14);
   for (const q of S.teams) if (q.side === 'p' && q.u) { const d = dist(p.x, p.y, q.x, q.y); if (d < bd) { bd = d; best = q.u; } }
-  for (const u of S.units) if (u.side === 'p' && u.x != null) {   // 点连队旗也能选中
+  for (const u of S.units) if (u.side === 'p' && u.x != null) {   // 点排旗也能选中
     const ts = teamsOf(u); if (!ts.length) continue;
     const top = Math.min(...ts.map(q => q.y)) - px(22);
     if (Math.abs(p.x - (u.x + px(7))) < px(10) && Math.abs(p.y - top) < px(10)) return u.id;
@@ -66,7 +66,7 @@ function applyTool(p) {
   else if (t === 'smoke') { if (ddFire(p.x, p.y, true)) U.tool = null; }
   else if (t === 'recon' || t === 'strike' || t === 'cas' || t === 'bomber' || t === 'fighter') { if ((t === 'recon' || t === 'fighter' ? launchPlane : airPkg)(t, p.x, p.y)) U.tool = null; }
   else if (t === 'para' || t === 'drop') { if (typeof paLaunch === 'function' && paLaunch(t, p.x, p.y)) U.tool = null; }   // 空降 / 空投（para.js）
-  else if (t === 'abn') { if (typeof abPlayerLaunch === 'function' && abPlayerLaunch(p.x, p.y)) U.tool = null; }   // 空降兵营夺取机场（abn.js）
+  else if (t === 'abn') { if (typeof abPlayerLaunch === 'function' && abPlayerLaunch(p.x, p.y)) U.tool = null; }   // 空降兵连夺取机场（abn.js）
   else if (t === 'rline') {
     const h = typeof pickShip === 'function' ? pickShip(p) : null;
     const s = S.ships.find(s => s.state === 'beached' && (s.id === h || dist(s.x, s.y, p.x, p.y) < 25));

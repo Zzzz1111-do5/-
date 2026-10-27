@@ -248,7 +248,7 @@ function moveTeam(q, dt, mul) {
     const d2 = dist(rx, ry, o2.x, o2.y);
     if (d2 < 9 && d2 > .01) { px += (rx - o2.x) / d2 * (9 - d2) * .3; py += (ry - o2.y) / d2 * (9 - d2) * .3; }
   }
-  // 避让只横向错开，不把小组往回推（桥上对向两组否则互相顶住，整连卡死）
+  // 避让只横向错开，不把小组往回推（桥上对向两组否则互相顶住，整排卡死）
   const ux = (tx - q.x) / l, uy = (ty - q.y) / l, back = px * ux + py * uy;
   if (back < 0) { px -= back * ux; py -= back * uy; }
   let nx = rx + px, ny = ry + py;

@@ -1,23 +1,23 @@
 'use strict';
 // 战场侦察与态势判断（双方 AI 司令；hq.js hqStep 每 3 秒调用 rcThink，侦察分队每秒 rcStep）
-// 为什么要有：两边各守一个点、隔得很远，谁也看不见谁——攻方旅打完预定目标就转入巩固，守方判明不了敌主攻方向就一直待机，全场卡住。
+// 为什么要有：两边各守一个点、隔得很远，谁也看不见谁——攻方团打完预定目标就转入巩固，守方判明不了敌主攻方向就一直待机，全场卡住。
 // ① 僵持：本方地面部队 RC.contact 以内一直没有看得见的敌人（沉寂），攻方 RC.quietP 秒、守方 RC.quietE 秒；
 //    或者有接触，但据点 RC.stuck 秒没有易手（互相看着谁也不动）→ 判定敌情不明、战线僵持
-// ② 派侦察分队：每个旅一个——优先侦察车（跑得快、看得远），其次步战车、反坦克车这类轻型车，都没有就从团里抽一个步兵组；
+// ② 派侦察分队：每个团一个——优先侦察车（跑得快、看得远），其次步战车、反坦克车这类轻型车，都没有就从营里抽一个步兵组；
 //    要看的目标：攻方——还没拿下的敌占据点（近 RC.stale 秒没看过的）；守方——被敌夺占的据点、各滩头出口；
 //    观察点：目标朝我一侧 RC.opMin–RC.opMax、掩蔽好或地势高、离已知敌人 RC.foeR 以外；到了停下观察 RC.look 秒，报告「X一带敌约 N / 未见敌人」，
-//    再去下一个目标；途中与敌接触（RC.foeR 以内出现敌人、挨打）：立即报告、掉头撤回，不恋战；看完或超时（RC.max 秒）归建回原来的团。
+//    再去下一个目标；途中与敌接触（RC.foeR 以内出现敌人、挨打）：立即报告、掉头撤回，不恋战；看完或超时（RC.max 秒）归建回原来的营。
 //    攻方另派侦察机 / 无人侦察机沿目标照相（甲板、战区机场有待命的）
 // ③ 敌情图：每个据点记「一带的敌兵力估计、看到的时刻」，看见了就更新；侦察分队失去联络的地方至少记 RC.lostN
 // ④ 定下决心（打破僵局）：
-//    攻方——把空闲的旅（任务完成在巩固、或打不动退下来、附近没有敌人的）派去打「分值 × 兵力比 / 距离」最高的敌占据点；
-//      一个旅兵力不够（不到敌估计的 RC.ratio 倍）就把空闲的旅集中起来打一处；还没看清的据点先侦察，侦察回来再定；
+//    攻方——把空闲的团（任务完成在巩固、或打不动退下来、附近没有敌人的）派去打「分值 × 兵力比 / 距离」最高的敌占据点；
+//      一个团兵力不够（不到敌估计的 RC.ratio 倍）就把空闲的团集中起来打一处；还没看清的据点先侦察，侦察回来再定；
 //      作战时间过了六成门槛放低到八成，过了八成只要有七成兵力也打（攻方拖下去就是败）
 //    守方——侦察到的敌人照样记进司令的敌情记忆，据此判明敌主攻方向转入反击（hq.js hqCmdE）；
-//      敌占据点兵力空虚（空闲机动旅兵力是它的 RC.ctr 倍以上）就派这个旅反冲击夺回；否则继续防御，隔 RC.again 秒再派侦察盯住敌人
+//      敌占据点兵力空虚（空闲机动团兵力是它的 RC.ctr 倍以上）就派这个团反冲击夺回；否则继续防御，隔 RC.again 秒再派侦察盯住敌人
 //    派侦察与定下的决心由司令在通联里说出来（第一次派侦察与每个决心是大战术，之后再派只进详档）
 // 状态（纯 JSON）：S.hq[side].rc = { q0 沉寂起点, sig 据点归属, flipT 上次易手, pat: [侦察分队], pt: { 据点 key: [估计兵力, 时刻] }, n 分队编号, t 上次派侦察, dT 上次定决心, spT 上次分兵, said }
-//   侦察分队 = { id, k: 'v' | 't', oid 车 / 组 id, g 原团 id, b 旅 id, tg: [目标 {k, x, y, nm}], i, op: {x, y}, st: 'go' | 'look' | 'back', t0, tl, hp0, nm }
+//   侦察分队 = { id, k: 'v' | 't', oid 车 / 组 id, g 原营 id, b 团 id, tg: [目标 {k, x, y, nm}], i, op: {x, y}, st: 'go' | 'look' | 'back', t0, tl, hp0, nm }
 const RC = { quietP: 45, quietE: 70, stuck: 90, contact: 380, stale: 120, look: 10, max: 200, opMin: 240, opMax: 320, foeR: 200, lostN: 10, again: 90, dGap: 20,
   ratio: 1.2, conc: 1.2, ctr: 1.4, prior: 15, maxPat: 3, est: 340 };
 const RC_VEH = { recon: 0, apc: 2, abv: 2, td: 3, lt_tank: 4, amtank: 5 };   // 侦察车优先，其次轻型车（数字越小越优先）；主战坦克、火炮、防空车不派
@@ -84,7 +84,7 @@ function rcOP(Hq, P, o, tg) {
   }
   return best || { x: Math.round(tg.x + Math.cos(a0) * RC.opMax), y: Math.round(tg.y + Math.sin(a0) * RC.opMax) };
 }
-// 从旅里挑侦察分队：先挑车（侦察车优先），没有就从没在打仗的团里抽一个步兵组
+// 从团里挑侦察分队：先挑车（侦察车优先），没有就从没在打仗的营里抽一个步兵组
 function rcPick(side, B) {
   const Rs = hqRegs(side, B).filter(G => !['assault', 'deploy', 'local', 'withdraw', 'clear'].includes(G.st));
   let best = null, bs = 99;
@@ -96,11 +96,11 @@ function rcPick(side, B) {
   if (best) return best;
   for (const G of Rs) for (const u of bgUnits(G)) {
     const ts = teamsOf(u).filter(q => q.men.length >= 2 && !q.ride && !q.rc && isLand(q.x, q.y) && !q.men.includes('aa'));
-    if (ts.length >= 2) return { k: 't', o: ts.sort((a, b) => a.men.length - b.men.length)[0], G };   // 连里至少留下一个组
+    if (ts.length >= 2) return { k: 't', o: ts.sort((a, b) => a.men.length - b.men.length)[0], G };   // 排里至少留下一个组
   }
   return null;
 }
-// ② 派侦察：每个旅一个分队，分到最近的一两个目标；攻方另派侦察机
+// ② 派侦察：每个团一个分队，分到最近的一两个目标；攻方另派侦察机
 function rcLaunch(H, side, quiet, stuck) {
   const R = rcEnsure(H), T = rcTargets(H, side);
   if (!T.length) return 0;
@@ -130,7 +130,7 @@ function rcLaunch(H, side, quiet, stuck) {
   if (!n) return 0;
   R.t = S.t;
   const nm = [...new Set(R.pat.flatMap(P => P.tg.map(t => t.nm)))].slice(0, 4).join('、');
-  const txt = `${stuck ? `战线僵持已 ${Math.round(quiet)} 秒、据点没有易手` : `战场沉寂已 ${Math.round(quiet)} 秒`}，敌情不明。各旅派出侦察分队（${R.pat.length} 个）前出侦察${nm}一带${plane ? '，侦察机沿线照相' : ''}，查明敌情后再定下一步决心。`;
+  const txt = `${stuck ? `战线僵持已 ${Math.round(quiet)} 秒、据点没有易手` : `战场沉寂已 ${Math.round(quiet)} 秒`}，敌情不明。各团派出侦察分队（${R.pat.length} 个）前出侦察${nm}一带${plane ? '，侦察机沿线照相' : ''}，查明敌情后再定下一步决心。`;
   if (!R.said++) hqBig(side, 'rc' + R.n, txt); else hqSay(side, null, txt);
   return n;
 }
@@ -198,14 +198,14 @@ function rcHold(P, o, tg) {
   if (P.k === 'v') { o.cmd = { x: o.x, y: o.y, t: 'move', face: tg ? Math.atan2(tg.y - o.y, tg.x - o.x) : o.heading, until: S.t + 3, ai: 'rc' }; return; }
   if (o.order.t !== 'hold') o.order = { t: 'hold' };
 }
-// 归建：交还原来的团（团的队形、命令照常接管）
+// 归建：交还原来的营（营的队形、命令照常接管）
 function rcFree(P, o) {
   if (!o) return;
   o.rc = null;
   if (P.k === 'v') o.cmd = null;
   else { o.order = { t: 'hold' }; const u = UNIT_MAP.get(o.u); if (u) u.bgX = null; }
 }
-// 守方：空闲机动旅能不能反冲击夺回兵力空虚的敌占据点
+// 守方：空闲机动团能不能反冲击夺回兵力空虚的敌占据点
 function rcDecideE(H) {
   const R = rcEnsure(H), out = [];
   const taken = new Set(H.bdes.filter(B => B.ord && B.ord.v === 'counter' && !B.ord.done).map(B => (hqObj(B) || {}).key));
@@ -228,22 +228,22 @@ function rcDecideE(H) {
   }
   return out;
 }
-// 攻方：空闲的旅转兵进攻；一个旅不够就集中几个旅打一处
+// 攻方：空闲的团转兵进攻；一个团不够就集中几个团打一处
 function rcDecideP(H, calm) {
   // 时间过了六成门槛放低到八成；过了八成（再拖就输了）只要有七成兵力也打——攻方拖下去就是败
   const R = rcEnsure(H), out = [], lim = typeof LIMIT === 'number' ? LIMIT : 2700, late = S.t > lim * .6, k = S.t > lim * .8 ? .58 : late ? .8 : 1, ratio = RC.ratio * k;
-  // 空闲：任务完成在巩固（或进攻打了两分钟没进展），各团没在冲击、展开、后撤，附近没有压上来的敌人（当面敌人很弱的不算）
+  // 空闲：任务完成在巩固（或进攻打了两分钟没进展），各营没在冲击、展开、后撤，附近没有压上来的敌人（当面敌人很弱的不算）
   const free = B => {
     const Rs = hqRegs('p', B);
     if (!Rs.length || Rs.some(G => (G.sa && G.sa.theirs >= 3 && G.sa.odds < 2) || ['assault', 'deploy', 'local', 'withdraw', 'clear', 'move'].includes(G.st))) return false;
     if (!B.ord || (B.ord.done && S.t - B.ord.done >= 30)) return true;   // 拿下目标巩固半分钟后
     return calm && B.ord.v !== 'feint' && S.t - (B.ordT ?? 0) > 120;   // 僵持时：进攻打了两分钟没进展、跟进待命太久的也转用
   };
-  const atHQ = B => B.ord && B.ord.done && (hqObj(B) || {}).key === 'HQ';   // 守着指挥所的旅：不整个调走
+  const atHQ = B => B.ord && B.ord.done && (hqObj(B) || {}).key === 'HQ';   // 守着指挥所的团：不整个调走
   let idle = H.bdes.filter(B => free(B) && !atHQ(B));
   if (!idle.length && S.t - (R.spT ?? -99) > 90) {   // 都挤在指挥所：分出一部去夺外围据点（攻方要占七成据点分值才算赢）
     const B = H.bdes.filter(B => free(B) && atHQ(B) && hqRegs('p', B).length >= 2)[0], nb = B && rcSplitP(H, B);
-    if (nb) { R.spT = S.t; idle = [nb]; out.push(`${B.name}留一部坚守指挥所，分出${nb.name}（${hqRegs('p', nb).length} 个团）夺取外围据点`); }
+    if (nb) { R.spT = S.t; idle = [nb]; out.push(`${B.name}留一部坚守指挥所，分出${nb.name}（${hqRegs('p', nb).length} 个营）夺取外围据点`); }
   }
   if (!idle.length) return out;
   const pending = R.pat.length > 0;   // 侦察分队还在外面：没看清的据点先等报告
@@ -258,30 +258,30 @@ function rcDecideP(H, calm) {
     for (const o of T) if (!used.has(o.p.key) && P >= (o.e + 4) * ratio) { const s = score(o, P, c); if (s > bs) { bs = s; best = o; } }
     if (!best) continue;
     used.add(best.p.key);
-    if (hqOrder('p', B, { v: 'attack', objs: [best.p.key] }, `${best.known ? `侦察查明${best.p.name}之敌约 ${best.e} 人` : `${best.p.name}敌情不明`}，我旅兵力足够。转兵攻击${best.p.name}。`, true)) { out.push(`${B.name}攻击${best.p.name}（敌约 ${best.known ? best.e : '?'}）`); B.rcGo = S.t; }
+    if (hqOrder('p', B, { v: 'attack', objs: [best.p.key] }, `${best.known ? `侦察查明${best.p.name}之敌约 ${best.e} 人` : `${best.p.name}敌情不明`}，我团兵力足够。转兵攻击${best.p.name}。`, true)) { out.push(`${B.name}攻击${best.p.name}（敌约 ${best.known ? best.e : '?'}）`); B.rcGo = S.t; }
   }
-  // 单个旅都不够：空闲的旅集中起来打一处（最强的旅主攻、其余同时攻击同一目标）
+  // 单个团都不够：空闲的团集中起来打一处（最强的团主攻、其余同时攻击同一目标）
   const rest = left.filter(B => B.rcGo !== S.t);
   if (rest.length >= 2 && !out.length) {
     const P = rest.reduce((a, B) => a + pw(B), 0), c = cen(rest[0]);
     let best = null, bs = 0;
     for (const o of T) if (!used.has(o.p.key) && P >= (o.e + 4) * RC.conc * k) { const s = score(o, P, c); if (s > bs) { bs = s; best = o; } }
     if (best) {
-      for (const B of rest) if (hqOrder('p', B, { v: 'attack', objs: [best.p.key] }, `各旅兵力单独都不够，集中力量会攻${best.p.name}（敌约 ${best.known ? best.e : '?'}）。`, true)) B.rcGo = S.t;
+      for (const B of rest) if (hqOrder('p', B, { v: 'attack', objs: [best.p.key] }, `各团兵力单独都不够，集中力量会攻${best.p.name}（敌约 ${best.known ? best.e : '?'}）。`, true)) B.rcGo = S.t;
       out.push(`${rest.map(B => B.name).join('、')}集中会攻${best.p.name}（敌约 ${best.known ? best.e : '?'}）`);
     }
   }
   return out;
 }
-// 守着指挥所的旅一分为二：最强的三分之一（至少一个团）留下坚守，其余编成一个新旅出去打
+// 守着指挥所的团一分为二：最强的三分之一（至少一个营）留下坚守，其余编成一个新团出去打
 function rcSplitP(H, B) {
   const Rs = hqRegs('p', B).sort((a, b) => hqRegPow(b).tot - hqRegPow(a).tot);
   if (Rs.length < 2) return null;
   const keep = Math.max(1, Math.floor(Rs.length / 3)), go = Rs.slice(keep), no = H.bdes.length + 1;
-  const nb = hqNewBde('p', no, `第${no}旅`, 'main', { x: go[0].ax, y: go[0].ay });
+  const nb = hqNewBde('p', no, `第${no}团`, 'main', { x: go[0].ax, y: go[0].ay });
   for (const G of go) { G.bde = nb.id; nb.regs.push(G.id); B.regs = B.regs.filter(id => id !== G.id); }
   rcStat('rcSplit');
-  hqSay('p', nb, `从${B.name}分出 ${go.length} 个团编成${nb.name}，出去夺取外围据点；${B.name}留 ${keep} 个团坚守指挥所。`);
+  hqSay('p', nb, `从${B.name}分出 ${go.length} 个营编成${nb.name}，出去夺取外围据点；${B.name}留 ${keep} 个营坚守指挥所。`);
   return nb;
 }
 // 司令每 3 秒：更新敌情图、判断战场是否沉寂、派侦察、定决心
@@ -298,7 +298,7 @@ function rcThink(H, side) {
   const quiet = R.q0 == null ? 0 : S.t - R.q0, stuck = S.t - (R.flipT ?? S.t), need = side === 'p' ? RC.quietP : RC.quietE, calm = quiet >= need || stuck >= RC.stuck;
   // 派侦察（僵持时）：敌情不明的目标还有、外面的侦察分队不够、上次派出去已过 RC.again 秒（分队都回来了就隔一半）
   if (calm && S.t - R.t > (R.pat.length ? RC.again : RC.again / 2) && R.pat.length < RC.maxPat) rcLaunch(H, side, Math.max(quiet, stuck), quiet < need);   // 分队都回来（或折损）了也至少隔 45 秒再派
-  // 定决心：上次决心后 RC.dGap 秒；攻方的空闲旅随时转用（攻方要的是进展），守方只在僵持时
+  // 定决心：上次决心后 RC.dGap 秒；攻方的空闲团随时转用（攻方要的是进展），守方只在僵持时
   if (S.t - R.dT < RC.dGap || (side === 'e' && !calm)) return;
   const dec = side === 'p' ? rcDecideP(H, calm) : rcDecideE(H);
   if (!dec.length) return;

@@ -881,7 +881,7 @@ function v3mFort(kind) {
 
 // ———————————————— 地面上的构筑物与杂项（原来只在地面贴图上画成平面图，3D 里立起来） ————————————————
 const V3_PT = ['exit', 'hq', 'radar', 'battery', 'town', 'village', 'ford', 'bridge'];   // 有立体模型的据点建筑（render4.js 在 3D 时不再画它们的平面图）
-// 据点建筑（render4.js drawStructure 的同一套布局，单位与世界坐标一致）：海滩出口的半圆地堡与龙牙锥、指挥所、雷达站、炮兵连阵地、
+// 据点建筑（render4.js drawStructure 的同一套布局，单位与世界坐标一致）：海滩出口的半圆地堡与龙牙锥、指挥所、雷达站、炮兵排阵地、
 //   城镇哨所、村舍、渡口踏石、公路桥（炸断只剩桥墩）
 function v3mPoint(kind, blown) {
   const M = mbNew();
@@ -901,7 +901,7 @@ function v3mPoint(kind, blown) {
     house(-8, 8, 10, 7, 3.4, 0);
     for (const [dx, dy] of [[-1.4, -1.4], [1.4, -1.4], [1.4, 1.4], [-1.4, 1.4]]) mbTube(M, [4 + dx, -4 + dy, 0], [4 + dx * .3, -4 + dy * .3, 9], .15, .12, 4, .85);
     mbBox(M, 2.6, 5.4, -5.4, -2.6, 9, 9.6, .9);
-  } else if (kind === 'battery') {   // 炮兵连：三个半圆土堤炮位，炮管朝南（海面），后面弹药掩体
+  } else if (kind === 'battery') {   // 炮兵排：三个半圆土堤炮位，炮管朝南（海面），后面弹药掩体
     for (const [dx, dy] of [[-20, 0], [0, 5], [20, 0]]) {
       const P = Array.from({ length: 9 }, (_, i) => { const a = Math.PI + i / 8 * Math.PI; return [dx + Math.cos(a) * 7.5, dy + Math.sin(a) * 7.5]; });
       mbPrism(M, P, 0, 1.6, .55, { taper: 1.2 });
@@ -974,7 +974,7 @@ function v3mRadarMast() {
 
 // 车轮：沿车宽方向的短圆管（u 车头方向坐标，v 车轮外侧，r 半径）
 function v3mWheel(M, u, v, r, w = .9) { const s = Math.sign(v) || 1; mbTube(M, [u, v - s * w, r], [u, v, r], r, r, 10, .4); }
-// 「堤丰」车阵（antiship.js TY_RIG，与二维同一套尺寸）：4 套 HEMTT 牵引车 + M870 拖车（发射箱单独实例，按起竖角转），营指挥车、发电车
+// 「堤丰」车阵（antiship.js TY_RIG，与二维同一套尺寸）：4 套 HEMTT 牵引车 + M870 拖车（发射箱单独实例，按起竖角转），连指挥车、发电车
 function v3mTyphon(M) {
   const R0 = TY_RIG;
   for (let k = 0; k < R0.n; k++) {
@@ -990,7 +990,7 @@ function v3mTyphon(M) {
     mbBox(M, -.5, 4.4, v0 - 1.8, v0 + 1.8, 2.3, 3.3, .8, { taper: .2 });   // 鹅颈
     for (const u of [-16.2, -1.8]) for (const s of [-1, 1]) { mbBox(M, u - .25, u + .25, v0 + s * 2.4 - (s < 0 ? 1.7 : 0), v0 + s * 2.4 + (s > 0 ? 1.7 : 0), 1.7, 2.1, .6); mbBox(M, u - .65, u + .65, v0 + s * 4.35 - .55, v0 + s * 4.35 + .55, 0, 1.9, .55); }   // 液压支腿
   }
-  mbBox(M, -33, -24.6, -9.2, -4.6, 1, 6.4, .8, { taper: .15 });   // 营指挥车方舱
+  mbBox(M, -33, -24.6, -9.2, -4.6, 1, 6.4, .8, { taper: .15 });   // 连指挥车方舱
   v3mDeck(M, -24.2, -21, -9, -4.8, 1, 4.6, .9, true);
   mbLine(M, [-31.6, -8.3, 6.4], [-31.6, -8.3, 13], .9); mbLine(M, [-31.6, -5.5, 6.4], [-31.6, -5.5, 11], .9);   // 鞭状天线
   mbPrism(M, mbCirc(-27.6, -6.9, 1.25, 10), 6.4, 6.9, .7, { taper: .4 });   // 卫星天线
@@ -1264,7 +1264,7 @@ function v3Units(C, box) {
   if (S.e101 && typeof A101 === 'object') chutes(S.e101.ch, c => c.k === 'veh' ? A101.heavy : A101.jump, 1);
   // —— 地面构筑物与杂项：原来只在地面贴图上画成平面图（render4 / render2 / ai3 / trucks / repair / afbase / afdef / para 在 3D 时不再画），这里立起来 ——
   const sea = (x, y) => Math.max(v3Ht(x, y), -3.2);   // 水里的东西露出水面
-  for (const p of S.points || []) {   // 据点建筑（海滩出口的地堡与龙牙、指挥所、雷达站、炮兵连、哨所、村舍、渡口、桥）
+  for (const p of S.points || []) {   // 据点建筑（海滩出口的地堡与龙牙、指挥所、雷达站、炮兵排、哨所、村舍、渡口、桥）
     if (!inB(p.x, p.y, 60)) continue;
     const k = typeof PKIND === 'function' ? PKIND(p.key) : null;
     if (!V3_PT.includes(k)) continue;

@@ -235,7 +235,7 @@ function frBuild(view) {
   frStat('frBuild');
 }
 
-// 进攻方步兵连队（岸上有小组）的形心：[{u, x, y, n}]
+// 进攻方步兵排（岸上有小组）的形心：[{u, x, y, n}]
 function frUnitsP(all) {
   const out = [];
   for (const u of S.units) {
@@ -246,7 +246,7 @@ function frUnitsP(all) {
   }
   return out;
 }
-// 'p' 视角附加：覆盖空隙、侧翼威胁、孤立连队
+// 'p' 视角附加：覆盖空隙、侧翼威胁、孤立排
 function frExtrasP(V) {
   const fp = V.fp, U = frUnitsP(true), C = U.filter(o => o.u.state !== 'rout'), VG = [];
   for (const v of S.veh || []) if (v.side === 'p' && !v.dead && !v.lst && !v.swim && typeof VEH_SPEC === 'object' && VEH_SPEC[v.type] && VEH_SPEC[v.type].gun && isLand(v.x, v.y)) VG.push(v);
@@ -372,7 +372,7 @@ function frSummary() {
 HOOK.step.push(frUpdate);
 HOOK.newGame.push(frNewGame);
 
-// —— 画面（HOOK.drawUnder）：己方前沿绿线（齿朝北）、敌前沿红线（齿朝南，情报超过 30 秒画虚线）、无人地带淡琥珀斜纹、空隙琥珀点线、孤立连队虚圈 ——
+// —— 画面（HOOK.drawUnder）：己方前沿绿线（齿朝北）、敌前沿红线（齿朝南，情报超过 30 秒画虚线）、无人地带淡琥珀斜纹、空隙琥珀点线、孤立排虚圈 ——
 // 全图时最醒目，放大后渐隐（近看以单兵为主）；低画质只画线
 const FRD = { x: new Float64Array(FR_NX + 2), y: new Float64Array(FR_NX + 2), fe: Array(FR_NX).fill(null) };
 const frYAt = (arr, x) => { const f = x / FR_G - .5, b = clamp(Math.floor(f), 0, FR_NX - 1), c = Math.min(FR_NX - 1, b + 1), l = arr[b], r = arr[c]; return l == null ? r : r == null ? l : lerp(l, r, clamp(f - b, 0, 1)); };
@@ -455,13 +455,13 @@ function frDraw(time) {
     for (const [x, dir, b] of [[g.b0 * FR_G, 1, g.b0], [(g.b1 + 1) * FR_G, -1, g.b1]]) { const y = P.fp[b]; ctx.moveTo(x, y - s); ctx.lineTo(x + dir * s, y); ctx.lineTo(x, y + s); }
     ctx.stroke();
   }
-  // 孤立连队：虚线圈
+  // 孤立排：虚线圈
   if (P.isl && P.isl.length) {
     ctx.strokeStyle = rgba(COL.g, .5 * fL); ctx.lineWidth = px(1.2); ctx.setLineDash([px(2), px(3)]); ctx.beginPath();
     for (const id of P.isl) { const u = UNIT_MAP.get(id), c = u && frCentroid(u); if (c) { ctx.moveTo(c[0] + 30, c[1]); ctx.arc(c[0], c[1], 30, 0, Math.PI * 2); } }
     ctx.stroke();
   }
-  // 地段分界：观战，或选中的连队所在地段
+  // 地段分界：观战，或选中的排所在地段
   if (sec.length) {
     let sx = null;
     if (!spec && S.sel && S.sel.length) { const u = UNIT_MAP.get(S.sel[0]), c = u && u.side === 'p' && frCentroid(u); if (c) sx = c[0]; }

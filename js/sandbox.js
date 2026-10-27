@@ -177,7 +177,7 @@ function sbxCheck(c, x, y, x2, y2, ignore) {
   if (!sbxLandOk(x, y)) return bad('须放在海岸线以北的陆地上（不能在河里）');
   const mob = s.kind === 'einf' || s.kind === 'veh' || s.kind === 'car';
   if (mob && !(TP[t].sp > 0)) return bad('部队不能放在悬崖或不可通行地形');
-  if (s.at === 'coast' && coastAt(x) - y > 300) return bad(s.ek === 'ascm' ? '岸舰导弹连须在离海岸 300 以内' : '岸防炮须在离海岸 300 以内');
+  if (s.at === 'coast' && coastAt(x) - y > 300) return bad(s.ek === 'ascm' ? '岸舰导弹排须在离海岸 300 以内' : '岸防炮须在离海岸 300 以内');
   if (s.minDepth && coastAt(x) - y < s.minDepth) return bad(`须放在离海岸 ${s.minDepth} 以外的纵深`);
   if (s.ek === 'airfield' && typeof eaRunwayFit === 'function' && !eaRunwayFit(x, y, 380, sbxAirAvoid(ignore))) return bad('这里放不下机场：920 米跑道与约 1100 × 800 的场区都要落在平整的陆地上（不跨水、河、悬崖、山地），也不能压在据点或其他工事上');
   if ((s.kind === 'enemy' || s.kind === 'post') && s.ek !== 'airfield' && sbxOnAirfield(x, y, ignore)) return bad('不能压在机场的跑道、滑行道、停机坪、机库群、油库或弹药库上');
@@ -509,21 +509,21 @@ function sbxAIDefendBase() {
   if (B0 >= 2200 && !(S.v7off && S.v7off.msl)) {
     const g0 = guns[0] || { x: b1.b.cx + 400, y: coastAt(b1.b.cx + 400) - 150 };
     const am = sbxTry('e_ascm', g0.x + (g0.x > b1.b.cx ? 60 : -60), g0.y + 20, 60);
-    if (am) say(`岸舰导弹连 1 个配置在岬角后侧，4 枚导弹专打海上的坦克登陆舰和满载登陆舰；发射后会暴露。`, am);
+    if (am) say(`岸舰导弹排 1 个配置在岬角后侧，4 枚导弹专打海上的坦克登陆舰和满载登陆舰；发射后会暴露。`, am);
   }
   if (B0 >= 2600 && !(S.v7off && S.v7off.msl)) {
     let tel = null;
     for (let k = 0; k < 40 && !tel; k++) { const x = clamp(hq.x + (Math.random() - .5) * 900, 80, W - 80), y = clamp(hq.y - 40 - Math.random() * 320, 40, H); if (coastAt(x) - y >= 480) tel = sbxTry('e_tel', x, y, 40); }
     if (tel) say(`纵深 ${sbxM(coastAt(tel.x) - tel.y)} 米处配置战术导弹发射车 1 辆（2 枚），专打抢滩卸载中的登陆舰与滩头补给站，每次发射后立即转移阵地。`, tel);
   }
-  // 反航母体系（antiship.js）：大预算才配——巡逻机找航母，「堤丰」导弹连打航母，更大的预算再加一艘攻击核潜艇
+  // 反航母体系（antiship.js）：大预算才配——巡逻机找航母，「堤丰」导弹排打航母，更大的预算再加一艘攻击核潜艇
   if (B0 >= 6000 && !(S.v7off && S.v7off.msl)) {
     let ty = null;
     for (let k = 0; k < 40 && !ty; k++) { const x = clamp(hq.x + (Math.random() - .5) * 1100, 80, W - 80), y = clamp(hq.y - 40 - Math.random() * 360, 40, H); if (coastAt(x) - y >= 520) ty = sbxTry('e_typhon', x, y, 40); }
     const p8 = ty && sbxPlace('e_p8').ok;
     let sub = null;
     if (ty && B0 >= 9000) for (let k = 0; k < 30 && !sub; k++) { const x = 300 + Math.random() * (W - 600); sub = sbxTry('e_ssn', x, coastAt(x) + 140 + Math.random() * 200, 40); }
-    if (ty) say(`反航母：纵深 ${sbxM(coastAt(ty.x) - ty.y)} 米处配置「堤丰」导弹连（16 枚战斧海上打击型）${p8 ? '，P-8A 巡逻机在外海搜索敌航母为它指示目标' : ''}${sub ? '；攻击核潜艇潜伏外海，伺机用重型鱼雷攻击敌航母编队' : ''}。`, ty);
+    if (ty) say(`反航母：纵深 ${sbxM(coastAt(ty.x) - ty.y)} 米处配置「堤丰」导弹排（16 枚战斧海上打击型）${p8 ? '，P-8A 巡逻机在外海搜索敌航母为它指示目标' : ''}${sub ? '；攻击核潜艇潜伏外海，伺机用重型鱼雷攻击敌航母编队' : ''}。`, ty);
   }
   // 6. 主攻滩头加强：反坦克炮、迫击炮、出口机枪班、反坦克雷、探照灯
   for (const B of main.slice(0, 2)) {
@@ -538,7 +538,7 @@ function sbxAIDefendBase() {
   const scr = [];
   for (const B of rest) { const cx = B.b.cx, cy = coastAt(cx); if (sbxTry('e_pillbox', cx, cy - 48, 40)) scr.push(B); sbxTry('e_ambush', cx + 30, cy - 62, 30); }
   if (scr.length) say(`${sbxNm(scr)}只留警戒：各一座小碉堡加伏击组，发现登陆立即报告、迟滞，等预备队赶到。`, scr[0].ex);
-  // 8. 纵深：第三处主防地带、更多炮兵、观察哨、雷达、反击连、桥梁守备、假目标
+  // 8. 纵深：第三处主防地带、更多炮兵、观察哨、雷达、反击排、桥梁守备、假目标
   if (main[2]) belt(main[2], false);
   const hi = sites.filter(s => coastAt(s.x) - s.y > 120 && Math.abs(s.x - b1.b.cx) < 500).sort((a, b) => elevAt(b.x, b.y) - elevAt(a.x, a.y))[0];
   if (hi && sbxTry('e_op', hi.x, hi.y, 30)) say(`观察哨设在${b1.b.name}侧后高地，为炮兵与岸炮指示目标。`, hi);
@@ -690,7 +690,7 @@ function sbxAIAttackBase(mi, fi) {
   if (cv) for (const [id, t] of [['p_air_fb', 'cas'], ['p_air_strike', 'strike'], ['p_air_ftr_adv', 'strike'], ['p_air_recon', 'recon'], ['p_air_fb', 'cas'], ['p_air_dive', 'bomber'], ['p_air_strike', 'strike']]) { if (sbxWingN() >= sbxWingCap() || sbxLeft('p') < 80) break; buyAir(id, t); }
   for (const [id, t] of [['p_air_ftr', 'fighter'], ['p_air_cas', 'cas']]) { if (sbxLeft('p') < 120) break; buyAir(id, t); }   // 大预算：再加战区歼-20、攻击-2
   if (sbxLeft('p') >= 1200) buyAir('p_air_j36', 'fighter');   // 超大预算还有富余：一架歼-36 制空型
-  if (sbxOf('enemy').some(it => sbxEntry(it).spawn.ek === 'airfield') && sbxLeft('p') >= 300 && sbxPlace('p_abn').ok) say('空降：空降兵营一个，待主力在滩头站稳、航线上的防空打掉后伞降夺取敌野战机场，修通跑道后机降轻型坦克，我方飞机就近起降。', null);
+  if (sbxOf('enemy').some(it => sbxEntry(it).spawn.ek === 'airfield') && sbxLeft('p') >= 300 && sbxPlace('p_abn').ok) say('空降：空降兵连一个，待主力在滩头站稳、航线上的防空打掉后伞降夺取敌野战机场，修通跑道后机降轻型坦克，我方飞机就近起降。', null);
   sbxSync();
   const men = w1.reduce((a, it) => a + sbxShipLoad(it).t, 0) * 3;
   say(`第一波：${w1.length} 艘突击登陆艇载陆战突击组、工兵、爆破组与机枪组约 ${men} 人` + (nAm ? `，${nAm} 辆两栖坦克随波泅渡` : '') + (nAc ? `，${nAc} 艘 726 型气垫艇各载一辆坦克` : '') + (sw ? '，扫雷舰先行清除水际障碍' : '') + (rk ? '，火箭艇抢滩前齐射压制滩头' : '') + '。', M.ex);
@@ -699,7 +699,7 @@ function sbxAIAttackBase(mi, fi) {
   const escT = esc.length ? `；另有护航舰 ${esc.length} 艘分赴${sbxNm([...new Set(esc)])}外海，对已发现火力点实施舰炮压制` : '';
   if (dd || cv) say(`火力：${dd ? sbxEntry(dd).name + '前出至' + M.b.name + '外海直接支援' : '无舰炮支援'}${escT}；${cv ? `${sbxEntry(cv).name}编 ${air.recon} 架侦察机先行照相、${air.cas} 架对地支援机随叫随到、${air.strike} 架攻击机专打已标定炮位${air.bomber ? `、${air.bomber} 架轰炸机轰炸炮兵阵地与岸炮` : ''}${air.fighter ? `、${air.fighter} 架战斗机巡逻夺取制空权` : ''}` : '无航空兵'}。`, dd || cv);
   const sup2 = [relay && '无线电中继减少通讯中断', '战前对' + M.b.name + '出口照相侦察', depot && '预置野战补给站加快向纵深推进', smoke && `烟幕弹 ${smoke} 发掩护抢滩`,
-    para && '空降伞兵连待命，攻势展开后在主攻目标后方伞降夹击', drop && '空投补给 2 次，接济断了补给线的部队'].filter(Boolean);
+    para && '空降伞兵排待命，攻势展开后在主攻目标后方伞降夹击', drop && '空投补给 2 次，接济断了补给线的部队'].filter(Boolean);
   say(`保障：${sup2.join('；')}。`, null);
   return { main: M.b.name, feint: F && F.b.name, M, F, cv, ship, plan, veh, say, buyAir, B0 };
 }
@@ -732,7 +732,7 @@ const sbxCnt = n => Object.entries(n).map(([id, k]) => `${catalogById(id).name.r
 function sbxDefStyle(style, R0) {
   const { main, rest, hub, hq, belt, art, say, cands } = R0, hubs = (cands || [hub]).filter(Boolean).slice(0, 3);
   const near = (p, i, r = 70) => ({ x: p.x + Math.cos(i * 2.1) * r, y: p.y - 40 - Math.abs(Math.sin(i * 2.1)) * r });
-  if (style === 'bal') {   // 机动反击群：坦克、步兵战车、步兵连、反坦克车、防空车按比例编配，分在两三个枢纽
+  if (style === 'bal') {   // 机动反击群：坦克、步兵战车、步兵排、反坦克车、防空车按比例编配，分在两三个枢纽
     const ids = sbxVehOk() ? ['e_tank', 'e_apc', 'e_reserve', 'e_td', 'e_tank', 'e_assault', 'e_sam_veh', 'e_hv_tank', 'e_apc', 'e_reserve', 'e_aa_veh'] : ['e_reserve', 'e_assault', 'e_car', 'e_reserve', 'e_at'];
     const n = sbxLoop(ids, (id, i) => { const p0 = near(hubs[i % hubs.length], i, 80), p = sbxCoverAt(p0.x, p0.y); return sbxTry(id, p.x, p.y, 40); }, 24, 80);
     say(`机动反击群（${sbxCnt(n)}）分别在${hubs.map(p => p.name).join('、')}附近的林地、村镇里隐蔽集结，熄火伪装、不暴露：判明敌主攻方向后成建制向滩头出口反突击，趁敌坦克、补给还没上岸把登陆场压回海里。`, hubs[0]);
@@ -764,7 +764,7 @@ function sbxAIDefend(style = 'bal') {
   let R0;
   try { R0 = sbxAIDefendBase(); } finally { S.sbx.budget.e = Btot; }
   if (DS.share) sbxDefStyle(style, R0);
-  // 余款不留：补步兵连、坦克、守备排（放在枢纽附近，作预备队）
+  // 余款不留：补步兵排、坦克、守备排（放在枢纽附近，作预备队）
   const hubs = (R0.cands || [R0.hub]).filter(Boolean).slice(0, 3);
   if (hubs.length) sbxLoop(sbxVehOk() ? ['e_reserve', 'e_tank', 'e_garrison', 'e_apc'] : ['e_reserve', 'e_garrison'], (id, i) => { const h = hubs[i % hubs.length], p = sbxCoverAt(h.x + Math.cos(i * 1.7) * 60, h.y - 50 - Math.abs(Math.sin(i * 1.7)) * 60); return sbxTry(id, p.x, p.y, 40); }, 14, 60);
   (S.sbx.aiSty || (S.sbx.aiSty = {})).e = style;   // 指挥体系（hq.js）按部署方案定战术
@@ -791,7 +791,7 @@ function sbxAttStyle(style, R0) {
     let cve = sbxOf('cv').find(it => it.cat === 'p_cve');
     if (!cve) { const p = sbxSea(clamp(M.b.cx + 260, 200, W - 200), CARRIER_Y - 10); const r = sbxPlace('p_cve', p.x, Math.max(p.y, STAGING_Y + 60)); if (r.ok) cve = r.it; }
     const n = sbxLoop(['p_para', 'p_air_heli', 'p_airdrop', 'p_air_heli', 'p_para'], id => sbxPlace(id).ok, 30, 24);
-    say(`方案「立体登陆」：正面登陆规模压小，${abn ? '空降兵营伞降夺取敌野战机场；' : ''}${sbxCnt(n)}——蛟龙突击队在主攻目标后方伞降、直升机机降，与正面登陆上下夹击。`, M.ex);
+    say(`方案「立体登陆」：正面登陆规模压小，${abn ? '空降兵连伞降夺取敌野战机场；' : ''}${sbxCnt(n)}——蛟龙突击队在主攻目标后方伞降、直升机机降，与正面登陆上下夹击。`, M.ex);
   } else if (style === 'fire') {
     let nd = 0, nr = 0;
     for (let i = 0; i < 6 && sbxLeft('p') >= 220; i++) { const id = i % 3 === 2 ? 'p_dd_h' : 'p_ca', p = sbxSea(M.b.cx + (i - 2.5) * 90, SEA(1690 + (i % 2) * 30)), r = sbxPlace(id, p.x, p.y); if (r.ok) { r.it.plan = { x: sbxR(M.b.cx + (i - 2.5) * 60), y: sbxR(coastAt(M.b.cx) + 420) }; nd++; } }
@@ -971,7 +971,7 @@ function sbxBuild(role) {
 // 开战：spectate 观战 AI 对 AI；attack 亲自指挥进攻方（进入常规部署阶段）
 function sbxStart(role) {
   if (!S || !S.sbx || S.sbx.live) return false;
-  // 「指挥进攻方」也是双方 AI 接管全部兵力（舰船、航母、连队都不能直接操控），玩家只在编队面板（thpanel.js）给攻方的师 / 旅 / 团下令
+  // 「指挥进攻方」也是双方 AI 接管全部兵力（舰船、航母、排都不能直接操控），玩家只在编队面板（thpanel.js）给攻方的师 / 团 / 营下令
   const ctl = role !== 'spectate' ? 'p' : null;
   role = 'spectate';
   const spent = { p: sbxSpent('p'), e: sbxSpent('e') };
@@ -991,7 +991,7 @@ function sbxStart(role) {
     S.ctl = ctl;
     startBattle();
     S.paused = false;
-    log(ctl ? '沙盒：你是攻方战区司令——在左侧编队面板给师、旅、团下令（推进 / 穿插 / 坚守 / 后撤 / 预备队），舰船与各连由 AI 执行' : '沙盒观战：双方指挥官 AI 接管全部兵力', 'info');
+    log(ctl ? '沙盒：你是攻方战区司令——在左侧编队面板给师、团、营下令（推进 / 穿插 / 坚守 / 后撤 / 预备队），舰船与各排由 AI 执行' : '沙盒观战：双方指挥官 AI 接管全部兵力', 'info');
   } else {
     S.phase = 'deploy'; S.paused = true;
     log('沙盒：进攻方由你指挥。预定登陆点后按 H-HOUR 开始。', 'info');
@@ -1035,7 +1035,7 @@ function sbxCargo() {
       mor += sp.morale || 80; nm++;
     });
     if (nm) u.morale = Math.round(mor / nm);
-    if (ts.filter(q => q.cat === 'p_ranger').length * 2 > ts.length) u.elite = true;   // 一半以上是蛟龙突击队小组：按精锐连队算士气
+    if (ts.filter(q => q.cat === 'p_ranger').length * 2 > ts.length) u.elite = true;   // 一半以上是蛟龙突击队小组：按精锐排算士气
     if (eng.length) { const ue = addUnit('p', 'eng', { ship: s.label, emblem: 'eng', face: NORTH, auto: u.auto }); for (const q of eng) q.u = ue.id; }
     indexUnits();
   }
@@ -1070,7 +1070,7 @@ function sbxWaves() {
   if (!go.length) return;
   for (const { s } of go) { s.sbxHold = false; s.auto = true; if (s.sbxPlan) { orderShips([s], s.sbxPlan.x, s.sbxPlan.y); s.sbxPlan = null; } }
   const g = go[0], n = go.length;
-  sbxSay('p', g.why === 'exit' ? `命令：${g.ex.name}已夺取，第二波 ${n} 艘起航靠岸。` : g.why === 'men' ? `命令：滩头已站稳（${g.ex.name}附近我军约一个连），第二波 ${n} 艘起航。` : `命令：H+${Math.round(S.t / 60 * 10) / 10} 分钟，按时间表第二波 ${n} 艘起航，各舰注意规避岸炮。`, 'order', { x: g.ex.x, y: g.ex.y });
+  sbxSay('p', g.why === 'exit' ? `命令：${g.ex.name}已夺取，第二波 ${n} 艘起航靠岸。` : g.why === 'men' ? `命令：滩头已站稳（${g.ex.name}附近我军约一个排），第二波 ${n} 艘起航。` : `命令：H+${Math.round(S.t / 60 * 10) / 10} 分钟，按时间表第二波 ${n} 艘起航，各舰注意规避岸炮。`, 'order', { x: g.ex.x, y: g.ex.y });
 }
 // 进攻方主攻滩头的 x：指挥官计划（commander.js）优先，否则取多数满载舰船预定抢滩的滩头；都没有时为 null
 function sbxMainX() {
@@ -1266,7 +1266,7 @@ function sbxHurtPost(o, d) {
   S.fx.push({ kind: 'boom', x: o.x, y: o.y, r: 22, life: 0, max: 1.1, side: 'e' });
   log(inVision(o.x, o.y) ? `摧毁敌${o.name}` : `远处殉爆，疑似敌${o.name}被毁`, 'good', null, 0, o);
 }
-// 兵种标签：卫生、营部、迫击炮、爆破、喷火、守军工兵、推土工程坦克
+// 兵种标签：卫生、连部、迫击炮、爆破、喷火、守军工兵、推土工程坦克
 function sbxTags(dt) {
   const R0 = S.sbxRun;
   if ((R0.tagT += dt) < .5) return;
@@ -1983,7 +1983,7 @@ function sbxGlyph(ctx, c, x, y, col, a, it, ghost) {
       ctx.restore();
       break;
     }
-    case 'missile': {   // 发射车 / 岸舰导弹连：车体 + 斜立的发射筒；进攻方的战术导弹（资产）只是一个点
+    case 'missile': {   // 发射车 / 岸舰导弹排：车体 + 斜立的发射筒；进攻方的战术导弹（资产）只是一个点
       if (s.kind !== 'enemy') { dot(0, 0, u * .6); break; }
       ctx.beginPath(); ctx.rect(x - u, y - u * .35, u * 2, u * .7); ctx.fill(); ctx.stroke();
       line(x - u * .6, y - u * .35, x + u * .8, y - u * 1.35, lw * 1.5);

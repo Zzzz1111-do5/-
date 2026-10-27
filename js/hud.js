@@ -49,7 +49,7 @@ const BTN = [
     ['fighter', '战斗机：歼-20 从战区机场起飞，在指定空域巡逻 90 秒，拦截敌机、夺取制空权', 'W', () => setTool('fighter')],
     ['para', '蛟龙突击队：两架运-20 向指定地点高跳低开 6 个组 18 人（突击、火力、反坦克、狙击、防空），特种部队火力强、抗打、不易溃退，落地后自动夺取附近据点', '⇧P', () => setTool('para')],
     ['drop', '空投补给：运输机投下 3 箱弹药，附近步兵与车辆就地补充（4 分钟内有效）', '⇧O', () => setTool('drop')],
-    ['abn', '空降夺取机场：4 架运-20 伞降空降兵营 60 人与 ZBD-03 伞兵战车 2 辆，夺取敌野战机场后机降轻型坦克，我方飞机可在那里降落整备（点敌机场附近）', '⇧K', () => setTool('abn')],
+    ['abn', '空降夺取机场：4 架运-20 伞降空降兵连 60 人与 ZBD-03 伞兵战车 2 辆，夺取敌野战机场后机降轻型坦克，我方飞机可在那里降落整备（点敌机场附近）', '⇧K', () => setTool('abn')],
     ['rline', '开辟增援线', 'E', () => setTool('rline')], ['auto', '驱逐舰自动掩护', 'G', toggleAuto],
     ['airauto', '航母自动派机：近距支援受压制的我军、空袭已标定火力点、侦察前线方向', 'J', () => toggleCvAuto()]]]
 ];
@@ -98,7 +98,7 @@ function buildHud() {
   $('objTog').addEventListener('click', () => objsToggle());
   $('feed').addEventListener('click', e => { const c = e.target.closest('[data-x]'); if (c) camCenter(+c.dataset.x, +c.dataset.y); });
   mmBind($('mm'));
-  const LEG = [['ship', '突击登陆舰'], ['supply', '补给登陆舰'], ['dd', '驱逐舰'], ['assault', '步兵连'], ['eng', '工兵'], ['reserve', '增援班'],
+  const LEG = [['ship', '突击登陆舰'], ['supply', '补给登陆舰'], ['dd', '驱逐舰'], ['assault', '步兵排'], ['eng', '工兵'], ['reserve', '增援班'],
     ...(ICON.lst ? [['lst', '坦克登陆舰']] : []), ...['tank', 'amtank', 'apc'].filter(k => ICON['v_' + k]).map(k => ['v_' + k, VEH_SPEC[k].name]),
     ['exit', '滩头出口'], ['battery', '岸防炮台'], ['radar', '雷达站'], ['bridge', '桥梁'], ['cross', '十字路口'], ['town', '镇中心'], ['village', '渔村'], ['ford', '渡口'], ['hq', '指挥所']];
   const nf = LEG.findIndex(l => l[0] === 'exit');   // 之前为我方单位，之后为地形与目标

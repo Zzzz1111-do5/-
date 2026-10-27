@@ -6,14 +6,14 @@
 //      敌未掌握制空权；机场附近已知敌兵力不多（预备队被主力吸走了）。条件不够先「塑造」最多 AB.shape 秒：
 //      侦察机照相、垂发导弹 / 歼-35 / 东风-15B 拔防空、战斗机进驻机场上空、空降前封锁敌跑道（敌机起不来拦截运输机）；
 //   ② 有蛟龙突击队就先遣：提前约 35 秒在空降场与机场之间高跳低开，掩护空降场、标定落点（主力散布收窄）；
-//   ③ 4 架运-20 伞降空降兵营 60 人（三个连：突击、机枪、红箭-12 反坦克、前卫防空、工兵）+ 重装空投 ZBD-03 伞兵战车 2 辆、弹药 3 箱；
-//   ④ 各连在集合点集结（约 25 秒或七成到齐）→ 舰炮 / 垂发导弹 / 对地支援机压制机场守敌 → 两个连主攻、一个连从侧翼发起；
-//   ⑤ 夺取后环形防御：一个连守机场核心、一个连前出到敌预备队来路构筑阻击阵地；工兵抢修跑道（守军炸过的要久得多）；
-//   ⑥ 跑道修通、机场 200 内无敌 → 运-20 依次机降：ZTQ-15 轻型坦克 2 辆、机降步兵连与弹药油料（机场成为补给点）；
+//   ③ 4 架运-20 伞降空降兵连 60 人（三个排：突击、机枪、红箭-12 反坦克、前卫防空、工兵）+ 重装空投 ZBD-03 伞兵战车 2 辆、弹药 3 箱；
+//   ④ 各排在集合点集结（约 25 秒或七成到齐）→ 舰炮 / 垂发导弹 / 对地支援机压制机场守敌 → 两个排主攻、一个排从侧翼发起；
+//   ⑤ 夺取后环形防御：一个排守机场核心、一个排前出到敌预备队来路构筑阻击阵地；工兵抢修跑道（守军炸过的要久得多）；
+//   ⑥ 跑道修通、机场 200 内无敌 → 运-20 依次机降：ZTQ-15 轻型坦克 2 辆、机降步兵排与弹药油料（机场成为补给点）；
 //      有油料后我方陆基飞机改在这里降落整备（45 秒，比回战区机场快一倍多）、从这里起飞（carrier.js 调 abRtbLand / abTakeoff）；
 //   ⑦ 会师前：指挥官把机场与通往机场的据点列为重点方向，空降场一有敌情就叫舰炮、垂发导弹、对地支援机；会师后交还自动指挥。
 // 守方（美军）：
-//   ① 战役按难度配机场警卫队与防空炮；② 雷达发现运输机编队 → 判断敌企图空降，就近预备连向机场机动，歼击机截击运输机（airwar.js）；
+//   ① 战役按难度配机场警卫队与防空炮；② 雷达发现运输机编队 → 判断敌企图空降，就近预备排向机场机动，歼击机截击运输机（airwar.js）；
 //   ③ 伞降中 / 刚落地 → 空降场 380 内的守军趁其集结未完立即冲击（敌落地兵力太多则就地坚守），炮兵、攻击机、武装直升机打空降场；
 //   ④ 机场守不住（已被突入、或当面之敌两倍于守军）→ 工兵炸毁跑道、焚毁油库，能飞的飞机转场，其余就地破坏；
 //   ⑤ 失守后：炮兵专挑运输机进近、飞机起降时封锁跑道；预备队合成反冲击（ai4 按据点 AF 自动组织）；夺回后跑道要抢修才能用。
@@ -22,7 +22,7 @@ const AB = { jump: 5, heavy: 7, sig: 24, sigPF: 13, dzMin: 230, dzMax: 380, foeR
   mod: { pow: 1.2, rof: 1.1, hard: .15, calm: .8 }, link: 320, rearm: 45, rw: 200, fix: 50, fixEng: 28, deny: 160, denyEng: 85, alGap: 22, unload: 8, fuel: 6 };
 const AB_SQ = { lead: ['radio', 'rifle', 'mg'], rifle: ['rifle', 'rifle', 'mg'], mg: ['rifle', 'mg', 'mg'], at: ['rifle', 'rifle', 'rifle'], aa: ['rifle', 'aa', 'rifle'], eng: ['rifle', 'rifle', 'rifle'] };
 const AB_ROLE = { at: { at: 1.6, atPen: 3.4, rng: 1.5 }, mg: { sup: 1.4 } };
-// 每架运-20 的装载（按跳伞顺序）；co = 连（0 = 重装空投）
+// 每架运-20 的装载（按跳伞顺序）；co = 排（0 = 重装空投）
 const AB_LOAD = [
   { co: 1, sq: ['lead', 'rifle', 'rifle', 'mg', 'at', 'aa', 'rifle'] },
   { co: 2, sq: ['lead', 'rifle', 'rifle', 'mg', 'at', 'eng', 'rifle'] },
@@ -31,7 +31,7 @@ const AB_LOAD = [
 ];
 const AB_MEN = AB_LOAD.reduce((a, L) => a + L.sq.reduce((b, k) => b + AB_SQ[k].length, 0), 0);
 // 机降：跑道修通后依次落地卸载
-const AB_AL = [{ veh: ['lt_tank'], nm: 'ZTQ-15 轻型坦克 1 辆' }, { veh: ['lt_tank'], nm: 'ZTQ-15 轻型坦克 1 辆' }, { sq: ['lead', 'rifle', 'at', 'aa'], sup: 360, fuel: AB.fuel, nm: '机降步兵连 12 人与弹药油料' }];
+const AB_AL = [{ veh: ['lt_tank'], nm: 'ZTQ-15 轻型坦克 1 辆' }, { veh: ['lt_tank'], nm: 'ZTQ-15 轻型坦克 1 辆' }, { sq: ['lead', 'rifle', 'at', 'aa'], sup: 360, fuel: AB.fuel, nm: '机降步兵排 12 人与弹药油料' }];
 const AB_CO = ['', '一', '二', '三'];
 const AB_ICONS = { abn: '<path d="M4 9a8 6 0 0 1 16 0z"/><path d="M4 9l8 6 8-6M9 9l3 6 3-6"/><circle class="f" cx="12" cy="16.2" r="1.5"/><rect x="2" y="19" width="20" height="3" rx=".5"/><path d="M5 20.5h2M11 20.5h2M17 20.5h2"/>' };   // 支援栏按钮：伞 + 跑道
 
@@ -40,7 +40,7 @@ const abSay = (side, t, o) => typeof chatSay === 'function' ? chatSay(side, t, o
 const abWhere = (x, y) => typeof cmdWhere === 'function' ? cmdWhere(x, y) : gridRef(x, y);
 const abAI = () => S.role === 'spectate' || (S.cv && S.cv.auto === true);   // 与 para.js paAI 相同：观战或航空兵交给 AI 时由指挥官决定
 const abAF = () => (S && S.points ? S.points.find(p => p.key === 'AF') : null) || null;
-// 打算夺取这座机场（还有空降兵营可用，或行动已经开始）：AI 的导弹、轰炸不把它炸毁（只封跑道），留着自己用
+// 打算夺取这座机场（还有空降兵连可用，或行动已经开始）：AI 的导弹、轰炸不把它炸毁（只封跑道），留着自己用
 const abKeep = () => !!(S && S.ab && S.assets && abAF() && (S.assets.abn > 0 || !['wait', 'end'].includes(S.ab.st)));
 function abEnsure() {
   if (!S) return null;
@@ -103,7 +103,7 @@ HOOK.newGame.push(function abNewGame(opts) {
   const p = abMakeAF();
   if (!p) return;
   abGarrison(p);
-  S.assets.abn = 1;   // 战役：空降兵营一个（沙盒从目录购买）
+  S.assets.abn = 1;   // 战役：空降兵连一个（沙盒从目录购买）
 });
 
 // —— 防空威胁（我方情报）：已标定的防空炮、看见过的防空车、近 150 秒暴露过的单兵防空组 ——
@@ -210,17 +210,17 @@ function abGo(E, why) {
   if (!(S.assets.abn > 0) || A.st === 'air' || A.st === 'pf') return false;
   S.assets.abn--;
   Object.assign(A, { dz: E.dz, ax: E.ax, t: S.t, tgtAf: E.af.key, men0: AB_MEN, pfM: false });
-  // 集合点：空降场靠机场一侧，三个连横向展开 34
+  // 集合点：空降场靠机场一侧，三个排横向展开 34
   const l = Math.max(1, dist(E.dz.x, E.dz.y, E.af.x, E.af.y)), ux = (E.af.x - E.dz.x) / l, uy = (E.af.y - E.dz.y) / l;
   A.rv = [0, 1, 2, 3].map(k => { const o = k ? (k - 2) * 34 : 0, x = E.dz.x + ux * 25 - uy * o, y = E.dz.y + uy * 25 + ux * o; return { x: Math.round(x), y: Math.round(y) }; });
   A.face = Math.atan2(uy, ux);
   if (abAI() && S.assets.para > 0 && typeof paLaunch === 'function') {
     const px = E.dz.x + ux * 70, py = E.dz.y + uy * 70;
-    if (isLand(px, py) && passInf(px, py) && paLaunch('para', px, py, true)) { A.st = 'pf'; A.pfT = S.t; abSay('p', `命令：蛟龙突击队先遣，在空降场与机场之间 ${abWhere(px, py)} 高跳低开，清除空降场附近的防空、标定落点；空降兵营约 ${AB.pfLead} 秒后跟进。`, { kind: 'order', at: { x: px, y: py }, lv: 1 }); }
+    if (isLand(px, py) && passInf(px, py) && paLaunch('para', px, py, true)) { A.st = 'pf'; A.pfT = S.t; abSay('p', `命令：蛟龙突击队先遣，在空降场与机场之间 ${abWhere(px, py)} 高跳低开，清除空降场附近的防空、标定落点；空降兵连约 ${AB.pfLead} 秒后跟进。`, { kind: 'order', at: { x: px, y: py }, lv: 1 }); }
   }
   if (A.st !== 'pf') abLift();
   abStat('abGo');
-  abSay('p', `决心：${why}以空降兵营（4 架运-20，伞兵 ${AB_MEN} 人，重装空投 ZBD-03 伞兵战车 2 辆）在${abWhere(E.dz.x, E.dz.y)}伞降，夺取敌野战机场——断敌空中支援、开辟空中走廊，机降轻型坦克与后续兵力，我方飞机就近起降；主力向机场方向打通，与空降兵会师。`, { kind: 'plan', at: E.dz, lv: 0 });
+  abSay('p', `决心：${why}以空降兵连（4 架运-20，伞兵 ${AB_MEN} 人，重装空投 ZBD-03 伞兵战车 2 辆）在${abWhere(E.dz.x, E.dz.y)}伞降，夺取敌野战机场——断敌空中支援、开辟空中走廊，机降轻型坦克与后续兵力，我方飞机就近起降；主力向机场方向打通，与空降兵会师。`, { kind: 'plan', at: E.dz, lv: 0 });
   return true;
 }
 function abLift() {
@@ -234,7 +234,7 @@ function abLift() {
     A.tr.push({ id: p.id, k, co: L.co, sq: L.sq.slice(), veh: (L.veh || []).slice(), cr: L.crates || 0, done: false, gone: false });
   });
   const sec = Math.round((H + 60 - dz.y) / 150);
-  log(`空降兵营：4 架运-20 从海上进场，约 ${sec} 秒后在 ${gridRef(dz.x, dz.y)} 伞降`, 'info', null, 0, dz);
+  log(`空降兵连：4 架运-20 从海上进场，约 ${sec} 秒后在 ${gridRef(dz.x, dz.y)} 伞降`, 'info', null, 0, dz);
   if (abAI()) { const how = abPrep(abAF(), true); if (how.length) abSay('p', `命令：运输机进场前，${how.join('、')}压制机场守敌，让他们抬不起头打运输机、冲空降场。`, { kind: 'order', at: abAF(), lv: 1 }); }
 }
 // 压制机场守敌：舰炮够得着先用舰炮，再用垂发导弹打机场核心（不打机场设施）、攻击机；force = 不管看没看见都打机场核心
@@ -254,11 +254,11 @@ function abPrep(af, force) {
 function abPlayerLaunch(x, y) {
   const A = abEnsure();
   if (!S || S.phase !== 'battle') { log('空降在 H 时之后才能使用', 'warn', 'ab0', 2); return false; }
-  if (!(S.assets.abn > 0)) { log('空降兵营已经用掉了', 'warn', 'ab1', 2); return false; }
-  if (A.st !== 'wait' && A.st !== 'shape') { log('空降兵营已经出动', 'warn', 'ab1', 2); return false; }
+  if (!(S.assets.abn > 0)) { log('空降兵连已经用掉了', 'warn', 'ab1', 2); return false; }
+  if (A.st !== 'wait' && A.st !== 'shape') { log('空降兵连已经出动', 'warn', 'ab1', 2); return false; }
   const E = abEval();
   if (!E || !E.dz) { log(S.abBase ? '机场已经在我手里' : '没有可以空降夺取的敌机场', 'warn', 'ab2', 2); return false; }
-  if (dist(x, y, E.af.x, E.af.y) > 700) { log('点敌野战机场附近：空降兵营会在机场周围选空降场', 'warn', 'ab3', 2); return false; }
+  if (dist(x, y, E.af.x, E.af.y) > 700) { log('点敌野战机场附近：空降兵连会在机场周围选空降场', 'warn', 'ab3', 2); return false; }
   const warn = [E.aaW > 1.5 && '航线上还有未压制的防空', E.air === 'e' && '敌方掌握制空权', !E.beach && '主力尚未在滩头站稳', E.near > 18 && `机场附近已知敌约 ${Math.round(E.near)} 人`].filter(Boolean);
   if (warn.length) abSay('p', `提醒：${warn.join('、')}——空降风险大。`, { kind: 'intel', at: E.dz, lv: 1 });
   return abGo(E, '');
@@ -288,7 +288,7 @@ function abRelease(p, r) {
   if (r.sq.length) { const k = r.sq.shift(); A.ch.push({ k: 'team', co: r.co, role: k, men: AB_SQ[k].slice(), x: p.x + gauss() * sg, y: p.y + gauss() * sg, t: 0, hT: 0 }); }
   else if (r.veh.length) { const v = r.veh.shift(); A.ch.push({ k: 'veh', v, x: p.x + gauss() * sg * .6, y: p.y + gauss() * sg * .6, t: 0 }); }
   else if (r.cr > 0) { r.cr--; A.ch.push({ k: 'crate', x: p.x + gauss() * sg * .6, y: p.y + gauss() * sg * .6, t: 0 }); }
-  if (!A.said.jump) { A.said.jump = 1; log('空降兵营开始伞降', 'good', null, 0, p); }
+  if (!A.said.jump) { A.said.jump = 1; log('空降兵连开始伞降', 'good', null, 0, p); }
 }
 // 下降：东北风飘移；伞兵每 0.5 秒挨一次地面火力（150 内没被压住的守军步兵、190 内的防空炮）
 function abChutes(dt) {
@@ -501,7 +501,7 @@ function abCapture() {
   A.capT = S.t; A.st = 'hold';
   abStat('abCap');
   log(`夺取敌野战机场${n ? `，停放的敌机 ${n} 架被缴获或击毁` : ''}`, 'good', null, 0, af);
-  abSay('p', `报告：空降兵夺取敌野战机场${n ? `，缴获、击毁停放的敌机 ${n} 架` : ''}！${fix > 0 ? `跑道${b.denied ? '被守敌炸毁' : '有弹坑'}，工兵抢修约 ${Math.round(fix)} 秒。` : '跑道完好。'}命令：各连就地转入环形防御，一个连前出阻击敌预备队；跑道修通后组织机降。`, { kind: 'report', at: af, lv: 0 });
+  abSay('p', `报告：空降兵夺取敌野战机场${n ? `，缴获、击毁停放的敌机 ${n} 架` : ''}！${fix > 0 ? `跑道${b.denied ? '被守敌炸毁' : '有弹坑'}，工兵抢修约 ${Math.round(fix)} 秒。` : '跑道完好。'}命令：各排就地转入环形防御，一个排前出阻击敌预备队；跑道修通后组织机降。`, { kind: 'report', at: af, lv: 0 });
   abPerimeter();
 }
 function abLoseBase() {
@@ -520,7 +520,7 @@ function abLoseBase() {
   log(`敌军夺回野战机场${n ? `，停在机场的我方飞机 ${n} 架被毁` : ''}`, 'bad', null, 0, b);
   abSay('p', `报告：野战机场遭敌反冲击失守${n ? `，停在机场的飞机 ${n} 架被毁` : ''}。决心：残部就近反击夺回，主力加速向机场方向打通。`, { kind: 'report', at: b, lv: 0 });
 }
-// 环形防御：最强的连守机场核心，次强的连前出到敌预备队来路 120–160 的阻击阵地（掩护好、可通行）
+// 环形防御：最强的排守机场核心，次强的排前出到敌预备队来路 120–160 的阻击阵地（掩护好、可通行）
 function abPerimeter() {
   const A = S.ab, af = abAF(), P = typeof apEnsure === 'function' ? apEnsure() : null;
   if (!af || !P) return;
@@ -538,7 +538,7 @@ function abPerimeter() {
     }
     if (best && us[1].auto !== false) { const pl = P.u[us[1].id] || (P.u[us[1].id] = {}); Object.assign(pl, { ph: 'ab', obj: null, next: S.t + 2 }); apMove(us[1], pl, best.x, best.y, dir, 'move'); A.blk = { u: us[1].id, x: Math.round(best.x), y: Math.round(best.y), a: dir }; }
   }
-  for (const u of us.slice(2)) if (u.auto !== false && typeof apGarrison === 'function') apGarrison(u, af, P);   // 玩家手动指挥的连不接管
+  for (const u of us.slice(2)) if (u.auto !== false && typeof apGarrison === 'function') apGarrison(u, af, P);   // 玩家手动指挥的排不接管
   // 工兵组去跑道
   const b = S.abBase;
   if (b) for (const q of S.teams) if (q.side === 'p' && q.men.length && q.ab === 'eng' && !(unitOf(q) && unitOf(q).auto === false) && typeof apTeamGo === 'function') { const [x, y] = eaW(b, gauss() * 240, 26); apTeamGo(q, x, y, 'move'); }
@@ -622,7 +622,7 @@ function abThink() {
     case 'pf': {   // 蛟龙先遣落地后标定空降场（主力散布收窄），时间到就让主力起飞
       const jl = S.units.find(u => u.side === 'p' && u.emblem === 'para' && u.paEv != null && teamsOf(u).length && dist(u.x, u.y, A.dz.x, A.dz.y) < 200);
       if (jl) A.pfM = true;
-      if (S.t - A.pfT >= AB.pfLead) { abLift(); if (A.pfM) abSay('p', '报告：蛟龙突击队已在空降场就位、标定落点。空降兵营跟进伞降。', { kind: 'report', at: A.dz, lv: 1 }); }
+      if (S.t - A.pfT >= AB.pfLead) { abLift(); if (A.pfM) abSay('p', '报告：蛟龙突击队已在空降场就位、标定落点。空降兵连跟进伞降。', { kind: 'report', at: A.dz, lv: 1 }); }
       return;
     }
     case 'air': {
@@ -635,13 +635,13 @@ function abThink() {
       }
       if (A.tr.every(r => r.done || r.gone) && !A.ch.length) {
         A.st = 'asm'; A.t = S.t;
-        abSay('p', `报告：空降兵营伞降完毕，${A.land} 个组落地${A.vs.length ? `，ZBD-03 ${A.vs.length} 辆` : ''}${A.lost ? `，空中损失 ${A.lost} 人` : ''}，正在集合点集结。`, { kind: 'report', at: A.dz, lv: 0 });
+        abSay('p', `报告：空降兵连伞降完毕，${A.land} 个组落地${A.vs.length ? `，ZBD-03 ${A.vs.length} 辆` : ''}${A.lost ? `，空中损失 ${A.lost} 人` : ''}，正在集合点集结。`, { kind: 'report', at: A.dz, lv: 0 });
       }
       return;
     }
     case 'asm': {
       const us = A.us.map(id => id != null && UNIT_MAP.get(id)).filter(u => u && teamsOf(u).length);
-      if (!us.length) { A.st = 'end'; abSay('p', '报告：空降兵营落地后被敌打散，夺取机场的行动失败。', { kind: 'report', at: A.dz, lv: 0 }); return; }
+      if (!us.length) { A.st = 'end'; abSay('p', '报告：空降兵连落地后被敌打散，夺取机场的行动失败。', { kind: 'report', at: A.dz, lv: 0 }); return; }
       const rvOf = q => A.rv[A.us.indexOf(q.u)] || A.dz, ts = us.flatMap(u => teamsOf(u)), atRv = ts.filter(q => dist(q.x, q.y, rvOf(q).x, rvOf(q).y) < 50).length;
       abFires();
       if (atRv < ts.length * .7 && S.t - A.t < AB.asm) return;
@@ -658,7 +658,7 @@ function abThink() {
       for (const id of A.vs) { const v = typeof vehById === 'function' ? vehById(id) : null; if (v && !v.dead && v1) { v.buddy = v1.id; v.esc = { back: 45, lat: 0, mode: 'travel' }; } }
       const pre = typeof cmdFoeAt === 'function' ? cmdFoeAt(af, 150) : null;
       if (pre && typeof cmdFire === 'function' && S.dd && S.dd.state !== 'sunk' && dist(S.dd.x, S.dd.y, pre.x, pre.y) < 980) cmdFire(pre.x, pre.y, 3, 'ab');
-      abSay('p', `命令：集结完毕（${ts.length} 个组 ${ts.reduce((a, q) => a + q.men.length, 0)} 人）。${ord.length > 2 ? `${typeof cmdUName === 'function' ? cmdUName(ord[0]) : unitName(ord[0])}、${typeof cmdUName === 'function' ? cmdUName(ord[1]) : unitName(ord[1])}正面主攻，${typeof cmdUName === 'function' ? cmdUName(ord[2]) : unitName(ord[2])}从侧翼发起` : '各连'}，ZBD-03 伴随，夺取机场${pre ? '；舰炮先压制机场守敌' : ''}。`, { kind: 'order', at: af, lv: 0 });
+      abSay('p', `命令：集结完毕（${ts.length} 个组 ${ts.reduce((a, q) => a + q.men.length, 0)} 人）。${ord.length > 2 ? `${typeof cmdUName === 'function' ? cmdUName(ord[0]) : unitName(ord[0])}、${typeof cmdUName === 'function' ? cmdUName(ord[1]) : unitName(ord[1])}正面主攻，${typeof cmdUName === 'function' ? cmdUName(ord[2]) : unitName(ord[2])}从侧翼发起` : '各排'}，ZBD-03 伴随，夺取机场${pre ? '；舰炮先压制机场守敌' : ''}。`, { kind: 'order', at: af, lv: 0 });
       return;
     }
     case 'dfd': {   // 固守空降场：火力削弱机场守敌；兵力占优、主力进到机场 600 以内、或固守 AB.dfd 秒后兵力不比守敌少，就发起
@@ -667,7 +667,7 @@ function abThink() {
       if (!us.length) { A.st = 'end'; return; }
       if (abStrong(af, us) || (S.t - A.t > AB.dfd && abNear(af, us) >= abEst(af) * 1.1)) {   // 兵力占优（主力赶到也算）或固守够久、兵力不比守敌少
         A.st = 'asm'; A.t = S.t - AB.asm; A.go = true;
-        abSay('p', `判断：机场方向我兵力约 ${abNear(af, us)} 人，守敌估计 ${Math.round(abEst(af))} 人。决心：空降兵营发起攻击，夺取机场。`, { kind: 'plan', at: af, lv: 1 });
+        abSay('p', `判断：机场方向我兵力约 ${abNear(af, us)} 人，守敌估计 ${Math.round(abEst(af))} 人。决心：空降兵连发起攻击，夺取机场。`, { kind: 'plan', at: af, lv: 1 });
       }
       return;
     }
@@ -676,7 +676,7 @@ function abThink() {
       const men = A.us.map(id => id != null && UNIT_MAP.get(id)).filter(Boolean).reduce((a, u) => a + teamsOf(u).reduce((b, q) => b + q.men.length, 0), 0);
       if (men < A.men0 * .3 && S.t - A.t > 40) {   // 伤亡过大：转入防御，等主力会师
         A.st = 'end';
-        abSay('p', `报告：空降兵营攻击机场受挫，仅剩约 ${men} 人。决心：就地转入防御，固守空降场待主力会师。`, { kind: 'report', at: A.dz, lv: 0 });
+        abSay('p', `报告：空降兵连攻击机场受挫，仅剩约 ${men} 人。决心：就地转入防御，固守空降场待主力会师。`, { kind: 'report', at: A.dz, lv: 0 });
       }
       return;
     }
@@ -700,7 +700,7 @@ function abThink() {
     }
   }
 }
-// 会师：主力（非空降兵）进入机场 320 以内，或机场 300 内有接通的补给点——空降兵各连交还自动指挥
+// 会师：主力（非空降兵）进入机场 320 以内，或机场 300 内有接通的补给点——空降兵各排交还自动指挥
 function abLink() {
   const A = S.ab, af = abAF();
   if (!af || A.linked || !['asm', 'dfd', 'atk', 'hold', 'ops', 'end'].includes(A.st)) return;
@@ -711,7 +711,7 @@ function abLink() {
   const P = typeof apEnsure === 'function' ? apEnsure() : null;
   if (P) for (const id of A.us) { const pl = id != null && P.u[id]; if (pl && pl.ph === 'ab') apIdle(pl); }
   abStat('abLink');
-  abSay('p', `报告：主力与空降兵在${af.name}附近会师${S.abBase ? '，机场已在我手中' : ''}。空降兵各连交还统一指挥。`, { kind: 'report', at: af, lv: 0 });
+  abSay('p', `报告：主力与空降兵在${af.name}附近会师${S.abBase ? '，机场已在我手中' : ''}。空降兵各排交还统一指挥。`, { kind: 'report', at: af, lv: 0 });
 }
 // 指挥官重点方向（autopilot 读 P.pri）：空降后、会师前，机场与通往机场的敌据点加权，主力朝机场打通
 function abPri() {
@@ -750,7 +750,7 @@ function abeThink() {
     if (af.prog > .35 || (pm >= 8 && pm >= em * 2)) abeDeny(b, af);
   }
 }
-// 就近空闲的预备连向机场机动（ai4 的机动预备队：到机场后方待机，吃紧时整连进入阵地）
+// 就近空闲的预备排向机场机动（ai4 的机动预备队：到机场后方待机，吃紧时整排进入阵地）
 function abeReserve(af) {
   let best = null, bd = 1100;
   for (const u of S.units) {

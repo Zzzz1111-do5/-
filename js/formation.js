@@ -1,5 +1,5 @@
 'use strict';
-// 编制与阵型：连队由若干三人组构成；横队 / 三三制楔形 / 散开；拖拽定宽定向；士气、溃退与重整；冲锋白刃
+// 编制与阵型：排由若干三人组构成；横队 / 三三制楔形 / 散开；拖拽定宽定向；士气、溃退与重整；冲锋白刃
 let UNIT_MAP = new Map(), UNIT_TEAMS = new Map();
 const NORTH = -Math.PI / 2, SOUTH = Math.PI / 2;
 
@@ -22,9 +22,9 @@ function indexUnits() {
 const teamsOf = u => UNIT_TEAMS.get(u.id) || [];
 const unitOf = q => UNIT_MAP.get(q.u);
 const angDiff = (a, b) => { const d = Math.abs(a - b) % 6.2832; return d > 3.1416 ? 6.2832 - d : d; };
-// 朝向：刚开过火（2.5 秒内）就面朝所打的目标——边走边打、后撤时也面朝敌人；否则行进中朝前进方向，停下朝连队正面
+// 朝向：刚开过火（2.5 秒内）就面朝所打的目标——边走边打、后撤时也面朝敌人；否则行进中朝前进方向，停下朝排正面
 const faceOf = q => q.fx != null && S.t - (q.fT ?? -9) < 2.5 ? Math.atan2(q.fy - q.y, q.fx - q.x) : S.t - q.movedT < .5 && q.heading != null ? q.heading : unitOf(q) ? unitOf(q).face : SOUTH;
-const unitName = u => u.side === 'p' ? (u.kind === 'eng' ? `${u.ship || ''}工兵` : /队\d*$/.test(u.ship || '') ? u.ship : `${u.ship || '增援'}连`) : '敌军';   // 「蛟龙突击队」这类本身是队名的不再加「连」
+const unitName = u => u.side === 'p' ? (u.kind === 'eng' ? `${u.ship || ''}工兵` : /队\d*$/.test(u.ship || '') ? u.ship : `${u.ship || '增援'}排`) : '敌军';   // 「蛟龙突击队」这类本身是队名的不再加「排」
 
 function defWidth(form, n) { return form === 'loose' ? Math.max(20, n * 34) : form === 'wedge' ? 28 + (n > 3 ? 84 : 0) : Math.max(16, n * 20); }
 
@@ -49,7 +49,7 @@ function unitSlots(n, form, cx0, cy0, face, width) {
   return out;
 }
 
-// 多个连队沿一条线展开：total 为总宽（拖拽长度），不给则用各自默认宽度
+// 多个排沿一条线展开：total 为总宽（拖拽长度），不给则用各自默认宽度
 function orderUnits(units, x, y, face, total, t) {
   units = units.filter(u => u.state !== 'rout' && teamsOf(u).length);
   if (!units.length) return 0;
@@ -63,7 +63,7 @@ function orderUnits(units, x, y, face, total, t) {
   return units.length;
 }
 
-// 计算各连队沿线展开后的位置与槽位（下令和拖拽预览共用）
+// 计算各排沿线展开后的位置与槽位（下令和拖拽预览共用）
 function layoutUnits(units, x, y, face, total) {
   const lx = -Math.sin(face), ly = Math.cos(face), gap = 26, proj = u => (u.x ?? 0) * lx + (u.y ?? 0) * ly;
   units = units.slice().sort((a, b) => proj(a) - proj(b));
@@ -101,7 +101,7 @@ function deployOrder(ships, dd, x, y, cv) {
 function startBattle() {
   if (S.phase !== 'deploy') return;
   S.phase = 'battle'; S.paused = false;
-  if (S.role === 'spectate') {   // AI 接管全部兵力：舰船自选滩头抢滩，驱逐舰、航母、车辆、各连自动
+  if (S.role === 'spectate') {   // AI 接管全部兵力：舰船自选滩头抢滩，驱逐舰、航母、车辆、各排自动
     for (const u of S.units) if (u.side === 'p') u.auto = true;
     for (const s of S.ships) if (!s.sbxHold) s.auto = true;
     for (const v of S.veh || []) if (v.side === 'p') v.auto = true;
@@ -134,7 +134,7 @@ function updateUnits(dt) {
     const sup = ts.reduce((a, q) => a + q.sup, 0) / ts.length, hit = S.t - u.hitT < 3;
     // 溃退到位（撤到落脚点、趴在掩蔽处 12 秒以上）：压制的影响减半以上，军官、骨干收拢溃兵——不会一直卡在 0
     const settled = u.state === 'rout' && S.t - (u.routT ?? 0) > 12 && ts.every(q => !q.order || q.order.t !== 'retreat');
-    let dm = -sup / 100 * (settled ? 2 : 5) * (u.elite ? .5 : 1);   // 精锐连队（蛟龙突击队等）：压制下士气掉得慢
+    let dm = -sup / 100 * (settled ? 2 : 5) * (u.elite ? .5 : 1);   // 精锐排（蛟龙突击队等）：压制下士气掉得慢
     if (S.t - u.flankT < 3) dm -= 4;
     if (!hit) dm += u.order === 'hold' ? 5 : 2.5;
     if (settled) dm += hit ? 2 : 3;

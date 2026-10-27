@@ -4,11 +4,11 @@
 // 伞兵（v13 起为海军陆战队「蛟龙突击队」）：两架运-20 各载 3 个三人组共 18 人——突击组 ×2、红箭-12 反坦克组、双机枪火力组、
 //   QBU-202 狙击组、前卫-2 防空组；高跳低开，散布小（σ 16）、下降快（4 秒），空中挨打的概率减半。
 //   特种部队加成（JL_MOD）：射击精度 1.6 倍、射速 1.3 倍、射程 1.2 倍、压制力 1.4 倍；防弹插板与战斗素养——致命一击有 45% 只是负伤（combat.js killMan mod.hard）；
-//   被压制程度减半（mod.calm）；连队士气 100、伤亡和压制对士气的打击减半（u.elite）。
+//   被压制程度减半（mod.calm）；排士气 100、伤亡和压制对士气的打击减半（u.elite）。
 //   落进水里的组全部损失；运输机在跳伞前被击落，机上的组一并损失。落地后编成「蛟龙突击队」，交自动指挥就近夺取据点
 // 补给：一架运输机投下 3 个弹药箱，落地后成为空投补给点（每箱 120 份弹药、4 分钟内有效）：120 以内的我方步兵每秒补 6 份弹药、恢复士气，
-//   90 以内停着的车辆补炮弹；也算补给点（supplynet.js supplyPoints：自动指挥的连队弹药不足会来这里补）；敌人先到（30 以内无我方）就被缴获
-// AI（观战，或航母开了自动派机）：攻势展开后向正在攻击的目标后方空降一次，与正面夹击；有连队弹药告急、又离接通的补给点很远时空投补给
+//   90 以内停着的车辆补炮弹；也算补给点（supplynet.js supplyPoints：自动指挥的排弹药不足会来这里补）；敌人先到（30 以内无我方）就被缴获
+// AI（观战，或航母开了自动派机）：攻势展开后向正在攻击的目标后方空降一次，与正面夹击；有排弹药告急、又离接通的补给点很远时空投补给
 // 状态：S.para = { tr: 在途运输机, ch: 下降中的伞兵组 / 弹药箱, ca: 空投补给点, n: 架次编号, aiT, dropT }；S.assets.para / S.assets.drop 剩余次数
 const PA = { spd: 140, alt: .55, jump: 5, sig: 28, crate: 120, life: 240, feed: 6, r: 120, rv: 90, jlJump: 4, jlSig: 16 };
 // 蛟龙突击队：每架运-20 的三个组 {men, role}
@@ -64,7 +64,7 @@ function paLaunch(kind, x, y, ai) {
 
 // carrier.js updatePlanes 对运输机调用：飞向空降场 → 跳伞 / 投箱 → 掉头飞回海上（飞出图外即返航，不算损失）
 function paFly(p, dt) {
-  if (p.ab && typeof abFly === 'function') { abFly(p, dt); return; }   // 空降兵营伞降 / 机降（abn.js）
+  if (p.ab && typeof abFly === 'function') { abFly(p, dt); return; }   // 空降兵连伞降 / 机降（abn.js）
   if (p.phase === 'in') {
     airSteer(p, p.tx, p.ty, dt);
     if (dist(p.x, p.y, p.tx, p.ty) < 40 || (p.y < p.ty - 10 && Math.abs(p.x - p.tx) < 80)) { p.dropped = true; p.phase = 'out'; p.ox = p.x < W / 2 ? 1 : -1; paRelease(p); }
@@ -194,7 +194,7 @@ function paAI(dt) {
       }
     }
   }
-  // 空投补给：弹药告急（小组平均不足 22 份）、离接通的补给点 350 以外的连队，人数最多的优先；投在连队位置稍后方
+  // 空投补给：弹药告急（小组平均不足 22 份）、离接通的补给点 350 以外的排，人数最多的优先；投在排位置稍后方
   if (S.assets.drop > 0 && S.t - (P.dropT ?? -99) > 60 && !P.tr.some(r => r.k === 'drop')) {
     let best = null, bs = 0;
     for (const u of S.units) {

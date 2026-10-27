@@ -1,5 +1,5 @@
 'use strict';
-// 型号卡（v8）：选中一个我方单位（步兵连、车辆、舰船、驱逐舰、航母），或用鼠标点一下看得见 / 已标定的敌方目标，
+// 型号卡（v8）：选中一个我方单位（步兵排、车辆、舰船、驱逐舰、航母），或用鼠标点一下看得见 / 已标定的敌方目标，
 // 左下角显示型号、编成与武器、弹药、油料、士气与当前状态。进攻方是解放军装备，守方是美军装备（名称与 catalog.js 一致）。
 // 只读界面：不改 S。U.info = { k: 'team' | 'veh' | 'st' | 'car', id } 记点中的敌方目标；每秒刷新 4 次
 const INFO_ROLE = {
@@ -39,14 +39,14 @@ function infoMen(ts, side) {
   if (sn) out.push(`${sn} 个组为狙击手（${side === 'p' ? 'QBU-202' : 'M2010'}）`);
   return out;
 }
-// 隶属：旅 · 团 · 连（每 2 秒由 hq.js hqAffil 刷新；还没刷到的按阵营给个临时建制，不出现「没有隶属」）
+// 隶属：团 · 营 · 排（每 2 秒由 hq.js hqAffil 刷新；还没刷到的按阵营给个临时建制，不出现「没有隶属」）
 function infoOrg(u, i) {
   if (!u) return '';
   const o = u.org, nm = typeof hqUName === 'function' ? hqUName(u, i ?? 0) : unitName(u);
   if (o) return [o.b, o.r, nm].filter(Boolean).join(' · ');
-  return u.side === 'p' ? `登陆兵团 · ${nm}（编组中）` : `海防守备旅 · ${nm}（编组中）`;
+  return u.side === 'p' ? `登陆兵团 · ${nm}（编组中）` : `海防守备团 · ${nm}（编组中）`;
 }
-const infoVOrg = v => v.org ? [v.org.b, v.org.r].filter(Boolean).join(' · ') : v.side === 'p' ? '登陆兵团 · 装甲分队（编组中）' : '海防守备旅 · 装甲分队（编组中）';
+const infoVOrg = v => v.org ? [v.org.b, v.org.r].filter(Boolean).join(' · ') : v.side === 'p' ? '登陆兵团 · 装甲分队（编组中）' : '海防守备团 · 装甲分队（编组中）';
 function infoRows(rows) { return rows.filter(Boolean).map(([k, v]) => `<dt>${infoEsc(k)}</dt><dd>${v}</dd>`).join(''); }
 
 // —— 各类目标的卡片内容：{ t 标题, s 副标题, rows [[项, 值（已转义的 HTML）]] } ——
@@ -103,12 +103,12 @@ function infoEnemyTeam(q) {
   const vis = specAll() || inVision(q.x, q.y);
   const u = unitOf(q), i = u ? S.units.filter(o => o.side === u.side && o.org && u.org && o.org.r === u.org.r).indexOf(u) : 0;
   return { t: '敌 ' + infoTeamModel(q), s: vis ? '目视' : '最后发现位置',
-    rows: [['隶属', infoEsc(u ? infoOrg(u, Math.max(0, i)) : '海防守备旅（散兵）')], ['人数', vis ? `${q.men.length} 人` : '不明'], vis && ['兵员与武器', infoEsc(infoMen([q], 'e').join('；'))], vis && ['状态', q.sup > 60 ? '被压制' : q.sup > 30 ? '受到压制' : '正常']] };
+    rows: [['隶属', infoEsc(u ? infoOrg(u, Math.max(0, i)) : '海防守备团（散兵）')], ['人数', vis ? `${q.men.length} 人` : '不明'], vis && ['兵员与武器', infoEsc(infoMen([q], 'e').join('；'))], vis && ['状态', q.sup > 60 ? '被压制' : q.sup > 30 ? '受到压制' : '正常']] };
 }
 function infoEnemySt(e) {
   const vis = specAll() || inVision(e.x, e.y), nm = e.name || (ENEMY_SPEC[e.kind] || {}).name || '火力点';
   return { t: '敌 ' + nm, s: e.dead ? '已摧毁' : vis ? '目视' : '已标定',
-    rows: [['隶属', infoEsc(e.org ? [e.org.b, e.org.r].filter(Boolean).join(' · ') : '海防守备旅 · 旅火力群')], !e.dead && vis && ['耐久', `约 ${infoPct(e.hp / ((ENEMY_SPEC[e.kind] || {}).hp || e.hp || 1))}`], !e.dead && ['状态', (e.sup || 0) > 50 ? '被压制' : e.moving ? '转移阵地' : '正常'], e.kind === 'tel' && ['载弹', `${e.n ?? 2} 枚`], e.kind === 'ascm' && ['载弹', `${e.n ?? 4} 枚`], e.kind === 'typhon' && ['载弹', `战斧 ${e.n ?? 16} 枚`]] };
+    rows: [['隶属', infoEsc(e.org ? [e.org.b, e.org.r].filter(Boolean).join(' · ') : '海防守备团 · 团火力群')], !e.dead && vis && ['耐久', `约 ${infoPct(e.hp / ((ENEMY_SPEC[e.kind] || {}).hp || e.hp || 1))}`], !e.dead && ['状态', (e.sup || 0) > 50 ? '被压制' : e.moving ? '转移阵地' : '正常'], e.kind === 'tel' && ['载弹', `${e.n ?? 2} 枚`], e.kind === 'ascm' && ['载弹', `${e.n ?? 4} 枚`], e.kind === 'typhon' && ['载弹', `战斧 ${e.n ?? 16} 枚`]] };
 }
 
 // 飞机参数卡：我方（S.planes）与敌机（S.eair.fly）

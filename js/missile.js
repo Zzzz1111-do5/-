@@ -23,7 +23,7 @@ HOOK.newGame.push(function msNewGame(opts) {
   if (!S) return;
   S.missiles = []; S.msl = { p: { used: 0, hit: 0 }, warn: [] };
   S.assets.msl = opts && opts.sandbox ? 0 : MS_STOCK[S.level] ?? 2;   // 沙盒的导弹从目录购买（p_tbm）
-  if (!(opts && opts.sandbox) && msOn() && S.level === 'hell') { msPlaceAscm(4); msPlaceTel(); }   // 战役地狱难度：侧翼岬角一个岸舰导弹连、纵深一辆战术导弹发射车
+  if (!(opts && opts.sandbox) && msOn() && S.level === 'hell') { msPlaceAscm(4); msPlaceTel(); }   // 战役地狱难度：侧翼岬角一个岸舰导弹排、纵深一辆战术导弹发射车
 });
 
 // 发射一枚：tgt = {x, y}；opts.delay 秒后才真正升空，opts.src 记发射平台
@@ -309,7 +309,7 @@ function ascMuzzle(e, k, i) {
   const px0 = e.x + ASC_RIG.piv * Math.cos(a) - v0 * Math.sin(a), py0 = e.y + ASC_RIG.piv * Math.sin(a) + v0 * Math.cos(a);
   return { x: px0 + Math.cos(b) * l - Math.sin(b) * o, y: py0 + Math.sin(b) * l + Math.cos(b) * o };
 }
-// —— 守方岸舰导弹连：两枚一组齐射，间隔 45 秒，射程 1600；只打海上航行 / 待命的舰船（已抢滩的不打） ——
+// —— 守方岸舰导弹排：两枚一组齐射，间隔 45 秒，射程 1600；只打海上航行 / 待命的舰船（已抢滩的不打） ——
 function msCommandE(dt) {
   if (!S || S.phase !== 'battle') return;
   if ((S.msl.eT = (S.msl.eT ?? 1) - dt) > 0) return;
@@ -339,7 +339,7 @@ function msCommandE(dt) {
     log(`导弹预警：${n} 枚岸舰导弹来袭，目标${best.nm}，约 ${sec} 秒到达`, 'bad', 'ascmw', 3, { x: best.x, y: best.y });
     if (typeof chatSay === 'function') {
       chatSay('sys', `导弹预警：敌岸舰导弹 ${n} 枚来袭，目标${best.nm}，约 ${sec} 秒后到达；驱逐舰舰空导弹与近防炮拦截。`, { kind: 'intel', at: { x: e.x, y: e.y }, key: 'ascmw', gap: 8 });
-      chatSay('e', `命令：岸舰导弹连齐射 ${n} 枚，打击海上${best.nm}。`, { kind: 'order', at: { x: best.x, y: best.y }, key: 'ascmo', gap: 20 });
+      chatSay('e', `命令：岸舰导弹排齐射 ${n} 枚，打击海上${best.nm}。`, { kind: 'order', at: { x: best.x, y: best.y }, key: 'ascmo', gap: 20 });
     }
   }
   msTelE();
@@ -406,7 +406,7 @@ function msPlaceTel() {
   }
   return null;
 }
-// 战役（困难 / 地狱）：在侧翼岬角布置一个岸舰导弹连（困难 2 枚，地狱 4 枚）
+// 战役（困难 / 地狱）：在侧翼岬角布置一个岸舰导弹排（困难 2 枚，地狱 4 枚）
 function msPlaceAscm(n) {
   const B = TER.beaches || [];
   let best = null, bs = -1e9;

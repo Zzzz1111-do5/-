@@ -301,7 +301,7 @@ function startPvE(level) {
   U.level = level;
   if (S && S.mode === 'sandbox' && typeof closeSandbox === 'function') try { closeSandbox(); } catch (e) { console.error('closeSandbox', e); }
   restart(false);
-  S.mode = 'pve'; S.role = 'spectate'; S.ctl = 'p';   // 战役：舰船、航母、各连由 AI 执行，玩家在编队面板给攻方的师 / 旅 / 团下令（thpanel.js）
+  S.mode = 'pve'; S.role = 'spectate'; S.ctl = 'p';   // 战役：舰船、航母、各排由 AI 执行，玩家在编队面板给攻方的师 / 团 / 营下令（thpanel.js）
   mnFrameDeploy();
   $('brief').hidden = true;
   updateHud();
