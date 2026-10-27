@@ -609,8 +609,8 @@ function eaFlyHeli(a, dt) {
     if (a.sx == null || dist(a.tx, a.ty, a.stx, a.sty) > 80 || S.t - (a.sdT ?? -99) > 3) { eaStandoff(a); a.sdT = S.t; }   // 途中每 3 秒按新发现的防空重算悬停点
     if (a.noSafe) { const ok = eaRetarget(a, true); if (ok) eaStandoff(a); if (!ok || a.noSafe) { eaHeliAbort(a, '发现目标周边都在敌防空火力覆盖下，找不到安全的悬停发射位置'); return; } }
     const dd = dist(a.x, a.y, a.sx, a.sy), d = eaHeliGo(a, a.sx, a.sy, dt, dd < 90 ? Math.max(15, dd * .8) : undefined);
-    if (d < 22 || (d < 60 && dist(a.x, a.y, a.tx, a.ty) < 390)) { a.ph = 'loiter'; a.loT = 12 + Math.random() * 28; a.fireT = 1.2; eaSpotSay(a); }
-    if (a.lost && !eaRetarget(a, true)) a.ph = 'rtb';
+    if (d < 22 || (d < 60 && dist(a.x, a.y, a.tx, a.ty) < 390)) { a.ph = 'loiter'; if (a.loT == null) a.loT = EA_HELI.station; a.fireT = 1.2; eaSpotSay(a); }   // 在阵位上的总时间（油料）跨换位累计
+    if (a.lost && !(eaRetarget(a, true, 1000) || (!(a.atgm > 0) && eaHeliAmmo(a) && eaHeliInf(a, 900)))) a.ph = 'rtb';   // 目标在途中没了：带着弹就在附近另找（按价值），实在没有才回
   } else if (a.ph === 'loiter') {
     eaTrack(a);
     if (typeof airMslWarn === 'function' && airMslWarn('e', 'eair', a.id)) {   // 导弹告警：记下导弹从哪儿来，放干扰弹、低飞换一个避开它的位置；第二次就返航
@@ -628,37 +628,80 @@ function eaFlyHeli(a, dt) {
     const want = Math.atan2(a.ty - a.y, a.tx - a.x);
     a.heading = eaAng(a.heading + clamp(eaAng(want - a.heading), -2 * dt, 2 * dt)); a.bank = 0;
     a.x += (Math.cos(a.heading) * a.spd + Math.sin(S.t * .7 + a.id) * 4) * airK(a) * dt; a.y += (Math.sin(a.heading) * a.spd + Math.cos(S.t * .9 + a.id) * 3) * airK(a) * dt;
-    if ((a.fireT -= dt) <= 0) { a.fireT = 3.5; eaHeliFire(a); }
-    if ((a.loT -= dt) <= 0 || (a.atgm <= 0 && a.rk <= 0)) a.ph = 'rtb';
+    if ((a.fireT -= dt) <= 0) { a.fireT = 3; eaHeliFire(a); }
+    if ((a.loT -= dt) <= 0) { a.ph = 'rtb'; eaStat('heliFuelE'); }   // 油料到了才走
+    else if (!eaHeliAmmo(a)) { a.ph = 'rtb'; eaStat('heliEmptyE'); }   // 弹药打光才走
   } else eaRtb(a, dt);
 }
+// 武装直升机：一次出击把弹打光才回去（地狱火、火箭、30 毫米链炮），每一发都挑当时看得见的价值最高的目标；
+//   只有油料到了、遭两次导弹 / 火力攻击、或附近再也找不到目标才提前回
+const EA_HELI = { station: 95, atgm: 4, rk: 3, gun: 6, rAtgm: 430, rGun: 300, idle: 10 };
+const eaHeliAmmo = a => a.atgm > 0 || a.rk > 0 || a.gunN > 0;
+// 目标价值：卸载 / 抢滩的登陆舰 10、坦克 8、防空车 7、装甲车 6、其余车辆 4（越近越好，但价值优先）
+function eaHeliVal(k, o) {
+  if (k === 'ship') return o.state === 'unloading' || o.state === 'beached' ? 10 : 6;
+  return EA_GUNV.includes(o.type) ? 8 : o.type === 'aa_veh' || o.type === 'sam_veh' ? 7 : o.type === 'apc' || o.type === 'ifv' || o.type === 'abv' ? 6 : 4;
+}
+function eaHeliPick(a, R) {
+  let best = null, bs = 0;
+  const busy = (k, id) => S.eair.proj.some(p => p.k === 'atgm' && p.tgt && p.tgt.k === k && p.tgt.id === id);
+  const cand = (k, o) => {
+    const d = dist(a.x, a.y, o.x, o.y);
+    if (d > R || ownNear('e', o.x, o.y, 40) || busy(k, o.id)) return;
+    const v = eaHeliVal(k, o), s = v * v / (1 + d / 600);
+    if (s > bs) { bs = s; best = { k, id: o.id, x: o.x, y: o.y, v }; }
+  };
+  for (const v of S.veh || []) if (v.side === 'p' && !v.dead && !v.lst && spotted(v.x, v.y)) cand('veh', v);
+  for (const s of S.ships) if (alive(s) && (s.state === 'unloading' || s.state === 'beached') && spotted(s.x, s.y)) cand('ship', s);
+  return best;
+}
 function eaHeliFire(a) {
-  if (a.lost && !eaRetarget(a, true)) { a.ph = 'rtb'; return; }
-  const d = dist(a.x, a.y, a.tx, a.ty);
-  if (d > 430) { a.ph = 'out'; a.sx = null; return; }
-  if (a.atgm > 0 && (a.tgt.k === 'veh' || a.tgt.k === 'ship')) {   // 每打两发换一个悬停点；打完四发（一波）就返航
-    eaATGM(a); a.atgm--;
-    if ((a.shots = (a.shots || 0) + 1) >= 4) a.ph = 'rtb';
-    else if (a.shots % 2 === 0) { a.hop = (a.hop || 0) + 1; a.ph = 'out'; a.sx = null; eaStat('heliHopE'); }
-    return;
+  // 地狱火：每发都重新挑看得见的价值最高的车辆 / 登陆舰（射程内），每打两发换一个悬停点
+  if (a.atgm > 0) {
+    const T = eaHeliPick(a, EA_HELI.rAtgm);
+    if (T) {
+      a.tgt = { k: T.k, id: T.id }; a.tx = T.x; a.ty = T.y; a.lost = false;
+      eaATGM(a); a.atgm--; a.idle = 0;
+      if ((a.shots = (a.shots || 0) + 1) % 2 === 0 && eaHeliAmmo(a)) { a.hop = (a.hop || 0) + 1; a.ph = 'out'; a.sx = null; eaStat('heliHopE'); }
+      return;
+    }
   }
   if (a.rk > 0) {
-    let tg = null, bm = 0;   // 火箭：目标附近（或机下 380 以内）最密集的步兵
+    let tg = null, bm = 0;   // 火箭：机下 380 以内最密集的步兵（≥ 4 人才值得一组火箭）
     for (const q of S.teams) {
       if (q.side !== 'p' || !q.men.length || q.ride || !spotted(q.x, q.y) || dist(q.x, q.y, a.x, a.y) > 380 || ownNear('e', q.x, q.y, 45)) continue;
       let m = 0; for (const o of S.teams) if (o.side === 'p' && o.men.length && !o.ride && dist(o.x, o.y, q.x, q.y) < 35) m += o.men.length;
       if (m > bm) { bm = m; tg = q; }
     }
-    if (tg) { eaRockets(a, 4, 22, .9, tg.x, tg.y); a.rk--; if ((a.shots = (a.shots || 0) + 1) >= 4) a.ph = 'rtb'; return; }
+    if (tg && (bm >= 4 || !(a.atgm > 0))) { eaRockets(a, 4, 22, .9, tg.x, tg.y); a.rk--; a.idle = 0; a.shots = (a.shots || 0) + 1; return; }
   }
-  if (!eaRetarget(a, true)) a.ph = 'rtb';
+  if (a.gunN > 0) {   // 30 毫米链炮：300 以内最近的步兵小组，点射压制、有伤亡
+    let tg = null, bd = EA_HELI.rGun;
+    for (const q of S.teams) if (q.side === 'p' && q.men.length && !q.ride && spotted(q.x, q.y) && !ownNear('e', q.x, q.y, 40)) { const dd = dist(q.x, q.y, a.x, a.y); if (dd < bd) { bd = dd; tg = q; } }
+    if (tg) { suppress(tg, 40, a.x, a.y); if (Math.random() < .3 * (1 - coverAt(tg.x, tg.y) * .5)) killMan(tg); a.gunN--; a.idle = 0; S.fx.push({ kind: 'flash', x: a.x, y: a.y, r: 5, life: 0, max: .25, side: 'e' }); eaStat('heliGunE'); return; }
+  }
+  // 射程内没有可打的：往附近（900 以内、悬停点在防空圈外）的目标挪过去；10 秒都找不到就返航
+  if (a.idle >= 3 && (a.atgm > 0 ? eaRetarget(a, true, 1400) || eaHeliInf(a, 1200) : eaHeliInf(a, 1200))) { a.ph = 'out'; a.sx = null; a.idle = 0; a.mvN = (a.mvN || 0) + 1; if (a.mvN > 4) a.ph = 'rtb'; return; }   // 地狱火打光了只找步兵（火箭、机炮）
+  if ((a.idle = (a.idle || 0) + 3) >= EA_HELI.idle) a.ph = 'rtb';
+}
+// 附近（R 以内、悬停点在防空圈外）步兵最多的一处：火箭、机炮的下一个目标
+function eaHeliInf(a, R) {
+  let best = null, bm = 0;
+  for (const q of S.teams) {
+    if (q.side !== 'p' || !q.men.length || q.ride || !spotted(q.x, q.y) || dist(q.x, q.y, a.x, a.y) > R || ownNear('e', q.x, q.y, 45)) continue;
+    let m = 0; for (const o of S.teams) if (o.side === 'p' && o.men.length && !o.ride && dist(o.x, o.y, q.x, q.y) < 40) m += o.men.length;
+    if (m > bm && eaHeliOk(q)) { bm = m; best = q; }
+  }
+  if (!best) return false;
+  a.tgt = { k: 'team', id: best.id }; a.tx = best.x; a.ty = best.y; a.lost = false;
+  return true;
 }
 // 原目标没了：直升机就近另找车辆 / 舰船
-function eaRetarget(a, safe) {   // safe：只挑悬停点能在防空圈外的目标
+function eaRetarget(a, safe, R = 450) {   // safe：只挑悬停点能在防空圈外的目标；R 搜索半径；按价值挑（登陆舰、坦克优先）
   let best = null, bv = 0;
   const ok = (x, y) => !safe || !(a.type === 'heli' || a.type === 'uh60') || eaHeliOk({ x, y });
-  for (const v of S.veh || []) if (v.side === 'p' && !v.dead && !v.lst && spotted(v.x, v.y) && dist(v.x, v.y, a.x, a.y) < 450) { const val = EA_GUNV.includes(v.type) ? 6 : 4; if (val > bv && ok(v.x, v.y)) { bv = val; best = { k: 'veh', id: v.id, x: v.x, y: v.y }; } }
-  if (!best) for (const s of S.ships) if (alive(s) && s.state === 'unloading' && dist(s.x, s.y, a.x, a.y) < 450 && ok(s.x, s.y)) { best = { k: 'ship', id: s.id, x: s.x, y: s.y }; break; }
+  for (const v of S.veh || []) if (v.side === 'p' && !v.dead && !v.lst && spotted(v.x, v.y) && dist(v.x, v.y, a.x, a.y) < R) { const val = eaHeliVal('veh', v) / (1 + dist(v.x, v.y, a.x, a.y) / 900); if (val > bv && ok(v.x, v.y)) { bv = val; best = { k: 'veh', id: v.id, x: v.x, y: v.y }; } }
+  for (const s of S.ships) if (alive(s) && (s.state === 'unloading' || s.state === 'beached') && dist(s.x, s.y, a.x, a.y) < R) { const val = eaHeliVal('ship', s) / (1 + dist(s.x, s.y, a.x, a.y) / 900); if (val > bv && ok(s.x, s.y)) { bv = val; best = { k: 'ship', id: s.id, x: s.x, y: s.y }; } }
   if (!best) return false;
   a.tgt = { k: best.k, id: best.id }; a.tx = best.x; a.ty = best.y; a.lost = false; a.sx = null;
   return true;
@@ -908,7 +951,7 @@ function eaPkg(b, fl, tgt) {
   fl.forEach((w, i) => {
     const T = tgt(i);
     const L = eaFtr(w.type) ? EA_FTR[w.type] : null, FT = L ? { role: 'strike', cx: T.x, cy: T.y, capT: 40, aam: Math.min(2, L.aam), gun: L.gun, aamR: L.aamR, pkK: L.pkK, gunK: L.gunK || 1, sdb: L.sdb || 4 } : {};   // F-35 对地：4 枚 GBU-53/B 小直径炸弹 + 2 枚 AIM-120D 自卫
-    const a = eaNewAir(b, w, T.x + (i % 2 ? gauss() * 20 : 0), T.y + (i % 2 ? gauss() * 20 : 0), { tgt: { k: T.k, id: T.id }, ammo: 1, atgm: w.type === 'heli' ? 2 : 0, rk: w.type === 'heli' ? 2 : 0, mav: w.type === 'ga' ? 2 : 0, aim9: w.type === 'ga' ? 2 : 0, ...(w.type === 'ga' ? { ammo: 2 } : {}), ...FT });   // A-10C：2 枚 AGM-65、2 枚 AIM-9X、机炮两次通场
+    const a = eaNewAir(b, w, T.x + (i % 2 ? gauss() * 20 : 0), T.y + (i % 2 ? gauss() * 20 : 0), { tgt: { k: T.k, id: T.id }, ammo: 1, atgm: w.type === 'heli' ? EA_HELI.atgm : 0, rk: w.type === 'heli' ? EA_HELI.rk : 0, gunN: w.type === 'heli' ? EA_HELI.gun : 0, mav: w.type === 'ga' ? 2 : 0, aim9: w.type === 'ga' ? 2 : 0, ...(w.type === 'ga' ? { ammo: 2 } : {}), ...FT });   // A-10C：2 枚 AGM-65、2 枚 AIM-9X、机炮两次通场
     if (i) { a.lead = lead.id; a.slot = i; if (a.wait == null) { a.x += 14 * i; a.y += i % 2 ? 8 : -8; } }   // 直升机并排离坪；固定翼按跑道排队依次滑跑
     else { lead = a; a.join = S.t + (a.wait || 0) + 4 + 3.5 * (fl.length - 1); }
     w.state = 'out';

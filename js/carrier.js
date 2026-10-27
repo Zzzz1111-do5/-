@@ -441,7 +441,7 @@ function airCasFly(p, dt, speed) {
   const fired = airAgm(p);
   if (fired && p.wave == null) p.wave = S.t;
   // 任务区（指定地域 450 以内）一直没有看得见的敌人：待 10 秒还没目标就返航，不在空中白白兜圈子
-  if (!fired && !p.run && p.wave == null) {
+  if (!fired && !p.run && (p.wave == null || heli)) {
     if ((p.idleC = (p.idleC ?? 0) - dt) <= 0) {
       p.idleC = 1;
       const any = S.teams.some(q => q.side === 'e' && q.men.length && inVision(q.x, q.y) && dist(q.x, q.y, p.cx, p.cy) < 450) || S.enemies.some(e => !e.dead && inVision(e.x, e.y) && dist(e.x, e.y, p.cx, p.cy) < 450) || (S.veh || []).some(v => v.side === 'e' && !v.dead && inVision(v.x, v.y) && dist(v.x, v.y, p.cx, p.cy) < 450);
@@ -450,7 +450,8 @@ function airCasFly(p, dt, speed) {
     if (p.idleN >= 10) { log(`${airName(p.kind, p.v).split(' ')[0]}：任务区内没有发现目标，返航`, 'info', 'casidle' + p.id, 20, p); if (typeof v8Stat === 'function') v8Stat('casIdleRtb'); airSet(p, 'rtb'); return; }
   }
   // 打完一波就返航：第一次开火后，固定翼再打 6 秒（把这一波的导弹打完）、直升机打完 4 发，然后返航，不在目标区上空兜圈子等下一个目标
-  if (p.wave != null && !p.run && (heli ? (p.wv0 ?? (p.wv0 = (p.agmN || 0) + 1)) - (p.agmN || 0) >= 4 || !(p.agmN > 0) && !(p.ammoG > 0) || S.t - p.wave > 16 : S.t - p.wave > 6)) { airSet(p, 'rtb'); return; }
+  // 直升机：一次出击把导弹、机炮都打光才回（每发挑价值最高的目标），找不到目标才提前回
+  if (p.wave != null && !p.run && (heli ? !(p.agmN > 0) && !(p.ammoG > 0) : S.t - p.wave > 6)) { if (heli) log(`${airName(p.kind, p.v).split(' ')[0]}弹药打光，返航`, 'info', 'heliempty' + p.id, 20, p); airSet(p, 'rtb'); return; }
   // 直-10：没有导弹目标（或导弹打光）时，悬停用 23 毫米机炮打目标一带的步兵和火力点（射程 280 内，每 2.5 秒一个点射）
   if (heli && !fired && S.t >= (p.gunT2 || 0) && (p.ammoG ?? (p.ammoG = 12)) > 0) {
     const sv = { x: p.x, y: p.y }, near = [...S.teams.filter(q => q.side === 'e' && q.men.length && inVision(q.x, q.y)), ...S.enemies.filter(e => !e.dead && inVision(e.x, e.y))].some(o => dist(o.x, o.y, sv.x, sv.y) < 280 && dist(o.x, o.y, p.cx, p.cy) <= 160);
@@ -662,7 +663,7 @@ function flyPlane(p, dt) {
       }
     } else {
       // 对地支援：先飞到任务区外的待机点（避开已知防空圈），到了转入待机（airCasFly）
-      if (!p.hp) { Object.assign(p, { cx: p.tx, cy: p.ty, loiterT: M.loiter || 40, strafeT: .8 }); airCasHold(p); }
+      if (!p.hp) { Object.assign(p, { cx: p.tx, cy: p.ty, loiterT: p.v === 'heli' ? Math.max(M.loiter || 40, 95) : M.loiter || 40, strafeT: .8 }); airCasHold(p); }   // 直升机：在阵位上待到弹打光（油料约 95 秒）
       const heli = p.v === 'heli';
       if (heli && S.t - p.hp.t > 3) airCasHold(p);   // 直升机途中每 3 秒按新发现的防空重算悬停点
       if (heli && p.noSafe) { airHeliAbort(p, '目标周边都在敌防空火力覆盖下，找不到安全的悬停发射位置'); return; }
@@ -836,8 +837,8 @@ function airAgm(p) {
   let best = null, bs = 0;
   const cand = (k, o, v) => {
     const d = dist(p.x, p.y, o.x, o.y);
-    if (!v || d > M.agmR || dist(o.x, o.y, cx, cy) > 220 || !inVision(o.x, o.y) || own(o.x, o.y) || flying(k, o.id)) return;
-    const s = v / (1 + d / 400);
+    if (!v || d > M.agmR || dist(o.x, o.y, cx, cy) > (p.v === 'heli' ? 380 : 220) || !inVision(o.x, o.y) || own(o.x, o.y) || flying(k, o.id)) return;
+    const s = p.v === 'heli' ? v * v / (1 + d / 600) : v / (1 + d / 400);   // 直升机：价值优先（先打高价值目标）
     if (s > bs) { bs = s; best = { k, id: o.id, x: o.x, y: o.y, o }; }
   };
   for (const v of S.veh || []) if (v.side === 'e' && !v.dead) cand('veh', v, AGM_V[v.type] || 3);
