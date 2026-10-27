@@ -25,7 +25,6 @@ button:focus-visible { outline: 2px solid var(--sel); outline-offset: 2px; }
 button:disabled { cursor: not-allowed; opacity: .3; }
 .ic { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
 .ic .f { fill: currentColor; stroke: none; }
-#bgrain { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 0; opacity: .15; pointer-events: none; }
 #stage { position: fixed; inset: 0; z-index: 1; background: var(--bg); }
 #cv { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: crosshair; }
 #stage::after {
@@ -155,7 +154,7 @@ button:disabled { cursor: not-allowed; opacity: .3; }
 #endStats { display: grid; grid-template-columns: auto 1fr; gap: 4px 18px; margin: 0; font-variant-numeric: tabular-nums; }
 #endStats dt { color: var(--mute); }
 #endStats dd { margin: 0; }
-@media (prefers-reduced-motion: reduce) { #bgrain { display: none; } .uc.rout { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .uc.rout { animation: none; } }
 /* 中等宽度：据点图标缩小，仍为两行；更窄时改为单行横向滚动 */
 @media (max-width: 1199px) and (min-width: 901px) {
   #objs { gap: 3px; padding: 4px 5px; }
@@ -225,7 +224,6 @@ button:disabled { cursor: not-allowed; opacity: .3; }
 .sbx-ld { margin-top: 4px; } .sbx-ld summary { cursor: pointer; color: var(--amber); } .sbx-ld .ct-load { margin-top: 6px; max-height: 40vh; overflow-y: auto; }
 </style>
 
-<canvas id="bgrain" aria-hidden="true"></canvas>
 <main id="stage">
   <canvas id="cv" aria-label="登陆战沙盘"></canvas>
   <ul id="feed" class="ov" aria-live="polite"></ul>
@@ -362,6 +360,8 @@ button:disabled { cursor: not-allowed; opacity: .3; }
 <script src="js/v3units.js"></script>
 <script src="js/v3fx.js"></script>
 <script src="js/v3obs.js"></script>
+<script src="js/v3table.js"></script>
+<script src="js/v3post.js"></script>
 <script src="js/sprites.js"></script>
 <script src="js/models.js"></script>
 <script src="js/camera.js"></script>

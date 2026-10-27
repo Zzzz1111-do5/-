@@ -1,6 +1,6 @@
 'use strict';
 // 开始界面：标题、主菜单（继续 / 战役 / 沙盒 / 图鉴 / 设置）、难度选择、设置面板；右上角 ≡ 菜单按钮
-// 菜单打开时：数码雨背景提到最上层、战场暗化，HUD 隐藏，游戏暂停（从对局中打开时）
+// 菜单打开时：背景是整张沙盘桌（3D）、战场暗化，HUD 隐藏，游戏暂停（从对局中打开时）
 const MENU = { open: false, el: null, set: null, view: 'main', game: false, pausedBy: false, idx: 0, last: 'pve', toastT: 0, drift: 0 };
 const MN_ICON = {
   cont: '<path d="M7 5l11 7-11 7z"/>',
@@ -26,8 +26,7 @@ const mnSvg = (k, cls = '') => `<svg viewBox="0 0 24 24" class="ic ${cls}" aria-
 const mnSfx = k => { if (typeof auUi === 'function') auUi(k); };
 
 const MN_CSS = `
-body.mn-open #bgrain { z-index: 30; opacity: .42; }
-body.mn-open > :not(#bgrain):not(#stage):not(.mn-layer):not(script):not(style), body.mn-open #stage > :not(#cv) { visibility: hidden; }
+body.mn-open > :not(#stage):not(.mn-layer):not(script):not(style), body.mn-open #stage > :not(#cv) { visibility: hidden; }
 #diff { display: none; }
 #mn { position: fixed; inset: 0; z-index: 40; overflow-y: auto; color: var(--text); font-family: var(--f-ui);
   background: linear-gradient(90deg, rgba(var(--bg-rgb), .82), rgba(var(--bg-rgb), .5) 55%, rgba(var(--bg-rgb), .3)), radial-gradient(ellipse at 50% 50%, transparent 55%, rgba(0, 0, 0, .55)), repeating-linear-gradient(to bottom, transparent 0 2px, rgba(0, 0, 0, .22) 2px 3px); }
@@ -478,8 +477,8 @@ HOOK.key.push(e => {
 HOOK.frame.push((now, dt) => {
   if (MENU.open && !MENU.game && S && CAM.vw > 1) {
     MENU.drift += dt * .05;
-    CAM.z = CAM.fit * 1.9;
-    CAM.x = W / 2 + Math.sin(MENU.drift) * W * .3; CAM.y = (TER ? coastAt(CAM.x) : H / 2) - 60 + Math.sin(MENU.drift * 1.7) * 90;
+    if (typeof V3 === 'object' && V3.ok && V3.dk > 1) { CAM.z = CAM.fit; CAM.x = W / 2; CAM.y = H / 2; }   // 3D 背景：整张沙盘桌绕着慢慢转（view3d.js v3Att）
+    else { CAM.z = CAM.fit * 1.9; CAM.x = W / 2 + Math.sin(MENU.drift) * W * .3; CAM.y = (TER ? coastAt(CAM.x) : H / 2) - 60 + Math.sin(MENU.drift * 1.7) * 90; }
     camClamp();
   }
 });

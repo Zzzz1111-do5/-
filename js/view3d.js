@@ -9,6 +9,7 @@
 const V3 = { on: false, ok: false, tried: false, gl: null, cv: null, pr: null, u: {}, a: {}, buf: null, n: 0, seed: null, sig: null,
   top: null, tex: null, base: null, hf: null, nx: 0, ny: 0, yaw: 0, tilt: .95, yawT: 0, tiltT: .95, box: null, cam: null, keep: null };
 const V3_HZ = 230, V3_FOV = .8, V3_TILT = [.05, 1.45], V3_SKIRT = -70;   // 俯仰：从几乎正俯视到几乎平视
+const V3_ZMAX = 11000, V3_OUT = 2400;   // 镜头最高高度、能飞出地图边多远：拉远能看见整张沙盘桌（v3table.js）
 const V3_AIR = 230 * V3_HZ / 150;   // 飞机、导弹高度 alt 1.0 对应的 3D 高度：随地形高程放大，高空飞机始终在最高的山顶之上
 let V3_ST = 2;   // 地形网格每几格一个顶点：显卡支持 32 位索引时为 1（每 10 米一个顶点，山脊、河谷的轮廓更细），否则 2
 
@@ -584,9 +585,9 @@ function v3FcInit() {
   const ps = V3.yawT ?? 0, tz = v3Ht(CAM.x, CAM.y), ux = Math.sin(ps), uy = Math.cos(ps);
   // 平面地图缩得很远时换算出的镜头会在地图外、高度上限以上：改成更陡地俯看、再降低距离，镜头仍对着原来的画面中心
   const lim = (p, u, a, b) => u > 1e-6 ? (b - p) / u : u < -1e-6 ? (a - p) / u : 1e9;
-  const hmax = Math.max(0, Math.min(lim(CAM.x, ux, -400, W + 400), lim(CAM.y, uy, -400, H + 400)));
+  const hmax = Math.max(0, Math.min(lim(CAM.x, ux, -V3_OUT, W + V3_OUT), lim(CAM.y, uy, -V3_OUT, H + V3_OUT)));
   if (D * Math.sin(th) > hmax) th = Math.asin(clamp(hmax / D, 0, 1));
-  if (D * Math.cos(th) > 4200 - tz) D = (4200 - tz) / Math.max(.2, Math.cos(th));
+  if (D * Math.cos(th) > V3_ZMAX - tz) D = (V3_ZMAX - tz) / Math.max(.2, Math.cos(th));
   V3.fc = v3FcFromOrbit(CAM.x, CAM.y, tz, D, th, ps);
   V3.fc0 = { x: CAM.x, y: CAM.y, tz, D, th, ps };   // 进 3D 过渡的终点（v3TiltIn）
 }
@@ -613,7 +614,7 @@ function v3FcCamera() {
   const F = V3.fc || (v3FcInit(), V3.fc), cp = Math.cos(F.pitch), f = [cp * Math.cos(F.yaw), -cp * Math.sin(F.yaw), Math.sin(F.pitch)];   // 视线方向（GL 坐标）
   const E = [F.x, -F.y, F.z], z = [-f[0], -f[1], -f[2]], x = v3Norm(v3Cross([0, 0, 1], z)), y = v3Cross(z, x);
   const view = new Float32Array([x[0], y[0], z[0], 0, x[1], y[1], z[1], 0, x[2], y[2], z[2], 0, -v3Dot(x, E), -v3Dot(y, E), -v3Dot(z, E), 1]);
-  const D = clamp(F.d || 600, 80, 5000), rd = v3RD(), fog = v3Fog(D, rd);
+  const D = clamp(F.d || 600, 80, 16000), rd = v3RD(), fog = v3Fog(D, rd);
   const asp = CAM.vw / Math.max(1, CAM.vh), fo = 1 / Math.tan(V3_FOV / 2), n = clamp(Math.min(D * .012, v3NearGap(F) * .45), .3, 25), fa = Math.max(D * 9, fog[1] * 1.5), nf = 1 / (n - fa);   // 近裁剪面：离最近的东西（地面、飞机）越近越小，凑近飞机不会被切掉
   const proj = new Float32Array([fo / asp, 0, 0, 0, 0, fo, 0, 0, 0, 0, (fa + n) * nf, -1, 0, 0, 2 * fa * n * nf, 0]);
   return (V3.cam = { E, x, y, z, D, rd, fog, asp, M: v3Mul(proj, view) });
@@ -625,10 +626,10 @@ function v3FcStep(dt) {
   if (F.cx != null && (Math.abs(CAM.x - F.cx) > .5 || Math.abs(CAM.y - F.cy) > .5)) { F.x += CAM.x - F.cx; F.y += CAM.y - F.cy; }   // 别处把画面中心移走了（小地图、双击编队、点消息定位）：镜头平移过去
   F.yaw += Math.atan2(Math.sin(F.yawT - F.yaw), Math.cos(F.yawT - F.yaw)) * Math.min(1, dt * 14);
   F.pitch += (F.pitchT - F.pitch) * Math.min(1, dt * 14);
-  F.x = clamp(F.x, -400, W + 400); F.y = clamp(F.y, -400, H + 400);
-  F.z = clamp(F.z, v3Gnd(F.x, F.y) + 3, 4200);
+  F.x = clamp(F.x, -V3_OUT, W + V3_OUT); F.y = clamp(F.y, -V3_OUT, H + V3_OUT);
+  F.z = clamp(F.z, v3Gnd(F.x, F.y) + 3, V3_ZMAX);
   const alt = Math.max(1, F.z - v3Gnd(F.x, F.y)), cp = Math.cos(F.pitch), down = -Math.sin(F.pitch);
-  const reach = down > .05 ? Math.min(5000, alt / down * cp) : 2600 * Math.min(1, alt / 200 + .3);   // 视线落地点（看天时取前方一段）
+  const reach = down > .05 ? Math.min(16000, alt / down * cp) : 2600 * Math.min(1, alt / 200 + .3);   // 视线落地点（看天时取前方一段）
   F.d = Math.hypot(reach, Math.min(alt, reach * 3));
   CAM.x = F.x + Math.cos(F.yaw) * reach; CAM.y = F.y + Math.sin(F.yaw) * reach;
   CAM.z = clamp((CAM.vh / Math.max(30, F.d)) / (2 * Math.tan(V3_FOV / 2)), CAM.fit, Math.max(CAM.fit * 12, 4));   // 与原来的环绕镜头同一换算：画面中心的比例接近平面地图
@@ -661,15 +662,15 @@ function v3Dolly(sx, sy, k) {
   const F = V3.fc || (v3FcInit(), V3.fc), P = v3Pick(sx, sy), pz = v3Gnd(P.x, P.y), dx = P.x - F.x, dy = P.y - F.y, dz = pz - F.z, d = Math.hypot(dx, dy, dz) || 1;
   let m = d * (1 - 1 / k);
   if (k > 1) m = Math.min(m, d - 6);   // 推近：停在离那一点 6 米外
-  else m = Math.max(m, dz < 0 ? -Math.max(0, 4200 - F.z) / Math.max(.05, -dz / d) : -d * 3);   // 拉远：到了最高高度就停，不再贴着高度上限水平往后飘出地图
+  else m = Math.max(m, dz < 0 ? -Math.max(0, V3_ZMAX - F.z) / Math.max(.05, -dz / d) : -d * 3);   // 拉远：到了最高高度就停，不再贴着高度上限水平往后飘出地图
   F.x += dx / d * m; F.y += dy / d * m; F.z += dz / d * m;
 }
 // 镜头：画面中心（CAM.x, CAM.y）为目标点；距离按平面地图的缩放换算，使画面中心的比例与平面时相同（开始界面背景的环绕展示用）
 function v3Camera() {
   if (typeof V3O === 'object' && V3O.on) return v3oCamera();   // 观察者模式（v3obs.js）
   if (V3.on) return v3FcCamera();   // 自由镜头
-  const th = V3.tilt, ps = V3.yaw, D = (CAM.vh / CAM.z) / (2 * Math.tan(V3_FOV / 2));
-  const T = [CAM.x, -CAM.y, V3.tz ?? v3Ht(CAM.x, CAM.y)];   // 注视点高度按帧平滑跟随地形 / 航母甲板（v3TzStep），翻过山头、掠过航母时镜头不突然冒高
+  const th = V3.tilt, ps = V3.yaw, D = (CAM.vh / CAM.z) / (2 * Math.tan(V3_FOV / 2)) * (V3.dk || 1), o = V3.tofs || [0, 0];
+  const T = [CAM.x + o[0], -(CAM.y + o[1]), V3.tz ?? v3Ht(CAM.x, CAM.y)];   // 注视点高度按帧平滑跟随地形 / 航母甲板（v3TzStep），翻过山头、掠过航母时镜头不突然冒高
   const E = [T[0] + D * Math.sin(th) * Math.sin(ps), T[1] - D * Math.sin(th) * Math.cos(ps), T[2] + D * Math.cos(th)];
   { const g = v3Ht(clamp(E[0], 0, W - 1), clamp(-E[1], 0, H - 1)); if (E[2] < g + 8) E[2] = g + 8; }   // 平视时镜头不钻进身后的山里
   const z = v3Norm(v3Sub(E, T)), x = v3Norm(v3Cross([-Math.sin(ps), Math.cos(ps), 0], z)), y = v3Cross(z, x);
@@ -743,8 +744,6 @@ function v3Draw(now) {
   if (typeof ema === 'number') V3.capK = clamp((V3.capK || 1) * (ema > .04 ? .985 : ema < .022 ? 1.004 : 1), .45, 1);
   const dpr = R.dprCap ? 1 : Math.min(2, window.devicePixelRatio || 1), one = boxN[2] * boxN[3] > box[2] * box[3] * .7;
   const bN = one ? box : boxN, sTop = Math.min(CAM.z * dpr, cap * (V3.capK || 1) / Math.max(bN[2], bN[3]));
-  // 立体士兵的开关：按画面中心的士兵有多少像素高（士兵约 3.4 个世界单位）——放大到约 6 像素才换成立体士兵，缩小到约 4.5 像素才换回贴图里的平面小人；
-  //   中间留迟滞，不在门槛上一帧立体、一帧平面地来回跳；更远的士兵立体模型只剩一两个像素，枪、背带这些细部件逐帧闪烁（拉远时模型抽搐）
   const K = { cv: R.cv, ctx: R.ctx, s: R.s, ox: R.ox, oy: R.oy, dpr: R.dpr, vw: CAM.vw, vh: CAM.vh, z: CAM.z, x: CAM.x, y: CAM.y };
   // 有立体模型的东西（飞机、车辆、舰船、阵地，近看时的步兵）贴图里不再画平面图标——否则地面上多一层「倒影」
   //   画布边长取最接近的 2 的幂（上传后生成多级渐远纹理）：比例按装得下整个范围取，多出来的一边把范围往两边放宽；返回实际铺的范围
@@ -802,6 +801,7 @@ function v3Draw(now) {
   gl.enableVertexAttribArray(V3.a.p); gl.vertexAttribPointer(V3.a.p, 3, gl.FLOAT, false, 24, 0);
   gl.enableVertexAttribArray(V3.a.n); gl.vertexAttribPointer(V3.a.n, 3, gl.FLOAT, false, 24, 12);
   gl.drawElements(gl.TRIANGLES, V3.n, V3.it || gl.UNSIGNED_SHORT, 0);
+  if (typeof v3Table === 'function') { gl.disableVertexAttribArray(V3.a.p); gl.disableVertexAttribArray(V3.a.n); v3Table(C); gl.useProgram(V3.pr); }   // 沙盘桌：边框、桌面（v3table.js）
   if (V3.bn && V3.pb && V3.bch) {   // 城镇房屋、机场建筑、树木（分块的静态缓冲区）
     const ub = V3.ub, ab = V3.ab;
     gl.useProgram(V3.pb);
@@ -810,10 +810,10 @@ function v3Draw(now) {
     gl.uniform1f(ub.uT, tm); gl.uniform1f(ub.uMx, mx);
     gl.disableVertexAttribArray(V3.a.p); gl.disableVertexAttribArray(V3.a.n);
     gl.enableVertexAttribArray(ab.p); gl.enableVertexAttribArray(ab.n); gl.enableVertexAttribArray(ab.e);
-    const fe = v3FogE(C), ex = C.E[0], ey = -C.E[1], rk = v3RD() * CAM.vh / 768, ft = Math.min(fe * .6, 4500 * rk), fb = Math.min(fe, 9000 * rk);
+    const fe = v3FogE(C), ex = C.E[0], ey = -C.E[1], ez = Math.max(0, C.E[2] - 120), rk = v3RD() * CAM.vh / 768, ft = Math.min(fe * .6, 4500 * rk), fb = Math.min(fe, 9000 * rk);   // ez：镜头比地面高出多少（拉得很高时树、房屋也算远）
     for (const c of V3.bch) {
       // 整块在雾外不画；树（约 10 高）只画屏幕上两个像素以上的近处，房屋九千以内——远处的林地、村镇由地面贴图表现（大地图上全图的树有几百万个三角形）
-      if (c.bb && Math.hypot(Math.max(c.bb[0] - ex, 0, ex - c.bb[2]), Math.max(c.bb[1] - ey, 0, ey - c.bb[3])) > (c.tree ? ft : fb)) continue;
+      if (c.bb && Math.hypot(Math.max(c.bb[0] - ex, 0, ex - c.bb[2]), Math.max(c.bb[1] - ey, 0, ey - c.bb[3]), ez) > (c.tree ? ft : fb)) continue;
       gl.bindBuffer(gl.ARRAY_BUFFER, c.b); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, c.i);
       gl.vertexAttribPointer(ab.p, 3, gl.FLOAT, false, 32, 0); gl.vertexAttribPointer(ab.n, 3, gl.FLOAT, false, 32, 12); gl.vertexAttribPointer(ab.e, 2, gl.FLOAT, false, 32, 24);
       gl.drawElements(gl.TRIANGLES, c.n, gl.UNSIGNED_SHORT, 0);
@@ -822,6 +822,7 @@ function v3Draw(now) {
   }
   if (typeof v3Units === 'function' && !(SETTINGS && SETTINGS.models3d === false)) { gl.disableVertexAttribArray(V3.a.p); gl.disableVertexAttribArray(V3.a.n); v3Units(C, box); }   // 兵种立体模型（v3units.js）
   if (typeof v3Fx === 'function' && !(SETTINGS && SETTINGS.models3d === false)) { gl.disableVertexAttribArray(V3.a.p); gl.disableVertexAttribArray(V3.a.n); v3Fx(C); }   // 立体弹道（v3fx.js）
+  if (typeof v3Post === 'function') { gl.disableVertexAttribArray(V3.a.p); gl.disableVertexAttribArray(V3.a.n); v3Post(now); }   // 辉光、景深、暗角（v3post.js）
   const ctx = R.ctx;
   ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalCompositeOperation = 'copy'; ctx.drawImage(V3.cv, 0, 0); ctx.restore();
   v3Overlay(ctx, now / 1000);
@@ -841,6 +842,7 @@ function v3Overlay(ctx, time) {
   ctx.save(); ctx.setTransform(R.dpr, 0, 0, R.dpr, 0, 0);
   ctx.lineCap = 'round'; ctx.font = '11px "IBM Plex Mono", "Noto Sans SC", monospace'; ctx.textAlign = 'center';
   const near = CAM.z / CAM.fit > 2.2, spec = specAll() || R.eye === 'all', used = [];
+  if (typeof v3TableMarks === 'function') v3TableMarks(ctx);   // 沙盘桌边框上的方格坐标
   // 名称标签：和已画的标签重叠就不画（近处的先画，远处的让位）
   const label = (t, x, y, col, al) => {
     const w = ctx.measureText(t).width + 4, r = [x - w / 2, y - 11, x + w / 2, y + 2];
@@ -919,7 +921,9 @@ function v3Att() {
   if (!(typeof MENU === 'object' && MENU.open && !MENU.game) || V3.ok === false && V3.tried || R.lowCap || (typeof SETTINGS === 'object' && SETTINGS.quality === 'low')) return false;
   if (V3.coarse == null) V3.coarse = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
   if (V3.coarse) return false;
-  V3.yaw = V3.yawT = (MENU.drift || 0) * .5; V3.tilt = V3.tiltT = 1.02;
+  V3.yaw = V3.yawT = (MENU.drift || 0) * .5; V3.tilt = V3.tiltT = .98;
+  // 拉远看整张沙盘桌，注视点往镜头左边挪，桌子落在菜单右边的空处
+  V3.dk = 1.32; V3.tofs = [-Math.cos(V3.yaw) * 2900, Math.sin(V3.yaw) * 2900];
   return true;
 }
 // user：玩家自己按的（按钮、Shift + L）——记住选择，下一局照此默认
