@@ -12,7 +12,7 @@
 // 画风：黑绿（默认）——深色实体 + 发光棱线（像 3D 房屋），舷窗、观察镜、座舱、车灯发光；敌方暗红实体 + 红色棱线；写实画面改成涂装色 + 暗棱线
 // 实现：每种模型的网格只建一次（零件坐标：x 向前、y 向右、z 向上；车辆、步兵按米，舰艇、飞机、阵地按世界单位），
 //   每帧只收集位置、朝向、比例、阵营，按模型实例化一次画完
-const V3M = { ok: false, tried: false, gl: null, ext: null, der: false, pr: null, a: {}, u: {}, mesh: new Map(), ib: null, inst: new Map(), veh: new Map(), mv: new WeakMap() };   // mv：只在画面里记的朝向（抢修组）
+const V3M = { ok: false, tried: false, gl: null, ext: null, der: false, pr: null, a: {}, u: {}, mesh: new Map(), ib: null, inst: new Map(), veh: new Map(), mv: new WeakMap(), tl: new Map() };   // mv：只在画面里记的朝向（抢修组）
 
 // ———————————————— 网格构建 ————————————————
 // 顶点：位置 3、法线 3、明暗 1（< 0 为发光的玻璃 / 灯）、棱线坐标 3（重心坐标，不画棱线的边加 1）= 10 个浮点
@@ -999,6 +999,43 @@ function v3mTyphon(M) {
   for (const u of [-23, -29.5]) for (const s of [-1, 1]) v3mWheel(M, u, -6.9 + s * 2.6, .9, .7);
   for (const s of [-1, 1]) v3mWheel(M, -28.2, 6.6 + s * 2, .8, .6);
 }
+// 堤丰车阵拆成单车（每辆按脚下坡度各自俯仰、侧倾，拖车与牵引车在第五轮处各自贴地）：局部原点放在各车中心
+//   牵引车中心在车阵坐标 u = 7、拖车 u = -8.5（鹅颈压在牵引车第五轮上）、连指挥车 (-27, -6.9)、发电车 (-28.2, 6.6)
+const TY3 = { tr: 7, tl: -8.5, boc: [-27, -6.9], gen: [-28.2, 6.6] };
+function v3mTyTractor() {
+  const M = mbNew(), o = -TY3.tr;
+  for (const u of [13.4, 11, 4.6, 2.3]) for (const s of [-1, 1]) v3mWheel(M, u + o, s * 2.75, 1.1);
+  mbBox(M, -.5 + o, 9.8 + o, -1.9, 1.9, 1.1, 2.3, .8);   // 车架
+  v3mDeck(M, 9.6 + o, 15 + o, -2.35, 2.35, 1.2, 5, .9, true);   // 全宽驾驶室（风挡发光）
+  mbBox(M, 5.8 + o, 8.6 + o, -1.9, -.7, 2.3, 3.4, .7);   // 绞盘箱
+  mbTube(M, [9.15 + o, 1.7, 2.3], [9.15 + o, 1.7, 5.6], .28, .24, 6, .6);   // 排气管
+  return M;
+}
+function v3mTyTrailer() {
+  const M = mbNew(), o = -TY3.tl;
+  for (const u of [-10.6, -12.8, -15]) for (const s of [-1, 1]) v3mWheel(M, u + o, s * 3.2, 1);
+  mbBox(M, -17 + o, -.5 + o, -2.4, 2.4, 1.6, 2.4, .75);   // 甲板
+  for (let u = -15; u < -1; u += 2.1) mbLine(M, [u + o, -2.4, 2.42], [u + o, 2.4, 2.42], .6);
+  mbBox(M, -.5 + o, 4.4 + o, -1.8, 1.8, 2.3, 3.3, .8, { taper: .2 });   // 鹅颈
+  for (const u of [-16.2, -1.8]) for (const s of [-1, 1]) { mbBox(M, u - .25 + o, u + .25 + o, s * 2.4 - (s < 0 ? 1.7 : 0), s * 2.4 + (s > 0 ? 1.7 : 0), 1.7, 2.1, .6); mbBox(M, u - .65 + o, u + .65 + o, s * 4.35 - .55, s * 4.35 + .55, 0, 1.9, .55); }   // 液压支腿
+  return M;
+}
+function v3mTyBoc() {
+  const M = mbNew(), [ou, ov] = TY3.boc.map(x => -x);
+  mbBox(M, -33 + ou, -24.6 + ou, -9.2 + ov, -4.6 + ov, 1, 6.4, .8, { taper: .15 });   // 方舱
+  v3mDeck(M, -24.2 + ou, -21 + ou, -9 + ov, -4.8 + ov, 1, 4.6, .9, true);
+  mbLine(M, [-31.6 + ou, -8.3 + ov, 6.4], [-31.6 + ou, -8.3 + ov, 13], .9); mbLine(M, [-31.6 + ou, -5.5 + ov, 6.4], [-31.6 + ou, -5.5 + ov, 11], .9);   // 鞭状天线
+  mbPrism(M, mbCirc(-27.6 + ou, -6.9 + ov, 1.25, 10), 6.4, 6.9, .7, { taper: .4 });   // 卫星天线
+  for (const u of [-23, -29.5]) for (const s of [-1, 1]) v3mWheel(M, u + ou, s * 2.6, .9, .7);
+  return M;
+}
+function v3mTyGen() {
+  const M = mbNew(), [ou, ov] = TY3.gen.map(x => -x);
+  mbBox(M, -31 + ou, -25.5 + ou, 4.8 + ov, 8.4 + ov, .8, 3.6, .75);
+  for (let u = -30; u < -26; u += 1.1) mbLine(M, [u + ou, 4.75 + ov, 1.6], [u + ou, 4.75 + ov, 3.2], .7);
+  for (const s of [-1, 1]) v3mWheel(M, -28.2 + ou, s * 2, .8, .6);
+  return M;
+}
 // 堤丰的 Mk 41 四联装发射箱：沿 -y 卧放（y = 0 是拖车尾部的铰点），按滚转角绕铰点竖起；箱顶 2×2 单元格舱盖缝发光
 function v3mTyBox() {
   const M = mbNew(), R0 = TY_RIG, L = R0.L, T = R0.T;
@@ -1040,14 +1077,14 @@ function v3mAscCan() {
 }
 
 // ———————————————— 着色器与绘制 ————————————————
-// 实例参数 iA = (x, y, z, 朝向)，iB = (比例, 阵营 0 我 / 1 敌 / 2 残骸, 滚转, -)，坐标是 GL 的（y 向北）
+// 实例参数 iA = (x, y, z, 朝向)，iB = (比例, 阵营 0 我 / 1 敌 / 2 残骸, 滚转, 俯仰)，坐标是 GL 的（y 向北）；先滚转、再俯仰（车头抬起为正）、再转朝向
 const V3M_VS = `attribute vec3 p; attribute vec3 n; attribute float s; attribute vec3 b; attribute vec4 iA; attribute vec4 iB;
 uniform mat4 uM; uniform vec3 uEye;
 varying vec3 vN, vB, vV; varying float vS, vSide, vD;
 void main() {
-  float c = cos(iA.w), sn = sin(iA.w), cr = cos(iB.z), sr = sin(iB.z);
-  vec3 q = p * iB.x; q = vec3(q.x, q.y * cr - q.z * sr, q.y * sr + q.z * cr);
-  vec3 m = vec3(n.x, n.y * cr - n.z * sr, n.y * sr + n.z * cr);
+  float c = cos(iA.w), sn = sin(iA.w), cr = cos(iB.z), sr = sin(iB.z), cp = cos(iB.w), sp = sin(iB.w);
+  vec3 q = p * iB.x; q = vec3(q.x, q.y * cr - q.z * sr, q.y * sr + q.z * cr); q = vec3(q.x * cp - q.z * sp, q.y, q.x * sp + q.z * cp);
+  vec3 m = vec3(n.x, n.y * cr - n.z * sr, n.y * sr + n.z * cr); m = vec3(m.x * cp - m.z * sp, m.y, m.x * sp + m.z * cp);
   vec3 w = vec3(iA.x + q.x * c - q.y * sn, iA.y + q.x * sn + q.y * c, iA.z + q.z);
   vN = vec3(m.x * c - m.y * sn, m.x * sn + m.y * c, m.z); vB = b; vS = s; vSide = iB.y; vV = uEye - w; vD = length(vV);
   gl_Position = uM * vec4(w, 1.);
@@ -1125,12 +1162,23 @@ function v3mLadder() {
   for (let i = 1; i <= 6; i++) { const q = i / 7; mbLine(M, [1.3 * q, -.32, 3.7 * q], [1.3 * q, .32, 3.7 * q], .9); }
   return M;
 }
-// 一个实例：x、y 世界坐标，z 高度，a 世界朝向（屏幕坐标角），k 比例，side 0 我 / 1 敌 / 2 残骸，roll 滚转
-function v3mAdd(key, build, x, y, z, a, k, side, roll = 0) {
+// 一个实例：x、y 世界坐标，z 高度，a 世界朝向（屏幕坐标角），k 比例，side 0 我 / 1 敌 / 2 残骸，roll 滚转，pitch 俯仰（车头抬起为正）
+function v3mAdd(key, build, x, y, z, a, k, side, roll = 0, pitch = 0) {
   let L = V3M.inst.get(key);
   if (!L) { L = { build, d: [] }; V3M.inst.set(key, L); }
-  L.d.push(x, -y, z, -a, k, side, roll, 0);
+  L.d.push(x, -y, z, -a, k, side, roll, pitch);
 }
+// 贴地姿态：地面在 (x, y) 处的坡度（dz/dx、dz/dy，中心差分，跨度 d）；id 给了就按帧平滑（车辆翻过坡顶时车身平顺地俯仰，不一帧一跳）
+function v3Grad(x, y, d, id) {
+  const gx = (v3Ht(x + d, y) - v3Ht(x - d, y)) / (2 * d), gy = (v3Ht(x, y + d) - v3Ht(x, y - d)) / (2 * d);
+  if (id == null) return [gx, gy];
+  const o = V3M.tl.get(id);
+  if (!o) { V3M.tl.set(id, [gx, gy]); return [gx, gy]; }
+  o[0] += (gx - o[0]) * .25; o[1] += (gy - o[1]) * .25;
+  return o;
+}
+// 朝向 th 的车体在坡度 g 上的 [俯仰, 滚转]：沿车头方向的坡度抬车头，沿车身左侧（模型 +y，朝向减 90°）的坡度抬左侧
+const v3Pose = (g, th) => { const c = Math.cos(th), s = Math.sin(th); return [Math.atan(g[0] * c + g[1] * s), Math.atan(g[0] * s - g[1] * c)]; };
 const v3mHex = h => { const s = String(h).replace('#', ''), v = parseInt(s.length === 3 ? s.split('').map(c => c + c).join('') : s, 16); return [(v >> 16 & 255) / 255, (v >> 8 & 255) / 255, (v & 255) / 255]; };
 function v3mPalette(gl) {
   const real = typeof realLook === 'function' && realLook() && !(typeof greenLook === 'function' && greenLook()), U = V3M.u;
@@ -1166,11 +1214,14 @@ function v3Units(C, box) {
     const side = v.side === 'e' ? 'e' : 'p', bk = Mm.key + ':' + side, sd = v.dead ? 2 : side === 'e' ? 1 : 0, k = vehSp(v).len / Mm.L, z = v3Ht(v.x, v.y), h = v.heading || 0;
     let V = V3M.veh.get(bk);
     if (!V) { V = v3mVehicle(Mm.key, side); V3M.veh.set(bk, V); }
-    v3mAdd('vh:' + bk, () => V.hull, v.x, v.y, z, h, k, sd);
+    // 贴地：车体按脚下坡度俯仰、侧倾（上坡车头抬起、横坡车身侧倾）；炮塔装在倾斜的车体上，按它自己的朝向取同一个坡面的姿态
+    const g = v3Grad(v.x, v.y, Math.max(2.5, vehSp(v).len * .45), v.id), [hp, hr] = v3Pose(g, h);
+    v3mAdd('vh:' + bk, () => V.hull, v.x, v.y, z, h, k, sd, hr, hp);
     if (V.tur.t.length) {
       const c = Math.cos(h), s = Math.sin(h), px0 = v.x + (V.piv[0] * c - V.piv[1] * s) * k, py0 = v.y + (V.piv[0] * s + V.piv[1] * c) * k, aim = v.dead ? h + .6 : (v.aim ?? h);
-      v3mAdd('vt:' + bk, () => V.tur, px0, py0, z, aim, k, sd);
-      if (V.rad && !v.dead) { const [rx, ry, rr, rz] = V.rad, ca = Math.cos(aim), sa = Math.sin(aim); v3mAdd('rad:' + rr, () => v3mRadar(rr), px0 + (rx * ca - ry * sa) * k, py0 + (rx * sa + ry * ca) * k, z + (rz + .45) * k, t * 3 + v.id, k, sd); }
+      const zt = z + g[0] * (px0 - v.x) + g[1] * (py0 - v.y), [tp, tr] = v3Pose(g, aim);
+      v3mAdd('vt:' + bk, () => V.tur, px0, py0, zt, aim, k, sd, tr, tp);
+      if (V.rad && !v.dead) { const [rx, ry, rr, rz] = V.rad, ca = Math.cos(aim), sa = Math.sin(aim), qx = px0 + (rx * ca - ry * sa) * k, qy = py0 + (rx * sa + ry * ca) * k; v3mAdd('rad:' + rr, () => v3mRadar(rr), qx, qy, zt + g[0] * (qx - px0) + g[1] * (qy - py0) + (rz + .45) * k, t * 3 + v.id, k, sd); }
     }
   }
   // 步兵（画得出单兵的距离都是立体模型，地面贴图里不再画平的小人）：三人按二维画面的三角站位，按兵种建模、按动作选姿态帧（manim.js：走 / 跑四帧、跪射、卧倒、匍匐），开火时枪口焰
@@ -1239,11 +1290,25 @@ function v3Units(C, box) {
     if (e.kind === 'airfield' || !inB(e.x, e.y)) continue;   // 被毁的也立着（暗色残骸），贴图里不再画平面残骸（render2.js）
     if (!seen(e.x, e.y) && e.kx == null) continue;
     const a = typeof gunAim === 'function' ? gunAim(e, t) : (e.th ?? 1.57), z0 = v3Ht(e.x, e.y), ca = Math.cos(a), sa = Math.sin(a), at = (u, v) => [e.x + u * ca - v * sa, e.y + u * sa + v * ca];
-    v3mAdd('st:' + e.kind, () => v3mFort(e.kind), e.x, e.y, z0, a, 1, e.dead ? 2 : 1);
-    if (!e.dead && e.kind === 'typhon' && typeof TY_RIG === 'object') for (let k = 0; k < TY_RIG.n; k++) {   // 发射箱：绕拖车尾部铰点起竖（antiship.js tyErect）
-      const [px0, py0] = at(TY_RIG.piv, (k - (TY_RIG.n - 1) / 2) * TY_RIG.gap);
-      v3mAdd('ty:box', v3mTyBox, px0, py0, z0 + 2.4, a + Math.PI / 2, 1, 1, tyErect(e, k));
+    if (e.kind === 'typhon' && typeof TY_RIG === 'object' && typeof tyEnsure === 'function') {
+      // 堤丰车阵：每辆车单独摆、各自贴地（脚下坡度定俯仰侧倾），被毁的车是歪着的暗色残骸；发射箱装在拖车尾部铰点上，起竖角叠加拖车的坡度
+      const TU = tyEnsure(e), put = (key, build, u, v, dead, sink = 0) => {
+        const [x, y] = at(u, v), g = v3Grad(x, y, 4), [p, r] = v3Pose(g, a);
+        v3mAdd(key, build, x, y, v3Ht(x, y) - (dead ? .5 + sink : 0), a, 1, dead || e.dead ? 2 : 1, r + (dead ? .14 : 0), p + (dead ? -.05 : 0));
+        return g;
+      };
+      for (let k = 0; k < TY_RIG.n; k++) {
+        const v0 = (k - (TY_RIG.n - 1) / 2) * TY_RIG.gap, dd = TU.u[k].dead || e.dead;
+        put('ty:trac', v3mTyTractor, TY3.tr, v0, dd);
+        const g = put('ty:trl', v3mTyTrailer, TY3.tl, v0, dd), [hx, hy] = at(TY_RIG.piv, v0), A = a + Math.PI / 2, [pb, rb] = v3Pose(g, A);
+        v3mAdd('ty:box', v3mTyBox, hx, hy, v3Ht(hx, hy) + 2.4 - (dd ? .5 : 0), A, 1, dd ? 2 : 1, (dd ? 0 : tyErect(e, k)) + rb, pb);
+      }
+      const bi = TY_U.findIndex(o => o.k === 'boc'), gi = TY_U.findIndex(o => o.k === 'gen');
+      put('ty:boc', v3mTyBoc, TY3.boc[0], TY3.boc[1], TU.u[bi].dead);
+      put('ty:gen', v3mTyGen, TY3.gen[0], TY3.gen[1], TU.u[gi].dead);
+      continue;
     }
+    v3mAdd('st:' + e.kind, () => v3mFort(e.kind), e.x, e.y, z0, a, 1, e.dead ? 2 : 1);
     if (!e.dead && e.kind === 'ascm' && typeof ASC_RIG === 'object') for (let k = 0; k < ASC_RIG.n; k++) {   // 发射箱：转台转向目标、仰起（missile.js ascPose）
       const P = ascPose(e, k), v0 = (k - (ASC_RIG.n - 1) / 2) * ASC_RIG.gap, b = a + P.tr, [cx, cy] = at(-3.4, v0), o = ASC_RIG.piv + 3.4;
       v3mAdd('asc:can', v3mAscCan, cx + Math.cos(b) * o, cy + Math.sin(b) * o, z0 + 3.1, b + Math.PI / 2, 1, 1, P.el);
@@ -1289,7 +1354,7 @@ function v3Units(C, box) {
       if (V.tur.t.length) { const c = Math.cos(h), sn = Math.sin(h); v3mAdd('vt:m1117:e', () => V.tur, a.x + (V.piv[0] * c - V.piv[1] * sn) * k, a.y + (V.piv[0] * sn + V.piv[1] * c) * k, z, a.dead ? h + .6 : (a.aim ?? h), k, sd); }
     }
   }
-  if (S.trk && S.trk.list) for (const tr of S.trk.list) if ((tr.ph !== 'idle' || tr.dead) && inB(tr.x, tr.y)) v3mAdd('truck', () => v3mTruck('cargo'), tr.x, tr.y, v3Ht(tr.x, tr.y), tr.h || 0, 1, tr.dead ? 2 : 0);   // 补给卡车
+  if (S.trk && S.trk.list) for (const tr of S.trk.list) if ((tr.ph !== 'idle' || tr.dead) && inB(tr.x, tr.y)) { const [tp, trl] = v3Pose(v3Grad(tr.x, tr.y, 3, 'trk' + tr.id), tr.h || 0); v3mAdd('truck', () => v3mTruck('cargo'), tr.x, tr.y, v3Ht(tr.x, tr.y), tr.h || 0, 1, tr.dead ? 2 : 0, trl, tp); }   // 补给卡车
   if (S.rep && S.rep.crew) for (const id in S.rep.crew) {   // 抢修组：岸上抢修车 / 海上抢修艇（朝向按移动方向，只在画面里记）
     const c = S.rep.crew[id];
     if (!c.k || !inB(c.x, c.y)) continue;

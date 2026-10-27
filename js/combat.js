@@ -56,9 +56,11 @@ function damageShip(s, dmg) {
   log(aboard ? `${s.label} 被击沉，舰上 ${aboard} 人阵亡` : `${s.label} 残骸被击毁`, 'bad');
 }
 
-function damageEnemy(e, dmg) {
+// x、y：弹着点（可省）——「堤丰」导弹排按弹着点落到车阵里最近的那辆车（antiship.js tyHit）
+function damageEnemy(e, dmg, x, y) {
   if (e.dead) return;
-  e.hp -= dmg;
+  if (e.kind === 'typhon' && typeof tyHit === 'function') { if (!tyHit(e, dmg, x, y)) return; e.hp = 0; }
+  else e.hp -= dmg;
   if (e.hp > 0) return;
   Object.assign(e, { dead: true, kx: e.x, ky: e.y, moving: false });
   S.stats.structs++;
@@ -85,7 +87,7 @@ function impact(x, y, pw, side, src) {
   if (pw.struct) for (const e of S.enemies) {
     const d = dist(x, y, e.x, e.y);
     if (!e.dead && d < R * 2) e.sup = Math.min(100, (e.sup || 0) + 80 * (1 - d / (R * 2)));
-    if (!e.dead && d < R + 4) damageEnemy(e, pw.struct * (1 - d / (R + 4) * .4));
+    if (!e.dead && d < R + 4) damageEnemy(e, pw.struct * (1 - d / (R + 4) * .4), x, y);
   }
   if (typeof supplyImpact === 'function') supplyImpact(x, y, R, pw, side, src);   // 补给节点（supplynet.js）
   if (typeof armorImpact === 'function') armorImpact(x, y, R, pw, side);   // 装甲车辆（ai3.js）

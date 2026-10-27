@@ -108,7 +108,7 @@ function infoEnemyTeam(q) {
 function infoEnemySt(e) {
   const vis = specAll() || inVision(e.x, e.y), nm = e.name || (ENEMY_SPEC[e.kind] || {}).name || '火力点';
   return { t: '敌 ' + nm, s: e.dead ? '已摧毁' : vis ? '目视' : '已标定',
-    rows: [['隶属', infoEsc(e.org ? [e.org.b, e.org.r].filter(Boolean).join(' · ') : '海防守备团 · 团火力群')], !e.dead && vis && ['耐久', `约 ${infoPct(e.hp / ((ENEMY_SPEC[e.kind] || {}).hp || e.hp || 1))}`], !e.dead && ['状态', (e.sup || 0) > 50 ? '被压制' : e.moving ? '转移阵地' : '正常'], e.kind === 'tel' && ['载弹', `${e.n ?? 2} 枚`], e.kind === 'ascm' && ['载弹', `${e.n ?? 4} 枚`], e.kind === 'typhon' && ['载弹', `战斧 ${e.n ?? 16} 枚`]] };
+    rows: [['隶属', infoEsc(e.org ? [e.org.b, e.org.r].filter(Boolean).join(' · ') : '海防守备团 · 团火力群')], !e.dead && vis && ['耐久', `约 ${infoPct(e.hp / ((ENEMY_SPEC[e.kind] || {}).hp || e.hp || 1))}`], !e.dead && ['状态', (e.sup || 0) > 50 ? '被压制' : e.moving ? '转移阵地' : '正常'], e.kind === 'tel' && ['载弹', `${e.n ?? 2} 枚`], e.kind === 'ascm' && ['载弹', `${e.n ?? 4} 枚`], e.kind === 'typhon' && ['载弹', `战斧 ${e.n ?? 16} 枚`], e.kind === 'typhon' && !e.dead && vis && typeof tyEnsure === 'function' && ['各车', (T => TY_U.map((o, i) => `${o.nm}${T.u[i].dead ? '（被毁）' : o.k === 'L' ? `（${T.u[i].r} 枚）` : ''}`).join('、'))(tyEnsure(e))]] };
 }
 
 // 飞机参数卡：我方（S.planes）与敌机（S.eair.fly）

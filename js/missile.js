@@ -161,7 +161,7 @@ function msPgmFly(m, dt) {
   if (m.src === 'b2' && typeof b2Blast === 'function') b2Blast(m.tx, m.ty, m.w);   // B-2 的重磅炸弹：大范围冲击波压制（b2.js）
   if (T && dist(T.x, T.y, m.tx, m.ty) < 16) {
     if (m.tgt.k === 'veh') vehDamage(T, W0.dmg, W0.pen, m.x0, m.y0, 'atgm');
-    else if (m.tgt.k === 'enemy') { damageEnemy(T, W0.st); T.sup = 100; }
+    else if (m.tgt.k === 'enemy') { damageEnemy(T, W0.st, m.tx, m.ty); T.sup = 100; }
     else if (m.tgt.k === 'armor' && typeof damageArmor === 'function') damageArmor(T, W0.dmg);
   }
   msStat('pgmHit');
