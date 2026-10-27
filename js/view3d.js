@@ -201,7 +201,11 @@ void main() {
   float lit = clamp(dot(N, normalize(vec3(-.45, .55, .7))), 0., 1.);
   float ed = min(min(vE.x, 1. - vE.x), min(vE.y, 1. - vE.y)), edge = 1. - smoothstep(.02, .1, ed);
   vec3 c;
-  if (uMx > .5) {   // 数码风：楼是数字模型——深色实体、发光棱线；屋顶细方格，墙面上随机亮着的「窗格」，字符竖着往下落
+  if (vE.x > 1.5) {   // 树：树冠（e.x 2.5）、树干（3.5）；不画棱线，边缘（侧面）一圈淡淡的轮廓光
+    float tk = step(3., vE.x), hv = fract(sin(dot(floor(vP.xy * .25), vec2(12.9898, 78.233))) * 43758.5453), rim = smoothstep(.15, .9, 1. - abs(N.z));
+    if (uMx > .5) c = mix(vec3(.004, .03, .016) * (.5 + 1.4 * lit) + vec3(.1, .7, .36) * rim * .1, vec3(.01, .02, .012), tk);
+    else c = mix(mix(vec3(.05, .1, .04), vec3(.09, .15, .06), hv) * (.45 + .9 * lit) + vec3(.05, .09, .04) * rim * .3, vec3(.07, .05, .03) * (.5 + .7 * lit), tk);
+  } else if (uMx > .5) {   // 数码风：楼是数字模型——深色实体、发光棱线；屋顶细方格，墙面上随机亮着的「窗格」，字符竖着往下落
     vec3 G = vec3(.14, .9, .46);
     c = vec3(.006, .035, .02) * (.6 + 1.2 * lit) + G * edge * (N.z > .5 ? .6 : .95);
     if (N.z > .5) { vec2 d = abs(fract(w / 3.) - .5); c += G * step(.42, max(d.x, d.y)) * .12; }
@@ -373,14 +377,24 @@ function v3Cls() {
 // 3D 地图用数码风画地面吗（黑绿画面；设置里可关）
 const v3Mx = () => typeof SETTINGS === 'object' && !!SETTINGS && (SETTINGS.look === 'green' || SETTINGS.look === 'matrix') && SETTINGS.matrix3d !== false;   // 黑绿、数码两种画面都用数码风地面
 
-// 房屋几何：每栋一个方块（屋顶 + 四面墙），高度按类型（平顶楼房高、坡顶民房矮）放大 1.6 倍，坐落在地面高度上；
-// 机场建筑（afbase.js：机库、机堡、塔台、营房、油罐等，任意朝向的多边形柱体，塔台玻璃顶与水塔水箱架空）排在前面，机场被发现 / 夺取时重建
+// 房屋几何：民房是坡顶（两面坡 + 山墙，屋脊顺着长边），楼房是平顶（女儿墙、楼梯间 / 水箱），镇中心的更高；坐落在地面高度上；
+// 机场建筑（afbase.js：机库、机堡、塔台、营房、油罐等，任意朝向的多边形柱体，塔台玻璃顶与水塔水箱架空）排在前面，机场被发现 / 夺取时重建；
+// 树木（v3Trees）：林地成片、丘陵山地零星、田野里偶尔一棵孤树；按块（每块不超过 16 位索引）静态缓冲区
+const v3Hsh = (x, y) => { const v = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453; return v - Math.floor(v); };
+function v3Chunks() {
+  const out = [];
+  let cur = null;
+  const need = n => { if (!cur || cur.vb.length / 8 + n > 65000) out.push(cur = { vb: [], ib: [] }); return cur; };
+  return { out, need };
+}
 function v3Bld() {
-  const gl = V3.gl, L = typeof townBld === 'function' ? townBld().list : [], vb = [], ib = [];
+  const gl = V3.gl, L = typeof townBld === 'function' ? townBld().list : [];
   const A = typeof afb3dBlocks === 'function' ? afb3dBlocks() : [];
   V3.asig = typeof afb3dSig === 'function' ? afb3dSig() : '';
+  const K = v3Chunks();
   for (const k of A) {
-    const n = k.pts.length, P = k.pts.map(([x, y]) => [x, -y]), g = Math.min(...k.pts.map(([x, y]) => v3Ht(x, y))) - .5, z0 = g + k.z0 * 1.6, top = g + k.z * 1.6;
+    const n = k.pts.length, ch = K.need(n * 5 + 2), vb = ch.vb, ib = ch.ib;
+    const P = k.pts.map(([x, y]) => [x, -y]), g = Math.min(...k.pts.map(([x, y]) => v3Ht(x, y))) - .5, z0 = g + k.z0 * 1.6, top = g + k.z * 1.6;
     const cx = P.reduce((a, p) => a + p[0], 0) / n, cy = P.reduce((a, p) => a + p[1], 0) / n, b0 = vb.length / 8;
     vb.push(cx, cy, top, 0, 0, 1, .5, .5);   // 顶面：从中心扇形三角化，边缘的 e 取 0（棱线发光）
     for (const [x, y] of P) vb.push(x, y, top, 0, 0, 1, 0, .5);
@@ -394,22 +408,112 @@ function v3Bld() {
       ib.push(q, q + 1, q + 2, q, q + 2, q + 3);
     }
   }
+  const TW = typeof TER === 'object' && TER.towns ? [...(TER.towns.vills || []), TER.towns.town1, TER.towns.town2, TER.towns.town3, TER.towns.hq].filter(Boolean) : [];
   for (const b of L) {
-    if (vb.length / 8 > 65000 - 24) break;
+    const ch = K.need(48), vb = ch.vb, ib = ch.ib;
+    const quad = (pts, n, e) => { const k = vb.length / 8; pts.forEach(([x, y, z], i) => vb.push(x, y, z, n[0], n[1], n[2], e ? e[i][0] : (i === 1 || i === 2 ? 1 : 0), e ? e[i][1] : (i >= 2 ? 1 : 0))); ib.push(k, k + 1, k + 2, k, k + 2, k + 3); };
+    const box = (X0, X1, Y0, Y1, z0, z1, roof = true) => {   // GL 坐标的方块（Y 已取负）：四面墙 + 平顶
+      if (roof) quad([[X0, Y0, z1], [X1, Y0, z1], [X1, Y1, z1], [X0, Y1, z1]], [0, 0, 1]);
+      quad([[X0, Y0, z0], [X1, Y0, z0], [X1, Y0, z1], [X0, Y0, z1]], [0, 1, 0]);    // 北墙
+      quad([[X1, Y1, z0], [X0, Y1, z0], [X0, Y1, z1], [X1, Y1, z1]], [0, -1, 0]);   // 南墙
+      quad([[X1, Y0, z0], [X1, Y1, z0], [X1, Y1, z1], [X1, Y0, z1]], [1, 0, 0]);    // 东墙
+      quad([[X0, Y1, z0], [X0, Y0, z0], [X0, Y0, z1], [X0, Y1, z1]], [-1, 0, 0]);   // 西墙
+    };
     const w = (b.r ? b.h : b.w) / 2, h = (b.r ? b.w : b.h) / 2, cx = b.x + b.dx, cy = b.y + b.dy, g = v3Ht(cx, cy) - .5;
-    const top = g + (b.f ? 9 + (Math.abs(Math.sin(cx * 12.9 + cy * 7.3)) * 7) : 5 + (Math.abs(Math.sin(cx * 3.1 + cy * 5.7)) * 3)) * 1.6;
+    const dc = TW.length ? Math.min(...TW.map(t => Math.hypot(t.x - cx, t.y - cy))) : 99, core = dc < 24 ? 2 : dc < 40 ? 1 : 0, hs = v3Hsh(cx, cy), hs2 = v3Hsh(cy, cx);
     const X0 = cx - w, X1 = cx + w, Y0 = -(cy - h), Y1 = -(cy + h);   // GL 坐标：y 取负（北为正）
-    const quad = (pts, n) => { const k = vb.length / 8; pts.forEach(([x, y, z], i) => vb.push(x, y, z, n[0], n[1], n[2], i === 1 || i === 2 ? 1 : 0, i >= 2 ? 1 : 0)); ib.push(k, k + 1, k + 2, k, k + 2, k + 3); };
-    quad([[X0, Y0, top], [X1, Y0, top], [X1, Y1, top], [X0, Y1, top]], [0, 0, 1]);
-    quad([[X0, Y0, g], [X1, Y0, g], [X1, Y0, top], [X0, Y0, top]], [0, 1, 0]);    // 北墙
-    quad([[X1, Y1, g], [X0, Y1, g], [X0, Y1, top], [X1, Y1, top]], [0, -1, 0]);   // 南墙
-    quad([[X1, Y0, g], [X1, Y1, g], [X1, Y1, top], [X1, Y0, top]], [1, 0, 0]);    // 东墙
-    quad([[X0, Y1, g], [X0, Y0, g], [X0, Y0, top], [X0, Y1, top]], [-1, 0, 0]);   // 西墙
+    if (b.f) {   // 平顶楼房：4–7 层（镇中心再高两层）、女儿墙、屋顶楼梯间 / 水箱
+      const top = g + (4 + Math.floor(hs * 4) + core) * 2.6, pw = .35;
+      box(X0, X1, Y0, Y1, g, top, false);
+      quad([[X0 + pw, Y0 - pw, top - .5], [X1 - pw, Y0 - pw, top - .5], [X1 - pw, Y1 + pw, top - .5], [X0 + pw, Y1 + pw, top - .5]], [0, 0, 1]);   // 屋面（比墙顶低半格）
+      quad([[X0, Y0, top], [X1, Y0, top], [X1 - pw, Y0 - pw, top], [X0 + pw, Y0 - pw, top]], [0, 0, 1], [[0, 0], [1, 0], [1, .5], [0, .5]]);   // 女儿墙顶
+      quad([[X1, Y1, top], [X0, Y1, top], [X0 + pw, Y1 + pw, top], [X1 - pw, Y1 + pw, top]], [0, 0, 1], [[0, 0], [1, 0], [1, .5], [0, .5]]);
+      quad([[X1, Y0, top], [X1, Y1, top], [X1 - pw, Y1 + pw, top], [X1 - pw, Y0 - pw, top]], [0, 0, 1], [[0, 0], [1, 0], [1, .5], [0, .5]]);
+      quad([[X0, Y1, top], [X0, Y0, top], [X0 + pw, Y0 - pw, top], [X0 + pw, Y1 + pw, top]], [0, 0, 1], [[0, 0], [1, 0], [1, .5], [0, .5]]);
+      const sx = lerp(X0 + 1, X1 - 2.2, hs2), sy = lerp(Y1 + 1, Y0 - 2, hs);   // 楼梯间
+      box(sx, sx + 1.4, sy, sy + 1.2, top - .5, top + 1.8);
+      if (hs2 > .45) { const tx = lerp(X0 + .8, X1 - 1.6, 1 - hs2), ty = lerp(Y1 + .8, Y0 - 1.6, 1 - hs); box(tx, tx + .9, ty, ty + .9, top + .4, top + 1.5); }   // 水箱
+    } else {   // 坡顶民房：2–3 层，两面坡屋顶（屋脊顺长边），两头山墙
+      const ew = g + (2 + Math.floor(hs * 2) + (core > 1 ? 1 : 0)) * 2.8, rh = 1.8 + hs2 * 1.2, ov = .35;
+      box(X0, X1, Y0, Y1, g, ew, false);
+      const ex = [[0, 0], [1, 0], [1, 1], [0, 1]];
+      if (X1 - X0 >= Y0 - Y1) {   // 屋脊东西向
+        const ym = (Y0 + Y1) / 2, nz = (Y0 - Y1) / 2 + ov, l = Math.hypot(nz, rh), N = [0, rh / l, nz / l], S2 = [0, -rh / l, nz / l];
+        quad([[X0 - ov, Y0 + ov, ew - .3], [X1 + ov, Y0 + ov, ew - .3], [X1 + ov, ym, ew + rh], [X0 - ov, ym, ew + rh]], N, ex);
+        quad([[X1 + ov, Y1 - ov, ew - .3], [X0 - ov, Y1 - ov, ew - .3], [X0 - ov, ym, ew + rh], [X1 + ov, ym, ew + rh]], S2, ex);
+        quad([[X1, Y0, ew], [X1, Y1, ew], [X1, ym, ew + rh], [X1, ym, ew + rh]], [1, 0, 0], ex);   // 山墙（三角形：上面两点重合）
+        quad([[X0, Y1, ew], [X0, Y0, ew], [X0, ym, ew + rh], [X0, ym, ew + rh]], [-1, 0, 0], ex);
+      } else {   // 屋脊南北向
+        const xm = (X0 + X1) / 2, nz = (X1 - X0) / 2 + ov, l = Math.hypot(nz, rh), E = [rh / l, 0, nz / l], Wn = [-rh / l, 0, nz / l];
+        quad([[X1 + ov, Y0 + ov, ew - .3], [X1 + ov, Y1 - ov, ew - .3], [xm, Y1 - ov, ew + rh], [xm, Y0 + ov, ew + rh]], E, ex);
+        quad([[X0 - ov, Y1 - ov, ew - .3], [X0 - ov, Y0 + ov, ew - .3], [xm, Y0 + ov, ew + rh], [xm, Y1 - ov, ew + rh]], Wn, ex);
+        quad([[X0, Y0, ew], [X1, Y0, ew], [xm, Y0, ew + rh], [xm, Y0, ew + rh]], [0, 1, 0], ex);
+        quad([[X1, Y1, ew], [X0, Y1, ew], [xm, Y1, ew + rh], [xm, Y1, ew + rh]], [0, -1, 0], ex);
+      }
+    }
   }
-  if (!V3.bb) { V3.bb = gl.createBuffer(); V3.bi = gl.createBuffer(); }
-  gl.bindBuffer(gl.ARRAY_BUFFER, V3.bb); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vb), gl.STATIC_DRAW);
-  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, V3.bi); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(ib), gl.STATIC_DRAW);
-  V3.bn = ib.length;
+  const up = L => L.filter(c => c.ib.length).map(c => {
+    const o = { b: gl.createBuffer(), i: gl.createBuffer(), n: c.ib.length, bb: c.bb };
+    gl.bindBuffer(gl.ARRAY_BUFFER, o.b); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(c.vb), gl.STATIC_DRAW);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, o.i); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(c.ib), gl.STATIC_DRAW);
+    return o;
+  }), drop = L => { for (const c of L || []) { gl.deleteBuffer(c.b); gl.deleteBuffer(c.i); } };
+  drop(V3.bch);
+  const TL = v3Trees();
+  if (V3.tchL !== TL) { drop(V3.tch); V3.tch = up(TL); V3.tchL = TL; }   // 树只在地图 / 地形变了时重传（机场被发现时只重建房屋）
+  V3.bch = [...up(K.out), ...V3.tch];
+  V3.bn = V3.bch.reduce((a, c) => a + c.n, 0);
+}
+// 树：阔叶树（两层收拢的多面树冠）、针叶树（尖塔形）、细树干；e.x = 2.5 标记树冠、3.5 树干（着色器另配颜色，不画棱线）
+// 返回若干小块（每块的顶点、索引，按地图种子缓存；地形改了（弹坑等）重算高度）
+function v3Trees() {
+  if (!(typeof TER === 'object' && TER && TER.type)) return [];
+  const sig = TER.seed + ':' + (V3.sig || '');
+  if (V3.trees && V3.trees.sig === sig) return V3.trees.list;
+  const r = rng(TER.seed + 77), list = [];
+  let cur = { vb: [], ib: [] };
+  const af = TER.af, roadNear = (gx, gy) => { for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const x = gx + dx, y = gy + dy; if (x < 0 || y < 0 || x >= GW || y >= GH) continue; const t = TER.type[y * GW + x]; if (t === T.ROAD || t === T.BRIDGE || t === T.TOWN || t === T.RIVER || t === T.BEACH) return true; } return false; };
+  const ptsNear = (x, y) => (TER.points || []).some(p => Math.abs(p.x - x) < 26 && Math.abs(p.y - y) < 26);
+  const tree = (x, y, hgt, rad, con) => {
+    if (cur.vb.length / 8 > 60000) { list.push(cur); cur = { vb: [], ib: [], bb: cur.bb }; }
+    const vb = cur.vb, ib = cur.ib, g = v3Ht(x, y) - .2, X = x, Y = -y, a0 = r() * 6.28, n = 5, base = vb.length / 8;
+    const tr = .22 + rad * .05;   // 树干：三棱柱
+    for (let i = 0; i < 3; i++) { const a = a0 + i * 2.094, c = Math.cos(a), s = Math.sin(a); vb.push(X + c * tr, Y + s * tr, g, c, s, 0, 3.5, .5, X + c * tr * .7, Y + s * tr * .7, g + hgt * .45, c, s, 0, 3.5, .5); }
+    for (let i = 0; i < 3; i++) { const j = (i + 1) % 3, a = base + i * 2, b2 = base + j * 2; ib.push(a, b2, b2 + 1, a, b2 + 1, a + 1); }
+    const c0 = vb.length / 8, ring = (z, rr, nz, k) => { for (let i = 0; i < n; i++) { const a = a0 + i * 6.2832 / n + k, c = Math.cos(a), s = Math.sin(a), jr = rr * (.85 + .3 * r()); vb.push(X + c * jr, Y + s * jr, z, c * (1 - Math.abs(nz)), s * (1 - Math.abs(nz)), nz, 2.5, .5); } };
+    // 针叶：两层尖塔（下层宽、上层收）；阔叶：腰宽、上收的多面树冠；底下一个尖收到树干
+    if (con) { ring(g + hgt * .22, rad, -.25, 0); ring(g + hgt * .55, rad * .62, .35, .6); }
+    else { ring(g + hgt * .55, rad, .05, 0); ring(g + hgt * .85, rad * .62, .6, .63); }
+    vb.push(X, Y, g + hgt, 0, 0, 1, 2.5, .5, X, Y, g + hgt * (con ? .2 : .32), 0, 0, -1, 2.5, .5);
+    const tip = c0 + 2 * n;
+    for (let i = 0; i < n; i++) { const j = (i + 1) % n; ib.push(c0 + i, c0 + j, c0 + n + j, c0 + i, c0 + n + j, c0 + n + i, c0 + n + i, c0 + n + j, tip, tip + 1, c0 + j, c0 + i); }
+  };
+  const TS = 30;   // 按 30 × 30 格的方块分块（每块一个缓冲区、带包围盒，远处雾里的整块不画）
+  for (let ty = 0; ty < GH; ty += TS) for (let tx = 0; tx < GW; tx += TS) {
+  if (cur.ib.length) list.push(cur);
+  cur = { vb: [], ib: [], bb: [tx * CELL - 6, ty * CELL - 6, (tx + TS) * CELL + 6, (ty + TS) * CELL + 6] };
+  for (let gy = ty; gy < Math.min(GH, ty + TS); gy++) for (let gx = tx; gx < Math.min(GW, tx + TS); gx++) {
+    const i = gy * GW + gx, t = TER.type[i];
+    let n = 0;
+    if (t === T.FOREST) n = 1 + (r() < (V3.coarse ? .15 : .45) ? 1 : 0) + (!V3.coarse && r() < .12 ? 1 : 0);   // 触屏（手机、平板）少种一些
+    else if (t === T.HILL) n = r() < .16 ? 1 : 0;
+    else if (t === T.MOUNT) n = r() < .09 ? 1 : 0;
+    else if (t === T.FIELD) n = r() < .01 ? 1 : 0;
+    else if (t === T.MARSH) n = r() < .06 ? 1 : 0;
+    if (!n || (t !== T.FOREST && roadNear(gx, gy))) continue;
+    const cx = gx * CELL + CELL / 2, cy = gy * CELL + CELL / 2;
+    if (af && Math.hypot(cx - af.x, cy - af.y) < 520) continue;   // 机场场区（跑道、滑行道）不长树
+    if (ptsNear(cx, cy)) continue;   // 据点、阵地上不长树（挡住工事）
+    for (let k = 0; k < n; k++) {
+      const x = cx + (r() - .5) * CELL * .9, y = cy + (r() - .5) * CELL * .9, el = TER.elev[i] || 0, con = el > .62 || t === T.MOUNT || r() < .28;
+      const hgt = (t === T.FOREST ? 7.5 + r() * 4 : 6 + r() * 3) * (t === T.MARSH ? .6 : 1), rad = (con ? 1.9 : 2.6) + r() * 1.1;
+      tree(x, y, hgt, rad, con);
+    }
+  }
+  }
+  if (cur.ib.length) list.push(cur);
+  V3.trees = { sig, list };
+  return list;
 }
 
 function v3Init() {
@@ -575,18 +679,21 @@ function v3Draw(now) {
   gl.enableVertexAttribArray(V3.a.p); gl.vertexAttribPointer(V3.a.p, 3, gl.FLOAT, false, 24, 0);
   gl.enableVertexAttribArray(V3.a.n); gl.vertexAttribPointer(V3.a.n, 3, gl.FLOAT, false, 24, 12);
   gl.drawElements(gl.TRIANGLES, V3.n, V3.it || gl.UNSIGNED_SHORT, 0);
-  if (V3.bn && V3.pb) {   // 城镇房屋、机场建筑
+  if (V3.bn && V3.pb && V3.bch) {   // 城镇房屋、机场建筑、树木（分块的静态缓冲区）
     const ub = V3.ub, ab = V3.ab;
     gl.useProgram(V3.pb);
     gl.uniformMatrix4fv(ub.uM, false, C.M); gl.uniform3f(ub.uEye, C.E[0], C.E[1], C.E[2]);
     gl.uniform4f(ub.uBox, V3.boxN[0], V3.boxN[1], V3.boxN[2], V3.boxN[3]); gl.uniform4f(ub.uBoxF, V3.boxF[0], V3.boxF[1], V3.boxF[2] || 1, V3.boxF[3] || 1); gl.uniform2f(ub.uWorld, W, H); gl.uniform2f(ub.uFog, C.D * 1.3, C.D * 2.8);
     gl.uniform1f(ub.uT, tm); gl.uniform1f(ub.uMx, mx);
-    gl.bindBuffer(gl.ARRAY_BUFFER, V3.bb); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, V3.bi);
     gl.disableVertexAttribArray(V3.a.p); gl.disableVertexAttribArray(V3.a.n);
-    gl.enableVertexAttribArray(ab.p); gl.vertexAttribPointer(ab.p, 3, gl.FLOAT, false, 32, 0);
-    gl.enableVertexAttribArray(ab.n); gl.vertexAttribPointer(ab.n, 3, gl.FLOAT, false, 32, 12);
-    gl.enableVertexAttribArray(ab.e); gl.vertexAttribPointer(ab.e, 2, gl.FLOAT, false, 32, 24);
-    gl.drawElements(gl.TRIANGLES, V3.bn, gl.UNSIGNED_SHORT, 0);
+    gl.enableVertexAttribArray(ab.p); gl.enableVertexAttribArray(ab.n); gl.enableVertexAttribArray(ab.e);
+    const fe = C.D * 2.8, ex = C.E[0], ey = -C.E[1];
+    for (const c of V3.bch) {
+      if (c.bb && Math.hypot(Math.max(c.bb[0] - ex, 0, ex - c.bb[2]), Math.max(c.bb[1] - ey, 0, ey - c.bb[3])) > fe) continue;   // 整块在雾外
+      gl.bindBuffer(gl.ARRAY_BUFFER, c.b); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, c.i);
+      gl.vertexAttribPointer(ab.p, 3, gl.FLOAT, false, 32, 0); gl.vertexAttribPointer(ab.n, 3, gl.FLOAT, false, 32, 12); gl.vertexAttribPointer(ab.e, 2, gl.FLOAT, false, 32, 24);
+      gl.drawElements(gl.TRIANGLES, c.n, gl.UNSIGNED_SHORT, 0);
+    }
     gl.disableVertexAttribArray(ab.p); gl.disableVertexAttribArray(ab.n); gl.disableVertexAttribArray(ab.e);
   }
   if (typeof v3Units === 'function' && !(SETTINGS && SETTINGS.models3d === false)) { gl.disableVertexAttribArray(V3.a.p); gl.disableVertexAttribArray(V3.a.n); v3Units(C, box); }   // 兵种立体模型（v3units.js）

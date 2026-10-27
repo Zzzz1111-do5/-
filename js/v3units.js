@@ -90,6 +90,31 @@ function mbTube(M, p0, p1, r0, r1, nseg, s, caps = true) {
 }
 function mbLoop(M, P, z, s = 1) { for (let i = 0; i < P.length; i++) { const a = P[i], b = P[(i + 1) % P.length]; mbLine(M, [a[0], a[1], z], [b[0], b[1], z], s); } }
 const mbCirc = (x, y, r, n = 12) => Array.from({ length: n }, (_, i) => { const a = i / n * 6.2832; return [x + Math.cos(a) * r, y + Math.sin(a) * r]; });
+// 翼面（有翼型）：外轮廓是薄的前后缘，往里收一圈抬起成上表面、下表面略薄——不再是一块平板；ins 收边宽度
+function mbWingP(M, P, z, tu, td, ins, s, top) {
+  mbPrism(M, P, z, z + tu, s, { top: top ?? s, taper: ins });
+  const M2 = mbNew();
+  mbPrism(M2, P, 0, td, s * .92, { taper: ins * .8 });
+  for (let i = 0; i < M2.t.length; i += 10) { M2.t[i + 2] = z - M2.t[i + 2]; M2.t[i + 5] = -M2.t[i + 5]; }
+  for (let i = 0; i < M2.l.length; i += 10) M2.l[i + 2] = z - M2.l[i + 2];
+  M.t.push(...M2.t); M.l.push(...M2.l);
+}
+// 光滑的水滴形座舱盖：沿 x 一站一站的半椭圆截面，逐顶点法线（玻璃平滑反光），只描底边与一道风挡框
+function mbCanopy(M, x0, x1, w, zb, h, s, frame = .32) {
+  const NX = 9, NA = 9, st = [];
+  for (let i = 0; i <= NX; i++) {
+    const t = i / NX, x = lerp(x1, x0, t), k = Math.sin(Math.PI * Math.min(1, Math.pow(t, .62) * 1.0)) ** .55, f = t < .5 ? 1 : 1 - (t - .5) * .5;
+    st.push({ x, ry: w * Math.max(.04, k), rz: h * Math.max(.04, k) * f });
+  }
+  const P = (i, j) => { const a = j / NA * Math.PI, S0 = st[i]; return [S0.x, Math.cos(a) * S0.ry, zb + Math.sin(a) * S0.rz]; };
+  const Nn = (i, j) => { const a = j / NA * Math.PI, S0 = st[i], d = st[Math.min(NX, i + 1)].rz - st[Math.max(0, i - 1)].rz; return mbNorm([d * .6, Math.cos(a) / Math.max(.05, S0.ry), Math.sin(a) / Math.max(.05, S0.rz)]); };
+  for (let i = 0; i < NX; i++) for (let j = 0; j < NA; j++) {
+    const a = P(i, j), b = P(i, j + 1), c = P(i + 1, j + 1), d = P(i + 1, j);
+    mbTriN(M, a, b, c, Nn(i, j), Nn(i, j + 1), Nn(i + 1, j + 1), s, [0, 0, 0]); mbTriN(M, a, c, d, Nn(i, j), Nn(i + 1, j + 1), Nn(i + 1, j), s, [0, 0, 0]);
+  }
+  for (let i = 0; i < NX; i++) for (const j of [0, NA]) mbLine(M, P(i, j), P(i + 1, j), .9);   // 座舱盖底边
+  const fi = Math.round(NX * frame); for (let j = 0; j < NA; j++) mbLine(M, P(fi, j), P(fi, j + 1), .55);   // 风挡框
+}
 const mbIn = (p, P) => { let c = false; for (let i = 0, j = P.length - 1; i < P.length; j = i++) { const a = P[i], b = P[j]; if ((a[1] > p[1]) !== (b[1] > p[1]) && p[0] < (b[0] - a[0]) * (p[1] - a[1]) / (b[1] - a[1]) + a[0]) c = !c; } return c; };
 const mbLum = hex => { const h = String(hex || '').replace('#', ''); if (!/^[0-9a-f]{6}$/i.test(h)) return .5; const v = parseInt(h, 16); return ((v >> 16 & 255) * .299 + (v >> 8 & 255) * .587 + (v & 255) * .114) / 255; };
 
@@ -693,11 +718,20 @@ function v3mAir(key, fold, opt = {}) {
   if (D.flat) mbPrism(M, [...D.wing, ...mir(D.wing).slice(D.wing[D.wing.length - 1][1] === 0 ? 1 : 0, D.wing[0][1] === 0 ? -1 : undefined)], zc - bot * .9, zc + top * .75, .85, { top: .92, taper: .7 });
   else if (D.wing) {
     const W = fold && D.fold ? adClipY(D.wing, D.fold) : D.wing;
-    for (const P of [W, mir(W)]) mbPrism(M, P, zw - thW, zw + thW, .82, { top: .9, taper: .03 });
+    const tw = thW * 1.6, wi = D.hi || D.tt ? .7 : .55;
+    for (const P of [W, mir(W)]) mbWingP(M, P, zw, tw, tw * .55, wi, .82, .9);
+    // 襟副翼：后缘往里一道铰链线、两头的分割线（上表面）
+    if (typeof adTE === 'function') for (const [a, b] of adTE(W)) for (const sg of [1, -1]) {
+      const L = Math.hypot(b[0] - a[0], b[1] - a[1]); if (L < 1.2) continue;
+      const ux = (b[0] - a[0]) / L, uy = (b[1] - a[1]) / L, nx = -uy, ny = ux, dn = nx > 0 ? 1 : -1, d = Math.min(1.1, L * .25) * dn, z = zw + tw + .02;
+      const p0 = [a[0] + ux * L * .08 + nx * d, (a[1] + uy * L * .08 + ny * d) * sg], p1 = [b[0] - ux * L * .08 + nx * d, (b[1] - uy * L * .08 + ny * d) * sg], pm = [lerp(p0[0], p1[0], .5), lerp(p0[1], p1[1], .5)];
+      mbLine(M, [p0[0], p0[1], z], [p1[0], p1[1], z], .5);
+      for (const q of [p0, pm, p1]) mbLine(M, [q[0], q[1], z], [q[0] - nx * d, q[1] - ny * d * sg, zw + .02], .45);
+    }
     if (fold && D.fold) { const c = adChordAt(D.wing, D.fold), ph = fold * Math.PI / 2, h = (Math.max(...D.wing.map(p => p[1])) - D.fold) * .9, dy = h * Math.cos(ph), dz = h * Math.sin(ph); if (c) for (const sg of [1, -1]) { const y = D.fold * sg; mbQuad(M, [c[0], y, zw], [c[1], y, zw], [c[1] + .3, y + dy * sg, zw + dz], [c[0] - .6, y + dy * sg, zw + dz], .8); } }   // 折起的外翼（绕折叠线翻起，竖直 = 完全折起）
   }
   if (D.wing2) for (const P of [D.wing2, mir(D.wing2)]) mbPrism(M, P, zc + top * .6, zc + top * .6 + .14, .8);   // 无侦-7 的后翼（连翼）
-  if (D.cnd) for (const P of [D.cnd, mir(D.cnd)]) mbPrism(M, P, zc + top * .25, zc + top * .25 + .12, .85);
+  if (D.cnd) for (const P of [D.cnd, mir(D.cnd)]) mbWingP(M, P, zc + top * .25, .14, .08, .3, .85);
   // 机身、尾椎、背部鼓包
   if (D.body) v3mLoft(M, D.body, sec, .92);
   if (D.tail) mbPrism(M, [...D.tail, ...mir(D.tail).slice(1)], zc - .35, zc + .35, .8, { taper: .2 });
@@ -724,7 +758,7 @@ function v3mAir(key, fold, opt = {}) {
   let finTop = zc + top;
   if (D.fin) { const [x, c, y, h, cant, sw] = D.fin; finTop = fin(x, c, y, h * 1.05, cant, sw, y ? topAt(x - c / 2) - .1 : topAt(x - c / 2) - .15); }
   if (D.fin4) for (const [x, c, y, h] of D.fin4) fin(x, c, y, h, 0, .5, zc + .2);
-  if (D.stab) { const zs = D.tt ? finTop - .05 : zc + top * .15, t = D.tt ? .1 : .08; for (const P of [D.stab, mir(D.stab)]) mbPrism(M, P, zs - t, zs + t, .84, { top: .88 }); }
+  if (D.stab) { const zs = D.tt ? finTop - .05 : zc + top * .15, t = D.tt ? .1 : .08; for (const P of [D.stab, mir(D.stab)]) mbWingP(M, P, zs, t * 1.5, t * .9, .35, .84, .88); }
   // 座舱：气泡（玻璃）、串列双座、大飞机风挡
   if (D.cp) {
     const [x0, x1, w, kd] = D.cp, cx = (x0 + x1) / 2, rx = (x1 - x0) / 2, zb = topAt(cx);
@@ -734,14 +768,21 @@ function v3mAir(key, fold, opt = {}) {
     else if ((opt.cpo || 0) > .02) {   // 座舱盖打开：后铰链往上掀，露出座舱里的弹射座椅
       mbBox(M, x0 + .2, x1 - .25, -w * .7, w * .7, zb - .55, zb - .08, .12); mbBox(M, x0 + .35, x0 + .95, -w * .45, w * .45, zb - .5, zb + .45, .3);
       const M2 = mbNew(), th = opt.cpo * .95, ct = Math.cos(th), st = Math.sin(th), hz = zb - .12;
-      dome(cx, rx, w, hz, w * 1.05, M2);
+      if (D.heli) dome(cx, rx, w, hz, w * 1.05, M2); else mbCanopy(M2, x0, x1, w, hz - .08, w * 1.15, -.85);
       for (const A of [M2.t, M2.l]) for (let i = 0; i < A.length; i += 10) {   // 绕后沿铰链转起来（位置与法线）
         const dx = A[i] - x0, dz = A[i + 2] - hz, nx = A[i + 3], nz = A[i + 5];
         A[i] = x0 + dx * ct - dz * st; A[i + 2] = hz + dx * st + dz * ct; A[i + 3] = nx * ct - nz * st; A[i + 5] = nx * st + nz * ct;
       }
       M.t.push(...M2.t); M.l.push(...M2.l);
-    } else dome(cx, rx, w, zb - .12, w * 1.05);
+    } else if (D.heli) dome(cx, rx, w, zb - .12, w * 1.05);
+    else mbCanopy(M, x0, x1, w, zb - .2, w * 1.15, -.85);   // 水滴形座舱盖（光滑玻璃、一道风挡框）
+    if (D.glass === 'gold' && !D.flat) {   // 隐身战斗机机头下方的光电瞄准窗（EOTS）：多棱的小玻璃罩
+      const ex = x1 + .9, ez = zc - v3AirHw(D, ex) * sec.kb * .9;
+      mbPrism(M, [[ex + .55, 0], [ex + .2, .32], [ex - .45, .3], [ex - .45, -.3], [ex + .2, -.32]], ez - .28, ez, -.85, { taper: .12 });
+    }
   }
+  // 弹舱门缝（隐身机机腹：关着时一圈分割线、中线；开舱时 v3mBay 画舱门）
+  if (D.bay) { const [bx0, bx1, bw, by] = D.bay, z = zc - bot * .98; for (const sg of by ? [1, -1] : [1]) { const yc = by * sg; mbLoop(M, [[bx0, yc - bw], [bx0, yc + bw], [bx1, yc + bw], [bx1, yc - bw]], z, .45); mbLine(M, [bx0, yc, z], [bx1, yc, z], .4); } }
   // 进气道（暗）、B-2 排气槽
   for (const [x0, x1, y, w, k] of D.inl || []) {
     if (k === 'top') { for (const sg of y ? [1, -1] : [1]) mbBox(M, x1, x0, y * sg - w * .8, y * sg + w * .8, topAt((x0 + x1) / 2) - .1, topAt((x0 + x1) / 2) + .18, .18, { taper: .1 }); }
