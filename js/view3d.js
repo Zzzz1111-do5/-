@@ -74,6 +74,7 @@ void main() {
   // 俯视贴图：近处一张高清（uTop / uBox），远到地平线一张低清（uTopF / uBoxF，隔几帧更新），再远是底图
   vec2 uv = (w - uBox.xy) / uBox.zw, uvF = (w - uBoxF.xy) / uBoxF.zw;
   bool inBox = uv.x > 0. && uv.y > 0. && uv.x < 1. && uv.y < 1., inF = uvF.x > 0. && uvF.y > 0. && uvF.x < 1. && uvF.y < 1.;
+  float wN = inBox ? smoothstep(0., .07, min(min(uv.x, uv.y), min(1. - uv.x, 1. - uv.y))) : 0.;   // 近处贴图的边上渐变到远处那张，看不出一圈分界
   vec3 N = normalize(vN);
   float lit = clamp(dot(N, normalize(vec3(-.45, .55, .7))), 0., 1.);
   float h = vP.z, land = step(uSea, h);
@@ -85,7 +86,8 @@ void main() {
   vec2 g2 = abs(fract(w / 200.) - .5);
   float gl = (1. - smoothstep(0., fg * 1.5, .5 - max(g2.x, g2.y))) * .16;
   if (uMx < .5) {   // 写实 / 关闭数码风：披俯视贴图，叠山体明暗、等高线、方格网
-    c = (inBox ? texture2D(uTop, uv).rgb : inF ? texture2D(uTopF, uvF).rgb : texture2D(uBase, w / uWorld).rgb) * (.5 + .75 * lit);
+    vec3 cF = inF ? texture2D(uTopF, uvF).rgb : texture2D(uBase, w / uWorld).rgb;
+    c = (wN > 0. ? mix(cF, texture2D(uTop, uv).rgb, wN) : cF) * (.5 + .75 * lit);
     c += vec3(.12, .62, .32) * (cl + gl);
     gl_FragColor = vec4(mix(c, bg, smoothstep(uFog.x, uFog.y, vD)), 1.); return;
   }
@@ -181,7 +183,8 @@ void main() {
   // 战争迷雾：没看见的地方压暗
   c *= mix(.42, 1., vis);
   // 单位、标号、箭头等（俯视贴图，底色是黑的）叠加上去
-  if (inBox) c += texture2D(uTop, uv).rgb; else if (inF) c += texture2D(uTopF, uvF).rgb;
+  vec3 oF = inF ? texture2D(uTopF, uvF).rgb : vec3(0.);
+  c += wN > 0. ? mix(oF, texture2D(uTop, uv).rgb, wN) : oF;
   gl_FragColor = vec4(mix(c, bg, smoothstep(uFog.x, uFog.y, vD)), 1.);
 }`;
 
@@ -332,11 +335,23 @@ function v3Mesh() {
 function v3BaseTex() {
   const gl = V3.gl, real = typeof realLook === 'function' && realLook() && !v3Mx();
   let src = V3.baseMM;
-  if (real && typeof trxSnapshot === 'function') { const snap = trxSnapshot(Math.min(V3.maxTex || 2048, 2800)); if (snap) src = snap; }
+  const pw = V3.coarse || (V3.maxTex || 2048) < 4096 ? 2048 : 4096;   // 底图按 2 的幂（2:1）存，好生成多级渐远纹理
+  if (real && typeof trxSnapshot === 'function') { const snap = trxSnapshot(pw); if (snap) src = snap; }
   V3.baseReal = real;
   if (!src) return;
-  gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, V3.base);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, src);
+  const P = V3.basePot || (V3.basePot = document.createElement('canvas'));
+  if (P.width !== pw) { P.width = pw; P.height = pw / 2; }
+  const cx = P.getContext('2d'); cx.imageSmoothingQuality = 'high'; cx.drawImage(src, 0, 0, P.width, P.height);
+  v3Upload(1, V3.base, P, gl.RGBA);
+}
+// 上传贴图：边长都是 2 的幂时生成多级渐远纹理、开各向异性过滤——斜着看远处的地面不再糊成一片，也不闪烁
+function v3Upload(unit, tex, src, fmt) {
+  const gl = V3.gl, pot = n => n > 0 && (n & (n - 1)) === 0, mip = pot(src.width) && pot(src.height);
+  gl.activeTexture(gl.TEXTURE0 + unit); gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.texImage2D(gl.TEXTURE_2D, 0, fmt, fmt, gl.UNSIGNED_BYTE, src);
+  if (mip) gl.generateMipmap(gl.TEXTURE_2D);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, mip ? gl.LINEAR_MIPMAP_LINEAR : gl.LINEAR);
+  if (V3.aniso) gl.texParameterf(gl.TEXTURE_2D, V3.aniso.TEXTURE_MAX_ANISOTROPY_EXT, mip ? V3.anMax : 1);
 }
 // 数码高程贴图（每个网格面一个像素，不插值）：R 高度台阶级数（每 15 一级）/ 16 · G 坦克上不去（山地，或高程超过 grid.js VEH_ELEV 的高地）· B 水面
 function v3HtTex() {
@@ -543,6 +558,7 @@ function v3Init() {
     gl.useProgram(pr);
     gl.uniform1i(u.uTop, 0); gl.uniform1i(u.uBase, 1); gl.uniform1i(u.uCls, 2); gl.uniform1i(u.uCls2, 3); gl.uniform1i(u.uFogT, 4); gl.uniform1i(u.uHt, 5); gl.uniform1i(u.uLf, 6); gl.uniform1i(u.uTopF, 7);
     if (V3.u32) V3_ST = 1;
+    V3.aniso = gl.getExtension('EXT_texture_filter_anisotropic') || gl.getExtension('WEBKIT_EXT_texture_filter_anisotropic'); V3.anMax = V3.aniso ? Math.min(8, gl.getParameter(V3.aniso.MAX_TEXTURE_MAX_ANISOTROPY_EXT) || 1) : 1;
     gl.enable(gl.DEPTH_TEST);
   } catch (e) { V3.ok = false; console.warn('3D 地图不可用', e); }
 }
@@ -553,8 +569,8 @@ function v3Init() {
 //   画面中心（CAM.x, CAM.y）与缩放 CAM.z 每帧由镜头推算（视线落地点、离地高度），贴图范围、细节档、平面地图的切换都照旧按它们
 // 渲染距离（设置「3D 渲染距离」）：雾、远景贴图、远裁剪面一起放远 / 拉近
 const v3RD = () => clamp(+(typeof SETTINGS === 'object' && SETTINGS && SETTINGS.rdist) || 1, .5, 4);
-// 能见距离（雾的起点、终点）：按镜头尺度 D，再乘玩家设的渲染距离（设置里的「3D 渲染距离」、3D 里 [ ] 键）；贴近地面时也至少看得到 600 × 倍数 米
-const v3Fog = (D, rd = v3RD()) => { const f1 = Math.max(D * 2.8, 600) * rd; return [f1 * .46, f1]; };
+// 能见距离（雾的起点、终点）：按镜头尺度 D，再乘玩家设的渲染距离（设置里的「3D 渲染距离」、3D 里 [ ] 键）；贴近地面时也至少看得到 1000 × 倍数 米
+const v3Fog = (D, rd = v3RD()) => { const f1 = Math.max(D * 3.2, 1000) * rd; return [f1 * .5, f1]; };   // 远处清楚的范围放远（原来 2.8 倍、雾从 46% 起，远处的地面一片暗）
 const v3FogR = C => C.fog || [C.D * 1.3, C.D * 2.8], v3FogE = C => v3FogR(C)[1];
 // 从「注视点 + 距离 + 俯角 + 方位」（原来的环绕参数）换算成自由镜头：进 3D 时画面和平面地图一致
 function v3FcFromOrbit(tx, ty, tz, D, th, ps) {
@@ -695,8 +711,11 @@ function v3Draw(now) {
   const bN = one ? box : boxN, sTop = Math.min(CAM.z * dpr, cap * (V3.capK || 1) / Math.max(bN[2], bN[3]));
   const K = { cv: R.cv, ctx: R.ctx, s: R.s, ox: R.ox, oy: R.oy, dpr: R.dpr, vw: CAM.vw, vh: CAM.vh, z: CAM.z, x: CAM.x, y: CAM.y };
   // 有立体模型的东西（飞机、车辆、舰船、阵地，近看时的步兵）贴图里不再画平面图标——否则地面上多一层「倒影」
-  const paint = (cv, b, sc) => {
-    const tw = Math.max(64, Math.round(b[2] * sc)), th = Math.max(64, Math.round(b[3] * sc));
+  //   画布边长取最接近的 2 的幂（上传后生成多级渐远纹理）：比例按装得下整个范围取，多出来的一边把范围往两边放宽；返回实际铺的范围
+  const pot = n => 2 ** clamp(Math.round(Math.log2(Math.max(64, n))), 6, 12);
+  const paint = (cv, b0, sc0) => {
+    const tw = pot(b0[2] * sc0), th = pot(b0[3] * sc0), sc = Math.min(tw / b0[2], th / b0[3]), bw = tw / sc, bh = th / sc;
+    const b = [b0[0] + b0[2] / 2 - bw / 2, b0[1] + b0[3] / 2 - bh / 2, bw, bh];
     if (cv.width !== tw || cv.height !== th) { cv.width = tw; cv.height = th; }
     V3.drawing = true;
     R.fx3d = typeof v3Fx === 'function' && !(SETTINGS && SETTINGS.models3d === false);   // 弹道在 3D 里立体画（v3fx.js），贴图里不再画
@@ -711,23 +730,22 @@ function v3Draw(now) {
       Object.assign(R, { cv: K.cv, ctx: K.ctx, s: K.s, ox: K.ox, oy: K.oy, dpr: K.dpr });
       Object.assign(CAM, { vw: K.vw, vh: K.vh, z: K.z, x: K.x, y: K.y });
     }
+    return b;
   };
-  paint(V3.top, bN, sTop);
-  V3.boxN = bN;
-  if (!one && (!V3.boxF || (V3.fT = (V3.fT || 0) + 1) % 3 === 0 || Math.abs(V3.boxF[0] - box[0]) + Math.abs(V3.boxF[1] - box[1]) > box[2] * .12)) {
-    paint(V3.topF, box, Math.min(sTop, cap * .62 * (V3.capK || 1) / Math.max(box[2], box[3])));
-    V3.boxF = box.slice(); V3.fNew = true;
+  V3.boxN = paint(V3.top, bN, sTop);
+  if (!one && (!V3.boxB || (V3.fT = (V3.fT || 0) + 1) % 3 === 0 || Math.abs(V3.boxB[0] - box[0]) + Math.abs(V3.boxB[1] - box[1]) > box[2] * .12)) {
+    V3.boxF = paint(V3.topF, box, Math.min(sTop, cap * (V3.capK || 1) / Math.max(box[2], box[3])));   // 远处这张也按整幅分辨率画（原来只有六成，远景糊）
+    V3.boxB = box.slice(); V3.fNew = true;
   }
-  if (one) V3.boxF = [0, 0, 0, 0];
+  if (one) { V3.boxF = [0, 0, 0, 0]; V3.boxB = null; }
   // 3D 网格
   const W0 = R.cv.width, H0 = R.cv.height;
   if (V3.cv.width !== W0 || V3.cv.height !== H0) { V3.cv.width = W0; V3.cv.height = H0; }
   gl.viewport(0, 0, W0, H0);
   gl.useProgram(V3.pr);
-  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, V3.tex);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, V3.top);
+  v3Upload(0, V3.tex, V3.top, gl.RGB);
+  if (V3.fNew) { v3Upload(7, V3.texF, V3.topF, gl.RGB); V3.fNew = false; }
   gl.activeTexture(gl.TEXTURE7); gl.bindTexture(gl.TEXTURE_2D, V3.texF);
-  if (V3.fNew) { gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, V3.topF); V3.fNew = false; }
   gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, V3.base);
   gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, V3.cls);
   gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D, V3.cls2);
