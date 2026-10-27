@@ -464,11 +464,33 @@ function airCasFly(p, dt, speed) {
   speed(uav ? 120 : 140);
   if (airSteer(p, p.leg2.x, p.leg2.y, dt) < 70) { if (p.wave == null) log(`${airName(p.kind, p.v).split(' ')[0]}任务区内没有发现可打的目标，返航`, 'info', 'casnone', 15, p); airSet(p, 'rtb'); }
 }
+// 侦察：左右两侧的侧视传感器，一次扫出约 560 米宽的侦察带（每 ARC.dt 秒在航迹两侧各记一个视野点，半径 ARC.r）；
+//   航线是「割草机」式往返：以目标为中心、沿岸线方向 ARC.w 宽的一片，按 ARC.row 的间距排两三条航带，从离飞机近的一端开始来回扫，
+//   最近 ARC.fresh 秒里已经侦察过的航带跳过（S.rcov 记每块 250 米见方地块最近一次被侦察的时刻），都侦察过了就只扫目标那一条
+const ARC = { r: 170, side: 110, w: 1300, row: 500, rows: 3, fresh: 75, cell: 250, keep: 30, h: 40, dt: .6 };   // 两侧各一个视野点（±110、半径 170）中间重叠，合起来约 560 米宽
+const arcKey = (x, y) => Math.floor(x / ARC.cell) + ',' + Math.floor(y / ARC.cell);
+function airRcRoute(x0, y0, tx, ty) {
+  const C = S.rcov || {}, xa = clamp(tx - ARC.w / 2, 60, W - 60), xb = clamp(tx + ARC.w / 2, 60, W - 60);
+  const rows = [];
+  for (let k = 0; k < ARC.rows; k++) {
+    const y = clamp(ty + (k - (ARC.rows - 1) / 2) * ARC.row, 60, Math.min(H - 60, (typeof STAGING_Y === 'number' ? STAGING_Y : H) - 20));
+    let fresh = 0, n = 0;
+    for (let x = xa; x <= xb; x += ARC.cell) { n++; if (S.t - (C[arcKey(x, y)] ?? -999) < ARC.fresh) fresh++; }
+    rows.push({ y, fresh: fresh / Math.max(1, n), d: Math.abs(y - y0) });
+  }
+  let todo = rows.filter(r => r.fresh < .7);
+  if (!todo.length) todo = [rows.reduce((a, b) => Math.abs(a.y - ty) < Math.abs(b.y - ty) ? a : b)];
+  todo.sort((a, b) => a.d - b.d);
+  const wp = [];
+  let east = Math.abs(x0 - xb) < Math.abs(x0 - xa);   // 从离飞机近的那一端开始
+  for (const r of todo) { const [s0, s1] = east ? [xb, xa] : [xa, xb]; wp.push({ x: s0, y: r.y }, { x: s1, y: r.y }); east = !east; }
+  return wp;
+}
 // 新飞机的公共字段
 function airNew(w, kind, x, y, heading, tx, ty, extra) {
   const M = airMdl(kind, w.v), p = { id: S.nid++, wid: w.id, home: cvHome(w), kind, v: w.v || null, x, y, heading, spd: 0, alt: 0, bank: 0,
     tx, ty, cx: tx, cy: ty, wp: [{ x: tx, y: ty }], leg: 0, aaT: Math.random() * .5, rt: 0, gunT: 0, strafeT: 1, loiterT: M.loiter || 40, odir: 1, dropped: false, rtbT: 0, ...extra };
-  if (kind === 'recon') { const a = Math.atan2(ty - y, tx - x), [bx, by] = airRay(tx, ty, a, 700); p.wp.push({ x: bx, y: by }); }   // 侦察机：飞越目标后沿同一方向再向纵深飞 700
+  if (kind === 'recon') p.wp = airRcRoute(x, y, tx, ty);   // 侦察机：在目标一带按往返航线扫一片（airRcRoute）
   if (kind === 'fighter') Object.assign(p, { aam: M.aam || 4, gun: M.gun ?? 40, capT: M.cap || 90, aamR: M.aamR || 480, pkK: M.pkK || 1, aamL: M.aamL || 0, aamLR: M.aamLR || 0, radar: M.radar || 520, aam0: (M.aam || 4) + (M.aamL || 0) });   // 空空导弹 · 机炮点射次数 · 巡逻秒数 · 远程弹 · 机载雷达（airwar.js）
   if (M.agm) p.agmN = M.agmN;   // 空地导弹（airAgm）
   return p;
@@ -604,7 +626,11 @@ function flyPlane(p, dt) {
       const wp = p.wp[Math.min(p.leg, p.wp.length - 1)], d = airSteer(p, wp.x, wp.y, dt);
       const ahead = (wp.x - p.x) * Math.cos(p.heading) + (wp.y - p.y) * Math.sin(p.heading);
       if (d < 45 || (ahead < 0 && d < 160)) p.leg++;
-      if (p.y < STAGING_Y && (p.rt -= dt) <= 0) { p.rt = .2; S.recon.push({ x: p.x, y: p.y, until: S.t + 25 }); }
+      if (p.y < STAGING_Y && (p.rt -= dt) <= 0) {   // 两侧侧视传感器：一条约 560 米宽的侦察带
+        p.rt = ARC.dt;
+        const nx = -Math.sin(p.heading), ny = Math.cos(p.heading), C = S.rcov || (S.rcov = {});
+        for (const o of [-ARC.side, ARC.side]) { const x = clamp(p.x + nx * o, 0, W), y = clamp(p.y + ny * o, 0, H); S.recon.push({ x, y, until: S.t + ARC.keep, r: ARC.r, h: ARC.h }); C[arcKey(x, y)] = S.t; C[arcKey(p.x, p.y)] = S.t; }
+      }
       if (p.leg >= p.wp.length) airSet(p, 'rtb');
     } else if (p.kind === 'strike' || p.kind === 'bomber') {
       if (p.hold && !p.dropped && airHoldP(p, dt, speed)) return;   // 突击群：防空圈外待机

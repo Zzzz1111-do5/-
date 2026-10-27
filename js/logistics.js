@@ -163,7 +163,7 @@ function updateVision() {
   if (typeof carrierVision === 'function') ps.push(...carrierVision());
   for (const p of S.planes) ps.push({ x: p.x, y: p.y, r: 110, h: 12 });
   S.recon = S.recon.filter(p => p.until > S.t);
-  for (const p of S.recon) ps.push({ x: p.x, y: p.y, r: 100, h: 12 });
+  for (const p of S.recon) ps.push({ x: p.x, y: p.y, r: p.r || 100, h: p.h || 12 });   // 侦察机的侧视传感器（carrier.js ARC）看得更宽、更高
   ps.push(...hookSources('visionP'));
   castVision(PV, ps);
   const es = [];

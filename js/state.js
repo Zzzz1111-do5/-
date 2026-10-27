@@ -61,6 +61,12 @@ function deployFleet() {
 
 function deployDefenses(r, D) {
   const cAt = coastAt;
+  // 按登陆价值分兵：滩头越宽、离指挥所越近越可能是主攻方向——前几处配满碉堡与伏击组，其余只留一座碉堡、一个警戒组，
+  //   省下的伏击组编进机动预备队（不在不会有人登陆的滩头上摊兵）
+  const hq0 = S.points.find(p => p.key === 'HQ') || { x: W / 2, y: H / 3 };
+  const val = b => (b.x1 - b.x0) / 190 + 1.5 * (1 - dist(b.cx, cAt(b.cx), hq0.x, hq0.y) / 2200);
+  const nMain = TER.beaches.length > 6 ? 3 : 2, mainB = new Set(TER.beaches.slice().sort((a, b) => val(b) - val(a)).slice(0, nMain));
+  let saved = 0;
   for (const b of TER.beaches) {
     const w = b.x1 - b.x0;
     // 滩顶铁丝网，出口路两侧留缺口
@@ -80,13 +86,15 @@ function deployDefenses(r, D) {
     const tr = [];
     for (let x = b.x0 - 30; x <= b.x1 + 30; x += 22) tr.push([x, cAt(x) - 62 + (tr.length % 2 ? 6 : -6)]);
     S.trench.push({ id: S.nid++, pts: tr, known: false });
-    for (let k = 0; k < D.beachBunkers; k++) {
-      const x = D.beachBunkers === 1 ? b.cx + (r() - .5) * 40 : lerp(b.x0, b.x1, k ? .82 : .18);
+    const main = mainB.has(b), nb = main ? D.beachBunkers : 1, na = main ? D.ambush : 1;
+    saved += D.ambush - na;
+    for (let k = 0; k < nb; k++) {
+      const x = nb === 1 ? b.cx + (r() - .5) * 40 : lerp(b.x0, b.x1, k ? .82 : .18);
       addEnemy('bunker', x, cAt(x) - 48);
     }
     const obj = 'E' + (TER.beaches.indexOf(b) + 1), ua = addUnit('e', 'inf', { role: 'ambush', obj });
-    for (let k = 0; k < D.ambush; k++) {
-      const x = lerp(b.x0, b.x1, (k + .5) / D.ambush);
+    for (let k = 0; k < na; k++) {
+      const x = lerp(b.x0, b.x1, (k + .5) / na);
       addTeam('e', x, cAt(x) - 62, ['rifle', 'rifle', 'mg'], { role: 'ambush', hold: true, obj, u: ua.id });
     }
   }
@@ -121,7 +129,7 @@ function deployDefenses(r, D) {
   const towns = ['T1', 'T2', 'T3'].map(k => S.points.find(p => p.key === k)).filter(Boolean);
   if (!towns.length) towns.push(S.points[0]);
   let ur = null;
-  for (let k = 0; k < D.reserves; k++) {
+  for (let k = 0; k < D.reserves + saved; k++) {   // saved：次要滩头省下的伏击组
     const tw = towns[Math.floor(k / 3) % towns.length];
     if (k % 3 === 0) ur = addUnit('e', 'inf', { role: 'reserve', obj: tw.key });
     addTeam('e', tw.x + (r() - .5) * 60, tw.y - 30 - r() * 30, ['rifle', 'rifle', 'mg'], { role: 'reserve', obj: tw.key, u: ur.id });

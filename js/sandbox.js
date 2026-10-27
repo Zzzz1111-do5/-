@@ -556,11 +556,15 @@ function sbxAIDefendBase() {
     else if (pass === 1) sbxTry('e_mines_mx', B.b.x0 + 20, coastAt(B.b.x0 + 20) - 36, 20);
     else sbxTry('e_mines_ap', B.b.x1 - 20, coastAt(B.b.x1 - 20) - 36, 20);
   }
-  for (const p of S.points) if (sbxLeft('e') >= 12 && !S.sbx.items.some(it => it.side === 'e' && sbxEntry(it).spawn.kind === 'einf' && dist(it.x, it.y, p.x, p.y) < 90)) sbxTry('e_militia', p.x, p.y + 10, 40, { n: 2 });
+  // 余款里的据点守备：只补主攻方向（离主攻滩头出口 900 以内）和指挥所一带的据点；远处的据点不撒兵，钱留给机动预备队
+  const nearMain = p => main.some(B => dist(p.x, p.y, B.ex.x, B.ex.y) < 900) || dist(p.x, p.y, hq.x, hq.y) < 300;
+  for (const p of S.points) if (nearMain(p) && sbxLeft('e') >= 12 && !S.sbx.items.some(it => it.side === 'e' && sbxEntry(it).spawn.kind === 'einf' && dist(it.x, it.y, p.x, p.y) < 90)) sbxTry('e_militia', p.x, p.y + 10, 40, { n: 2 });
+  for (let i = 0; i < 2 && sbxLeft('e') >= 60; i++) sbxTry(i ? 'e_assault' : 'e_reserve', hub.x + (i ? -50 : 50), hub.y - 20, 50);
   // 10. 大预算：次要滩头也筑防御地带，主防地带加第二道阵地，增援波次与纵深坦克随预算增加
   if (k >= 1.6) {
     const e0 = sbxSpent('e'), up = [];
-    for (const B of rest) if (sbxLeft('e') >= 200) { belt(B, k >= 2.5); up.push(B); }
+    const Lcut = main[main.length - 1].L * .75;   // 次要滩头里还算有登陆价值的才筑防御地带，其余只留警戒（不给舰炮多送靶子、不在没人来的滩头摊兵）
+    for (const B of rest) if (B.L >= Lcut && sbxLeft('e') >= 200) { belt(B, k >= 2.5); up.push(B); }
     for (let pass = 0; pass < Math.min(3, Math.round(2 * k)) && sbxLeft('e') >= 80; pass++) for (const B of main) {   // 第二道碉堡线：每个主攻滩头最多 3 处（多了只是给舰炮当靶子）
       const x = B.b.cx + ((pass % 3) - 1) * B.w * .3, y = coastAt(x) - 140 - (pass >> 1) * 18;
       sbxTry(pass % 2 ? 'e_casemate' : 'e_mg_bunker', x, y, 40); sbxTry('e_garrison', x, y - 30, 40);
