@@ -228,7 +228,7 @@ function v3H0(gx, gy) {
 // 世界坐标 (x, y) 处的地面高度（双线性插值）
 // 飞机在 3D 里的绝对高度（模型、标识、机上射出的弹共用）：舰载机在甲板上（弹射、滑跑、拦阻）贴着飞行甲板，海上起降以甲板为基准；
 //   高度 alt 0.05 以下贴着基准面（地面 / 甲板），往上每 1.0 约 230（直升机悬停 0.3 约离地 60）——见 v3AltZ：高空按海拔平飞，不随山起伏
-const V3_DECK = -2.6 + 7.4 + .55;
+const V3_DECK = -2.6 + 17 + 1.5;   // 舰载机在飞行甲板上的高度：甲板离水线 17（carrier.js CVG.zd）+ 放下起落架的机身高度
 function v3AirZ(o) {
   const ph = o.phase || o.ph;
   if (o.kind && (ph === 'cat' || ph === 'roll' || ph === 'trap')) return V3_DECK;
@@ -421,7 +421,7 @@ function v3Init() {
 function v3Camera() {
   if (typeof V3O === 'object' && V3O.on) return v3oCamera();   // 观察者模式（v3obs.js）
   const th = V3.tilt, ps = V3.yaw, D = (CAM.vh / CAM.z) / (2 * Math.tan(V3_FOV / 2));
-  const T = [CAM.x, -CAM.y, v3Ht(CAM.x, CAM.y)];
+  const cz = typeof cvCamZ === 'function' ? cvCamZ(CAM.x, CAM.y) : null, T = [CAM.x, -CAM.y, Math.max(v3Ht(CAM.x, CAM.y), cz ?? -99)];   // 对准航母时注视点在飞行甲板高度（cvdeck.js）
   const E = [T[0] + D * Math.sin(th) * Math.sin(ps), T[1] - D * Math.sin(th) * Math.cos(ps), T[2] + D * Math.cos(th)];
   const z = v3Norm(v3Sub(E, T)), x = v3Norm(v3Cross([-Math.sin(ps), Math.cos(ps), 0], z)), y = v3Cross(z, x);
   const view = new Float32Array([x[0], y[0], z[0], 0, x[1], y[1], z[1], 0, x[2], y[2], z[2], 0, -v3Dot(x, E), -v3Dot(y, E), -v3Dot(z, E), 1]);

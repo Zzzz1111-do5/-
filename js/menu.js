@@ -476,7 +476,7 @@ if (typeof onSettings === 'function') onSettings(() => { if (MENU.set && !MENU.s
 HOOK.key.push(e => {
   if (MENU.open || !S) return false;
   if (e.key === 'Escape' && S.briefed && !$('brief').hidden) { $('brief').hidden = true; return true; }   // ？帮助（简报）打开时 Esc 先关它
-  if (e.key === 'F10' || (e.key === 'Escape' && !U.tool && !S.sel.length && !U.fdrag && !(typeof thuActive === 'function' && thuActive() && (THU.sel.size || THU.pick)) && (S.phase !== 'sandbox' || (typeof SBX === 'object' && !SBX.line && !SBX.pick && !SBX.drag)))) { e.preventDefault(); showMenu(); return true; }   // 沙盒编辑：无选中兵种 / 画线 / 拖动时 Esc 也开菜单
+  if (e.key === 'F10' || (e.key === 'Escape' && !U.tool && !S.sel.length && !U.fdrag && !(typeof thuActive === 'function' && thuActive() && (THU.sel.size || THU.pick)) && !(typeof SPU === 'object' && SPU.k) && !e.spuEsc && (S.phase !== 'sandbox' || (typeof SBX === 'object' && !SBX.line && !SBX.pick && !SBX.drag)))) { e.preventDefault(); showMenu(); return true; }   // 沙盒编辑：无选中兵种 / 画线 / 拖动时 Esc 也开菜单
   return false;
 });
 

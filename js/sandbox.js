@@ -580,7 +580,7 @@ function sbxAIDefendBase() {
 function sbxSea(x, y) {
   for (let k = 0; k < 30; k++) {
     const a = k * 2.4, d = k * 6, sx = clamp(x + Math.cos(a) * d, 30, W - 30), sy = clamp(y + Math.sin(a) * d * .6, STAGING_Y - 90, H - 30);
-    if (typeAt(sx, sy) === T.DEEP && !S.sbx.items.some(it => it.side === 'p' && it.x != null && sbxEntry(it).spawn.at === 'sea' && dist(it.x, it.y, sx, sy) < 18)) return { x: sx, y: sy };
+    if (typeAt(sx, sy) === T.DEEP && !S.sbx.items.some(it => it.side === 'p' && it.x != null && sbxEntry(it).spawn.at === 'sea' && (sbxEntry(it).spawn.kind === 'cv' ? Math.abs(sx - it.x) < 50 && Math.abs(sy - it.y) < 172 : dist(it.x, it.y, sx, sy) < 18))) return { x: sx, y: sy };   // 航母舰体长 316（舰首朝北）
   }
   return { x, y };
 }

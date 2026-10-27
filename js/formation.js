@@ -111,6 +111,7 @@ function startBattle() {
   for (const s of S.ships) if (s.plan) { orderShips([s], s.plan.x, s.plan.y); s.plan = null; }
   if (S.dd.plan) { orderDD(S.dd.plan.x, S.dd.plan.y); S.dd.plan = null; }
   if (typeof vehStartBattle === 'function') vehStartBattle();   // 车辆的预定上陆点（vehicles.js）
+  if (typeof cvShoo === 'function') cvShoo(0, true);   // 部署时压在航母舰体上的舰艇挪开（cvdeck.js）
   log('H 时已到，登陆开始', 'warn');
 }
 
