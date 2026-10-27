@@ -2,7 +2,7 @@
 // 3D 后期（view3d.js v3Draw 画完地形、建筑、模型、弹道后调用 v3Post）：像指挥部里压暗灯光的一张电子沙盘桌——
 //   辉光：亮线、曳光、爆炸、发光的棱线向外泛一圈光（亮部提取 → 四分之一分辨率两遍高斯模糊 → 叠加回去）；
 //   移轴景深：斜着看时画面上下两边虚化、中间一条清楚，整片战场像桌上的微缩沙盘；正俯视时不虚化；
-//   暗角与细颗粒：四角压暗、极轻的胶片颗粒，不是一张「干净的电脑图」。
+//   调色：亮部柔和压缩、中间调略提、饱和度加一成；暗角与细颗粒：四角压暗、极轻的胶片颗粒，不是一张「干净的电脑图」。
 // 在 WebGL 里做完再交给主画布（文字、标号由 v3Overlay 之后画在主画布上，不跟着泛光、不虚化，照样清楚）
 // 画质「低」时不做；帧间隔偏大（设备跟不上）时先关景深，辉光留着
 const V3P = { ok: false, tried: false, pr: {}, buf: null, scene: null, fb: [], w: 0, h: 0 };
@@ -36,6 +36,10 @@ void main() {
   vec3 c = texture2D(uS, vU).rgb;
   if (uTs.x > 0.) c = mix(c, texture2D(uD, vU).rgb, smoothstep(uTs.z, uTs.z + uTs.w, abs(vU.y - uTs.y)) * uTs.x);
   c += texture2D(uB, vU).rgb * uBk;
+  // 调色：亮部柔和地压一点（辉光叠上去不发白）、中间调略提、饱和度加一成——像胶片，不是平的电脑图
+  c = c / (1. + c * .12);
+  c = pow(max(c, 0.), vec3(.94));
+  c = mix(vec3(dot(c, vec3(.299, .587, .114))), c, 1.1);
   vec2 d = (vU - .5) * vec2(uRes.x / uRes.y, 1.);
   c *= 1. - uVig * smoothstep(.3, 1.05, length(d));
   c += (hash(floor(vU * uRes) + uT) - .5) * uGr;

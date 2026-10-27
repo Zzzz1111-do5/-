@@ -1585,24 +1585,24 @@ function v3mAscCan() {
 // 实例参数 iA = (x, y, z, 朝向)，iB = (比例, 阵营 0 我 / 1 敌 / 2 残骸, 滚转, 俯仰)，坐标是 GL 的（y 向北）；先滚转、再俯仰（车头抬起为正）、再转朝向
 const V3M_VS = `attribute vec3 p; attribute vec3 n; attribute float s; attribute vec3 b; attribute vec4 iA; attribute vec4 iB;
 uniform mat4 uM; uniform vec3 uEye;
-varying vec3 vN, vB, vV; varying float vS, vSide, vD;
+varying vec3 vN, vB, vV; varying float vS, vSide, vD; varying vec2 vW;
 void main() {
   float c = cos(iA.w), sn = sin(iA.w), cr = cos(iB.z), sr = sin(iB.z), cp = cos(iB.w), sp = sin(iB.w);
   vec3 q = p * iB.x; q = vec3(q.x, q.y * cr - q.z * sr, q.y * sr + q.z * cr); q = vec3(q.x * cp - q.z * sp, q.y, q.x * sp + q.z * cp);
   vec3 m = vec3(n.x, n.y * cr - n.z * sr, n.y * sr + n.z * cr); m = vec3(m.x * cp - m.z * sp, m.y, m.x * sp + m.z * cp);
   vec3 w = vec3(iA.x + q.x * c - q.y * sn, iA.y + q.x * sn + q.y * c, iA.z + q.z);
-  vN = vec3(m.x * c - m.y * sn, m.x * sn + m.y * c, m.z); vB = b; vS = s; vSide = iB.y; vV = uEye - w; vD = length(vV);
+  vN = vec3(m.x * c - m.y * sn, m.x * sn + m.y * c, m.z); vB = b; vS = s; vSide = iB.y; vV = uEye - w; vD = length(vV); vW = w.xy;
   gl_Position = uM * vec4(w, 1.);
 }`;
-const V3M_FS = der => `${der ? '#extension GL_OES_standard_derivatives : enable\n#define DER 1\n' : ''}precision mediump float;
-uniform vec2 uFog; uniform vec3 uBg;
+const V3M_FS = der => `${der ? '#extension GL_OES_standard_derivatives : enable\n#define DER 1\n' : ''}${typeof V3_PREC === 'string' ? V3_PREC : 'precision mediump float;'}
+uniform vec2 uFog, uWorld; uniform vec3 uBg; uniform sampler2D uLm; uniform float uLmOn;
 uniform vec3 uBody0, uBody1, uBody2, uBody3, uBody4, uGlow0, uGlow1, uGlow2;
-varying vec3 vN, vB, vV; varying float vS, vSide, vD;
+varying vec3 vN, vB, vV; varying float vS, vSide, vD; varying vec2 vW;
 void main() {
   vec3 body = vSide < .5 ? uBody0 : vSide < 1.5 ? uBody1 : vSide < 2.5 ? uBody2 : vSide < 3.5 ? uBody3 : uBody4;   // 3、4：我方 / 敌方飞机
   vec3 glow = vSide < .5 || (vSide > 2.5 && vSide < 3.5) ? uGlow0 : vSide < 1.5 || vSide > 3.5 ? uGlow1 : uGlow2;
   vec3 N = normalize(vN), V = normalize(vV);
-  float lit = clamp(dot(N, normalize(vec3(-.45, .55, .7))), 0., 1.), up = clamp(N.z, 0., 1.);
+  float lit = clamp(dot(N, ${V3_SUNG}), 0., 1.), up = clamp(N.z, 0., 1.);
   float e = min(min(vB.x, vB.y), vB.z);
 #ifdef DER
   float w = max(fwidth(e), 1e-4), ed = 1. - smoothstep(w * .6, w * 1.9, e);
@@ -1616,8 +1616,10 @@ void main() {
     body *= mt < 2.5 ? 1.35 : mt < 3.5 ? .42 : mt < 4.5 ? .8 : 1.05;
     sh = br; ed *= mt < 2.5 ? .25 : .7;   // 皮肤、装具的棱线淡一点（不像线框）
   }
-  // 深色实体 + 发光棱线 + 边缘光；玻璃、车灯、观察镜发光
-  vec3 c = body * (.45 + .95 * lit + .25 * up) * sh + glow * ed * .95 + glow * rim * .22;
+  // 深色实体 + 发光棱线 + 边缘光；玻璃、车灯、观察镜发光。山、房屋的投影也落在模型上（v3light.js 光照贴图），金属件上一点灯光高光
+  float shd = uLmOn > .5 ? mix(.45, 1., texture2D(uLm, vec2(vW.x, -vW.y) / uWorld).r) : 1.;
+  vec3 c = body * (.45 + .95 * lit * shd + .25 * up) * sh + glow * ed * .95 * (.75 + .25 * shd) + glow * rim * .22;
+  c += vec3(.45, .62, .55) * pow(max(dot(N, normalize(${V3_SUNG} + V)), 0.), 36.) * .22 * shd;
   if (vS < 0.) c += glow * .75 * sh;
   gl_FragColor = vec4(mix(c, uBg, smoothstep(uFog.x, uFog.y, vD)), 1.);
 }`;
@@ -1633,7 +1635,7 @@ function v3mInit(gl) {
     if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(pr));
     V3M.pr = pr; V3M.gl = gl;
     for (const k of ['p', 'n', 's', 'b', 'iA', 'iB']) V3M.a[k] = gl.getAttribLocation(pr, k);
-    for (const k of ['uM', 'uEye', 'uFog', 'uBg', 'uBody0', 'uBody1', 'uBody2', 'uBody3', 'uBody4', 'uGlow0', 'uGlow1', 'uGlow2']) V3M.u[k] = gl.getUniformLocation(pr, k);
+    for (const k of ['uM', 'uEye', 'uFog', 'uBg', 'uWorld', 'uLm', 'uLmOn', 'uBody0', 'uBody1', 'uBody2', 'uBody3', 'uBody4', 'uGlow0', 'uGlow1', 'uGlow2']) V3M.u[k] = gl.getUniformLocation(pr, k);
     V3M.ib = gl.createBuffer();
     V3M.ok = true;
   } catch (e) { V3M.ok = false; console.warn('3D 兵种模型不可用', e); }
@@ -1646,7 +1648,11 @@ function v3mGet(key, build) {
   const gl = V3M.gl;
   let MB;
   try { MB = build(); } catch (e) { console.warn('3D 模型 ' + key, e); MB = mbNew(); }
-  m = { tn: MB.t.length / 10, ln: MB.l.length / 10, tb: null, lb: null };
+  m = { tn: MB.t.length / 10, ln: MB.l.length / 10, tb: null, lb: null, bb: null };
+  if (MB.t.length) {   // 包围盒（模型坐标）：地面软阴影的大小、离地多高（v3light.js）
+    const bb = m.bb = [1e9, -1e9, 1e9, -1e9, 1e9, -1e9];
+    for (let i = 0; i < MB.t.length; i += 10) for (let a = 0; a < 3; a++) { const v = MB.t[i + a]; if (v < bb[a * 2]) bb[a * 2] = v; if (v > bb[a * 2 + 1]) bb[a * 2 + 1] = v; }
+  }
   if (m.tn) { m.tb = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, m.tb); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(MB.t), gl.STATIC_DRAW); }
   if (m.ln) { m.lb = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, m.lb); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(MB.l), gl.STATIC_DRAW); }
   V3M.mesh.set(ck, m);
@@ -2000,9 +2006,20 @@ function v3Units(C, box) {
     if (VP && m.t < 2.2 && typeof v3VlsOrigin === 'function') { const vo = v3VlsOrigin(m); if (vo) v3mAdd('vlslid', v3mVlsLid, vo.x, vo.y, vo.z, vo.h, 1, m.side === 'e' ? 1 : 0, -1.25 * clamp(m.t / .25, 0, 1) * clamp((2.2 - m.t) / .4, 0, 1)); }
   }
   for (const id of mp.keys()) if (!mlive.has(id)) mp.delete(id);
+  // —— 地面软阴影（v3light.js）：先画在地上，模型再盖上去 ——
+  if (typeof v3ShadowBegin === 'function' && v3ShadowBegin(gl)) {
+    for (const [key, L] of V3M.inst) {
+      if (!L.d.length || V3L_SKIP.test(key)) continue;
+      const m = v3mGet(key, L.build), sea = /^(sh:|dd:|es:|cv:|sub|wboat|asc:)/.test(key);
+      if (m.bb) for (let i = 0; i < L.d.length; i += 8) v3ShadowAdd(L.d[i], -L.d[i + 1], L.d[i + 2], -L.d[i + 3], L.d[i + 4], m.bb, sea);
+    }
+    v3ShadowDraw(gl, C);
+  }
   // —— 画 ——
   gl.useProgram(V3M.pr);
   gl.uniformMatrix4fv(V3M.u.uM, false, C.M);
+  const lmOn = typeof v3LightBind === 'function' && v3LightBind(gl);
+  gl.uniform1i(V3M.u.uLm, lmOn ? V3L.unit : 0); gl.uniform1f(V3M.u.uLmOn, lmOn ? 1 : 0); gl.uniform2f(V3M.u.uWorld, W, H);
   gl.uniform3f(V3M.u.uEye, C.E[0], C.E[1], C.E[2]);
   gl.uniform2f(V3M.u.uFog, ...(typeof v3FogR === 'function' ? v3FogR(C) : [C.D * 1.3, C.D * 2.8]));
   gl.uniform3f(V3M.u.uBg, .004, .02, .011);

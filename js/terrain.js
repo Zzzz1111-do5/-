@@ -391,7 +391,9 @@ function terLines() {
     for (let j = 0; j < h; j++) {
       const y = (j + .5) * px, g = (y - 5) / CELL, g0 = Math.floor(g), f = g - g0, a = X(g0), b = X(g0 + 1);
       if (a < -1e8 || b < -1e8 || y < top) continue;
-      const cx = a + (b - a) * f, hw = rv.w * (y - top < 80 && top > 0 ? .55 + .45 * (y - top) / 80 : 1);   // 河源一段渐窄
+      const cx = a + (b - a) * f, cy = coastAt(cx);
+      if (y > cy + 10) continue;   // 河道到海岸线为止（中心线在海里一直延伸到图边，以前海面上留着一道河形的直线）
+      const hw = rv.w * (y - top < 80 && top > 0 ? .55 + .45 * (y - top) / 80 : 1) * (1 + 1.8 * smooth(cy - 90, cy + 10, y));   // 河源一段渐窄；河口最后 90 米张开成喇叭口，融进海里
       const i0 = Math.max(0, Math.floor((cx - hw * 2.6) / px)), i1 = Math.min(w - 1, Math.ceil((cx + hw * 2.6) / px));
       for (let i = i0; i <= i1; i++) { const q = j * w + i, d = Math.abs((i + .5) * px - cx) / hw; if (d < dV[q]) dV[q] = d; }
     }
