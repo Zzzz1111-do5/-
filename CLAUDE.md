@@ -8,6 +8,8 @@
 - 两栖登陆作战沙盘游戏，浏览器运行：index.html 按顺序加载 js/ 下的普通脚本（共享全局变量，没有构建步骤）。
 - 安卓版用 Capacitor 打包（android/、capacitor.config.json；`npm run build` 生成 www/，`npm run sync` 同步到安卓工程）。
 - 网页版：`bash tools/publish_pages.sh` 生成 www/ 并推到 gh-pages 分支（GitHub Pages）。
+- 地图 8400 × 5600（core.js MAP_K = 2.8）。画面只有黑绿一种（look.js）；对局默认 3D——view3d.js 自由镜头、v3table.js 沙盘桌、v3post.js 后期，整体做成指挥部的兵推沙盘桌。
+- 主菜单「闯关」是 levels.js（三章十关，按预算自己布兵），建在沙盒（sandbox.js）上。
 
 ## 代码约定
 - 全部状态在全局 `S`（纯 JSON，可存档）；类型数组、渲染缓存放在 S 之外，S 换了就重建。
