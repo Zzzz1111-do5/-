@@ -169,7 +169,7 @@ function chatRow(m) {
   li.className = `s-${m.side} k-${m.kind}`;
   li.dataset.id = m.id;
   if (m.x != null && m.y != null) { li.dataset.x = m.x; li.dataset.y = m.y; li.title = '点击定位'; }
-  const who = m.side === 'p' ? '我方指挥官' : m.side === 'e' ? '敌方指挥官' : '系统';
+  const who = m.who ? `${m.side === 'e' ? '敌 · ' : ''}${chatEsc(m.who)}` : m.side === 'p' ? '我方指挥官' : m.side === 'e' ? '敌方指挥官' : '系统';
   const txt = chatEsc(m.text), i = txt.indexOf('：');
   const body = i > 0 && i <= 6 ? `<b>${txt.slice(0, i + 1)}</b>${txt.slice(i + 1)}` : txt;
   // 截获的消息按截获时刻排序：显示截获时刻，原发时刻放在后面，免得时间戳前后颠倒
