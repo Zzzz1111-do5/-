@@ -11,7 +11,7 @@ const TRX_FS = (lite, pass = 0) => `precision highp float;
 #define LITE ${lite ? 1 : 0}
 #define PASS ${pass}
 uniform vec2 uRes, uCoast, uShift; uniform vec3 uView; uniform float uTime, uFlash;
-uniform sampler2D uA, uB, uC, uD, uK, uFog, uL;
+uniform sampler2D uA, uB, uC, uD, uK, uFog, uL, uR;
 const vec2 WORLD = vec2(${W}., ${H}.);
 const vec2 GRID = vec2(${GW}., ${GH}.);
 float h21(vec2 p) { vec3 q = fract(vec3(p.xyx) * .1031); q += dot(q, q.yzx + 33.33); return fract((q.x + q.y) * q.z); }
@@ -147,16 +147,17 @@ void main() {
   // 合成：陆地读缓存（rgb 按 1/1.5 存，亮沙坡等超过 1 的颜色不被截掉；a 是陆地覆盖度），震动时按偏移平移着读
   vec4 Lc = texture2D(uL, (gl_FragCoord.xy + uShift) / uRes);
   c = Lc.rgb * 1.5;
-  bool sea = Lc.a < .999, riv = Lc.a > .001 && texture2D(uC, uv0).g > .1;
+  vec4 Lf = texture2D(uR, uv0);
+  bool sea = Lc.a < .999, riv = Lc.a > .001 && Lf.g < .45;
   if (sea || riv) {
     vec2 wq = w + (vec2(vn(w * .045), vn(w * .045 + 31.7)) - .5) * 6.;
     vec4 C = texture2D(uC, (w + (wq - w) * .3) / WORLD), D = texture2D(uD, wq / WORLD);
     // 河水流动：缓存里的河面按噪声中值画，这里补上随时间变的那一份（后面盖上的路肩、桥面按各自覆盖度扣掉）
     if (riv) {
-      float rv = smoothstep(.22 - eb * .5, .22 + eb * .5, C.g);
+      float rv = 1. - smoothstep(1. - pw / 7., 1. + pw / 7., Lf.g * 2.5), hw = max(Lf.b * 8., 1.5);
       if (rv > .002) {
-        float rd = smoothstep(.27 - eb * .5, .27 + eb * .5, C.r), sho = smoothstep(.15, .25, C.r) * (1. - rd), rdm = max(rd, smoothstep(.15, .3, C.b) * rv);
-        float k = rv * (1. - smoothstep(.2, .5, D.b) * .6) * (1. - sho * .6 * (1. - rv)) * (rdm > .002 ? 1. - rdm : 1.);
+        float rd = 1. - smoothstep(hw - pw * .6, hw + pw * .6, Lf.r * 12.);
+        float k = rv * (1. - smoothstep(.2, .5, D.b) * .6) * (1. - rd);
         c += (vn(w * .15 + vec2(0., -t * .6)) - .5) * k * vec3(.07, .07, .05);
       }
     }
@@ -243,25 +244,46 @@ void main() {
     vec3 N = normalize(vec3(-dx * 9., -dy * 9., 1.)), L = normalize(vec3(-.55, -.65, .62));
     float sh = clamp(dot(N, L) / L.z, .55, 1.35);
     lc *= mix(1., sh, .85) * (.95 + e * .12);
-    // 河流（含桥下、渡口）与河岸；河口一直通到海里
-    float rvW = C.g, rv = smoothstep(.22 - eb * .5, .22 + eb * .5, rvW), bank = smoothstep(.12, .2, rvW) * (1. - rv);
-    lc = mix(lc, vec3(.42, .38, .28), bank * .75);
+    // 河流（含桥下、渡口）与河岸：按河道中心线的距离场画（uR.g，rq = 到中心的水平距离 / 半宽，水面 rq < 1，与格子判河一致）——
+    //   水面中间深、近岸浅，岸线一道浅色水痕；岸外一道泥沙滩，再外一圈偏深的湿草、芦苇；河口入海的部分照旧由海水着色接上
+    vec4 Lf = texture2D(uR, uv0);
+    float rq = Lf.g * 2.5, rfw = pw / 7.;
+    float rv = 1. - smoothstep(1. - rfw, 1. + rfw, rq + (vn(w * .21) - .5) * .05);
+    float bank = (1. - smoothstep(1.12, 1.42, rq + (vn(w * .13) - .5) * .22)) * (1. - rv);
+    float verge = (1. - smoothstep(1.35, 2.2, rq + (vn(w * .08) - .5) * .5)) * (1. - rv) * (1. - bank);
+    lc = mix(lc, lc * vec3(.78, .88, .7), verge * .8);
+    lc = mix(lc, mix(vec3(.45, .4, .29), vec3(.56, .51, .39), vn(w * .32)), bank * .9);
     if (rv > .002) {
 #if PASS == 1
       float rvn = .5;   // 缓存：取噪声中值，流动由合成补上
 #else
       float rvn = vn(w * .15 + vec2(0., -t * .6));
 #endif
-      vec3 river = mix(vec3(.18, .3, .3), vec3(.25, .37, .35), rvn);
+      vec3 river = mix(vec3(.11, .21, .23), vec3(.22, .34, .32), smoothstep(.1, .95, rq));   // 中间深、近岸浅
+      river *= .93 + .14 * rvn;
+      river += vec3(.07, .08, .06) * smoothstep(.78, .96, rq);   // 岸线水痕
       lc = mix(lc, mix(river, vec3(.42, .5, .44), smoothstep(.2, .5, D.b) * .6), rv);
     }
-    // 道路：水泥路面 + 土路肩；桥面两侧压暗
-    float rdW = C.r, rd = smoothstep(.27 - eb * .5, .27 + eb * .5, rdW), sho = smoothstep(.15, .25, rdW) * (1. - rd);
-    lc = mix(lc, vec3(.47, .42, .33), sho * .6 * (1. - rv));
-    float bg = smoothstep(.15, .3, C.b), rdm = max(rd, bg * rv);
+    // 道路：按中心线距离场画（uR.r 距离、uR.b 半宽、uR.a 路程相位）——干线是沥青路面，有车辙、白色边线与中心虚线；
+    //   村道、滩头出口路是碎石路面；两侧土路肩；过河处是桥面（混凝土、两边护栏，桥下水面落影）
+    float dR = Lf.r * 12., hw = max(Lf.b * 8., 1.5), mainR = step(3.2, hw);
+    float rd = 1. - smoothstep(hw - pw * .6, hw + pw * .6, dR);
+    float sho = (1. - smoothstep(hw + .3, hw + 1.5 + pw, dR + (vn(w * .37) - .5) * .7)) * (1. - rd);
+    lc = mix(lc, mix(vec3(.47, .42, .33), vec3(.55, .5, .4), vn(w * .5)), sho * .7 * (1. - rv));
+    lc *= 1. - .3 * (1. - smoothstep(.0, .5 + pw * .5, abs(dR - hw - .15))) * (1. - rv);   // 路缘一道暗线：路面在黑绿画面里也分得清边
+    float brg = rd * rv, rdm = rd;
+    lc *= 1. - .35 * rv * (1. - rd) * (1. - smoothstep(hw, hw + 3.5, dR));   // 桥下水面落影（路只在桥上跨河）
     if (rdm > .002) {
-      vec3 road = mix(vec3(.6, .58, .54), vec3(.68, .66, .62), vn(w * .3)) * (1. - .08 * smoothstep(.6, 1., vn(w * .9)));
-      lc = mix(lc, mix(road, vec3(.12, .12, .11), bg * rv * (1. - smoothstep(.25, .4, rdW))), rdm);   // 只有桥面两侧有阴影
+      float gn = vn(w * .35), track = (1. - smoothstep(.25, .9, abs(abs(dR) - hw * .45))) * (1. - smoothstep(.6, 1.6, pw));
+      vec3 asph = mix(vec3(.5, .5, .48), vec3(.57, .57, .54), gn) * (1. - .1 * track);
+      vec3 grav = mix(vec3(.62, .59, .52), vec3(.7, .66, .58), gn) * (1. - .08 * track);
+      vec3 road = mix(grav, asph, mainR);
+      float fine = 1. - smoothstep(.35, .7, pw);   // 标线只在近看时画
+      road = mix(road, vec3(.86, .86, .82), mainR * fine * (1. - smoothstep(.12, .26 + pw * .3, abs(dR - (hw - .45)))) * (1. - brg));   // 白色边线
+      road = mix(road, vec3(.88, .82, .55), mainR * fine * (1. - smoothstep(.1, .2 + pw * .3, dR)) * step(.55, Lf.a) * (1. - brg));   // 中心虚线
+      vec3 deck = mix(vec3(.62, .61, .58), vec3(.7, .69, .66), gn);
+      deck = mix(deck, vec3(.2, .2, .19), 1. - smoothstep(.25, .6 + pw * .4, hw - dR));   // 护栏
+      lc = mix(lc, mix(road, deck, brg), rdm);
     }
     // 近看的细碎颗粒（草叶、土粒），像素大于颗粒时淡出
     float gr = 0.;
@@ -284,7 +306,7 @@ void main() {
 #endif
 }`;
 
-const TRX_U = ['uA', 'uB', 'uC', 'uD', 'uK', 'uFog', 'uL'];   // 依次占贴图单元 0–6
+const TRX_U = ['uA', 'uB', 'uC', 'uD', 'uK', 'uFog', 'uL', 'uR'];   // 依次占贴图单元 0–7（uR 线状地物距离场 terLines）
 function trxSh(gl, type, src) {
   const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
   if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
@@ -318,7 +340,8 @@ function trxInit() {
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
     gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
     trxProg(0, false); trxProg(0, true);
-    ['a', 'b', 'c', 'd', 'k', 'fog'].forEach((k, i) => {
+    ['a', 'b', 'c', 'd', 'k', 'fog', null, 'lf'].forEach((k, i) => {
+      if (!k) return;   // 单元 6 是陆地缓存（帧缓冲贴图）
       const t = gl.createTexture();
       gl.activeTexture(gl.TEXTURE0 + i); gl.bindTexture(gl.TEXTURE_2D, t);
       const filt = k === 'k' ? gl.NEAREST : gl.LINEAR;
@@ -339,6 +362,47 @@ function trxBlur(a, n) {
     for (let y = 0; y < GH; y++) for (let x = 0; x < GW; x++) { const i = y * GW + x; a[i] = (b[i - (y > 0) * GW] + 2 * b[i] + b[i + (y < GH - 1) * GW]) / 4; }
   }
   return a;
+}
+
+// 线状地物距离场（道路、河流按中心线算，4 倍网格精度 = 每 2.5 米一个像素，路面、河岸的边是光滑的曲线，不再是一格格的台阶）：
+//   R 到最近道路中心线的距离 / 12 米 · G 到河道中心线的水平距离 / 河道半宽 / 2.5（与格子里判河的规则一致）·
+//   B 最近那条路的半宽 / 8 · A 沿路程的相位 0.5 + 0.5cos(2πs / 9)（干线中心虚线）。按地图缓存在 TER.lf，2D 地形与 3D 地面共用
+const LF_K = 4;
+function terLines() {
+  if (TER.lf && TER.lf.seed === TER.seed) return TER.lf;
+  const w = GW * LF_K, h = GH * LF_K, px = CELL / LF_K, n = w * h;
+  const dR = new Float32Array(n).fill(99), hR = new Float32Array(n), sR = new Float32Array(n), dV = new Float32Array(n).fill(9);
+  for (const rd of TER.roads || []) {
+    let s0 = 0;
+    for (let k = 1; k < rd.pts.length; k++) {
+      const [x0, y0] = rd.pts[k - 1], [x1, y1] = rd.pts[k], L = Math.hypot(x1 - x0, y1 - y0) || 1e-6, ux = (x1 - x0) / L, uy = (y1 - y0) / L, pad = rd.hw + 9;
+      const i0 = Math.max(0, Math.floor((Math.min(x0, x1) - pad) / px)), i1 = Math.min(w - 1, Math.ceil((Math.max(x0, x1) + pad) / px));
+      const j0 = Math.max(0, Math.floor((Math.min(y0, y1) - pad) / px)), j1 = Math.min(h - 1, Math.ceil((Math.max(y0, y1) + pad) / px));
+      for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+        const x = (i + .5) * px, y = (j + .5) * px, t = clamp((x - x0) * ux + (y - y0) * uy, 0, L), d = Math.hypot(x - x0 - ux * t, y - y0 - uy * t), q = j * w + i;
+        if (d < dR[q]) { dR[q] = d; hR[q] = rd.hw; sR[q] = s0 + t; }
+      }
+      s0 += L;
+    }
+  }
+  for (const rv of TER.rivers || []) {
+    const top = rv.top, X = gy => rv.rx[clamp(gy, 0, GH - 1)];
+    for (let j = 0; j < h; j++) {
+      const y = (j + .5) * px, g = (y - 5) / CELL, g0 = Math.floor(g), f = g - g0, a = X(g0), b = X(g0 + 1);
+      if (a < -1e8 || b < -1e8 || y < top) continue;
+      const cx = a + (b - a) * f, hw = rv.w * (y - top < 80 && top > 0 ? .55 + .45 * (y - top) / 80 : 1);   // 河源一段渐窄
+      const i0 = Math.max(0, Math.floor((cx - hw * 2.6) / px)), i1 = Math.min(w - 1, Math.ceil((cx + hw * 2.6) / px));
+      for (let i = i0; i <= i1; i++) { const q = j * w + i, d = Math.abs((i + .5) * px - cx) / hw; if (d < dV[q]) dV[q] = d; }
+    }
+  }
+  const d = new Uint8Array(n * 4);
+  for (let q = 0; q < n; q++) {
+    d[q * 4] = Math.round(Math.min(1, dR[q] / 12) * 255);
+    d[q * 4 + 1] = Math.round(Math.min(1, dV[q] / 2.5) * 255);
+    d[q * 4 + 2] = Math.round(Math.min(1, hR[q] / 8) * 255);
+    d[q * 4 + 3] = Math.round((.5 + .5 * Math.cos(sR[q] * Math.PI * 2 / 9)) * 255);
+  }
+  return (TER.lf = { seed: TER.seed, w, h, d });
 }
 
 // 材质权重：每格 0/1 → 模糊 → 打包成四张 RGBA 纹理
@@ -389,6 +453,9 @@ function trxTerrain() {
   for (let j = 0; j <= KN; j++) { const v = Math.round((co[Math.min(W, j * 2)] - lo) / cr * 65535); k[j * 2] = v >> 8; k[j * 2 + 1] = v & 255; }
   gl.activeTexture(gl.TEXTURE4); gl.bindTexture(gl.TEXTURE_2D, TRX.tex.k);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE_ALPHA, KN + 1, 1, 0, gl.LUMINANCE_ALPHA, gl.UNSIGNED_BYTE, k);
+  const lf = terLines();
+  gl.activeTexture(gl.TEXTURE7); gl.bindTexture(gl.TEXTURE_2D, TRX.tex.lf);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, lf.w, lf.h, 0, gl.RGBA, gl.UNSIGNED_BYTE, lf.d);
   Object.assign(TRX, { seed: TER.seed, sig: trxSig(), c0: lo, cr, ver: TRX.ver + 1 });
 }
 

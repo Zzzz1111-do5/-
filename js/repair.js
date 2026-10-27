@@ -2,7 +2,7 @@
 // 步兵抢修补给线：工兵不在位时，普通步兵也能修浮桥断段、接通运输线、重建被毁的补给点（速度约为工兵的四成）；
 // 再没人管的断点由滩头补给站的后勤抢修队（海军工程艇 / 后勤分队，文件末尾 rpCrews）接手。
 // 一、被动：坚守中的步兵小组正站在断点上（16 以内）就顺手抢修；
-// 二、主动：断点 10 秒无工兵处理，从附近自动指挥的连队抽一个小组前去抢修，修好后归建。
+// 二、主动：断点 10 秒无工兵处理，从附近自动指挥的排抽一个小组前去抢修，修好后归建。
 // 状态：S.rep = { since: {断点键: 首次发现时刻}, det: {断点键: 小组 id} }；小组 q.detail = {k, kind, ...}
 const RP_RATE = .42, RP_WAIT = 10, RP_REACH = 700;
 
@@ -18,14 +18,14 @@ function rpBreaks() {
   }
   return out;
 }
-// 工兵是否已在处理：本线工兵在抢修，或有工兵小组在断点附近 / 工兵连的任务就是它
+// 工兵是否已在处理：本线工兵在抢修，或有工兵小组在断点附近 / 工兵排的任务就是它
 function rpEngOn(b) {
   if (b.kind === 'seg') { const e = S.teams.find(q => q.id === b.L.eng && q.men.length); if (e && e.repairing) return true; }
   for (const q of S.teams) if (q.side === 'p' && q.kind === 'eng' && q.men.length && dist(q.x, q.y, b.x, b.y) < 60) return true;
   const P = S.autoPlan && S.autoPlan.u;
   if (P) for (const id in P) {
     const j = P[id] && P[id].job, u = UNIT_MAP.get(+id);
-    if (!j || !u || !teamsOf(u).some(q => q.kind === 'eng' && q.men.length)) continue;   // 工兵连已打光：它的旧任务不算
+    if (!j || !u || !teamsOf(u).some(q => q.kind === 'eng' && q.men.length)) continue;   // 工兵排已打光：它的旧任务不算
     if (j.k === b.k || (b.kind === 'seg' && j.k === 'pontoon' + b.L.id)) return true;
   }
   return false;
@@ -65,7 +65,7 @@ function rpRelease(q, back) {
   if (q.detail) delete R0.det[q.detail.k];
   q.detail = null; q.repairing = false; q.working = false;
   if (!back) return;
-  const u = unitOf(q);   // 归建：回到本连附近，等下一道命令
+  const u = unitOf(q);   // 归建：回到本排附近，等下一道命令
   if (u && u.x != null && fieldOk(u.x, u.y, 'p')) q.order = { t: 'move', x: u.x + gauss() * 8, y: u.y + gauss() * 8, gx: u.x, gy: u.y };
   else q.order = { t: 'hold' };
 }
@@ -84,7 +84,7 @@ function updateRepair(dt) {
       if (!L || !q.men.length || rpWalk(q, L, L.x, L.y - 6, dt) < 3 || isLand(q.x, q.y) && dist(q.x, q.y, L.x, L.y) < 40) rpRelease(q, !!q.men.length);
       continue;
     }
-    // 中止：断点已修好、小组被打残 / 压制、连队溃退、超时
+    // 中止：断点已修好、小组被打残 / 压制、排溃退、超时
     if (!b || !q.men.length || q.sup > 70 || (u && u.state === 'rout') || S.t - D.t0 > 100) {
       if (D.kind === 'seg' && q.men.length && !isLand(q.x, q.y)) { D.back = true; delete R0.det[D.k]; q.working = false; } else rpRelease(q, !!q.men.length);
       continue;
@@ -114,7 +114,7 @@ function updateRepair(dt) {
     const q = S.teams.find(q => q.side === 'p' && q.kind === 'inf' && q.men.length && !q.detail && !q.ride && q.order.t === 'hold' && q.order.x == null && q.sup < 50 && dist(q.x, q.y, b.x, b.y) < 16);
     if (q) { q.working = true; if (rpWork(b, dt * q.men.length / 3 * RP_RATE, '步兵')) q.working = false; }
   }
-  // 主动派人：每 2 秒检查一次，10 秒没人修的断点从附近自动指挥的连队抽一个小组
+  // 主动派人：每 2 秒检查一次，10 秒没人修的断点从附近自动指挥的排抽一个小组
   if ((R0.chkT = (R0.chkT ?? 0) - dt) > 0) return;
   R0.chkT = 2;
   const busy = new Set(Object.keys(R0.det).filter(k => k[0] === 's').map(k => k.split('_')[0]));   // 同一条浮桥一次只派一个组，逐段修
@@ -128,7 +128,7 @@ function updateRepair(dt) {
       if (q.side !== 'p' || q.kind !== 'inf' || q.men.length < 2 || q.detail || q.ride || q.sup > 40) continue;
       const u = unitOf(q);
       if (!u || u.auto !== true || u.state === 'rout' || u.order === 'charge' || q.order.t === 'charge') continue;
-      if (teamsOf(u).filter(o => o.men.length && !o.detail).length < 2) continue;   // 不把一个连抽空
+      if (teamsOf(u).filter(o => o.men.length && !o.detail).length < 2) continue;   // 不把一个排抽空
       if (rpFoeNear(q.x, q.y, 110)) continue;   // 正在交火的不抽
       const d = dist(q.x, q.y, ax, ay) + (q.men.includes('radio') ? 60 : 0);   // 尽量不派带电台的组
       if (d < bd) { bd = d; best = q; }
@@ -138,8 +138,8 @@ function updateRepair(dt) {
     R0.det[b.k] = best.id;
     if (b.kind === 'seg') busy.add(b.k.split('_')[0]);
     const u = unitOf(best), nm = (u && (u.ship || u.label)) || '前沿';
-    log(`${nm}连抽调一个小组抢修${rpName(b)}`, 'info', 'rpgo' + b.k, 20, b);
-    if (typeof chatSay === 'function') chatSay('p', `命令：工兵不在位，${nm}连抽一个小组抢修 ${gridRef(b.x, b.y)} 的${rpName(b)}断点，修复后归建。`, { kind: 'order', at: { x: b.x, y: b.y }, key: 'rp' + b.k, gap: 60 });
+    log(`${nm}排抽调一个小组抢修${rpName(b)}`, 'info', 'rpgo' + b.k, 20, b);
+    if (typeof chatSay === 'function') chatSay('p', `命令：工兵不在位，${nm}排抽一个小组抢修 ${gridRef(b.x, b.y)} 的${rpName(b)}断点，修复后归建。`, { kind: 'order', at: { x: b.x, y: b.y }, key: 'rp' + b.k, gap: 60 });
   }
 }
 // —— 后勤抢修队：每个滩头补给站一支，海上浮桥由海军工程艇修、陆上运输线 / 补给点由后勤分队修；不占作战小组，玩家亲自指挥部队时也照常工作 ——

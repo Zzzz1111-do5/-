@@ -25,7 +25,7 @@ function atoPhase(side) {
 }
 // 双方的歼击机：在册（没损失的）与在空的
 const atoFtrP = () => !!S.air && (S.air.wing.some(w => w.type === 'fighter' && w.state !== 'lost') || (S.planes || []).some(p => !p.dead && p.kind === 'fighter'));
-const atoFtrE = () => !!S.eair && (S.eair.wing.some(w => (w.type === 'ftr' || w.type === 'f22') && w.state !== 'lost') || S.eair.fly.some(a => !a.dead && (a.type === 'ftr' || a.type === 'f22')));
+const atoFtrE = () => !!S.eair && (S.eair.wing.some(w => eaFtr(w.type) && w.state !== 'lost') || S.eair.fly.some(a => !a.dead && eaFtr(a.type)));
 // 已知的敌防空（攻方所知：carrier.js airAASites；守方所知：看得见的防空车、近 2 分钟暴露过的单兵防空组）
 function atoAAKnown(side) {
   if (side === 'p') return typeof airAASites === 'function' ? airAASites() : [];
@@ -38,7 +38,7 @@ function atoAAKnown(side) {
 const atoLost = side => side === 'p' ? (S.air ? S.air.wing.filter(w => w.state === 'lost').length : 0) : (S.eair ? S.eair.wing.filter(w => w.state === 'lost').length : 0);
 // 能压制防空的飞机：攻方攻击机（歼-35，防空压制型更好）、歼-36 打击型；守方 A-10C（小牛）、带小直径炸弹的 F-35A
 const atoSeadP = () => !!S.air && S.air.wing.some(w => (w.type === 'strike' || (w.type === 'fighter' && w.v === 'j36s')) && w.state !== 'lost');
-const atoSeadE = () => !!S.eair && S.eair.wing.some(w => (w.type === 'ga' || w.type === 'ftr') && w.state !== 'lost');
+const atoSeadE = () => !!S.eair && S.eair.wing.some(w => (w.type === 'ga' || w.type === 'ftr' || w.type === 'ftrb') && w.state !== 'lost');
 function atoSay(side, ph, why) {
   const txt = { 1: `空中作战第一阶段——夺取制空权：${side === 'p' ? '歼击机' : 'F-35A / F-22A'}双机编队前出扫荡、巡逻，对地飞机一律待命，不打无制空权的仗。`,
     2: `空中作战转入第二阶段——压制防空（${why}）：攻击机专打已知的敌防空${side === 'p' ? '（高炮、防空车、单兵防空组）' : '（防空车、单兵防空组）'}，战斗机继续巡逻掩护，近距支援仍待命。`,

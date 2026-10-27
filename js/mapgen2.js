@@ -66,7 +66,13 @@ function finishMap(r, cAt, headland) {
   const rdY = x => roadY[clamp(Math.round(x / CELL), 0, GW)];
   TER.roadY = roadY;
   const bridgeCells = [];
-  const road = pts => {
+  // 折线先用 Chaikin 切角平滑两遍（拐弯是圆滑的弧，不是折角），记进 TER.roads（渲染按中心线画路面），再按平滑后的线把格子标成道路
+  //   hw 半宽：干线（海岸公路、镇子与指挥所之间、机场公路）4.2，滩头出口、村道 2.8
+  TER.roads = [];
+  const chaikin = pts => { let P = pts; for (let it = 0; it < 2; it++) { const Q = [P[0]]; for (let k = 1; k < P.length; k++) { const [x0, y0] = P[k - 1], [x1, y1] = P[k]; Q.push([x0 * .75 + x1 * .25, y0 * .75 + y1 * .25], [x0 * .25 + x1 * .75, y0 * .25 + y1 * .75]); } Q.push(P[P.length - 1]); P = Q; } return P; };
+  const road = (pts0, hw = 4.2) => {
+    const pts = pts0.length > 2 ? chaikin(pts0) : pts0;
+    TER.roads.push({ pts: pts.map(([x, y]) => [Math.round(x * 10) / 10, Math.round(y * 10) / 10]), hw });
     for (let k = 1; k < pts.length; k++) {
       const [x0, y0] = pts[k - 1], [x1, y1] = pts[k], n = Math.ceil(dist(x0, y0, x1, y1) / 4);
       for (let s = 0; s <= n; s++) {
@@ -79,7 +85,7 @@ function finishMap(r, cAt, headland) {
   const coastal = [];
   for (let x = 10; x <= W - 10; x += 50) coastal.push([x, rdY(x)]);
   road(coastal);
-  for (const b of beaches) road([[b.cx, cAt(b.cx) - 22], [b.cx, rdY(b.cx)]]);
+  for (const b of beaches) road([[b.cx, cAt(b.cx) - 22], [b.cx, rdY(b.cx)]], 2.8);
   const via = (a, b, k) => [lerp(a.x, b.x, .5) + (r() - .5) * k, lerp(a.y, b.y, .5)];
   road([[town1.x, rdY(town1.x)], [town1.x + (r() - .5) * 60, lerp(rdY(town1.x), town1.y, .5)], [town1.x, town1.y], via(town1, hq, 180), [hq.x, hq.y]]);
   road([[town2.x, rdY(town2.x)], [town2.x + (r() - .5) * 60, lerp(rdY(town2.x), town2.y, .5)], [town2.x, town2.y], via(town2, hq, 180), [hq.x, hq.y]]);
@@ -89,7 +95,7 @@ function finishMap(r, cAt, headland) {
     road([[tn.x, tn.y], via(tn, town3, 160), [town3.x, town3.y]]);
     road([[town3.x, town3.y], via(town3, hq, 160), [hq.x, hq.y]]);
   }
-  for (const v of vills) road([[v.x, v.y], [v.x, rdY(v.x)]]);
+  for (const v of vills) road([[v.x, v.y], [v.x, rdY(v.x)]], 2.8);
   if (TER.af) {   // 机场进场公路：南门 → 最近的镇子 / 指挥所
     const [gx, gy] = afWorld(TER.af, 0, AF_BOX.v1 - 5), [ox, oy] = afWorld(TER.af, 0, AF_BOX.v1 + 30);
     const tn = [hq, town1, town2, town3].filter(Boolean).reduce((a, b) => dist(b.x, b.y, gx, gy) < dist(a.x, a.y, gx, gy) ? b : a);

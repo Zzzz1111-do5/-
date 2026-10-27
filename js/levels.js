@@ -157,7 +157,7 @@ function lvGroundDefend(L) {
   }
   sbxSync();
 }
-// 陆战关开战：滩头阵地上的步兵组按位置编成连（每连至多 6 组），车辆已由 sbxSpawn 放好；离部队最近的两处滩头各设补给站；滩头出口归我
+// 陆战关开战：滩头阵地上的步兵组按位置编成排（每排至多 6 组），车辆已由 sbxSpawn 放好；离部队最近的两处滩头各设补给站；滩头出口归我
 function lvGroundSpawn(items) {
   const inf = items.filter(it => it.side === 'p' && it.x != null && sbxEntry(it) && sbxEntry(it).spawn.kind === 'cargo');
   const used = new Set();
@@ -218,7 +218,7 @@ function lvIntel(L) {
   }
   const af = E.find(it => it.cat === 'e_airfield'), air = cnt(c => c.spawn && c.spawn.kind === 'ewing'), asc = cnt(c => c.id === 'e_ascm');
   if (af) { lines.push(`空中：纵深有野战机场（自带雷达、防空），飞机 ${fuzz(air)} 架。`); ring(af.x, af.y, '敌机场'); }
-  if (asc) lines.push(`岸舰导弹连 ${fuzz(asc)} 个，射程 1600，靠近海岸的舰船当心。`);
+  if (asc) lines.push(`岸舰导弹排 ${fuzz(asc)} 个，射程 1600，靠近海岸的舰船当心。`);
   S.lvIntel = { lines, rings };
   S.sbx.notes.p = [`第 ${L.n} 关「${L.nm}」：${LV_CH[L.ch][2]}`, L.brief, ...lines.map(t => '情报：' + t)];
   if (typeof chatSay === 'function') chatSay('sys', `第 ${L.n} 关「${L.nm}」情报简报：${lines.join(' ')}`, { kind: 'intel', lv: 0 });

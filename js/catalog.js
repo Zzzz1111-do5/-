@@ -163,13 +163,13 @@ ctE('p_eng', '战斗工兵组', 'p', 'inf', 'eng_p', 12, CT_IC.eng, [3, 0, 1, 2,
   { kind: 'cargo', at: 'cargo', men: ['eng', 'eng', 'eng'], eng: true }, { counters: ['mines', 'wire'], weakTo: ['inf_e', 'mortar'] });
 ctE('p_demo', '爆破突击组', 'p', 'inf', 'eng_p', 16, CT_IC.demo, [3, 0, 5, 1, 5, 4, 3], '携带炸药包的突击工兵：摸到碉堡 25 以内即可爆破，是拔除火力点的利器。',
   { kind: 'cargo', at: 'cargo', men: ['rifle', 'eng', 'rifle'], tag: 'demo' }, { counters: ['bunker', 'coastal'], weakTo: ['e_mg_nest'] });
-ctE('p_medic', '卫生组', 'p', 'inf', 'inf_p', 12, CT_IC.medic, [3, 0, 1, 4, 5, 5, 3], '随队卫生员：附近连队士气恢复更快、更难溃退；自身火力很弱。',
+ctE('p_medic', '卫生组', 'p', 'inf', 'inf_p', 12, CT_IC.medic, [3, 0, 1, 4, 5, 5, 3], '随队卫生员：附近排士气恢复更快、更难溃退；自身火力很弱。',
   { kind: 'cargo', at: 'cargo', men: ['radio', 'rifle', 'rifle'], mod: { pow: .6 }, tag: 'medic' }, { weakTo: ['arty'] });
 ctE('p_fo', '前进观察组', 'p', 'inf', 'inf_p', 14, CT_IC.fo, [3, 0, 1, 4, 5, 9, 3], '双电台观察组：视野远超普通小组，为舰炮、航空兵和自动指挥提供目标。',
   { kind: 'cargo', at: 'cargo', men: ['radio', 'radio', 'rifle'], mod: { pow: .7 }, tag: 'fo' }, { counters: ['arty', 'mortar'], weakTo: ['inf_e'] });
-ctE('p_mortar', '迫击炮组（PP-87 82 毫米）', 'p', 'inf', 'inf_p', 18, CT_IC.pmortar, [3, 0, 5, 7, 4, 5, 3], '随登陆连上岸的轻迫击炮：对 380 以内看得见的敌人与工事间接射击，压制碉堡与机枪阵地。',
+ctE('p_mortar', '迫击炮组（PP-87 82 毫米）', 'p', 'inf', 'inf_p', 18, CT_IC.pmortar, [3, 0, 5, 7, 4, 5, 3], '随登陆排上岸的轻迫击炮：对 380 以内看得见的敌人与工事间接射击，压制碉堡与机枪阵地。',
   { kind: 'cargo', at: 'cargo', men: ['radio', 'rifle', 'rifle'], mod: { pow: .6 }, tag: 'mortar' }, { counters: ['inf_e', 'trench'], weakTo: ['arty'] });
-ctE('p_hq', '营部指挥组', 'p', 'inf', 'inf_p', 16, CT_IC.hq, [3, 0, 2, 4, 5, 7, 3], '营指挥所：150 内的连队士气稳定、压制恢复更快；被打掉会让附近部队动摇。',
+ctE('p_hq', '连部指挥组', 'p', 'inf', 'inf_p', 16, CT_IC.hq, [3, 0, 2, 4, 5, 7, 3], '连指挥所：150 内的排士气稳定、压制恢复更快；被打掉会让附近部队动摇。',
   { kind: 'cargo', at: 'cargo', men: ['radio', 'radio', 'rifle'], tag: 'hq' }, { weakTo: ['e_sniper', 'arty'] });
 ctE('p_manpads', '便携防空导弹组（前卫-2）', 'p', 'inf', 'inf_p', 18, CT_IC.manpads, [3, 0, 2, 7, 5, 6, 3], '肩扛式防空导弹（每组 3 枚）：230–260 内击落低飞的敌攻击机与武装直升机，补给点附近每分钟补 1 枚；对地火力弱。',
   { kind: 'cargo', at: 'cargo', men: ['radio', 'rifle', 'aa'], mod: { pow: .8 }, tag: 'manpads' }, { counters: ['e_air_ga', 'e_air_heli'], weakTo: ['inf_e', 'mortar'] });
@@ -213,7 +213,7 @@ ctE('p_dozer', 'GCZ-110 重型工程车', 'p', 'armor', 'veh', 44, CT_IC.dozer, 
 // ———— 进攻方 · 舰艇 ————
 ctE('p_lct', '271 型登陆艇', 'p', 'naval', 'ship', 20, CT_IC.lct, [5, 1, 0, 0, 5, 3, 10], '标准突击登陆艇，满载 5 个小组：放下就自带步枪组 ×2、机枪组、反坦克组、工兵组（兵员点数另计，右键可卸下换兵种）；首波抢滩主力。',
   { kind: 'ship', at: 'sea', ship: 'assault', cap: 5, hp: 10, pre: 'LA', def: ['p_rifle', 'p_rifle', 'p_mg', 'p_at', 'p_eng'] }, { weakTo: ['coastal', 'obst', 'bunker'] });
-ctE('p_lci', '074A 型登陆舰', 'p', 'naval', 'ship', 28, CT_IC.lci, [6, 1, 0, 0, 5, 3, 10], '载 8 个小组的较大舰艇，放下就自带一个加强连（营部、步枪组 ×3、机枪组 ×2、反坦克组、卫生组），一次送上；目标大，抢滩时更招火。',
+ctE('p_lci', '074A 型登陆舰', 'p', 'naval', 'ship', 28, CT_IC.lci, [6, 1, 0, 0, 5, 3, 10], '载 8 个小组的较大舰艇，放下就自带一个加强排（连部、步枪组 ×3、机枪组 ×2、反坦克组、卫生组），一次送上；目标大，抢滩时更招火。',
   { kind: 'ship', at: 'sea', ship: 'assault', cap: 8, hp: 12, pre: 'LI', def: ['p_hq', 'p_rifle', 'p_rifle', 'p_rifle', 'p_mg', 'p_mg', 'p_at', 'p_medic'] }, { weakTo: ['coastal', 'obst'] });
 ctE('p_lcvp', '人员登陆艇', 'p', 'naval', 'ship', 12, CT_IC.lcvp, [3, 0, 0, 0, 6, 3, 9], '只载 3 个小组的小艇，自带步枪组 ×2 与机枪组；便宜、目标小，适合佯攻与分散登陆。',
   { kind: 'ship', at: 'sea', ship: 'assault', cap: 3, hp: 6, pre: 'LV', def: ['p_rifle', 'p_rifle', 'p_mg'] }, { weakTo: ['bunker', 'obst'] });
@@ -329,7 +329,7 @@ ctE('p_tbm', '东风-15B 战术导弹（2 枚）', 'p', 'support', 'missile', 60
   { kind: 'asset', at: 'none', key: 'msl', add: 2 }, { counters: ['coastal', 'e_tel', 'e_ascm', 'e_airfield'], weakTo: ['e_aa_radar'] });
 ctE('p_nuke', '战术核弹（低当量，1 枚）', 'p', 'support', 'missile', 1200, CT_IC.nuke, [0, 0, 10, 10, 0, 0, 0], '单独购买的战术核武器：战区火箭军发射，约 15 秒落地（发射即向全战场发出核打击预警）。爆心 60 米内一切人员、车辆、工事、舰船毁灭，140 米内重创，280 米内压制、士气崩溃；不分敌我，落点 300 米内有我军就拒绝发射。留下约 2 分 30 秒的辐射区，进入的人员持续伤亡。末段仍可能被拦截。支援栏「核」按钮。',
   { kind: 'asset', at: 'none', key: 'nuke', add: 1 }, { counters: ['coastal', 'arty', 'bunker', 'inf_e'], weakTo: ['e_aa_radar'] });
-ctE('p_abn', '空降兵营（运-20 伞降夺取机场）', 'p', 'support', 'asset', 260, '<path d="M4 9a8 6 0 0 1 16 0z"/><path d="M4 9l8 6 8-6M9 9l3 6 3-6"/><circle class="f" cx="12" cy="16.2" r="1.5"/><rect x="2" y="19" width="20" height="3" rx=".5"/><path d="M5 20.5h2M11 20.5h2M17 20.5h2"/>', [5, 1, 8, 7, 7, 7, 60], '解放军空降兵一个营，专门用来夺取敌野战机场（敌方要有机场）：4 架运-20 从海上进场，伞降 60 人（三个连，含突击、机枪、红箭-12 反坦克、前卫防空和工兵组），并重装空投 ZBD-03 伞兵战车 2 辆、弹药 3 箱。夺取后工兵抢修跑道（守军炸过的要两分多钟），修通后运-20 依次机降 ZTQ-15 轻型坦克 2 辆、机降步兵连和弹药油料；有了油料，我方陆基飞机（歼-20、歼-36、轰-6K、攻击-2 等）改在这里降落整备，45 秒就能再出击。AI 指挥时会等主力在滩头站稳、先打掉航线上的防空再空降，并让主力向机场方向打通会师。快捷键 Shift+K，点敌机场附近。',
+ctE('p_abn', '空降兵连（运-20 伞降夺取机场）', 'p', 'support', 'asset', 260, '<path d="M4 9a8 6 0 0 1 16 0z"/><path d="M4 9l8 6 8-6M9 9l3 6 3-6"/><circle class="f" cx="12" cy="16.2" r="1.5"/><rect x="2" y="19" width="20" height="3" rx=".5"/><path d="M5 20.5h2M11 20.5h2M17 20.5h2"/>', [5, 1, 8, 7, 7, 7, 60], '解放军空降兵一个连，专门用来夺取敌野战机场（敌方要有机场）：4 架运-20 从海上进场，伞降 60 人（三个排，含突击、机枪、红箭-12 反坦克、前卫防空和工兵组），并重装空投 ZBD-03 伞兵战车 2 辆、弹药 3 箱。夺取后工兵抢修跑道（守军炸过的要两分多钟），修通后运-20 依次机降 ZTQ-15 轻型坦克 2 辆、机降步兵排和弹药油料；有了油料，我方陆基飞机（歼-20、歼-36、轰-6K、攻击-2 等）改在这里降落整备，45 秒就能再出击。AI 指挥时会等主力在滩头站稳、先打掉航线上的防空再空降，并让主力向机场方向打通会师。快捷键 Shift+K，点敌机场附近。',
   { kind: 'asset', at: 'none', key: 'abn', add: 1 }, { counters: ['e_airfield', 'e_air_ga', 'e_air_heli', 'e_air_ftr', 'e_air_f22'], weakTo: ['aa', 'e_aa_radar', 'e_sam_veh', 'e_air_f22'] });
 ctE('p_para', '蛟龙突击队（运-20 伞降）', 'p', 'support', 'asset', 140, CT_IC.para, [6, 1, 9, 8, 7, 8, 18], '海军陆战队特种部队：两架运-20 从海上飞来，高跳低开 6 个组 18 人——突击组 ×2、双机枪火力组、红箭-12 反坦克组、QBU-202 狙击组、前卫-2 防空组。射击精度 1.6 倍、射速 1.3 倍，防弹插板让近一半的致命伤只是负伤，被压制和伤亡对士气的打击减半；落地后自动夺取附近据点、与正面夹击。运输机仍可能被高炮、防空导弹与敌机击落。快捷键 Shift+P。',
   { kind: 'asset', at: 'none', key: 'para', add: 1 }, { counters: ['arty', 'mortar', 'coastal'], weakTo: ['aa', 'e_air_ftr'] });
@@ -349,9 +349,9 @@ ctE('e_mg_nest', 'M240 机枪班', 'e', 'inf', 'inf_e', 22, CT_IC.emg, [4, 0, 5,
   { kind: 'einf', at: 'land', role: 'garrison', teams: 2, men: ['mg', 'mg', 'rifle'], mod: { sup: 1.3 } }, { counters: ['p_rifle', 'p_marine'], weakTo: ['p_mortar', 'veh'] });
 ctE('e_ambush', '滩头伏击组', 'e', 'inf', 'inf_e', 18, CT_IC.eamb, [4, 0, 4, 4, 3, 5, 6], '潜伏在滩顶堑壕，敌人上滩到 80 以内才开火；被压倒时撤向出口据点。',
   { kind: 'einf', at: 'land', role: 'ambush', teams: 2, men: ['rifle', 'rifle', 'mg'] }, { counters: ['p_eng', 'p_rifle'], weakTo: ['arty', 'p_rocket'] });
-ctE('e_reserve', '机动预备队（步兵连）', 'e', 'inf', 'inf_e', 28, CT_IC.eres, [5, 0, 4, 5, 4, 6, 9], '驻扎在镇子或路口，由守军指挥官调往压力最大的据点。',
+ctE('e_reserve', '机动预备队（步兵排）', 'e', 'inf', 'inf_e', 28, CT_IC.eres, [5, 0, 4, 5, 4, 6, 9], '驻扎在镇子或路口，由守军指挥官调往压力最大的据点。',
   { kind: 'einf', at: 'land', role: 'reserve', teams: 3, men: ['rifle', 'rifle', 'mg'] }, { counters: ['p_rifle'], weakTo: ['p_air_cas', 'veh'] });
-ctE('e_assault', '反击突击连', 'e', 'inf', 'inf_e', 40, CT_IC.easlt, [7, 0, 6, 5, 4, 6, 10], '四个精锐小组，士气高、射击准，用于夺回失守的据点。',
+ctE('e_assault', '反击突击排', 'e', 'inf', 'inf_e', 40, CT_IC.easlt, [7, 0, 6, 5, 4, 6, 10], '四个精锐小组，士气高、射击准，用于夺回失守的据点。',
   { kind: 'einf', at: 'land', role: 'reserve', teams: 4, men: ['rifle', 'mg', 'mg'], mod: { pow: 1.15 }, morale: 92 }, { counters: ['p_rifle', 'p_eng'], weakTo: ['p_air_cas', 'arty'] });
 ctE('e_sniper', '狙击手（M2010）', 'e', 'inf', 'inf_e', 12, CT_IC.esniper, [2, 0, 4, 9, 3, 8, 2], '两人狙击组，优先射杀通讯兵，令登陆部队视野与指挥中断。',
   { kind: 'einf', at: 'land', role: 'garrison', teams: 1, men: ['rifle', 'rifle'], mod: { pow: 2.2, rng: 1.6, rof: .55, sup: .5 } }, { counters: ['p_fo', 'p_hq'], weakTo: ['mortar', 'p_air_cas'] });
@@ -417,7 +417,7 @@ ctE('e_how', 'M777A2 155 毫米榴弹炮阵地', 'e', 'arty', 'arty', 40, CT_IC.
   { kind: 'enemy', at: 'land', ek: 'arty', hp: 1 }, { counters: ['inf_p', 'ship'], weakTo: ['p_air_strike', 'p_fo'] });
 ctE('e_hhow', '203 毫米重型榴弹炮', 'e', 'arty', 'arty', 60, CT_IC.hhow, [6, 1, 9, 9, 0, 4, 8], '大口径重炮：射程更远、单发威力接近岸防重炮，射速慢。',
   { kind: 'enemy', at: 'land', ek: 'arty', hp: 1.2, mod: { rof: .6, rng: 1.3, shell: 'coastal' } }, { counters: ['inf_p', 'ship', 'veh'], weakTo: ['p_air_heavy'] });
-ctE('e_rkt', 'M270 多管火箭炮连', 'e', 'arty', 'arty', 45, CT_IC.rkt, [3, 0, 8, 7, 0, 4, 6], '一次三发齐射，覆盖面大但散布也大，装填快；阵地脆弱。',
+ctE('e_rkt', 'M270 多管火箭炮排', 'e', 'arty', 'arty', 45, CT_IC.rkt, [3, 0, 8, 7, 0, 4, 6], '一次三发齐射，覆盖面大但散布也大，装填快；阵地脆弱。',
   { kind: 'enemy', at: 'land', ek: 'arty', hp: .7, mod: { salvo: 3, pow: .55, rof: 1.3 } }, { counters: ['inf_p'], weakTo: ['p_air_cas', 'p_spg'] });
 ctE('e_mortar', 'M252 81 毫米迫击炮', 'e', 'arty', 'mortar', 20, CT_IC.mortar, [3, 0, 4, 4, 0, 4, 3], '射程 420 的轻迫击炮，覆盖滩头与出口，不能打海上目标。',
   { kind: 'enemy', at: 'land', ek: 'mortar', hp: 1 }, { counters: ['inf_p', 'p_eng'], weakTo: ['p_mortar', 'p_air_cas'] });
@@ -431,7 +431,7 @@ ctE('e_aa_radar', 'C-RAM 陆基密集阵', 'e', 'arty', 'aa', 50, CT_IC.raa, [5,
   { kind: 'enemy', at: 'land', ek: 'aa', hp: 1.25, mod: { aa: 1.9, rng: 1.35 }, vis: { r: 260, h: 3 } }, { counters: ['wing'], weakTo: ['p_air_dive', 'p_dd'] });
 ctE('e_tel', 'M142 海马斯（ATACMS）', 'e', 'arty', 'missile', 90, CT_IC.tel, [3, 1, 10, 10, 2, 0, 0], '纵深 450 以外的机动发射车，载弹 2 枚：打击滩头卸载中的登陆舰与密集部队，射程 300–1800；发射后暴露并转移阵地。',
   { kind: 'enemy', at: 'land', ek: 'tel', minDepth: 450, n: 2 }, { counters: ['ship', 'inf_p', 'p_depot'], weakTo: ['p_tbm', 'p_air_strike', 'p_air_recon'] });
-ctE('e_ascm', 'NMESIS 岸舰导弹连（NSM）', 'e', 'arty', 'missile', 110, CT_IC.ascm, [4, 1, 10, 10, 0, 7, 0], '岸边的反舰导弹连（4 枚，两枚一组齐射）：掠海飞行打击射程 1600 内的坦克登陆舰、满载登陆舰与驱逐舰；驱逐舰近防炮可拦截，发射后暴露 90 秒。',
+ctE('e_ascm', 'NMESIS 岸舰导弹排（NSM）', 'e', 'arty', 'missile', 110, CT_IC.ascm, [4, 1, 10, 10, 0, 7, 0], '岸边的反舰导弹排（4 枚，两枚一组齐射）：掠海飞行打击射程 1600 内的坦克登陆舰、满载登陆舰与驱逐舰；驱逐舰近防炮可拦截，发射后暴露 90 秒。',
   { kind: 'enemy', at: 'coast', ek: 'ascm', n: 4 }, { counters: ['p_lst', 'p_lct', 'dd'], weakTo: ['p_tbm', 'p_air_dive'] });
 
 // ———— 防守方 · 水面舰艇（navy.js；放在本方海岸外的深水区）————
@@ -456,12 +456,16 @@ ctE('e_air_heli', 'AH-64E 阿帕奇', 'e', 'air', 'ewing', 40, CT_IC.eheli, [3, 
 
 ctE('e_air_ftr', 'F-35A 闪电 II 战斗机', 'e', 'air', 'ewing', 40, CT_IC.eftr, [3, 0, 6, 7, 10, 7, 0], '从野战机场起飞，在防区上空巡逻、拦截敌舰载机，以 4 枚空空导弹与机炮与敌战斗机争夺制空权；我方掌握制空权后攻击机与直升机出击更频繁。需要野战机场。',
   { kind: 'ewing', at: 'air', type: 'ftr' }, { counters: ['p_air_cas', 'p_air_strike', 'p_air_ftr', 'wing'], weakTo: ['p_air_ftr', 'p_dd', 'p_tbm'] });
+ctE('e_air_ftrb', 'F-35B 闪电 II（短距起飞 / 垂直降落）', 'e', 'air', 'ewing', 45, CT_IC.eftr, [4, 0, 6, 7, 10, 7, 0], '美国海军陆战队型：升力风扇加可转向的尾喷口，不要跑道——机场跑道被炸、机场被敌人逼近甚至占领时，照样能从机位、直升机坪或机场外的前沿加油弹药点垂直起降。弹舱小一些：2 枚 AIM-120D 空空导弹 + 4 枚 GBU-53/B 小直径炸弹（外挂机炮吊舱），既能巡逻拦截，也能对车辆、登陆舰做精确打击。需要野战机场（被占后仍可在野外前沿点继续作战）。',
+  { kind: 'ewing', at: 'air', type: 'ftrb' }, { counters: ['p_air_cas', 'p_air_strike', 'p_tank', 'p_lst', 'p_abn'], weakTo: ['p_air_ftr', 'p_dd', 'p_aa_veh'] });
+ctE('e_air_mq9', 'MQ-9A 死神侦察无人机', 'e', 'air', 'ewing', 22, CT_IC.acas || CT_IC.eftr, [1, 0, 3, 6, 10, 9, 0], '中空长航时无人机，守方的眼睛：自动飞到最久没看过的滩头、据点、跟丢了敌人的地方，在 7000 米上下盘旋，用光电 / 红外转塔把看到的敌人标上敌情图（视野 250，比普通飞机远一倍），看完换下一处，续航 5 分钟。高炮和单兵防空导弹够不着，怕防空导弹车、舰空导弹和战斗机。需要野战机场。',
+  { kind: 'ewing', at: 'air', type: 'mq9' }, { counters: ['p_lst', 'p_tank', 'inf_p'], weakTo: ['p_air_ftr', 'p_aa_veh', 'p_dd'] });
 ctE('e_air_f22', 'F-22A 猛禽战斗机', 'e', 'air', 'ewing', 75, CT_IC.ef22 || CT_IC.eftr, [3, 0, 8, 8, 10, 8, 0], '美军最强的空优战斗机：比 F-35A 更难被雷达发现，超音速巡航、推力矢量，转弯追击更快；内埋 6 枚 AIM-120D 与 2 枚 AIM-9X（F-35A 只有 4 枚），AN/APG-77 雷达看得更远。有敌战斗机时打头阵，平时留在机场待命，让 F-35A 去巡逻。价格接近两架 F-35A。需要野战机场。',
   { kind: 'ewing', at: 'air', type: 'f22' }, { counters: ['p_air_ftr', 'p_air_cas', 'p_air_strike', 'wing'], weakTo: ['p_dd', 'p_tbm'] });
-// ———— 防守方 · 反航母体系（antiship.js）：巡逻机找到航母 → 堤丰导弹连 / 攻击核潜艇打击 ————
-ctE('e_p8', 'P-8A 海神海上巡逻机（2 架轮换）', 'e', 'air', 'asset', 380, CT_IC.arecon, [3, 0, 0, 0, 5, 10, 0], '反航母体系的眼睛：在本方海岸外高空巡逻，APY-10 雷达搜索 1500 以内的海面，把敌航母、驱逐舰的位置报给「堤丰」导弹连与潜艇。飞得慢、目标大，敌歼击机和驱逐舰舰空导弹够得着就会打它，被击落后另一架约 4 分钟后接班。不需要机场。',
+// ———— 防守方 · 反航母体系（antiship.js）：巡逻机找到航母 → 堤丰导弹排 / 攻击核潜艇打击 ————
+ctE('e_p8', 'P-8A 海神海上巡逻机（2 架轮换）', 'e', 'air', 'asset', 380, CT_IC.arecon, [3, 0, 0, 0, 5, 10, 0], '反航母体系的眼睛：在本方海岸外高空巡逻，APY-10 雷达搜索 1500 以内的海面，把敌航母、驱逐舰的位置报给「堤丰」导弹排与潜艇。飞得慢、目标大，敌歼击机和驱逐舰舰空导弹够得着就会打它，被击落后另一架约 4 分钟后接班。不需要机场。',
   { kind: 'asset', at: 'none', key: 'ep8', add: 1 }, { counters: ['p_cv', 'p_dd'], weakTo: ['p_air_ftr', 'p_air_j36', 'p_dd'] });
-ctE('e_typhon', '「堤丰」陆基中程导弹连（战斧海上打击型）', 'e', 'arty', 'missile', 420, CT_IC.tel, [4, 1, 10, 10, 2, 0, 0], '纵深 500 以外的发射车：16 枚战斧 Block V 海上打击型巡航导弹，射程覆盖全图，每次 4 枚齐射，专打航母，其次驱逐舰。要靠巡逻机（或岸上直接看见）提供目标位置；亚音速，可被航母红旗-10、近防炮与驱逐舰舰空导弹拦截，但每枚命中伤害很重。发射即暴露。',
+ctE('e_typhon', '「堤丰」陆基中程导弹排（战斧海上打击型）', 'e', 'arty', 'missile', 420, CT_IC.tel, [4, 1, 10, 10, 2, 0, 0], '纵深 500 以外的发射车：16 枚战斧 Block V 海上打击型巡航导弹，射程覆盖全图，每次 4 枚齐射，专打航母，其次驱逐舰。要靠巡逻机（或岸上直接看见）提供目标位置；亚音速，可被航母红旗-10、近防炮与驱逐舰舰空导弹拦截，但每枚命中伤害很重。发射即暴露。',
   { kind: 'enemy', at: 'land', ek: 'typhon', minDepth: 500, n: 16 }, { counters: ['p_cv', 'p_dd'], weakTo: ['p_tbm', 'p_air_strike', 'p_air_j36'] });
 ctE('e_ssn', 'SSN-774 弗吉尼亚级攻击核潜艇', 'e', 'naval', 'esub', 520, CT_IC.lcs, [5, 2, 10, 6, 4, 6, 0], '潜航慢速接近敌航母编队（被动声呐 1300 内听得到航母），进到 460 内发射 Mk 48 重型鱼雷，每次 4 条、共 12 条，打完一轮就规避装填。敌驱逐舰声呐 380 内会逐渐发现它并用反潜鱼雷攻击，发射鱼雷后暴露 20 秒；没有驱逐舰护航的航母几乎拿它没办法。',
   { kind: 'esub', at: 'esea' }, { counters: ['p_cv', 'p_dd', 'p_lst'], weakTo: ['p_dd', 'p_dd_e'] });
@@ -507,7 +511,7 @@ ctE('e_ammo', '弹药库', 'e', 'support', 'depot_e', 25, CT_IC.ammo, [4, 0, 0, 
   { kind: 'post', at: 'land', r: 0, h: 0, hp: 6, ammo: 1 }, { counters: ['arty'], weakTo: ['p_air_strike', 'p_sortie_bomb'] });
 ctE('e_wave', '增援波次', 'e', 'support', 'wave_e', 30, CT_IC.ewave, [0, 0, 4, 0, 0, 0, 9], '开战约 4 分钟后，三个小组从北面开到受威胁最大的据点。可叠加，每次晚 1 分钟。',
   { kind: 'ewave', at: 'none', teams: 3, t: 240 }, { counters: ['inf_p'] });
-ctE('e_101', '第 101 空降师 · C-17 机械化空降战斗群', 'e', 'support', 'asset', 4800, CT_IC.c17, [10, 3, 10, 8, 10, 8, 60], '（沙盒为机械化空降，价格 4800）24 架 C-17A 按真实载重装机，三机一队纵列进场：伞兵 60 人（3 架）；重装空投 M1A2 SEPv3 主战坦克 8 辆、M1A1 主战坦克 6 辆（一架只装一辆）、M2A3 布雷德利步兵战车 4 辆、M109A7 帕拉丁自行榴弹炮 2 辆、复仇者与 M-SHORAD 防空车各 2 辆（备弹 12 枚、射程远）、JLTV 陶式反坦克车 2 辆；6 架 AH-64E 随队先到空降场压制我军；守军蓄力总攻时配合总攻空降，从另一个方向夹击。限购一份（只来一波）。伞兵为精锐：精度 1.25 倍、两成致命伤只是负伤、不易被压制；落地在空降场集合后，坦克、步战车分别配属两个伞兵连步坦协同增援或反冲击，自行火炮在空降场后方支援。运输机与下降中的伞兵会挨我方防空火力与战斗机，跳伞前被击落则机上人员装备全损。',
+ctE('e_101', '第 101 空降师 · C-17 机械化空降战斗群', 'e', 'support', 'asset', 3600, CT_IC.c17, [10, 3, 10, 8, 10, 8, 60], '（沙盒为机械化空降，价格 3600）16 架 C-17A 按真实载重装机，三机一队纵列进场：伞兵 60 人（3 架）；重装空投 M1A1 主战坦克 6 辆（一架只装一辆）、M2A3 布雷德利步兵战车 4 辆、M109A7 帕拉丁自行榴弹炮 2 辆、复仇者与 M-SHORAD 防空车各 2 辆（备弹 12 枚、射程远）、JLTV 陶式反坦克车 2 辆；6 架 AH-64E 随队先到空降场压制我军；守军蓄力总攻时配合总攻空降，从另一个方向夹击。限购一份（只来一波）。伞兵为精锐：精度 1.25 倍、两成致命伤只是负伤、不易被压制；落地在空降场集合后，坦克、步战车分别配属两个伞兵排步坦协同增援或反冲击，自行火炮在空降场后方支援。运输机与下降中的伞兵会挨我方防空火力与战斗机，跳伞前被击落则机上人员装备全损。',
   { kind: 'asset', at: 'none', key: 'e101', add: 1 }, { lim: { g: '101', n: 1, nm: '第 101 空降师', u: '份' }, counters: ['p_para', 'inf_p'], weakTo: ['p_manpads', 'p_aa_veh', 'p_air_ftr'] });
 
 // 尚未接入推演的条目：先不出现在沙盒与图鉴（codex.js 也据此过滤关联条目）；v7 的条目已全部接入

@@ -1,12 +1,12 @@
 'use strict';
-// 渲染（五）：连队旗、舰船编组点与载员条、部署计划、阵型拖拽预览、事件波纹（全部为图形，无文字）
+// 渲染（五）：排旗、舰船编组点与载员条、部署计划、阵型拖拽预览、事件波纹（全部为图形，无文字）
 const MORALE_COL = { ok: COL.g, waver: COL.amber, rout: COL.enemy };
 
 function emblem(ctx, kind, x, y, r, col) {
   ctx.fillStyle = col; ctx.strokeStyle = col; ctx.lineWidth = px(1.2);
   if (kind === 'eng') { ctx.beginPath(); ctx.arc(x, y, r * .7, 0, 7); ctx.stroke(); }
   else if (kind === 'reserve') { shape(ctx, x, y, r * .8, 4, 0); ctx.fill(); }
-  else if (kind === 'para') { ctx.beginPath(); ctx.arc(x, y - r * .15, r * .85, Math.PI, 0); ctx.closePath(); ctx.fill(); ctx.beginPath(); ctx.moveTo(x - r * .85, y - r * .15); ctx.lineTo(x, y + r * .8); ctx.lineTo(x + r * .85, y - r * .15); ctx.stroke(); }   // 空降连：伞衣
+  else if (kind === 'para') { ctx.beginPath(); ctx.arc(x, y - r * .15, r * .85, Math.PI, 0); ctx.closePath(); ctx.fill(); ctx.beginPath(); ctx.moveTo(x - r * .85, y - r * .15); ctx.lineTo(x, y + r * .8); ctx.lineTo(x + r * .85, y - r * .15); ctx.stroke(); }   // 空降排：伞衣
   else if (kind === 'enemy') { ctx.fillRect(x - r * .55, y - r * .55, r * 1.1, r * 1.1); }
   else { shape(ctx, x, y, r * .85, 3, -1.57); ctx.fill(); if (kind === 'supply') { ctx.fillStyle = 'rgba(2,10,6,.9)'; ctx.fillRect(x - r * .5, y + r * .1, r, r * .25); } }
 }
@@ -17,7 +17,7 @@ function pips(ctx, n, x, y, col) {
 }
 const groupOf = id => +(Object.keys(S.groups).find(k => S.groups[k].includes(id)) || 0);
 
-// 连队旗：屏幕尺寸随缩放略变（全图小一点、近看稍大）；相互重叠时先左右错开、再向上叠放，旗杆/引线指回连队
+// 排旗：屏幕尺寸随缩放略变（全图小一点、近看稍大）；相互重叠时先左右错开、再向上叠放，旗杆/引线指回排
 // BANNER_HITS 记录本帧旗框（世界坐标），bannerAt(p) 供点选使用
 const BANNER_HITS = [];
 function bannerAt(p) {
@@ -26,7 +26,7 @@ function bannerAt(p) {
   return null;
 }
 
-// 错开后的连队旗也能点选（ui.js pickAt 只认默认位置）：鼠标左键松开、未拖框且无工具时，命中我方旗框即选中该连队
+// 错开后的排旗也能点选（ui.js pickAt 只认默认位置）：鼠标左键松开、未拖框且无工具时，命中我方旗框即选中该排
 if (typeof HOOK === 'object') HOOK.pointer.push((e, ph, p) => {
   if (ph !== 'up' || e.pointerType === 'touch' || e.button !== 0 || S.phase === 'sandbox') return false;
   const D = U.down, id = D && !D.pan && !U.box && !U.tool ? bannerAt(p) : null, u = id != null && UNIT_MAP.get(id);
@@ -39,11 +39,11 @@ if (typeof HOOK === 'object') HOOK.pointer.push((e, ph, p) => {
 function drawBanners(time) {
   const ctx = R.ctx, bk = lerp(.82, 1.12, smooth(1, 6, R.zr)), list = [], placed = [];
   BANNER_HITS.length = 0;
-  if (typeof V3 === 'object' && V3.drawing) return;   // 3D：连旗贴在地面上是扁的「倒影」，番号由立着的旅 / 团标表示（hq.js hqMarks3）
+  if (typeof V3 === 'object' && V3.drawing) return;   // 3D：排旗贴在地面上是扁的「倒影」，番号由立着的团 / 营标表示（hq.js hqMarks3）
   const agg = typeof hqAggHide === 'function';
   for (const u of S.units) {
     if (u.x == null || !inView(u.x, u.y, 80)) continue;
-    if (agg && !(u.side === 'p' && isSel(u.id)) && hqAggHide('u', u.id)) continue;   // 远看已画成分队 / 团符号（hq.js）：不再每个连插一面旗
+    if (agg && !(u.side === 'p' && isSel(u.id)) && hqAggHide('u', u.id)) continue;   // 远看已画成分队 / 营符号（hq.js）：不再每个排插一面旗
     const ts = teamsOf(u);
     if (!ts.length || (u.side === 'e' && !ts.some(q => inVision(q.x, q.y)))) continue;
     list.push({ u, ts, top: Math.min(...ts.map(q => q.y)), sel: u.side === 'p' && isSel(u.id) });
@@ -65,7 +65,7 @@ function drawBanners(time) {
     const moved = fx !== bx || fy < by - pole - 1e-6;
     ctx.strokeStyle = rgba(STRUCT, moved ? .45 : .7); ctx.lineWidth = px(1);
     ctx.beginPath(); ctx.moveTo(bx, by);
-    if (fx !== bx) ctx.lineTo(fx, Math.min(by, fy + boxH + px(3)));   // 引线：连队 → 旗杆下端
+    if (fx !== bx) ctx.lineTo(fx, Math.min(by, fy + boxH + px(3)));   // 引线：排 → 旗杆下端
     ctx.lineTo(fx, fy); ctx.stroke();
     ctx.fillStyle = 'rgba(2,10,6,.88)'; ctx.fillRect(fx, fy, fw, fh);
     ctx.strokeStyle = sel ? COL.sel : col; ctx.lineWidth = px(sel ? 1.8 : 1.1); ctx.strokeRect(fx, fy, fw, fh);
@@ -79,7 +79,7 @@ function drawBanners(time) {
       const g = groupOf(ts[0].id);
       if (g) pips(ctx, g, fx + fw / 2, fy + fh + px(10 * bk), COL.sel);
     }
-    if (sel) {   // 选中：四角括号框住全连 + 朝向箭头
+    if (sel) {   // 选中：四角括号框住全排 + 朝向箭头
       const xs = ts.map(q => q.x), ys = ts.map(q => q.y), pad = 7, x0 = Math.min(...xs) - pad, y0 = Math.min(...ys) - pad, x1 = Math.max(...xs) + pad, y1 = Math.max(...ys) + pad;
       const c = Math.min(px(8), (x1 - x0) / 3, (y1 - y0) / 3);
       ctx.strokeStyle = rgba(COL.sel, .75); ctx.lineWidth = px(1.2);

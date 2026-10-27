@@ -29,7 +29,7 @@ function aiThink(D) {
     const def = foes.filter(q => q.obj === p.key).reduce((a, q) => a + q.men.length, 0);
     info[p.key] = { p, th, near, def, fx: w ? cx0 / w : p.x, fy: w ? cy0 / w : p.y + 250 };
   }
-  const a4 = typeof a4On === 'function' && a4On() && !!(S.ai.co);   // v7 守方协同（ai4.js）：预备队整连机动、有计划的反冲击、借兵侧射
+  const a4 = typeof a4On === 'function' && a4On() && !!(S.ai.co);   // v7 守方协同（ai4.js）：预备队整排机动、有计划的反冲击、借兵侧射
   if (a4) for (const k in info) S.ai.co.thr[k] = [Math.round(info[k].fx), Math.round(info[k].fy), +info[k].th.toFixed(1), info[k].near];
   for (const u of S.units) if (u.side === 'e' && u.state !== 'rout') {
     const I = info[u.obj];
@@ -44,7 +44,7 @@ function aiThink(D) {
   for (const q of foes) {
     if (q.order.t === 'amove' || q.order.t === 'retreat' || q.role === 'ambush' || !info[q.obj]) continue;
     if (typeof cmdHeld === 'function' && cmdHeld(q)) continue;   // 预备队尚未获准出动
-    if (a4) continue;   // 有 ai4：预备队整连机动、平静据点的多余守备由远方抽调编成支队成建制机动，不再一组一组地抽（逐次添油）
+    if (a4) continue;   // 有 ai4：预备队整排机动、平静据点的多余守备由远方抽调编成支队成建制机动，不再一组一组地抽（逐次添油）
     const k = keys.reduce((a, b) => need(b) > need(a) ? b : a);
     if (k === q.obj || need(k) < need(q.obj) * 1.5) continue;
     const spare = q.role === 'reserve' || (info[q.obj].th < 2 && foes.filter(o => o.obj === q.obj && o.role === 'garrison').length > 1);

@@ -389,7 +389,9 @@ function snDrawNode(ctx, n, time) {
   const s = Math.max(6, px(7)), x = n.x, y = n.y, live = snLive(n);
   const col = n.dead ? COL.enemy : !live ? COL.g : n.connected ? COL.g : COL.amber;
   ctx.setLineDash([]);
+  const m3 = typeof R === 'object' && R.m3d;   // 3D：补给点是立体模型（v3units.js v3mDepot），贴图里只留进度环、存量条
   if (n.dead && !(n.built > 0)) {   // 残骸
+    if (m3) return;
     ctx.strokeStyle = rgba(COL.enemy, .55); ctx.lineWidth = px(1.2); ctx.fillStyle = 'rgba(2,10,6,.7)';
     for (const [dx, dy, w] of [[-.7, .2, .45], [.35, -.35, .4], [.2, .55, .35]]) { ctx.fillRect(x + dx * s - w * s / 2, y + dy * s - w * s / 2, w * s, w * s); ctx.strokeRect(x + dx * s - w * s / 2, y + dy * s - w * s / 2, w * s, w * s); }
     ctx.beginPath(); ctx.moveTo(x - s * .5, y - s * .5); ctx.lineTo(x + s * .5, y + s * .5); ctx.moveTo(x + s * .5, y - s * .5); ctx.lineTo(x - s * .5, y + s * .5); ctx.stroke();
@@ -399,7 +401,7 @@ function snDrawNode(ctx, n, time) {
   ctx.lineWidth = px(ghost ? 1 : 1.3);
   if (ghost) ctx.setLineDash([px(2), px(2)]);
   ctx.strokeStyle = rgba(col, a); ctx.fillStyle = ghost ? 'rgba(2,10,6,.35)' : 'rgba(2,10,6,.85)';
-  if (s * R.s < 9) {   // 远景：方块 + 十字
+  if (m3) { /* 立体模型 */ } else if (s * R.s < 9) {   // 远景：方块 + 十字
     ctx.fillRect(x - s * .8, y - s * .8, s * 1.6, s * 1.6); ctx.strokeRect(x - s * .8, y - s * .8, s * 1.6, s * 1.6);
     ctx.beginPath(); ctx.moveTo(x - s * .45, y); ctx.lineTo(x + s * .45, y); ctx.moveTo(x, y - s * .45); ctx.lineTo(x, y + s * .45); ctx.stroke();
   } else {

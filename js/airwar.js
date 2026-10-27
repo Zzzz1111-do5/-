@@ -6,9 +6,10 @@
 // 界面：据点条下方的制空权条；支援栏「战斗机」按钮（W）在指定空域巡逻；航母自动派机时 AI 自动派战斗机，守方机场自动派歼击机。
 // 状态：S.airw = { v1, v 制空权 −1..1, st 'p' | 'e' | 'c' | null, k: {p, e} 空战击落数, seenP / seenE 最近发现对方飞机的时刻, thT, lnE, said }
 const AW_RNG = 700, AW_CAP = 160, AW_LEASH = 950;   // 拦截搜索半径 · 巡逻圈半径 · 目标离巡逻中心多远就不再追（不被诱离防区）
-const AW_PK = { fighter: .42, ftr: .42, f22: .36, transport: .65, recon: .62, strike: .55, cas: .55, ga: .55, bomber: .6, heli: .5, c17: .65 };   // 空空导弹单发命中率（干扰弹另算）
+const AW_PK = { fighter: .42, ftr: .42, ftrb: .42, f22: .36, transport: .65, recon: .62, strike: .55, cas: .55, ga: .55, bomber: .6, heli: .5, c17: .65 };   // 空空导弹单发命中率（干扰弹另算）
 // 守方歼击机按型号的挂载与实力：aam 空空导弹数、aamR 射程、pkK 命中修正、gun 机炮、radar 机载雷达发现距离、pw 制空权实力（在空 / 地面待命）
 const EA_FTR = { ftr: { aam: 4, aamR: 480, pkK: 1.1, gun: 30, radar: 520, pw: 1.25, pw0: .35 },   // F-35A：4 枚 AIM-120D
+  ftrb: { aam: 2, aamR: 480, pkK: 1.1, gun: 25, radar: 520, pw: 1, pw0: .3, sdb: 4 },   // F-35B：弹舱小一些，2 枚 AIM-120D + 4 枚 GBU-53/B 小直径炸弹，机炮吊舱
   f22: { aam: 8, aamR: 520, pkK: 1.25, gun: 40, gunK: 1.3, radar: 640, pw: 1.75, pw0: .5 } };   // F-22A：6 枚 AIM-120D + 2 枚 AIM-9X，AN/APG-77 雷达
 const AW_ICON = typeof WI === 'object' ? WI.j20 : '<path d="M12 2l1.4 5.6 7.6 6.4v2l-7.6-2.2-.3 3.8 2.6 2v1.6L12 20.4l-3.7 1.2V20l2.6-2-.3-3.8L3 16v-2l7.6-6.4z"/>';   // 制空权条：歼-20
 const awStat = (k, n = 1) => { const o = S.v7s || (S.v7s = {}); o[k] = (o[k] || 0) + n; };
@@ -22,7 +23,7 @@ const awWhere = (x, y) => typeof cmdWhere === 'function' ? cmdWhere(x, y) : grid
 function awFoes(side) {
   const out = [];
   if (side === 'e') { for (const p of S.planes || []) if (!p.dead && p.alt > .25 && !['cat', 'roll', 'trap', 'final'].includes(p.phase) && !p.afPh) out.push({ o: p, k: 'plane', type: p.kind, x: p.x, y: p.y, ftr: p.kind === 'fighter', st: typeof airStealth === 'function' ? airStealth(p) : 1 }); }
-  else if (S.eair) for (const a of S.eair.fly) if (!a.dead && a.alt > .1 && !['roll', 'land', 'final'].includes(a.ph)) out.push({ o: a, k: 'eair', type: a.type, x: a.x, y: a.y, ftr: eaFtr(a.type), st: eaStl(a) });
+  else if (S.eair) for (const a of S.eair.fly) if (!a.dead && a.alt > .1 && !['gnd', 'roll', 'land', 'final'].includes(a.ph)) out.push({ o: a, k: 'eair', type: a.type, x: a.x, y: a.y, ftr: eaFtr(a.type), st: eaStl(a) });
   return out;
 }
 // side 方是否发现了 (x, y) 处的飞机：进攻方 = 视野、战斗机机载雷达 520、驱逐舰 720、航母 600；守方 = 视野、雷达站 820、歼击机 520（F-22A 640）、机场 450、沙盒雷达站
@@ -343,6 +344,7 @@ function awFlyE(a, dt) {
   a.gunT = Math.max(0, (a.gunT || 0) - dt);
   awFight(a, 'e', dt);
   const T = a.tg && awTgt(a.tg);
+  if (a.role === 'strike' && !T && awStrikeE(a, dt)) return;   // F-35 对地打击（遇到敌机先自卫）
   if (!T && a.sdb > 0 && (a.sdbT || 0) <= S.t) awSdbE(a);
   const mv = T && sp.stealth ? awBvrMove(a, T) : null;
   if (mv) { a.spd += clamp(sp.spd * mv[2] - a.spd, -60 * dt, 50 * dt); eaSteer(a, clamp(mv[0], 40, W - 40), clamp(mv[1], 40, H - 40), dt); }
@@ -355,24 +357,52 @@ function awFlyE(a, dt) {
     if (eaSteer(a, a.leg2.x, a.leg2.y, dt, sp.spd * .8) < 90) a.ph = 'rtb';
   }
   if (!T && a.fired != null && S.t - a.fired > 4) a.ph = 'rtb';   // 打完一波就返航
+  if (a.mis === 'int' && !T && a.ph !== 'rtb') {   // 拦截任务：要拦的敌机打掉了 / 飞走了（附近 700 内再没有看得见的敌机）6 秒，立即返航，不在空中闲逛
+    if ((a.foeT = (a.foeT ?? 0) - dt) <= 0) { a.foeT = 1; a.noFoe = awFoes('e').some(t => awSeen('e', t.x, t.y) && dist(t.x, t.y, a.x, a.y) < 700) ? 0 : (a.noFoe || 0) + 1; }
+    if (a.noFoe >= 6) { a.ph = 'rtb'; awStat('intDoneE'); }
+  }
   if (a.ph === 'cap' && (a.capT -= dt) <= 0) a.ph = 'rtb';
   else if (!(a.aam > 0) && (sp.stealth || !(a.gun > 0))) a.ph = 'rtb';
 }
 
+// F-35A / F-35B 对地打击：飞向目标，进到 GBU-53/B 小直径炸弹的投放距离（430）逐枚投放——先打指定目标，再打它附近看得见的车辆、舰船；
+//   弹投完、或目标没了附近也没别的可打，立即返航
+function awStrikeE(a, dt) {
+  const o = typeof eaTgtObj === 'function' && a.tgt ? eaTgtObj(a.tgt) : null;
+  if (o && (spotted(o.x, o.y) || dist(o.x, o.y, a.x, a.y) < 200)) { a.tx = o.x; a.ty = o.y; }
+  const gone = a.tgt && a.tgt.k !== 'pt' && !o;
+  const d = eaSteer(a, a.tx, a.ty, dt);
+  if (!(a.sdb > 0)) { a.ph = 'rtb'; return true; }
+  if (d < 430 && (a.sdbT || 0) <= S.t && (typeof atoOk !== 'function' || atoOk('e', 'sdb', true))) {
+    let T = !gone ? { x: a.tx, y: a.ty, ...(a.tgt.k === 'veh' ? { k: 'veh', id: a.tgt.id } : {}) } : null;
+    if (!T || S.missiles.some(m => m.kind === 'pgm' && !m.done && m.side === 'e' && dist(m.tx, m.ty, a.tx, a.ty) < 12 && a.tgt.k !== 'pt')) {   // 这个已经有弹在飞：打附近别的
+      let best = null, bv = 0;
+      for (const v of S.veh || []) if (v.side === 'p' && !v.dead && !v.lst && spotted(v.x, v.y) && dist(v.x, v.y, a.tx, a.ty) < 500 && !S.missiles.some(m => m.kind === 'pgm' && !m.done && m.side === 'e' && m.tgt && m.tgt.k === 'veh' && m.tgt.id === v.id)) { const val = EA_GUNV.includes(v.type) ? 6 : v.type === 'aa_veh' || v.type === 'sam_veh' ? 7 : 4; if (val > bv) { bv = val; best = { k: 'veh', id: v.id, x: v.x, y: v.y }; } }
+      if (!best) for (const s of S.ships) if (alive(s) && s.state === 'unloading' && dist(s.x, s.y, a.tx, a.ty) < 500) { best = { x: s.x, y: s.y }; break; }
+      T = best;
+    }
+    if (!T) { if (gone) a.ph = 'rtb'; return true; }
+    msPgm('gbu53', 'e', a.x, a.y, T, 'f35');
+    a.sdb--; a.sdbT = S.t + 1.4; awStat('sdbStrikeE');
+    log(`敌 ${EA_SPEC[a.type].name}投下 GBU-53/B 小直径炸弹（余 ${a.sdb} 枚）`, 'bad', 'sdbS' + a.id, 8, T);
+    if (!(a.sdb > 0)) a.ph = 'rtb';
+  }
+  return true;
+}
 // —— 守方派歼击机（每秒）：发现敌机就起飞拦截（敌机越多、有敌战斗机时派得越多，最多 3 架）；近 2 分钟见过敌机就保持一架巡逻；
 //    跑道被炸则等抢修。巡逻点：敌机群形心，没有时取受威胁最大的据点向海一侧 ——
 function awThinkE() {
   const E = S.eair;
   if (!E || typeof eaOpen !== 'function' || !(typeof eaOn === 'function' && eaOn())) return;
-  const ready = E.wing.filter(w => eaFtr(w.type) && w.state === 'ready'), open = eaOpen(), A = awEnsure();
+  const open = eaOpen(), A = awEnsure(), ready = E.wing.filter(w => eaFtr(w.type) && w.state === 'ready' && (open.length || (eaVtol(w.type) && eaBases().length) || (w.farp && E.farp)));   // F-35B 不要跑道
   const seen = awFoes('e').filter(t => awSeen('e', t.x, t.y));
   if (seen.length) A.seenP = S.t;
   const foes = seen.filter(t => !awFleetCover(t.x, t.y, AW_CAP));   // 在我舰队防空伞里（刚起飞、正着舰）的不去拦
-  if (!ready.length || !open.length) return;
+  if (!ready.length) return;
   // 有敌战斗机时 F-22A 打头阵；平时巡逻先派 F-35A，F-22A 留着对付敌战斗机
   const vsF = foes.some(t => t.ftr);
   ready.sort((a, b) => ((b.type === 'f22') - (a.type === 'f22')) * (vsF ? 1 : -1));
-  const up = E.fly.filter(a => !a.dead && eaFtr(a.type) && (a.ph === 'out' || a.ph === 'cap' || a.ph === 'roll')).length;
+  const up = E.fly.filter(a => !a.dead && eaFtr(a.type) && (a.ph === 'out' || a.ph === 'cap' || a.ph === 'roll' || a.ph === 'gnd')).length;
   const g5 = S.ai && S.ai.g5 && (S.ai.g5.st === 'prep' || S.ai.g5.st === 'go');
   const want = Math.max(g5 ? 2 : 0, typeof atoPhase === 'function' && atoPhase('e') === 1 && atoFtrP() ? 2 : 0, foes.length ? Math.min(4, Math.ceil(foes.length / 2) + (foes.some(t => t.ftr) ? 2 : 0)) : S.t - A.seenP < 120 ? (ready.length + up >= 4 ? 2 : 1) : 0);   // 敌机越多、有敌战斗机时派得越多（最多 4 架）；总攻时至少双机掩护
   if (up >= want || S.t - A.lnE < 3) return;
@@ -385,7 +415,7 @@ function awThinkE() {
   const n = Math.min(ready.length, 4, Math.max(2, want - up)), fl = ready.slice(0, n);
   let lead = null;
   for (let i = 0; i < n; i++) {
-    const w = fl[i], L = EA_FTR[w.type], b = eaNearBase(cx, cy, open), a = eaNewAir(b, w, cx, cy, { cx, cy, capT: 80, aam: L.aam, gun: L.gun, aamR: L.aamR, pkK: L.pkK, gunK: L.gunK || 1, odir: i ? -1 : 1 });
+    const w = fl[i], L = EA_FTR[w.type], b = eaNearBase(cx, cy, open.length && !eaVtol(w.type) ? open : eaBases()) || eaFarpBase(), a = eaNewAir(b, w, cx, cy, { cx, cy, capT: 80, mis: foes.length ? 'int' : 'cap', aam: L.aam, gun: L.gun, aamR: L.aamR, pkK: L.pkK, gunK: L.gunK || 1, odir: i ? -1 : 1 });
     if (i) { a.lead = lead.id; a.slot = i; } else { lead = a; a.join = S.t + (a.wait || 0) + 3 + 3.5 * (n - 1); }   // 双机 / 四机编队（eair.js eaForm）
     w.state = 'out';
     E.fly.push(a);
@@ -404,11 +434,11 @@ function awEscortE(x, y, nm, pl) {   // pl：被护航编队的长机（攻击�
   if (!E || typeof eaOpen !== 'function' || !(typeof eaOn === 'function' && eaOn())) return 0;
   const open = eaOpen();
   if (!open.length) return 0;
-  const up = E.fly.filter(a => !a.dead && eaFtr(a.type) && ['roll', 'out', 'cap'].includes(a.ph) && dist(a.cx, a.cy, x, y) < 320).length;
+  const up = E.fly.filter(a => !a.dead && eaFtr(a.type) && ['gnd', 'roll', 'out', 'cap'].includes(a.ph) && dist(a.cx, a.cy, x, y) < 320).length;
   if (up >= 2) return 0;
   const ready = E.wing.filter(w => eaFtr(w.type) && w.state === 'ready');
   if (!ready.length) return 0;
-  const sw = ready.find(w => w.type === 'f22'), es = ready.find(w => w.type === 'ftr') || ready.find(w => w !== sw);
+  const sw = ready.find(w => w.type === 'f22'), es = ready.find(w => w.type === 'ftr' || w.type === 'ftrb') || ready.find(w => w !== sw);
   const fl = [sw, es].filter(Boolean).filter((w, i, a) => a.indexOf(w) === i).slice(0, 2 - up);
   let cx = clamp(x, 60, W - 60), cy = clamp(y, 60, H - 60);
   const b = eaNearBase(cx, cy, open);
@@ -416,7 +446,7 @@ function awEscortE(x, y, nm, pl) {   // pl：被护航编队的长机（攻击�
   // 在册的护航机：F-22A 前出扫荡，F-35A 随队护航
   fl.forEach((w, i) => {
     const L = EA_FTR[w.type], sweep = w.type === 'f22' && fl.length > 1 && i === 0;
-    const a = eaNewAir(b, w, cx, cy, { cx: sweep ? clamp(cx, 60, W - 60) : cx, cy: sweep ? clamp(cy + 90, 60, H - 60) : cy, capT: 75, aam: L.aam, gun: L.gun, aamR: L.aamR, pkK: L.pkK, gunK: L.gunK || 1, odir: i ? -1 : 1, role: sweep ? 'sweep' : 'esc', sdb: w.type === 'ftr' ? 4 : 0 });
+    const a = eaNewAir(b, w, cx, cy, { cx: sweep ? clamp(cx, 60, W - 60) : cx, cy: sweep ? clamp(cy + 90, 60, H - 60) : cy, capT: 75, aam: L.aam, gun: L.gun, aamR: L.aamR, pkK: L.pkK, gunK: L.gunK || 1, odir: i ? -1 : 1, role: sweep ? 'sweep' : 'esc', sdb: w.type === 'ftr' || w.type === 'ftrb' ? 4 : 0 });
     if (!sweep && pl && pl.type === 'ga' && !pl.dead) { a.lead = pl.id; a.slot = 4; }   // 随队护航：在攻击机编队左后方（eaForm 槽位 4）
     w.state = 'out';
     E.fly.push(a);
@@ -428,7 +458,7 @@ function awEscortE(x, y, nm, pl) {   // pl：被护航编队的长机（攻击�
 function awEscSay(fl, x, y, nm) {
   awStat('escE', fl.length);
   if (typeof chatSay !== 'function') return;
-  const t = fl.map((w, i) => w.type === 'f22' && fl.length > 1 && i === 0 ? 'F-22A 前出扫荡目标空域' : `${EA_SPEC[w.type].name}随队护航${w.type === 'ftr' ? '、以小直径炸弹先打敌防空车' : ''}`).join('，');
+  const t = fl.map((w, i) => w.type === 'f22' && fl.length > 1 && i === 0 ? 'F-22A 前出扫荡目标空域' : `${EA_SPEC[w.type].name}随队护航${w.type === 'ftr' || w.type === 'ftrb' ? '、以小直径炸弹先打敌防空车' : ''}`).join('，');
   chatSay('e', `命令：综合打击群编成——${t}，掩护${nm || '攻击编队'}，不让敌战斗机和防空武器各个击破我攻击机。`, { kind: 'order', at: { x, y }, key: 'awEsc', gap: 15, lv: 1 });
 }
 // F-35A 防区外压制防空：420 以内、我方看得见的敌防空车（弹炮 / 导弹防空车、近防炮车），一次一枚，间隔 2.5 秒
@@ -446,13 +476,13 @@ function awSdbE(a) {
   msPgm('gbu53', 'e', a.x, a.y, { k: 'veh', id: best.id, x: best.x, y: best.y }, 'f35');
   a.sdb--; a.sdbT = S.t + 2.5;
   awStat('sdbE');
-  log(`敌 F-35A 投下 GBU-53/B 小直径炸弹，攻击我${typeof vehName === 'function' ? vehName(best) : '防空车'}`, 'bad', 'sdbE', 6, best);
+  log(`敌 ${EA_SPEC[a.type] ? EA_SPEC[a.type].name : 'F-35A'}投下 GBU-53/B 小直径炸弹，攻击我${typeof vehName === 'function' ? vehName(best) : '防空车'}`, 'bad', 'sdbE', 6, best);
 }
 function awCapE() {
   const G = S.ai && S.ai.g5;
   if (G && G.key && (G.st === 'prep' || G.st === 'go')) return { x: G.tx, y: Math.min(G.ty + 80, coastAt(G.tx) + 60) };   // 总攻时：在主攻目标上空掩护
   const bg = typeof brIsAA === 'function' ? awCapBG('e') : null;
-  if (bg) return { x: clamp(bg.x, 60, W - 60), y: Math.min(bg.y, coastAt(clamp(bg.x, 0, W - 1)) + 60) };   // 没有伴随防空的机动营 / 团：在它上空掩护
+  if (bg) return { x: clamp(bg.x, 60, W - 60), y: Math.min(bg.y, coastAt(clamp(bg.x, 0, W - 1)) + 60) };   // 没有伴随防空的机动连 / 营：在它上空掩护
   const thr = S.ai && S.ai.co && S.ai.co.thr;
   let best = null, bt = 0;
   if (thr) for (const p of S.points) { const T = thr[p.key]; if (T && T[2] > bt) { bt = T[2]; best = p; } }

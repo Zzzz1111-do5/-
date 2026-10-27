@@ -68,7 +68,7 @@ function buildMap(seed) {
     let e = .05 + Math.min(.16, d / (3500 * MAP_K));
     e += .36 * Math.exp(-((y - ridgeY(x)) ** 2) / 14450);
     for (const h of hills) e += h.h * Math.exp(-((x - h.x) ** 2 + (y - h.y) ** 2) / (2 * h.r * h.r));
-    if (headland(x)) e += .5 * Math.exp(-((d - 25) ** 2) / 1800);
+    if (headland(x)) e += .1 * Math.exp(-((d - 60) ** 2) / 9000);   // 岬角：低缓的岸坡（原来岸边陡起一道山包，很突兀）
     e += (noise(x / W, y / H) - .5) * .2 + (noise2(x / W, y / H) - .5) * .08;
     if (b >= 0) e *= lerp(.35, 1, smooth(30, 220, d));                 // 海滩后方平缓
     let rd = 1e9, rw = 9;

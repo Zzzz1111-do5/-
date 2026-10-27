@@ -1,19 +1,19 @@
 'use strict';
-// 态势感知与边打边撤（双方每个团 hq.js regThink、每个战斗群 orbat.js bgThink、守方守备连 saGarrison）
+// 态势感知与边打边撤（双方每个营 hq.js regThink、每个战斗群 orbat.js bgThink、守方守备排 saGarrison）
 // saLook(G)：每 3 秒看一次全局——
-//   我方：本团（战斗群）战斗力，加上 450 以内友邻团 / 战斗群、守备部队的一半；
+//   我方：本营（战斗群）战斗力，加上 450 以内友邻营 / 战斗群、守备部队的一半；
 //   敌方：当面 320 以内看得见的敌人；敌人钻进林子看不见了不算没了——按 25 秒慢慢淡忘（记忆）；
 //   趋势：敌兵力 15 秒内涨了三成以上（后续梯队上来了）按 1.25 倍算；
 //   火力支援：攻方——驱逐舰舰炮够得着、垂发导弹还有、空中有对地支援机；守方——炮兵 / 迫击炮 / 自行火炮够得着；
 //   地形：阵地的掩蔽（林地、城镇比开阔地好打）；
-//   → 有效兵力比 odds，团长拿它跟战法表的 press（压上）/ ret（后撤）比：够了就打，不够就就地拖住，打不过就边打边撤；
-//     打不过、本团又只剩三成五：脱离接触（break），两组一起撤、放烟幕，一口气撤到后方
-// saDelay(G, L, slots)：边打边撤——全团按战斗队形分成两组交替：一组停在原地向追兵射击掩护，另一组后撤一跃（110）到掩护组身后再停下，然后互换；
+//   → 有效兵力比 odds，营长拿它跟战法表的 press（压上）/ ret（后撤）比：够了就打，不够就就地拖住，打不过就边打边撤；
+//     打不过、本营又只剩三成五：脱离接触（break），两组一起撤、放烟幕，一口气撤到后方
+// saDelay(G, L, slots)：边打边撤——全营按战斗队形分成两组交替：一组停在原地向追兵射击掩护，另一组后撤一跃（110）到掩护组身后再停下，然后互换；
 //   正面始终朝着追兵。撤往：附近有比自己强的友邻（主力）就往主力那边撤，到它身边（260 以内）与主力汇合；
 //   否则往本方的大后方——攻方往海边（驱逐舰舰炮、舰空导弹的保护伞下），守方往纵深（炮兵阵地、指挥所方向）；
 //   一路每 12 秒对追兵的中心叫一次火力（攻方舰炮、垂发导弹、对地支援机；守方炮兵；101 空降师还能叫 B-2A），把追兵一点点消耗掉；
 //   兵力比回到 ret × 1.3 以上（追兵被打掉、或与主力汇合）就停下重整再战；撤出 700 还没摆脱也转入重整
-// saGarrison：守方不编团的守备连——据点还没丢、连队在阵地外（不在碉堡、城镇里）被三倍以上的敌人压上来，交替掩护退到据点后方的二线位置，
+// saGarrison：守方不编营的守备排——据点还没丢、排在阵地外（不在碉堡、城镇里）被三倍以上的敌人压上来，交替掩护退到据点后方的二线位置，
 //   不在开阔地上被一口吃掉；退到位或兵力比好转就交还守军 AI（ai2.js 跳过 q.saFall 的组）
 const SA = { r: 320, mem: 25, friend: 450, fw: .5, trendT: 15, trendK: 1.3, trendW: 1.25, bound: 110, swap: 24, fireGap: 12, link: 260, linkMax: 1200, maxW: 700, brk: .5, brkPw: .35, cover: .5, sup: .3, every: 3, smoke: 30 };
 const saStat = (k, n = 1) => { if (typeof v8Stat === 'function') v8Stat(k, n); };
@@ -34,7 +34,7 @@ function saSup(side, x, y) {
   }
   return Math.min(1, s);
 }
-// 团 / 战斗群的成员连（id 集合）——算友邻守备时不重复算
+// 营 / 战斗群的成员排（id 集合）——算友邻守备时不重复算
 function saMembers() {
   const k = S.t;
   if (SA.memK === k) return SA.memS;
@@ -58,7 +58,7 @@ function saLook(G, pw, near) {
   H0.push([Math.round(S.t), near.n]);
   while (H0.length > 2 && S.t - H0[1][0] >= SA.trendT) H0.shift();
   const old = H0[0][1], rising = S.t - H0[0][0] >= SA.trendT * .6 && near.n > old * SA.trendK + 3;
-  // 友邻：别的团 / 战斗群（450 以内），守方另算阵地上的守备组；可汇合的主力 = 1200 以内比自己强、不在敌人那一边的团
+  // 友邻：别的营 / 战斗群（450 以内），守方另算阵地上的守备组；可汇合的主力 = 1200 以内比自己强、不在敌人那一边的营
   const mem = saMembers(), own = new Set(G.us);
   let fr = 0, main = null, mp = pw.tot * .8;
   const ex = G.saFx ?? G.ax + Math.cos(G.face) * 200, ey = G.saFy ?? G.ay + Math.sin(G.face) * 200, ea = Math.atan2(ey - G.ay, ex - G.ax);
@@ -121,11 +121,11 @@ function saDelayStart(G, L, brk) {
   saFire(G, L, brk ? 'break' : 'delay');
   if (brk || L.theirs >= 12) saSmoke(G, L);
   saStat(brk ? 'saBreak' : 'saDelay');
-  if (S.t - (G.saSayT ?? -99) < 40) return;   // 通联里同一个团 40 秒内只说一次
+  if (S.t - (G.saSayT ?? -99) < 40) return;   // 通联里同一个营 40 秒内只说一次
   G.saSayT = S.t;
   const Lm = R0.link != null && bgOf(R0.link), arty = G.side === 'e' && S.enemies.some(e => !e.dead && (e.kind === 'arty' || e.kind === 'mortar'));
   const to = Lm ? `向${Lm.name}靠拢、与主力汇合` : G.side === 'p' ? (typeof navGunUp === 'function' && navGunUp() ? '往海边撤到舰炮掩护下' : '往海边撤回滩头阵地') : arty ? '往纵深撤到炮兵掩护下' : '往纵深撤回二线阵地';
-  if (typeof bgSay === 'function') bgSay(G, brk ? `${L.odds < 1 ? `伤亡过大、打不过（有效兵力比约 ${L.odds.toFixed(1)}）` : '本团伤亡过大、已无力再战'}，放烟幕脱离接触，${to}。` : `敌我有效兵力约 ${L.odds.toFixed(1)} 比 1，交替掩护、边打边撤，${to}，沿途叫火力消耗追兵。`, null, 'order', brk ? '放烟幕，脱离接触！' : '交替掩护，边打边撤！');
+  if (typeof bgSay === 'function') bgSay(G, brk ? `${L.odds < 1 ? `伤亡过大、打不过（有效兵力比约 ${L.odds.toFixed(1)}）` : '本营伤亡过大、已无力再战'}，放烟幕脱离接触，${to}。` : `敌我有效兵力约 ${L.odds.toFixed(1)} 比 1，交替掩护、边打边撤，${to}，沿途叫火力消耗追兵。`, null, 'order', brk ? '放烟幕，脱离接触！' : '交替掩护，边打边撤！');
 }
 // 一步边打边撤：返回 { sl 带 t 的槽位, done 结束原因 }；slotsFn 给出当前锚点的战斗队形（regSlots / bgSlots）
 function saDelay(G, L, slotsFn) {
@@ -178,7 +178,7 @@ function saDelay(G, L, slotsFn) {
   return { sl: out, done, link: done === 'link' ? Lm : null };
 }
 
-// —— 守方守备连：在阵地外被压倒性的敌人压上来，交替掩护退到据点后方的二线 ——
+// —— 守方守备排：在阵地外被压倒性的敌人压上来，交替掩护退到据点后方的二线 ——
 function saGarrison() {
   if (!S || S.phase !== 'battle' || !S.ai) return;
   const mem = saMembers();
@@ -217,7 +217,7 @@ function saGarrison() {
     saGarStep(u, ts, u.saF);
   }
 }
-// 守备连一步：半数组后撤（每 10 秒换一次），另一半原地射击；全到位就结束
+// 守备排一步：半数组后撤（每 10 秒换一次），另一半原地射击；全到位就结束
 function saGarStep(u, ts, F) {
   if (S.t - F.t > 10) { F.h ^= 1; F.t = S.t; }
   let done = true;

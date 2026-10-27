@@ -16,7 +16,7 @@ function shLook() {
 const SHIP_ICONS = typeof WI === 'object' ? { ship: WI.t271, supply: WI.t072, dd: WI.t055, lst: WI.t072a, boat: WI.lcvp } : {};
 
 // 远景放大：保证船体在适配缩放下仍有约 18px 长（各舰同一比例，保持大小关系）
-const shipK = () => clamp(18 / (32 * R.s), 1, 2.6);
+const shipK = () => typeof V3 === 'object' && V3.drawing ? 1 : clamp(18 / (32 * R.s), 1, 2.6);   // 3D：舰体按实际尺寸（近、远两张贴图比例不同，按贴图放大会让立体舰船来回缩放抽搐）
 const shWrap = a => Math.atan2(Math.sin(a), Math.cos(a));
 
 function shSync() {
@@ -274,37 +274,78 @@ function shTurret(ctx, x, rot, col, a, lw, lod, flash) {
   ctx.restore();
 }
 
+// 驱护舰按舰型画（舰型从名称判断，vls.js vlsCls）：055 万吨大驱（一体化塔式桅杆、前 64 / 后 48 单元垂发、130 主炮、双机库）、
+//   052D（舰桥四面相控阵、独立封闭桅杆、前后各 32 单元垂发、130 主炮）、052C（圆形转轮式垂发、100 主炮、舯部鹰击-62 发射箱、格构桅杆）、
+//   054A 护卫舰（小一圈、76 炮、32 单元垂发、舯部两组鹰击-83 四联装、两座近防炮）；每型的垂发位置与 3D、垂发特效共用（SH_DDC.vls：舰长坐标 x0..x1、半宽）
+const SH_DDC = {
+  '055': { k: 1, w: 1.06, gun: 1.15, vls: [[8.6, 14.4, 2.7], [-9.6, -5.2, 2.6]] },
+  '052D': { k: .92, w: 1, gun: 1.1, vls: [[9.4, 13.4, 2.4], [-8.4, -4.8, 2.3]] },
+  '052C': { k: .9, w: 1, gun: .85, vls: [[9, 13.8, 2.3], [-8, -6, 1.6]] },
+  '054A': { k: .8, w: .95, gun: .7, vls: [[11, 14, 2.2]] }
+};
+const shDDCls = D => typeof vlsCls === 'function' ? vlsCls(D) : '055';
 function shDDBody(ctx, D, P, col, a, time, flash, tur = SHIPV.tur) {
-  const lw = v => px(v) / P.k, lod = P.L * P.k * R.s;
-  ctx.save(); ctx.translate(P.x, P.y); ctx.rotate(P.h); ctx.scale(P.k, P.k);
+  const C = shDDCls(D), K = SH_DDC[C] || SH_DDC['055'];
+  const lw = v => px(v) / P.k / K.k, lod = P.L * P.k * K.k * R.s;
+  ctx.save(); ctx.translate(P.x, P.y); ctx.rotate(P.h); ctx.scale(P.k * K.k, P.k * K.k * K.w);
   shHull(ctx, 'dd', false, col, a, lw);
-  if (lod >= 24) {
-    ctx.strokeStyle = rgba(col, .18 * a); ctx.lineWidth = lw(.6);
-    ctx.beginPath(); ctx.moveTo(21.5, 0); ctx.lineTo(18, 0); ctx.moveTo(-19.5, 0); ctx.lineTo(-23.5, 0); ctx.stroke();
-    ctx.strokeStyle = rgba(col, .55 * a);   // 深弹架、鱼雷发射管
-    ctx.beginPath(); ctx.moveTo(-24, -2.3); ctx.lineTo(-21, -2.3); ctx.moveTo(-24, 2.3); ctx.lineTo(-21, 2.3); ctx.stroke();
-    ctx.strokeRect(-12, -.9, 4.2, 1.8);
+  const box = (x0, x1, y0, y1, f = SH_DARK, w = 1) => { ctx.beginPath(); ctx.rect(x0, y0, x1 - x0, y1 - y0); ctx.fillStyle = f; ctx.fill(); ctx.strokeStyle = rgba(col, a); ctx.lineWidth = lw(w); ctx.stroke(); };
+  const grid = (x0, x1, hw, nx, ny) => {   // 垂发单元：方格
+    box(x0, x1, -hw, hw, rgba(col, .12 * a), .9);
+    if (lod < 24) return;
+    ctx.strokeStyle = rgba(col, .35 * a); ctx.lineWidth = lw(.5); ctx.beginPath();
+    for (let i = 1; i < nx; i++) { const x = lerp(x0, x1, i / nx); ctx.moveTo(x, -hw); ctx.lineTo(x, hw); }
+    for (let j = 1; j < ny; j++) { const y = lerp(-hw, hw, j / ny); ctx.moveTo(x0, y); ctx.lineTo(x1, y); }
+    ctx.stroke();
+  };
+  const revolver = (x, y, r) => { ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fillStyle = rgba(col, .12 * a); ctx.fill(); ctx.strokeStyle = rgba(col, a); ctx.lineWidth = lw(.8); ctx.stroke(); if (lod >= 24) { ctx.beginPath(); for (let k = 0; k < 6; k++) { const t = k / 6 * 6.283; ctx.moveTo(x + Math.cos(t) * r * .62, y + Math.sin(t) * r * .62); ctx.arc(x + Math.cos(t) * r * .62, y + Math.sin(t) * r * .62, r * .2, 0, 7); } ctx.strokeStyle = rgba(col, .45 * a); ctx.lineWidth = lw(.4); ctx.stroke(); } };   // 052C 转轮式垂发：圆盖、六个弹位
+  const panels = (x0, x1, hw) => { ctx.strokeStyle = rgba(col, a); ctx.lineWidth = lw(1.6); ctx.beginPath(); ctx.moveTo(x1, -hw * .55); ctx.lineTo(x1, hw * .55); ctx.moveTo(x0, -hw * .55); ctx.lineTo(x0, hw * .55); ctx.moveTo(x0 + (x1 - x0) * .2, -hw); ctx.lineTo(x1 - (x1 - x0) * .2, -hw); ctx.moveTo(x0 + (x1 - x0) * .2, hw); ctx.lineTo(x1 - (x1 - x0) * .2, hw); ctx.stroke(); };   // 四面相控阵（每面一道粗线）
+  const deck = (x, r) => { ctx.strokeStyle = rgba(col, .5 * a); ctx.lineWidth = lw(.6); ctx.beginPath(); ctx.arc(x, 0, r, 0, 7); ctx.stroke(); if (lod >= 40) { ctx.beginPath(); ctx.moveTo(x - r * .4, -r * .45); ctx.lineTo(x - r * .4, r * .45); ctx.moveTo(x + r * .4, -r * .45); ctx.lineTo(x + r * .4, r * .45); ctx.moveTo(x - r * .4, 0); ctx.lineTo(x + r * .4, 0); ctx.stroke(); } };   // 飞行甲板着舰圈与 H
+  const funnel = (x, rx, ry, n = 1) => { for (let i = 0; i < n; i++) { const y = n > 1 ? (i - .5) * ry * 1.3 : 0; ctx.beginPath(); ctx.ellipse(x, y, rx, ry, 0, 0, 7); ctx.fillStyle = rgba(col, .3 * a); ctx.fill(); ctx.strokeStyle = rgba(col, a); ctx.lineWidth = lw(.9); ctx.stroke(); if (lod > 70) { ctx.beginPath(); ctx.ellipse(x, y, rx * .55, ry * .5, 0, 0, 7); ctx.fillStyle = 'rgba(0,0,0,.7)'; ctx.fill(); } } };
+  const quad = (x, sd) => { ctx.strokeStyle = rgba(col, a); ctx.lineWidth = lw(.8); for (let i = 0; i < 4; i++) { const y = sd * (1.1 + i * .55); ctx.strokeRect(x - 1.6, y - .22, 3.2, .44); } };   // 反舰导弹四联装发射筒（侧向斜置）
+  const [V1, V2] = K.vls;
+  if (C === '055') {
+    grid(V1[0], V1[1], V1[2], 8, 8);
+    box(-1.5, 8.2, -3.4, 3.4); box(1.2, 6.6, -2.4, 2.4, rgba(col, .25 * a), 1.1); panels(1.2, 6.6, 2.4);   // 上层建筑 + 一体化塔式桅杆
+    if (lod >= 24) { ctx.fillStyle = rgba(col, .4 * a); ctx.fillRect(7.6, -2.2, .5, 4.4); }   // 舰桥窗
+    funnel(-3.2, 1.9, 1.6);
+    grid(V2[0], V2[1], V2[2], 6, 8);
+    box(-15.2, -10, -3.6, 3.6); deck(-19.6, 2.8);
+  } else if (C === '052D') {
+    grid(V1[0], V1[1], V1[2], 4, 8);
+    box(2.6, 8.6, -3, 3); panels(3.2, 8.2, 3); if (lod >= 24) { ctx.fillStyle = rgba(col, .4 * a); ctx.fillRect(8, -2, .5, 4); }
+    box(-.4, 2, -1.3, 1.3, rgba(col, .3 * a), .9);   // 独立封闭桅杆
+    funnel(-2.6, 1.6, 1.1, 2);
+    grid(V2[0], V2[1], V2[2], 4, 8);
+    box(-14, -9, -3.3, 3.3); deck(-19.2, 2.6);
+  } else if (C === '052C') {
+    for (let i = 0; i < 3; i++) for (const y of [-1.15, 1.15]) revolver(lerp(V1[0] + 1, V1[1] - 1, i / 2), y, 1);
+    box(2.8, 8.4, -2.9, 2.9); panels(3.4, 8, 2.9);
+    ctx.strokeStyle = rgba(col, .8 * a); ctx.lineWidth = lw(.6); ctx.beginPath(); ctx.moveTo(.2, -1.4); ctx.lineTo(2.2, 1.4); ctx.moveTo(.2, 1.4); ctx.lineTo(2.2, -1.4); ctx.rect(.2, -1.4, 2, 2.8); ctx.stroke();   // 格构桅杆
+    quad(-1.6, -1); quad(-1.6, 1);   // 鹰击-62
+    funnel(-4.2, 1.7, 1.3);
+    for (const y of [-.9, .9]) revolver(-7, y, .85);
+    box(-13.4, -9.2, -3.2, 3.2); deck(-19, 2.5);
+  } else {   // 054A
+    grid(V1[0], V1[1], V1[2], 4, 8);
+    box(4.6, 10, -2.8, 2.8); if (lod >= 24) { ctx.fillStyle = rgba(col, .4 * a); ctx.fillRect(9.4, -1.8, .5, 3.6); }
+    ctx.beginPath(); ctx.moveTo(1.6, -1.4); ctx.lineTo(4, 0); ctx.lineTo(1.6, 1.4); ctx.closePath(); ctx.fillStyle = rgba(col, .3 * a); ctx.fill(); ctx.strokeStyle = rgba(col, a); ctx.lineWidth = lw(.9); ctx.stroke();   // 塔式桅杆
+    quad(-.6, -1); quad(-.6, 1);   // 鹰击-83 两组四联装
+    funnel(-3.4, 1.5, 1.2);
+    box(-12.4, -7.2, -3, 3); deck(-18.4, 2.4);
   }
-  // 舰桥
-  ctx.beginPath(); ctx.moveTo(4.5, -2.8); ctx.lineTo(10.4, -2.8); ctx.lineTo(12, -1.5); ctx.lineTo(12, 1.5); ctx.lineTo(10.4, 2.8); ctx.lineTo(4.5, 2.8); ctx.closePath();
-  ctx.fillStyle = SH_DARK; ctx.fill(); ctx.strokeStyle = rgba(col, a); ctx.lineWidth = lw(1.1); ctx.stroke();
-  if (lod >= 24) { ctx.fillStyle = rgba(col, .4 * a); ctx.fillRect(10.6, -1.7, .9, 3.4); }
-  // 烟囱
-  for (const [x, rx, ry] of [[.6, 2.1, 1.5], [-5, 2, 1.4]]) {
-    ctx.beginPath(); ctx.ellipse(x, 0, rx, ry, 0, 0, 7); ctx.fillStyle = rgba(col, .3 * a); ctx.fill(); ctx.strokeStyle = rgba(col, a); ctx.lineWidth = lw(.9); ctx.stroke();
-    if (lod > 70) { ctx.beginPath(); ctx.ellipse(x, 0, rx * .55, ry * .5, 0, 0, 7); ctx.fillStyle = 'rgba(0,0,0,.7)'; ctx.fill(); }
-  }
-  // 桅杆与雷达（自动掩护时雷达旋转）
-  ctx.strokeStyle = rgba(col, .9 * a); ctx.lineWidth = lw(.8);
-  ctx.beginPath(); ctx.moveTo(7.2, -3.6); ctx.lineTo(7.2, 3.6); ctx.stroke();
-  ctx.fillStyle = rgba(col, a); ctx.beginPath(); ctx.arc(7.2, 0, .9, 0, 7); ctx.fill();
-  if (D.auto && lod >= 24) { const r = time * 3; ctx.beginPath(); ctx.moveTo(7.2 - Math.cos(r) * 2.4, -Math.sin(r) * 2.4); ctx.lineTo(7.2 + Math.cos(r) * 2.4, Math.sin(r) * 2.4); ctx.stroke(); }
+  // 桅顶雷达（自动掩护时旋转）
+  const mx = C === '055' ? 3.9 : C === '052D' ? .8 : C === '052C' ? 1.2 : 2.6;
+  ctx.fillStyle = rgba(col, a); ctx.beginPath(); ctx.arc(mx, 0, .8, 0, 7); ctx.fill();
+  if (D.auto && lod >= 24) { const r = time * 3; ctx.strokeStyle = rgba(col, .9 * a); ctx.lineWidth = lw(.8); ctx.beginPath(); ctx.moveTo(mx - Math.cos(r) * 2.2, -Math.sin(r) * 2.2); ctx.lineTo(mx + Math.cos(r) * 2.2, Math.sin(r) * 2.2); ctx.stroke(); }
   if (lod > 70) {   // 近景：锚链、舷侧系缆桩
     ctx.fillStyle = rgba(col, .6 * a);
     for (const [x, y] of [[20.5, -1.1], [20.5, 1.1], [-2, -4], [-2, 4], [-18, -3.7], [-18, 3.7]]) ctx.fillRect(x - .4, y - .4, .8, .8);
   }
-  shTurret(ctx, 15, tur[0], col, a, lw, lod, flash);
-  shTurret(ctx, -16.5, Math.PI + tur[1], col, a, lw, lod, flash);
+  // 主炮（055 / 052D 130 毫米、052C 100 毫米、054A 76 毫米）；机库顶近防炮
+  const gx = C === '054A' ? 16.6 : 16.2;
+  ctx.save(); ctx.translate(gx, 0); ctx.scale(K.gun, K.gun); shTurret(ctx, 0, tur[0], col, a, v => lw(v) / K.gun, lod, flash); ctx.restore();
+  ctx.save(); ctx.translate(C === '055' ? -12.6 : C === '052D' ? -11.5 : C === '052C' ? -11.3 : -9.8, 0); ctx.scale(.45, .45); shTurret(ctx, 0, Math.PI + tur[1], col, a, v => lw(v) / .45, lod, null); ctx.restore();
   ctx.restore();
 }
 

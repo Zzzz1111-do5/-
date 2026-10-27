@@ -280,7 +280,7 @@ function vehDrive(v, dt, mul) {
   const tk = sp.swimK && isWater(t) ? (v.side === 'e' ? .6 : sp.swimK) : t === T.RIVER ? (sp.amph ? RIVER_WADE.amph : RIVER_WADE.veh) : VEH_TSP[t];   // 水上：ZTD-05 滑行艇体，航速与登陆艇相当；守方 AAV-7 只有约一半
   let vel = sp.speed * (tk || .4) * climb * (v.sup > 60 ? .75 : 1) * ((v.mod && v.mod.spd) || 1) * mul * (dir < 0 ? .45 : 1);
   vel *= Math.abs(da) > 1 ? .12 : 1 - Math.abs(da) * .55;   // 大角度时原地转向
-  if (v.cmd && v.cmd.cap && S.t < (v.cmd.until ?? 0)) vel = Math.min(vel, v.cmd.cap);   // 团的队形整体移动：车速跟锚点（hq.js regOrder）
+  if (v.cmd && v.cmd.cap && S.t < (v.cmd.until ?? 0)) vel = Math.min(vel, v.cmd.cap);   // 营的队形整体移动：车速跟锚点（hq.js regOrder）
   if (slow < 1 && dir > 0) {   // 前车挡着：让行，等太久就侧绕
     v.yieldT = (v.yieldT || 0) + dt;
     if (park && v.yieldT > 1.5) vehGiveWay(park, v);
@@ -719,7 +719,7 @@ function vehDepotTick(v, dt) {
   if (p.kind === 'node') { const n = snById(p.id); if (n) n.stock = Math.max(0, (n.stock ?? 1) - (v.ammo - a0) * .006 - (v.fuel - f0) * .25); }   // 前沿点的存量：一车炮弹约 0.25、加满油 0.25
   if (v.immob && S.t - v.hitT > 8) { v.immob = false; log(`${vehName(v)}在补给点修复履带`, 'good', 'vfix' + v.id, 10, v); }
 }
-// 同排（同一伙伴连 / 同一进攻目标）的车辆
+// 同排（同一伙伴排 / 同一进攻目标）的车辆
 const vehMates = v => (S.veh || []).filter(o => o !== v && !o.dead && o.side === v.side && !o.lst && ((v.buddy != null && o.buddy === v.buddy) || (v.sk != null && o.sk === v.sk)));
 // 弹药（主炮占满载的比例）与油料
 const vehAmmoF = v => { const sp = vehSp(v); return sp.gun && !sp.gun.flame && sp.ammo ? v.ammo / sp.ammo : 1; };
@@ -896,7 +896,7 @@ function vehSupport(v) {
   if (!vehGo(v, tx, ty, 'move', Math.atan2(p.y - ty, p.x - tx))) vehGo(v, cx + dx * back, cy + dy * back, 'move');
 }
 
-// 没有自动进攻可支援：跟在最近的我方步兵连后面（离最近的敌占据点的反方向 60）
+// 没有自动进攻可支援：跟在最近的我方步兵排后面（离最近的敌占据点的反方向 60）
 function vehFollow(v) {
   let u = null, bd = Infinity;
   for (const o of S.units) if (o.side === 'p' && o.kind === 'inf' && o.x != null && teamsOf(o).length) { const d = dist(o.x, o.y, v.x, v.y); if (d < bd) { bd = d; u = o; } }
@@ -1226,7 +1226,7 @@ function vehDrawOver(time) {
   const agg = typeof hqAggHide === 'function';
   for (const v of S.veh) {
     if (v.dead || v.lst) continue;
-    if (agg && !isSel(v.id) && hqAggHide('v', v.id)) continue;   // 远看：编进团的车画成排符号（hq.js）
+    if (agg && !isSel(v.id) && hqAggHide('v', v.id)) continue;   // 远看：编进营的车画成排符号（hq.js）
     const vis = v.side === 'p' || inVision(v.x, v.y);
     if (!vis && v.kx == null) continue;
     const x = vis ? v.x : v.kx, y = vis ? v.y : v.ky;
@@ -1277,7 +1277,7 @@ function vehDrawShot(ctx, s) {
   ctx.beginPath(); ctx.moveTo(lerp(s.x0, s.x1, b), lerp(s.y0, s.y1, b)); ctx.lineTo(x, y); ctx.stroke();
 }
 
-// 坦克排队形示意：同一伙伴连（或同一进攻目标）的两辆以上车辆，按队形槽位的横向 / 纵深顺序连一条淡虚线（横队、楔形、纵队、梯队一眼看得出）；
+// 坦克排队形示意：同一伙伴排（或同一进攻目标）的两辆以上车辆，按队形槽位的横向 / 纵深顺序排一条淡虚线（横队、楔形、纵队、梯队一眼看得出）；
 // 守方的只在观战时画
 function vehDrawPlatoons(ctx) {
   const G = {};

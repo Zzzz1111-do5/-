@@ -17,7 +17,7 @@ function killMan(q, prefer, force) {
   if (typeof manDied === 'function') manDied(q, idx, q.men[idx]);   // 画面：这个人倒地（manim.js，只记在画面缓存里）
   const role = q.men.splice(idx, 1)[0];
   const u = unitOf(q);
-  if (u) { u.morale -= 5 * (S.t - u.flankT < 3 ? 1.5 : 1) * (u.elite ? .5 : 1); u.hitT = S.t; }   // 精锐连队：伤亡对士气的打击减半
+  if (u) { u.morale -= 5 * (S.t - u.flankT < 3 ? 1.5 : 1) * (u.elite ? .5 : 1); u.hitT = S.t; }   // 精锐排：伤亡对士气的打击减半
   if (q.side === 'e') { S.stats.killed++; return; }
   S.stats.lost++;
   if (role === 'radio') log('通讯兵阵亡，视野丢失', 'bad', 'radio', 4, q);
@@ -56,9 +56,11 @@ function damageShip(s, dmg) {
   log(aboard ? `${s.label} 被击沉，舰上 ${aboard} 人阵亡` : `${s.label} 残骸被击毁`, 'bad');
 }
 
-function damageEnemy(e, dmg) {
+// x、y：弹着点（可省）——「堤丰」导弹排按弹着点落到车阵里最近的那辆车（antiship.js tyHit）
+function damageEnemy(e, dmg, x, y) {
   if (e.dead) return;
-  e.hp -= dmg;
+  if (e.kind === 'typhon' && typeof tyHit === 'function') { if (!tyHit(e, dmg, x, y)) return; e.hp = 0; }
+  else e.hp -= dmg;
   if (e.hp > 0) return;
   Object.assign(e, { dead: true, kx: e.x, ky: e.y, moving: false });
   S.stats.structs++;
@@ -85,7 +87,7 @@ function impact(x, y, pw, side, src) {
   if (pw.struct) for (const e of S.enemies) {
     const d = dist(x, y, e.x, e.y);
     if (!e.dead && d < R * 2) e.sup = Math.min(100, (e.sup || 0) + 80 * (1 - d / (R * 2)));
-    if (!e.dead && d < R + 4) damageEnemy(e, pw.struct * (1 - d / (R + 4) * .4));
+    if (!e.dead && d < R + 4) damageEnemy(e, pw.struct * (1 - d / (R + 4) * .4), x, y);
   }
   if (typeof supplyImpact === 'function') supplyImpact(x, y, R, pw, side, src);   // 补给节点（supplynet.js）
   if (typeof armorImpact === 'function') armorImpact(x, y, R, pw, side);   // 装甲车辆（ai3.js）

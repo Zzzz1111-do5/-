@@ -1,8 +1,8 @@
 'use strict';
-// 编制与战斗群（旅 / 团战斗队，固定机制部分）：成建制、按队形行动，对地、对空、地面推进能力齐全
-// 战斗群 G（S.bgs，纯 JSON）：{ id, side, name, cmd 指挥员, us: [连 id], vs: [车 id], rec: [侦察组 id], st, ax, ay 锚点, face, key 任务据点, t, stT, thT }
+// 编制与战斗群（团 / 营战斗队，固定机制部分）：成建制、按队形行动，对地、对空、地面推进能力齐全
+// 战斗群 G（S.bgs，纯 JSON）：{ id, side, name, cmd 指挥员, us: [排 id], vs: [车 id], rec: [侦察组 id], st, ax, ay 锚点, face, key 任务据点, t, stT, thT }
 //   st：asm 集合 → move 行军 → fight 接敌（战斗队形）→ hold 到达后防御；delay 边打边撤（sa.js）→ link 与主力汇合
-// 队形（锚点坐标系：x 向前、y 向右）：步兵连并排居中；主战坦克在步兵前方一线；步战车在步兵身后；反坦克车护两翼；防空车在中后；
+// 队形（锚点坐标系：x 向前、y 向右）：步兵排并排居中；主战坦克在步兵前方一线；步战车在步兵身后；反坦克车护两翼；防空车在中后；
 //   自行火炮在后方 230；行军时横向收拢、纵向拉长（前卫坦克在前、火炮殿后）
 // 移动：锚点沿寻路场向任务点推进，速度跟最慢的成员走；有成员离自己的位置 70 以上就停下等，不各走各的
 // 接敌：锚点 300 内发现敌人就展开成战斗队形、正面朝敌；兵力比占优继续推进，劣势后撤重整
@@ -20,8 +20,30 @@ function bgNew(side, name, cmd, o) {
 const bgUnits = G => G.us.map(id => UNIT_MAP.get(id)).filter(u => u && teamsOf(u).some(q => q.men.length));
 const bgVehs = G => G.vs.map(id => vehById(id)).filter(v => v && !v.dead);
 const bgRecs = G => G.rec.map(id => S.teams.find(q => q.id === id)).filter(q => q && q.men.length);
+// 战斗群在画面上的位置：成员（各组、各车）实际所在处。锚点 ax/ay 只是队形的虚拟基准——行军时跑在前面、据点易手时直接跳过去，
+//   番号牌、营标、「查看」定位按锚点画会跟部队对不上。取成员中位点 250 内的平均（掉队、被打散的不把牌子拉走）；
+//   同一时刻（且 60ms 内）只算一次；还没有成员（在海上）时用锚点
+const BGAT = { S: null, t: -1, at: 0, m: new Map() };
+function bgAt(G) {
+  const now = Date.now();
+  if (BGAT.S !== S || BGAT.t !== S.t || now - BGAT.at > 60) { BGAT.S = S; BGAT.t = S.t; BGAT.at = now; BGAT.m.clear(); }
+  let c = BGAT.m.get(G.id);
+  if (c) return c;
+  const P = [];
+  for (const u of bgUnits(G)) for (const q of teamsOf(u)) if (q.men.length && !q.ride && isFinite(q.x)) P.push([q.x, q.y]);
+  for (const v of bgVehs(G)) if (v.x >= 0 && v.x <= W && v.y >= 0 && v.y <= H) P.push([v.x, v.y]);
+  if (!P.length) c = { x: G.ax, y: G.ay };
+  else {
+    const md = k => { const a = P.map(p => p[k]).sort((a, b) => a - b); return a[a.length >> 1]; }, mx = md(0), my = md(1);
+    let x = 0, y = 0, n = 0;
+    for (const p of P) if (dist(p[0], p[1], mx, my) < 250) { x += p[0]; y += p[1]; n++; }
+    c = n ? { x: x / n, y: y / n } : { x: mx, y: my };
+  }
+  BGAT.m.set(G.id, c);
+  return c;
+}
 
-// 吸附到与锚点同一岸（同一片连通区域，grid.js compOf）的最近可走格：队形位置落在河里时，不会被挪到河对岸让那个连绕远路过河
+// 吸附到与锚点同一岸（同一片连通区域，grid.js compOf）的最近可走格：队形位置落在河里时，不会被挪到河对岸让那个排绕远路过河
 function bgSnap(G, x, y, cls) {
   const lab = compOf(cls), i0 = ci(G.ax, G.ay), a0 = lab[i0] || lab[Math.max(0, nearestPassable(i0, cls))] || 0;
   const i = ci(x, y), wet = j => TER.type[j] === T.RIVER;   // 河可以涉水过，但队形位置不放在河里
@@ -38,12 +60,12 @@ function bgSnap(G, x, y, cls) {
 }
 // 队形位置（世界坐标）：返回 [{m 成员, k 'u'|'v', x, y}]
 function bgSlots(G, mode) {
-  const us = bgUnits(G).filter(u => u.state !== 'rout'), vs = bgVehs(G), out = [];   // 溃退的连先撤下去重整，不排进队形、不拖住全群
+  const us = bgUnits(G).filter(u => u.state !== 'rout'), vs = bgVehs(G), out = [];   // 溃退的排先撤下去重整，不排进队形、不拖住全群
   const march = mode === 'march', lat = march ? .45 : 1, lon = march ? 1.5 : 1;
   const fx = Math.cos(G.face), fy = Math.sin(G.face), px = -fy, py = fx;
   const at = (x, y) => { let sx = clamp(G.ax + fx * x * lon + px * y * lat, 15, W - 15), sy = clamp(G.ay + fy * x * lon + py * y * lat, 15, H - 15); return [sx, sy]; };
   const wid = Math.max(1, us.length) * 95;
-  us.forEach((u, i) => { const [x, y] = bgSnap(G, ...at(0, (i - (us.length - 1) / 2) * 95), G.side); out.push({ m: u, k: 'u', x, y }); });   // 连的位置落在河里、崖上：挪到同一岸最近的可走格
+  us.forEach((u, i) => { const [x, y] = bgSnap(G, ...at(0, (i - (us.length - 1) / 2) * 95), G.side); out.push({ m: u, k: 'u', x, y }); });   // 排的位置落在河里、崖上：挪到同一岸最近的可走格
   const tk = vs.filter(v => BG_TANK.includes(v.type)), ifv = vs.filter(v => v.type === 'apc'), td = vs.filter(v => v.type === 'td' || v.type === 'recon');
   const aa = vs.filter(v => v.type === 'sam_veh' || v.type === 'aa_veh'), art = vs.filter(v => v.type === 'spg'), rest = vs.filter(v => ![...tk, ...ifv, ...td, ...aa, ...art].includes(v));
   // 车辆位置吸附到该车能开到的最近格（河、悬崖、密林里的位置开不进去，整群会一直等它）
@@ -99,8 +121,8 @@ function bgOrder(G, sl, t0) {
     }
   }
 }
-// 掉队：成员离自己位置的距离，取第 60 百分位（连队按各组平均位置算）——一两辆卡住的车不拖住全群；
-// 连队全部到位才算（步兵是主体，不能把步兵甩下）；但掉队 20 秒还没靠近 10 的成员算卡住（隔水、交火走不开、走走停停），不再等它，随后跟进
+// 掉队：成员离自己位置的距离，取第 60 百分位（排按各组平均位置算）——一两辆卡住的车不拖住全群；
+// 排全部到位才算（步兵是主体，不能把步兵甩下）；但掉队 20 秒还没靠近 10 的成员算卡住（隔水、交火走不开、走走停停），不再等它，随后跟进
 function bgLag(G, sl) {
   const ds = [], lp = G.lp || (G.lp = {});
   let inf = 0;
@@ -133,17 +155,17 @@ function bgAdvance(G, gx, gy, step) {
 
 // 战斗群指挥员的口令：头顶喊一句短话（shout.js，short 不给就取第一句），完整的话只记在通联详档（战斗群失去战斗力的报告仍在常规档）
 function bgSay(G, text, at, kind = 'order', short) {
-  if (typeof chatSay === 'function') chatSay(G.side, `${G.cmd}（${G.name}）：${text}`, { kind, at: at || { x: G.ax, y: G.ay }, key: 'bg' + G.id + kind + G.st, gap: 25, lv: kind === 'report' ? 1 : 2 });
+  if (typeof chatSay === 'function') chatSay(G.side, `${G.cmd}（${G.name}）：${text}`, { kind, at: at || bgAt(G), key: 'bg' + G.id + kind + G.st, gap: 25, lv: kind === 'report' ? 1 : 2 });
   if (typeof shout === 'function') { const s = short || text.split(/[，。；]/)[0]; shout(at && at.men ? at : G, /[！？]$/.test(s) ? s : s + '！', { side: G.side }); }
 }
 
 // 河两岸：桥被炸、附近没有渡口，一部分成员跟锚点不在同一片连通区域（grid.js compOf），永远走不过来——
-//   锚点挪到人多的一岸，过不去的连、车脱离战斗群交回原来的指挥（守方由大脑重新抽调，攻方交还自动指挥），全群照常行动，不再整营干等
+//   锚点挪到人多的一岸，过不去的排、车脱离战斗群交回原来的指挥（守方由大脑重新抽调，攻方交还自动指挥），全群照常行动，不再整连干等
 function bgSplit(G) {
   if (S.t - (G.spT ?? -99) < 5) return;
   G.spT = S.t;
   const lab = compOf(G.side), us = bgUnits(G), vs = bgVehs(G), live = u => teamsOf(u).filter(q => q.men.length && !q.ride);
-  const bank = u => { const n = new Map(); for (const q of live(u)) { const l = lab[ci(q.x, q.y)]; if (l) n.set(l, (n.get(l) || 0) + q.men.length); } return [...n].sort((a, b) => b[1] - a[1])[0]; };   // 连的大部分在哪一岸
+  const bank = u => { const n = new Map(); for (const q of live(u)) { const l = lab[ci(q.x, q.y)]; if (l) n.set(l, (n.get(l) || 0) + q.men.length); } return [...n].sort((a, b) => b[1] - a[1])[0]; };   // 排的大部分在哪一岸
   const men = new Map();
   for (const u of us) { const b = bank(u); if (b) men.set(b[0], (men.get(b[0]) || 0) + b[1]); }
   let a0 = lab[ci(G.ax, G.ay)];
@@ -166,7 +188,7 @@ function bgSplit(G) {
     if (typeof shout === 'function') shout(u, '隔着河过不去，就地归建！');
   }
   for (const v of cutV) { G.vs = G.vs.filter(id => id !== v.id); v.bgG = null; v.cmd = null; }
-  bgSay(G, `${[cutU.length && `${cutU.length} 个连`, cutV.length && `${cutV.length} 辆车`].filter(Boolean).join('、')}被河隔开、过不去，脱离本群就地归建；其余继续行动。`, null, 'order', '隔河的部队不等了，继续前进！');
+  bgSay(G, `${[cutU.length && `${cutU.length} 个排`, cutV.length && `${cutV.length} 辆车`].filter(Boolean).join('、')}被河隔开、过不去，脱离本群就地归建；其余继续行动。`, null, 'order', '隔河的部队不等了，继续前进！');
   if (typeof v8Stat === 'function') v8Stat('bgSplit');
 }
 
@@ -301,8 +323,8 @@ function bgStep(dt) {
   for (const G of S.bgs) {
     if (G.dead || (G.thT -= dt) > 0) continue;
     G.thT = 1;
-    if (G.th && typeof thRegThink === 'function') thRegThink(G);   // 战区编成的团（theater.js）：沿战线的命令自己摆，其余交团长
-    else if (G.reg && typeof regThink === 'function') regThink(G); else bgThink(G);   // 团（hq.js）由团长按战法表指挥
+    if (G.th && typeof thRegThink === 'function') thRegThink(G);   // 战区编成的营（theater.js）：沿战线的命令自己摆，其余交营长
+    else if (G.reg && typeof regThink === 'function') regThink(G); else bgThink(G);   // 营（hq.js）由营长按战法表指挥
     if (!G.dead) bgRecon(G);
   }
   if (S.bgs.some(G => G.dead)) {
@@ -316,16 +338,17 @@ HOOK.step.push(bgStep);
 HOOK.visionE.push(() => S && S.bgs ? S.bgs.filter(G => G.side === 'e').flatMap(G => bgRecs(G).map(q => ({ x: q.x, y: q.y, r: BG.recR, h: 1.2 }))) : []);
 HOOK.visionP.push(() => S && S.bgs ? S.bgs.filter(G => G.side === 'p').flatMap(G => bgRecs(G).map(q => ({ x: q.x, y: q.y, r: BG.recR, h: 1.2 }))) : []);
 
-// 画面：战斗群标号（北约式方框 + 编制记号「X」旅 /「III」团）与名称，远看时显示
+// 画面：战斗群标号（北约式方框 + 编制记号「X」团 /「III」营）与名称，远看时显示
 function bgDraw() {
   if (!S || !S.bgs || !S.bgs.length || R.s > 3 || (typeof V3 === 'object' && V3.drawing)) return;   // 3D 立体地图里标号立在地形上方（view3d.js），地面上不再重复画
   const ctx = R.ctx;
   const at = [];
   for (const G of S.bgs) {
-    if (G.reg) continue;   // 团的标号由指挥体系画（hq.js hqDraw）
-    if (G.side === 'e' && !(specAll() || R.eye === 'all') && !spotted(G.ax, G.ay)) continue;
-    const col = G.side === 'p' ? COL.g : COL.enemy, w = px(22), h = px(14), x = G.ax;
-    let y = G.ay;
+    if (G.reg) continue;   // 营的标号由指挥体系画（hq.js hqDraw）
+    const c = bgAt(G);
+    if (G.side === 'e' && !(specAll() || R.eye === 'all') && !spotted(c.x, c.y)) continue;
+    const col = G.side === 'p' ? COL.g : COL.enemy, w = px(22), h = px(14), x = c.x;
+    let y = c.y;
     while (at.some(o => Math.abs(o[0] - x) < w * 1.2 && Math.abs(o[1] - y) < h * 2.6)) y += h * 2.8;   // 两个战斗群在同一处集合：标号上下错开，不叠在一起
     at.push([x, y]);
     ctx.save(); ctx.strokeStyle = col; ctx.fillStyle = rgba(COL.bg, .7); ctx.lineWidth = px(1.4);

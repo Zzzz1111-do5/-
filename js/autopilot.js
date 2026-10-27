@@ -1,12 +1,12 @@
 'use strict';
-// 自动指挥：auto === true 的舰船自行选滩抢滩；步兵连自选据点 → 集结 → 攻击前进 → 冲锋 → 留守 / 继续推进，
+// 自动指挥：auto === true 的舰船自行选滩抢滩；步兵排自选据点 → 集结 → 攻击前进 → 冲锋 → 留守 / 继续推进，
 // 弹药不足或动摇时退回最近的接通补给点，恢复后继续；工兵自动修建补给网、抢修运输线、排除进攻路线上的已知雷区，没活干时跟进保障
-// 计划（纯数据）存于 S.autoPlan：u[连队 id] = {ph, obj, sx, sy, dx, dy, waitT, sp, job, ...}
+// 计划（纯数据）存于 S.autoPlan：u[排 id] = {ph, obj, sx, sy, dx, dy, waitT, sp, job, ...}
 //   ph：idle 待命 / stage 前往集结点 / wait 集结待命 / go 攻击 / garrison 留守 / supply 回补弹药 / regroup 重整 / bg 编入战斗群（brain.js，由战斗群指挥）
 //   o[据点 key] = {go, t, need, pg, pgT} 攻击组状态；hard[据点 key] = 近期受挫时刻；s[舰船 id] = {b, x} 预定滩头
-// 指挥官（commander.js，可缺省）的指令：pri[据点 key] 目标加权 · mis[连队 id] 任务式指挥的既定目标 · 舰船梯队经 cmdShipTask
+// 指挥官（commander.js，可缺省）的指令：pri[据点 key] 目标加权 · mis[排 id] 任务式指挥的既定目标 · 舰船梯队经 cmdShipTask
 const AP_THINK = 1.5, AP_WAIT = 20, AP_STAGE_MIN = 140, AP_STAGE_MAX = 180;
-const AP_ROUTES = new Map();   // 渲染缓存（不进 S）：连队 id → 路线采样点
+const AP_ROUTES = new Map();   // 渲染缓存（不进 S）：排 id → 路线采样点
 
 function apEnsure() {
   if (!S.autoPlan || typeof S.autoPlan !== 'object') S.autoPlan = {};
@@ -27,7 +27,7 @@ function updateAutopilot(dt) {
   const P = apEnsure();
   if ((P.shipT = (P.shipT ?? 0) - dt) <= 0) { P.shipT = AP_THINK; apShips(P); }
   if ((P.asgT = (P.asgT ?? 0) - dt) <= 0) { P.asgT = 3; apPrune(P); apAssign(P); }
-  // 各连队错峰思考（约 1.5 秒一次）
+  // 各排错峰思考（约 1.5 秒一次）
   for (const u of S.units) {
     if (u.side !== 'p' || u.auto !== true || u.x == null || !isFinite(u.x)) continue;
     const pl = P.u[u.id];
@@ -127,7 +127,7 @@ function apThreatDir(p) {
   return best ? apAng(p.x, p.y, best.x, best.y) : NORTH;
 }
 
-// —— 目标分配：价值、距离、已知敌情、已有多少自动连队在攻（强点集中 2–3 个连队）——
+// —— 目标分配：价值、距离、已知敌情、已有多少自动排在攻（强点集中 2–3 个排）——
 function apScore(u, p, est, cnt, P) {
   const need = apNeed(est);
   let s = p.vp * 3 + (p.key === 'HQ' ? 3 : 0) - dist(u.x, u.y, p.x, p.y) / 70 - est * .3;
@@ -156,7 +156,7 @@ function apGarrisonSpot(u, P) {
 function apAssign(P) {
   const all = S.units.filter(u => u.side === 'p' && u.auto === true && u.x != null && isFinite(u.x) && teamsOf(u).length);
   for (const u of all) if (!P.u[u.id]) P.u[u.id] = { ph: 'idle', obj: null, next: S.t + Math.random() * AP_THINK };
-  // 战区指挥（theater.js）开着：步兵连由师 / 旅 / 团沿战线指挥，不再各自挑据点（只有空降兵、突击队仍自己选目标）
+  // 战区指挥（theater.js）开着：步兵排由师 / 团 / 营沿战线指挥，不再各自挑据点（只有空降兵、突击队仍自己选目标）
   const inf = all.filter(u => u.kind === 'inf' && !(typeof thOn === 'function' && thOn('p') && !thAir(u)));
   const cand = S.points.filter(p => p.owner !== 'p' || p.prog < .9);
   const est = {}, cnt = {};
@@ -187,7 +187,7 @@ function apAssign(P) {
   }
 }
 
-// 自动连队下令：先检查可达，避免“无法到达”刷屏；近期挨过炮击用散开队形，否则横队
+// 自动排下令：先检查可达，避免“无法到达”刷屏；近期挨过炮击用散开队形，否则横队
 function apMove(u, pl, x, y, face, t) {
   if (!isFinite(x) || !isFinite(y)) return false;
   x = clamp(x, 6, W - 6); y = clamp(y, 6, H - 6);
@@ -207,12 +207,12 @@ function apGarrison(u, p, P) {
 }
 
 // —— 指挥官指派（commander.js 经通信延迟后调用）——
-// 连队改攻指定据点（集结 → 攻击）；flank = ±1 时先到侧翼集结点，再从侧翼发起
+// 排改攻指定据点（集结 → 攻击）；flank = ±1 时先到侧翼集结点，再从侧翼发起
 function apTask(u, key, flank) {
   const P = apEnsure(), p = apPt(key);
   if (!p || !u || u.side !== 'p' || u.auto !== true || u.state === 'rout' || !teamsOf(u).length) return false;
   const pl = P.u[u.id] || (P.u[u.id] = { ph: 'idle', obj: null, next: S.t });
-  if (pl.ph === 'bg') return false;   // 战斗群行军中：到攻击出发位置展开后才归各连自己打
+  if (pl.ph === 'bg') return false;   // 战斗群行军中：到攻击出发位置展开后才归各排自己打
   apIdle(pl);
   Object.assign(pl, { ph: 'stage', obj: key, t0: S.t, men0: u.men || 0, next: S.t + .5, task: S.t });
   if (!P.o[key]) P.o[key] = { go: false, t: 0, need: 1 };
@@ -308,11 +308,11 @@ function apLaunch(units, p, P) {
   const O = P.o[p.key] || (P.o[p.key] = { need: units.length }), first = !O.go;
   if (!O.go) Object.assign(O, { go: true, t: S.t, pg: p.prog, pgT: S.t });
   for (const g of units) Object.assign(P.u[g.id], { ph: 'go', obj: p.key, goT: S.t, men0: g.men || 0, dx: g.tx, dy: g.ty, ordT: S.t });
-  if (fm) tfFormOrder(fm, p);   // 各连转入 go 后再下第一次跃进令（tfFormOrder 只管 go 阶段的连）
-  if (first && typeof cmdOnLaunch === 'function') cmdOnLaunch(units, p);   // 摩擦：个别连队可能在调整线前停顿
+  if (fm) tfFormOrder(fm, p);   // 各排转入 go 后再下第一次跃进令（tfFormOrder 只管 go 阶段的排）
+  if (first && typeof cmdOnLaunch === 'function') cmdOnLaunch(units, p);   // 摩擦：个别排可能在调整线前停顿
 }
 
-// 占领后：留一个连队守备（指挥所必留；多连队攻击组或高价值据点），其余继续前进
+// 占领后：留一个排守备（指挥所必留；多排攻击组或高价值据点），其余继续前进
 function apCaptured(p, P) {
   const grp = apGroup(p.key, P).filter(u => dist(u.x, u.y, p.x, p.y) < 320), all = apAutoInf();
   const gars = all.filter(u => P.u[u.id] && P.u[u.id].ph === 'garrison');
@@ -387,13 +387,13 @@ function apInfantry(u, pl, P) {
   if (pl.obj != null && !p) { apIdle(pl); return; }
   const gar = pl.ph === 'garrison', cap = apCap(u);
   if (pl.ph !== 'supply' && pl.ph !== 'regroup') {
-    // 轮流补给：同一目标还有别的连在场掩护、又没有连在补给时，弹药不足 30 就轮到本连下去补（补给点 600 以内）；不足 15 则不等
+    // 轮流补给：同一目标还有别的排在场掩护、又没有排在补给时，弹药不足 30 就轮到本排下去补（补给点 600 以内）；不足 15 则不等
     const mates = Object.keys(P.u).filter(id => +id !== u.id && P.u[id].obj != null && P.u[id].obj === pl.obj);
     if (ammo < 30 && ammo >= (gar ? 8 : 15) && pl.obj != null && mates.some(id => P.u[id].ph === pl.ph) && !mates.some(id => P.u[id].ph === 'supply')) {
       const sp = apSupplyPt(u.x, u.y);
       if (sp && dist(sp.x, sp.y, u.x, u.y) < 600 && apFallback(u, pl, 'supply', 600)) {
         v8Stat('uRepTurn');
-        if (typeof chatSay === 'function') chatSay('p', `命令：${typeof cmdUName === 'function' ? cmdUName(u) : unitName(u)}轮换下去补充弹药，其余各连留在原地接替掩护。`, { kind: 'order', at: u, key: 'aprot' + pl.obj, gap: 60, lv: 2 });
+        if (typeof chatSay === 'function') chatSay('p', `命令：${typeof cmdUName === 'function' ? cmdUName(u) : unitName(u)}轮换下去补充弹药，其余各排留在原地接替掩护。`, { kind: 'order', at: u, key: 'aprot' + pl.obj, gap: 60, lv: 2 });
         return;
       }
     }
@@ -554,7 +554,7 @@ function apEngineer(u, pl, P) {
   else if (q.order.x != null || q.order.t !== 'hold') q.order = { t: 'hold' };   // 到位：updateSupplyNet 计施工进度
 }
 
-// 跟进保障：没有活干的工兵跟在离自己最近的进攻连队后方约 130（背向目标一侧、敌火力以外），到时就近排雷、剪网、修路，不在滩头干等
+// 跟进保障：没有活干的工兵跟在离自己最近的进攻排后方约 130（背向目标一侧、敌火力以外），到时就近排雷、剪网、修路，不在滩头干等
 function apEngFollow(u, q, pl, P) {
   const ok = g => !!g && g.side === 'p' && g.kind === 'inf' && g.auto === true && g.state !== 'rout' && g.x != null && !!P.u[g.id] && ['stage', 'wait', 'go', 'bg'].includes(P.u[g.id].ph);
   let best = null, bd = 1400;
@@ -563,7 +563,7 @@ function apEngFollow(u, q, pl, P) {
     const d = dist(g.x, g.y, q.x, q.y);
     if (d < bd) { bd = d; best = g; }
   }
-  // 跟定一个连：原来跟的那个连还能跟、又没比最近的远出太多，就继续跟它——否则两个连离得差不多远时，工兵每走几步「最近的连」就换一个，来回掉头
+  // 跟定一个排：原来跟的那个排还能跟、又没比最近的远出太多，就继续跟它——否则两个排离得差不多远时，工兵每走几步「最近的排」就换一个，来回掉头
   const cur = pl.fol != null ? UNIT_MAP.get(pl.fol) : null;
   if (ok(cur) && (!best || dist(cur.x, cur.y, q.x, q.y) < bd * 1.6 + 150)) best = cur;
   if (!best) { pl.fol = null; return; }
@@ -575,7 +575,7 @@ function apEngFollow(u, q, pl, P) {
   if (apTeamGo(q, x, y, 'move')) pl.folT = S.t;
 }
 
-// —— 渲染（仅图形）：自动连队的计划路线（虚线流动箭头）、集结点标记与等待倒计时、攻击目标角框、自动指挥标记 ——
+// —— 渲染（仅图形）：自动排的计划路线（虚线流动箭头）、集结点标记与等待倒计时、攻击目标角框、自动指挥标记 ——
 function apRoute(u, x, y) {
   const c = AP_ROUTES.get(u.id);
   if (c && c.S === S && dist(c.tx, c.ty, x, y) < 15 && Math.abs(S.t - c.t) < 3) return c.pts;
@@ -613,7 +613,7 @@ function drawAutoRoutes(time) {
     const pl = P[u.id], ts = teamsOf(u);
     if (!pl || !ts.length) continue;
     const on = sel(u.id), eng = u.kind === 'eng';
-    // 自动指挥标记：连队旗右侧的小旋转标（与 HUD“自动”按钮同形）
+    // 自动指挥标记：排旗右侧的小旋转标（与 HUD“自动”按钮同形）
     const top = Math.min(...ts.map(q => q.y)), mx = u.x + px(24), my = top - px(25), r0 = px(3.2), spin = time * 1.5;
     ctx.setLineDash([]); ctx.lineWidth = px(1.1); ctx.strokeStyle = rgba(COL.intel, on ? .95 : .7);
     ctx.beginPath(); ctx.arc(mx, my, r0, 0, 7); ctx.stroke();
@@ -628,7 +628,7 @@ function drawAutoRoutes(time) {
       else { tx = u.tx ?? pl.dx; ty = u.ty ?? pl.dy; }
     }
     const col = pl.ph === 'go' ? COL.enemy : pl.ph === 'supply' || pl.ph === 'regroup' || eng ? COL.intel : COL.g;
-    if (tx != null && isFinite(tx) && isFinite(ty) && dist(u.x, u.y, tx, ty) > 20 && (on || !(typeof hqOn === 'function' && hqOn()))) {   // 指挥体系开着：满屏的连队路线只在选中时画，大方向看旅的箭头
+    if (tx != null && isFinite(tx) && isFinite(ty) && dist(u.x, u.y, tx, ty) > 20 && (on || !(typeof hqOn === 'function' && hqOn()))) {   // 指挥体系开着：满屏的排路线只在选中时画，大方向看团的箭头
       const pts = apRoute(u, tx, ty), d0 = dist(u.x, u.y, tx, ty);
       const path = [[u.x, u.y]];
       for (let i = 1; i < pts.length; i++) if (dist(pts[i][0], pts[i][1], tx, ty) < d0 - 6 || i === pts.length - 1) path.push(pts[i]);

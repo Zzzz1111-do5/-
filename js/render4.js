@@ -1,5 +1,5 @@
 'use strict';
-// 渲染（四）：不用文字，用形状表达——据点建筑、房屋、弹坑、士兵、连队旗、部署计划、阵型预览、事件波纹
+// 渲染（四）：不用文字，用形状表达——据点建筑、房屋、弹坑、士兵、排旗、部署计划、阵型预览、事件波纹
 const PKIND = k => k === 'HQ' ? 'hq' : k === 'RD' ? 'radar' : k.startsWith('BT') ? 'battery' : ({ E: 'exit', T: 'town', B: 'bridge', X: 'cross', V: 'village', F: 'ford' })[k[0]];
 const STRUCT = '#d9ffe6';
 let TOWN_CELLS = [], TOWN_SEED = null;

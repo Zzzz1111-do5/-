@@ -33,7 +33,7 @@ function sayOnce(key, msg, p, kind = 'warn', at) {
   if (Math.random() < p) log(msg, kind, null, 0, at);
 }
 
-// 调往某据点的散兵编入该据点的预备连（不超过 4 组）；正由 ai4 整连调动 / 反冲击的连不编（散兵不会跟着走，反而拖住整连）
+// 调往某据点的散兵编入该据点的预备排（不超过 4 组）；正由 ai4 整排调动 / 反冲击的排不编（散兵不会跟着走，反而拖住整排）
 function aiUnitFor(k) {
   return S.units.find(u => u.side === 'e' && u.obj === k && u.role === 'reserve' && u.state !== 'rout' && teamsOf(u).length < 4 && !(typeof a4UnitBusy === 'function' && a4UnitBusy(u.id))) ||
     addUnit('e', 'inf', { role: 'reserve', obj: k });

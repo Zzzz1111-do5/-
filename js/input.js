@@ -1,6 +1,6 @@
 'use strict';
 // 事件：左键点选/框选，右键下令（拖拽 = 阵型宽度与朝向），中键或 Alt 拖动平移，滚轮缩放，触屏单指平移、双指缩放
-// 编队指挥模式（thpanel.js thuActive：沙盒编辑以外的战役 / 推演）：不再点选、下令单个部队——左键点部队看型号卡并选中它所属的团，
+// 编队指挥模式（thpanel.js thuActive：沙盒编辑以外的战役 / 推演）：不再点选、下令单个部队——左键点部队看型号卡并选中它所属的营，
 //   左键拖动平移地图，右键只取消穿插选目标；WASD 与方向键移动视角（3D 按镜头朝向）；舰船、航母、编组的快捷键都不再有
 //   ——驱逐舰、航母的支援火力改为点舰弹出选项（spui.js），另有 F 舰炮 · T 空袭 · V 对地支援 · R 侦察 · Y 垂发导弹 · I 战术导弹
 const WASD = { KeyW: 'ArrowUp', KeyA: 'ArrowLeft', KeyS: 'ArrowDown', KeyD: 'ArrowRight' };
@@ -41,7 +41,7 @@ function bindInput() {
         camPan(mx - U.pinch.mx, my - U.pinch.my);
         camZoomAt(mx, my, d / U.pinch.d);
         const an = Math.atan2(b.sy - a.sy, b.sx - a.sx);
-        if (typeof V3 === 'object' && V3.on && U.pinch.an != null) { const da = Math.atan2(Math.sin(an - U.pinch.an), Math.cos(an - U.pinch.an)); V3.yawT -= da; V3.yaw = V3.yawT; }   // 3D：双指旋转转向
+        if (typeof V3 === 'object' && V3.on && U.pinch.an != null && typeof v3Look === 'function') { const da = Math.atan2(Math.sin(an - U.pinch.an), Math.cos(an - U.pinch.an)); v3Look(-da, 0, true); }   // 3D：双指旋转原地转头
         U.pinch = { d, mx, my, an };
         return;
       }
@@ -96,6 +96,7 @@ function bindInput() {
     const bf = $('brief'), en = $('end');
     if (bf && !bf.hidden) { if ((e.key === 'Enter' && !(e.target.closest && e.target.closest('#diff'))) || e.key === 'Escape') { e.preventDefault(); $('btnBrief').click(); } return; }
     if (en && !en.hidden) { if (e.key === 'Escape' || e.key === 'F10') runHook('key', e); return; }
+    if (e.key === 'Shift') KEYS.add('Shift');   // 3D 自由镜头：按住 Shift 飞得快
     if (e.key.startsWith('Arrow')) { KEYS.add(e.key); e.preventDefault(); return; }
     // WASD：前后左右移动视角（3D 观察者模式里 WASD 归观察者飞行）
     if (WASD[e.code] && !e.ctrlKey && !e.metaKey && !e.altKey && !(typeof V3O === 'object' && V3O.on) && !(e.target.closest && e.target.closest('#sbxPanel'))) { KEYS.add(WASD[e.code]); e.preventDefault(); return; }

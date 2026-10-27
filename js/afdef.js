@@ -19,7 +19,7 @@ function afdAt(b, u, v, cls) {
 // 阵位（机场局部坐标，与 afbase.js 的版图一致，那里也画出各阵位的土堤、沙袋）
 // 巡逻路线：沿围栏内侧的巡逻道绕场区一圈（十个路标）
 const AFD_WP = [[-490, -160], [0, -160], [490, -160], [526, 60], [526, 330], [490, 598], [0, 598], [-490, 598], [-526, 330], [-526, 60]];
-// 火神高炮：跑道外侧两门、塔台消防站后方与直升机起降坪后方各一门；爱国者发射车阵位（东南角导弹连）；M-SHORAD（跑道两端外侧）；陆基密集阵（机库东侧）；
+// 火神高炮：跑道外侧两门、塔台消防站后方与直升机起降坪后方各一门；爱国者发射车阵位（东南角导弹排）；M-SHORAD（跑道两端外侧）；陆基密集阵（机库东侧）；
 // AN/TPS-80 雷达站（跑道外侧西端）；常驻守备队工事（跑道外侧四处、正门门岗、西端）
 const AFD_GUN = [[-250, -62], [250, -62], [-205, 222], [300, 268]];
 const AFD_PAT = [[392, 432], [498, 432]];
@@ -38,7 +38,7 @@ function afdBuild(b) {
   // 高炮：滑行道外侧两门、场区东西两侧各一门，都在沙袋掩体里（AFD_GUN）
   B.guns = [];
   for (const [u, v] of AFD_GUN) { const [x, y] = afdAt(b, u, v, 'inf'), e = addEnemy('aa', x, y); e.afD = b.id; B.guns.push({ id: e.id, u, v }); }
-  // 固定防空阵地（v.fixed：不机动，坏了由地勤修 / 换装）：跑道两端 M-SHORAD、机库东侧 LPWS、营区一角的爱国者导弹连（两部发射车）
+  // 固定防空阵地（v.fixed：不机动，坏了由地勤修 / 换装）：跑道两端 M-SHORAD、机库东侧 LPWS、营区一角的爱国者导弹排（两部发射车）
   if (typeof addVehicle === 'function' && typeof VEH_SPEC === 'object') {
     const put = (type, u, v, ex) => { const [x, y] = afdAt(b, u, v), o = addVehicle('e', type, x, y, { auto: true, afD: b.id, fixed: true, ...ex }); if (o) { o.hx = o.x; o.hy = o.y; o.heading = (b.rh || 0) - Math.PI / 2 * (b.rs || 1); B.aa.push({ id: o.id, x: o.x, y: o.y, u, v, type, ex }); } return o; };
     if (VEH_SPEC.sam_veh) {

@@ -1,6 +1,6 @@
 'use strict';
 // 设置：音量、显示、流程、AI 指挥官聊天。存 localStorage 'bh-settings'（兼容旧的 'bh-rain'）；无 DOM，可在 Node 中运行
-const SETTINGS_DEF = { master: .8, music: .45, musicStyle: 'march', sfx: .8, radio: .6, rain: .25, bloom: .7, quality: 'high', look: 'green', intro: true, chat: 'normal', enemyChat: true, shake: true, front: true };
+const SETTINGS_DEF = { master: .8, music: .45, musicStyle: 'march', sfx: .8, radio: .6, rain: .25, bloom: .7, quality: 'high', look: 'green', intro: true, chat: 'normal', enemyChat: true, shake: true, front: true, rdist: 1 };
 const SETTINGS = { ...SETTINGS_DEF };
 const SET_FNS = [];
 const SET_KEY = 'bh-settings';
@@ -10,7 +10,7 @@ const setStore = () => { try { return typeof localStorage !== 'undefined' ? loca
 function setClean(k, v) {
   const d = SETTINGS_DEF[k];
   if (d === undefined) return undefined;
-  if (typeof d === 'number') { v = +v; return isFinite(v) ? Math.min(k === 'bloom' ? 1.5 : 1, Math.max(0, v)) : undefined; }
+  if (typeof d === 'number') { v = +v; return isFinite(v) ? Math.min(k === 'bloom' ? 1.5 : k === 'rdist' ? 4 : 1, Math.max(k === 'rdist' ? .5 : 0, v)) : undefined; }
   if (typeof d === 'boolean') return typeof v === 'boolean' ? v : v === 'true' ? true : v === 'false' ? false : undefined;
   if (k === 'quality') return v === 'low' || v === 'high' ? v : undefined;
   if (k === 'look') return v === 'green' || v === 'real' || v === 'matrix' ? v : undefined;

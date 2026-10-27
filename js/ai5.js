@@ -1,21 +1,21 @@
 'use strict';
 // 守方蓄力总攻（v13）：不再逐次添油、被各个击破——
-// ① 蓄力：我军上陆站稳（或丢了第一个据点）后，把机动预备队整连、远方抽调到位的支队、第 101 空降师落地的连编入总攻集团（守备队照常坚守），
-//    调到主攻方向背后、我方看不见的集结地域隐蔽待命；坦克、步兵战车跟着各连（ai4 a4Bind），防空车掩护集结地域；
+// ① 蓄力：我军上陆站稳（或丢了第一个据点）后，把机动预备队整排、远方抽调到位的支队、第 101 空降师落地的排编入总攻集团（守备队照常坚守），
+//    调到主攻方向背后、我方看不见的集结地域隐蔽待命；坦克、步兵战车跟着各排（ai4 a4Bind），防空车掩护集结地域；
 //    蓄力期间 ai4 的小规模反冲击、机动加强、ai2 的兵力调度都不抽用这些兵力（只有指挥所告急例外），第 101 空降师也留着配合总攻；
 // ② 主攻方向：我方占着的据点里最要害的——滩头出口（切断登陆场与海滩）优先，其次分值高、我方守备薄弱、离集结地域近的；
 // ③ 发起时机：集结到位的兵力 ≥ 目标附近我方兵力的 1.4 倍且不少于 30 人；或我方刚推进上来弹药不足、士气动摇（机会），够 20 人且不少于我方；
 //    或蓄力超过 A5.max 秒、够 20 人；
-// ④ 总攻：各连进入冲击出发阵地（目标前 160、分两三个方向）同时炮兵火力准备、攻击机与武装直升机编队同时出动、第 101 空降师在目标另一侧空降夹击
+// ④ 总攻：各排进入冲击出发阵地（目标前 160、分两三个方向）同时炮兵火力准备、攻击机与武装直升机编队同时出动、第 101 空降师在目标另一侧空降夹击
 //    → 统一发起，坦克在步兵线后伴随、防空车跟进掩护 → 接近后冲锋；
 // ⑤ 夺回后扩张战果：兵力还有六成、附近还有我方据点就转向下一个；伤亡过半或 150 秒打不下转入防御，休整后再蓄力。
-// 状态：S.ai.g5 = { st: build | prep | go | rest, t, key, x, y（集结地域）, ux, uy（攻击方向）, units: [连 id], aa: [车 id], men0, goT, n 次数 }
+// 状态：S.ai.g5 = { st: build | prep | go | rest, t, key, x, y（集结地域）, ux, uy（攻击方向）, units: [排 id], aa: [车 id], men0, goT, n 次数 }
 const A5 = { start: 60, max: 110, need: 1.4, minMen: 24, oppMen: 20, prep: 16, prepMax: 50, go: 150, rest: 90, keepHQ: true };
 const a5On = () => !!S && S.ai && typeof a4On === 'function' && a4On();
 const a5G = () => S.ai.g5 || (S.ai.g5 = { st: 'off', t: 0, units: [], aa: [], n: 0 });
 const a5Say = (t, o) => typeof chatSay === 'function' ? chatSay('e', t, o) : null;
 const a5Units = G => G.units.map(id => UNIT_MAP.get(id)).filter(u => u && u.state !== 'rout' && a4Ts(u).length);
-// 总攻集团的连：ai2 不调动、ai3 不抽去袭扰、ai4 不拿去零散反冲击（a4UnitBusy 读这里）
+// 总攻集团的排：ai2 不调动、ai3 不抽去袭扰、ai4 不拿去零散反冲击（a4UnitBusy 读这里）
 const a5Has = id => !!(S && S.ai && S.ai.g5 && S.ai.g5.st !== 'off' && S.ai.g5.st !== 'rest' && S.ai.g5.units.includes(id));
 // 蓄力期间第 101 空降师不零散空降（a101.js 读）
 const a5Hold = () => !!(S && S.ai && S.ai.g5 && S.ai.g5.st === 'build' && S.t - S.ai.g5.t < 90);   // 最多扣 90 秒
@@ -60,7 +60,7 @@ function a5Rally(T) {
   }
   return best;
 }
-// 可编入总攻的连：机动预备队（含落地集合完的第 101 空降师）、到位的抽调支队；不抽守备队、正在反冲击的、行军中的；指挥所旁留一个预备连
+// 可编入总攻的排：机动预备队（含落地集合完的第 101 空降师）、到位的抽调支队；不抽守备队、正在反冲击的、行军中的；指挥所旁留一个预备排
 function a5Pool(G) {
   const C = a4C(), hq = S.points.find(p => p.key === 'HQ' && p.owner === 'e'), out = [], F = a4Foes();
   for (const u of S.units) {
@@ -69,10 +69,10 @@ function a5Pool(G) {
     if (pl && pl.st === 'go') continue;
     const ts = a4Ts(u), c = a4Cent(u);
     if (a4Men(ts) < 3 || ts.some(q => q.raid || a4Held(q) || C.fl[q.id])) continue;
-    if (c && a4FoeD(F, c[0], c[1]) < 220) continue;   // 正在交战的连抽不出来，硬抽只会在路上被打散
+    if (c && a4FoeD(F, c[0], c[1]) < 220) continue;   // 正在交战的排抽不出来，硬抽只会在路上被打散
     out.push(u);
   }
-  if (A5.keepHQ && hq && out.length >= 3) {   // 总预备队留一个连在指挥所
+  if (A5.keepHQ && hq && out.length >= 3) {   // 总预备队留一个排在指挥所
     const c = out.map(u => ({ u, c: a4Cent(u) })).filter(o => o.c).sort((a, b) => dist(a.c[0], a.c[1], hq.x, hq.y) - dist(b.c[0], b.c[1], hq.x, hq.y))[0];
     if (c && dist(c.c[0], c.c[1], hq.x, hq.y) < 300) out.splice(out.indexOf(c.u), 1);
   }
@@ -86,7 +86,7 @@ function a5Recruit(G, us) {
     const pl = a4Plan(C, u.id);
     if (pl) pl.units = pl.units.filter(id => id !== u.id);
     G.units.push(u.id); u.a4T = S.t;
-    const lat = ((k % 2) ? 1 : -1) * Math.ceil(k / 2) * 46, back = (k % 3) * 18;   // 集结地域里各连左右错开
+    const lat = ((k % 2) ? 1 : -1) * Math.ceil(k / 2) * 46, back = (k % 3) * 18;   // 集结地域里各排左右错开
     a4Move(u, G.x - G.uy * lat - G.ux * back, G.y + G.ux * lat - G.uy * back, Math.atan2(G.uy, G.ux));
     k++;
   }
@@ -141,10 +141,10 @@ function a5Think() {
       if (pool.length) { a5Recruit(G, pool); a5Say(`命令：${a4Names(pool.map(a4Name))}编入总攻集团，到${a4Where(G.x, G.y)}隐蔽集结，不得零散投入。`, { kind: 'order', at: { x: G.x, y: G.y }, key: 'a5rec', gap: 25, lv: 1 }); }
       const T = ptByKey(G.key), our = a5Our(T.x, T.y, 300), men = a5Arrived(G, G.x, G.y, 180);
       const tot = a5Men(G), ready = men >= tot * .7 && men >= A5.oppMen && men >= our.men * 1.1;   // 七成到位、对目标之敌占优就不再干等
-      const strong = men >= Math.max(A5.minMen, our.men * A5.need) || ready, chance = (our.ammo < 25 || our.shaky > .3) && men >= Math.max(A5.oppMen, our.men), late = S.t - G.t > A5.max && (men >= A5.oppMen || tot >= Math.min(A5.oppMen, 14));   // 等太久：各连从所在位置直接向冲击出发阵地开进，向心合击
+      const strong = men >= Math.max(A5.minMen, our.men * A5.need) || ready, chance = (our.ammo < 25 || our.shaky > .3) && men >= Math.max(A5.oppMen, our.men), late = S.t - G.t > A5.max && (men >= A5.oppMen || tot >= Math.min(A5.oppMen, 14));   // 等太久：各排从所在位置直接向冲击出发阵地开进，向心合击
       if (!(strong || chance || late)) return;
       G.st = 'prep'; G.t = S.t; G.men0 = a5Men(G);
-      // 冲击出发阵地：目标前 160，按连分成两三个方向
+      // 冲击出发阵地：目标前 160，按排分成两三个方向
       a5Units(G).forEach((u, i) => {
         const lane = ((i % 3) - 1) * 80, x = T.x - G.ux * 160 - G.uy * lane, y = T.y - G.uy * 160 + G.ux * lane;
         a4Move(u, x, y, Math.atan2(T.y - y, T.x - x));
@@ -155,7 +155,7 @@ function a5Think() {
       if (E1 && E1.n > 0 && !E1.lift) { E1.force = T.key; E1.next = Math.min(E1.next, S.t); ab = true; }   // 第 101 空降师配合总攻空降
       const nv = (S.veh || []).filter(v => v.side === 'e' && !v.dead && v.buddy != null && G.units.includes(v.buddy)).length;
       a4Stat('a5Go');
-      a5Say(`决心：${strong ? `总攻集团已集结 ${men} 人，对${T.name}之敌（约 ${our.men} 人）占优` : chance ? `${T.name}之敌弹药不足、士气动摇，战机已到` : '蓄力已久，不能再等'}——向${T.name}发起总攻！命令：各连进入冲击出发阵地，炮兵火力准备${air ? `，攻击机、武装直升机 ${air} 架编队同时出击` : ''}${nv ? `，坦克、步兵战车 ${nv} 辆伴随` : ''}${ab ? '，第 101 空降师在目标另一侧空降夹击' : ''}；火力准备结束统一冲击，不得各自为战。`, { kind: 'plan', at: T, lv: 0 });
+      a5Say(`决心：${strong ? `总攻集团已集结 ${men} 人，对${T.name}之敌（约 ${our.men} 人）占优` : chance ? `${T.name}之敌弹药不足、士气动摇，战机已到` : '蓄力已久，不能再等'}——向${T.name}发起总攻！命令：各排进入冲击出发阵地，炮兵火力准备${air ? `，攻击机、武装直升机 ${air} 架编队同时出击` : ''}${nv ? `，坦克、步兵战车 ${nv} 辆伴随` : ''}${ab ? '，第 101 空降师在目标另一侧空降夹击' : ''}；火力准备结束统一冲击，不得各自为战。`, { kind: 'plan', at: T, lv: 0 });
       return;
     }
     case 'prep': {
@@ -166,7 +166,7 @@ function a5Think() {
       G.st = 'go'; G.goT = S.t; G.men0 = a5Men(G); G.air2 = 0;
       for (const u of us) { const c = a4Cent(u) || [T.x, T.y]; a4Move(u, T.x + (c[0] - T.x) * .15, T.y + (c[1] - T.y) * .15, Math.atan2(T.y - c[1], T.x - c[0]), 'amove'); }
       for (const id of G.aa) { const v = vehById(id); if (v && !v.dead) v.cmd = { t: 'move', x: Math.round(T.x - G.ux * 260), y: Math.round(T.y - G.uy * 260), face: Math.atan2(G.uy, G.ux), until: S.t + 300, ai: 'aacov' }; }
-      a5Say(`命令：火力延伸！总攻集团 ${us.length} 个连 ${G.men0} 人从 ${Math.min(3, us.length)} 个方向向${T.name}同时冲击，坦克在步兵线后跟进，防空车随后掩护。`, { kind: 'order', at: T, lv: 0 });
+      a5Say(`命令：火力延伸！总攻集团 ${us.length} 个排 ${G.men0} 人从 ${Math.min(3, us.length)} 个方向向${T.name}同时冲击，坦克在步兵线后跟进，防空车随后掩护。`, { kind: 'order', at: T, lv: 0 });
       return;
     }
     case 'go': {
@@ -185,13 +185,13 @@ function a5Think() {
           a5Say(`报告：总攻得手，夺回${T.name}！命令：不停顿，乘胜向${nx.name}扩张战果。`, { kind: 'order', at: nx, lv: 0 });
         } else {
           a5Release(G, 'ok');
-          a5Say(`报告：总攻得手，夺回${T.name}，各连就地转入防御，抓紧补充弹药，准备下一次总攻。`, { kind: 'report', at: T, lv: 0 });
+          a5Say(`报告：总攻得手，夺回${T.name}，各排就地转入防御，抓紧补充弹药，准备下一次总攻。`, { kind: 'report', at: T, lv: 0 });
         }
         return;
       }
       if (men < G.men0 * .5 || S.t - G.goT > A5.go) {
         a4Stat('a5Fail');
-        a5Say(`报告：向${T.name}的总攻受挫（伤亡 ${G.men0 - men} 人），各连撤回集结地域休整，重新蓄力。`, { kind: 'report', at: T, lv: 0 });
+        a5Say(`报告：向${T.name}的总攻受挫（伤亡 ${G.men0 - men} 人），各排撤回集结地域休整，重新蓄力。`, { kind: 'report', at: T, lv: 0 });
         a5Release(G, 'fail');
         return;
       }

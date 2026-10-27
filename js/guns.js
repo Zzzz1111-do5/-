@@ -193,16 +193,24 @@ function gunFlare(ctx, u, v, k, r) {   // 点火白光：k 1 → 0
   ctx.fillStyle = rgba(COL.amber, .55 * k); ctx.beginPath(); ctx.arc(u, v, r * 1.8 * (.7 + .3 * k), 0, 7); ctx.fill();
 }
 
-// 「堤丰」导弹连（车阵见 antiship.js TY_RIG）：4 套发射单元并排——HEMTT 牵引车（全宽驾驶室、风挡、后视镜、排气管、四轴八轮）
+// 「堤丰」导弹排（车阵见 antiship.js TY_RIG）：4 套发射单元并排——HEMTT 牵引车（全宽驾驶室、风挡、后视镜、排气管、四轴八轮）
 //   + M870 拖车（鹅颈、三轴、展开的四个液压支腿），拖车上卧着 Mk 41 四联装发射箱（侧面加强筋、箱口端盖）；
 //   发射前箱子绕拖车尾部铰点起竖到垂直：卧着看见侧面，竖起来看见箱顶 2×2 四个单元格的舱盖，地上拖出长长的投影；
 //   点火前舱盖打开（黑），点火瞬间白光、燃气从箱顶冒出随风飘散、地面一圈冲击波；打空的发射单元尾部地面留下烧蚀痕；
-//   车阵后方是营指挥车（方舱、鞭状天线、卫星天线）与发电车，电缆连到车阵
+//   车阵后方是连指挥车（方舱、鞭状天线、卫星天线）与发电车，电缆连到车阵
+// 车阵里被毁的车：一层焦黑 + 一圈烧痕 + 叉
+function tyWreck(ctx, u0, u1, v0, v1, col) {
+  const cu = (u0 + u1) / 2, cv = (v0 + v1) / 2, r = Math.max(u1 - u0, v1 - v0) * .6, g = ctx.createRadialGradient(cu, cv, 0, cu, cv, r);
+  g.addColorStop(0, 'rgba(0,0,0,.7)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cu, cv, r, 0, 7); ctx.fill();
+  ctx.fillStyle = 'rgba(0,0,0,.45)'; ctx.beginPath(); gunRect(ctx, u0, u1, v0, v1); ctx.fill();
+  ctx.strokeStyle = rgba(col, .8); ctx.lineWidth = px(1.4); ctx.beginPath(); ctx.moveTo(u0, v0); ctx.lineTo(u1, v1); ctx.moveTo(u0, v1); ctx.lineTo(u1, v0); ctx.stroke(); ctx.lineWidth = px(1.1);
+}
 function tyModel(ctx, e, x, y, a, vis, col, dim, dark, real) {
   const R0 = TY_RIG, [su, sv] = gunSh(a), fired = AS.ty.n - (e.n ?? AS.ty.n), ft = e.fireT != null ? S.t - e.fireT : 99, glass = real ? 'rgba(150,190,210,.9)' : rgba(col, .9);
   ctx.save(); ctx.translate(x, y); ctx.rotate(a);
   ctx.lineWidth = px(1.1);
-  // 连部：营指挥车与发电车（车阵后方左右）
+  // 排部：连指挥车与发电车（车阵后方左右）
   ctx.fillStyle = 'rgba(0,0,0,.28)'; ctx.beginPath(); gunRect(ctx, -33 + su * 3, -21 + su * 3, -9.2 + sv * 3, -4.6 + sv * 3); gunRect(ctx, -31 + su * 1.6, -25.5 + su * 1.6, 4.8 + sv * 1.6, 8.4 + sv * 1.6); ctx.fill();
   ctx.fillStyle = dark; ctx.strokeStyle = col;
   ctx.beginPath(); gunRect(ctx, -24.2, -21, -9, -4.8); ctx.fill(); ctx.stroke();   // 驾驶室
@@ -213,8 +221,10 @@ function tyModel(ctx, e, x, y, a, vis, col, dim, dark, real) {
   ctx.fillStyle = dark; ctx.strokeStyle = col; ctx.beginPath(); gunRect(ctx, -31, -25.5, 4.8, 8.4); ctx.fill(); ctx.stroke();   // 发电车
   ctx.strokeStyle = dim; ctx.beginPath(); for (let u = -30; u < -26; u += 1.1) { ctx.moveTo(u, 5.4); ctx.lineTo(u, 7.8); } ctx.moveTo(-25.5, 6.6); ctx.lineTo(-23.6, 6.6); ctx.stroke();
   ctx.setLineDash([px(1.5), px(2)]); ctx.beginPath(); ctx.moveTo(-25.5, 7.6); ctx.quadraticCurveTo(-20, 9, -17, (R0.n - 1) / 2 * R0.gap * .5); ctx.moveTo(-28, 4.8); ctx.quadraticCurveTo(-27, -1, -24.6, -4.6); ctx.stroke(); ctx.setLineDash(vis ? [] : [px(2), px(2)]);   // 电缆
+  if (typeof tyEnsure === 'function') { const T0 = tyEnsure(e), bi = TY_U.findIndex(o => o.k === 'boc'), gi = TY_U.findIndex(o => o.k === 'gen'); if (T0.u[bi].dead) tyWreck(ctx, -33, -21, -9.2, -4.6, col); if (T0.u[gi].dead) tyWreck(ctx, -31, -25.5, 4.8, 8.4, col); }
   for (let k = 0; k < R0.n; k++) {
-    const v0 = (k - (R0.n - 1) / 2) * R0.gap, th = tyErect(e, k), sn = Math.sin(th), cs = Math.cos(th), cur = e.tyL === k && ft < R0.up + R0.hold + R0.down, spent = (k + 1) * 4 <= fired && !cur;
+    const TU = typeof tyEnsure === 'function' ? tyEnsure(e) : null, up = e.tyUp || R0.up;
+    const v0 = (k - (R0.n - 1) / 2) * R0.gap, th = tyErect(e, k), sn = Math.sin(th), cs = Math.cos(th), cur = e.tyL === k && ft < up + R0.hold + R0.down * up / R0.up, spent = (TU ? TU.u[k].r <= 0 : (k + 1) * 4 <= fired) && !cur;
     ctx.save(); ctx.translate(0, v0);
     if (spent || (cur && ft > R0.up)) { const g = ctx.createRadialGradient(R0.piv - R0.T / 2, 0, 0, R0.piv - R0.T / 2, 0, 7); g.addColorStop(0, 'rgba(0,0,0,.55)'); g.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(R0.piv - R0.T / 2, 0, 7, 0, 7); ctx.fill(); }   // 烧蚀痕
     ctx.fillStyle = 'rgba(0,0,0,.28)'; ctx.beginPath(); gunRect(ctx, -17 + su * 2.2, 15 + su * 2.2, -2.4 + sv * 2.2, 2.4 + sv * 2.2); ctx.fill();   // 车的投影
@@ -255,6 +265,7 @@ function tyModel(ctx, e, x, y, a, vis, col, dim, dark, real) {
         if (cur && vis && dt >= 0 && dt < .3) gunFlare(ctx, (ua + ub) / 2, (va + vb) / 2, 1 - dt / .3, 3.2);
       }
     }
+    if (TU && TU.u[k].dead) tyWreck(ctx, -17, 15, -3.3, 3.3, col);   // 这套发射单元被毁：焦黑、打叉
     ctx.restore();
     if (cur && vis) for (let i = 0; i < 4; i++) {   // 燃气与地面冲击波
       const dt = ft - (R0.up + i * AS.ty.every), cu = pu - T * (i < 2 ? .25 : .75), cv = v0 + (i % 2 ? .25 : -.25) * T;
@@ -266,7 +277,7 @@ function tyModel(ctx, e, x, y, a, vis, col, dim, dark, real) {
   if (vis) gunCrew(ctx, x, y, a, [[-20, -11], [-19.5, -2.8, 'radio'], [-23, 10]], col);
 }
 
-// NMESIS 岸舰导弹连（车阵见 missile.js ASC_RIG）：2 辆 ROGUE-Fires 无人发射车（JLTV 底盘、没有驾驶室，车头只有传感器吊舱与摄像头杆）
+// NMESIS 岸舰导弹排（车阵见 missile.js ASC_RIG）：2 辆 ROGUE-Fires 无人发射车（JLTV 底盘、没有驾驶室，车头只有传感器吊舱与摄像头杆）
 //   各载 2 联装 NSM 发射箱，卧放时箱口朝车头；发射前转台转向目标、发射箱以尾部为轴仰起，箱口白光、车尾助推器燃气；
 //   车阵后方一辆有人驾驶的 JLTV 遥控指挥车（风挡、车顶卫通天线罩）
 function ascModel(ctx, e, x, y, a, vis, col, dim, dark, real) {

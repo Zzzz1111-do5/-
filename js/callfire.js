@@ -1,5 +1,5 @@
 'use strict';
-// 呼叫火力（进攻方）：岸上步兵发现敌密集火力点 → 由发现的连上报（方位、兵力、火器）→ 指挥所比较各种火力的到达时间，派最快、又不会误伤的那一种：
+// 呼叫火力（进攻方）：岸上步兵发现敌密集火力点 → 由发现的排上报（方位、兵力、火器）→ 指挥所比较各种火力的到达时间，派最快、又不会误伤的那一种：
 //   ① 在空的对地支援机（出航或盘旋中，700 以内）：改派过去，最快，危险近距 45 也能打；
 //   ② 驱逐舰舰炮（射程内、不在损管）：约 5–8 秒，我军须在 70 以外；沙盒护航舰按告急区转火支援；
 //   ③ 驱逐舰垂发对地导弹（碉堡 / 炮位等硬目标，vls.js）：几秒到十几秒，精度高；
@@ -88,7 +88,7 @@ function cfStep(dt) {
     F.calls.push({ ...at, t: S.t, a: O[0] ? O[0].a : null, eta: O[0] ? O[0].eta : 0, by: nm });
     v8Stat('cfCall');
     chatSay('p', `报告：${nm}在${wh}发现敌密集火力点（${cfDesc(c)}），距我 ${Math.round(od)} 米，请求火力支援。`, { kind: 'report', at, key: 'cfr' + Math.round(c.x / 150) + '_' + Math.round(c.y / 150), gap: 40, lv: 2 });
-    const who = u || obs, sh = (t, o) => typeof shout === 'function' && shout(who, t, o);   // 请求、答复由前沿连队自己喊（shout.js），通联里只留详档
+    const who = u || obs, sh = (t, o) => typeof shout === 'function' && shout(who, t, o);   // 请求、答复由前沿排自己喊（shout.js），通联里只留详档
     sh('发现敌火力点，请求火力支援！');
     if (!O.length) { chatSay('p', `答复：${nm}，附近暂无可用的支援火力，就地隐蔽、以建制火力压制${cfWait()}。`, { kind: 'remedy', at, delay: 1.5, key: 'cfnone', gap: 40, lv: 2 }); sh('没有支援火力，就地隐蔽压制！', { delay: 2.5 }); v8Stat('cfNone'); continue; }
     const o = O[0];

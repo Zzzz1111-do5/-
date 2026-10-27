@@ -23,6 +23,7 @@ function camClamp() {
 }
 
 function camZoomAt(sx, sy, k) {
+  if (typeof V3 === 'object' && V3.on && !(typeof V3O === 'object' && V3O.on) && typeof v3Dolly === 'function') { v3Dolly(sx, sy, k); return; }   // 3D 自由镜头：朝鼠标指着的地方推近 / 拉远
   const before = toWorld(sx, sy);
   CAM.z *= k;
   camClamp();
@@ -38,9 +39,9 @@ function camCenter(x, y) { CAM.x = x; CAM.y = y; camClamp(); }
 const KEYS = new Set();
 function camKeys(dt) {
   const v = 700 * dt / CAM.z * CAM.fit;
-  if (typeof V3 === 'object' && V3.on) {   // 3D：方向键按镜头转向平移（屏幕上的左右上下）
-    const k = v * CAM.z, dx = (KEYS.has('ArrowLeft') ? k : 0) - (KEYS.has('ArrowRight') ? k : 0), dy = (KEYS.has('ArrowUp') ? k : 0) - (KEYS.has('ArrowDown') ? k : 0);
-    if (dx || dy) v3Pan(dx, dy);
+  if (typeof V3 === 'object' && V3.on) {   // 3D 自由镜头：W / ↑ 沿视线往前飞（抬头往上、低头往下）、S / ↓ 往后，A D / ← → 左右平移
+    const fw = (KEYS.has('ArrowUp') ? 1 : 0) - (KEYS.has('ArrowDown') ? 1 : 0), rt = (KEYS.has('ArrowRight') ? 1 : 0) - (KEYS.has('ArrowLeft') ? 1 : 0);
+    if ((fw || rt) && typeof v3Fly === 'function') v3Fly(fw, rt, dt * (KEYS.has('Shift') ? 3 : 1));
     return;
   }
   if (KEYS.has('ArrowLeft')) CAM.x -= v;

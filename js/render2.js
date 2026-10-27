@@ -73,8 +73,10 @@ function drawLines(time) {
       ctx.fillStyle = rgba(COL.g, .9); ctx.fillRect(lerp(z.x1, a.x0, u) - px(1.5), lerp(z.y1, a.y0, u) - px(1.5), px(3), px(3));
     }
     ctx.strokeStyle = rgba(COL.g, L.connected ? .9 : .4); ctx.lineWidth = px(1.4);
-    ctx.strokeRect(L.x - 5, L.y - 5, 10, 10);
-    ctx.beginPath(); ctx.moveTo(L.x - 3, L.y); ctx.lineTo(L.x + 3, L.y); ctx.moveTo(L.x, L.y - 3); ctx.lineTo(L.x, L.y + 3); ctx.stroke();
+    if (!R.m3d) {   // 3D：滩头补给站是立体模型（v3units.js v3mDepot）
+      ctx.strokeRect(L.x - 5, L.y - 5, 10, 10);
+      ctx.beginPath(); ctx.moveTo(L.x - 3, L.y); ctx.lineTo(L.x + 3, L.y); ctx.moveTo(L.x, L.y - 3); ctx.lineTo(L.x, L.y + 3); ctx.stroke();
+    }
     if (L.connected && hoverNear(L.x, L.y, 12)) { ctx.strokeStyle = rgba(COL.g, .25); ctx.lineWidth = px(1); ctx.setLineDash([px(2), px(5)]); ctx.beginPath(); ctx.arc(L.x, L.y, 200, 0, 7); ctx.stroke(); ctx.setLineDash([]); }
   }
   ctx.lineWidth = px(1); ctx.setLineDash([px(2), px(6)]); ctx.strokeStyle = rgba(COL.intel, .3);
@@ -120,12 +122,13 @@ function enemyMark(ctx, kind, x, y) {
 
 // 画面上的小组朝向：向 faceOf 平滑转过去（每帧最多约 0.2 弧度），不随寻路的每一步左右乱转
 const TFACE = new WeakMap();
+// 画面朝向：按真实时间限制转身速度（每秒约 3 弧度），与帧率无关；一次只在同一帧算一遍（2D、3D、贴图多次调用不重复转）
 function faceDraw(q) {
-  const f = faceOf(q), o = TFACE.get(q);
-  if (o == null || !isFinite(o)) { TFACE.set(q, f); return f; }
-  const d = Math.atan2(Math.sin(f - o), Math.cos(f - o)), n = o + clamp(d, -.2, .2);
-  TFACE.set(q, n);
-  return n;
+  const f = faceOf(q), o = TFACE.get(q), now = typeof performance === 'object' ? performance.now() / 1000 : 0;
+  if (!o || !isFinite(o.a)) { TFACE.set(q, { a: f, t: now }); return f; }
+  const dt = clamp(now - o.t, 0, .1);
+  if (dt > 0) { const d = Math.atan2(Math.sin(f - o.a), Math.cos(f - o.a)); o.a += clamp(d, -3 * dt, 3 * dt); o.t = now; }
+  return o.a;
 }
 // 小组本体：远看（每格不足 10px）为楔形三点，点与间距按屏幕像素（随缩放略增），不会糊成一团；近看为世界尺寸的单兵小人
 function drawTeamBody(ctx, q, f, col) {
@@ -188,7 +191,7 @@ function drawEnemies(time) {
   const agg = typeof hqAggHide === 'function';
   for (const q of S.teams) {
     if (q.side !== 'e' || !inView(q.x, q.y, 12)) continue;
-    if (agg && !q.rc && hqAggHide('u', q.u)) continue;   // 远看：编进团的连画成分队符号（hq.js）
+    if (agg && !q.rc && hqAggHide('u', q.u)) continue;   // 远看：编进营的排画成分队符号（hq.js）
     if (inVision(q.x, q.y)) {
       if (!(R.m3d && R.m3dNear)) drawTeamBody(ctx, q, faceDraw(q), !R.fig && q.sup >= 60 ? rgba(COL.amber, .9) : COL.enemy);   // 3D 近看：步兵是立体小人
       supMark(ctx, q);
@@ -201,7 +204,7 @@ function drawEnemies(time) {
 
 function drawTeams(time) {
   const ctx = R.ctx;
-  // 选中连队的去向：每个连队一条虚线（连队中心 → 各组目标的中心）与小目标点，不再每组一条
+  // 选中排的去向：每个排一条虚线（排中心 → 各组目标的中心）与小目标点，不再每组一条
   for (const u of S.units) {
     if (u.side !== 'p' || !isSel(u.id) || u.x == null) continue;
     const ts = teamsOf(u).filter(q => q.order.x != null && q.order.t !== 'hold');
@@ -218,7 +221,7 @@ function drawTeams(time) {
   const agg = typeof hqAggHide === 'function';
   for (const q of S.teams) {
     if (q.side !== 'p' || !inView(q.x, q.y, 12)) continue;
-    if (agg && !q.rc && hqAggHide('u', q.u)) continue;   // 远看：编进团的连画成分队符号（hq.js）
+    if (agg && !q.rc && hqAggHide('u', q.u)) continue;   // 远看：编进营的排画成分队符号（hq.js）
     const low = q.kind === 'inf' && q.ammo < 8, a = low ? .55 + .4 * Math.sin(time * 8) : 1, u = unitOf(q);
     const col = rgba(!R.fig && q.sup >= 60 ? COL.amber : u && u.state === 'rout' ? COL.amber : COL.g, a);
     if (!(R.m3d && R.m3dNear)) drawTeamBody(ctx, q, faceDraw(q), col);

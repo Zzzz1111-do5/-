@@ -2,7 +2,7 @@
 // AI 指挥官（攻防双方）：判断—决心—理由—命令—报告。命令经通信传递有延迟；执行中有摩擦（偏航、通信受阻、情报误判、
 // 后续梯队迟滞、火力误伤与假目标、停滞不前），指挥官发现后实施补救，补救在推演中真实执行
 // 存档数据（纯 JSON）：S.chat 通联记录 · S.chatK 节流 · S.cmd = { v, q 待执行动作, p 我方指挥官, e 敌方指挥官 }
-// 我方：PvE 只指挥 auto 资产（连队、舰船、车辆；驱逐舰 / 航母须开自动）；观战（S.role === 'spectate'）指挥全部
+// 我方：PvE 只指挥 auto 资产（排、舰船、车辆；驱逐舰 / 航母须开自动）；观战（S.role === 'spectate'）指挥全部
 // 敌方：包装 ai.js / ai2.js / ai3.js：判明主攻方向（可能误判佯攻）、控制预备队投入、反冲击协同，叙述炸桥 / 袭扰 / 装甲车 / 炮兵
 const CMD_KINDS = ['plan', 'order', 'intel', 'friction', 'remedy', 'report'];
 const CMD_FP = { drift: .2, late: .4, halt: .16, dc: .14, decoy: .22, jam: .07 };   // 我方摩擦基础概率（有无线电中继 S.relay 时减半）
@@ -19,9 +19,44 @@ let CMD_STRICT = false;   // 测试时置 true：出错直接抛出
 
 // ———————————————— 通联记录 ————————————————
 // side：'p' 我方指挥官 / 'e' 敌方指挥官 / 'sys' 系统；opts = {kind, at:{x,y}, delay 秒, key, gap 节流秒, lv 0 必显 / 1 普通 / 2 详细}
+// 说话像人，不像旁白（chatVoice）：去掉「命令：」「判断：」「决心：」「理由：」这类公文标签（面板上已经有「命令 / 报告 / 计划」的标签），
+//   「A → B：…」「X 收到上级命令：…，转令所属…」改成谁在说、说了什么；长段的机制说明括注删掉，一条话最多两三句；
+//   偶尔加一句口头的开头（「各单位注意」「糟了」）或「完毕」，下了命令有时下面回一声「收到」——同样的意思换着说法，不一字不差地重复
+const CV_ACK = { p: ['收到。', '收到，马上动。', '明白。', '好，这就去。', '收到——给我一点时间。', '明白，正在执行。', '收到，已经在路上了。'],
+  e: ['收到。', '明白，马上办。', 'Copy，这就去。', '收到，正在动。', '明白。需要几分钟。', '收到——我们会顶住。'] };
+const CV_WHO = { p: ['一线营长', '前沿连长', '舰队值班军官', '空中协调员', '炮兵指挥'], e: ['前沿连长', '营指挥所', '值班军官', '防空指挥', '炮兵阵地'] };
+function chatVoice(side, text, kind) {
+  let who = null, t = String(text).trim(), m;
+  if ((m = t.match(/^(.{2,16}?) → (.{2,18}?)：(.+)$/))) { who = `${m[1]} → ${m[2]}`; t = m[3]; }
+  let relay = false;
+  if ((m = t.match(/^(.{2,18}?)收到上级命令：(.+?)，转令所属.*$/))) { who = m[1]; relay = true; t = pick([`收到，${m[2]}。我往下传。`, `明白——${m[2]}。`, `收到。${m[2]}，下面马上动起来。`, `收到：${m[2]}。`]); }
+  if ((m = t.match(/^编组：(.+)$/))) t = pick(['人凑齐了，', '编好了：', '']) + m[1].replace(/（步兵 (\d+) 人，归(?:.*?)(第\d+团)）/g, '（$1 个人，归$2）');
+  if ((m = t.match(/^(?:前沿观察|侦察机)报告：(.+)$/))) { who = t.startsWith('侦察机') ? '侦察机' : '前沿观察哨'; t = m[1].replace('方向标定', pick(['那边看到', '方向有', '一带发现了'])).replace(/，坐标 ([A-Z]\d+)/, '，在 $1').replace(/^([A-Z]\d+) 方格标定/, '$1 那格有'); }
+  if ((m = t.match(/^(司令|战区司令部|战区|守方司令|攻方司令)：/))) { who = who || '战区司令部'; t = t.slice(m[0].length); }
+  t = t.replace(/^(命令|报告|补救|情报|计划)：/, '');
+  t = t.replace(/^判断：/, () => pick(['看样子', '眼下', '我看', '']));
+  t = t.replace(/^(初步)?决心：/, (_, pre) => pre ? pick(['先这么打算：', '初步想法：']) : pick(['那就这么办：', '这样打：', '定了：', '']));
+  t = t.replace(/[。；]?\s*(初步)?决心：/g, (_, pre) => pre ? pick(['。先这么打算：', '。初步想法：']) : pick(['。那就这么办：', '。这样打：', '。我的决定是：', '。所以：']));
+  t = t.replace(/^理由：/, () => pick(['因为', '这么选是因为', '原因：']));
+  t = t.replace(/[。；]\s*命令：/g, '。');
+  t = t.replace(/（[^（）]{14,}）/g, '');   // 长括注多是机制说明，说话时不念
+  if (t.length > 100) {   // 太长：只说前面几句
+    const parts = t.split(/(?<=[。！？；])/);
+    let out = '';
+    for (const p of parts) { if (out && (out + p).length > 100) break; out += p; }
+    t = out.replace(/；$/, '。');
+  }
+  if (kind === 'order' && !relay && !who && t.length > 12 && Math.random() < .22) t = pick(['各单位注意，', '听好，', '注意，']) + t;
+  else if (kind === 'friction' && Math.random() < .55) t = pick(['糟了，', '不好，', '注意！', '麻烦了，']) + t;
+  else if (kind === 'report' && /击落|摧毁|击毁|夺取|拿下/.test(t) && Math.random() < .3) t = pick(['干得漂亮——', '好！', '漂亮，']) + t;
+  if (Math.random() < .07) t = t.replace(/。$/, '，完毕。');
+  return { text: t, who, relay };
+}
 function chatSay(side, text, opts) {
   if (!S || !text) return null;
   opts = opts || {};
+  if (!opts.raw && side !== 'sys') { const v = chatVoice(side, text, opts.kind); text = v.text; opts = { ...opts, ...(v.who && !opts.who ? { who: v.who } : {}), ...(v.relay ? { relay: true } : {}) }; }
+  if (!text) return null;
   if (!Array.isArray(S.chat)) S.chat = [];
   if (opts.key) {
     const th = S.chatK && typeof S.chatK === 'object' ? S.chatK : (S.chatK = {});
@@ -34,10 +69,16 @@ function chatSay(side, text, opts) {
     lv: opts.lv ?? (kind === 'plan' || kind === 'friction' || kind === 'remedy' ? 0 : 1) };
   if (S.hq && S.hq.on && !opts.hq) m.lv = Math.max(m.lv, 2);   // 指挥体系（hq.js）开着：常规档只看双方司令的大战术，其余都进详档
   if (opts.hq) m.hq = true;
+  if (opts.who) m.who = String(opts.who);
   // PvE 里敌方通话只能截获：约四成，滞后 15–30 秒（面板据此显示；观战时实时显示）
   if (m.side === 'e') m.ic = Math.random() < (m.lv === 0 ? .45 : m.lv === 1 ? .38 : .3) ? +(t + 15 + Math.random() * 15).toFixed(2) : null;
   S.chat.push(m);
   if (S.chat.length > 400) { const k = S.chat.findIndex(m => m.kind !== 'plan'); if (k >= 0) S.chat.splice(k, 1); }   // 上限 400，先丢最早的非决心消息
+  // 下了命令，下面有时回一声（谁接的令就谁回；不是每条都回）
+  if (m.kind === 'order' && !opts.ack && !opts.relay && m.side !== 'sys' && Math.random() < .3) {
+    const to = m.who && m.who.includes(' → ') ? m.who.split(' → ')[1] : pick(CV_WHO[m.side]);
+    chatSay(m.side, pick(CV_ACK[m.side]), { kind: 'report', lv: m.lv, hq: m.hq, delay: (+opts.delay || 0) + 2 + Math.random() * 4, ack: true, raw: true, who: to, at: at || undefined });
+  }
   return m;
 }
 
@@ -109,14 +150,17 @@ function cmdUName(u) {
   if (u.side !== 'p') return '敌军';
   if (u.kind === 'eng') return `${u.ship || ''}工兵组`;
   if (u.ship && Array.isArray(S.veh) && S.veh.some(v => v.label === u.ship)) return `${u.ship}车组`;
-  if (u.ship && u.ship !== '增援') return /队\d*$/.test(u.ship) ? u.ship : `${u.ship}连`;
+  if (u.ship && u.ship !== '增援') return /队\d*$/.test(u.ship) ? u.ship : `${u.ship}排`;
   const C = S.cmd.p;
   if (!C.alias[u.id]) C.alias[u.id] = ++C.rc;
-  return `增援${C.alias[u.id]}连`;
+  return `增援${C.alias[u.id]}排`;
 }
 function cmdKnText(kn) {
   const N = { coastal: '岸防重炮', bunker: '机枪碉堡', arty: '榴弹炮', mortar: '迫击炮', aa: '防空炮', mine: '雷区' };
-  return Object.keys(N).filter(k => kn[k]).map(k => `${N[k]} ${kn[k]} ${CMD_UNIT[k]}`).join('、');
+  const s = Object.keys(N).filter(k => kn[k]).map(k => `${N[k]} ${kn[k]} ${CMD_UNIT[k]}`).join('、');
+  if (s) return s;
+  const o = Object.keys(kn).filter(k => kn[k] && typeof ENEMY_SPEC === 'object' && ENEMY_SPEC[k]).map(k => `${ENEMY_SPEC[k].name}${kn[k] > 1 ? ` ${kn[k]} 处` : ''}`).join('、');   // 机场、雷达、发射车等其他目标
+  return o || '敌目标';
 }
 // 待执行动作（命令传递、延时补救）：动作名 + 纯数据参数
 function cmdLater(d, act, a) { S.cmd.q.push({ due: +(S.t + d).toFixed(2), act, a: a || {} }); }
@@ -414,7 +458,7 @@ function cmdPlanP() {
   return C.plan;
 }
 
-// 登陆由玩家亲自指挥时：以上陆兵力最多的滩头为主要方向，接手自动连队的纵深发展
+// 登陆由玩家亲自指挥时：以上陆兵力最多的滩头为主要方向，接手自动排的纵深发展
 function cmdAdoptP(C) {
   if (!TER.beaches.length || S.t - C.plan.t < 15 || !S.units.some(u => u.side === 'p' && u.kind === 'inf' && cmdCtl(u) && teamsOf(u).length)) return;
   C.plan.t = S.t;
@@ -425,7 +469,7 @@ function cmdAdoptP(C) {
   C.ph = cmdOwned(E) ? 'brk' : 'beach';
   if (C.ph === 'brk') C.axis = cmdAxis(E);
   const nxt = C.ph === 'brk' && C.axis[0] ? cmdPt(C.axis[0]) : null;
-  chatSay('p', `判断：登陆按指挥员部署实施，主力已在${cmdBN(main)}上陆约 ${mx} 人${cmdOwned(E) ? `，${E.name}已在我手` : ''}。决心：各自动连队以${cmdBN(main)}为主要方向，${nxt ? `向${nxt.name}发展` : `先夺取${E.name}`}。`, { kind: 'plan', at: E });
+  chatSay('p', `判断：登陆按指挥员部署实施，主力已在${cmdBN(main)}上陆约 ${mx} 人${cmdOwned(E) ? `，${E.name}已在我手` : ''}。决心：各自动排以${cmdBN(main)}为主要方向，${nxt ? `向${nxt.name}发展` : `先夺取${E.name}`}。`, { kind: 'plan', at: E });
 }
 
 function cmdSayPlan(B, R, mode, prep) {
@@ -970,7 +1014,7 @@ function cmdPhaseP(C, P) {
   }
   if (C.ph !== 'cons' && hq && cmdOwned(hq)) {
     C.ph = 'cons';
-    chatSay('p', `决心：指挥所已夺取，转入巩固。各连就地构筑防御，严防反冲击；${vpShare() >= VP_WIN ? '已控制七成据点分值，坚守待援' : '余部继续夺取周边据点，扩大登陆场'}。`, { kind: 'plan', at: hq });
+    chatSay('p', `决心：指挥所已夺取，转入巩固。各排就地构筑防御，严防反冲击；${vpShare() >= VP_WIN ? '已控制七成据点分值，坚守待援' : '余部继续夺取周边据点，扩大登陆场'}。`, { kind: 'plan', at: hq });
   } else if (C.ph === 'cons' && hq && hq.owner !== 'p') { C.ph = 'brk'; C.axis = ['HQ']; }   // 失守的叙述与反击见 cmdPointsP
   // 目标优先级
   const pri = {};
@@ -1004,7 +1048,7 @@ function cmdPointsP(C, P) {
       for (const o of S.units) if (o.side === 'p' && o.kind === 'inf' && o.x != null) { const d = dist(o.x, o.y, p.x, p.y); if (d < bd) { bd = d; u = o; } }
       const next = C.ph === 'brk' && C.axis[0] === p.key ? cmdPt(C.axis[1]) : null;
       chatSay('p', `报告：${u ? cmdUName(u) : '我部'}夺取${p.name}。${next ? `命令：继续向${next.name}发展。` : ''}`, { kind: 'report', at: p, lv: 2 });
-      if (u && typeof shout === 'function') shout(u, `拿下${p.name}！`);   // 夺点由连队自己喊（shout.js），通联里只留详档
+      if (u && typeof shout === 'function') shout(u, `拿下${p.name}！`);   // 夺点由排自己喊（shout.js），通联里只留详档
     } else {
       if (S.t - (C.lostT[p.key] ?? -99) < 60) continue;
       C.lostT[p.key] = S.t;
@@ -1036,7 +1080,7 @@ function cmdFoeAt(p, r, safe) {
   return best;
 }
 function cmdFoeFire(p) { const f = cmdFoeAt(p, 140); return !!(f && cmdFire(f.x, f.y, 2, 'retake')); }
-// 可抽调的连队：受指挥、未溃、不弱，当前目标价值不高于 p，距离以内最近
+// 可抽调的排：受指挥、未溃、不弱，当前目标价值不高于 p，距离以内最近
 function cmdSpareUnit(p, grp, P, maxD = 700) {
   let best = null, bd = maxD;
   const pri = (P.pri || {});
@@ -1136,7 +1180,7 @@ function cmdStallFix(C, P, key, p, grp, men, men0, lost) {
   chatSay('p', `补救：${acts.join('；')}。`, { kind: 'remedy', at: p, delay: 2 });
 }
 
-// —— 集结迟滞：连队向目标集结 100 秒仍未进入攻击位置（桥上拥堵、桥被炸、绕行过远）——报告原因；兵力够就地发起，不够则暂缓、转用 ——
+// —— 集结迟滞：排向目标集结 100 秒仍未进入攻击位置（桥上拥堵、桥被炸、绕行过远）——报告原因；兵力够就地发起，不够则暂缓、转用 ——
 function cmdStageStall(C, P) {
   const st = C.stg || (C.stg = {}), kT = C.stgK || (C.stgK = {}), by = {};
   for (const u of S.units) {
@@ -1224,7 +1268,7 @@ function cmdSend(u, act, a) {
     chatSay('p', `补救：改用备用频率重发命令，约 ${n} 秒后确认收到。`, { kind: 'remedy', at: u, delay: 2 });
   }
   cmdLater(d, 'order', { uid: u.id, act, ...a, lost, runner: !radios && !relay });
-  (C.pend || (C.pend = {}))[u.id] = S.t + d + 30;   // 命令在途及送达后 30 秒内不再被另行抽调（免得一连两令、朝令夕改）
+  (C.pend || (C.pend = {}))[u.id] = S.t + d + 30;   // 命令在途及送达后 30 秒内不再被另行抽调（免得一排两令、朝令夕改）
   return d;
 }
 
@@ -1276,7 +1320,7 @@ function cmdThreatsP(C) {
     else if (!close && cmdAsk(a.kx, a.ky)) chatSay('p', `${cmdAsk(a.kx, a.ky)}：敌装甲车正向我滩头机动。`, { kind: 'order', at, delay: 1.5, key: 'carord', gap: 30, lv: 0 });
     if (close) {
       const vh = near.q ? cmdVehHelp(near.q.x, near.q.y, at) : null, ask = !acts.length ? cmdAsk(a.kx, a.ky) : '';
-      chatSay('p', `补救：${vh ? `${typeof vehName === 'function' ? vehName(vh) + ' ' : '我坦克'}前出迎击；` : ''}${ask ? ask + '；' : ''}附近各连以集束手榴弹抵近攻击，不得以步兵正面硬拼。`, { kind: 'remedy', at, delay: 2.5, key: 'carfix', gap: 30 });
+      chatSay('p', `补救：${vh ? `${typeof vehName === 'function' ? vehName(vh) + ' ' : '我坦克'}前出迎击；` : ''}${ask ? ask + '；' : ''}附近各排以集束手榴弹抵近攻击，不得以步兵正面硬拼。`, { kind: 'remedy', at, delay: 2.5, key: 'carfix', gap: 30 });
     }
   }
 }
@@ -1367,7 +1411,7 @@ function cmdCrisisStall(C, ts, cx, cy) {
   }
   chatSay('p', `补救：${acts.join('；')}。`, { kind: 'remedy', at: cp, delay: 2 });
 }
-// 弹药摩擦：连队因弹药将尽转入补给（autopilot apFallback 写 ph=supply / regroup）时报告
+// 弹药摩擦：排因弹药将尽转入补给（autopilot apFallback 写 ph=supply / regroup）时报告
 function cmdAmmoP(C, P) {
   C.ammo = C.ammo || {};
   for (const u of S.units) {
@@ -1682,7 +1726,7 @@ function cmdEEvents(E, o) {
 
 // ———————————————— 延时动作 ————————————————
 const CMD_ACT = {
-  // 命令到达连队（可能已丢失：传令兵失踪 → 任务式指挥）
+  // 命令到达排（可能已丢失：传令兵失踪 → 任务式指挥）
   order(a) {
     const u = UNIT_MAP.get(a.uid);
     if (!u || !teamsOf(u).length || u.state === 'rout') return;
@@ -1690,7 +1734,7 @@ const CMD_ACT = {
     if (a.lost) {
       const p = cmdPt(a.key);
       chatSay('p', `报告：派往${un}的传令兵途中失踪，命令未能送达。`, { kind: 'friction', at: u });
-      if (p) { S.cmd.p.mission[u.id] = p.key; chatSay('p', `补救：${un}依任务式指挥行动，按既定意图自行向${p.name}攻击；后续命令经邻近连队电台转达。`, { kind: 'remedy', at: u, delay: 2 }); }
+      if (p) { S.cmd.p.mission[u.id] = p.key; chatSay('p', `补救：${un}依任务式指挥行动，按既定意图自行向${p.name}攻击；后续命令经邻近排电台转达。`, { kind: 'remedy', at: u, delay: 2 }); }
       return;
     }
     if (!P || typeof apTask !== 'function') return;
@@ -1707,7 +1751,7 @@ const CMD_ACT = {
     } else if (a.act === 'launch') {   // 集结迟滞：不再等集结，就地发起
       const pl = P.u[u.id], p = cmdPt(a.key);
       if (pl && p && pl.obj === a.key && (pl.ph === 'stage' || pl.ph === 'wait') && !cmdOwned(p) && typeof apLaunch === 'function') apLaunch([u], p, P);
-    } else if (a.act === 'drop') {     // 暂缓攻击该点：连队转用，该点一段时间内不再优先
+    } else if (a.act === 'drop') {     // 暂缓攻击该点：排转用，该点一段时间内不再优先
       const pl = P.u[u.id];
       if (!pl || pl.obj !== a.key || !['stage', 'wait', 'go'].includes(pl.ph) || typeof apIdle !== 'function') return;
       apIdle(pl); P.hard[a.key] = S.t;

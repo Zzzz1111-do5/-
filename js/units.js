@@ -248,7 +248,7 @@ function moveTeam(q, dt, mul) {
     const d2 = dist(rx, ry, o2.x, o2.y);
     if (d2 < 9 && d2 > .01) { px += (rx - o2.x) / d2 * (9 - d2) * .3; py += (ry - o2.y) / d2 * (9 - d2) * .3; }
   }
-  // 避让只横向错开，不把小组往回推（桥上对向两组否则互相顶住，整连卡死）
+  // 避让只横向错开，不把小组往回推（桥上对向两组否则互相顶住，整排卡死）
   const ux = (tx - q.x) / l, uy = (ty - q.y) / l, back = px * ux + py * uy;
   if (back < 0) { px -= back * ux; py -= back * uy; }
   let nx = rx + px, ny = ry + py;
@@ -261,7 +261,8 @@ function moveTeam(q, dt, mul) {
   }
   const bo = bldOut(nx, ny, .6);   // 避让推进了房子：贴墙走
   if (bo && passInf(bo[0], bo[1])) [nx, ny] = bo;
-  q.x = nx; q.y = ny; q.movedT = S.t; q.heading = Math.atan2(ty - q.y, tx - q.x);
+  q.x = nx; q.y = ny; q.movedT = S.t;
+  if (dd > 8 || q.heading == null) { q.heading = Math.atan2(ty - q.y, tx - q.x); q.hT = S.t; }   // 离落脚点几米内的小幅修正不转身（否则槽位一挪，三个人就绕着小组中心来回甩）
   return false;
 }
 

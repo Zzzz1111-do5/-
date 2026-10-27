@@ -18,7 +18,7 @@
 //   飞机在 S.eair.fly（type 'b2'，g 机群 id，no 机号，load 挂载，aims 瞄准点 [x, y, k?, id?]，i 已投 / 已射枚数）
 // n 一组架数 · minT 开战后最早出动 · need 出动门槛（看得见的上岸之敌价值合计：步兵每人 1、坦克 6、车辆 3、抢滩舰 7~10）· needLost 据点失守后的门槛
 const B2 = { n: 5, minT: 240, need: 90, needLost: 50, retry: 10, spd: 200, alt: .95, turn: .8, hp: 3, rel: 260, every: .12, jEvery: .35, safe: 60, gps: 4, edge: 90 };
-// 压制（v14）：每枚 JDAM 落地除了杀伤半径内的毁伤，还有大得多的冲击波与心理震撼——RS 以内的敌步兵被死死压住、连队士气大跌，
+// 压制（v14）：每枚 JDAM 落地除了杀伤半径内的毁伤，还有大得多的冲击波与心理震撼——RS 以内的敌步兵被死死压住、排士气大跌，
 //   车辆乘员被震晕（压制）；连续落弹沿航线一路滚过去（地毯式覆盖），爆点留下火球与久久不散的烟尘。
 //   弹多目标少时不再「其余几架补投同样的点」：GBU-38 在敌集结处按 26 的间距铺满覆盖面（藏在掩体里看不见的也一起覆盖）
 const B2_SHOCK = { gbu38: { rs: 120, sup: 95, mor: 10 }, gbu31: { rs: 190, sup: 100, mor: 18 } };
@@ -113,7 +113,7 @@ function b2Blast(x, y, w) {
   const D = S.b2dust || (S.b2dust = []);
   D.push({ x: Math.round(x + gauss() * 6), y: Math.round(y + gauss() * 6), t: S.t, r: w === 'gbu31' ? 48 : 30 });
   if (D.length > 260) D.splice(0, D.length - 260);
-  if (S.t - (S.b2shoutT ?? -99) > 6 && typeof shout === 'function') {   // 挨炸的连喊一嗓子
+  if (S.t - (S.b2shoutT ?? -99) > 6 && typeof shout === 'function') {   // 挨炸的排喊一嗓子
     const q = S.teams.find(q => q.side === 'p' && q.men.length && dist(q.x, q.y, x, y) < K.rs);
     if (q && unitOf(q)) { S.b2shoutT = S.t; shout(unitOf(q), pick(['B-2 地毯轰炸！趴下！', '天上全是炸弹！', '隐蔽！炸弹一路砸过来了！']), { side: 'p' }); }
   }
@@ -148,18 +148,51 @@ function b2Sortie(G) {
   const plan = b2Plan(G.n);
   if (!plan) { G.next = S.t + B2.retry; return; }
   const E = eaEnsure(), sp = EA_SPEC.b2;
-  // 进入点：北边图外，正对主要目标的经度；楔形编队（长机居中在前，僚机两侧各两架、逐级向后 90）
+  // 进入点：北边图外，正对主要目标的经度；楔形编队（长机居中在前，僚机两侧各两架、逐级向后 B2_FORM.back），全程保持队形：
+  //   机群沿一条共同航线飞（按全部瞄准点聚成几片、就近串起来），各机在自己的编队位置上，瞄准点进了投放距离就投（JDAM 是 GPS 制导、能偏置投放）
   const cx = clamp(plan.reduce((a, p) => a + (p.aims[0] ? p.aims[0][0] : W / 2), 0) / plan.length, 300, W - 300);
+  const land = plan.filter(p => p.load !== 'jassm').flatMap(p => p.aims);
+  G.f = { x: cx, y: -B2.edge, heading: Math.PI / 2, spd: B2.spd, alt: B2.alt, hr: 0, bank: 0, ri: 0, pass: 0, route: b2FormRoute(land, cx, -B2.edge) };
+  const order = plan.map((p, i) => i).sort((i, j) => (plan[i].aims[0] ? plan[i].aims[0][0] : cx) - (plan[j].aims[0] ? plan[j].aims[0][0] : cx));   // 瞄准点偏东的飞机排在编队东侧
+  const slots = b2Slots(plan.length).sort((u, v) => v[1] - u[1]);   // 由东到西（航向向南时右翼 = 西）：先按横向位置排
   plan.forEach((p, i) => {
-    const r = Math.ceil(i / 2), x = cx + (i % 2 ? -1 : 1) * r * 110, y = -B2.edge - r * 90;
-    const aims = p.load === 'jassm' ? p.aims : b2Route(p.aims, x, y);
+    const sl = slots[order.indexOf(i)] || [0, 0], x = cx - sl[1], y = -B2.edge - sl[0];
     E.fly.push({ id: S.nid++, type: 'b2', g: G.id, no: i + 1, x, y, heading: Math.PI / 2, spd: B2.spd, alt: B2.alt, bank: 0, hp: sp.hp, flares: sp.flares, t: S.t, pv: false,
-      ph: 'in', load: p.load, aims: aims.map(o => [Math.round(o[0]), Math.round(o[1]), o[3] || null, o[4] ?? null]), i: 0, relT: 0 });
+      ph: 'in', load: p.load, fo: sl, aims: p.aims.map(o => [Math.round(o[0]), Math.round(o[1]), o[3] || null, o[4] ?? null]), i: 0, relT: 0 });
   });
   G.st = 'out'; G.k++;
   const what = plan.map((p, i) => `${i + 1} 号机挂 ${B2_LOAD[p.load].n} 枚 ${B2_LOAD[p.load].nm}，${p.load === 'jassm' ? '在防区外打海上舰艇' : p.load === 'gbu31' ? '打抢滩登陆舰与坦克' : `打${typeof cmdWhere === 'function' && p.aims[0] ? cmdWhere(p.aims[0][0], p.aims[0][1]) : '滩头'}一带的步兵、车辆`}`).join('；');
   if (typeof chatSay === 'function') chatSay('e', `决心：滩头吃紧，动用 B-2A 隐身轰炸机群（${plan.length} 架，一局仅此一波）从本土远程奔袭，高空突防：${what}。`, { kind: 'plan', lv: 1, at: plan[0].aims[0] ? { x: plan[0].aims[0][0], y: plan[0].aims[0][1] } : null });
   if (typeof eaStat === 'function') eaStat('b2Sortie');
+}
+// 楔形编队的位置 [向后, 横向（航向右侧为正）]：长机居中在前，僚机左右交替、逐级向后
+const B2_FORM = { back: 75, side: 95, cell: 230, wp: 60, passes: 2 };
+const b2Slots = n => Array.from({ length: n }, (_, i) => { const r = Math.ceil(i / 2); return [r * B2_FORM.back, (i % 2 ? -1 : 1) * r * B2_FORM.side]; });
+// 机群的共同航线：瞄准点按 cell 的网格聚成几片（按价值加权的中心），从当前位置就近串起来；没有地面瞄准点（只打海上）就向南直飞一段
+function b2FormRoute(aims, x, y) {
+  if (!aims.length) return [[x, y + 700]];
+  const cells = new Map();
+  for (const o of aims) { const k = Math.floor(o[0] / B2_FORM.cell) + ',' + Math.floor(o[1] / B2_FORM.cell), c = cells.get(k) || { x: 0, y: 0, w: 0 }, w = Math.max(.5, o[2] || 1); c.x += o[0] * w; c.y += o[1] * w; c.w += w; cells.set(k, c); }
+  return b2Route([...cells.values()].map(c => [Math.round(c.x / c.w), Math.round(c.y / c.w)]), x, y).map(o => [o[0], o[1]]);
+}
+// 编队基准点（机群共享，存在 G.f）沿航线平滑转向前进；航线飞完还有没投出去的弹，就按剩下的瞄准点再绕一圈（最多两遍），然后返航
+function b2FormStep(G, dt) {
+  const F = G.f, live = S.eair.fly.filter(a => a.type === 'b2' && a.g === G.id && !a.dead && !a.abort);
+  if (F.ph !== 'out') {
+    let w = F.route[F.ri];
+    if (w && dist(F.x, F.y, w[0], w[1]) < B2_FORM.wp + 40) { F.ri++; w = F.route[F.ri]; }
+    if (!w && live.some(a => a.load === 'jassm' && a.i < a.aims.length) && F.y < H - 200) { F.route.push([F.x + Math.cos(F.heading) * 300, F.y + Math.sin(F.heading) * 300]); w = F.route[F.ri]; }   // 巡航导弹还没射完：保持航向再飞一段
+    if (!w) {
+      const rest = live.filter(a => a.load !== 'jassm').flatMap(a => a.aims.slice(a.i));
+      if (rest.length && F.pass < B2_FORM.passes - 1) { F.pass++; F.route = b2FormRoute(rest, F.x, F.y); F.ri = 0; w = F.route[0]; if (typeof chatSay === 'function') chatSay('e', `B-2A 机群保持编队转弯，再进入一次投弹航路。`, { kind: 'report', lv: 0, at: { x: w[0], y: w[1] } }); }
+      else F.ph = 'out';
+    }
+    if (w) b2Turn(F, w[0], w[1], dt);
+  }
+  if (F.ph === 'out') {   // 从最近的图边飞出（多半是北边）
+    if (F.ox == null) { const e = [[F.x, -200, F.y], [W + 200, F.y, W - F.x], [-200, F.y, F.x]].sort((p, q) => p[2] - q[2])[0]; [F.ox, F.oy] = e; }
+    b2Turn(F, F.ox, F.oy, dt);
+  }
 }
 // 机群里一架被击落（eair.js eaLost 调用）
 function b2Down(a) {
@@ -175,44 +208,47 @@ function b2Turn(a, tx, ty, dt) {
   a.x += Math.cos(a.heading) * a.spd * k * dt; a.y += Math.sin(a.heading) * a.spd * k * dt;
 }
 function b2Fly(a, dt) {
-  if (a.ph === 'rtb') {   // 中弹（eaAA 置 rtb）：放弃攻击，从图边飞出
-    if (!a.abort && typeof chatSay === 'function') chatSay('e', `报告：B-2A ${a.no} 号机中弹受损，放弃攻击返航。`, { kind: 'report', lv: 1, at: { x: a.x, y: a.y } });
+  const G = S.b2 && S.b2.g.find(G => G.id === a.g), F = G && G.f;
+  if (a.ph === 'rtb') {   // 中弹（eaAA 置 rtb）：放弃攻击，脱离编队从图边飞出
+    if (!a.abort && typeof chatSay === 'function') chatSay('e', `报告：B-2A ${a.no} 号机中弹受损，放弃攻击，脱离编队返航。`, { kind: 'report', lv: 1, at: { x: a.x, y: a.y } });
     a.abort = true; a.ph = 'out';
   }
+  if (!F || a.abort) {   // 脱离编队的（或旧存档没有编队数据）：单机从最近的图边飞出
+    if (a.ox == null) { const e = [[a.x, -200, a.y], [W + 200, a.y, W - a.x], [-200, a.y, a.x]].sort((p, q) => p[2] - q[2])[0]; [a.ox, a.oy] = e; }
+    b2Turn(a, a.ox, a.oy, dt);
+    if (a.x < -150 || a.x > W + 150 || a.y < -150) { a.dead = true; a.gone = true; }
+    return;
+  }
+  if (G.fT !== S.t) { G.fT = S.t; b2FormStep(G, dt); }   // 每帧只推进一次编队基准点
+  // 位置：编队基准点 + 本机的编队位置（随航向转），姿态与长机一致
+  const [bk, sd] = a.fo || [0, 0], c = Math.cos(F.heading), sn = Math.sin(F.heading);
+  a.x = F.x - c * bk - sn * sd; a.y = F.y - sn * bk + c * sd; a.heading = F.heading; a.bank = F.bank; a.hr = F.hr;
   if (a.ph === 'in' || a.ph === 'run') {
-    if (a.load === 'jassm') {   // 一进图就逐枚发射，然后掉头
+    if (a.load === 'jassm') {   // 一进图就逐枚发射（编队照样往前飞）
       if (a.y > 40 && (a.relT -= dt) <= 0 && a.i < a.aims.length) {
         a.relT = B2.jEvery;
         const [x, y, k, id] = a.aims[a.i++], m = msLaunch('asm', 'e', a.x, a.y, { x, y }, { tgt: k ? { k, id } : null, spd: 240 });
         Object.assign(m, { nm: 'JASSM-ER 隐身巡航导弹', lo: true, life: 40 });
-        if (a.i === 1) log('B-2A 在防区外发射 JASSM-ER 隐身巡航导弹', S.role === 'spectate' ? 'warn' : 'warn', 'b2j' + a.id, 30, { x, y });
+        if (a.i === 1) log('B-2A 在防区外发射 JASSM-ER 隐身巡航导弹', 'warn', 'b2j' + a.id, 30, { x, y });
       }
-      if (a.i >= a.aims.length) a.ph = 'out';
-      else b2Turn(a, a.x, a.y + 200, dt);   // 打完前一直向南直飞
-    } else {
-      const o = a.aims[a.i];
-      if (!o) a.ph = 'out';
-      else {
-        b2Turn(a, o[0], o[1], dt);
-        if (dist(a.x, a.y, o[0], o[1]) < B2.rel) {
-          a.ph = 'run';
-          if ((a.relT -= dt) <= 0) {   // 逐枚投放：每 0.12 秒一枚，同一航线上的下一个瞄准点也进了投放距离就接着投
-            a.relT = B2.every;
-            const x = o[0] + gauss() * B2.gps, y = o[1] + gauss() * B2.gps;
-            if (!b2Own(x, y)) msLaunch('pgm', 'e', a.x, a.y, { x, y }, { src: 'b2', dur: 60, w: a.load });
-            if (a.i === 0) log(`B-2A 隐身轰炸机投弹（${B2_LOAD[a.load].nm}）`, 'bad', 'b2drop' + a.g, 20, { x: o[0], y: o[1] });
-            a.i++;
-          }
+    } else if (a.i < a.aims.length) {
+      // 逐枚投放：剩下的瞄准点里离本机最近、进了投放距离（GPS 制导滑翔，可以偏离航线投）的那个；每 0.12 秒一枚
+      let bi = -1, bd = B2.rel + B2_FORM.side * 1.7;
+      for (let j = a.i; j < a.aims.length; j++) { const o = a.aims[j], d = dist(a.x, a.y, o[0], o[1]); if (d < bd) { bd = d; bi = j; } }
+      if (bi >= 0) {
+        a.ph = 'run';
+        if ((a.relT -= dt) <= 0) {
+          a.relT = B2.every;
+          const o = a.aims[bi]; a.aims[bi] = a.aims[a.i]; a.aims[a.i] = o;   // 投过的挪到前面（a.i 之前都是投过的）
+          const x = o[0] + gauss() * B2.gps, y = o[1] + gauss() * B2.gps;
+          if (!b2Own(x, y)) msLaunch('pgm', 'e', a.x, a.y, { x, y }, { src: 'b2', dur: 60, w: a.load });
+          if (a.i === 0) log(`B-2A 隐身轰炸机编队投弹（${B2_LOAD[a.load].nm}）`, 'bad', 'b2drop' + a.g, 20, { x: o[0], y: o[1] });
+          a.i++;
         }
-        if (a.i >= a.aims.length) a.ph = 'out';
-      }
+      } else a.ph = 'in';
     }
   }
-  if (a.ph === 'out') {   // 从最近的图边飞出（多半是北边）
-    if (a.ox == null) { const e = [[a.x, -200, a.y], [W + 200, a.y, W - a.x], [-200, a.y, a.x]].sort((p, q) => p[2] - q[2])[0]; [a.ox, a.oy] = e; }
-    b2Turn(a, a.ox, a.oy, dt);
-    if (a.x < -150 || a.x > W + 150 || a.y < -150) { a.dead = true; a.gone = true; }
-  }
+  if (F.ph === 'out') { a.ph = 'out'; if (a.x < -150 || a.x > W + 150 || a.y < -150) { a.dead = true; a.gone = true; } }   // 返航出了图边
 }
 
 function b2Step() {
