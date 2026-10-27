@@ -2,8 +2,9 @@
 // 战区指挥与战线推演（双方，钢铁雄心式）
 //   层级：战区司令部 → 师（XX）→ 旅（X）→ 团（III，三个连以上）/ 营（II）→ 连。命令逐级下达，每一级都有传达时间（TH.dly），
 //     传到哪一级就由哪一级接着往下分；玩家（S.ctl = 'p'）选中任一级下令，命令同样从战区一级级传下去，期间面板上显示「传达中」
-//   战线：front.js 的双方前沿（每 30 米一列）就是战线。战区把战线按兵力分给各师、师分给旅、旅分给团（团多、正面窄时留一个团作第二梯队），
-//     团在自己的地段里沿战线一字排开（连多了排二线）。推进 = 整条线一步一步往前压：每步一个跃进（TH.bound），不甩开左右友邻（TH.lead），
+//   战线：front.js 的双方前沿（每 30 米一列）就是战线。战区把战线按兵力分给各师、师分给旅、旅分给团（团多、正面窄时留一个团作第二梯队）；
+//     战线比一线各团能守的总宽长得多时只守最要紧的几段（thFocus），战线断成几段时一支部队只分在一段里。
+//     团在自己的地段里沿战线排开：一线各连按队形实际宽度留出空当，排不下的往后一排排错开；各连、各车的槽位都和本方已定的错开（thBusy），不挤成一团。推进 = 整条线一步一步往前压：每步一个跃进（TH.bound），不甩开左右友邻（TH.lead），
 //     不越过战区的阶段线；地段里的敌据点在战线推过时由最近的连夺取——不再有部队单独直扑指挥所
 //   命令：推进 · 穿插（向指定点突击，用团长状态机的开进 / 展开 / 冲击 / 肃清）· 坚守（就地挖工事）· 后撤（退一个后撤距离再坚守）·
 //     预备队（撤到战线后方隐蔽集结）· 自动（交还战区 AI）
@@ -15,7 +16,8 @@
 //   编队 = { id, side, lvl: thr / div / bde / reg, no, name, ech, par, kids: [id], g 团对应的战斗群（S.bgs）id, cols 战线列, sec [x0, x1],
 //     ord { v, x, y, src: ai / pl, t } 正在执行的命令, box [{ ord, at }] 在途命令, man 玩家接管, aiSp AI 派出的穿插, p0 初始兵力 }
 const TH = { org: 2, think: 4, dly: { div: 5, bde: 3, reg: 2 }, bound: 130, lead: 150, back: 240, rest: 30, minW: 60, maxReg: 4, maxBde: 3, maxDiv: 3,
-  head: 260, phase: 300, phaseK: .7, spear: 700, spearT: 160, link: 380, wait: 20 };
+  head: 260, phase: 300, phaseK: .7, spear: 700, spearT: 160, link: 380, wait: 20,
+  gap: 30, vgap: 25, row: 100, rows: 3, focus: 1.2 };   // gap 相邻两连队形之间留的空当 · vgap 车辆最小间距 · row 后几排的排距 · focus 正面超出能守宽度多少倍就收缩
 const TH_V = { auto: '自动', advance: '推进', spear: '穿插', hold: '坚守', retreat: '后撤', reserve: '预备队', follow: '第二梯队' };
 const TH_LV = { thr: '战区', div: '师', bde: '旅', reg: '团' };
 const thOn = side => !!S && !!S.th && S.th.on && S.phase === 'battle' && (!side || S.th[side] != null);
@@ -71,21 +73,73 @@ function thCols(side) {
   }
   for (const q of S.teams) if (q.side === 'p' && q.men.length && !q.ride && isLand(q.x, q.y) && (EV[ci(q.x, q.y)] || (q.es != null && S.t - q.es < 60))) mark(q.x);
   // 记忆：一列上 60 秒内确认过敌登陆场，就仍算（敌人一时钻进隐蔽处看不见，不等于登陆场没了）
-  const M = S.th.e.colT || (S.th.e.colT = Array(FR_NX).fill(-99));
+  const M = S.th.e.colT && S.th.e.colT.length === FR_NX ? S.th.e.colT : (S.th.e.colT = Array(FR_NX).fill(-99));
   for (let b = 0; b < FR_NX; b++) if (A[b] != null && has[b]) M[b] = S.t;
   const on = new Uint8Array(FR_NX);
   for (let b = 0; b < FR_NX; b++) if (S.t - M[b] < 60) for (let k = -3; k <= 3; k++) if (b + k >= 0 && b + k < FR_NX) on[b + k] = 1;
   for (let b = 0; b < FR_NX; b++) if (on[b]) out.push(b);
   return out;
 }
+// 一个团能守的正面（米）：每人 7 米、每车 15 米，90–480 米
+const thCap = G => clamp(bgUnits(G).reduce((a, u) => a + teamsOf(u).reduce((b, q) => b + q.men.length, 0), 0) * 7 + bgVehs(G).length * 15, 90, 480);
+// 一串战线列断成连续的几段（相隔超过 3 列就算断开）
+function thSegs(cols) { const out = []; for (const b of cols) { const s = out[out.length - 1]; if (s && b - s[s.length - 1] <= 3) s.push(b); else out.push([b]); } return out; }
+// 收缩正面：战线比一线各团能守的总宽（thCap 之和）长出 TH.focus 倍以上时，只守最要紧的几段——攻方守自己兵力集中的地方，
+//   守方守当面敌兵力多、身后有本方据点的地方；其余地段不再摊兵（兵少线长时不把人撒成一条细线，集中起来守得住）
+function thFocus(side, cols, divs) {
+  const T = S.th[side];
+  let cap = 0;
+  for (const D of divs) for (const R of thRegsOf(D)) { const G = thG(R); if (G && thInLine(R)) cap += thCap(G); }
+  const B = Math.max(8, Math.round(cap * TH.focus / FR_G));
+  if (cols.length <= B) { T.foc = null; return cols; }
+  // 每列的分量（左右各 5 列平滑）：攻方 = 已上岸的本方兵力；守方 = 看得见或记得住的已上岸之敌 + 本方据点
+  const wt = new Float64Array(FR_NX), add = (x, w) => { const b = frBand(x); for (let k = -5; k <= 5; k++) if (b + k >= 0 && b + k < FR_NX) wt[b + k] += w * (1 - Math.abs(k) / 6); };
+  const known = o => side === 'p' || EV[ci(o.x, o.y)] || (o.es != null && S.t - o.es < 60);
+  for (const q of S.teams) if (q.side === 'p' && q.men.length && !q.ride && isLand(q.x, q.y) && known(q)) add(q.x, q.men.length);
+  for (const v of S.veh || []) if (v.side === 'p' && !v.dead && !v.lst && !v.swim && isLand(v.x, v.y) && known(v)) add(v.x, 3);
+  if (side === 'e') for (const p of S.points) if (p.owner !== 'p') add(p.x, 4 * (p.vp || 1));
+  const prev = new Set(T.foc || []);
+  for (const b of cols) if (prev.has(b)) wt[b] *= 1.3;   // 上次守的地段优先，不来回换
+  // 按段的总分量从大到小整段取，取到预算用完；放不下的那一段只取分量最大的一截
+  const segs = thSegs(cols).map(c => ({ c, w: c.reduce((a, b) => a + wt[b], 0) })).sort((a, b) => b.w - a.w), pick = [];
+  let left = B;
+  for (const o of segs) {
+    if (left < 4) break;
+    if (o.c.length <= left) { pick.push(...o.c); left -= o.c.length; continue; }
+    let bi = 0, bw = -1, acc = 0;
+    for (let i = 0; i < o.c.length; i++) { acc += wt[o.c[i]]; if (i >= left) acc -= wt[o.c[i - left]]; if (i >= left - 1 && acc > bw) { bw = acc; bi = i - left + 1; } }
+    pick.push(...o.c.slice(bi, bi + left)); left = 0;
+  }
+  pick.sort((a, b) => a - b);
+  if (!T.foc) thStat('thFocus' + side);
+  T.foc = pick;
+  return pick;
+}
+
 // 攻方阶段线：第 k 道 = 岸线向内陆 TH.head + k × TH.phase（不是一条直线，跟着岸线走）
 const thPL = (k, x) => coastAt(clamp(x, 0, W - 1)) - (TH.head + TH.phase * k);
 
 // 把一串战线列按兵力比例分给几支部队（左右顺序按它们上次的地段 / 现在的位置排，不互相穿插）
+// 战线断成几段时，每支部队只分在离它最近的那一段里，不跨过空当把一个团撒在两段上；没有部队的段空着（那里的兵归回各自部队的地段）
+const thKey = F => F.sec0 != null ? F.sec0 : (thAt(F) || { x: W / 2 }).x;
 function thSplit(cols, items) {
   for (const F of items) { F.cols = []; F.sec = null; }
   if (!items.length || !cols.length) return;
-  const key = F => F.sec0 != null ? F.sec0 : (thAt(F) || { x: W / 2 }).x;
+  const segs = thSegs(cols);
+  if (segs.length > 1) {
+    const grp = segs.map(() => []);
+    for (const F of items) {
+      const k = thKey(F); let bi = 0, bd = Infinity;
+      segs.forEach((c, i) => { const x0 = c[0] * FR_G, x1 = (c[c.length - 1] + 1) * FR_G, d = k < x0 ? x0 - k : k > x1 ? k - x1 : 0; if (d < bd) { bd = d; bi = i; } });
+      grp[bi].push(F);
+    }
+    segs.forEach((c, i) => { if (grp[i].length) thSplit1(c, grp[i]); });
+    return;
+  }
+  thSplit1(cols, items);
+}
+function thSplit1(cols, items) {
+  const key = thKey;
   items.sort((a, b) => key(a) - key(b));
   const w = items.map(F => Math.max(4, thPow(F))), tot = w.reduce((a, b) => a + b, 0);
   let k = 0;
@@ -304,7 +358,7 @@ function thPrune() {
 // ———————————————— 战线分配：战区 → 师 → 旅 → 团 ————————————————
 const thInLine = F => { const v = thOrdOf(F).v; return v !== 'reserve' && v !== 'spear' && v !== 'follow'; };
 function thAlloc(side) {
-  const R = thRoot(side), cols = thCols(side), divs = thKids(R).filter(d => thPow(d) > 0);
+  const R = thRoot(side), divs = thKids(R).filter(d => thPow(d) > 0), cols = thFocus(side, thCols(side), divs.filter(thInLine));
   thSplit(cols, divs.filter(thInLine));
   for (const D of divs) {
     const bdes = thKids(D).filter(b => thPow(b) > 0);
@@ -496,19 +550,42 @@ function thRearSpot(side, F, back) {
   const s = hqSlot(side, x, y);
   return hqCover(side, s.x, s.y);
 }
-// 槽位附近 55 米内隐蔽最好的一处（已经在用的隐蔽点离新槽位不远就不换，免得一点点挪）
-function thCov(x, y, keep) {
-  if (keep && passInf(keep[0], keep[1]) && coverAt(keep[0], keep[1]) <= coverAt(x, y)) return keep;
+// 槽位附近 55 米内隐蔽最好的一处（已经在用的隐蔽点离新槽位不远就不换，免得一点点挪）；ok(x, y) 为假的点不选（与友邻挤在一起）
+function thCov(x, y, keep, ok) {
+  if (keep && passInf(keep[0], keep[1]) && (!ok || ok(keep[0], keep[1])) && coverAt(keep[0], keep[1]) <= coverAt(x, y)) return keep;
   let best = [x, y], bs = -1e9;
   for (let i = 0; i < 12; i++) {
     const a = i * 2.4, r = i ? 10 + i * 4 : 0, sx = clamp(x + Math.cos(a) * r, 20, W - 20), sy = clamp(y + Math.sin(a) * r, 20, H - 20);
-    if (!passInf(sx, sy)) continue;
+    if (!passInf(sx, sy) || (ok && !ok(sx, sy))) continue;
     const sc = (1 - coverAt(sx, sy)) * 2 - r / 30;
     if (sc > bs) { bs = sc; best = [sx, sy]; }
   }
   return best;
 }
-// 沿战线一字排开：连在地段的各列上等距摆开（连多了排二线），坦克夹在步兵线后，防空、火炮在后；推进时整线前压一个跃进
+// 连的横向占地（米），照 units.js formationSlots 的三三制队形：1 组 0 米、3 组 28 米、6 组 74 米、9 组 120 米，每多一个排再加 150 米
+function thFoot(n) {
+  let lo = 0, hi = 0;
+  const pls = Math.ceil(n / 9), tri = [0, -1, 1];
+  for (let k = 0; k < n; k++) { const lat = tri[k % 3] * 14 + tri[Math.floor(k / 3) % 3] * 46 + (Math.floor(k / 9) - (pls - 1) / 2) * 150; if (lat < lo) lo = lat; if (lat > hi) hi = lat; }
+  return hi - lo;
+}
+const thFootU = u => thFoot(teamsOf(u).filter(q => q.men.length && !q.ride && !q.rc).length);
+// 本方已经定下的槽位：友邻（同一方其他战斗群）上次下达的 + 本团这一轮刚定的。两连前后相距不到 60 米、左右相距不到两连半宽之和加半个空当就算挤；
+//   车辆之间不到 TH.vgap 米算挤——挤在一起一发炮弹、一颗炸弹就能端掉好几个连（几辆车）
+function thBusy(G) {
+  const us = [], vs = [];
+  for (const H of S.bgs || []) {
+    if (H === G || H.dead || H.side !== G.side) continue;
+    for (const u of bgUnits(H)) if (u.bgX != null && u.state !== 'rout') us.push([u.bgX, u.bgY, thFootU(u)]);
+    for (const v of bgVehs(H)) { const c = v.cmd && v.cmd.ai === 'bg' ? v.cmd : v; vs.push([c.x, c.y]); }
+  }
+  return {
+    u: (x, y, w) => !us.some(o => Math.abs(o[1] - y) < 60 && Math.abs(o[0] - x) < (o[2] + w) / 2 + TH.gap / 2),
+    v: (x, y) => !vs.some(o => Math.abs(o[0] - x) < TH.vgap && Math.abs(o[1] - y) < TH.vgap && Math.hypot(o[0] - x, o[1] - y) < TH.vgap),
+    addU: (x, y, w) => { us.push([x, y, w]); }, addV: (x, y) => { vs.push([x, y]); }
+  };
+}
+// 沿战线排开：一线各连按占地分完地段正面（排不下的往后一排排），坦克夹在步兵线后，防空、火炮在后；推进时整线前压一个跃进
 function thLine(G, F, v, O) {
   const side = G.side, dir = thDir(side), us0 = bgUnits(G), vs = bgVehs(G);
   if (!us0.length && !vs.length) { G.dead = true; G.done = true; return; }
@@ -547,7 +624,7 @@ function thLine(G, F, v, O) {
   // 后撤：接令时的战线往后一个后撤距离，记下来（战线跟着后退，目标不跟着退）
   const RY = v === 'retreat' ? (G.thRY && G.thRY.t === O.t ? G.thRY.m : (G.thRY = { t: O.t, m: {} }).m) : null;
   // 战线是兵力场的边缘，在兵的前面；坚守就守在现在的位置（已经在线后 15–150 米之间的不挪），不一次次往线上凑、越守越往前
-  const tgtY = (x, yc) => {
+  const tgtY = (x, yc, keep = 150) => {
     const y0 = cy(x);
     let y;
     if (fb) y = y0 - dir * 120;
@@ -557,7 +634,7 @@ function thLine(G, F, v, O) {
       if (rear != null) y = dir < 0 ? Math.max(y, rear - TH.lead) : Math.min(y, rear + TH.lead);
       if (pl != null) y = Math.max(y, thPL(pl, x));
       if (side === 'e') { const f = thFoeY('e', x); if (f != null) y = Math.min(y, f + 20); }
-    } else if (yc != null) { const a = (yc - y0) * dir; y = a > -15 ? y0 - dir * 15 : a < -150 ? y0 - dir * 150 : yc; }
+    } else if (yc != null) { const a = (yc - y0) * dir; y = a > -15 ? y0 - dir * 15 : a < -keep ? y0 - dir * keep : yc; }
     else y = y0 - dir * 15;
     if (side === 'p') y = Math.min(y, coastAt(clamp(x, 0, W - 1)) - 30); else y = Math.min(Math.max(50, y), coastAt(clamp(x, 0, W - 1)) - 40);
     return y;
@@ -567,7 +644,15 @@ function thLine(G, F, v, O) {
   // 连：左右顺序黏住（按现在的横向位置排一次，之后编成不变就沿用）
   G.face = dir < 0 ? NORTH : SOUTH;
   const sorted = regLatOrder(G, 'thu', us, u => regUnitAt(u)[0]);
-  const nL = Math.max(1, Math.min(sorted.length, Math.floor(xs.length * FR_G / TH.minW))), line = sorted.slice(0, nL), sec2 = sorted.slice(nL);
+  // 一线按横向顺序取连，各连占（队形宽 + 空当 TH.gap，至少 TH.minW）把地段正面排满为止；排不下的往后一排一排摆（排距 TH.row，最多再排 TH.rows 排）
+  //   ——原来一律按每连 60 米摆，六到九个组的连队形就有 74–120 米宽，相邻两个连的兵混成一团
+  const width = xs.length * FR_G, needW = u => Math.max(TH.minW, thFootU(u) + TH.gap), rows = [[]];
+  let used = 0;
+  for (const u of sorted) {
+    if (rows[rows.length - 1].length && used + needW(u) > width && rows.length <= TH.rows) { rows.push([]); used = 0; }
+    rows[rows.length - 1].push(u); used += needW(u);
+  }
+  const line = rows[0], deep = rows.length > 1;
   // 地段里（含两侧 60）战线前方 260 以内的敌据点：派最近的一线连去夺（推进中；坚守时只夺贴着战线的）
   const x0 = xs[0] - 60, x1 = xs[xs.length - 1] + 60, taken = new Map();
   for (const p of S.points) {
@@ -578,27 +663,52 @@ function thLine(G, F, v, O) {
     const u = line.filter(o => !taken.has(o)).sort((a, b) => Math.abs(regUnitAt(a)[0] - p.x) - Math.abs(regUnitAt(b)[0] - p.x))[0];
     if (u) taken.set(u, p);
   }
-  const lineXs = line.map((u, i) => xs[Math.min(xs.length - 1, Math.floor((i + .5) * xs.length / line.length))]);
+  // 一排里各连按占地比例分完整段正面，连中心放在各自那一份的中点
+  const rowXs = R0 => { const tot = R0.reduce((a, u) => a + needW(u), 0); let acc = 0; return R0.map(u => { const w = needW(u), f = (acc + w / 2) / tot; acc += w; return xs[Math.min(xs.length - 1, Math.floor(f * xs.length))]; }); };
   const dig = !(v === 'advance' && !stall) && !fb && !RY;   // 坚守：槽位附近找隐蔽处
+  // 槽位按先后（夺据点的连 → 一线 → 后几排）逐个定下，和本方已定的槽位错开：挤了先往左右挪一个连宽、再往后挪一排，都不行才留在原处
+  const busy = thBusy(G);
+  const place = (u, bx, by, keep, t) => {
+    const w = thFootU(u), ok = (x, y) => busy.u(x, y, w), st = Math.max(TH.minW, w + TH.gap);
+    let best = null;
+    for (const [l, r] of [[0, 0], [1, 0], [-1, 0], [0, 1], [2, 0], [-2, 0], [1, 1], [-1, 1], [0, 2]]) {
+      let [sx, sy] = snap(bx + l * st, by - dir * r * TH.row, side);
+      if (dig && !t) [sx, sy] = thCov(sx, sy, !l && !r ? keep : null, ok);
+      if (!best) best = [sx, sy];
+      if (ok(sx, sy)) { best = [sx, sy]; break; }
+    }
+    busy.addU(best[0], best[1], w);
+    out.push({ m: u, k: 'u', x: best[0], y: best[1], ...(t ? { t } : {}) });
+  };
+  for (const u of line) { const p = taken.get(u); if (p) place(u, p.x, p.y, null, 'amove'); }
+  const lineXs = rowXs(line);
   line.forEach((u, i) => {
-    const p = taken.get(u);
-    if (p) { const [x, y] = snap(p.x, p.y, side); out.push({ m: u, k: 'u', x, y, t: 'amove' }); return; }
-    const x = lineXs[i];
-    let [sx, sy] = snap(x, tgtY(x, dig ? regUnitAt(u)[1] : null), side);
-    if (dig) [sx, sy] = thCov(sx, sy, u.bgX != null && dist(u.bgX, u.bgY, sx, sy) < 60 ? [u.bgX, u.bgY] : null);
-    out.push({ m: u, k: 'u', x: sx, y: sy });
+    if (taken.has(u)) return;
+    const x = lineXs[i], [sx, sy] = snap(x, tgtY(x, dig ? regUnitAt(u)[1] : null, deep ? 70 : 150), side);
+    place(u, sx, sy, u.bgX != null && dist(u.bgX, u.bgY, sx, sy) < 60 ? [u.bgX, u.bgY] : null);
   });
-  sec2.forEach((u, i) => { const x = xs[Math.min(xs.length - 1, Math.floor((i + .5) * xs.length / sec2.length))]; let [sx, sy] = snap(x, tgtY(x) - dir * 110, side); if (dig) [sx, sy] = thCov(sx, sy); out.push({ m: u, k: 'u', x: sx, y: sy }); });
+  rows.slice(1).forEach((R0, r) => { const X = rowXs(R0); R0.forEach((u, i) => place(u, X[i], tgtY(X[i]) - dir * (110 + r * TH.row), null)); });
   // 车辆：坦克、步战车在步兵线后（推进时贴上来），反坦克 / 侦察车护两翼，防空在后 120，自行火炮在后 240
   const tk = vs.filter(hqTank), ifv = vs.filter(o => o.type === 'apc' || o.type === 'abv'), aa = vs.filter(hqAA), art = vs.filter(o => o.type === 'spg');
   const oth = vs.filter(o => !tk.includes(o) && !ifv.includes(o) && !aa.includes(o) && !art.includes(o));
-  const spread = (list, back, key) => { const L2 = regLatOrder(G, key, list, o => o.x); L2.forEach((o, i) => { const x = xs[Math.min(xs.length - 1, Math.floor((i + .5) * xs.length / L2.length))], [sx, sy] = snap(x + (i % 2 ? 12 : -12), tgtY(x) - dir * back, vcls); out.push({ m: o, k: 'v', x: sx, y: sy }); }); };
+  // 车辆槽位同样和本方已定的车辆错开（左右挪 TH.vgap、再往后挪）
+  const placeV = (o, bx, by) => {
+    let best = null;
+    for (const [l, r] of [[0, 0], [1, 0], [-1, 0], [0, 1], [2, 0], [-2, 0], [1, 1], [-1, 1], [0, 2], [3, 0], [-3, 0]]) {
+      const [sx, sy] = snap(bx + l * TH.vgap, by - dir * r * TH.vgap, vcls);
+      if (!best) best = [sx, sy];
+      if (busy.v(sx, sy)) { best = [sx, sy]; break; }
+    }
+    busy.addV(best[0], best[1]);
+    out.push({ m: o, k: 'v', x: best[0], y: best[1] });
+  };
+  const spread = (list, back, key) => { const L2 = regLatOrder(G, key, list, o => o.x); L2.forEach((o, i) => { const x = xs[Math.min(xs.length - 1, Math.floor((i + .5) * xs.length / L2.length))]; placeV(o, x + (i % 2 ? 12 : -12), tgtY(x) - dir * back); }); };
   spread(tk, v === 'advance' && !stall ? 18 : 40, 'tht');
   spread(ifv, 55, 'thi');
   const xm = xs[Math.floor(xs.length / 2)];
-  oth.forEach((o, i) => { const x = i % 2 ? xs[xs.length - 1] + 30 : xs[0] - 30, [sx, sy] = snap(x, tgtY(clamp(x, xs[0], xs[xs.length - 1])) - dir * 40, vcls); out.push({ m: o, k: 'v', x: sx, y: sy }); });
-  aa.forEach((o, i) => { const [sx, sy] = snap(xm + (i - (aa.length - 1) / 2) * 40, tgtY(xm) - dir * 120, vcls); out.push({ m: o, k: 'v', x: sx, y: sy }); });
-  art.forEach((o, i) => { const [sx, sy] = snap(xm + (i - (art.length - 1) / 2) * 35, tgtY(xm) - dir * 240, vcls); out.push({ m: o, k: 'v', x: sx, y: sy }); });
+  oth.forEach((o, i) => { const x = i % 2 ? xs[xs.length - 1] + 30 : xs[0] - 30; placeV(o, x, tgtY(clamp(x, xs[0], xs[xs.length - 1])) - dir * 40); });
+  aa.forEach((o, i) => placeV(o, xm + (i - (aa.length - 1) / 2) * 40, tgtY(xm) - dir * 120));
+  art.forEach((o, i) => placeV(o, xm + (i - (art.length - 1) / 2) * 35, tgtY(xm) - dir * 240));
   // 锚点 = 一线的中心（画团标、态势感知用）；车辆按锚点移动的速度跟进
   const lo = out.filter(s => s.k === 'u' && line.includes(s.m));
   const ax0 = G.ax, ay0 = G.ay;
