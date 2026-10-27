@@ -7,7 +7,11 @@ const LK = { ok: false, tried: false, gl: null, cv: null, pr: null, u: {}, tex: 
 const greenLook = () => typeof SETTINGS === 'object' && !!SETTINGS && SETTINGS.look === 'green';
 
 const LK_VS = 'attribute vec2 p; void main(){ gl_Position = vec4(p, 0., 1.); }';
-const LK_FS = `precision mediump float;
+const LK_FS = `#ifdef GL_FRAGMENT_PRECISION_HIGH
+precision highp float;
+#else
+precision mediump float;
+#endif
 uniform sampler2D uSrc; uniform vec2 uRes; uniform float uEdge, uGlow, uDark;
 float L(vec3 c) { return dot(c, vec3(.299, .587, .114)); }
 vec3 S(vec2 uv) { return texture2D(uSrc, uv).rgb; }
@@ -15,11 +19,10 @@ void main() {
   vec2 px = 1. / uRes, uv = vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y) * px;
   vec3 c = S(uv);
   float l = L(c);
-  // 轮廓：亮度 Sobel（一个设备像素的间隔）
-  float a = L(S(uv + px * vec2(-1., -1.))), b = L(S(uv + px * vec2(0., -1.))), d = L(S(uv + px * vec2(1., -1.)));
-  float e = L(S(uv + px * vec2(-1., 0.))), f = L(S(uv + px * vec2(1., 0.)));
-  float g = L(S(uv + px * vec2(-1., 1.))), h = L(S(uv + px * vec2(0., 1.))), k = L(S(uv + px * vec2(1., 1.)));
-  float gx = (d + 2. * f + k) - (a + 2. * e + g), gy = (g + 2. * h + k) - (a + 2. * b + d);
+  // 轮廓：亮度 Sobel（一个设备像素的间隔）。在四个对角的半像素处线性插值采样，每次正好是 2×2 个像素的平均，
+  // 四个采样相减就合出完整的 3×3 Sobel 核（亮度对颜色是线性的），比逐个读 8 个邻点少一半采样
+  float a = L(S(uv + px * vec2(-.5, -.5))), b = L(S(uv + px * vec2(.5, -.5))), d = L(S(uv + px * vec2(-.5, .5))), e = L(S(uv + px * vec2(.5, .5)));
+  float gx = 4. * ((b + e) - (a + d)), gy = 4. * ((d + e) - (a + b));
   float ed = smoothstep(.09, .5, sqrt(gx * gx + gy * gy));
   // 辉光：周围八个点里亮的部分（半径约 3 像素）
   float gl = 0.;

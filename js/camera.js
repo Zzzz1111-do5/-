@@ -89,8 +89,16 @@ function mmDraw1() {
   const g = MM.cv.getContext('2d'), k = MM.k, dot = (x, y, r, c) => { g.fillStyle = c; g.fillRect(x * k - r, y * k - r, r * 2, r * 2); };
   g.imageSmoothingEnabled = MM.real;
   g.drawImage(MM.base, 0, 0, MM.cv.width, MM.cv.height);
-  g.fillStyle = MM.real ? 'rgba(8,12,18,.5)' : 'rgba(0,4,2,.45)';
-  for (let gy = 0; gy < GH; gy += 2) for (let gx = 0; gx < GW; gx += 2) if (!PV[gy * GW + gx] && !(typeof CVL_DISP === 'object' && CVL_DISP[gy * GW + gx])) g.fillRect(gx * CELL * k, gy * CELL * k, CELL * 2 * k, CELL * 2 * k);
+  // 视野外压暗：每 2×2 格取一个像素拼成小图，一次贴上（原来逐块 fillRect，开局大半张图没侦察时每次上万个）
+  const fw = Math.ceil(GW / 2), fh = Math.ceil(GH / 2), D = typeof CVL_DISP === 'object' ? CVL_DISP : null;
+  if (!MM.fog) { MM.fog = document.createElement('canvas'); MM.fog.width = fw; MM.fog.height = fh; MM.fogImg = MM.fog.getContext('2d').createImageData(fw, fh); }
+  const fd = MM.fogImg.data, fc = MM.real ? [8, 12, 18, 128] : [0, 4, 2, 115];
+  for (let y = 0; y < fh; y++) for (let x = 0; x < fw; x++) {
+    const i = y * 2 * GW + x * 2, o = (y * fw + x) * 4;
+    fd[o] = fc[0]; fd[o + 1] = fc[1]; fd[o + 2] = fc[2]; fd[o + 3] = !PV[i] && !(D && D[i]) ? fc[3] : 0;
+  }
+  MM.fog.getContext('2d').putImageData(MM.fogImg, 0, 0);
+  g.imageSmoothingEnabled = false; g.drawImage(MM.fog, 0, 0, fw * 2 * CELL * k, fh * 2 * CELL * k); g.imageSmoothingEnabled = MM.real;
   const u = Math.max(1.5, k * 6);
   for (const p of S.points) { g.strokeStyle = p.owner === 'p' ? COL.g : COL.enemy; g.lineWidth = 1.5; g.strokeRect(p.x * k - u * 1.4, p.y * k - u * 1.4, u * 2.8, u * 2.8); }
   for (const e of S.enemies) if (e.kx != null && !e.dead) dot(e.kx, e.ky, u * .7, COL.enemy);

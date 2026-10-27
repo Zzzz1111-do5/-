@@ -132,8 +132,11 @@ const canSee = (side, x, y, d) => d < 50 || (side === 'p' ? PV : EV)[ci(x, y)] =
 const modOf = o => o.mod || {};
 function findTarget(q, range) {
   let best = null, bd = range * (modOf(q).rng || 1);
+  const qx = q.x, qy = q.y;
   for (const o of S.teams) if (o.side !== q.side && o.men.length && !o.ride) {   // ride：搭乘装甲运兵车中
-    const d = dist(q.x, q.y, o.x, o.y);
+    const dx = o.x - qx, dy = o.y - qy;
+    if (dx >= bd || dx <= -bd || dy >= bd || dy <= -bd) continue;   // 坐标差已超出当前最近距离的直接跳过（每步每个小组都要扫一遍全体）
+    const d = dist(qx, qy, o.x, o.y);
     if (d < bd && canSee(q.side, o.x, o.y, d)) { bd = d; best = { t: o, d, k: 'tm' }; }
   }
   // 对方车辆（vehicles.js）：轻武器只能压制乘员，优先打步兵；带反坦克手段（mod.at）的小组优先打车
@@ -142,7 +145,9 @@ function findTarget(q, range) {
     if (w < bd && canSee(q.side, v.x, v.y, d)) { bd = w; best = { t: v, d, k: 'veh' }; }
   }
   if (q.side === 'p') for (const e of S.enemies) if (!e.dead) {
-    const d = dist(q.x, q.y, e.x, e.y);
+    const dx = e.x - qx, dy = e.y - qy;
+    if (dx >= bd || dx <= -bd || dy >= bd || dy <= -bd) continue;
+    const d = dist(qx, qy, e.x, e.y);
     if (d < bd && canSee('p', e.x, e.y, d)) { bd = d; best = { t: e, d, k: 'st' }; }
   }
   return best;
