@@ -1148,39 +1148,33 @@ function airShape(ctx, type) {
 // 飞机剪影：轮廓 + 各型细节（预警机雷达圆盘、歼-20 外倾双垂尾与鸭翼、轰-6K 翼根发动机、A-10 尾部双发、连翼机的中空、V 尾、旋翼与短翼）；攻击机挂弹
 // o（可缺省）：精细模型的状态——t 时间、ab 加力、fold 机翼折起、st 外挂剩余比例、bay / sbay 弹舱开度、still 停放（旋翼不转）
 function drawAircraft(ctx, x, y, a, type, size, col, alpha, bank, lw, bombs, o) {
-  const sc = size / 21, real = typeof realLook === 'function' && realLook();
+  const sc = size / 21;
   ctx.save(); ctx.translate(x, y); ctx.rotate(a); ctx.scale(sc, sc * (1 - .32 * Math.min(1, Math.abs(bank || 0))));
   if (typeof airDetail === 'function' && typeof AIRD === 'object' && AIRD[type]) {   // 屏幕上够大（机长约 26 像素以上）就画精细模型（airmdl.js）
     const T = ctx.getTransform(), ppu = Math.hypot(T.a, T.b) / ((typeof R === 'object' && R.dpr) || 1);
-    if (ppu * 22 >= 26 && airDetail(ctx, type, a, real, col, alpha, lw / sc, type === 'h6k' && bombs != null ? { st: bombs ? 1 : 0, ...o } : o)) { ctx.restore(); return; }
+    if (ppu * 22 >= 26 && airDetail(ctx, type, a, col, alpha, lw / sc, type === 'h6k' && bombs != null ? { st: bombs ? 1 : 0, ...o } : o)) { ctx.restore(); return; }
   }
   airShape(ctx, type);
-  if (real) {   // 写实：按机型涂装（受光渐变）、深色细节线、阵营细边
-    const ga = ctx.globalAlpha;
-    ctx.fillStyle = rlLit(ctx, a, 22, 18, col === COL.enemy ? lkPaint(rlAirPaint(type), 'e') : rlAirPaint(type)); ctx.globalAlpha = ga * alpha; ctx.fill(); ctx.globalAlpha = ga;   // 黑绿画面：敌机暗红
-    ctx.strokeStyle = rgba(col, alpha * .8); ctx.lineWidth = lw / sc * .8; ctx.stroke();
-    ctx.strokeStyle = `rgba(20,22,24,${.55 * alpha})`;
-  } else {
-    ctx.fillStyle = `rgba(2,10,6,${.88 * alpha})`; ctx.fill();
-    ctx.strokeStyle = rgba(col, alpha); ctx.lineWidth = lw / sc; ctx.stroke();
-  }
+  // 写实：按机型涂装（受光渐变）、深色细节线、阵营细边
+  const ga = ctx.globalAlpha;
+  ctx.fillStyle = rlLit(ctx, a, 22, 18, col === COL.enemy ? lkPaint(rlAirPaint(type), 'e') : rlAirPaint(type)); ctx.globalAlpha = ga * alpha; ctx.fill(); ctx.globalAlpha = ga;   // 黑绿画面：敌机暗红
+  ctx.strokeStyle = rgba(col, alpha * .8); ctx.lineWidth = lw / sc * .8; ctx.stroke();
+  ctx.strokeStyle = `rgba(20,22,24,${.55 * alpha})`;
   ctx.lineWidth = lw / sc * .7;
   const seg = (...p) => { ctx.beginPath(); for (let i = 0; i < p.length; i += 4) { ctx.moveTo(p[i], p[i + 1]); ctx.lineTo(p[i + 2], p[i + 3]); } ctx.stroke(); };
   const heliT = type === 'heli' || type === 'z10' || type === 'ah64' || type === 'uh60', bigT = type === 'transport' || type === 'y20' || type === 'c17' || type === 'h6k' || type === 'kj600';
-  if (!heliT && type !== 'gj11' && type !== 'wz7' && type !== 'gj2' && type !== 'b2' && !real) seg(8.5, 0, 4.5, 0);   // 座舱
-  if (real) {   // 写实细节：座舱玻璃（有人机）、尾喷口、机身中线
-    if (type === 'b2') { ctx.fillStyle = `rgba(40,58,68,${alpha})`; for (const y of [-.55, .55]) { ctx.beginPath(); ctx.ellipse(3.7, y, .45, .35, 0, 0, 7); ctx.fill(); } }   // B-2A：机鼻上两块风挡
-    else if (!heliT && !bigT && type !== 'gj11' && type !== 'wz7' && type !== 'gj2') {
-      ctx.fillStyle = `rgba(52,78,94,${alpha})`; ctx.beginPath(); ctx.ellipse(6.6, 0, type === 'a10' ? 1.3 : 1.8, .62, 0, 0, 7); ctx.fill();
-      ctx.fillStyle = `rgba(210,230,240,${.35 * alpha})`; ctx.beginPath(); ctx.ellipse(7, -.18, .7, .2, 0, 0, 7); ctx.fill();
-      const nz = type === 'f35' ? [0] : type === 'j36' ? [] : type === 'a10' ? [] : [-.75, .75];
-      ctx.fillStyle = `rgba(28,28,26,${alpha})`; for (const y of nz) { ctx.beginPath(); ctx.arc(-10.6, y, .62, 0, 7); ctx.fill(); }
-    } else if (bigT || heliT) { ctx.fillStyle = `rgba(40,58,68,${alpha})`; ctx.beginPath(); ctx.ellipse(heliT ? 6.6 : 10.2, 0, heliT ? 1.4 : .9, heliT ? .75 : 1, 0, 0, 7); ctx.fill(); }   // 风挡
-    ctx.strokeStyle = `rgba(20,22,24,${.25 * alpha})`; seg(9, 0, -9, 0);
-    ctx.strokeStyle = `rgba(20,22,24,${.55 * alpha})`;
-  }
+  // 写实细节：座舱玻璃（有人机）、尾喷口、机身中线
+  if (type === 'b2') { ctx.fillStyle = `rgba(40,58,68,${alpha})`; for (const y of [-.55, .55]) { ctx.beginPath(); ctx.ellipse(3.7, y, .45, .35, 0, 0, 7); ctx.fill(); } }   // B-2A：机鼻上两块风挡
+  else if (!heliT && !bigT && type !== 'gj11' && type !== 'wz7' && type !== 'gj2') {
+    ctx.fillStyle = `rgba(52,78,94,${alpha})`; ctx.beginPath(); ctx.ellipse(6.6, 0, type === 'a10' ? 1.3 : 1.8, .62, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = `rgba(210,230,240,${.35 * alpha})`; ctx.beginPath(); ctx.ellipse(7, -.18, .7, .2, 0, 0, 7); ctx.fill();
+    const nz = type === 'f35' ? [0] : type === 'j36' ? [] : type === 'a10' ? [] : [-.75, .75];
+    ctx.fillStyle = `rgba(28,28,26,${alpha})`; for (const y of nz) { ctx.beginPath(); ctx.arc(-10.6, y, .62, 0, 7); ctx.fill(); }
+  } else if (bigT || heliT) { ctx.fillStyle = `rgba(40,58,68,${alpha})`; ctx.beginPath(); ctx.ellipse(heliT ? 6.6 : 10.2, 0, heliT ? 1.4 : .9, heliT ? .75 : 1, 0, 0, 7); ctx.fill(); }   // 风挡
+  ctx.strokeStyle = `rgba(20,22,24,${.25 * alpha})`; seg(9, 0, -9, 0);
+  ctx.strokeStyle = `rgba(20,22,24,${.55 * alpha})`;
   if (type === 'kj600') {   // 背负雷达圆盘 + 两台涡桨
-    ctx.beginPath(); ctx.arc(-1.8, 0, 3.6, 0, 7); ctx.fillStyle = real ? `rgba(214,218,218,${alpha})` : `rgba(2,10,6,${alpha})`; ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.arc(-1.8, 0, 3.6, 0, 7); ctx.fillStyle = `rgba(214,218,218,${alpha})`; ctx.fill(); ctx.stroke();
     seg(-5.4, 0, 1.8, 0);
     for (const s of [-1, 1]) ctx.strokeRect(1.2, s * 4.4 - .8, 3.4, 1.6);
   } else if (type === 'wz7') {   // 连翼中间是空的
@@ -1204,23 +1198,17 @@ function drawAircraft(ctx, x, y, a, type, size, col, alpha, bank, lw, bombs, o) 
   } else if (type === 'gj11') {   // 背部进气口
     ctx.strokeRect(1, -1, 3, 2);
   } else if (heliT) {   // 主旋翼（写实：转动的半透明桨盘 + 桨叶；数码：虚线圆）+ 短翼挂架
-    if (type === 'ah64' && real) { ctx.fillStyle = `rgba(60,62,56,${alpha})`; for (const s of [-1, 1]) for (const x of [-.1, -.8]) ctx.fillRect(x - .25, s * 3.9 - .45, .5, .9); }   // 地狱火
-    if (real) {
-      const tt = (typeof S === 'object' && S ? S.t : 0) * 22, nb = type === 'ah64' || type === 'uh60' ? 4 : 5, Rr = type === 'uh60' ? 10.5 : 9.5;
-      ctx.fillStyle = `rgba(24,26,24,${.16 * alpha})`; ctx.beginPath(); ctx.arc(.4, 0, Rr, 0, 7); ctx.fill();
-      ctx.strokeStyle = `rgba(22,22,20,${.5 * alpha})`; ctx.lineWidth = lw / sc * .9;
-      ctx.beginPath(); for (let i = 0; i < nb; i++) { const b = tt + i * 6.283 / nb; ctx.moveTo(.4, 0); ctx.lineTo(.4 + Math.cos(b) * Rr, Math.sin(b) * Rr); } ctx.stroke();
-      ctx.fillStyle = `rgba(24,26,24,${.2 * alpha})`; ctx.beginPath(); ctx.arc(-12.2, 1.4, 1.5, 0, 7); ctx.fill();   // 尾桨
-    } else {
-      seg(-.5, type === 'uh60' ? -5 : -4.2, -.5, type === 'uh60' ? 5 : 4.2);
-      ctx.setLineDash([2.2, 1.6]); ctx.beginPath(); ctx.arc(1.5, 0, 9.5, 0, 7); ctx.stroke(); ctx.setLineDash([]);
-    }
+    if (type === 'ah64') { ctx.fillStyle = `rgba(60,62,56,${alpha})`; for (const s of [-1, 1]) for (const x of [-.1, -.8]) ctx.fillRect(x - .25, s * 3.9 - .45, .5, .9); }   // 地狱火
+    const tt = (typeof S === 'object' && S ? S.t : 0) * 22, nb = type === 'ah64' || type === 'uh60' ? 4 : 5, Rr = type === 'uh60' ? 10.5 : 9.5;
+    ctx.fillStyle = `rgba(24,26,24,${.16 * alpha})`; ctx.beginPath(); ctx.arc(.4, 0, Rr, 0, 7); ctx.fill();
+    ctx.strokeStyle = `rgba(22,22,20,${.5 * alpha})`; ctx.lineWidth = lw / sc * .9;
+    ctx.beginPath(); for (let i = 0; i < nb; i++) { const b = tt + i * 6.283 / nb; ctx.moveTo(.4, 0); ctx.lineTo(.4 + Math.cos(b) * Rr, Math.sin(b) * Rr); } ctx.stroke();
+    ctx.fillStyle = `rgba(24,26,24,${.2 * alpha})`; ctx.beginPath(); ctx.arc(-12.2, 1.4, 1.5, 0, 7); ctx.fill();   // 尾桨
   } else if (type === 'transport' || type === 'y20' || type === 'c17') {   // 四台涡扇发动机吊舱
-    if (real) { ctx.fillStyle = `rgba(90,96,100,${alpha})`; for (const s of [-1, 1]) for (const y of [4.4, 8.1]) ctx.fillRect(type === 'c17' ? .4 - (y - 4.4) * .25 : 1.2 - (y - 4.4) * .2, s * y - .7, 3, 1.4); }
-    else for (const s of [-1, 1]) for (const y of [4.2, 8]) ctx.strokeRect(1.4, s * y - .8, 3.2, 1.6);
+    ctx.fillStyle = `rgba(90,96,100,${alpha})`; for (const s of [-1, 1]) for (const y of [4.4, 8.1]) ctx.fillRect(type === 'c17' ? .4 - (y - 4.4) * .25 : 1.2 - (y - 4.4) * .2, s * y - .7, 3, 1.4);
   }
   if (bombs) {
-    ctx.fillStyle = real ? `rgba(70,74,64,${alpha})` : rgba(COL.amber, alpha);
+    ctx.fillStyle = `rgba(70,74,64,${alpha})`;
     for (const s of [-1, 0, 1]) { ctx.beginPath(); ctx.ellipse(-1.5 + Math.abs(s) * .5, s * 4.6, 1.6, .8, 0, 0, 7); ctx.fill(); }
   }
   ctx.restore();
@@ -1242,13 +1230,12 @@ function drawCarrier1(time) {
     ctx.beginPath(); ctx.moveTo(c.x, c.y); ctx.lineTo(c.tx, c.ty); ctx.stroke(); ctx.setLineDash([]);
     ctx.beginPath(); ctx.arc(c.tx, c.ty, px(5), 0, 7); ctx.stroke();
   }
-  const real = typeof realLook === 'function' && realLook();
   if (typeof cvDeckInit === 'function') cvDeckInit(c);
   ctx.save();
   ctx.translate(c.x, c.y); ctx.rotate(c.heading); ctx.scale(k, k);
   if (c.moving && !dead) {   // 舰尾 V 形尾流与舰首浪
     for (const s of [-1, 1]) {
-      const g = ctx.createLinearGradient(-156, 0, -380, 0), wc = real ? '#eef3f2' : COL.intel;
+      const g = ctx.createLinearGradient(-156, 0, -380, 0), wc = '#eef3f2';
       g.addColorStop(0, rgba(wc, .35)); g.addColorStop(1, rgba(wc, 0));
       ctx.strokeStyle = g; ctx.lineWidth = lw(1.6);
       ctx.beginPath(); ctx.moveTo(-150, s * 16); ctx.lineTo(-380, s * (60 + 8 * Math.sin(time * 2 + s))); ctx.stroke();
@@ -1264,21 +1251,20 @@ function drawCarrier1(time) {
     ctx.save(); ctx.translate(8 * Math.sin(c.heading) + 6 * Math.cos(c.heading), 8 * Math.cos(c.heading) - 6 * Math.sin(c.heading));
     cvPath(ctx, CVG.deck); ctx.fillStyle = 'rgba(0,0,0,.45)'; ctx.fill(); ctx.restore();
     cvPath(ctx, CVG.deck);
-    ctx.fillStyle = real ? rlLit(ctx, c.heading, 300, 70, '#4d5357') : 'rgba(2,10,6,.9)'; ctx.fill();   // 写实：深灰飞行甲板
+    ctx.fillStyle = rlLit(ctx, c.heading, 300, 70, '#4d5357'); ctx.fill();   // 写实：深灰飞行甲板
     ctx.strokeStyle = hit ? rgba('#ffffff', .95) : rgba(col, dead ? .65 : .95); ctx.lineWidth = lw(hit ? 2.6 : 1.6); ctx.stroke();
-    const pc = a => real ? `rgba(236,236,226,${a})` : rgba(STRUCT, a), ylw = a => real ? `rgba(214,190,72,${a})` : rgba(COL.amber, a * .8);
+    const pc = a => `rgba(236,236,226,${a})`, ylw = a => `rgba(214,190,72,${a})`;
     // 升降机：平台在甲板高度时与甲板齐平（黄边）；降下时舷边缺口露出机库，平台变暗
     CVG.el.forEach((E, i) => {
       const eh = typeof cvElH === 'function' ? cvElH(c, i) : 0, u0 = E.u - E.L / 2, v0 = E.v - E.B / 2;
       if (eh > .01) {
-        ctx.fillStyle = real ? 'rgba(16,18,20,.95)' : 'rgba(0,4,2,.98)'; ctx.fillRect(u0, v0, E.L, 33 - v0);   // 机库开口
+        ctx.fillStyle = 'rgba(16,18,20,.95)'; ctx.fillRect(u0, v0, E.L, 33 - v0);   // 机库开口
         const sh = 1 - eh * .1, du = E.L * (1 - sh) / 2;
-        ctx.fillStyle = real ? `rgba(${Math.round(77 - 45 * eh)},${Math.round(83 - 48 * eh)},${Math.round(87 - 50 * eh)},1)` : `rgba(2,10,6,${.9})`;
+        ctx.fillStyle = `rgba(${Math.round(77 - 45 * eh)},${Math.round(83 - 48 * eh)},${Math.round(87 - 50 * eh)},1)`;
         ctx.fillRect(u0 + du, v0 + 1 + eh * 2, E.L - du * 2, E.B - 2 - eh * 2);
         ctx.strokeStyle = ylw(.5 * (1 - eh * .6)); ctx.lineWidth = lw(1); ctx.strokeRect(u0 + du, v0 + 1 + eh * 2, E.L - du * 2, E.B - 2 - eh * 2);
       } else {
-        if (real) { ctx.fillStyle = rlLit(ctx, c.heading, 22, 18, '#50565a'); ctx.fillRect(u0, v0, E.L, E.B); }
-        else { ctx.fillStyle = 'rgba(2,10,6,.9)'; ctx.fillRect(u0, v0, E.L, E.B); }
+        ctx.fillStyle = rlLit(ctx, c.heading, 22, 18, '#50565a'); ctx.fillRect(u0, v0, E.L, E.B);
         ctx.strokeStyle = ylw(.75); ctx.lineWidth = lw(1.1); ctx.strokeRect(u0, v0, E.L, E.B);
         if (det >= 160) { ctx.strokeStyle = ylw(.35); ctx.setLineDash([lw(3), lw(3)]); ctx.strokeRect(u0 + 1.5, v0 + 1.5, E.L - 3, E.B - 3); ctx.setLineDash([]); }
       }
@@ -1286,76 +1272,76 @@ function drawCarrier1(time) {
     const L = CVG.land, nx = -(L.v1 - L.v0) / CV_LLEN, ny = (L.u1 - L.u0) / CV_LLEN, at = t => [lerp(L.u0, L.u1, t), lerp(L.v0, L.v1, t)];
     if (det >= 70) {
       // 斜角着舰区：两侧边线、中线虚线、接地区横条、四道拦阻索；右侧红白相间的安全线（着舰时这条线以左不能停飞机）
-      ctx.strokeStyle = pc(real ? .7 : .35); ctx.lineWidth = lw(1);
+      ctx.strokeStyle = pc(.7); ctx.lineWidth = lw(1);
       ctx.beginPath();
       for (const s of [-L.hw, L.hw]) { ctx.moveTo(L.u0 + nx * s, L.v0 + ny * s); ctx.lineTo(L.u1 + nx * s, L.v1 + ny * s); }
       ctx.stroke();
-      ctx.setLineDash([lw(9), lw(7)]); ctx.strokeStyle = pc(real ? .8 : .45); ctx.lineWidth = lw(1.2);
+      ctx.setLineDash([lw(9), lw(7)]); ctx.strokeStyle = pc(.8); ctx.lineWidth = lw(1.2);
       ctx.beginPath(); ctx.moveTo(L.u0, L.v0); ctx.lineTo(L.u1, L.v1); ctx.stroke(); ctx.setLineDash([]);
       if (det >= 160) {
-        ctx.strokeStyle = real ? 'rgba(200,52,40,.75)' : rgba(COL.enemy, .45); ctx.lineWidth = lw(1); ctx.setLineDash([lw(4), lw(4)]);
+        ctx.strokeStyle = 'rgba(200,52,40,.75)'; ctx.lineWidth = lw(1); ctx.setLineDash([lw(4), lw(4)]);
         ctx.beginPath(); ctx.moveTo(L.u0 + nx * (L.hw + 2.5), L.v0 + ny * (L.hw + 2.5)); ctx.lineTo(L.u1 + nx * (L.hw + 2.5), L.v1 + ny * (L.hw + 2.5)); ctx.stroke(); ctx.setLineDash([]);
-        ctx.fillStyle = pc(real ? .5 : .25);
+        ctx.fillStyle = pc(.5);
         for (const t of [.06, .085, .27, .3]) { const [u, v] = at(t); ctx.save(); ctx.translate(u, v); ctx.rotate(CV_LANG); for (const s of [-1, 1]) ctx.fillRect(-1.2, s * 7 - 2, 2.4, 4); ctx.restore(); }   // 接地区标志
       }
-      ctx.strokeStyle = real ? 'rgba(30,30,28,.85)' : rgba(STRUCT, .32); ctx.lineWidth = lw(real ? 1.1 : .9);
+      ctx.strokeStyle = 'rgba(30,30,28,.85)'; ctx.lineWidth = lw(1.1);
       ctx.beginPath();
       for (const t of CVG.wires) { const [u, v] = at(t); ctx.moveTo(u + nx * 15, v + ny * 15); ctx.lineTo(u - nx * 15, v - ny * 15); }
       ctx.stroke();
       // 舰首中线、甲板边安全线
-      ctx.setLineDash([lw(6), lw(6)]); ctx.strokeStyle = pc(real ? .45 : .22); ctx.lineWidth = lw(1);
+      ctx.setLineDash([lw(6), lw(6)]); ctx.strokeStyle = pc(.45); ctx.lineWidth = lw(1);
       ctx.beginPath(); ctx.moveTo(150, 0); ctx.lineTo(60, 0); ctx.stroke(); ctx.setLineDash([]);
-      if (det >= 160 && real) { ctx.strokeStyle = 'rgba(230,230,220,.25)'; ctx.lineWidth = lw(.8); ctx.save(); ctx.beginPath(); cvPath(ctx, CVG.deck); ctx.clip(); cvPath(ctx, CVG.deck); ctx.lineWidth = lw(3.4); ctx.stroke(); ctx.restore(); }
+      if (det >= 160) { ctx.strokeStyle = 'rgba(230,230,220,.25)'; ctx.lineWidth = lw(.8); ctx.save(); ctx.beginPath(); cvPath(ctx, CVG.deck); ctx.clip(); cvPath(ctx, CVG.deck); ctx.lineWidth = lw(3.4); ctx.stroke(); ctx.restore(); }
     }
     // 弹射器：滑轨、弹射滑块；有飞机挂上 / 弹射时发光，偏流板升起（抬起的板子俯视变短、身后拖一道影子）
     CVG.cats.forEach((C, i) => {
       const ca = Math.cos(C.a), sa = Math.sin(C.a), on = live.find(p => p.cat === i && ((p.phase === 'cat' && (p.dk === 'hook' || p.dk === 'line')) || p.phase === 'roll'));
       ctx.save(); ctx.translate(C.u, C.v); ctx.rotate(C.a);
-      ctx.strokeStyle = on ? rgba(COL.amber, .55 + .4 * Math.sin(time * 14)) : real ? 'rgba(24,26,26,.85)' : rgba(STRUCT, det >= 70 ? .3 : .18);
+      ctx.strokeStyle = on ? rgba(COL.amber, .55 + .4 * Math.sin(time * 14)) : 'rgba(24,26,26,.85)';
       ctx.lineWidth = lw(on ? 2 : 1); ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(C.L - 2, 0); ctx.stroke();
-      if (det >= 160) { ctx.strokeStyle = pc(real ? .4 : .2); ctx.lineWidth = lw(.7); ctx.beginPath(); for (const s of [-1, 1]) { ctx.moveTo(0, s * 2.2); ctx.lineTo(C.L - 2, s * 2.2); } ctx.stroke(); }
+      if (det >= 160) { ctx.strokeStyle = pc(.4); ctx.lineWidth = lw(.7); ctx.beginPath(); for (const s of [-1, 1]) { ctx.moveTo(0, s * 2.2); ctx.lineTo(C.L - 2, s * 2.2); } ctx.stroke(); }
       const sx = on && on.phase === 'roll' ? Math.min(C.L, on.cs || 0) : 0;   // 滑块
-      ctx.fillStyle = real ? '#2c2e2e' : rgba(COL.amber, .9); ctx.fillRect(sx - 1.4, -.6, 2.8, 1.2);
+      ctx.fillStyle = '#2c2e2e'; ctx.fillRect(sx - 1.4, -.6, 2.8, 1.2);
       if (on && on.phase === 'roll') { const g = ctx.createLinearGradient(0, 0, sx, 0); g.addColorStop(0, rgba(COL.amber, 0)); g.addColorStop(1, rgba(COL.amber, .55)); ctx.strokeStyle = g; ctx.lineWidth = lw(3); ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(sx, 0); ctx.stroke(); }
       const j = typeof cvJbd === 'function' ? cvJbd(c, i, live) : 0, dep = 5 * Math.cos(j * .96), sh = 5 * Math.sin(j * .96) * .7;   // 偏流板：铰链在前沿，向后上方抬起
       if (sh > .2) { ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.fillRect(-9.5 - dep - sh, -8, sh, 16); }
-      ctx.fillStyle = real ? (j > .05 ? '#7c8287' : '#565c60') : `rgba(2,10,6,.95)`; ctx.fillRect(-9.5 - dep, -8, dep, 16);
-      ctx.strokeStyle = j > .05 ? rgba(COL.amber, .4 + .5 * j) : real ? 'rgba(20,22,22,.7)' : rgba(STRUCT, .28); ctx.lineWidth = lw(1); ctx.strokeRect(-9.5 - dep, -8, dep, 16);
-      if (real && j > .05) { ctx.strokeStyle = 'rgba(30,30,30,.5)'; ctx.lineWidth = lw(.5); ctx.beginPath(); for (let y = -6; y <= 6; y += 3) { ctx.moveTo(-9.5 - dep, y); ctx.lineTo(-9.5, y); } ctx.stroke(); }
+      ctx.fillStyle = (j > .05 ? '#7c8287' : '#565c60'); ctx.fillRect(-9.5 - dep, -8, dep, 16);
+      ctx.strokeStyle = j > .05 ? rgba(COL.amber, .4 + .5 * j) : 'rgba(20,22,22,.7)'; ctx.lineWidth = lw(1); ctx.strokeRect(-9.5 - dep, -8, dep, 16);
+      if (j > .05) { ctx.strokeStyle = 'rgba(30,30,30,.5)'; ctx.lineWidth = lw(.5); ctx.beginPath(); for (let y = -6; y <= 6; y += 3) { ctx.moveTo(-9.5 - dep, y); ctx.lineTo(-9.5, y); } ctx.stroke(); }
       ctx.restore();
     });
     // 舰首、舰尾舷号「18」（字头朝舰首，从舰尾方向看是正的）
     if (det >= 110) {
-      ctx.save(); ctx.fillStyle = pc(real ? .75 : .4); ctx.font = '700 10px "IBM Plex Mono", monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.save(); ctx.fillStyle = pc(.75); ctx.font = '700 10px "IBM Plex Mono", monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       for (const [u, v, s] of [[126, 0, 1.1], [-146, 12, .9]]) { ctx.save(); ctx.translate(u, v); ctx.rotate(Math.PI / 2); ctx.scale(s, s * 1.4); ctx.fillText('18', 0, 0); ctx.restore(); }
       ctx.restore();
     }
     // 近防炮 / 红旗-10 发射装置：甲板四角舷台
-    ctx.fillStyle = real ? '#8d9398' : 'rgba(2,10,6,1)'; ctx.strokeStyle = real ? 'rgba(0,0,0,.5)' : rgba(STRUCT, .6); ctx.lineWidth = lw(.9);
+    ctx.fillStyle = '#8d9398'; ctx.strokeStyle = 'rgba(0,0,0,.5)'; ctx.lineWidth = lw(.9);
     for (const [u, v] of [[144, -19], [136, 23], [-148, -20], [-150, 30]]) { ctx.beginPath(); ctx.arc(u, v, 2.6, 0, 7); ctx.fill(); ctx.stroke(); }
     ctx.fillRect(-124, -28, 9, 5); ctx.strokeRect(-124, -28, 9, 5);   // 左舷后部的着舰指挥官平台
     // 舰岛（003：右舷中后部、紧凑）：底层甲板室 → 相控阵层（四面大型有源相控阵，俯视是四边的深色斜面）→ 驾驶室（前、侧窗带）→ 一体化桅杆（八角柱、顶部天线罩）；
     //   尾部烟囱（两个排烟口）；舰岛朝甲板一侧的飞行指挥所窗
     const [iu0, iu1, iv0, iv1] = CVG.isl, im = (iv0 + iv1) / 2;
-    const blk = (u0, u1, v0, v1, f) => { ctx.fillStyle = real ? f : 'rgba(2,10,6,1)'; ctx.fillRect(u0, v0, u1 - u0, v1 - v0); ctx.strokeRect(u0, v0, u1 - u0, v1 - v0); };
+    const blk = (u0, u1, v0, v1, f) => { ctx.fillStyle = f; ctx.fillRect(u0, v0, u1 - u0, v1 - v0); ctx.strokeRect(u0, v0, u1 - u0, v1 - v0); };
     ctx.save(); ctx.translate(7, 7); ctx.fillStyle = 'rgba(0,0,0,.4)'; ctx.fillRect(iu0, iv0, iu1 - iu0, iv1 - iv0); ctx.restore();   // 投影（光从西北来）
-    ctx.strokeStyle = real ? 'rgba(0,0,0,.55)' : rgba(STRUCT, dead ? .5 : .85); ctx.lineWidth = lw(1.3);
+    ctx.strokeStyle = 'rgba(0,0,0,.55)'; ctx.lineWidth = lw(1.3);
     blk(iu0, iu1, iv0, iv1, '#8a9196');
     if (det >= 70) {
       ctx.lineWidth = lw(1);
       blk(iu0 + 2, iu0 + 11, iv0 + 2, iv1 - 2, '#7d8489');   // 烟囱
-      ctx.fillStyle = real ? '#22262a' : rgba(STRUCT, .45);
+      ctx.fillStyle = '#22262a';
       for (const v of [im - 1.6, im + 1.6]) { ctx.beginPath(); ctx.ellipse(iu0 + 6.5, v, 3, 1.2, 0, 0, 7); ctx.fill(); }   // 排烟口
       blk(iu0 + 13, iu1 - 3, iv0 + 1.2, iv1 - 1.2, '#9aa1a6');   // 相控阵层
-      if (real) { ctx.fillStyle = '#56606a'; ctx.fillRect(iu0 + 15, iv0 + 1.2, iu1 - iu0 - 20, 1.3); ctx.fillRect(iu0 + 15, iv1 - 2.5, iu1 - iu0 - 20, 1.3); ctx.fillRect(iu1 - 4.3, iv0 + 3, 1.3, iv1 - iv0 - 6); ctx.fillRect(iu0 + 13, iv0 + 3, 1.3, iv1 - iv0 - 6); }   // 四面阵列
+      ctx.fillStyle = '#56606a'; ctx.fillRect(iu0 + 15, iv0 + 1.2, iu1 - iu0 - 20, 1.3); ctx.fillRect(iu0 + 15, iv1 - 2.5, iu1 - iu0 - 20, 1.3); ctx.fillRect(iu1 - 4.3, iv0 + 3, 1.3, iv1 - iv0 - 6); ctx.fillRect(iu0 + 13, iv0 + 3, 1.3, iv1 - iv0 - 6);   // 四面阵列
       blk(iu0 + 18, iu1 - 4, iv0 + 2.4, iv1 - 2.4, '#acb3b8');   // 驾驶室
-      ctx.fillStyle = real ? '#28394a' : rgba(STRUCT, .55); ctx.fillRect(iu1 - 5, iv0 + 3, 1, iv1 - iv0 - 6); ctx.fillRect(iu0 + 18, iv0 + 2.4, iu1 - iu0 - 22, .8);   // 前窗、舷内侧窗（飞行指挥所）
+      ctx.fillStyle = '#28394a'; ctx.fillRect(iu1 - 5, iv0 + 3, 1, iv1 - iv0 - 6); ctx.fillRect(iu0 + 18, iv0 + 2.4, iu1 - iu0 - 22, .8);   // 前窗、舷内侧窗（飞行指挥所）
       const mu = iu0 + 24, ra = dead ? 0 : time * 2.2;
-      ctx.fillStyle = real ? '#bfc5c9' : 'rgba(2,10,6,1)'; ctx.beginPath();
+      ctx.fillStyle = '#bfc5c9'; ctx.beginPath();
       for (let i = 0; i < 8; i++) { const b = i / 8 * 6.283 + .39; ctx.lineTo(mu + Math.cos(b) * 3.4, im + Math.sin(b) * 3.4); }
       ctx.closePath(); ctx.fill(); ctx.stroke();   // 一体化桅杆
-      ctx.fillStyle = real ? '#e2e5e6' : 'rgba(2,10,6,1)'; ctx.beginPath(); ctx.arc(mu, im, 1.6, 0, 7); ctx.fill(); ctx.stroke();   // 顶部天线罩
-      ctx.strokeStyle = real ? '#3a4249' : rgba(STRUCT, .8); ctx.lineWidth = lw(1.1);
+      ctx.fillStyle = '#e2e5e6'; ctx.beginPath(); ctx.arc(mu, im, 1.6, 0, 7); ctx.fill(); ctx.stroke();   // 顶部天线罩
+      ctx.strokeStyle = '#3a4249'; ctx.lineWidth = lw(1.1);
       ctx.beginPath(); ctx.moveTo(mu - 6 - Math.cos(ra) * 2.4, im - Math.sin(ra) * 2.4); ctx.lineTo(mu - 6 + Math.cos(ra) * 2.4, im + Math.sin(ra) * 2.4); ctx.stroke();   // 导航雷达
       ctx.fillStyle = rgba(dead ? COL.enemy : COL.g, .5 + .5 * Math.sin(time * 4)); ctx.beginPath(); ctx.arc(iu1 - 2, im, lw(1.8), 0, 7); ctx.fill();
     }
@@ -1373,7 +1359,7 @@ function drawCarrier1(time) {
       }
     }
     // 弹射官：飞机挂上弹射器时站在一旁，弹射那一刻蹲下、手臂指向舰首（黄衣）
-    if (det >= 220 && typeof cvShooters === 'function' && typeof manDraw === 'function') for (const o of cvShooters(c, live)) manDraw(ctx, o.u, o.v, o.a, 'deck', COL.g, 'p', { ...MAN_IDLE, k: .5, kneel: o.go, jc: '#e8c33a', point: o.go, t: time }, real);
+    if (det >= 220 && typeof cvShooters === 'function' && typeof manDraw === 'function') for (const o of cvShooters(c, live)) manDraw(ctx, o.u, o.v, o.a, 'deck', COL.g, 'p', { ...MAN_IDLE, k: .5, kneel: o.go, jc: '#e8c33a', point: o.go, t: time });
   }
   if (dead) {   // 甲板火灾
     CVG.fires.forEach(([u, v], i) => {

@@ -3,42 +3,8 @@
 // 舰船为俯视剪影（见 ships.js）；小组远看为楔形三点（屏幕尺寸固定），近看为世界尺寸的单兵小人；红色 = 敌方（仅视野内或已标定）
 const MO = [[0, -4.6], [-4.6, 3.4], [4.6, 3.4]];   // 三人组成三角（世界单位；小人约 4 单位宽，彼此留空）
 
-function drawForts(time) {
-  const ctx = R.ctx;
-  if (realLook()) return drawFortsReal(ctx, time);
-  ctx.lineWidth = px(1.2);
-  for (const t of S.trench) if (t.known) {
-    ctx.strokeStyle = rgba(COL.enemy, .4); ctx.lineWidth = px(2);
-    ctx.beginPath(); for (const [x, y] of t.pts) ctx.lineTo(x, y); ctx.stroke();
-  }
-  ctx.lineWidth = px(1.1);
-  for (const w of S.wire) if (w.known && !R.m3d) {   // 3D：铁丝网、海滩障碍是立体模型（v3units.js）
-    const n = Math.max(2, Math.round(dist(w.x0, w.y0, w.x1, w.y1) / 7));
-    ctx.strokeStyle = rgba(COL.enemy, w.cut ? .18 : .7);
-    ctx.beginPath();
-    for (let s = 0; s <= n; s++) {
-      const x = lerp(w.x0, w.x1, s / n), y = lerp(w.y0, w.y1, s / n);
-      if (w.cut && s % 2) continue;
-      ctx.moveTo(x - 2.5, y - 2.5); ctx.lineTo(x + 2.5, y + 2.5); ctx.moveTo(x + 2.5, y - 2.5); ctx.lineTo(x - 2.5, y + 2.5);
-    }
-    ctx.stroke();
-  }
-  ctx.lineWidth = px(1);
-  for (const m of S.mines) if (m.known && m.clr < 1 && inView(m.x, m.y, m.r)) {
-    ctx.setLineDash([px(3), px(4)]); ctx.strokeStyle = rgba(COL.enemy, .5);
-    ctx.beginPath(); ctx.arc(m.x, m.y, m.r, 0, 7); ctx.stroke(); ctx.setLineDash([]);
-    ctx.fillStyle = rgba(COL.enemy, .07); ctx.fill();
-    if (R.fig) {   // 近看：雷区内散布的小地雷点
-      ctx.fillStyle = rgba(COL.enemy, .45);
-      for (let i = 0; i < 9; i++) { const a = i * 2.4 + m.x, d = m.r * (.25 + .65 * ((i * 37 + (m.y | 0)) % 10) / 10); ctx.beginPath(); ctx.arc(m.x + Math.cos(a) * d, m.y + Math.sin(a) * d, .9, 0, 7); ctx.fill(); }
-    }
-    if (m.clr > 0) { ctx.strokeStyle = COL.amber; ctx.lineWidth = px(1.6); ctx.beginPath(); ctx.arc(m.x, m.y, m.r + px(3), -1.57, -1.57 + m.clr * 6.283); ctx.stroke(); ctx.lineWidth = px(1); }
-  }
-  ctx.strokeStyle = rgba(COL.enemy, .7); ctx.lineWidth = px(1.1);
-  for (const o of S.obst) if (o.known && !o.dead && !R.m3d) {
-    ctx.beginPath(); ctx.moveTo(o.x - 3, o.y - 3); ctx.lineTo(o.x + 3, o.y + 3); ctx.moveTo(o.x + 3, o.y - 3); ctx.lineTo(o.x - 3, o.y + 3); ctx.stroke();
-  }
-}
+// 战壕、铁丝网、雷区、障碍物（real.js drawFortsReal）
+function drawForts(time) { drawFortsReal(R.ctx, time); }
 
 function drawSmoke(time) {
   const ctx = R.ctx;
@@ -134,13 +100,13 @@ function faceDraw(q) {
 function drawTeamBody(ctx, q, f, col) {
   const c = Math.cos(f + 1.57), s = Math.sin(f + 1.57), n = q.men.length;
   if (R.fig) {
-    const T = manTeam(q), real = realLook();   // 动作状态（manim.js）
+    const T = manTeam(q);   // 动作状态（manim.js）
     for (let i = 0; i < n; i++) {
       let mx = q.x + MO[i][0] * c - MO[i][1] * s, my = q.y + MO[i][0] * s + MO[i][1] * c;
       const bo = bldOut(mx, my, .5);   // 小人落在房子轮廓里：画在墙根
       if (bo) [mx, my] = bo;
       const kind = manKind(q, i, q.men[i]);
-      manDraw(ctx, mx, my, f, kind, col, q.side, manAn(q, T, i, kind), real);
+      manDraw(ctx, mx, my, f, kind, col, q.side, manAn(q, T, i, kind));
     }
     return;
   }

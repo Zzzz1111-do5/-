@@ -1396,8 +1396,6 @@ function openSandbox(seed, keep) {
   Object.assign(SBX, { pick: null, line: null, lineDown: null, hover: null, drag: null, pv: false, msg: '', endKey: null, savesOpen: false });
   sbxSync();
   if (typeof document === 'undefined') return S;
-  if (typeof MX === 'object' && MX) MX.seed = null;
-  if (typeof R === 'object' && R) R.pixSeed = null;
   if (typeof mmInit === 'function' && $('mm')) mmInit($('mm'));
   if (typeof U === 'object') { U.tool = null; U.logKey = null; U.cardKey = null; U.level = lv; }
   $('brief').hidden = true; $('end').hidden = true;

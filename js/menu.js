@@ -27,7 +27,6 @@ const mnSfx = k => { if (typeof auUi === 'function') auUi(k); };
 
 const MN_CSS = `
 body.mn-open #bgrain { z-index: 30; opacity: .42; }
-:root[data-look="real"] #mnSet .ms-row[data-only="matrix"], :root[data-look="real"] #mnSet .ms-row[data-only="glow"], :root[data-look="green"] #mnSet .ms-row[data-only="matrix"] { display: none; }
 body.mn-open > :not(#bgrain):not(#stage):not(.mn-layer):not(script):not(style), body.mn-open #stage > :not(#cv) { visibility: hidden; }
 #diff { display: none; }
 #mn { position: fixed; inset: 0; z-index: 40; overflow-y: auto; color: var(--text); font-family: var(--f-ui);
@@ -152,12 +151,7 @@ body.mn-open > :not(#bgrain):not(#stage):not(.mn-layer):not(script):not(style), 
   #mnSet .ms-row { grid-template-columns: 96px minmax(0, 1fr) 44px; gap: 8px; }
 }
 @media (prefers-reduced-motion: reduce) { #mn .mn-it, #mn .mn-lv { transition: none; } }
-/* 写实画面：去扫描线与霓虹辉光，标题白字压暗影 */
-:root[data-look="real"] #mn { background: linear-gradient(90deg, rgba(var(--bg-rgb), .86), rgba(var(--bg-rgb), .52) 55%, rgba(var(--bg-rgb), .25)), radial-gradient(ellipse at 50% 50%, transparent 55%, rgba(0, 0, 0, .5)); }
-:root[data-look="real"] #mn h1 { color: #f2f5f7; text-shadow: 0 2px 14px rgba(0, 0, 0, .6); }
-:root[data-look="real"] #mn .mn-en { color: rgba(230, 237, 242, .7); }
-:root[data-look="real"] #mn .mn-rule { box-shadow: none; }
-:root[data-look="real"] #mn .mn-it::before { box-shadow: none; }`;
+`;
 
 function mnBuild() {
   if (MENU.el) return MENU.el;
@@ -209,7 +203,7 @@ function mnHi(k, snd) {
   } else if (k === 'pve') { const P = typeof lvProg === 'function' ? lvProg() : null, done = P && P.done ? P.done.length : 0; body = `<p>三章十关，按真实作战顺序递进：海战夺取制海权 → 强行登陆夺取登陆场 → 从滩头向纵深推进。每关给定预算，你自己挑兵种、布置进攻兵力；守军由 AI 按本关风格布防，你只拿到一份有误差的情报。</p><dl><dt>进度</dt><dd>已通过 ${done} / ${typeof LV_DEFS === 'object' ? LV_DEFS.length : 10} 关</dd></dl>`; }
   else if (k === 'sbx') body = `<p>在同一张海岸地图上自由部署岸防与进攻部队，按预算对抗；可以观战 AI 对 AI，也可以亲自指挥进攻方。</p><dl><dt>状态</dt><dd>${typeof openSandbox === 'function' ? '可用' : '模块加载中'}</dd></dl>`;
   else if (k === 'cdx') { const n = typeof CATALOG !== 'undefined' && Array.isArray(CATALOG) ? CATALOG.length : 0; body = `<p>查看全部兵力：步兵、装甲、火炮、航空、舰艇、工事与支援单位的属性条、定位与克制关系。</p><dl><dt>收录</dt><dd>${n ? n + ' 种单位' : '目录加载中'}</dd></dl>`; }
-  else if (k === 'set') body = `<p>主音量、音乐、音效、无线电；画面风格（黑绿 / 写实 / 数码）、画质、屏幕震动；开场转场；AI 指挥官通讯详略。</p><dl><dt>当前</dt><dd>主音量 ${Math.round(SETTINGS.master * 100)}% · 画质${SETTINGS.quality === 'low' ? '低' : '高'}</dd></dl>`;
+  else if (k === 'set') body = `<p>主音量、音乐、音效、无线电；辉光、画质、3D 渲染距离、屏幕震动；开场转场；AI 指挥官通讯详略。</p><dl><dt>当前</dt><dd>主音量 ${Math.round(SETTINGS.master * 100)}% · 画质${SETTINGS.quality === 'low' ? '低' : '高'}</dd></dl>`;
   info.innerHTML = `<h2>${it[2]}</h2>${body}`;
 }
 function mnLvHi(b) {
@@ -372,11 +366,11 @@ function mnKey(e) {
 // —— 设置面板 ——
 const MN_SET = [
   ['音量', 'VOLUME', [['master', '主音量', 'vol'], ['music', '音乐', 'vol'], ['musicStyle', '背景音乐', [['march', '进行曲'], ['custom', '我的歌'], ['ambient', '氛围']], '进行曲：明亮的军乐，战况越激烈编制越全；我的歌：用下面导入的歌'], ['bgm', '导入音乐', 'file', '选一首你设备上的歌（mp3 / m4a / ogg / wav），循环播放；只保存在你自己的浏览器里'], ['sfx', '音效', 'vol'], ['radio', '无线电通话', 'vol']]],
-  ['画面', 'DISPLAY', [['look', '画面风格', [['green', '黑绿'], ['real', '写实'], ['matrix', '数码']], '黑绿：写实的地形与模型，黑底绿色磷光、发光轮廓（敌方红）；写实：真实配色（我方蓝、敌方红）；数码：原来的字符矩阵风格'], ['rain', '数码雨密度', 'rain'], ['bloom', '辉光强度', 'pct'], ['quality', '画质', [['high', '高'], ['low', '低']]], ['rdist', '3D 渲染距离', 'rd', '3D 里能看多远（远处的地形、建筑、部队模型）；调远更耗性能。3D 中也可按 [ ] 键调'], ['shake', '屏幕震动', 'sw'], ['front', '战线与态势图形', 'sw', '显示双方战线、无人地带、空隙、突击群调整线']]],
+  ['画面', 'DISPLAY', [['bloom', '辉光强度', 'pct'], ['quality', '画质', [['high', '高'], ['low', '低']]], ['rdist', '3D 渲染距离', 'rd', '3D 里能看多远（远处的地形、建筑、部队模型）；调远更耗性能。3D 中也可按 [ ] 键调'], ['shake', '屏幕震动', 'sw'], ['front', '战线与态势图形', 'sw', '显示双方战线、无人地带、空隙、突击群调整线']]],
   ['流程', 'FLOW', [['intro', '开场转场', 'sw', '从国家全图推近到战场，约 7 秒']]],
   ['AI 指挥官通讯', 'COMMANDER CHAT', [['chat', '通讯详略', [['brief', '简要'], ['normal', '标准'], ['verbose', '详细']]], ['enemyChat', '显示敌方（截获）', 'sw', '战役中敌方通话以「截获」形式延迟出现']]]
 ];
-const mnFmt = (k, v) => k === 'rdist' ? (v < .9 ? '近 ' : v <= 1.1 ? '标准 ' : v < 2.5 ? '远 ' : '极远 ') + (+v).toFixed(2).replace(/0$/, '') + '×' : k === 'rain' ? (v <= 0 ? '关' : v < .45 ? '淡 ' : '强 ') + (v > 0 ? Math.round(v * 100) + '%' : '') : Math.round(v * 100) + '%';
+const mnFmt = (k, v) => k === 'rdist' ? (v < .9 ? '近 ' : v <= 1.1 ? '标准 ' : v < 2.5 ? '远 ' : '极远 ') + (+v).toFixed(2).replace(/0$/, '') + '×' : Math.round(v * 100) + '%';
 
 function mnSetBuild() {
   if (MENU.set) return MENU.set;
@@ -390,7 +384,7 @@ function mnSetBuild() {
     else if (ty === 'sw') ctl = `<button type="button" class="ms-sw" role="switch" data-k="${k}" aria-label="${n}"></button><span></span>`;
     else if (Array.isArray(ty)) ctl = `<div class="ms-seg" role="group" aria-label="${n}">${ty.map(([v, l]) => `<button type="button" data-k="${k}" data-v="${v}">${l}</button>`).join('')}</div><span></span>`;
     else ctl = `<input type="range" id="ms-${k}" data-k="${k}" ${ty === 'rd' ? 'min="0.5" max="4" step="0.25"' : 'min="0" max="1" step="0.05"'} aria-label="${n}"><output for="ms-${k}" data-o="${k}"></output>`;
-    return `<div class="ms-row"${k === 'rain' ? ' data-only="matrix"' : k === 'bloom' ? ' data-only="glow"' : ''}><label ${ty === 'vol' || ty === 'pct' || ty === 'rain' || ty === 'rd' ? `for="ms-${k}"` : ''}>${n}</label>${ctl}${note ? `<span class="ms-note">${note}</span>` : ''}</div>`;
+    return `<div class="ms-row"><label ${ty === 'vol' || ty === 'pct' || ty === 'rd' ? `for="ms-${k}"` : ''}>${n}</label>${ctl}${note ? `<span class="ms-note">${note}</span>` : ''}</div>`;
   };
   el.innerHTML = `<div class="ms-win"><header><h2>设置<small>SETTINGS</small></h2><button type="button" class="ms-x" aria-label="关闭" title="关闭（Esc）">×</button></header>
     ${MN_SET.map(([h, en, rows]) => `<h3>${h} · ${en}</h3>${rows.map(row).join('')}`).join('')}
@@ -480,9 +474,8 @@ HOOK.key.push(e => {
   return false;
 });
 
-// 每帧：HUD 数码雨按钮改动同步进设置；无对局时菜单背景镜头缓慢巡航
+// 每帧：无对局时菜单背景镜头缓慢巡航
 HOOK.frame.push((now, dt) => {
-  if (typeof R === 'object' && R.cv && typeof SETTINGS === 'object' && R.rain !== SETTINGS.rain) setSetting('rain', R.rain);
   if (MENU.open && !MENU.game && S && CAM.vw > 1) {
     MENU.drift += dt * .05;
     CAM.z = CAM.fit * 1.9;

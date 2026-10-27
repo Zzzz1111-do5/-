@@ -26,15 +26,15 @@ function gunAim(e, time) {
 const gunRocket = e => e.kind === 'arty' && e.mod && (e.mod.salvo || 1) >= 2;
 
 // 炮组：近看画几个小人，朝向射向
-function gunCrew(ctx, x, y, a, pts, col) {
+function gunCrew(ctx, x, y, a, pts) {
   if (typeof drawMan !== 'function' || !R.fig) return;
   const c = Math.cos(a), s = Math.sin(a);
-  for (const [u, v, role] of pts) drawMan(ctx, x + u * c - v * s, y + u * s + v * c, a, role || 'rifle', realLook() ? rgba(COL.enemy, .5) : col, true, 'e');
+  for (const [u, v, role] of pts) drawMan(ctx, x + u * c - v * s, y + u * s + v * c, a, role || 'rifle', rgba(COL.enemy, .5), true, 'e');
 }
 // 沙袋环：一圈小圆角块；open 为缺口方向（弧度），不设则为整圈
-function gunSandbags(ctx, x, y, r, open, col) {
+function gunSandbags(ctx, x, y, r, open) {
   const n = Math.max(8, Math.round(r * 1.4)), gap = open == null ? 0 : .9;
-  ctx.fillStyle = realLook() ? rlGun().sand : 'rgba(2,10,6,.85)'; ctx.strokeStyle = realLook() ? 'rgba(70,58,40,.8)' : col; ctx.lineWidth = px(1);
+  ctx.fillStyle = rlGun().sand; ctx.strokeStyle = 'rgba(70,58,40,.8)'; ctx.lineWidth = px(1);
   for (let i = 0; i < n; i++) {
     const a = i / n * 6.283;
     if (open != null && Math.abs(Math.atan2(Math.sin(a - open), Math.cos(a - open))) < gap) continue;
@@ -54,8 +54,8 @@ function gunMove(ctx, e, x, y, vis, col, dim, dark) {
   const a = Math.atan2(e.my - e.y, e.mx - e.x);
   if (e.kind === 'mortar') {
     if (!R.fig || typeof manDraw !== 'function') { ctx.fillStyle = dark; ctx.strokeStyle = col; ctx.beginPath(); ctx.arc(x, y, 2.2, 0, 7); ctx.fill(); ctx.stroke(); return; }
-    const c = Math.cos(a), s = Math.sin(a), mc = realLook() ? rgba(COL.enemy, .5) : col;
-    [[2.6, -1.2, 'mortar'], [-2.6, 1.2, 'rifle']].forEach(([u, v, k], i) => manDraw(ctx, x + u * c - v * s, y + u * s + v * c, a, k, mc, 'e', { ...MAN_IDLE, mv: true, ph: S.t * 7 + e.id + i * 2.1 }, realLook()));
+    const c = Math.cos(a), s = Math.sin(a), mc = rgba(COL.enemy, .5);
+    [[2.6, -1.2, 'mortar'], [-2.6, 1.2, 'rifle']].forEach(([u, v, k], i) => manDraw(ctx, x + u * c - v * s, y + u * s + v * c, a, k, mc, 'e', { ...MAN_IDLE, mv: true, ph: S.t * 7 + e.id + i * 2.1 }));
     return;
   }
   ctx.save(); ctx.translate(x, y); ctx.rotate(a);
@@ -87,7 +87,7 @@ function gunPits(ctx) {
     for (const p of e.pos) {
       if (!e.moving && !e.dead && dist(p.x, p.y, e.x, e.y) <= 4) continue;
       if (!inView(p.x, p.y, 20) || !(spec || inVision(p.x, p.y))) continue;
-      gunSandbags(ctx, p.x, p.y, mortar ? 7 : gunRocket(e) ? 13 : 12, mortar ? null : Math.PI / 2, realLook() ? rlGun().dim : rgba(COL.enemy, .3));
+      gunSandbags(ctx, p.x, p.y, mortar ? 7 : gunRocket(e) ? 13 : 12, mortar ? null : Math.PI / 2);
     }
   }
 }
@@ -97,7 +97,7 @@ function gunModel(ctx, e, x, y, vis, time) {
   const K = { coastal: 1, arty: 1, mortar: 1, aa: 1, bunker: 1, tel: 1, typhon: 1, ascm: 1 };
   if (!K[e.kind]) return false;
   if (GUNV.S !== S || GUNV.t !== time) { gunScan(); GUNV.t = time; }
-  const real = vis && realLook();   // 写实：深色金属描边、沙色 / 混凝土底，不再是发光线稿
+  const real = vis;   // 看得见：深色金属描边、沙色 / 混凝土底；看不见的是暗红虚线轮廓
   const a = gunAim(e, time), col = real ? rlGun().col : rgba(COL.enemy, vis ? .95 : .4), dim = real ? rlGun().dim : rgba(COL.enemy, vis ? .45 : .2), con = real ? rlGun().con : rgba(STRUCT, vis ? .3 : .12);
   const ft = S.t - (GUNV.fire[e.id] ?? -99), fk = vis && ft < .3 ? 1 - ft / .3 : 0, rec = vis && ft < .45 ? (1 - ft / .45) * 2.2 : 0;
   const dark = real ? rlGun().dark : 'rgba(30,4,10,.85)';
@@ -121,11 +121,11 @@ function gunModel(ctx, e, x, y, vis, time) {
     ctx.beginPath(); ctx.moveTo(-6, -5); ctx.lineTo(4, -5.5); ctx.quadraticCurveTo(7.5, 0, 4, 5.5); ctx.lineTo(-6, 5); ctx.closePath(); ctx.fill(); ctx.stroke();   // 炮塔防盾
     ctx.fillStyle = dim; ctx.fillRect(-4, -1.2, 5, 2.4);
     ctx.restore();
-    if (vis) gunCrew(ctx, x, y, a, [[-9, -6], [-10, 6], [-14, 0, 'radio']], col);
+    if (vis) gunCrew(ctx, x, y, a, [[-9, -6], [-10, 6], [-14, 0, 'radio']]);
     if (fk) gunFlash(ctx, x, y, a, 24 - rec, fk);
   } else if (e.kind === 'arty' && gunRocket(e)) {
     // 火箭炮：卡车底盘 + 驾驶室 + 斜指射向的多管发射架
-    gunSandbags(ctx, x, y, 13, a, dim);
+    gunSandbags(ctx, x, y, 13, a);
     ctx.save(); ctx.translate(x, y); ctx.rotate(a);
     ctx.fillStyle = dark; ctx.strokeStyle = col; ctx.lineWidth = px(1.2);
     ctx.fillRect(-10, -3.6, 15, 7.2); ctx.strokeRect(-10, -3.6, 15, 7.2);   // 车体
@@ -135,11 +135,11 @@ function gunModel(ctx, e, x, y, vis, time) {
     ctx.lineWidth = px(1);
     for (let i = 0; i < 5; i++) { const v = -2.4 + i * 1.2; ctx.beginPath(); ctx.moveTo(-9, v); ctx.lineTo(2, v); ctx.stroke(); }
     ctx.restore();
-    if (vis) gunCrew(ctx, x, y, a, [[-14, -6], [-15, 6]], col);
+    if (vis) gunCrew(ctx, x, y, a, [[-14, -6], [-15, 6]]);
     if (fk) { for (let i = 0; i < 3; i++) gunFlash(ctx, x + Math.cos(a + 1.57) * (i - 1) * 2, y + Math.sin(a + 1.57) * (i - 1) * 2, a, 3, fk * .8); ctx.fillStyle = rgba(COL.smoke, .35 * fk); ctx.beginPath(); ctx.arc(x - Math.cos(a) * 14, y - Math.sin(a) * 14, 8 + 6 * (1 - fk), 0, 7); ctx.fill(); }   // 尾焰与后喷烟
   } else if (e.kind === 'arty') {
     // 榴弹炮：马蹄形沙袋掩体（开口朝射向）+ 炮轮、防盾、大架两腿 + 炮管
-    gunSandbags(ctx, x, y, 12, a, dim);
+    gunSandbags(ctx, x, y, 12, a);
     ctx.save(); ctx.translate(x, y); ctx.rotate(a);
     ctx.strokeStyle = col; ctx.lineWidth = px(1.3);
     ctx.beginPath(); ctx.moveTo(-1, -1.8); ctx.lineTo(-11, -5.5); ctx.moveTo(-1, 1.8); ctx.lineTo(-11, 5.5); ctx.stroke();   // 大架
@@ -151,22 +151,22 @@ function gunModel(ctx, e, x, y, vis, time) {
     ctx.restore();
     ctx.fillStyle = dark; ctx.strokeStyle = dim; ctx.lineWidth = px(1);
     for (const [u, v] of [[-15, -3], [-15, 1.5]]) { const c = Math.cos(a), s = Math.sin(a), bx = x + u * c - v * s, by = y + u * s + v * c; ctx.fillRect(bx - 1.6, by - 1.2, 3.2, 2.4); ctx.strokeRect(bx - 1.6, by - 1.2, 3.2, 2.4); }   // 弹药箱
-    if (vis) gunCrew(ctx, x, y, a, [[-7, -7], [-9, 7], [-4, 8.5, 'radio']], col);
+    if (vis) gunCrew(ctx, x, y, a, [[-7, -7], [-9, 7], [-4, 8.5, 'radio']]);
     if (fk) gunFlash(ctx, x, y, a, 14 - rec, fk);
   } else if (e.kind === 'mortar') {
     // 迫击炮：圆形炮坑 + 座钣 + 短炮身与两脚架
-    gunSandbags(ctx, x, y, 7, null, dim);
+    gunSandbags(ctx, x, y, 7, null);
     ctx.save(); ctx.translate(x, y); ctx.rotate(a);
     ctx.fillStyle = dark; ctx.strokeStyle = col; ctx.lineWidth = px(1.1);
     ctx.beginPath(); ctx.arc(-1.5, 0, 1.8, 0, 7); ctx.fill(); ctx.stroke();   // 座钣
     ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(-1.5, 0); ctx.lineTo(4.5, 0); ctx.stroke();   // 炮身（高仰角，俯视很短）
     ctx.lineWidth = px(1); ctx.beginPath(); ctx.moveTo(3, 0); ctx.lineTo(1.5, -2.6); ctx.moveTo(3, 0); ctx.lineTo(1.5, 2.6); ctx.stroke();   // 两脚架
     ctx.restore();
-    if (vis) gunCrew(ctx, x, y, a, [[-4, -3.5], [-4.5, 3.5]], col);
+    if (vis) gunCrew(ctx, x, y, a, [[-4, -3.5], [-4.5, 3.5]]);
     if (fk) gunFlash(ctx, x, y, a, 4.5, fk * .8);
   } else if (e.kind === 'aa') {
     // 高炮：圆形沙袋阵地 + 炮座 + 双联长炮管；雷达高炮带一个小雷达
-    gunSandbags(ctx, x, y, 10, null, dim);
+    gunSandbags(ctx, x, y, 10, null);
     ctx.save(); ctx.translate(x, y); ctx.rotate(a);
     ctx.fillStyle = dark; ctx.strokeStyle = col; ctx.lineWidth = px(1.2);
     ctx.beginPath(); ctx.arc(0, 0, 3.6, 0, 7); ctx.fill(); ctx.stroke();
@@ -180,7 +180,7 @@ function gunModel(ctx, e, x, y, vis, time) {
       ctx.beginPath(); ctx.arc(rx, ry, 3, ra - .9, ra + .9); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(rx, ry); ctx.lineTo(rx + Math.cos(ra) * 3, ry + Math.sin(ra) * 3); ctx.stroke();
     }
-    if (vis) gunCrew(ctx, x, y, a, [[-6, -5.5], [-6, 5.5]], col);
+    if (vis) gunCrew(ctx, x, y, a, [[-6, -5.5], [-6, 5.5]]);
     if (fk) { gunFlash(ctx, x + Math.cos(a + 1.57) * 1.3, y + Math.sin(a + 1.57) * 1.3, a, 13, fk); gunFlash(ctx, x - Math.cos(a + 1.57) * 1.3, y - Math.sin(a + 1.57) * 1.3, a, 13, fk); }
   } else if (e.kind === 'bunker') {
     // 机枪碉堡：厚墙混凝土工事（圆角方形）、朝射向的射孔与伸出的枪管、伪装点
@@ -215,7 +215,7 @@ function gunModel(ctx, e, x, y, vis, time) {
       ctx.fillStyle = rgba('#fff3d6', .85 * k); ctx.beginPath(); ctx.arc(bx, by, 3 + 3 * k, 0, 7); ctx.fill();
       ctx.fillStyle = rgba(COL.smoke, .35 * k); ctx.beginPath(); ctx.arc(bx, by, 10 + 10 * (1 - k), 0, 7); ctx.fill();
     }
-    if (vis && !e.moving) gunCrew(ctx, x, y, a, [[-4, -7], [3, 7, 'radio']], col);
+    if (vis && !e.moving) gunCrew(ctx, x, y, a, [[-4, -7], [3, 7, 'radio']]);
   } else if (e.kind === 'typhon') tyModel(ctx, e, x, y, a, vis, col, dim, dark, real);
   else if (e.kind === 'ascm') ascModel(ctx, e, x, y, a, vis, col, dim, dark, real);
   ctx.restore();
@@ -318,7 +318,7 @@ function tyModel(ctx, e, x, y, a, vis, col, dim, dark, real) {
     }
   }
   ctx.restore();
-  if (vis) gunCrew(ctx, x, y, a, [[-20, -11], [-19.5, -2.8, 'radio'], [-23, 10]], col);
+  if (vis) gunCrew(ctx, x, y, a, [[-20, -11], [-19.5, -2.8, 'radio'], [-23, 10]]);
 }
 
 // NMESIS 岸舰导弹排（车阵见 missile.js ASC_RIG）：2 辆 ROGUE-Fires 无人发射车（JLTV 底盘、没有驾驶室，车头只有传感器吊舱与摄像头杆）
@@ -361,12 +361,12 @@ function ascModel(ctx, e, x, y, a, vis, col, dim, dark, real) {
     ctx.restore();
   }
   ctx.restore();
-  if (vis) gunCrew(ctx, x, y, a, [[-14, -5], [-15.5, 4.6, 'radio']], col);
+  if (vis) gunCrew(ctx, x, y, a, [[-14, -5], [-15.5, 4.6, 'radio']]);
 }
 
 // 被摧毁：焦黑弹坑、散落的掩体块、折断的炮管
 function gunWreck(ctx, e, x, y, a) {
-  const col = realLook() ? 'rgba(28,26,22,.75)' : rgba(COL.enemy, .35);
+  const col = 'rgba(28,26,22,.75)';
   ctx.setLineDash([]);
   const g = ctx.createRadialGradient(x, y, 0, x, y, 14);
   g.addColorStop(0, 'rgba(0,0,0,.65)'); g.addColorStop(1, 'rgba(0,0,0,0)');

@@ -23,7 +23,7 @@ function bgRain() {
   fit(); addEventListener('resize', fit);
   const tick = t => {
     requestAnimationFrame(tick);
-    if (t - last < 60 || (typeof realLook === 'function' && realLook() && !(typeof greenLook === 'function' && greenLook()))) return;   // 写实画面不显示数码雨（黑绿画面照常）
+    if (t - last < 60) return;
     last = t;
     g.fillStyle = 'rgba(2,7,4,0.14)'; g.fillRect(0, 0, c.width, c.height);
     g.font = fs + 'px "Noto Sans SC", monospace';
@@ -65,7 +65,6 @@ function start(data) {
   } else { newGame(undefined, 'hard'); S.attract = true; }   // attract：开始界面背后的展示局，尚未开打
   U.level = S.level;
   initRender($('cv'));
-  if (typeof SETTINGS === 'object') R.rain = SETTINGS.rain;
   buildHud(); bindInput();
   mmInit($('mm'));
   $('brief').hidden = !!S.briefed;
