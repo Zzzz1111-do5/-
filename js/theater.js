@@ -18,6 +18,13 @@
 const TH = { org: 2, think: 4, dly: { div: 5, bde: 3, reg: 2 }, bound: 130, lead: 150, back: 240, rest: 30, minW: 60, maxReg: 4, maxBde: 3, maxDiv: 3,
   head: 260, phase: 300, phaseK: .7, spear: 700, spearT: 160, link: 380, wait: 20,
   gap: 30, vgap: 25, row: 100, rows: 3, focus: 1.2 };   // gap 相邻两排形之间留的空当 · vgap 车辆最小间距 · row 后几排的排距 · focus 正面超出能守宽度多少倍就收缩
+// 战区条令参数（司令训练场 tools/train_real.js 按「胜负 + 条令符合度」调出来；S.thFix = { p: {…}, e: {…} } 可覆盖，训练时用）
+//   攻方：ech 留作第二梯队的营占上陆营数的比例（联合登陆战役：第一梯队约三分之二）· adv 由坚守恢复推进要的兵力比（推进中掉到它的七成就转入坚守）·
+//         prep 由坚守转入推进前的火力准备秒数（舰炮、垂发导弹打当面已知火力点，到点再推进）
+//   守方：res 登陆场出现后留作战役预备队的机动营比例（美军机动防御：机动兵力的 1/9–1/3）· ctr 向海反击要的兵力比 ·
+//         prep 反击前的炮火准备秒数 · commit 一线吃紧到什么程度（当面敌兵力 / 一线兵力）不等判明主攻就投入预备队
+const TH_DOC = { p: { ech: .25, adv: 1.5, prep: 12 }, e: { res: .25, ctr: 2, prep: 12, commit: 1.2 } };
+const thDoc = side => ({ ...TH_DOC[side], ...(S && S.thFix && S.thFix[side] || {}) });
 const TH_V = { auto: '自动', advance: '推进', spear: '穿插', hold: '坚守', retreat: '后撤', reserve: '预备队', follow: '第二梯队', ext: '独立作战' };
 const TH_LV = { thr: '战区', div: '师', bde: '团', reg: '营' };
 const thOn = side => !!S && !!S.th && S.th.on && S.phase === 'battle' && (!side || S.th[side] != null);
@@ -204,7 +211,7 @@ function thRecv(F, ord) {
   const was = F.ord && F.ord.v;
   F.ord = ord; F.ordT = S.t;
   if (F.lvl === 'reg') { const G = thG(F); if (G) { G.tk = null; G.thFb = null; } }
-  else for (const K of thKids(F)) if (!K.man || ord.src === 'pl') { if (ord.src === 'pl') K.man = false; if (!K.aiSp || ord.src === 'pl') thSend(K, thChildOrd(F, K, ord)); }
+  else for (const K of thKids(F)) if (!K.man || ord.src === 'pl') { if (ord.src === 'pl') { K.man = false; K.e2 = false; K.rsv = false; } if ((!K.aiSp && !K.e2 && !K.rsv) || ord.src === 'pl') thSend(K, thChildOrd(F, K, ord)); }
   if (was !== ord.v && F.lvl !== 'reg' && typeof chatSay === 'function') {
     const n = thKids(F).length;
     chatSay(F.side, `${F.name}收到${ord.src === 'pl' ? '战区' : '上级'}命令：${thVerb(ord)}${n ? `，转令所属 ${n} 个${F.lvl === 'div' ? '团' : '营连'}` : ''}。`, { kind: 'order', at: thAt(F), lv: F.lvl === 'div' ? 1 : 2, key: 'thr' + F.id, gap: 8 });
@@ -385,10 +392,10 @@ function thAlloc(side) {
     for (const B of bdes) {
       let regs = thKids(B).filter(r => thG(r));
       // 第二梯队：团里三个营以上、正面又窄（每营不到 180 米），最弱的一个营跟在后面；条件不在了就回到一线。选定了就不换人
-      const v = thOrdOf(B).v, w = (B.cols || []).length * FR_G, cur = regs.find(r => r.ord && r.ord.v === 'follow' && !r.man);
+      const v = thOrdOf(B).v, w = (B.cols || []).length * FR_G, cur = regs.find(r => r.ord && r.ord.v === 'follow' && !r.man && !r.e2);
       const n = regs.filter(thInLine).length + (cur ? 1 : 0), need = (v === 'advance' || v === 'hold') && n >= 3 && w < 180 * (n - 1);
       if (cur && !need) cur.ord = { ...thOrdOf(B), t: S.t };
-      if (!cur && need) { const weak = regs.filter(r => thInLine(r) && !r.man && !r.aiSp).sort((a, b) => thPow(a) - thPow(b))[0]; if (weak) weak.ord = { v: 'follow', src: 'ai', lead: B.id, t: S.t }; }
+      if (!cur && need) { const weak = regs.filter(r => thInLine(r) && !r.man && !r.aiSp && !r.e2 && !r.rsv).sort((a, b) => thPow(a) - thPow(b))[0]; if (weak) weak.ord = { v: 'follow', src: 'ai', lead: B.id, t: S.t }; }
       regs = regs.filter(thInLine);
       thSplit(B.cols || [], regs);
     }
@@ -453,16 +460,26 @@ function thThinkP(T) {
   // 巩固登陆场：后续梯队（还载着兵、正驶向滩头的舰艇）没上来之前，先沿滩头一线挖工事顶住反冲击（第一批上岸后最多等 150 秒）
   const afloat = S.ships.some(s => alive(s) && s.land && (s.state === 'move' || s.state === 'unloading') && s.load && (s.load.teams > 0 || (Array.isArray(s.load.veh) && s.load.veh.length)));
   if (T.landT == null && divs.length) T.landT = S.t;
-  const consol = T.k === 0 && afloat && S.t - T.landT < 150;
+  const consol = T.k === 0 && afloat && S.t - T.landT < 150, dc = thDoc('p');
   for (const D of divs) {
     const o = thPress('p', D), drop = thDrop(D), str = thPow(D) / Math.max(1, thP0(D)), org = thOrg(D), cur = D.aiK ? D.aiK.split(':')[0] : null;
     // 转入防御要的门槛低、恢复推进要的门槛高（不在两个命令之间来回切）
-    const weak = o.foe > 4 && (cur === 'hold' ? o.r < 1.3 || drop > .12 : o.r < 1 || drop > .3);
+    const weak = o.foe > 4 && (cur === 'hold' ? o.r < dc.adv || drop > .12 : o.r < dc.adv * .7 || drop > .3);
+    if (weak || consol) D.prepT = null;
     if ((str < .3 || org < 22) && divs.length > 1 && divs.some(d => d !== D && thPow(d) > thPow(D))) thAiSend(D, 'reserve', '伤亡过大，撤下来整补');
     else if (consol && !weak) thAiSend(D, 'hold', '后续梯队正在上陆，先沿滩头一线挖工事巩固登陆场');
-    else if (weak) thAiSend(D, 'hold', drop > .25 ? `近一分半钟伤亡${Math.round(drop * 100)}%，当面敌反击猛烈，就地转入防御、挖工事，等舰炮和航空兵削弱敌人再攻` : `当面之敌约 ${Math.round(o.foe)}，兵力比 ${o.r.toFixed(1)}:1，就地巩固、等火力削弱后再攻`);
-    else thAiSend(D, 'advance', T.k === 0 ? '扩大登陆场，前出至第一阶段线' : `向第 ${T.k} 阶段线推进`);
+    else if (weak) thAiSend(D, 'hold', drop > .25 ? `近一分半钟伤亡${Math.round(drop * 100)}%，当面敌反击猛烈，就地转入防御、挖工事，等舰炮和航空兵削弱敌人再攻` : `当面之敌约 ${Math.round(o.foe)}，兵力比 ${o.r.toFixed(1)}:1，不够 ${dc.adv}:1，就地巩固、等火力削弱后再攻`);
+    else {
+      // 由坚守转入推进：先火力准备（舰炮、垂发导弹打当面已知火力点），到点再全线推进
+      if (cur !== 'advance' && o.foe > 2 && dc.prep > 0) {
+        if (D.prepT == null) { const n = thPrepFire('p', D, dc.prep); D.prepT = S.t + (n ? dc.prep : 0); }
+        if (S.t < D.prepT) continue;
+      }
+      D.prepT = null;
+      thAiSend(D, 'advance', T.k === 0 ? '扩大登陆场，前出至第一阶段线' : `向第 ${T.k} 阶段线推进`);
+    }
   }
+  thEchP(T, dc);
   // 后备队：滩头站稳后开辟增援线，把后备队经抢滩的舰船送上岸补进战线
   if (S.t > 150 && S.assets && S.assets.reserve > 0 && S.assets.rline > 0 && !(S.rlines || []).length && typeof buildRLine === 'function') {
     const c = thAt(divs.slice().sort((a, b) => thPow(b) - thPow(a))[0]) || { x: W / 2, y: H / 2 };
@@ -487,17 +504,156 @@ function thThinkE(T) {
       if (c && thPow(c) < lp - thPow(c)) T.resD = c.id;
     }
   }
+  const dc = thDoc('e');
+  thResE(T, cols, dc);
   for (const D of divs) {
     if (!cols.length) { thAiSend(D, 'reserve', '敌登陆方向未明，隐蔽待机'); continue; }
     if (D.id === T.resD) { thAiSend(D, 'reserve', '作战区预备队，隐蔽待机，一线吃紧时投入'); continue; }
     if (!(D.cols && D.cols.length) && thInLine(D)) { thAiSend(D, 'reserve', '当面无敌，作战区预备队'); continue; }
     const o = thOdds('e', D), drop = thDrop(D), str = thPow(D) / Math.max(1, thP0(D)), cur = D.aiK ? D.aiK.split(':')[0] : null;
-    if (cur === 'advance' ? o.r >= 1.2 && drop < .3 : o.r >= 1.8 && o.foe >= 3 && drop < .2) thAiSend(D, 'advance', o.foe < 1 ? '当面敌情不明，向海搜索前进、压缩登陆场' : `当面之敌约 ${Math.round(o.foe)}，我占优，向海反击、把登陆场压回去`);
-    else if (o.r < .5 && str < .45) thAiSend(D, 'retreat', '兵力不足，边打边撤到下一道防线');
-    else thAiSend(D, 'hold', '沿当面封锁登陆场');
+    if (cur === 'advance' ? o.r >= dc.ctr * .6 && drop < .3 : o.r >= dc.ctr && o.foe >= 3 && drop < .2) {
+      // 由坚守转入反击：炮兵先对当面打一阵（a4Focus 加权），到点再出击
+      if (cur !== 'advance' && o.foe >= 3 && dc.prep > 0) {
+        if (D.prepT == null) { const n = thPrepFire('e', D, dc.prep); D.prepT = S.t + (n ? dc.prep : 0); }
+        if (S.t < D.prepT) continue;
+      }
+      D.prepT = null;
+      thAiSend(D, 'advance', o.foe < 1 ? '当面敌情不明，向海搜索前进、压缩登陆场' : `当面之敌约 ${Math.round(o.foe)}，我 ${o.r.toFixed(1)} 倍于敌，炮火准备后向海反击、把登陆场压回去`);
+    }
+    else if (o.r < .5 && str < .45) { D.prepT = null; thAiSend(D, 'retreat', '兵力不足，边打边撤到下一道防线'); }
+    else { D.prepT = null; thAiSend(D, 'hold', '沿当面封锁登陆场'); }
   }
   thSpearAi('e', T);
 }
+// ———————————————— 条令：火力准备、第二梯队、战役预备队 ————————————————
+// 火力准备：本师地段内、己方战线前 450 以内的已知敌火力点，聚成最多 3 处（70 内合计、相距 120 以上）；
+//   攻方叫舰炮（commander.js cmdFire）、硬目标加垂发对陆导弹、沙盒护航舰转火；守方给炮兵定火力重点（thFocusE → ai2 aiArtillery 加权）。返回打了几处
+function thPrepFire(side, D, secs) {
+  const c = thAt(D), sec = D.sec || (c ? [c.x - 220, c.x + 220] : null);
+  if (!sec) return 0;
+  const its = [], inSec = x => x >= sec[0] - 60 && x <= sec[1] + 60;
+  const ahead = (x, y) => { const ly = thLineY(side, x); if (ly == null) return true; const a = side === 'p' ? ly - y : y - ly; return a > -30 && a < 450; };
+  if (side === 'p') {
+    for (const e of S.enemies) if (!e.dead && e.kx != null && inSec(e.kx) && ahead(e.kx, e.ky)) its.push({ x: e.kx, y: e.ky, w: e.kind === 'bunker' ? 6 : 3, hard: true });
+    for (const q of S.teams) if (q.side === 'e' && q.men.length && inVision(q.x, q.y) && inSec(q.x) && ahead(q.x, q.y)) its.push({ x: q.x, y: q.y, w: q.men.length });
+    for (const v of S.veh || []) if (v.side === 'e' && !v.dead && inVision(v.x, v.y) && inSec(v.x) && ahead(v.x, v.y)) its.push({ x: v.x, y: v.y, w: bgPow(v), hard: true });
+  } else {
+    for (const q of S.teams) if (q.side === 'p' && q.men.length && !q.ride && spotted(q.x, q.y) && inSec(q.x) && ahead(q.x, q.y)) its.push({ x: q.x, y: q.y, w: q.men.length });
+    for (const v of S.veh || []) if (v.side === 'p' && !v.dead && !v.lst && spotted(v.x, v.y) && inSec(v.x) && ahead(v.x, v.y)) its.push({ x: v.x, y: v.y, w: bgPow(v) });
+  }
+  const cl = [];
+  for (const o of its) { let w = 0, x = 0, y = 0, hard = false; for (const k of its) if (dist(k.x, k.y, o.x, o.y) < 70) { w += k.w; x += k.x * k.w; y += k.y * k.w; hard = hard || !!k.hard; } cl.push({ x: x / w, y: y / w, w, hard }); }
+  cl.sort((a, b) => b.w - a.w);
+  const pick = [];
+  for (const k of cl) { if (pick.length >= 3) break; if (k.w >= 3 && !pick.some(o => dist(o.x, o.y, k.x, k.y) < 120)) pick.push(k); }
+  if (!pick.length) return 0;
+  if (side === 'p') {
+    let n = 0;
+    for (const k of pick) {
+      if (typeof cmdFire === 'function' && S.cmd && S.cmd.p && cmdFire(k.x, k.y, 2, 'prep')) n++;
+      if (k.hard && typeof vlsCan === 'function' && vlsCan('lacm', k.x, k.y) && vlsFire('lacm', k.x, k.y, 1, 'prep')) n++;
+      if (typeof navEnsure === 'function') navEnsure().hot.push({ x: Math.round(k.x), y: Math.round(k.y), until: S.t + secs + 10, why: 'prep' });
+    }
+    if (n && typeof chatSay === 'function') chatSay('p', `${D.name}推进前先打 ${secs} 秒火力准备：舰炮${n > pick.length ? '和垂发导弹' : ''}压制当面 ${pick.length} 处敌火力点。`, { kind: 'order', at: pick[0], lv: 1, key: 'thprep' + D.id, gap: 30 });
+    thStat('thPrepP');
+    return n || pick.length;
+  }
+  const k = pick[0];
+  S.th.e.focus = { x: Math.round(k.x), y: Math.round(k.y), r: 130, until: S.t + secs + 8 };
+  if (typeof chatSay === 'function') chatSay('e', `${D.name}反击前，炮兵先对${typeof cmdWhere === 'function' ? cmdWhere(k.x, k.y) : gridRef(k.x, k.y)}打 ${secs} 秒火力准备。`, { kind: 'order', at: k, lv: 1, key: 'thprepe' + D.id, gap: 30 });
+  thStat('thPrepE');
+  return pick.length;
+}
+// 守方炮兵的火力重点（ai2.js aiArtillery 对 r 以内的目标加权）
+function thFocusE() { const f = S && S.th && S.th.e && S.th.e.focus; return f && S.t < f.until ? f : null; }
+// 攻方第二梯队：上陆的营够四个以上时，按 ech 留出营在一线后 200 跟进（先挑最弱、需要整补的）；
+//   一线营打残（战力不到四成五或组织度不到 30）就由第二梯队里最强的超越接替，打残的营撤下来作第二梯队整补
+function thEchSet(R, on) {
+  R.e2 = on;
+  const B = thF(R.par), D = B && thF(B.par);
+  thSend(R, on ? { v: 'follow', src: 'ai', lead: (D || B || R).id } : { ...thOrdOf(B || R), src: 'ai' }, TH.dly.reg);
+}
+function thEchP(T, dc) {
+  const regs = thDivs('p').flatMap(thRegsOf).filter(R => thG(R) && !R.man && !R.aiSp);
+  const ech = regs.filter(R => R.e2), line = regs.filter(R => !R.e2 && thInLine(R)), want = regs.length >= 4 ? Math.round(regs.length * dc.ech) : 0;
+  const str = R => thPow(R) / Math.max(1, R.p0 || thPow(R));
+  const worn = line.filter(R => str(R) < .45 || thOrg(R) < 30).sort((a, b) => str(a) - str(b))[0];
+  const fresh = ech.filter(R => str(R) > .7 && thOrg(R) > 45).sort((a, b) => thPow(b) - thPow(a))[0];
+  if (worn && fresh && S.t - (T.passT ?? -99) > 30) {
+    thEchSet(fresh, false); thEchSet(worn, true); T.passT = S.t;
+    if (typeof chatSay === 'function') chatSay('p', `${fresh.name}超越${worn.name}接替一线，${worn.name}撤下来作第二梯队整补。`, { kind: 'order', at: thAt(worn), lv: 1, key: 'thpass', gap: 20 });
+    thStat('thPass');
+    return;
+  }
+  if (S.t - (T.e2T ?? -99) < 20) return;
+  if (ech.length > want) { const R = ech.slice().sort((a, b) => str(b) - str(a))[0]; thEchSet(R, false); T.e2T = S.t; }
+  else if (ech.length < want && line.length > want) {
+    const R = line.slice().sort((a, b) => str(a) - str(b) || thPow(a) - thPow(b))[0];
+    if (R) {
+      thEchSet(R, true); T.e2T = S.t;
+      if (typeof chatSay === 'function' && !T.e2Said) { T.e2Said = 1; chatSay('p', `第一梯队沿登陆场展开，${R.name}作第二梯队在一线后跟进，准备接替和扩张战果。`, { kind: 'plan', at: thAt(R), lv: 0 }); }
+      thStat('thEch');
+    }
+  }
+}
+// 守方战役预备队（营级）：登陆场出现后按 res 留出机动营（装甲 > 机步 > 步兵）在纵深隐蔽待机；
+//   判明敌主攻（已知上陆兵力最集中的一段 12 人以上、见敌 45 秒后）且预备队加当面一线对它的兵力比够 ctr，集中向那里反冲击（炮兵先打 prep 秒）；
+//   一线吃紧（当面敌兵力超过一线兵力 commit 倍）就不等，投入加强。反冲击打完（夺回、打不动或 200 秒）各营回到所在师的命令，120 秒后再重新留预备队
+function thRsvSet(R, on) {
+  R.rsv = on;
+  const B = thF(R.par);
+  thSend(R, on ? { v: 'reserve', src: 'ai' } : { ...thOrdOf(B || R), src: 'ai' }, TH.dly.reg);
+}
+function thResE(T, cols, dc) {
+  if (!cols.length) return;
+  if (T.seen0 == null) T.seen0 = S.t;
+  const regs = thDivs('e').flatMap(thRegsOf).filter(R => thG(R) && !R.man);
+  const sp = T.rsp;
+  if (sp) {   // 预备队反冲击进行中
+    const p = sp.key ? S.points.find(o => o.key === sp.key) : null, live = sp.ids.map(thF).filter(R => R && thG(R));
+    if (!live.length || (p && hqMine('e', p)) || S.t - sp.t > 200) {
+      for (const R of live) { R.aiSp = false; const B = thF(R.par); thSend(R, { ...thOrdOf(B || R), src: 'ai' }); }
+      T.rsp = null; T.resT = S.t;
+    }
+    return;
+  }
+  const rs = regs.filter(R => R.rsv), want = regs.length >= 3 && dc.res > 0 ? Math.max(1, Math.round(regs.length * dc.res)) : 0;
+  if (rs.length < want && S.t - (T.resT ?? -999) > 120) {
+    const c = regs.filter(R => !R.rsv && !R.aiSp && thInLine(R)).sort((a, b) => thSpearScore(b) - thSpearScore(a));
+    const add = [];
+    while (rs.length + add.length < want && c.length > 1) add.push(c.shift());
+    for (const R of add) thRsvSet(R, true);
+    if (add.length) {
+      thStat('thRsv', add.length);
+      if (typeof chatSay === 'function') chatSay('e', `${add.map(R => R.name).join('、')}作战役预备队，在纵深隐蔽待机，判明敌主攻方向再集中使用。`, { kind: 'plan', at: thAt(add[0]), lv: 0, key: 'thrsv', gap: 60 });
+    }
+    return;
+  }
+  if (!rs.length) return;
+  // 敌主攻：沿登陆场每 300 米量一处已知敌兵力，取最大的一处
+  let best = null, foeAll = 0;
+  for (let i = 0; i < cols.length; i += 10) {
+    const x = frBX(cols[Math.min(cols.length - 1, i + 5)]), fy = thFoeY('e', x);
+    if (fy == null) continue;
+    const f = frKnown('e', x, fy, 260).foe;
+    foeAll += f;
+    if (!best || f > best.foe) best = { x, y: fy, foe: f };
+  }
+  if (!best) return;
+  const rp = rs.reduce((a, R) => a + thPow(R), 0), line = regs.filter(R => !R.rsv && thInLine(R));
+  const lp = line.reduce((a, R) => a + thPow(R), 0), near = line.filter(R => { const c = thAt(R); return c && dist(c.x, c.y, best.x, best.y) < 450; }).reduce((a, R) => a + thPow(R), 0);
+  const main = best.foe >= 12 && S.t - T.seen0 > 45, r = (rp + near) / Math.max(1, best.foe), crisis = foeAll > lp * dc.commit;
+  if (!(main && r >= dc.ctr) && !crisis) return;
+  // 目标：离敌主攻最近的已失守据点，没有就直接打敌登陆场
+  const lost = S.points.filter(p => p.owner === 'p' || p.prog > .25).sort((a, b) => dist(a.x, a.y, best.x, best.y) - dist(b.x, b.y, best.x, best.y))[0];
+  const tgt = lost && dist(lost.x, lost.y, best.x, best.y) < 500 ? { x: lost.x, y: lost.y, key: lost.key, nm: lost.name } : { x: best.x, y: best.y, key: null, nm: typeof cmdWhere === 'function' ? cmdWhere(best.x, best.y) : gridRef(best.x, best.y) };
+  for (const R of rs) { R.rsv = false; R.aiSp = true; thSend(R, { v: 'spear', x: Math.round(tgt.x), y: Math.round(tgt.y), key: tgt.key, src: 'ai' }, TH.dly.div + TH.dly.reg); }
+  T.rsp = { ids: rs.map(R => R.id), key: tgt.key, t: S.t };
+  if (dc.prep > 0) S.th.e.focus = { x: Math.round(tgt.x), y: Math.round(tgt.y), r: 140, until: S.t + dc.prep + 15 };
+  thStat(crisis && !(main && r >= dc.ctr) ? 'thCommitCrisis' : 'thCommit');
+  if (typeof chatSay === 'function') chatSay('e', crisis && !(main && r >= dc.ctr) ? `一线吃紧（当面之敌约 ${Math.round(foeAll)}），预备队${rs.map(R => R.name).join('、')}投入，向${tgt.nm}反冲击。` : `判明敌主攻在${tgt.nm}一带（约 ${Math.round(best.foe)} 人），预备队${rs.map(R => R.name).join('、')}集中反冲击，我约 ${r.toFixed(1)} 倍于敌，炮兵先打 ${dc.prep} 秒。`, { kind: 'plan', at: tgt, lv: 0 });
+}
+
 // 穿插（AI）：兵力占优、前方空虚的地段，派装甲（机械化）营向战线后方的敌据点突击；同时只派一个，打下来或打不动就收回
 function thSpearAi(side, T) {
   const sp = T.sp;
@@ -515,7 +671,7 @@ function thSpearAi(side, T) {
     if (D.man || thOrdOf(D).v !== 'advance') continue;
     for (const F of thRegsOf(D)) {
       const G = thG(F);
-      if (!G || F.man || F.aiSp || (G.type !== 'armor' && G.type !== 'mech')) continue;
+      if (!G || F.man || F.aiSp || F.rsv || F.e2 || (G.type !== 'armor' && G.type !== 'mech')) continue;
       const P = hqRegPow(G);
       if (P.tot < (F.p0 || 1) * .55) continue;
       for (const p of S.points) {

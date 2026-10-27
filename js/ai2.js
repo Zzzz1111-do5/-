@@ -129,7 +129,7 @@ function aiArtillery(D, seenT, seenShips) {
     const L = S.rlines.find(l => l.id === b.line), a = Math.atan2(L.y1 - L.y0, L.x1 - L.x0);
     T.push({ x: b.x, y: b.y, v: 4, vx: Math.cos(a) * 40, vy: Math.sin(a) * 40, sea: true });
   }
-  const FO = typeof a4Focus === 'function' ? a4Focus() : null;   // 反冲击火力准备 / 延伸射击（ai4.js）
+  const FO = (typeof thFocusE === 'function' && thFocusE()) || (typeof a4Focus === 'function' ? a4Focus() : null);   // 反冲击火力准备 / 延伸射击（战区 theater.js、ai4.js）
   if (FO) for (const t of T) if (dist(t.x, t.y, FO.x, FO.y) < FO.r) t.v = t.v * 3 + 4;
   for (const t of T) for (const sh of S.shells) if (sh.side === 'e' && dist(sh.x1, sh.y1, t.x, t.y) < 40) t.v *= .35;
   T.sort((a, b) => b.v - a.v);
