@@ -17,6 +17,7 @@ function v3oToggle(on = !V3O.on) {
     v3oLock();
     if (typeof log === 'function') log('观察者模式：鼠标转视角 · W A S D 移动 · 空格 / C 升降 · Shift 加速 · Esc 退出', 'info', 'v3o', 1);
   } else {
+    if (V3O.on && V3.fc) Object.assign(V3.fc, { x: V3O.x, y: V3O.y, z: V3O.z, yaw: V3O.yaw, yawT: V3O.yaw, pitch: V3O.pitch, pitchT: V3O.pitch, cx: null, cy: null });   // 退出观察：自由镜头就停在观察者的位置、朝向
     V3O.on = false; V3O.keys.clear(); V3O.drag = null;
     if (typeof document !== 'undefined' && document.pointerLockElement && document.exitPointerLock) document.exitPointerLock();
   }
@@ -37,9 +38,10 @@ function v3oCamera() {
   const x = v3Norm(v3Cross([0, 0, 1], z)), y = v3Cross(z, x);
   const view = new Float32Array([x[0], y[0], z[0], 0, x[1], y[1], z[1], 0, x[2], y[2], z[2], 0, -v3Dot(x, E), -v3Dot(y, E), -v3Dot(z, E), 1]);
   const alt = V3O.z - v3Ht(V3O.x, V3O.y), D = clamp(alt * 5, 420, 2400);   // D：雾与贴图范围的尺度（高处看得远）
-  const asp = CAM.vw / Math.max(1, CAM.vh), fo = 1 / Math.tan(V3_FOV / 2), n = 1.2, fa = D * 9, nf = 1 / (n - fa);
+  const rd = v3RD(), fog = [D * 1.3 * rd, D * 2.8 * rd];   // 渲染距离设置同样放大能见距离
+  const asp = CAM.vw / Math.max(1, CAM.vh), fo = 1 / Math.tan(V3_FOV / 2), n = 1.2, fa = Math.max(D * 9, fog[1] * 1.5), nf = 1 / (n - fa);
   const proj = new Float32Array([fo / asp, 0, 0, 0, 0, fo, 0, 0, 0, 0, (fa + n) * nf, -1, 0, 0, 2 * fa * n * nf, 0]);
-  return (V3.cam = { E, x, y, z, D, asp, M: v3Mul(proj, view) });
+  return (V3.cam = { E, x, y, z, D, rd, fog, asp, M: v3Mul(proj, view) });
 }
 // 每帧（view3d.js v3Draw 开头）：按住的键移动，画面中心跟着观察点（贴图、细节档都按它）
 function v3oStep(now) {
@@ -161,7 +163,7 @@ if (typeof window !== 'undefined' && window.addEventListener) {
     else if (V3O.drag) { dx = e.clientX - V3O.drag[0]; dy = e.clientY - V3O.drag[1]; V3O.drag = [e.clientX, e.clientY]; }
     if (!dx && !dy) return;
     V3O.yaw = Math.atan2(Math.sin(V3O.yaw + dx * .0024), Math.cos(V3O.yaw + dx * .0024));
-    V3O.pitch = clamp(V3O.pitch - dy * .0024, -1.5, .75);
+    V3O.pitch = clamp(V3O.pitch - dy * .0024, -1.5, 1.45);
   });
   window.addEventListener('mouseup', () => { V3O.drag = null; });
   if (typeof document !== 'undefined') document.addEventListener('pointerlockchange', () => { if (V3O.on && !v3oLocked()) V3O.keys.clear(); });   // Esc 解锁：键全部松开（模式由 Esc 键处理退出）

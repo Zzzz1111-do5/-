@@ -16,7 +16,7 @@ function shLook() {
 const SHIP_ICONS = typeof WI === 'object' ? { ship: WI.t271, supply: WI.t072, dd: WI.t055, lst: WI.t072a, boat: WI.lcvp } : {};
 
 // 远景放大：保证船体在适配缩放下仍有约 18px 长（各舰同一比例，保持大小关系）
-const shipK = () => clamp(18 / (32 * R.s), 1, 2.6);
+const shipK = () => typeof V3 === 'object' && V3.drawing ? 1 : clamp(18 / (32 * R.s), 1, 2.6);   // 3D：舰体按实际尺寸（近、远两张贴图比例不同，按贴图放大会让立体舰船来回缩放抽搐）
 const shWrap = a => Math.atan2(Math.sin(a), Math.cos(a));
 
 function shSync() {

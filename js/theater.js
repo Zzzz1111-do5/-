@@ -55,6 +55,8 @@ function thOrg(F) {
 }
 const thMen = F => thRegsOf(F).reduce((a, R) => { const G = thG(R); return a + (G ? bgUnits(G).reduce((b, u) => b + teamsOf(u).reduce((c, q) => c + q.men.length, 0), 0) : 0); }, 0);
 const thVehN = F => thRegsOf(F).reduce((a, R) => { const G = thG(R); return a + (G ? bgVehs(G).length : 0); }, 0);
+// thAtV：画面用（番号牌、定位）——按各营成员的实际位置（orbat.js bgAt）；thAt 按锚点，给指挥逻辑用
+const thAtV = F => { let x = 0, y = 0, w = 0; for (const R of thRegsOf(F)) { const G = thG(R); if (!G) continue; const k = Math.max(1, hqRegPow(G).tot), c = bgAt(G); x += c.x * k; y += c.y * k; w += k; } return w ? { x: x / w, y: y / w } : null; };
 const thAt = F => { let x = 0, y = 0, w = 0; for (const R of thRegsOf(F)) { const G = thG(R); if (!G) continue; const k = Math.max(1, hqRegPow(G).tot); x += G.ax * k; y += G.ay * k; w += k; } return w ? { x: x / w, y: y / w } : null; };
 
 // ———————————————— 战线 ————————————————
@@ -215,7 +217,7 @@ function thRecv(F, ord) {
   else for (const K of thKids(F)) if (!K.man || ord.src === 'pl') { if (ord.src === 'pl') { K.man = false; K.e2 = false; K.rsv = false; } if ((!K.aiSp && !K.e2 && !K.rsv) || ord.src === 'pl') thSend(K, thChildOrd(F, K, ord)); }
   if (was !== ord.v && F.lvl !== 'reg' && typeof chatSay === 'function') {
     const n = thKids(F).length;
-    chatSay(F.side, `${F.name}收到${ord.src === 'pl' ? '战区' : '上级'}命令：${thVerb(ord)}${n ? `，转令所属 ${n} 个${F.lvl === 'div' ? '团' : '营连'}` : ''}。`, { kind: 'order', at: thAt(F), lv: F.lvl === 'div' ? 1 : 2, key: 'thr' + F.id, gap: 8 });
+    chatSay(F.side, `${F.name}收到${ord.src === 'pl' ? '战区' : '上级'}命令：${thVerb(ord)}${n ? `，转令所属 ${n} 个${F.lvl === 'div' ? '团' : '营连'}` : ''}。`, { kind: 'order', at: thAtV(F), lv: F.lvl === 'div' ? 1 : 2, key: 'thr' + F.id, gap: 8 });
   }
 }
 function thDeliver() {
@@ -442,7 +444,7 @@ function thAiSend(D, v, why, extra) {
   if (D.aiK && S.t - (D.aiT ?? -99) < TH.rest && v !== 'retreat') return;   // 命令下了至少执行 30 秒，不朝令夕改（后撤除外）
   D.aiK = k; D.aiT = S.t;
   thSend(D, { v, src: 'ai', ...(extra || {}) });
-  if (typeof chatSay === 'function') chatSay(D.side, `战区司令部 → ${D.name}：${TH_V[v]}${why ? '，' + why : ''}。`, { kind: 'order', at: thAt(D), lv: 1, key: 'tha' + D.id, gap: 10 });
+  if (typeof chatSay === 'function') chatSay(D.side, `战区司令部 → ${D.name}：${TH_V[v]}${why ? '，' + why : ''}。`, { kind: 'order', at: thAtV(D), lv: 1, key: 'tha' + D.id, gap: 10 });
 }
 // 攻方战区：阶段线推进
 function thThinkP(T) {
@@ -502,7 +504,7 @@ function thThinkE(T) {
     const line = divs.filter(d => d.id !== T.resD), lp = line.reduce((a, d) => a + thPow(d), 0), foe = line.reduce((a, d) => a + thOdds('e', d).foe, 0);
     if (T.resD && (!thF(T.resD) || thF(T.resD).man || foe > lp * .7)) {
       const Rd = thF(T.resD); T.resD = null; T.resT = S.t;
-      if (Rd && !Rd.man) { Rd.aiK = null; if (typeof chatSay === 'function') chatSay('e', `战区：一线当面之敌约 ${Math.round(foe)}，投入战区预备队${Rd.name}。`, { kind: 'plan', at: thAt(Rd), lv: 0 }); }
+      if (Rd && !Rd.man) { Rd.aiK = null; if (typeof chatSay === 'function') chatSay('e', `战区：一线当面之敌约 ${Math.round(foe)}，投入战区预备队${Rd.name}。`, { kind: 'plan', at: thAtV(Rd), lv: 0 }); }
     } else if (!T.resD && S.t - (T.resT ?? -999) > 120 && foe < lp * .4) {
       const c = divs.filter(d => !d.man).sort((a, b) => thPow(a) - thPow(b))[0];
       if (c && thPow(c) < lp - thPow(c)) T.resD = c.id;

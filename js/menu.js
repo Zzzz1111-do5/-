@@ -372,11 +372,11 @@ function mnKey(e) {
 // —— 设置面板 ——
 const MN_SET = [
   ['音量', 'VOLUME', [['master', '主音量', 'vol'], ['music', '音乐', 'vol'], ['musicStyle', '背景音乐', [['march', '进行曲'], ['custom', '我的歌'], ['ambient', '氛围']], '进行曲：明亮的军乐，战况越激烈编制越全；我的歌：用下面导入的歌'], ['bgm', '导入音乐', 'file', '选一首你设备上的歌（mp3 / m4a / ogg / wav），循环播放；只保存在你自己的浏览器里'], ['sfx', '音效', 'vol'], ['radio', '无线电通话', 'vol']]],
-  ['画面', 'DISPLAY', [['look', '画面风格', [['green', '黑绿'], ['real', '写实'], ['matrix', '数码']], '黑绿：写实的地形与模型，黑底绿色磷光、发光轮廓（敌方红）；写实：真实配色（我方蓝、敌方红）；数码：原来的字符矩阵风格'], ['rain', '数码雨密度', 'rain'], ['bloom', '辉光强度', 'pct'], ['quality', '画质', [['high', '高'], ['low', '低']]], ['shake', '屏幕震动', 'sw'], ['front', '战线与态势图形', 'sw', '显示双方战线、无人地带、空隙、突击群调整线']]],
+  ['画面', 'DISPLAY', [['look', '画面风格', [['green', '黑绿'], ['real', '写实'], ['matrix', '数码']], '黑绿：写实的地形与模型，黑底绿色磷光、发光轮廓（敌方红）；写实：真实配色（我方蓝、敌方红）；数码：原来的字符矩阵风格'], ['rain', '数码雨密度', 'rain'], ['bloom', '辉光强度', 'pct'], ['quality', '画质', [['high', '高'], ['low', '低']]], ['rdist', '3D 渲染距离', 'rd', '3D 里能看多远（远处的地形、建筑、部队模型）；调远更耗性能。3D 中也可按 [ ] 键调'], ['shake', '屏幕震动', 'sw'], ['front', '战线与态势图形', 'sw', '显示双方战线、无人地带、空隙、突击群调整线']]],
   ['流程', 'FLOW', [['intro', '开场转场', 'sw', '从国家全图推近到战场，约 7 秒']]],
   ['AI 指挥官通讯', 'COMMANDER CHAT', [['chat', '通讯详略', [['brief', '简要'], ['normal', '标准'], ['verbose', '详细']]], ['enemyChat', '显示敌方（截获）', 'sw', '战役中敌方通话以「截获」形式延迟出现']]]
 ];
-const mnFmt = (k, v) => k === 'rain' ? (v <= 0 ? '关' : v < .45 ? '淡 ' : '强 ') + (v > 0 ? Math.round(v * 100) + '%' : '') : Math.round(v * 100) + '%';
+const mnFmt = (k, v) => k === 'rdist' ? (v < .9 ? '近 ' : v <= 1.1 ? '标准 ' : v < 2.5 ? '远 ' : '极远 ') + (+v).toFixed(2).replace(/0$/, '') + '×' : k === 'rain' ? (v <= 0 ? '关' : v < .45 ? '淡 ' : '强 ') + (v > 0 ? Math.round(v * 100) + '%' : '') : Math.round(v * 100) + '%';
 
 function mnSetBuild() {
   if (MENU.set) return MENU.set;
@@ -389,8 +389,8 @@ function mnSetBuild() {
     if (ty === 'file') ctl = `<div class="ms-file"><label class="ms-fbtn"><input type="file" accept="audio/*" data-file="${k}" hidden>选择文件…</label><button type="button" class="ms-fclr" data-fclr="${k}">清除</button></div><span class="ms-fname" data-fn="${k}"></span>`;
     else if (ty === 'sw') ctl = `<button type="button" class="ms-sw" role="switch" data-k="${k}" aria-label="${n}"></button><span></span>`;
     else if (Array.isArray(ty)) ctl = `<div class="ms-seg" role="group" aria-label="${n}">${ty.map(([v, l]) => `<button type="button" data-k="${k}" data-v="${v}">${l}</button>`).join('')}</div><span></span>`;
-    else ctl = `<input type="range" id="ms-${k}" data-k="${k}" min="0" max="1" step="0.05" aria-label="${n}"><output for="ms-${k}" data-o="${k}"></output>`;
-    return `<div class="ms-row"${k === 'rain' ? ' data-only="matrix"' : k === 'bloom' ? ' data-only="glow"' : ''}><label ${ty === 'vol' || ty === 'pct' || ty === 'rain' ? `for="ms-${k}"` : ''}>${n}</label>${ctl}${note ? `<span class="ms-note">${note}</span>` : ''}</div>`;
+    else ctl = `<input type="range" id="ms-${k}" data-k="${k}" ${ty === 'rd' ? 'min="0.5" max="4" step="0.25"' : 'min="0" max="1" step="0.05"'} aria-label="${n}"><output for="ms-${k}" data-o="${k}"></output>`;
+    return `<div class="ms-row"${k === 'rain' ? ' data-only="matrix"' : k === 'bloom' ? ' data-only="glow"' : ''}><label ${ty === 'vol' || ty === 'pct' || ty === 'rain' || ty === 'rd' ? `for="ms-${k}"` : ''}>${n}</label>${ctl}${note ? `<span class="ms-note">${note}</span>` : ''}</div>`;
   };
   el.innerHTML = `<div class="ms-win"><header><h2>设置<small>SETTINGS</small></h2><button type="button" class="ms-x" aria-label="关闭" title="关闭（Esc）">×</button></header>
     ${MN_SET.map(([h, en, rows]) => `<h3>${h} · ${en}</h3>${rows.map(row).join('')}`).join('')}
@@ -431,7 +431,7 @@ function mnSetSync() {
   for (const i of el.querySelectorAll('input[type=range]')) {
     const v = SETTINGS[i.dataset.k];
     if (document.activeElement !== i || +i.value !== v) i.value = v;
-    i.style.setProperty('--v', v * 100 + '%');
+    i.style.setProperty('--v', (v - +i.min) / ((+i.max - +i.min) || 1) * 100 + '%');
     el.querySelector(`[data-o="${i.dataset.k}"]`).textContent = mnFmt(i.dataset.k, v);
   }
   for (const b of el.querySelectorAll('.ms-sw')) b.setAttribute('aria-checked', !!SETTINGS[b.dataset.k]);

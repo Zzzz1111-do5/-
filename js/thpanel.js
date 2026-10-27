@@ -96,7 +96,7 @@ function thuOrder(v) {
 }
 const thuAnc = (P, F) => { for (let k = thF(F.par); k; k = thF(k.par)) if (k === P) return true; return false; };
 function thuCenter(F) {
-  const c = F && (F.lvl === 'reg' ? (G => G && { x: G.ax, y: G.ay })(thG(F)) : thAt(F));
+  const c = F && (F.lvl === 'reg' ? (G => G && bgAt(G))(thG(F)) : thAtV(F));   // 定位到部队实际所在处
   if (!c || typeof camCenter !== 'function') return;
   if (CAM.z < CAM.fit * 2.6) CAM.z = CAM.fit * 2.6;
   camCenter(c.x, c.y);
@@ -291,7 +291,7 @@ function thuDraw(time) {
     }
     const list = far ? thKids(R0).filter(D => thRegsOf(D).some(thG)) : thRegsOf(R0).filter(thG);
     for (const F of list) {
-      const c = F.lvl === 'reg' ? (G => ({ x: G.ax, y: G.ay }))(thG(F)) : thAt(F);
+      const c = F.lvl === 'reg' ? bgAt(thG(F)) : thAtV(F);   // 部队实际所在处（锚点行军时跑在前面、据点易手时会跳过去）
       if (!c || !vis(c.x, c.y)) continue;
       const sel = THU.sel.has(F.id) || [...THU.sel].some(id => { const P = thF(id); return P && thuAnc(P, F); }), y = c.y - px(30);   // 番号牌都立在部队头顶（屏幕上方）
       ctx.strokeStyle = rgba(col, mine ? .5 : .35); ctx.lineWidth = px(1); ctx.beginPath(); ctx.moveTo(c.x, c.y); ctx.lineTo(c.x, y + px(13)); ctx.stroke();   // 引线
@@ -311,10 +311,10 @@ function thuDraw(time) {
       ctx.stroke();
     }
     if (F.lvl !== 'reg') {
-      const c = thAt(F);
+      const c = thAtV(F);
       if (!c) continue;
       ctx.strokeStyle = rgba(COL.amber, .55); ctx.lineWidth = px(1); ctx.setLineDash([px(3), px(4)]);
-      for (const R1 of thRegsOf(F)) { const G = thG(R1); if (!G) continue; ctx.beginPath(); ctx.moveTo(c.x, c.y); ctx.lineTo(G.ax, G.ay - thDir(side) * px(22)); ctx.stroke(); }
+      for (const R1 of thRegsOf(F)) { const G = thG(R1); if (!G) continue; const g = bgAt(G); ctx.beginPath(); ctx.moveTo(c.x, c.y); ctx.lineTo(g.x, g.y - thDir(side) * px(22)); ctx.stroke(); }
       ctx.setLineDash([]);
     }
   }
@@ -346,7 +346,7 @@ function thMarks3(ctx, stem) {
     if (!R0) continue;
     const mine = !S.ctl || side === S.ctl, col = side === 'p' ? COL.g : COL.enemy;
     for (const F of far ? thKids(R0).filter(D => thRegsOf(D).some(thG)) : thRegsOf(R0).filter(thG)) {
-      const c = F.lvl === 'reg' ? (G => ({ x: G.ax, y: G.ay }))(thG(F)) : thAt(F);
+      const c = F.lvl === 'reg' ? bgAt(thG(F)) : thAtV(F);   // 部队实际所在处（锚点行军时跑在前面、据点易手时会跳过去）
       if (!c || !(mine || (side === 'e' ? inVision(c.x, c.y) : spotted(c.x, c.y)))) continue;
       list.push({ F, c, col, d: C ? dist(c.x, -c.y, C.E[0], C.E[1]) : 0 });
     }

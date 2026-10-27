@@ -20,6 +20,28 @@ function bgNew(side, name, cmd, o) {
 const bgUnits = G => G.us.map(id => UNIT_MAP.get(id)).filter(u => u && teamsOf(u).some(q => q.men.length));
 const bgVehs = G => G.vs.map(id => vehById(id)).filter(v => v && !v.dead);
 const bgRecs = G => G.rec.map(id => S.teams.find(q => q.id === id)).filter(q => q && q.men.length);
+// 战斗群在画面上的位置：成员（各组、各车）实际所在处。锚点 ax/ay 只是队形的虚拟基准——行军时跑在前面、据点易手时直接跳过去，
+//   番号牌、营标、「查看」定位按锚点画会跟部队对不上。取成员中位点 250 内的平均（掉队、被打散的不把牌子拉走）；
+//   同一时刻（且 60ms 内）只算一次；还没有成员（在海上）时用锚点
+const BGAT = { S: null, t: -1, at: 0, m: new Map() };
+function bgAt(G) {
+  const now = Date.now();
+  if (BGAT.S !== S || BGAT.t !== S.t || now - BGAT.at > 60) { BGAT.S = S; BGAT.t = S.t; BGAT.at = now; BGAT.m.clear(); }
+  let c = BGAT.m.get(G.id);
+  if (c) return c;
+  const P = [];
+  for (const u of bgUnits(G)) for (const q of teamsOf(u)) if (q.men.length && !q.ride && isFinite(q.x)) P.push([q.x, q.y]);
+  for (const v of bgVehs(G)) if (v.x >= 0 && v.x <= W && v.y >= 0 && v.y <= H) P.push([v.x, v.y]);
+  if (!P.length) c = { x: G.ax, y: G.ay };
+  else {
+    const md = k => { const a = P.map(p => p[k]).sort((a, b) => a - b); return a[a.length >> 1]; }, mx = md(0), my = md(1);
+    let x = 0, y = 0, n = 0;
+    for (const p of P) if (dist(p[0], p[1], mx, my) < 250) { x += p[0]; y += p[1]; n++; }
+    c = n ? { x: x / n, y: y / n } : { x: mx, y: my };
+  }
+  BGAT.m.set(G.id, c);
+  return c;
+}
 
 // 吸附到与锚点同一岸（同一片连通区域，grid.js compOf）的最近可走格：队形位置落在河里时，不会被挪到河对岸让那个排绕远路过河
 function bgSnap(G, x, y, cls) {
@@ -133,7 +155,7 @@ function bgAdvance(G, gx, gy, step) {
 
 // 战斗群指挥员的口令：头顶喊一句短话（shout.js，short 不给就取第一句），完整的话只记在通联详档（战斗群失去战斗力的报告仍在常规档）
 function bgSay(G, text, at, kind = 'order', short) {
-  if (typeof chatSay === 'function') chatSay(G.side, `${G.cmd}（${G.name}）：${text}`, { kind, at: at || { x: G.ax, y: G.ay }, key: 'bg' + G.id + kind + G.st, gap: 25, lv: kind === 'report' ? 1 : 2 });
+  if (typeof chatSay === 'function') chatSay(G.side, `${G.cmd}（${G.name}）：${text}`, { kind, at: at || bgAt(G), key: 'bg' + G.id + kind + G.st, gap: 25, lv: kind === 'report' ? 1 : 2 });
   if (typeof shout === 'function') { const s = short || text.split(/[，。；]/)[0]; shout(at && at.men ? at : G, /[！？]$/.test(s) ? s : s + '！', { side: G.side }); }
 }
 
@@ -323,9 +345,10 @@ function bgDraw() {
   const at = [];
   for (const G of S.bgs) {
     if (G.reg) continue;   // 营的标号由指挥体系画（hq.js hqDraw）
-    if (G.side === 'e' && !(specAll() || R.eye === 'all') && !spotted(G.ax, G.ay)) continue;
-    const col = G.side === 'p' ? COL.g : COL.enemy, w = px(22), h = px(14), x = G.ax;
-    let y = G.ay;
+    const c = bgAt(G);
+    if (G.side === 'e' && !(specAll() || R.eye === 'all') && !spotted(c.x, c.y)) continue;
+    const col = G.side === 'p' ? COL.g : COL.enemy, w = px(22), h = px(14), x = c.x;
+    let y = c.y;
     while (at.some(o => Math.abs(o[0] - x) < w * 1.2 && Math.abs(o[1] - y) < h * 2.6)) y += h * 2.8;   // 两个战斗群在同一处集合：标号上下错开，不叠在一起
     at.push([x, y]);
     ctx.save(); ctx.strokeStyle = col; ctx.fillStyle = rgba(COL.bg, .7); ctx.lineWidth = px(1.4);

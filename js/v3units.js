@@ -204,7 +204,35 @@ function v3mPainter(M, L, side) {
       g.restore();
     },
     light: (x, y, w = .22, h = .16) => put(rr(x - w / 2, y - h / 2, w, h).pts, .12, -.6, { flat: true }),
-    cable: () => {}, bolts: () => {}, camo: () => {}, dirt: () => {},
+    // 拖缆：沿折线挂在车体侧面的一根细缆（二维有、三维原本被跳过的零件，这里补出）
+    cable: pts => {
+      if (!pts || pts.length < 2) return;
+      const Q = pts.map(([x, y]) => { const t = g.tf(x, y); return [t[0], t[1], at(t[0], t[1])]; });
+      for (let i = 0; i < Q.length - 1; i++) { const a = Q[i], b = Q[i + 1]; mbTube(M, [a[0], a[1], a[2] + .05], [b[0], b[1], b[2] + .05], .045, .045, 5, .5); }
+    },
+    // 螺栓 / 凸起座：一组坐标点各立一个小圆柱（天线座、传感器底座之类）
+    bolts: pts => { for (const [x, y] of pts || []) { const c = g.tf(x, y), z = at(c[0], c[1]); mbTube(M, [c[0], c[1], z], [c[0], c[1], z + .04], .035, .028, 6, .85); } },
+    // 迷彩色块：二维模型原本会在车体 / 炮塔表面画迷彩图，三维里补成贴在顶面的不规则浅浮雕斑块
+    camo: (path, seed = 1, k = 1) => {
+      if (!v3mHi()) return;
+      const pts = path && path.pts; if (!pts || pts.length < 3) return;
+      const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]), x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys), w = x1 - x0, h = y1 - y0;
+      let r = (Math.sin(seed * 12.9898) * 43758.5453) % 1; if (r < 0) r += 1;
+      for (let i = 0; i < 4; i++) {
+        r = (r * 9301 + 49297) % 233280 / 233280; const cx = x0 + w * (.18 + .64 * r);
+        r = (r * 9301 + 49297) % 233280 / 233280; const cy = y0 + h * (.18 + .64 * r);
+        if (!mbIn([cx, cy], pts)) continue;
+        const sx = w * (.08 + .05 * ((i + seed) % 3)) * k, sy = h * (.06 + .04 * ((i + seed * 2) % 3)) * k, z = at(cx, cy) + .012;
+        mbPrism(M, [[cx - sx, cy], [cx - sx * .25, cy + sy], [cx + sx, cy + sy * .35], [cx + sx * .6, cy - sy], [cx - sx * .45, cy - sy * .55]], z, z + .018, .55 + (i % 2) * .18, { flat: true, taper: .01 });
+      }
+    },
+    // 尘土 / 磨损：在水平装甲面上补几道暗色擦痕，强化厚重感与使用痕迹
+    dirt: (path, len = 4, wid = 2) => {
+      if (!v3mHi()) return;
+      const pts = path && path.pts; if (!pts || pts.length < 3) return;
+      const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]), x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+      for (let i = 0; i < 5; i++) { const u = (i + 1) / 6, x = lerp(x0, x1, u), y = lerp(y0, y1, (Math.sin(i * 2.17 + len + wid) + 1) / 2); if (!mbIn([x, y], pts)) continue; const z = at(x, y) + .02; mbLine(M, [x - .25, y - .04, z], [x + .32, y + .05, z], .32); }
+    },
     bag: (x, y, w, h, a = 0) => { g.save(); g.translate(x, y); g.rotate(a); put(rr(-w / 2, -h / 2, w, h, Math.min(w, h) * .35).pts, .26, .8, { taper: .06 }); g.restore(); },
     tool: (x, y, len, a = 0) => { g.save(); g.translate(x, y); g.rotate(a); put(rr(-len / 2, -.04, len, .08).pts, .06, .8, { flat: true }); g.restore(); },
     mg: (x, y, a = 0, len = 1.2, heavy = false) => {   // 机枪：机匣、枪管、弹箱
@@ -236,14 +264,38 @@ function v3mVehicle(Mk, side) {
     const y0 = s > 0 ? hb - tw : -hb, y1 = s > 0 ? hb : -hb + tw;
     mbSide(hull, [[-hl + .05, .55], [-hl + .55, .04], [hl - .7, .04], [hl - .05, .62], [hl - .25, .95], [-hl + .15, .9]], y0, y1, .32);
     const n = Math.max(5, Math.round((L - 1.6) / .95)), yo = s > 0 ? y1 + .005 : y0 - .005;
-    for (let i = 0; i < n; i++) { const x = -hl + .85 + i * (L - 1.9) / (n - 1); mbTube(hull, [x, yo - s * .06, .36], [x, yo + s * .04, .36], .34, .34, 10, .55); mbTube(hull, [x, yo + s * .04, .36], [x, yo + s * .07, .36], .14, .14, 6, .9); }
+    for (let i = 0; i < n; i++) {
+      const x = -hl + .85 + i * (L - 1.9) / (n - 1);
+      mbTube(hull, [x, yo - s * .06, .36], [x, yo + s * .04, .36], .34, .34, 10, .55); mbTube(hull, [x, yo + s * .04, .36], [x, yo + s * .07, .36], .14, .14, 6, .9);
+      if (v3mHi()) {   // 轮毂盖与一圈轮毂螺栓（悬挂臂、减震器在负重轮里侧，外面看不见，不画）
+        mbTube(hull, [x, yo + s * .07, .36], [x, yo + s * .1, .36], .075, .065, 8, .78);
+        for (let k = 0; k < 6; k++) { const a = k / 6 * 6.2832, bx = x + Math.cos(a) * .105, bz = .36 + Math.sin(a) * .105; mbTube(hull, [bx, yo + s * .07, bz], [bx, yo + s * .088, bz], .016, .014, 4, .9); }
+      }
+    }
     mbTube(hull, [hl - .42, yo - s * .06, .55], [hl - .42, yo + s * .06, .55], .3, .3, 8, .65);
     mbTube(hull, [-hl + .42, yo - s * .06, .5], [-hl + .42, yo + s * .06, .5], .28, .28, 8, .65);
-    for (let x = -hl + .5; x < hl - .5; x += .45) mbLine(hull, [x, yo, .9], [x + .1, yo, .93], .35);
+    // 托带轮：上支履带下面的一排小支撑轮（真实履带车的特征，原来缺）
+    const nTop = Math.max(2, Math.round((L - 2.4) / 2));
+    for (let i = 0; i < nTop; i++) { const x = -hl + 1.15 + i * (L - 2.5) / Math.max(1, nTop - 1); mbTube(hull, [x, yo - s * .05, .74], [x, yo + s * .03, .74], .12, .12, 6, .72); }
+    if (v3mHi()) {
+      for (let x = -hl + .55; x < hl - .65; x += .42) {   // 实体分段履带板：上支与下支各一排
+        mbBox(hull, x, x + .32, yo - s * .032, yo + s * .04, .82, .96, .36);
+        mbBox(hull, x, x + .34, yo - s * .034, yo + s * .038, .035, .16, .28);
+        mbLine(hull, [x, yo + s * .045, .965], [x + .27, yo + s * .045, .965], .32);
+      }
+      for (let x = -hl + .7; x < hl - .75; x += .9) mbLine(hull, [x, s * (hb + .012), .52], [x, s * (hb + .012), 1.16], .42);   // 侧裙分块线
+    } else for (let x = -hl + .5; x < hl - .5; x += .45) mbLine(hull, [x, yo, .9], [x + .1, yo, .93], .35);
   }
   const HL = { base: wheel ? .55 : .62, first: wheel ? 1.35 : .5, second: wheel ? 0 : .58, taper: wheel ? .22 : .05 };
   const P = v3mPainter(hull, HL, side);
   try { M0.H(P); } catch (e) { mbPrism(hull, M0.hull, HL.base, HL.base + 1.1, 1, { taper: .2 }); }
+  if (v3mHi()) {   // 车体焊缝、铆钉排、发动机舱检修盖
+    const zTop = Math.max(HL.top(0, 0), HL.base + .66), yb = Math.max(.35, hb - .26), xb = Math.max(.8, hl - .65);
+    mbLine(hull, [-xb, -yb, zTop + .025], [xb, -yb, zTop + .025], .36); mbLine(hull, [-xb, yb, zTop + .025], [xb, yb, zTop + .025], .36);
+    v3mBoltLine(hull, [-xb, -yb, zTop + .05], [xb, -yb, zTop + .05], Math.max(4, L / .72), .026, .75);
+    v3mBoltLine(hull, [-xb, yb, zTop + .05], [xb, yb, zTop + .05], Math.max(4, L / .72), .026, .75);
+    v3mPanelRect(hull, -hl * .72, -hl * .28, -hb * .42, hb * .42, zTop + .035, .34);
+  }
   if (M0.mast) { const [mx, my, mr] = M0.mast, z = HL.top(mx, my); mbTube(hull, [mx, my, z], [mx, my, z + 1.6], .07, .05, 6, .6); mbBox(hull, mx - .08, mx + .08, my - mr, my + mr, z + 1.6, z + 1.85, .9); }
   let top = 0, piv = [0, 0], rad = null;
   if (M0.T && M0.tur) {
@@ -252,6 +304,12 @@ function v3mVehicle(Mk, side) {
     const TL = { base: top, first: wheel ? .7 : .78, taper: .2 }, Q = v3mPainter(tur, TL, side);
     try { M0.T(Q); } catch (e) { mbPrism(tur, mbCirc(0, 0, Math.min(B * .38, 1.6), 8), top, top + .75, 1.1, { taper: .2 }); }
     const tz = TL.top(0, 0);
+    if (v3mHi()) {   // 炮塔座圈、焊缝和装甲板铆钉
+      const rr0 = Math.min(B * .34, 1.36);
+      mbLoop(tur, mbCirc(0, 0, rr0, 22), top + .055, .45);
+      mbLine(tur, [-1.2, -.9, tz + .035], [.9, -.55, tz + .035], .34); mbLine(tur, [-1.2, .9, tz + .035], [.9, .55, tz + .035], .34);
+      v3mBoltLine(tur, [-1.05, -1.0, tz + .06], [.8, -.7, tz + .06], 5, .024, .74); v3mBoltLine(tur, [-1.05, 1.0, tz + .06], [.8, .7, tz + .06], 5, .024, .74);
+    }
     for (const gn of [M0.gun, M0.gun2].filter(Boolean)) {
       const oy = gn.oy || 0, z = (gn.gat || gn.tube || gn.arm ? tz - .25 : top + Math.min(.45, (tz - top) * .55)), x0 = gn.x0, x1 = gn.x0 + gn.len, r = Math.max(gn.r, .05);
       if (gn.tube) { mbBox(tur, x0, x1, oy - r, oy + r, z - r, z + r, .8); mbLine(tur, [x1 + .01, oy - r * .6, z], [x1 + .01, oy + r * .6, z], 1); continue; }   // 导弹发射箱
@@ -262,6 +320,9 @@ function v3mVehicle(Mk, side) {
       if (gn.fe) mbTube(tur, [x0 + gn.fe[0], oy, z], [x0 + gn.fe[0] + gn.fe[1], oy, z], gn.fe[2] * 1.1, gn.fe[2] * 1.1, 10, .72);   // 抽烟装置
       if (gn.sl) for (let i = 1; i <= gn.sl; i++) { const x = x0 + gn.len * (.15 + .8 * i / (gn.sl + 1)); mbTube(tur, [x - .04, oy, z], [x + .04, oy, z], r * 1.35, r * 1.35, 10, .5); }   // 热护套箍
       if (gn.br) mbTube(tur, [x1 - .42, oy, z], [x1, oy, z], r * 1.6, r * 1.6, 8, .5);   // 炮口制退器
+    }
+    if (v3mHi() && !M0.radar) {   // 炮塔后部通信天线：细长柔性杆，给主战坦克 / 装甲车增加识别度
+      for (const ay of [-B * .18, B * .18]) { const ax = -Math.min(1.05, L * .16), az = TL.top(ax, ay); mbTube(tur, [ax, ay, az], [ax - .28, ay, az + 1.45], .035, .018, 5, .58, false); }
     }
     if (M0.radar) { const [rx, ry, rr] = M0.radar; rad = [rx, ry, rr, TL.top(rx, ry)]; mbTube(tur, [rx, ry, rad[3]], [rx, ry, rad[3] + .45], .12, .1, 6, .6); }
   }
@@ -403,6 +464,12 @@ function v3ManGun(M, kind, sof) {
   if (sn) { mbTube(M, [-.06, 0, .1], [.3, 0, .1], .03, .03, 10, B); mbTube(M, [.3, 0, .1], [.36, 0, .1], .04, .04, 10, B); mbBox(M, .355, .365, -.03, .03, .07, .13, MS.glass); mbBox(M, .05, .12, -.02, .02, .05, .08, B); }   // 大瞄准镜
   else if (!smg) { mbBox(M, -.02, .1, -.022, .022, .05, .1, B); mbBox(M, .095, .105, -.018, .018, .06, .095, MS.glass); mbLine(M, [-.1, 0, .05], [.2, 0, .05], .6); }   // 红点 / 光学瞄具、皮卡汀尼导轨
 }
+// 远景低模的枪：一根方条（发射筒是粗一点的方管）
+function v3ManGunLo(M, kind) {
+  if (kind === 'at' || kind === 'aa' || kind === 'flame') { const x0 = kind === 'aa' ? -.62 : -.42, len = kind === 'aa' ? 1.62 : kind === 'flame' ? 1.2 : 1.32, r = kind === 'at' ? .07 : .05; mbBox(M, x0, x0 + len, -r, r, -r, r, kind === 'aa' ? MS.uni2 : MS.gear2); return; }
+  const L = kind === 'crew' ? .55 : kind === 'mg' ? 1.25 : kind === 'sniper' ? 1.3 : .95;
+  mbBox(M, -.44, L - .44, -.03, .03, -.06, .05, MS.blk);
+}
 // 光滑的半椭球（头盔、帽子）：逐顶点法线，只描底圈
 function mbDome(M, cx, cy, rx, ry, z0, h, s, n = 16, m = 5) {
   const P = (i, j) => { const a = i / n * 6.2832, t = j / m * 1.5708, c = Math.cos(t); return [cx + Math.cos(a) * rx * c, cy + Math.sin(a) * ry * c, z0 + Math.sin(t) * h]; };
@@ -430,22 +497,23 @@ function v3ManHead(M, kind, sof) {
 }
 
 function v3mMan(kind, pose, opt = {}) {
-  const M = mbNew(), P = v3ManParse(pose), J = v3ManSkel(kind, P), crw = J.crw, sof = !!opt.sof;
-  const { O, Zt, Xt, Yt, legs } = J, U = MS.uni, U2 = MS.uni2;
+  const M = mbNew(), P = v3ManParse(pose), J = v3ManSkel(kind, P), crw = J.crw, sof = !!opt.sof, lo = !!opt.lo;   // lo：远景低模（同一副骨骼与姿态，四棱的四肢、方块的头和枪，不要小零件）
+  const { O, Zt, Xt, Yt, legs } = J, U = MS.uni, U2 = MS.uni2, NS = lo ? 4 : 9;
   const TF = [Xt, Yt, Zt];   // 躯干坐标系
   // —— 腿：大腿（裤）、护膝、小腿、作战靴 ——
   for (const g of legs) {
-    mbTube(M, g.H0, g.Kn, .086, .074, 9, U2);
+    mbTube(M, g.H0, g.Kn, .086, .074, NS, U2);
     const u1 = v3Nm([g.H0[0] - g.Kn[0], g.H0[1] - g.Kn[1], g.H0[2] - g.Kn[2]]), u2 = v3Nm([g.An[0] - g.Kn[0], g.An[1] - g.Kn[1], g.An[2] - g.Kn[2]]), ks = [-(u1[0] + u2[0]), -(u1[1] + u2[1]), -(u1[2] + u2[2])];
     const kf = v3Len(ks) > .15 ? v3Nm(ks) : [1, 0, 0];   // 膝盖朝外的方向（腿伸直时朝前）
-    if (!crw) v3ManPart(M, v3Add(g.Kn, kf, .05), v3Frame(kf), m => mbBox(m, -.02, .03, -.055, .055, -.065, .065, MS.blk2));   // 护膝
-    mbTube(M, g.Kn, g.An, .07, .056, 9, U);
+    if (!crw && !lo) v3ManPart(M, v3Add(g.Kn, kf, .05), v3Frame(kf), m => mbBox(m, -.02, .03, -.055, .055, -.065, .065, MS.blk2));   // 护膝
+    mbTube(M, g.Kn, g.An, .07, .056, NS, U);
     // 作战靴：站立、行走时脚尖朝前；小腿向后贴地（跪姿后腿、卧倒、匍匐）时脚尖朝下点地、靴底朝后
     const bf = g.as < -1 ? v3Frame([-.25, 0, -1], [1, 0, 0]) : v3Frame([1, 0, g.as < -.4 ? .25 : 0]);
-    v3ManPart(M, g.An, bf, m => { mbBox(m, -.06, .17, -.052, .052, -.085, .05, MS.blk, { taper: .008 }); mbBox(m, -.065, .18, -.057, .057, -.1, -.08, MS.blk2); });   // 靴、靴底
+    v3ManPart(M, g.An, bf, m => { mbBox(m, -.06, .17, -.052, .052, lo ? -.1 : -.085, .05, MS.blk, { taper: .008 }); if (!lo) mbBox(m, -.065, .18, -.057, .057, -.1, -.08, MS.blk2); });   // 靴、靴底
   }
   // —— 躯干：腰带与杂物袋、上衣、插板携行具（前后插板、侧围）、胸前弹匣包、肩带 ——
   v3ManPart(M, O, TF, m => {
+    if (lo) { mbBox(m, -.14, .15, -.19, .19, -.06, .5, U, { taper: .025 }); if (!crw) mbBox(m, -.18, .18, -.16, .16, .12, .46, MS.gear); return; }   // 低模：上衣 + 携行具两块
     mbBox(m, -.13, .13, -.185, .185, -.06, .06, MS.gear2);   // 腰带
     if (!crw) { mbBox(m, -.1, .02, .17, .23, -.05, .05, MS.gear); mbBox(m, -.17, -.11, -.12, .12, -.04, .05, MS.gear2); }   // 侧挂杂物袋、后腰包
     mbPrism(m, [[-.12, -.19], [.13, -.19], [.15, 0], [.13, .19], [-.12, .19], [-.14, 0]], .03, .5, U, { taper: .025 });   // 上衣（胸廓）
@@ -459,11 +527,12 @@ function v3mMan(kind, pose, opt = {}) {
     if (kind === 'medic') mbBox(m, -.06, .1, .2, .27, .1, .26, MS.gear);   // 卫生兵急救包
   });
   // 颈、头
-  mbTube(M, J.Nk, v3Add(J.Hc, J.Hd, -.07), .05, .048, 8, MS.skin);
-  { const HX = v3Nm([J.Hd[2], 0, -J.Hd[0]]); v3ManPart(M, J.Hc, [HX, v3Cr(J.Hd, HX), J.Hd], m => v3ManHead(m, kind, sof)); }   // 头的坐标系：z 头顶方向、x 面朝方向
+  if (!lo) mbTube(M, J.Nk, v3Add(J.Hc, J.Hd, -.07), .05, .048, 8, MS.skin);
+  { const HX = v3Nm([J.Hd[2], 0, -J.Hd[0]]); v3ManPart(M, J.Hc, [HX, v3Cr(J.Hd, HX), J.Hd], m => lo ? (mbBox(m, -.075, .085, -.07, .07, -.17, .02, MS.skin), mbBox(m, -.13, .12, -.125, .125, -.01, .13, crw ? MS.blk : MS.helm, { taper: .05 })) : v3ManHead(m, kind, sof)); }   // 低模：脸 + 方头盔   // 头的坐标系：z 头顶方向、x 面朝方向
   // —— 背后：突击背包 / 电台 / 发射筒 / 工兵锹 ——
   if (!crw && kind !== 'crew') v3ManPart(M, O, TF, m => {
     const bx = -.175;
+    if (lo) { mbBox(m, bx - .17, bx, -.15, .15, .16, .46, kind === 'radio' ? MS.blk : MS.gear); return; }   // 低模：只有背包 / 电台一块
     if (kind === 'radio') { mbBox(m, bx - .16, bx, -.13, .13, .16, .46, MS.blk, { taper: .01 }); mbBox(m, bx - .14, bx - .02, -.1, .1, .46, .5, MS.blk2); mbLine(m, [bx - .1, .08, .5], [bx - .2, .1, 1.55], 1); return; }   // 背负电台、鞭状天线
     mbBox(m, bx - .17, bx, -.15, .15, .16, .45, MS.gear, { taper: .015 }); mbBox(m, bx - .15, bx - .01, -.13, .13, .45, .49, MS.gear2);   // 背包、顶盖
     mbBox(m, bx - .2, bx - .17, -.1, .1, .2, .36, MS.gear2);   // 背包外袋
@@ -473,12 +542,12 @@ function v3mMan(kind, pose, opt = {}) {
     if (kind === 'mortar' && P.m !== 'idle') mbBox(m, bx - .25, bx - .2, -.18, .18, .18, .44, MS.blk);   // 背着的座钣
     if (kind === 'at' && P.m !== 'idle' && P.m !== 'aim') mbTube(m, [bx - .22, -.12, .05], [bx - .22, -.12, 1.05], .062, .062, 9, MS.gear2);   // 行进时发射筒背在背上
   });
-  if (kind === 'sniper' || kind === 'spot') for (let i = 0; i < 14; i++) {   // 伪装披挂：从肩头垂下的布条
+  if (!lo && (kind === 'sniper' || kind === 'spot')) for (let i = 0; i < 14; i++) {   // 伪装披挂：从肩头垂下的布条
     const a = i / 14 * 6.2832, top = v3Add(v3Add(O, Zt, .5), [Math.cos(a) * .16, Math.sin(a) * .22, 0]), bot = v3Add(v3Add(O, Zt, .15), [Math.cos(a) * .3 - .05, Math.sin(a) * .34, -.05]);
     mbLine(M, top, bot, .55);
   }
   // —— 手臂与武器 ——
-  const arm = (S, T, sd) => { const k = v3ManIK(S, T, V3MAN_LEN.ua, V3MAN_LEN.fa, sd); mbTube(M, S, k.E, .056, .05, 9, U); mbTube(M, k.E, k.H, .049, .042, 9, U2); v3ManPart(M, k.H, v3Frame([k.H[0] - k.E[0], k.H[1] - k.E[1], k.H[2] - k.E[2]]), m => mbBox(m, -.02, .07, -.035, .035, -.03, .03, MS.blk)); return k; };
+  const arm = (S, T, sd) => { const k = v3ManIK(S, T, V3MAN_LEN.ua, V3MAN_LEN.fa, sd); mbTube(M, S, k.E, .056, .05, NS, U); mbTube(M, k.E, k.H, .049, .042, NS, U2); if (!lo) v3ManPart(M, k.H, v3Frame([k.H[0] - k.E[0], k.H[1] - k.E[1], k.H[2] - k.E[2]]), m => mbBox(m, -.02, .07, -.035, .035, -.03, .03, MS.blk)); return k; };
   const Sr = J.Sr, Sl = J.Sl;
   if (crw) {   // 飞行员、甲板人员：不带枪——爬梯两手交替往上抓、打手势右臂直指前方、跑步两臂前后摆
     if (P.m === 'climb') { const up = P.f ? -1 : 1; arm(Sr, v3Add(Sr, [.3, .02, .3 + up * .16]), 1); arm(Sl, v3Add(Sl, [.3, -.02, .3 - up * .16]), -1); }
@@ -529,7 +598,7 @@ function v3mMan(kind, pose, opt = {}) {
   }
   if (Xg) {
     const Fg = v3Frame(Xg);
-    v3ManPart(M, G, Fg, m => v3ManGun(m, kind, sof));
+    v3ManPart(M, G, Fg, m => lo ? v3ManGunLo(m, kind) : v3ManGun(m, kind, sof));
     const at = (x, z) => v3Add(v3Add(G, Fg[0], x), Fg[2], z);
     // 卧姿过渡中途（双手撑地那一段）左手离开护木撑在前方地上
     const w = clamp(1 - Math.abs(P.L - 1.45) / .3, 0, 1), Lh = tube ? at(.35, -.1) : at(kind === 'mg' ? .55 : .42, -.03), Gd = [O[0] + .5, -.24, .04];
@@ -581,6 +650,56 @@ function v3mCells(M, x0, x1, y0, y1, z, nx, ny) {   // 垂发单元：方块阵�
   for (let i = 1; i < nx; i++) { const x = lerp(x0, x1, i / nx); mbLine(M, [x, y0, z + .26], [x, y1, z + .26], .6); }
   for (let j = 1; j < ny; j++) { const y = lerp(y0, y1, j / ny); mbLine(M, [x0, y, z + .26], [x1, y, z + .26], .6); }
 }
+const V3_NOPITOT = { j35: 1, j20: 1, j36: 1, j50: 1, gj11: 1, f35: 1, f35b: 1, f22: 1, b2: 1 };
+function v3mHi() {
+  return typeof SETTINGS === 'object' && SETTINGS && SETTINGS.quality === 'high' && !(typeof V3 === 'object' && V3 && V3.coarse) && !(typeof R === 'object' && R && R.lowCap);
+}
+function v3mQKey(key) { return key + (v3mHi() ? ':hi' : ':std'); }
+function v3mBoltLine(M, a, b, n, r = .035, s = .82) {
+  n = Math.max(1, Math.round(n || 1));
+  for (let i = 0; i < n; i++) { const t = n === 1 ? .5 : i / (n - 1), x = lerp(a[0], b[0], t), y = lerp(a[1], b[1], t), z = lerp(a[2], b[2], t); mbTube(M, [x, y, z], [x, y, z + r * .95], r, r * .82, 6, s); }
+}
+function v3mRail(M, pts, z, h = .85, step = 7, s = .55) {
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[i], b = pts[(i + 1) % pts.length], L = Math.hypot(b[0] - a[0], b[1] - a[1]), n = Math.max(1, Math.round(L / step));
+    mbLine(M, [a[0], a[1], z + h], [b[0], b[1], z + h], s); mbLine(M, [a[0], a[1], z + h * .52], [b[0], b[1], z + h * .52], s * .72);
+    for (let k = 0; k <= n; k++) { const t = k / n, x = lerp(a[0], b[0], t), y = lerp(a[1], b[1], t); mbLine(M, [x, y, z], [x, y, z + h], s * .75); }
+  }
+}
+function v3mPanelRect(M, x0, x1, y0, y1, z, s = .45) { mbLoop(M, [[x0, y0], [x1, y0], [x1, y1], [x0, y1]], z, s); mbLine(M, [(x0 + x1) / 2, y0, z], [(x0 + x1) / 2, y1, z], s * .75); }
+function v3mShipSideGear(M, hl, hb, fb, scale = 1) {
+  if (!v3mHi()) return;
+  // 锚、锚链孔、舷侧救生筏筒：高精模式下丰富舰体侧面
+  for (const sg of [-1, 1]) {
+    const y = sg * hb * 1.02;
+    mbTube(M, [hl * .78, y, fb * .48], [hl * .88, y, fb * .48], .18 * scale, .1 * scale, 6, .42);   // 舰首锚链孔 / 锚
+    mbLine(M, [hl * .84, y, fb * .48], [hl * .76, sg * hb * .8, fb * .22], .45);
+    for (const x of [-hl * .18, -hl * .34, hl * .04]) mbTube(M, [x - 1.1 * scale, y, fb + .75 * scale], [x + 1.1 * scale, y, fb + .75 * scale], .28 * scale, .28 * scale, 8, .86);
+  }
+}
+function v3mDeckTractor() {
+  const M = mbNew();
+  mbBox(M, -2.2, 2.2, -1.05, 1.05, .22, 1.05, .72, { taper: .12 }); mbBox(M, .55, 1.8, -.78, .78, 1.05, 1.65, .62, { taper: .1 });
+  for (const [x, y] of [[-1.45, -1.02], [1.45, -1.02], [-1.45, 1.02], [1.45, 1.02]]) mbTube(M, [x, y - .16, .35], [x, y + .16, .35], .34, .34, 8, .28);
+  mbLine(M, [-2.15, 0, .72], [-3.25, 0, .4], .8); mbBox(M, -2.9, -2.35, -.18, .18, .28, .52, .7);
+  return M;
+}
+function v3mDeckCart() {
+  const M = mbNew();
+  mbBox(M, -1.75, 1.75, -.82, .82, .3, .82, .68, { taper: .05 });
+  for (let i = 0; i < 3; i++) mbTube(M, [-1 + i, 0, .94], [-.65 + i, 0, .94], .18, .18, 8, .86);
+  for (const [x, y] of [[-1.35, -.9], [1.35, -.9], [-1.35, .9], [1.35, .9]]) mbTube(M, [x, y - .12, .24], [x, y + .12, .24], .22, .22, 6, .32);
+  return M;
+}
+function v3mCarrierCIWS(M, u, v, z, dir) {
+  mbPrism(M, mbCirc(u, v, 1.55, 12), z, z + .9, .82, { taper: .35 }); mbBox(M, u - .75, u + .75, v - .7, v + .7, z + .9, z + 1.65, .9, { taper: .18 });
+  for (let i = 0; i < 6; i++) { const o = (i - 2.5) * .08; mbTube(M, [u, v + o, z + 1.35], [u + dir * 3.2, v + o, z + 1.55], .055, .045, 5, .6, false); }
+  mbPrism(M, mbCirc(u - dir * .45, v, .42, 8), z + 1.68, z + 2.25, .9, { taper: .2 });
+}
+function v3mCarrierHQ10(M, u, v, z, dir) {
+  mbPrism(M, mbCirc(u, v, 1.35, 10), z, z + .6, .82, { taper: .2 });
+  for (let i = 0; i < 6; i++) { const yy = v + (i - 2.5) * .32; mbBox(M, u - dir * .4, u + dir * 2.3, yy - .11, yy + .11, z + .75, z + 1.18, .7, { taper: .04 }); }
+}
 function v3mShip(kind, L, B) {
   const M = mbNew(), hk = kind === 'ddA' || kind === 'ddB' || kind === 'ffg' ? 'dd' : kind, H = v3mHullPts(hk, L, B);
   const fb = kind === 'assault' ? 1.8 : kind === 'boat' ? .9 : kind === 'supply' ? 2.6 : kind === 'lst' ? 3 : 2.8, hl = L / 2, hb = B / 2;
@@ -625,6 +744,14 @@ function v3mShip(kind, L, B) {
     mbPrism(M, mbCirc(-hl * .42, 0, .55, 8), fb + 2.4, fb + 3.2, .9, { taper: .2 });
     mbLoop(M, mbCirc(-hl * .8, 0, hb * .55, 16), fb + .02, 1);
     mbLine(M, [-hl * .6, 0, fb + .02], [-hl * .98, 0, fb + .02], .8);
+  }
+  if (kind !== 'boat') v3mShipSideGear(M, hl, hb, fb, Math.max(.75, Math.min(1.2, L / 70)));
+  // 两舷救生艇：贴着干舷挂在舷侧
+  if (kind !== 'boat' && L >= 40) for (const [xf, sg] of [[.14, 1], [-.28, 1], [.14, -1], [-.28, -1]]) {   // 30 来米的登陆艇只带救生筏筒（v3mShipSideGear），不挂救生艇
+    const u = hl * xf, vy = sg * hb * 1.06, z = fb + .35;
+    mbTube(M, [u - 1.7, vy, z], [u + 1.7, vy, z], .6, .6, 8, .78);                       // 救生艇（首尾沿舰长横躺）
+    mbBox(M, u - .85, u + .85, vy - .52, vy + .52, z + .5, z + .62, .9);                  // 顶盖
+    mbLine(M, [u, vy, z + .62], [u, sg * hb * .92, z + 1.9], .5);                         // 吊索
   }
   mbLoop(M, H, fb + .03, .9);
   return M;
@@ -689,6 +816,7 @@ function v3mDD(cls) {
     hangar(-12.4, -7.2, 3, -18.4);
     for (const y of [-2.2, 2.2]) mbPrism(M, mbCirc(X(-8), Y(y), .5 * sx, 8), fb + 2.6, fb + 3.3, .9, { taper: .2 });   // 两座近防炮
   }
+  v3mShipSideGear(M, L / 2, B / 2, fb, Math.max(.75, Math.min(1.25, L / 55)));
   mbLoop(M, H, fb + .03, .9);
   return M;
 }
@@ -719,6 +847,7 @@ function v3mEShip(cls, L, B) {
   for (const x of [-hl * .08, -hl * .2]) mbPrism(M, mbRect(x - 1.1, x + 1.1, -hb * .3, hb * .3), fb, fb + 5, .7, { taper: .3 });
   v3mCells(M, -hl * .5, -hl * .34, -hb * .5, hb * .5, fb, 8, 4);
   mbLoop(M, mbCirc(-hl * .8, 0, hb * .55, 16), fb + .02, 1);
+  v3mShipSideGear(M, hl, hb, fb, Math.max(.75, Math.min(1.2, L / 70)));
   mbLoop(M, H, fb + .03, .9);
   return M;
 }
@@ -755,6 +884,13 @@ function v3mCarrier(lhd) {
   }
   // 舷号「18」：两舷靠舰首（从舷外看都是正的）
   for (const sg of [1, -1]) v3mDigits(M, '18', (x, y) => [sg > 0 ? 112 + x * 6 : 124 - x * 6, sg * (16.4 + y * 2.5), 4 + y * 7], .95);
+  // 两舷救生艇：封闭式救生艇挂在飞行甲板外伸部分下面的舷侧（两根吊索、吊艇臂从舷侧上沿伸出），左舷三艘、右舷两艘（避开舰岛与升降机）
+  if (!lhd && C) for (const [u, sg] of [[64, -1], [8, -1], [-52, -1], [78, 1], [-44, 1]]) {
+    const vy = sg * 25.9, z = 9.6;
+    mbBox(M, u - 3, u + 3, vy - .95, vy + .95, z - .9, z + .15, .8);   // 艇体
+    mbBox(M, u - 2.3, u + 2.5, vy - .8, vy + .8, z + .15, z + 1, .92, { taper: .18 });   // 封闭顶篷
+    for (const du of [-2.2, 2.2]) { mbLine(M, [u + du, vy, z + 1], [u + du, vy, zh - .3], .5); mbBox(M, u + du - .15, u + du + .15, Math.min(vy, sg * 24.6), Math.max(vy, sg * 24.6), zh - .55, zh - .25, .72); }   // 吊索、吊艇臂
+  }
   // 舰岛
   if (lhd) {
     const isl = [-38, -8, 11, 15.5].map(x => x * 2);
@@ -781,6 +917,14 @@ function v3mCarrier(lhd) {
   }
   // 甲板标线
   const z = zd + .03;
+  if (v3mHi()) {   // Ultra：飞行甲板边缘安全网 / 低栏杆、舰首锚机与系泊设备
+    v3mRail(M, D, zd + .06, .72, 12, .42);
+    if (!lhd && C) for (const s of [-1, 1]) {
+      mbTube(M, [133, s * 12.5, zd + .16], [145, s * 15.5, zh + 1.2], .2, .16, 6, .42);   // 锚链
+      mbPrism(M, mbCirc(127, s * 9.2, 1.2, 10), zd + .04, zd + .48, .72, { taper: .15 });   // 锚机
+      for (const u of [116, 122, 137]) mbTube(M, [u, s * 18.2, zd + .04], [u, s * 18.2, zd + .85], .36, .32, 8, .75);   // 系缆桩
+    }
+  }
   mbLoop(M, D, z, .9);
   if (!lhd && C) {
     const L = C.land, a = Math.atan2(L.v1 - L.v0, L.u1 - L.u0), nx = -Math.sin(a), ny = Math.cos(a), at = t => [lerp(L.u0, L.u1, t), lerp(L.v0, L.v1, t)];
@@ -793,7 +937,11 @@ function v3mCarrier(lhd) {
     v3mDigits(M, '18', (x, y) => [120 + y * 12, -6.5 + x * 4.6, z], .9);   // 甲板舷号（字头朝舰首，从舰尾方向看是正的）
     v3mDigits(M, '18', (x, y) => [-152 + y * 10, 8 + x * 3.8, z], .8);
     // 近防炮 / 红旗-10 舷台、着舰指挥官平台
-    for (const [u, v] of [[144, -19], [136, 23], [-148, -20], [-150, 30]]) { mbPrism(M, mbCirc(u, v, 2.4, 10), zd - 1, zd + 1.5, .82, { taper: .5 }); mbTube(M, [u, v, zd + 1.1], [u + (u > 0 ? 3 : -3), v, zd + 1.5], .18, .15, 6, .6); }
+    if (v3mHi()) for (const [u, v, k] of [[144, -19, 'ciws'], [136, 23, 'hq10'], [-148, -20, 'ciws'], [-150, 30, 'hq10']]) {
+      const dir = u > 0 ? 1 : -1;
+      mbPrism(M, mbCirc(u, v, 2.6, 12), zd - 1, zd + 1.15, .82, { taper: .5 }); v3mRail(M, mbCirc(u, v, 2.45, 12), zd + 1.15, .55, 3, .38);
+      if (k === 'ciws') v3mCarrierCIWS(M, u, v, zd + 1.1, dir); else v3mCarrierHQ10(M, u, v, zd + 1.1, dir);
+    } else for (const [u, v] of [[144, -19], [136, 23], [-148, -20], [-150, 30]]) { mbPrism(M, mbCirc(u, v, 2.4, 10), zd - 1, zd + 1.5, .82, { taper: .5 }); mbTube(M, [u, v, zd + 1.1], [u + (u > 0 ? 3 : -3), v, zd + 1.5], .18, .15, 6, .6); }
     mbBox(M, -124, -115, -30, -24, zd - 1.2, zd - .2, .7);
   } else for (let k = 0; k < 6; k++) mbLoop(M, mbCirc(100 - k * 44, -8, 6, 10), z, .8);
   return M;
@@ -898,6 +1046,15 @@ function v3mAir(key, fold, opt = {}) {
   if (D.cnd) for (const P of [D.cnd, mir(D.cnd)]) mbWingP(M, P, zc + top * .25, .14, .08, .3, .85);
   // 机身、尾椎、背部鼓包
   if (D.body) v3mLoft(M, D.body, sec, .92);
+  if (v3mHi() && D.body && !D.flat) {   // Ultra：机身维护面板线、雷达罩分割、背脊线、刀形天线
+    const xs = D.body.map(p => p[0]), xa = Math.min(...xs), xb = Math.max(...xs), cnt = D.heli ? 3 : 7;
+    for (let i = 1; i <= cnt; i++) { const xx = lerp(xa, xb, i / (cnt + 1)), hw = v3AirHw(D, xx) * .74, zz = topAt(xx) + .018; if (hw > .18) mbLine(M, [xx, -hw, zz], [xx, hw, zz], .42); }
+    if (!D.heli) {
+      const nr = xb - 1.55, hw = v3AirHw(D, nr) * .78; if (hw > .18) mbLine(M, [nr, -hw, topAt(nr) + .035], [nr, hw, topAt(nr) + .035], .52);   // 雷达罩环线
+      mbLine(M, [xb - 2.2, 0, topAt(xb - 2.2) + .035], [xa + 2.2, 0, topAt(xa + 2.2) + .035], .32);   // 背脊纵向面板线
+      const xx = lerp(xa, xb, .42), zz = topAt(xx) + .04; mbPrism(M, [[xx - .18, -.05], [xx + .28, 0], [xx - .18, .05]], zz, zz + .38, .72, { taper: .04 });   // 背部刀形天线
+    }
+  }
   if (D.tail) mbPrism(M, [...D.tail, ...mir(D.tail).slice(1)], zc - .35, zc + .35, .8, { taper: .2 });
   if (D.hump) mbPrism(M, mbCirc(D.hump[0], 0, D.hump[2], 10).map(([x, y]) => [D.hump[0] + (x - D.hump[0]) * D.hump[1] / D.hump[2], y]), topAt(D.hump[0]) - .2, topAt(D.hump[0]) + .45, .95, { taper: .35 });
   // 短舱：翼下吊舱 / 机身旁（A-10 尾部、阿帕奇两侧、轰-6K 翼根、直升机顶部、歼-15 两台发动机）
@@ -931,6 +1088,12 @@ function v3mAir(key, fold, opt = {}) {
     else if (kd === 'win') mbPrism(M, [[x1, -w * .55], [x1 + .25, 0], [x1, w * .55], [x0, w], [x0, -w]], zb - top * .3, zb - top * .05, -.85, { taper: .15 });
     else if ((opt.cpo || 0) > .02) {   // 座舱盖打开：后铰链往上掀，露出座舱里的弹射座椅
       mbBox(M, x0 + .2, x1 - .25, -w * .7, w * .7, zb - .55, zb - .08, .12); mbBox(M, x0 + .35, x0 + .95, -w * .45, w * .45, zb - .5, zb + .45, .3);
+      if (v3mHi()) {   // Ultra：弹射座椅头枕、仪表台、操纵杆
+        mbBox(M, x0 + .42, x0 + .82, -w * .32, w * .32, zb + .42, zb + .66, .22);
+        mbBox(M, x1 - .95, x1 - .32, -w * .52, w * .52, zb - .34, zb - .12, .18, { taper: .06 });
+        mbTube(M, [x0 + 1.15, 0, zb - .42], [x0 + 1.2, 0, zb - .16], .025, .02, 5, .2);
+        if (kd === 'tandem') { mbBox(M, x1 - .95, x1 - .45, -w * .34, w * .34, zb - .45, zb + .22, .28); mbBox(M, x1 - .9, x1 - .55, -w * .26, w * .26, zb + .22, zb + .42, .22); }
+      }
       const M2 = mbNew(), th = opt.cpo * .95, ct = Math.cos(th), st = Math.sin(th), hz = zb - .12;
       if (D.heli) dome(cx, rx, w, hz, w * 1.05, M2); else mbCanopy(M2, x0, x1, w, hz - .08, w * 1.15, -.85);
       for (const A of [M2.t, M2.l]) for (let i = 0; i < A.length; i += 10) {   // 绕后沿铰链转起来（位置与法线）
@@ -963,8 +1126,14 @@ function v3mAir(key, fold, opt = {}) {
   // 喷口：圆形（收敛调节片）/ 二元扁平
   for (const nz of D.noz || []) for (const sg of nz[1] ? [1, -1] : [1]) {
     const [x, y] = [nz[0], nz[1] * sg];
-    if (nz[4] === 'flat') { mbBox(M, x - nz[3], x + .2, y - nz[2], y + nz[2], zc - nz[2] * .45, zc + nz[2] * .45, .45); mbBox(M, x - nz[3] - .05, x - nz[3] + .1, y - nz[2] * .8, y + nz[2] * .8, zc - nz[2] * .3, zc + nz[2] * .3, .12); }
-    else { mbTube(M, [x + .7, y, zc], [x - .35, y, zc], nz[2] * 1.02, nz[2] * .88, 12, .5); mbTube(M, [x - .3, y, zc], [x - .4, y, zc], nz[2] * .7, nz[2] * .7, 10, .12); }
+    if (nz[4] === 'flat') {
+      mbBox(M, x - nz[3], x + .2, y - nz[2], y + nz[2], zc - nz[2] * .45, zc + nz[2] * .45, .45); mbBox(M, x - nz[3] - .05, x - nz[3] + .1, y - nz[2] * .8, y + nz[2] * .8, zc - nz[2] * .3, zc + nz[2] * .3, .12);
+      if (v3mHi()) { mbLine(M, [x - nz[3] - .08, y - nz[2] * .9, zc], [x - nz[3] - .35, y - nz[2] * .65, zc + nz[2] * .28], .42); mbLine(M, [x - nz[3] - .08, y + nz[2] * .9, zc], [x - nz[3] - .35, y + nz[2] * .65, zc - nz[2] * .28], .42); }
+    }
+    else {
+      mbTube(M, [x + .7, y, zc], [x - .35, y, zc], nz[2] * 1.02, nz[2] * .88, 12, .5); mbTube(M, [x - .3, y, zc], [x - .4, y, zc], nz[2] * .7, nz[2] * .7, 10, .12);
+      if (v3mHi()) { const r = nz[2]; for (let i = 0; i < 12; i++) { const a = i / 12 * 6.2832; mbLine(M, [x - .36, y + Math.cos(a) * r * .9, zc + Math.sin(a) * r * .9], [x - .75, y + Math.cos(a) * r * .62, zc + Math.sin(a) * r * .62], .38); } }
+    }
   }
   // 挂架（外挂弹另外实例化）
   for (const [x, y, k] of D.st || []) for (const sg of y ? [1, -1] : [1]) { const z = D.heli ? zw : zw; mbBox(M, x - .55, x + .45, y * sg - .07, y * sg + .07, z - .32, z, .6); }
@@ -984,12 +1153,18 @@ function v3mAir(key, fold, opt = {}) {
   }
   if (opt.gear) {   // 起落架：前起落架在座舱下前方，两个主起落架在机身两侧；支柱 + 轮子（轮底在 z = −V3_GEAR）
     const xf = D.body ? D.body[0][0] : 10, xn = D.cp ? Math.min(D.cp[1] + .6, xf - 1.6) : xf * .6, xm = D.heli ? 1.2 : D.hi ? -.4 : -1.4, ym = D.heli ? 1.7 : Math.max(1.3, hw0 * .82), zb0 = zc - bot * .7;
-    for (const [x, y, r] of [[xn, 0, .32], [xm, ym, .46], [xm, -ym, .46]]) {
+    const gearPts = [[xn, 0, .32], [xm, ym, .46], [xm, -ym, .46]];
+    for (const [x, y, r] of gearPts) {
       const zw0 = -V3_GEAR + r;
       mbTube(M, [x, y, zb0], [x, y, zw0], .1, .09, 6, .75);
+      if (v3mHi()) { mbTube(M, [x + r * .35, y, zb0 - .12], [x, y, zw0 + r * .2], .045, .035, 5, .78); mbBox(M, x - r * 1.05, x + r * 1.05, y - r * 1.45, y + r * 1.45, zb0 - .08, zb0 + .02, .15); mbQuad(M, [x - r, y - r * 1.35, zb0], [x + r, y - r * 1.35, zb0], [x + r * .72, y - r * 2.25, zb0 - r * .62], [x - r * .72, y - r * 2.25, zb0 - r * .62], .72); mbQuad(M, [x - r, y + r * 1.35, zb0], [x + r, y + r * 1.35, zb0], [x + r * .72, y + r * 2.25, zb0 - r * .62], [x - r * .72, y + r * 2.25, zb0 - r * .62], .72); }
       mbTube(M, [x, y - .2, zw0], [x, y + .2, zw0], r, r, 10, .22); mbTube(M, [x, y - .21, zw0], [x, y + .21, zw0], r * .5, r * .5, 8, .7);
     }
   }
+  // 空速管：机头尖伸出的细针（真实战机的特征，原来缺）；飞翼（B-2）与直升机没有
+  if (D.body && !D.flat && !D.heli && !V3_NOPITOT[key]) { const xn = Math.max(...D.body.map(b => b[0])); mbTube(M, [xn, 0, zc + top * .08], [xn + 1.15, 0, zc + top * .08], .07, .035, 5, .72); }   // 隐身战机用嵌入式大气数据传感器，没有伸出的空速管
+  // 翼尖航行灯 / 编队灯：两侧翼尖各一个发光小块
+  if (D.wing && !D.heli) { const tp = D.wing.reduce((a, p) => p[1] > a[1] ? p : a, D.wing[0]); for (const sg of [1, -1]) mbBox(M, tp[0] - .3, tp[0] + .12, tp[1] * sg - .13, tp[1] * sg + .13, zw - .05, zw + .13, -.9); }
   return M;
 }
 // 精细飞机的附件实例：外挂弹药（按 airmdl.js 记的消耗逐个去掉）、主旋翼（转）、螺旋桨（绕机身轴转）；still：停放，不转
@@ -1471,7 +1646,8 @@ function v3mInit(gl) {
 }
 // 网格上传（每种模型只建一次）
 function v3mGet(key, build) {
-  let m = V3M.mesh.get(key);
+  const ck = v3mQKey(key);
+  let m = V3M.mesh.get(ck);
   if (m) return m;
   const gl = V3M.gl;
   let MB;
@@ -1479,7 +1655,7 @@ function v3mGet(key, build) {
   m = { tn: MB.t.length / 10, ln: MB.l.length / 10, tb: null, lb: null };
   if (m.tn) { m.tb = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, m.tb); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(MB.t), gl.STATIC_DRAW); }
   if (m.ln) { m.lb = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, m.lb); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(MB.l), gl.STATIC_DRAW); }
-  V3M.mesh.set(key, m);
+  V3M.mesh.set(ck, m);
   return m;
 }
 // 停在甲板 / 地面上（或在地面滑行）的飞机：精细模型放下起落架（轮子着地），外翼折起程度、座舱盖开度按四档取模型；外挂、旋翼、螺旋桨另外实例化
@@ -1533,6 +1709,12 @@ function v3mPalette(gl) {
 }
 
 // 每帧：收集贴图覆盖范围内看得见的单位，按模型分批实例化画完
+// 被击落飞机的残骸（carrier.js S.air.wrecks、eair.js wr）：沿原航向往前冲，从被击中的高度加速栽下来，T 秒落地；u 下落进度
+function v3WreckAt(w, age, T) {
+  const x = w.x + Math.cos(w.h) * w.spd * age, y = w.y + Math.sin(w.h) * w.spd * age, u = clamp(age / T, 0, 1);
+  const gz = Math.max(v3Ht(clamp(x, 0, W - 1), clamp(y, 0, H - 1)), -2.6), z0 = v3AltZ(w.x, w.y, Math.max(0, clamp(w.alt ?? 1, 0, 1) - .05) * V3_AIR, -2.6, 1.5);
+  return { x, y, z: Math.max(gz + .5, z0 + (gz - z0) * u * u), u };
+}
 function v3Units(C, box) {
   if (!S || !V3.gl) return;
   const gl = V3.gl;
@@ -1540,7 +1722,7 @@ function v3Units(C, box) {
   if (!V3M.ok) return;
   for (const L of V3M.inst.values()) L.d.length = 0;
   const [bx, by, bw, bh] = box, inB = (x, y, m = 40) => x > bx - m && x < bx + bw + m && y > by - m && y < by + bh + m;
-  const spec = specAll() || (typeof R === 'object' && (R.eye === 'all' || R.eye === 'both' || R.eye === 'e')), near = !!R.m3dNear, t = performance.now() / 1000;   // near：画得出单兵的距离就用立体士兵（view3d.js）
+  const spec = specAll() || (typeof R === 'object' && (R.eye === 'all' || R.eye === 'both' || R.eye === 'e')), t = performance.now() / 1000;
   const seen = (x, y) => inVision(x, y);
   // 车辆：车体 + 炮塔（随瞄准转）+ 炮塔后的雷达（转）
   for (const v of S.veh || []) {
@@ -1548,7 +1730,7 @@ function v3Units(C, box) {
     if (v.side === 'e' && !v.dead && !seen(v.x, v.y)) continue;
     const Mm = typeof rlModelOf === 'function' ? rlModelOf(v) : null;
     if (!Mm || !RLM[Mm.key]) continue;
-    const side = v.side === 'e' ? 'e' : 'p', bk = Mm.key + ':' + side, sd = v.dead ? 2 : side === 'e' ? 1 : 0, k = vehSp(v).len / Mm.L, z = v3Ht(v.x, v.y), h = v.heading || 0;
+    const side = v.side === 'e' ? 'e' : 'p', bk = Mm.key + ':' + side + (v3mHi() ? ':hi' : ':std'), sd = v.dead ? 2 : side === 'e' ? 1 : 0, k = vehSp(v).len / Mm.L, z = v3Ht(v.x, v.y), h = v.heading || 0;
     let V = V3M.veh.get(bk);
     if (!V) { V = v3mVehicle(Mm.key, side); V3M.veh.set(bk, V); }
     // 贴地：车体按脚下坡度俯仰、侧倾（上坡车头抬起、横坡车身侧倾）；炮塔装在倾斜的车体上，按它自己的朝向取同一个坡面的姿态
@@ -1562,29 +1744,35 @@ function v3Units(C, box) {
     }
   }
   // 步兵（画得出单兵的距离都是立体模型，地面贴图里不再画平的小人）：三人按二维画面的三角站位，按兵种建模、按动作选姿态帧（manim.js：走 / 跑四帧、跪射、卧倒、匍匐），开火时枪口焰
-  if (near) for (const q of S.teams) {
+  // 远近都是立体的：离镜头 180 米外换低模，再远一点略放大（远看不至于缩成看不见的一个点；三人的间距一起放大，不挤成一团）
+  const E3 = C.E, lod = (x, y, z) => { const d = Math.hypot(x - E3[0], y + E3[1], z - E3[2]); return { lo: d > 180, k: clamp(d / 700, 1, 1.6) }; };
+  for (const q of S.teams) {
     if (!q.men.length || q.ride || q.boarded || !inB(q.x, q.y) || (q.side === 'e' && !seen(q.x, q.y))) continue;
     const f = typeof faceDraw === 'function' ? faceDraw(q) : faceOf(q), c = Math.cos(f + 1.57), s = Math.sin(f + 1.57), sd = q.side === 'e' ? 1 : 0, T = typeof manTeam === 'function' ? manTeam(q) : null;
+    const Lq = lod(q.x, q.y, v3Ht(q.x, q.y)), ks = Lq.k;
     q.men.forEach((role, i) => {
       if (i > 2) return;
-      let mx = q.x + MO[i][0] * c - MO[i][1] * s, my = q.y + MO[i][0] * s + MO[i][1] * c;
+      let mx = q.x + (MO[i][0] * c - MO[i][1] * s) * ks, my = q.y + (MO[i][0] * s + MO[i][1] * c) * ks;
       const bo = typeof bldOut === 'function' && bldOut(mx, my, .5);
       if (bo) [mx, my] = bo;
       const kind = typeof manKind === 'function' ? manKind(q, i, role) : role, P = T ? manPose3(q, T, i, kind) : { p: q.prone ? 'pr' : 'st', fire: null }, z = v3Ht(mx, my);
-      const sof = !!P.sof;
-      v3mAdd('man:' + kind + (sof ? 's' : '') + ':' + P.p, () => v3mMan(kind, P.p, { sof }), mx, my, z, f, V3_MAN, sd);
+      const sof = !!P.sof, K = V3_MAN * ks;
+      if (Lq.lo) v3mAdd('manf:' + kind + ':' + P.p, () => v3mMan(kind, P.p, { lo: true }), mx, my, z, f, K, sd);
+      else v3mAdd('man:' + kind + (sof ? 's' : '') + ':' + P.p, () => v3mMan(kind, P.p, { sof }), mx, my, z, f, K, sd);
       if (P.fire != null && P.fire < .07) {   // 枪口焰：站姿在胸高、跪姿低一些、卧倒贴地（按姿态高度 L 插值）
-        const Lp = P.L ?? (P.p === 'pr' || P.p[0] === 'c' ? 2 : P.p === 'kn' ? 1 : 0), low = Lp > 1.5, L = (low ? 1.35 : kind === 'mg' ? 1.45 : 1.1) * V3_MAN, h = (Lp <= 1 ? lerp(1.32, .9, Lp) : lerp(.9, .2, Lp - 1)) * V3_MAN;
-        v3mAdd('mflash', v3mFlash, mx + Math.cos(f) * L, my + Math.sin(f) * L, z + h, f, V3_MAN, sd);
+        const Lp = P.L ?? (P.p === 'pr' || P.p[0] === 'c' ? 2 : P.p === 'kn' ? 1 : 0), low = Lp > 1.5, L = (low ? 1.35 : kind === 'mg' ? 1.45 : 1.1) * K, h = (Lp <= 1 ? lerp(1.32, .9, Lp) : lerp(.9, .2, Lp - 1)) * K;
+        v3mAdd('mflash', v3mFlash, mx + Math.cos(f) * L, my + Math.sin(f) * L, z + h, f, K, sd);
       }
     });
   }
   // 阵亡的遗体（manim.js）：倒地后躺在原地，约一分钟后消失
-  if (near && typeof MANV === 'object' && MANV.S === S) for (const d of MANV.dead) {
+  if (typeof MANV === 'object' && MANV.S === S) for (const d of MANV.dead) {
     if (S.t - d.t0 < .3 || S.t - d.t0 > 60 || !inB(d.x, d.y) || (d.side === 'e' && !spec && !seen(d.x, d.y))) continue;
-    v3mAdd('man:' + d.kind + ':dead', () => v3mMan(d.kind, 'dead'), d.x, d.y, v3Ht(d.x, d.y), d.a + d.tw, V3_MAN, 2);
+    const z = v3Ht(d.x, d.y), Ld = lod(d.x, d.y, z);
+    if (Ld.lo) v3mAdd('manf:' + d.kind + ':dead', () => v3mMan(d.kind, 'dead', { lo: true }), d.x, d.y, z, d.a + d.tw, V3_MAN * Ld.k, 2);
+    else v3mAdd('man:' + d.kind + ':dead', () => v3mMan(d.kind, 'dead'), d.x, d.y, z, d.a + d.tw, V3_MAN, 2);
   }
-  // 舰艇：位置、航向、远景放大系数跟二维画面一致（ships.js 的姿态缓存）
+  // 舰艇：位置、航向跟二维画面一致（ships.js 的姿态缓存；3D 里不放大）
   const pose = (key, o, hd) => { const P = typeof SHIPV === 'object' && SHIPV.pose[key]; return P && dist(P.x, P.y, o.x, o.y) < 60 ? P : { x: o.x, y: o.y, h: hd, k: 1 }; };
   for (const sh of S.ships) {
     if (!alive(sh) || !inB(sh.x, sh.y, 80)) continue;
@@ -1620,6 +1808,11 @@ function v3Units(C, box) {
       if (P && (p.cpo || 0) > .3) { const L = cvLadder(p), [x, y] = at(L[0], L[1]); v3mAdd('ladder', v3mLadder, x, y, top, p.heading + Math.PI / 2, sz / 21, 0); }
     }
     for (const o of typeof cvShooters === 'function' ? cvShooters(cv, live) : []) { const [x, y] = at(o.u, o.v), pose = o.go ? 'kn' : 'pt'; v3mAdd('man:deck:' + pose, () => v3mMan('deck', pose), x, y, top, h + o.a, V3_PIL, 0); }   // 弹射官
+    if (v3mHi() && !lhd) {   // Ultra：甲板牵引车、弹药车、地勤人员，避开弹射器/着舰区
+      for (const [key, build, u, v, a0] of [['tractor', v3mDeckTractor, 92, -24, -.25], ['tractor', v3mDeckTractor, 30, 24, 2.75], ['cart', v3mDeckCart, -28, 21, .15], ['cart', v3mDeckCart, -108, 18, .5]]) { const [x, y] = at(u, v); v3mAdd('cvsvc:' + key, build, x, y, top + .05, h + a0, 1, 3); }
+      const crew = [[70, -13, 0, 'pt'], [58, 13, .2, 'kn'], [-95, 23, -2.6, 'st'], [-122, 24, -2.8, 'pt'], [5, 31, 1.4, 'st']];
+      for (const [u, v, a0, pose] of crew) { const [x, y] = at(u, v); v3mAdd('man:deck:' + pose, () => v3mMan('deck', pose), x, y, top, h + a0, V3_PIL, 0); }
+    }
   }
   for (const e of S.eships || []) if (!e.dead && inB(e.x, e.y, 80) && (spec || seen(e.x, e.y) || (S.t - (e.det ?? -99) < 4 && !(typeof nvEsmOnly === 'function' && nvEsmOnly(e))))) { const C0 = (typeof NV_CLS === 'object' && NV_CLS[e.cls]) || { L: 46, B: 9 }; v3mAdd('es:' + e.cls, () => v3mEShip(e.cls, C0.L, C0.B), e.x, e.y, -2.6, e.heading ?? -1.57, 1, 1); }
   for (const s of S.subs || []) if (!s.dead && inB(s.x, s.y) && (spec || (typeof asSubSeen === 'function' && asSubSeen(s)))) v3mAdd('sub', v3mSub, s.x, s.y, -4.2, s.heading || 0, 1, 1);
@@ -1694,14 +1887,15 @@ function v3Units(C, box) {
     for (let i = 0; i < n; i++) { const u = (i + .5) / n, x = lerp(w.x0, w.x1, u), y = lerp(w.y0, w.y1, u), c = !!(w.cut && i % 3 === 1); v3mAdd(c ? 'wire:x' : 'wire', () => v3mWire(c), x, y, v3Ht(x, y), a, L / n / 6, 1); }
   }
   if (S.armor && S.armor.length && typeof RLM === 'object' && RLM.m1117) {   // 守方轮式装甲车（ai3.js）：借 M1117 的立体模型
-    let V = V3M.veh.get('m1117:e');
-    if (!V) { V = v3mVehicle('m1117', 'e'); V3M.veh.set('m1117:e', V); }
+    const mbk = 'm1117:e' + (v3mHi() ? ':hi' : ':std');
+    let V = V3M.veh.get(mbk);
+    if (!V) { V = v3mVehicle('m1117', 'e'); V3M.veh.set(mbk, V); }
     const k = (typeof A3_LEN === 'number' ? A3_LEN : 18) / RLM.m1117.L;
     for (const a of S.armor) {
       if (!inB(a.x, a.y) || !(spec || seen(a.x, a.y)) || (a.dead && S.t - (a.deadT ?? 0) > 120)) continue;
       const z = v3Ht(a.x, a.y), h = a.heading || 0, sd = a.dead ? 2 : 1;
-      v3mAdd('vh:m1117:e', () => V.hull, a.x, a.y, z, h, k, sd);
-      if (V.tur.t.length) { const c = Math.cos(h), sn = Math.sin(h); v3mAdd('vt:m1117:e', () => V.tur, a.x + (V.piv[0] * c - V.piv[1] * sn) * k, a.y + (V.piv[0] * sn + V.piv[1] * c) * k, z, a.dead ? h + .6 : (a.aim ?? h), k, sd); }
+      v3mAdd('vh:' + mbk, () => V.hull, a.x, a.y, z, h, k, sd);
+      if (V.tur.t.length) { const c = Math.cos(h), sn = Math.sin(h); v3mAdd('vt:' + mbk, () => V.tur, a.x + (V.piv[0] * c - V.piv[1] * sn) * k, a.y + (V.piv[0] * sn + V.piv[1] * c) * k, z, a.dead ? h + .6 : (a.aim ?? h), k, sd); }
     }
   }
   if (S.trk && S.trk.list) for (const tr of S.trk.list) if ((tr.ph !== 'idle' || tr.dead) && inB(tr.x, tr.y)) { const [tp, trl] = v3Pose(v3Grad(tr.x, tr.y, 3, 'trk' + tr.id), tr.h || 0); v3mAdd('truck', () => v3mTruck('cargo'), tr.x, tr.y, v3Ht(tr.x, tr.y), tr.h || 0, 1, tr.dead ? 2 : 0, trl, tp); }   // 补给卡车
@@ -1768,6 +1962,15 @@ function v3Units(C, box) {
     plane(p, p.heading, 0, key, sz, p.bank);
   }
   const EA_K = { ga: ['a10', 18], heli: ['ah64', 16], uh60: ['uh60', 17], c17: ['c17', 30], ftr: ['f35', 17], ftrb: ['f35b', 17], mq9: ['mq9', 18], f22: ['f22', 18], b2: ['b2', 34], p8: ['p8', 26] };
+  // 被击落的飞机：烧黑的机体（2：残骸色）从被击中的高度翻滚着、机头朝下栽下去（火球与拖着的黑烟在 v3fx.js）
+  const wreck = (w, T, key, sz) => {
+    const age = S.t - w.t;
+    if (age < 0 || age > T) return;
+    const P = v3WreckAt(w, age, T), sp = (w.t * 7.31) % 1 < .5 ? 1 : -1;
+    if (inB(P.x, P.y, 220)) v3mAdd('pl:' + key, () => v3mPlane(key), P.x, P.y, P.z, w.h + age * .5 * sp, sz / 21, 2, age * 4.2 * sp, -.2 - P.u * .95);
+  };
+  for (const w of (S.air && S.air.wrecks) || []) { const key = typeof airSilKey === 'function' ? airSilKey(w.kind, w.v) : 'j35'; wreck(w, 2.2, key, (typeof airMdl === 'function' && airMdl(w.kind, w.v).size) || 15); }
+  if (S.eair) for (const w of S.eair.wr || []) if (spec || seen(w.x, w.y)) { const [key, sz] = EA_K[w.type] || ['f35', 17]; wreck(w, 2, key, sz); }
   if (S.eair) for (const a of S.eair.fly) if (!a.dead && isFinite(a.x) && (spec || a.pv || seen(a.x, a.y)) && inB(a.x, a.y, 220)) {
     const [key, sz] = EA_K[a.type] || ['f35', 17];
     if ((a.ph === 'vto' || a.ph === 'vl') && typeof AIRD === 'object' && AIRD[key] && AIRD[key].lift) {   // F-35B 垂直起降：放下起落架、升力风扇舱门打开
@@ -1816,7 +2019,7 @@ function v3Units(C, box) {
   gl.useProgram(V3M.pr);
   gl.uniformMatrix4fv(V3M.u.uM, false, C.M);
   gl.uniform3f(V3M.u.uEye, C.E[0], C.E[1], C.E[2]);
-  gl.uniform2f(V3M.u.uFog, C.D * 1.3, C.D * 2.8);
+  gl.uniform2f(V3M.u.uFog, ...(typeof v3FogR === 'function' ? v3FogR(C) : [C.D * 1.3, C.D * 2.8]));
   gl.uniform3f(V3M.u.uBg, .004, .02, .011);
   v3mPalette(gl);
   const A = V3M.a, X = V3M.ext;

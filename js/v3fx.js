@@ -4,7 +4,7 @@
 //   步兵曳光弹、坦克炮弹在枪口 / 炮口的高度平直飞过去（穿甲弹白热、榴弹琥珀色、喷火是一股宽的橙色火舌）；
 //   导弹（战术导弹、防空导弹、反舰导弹、精确制导炸弹）按各自的飞行高度飞，尾焰亮点加一条渐暗的尾迹；直升机的火箭、反坦克导弹从机上射向地面
 // 画法：面向镜头的发光带（宽度按世界单位），加法混合、不写深度，被地形、房屋、车辆挡住的部分不画；3D 时平面贴图里不再画这些弹道（R.fx3d）
-const V3F = { ok: false, tried: false, pr: null, a: {}, u: {}, buf: null, trail: new Map(), S: null, puff: [], seen: new Set() };   // puff：发射点的点火闪光与烟团（只在画面里记）
+const V3F = { ok: false, tried: false, pr: null, a: {}, u: {}, buf: null, trail: new Map(), S: null, puff: [], seen: new Set(), ex: [], exSeen: new WeakSet() };   // ex：爆炸（火球、碎片、烟）   // puff：发射点的点火闪光与烟团（只在画面里记）
 const V3F_VS = `attribute vec3 p; attribute vec4 c; attribute vec2 q;
 uniform mat4 uM; varying vec4 vC; varying vec2 vQ;
 void main() { vC = c; vQ = q; gl_Position = uM * vec4(p, 1.); }`;
@@ -89,7 +89,7 @@ function v3Fx(C) {
   const gl = V3.gl;
   if (!V3F.tried) v3fxInit(gl);
   if (!V3F.ok) return;
-  if (V3F.S !== S) { V3F.S = S; V3F.trail.clear(); V3F.puff.length = 0; V3F.seen.clear(); if (V3F.vo) V3F.vo.clear(); }
+  if (V3F.S !== S) { V3F.S = S; V3F.trail.clear(); V3F.puff.length = 0; V3F.seen.clear(); V3F.ex.length = 0; V3F.exSeen = new WeakSet(); if (V3F.vo) V3F.vo.clear(); }
   const out = [], E = C.E, box = V3.box || [0, 0, W, H], inB = (x, y, m = 200) => x > box[0] - m && x < box[0] + box[2] + m && y > box[1] - m && y < box[1] + box[3] + m;
   const spec = specAll() || (typeof R === 'object' && (R.eye === 'all' || R.eye === 'both' || R.eye === 'e'));
   const seen = (x, y) => spec || inVision(x, y);
@@ -177,6 +177,54 @@ function v3Fx(C) {
       v3fSpark(out, C, v3fP(o.x + ex, o.y + ey, o.z + 1 + a * (1.2 + i * .35) * k), (3 + a * 4.5) * k, [c[0] * .6, c[1] * .6, c[2] * .6, .13 * (1 - a / 4.5)]);   // 加法混合：几团叠在一起也不发白
     }
   }
+  // —— 爆炸：空中（击落飞机）在被击中的高度炸开，地面的从地上腾起——白热闪光、翻滚扩散的火球、四散的碎片（受重力往下掉）、往上飘的烟 ——
+  for (const f of S.fx) if ((f.kind === 'boom' || f.kind === 'b2') && !V3F.exSeen.has(f)) {
+    V3F.exSeen.add(f);
+    if (f.life > .3) continue;   // 打开 3D 之前就炸了的不补
+    const air = !!f.air, z = air ? v3AltZ(f.x, f.y, Math.max(0, clamp(f.alt ?? 1, 0, 1) - .05) * V3_AIR, -2.6, 1.5) : Math.max(g(f.x, f.y), -2.6);
+    V3F.ex.push({ x: f.x, y: f.y, z, r: f.r * (f.kind === 'b2' ? 1.4 : 1), t0: S.t - f.life, air, side: f.side, sd: (f.x * 13.7 + f.y * 7.1) % 6.283 });
+  }
+  V3F.ex = V3F.ex.filter(o => S.t - o.t0 < 4);
+  for (const o of V3F.ex) {
+    if (!inB(o.x, o.y, 300)) continue;   // 与平面画面一样：爆炸都画（看得见火光）
+    const a = S.t - o.t0, r = clamp(o.r, 6, 90), up = o.air ? 0 : 1;
+    if (a < .18) v3fSpark(out, C, v3fP(o.x, o.y, o.z + r * .3 * up), r * (1.1 + a * 3), [1, .95, .8, 1 - a / .18]);   // 白热闪光
+    if (a < 1.3) for (let i = 0; i < 9; i++) {   // 火球：几团橙红的火往外翻滚、膨胀，地面的往上腾
+      const an = o.sd + i * 2.39, el = (i % 3 - 1) * .6, d = r * (.12 + .5 * Math.sqrt(a / 1.3)) * (.6 + (i * 37 % 10) / 20);
+      const p = v3fP(o.x + Math.cos(an) * Math.cos(el) * d, o.y + Math.sin(an) * Math.cos(el) * d, o.z + (Math.sin(el) * d + up * (r * .25 + a * r * .55)) * (o.air ? 1 : .9));
+      const k = 1 - a / 1.3, hot = a < .35;
+      v3fSpark(out, C, p, r * (.35 + .35 * a), hot ? [1, .75, .35, .75 * k] : [1, .42 + .2 * k, .12, .55 * k]);
+    }
+    if (a < 1.6) for (let i = 0; i < 12; i++) {   // 碎片：亮点四散，受重力往下掉
+      const an = o.sd * 1.7 + i * 2.1, el = .25 + (i * 53 % 10) / 14, v = r * (1.4 + (i * 29 % 10) / 6), c = Math.cos(el) * v * a, zz = Math.sin(el) * v * a - 4.9 * a * a * (o.air ? 3 : 4);
+      const zp = Math.max(o.air ? -1e9 : o.z, o.z + zz);
+      v3fSpark(out, C, v3fP(o.x + Math.cos(an) * c, o.y + Math.sin(an) * c, zp), Math.max(.5, r * .045), [1, .7, .3, .9 * (1 - a / 1.6)]);
+    }
+    if (a > .25) for (let i = 0; i < 6; i++) {   // 烟：往上飘、扩散、变淡（加法混合下用暗灰，叠起来也不发白）
+      const an = o.sd + i * 1.05, d = r * (.3 + a * .25), sm = V3F_COL.smoke;
+      v3fSpark(out, C, v3fP(o.x + Math.cos(an) * d, o.y + Math.sin(an) * d, o.z + r * .4 * up + a * (2.5 + i * .6) * (o.air ? .6 : 1.4)), r * (.45 + a * .28), [sm[0] * .55, sm[1] * .55, sm[2] * .55, .16 * (1 - a / 4)]);
+    }
+  }
+  // —— 被击落的飞机往下栽：机身上的火、身后拖着的一条越来越宽的黑烟（残骸本身是 v3units.js 的立体模型）——
+  const wtr = (w, T) => {
+    const age = S.t - w.t;
+    if (age < 0 || age > T) return;
+    const P = v3WreckAt(w, age, T);
+    if (!inB(P.x, P.y, 300)) return;
+    let prev = null;
+    for (let j = 14; j >= 0; j--) {
+      const a2 = age - j * .07;
+      if (a2 < 0) continue;
+      const Q = v3WreckAt(w, a2, T), q = v3fP(Q.x, Q.y, Q.z), k = j / 14, sm = V3F_COL.smoke;
+      if (prev) v3fRib(out, E, prev, q, 2.5 + k * 9, [sm[0] * .7, sm[1] * .7, sm[2] * .7, .28 * (1 - k)], [sm[0] * .7, sm[1] * .7, sm[2] * .7, .3 * (1 - k + .07)]);
+      prev = q;
+    }
+    const p = v3fP(P.x, P.y, P.z);
+    v3fSpark(out, C, p, 4.5 + Math.sin(S.t * 37 + w.t) * .8, [1, .55, .15, .8]);   // 机身上烧着的火
+    v3fSpark(out, C, p, 2, [1, .9, .6, .9]);
+  };
+  for (const w of (S.air && S.air.wrecks) || []) wtr(w, 2.2);
+  if (S.eair) for (const w of S.eair.wr || []) if (seen(w.x, w.y)) wtr(w, 2);
   // —— 直升机的火箭、反坦克导弹（从机上射向地面）——
   if (S.eair) for (const p of S.eair.proj || []) {
     if (p.t < 0 || p.done || (!spec && !inVision(p.tx, p.ty) && !inVision(p.x0, p.y0)) || !inB(p.tx, p.ty, 100)) continue;

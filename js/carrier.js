@@ -910,8 +910,8 @@ function airLost(p, msg, ditch) {
   if (w) w.state = 'lost';
   if (ditch) S.fx.push({ kind: 'flash', x: p.x, y: p.y, r: 12, life: 0, max: .8, side: 'p' });
   else {
-    S.fx.push({ kind: 'boom', x: p.x, y: p.y, r: 22, life: 0, max: 1, side: 'p' });
-    S.air.wrecks.push({ x: p.x, y: p.y, h: p.heading, spd: Math.min(80, p.spd * .4), kind: p.kind, v: p.v || null, t: S.t, hit: false });
+    S.fx.push({ kind: 'boom', x: p.x, y: p.y, r: 22, life: 0, max: 1, side: 'p', air: 1, alt: p.alt ?? 1 });   // air / alt：3D 里在空中这个高度炸开（v3fx.js）
+    S.air.wrecks.push({ x: p.x, y: p.y, h: p.heading, spd: Math.min(80, p.spd * .4), kind: p.kind, v: p.v || null, t: S.t, hit: false, alt: p.alt ?? 1 });
   }
   if (msg) log(msg, 'bad', null, 0, { x: p.x, y: p.y });
 }
@@ -1441,7 +1441,7 @@ function drawPlanes(time) {
   // 被击落：翻滚、拖着黑烟坠落
   for (const w of (S.air && S.air.wrecks) || []) {
     const age = S.t - w.t, u = clamp(age / 2.2, 0, 1);
-    if (age < 0 || age > 2.2) continue;
+    if (age < 0 || age > 2.2 || R.m3d) continue;   // 3D：立体残骸从空中栽下来（v3units.js、v3fx.js）
     for (let j = 1; j <= 6; j++) {
       const a2 = age - j * .09;
       if (a2 < 0) break;
