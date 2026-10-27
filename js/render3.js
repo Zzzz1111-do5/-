@@ -87,6 +87,7 @@ function drawFx() {
   const ctx = R.ctx;
   for (const f of S.fx) {
     if (!inView(f.x, f.y, f.r * 2 + 10)) continue;
+    if (R.fx3d && (f.kind === 'boom' || f.kind === 'b2') && f.air) continue;   // 3D：空中爆炸在空中立体地画（v3fx.js），地面上不留一圈
     const u = f.life / f.max;
     if (f.kind === 'flash') {
       ctx.fillStyle = rgba(f.side === 'e' ? COL.enemy : COL.g, (1 - u) * .9);
@@ -96,7 +97,7 @@ function drawFx() {
     ctx.strokeStyle = rgba(COL.amber, (1 - u) * .75); ctx.lineWidth = px(1.2);
     ctx.beginPath(); ctx.arc(f.x, f.y, f.r * (.25 + .75 * Math.sqrt(u)), 0, 7); ctx.stroke();
     if (u < .3) { ctx.fillStyle = rgba('#fff3d6', (.3 - u) * 1.6); ctx.beginPath(); ctx.arc(f.x, f.y, f.r * .4, 0, 7); ctx.fill(); }
-    if (u > .7) continue;
+    if (u > .7 || R.fx3d) continue;   // 3D：火球、飞溅的碎片立体地画（v3fx.js），贴图里只留地面上的冲击波圈和闪光
     if (!R.fig) {
       if (f.r < 12) continue;
       ctx.font = font(7); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';

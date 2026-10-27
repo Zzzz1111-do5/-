@@ -933,8 +933,8 @@ function eaLost(a, how) {
   if (a.type === 'b2' && typeof b2Down === 'function') b2Down(a);   // B-2A 机群少一架（b2.js）   // 空降运输机：机上的人员装备一起损失
   const E = S.eair, w = E && E.wing.find(w => w.id === a.wid);
   if (w) w.state = 'lost';
-  S.fx.push({ kind: 'boom', x: a.x, y: a.y, r: 20, life: 0, max: 1, side: 'e' });
-  if (E) E.wr.push({ x: a.x, y: a.y, h: a.heading, spd: Math.min(70, a.spd * .4 + 10), t: S.t, type: a.type, hit: false });
+  S.fx.push({ kind: 'boom', x: a.x, y: a.y, r: a.type === 'b2' || a.type === 'c17' ? 34 : 20, life: 0, max: 1, side: 'e', air: 1, alt: a.alt ?? 1 });   // air / alt：3D 里在空中这个高度炸开（v3fx.js）
+  if (E) E.wr.push({ x: a.x, y: a.y, h: a.heading, spd: Math.min(70, a.spd * .4 + 10), t: S.t, type: a.type, hit: false, alt: a.alt ?? 1 });
   eaStat('eaLost');
   const nm = EA_SPEC[a.type].name, by = { manpads: '便携防空导弹', sam: '舰空导弹', samv: '弹炮防空车', aa: '防空车机炮', mg: '机枪火力', ciws: '舰上近防炮', aam: '我方战斗机空空导弹', aaml: '歼-36 的霹雳-17 远程空空导弹', gun: '我方战斗机机炮', nuke: '核爆冲击波' }[how] || '防空火力';
   log(`${by}击落敌${nm}`, 'good', null, 0, a);
@@ -1127,7 +1127,7 @@ function eaDraw(time) {
   // 坠落残骸：翻滚、拖烟
   for (const w of E.wr) {
     const age = S.t - w.t, x = w.x + Math.cos(w.h) * w.spd * age, y = w.y + Math.sin(w.h) * w.spd * age;
-    if (!spec && !inVision(x, y)) continue;
+    if ((!spec && !inVision(x, y)) || R.m3d) continue;   // 3D：立体残骸（v3units.js、v3fx.js）
     ctx.strokeStyle = rgba(COL.smoke, .35); ctx.lineWidth = px(3); ctx.beginPath(); ctx.moveTo(w.x, w.y); ctx.lineTo(x, y); ctx.stroke();
     if (typeof drawAircraft === 'function') drawAircraft(ctx, x, y, w.h + age * 5, eaSil(w.type), 14 * (1 - age * .2), COL.enemy, .6 * (1 - age / 2.4), 0, lw);
   }
