@@ -38,9 +38,10 @@ function v3oCamera() {
   const x = v3Norm(v3Cross([0, 0, 1], z)), y = v3Cross(z, x);
   const view = new Float32Array([x[0], y[0], z[0], 0, x[1], y[1], z[1], 0, x[2], y[2], z[2], 0, -v3Dot(x, E), -v3Dot(y, E), -v3Dot(z, E), 1]);
   const alt = V3O.z - v3Ht(V3O.x, V3O.y), D = clamp(alt * 5, 420, 2400);   // D：雾与贴图范围的尺度（高处看得远）
-  const asp = CAM.vw / Math.max(1, CAM.vh), fo = 1 / Math.tan(V3_FOV / 2), n = 1.2, fa = D * 9, nf = 1 / (n - fa);
+  const rd = v3RD(), fog = [D * 1.3 * rd, D * 2.8 * rd];   // 渲染距离设置同样放大能见距离
+  const asp = CAM.vw / Math.max(1, CAM.vh), fo = 1 / Math.tan(V3_FOV / 2), n = 1.2, fa = Math.max(D * 9, fog[1] * 1.5), nf = 1 / (n - fa);
   const proj = new Float32Array([fo / asp, 0, 0, 0, 0, fo, 0, 0, 0, 0, (fa + n) * nf, -1, 0, 0, 2 * fa * n * nf, 0]);
-  return (V3.cam = { E, x, y, z, D, asp, M: v3Mul(proj, view) });
+  return (V3.cam = { E, x, y, z, D, rd, fog, asp, M: v3Mul(proj, view) });
 }
 // 每帧（view3d.js v3Draw 开头）：按住的键移动，画面中心跟着观察点（贴图、细节档都按它）
 function v3oStep(now) {

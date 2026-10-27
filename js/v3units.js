@@ -1796,7 +1796,7 @@ function v3Units(C, box) {
   gl.useProgram(V3M.pr);
   gl.uniformMatrix4fv(V3M.u.uM, false, C.M);
   gl.uniform3f(V3M.u.uEye, C.E[0], C.E[1], C.E[2]);
-  gl.uniform2f(V3M.u.uFog, C.D * 1.3, C.D * 2.8);
+  gl.uniform2f(V3M.u.uFog, ...(typeof v3FogR === 'function' ? v3FogR(C) : [C.D * 1.3, C.D * 2.8]));
   gl.uniform3f(V3M.u.uBg, .004, .02, .011);
   v3mPalette(gl);
   const A = V3M.a, X = V3M.ext;

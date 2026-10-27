@@ -552,7 +552,10 @@ function v3Init() {
 //   滚轮朝鼠标指着的地方推近 / 拉远；左键拖动平移（地面跟着手走）；小地图、编队栏双击等「把镜头移到某处」保持当前朝向和距离平移过去。
 //   画面中心（CAM.x, CAM.y）与缩放 CAM.z 每帧由镜头推算（视线落地点、离地高度），贴图范围、细节档、平面地图的切换都照旧按它们
 // 渲染距离（设置「3D 渲染距离」）：雾、远景贴图、远裁剪面一起放远 / 拉近
-const v3RD = () => clamp(+(typeof SETTINGS === 'object' && SETTINGS && SETTINGS.rdist) || 1, .5, 3);
+const v3RD = () => clamp(+(typeof SETTINGS === 'object' && SETTINGS && SETTINGS.rdist) || 1, .5, 4);
+// 能见距离（雾的起点、终点）：按镜头尺度 D，再乘玩家设的渲染距离（设置里的「3D 渲染距离」、3D 里 [ ] 键）；贴近地面时也至少看得到 600 × 倍数 米
+const v3Fog = (D, rd = v3RD()) => { const f1 = Math.max(D * 2.8, 600) * rd; return [f1 * .46, f1]; };
+const v3FogR = C => C.fog || [C.D * 1.3, C.D * 2.8], v3FogE = C => v3FogR(C)[1];
 // 从「注视点 + 距离 + 俯角 + 方位」（原来的环绕参数）换算成自由镜头：进 3D 时画面和平面地图一致
 function v3FcFromOrbit(tx, ty, tz, D, th, ps) {
   const x = tx + D * Math.sin(th) * Math.sin(ps), y = ty + D * Math.sin(th) * Math.cos(ps), z = tz + D * Math.cos(th);
@@ -574,10 +577,10 @@ function v3FcCamera() {
   const F = V3.fc || (v3FcInit(), V3.fc), cp = Math.cos(F.pitch), f = [cp * Math.cos(F.yaw), -cp * Math.sin(F.yaw), Math.sin(F.pitch)];   // 视线方向（GL 坐标）
   const E = [F.x, -F.y, F.z], z = [-f[0], -f[1], -f[2]], x = v3Norm(v3Cross([0, 0, 1], z)), y = v3Cross(z, x);
   const view = new Float32Array([x[0], y[0], z[0], 0, x[1], y[1], z[1], 0, x[2], y[2], z[2], 0, -v3Dot(x, E), -v3Dot(y, E), -v3Dot(z, E), 1]);
-  const D = clamp(F.d || 600, 80, 5000), rd = v3RD();
-  const asp = CAM.vw / Math.max(1, CAM.vh), fo = 1 / Math.tan(V3_FOV / 2), n = clamp(D * .012, .8, 25), fa = D * 9 * rd, nf = 1 / (n - fa);
+  const D = clamp(F.d || 600, 80, 5000), rd = v3RD(), fog = v3Fog(D, rd);
+  const asp = CAM.vw / Math.max(1, CAM.vh), fo = 1 / Math.tan(V3_FOV / 2), n = clamp(D * .012, .8, 25), fa = Math.max(D * 9, fog[1] * 1.5), nf = 1 / (n - fa);
   const proj = new Float32Array([fo / asp, 0, 0, 0, 0, fo, 0, 0, 0, 0, (fa + n) * nf, -1, 0, 0, 2 * fa * n * nf, 0]);
-  return (V3.cam = { E, x, y, z, D, rd, asp, M: v3Mul(proj, view) });
+  return (V3.cam = { E, x, y, z, D, rd, fog, asp, M: v3Mul(proj, view) });
 }
 // 每帧：转头缓动、按键飞行、外部「移镜头」的平移、不钻地；再推算画面中心与缩放
 function v3FcStep(dt) {
@@ -627,7 +630,7 @@ function v3Camera() {
   const view = new Float32Array([x[0], y[0], z[0], 0, x[1], y[1], z[1], 0, x[2], y[2], z[2], 0, -v3Dot(x, E), -v3Dot(y, E), -v3Dot(z, E), 1]);
   const asp = CAM.vw / Math.max(1, CAM.vh), f = 1 / Math.tan(V3_FOV / 2), n = D * .03, fa = D * 9, nf = 1 / (n - fa);
   const proj = new Float32Array([f / asp, 0, 0, 0, 0, f, 0, 0, 0, 0, (fa + n) * nf, -1, 0, 0, 2 * fa * n * nf, 0]);
-  return (V3.cam = { E, x, y, z, D, rd: 1, asp, M: v3Mul(proj, view) });
+  return (V3.cam = { E, x, y, z, D, rd: 1, fog: [D * 1.3, D * 2.8], asp, M: v3Mul(proj, view) });
 }
 // 注视点高度：画面中心脚下的地形包络（比实际地形平缓）与航母飞行甲板取高者，按真实时间平滑过去（时间常数约 0.35 秒）
 function v3TzStep(dt) {
@@ -682,7 +685,7 @@ function v3Draw(now) {
   if (typeof V3O === 'object' && V3O.on) v3oStep(now);
   else if (V3.on) { v3HoldStep(fdt); v3FcStep(fdt); }   // 自由镜头
   else { v3TzStep(fdt); V3.yaw += Math.atan2(Math.sin(V3.yawT - V3.yaw), Math.cos(V3.yawT - V3.yaw)) * .18; V3.tilt += (V3.tiltT - V3.tilt) * .18; }   // 开始界面背景的环绕展示
-  const C = v3Camera(), box = V3.box = v3Box(), boxN = v3Box(1.15);
+  const C = v3Camera(), box = V3.box = v3Box(Math.max(2.6, v3FogE(C) * .93 / C.D)), boxN = v3Box(1.15);   // 远处贴图（与立体模型）铺到能见距离
   if (V3.baseReal !== (typeof realLook === 'function' && realLook() && !v3Mx())) v3BaseTex();   // 切换了画面风格：底图跟着换
   // 俯视贴图：近处一张高清（每帧画），整个可见范围一张低清（每 3 帧画一次）；近处已经盖住大半个可见范围（俯看时）就只画一张
   const cap = Math.min(V3.maxTex, R.lowCap || (SETTINGS && SETTINGS.quality === 'low') ? 1280 : V3.coarse ? 1600 : 2048, Math.max(1024, Math.max(R.cv.width, R.cv.height) * 1.3));   // 屏外俯视画布最长边（按屏幕大小，手机、低画质更小）
@@ -737,7 +740,7 @@ function v3Draw(now) {
   gl.uniform3f(u.uEye, C.E[0], C.E[1], C.E[2]);
   gl.uniform4f(u.uBox, V3.boxN[0], V3.boxN[1], V3.boxN[2], V3.boxN[3]); gl.uniform4f(u.uBoxF, V3.boxF[0], V3.boxF[1], V3.boxF[2] || 1, V3.boxF[3] || 1);
   gl.uniform2f(u.uWorld, W, H); gl.uniform2f(u.uGrid, GW, GH); gl.uniform2f(u.uHG, Math.max(1, V3.nx - 1), Math.max(1, V3.ny - 1));
-  gl.uniform2f(u.uFog, C.D * 1.3 * (C.rd || 1), C.D * 2.8 * (C.rd || 1));
+  gl.uniform2f(u.uFog, ...v3FogR(C));
   gl.uniform1f(u.uSea, 1.5);
   const mx = v3Mx() ? 1 : 0, tm = (now / 1000) % 3600;   // 黑绿画面：黑客帝国式数码风
   gl.uniform1f(u.uT, tm); gl.uniform1f(u.uMx, mx);
@@ -749,11 +752,11 @@ function v3Draw(now) {
     const ub = V3.ub, ab = V3.ab;
     gl.useProgram(V3.pb);
     gl.uniformMatrix4fv(ub.uM, false, C.M); gl.uniform3f(ub.uEye, C.E[0], C.E[1], C.E[2]);
-    gl.uniform4f(ub.uBox, V3.boxN[0], V3.boxN[1], V3.boxN[2], V3.boxN[3]); gl.uniform4f(ub.uBoxF, V3.boxF[0], V3.boxF[1], V3.boxF[2] || 1, V3.boxF[3] || 1); gl.uniform2f(ub.uWorld, W, H); gl.uniform2f(ub.uFog, C.D * 1.3 * (C.rd || 1), C.D * 2.8 * (C.rd || 1));
+    gl.uniform4f(ub.uBox, V3.boxN[0], V3.boxN[1], V3.boxN[2], V3.boxN[3]); gl.uniform4f(ub.uBoxF, V3.boxF[0], V3.boxF[1], V3.boxF[2] || 1, V3.boxF[3] || 1); gl.uniform2f(ub.uWorld, W, H); gl.uniform2f(ub.uFog, ...v3FogR(C));
     gl.uniform1f(ub.uT, tm); gl.uniform1f(ub.uMx, mx);
     gl.disableVertexAttribArray(V3.a.p); gl.disableVertexAttribArray(V3.a.n);
     gl.enableVertexAttribArray(ab.p); gl.enableVertexAttribArray(ab.n); gl.enableVertexAttribArray(ab.e);
-    const fe = C.D * 2.8 * (C.rd || 1), ex = C.E[0], ey = -C.E[1];
+    const fe = v3FogE(C), ex = C.E[0], ey = -C.E[1];
     for (const c of V3.bch) {
       if (c.bb && Math.hypot(Math.max(c.bb[0] - ex, 0, ex - c.bb[2]), Math.max(c.bb[1] - ey, 0, ey - c.bb[3])) > fe) continue;   // 整块在雾外
       gl.bindBuffer(gl.ARRAY_BUFFER, c.b); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, c.i);
@@ -775,7 +778,7 @@ function v3Proj(x, y, z) {
   const M = V3.cam.M, X = x, Y = -y, cw = M[3] * X + M[7] * Y + M[11] * z + M[15];
   if (cw <= 1e-3) return null;
   const cx = M[0] * X + M[4] * Y + M[8] * z + M[12], cy = M[1] * X + M[5] * Y + M[9] * z + M[13], E = V3.cam.E;
-  const f = smooth(V3.cam.D * 1.3, V3.cam.D * 2.8, Math.hypot(X - E[0], Y - E[1], z - E[2]));
+  const [f0, f1] = v3FogR(V3.cam), f = smooth(f0, f1, Math.hypot(X - E[0], Y - E[1], z - E[2]));
   return { x: (cx / cw + 1) / 2 * CAM.vw, y: (1 - cy / cw) / 2 * CAM.vh, f };
 }
 // 立在地形上方的标识（屏幕空间，不随透视变形）：据点旗杆与菱形、战斗群北约标号、飞机按高度悬空并向地面引垂线
@@ -917,6 +920,11 @@ HOOK.key.push(e => {
   if (k === '.' || k === '>') { v3Turn(1); return true; }
   if (k === ';') { v3Tilt(-1); return true; }
   if (k === "'") { v3Tilt(1); return true; }
+  if ((k === '[' || k === ']') && typeof setSetting === 'function') {   // 渲染距离：每下 ±0.25 倍（0.5–4）
+    const v = setSetting('rdist', Math.round((v3RD() + (k === ']' ? .25 : -.25)) * 4) / 4);
+    if (typeof log === 'function') log(`3D 渲染距离 ${v.toFixed(2).replace(/0$/, '')}×${v >= 2.5 ? '（远景很多，慢的设备会掉帧）' : ''}`, 'info');
+    return true;
+  }
   return false;
 });
 
