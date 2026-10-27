@@ -8,7 +8,7 @@
 // 坐标：GL 里用 (x, -y, 高) 的右手系（x 东、y 北、z 上），世界坐标 y 向南，换算时取负
 const V3 = { on: false, ok: false, tried: false, gl: null, cv: null, pr: null, u: {}, a: {}, buf: null, n: 0, seed: null, sig: null,
   top: null, tex: null, base: null, hf: null, nx: 0, ny: 0, yaw: 0, tilt: .95, yawT: 0, tiltT: .95, box: null, cam: null, keep: null };
-const V3_HZ = 150, V3_FOV = .8, V3_TILT = [.2, 1.25], V3_SKIRT = -70;
+const V3_HZ = 150, V3_FOV = .8, V3_TILT = [.05, 1.45], V3_SKIRT = -70;   // 俯仰：从几乎正俯视到几乎平视
 let V3_ST = 2;   // 地形网格每几格一个顶点：显卡支持 32 位索引时为 1（每 10 米一个顶点，山脊、河谷的轮廓更细），否则 2
 
 const V3_VS = `attribute vec3 p; attribute vec3 n;
@@ -447,13 +447,29 @@ function v3Init() {
 function v3Camera() {
   if (typeof V3O === 'object' && V3O.on) return v3oCamera();   // 观察者模式（v3obs.js）
   const th = V3.tilt, ps = V3.yaw, D = (CAM.vh / CAM.z) / (2 * Math.tan(V3_FOV / 2));
-  const cz = typeof cvCamZ === 'function' ? cvCamZ(CAM.x, CAM.y) : null, T = [CAM.x, -CAM.y, Math.max(v3Ht(CAM.x, CAM.y), cz ?? -99)];   // 对准航母时注视点在飞行甲板高度（cvdeck.js）
+  const T = [CAM.x, -CAM.y, V3.tz ?? v3Ht(CAM.x, CAM.y)];   // 注视点高度按帧平滑跟随地形 / 航母甲板（v3TzStep），翻过山头、掠过航母时镜头不突然冒高
   const E = [T[0] + D * Math.sin(th) * Math.sin(ps), T[1] - D * Math.sin(th) * Math.cos(ps), T[2] + D * Math.cos(th)];
+  { const g = v3Ht(clamp(E[0], 0, W - 1), clamp(-E[1], 0, H - 1)); if (E[2] < g + 8) E[2] = g + 8; }   // 平视时镜头不钻进身后的山里
   const z = v3Norm(v3Sub(E, T)), x = v3Norm(v3Cross([-Math.sin(ps), Math.cos(ps), 0], z)), y = v3Cross(z, x);
   const view = new Float32Array([x[0], y[0], z[0], 0, x[1], y[1], z[1], 0, x[2], y[2], z[2], 0, -v3Dot(x, E), -v3Dot(y, E), -v3Dot(z, E), 1]);
   const asp = CAM.vw / Math.max(1, CAM.vh), f = 1 / Math.tan(V3_FOV / 2), n = D * .03, fa = D * 9, nf = 1 / (n - fa);
   const proj = new Float32Array([f / asp, 0, 0, 0, 0, f, 0, 0, 0, 0, (fa + n) * nf, -1, 0, 0, 2 * fa * n * nf, 0]);
   return (V3.cam = { E, x, y, z, D, asp, M: v3Mul(proj, view) });
+}
+// 注视点高度：画面中心脚下的地形包络（比实际地形平缓）与航母飞行甲板取高者，按真实时间平滑过去（时间常数约 0.35 秒）
+function v3TzStep(dt) {
+  const cz = typeof cvCamZ === 'function' ? cvCamZ(CAM.x, CAM.y) : null, g = V3.env ? v3Env(CAM.x, CAM.y) : v3Ht(CAM.x, CAM.y), want = Math.max(g, cz ?? -99);
+  if (V3.tz == null || !isFinite(V3.tz)) V3.tz = want;
+  else V3.tz += (want - V3.tz) * (1 - Math.exp(-dt / .35));
+}
+// 按住 Q / E 连续转向、R / F 连续俯仰（右键拖动同样可以自由转视角）
+function v3HoldStep(dt) {
+  const K = V3.hold;
+  if (!K || !K.size) return;
+  if (K.has('KeyQ')) V3.yawT -= 1.8 * dt;
+  if (K.has('KeyE')) V3.yawT += 1.8 * dt;
+  if (K.has('KeyR')) V3.tiltT = clamp(V3.tiltT + 1.1 * dt, V3_TILT[0], V3_TILT[1]);
+  if (K.has('KeyF')) V3.tiltT = clamp(V3.tiltT - 1.1 * dt, V3_TILT[0], V3_TILT[1]);
 }
 // 屏幕点 → 视线 → 与地形求交（先粗步进，再二分）；打不到地面时取视线与海平面的交点
 function v3Ray(sx, sy) {
@@ -491,7 +507,9 @@ function v3Draw(now) {
   const gl = V3.gl;
   if (V3.seed !== TER.seed || (typeof trxSig === 'function' && (V3.chk = (V3.chk || 0) - 1) <= 0 && (V3.chk = 60) && trxSig() !== V3.sig)) v3Mesh();
   else if (typeof afb3dSig === 'function' && (V3.achk = (V3.achk || 0) - 1) <= 0 && (V3.achk = 30) && afb3dSig() !== V3.asig) v3Bld();   // 机场刚被发现 / 夺取
-  // 转向 / 俯仰缓动
+  // 转向 / 俯仰缓动；注视点高度平滑
+  const fdt = clamp((now - (V3.lastNow || now)) / 1000, 0, .1); V3.lastNow = now;
+  v3HoldStep(fdt); v3TzStep(fdt);
   V3.yaw += Math.atan2(Math.sin(V3.yawT - V3.yaw), Math.cos(V3.yawT - V3.yaw)) * .18; V3.tilt += (V3.tiltT - V3.tilt) * .18;
   if (typeof V3O === 'object' && V3O.on) v3oStep(now);
   const C = v3Camera(), box = V3.box = v3Box(), boxN = v3Box(1.15);
@@ -679,7 +697,7 @@ function v3Toggle(on = !V3.on) {
   if (b) { b.classList.toggle('on', V3.on); b.setAttribute('aria-pressed', V3.on ? 'true' : 'false'); }
   if (c) c.hidden = !V3.on;
   if (!V3.on && typeof trxResize === 'function' && TRX.ok) trxResize();
-  if (typeof log === 'function' && S && S.t != null) log(V3.on ? '3D 立体地图：中键拖动转向 / 俯仰，< > 转向，; \' 俯仰' : '平面地图', 'info', 'v3', 1);
+  if (typeof log === 'function' && S && S.t != null) log(V3.on ? '3D 立体地图：右键 / 中键拖动自由转视角，按住 Q E 转向、R F 俯仰，WASD 移动，O 观察者模式' : '平面地图', 'info', 'v3', 1);
 }
 const v3Turn = k => { V3.yawT += k * Math.PI / 8; };
 const v3Tilt = k => { V3.tiltT = clamp(V3.tiltT + k * .12, V3_TILT[0], V3_TILT[1]); };
@@ -692,16 +710,31 @@ function v3Pan(dx, dy) {
 }
 
 // 输入：中键（或 Ctrl + 左键）拖动 → 横向转向、纵向俯仰；双指旋转 → 转向
+// 右键拖动（编队指挥模式里右键不再下命令）：同样转视角；只点一下不拖，照旧是取消（穿插选目标 / 选择）
 HOOK.pointer.push((e, kind) => {
-  if (!V3.on) return false;
-  const { sx, sy } = evPos(e);
-  if (kind === 'down' && (e.button === 1 || (e.button === 0 && e.ctrlKey))) { V3.orb = { sx, sy, id: e.pointerId }; return true; }
+  if (!V3.on || (typeof V3O === 'object' && V3O.on)) return false;
+  const { sx, sy } = evPos(e), rDrag = e.button === 2 && typeof thuActive === 'function' && thuActive();
+  if (kind === 'down' && (e.button === 1 || (e.button === 0 && e.ctrlKey) || rDrag)) { V3.orb = { sx, sy, x0: sx, y0: sy, id: e.pointerId, r: rDrag, moved: false }; return true; }
   if (V3.orb && V3.orb.id === e.pointerId) {
-    if (kind === 'move') { V3.yawT -= (sx - V3.orb.sx) * .006; V3.yaw = V3.yawT; v3Tilt(-(sy - V3.orb.sy) * .05); V3.tilt = V3.tiltT; V3.orb.sx = sx; V3.orb.sy = sy; return true; }
-    if (kind === 'up') { V3.orb = null; return true; }
+    if (kind === 'move') {
+      if (!V3.orb.moved && Math.hypot(sx - V3.orb.x0, sy - V3.orb.y0) < 4) return true;
+      V3.orb.moved = true;
+      V3.yawT -= (sx - V3.orb.sx) * .006; V3.yaw = V3.yawT; v3Tilt(-(sy - V3.orb.sy) * .05); V3.tilt = V3.tiltT; V3.orb.sx = sx; V3.orb.sy = sy; return true;
+    }
+    if (kind === 'up') { const o = V3.orb; V3.orb = null; if (o.r && !o.moved && typeof thuCancel === 'function') thuCancel(); return true; }
   }
   return false;
 });
+if (typeof window === 'object' && window.addEventListener) {
+  const hk = { KeyQ: 1, KeyE: 1, KeyR: 1, KeyF: 1 };
+  window.addEventListener('keyup', e => { if (V3.hold) V3.hold.delete(e.code); });
+  window.addEventListener('blur', () => { if (V3.hold) V3.hold.clear(); });
+  HOOK.key.push(e => {   // 3D 且编队指挥模式（这几个键不再有别的用途）：按住连续转向 / 俯仰
+    if (!V3.on || !hk[e.code] || (typeof V3O === 'object' && V3O.on) || !(typeof thuActive === 'function' && thuActive()) || e.ctrlKey || e.metaKey || e.altKey) return false;
+    (V3.hold || (V3.hold = new Set())).add(e.code);
+    return true;
+  });
+}
 HOOK.key.push(e => {
   const k = e.key;
   if ((k === 'l' || k === 'L') && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) { v3Toggle(); return true; }   // 单按 L 是通讯面板（chat.js）
