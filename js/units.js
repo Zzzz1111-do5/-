@@ -207,7 +207,7 @@ function orderTeams(teams, x, y, t) {
     log(`${teams.length} 个小组撤向滩头`, 'warn', 'ord', 1);
     return teams.length;
   }
-  if (!field(x, y, 'p')) { log('该位置无法到达', 'warn', 'unreach', 2); return 0; }
+  if (!fieldOk(x, y, 'p')) { log('该位置无法到达', 'warn', 'unreach', 2); return 0; }   // 只判断目标点附近有没有能站的格（下令时不为它整图算流场）
   const cxs = teams.reduce((a, q) => a + q.x, 0) / teams.length, cys = teams.reduce((a, q) => a + q.y, 0) / teams.length;
   const ang = Math.atan2(y - cys, x - cxs), slots = formationSlots(teams.length, x, y, ang);
   const px = -Math.sin(ang), py = Math.cos(ang), key = (a, b) => a[0] * px + a[1] * py - (b[0] * px + b[1] * py);

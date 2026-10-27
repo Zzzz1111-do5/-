@@ -459,9 +459,9 @@ function v3Bld() {
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, o.i); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(c.ib), gl.STATIC_DRAW);
     return o;
   }), drop = L => { for (const c of L || []) { gl.deleteBuffer(c.b); gl.deleteBuffer(c.i); } };
-  drop(V3.bch);
+  drop((V3.bch || []).filter(c => !c.tree));   // 只删房屋块：树块沿用（以前连树的缓冲区一起删了，机场被发现、重建房屋后全图的树就不见了）
   const TL = v3Trees();
-  if (V3.tchL !== TL) { drop(V3.tch); V3.tch = up(TL); V3.tchL = TL; }   // 树只在地图 / 地形变了时重传（机场被发现时只重建房屋）
+  if (V3.tchL !== TL) { drop(V3.tch); V3.tch = up(TL).map(c => Object.assign(c, { tree: true })); V3.tchL = TL; }   // 树只在地图 / 地形变了时重传（机场被发现时只重建房屋）
   V3.bch = [...up(K.out), ...V3.tch];
   V3.bn = V3.bch.reduce((a, c) => a + c.n, 0);
 }
@@ -543,7 +543,7 @@ function v3Init() {
     Object.assign(V3, { gl, cv, pr, u, a, tex: mk(0, gl.LINEAR), base: mk(1, gl.LINEAR), cls: mk(2, gl.LINEAR), cls2: mk(3, gl.LINEAR), fog: mk(4, gl.LINEAR), ht: mk(5, gl.NEAREST), lf: mk(6, gl.LINEAR), texF: mk(7, gl.LINEAR), topF: document.createElement('canvas'), u32: !!gl.getExtension('OES_element_index_uint'), top: document.createElement('canvas'), coarse: V3.coarse ?? (typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches), maxTex: Math.min(4096, gl.getParameter(gl.MAX_TEXTURE_SIZE) || 2048), ok: true });
     gl.useProgram(pr);
     gl.uniform1i(u.uTop, 0); gl.uniform1i(u.uBase, 1); gl.uniform1i(u.uCls, 2); gl.uniform1i(u.uCls2, 3); gl.uniform1i(u.uFogT, 4); gl.uniform1i(u.uHt, 5); gl.uniform1i(u.uLf, 6); gl.uniform1i(u.uTopF, 7);
-    if (V3.u32) V3_ST = 1;
+    if (V3.u32 && GW * GH <= 200000) V3_ST = 1;   // 大地图（8400 × 5600）每 2 格一个顶点：每格一个要近百万个三角形，手机画不动
     gl.enable(gl.DEPTH_TEST);
   } catch (e) { V3.ok = false; console.warn('3D 地图不可用', e); }
 }
@@ -691,9 +691,10 @@ function v3Draw(now) {
     gl.uniform1f(ub.uT, tm); gl.uniform1f(ub.uMx, mx);
     gl.disableVertexAttribArray(V3.a.p); gl.disableVertexAttribArray(V3.a.n);
     gl.enableVertexAttribArray(ab.p); gl.enableVertexAttribArray(ab.n); gl.enableVertexAttribArray(ab.e);
-    const fe = C.D * 2.8, ex = C.E[0], ey = -C.E[1];
+    const fe = C.D * 2.8, ex = C.E[0], ey = -C.E[1], ft = Math.min(C.D * 1.7, 4500 * CAM.vh / 768), fb = Math.min(fe, 9000 * CAM.vh / 768);
     for (const c of V3.bch) {
-      if (c.bb && Math.hypot(Math.max(c.bb[0] - ex, 0, ex - c.bb[2]), Math.max(c.bb[1] - ey, 0, ey - c.bb[3])) > fe) continue;   // 整块在雾外
+      // 整块在雾外不画；树（约 10 高）只画屏幕上两个像素以上的近处，房屋九千以内——远处的林地、村镇由地面贴图表现（大地图上全图的树有几百万个三角形）
+      if (c.bb && Math.hypot(Math.max(c.bb[0] - ex, 0, ex - c.bb[2]), Math.max(c.bb[1] - ey, 0, ey - c.bb[3])) > (c.tree ? ft : fb)) continue;
       gl.bindBuffer(gl.ARRAY_BUFFER, c.b); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, c.i);
       gl.vertexAttribPointer(ab.p, 3, gl.FLOAT, false, 32, 0); gl.vertexAttribPointer(ab.n, 3, gl.FLOAT, false, 32, 12); gl.vertexAttribPointer(ab.e, 2, gl.FLOAT, false, 32, 24);
       gl.drawElements(gl.TRIANGLES, c.n, gl.UNSIGNED_SHORT, 0);

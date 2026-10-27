@@ -1,9 +1,10 @@
 'use strict';
 // 常量、工具函数、地形类型表
-// 地图尺度：边长是最初 3000 × 2000 版的 MAP_K 倍（面积约 2 倍）。地形大特征、纵深、海面位置按它换算；武器射程等真实距离不变
-const MAP_K = 1.4;
+// 地图尺度：边长是最初 3000 × 2000 版的 MAP_K 倍（2.8：8400 × 5600，面积约 8 倍；比上一版 4200 × 2800 大 4 倍）。
+//   地形大特征、纵深、海面位置按它换算；武器射程、车速等真实距离不变——战场更开阔，海上纵深也更大
+const MAP_K = 2.8;
 const AF_K = 2;   // 空军基地场区尺度：场区世界范围 = AF_BOX（mapgen2.js）× AF_K，约 1100 × 800（面积为最初的 4 倍）；场内设施按真实比例布置（afbase.js），机场局部坐标 eaW / eaL 与世界同一尺度
-const W = 4200, H = 2800, CELL = 10, GW = W / CELL, GH = H / CELL;
+const W = Math.round(3000 * MAP_K), H = Math.round(2000 * MAP_K), CELL = 10, GW = W / CELL, GH = H / CELL;
 const SEA = y => H - (2000 - y) * MAP_K;   // 旧版（高 2000）海面上的 y 换算到现在的地图：集结海域、船位、航母
 const STAGING_Y = SEA(1500);      // 我方舰队集结海域上沿（航母在更南边）
 const CARRIER_Y = SEA(1880);
@@ -45,7 +46,8 @@ const pick = arr => arr[Math.floor(Math.random() * arr.length)];
 const bearing = (ax, ay, bx, by) => (Math.atan2(bx - ax, ay - by) * 180 / Math.PI + 360) % 360;
 const fmtBrg = b => String(Math.round(b) % 360).padStart(3, '0') + '°';
 const GRID_COLS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-const gridRef = (x, y) => GRID_COLS[clamp(Math.floor(x / 200), 0, Math.ceil(W / 200) - 1)] + (clamp(Math.floor(y / 200), 0, Math.ceil(H / 200) - 1) + 1);   // 200 一格：列 A–U 自西向东，行 1–14 自北向南（地图上有标注，places.js）
+const gridCol = k => k < 26 ? GRID_COLS[k] : GRID_COLS[Math.floor(k / 26) - 1] + GRID_COLS[k % 26];   // 超过 26 列（大地图 42 列）接着用 AA、AB……
+const gridRef = (x, y) => gridCol(clamp(Math.floor(x / 200), 0, Math.ceil(W / 200) - 1)) + (clamp(Math.floor(y / 200), 0, Math.ceil(H / 200) - 1) + 1);   // 200 一格：列 A–Z、AA… 自西向东，行 1… 自北向南（地图上有标注，places.js）
 
 function segDist(px, py, x0, y0, x1, y1) {
   const dx = x1 - x0, dy = y1 - y0, l2 = dx * dx + dy * dy || 1;
