@@ -17,7 +17,7 @@
 // 状态（纯 JSON）：S.b2 = { g: [{ id, n 剩余架数, st: 'base' 待命 | 'out' 出击中 | 'done' 已返航, k 出击次数 }] }；
 //   飞机在 S.eair.fly（type 'b2'，g 机群 id，no 机号，load 挂载，aims 瞄准点 [x, y, k?, id?]，i 已投 / 已射枚数）
 // n 一组架数 · minT 开战后最早出动 · need 出动门槛（看得见的上岸之敌价值合计：步兵每人 1、坦克 6、车辆 3、抢滩舰 7~10）· needLost 据点失守后的门槛
-const B2 = { n: 5, minT: 240, need: 90, needLost: 50, retry: 10, spd: 200, alt: .95, turn: .8, hp: 3, rel: 260, every: .12, jEvery: .35, safe: 60, gps: 4, edge: 90 };
+const B2 = { n: 5, minT: 240, need: 90, needLost: 50, retry: 10, spd: 200, alt: .95, turn: .8, fturn: .28, hp: 3, rel: 260, every: .12, jEvery: .35, safe: 60, gps: 4, edge: 90 };
 // 压制（v14）：每枚 JDAM 落地除了杀伤半径内的毁伤，还有大得多的冲击波与心理震撼——RS 以内的敌步兵被死死压住、排士气大跌，
 //   车辆乘员被震晕（压制）；连续落弹沿航线一路滚过去（地毯式覆盖），爆点留下火球与久久不散的烟尘。
 //   弹多目标少时不再「其余几架补投同样的点」：GBU-38 在敌集结处按 26 的间距铺满覆盖面（藏在掩体里看不见的也一起覆盖）
@@ -187,11 +187,11 @@ function b2FormStep(G, dt) {
       if (rest.length && F.pass < B2_FORM.passes - 1) { F.pass++; F.route = b2FormRoute(rest, F.x, F.y); F.ri = 0; w = F.route[0]; if (typeof chatSay === 'function') chatSay('e', `B-2A 机群保持编队转弯，再进入一次投弹航路。`, { kind: 'report', lv: 0, at: { x: w[0], y: w[1] } }); }
       else F.ph = 'out';
     }
-    if (w) b2Turn(F, w[0], w[1], dt);
+    if (w) b2Turn(F, w[0], w[1], dt, B2.fturn);
   }
-  if (F.ph === 'out') {   // 从最近的图边飞出（多半是北边）
-    if (F.ox == null) { const e = [[F.x, -200, F.y], [W + 200, F.y, W - F.x], [-200, F.y, F.x]].sort((p, q) => p[2] - q[2])[0]; [F.ox, F.oy] = e; }
-    b2Turn(F, F.ox, F.oy, dt);
+  if (F.ph === 'out') {   // 弹投完了：加速从最近的图边飞出（多半是北边），不再盘旋
+    if (F.ox == null) { const e = [[F.x, -200, F.y], [W + 200, F.y, W - F.x], [-200, F.y, F.x]].sort((p, q) => p[2] - q[2])[0]; [F.ox, F.oy] = e; F.spd = B2.spd * 1.3; }
+    b2Turn(F, F.ox, F.oy, dt, B2.fturn);
   }
 }
 // 机群里一架被击落（eair.js eaLost 调用）
@@ -202,9 +202,9 @@ function b2Down(a) {
 }
 
 // —— 飞行 ——
-function b2Turn(a, tx, ty, dt) {
+function b2Turn(a, tx, ty, dt, rate = B2.turn) {
   const want = Math.atan2(ty - a.y, tx - a.x), da = eaAng(want - a.heading), k = airK(a);
-  a.heading = eaAng(a.heading + airYaw(a, da, B2.turn, dt)); a.bank = clamp(a.hr / B2.turn, -.6, .6);   // 平滑转向、地速减半（carrier.js）
+  a.heading = eaAng(a.heading + airYaw(a, da, rate, dt)); a.bank = clamp(a.hr / rate, -.6, .6);   // 平滑转向、地速减半（carrier.js）
   a.x += Math.cos(a.heading) * a.spd * k * dt; a.y += Math.sin(a.heading) * a.spd * k * dt;
 }
 function b2Fly(a, dt) {
@@ -220,9 +220,13 @@ function b2Fly(a, dt) {
     return;
   }
   if (G.fT !== S.t) { G.fT = S.t; b2FormStep(G, dt); }   // 每帧只推进一次编队基准点
-  // 位置：编队基准点 + 本机的编队位置（随航向转），姿态与长机一致
-  const [bk, sd] = a.fo || [0, 0], c = Math.cos(F.heading), sn = Math.sin(F.heading);
-  a.x = F.x - c * bk - sn * sd; a.y = F.y - sn * bk + c * sd; a.heading = F.heading; a.bank = F.bank; a.hr = F.hr;
+  // 编队位置 = 基准点 + 本机的编队位置（随航向转）。各机自己转弯、加减速飞向编队位置前方一点（位置保持）：
+  //   转弯时外侧的飞得快、内侧的慢，掉队了加速追，不刚性平移、不横着滑
+  const [bk, sd] = a.fo || [0, 0], c = Math.cos(F.heading), sn = Math.sin(F.heading), px = F.x - c * bk - sn * sd, py = F.y - sn * bk + c * sd;
+  if (!a.fk) { a.fk = 1; a.x = px; a.y = py; a.heading = F.heading; }
+  const lag = (px - a.x) * c + (py - a.y) * sn;
+  a.spd = clamp(F.spd + lag * .8, F.spd * .7, F.spd * 1.35);
+  b2Turn(a, px + c * 90, py + sn * 90, dt);
   if (a.ph === 'in' || a.ph === 'run') {
     if (a.load === 'jassm') {   // 一进图就逐枚发射（编队照样往前飞）
       if (a.y > 40 && (a.relT -= dt) <= 0 && a.i < a.aims.length) {

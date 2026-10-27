@@ -33,6 +33,7 @@ function msLaunch(kind, side, x0, y0, tgt, opts = {}) {
   const m = { id: S.nid++, kind, side, x0, y0, x: x0, y: y0, z: 0, tx: tgt.x, ty: tgt.y, t: -(opts.delay || 0), dur, tgt: opts.tgt || null, ph: opts.delay ? 'wait' : 'boost', icp: false, src: opts.src || null,
     spd: opts.spd || null, pk: opts.pk || null, sup: opts.sup || 0, w: opts.w || null, ...(opts.lr ? { lr: true } : {}) };   // lr：远程空空导弹（歼-36 的霹雳-17）
   S.missiles.push(m);
+  if (kind === 'asm' && side === 'e') S.asmSrc = { x: Math.round(x0), y: Math.round(y0), t: S.t };   // 反舰导弹从哪个方向来（舰队预警机按它定阵位，carrier.js cvAewP）
   return m;
 }
 
@@ -432,7 +433,7 @@ function msCommandP(dt) {
   if ((S.msl.aiT = (S.msl.aiT ?? 3) - dt) > 0) return;
   S.msl.aiT = 3;
   const pT = S.teams.filter(q => q.side === 'p' && q.men.length), atSea = S.ships.some(s => s.state !== 'sunk' && s.state !== 'beached' && s.load && s.load.teams > 0);
-  const VAL = { coastal: atSea ? 10 : 5, tel: 9, ascm: atSea ? 10 : 6, airfield: 8, arty: 4, aa: 3, mortar: 2.5, bunker: 2 };
+  const VAL = { coastal: atSea ? 10 : 5, tel: 9, typhon: 11, ascm: atSea ? 10 : 6, airfield: 8, arty: 4, aa: 3, mortar: 2.5, bunker: 2 };
   let best = null, bv = 0;
   const JP = typeof cmdJointPts === 'function' ? cmdJointPts() : [];   // 联合火力：正在攻击的目标据点附近的火力点优先
   for (const e of S.enemies) {

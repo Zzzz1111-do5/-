@@ -8,7 +8,8 @@
 // 坐标：GL 里用 (x, -y, 高) 的右手系（x 东、y 北、z 上），世界坐标 y 向南，换算时取负
 const V3 = { on: false, ok: false, tried: false, gl: null, cv: null, pr: null, u: {}, a: {}, buf: null, n: 0, seed: null, sig: null,
   top: null, tex: null, base: null, hf: null, nx: 0, ny: 0, yaw: 0, tilt: .95, yawT: 0, tiltT: .95, box: null, cam: null, keep: null };
-const V3_HZ = 150, V3_FOV = .8, V3_TILT = [.05, 1.45], V3_SKIRT = -70;   // 俯仰：从几乎正俯视到几乎平视
+const V3_HZ = 230, V3_FOV = .8, V3_TILT = [.05, 1.45], V3_SKIRT = -70;   // 俯仰：从几乎正俯视到几乎平视
+const V3_AIR = 230 * V3_HZ / 150;   // 飞机、导弹高度 alt 1.0 对应的 3D 高度：随地形高程放大，高空飞机始终在最高的山顶之上
 let V3_ST = 2;   // 地形网格每几格一个顶点：显卡支持 32 位索引时为 1（每 10 米一个顶点，山脊、河谷的轮廓更细），否则 2
 
 const V3_VS = `attribute vec3 p; attribute vec3 n;
@@ -242,21 +243,21 @@ function v3H0(gx, gy) {
 }
 // 世界坐标 (x, y) 处的地面高度（双线性插值）
 // 飞机在 3D 里的绝对高度（模型、标识、机上射出的弹共用）：舰载机在甲板上（弹射、滑跑、拦阻）贴着飞行甲板，海上起降以甲板为基准；
-//   高度 alt 0.05 以下贴着基准面（地面 / 甲板），往上每 1.0 约 230（直升机悬停 0.3 约离地 60）——见 v3AltZ：高空按海拔平飞，不随山起伏
+//   高度 alt 0.05 以下贴着基准面（地面 / 甲板），往上每 1.0 为 V3_AIR（约 350，直升机悬停 0.3 约离地 90）——见 v3AltZ：高空按海拔平飞，不随山起伏
 const V3_DECK = -2.6 + 17 + 1.5;   // 舰载机在飞行甲板上的高度：甲板离水线 17（carrier.js CVG.zd）+ 放下起落架的机身高度
 function v3AirZ(o) {
   const ph = o.phase || o.ph;
   if (o.kind && (ph === 'cat' || ph === 'roll' || ph === 'trap')) return V3_DECK;
-  return v3AltZ(o.x, o.y, Math.max(0, clamp(o.alt ?? 1, 0, 1) - .05) * 230, o.kind && !o.land && !o.afPh ? V3_DECK - 1.5 : -2.6, 1.5);
+  return v3AltZ(o.x, o.y, Math.max(0, clamp(o.alt ?? 1, 0, 1) - .05) * V3_AIR, o.kind && !o.land && !o.afPh ? V3_DECK - 1.5 : -2.6, 1.5);
 }
 // 离地高度 h → 绝对高度：贴地时按脚下实际地面（lo 是海上的最低基准：舰载机 = 飞行甲板，其余 = 海面），一离地参考面就换成平滑的地形包络
-//   （v3Env，不跟着每个小山包上下抖），越高越接近海拔基准——220 以上完全按海拔平飞；低空过山时沿包络平缓爬升、越过山脊再下来
+//   （v3Env，不跟着每个小山包上下抖），越高越接近海拔基准——巡航高度（约 V3_AIR）完全按海拔平飞；低空过山时沿包络平缓爬升、越过山脊再下来
 const sm01 = v => { v = clamp(v, 0, 1); return v * v * (3 - 2 * v); };
 function v3AltZ(x, y, h, lo, lift) {
   const g = Math.max(v3Ht(x, y), lo);
   if (!(h > 0)) return g + lift;
   const F = Math.max(v3Env(x, y), g), gr = lerp(g, F, sm01(h / 20));
-  return Math.max(h + lift + lerp(gr, lo, sm01(h / 220)), g + lift + Math.min(h, 6));
+  return Math.max(h + lift + lerp(gr, lo, sm01(h / (V3_AIR * .96))), g + lift + Math.min(h, 6));
 }
 // 地形包络：每 40 一个点，取 140 以内的最高地面，再在 80 内取平均——比实际地形略宽、略高，处处平缓
 const V3_ENV = 40;
@@ -624,6 +625,9 @@ function v3Draw(now) {
   if (typeof ema === 'number') V3.capK = clamp((V3.capK || 1) * (ema > .04 ? .985 : ema < .022 ? 1.004 : 1), .45, 1);
   const dpr = R.dprCap ? 1 : Math.min(2, window.devicePixelRatio || 1), one = boxN[2] * boxN[3] > box[2] * box[3] * .7;
   const bN = one ? box : boxN, sTop = Math.min(CAM.z * dpr, cap * (V3.capK || 1) / Math.max(bN[2], bN[3]));
+  // 立体士兵的开关：按画面中心的士兵有多少像素高（士兵约 3.4 个世界单位）——放大到约 6 像素才换成立体士兵，缩小到约 4.5 像素才换回贴图里的平面小人；
+  //   中间留迟滞，不在门槛上一帧立体、一帧平面地来回跳；更远的士兵立体模型只剩一两个像素，枪、背带这些细部件逐帧闪烁（拉远时模型抽搐）
+  V3.near = V3.near ? CAM.z * dpr > 1.3 : CAM.z * dpr > 1.75;
   const K = { cv: R.cv, ctx: R.ctx, s: R.s, ox: R.ox, oy: R.oy, dpr: R.dpr, vw: CAM.vw, vh: CAM.vh, z: CAM.z, x: CAM.x, y: CAM.y };
   // 有立体模型的东西（飞机、车辆、舰船、阵地，近看时的步兵）贴图里不再画平面图标——否则地面上多一层「倒影」
   const paint = (cv, b, sc) => {
@@ -631,7 +635,7 @@ function v3Draw(now) {
     if (cv.width !== tw || cv.height !== th) { cv.width = tw; cv.height = th; }
     V3.drawing = true;
     R.fx3d = typeof v3Fx === 'function' && !(SETTINGS && SETTINGS.models3d === false);   // 弹道在 3D 里立体画（v3fx.js），贴图里不再画
-    R.m3d = R.fx3d && typeof V3M === 'object' && !!V3M.ok; R.m3dNear = K.z / CAM.fit > 1.15 || sTop >= 1;   // 贴图里会画出单兵小人的距离（R.fig）起就改用立体士兵，地面上不留平的小人
+    R.m3d = R.fx3d && typeof V3M === 'object' && !!V3M.ok; R.m3dNear = V3.near;   // 用立体士兵时贴图里不再画平的小人
     try {
       R.cv = cv; R.ctx = cv.getContext('2d'); R.dpr = 1;
       CAM.vw = tw; CAM.vh = th; CAM.z = R.s = sc; CAM.x = b[0] + b[2] / 2; CAM.y = b[1] + b[3] / 2;

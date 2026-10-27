@@ -212,11 +212,14 @@ function launchPlane(kind, tx, ty, pref) {
   // 多艘航母时：从离目标最近、且有该机型待命的那艘起飞；陆基飞机从战区机场（地图南缘以外）飞来，算作稍远
   const want = pref || (kind === 'bomber' ? (S.enemies.some(e => !e.dead && e.kx != null && dist(e.kx, e.ky, tx, ty) < 40) ? 'dive' : 'heavy') : null);
   let w = null, bd = Infinity;
+  const isAew = o => (o.v || 'kj600') === 'kj600';   // 空警-600：舰队预警的眼睛——陆上侦察先派无侦-7，最后一架空警-600 留给舰队预警（cvAewP）
+  const aewRes = kind === 'recon' && pref !== 'kj600' && !S.planes.some(p => !p.dead && p.aew) && S.air.wing.filter(o => o.type === 'recon' && o.state === 'deck' && isAew(o)).length <= 1;
   for (const o of S.air.wing) if (o.type === kind && o.state === 'deck') {
+    if (aewRes && isAew(o)) continue;
     const land = airLandW(o), c = land ? null : cvOf(cvHome(o)), af = o.af && S.abBase;
     if (!land && !(c && c.hp > 0)) continue;
     if (o.af && !(typeof abAfOpen === 'function' && abAfOpen())) continue;   // 停在夺取的机场上、跑道用不了的起不来
-    const d = (af ? dist(af.x, af.y, tx, ty) : land ? H - ty + 300 : dist(c.x, c.y, tx, ty)) + (want && (o.v || (kind === 'bomber' ? 'heavy' : null)) !== want ? 1e4 : 0) + (!land && !af && o.dk === -1 ? 60 : 0);   // 同一艘航母上先派甲板上的，机库里的要等升降机
+    const d = (af ? dist(af.x, af.y, tx, ty) : land ? H - ty + 300 : dist(c.x, c.y, tx, ty)) + (want && (o.v || (kind === 'bomber' ? 'heavy' : kind === 'recon' ? 'kj600' : null)) !== want ? 1e4 : 0) + (kind === 'recon' && !pref && isAew(o) ? 3000 : 0) + (!land && !af && o.dk === -1 ? 60 : 0);   // 同一艘航母上先派甲板上的，机库里的要等升降机
     if (d < bd) { bd = d; w = o; }
   }
   if (!w) {
@@ -635,7 +638,10 @@ function flyPlane(p, dt) {
   if (p.kind === 'fighter' && (p.phase === 'out' || p.phase === 'loiter') && typeof awFlyP === 'function') { awFlyP(p, dt, speed); return; }   // 战斗机巡逻 / 拦截（airwar.js）
   if (p.phase === 'out') {
     p.alt = Math.min(1, p.alt + dt / 2.2); speed(sp.spd);
-    if (p.kind === 'recon') {
+    if (p.kind === 'recon' && p.aew) {   // 海上预警（cvAewP）：到预警阵位盘旋，到时返航
+      if (airSteer(p, p.aew.x, p.aew.y, dt) < 200) { speed(sp.spd * .75); airOrbit(p, p.aew.x, p.aew.y, 150, 1, dt); }
+      if (S.t > p.aew.until) { p.aew = null; airSet(p, 'rtb'); }
+    } else if (p.kind === 'recon') {
       const wp = p.wp[Math.min(p.leg, p.wp.length - 1)], d = airSteer(p, wp.x, wp.y, dt);
       const ahead = (wp.x - p.x) * Math.cos(p.heading) + (wp.y - p.y) * Math.sin(p.heading);
       if (d < 45 || (ahead < 0 && d < 160)) p.leg++;
@@ -765,7 +771,7 @@ function guidedDrop(p) {
 //   普通型：飞腾-8 打战车、炮位、碉堡、发射车（硬目标两枚，车辆一枚，能追运动目标）；防空压制型：雷电-10 专打防空。
 //   防空太密的目标不碰（隐身也有限度）；在防区外（arR）对准发射后立即转开；弹打完或巡逻超时（约 50 秒）返航
 const AR_V = { tank: 6, hv_tank: 6.5, td: 5.5, lt_tank: 5, apc: 4.5, amtank: 4.5, aa_veh: 5.5, sam_veh: 6, spg: 5, recon: 3, flame_tank: 5.5, mine_tank: 4 };
-const AR_E = { bunker: 4.5, coastal: 5.5, arty: 5, mortar: 3.5, aa: 5.5, tel: 7, ascm: 7 };
+const AR_E = { bunker: 4.5, coastal: 5.5, arty: 5, mortar: 3.5, aa: 5.5, tel: 7, ascm: 7, typhon: 7.5 };
 function airArPick(p, M) {
   const own = (x, y) => S.teams.some(q => q.side === 'p' && q.men.length && dist(q.x, q.y, x, y) < 45);
   const taken = (x, y) => S.missiles.some(m => !m.done && m.side === 'p' && m.kind === 'pgm' && dist(m.tx, m.ty, x, y) < 20)
@@ -828,7 +834,7 @@ function bomberDrop(p) {
 // 空地导弹：射程 agmR 内、任务区 220 以内看得见的硬目标（坦克 / 战车、装甲车、碉堡、炮位、防空、发射车）；离我军 40 以内不打；
 // 同一目标只要一枚在飞；两次发射间隔 2.5 秒（KD-88 防区外、蓝箭-7 / 红箭-10 近距）
 const AGM_V = { tank: 6, td: 5.5, hv_tank: 6.5, lt_tank: 5, apc: 4.5, amtank: 4.5, aa_veh: 5, sam_veh: 5.5, spg: 4.5, recon: 3, flame_tank: 5.5 };
-const AGM_E = { bunker: 4.5, coastal: 5, arty: 4.5, mortar: 3.5, aa: 5, tel: 6, ascm: 6 };
+const AGM_E = { bunker: 4.5, coastal: 5, arty: 4.5, mortar: 3.5, aa: 5, tel: 6, ascm: 6, typhon: 6.5 };
 function airAgm(p) {
   const M = airMdl(p.kind, p.v);
   if (!M.agm || !(p.agmN > 0) || (p.agmT || 0) > S.t || typeof msPgm !== 'function' || p.alt < (p.v === 'heli' ? .2 : .4)) return false;   // 直-10 悬停高度约 0.3：照样能打
@@ -998,6 +1004,32 @@ function carrierVision() {
 }
 
 // —— 自动派机（S.cv.auto）：对地支援压制我军的敌人、空袭已标定火力点、侦察前线方向的敌占据点 ——
+// —— 海上预警（空警-600）：一直保持一架预警机在舰队前方值班；知道海上有威胁（发现过敌水面舰艇、截获过 P-8A 搜索雷达、挨过反舰导弹）就移到舰队与威胁方向之间——
+//    预警机 900 以内的敌舰、敌机都看得见（navy.js、airwar.js awAew）；没有它，舰艇雷达（600–720）看不到海平线外的敌舰和巡逻机，挨了打也找不到对手 ——
+function cvSeaThreat() {
+  let best = null, bt = -1e9;
+  const put = (x, y, t) => { if (isFinite(x) && isFinite(y) && t > bt && S.t - t < 180) { bt = t; best = { x, y }; } };
+  for (const e of S.eships || []) if (!e.dead && e.kx != null) put(e.kx, e.ky, e.det ?? -1e9);
+  if (S.asEsm) put(S.asEsm.x, S.asEsm.y, S.asEsm.t);
+  if (S.asmSrc) put(S.asmSrc.x, S.asmSrc.y, S.asmSrc.t);
+  return best;
+}
+function cvAewP(c) {
+  const T = cvSeaThreat() || { x: c.x, y: coastAt(clamp(c.x, 0, W - 1)) };   // 没有已知威胁：在舰队与对岸之间值班（舰载预警机一直有一架在空）
+  if (!(S.assets.recon > 0) || S.planes.some(p => !p.dead && p.kind === 'recon' && p.aew && p.phase !== 'rtb')) return false;
+  if (!S.air.wing.some(w => w.type === 'recon' && w.state === 'deck' && (w.v || 'kj600') === 'kj600')) return false;   // 只有空警-600 能当预警机
+  const d = dist(c.x, c.y, T.x, T.y), a = Math.atan2(T.y - c.y, T.x - c.x), TH = typeof airThreats === 'function' ? airThreats('p') : [];
+  let st = null;
+  for (const k of [1, .7, .45, .2, 0]) {   // 不进已知的敌防空圈：往航母方向收
+    const r = Math.min(380, d * .45) * k, x = clamp(c.x + Math.cos(a) * r, 60, W - 60), y = clamp(c.y + Math.sin(a) * r, 60, H - 60);
+    if (!TH.length || airThreatAt(TH, x, y, 120) <= 0) { st = { x, y }; break; }
+  }
+  if (!st || !launchPlane('recon', st.x, st.y, 'kj600')) return false;
+  const p = S.planes[S.planes.length - 1];
+  p.aew = { x: st.x, y: st.y, until: S.t + 150 };
+  if (typeof chatSay === 'function') chatSay('p', `命令：空警-600 起飞，到${typeof cmdWhere === 'function' ? cmdWhere(st.x, st.y) : gridRef(st.x, st.y)}上空预警，盯住海上来的敌舰和巡逻机。`, { kind: 'order', at: st, key: 'aew', gap: 60, lv: 1 });
+  return true;
+}
 function updateAirAuto(dt) {
   const c = S.cv;
   if (!c || !c.auto || S.phase !== 'battle' || (!cvAll().some(o => o.hp > 0) && !S.air.wing.some(w => airLandW(w) && w.state !== 'lost'))) return;   // 旗舰的自动开关统管全部航母（含战区陆基飞机）
@@ -1015,6 +1047,18 @@ function updateAirAuto(dt) {
   const pT = S.teams.filter(q => q.side === 'p' && q.men.length);
   const near = (x, y, r) => pT.filter(q => dist(q.x, q.y, x, y) < r);
   const busy = (kind, x, y, r) => S.planes.some(p => p.kind === kind && !p.dead && (p.phase === 'cat' || p.phase === 'roll' || p.phase === 'out' || p.phase === 'loiter') && dist(p.cx ?? p.tx, p.cy ?? p.ty, x, y) < r);
+  if (cvAewP(c)) return;
+  // 时间敏感目标（不受空中作战计划分阶段限制）：刚发射过、位置暴露的「堤丰」导弹排、岸舰导弹排——不立即打掉，舰队就一直挨打
+  if (S.assets.strike > 0) {
+    const tst = S.enemies.filter(e => !e.dead && e.kx != null && (e.kind === 'typhon' || e.kind === 'ascm') && S.t - (e.fireT ?? -99) < 180 && !busy('strike', e.kx, e.ky, 80) && !S.missiles.some(m => m.side === 'p' && !m.done && dist(m.tx, m.ty, e.kx, e.ky) < 50))
+      .sort((a, b) => (b.kind === 'typhon') - (a.kind === 'typhon') || (b.fireT ?? 0) - (a.fireT ?? 0))[0];
+    const L = tst && airPkg('strike', tst.kx, tst.ky);
+    if (L) {
+      if (typeof atoWing === 'function') atoWing(L, 'strike', tst.kx, tst.ky);
+      if (typeof chatSay === 'function') chatSay('p', `命令：${tst.kind === 'typhon' ? '「堤丰」导弹排' : '岸舰导弹排'}发射暴露在${typeof cmdWhere === 'function' ? cmdWhere(tst.kx, tst.ky) : gridRef(tst.kx, tst.ky)}，${airName('strike', L.v).split(' ')[0]}立即出击打掉它，不等空中作战计划转段。`, { kind: 'order', at: { x: tst.kx, y: tst.ky }, key: 'tst' + tst.id, gap: 40, lv: 1 });
+      return;
+    }
+  }
   if (S.assets.cas > 0 && pT.length && ph >= 3) {
     let best = null, bs = 0;
     for (const o of S.teams) if (o.side === 'e' && o.men.length && inVision(o.x, o.y)) {
@@ -1030,7 +1074,7 @@ function updateAirAuto(dt) {
   }
   const seadUp = S.planes.filter(o => !o.dead && o.kind === 'strike' && o.phase !== 'rtb').length, seadV = S.air.wing.some(w => w.type === 'strike' && w.v === 'sead' && w.state === 'deck');
   if (S.assets.strike > 0 && !awBad && ph >= 2 && !(ph === 2 && seadUp >= 2)) {   // 压制防空阶段：同时最多两架
-    const PRI = { coastal: 5, ascm: 5, tel: 5, airfield: 4.5, arty: 4, aa: 3.5, mortar: 3, bunker: 2 };   // 歼-35 在时高炮阵地（防空）优先级再乘 1.8
+    const PRI = { typhon: 6, coastal: 5, ascm: 5, tel: 5, airfield: 4.5, arty: 4, aa: 3.5, mortar: 3, bunker: 2 };   // 歼-35 在时高炮阵地（防空）优先级再乘 1.8
     let best = null, bs = 0;
     for (const e of S.enemies) if (!e.dead && e.kx != null && !(e.kind === 'airfield' && typeof abKeep === 'function' && abKeep())) {   // 打算空降夺取的机场不炸（abn.js）
       if (ph === 2 && (e.kind !== 'aa' || (!seadV && airAAAt(e.kx, e.ky, 300) > 1.4))) continue;   // 压制防空阶段：只打防空；没有防空压制型时只打孤立的防空点，不往防空网里送
@@ -1046,7 +1090,7 @@ function updateAirAuto(dt) {
     if (L) { if (typeof atoWing === 'function') atoWing(L, 'strike', best.kx, best.ky, pref); if (typeof cmdAirLaunched === 'function' && best.id != null) cmdAirLaunched({ k: 'strike', x: best.kx, y: best.ky, eid: best.id }, L); return; }
   }
   if (S.assets.bomber > 0 && !awBad && ph >= 3) {   // 轰炸机：炮兵阵地群、岸防炮、碉堡（周围已标定目标越多越优先）；我军 150 以内不投
-    const PRI = { coastal: 5, airfield: 5, ascm: 4.5, tel: 4.5, arty: 4.5, aa: 3, mortar: 3, bunker: 2.5 };
+    const PRI = { typhon: 5.5, coastal: 5, airfield: 5, ascm: 4.5, tel: 4.5, arty: 4.5, aa: 3, mortar: 3, bunker: 2.5 };
     let best = null, bs = 0;
     for (const e of S.enemies) if (!e.dead && e.kx != null && !(e.kind === 'airfield' && typeof abKeep === 'function' && abKeep())) {
       if (near(e.kx, e.ky, 150).length || busy('bomber', e.kx, e.ky, 90) || S.shells.some(s => s.side === 'p' && s.kind === 'bomb' && dist(s.x1, s.y1, e.kx, e.ky) < 60)) continue;

@@ -577,7 +577,7 @@ function airRelPos(m, three) {
 }
 // 3D 高度：机腹下的挂点 → 落下 → 点火后接上导弹自己的高度（与 v3fx.js 同一套）
 function airRelZ(P, m) {
-  const zp = v3AirZ(P.o) - 1 * P.sc - (P.r.k === 'side' ? 0 : 16 * Math.max(0, P.u - .12) ** 2), zm = v3AltZ(m.x, m.y, m.z * (m.kind === 'tbm' ? 620 : 230), -2.6, 2);
+  const zp = v3AirZ(P.o) - 1 * P.sc - (P.r.k === 'side' ? 0 : 16 * Math.max(0, P.u - .12) ** 2), zm = v3AltZ(m.x, m.y, m.z * (m.kind === 'tbm' ? 620 : V3_AIR), -2.6, 2);
   return lerp(zp, zm, P.e);
 }
 // 3D 里飞机的尺寸（v3units.js 的 plane()）

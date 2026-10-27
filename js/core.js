@@ -87,6 +87,21 @@ const RIVER_WADE = { inf: .25, veh: .25, amph: .6 };
 const wadeInf = (x, y) => { const t = typeAt(x, y); return TP[t].sp > 0 || t === T.RIVER; };   // 能走（含涉水）
 const spInf = t => TP[t].sp || (t === T.RIVER ? RIVER_WADE.inf : 0);   // 步兵在这种地形上的速度系数
 const coverAt = (x, y) => TP[typeAt(x, y)].cv;
+// 地面坡度（度）：按 3D 地形里看到的坡度（高程 1.0 对应 view3d.js V3_HZ 高），中心差分、跨度 2r。
+//   碉堡、岸防炮台是整块浇筑的混凝土工事，只能建在 SLOPE_MAX 以内的平地上（沙盒放置、AI 布防、战役布防都按这个）
+const SLOPE_MAX = 14;
+function groundSlope(x, y, r = 10) {
+  const k = typeof V3_HZ === 'number' ? V3_HZ : 230, z = (a, b) => elevAt(clamp(a, 0, W - 1), clamp(b, 0, H - 1)) * k;
+  return Math.atan(Math.hypot((z(x + r, y) - z(x - r, y)) / (2 * r), (z(x, y + r) - z(x, y - r)) / (2 * r))) * 57.3;
+}
+// r 以内离 (x, y) 最近的一处平地（坡度不超过 max，ok 为额外条件）；没有返回 null
+function flatNear(x, y, r, max = SLOPE_MAX, ok) {
+  for (let d = 0; d <= r; d += 8) for (let i = 0, n = d ? Math.ceil(d * .8) : 1; i < n; i++) {
+    const a = i / n * 6.283, px = clamp(x + Math.cos(a) * d, 10, W - 10), py = clamp(y + Math.sin(a) * d, 10, H - 10);
+    if (groundSlope(px, py) <= max && (!ok || ok(px, py))) return { x: px, y: py };
+  }
+  return null;
+}
 // 观战看全图：双方都交给 AI、玩家不指挥任何一方时才算（指挥模式 S.ctl 下各级仍由 AI 执行，但玩家只看本方视野）
 const specAll = () => !!S && S.role === 'spectate' && !S.ctl;
 

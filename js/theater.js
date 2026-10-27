@@ -309,22 +309,24 @@ function thFold(side, us, vs) {
     for (const u of rest) u.thW = null;
   }
 }
-// 撤编合并：营打到不足 4 人（又没有车）就解散，人并入就近的营；师打到不足 15 人（车不超过 1 辆）就撤销，所属的营划给最近的师
+// 撤编合并：营打光了（没有能动的车，人不足 4 个、或兵力打到编成时的一成五以下又不足 8 人）就撤销番号，残部并入就近的营——
+//   面板、地图上不再有这个番号，也不再给它下命令；趴窝的车留在原地当固定火力点。全军只剩这一股人时留着。
+//   师打到不足 15 人（车不超过 1 辆）就撤销，所属的营划给最近的师
+const thSpent = F => { const G = thG(F); if (!G || bgVehs(G).some(v => !v.immob)) return false; const men = thMen(F); return men < 4 || (men < 8 && thPow(F) < (F.p0 || 1) * .15); };
 function thMerge(side) {
   const R0 = thRoot(side);
   if (!R0) return;
   const regs = thDivs(side).flatMap(thRegsOf).filter(F => thG(F));
   for (const F of regs) {
     const G = thG(F);
-    if (!G || bgVehs(G).length) continue;
-    const men = thMen(F);
-    if (!men || men >= 4) continue;
-    const o = regs.filter(R => R !== F && thG(R) && thMen(R) >= 4).map(R => ({ R, G: thG(R) })).sort((a, b) => dist(a.G.ax, a.G.ay, G.ax, G.ay) - dist(b.G.ax, b.G.ay, G.ax, G.ay))[0];
-    if (!o) continue;
+    if (!G || !thSpent(F)) continue;
+    const men = thMen(F), o = regs.filter(R => R !== F && thG(R) && !thSpent(R)).map(R => ({ R, G: thG(R) })).sort((a, b) => dist(a.G.ax, a.G.ay, G.ax, G.ay) - dist(b.G.ax, b.G.ay, G.ax, G.ay))[0];
+    if (!o && men) continue;
     const us = bgUnits(G);
     G.us = []; G.vs = [];   // 空营下面 thPrune 撤掉
-    hqTake(o.G, us, []);
+    if (o) hqTake(o.G, us, []);
     thStat('thMergeReg');
+    if (men && typeof chatSay === 'function') chatSay(side, `${F.name}打光了，只剩 ${men} 人，番号撤销，残部并入${o.R.name}。`, { kind: 'report', at: { x: G.ax, y: G.ay }, lv: 2, key: 'thsp' + F.id, gap: 30 });
   }
   const divs = thDivs(side).filter(D => thRegsOf(D).some(R => thG(R)));
   for (const D of divs) {

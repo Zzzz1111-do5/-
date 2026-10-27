@@ -54,7 +54,7 @@ const vlsLeft = k => vlsShips().reduce((a, s) => a + ((vlsOf(s.o) || {})[k] || 0
 function vlsWeapon(w, kind) {
   if (kind === 'eship') return ['yj21', 'yj18', 'yj83', 'yj62'].includes(w) && vlsLeft(w) > 0 ? w : ['yj18', 'yj83', 'yj62', 'yj21'].find(k => vlsLeft(k) > 0) || null;   // 打舰只用反舰导弹
   if (w !== 'lacm') return w;
-  const top = ['ascm', 'tel', 'airfield'].includes(kind) || (kind === 'coastal' && typeof S === 'object' && S.ships.some(s => alive(s) && s.load && s.load.teams > 0));
+  const top = ['ascm', 'tel', 'typhon', 'airfield'].includes(kind) || (kind === 'coastal' && typeof S === 'object' && S.ships.some(s => alive(s) && s.load && s.load.teams > 0));
   const coast = kind === 'coastal' || kind === 'ascm' || kind === 'aa';   // 沿岸硬目标、有防空掩护的目标：超音速的鹰击-18A 更难被拦
   const order = top ? ['yj21', 'yj18', 'cj10', 'yj62', 'yj83'] : coast ? ['yj18', 'yj83', 'cj10', 'yj62', 'yj21'] : ['cj10', 'yj62', 'yj83', 'yj18'];
   return order.find(k => vlsLeft(k) > 0) || null;
@@ -101,7 +101,7 @@ function vlsFire(w, x, y, n = 1, why, player) {
 
 // —— 进攻方 AI 用垂发对陆导弹（每 4 秒）：驱逐舰受指挥官控制（观战 / 自动）时；目标按价值，已有弹在飞的不重复打；
 //    敌弹炮防空车 / 密集阵掩护的目标，亚音速的长剑-10 一次打两枚 ——
-const VLS_VAL = { ascm: 10, tel: 9, coastal: 8, airfield: 7, arty: 5, aa: 4.5, mortar: 3, bunker: 2.5 };
+const VLS_VAL = { typhon: 11, ascm: 10, tel: 9, coastal: 8, airfield: 7, arty: 5, aa: 4.5, mortar: 3, bunker: 2.5 };
 function vlsCommandP(dt) {
   if (!S || S.phase !== 'battle' || S.over || !S.cmd) return;
   const V = S.vlsS || (S.vlsS = { t: 6 });
@@ -122,7 +122,7 @@ function vlsCommandP(dt) {
   const k = vlsWeapon('lacm', best.kind);
   if (!k) return;
   const cover = (S.veh || []).some(v => v.side === 'e' && !v.dead && (v.type === 'sam_veh' || (v.mod && v.mod.cram)) && dist(v.x, v.y, best.kx, best.ky) < 450);
-  const n = (k === 'cj10' && cover ? 2 : 1) + (best.kind === 'airfield' ? 1 : 0);
+  const n = (k === 'cj10' && cover ? 2 : 1) + (best.kind === 'airfield' ? 1 : 0) + (best.kind === 'typhon' ? 2 : 0);   // 「堤丰」：一次三枚饱和它的防空，一轮打掉，别让它再齐射
   const who = vlsWho(k, best.kx, best.ky), f = vlsFire(k, best.kx, best.ky, n, 'ai');
   if (f && typeof chatSay === 'function') chatSay('p', `命令：${who}垂发 ${f} 枚${vlsNmS(k)}，打击${typeof cmdWhere === 'function' ? cmdWhere(best.kx, best.ky) : gridRef(best.kx, best.ky)}的${(ENEMY_SPEC[best.kind] || {}).name || '目标'}${cover && k === 'cj10' ? '（敌有弹炮防空掩护，双发）' : ''}。`, { kind: 'order', at: { x: best.kx, y: best.ky }, key: 'vls' + best.id, gap: 60, lv: 2 });
 }

@@ -54,17 +54,28 @@ function navyStep(dt) {
     if (!det && typeof cvAll === 'function') det = cvAll().some(c => c.hp > 0 && sees(c.x, c.y, 600));
     if (!det) det = (S.planes || []).some(p => !p.dead && p.alt > .3 && (p.kind === 'recon' ? sees(p.x, p.y, (p.v || 'kj600') === 'kj600' ? 900 : 420) : sees(p.x, p.y, p.kind === 'fighter' ? (p.radar || 520) : 260)));
     if (det) { if (e.det < S.t - 30 && !N.said['d' + e.id]) { N.said['d' + e.id] = 1; log(`发现敌${e.nm}`, 'warn', null, 0, e); } e.det = S.t; e.kx = e.x; e.ky = e.y; }
+    else if (nvEsm(e)) {   // 电子侦察：敌舰的搜索雷达一直开着，照到我方舰艇时，舰上电子侦察在更远处就截获了信号，几条舰交叉测向定出大致位置
+      if (!N.said['e' + e.id]) { N.said['e' + e.id] = 1; log(`电子侦察截获敌${e.nm}的雷达信号，交叉测向定位`, 'warn', null, 0, e); }
+      if (S.t - (e.esmFix ?? -99) > 2) { e.esmFix = S.t; e.kx = e.x + gauss() * 30; e.ky = e.y + gauss() * 30; }
+      e.det = e.esm = S.t;
+    }
   }
   if ((N.thT -= dt) <= 0) { N.thT = 1; for (const e of S.eships) if (!e.dead) nvThink(e); }
   if ((N.pT -= dt) <= 0) { N.pT = 2; nvThinkP(N); }
   nvEnd(dt);
 }
+// 敌舰的雷达照得到我方哪条舰（截获距离比它的雷达探测距离远一成半）
+function nvEsm(e) {
+  const R0 = NV_CLS[e.cls].radar * (e.hp < e.maxhp * .5 ? .75 : 1) * 1.15, us = [S.dd, ...S.ships.filter(s => alive(s) && !isLand(s.x, s.y)), ...(typeof cvAll === 'function' ? cvAll().filter(c => c.hp > 0) : [])];
+  return us.some(o => o && o.state !== 'sunk' && isFinite(o.x) && o.x > -999 && dist(o.x, o.y, e.x, e.y) < R0);
+}
+const nvEsmOnly = e => e.esm != null && e.esm === e.det;   // 最近一次只是电子侦察测向（没有雷达 / 目视看见）：画在测向位置上的虚影
 // 航行：巡逻（绕守备点）/ 接敌（保持在反舰导弹射程的八成）/ 撤退（回岸边防空伞下）；只走深水，舰间保持 60
 function nvMove(e, dt) {
   const C = NV_CLS[e.cls], vmax = C.spd * (e.hp < e.maxhp * .4 ? .55 : 1);
   let tx = e.gx, ty = e.gy, v = vmax * .4;
   if (e.st === 'patrol') { const a = Math.atan2(e.y - e.gy, e.x - e.gx) + .5 * e.odir; tx = e.gx + Math.cos(a) * 90; ty = e.gy + Math.sin(a) * 60; }
-  else if (e.st === 'engage' && e.tg) { const d = dist(e.x, e.y, e.tg.x, e.tg.y), want = C.asmR * .78; const a = Math.atan2(e.y - e.tg.y, e.x - e.tg.x); tx = e.tg.x + Math.cos(a) * want; ty = e.tg.y + Math.sin(a) * want; v = Math.abs(d - want) > 60 ? vmax : vmax * .4; }
+  else if ((e.st === 'engage' || e.st === 'gun') && e.tg) { const d = dist(e.x, e.y, e.tg.x, e.tg.y), want = e.st === 'gun' ? C.gunR * .8 : C.asmR * .78; const a = Math.atan2(e.y - e.tg.y, e.x - e.tg.x); tx = e.tg.x + Math.cos(a) * want; ty = e.tg.y + Math.sin(a) * want; v = Math.abs(d - want) > 60 ? vmax : vmax * .4; }
   else if (e.st === 'retreat') { tx = e.gx; ty = Math.max(coastAt(e.gx) + 70, e.gy - 120); v = vmax; }
   for (const o of S.eships) if (o !== e && !o.dead) { const d = dist(o.x, o.y, e.x, e.y); if (d < 60 && d > 0) { tx += (e.x - o.x) / d * 40; ty += (e.y - o.y) / d * 40; } }
   ty = Math.min(ty, STAGING_Y + 120);
@@ -81,6 +92,8 @@ function nvThink(e) {
   for (const t of tg) { const d = dist(e.x, e.y, t.x, t.y); if (d > C.asmR * 1.6) continue; const s = t.v * 2 - d / 200; if (s > bs) { bs = s; best = t; } }
   e.tg = best;
   e.st = e.hp < e.maxhp * .35 ? 'retreat' : best ? 'engage' : 'patrol';
+  // 反舰导弹打光：护航弱的登陆舰才抵近用主炮打（我方驱逐舰 700 内就不去送），否则回巡逻区（主炮照样给滩头火力支援）
+  if (e.st === 'engage' && !(e.asm > 0)) e.st = best.k === 'ship' && !(S.dd && S.dd.state !== 'sunk' && dist(S.dd.x, S.dd.y, best.x, best.y) < 700) ? 'gun' : 'patrol';
   // 反舰导弹齐射：射程内、来袭中的不超过 4 枚；同舰 25 秒一轮
   if (best && e.asm > 0 && S.t >= e.asmT && dist(e.x, e.y, best.x, best.y) < C.asmR) {
     const inb = S.missiles.filter(m => m.kind === 'asm' && m.side === 'e' && !m.done && m.tgt && m.tgt.k === best.k && m.tgt.id === best.id).length;
@@ -106,18 +119,27 @@ function nvThink(e) {
     }
     if (p0) { msLaunch('sam', 'e', e.x, e.y, { x: p0.x, y: p0.y }, { tgt: { k: 'plane', id: p0.id }, src: 'eship', spd: 620, dur: 2.6, pk: .5 }); e.sam--; e.samCd = S.t + 2; nvStat('nvSamE'); }
   }
-  // 舰炮：480 内的我方舰船，每 3 秒一次齐射，三成五命中
-  if (S.t >= e.gunT) for (const t of tg) {
-    if (dist(e.x, e.y, t.x, t.y) > C.gunR) continue;
-    e.gunT = S.t + 3;
-    if (typeof tracer === 'function') for (let i = 0; i < 2; i++) tracer(e.x, e.y, t.x + gauss() * 10, t.y + gauss() * 10, 'e', true);
-    if (Math.random() < .35) {
-      S.fx.push({ kind: 'flash', x: t.x, y: t.y, r: 12, life: 0, max: .6, side: 'e' });
-      if (t.k === 'ship') { const s = S.ships.find(o => o.id === t.id); if (s) damageShip(s, 3); }
-      else if (t.k === 'dd' && Math.random() < .3) damageDD({ kind: 'coastal', x: e.x, y: e.y });
-      else if (t.k === 'cv' && typeof cvImpact === 'function') cvImpact(t.x, t.y, { men: 0, ship: 2, struct: 0, R: 12 });
+  // 主炮（Mk45 127 毫米）：射程内的我方舰船优先（抢滩卸载的登陆舰最先），其次岸上看得见的我方登陆部队（舰炮火力支援）；
+  //   每 3 秒一发真炮弹（有飞行时间、散布，按目标航速打提前量），落点按炮弹毁伤结算（combat.js impact）
+  if (S.t >= e.gunT) {
+    let gt = null, gs = -1;
+    for (const t of tg) { const d = dist(e.x, e.y, t.x, t.y); if (d < C.gunR) { const s = t.v * 2 - d / 120; if (s > gs) { gs = s; gt = t; } } }
+    if (!gt) for (const q of S.teams) {
+      if (q.side !== 'p' || !q.men.length || q.ride || !isLand(q.x, q.y) || coastAt(q.x) - q.y > 260 || !spotted(q.x, q.y)) continue;
+      const d = dist(e.x, e.y, q.x, q.y);
+      if (d > C.gunR || S.teams.some(o => o.side === 'e' && o.men.length && dist(o.x, o.y, q.x, q.y) < 60)) continue;   // 自己人在附近不打
+      const s = q.men.length - d / 120;
+      if (s > gs) { gs = s; gt = { x: q.x, y: q.y, k: 'team' }; }
     }
-    break;
+    if (gt) {
+      const d = dist(e.x, e.y, gt.x, gt.y), dur = 1 + d / 420, s0 = gt.k === 'ship' ? S.ships.find(o => o.id === gt.id) : null, mv = s0 && s0.state === 'move';
+      const ax = gt.x + (mv ? Math.cos(s0.heading) * 26 * dur * .8 : 0) + gauss() * 12, ay = gt.y + (mv ? Math.sin(s0.heading) * 26 * dur * .8 : 0) + gauss() * 12;
+      const bx = e.x + Math.cos(e.heading) * C.L * .36, by = e.y + Math.sin(e.heading) * C.L * .36;   // 舰首炮塔
+      fireShell(bx, by, ax, ay, 'e', 'naval', dur, false, { src: 'eship' });
+      e.gunT = S.t + 3; e.gunA = Math.atan2(gt.y - by, gt.x - bx); e.gunF = S.t; e.det = S.t; e.kx = e.x; e.ky = e.y;   // 炮口焰：暴露位置
+      nvStat('nvGunE');
+      if (gt.k === 'team' && typeof chatSay === 'function') chatSay('e', `命令：${e.nm}主炮对滩头登陆之敌实施火力支援。`, { kind: 'order', at: gt, key: 'nvgun' + e.id, gap: 60, lv: 2 });
+    }
   }
 }
 // —— 来袭导弹的分层拦截（missile.js msPgmFly 对我方导弹每步调用）：返回 true 表示本步已被拦截 ——
@@ -191,22 +213,24 @@ function nvThinkP(N) {
     const need = Math.ceil(tgt.hp / 24) + 1 + (NV_CLS[tgt.cls].sam > 30 ? 2 : 1) - inb;
     if (need > 0) {
       const strong = NV_CLS[tgt.cls].sam > 30 && typeof vlsLeft === 'function' && vlsLeft('yj21') > 0;
-      const who = typeof vlsWho === 'function' ? vlsWho(strong ? 'yj21' : 'yj18', tgt.x, tgt.y) : '驱逐舰', n = vlsFire(strong ? 'yj21' : 'yj18', tgt.x, tgt.y, Math.min(4, need), 'asuw') || vlsFire(strong ? 'yj18' : 'yj21', tgt.x, tgt.y, Math.min(4, need), 'asuw');
+      const ax = tgt.kx ?? tgt.x, ay = tgt.ky ?? tgt.y;
+      const who = typeof vlsWho === 'function' ? vlsWho(strong ? 'yj21' : 'yj18', ax, ay) : '驱逐舰', n = vlsFire(strong ? 'yj21' : 'yj18', ax, ay, Math.min(4, need), 'asuw') || vlsFire(strong ? 'yj18' : 'yj21', ax, ay, Math.min(4, need), 'asuw');
       if (n) {
         N.vlsT = S.t + 6; nvStat('nvVls', n);
         if (typeof chatSay === 'function') chatSay('p', `命令：${who}垂发${strong ? '鹰击-21 高超音速' : '鹰击-18A 超音速'}反舰导弹 ${n} 枚，饱和攻击敌${tgt.nm}。`, { kind: 'order', at: tgt, key: 'nvvls', gap: 12, lv: 1 });
       }
     }
   }
-  // 航空兵：歼-35 挂鹰击-83K、轰-6K 挂鹰击-12，打离我方舰队最近的已发现敌舰
+  // 航空兵：歼-35 挂鹰击-83K（双机编队，4 枚同时到达）、轰-6K 挂鹰击-12，打离我方舰队最近的已发现敌舰；在敌舰防空导弹射程外发射（navyPlaneAsm）
   const airOk = S.role === 'spectate' || (S.cv && S.cv.auto);
   if (!airOk || typeof airPkg !== 'function' || S.t < (N.airT || 0)) return;
   const busy = new Set((S.planes || []).filter(p => !p.dead && p.asm).map(p => p.asm.id));
   const tgt = known.filter(e => !busy.has(e.id)).sort((a, b) => a.y - b.y)[0] || known[0];
   for (const [kind, w] of [['bomber', 'yj12'], ['strike', 'yj83k']]) {
     if (!(S.assets[kind] > 0) || !(typeof airReady === 'function' && airReady(kind))) continue;
-    const n0 = S.planes.length, L = airPkg(kind, tgt.x, tgt.y);
+    const n0 = S.planes.length, L = airPkg(kind, tgt.kx ?? tgt.x, tgt.ky ?? tgt.y);
     if (!L) continue;
+    if (kind === 'strike' && typeof atoWing === 'function') atoWing(L, kind, tgt.kx ?? tgt.x, tgt.ky ?? tgt.y);
     for (const p of S.planes.slice(n0)) if (p.kind === kind) p.asm = { id: tgt.id, w };
     N.airT = S.t + 8; nvStat('nvAir');
     if (typeof chatSay === 'function') chatSay('p', `命令：${kind === 'bomber' ? '轰-6K 挂鹰击-12 超音速反舰导弹' : '歼-35 挂鹰击-83K 反舰导弹'}出击，在敌舰防空导弹射程外发射，打敌${tgt.nm}。`, { kind: 'order', at: tgt, key: 'nvair' + kind, gap: 15, lv: 1 });
@@ -217,8 +241,9 @@ function nvThinkP(N) {
 function navyPlaneAsm(p, dt, speed) {
   const E = navyById(p.asm.id);
   if (!E || E.dead) { const n = nvAlive().filter(nvKnown).sort((a, b) => dist(a.x, a.y, p.x, p.y) - dist(b.x, b.y, p.x, p.y))[0]; if (n) { p.asm.id = n.id; return true; } p.asm = null; airSet(p, 'rtb'); return true; }
-  if (nvKnown(E)) { p.tx = E.x; p.ty = E.y; }
-  const R = p.asm.w === 'yj12' ? 700 : 480, d = dist(p.x, p.y, p.tx, p.ty);
+  if (nvKnown(E)) { p.tx = E.kx ?? E.x; p.ty = E.ky ?? E.y; }
+  // 发射距离：在目标舰防空导弹射程外 60（鹰击-83K 射程比标准-2 远；鹰击-12 更远），不飞进防空圈送
+  const sr = NV_CLS[E.cls].samR || 0, R = p.asm.w === 'yj12' ? Math.max(700, sr + 80) : Math.max(480, sr + 60), d = dist(p.x, p.y, p.tx, p.ty);
   speed(airSpec(p.kind, p.v).spd);
   airSteer(p, p.tx, p.ty, dt);
   if (d > R) return true;
@@ -247,7 +272,7 @@ function navyDraw(time) {
   if (!S || !S.eships || !S.eships.length || typeof R !== 'object' || !R.ctx) return;
   const ctx = R.ctx, spec = specAll(), k = typeof shipK === 'function' ? shipK() : 1;
   for (const e of S.eships) {
-    const known = spec || S.t - (e.det ?? -99) < 4, ghost = !known && e.kx != null && !e.dead;
+    const known = spec || (S.t - (e.det ?? -99) < 4 && !nvEsmOnly(e)), ghost = !known && e.kx != null && !e.dead;
     if (!known && !ghost && !(e.dead && S.t - e.sinkT < 12 && e.kx != null)) continue;
     const C = NV_CLS[e.cls], x = ghost ? e.kx : e.x, y = ghost ? e.ky : e.y, L = C.L * k, B = C.B * k;
     const sink = e.dead ? clamp((S.t - e.sinkT) / 10, 0, 1) : 0;
@@ -262,7 +287,9 @@ function navyDraw(time) {
     ctx.fillRect(-L * .08, -B * .3, L * .2, B * .6);   // 舰桥 / 相控阵雷达
     ctx.strokeRect(L * .18, -B * .22, L * .12, B * .44);   // 前垂发
     if (e.cls !== 'lcs') ctx.strokeRect(-L * .34, -B * .22, L * .12, B * .44);   // 后垂发
-    ctx.beginPath(); ctx.arc(L * .36, 0, B * .14, 0, 7); ctx.fill(); ctx.beginPath(); ctx.moveTo(L * .36, 0); ctx.lineTo(L * .48, 0); ctx.stroke();   // 舰炮
+    const ga = e.gunA != null && !ghost && S.t - (e.gunF ?? -99) < 20 ? e.gunA - e.heading : 0, gf = !ghost && S.t - (e.gunF ?? -99) < .25;   // 主炮：转向最近射击的目标，开炮时炮口焰
+    ctx.beginPath(); ctx.arc(L * .36, 0, B * .14, 0, 7); ctx.fill(); ctx.beginPath(); ctx.moveTo(L * .36, 0); ctx.lineTo(L * .36 + Math.cos(ga) * L * .13, Math.sin(ga) * L * .13); ctx.stroke();
+    if (gf) { ctx.fillStyle = rgba('#fff3d6', .9); ctx.beginPath(); ctx.arc(L * .36 + Math.cos(ga) * L * .16, Math.sin(ga) * L * .16, B * .3, 0, 7); ctx.fill(); }
     ctx.restore();
     if (!e.dead && !ghost) {   // 耐久条
       const w = Math.max(16, L * .8), f = clamp(e.hp / e.maxhp, 0, 1);

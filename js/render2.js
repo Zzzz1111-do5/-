@@ -158,6 +158,7 @@ function supMark(ctx, q) {
 
 function drawEnemies(time) {
   const ctx = R.ctx;
+  if (typeof gunPits === 'function') gunPits(ctx);   // 空着的发射阵地（guns.js）
   ctx.lineWidth = px(1.4);
   for (const e of S.enemies) {
     if (e.kind === 'airfield' && typeof eaDrawBase === 'function' && eaOn()) continue;   // 野战机场按世界尺寸在 drawUnder 里画（eair.js）

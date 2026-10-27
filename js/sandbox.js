@@ -181,6 +181,7 @@ function sbxCheck(c, x, y, x2, y2, ignore) {
   if (s.minDepth && coastAt(x) - y < s.minDepth) return bad(`须放在离海岸 ${s.minDepth} 以外的纵深`);
   if (s.ek === 'airfield' && typeof eaRunwayFit === 'function' && !eaRunwayFit(x, y, 380, sbxAirAvoid(ignore))) return bad('这里放不下机场：920 米跑道与约 1100 × 800 的场区都要落在平整的陆地上（不跨水、河、悬崖、山地），也不能压在据点或其他工事上');
   if ((s.kind === 'enemy' || s.kind === 'post') && s.ek !== 'airfield' && sbxOnAirfield(x, y, ignore)) return bad('不能压在机场的跑道、滑行道、停机坪、机库群、油库或弹药库上');
+  if (s.kind === 'enemy' && (s.ek === 'bunker' || s.ek === 'coastal')) { const sl = groundSlope(x, y); if (sl > SLOPE_MAX) return bad(`${s.ek === 'coastal' ? '炮台' : '碉堡'}是整块浇筑的混凝土工事，要建在平地上：这里坡度约 ${Math.round(sl)}°（不能超过 ${SLOPE_MAX}°）`); }
   if (s.kind === 'enemy' || s.kind === 'post') {
     if (S.sbx.items.some(it => it !== ignore && it.side === 'e' && it.x != null && ['enemy', 'post'].includes(sbxEntry(it).spawn.kind) && dist(it.x, it.y, x, y) < 12)) return bad('与其他工事重叠');
   }
