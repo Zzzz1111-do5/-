@@ -500,9 +500,9 @@ function sbxAIDefendBase() {
     const af = af0;
     {
       const buyN = (id, n) => { let k = 0; for (let i = 0; i < n; i++) if (sbxPlace(id).ok) k++; return k; };   // 预算越大，机队越大
-      const nh = buyN('e_air_heli', B0 >= 3000 ? 5 : 2), ng = buyN('e_air_ga', 1 + (B0 >= 3000) + (B0 >= 6000)), nf = buyN('e_air_ftr', (B0 >= 2200) + (B0 >= 4000) + (B0 >= 8000)), n22 = buyN('e_air_f22', (B0 >= 3000) + (B0 >= 7000));
+      const nh = buyN('e_air_heli', B0 >= 3000 ? 5 : 2), ng = buyN('e_air_ga', 1 + (B0 >= 3000) + (B0 >= 6000)), nf = buyN('e_air_ftr', (B0 >= 2200) + (B0 >= 8000)), nfb = buyN('e_air_ftrb', (B0 >= 4000) + (B0 >= 9000)), n22 = buyN('e_air_f22', (B0 >= 3000) + (B0 >= 7000));
       sbxTry('e_manpads', hq.x - 30, hq.y + 25, 40);
-      const fw = [nf && `F-35A ${nf} 架`, n22 && `F-22A ${n22} 架`].filter(Boolean).join('、');
+      const fw = [nf && `F-35A ${nf} 架`, nfb && `F-35B ${nfb} 架`, n22 && `F-22A ${n22} 架`].filter(Boolean).join('、');
       say(`航空：纵深 ${sbxM(coastAt(af.x) - af.y)} 米处修野战机场，${[nh && `武装直升机 ${nh} 架`, ng && `攻击机 ${ng} 架`].filter(Boolean).join('、')}，成双机、四机编队专打卸载中的登陆舰与登陆后的坦克${fw ? `；歼击机 ${fw}，拦截敌舰载机、争夺制空权` : ''}；机场自带雷达、防空车、高炮、巡逻车与常驻守备队，指挥所配单兵防空组。`, af);
     }
   }

@@ -90,8 +90,9 @@ const AIR_SIL = {
   j50: [[11, 0], [8.6, .9], [5, 1.8], [1.6, 2.4], [-4.4, 8.2], [-6, 8.2], [-5.4, 5.2], [-8.4, 3.4], [-10.2, 2.4], [-9.6, 0]],   // 歼-50：λ 形无尾翼，后缘锯齿
   j36: [[12.6, 0], [10.6, .8], [8.2, 1.6], [5.6, 2.6], [1, 5.4], [-5.8, 10.3], [-7.4, 10.3], [-6.4, 6], [-10.6, 2.8], [-11.6, 2.2], [-12.2, 1.2], [-12.2, 0]]   // 歼-36：无尾双菱形翼（翼尖切尖、后缘 W 形），机长 : 翼展约 23 : 19，与歼-20 同一比例尺
 };
-// 剪影键：按型号；守方 type（ga / heli / ftr / f22）另映射
-const airSilKey = (type, v) => type === 'ga' ? 'a10' : type === 'ftr' ? 'f35' : AIR_SIL[type] && !AIR_BASEM[type] ? type : airMdl(type, v).sil || 'j35';
+AIR_SIL.f35b = AIR_SIL.f35;   // F-35B 俯视轮廓同 F-35A
+// 剪影键：按型号；守方 type（ga / heli / ftr / ftrb / f22）另映射
+const airSilKey = (type, v) => type === 'ga' ? 'a10' : type === 'ftr' ? 'f35' : type === 'ftrb' ? 'f35b' : AIR_SIL[type] && !AIR_BASEM[type] ? type : airMdl(type, v).sil || 'j35';
 const airName = (type, v) => airMdl(type, v).name || (AIR_SPEC[type] || {}).name || '飞机';
 // HUD 图标（24×24，描边风格，与 hud.js ICON 一致）
 const CARRIER_ICONS = typeof WI === 'object' ? {   // 照真实机型画（icons.js）：福建舰、空警-600、歼-35、攻击-2、轰-6K、歼-20
@@ -274,7 +275,7 @@ const airFtrUp = () => S.air.wing.filter(w => w.type === 'fighter' && w.state !=
 const airFtrDeck = () => S.air.wing.filter(w => w.type === 'fighter' && w.state === 'deck' && !(w.af && !(typeof abAfOpen === 'function' && abAfOpen())) && (airLandW(w) || (cvOf(cvHome(w)) || { hp: 0 }).hp > 0)).length;
 // 在空、没在接敌、弹药够的巡逻战斗机（可改派去护航轰炸机）
 const airFtrFree = () => S.planes.filter(p => !p.dead && p.kind === 'fighter' && (p.phase === 'loiter' || p.phase === 'out') && !p.tg && !p.esc && p.escOf == null && !p.sweep && (p.aam || 0) >= 2 && p.alt > .5);
-const airEFtr = () => !!(S.eair && (S.eair.wing.some(w => (w.type === 'ftr' || w.type === 'f22') && w.state !== 'lost') || S.eair.fly.some(a => !a.dead && (a.type === 'ftr' || a.type === 'f22'))));
+const airEFtr = () => !!(S.eair && (S.eair.wing.some(w => eaFtr(w.type) && w.state !== 'lost') || S.eair.fly.some(a => !a.dead && eaFtr(a.type))));
 // 目标 r 以内已知的敌防空（高炮阵地、防空车、近 2 分钟暴露过的单兵防空）
 function airAAKnown(x, y, r) {
   const out = [];

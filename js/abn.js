@@ -496,7 +496,7 @@ function abCapture() {
   b.cratT = fix > 0 ? S.t + fix : 0; b.fixD = fix;
   // 停在机场上的敌机：被缴获 / 就地击毁
   let n = 0;
-  if (S.eair) for (const w of S.eair.wing) if ((w.state === 'ready' || w.state === 'rearm') && !(typeof eaBases === 'function' && eaBases().length)) { w.state = 'lost'; n++; }
+  if (S.eair) for (const w of S.eair.wing) if ((w.state === 'ready' || w.state === 'rearm') && !w.farp && !(typeof eaBases === 'function' && eaBases().length)) { w.state = 'lost'; n++; }   // 疏散到机场外前沿加油弹药点的不算
   if (S.eair) S.eair.said.base = 1;
   A.capT = S.t; A.st = 'hold';
   abStat('abCap');
@@ -770,6 +770,7 @@ function abeDeny(b, af) {
   b.hp = Math.max(1, b.hp * .5);
   let fly = 0, burn = 0;
   if (S.eair) for (const w of S.eair.wing) {
+    if (w.farp || ((w.type === 'heli' || (typeof eaVtol === 'function' && eaVtol(w.type))) && (w.state === 'ready' || w.state === 'rearm'))) continue;   // 直升机、F-35B 不要跑道：升空疏散到机场外的前沿加油弹药点（eair.js eaScramble）
     if (w.state === 'ready') { w.state = 'lost'; fly++; }   // 转场去后方机场，本局不再出现
     else if (w.state === 'rearm') { w.state = 'lost'; burn++; }
   }

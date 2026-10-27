@@ -96,6 +96,8 @@ const AIRD = {
     body: [[5.4, 0], [4.6, .7], [3, 1.3], [1, 1.9], [-1.4, 2.1], [-3.6, 1.6], [-4.3, .6]],
     cp: [3.5, 4.5, .5, 'win'], inl: [[1.5, .3, 2.6, .55, 'top'], [1, -.2, 3.8, .55, 'top']], ex: [[-2.2, 1.6, 4.6]], bay: [1.8, -1.6, .8, .95], mk: [[-1.6, 8, .75]] }
 };
+// F-35B：机体同 F-35A，座舱后背上一块升力风扇舱门、其后的辅助进气门，弹舱短一些、机炮改外挂吊舱（腹部中线）
+AIRD.f35b = { ...AIRD.f35, lift: [3.1, .3, .62], bay: [2.2, -2.4, .8, 1.15], mk: [[-3.2, 5.2, .7]] };
 AIRD.heli = AIRD.z10; AIRD.transport = AIRD.y20;
 const AIRV = { path: new Map() };   // 渲染缓存：Path2D（局部坐标，按机型 + 部件）
 
@@ -580,7 +582,7 @@ function airRelZ(P, m) {
 // 3D 里飞机的尺寸（v3units.js 的 plane()）
 function airSize3(o, side) {
   if (side === 'p') return (typeof airMdl === 'function' && airMdl(o.kind, o.v).size) || ((typeof AIR_SPEC === 'object' && AIR_SPEC[o.kind]) || {}).size || 15;
-  return ({ ga: 18, heli: 16, uh60: 17, c17: 30, ftr: 17, f22: 18, b2: 34, p8: 26 })[o.type] || 17;
+  return ({ ga: 18, heli: 16, uh60: 17, c17: 30, ftr: 17, ftrb: 17, f22: 18, b2: 34, p8: 26 })[o.type] || 17;
 }
 // 二维：离机阶段画弹体（落下时不点火，点火后尾焰），返回 true 表示已经画了
 function airRelDraw(ctx, m) {

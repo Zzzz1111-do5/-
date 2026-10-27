@@ -781,6 +781,13 @@ function v3mAir(key, fold, opt = {}) {
       mbPrism(M, [[ex + .55, 0], [ex + .2, .32], [ex - .45, .3], [ex - .45, -.3], [ex + .2, -.32]], ez - .28, ez, -.85, { taper: .12 });
     }
   }
+  // F-35B 座舱后背的升力风扇舱门（向后铰接的大门）与辅助进气门；opt.lift 舱门打开（垂直起降时）
+  if (D.lift) {
+    const [lx0, lx1, lw] = D.lift, zt = topAt((lx0 + lx1) / 2) + .03, op = opt.lift || 0;
+    if (op > .02) { const hz = zt + Math.sin(op * 1.3) * (lx0 - lx1); mbQuad(M, [lx1, -lw, zt], [lx1, lw, zt], [lx1 + Math.cos(op * 1.3) * (lx0 - lx1), lw, hz], [lx1 + Math.cos(op * 1.3) * (lx0 - lx1), -lw, hz], .8); mbBox(M, lx1 + .1, lx0 - .1, -lw * .8, lw * .8, zt - .25, zt - .02, .15); }
+    else mbLoop(M, [[lx0, -lw], [lx0, lw], [lx1, lw], [lx1, -lw]], zt, .55);
+    mbLoop(M, [[lx1 - .3, -lw * .7], [lx1 - .3, lw * .7], [lx1 - 1.3, lw * .7], [lx1 - 1.3, -lw * .7]], topAt(lx1 - .8) + .03, .45);   // 辅助进气门
+  }
   // 弹舱门缝（隐身机机腹：关着时一圈分割线、中线；开舱时 v3mBay 画舱门）
   if (D.bay) { const [bx0, bx1, bw, by] = D.bay, z = zc - bot * .98; for (const sg of by ? [1, -1] : [1]) { const yc = by * sg; mbLoop(M, [[bx0, yc - bw], [bx0, yc + bw], [bx1, yc + bw], [bx1, yc - bw]], z, .45); mbLine(M, [bx0, yc, z], [bx1, yc, z], .4); } }
   // 进气道（暗）、B-2 排气槽
@@ -1548,6 +1555,13 @@ function v3Units(C, box) {
       v3AirExtras(P.sil, x, y, z, h, k, sd + 3, 0, null, t, true);
     }
   }
+  // 机场外的前沿加油弹药点（eair.js）：停着的直升机 / F-35B、油囊、弹药箱
+  if (S.eair && S.eair.farp && typeof eaFarpParked === 'function' && (spec || eaFarpSeen()) && inB(S.eair.farp.x, S.eair.farp.y, 120)) {
+    const F = S.eair.farp, K = { heli: ['ah64', 16], ftrb: ['f35b', 17], uh60: ['uh60', 17] };
+    for (const P of eaFarpParked()) { const [key, sz] = K[P.w.type] || ['ah64', 16]; v3GroundPlane(key, sz, P.x, P.y, v3Ht(P.x, P.y), P.h, 0, 0, true, 4, t); }
+    for (const [dx, dy] of [[-62, -40], [-62, -28], [62, -40]]) v3mAdd('farpbl', () => { const M = mbNew(); mbBox(M, -6.5, 6.5, -3.2, 3.2, 0, 1.4, .6, { taper: 1.1 }); return M; }, F.x + dx, F.y + dy, v3Ht(F.x + dx, F.y + dy), 0, 1, 2);   // 油囊
+    v3mAdd('crates', v3mCrates, F.x + 54, F.y + 38, v3Ht(F.x + 54, F.y + 38), .3, 1, 2);
+  }
   // 飞机：高度与 3D 地图里的标识一致（view3d.js v3AirZ：甲板上贴着甲板，空中按高度），按滚转角倾斜；直升机主旋翼转动
   const plane = (o, hd, sd, key, sz, bank) => {
     const x = o.x, y = o.y, z = v3AirZ(o), k = sz / 21, ac = sd + 3;   // 3、4：飞机涂装（写实画面灰色）
@@ -1561,9 +1575,14 @@ function v3Units(C, box) {
     const key = typeof airSilKey === 'function' ? airSilKey(p.kind, p.v) : 'j35', sz = (typeof airMdl === 'function' && airMdl(p.kind, p.v).size) || ((typeof AIR_SPEC === 'object' && AIR_SPEC[p.kind]) || {}).size || 15;
     plane(p, p.heading, 0, key, sz, p.bank);
   }
-  const EA_K = { ga: ['a10', 18], heli: ['ah64', 16], uh60: ['uh60', 17], c17: ['c17', 30], ftr: ['f35', 17], f22: ['f22', 18], b2: ['b2', 34], p8: ['p8', 26] };
+  const EA_K = { ga: ['a10', 18], heli: ['ah64', 16], uh60: ['uh60', 17], c17: ['c17', 30], ftr: ['f35', 17], ftrb: ['f35b', 17], f22: ['f22', 18], b2: ['b2', 34], p8: ['p8', 26] };
   if (S.eair) for (const a of S.eair.fly) if (!a.dead && isFinite(a.x) && (spec || a.pv || seen(a.x, a.y)) && inB(a.x, a.y, 220)) {
     const [key, sz] = EA_K[a.type] || ['f35', 17];
+    if ((a.ph === 'vto' || a.ph === 'vl') && typeof AIRD === 'object' && AIRD[key] && AIRD[key].lift) {   // F-35B 垂直起降：放下起落架、升力风扇舱门打开
+      const k = sz / 21, z = Math.max(v3AirZ(a), v3Ht(a.x, a.y) + V3_GEAR * k);
+      v3mAdd('plv:' + key, () => v3mAir(key, 0, { gear: true, lift: 1 }), a.x, a.y, z, a.heading, k, 4, 0);
+      continue;
+    }
     if (a.ph !== 'gnd' && a.ph !== 'roll') { plane(a, a.heading, 1, key, sz, a.bank); continue; }
     // 机场地面作业（eair.js eaGnd）：放下起落架停在机位 / 沿滑行道滑行 / 跑道上滑跑；登机时飞行员跑过来、顺梯子爬进座舱，座舱盖开合，地勤在机头前打手势
     const b = S.enemies.find(e => e.id === a.base), Cr = typeof eaGndCrew === 'function' ? eaGndCrew(a) : null, gz = v3Ht(a.x, a.y);
