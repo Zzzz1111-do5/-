@@ -17,6 +17,7 @@ function v3oToggle(on = !V3O.on) {
     v3oLock();
     if (typeof log === 'function') log('观察者模式：鼠标转视角 · W A S D 移动 · 空格 / C 升降 · Shift 加速 · Esc 退出', 'info', 'v3o', 1);
   } else {
+    if (V3O.on && V3.fc) Object.assign(V3.fc, { x: V3O.x, y: V3O.y, z: V3O.z, yaw: V3O.yaw, yawT: V3O.yaw, pitch: V3O.pitch, pitchT: V3O.pitch, cx: null, cy: null });   // 退出观察：自由镜头就停在观察者的位置、朝向
     V3O.on = false; V3O.keys.clear(); V3O.drag = null;
     if (typeof document !== 'undefined' && document.pointerLockElement && document.exitPointerLock) document.exitPointerLock();
   }

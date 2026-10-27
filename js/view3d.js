@@ -547,9 +547,78 @@ function v3Init() {
   } catch (e) { V3.ok = false; console.warn('3D 地图不可用', e); }
 }
 
-// 镜头：画面中心（CAM.x, CAM.y）为目标点；距离按平面地图的缩放换算，使画面中心的比例与平面时相同
+// —— 3D 镜头：自由镜头（V3.fc）——镜头本身就是一个在战场上空自由移动的视点：位置 (x, y, z) + 偏航 yaw（0 朝东、π/2 朝南）+ 俯仰 pitch（向上为正）。
+//   不再绕着地面上的某一点转（不是第三人称）：拖动 / Q E / R F 是原地转头、抬头低头；W S 沿视线方向前后飞（抬头往上、低头往下）、A D 左右平移；
+//   滚轮朝鼠标指着的地方推近 / 拉远；左键拖动平移（地面跟着手走）；小地图、编队栏双击等「把镜头移到某处」保持当前朝向和距离平移过去。
+//   画面中心（CAM.x, CAM.y）与缩放 CAM.z 每帧由镜头推算（视线落地点、离地高度），贴图范围、细节档、平面地图的切换都照旧按它们
+// 渲染距离（设置「3D 渲染距离」）：雾、远景贴图、远裁剪面一起放远 / 拉近
+const v3RD = () => clamp(+(typeof SETTINGS === 'object' && SETTINGS && SETTINGS.rdist) || 1, .5, 3);
+// 从「注视点 + 距离 + 俯角 + 方位」（原来的环绕参数）换算成自由镜头：进 3D 时画面和平面地图一致
+function v3FcFromOrbit(tx, ty, tz, D, th, ps) {
+  const x = tx + D * Math.sin(th) * Math.sin(ps), y = ty + D * Math.sin(th) * Math.cos(ps), z = tz + D * Math.cos(th);
+  const yaw = Math.atan2(ty - y, tx - x), pitch = th - Math.PI / 2;
+  return { x, y, z, yaw, pitch, yawT: yaw, pitchT: pitch, cx: null, cy: null, cz: null, d: D };
+}
+function v3FcInit() {
+  let D = (CAM.vh / CAM.z) / (2 * Math.tan(V3_FOV / 2)), th = V3.tiltT ?? .95;
+  const ps = V3.yawT ?? 0, tz = v3Ht(CAM.x, CAM.y), ux = Math.sin(ps), uy = Math.cos(ps);
+  // 平面地图缩得很远时换算出的镜头会在地图外、高度上限以上：改成更陡地俯看、再降低距离，镜头仍对着原来的画面中心
+  const lim = (p, u, a, b) => u > 1e-6 ? (b - p) / u : u < -1e-6 ? (a - p) / u : 1e9;
+  const hmax = Math.max(0, Math.min(lim(CAM.x, ux, -400, W + 400), lim(CAM.y, uy, -400, H + 400)));
+  if (D * Math.sin(th) > hmax) th = Math.asin(clamp(hmax / D, 0, 1));
+  if (D * Math.cos(th) > 4200 - tz) D = (4200 - tz) / Math.max(.2, Math.cos(th));
+  V3.fc = v3FcFromOrbit(CAM.x, CAM.y, tz, D, th, ps);
+}
+const v3Gnd = (x, y) => Math.max(v3Ht(clamp(x, 0, W - 1), clamp(y, 0, H - 1)), -2.6, typeof cvCamZ === 'function' ? cvCamZ(x, y) ?? -99 : -99);
+function v3FcCamera() {
+  const F = V3.fc || (v3FcInit(), V3.fc), cp = Math.cos(F.pitch), f = [cp * Math.cos(F.yaw), -cp * Math.sin(F.yaw), Math.sin(F.pitch)];   // 视线方向（GL 坐标）
+  const E = [F.x, -F.y, F.z], z = [-f[0], -f[1], -f[2]], x = v3Norm(v3Cross([0, 0, 1], z)), y = v3Cross(z, x);
+  const view = new Float32Array([x[0], y[0], z[0], 0, x[1], y[1], z[1], 0, x[2], y[2], z[2], 0, -v3Dot(x, E), -v3Dot(y, E), -v3Dot(z, E), 1]);
+  const D = clamp(F.d || 600, 80, 5000), rd = v3RD();
+  const asp = CAM.vw / Math.max(1, CAM.vh), fo = 1 / Math.tan(V3_FOV / 2), n = clamp(D * .012, .8, 25), fa = D * 9 * rd, nf = 1 / (n - fa);
+  const proj = new Float32Array([fo / asp, 0, 0, 0, 0, fo, 0, 0, 0, 0, (fa + n) * nf, -1, 0, 0, 2 * fa * n * nf, 0]);
+  return (V3.cam = { E, x, y, z, D, rd, asp, M: v3Mul(proj, view) });
+}
+// 每帧：转头缓动、按键飞行、外部「移镜头」的平移、不钻地；再推算画面中心与缩放
+function v3FcStep(dt) {
+  const F = V3.fc || (v3FcInit(), V3.fc);
+  if (F.cx != null && (Math.abs(CAM.x - F.cx) > .5 || Math.abs(CAM.y - F.cy) > .5)) { F.x += CAM.x - F.cx; F.y += CAM.y - F.cy; }   // 别处把画面中心移走了（小地图、双击编队、点消息定位）：镜头平移过去
+  F.yaw += Math.atan2(Math.sin(F.yawT - F.yaw), Math.cos(F.yawT - F.yaw)) * Math.min(1, dt * 14);
+  F.pitch += (F.pitchT - F.pitch) * Math.min(1, dt * 14);
+  F.x = clamp(F.x, -400, W + 400); F.y = clamp(F.y, -400, H + 400);
+  F.z = clamp(F.z, v3Gnd(F.x, F.y) + 3, 4200);
+  const alt = Math.max(1, F.z - v3Gnd(F.x, F.y)), cp = Math.cos(F.pitch), down = -Math.sin(F.pitch);
+  const reach = down > .05 ? Math.min(5000, alt / down * cp) : 2600 * Math.min(1, alt / 200 + .3);   // 视线落地点（看天时取前方一段）
+  F.d = Math.hypot(reach, Math.min(alt, reach * 3));
+  CAM.x = F.x + Math.cos(F.yaw) * reach; CAM.y = F.y + Math.sin(F.yaw) * reach;
+  CAM.z = clamp((CAM.vh / Math.max(30, F.d)) / (2 * Math.tan(V3_FOV / 2)), CAM.fit, Math.max(CAM.fit * 12, 4));   // 与原来的环绕镜头同一换算：画面中心的比例接近平面地图
+  camClamp();
+  F.cx = CAM.x; F.cy = CAM.y; F.cz = CAM.z;
+  V3.yaw = V3.yawT = Math.atan2(-Math.cos(F.yaw), -Math.sin(F.yaw)); V3.tilt = V3.tiltT = clamp(F.pitch + Math.PI / 2, V3_TILT[0], V3_TILT[1]);   // 兼容：旧的方位 / 俯角
+}
+// 原地转头（偏航）、抬头低头（俯仰）
+function v3Look(dyaw, dpitch, now) {
+  const F = V3.fc || (v3FcInit(), V3.fc);
+  F.yawT += dyaw; F.pitchT = clamp(F.pitchT + dpitch, -1.52, .7);
+  if (now) { F.yaw = F.yawT; F.pitch = F.pitchT; }
+}
+// 沿视线飞：fw 前后（沿视线方向，含高低）、rt 左右平移，按离地高度定速度
+function v3Fly(fw, rt, dt) {
+  const F = V3.fc || (v3FcInit(), V3.fc), alt = Math.max(1, F.z - v3Gnd(F.x, F.y)), sp = clamp(alt * 1.25, 50, 1100) * dt, cp = Math.cos(F.pitch);
+  F.x += (Math.cos(F.yaw) * cp * fw - Math.sin(F.yaw) * rt) * sp; F.y += (Math.sin(F.yaw) * cp * fw + Math.cos(F.yaw) * rt) * sp; F.z += Math.sin(F.pitch) * fw * sp;
+}
+// 推近 / 拉远：朝屏幕上 (sx, sy) 指着的地面点移动（k > 1 推近）
+function v3Dolly(sx, sy, k) {
+  const F = V3.fc || (v3FcInit(), V3.fc), P = v3Pick(sx, sy), pz = v3Gnd(P.x, P.y), dx = P.x - F.x, dy = P.y - F.y, dz = pz - F.z, d = Math.hypot(dx, dy, dz) || 1;
+  let m = d * (1 - 1 / k);
+  if (k > 1) m = Math.min(m, d - 6);   // 推近：停在离那一点 6 米外
+  else m = Math.max(m, dz < 0 ? -Math.max(0, 4200 - F.z) / Math.max(.05, -dz / d) : -d * 3);   // 拉远：到了最高高度就停，不再贴着高度上限水平往后飘出地图
+  F.x += dx / d * m; F.y += dy / d * m; F.z += dz / d * m;
+}
+// 镜头：画面中心（CAM.x, CAM.y）为目标点；距离按平面地图的缩放换算，使画面中心的比例与平面时相同（开始界面背景的环绕展示用）
 function v3Camera() {
   if (typeof V3O === 'object' && V3O.on) return v3oCamera();   // 观察者模式（v3obs.js）
+  if (V3.on) return v3FcCamera();   // 自由镜头
   const th = V3.tilt, ps = V3.yaw, D = (CAM.vh / CAM.z) / (2 * Math.tan(V3_FOV / 2));
   const T = [CAM.x, -CAM.y, V3.tz ?? v3Ht(CAM.x, CAM.y)];   // 注视点高度按帧平滑跟随地形 / 航母甲板（v3TzStep），翻过山头、掠过航母时镜头不突然冒高
   const E = [T[0] + D * Math.sin(th) * Math.sin(ps), T[1] - D * Math.sin(th) * Math.cos(ps), T[2] + D * Math.cos(th)];
@@ -558,7 +627,7 @@ function v3Camera() {
   const view = new Float32Array([x[0], y[0], z[0], 0, x[1], y[1], z[1], 0, x[2], y[2], z[2], 0, -v3Dot(x, E), -v3Dot(y, E), -v3Dot(z, E), 1]);
   const asp = CAM.vw / Math.max(1, CAM.vh), f = 1 / Math.tan(V3_FOV / 2), n = D * .03, fa = D * 9, nf = 1 / (n - fa);
   const proj = new Float32Array([f / asp, 0, 0, 0, 0, f, 0, 0, 0, 0, (fa + n) * nf, -1, 0, 0, 2 * fa * n * nf, 0]);
-  return (V3.cam = { E, x, y, z, D, asp, M: v3Mul(proj, view) });
+  return (V3.cam = { E, x, y, z, D, rd: 1, asp, M: v3Mul(proj, view) });
 }
 // 注视点高度：画面中心脚下的地形包络（比实际地形平缓）与航母飞行甲板取高者，按真实时间平滑过去（时间常数约 0.35 秒）
 function v3TzStep(dt) {
@@ -569,11 +638,8 @@ function v3TzStep(dt) {
 // 按住 Q / E 连续转向、R / F 连续俯仰（右键拖动同样可以自由转视角）
 function v3HoldStep(dt) {
   const K = V3.hold;
-  if (!K || !K.size) return;
-  if (K.has('KeyQ')) V3.yawT -= 1.8 * dt;
-  if (K.has('KeyE')) V3.yawT += 1.8 * dt;
-  if (K.has('KeyR')) V3.tiltT = clamp(V3.tiltT + 1.1 * dt, V3_TILT[0], V3_TILT[1]);
-  if (K.has('KeyF')) V3.tiltT = clamp(V3.tiltT - 1.1 * dt, V3_TILT[0], V3_TILT[1]);
+  if (!K || !K.size || !V3.on) return;
+  v3Look((K.has('KeyE') ? 1.6 : 0) * dt - (K.has('KeyQ') ? 1.6 : 0) * dt, (K.has('KeyR') ? 1 : 0) * dt - (K.has('KeyF') ? 1 : 0) * dt, true);   // Q E 原地左右转头、R 抬头 F 低头
 }
 // 屏幕点 → 视线 → 与地形求交（先粗步进，再二分）；打不到地面时取视线与海平面的交点
 function v3Ray(sx, sy) {
@@ -613,9 +679,9 @@ function v3Draw(now) {
   else if (typeof afb3dSig === 'function' && (V3.achk = (V3.achk || 0) - 1) <= 0 && (V3.achk = 30) && afb3dSig() !== V3.asig) v3Bld();   // 机场刚被发现 / 夺取
   // 转向 / 俯仰缓动；注视点高度平滑
   const fdt = clamp((now - (V3.lastNow || now)) / 1000, 0, .1); V3.lastNow = now;
-  v3HoldStep(fdt); v3TzStep(fdt);
-  V3.yaw += Math.atan2(Math.sin(V3.yawT - V3.yaw), Math.cos(V3.yawT - V3.yaw)) * .18; V3.tilt += (V3.tiltT - V3.tilt) * .18;
   if (typeof V3O === 'object' && V3O.on) v3oStep(now);
+  else if (V3.on) { v3HoldStep(fdt); v3FcStep(fdt); }   // 自由镜头
+  else { v3TzStep(fdt); V3.yaw += Math.atan2(Math.sin(V3.yawT - V3.yaw), Math.cos(V3.yawT - V3.yaw)) * .18; V3.tilt += (V3.tiltT - V3.tilt) * .18; }   // 开始界面背景的环绕展示
   const C = v3Camera(), box = V3.box = v3Box(), boxN = v3Box(1.15);
   if (V3.baseReal !== (typeof realLook === 'function' && realLook() && !v3Mx())) v3BaseTex();   // 切换了画面风格：底图跟着换
   // 俯视贴图：近处一张高清（每帧画），整个可见范围一张低清（每 3 帧画一次）；近处已经盖住大半个可见范围（俯看时）就只画一张
@@ -671,7 +737,7 @@ function v3Draw(now) {
   gl.uniform3f(u.uEye, C.E[0], C.E[1], C.E[2]);
   gl.uniform4f(u.uBox, V3.boxN[0], V3.boxN[1], V3.boxN[2], V3.boxN[3]); gl.uniform4f(u.uBoxF, V3.boxF[0], V3.boxF[1], V3.boxF[2] || 1, V3.boxF[3] || 1);
   gl.uniform2f(u.uWorld, W, H); gl.uniform2f(u.uGrid, GW, GH); gl.uniform2f(u.uHG, Math.max(1, V3.nx - 1), Math.max(1, V3.ny - 1));
-  gl.uniform2f(u.uFog, C.D * 1.3, C.D * 2.8);
+  gl.uniform2f(u.uFog, C.D * 1.3 * (C.rd || 1), C.D * 2.8 * (C.rd || 1));
   gl.uniform1f(u.uSea, 1.5);
   const mx = v3Mx() ? 1 : 0, tm = (now / 1000) % 3600;   // 黑绿画面：黑客帝国式数码风
   gl.uniform1f(u.uT, tm); gl.uniform1f(u.uMx, mx);
@@ -683,11 +749,11 @@ function v3Draw(now) {
     const ub = V3.ub, ab = V3.ab;
     gl.useProgram(V3.pb);
     gl.uniformMatrix4fv(ub.uM, false, C.M); gl.uniform3f(ub.uEye, C.E[0], C.E[1], C.E[2]);
-    gl.uniform4f(ub.uBox, V3.boxN[0], V3.boxN[1], V3.boxN[2], V3.boxN[3]); gl.uniform4f(ub.uBoxF, V3.boxF[0], V3.boxF[1], V3.boxF[2] || 1, V3.boxF[3] || 1); gl.uniform2f(ub.uWorld, W, H); gl.uniform2f(ub.uFog, C.D * 1.3, C.D * 2.8);
+    gl.uniform4f(ub.uBox, V3.boxN[0], V3.boxN[1], V3.boxN[2], V3.boxN[3]); gl.uniform4f(ub.uBoxF, V3.boxF[0], V3.boxF[1], V3.boxF[2] || 1, V3.boxF[3] || 1); gl.uniform2f(ub.uWorld, W, H); gl.uniform2f(ub.uFog, C.D * 1.3 * (C.rd || 1), C.D * 2.8 * (C.rd || 1));
     gl.uniform1f(ub.uT, tm); gl.uniform1f(ub.uMx, mx);
     gl.disableVertexAttribArray(V3.a.p); gl.disableVertexAttribArray(V3.a.n);
     gl.enableVertexAttribArray(ab.p); gl.enableVertexAttribArray(ab.n); gl.enableVertexAttribArray(ab.e);
-    const fe = C.D * 2.8, ex = C.E[0], ey = -C.E[1];
+    const fe = C.D * 2.8 * (C.rd || 1), ex = C.E[0], ey = -C.E[1];
     for (const c of V3.bch) {
       if (c.bb && Math.hypot(Math.max(c.bb[0] - ex, 0, ex - c.bb[2]), Math.max(c.bb[1] - ey, 0, ey - c.bb[3])) > fe) continue;   // 整块在雾外
       gl.bindBuffer(gl.ARRAY_BUFFER, c.b); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, c.i);
@@ -787,7 +853,7 @@ function v3Overlay(ctx, time) {
 }
 
 // —— 开关与操作 ——
-const v3Can = () => !!S && S.phase !== 'sandbox' && !(typeof INTRO === 'object' && INTRO.on);
+const v3Can = () => !!S && !(typeof INTRO === 'object' && INTRO.on);   // 部署、沙盒编辑、开战后都能开 3D
 // 开始界面背景：电脑上（非低画质）用 3D 地形缓慢转动展示
 function v3Att() {
   if (!(typeof MENU === 'object' && MENU.open && !MENU.game) || V3.ok === false && V3.tried || R.lowCap || (typeof SETTINGS === 'object' && SETTINGS.quality === 'low')) return false;
@@ -799,21 +865,22 @@ function v3Att() {
 function v3Toggle(on = !V3.on) {
   if (on && !v3Can()) return;
   if (on && !V3.tried) v3Init();
+  const was = V3.on;
   V3.on = on && V3.ok;
+  if (V3.on && !was) v3FcInit();   // 进 3D：自由镜头从平面地图当前的画面接着看
   const b = typeof $ === 'function' && $('btn3d'), c = typeof $ === 'function' && $('v3ctl');
   if (b) { b.classList.toggle('on', V3.on); b.setAttribute('aria-pressed', V3.on ? 'true' : 'false'); }
   if (c) c.hidden = !V3.on;
   if (!V3.on && typeof trxResize === 'function' && TRX.ok) trxResize();
-  if (typeof log === 'function' && S && S.t != null) log(V3.on ? '3D 立体地图：右键 / 中键拖动自由转视角，按住 Q E 转向、R F 俯仰，WASD 移动，O 观察者模式' : '平面地图', 'info', 'v3', 1);
+  if (typeof log === 'function' && S && S.t != null) log(V3.on ? '3D 自由镜头：中键 / 右键拖动原地转头，Q E 转向、R F 抬头低头，W S 沿视线飞、A D 平移，滚轮朝鼠标处推拉，左键拖动平移，O 观察者模式' : '平面地图', 'info', 'v3', 1);
 }
-const v3Turn = k => { V3.yawT += k * Math.PI / 8; };
-const v3Tilt = k => { V3.tiltT = clamp(V3.tiltT + k * .12, V3_TILT[0], V3_TILT[1]); };
+const v3Turn = k => { if (V3.on) v3Look(k * Math.PI / 8, 0); else V3.yawT += k * Math.PI / 8; };
+const v3Tilt = k => { if (V3.on) v3Look(0, -k * .12); else V3.tiltT = clamp(V3.tiltT + k * .12, V3_TILT[0], V3_TILT[1]); };
 
-// 平移：拖动的屏幕方向按镜头转向换算到地面
+// 平移：拖动的屏幕方向换算到地面（地面跟着手走），镜头高度、朝向不变
 function v3Pan(dx, dy) {
-  const c = Math.cos(V3.yaw), s = Math.sin(V3.yaw);
-  CAM.x -= (dx * c - dy * s) / CAM.z; CAM.y -= (dx * s + dy * c) / CAM.z / Math.max(.45, Math.cos(V3.tilt));
-  camClamp();
+  const F = V3.fc || (v3FcInit(), V3.fc), k = Math.max(30, F.d || 600) * 2 * Math.tan(V3_FOV / 2) / Math.max(1, CAM.vh), c = Math.cos(F.yaw), s = Math.sin(F.yaw), down = Math.max(.35, -Math.sin(F.pitch));
+  F.x -= (-s * dx) * k - (c * dy) * k / down; F.y -= (c * dx) * k - (s * dy) * k / down;
 }
 
 // 输入：中键（或 Ctrl + 左键）拖动 → 横向转向、纵向俯仰；双指旋转 → 转向
@@ -826,7 +893,7 @@ HOOK.pointer.push((e, kind) => {
     if (kind === 'move') {
       if (!V3.orb.moved && Math.hypot(sx - V3.orb.x0, sy - V3.orb.y0) < 4) return true;
       V3.orb.moved = true;
-      V3.yawT -= (sx - V3.orb.sx) * .006; V3.yaw = V3.yawT; v3Tilt(-(sy - V3.orb.sy) * .05); V3.tilt = V3.tiltT; V3.orb.sx = sx; V3.orb.sy = sy; return true;
+      v3Look((sx - V3.orb.sx) * .005, -(sy - V3.orb.sy) * .005, true); V3.orb.sx = sx; V3.orb.sy = sy; return true;   // 原地转头：往右拖看右边、往上拖抬头
     }
     if (kind === 'up') { const o = V3.orb; V3.orb = null; if (o.r && !o.moved && typeof thuCancel === 'function') thuCancel(); return true; }
   }

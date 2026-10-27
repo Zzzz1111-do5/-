@@ -41,7 +41,7 @@ function bindInput() {
         camPan(mx - U.pinch.mx, my - U.pinch.my);
         camZoomAt(mx, my, d / U.pinch.d);
         const an = Math.atan2(b.sy - a.sy, b.sx - a.sx);
-        if (typeof V3 === 'object' && V3.on && U.pinch.an != null) { const da = Math.atan2(Math.sin(an - U.pinch.an), Math.cos(an - U.pinch.an)); V3.yawT -= da; V3.yaw = V3.yawT; }   // 3D：双指旋转转向
+        if (typeof V3 === 'object' && V3.on && U.pinch.an != null && typeof v3Look === 'function') { const da = Math.atan2(Math.sin(an - U.pinch.an), Math.cos(an - U.pinch.an)); v3Look(-da, 0, true); }   // 3D：双指旋转原地转头
         U.pinch = { d, mx, my, an };
         return;
       }
@@ -96,6 +96,7 @@ function bindInput() {
     const bf = $('brief'), en = $('end');
     if (bf && !bf.hidden) { if ((e.key === 'Enter' && !(e.target.closest && e.target.closest('#diff'))) || e.key === 'Escape') { e.preventDefault(); $('btnBrief').click(); } return; }
     if (en && !en.hidden) { if (e.key === 'Escape' || e.key === 'F10') runHook('key', e); return; }
+    if (e.key === 'Shift') KEYS.add('Shift');   // 3D 自由镜头：按住 Shift 飞得快
     if (e.key.startsWith('Arrow')) { KEYS.add(e.key); e.preventDefault(); return; }
     // WASD：前后左右移动视角（3D 观察者模式里 WASD 归观察者飞行）
     if (WASD[e.code] && !e.ctrlKey && !e.metaKey && !e.altKey && !(typeof V3O === 'object' && V3O.on) && !(e.target.closest && e.target.closest('#sbxPanel'))) { KEYS.add(WASD[e.code]); e.preventDefault(); return; }
