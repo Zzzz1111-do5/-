@@ -267,10 +267,9 @@ function v3mVehicle(Mk, side) {
     for (let i = 0; i < n; i++) {
       const x = -hl + .85 + i * (L - 1.9) / (n - 1);
       mbTube(hull, [x, yo - s * .06, .36], [x, yo + s * .04, .36], .34, .34, 10, .55); mbTube(hull, [x, yo + s * .04, .36], [x, yo + s * .07, .36], .14, .14, 6, .9);
-      if (v3mHi()) {   // 悬挂臂、减震器、轮毂螺栓
-        mbTube(hull, [x - .18, yo - s * .035, .82], [x, yo + s * .055, .43], .045, .038, 5, .64);
-        mbTube(hull, [x + .15, yo - s * .03, .9], [x + .04, yo + s * .058, .5], .032, .028, 5, .72);
-        for (let k = 0; k < 6; k++) { const a = k / 6 * 6.2832; mbTube(hull, [x, yo + s * .074, .36], [x + Math.cos(a) * .13, yo + s * .079, .36 + Math.sin(a) * .13], .012, .012, 4, .9); }
+      if (v3mHi()) {   // 轮毂盖与一圈轮毂螺栓（悬挂臂、减震器在负重轮里侧，外面看不见，不画）
+        mbTube(hull, [x, yo + s * .07, .36], [x, yo + s * .1, .36], .075, .065, 8, .78);
+        for (let k = 0; k < 6; k++) { const a = k / 6 * 6.2832, bx = x + Math.cos(a) * .105, bz = .36 + Math.sin(a) * .105; mbTube(hull, [bx, yo + s * .07, bz], [bx, yo + s * .088, bz], .016, .014, 4, .9); }
       }
     }
     mbTube(hull, [hl - .42, yo - s * .06, .55], [hl - .42, yo + s * .06, .55], .3, .3, 8, .65);
@@ -651,6 +650,7 @@ function v3mCells(M, x0, x1, y0, y1, z, nx, ny) {   // 垂发单元：方块阵�
   for (let i = 1; i < nx; i++) { const x = lerp(x0, x1, i / nx); mbLine(M, [x, y0, z + .26], [x, y1, z + .26], .6); }
   for (let j = 1; j < ny; j++) { const y = lerp(y0, y1, j / ny); mbLine(M, [x0, y, z + .26], [x1, y, z + .26], .6); }
 }
+const V3_NOPITOT = { j35: 1, j20: 1, j36: 1, j50: 1, gj11: 1, f35: 1, f35b: 1, f22: 1, b2: 1 };
 function v3mHi() {
   return typeof SETTINGS === 'object' && SETTINGS && SETTINGS.quality === 'high' && !(typeof V3 === 'object' && V3 && V3.coarse) && !(typeof R === 'object' && R && R.lowCap);
 }
@@ -746,8 +746,8 @@ function v3mShip(kind, L, B) {
     mbLine(M, [-hl * .6, 0, fb + .02], [-hl * .98, 0, fb + .02], .8);
   }
   if (kind !== 'boat') v3mShipSideGear(M, hl, hb, fb, Math.max(.75, Math.min(1.2, L / 70)));
-  // 两舷救生艇（真实水面舰艇的标配，原来缺）：贴着干舷挂在舷侧，小艇不挂
-  if (kind !== 'boat') for (const [xf, sg] of [[.14, 1], [-.28, 1], [.14, -1], [-.28, -1]]) {
+  // 两舷救生艇：贴着干舷挂在舷侧
+  if (kind !== 'boat' && L >= 40) for (const [xf, sg] of [[.14, 1], [-.28, 1], [.14, -1], [-.28, -1]]) {   // 30 来米的登陆艇只带救生筏筒（v3mShipSideGear），不挂救生艇
     const u = hl * xf, vy = sg * hb * 1.06, z = fb + .35;
     mbTube(M, [u - 1.7, vy, z], [u + 1.7, vy, z], .6, .6, 8, .78);                       // 救生艇（首尾沿舰长横躺）
     mbBox(M, u - .85, u + .85, vy - .52, vy + .52, z + .5, z + .62, .9);                  // 顶盖
@@ -884,13 +884,12 @@ function v3mCarrier(lhd) {
   }
   // 舷号「18」：两舷靠舰首（从舷外看都是正的）
   for (const sg of [1, -1]) v3mDigits(M, '18', (x, y) => [sg > 0 ? 112 + x * 6 : 124 - x * 6, sg * (16.4 + y * 2.5), 4 + y * 7], .95);
-  // 两舷救生艇与吊艇架（真实航母的标配，原来缺）：封闭艇贴着外飘的舷侧挂在小艇架上，左舷三艘、右舷两艘（避开舰岛）
+  // 两舷救生艇：封闭式救生艇挂在飞行甲板外伸部分下面的舷侧（两根吊索、吊艇臂从舷侧上沿伸出），左舷三艘、右舷两艘（避开舰岛与升降机）
   if (!lhd && C) for (const [u, sg] of [[64, -1], [8, -1], [-52, -1], [78, 1], [-44, 1]]) {
-    const vy = sg * 25.4, z = 9;
-    mbTube(M, [u - 2.8, vy, z], [u + 2.8, vy, z], 1.15, 1.15, 8, .8);                                               // 救生艇（首尾沿舰长横躺）
-    mbBox(M, u - 1.3, u + 1.3, vy - 1, vy + 1, z + 1.05, z + 1.2, .92);                                             // 艇顶盖
-    mbLine(M, [u, vy, z + 1.2], [u, sg * 26.8, z + 3.6], .5);                                                       // 吊索
-    mbBox(M, u - .35, u + .35, Math.min(sg * 26.4, sg * 27), Math.max(sg * 26.4, sg * 27), z + 3.4, z + 3.8, .72);   // 吊艇架基座
+    const vy = sg * 25.9, z = 9.6;
+    mbBox(M, u - 3, u + 3, vy - .95, vy + .95, z - .9, z + .15, .8);   // 艇体
+    mbBox(M, u - 2.3, u + 2.5, vy - .8, vy + .8, z + .15, z + 1, .92, { taper: .18 });   // 封闭顶篷
+    for (const du of [-2.2, 2.2]) { mbLine(M, [u + du, vy, z + 1], [u + du, vy, zh - .3], .5); mbBox(M, u + du - .15, u + du + .15, Math.min(vy, sg * 24.6), Math.max(vy, sg * 24.6), zh - .55, zh - .25, .72); }   // 吊索、吊艇臂
   }
   // 舰岛
   if (lhd) {
@@ -1163,7 +1162,7 @@ function v3mAir(key, fold, opt = {}) {
     }
   }
   // 空速管：机头尖伸出的细针（真实战机的特征，原来缺）；飞翼（B-2）与直升机没有
-  if (D.body && !D.flat && !D.heli) { const xn = Math.max(...D.body.map(b => b[0])); mbTube(M, [xn, 0, zc + top * .08], [xn + 1.15, 0, zc + top * .08], .07, .035, 5, .72); }
+  if (D.body && !D.flat && !D.heli && !V3_NOPITOT[key]) { const xn = Math.max(...D.body.map(b => b[0])); mbTube(M, [xn, 0, zc + top * .08], [xn + 1.15, 0, zc + top * .08], .07, .035, 5, .72); }   // 隐身战机用嵌入式大气数据传感器，没有伸出的空速管
   // 翼尖航行灯 / 编队灯：两侧翼尖各一个发光小块
   if (D.wing && !D.heli) { const tp = D.wing.reduce((a, p) => p[1] > a[1] ? p : a, D.wing[0]); for (const sg of [1, -1]) mbBox(M, tp[0] - .3, tp[0] + .12, tp[1] * sg - .13, tp[1] * sg + .13, zw - .05, zw + .13, -.9); }
   return M;
