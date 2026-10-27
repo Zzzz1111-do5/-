@@ -1,7 +1,8 @@
 'use strict';
 // 事件：左键点选/框选，右键下令（拖拽 = 阵型宽度与朝向），中键或 Alt 拖动平移，滚轮缩放，触屏单指平移、双指缩放
 // 编队指挥模式（thpanel.js thuActive：沙盒编辑以外的战役 / 推演）：不再点选、下令单个部队——左键点部队看型号卡并选中它所属的团，
-//   左键拖动平移地图，右键只取消穿插选目标；WASD 与方向键移动视角（3D 按镜头朝向）；舰船、航母、支援火力、编组的快捷键都不再有
+//   左键拖动平移地图，右键只取消穿插选目标；WASD 与方向键移动视角（3D 按镜头朝向）；舰船、航母、编组的快捷键都不再有
+//   ——驱逐舰、航母的支援火力改为点舰弹出选项（spui.js），另有 F 舰炮 · T 空袭 · V 对地支援 · R 侦察 · Y 垂发导弹 · I 战术导弹
 const WASD = { KeyW: 'ArrowUp', KeyA: 'ArrowLeft', KeyS: 'ArrowDown', KeyD: 'ArrowRight' };
 const thUI = () => typeof thuActive === 'function' && thuActive();
 function bindInput() {
@@ -98,8 +99,8 @@ function bindInput() {
     if (e.key.startsWith('Arrow')) { KEYS.add(e.key); e.preventDefault(); return; }
     // WASD：前后左右移动视角（3D 观察者模式里 WASD 归观察者飞行）
     if (WASD[e.code] && !e.ctrlKey && !e.metaKey && !e.altKey && !(typeof V3O === 'object' && V3O.on) && !(e.target.closest && e.target.closest('#sbxPanel'))) { KEYS.add(WASD[e.code]); e.preventDefault(); return; }
-    // 编队指挥模式：支援火力、空降、导弹这些直接操控的快捷键不再有
-    if (thUI() && (/^Key[IY]$/.test(e.code) || (e.shiftKey && /^Key[KPO]$/.test(e.code)))) { e.preventDefault(); return; }
+    // 编队指挥模式：空降这些直接操控的快捷键不再有；垂发导弹（Y）、战术导弹（I）只在你指挥攻方时保留（舰艇支援见 spui.js）
+    if (thUI() && ((/^Key[IY]$/.test(e.code) && S.ctl !== 'p') || (e.shiftKey && /^Key[KPO]$/.test(e.code)))) { e.preventDefault(); return; }
     if (runHook('key', e)) return;
     const k = e.key.toUpperCase();
     if (thUI()) {
