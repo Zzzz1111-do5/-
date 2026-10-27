@@ -700,7 +700,7 @@ function v3Draw(now) {
     if (cv.width !== tw || cv.height !== th) { cv.width = tw; cv.height = th; }
     V3.drawing = true;
     R.fx3d = typeof v3Fx === 'function' && !(SETTINGS && SETTINGS.models3d === false);   // 弹道在 3D 里立体画（v3fx.js），贴图里不再画
-    R.m3d = R.fx3d && typeof V3M === 'object' && !!V3M.ok; R.m3dNear = K.z / CAM.fit > 1.15 || sTop >= 1;   // 贴图里会画出单兵小人的距离（R.fig）起就改用立体士兵，地面上不留平的小人
+    R.m3d = R.fx3d && typeof V3M === 'object' && !!V3M.ok; R.m3dNear = true;   // 士兵远近都是立体模型（远处低模，v3units.js），贴图里不再画平的小人
     try {
       R.cv = cv; R.ctx = cv.getContext('2d'); R.dpr = 1;
       CAM.vw = tw; CAM.vh = th; CAM.z = R.s = sc; CAM.x = b[0] + b[2] / 2; CAM.y = b[1] + b[3] / 2;
