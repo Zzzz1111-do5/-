@@ -293,7 +293,7 @@ function airDetail(ctx, type, a, real, col, alpha, lw, o) {
   }
   if (D.ex) for (const [x0, y0, y1] of D.ex) both(s => { ctx.fillStyle = real ? 'rgba(30,26,24,.75)' : rgba(col, .4); ctx.beginPath(); ctx.moveTo(x0, y0 * s); ctx.lineTo(x0 - 1.3, (y0 + .3) * s); ctx.lineTo(x0 - 1.2, y1 * s); ctx.lineTo(x0, (y1 - .5) * s); ctx.closePath(); ctx.fill(); });   // B-2 背部排气槽
   if (D.cabin && real) both(s => { ctx.fillStyle = 'rgba(30,40,46,.8)'; for (const x of [3.6, 2.2, .8]) ctx.fillRect(x - .45, s > 0 ? 2.05 : -2.4, .9, .35); });   // 黑鹰舱门窗
-  adCanopy(ctx, D, real, col, lw, lx, ly);
+  adCanopy(ctx, D, real, col, lw, lx, ly, o.cpo || 0);
   adBay(ctx, D, o, real, col, lw, sh);
   // ⑥ 垂尾（外倾：俯视看到外侧面，受光一侧亮）、T 形尾的平尾
   if (D.fin) adFins(ctx, D.fin, real, col, lw, sh, ly);
@@ -366,9 +366,16 @@ function adHinge(ctx, pts, d, ink, lw, flat) {
   ctx.stroke();
 }
 // 座舱：气泡（金色镀膜 / 普通）、串列双座（直升机）、风挡（大飞机）
-function adCanopy(ctx, D, real, col, lw, lx, ly) {
+// cpo：座舱盖打开的程度（登机时）——后铰链向上掀起，俯视变短、露出前面的座舱（坐椅、仪表板）
+function adCanopy(ctx, D, real, col, lw, lx, ly, cpo = 0) {
   if (!D.cp) return;
-  const [x0, x1, w, k] = D.cp, cx = (x0 + x1) / 2, rx = (x1 - x0) / 2;
+  const [x0, x1, w0, k] = D.cp, rx0 = (x1 - x0) / 2;
+  if (cpo > .02 && k === 'bubble') {
+    ctx.fillStyle = real ? '#1b1d1e' : 'rgba(2,10,6,.95)'; ctx.beginPath(); ctx.ellipse(x0 + rx0, 0, rx0 * .92, w0 * .82, 0, 0, 7); ctx.fill();   // 座舱
+    if (real) { ctx.fillStyle = '#3d4040'; ctx.fillRect(x0 + rx0 * .55, -w0 * .4, rx0 * .55, w0 * .8); ctx.fillStyle = '#2a2c2c'; ctx.fillRect(x1 - rx0 * .55, -w0 * .55, rx0 * .3, w0 * 1.1); }   // 弹射座椅、仪表板遮光罩
+    else { ctx.strokeStyle = col; ctx.lineWidth = lw * .45; ctx.strokeRect(x0 + rx0 * .55, -w0 * .4, rx0 * .55, w0 * .8); }
+  }
+  const th = cpo * .95, x1o = x0 + (x1 - x0) * Math.cos(th), cx = (x0 + x1o) / 2, rx = (x1o - x0) / 2, w = w0 * (1 + cpo * .12);
   const glass = D.glass === 'gold' ? ['#5b4a24', '#9a8040'] : ['#1f2d36', '#3f5866'];
   const pane = (cx, rx, ry) => {
     if (real) { const g = ctx.createLinearGradient(cx - rx, -ry, cx + rx, ry); g.addColorStop(0, glass[0]); g.addColorStop(1, glass[1]); ctx.fillStyle = g; }
@@ -385,7 +392,7 @@ function adCanopy(ctx, D, real, col, lw, lx, ly) {
     return;
   }
   pane(cx, rx, w);
-  if (D.glass !== 'gold') { ctx.strokeStyle = real ? 'rgba(15,16,18,.6)' : col; ctx.lineWidth = lw * .45; ctx.beginPath(); ctx.moveTo(x1 - rx * .55, -w * .82); ctx.quadraticCurveTo(x1 - rx * .4, 0, x1 - rx * .55, w * .82); ctx.stroke(); }   // 风挡框
+  if (D.glass !== 'gold') { ctx.strokeStyle = real ? 'rgba(15,16,18,.6)' : col; ctx.lineWidth = lw * .45; ctx.beginPath(); ctx.moveTo(x1o - rx * .55, -w * .82); ctx.quadraticCurveTo(x1o - rx * .4, 0, x1o - rx * .55, w * .82); ctx.stroke(); }   // 风挡框
 }
 // 垂尾：根部在机身上，外倾时梢部向外偏（俯视能看到外侧面）
 function adFins(ctx, f, real, col, lw, sh, ly) {
