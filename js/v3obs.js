@@ -163,7 +163,7 @@ if (typeof window !== 'undefined' && window.addEventListener) {
     else if (V3O.drag) { dx = e.clientX - V3O.drag[0]; dy = e.clientY - V3O.drag[1]; V3O.drag = [e.clientX, e.clientY]; }
     if (!dx && !dy) return;
     V3O.yaw = Math.atan2(Math.sin(V3O.yaw + dx * .0024), Math.cos(V3O.yaw + dx * .0024));
-    V3O.pitch = clamp(V3O.pitch - dy * .0024, -1.5, .75);
+    V3O.pitch = clamp(V3O.pitch - dy * .0024, -1.5, 1.45);
   });
   window.addEventListener('mouseup', () => { V3O.drag = null; });
   if (typeof document !== 'undefined') document.addEventListener('pointerlockchange', () => { if (V3O.on && !v3oLocked()) V3O.keys.clear(); });   // Esc 解锁：键全部松开（模式由 Esc 键处理退出）

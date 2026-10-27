@@ -618,7 +618,7 @@ function v3FcStep(dt) {
 // 原地转头（偏航）、抬头低头（俯仰）
 function v3Look(dyaw, dpitch, now) {
   const F = V3.fc || (v3FcInit(), V3.fc);
-  F.yawT += dyaw; F.pitchT = clamp(F.pitchT + dpitch, -1.52, .7);
+  F.yawT += dyaw; F.pitchT = clamp(F.pitchT + dpitch, -1.52, 1.45);   // 可以抬头看到接近头顶（仰看飞过头顶的飞机）
   if (now) { F.yaw = F.yawT; F.pitch = F.pitchT; }
 }
 // 沿视线飞：fw 前后（沿视线方向，含高低）、rt 左右平移，按离地高度定速度
@@ -676,14 +676,16 @@ function v3Pick(sx, sy) {
 }
 // 俯视贴图要覆盖的地面范围：画面四角、四边中点的视线落点（最远 2.6 倍镜头距离），外扩一点，夹在地图内
 // lim：视线最远取到几倍的镜头尺度（2.6 = 一直到地平线的雾里；近处的高清贴图取 1.15）
+const V3_SKY = 700;   // 最高的飞行高度（战术弹道导弹弹道顶点附近）
 function v3Box(lim = 2.6) {
   const C = V3.cam, pts = [];
   for (const [sx, sy] of [[0, 0], [CAM.vw / 2, 0], [CAM.vw, 0], [0, CAM.vh / 2], [CAM.vw, CAM.vh / 2], [0, CAM.vh], [CAM.vw / 2, CAM.vh], [CAM.vw, CAM.vh]]) {
     const { o, d } = v3Ray(sx, sy);
-    let t = d[2] < -1e-4 ? (V3_HZ * .3 - o[2]) / d[2] : C.D * lim;
+    let t = d[2] < -1e-4 ? (V3_HZ * .3 - o[2]) / d[2] : d[2] > 1e-4 ? (V3_SKY - o[2]) / d[2] : C.D * lim;   // 往上看的视线：飞机、导弹只会在它穿过最高飞行高度之前出现
     t = Math.min(Math.max(t, 0), C.D * lim);   // 再远的地方已经暗下去了（雾），用底图
     pts.push([o[0] + d[0] * t, -(o[1] + d[1] * t)]);
   }
+  pts.push([C.E[0], -C.E[1]]);   // 镜头脚下：仰看时头顶的飞机就在这附近（原来只按视线远处的落点圈范围，正下方往上看时飞机被当成在范围外不画）
   const m = 60, x0 = clamp(Math.min(...pts.map(p => p[0])) - m, 0, W), x1 = clamp(Math.max(...pts.map(p => p[0])) + m, 0, W);
   const y0 = clamp(Math.min(...pts.map(p => p[1])) - m, 0, H), y1 = clamp(Math.max(...pts.map(p => p[1])) + m, 0, H);
   return [x0, y0, Math.max(20, x1 - x0), Math.max(20, y1 - y0)];
