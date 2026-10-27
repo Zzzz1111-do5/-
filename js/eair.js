@@ -227,7 +227,7 @@ function eaNewAir(b, w, tx, ty, extra) {
     const P = eaParked(b).find(o => o.w === w), G = P ? eaGndPlan(b, P) : null, d2 = G ? G.dir : dir;
     const t0 = S.t + (G ? G.dur : 0), go = Math.max(t0, b.rwT || 0), wait = go - S.t;   // 跑道排队：前一架滑跑 3.5 秒后才轮到
     b.rwT = go + 3.5;
-    Object.assign(a, { ru: -d2 * 440, dir: d2, wait, heading: h + (d2 < 0 ? Math.PI : 0), alt: 0, ph: 'roll' });
+    Object.assign(a, { ru: -d2 * 440, dir: d2, wait, goT: go, heading: h + (d2 < 0 ? Math.PI : 0), alt: 0, ph: 'roll' });
     [a.x, a.y] = eaW(b, a.ru, 0);
     if (G) { Object.assign(a, { ph: 'gnd', g: G }); [a.x, a.y] = eaW(b, G.P[0][0], G.P[0][1]); a.heading = eaGndHd(b, G, 0); }
   }
@@ -273,6 +273,11 @@ function eaGnd(a, dt) {
   if (t < G.crew) return;   // 机组登机、开车
   if (a.vto) { a.ph = 'vto'; a.vt = 0; a.g = null; a.vto = false; return; }   // F-35B：在机位上直接垂直起飞
   const end = G.L[G.L.length - 1];
+  // 排队滑行：前面 34 以内有别的飞机（还在滑行、或在跑道头等起飞）就停下等它走——两架互相挡着时，排在前面起飞的先走
+  const ahead = (o, p) => { const dx = o.x - p.x, dy = o.y - p.y, d = Math.hypot(dx, dy); return d < 34 && d > .1 && (dx * Math.cos(p.heading) + dy * Math.sin(p.heading)) / d > .35; };
+  const blk = S.eair.fly.find(o => o !== a && !o.dead && o.base === a.base && ((o.ph === 'gnd' && o.g && o.g.s > 0) || (o.ph === 'roll' && o.spd < 60)) && ahead(o, a) && !(ahead(a, o) && (a.goT ?? 0) < (o.goT ?? 0)));   // 还停在机位上登机的不挡路
+  if (blk) { a.spd = 0; a.hold = true; return; }
+  a.hold = false;
   G.s = Math.min(end, G.s + EA_GND.taxi * Math.min(1, (t - G.crew) / 2.5) * dt);   // 起步慢慢加速
   const q = eaGndAt(G, G.s);
   [a.x, a.y] = eaW(b, q.u, q.v); a.heading = eaGndHd(b, G, Math.max(.01, G.s)); a.spd = EA_GND.taxi;

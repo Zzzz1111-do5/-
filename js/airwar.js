@@ -357,6 +357,10 @@ function awFlyE(a, dt) {
     if (eaSteer(a, a.leg2.x, a.leg2.y, dt, sp.spd * .8) < 90) a.ph = 'rtb';
   }
   if (!T && a.fired != null && S.t - a.fired > 4) a.ph = 'rtb';   // 打完一波就返航
+  if (a.mis === 'int' && !T && a.ph !== 'rtb') {   // 拦截任务：要拦的敌机打掉了 / 飞走了（附近 700 内再没有看得见的敌机）6 秒，立即返航，不在空中闲逛
+    if ((a.foeT = (a.foeT ?? 0) - dt) <= 0) { a.foeT = 1; a.noFoe = awFoes('e').some(t => awSeen('e', t.x, t.y) && dist(t.x, t.y, a.x, a.y) < 700) ? 0 : (a.noFoe || 0) + 1; }
+    if (a.noFoe >= 6) { a.ph = 'rtb'; awStat('intDoneE'); }
+  }
   if (a.ph === 'cap' && (a.capT -= dt) <= 0) a.ph = 'rtb';
   else if (!(a.aam > 0) && (sp.stealth || !(a.gun > 0))) a.ph = 'rtb';
 }
@@ -411,7 +415,7 @@ function awThinkE() {
   const n = Math.min(ready.length, 4, Math.max(2, want - up)), fl = ready.slice(0, n);
   let lead = null;
   for (let i = 0; i < n; i++) {
-    const w = fl[i], L = EA_FTR[w.type], b = eaNearBase(cx, cy, open.length && !eaVtol(w.type) ? open : eaBases()) || eaFarpBase(), a = eaNewAir(b, w, cx, cy, { cx, cy, capT: 80, aam: L.aam, gun: L.gun, aamR: L.aamR, pkK: L.pkK, gunK: L.gunK || 1, odir: i ? -1 : 1 });
+    const w = fl[i], L = EA_FTR[w.type], b = eaNearBase(cx, cy, open.length && !eaVtol(w.type) ? open : eaBases()) || eaFarpBase(), a = eaNewAir(b, w, cx, cy, { cx, cy, capT: 80, mis: foes.length ? 'int' : 'cap', aam: L.aam, gun: L.gun, aamR: L.aamR, pkK: L.pkK, gunK: L.gunK || 1, odir: i ? -1 : 1 });
     if (i) { a.lead = lead.id; a.slot = i; } else { lead = a; a.join = S.t + (a.wait || 0) + 3 + 3.5 * (n - 1); }   // 双机 / 四机编队（eair.js eaForm）
     w.state = 'out';
     E.fly.push(a);

@@ -440,6 +440,15 @@ function airCasFly(p, dt, speed) {
   }
   const fired = airAgm(p);
   if (fired && p.wave == null) p.wave = S.t;
+  // 任务区（指定地域 450 以内）一直没有看得见的敌人：待 10 秒还没目标就返航，不在空中白白兜圈子
+  if (!fired && !p.run && p.wave == null) {
+    if ((p.idleC = (p.idleC ?? 0) - dt) <= 0) {
+      p.idleC = 1;
+      const any = S.teams.some(q => q.side === 'e' && q.men.length && inVision(q.x, q.y) && dist(q.x, q.y, p.cx, p.cy) < 450) || S.enemies.some(e => !e.dead && inVision(e.x, e.y) && dist(e.x, e.y, p.cx, p.cy) < 450) || (S.veh || []).some(v => v.side === 'e' && !v.dead && inVision(v.x, v.y) && dist(v.x, v.y, p.cx, p.cy) < 450);
+      p.idleN = any ? 0 : (p.idleN || 0) + 1;
+    }
+    if (p.idleN >= 10) { log(`${airName(p.kind, p.v).split(' ')[0]}：任务区内没有发现目标，返航`, 'info', 'casidle' + p.id, 20, p); if (typeof v8Stat === 'function') v8Stat('casIdleRtb'); airSet(p, 'rtb'); return; }
+  }
   // 打完一波就返航：第一次开火后，固定翼再打 6 秒（把这一波的导弹打完）、直升机打完 4 发，然后返航，不在目标区上空兜圈子等下一个目标
   if (p.wave != null && !p.run && (heli ? (p.wv0 ?? (p.wv0 = (p.agmN || 0) + 1)) - (p.agmN || 0) >= 4 || !(p.agmN > 0) && !(p.ammoG > 0) || S.t - p.wave > 16 : S.t - p.wave > 6)) { airSet(p, 'rtb'); return; }
   // 直-10：没有导弹目标（或导弹打光）时，悬停用 23 毫米机炮打目标一带的步兵和火力点（射程 280 内，每 2.5 秒一个点射）
