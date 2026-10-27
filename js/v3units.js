@@ -204,7 +204,15 @@ function v3mPainter(M, L, side) {
       g.restore();
     },
     light: (x, y, w = .22, h = .16) => put(rr(x - w / 2, y - h / 2, w, h).pts, .12, -.6, { flat: true }),
-    cable: () => {}, bolts: () => {}, camo: () => {}, dirt: () => {},
+    // 拖缆：沿折线挂在车体侧面的一根细缆（二维有、三维原本被跳过的零件，这里补出）
+    cable: pts => {
+      if (!pts || pts.length < 2) return;
+      const Q = pts.map(([x, y]) => { const t = g.tf(x, y); return [t[0], t[1], at(t[0], t[1])]; });
+      for (let i = 0; i < Q.length - 1; i++) { const a = Q[i], b = Q[i + 1]; mbTube(M, [a[0], a[1], a[2] + .05], [b[0], b[1], b[2] + .05], .045, .045, 5, .5); }
+    },
+    // 螺栓 / 凸起座：一组坐标点各立一个小圆柱（天线座、传感器底座之类）
+    bolts: pts => { for (const [x, y] of pts || []) { const c = g.tf(x, y), z = at(c[0], c[1]); mbTube(M, [c[0], c[1], z], [c[0], c[1], z + .04], .035, .028, 6, .85); } },
+    camo: () => {}, dirt: () => {},
     bag: (x, y, w, h, a = 0) => { g.save(); g.translate(x, y); g.rotate(a); put(rr(-w / 2, -h / 2, w, h, Math.min(w, h) * .35).pts, .26, .8, { taper: .06 }); g.restore(); },
     tool: (x, y, len, a = 0) => { g.save(); g.translate(x, y); g.rotate(a); put(rr(-len / 2, -.04, len, .08).pts, .06, .8, { flat: true }); g.restore(); },
     mg: (x, y, a = 0, len = 1.2, heavy = false) => {   // 机枪：机匣、枪管、弹箱
@@ -239,6 +247,9 @@ function v3mVehicle(Mk, side) {
     for (let i = 0; i < n; i++) { const x = -hl + .85 + i * (L - 1.9) / (n - 1); mbTube(hull, [x, yo - s * .06, .36], [x, yo + s * .04, .36], .34, .34, 10, .55); mbTube(hull, [x, yo + s * .04, .36], [x, yo + s * .07, .36], .14, .14, 6, .9); }
     mbTube(hull, [hl - .42, yo - s * .06, .55], [hl - .42, yo + s * .06, .55], .3, .3, 8, .65);
     mbTube(hull, [-hl + .42, yo - s * .06, .5], [-hl + .42, yo + s * .06, .5], .28, .28, 8, .65);
+    // 托带轮：上支履带下面的一排小支撑轮（真实履带车的特征，原来缺）
+    const nTop = Math.max(2, Math.round((L - 2.4) / 2));
+    for (let i = 0; i < nTop; i++) { const x = -hl + 1.15 + i * (L - 2.5) / Math.max(1, nTop - 1); mbTube(hull, [x, yo - s * .05, .74], [x, yo + s * .03, .74], .12, .12, 6, .72); }
     for (let x = -hl + .5; x < hl - .5; x += .45) mbLine(hull, [x, yo, .9], [x + .1, yo, .93], .35);
   }
   const HL = { base: wheel ? .55 : .62, first: wheel ? 1.35 : .5, second: wheel ? 0 : .58, taper: wheel ? .22 : .05 };
@@ -626,6 +637,13 @@ function v3mShip(kind, L, B) {
     mbLoop(M, mbCirc(-hl * .8, 0, hb * .55, 16), fb + .02, 1);
     mbLine(M, [-hl * .6, 0, fb + .02], [-hl * .98, 0, fb + .02], .8);
   }
+  // 两舷救生艇（真实水面舰艇的标配，原来缺）：贴着干舷挂在舷侧，小艇不挂
+  if (kind !== 'boat') for (const [xf, sg] of [[.14, 1], [-.28, 1], [.14, -1], [-.28, -1]]) {
+    const u = hl * xf, vy = sg * hb * 1.06, z = fb + .35;
+    mbTube(M, [u - 1.7, vy, z], [u + 1.7, vy, z], .6, .6, 8, .78);                       // 救生艇（首尾沿舰长横躺）
+    mbBox(M, u - .85, u + .85, vy - .52, vy + .52, z + .5, z + .62, .9);                  // 顶盖
+    mbLine(M, [u, vy, z + .62], [u, sg * hb * .92, z + 1.9], .5);                         // 吊索
+  }
   mbLoop(M, H, fb + .03, .9);
   return M;
 }
@@ -755,6 +773,14 @@ function v3mCarrier(lhd) {
   }
   // 舷号「18」：两舷靠舰首（从舷外看都是正的）
   for (const sg of [1, -1]) v3mDigits(M, '18', (x, y) => [sg > 0 ? 112 + x * 6 : 124 - x * 6, sg * (16.4 + y * 2.5), 4 + y * 7], .95);
+  // 两舷救生艇与吊艇架（真实航母的标配，原来缺）：封闭艇贴着外飘的舷侧挂在小艇架上，左舷三艘、右舷两艘（避开舰岛）
+  if (!lhd && C) for (const [u, sg] of [[64, -1], [8, -1], [-52, -1], [78, 1], [-44, 1]]) {
+    const vy = sg * 25.4, z = 9;
+    mbTube(M, [u - 2.8, vy, z], [u + 2.8, vy, z], 1.15, 1.15, 8, .8);                                               // 救生艇（首尾沿舰长横躺）
+    mbBox(M, u - 1.3, u + 1.3, vy - 1, vy + 1, z + 1.05, z + 1.2, .92);                                             // 艇顶盖
+    mbLine(M, [u, vy, z + 1.2], [u, sg * 26.8, z + 3.6], .5);                                                       // 吊索
+    mbBox(M, u - .35, u + .35, Math.min(sg * 26.4, sg * 27), Math.max(sg * 26.4, sg * 27), z + 3.4, z + 3.8, .72);   // 吊艇架基座
+  }
   // 舰岛
   if (lhd) {
     const isl = [-38, -8, 11, 15.5].map(x => x * 2);
@@ -990,6 +1016,10 @@ function v3mAir(key, fold, opt = {}) {
       mbTube(M, [x, y - .2, zw0], [x, y + .2, zw0], r, r, 10, .22); mbTube(M, [x, y - .21, zw0], [x, y + .21, zw0], r * .5, r * .5, 8, .7);
     }
   }
+  // 空速管：机头尖伸出的细针（真实战机的特征，原来缺）；飞翼（B-2）与直升机没有
+  if (D.body && !D.flat && !D.heli) { const xn = Math.max(...D.body.map(b => b[0])); mbTube(M, [xn, 0, zc + top * .08], [xn + 1.15, 0, zc + top * .08], .07, .035, 5, .72); }
+  // 翼尖航行灯 / 编队灯：两侧翼尖各一个发光小块
+  if (D.wing && !D.heli) { const tp = D.wing.reduce((a, p) => p[1] > a[1] ? p : a, D.wing[0]); for (const sg of [1, -1]) mbBox(M, tp[0] - .3, tp[0] + .12, tp[1] * sg - .13, tp[1] * sg + .13, zw - .05, zw + .13, -.9); }
   return M;
 }
 // 精细飞机的附件实例：外挂弹药（按 airmdl.js 记的消耗逐个去掉）、主旋翼（转）、螺旋桨（绕机身轴转）；still：停放，不转
