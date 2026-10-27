@@ -73,8 +73,10 @@ function drawLines(time) {
       ctx.fillStyle = rgba(COL.g, .9); ctx.fillRect(lerp(z.x1, a.x0, u) - px(1.5), lerp(z.y1, a.y0, u) - px(1.5), px(3), px(3));
     }
     ctx.strokeStyle = rgba(COL.g, L.connected ? .9 : .4); ctx.lineWidth = px(1.4);
-    ctx.strokeRect(L.x - 5, L.y - 5, 10, 10);
-    ctx.beginPath(); ctx.moveTo(L.x - 3, L.y); ctx.lineTo(L.x + 3, L.y); ctx.moveTo(L.x, L.y - 3); ctx.lineTo(L.x, L.y + 3); ctx.stroke();
+    if (!R.m3d) {   // 3D：滩头补给站是立体模型（v3units.js v3mDepot）
+      ctx.strokeRect(L.x - 5, L.y - 5, 10, 10);
+      ctx.beginPath(); ctx.moveTo(L.x - 3, L.y); ctx.lineTo(L.x + 3, L.y); ctx.moveTo(L.x, L.y - 3); ctx.lineTo(L.x, L.y + 3); ctx.stroke();
+    }
     if (L.connected && hoverNear(L.x, L.y, 12)) { ctx.strokeStyle = rgba(COL.g, .25); ctx.lineWidth = px(1); ctx.setLineDash([px(2), px(5)]); ctx.beginPath(); ctx.arc(L.x, L.y, 200, 0, 7); ctx.stroke(); ctx.setLineDash([]); }
   }
   ctx.lineWidth = px(1); ctx.setLineDash([px(2), px(6)]); ctx.strokeStyle = rgba(COL.intel, .3);

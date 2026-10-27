@@ -963,6 +963,44 @@ function v3mCrates() {
   mbPrism(M, mbCirc(4.5, 2, 2.2, 10), 0, .15, .6);
   return M;
 }
+// 补给站（supplynet.js 前沿补给点 / 滩头补给站）：碎石垫层、沙袋矮墙、托盘物资箱堆（捆扎带）、油桶、伪装网棚（四根立杆、网面经纬线）、天线杆；
+//   big = 滩头补给站：更大，多两只集装箱（波纹板）和一台叉车。n = 0–3 箱堆的多少（前沿点按存量、在建的按进度）；dead = 被毁：散落的焦黑箱子
+function v3mDepot(big, n, dead) {
+  const M = mbNew(), R0 = big ? 13 : 8;
+  mbPrism(M, mbCirc(0, 0, R0 + 1.5, 16), 0, .12, .5);   // 碎石垫层
+  if (dead) {
+    for (let i = 0; i < 9; i++) { const a = i * 2.39, r = 1.5 + (i * 3.1) % R0, x = Math.cos(a) * r, y = Math.sin(a) * r, h = .5 + (i % 3) * .3; mbBox(M, x - .6, x + .6, y - .5, y + .5, 0, h, .35, { taper: .1 }); }
+    for (let i = 0; i < 4; i++) { const a = i * 1.7; mbTube(M, [Math.cos(a) * 3, Math.sin(a) * 3, .3], [Math.cos(a) * 3 + .9, Math.sin(a) * 3 + .3, .3], .3, .3, 8, .3); }   // 倒地的油桶
+    return M;
+  }
+  // 沙袋矮墙：一圈短墙，留出口
+  for (let i = 0; i < 14; i++) { if (i === 3 || i === 4) continue; const a0 = i / 14 * 6.283, a1 = (i + .85) / 14 * 6.283; const P = [[Math.cos(a0) * R0, Math.sin(a0) * R0], [Math.cos(a1) * R0, Math.sin(a1) * R0], [Math.cos(a1) * (R0 - .7), Math.sin(a1) * (R0 - .7)], [Math.cos(a0) * (R0 - .7), Math.sin(a0) * (R0 - .7)]]; mbPrism(M, P, 0, .8, .62, { taper: .15 }); }
+  // 托盘物资箱：每堆一个托盘 + 两三层箱子，箱面一道捆扎带
+  const stack = (x, y, h) => {
+    mbBox(M, x - .65, x + .65, y - .55, y + .55, 0, .15, .55);
+    for (let k = 0; k < h; k++) { const z = .15 + k * .62; mbBox(M, x - .58, x + .58, y - .48, y + .48, z, z + .58, .78 + (k % 2) * .06); mbLoop(M, [[x - .59, y - .1], [x + .59, y - .1], [x + .59, y + .1], [x - .59, y + .1]], z + .29, .9); }
+  };
+  const cnt = big ? [8, 12, 16, 20][n] : [3, 6, 9, 12][n];
+  for (let i = 0; i < cnt; i++) { const c = i % (big ? 5 : 4), r = Math.floor(i / (big ? 5 : 4)); stack(-R0 * .55 + c * 1.6, -R0 * .35 + r * 1.4, 1 + ((i * 7) % 3)); }
+  // 油桶：一簇立着的 200 升桶
+  for (let i = 0; i < (big ? 10 : 5); i++) { const x = R0 * .35 + (i % 3) * .75, y = R0 * .2 + Math.floor(i / 3) * .75; mbTube(M, [x, y, 0], [x, y, .9], .3, .3, 8, .7); mbLoop(M, mbCirc(x, y, .31, 8), .45, .85); }
+  // 伪装网棚：四根立杆、斜坡网面、经纬线
+  const cx = -R0 * .2, cy = -R0 * .05, hw = big ? 5 : 3.4, hd = big ? 4 : 2.8, hz = 3.2;
+  for (const [sx, sy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) mbTube(M, [cx + sx * hw, cy + sy * hd, 0], [cx + sx * hw, cy + sy * hd, hz - .4], .07, .07, 4, .7, false);
+  mbQuad(M, [cx - hw, cy - hd, hz - .4], [cx + hw, cy - hd, hz - .4], [cx + hw, cy, hz], [cx - hw, cy, hz], .55);
+  mbQuad(M, [cx - hw, cy, hz], [cx + hw, cy, hz], [cx + hw, cy + hd, hz - .4], [cx - hw, cy + hd, hz - .4], .5);
+  for (let k = -2; k <= 2; k++) { const x = cx + k * hw / 2.5; mbLine(M, [x, cy - hd, hz - .38], [x, cy, hz + .02], .8); mbLine(M, [x, cy, hz + .02], [x, cy + hd, hz - .38], .8); }
+  // 天线杆
+  mbTube(M, [R0 * .6, -R0 * .55, 0], [R0 * .6, -R0 * .55, 7.5], .06, .04, 4, .8, false); mbLine(M, [R0 * .6, -R0 * .55, 7.5], [R0 * .6 + .9, -R0 * .55, 7], .9);
+  if (big) {   // 集装箱（ISO 20 呎，波纹板）+ 叉车
+    for (const [x, y] of [[R0 * .25, -R0 * .6], [R0 * .25, -R0 * .6 + 2.7]]) { mbBox(M, x - 3, x + 3, y - 1.2, y + 1.2, 0, 2.6, .72); for (let u = -2.6; u <= 2.6; u += .45) mbLine(M, [x + u, y - 1.21, .15], [x + u, y - 1.21, 2.45], .62); }
+    const fx = -R0 * .55, fy = R0 * .5;
+    mbBox(M, fx - 1, fx + 1, fy - .6, fy + .6, .3, 1.3, .75); mbBox(M, fx - .7, fx + .3, fy - .55, fy + .55, 1.3, 2.3, .65, { taper: .1 });   // 车身、护顶
+    mbTube(M, [fx + 1.1, fy - .35, .1], [fx + 1.1, fy - .35, 2.6], .06, .06, 4, .8); mbTube(M, [fx + 1.1, fy + .35, .1], [fx + 1.1, fy + .35, 2.6], .06, .06, 4, .8);   // 门架
+    for (const [u, v] of [[-.7, -.65], [.7, -.65], [-.7, .65], [.7, .65]]) v3mWheel(M, fx + u, fy + v, .3, .25);
+  }
+  return M;
+}
 // 机场对空监视雷达站：铁塔 + 天线（天线另外转）
 function v3mRadarMast() {
   const M = mbNew();
@@ -1377,6 +1415,15 @@ function v3Units(C, box) {
     }
   }
   if (S.para && S.para.ca) for (const c of S.para.ca) if (inB(c.x, c.y)) v3mAdd('crates', v3mCrates, c.x, c.y, v3Ht(c.x, c.y), 0, 1, 0);   // 空投补给点
+  // 补给站：滩头补给站（浮桥补给线终点）与前沿补给点；箱堆随存量增减，在建的按进度一堆堆码起来，被毁的散落一地
+  for (const L of S.supply || []) if (inB(L.x, L.y)) { const z = Math.max(v3Ht(L.x, L.y), -1); v3mAdd('depot:b:3', () => v3mDepot(true, 3, false), L.x, L.y, z, 0, 1, 0); }
+  if (S.snet) for (const n of S.snet.nodes) {
+    if (!isFinite(n.x) || !inB(n.x, n.y)) continue;
+    const live = typeof snLive === 'function' ? snLive(n) : !n.dead, dead = n.dead && !(n.built > 0);
+    if (!live && !dead && !(n.built > 0)) continue;   // 只是规划，还没动工
+    const k = dead ? 0 : live ? Math.round(clamp(n.stock ?? 1, 0, 1) * 3) : Math.round(clamp(n.built, 0, 1) * 3), key = `depot:n:${k}:${dead ? 1 : 0}`;
+    v3mAdd(key, () => v3mDepot(false, k, dead), n.x, n.y, v3Ht(n.x, n.y), (n.id || 0) * .7, 1, dead ? 2 : 0);
+  }
   if (typeof afb3dBases === 'function' && typeof afbParked === 'function') for (const b of afb3dBases()) {   // 机场停放的飞机（机堡里、停机线、直升机位）
     const own = b === S.abBase;
     if (!own && !(spec || (typeof eaBaseSeen === 'function' && eaBaseSeen(b)))) continue;
