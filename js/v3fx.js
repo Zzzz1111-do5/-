@@ -51,6 +51,37 @@ function v3fTrail(out, E, f, u0, u1, n, w, col) {
     prev = p;
   }
 }
+// 垂发：舰上发射的导弹（vls 对陆、dd / esc 舰空、eship 敌舰）先从垂发单元舱口竖直冲出、升到几十米再转向目标；位置只在画面里改（逻辑照旧）
+const V3F_SHIPSRC = { vls: 1, dd: 1, esc: 1, eship: 1 };
+function v3VlsOrigin(m) {
+  if (!V3F_SHIPSRC[m.src] || !isFinite(m.x0)) return null;
+  const V = V3F.vo || (V3F.vo = new Map());
+  if (V.has(m.id)) return V.get(m.id);
+  let sh = null, bd = 45, cls = null;
+  const take = (o, c) => { const d = dist(o.x, o.y, m.x0, m.y0); if (d < bd) { bd = d; sh = o; cls = c; } };
+  if (m.src === 'eship') { for (const e of S.eships || []) if (!e.dead) take(e, null); }
+  else { if (S.dd && S.dd.state !== 'sunk') take(S.dd, typeof vlsCls === 'function' ? vlsCls(S.dd) : '055'); for (const o of S.ships) if (o.kind === 'dd' && alive(o)) take(o, typeof vlsCls === 'function' ? vlsCls(o) : '052D'); }
+  let o = null;
+  if (sh) {
+    const K = cls && typeof SH_DDC === 'object' ? SH_DDC[cls] : null, blocks = K ? K.vls : [[8, 13, 2.2]], b = blocks[m.id % blocks.length], k = K ? K.k : 1;
+    const pseudo = (m.id * 9301 + 49297) % 233280 / 233280, pv = (m.id * 4271 + 113) % 1000 / 1000;
+    const u = lerp(b[0], b[1], .15 + .7 * pseudo) * k, v = (pv * 2 - 1) * b[2] * .7 * k * (K ? K.w : 1);
+    const key = sh === S.dd ? 'DD' : sh.id, P = typeof SHIPV === 'object' && SHIPV.pose[key], h = P ? P.h : (sh.heading ?? -1.57), px0 = P ? P.x : sh.x, py0 = P ? P.y : sh.y;
+    o = { x: px0 + u * Math.cos(h) - v * Math.sin(h), y: py0 + u * Math.sin(h) + v * Math.cos(h), z: -2.6 + 2.8 * k + .3, h, up: m.kind === 'sam' ? .45 : .9 };
+  }
+  V.set(m.id, o);
+  return o;
+}
+// 画面里导弹的位置：垂发冲出阶段竖直往上（加速），之后半秒内平滑接上实际弹道
+function v3MslPos(m, zReal) {
+  const o = v3VlsOrigin(m);
+  if (!o) return null;
+  const top = 34 * (o.up > .6 ? 1.3 : 1);
+  if (m.t < o.up) { const u = clamp(m.t / o.up, 0, 1); return { x: o.x, y: o.y, z: o.z + top * Math.pow(u, 1.7), vls: true }; }
+  const b = clamp((m.t - o.up) / .5, 0, 1), e = b * b * (3 - 2 * b);
+  if (b >= 1) return null;
+  return { x: lerp(o.x, m.x, e), y: lerp(o.y, m.y, e), z: lerp(o.z + top, zReal, e), vls: true };
+}
 const V3F_COL = { p: [.45, 1, .65, .9], e: [1, .32, .28, .9], amber: [1, .72, .3, .95], white: [1, .97, .88, 1], smoke: [.55, .62, .58, .5], flame: [1, .55, .15, .7] };
 
 function v3Fx(C) {
@@ -58,7 +89,7 @@ function v3Fx(C) {
   const gl = V3.gl;
   if (!V3F.tried) v3fxInit(gl);
   if (!V3F.ok) return;
-  if (V3F.S !== S) { V3F.S = S; V3F.trail.clear(); V3F.puff.length = 0; V3F.seen.clear(); }
+  if (V3F.S !== S) { V3F.S = S; V3F.trail.clear(); V3F.puff.length = 0; V3F.seen.clear(); if (V3F.vo) V3F.vo.clear(); }
   const out = [], E = C.E, box = V3.box || [0, 0, W, H], inB = (x, y, m = 200) => x > box[0] - m && x < box[0] + box[2] + m && y > box[1] - m && y < box[1] + box[3] + m;
   const spec = specAll() || (typeof R === 'object' && (R.eye === 'all' || R.eye === 'both' || R.eye === 'e'));
   const seen = (x, y) => spec || inVision(x, y);
@@ -105,12 +136,14 @@ function v3Fx(C) {
     if (!V3F.seen.has(m.id)) {   // 刚点火：在发射点记一团烟（离机的空射弹在挂点附近点火，不在地面）
       V3F.seen.add(m.id);
       const air = typeof AIRV === 'object' && AIRV.mv && AIRV.mv.has(m.id);
-      if (!air && m.t < .6 && isFinite(m.x0)) { const sea = !isLand(m.x0, m.y0); V3F.puff.push({ x: m.x0, y: m.y0, z: sea ? 4 : g(m.x0, m.y0) + 1.5, t0: S.t, big: m.kind === 'tbm' || m.kind === 'asm', side: m.side, sea }); }
+      const vo = v3VlsOrigin(m);
+      if (vo && m.t < .6) V3F.puff.push({ x: vo.x, y: vo.y, z: vo.z, t0: S.t, big: m.kind !== 'sam', side: m.side, sea: true, vls: true, up: vo.up });
+      else if (!air && m.t < .6 && isFinite(m.x0)) { const sea = !isLand(m.x0, m.y0); V3F.puff.push({ x: m.x0, y: m.y0, z: sea ? 4 : g(m.x0, m.y0) + 1.5, t0: S.t, big: m.kind === 'tbm' || m.kind === 'asm', side: m.side, sea }); }
     }
     if (!inB(m.x, m.y, 400) || (m.side === 'e' && !seen(m.x, m.y))) continue;
     const rp = typeof airRelPos === 'function' ? airRelPos(m, true) : null;   // 刚离机（airmdl.js）：没点火前是立体弹体（v3units.js），点火后光点从挂点接上弹道
     if (rp) { V3F.trail.delete(m.id); if (rp.lit) { const q = v3fP(rp.x, rp.y, airRelZ(rp, m)); v3fSpark(out, C, q, 2.2 + rp.e * 1.4, V3F_COL.amber); } continue; }
-    const z = v3AltZ(m.x, m.y, m.z * (m.kind === 'tbm' ? 620 : 230), -2.6, 2), p = v3fP(m.x, m.y, z);   // 与飞机同一套高度：低空沿地形包络、高空按海拔
+    const z0 = v3AltZ(m.x, m.y, m.z * (m.kind === 'tbm' ? 620 : 230), -2.6, 2), VP = v3MslPos(m, z0), p = VP ? v3fP(VP.x, VP.y, VP.z) : v3fP(m.x, m.y, z0);   // 与飞机同一套高度：低空沿地形包络、高空按海拔；垂发冲出阶段竖直往上
     let tr = V3F.trail.get(m.id);
     if (!tr) V3F.trail.set(m.id, tr = []);
     const last = tr[tr.length - 1];
@@ -126,13 +159,18 @@ function v3Fx(C) {
     v3fSpark(out, C, p, (m.kind === 'tbm' ? 10 : 6) * (.85 + .15 * Math.sin(S.t * 40 + m.id)), [...V3F_COL.flame.slice(0, 3), .45]);   // 尾焰的光晕（闪烁）
   }
   for (const id of V3F.trail.keys()) if (!live.has(id)) V3F.trail.delete(id);
-  for (const id of V3F.seen) if (!live.has(id) && !(S.missiles || []).some(m => m.id === id)) V3F.seen.delete(id);
+  for (const id of V3F.seen) if (!live.has(id) && !(S.missiles || []).some(m => m.id === id)) { V3F.seen.delete(id); if (V3F.vo) V3F.vo.delete(id); }
   // 发射点：点火瞬间的闪光、发射筒 / 发射箱口喷出的一团烟（地面上贴地翻滚、海面上是水汽），4 秒里翻滚扩散、往上飘、变淡
   V3F.puff = V3F.puff.filter(o => S.t - o.t0 < 4.5);
   for (const o of V3F.puff) {
     if (!inB(o.x, o.y, 200) || (o.side === 'e' && !seen(o.x, o.y))) continue;
     const a = S.t - o.t0, k = o.big ? 1.6 : 1;
-    if (a < .3) v3fSpark(out, C, v3fP(o.x, o.y, o.z + 2), (8 + a * 20) * k, [1, .9, .7, .8 * (1 - a / .3)]);
+    if (o.vls) {   // 垂发：舱口一团闪光，燃气沿出筒方向拉成一根竖直的白色烟柱（随风慢慢散开、变淡）
+      if (a < .35) v3fSpark(out, C, v3fP(o.x, o.y, o.z + 1), (5 + a * 18) * k, [1, .92, .75, .95 * (1 - a / .35)]);
+      const top = 34 * (o.up > .6 ? 1.3 : 1) * clamp(a / o.up, 0, 1), fade = clamp(1 - a / 3.5, 0, 1);
+      if (top > 1 && fade > 0) { const drift = a * 1.6; v3fRib(out, E, v3fP(o.x, o.y, o.z + .5), v3fP(o.x + drift, o.y - drift * .5, o.z + top), (1.6 + a * 2.2) * k, [.85, .9, .9, .5 * fade], [.75, .8, .82, .18 * fade]); }
+    }
+    if (a < .3 && !o.vls) v3fSpark(out, C, v3fP(o.x, o.y, o.z + 2), (8 + a * 20) * k, [1, .9, .7, .8 * (1 - a / .3)]);
     for (let i = 0; i < 7; i++) {
       const an = i * 2.4 + o.t0, r = (2 + a * (o.sea ? 5 : 3.5)) * k, ex = Math.cos(an) * r * .9, ey = Math.sin(an) * r * .9;
       const c = o.sea ? [.7, .78, .8] : V3F_COL.smoke;

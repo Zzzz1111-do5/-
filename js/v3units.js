@@ -440,6 +440,69 @@ function v3mShip(kind, L, B) {
   mbLoop(M, H, fb + .03, .9);
   return M;
 }
+// 我方驱护舰按舰型建模（布局与二维 ships.js SH_DDC 一致，坐标按二维的 50 × 9 舰长缩放）：
+//   055（一体化塔式桅杆四面相控阵、前 64 后 48 单元垂发、130 主炮、双机库）· 052D（舰桥四面相控阵、独立封闭桅杆、前后各 32 单元、双烟囱）·
+//   052C（圆形转轮式垂发、100 主炮、格构桅杆、舯部鹰击-62 发射箱）· 054A（小一圈、76 炮、32 单元、塔式桅杆、鹰击-83 四联装、两座近防炮）
+function v3mDD(cls) {
+  const K = (typeof SH_DDC === 'object' && SH_DDC[cls]) || { k: 1, w: 1, gun: 1, vls: [[8.6, 14.4, 2.7]] }, L = 50 * K.k, B = 9 * K.k * K.w, sx = L / 50, sy = B / 9;
+  const M = mbNew(), H = v3mHullPts('dd', L, B), fb = 2.8 * sx, X = x => x * sx, Y = y => y * sy;
+  mbPrism(M, H, 0, fb, .8, { top: .55, taper: .25 });
+  const blk = (x0, x1, hw, z0, z1, sh = .9, win = false) => v3mDeck(M, X(x0), X(x1), -Y(hw), Y(hw), z0, z1, sh, win);
+  const panels = (x0, x1, hw, z0, z1) => {   // 四面相控阵：每面一块略凸的深色阵面 + 一圈亮边
+    const zc = (z0 + z1) / 2, hz = (z1 - z0) * .32;
+    for (const xf of [X(x1) + .02, X(x0) - .02]) { mbBox(M, xf - .06, xf + .06, -Y(hw) * .55, Y(hw) * .55, zc - hz, zc + hz, .5); mbLoop(M, [[xf, -Y(hw) * .55], [xf, Y(hw) * .55]], zc + hz, 1); }
+    for (const yf of [-Y(hw) - .02, Y(hw) + .02]) { mbBox(M, X(x0) + (X(x1) - X(x0)) * .2, X(x1) - (X(x1) - X(x0)) * .2, yf - .06, yf + .06, zc - hz, zc + hz, .5); mbLine(M, [X(x0) + (X(x1) - X(x0)) * .2, yf, zc + hz], [X(x1) - (X(x1) - X(x0)) * .2, yf, zc + hz], 1); }
+  };
+  const cells = ([x0, x1, hw], nx) => v3mCells(M, X(x0), X(x1), -Y(hw), Y(hw), fb, nx, 4);
+  const revolver = (x, y, r) => { mbPrism(M, mbCirc(X(x), Y(y), r * sx, 12), fb, fb + .3, .7); mbLoop(M, mbCirc(X(x), Y(y), r * sx * .62, 6), fb + .32, .8); };
+  const quad = (x, sd) => { for (let i = 0; i < 4; i++) { const y = sd * Y(1.1 + i * .55); mbTube(M, [X(x) - 1.6 * sx, y, fb + .5], [X(x) + 1.6 * sx, y, fb + 1.1], .22 * sx, .22 * sx, 6, .75); } };   // 反舰导弹发射筒：斜置的四联装
+  const hangar = (x0, x1, hw, dx) => { blk(x0, x1, hw, fb, fb + 2.6, .85); mbPrism(M, mbCirc(X(x0 + .9), 0, .55 * sx, 8), fb + 2.6, fb + 3.4, .9, { taper: .2 }); mbLoop(M, mbCirc(X(dx), 0, Y(2.6), 18), fb + .02, 1); mbLine(M, [X(dx) - 1, -.9, fb + .02], [X(dx) - 1, .9, fb + .02], .9); mbLine(M, [X(dx) + 1, -.9, fb + .02], [X(dx) + 1, .9, fb + .02], .9); mbLine(M, [X(dx) - 1, 0, fb + .02], [X(dx) + 1, 0, fb + .02], .9); };
+  const [V1, V2] = K.vls;
+  v3mGun(M, X(cls === '054A' ? 16.6 : 16.2), fb, 1.4 * K.gun * sx, 4.4 * K.gun * sx, .9);
+  if (cls === '055') {
+    cells(V1, 8); cells(V2, 6);
+    blk(-1.5, 8.2, 3.4, fb, fb + 2.8, .9); blk(-.5, 7.6, 3, fb + 2.8, fb + 4.8, .95, true);
+    const z0 = fb + 4.8, z1 = z0 + 8.5;
+    mbPrism(M, mbRect(X(1.2), X(6.6), -Y(2.4), Y(2.4)), z0, z1, .9, { taper: 1 });   // 一体化塔式桅杆
+    panels(1.6, 6.2, 2, z0 + 1.5, z0 + 7);
+    mbPrism(M, mbCirc(X(3.9), 0, .7 * sx, 10), z1, z1 + 1.4, .9, { taper: .3 }); mbTube(M, [X(3.9), 0, z1 + 1.4], [X(3.9), 0, z1 + 3.4], .08, .05, 4, .9, false);
+    mbPrism(M, mbCirc(X(-3.2), 0, 1.7 * sx, 12), fb, fb + 5.5, .7, { taper: .4 });   // 烟囱
+    hangar(-15.2, -10, 3.6, -19.6);
+  } else if (cls === '052D') {
+    cells(V1, 4); cells(V2, 4);
+    blk(2.6, 8.6, 3, fb, fb + 2.6, .9); blk(3.2, 8.2, 2.7, fb + 2.6, fb + 5.6, .95, true);
+    panels(3.2, 8.2, 2.7, fb + 2.6, fb + 5.6);
+    mbPrism(M, mbRect(X(-.4), X(2), -Y(1.3), Y(1.3)), fb, fb + 8, .9, { taper: .8 });   // 独立封闭桅杆
+    mbBox(M, X(.8) - .1, X(.8) + .1, -1.2, 1.2, fb + 8, fb + 8.4, .95);
+    for (const y of [-.75, .75]) mbPrism(M, mbCirc(X(-2.6), Y(y), 1 * sx, 10), fb, fb + 4.6, .7, { taper: .3 });   // 双烟囱
+    hangar(-14, -9, 3.3, -19.2);
+    mbBox(M, X(-11.6) - .5, X(-11.6) + .5, -.5, .5, fb + 2.6, fb + 3.6, .85);   // 机库顶的 518 型 L 波段雷达：大块竖直矩形阵面
+    mbBox(M, X(-11.6) - .1, X(-11.6) + .1, -Y(2.2), Y(2.2), fb + 3.6, fb + 6.2, .95); mbLoop(M, mbRect(X(-11.6) - .12, X(-11.6) + .12, -Y(2.2), Y(2.2)), fb + 6.2, 1);
+  } else if (cls === '052C') {
+    for (let i = 0; i < 3; i++) for (const y of [-1.15, 1.15]) revolver(lerp(V1[0] + 1, V1[1] - 1, i / 2), y, 1);
+    for (const y of [-.9, .9]) revolver(-7, y, .85);
+    blk(2.8, 8.4, 2.9, fb, fb + 2.6, .9); blk(3.4, 8, 2.6, fb + 2.6, fb + 5.4, .95, true);
+    panels(3.4, 8, 2.6, fb + 2.6, fb + 5.4);
+    v3mMast(M, X(1.2), fb, 8.5, .9);   // 格构桅杆
+    { const zt = fb + 9.2; mbLine(M, [X(1.2), -Y(2.4), zt], [X(1.2), Y(2.4), zt], 1); for (let i = 0; i < 7; i++) { const y = Y(-2.1 + i * .7); mbLine(M, [X(1.2) - .5, y, zt - .7], [X(1.2) - .5, y, zt + .7], .95); } }   // 517 型米波雷达：桅顶横梁上一排八木天线
+    quad(-1.6, -1); quad(-1.6, 1);
+    mbPrism(M, mbCirc(X(-4.2), 0, 1.6 * sx, 10), fb, fb + 4.8, .7, { taper: .35 });
+    hangar(-13.4, -9.2, 3.2, -19);
+  } else {   // 054A
+    cells(V1, 4);
+    blk(4.6, 10, 2.8, fb, fb + 2.4, .9); blk(5.2, 9.6, 2.4, fb + 2.4, fb + 4.4, .95, true);
+    mbPrism(M, [[X(4), 0], [X(1.6), -Y(1.4)], [X(1.6), Y(1.4)]], fb + 2.4, fb + 7.5, .9, { taper: .5 });   // 塔式桅杆
+    mbBox(M, X(2.6) - .1, X(2.6) + .1, -1.1, 1.1, fb + 7.5, fb + 7.9, .95);
+    mbPrism(M, mbCirc(X(2.6), 0, .3, 8), fb + 7.9, fb + 8.4, .9); mbPrism(M, [[X(2.6) - .5, -Y(1.6)], [X(2.6) + .2, -Y(1.6)], [X(2.6) + .2, Y(1.6)], [X(2.6) - .5, Y(1.6)]], fb + 8.4, fb + 9.6, .95, { taper: .7 });   // 382 型三坐标雷达：桅顶背靠背的旋转阵面
+    for (const y of [-1.6, 1.6]) mbPrism(M, mbCirc(X(7.4), Y(y), .45, 10), fb + 4.4, fb + 5.2, .9, { taper: .2 });   // 驾驶室顶两侧的火控雷达罩
+    quad(-.6, -1); quad(-.6, 1);
+    mbPrism(M, mbCirc(X(-3.4), 0, 1.4 * sx, 10), fb, fb + 4, .7, { taper: .35 });
+    hangar(-12.4, -7.2, 3, -18.4);
+    for (const y of [-2.2, 2.2]) mbPrism(M, mbCirc(X(-8), Y(y), .5 * sx, 8), fb + 2.6, fb + 3.3, .9, { taper: .2 });   // 两座近防炮
+  }
+  mbLoop(M, H, fb + .03, .9);
+  return M;
+}
 // 守方舰艇（NV_CLS 长宽）：阿利·伯克级（SPY-1 相控阵、两座烟囱）、提康德罗加级（两座上层建筑）、星座级、独立级（三体船）
 function v3mEShip(cls, L, B) {
   if (cls === 'ffg') return v3mShip('ffg', L, B);
@@ -810,6 +873,8 @@ function v3mMsl(kind) {
   for (const [dy, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) mbQuad(M, [-L / 2, dy * r, dz * r], [-L / 2 + .55, dy * r, dz * r], [-L / 2 + .25, dy * r * 3, dz * r * 3], [-L / 2, dy * r * 3, dz * r * 3], .8);
   return M;
 }
+// 垂发单元舱盖：铰链在 y = 0 一边，按滚转角翻起
+function v3mVlsLid() { const M = mbNew(); mbBox(M, -.55, .55, 0, 1.1, 0, .12, .8); mbLoop(M, [[-.55, 0], [.55, 0], [.55, 1.1], [-.55, 1.1]], .13, 1); return M; }
 function v3mRotor(n = 4, r = 7.5) {   // 主旋翼：桨叶 + 桨毂，桨盘外圈一道淡线
   const M = mbNew();
   for (let i = 0; i < n; i++) { const a = i / n * 6.2832, c = Math.cos(a), s = Math.sin(a); mbPrism(M, [[c * .3 - s * .25, s * .3 + c * .25], [c * r - s * .25, s * r + c * .25], [c * r + s * .25, s * r - c * .25], [c * .3 + s * .25, s * .3 - c * .25]], 0, .1, .9); }
@@ -1289,11 +1354,11 @@ function v3Units(C, box) {
   for (const sh of S.ships) {
     if (!alive(sh) || !inB(sh.x, sh.y, 80)) continue;
     const d = (typeof SHIP_DIM === 'object' && SHIP_DIM[sh.kind]) || [32, 11], P = pose(sh.id, sh, sh.heading ?? -1.57), nm = (sh.sbxCls && sh.sbxCls.name) || '';
-    const kind = sh.kind === 'dd' ? (/055/.test(nm) ? 'ddA' : /054/.test(nm) ? 'ffg' : 'ddB') : sh.kind;
-    v3mAdd('sh:' + kind, () => v3mShip(kind, d[0], d[1]), P.x, P.y, -2.6, P.h, P.k, 0);
+    if (sh.kind === 'dd') { const c = typeof vlsCls === 'function' ? vlsCls(sh) : '052D'; v3mAdd('dd:' + c, () => v3mDD(c), P.x, P.y, -2.6, P.h, P.k, 0); continue; }   // 驱护舰按舰型建模
+    v3mAdd('sh:' + sh.kind, () => v3mShip(sh.kind, d[0], d[1]), P.x, P.y, -2.6, P.h, P.k, 0);
   }
   for (const bt of S.boats || []) if (!bt.dead && isFinite(bt.x) && inB(bt.x, bt.y)) v3mAdd('sh:boat', () => v3mShip('boat', 12, 5), bt.x, bt.y, -2.6, bt.heading ?? -1.57, 1, 0);
-  if (S.dd && S.dd.state !== 'sunk' && isFinite(S.dd.x) && inB(S.dd.x, S.dd.y, 80)) { const P = pose('DD', S.dd, S.dd.heading ?? -1.57), A = /055/.test(S.dd.name || '055'); v3mAdd('sh:' + (A ? 'ddA' : 'ddB'), () => v3mShip(A ? 'ddA' : 'ddB', 50, 9), P.x, P.y, -2.6, P.h, P.k, 0); }
+  if (S.dd && S.dd.state !== 'sunk' && isFinite(S.dd.x) && inB(S.dd.x, S.dd.y, 80)) { const P = pose('DD', S.dd, S.dd.heading ?? -1.57), c = typeof vlsCls === 'function' ? vlsCls(S.dd) : '055'; v3mAdd('dd:' + c, () => v3mDD(c), P.x, P.y, -2.6, P.h, P.k, 0); }
   if (typeof cvAll === 'function') for (const cv of cvAll()) {
     if (!(cv.hp > 0) || cv.x < -999 || !inB(cv.x, cv.y, 220)) continue;
     const lhd = /075/.test(cv.name || ''), h = cv.heading ?? -1.57, C = typeof CVG === 'object' ? CVG : null, top = -2.6 + (C ? C.zd : 17), home = cvHome(cv);   // top：飞行甲板顶面
@@ -1476,13 +1541,16 @@ function v3Units(C, box) {
     if (m.t < 0 || m.done || !isFinite(m.x)) continue;
     mlive.add(m.id);
     if ((typeof AIRV === 'object' && AIRV.mv && AIRV.mv.has(m.id) && typeof airRelPos === 'function' && airRelPos(m, true)) || !inB(m.x, m.y, 300) || (m.side === 'e' && !(spec || seen(m.x, m.y)))) continue;
-    const z = typeof v3AltZ === 'function' ? v3AltZ(m.x, m.y, m.z * (m.kind === 'tbm' ? 620 : 230), -2.6, 2) : v3Ht(m.x, m.y) + 20;
+    const z0 = typeof v3AltZ === 'function' ? v3AltZ(m.x, m.y, m.z * (m.kind === 'tbm' ? 620 : 230), -2.6, 2) : v3Ht(m.x, m.y) + 20;
+    const VP = typeof v3MslPos === 'function' ? v3MslPos(m, z0) : null, mx = VP ? VP.x : m.x, my = VP ? VP.y : m.y, z = VP ? VP.z : z0;   // 垂发冲出阶段（v3fx.js）
     let o = mp.get(m.id);
-    if (!o) mp.set(m.id, o = { x: m.x0 ?? m.x, y: m.y0 ?? m.y, z: z - 1, h: Math.atan2(m.ty - m.y, m.tx - m.x), p: .8 });
-    const dx = m.x - o.x, dy = m.y - o.y, dz = z - o.z, dl = Math.hypot(dx, dy);
-    if (dl + Math.abs(dz) > .4) { o.h = Math.atan2(dy, dx); o.p = Math.atan2(dz, Math.max(.01, dl)); o.x = m.x; o.y = m.y; o.z = z; }
+    if (!o) mp.set(m.id, o = { x: mx, y: my, z: z - 1, h: Math.atan2(m.ty - m.y, m.tx - m.x), p: VP ? 1.5 : .8 });
+    const dx = mx - o.x, dy = my - o.y, dz = z - o.z, dl = Math.hypot(dx, dy);
+    if (dl + Math.abs(dz) > .4) { o.h = dl > .05 ? Math.atan2(dy, dx) : o.h; o.p = Math.atan2(dz, Math.max(.01, dl)); o.x = mx; o.y = my; o.z = z; }
     const [mk, sc] = MK3[m.kind] || ['aam', 2];
-    v3mAdd('msl:' + mk, () => v3mMsl(mk), m.x, m.y, z, o.h, sc, m.side === 'e' ? 1 : 0, 0, o.p);
+    v3mAdd('msl:' + mk, () => v3mMsl(mk), mx, my, z, o.h, sc, m.side === 'e' ? 1 : 0, 0, o.p);
+    // 垂发舱盖：发射后翻开约 2 秒
+    if (VP && m.t < 2.2 && typeof v3VlsOrigin === 'function') { const vo = v3VlsOrigin(m); if (vo) v3mAdd('vlslid', v3mVlsLid, vo.x, vo.y, vo.z, vo.h, 1, m.side === 'e' ? 1 : 0, -1.25 * clamp(m.t / .25, 0, 1) * clamp((2.2 - m.t) / .4, 0, 1)); }
   }
   for (const id of mp.keys()) if (!mlive.has(id)) mp.delete(id);
   // —— 画 ——
