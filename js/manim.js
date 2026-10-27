@@ -63,7 +63,8 @@ function manAn(q, T, i, kind) {
     bino: kind === 'fo' && !mv && fire == null, cmd: kind === 'officer' && !mv && fire == null,
     kneel: !mv && !q.prone && (fired || kind === 'mortar') && kind !== 'eng', rel: T.rel > t && T.rel - t < 1.9 && kind !== 'at' && kind !== 'aa' && kind !== 'mortar' ? 1 - (T.rel - t) / 1.9 : null,
     thr: i === 0 && T.thr != null && t - T.thr < .55 ? (t - T.thr) / .55 : null, sup: q.sup >= 55 && !q.prone, work: !!q.working && kind === 'eng',
-    look: !mv && !fired ? Math.sin(t * .37 + q.id * 1.7 + i * 2.3) * .55 : 0, t: t + q.id * .61 + i * 1.3
+    look: !mv && !fired ? Math.sin(t * .37 + q.id * 1.7 + i * 2.3) * .55 : 0, t: t + q.id * .61 + i * 1.3,
+    low: manLowStep(q, T, i, q.prone ? 2 : !mv && (fired || kind === 'mortar') && kind !== 'eng' ? 1 : 0)
   };
 }
 
@@ -79,6 +80,17 @@ function manDied(q, i, role) {
 // —— 画一个人（局部坐标 +x 朝前、+y 向右，单位：世界长度 / MAN_K）——
 function manDraw(ctx, x0, y0, a, kind, col, side, an, real) {
   an = an || MAN_IDLE;
+  const lo = an.low;
+  if (lo != null) {   // 姿态过渡（manLowStep）：站 ↔ 跪 ↔ 卧之间，相邻两个姿态叠着淡入淡出，不一下子跳过去
+    if (!an.mv && lo > .06 && lo < 1.94 && Math.abs(lo - 1) > .06) {
+      const g = ctx.globalAlpha, [A, B, w] = lo < 1 ? [{ kneel: false, prone: false }, { kneel: true, prone: false }, lo] : [{ kneel: true, prone: false }, { kneel: false, prone: true }, lo - 1];
+      ctx.globalAlpha = g * (1 - w); manDraw(ctx, x0, y0, a, kind, col, side, { ...an, ...A, low: null }, real);
+      ctx.globalAlpha = g * w; manDraw(ctx, x0, y0, a, kind, col, side, { ...an, ...B, low: null }, real);
+      ctx.globalAlpha = g;
+      return;
+    }
+    an = { ...an, kneel: Math.abs(lo - 1) <= .06 && !an.mv, prone: lo >= 1.94, low: null };
+  }
   const P = real ? rlPal(side) : null, mk = MAN_K * (an.k || 1), lw = px(1) / mk, dark = 'rgba(2,10,6,.88)';   // an.k：另行缩放（飞行员、甲板人员按飞机的比例画小）
   const uni = real ? (an.sof ? rlShade(P.uni, .8) : P.uni) : dark, packC = real ? P.pack : dark, helmC = real ? P.helm : col, gunC = real ? RL_EDGE : col, edge = real ? 'rgba(0,0,0,.45)' : col;
   ctx.save(); ctx.translate(x0, y0); ctx.rotate(a); ctx.scale(mk, mk);
@@ -384,11 +396,29 @@ function manDrawCorpses(ctx) {
   if (drop > 40) MANV.dead = MANV.dead.filter(d => S.t - d.t0 <= 65);
 }
 // 3D（v3units.js）用：这个人现在是哪个姿态、哪一帧
+// 3D 姿态帧：姿态高度 L（0 站、1 跪、2 卧）连续变化，过渡中取 L1–L15 的过渡帧；走 / 跑八帧、匍匐四帧；站着开火时抵肩瞄准
 function manPose3(q, T, i, kind) {
-  const an = manAn(q, T, i, kind);
-  if (an.prone) return { p: an.mv ? 'c' + ((Math.floor(an.ph / Math.PI * 1.6) % 2 + 2) % 2) : 'pr', fire: an.fire };
-  if (an.mv) { const f = ((Math.floor(an.ph / (Math.PI / 2)) % 4) + 4) % 4; return { p: (an.run ? 'r' : 'w') + f, fire: null }; }
-  if (an.kneel) return { p: 'kn', fire: an.fire };
-  return { p: 'st', fire: an.fire };
+  const an = manAn(q, T, i, kind), L = an.low ?? (an.prone ? 2 : an.kneel ? 1 : 0), sof = an.sof;
+  if (L > 1.94) return { p: an.mv ? 'c' + (((Math.floor(an.ph / (Math.PI / 2)) % 4) + 4) % 4) : 'pr', fire: an.fire, L: 2, sof };
+  if (L < .06) {
+    if (an.mv) return { p: (an.run ? 'r' : 'w') + (((Math.floor(an.ph / (Math.PI / 4)) % 8) + 8) % 8), fire: null, L: 0, sof };
+    return { p: an.fire != null || (T.fT > 0 && S.t - T.fT < 2.5) ? 'sa' : 'st', fire: an.fire, L: 0, sof };
+  }
+  if (Math.abs(L - 1) < .06) return { p: 'kn', fire: an.fire, L: 1, sof };
+  return { p: 'L' + clamp(Math.round(L * 8), 1, 15), fire: null, L, sof };
+}
+// 姿态高度的过渡：卧倒、跪下、起身都要时间（站 → 跪约 0.45 秒、跪 → 卧约 0.65 秒、卧 → 跪约 0.8 秒、跪 → 站约 0.4 秒）；
+//   同组的三个人反应有先后（每人错开约 0.12 秒），不齐刷刷地一起动；第一次看到这个组时直接取当前姿态
+const MAN_RATE = { d1: 2.2, d2: 1.55, u2: 1.25, u1: 2.5, lag: .12 };
+function manLowStep(q, T, i, tgt) {
+  if (!T.lo) { T.lo = [tgt, tgt, tgt]; T.lot = [S.t, S.t, S.t]; T.lg = [tgt, tgt, tgt]; T.lgT = [S.t, S.t, S.t]; }
+  if (T.lg[i] !== tgt) { T.lg[i] = tgt; T.lgT[i] = S.t; }
+  const dt = clamp(S.t - T.lot[i], 0, .5);
+  T.lot[i] = S.t;
+  if (S.t - T.lgT[i] < i * MAN_RATE.lag + (q.id % 3) * .04) return T.lo[i];   // 还没反应过来
+  let L = T.lo[i];
+  if (L < tgt) L = Math.min(tgt, L + dt * (L < 1 ? MAN_RATE.d1 : MAN_RATE.d2));
+  else if (L > tgt) L = Math.max(tgt, L - dt * (L > 1 ? MAN_RATE.u2 : MAN_RATE.u1));
+  return (T.lo[i] = L);
 }
 HOOK.drawUnder.push(() => { if (!(R.m3d && R.m3dNear)) manDrawCorpses(R.ctx); });   // 3D 近看时遗体是立体模型（v3units.js）
