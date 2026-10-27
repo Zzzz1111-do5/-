@@ -54,6 +54,7 @@ const V3_FS = der => `${der ? '#extension GL_OES_standard_derivatives : enable\n
 uniform sampler2D uTop, uBase, uCls, uCls2, uFogT, uHt, uLf, uTopF, uLm; uniform vec4 uBox, uBoxF; uniform vec2 uWorld, uGrid, uHG; uniform vec2 uFog; uniform float uSea, uT, uMx, uLmOn;
 varying vec3 vP, vN, vV; varying float vD;
 ${V3_MX}
+${typeof V3L_BOOM_GLSL === 'string' ? V3L_BOOM_GLSL : 'vec3 boomLight(vec2 w) { return vec3(0.); }'}
 #ifdef DER
 #define FW(x) fwidth(x)
 #else
@@ -95,7 +96,7 @@ void main() {
   if (uMx < .5) {   // 写实 / 关闭数码风：披俯视贴图，叠山体明暗、等高线、方格网
     vec3 cF = inF ? texture2D(uTopF, uvF).rgb : texture2D(uBase, w / uWorld).rgb;
     vec3 lm0 = uLmOn > .5 ? texture2D(uLm, w / uWorld).rgb : vec3(1., 1., 0.);
-    c = (wN > 0. ? mix(cF, texture2D(uTop, uv).rgb, wN) : cF) * (.5 + .75 * lit) * mix(.42, 1., lm0.r) * mix(.55, 1., lm0.g);
+    c = (wN > 0. ? mix(cF, texture2D(uTop, uv).rgb, wN) : cF) * (.5 + .75 * lit) * mix(.42, 1., lm0.r) * mix(.55, 1., lm0.g) + boomLight(w) * (.35 + .65 * lit);
     c += vec3(.12, .62, .32) * (cl + gl);
     gl_FragColor = vec4(mix(c, bg, smoothstep(uFog.x, uFog.y, vD)), 1.); return;
   }
@@ -192,6 +193,7 @@ void main() {
   vec3 lm = uLmOn > .5 ? texture2D(uLm, cu).rgb : vec3(1., 1., 0.);
   float lampR = length((w - uWorld * .5) / (uWorld * .5));
   c *= mix(.3, 1., lm.r) * mix(.45, 1., lm.g) * (.72 + .28 * (1. - smoothstep(.55, 1.5, lampR)));
+  c += boomLight(w) * (.3 + .7 * lit);   // 爆炸火光照亮周围的地面
   if (land < .5) {
     // 海面：几层缓慢移动的波纹斜着反射头顶的灯（粼粼的亮点），近岸的浅水亮一些、岸边一道来回涌的浪线
     vec2 wq = w * vec2(.029, .041); float t2 = uT * .55;
@@ -216,10 +218,11 @@ const V3_BVS = `attribute vec3 p; attribute vec3 n; attribute vec2 e;
 uniform mat4 uM; uniform vec3 uEye;
 varying vec3 vP, vN; varying vec2 vE; varying float vD;
 void main() { vP = p; vN = n; vE = e; vD = distance(p, uEye); gl_Position = uM * vec4(p, 1.); }`;
-const V3_BFS = `${V3_PREC}
+const V3_BFS = () => `${V3_PREC}
 uniform sampler2D uTop, uBase, uTopF, uLm; uniform vec4 uBox, uBoxF; uniform vec2 uWorld, uFog; uniform float uT, uMx, uLmOn;
 varying vec3 vP, vN; varying vec2 vE; varying float vD;
 ${V3_MX}
+${typeof V3L_BOOM_GLSL === 'string' ? V3L_BOOM_GLSL : 'vec3 boomLight(vec2 w) { return vec3(0.); }'}
 void main() {
   vec2 w = vec2(vP.x, -vP.y), uv = (w - uBox.xy) / uBox.zw, uvF = (w - uBoxF.xy) / uBoxF.zw;
   bool inF = uvF.x > 0. && uvF.y > 0. && uvF.x < 1. && uvF.y < 1.;
@@ -249,6 +252,7 @@ void main() {
   // 山的投影、街巷与林下的遮蔽也落在房屋、树上（v3light.js 光照贴图）；墙脚比屋顶暗一点
   vec2 lmB = uLmOn > .5 ? texture2D(uLm, w / uWorld).rg : vec2(1.);
   c *= mix(.42, 1., lmB.r) * mix(.62, 1., lmB.g);
+  c += boomLight(w) * (.25 + .75 * lit);
   gl_FragColor = vec4(mix(c, bg, smoothstep(uFog.x, uFog.y, vD)), 1.);
 }`;
 
@@ -571,13 +575,13 @@ function v3Init() {
     gl.linkProgram(pr);
     if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(pr));
     const u = {}, a = { p: gl.getAttribLocation(pr, 'p'), n: gl.getAttribLocation(pr, 'n') };
-    for (const k of ['uM', 'uEye', 'uTop', 'uBase', 'uCls', 'uCls2', 'uFogT', 'uHt', 'uLf', 'uTopF', 'uBox', 'uBoxF', 'uWorld', 'uGrid', 'uHG', 'uFog', 'uSea', 'uT', 'uMx', 'uLm', 'uLmOn']) u[k] = gl.getUniformLocation(pr, k);
+    for (const k of ['uM', 'uEye', 'uTop', 'uBase', 'uCls', 'uCls2', 'uFogT', 'uHt', 'uLf', 'uTopF', 'uBox', 'uBoxF', 'uWorld', 'uGrid', 'uHG', 'uFog', 'uSea', 'uT', 'uMx', 'uLm', 'uLmOn', 'uBm']) u[k] = gl.getUniformLocation(pr, k);
     const pb = gl.createProgram();
-    gl.attachShader(pb, sh(gl.VERTEX_SHADER, V3_BVS)); gl.attachShader(pb, sh(gl.FRAGMENT_SHADER, V3_BFS));
+    gl.attachShader(pb, sh(gl.VERTEX_SHADER, V3_BVS)); gl.attachShader(pb, sh(gl.FRAGMENT_SHADER, V3_BFS()));   // 着色器源码用到时再拼：爆炸火光的 GLSL 在后加载的 v3light.js 里
     gl.linkProgram(pb);
     if (!gl.getProgramParameter(pb, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(pb));
     const ub = {}, ab = { p: gl.getAttribLocation(pb, 'p'), n: gl.getAttribLocation(pb, 'n'), e: gl.getAttribLocation(pb, 'e') };
-    for (const k of ['uM', 'uEye', 'uTop', 'uBase', 'uTopF', 'uBox', 'uBoxF', 'uWorld', 'uFog', 'uT', 'uMx', 'uLm', 'uLmOn']) ub[k] = gl.getUniformLocation(pb, k);
+    for (const k of ['uM', 'uEye', 'uTop', 'uBase', 'uTopF', 'uBox', 'uBoxF', 'uWorld', 'uFog', 'uT', 'uMx', 'uLm', 'uLmOn', 'uBm']) ub[k] = gl.getUniformLocation(pb, k);
     const lmU = (gl.getParameter(gl.MAX_TEXTURE_IMAGE_UNITS) || 8) > 8 ? 8 : 0;   // 光照贴图在第 9 个单元（不够就指到 0 号，uLmOn = 0 不用它）
     gl.useProgram(pb); gl.uniform1i(ub.uTop, 0); gl.uniform1i(ub.uBase, 1); gl.uniform1i(ub.uTopF, 7); gl.uniform1i(ub.uLm, lmU);
     Object.assign(V3, { pb, ub, ab });
@@ -824,6 +828,8 @@ function v3Draw(now) {
   gl.uniform1f(u.uSea, 1.5);
   const mx = v3Mx() ? 1 : 0, tm = (now / 1000) % 3600;   // 黑绿画面：黑客帝国式数码风
   gl.uniform1f(u.uT, tm); gl.uniform1f(u.uMx, mx); gl.uniform1f(u.uLmOn, lmOn);
+  const bm = typeof v3Booms === 'function' ? v3Booms() : null;   // 爆炸火光（v3light.js）
+  if (bm && u.uBm) gl.uniform4fv(u.uBm, bm);
   gl.bindBuffer(gl.ARRAY_BUFFER, V3.buf); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, V3.ib);
   gl.enableVertexAttribArray(V3.a.p); gl.vertexAttribPointer(V3.a.p, 3, gl.FLOAT, false, 24, 0);
   gl.enableVertexAttribArray(V3.a.n); gl.vertexAttribPointer(V3.a.n, 3, gl.FLOAT, false, 24, 12);
@@ -835,6 +841,7 @@ function v3Draw(now) {
     gl.uniformMatrix4fv(ub.uM, false, C.M); gl.uniform3f(ub.uEye, C.E[0], C.E[1], C.E[2]);
     gl.uniform4f(ub.uBox, V3.boxN[0], V3.boxN[1], V3.boxN[2], V3.boxN[3]); gl.uniform4f(ub.uBoxF, V3.boxF[0], V3.boxF[1], V3.boxF[2] || 1, V3.boxF[3] || 1); gl.uniform2f(ub.uWorld, W, H); gl.uniform2f(ub.uFog, ...v3FogR(C));
     gl.uniform1f(ub.uT, tm); gl.uniform1f(ub.uMx, mx); gl.uniform1f(ub.uLmOn, lmOn);
+    if (bm && ub.uBm) gl.uniform4fv(ub.uBm, bm);
     gl.disableVertexAttribArray(V3.a.p); gl.disableVertexAttribArray(V3.a.n);
     gl.enableVertexAttribArray(ab.p); gl.enableVertexAttribArray(ab.n); gl.enableVertexAttribArray(ab.e);
     const fe = v3FogE(C), ex = C.E[0], ey = -C.E[1], ez = Math.max(0, C.E[2] - 120), rk = v3RD() * CAM.vh / 768, ft = Math.min(fe * .6, 4500 * rk), fb = Math.min(fe, 9000 * rk);   // ez：镜头比地面高出多少（拉得很高时树、房屋也算远）

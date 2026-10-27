@@ -1598,6 +1598,7 @@ const V3M_FS = der => `${der ? '#extension GL_OES_standard_derivatives : enable\
 uniform vec2 uFog, uWorld; uniform vec3 uBg; uniform sampler2D uLm; uniform float uLmOn;
 uniform vec3 uBody0, uBody1, uBody2, uBody3, uBody4, uGlow0, uGlow1, uGlow2;
 varying vec3 vN, vB, vV; varying float vS, vSide, vD; varying vec2 vW;
+${typeof V3L_BOOM_GLSL === 'string' ? V3L_BOOM_GLSL : 'vec3 boomLight(vec2 w) { return vec3(0.); }'}
 void main() {
   vec3 body = vSide < .5 ? uBody0 : vSide < 1.5 ? uBody1 : vSide < 2.5 ? uBody2 : vSide < 3.5 ? uBody3 : uBody4;   // 3、4：我方 / 敌方飞机
   vec3 glow = vSide < .5 || (vSide > 2.5 && vSide < 3.5) ? uGlow0 : vSide < 1.5 || vSide > 3.5 ? uGlow1 : uGlow2;
@@ -1621,6 +1622,7 @@ void main() {
   vec3 c = body * (.45 + .95 * lit * shd + .25 * up) * sh + glow * ed * .95 * (.75 + .25 * shd) + glow * rim * .22;
   c += vec3(.45, .62, .55) * pow(max(dot(N, normalize(${V3_SUNG} + V)), 0.), 36.) * .22 * shd;
   if (vS < 0.) c += glow * .75 * sh;
+  c += boomLight(vec2(vW.x, -vW.y)) * (.3 + .7 * lit) * .8;   // 近处爆炸的火光映在车身上
   gl_FragColor = vec4(mix(c, uBg, smoothstep(uFog.x, uFog.y, vD)), 1.);
 }`;
 function v3mInit(gl) {
@@ -1635,7 +1637,7 @@ function v3mInit(gl) {
     if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(pr));
     V3M.pr = pr; V3M.gl = gl;
     for (const k of ['p', 'n', 's', 'b', 'iA', 'iB']) V3M.a[k] = gl.getAttribLocation(pr, k);
-    for (const k of ['uM', 'uEye', 'uFog', 'uBg', 'uWorld', 'uLm', 'uLmOn', 'uBody0', 'uBody1', 'uBody2', 'uBody3', 'uBody4', 'uGlow0', 'uGlow1', 'uGlow2']) V3M.u[k] = gl.getUniformLocation(pr, k);
+    for (const k of ['uM', 'uEye', 'uFog', 'uBg', 'uWorld', 'uLm', 'uLmOn', 'uBm', 'uBody0', 'uBody1', 'uBody2', 'uBody3', 'uBody4', 'uGlow0', 'uGlow1', 'uGlow2']) V3M.u[k] = gl.getUniformLocation(pr, k);
     V3M.ib = gl.createBuffer();
     V3M.ok = true;
   } catch (e) { V3M.ok = false; console.warn('3D 兵种模型不可用', e); }
@@ -2020,6 +2022,7 @@ function v3Units(C, box) {
   gl.uniformMatrix4fv(V3M.u.uM, false, C.M);
   const lmOn = typeof v3LightBind === 'function' && v3LightBind(gl);
   gl.uniform1i(V3M.u.uLm, lmOn ? V3L.unit : 0); gl.uniform1f(V3M.u.uLmOn, lmOn ? 1 : 0); gl.uniform2f(V3M.u.uWorld, W, H);
+  if (V3M.u.uBm && typeof V3L_BM === 'object') gl.uniform4fv(V3M.u.uBm, V3L_BM);   // 爆炸火光（view3d.js 这一帧已算好）
   gl.uniform3f(V3M.u.uEye, C.E[0], C.E[1], C.E[2]);
   gl.uniform2f(V3M.u.uFog, ...(typeof v3FogR === 'function' ? v3FogR(C) : [C.D * 1.3, C.D * 2.8]));
   gl.uniform3f(V3M.u.uBg, .004, .02, .011);

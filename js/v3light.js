@@ -110,3 +110,26 @@ function v3ShadowDraw(gl, C) {
   gl.disable(gl.POLYGON_OFFSET_FILL); gl.depthMask(true); gl.disable(gl.BLEND);
   gl.disableVertexAttribArray(S0.p); gl.disableVertexAttribArray(S0.q);
 }
+
+// —— 爆炸的火光：最近的几团爆炸（S.fx boom / b2）在爆开后半秒内把周围的地面、房屋、模型照亮，暖色、按距离平方衰减 ——
+const V3L_NB = 6, V3L_BM = new Float32Array(V3L_NB * 4);
+const V3L_BOOM_GLSL = `uniform vec4 uBm[${V3L_NB}];
+vec3 boomLight(vec2 w) {
+  vec3 L = vec3(0.);
+  for (int i = 0; i < ${V3L_NB}; i++) { vec4 b = uBm[i]; if (b.w <= 0.) continue; float d = max(1. - length(w - b.xy) / b.z, 0.); L += vec3(1., .56, .24) * b.w * d * d; }
+  return L;
+}`;
+// 每帧挑出镜头附近最亮的几团（离画面中心近、刚炸开的优先），返回 [x, y, 照亮半径, 强度] × 6
+function v3Booms() {
+  V3L_BM.fill(0);
+  if (!S || !S.fx) return V3L_BM;
+  const L = [];
+  for (const f of S.fx) {
+    if ((f.kind !== 'boom' && f.kind !== 'b2') || f.life > .6 || !(f.r > 0)) continue;
+    const u = 1 - f.life / .6, k = u * u * Math.min(1.6, f.r / 18) * (f.kind === 'b2' ? 1.6 : 1), d = Math.hypot(f.x - CAM.x, f.y - CAM.y);
+    L.push([f.x, f.y, f.r * (f.kind === 'b2' ? 9 : 6), k, k / (1 + d / 1500)]);
+  }
+  L.sort((a, b) => b[4] - a[4]);
+  for (let i = 0; i < Math.min(V3L_NB, L.length); i++) V3L_BM.set([L[i][0], L[i][1], L[i][2], L[i][3]], i * 4);
+  return V3L_BM;
+}
