@@ -1,5 +1,5 @@
 'use strict';
-// 3D 立体地图（黑绿画风）：右上角「3D」按钮或 Shift + L 切换，沙盒编辑时不可用
+// 3D 立体地图（黑绿画风）：对局默认就是 3D（SETTINGS.v3，玩家切回平面后记住）；右上角「3D」按钮或 Shift + L 切换
 // 画法：地形按高程做成立体网格（每 2 格一个顶点，高程放大 V3_HZ 倍，海面平铺，四周有沙盘围边）；
 //   当前整帧战场（地形、单位、标记，已过黑绿着色器）先在屏外按俯视画好，作为贴图披在地形上；
 //   再叠加西北来光的山体明暗、等高线（每 14 一条，每 5 条加粗）、200 一格的方格网、远处渐暗
@@ -565,7 +565,7 @@ function v3Init() {
 }
 
 // —— 3D 镜头：自由镜头（V3.fc）——镜头本身就是一个在战场上空自由移动的视点：位置 (x, y, z) + 偏航 yaw（0 朝东、π/2 朝南）+ 俯仰 pitch（向上为正）。
-//   不再绕着地面上的某一点转（不是第三人称）：拖动 / Q E / R F 是原地转头、抬头低头；W S 沿视线方向前后飞（抬头往上、低头往下）、A D 左右平移；
+//   不再绕着地面上的某一点转（不是第三人称）：拖动 / R F 是原地转头、抬头低头；Q E 降低 / 升高；W S 沿视线方向前后飞（抬头往上、低头往下）、A D 左右平移；
 //   滚轮朝鼠标指着的地方推近 / 拉远；左键拖动平移（地面跟着手走）；小地图、编队栏双击等「把镜头移到某处」保持当前朝向和距离平移过去。
 //   画面中心（CAM.x, CAM.y）与缩放 CAM.z 每帧由镜头推算（视线落地点、离地高度），贴图范围、细节档、平面地图的切换都照旧按它们
 // 渲染距离（设置「3D 渲染距离」）：雾、远景贴图、远裁剪面一起放远 / 拉近
@@ -588,6 +588,17 @@ function v3FcInit() {
   if (D * Math.sin(th) > hmax) th = Math.asin(clamp(hmax / D, 0, 1));
   if (D * Math.cos(th) > 4200 - tz) D = (4200 - tz) / Math.max(.2, Math.cos(th));
   V3.fc = v3FcFromOrbit(CAM.x, CAM.y, tz, D, th, ps);
+  V3.fc0 = { x: CAM.x, y: CAM.y, tz, D, th, ps };   // 进 3D 过渡的终点（v3TiltIn）
+}
+// 进 3D 的过渡：先从接近正俯视（和平面地图看到的一样）开始，绕画面中心约 1.2 秒压低到默认俯角，不突然跳成透视
+const V3_TIN = 1.2;
+function v3TiltStep(dt) {
+  const T = V3.tin, A = V3.fc0;
+  if (!T || !A) return;
+  T.t += dt;
+  const u = clamp(T.t / V3_TIN, 0, 1), e = u * u * (3 - 2 * u);
+  Object.assign(V3.fc, v3FcFromOrbit(A.x, A.y, A.tz, A.D, lerp(Math.min(.1, A.th), A.th, e), A.ps));
+  if (u >= 1) V3.tin = null;
 }
 const v3Gnd = (x, y) => Math.max(v3Ht(clamp(x, 0, W - 1), clamp(y, 0, H - 1)), -2.6, typeof cvCamZ === 'function' ? cvCamZ(x, y) ?? -99 : -99);
 // 镜头离最近的东西有多远：脚下的地面 / 甲板，空中的飞机、直升机（近裁剪面按它定）
@@ -610,6 +621,7 @@ function v3FcCamera() {
 // 每帧：转头缓动、按键飞行、外部「移镜头」的平移、不钻地；再推算画面中心与缩放
 function v3FcStep(dt) {
   const F = V3.fc || (v3FcInit(), V3.fc);
+  v3TiltStep(dt);
   if (F.cx != null && (Math.abs(CAM.x - F.cx) > .5 || Math.abs(CAM.y - F.cy) > .5)) { F.x += CAM.x - F.cx; F.y += CAM.y - F.cy; }   // 别处把画面中心移走了（小地图、双击编队、点消息定位）：镜头平移过去
   F.yaw += Math.atan2(Math.sin(F.yawT - F.yaw), Math.cos(F.yawT - F.yaw)) * Math.min(1, dt * 14);
   F.pitch += (F.pitchT - F.pitch) * Math.min(1, dt * 14);
@@ -627,16 +639,25 @@ function v3FcStep(dt) {
 // 原地转头（偏航）、抬头低头（俯仰）
 function v3Look(dyaw, dpitch, now) {
   const F = V3.fc || (v3FcInit(), V3.fc);
+  V3.tin = null;   // 玩家自己动了镜头：过渡停下
   F.yawT += dyaw; F.pitchT = clamp(F.pitchT + dpitch, -1.52, 1.45);   // 可以抬头看到接近头顶（仰看飞过头顶的飞机）
   if (now) { F.yaw = F.yawT; F.pitch = F.pitchT; }
 }
 // 沿视线飞：fw 前后（沿视线方向，含高低）、rt 左右平移，按离地高度定速度
 function v3Fly(fw, rt, dt) {
+  V3.tin = null;
   const F = V3.fc || (v3FcInit(), V3.fc), alt = Math.max(1, F.z - v3Gnd(F.x, F.y)), sp = clamp(alt * 1.25, 50, 1100) * dt, cp = Math.cos(F.pitch);
   F.x += (Math.cos(F.yaw) * cp * fw - Math.sin(F.yaw) * rt) * sp; F.y += (Math.sin(F.yaw) * cp * fw + Math.cos(F.yaw) * rt) * sp; F.z += Math.sin(F.pitch) * fw * sp;
 }
+// 升高 / 降低（k > 0 升高）：速度和前后飞一样按离地高度定，贴近地面时慢
+function v3Rise(k, dt) {
+  V3.tin = null;
+  const F = V3.fc || (v3FcInit(), V3.fc), alt = Math.max(1, F.z - v3Gnd(F.x, F.y));
+  F.z += k * clamp(alt * 1.25, 50, 1100) * dt;
+}
 // 推近 / 拉远：朝屏幕上 (sx, sy) 指着的地面点移动（k > 1 推近）
 function v3Dolly(sx, sy, k) {
+  V3.tin = null;
   const F = V3.fc || (v3FcInit(), V3.fc), P = v3Pick(sx, sy), pz = v3Gnd(P.x, P.y), dx = P.x - F.x, dy = P.y - F.y, dz = pz - F.z, d = Math.hypot(dx, dy, dz) || 1;
   let m = d * (1 - 1 / k);
   if (k > 1) m = Math.min(m, d - 6);   // 推近：停在离那一点 6 米外
@@ -663,11 +684,13 @@ function v3TzStep(dt) {
   if (V3.tz == null || !isFinite(V3.tz)) V3.tz = want;
   else V3.tz += (want - V3.tz) * (1 - Math.exp(-dt / .35));
 }
-// 按住 Q / E 连续转向、R / F 连续俯仰（右键拖动同样可以自由转视角）
+// 按住 Q / E 降低 / 升高镜头（Shift 加速），R / F 连续俯仰；转向用右键 / 中键拖动或 < >
 function v3HoldStep(dt) {
   const K = V3.hold;
   if (!K || !K.size || !V3.on) return;
-  v3Look((K.has('KeyE') ? 1.6 : 0) * dt - (K.has('KeyQ') ? 1.6 : 0) * dt, (K.has('KeyR') ? 1 : 0) * dt - (K.has('KeyF') ? 1 : 0) * dt, true);   // Q E 原地左右转头、R 抬头 F 低头
+  const up = (K.has('KeyE') ? 1 : 0) - (K.has('KeyQ') ? 1 : 0), pt = (K.has('KeyR') ? 1 : 0) - (K.has('KeyF') ? 1 : 0);
+  if (up) v3Rise(up, dt * (typeof KEYS === 'object' && KEYS.has('Shift') ? 3 : 1));
+  if (pt) v3Look(0, pt * dt, true);   // R 抬头、F 低头
 }
 // 屏幕点 → 视线 → 与地形求交（先粗步进，再二分）；打不到地面时取视线与海平面的交点
 function v3Ray(sx, sy) {
@@ -899,17 +922,19 @@ function v3Att() {
   V3.yaw = V3.yawT = (MENU.drift || 0) * .5; V3.tilt = V3.tiltT = 1.02;
   return true;
 }
-function v3Toggle(on = !V3.on) {
+// user：玩家自己按的（按钮、Shift + L）——记住选择，下一局照此默认
+function v3Toggle(on = !V3.on, user = false) {
   if (on && !v3Can()) return;
   if (on && !V3.tried) v3Init();
   const was = V3.on;
   V3.on = on && V3.ok;
-  if (V3.on && !was) v3FcInit();   // 进 3D：自由镜头从平面地图当前的画面接着看
+  if (V3.on && !was) { v3FcInit(); V3.tin = { t: 0 }; }   // 进 3D：自由镜头从平面地图当前的画面接着看，从俯视慢慢压低成透视
+  if (user && typeof setSetting === 'function') setSetting('v3', V3.on);
   const b = typeof $ === 'function' && $('btn3d'), c = typeof $ === 'function' && $('v3ctl');
   if (b) { b.classList.toggle('on', V3.on); b.setAttribute('aria-pressed', V3.on ? 'true' : 'false'); }
   if (c) c.hidden = !V3.on;
   if (!V3.on && typeof trxResize === 'function' && TRX.ok) trxResize();
-  if (typeof log === 'function' && S && S.t != null) log(V3.on ? '3D 自由镜头：中键 / 右键拖动原地转头，Q E 转向、R F 抬头低头，W S 沿视线飞、A D 平移，滚轮朝鼠标处推拉，左键拖动平移，O 观察者模式' : '平面地图', 'info', 'v3', 1);
+  if (typeof log === 'function' && S && S.t != null) log(V3.on ? '3D 自由镜头：中键 / 右键拖动转头，R F 抬头低头，Q E 降低 / 升高，W S 沿视线飞、A D 平移，滚轮朝鼠标处推拉，左键拖动平移，O 观察者模式' : '平面地图', 'info', 'v3', 1);
 }
 const v3Turn = k => { if (V3.on) v3Look(k * Math.PI / 8, 0); else V3.yawT += k * Math.PI / 8; };
 const v3Tilt = k => { if (V3.on) v3Look(0, -k * .12); else V3.tiltT = clamp(V3.tiltT + k * .12, V3_TILT[0], V3_TILT[1]); };
@@ -940,15 +965,16 @@ if (typeof window === 'object' && window.addEventListener) {
   const hk = { KeyQ: 1, KeyE: 1, KeyR: 1, KeyF: 1 };
   window.addEventListener('keyup', e => { if (V3.hold) V3.hold.delete(e.code); });
   window.addEventListener('blur', () => { if (V3.hold) V3.hold.clear(); });
-  HOOK.key.push(e => {   // 3D 且编队指挥模式（这几个键不再有别的用途）：按住连续转向 / 俯仰
-    if (!V3.on || !hk[e.code] || (typeof V3O === 'object' && V3O.on) || !(typeof thuActive === 'function' && thuActive()) || e.ctrlKey || e.metaKey || e.altKey) return false;
+  HOOK.key.push(e => {   // 3D：按住 Q / E 降低 / 升高（Q E 原来的冲锋、增援线快捷键只在平面地图里用）；编队指挥模式里按住 R / F 连续俯仰
+    if (!V3.on || !hk[e.code] || (typeof V3O === 'object' && V3O.on) || e.ctrlKey || e.metaKey || e.altKey) return false;
+    if ((e.code === 'KeyR' || e.code === 'KeyF') && !(typeof thuActive === 'function' && thuActive())) return false;
     (V3.hold || (V3.hold = new Set())).add(e.code);
     return true;
   });
 }
 HOOK.key.push(e => {
   const k = e.key;
-  if ((k === 'l' || k === 'L') && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) { v3Toggle(); return true; }   // 单按 L 是通讯面板（chat.js）
+  if ((k === 'l' || k === 'L') && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) { v3Toggle(!V3.on, true); return true; }   // 单按 L 是通讯面板（chat.js）
   if (!V3.on) return false;
   if (k === ',' || k === '<') { v3Turn(-1); return true; }
   if (k === '.' || k === '>') { v3Turn(1); return true; }
@@ -962,18 +988,27 @@ HOOK.key.push(e => {
   return false;
 });
 
+// 默认 3D：进了对局（部署、沙盒、闯关、开战后）就自动打开，每局只开一次——玩家中途切回平面不再强开；低画质、显卡不支持时留在平面
+HOOK.frame.push(() => {
+  if (V3.on || !S || V3.auto === S || S.attract || !v3Can() || (typeof MENU === 'object' && MENU.open)) return;
+  V3.auto = S;
+  if (typeof SETTINGS === 'object' && (SETTINGS.v3 === false || SETTINGS.quality === 'low')) return;
+  v3Toggle(true);
+});
+
 // 右上角按钮
 function v3Button() {
   if (typeof document === 'undefined' || !document.getElementById('topr') || document.getElementById('btn3d')) return;
   const b = document.createElement('button');
   b.id = 'btn3d'; b.className = 'tb'; b.type = 'button'; b.textContent = '3D'; b.title = '3D 立体地图（Shift + L）'; b.setAttribute('aria-pressed', 'false');
-  b.addEventListener('click', () => v3Toggle());
+  b.addEventListener('click', () => v3Toggle(!V3.on, true));
   const help = document.getElementById('btnHelp');
   help.parentNode.insertBefore(b, help);
   // 3D 时显示的转向 / 俯仰按钮（手机没有键盘、中键）
   const c = document.createElement('div');
   c.id = 'v3ctl'; c.className = 'ov box'; c.hidden = true; c.setAttribute('role', 'group'); c.setAttribute('aria-label', '3D 镜头');
-  for (const [t, ti, f] of [['⟲', '向左转（<）', () => v3Turn(-1)], ['⟳', '向右转（>）', () => v3Turn(1)], ['⤒', '抬高视角、更俯视（;）', () => v3Tilt(-1)], ['⤓', '压低视角、更平视（\'）', () => v3Tilt(1)]]) {
+  for (const [t, ti, f] of [['⟲', '向左转（<）', () => v3Turn(-1)], ['⟳', '向右转（>）', () => v3Turn(1)], ['⤒', '抬高视角、更俯视（;）', () => v3Tilt(-1)], ['⤓', '压低视角、更平视（\'）', () => v3Tilt(1)],
+    ['▲', '升高镜头（按住 E）', () => v3Rise(1, .5)], ['▼', '降低镜头（按住 Q）', () => v3Rise(-1, .5)]]) {
     const k = document.createElement('button');
     k.type = 'button'; k.className = 'tb'; k.textContent = t; k.title = ti; k.setAttribute('aria-label', ti);
     k.addEventListener('click', f);
