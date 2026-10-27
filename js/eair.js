@@ -92,11 +92,12 @@ function eaParked(b) {
   for (const w of gnd.slice(i0 * per, (i0 + 1) * per)) {
     const rot = w.type === 'heli' || w.type === 'uh60', want = rot ? 'heli' : nf++ % 2 ? 'line' : 'has';
     if (rot && !pad) { pad = true; out.push({ w, u: EA_PAD[0], v: EA_PAD[1], a: -Math.PI / 2, k: 'pad' }); continue; }
-    let i = EA_STAND.findIndex((st, j) => !used.has(j) && st[3] === want);
+    let i = w.sb === b.id && w.st != null && !used.has(w.st) && EA_STAND[w.st] && (EA_STAND[w.st][3] === 'heli') === rot ? w.st : -1;   // 记住的机位：别的飞机起飞了也不挪位
+    if (i < 0) i = EA_STAND.findIndex((st, j) => !used.has(j) && st[3] === want && !gnd.some(o => o !== w && o.sb === b.id && o.st === j));
     if (i < 0) i = EA_STAND.findIndex((st, j) => !used.has(j) && (st[3] === 'heli') === rot);
     if (i < 0) i = EA_STAND.findIndex((st, j) => !used.has(j));
     if (i < 0) break;
-    used.add(i);
+    used.add(i); w.st = i; w.sb = b.id;
     const [u, v, a, k] = EA_STAND[i];
     out.push({ w, u, v, a, k });
   }
@@ -179,7 +180,7 @@ function eaStep(dt) {
     for (let i = gnd.length - 1; i >= 0 && over > 0; i--, over--) { gnd[i].state = 'lost'; lost++; }
     if (lost && !cap && !E.said.base) { E.said.base = 1; log('敌野战机场被毁，停在地面的敌机全部损失', 'good'); }
     for (const w of E.wing) if (w.state === 'rearm' && (w.rearmT -= dt) <= 0) w.state = 'ready';
-    for (const a of E.fly) if (!a.dead) { if (a.type === 'b2') { if (typeof b2Fly === 'function') b2Fly(a, dt); else a.dead = true; } else if (a.type === 'p8') { if (typeof asP8Fly === 'function') asP8Fly(a, dt); else a.dead = true; } else if (a.type === 'uh60' || a.type === 'c17') { if (typeof a101Fly === 'function') a101Fly(a, dt); else a.dead = true; } else if (a.ph === 'roll') eaRoll(a, dt); else if (a.type === 'heli') eaFlyHeli(a, dt); else if (eaFtr(a.type) && typeof awFlyE === 'function') awFlyE(a, dt); else eaFlyGA(a, dt); }
+    for (const a of E.fly) if (!a.dead) { if (a.type === 'b2') { if (typeof b2Fly === 'function') b2Fly(a, dt); else a.dead = true; } else if (a.type === 'p8') { if (typeof asP8Fly === 'function') asP8Fly(a, dt); else a.dead = true; } else if (a.type === 'uh60' || a.type === 'c17') { if (typeof a101Fly === 'function') a101Fly(a, dt); else a.dead = true; } else if (a.ph === 'gnd') eaGnd(a, dt); else if (a.ph === 'roll') eaRoll(a, dt); else if (a.type === 'heli') eaFlyHeli(a, dt); else if (eaFtr(a.type) && typeof awFlyE === 'function') awFlyE(a, dt); else eaFlyGA(a, dt); }
     E.fly = E.fly.filter(a => !a.dead);
     eaProj(dt);
     for (const w of E.wr) if (!w.hit && S.t - w.t >= 2) { w.hit = true; const x = w.x + Math.cos(w.h) * w.spd * 2, y = w.y + Math.sin(w.h) * w.spd * 2; S.fx.push({ kind: isLand(x, y) ? 'boom' : 'flash', x, y, r: 14, life: 0, max: .8, side: 'e' }); }
@@ -212,12 +213,70 @@ function eaNewAir(b, w, tx, ty, extra) {
     tx, ty, flares: sp.flares, hp: sp.hp, t: S.t, pv: false, ...extra };
   if (w.type === 'heli') { [a.x, a.y] = eaW(b, EA_PAD[0], EA_PAD[1]); Object.assign(a, { heading: Math.atan2(ty - a.y, tx - a.x), alt: .02, ph: 'out' }); }
   else {
-    const wait = Math.max(0, (b.rwT || 0) - S.t);
-    b.rwT = S.t + wait + 3.5;
-    Object.assign(a, { ru: -dir * 440, dir, wait, heading: h + (dir < 0 ? Math.PI : 0), alt: 0, ph: 'roll' });
+    const P = eaParked(b).find(o => o.w === w), G = P ? eaGndPlan(b, P) : null, d2 = G ? G.dir : dir;
+    const t0 = S.t + (G ? G.dur : 0), go = Math.max(t0, b.rwT || 0), wait = go - S.t;   // 跑道排队：前一架滑跑 3.5 秒后才轮到
+    b.rwT = go + 3.5;
+    Object.assign(a, { ru: -d2 * 440, dir: d2, wait, heading: h + (d2 < 0 ? Math.PI : 0), alt: 0, ph: 'roll' });
     [a.x, a.y] = eaW(b, a.ru, 0);
+    if (G) { Object.assign(a, { ph: 'gnd', g: G }); [a.x, a.y] = eaW(b, G.P[0][0], G.P[0][1]); a.heading = eaGndHd(b, G, 0); }
   }
   return a;
+}
+// —— 机场地面作业（固定翼出动全过程）——
+//   机组：飞行员从中队楼 / 机堡侧门跑到飞机左侧登机梯（EA_GND.run 米每秒），顺梯子爬进座舱（climb 秒），座舱盖合上（cnp 秒），
+//     地勤在机头前打手势、发动机启动（start 秒）；
+//   滑行：从机位沿机库群的鱼骨滑行道 / 停机坪滑到平行滑行道，再经联络道进跑道头（离机位近的那一端），滑行 EA_GND.taxi 米每秒，转弯处是圆弧；
+//   到跑道头对准跑道，轮到自己就开始滑跑（eaRoll）。直升机仍从起降坪直接起飞
+const EA_GND = { run: 4.2, climb: 2.2, cnp: 1.6, start: 2.6, taxi: 19, door: 30 };
+function eaGndPlan(b, P) {
+  const [u0, v0, a0, k] = [P.u, P.v, P.a, P.k], dir = u0 > 0 ? -1 : 1, ue = -dir * 450;   // 离机位近的那一端
+  const pts = [[u0, v0]];
+  if (k === 'has') { const su = AFB_SP.reduce((m, x) => Math.abs(x - u0) < Math.abs(m - u0) ? x : m, AFB_SP[0]); pts.push([su, v0], [su, 75]); }   // 机头朝鱼骨滑行道：先出机堡，再沿鱼骨道出来
+  else pts.push([u0, 75]);   // 停机线：机头朝滑行道，直接滑出
+  pts.push([ue + dir * 30, 75], [ue, 45], [ue, 10], [ue + dir * 10, 0]);
+  // 圆角：Chaikin 切一遍（起点、终点不动）
+  const Q = [pts[0]];
+  for (let i = 1; i < pts.length; i++) { const [x0, y0] = pts[i - 1], [x1, y1] = pts[i]; if (i > 1) Q.push([x0 * .75 + x1 * .25, y0 * .75 + y1 * .25]); if (i < pts.length - 1) Q.push([x0 * .25 + x1 * .75, y0 * .25 + y1 * .75]); }
+  Q.push(pts[pts.length - 1]);
+  const L = [0];
+  for (let i = 1; i < Q.length; i++) L.push(L[i - 1] + Math.hypot(Q[i][0] - Q[i - 1][0], Q[i][1] - Q[i - 1][1]));
+  // 飞行员出发点：停机线在机位后方的中队楼一侧，机堡在机堡侧门
+  const door = k === 'has' ? [u0 - Math.cos(a0) * 12, v0 + 13] : [u0 + 9, v0 + EA_GND.door];
+  const crew = Math.hypot(door[0] - u0, door[1] - v0) / EA_GND.run + EA_GND.climb + EA_GND.cnp + EA_GND.start;
+  return { P: Q, L, dir, door, a0, crew, s: 0, t0: S.t, dur: crew + L[L.length - 1] / EA_GND.taxi };
+}
+// 沿滑行路线 s 米处的位置（局部 u, v）与朝向
+function eaGndAt(G, s) {
+  const { P, L } = G;
+  let i = 1;
+  while (i < L.length - 1 && L[i] < s) i++;
+  const f = clamp((s - L[i - 1]) / Math.max(1e-6, L[i] - L[i - 1]), 0, 1);
+  return { u: lerp(P[i - 1][0], P[i][0], f), v: lerp(P[i - 1][1], P[i][1], f), a: Math.atan2(P[i][1] - P[i - 1][1], P[i][0] - P[i - 1][0]) };
+}
+const eaGndHd = (b, G, s) => { const h = b.rh || 0, sg = b.rs || 1; if (s <= 0) return h + Math.atan2(Math.sin(G.a0) * sg, Math.cos(G.a0)); const q = eaGndAt(G, s); return h + Math.atan2(Math.sin(q.a) * sg, Math.cos(q.a)); };
+function eaGnd(a, dt) {
+  const b = S.enemies.find(e => e.id === a.base && !e.dead);
+  if (!b) { a.dead = true; const w = S.eair.wing.find(w => w.id === a.wid); if (w) w.state = 'lost'; return; }
+  const G = a.g, t = S.t - G.t0;
+  if (a.wait > 0) a.wait -= dt;
+  if (t < G.crew) return;   // 机组登机、开车
+  const end = G.L[G.L.length - 1];
+  G.s = Math.min(end, G.s + EA_GND.taxi * Math.min(1, (t - G.crew) / 2.5) * dt);   // 起步慢慢加速
+  const q = eaGndAt(G, G.s);
+  [a.x, a.y] = eaW(b, q.u, q.v); a.heading = eaGndHd(b, G, Math.max(.01, G.s)); a.spd = EA_GND.taxi;
+  if (G.s >= end - .01) { a.ph = 'roll'; a.spd = 0; a.g = null; a.wait = Math.max(0, a.wait); [a.x, a.y] = eaW(b, a.ru, 0); a.heading = (b.rh || 0) + (a.dir < 0 ? Math.PI : 0); }
+}
+// 机组动作（画面用）：{ pilot: {u, v, a, z, run, ph} | null, cpo 座舱盖开度, crew 地勤手势, eng 发动机启动中 }
+function eaGndCrew(a) {
+  const G = a.g;
+  if (!G || a.ph !== 'gnd') return null;
+  const t = S.t - G.t0, [u0, v0] = G.P[0], walk = Math.hypot(G.door[0] - u0, G.door[1] - v0) / EA_GND.run, k = (EA_SPEC[a.type] && a.type === 'ga' ? 18 : 17) / 21;
+  const ca = Math.cos(G.a0), sa = Math.sin(G.a0), lad = [u0 + ca * 2.4 * k + sa * 2.6 * k, v0 + sa * 2.4 * k - ca * 2.6 * k];   // 登机梯在座舱左侧（机头前 2.4、左 2.6）
+  let pilot = null;
+  if (t < walk) { const f = t / walk; pilot = { u: lerp(G.door[0], lad[0], f), v: lerp(G.door[1], lad[1], f), a: Math.atan2(lad[1] - G.door[1], lad[0] - G.door[0]), z: 0, run: true, ph: t * 6.5 }; }
+  else if (t < walk + EA_GND.climb) { const q = (t - walk) / EA_GND.climb; pilot = { u: lad[0], v: lad[1], a: G.a0 + Math.PI / 2, z: Math.min(q / .7, 1) * 2.6 * k, run: false, ph: q * 9 }; }
+  const tc = t - walk - EA_GND.climb, cpo = tc < 0 ? clamp(t / 1.2, 0, 1) : 1 - clamp(tc / EA_GND.cnp, 0, 1);
+  return { pilot, cpo, lad: t < walk + EA_GND.climb + .4 ? lad : null, crew: t < G.crew + 4, mar: [u0 + ca * 15 * k, v0 + sa * 15 * k], mh: G.a0 + Math.PI, eng: tc > EA_GND.cnp && t < G.crew + 1, k };   // mar：地勤站在机位前方指挥开车、引导滑出
 }
 // 起飞滑跑：从跑道入口沿跑道加速，到 150 离地转入出航（a.next 指定离地后的阶段）；机场在滑跑中被毁则损失
 function eaRoll(a, dt) {
@@ -325,8 +384,8 @@ function eaForm(a, dt, brk) {
   const L = S.eair.fly.find(o => o.id === a.lead && !o.dead);
   if (L && L.ph === 'rtb' && eaFtr(a.type) && !a.tg) a.ph = 'rtb';   // 歼击机长机返航：僚机跟着回
   const capOk = L && L.ph === 'cap' && eaFtr(L.type);   // 歼击机双机巡逻：僚机跟着长机飞跑马场航线
-  if (!L || (L.ph !== 'out' && L.ph !== 'roll' && !capOk) || L.tg || a.tg || (brk && dist(a.x, a.y, a.tx, a.ty) < brk)) { if (!L || L.ph !== 'roll') a.lead = null; return false; }
-  if (L.ph === 'roll') return false;
+  if (!L || (L.ph !== 'out' && L.ph !== 'roll' && L.ph !== 'gnd' && !capOk) || L.tg || a.tg || (brk && dist(a.x, a.y, a.tx, a.ty) < brk)) { if (!L || (L.ph !== 'roll' && L.ph !== 'gnd')) a.lead = null; return false; }
+  if (L.ph === 'roll' || L.ph === 'gnd') return false;
   const [sx0, sy0] = EA_SLOT[Math.min(a.slot || 1, EA_SLOT.length - 1)], k = a.type === 'heli' ? .8 : 1, h = L.heading, c = Math.cos(h), n = Math.sin(h);
   const px = L.x + c * sx0 * k - n * sy0 * k, py = L.y + n * sx0 * k + c * sy0 * k, err = (px - a.x) * c + (py - a.y) * n, sp = EA_SPEC[a.type];
   eaSteer(a, px + c * 40, py + n * 40, dt, clamp(L.spd + err * .9, L.spd * .6, sp.spd * 1.5));
@@ -831,7 +890,7 @@ function eaDraw(time) {
   if (EA_TRAILS.size) { const ids = new Set(E.fly.map(a => a.id)); for (const id of [...EA_TRAILS.keys()]) if (!ids.has(id)) EA_TRAILS.delete(id); }
   for (const a of E.fly) {
     if (a.dead || !(spec || a.pv || inVision(a.x, a.y))) continue;
-    if (R.m3d && a.ph !== 'roll') continue;   // 3D：立体模型（v3units.js）
+    if (R.m3d) continue;   // 3D：立体模型（v3units.js；地面滑行、滑跑放下起落架）
     const heli = a.type === 'heli' || a.type === 'uh60', big = a.type === 'c17' || a.type === 'b2', size = big ? Math.max(28, px(30)) : Math.max(heli ? 15 : 17, px(heli ? 17 : 19));
     if (!heli && a.alt > .2) {
       let tr = EA_TRAILS.get(a.id);

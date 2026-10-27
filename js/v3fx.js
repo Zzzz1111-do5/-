@@ -4,7 +4,7 @@
 //   步兵曳光弹、坦克炮弹在枪口 / 炮口的高度平直飞过去（穿甲弹白热、榴弹琥珀色、喷火是一股宽的橙色火舌）；
 //   导弹（战术导弹、防空导弹、反舰导弹、精确制导炸弹）按各自的飞行高度飞，尾焰亮点加一条渐暗的尾迹；直升机的火箭、反坦克导弹从机上射向地面
 // 画法：面向镜头的发光带（宽度按世界单位），加法混合、不写深度，被地形、房屋、车辆挡住的部分不画；3D 时平面贴图里不再画这些弹道（R.fx3d）
-const V3F = { ok: false, tried: false, pr: null, a: {}, u: {}, buf: null, trail: new Map(), S: null };
+const V3F = { ok: false, tried: false, pr: null, a: {}, u: {}, buf: null, trail: new Map(), S: null, puff: [], seen: new Set() };   // puff：发射点的点火闪光与烟团（只在画面里记）
 const V3F_VS = `attribute vec3 p; attribute vec4 c; attribute vec2 q;
 uniform mat4 uM; varying vec4 vC; varying vec2 vQ;
 void main() { vC = c; vQ = q; gl_Position = uM * vec4(p, 1.); }`;
@@ -58,7 +58,7 @@ function v3Fx(C) {
   const gl = V3.gl;
   if (!V3F.tried) v3fxInit(gl);
   if (!V3F.ok) return;
-  if (V3F.S !== S) { V3F.S = S; V3F.trail.clear(); }
+  if (V3F.S !== S) { V3F.S = S; V3F.trail.clear(); V3F.puff.length = 0; V3F.seen.clear(); }
   const out = [], E = C.E, box = V3.box || [0, 0, W, H], inB = (x, y, m = 200) => x > box[0] - m && x < box[0] + box[2] + m && y > box[1] - m && y < box[1] + box[3] + m;
   const spec = specAll() || (typeof R === 'object' && (R.eye === 'all' || R.eye === 'both' || R.eye === 'e'));
   const seen = (x, y) => spec || inVision(x, y);
@@ -97,11 +97,16 @@ function v3Fx(C) {
     v3fRib(out, E, v3fP(lerp(s.x0, s.x1, b), lerp(s.y0, s.y1, b), lerp(z0, z1, b)), v3fP(lerp(s.x0, s.x1, u), lerp(s.y0, s.y1, u), lerp(z0, z1, u)), 1.3, [col[0], col[1], col[2], 0], col);
     if (u < .15) v3fSpark(out, C, v3fP(s.x0, s.y0, z0), 4.5 * (1 - u / .15), V3F_COL.amber);   // 炮口焰
   }
-  // —— 导弹：按飞行高度，尾迹记最近 1.4 秒的位置 ——
+  // —— 导弹：按飞行高度；发射点一团点火闪光与翻滚扩散的烟；尾迹是近弹头一段亮的尾焰 + 后面 4 秒里慢慢变宽、变淡的烟迹 ——
   const live = new Set();
   for (const m of S.missiles || []) {
     if (m.t < 0 || m.done || !isFinite(m.x)) continue;
     live.add(m.id);
+    if (!V3F.seen.has(m.id)) {   // 刚点火：在发射点记一团烟（离机的空射弹在挂点附近点火，不在地面）
+      V3F.seen.add(m.id);
+      const air = typeof AIRV === 'object' && AIRV.mv && AIRV.mv.has(m.id);
+      if (!air && m.t < .6 && isFinite(m.x0)) { const sea = !isLand(m.x0, m.y0); V3F.puff.push({ x: m.x0, y: m.y0, z: sea ? 4 : g(m.x0, m.y0) + 1.5, t0: S.t, big: m.kind === 'tbm' || m.kind === 'asm', side: m.side, sea }); }
+    }
     if (!inB(m.x, m.y, 400) || (m.side === 'e' && !seen(m.x, m.y))) continue;
     const rp = typeof airRelPos === 'function' ? airRelPos(m, true) : null;   // 刚离机（airmdl.js）：没点火前是立体弹体（v3units.js），点火后光点从挂点接上弹道
     if (rp) { V3F.trail.delete(m.id); if (rp.lit) { const q = v3fP(rp.x, rp.y, airRelZ(rp, m)); v3fSpark(out, C, q, 2.2 + rp.e * 1.4, V3F_COL.amber); } continue; }
@@ -110,12 +115,30 @@ function v3Fx(C) {
     if (!tr) V3F.trail.set(m.id, tr = []);
     const last = tr[tr.length - 1];
     if (!last || Math.hypot(p[0] - last[0], p[1] - last[1], p[2] - last[2]) > 2) tr.push([...p, S.t]);
-    while (tr.length && S.t - tr[0][3] > 1.4) tr.shift();
-    const col = m.side === 'p' ? V3F_COL.p : V3F_COL.e;
-    for (let i = 1; i < tr.length; i++) { const k0 = (i - 1) / tr.length, k1 = i / tr.length; v3fRib(out, E, tr[i - 1], tr[i], m.kind === 'tbm' ? 4 : 2.2, [...V3F_COL.smoke.slice(0, 3), .45 * k0], [...(i > tr.length - 3 ? V3F_COL.amber : col).slice(0, 3), .8 * k1]); }
+    while (tr.length && S.t - tr[0][3] > 4) tr.shift();
+    const col = m.side === 'p' ? V3F_COL.p : V3F_COL.e, w0 = m.kind === 'tbm' ? 4 : 2.2, sm = V3F_COL.smoke;
+    for (let i = 1; i < tr.length; i++) {
+      const a0 = S.t - tr[i - 1][3], a1 = S.t - tr[i][3], hot = a1 < .35;   // 越老的一段越宽、越淡（烟在空中散开）
+      v3fRib(out, E, tr[i - 1], tr[i], w0 * (1 + a1 * 1.6), [sm[0], sm[1], sm[2], .3 * (1 - a0 / 4)], hot ? [...V3F_COL.amber.slice(0, 3), .85] : [sm[0], sm[1], sm[2], .3 * (1 - a1 / 4)]);
+    }
+    if (tr.length > 1) { const q = tr[tr.length - 2]; v3fRib(out, E, q, p, w0 * .9, [...col.slice(0, 3), .5], [...V3F_COL.flame.slice(0, 3), .95]); }   // 尾焰
     v3fSpark(out, C, p, m.kind === 'tbm' ? 6 : 3.4, V3F_COL.white);
+    v3fSpark(out, C, p, (m.kind === 'tbm' ? 10 : 6) * (.85 + .15 * Math.sin(S.t * 40 + m.id)), [...V3F_COL.flame.slice(0, 3), .45]);   // 尾焰的光晕（闪烁）
   }
   for (const id of V3F.trail.keys()) if (!live.has(id)) V3F.trail.delete(id);
+  for (const id of V3F.seen) if (!live.has(id) && !(S.missiles || []).some(m => m.id === id)) V3F.seen.delete(id);
+  // 发射点：点火瞬间的闪光、发射筒 / 发射箱口喷出的一团烟（地面上贴地翻滚、海面上是水汽），4 秒里翻滚扩散、往上飘、变淡
+  V3F.puff = V3F.puff.filter(o => S.t - o.t0 < 4.5);
+  for (const o of V3F.puff) {
+    if (!inB(o.x, o.y, 200) || (o.side === 'e' && !seen(o.x, o.y))) continue;
+    const a = S.t - o.t0, k = o.big ? 1.6 : 1;
+    if (a < .3) v3fSpark(out, C, v3fP(o.x, o.y, o.z + 2), (8 + a * 20) * k, [1, .9, .7, .8 * (1 - a / .3)]);
+    for (let i = 0; i < 7; i++) {
+      const an = i * 2.4 + o.t0, r = (2 + a * (o.sea ? 5 : 3.5)) * k, ex = Math.cos(an) * r * .9, ey = Math.sin(an) * r * .9;
+      const c = o.sea ? [.7, .78, .8] : V3F_COL.smoke;
+      v3fSpark(out, C, v3fP(o.x + ex, o.y + ey, o.z + 1 + a * (1.2 + i * .35) * k), (3 + a * 4.5) * k, [c[0] * .6, c[1] * .6, c[2] * .6, .13 * (1 - a / 4.5)]);   // 加法混合：几团叠在一起也不发白
+    }
+  }
   // —— 直升机的火箭、反坦克导弹（从机上射向地面）——
   if (S.eair) for (const p of S.eair.proj || []) {
     if (p.t < 0 || p.done || (!spec && !inVision(p.tx, p.ty) && !inVision(p.x0, p.y0)) || !inB(p.tx, p.ty, 100)) continue;
@@ -128,6 +151,39 @@ function v3Fx(C) {
       const k = clamp(dist(p.x0, p.y0, p.x, p.y) / Math.max(1, dist(p.x0, p.y0, p.tx, p.ty)), 0, 1), q = v3fP(p.x, p.y, lerp(za, zb, k));
       v3fRib(out, E, v3fP(p.x0, p.y0, za), q, 1, [...V3F_COL.smoke.slice(0, 3), .2], [...V3F_COL.e.slice(0, 3), .7]);
       v3fSpark(out, C, q, 2.6, V3F_COL.white);
+    }
+  }
+  // —— 飞机灯光：左翼尖红、右翼尖绿航行灯，垂尾顶上的白色防撞灯一闪一闪；歼击机起飞滑跑、刚离地爬升时尾喷口拖出加力火焰 ——
+  if (typeof AIRD === 'object') {
+    const EA_K3 = { ga: ['a10', 18], heli: ['ah64', 16], uh60: ['uh60', 17], c17: ['c17', 30], ftr: ['f35', 17], f22: ['f22', 18], b2: ['b2', 34], p8: ['p8', 26] };
+    const FTR = { j35: 1, j20: 1, j15: 1, j36: 1, f35: 1, f22: 1, j15t: 1 };
+    const lit = (o, key, sz, own, burn) => {
+      const D = AIRD[key];
+      if (!D || !D.wing || !inB(o.x, o.y, 220)) return;
+      const k = sz / 21, gnd = o.ph === 'gnd' || o.ph === 'roll' || o.phase === 'roll' && !o.kind, z = gnd ? g(o.x, o.y) + 1.9 * k : v3AirZ(o), h = o.heading || 0, r = o.bank || 0;
+      const ch = Math.cos(h), sh = Math.sin(h), cr = Math.cos(r), sr = Math.sin(r);
+      const Wp = (u, v, w) => { const y = v * cr - w * sr, zz = v * sr + w * cr; return v3fP(o.x + (u * ch + y * sh) * k, o.y + (u * sh - y * ch) * k, z + zz * k); };
+      const tip = D.wing.reduce((m, q) => q[1] > m[1] ? q : m, D.wing[0]), tu = tip[0] - .6;
+      v3fSpark(out, C, Wp(tu, tip[1], 0), 1.1 * k + .5, [1, .25, .2, .95]);   // 左翼尖红灯
+      v3fSpark(out, C, Wp(tu, -tip[1], 0), 1.1 * k + .5, [.3, 1, .45, .95]);   // 右翼尖绿灯
+      const tail = D.stab ? D.stab.reduce((m, q) => Math.min(m, q[0]), 0) : (D.body ? D.body[D.body.length - 1][0] : -9);
+      if (((S.t * .8 + o.id * .37) % 1) < .07) v3fSpark(out, C, Wp(tail + 1, 0, 2.6), 2.4 * k + 1, [1, 1, 1, 1]);   // 防撞灯
+      if (burn) {   // 加力：尾喷口一束橙白的火舌 + 光晕，长度随时间抖动
+        const nu = D.body ? D.body[D.body.length - 1][0] : -10, L = 4.5 + Math.sin(S.t * 31 + o.id) * .6;
+        v3fRib(out, E, Wp(nu, 0, 0), Wp(nu - L, 0, 0), 1.5 * k + .4, [1, .95, .8, .95], [1, .45, .1, 0]);
+        v3fSpark(out, C, Wp(nu - .5, 0, 0), 2.6 * k + 1, [1, .6, .2, .55]);
+      }
+    };
+    for (const p of S.planes || []) if (!p.dead && isFinite(p.x) && !(p.phase === 'cat' || p.phase === 'trap' || (p.phase === 'roll' && !p.afPh && !p.land))) {   // 甲板上的由航母那边画
+      const key = typeof airSilKey === 'function' ? airSilKey(p.kind, p.v) : null;
+      if (!key) continue;
+      const sz = (typeof airMdl === 'function' && airMdl(p.kind, p.v).size) || 15;
+      lit(p, key, sz, true, !!FTR[key] && (p.phase === 'out' && (p.alt ?? 1) < .5));
+    }
+    if (S.eair) for (const a of S.eair.fly) {
+      if (a.dead || !isFinite(a.x) || !(spec || a.pv || inVision(a.x, a.y))) continue;
+      const [key, sz] = EA_K3[a.type] || ['f35', 17];
+      lit(a, key, sz, false, !!FTR[key] && ((a.ph === 'roll' && !(a.wait > 0)) || (a.ph === 'out' && (a.alt ?? 1) < .4)));
     }
   }
   if (!out.length) return;

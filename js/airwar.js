@@ -22,7 +22,7 @@ const awWhere = (x, y) => typeof cmdWhere === 'function' ? cmdWhere(x, y) : grid
 function awFoes(side) {
   const out = [];
   if (side === 'e') { for (const p of S.planes || []) if (!p.dead && p.alt > .25 && !['cat', 'roll', 'trap', 'final'].includes(p.phase) && !p.afPh) out.push({ o: p, k: 'plane', type: p.kind, x: p.x, y: p.y, ftr: p.kind === 'fighter', st: typeof airStealth === 'function' ? airStealth(p) : 1 }); }
-  else if (S.eair) for (const a of S.eair.fly) if (!a.dead && a.alt > .1 && !['roll', 'land', 'final'].includes(a.ph)) out.push({ o: a, k: 'eair', type: a.type, x: a.x, y: a.y, ftr: eaFtr(a.type), st: eaStl(a) });
+  else if (S.eair) for (const a of S.eair.fly) if (!a.dead && a.alt > .1 && !['gnd', 'roll', 'land', 'final'].includes(a.ph)) out.push({ o: a, k: 'eair', type: a.type, x: a.x, y: a.y, ftr: eaFtr(a.type), st: eaStl(a) });
   return out;
 }
 // side 方是否发现了 (x, y) 处的飞机：进攻方 = 视野、战斗机机载雷达 520、驱逐舰 720、航母 600；守方 = 视野、雷达站 820、歼击机 520（F-22A 640）、机场 450、沙盒雷达站
@@ -372,7 +372,7 @@ function awThinkE() {
   // 有敌战斗机时 F-22A 打头阵；平时巡逻先派 F-35A，F-22A 留着对付敌战斗机
   const vsF = foes.some(t => t.ftr);
   ready.sort((a, b) => ((b.type === 'f22') - (a.type === 'f22')) * (vsF ? 1 : -1));
-  const up = E.fly.filter(a => !a.dead && eaFtr(a.type) && (a.ph === 'out' || a.ph === 'cap' || a.ph === 'roll')).length;
+  const up = E.fly.filter(a => !a.dead && eaFtr(a.type) && (a.ph === 'out' || a.ph === 'cap' || a.ph === 'roll' || a.ph === 'gnd')).length;
   const g5 = S.ai && S.ai.g5 && (S.ai.g5.st === 'prep' || S.ai.g5.st === 'go');
   const want = Math.max(g5 ? 2 : 0, typeof atoPhase === 'function' && atoPhase('e') === 1 && atoFtrP() ? 2 : 0, foes.length ? Math.min(4, Math.ceil(foes.length / 2) + (foes.some(t => t.ftr) ? 2 : 0)) : S.t - A.seenP < 120 ? (ready.length + up >= 4 ? 2 : 1) : 0);   // 敌机越多、有敌战斗机时派得越多（最多 4 架）；总攻时至少双机掩护
   if (up >= want || S.t - A.lnE < 3) return;
@@ -404,7 +404,7 @@ function awEscortE(x, y, nm, pl) {   // pl：被护航编队的长机（攻击�
   if (!E || typeof eaOpen !== 'function' || !(typeof eaOn === 'function' && eaOn())) return 0;
   const open = eaOpen();
   if (!open.length) return 0;
-  const up = E.fly.filter(a => !a.dead && eaFtr(a.type) && ['roll', 'out', 'cap'].includes(a.ph) && dist(a.cx, a.cy, x, y) < 320).length;
+  const up = E.fly.filter(a => !a.dead && eaFtr(a.type) && ['gnd', 'roll', 'out', 'cap'].includes(a.ph) && dist(a.cx, a.cy, x, y) < 320).length;
   if (up >= 2) return 0;
   const ready = E.wing.filter(w => eaFtr(w.type) && w.state === 'ready');
   if (!ready.length) return 0;

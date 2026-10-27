@@ -510,7 +510,7 @@ function airRelNew(m) {
   const side = m.side, L = side === 'p' ? S.planes || [] : (S.eair && S.eair.fly) || [];
   let best = null, bd = 70;
   for (const o of L) {
-    if (o.dead || o.phase === 'cat' || o.phase === 'roll' || o.phase === 'trap' || o.ph === 'roll') continue;
+    if (o.dead || o.phase === 'cat' || o.phase === 'roll' || o.phase === 'trap' || o.ph === 'roll' || o.ph === 'gnd') continue;
     const d = dist(o.x, o.y, m.x0, m.y0);
     if (d < bd) { bd = d; best = o; }
   }

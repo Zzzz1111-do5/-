@@ -1402,7 +1402,18 @@ function v3Units(C, box) {
     plane(p, p.heading, 0, key, sz, p.bank);
   }
   const EA_K = { ga: ['a10', 18], heli: ['ah64', 16], uh60: ['uh60', 17], c17: ['c17', 30], ftr: ['f35', 17], f22: ['f22', 18], b2: ['b2', 34], p8: ['p8', 26] };
-  if (S.eair) for (const a of S.eair.fly) if (!a.dead && isFinite(a.x) && a.ph !== 'roll' && (spec || a.pv || seen(a.x, a.y)) && inB(a.x, a.y, 220)) { const [key, sz] = EA_K[a.type] || ['f35', 17]; plane(a, a.heading, 1, key, sz, a.bank); }
+  if (S.eair) for (const a of S.eair.fly) if (!a.dead && isFinite(a.x) && (spec || a.pv || seen(a.x, a.y)) && inB(a.x, a.y, 220)) {
+    const [key, sz] = EA_K[a.type] || ['f35', 17];
+    if (a.ph !== 'gnd' && a.ph !== 'roll') { plane(a, a.heading, 1, key, sz, a.bank); continue; }
+    // 机场地面作业（eair.js eaGnd）：放下起落架停在机位 / 沿滑行道滑行 / 跑道上滑跑；登机时飞行员跑过来、顺梯子爬进座舱，座舱盖开合，地勤在机头前打手势
+    const b = S.enemies.find(e => e.id === a.base), Cr = typeof eaGndCrew === 'function' ? eaGndCrew(a) : null, gz = v3Ht(a.x, a.y);
+    v3GroundPlane(key, sz, a.x, a.y, gz, a.heading, 0, Cr ? Cr.cpo : 0, !!(Cr && !Cr.eng && Cr.crew && S.t - a.g.t0 < a.g.crew - EA_GND.start), 4, t);
+    if (!Cr || !b) continue;
+    const toW = (u, v) => eaW(b, u, v), hb = (b.rh || 0), da = A => hb + Math.atan2(Math.sin(A) * (b.rs || 1), Math.cos(A));
+    if (Cr.pilot) { const [x, y] = toW(Cr.pilot.u, Cr.pilot.v), pose = Cr.pilot.run ? 'r' + (Math.floor(Cr.pilot.ph / 1.5708) & 3) : 'cl' + (Math.floor(Cr.pilot.ph / 1.7) & 1); v3mAdd('man:pilot:' + pose, () => v3mMan('pilot', pose), x, y, v3Ht(x, y) + Cr.pilot.z, da(Cr.pilot.a), V3_PIL, 1); }
+    if (Cr.lad) { const [x, y] = toW(Cr.lad[0], Cr.lad[1]); v3mAdd('ladder', v3mLadder, x, y, v3Ht(x, y), a.heading + Math.PI / 2, sz / 21, 1); }
+    if (Cr.crew) { const [nx, ny] = toW(Cr.mar[0], Cr.mar[1]), pose = Cr.eng || Math.floor(S.t * 1.5) & 1 ? 'pt' : 'kn'; v3mAdd('man:deck:' + pose, () => v3mMan('deck', pose), nx, ny, v3Ht(nx, ny), da(Cr.mh), V3_PIL, 1); }   // 地勤：站在机位前方指挥开车、引导滑出
+  }
   // 刚离机的导弹 / 炸弹：从弹舱 / 挂架落下（还没点火时是立体弹体，点火后由 v3fx.js 画光点与尾迹）
   if (typeof airRelPos === 'function' && typeof AIRV === 'object' && AIRV.mv && AIRV.mv.size) for (const m of S.missiles || []) {
     if (!AIRV.mv.has(m.id)) continue;
@@ -1411,6 +1422,22 @@ function v3Units(C, box) {
     const sk = P.r.w === 'aam' ? 'aam' : P.r.w === 'bomb' ? 'bomb' : P.r.w === 'cm' ? 'cm' : 'agm';
     v3mAdd('msl:' + sk, () => v3mMsl(sk), P.x, P.y, airRelZ(P, m), P.h, P.sc, m.side === 'e' ? 1 : 0, 0);
   }
+  // 飞行中的导弹：立体弹体，按飞行方向取朝向与俯仰（发光的尾焰、烟迹在 v3fx.js）；刚离机还没点火的在上面画
+  const MK3 = { sam: ['aam', 2.2], asm: ['asm', 2.2], pgm: ['agm', 1.8], tbm: ['cm', 3.6] };
+  const mp = V3M.mp || (V3M.mp = new Map()), mlive = new Set();
+  for (const m of S.missiles || []) {
+    if (m.t < 0 || m.done || !isFinite(m.x)) continue;
+    mlive.add(m.id);
+    if ((typeof AIRV === 'object' && AIRV.mv && AIRV.mv.has(m.id) && typeof airRelPos === 'function' && airRelPos(m, true)) || !inB(m.x, m.y, 300) || (m.side === 'e' && !(spec || seen(m.x, m.y)))) continue;
+    const z = typeof v3AltZ === 'function' ? v3AltZ(m.x, m.y, m.z * (m.kind === 'tbm' ? 620 : 230), -2.6, 2) : v3Ht(m.x, m.y) + 20;
+    let o = mp.get(m.id);
+    if (!o) mp.set(m.id, o = { x: m.x0 ?? m.x, y: m.y0 ?? m.y, z: z - 1, h: Math.atan2(m.ty - m.y, m.tx - m.x), p: .8 });
+    const dx = m.x - o.x, dy = m.y - o.y, dz = z - o.z, dl = Math.hypot(dx, dy);
+    if (dl + Math.abs(dz) > .4) { o.h = Math.atan2(dy, dx); o.p = Math.atan2(dz, Math.max(.01, dl)); o.x = m.x; o.y = m.y; o.z = z; }
+    const [mk, sc] = MK3[m.kind] || ['aam', 2];
+    v3mAdd('msl:' + mk, () => v3mMsl(mk), m.x, m.y, z, o.h, sc, m.side === 'e' ? 1 : 0, 0, o.p);
+  }
+  for (const id of mp.keys()) if (!mlive.has(id)) mp.delete(id);
   // —— 画 ——
   gl.useProgram(V3M.pr);
   gl.uniformMatrix4fv(V3M.u.uM, false, C.M);
