@@ -12,7 +12,7 @@ const MN_ICON = {
 };
 const MN_ITEMS = [
   ['cont', '继续作战', 'RESUME', '返回当前战局'],
-  ['pve', '战役（PvE）', 'CAMPAIGN', '指挥登陆舰队，夺取 AI 守军的海岸据点'],
+  ['pve', '闯关', 'CAMPAIGN', '三章十关：每关给预算，自己挑兵种、布置兵力——先夺制海权，再登陆，再向纵深推进'],
   ['sbx', '沙盒模式', 'SANDBOX', '自由部署双方兵力，观战或亲自指挥'],
   ['cdx', '兵力图鉴', 'CODEX', '全部单位的属性、定位与克制关系'],
   ['set', '设置', 'SETTINGS', '音量、画面、开场转场与指挥官通讯']
@@ -205,8 +205,8 @@ function mnHi(k, snd) {
   let body = '';
   if (k === 'cont' && S) {
     const pts = S.points || [], own = pts.filter(p => p.owner === 'p').length, crew = typeof vehCrewOf === 'function' ? vehCrewOf('p') : 0, men = (S.teams || []).filter(q => q.side === 'p').reduce((a, q) => a + q.men.length, 0) + crew;
-    body = `<p>返回当前战局，${S.phase === 'battle' ? '推演从暂停处继续' : S.phase === 'deploy' ? '继续排兵布阵' : '继续编辑部署'}。</p><dl><dt>模式</dt><dd>${S.mode === 'sandbox' ? (S.role === 'spectate' ? '沙盒 · 观战' : '沙盒') : '战役 · ' + (DIFF[S.level] ? DIFF[S.level].name : S.level)}</dd><dt>作战用时</dt><dd>${fmtT(S.t)}</dd><dt>${S.role === 'spectate' ? '进攻方据点' : '我方据点'}</dt><dd>${own} / ${pts.length}</dd><dt>在场兵力</dt><dd>${men} 人${crew ? `（含车组 ${crew} 人）` : ''}</dd></dl>`;
-  } else if (k === 'pve') body = `<p>你是登陆指挥官。登陆舰队、驱逐舰与航母航空联队归你指挥，对抗据守 ${TER && TER.points ? TER.points.length : 19} 处据点的 AI 守军。先部署、再于 H 时发起登陆。</p><dl><dt>胜利条件</dt><dd>控制指挥所与七成据点分值 30 秒</dd><dt>难度</dt><dd>普通 · 困难 · 地狱</dd></dl>`;
+    body = `<p>返回当前战局，${S.phase === 'battle' ? '推演从暂停处继续' : S.phase === 'deploy' ? '继续排兵布阵' : '继续编辑部署'}。</p><dl><dt>模式</dt><dd>${S.lv ? `闯关 · 第 ${S.lv.n} 关「${S.lv.nm}」` : S.mode === 'sandbox' ? (S.role === 'spectate' ? '沙盒 · 观战' : '沙盒') : '战役 · ' + (DIFF[S.level] ? DIFF[S.level].name : S.level)}</dd><dt>作战用时</dt><dd>${fmtT(S.t)}</dd><dt>${S.role === 'spectate' ? '进攻方据点' : '我方据点'}</dt><dd>${own} / ${pts.length}</dd><dt>在场兵力</dt><dd>${men} 人${crew ? `（含车组 ${crew} 人）` : ''}</dd></dl>`;
+  } else if (k === 'pve') { const P = typeof lvProg === 'function' ? lvProg() : null, done = P && P.done ? P.done.length : 0; body = `<p>三章十关，按真实作战顺序递进：海战夺取制海权 → 强行登陆夺取登陆场 → 从滩头向纵深推进。每关给定预算，你自己挑兵种、布置进攻兵力；守军由 AI 按本关风格布防，你只拿到一份有误差的情报。</p><dl><dt>进度</dt><dd>已通过 ${done} / ${typeof LV_DEFS === 'object' ? LV_DEFS.length : 10} 关</dd></dl>`; }
   else if (k === 'sbx') body = `<p>在同一张海岸地图上自由部署岸防与进攻部队，按预算对抗；可以观战 AI 对 AI，也可以亲自指挥进攻方。</p><dl><dt>状态</dt><dd>${typeof openSandbox === 'function' ? '可用' : '模块加载中'}</dd></dl>`;
   else if (k === 'cdx') { const n = typeof CATALOG !== 'undefined' && Array.isArray(CATALOG) ? CATALOG.length : 0; body = `<p>查看全部兵力：步兵、装甲、火炮、航空、舰艇、工事与支援单位的属性条、定位与克制关系。</p><dl><dt>收录</dt><dd>${n ? n + ' 种单位' : '目录加载中'}</dd></dl>`; }
   else if (k === 'set') body = `<p>主音量、音乐、音效、无线电；画面风格（黑绿 / 写实 / 数码）、画质、屏幕震动；开场转场；AI 指挥官通讯详略。</p><dl><dt>当前</dt><dd>主音量 ${Math.round(SETTINGS.master * 100)}% · 画质${SETTINGS.quality === 'low' ? '低' : '高'}</dd></dl>`;
@@ -280,7 +280,7 @@ function mnResume() {
 function mnAct(k) {
   if (k !== 'cont') MENU.last = k;
   if (k === 'cont') { mnSfx('ok'); mnResume(); }
-  else if (k === 'pve') { mnSfx('open'); mnView('pve'); }
+  else if (k === 'pve') { mnSfx('open'); if (typeof lvOpen === 'function') { mnHide(); lvOpen(); } else mnView('pve'); }   // 闯关（levels.js）：关卡列表 → 给预算自己布兵
   else if (k === 'sbx') mnSandbox();
   else if (k === 'cdx') { if (typeof openCodex === 'function') openCodex(); else mnToast('图鉴模块尚未就绪'); }
   else if (k === 'set') openSettings();
