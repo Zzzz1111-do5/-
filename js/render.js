@@ -67,7 +67,9 @@ function viewBegin() {
 function viewEnd(on) { if (on) PV.set(PV_KEEP); }
 function draw(now) {
   const on = viewBegin();
-  try { if (!(typeof V3 === 'object' && (V3.on || v3Att()) && !V3.drawing && v3Can() && v3Draw(now))) drawScene(now); } finally { viewEnd(on); }   // 3D 立体地图（view3d.js）在屏外按俯视画好再贴到地形上
+  let d3 = false;
+  try { d3 = typeof V3 === 'object' && (V3.on || v3Att()) && !V3.drawing && v3Can() && v3Draw(now); if (!d3) drawScene(now); } finally { viewEnd(on); }   // 3D 立体地图（view3d.js）在屏外按俯视画好再贴到地形上
+  if (R.d3 !== d3) { R.d3 = d3; document.body.classList.toggle('v3on', !!d3); }   // 3D 画面自带暗角（v3post.js），CSS 那层暗角关掉
 }
 function drawScene(now) {
   const { ctx } = R, time = now / 1000;

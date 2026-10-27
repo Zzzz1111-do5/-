@@ -27,12 +27,28 @@ button:disabled { cursor: not-allowed; opacity: .3; }
 .ic .f { fill: currentColor; stroke: none; }
 #stage { position: fixed; inset: 0; z-index: 1; background: var(--bg); }
 #cv { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: crosshair; }
-#stage::after {
-  content: ""; position: absolute; inset: 0; pointer-events: none;
-  background: repeating-linear-gradient(to bottom, transparent 0 2px, rgba(0, 0, 0, .18) 2px 3px), radial-gradient(ellipse at center, transparent 60%, rgba(0, 0, 0, .6) 100%);
-}
+/* 平面地图四角压暗；3D 的暗角由 v3post.js 在画面里做，这里不再叠一层 */
+#stage::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: radial-gradient(ellipse at center, transparent 60%, rgba(0, 0, 0, .5) 100%); }
+body.v3on #stage::after { display: none; }
 .ov { position: absolute; z-index: 3; }
-.box { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 0 18px rgba(0, 0, 0, .6); }
+/* 面板是指挥台上压暗的玻璃屏：四角各一小段亮折角，顶上一抹反光；出现时轻轻浮上来。按钮悬停微亮、按下略缩 */
+.box {
+  --bc: rgba(var(--g-rgb), .5);
+  border: 1px solid rgba(var(--g-rgb), .17); border-radius: 3px; box-shadow: 0 8px 26px rgba(0, 0, 0, .55), inset 0 1px 0 rgba(var(--g-rgb), .09);
+  background:
+    linear-gradient(var(--bc), var(--bc)) 0 0 / 9px 1px no-repeat, linear-gradient(var(--bc), var(--bc)) 0 0 / 1px 9px no-repeat,
+    linear-gradient(var(--bc), var(--bc)) 100% 0 / 9px 1px no-repeat, linear-gradient(var(--bc), var(--bc)) 100% 0 / 1px 9px no-repeat,
+    linear-gradient(var(--bc), var(--bc)) 0 100% / 9px 1px no-repeat, linear-gradient(var(--bc), var(--bc)) 0 100% / 1px 9px no-repeat,
+    linear-gradient(var(--bc), var(--bc)) 100% 100% / 9px 1px no-repeat, linear-gradient(var(--bc), var(--bc)) 100% 100% / 1px 9px no-repeat,
+    linear-gradient(180deg, rgba(var(--g-rgb), .05), rgba(var(--g-rgb), 0) 46px), var(--panel);
+}
+@keyframes pnIn { from { opacity: 0; translate: 0 6px; scale: .985; } }
+#info, #bdeInfo, #chat, #spMenu, #thPanel, #v3ctl, #mmBox, #cards { animation: pnIn .22s cubic-bezier(.2, .8, .2, 1); }
+.tb, .ib, .uc, .ob { transition: border-color .12s, box-shadow .12s, background-color .12s, color .12s, scale .08s; }
+.tb:hover:not(:disabled), .ib:hover:not(:disabled) { box-shadow: 0 0 10px rgba(var(--g-rgb), .2); background-color: rgba(var(--g-rgb), .07); }
+.uc:hover { box-shadow: 0 0 12px rgba(var(--g-rgb), .22); }
+.tb:active:not(:disabled), .ib:active:not(:disabled), .uc:active { scale: .95; }
+@media (prefers-reduced-motion: reduce) { #info, #bdeInfo, #chat, #spMenu, #thPanel, #v3ctl, #mmBox, #cards { animation: none; } .tb, .ib, .uc, .ob { transition: none; } }
 
 /* 顶部 */
 #feed { top: calc(10px + env(safe-area-inset-top, 0px)); left: max(16px, env(safe-area-inset-left, 0px)); margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; max-width: min(300px, 26vw); pointer-events: auto; }
