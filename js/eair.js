@@ -8,8 +8,8 @@ const eaStat = (k, n = 1) => { const o = S.v7s || (S.v7s = {}); o[k] = (o[k] || 
 POWER.erk = { men: .45, ship: 2, struct: 0, seg: false, R: 18 };   // 机载火箭（守方只打进攻方，不伤自家工事）
 // 战役各难度：机队、首次出击时刻、两次出击的间隔（v13 出动更快、机队更大）
 const EA_H5 = ['heli', 'heli', 'heli', 'heli', 'heli'];   // 阿帕奇 5 架，一次全部出动
-const EA_DIFF = { normal: { wing: [...EA_H5, 'ga'], first: 120, gap: 80 }, hard: { wing: ['ga', 'ga', ...EA_H5, 'ftr', 'ftrb'], first: 80, gap: 50 },
-  hell: { wing: ['ga', 'ga', 'ga', ...EA_H5, 'ftr', 'ftrb', 'ftrb', 'f22', 'f22'], first: 55, gap: 35 } };
+const EA_DIFF = { normal: { wing: [...EA_H5, 'ga', 'mq9'], first: 120, gap: 80 }, hard: { wing: ['ga', 'ga', ...EA_H5, 'ftr', 'ftrb', 'mq9'], first: 80, gap: 50 },
+  hell: { wing: ['ga', 'ga', 'ga', ...EA_H5, 'ftr', 'ftrb', 'ftrb', 'f22', 'f22', 'mq9', 'mq9'], first: 55, gap: 35 } };
 // 守方（美军）：A-10C 慢而皮实（钛合金座舱浴盆，挨一发还能飞），AH-64E，F-35A 隐身（我方雷达发现距离打折），F-22A 更隐身、超音速巡航、推力矢量
 const EA_SPEC = { ga: { name: 'A-10C 攻击机', spd: 170, turn: 1.4, hp: 2, flares: 2 }, heli: { name: 'AH-64E 武装直升机', spd: 90, turn: 2.4, hp: 2, flares: 1 },
   uh60: { name: 'UH-60M 黑鹰运输直升机', spd: 85, turn: 2.2, hp: 2, flares: 1 },
@@ -17,6 +17,7 @@ const EA_SPEC = { ga: { name: 'A-10C 攻击机', spd: 170, turn: 1.4, hp: 2, fla
   ftr: { name: 'F-35A 战斗机', spd: 240, turn: 1.9, hp: 1, flares: 2, stealth: .45 },   // 守方按美军装备命名   // 歼击机：巡逻、拦截、争夺制空权（airwar.js）
   ftrb: { name: 'F-35B 战斗机', spd: 230, turn: 1.8, hp: 1, flares: 2, stealth: .45, vtol: true },   // 短距起飞 / 垂直降落型：不要跑道，从机位、直升机坪或机场外的前沿加油弹药点垂直起降；空空导弹 2 枚 + 小直径炸弹 4 枚
   f22: { name: 'F-22A 猛禽战斗机', spd: 285, turn: 2.4, hp: 1, flares: 3, stealth: .3 },   // 制空专用：6 枚 AIM-120D + 2 枚 AIM-9X、雷达看得更远（airwar.js EA_FTR）
+  mq9: { name: 'MQ-9A 死神无人机', spd: 110, turn: 1, hp: 1, flares: 0, isr: true },   // 中空长航时侦察：光电 / 红外转塔，飞到守方最久没看过的地方盘旋侦察（intel.js intelTask）
   b2: { name: 'B-2A 幽灵隐身轰炸机', spd: 200, turn: .8, hp: 3, flares: 4, stealth: .1 },
   p8: { name: 'P-8A 海神海上巡逻机', spd: 150, turn: .6, hp: 2, flares: 2, stealth: 1 } };   // 反航母体系的眼睛（antiship.js）：在海岸外高空巡逻，雷达搜索海面   // 从图外远程奔袭（b2.js）：约 12000 米高空，雷达反射截面极小
 const eaFtr = t => t === 'ftr' || t === 'ftrb' || t === 'f22';
@@ -27,8 +28,8 @@ const eaVtol = t => !!(EA_SPEC[t] && EA_SPEC[t].vtol);   // 垂直起降（F-35B
 //   高炮、单兵防空导弹、弹炮防空车都够不着，只有爱国者等中远程防空（M.hi）与歼击机能打；起降阶段除外
 const eaHighUav = o => !!o && o.kind === 'cas' && (!o.v || o.v === 'gj2') && o.alt > .8;
 const eaHighAlt = o => !!o && ((o.kind === 'recon' && o.alt > .6) || (o.kind === 'transport' && !!o.halo && o.alt > .5)) && !['cat', 'roll', 'trap', 'final', 'hold'].includes(o.phase);
-const eaHigh = o => !!o && (o.kind === 'fighter' ? o.alt > .6 && !['cat', 'roll', 'trap', 'final'].includes(o.phase) : o.kind === 'recon' || o.kind === 'transport' ? eaHighAlt(o) : (eaFtr(o.type) || o.type === 'b2' || o.type === 'p8') && o.alt > .6);   // B-2A 在 12000 米高空；P-8A 在 8000 米巡逻
-const EA_SIL = { ga: 'a10', heli: 'ah64', uh60: 'uh60', c17: 'c17', ftr: 'f35', ftrb: 'f35b', f22: 'f22', b2: 'b2', p8: 'c17' };
+const eaHigh = o => !!o && (o.kind === 'fighter' ? o.alt > .6 && !['cat', 'roll', 'trap', 'final'].includes(o.phase) : o.kind === 'recon' || o.kind === 'transport' ? eaHighAlt(o) : (eaFtr(o.type) || o.type === 'b2' || o.type === 'p8' || o.type === 'mq9') && o.alt > .6);   // MQ-9A 在 7000 米上下：便携防空导弹、高炮够不着   // B-2A 在 12000 米高空；P-8A 在 8000 米巡逻
+const EA_SIL = { ga: 'a10', heli: 'ah64', uh60: 'uh60', c17: 'c17', ftr: 'f35', ftrb: 'f35b', f22: 'f22', b2: 'b2', p8: 'c17', mq9: 'mq9' };
 const eaSil = t => EA_SIL[t] || 'a10';
 const EA_TRAILS = new Map();   // 仅渲染用：固定翼尾迹点（不进 S）
 const EA_MANPADS = { normal: 0, hard: 1, hell: 2 };   // 战役守军单兵防空组数
@@ -182,7 +183,7 @@ function eaStep(dt) {
     for (let i = gnd.length - 1; i >= 0 && over > 0; i--, over--) { gnd[i].state = 'lost'; lost++; }
     if (lost && !cap && !E.said.base) { E.said.base = 1; log('敌野战机场被毁，停在地面的敌机全部损失', 'good'); }
     for (const w of E.wing) if (w.state === 'rearm' && (w.rearmT -= dt) <= 0) w.state = 'ready';
-    for (const a of E.fly) if (!a.dead) { if (a.type === 'b2') { if (typeof b2Fly === 'function') b2Fly(a, dt); else a.dead = true; } else if (a.type === 'p8') { if (typeof asP8Fly === 'function') asP8Fly(a, dt); else a.dead = true; } else if (a.type === 'uh60' || a.type === 'c17') { if (typeof a101Fly === 'function') a101Fly(a, dt); else a.dead = true; } else if (a.ph === 'gnd') eaGnd(a, dt); else if (a.ph === 'roll') eaRoll(a, dt); else if (a.ph === 'vto') eaVto(a, dt); else if (a.ph === 'vl') eaRtb(a, dt); else if (a.type === 'heli') eaFlyHeli(a, dt); else if (eaFtr(a.type) && typeof awFlyE === 'function') awFlyE(a, dt); else eaFlyGA(a, dt); }
+    for (const a of E.fly) if (!a.dead) { if (a.type === 'b2') { if (typeof b2Fly === 'function') b2Fly(a, dt); else a.dead = true; } else if (a.type === 'p8') { if (typeof asP8Fly === 'function') asP8Fly(a, dt); else a.dead = true; } else if (a.type === 'uh60' || a.type === 'c17') { if (typeof a101Fly === 'function') a101Fly(a, dt); else a.dead = true; } else if (a.ph === 'gnd') eaGnd(a, dt); else if (a.ph === 'roll') eaRoll(a, dt); else if (a.ph === 'vto') eaVto(a, dt); else if (a.ph === 'vl') eaRtb(a, dt); else if (a.type === 'mq9') eaFlyIsr(a, dt); else if (a.type === 'heli') eaFlyHeli(a, dt); else if (eaFtr(a.type) && typeof awFlyE === 'function') awFlyE(a, dt); else eaFlyGA(a, dt); }
     E.fly = E.fly.filter(a => !a.dead);
     eaProj(dt);
     for (const w of E.wr) if (!w.hit && S.t - w.t >= 2) { w.hit = true; const x = w.x + Math.cos(w.h) * w.spd * 2, y = w.y + Math.sin(w.h) * w.spd * 2; S.fx.push({ kind: isLand(x, y) ? 'boom' : 'flash', x, y, r: 14, life: 0, max: .8, side: 'e' }); }
@@ -190,6 +191,7 @@ function eaStep(dt) {
     E.flash = E.flash.filter(f => S.t - f.t < 2);
     if ((E.thinkT -= dt) <= 0) { E.thinkT = 2; eaThink(); }
     if ((E.scrT = (E.scrT ?? 0) - dt) <= 0) { E.scrT = 1; eaScramble(); }
+    if ((E.isrT = (E.isrT ?? 8) - dt) <= 0) { E.isrT = 3; eaIsrThink(); }
   }
   if (((E || eaEnsureLight()).aaT -= dt) <= 0) { (E || S.eaLight).aaT = .5; eaAA(); }
 }
@@ -329,6 +331,46 @@ function eaVLand(a, H, dt) {
   a.heading = eaAng(a.heading + clamp(eaAng(H.h - a.heading), -.7 * dt, .7 * dt));
   if (d < 4) a.alt = Math.max(0, a.alt - dt * .045);
   if (a.alt <= .002) eaLanded(a, H);
+}
+// —— MQ-9A 侦察无人机：守方态势感知的主力。起飞后飞到「最该看的地方」（intel.js intelTask：滩头、据点、跟丢的敌人 × 多久没看过），
+//    在那里绕 160 的圈盘旋 45 秒，看完换下一处；续航 300 秒后返航；发现新的敌情就报告；导弹告警就背离来袭方向脱离一段 ——
+const EA_ISR = { orbit: 160, stay: 45, endur: 300, alt: .8, gap: 25 };
+function eaIsrThink() {
+  const E = S.eair, up = E.fly.filter(a => a.type === 'mq9' && !a.dead).length, ready = E.wing.filter(w => w.type === 'mq9' && w.state === 'ready' && (eaOpen().length || (w.farp && E.farp)));
+  if (!ready.length || up >= 1 + (ready.length > 1 && (S.intel && S.intel.sa.e < .4) ? 1 : 0) || S.t - (E.isrL ?? -99) < EA_ISR.gap || typeof intelTask !== 'function') return;
+  const T = intelTask('e');
+  if (!T) return;
+  const w = ready[0], b = eaNearBase(T.x, T.y, eaOpen()) || eaFarpBase();
+  if (!b) return;
+  const a = eaNewAir(b, w, T.x, T.y, { isr: { x: T.x, y: T.y, why: T.why }, endur: EA_ISR.endur, tgt: { k: 'pt' } });
+  w.state = 'out'; E.fly.push(a); E.isrL = S.t; eaStat('isrE');
+  if (typeof chatSay === 'function') chatSay('e', `${T.why}那边${T.never ? '到现在还没人看过' : `已经 ${T.age} 秒没看过了`}，放一架 MQ-9 过去盯着。`, { kind: 'order', at: T, lv: 1, key: 'isrE', gap: 40 });
+}
+function eaFlyIsr(a, dt) {
+  if (a.ph === 'rtb' || a.ph === 'app' || a.ph === 'final' || a.ph === 'land' || a.ph === 'hold') { eaRtb(a, dt); return; }
+  a.alt = Math.min(EA_ISR.alt, a.alt + dt * .25);
+  if ((a.endur -= dt) <= 0) { a.ph = 'rtb'; return; }
+  if (typeof airMslWarn === 'function' && airMslWarn('e', 'eair', a.id)) a.brk = S.t + 4;
+  if (a.brk > S.t) { const m = S.missiles.find(o => o.kind === 'sam' && o.side === 'p' && !o.done && o.tgt && o.tgt.k === 'eair' && o.tgt.id === a.id), h = m ? Math.atan2(a.y - m.y, a.x - m.x) : a.heading; eaSteer(a, clamp(a.x + Math.cos(h) * 300, 30, W - 30), clamp(a.y + Math.sin(h) * 300, 30, H - 30), dt); return; }
+  const T = a.isr || (a.isr = { x: a.tx, y: a.ty });
+  const d = dist(a.x, a.y, T.x, T.y);
+  if (d > EA_ISR.orbit + 40) { a.ph = 'out'; eaSteer(a, T.x, T.y, dt); return; }
+  // 盘旋：沿圆周切向飞（逆时针）
+  a.ph = 'isr';
+  const an = Math.atan2(a.y - T.y, a.x - T.x) + .5;
+  eaSteer(a, T.x + Math.cos(an) * EA_ISR.orbit, T.y + Math.sin(an) * EA_ISR.orbit, dt, EA_SPEC.mq9.spd * .8);
+  a.orbT = (a.orbT || 0) + dt;
+  if (S.intel && (a.repT = (a.repT ?? 6) - dt) <= 0) {   // 报告看到的敌情（新发现、或者有一阵没报了）
+    a.repT = 20;
+    const near = Object.values(S.intel.e).filter(tr => S.t - tr.t < 3 && dist(tr.x, tr.y, a.x, a.y) < 300);
+    const men = near.filter(tr => tr.k === 'team').reduce((s, tr) => s + tr.n, 0), veh = near.filter(tr => tr.k === 'veh').length, sh = near.filter(tr => tr.k === 'ship').length, fresh = near.some(tr => S.t - tr.t0 < 25);
+    if (fresh && (men || veh || sh) && typeof chatSay === 'function') chatSay('e', `MQ-9：${eaWhere(T.x, T.y)}看到${[veh && `车 ${veh} 辆`, men && `步兵大概 ${men} 个`, sh && `船 ${sh} 条`].filter(Boolean).join('、')}，位置已经标上。`, { kind: 'report', at: T, lv: 0, key: 'isrRep' + a.id, gap: 30 });
+  }
+  if (a.orbT > EA_ISR.stay && typeof intelTask === 'function') {   // 看够了：换下一个最该看的地方（不重复看刚看过的）
+    const N = intelTask('e');
+    if (N && dist(N.x, N.y, T.x, T.y) > 300) { a.isr = { x: N.x, y: N.y, why: N.why }; a.orbT = 0; }
+    else a.orbT = EA_ISR.stay * .6;
+  }
 }
 // —— 机场受威胁（敌地面部队逼近、空降场就在附近）：直升机与 F-35B 不等机场陷落，立即升空——有弹的冲上去打，整备中的直接疏散；
 //    疏散到机场外的前沿加油弹药补给点（FARP：一块平整的野地，几个停放点、油囊和弹药箱），在那里停放、加油挂弹、继续出动 ——
@@ -1060,7 +1102,7 @@ function eaImpact(x, y, R, pw, side) {
 function eaVision() {
   if (!S || !S.eair || !eaOn()) return [];
   const o = [];
-  for (const a of S.eair.fly) if (!a.dead && a.alt > .1 && a.type !== 'b2') o.push({ x: a.x, y: a.y, r: 120, h: 1.5 });   // B-2A 只管轰炸，不当侦察用
+  for (const a of S.eair.fly) if (!a.dead && a.alt > .1 && a.type !== 'b2') o.push(a.type === 'mq9' ? { x: a.x, y: a.y, r: 250, h: 8 } : { x: a.x, y: a.y, r: 120, h: 1.5 });   // B-2A 只管轰炸，不当侦察用；MQ-9A 的光电转塔看得远
   for (const f of S.eair.flash) o.push({ x: f.x, y: f.y, r: 60, h: .5 });
   return o;
 }

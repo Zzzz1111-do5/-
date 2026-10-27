@@ -137,6 +137,7 @@ function infoMisE(a) {
   if (a.ph === 'rtb' || a.ph === 'app' || a.ph === 'final' || a.ph === 'land' || a.ph === 'vl') return a.farpGo || (S.eair && S.eair.wing.some(w => w.id === a.wid && w.farp)) ? '返航（落到机场外的前沿加油弹药点）' : '任务结束，返航';
   if (a.type === 'b2') return `编队轰炸（${a.no} 号机，${B2_LOAD[a.load] ? B2_LOAD[a.load].nm : ''}，已投 ${a.i}/${(a.aims || []).length}）`;
   if (a.type === 'p8') return '海上巡逻、搜索舰艇';
+  if (a.type === 'mq9') return a.isr ? `侦察：在${infoWh(a.isr.x, a.isr.y)}上空盘旋盯着（${a.isr.why || '最久没看过的地方'}），还能飞 ${Math.max(0, Math.round(a.endur || 0))} 秒` : '侦察';
   if (a.type === 'c17' || a.type === 'uh60') return '空降 / 机降运输';
   if (eaFtr(a.type)) return a.role === 'strike' ? `对地打击：${infoTgtNm(a.tgt) || ''}${infoWh(a.tx, a.ty) ? '（' + infoWh(a.tx, a.ty) + '）' : ''}` : a.role === 'sweep' ? '前出扫荡目标空域' : a.role === 'esc' ? '护航攻击编队' : a.mis === 'int' ? '拦截来袭敌机' : `在${infoWh(a.cx, a.cy)}上空巡逻`;
   return `打击${infoTgtNm(a.tgt) || '目标'}${infoWh(a.tx, a.ty) ? '（' + infoWh(a.tx, a.ty) + '）' : ''}`;

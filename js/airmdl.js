@@ -98,6 +98,7 @@ const AIRD = {
 };
 // F-35B：机体同 F-35A，座舱后背上一块升力风扇舱门、其后的辅助进气门，弹舱短一些、机炮改外挂吊舱（腹部中线）
 AIRD.f35b = { ...AIRD.f35, lift: [3.1, .3, .62], bay: [2.2, -2.4, .8, 1.15], mk: [[-3.2, 5.2, .7]] };
+AIRD.mq9 = { ...AIRD.gj2, paint: '#9aa1a6', nat: 'us', st: [[1.25, 3.4, 'agm']], mk: [[-.2, 8.2, .7]] };   // MQ-9A：外形与攻击-2 同类（细长机身、直翼、V 尾、推进式螺旋桨），浅灰涂装，翼下一具光电吊舱
 AIRD.heli = AIRD.z10; AIRD.transport = AIRD.y20;
 const AIRV = { path: new Map() };   // 渲染缓存：Path2D（局部坐标，按机型 + 部件）
 
@@ -582,7 +583,7 @@ function airRelZ(P, m) {
 // 3D 里飞机的尺寸（v3units.js 的 plane()）
 function airSize3(o, side) {
   if (side === 'p') return (typeof airMdl === 'function' && airMdl(o.kind, o.v).size) || ((typeof AIR_SPEC === 'object' && AIR_SPEC[o.kind]) || {}).size || 15;
-  return ({ ga: 18, heli: 16, uh60: 17, c17: 30, ftr: 17, ftrb: 17, f22: 18, b2: 34, p8: 26 })[o.type] || 17;
+  return ({ ga: 18, heli: 16, uh60: 17, c17: 30, ftr: 17, ftrb: 17, f22: 18, b2: 34, p8: 26, mq9: 18 })[o.type] || 17;
 }
 // 二维：离机阶段画弹体（落下时不点火，点火后尾焰），返回 true 表示已经画了
 function airRelDraw(ctx, m) {

@@ -458,6 +458,8 @@ ctE('e_air_ftr', 'F-35A 闪电 II 战斗机', 'e', 'air', 'ewing', 40, CT_IC.eft
   { kind: 'ewing', at: 'air', type: 'ftr' }, { counters: ['p_air_cas', 'p_air_strike', 'p_air_ftr', 'wing'], weakTo: ['p_air_ftr', 'p_dd', 'p_tbm'] });
 ctE('e_air_ftrb', 'F-35B 闪电 II（短距起飞 / 垂直降落）', 'e', 'air', 'ewing', 45, CT_IC.eftr, [4, 0, 6, 7, 10, 7, 0], '美国海军陆战队型：升力风扇加可转向的尾喷口，不要跑道——机场跑道被炸、机场被敌人逼近甚至占领时，照样能从机位、直升机坪或机场外的前沿加油弹药点垂直起降。弹舱小一些：2 枚 AIM-120D 空空导弹 + 4 枚 GBU-53/B 小直径炸弹（外挂机炮吊舱），既能巡逻拦截，也能对车辆、登陆舰做精确打击。需要野战机场（被占后仍可在野外前沿点继续作战）。',
   { kind: 'ewing', at: 'air', type: 'ftrb' }, { counters: ['p_air_cas', 'p_air_strike', 'p_tank', 'p_lst', 'p_abn'], weakTo: ['p_air_ftr', 'p_dd', 'p_aa_veh'] });
+ctE('e_air_mq9', 'MQ-9A 死神侦察无人机', 'e', 'air', 'ewing', 22, CT_IC.acas || CT_IC.eftr, [1, 0, 3, 6, 10, 9, 0], '中空长航时无人机，守方的眼睛：自动飞到最久没看过的滩头、据点、跟丢了敌人的地方，在 7000 米上下盘旋，用光电 / 红外转塔把看到的敌人标上敌情图（视野 250，比普通飞机远一倍），看完换下一处，续航 5 分钟。高炮和单兵防空导弹够不着，怕防空导弹车、舰空导弹和战斗机。需要野战机场。',
+  { kind: 'ewing', at: 'air', type: 'mq9' }, { counters: ['p_lst', 'p_tank', 'inf_p'], weakTo: ['p_air_ftr', 'p_aa_veh', 'p_dd'] });
 ctE('e_air_f22', 'F-22A 猛禽战斗机', 'e', 'air', 'ewing', 75, CT_IC.ef22 || CT_IC.eftr, [3, 0, 8, 8, 10, 8, 0], '美军最强的空优战斗机：比 F-35A 更难被雷达发现，超音速巡航、推力矢量，转弯追击更快；内埋 6 枚 AIM-120D 与 2 枚 AIM-9X（F-35A 只有 4 枚），AN/APG-77 雷达看得更远。有敌战斗机时打头阵，平时留在机场待命，让 F-35A 去巡逻。价格接近两架 F-35A。需要野战机场。',
   { kind: 'ewing', at: 'air', type: 'f22' }, { counters: ['p_air_ftr', 'p_air_cas', 'p_air_strike', 'wing'], weakTo: ['p_dd', 'p_tbm'] });
 // ———— 防守方 · 反航母体系（antiship.js）：巡逻机找到航母 → 堤丰导弹排 / 攻击核潜艇打击 ————

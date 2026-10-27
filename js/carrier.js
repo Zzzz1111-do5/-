@@ -91,8 +91,9 @@ const AIR_SIL = {
   j36: [[12.6, 0], [10.6, .8], [8.2, 1.6], [5.6, 2.6], [1, 5.4], [-5.8, 10.3], [-7.4, 10.3], [-6.4, 6], [-10.6, 2.8], [-11.6, 2.2], [-12.2, 1.2], [-12.2, 0]]   // 歼-36：无尾双菱形翼（翼尖切尖、后缘 W 形），机长 : 翼展约 23 : 19，与歼-20 同一比例尺
 };
 AIR_SIL.f35b = AIR_SIL.f35;   // F-35B 俯视轮廓同 F-35A
+AIR_SIL.mq9 = AIR_SIL.gj2;   // MQ-9A 与攻击-2 同类布局
 // 剪影键：按型号；守方 type（ga / heli / ftr / ftrb / f22）另映射
-const airSilKey = (type, v) => type === 'ga' ? 'a10' : type === 'ftr' ? 'f35' : type === 'ftrb' ? 'f35b' : AIR_SIL[type] && !AIR_BASEM[type] ? type : airMdl(type, v).sil || 'j35';
+const airSilKey = (type, v) => type === 'ga' ? 'a10' : type === 'ftr' ? 'f35' : type === 'ftrb' ? 'f35b' : type === 'mq9' ? 'mq9' : AIR_SIL[type] && !AIR_BASEM[type] ? type : airMdl(type, v).sil || 'j35';
 const airName = (type, v) => airMdl(type, v).name || (AIR_SPEC[type] || {}).name || '飞机';
 // HUD 图标（24×24，描边风格，与 hud.js ICON 一致）
 const CARRIER_ICONS = typeof WI === 'object' ? {   // 照真实机型画（icons.js）：福建舰、空警-600、歼-35、攻击-2、轰-6K、歼-20
