@@ -272,5 +272,6 @@ function mxDraw(time, flash) {
 }
 
 // 视野字节图（0/255），供着色器与像素降级方案共用
-const FOGB = new Uint8Array(GW * GH);
+let FOGB = new Uint8Array(GW * GH);
+onWorld(() => { FOGB = new Uint8Array(GW * GH); });
 function fogBytes() { const D = typeof CVL_DISP === 'object' ? CVL_DISP : null; for (let i = 0; i < GW * GH; i++) FOGB[i] = PV[i] || (D && D[i]) ? 255 : 0; }   // 隐蔽小组所在格照常显示为可见（conceal.js）

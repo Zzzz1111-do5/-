@@ -297,14 +297,22 @@ function v3Mesh() {
   const d = CELL * st, verts = [], idx = [];
   const P = (i, j) => [i * d, -j * d, hf[j * nx + i]];
   const nor = (i, j) => { const hx = hf[j * nx + Math.min(nx - 1, i + 1)] - hf[j * nx + Math.max(0, i - 1)], hy = hf[Math.max(0, j - 1) * nx + i] - hf[Math.min(ny - 1, j + 1) * nx + i]; return v3Norm([-hx / (2 * d), -hy / (2 * d), 1]); };
-  for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) { const p = P(i, j), n = nor(i, j); verts.push(p[0], p[1], p[2], n[0], n[1], n[2]); }
-  for (let j = 0; j < ny - 1; j++) for (let i = 0; i < nx - 1; i++) { const a = j * nx + i, b = a + 1, c = a + nx, e = c + 1; idx.push(a, c, b, b, c, e); }
-  // 围边：沿四条边走一圈，每个边点一上一下两个顶点
+  // 大海域地图：只有陆地与近岸（寻路带 + 一点余量）铺细网格，更南的远海是一块平的海面（整片大海逐格建网格有几百万个索引）
+  const jMax = TER.pathY ? Math.min(ny - 1, Math.ceil(TER.pathY / d) + 2) : ny - 1;
+  for (let j = 0; j <= jMax; j++) for (let i = 0; i < nx; i++) { const p = P(i, j), n = nor(i, j); verts.push(p[0], p[1], p[2], n[0], n[1], n[2]); }
+  for (let j = 0; j < jMax; j++) for (let i = 0; i < nx - 1; i++) { const a = j * nx + i, b = a + 1, c = a + nx, e = c + 1; idx.push(a, c, b, b, c, e); }
+  if (jMax < ny - 1) {
+    const s0 = verts.length / 6, zs = hf[jMax * nx], y0 = -jMax * d, y1 = -(ny - 1) * d, x1 = (nx - 1) * d;
+    for (const [x, y] of [[0, y0], [x1, y0], [0, y1], [x1, y1]]) verts.push(x, y, zs, 0, 0, 1);
+    idx.push(s0, s0 + 2, s0 + 1, s0 + 1, s0 + 2, s0 + 3);
+  }
+  // 围边：沿四条边走一圈，每个边点一上一下两个顶点（远海那一段只取端点）
   const ring = [];
   for (let i = 0; i < nx; i++) ring.push([i, 0]);
-  for (let j = 1; j < ny; j++) ring.push([nx - 1, j]);
-  for (let i = nx - 2; i >= 0; i--) ring.push([i, ny - 1]);
-  for (let j = ny - 2; j > 0; j--) ring.push([0, j]);
+  for (let j = 1; j <= jMax; j++) ring.push([nx - 1, j]);
+  if (jMax < ny - 1) ring.push([nx - 1, ny - 1], [0, ny - 1], [0, jMax]);
+  else for (let i = nx - 2; i >= 0; i--) ring.push([i, ny - 1]);
+  for (let j = (jMax < ny - 1 ? jMax : ny - 1) - 1; j > 0; j--) ring.push([0, j]);
   ring.push([0, 0]);
   const base = verts.length / 6;
   for (const [i, j] of ring) { const p = P(i, j); verts.push(p[0], p[1], p[2], 0, 0, -1, p[0], p[1], V3_SKIRT, 0, 0, -1); }

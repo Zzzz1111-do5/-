@@ -2,6 +2,7 @@
 // 镜头：缩放、平移、坐标换算、小地图
 const CAM = { x: W / 2, y: STAGING_Y + 120, z: 1, vw: 1, vh: 1, fit: 1 };
 
+onWorld(() => { if (CAM.vw > 1) camFit(CAM.vw, CAM.vh); });   // 换了世界尺寸：全图缩放重新算
 function camFit(vw, vh) {
   const first = CAM.vw === 1;
   CAM.vw = vw; CAM.vh = vh;

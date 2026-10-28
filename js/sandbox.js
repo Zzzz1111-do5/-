@@ -1384,10 +1384,11 @@ HOOK.step.push(dt => {
 HOOK.newGame.push(opts => { if (typeof R === 'object' && R) R.eye = null; if (!(opts && opts.sandbox)) closeSandbox(); });
 
 // ———————————————— 编辑器入口 ————————————————
-function openSandbox(seed, keep) {
+function openSandbox(seed, keep, map) {
   const prev = S && S.sbx ? S : null, lv = (prev && prev.level) || (typeof U === 'object' && U.level) || 'hard';
   const bud = keep && prev ? { ...prev.sbx.budget } : { p: SBX_BUDGET, e: SBX_BUDGET };
-  newGame(seed, lv, { sandbox: true, mode: 'sandbox' });
+  map = map || (keep && prev && prev.map && prev.map !== 'std' ? prev.map : undefined);
+  newGame(seed, lv, { sandbox: true, mode: 'sandbox', map });   // map：另外登记的地图（core.js MAPGEN），换种子重建时沿用
   Object.assign(S, { phase: 'sandbox', briefed: true, paused: true, role: 'attack', mode: 'sandbox', armor: [] });
   S.sbx = { items: [], budget: bud, nid: 1, notes: { p: [], e: [] }, live: false };
   sbxMapAF();
