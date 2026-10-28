@@ -1349,6 +1349,7 @@ const V3_PTHOUSE = { hq: [[-12, -6, 18, 12, 3.6, 0], [12, -8, 12, 9, 3.2, 0], [1
   town: [[16, -4, 8, 14, 6, 0], [16, -14, 5, 6, 3, 0]], village: [[-10, -4, 8, 6, 2.6, 1.6], [6, -8, 7, 6, 2.6, 1.6], [2, 6, 9, 6, 2.6, 1.6]] };
 function v3mPoint(kind, blown, noHouse) {
   const M = mbNew();
+  if (noHouse && (kind === 'exit' || kind === 'bridge')) return M;   // 地堡、龙牙、公路桥都换成了外部模型（v3props.js）
   const house = (x, y, w, h, z, roof) => { if (noHouse) return; mbBox(M, x - w / 2, x + w / 2, y - h / 2, y + h / 2, 0, z, .8); if (roof) mbBox(M, x - w / 2, x + w / 2, y - h / 2, y + h / 2, z, z + roof, .95, { taper: Math.min(w, h) * .45 }); };
   if (kind === 'exit') {
     for (const sx of [-17, 17]) {   // 半圆混凝土地堡：圆顶朝海、平的一面朝内陆，朝海一侧一道射孔
@@ -1631,8 +1632,8 @@ void main() {
   if (uMode < .5) {   // 黑绿：深色实体 + 发光棱线 + 边缘光；玻璃、车灯、观察镜发光
     c = body * (.45 + .95 * lit + .25 * up) * sh + glow * ed * .95 + glow * rim * .22;
     if (vS < 0.) c += glow * .75 * sh;
-  } else {   // 写实：涂装色受日光、天光（上冷下暖）+ 暗棱线，边缘描一道阵营色细光
-    c = body * (mix(vec3(.3, .29, .27), vec3(.45, .5, .58), up) + vec3(1., .95, .86) * lit * .82 * shadowAt()) * sh * (1. - ed * .4) + glow * rim * .18;
+  } else {   // 写实：涂装色受日光、天光（半球：朝天的冷、朝下的暖，竖直面各一半，与 v3props.js 楼房一致）+ 暗棱线，边缘描一道阵营色细光
+    c = body * (mix(vec3(.3, .29, .27), vec3(.45, .5, .58), N.z * .5 + .5) + vec3(1., .95, .86) * lit * .82 * shadowAt()) * sh * (1. - ed * .4) + glow * rim * .18;
     if (vS < 0.) c = mix(c, vec3(.55, .7, .78), .6);
   }
   if (hl > .5) c += uHlC * uHl * (.28 + .9 * rim + .55 * ed);   // 选中的：整个人 / 整辆车亮起来，轮廓与棱线更亮
@@ -1881,8 +1882,9 @@ function v3mCollect(C, box) {
     if (!V3_PT.includes(k)) continue;
     const blown = k === 'bridge' && typeof isBlown === 'function' && isBlown(p.key), sd = p.owner === 'p' ? 0 : p.owner === 'e' ? 1 : 2;
     const z = k === 'bridge' ? Math.max(v3Ht(p.x - 26, p.y), v3Ht(p.x + 26, p.y), -2) - 2.4 : k === 'ford' ? sea(p.x, p.y) : v3Ht(p.x, p.y);
-    const nh = !!V3_PTHOUSE[k] && typeof v3pReady === 'function' && v3pReady();   // 房屋换成了外部模型（v3props.js）
-    v3mAdd((nh ? 'ptn:' : 'pt:') + k + (blown ? ':x' : ''), () => v3mPoint(k, blown, nh), p.x, p.y, z, 0, 1, sd);
+    const nh = (!!V3_PTHOUSE[k] || k === 'exit' || k === 'bridge') && typeof v3pReady === 'function' && v3pReady();   // 房屋、地堡、桥换成了外部模型（v3props.js）
+    const sv = typeof v3Mx === 'function' && !v3Mx() ? 3 : sd;   // 写实画面：混凝土、土堤用中性的灰，不按归属涂色（归属看旗子）
+    v3mAdd((nh ? 'ptn:' : 'pt:') + k + (blown ? ':x' : ''), () => v3mPoint(k, blown, nh), p.x, p.y, z, 0, 1, sv);
     if (k === 'radar') v3mAdd('rad:4', () => v3mRadar(4), p.x + 4, p.y - 4, z + 9.6, p.owner === 'e' ? t * 1.4 : .5, 1, sd);
   }
   for (const o of S.obst || []) if (o.known && !o.dead && inB(o.x, o.y)) v3mAdd('hedge', v3mHedgehog, o.x, o.y, sea(o.x, o.y), (o.x * 7.1 + o.y * 3.3) % 6.28, 1.3, 1);   // 海滩反登陆障碍

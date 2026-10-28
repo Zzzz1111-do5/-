@@ -107,8 +107,8 @@ float wNoise(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3. - 2. * f
 vec3 waterNrm(HP vec2 w, float t) {
   vec3 n = texture2D(uWn, w / 113. + vec2(t * .012, t * .008)).rgb + texture2D(uWn, w / 67. + vec2(-t * .01, t * .014)).rgb
          + texture2D(uWn, w / 29. + vec2(t * .021, -t * .016)).rgb + texture2D(uWn, w / 13. + vec2(-t * .033, -t * .026)).rgb;
-  n = n * .5 - 2.;
-  return vec3(n.x, n.y, n.z * 2.2 + 1.);
+  n = n * .5 - 1.;   // 四张的平均（每张 2t − 1）
+  return vec3(n.x, -n.y, n.z * 2.2 + 1.);   // 贴图 v 朝南（w.y），GL 的 y 朝北
 }
 vec2 waveSlope(HP vec2 w, float t, float fw) {
   vec2 g = vec2(0.);
@@ -177,12 +177,16 @@ void main() {
     if (h < uSea + .6) {   // 海面：波浪法线、天空反射（菲涅尔）、太阳反光、深浅水颜色（浅滩、礁石泛青绿）、近岸白浪；俯视贴图里的航迹等留一点
       vec4 k3 = texture2D(uCls3, w / uWorld);
       float fwm = max(FW(w.x), FW(w.y)) * 1.4;   // 一个像素在海面上有几米
-      vec3 Nw = uWnOn > .5 ? waterNrm(w, uT) : vec3(-waveSlope(w, uT, fwm), 1.);
+      vec3 Nw = uWnOn > .5 ? waterNrm(w, uT) : vec3(waveSlope(w, uT, fwm) * vec2(-1., 1.), 1.);   // 斜率按 w（y 朝南）算的，法线换到 GL 坐标（y 朝北，与视线 vV 一致）
       Nw = normalize(vec3(Nw.xy * (1. - k3.r * .45), Nw.z));   // 浅水、礁盘上浪小
       vec3 V = normalize(vV), Rf = reflect(-V, Nw);
       Rf.z = abs(Rf.z);
       float bl = clamp(log2(max(fwm, .1) * 4.), 0., 6.);   // 远处的反射模糊一些（粗糙的海面平均了很多方向）
-      vec3 sk = uSkyOn > .5 ? texture2D(uSky, vec2(atan(Rf.y, Rf.x) / 6.2831853 + uSkyU, .5 - asin(clamp(Rf.z, 0., 1.)) / 3.1415927), bl).rgb * .84 : mix(uBg, vec3(.5, .62, .8), sqrt(Rf.z));
+      float su = atan(Rf.y, Rf.x) / 6.2831853 + uSkyU;
+#ifdef DER
+      float sa = fract(su), sb = fract(su + .5) - .5; su = fwidth(sa) < fwidth(sb) ? sa : sb;   // 方位角在 ±180° 处跳一整圈：取导数小的那种写法，接缝上不会掉到最糊的一级（一条竖线）
+#endif
+      vec3 sk = uSkyOn > .5 ? texture2D(uSky, vec2(su, .5 - asin(clamp(Rf.z, 0., 1.)) / 3.1415927), bl).rgb * .84 : mix(uBg, vec3(.5, .62, .8), sqrt(Rf.z));
       float fr = .02 + .98 * pow(1. - clamp(dot(Nw, V), 0., 1.), 5.);
       vec3 body = mix(vec3(.012, .06, .1), vec3(.05, .28, .3), k3.r);
       body = mix(body, vec3(.1, .4, .38), k3.g * .6);
@@ -327,7 +331,7 @@ void main() {
       c += vec3(.15, .95, .45) * mxRain(floor(u), fract(u), uT * 1.3, px) * .5;
     }
   } else {   // 写实：屋顶取俯视贴图，墙面是水泥色（受日光、天光），棱线略压暗
-    vec3 amb = mix(vec3(.3, .29, .27), vec3(.47, .52, .6), clamp(N.z, 0., 1.)), L = amb + vec3(1., .95, .86) * lit * .8 * shadowAt();
+    vec3 amb = mix(vec3(.3, .29, .27), vec3(.47, .52, .6), N.z * .5 + .5), L = amb + vec3(1., .95, .86) * lit * .8 * shadowAt();
     c = N.z > .5 ? ((uv.x > 0. && uv.y > 0. && uv.x < 1. && uv.y < 1.) ? texture2D(uTop, uv).rgb : inF ? texture2D(uTopF, uvF).rgb : texture2D(uBase, w / uWorld).rgb) * L * 1.15
       : vec3(.6, .6, .57) * L;
     c *= 1. - edge * .3;
@@ -344,7 +348,7 @@ uniform sampler2D uSky; uniform float uU; uniform vec3 uBg; varying vec3 vR;
 void main() {
   vec3 d = normalize(vR);
   vec2 uv = vec2(atan(d.y, d.x) / 6.2831853 + uU, .5 - asin(clamp(d.z, -1., 1.)) / 3.1415927);
-  vec3 c = texture2D(uSky, uv).rgb;
+  vec3 c = texture2D(uSky, uv, -16.).rgb;   // 天空图一个像素比屏幕像素大，总用最清楚的一级（方位角的接缝处导数很大，不加偏置会糊出一条竖线）
   gl_FragColor = vec4(mix(c, uBg, smoothstep(.03, -.08, d.z)), 1.);
 }`;
 // 地表细节贴图（写实画面）：第一次用到时载入，四张都好了才启用；绑在 8–11 号纹理单元
@@ -457,12 +461,14 @@ function v3ShPass(C) {
   gl.colorMask(false, false, false, false);
   gl.clear(gl.DEPTH_BUFFER_BIT);
   gl.enable(gl.POLYGON_OFFSET_FILL); gl.polygonOffset(1.5, 3);
-  // 地形（山体互相投影）与自己挤出的房屋
+  // 地形（山体互相投影；触屏设备省掉这一遍）与自己挤出的房屋
   gl.useProgram(V3SH.pr); gl.uniformMatrix4fv(V3SH.uM, false, M);
   gl.enableVertexAttribArray(V3SH.a);
-  gl.bindBuffer(gl.ARRAY_BUFFER, V3.buf); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, V3.ib);
-  gl.vertexAttribPointer(V3SH.a, 3, gl.FLOAT, false, 24, 0);
-  gl.drawElements(gl.TRIANGLES, V3.n, V3.it || gl.UNSIGNED_SHORT, 0);
+  if (!V3.coarse) {
+    gl.bindBuffer(gl.ARRAY_BUFFER, V3.buf); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, V3.ib);
+    gl.vertexAttribPointer(V3SH.a, 3, gl.FLOAT, false, 24, 0);
+    gl.drawElements(gl.TRIANGLES, V3.n, V3.it || gl.UNSIGNED_SHORT, 0);
+  }
   for (const c of V3.bch || []) {
     if (c.bb && (c.bb[2] < V3SH.box[0] || c.bb[0] > V3SH.box[2] || c.bb[3] < V3SH.box[1] || c.bb[1] > V3SH.box[3])) continue;
     gl.bindBuffer(gl.ARRAY_BUFFER, c.b); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, c.i);
