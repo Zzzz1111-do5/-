@@ -81,6 +81,7 @@ function thuPanelClick(e) {
   if (t.closest('.th-car') && F.lvl !== 'reg') { THU.open[F.id] = THU.open[F.id] === false; THU.key = ''; thuRender(true); return; }
   if (e.shiftKey || e.ctrlKey || e.metaKey) { THU.sel.has(F.id) ? THU.sel.delete(F.id) : THU.sel.add(F.id); } else { THU.sel.clear(); THU.sel.add(F.id); }
   THU.pick = null; THU.key = '';
+  if (typeof sfxPing === 'function') sfxPing();   // 所属的兵、车闪一下光（selfx.js）
   thuRender(true);
 }
 // 下令：同时选中了上级和它的下级，只对上级下（命令会自己传下去）
@@ -203,6 +204,7 @@ function thuSelect(F, add, keepInfo) {
   for (let k = thF(F.par); k; k = thF(k.par)) THU.open[k.id] = true;   // 展开到它
   THU.min = false; THU.key = '';
   if (!keepInfo && typeof U === 'object') { U.info = null; if (typeof infoRender === 'function') infoRender(true); }
+  if (!keepInfo && typeof sfxPing === 'function') sfxPing();   // 点番号牌：所属的兵、车闪一下光（selfx.js）；点单个兵顺带选中所属营时不闪
   thuRender(true);
   const el = document.querySelector(`#thPanel [data-f="${F.id}"]`);
   if (el && el.scrollIntoView) el.scrollIntoView({ block: 'nearest' });
@@ -262,6 +264,13 @@ function thuArrow(ctx, F, x, y, col, a, side) {
     ctx.beginPath(); ctx.ellipse(x, y, px(22), px(16), 0, 0, 6.283); ctx.stroke(); ctx.setLineDash([]);
   }
 }
+// 地图上立哪一级的番号牌（按缩放）：拉远看师，中间看团（没有团这一级的营 / 连直接立），拉近看营、连
+function thuTier(R0, zr) {
+  const has = F => thRegsOf(F).some(thG);
+  if (zr < 1.45) return thKids(R0).filter(has);
+  if (zr < 2.4) { const out = []; for (const D of thKids(R0)) for (const K of thKids(D)) if (has(K)) out.push(K); return out; }
+  return thRegsOf(R0).filter(thG);
+}
 function thuDraw(time) {
   THU.hit = [];
   if (!thOn() || typeof R === 'undefined' || !R.ctx || (typeof V3 === 'object' && V3.drawing)) return;
@@ -289,10 +298,9 @@ function thuDraw(time) {
         ctx.beginPath(); ctx.moveTo(xb, y - px(7)); ctx.lineTo(xb, y + px(7)); ctx.stroke();
       }
     }
-    const list = far ? thKids(R0).filter(D => thRegsOf(D).some(thG)) : thRegsOf(R0).filter(thG);
-    for (const F of list) {
+    for (const F of thuTier(R0, zr)) {
       const c = F.lvl === 'reg' ? bgAt(thG(F)) : thAtV(F);   // 部队实际所在处（锚点行军时跑在前面、据点易手时会跳过去）
-      if (!c || !vis(c.x, c.y)) continue;
+      if (!c || !c.n || !vis(c.x, c.y)) continue;   // 还没上岸的不立牌子（锚点上没有兵）
       const sel = THU.sel.has(F.id) || [...THU.sel].some(id => { const P = thF(id); return P && thuAnc(P, F); }), y = c.y - px(30);   // 番号牌都立在部队头顶（屏幕上方）
       ctx.strokeStyle = rgba(col, mine ? .5 : .35); ctx.lineWidth = px(1); ctx.beginPath(); ctx.moveTo(c.x, c.y); ctx.lineTo(c.x, y + px(13)); ctx.stroke();   // 引线
       thuArrow(ctx, F, c.x, thDir(side) < 0 ? y - px(15) : c.y, col, mine ? .9 : .55, side);   // 箭头从牌子上沿（向北推进）或部队位置（向南）出发，不压住番号
@@ -340,20 +348,20 @@ HOOK.step.push(dt => {
 function thMarks3(ctx, stem) {
   THU.hit3 = [];
   if (!thOn() || !thuActive()) return;
-  const far = CAM.z / CAM.fit < 2.1, occ = [], C = V3.cam, list = [];
+  const zr = CAM.z / CAM.fit, occ = [], C = V3.cam, list = [];
   for (const side of ['p', 'e']) {
     const R0 = thRoot(side);
     if (!R0) continue;
     const mine = !S.ctl || side === S.ctl, col = side === 'p' ? COL.g : COL.enemy;
-    for (const F of far ? thKids(R0).filter(D => thRegsOf(D).some(thG)) : thRegsOf(R0).filter(thG)) {
+    for (const F of thuTier(R0, zr)) {
       const c = F.lvl === 'reg' ? bgAt(thG(F)) : thAtV(F);   // 部队实际所在处（锚点行军时跑在前面、据点易手时会跳过去）
-      if (!c || !(mine || (side === 'e' ? inVision(c.x, c.y) : spotted(c.x, c.y)))) continue;
+      if (!c || !c.n || !(mine || (side === 'e' ? inVision(c.x, c.y) : spotted(c.x, c.y)))) continue;
       list.push({ F, c, col, d: C ? dist(c.x, -c.y, C.E[0], C.E[1]) : 0 });
     }
   }
   list.sort((a, b) => a.d - b.d);
   for (const { F, c, col } of list) {
-    const q = stem(c.x, c.y, F.lvl === 'div' ? 90 : 55, col, 1);
+    const q = stem(c.x, c.y, F.lvl === 'div' ? 90 : F.lvl === 'bde' ? 72 : 55, col, 1);
     if (!q) continue;
     const G = F.lvl === 'reg' ? thG(F) : null, sel = THU.sel.has(F.id) || [...THU.sel].some(id => { const P = thF(id); return P && thuAnc(P, F); });
     const t = G ? G.type || 'inf' : (() => { let v = 0, n = 0; for (const R of thRegsOf(F)) { const g = thG(R); if (g) { const P = hqRegPow(g); v += P.veh; n += P.tot; } } return v / Math.max(1, n) >= .6 ? 'armor' : v / Math.max(1, n) >= .25 ? 'mech' : 'inf'; })();

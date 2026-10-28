@@ -48,7 +48,24 @@ function thOrg(F) {
 const thMen = F => thRegsOf(F).reduce((a, R) => { const G = thG(R); return a + (G ? bgUnits(G).reduce((b, u) => b + teamsOf(u).reduce((c, q) => c + q.men.length, 0), 0) : 0); }, 0);
 const thVehN = F => thRegsOf(F).reduce((a, R) => { const G = thG(R); return a + (G ? bgVehs(G).length : 0); }, 0);
 // thAtV：画面用（番号牌、定位）——按各营成员的实际位置（orbat.js bgAt）；thAt 按锚点，给指挥逻辑用
-const thAtV = F => { let x = 0, y = 0, w = 0; for (const R of thRegsOf(F)) { const G = thG(R); if (!G) continue; const k = Math.max(1, hqRegPow(G).tot), c = bgAt(G); x += c.x * k; y += c.y * k; w += k; } return w ? { x: x / w, y: y / w } : null; };
+//   取兵力最集中的那一片（各营按兵力加权，450 米内兵力最多的营为中心，700 米内加权平均），不落在相隔很远的几个营中间的空地上；
+//   还没上岸的营不算（都没上岸时 n = 0，番号牌不画）
+function thAtV(F) {
+  const P = [];
+  let x0 = 0, y0 = 0, w0 = 0;
+  for (const R of thRegsOf(F)) {
+    const G = thG(R);
+    if (!G) continue;
+    const k = Math.max(1, hqRegPow(G).tot), c = bgAt(G);
+    if (c.n === 0) { x0 += c.x * k; y0 += c.y * k; w0 += k; } else P.push([c.x, c.y, k]);
+  }
+  if (!P.length) return w0 ? { x: x0 / w0, y: y0 / w0, n: 0 } : null;
+  let bi = 0, bw = -1;
+  for (let i = 0; i < P.length; i++) { let w = 0; for (const p of P) if (dist(p[0], p[1], P[i][0], P[i][1]) < 450) w += p[2]; if (w > bw) { bw = w; bi = i; } }
+  let x = 0, y = 0, w = 0;
+  for (const p of P) if (dist(p[0], p[1], P[bi][0], P[bi][1]) < 700) { x += p[0] * p[2]; y += p[1] * p[2]; w += p[2]; }
+  return { x: x / w, y: y / w, n: P.length };
+}
 const thAt = F => { let x = 0, y = 0, w = 0; for (const R of thRegsOf(F)) { const G = thG(R); if (!G) continue; const k = Math.max(1, hqRegPow(G).tot); x += G.ax * k; y += G.ay * k; w += k; } return w ? { x: x / w, y: y / w } : null; };
 
 // ———————————————— 战线 ————————————————
