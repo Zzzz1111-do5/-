@@ -50,10 +50,10 @@
    - `store/steam/header_capsule.jpg`（920×430）、`small_capsule.jpg`（462×174）、`main_capsule.jpg`（1232×706）、`vertical_capsule.jpg`（748×896）
    - 库：`library_capsule.jpg`（600×900）、`library_header.jpg`（920×430）、`library_hero.jpg`（3840×1240，不带字）、`library_logo.png`（1280×720 透明底）
    - `page_background.jpg`（1438×810，可选）
-   - 截图：`store/screens/` 里的 7 张（1920×1080，至少传 5 张）
+   - 截图：`store/screens/` 里的 7 张（1920×1080，至少传 5 张）；建议顺序：03 沙盘全景、01 登陆近景、04 航母、02 前线、06 部署、05 闯关、07 图鉴
    - 社区图标 `community_icon_184.jpg`、客户端图标 `client_icon.ico` / `client_icon_32.tga`
    - 文案、标签、配置要求、语言：`docs/store.md`（**支持语言只勾简体中文**）
-   - 预告片（可选）：`node tools/store_assets.js` 会生成一段 30 秒的实机视频（无声），更好的是自己用 OBS 录一段带声音的
+   - 预告片（可选）：`store/video/gameplay_1080p.mp4`（30 秒实机视频、无声；文件太大不进仓库，`node tools/store_assets.js` 重新生成），更好的是自己用 OBS 录一段带声音的
 6. **提审**：商店页填完点「标记为准备好审核」（一般 3–5 个工作日，至少提前 7 天交）；商店页通过后再提交构建审核。
 7. **「即将推出」页面要公开至少两周**才能发售。这段时间可以收集愿望单。
 8. **发售前自测**：用 Steam 客户端安装、启动；Shift+Tab 能打开 Steam 界面；全屏切换、退出游戏正常；断网也能玩。
@@ -78,7 +78,7 @@
    - 图标：`icon_512.png`（方形、不带圆角、墨绿底；TapTap 不收纯黑 / 白 / 透明底）
    - 截图：`store/screens/` 挑 3 张以上（横屏 1920×1080，每张不到 1 MB）
    - 16:9 宣传图：`promo_1920x1080.jpg`；其他可选：`cover_460x215.jpg`、`cover_600x900.jpg`、`logo_1280.png`、`wallpaper_3840x1240.jpg`、`featured_1920x1280.jpg`、`nologo_1920x1080.jpg`、`nologo_720x1080.jpg`
-   - **实机录像（上架必填）**：15 秒以上的 MP4；`node tools/store_assets.js` 生成的 `video/gameplay_1080p.mp4` 可以用，也可以自己用手机录屏
+   - **实机录像（上架必填）**：15 秒以上的 MP4；`store/video/gameplay_1080p.mp4` 可以用（不进仓库，`node tools/store_assets.js` 重新生成），也可以自己用手机录屏
    - 文案：`docs/store.md`
 8. **审核**：素材和资质审核一般 5–7 天。
 
