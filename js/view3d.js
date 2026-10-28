@@ -457,12 +457,14 @@ function v3ShPass(C) {
   gl.colorMask(false, false, false, false);
   gl.clear(gl.DEPTH_BUFFER_BIT);
   gl.enable(gl.POLYGON_OFFSET_FILL); gl.polygonOffset(1.5, 3);
-  // 地形（山体互相投影）与自己挤出的房屋
+  // 地形（山体互相投影；触屏设备省掉这一遍）与自己挤出的房屋
   gl.useProgram(V3SH.pr); gl.uniformMatrix4fv(V3SH.uM, false, M);
   gl.enableVertexAttribArray(V3SH.a);
-  gl.bindBuffer(gl.ARRAY_BUFFER, V3.buf); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, V3.ib);
-  gl.vertexAttribPointer(V3SH.a, 3, gl.FLOAT, false, 24, 0);
-  gl.drawElements(gl.TRIANGLES, V3.n, V3.it || gl.UNSIGNED_SHORT, 0);
+  if (!V3.coarse) {
+    gl.bindBuffer(gl.ARRAY_BUFFER, V3.buf); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, V3.ib);
+    gl.vertexAttribPointer(V3SH.a, 3, gl.FLOAT, false, 24, 0);
+    gl.drawElements(gl.TRIANGLES, V3.n, V3.it || gl.UNSIGNED_SHORT, 0);
+  }
   for (const c of V3.bch || []) {
     if (c.bb && (c.bb[2] < V3SH.box[0] || c.bb[0] > V3SH.box[2] || c.bb[3] < V3SH.box[1] || c.bb[1] > V3SH.box[3])) continue;
     gl.bindBuffer(gl.ARRAY_BUFFER, c.b); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, c.i);
