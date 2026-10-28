@@ -22,6 +22,7 @@ async function boot(b, w, h) {
     let s = 20261028;
     Math.random = () => { s = s + 0x6D2B79F5 | 0; let t = Math.imul(s ^ s >>> 15, 1 | s); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
     window.__seed = v => { s = v; };   // 开局、开战前各重置一次：等待时页面一直在画，画面用掉多少随机数跟机器快慢有关
+    window.__rng = () => s;   // 读出当前状态（宣传片把推演和画面的随机数分开：画画用掉的随机数不影响战局）
     try { localStorage.clear(); localStorage.setItem('bh-settings', JSON.stringify({ intro: false })); localStorage.setItem('bh-levels', JSON.stringify({ done: [1, 2, 3] })); } catch (e) { /* 只影响取景 */ }
   });
   await p.goto('file://' + ROOT + '/index.html');
@@ -215,7 +216,8 @@ async function stepVideo(b) {
   fs.rmSync(F, { recursive: true, force: true });
 }
 
-(async () => {
+module.exports = { ROOT, SEED, LAUNCH, sleep, boot, battle, advance, look, clean };   // tools/trailer.js 共用
+if (require.main === module) (async () => {
   const b = await chromium.launch(LAUNCH);
   try {
     if (STEPS.includes('ui')) { console.log('界面截图…'); await stepUi(b); }
