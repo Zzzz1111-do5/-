@@ -1196,8 +1196,9 @@ function v3AirExtras(key, x, y, z, h, k, sd, roll, rs, t, still, pitch = 0) {
   const zw = D.hi ? zc + top * .82 : zc - bot * .35, c = Math.cos(h), sn = Math.sin(h), cr = Math.cos(roll), sr = Math.sin(roll), cp = Math.cos(pitch), sp = Math.sin(pitch);
   const W = (lx, ly, lz) => { const yy = ly * cr + lz * sr, z0 = -ly * sr + lz * cr, xx = lx * cp - z0 * sp, zz = lx * sp + z0 * cp; return [x + (xx * c - yy * sn) * k, y + (xx * sn + yy * c) * k, z + zz * k]; };
   if (D.st && typeof adStores === 'function') for (const st of adStores(D, { used: rs && rs.used })) {
-    const kd = st.k === 'atgm4' ? 'atgm4' : st.k, L = (AD_ST[kd] || AD_ST.agm), zz = zw - .36 - L[1];
-    const put = (ly, lz) => { const [X, Y, Z] = W(st.x, ly, lz); v3mAdd('st3:' + kd, () => v3mMsl(kd), X, Y, Z, h, k, sd, roll, pitch); };
+    const kd = st.k === 'atgm4' ? 'atgm4' : st.k, mk = typeof V3_STK === 'object' ? V3_STK[kd] || 'agm' : null, ak = mk ? v3MslAk(key) : 1;   // 按型号、真实尺寸（v3msl.js）
+    const L = mk ? [0, V3MS[mk].d / 2 * ak] : (AD_ST[kd] || AD_ST.agm), zz = zw - .36 - L[1], [ik, bd] = mk ? v3MslInst('st3:x:', mk) : ['st3:' + kd, () => v3mMsl(kd)];
+    const put = (ly, lz) => { const [X, Y, Z] = W(st.x, ly, lz); v3mAdd(ik, bd, X, Y, Z, h, k * ak, sd, roll, pitch); };
     if (kd === 'atgm4') for (let i = 0; i < Math.min(4, st.n ?? 4); i++) put(st.y + (i % 2 ? .2 : -.2), zz + (i > 1 ? -.3 : 0)); else put(st.y, zz);
   }
   if (D.heli && D.rot) { const [X, Y, Z] = W(D.rot[0], 0, zc + top + .35 + .55); v3mAdd('rot:' + D.rot[2] + ':' + D.rot[1], () => v3mRotor(D.rot[2], D.rot[1] * .92), X, Y, Z, still ? h + .4 : t * 22, k, sd); }
@@ -1843,9 +1844,9 @@ function v3mCollect(C, box) {
       if (P) { const [x, y] = at(P.u, P.v), pose = P.run ? 'r' + (Math.floor(P.ph / .7854) & 7) : 'cl' + (Math.floor(P.ph / 1.7) & 1); v3mAdd('man:pilot:' + pose, () => v3mMan('pilot', pose), x, y, top + P.z, h + P.a, V3_PIL, 0); }
       if (P && (p.cpo || 0) > .3) { const L = cvLadder(p), [x, y] = at(L[0], L[1]); v3mAdd('ladder', v3mLadder, x, y, top, p.heading + Math.PI / 2, sz / 21, 0); }
     }
+    if (!lhd && typeof v3dDeckVeh === 'function') v3dDeckVeh(cv, C, live, wing, top, h, at);   // 挂弹车、弹药拖车、牵引车（v3det.js）
     for (const o of typeof cvShooters === 'function' ? cvShooters(cv, live) : []) { const [x, y] = at(o.u, o.v), pose = o.go ? 'kn' : 'pt'; v3mAdd('man:deck:' + pose, () => v3mMan('deck', pose), x, y, top, h + o.a, V3_PIL, 0); }   // 弹射官
-    if (v3mHi() && !lhd) {   // Ultra：甲板牵引车、弹药车、地勤人员，避开弹射器/着舰区
-      for (const [key, build, u, v, a0] of [['tractor', v3mDeckTractor, -57, 22.5, 1.6], ['cart', v3mDeckCart, -64, 22.5, 1.6], ['tractor', v3mDeckTractor, -70, 23, 1.5], ['cart', v3mDeckCart, -146, 16, .5]]) { const [x, y] = at(u, v); v3mAdd('cvsvc:' + key, build, x, y, top + .05, h + a0, 1, 3); }
+    if (v3mHi() && !lhd) {   // Ultra：地勤人员，避开弹射器/着舰区（甲板车辆在 v3det.js v3dDeckVeh，跟着停机位与整备进度）
       const crew = [[70, -13, 0, 'pt'], [58, 17, .2, 'kn'], [-103, 24, -2.6, 'st'], [-122, 24, -2.8, 'pt'], [4, 31, 1.4, 'st']];
       for (const [u, v, a0, pose] of crew) { const [x, y] = at(u, v); v3mAdd('man:deck:' + pose, () => v3mMan('deck', pose), x, y, top, h + a0, V3_PIL, 0); }
     }
@@ -2022,8 +2023,10 @@ function v3mCollect(C, box) {
     if (!AIRV.mv.has(m.id)) continue;
     const P = airRelPos(m, true);
     if (!P || P.u < (P.r.k === 'main' ? AIR_REL.open : .05) || P.e > .5 || !inB(P.x, P.y, 100) || (m.side === 'e' && !(spec || seen(P.x, P.y)))) continue;
-    const sk = P.r.w === 'aam' ? 'aam' : P.r.w === 'bomb' ? 'bomb' : P.r.w === 'cm' ? 'cm' : 'agm';
-    v3mAdd('msl:' + sk, () => v3mMsl(sk), P.x, P.y, airRelZ(P, m), P.h, P.sc, m.side === 'e' ? 1 : 0, 0);
+    if (typeof v3MslKey === 'function') {   // 按型号、真实尺寸，和发射它的飞机同一比例（v3msl.js）
+      const [ik, bd] = v3MslInst('msl:x:', P.r.w === 'bomb' ? 'bomb' : v3MslKey(m));
+      v3mAdd(ik, bd, P.x, P.y, airRelZ(P, m), P.h, P.sc * v3MslAk(v3MslPlaneKey(P.o)), m.side === 'e' ? 1 : 0, 0);
+    } else { const sk = P.r.w === 'aam' ? 'aam' : P.r.w === 'bomb' ? 'bomb' : P.r.w === 'cm' ? 'cm' : 'agm'; v3mAdd('msl:' + sk, () => v3mMsl(sk), P.x, P.y, airRelZ(P, m), P.h, P.sc, m.side === 'e' ? 1 : 0, 0); }
     if (P.r.k === 'main' && typeof v3dEjArm === 'function') v3dEjArm(P, m);   // 弹射臂（v3det.js）
   }
   // 飞行中的导弹：立体弹体，按飞行方向取朝向与俯仰（发光的尾焰、烟迹在 v3fx.js）；刚离机还没点火的在上面画
@@ -2039,8 +2042,8 @@ function v3mCollect(C, box) {
     if (!o) mp.set(m.id, o = { x: mx, y: my, z: z - 1, h: Math.atan2(m.ty - m.y, m.tx - m.x), p: VP ? 1.5 : .8 });
     const dx = mx - o.x, dy = my - o.y, dz = z - o.z, dl = Math.hypot(dx, dy);
     if (dl + Math.abs(dz) > .4) { o.h = dl > .05 ? Math.atan2(dy, dx) : o.h; o.p = Math.atan2(dz, Math.max(.01, dl)); o.x = mx; o.y = my; o.z = z; }
-    const [mk, sc] = MK3[m.kind] || ['aam', 2];
-    v3mAdd('msl:' + mk, () => v3mMsl(mk), mx, my, z, o.h, sc, m.side === 'e' ? 1 : 0, 0, o.p);
+    if (typeof v3MslKey === 'function') { const [ik, bd] = v3MslInst('msl:x:', v3MslKey(m)); v3mAdd(ik, bd, mx, my, z, o.h, v3MslK(m), m.side === 'e' ? 1 : 0, 0, o.p); }   // 按型号、真实尺寸（v3msl.js）
+    else { const [mk, sc] = MK3[m.kind] || ['aam', 2]; v3mAdd('msl:' + mk, () => v3mMsl(mk), mx, my, z, o.h, sc, m.side === 'e' ? 1 : 0, 0, o.p); }
     // 垂发舱盖：发射后翻开约 2 秒
     if (VP && m.t < 2.2 && typeof v3VlsOrigin === 'function') { const vo = v3VlsOrigin(m); if (vo) v3mAdd('vlslid', v3mVlsLid, vo.x, vo.y, vo.z, vo.h, 1, m.side === 'e' ? 1 : 0, -1.25 * clamp(m.t / .25, 0, 1) * clamp((2.2 - m.t) / .4, 0, 1)); }
   }

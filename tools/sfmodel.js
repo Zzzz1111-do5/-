@@ -5,7 +5,7 @@
 //   密钥只从环境变量读，不写进任何文件；下载缓存在 tools/.cache/sketchfab/<uid>/（不进仓库），已经下过的不用密钥
 //   下载来的文件只当数据读（解析 JSON 与二进制），不执行其中任何东西
 // 清单每项：uid、name、fwd / up（模型的前、上是哪根轴）、len（实长，米）、draft（吃水，米；飞机不给）、tris（减面后面数）、crease（棱线角度）；
-//   舰船可给 vls：垂发块 [x0, x1, y0, y1, 盖面高, 纵向格数, 横向格数]（转换后的建模坐标，米；对着转换结果量），垂发出弹与开盖动画按它
+//   车辆给 floor: true（轮子着地处为 z = 0）；skip：不要的节点名（正则，比如展示用的地面板）；舰船可给 vls：垂发块 [x0, x1, y0, y1, 盖面高, 纵向格数, 横向格数]（转换后的建模坐标，米；对着转换结果量），垂发出弹与开盖动画按它
 'use strict';
 const fs = require('fs'), path = require('path'), https = require('https'), { execFileSync } = require('child_process');
 const { MeshoptSimplifier } = require('meshoptimizer');
@@ -44,7 +44,7 @@ async function fetchModel(uid) {
 // —— glTF：展开全部三角形（世界坐标），带材质类别与明暗 ——
 const CT = { 5126: Float32Array, 5125: Uint32Array, 5123: Uint16Array, 5121: Uint8Array, 5122: Int16Array, 5120: Int8Array };
 const NC = { SCALAR: 1, VEC2: 2, VEC3: 3, VEC4: 4, MAT4: 16 };
-function loadGltf(dir) {
+function loadGltf(dir, skip) {
   const G = JSON.parse(fs.readFileSync(path.join(dir, 'scene.gltf'), 'utf8'));
   const bufs = G.buffers.map(b => {   // 下载来的文件不可信：缓冲区只许在模型目录里
     const f = path.resolve(dir, decodeURIComponent(b.uri || ''));
@@ -75,6 +75,7 @@ function loadGltf(dir) {
   };
   const walk = (i, M) => {
     const nd = G.nodes[i], W = mul(M, mat4(nd));
+    if (skip && skip.test(nd.name || '')) return;   // 清单 skip：不要的节点（展示用的地面板之类）
     if (nd.mesh != null) for (const pr of G.meshes[nd.mesh].primitives) {
       if ((pr.mode ?? 4) !== 4) continue;
       const P = acc(pr.attributes.POSITION), I = pr.indices != null ? acc(pr.indices) : Array.from({ length: P.length / 3 }, (_, k) => k), C = matCls(pr.material);
@@ -97,13 +98,13 @@ const pushAll = (A, B) => { for (const v of B) A.push(v); };
 
 async function convert(key, E) {
   const { dir, info } = await fetchModel(E.uid);
-  const { tris, mats } = loadGltf(dir);
+  const { tris, mats } = loadGltf(dir, E.skip ? new RegExp(E.skip) : null);
   // 换到建模坐标：x = 前、y = 右、z = 上（左手系）——glTF 是右手系，镜像一次，三角形顶点顺序反过来法线才朝外
   const F = AX(E.fwd || '+z'), U = AX(E.up || '+y'), R = cross(F, U);
   const all = []; for (const t of tris) for (let k = 0; k < 9; k += 3) all.push([t.p[k], t.p[k + 1], t.p[k + 2]]);
   const xs = all.map(p => dot(p, F)), ys = all.map(p => dot(p, R)), zs = all.map(p => dot(p, U));
   const x0 = amin(xs), x1 = amax(xs), k = E.len / (x1 - x0), yc = (pct(ys, .02) + pct(ys, .98)) / 2, zb = amin(zs);
-  const z0 = E.draft != null ? zb + E.draft / k : (amin(zs) + amax(zs)) / 2;   // 舰船：水线（离最低点 draft 米）为 z = 0；飞机：包围盒中心
+  const z0 = E.draft != null ? zb + E.draft / k : E.floor ? zb : (amin(zs) + amax(zs)) / 2;   // 舰船：水线（离最低点 draft 米）为 z = 0；车辆（floor）：着地点为 z = 0；导弹、飞机：包围盒中心
   const tf = p => [(dot(p, F) - (x0 + x1) / 2) * k, (dot(p, R) - yc) * k, (dot(p, U) - z0) * k];
   // 按类别焊接顶点（1 厘米网格）、减面
   const out = { v: [], t: [], e: [], s: [], l: [] };
@@ -112,7 +113,8 @@ async function convert(key, E) {
     if (!T.length) continue;
     const map = new Map(), V = [], S = [], IDX = [];
     const vid = p => { const q = tf(p), h = q.map(v => Math.round(v * 100)).join(','); let i = map.get(h); if (i == null) { i = V.length / 3; map.set(h, i); V.push(...q); } return i; };
-    for (const t of T) { const a = vid(t.p.slice(0, 3)), b = vid(t.p.slice(3, 6)), c = vid(t.p.slice(6, 9)); if (a === b || b === c || a === c) continue; IDX.push(a, c, b); S.push(t.s); }   // 反顺序（镜像）
+    const seen = new Set();   // 双面导出的模型每个面有一正一反两个三角形：只留一个，不然每条边都被当成非流形边描出来
+    for (const t of T) { const a = vid(t.p.slice(0, 3)), b = vid(t.p.slice(3, 6)), c = vid(t.p.slice(6, 9)); if (a === b || b === c || a === c) continue; const h = [a, b, c].sort((x, y) => x - y).join(','); if (seen.has(h)) continue; seen.add(h); IDX.push(a, c, b); S.push(t.s); }   // 反顺序（镜像）
     if (cls === 'mask') {   // 透明贴图的面：只取边界线（只属于一个三角形的边）
       const cnt = new Map(); for (let i = 0; i < IDX.length; i += 3) for (const [a, b] of [[IDX[i], IDX[i + 1]], [IDX[i + 1], IDX[i + 2]], [IDX[i + 2], IDX[i]]]) { const h = Math.min(a, b) + ',' + Math.max(a, b); cnt.set(h, (cnt.get(h) || 0) + 1); }
       const base = out.v.length / 3; pushAll(out.v, V);
@@ -132,6 +134,24 @@ async function convert(key, E) {
     const used = new Map(), base = out.v.length / 3;
     for (const i of I) if (!used.has(i)) { used.set(i, base + used.size); out.v.push(V[i * 3], V[i * 3 + 1], V[i * 3 + 2]); }
     const J = Array.from(I, i => used.get(i));
+    // 统一绕向：有的模型相邻面片朝向不一致（法线相反），会被当成锐角描出一片乱线——沿流形边广度优先翻正，每个连通块以原来的多数朝向为准
+    { const nt = J.length / 3, flip = new Uint8Array(nt), done = new Uint8Array(nt), E2 = new Map(), ek = (a, b) => a < b ? a + ',' + b : b + ',' + a;
+      for (let t = 0; t < nt; t++) for (let k = 0; k < 3; k++) { const a = J[t * 3 + k], b = J[t * 3 + (k + 1) % 3], h = ek(a, b); (E2.get(h) || E2.set(h, []).get(h)).push([t, a, b]); }
+      for (let s0 = 0; s0 < nt; s0++) {
+        if (done[s0]) continue;
+        done[s0] = 1; const st = [s0], comp = [s0];
+        while (st.length) {
+          const t = st.pop();
+          for (let k = 0; k < 3; k++) {
+            let a = J[t * 3 + k], b = J[t * 3 + (k + 1) % 3]; if (flip[t]) [a, b] = [b, a];
+            const L = E2.get(ek(a, b)); if (L.length !== 2) continue;
+            for (const [u, ua, ub] of L) if (u !== t && !done[u]) { flip[u] = ua === a && ub === b ? 1 : 0; done[u] = 1; st.push(u); comp.push(u); }
+          }
+        }
+        if (comp.reduce((n, t) => n + flip[t], 0) * 2 > comp.length) for (const t of comp) flip[t] ^= 1;
+      }
+      for (let t = 0; t < nt; t++) if (flip[t]) { const q = J[t * 3 + 1]; J[t * 3 + 1] = J[t * 3 + 2]; J[t * 3 + 2] = q; }
+    }
     // 发光棱线：边界边、非流形边、两面夹角大于 E.crease 度的边
     const P = i => [out.v[i * 3], out.v[i * 3 + 1], out.v[i * 3 + 2]], nrm = (a, b, c) => { const n = cross([P(b)[0] - P(a)[0], P(b)[1] - P(a)[1], P(b)[2] - P(a)[2]], [P(c)[0] - P(a)[0], P(c)[1] - P(a)[1], P(c)[2] - P(a)[2]]), l = Math.hypot(...n) || 1; return n.map(v => v / l); };
     const N = [], adj = new Map();
