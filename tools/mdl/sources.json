@@ -294,5 +294,69 @@
         1
       ]
     }
+  },
+  "firestation": {
+    "mode": "tex",
+    "file": "firestation.glb",
+    "name": "Fire Station No. 1",
+    "author": "CommonSpence",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/fire-station-no-1-87edf04deb28434993274d9f05070865",
+    "unit": 1
+  },
+  "wh3": {
+    "mode": "tex",
+    "file": "wh3.glb",
+    "name": "Pack - Realistic - 3 Warehouse",
+    "author": "Islide",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/pack-realistic-3-warehouse-320c272513a94c0482dbb3c4e79d61f5",
+    "unit": 1
+  },
+  "sawtooth": {
+    "mode": "tex",
+    "file": "sawtooth.glb",
+    "name": "Warehouse Building",
+    "author": "OmegaRedZA",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/warehouse-building-0c37b0f92cb54e07a1e1c6c3df9f8439",
+    "unit": 1
+  },
+  "smallwh": {
+    "mode": "tex",
+    "file": "smallwh.glb",
+    "name": "Small Warehouse",
+    "author": "Wardster",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/small-warehouse-c7f4c017c20943cb9e9e559822a5c402",
+    "unit": 1,
+    "drop": "internalArea|warehouseFloor|warehouseCeiling|barricade"
+  },
+  "industrial": {
+    "mode": "tex",
+    "file": "industrial.glb",
+    "name": "industrial building",
+    "author": "spicybamer",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/industrial-building-770acf6b0da74af397f748d95141f8be",
+    "unit": 6
+  },
+  "flats1": {
+    "mode": "tex",
+    "file": "flats1.glb",
+    "name": "Davison Street Flats 1 - Flat Roof",
+    "author": "Charlie_Zane",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/davison-street-flats-1-flat-roof-0f461ea81f8541db8d6a5f5e35133588",
+    "unit": 0.01
+  },
+  "wh99": {
+    "mode": "tex",
+    "file": "wh99.glb",
+    "name": "Warehouses",
+    "author": "99.Miles",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/warehouses-e6e105d35b3f486292c42ffa52f363c0",
+    "unit": 0.2
   }
 }

@@ -1344,9 +1344,12 @@ function v3mFort(kind) {
 const V3_PT = ['exit', 'hq', 'radar', 'battery', 'town', 'village', 'ford', 'bridge'];   // 有立体模型的据点建筑（render4.js 在 3D 时不再画它们的平面图）
 // 据点建筑（render4.js drawStructure 的同一套布局，单位与世界坐标一致）：海滩出口的半圆地堡与龙牙锥、指挥所、雷达站、炮兵排阵地、
 //   城镇哨所、村舍、渡口踏石、公路桥（炸断只剩桥墩）
-function v3mPoint(kind, blown) {
+// 据点里的房屋（据点局部坐标 x, y、占地 w × h、墙高 z、坡顶高 roof）：外部精细模型载入后由 v3props.js 换成真实楼房，这里就不再挤出（noHouse）
+const V3_PTHOUSE = { hq: [[-12, -6, 18, 12, 3.6, 0], [12, -8, 12, 9, 3.2, 0], [10, 8, 16, 8, 2.8, 0]], radar: [[-8, 8, 10, 7, 3.4, 0]], battery: [[0, -14, 14, 7, 2.2, 0]],
+  town: [[16, -4, 8, 14, 6, 0], [16, -14, 5, 6, 3, 0]], village: [[-10, -4, 8, 6, 2.6, 1.6], [6, -8, 7, 6, 2.6, 1.6], [2, 6, 9, 6, 2.6, 1.6]] };
+function v3mPoint(kind, blown, noHouse) {
   const M = mbNew();
-  const house = (x, y, w, h, z, roof) => { mbBox(M, x - w / 2, x + w / 2, y - h / 2, y + h / 2, 0, z, .8); if (roof) mbBox(M, x - w / 2, x + w / 2, y - h / 2, y + h / 2, z, z + roof, .95, { taper: Math.min(w, h) * .45 }); };
+  const house = (x, y, w, h, z, roof) => { if (noHouse) return; mbBox(M, x - w / 2, x + w / 2, y - h / 2, y + h / 2, 0, z, .8); if (roof) mbBox(M, x - w / 2, x + w / 2, y - h / 2, y + h / 2, z, z + roof, .95, { taper: Math.min(w, h) * .45 }); };
   if (kind === 'exit') {
     for (const sx of [-17, 17]) {   // 半圆混凝土地堡：圆顶朝海、平的一面朝内陆，朝海一侧一道射孔
       const P = Array.from({ length: 9 }, (_, i) => { const a = i / 8 * Math.PI; return [sx + Math.cos(a) * 6, Math.sin(a) * 6]; });
@@ -1875,7 +1878,8 @@ function v3mCollect(C, box) {
     if (!V3_PT.includes(k)) continue;
     const blown = k === 'bridge' && typeof isBlown === 'function' && isBlown(p.key), sd = p.owner === 'p' ? 0 : p.owner === 'e' ? 1 : 2;
     const z = k === 'bridge' ? Math.max(v3Ht(p.x - 26, p.y), v3Ht(p.x + 26, p.y), -2) - 2.4 : k === 'ford' ? sea(p.x, p.y) : v3Ht(p.x, p.y);
-    v3mAdd('pt:' + k + (blown ? ':x' : ''), () => v3mPoint(k, blown), p.x, p.y, z, 0, 1, sd);
+    const nh = !!V3_PTHOUSE[k] && typeof v3pReady === 'function' && v3pReady();   // 房屋换成了外部模型（v3props.js）
+    v3mAdd((nh ? 'ptn:' : 'pt:') + k + (blown ? ':x' : ''), () => v3mPoint(k, blown, nh), p.x, p.y, z, 0, 1, sd);
     if (k === 'radar') v3mAdd('rad:4', () => v3mRadar(4), p.x + 4, p.y - 4, z + 9.6, p.owner === 'e' ? t * 1.4 : .5, 1, sd);
   }
   for (const o of S.obst || []) if (o.known && !o.dead && inB(o.x, o.y)) v3mAdd('hedge', v3mHedgehog, o.x, o.y, sea(o.x, o.y), (o.x * 7.1 + o.y * 3.3) % 6.28, 1.3, 1);   // 海滩反登陆障碍

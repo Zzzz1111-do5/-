@@ -18,6 +18,13 @@ const V3P_PACKS = {
   hangar: { name: '机库', title: 'j type hanger', author: 'ElectricL', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/j-type-hanger-d86713d61b4941378a6ad21569e0cbac' },
   atc: { name: '塔台', title: 'Air Traffic Control Tower', author: 'abass20', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/air-traffic-control-tower-84f215391662453680e646649d42b264' },
   quonset: { name: '铁皮营房', title: 'Military Style Building (with animations)', author: 'TampaJoey', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/military-style-building-with-animations-1671685e1dd94b6e9216ead632f08f6e' },
+  firestation: { name: '消防站', title: 'Fire Station No. 1', author: 'CommonSpence', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/fire-station-no-1-87edf04deb28434993274d9f05070865' },
+  wh3: { name: '库房', title: 'Pack - Realistic - 3 Warehouse', author: 'Islide', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/pack-realistic-3-warehouse-320c272513a94c0482dbb3c4e79d61f5' },
+  sawtooth: { name: '厂房', title: 'Warehouse Building', author: 'OmegaRedZA', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/warehouse-building-0c37b0f92cb54e07a1e1c6c3df9f8439' },
+  smallwh: { name: '小库房', title: 'Small Warehouse', author: 'Wardster', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/small-warehouse-c7f4c017c20943cb9e9e559822a5c402' },
+  industrial: { name: '办公楼', title: 'industrial building', author: 'spicybamer', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/industrial-building-770acf6b0da74af397f748d95141f8be' },
+  flats1: { name: '公寓楼', title: 'Davison Street Flats 1 - Flat Roof', author: 'Charlie_Zane', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/davison-street-flats-1-flat-roof-0f461ea81f8541db8d6a5f5e35133588' },
+  wh99: { name: '砖砌库房', title: 'Warehouses', author: '99.Miles', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/warehouses-e6e105d35b3f486292c42ffa52f363c0' },
   palms: { name: '棕榈树', title: 'Palm Trees', author: 'YadroGames', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/palm-trees-55690379305145488e20afb05fc687e6' },
   rocks3: { name: '岩石', title: 'Rocks Set 3', author: 'DJMaesen', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/rocks-set-3-9a160330d1c14268948248f387889b35' },
   sky: { name: '天空', title: 'Kloofendal 48d Partly Cloudy (Pure Sky)', author: 'Greg Zaal / Poly Haven', license: 'CC0', url: 'https://polyhaven.com/a/kloofendal_48d_partly_cloudy_puresky' },
@@ -194,7 +201,7 @@ const v3pVar = (pk, name) => { const P = v3pPack(pk); return P ? P.vars.get(name
 // —— 摆放：按地图格子种树、灌木、岩石，城镇房屋、机场设施换模型（地图或地形变了重算）——
 const V3P_TS = 30;   // 远处替身按 30 × 30 格（300 米）分块
 function v3pPlace() {
-  const need = ['treepack', 'cliffs', 'jph1', 'jph2', 'jph3', 'house', 'oldconc', 'hangar', 'atc', 'quonset'];
+  const need = ['treepack', 'cliffs', 'jph1', 'jph2', 'jph3', 'house', 'oldconc', 'hangar', 'atc', 'quonset', 'firestation', 'wh3', 'sawtooth', 'smallwh', 'industrial', 'flats1', 'wh99'];
   const got = need.map(id => v3pPack(id) || (V3P.packs.get(id) || {}).st === -1);   // 先全部发起下载（同时载入），再看是不是都好了
   if (!got.every(Boolean)) return false;
   const tp = v3pPack('treepack');
@@ -353,8 +360,12 @@ function v3pStatic(vOf) {
   const hv = V3P_HOUSE.map(([pk, nm, rot]) => [vOf(pk, nm), rot]).filter(o => o[0] >= 0), fv = V3P_FLAT.map(([pk, nm, rot]) => [vOf(pk, nm), rot]).filter(o => o[0] >= 0);
   const sc = (b, x) => { const t = TER.type[b]; return t === T.ROAD || t === T.BRIDGE ? 3 : t === T.TOWN ? 0 : t === T.RIVER || isWater(t) ? .5 : 1; };
   const hr = rng(TER.seed + 913);
+  // 据点房屋占的地方（城镇里的指挥所）：这里的普通民房不放，免得叠在一起
+  const ptR = [];
+  if (typeof V3_PTHOUSE === 'object') for (const p of (typeof S === 'object' && S && S.points) || []) { const L = V3_PTHOUSE[typeof PKIND === 'function' ? PKIND(p.key) : '']; if (L) for (const [hx, hy, w, h] of L) ptR.push([p.x + hx - w / 2 - 2, p.y + hy - h / 2 - 2, p.x + hx + w / 2 + 2, p.y + hy + h / 2 + 2]); }
   if (hv.length && fv.length) for (const b of B) {
     const fw = (b.r ? b.h : b.w) + 1, fh = (b.r ? b.w : b.h) + 1, cx = b.x + b.dx, cy = b.y + b.dy, gx = Math.floor(b.x / CELL), gy = Math.floor(b.y / CELL);
+    if (ptR.some(r => cx + fw / 2 > r[0] && cx - fw / 2 < r[2] && cy + fh / 2 > r[1] && cy - fh / 2 < r[3])) continue;
     // 朝街的一面：四个邻格里路最优先，其次空地
     const dirs = [[1, 0, 0], [0, 1, Math.PI / 2], [-1, 0, Math.PI], [0, -1, -Math.PI / 2]].map(([dx, dy, a]) => { const x = gx + dx, y = gy + dy; return [x >= 0 && y >= 0 && x < GW && y < GH ? sc(y * GW + x) + hr() * .3 : 0, a]; }).sort((p, q) => q[0] - p[0]);
     const face = dirs[0][1], alongX = Math.abs(Math.cos(face)) > .5;   // 正面朝东西：模型的进深（x）沿世界 x
@@ -370,8 +381,39 @@ function v3pStatic(vOf) {
     add(best.v, cx, cy, zc, face + best.rot, best.s, best.s, best.s * (b.f ? 1.05 : 1));
   }
   if (hv.length && fv.length) V3P.rep.add('town');
-  // 机场：拱顶的换机库 / 铁皮营房，坡顶的金属、砖瓦库房换铁皮营房，塔台换塔台模型
+  // 据点里的房屋（指挥所、雷达站、炮兵排的平房，哨所，渔村的坡顶房）：按占地放水泥楼 / 民房模型，整体缩放（不压扁），朝向随机转 180°
+  if (hv.length && fv.length && typeof V3_PTHOUSE === 'object') for (const p of (typeof S === 'object' && S && S.points) || []) {
+    const k = typeof PKIND === 'function' ? PKIND(p.key) : null, L = V3_PTHOUSE[k];
+    if (!L) continue;
+    for (const [hx, hy, w, h, , roof] of L) {
+      const cx = p.x + hx, cy = p.y + hy, opts = roof ? hv : fv;
+      let best = null;
+      for (const [v, rot] of opts) for (const q of [0, 1]) {   // 两个朝向：模型长边对着占地长边
+        const bb = V3P.VL[v].V.bb, rq = (Math.abs(Math.sin(rot)) > .5) !== !!q, mw = rq ? bb[1][1] - bb[0][1] : bb[1][0] - bb[0][0], mh = rq ? bb[1][0] - bb[0][0] : bb[1][1] - bb[0][1];
+        const s0 = Math.min((w + 1) / mw, (h + 1) / mh), sc0 = Math.abs(Math.log(s0)) + hr() * .2;
+        if (!best || sc0 < best.sc) best = { v, a: rot + (q ? Math.PI / 2 : 0) + (hr() < .5 ? Math.PI : 0), s: s0, sc: sc0 };
+      }
+      const zc = Math.min(...[[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([sx, sy]) => v3Ht(cx + sx * w / 2, cy + sy * h / 2))) - .3;
+      add(best.v, cx, cy, zc, best.a, best.s, best.s, best.s);
+    }
+  }
+  // 机场：拱顶的换机库 / 铁皮营房，坡顶的库房换成排库房（金属）/ 砖砌库房，平顶的按材质与大小换消防站、办公楼、公寓楼、厂房、小库房，塔台换塔台；
+  //   模型长边对着建筑长边，长宽比差得多就沿长边并排放几栋（每栋按自己的一份占地缩放）
   const blocks = typeof afb3dBlocks === 'function' ? afb3dBlocks() : [], hg = vOf('hangar', 'hangar'), qs = vOf('quonset', 'quonset'), tw = vOf('atc', 'atc');
+  const fs = vOf('firestation', 'firestation'), w3 = vOf('wh3', 'wh3'), st = vOf('sawtooth', 'sawtooth'), sw = vOf('smallwh', 'smallwh'), ind = vOf('industrial', 'industrial'), fl = vOf('flats1', 'flats1'), w99 = vOf('wh99', 'wh99');
+  let fire = false;
+  const pick = (k, big, small) => {
+    const asp = big / small, or = (...vs) => vs.find(v => v >= 0) ?? -1;
+    if (k.r === 'arch') return big >= 30 ? or(hg, qs) : or(qs);
+    if (k.r === 'has') return or(qs);   // 加固机堡：拱顶，外形接近半圆营房
+    if (k.r === 'gable') return k.m === 'mound' ? -1 : k.m === 'metal' ? or(w3, qs) : or(w99, w3, qs);
+    if (k.r !== 'flat' || k.m === 'canopy') return -1;
+    if (big < 16) return or(sw);
+    if (k.m === 'dark') return or(st, ind);
+    if (k.m === 'white') return or(fl, ind);
+    if (k.m === 'conc' && !fire && asp >= 1.5 && asp <= 2.4 && fs >= 0) { fire = true; return fs; }
+    return asp < 1.45 ? or(ind, fl) : or(fl, ind);
+  };
   blocks.forEach((k, i) => {
     const P = k.pts;
     if (P.length !== 4 && k.k !== 'cab') return;
@@ -384,15 +426,15 @@ function v3pStatic(vOf) {
       return;
     }
     const L = Math.hypot(P[1][0] - P[0][0], P[1][1] - P[0][1]), Wd = Math.hypot(P[2][0] - P[1][0], P[2][1] - P[1][1]), a = Math.atan2(P[1][1] - P[0][1], P[1][0] - P[0][0]);
-    const cx = P.reduce((s, p) => s + p[0], 0) / 4, cy = P.reduce((s, p) => s + p[1], 0) / 4, g = Math.min(...P.map(([x, y]) => v3Ht(x, y))) - .4;
-    let v = -1;
-    if (k.r === 'arch') v = Math.max(L, Wd) >= 30 && hg >= 0 ? hg : qs;
-    else if (k.r === 'gable' && k.m !== 'mound') v = qs;
+    const big = Math.max(L, Wd), small = Math.min(L, Wd), v = pick(k, big, small);
     if (v < 0) return;
-    const bb = V3P.VL[v].V.bb, mL = bb[1][0] - bb[0][0], mW = bb[1][1] - bb[0][1], mH = bb[1][2] - bb[0][2];
-    const long = L >= Wd, aL = long ? a : a + Math.PI / 2, LL = long ? L : Wd, WW = long ? Wd : L;   // 模型长轴对着建筑长边
-    const sw = WW / mW, sl = v === qs ? LL / mL : Math.min(LL / mL, sw * 1.15), sz = v === qs ? sw * .9 : Math.min(sl, sw);
-    add(v, cx, cy, g, aL, sl, sw, sz);
+    const cx = P.reduce((s, p) => s + p[0], 0) / 4, cy = P.reduce((s, p) => s + p[1], 0) / 4, g = Math.min(...P.map(([x, y]) => v3Ht(x, y))) - .4;
+    const bb = V3P.VL[v].V.bb, mL = bb[1][0] - bb[0][0], mW = bb[1][1] - bb[0][1], mBig = Math.max(mL, mW), mSmall = Math.min(mL, mW);
+    const aL = L >= Wd ? a : a + Math.PI / 2, yaw = mL >= mW ? aL : aL - Math.PI / 2;   // 模型长边转到建筑长边
+    const n = v === hg ? 1 : Math.max(1, Math.round((big / small) / (mBig / mSmall))), seg = big / n;
+    const sLong = seg / mBig, sShort = small / mSmall, sx = mL >= mW ? sLong : sShort, sy = mL >= mW ? sShort : sLong;
+    const sz = v === qs ? sShort * .9 : v === hg ? Math.min(sLong, sShort) : Math.min(sLong, sShort) * 1.05;
+    for (let j = 0; j < n; j++) { const o = ((j + .5) / n - .5) * big; add(v, cx + Math.cos(aL) * o, cy + Math.sin(aL) * o, g, yaw, v === hg ? Math.min(sx, sy * 1.15) : sx, sy, sz); }
     V3P.rep.add(i);
   });
   for (const c of V3P.B || []) gl.deleteBuffer(c.b);
