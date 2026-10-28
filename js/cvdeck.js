@@ -14,7 +14,7 @@ const CVD = { taxi: 16, rev: 6, run: 9, climb: 1.5, cnp: .8, eng: 1.1, hook: 2.4
 const cvCat = k => CVG.cats[clamp(k | 0, 0, CVG.cats.length - 1)];
 const cvCatPt = (k, s) => { const C = cvCat(k); return [C.u + Math.cos(C.a) * s, C.v + Math.sin(C.a) * s]; };
 // 右舷甲板边线（不算升降机缺口）：舷边通道口的位置
-const CVD_EDGE = [[158, 2], [156, 8], [150, 14], [140, 20], [120, 27], [96, 32], [70, 34], [-140, 33], [-152, 30], [-158, 22]];
+const CVD_EDGE = [[158, 13], [118, 16.5], [100, 17], [90, 21], [84, 27], [74, 33], [52, 34], [50, 37], [-116, 37], [-152, 28], [-158, 26]];
 function cvEdgeV(u) {
   for (let i = 1; i < CVD_EDGE.length; i++) { const [u0, v0] = CVD_EDGE[i - 1], [u1, v1] = CVD_EDGE[i]; if (u <= u0 && u >= u1) return lerp(v0, v1, (u0 - u) / (u0 - u1 || 1)); }
   return 18;
@@ -188,7 +188,7 @@ function cvLaunchStep(p, c, dt) {
     p.spd = Math.min(p.spd + CVD.acc * dt, 175); p.cs = (p.cs || 0) + p.spd * dt;
     [p.lu, p.lv] = cvCatPt(p.cat, p.cs); p.lh = C.a; p.fold = 0; p.cpo = 0;
     cvPlace(p, c);
-    if (p.cs >= C.L) { c.jl[p.cat] = S.t; airSet(p, 'out'); p.alt = .05; p.lu = p.lv = null; p.dk = null; p.path = null; }
+    if (p.cs >= C.L) { c.jl[p.cat] = S.t; airSet(p, 'out'); p.alt = .05; p.lT = S.t; p.lu = p.lv = null; p.dk = null; p.path = null; }   // lT：离舰时刻（画面用：抬头、下沉、收起落架）
     return;
   }
   switch (p.dk) {
@@ -330,9 +330,9 @@ function cvPilotDraw(ctx, p, k, time) {
   manDraw(ctx, x, y, c.heading + P.a, 'pilot', COL.g, 'p', { ...MAN_IDLE, k: .5 * k * (1 + P.z * .05), mv: P.run, run: P.run, ph: P.ph, clb: P.clb, t: time });
 }
 // —— 舰体占位：别的舰艇不能压在航母上 ——
-// 舰体（外扩 r）在甲板局部坐标里的范围：u −160…160、v −44…36（左舷斜角甲板伸得更远）；点在里面时返回推出去的最近点
+// 舰体（外扩 r）在甲板局部坐标里的范围：u −160…160、v −47…39（左舷斜角甲板伸得更远）；点在里面时返回推出去的最近点
 function cvFootOut(c, x, y, r) {
-  const [u, v] = cvL(x, y, c), u0 = -160 - r, u1 = 160 + r, v0 = -44 - r, v1 = 36 + r;
+  const [u, v] = cvL(x, y, c), u0 = -160 - r, u1 = 160 + r, v0 = -47 - r, v1 = 39 + r;
   if (u <= u0 || u >= u1 || v <= v0 || v >= v1) return null;
   const d = [[u - u0, u0, v], [u1 - u, u1, v], [v - v0, u, v0], [v1 - v, u, v1]].sort((a, b) => a[0] - b[0])[0];
   return cvW(d[1], d[2], c);
@@ -359,7 +359,7 @@ function cvCamZ(x, y) {
   let best = null;
   for (const c of cvAll()) {
     if (!(c.x > -999)) continue;
-    const [u, v] = cvL(x, y, c), d = Math.hypot(Math.max(0, Math.abs(u) - 158), Math.max(0, v > 0 ? v - 34 : -v - 42));
+    const [u, v] = cvL(x, y, c), d = Math.hypot(Math.max(0, Math.abs(u) - 158), Math.max(0, v > 0 ? v - 37 : -v - 42));
     if (d >= 60) continue;
     const k = 1 - d / 60, z = lerp(-2.6, -2.6 + CVG.zd, k * k * (3 - 2 * k));
     if (best == null || z > best) best = z;
