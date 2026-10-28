@@ -4,6 +4,8 @@
 // 用法：SKETCHFAB_TOKEN=你的密钥 node tools/sfmodel.js [键 …]（不给键就处理清单里全部）
 //   密钥只从环境变量读，不写进任何文件；下载缓存在 tools/.cache/sketchfab/<uid>/（不进仓库），已经下过的不用密钥
 //   下载来的文件只当数据读（解析 JSON 与二进制），不执行其中任何东西
+// 清单每项：uid、name、fwd / up（模型的前、上是哪根轴）、len（实长，米）、draft（吃水，米；飞机不给）、tris（减面后面数）、crease（棱线角度）；
+//   舰船可给 vls：垂发块 [x0, x1, y0, y1, 盖面高, 纵向格数, 横向格数]（转换后的建模坐标，米；对着转换结果量），垂发出弹与开盖动画按它
 'use strict';
 const fs = require('fs'), path = require('path'), https = require('https'), { execFileSync } = require('child_process');
 const { MeshoptSimplifier } = require('meshoptimizer');
@@ -155,7 +157,7 @@ async function convert(key, E) {
   for (const s of out.s) buf.writeUInt8(Math.round((s + 1) * 127.5), o++);
   for (const v of out.l) wi(v);
   const credit = creditLine(info);
-  const meta = { name: E.name, len: E.len, nv, nt, nl, idx, bb: bb.map(v => +v.toFixed(3)), credit: { title: info.name, author: info.author, url: info.url, license: info.license } };
+  const meta = { name: E.name, len: E.len, nv, nt, nl, idx, bb: bb.map(v => +v.toFixed(3)), ...(E.vls ? { vls: E.vls } : {}), credit: { title: info.name, author: info.author, url: info.url, license: info.license } };
   fs.mkdirSync(OUT, { recursive: true });
   fs.writeFileSync(path.join(OUT, key + '.js'), `'use strict';\n// ${E.name}：${credit}\n// 由 tools/sfmodel.js 转换（减面、统一朝向与尺寸、算发光棱线），不要手改\nV3X.add('${key}', ${JSON.stringify(meta)}, '${buf.toString('base64')}');\n`);
   console.log(`${key}：${info.name}（${info.author}，${info.license}）原 ${tris.length} 面 → ${nt} 面、${nl} 条轮廓线，${(buf.length / 1024).toFixed(0)} KB；材质 ${mats.join(' ')}`);
