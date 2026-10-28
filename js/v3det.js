@@ -92,28 +92,88 @@ function v3dCatFx(out, C, inB) {
     }
   }
 }
-// v3units.js plane()：刚离舰的舰载机——先略微下沉、抬头爬升，约 1 秒后收起落架（cvdeck.js 记的离舰时刻 p.lT）
-function v3dLaunch(p) {
-  const u = p.lT != null && p.phase === 'out' ? S.t - p.lT : -1;
-  if (!(u >= 0 && u < 2.6)) return null;
-  return { gear: u < 1.05, pitch: .2 * sm01(u / .45) * (1 - sm01((u - 1.4) / 1.2)), dz: -1.3 * Math.sin(Math.PI * clamp(u / .9, 0, 1)) };
+// ———————————————— 飞行姿态：js/aero.js（tools/aero_jsbsim.py 用 JSBSim 离线算）————————————————
+//   弹射离舰的头 14 秒：高度（含离舰后先下沉约 3 米）、俯仰、平尾、前缘襟翼、起落架照 JSBSim 的时间历程；
+//   之后：俯仰 = 画面上的航迹角 + 迎角，迎角按升力线从速度、过载、翼载算（AERO.a0 / cla），平尾按配平规律 + 俯仰角速度
+const V3_WS = { j35: 500, j20: 450, j15: 470, j36: 480, j50: 480, h6k: 520, y20: 620, kj600: 380 };   // 翼载（公斤 / 平方米，公开估算）：算迎角
+const V3D_D2R = Math.PI / 180;
+// 离舰后 u 秒的一行 [离甲板高, 俯仰, 迎角, 速度, 平尾, 前缘襟翼, 起落架]（插值）；超出 14 秒返回 null
+function v3dAeroAt(u) {
+  if (typeof AERO !== 'object' || !(u >= 0)) return null;
+  const R = AERO.launch.rows, f = u / AERO.launch.dt, i = Math.floor(f);
+  if (i >= R.length - 1) return null;
+  const A = R[i], B = R[i + 1], t = f - i;
+  return A.map((v, j) => v + (B[j] - v) * t);
 }
-// 机身仰角跟着画面上的实际航迹走（爬升抬头、俯冲低头、平飞放平）：每帧按高度变化与水平位移算航迹角，平滑约 1/3 秒；
-//   刚离舰：抬头离舰的姿态（v3dLaunch）兜底，速度还低的头几秒迎角大一点。o 飞机、sd 1 = 敌方、z 画面高度、L = v3dLaunch(o)
+// v3units.js plane()：刚离舰的舰载机（cvdeck.js 记的离舰时刻 p.lT）——起落架、俯仰、平尾照 JSBSim；高度在 view3d.js v3ClimbZ
+function v3dLaunch(p) {
+  const u = p.lT != null && p.phase === 'out' ? S.t - p.lT : -1, A = u >= 0 ? v3dAeroAt(u) : null;
+  if (!A) return null;
+  return { gear: A[6] > .5, pitch: A[1] * V3D_D2R, dz: 0, de: A[4] * V3D_D2R, lef: A[5] * V3D_D2R, u };
+}
+// 迎角（弧度）：升力系数 CL = n · 翼载 · g / (½ρV²)，α = a0 + CL / CLα（JSBSim 配平拟合的升力线），限在 −4°…18°
+function v3dAlpha(o, key, n) {
+  if (typeof AERO !== 'object') return 0;
+  const V = Math.max(45, o.spd || 200), q = .5 * 1.15 * V * V, CL = n * (V3_WS[key] || 450) * 9.81 / q;
+  return clamp(AERO.a0 + CL / AERO.cla, -4, 18) * V3D_D2R;
+}
+// 机身俯仰：航迹角（画面上每帧的高度变化与水平位移，平滑约 1/3 秒）+ 迎角（过载按航迹角变化率与坡度算）；刚离舰按 JSBSim 的俯仰，
+//   12–14 秒平滑接上。顺带算舵面：平尾 / 鸭翼的偏角（配平 + 俯仰角速度）、左右差动（滚转角速度）。o 飞机、sd 1 = 敌方、z 画面高度、L = v3dLaunch(o)
 const V3D_PT = new Map();
-function v3dPitch(o, sd, z, L) {
-  const key = (sd ? 'e' : 'p') + o.id;
-  let P = V3D_PT.get(key);
-  if (!P || P.S !== S || S.t < P.t) { P = { x: o.x, y: o.y, z, t: S.t, g: 0, pt: 0, S }; V3D_PT.set(key, P); }
+function v3dPitch(o, sd, z, L, key) {
+  const id = (sd ? 'e' : 'p') + o.id;
+  let P = V3D_PT.get(id);
+  if (!P || P.S !== S || S.t < P.t) { P = { x: o.x, y: o.y, z, t: S.t, g: 0, gd: 0, pt: 0, q: 0, b: o.bank || 0, p: 0, de: 0, da: 0, S }; V3D_PT.set(id, P); }
   const dt = S.t - P.t;
   if (dt > 1e-4) {
-    const dh = Math.hypot(o.x - P.x, o.y - P.y), g = clamp(Math.atan2(z - P.z, Math.max(dh, .3)), -.6, .5);
-    P.g += (g - P.g) * Math.min(1, dt * 3); P.x = o.x; P.y = o.y; P.z = z; P.t = S.t;
+    const dh = Math.hypot(o.x - P.x, o.y - P.y), g = clamp(Math.atan2(z - P.z, Math.max(dh, .3)), -.6, .5), g0 = P.g;
+    P.g += (g - P.g) * Math.min(1, dt * 3); P.gd += ((P.g - g0) / dt - P.gd) * Math.min(1, dt * 2);
+    const b = o.bank || 0; P.p += ((b - P.b) / dt - P.p) * Math.min(1, dt * 4); P.b = b;
+    P.x = o.x; P.y = o.y; P.z = z;
   }
   if (V3D_PT.size > 400) for (const [k, v] of V3D_PT) if (v.S !== S || S.t - v.t > 5) V3D_PT.delete(k);
-  const u = o.lT != null ? S.t - o.lT : -1, aoa = u >= 0 && u < 8 ? .07 * sm01(u / .4) * (1 - sm01((u - 3) / 4)) : 0;
-  P.pt = Math.max(L ? L.pitch : -9, P.g + aoa);
-  return P.pt;
+  const k = key || (o.kind && typeof v3dKey === 'function' ? v3dKey(o) : 'j35'), n = clamp((1 + Math.max(45, o.spd || 200) * P.gd / 9.81) / Math.max(.3, Math.cos(o.bank || 0)), -1, 9);
+  const al = v3dAlpha(o, k, n), pf = P.g + al, w = L ? sm01((L.u - 12) / 2) : 1;
+  const pt = L ? L.pitch * (1 - w) + pf * w : pf, q = dt > 1e-4 ? (pt - P.pt) / dt : P.q;
+  P.q += (q - P.q) * Math.min(1, Math.max(dt, 0) * 4);
+  // 平尾（JSBSim 符号：负 = 后缘上偏 = 抬头）：离舰照数据；之后按配平规律 δe = d0 + d1 α，再加俯仰角速度的一项
+  const trim = typeof AERO === 'object' ? (AERO.d0 + AERO.d1 * al / V3D_D2R) * V3D_D2R : 0;
+  P.de = L ? L.de * (1 - w) + (trim - .35 * P.q) * w : clamp(trim - .35 * P.q, -.3, .15);
+  P.da = clamp(.3 * P.p, -.2, .2);   // 滚转：左右舵面差动
+  P.t = S.t; P.pt = pt;
+  return pt;
+}
+// 这一帧的舵面偏角（弧度）：de 平尾 / 鸭翼（负 = 抬头），da 差动
+const v3dSurf = (o, sd) => { const P = V3D_PT.get((sd ? 'e' : 'p') + o.id); return P && P.S === S ? P : { de: 0, da: 0 }; };
+// ———————————————— 导入的飞机模型（Sketchfab，v3x.js）————————————————
+//   空中用收起落架的 <键>_a，地面、甲板、刚离舰还没收起落架时用 <键>；网格按米、着地点 z = 0，按游戏里的机型尺寸缩放（sz / 实长）
+//   俯仰、滚转绕机身中线转（不是绕机轮）；活动舵面（平尾、鸭翼）单独一块：先绕自己的转轴偏转，再随机身滚转、俯仰、转向
+const V3_PX = { j35: 'j35', j20: 'j20', j36: 'j36', j50: 'j50', y20: 'y20', transport: 'y20' };
+// 3 × 3 旋转（与 v3units.js 实例着色器同一约定：先绕 x 滚转、再绕 y 俯仰（机头抬起为正）、再绕 z 转向；GL 坐标 y 取反）
+const v3dRx = r => { const c = Math.cos(r), s = Math.sin(r); return [1, 0, 0, 0, c, -s, 0, s, c]; };
+const v3dRy = p => { const c = Math.cos(p), s = Math.sin(p); return [c, 0, -s, 0, 1, 0, s, 0, c]; };
+const v3dRz = a => { const c = Math.cos(a), s = Math.sin(a); return [c, -s, 0, s, c, 0, 0, 0, 1]; };
+const v3dMul = (A, B) => { const o = []; for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) o.push(A[i * 3] * B[j] + A[i * 3 + 1] * B[3 + j] + A[i * 3 + 2] * B[6 + j]); return o; };
+const v3dMv = (M, v) => [M[0] * v[0] + M[1] * v[1] + M[2] * v[2], M[3] * v[0] + M[4] * v[1] + M[5] * v[2], M[6] * v[0] + M[7] * v[1] + M[8] * v[2]];
+// 画一架导入的飞机；没有这型或还没加载完返回 false（照旧画代码建的）。ground：z 是地面（机轮着地）；否则 z 是机身中线高度
+function v3dPlaneX(key, sz, x, y, z, ground, h, side, roll, pitch, gear, sf) {
+  const mk = V3_PX[key];
+  if (!mk || typeof v3xMesh !== 'function') return false;
+  const Mg = v3xMesh(mk), Ma = v3xMesh(mk + '_a'), M = gear ? Mg : Ma;   // 两个都要：起飞、着陆来回换
+  if (!M || !Mg) return false;
+  const s = sz / M.len, R = v3dMul(v3dMul(v3dRz(-h), v3dRy(pitch)), v3dRx(roll));
+  let ox = x, oy = y, oz = z;
+  if (!ground) { const o = v3dMv(R, [0, 0, M.zc * s]); ox -= o[0]; oy += o[1]; oz -= o[2]; }   // 机身中线对准 z
+  v3mAdd('x:' + mk + (gear ? '' : '_a'), () => M, ox, oy, oz, h, s, side, roll, pitch);
+  for (const nm in Mg.parts || {}) for (const sd of ['L', 'R']) {
+    const P = typeof V3X === 'object' && V3X.mesh[mk + '_' + nm + sd];
+    if (!P) { v3xMesh(mk + '_' + nm + sd); continue; }
+    const [px, pz] = Mg.parts[nm], de = sf ? sf.de || 0 : 0, da = sf ? sf.da || 0 : 0;
+    const d = (nm === 'canard' ? -1.6 * de : de) + (sd === 'L' ? da : -da);   // 平尾：负 = 后缘上偏（抬头）；鸭翼抬头时前缘上偏
+    const Rp = v3dMul(R, v3dRy(d)), o = v3dMv(R, [px * s, 0, pz * s]);
+    v3mAdd('x:' + mk + '_' + nm + sd, () => P, ox + o[0], oy - o[1], oz + o[2], -Math.atan2(Rp[3], Rp[0]), s, side, Math.atan2(Rp[7], Rp[8]), Math.asin(clamp(Rp[6], -1, 1)));
+  }
+  return true;
 }
 // v3fx.js：这一帧算好的仰角（加力尾焰的方向）
 const v3dPitchOf = (o, sd) => { const P = V3D_PT.get((sd ? 'e' : 'p') + o.id); return P && P.S === S ? P.pt : 0; };

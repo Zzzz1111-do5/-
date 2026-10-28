@@ -5,7 +5,9 @@
 //   密钥只从环境变量读，不写进任何文件；下载缓存在 tools/.cache/sketchfab/<uid>/（不进仓库），已经下过的不用密钥
 //   下载来的文件只当数据读（解析 JSON 与二进制），不执行其中任何东西
 // 清单每项：uid、name、fwd / up（模型的前、上是哪根轴）、len（实长，米）、draft（吃水，米；飞机不给）、tris（减面后面数）、crease（棱线角度）；
-//   车辆给 floor: true（轮子着地处为 z = 0）；skip：不要的节点名（正则，比如展示用的地面板）；舰船可给 vls：垂发块 [x0, x1, y0, y1, 盖面高, 纵向格数, 横向格数]（转换后的建模坐标，米；对着转换结果量），垂发出弹与开盖动画按它
+//   车辆、飞机给 floor: true（轮子着地处为 z = 0）；飞机给 air: {} 另出收起落架的 <键>_a（gearless）；
+//   lines：{ crease 度, min 米, tol 米 } 只画整理好的轮廓线（featureLines），三角形不描边；
+//   parts：活动舵面 { 名: { box: [x0, x1, |y| 下限, |y| 上限, z0, z1], piv: [转轴 x, 转轴 z], nz: 法线竖直分量下限 } }，切成 <键>_<名>L / R；skip：不要的节点名（正则，比如展示用的地面板）；舰船可给 vls：垂发块 [x0, x1, y0, y1, 盖面高, 纵向格数, 横向格数]（转换后的建模坐标，米；对着转换结果量），垂发出弹与开盖动画按它
 'use strict';
 const fs = require('fs'), path = require('path'), https = require('https'), { execFileSync } = require('child_process');
 const { MeshoptSimplifier } = require('meshoptimizer');
@@ -95,17 +97,45 @@ const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2], cross = (a, b) =>
 const pct = (A, q) => { const s = Float64Array.from(A).sort(); return s[Math.min(s.length - 1, Math.max(0, Math.round(q * (s.length - 1))))]; };
 const amin = A => { let m = Infinity; for (const v of A) if (v < m) m = v; return m; }, amax = A => { let m = -Infinity; for (const v of A) if (v > m) m = v; return m; };   // 几十万个数不能用 Math.min(...A)（调用栈放不下）
 const pushAll = (A, B) => { for (const v of B) A.push(v); };
+const STATS = {};   // 每个输出键的棱线统计（打印用）
 
 async function convert(key, E) {
   const { dir, info } = await fetchModel(E.uid);
-  const { tris, mats } = loadGltf(dir, E.skip ? new RegExp(E.skip) : null);
+  let { tris, mats } = loadGltf(dir, E.skip ? new RegExp(E.skip) : null);
   // 换到建模坐标：x = 前、y = 右、z = 上（左手系）——glTF 是右手系，镜像一次，三角形顶点顺序反过来法线才朝外
   const F = AX(E.fwd || '+z'), U = AX(E.up || '+y'), R = cross(F, U);
   const all = []; for (const t of tris) for (let k = 0; k < 9; k += 3) all.push([t.p[k], t.p[k + 1], t.p[k + 2]]);
   const xs = all.map(p => dot(p, F)), ys = all.map(p => dot(p, R)), zs = all.map(p => dot(p, U));
   const x0 = amin(xs), x1 = amax(xs), k = E.len / (x1 - x0), yc = (pct(ys, .02) + pct(ys, .98)) / 2, zb = amin(zs);
   const z0 = E.draft != null ? zb + E.draft / k : E.floor ? zb : (amin(zs) + amax(zs)) / 2;   // 舰船：水线（离最低点 draft 米）为 z = 0；车辆（floor）：着地点为 z = 0；导弹、飞机：包围盒中心
-  const tf = p => [(dot(p, F) - (x0 + x1) / 2) * k, (dot(p, R) - yc) * k, (dot(p, U) - z0) * k];
+  const tf0 = p => [(dot(p, F) - (x0 + x1) / 2) * k, (dot(p, R) - yc) * k, (dot(p, U) - z0) * k];
+  let tf = tf0;
+  // 活动舵面（parts）：按区域切出近似水平的面（平尾、鸭翼），左右各一块，坐标以转轴为原点（画面里按算出的偏角转）
+  const PT = [];
+  if (E.parts) {
+    const own = new Map();
+    for (const t of tris) {
+      const P = [tf0(t.p.slice(0, 3)), tf0(t.p.slice(3, 6)), tf0(t.p.slice(6, 9))], c = [0, 1, 2].map(a => (P[0][a] + P[1][a] + P[2][a]) / 3);
+      const n = cross([P[1][0] - P[0][0], P[1][1] - P[0][1], P[1][2] - P[0][2]], [P[2][0] - P[0][0], P[2][1] - P[0][1], P[2][2] - P[0][2]]), nl = Math.hypot(...n) || 1;
+      for (const [nm, D] of Object.entries(E.parts)) {
+        const [bx0, bx1, ya, yb, bz0, bz1] = D.box;
+        if (c[0] < bx0 || c[0] > bx1 || Math.abs(c[1]) < ya || Math.abs(c[1]) > yb || c[2] < bz0 || c[2] > bz1 || Math.abs(n[2] / nl) < (D.nz ?? .6)) continue;
+        own.set(t, nm + (c[1] < 0 ? 'L' : 'R')); break;
+      }
+    }
+    for (const [nm, D] of Object.entries(E.parts)) for (const sd of ['L', 'R']) PT.push({ key: key + '_' + nm + sd, piv: D.piv, tris: tris.filter(t => own.get(t) === nm + sd) });
+    tris = tris.filter(t => !own.has(t));
+  }
+  const lines = [], meta0 = PT.length ? { parts: Object.fromEntries(Object.entries(E.parts).map(([nm, D]) => [nm, D.piv])) } : {};
+  lines.push(await emit(tris, key, meta0));
+  for (const P of PT) { if (!P.tris.length) { console.warn(P.key, '这块舵面没切到面'); continue; } tf = p => { const q = tf0(p); return [q[0] - P.piv[0], q[1], q[2] - P.piv[1]]; }; lines.push(await emit(P.tris, P.key, { piv: P.piv })); }
+  tf = tf0;
+  fs.mkdirSync(OUT, { recursive: true });
+  const head = `'use strict';\n// ${E.name}：${creditLine(info)}\n// 由 tools/sfmodel.js 转换（减面、统一朝向与尺寸、算发光棱线），不要手改\n`;
+  fs.writeFileSync(path.join(OUT, key + '.js'), head + lines.join(''));
+  if (E.air) fs.writeFileSync(path.join(OUT, key + '_a.js'), head + await emit(gearless(tris, tf, E.air), key + '_a', { air: 1, ...meta0 }));   // 飞机：另出一个收起落架的空中版（舵面块在主文件里）
+  // 一个变体：焊接、减面、算棱线、编码，返回一行 V3X.add(…)
+  async function emit(tris, key, extra) {
   // 按类别焊接顶点（1 厘米网格）、减面
   const out = { v: [], t: [], e: [], s: [], l: [] };
   for (const cls of ['solid', 'glow', 'mask']) {
@@ -115,6 +145,7 @@ async function convert(key, E) {
     const vid = p => { const q = tf(p), h = q.map(v => Math.round(v * 100)).join(','); let i = map.get(h); if (i == null) { i = V.length / 3; map.set(h, i); V.push(...q); } return i; };
     const seen = new Set();   // 双面导出的模型每个面有一正一反两个三角形：只留一个，不然每条边都被当成非流形边描出来
     for (const t of T) { const a = vid(t.p.slice(0, 3)), b = vid(t.p.slice(3, 6)), c = vid(t.p.slice(6, 9)); if (a === b || b === c || a === c) continue; const h = [a, b, c].sort((x, y) => x - y).join(','); if (seen.has(h)) continue; seen.add(h); IDX.push(a, c, b); S.push(t.s); }   // 反顺序（镜像）
+    if (cls === 'solid' && E.lines) featureLines(V, IDX, E.lines, out);   // 轮廓线在原始精度的网格上提取（减面前）
     if (cls === 'mask') {   // 透明贴图的面：只取边界线（只属于一个三角形的边）
       const cnt = new Map(); for (let i = 0; i < IDX.length; i += 3) for (const [a, b] of [[IDX[i], IDX[i + 1]], [IDX[i + 1], IDX[i + 2]], [IDX[i + 2], IDX[i]]]) { const h = Math.min(a, b) + ',' + Math.max(a, b); cnt.set(h, (cnt.get(h) || 0) + 1); }
       const base = out.v.length / 3; pushAll(out.v, V);
@@ -156,12 +187,16 @@ async function convert(key, E) {
     const P = i => [out.v[i * 3], out.v[i * 3 + 1], out.v[i * 3 + 2]], nrm = (a, b, c) => { const n = cross([P(b)[0] - P(a)[0], P(b)[1] - P(a)[1], P(b)[2] - P(a)[2]], [P(c)[0] - P(a)[0], P(c)[1] - P(a)[1], P(c)[2] - P(a)[2]]), l = Math.hypot(...n) || 1; return n.map(v => v / l); };
     const N = [], adj = new Map();
     for (let i = 0; i < J.length; i += 3) { N.push(nrm(J[i], J[i + 1], J[i + 2])); for (let k2 = 0; k2 < 3; k2++) { const a = J[i + (k2 + 1) % 3], b = J[i + (k2 + 2) % 3], h = Math.min(a, b) + ',' + Math.max(a, b); (adj.get(h) || adj.set(h, []).get(h)).push(i / 3); } }
-    const cosT = Math.cos((E.crease || 32) * Math.PI / 180);
+    // 棱线筛选：两面夹角超过 crease 的才算棱；面片边界、非流形边（拼起来的零散面片、小部件）只画长过 edgeMin 米的——不然满身碎线
+    const cosT = Math.cos((E.crease || 32) * Math.PI / 180), eMin = E.edgeMin || 0, ST = STATS[key] || (STATS[key] = { crease: 0, bound: 0, short: 0 });
     for (let i = 0; i < J.length; i += 3) {
       let f = 0;
       for (let k2 = 0; k2 < 3; k2++) {   // 第 k2 条边 = 顶点 k2 的对边
         const a = J[i + (k2 + 1) % 3], b = J[i + (k2 + 2) % 3], L = adj.get(Math.min(a, b) + ',' + Math.max(a, b));
-        if (L.length !== 2 || dot(N[L[0]], N[L[1]]) < cosT) f |= 1 << k2;
+        if (E.lines) continue;   // 用整理好的轮廓线（featureLines），三角形本身不描边
+        if (L.length === 2) { if (dot(N[L[0]], N[L[1]]) < cosT) { f |= 1 << k2; ST.crease++; } continue; }
+        const len = Math.hypot(...[0, 1, 2].map(c => out.v[a * 3 + c] - out.v[b * 3 + c]));
+        if (len >= eMin) { f |= 1 << k2; ST.bound++; } else ST.short++;
       }
       out.t.push(J[i], J[i + 1], J[i + 2]); out.e.push(f); out.s.push(Ss[i / 3]);
     }
@@ -176,11 +211,61 @@ async function convert(key, E) {
   for (const f of out.e) buf.writeUInt8(f, o++);
   for (const s of out.s) buf.writeUInt8(Math.round((s + 1) * 127.5), o++);
   for (const v of out.l) wi(v);
-  const credit = creditLine(info);
-  const meta = { name: E.name, len: E.len, nv, nt, nl, idx, bb: bb.map(v => +v.toFixed(3)), ...(E.vls ? { vls: E.vls } : {}), credit: { title: info.name, author: info.author, url: info.url, license: info.license } };
-  fs.mkdirSync(OUT, { recursive: true });
-  fs.writeFileSync(path.join(OUT, key + '.js'), `'use strict';\n// ${E.name}：${credit}\n// 由 tools/sfmodel.js 转换（减面、统一朝向与尺寸、算发光棱线），不要手改\nV3X.add('${key}', ${JSON.stringify(meta)}, '${buf.toString('base64')}');\n`);
-  console.log(`${key}：${info.name}（${info.author}，${info.license}）原 ${tris.length} 面 → ${nt} 面、${nl} 条轮廓线，${(buf.length / 1024).toFixed(0)} KB；材质 ${mats.join(' ')}`);
+  let xm = -Infinity, zc = 0; for (let i = 0; i < nv; i++) if (out.v[i * 3] > xm) { xm = out.v[i * 3]; zc = out.v[i * 3 + 2]; }   // 机头尖的高度（飞机：画面上对齐机身中线）
+  const meta = { name: E.name, len: E.len, nv, nt, nl, idx, bb: bb.map(v => +v.toFixed(3)), zc: +zc.toFixed(3), ...extra, ...(E.vls ? { vls: E.vls } : {}), credit: { title: info.name, author: info.author, url: info.url, license: info.license } };
+  const st = STATS[key] || {};
+  console.log(`${key}：${info.name}（${info.author}，${info.license}）原 ${tris.length} 面 → ${nt} 面、${nl} 条轮廓线，${(buf.length / 1024).toFixed(0)} KB；棱 ${st.crease || 0}、边界 ${st.bound || 0}（略去短的 ${st.short || 0}）`);
+  return `V3X.add('${key}', ${JSON.stringify(meta)}, '${buf.toString('base64')}');\n`;
+  }
+}
+// 轮廓线：在原始精度的网格上找棱（两面夹角超过 O.crease 度）与面片边界，串成连续折线，短于 O.min 米的不要（碎面片、小部件），
+//   再按 O.tol 米抽稀（Douglas-Peucker）——只留机翼、尾翼前后缘、进气道、座舱盖、机身棱线这类主要轮廓，不是满身碎线
+function featureLines(V, IDX, O, out) {
+  const P = i => [V[i * 3], V[i * 3 + 1], V[i * 3 + 2]], sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+  const N = [], adj = new Map(), ek = (a, b) => a < b ? a + ',' + b : b + ',' + a;
+  for (let i = 0; i < IDX.length; i += 3) {
+    const n = cross(sub(P(IDX[i + 1]), P(IDX[i])), sub(P(IDX[i + 2]), P(IDX[i]))), l = Math.hypot(...n) || 1; N.push(n.map(v => v / l));
+    for (let k = 0; k < 3; k++) { const a = IDX[i + k], b = IDX[i + (k + 1) % 3], h = ek(a, b); (adj.get(h) || adj.set(h, []).get(h)).push(i / 3); }
+  }
+  const cosT = Math.cos((O.crease || 40) * Math.PI / 180), G = new Map(), link = (a, b) => { (G.get(a) || G.set(a, []).get(a)).push(b); };
+  for (const [h, L] of adj) {
+    if (L.length === 2 && Math.abs(dot(N[L[0]], N[L[1]])) > cosT) continue;   // 平滑处（绝对值：个别面片朝向反了也算平滑）
+    const [a, b] = h.split(',').map(Number); link(a, b); link(b, a);
+  }
+  const used = new Set(), chains = [], walk = (a, b) => { const C = [a, b]; used.add(ek(a, b)); let p = a, q = b; for (;;) { const nb = G.get(q); if (nb.length !== 2) break; const r = nb[0] === p ? nb[1] : nb[0]; if (used.has(ek(q, r))) break; used.add(ek(q, r)); C.push(r); p = q; q = r; } return C; };
+  for (const [a, nb] of G) if (nb.length !== 2) for (const b of nb) if (!used.has(ek(a, b))) chains.push(walk(a, b));
+  for (const [a, nb] of G) for (const b of nb) if (!used.has(ek(a, b))) chains.push(walk(a, b));   // 闭合的圈
+  const dp = (C, tol) => {   // Douglas-Peucker
+    if (C.length < 3) return C;
+    const A = P(C[0]), B = P(C[C.length - 1]), d = sub(B, A), dl = Math.hypot(...d) || 1e-9;
+    let mx = -1, mi = 0;
+    for (let i = 1; i < C.length - 1; i++) { const v = sub(P(C[i]), A), c = cross(v, d), e = Math.hypot(...c) / dl; if (e > mx) { mx = e; mi = i; } }
+    return mx <= tol ? [C[0], C[C.length - 1]] : dp(C.slice(0, mi + 1), tol).slice(0, -1).concat(dp(C.slice(mi), tol));
+  };
+  let kept = 0;
+  for (const C of chains) {
+    let len = 0; for (let i = 1; i < C.length; i++) len += Math.hypot(...sub(P(C[i]), P(C[i - 1])));
+    if (len < (O.min || 1)) continue;
+    const D = dp(C, O.tol || .03), base = out.v.length / 3;
+    for (const i of D) pushAll(out.v, P(i));
+    for (let i = 1; i < D.length; i++) out.l.push(base + i - 1, base + i);
+    kept++;
+  }
+  console.log(`  轮廓线：${chains.length} 条折线，留下 ${kept} 条、${out.l.length / 2} 段`);
+}
+// 收起落架：起落架（机轮、支柱、舱门）一般是和机体不相连的小块，在机身下方、一直伸到地面——按连通块去掉；
+//   A.cut：块的最高点低于全高的这个比例（默认 0.45），A.low：最低点低于全高的这个比例（默认 0.25，雷达罩这类低处的机体块不算）；
+//   A.z：再去掉整个三角形都低于这个高度（米）的（和机体连在一起的支柱）
+function gearless(tris, tf, A) {
+  const cut = (A && A.cut) || .45, low = (A && A.low) || .25, zAbs = A && A.z, key = q => q.map(v => Math.round(v * 100)).join(','), id = new Map(), par = [];
+  const f = i => { while (par[i] !== i) i = par[i] = par[par[i]]; return i; };
+  const vi = q => { const h = key(q); let i = id.get(h); if (i == null) { i = par.length; id.set(h, i); par.push(i); } return i; };
+  const T = tris.map(t => { const P = [tf(t.p.slice(0, 3)), tf(t.p.slice(3, 6)), tf(t.p.slice(6, 9))], I = P.map(vi); par[f(I[1])] = f(I[0]); par[f(I[2])] = f(I[0]); return { P, I }; });
+  const B = new Map(); let zmin = Infinity, zmax = -Infinity, xmin = Infinity, xmax = -Infinity;
+  for (const { P, I } of T) { const r = f(I[0]); let b = B.get(r); if (!b) B.set(r, b = [Infinity, -Infinity, Infinity, -Infinity]); for (const q of P) { b[0] = Math.min(b[0], q[0]); b[1] = Math.max(b[1], q[0]); b[2] = Math.min(b[2], q[2]); b[3] = Math.max(b[3], q[2]); zmin = Math.min(zmin, q[2]); zmax = Math.max(zmax, q[2]); xmin = Math.min(xmin, q[0]); xmax = Math.max(xmax, q[0]); } }
+  const H = zmax - zmin, L = xmax - xmin, gear = new Set();
+  for (const [r, b] of B) if (b[3] < zmin + cut * H && b[2] < zmin + low * H && b[1] - b[0] < .35 * L) gear.add(r);
+  return tris.filter((t, i) => !gear.has(f(T[i].I[0])) && !(zAbs != null && T[i].P.every(q => q[2] < zmin + zAbs)));
 }
 
 // 署名（CC-BY 要求的格式）；名字、作者是下载来的文字，去掉换行，免得写进 js/mdl/*.js 的注释时跑出注释变成代码

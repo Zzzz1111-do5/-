@@ -2,5 +2,10 @@
   "dd055": { "uid": "f0a96b2475da407eb6ea2b430ba9ea85", "name": "055 型驱逐舰", "fwd": "+z", "up": "+y", "len": 180, "draft": 6.5, "tris": 24000, "crease": 30,
     "vls": [[41.8, 51.5, -3.6, 4.4, 10.7, 8, 8], [-37.8, -30.9, -3.8, 4.2, 10.7, 6, 8]] },
   "tug": { "uid": "ac1c0a974a734864a27fe84dbbcb0de8", "name": "舰载飞机牵引车", "fwd": "-z", "up": "+y", "len": 5.32, "floor": true, "skip": "^Plane001", "tris": 3000, "crease": 30 },
-  "loader": { "uid": "016ca0f9b98b4ffbbe0e55f235bef496", "name": "挂弹车", "fwd": "+x", "up": "+y", "len": 4.06, "floor": true, "tris": 6000, "crease": 30 }
+  "loader": { "uid": "016ca0f9b98b4ffbbe0e55f235bef496", "name": "挂弹车", "fwd": "+x", "up": "+y", "len": 4.06, "floor": true, "tris": 6000, "crease": 30 },
+  "j35": { "uid": "37085f458d7943cd8314372af76e0f67", "name": "歼-35", "fwd": "+z", "up": "+y", "len": 17.3, "tris": 5000, "crease": 60, "floor": true, "air": {"z": 1.25}, "parts": {"stab": {"box": [-9.4, -6.4, 1.45, 4.4, 1.6, 2.7], "piv": [-7.7, 2.15]}}, "edgeMin": 0.8, "lines": {"crease": 40, "min": 1.2, "tol": 0.04} },
+  "j20": { "uid": "84d0f70a1d5e498aae6e3f51801ede46", "name": "歼-20", "fwd": "+z", "up": "+y", "len": 20.4, "tris": 5000, "crease": 60, "floor": true, "air": {"z": 1.3}, "parts": {"canard": {"box": [0.6, 3.9, 1.4, 3.3, 2.6, 3.6], "piv": [2.7, 3.1]}}, "edgeMin": 0.8, "lines": {"crease": 40, "min": 1.2, "tol": 0.04} },
+  "j36": { "uid": "f1ec41428fd745dfab34531ef06274a3", "name": "歼-36", "fwd": "+z", "up": "+y", "len": 22.8, "tris": 5000, "crease": 60, "floor": true, "air": {"z": 1.2}, "edgeMin": 0.8, "lines": {"crease": 50, "min": 2.4, "tol": 0.05} },
+  "j50": { "uid": "cc2c44f514a146d5ab185c8840dbb5a1", "name": "歼-50", "fwd": "+z", "up": "+y", "len": 19, "tris": 5000, "crease": 60, "floor": true, "air": {"z": 1.05}, "edgeMin": 0.8, "lines": {"crease": 50, "min": 2.2, "tol": 0.05} },
+  "y20": { "uid": "40ce0195eb07494f83304574aafbb3bc", "name": "运-20", "fwd": "+x", "up": "+y", "len": 47, "tris": 6000, "crease": 60, "floor": true, "air": {"cut": 0.17}, "edgeMin": 1.5, "lines": {"crease": 40, "min": 2.5, "tol": 0.08} }
 }
