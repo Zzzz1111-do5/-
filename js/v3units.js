@@ -2033,7 +2033,7 @@ function v3Units(C, box) {
     const [mk, sc] = MK3[m.kind] || ['aam', 2];
     v3mAdd('msl:' + mk, () => v3mMsl(mk), mx, my, z, o.h, sc, m.side === 'e' ? 1 : 0, 0, o.p);
     // 垂发舱盖：发射后翻开约 2 秒
-    if (VP && m.t < 2.2 && typeof v3VlsOrigin === 'function') { const vo = v3VlsOrigin(m); if (vo) v3mAdd('vlslid', v3mVlsLid, vo.x, vo.y, vo.z, vo.h, 1, m.side === 'e' ? 1 : 0, -1.25 * clamp(m.t / .25, 0, 1) * clamp((2.2 - m.t) / .4, 0, 1)); }
+    if (VP && m.t < 2.2 && typeof v3VlsOrigin === 'function') { const vo = v3VlsOrigin(m); if (vo) v3mAdd('vlslid', v3mVlsLid, vo.lx ?? vo.x, vo.ly ?? vo.y, vo.z, vo.h, vo.lk || 1, m.side === 'e' ? 1 : 0, -1.25 * clamp(m.t / .25, 0, 1) * clamp((2.2 - m.t) / .4, 0, 1)); }
   }
   for (const id of mp.keys()) if (!mlive.has(id)) mp.delete(id);
   // —— 地面软阴影（v3light.js）：先画在地上，模型再盖上去 ——

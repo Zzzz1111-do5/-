@@ -34,7 +34,7 @@ function v3xBuild(D) {
   const M = mbNew(), p = i => [P[i * 3], P[i * 3 + 1], P[i * 3 + 2]];
   for (let t = 0; t < m.nt; t++) { const e = E[t]; mbTri(M, p(I[t * 3]), p(I[t * 3 + 1]), p(I[t * 3 + 2]), SH[t] / 127.5 - 1, [e & 1, e >> 1 & 1, e >> 2 & 1]); }
   for (let l = 0; l < m.nl; l++) { const a = rd(), b = rd(); mbLine(M, p(a), p(b), .55); }
-  M.len = m.len;
+  M.len = m.len; M.vls = m.vls || null;   // 垂发块（米，v3fx.js v3VlsOrigin 用）
   return M;
 }
 // 驱逐舰按舰型用导入的模型：键与真实舰长（米）；游戏里按 ships.js 的舰长缩放

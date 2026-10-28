@@ -65,9 +65,16 @@ function v3VlsOrigin(m) {
   if (sh) {
     const K = cls && typeof SH_DDC === 'object' ? SH_DDC[cls] : null, blocks = K ? K.vls : [[8, 13, 2.2]], b = blocks[m.id % blocks.length], k = K ? K.k : 1;
     const pseudo = (m.id * 9301 + 49297) % 233280 / 233280, pv = (m.id * 4271 + 113) % 1000 / 1000;
-    const u = lerp(b[0], b[1], .15 + .7 * pseudo) * k, v = (pv * 2 - 1) * b[2] * .7 * k * (K ? K.w : 1);
     const key = sh === S.dd ? 'DD' : sh.id, P = typeof SHIPV === 'object' && SHIPV.pose[key], h = P ? P.h : (sh.heading ?? -1.57), px0 = P ? P.x : sh.x, py0 = P ? P.y : sh.y;
-    o = { x: px0 + u * Math.cos(h) - v * Math.sin(h), y: py0 + u * Math.sin(h) + v * Math.cos(h), z: -2.6 + 2.8 * k + .3, h, up: m.kind === 'sam' ? .45 : .9 };
+    // 导入的模型（v3x.js）自带垂发块的实测位置（米、格数）：弹从某一格正中冲出，舱盖按格子大小、铰链在格子一边
+    const X = cls && typeof V3X_DD === 'object' && V3X_DD[cls] && typeof v3xMesh === 'function' ? v3xMesh(V3X_DD[cls]) : null, B = X && X.vls ? X.vls[m.id % X.vls.length] : null;
+    let u, v, z, lv = 0, lk = 1;
+    if (B) {
+      const sc = (P && P.k || 1) * 50 * k / X.len, cx = (B[1] - B[0]) / B[5], cy = (B[3] - B[2]) / B[6];
+      u = (B[0] + (Math.floor(pseudo * B[5]) + .5) * cx) * sc; v = (B[2] + (Math.floor(pv * B[6]) + .5) * cy) * sc; z = -2.6 + B[4] * sc; lk = Math.min(cx, cy) * sc / 1.1; lv = -cy * sc / 2;
+    } else { u = lerp(b[0], b[1], .15 + .7 * pseudo) * k; v = (pv * 2 - 1) * b[2] * .7 * k * (K ? K.w : 1); z = -2.6 + 2.8 * k + .3; }
+    const W = (u, v) => [px0 + u * Math.cos(h) - v * Math.sin(h), py0 + u * Math.sin(h) + v * Math.cos(h)], [x, y] = W(u, v), [lx, ly] = W(u, v + lv);
+    o = { x, y, z, h, lx, ly, lk, up: m.kind === 'sam' ? .45 : .9 };
   }
   V.set(m.id, o);
   return o;
