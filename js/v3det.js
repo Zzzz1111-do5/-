@@ -98,6 +98,25 @@ function v3dLaunch(p) {
   if (!(u >= 0 && u < 2.6)) return null;
   return { gear: u < 1.05, pitch: .2 * sm01(u / .45) * (1 - sm01((u - 1.4) / 1.2)), dz: -1.3 * Math.sin(Math.PI * clamp(u / .9, 0, 1)) };
 }
+// 机身仰角跟着画面上的实际航迹走（爬升抬头、俯冲低头、平飞放平）：每帧按高度变化与水平位移算航迹角，平滑约 1/3 秒；
+//   刚离舰：抬头离舰的姿态（v3dLaunch）兜底，速度还低的头几秒迎角大一点。o 飞机、sd 1 = 敌方、z 画面高度、L = v3dLaunch(o)
+const V3D_PT = new Map();
+function v3dPitch(o, sd, z, L) {
+  const key = (sd ? 'e' : 'p') + o.id;
+  let P = V3D_PT.get(key);
+  if (!P || P.S !== S || S.t < P.t) { P = { x: o.x, y: o.y, z, t: S.t, g: 0, pt: 0, S }; V3D_PT.set(key, P); }
+  const dt = S.t - P.t;
+  if (dt > 1e-4) {
+    const dh = Math.hypot(o.x - P.x, o.y - P.y), g = clamp(Math.atan2(z - P.z, Math.max(dh, .3)), -.6, .5);
+    P.g += (g - P.g) * Math.min(1, dt * 3); P.x = o.x; P.y = o.y; P.z = z; P.t = S.t;
+  }
+  if (V3D_PT.size > 400) for (const [k, v] of V3D_PT) if (v.S !== S || S.t - v.t > 5) V3D_PT.delete(k);
+  const u = o.lT != null ? S.t - o.lT : -1, aoa = u >= 0 && u < 8 ? .07 * sm01(u / .4) * (1 - sm01((u - 3) / 4)) : 0;
+  P.pt = Math.max(L ? L.pitch : -9, P.g + aoa);
+  return P.pt;
+}
+// v3fx.js：这一帧算好的仰角（加力尾焰的方向）
+const v3dPitchOf = (o, sd) => { const P = V3D_PT.get((sd ? 'e' : 'p') + o.id); return P && P.S === S ? P.pt : 0; };
 
 // ———————————————— 弹舱弹射发射（airmdl.js 的离机记录 AIRV、airRelPos / airRelZ）————————————————
 //   内埋弹舱：舱门打开后，弹射臂（前后两根撑杆 + 托架）把弹从舱顶往下推出舱外，松开后收回舱里；点火的闪光、尾焰、空中那团白烟在 v3fx.js

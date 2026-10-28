@@ -562,7 +562,18 @@ const V3_DECK = -2.6 + 17 + 1.5;   // 舰载机在飞行甲板上的高度：甲
 function v3AirZ(o) {
   const ph = o.phase || o.ph;
   if (o.kind && (ph === 'cat' || ph === 'roll' || ph === 'trap')) return V3_DECK;
-  return v3AltZ(o.x, o.y, Math.max(0, clamp(o.alt ?? 1, 0, 1) - .05) * 230, o.kind && !o.land && !o.afPh ? V3_DECK - 1.5 : -2.6, 1.5);
+  const z = v3AltZ(o.x, o.y, Math.max(0, clamp(o.alt ?? 1, 0, 1) - .05) * 230, o.kind && !o.land && !o.afPh ? V3_DECK - 1.5 : -2.6, 1.5);
+  return o.kind && o.lT != null ? v3ClimbZ(o, z) : z;
+}
+// 刚弹射离舰的舰载机（cvdeck.js 记的离舰时刻 lT）：推演里 2 秒就升到巡航高度，照着画像坐电梯直上——
+//   画面按真实的爬升剖面：离舰速度约 85、边加速边抬头，航迹角约 1.6 秒到 13°，十来秒爬到推演的高度；快赶上时平滑改平，推演比剖面低（俯冲、低空突防）就照推演
+let V3_CLIMB = null;
+function v3ClimbZ(o, zs) {
+  const u = S.t - o.lT;
+  if (!(u >= 0 && u < 25)) return zs;
+  if (!V3_CLIMB) { V3_CLIMB = [0]; let h = 0; for (let i = 1; i <= 250; i++) { const t = i / 10, v = Math.min(170, 85 + 45 * t), g = .23 * sm01((t - .35) / 1.3); h += v * Math.sin(g) / 10; V3_CLIMB.push(h); } }
+  const i = Math.min(V3_CLIMB.length - 2, Math.floor(u * 10)), zp = V3_DECK + lerp(V3_CLIMB[i], V3_CLIMB[i + 1], u * 10 - i), d = zs - zp;
+  return d <= 0 ? zs : zs - d * sm01(d / 60);
 }
 // 离地高度 h → 绝对高度：贴地时按脚下实际地面（lo 是海上的最低基准：舰载机 = 飞行甲板，其余 = 海面），一离地参考面就换成平滑的地形包络
 //   （v3Env，不跟着每个小山包上下抖），越高越接近海拔基准——220 以上完全按海拔平飞；低空过山时沿包络平缓爬升、越过山脊再下来

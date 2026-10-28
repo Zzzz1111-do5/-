@@ -10,7 +10,7 @@
 //     甲板停满：滑到升降机舷内侧 → ewait 等升降机 → 倒上平台 → down 降到机库甲板（进机库整备），空平台再升回来
 // 停机位：每架舰载机记 w.dk（机位序号；-1 机库；null 不在舰上）。升降机 c.el[i] = { h 平台高度 0 甲板—1 机库, to 目标, w 占用的飞机 id }；
 // 偏流板：c.jl[k] 弹射器 k 上一次弹射离舰的时刻（放下的动画）
-const CVD = { taxi: 16, rev: 6, run: 9, climb: 1.5, cnp: .8, eng: 1.1, hook: 2.4, acc: 110, elv: .32, pivot: 1.25 };
+const CVD = { taxi: 16, rev: 6, run: 9, climb: 1.5, cnp: .8, eng: 1.1, hook: 2.4, acc: 35, elv: .32, pivot: 1.25 };
 const cvCat = k => CVG.cats[clamp(k | 0, 0, CVG.cats.length - 1)];
 const cvCatPt = (k, s) => { const C = cvCat(k); return [C.u + Math.cos(C.a) * s, C.v + Math.sin(C.a) * s]; };
 // 右舷甲板边线（不算升降机缺口）：舷边通道口的位置
@@ -185,7 +185,7 @@ function cvLaunchStep(p, c, dt) {
   const h = cvHome(c), others = cvLive(c).filter(o => o !== p);
   if (p.phase === 'roll') {   // 电磁弹射：沿弹射器加速，到行程末端离舰
     const C = cvCat(p.cat);
-    p.spd = Math.min(p.spd + CVD.acc * dt, 175); p.cs = (p.cs || 0) + p.spd * dt;
+    p.spd = Math.min(p.spd + CVD.acc * dt, 175); p.cs = (p.cs || 0) + p.spd * dt;   // 约 3.5g：104 米行程约 2 秒，离舰约 85（之后在空中继续加速）
     [p.lu, p.lv] = cvCatPt(p.cat, p.cs); p.lh = C.a; p.fold = 0; p.cpo = 0;
     cvPlace(p, c);
     if (p.cs >= C.L) { c.jl[p.cat] = S.t; airSet(p, 'out'); p.alt = .05; p.lT = S.t; p.lu = p.lv = null; p.dk = null; p.path = null; }   // lT：离舰时刻（画面用：抬头、下沉、收起落架）

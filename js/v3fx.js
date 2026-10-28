@@ -270,7 +270,7 @@ function v3Fx(C) {
       v3fSpark(out, C, Wp(tu, -tip[1], 0), 1.1 * k + .5, [.3, 1, .45, .95]);   // 右翼尖绿灯
       const tail = D.stab ? D.stab.reduce((m, q) => Math.min(m, q[0]), 0) : (D.body ? D.body[D.body.length - 1][0] : -9);
       if (((S.t * .8 + o.id * .37) % 1) < .07) v3fSpark(out, C, Wp(tail + 1, 0, 2.6), 2.4 * k + 1, [1, 1, 1, 1]);   // 防撞灯
-      if (burn && typeof v3dBurner === 'function' && D.noz && !r) { v3dBurner(out, C, o, 1, { x: o.x, y: o.y, z: z + V3_AIRZ * k, h, pt: Lc ? Lc.pitch : 0 }); return; }   // 加力：按每个喷口（v3det.js）
+      if (burn && typeof v3dBurner === 'function' && D.noz && !r) { v3dBurner(out, C, o, 1, { x: o.x, y: o.y, z: z + V3_AIRZ * k, h, pt: typeof v3dPitchOf === 'function' ? v3dPitchOf(o, own ? 0 : 1) : Lc ? Lc.pitch : 0 }); return; }   // 加力：按每个喷口（v3det.js），方向随机身仰角
       if (burn) {   // 加力：尾喷口一束橙白的火舌 + 光晕，长度随时间抖动
         const nu = D.body ? D.body[D.body.length - 1][0] : -10, L = 4.5 + Math.sin(S.t * 31 + o.id) * .6;
         v3fRib(out, E, Wp(nu, 0, 0), Wp(nu - L, 0, 0), 1.5 * k + .4, [1, .95, .8, .95], [1, .45, .1, 0]);
