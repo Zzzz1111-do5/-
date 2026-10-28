@@ -402,7 +402,7 @@ function mnSetBuild() {
   el.innerHTML = `<div class="ms-win"><header><h2>设置<small>SETTINGS</small></h2><button type="button" class="ms-x" aria-label="关闭" title="关闭（Esc）">×</button></header>
     ${MN_SET.map(([h, en, rows]) => `<h3>${h} · ${en}</h3>${rows.map(row).join('')}`).join('')}
     <footer><button type="button" class="ms-reset">恢复默认</button><button type="button" class="go ms-ok">完成</button></footer>
-    <div class="ms-about">${typeof window !== 'undefined' && window.DS_BUILD ? `版本 ${window.DS_BUILD} · ` : ''}<button type="button" data-doc="terms">用户协议</button> · <button type="button" data-doc="privacy">隐私政策</button></div></div>`;
+    <div class="ms-about">${typeof window !== 'undefined' && window.DS_BUILD ? `版本 ${window.DS_BUILD} · ` : ''}<button type="button" data-doc="terms">用户协议</button> · <button type="button" data-doc="privacy">隐私政策</button> · <button type="button" data-doc="credits">素材署名</button></div></div>`;
   document.body.appendChild(el);
   el.addEventListener('input', e => { const i = e.target.closest('input[type=range]'); if (i) { setSetting(i.dataset.k, +i.value); mnSetSync(); } });
   el.addEventListener('change', async e => {

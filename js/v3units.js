@@ -1786,14 +1786,19 @@ function v3Units(C, box) {
   }
   // 舰艇：位置、航向跟二维画面一致（ships.js 的姿态缓存；3D 里不放大）
   const pose = (key, o, hd) => { const P = typeof SHIPV === 'object' && SHIPV.pose[key]; return P && dist(P.x, P.y, o.x, o.y) < 60 ? P : { x: o.x, y: o.y, h: hd, k: 1 }; };
+  const ddAdd = (c, P) => {   // 驱逐舰：有导入的模型（v3x.js）就用它，按游戏里的舰长缩放；还没加载完就画代码建的
+    const xk = typeof V3X_DD === 'object' && V3X_DD[c], X = xk && typeof v3xMesh === 'function' ? v3xMesh(xk) : null;
+    if (X) v3mAdd('x:' + xk, () => X, P.x, P.y, -2.6, P.h, P.k * 50 * ((typeof SH_DDC === 'object' && SH_DDC[c]) || { k: 1 }).k / X.len, 0);
+    else v3mAdd('dd:' + c, () => v3mDD(c), P.x, P.y, -2.6, P.h, P.k, 0);
+  };
   for (const sh of S.ships) {
     if (!alive(sh) || !inB(sh.x, sh.y, 80)) continue;
     const d = (typeof SHIP_DIM === 'object' && SHIP_DIM[sh.kind]) || [32, 11], P = pose(sh.id, sh, sh.heading ?? -1.57), nm = (sh.sbxCls && sh.sbxCls.name) || '';
-    if (sh.kind === 'dd') { const c = typeof vlsCls === 'function' ? vlsCls(sh) : '052D'; v3mAdd('dd:' + c, () => v3mDD(c), P.x, P.y, -2.6, P.h, P.k, 0); continue; }   // 驱护舰按舰型建模
+    if (sh.kind === 'dd') { ddAdd(typeof vlsCls === 'function' ? vlsCls(sh) : '052D', P); continue; }   // 驱护舰按舰型建模
     v3mAdd('sh:' + sh.kind, () => v3mShip(sh.kind, d[0], d[1]), P.x, P.y, -2.6, P.h, P.k, 0);
   }
   for (const bt of S.boats || []) if (!bt.dead && isFinite(bt.x) && inB(bt.x, bt.y)) v3mAdd('sh:boat', () => v3mShip('boat', 12, 5), bt.x, bt.y, -2.6, bt.heading ?? -1.57, 1, 0);
-  if (S.dd && S.dd.state !== 'sunk' && isFinite(S.dd.x) && inB(S.dd.x, S.dd.y, 80)) { const P = pose('DD', S.dd, S.dd.heading ?? -1.57), c = typeof vlsCls === 'function' ? vlsCls(S.dd) : '055'; v3mAdd('dd:' + c, () => v3mDD(c), P.x, P.y, -2.6, P.h, P.k, 0); }
+  if (S.dd && S.dd.state !== 'sunk' && isFinite(S.dd.x) && inB(S.dd.x, S.dd.y, 80)) { const P = pose('DD', S.dd, S.dd.heading ?? -1.57); ddAdd(typeof vlsCls === 'function' ? vlsCls(S.dd) : '055', P); }
   if (typeof cvAll === 'function') for (const cv of cvAll()) {
     if (!(cv.hp > 0) || cv.x < -999 || !inB(cv.x, cv.y, 220)) continue;
     const lhd = /075/.test(cv.name || ''), h = cv.heading ?? -1.57, C = typeof CVG === 'object' ? CVG : null, top = -2.6 + (C ? C.zd : 17), home = cvHome(cv);   // top：飞行甲板顶面

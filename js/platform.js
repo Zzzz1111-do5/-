@@ -3,7 +3,7 @@
 //   电脑版、安卓版：菜单里有「退出游戏」；电脑版设置里有「全屏」（F11 / Alt+Enter 也能切，外壳记住，下次照此打开）
 //   安卓版：第一次打开先请玩家同意《用户协议》《隐私政策》（国内应用商店的合规要求）；返回键当 Esc 用（关浮层、开菜单），
 //          开始界面上连按两次返回键退出；切到后台时声音停下、推演暂停
-//   各版本：设置面板底部随时能打开两份协议（legal/ 下的网页，网页版、电脑版、安卓版都带着）
+//   各版本：设置面板底部随时能打开两份协议与素材署名（legal/ 下的网页，网页版、电脑版、安卓版都带着）
 // 要在 menu.js 之前加载：菜单、设置的条目在 menu.js 加载时就按 PLAT 建好
 const PLAT = (() => {
   const w = typeof window !== 'undefined' ? window : {}, C = w.Capacitor;
@@ -56,11 +56,13 @@ function platLayer(id, html, key) {
 }
 function platClose(el) { if (typeof lyPop === 'function') lyPop(el); el.remove(); }
 
-// 查看协议：legal/ 下的网页装在浮层里（网页版、电脑版、安卓版同一份，商店填的隐私政策网址也是它）
+// 查看协议与素材署名：legal/ 下的网页装在浮层里（网页版、电脑版、安卓版同一份，商店填的隐私政策网址也是它）
+const PLAT_DOCS = { terms: '用户协议', privacy: '隐私政策', credits: '素材署名' };
 function platDoc(which) {
-  const name = which === 'terms' ? '用户协议' : '隐私政策';
+  if (!PLAT_DOCS[which]) which = 'privacy';
+  const name = PLAT_DOCS[which];
   const el = platLayer('plDoc', `<div class="pl-win pl-doc"><header><h2>${name}</h2><button type="button" class="pl-x" aria-label="关闭" title="关闭（Esc）">×</button></header>
-    <iframe src="legal/${which === 'terms' ? 'terms' : 'privacy'}.html" title="${name}"></iframe></div>`, e => { if (e.key === 'Escape') { e.preventDefault(); close(); } });
+    <iframe src="legal/${which}.html" title="${name}"></iframe></div>`, e => { if (e.key === 'Escape') { e.preventDefault(); close(); } });
   const close = () => { platClose(el); if (typeof auUi === 'function') auUi('back'); };
   el.querySelector('.pl-x').addEventListener('click', close);
   el.addEventListener('pointerdown', e => { if (e.target === el) close(); });
