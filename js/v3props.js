@@ -25,6 +25,9 @@ const V3P_PACKS = {
   industrial: { name: '办公楼', title: 'industrial building', author: 'spicybamer', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/industrial-building-770acf6b0da74af397f748d95141f8be' },
   flats1: { name: '公寓楼', title: 'Davison Street Flats 1 - Flat Roof', author: 'Charlie_Zane', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/davison-street-flats-1-flat-roof-0f461ea81f8541db8d6a5f5e35133588' },
   wh99: { name: '砖砌库房', title: 'Warehouses', author: '99.Miles', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/warehouses-e6e105d35b3f486292c42ffa52f363c0' },
+  girder: { name: '公路桥', title: 'Concrete Girder Beam Bridges/Tunnels [Free]', author: 'JoTrain The Aussie', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/concrete-girder-beam-bridgestunnels-free-1c5d6642796843c198b94124518b9f04' },
+  pillbox: { name: '海滩地堡', title: 'WWII Pill Box - Saltney Quay, Flintshire, UK', author: 'al3xfoster', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/wwii-pill-box-saltney-quay-flintshire-uk-be8136976b294e1fb764b5b1cba7a72c' },
+  teeth: { name: '龙牙', title: "Dragon's Teeth Anti-Tank obstacle", author: 'AdamKozakGrafika', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/dragons-teeth-anti-tank-obstacle-f7a6c987711d4ed2871707da47d2f3fb' },
   palms: { name: '棕榈树', title: 'Palm Trees', author: 'YadroGames', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/palm-trees-55690379305145488e20afb05fc687e6' },
   rocks3: { name: '岩石', title: 'Rocks Set 3', author: 'DJMaesen', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/rocks-set-3-9a160330d1c14268948248f387889b35' },
   sky: { name: '天空', title: 'Kloofendal 48d Partly Cloudy (Pure Sky)', author: 'Greg Zaal / Poly Haven', license: 'CC0', url: 'https://polyhaven.com/a/kloofendal_48d_partly_cloudy_puresky' },
@@ -35,6 +38,7 @@ const V3P_PACKS = {
 const V3P_CON = ['bg0', 'bg2', 'bg3', 'bg5', 'bg6', 'bg7', 'treeA', 'treeB', 'treeC'], V3P_BRD = ['bg1', 'bg4', 'treeD'];
 const V3P_BUSH = ['bush1', 'bush2', 'bush3', 'bush4'], V3P_ROCK = ['rock0', 'rock1', 'rock2', 'rock3', 'rock4', 'rock5', 'rock6', 'rock7', 'rock8'];
 const V3P_TINT = { bg1: [.56, .84, .44], bg4: [.6, .86, .42], treeD: [.55, .82, .42] };   // 模型里的桦树、落叶松是秋天的黄叶：压成夏天的绿
+const V3P_MUL = { girder: [.5, .5, .48], teeth: [.85, .85, .82] };   // 没贴图（纯白底色）的模型压成混凝土灰
 // 楼房：rot 把模型的正面转到 +x（有的模型正面朝 +y）
 const V3P_HOUSE = [['jph1', 'jph1', 0], ['jph2', 'jph2', -Math.PI / 2], ['jph3', 'jph3', -Math.PI / 2], ['house', 'house', 0]];
 const V3P_FLAT = [['oldconc', 'conc1', 0], ['oldconc', 'conc2', 0], ['oldconc', 'conc3', 0]];
@@ -201,12 +205,12 @@ const v3pVar = (pk, name) => { const P = v3pPack(pk); return P ? P.vars.get(name
 // —— 摆放：按地图格子种树、灌木、岩石，城镇房屋、机场设施换模型（地图或地形变了重算）——
 const V3P_TS = 30;   // 远处替身按 30 × 30 格（300 米）分块
 function v3pPlace() {
-  const need = ['treepack', 'cliffs', 'jph1', 'jph2', 'jph3', 'house', 'oldconc', 'hangar', 'atc', 'quonset', 'firestation', 'wh3', 'sawtooth', 'smallwh', 'industrial', 'flats1', 'wh99'];
+  const need = ['treepack', 'cliffs', 'jph1', 'jph2', 'jph3', 'house', 'oldconc', 'hangar', 'atc', 'quonset', 'firestation', 'wh3', 'sawtooth', 'smallwh', 'industrial', 'flats1', 'wh99', 'girder', 'pillbox', 'teeth'];
   const got = need.map(id => v3pPack(id) || (V3P.packs.get(id) || {}).st === -1);   // 先全部发起下载（同时载入），再看是不是都好了
   if (!got.every(Boolean)) return false;
   const tp = v3pPack('treepack');
   if (!tp) return false;
-  const VL = [], vIdx = new Map(), vOf = (pk, nm) => { const k = pk + '/' + nm; if (vIdx.has(k)) return vIdx.get(k); const V = v3pVar(pk, nm); if (!V) return -1; vIdx.set(k, VL.length); VL.push({ pk, nm, V, h: V.bb[1][2] - V.bb[0][2], w: Math.max(V.bb[1][0] - V.bb[0][0], V.bb[1][1] - V.bb[0][1]), tint: pk === 'treepack' ? V3P_TINT[nm] || null : null, veg: pk === 'treepack' && !/^rock/.test(nm) }); return VL.length - 1; };
+  const VL = [], vIdx = new Map(), vOf = (pk, nm) => { const k = pk + '/' + nm; if (vIdx.has(k)) return vIdx.get(k); const V = v3pVar(pk, nm); if (!V) return -1; vIdx.set(k, VL.length); VL.push({ pk, nm, V, h: V.bb[1][2] - V.bb[0][2], w: Math.max(V.bb[1][0] - V.bb[0][0], V.bb[1][1] - V.bb[0][1]), tint: pk === 'treepack' ? V3P_TINT[nm] || null : null, mul: V3P_MUL[pk] || null, veg: pk === 'treepack' && !/^rock/.test(nm) }); return VL.length - 1; };
   const con = V3P_CON.map(n => vOf('treepack', n)).filter(i => i >= 0), brd = V3P_BRD.map(n => vOf('treepack', n)).filter(i => i >= 0);
   const bush = V3P_BUSH.map(n => vOf('treepack', n)).filter(i => i >= 0), grass = vOf('treepack', 'bush0'), rock = V3P_ROCK.map(n => vOf('treepack', n)).filter(i => i >= 0);
   const cliff = ['cliffA', 'cliffB'].map(n => vOf('cliffs', n)).filter(i => i >= 0);
@@ -397,6 +401,20 @@ function v3pStatic(vOf) {
       add(best.v, cx, cy, zc, best.a, best.s, best.s, best.s);
     }
   }
+  // 海滩出口：两座地堡（射孔朝海，+y 是南）、一排龙牙；公路桥的桥墩（桥面按炸没炸每帧加，见 v3pPrep）
+  const pb = vOf('pillbox', 'pillbox'), th = vOf('teeth', 'teeth'), gp = vOf('girder', 'pier'), gs = vOf('girder', 'span');
+  V3P.brg = [];
+  for (const p of (typeof S === 'object' && S && S.points) || []) {
+    const k = typeof PKIND === 'function' ? PKIND(p.key) : null;
+    if (k === 'exit' && pb >= 0 && th >= 0) {
+      for (const sx of [-17, 17]) add(pb, p.x + sx, p.y, v3Ht(p.x + sx, p.y) - .4, Math.PI / 2, 1, 1, 1);
+      for (const ox of [-18, -6, 6, 18]) add(th, p.x + ox, p.y + 11.5, v3Ht(p.x + ox, p.y + 11.5) - .1, -Math.PI / 2, 1.1, 1.1, 1.3);
+    } else if (k === 'bridge' && gp >= 0 && gs >= 0) {
+      const z = Math.max(v3Ht(p.x - 26, p.y), v3Ht(p.x + 26, p.y), -2) - 2.4;   // 与自带的桥同一套高度（v3units.js）
+      for (const bx of [-9, 9]) add(gp, p.x + bx, p.y, z - 3, 0, .45, .56, 3.7 / 37.5);
+      V3P.brg.push({ key: p.key, x: p.x, y: p.y, z: z + 3 - 4 * .6, v: gs });
+    }
+  }
   // 机场：拱顶的换机库 / 铁皮营房，坡顶的库房换成排库房（金属）/ 砖砌库房，平顶的按材质与大小换消防站、办公楼、公寓楼、厂房、小库房，塔台换塔台；
   //   模型长边对着建筑长边，长宽比差得多就沿长边并排放几栋（每栋按自己的一份占地缩放）
   const blocks = typeof afb3dBlocks === 'function' ? afb3dBlocks() : [], hg = vOf('hangar', 'hangar'), qs = vOf('quonset', 'quonset'), tw = vOf('atc', 'atc');
@@ -451,8 +469,10 @@ function v3pDrawVar(V, pk, inst, n, fol, VV) {
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, t || V3P.white);
     gl.uniform1f(U.uCut, M && M.mode === 1 ? Math.max(.3, Math.min(.6, M.cut)) : -1);
     gl.uniform1f(U.uFol, fol ?? (M && M.mode === 1 ? 1 : 0)); gl.uniform1f(U.uGlass, M && M.mode === 2 ? 1 : 0);
-    const bf = M ? M.bf : [1, 1, 1, 1];
-    if (tn && M && M.mode === 1) gl.uniform4f(U.uCol, bf[0] * tn[0], bf[1] * tn[1], bf[2] * tn[2], bf[3]); else gl.uniform4f(U.uCol, bf[0], bf[1], bf[2], bf[3]);
+    const bf = M ? M.bf : [1, 1, 1, 1], ml = VV && VV.mul;
+    if (tn && M && M.mode === 1) gl.uniform4f(U.uCol, bf[0] * tn[0], bf[1] * tn[1], bf[2] * tn[2], bf[3]);
+    else if (ml) gl.uniform4f(U.uCol, bf[0] * ml[0], bf[1] * ml[1], bf[2] * ml[2], bf[3]);
+    else gl.uniform4f(U.uCol, bf[0], bf[1], bf[2], bf[3]);
     gl.bindBuffer(gl.ARRAY_BUFFER, g.b);
     gl.enableVertexAttribArray(A.p); gl.vertexAttribPointer(A.p, 3, gl.FLOAT, false, 44, 0);
     gl.enableVertexAttribArray(A.n); gl.vertexAttribPointer(A.n, 3, gl.FLOAT, false, 44, 12);
@@ -507,6 +527,13 @@ function v3pPrep(C) {
       if ((a.n + 1) * 8 > a.d.length) { const d2 = new Float32Array(a.d.length * 2); d2.set(a.d); a.d = d2; }
       a.d.set([PL.x[i], -PL.y[i], PL.z[i], -PL.a[i], PL.s[i], PL.s[i], PL.sz[i], PL.sd[i]], a.n * 8); a.n++;
     }
+  }
+  for (const B of V3P.brg || []) {   // 公路桥的桥面：炸断了就不画（只剩桥墩）
+    if (typeof isBlown === 'function' && isBlown(B.key)) continue;
+    let a = per.get(B.v);
+    if (!a) per.set(B.v, a = { d: new Float32Array(8 * 16), n: 0, b: gl.createBuffer() });
+    if ((a.n + 1) * 8 > a.d.length) { const d2 = new Float32Array(a.d.length * 2); d2.set(a.d); a.d = d2; }
+    a.d.set([B.x, -B.y, B.z, 0, 48 / 51.6, 10 / 18, .6, .5], a.n * 8); a.n++;
   }
   for (const a of per.values()) if (a.n) { gl.bindBuffer(gl.ARRAY_BUFFER, a.b); gl.bufferData(gl.ARRAY_BUFFER, a.d.subarray(0, a.n * 8), gl.DYNAMIC_DRAW); }
   V3P.fe = fe; V3P.near = near; V3P.live = true;

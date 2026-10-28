@@ -1349,6 +1349,7 @@ const V3_PTHOUSE = { hq: [[-12, -6, 18, 12, 3.6, 0], [12, -8, 12, 9, 3.2, 0], [1
   town: [[16, -4, 8, 14, 6, 0], [16, -14, 5, 6, 3, 0]], village: [[-10, -4, 8, 6, 2.6, 1.6], [6, -8, 7, 6, 2.6, 1.6], [2, 6, 9, 6, 2.6, 1.6]] };
 function v3mPoint(kind, blown, noHouse) {
   const M = mbNew();
+  if (noHouse && (kind === 'exit' || kind === 'bridge')) return M;   // 地堡、龙牙、公路桥都换成了外部模型（v3props.js）
   const house = (x, y, w, h, z, roof) => { if (noHouse) return; mbBox(M, x - w / 2, x + w / 2, y - h / 2, y + h / 2, 0, z, .8); if (roof) mbBox(M, x - w / 2, x + w / 2, y - h / 2, y + h / 2, z, z + roof, .95, { taper: Math.min(w, h) * .45 }); };
   if (kind === 'exit') {
     for (const sx of [-17, 17]) {   // 半圆混凝土地堡：圆顶朝海、平的一面朝内陆，朝海一侧一道射孔
@@ -1881,8 +1882,9 @@ function v3mCollect(C, box) {
     if (!V3_PT.includes(k)) continue;
     const blown = k === 'bridge' && typeof isBlown === 'function' && isBlown(p.key), sd = p.owner === 'p' ? 0 : p.owner === 'e' ? 1 : 2;
     const z = k === 'bridge' ? Math.max(v3Ht(p.x - 26, p.y), v3Ht(p.x + 26, p.y), -2) - 2.4 : k === 'ford' ? sea(p.x, p.y) : v3Ht(p.x, p.y);
-    const nh = !!V3_PTHOUSE[k] && typeof v3pReady === 'function' && v3pReady();   // 房屋换成了外部模型（v3props.js）
-    v3mAdd((nh ? 'ptn:' : 'pt:') + k + (blown ? ':x' : ''), () => v3mPoint(k, blown, nh), p.x, p.y, z, 0, 1, sd);
+    const nh = (!!V3_PTHOUSE[k] || k === 'exit' || k === 'bridge') && typeof v3pReady === 'function' && v3pReady();   // 房屋、地堡、桥换成了外部模型（v3props.js）
+    const sv = typeof v3Mx === 'function' && !v3Mx() ? 3 : sd;   // 写实画面：混凝土、土堤用中性的灰，不按归属涂色（归属看旗子）
+    v3mAdd((nh ? 'ptn:' : 'pt:') + k + (blown ? ':x' : ''), () => v3mPoint(k, blown, nh), p.x, p.y, z, 0, 1, sv);
     if (k === 'radar') v3mAdd('rad:4', () => v3mRadar(4), p.x + 4, p.y - 4, z + 9.6, p.owner === 'e' ? t * 1.4 : .5, 1, sd);
   }
   for (const o of S.obst || []) if (o.known && !o.dead && inB(o.x, o.y)) v3mAdd('hedge', v3mHedgehog, o.x, o.y, sea(o.x, o.y), (o.x * 7.1 + o.y * 3.3) % 6.28, 1.3, 1);   // 海滩反登陆障碍

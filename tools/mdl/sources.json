@@ -358,5 +358,41 @@
     "license": "CC BY 4.0",
     "url": "https://sketchfab.com/3d-models/warehouses-e6e105d35b3f486292c42ffa52f363c0",
     "unit": 0.2
+  },
+  "girder": {
+    "mode": "tex",
+    "file": "girder.glb",
+    "name": "Concrete Girder Beam Bridges/Tunnels [Free]",
+    "author": "JoTrain The Aussie 🇦🇺",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/concrete-girder-beam-bridgestunnels-free-1c5d6642796843c198b94124518b9f04",
+    "unit": 1,
+    "parts": {
+      "span": [
+        1,
+        4
+      ],
+      "pier": [
+        2
+      ]
+    }
+  },
+  "pillbox": {
+    "mode": "tex",
+    "file": "pillbox.glb",
+    "name": "WWII Pill Box - Saltney Quay, Flintshire, UK",
+    "author": "al3xfoster",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/wwii-pill-box-saltney-quay-flintshire-uk-be8136976b294e1fb764b5b1cba7a72c",
+    "unit": 1
+  },
+  "teeth": {
+    "mode": "tex",
+    "file": "teeth.glb",
+    "name": "Dragon's Teeth Anti-Tank obstacle",
+    "author": "AdamKozakGrafika",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/dragons-teeth-anti-tank-obstacle-f7a6c987711d4ed2871707da47d2f3fb",
+    "unit": 1
   }
 }
