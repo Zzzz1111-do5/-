@@ -99,6 +99,23 @@ function v3dLaunch(p) {
   return { gear: u < 1.05, pitch: .2 * sm01(u / .45) * (1 - sm01((u - 1.4) / 1.2)), dz: -1.3 * Math.sin(Math.PI * clamp(u / .9, 0, 1)) };
 }
 
+// ———————————————— 弹舱弹射发射（airmdl.js 的离机记录 AIRV、airRelPos / airRelZ）————————————————
+//   内埋弹舱：舱门打开后，弹射臂（前后两根撑杆 + 托架）把弹从舱顶往下推出舱外，松开后收回舱里；点火的闪光、尾焰、空中那团白烟在 v3fx.js
+// 弹射臂（机型单位：舱顶在 z = 0，伸出 e 时托架到 z = −e）
+function v3mdEjArm(e) {
+  const M = mbNew(), z1 = -e;
+  for (const x of [-.9, .9]) mbTube(M, [x, 0, 0], [x * .8, 0, z1 + .15], .15, .12, 6, .8);
+  mbBox(M, -1.2, 1.2, -.2, .2, z1, z1 + .2, .75);
+  return M;
+}
+// v3units.js：主弹舱离机的弹，弹射臂伸出（推弹）→ 松开 → 收回，按四档取模型
+function v3dEjArm(P, m) {
+  const A = AIR_REL, ex = clamp((P.u - A.open) / A.ej, 0, 1) * (1 - clamp((P.u - A.open - A.ej - .08) / .22, 0, 1)), st = Math.round(ex * 4);
+  if (!st) return;
+  const o = P.o, h = o.heading || 0, c = Math.cos(h), sn = Math.sin(h), x = o.x + (P.r.ox * c - P.r.oy * sn) * P.sc, y = o.y + (P.r.ox * sn + P.r.oy * c) * P.sc;
+  v3mAdd('ejarm:' + st, () => v3mdEjArm(st / 4), x, y, v3AirZ(o) - .55 * P.sc, h, P.sc, m.side === 'e' ? 1 : 0, o.bank || 0);
+}
+
 // v3fx.js 每帧调用：本文件各部分的发光与烟
 function v3dFx(out, C, inB, seen) {
   v3dCatFx(out, C, inB);

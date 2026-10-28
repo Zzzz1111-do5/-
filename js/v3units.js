@@ -2023,6 +2023,7 @@ function v3mCollect(C, box) {
     if (!P || P.u < (P.r.k === 'main' ? AIR_REL.open : .05) || P.e > .5 || !inB(P.x, P.y, 100) || (m.side === 'e' && !(spec || seen(P.x, P.y)))) continue;
     const sk = P.r.w === 'aam' ? 'aam' : P.r.w === 'bomb' ? 'bomb' : P.r.w === 'cm' ? 'cm' : 'agm';
     v3mAdd('msl:' + sk, () => v3mMsl(sk), P.x, P.y, airRelZ(P, m), P.h, P.sc, m.side === 'e' ? 1 : 0, 0);
+    if (P.r.k === 'main' && typeof v3dEjArm === 'function') v3dEjArm(P, m);   // 弹射臂（v3det.js）
   }
   // 飞行中的导弹：立体弹体，按飞行方向取朝向与俯仰（发光的尾焰、烟迹在 v3fx.js）；刚离机还没点火的在上面画
   const MK3 = { sam: ['aam', 2.2], asm: ['asm', 2.2], pgm: ['agm', 1.8], tbm: ['cm', 3.6] };
