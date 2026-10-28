@@ -80,5 +80,6 @@ function v3imParse(buf) {
 // 设置面板里的「素材致谢」
 function v3imCredits() {
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
-  return Object.values(V3IM_LIST).map(m => `<li>${esc(m.name)}：<a href="${esc(m.url)}" target="_blank" rel="noopener">“${esc(m.title)}”</a> by ${esc(m.author)}，${esc(m.license)}（转换时减面、烘焙颜色）</li>`).join('');
+  const all = [...Object.values(V3IM_LIST), ...(typeof V3P_PACKS === 'object' ? Object.values(V3P_PACKS) : [])];
+  return all.map(m => `<li>${esc(m.name)}：<a href="${esc(m.url)}" target="_blank" rel="noopener">“${esc(m.title)}”</a> by ${esc(m.author)}，${esc(m.license)}（有改动：格式转换、缩小贴图或减面）</li>`).join('');
 }

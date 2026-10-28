@@ -1,8 +1,298 @@
 {
   "t055": {
     "file": "t055.glb",
-    "name": "Type-055 Destroyer", "author": "SB-129 (hrd4588)", "license": "CC BY 4.0",
+    "name": "Type-055 Destroyer",
+    "author": "SB-129 (hrd4588)",
+    "license": "CC BY 4.0",
     "url": "https://sketchfab.com/3d-models/type-055-destroyer-f0a96b2475da407eb6ea2b430ba9ea85",
-    "axes": ["z", "-x", "y"], "len": 50, "wl": 0.188, "tris": 24000
+    "axes": [
+      "z",
+      "-x",
+      "y"
+    ],
+    "len": 50,
+    "wl": 0.188,
+    "tris": 24000
+  },
+  "treepack": {
+    "mode": "tex",
+    "file": "treepack.glb",
+    "name": "Low Poly Forest Tree Pack",
+    "author": "99.Miles",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/low-poly-forest-tree-pack-5ff5a51e74324845a4e4905f182dfb2b",
+    "unit": 1,
+    "tex": 1024,
+    "parts": {
+      "bg0": [
+        0
+      ],
+      "bg1": [
+        1
+      ],
+      "bg2": [
+        2
+      ],
+      "bg3": [
+        3
+      ],
+      "bg4": [
+        4
+      ],
+      "bg5": [
+        5
+      ],
+      "bg6": [
+        6
+      ],
+      "bg7": [
+        7
+      ],
+      "bush0": [
+        8
+      ],
+      "bush1": [
+        9
+      ],
+      "bush2": [
+        10
+      ],
+      "bush3": [
+        11
+      ],
+      "bush4": [
+        12
+      ],
+      "rock0": [
+        13
+      ],
+      "rock1": [
+        14
+      ],
+      "rock2": [
+        15
+      ],
+      "rock3": [
+        16
+      ],
+      "rock4": [
+        17
+      ],
+      "rock5": [
+        18
+      ],
+      "rock6": [
+        19
+      ],
+      "rock7": [
+        20
+      ],
+      "rock8": [
+        21
+      ],
+      "treeA": [
+        22,
+        27
+      ],
+      "treeB": [
+        23,
+        26
+      ],
+      "treeC": [
+        24,
+        28
+      ],
+      "treeD": [
+        25,
+        29
+      ]
+    }
+  },
+  "oldbld": {
+    "mode": "tex",
+    "file": "oldbld.glb",
+    "name": "Old Building | Lowpoly",
+    "author": "Frid.blend",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/old-building-lowpoly-1f304c6e56324c19955a18aa79b15b9f",
+    "unit": 1
+  },
+  "quonset": {
+    "mode": "tex",
+    "file": "quonset.glb",
+    "name": "Military Style Building (with animations)",
+    "author": "TampaJoey",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/military-style-building-with-animations-1671685e1dd94b6e9216ead632f08f6e",
+    "unit": 1,
+    "drop": "Ceiling|Inside|Fluorescent|Tracks|Barricades|Keypads|Brackets|Fuse|Object_1[57]|DoorFrames|MetalFrame",
+    "tris": 5000
+  },
+  "atc": {
+    "mode": "tex",
+    "file": "atc.glb",
+    "name": "Air Traffic Control Tower",
+    "author": "abass20",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/air-traffic-control-tower-84f215391662453680e646649d42b264",
+    "unit": 1,
+    "drop": "Cube\\.00[789]|Cylinder\\.008"
+  },
+  "asianb3": {
+    "mode": "tex",
+    "file": "asianb3.glb",
+    "unit": 1
+  },
+  "jph1": {
+    "mode": "tex",
+    "file": "jph1.glb",
+    "name": "Japanese Residential Home 01",
+    "author": "Morrissey Alexander",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/japanese-residential-home-01-d690f83d8e8d48e6a532bebe84901595",
+    "unit": 0.01
+  },
+  "jph2": {
+    "mode": "tex",
+    "file": "jph2.glb",
+    "name": "Japanese Residential Home 02",
+    "author": "Morrissey Alexander",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/japanese-residential-home-02-c31697f09152453cb3ed215482e7a810",
+    "unit": 0.01
+  },
+  "jph3": {
+    "mode": "tex",
+    "file": "jph3.glb",
+    "name": "Japanese Residential Home 03",
+    "author": "Morrissey Alexander",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/japanese-residential-home-03-1c53f4f37fc44c32a8874464025aea48",
+    "unit": 0.01
+  },
+  "asiantower": {
+    "mode": "tex",
+    "file": "asiantower.glb",
+    "name": "LOW POLY - ASIAN TOWER BLOCK",
+    "author": "Colin.Greenall",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/low-poly-asian-tower-block-694adf5094fa41f99a245ed822293f47",
+    "unit": 1
+  },
+  "oldconc": {
+    "mode": "tex",
+    "file": "oldconc.glb",
+    "name": "Old Concete Building Pack | Lowpoly",
+    "author": "Frid.blend",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/old-concete-building-pack-lowpoly-6d070fcc86b0430dadf53da67545c6f3",
+    "unit": 1,
+    "parts": {
+      "conc1": [
+        0
+      ],
+      "conc2": [
+        1
+      ],
+      "conc3": [
+        2
+      ]
+    }
+  },
+  "house": {
+    "mode": "tex",
+    "file": "house.glb",
+    "name": "House",
+    "author": "SpatialNeglect",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/house-e70c4aebc911429ba9a894b38146892c",
+    "unit": 0.065,
+    "drop": "^Plane$|ground"
+  },
+  "hangar": {
+    "mode": "tex",
+    "file": "hangar.glb",
+    "name": "j type hanger",
+    "author": "ElectricL",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/j-type-hanger-d86713d61b4941378a6ad21569e0cbac",
+    "unit": 1,
+    "tris": 4500
+  },
+  "palms": {
+    "mode": "tex",
+    "file": "palms.glb",
+    "name": "Palm Trees",
+    "author": "YadroGames",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/palm-trees-55690379305145488e20afb05fc687e6",
+    "unit": 1,
+    "parts": {
+      "palm1": [
+        0
+      ],
+      "palm2": [
+        1
+      ],
+      "palm3": [
+        2
+      ],
+      "palm4": [
+        3
+      ]
+    },
+    "tex": 1024
+  },
+  "rocks3": {
+    "mode": "tex",
+    "file": "rocks3.glb",
+    "name": "Rocks Set 3",
+    "author": "DJMaesen",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/rocks-set-3-9a160330d1c14268948248f387889b35",
+    "unit": 0.01,
+    "parts": {
+      "drock1": [
+        1
+      ],
+      "drock2": [
+        2
+      ],
+      "drock3": [
+        3
+      ],
+      "drock4": [
+        4
+      ],
+      "drock5": [
+        5
+      ],
+      "pillar": [
+        6
+      ],
+      "cliff1": [
+        8
+      ],
+      "arch": [
+        10
+      ]
+    }
+  },
+  "cliffs": {
+    "mode": "tex",
+    "file": "cliffs.glb",
+    "name": "Cliffs",
+    "author": "DJMaesen",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/cliffs-14fe5023840146179c8515093e88fae0",
+    "unit": 0.01,
+    "parts": {
+      "cliffA": [
+        0
+      ],
+      "cliffB": [
+        1
+      ]
+    }
   }
 }

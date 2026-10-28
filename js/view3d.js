@@ -415,7 +415,10 @@ function v3Bld() {
   const A = typeof afb3dBlocks === 'function' ? afb3dBlocks() : [];
   V3.asig = typeof afb3dSig === 'function' ? afb3dSig() : '';
   const K = v3Chunks();
-  for (const k of A) {
+  const rep = typeof v3pRep === 'function' ? v3pRep : () => false;   // 换成外部模型的（v3props.js）不再自己挤出
+  for (let ai = 0; ai < A.length; ai++) {
+    const k = A[ai];
+    if (rep(ai)) continue;
     const n = k.pts.length, ch = K.need(n * 5 + 2), vb = ch.vb, ib = ch.ib;
     const P = k.pts.map(([x, y]) => [x, -y]), g = Math.min(...k.pts.map(([x, y]) => v3Ht(x, y))) - .5, z0 = g + k.z0 * 1.6, top = g + k.z * 1.6;
     const cx = P.reduce((a, p) => a + p[0], 0) / n, cy = P.reduce((a, p) => a + p[1], 0) / n, b0 = vb.length / 8;
@@ -432,7 +435,7 @@ function v3Bld() {
     }
   }
   const TW = typeof TER === 'object' && TER.towns ? [...(TER.towns.vills || []), TER.towns.town1, TER.towns.town2, TER.towns.town3, TER.towns.hq].filter(Boolean) : [];
-  for (const b of L) {
+  for (const b of rep('town') ? [] : L) {
     const ch = K.need(48), vb = ch.vb, ib = ch.ib;
     const quad = (pts, n, e) => { const k = vb.length / 8; pts.forEach(([x, y, z], i) => vb.push(x, y, z, n[0], n[1], n[2], e ? e[i][0] : (i === 1 || i === 2 ? 1 : 0), e ? e[i][1] : (i >= 2 ? 1 : 0))); ib.push(k, k + 1, k + 2, k, k + 2, k + 3); };
     const box = (X0, X1, Y0, Y1, z0, z1, roof = true) => {   // GL 坐标的方块（Y 已取负）：四面墙 + 平顶
@@ -482,7 +485,7 @@ function v3Bld() {
     return o;
   }), drop = L => { for (const c of L || []) { gl.deleteBuffer(c.b); gl.deleteBuffer(c.i); } };
   drop(V3.bch);
-  const TL = v3Trees();
+  const TL = typeof v3pReady === 'function' && v3pReady() ? [] : v3Trees();   // 树换成外部模型后不再种自己的
   if (V3.tchL !== TL) { drop(V3.tch); V3.tch = up(TL); V3.tchL = TL; }   // 树只在地图 / 地形变了时重传（机场被发现时只重建房屋）
   V3.bch = [...up(K.out), ...V3.tch];
   V3.bn = V3.bch.reduce((a, c) => a + c.n, 0);
@@ -801,6 +804,7 @@ function v3Draw(now) {
     }
     gl.disableVertexAttribArray(ab.p); gl.disableVertexAttribArray(ab.n); gl.disableVertexAttribArray(ab.e);
   }
+  if (typeof v3Props === 'function') { gl.disableVertexAttribArray(V3.a.p); gl.disableVertexAttribArray(V3.a.n); v3Props(C); }   // 地图物件：树木、岩石、楼房、机场设施（v3props.js，免费资源模型）
   if (typeof v3Units === 'function' && !(SETTINGS && SETTINGS.models3d === false)) { gl.disableVertexAttribArray(V3.a.p); gl.disableVertexAttribArray(V3.a.n); v3Units(C, box); }   // 兵种立体模型（v3units.js）
   if (typeof v3Fx === 'function' && !(SETTINGS && SETTINGS.models3d === false)) { gl.disableVertexAttribArray(V3.a.p); gl.disableVertexAttribArray(V3.a.n); v3Fx(C); }   // 立体弹道（v3fx.js）
   const ctx = R.ctx;

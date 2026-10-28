@@ -69,7 +69,7 @@ function afbBuild(h, s) {
     const Q = (x, y) => [u + x * ca - y * sa, v + x * sa + y * ca];
     const R4 = (x0, y0, x1, y1) => [Q(x0, y0), Q(x1, y0), Q(x1, y1), Q(x0, y1)];
     const pts = R4(-l, -w, l, w);
-    shade('shade', pts, z); poly('foot', pts); G.blocks.push({ pts, z, z0 });
+    shade('shade', pts, z); poly('foot', pts); G.blocks.push({ pts, z, z0, m, r });   // m、r：3D 里按材质、屋顶类型换模型（v3props.js）
     take(Math.min(...pts.map(p => p[0])), Math.min(...pts.map(p => p[1])), Math.max(...pts.map(p => p[0])), Math.max(...pts.map(p => p[1])));
     if (r === 'flat') {
       const i1 = Math.min(.9, l * .2, w * .2);
@@ -239,8 +239,8 @@ function afbBuild(h, s) {
   bld(-215, 107, 44, 24, 0, 7, 'conc', 'flat');   // 消防站：车库门朝滑行道，门前三辆消防车
   for (let i = 0; i < 5; i++) rect('bay', -234.5 + i * 8.6, 94.6, -228.5 + i * 8.6, 95.8);
   for (const u of [-229, -215, -201]) veh('vLime', u, 90, 3.4, 8.4, -Math.PI / 2);
-  bld(-215, 136, 10, 10, 0, 30, 'conc', 'flat');  // 塔台：塔身 + 八角形玻璃塔顶
-  { const o = ngon(-215, 136, 7, 8); shade('shade', o, 36); poly('foot', o); poly('cab', o); poly('cabTop', ngon(-215, 136, 4.6, 8)); G.blocks.push({ pts: o, z: 36, z0: 30 }); line('ant', -215, 136, -211, 132.5); }
+  bld(-215, 136, 10, 10, 0, 30, 'conc', 'flat'); G.blocks[G.blocks.length - 1].k = 'tower';  // 塔台：塔身 + 八角形玻璃塔顶
+  { const o = ngon(-215, 136, 7, 8); shade('shade', o, 36); poly('foot', o); poly('cab', o); poly('cabTop', ngon(-215, 136, 4.6, 8)); G.blocks.push({ pts: o, z: 36, z0: 30, k: 'cab' }); line('ant', -215, 136, -211, 132.5); }
   bld(-215, 161, 40, 22, 0, 7, 'tan', 'flat');    // 航务楼
   for (const u of [-120, 0, 120]) {   // 维修机库：拱顶、门朝停机坪（门轨与门扇）
     bld(u, 256, 70, 48, 0, 16, 'metal', 'arch');
@@ -552,7 +552,7 @@ function afb3dBases() {
 const afb3dSig = () => afb3dBases().map(b => `${b.id}:${Math.round(b.x)},${Math.round(b.y)},${(b.rh || 0).toFixed(3)},${b.rs || 1}`).join('|');
 function afb3dBlocks() {
   const out = [];
-  for (const b of afb3dBases()) for (const k of afbGeo(b.rh || 0, b.rs || 1).blocks) out.push({ pts: k.pts.map(([u, v]) => eaW(b, u, v)), z: k.z, z0: k.z0 || 0 });
+  for (const b of afb3dBases()) for (const k of afbGeo(b.rh || 0, b.rs || 1).blocks) out.push({ pts: k.pts.map(([u, v]) => eaW(b, u, v)), z: k.z, z0: k.z0 || 0, m: k.m, r: k.r, k: k.k, base: b.id });
   return out;
 }
 
