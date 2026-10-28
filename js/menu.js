@@ -1,5 +1,5 @@
 'use strict';
-// 开始界面：标题、主菜单（继续 / 战役 / 沙盒 / 图鉴 / 设置）、难度选择、设置面板；右上角 ≡ 菜单按钮
+// 开始界面：标题、主菜单（继续 / 闯关 / 沙盒 / 图鉴 / 设置，电脑版与安卓版还有退出）、难度选择、设置面板；右上角 ≡ 菜单按钮
 // 菜单打开时：背景是整张沙盘桌（3D）、战场暗化，HUD 隐藏，游戏暂停（从对局中打开时）
 const MENU = { open: false, el: null, set: null, view: 'main', game: false, pausedBy: false, idx: 0, last: 'pve', toastT: 0, drift: 0 };
 const MN_ICON = {
@@ -8,6 +8,7 @@ const MN_ICON = {
   sbx: '<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7" stroke-dasharray="2 2"/><rect x="3" y="14" width="7" height="7" stroke-dasharray="2 2"/><path d="M17.5 14v7M14 17.5h7"/>',
   cdx: '<path d="M4 4h7a2 2 0 012 2v14a2 2 0 00-2-2H4z"/><path d="M20 4h-5a2 2 0 00-2 2v14a2 2 0 012-2h5z"/>',
   set: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/>',
+  quit: '<path d="M12 3v8"/><path d="M6.3 6.8a8 8 0 1011.4 0"/>',
   menu: '<path d="M4 7h16M4 12h16M4 17h16"/>'
 };
 const MN_ITEMS = [
@@ -15,7 +16,8 @@ const MN_ITEMS = [
   ['pve', '闯关', 'CAMPAIGN', '三章十关：每关给预算，自己挑兵种、布置兵力——先夺制海权，再登陆，再向纵深推进'],
   ['sbx', '沙盒模式', 'SANDBOX', '自由部署双方兵力，观战或亲自指挥'],
   ['cdx', '兵力图鉴', 'CODEX', '全部单位的属性、定位与克制关系'],
-  ['set', '设置', 'SETTINGS', '音量、画面、开场转场与指挥官通讯']
+  ['set', '设置', 'SETTINGS', '音量、画面、开场转场与指挥官通讯'],
+  ...(typeof platCanQuit === 'function' && platCanQuit() ? [['quit', '退出游戏', 'QUIT', '关闭暗剑，回到桌面']] : [])   // 电脑版、安卓版（platform.js）
 ];
 const MN_LV = [
   ['normal', '普通', 'NORMAL', '守军较少，士气易崩', COL.g],
@@ -79,6 +81,7 @@ body.mn-open > :not(#stage):not(.mn-layer):not(script):not(style), body.mn-open 
 #mn .mn-back { justify-self: start; background: transparent; border: 1px solid var(--line); border-radius: 4px; padding: 6px 16px; color: var(--text); min-height: 36px; }
 #mn .mn-back:hover, #mn .mn-back:focus-visible { border-color: var(--line-hi); outline: none; }
 #mn footer { display: flex; justify-content: space-between; gap: 12px; font-size: 11px; color: var(--mute); flex-wrap: wrap; }
+#mn footer .mn-adv { flex-basis: 100%; text-align: center; opacity: .8; }
 #mn footer kbd { border: 1px solid var(--line); border-radius: 3px; padding: 0 4px; font: 10px var(--f-ui); color: var(--text); }
 #mn .mn-toast { position: fixed; left: 50%; bottom: 60px; transform: translateX(-50%); background: rgba(20, 12, 3, .92); border: 1px solid var(--amber); color: #ffe2a3; padding: 6px 16px; border-radius: 4px; font-size: 13px; pointer-events: none; }
 #btnMenu .ic { width: 18px; height: 18px; vertical-align: middle; }
@@ -120,6 +123,9 @@ body.mn-open > :not(#stage):not(.mn-layer):not(script):not(style), body.mn-open 
 #mnSet footer { display: flex; justify-content: space-between; margin-top: 12px; gap: 10px; }
 #mnSet footer button { background: transparent; border: 1px solid var(--line); border-radius: 4px; padding: 6px 16px; color: var(--text); min-height: 34px; }
 #mnSet footer .go { border-color: var(--g); color: var(--g); }
+#mnSet .ms-about { margin-top: 12px; text-align: center; font-size: 11px; color: var(--mute); }
+#mnSet .ms-about button { background: none; border: 0; padding: 2px 4px; color: var(--mute); text-decoration: underline; text-underline-offset: 3px; }
+#mnSet .ms-about button:hover { color: var(--g); }
 @media (max-width: 900px) {
   #mn .mn-main { grid-template-columns: minmax(0, 1fr); }
   #mn .mn-info { display: none; }
@@ -137,6 +143,7 @@ body.mn-open > :not(#stage):not(.mn-layer):not(script):not(style), body.mn-open 
   #mn .mn-lv dl { font-size: 11px; gap: 1px 10px; } #mn .mn-lv .go2 { display: none; }
   #mn .mn-back { min-height: 30px; padding: 3px 14px; }
 }
+@media (pointer: coarse) { #mn footer .mn-keys { display: none; } }   /* 手机、平板：没有键盘，不显示按键提示 */
 @media (max-width: 560px) {
   #mn .mn-wrap { padding: 32px 16px 16px; gap: 20px; }
   #mn .mn-en { letter-spacing: .4em; }
@@ -168,7 +175,7 @@ function mnBuild() {
     `<button type="button" class="mn-lv" data-lv="${k}" style="--c:${c}"><b>${n}<small>${en}</small></b><span>${d}</span><dl>${mnLvStats(k)}</dl><span class="go2">出发 ▸</span></button>`).join('')}</div>
     <button type="button" class="mn-back">‹ 返回</button></div>
   </div>
-  <footer><span class="mn-keys"><kbd>↑</kbd><kbd>↓</kbd> 选择 · <kbd>Enter</kbd> 确认 · <kbd>Esc</kbd> 返回</span><span id="mnSeed"></span></footer></div>`;
+  <footer><span class="mn-keys"><kbd>↑</kbd><kbd>↓</kbd> 选择 · <kbd>Enter</kbd> 确认 · <kbd>Esc</kbd> 返回</span><span id="mnSeed"></span>${typeof PLAT === 'object' && PLAT.android ? `<span class="mn-adv">${PLAT_ADVICE}</span>` : ''}</footer></div>`;
   document.body.appendChild(el);
   const list = el.querySelector('.mn-list');
   list.addEventListener('click', e => { const b = e.target.closest('.mn-it'); if (b) mnAct(b.dataset.k); });
@@ -203,6 +210,7 @@ function mnHi(k, snd) {
   else if (k === 'sbx') body = `<p>在同一张海岸地图上自由部署岸防与进攻部队，按预算对抗；可以观战 AI 对 AI，也可以亲自指挥进攻方。</p><dl><dt>状态</dt><dd>${typeof openSandbox === 'function' ? '可用' : '模块加载中'}</dd></dl>`;
   else if (k === 'cdx') { const n = typeof CATALOG !== 'undefined' && Array.isArray(CATALOG) ? CATALOG.length : 0; body = `<p>查看全部兵力：步兵、装甲、火炮、航空、舰艇、工事与支援单位的属性条、定位与克制关系。</p><dl><dt>收录</dt><dd>${n ? n + ' 种单位' : '目录加载中'}</dd></dl>`; }
   else if (k === 'set') body = `<p>主音量、音乐、音效、无线电；辉光、画质、3D 渲染距离、屏幕震动；开场转场；AI 指挥官通讯详略。</p><dl><dt>当前</dt><dd>主音量 ${Math.round(SETTINGS.master * 100)}% · 画质${SETTINGS.quality === 'low' ? '低' : '高'}</dd></dl>`;
+  else if (k === 'quit') body = `<p>关闭暗剑。设置、闯关进度和部署存档都存在本机，下次打开还在。</p>${mnCanResume() ? '<p>打到一半的这一局不会保存。</p>' : ''}`;
   info.innerHTML = `<h2>${it[2]}</h2>${body}`;
 }
 function mnLvHi(b) {
@@ -249,7 +257,7 @@ function showMenu(view) {
   for (const b of el.querySelectorAll('.mn-it')) b.classList.remove('on');
   const first = cont.hidden ? el.querySelector(`[data-k="${MENU.last}"]`) || mnItems()[0] : cont;
   first.classList.add('on');
-  el.querySelector('#mnSeed').textContent = S ? `SEED ${S.seed}` : '';
+  el.querySelector('#mnSeed').textContent = [typeof window !== 'undefined' && window.DS_BUILD ? `版本 ${window.DS_BUILD}` : '', S ? `SEED ${S.seed}` : ''].filter(Boolean).join(' · ');
   typeof lyPush === 'function' && lyPush(el, mnKey);
   if (typeof decode === 'function') { decode(el.querySelector('#mnT'), '暗剑', 700); decode(el.querySelector('#mnE'), 'DARKSWORD', 1000); }
   mnView(view === 'pve' ? 'pve' : 'main', true);
@@ -277,6 +285,12 @@ function mnAct(k) {
   else if (k === 'sbx') mnSandbox();
   else if (k === 'cdx') { if (typeof openCodex === 'function') openCodex(); else mnToast('图鉴模块尚未就绪'); }
   else if (k === 'set') openSettings();
+  else if (k === 'quit') mnQuit();
+}
+// 退出游戏：有打到一半的对局时先提示一次，三秒内再点才退出（对局不存档）
+function mnQuit() {
+  if (mnCanResume() && performance.now() - PLAT.quitT > 3000) { PLAT.quitT = performance.now(); mnSfx('tick'); mnToast('这一局不会保存——再点一次「退出游戏」就退出'); return; }
+  mnSfx('back'); platQuit();
 }
 
 function mnToast(msg) {
@@ -364,8 +378,8 @@ function mnKey(e) {
 
 // —— 设置面板 ——
 const MN_SET = [
-  ['音量', 'VOLUME', [['master', '主音量', 'vol'], ['music', '音乐', 'vol'], ['musicStyle', '背景音乐', [['march', '进行曲'], ['custom', '我的歌'], ['ambient', '氛围']], '进行曲：明亮的军乐，战况越激烈编制越全；我的歌：用下面导入的歌'], ['bgm', '导入音乐', 'file', '选一首你设备上的歌（mp3 / m4a / ogg / wav），循环播放；只保存在你自己的浏览器里'], ['sfx', '音效', 'vol'], ['radio', '无线电通话', 'vol']]],
-  ['画面', 'DISPLAY', [['bloom', '辉光强度', 'pct'], ['quality', '画质', [['high', '高'], ['low', '低']]], ['rdist', '3D 渲染距离', 'rd', '3D 里能看多远（远处的地形、建筑、部队模型）；调远更耗性能。3D 中也可按 [ ] 键调'], ['shake', '屏幕震动', 'sw'], ['front', '战线与态势图形', 'sw', '显示双方战线、无人地带、空隙、突击群调整线']]],
+  ['音量', 'VOLUME', [['master', '主音量', 'vol'], ['music', '音乐', 'vol'], ['musicStyle', '背景音乐', [['march', '进行曲'], ['custom', '我的歌'], ['ambient', '氛围']], '进行曲：明亮的军乐，战况越激烈编制越全；我的歌：用下面导入的歌'], ['bgm', '导入音乐', 'file', '选一首你设备上的歌（mp3 / m4a / ogg / wav），循环播放；只保存在这台设备上'], ['sfx', '音效', 'vol'], ['radio', '无线电通话', 'vol']]],
+  ['画面', 'DISPLAY', [...(typeof platCanFs === 'function' && platCanFs() ? [['fs', '全屏', 'sw', PLAT.desk ? 'F11 或 Alt+Enter 也能切换，下次打开照此' : '按 Esc 退出全屏']] : []), ['bloom', '辉光强度', 'pct'], ['quality', '画质', [['high', '高'], ['low', '低']]], ['rdist', '3D 渲染距离', 'rd', '3D 里能看多远（远处的地形、建筑、部队模型）；调远更耗性能。3D 中也可按 [ ] 键调'], ['shake', '屏幕震动', 'sw'], ['front', '战线与态势图形', 'sw', '显示双方战线、无人地带、空隙、突击群调整线']]],
   ['流程', 'FLOW', [['intro', '开场转场', 'sw', '从国家全图推近到战场，约 7 秒']]],
   ['AI 指挥官通讯', 'COMMANDER CHAT', [['chat', '通讯详略', [['brief', '简要'], ['normal', '标准'], ['verbose', '详细']]], ['enemyChat', '显示敌方（截获）', 'sw', '战役中敌方通话以「截获」形式延迟出现']]]
 ];
@@ -387,7 +401,8 @@ function mnSetBuild() {
   };
   el.innerHTML = `<div class="ms-win"><header><h2>设置<small>SETTINGS</small></h2><button type="button" class="ms-x" aria-label="关闭" title="关闭（Esc）">×</button></header>
     ${MN_SET.map(([h, en, rows]) => `<h3>${h} · ${en}</h3>${rows.map(row).join('')}`).join('')}
-    <footer><button type="button" class="ms-reset">恢复默认</button><button type="button" class="go ms-ok">完成</button></footer></div>`;
+    <footer><button type="button" class="ms-reset">恢复默认</button><button type="button" class="go ms-ok">完成</button></footer>
+    <div class="ms-about">${typeof window !== 'undefined' && window.DS_BUILD ? `版本 ${window.DS_BUILD} · ` : ''}<button type="button" data-doc="terms">用户协议</button> · <button type="button" data-doc="privacy">隐私政策</button></div></div>`;
   document.body.appendChild(el);
   el.addEventListener('input', e => { const i = e.target.closest('input[type=range]'); if (i) { setSetting(i.dataset.k, +i.value); mnSetSync(); } });
   el.addEventListener('change', async e => {
@@ -398,7 +413,7 @@ function mnSetBuild() {
       fn.textContent = '正在载入…';
       const r = await auBgmImport(file);
       f.value = '';
-      if (r.ok) { setSetting('musicStyle', 'custom'); fn.textContent = `♪ ${auBgmName()}${r.saved ? '' : '（本次有效，浏览器不让保存）'}`; }
+      if (r.ok) { setSetting('musicStyle', 'custom'); fn.textContent = `♪ ${auBgmName()}${r.saved ? '' : '（本次有效，没能存到这台设备上）'}`; }
       else fn.textContent = r.why;
       mnSetSync();
       return;
@@ -408,8 +423,9 @@ function mnSetBuild() {
   el.addEventListener('click', e => {
     const b = e.target.closest('button');
     if (!b) return;
+    if (b.dataset.doc) { if (typeof platDoc === 'function') platDoc(b.dataset.doc); return; }   // 两份协议（platform.js）
     if (b.dataset.fclr) { if (typeof auBgmForget === 'function') auBgmForget().then(mnSetSync); if (SETTINGS.musicStyle === 'custom') setSetting('musicStyle', 'march'); }
-    else if (b.classList.contains('ms-sw')) setSetting(b.dataset.k, !SETTINGS[b.dataset.k]);
+    else if (b.classList.contains('ms-sw')) { if (b.dataset.k === 'fs') platSetFs(!platFs()); else setSetting(b.dataset.k, !SETTINGS[b.dataset.k]); }   // 全屏归外壳 / 浏览器管，不进 SETTINGS
     else if (b.dataset.v) setSetting(b.dataset.k, b.dataset.v);
     else if (b.classList.contains('ms-reset')) resetSettings();
     else if (b.classList.contains('ms-x') || b.classList.contains('ms-ok')) { closeSettings(); return; }
@@ -427,7 +443,7 @@ function mnSetSync() {
     i.style.setProperty('--v', (v - +i.min) / ((+i.max - +i.min) || 1) * 100 + '%');
     el.querySelector(`[data-o="${i.dataset.k}"]`).textContent = mnFmt(i.dataset.k, v);
   }
-  for (const b of el.querySelectorAll('.ms-sw')) b.setAttribute('aria-checked', !!SETTINGS[b.dataset.k]);
+  for (const b of el.querySelectorAll('.ms-sw')) b.setAttribute('aria-checked', b.dataset.k === 'fs' ? platFs() : !!SETTINGS[b.dataset.k]);
   for (const b of el.querySelectorAll('.ms-seg button')) b.setAttribute('aria-pressed', SETTINGS[b.dataset.k] === b.dataset.v);
   const fn = el.querySelector('[data-fn="bgm"]');
   if (fn && fn.textContent !== '正在载入…') fn.textContent = typeof auBgmName === 'function' && auBgmName() ? `♪ ${auBgmName()}` : '还没有导入';

@@ -1,5 +1,13 @@
 apply plugin: 'com.android.application'
 
+// 发布签名：android/keystore.properties（不进仓库，照 keystore.properties.example 填），或环境变量 DS_KEYSTORE 等（GitHub Actions 用）；
+// 都没有时 release 包不签名（商店不收），debug 包照常用调试签名。签名文件一旦用来上架就不能换，丢了就没法给老玩家更新
+def ksProps = new Properties()
+def ksFile = rootProject.file('keystore.properties')
+if (ksFile.exists()) ksFile.withInputStream { ksProps.load(it) }
+def ks = { String k, String env -> ksProps.getProperty(k) ?: System.getenv(env) }
+def ksPath = ks('storeFile', 'DS_KEYSTORE')
+
 android {
     namespace = "com.studio.darksword"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -7,8 +15,9 @@ android {
         applicationId "com.studio.darksword"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
+        // 每次上传商店前 versionCode 加一（商店不收相同或更小的）；versionName 与 package.json 的 version 一致
         versionCode 1
-        versionName "1.0"
+        versionName "1.0.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -16,8 +25,19 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        release {
+            if (ksPath) {
+                storeFile rootProject.file(ksPath)
+                storePassword ks('storePassword', 'DS_KEYSTORE_PASSWORD')
+                keyAlias ks('keyAlias', 'DS_KEY_ALIAS')
+                keyPassword ks('keyPassword', 'DS_KEY_PASSWORD')
+            }
+        }
+    }
     buildTypes {
         release {
+            if (ksPath) signingConfig signingConfigs.release
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }

@@ -46,6 +46,7 @@ function start(data) {
   updateVision(); updateHud();
   // 开始界面；热重载恢复的对局直接继续
   if (typeof showMenu === 'function') { if (hot && !S.attract) MENU.game = true; else { $('brief').hidden = true; showMenu(); } }
+  if (typeof platBoot === 'function') platBoot();   // 电脑版 / 安卓版的接入：返回键、全屏、首次打开的协议确认（platform.js）
   requestAnimationFrame(frame);
 }
 

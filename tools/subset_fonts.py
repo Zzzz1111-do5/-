@@ -5,7 +5,7 @@
   依赖：pip install fonttools brotli
   源字体不在缓存目录里时自动下载（google/fonts 与 notofonts/noto-cjk 仓库，均为 SIL OFL 1.1 许可）。
 
-收录的字：游戏源码（index.html、js/*.js）里出现的全部字符 + ASCII + GB2312 一级常用汉字（3755 字，
+收录的字：游戏源码（index.html、js/*.js）与协议页（legal/*.html）里出现的全部字符 + ASCII + GB2312 一级常用汉字（3755 字，
 覆盖以后新加的文字和玩家输入）。改了界面文字、用到生僻字时重新运行一次即可；缺的字会落到系统字体（微软雅黑等）。
 """
 import glob
@@ -43,7 +43,7 @@ def fetch(url, path):
 
 def game_chars():
     s = set()
-    for f in [os.path.join(ROOT, 'index.html')] + glob.glob(os.path.join(ROOT, 'js', '*.js')):
+    for f in [os.path.join(ROOT, 'index.html')] + glob.glob(os.path.join(ROOT, 'js', '*.js')) + glob.glob(os.path.join(ROOT, 'legal', '*.html')):
         with open(f, encoding='utf-8') as fh:
             s |= set(fh.read())
     return s
