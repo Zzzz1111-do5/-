@@ -35,5 +35,6 @@ function v3xBuild(D) {
   for (let t = 0; t < m.nt; t++) { const e = E[t]; mbTri(M, p(I[t * 3]), p(I[t * 3 + 1]), p(I[t * 3 + 2]), SH[t] / 127.5 - 1, [e & 1, e >> 1 & 1, e >> 2 & 1]); }
   for (let l = 0; l < m.nl; l++) { const a = rd(), b = rd(); mbLine(M, p(a), p(b), .55); }
   M.len = m.len; M.vls = m.vls || null;   // 垂发块（米，v3fx.js v3VlsOrigin 用）
+  M.zc = m.zc || 0; M.parts = m.parts || null;   // 飞机：机身中线离着地点的高度、活动舵面（转轴，米）
   return M;
 }

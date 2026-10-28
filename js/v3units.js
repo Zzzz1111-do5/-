@@ -1693,6 +1693,7 @@ function v3mGet(key, build) {
 // 停在甲板 / 地面上（或在地面滑行）的飞机：精细模型放下起落架（轮子着地），外翼折起程度、座舱盖开度按四档取模型；外挂、旋翼、螺旋桨另外实例化
 const V3_PIL = .95;   // 飞行员、甲板人员的比例（按飞机的真实比例，比战场上的士兵小）
 function v3GroundPlane(key, sz, x, y, ground, hd, fold, cpo, still, side, t) {
+  if (typeof v3dPlaneX === 'function' && v3dPlaneX(key, sz, x, y, ground, true, hd, side, 0, 0, true, null)) return;   // 导入的真机模型（放下起落架）
   const k = sz / 21;
   if (typeof AIRD === 'object' && AIRD[key]) {
     const f = AIRD[key].fold ? Math.round(clamp(fold, 0, 1) * 3) : 0, c = Math.round(clamp(cpo, 0, 1) * 3), z = ground + V3_GEAR * k;
@@ -1979,7 +1980,12 @@ function v3mCollect(C, box) {
   const plane = (o, hd, sd, key, sz, bank) => {
     const L = !sd && typeof v3dLaunch === 'function' ? v3dLaunch(o) : null, gear = L && L.gear && typeof AIRD === 'object' && AIRD[key];   // 刚离舰：下沉、抬头，起落架过一会儿才收（v3det.js）
     const x = o.x, y = o.y, z = v3AirZ(o) + (L ? L.dz : 0), k = sz / 21, ac = sd + 3;   // 3、4：飞机涂装（写实画面灰色）
-    const pt = V3_PLANE_TAIL[key] === 'heli' ? 0 : typeof v3dPitch === 'function' ? v3dPitch(o, sd, z, L) : L ? L.pitch : 0;   // 仰角跟着航迹（直升机不按航迹抬头）
+    const pt = V3_PLANE_TAIL[key] === 'heli' ? 0 : typeof v3dPitch === 'function' ? v3dPitch(o, sd, z, L, key) : L ? L.pitch : 0;   // 仰角跟着航迹 + 迎角（js/aero.js；直升机不按航迹抬头）
+    if (typeof v3dPlaneX === 'function' && v3dPlaneX(key, sz, x, y, z, false, hd || 0, ac, bank || 0, pt, !!(L && L.gear), typeof v3dSurf === 'function' ? v3dSurf(o, sd) : null)) {   // 导入的真机模型（v3det.js）
+      const rs = typeof airRelState === 'function' ? airRelState(sd ? 'e' : 'p', o.id) : null;
+      if (rs && (rs.bay > .04 || rs.sbay > .04)) { const b = Math.round(rs.bay * 4), sb = Math.round(rs.sbay * 4); v3mAdd('bay:' + key + ':' + b + ':' + sb, () => v3mBay(key, b / 4, sb / 4), x, y, z, hd || 0, k, ac, bank || 0, pt); }
+      return;
+    }
     if (gear) v3mAdd('plg:' + key + ':0:0', () => v3mAir(key, 0, { gear: true, cpo: 0 }), x, y, z, hd || 0, k, ac, bank || 0, pt);
     else v3mAdd('pl:' + key, () => v3mPlane(key), x, y, z, hd || 0, k, ac, bank || 0, pt);
     const rs = typeof airRelState === 'function' ? airRelState(sd ? 'e' : 'p', o.id) : null;   // 弹舱开合、外挂消耗（airmdl.js）

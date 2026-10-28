@@ -566,14 +566,15 @@ function v3AirZ(o) {
   return o.kind && o.lT != null ? v3ClimbZ(o, z) : z;
 }
 // 刚弹射离舰的舰载机（cvdeck.js 记的离舰时刻 lT）：推演里 2 秒就升到巡航高度，照着画像坐电梯直上——
-//   画面按真实的爬升剖面：离舰速度约 85、边加速边抬头，航迹角约 1.6 秒到 13°，十来秒爬到推演的高度；快赶上时平滑改平，推演比剖面低（俯冲、低空突防）就照推演
-let V3_CLIMB = null;
+//   画面按 JSBSim 算的离舰时间历程（js/aero.js：先下沉约 3 米，再抬头加速爬升，14 秒约 220 米），之后按末了的爬升率继续；
+//   赶上推演的高度时平滑改平；推演更低时（俯冲、低空突防）照推演
 function v3ClimbZ(o, zs) {
   const u = S.t - o.lT;
-  if (!(u >= 0 && u < 25)) return zs;
-  if (!V3_CLIMB) { V3_CLIMB = [0]; let h = 0; for (let i = 1; i <= 250; i++) { const t = i / 10, v = Math.min(170, 85 + 45 * t), g = .23 * sm01((t - .35) / 1.3); h += v * Math.sin(g) / 10; V3_CLIMB.push(h); } }
-  const i = Math.min(V3_CLIMB.length - 2, Math.floor(u * 10)), zp = V3_DECK + lerp(V3_CLIMB[i], V3_CLIMB[i + 1], u * 10 - i), d = zs - zp;
-  return d <= 0 ? zs : zs - d * sm01(d / 60);
+  if (!(u >= 0 && u < 40) || typeof AERO !== 'object') return zs;
+  const R = AERO.launch.rows, n = R.length - 1, f = u / AERO.launch.dt, i = Math.min(n - 1, Math.floor(f));
+  const h = f < n ? lerp(R[i][0], R[i + 1][0], f - i) : R[n][0] + (u - n * AERO.launch.dt) * (R[n][0] - R[n - 10][0]) / (10 * AERO.launch.dt);
+  const zp = V3_DECK + h, d = zs - zp;
+  return d <= 0 ? zs : zs - d * Math.max(sm01(d / 60), 1 - sm01((u - 2) / 2));   // 头 2 秒完全照数据（含下沉），之后只在快赶上时圆滑过渡
 }
 // 离地高度 h → 绝对高度：贴地时按脚下实际地面（lo 是海上的最低基准：舰载机 = 飞行甲板，其余 = 海面），一离地参考面就换成平滑的地形包络
 //   （v3Env，不跟着每个小山包上下抖），越高越接近海拔基准——220 以上完全按海拔平飞；低空过山时沿包络平缓爬升、越过山脊再下来
