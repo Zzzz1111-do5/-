@@ -314,6 +314,7 @@ function v3dEjArm(P, m) {
 //   每个停着飞机的机位内侧停一辆挂弹车，旁边一辆弹药拖车（两枚霹雳-15）。飞机着舰停好后整备 45 秒（carrier.js 的 rearm）：
 //   挂弹车托着导弹开到飞机侧面，举升、把导弹送进弹舱，再倒回原位，拖车上再取一枚放上托架
 //   着舰后的飞机滑到机位前：牵引车从内侧开过来，用拖杆挂上前起落架；原地转向、倒进机位都是它推着，停好后脱钩开走
+//   出动前：带武器的飞机在机位上登机时挂弹车同样把弹送进弹舱；快好时牵引车倒到机头前挂上拖杆，启动后把飞机拖出机位约 20 米再脱钩
 const V3D_TUG = new Map();
 const V3D_LOAD = { cradle: [1.75, .55], bayZ: 1.15 };   // 托架（挂弹车坐标：离车中心前方、离甲板高）、弹舱口离甲板高
 function v3dVeh(key, fb, x, y, z, a) {
@@ -323,15 +324,13 @@ function v3dVeh(key, fb, x, y, z, a) {
 function v3dDeckVeh(cv, C, live, wing, top, h, at) {
   if (typeof cvPark !== 'function' || typeof AIR_REARM !== 'number') return;
   const msl = typeof v3MslInst === 'function' ? v3MslInst('st3:x:', 'pl15') : null, K = .86;   // 导弹跟飞机同一比例
-  // 挂弹车：每个有飞机的机位一辆
-  for (const [id, j] of cvPark(cv, wing)) {
-    const w = wing.find(o => o.id === id), sl = C.slots[j];
-    if (!w || !sl) continue;
+  // 机位 j 旁的挂弹车与弹药拖车：r = 挂弹进度（0 开始 – 1 挂完；挂弹车开过去、举升把弹送进弹舱、倒回原位，拖车上再取一枚放上托架）
+  const loader = (j, key, sz, r) => {
+    const sl = C.slots[j];
+    if (!sl) return;
     const a = sl[2], ca = Math.cos(a), sa = Math.sin(a), lat = ca * sl[1] < 0 ? [-sa, ca] : [sa, -ca], la = Math.atan2(-lat[1], -lat[0]);   // lat：朝甲板内侧
-    const key = typeof airSilKey === 'function' ? airSilKey(w.type, w.v) : 'j35', D = typeof AIRD === 'object' && AIRD[key], sz = (typeof airMdl === 'function' && airMdl(w.type, w.v).size) || 15;
-    const bx = D && D.bay ? (D.bay[0] + D.bay[1]) / 2 * sz / 21 : 0, B = [sl[0] + ca * bx, sl[1] + sa * bx];   // 弹舱中点
-    const r = w.state === 'rearm' ? 1 - clamp(w.rearmT / AIR_REARM, 0, 1) : 1, d0 = 9.5, d1 = 3.6;
-    const dl = r < .1 ? d0 : r < .3 ? lerp(d0, d1, sm01((r - .1) / .2)) : r < .58 ? d1 : r < .78 ? lerp(d1, d0, sm01((r - .58) / .2)) : d0;
+    const D = typeof AIRD === 'object' && AIRD[key], bx = D && D.bay ? (D.bay[0] + D.bay[1]) / 2 * sz / 21 : 0, B = [sl[0] + ca * bx, sl[1] + sa * bx];   // 弹舱中点
+    const d0 = 9.5, d1 = 3.6, dl = r < .1 ? d0 : r < .3 ? lerp(d0, d1, sm01((r - .1) / .2)) : r < .58 ? d1 : r < .78 ? lerp(d1, d0, sm01((r - .58) / .2)) : d0;
     const Lu = B[0] + lat[0] * dl, Lv = B[1] + lat[1] * dl, [lx, ly] = at(Lu, Lv);
     v3dVeh('loader', v3mDeckCart, lx, ly, top + .02, h + la);
     // 弹药拖车：挂弹车原位旁边、顺着飞机方向
@@ -344,10 +343,28 @@ function v3dDeckVeh(cv, C, live, wing, top, h, at) {
       const [mx, my] = at(B[0] + lat[0] * reach, B[1] + lat[1] * reach);
       v3mAdd(msl[0], msl[1], mx, my, top + lerp(cr[1], V3D_LOAD.bayZ, q), h + a, K, 0);
     }
+  };
+  // 停着待命 / 整备的飞机（着舰后整备 45 秒）
+  for (const [id, j] of cvPark(cv, wing)) {
+    const w = wing.find(o => o.id === id);
+    if (!w) continue;
+    const key = typeof airSilKey === 'function' ? airSilKey(w.type, w.v) : 'j35', sz = (typeof airMdl === 'function' && airMdl(w.type, w.v).size) || 15;
+    loader(j, key, sz, w.state === 'rearm' ? 1 - clamp(w.rearmT / AIR_REARM, 0, 1) : 1);
   }
+  // 出动前挂弹：带武器的飞机在机位上登机的同时，挂弹车把弹送进弹舱（cvdeck.js 'brd'，CVD.arm 秒）
+  for (const p of live) if (p.phase === 'cat' && p.dk === 'brd' && p.arm && p.slot != null) loader(p.slot, v3dKey(p), v3dSz(p), clamp((p.dkT || 0) / CVD.arm, 0, 1));
   // 牵引车：着舰后滑到机位前、原地转向、倒进机位
   const seen = new Set();
   for (const p of live) {
+    // 出动：登机、挂弹快好时牵引车倒车开到机头前，挂上前起落架的拖杆；启动后把飞机拖出机位（cvdeck.js p.tow），拖够了脱钩开走（下面的脱钩一段）
+    const tb = p.phase === 'cat' && p.dk === 'brd' && p.tw && typeof cvBrdT === 'function' ? cvBrdT(p) : 0;
+    if (p.phase === 'cat' && p.lu != null && ((tb && (p.dkT || 0) > tb - 3) || (p.dk === 'eng' && p.tw) || (p.dk === 'taxi' && p.tow))) {
+      const kk = v3dK(p), nose = v3dNose(v3dKey(p), kk), c = Math.cos(p.lh), sn = Math.sin(p.lh), back = tb ? 12 * (1 - sm01(((p.dkT || 0) - (tb - 3)) / 3)) : 0;
+      const u = p.lu + c * (nose + 2.66 + back), v = p.lv + sn * (nose + 2.66 + back), [x, y] = at(u, v);
+      V3D_TUG.set(p.id, { u, v, a: p.lh, t: S.t, cv }); seen.add(p.id);
+      v3dVeh('tug', v3mDeckTractor, x, y, top + .02, h + p.lh);
+      continue;
+    }
     if (p.phase !== 'trap' || !Array.isArray(p.path) || !p.path.length || p.lu == null) continue;
     const s0 = p.path[0], tow = s0[0] === 'P' || s0[0] === 'R', near = !tow && p.path[1] && p.path[1][0] === 'P';
     if (!tow && !near) continue;
