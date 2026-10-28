@@ -119,6 +119,7 @@ body.mn-open > :not(#bgrain):not(#stage):not(.mn-layer):not(script):not(style), 
 #mnSet .ms-sw[aria-checked="true"] { border-color: var(--line-hi); background: rgba(var(--g-rgb), .16); }
 #mnSet .ms-sw[aria-checked="true"]::after { left: 25px; background: var(--g); box-shadow: 0 0 8px var(--g); }
 #mnSet .ms-note { grid-column: 2 / -1; font-size: 11px; color: var(--mute); margin-top: -6px; }
+#mnSet .ms-cred { margin: 4px 0 6px; padding-left: 18px; font-size: 11px; line-height: 1.6; color: var(--mute); } #mnSet .ms-cred a { color: var(--g); }
 #mnSet footer { display: flex; justify-content: space-between; margin-top: 12px; gap: 10px; }
 #mnSet footer button { background: transparent; border: 1px solid var(--line); border-radius: 4px; padding: 6px 16px; color: var(--text); min-height: 34px; }
 #mnSet footer .go { border-color: var(--g); color: var(--g); }
@@ -372,7 +373,7 @@ function mnKey(e) {
 // —— 设置面板 ——
 const MN_SET = [
   ['音量', 'VOLUME', [['master', '主音量', 'vol'], ['music', '音乐', 'vol'], ['musicStyle', '背景音乐', [['march', '进行曲'], ['custom', '我的歌'], ['ambient', '氛围']], '进行曲：明亮的军乐，战况越激烈编制越全；我的歌：用下面导入的歌'], ['bgm', '导入音乐', 'file', '选一首你设备上的歌（mp3 / m4a / ogg / wav），循环播放；只保存在你自己的浏览器里'], ['sfx', '音效', 'vol'], ['radio', '无线电通话', 'vol']]],
-  ['画面', 'DISPLAY', [['look', '画面风格', [['green', '黑绿'], ['real', '写实'], ['matrix', '数码']], '黑绿：写实的地形与模型，黑底绿色磷光、发光轮廓（敌方红）；写实：真实配色（我方蓝、敌方红）；数码：原来的字符矩阵风格'], ['rain', '数码雨密度', 'rain'], ['bloom', '辉光强度', 'pct'], ['quality', '画质', [['high', '高'], ['low', '低']]], ['rdist', '3D 渲染距离', 'rd', '3D 里能看多远（远处的地形、建筑、部队模型）；调远更耗性能。3D 中也可按 [ ] 键调'], ['shake', '屏幕震动', 'sw'], ['front', '战线与态势图形', 'sw', '显示双方战线、无人地带、空隙、突击群调整线']]],
+  ['画面', 'DISPLAY', [['look', '画面风格', [['green', '黑绿'], ['real', '写实'], ['matrix', '数码']], '黑绿：写实的地形与模型，黑底绿色磷光、发光轮廓（敌方红）；写实：真实配色（我方蓝、敌方红）；数码：原来的字符矩阵风格'], ['rain', '数码雨密度', 'rain'], ['bloom', '辉光强度', 'pct'], ['quality', '画质', [['high', '高'], ['low', '低']]], ['rdist', '3D 渲染距离', 'rd', '3D 里能看多远（远处的地形、建筑、部队模型）；调远更耗性能。3D 中也可按 [ ] 键调'], ['extMdl', '外部精细模型', 'sw', '3D 里部分单位换成免费可商用的真实模型（作者与授权见下方「素材致谢」）；关掉用游戏自己画的模型'], ['shake', '屏幕震动', 'sw'], ['front', '战线与态势图形', 'sw', '显示双方战线、无人地带、空隙、突击群调整线']]],
   ['流程', 'FLOW', [['intro', '开场转场', 'sw', '从国家全图推近到战场，约 7 秒']]],
   ['AI 指挥官通讯', 'COMMANDER CHAT', [['chat', '通讯详略', [['brief', '简要'], ['normal', '标准'], ['verbose', '详细']]], ['enemyChat', '显示敌方（截获）', 'sw', '战役中敌方通话以「截获」形式延迟出现']]]
 ];
@@ -394,6 +395,7 @@ function mnSetBuild() {
   };
   el.innerHTML = `<div class="ms-win"><header><h2>设置<small>SETTINGS</small></h2><button type="button" class="ms-x" aria-label="关闭" title="关闭（Esc）">×</button></header>
     ${MN_SET.map(([h, en, rows]) => `<h3>${h} · ${en}</h3>${rows.map(row).join('')}`).join('')}
+    ${typeof v3imCredits === 'function' ? `<h3>素材致谢 · CREDITS</h3><ul class="ms-cred">${v3imCredits()}</ul>` : ''}
     <footer><button type="button" class="ms-reset">恢复默认</button><button type="button" class="go ms-ok">完成</button></footer></div>`;
   document.body.appendChild(el);
   el.addEventListener('input', e => { const i = e.target.closest('input[type=range]'); if (i) { setSetting(i.dataset.k, +i.value); mnSetSync(); } });

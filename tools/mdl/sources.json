@@ -1,0 +1,8 @@
+{
+  "t055": {
+    "file": "t055.glb",
+    "name": "Type-055 Destroyer", "author": "SB-129 (hrd4588)", "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/type-055-destroyer-f0a96b2475da407eb6ea2b430ba9ea85",
+    "axes": ["z", "-x", "y"], "len": 50, "wl": 0.188, "tris": 24000
+  }
+}

@@ -63,11 +63,12 @@ function v3VlsOrigin(m) {
   else { if (S.dd && S.dd.state !== 'sunk') take(S.dd, typeof vlsCls === 'function' ? vlsCls(S.dd) : '055'); for (const o of S.ships) if (o.kind === 'dd' && alive(o)) take(o, typeof vlsCls === 'function' ? vlsCls(o) : '052D'); }
   let o = null;
   if (sh) {
-    const K = cls && typeof SH_DDC === 'object' ? SH_DDC[cls] : null, blocks = K ? K.vls : [[8, 13, 2.2]], b = blocks[m.id % blocks.length], k = K ? K.k : 1;
+    const IM = cls && typeof v3imOn === 'function' ? v3imOn(cls === '055' ? 't055' : null) : null;   // 换成外部精细模型的舰：垂发位置按那个模型
+    const K = IM && IM.vls ? { k: 1, w: 1, vls: IM.vls } : cls && typeof SH_DDC === 'object' ? SH_DDC[cls] : null, blocks = K ? K.vls : [[8, 13, 2.2]], b = blocks[m.id % blocks.length], k = K ? K.k : 1;
     const pseudo = (m.id * 9301 + 49297) % 233280 / 233280, pv = (m.id * 4271 + 113) % 1000 / 1000;
     const u = lerp(b[0], b[1], .15 + .7 * pseudo) * k, v = (pv * 2 - 1) * b[2] * .7 * k * (K ? K.w : 1);
     const key = sh === S.dd ? 'DD' : sh.id, P = typeof SHIPV === 'object' && SHIPV.pose[key], h = P ? P.h : (sh.heading ?? -1.57), px0 = P ? P.x : sh.x, py0 = P ? P.y : sh.y;
-    o = { x: px0 + u * Math.cos(h) - v * Math.sin(h), y: py0 + u * Math.sin(h) + v * Math.cos(h), z: -2.6 + 2.8 * k + .3, h, up: m.kind === 'sam' ? .45 : .9 };
+    o = { x: px0 + u * Math.cos(h) - v * Math.sin(h), y: py0 + u * Math.sin(h) + v * Math.cos(h), z: -2.6 + (IM && IM.vlsZ != null ? IM.vlsZ : 2.8 * k) + .3, h, up: m.kind === 'sam' ? .45 : .9 };
   }
   V.set(m.id, o);
   return o;

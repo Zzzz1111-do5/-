@@ -1,4 +1,4 @@
-// 生成安卓包用的网页目录 www/：index.html 补成完整文档（字符集、手机视口、禁止缩放），复制 js/ 与 fonts/
+// 生成安卓包用的网页目录 www/：index.html 补成完整文档（字符集、手机视口、禁止缩放），复制 js/、fonts/ 与 assets/（外部模型）
 import fs from 'fs';
 import path from 'path';
 import { execSync } from 'child_process';
@@ -18,5 +18,5 @@ const tag = `<div id="buildTag" style="position:fixed;right:8px;top:2px;z-index:
 fs.writeFileSync(path.join(out, 'version.json'), JSON.stringify({ v: ver }));
 const page = body.replace(/(<script src="js\/[^"?]+\.js)"/g, `$1?v=${ver}"`);
 fs.writeFileSync(path.join(out, 'index.html'), head + page.replace(/(<\/style>)/, '$1\n</head>\n<body>\n' + tag) + '\n</body>\n</html>\n');
-for (const d of ['js', 'fonts']) fs.cpSync(path.join(root, d), path.join(out, d), { recursive: true, filter: s => !/\.fontcache/.test(s) });
+for (const d of ['js', 'fonts', 'assets']) fs.cpSync(path.join(root, d), path.join(out, d), { recursive: true, filter: s => !/\.fontcache/.test(s) });
 console.log('www/ 已生成：', fs.readdirSync(path.join(out, 'js')).length, '个脚本');

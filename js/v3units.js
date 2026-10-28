@@ -820,6 +820,8 @@ function v3mDD(cls) {
   mbLoop(M, H, fb + .03, .9);
   return M;
 }
+// 驱护舰的实例键与建网格函数：055 有外部精细模型（v3import.js）时用它，没载入好之前用上面自己画的
+const v3mDDK = c => c === '055' && typeof v3im === 'function' ? v3im('t055', 'dd:055', () => v3mDD(c)) : ['dd:' + c, () => v3mDD(c)];
 // 守方舰艇（NV_CLS 长宽）：阿利·伯克级（SPY-1 相控阵、两座烟囱）、提康德罗加级（两座上层建筑）、星座级、独立级（三体船）
 function v3mEShip(cls, L, B) {
   if (cls === 'ffg') return v3mShip('ffg', L, B);
@@ -1577,19 +1579,23 @@ function v3mAscCan() {
 // 实例参数 iA = (x, y, z, 朝向)，iB = (比例, 阵营 0 我 / 1 敌 / 2 残骸, 滚转, 俯仰)，坐标是 GL 的（y 向北）；先滚转、再俯仰（车头抬起为正）、再转朝向
 const V3M_VS = `attribute vec3 p; attribute vec3 n; attribute float s; attribute vec3 b; attribute vec4 iA; attribute vec4 iB;
 uniform mat4 uM; uniform vec3 uEye;
-varying vec3 vN, vB, vV; varying float vS, vSide, vD;
+varying vec3 vN, vB, vV, vC; varying float vS, vSide, vD;
 void main() {
+  // 外部模型（v3import.js）：|s| ≥ 16 时 s − 16 是 7 位 RGB 涂装色，负数是玻璃；自己画的模型 vC 记 −1
+  float a = abs(s);
+  if (a >= 16.) { float q = a - 16., r = floor((q + .5) / 16384.), g = floor((q - r * 16384. + .5) / 128.); vC = vec3(r, g, q - r * 16384. - g * 128.) / 127.; vS = s < 0. ? -1. : 1.; }
+  else { vC = vec3(-1.); vS = s; }
   float c = cos(iA.w), sn = sin(iA.w), cr = cos(iB.z), sr = sin(iB.z), cp = cos(iB.w), sp = sin(iB.w);
   vec3 q = p * iB.x; q = vec3(q.x, q.y * cr - q.z * sr, q.y * sr + q.z * cr); q = vec3(q.x * cp - q.z * sp, q.y, q.x * sp + q.z * cp);
   vec3 m = vec3(n.x, n.y * cr - n.z * sr, n.y * sr + n.z * cr); m = vec3(m.x * cp - m.z * sp, m.y, m.x * sp + m.z * cp);
   vec3 w = vec3(iA.x + q.x * c - q.y * sn, iA.y + q.x * sn + q.y * c, iA.z + q.z);
-  vN = vec3(m.x * c - m.y * sn, m.x * sn + m.y * c, m.z); vB = b; vS = s; vSide = iB.y; vV = uEye - w; vD = length(vV);
+  vN = vec3(m.x * c - m.y * sn, m.x * sn + m.y * c, m.z); vB = b; vSide = iB.y; vV = uEye - w; vD = length(vV);
   gl_Position = uM * vec4(w, 1.);
 }`;
 const V3M_FS = der => `${der ? '#extension GL_OES_standard_derivatives : enable\n#define DER 1\n' : ''}precision mediump float;
 uniform vec2 uFog; uniform vec3 uBg; uniform float uMode;
 uniform vec3 uBody0, uBody1, uBody2, uBody3, uBody4, uGlow0, uGlow1, uGlow2;
-varying vec3 vN, vB, vV; varying float vS, vSide, vD;
+varying vec3 vN, vB, vV, vC; varying float vS, vSide, vD;
 void main() {
   vec3 body = vSide < .5 ? uBody0 : vSide < 1.5 ? uBody1 : vSide < 2.5 ? uBody2 : vSide < 3.5 ? uBody3 : uBody4;   // 3、4：我方 / 敌方飞机
   vec3 glow = vSide < .5 || (vSide > 2.5 && vSide < 3.5) ? uGlow0 : vSide < 1.5 || vSide > 3.5 ? uGlow1 : uGlow2;
@@ -1608,6 +1614,11 @@ void main() {
     if (uMode < .5) body *= mt < 2.5 ? 1.35 : mt < 3.5 ? .42 : mt < 4.5 ? .8 : 1.05;
     else body = mt < 2.5 ? vec3(.6, .45, .35) : mt < 3.5 ? vec3(.075, .078, .074) : mt < 4.5 ? mix(body, vec3(.46, .41, .3), .5) : mix(body, vec3(.36, .37, .3), .35);
     sh = br; ed *= mt < 2.5 ? .25 : .7;   // 皮肤、装具的棱线淡一点（不像线框）
+  }
+  if (vC.x >= 0.) {   // 外部模型：黑绿画面按涂装深浅调暗实体，写实画面直接用涂装色（残骸压暗）；棱线密，淡一点
+    if (uMode < .5) body *= .45 + 1.25 * dot(vC, vec3(.3, .59, .11));
+    else body = vSide > 1.5 && vSide < 2.5 ? mix(vC, body, .75) : vC;
+    ed *= .8;
   }
   vec3 c;
   if (uMode < .5) {   // 黑绿：深色实体 + 发光棱线 + 边缘光；玻璃、车灯、观察镜发光
@@ -1769,11 +1780,11 @@ function v3Units(C, box) {
   for (const sh of S.ships) {
     if (!alive(sh) || !inB(sh.x, sh.y, 80)) continue;
     const d = (typeof SHIP_DIM === 'object' && SHIP_DIM[sh.kind]) || [32, 11], P = pose(sh.id, sh, sh.heading ?? -1.57), nm = (sh.sbxCls && sh.sbxCls.name) || '';
-    if (sh.kind === 'dd') { const c = typeof vlsCls === 'function' ? vlsCls(sh) : '052D'; v3mAdd('dd:' + c, () => v3mDD(c), P.x, P.y, -2.6, P.h, P.k, 0); continue; }   // 驱护舰按舰型建模
+    if (sh.kind === 'dd') { const c = typeof vlsCls === 'function' ? vlsCls(sh) : '052D', [mk, mb] = v3mDDK(c); v3mAdd(mk, mb, P.x, P.y, -2.6, P.h, P.k, 0); continue; }   // 驱护舰按舰型建模
     v3mAdd('sh:' + sh.kind, () => v3mShip(sh.kind, d[0], d[1]), P.x, P.y, -2.6, P.h, P.k, 0);
   }
   for (const bt of S.boats || []) if (!bt.dead && isFinite(bt.x) && inB(bt.x, bt.y)) v3mAdd('sh:boat', () => v3mShip('boat', 12, 5), bt.x, bt.y, -2.6, bt.heading ?? -1.57, 1, 0);
-  if (S.dd && S.dd.state !== 'sunk' && isFinite(S.dd.x) && inB(S.dd.x, S.dd.y, 80)) { const P = pose('DD', S.dd, S.dd.heading ?? -1.57), c = typeof vlsCls === 'function' ? vlsCls(S.dd) : '055'; v3mAdd('dd:' + c, () => v3mDD(c), P.x, P.y, -2.6, P.h, P.k, 0); }
+  if (S.dd && S.dd.state !== 'sunk' && isFinite(S.dd.x) && inB(S.dd.x, S.dd.y, 80)) { const P = pose('DD', S.dd, S.dd.heading ?? -1.57), c = typeof vlsCls === 'function' ? vlsCls(S.dd) : '055', [mk, mb] = v3mDDK(c); v3mAdd(mk, mb, P.x, P.y, -2.6, P.h, P.k, 0); }
   if (typeof cvAll === 'function') for (const cv of cvAll()) {
     if (!(cv.hp > 0) || cv.x < -999 || !inB(cv.x, cv.y, 220)) continue;
     const lhd = /075/.test(cv.name || ''), h = cv.heading ?? -1.57, C = typeof CVG === 'object' ? CVG : null, top = -2.6 + (C ? C.zd : 17), home = cvHome(cv);   // top：飞行甲板顶面
