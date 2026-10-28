@@ -10,7 +10,8 @@
 //     甲板停满：滑到升降机舷内侧 → ewait 等升降机 → 倒上平台 → down 降到机库甲板（进机库整备），空平台再升回来
 // 停机位：每架舰载机记 w.dk（机位序号；-1 机库；null 不在舰上）。升降机 c.el[i] = { h 平台高度 0 甲板—1 机库, to 目标, w 占用的飞机 id }；
 // 偏流板：c.jl[k] 弹射器 k 上一次弹射离舰的时刻（放下的动画）
-const CVD = { taxi: 16, rev: 6, run: 9, climb: 1.5, cnp: .8, eng: 1.1, hook: 2.4, acc: 35, elv: .32, pivot: 1.25 };
+// hook：挂上弹射杆到弹射的秒数（舵面检查、推到最大推力、点加力：小火 → 全加力，见 v3det.js v3dDeckEng）；ab：弹射前几秒点加力
+const CVD = { taxi: 16, rev: 6, run: 9, climb: 1.5, cnp: .8, eng: 1.1, hook: 4, ab: 2.1, acc: 35, elv: .32, pivot: 1.25 };
 const cvCat = k => CVG.cats[clamp(k | 0, 0, CVG.cats.length - 1)];
 const cvCatPt = (k, s) => { const C = cvCat(k); return [C.u + Math.cos(C.a) * s, C.v + Math.sin(C.a) * s]; };
 // 右舷甲板边线（不算升降机缺口）：舷边通道口的位置

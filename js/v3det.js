@@ -5,12 +5,12 @@
 //   换到世界（朝向 a）：x' = x cos a − y sin a、y' = x sin a + y cos a（与 v3units.js 的实例着色器一致）
 
 const v3dKey = p => typeof airSilKey === 'function' ? airSilKey(p.kind, p.v) : 'j35';
-const v3dK = p => ((typeof airMdl === 'function' && airMdl(p.kind, p.v).size) || 15) / 21;
+const v3dSz = p => typeof airSize3 === 'function' ? airSize3(p, 'p') : (typeof airMdl === 'function' && airMdl(p.kind, p.v).size) || 15, v3dK = p => v3dSz(p) / 21;   // 与 v3units.js 画机体用同一个尺寸
 
 // ———————————————— 电磁弹射（carrier.js CVG.cats、cvdeck.js 的 'cat' / 'roll'）————————————————
 //   弹射滑块：从甲板滑槽里露出一截，挂杆时卡在前起落架的弹射杆上；弹射时随飞机冲到行程末端，刹停，约 1.5 秒退回起点
 //   直线电机：挂杆后整条滑轨微微发光（储能），越接近弹射越亮；弹射时滑块所在的一段定子最亮、身后一段渐暗、前面一小段刚通电
-//   喷气机挂杆最后一秒多与弹射时开加力，尾焰打在升起的偏流板上（板面映亮）；离舰后先略微下沉、抬头爬升，约 1 秒后收起落架
+//   喷气机挂杆后推到最大推力、弹射前约 2 秒点加力（v3dDeckEng），尾焰打在升起的偏流板上（板面映亮）；离舰后先略微下沉、抬头爬升，约 2 秒后收起落架
 const V3D_NOSE0 = 6;   // 没有飞机时滑块停在起点前 6 米（前起落架大致的位置）
 const V3D_JET = { j35: 1, j20: 1, j15: 1, j15t: 1, j36: 1, j50: 1, f35: 1, f22: 1, f35b: 1 };   // 有加力的喷气机
 // 前起落架离机身中心多远（世界单位，与 v3mAir 的起落架同一算法）
@@ -26,7 +26,7 @@ function v3dCat(cv, k, live) {
   if (p) {
     const nose = v3dNose(v3dKey(p), v3dK(p));
     if (p.phase === 'roll') return { s: (p.cs || 0) + nose, m: 'roll', p, q: 1, burn: 1 };
-    if (p.dk === 'hook') return { s: nose, m: 'hook', p, q: (p.dkT || 0) / CVD.hook, burn: sm01(((p.dkT || 0) - (CVD.hook - 1.25)) / .35) };
+    if (p.dk === 'hook') return { s: nose, m: 'hook', p, q: (p.dkT || 0) / CVD.hook, burn: v3dDeckEng(p)[1] };
     return { s: V3D_NOSE0, m: 'line', p, q: 0, burn: 0 };   // 正滑上弹射器：滑块在起点等着
   }
   const u = S.t - ((cv.jl && cv.jl[k]) ?? -99), end = C.L + V3D_NOSE0 + 1;
@@ -50,19 +50,6 @@ function v3dCatUnits(cv, live, top, h) {
     v3mAdd('cvshut', v3mdShuttle, x, y, top + .02, h + cvCat(k).a, 1, 3);
   }
 }
-// 喷气机加力：每个喷口（分件数据 noz，左右对称）一束橙白的火舌 + 光晕，长度抖动；o = 位置 (x, y, z 机身中心)、朝向 h、俯仰 pt
-function v3dBurner(out, C, p, a, o) {
-  const key = v3dKey(p), D = typeof AIRD === 'object' && AIRD[key];
-  if (!D || !D.noz || !V3D_JET[key] || a <= .02) return;
-  const k = v3dK(p), ch = Math.cos(o.h), sh = Math.sin(o.h), cp = Math.cos(o.pt || 0), sp = Math.sin(o.pt || 0);
-  const Wp = (x, y, z) => { const xx = x * cp - z * sp, zz = x * sp + z * cp; return v3fP(o.x + (xx * ch - y * sh) * k, o.y + (xx * sh + y * ch) * k, o.z + zz * k); };
-  for (const nz of D.noz) for (const sg of nz[1] ? [1, -1] : [1]) {
-    const r = nz[4] === 'flat' ? nz[2] : nz[2], L = (4.6 + Math.sin(S.t * 31 + p.id + sg) * .7) * (.55 + .45 * a), y = nz[1] * sg;
-    v3fRib(out, C.E, Wp(nz[0], y, 0), Wp(nz[0] - L, y, 0), (r * 2.1 + .3) * k, [1, .95, .8, .95 * a], [1, .45, .1, 0]);
-    v3fRib(out, C.E, Wp(nz[0], y, 0), Wp(nz[0] - L * .45, y, 0), r * 1.2 * k, [.75, .85, 1, .8 * a], [1, .8, .5, 0]);   // 内焰（发白、带一点蓝）
-    v3fSpark(out, C, Wp(nz[0] - .4, y, 0), (r * 3.2 + 1) * k, [1, .6, .2, .5 * a]);
-  }
-}
 // v3fx.js：滑轨通电的光带、滑块亮点、挂杆末段与弹射时的加力、偏流板被尾焰映亮
 function v3dCatFx(out, C, inB) {
   if (typeof cvAll !== 'function' || typeof CVG !== 'object' || typeof cvCat !== 'function') return;
@@ -70,6 +57,10 @@ function v3dCatFx(out, C, inB) {
   for (const cv of cvAll()) {
     if (!(cv.hp > 0) || cv.x < -999 || !inB(cv.x, cv.y, 220) || /075/.test(cv.name || '')) continue;
     const home = cvHome(cv), live = (S.planes || []).filter(p => !p.dead && cvHome(p) === home && !p.land && (p.phase === 'cat' || p.phase === 'roll'));
+    for (const p of live) {   // 甲板上开着车的喷气机：喷口发热，挂杆后点加力（v3dDeckEng 的时间轴）
+      const key = v3dKey(p), [th, tb] = V3D_JET[key] ? v3dDeckEng(p) : [0, 0];
+      if (th > .03 || tb > .02) v3dBurner(out, C, p, key, v3dSz(p), { x: p.x, y: p.y, z: zd - .12, h: p.heading || 0, ground: true }, v3dEng('p' + p.id, th, tb, true));
+    }
     for (let k = 0; k < CVG.cats.length; k++) {
       const st = v3dCat(cv, k, live), C0 = cvCat(k), L = C0.L + V3D_NOSE0 + 6;
       const P = s => { const [u, v] = cvCatPt(k, s), [x, y] = cvW(u, v, cv); return v3fP(x, y, zd); };
@@ -84,10 +75,8 @@ function v3dCatFx(out, C, inB) {
       }
       if (st.m === 'roll' || st.m === 'brake') v3fSpark(out, C, P(st.s), st.m === 'roll' ? 2.6 : 1.6, [.8, 1, .95, st.m === 'roll' ? .9 : .5]);   // 滑块
       if (st.p && st.burn > .02) {
-        const p = st.p, kk = v3dK(p);
-        v3dBurner(out, C, p, st.burn, { x: p.x, y: p.y, z: -2.6 + CVG.zd + (V3_GEAR + V3_AIRZ) * kk, h: p.heading || 0 });
-        const wash = st.burn * (st.m === 'roll' ? Math.max(0, 1 - (p.cs || 0) / 45) : 1), [ju, jv] = [C0.u - Math.cos(C0.a) * 9.5, C0.v - Math.sin(C0.a) * 9.5], [jx, jy] = cvW(ju, jv, cv);
-        if (wash > .02) v3fSpark(out, C, v3fP(jx, jy, zd + 2.2), 6, [1, .5, .18, .22 * wash * (.8 + .2 * Math.sin(S.t * 43 + k))]);   // 偏流板被尾焰映亮
+        const p = st.p, g = sm01((st.burn - .38) / .62), wash = st.burn * (st.m === 'roll' ? Math.max(0, 1 - (p.cs || 0) / 45) : 1), [ju, jv] = [C0.u - Math.cos(C0.a) * 9.5, C0.v - Math.sin(C0.a) * 9.5], [jx, jy] = cvW(ju, jv, cv);
+        if (wash > .02) v3fSpark(out, C, v3fP(jx, jy, zd + 2.2), 6, [1, lerp(.42, .55, g), lerp(.15, .25, g), .22 * wash * (.8 + .2 * Math.sin(S.t * 43 + k))]);   // 偏流板被尾焰映亮
       }
     }
   }
@@ -138,10 +127,18 @@ function v3dPitch(o, sd, z, L, key) {
   P.q += (q - P.q) * Math.min(1, Math.max(dt, 0) * 4);
   // 平尾（JSBSim 符号：负 = 后缘上偏 = 抬头）：离舰照数据；之后按配平规律 δe = d0 + d1 α，再加俯仰角速度的一项
   const trim = typeof AERO === 'object' ? (AERO.d0 + AERO.d1 * al / V3D_D2R) * V3D_D2R : 0;
-  P.de = L ? L.de * (1 - w) + (trim - .35 * P.q) * w : clamp(trim - .35 * P.q, -.3, .15);
+  P.de = L ? lerp(V3D_TOTRIM, L.de, sm01(L.u / .8)) * (1 - w) + (trim - .35 * P.q) * w : clamp(trim - .35 * P.q, -.3, .15);   // 离舰：从起飞配平过渡到 JSBSim 的平尾
   P.da = clamp(.3 * P.p, -.2, .2);   // 滚转：左右舵面差动
   P.t = S.t; P.pt = pt;
   return pt;
+}
+// 甲板上的舰载机：挂杆后先做舵面检查（杆前后左右推一遍，平尾上下摆、左右差动），之后停在起飞配平（后缘上偏约 10°）直到弹射
+const V3D_TOTRIM = -.18;
+function v3dDeckSurf(p) {
+  if (p.phase === 'roll') return { de: V3D_TOTRIM, da: 0 };
+  if (p.phase !== 'cat' || p.dk !== 'hook') return null;
+  const t = p.dkT || 0, c = t < .5 ? -.35 * Math.sin(t / .5 * Math.PI) : t < 1 ? .25 * Math.sin((t - .5) / .5 * Math.PI) : 0, r = t >= 1 && t < 1.7 ? .22 * Math.sin((t - 1) / .7 * Math.PI * 2) : 0;
+  return { de: c + V3D_TOTRIM * sm01((t - 1.5) / .5), da: r };
 }
 // 这一帧的舵面偏角（弧度）：de 平尾 / 鸭翼（负 = 抬头），da 差动
 const v3dSurf = (o, sd) => { const P = V3D_PT.get((sd ? 'e' : 'p') + o.id); return P && P.S === S ? P : { de: 0, da: 0 }; };
@@ -177,6 +174,123 @@ function v3dPlaneX(key, sz, x, y, z, ground, h, side, roll, pitch, gear, sf) {
 }
 // v3fx.js：这一帧算好的仰角（加力尾焰的方向）
 const v3dPitchOf = (o, sd) => { const P = V3D_PT.get((sd ? 'e' : 'p') + o.id); return P && P.S === S ? P.pt : 0; };
+
+// ———————————————— 发动机尾焰：喷口发热 → 加力点火的小火 → 变色的大火 ————————————————
+//   照加力式涡扇的结构画：涡轮后面是尾锥、涡轮后机匣的支板与喷油杆，再往后两圈同心的 V 形火焰稳定器，外面是隔热衬套和收敛扩散喷管的调节片。
+//   推油门时这些从里往外热起来：暗红 → 橙 → 橙黄（喷口里发动机变热的纹路）；开加力先在稳定器上点着一小团火（分区加力一区一区点），
+//   根部蓝紫、尖上橙红；其余几区接连点着，火舌变长、变成白芯黄焰；全加力时喷流欠膨胀，喷口后约一个直径起一串激波马赫环，间隔约 1.2 个直径，越往后越暗、越偏橙粉
+// 导入模型的喷口（米，模型坐标 x 机头、y 右、z 离着地点高；唇口顶点拟合的圆，深是唇口到喷管里封底的距离）：[出口 x, y（不为 0 就左右各一个）, z, 半径, 喷管深]；扁平的半径记 0，再加 [半宽, 半高]
+const V3D_NOZX = { j35: [[-8.4, .79, 2.17, .3, .62]], j20: [[-9.81, .775, 2.05, .42, .9]], j36: [[-10, 0, 2.6, 0, .5, .45, .33], [-10, 1.55, 2.6, 0, .5, .45, .33]], j50: [[-8.85, 0, 2.22, 0, 1.6, .4, .15]] };
+// 一架飞机的喷口（世界单位，相对锚点：空中是机身中线，ground 时是机轮着地点）：{ x, y, z, r 半径（扁平的为 0）, w、hh 半宽、半高, d 喷管深 }
+function v3dNoz(key, sz, ground) {
+  const mk = V3_PX[key], X = typeof V3X === 'object' && V3X.mesh, M = mk && X && X[mk] && (ground || X[mk + '_a']) ? X[mk] : null, N = [];
+  if (M && V3D_NOZX[mk]) {   // 导入的模型已经加载（画面上画的就是它）
+    const s = sz / M.len, z0 = ground ? 0 : M.zc;
+    for (const n of V3D_NOZX[mk]) for (const sg of n[1] ? [1, -1] : [1]) N.push({ x: n[0] * s, y: n[1] * sg * s, z: (n[2] - z0) * s, r: n[3] * s, d: n[4] * s, w: (n[5] || n[3]) * s, hh: (n[6] || n[3]) * s });
+    return N;
+  }
+  const D = typeof AIRD === 'object' && AIRD[key], k = sz / 21, zc = (ground ? V3_GEAR + V3_AIRZ : V3_AIRZ) * k;   // 代码建的模型（v3units.js v3mAir 的喷口）
+  for (const n of (D && D.noz) || []) for (const sg of n[1] ? [1, -1] : [1]) {
+    const fl = n[4] === 'flat';
+    N.push({ x: (n[0] - (fl ? n[3] : .35)) * k, y: n[1] * sg * k, z: zc, r: fl ? 0 : n[2] * .88 * k, d: (fl ? .25 : .9) * k, w: n[2] * (fl ? 1 : .88) * k, hh: n[2] * (fl ? .45 : .88) * k });
+  }
+  return N;
+}
+// 炽热金属的颜色（近似黑体）：t 0 暗红 → .5 橙 → 1 淡黄；a 不透明度
+const V3D_HOT = [[.4, .03, .01], [.85, .13, .03], [1, .3, .06], [1, .5, .15], [1, .7, .32], [1, .87, .58]];
+function v3dHot(t, a) {
+  const f = clamp(t, 0, 1) * 5, i = Math.min(4, f | 0), u = f - i, A = V3D_HOT[i], B = V3D_HOT[i + 1];
+  return [A[0] + (B[0] - A[0]) * u, A[1] + (B[1] - A[1]) * u, A[2] + (B[2] - A[2]) * u, a];
+}
+// 发动机（画面用）：h 热度（0 冷、.3 慢车、.65 巡航、1 最大推力），b 加力（0 关 – 1 全加力）；th、tb 是此刻该有的值——
+//   hard 时直接用（甲板上按时间轴），否则按速率追：推油门约 1.2 秒热起来、收油门约 8 秒才凉；加力约 .5 秒点满、.6 秒熄（火舌缩回小火再灭）
+//   tL：加力点着的时刻（画点火那一下的闪光）
+const V3D_ENG = new Map();
+function v3dEng(id, th, tb, hard) {
+  let E = V3D_ENG.get(id);
+  if (!E || E.S !== S || S.t < E.t || S.t - E.t > 1.5) { E = { h: th, b: tb, t: S.t, tL: -99, S }; V3D_ENG.set(id, E); }
+  const dt = S.t - E.t, b0 = E.b;
+  if (hard) { E.h = th; E.b = tb; }
+  else { E.h += clamp(th - E.h, -dt / 8, dt / 1.2); E.b += clamp(tb - E.b, -dt / .6, dt / .5); }
+  if (b0 <= .02 && E.b > .02) E.tL = S.t;
+  E.t = S.t;
+  if (V3D_ENG.size > 300) for (const [k, v] of V3D_ENG) if (v.S !== S || S.t - v.t > 5) V3D_ENG.delete(k);
+  return E;
+}
+// 甲板上的舰载机（cvdeck.js）：启动后慢车，喷口深处微微发红；挂上弹射杆后边做舵面检查边推到最大推力，喷口从里往外热透；
+//   弹射前 CVD.ab 秒点加力：先一小团火（.3 → .38），约 .7 秒后其余四区每隔 .2 秒点着一区，涨到全加力，稳住约 .6 秒弹射。返回 [热度, 加力]
+function v3dDeckEng(p) {
+  if (p.phase === 'roll') return [1, 1];
+  if (p.phase !== 'cat' || p.dk === 'brd' || p.dk === 'lift') return [0, 0];
+  if (p.dk === 'eng') return [.3 * sm01((p.dkT || 0) / 2.5), 0];
+  if (p.dk !== 'hook') return [.3, 0];
+  const t = p.dkT || 0, lo = CVD.hook - CVD.ab, u = t - lo;
+  let b = 0;
+  if (u >= 0) { b = .3 * sm01(u / .12) + .08 * sm01((u - .12) / .6); for (let z = 0; z < 4; z++) b += .155 * sm01((u - .7 - z * .2) / .15); }
+  return [lerp(.3, 1, sm01((t - .4) / (lo - .4))), Math.min(1, b)];
+}
+// 画一架喷气机的喷口与尾焰。o：锚点 x、y、z（ground 时是机轮着地点，否则是机身中线），朝向 h、俯仰 pt、滚转 rl；E = v3dEng(...)
+//   喷口坐标：u 沿喷流向后（出口截面 u = 0，喷管里为负），v、w 在喷口平面里向右、向上；离镜头远了只画光，不画纹路
+function v3dBurner(out, C, p, key, sz, o, E) {
+  if (!E || !V3D_JET[key] || (E.h < .03 && E.b < .02)) return;
+  const N = v3dNoz(key, sz, o.ground);
+  if (!N.length) return;
+  const R = v3dMul(v3dMul(v3dRz(-o.h), v3dRy(o.pt || 0)), v3dRx(o.rl || 0)), Ey = C.E, id = p.id || 0;
+  const ht = E.h, ab = E.b, s1 = Math.min(1, ab / .3), g = sm01((ab - .38) / .62), fsh = Math.exp(-(S.t - E.tL) / .15);   // s1 小火、g 大火的程度，fsh 点火的闪光
+  const hk = dl => clamp((ht - dl) / (1 - dl), 0, 1);   // 从里往外热：越靠外的部件热得越晚
+  for (const n of N) {
+    const c = [o.x + R[0] * n.x + R[1] * n.y + R[2] * n.z, -o.y + R[3] * n.x + R[4] * n.y + R[5] * n.z, o.z + R[6] * n.x + R[7] * n.y + R[8] * n.z];
+    const P = (u, v, w) => [c[0] - R[0] * u + R[1] * v + R[2] * w, c[1] - R[3] * u + R[4] * v + R[5] * w, c[2] - R[6] * u + R[7] * v + R[8] * w];
+    const r = n.r || Math.min(n.w, n.hh * 1.6), d = n.d, w0 = r * .075;
+    const q = 1 - sm01((Math.hypot(c[0] - Ey[0], c[1] - Ey[1], c[2] - Ey[2]) / Math.max(r, .05) - 120) / 100);   // 纹路：离镜头近才画
+    const rib = (a, b, w, c0, c1) => v3fRib(out, Ey, a, b, w, c0, c1 || c0);
+    // —— 喷口里发热的纹路 ——
+    if (ht > .03) {
+      v3fSpark(out, C, P(-d * .8, 0, 0), (n.r ? r : Math.max(n.w, n.hh)) * .9, v3dHot(hk(0), .5 * hk(0)));   // 喷管深处涡轮、尾锥的光（外圈被喷管壁挡住）
+      if (q > .01 && n.r) {
+        const ring = (u, rr, col) => { for (let i = 0; i < 18; i++) { const a0 = i / 18 * 6.2832, a1 = a0 + .349; rib(P(u, Math.cos(a0) * rr, Math.sin(a0) * rr), P(u, Math.cos(a1) * rr, Math.sin(a1) * rr), w0, col); } };
+        v3fSpark(out, C, P(-d * .78, 0, 0), r * .3, v3dHot(hk(0), .75 * hk(0) * q));   // 尾锥
+        const cs = v3dHot(hk(.08), .5 * hk(.08) * q);
+        for (let i = 0; i < 9; i++) { const a = i / 9 * 6.2832 + .3, ca = Math.cos(a), sa = Math.sin(a); rib(P(-d * .62, ca * r * .3, sa * r * .3), P(-d * .62, ca * r * .84, sa * r * .84), w0, cs); }   // 涡轮后机匣支板、喷油杆
+        for (const [rr, dl] of [[.5, .15], [.78, .25]]) { const t = Math.max(hk(dl), .92 * s1); ring(-d * .48, r * rr, v3dHot(t, (.55 * hk(dl) + .45 * s1) * q)); }   // 火焰稳定器（点了加力火挂在上面，最亮）
+        const cw = v3dHot(hk(.4) * .85, .3 * hk(.4) * q), ce = v3dHot(hk(.4) * .7, .1 * hk(.4) * q);
+        for (let i = 0; i < 14; i++) { const a = i / 14 * 6.2832, ca = Math.cos(a), sa = Math.sin(a); rib(P(-d * .42, ca * r * .93, sa * r * .93), P(-d * .04, ca * r * .98, sa * r * .98), w0 * .8, cw, ce); }   // 调节片内壁受热的条纹
+        ring(-d * .02, r * .99, v3dHot(hk(.55) * .8, .18 * hk(.55) * q));   // 喷口唇口
+      } else if (q > .01) {   // 扁平喷口：几道横的导流片
+        const cs = v3dHot(Math.max(hk(.1), .92 * s1), (.5 * hk(.1) + .4 * s1) * q);
+        for (const f of [-.5, 0, .5]) rib(P(-d * .5, -n.w * .88, f * n.hh), P(-d * .5, n.w * .88, f * n.hh), w0, cs);
+      }
+    }
+    if (ab <= .02) continue;
+    // —— 加力：小火 → 大火（扁平喷口按宽度分几股） ——
+    const K = n.r ? 1 : clamp(Math.round(n.w / (n.hh * 1.6)), 1, 3);
+    for (let j = 0; j < K; j++) {
+      const v0 = n.r ? 0 : -n.w + (2 * j + 1) * n.w / K, rf = n.r ? r : Math.min(n.w / K, n.hh * 1.6), D2 = rf * 2, F = u => P(u, v0, 0);
+      const fk = 1 + .1 * Math.sin(S.t * 37 + id * 1.7 + v0 * 5 + n.y * 3) + .06 * Math.sin(S.t * 61 + id + j);   // 火舌抖动
+      const cone = (u0, u1, wa, wb, ca, cb, ns) => { for (let i = 0; i < ns; i++) { const f0 = i / ns, f1 = (i + 1) / ns, cm = f => ca.map((x, m) => x + (cb[m] - x) * f); rib(F(lerp(u0, u1, f0)), F(lerp(u0, u1, f1)), lerp(wa, wb, (f0 + f1) / 2), cm(f0), cm(f1)); } };
+      if (fsh > .02) v3fSpark(out, C, F(rf * .4), rf * 1.8, [1, .72, .4, .6 * fsh]);   // 点火那一下
+      const Ls = D2 * (.7 + 1.4 * s1) * fk, k1 = s1 * (1 - .6 * g);   // 小火：一截半透明的火舌，根部蓝紫、中段粉橙、尖上橙红（大火起来后并进去）
+      cone(0, Ls * .45, rf * 1.5, rf * 1.2, [.45, .48, 1, .42 * k1], [1, .5, .42, .32 * k1], 2);
+      cone(Ls * .45, Ls, rf * 1.2, rf * .6, [1, .5, .42, .32 * k1], [1, .32, .12, 0], 2);
+      cone(0, Ls * .4, rf * .7, rf * .4, [.8, .8, 1, .4 * k1], [1, .7, .5, 0], 2);
+      if (g > .01) {   // 大火：外层橙红的混合层、黄色的焰身、白芯（根部带蓝紫），焰身里一串激波马赫环；火色随加力加大从橙变到白黄，再慢慢起伏
+        const Lb = D2 * (1.8 + 4.6 * g) * fk, hu = .5 + .5 * Math.sin(S.t * 4.3 + id + j);
+        cone(0, Lb, rf * 1.9, rf * 1.1, [1, lerp(.32, .42, g), lerp(.12, .2, g), .3 * g], [1, .22, .1, 0], 3);   // 外焰
+        cone(0, Lb * .85, rf * 1.3, rf * .7, [1, lerp(.55, .72, g) - .06 * hu, lerp(.22, .4, g), .38 * g], [1, .42, .2, 0], 3);   // 焰身
+        cone(0, D2 * (.8 + .5 * g), rf * .95, rf * .45, [lerp(1, .86, g), lerp(.8, .92, g), lerp(.55, 1, g), .7 * g], [1, .85, .65, .1 * g], 2);   // 白芯
+        v3fSpark(out, C, F(rf * .15), rf * 1.25, [.55, .45, 1, .28 * g]);   // 根部蓝紫
+        for (let i = 0; i < 5; i++) {   // 激波马赫环：喷口后约一个直径起、间隔约 1.2 个直径，越往后越暗、越偏橙粉
+          const u = D2 * (1 + 1.2 * i) * (1 + .03 * Math.sin(S.t * 23 + i + id)), a = .5 * sm01((g - .2 - i * .12) / .3) * (1 - i * .17) * fk;
+          if (a < .02 || u > Lb * .85) continue;
+          const cd = [[1, .93, .82], [1, .82, .66], [1, .7, .58], [1, .64, .56], [1, .6, .55]][i], w = rf * (.8 - .06 * i);
+          cone(u - rf * .7, u, w * .3, w, [...cd, 0], [...cd, a], 2);
+          cone(u, u + rf * .5, w, w * .3, [...cd, a], [...cd, 0], 2);
+        }
+      }
+      v3fSpark(out, C, F(rf * .8), rf * (2.6 + 1.6 * g) + .3, [1, lerp(.5, .6, g), lerp(.2, .3, g), (.13 + .15 * g) * Math.min(1, ab * 3)]);   // 映亮周围
+    }
+  }
+}
 
 // ———————————————— 弹舱弹射发射（airmdl.js 的离机记录 AIRV、airRelPos / airRelZ）————————————————
 //   内埋弹舱：舱门打开后，弹射臂（前后两根撑杆 + 托架）把弹从舱顶往下推出舱外，松开后收回舱里；点火的闪光、尾焰、空中那团白烟在 v3fx.js

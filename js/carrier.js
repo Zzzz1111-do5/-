@@ -1494,7 +1494,7 @@ function drawPlanes(time) {
       airShape(ctx, airSilKey(p.kind, p.v)); ctx.fillStyle = `rgba(0,0,0,${.38 * air})`; ctx.fill(); ctx.restore();
     }
     const rs = typeof airRelState === 'function' ? airRelState('p', p.id) : null;   // 弹舱开度、外挂消耗（airmdl.js）
-    const dk = onDeck ? { fold: (p.fold ?? 0) > .5, cpo: p.cpo || 0, still: p.dk === 'brd' || (p.dk === 'lift' && !p.up), ab: p.phase === 'roll' || (p.phase === 'cat' && p.dk === 'hook' && p.dkT > 1.3) } : { ab: false };   // 甲板上：折翼、座舱盖开合、发动机没启动时旋翼 / 螺旋桨不转、弹射前加力
+    const dk = onDeck ? { fold: (p.fold ?? 0) > .5, cpo: p.cpo || 0, still: p.dk === 'brd' || (p.dk === 'lift' && !p.up), ab: p.phase === 'roll' || (p.phase === 'cat' && p.dk === 'hook' && p.dkT > CVD.hook - CVD.ab) } : { ab: false };   // 甲板上：折翼、座舱盖开合、发动机没启动时旋翼 / 螺旋桨不转、弹射前加力
     drawAircraft(ctx, x, y, p.heading, airSilKey(p.kind, p.v), size, COL.intel, 1 - sink * .65, p.bank, px(1.4), p.kind === 'bomber' && !p.dropped, { t: time, ...dk, ...rs });   // 歼-35 内埋弹舱：不画外挂炸弹
     if (onDeck && p.dk === 'brd' && typeof cvPilotDraw === 'function') cvPilotDraw(ctx, p, k, time);   // 飞行员跑向飞机、爬梯进座舱
     if (p.gunT > 0) {   // 机炮口焰
