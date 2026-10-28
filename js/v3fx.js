@@ -247,7 +247,8 @@ function v3Fx(C) {
     const lit = (o, key, sz, own, burn) => {
       const D = AIRD[key];
       if (!D || !D.wing || !inB(o.x, o.y, 220)) return;
-      const k = sz / 21, gnd = o.ph === 'gnd' || o.ph === 'roll' || o.phase === 'roll' && !o.kind, z = gnd ? g(o.x, o.y) + 1.9 * k : v3AirZ(o), h = o.heading || 0, r = o.bank || 0;
+      const Lc = own && typeof v3dLaunch === 'function' ? v3dLaunch(o) : null;   // 刚离舰：下沉、抬头（v3det.js）
+      const k = sz / 21, gnd = o.ph === 'gnd' || o.ph === 'roll' || o.phase === 'roll' && !o.kind, z = (gnd ? g(o.x, o.y) + 1.9 * k : v3AirZ(o)) + (Lc ? Lc.dz : 0), h = o.heading || 0, r = o.bank || 0;
       const ch = Math.cos(h), sh = Math.sin(h), cr = Math.cos(r), sr = Math.sin(r);
       const Wp = (u, v, w) => { const y = v * cr - w * sr, zz = v * sr + w * cr; return v3fP(o.x + (u * ch + y * sh) * k, o.y + (u * sh - y * ch) * k, z + zz * k); };
       const tip = D.wing.reduce((m, q) => q[1] > m[1] ? q : m, D.wing[0]), tu = tip[0] - .6;
@@ -255,6 +256,7 @@ function v3Fx(C) {
       v3fSpark(out, C, Wp(tu, -tip[1], 0), 1.1 * k + .5, [.3, 1, .45, .95]);   // 右翼尖绿灯
       const tail = D.stab ? D.stab.reduce((m, q) => Math.min(m, q[0]), 0) : (D.body ? D.body[D.body.length - 1][0] : -9);
       if (((S.t * .8 + o.id * .37) % 1) < .07) v3fSpark(out, C, Wp(tail + 1, 0, 2.6), 2.4 * k + 1, [1, 1, 1, 1]);   // 防撞灯
+      if (burn && typeof v3dBurner === 'function' && D.noz && !r) { v3dBurner(out, C, o, 1, { x: o.x, y: o.y, z: z + V3_AIRZ * k, h, pt: Lc ? Lc.pitch : 0 }); return; }   // 加力：按每个喷口（v3det.js）
       if (burn) {   // 加力：尾喷口一束橙白的火舌 + 光晕，长度随时间抖动
         const nu = D.body ? D.body[D.body.length - 1][0] : -10, L = 4.5 + Math.sin(S.t * 31 + o.id) * .6;
         v3fRib(out, E, Wp(nu, 0, 0), Wp(nu - L, 0, 0), 1.5 * k + .4, [1, .95, .8, .95], [1, .45, .1, 0]);
@@ -273,6 +275,7 @@ function v3Fx(C) {
       lit(a, key, sz, false, !!FTR[key] && ((a.ph === 'roll' && !(a.wait > 0)) || (a.ph === 'out' && (a.alt ?? 1) < .4)));
     }
   }
+  if (typeof v3dFx === 'function') v3dFx(out, C, inB, seen);   // 弹射、离机、伞降的发光与烟（v3det.js）
   if (!out.length) return;
   // —— 画：加法混合，测深度不写深度 ——
   const A = V3F.a;
