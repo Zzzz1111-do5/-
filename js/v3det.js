@@ -135,6 +135,68 @@ function v3dEjArm(P, m) {
   v3mAdd('ejarm:' + st, () => v3mdEjArm(st / 4), x, y, v3AirZ(o) - .55 * P.sc, h, P.sc, m.side === 'e' ? 1 : 0, o.bank || 0);
 }
 
+// ———————————————— 甲板车辆（只是画面）：挂弹车、弹药拖车、牵引车 ————————————————
+//   挂弹车、牵引车用 Sketchfab 上的模型（v3x.js 的 loader、tug，CC-BY），还没加载完时画代码建的；车辆按米画（航母是 1 比 1）
+//   每个停着飞机的机位内侧停一辆挂弹车，旁边一辆弹药拖车（两枚霹雳-15）。飞机着舰停好后整备 45 秒（carrier.js 的 rearm）：
+//   挂弹车托着导弹开到飞机侧面，举升、把导弹送进弹舱，再倒回原位，拖车上再取一枚放上托架
+//   着舰后的飞机滑到机位前：牵引车从内侧开过来，用拖杆挂上前起落架；原地转向、倒进机位都是它推着，停好后脱钩开走
+const V3D_TUG = new Map();
+const V3D_LOAD = { cradle: [1.75, .55], bayZ: 1.15 };   // 托架（挂弹车坐标：离车中心前方、离甲板高）、弹舱口离甲板高
+function v3dVeh(key, fb, x, y, z, a) {
+  const X = typeof v3xMesh === 'function' ? v3xMesh(key) : null;
+  v3mAdd(X ? 'x:' + key : 'cvsvc:' + key, X ? () => X : fb, x, y, z, a, 1, 3);
+}
+function v3dDeckVeh(cv, C, live, wing, top, h, at) {
+  if (typeof cvPark !== 'function' || typeof AIR_REARM !== 'number') return;
+  const msl = typeof v3MslInst === 'function' ? v3MslInst('st3:x:', 'pl15') : null, K = .86;   // 导弹跟飞机同一比例
+  // 挂弹车：每个有飞机的机位一辆
+  for (const [id, j] of cvPark(cv, wing)) {
+    const w = wing.find(o => o.id === id), sl = C.slots[j];
+    if (!w || !sl) continue;
+    const a = sl[2], ca = Math.cos(a), sa = Math.sin(a), lat = ca * sl[1] < 0 ? [-sa, ca] : [sa, -ca], la = Math.atan2(-lat[1], -lat[0]);   // lat：朝甲板内侧
+    const key = typeof airSilKey === 'function' ? airSilKey(w.type, w.v) : 'j35', D = typeof AIRD === 'object' && AIRD[key], sz = (typeof airMdl === 'function' && airMdl(w.type, w.v).size) || 15;
+    const bx = D && D.bay ? (D.bay[0] + D.bay[1]) / 2 * sz / 21 : 0, B = [sl[0] + ca * bx, sl[1] + sa * bx];   // 弹舱中点
+    const r = w.state === 'rearm' ? 1 - clamp(w.rearmT / AIR_REARM, 0, 1) : 1, d0 = 9.5, d1 = 3.6;
+    const dl = r < .1 ? d0 : r < .3 ? lerp(d0, d1, sm01((r - .1) / .2)) : r < .58 ? d1 : r < .78 ? lerp(d1, d0, sm01((r - .58) / .2)) : d0;
+    const Lu = B[0] + lat[0] * dl, Lv = B[1] + lat[1] * dl, [lx, ly] = at(Lu, Lv);
+    v3dVeh('loader', v3mDeckCart, lx, ly, top + .02, h + la);
+    // 弹药拖车：挂弹车原位旁边、顺着飞机方向
+    const Tu = B[0] + lat[0] * (d0 + .3) + ca * 4.6, Tv = B[1] + lat[1] * (d0 + .3) + sa * 4.6, [tx, ty] = at(Tu, Tv);
+    v3mAdd('cvsvc:cart', v3mDeckCart, tx, ty, top + .02, h + a, 1, 3);
+    if (msl) for (const o of [-.45, .45]) { const [mx, my] = at(Tu - sa * o, Tv + ca * o); v3mAdd(msl[0], msl[1], mx, my, top + 1.1, h + a, K, 0); }
+    // 托架上的导弹：开过去时托着，举升送进弹舱（r .3–.5），之后托架空着，倒回原位后再从拖车上取一枚
+    if (msl && !(r >= .5 && r < .8)) {
+      const q = r >= .3 && r < .5 ? sm01((r - .3) / .2) : 0, cr = V3D_LOAD.cradle, reach = lerp(dl - cr[0], 0, q);
+      const [mx, my] = at(B[0] + lat[0] * reach, B[1] + lat[1] * reach);
+      v3mAdd(msl[0], msl[1], mx, my, top + lerp(cr[1], V3D_LOAD.bayZ, q), h + a, K, 0);
+    }
+  }
+  // 牵引车：着舰后滑到机位前、原地转向、倒进机位
+  const seen = new Set();
+  for (const p of live) {
+    if (p.phase !== 'trap' || !Array.isArray(p.path) || !p.path.length || p.lu == null) continue;
+    const s0 = p.path[0], tow = s0[0] === 'P' || s0[0] === 'R', near = !tow && p.path[1] && p.path[1][0] === 'P';
+    if (!tow && !near) continue;
+    const kk = v3dK(p), nose = v3dNose(v3dKey(p), kk), c = Math.cos(p.lh), sn = Math.sin(p.lh);
+    let u = p.lu + c * (nose + 2.66), v = p.lv + sn * (nose + 2.66), a = p.lh;   // 拖杆一头挂在前起落架上（牵引车模型的拖杆端在车后 2.66 米）
+    if (near) {   // 还在往机位前滑：牵引车从内侧开过来，飞机停下时正好挂上
+      const f = sm01(1 - clamp(Math.hypot(s0[0] - p.lu, s0[1] - p.lv) / 25, 0, 1)), q = (p.lv > 0) === (c > 0) ? [sn, -c] : [-sn, c];   // q：朝甲板内侧
+      const a0 = Math.atan2(-q[1], -q[0]);
+      u = lerp(u + q[0] * 10, u, f); v = lerp(v + q[1] * 10, v, f); a = a0 + airAng(p.lh - a0) * sm01((f - .6) / .4);
+    }
+    V3D_TUG.set(p.id, { u, v, a, t: S.t, cv }); seen.add(p.id);
+    const [x, y] = at(u, v);
+    v3dVeh('tug', v3mDeckTractor, x, y, top + .02, h + a);
+  }
+  for (const [id, T] of V3D_TUG) {   // 飞机停好了：牵引车脱钩，往前开走（3 秒）
+    if (seen.has(id) || T.cv !== cv) continue;
+    const age = S.t - T.t;
+    if (age > 3 || age < 0) { V3D_TUG.delete(id); continue; }
+    const a = T.a + age * .35, dd = 2.5 * age * age / 2 + age, [x, y] = at(T.u + Math.cos(a) * dd, T.v + Math.sin(a) * dd);
+    v3dVeh('tug', v3mDeckTractor, x, y, top + .02, h + a);
+  }
+}
+
 // v3fx.js 每帧调用：本文件各部分的发光与烟
 function v3dFx(out, C, inB, seen) {
   v3dCatFx(out, C, inB);

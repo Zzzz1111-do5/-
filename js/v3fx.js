@@ -74,7 +74,7 @@ function v3VlsOrigin(m) {
       u = (B[0] + (Math.floor(pseudo * B[5]) + .5) * cx) * sc; v = (B[2] + (Math.floor(pv * B[6]) + .5) * cy) * sc; z = -2.6 + B[4] * sc; lk = Math.min(cx, cy) * sc / 1.1; lv = -cy * sc / 2;
     } else { u = lerp(b[0], b[1], .15 + .7 * pseudo) * k; v = (pv * 2 - 1) * b[2] * .7 * k * (K ? K.w : 1); z = -2.6 + 2.8 * k + .3; }
     const W = (u, v) => [px0 + u * Math.cos(h) - v * Math.sin(h), py0 + u * Math.sin(h) + v * Math.cos(h)], [x, y] = W(u, v), [lx, ly] = W(u, v + lv);
-    o = { x, y, z, h, lx, ly, lk, up: m.kind === 'sam' ? .45 : .9 };
+    o = { x, y, z, h, lx, ly, lk, cls, up: m.kind === 'sam' ? .45 : .9 };
   }
   V.set(m.id, o);
   return o;
@@ -170,9 +170,13 @@ function v3Fx(C) {
       const a0 = S.t - tr[i - 1][3], a1 = S.t - tr[i][3], hot = a1 < .35;   // 越老的一段越宽、越淡（烟在空中散开）
       v3fRib(out, E, tr[i - 1], tr[i], w0 * (1 + a1 * 1.6), [sm[0], sm[1], sm[2], .3 * (1 - a0 / 4)], hot ? [...V3F_COL.amber.slice(0, 3), .85] : [sm[0], sm[1], sm[2], .3 * (1 - a1 / 4)]);
     }
-    if (tr.length > 1) { const q = tr[tr.length - 2]; v3fRib(out, E, q, p, w0 * .9, [...col.slice(0, 3), .5], [...V3F_COL.flame.slice(0, 3), .95]); }   // 尾焰
-    v3fSpark(out, C, p, m.kind === 'tbm' ? 6 : 3.4, V3F_COL.white);
-    v3fSpark(out, C, p, (m.kind === 'tbm' ? 10 : 6) * (.85 + .15 * Math.sin(S.t * 40 + m.id)), [...V3F_COL.flame.slice(0, 3), .45]);   // 尾焰的光晕（闪烁）
+    // 尾焰挂在弹尾（导弹按真实长度画，v3msl.js），光晕按弹体大小
+    const hl = typeof v3MslKey === 'function' ? ((V3MS[v3MslKey(m)] || V3MS.pl15).L / 2) * v3MslK(m) : 0, fs = hl > 0 ? clamp(hl / 2, .5, 2) : 1;
+    let pt = p;
+    if (hl > 0 && tr.length > 1) { const q = tr[tr.length - 2], dx = p[0] - q[0], dy = p[1] - q[1], dz = p[2] - q[2], l = Math.hypot(dx, dy, dz); if (l > 1e-3) pt = [p[0] - dx / l * hl, p[1] - dy / l * hl, p[2] - dz / l * hl]; }
+    if (tr.length > 1) { const q = tr[tr.length - 2]; v3fRib(out, E, q, pt, w0 * .9 * fs, [...col.slice(0, 3), .5], [...V3F_COL.flame.slice(0, 3), .95]); }   // 尾焰
+    v3fSpark(out, C, pt, (m.kind === 'tbm' ? 6 : 3.4) * fs, V3F_COL.white);
+    v3fSpark(out, C, pt, (m.kind === 'tbm' ? 10 : 6) * fs * (.85 + .15 * Math.sin(S.t * 40 + m.id)), [...V3F_COL.flame.slice(0, 3), .45]);   // 尾焰的光晕（闪烁）
   }
   for (const id of V3F.trail.keys()) if (!live.has(id)) V3F.trail.delete(id);
   for (const id of V3F.seen) if (!live.has(id) && !(S.missiles || []).some(m => m.id === id)) { V3F.seen.delete(id); V3F.ign.delete(id); if (V3F.vo) V3F.vo.delete(id); }
