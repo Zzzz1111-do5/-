@@ -3,6 +3,7 @@
 // 地形材质先在 CPU 上算成平滑过的权重纹理（每格一个像素，线性插值），海岸线用 TER.coast 的平滑曲线；着色器用噪声扰动边界、叠加细节，细节按缩放淡入（远看不闪）
 const TRX = { ok: false, tried: false, gl: null, cv: null, vs: null, P: {}, tex: {}, seed: null, sig: -1, chk: 0, c0: 0, cr: 1, fb: null, fbSeed: null,
   ver: 0, fbs: [], blit: null, fbOk: null, key: null, prev: null, lastSig: null, lastKey: null, lastT: 0 };   // ver 地形贴图版本；fbs 陆地缓存（全 / 低分辨率）；key 缓存对应的镜头，prev 上一帧的镜头；last* 上次合成
+const TRX_KS = Math.ceil((W + 1) / 4096);   // 海岸线纹理每几个世界单位一个采样：纹理宽 W / TRX_KS + 1，不超过手机常见的 4096 上限（8400 宽的地图每 3 个）
 
 const TRX_VS = 'attribute vec2 p; void main(){ gl_Position = vec4(p, 0., 1.); }';
 // pass：0 一遍画完整帧（开场快照、镜头正在移动、没有帧缓冲时）· 1 只画陆地，存进缓存贴图（镜头不动就不重画）
@@ -58,10 +59,10 @@ vec3 farm(vec2 w, float pw, out float ed, out vec2 wc, out float fk) {
 }
 #endif
 // 海岸线 y：16 位（高低两字节）存储，最近点采样后手动线性插值，避免 8 位量化在岸边浪线上出现竖条
-// 每 2 个世界单位一个采样（纹理宽 W/2+1，不超过手机常见的 4096 上限）
-const float KN = ${W / 2}.;
+// 每 TRX_KS 个世界单位一个采样（纹理宽 W / TRX_KS + 1，不超过手机常见的 4096 上限）
+const float KN = ${W / TRX_KS}.;
 float coastY(float x) {
-  float fx = clamp(x, 0., WORLD.x) * .5, i = floor(fx);
+  float fx = clamp(x, 0., WORLD.x) / ${TRX_KS}., i = floor(fx);
   vec2 a = texture2D(uK, vec2((i + .5) / (KN + 1.), .5)).ra, b = texture2D(uK, vec2((min(i + 1., KN) + .5) / (KN + 1.), .5)).ra;
   return uCoast.x + mix(a.x * 65280. + a.y * 255., b.x * 65280. + b.y * 255., fx - i) / 65535. * uCoast.y;
 }
@@ -390,7 +391,9 @@ function terLines() {
     for (let j = 0; j < h; j++) {
       const y = (j + .5) * px, g = (y - 5) / CELL, g0 = Math.floor(g), f = g - g0, a = X(g0), b = X(g0 + 1);
       if (a < -1e8 || b < -1e8 || y < top) continue;
-      const cx = a + (b - a) * f, hw = rv.w * (y - top < 80 && top > 0 ? .55 + .45 * (y - top) / 80 : 1);   // 河源一段渐窄
+      const cx = a + (b - a) * f, cy = coastAt(cx);
+      if (y > cy + 10) continue;   // 河道到海岸线为止（中心线在海里一直延伸到图边，以前海面上留着一道河形的直线）
+      const hw = rv.w * (y - top < 80 && top > 0 ? .55 + .45 * (y - top) / 80 : 1) * (1 + 1.8 * smooth(cy - 90, cy + 10, y));   // 河源一段渐窄；河口最后 90 米张开成喇叭口，融进海里
       const i0 = Math.max(0, Math.floor((cx - hw * 2.6) / px)), i1 = Math.min(w - 1, Math.ceil((cx + hw * 2.6) / px));
       for (let i = i0; i <= i1; i++) { const q = j * w + i, d = Math.abs((i + .5) * px - cx) / hw; if (d < dV[q]) dV[q] = d; }
     }
@@ -446,11 +449,11 @@ function trxTerrain() {
     gl.activeTexture(gl.TEXTURE0 + i); gl.bindTexture(gl.TEXTURE_2D, TRX.tex[k]);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, GW, GH, 0, gl.RGBA, gl.UNSIGNED_BYTE, w[k]);
   });
-  // 海岸线：每 2 个世界单位一个采样（共 W/2+1 个），按本图最高 / 最低点归一化到 16 位（亮度 = 高字节、透明度 = 低字节）
-  const co = TER.coast, KN = W / 2; let lo = 1e9, hi = -1e9;
+  // 海岸线：每 TRX_KS 个世界单位一个采样（共 W / TRX_KS + 1 个），按本图最高 / 最低点归一化到 16 位（亮度 = 高字节、透明度 = 低字节）
+  const co = TER.coast, KN = W / TRX_KS; let lo = 1e9, hi = -1e9;
   for (let x = 0; x <= W; x++) { lo = Math.min(lo, co[x]); hi = Math.max(hi, co[x]); }
   const cr = Math.max(1, hi - lo), k = new Uint8Array((KN + 1) * 2);
-  for (let j = 0; j <= KN; j++) { const v = Math.round((co[Math.min(W, j * 2)] - lo) / cr * 65535); k[j * 2] = v >> 8; k[j * 2 + 1] = v & 255; }
+  for (let j = 0; j <= KN; j++) { const v = Math.round((co[Math.min(W, j * TRX_KS)] - lo) / cr * 65535); k[j * 2] = v >> 8; k[j * 2 + 1] = v & 255; }
   gl.activeTexture(gl.TEXTURE4); gl.bindTexture(gl.TEXTURE_2D, TRX.tex.k);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE_ALPHA, KN + 1, 1, 0, gl.LUMINANCE_ALPHA, gl.UNSIGNED_BYTE, k);
   const lf = terLines();

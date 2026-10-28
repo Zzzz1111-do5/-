@@ -4,14 +4,9 @@
 // 渲染侧缓存（不进 S）：平滑航向、航迹点、沉没时刻、炮塔角度、上次绘制的姿态（供点选）
 const SHIPV = { S: null, t1: 0, t2: 0, h: {}, trail: {}, sunk: {}, pose: {}, tur: [0, 0], etur: {}, aim: null, aimT: -99 };
 const SHIP_DIM = { assault: [32, 11], supply: [42, 13], lst: [48, 14], dd: [50, 9], boat: [12, 5] };   // 长 × 宽（世界单位）
-let SH_DARK = 'rgba(2,10,6,.86)', SH_FOAM = '#d4fff0';
-// 写实画面：甲板灰、白色浪花；细节线（原先的发光描边）改深灰，船体用海军灰涂装（shHull）
+// 甲板灰、白色浪花；细节线用深灰，船体用海军灰涂装（shHull）
 const SH_REAL = { deck: '#646b70', hull: '#7c8489', sup: '#9aa1a6', edge: '#2c3135', foam: '#eef3f2' };
-function shLook() {
-  const r = typeof realLook === 'function' && realLook();
-  SH_DARK = r ? SH_REAL.deck : 'rgba(2,10,6,.86)'; SH_FOAM = r ? SH_REAL.foam : '#d4fff0';
-  return r;
-}
+const SH_DARK = SH_REAL.deck, SH_FOAM = SH_REAL.foam;
 // HUD 单位卡图标（侧视，照真实舰型，icons.js）：271 型登陆艇、072 型后勤登陆舰、055 / 052D、072A、人员登陆艇
 const SHIP_ICONS = typeof WI === 'object' ? { ship: WI.t271, supply: WI.t072, dd: WI.t055, lst: WI.t072a, boat: WI.lcvp } : {};
 
@@ -79,24 +74,18 @@ function shHullPath(ctx, kind, open) {
   ctx.closePath();
 }
 
+// 船体：投影 + 受光渐变的海军灰 + 深色边线 + 阵营细边
 function shHull(ctx, kind, open, col, a, lw) {
-  if (typeof realLook === 'function' && realLook()) {   // 写实：投影 + 受光渐变的海军灰船体 + 深色边线 + 阵营细边（我方蓝）
-    const m = ctx.getTransform(), h = Math.atan2(m.b, m.a), [sx, sy] = rlLocal(h, 1.6, 1.6);
-    ctx.save(); ctx.translate(sx, sy); shHullPath(ctx, kind, open); ctx.fillStyle = 'rgba(0,0,0,.28)'; ctx.fill(); ctx.restore();
-    shHullPath(ctx, kind, open);
-    ctx.fillStyle = rlLit(ctx, h, 40, 10, SH_REAL.hull); ctx.fill();
-    ctx.strokeStyle = 'rgba(0,0,0,.6)'; ctx.lineWidth = lw(.7); ctx.stroke();
-    ctx.strokeStyle = rgba(COL.g, .7 * a); ctx.lineWidth = lw(1); ctx.stroke();
-    return;
-  }
+  const m = ctx.getTransform(), h = Math.atan2(m.b, m.a), [sx, sy] = rlLocal(h, 1.6, 1.6);
+  ctx.save(); ctx.translate(sx, sy); shHullPath(ctx, kind, open); ctx.fillStyle = 'rgba(0,0,0,.28)'; ctx.fill(); ctx.restore();
   shHullPath(ctx, kind, open);
-  ctx.fillStyle = SH_DARK; ctx.fill();
-  ctx.strokeStyle = rgba(col, .16 * a); ctx.lineWidth = lw(3.4); ctx.stroke();   // 外晕，远景更醒目
-  ctx.strokeStyle = rgba(col, a); ctx.lineWidth = lw(1.5); ctx.stroke();
+  ctx.fillStyle = rlLit(ctx, h, 40, 10, SH_REAL.hull); ctx.fill();
+  ctx.strokeStyle = 'rgba(0,0,0,.6)'; ctx.lineWidth = lw(.7); ctx.stroke();
+  ctx.strokeStyle = rgba(COL.g, .7 * a); ctx.lineWidth = lw(1); ctx.stroke();
 }
 
 function shBox(ctx, x, y, w, h, col, a, lw, fa) {
-  ctx.fillStyle = SH_DARK === SH_REAL.deck ? SH_REAL.sup : SH_DARK; ctx.fillRect(x, y, w, h);
+  ctx.fillStyle = SH_REAL.sup; ctx.fillRect(x, y, w, h);
   if (fa) { ctx.fillStyle = rgba(col, fa * a); ctx.fillRect(x, y, w, h); }
   ctx.strokeStyle = rgba(col, a); ctx.lineWidth = lw; ctx.strokeRect(x, y, w, h);
 }
@@ -248,7 +237,7 @@ function shDeckVeh(ctx, type, x, y, sc, col, a, lw, lod) {
   const L = 6.6, B = 3.9, wheel = type === 'recon', tur = !['apc', 'spg', 'td'].includes(type);
   ctx.strokeStyle = rgba(col, .9 * a); ctx.lineWidth = lw(.7) / sc;
   if (!wheel) for (const g of [-1, 1]) { ctx.fillStyle = 'rgba(4,8,6,.95)'; ctx.fillRect(-L / 2, g < 0 ? -B / 2 : B / 2 - 1, L, 1); ctx.strokeRect(-L / 2, g < 0 ? -B / 2 : B / 2 - 1, L, 1); }
-  const vp = SH_DARK === SH_REAL.deck ? RLP.p.hull : SH_DARK;   // 写实：甲板上的车辆是橄榄绿
+  const vp = RLP.p.hull;   // 甲板上的车辆是橄榄绿
   ctx.beginPath(); ctx.rect(-L / 2 + .3, -B / 2 + .8, L - .6, B - 1.6); ctx.fillStyle = vp; ctx.fill(); ctx.fillStyle = rgba(col, .18 * a); ctx.fill(); ctx.stroke();
   if (tur) { ctx.beginPath(); ctx.arc(-.3, 0, 1.25, 0, 7); ctx.fillStyle = vp; ctx.fill(); ctx.stroke(); ctx.beginPath(); ctx.moveTo(.9, 0); ctx.lineTo(L / 2 + 1.6, 0); ctx.stroke(); }
   else if (type !== 'apc') { ctx.beginPath(); ctx.moveTo(.4, 0); ctx.lineTo(L / 2 + 1.8, 0); ctx.stroke(); }
@@ -418,12 +407,12 @@ function shWreck(ctx, P, kind, key, time) {
     const rx = Lk * (.26 + .3 * g) * (1 + .2 * Math.sin(i * 1.9 + sd)), ox = (i - 1.5) * Lk * .16 - g * Lk * .15, oy = Math.sin(i * 2.3 + sd) * Bk * .5;
     ctx.beginPath(); ctx.ellipse(ox, oy, rx, rx * .5, Math.sin(i + sd) * .5, 0, 7);
     ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.fill();
-    ctx.strokeStyle = realLook() ? `rgba(60,70,72,${.2 + .06 * Math.sin(time * .7 + i)})` : rgba(i % 2 ? COL.amber : COL.intel, .13 + .05 * Math.sin(time * .7 + i)); ctx.lineWidth = px(1); ctx.stroke();   // 油污
+    ctx.strokeStyle = `rgba(60,70,72,${.2 + .06 * Math.sin(time * .7 + i)})`; ctx.lineWidth = px(1); ctx.stroke();   // 油污
   }
   ctx.scale(P.k, P.k); ctx.rotate(.08);
   shHullPath(ctx, kind, false);
-  ctx.fillStyle = realLook() ? 'rgba(40,44,46,.55)' : 'rgba(2,10,6,.35)'; ctx.fill();
-  ctx.setLineDash([px(2) / P.k, px(3) / P.k]); ctx.strokeStyle = realLook() ? 'rgba(0,0,0,.35)' : rgba(COL.g, .4); ctx.lineWidth = px(1) / P.k; ctx.stroke(); ctx.setLineDash([]);
+  ctx.fillStyle = 'rgba(40,44,46,.55)'; ctx.fill();
+  ctx.setLineDash([px(2) / P.k, px(3) / P.k]); ctx.strokeStyle = 'rgba(0,0,0,.35)'; ctx.lineWidth = px(1) / P.k; ctx.stroke(); ctx.setLineDash([]);
   ctx.restore();
   if (age < 30) for (let j = 0; j < 4; j++) {
     const u = (time * .8 + j * .29 + sd * .13) % 1, bx = P.x + Math.sin(j * 2.1 + sd) * Lk * .25, by = P.y + Math.cos(j * 1.7 + sd) * Bk * .4;
@@ -484,7 +473,7 @@ function shInView(P, vr) {
 
 function drawShips(time) {
   shSync();
-  const real = shLook(), dcol = real ? SH_REAL.edge : COL.g;
+  const dcol = SH_REAL.edge;
   const ctx = R.ctx, dt = clamp(time - SHIPV.t1, 0, .25), vr = viewRect(), list = [];
   SHIPV.t1 = time;
   for (const s of S.ships) {
@@ -540,14 +529,13 @@ function shEscortTur(s, P, dt) {
 
 function drawDD(time) {
   shSync();
-  const real = shLook();
   const ctx = R.ctx, D = S.dd;
   if (!D || !isFinite(D.x) || !isFinite(D.y)) return;
   const dt = clamp(time - SHIPV.t2, 0, .25), sunk = D.state === 'sunk';
   SHIPV.t2 = time;
   const P = shPose(D, 'DD', 50, 9, sunk && SHIPV.h.DD != null ? SHIPV.h.DD : D.heading ?? -Math.PI / 2, !!D.moving && !sunk, dt, false);
   if (sunk) { shWreck(ctx, P, 'dd', 'DD', time); return; }
-  const col = D.state === 'repair' ? COL.amber : COL.g, sel = isSel('DD'), bcol = real && D.state !== 'repair' ? SH_REAL.edge : col;
+  const col = D.state === 'repair' ? COL.amber : COL.g, sel = isSel('DD'), bcol = D.state !== 'repair' ? SH_REAL.edge : col;
   if (sel || U.tool === 'fire' || U.tool === 'smoke') {
     ctx.strokeStyle = rgba(COL.g, .12); ctx.lineWidth = px(1); ctx.setLineDash([px(4), px(8)]);
     ctx.beginPath(); ctx.arc(D.x, D.y, 1000, 0, 7); ctx.stroke(); ctx.setLineDash([]);
@@ -580,7 +568,7 @@ function drawDD(time) {
 function drawBoat(ctx, x, y, heading, opt) {
   if (!isFinite(x) || !isFinite(y)) return;
   opt = opt || {};
-  const real = shLook(), h = isFinite(heading) ? heading : -Math.PI / 2, col = real ? SH_REAL.edge : opt.col || COL.intel, k = clamp(9 / (12 * R.s), 1, 3), lod = 12 * k * R.s, lw = v => px(v) / k;
+  const h = isFinite(heading) ? heading : -Math.PI / 2, col = SH_REAL.edge, k = clamp(9 / (12 * R.s), 1, 3), lod = 12 * k * R.s, lw = v => px(v) / k;
   const n = clamp(opt.n ?? 3, 0, 9);
   if (opt.wake !== false) shVWake(ctx, x, y, h, 12, 5, k, SH_FOAM, .45);
   ctx.save(); ctx.translate(x, y); ctx.rotate(h); ctx.scale(k, k);

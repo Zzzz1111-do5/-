@@ -1,10 +1,9 @@
 'use strict';
-// 黑绿画面（SETTINGS.look === 'green'，默认）：沿用写实画面的全部轮廓与模型（地形、房屋、车辆、舰船、飞机），整帧画完后过一遍着色器——
+// 黑绿画面（唯一的画面风格）：用写实画法画出全部轮廓与模型（地形、房屋、车辆、舰船、飞机），整帧画完后过一遍着色器——
 // 亮度映射成黑底绿色磷光（像夜视 / 战术显示屏），亮度边缘（Sobel）加亮成发光轮廓线，亮处带一点辉光；
 // 鲜艳的标识色（敌方红、琥珀、青、紫、火光）保留原色，敌方的涂装在这个画面里改成暗红（lkPaint），一眼分清敌我
 // 实现：主画布（2D）作纹理上传到一个 WebGL 画布，着色后再整张画回主画布（用 copy 合成，不影响点击、截图等）；没有 WebGL 时退回 CSS 滤镜（全图绿、不保留红）
 const LK = { ok: false, tried: false, gl: null, cv: null, pr: null, u: {}, tex: null, w: 0, h: 0, css: false };
-const greenLook = () => typeof SETTINGS === 'object' && !!SETTINGS && SETTINGS.look === 'green';
 
 const LK_VS = 'attribute vec2 p; void main(){ gl_Position = vec4(p, 0., 1.); }';
 const LK_FS = `#ifdef GL_FRAGMENT_PRECISION_HIGH
@@ -106,10 +105,10 @@ function lkCss(on) {
   R.cv.style.filter = on ? 'grayscale(1) sepia(1) hue-rotate(75deg) saturate(2.4) brightness(.82)' : '';
 }
 
-// 敌方涂装：黑绿画面里换成同样明暗的暗红（饱和度够高，过着色器时保留红色）；其他画面原样返回
+// 敌方涂装：换成同样明暗的暗红（饱和度够高，过着色器时保留红色）；我方原样返回
 const _lkp = {};
 function lkPaint(hex, side) {
-  if (side !== 'e' || !greenLook() || typeof hex !== 'string' || hex[0] !== '#' || hex.length !== 7) return hex;
+  if (side !== 'e' || typeof hex !== 'string' || hex[0] !== '#' || hex.length !== 7) return hex;
   const c = _lkp[hex];
   if (c) return c;
   const v = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255), l = .3 * v[0] + .59 * v[1] + .11 * v[2];

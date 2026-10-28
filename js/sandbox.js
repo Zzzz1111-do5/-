@@ -92,6 +92,7 @@ const sbxLandOk = (x, y) => { const t = typeAt(x, y); return !isWater(t) && t !=
 function sbxCheck(c, x, y, x2, y2, ignore) {
   if (!c) return { ok: false, why: '未知条目' };
   const s = c.spawn, bad = why => ({ ok: false, why });
+  if (typeof lvAllow === 'function' && !lvAllow(c)) return bad(S.lv.kind === 'naval' ? '海战关只部署舰艇、航空兵与远程火力' : '陆战关不需要登陆舰艇');   // 闯关按关卡类型限制兵种（levels.js）
   if (s.kind === 'veh' && !sbxVehOk()) return bad('装甲车辆模块未加载');
   let cost = c.cost;
   if (s.at === 'line') cost = x2 == null ? 1 : Math.max(1, Math.round(s.per * dist(x, y, x2, y2) / 100));
@@ -181,6 +182,7 @@ function sbxCheck(c, x, y, x2, y2, ignore) {
   if (s.minDepth && coastAt(x) - y < s.minDepth) return bad(`须放在离海岸 ${s.minDepth} 以外的纵深`);
   if (s.ek === 'airfield' && typeof eaRunwayFit === 'function' && !eaRunwayFit(x, y, 380, sbxAirAvoid(ignore))) return bad('这里放不下机场：920 米跑道与约 1100 × 800 的场区都要落在平整的陆地上（不跨水、河、悬崖、山地），也不能压在据点或其他工事上');
   if ((s.kind === 'enemy' || s.kind === 'post') && s.ek !== 'airfield' && sbxOnAirfield(x, y, ignore)) return bad('不能压在机场的跑道、滑行道、停机坪、机库群、油库或弹药库上');
+  if (s.kind === 'enemy' && (s.ek === 'bunker' || s.ek === 'coastal')) { const sl = groundSlope(x, y); if (sl > SLOPE_MAX) return bad(`${s.ek === 'coastal' ? '炮台' : '碉堡'}是整块浇筑的混凝土工事，要建在平地上：这里坡度约 ${Math.round(sl)}°（不能超过 ${SLOPE_MAX}°）`); }
   if (s.kind === 'enemy' || s.kind === 'post') {
     if (S.sbx.items.some(it => it !== ignore && it.side === 'e' && it.x != null && ['enemy', 'post'].includes(sbxEntry(it).spawn.kind) && dist(it.x, it.y, x, y) < 12)) return bad('与其他工事重叠');
   }
@@ -1394,8 +1396,6 @@ function openSandbox(seed, keep) {
   Object.assign(SBX, { pick: null, line: null, lineDown: null, hover: null, drag: null, pv: false, msg: '', endKey: null, savesOpen: false });
   sbxSync();
   if (typeof document === 'undefined') return S;
-  if (typeof MX === 'object' && MX) MX.seed = null;
-  if (typeof R === 'object' && R) R.pixSeed = null;
   if (typeof mmInit === 'function' && $('mm')) mmInit($('mm'));
   if (typeof U === 'object') { U.tool = null; U.logKey = null; U.cardKey = null; U.level = lv; }
   $('brief').hidden = true; $('end').hidden = true;
@@ -1554,6 +1554,7 @@ function sbxUI() {
       if (v < sp) sbxMsg(`已部署 ${sp} 点，预算不能低于此`, true); else S.sbx.budget[SBX.side] = v;
     }
     else if (a === 'preset') { const b0 = S.sbx.budget[SBX.side]; if (SBX.side === 'e') sbxPresetDef(); else sbxPresetFleet(); sbxMsg(`已载入标准部署（${sbxSpent(SBX.side)} 点）` + (S.sbx.budget[SBX.side] > b0 ? `，预算已调至 ${S.sbx.budget[SBX.side]}` : '')); }
+    else if (a === 'ai' && S.lv && SBX.side === 'p' && typeof lvAIAttack === 'function') sbxMsg(lvAIAttack(SBX.sty.p));   // 闯关：按关卡类型部署（levels.js）
     else if (a === 'ai') { const st = SBX.sty[SBX.side], r = SBX.side === 'e' ? sbxAIDefend(st) : sbxAIAttack(st, SBX.dir.main, SBX.dir.feint); sbxMsg(SBX.side === 'e' ? `「${SBX_STY.e[st].nm}」部署完毕；判断敌主攻方向：${r.join('、')}` : `「${SBX_STY.p[st].nm}」部署完毕：主攻${r.main}${r.feint ? '，佯攻' + r.feint : '，不佯攻'}`); }
     else if (a === 'clear') { sbxClear(SBX.side); sbxMsg('已清空' + (SBX.side === 'e' ? '防守方' : '进攻方')); }
     else if (a === 'save') { const ok = sbxSaveNow(); sbxMsg(ok ? `已保存：${sbxSaves()[0].name}（双方部署、预算与地图）` : '已保存在本页（浏览器存储不可用，刷新后会丢失）', !ok); sbxSavesShow(true); }
@@ -1657,13 +1658,15 @@ function sbxPick(id) {
 function sbxInfo(c) {
   if (!SBX.el) return;
   const box = SBX.el.querySelector('.sbx-info');
-  if (!c) { box.innerHTML = `<p class="h">从目录中选择一种兵力，然后在地图上放置。${SBX.side === 'p' ? '步兵与非两栖车辆须装载到登陆舰上。' : ''}</p>`; return; }
+  if (!c) { box.innerHTML = `<p class="h">从目录中选择一种兵力，然后在地图上放置。${SBX.side !== 'p' ? '' : S.lv && S.lv.kind === 'ground' ? '陆战关：步兵、车辆直接放在滩头阵地里（海岸线以北的虚线区）。' : S.lv && S.lv.kind === 'naval' ? '海战关：只部署舰艇、航空兵与远程火力。' : '步兵与非两栖车辆须装载到登陆舰上。'}</p>`; return; }
   const arch = typeof ARCH_NAMES === 'object' ? ARCH_NAMES[c.arch] || '' : '', cost = c.spawn.at === 'line' ? `${c.spawn.per} 点 / 100 长` : `${c.cost} 点`;
   const ld = typeof ctLoadHtml === 'function' ? ctLoadHtml(c, sbxEsc) : '';
   box.innerHTML = `<b>${sbxEsc(c.name)}</b><em>◆ ${cost}</em><span class="h"> · ${sbxEsc(arch)}</span><p>${sbxEsc(c.desc)}</p>${ld ? `<details class="sbx-ld"><summary>挂载与参数</summary>${ld}</details>` : ''}<p class="h">${sbxEsc(SBX_AT[c.spawn.at] || '')}</p>`;
 }
 function sbxRender() {
   if (!SBX.el || !S || !S.sbx || typeof document === 'undefined') return;
+  if (S.lv) SBX.side = 'p';   // 闯关：只部署进攻方，守方由 AI 布好、看不到
+  if (typeof lvPanel === 'function') lvPanel(SBX.el);
   const el = SBX.el, side = SBX.side, q = s => el.querySelector(s);
   el.classList.toggle('e', side === 'e'); el.classList.toggle('p', side === 'p');
   q('.sbx-seed').textContent = `SEED ${S.seed}`;
@@ -1676,7 +1679,7 @@ function sbxRender() {
   const cats = SBX_CATS[side];
   if (SBX.cat !== 'all' && !cats.includes(SBX.cat)) SBX.cat = 'all';
   q('.sbx-cats').innerHTML = ['all', ...cats].map(k => `<button type="button" class="${SBX.cat === k ? 'on' : ''}" data-cat="${k}">${k === 'all' ? '全部' : CAT_NAMES[k]}</button>`).join('');
-  const pal = CATALOG.filter(c => (c.side === side || c.side === 'both') && (SBX.cat === 'all' || c.cat === SBX.cat) && !(c.id === 'e_airfield' && TER.af));   // 地图自带空军基地：不再出售
+  const pal = CATALOG.filter(c => (c.side === side || c.side === 'both') && (SBX.cat === 'all' || c.cat === SBX.cat) && !(c.id === 'e_airfield' && TER.af) && (typeof lvAllow !== 'function' || lvAllow(c)));   // 地图自带空军基地：不再出售；闯关按关卡类型过滤（levels.js）
   const left = bud - sp;
   q('.sbx-pal').innerHTML = pal.map(c => {
     const na = c.spawn.kind === 'veh' && !sbxVehOk(), cost = c.spawn.at === 'line' ? c.spawn.per + '/百' : c.cost;

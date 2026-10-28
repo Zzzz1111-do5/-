@@ -145,7 +145,7 @@ function bgAdvance(G, gx, gy, step) {
   const d = dist(G.ax, G.ay, gx, gy);
   if (d < 25) return true;
   let tx = gx, ty = gy;
-  if (d > 40 && !clearLine(G.ax, G.ay, gx, gy, G.side)) { const f = field(gx, gy, G.side), n = f && nextStep(f, G.ax, G.ay); if (n) [tx, ty] = n; }
+  if (d > 40 && !clearLine(G.ax, G.ay, gx, gy, G.side)) { const q = d > 240 ? 60 : 20, f = field(Math.round(gx / q) * q, Math.round(gy / q) * q, G.side), n = f && nextStep(f, G.ax, G.ay); if (n) [tx, ty] = n; }   // 远处的目标取整到格点：几个营共用一张流场，不每挪一步就整图重算
   const l = dist(G.ax, G.ay, tx, ty) || 1, k = Math.min(step, l) / l;
   G.ax += (tx - G.ax) * k; G.ay += (ty - G.ay) * k;
   const a = Math.atan2(gy - G.ay, gx - G.ax);

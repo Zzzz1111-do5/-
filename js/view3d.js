@@ -1,5 +1,5 @@
 'use strict';
-// 3D 立体地图（黑绿画风）：右上角「3D」按钮或 Shift + L 切换，沙盒编辑时不可用
+// 3D 立体地图（黑绿画风）：对局默认就是 3D（SETTINGS.v3，玩家切回平面后记住）；右上角「3D」按钮或 Shift + L 切换
 // 画法：地形按高程做成立体网格（每 2 格一个顶点，高程放大 V3_HZ 倍，海面平铺，四周有沙盘围边）；
 //   当前整帧战场（地形、单位、标记，已过黑绿着色器）先在屏外按俯视画好，作为贴图披在地形上；
 //   再叠加西北来光的山体明暗、等高线（每 14 一条，每 5 条加粗）、200 一格的方格网、远处渐暗
@@ -8,13 +8,20 @@
 // 坐标：GL 里用 (x, -y, 高) 的右手系（x 东、y 北、z 上），世界坐标 y 向南，换算时取负
 const V3 = { on: false, ok: false, tried: false, gl: null, cv: null, pr: null, u: {}, a: {}, buf: null, n: 0, seed: null, sig: null,
   top: null, tex: null, base: null, hf: null, nx: 0, ny: 0, yaw: 0, tilt: .95, yawT: 0, tiltT: .95, box: null, cam: null, keep: null };
-const V3_HZ = 150, V3_FOV = .8, V3_TILT = [.05, 1.45], V3_SKIRT = -70;   // 俯仰：从几乎正俯视到几乎平视
+const V3_HZ = 230, V3_FOV = .8, V3_TILT = [.05, 1.45], V3_SKIRT = -70;   // 俯仰：从几乎正俯视到几乎平视
+const V3_ZMAX = 11000, V3_OUT = 2400;   // 镜头最高高度、能飞出地图边多远：拉远能看见整张沙盘桌（v3table.js）
+// 光向（GL 坐标：x 东、y 北、z 上）：桌子上方的灯从西北斜照，仰角约 26°——像早晨的斜阳，山、房屋、车辆的影子拉得长、明暗分得开；
+//   地面、房屋、模型的着色器和烘焙的投影（v3light.js）都用它
+const V3_SUN = (() => { const v = [-.6, .62, .42], l = Math.hypot(...v); return v.map(a => +(a / l).toFixed(4)); })(), V3_SUNG = `vec3(${V3_SUN.join(', ')})`;
+const V3_AIR = 230 * V3_HZ / 150;   // 飞机、导弹高度 alt 1.0 对应的 3D 高度：随地形高程放大，高空飞机始终在最高的山顶之上
 let V3_ST = 2;   // 地形网格每几格一个顶点：显卡支持 32 位索引时为 1（每 10 米一个顶点，山脊、河谷的轮廓更细），否则 2
 
 const V3_VS = `attribute vec3 p; attribute vec3 n;
 uniform mat4 uM; uniform vec3 uEye;
-varying vec3 vP, vN; varying float vD;
-void main() { vP = p; vN = n; vD = distance(p, uEye); gl_Position = uM * vec4(p, 1.); }`;
+varying vec3 vP, vN, vV; varying float vD;
+void main() { vP = p; vN = n; vV = uEye - p; vD = length(vV); gl_Position = uM * vec4(p, 1.); }`;
+// 片元着色器精度：支持就用 highp（世界坐标上千米，mediump 在手机上只有约 8 米的精度，网格线、字符会成块抖动）
+const V3_PREC = '#ifdef GL_FRAGMENT_PRECISION_HIGH\nprecision highp float;\n#else\nprecision mediump float;\n#endif\n';
 // 黑客帝国式数码风（黑绿画面）：地形网格的每个面都画出发光的网格线（粗糙的多边形地形反而像数字模型）、按等高线分层的明暗台阶，
 //   地面上一列列下落的点阵字符流（「数字雨」，向海的方向流下去、字形不断变换、头部最亮、拖着渐暗的尾巴），海面是暗色的字符雨与扫描线，
 //   沙盘围边与房屋墙面上字符竖着往下落；字小到看不清时只留亮度带，不闪烁
@@ -43,10 +50,11 @@ float mxRain(vec2 cell, vec2 f, float t, float px) {
 //   田地是稀疏的数据点阵；沼泽横向虚线；沙滩细密点、礁石稀疏亮点；道路是带亮边的通道，中线上一段段「数据包」沿路流动；
 //   河流是暗色水道、两岸亮线，水道里的字符顺流而下；海岸线一道亮光；没看见的地方压暗（战争迷雾）；字符雨照常落下。
 //   单位、标号、箭头、弹坑等仍来自俯视贴图（这时贴图底色是黑的，叠加上去）
-const V3_FS = der => `${der ? '#extension GL_OES_standard_derivatives : enable\n#define DER 1\n' : ''}precision mediump float;
-uniform sampler2D uTop, uBase, uCls, uCls2, uFogT, uHt, uLf, uTopF; uniform vec4 uBox, uBoxF; uniform vec2 uWorld, uGrid, uHG; uniform vec2 uFog; uniform float uSea, uT, uMx;
-varying vec3 vP, vN; varying float vD;
+const V3_FS = der => `${der ? '#extension GL_OES_standard_derivatives : enable\n#define DER 1\n' : ''}${V3_PREC}
+uniform sampler2D uTop, uBase, uCls, uCls2, uFogT, uHt, uLf, uTopF, uLm; uniform vec4 uBox, uBoxF; uniform vec2 uWorld, uGrid, uHG; uniform vec2 uFog; uniform float uSea, uT, uMx, uLmOn;
+varying vec3 vP, vN, vV; varying float vD;
 ${V3_MX}
+${typeof V3L_BOOM_GLSL === 'string' ? V3L_BOOM_GLSL : 'vec3 boomLight(vec2 w) { return vec3(0.); }'}
 #ifdef DER
 #define FW(x) fwidth(x)
 #else
@@ -76,7 +84,7 @@ void main() {
   bool inBox = uv.x > 0. && uv.y > 0. && uv.x < 1. && uv.y < 1., inF = uvF.x > 0. && uvF.y > 0. && uvF.x < 1. && uvF.y < 1.;
   float wN = inBox ? smoothstep(0., .07, min(min(uv.x, uv.y), min(1. - uv.x, 1. - uv.y))) : 0.;   // 近处贴图的边上渐变到远处那张，看不出一圈分界
   vec3 N = normalize(vN);
-  float lit = clamp(dot(N, normalize(vec3(-.45, .55, .7))), 0., 1.);
+  float lit = clamp(dot(N, ${V3_SUNG}), 0., 1.);
   float h = vP.z, land = step(uSea, h);
   vec3 c;
   // 等高线与方格网（两种画风共用）
@@ -87,7 +95,8 @@ void main() {
   float gl = (1. - smoothstep(0., fg * 1.5, .5 - max(g2.x, g2.y))) * .16;
   if (uMx < .5) {   // 写实 / 关闭数码风：披俯视贴图，叠山体明暗、等高线、方格网
     vec3 cF = inF ? texture2D(uTopF, uvF).rgb : texture2D(uBase, w / uWorld).rgb;
-    c = (wN > 0. ? mix(cF, texture2D(uTop, uv).rgb, wN) : cF) * (.5 + .75 * lit);
+    vec3 lm0 = uLmOn > .5 ? texture2D(uLm, w / uWorld).rgb : vec3(1., 1., 0.);
+    c = (wN > 0. ? mix(cF, texture2D(uTop, uv).rgb, wN) : cF) * (.5 + .75 * lit) * mix(.42, 1., lm0.r) * mix(.55, 1., lm0.g) + boomLight(w) * (.35 + .65 * lit);
     c += vec3(.12, .62, .32) * (cl + gl);
     gl_FragColor = vec4(mix(c, bg, smoothstep(uFog.x, uFog.y, vD)), 1.); return;
   }
@@ -99,11 +108,11 @@ void main() {
 #ifdef DER
   vec3 Nf = normalize(cross(dFdx(vP), dFdy(vP)));
   if (Nf.z < 0.) Nf = -Nf;
-  float litF = clamp(dot(Nf, normalize(vec3(-.45, .55, .7))), 0., 1.);
+  float litF = clamp(dot(Nf, ${V3_SUNG}), 0., 1.);
 #else
   float litF = lit;
 #endif
-  litF = floor(litF * 5. + .5) / 5.;
+  litF = mix(lit, litF, .45);   // 平滑的山体受光为主，掺一点平面多边形的块面感（原来量化成五档，像色块）
   // 数码高程（取代平滑的等高线曲线）：每个 20 × 20 的网格面按平均高度量化成一级台阶（uHt：R 级数 / 16，G 坦克上不去的高山，B 水面），
   //   越高越亮；级数变化处沿网格边画直角折线（数码等高线）；远看折线细到看不清时淡出，只留台阶的明暗
   vec2 hc = w / 20., hi = floor(hc), hq = fract(hc);
@@ -112,7 +121,7 @@ void main() {
   float lw = fm * 1.7, far2 = 1. - smoothstep(.12, .45, fm);
   float stp = max(step(.01, abs(Lx - HT.r)) * (1. - smoothstep(0., lw, .5 - abs(hq.x - .5))), step(.01, abs(Ly - HT.r)) * (1. - smoothstep(0., lw, .5 - abs(hq.y - .5))));
   // 底色：近黑，陆地按高度台阶提亮
-  c = mix(vec3(.002, .012, .014), vec3(.006, .03, .017) + vec3(.012, .05, .026) * hn + vec3(.01, .06, .03) * HT.r, land) * (.55 + 1.15 * litF);
+  c = mix(vec3(.005, .028, .034), vec3(.026, .1, .06) + vec3(.035, .13, .07) * hn + vec3(.025, .12, .06) * HT.r, land) * (.28 + 1.6 * litF);   // 灯下的沙盘：迎光面亮、背光面暗，明暗拉得开（底色够亮，影子才看得出）
   c += G * (stp * (.13 + .3 * HT.r) * far2 * land + gl * .7);
   // 坦克上不去的高山：斜向扫描线（远看成一层淡淡的亮度）
   float hz = step(.86, fract((w.x - w.y) / 9.));
@@ -180,6 +189,22 @@ void main() {
   float r = mix(mxRain(floor(cu1), fract(cu1), uT, 9. / pw), mxRain(floor(cu2) + 500., fract(cu2), uT * .6, 27. / pw), smoothstep(7., 3.5, 9. / pw));
   c += vec3(.16, 1., .5) * r * mix(.5, .26, land) + vec3(.6, 1., .8) * max(r - 1., 0.) * .3;
   if (land < .5) c += vec3(.02, .1, .07) * (.5 + .5 * sin(w.y * .35 - uT * 3.)) * .45;   // 海面扫描线
+  // 光影（v3light.js 烘焙的光照贴图）：R 投影、G 环境光遮蔽、B 近岸浅水；再按桌子上方那盏灯的远近压暗四周
+  vec3 lm = uLmOn > .5 ? texture2D(uLm, cu).rgb : vec3(1., 1., 0.);
+  float lampR = length((w - uWorld * .5) / (uWorld * .5));
+  c *= mix(.3, 1., lm.r) * mix(.45, 1., lm.g) * (.72 + .28 * (1. - smoothstep(.55, 1.5, lampR)));
+  c += boomLight(w) * (.3 + .7 * lit);   // 爆炸火光照亮周围的地面
+  if (land < .5) {
+    // 海面：几层缓慢移动的波纹斜着反射头顶的灯（粼粼的亮点），近岸的浅水亮一些、岸边一道来回涌的浪线
+    vec2 wq = w * vec2(.029, .041); float t2 = uT * .55;
+    vec3 nw = normalize(vec3(sin(wq.x + t2) * .5 + sin(wq.y * 1.7 - t2 * .8) * .35 + sin((wq.x + wq.y) * 2.6 + t2 * 1.4) * .2,
+                             cos(wq.y - t2 * .7) * .5 + cos(wq.x * 1.9 + t2) * .3 + cos((wq.x - wq.y) * 3.1 - t2) * .15, 5.5));
+    vec3 Hs = normalize(${V3_SUNG} + normalize(vV));
+    float glint = pow(max(dot(nw, Hs), 0.), 90.) * lm.r, sheen = pow(max(dot(nw, Hs), 0.), 12.) * lm.r;
+    c += vec3(.55, 1., .82) * (glint * .9 + sheen * .05) * (1. - smoothstep(uFog.x * .5, uFog.y, vD));
+    c += vec3(.012, .07, .05) * lm.b * lm.b;
+    c += G * smoothstep(.86, .97, lm.b) * (.5 + .5 * sin(uT * 1.3 - lm.b * 40. + w.x * .02)) * .16;
+  }
   // 战争迷雾：没看见的地方压暗
   c *= mix(.42, 1., vis);
   // 单位、标号、箭头等（俯视贴图，底色是黑的）叠加上去
@@ -193,15 +218,16 @@ const V3_BVS = `attribute vec3 p; attribute vec3 n; attribute vec2 e;
 uniform mat4 uM; uniform vec3 uEye;
 varying vec3 vP, vN; varying vec2 vE; varying float vD;
 void main() { vP = p; vN = n; vE = e; vD = distance(p, uEye); gl_Position = uM * vec4(p, 1.); }`;
-const V3_BFS = `precision mediump float;
-uniform sampler2D uTop, uBase, uTopF; uniform vec4 uBox, uBoxF; uniform vec2 uWorld, uFog; uniform float uT, uMx;
+const V3_BFS = () => `${V3_PREC}
+uniform sampler2D uTop, uBase, uTopF, uLm; uniform vec4 uBox, uBoxF; uniform vec2 uWorld, uFog; uniform float uT, uMx, uLmOn;
 varying vec3 vP, vN; varying vec2 vE; varying float vD;
 ${V3_MX}
+${typeof V3L_BOOM_GLSL === 'string' ? V3L_BOOM_GLSL : 'vec3 boomLight(vec2 w) { return vec3(0.); }'}
 void main() {
   vec2 w = vec2(vP.x, -vP.y), uv = (w - uBox.xy) / uBox.zw, uvF = (w - uBoxF.xy) / uBoxF.zw;
   bool inF = uvF.x > 0. && uvF.y > 0. && uvF.x < 1. && uvF.y < 1.;
   vec3 N = normalize(vN), bg = vec3(.004, .02, .011);
-  float lit = clamp(dot(N, normalize(vec3(-.45, .55, .7))), 0., 1.);
+  float lit = clamp(dot(N, ${V3_SUNG}), 0., 1.);
   float ed = min(min(vE.x, 1. - vE.x), min(vE.y, 1. - vE.y)), edge = 1. - smoothstep(.02, .1, ed);
   vec3 c;
   if (vE.x > 1.5) {   // 树：树冠（e.x 2.5）、树干（3.5）；不画棱线，边缘（侧面）一圈淡淡的轮廓光
@@ -223,6 +249,10 @@ void main() {
       : vec3(.015, .085, .045) * (.55 + 1.1 * lit);
     c += vec3(.12, .68, .36) * edge * (N.z > .5 ? .55 : .9);
   }
+  // 山的投影、街巷与林下的遮蔽也落在房屋、树上（v3light.js 光照贴图）；墙脚比屋顶暗一点
+  vec2 lmB = uLmOn > .5 ? texture2D(uLm, w / uWorld).rg : vec2(1.);
+  c *= mix(.42, 1., lmB.r) * mix(.62, 1., lmB.g);
+  c += boomLight(w) * (.25 + .75 * lit);
   gl_FragColor = vec4(mix(c, bg, smoothstep(uFog.x, uFog.y, vD)), 1.);
 }`;
 
@@ -245,21 +275,33 @@ function v3H0(gx, gy) {
 }
 // 世界坐标 (x, y) 处的地面高度（双线性插值）
 // 飞机在 3D 里的绝对高度（模型、标识、机上射出的弹共用）：舰载机在甲板上（弹射、滑跑、拦阻）贴着飞行甲板，海上起降以甲板为基准；
-//   高度 alt 0.05 以下贴着基准面（地面 / 甲板），往上每 1.0 约 230（直升机悬停 0.3 约离地 60）——见 v3AltZ：高空按海拔平飞，不随山起伏
+//   高度 alt 0.05 以下贴着基准面（地面 / 甲板），往上每 1.0 为 V3_AIR（约 350，直升机悬停 0.3 约离地 90）——见 v3AltZ：高空按海拔平飞，不随山起伏
 const V3_DECK = -2.6 + 17 + 1.5;   // 舰载机在飞行甲板上的高度：甲板离水线 17（carrier.js CVG.zd）+ 放下起落架的机身高度
 function v3AirZ(o) {
   const ph = o.phase || o.ph;
   if (o.kind && (ph === 'cat' || ph === 'roll' || ph === 'trap')) return V3_DECK;
-  return v3AltZ(o.x, o.y, Math.max(0, clamp(o.alt ?? 1, 0, 1) - .05) * 230, o.kind && !o.land && !o.afPh ? V3_DECK - 1.5 : -2.6, 1.5);
+  const z = v3AltZ(o.x, o.y, Math.max(0, clamp(o.alt ?? 1, 0, 1) - .05) * V3_AIR, o.kind && !o.land && !o.afPh ? V3_DECK - 1.5 : -2.6, 1.5);
+  return o.kind && o.lT != null ? v3ClimbZ(o, z) : z;
+}
+// 刚弹射离舰的舰载机（cvdeck.js 记的离舰时刻 lT）：推演里 2 秒就升到巡航高度，照着画像坐电梯直上——
+//   画面按 JSBSim 算的离舰时间历程（js/aero.js：先下沉约 3 米，再抬头加速爬升，14 秒约 220 米），之后按末了的爬升率继续；
+//   赶上推演的高度时平滑改平；推演更低时（俯冲、低空突防）照推演
+function v3ClimbZ(o, zs) {
+  const u = S.t - o.lT;
+  if (!(u >= 0 && u < 40) || typeof AERO !== 'object') return zs;
+  const R = AERO.launch.rows, n = R.length - 1, f = u / AERO.launch.dt, i = Math.min(n - 1, Math.floor(f));
+  const h = f < n ? lerp(R[i][0], R[i + 1][0], f - i) : R[n][0] + (u - n * AERO.launch.dt) * (R[n][0] - R[n - 10][0]) / (10 * AERO.launch.dt);
+  const zp = V3_DECK + h, d = zs - zp;
+  return d <= 0 ? zs : zs - d * Math.max(sm01(d / 60), 1 - sm01((u - 2) / 2));   // 头 2 秒完全照数据（含下沉），之后只在快赶上时圆滑过渡
 }
 // 离地高度 h → 绝对高度：贴地时按脚下实际地面（lo 是海上的最低基准：舰载机 = 飞行甲板，其余 = 海面），一离地参考面就换成平滑的地形包络
-//   （v3Env，不跟着每个小山包上下抖），越高越接近海拔基准——220 以上完全按海拔平飞；低空过山时沿包络平缓爬升、越过山脊再下来
+//   （v3Env，不跟着每个小山包上下抖），越高越接近海拔基准——巡航高度（约 V3_AIR）完全按海拔平飞；低空过山时沿包络平缓爬升、越过山脊再下来
 const sm01 = v => { v = clamp(v, 0, 1); return v * v * (3 - 2 * v); };
 function v3AltZ(x, y, h, lo, lift) {
   const g = Math.max(v3Ht(x, y), lo);
   if (!(h > 0)) return g + lift;
   const F = Math.max(v3Env(x, y), g), gr = lerp(g, F, sm01(h / 20));
-  return Math.max(h + lift + lerp(gr, lo, sm01(h / 220)), g + lift + Math.min(h, 6));
+  return Math.max(h + lift + lerp(gr, lo, sm01(h / (V3_AIR * .96))), g + lift + Math.min(h, 6));
 }
 // 地形包络：每 40 一个点，取 140 以内的最高地面，再在 80 内取平均——比实际地形略宽、略高，处处平缓
 const V3_ENV = 40;
@@ -329,11 +371,12 @@ function v3Mesh() {
   v3Cls();
   v3HtTex();
   v3EnvBuild();
+  if (typeof v3LightBake === 'function') v3LightBake();   // 光照贴图（v3light.js）
 }
-// 底图（远处、俯视贴图以外）：写实画面用整图地形渲染（terrain.js trxSnapshot，约 1.5 米一个像素，有农田、林冠、河流道路），
-//   不再是每 10 米一个色块；黑绿 / 数码风的地面由着色器画，底图只在写实画面里用，用小地图配色就够
+// 底图（远处、俯视贴图以外）：地形图地面（v3Mx 关）用整图地形渲染（terrain.js trxSnapshot，约 1.5 米一个像素，有农田、林冠、河流道路），
+//   不再是每 10 米一个色块；数码风的地面由着色器画，底图用小地图配色就够
 function v3BaseTex() {
-  const gl = V3.gl, real = typeof realLook === 'function' && realLook() && !v3Mx();
+  const gl = V3.gl, real = !v3Mx();
   let src = V3.baseMM;
   const pw = V3.coarse || (V3.maxTex || 2048) < 4096 ? 2048 : 4096;   // 底图按 2 的幂（2:1）存，好生成多级渐远纹理
   if (real && typeof trxSnapshot === 'function') { const snap = trxSnapshot(pw); if (snap) src = snap; }
@@ -389,8 +432,8 @@ function v3Cls() {
   gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D, V3.cls2); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, GW, GH, 0, gl.RGBA, gl.UNSIGNED_BYTE, b);
   if (typeof terLines === 'function') { const lf = terLines(); gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1); gl.activeTexture(gl.TEXTURE6); gl.bindTexture(gl.TEXTURE_2D, V3.lf); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, lf.w, lf.h, 0, gl.RGBA, gl.UNSIGNED_BYTE, lf.d); }   // 道路、河流的中心线距离场（terrain.js）
 }
-// 3D 地图用数码风画地面吗（黑绿画面；设置里可关）
-const v3Mx = () => typeof SETTINGS === 'object' && !!SETTINGS && (SETTINGS.look === 'green' || SETTINGS.look === 'matrix') && SETTINGS.matrix3d !== false;   // 黑绿、数码两种画面都用数码风地面
+// 3D 地面用数码风画吗（默认是；SETTINGS.matrix3d = false 时改为披俯视贴图的地形图）
+const v3Mx = () => !(typeof SETTINGS === 'object' && SETTINGS && SETTINGS.matrix3d === false);
 
 // 房屋几何：民房是坡顶（两面坡 + 山墙，屋脊顺着长边），楼房是平顶（女儿墙、楼梯间 / 水箱），镇中心的更高；坐落在地面高度上；
 // 机场建筑（afbase.js：机库、机堡、塔台、营房、油罐等，任意朝向的多边形柱体，塔台玻璃顶与水塔水箱架空）排在前面，机场被发现 / 夺取时重建；
@@ -473,9 +516,9 @@ function v3Bld() {
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, o.i); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(c.ib), gl.STATIC_DRAW);
     return o;
   }), drop = L => { for (const c of L || []) { gl.deleteBuffer(c.b); gl.deleteBuffer(c.i); } };
-  drop(V3.bch);
+  drop((V3.bch || []).filter(c => !c.tree));   // 只删房屋块：树块沿用（以前连树的缓冲区一起删了，机场被发现、重建房屋后全图的树就不见了）
   const TL = v3Trees();
-  if (V3.tchL !== TL) { drop(V3.tch); V3.tch = up(TL); V3.tchL = TL; }   // 树只在地图 / 地形变了时重传（机场被发现时只重建房屋）
+  if (V3.tchL !== TL) { drop(V3.tch); V3.tch = up(TL).map(c => Object.assign(c, { tree: true })); V3.tchL = TL; }   // 树只在地图 / 地形变了时重传（机场被发现时只重建房屋）
   V3.bch = [...up(K.out), ...V3.tch];
   V3.bn = V3.bch.reduce((a, c) => a + c.n, 0);
 }
@@ -544,27 +587,28 @@ function v3Init() {
     gl.linkProgram(pr);
     if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(pr));
     const u = {}, a = { p: gl.getAttribLocation(pr, 'p'), n: gl.getAttribLocation(pr, 'n') };
-    for (const k of ['uM', 'uEye', 'uTop', 'uBase', 'uCls', 'uCls2', 'uFogT', 'uHt', 'uLf', 'uTopF', 'uBox', 'uBoxF', 'uWorld', 'uGrid', 'uHG', 'uFog', 'uSea', 'uT', 'uMx']) u[k] = gl.getUniformLocation(pr, k);
+    for (const k of ['uM', 'uEye', 'uTop', 'uBase', 'uCls', 'uCls2', 'uFogT', 'uHt', 'uLf', 'uTopF', 'uBox', 'uBoxF', 'uWorld', 'uGrid', 'uHG', 'uFog', 'uSea', 'uT', 'uMx', 'uLm', 'uLmOn', 'uBm']) u[k] = gl.getUniformLocation(pr, k);
     const pb = gl.createProgram();
-    gl.attachShader(pb, sh(gl.VERTEX_SHADER, V3_BVS)); gl.attachShader(pb, sh(gl.FRAGMENT_SHADER, V3_BFS));
+    gl.attachShader(pb, sh(gl.VERTEX_SHADER, V3_BVS)); gl.attachShader(pb, sh(gl.FRAGMENT_SHADER, V3_BFS()));   // 着色器源码用到时再拼：爆炸火光的 GLSL 在后加载的 v3light.js 里
     gl.linkProgram(pb);
     if (!gl.getProgramParameter(pb, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(pb));
     const ub = {}, ab = { p: gl.getAttribLocation(pb, 'p'), n: gl.getAttribLocation(pb, 'n'), e: gl.getAttribLocation(pb, 'e') };
-    for (const k of ['uM', 'uEye', 'uTop', 'uBase', 'uTopF', 'uBox', 'uBoxF', 'uWorld', 'uFog', 'uT', 'uMx']) ub[k] = gl.getUniformLocation(pb, k);
-    gl.useProgram(pb); gl.uniform1i(ub.uTop, 0); gl.uniform1i(ub.uBase, 1); gl.uniform1i(ub.uTopF, 7);
+    for (const k of ['uM', 'uEye', 'uTop', 'uBase', 'uTopF', 'uBox', 'uBoxF', 'uWorld', 'uFog', 'uT', 'uMx', 'uLm', 'uLmOn', 'uBm']) ub[k] = gl.getUniformLocation(pb, k);
+    const lmU = (gl.getParameter(gl.MAX_TEXTURE_IMAGE_UNITS) || 8) > 8 ? 8 : 0;   // 光照贴图在第 9 个单元（不够就指到 0 号，uLmOn = 0 不用它）
+    gl.useProgram(pb); gl.uniform1i(ub.uTop, 0); gl.uniform1i(ub.uBase, 1); gl.uniform1i(ub.uTopF, 7); gl.uniform1i(ub.uLm, lmU);
     Object.assign(V3, { pb, ub, ab });
     const mk = (unit, filt) => { const t = gl.createTexture(); gl.activeTexture(gl.TEXTURE0 + unit); gl.bindTexture(gl.TEXTURE_2D, t); for (const [p, v] of [[gl.TEXTURE_MIN_FILTER, filt], [gl.TEXTURE_MAG_FILTER, filt], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D, p, v); return t; };
     Object.assign(V3, { gl, cv, pr, u, a, tex: mk(0, gl.LINEAR), base: mk(1, gl.LINEAR), cls: mk(2, gl.LINEAR), cls2: mk(3, gl.LINEAR), fog: mk(4, gl.LINEAR), ht: mk(5, gl.NEAREST), lf: mk(6, gl.LINEAR), texF: mk(7, gl.LINEAR), topF: document.createElement('canvas'), u32: !!gl.getExtension('OES_element_index_uint'), top: document.createElement('canvas'), coarse: V3.coarse ?? (typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches), maxTex: Math.min(4096, gl.getParameter(gl.MAX_TEXTURE_SIZE) || 2048), ok: true });
     gl.useProgram(pr);
-    gl.uniform1i(u.uTop, 0); gl.uniform1i(u.uBase, 1); gl.uniform1i(u.uCls, 2); gl.uniform1i(u.uCls2, 3); gl.uniform1i(u.uFogT, 4); gl.uniform1i(u.uHt, 5); gl.uniform1i(u.uLf, 6); gl.uniform1i(u.uTopF, 7);
-    if (V3.u32) V3_ST = 1;
+    gl.uniform1i(u.uTop, 0); gl.uniform1i(u.uBase, 1); gl.uniform1i(u.uCls, 2); gl.uniform1i(u.uCls2, 3); gl.uniform1i(u.uFogT, 4); gl.uniform1i(u.uHt, 5); gl.uniform1i(u.uLf, 6); gl.uniform1i(u.uTopF, 7); gl.uniform1i(u.uLm, lmU);
+    if (V3.u32 && GW * GH <= 200000) V3_ST = 1;   // 大地图（8400 × 5600）每 2 格一个顶点：每格一个要近百万个三角形，手机画不动
     V3.aniso = gl.getExtension('EXT_texture_filter_anisotropic') || gl.getExtension('WEBKIT_EXT_texture_filter_anisotropic'); V3.anMax = V3.aniso ? Math.min(8, gl.getParameter(V3.aniso.MAX_TEXTURE_MAX_ANISOTROPY_EXT) || 1) : 1;
     gl.enable(gl.DEPTH_TEST);
   } catch (e) { V3.ok = false; console.warn('3D 地图不可用', e); }
 }
 
 // —— 3D 镜头：自由镜头（V3.fc）——镜头本身就是一个在战场上空自由移动的视点：位置 (x, y, z) + 偏航 yaw（0 朝东、π/2 朝南）+ 俯仰 pitch（向上为正）。
-//   不再绕着地面上的某一点转（不是第三人称）：拖动 / Q E / R F 是原地转头、抬头低头；W S 沿视线方向前后飞（抬头往上、低头往下）、A D 左右平移；
+//   不再绕着地面上的某一点转（不是第三人称）：拖动 / R F 是原地转头、抬头低头；Q E 降低 / 升高；W S 沿视线方向前后飞（抬头往上、低头往下）、A D 左右平移；
 //   滚轮朝鼠标指着的地方推近 / 拉远；左键拖动平移（地面跟着手走）；小地图、编队栏双击等「把镜头移到某处」保持当前朝向和距离平移过去。
 //   画面中心（CAM.x, CAM.y）与缩放 CAM.z 每帧由镜头推算（视线落地点、离地高度），贴图范围、细节档、平面地图的切换都照旧按它们
 // 渲染距离（设置「3D 渲染距离」）：雾、远景贴图、远裁剪面一起放远 / 拉近
@@ -583,10 +627,21 @@ function v3FcInit() {
   const ps = V3.yawT ?? 0, tz = v3Ht(CAM.x, CAM.y), ux = Math.sin(ps), uy = Math.cos(ps);
   // 平面地图缩得很远时换算出的镜头会在地图外、高度上限以上：改成更陡地俯看、再降低距离，镜头仍对着原来的画面中心
   const lim = (p, u, a, b) => u > 1e-6 ? (b - p) / u : u < -1e-6 ? (a - p) / u : 1e9;
-  const hmax = Math.max(0, Math.min(lim(CAM.x, ux, -400, W + 400), lim(CAM.y, uy, -400, H + 400)));
+  const hmax = Math.max(0, Math.min(lim(CAM.x, ux, -V3_OUT, W + V3_OUT), lim(CAM.y, uy, -V3_OUT, H + V3_OUT)));
   if (D * Math.sin(th) > hmax) th = Math.asin(clamp(hmax / D, 0, 1));
-  if (D * Math.cos(th) > 4200 - tz) D = (4200 - tz) / Math.max(.2, Math.cos(th));
+  if (D * Math.cos(th) > V3_ZMAX - tz) D = (V3_ZMAX - tz) / Math.max(.2, Math.cos(th));
   V3.fc = v3FcFromOrbit(CAM.x, CAM.y, tz, D, th, ps);
+  V3.fc0 = { x: CAM.x, y: CAM.y, tz, D, th, ps };   // 进 3D 过渡的终点（v3TiltIn）
+}
+// 进 3D 的过渡：先从接近正俯视（和平面地图看到的一样）开始，绕画面中心约 1.2 秒压低到默认俯角，不突然跳成透视
+const V3_TIN = 1.2;
+function v3TiltStep(dt) {
+  const T = V3.tin, A = V3.fc0;
+  if (!T || !A) return;
+  T.t += dt;
+  const u = clamp(T.t / V3_TIN, 0, 1), e = u * u * (3 - 2 * u);
+  Object.assign(V3.fc, v3FcFromOrbit(A.x, A.y, A.tz, A.D, lerp(Math.min(.1, A.th), A.th, e), A.ps));
+  if (u >= 1) V3.tin = null;
 }
 const v3Gnd = (x, y) => Math.max(v3Ht(clamp(x, 0, W - 1), clamp(y, 0, H - 1)), -2.6, typeof cvCamZ === 'function' ? cvCamZ(x, y) ?? -99 : -99);
 // 镜头离最近的东西有多远：脚下的地面 / 甲板，空中的飞机、直升机（近裁剪面按它定）
@@ -601,7 +656,7 @@ function v3FcCamera() {
   const F = V3.fc || (v3FcInit(), V3.fc), cp = Math.cos(F.pitch), f = [cp * Math.cos(F.yaw), -cp * Math.sin(F.yaw), Math.sin(F.pitch)];   // 视线方向（GL 坐标）
   const E = [F.x, -F.y, F.z], z = [-f[0], -f[1], -f[2]], x = v3Norm(v3Cross([0, 0, 1], z)), y = v3Cross(z, x);
   const view = new Float32Array([x[0], y[0], z[0], 0, x[1], y[1], z[1], 0, x[2], y[2], z[2], 0, -v3Dot(x, E), -v3Dot(y, E), -v3Dot(z, E), 1]);
-  const D = clamp(F.d || 600, 80, 5000), rd = v3RD(), fog = v3Fog(D, rd);
+  const D = clamp(F.d || 600, 80, 16000), rd = v3RD(), fog = v3Fog(D, rd);
   const asp = CAM.vw / Math.max(1, CAM.vh), fo = 1 / Math.tan(V3_FOV / 2), n = clamp(Math.min(D * .012, v3NearGap(F) * .45), .3, 25), fa = Math.max(D * 9, fog[1] * 1.5), nf = 1 / (n - fa);   // 近裁剪面：离最近的东西（地面、飞机）越近越小，凑近飞机不会被切掉
   const proj = new Float32Array([fo / asp, 0, 0, 0, 0, fo, 0, 0, 0, 0, (fa + n) * nf, -1, 0, 0, 2 * fa * n * nf, 0]);
   return (V3.cam = { E, x, y, z, D, rd, fog, asp, M: v3Mul(proj, view) });
@@ -609,13 +664,14 @@ function v3FcCamera() {
 // 每帧：转头缓动、按键飞行、外部「移镜头」的平移、不钻地；再推算画面中心与缩放
 function v3FcStep(dt) {
   const F = V3.fc || (v3FcInit(), V3.fc);
+  v3TiltStep(dt);
   if (F.cx != null && (Math.abs(CAM.x - F.cx) > .5 || Math.abs(CAM.y - F.cy) > .5)) { F.x += CAM.x - F.cx; F.y += CAM.y - F.cy; }   // 别处把画面中心移走了（小地图、双击编队、点消息定位）：镜头平移过去
   F.yaw += Math.atan2(Math.sin(F.yawT - F.yaw), Math.cos(F.yawT - F.yaw)) * Math.min(1, dt * 14);
   F.pitch += (F.pitchT - F.pitch) * Math.min(1, dt * 14);
-  F.x = clamp(F.x, -400, W + 400); F.y = clamp(F.y, -400, H + 400);
-  F.z = clamp(F.z, v3Gnd(F.x, F.y) + 3, 4200);
+  F.x = clamp(F.x, -V3_OUT, W + V3_OUT); F.y = clamp(F.y, -V3_OUT, H + V3_OUT);
+  F.z = clamp(F.z, v3Gnd(F.x, F.y) + 3, V3_ZMAX);
   const alt = Math.max(1, F.z - v3Gnd(F.x, F.y)), cp = Math.cos(F.pitch), down = -Math.sin(F.pitch);
-  const reach = down > .05 ? Math.min(5000, alt / down * cp) : 2600 * Math.min(1, alt / 200 + .3);   // 视线落地点（看天时取前方一段）
+  const reach = down > .05 ? Math.min(16000, alt / down * cp) : 2600 * Math.min(1, alt / 200 + .3);   // 视线落地点（看天时取前方一段）
   F.d = Math.hypot(reach, Math.min(alt, reach * 3));
   CAM.x = F.x + Math.cos(F.yaw) * reach; CAM.y = F.y + Math.sin(F.yaw) * reach;
   CAM.z = clamp((CAM.vh / Math.max(30, F.d)) / (2 * Math.tan(V3_FOV / 2)), CAM.fit, Math.max(CAM.fit * 12, 4));   // 与原来的环绕镜头同一换算：画面中心的比例接近平面地图
@@ -626,28 +682,37 @@ function v3FcStep(dt) {
 // 原地转头（偏航）、抬头低头（俯仰）
 function v3Look(dyaw, dpitch, now) {
   const F = V3.fc || (v3FcInit(), V3.fc);
+  V3.tin = null;   // 玩家自己动了镜头：过渡停下
   F.yawT += dyaw; F.pitchT = clamp(F.pitchT + dpitch, -1.52, 1.45);   // 可以抬头看到接近头顶（仰看飞过头顶的飞机）
   if (now) { F.yaw = F.yawT; F.pitch = F.pitchT; }
 }
 // 沿视线飞：fw 前后（沿视线方向，含高低）、rt 左右平移，按离地高度定速度
 function v3Fly(fw, rt, dt) {
+  V3.tin = null;
   const F = V3.fc || (v3FcInit(), V3.fc), alt = Math.max(1, F.z - v3Gnd(F.x, F.y)), sp = clamp(alt * 1.25, 50, 1100) * dt, cp = Math.cos(F.pitch);
   F.x += (Math.cos(F.yaw) * cp * fw - Math.sin(F.yaw) * rt) * sp; F.y += (Math.sin(F.yaw) * cp * fw + Math.cos(F.yaw) * rt) * sp; F.z += Math.sin(F.pitch) * fw * sp;
 }
+// 升高 / 降低（k > 0 升高）：速度和前后飞一样按离地高度定，贴近地面时慢
+function v3Rise(k, dt) {
+  V3.tin = null;
+  const F = V3.fc || (v3FcInit(), V3.fc), alt = Math.max(1, F.z - v3Gnd(F.x, F.y));
+  F.z += k * clamp(alt * 1.25, 50, 1100) * dt;
+}
 // 推近 / 拉远：朝屏幕上 (sx, sy) 指着的地面点移动（k > 1 推近）
 function v3Dolly(sx, sy, k) {
+  V3.tin = null;
   const F = V3.fc || (v3FcInit(), V3.fc), P = v3Pick(sx, sy), pz = v3Gnd(P.x, P.y), dx = P.x - F.x, dy = P.y - F.y, dz = pz - F.z, d = Math.hypot(dx, dy, dz) || 1;
   let m = d * (1 - 1 / k);
   if (k > 1) m = Math.min(m, d - 6);   // 推近：停在离那一点 6 米外
-  else m = Math.max(m, dz < 0 ? -Math.max(0, 4200 - F.z) / Math.max(.05, -dz / d) : -d * 3);   // 拉远：到了最高高度就停，不再贴着高度上限水平往后飘出地图
+  else m = Math.max(m, dz < 0 ? -Math.max(0, V3_ZMAX - F.z) / Math.max(.05, -dz / d) : -d * 3);   // 拉远：到了最高高度就停，不再贴着高度上限水平往后飘出地图
   F.x += dx / d * m; F.y += dy / d * m; F.z += dz / d * m;
 }
 // 镜头：画面中心（CAM.x, CAM.y）为目标点；距离按平面地图的缩放换算，使画面中心的比例与平面时相同（开始界面背景的环绕展示用）
 function v3Camera() {
   if (typeof V3O === 'object' && V3O.on) return v3oCamera();   // 观察者模式（v3obs.js）
   if (V3.on) return v3FcCamera();   // 自由镜头
-  const th = V3.tilt, ps = V3.yaw, D = (CAM.vh / CAM.z) / (2 * Math.tan(V3_FOV / 2));
-  const T = [CAM.x, -CAM.y, V3.tz ?? v3Ht(CAM.x, CAM.y)];   // 注视点高度按帧平滑跟随地形 / 航母甲板（v3TzStep），翻过山头、掠过航母时镜头不突然冒高
+  const th = V3.tilt, ps = V3.yaw, D = (CAM.vh / CAM.z) / (2 * Math.tan(V3_FOV / 2)) * (V3.dk || 1), o = V3.tofs || [0, 0];
+  const T = [CAM.x + o[0], -(CAM.y + o[1]), V3.tz ?? v3Ht(CAM.x, CAM.y)];   // 注视点高度按帧平滑跟随地形 / 航母甲板（v3TzStep），翻过山头、掠过航母时镜头不突然冒高
   const E = [T[0] + D * Math.sin(th) * Math.sin(ps), T[1] - D * Math.sin(th) * Math.cos(ps), T[2] + D * Math.cos(th)];
   { const g = v3Ht(clamp(E[0], 0, W - 1), clamp(-E[1], 0, H - 1)); if (E[2] < g + 8) E[2] = g + 8; }   // 平视时镜头不钻进身后的山里
   const z = v3Norm(v3Sub(E, T)), x = v3Norm(v3Cross([-Math.sin(ps), Math.cos(ps), 0], z)), y = v3Cross(z, x);
@@ -662,11 +727,13 @@ function v3TzStep(dt) {
   if (V3.tz == null || !isFinite(V3.tz)) V3.tz = want;
   else V3.tz += (want - V3.tz) * (1 - Math.exp(-dt / .35));
 }
-// 按住 Q / E 连续转向、R / F 连续俯仰（右键拖动同样可以自由转视角）
+// 按住 Q / E 降低 / 升高镜头（Shift 加速），R / F 连续俯仰；转向用右键 / 中键拖动或 < >
 function v3HoldStep(dt) {
   const K = V3.hold;
   if (!K || !K.size || !V3.on) return;
-  v3Look((K.has('KeyE') ? 1.6 : 0) * dt - (K.has('KeyQ') ? 1.6 : 0) * dt, (K.has('KeyR') ? 1 : 0) * dt - (K.has('KeyF') ? 1 : 0) * dt, true);   // Q E 原地左右转头、R 抬头 F 低头
+  const up = (K.has('KeyE') ? 1 : 0) - (K.has('KeyQ') ? 1 : 0), pt = (K.has('KeyR') ? 1 : 0) - (K.has('KeyF') ? 1 : 0);
+  if (up) v3Rise(up, dt * (typeof KEYS === 'object' && KEYS.has('Shift') ? 3 : 1));
+  if (pt) v3Look(0, pt * dt, true);   // R 抬头、F 低头
 }
 // 屏幕点 → 视线 → 与地形求交（先粗步进，再二分）；打不到地面时取视线与海平面的交点
 function v3Ray(sx, sy) {
@@ -712,7 +779,7 @@ function v3Draw(now) {
   else if (V3.on) { v3HoldStep(fdt); v3FcStep(fdt); }   // 自由镜头
   else { v3TzStep(fdt); V3.yaw += Math.atan2(Math.sin(V3.yawT - V3.yaw), Math.cos(V3.yawT - V3.yaw)) * .18; V3.tilt += (V3.tiltT - V3.tilt) * .18; }   // 开始界面背景的环绕展示
   const C = v3Camera(), box = V3.box = v3Box(Math.max(2.6, v3FogE(C) * .93 / C.D)), boxN = v3Box(1.15);   // 远处贴图（与立体模型）铺到能见距离
-  if (V3.baseReal !== (typeof realLook === 'function' && realLook() && !v3Mx())) v3BaseTex();   // 切换了画面风格：底图跟着换
+  if (V3.baseReal !== !v3Mx()) v3BaseTex();   // 换了地面画法：底图跟着换
   // 俯视贴图：近处一张高清（每帧画），整个可见范围一张低清（每 3 帧画一次）；近处已经盖住大半个可见范围（俯看时）就只画一张
   const cap = Math.min(V3.maxTex, R.lowCap || (SETTINGS && SETTINGS.quality === 'low') ? 1280 : V3.coarse ? 1600 : 2048, Math.max(1024, Math.max(R.cv.width, R.cv.height) * 1.3));   // 屏外俯视画布最长边（按屏幕大小，手机、低画质更小）
   // 跟不上（主循环帧间隔滑动平均超过 40ms）就把屏外画布逐步缩小，最低 45%；流畅后再慢慢放大
@@ -762,6 +829,7 @@ function v3Draw(now) {
   gl.activeTexture(gl.TEXTURE5); gl.bindTexture(gl.TEXTURE_2D, V3.ht);
   gl.activeTexture(gl.TEXTURE4); gl.bindTexture(gl.TEXTURE_2D, V3.fog);
   if (typeof FOGB === 'object') gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE, GW, GH, 0, gl.LUMINANCE, gl.UNSIGNED_BYTE, FOGB);   // 视野（drawScene 刚按当前观察视野算好）
+  const lmOn = typeof v3LightBind === 'function' && v3LightBind(gl) ? 1 : 0;   // 光照贴图（v3light.js，第 9 个贴图单元）
   gl.clearColor(.004, .02, .011, 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
   const u = V3.u;
   gl.uniformMatrix4fv(u.uM, false, C.M);
@@ -771,22 +839,27 @@ function v3Draw(now) {
   gl.uniform2f(u.uFog, ...v3FogR(C));
   gl.uniform1f(u.uSea, 1.5);
   const mx = v3Mx() ? 1 : 0, tm = (now / 1000) % 3600;   // 黑绿画面：黑客帝国式数码风
-  gl.uniform1f(u.uT, tm); gl.uniform1f(u.uMx, mx);
+  gl.uniform1f(u.uT, tm); gl.uniform1f(u.uMx, mx); gl.uniform1f(u.uLmOn, lmOn);
+  const bm = typeof v3Booms === 'function' ? v3Booms() : null;   // 爆炸火光（v3light.js）
+  if (bm && u.uBm) gl.uniform4fv(u.uBm, bm);
   gl.bindBuffer(gl.ARRAY_BUFFER, V3.buf); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, V3.ib);
   gl.enableVertexAttribArray(V3.a.p); gl.vertexAttribPointer(V3.a.p, 3, gl.FLOAT, false, 24, 0);
   gl.enableVertexAttribArray(V3.a.n); gl.vertexAttribPointer(V3.a.n, 3, gl.FLOAT, false, 24, 12);
   gl.drawElements(gl.TRIANGLES, V3.n, V3.it || gl.UNSIGNED_SHORT, 0);
+  if (typeof v3Table === 'function') { gl.disableVertexAttribArray(V3.a.p); gl.disableVertexAttribArray(V3.a.n); v3Table(C); gl.useProgram(V3.pr); }   // 沙盘桌：边框、桌面（v3table.js）
   if (V3.bn && V3.pb && V3.bch) {   // 城镇房屋、机场建筑、树木（分块的静态缓冲区）
     const ub = V3.ub, ab = V3.ab;
     gl.useProgram(V3.pb);
     gl.uniformMatrix4fv(ub.uM, false, C.M); gl.uniform3f(ub.uEye, C.E[0], C.E[1], C.E[2]);
     gl.uniform4f(ub.uBox, V3.boxN[0], V3.boxN[1], V3.boxN[2], V3.boxN[3]); gl.uniform4f(ub.uBoxF, V3.boxF[0], V3.boxF[1], V3.boxF[2] || 1, V3.boxF[3] || 1); gl.uniform2f(ub.uWorld, W, H); gl.uniform2f(ub.uFog, ...v3FogR(C));
-    gl.uniform1f(ub.uT, tm); gl.uniform1f(ub.uMx, mx);
+    gl.uniform1f(ub.uT, tm); gl.uniform1f(ub.uMx, mx); gl.uniform1f(ub.uLmOn, lmOn);
+    if (bm && ub.uBm) gl.uniform4fv(ub.uBm, bm);
     gl.disableVertexAttribArray(V3.a.p); gl.disableVertexAttribArray(V3.a.n);
     gl.enableVertexAttribArray(ab.p); gl.enableVertexAttribArray(ab.n); gl.enableVertexAttribArray(ab.e);
-    const fe = v3FogE(C), ex = C.E[0], ey = -C.E[1];
+    const fe = v3FogE(C), ex = C.E[0], ey = -C.E[1], ez = Math.max(0, C.E[2] - 120), rk = v3RD() * CAM.vh / 768, ft = Math.min(fe * .6, 4500 * rk), fb = Math.min(fe, 9000 * rk);   // ez：镜头比地面高出多少（拉得很高时树、房屋也算远）
     for (const c of V3.bch) {
-      if (c.bb && Math.hypot(Math.max(c.bb[0] - ex, 0, ex - c.bb[2]), Math.max(c.bb[1] - ey, 0, ey - c.bb[3])) > fe) continue;   // 整块在雾外
+      // 整块在雾外不画；树（约 10 高）只画屏幕上两个像素以上的近处，房屋九千以内——远处的林地、村镇由地面贴图表现（大地图上全图的树有几百万个三角形）
+      if (c.bb && Math.hypot(Math.max(c.bb[0] - ex, 0, ex - c.bb[2]), Math.max(c.bb[1] - ey, 0, ey - c.bb[3]), ez) > (c.tree ? ft : fb)) continue;
       gl.bindBuffer(gl.ARRAY_BUFFER, c.b); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, c.i);
       gl.vertexAttribPointer(ab.p, 3, gl.FLOAT, false, 32, 0); gl.vertexAttribPointer(ab.n, 3, gl.FLOAT, false, 32, 12); gl.vertexAttribPointer(ab.e, 2, gl.FLOAT, false, 32, 24);
       gl.drawElements(gl.TRIANGLES, c.n, gl.UNSIGNED_SHORT, 0);
@@ -795,6 +868,7 @@ function v3Draw(now) {
   }
   if (typeof v3Units === 'function' && !(SETTINGS && SETTINGS.models3d === false)) { gl.disableVertexAttribArray(V3.a.p); gl.disableVertexAttribArray(V3.a.n); v3Units(C, box); }   // 兵种立体模型（v3units.js）
   if (typeof v3Fx === 'function' && !(SETTINGS && SETTINGS.models3d === false)) { gl.disableVertexAttribArray(V3.a.p); gl.disableVertexAttribArray(V3.a.n); v3Fx(C); }   // 立体弹道（v3fx.js）
+  if (typeof v3Post === 'function') { gl.disableVertexAttribArray(V3.a.p); gl.disableVertexAttribArray(V3.a.n); v3Post(now); }   // 辉光、景深、暗角（v3post.js）
   const ctx = R.ctx;
   ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalCompositeOperation = 'copy'; ctx.drawImage(V3.cv, 0, 0); ctx.restore();
   v3Overlay(ctx, now / 1000);
@@ -814,6 +888,7 @@ function v3Overlay(ctx, time) {
   ctx.save(); ctx.setTransform(R.dpr, 0, 0, R.dpr, 0, 0);
   ctx.lineCap = 'round'; ctx.font = '11px "IBM Plex Mono", "Noto Sans SC", monospace'; ctx.textAlign = 'center';
   const near = CAM.z / CAM.fit > 2.2, spec = specAll() || R.eye === 'all', used = [];
+  if (typeof v3TableMarks === 'function') v3TableMarks(ctx);   // 沙盘桌边框上的方格坐标
   // 名称标签：和已画的标签重叠就不画（近处的先画，远处的让位）
   const label = (t, x, y, col, al) => {
     const w = ctx.measureText(t).width + 4, r = [x - w / 2, y - 11, x + w / 2, y + 2];
@@ -892,20 +967,24 @@ function v3Att() {
   if (!(typeof MENU === 'object' && MENU.open && !MENU.game) || V3.ok === false && V3.tried || R.lowCap || (typeof SETTINGS === 'object' && SETTINGS.quality === 'low')) return false;
   if (V3.coarse == null) V3.coarse = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
   if (V3.coarse) return false;
-  V3.yaw = V3.yawT = (MENU.drift || 0) * .5; V3.tilt = V3.tiltT = 1.02;
+  V3.yaw = V3.yawT = (MENU.drift || 0) * .5; V3.tilt = V3.tiltT = .98;
+  // 拉远看整张沙盘桌，注视点往镜头左边挪，桌子落在菜单右边的空处
+  V3.dk = 1.32; V3.tofs = [-Math.cos(V3.yaw) * 2900, Math.sin(V3.yaw) * 2900];
   return true;
 }
-function v3Toggle(on = !V3.on) {
+// user：玩家自己按的（按钮、Shift + L）——记住选择，下一局照此默认
+function v3Toggle(on = !V3.on, user = false) {
   if (on && !v3Can()) return;
   if (on && !V3.tried) v3Init();
   const was = V3.on;
   V3.on = on && V3.ok;
-  if (V3.on && !was) v3FcInit();   // 进 3D：自由镜头从平面地图当前的画面接着看
+  if (V3.on && !was) { v3FcInit(); V3.tin = { t: 0 }; }   // 进 3D：自由镜头从平面地图当前的画面接着看，从俯视慢慢压低成透视
+  if (user && typeof setSetting === 'function') setSetting('v3', V3.on);
   const b = typeof $ === 'function' && $('btn3d'), c = typeof $ === 'function' && $('v3ctl');
   if (b) { b.classList.toggle('on', V3.on); b.setAttribute('aria-pressed', V3.on ? 'true' : 'false'); }
   if (c) c.hidden = !V3.on;
   if (!V3.on && typeof trxResize === 'function' && TRX.ok) trxResize();
-  if (typeof log === 'function' && S && S.t != null) log(V3.on ? '3D 自由镜头：中键 / 右键拖动原地转头，Q E 转向、R F 抬头低头，W S 沿视线飞、A D 平移，滚轮朝鼠标处推拉，左键拖动平移，O 观察者模式' : '平面地图', 'info', 'v3', 1);
+  if (typeof log === 'function' && S && S.t != null) log(V3.on ? '3D 自由镜头：中键 / 右键拖动转头，R F 抬头低头，Q E 降低 / 升高，W S 沿视线飞、A D 平移，滚轮朝鼠标处推拉，左键拖动平移，O 观察者模式' : '平面地图', 'info', 'v3', 1);
 }
 const v3Turn = k => { if (V3.on) v3Look(k * Math.PI / 8, 0); else V3.yawT += k * Math.PI / 8; };
 const v3Tilt = k => { if (V3.on) v3Look(0, -k * .12); else V3.tiltT = clamp(V3.tiltT + k * .12, V3_TILT[0], V3_TILT[1]); };
@@ -936,15 +1015,16 @@ if (typeof window === 'object' && window.addEventListener) {
   const hk = { KeyQ: 1, KeyE: 1, KeyR: 1, KeyF: 1 };
   window.addEventListener('keyup', e => { if (V3.hold) V3.hold.delete(e.code); });
   window.addEventListener('blur', () => { if (V3.hold) V3.hold.clear(); });
-  HOOK.key.push(e => {   // 3D 且编队指挥模式（这几个键不再有别的用途）：按住连续转向 / 俯仰
-    if (!V3.on || !hk[e.code] || (typeof V3O === 'object' && V3O.on) || !(typeof thuActive === 'function' && thuActive()) || e.ctrlKey || e.metaKey || e.altKey) return false;
+  HOOK.key.push(e => {   // 3D：按住 Q / E 降低 / 升高（Q E 原来的冲锋、增援线快捷键只在平面地图里用）；编队指挥模式里按住 R / F 连续俯仰
+    if (!V3.on || !hk[e.code] || (typeof V3O === 'object' && V3O.on) || e.ctrlKey || e.metaKey || e.altKey) return false;
+    if ((e.code === 'KeyR' || e.code === 'KeyF') && !(typeof thuActive === 'function' && thuActive())) return false;
     (V3.hold || (V3.hold = new Set())).add(e.code);
     return true;
   });
 }
 HOOK.key.push(e => {
   const k = e.key;
-  if ((k === 'l' || k === 'L') && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) { v3Toggle(); return true; }   // 单按 L 是通讯面板（chat.js）
+  if ((k === 'l' || k === 'L') && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) { v3Toggle(!V3.on, true); return true; }   // 单按 L 是通讯面板（chat.js）
   if (!V3.on) return false;
   if (k === ',' || k === '<') { v3Turn(-1); return true; }
   if (k === '.' || k === '>') { v3Turn(1); return true; }
@@ -958,18 +1038,27 @@ HOOK.key.push(e => {
   return false;
 });
 
+// 默认 3D：进了对局（部署、沙盒、闯关、开战后）就自动打开，每局只开一次——玩家中途切回平面不再强开；低画质、显卡不支持时留在平面
+HOOK.frame.push(() => {
+  if (V3.on || !S || V3.auto === S || S.attract || !v3Can() || (typeof MENU === 'object' && MENU.open)) return;
+  V3.auto = S;
+  if (typeof SETTINGS === 'object' && (SETTINGS.v3 === false || SETTINGS.quality === 'low')) return;
+  v3Toggle(true);
+});
+
 // 右上角按钮
 function v3Button() {
   if (typeof document === 'undefined' || !document.getElementById('topr') || document.getElementById('btn3d')) return;
   const b = document.createElement('button');
   b.id = 'btn3d'; b.className = 'tb'; b.type = 'button'; b.textContent = '3D'; b.title = '3D 立体地图（Shift + L）'; b.setAttribute('aria-pressed', 'false');
-  b.addEventListener('click', () => v3Toggle());
+  b.addEventListener('click', () => v3Toggle(!V3.on, true));
   const help = document.getElementById('btnHelp');
   help.parentNode.insertBefore(b, help);
   // 3D 时显示的转向 / 俯仰按钮（手机没有键盘、中键）
   const c = document.createElement('div');
   c.id = 'v3ctl'; c.className = 'ov box'; c.hidden = true; c.setAttribute('role', 'group'); c.setAttribute('aria-label', '3D 镜头');
-  for (const [t, ti, f] of [['⟲', '向左转（<）', () => v3Turn(-1)], ['⟳', '向右转（>）', () => v3Turn(1)], ['⤒', '抬高视角、更俯视（;）', () => v3Tilt(-1)], ['⤓', '压低视角、更平视（\'）', () => v3Tilt(1)]]) {
+  for (const [t, ti, f] of [['⟲', '向左转（<）', () => v3Turn(-1)], ['⟳', '向右转（>）', () => v3Turn(1)], ['⤒', '抬高视角、更俯视（;）', () => v3Tilt(-1)], ['⤓', '压低视角、更平视（\'）', () => v3Tilt(1)],
+    ['▲', '升高镜头（按住 E）', () => v3Rise(1, .5)], ['▼', '降低镜头（按住 Q）', () => v3Rise(-1, .5)]]) {
     const k = document.createElement('button');
     k.type = 'button'; k.className = 'tb'; k.textContent = t; k.title = ti; k.setAttribute('aria-label', ti);
     k.addEventListener('click', f);

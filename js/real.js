@@ -1,5 +1,5 @@
 'use strict';
-// 写实画面的单位外观（SETTINGS.look === 'real'）：真实涂装代替发光描边——解放军橄榄绿、美军沙色；深色边线、西北光源明暗、东南向投影
+// 单位的写实画法（黑绿画面在它之上过着色器，look.js）：真实涂装——解放军橄榄绿、美军沙色；深色边线、西北光源明暗、东南向投影
 // 各绘制函数在写实画面下改调这里的版本；阵营只用一道细的蓝 / 红边线或脚下淡圈标识，远看仍是图标
 const RLP = {
   p: { hull: '#5d6c3e', tur: '#67774a', dark: '#3d4828', uni: '#56653f', helm: '#4c5a35', pack: '#3f4a2c' },
@@ -8,7 +8,7 @@ const RLP = {
 const RL_EDGE = '#24251f';   // 边线、炮管、履带等深色金属
 // 黑绿画面（look.js）：敌方换成同样明暗的暗红涂装，过着色器时保留红色、一眼分清敌我
 const RLP_G = { e: Object.fromEntries(Object.entries(RLP.e).map(([k, v]) => [k, v])) };
-const rlPal = side => side === 'e' ? (typeof greenLook === 'function' && greenLook() ? rlPalG() : RLP.e) : RLP.p;
+const rlPal = side => side === 'e' ? rlPalG() : RLP.p;
 function rlPalG() { if (!RLP_G.ok) { for (const k in RLP.e) RLP_G.e[k] = lkPaint(RLP.e[k], 'e'); RLP_G.ok = true; } return RLP_G.e; }
 const _rlc = {};
 // 颜色按系数提亮 / 压暗（缓存）
@@ -106,7 +106,7 @@ function vehWreckReal(ctx, v, sp, k) {
 // 火炮阵地等线稿模型的写实配色：描边色 → 深色金属，暗底 → 涂装 / 混凝土
 const RL_GUN = { col: 'rgba(30,30,26,.92)', dim: 'rgba(0,0,0,.38)', con: 'rgba(150,146,136,.95)', dark: '#857a57', sand: '#a8966e', concrete: '#8c887e' };
 // 火炮阵地都是守方的：黑绿画面里涂装、混凝土换成暗红
-const rlGun = () => typeof greenLook === 'function' && greenLook() ? (RL_GUN.g || (RL_GUN.g = { ...RL_GUN, con: 'rgba(170,70,60,.95)', dark: lkPaint(RL_GUN.dark, 'e'), sand: lkPaint(RL_GUN.sand, 'e'), concrete: lkPaint(RL_GUN.concrete, 'e') })) : RL_GUN;
+const rlGun = () => RL_GUN.g || (RL_GUN.g = { ...RL_GUN, con: 'rgba(170,70,60,.95)', dark: lkPaint(RL_GUN.dark, 'e'), sand: lkPaint(RL_GUN.sand, 'e'), concrete: lkPaint(RL_GUN.concrete, 'e') });
 
 // 飞机涂装：隐身战机深灰、大型机浅灰、A-10 深灰绿、直升机橄榄绿、无人机浅灰
 function rlAirPaint(type) {

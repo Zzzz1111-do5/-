@@ -12,11 +12,11 @@ const LV_CH = {
   3: ['第三章 · 陆战', '向纵深推进', '滩头已巩固、各滩头出口在我手中。部队直接部署在滩头阵地（虚线区），向内陆攻击，控制指挥所与七成据点分值。']
 };
 const LV_DEFS = [
-  { n: 1, ch: 1, kind: 'naval', nm: '前出侦巡', seed: 110111, p: 3000, lv: 'normal', fleet: ['e_lcs', 'e_lcs', 'e_ffg'], ascm: 0, af: 0,
+  { n: 1, ch: 1, kind: 'naval', nm: '前出侦巡', seed: 110111, p: 1500, lv: 'normal', fleet: ['e_lcs', 'e_lcs', 'e_ffg'], ascm: 0, af: 0,
     brief: '敌濒海战斗舰与护卫舰在岛前海域巡逻。用驱逐舰垂发鹰击-18A 与舰载机先敌发现、先敌打击。' },
-  { n: 2, ch: 1, kind: 'naval', nm: '突破岛链', seed: 220222, p: 5000, lv: 'hard', fleet: ['e_ddg', 'e_ffg', 'e_ffg', 'e_lcs'], ascm: 1, af: 0,
+  { n: 2, ch: 1, kind: 'naval', nm: '突破岛链', seed: 220222, p: 2800, lv: 'hard', fleet: ['e_ddg', 'e_ffg', 'e_ffg', 'e_lcs'], ascm: 1, af: 0,
     brief: '一艘宙斯盾驱逐舰带护卫舰编队，岸上有 NMESIS 岸舰导弹。宙斯盾拦截能力强：要么饱和攻击，要么用难拦的超音速 / 高超音速导弹。' },
-  { n: 3, ch: 1, kind: 'naval', nm: '决战制海', seed: 330333, p: 9000, lv: 'hell', fleet: ['e_cg', 'e_ddg3', 'e_ddg', 'e_ffg', 'e_ffg', 'e_lcs'], ascm: 2, af: 1,
+  { n: 3, ch: 1, kind: 'naval', nm: '决战制海', seed: 330333, p: 5000, lv: 'hell', fleet: ['e_cg', 'e_ddg3', 'e_ddg', 'e_ffg', 'e_ffg', 'e_lcs'], ascm: 2, af: 1,
     brief: '敌水面主力：巡洋舰、两艘伯克级、护卫舰，岸基 F-35A / F-22A 掩护。先夺制空权再打舰，或用 055 的鹰击-21 直接破防。' },
   { n: 4, ch: 2, kind: 'landing', nm: '抢滩', seed: 440444, p: 6000, eB: 3000, style: 'bal', lv: 'normal',
     brief: '守军按常规均衡布防。选一处正面宽、离指挥所近的滩头主攻，佯攻牵制预备队。' },
@@ -75,9 +75,10 @@ const LV_CSS = `
 #sbxPanel .sbx-lvhead { display: grid; gap: 3px; padding: 6px 8px; border: 1px solid var(--line, #1d4a2e); border-radius: 5px; background: rgba(var(--g-rgb), .05); }
 #sbxPanel .sbx-lvhead b { color: var(--g, #3dff8a); font-size: 13px; }
 #sbxPanel .sbx-lvhead span { font-size: 12px; color: var(--mute, #7fa98d); line-height: 1.45; }`;
+const lvCss = () => { if (typeof document !== 'undefined' && !document.getElementById('lvCss')) { const st = document.createElement('style'); st.id = 'lvCss'; st.textContent = LV_CSS; document.head.appendChild(st); } };
 function lvOpen() {
   if (typeof document === 'undefined') return;
-  if (!document.getElementById('lvCss')) { const st = document.createElement('style'); st.id = 'lvCss'; st.textContent = LV_CSS; document.head.appendChild(st); }
+  lvCss();
   if (LV.el) LV.el.remove();
   const el = LV.el = document.createElement('div');
   el.id = 'lvSel'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true'); el.setAttribute('aria-label', '闯关模式');
@@ -103,6 +104,7 @@ function lvClose() { if (LV.el) { LV.el.remove(); LV.el = null; } }
 function lvStart(n) {
   const L = lvDef(n);
   if (!L || typeof openSandbox !== 'function') return;
+  lvCss();
   if (typeof mnHide === 'function') mnHide();
   if (typeof MENU === 'object') { MENU.pausedBy = false; MENU.game = true; MENU.last = 'lvl'; }
   if (typeof U === 'object') U.level = L.lv;
@@ -236,6 +238,48 @@ HOOK.drawOver.push(function lvDraw() {
   }
   ctx.restore();
 });
+// 闯关的「AI 帮我部署」：登陆关照沙盒的登陆方案；海战关只买舰艇、舰载 / 战区航空兵与远程火力；陆战关把步兵组、坦克与战车直接摆进滩头阵地
+//   （主攻、助攻两处滩头出口后面），再配炮兵、防空与航空兵。部署说明接在本关情报后面（sbxClear 会清掉说明，先存起来）。返回给面板的一句话
+function lvAIAttack(style) {
+  const keep = (S.sbx.notes.p || []).slice(), say = (t, at) => sbxSay('p', t, 'plan', at);
+  let msg;
+  if (S.lv.kind === 'landing') { const r = sbxAIAttack(style, SBX.dir.main, SBX.dir.feint); msg = `部署完毕：主攻${r.main}${r.feint ? '，佯攻' + r.feint : ''}`; }
+  else { sbxClear('p'); msg = S.lv.kind === 'naval' ? lvAINaval(say) : lvAIGround(say); }
+  S.sbx.notes.p = [...keep, ...(S.sbx.notes.p || []).filter(t => !keep.includes(t))];
+  sbxSync();
+  return `${msg}（${sbxSpent('p')} / ${S.sbx.budget.p} 点）`;
+}
+// 海战关：航母在集结海域纵深，驱逐舰在前方展开成防空、反舰屏障；舰载机以预警机、歼-35（挂鹰击-83K）为主，战区轰-6K 挂鹰击-12、歼-20 夺制空权
+function lvAINaval(say) {
+  const cx = W / 2, cv = sbxTry('p_cv', cx, CARRIER_Y - 20, 90), dds = [];
+  for (const [id, dx] of [['p_ca', -130], ['p_cl', 130], ['p_dd_h', -280], ['p_dd_h', 280], ['p_dd', 0]]) { if (sbxLeft('p') < catalogById(id).cost + 200) continue; const r = sbxTry(id, cx + dx, STAGING_Y + 40, 70); if (r) dds.push(r); }
+  const air = sbxLoop(['p_air_recon', 'p_air_strike', 'p_air_strike', 'p_air_ftr', 'p_air_heavy', 'p_air_strike', 'p_air_recon', 'p_air_fb', 'p_air_heavy', 'p_air_strike', 'p_air_ftr', 'p_air_ftr_adv'], id => sbxPlace(id).ok, 15, 40);
+  const more = sbxLoop(['p_tbm', 'p_cl', 'p_air_heavy', 'p_dd_h', 'p_air_ftr', 'p_tbm'], (id, i) => catalogById(id).spawn.kind === 'dd' ? !!sbxTry(id, cx + (i % 2 ? 1 : -1) * (380 + i * 40), STAGING_Y + 60, 70) : sbxPlace(id).ok, 30, 30);
+  say(`海战部署：${cv ? '福建舰居后，舰载机联队' : '没有航母，'}驱逐舰 ${dds.length + (more.p_cl || 0) + (more.p_dd_h || 0)} 艘在前方展开；空警-600 先上去找敌舰，歼-35 挂鹰击-83K 双机编队在敌舰防空圈外发射，轰-6K 挂鹰击-12 远程突击，垂发鹰击-18A / 21 饱和攻击宙斯盾舰。`, cv || dds[0]);
+  return `海战部署完毕：${sbxCnt({ ...air, ...more }) || '无航空兵'}`;
+}
+// 陆战关：步兵组按突击、火力、保障搭配成排，摆在主攻（六成）、助攻（四成）两处滩头出口后面的滩头阵地里；坦克、步兵战车跟着步兵，自行火炮、防空车在后
+function lvAIGround(say) {
+  const BS = typeof sbxBeaches === 'function' ? sbxBeaches().sort((a, b) => a.dHQ - b.dHQ) : [];
+  if (!BS.length) return '找不到滩头';
+  const M = BS[0], F = BS.find(B => Math.abs(B.b.cx - M.b.cx) > 400) || BS[1] || M, B0 = sbxLeft('p');
+  const spot = (B, i, back) => { const x = clamp(B.ex.x + ((i * 37) % 9 - 4) * 26, 30, W - 30); return { x, y: coastAt(x) - back }; };
+  // 规模：步兵 18–60 组、车辆 6–28 辆（一个加强团上下，按预算），其余给炮兵、航空兵——便宜的步兵不堆成几百组
+  const NI = clamp(Math.round(B0 / 110), 18, 60), NV = clamp(Math.round(B0 / 260), 6, 28);
+  let ni = 0, nv = 0;
+  const INF = ['p_marine', 'p_marine', 'p_mg', 'p_rifle', 'p_at', 'p_eng', 'p_hj12', 'p_demo', 'p_mortar', 'p_fo', 'p_manpads', 'p_hq', 'p_medic', 'p_flame', 'p_sniper', 'p_ranger'];
+  const inf = sbxLoop(INF, (id, i) => { if (ni >= NI) return false; const B = i % 5 < 3 ? M : F, p = spot(B, i, 70 + (i % 4) * 30), ok = !!sbxTry(id, p.x, p.y, 45); if (ok) ni++; return ok; }, 0, NI * 3);
+  const VEH = ['p_hv_tank', 'p_ifv', 'p_tank', 'p_td', 'p_ifv', 'p_hv_tank', 'p_spg', 'p_aa_veh', 'p_mine_tank', 'p_sam_veh', 'p_recon', 'p_spg'];
+  const veh = sbxLoop(VEH, (id, i) => { if (nv >= NV) return false; const B = i % 5 < 3 ? M : F, back = /spg|aa|sam/.test(id) ? 230 : 120 + (i % 3) * 25, p = spot(B, i + 2, back), ok = !!sbxTry(id, p.x, p.y, 50); if (ok) nv++; return ok; }, 0, NV * 3);
+  const sup = sbxLoop(['p_cv', 'p_air_cas', 'p_air_strike', 'p_air_recon', 'p_air_cas', 'p_tbm', 'p_air_heli', 'p_air_strike', 'p_cl', 'p_air_heavy'], (id, i) => {
+    const s = catalogById(id).spawn;
+    if (s.kind === 'cv') return !sbxOf('cv').length && !!sbxTry(id, W / 2, CARRIER_Y - 20, 90);
+    if (s.kind === 'dd') return !!sbxTry(id, M.b.cx + (i % 2 ? 90 : -90), STAGING_Y + 30, 70);
+    return sbxPlace(id).ok;
+  }, 20, 40);
+  say(`陆战部署：主攻${M.b.name}出口、助攻${F.b.name}出口——步兵 ${Object.values(inf).reduce((a, b) => a + b, 0)} 组、坦克与战车 ${Object.values(veh).reduce((a, b) => a + b, 0)} 辆在滩头阵地展开，自行火炮、防空车在后；${sbxCnt(sup) || '无航空兵'}支援。`, M.ex);
+  return `陆战部署完毕：主攻${M.b.name}、助攻${F.b.name}`;
+}
 // 攻方目录：海战只要舰艇、航空与支援火力；陆战不要登陆舰艇
 function lvAllow(c) {
   if (!S || !S.lv || c.side !== 'p') return true;

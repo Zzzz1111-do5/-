@@ -459,10 +459,10 @@ HOOK.drawUnder.push(function eaDrawFarp() {
   const vis = specAll() || inVision(F.x, F.y);
   if (vis && F.kx == null && !specAll()) { F.kx = F.x; log('发现敌军在机场外开设的前沿加油弹药点', 'warn', null, 0, F); }
   if (!vis && F.kx == null) return;
-  const ctx = R.ctx, rl = typeof realLook === 'function' && realLook(), col = rl ? 'rgba(235,235,225,.75)' : rgba(COL.enemy, .55);
+  const ctx = R.ctx, col = 'rgba(235,235,225,.75)';
   ctx.save(); ctx.globalAlpha = vis ? 1 : .45; ctx.setLineDash([]);
   for (const [x, y] of F.slots) { ctx.strokeStyle = col; ctx.lineWidth = px(1); ctx.beginPath(); ctx.arc(x, y, 9, 0, 6.283); ctx.stroke(); ctx.beginPath(); ctx.moveTo(x - 2.6, y - 3.4); ctx.lineTo(x - 2.6, y + 3.4); ctx.moveTo(x + 2.6, y - 3.4); ctx.lineTo(x + 2.6, y + 3.4); ctx.moveTo(x - 2.6, y); ctx.lineTo(x + 2.6, y); ctx.stroke(); }
-  ctx.fillStyle = rl ? '#3b3f33' : 'rgba(10,30,18,.9)'; ctx.strokeStyle = col;
+  ctx.fillStyle = '#3b3f33'; ctx.strokeStyle = col;
   for (const [dx, dy] of [[-62, -40], [-62, -28], [62, -40]]) { ctx.beginPath(); ctx.ellipse(F.x + dx, F.y + dy, 7, 3.6, 0, 0, 6.283); ctx.fill(); ctx.stroke(); }   // 油囊
   for (let i = 0; i < 4; i++) { ctx.fillRect(F.x + 50 + (i % 2) * 5, F.y + 34 + (i >> 1) * 4, 4, 3); }   // 弹药箱
   if (!R.m3d) for (const P of eaFarpParked()) drawAircraft(ctx, P.x, P.y, P.h, eaSil(P.w.type), P.w.type === 'heli' ? 13 : 15, COL.enemy, P.w.state === 'ready' ? .95 : .5, 0, px(1), undefined, { still: true });

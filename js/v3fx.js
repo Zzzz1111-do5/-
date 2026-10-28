@@ -4,7 +4,7 @@
 //   步兵曳光弹、坦克炮弹在枪口 / 炮口的高度平直飞过去（穿甲弹白热、榴弹琥珀色、喷火是一股宽的橙色火舌）；
 //   导弹（战术导弹、防空导弹、反舰导弹、精确制导炸弹）按各自的飞行高度飞，尾焰亮点加一条渐暗的尾迹；直升机的火箭、反坦克导弹从机上射向地面
 // 画法：面向镜头的发光带（宽度按世界单位），加法混合、不写深度，被地形、房屋、车辆挡住的部分不画；3D 时平面贴图里不再画这些弹道（R.fx3d）
-const V3F = { ok: false, tried: false, pr: null, a: {}, u: {}, buf: null, trail: new Map(), S: null, puff: [], seen: new Set(), ex: [], exSeen: new WeakSet() };   // ex：爆炸（火球、碎片、烟）   // puff：发射点的点火闪光与烟团（只在画面里记）
+const V3F = { ok: false, tried: false, pr: null, a: {}, u: {}, buf: null, trail: new Map(), S: null, puff: [], seen: new Set(), ign: new Set(), ex: [], exSeen: new WeakSet() };   // ex：爆炸（火球、碎片、烟）   // puff：发射点的点火闪光与烟团（只在画面里记）
 const V3F_VS = `attribute vec3 p; attribute vec4 c; attribute vec2 q;
 uniform mat4 uM; varying vec4 vC; varying vec2 vQ;
 void main() { vC = c; vQ = q; gl_Position = uM * vec4(p, 1.); }`;
@@ -65,9 +65,16 @@ function v3VlsOrigin(m) {
   if (sh) {
     const K = cls && typeof SH_DDC === 'object' ? SH_DDC[cls] : null, blocks = K ? K.vls : [[8, 13, 2.2]], b = blocks[m.id % blocks.length], k = K ? K.k : 1;
     const pseudo = (m.id * 9301 + 49297) % 233280 / 233280, pv = (m.id * 4271 + 113) % 1000 / 1000;
-    const u = lerp(b[0], b[1], .15 + .7 * pseudo) * k, v = (pv * 2 - 1) * b[2] * .7 * k * (K ? K.w : 1);
     const key = sh === S.dd ? 'DD' : sh.id, P = typeof SHIPV === 'object' && SHIPV.pose[key], h = P ? P.h : (sh.heading ?? -1.57), px0 = P ? P.x : sh.x, py0 = P ? P.y : sh.y;
-    o = { x: px0 + u * Math.cos(h) - v * Math.sin(h), y: py0 + u * Math.sin(h) + v * Math.cos(h), z: -2.6 + 2.8 * k + .3, h, up: m.kind === 'sam' ? .45 : .9 };
+    // 导入的模型（v3x.js）自带垂发块的实测位置（米、格数）：弹从某一格正中冲出，舱盖按格子大小、铰链在格子一边
+    const X = cls && typeof V3X_DD === 'object' && V3X_DD[cls] && typeof v3xMesh === 'function' ? v3xMesh(V3X_DD[cls]) : null, B = X && X.vls ? X.vls[m.id % X.vls.length] : null;
+    let u, v, z, lv = 0, lk = 1;
+    if (B) {
+      const sc = (P && P.k || 1) * 50 * k / X.len, cx = (B[1] - B[0]) / B[5], cy = (B[3] - B[2]) / B[6];
+      u = (B[0] + (Math.floor(pseudo * B[5]) + .5) * cx) * sc; v = (B[2] + (Math.floor(pv * B[6]) + .5) * cy) * sc; z = -2.6 + B[4] * sc; lk = Math.min(cx, cy) * sc / 1.1; lv = -cy * sc / 2;
+    } else { u = lerp(b[0], b[1], .15 + .7 * pseudo) * k; v = (pv * 2 - 1) * b[2] * .7 * k * (K ? K.w : 1); z = -2.6 + 2.8 * k + .3; }
+    const W = (u, v) => [px0 + u * Math.cos(h) - v * Math.sin(h), py0 + u * Math.sin(h) + v * Math.cos(h)], [x, y] = W(u, v), [lx, ly] = W(u, v + lv);
+    o = { x, y, z, h, lx, ly, lk, cls, up: m.kind === 'sam' ? .45 : .9 };
   }
   V.set(m.id, o);
   return o;
@@ -89,7 +96,7 @@ function v3Fx(C) {
   const gl = V3.gl;
   if (!V3F.tried) v3fxInit(gl);
   if (!V3F.ok) return;
-  if (V3F.S !== S) { V3F.S = S; V3F.trail.clear(); V3F.puff.length = 0; V3F.seen.clear(); V3F.ex.length = 0; V3F.exSeen = new WeakSet(); if (V3F.vo) V3F.vo.clear(); }
+  if (V3F.S !== S) { V3F.S = S; V3F.trail.clear(); V3F.puff.length = 0; V3F.seen.clear(); V3F.ign.clear(); V3F.ex.length = 0; V3F.exSeen = new WeakSet(); if (V3F.vo) V3F.vo.clear(); }
   const out = [], E = C.E, box = V3.box || [0, 0, W, H], inB = (x, y, m = 200) => x > box[0] - m && x < box[0] + box[2] + m && y > box[1] - m && y < box[1] + box[3] + m;
   const spec = specAll() || (typeof R === 'object' && (R.eye === 'all' || R.eye === 'both' || R.eye === 'e'));
   const seen = (x, y) => spec || inVision(x, y);
@@ -101,7 +108,7 @@ function v3Fx(C) {
     if (s.side === 'e' && !s.fuzzy && !seen(s.x1, s.y1) && !seen(sx, sy)) continue;
     const d = dist(sx, sy, s.x1, s.y1), z0 = g(sx, sy) + 3, z1 = g(s.x1, s.y1);
     let f;
-    if (s.kind === 'bomb') { const zt = Math.max(z1 + 60, v3AltZ(sx, sy, .95 * 230, -2.6, 1.5)); f = v => v3fP(lerp(sx, s.x1, v), lerp(sy, s.y1, v), z1 + (zt - z1) * (1 - v * v)); }   // 炸弹：从飞机高度（按海拔平飞）加速落下
+    if (s.kind === 'bomb') { const zt = Math.max(z1 + 60, v3AltZ(sx, sy, .95 * V3_AIR, -2.6, 1.5)); f = v => v3fP(lerp(sx, s.x1, v), lerp(sy, s.y1, v), z1 + (zt - z1) * (1 - v * v)); }   // 炸弹：从飞机高度（按海拔平飞）加速落下
     else { const apex = s.kind === 'mortar' ? Math.min(320, d * .75) : Math.min(420, d * .32); f = v => v3fP(lerp(sx, s.x1, v), lerp(sy, s.y1, v), lerp(z0, z1, v) + Math.sin(Math.PI * v) * apex); }
     const col = s.kind === 'smoke' ? V3F_COL.smoke : s.kind === 'bomb' ? V3F_COL.amber : s.side === 'p' ? V3F_COL.p : V3F_COL.e;
     v3fTrail(out, E, f, Math.max(0, u - .1), u, 6, s.kind === 'bomb' ? 2.2 : 1.8, col);
@@ -142,8 +149,17 @@ function v3Fx(C) {
     }
     if (!inB(m.x, m.y, 400) || (m.side === 'e' && !seen(m.x, m.y))) continue;
     const rp = typeof airRelPos === 'function' ? airRelPos(m, true) : null;   // 刚离机（airmdl.js）：没点火前是立体弹体（v3units.js），点火后光点从挂点接上弹道
-    if (rp) { V3F.trail.delete(m.id); if (rp.lit) { const q = v3fP(rp.x, rp.y, airRelZ(rp, m)); v3fSpark(out, C, q, 2.2 + rp.e * 1.4, V3F_COL.amber); } continue; }
-    const z0 = v3AltZ(m.x, m.y, m.z * (m.kind === 'tbm' ? 620 : 230), -2.6, 2), VP = v3MslPos(m, z0), p = VP ? v3fP(VP.x, VP.y, VP.z) : v3fP(m.x, m.y, z0);   // 与飞机同一套高度：低空沿地形包络、高空按海拔；垂发冲出阶段竖直往上
+    if (rp) {
+      V3F.trail.delete(m.id);
+      if (rp.lit && rp.r.w !== 'bomb') {   // 点火（炸弹没有发动机，只是落下去）：弹尾一闪、一束尾焰；点火的地方空中留一团白烟（飞机飞走了烟还在原地慢慢散开）
+        const zq = airRelZ(rp, m), q = v3fP(rp.x, rp.y, zq), k = clamp((rp.u - AIR_REL.ign) / .12, 0, 1), L = (2.5 + 6 * k) * rp.sc, tx = rp.x - Math.cos(rp.h) * L, ty = rp.y - Math.sin(rp.h) * L;
+        if (!V3F.ign.has(m.id)) { V3F.ign.add(m.id); V3F.puff.push({ x: rp.x, y: rp.y, z: zq, t0: S.t, big: false, side: m.side, air: true }); }
+        v3fRib(out, E, q, v3fP(tx, ty, zq), 1.3 * rp.sc + .5, [1, .95, .8, .95], [1, .45, .1, 0]);
+        v3fSpark(out, C, q, 2.2 + rp.e * 1.4 + (1 - k) * 3, V3F_COL.amber);
+      }
+      continue;
+    }
+    const z0 = v3AltZ(m.x, m.y, m.z * (m.kind === 'tbm' ? 620 : V3_AIR), -2.6, 2), VP = v3MslPos(m, z0), p = VP ? v3fP(VP.x, VP.y, VP.z) : v3fP(m.x, m.y, z0);   // 与飞机同一套高度：低空沿地形包络、高空按海拔；垂发冲出阶段竖直往上
     let tr = V3F.trail.get(m.id);
     if (!tr) V3F.trail.set(m.id, tr = []);
     const last = tr[tr.length - 1];
@@ -154,12 +170,16 @@ function v3Fx(C) {
       const a0 = S.t - tr[i - 1][3], a1 = S.t - tr[i][3], hot = a1 < .35;   // 越老的一段越宽、越淡（烟在空中散开）
       v3fRib(out, E, tr[i - 1], tr[i], w0 * (1 + a1 * 1.6), [sm[0], sm[1], sm[2], .3 * (1 - a0 / 4)], hot ? [...V3F_COL.amber.slice(0, 3), .85] : [sm[0], sm[1], sm[2], .3 * (1 - a1 / 4)]);
     }
-    if (tr.length > 1) { const q = tr[tr.length - 2]; v3fRib(out, E, q, p, w0 * .9, [...col.slice(0, 3), .5], [...V3F_COL.flame.slice(0, 3), .95]); }   // 尾焰
-    v3fSpark(out, C, p, m.kind === 'tbm' ? 6 : 3.4, V3F_COL.white);
-    v3fSpark(out, C, p, (m.kind === 'tbm' ? 10 : 6) * (.85 + .15 * Math.sin(S.t * 40 + m.id)), [...V3F_COL.flame.slice(0, 3), .45]);   // 尾焰的光晕（闪烁）
+    // 尾焰挂在弹尾（导弹按真实长度画，v3msl.js），光晕按弹体大小
+    const hl = typeof v3MslKey === 'function' ? ((V3MS[v3MslKey(m)] || V3MS.pl15).L / 2) * v3MslK(m) : 0, fs = hl > 0 ? clamp(hl / 2, .5, 2) : 1;
+    let pt = p;
+    if (hl > 0 && tr.length > 1) { const q = tr[tr.length - 2], dx = p[0] - q[0], dy = p[1] - q[1], dz = p[2] - q[2], l = Math.hypot(dx, dy, dz); if (l > 1e-3) pt = [p[0] - dx / l * hl, p[1] - dy / l * hl, p[2] - dz / l * hl]; }
+    if (tr.length > 1) { const q = tr[tr.length - 2]; v3fRib(out, E, q, pt, w0 * .9 * fs, [...col.slice(0, 3), .5], [...V3F_COL.flame.slice(0, 3), .95]); }   // 尾焰
+    v3fSpark(out, C, pt, (m.kind === 'tbm' ? 6 : 3.4) * fs, V3F_COL.white);
+    v3fSpark(out, C, pt, (m.kind === 'tbm' ? 10 : 6) * fs * (.85 + .15 * Math.sin(S.t * 40 + m.id)), [...V3F_COL.flame.slice(0, 3), .45]);   // 尾焰的光晕（闪烁）
   }
   for (const id of V3F.trail.keys()) if (!live.has(id)) V3F.trail.delete(id);
-  for (const id of V3F.seen) if (!live.has(id) && !(S.missiles || []).some(m => m.id === id)) { V3F.seen.delete(id); if (V3F.vo) V3F.vo.delete(id); }
+  for (const id of V3F.seen) if (!live.has(id) && !(S.missiles || []).some(m => m.id === id)) { V3F.seen.delete(id); V3F.ign.delete(id); if (V3F.vo) V3F.vo.delete(id); }
   // 发射点：点火瞬间的闪光、发射筒 / 发射箱口喷出的一团烟（地面上贴地翻滚、海面上是水汽），4 秒里翻滚扩散、往上飘、变淡
   V3F.puff = V3F.puff.filter(o => S.t - o.t0 < 4.5);
   for (const o of V3F.puff) {
@@ -169,6 +189,11 @@ function v3Fx(C) {
       if (a < .35) v3fSpark(out, C, v3fP(o.x, o.y, o.z + 1), (5 + a * 18) * k, [1, .92, .75, .95 * (1 - a / .35)]);
       const top = 34 * (o.up > .6 ? 1.3 : 1) * clamp(a / o.up, 0, 1), fade = clamp(1 - a / 3.5, 0, 1);
       if (top > 1 && fade > 0) { const drift = a * 1.6; v3fRib(out, E, v3fP(o.x, o.y, o.z + .5), v3fP(o.x + drift, o.y - drift * .5, o.z + top), (1.6 + a * 2.2) * k, [.85, .9, .9, .5 * fade], [.75, .8, .82, .18 * fade]); }
+    }
+    if (o.air) {   // 空中点火：发动机一闪，一团白烟在空中翻滚着散开、变淡（不往地上落、几乎不往上飘）
+      if (a < .15) v3fSpark(out, C, v3fP(o.x, o.y, o.z), 3 + a * 26, [1, .95, .85, .95 * (1 - a / .15)]);
+      for (let i = 0; i < 6; i++) { const an = i * 2.4 + o.t0, r = 1 + a * 2.2, ex = Math.cos(an) * r, ey = Math.sin(an) * r; v3fSpark(out, C, v3fP(o.x + ex, o.y + ey, o.z + (i % 3 - 1) * r * .5 + a * .4), 1.8 + a * 3.2, [.55, .58, .56, .2 * (1 - a / 4.5)]); }
+      continue;
     }
     if (a < .3 && !o.vls) v3fSpark(out, C, v3fP(o.x, o.y, o.z + 2), (8 + a * 20) * k, [1, .9, .7, .8 * (1 - a / .3)]);
     for (let i = 0; i < 7; i++) {
@@ -181,7 +206,7 @@ function v3Fx(C) {
   for (const f of S.fx) if ((f.kind === 'boom' || f.kind === 'b2') && !V3F.exSeen.has(f)) {
     V3F.exSeen.add(f);
     if (f.life > .3) continue;   // 打开 3D 之前就炸了的不补
-    const air = !!f.air, z = air ? v3AltZ(f.x, f.y, Math.max(0, clamp(f.alt ?? 1, 0, 1) - .05) * 230, -2.6, 1.5) : Math.max(g(f.x, f.y), -2.6);
+    const air = !!f.air, z = air ? v3AltZ(f.x, f.y, Math.max(0, clamp(f.alt ?? 1, 0, 1) - .05) * V3_AIR, -2.6, 1.5) : Math.max(g(f.x, f.y), -2.6);
     V3F.ex.push({ x: f.x, y: f.y, z, r: f.r * (f.kind === 'b2' ? 1.4 : 1), t0: S.t - f.life, air, side: f.side, sd: (f.x * 13.7 + f.y * 7.1) % 6.283 });
   }
   V3F.ex = V3F.ex.filter(o => S.t - o.t0 < 4);
@@ -228,7 +253,7 @@ function v3Fx(C) {
   // —— 直升机的火箭、反坦克导弹（从机上射向地面）——
   if (S.eair) for (const p of S.eair.proj || []) {
     if (p.t < 0 || p.done || (!spec && !inVision(p.tx, p.ty) && !inVision(p.x0, p.y0)) || !inB(p.tx, p.ty, 100)) continue;
-    const za = v3AltZ(p.x0, p.y0, .25 * 230, -2.6, 1.5), zb = g(p.tx, p.ty) + 1;   // 直升机悬停高度（view3d.js v3AirZ）
+    const za = v3AltZ(p.x0, p.y0, .25 * V3_AIR, -2.6, 1.5), zb = g(p.tx, p.ty) + 1;   // 直升机悬停高度（view3d.js v3AirZ）
     if (p.k === 'rk') {
       const u = clamp(p.t / p.dur, 0, 1), f = v => v3fP(lerp(p.x0, p.tx, v), lerp(p.y0, p.ty, v), lerp(za, zb, v));
       v3fTrail(out, E, f, Math.max(0, u - .12), u, 3, 1.6, V3F_COL.e);
@@ -242,11 +267,12 @@ function v3Fx(C) {
   // —— 飞机灯光：左翼尖红、右翼尖绿航行灯，垂尾顶上的白色防撞灯一闪一闪；歼击机起飞滑跑、刚离地爬升时尾喷口拖出加力火焰 ——
   if (typeof AIRD === 'object') {
     const EA_K3 = { ga: ['a10', 18], heli: ['ah64', 16], uh60: ['uh60', 17], c17: ['c17', 30], ftr: ['f35', 17], ftrb: ['f35b', 17], mq9: ['mq9', 18], f22: ['f22', 18], b2: ['b2', 34], p8: ['p8', 26] };
-    const FTR = { j35: 1, j20: 1, j15: 1, j36: 1, f35: 1, f22: 1, j15t: 1 };
+    const FTR = { j35: 1, j20: 1, j15: 1, j36: 1, j50: 1, f35: 1, f22: 1, j15t: 1 };
     const lit = (o, key, sz, own, burn) => {
       const D = AIRD[key];
       if (!D || !D.wing || !inB(o.x, o.y, 220)) return;
-      const k = sz / 21, gnd = o.ph === 'gnd' || o.ph === 'roll' || o.phase === 'roll' && !o.kind, z = gnd ? g(o.x, o.y) + 1.9 * k : v3AirZ(o), h = o.heading || 0, r = o.bank || 0;
+      const Lc = own && typeof v3dLaunch === 'function' ? v3dLaunch(o) : null;   // 刚离舰：下沉、抬头（v3det.js）
+      const k = sz / 21, gnd = o.ph === 'gnd' || o.ph === 'roll' || o.phase === 'roll' && !o.kind, z = (gnd ? g(o.x, o.y) + 1.9 * k : v3AirZ(o)) + (Lc ? Lc.dz : 0), h = o.heading || 0, r = o.bank || 0;
       const ch = Math.cos(h), sh = Math.sin(h), cr = Math.cos(r), sr = Math.sin(r);
       const Wp = (u, v, w) => { const y = v * cr - w * sr, zz = v * sr + w * cr; return v3fP(o.x + (u * ch + y * sh) * k, o.y + (u * sh - y * ch) * k, z + zz * k); };
       const tip = D.wing.reduce((m, q) => q[1] > m[1] ? q : m, D.wing[0]), tu = tip[0] - .6;
@@ -254,17 +280,16 @@ function v3Fx(C) {
       v3fSpark(out, C, Wp(tu, -tip[1], 0), 1.1 * k + .5, [.3, 1, .45, .95]);   // 右翼尖绿灯
       const tail = D.stab ? D.stab.reduce((m, q) => Math.min(m, q[0]), 0) : (D.body ? D.body[D.body.length - 1][0] : -9);
       if (((S.t * .8 + o.id * .37) % 1) < .07) v3fSpark(out, C, Wp(tail + 1, 0, 2.6), 2.4 * k + 1, [1, 1, 1, 1]);   // 防撞灯
-      if (burn) {   // 加力：尾喷口一束橙白的火舌 + 光晕，长度随时间抖动
-        const nu = D.body ? D.body[D.body.length - 1][0] : -10, L = 4.5 + Math.sin(S.t * 31 + o.id) * .6;
-        v3fRib(out, E, Wp(nu, 0, 0), Wp(nu - L, 0, 0), 1.5 * k + .4, [1, .95, .8, .95], [1, .45, .1, 0]);
-        v3fSpark(out, C, Wp(nu - .5, 0, 0), 2.6 * k + 1, [1, .6, .2, .55]);
+      if (FTR[key] && typeof v3dBurner === 'function') {   // 喷口发热、加力尾焰（v3det.js）：按每个喷口，随机身俯仰、滚转；加力开关时火舌平滑地长出、缩回
+        const Eg = v3dEng((own ? 'p' : 'e') + o.id, burn ? 1 : .65, burn ? 1 : 0);
+        v3dBurner(out, C, o, key, sz, { x: o.x, y: o.y, z, h, pt: typeof v3dPitchOf === 'function' ? v3dPitchOf(o, own ? 0 : 1) : Lc ? Lc.pitch : 0, rl: r }, Eg);
       }
     };
     for (const p of S.planes || []) if (!p.dead && isFinite(p.x) && !(p.phase === 'cat' || p.phase === 'trap' || (p.phase === 'roll' && !p.afPh && !p.land))) {   // 甲板上的由航母那边画
       const key = typeof airSilKey === 'function' ? airSilKey(p.kind, p.v) : null;
       if (!key) continue;
-      const sz = (typeof airMdl === 'function' && airMdl(p.kind, p.v).size) || 15;
-      lit(p, key, sz, true, !!FTR[key] && (p.phase === 'out' && (p.alt ?? 1) < .5));
+      const sz = typeof airSize3 === 'function' ? airSize3(p, 'p') : (typeof airMdl === 'function' && airMdl(p.kind, p.v).size) || 15;   // 与画机体同一个尺寸（喷口对得上）
+      lit(p, key, sz, true, !!FTR[key] && p.phase === 'out' && ((p.alt ?? 1) < .5 || (p.lT != null && S.t - p.lT < 14)));   // 弹射离舰后全加力爬升约 14 秒（与 js/aero.js 的离舰剖面一致）
     }
     if (S.eair) for (const a of S.eair.fly) {
       if (a.dead || !isFinite(a.x) || !(spec || a.pv || inVision(a.x, a.y))) continue;
@@ -272,6 +297,7 @@ function v3Fx(C) {
       lit(a, key, sz, false, !!FTR[key] && ((a.ph === 'roll' && !(a.wait > 0)) || (a.ph === 'out' && (a.alt ?? 1) < .4)));
     }
   }
+  if (typeof v3dFx === 'function') v3dFx(out, C, inB, seen);   // 弹射、离机、伞降的发光与烟（v3det.js）
   if (!out.length) return;
   // —— 画：加法混合，测深度不写深度 ——
   const A = V3F.a;
