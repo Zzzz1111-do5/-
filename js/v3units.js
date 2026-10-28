@@ -1692,8 +1692,8 @@ function v3mGet(key, build) {
 }
 // 停在甲板 / 地面上（或在地面滑行）的飞机：精细模型放下起落架（轮子着地），外翼折起程度、座舱盖开度按四档取模型；外挂、旋翼、螺旋桨另外实例化
 const V3_PIL = .95;   // 飞行员、甲板人员的比例（按飞机的真实比例，比战场上的士兵小）
-function v3GroundPlane(key, sz, x, y, ground, hd, fold, cpo, still, side, t) {
-  if (typeof v3dPlaneX === 'function' && v3dPlaneX(key, sz, x, y, ground, true, hd, side, 0, 0, true, null)) return;   // 导入的真机模型（放下起落架）
+function v3GroundPlane(key, sz, x, y, ground, hd, fold, cpo, still, side, t, sf) {
+  if (typeof v3dPlaneX === 'function' && v3dPlaneX(key, sz, x, y, ground, true, hd, side, 0, 0, true, sf || null)) return;   // 导入的真机模型（放下起落架）；sf 舵面
   const k = sz / 21;
   if (typeof AIRD === 'object' && AIRD[key]) {
     const f = AIRD[key].fold ? Math.round(clamp(fold, 0, 1) * 3) : 0, c = Math.round(clamp(cpo, 0, 1) * 3), z = ground + V3_GEAR * k;
@@ -1840,7 +1840,7 @@ function v3mCollect(C, box) {
     for (const p of live) {
       if (p.dk === 'lift' && !p.up) continue;   // 还在机库里
       const key = airSilKey(p.kind, p.v), sz = airMdl(p.kind, p.v).size || 15, sink = typeof cvDeckSink === 'function' ? cvDeckSink(p) : 0;
-      v3GroundPlane(key, sz, p.x, p.y, top - C.hang * sink, p.heading, p.fold ?? 0, p.cpo || 0, p.dk === 'brd' || p.dk === 'lift', 3, t);
+      v3GroundPlane(key, sz, p.x, p.y, top - C.hang * sink, p.heading, p.fold ?? 0, p.cpo || 0, p.dk === 'brd' || p.dk === 'lift', 3, t, typeof v3dDeckSurf === 'function' ? v3dDeckSurf(p) : null);   // 挂杆后舵面检查、起飞配平
       const P = p.dk === 'brd' && typeof cvPilotPose === 'function' ? cvPilotPose(p) : null;   // 飞行员跑过来、顺登机梯爬进座舱
       if (P) { const [x, y] = at(P.u, P.v), pose = P.run ? 'r' + (Math.floor(P.ph / .7854) & 7) : 'cl' + (Math.floor(P.ph / 1.7) & 1); v3mAdd('man:pilot:' + pose, () => v3mMan('pilot', pose), x, y, top + P.z, h + P.a, V3_PIL, 0); }
       if (P && (p.cpo || 0) > .3) { const L = cvLadder(p), [x, y] = at(L[0], L[1]); v3mAdd('ladder', v3mLadder, x, y, top, p.heading + Math.PI / 2, sz / 21, 0); }

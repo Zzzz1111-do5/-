@@ -262,7 +262,7 @@ function v3Fx(C) {
   // —— 飞机灯光：左翼尖红、右翼尖绿航行灯，垂尾顶上的白色防撞灯一闪一闪；歼击机起飞滑跑、刚离地爬升时尾喷口拖出加力火焰 ——
   if (typeof AIRD === 'object') {
     const EA_K3 = { ga: ['a10', 18], heli: ['ah64', 16], uh60: ['uh60', 17], c17: ['c17', 30], ftr: ['f35', 17], ftrb: ['f35b', 17], mq9: ['mq9', 18], f22: ['f22', 18], b2: ['b2', 34], p8: ['p8', 26] };
-    const FTR = { j35: 1, j20: 1, j15: 1, j36: 1, f35: 1, f22: 1, j15t: 1 };
+    const FTR = { j35: 1, j20: 1, j15: 1, j36: 1, j50: 1, f35: 1, f22: 1, j15t: 1 };
     const lit = (o, key, sz, own, burn) => {
       const D = AIRD[key];
       if (!D || !D.wing || !inB(o.x, o.y, 220)) return;
@@ -275,18 +275,16 @@ function v3Fx(C) {
       v3fSpark(out, C, Wp(tu, -tip[1], 0), 1.1 * k + .5, [.3, 1, .45, .95]);   // 右翼尖绿灯
       const tail = D.stab ? D.stab.reduce((m, q) => Math.min(m, q[0]), 0) : (D.body ? D.body[D.body.length - 1][0] : -9);
       if (((S.t * .8 + o.id * .37) % 1) < .07) v3fSpark(out, C, Wp(tail + 1, 0, 2.6), 2.4 * k + 1, [1, 1, 1, 1]);   // 防撞灯
-      if (burn && typeof v3dBurner === 'function' && D.noz && !r) { v3dBurner(out, C, o, 1, { x: o.x, y: o.y, z: z + V3_AIRZ * k, h, pt: typeof v3dPitchOf === 'function' ? v3dPitchOf(o, own ? 0 : 1) : Lc ? Lc.pitch : 0 }); return; }   // 加力：按每个喷口（v3det.js），方向随机身仰角
-      if (burn) {   // 加力：尾喷口一束橙白的火舌 + 光晕，长度随时间抖动
-        const nu = D.body ? D.body[D.body.length - 1][0] : -10, L = 4.5 + Math.sin(S.t * 31 + o.id) * .6;
-        v3fRib(out, E, Wp(nu, 0, 0), Wp(nu - L, 0, 0), 1.5 * k + .4, [1, .95, .8, .95], [1, .45, .1, 0]);
-        v3fSpark(out, C, Wp(nu - .5, 0, 0), 2.6 * k + 1, [1, .6, .2, .55]);
+      if (FTR[key] && typeof v3dBurner === 'function') {   // 喷口发热、加力尾焰（v3det.js）：按每个喷口，随机身俯仰、滚转；加力开关时火舌平滑地长出、缩回
+        const Eg = v3dEng((own ? 'p' : 'e') + o.id, burn ? 1 : .65, burn ? 1 : 0);
+        v3dBurner(out, C, o, key, sz, { x: o.x, y: o.y, z, h, pt: typeof v3dPitchOf === 'function' ? v3dPitchOf(o, own ? 0 : 1) : Lc ? Lc.pitch : 0, rl: r }, Eg);
       }
     };
     for (const p of S.planes || []) if (!p.dead && isFinite(p.x) && !(p.phase === 'cat' || p.phase === 'trap' || (p.phase === 'roll' && !p.afPh && !p.land))) {   // 甲板上的由航母那边画
       const key = typeof airSilKey === 'function' ? airSilKey(p.kind, p.v) : null;
       if (!key) continue;
-      const sz = (typeof airMdl === 'function' && airMdl(p.kind, p.v).size) || 15;
-      lit(p, key, sz, true, !!FTR[key] && (p.phase === 'out' && (p.alt ?? 1) < .5));
+      const sz = typeof airSize3 === 'function' ? airSize3(p, 'p') : (typeof airMdl === 'function' && airMdl(p.kind, p.v).size) || 15;   // 与画机体同一个尺寸（喷口对得上）
+      lit(p, key, sz, true, !!FTR[key] && p.phase === 'out' && ((p.alt ?? 1) < .5 || (p.lT != null && S.t - p.lT < 14)));   // 弹射离舰后全加力爬升约 14 秒（与 js/aero.js 的离舰剖面一致）
     }
     if (S.eair) for (const a of S.eair.fly) {
       if (a.dead || !isFinite(a.x) || !(spec || a.pv || inVision(a.x, a.y))) continue;
