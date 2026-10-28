@@ -1580,6 +1580,7 @@ function v3mAscCan() {
 const V3M_VS = `attribute vec3 p; attribute vec3 n; attribute float s; attribute vec3 b; attribute vec4 iA; attribute vec4 iB;
 uniform mat4 uM; uniform vec3 uEye;
 varying vec3 vN, vB, vV, vC; varying float vS, vSide, vD;
+${typeof V3_SHV === 'string' ? V3_SHV : ''}
 void main() {
   // 外部模型（v3import.js）：|s| ≥ 16 时 s − 16 是 7 位 RGB 涂装色，负数是玻璃；自己画的模型 vC 记 −1
   float a = abs(s);
@@ -1590,12 +1591,14 @@ void main() {
   vec3 m = vec3(n.x, n.y * cr - n.z * sr, n.y * sr + n.z * cr); m = vec3(m.x * cp - m.z * sp, m.y, m.x * sp + m.z * cp);
   vec3 w = vec3(iA.x + q.x * c - q.y * sn, iA.y + q.x * sn + q.y * c, iA.z + q.z);
   vN = vec3(m.x * c - m.y * sn, m.x * sn + m.y * c, m.z); vB = b; vSide = iB.y; vV = uEye - w; vD = length(vV);
+  ${typeof V3_SHV === 'string' ? 'vSh = uShM * vec4(w, 1.);' : ''}
   gl_Position = uM * vec4(w, 1.);
 }`;
 const V3M_FS = der => `${der ? '#extension GL_OES_standard_derivatives : enable\n#define DER 1\n' : ''}precision mediump float;
 uniform vec2 uFog; uniform vec3 uBg; uniform float uMode;
 uniform vec3 uBody0, uBody1, uBody2, uBody3, uBody4, uGlow0, uGlow1, uGlow2;
 varying vec3 vN, vB, vV, vC; varying float vS, vSide, vD;
+${typeof V3_SHF === 'string' ? V3_SHF : 'float shadowAt() { return 1.; }'}
 void main() {
   vec3 body = vSide < .5 ? uBody0 : vSide < 1.5 ? uBody1 : vSide < 2.5 ? uBody2 : vSide < 3.5 ? uBody3 : uBody4;   // 3、4：我方 / 敌方飞机
   vec3 glow = vSide < .5 || (vSide > 2.5 && vSide < 3.5) ? uGlow0 : vSide < 1.5 || vSide > 3.5 ? uGlow1 : uGlow2;
@@ -1625,7 +1628,7 @@ void main() {
     c = body * (.45 + .95 * lit + .25 * up) * sh + glow * ed * .95 + glow * rim * .22;
     if (vS < 0.) c += glow * .75 * sh;
   } else {   // 写实：涂装色受日光、天光（上冷下暖）+ 暗棱线，边缘描一道阵营色细光
-    c = body * (mix(vec3(.3, .29, .27), vec3(.45, .5, .58), up) + vec3(1., .95, .86) * lit * .82) * sh * (1. - ed * .4) + glow * rim * .18;
+    c = body * (mix(vec3(.3, .29, .27), vec3(.45, .5, .58), up) + vec3(1., .95, .86) * lit * .82 * shadowAt()) * sh * (1. - ed * .4) + glow * rim * .18;
     if (vS < 0.) c = mix(c, vec3(.55, .7, .78), .6);
   }
   gl_FragColor = vec4(mix(c, uBg, smoothstep(uFog.x, uFog.y, vD)), 1.);
@@ -1642,7 +1645,7 @@ function v3mInit(gl) {
     if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(pr));
     V3M.pr = pr; V3M.gl = gl;
     for (const k of ['p', 'n', 's', 'b', 'iA', 'iB']) V3M.a[k] = gl.getAttribLocation(pr, k);
-    for (const k of ['uM', 'uEye', 'uFog', 'uBg', 'uMode', 'uBody0', 'uBody1', 'uBody2', 'uBody3', 'uBody4', 'uGlow0', 'uGlow1', 'uGlow2']) V3M.u[k] = gl.getUniformLocation(pr, k);
+    for (const k of ['uM', 'uEye', 'uFog', 'uBg', 'uMode', 'uBody0', 'uBody1', 'uBody2', 'uBody3', 'uBody4', 'uGlow0', 'uGlow1', 'uGlow2', 'uShM', 'uShT', 'uShOn', 'uShP']) V3M.u[k] = gl.getUniformLocation(pr, k);
     V3M.ib = gl.createBuffer();
     V3M.ok = true;
   } catch (e) { V3M.ok = false; console.warn('3D 兵种模型不可用', e); }
@@ -1718,7 +1721,10 @@ function v3WreckAt(w, age, T) {
   const gz = Math.max(v3Ht(clamp(x, 0, W - 1), clamp(y, 0, H - 1)), -2.6), z0 = v3AltZ(w.x, w.y, Math.max(0, clamp(w.alt ?? 1, 0, 1) - .05) * 230, -2.6, 1.5);
   return { x, y, z: Math.max(gz + .5, z0 + (gz - z0) * u * u), u };
 }
-function v3Units(C, box) {
+function v3Units(C, box) { v3mCollect(C, box); v3mDraw(C); }
+// 收集这一帧要画的实例（每帧一次；阴影图与正常画面各画一遍，见 v3mDraw）
+function v3mCollect(C, box) {
+  V3M.fr = (V3M.fr || 0) + 1;
   if (!S || !V3.gl) return;
   const gl = V3.gl;
   if (!V3M.tried) v3mInit(gl);
@@ -2006,20 +2012,26 @@ function v3Units(C, box) {
     if (VP && m.t < 2.2 && typeof v3VlsOrigin === 'function') { const vo = v3VlsOrigin(m); if (vo) v3mAdd('vlslid', v3mVlsLid, vo.x, vo.y, vo.z, vo.h, 1, m.side === 'e' ? 1 : 0, -1.25 * clamp(m.t / .25, 0, 1) * clamp((2.2 - m.t) / .4, 0, 1)); }
   }
   for (const id of mp.keys()) if (!mlive.has(id)) mp.delete(id);
-  // —— 画 ——
+}
+// 画收集好的实例；LM：太阳阴影图的光源矩阵（这一遍只写深度，不画发光线）
+function v3mDraw(C, LM) {
+  if (!V3M.ok || !V3.gl || !S) return;
+  const gl = V3.gl;
   gl.useProgram(V3M.pr);
-  gl.uniformMatrix4fv(V3M.u.uM, false, C.M);
+  gl.uniformMatrix4fv(V3M.u.uM, false, LM || C.M);
   gl.uniform3f(V3M.u.uEye, C.E[0], C.E[1], C.E[2]);
   gl.uniform2f(V3M.u.uFog, ...(typeof v3FogR === 'function' ? v3FogR(C) : [C.D * 1.3, C.D * 2.8]));
   gl.uniform3f(V3M.u.uBg, ...(typeof v3Bg === 'function' ? v3Bg() : [.004, .02, .011]));
   v3mPalette(gl);
+  if (typeof v3ShUni === 'function') v3ShUni(gl, V3M.u, !LM);
   const A = V3M.a, X = V3M.ext;
   for (const [key, L] of V3M.inst) {
     const n = L.d.length / 8;
     if (!n) continue;
-    const m = v3mGet(key, L.build), data = new Float32Array(L.d);
+    if (L.fr !== V3M.fr) { L.fr = V3M.fr; L.f = new Float32Array(L.d); }   // 这一帧的实例数据只转一次（两遍共用）
+    const m = v3mGet(key, L.build), data = L.f;
     for (const [buf, cnt, mode] of [[m.tb, m.tn, gl.TRIANGLES], [m.lb, m.ln, gl.LINES]]) {
-      if (!buf || !cnt) continue;
+      if (!buf || !cnt || (LM && mode === gl.LINES)) continue;
       gl.bindBuffer(gl.ARRAY_BUFFER, buf);
       gl.enableVertexAttribArray(A.p); gl.vertexAttribPointer(A.p, 3, gl.FLOAT, false, 40, 0);
       gl.enableVertexAttribArray(A.n); gl.vertexAttribPointer(A.n, 3, gl.FLOAT, false, 40, 12);

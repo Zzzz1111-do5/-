@@ -15,11 +15,40 @@ let V3_ST = 2;   // 地形网格每几格一个顶点：显卡支持 32 位索�
 const V3_SUN = [-.4236, .5178, .743], V3_SUNG = `normalize(vec3(${V3_SUN.join(', ')}))`, V3_HZ_COL = [.74, .75, .8];
 const V3_SKYU = .595 - Math.atan2(V3_SUN[1], V3_SUN[0]) / (2 * Math.PI);   // 天空图横坐标的偏移：太阳在图里的位置（u = 0.595）对准太阳方向
 const v3Bg = () => v3Mx() ? [.004, .02, .011] : V3_HZ_COL;   // 雾色 / 背景色
+// 太阳阴影（写实画面）：镜头注视点周围一块（几百米到一千多米见方）从太阳方向渲染成深度图；各着色器的顶点里算 vSh = uShM × 世界坐标，
+//   片元里比较深度（4 点柔化），只压暗日光那一项（天光照旧）；阴影范围边上渐变消失。需要深度纹理扩展与片元高精度浮点，老设备没有就不画
+const V3_SHV = `uniform mat4 uShM; varying vec4 vSh;`;
+const V3_SHF = `
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+varying highp vec4 vSh; uniform highp sampler2D uShT;
+#else
+varying vec4 vSh; uniform sampler2D uShT;
+#endif
+uniform float uShOn; uniform vec2 uShP;
+float shadowAt() {
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+  if (uShOn < .5) return 1.;
+  highp vec3 q = vSh.xyz / vSh.w * .5 + .5;
+  vec2 e = abs(q.xy - .5);
+  float edge = smoothstep(.5, .4, max(e.x, e.y));
+  if (edge <= 0. || q.z >= 1.) return 1.;
+  float s = 0.;
+  for (int i = 0; i < 4; i++) {
+    vec2 o = i == 0 ? vec2(-.7, -.3) : i == 1 ? vec2(.3, -.7) : i == 2 ? vec2(.7, .3) : vec2(-.3, .7);
+    highp float d = texture2D(uShT, q.xy + o * uShP.x).r;
+    s += step(q.z - uShP.y, d);
+  }
+  return mix(1., s * .25, edge);
+#else
+  return 1.;
+#endif
+}`;
 
 const V3_VS = `attribute vec3 p; attribute vec3 n;
 uniform mat4 uM; uniform vec3 uEye;
 varying vec3 vP, vN, vV; varying float vD;
-void main() { vP = p; vN = n; vV = uEye - p; vD = length(vV); gl_Position = uM * vec4(p, 1.); }`;
+${V3_SHV}
+void main() { vP = p; vN = n; vV = uEye - p; vD = length(vV); vSh = uShM * vec4(p, 1.); gl_Position = uM * vec4(p, 1.); }`;
 // 黑客帝国式数码风（黑绿画面）：地形网格的每个面都画出发光的网格线（粗糙的多边形地形反而像数字模型）、按等高线分层的明暗台阶，
 //   地面上一列列下落的点阵字符流（「数字雨」，向海的方向流下去、字形不断变换、头部最亮、拖着渐暗的尾巴），海面是暗色的字符雨与扫描线，
 //   沙盘围边与房屋墙面上字符竖着往下落；字小到看不清时只留亮度带，不闪烁
@@ -53,6 +82,7 @@ uniform sampler2D uTop, uBase, uCls, uCls2, uFogT, uHt, uLf, uTopF; uniform vec4
 uniform sampler2D uDg, uDf, uDr, uDs; uniform float uDet;   // 写实地表细节贴图（ambientCG，CC0）：草地、林下地面、岩石、沙滩
 uniform sampler2D uCls3, uSky, uWn; uniform float uSkyOn, uSkyU, uWnOn;   // 水深分类（浅滩、礁石、近岸）、天空图（海面反射）、水面法线贴图（three.js 示例，MIT）
 varying vec3 vP, vN, vV; varying float vD;
+${V3_SHF}
 #ifdef GL_FRAGMENT_PRECISION_HIGH
 #define HP highp
 #else
@@ -142,7 +172,7 @@ void main() {
       float keep = max(max(tw, road), max(riv, .3 + .4 * fd));
       col = mix(nat * 1.1, col, keep);
     }
-    c = col * (amb + vec3(1., .95, .86) * lit * .8);
+    c = col * (amb + vec3(1., .95, .86) * lit * .8 * shadowAt());
     c += vec3(.12, .62, .32) * (cl + gl) * .55 * land;
     if (h < uSea + .6) {   // 海面：波浪法线、天空反射（菲涅尔）、太阳反光、深浅水颜色（浅滩、礁石泛青绿）、近岸白浪；俯视贴图里的航迹等留一点
       vec4 k3 = texture2D(uCls3, w / uWorld);
@@ -156,9 +186,10 @@ void main() {
       float fr = .02 + .98 * pow(1. - clamp(dot(Nw, V), 0., 1.), 5.);
       vec3 body = mix(vec3(.012, .06, .1), vec3(.05, .28, .3), k3.r);
       body = mix(body, vec3(.1, .4, .38), k3.g * .6);
-      body *= .55 + .45 * clamp(dot(Nw, ${V3_SUNG}), 0., 1.);
+      float shw = shadowAt();   // 舰船、码头在海面上的影子
+      body *= (.55 + .45 * clamp(dot(Nw, ${V3_SUNG}), 0., 1.)) * (.6 + .4 * shw);
       float sp = max(dot(Rf, ${V3_SUNG}), 0.);
-      vec3 wat = mix(body, sk, fr) + vec3(1., .96, .88) * (pow(sp, 700.) * 5. + pow(sp, 60.) * .12);
+      vec3 wat = mix(body, sk * (.75 + .25 * shw), fr) + vec3(1., .96, .88) * (pow(sp, 700.) * 5. + pow(sp, 60.) * .12) * shw;
       float fo = k3.b * (.55 + .45 * sin(w.x * .21 + w.y * .17 - uT * 1.3)) * smoothstep(.2, .8, k3.b);   // 近岸白浪：一条条随时间起伏
       wat = mix(wat, vec3(.86, .9, .92), fo * .55);
       wat = mix(wat, top * 1.2, .14);   // 航迹、标号等
@@ -267,10 +298,12 @@ void main() {
 const V3_BVS = `attribute vec3 p; attribute vec3 n; attribute vec2 e;
 uniform mat4 uM; uniform vec3 uEye;
 varying vec3 vP, vN; varying vec2 vE; varying float vD;
-void main() { vP = p; vN = n; vE = e; vD = distance(p, uEye); gl_Position = uM * vec4(p, 1.); }`;
+${V3_SHV}
+void main() { vP = p; vN = n; vE = e; vD = distance(p, uEye); vSh = uShM * vec4(p, 1.); gl_Position = uM * vec4(p, 1.); }`;
 const V3_BFS = `precision mediump float;
 uniform sampler2D uTop, uBase, uTopF; uniform vec4 uBox, uBoxF; uniform vec2 uWorld, uFog; uniform float uT, uMx; uniform vec3 uBg;
 varying vec3 vP, vN; varying vec2 vE; varying float vD;
+${V3_SHF}
 ${V3_MX}
 void main() {
   vec2 w = vec2(vP.x, -vP.y), uv = (w - uBox.xy) / uBox.zw, uvF = (w - uBoxF.xy) / uBoxF.zw;
@@ -294,7 +327,7 @@ void main() {
       c += vec3(.15, .95, .45) * mxRain(floor(u), fract(u), uT * 1.3, px) * .5;
     }
   } else {   // 写实：屋顶取俯视贴图，墙面是水泥色（受日光、天光），棱线略压暗
-    vec3 amb = mix(vec3(.3, .29, .27), vec3(.47, .52, .6), clamp(N.z, 0., 1.)), L = amb + vec3(1., .95, .86) * lit * .8;
+    vec3 amb = mix(vec3(.3, .29, .27), vec3(.47, .52, .6), clamp(N.z, 0., 1.)), L = amb + vec3(1., .95, .86) * lit * .8 * shadowAt();
     c = N.z > .5 ? ((uv.x > 0. && uv.y > 0. && uv.x < 1. && uv.y < 1.) ? texture2D(uTop, uv).rgb : inF ? texture2D(uTopF, uvF).rgb : texture2D(uBase, w / uWorld).rgb) * L * 1.15
       : vec3(.6, .6, .57) * L;
     c *= 1. - edge * .3;
@@ -358,6 +391,102 @@ function v3WaterTex() {
   if (!D.ok) return false;
   gl.activeTexture(gl.TEXTURE14); gl.bindTexture(gl.TEXTURE_2D, D.t);
   return true;
+}
+const V3SH = { tried: false, ok: false, size: 2048, M: null, on: false, box: null };
+function v3ShInit(gl) {
+  V3SH.tried = true;
+  try {
+    const dt = gl.getExtension('WEBGL_depth_texture') || gl.getExtension('WEBKIT_WEBGL_depth_texture'), hp = gl.getShaderPrecisionFormat(gl.FRAGMENT_SHADER, gl.HIGH_FLOAT);
+    if (!dt || !hp || hp.precision < 16 || gl.getParameter(gl.MAX_TEXTURE_IMAGE_UNITS) < 16) return;
+    const S0 = V3SH.size = V3.coarse ? 1024 : 2048;
+    const tex = gl.createTexture(); gl.activeTexture(gl.TEXTURE15); gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.DEPTH_COMPONENT, S0, S0, 0, gl.DEPTH_COMPONENT, gl.UNSIGNED_INT, null);
+    for (const [k, v] of [[gl.TEXTURE_MIN_FILTER, gl.NEAREST], [gl.TEXTURE_MAG_FILTER, gl.NEAREST], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D, k, v);
+    const fb = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, tex, 0);
+    if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) {   // 有的实现必须有颜色附件
+      const rb = gl.createRenderbuffer(); gl.bindRenderbuffer(gl.RENDERBUFFER, rb); gl.renderbufferStorage(gl.RENDERBUFFER, gl.RGBA4, S0, S0);
+      gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.RENDERBUFFER, rb);
+    }
+    const ok = gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    if (!ok) return;
+    // 只写深度的小着色器（地形、自己挤出的房屋）
+    const sh = (type, src) => { const o = gl.createShader(type); gl.shaderSource(o, src); gl.compileShader(o); if (!gl.getShaderParameter(o, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(o)); return o; };
+    const pr = gl.createProgram();
+    gl.attachShader(pr, sh(gl.VERTEX_SHADER, 'attribute vec3 p; uniform mat4 uM; void main() { gl_Position = uM * vec4(p, 1.); }'));
+    gl.attachShader(pr, sh(gl.FRAGMENT_SHADER, 'precision mediump float; void main() { gl_FragColor = vec4(1.); }'));
+    gl.linkProgram(pr);
+    if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(pr));
+    Object.assign(V3SH, { tex, fb, pr, a: gl.getAttribLocation(pr, 'p'), uM: gl.getUniformLocation(pr, 'uM'), ok: true });
+  } catch (e) { V3SH.ok = false; console.warn('阴影不可用', e); }
+}
+// 光源矩阵：以注视点为中心、边长 2R 的正交投影，从太阳方向看；中心按阴影图的像素对齐（镜头移动时阴影边不闪）
+function v3ShMatrix(C) {
+  // 范围按镜头离地高度（贴地看时一百米左右，越高越大）；中心取画面中心的落地点，但离镜头脚下不超过范围的七成（平视时影子落在近处）
+  const ex = C.E[0], ey = -C.E[1], hE = Math.max(1, C.E[2] - v3Gnd(ex, ey)), R = clamp(hE * 2.2 + 70, 90, 1100);
+  let cx = CAM.x, cy = CAM.y;
+  const dd = Math.hypot(cx - ex, cy - ey), lim = R * .7;
+  if (dd > lim) { cx = ex + (cx - ex) * lim / dd; cy = ey + (cy - ey) * lim / dd; }
+  const cz = Math.max(v3Ht(clamp(cx, 0, W - 1), clamp(cy, 0, H - 1)), -2.6), L = v3Norm(V3_SUN);
+  const up0 = Math.abs(L[2]) > .95 ? [0, 1, 0] : [0, 0, 1], f = [-L[0], -L[1], -L[2]], r = v3Norm(v3Cross(f, up0)), u = v3Cross(r, f);
+  const C0 = [cx, -cy, cz], tx = 2 * R / V3SH.size;
+  let a = v3Dot(C0, r), b = v3Dot(C0, u);
+  a = Math.round(a / tx) * tx; b = Math.round(b / tx) * tx;   // 对齐像素
+  const dz = 2 * R + 1600, c0 = v3Dot(C0, f) - (R + 800);   // 深度范围：注视点前后
+  // 视图：x = 点·r − a，y = 点·u − b，深度 = 点·f − c0；正交：x / R，y / R，深度 [0, dz] → [-1, 1]
+  const M = new Float32Array(16);
+  M[0] = r[0] / R; M[4] = r[1] / R; M[8] = r[2] / R; M[12] = -a / R;
+  M[1] = u[0] / R; M[5] = u[1] / R; M[9] = u[2] / R; M[13] = -b / R;
+  M[2] = f[0] * 2 / dz; M[6] = f[1] * 2 / dz; M[10] = f[2] * 2 / dz; M[14] = -c0 * 2 / dz - 1;
+  M[3] = 0; M[7] = 0; M[11] = 0; M[15] = 1;
+  V3SH.M = M; V3SH.bias = .5 / dz + 1.5 * tx / dz; V3SH.box = [cx - R * 1.5, cy - R * 1.5, cx + R * 1.5, cy + R * 1.5];
+  return M;
+}
+// 这一帧画阴影吗（写实画面、设备支持）；画就先从太阳方向把会投影的东西画进深度图
+function v3ShPass(C) {
+  const gl = V3.gl;
+  V3SH.on = false;
+  if (v3Mx() || (SETTINGS && SETTINGS.quality === 'low')) return false;
+  if (!V3SH.tried) v3ShInit(gl);
+  if (!V3SH.ok) return false;
+  const M = v3ShMatrix(C), S0 = V3SH.size;
+  gl.activeTexture(gl.TEXTURE15); gl.bindTexture(gl.TEXTURE_2D, null);   // 正在写的深度图不能同时绑在采样单元上
+  gl.bindFramebuffer(gl.FRAMEBUFFER, V3SH.fb);
+  gl.viewport(0, 0, S0, S0);
+  gl.colorMask(false, false, false, false);
+  gl.clear(gl.DEPTH_BUFFER_BIT);
+  gl.enable(gl.POLYGON_OFFSET_FILL); gl.polygonOffset(1.5, 3);
+  // 地形（山体互相投影）与自己挤出的房屋
+  gl.useProgram(V3SH.pr); gl.uniformMatrix4fv(V3SH.uM, false, M);
+  gl.enableVertexAttribArray(V3SH.a);
+  gl.bindBuffer(gl.ARRAY_BUFFER, V3.buf); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, V3.ib);
+  gl.vertexAttribPointer(V3SH.a, 3, gl.FLOAT, false, 24, 0);
+  gl.drawElements(gl.TRIANGLES, V3.n, V3.it || gl.UNSIGNED_SHORT, 0);
+  for (const c of V3.bch || []) {
+    if (c.bb && (c.bb[2] < V3SH.box[0] || c.bb[0] > V3SH.box[2] || c.bb[3] < V3SH.box[1] || c.bb[1] > V3SH.box[3])) continue;
+    gl.bindBuffer(gl.ARRAY_BUFFER, c.b); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, c.i);
+    gl.vertexAttribPointer(V3SH.a, 3, gl.FLOAT, false, 32, 0);
+    gl.drawElements(gl.TRIANGLES, c.n, gl.UNSIGNED_SHORT, 0);
+  }
+  gl.disableVertexAttribArray(V3SH.a);
+  // 地图物件、兵种模型
+  if (typeof v3pDraw === 'function') v3pDraw(C, M);
+  if (typeof v3mDraw === 'function' && !(SETTINGS && SETTINGS.models3d === false)) v3mDraw(C, M);
+  gl.disable(gl.POLYGON_OFFSET_FILL);
+  gl.colorMask(true, true, true, true);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.activeTexture(gl.TEXTURE15); gl.bindTexture(gl.TEXTURE_2D, V3SH.tex);
+  V3SH.on = true;
+  return true;
+}
+// 接收阴影的着色器：设好 uniform（on = false：这一遍本身是在画阴影图，不查阴影）
+function v3ShUni(gl, U, on) {
+  const use = on && V3SH.on;
+  if (U.uShOn) gl.uniform1f(U.uShOn, use ? 1 : 0);
+  if (U.uShM) gl.uniformMatrix4fv(U.uShM, false, V3SH.M || new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]));
+  if (U.uShT) gl.uniform1i(U.uShT, use ? 15 : 0);
+  if (U.uShP) gl.uniform2f(U.uShP, 1 / V3SH.size, V3SH.bias || .001);
 }
 function v3Inv(m) {   // 4×4 求逆（列主序）
   const a = m, o = new Float32Array(16);
@@ -746,13 +875,13 @@ function v3Init() {
     gl.linkProgram(pr);
     if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(pr));
     const u = {}, a = { p: gl.getAttribLocation(pr, 'p'), n: gl.getAttribLocation(pr, 'n') };
-    for (const k of ['uM', 'uEye', 'uTop', 'uBase', 'uCls', 'uCls2', 'uFogT', 'uHt', 'uLf', 'uTopF', 'uBox', 'uBoxF', 'uWorld', 'uGrid', 'uHG', 'uFog', 'uSea', 'uT', 'uMx', 'uBg', 'uDg', 'uDf', 'uDr', 'uDs', 'uDet', 'uCls3', 'uSky', 'uSkyOn', 'uSkyU', 'uWn', 'uWnOn']) u[k] = gl.getUniformLocation(pr, k);
+    for (const k of ['uM', 'uEye', 'uTop', 'uBase', 'uCls', 'uCls2', 'uFogT', 'uHt', 'uLf', 'uTopF', 'uBox', 'uBoxF', 'uWorld', 'uGrid', 'uHG', 'uFog', 'uSea', 'uT', 'uMx', 'uBg', 'uDg', 'uDf', 'uDr', 'uDs', 'uDet', 'uCls3', 'uSky', 'uSkyOn', 'uSkyU', 'uWn', 'uWnOn', 'uShM', 'uShT', 'uShOn', 'uShP']) u[k] = gl.getUniformLocation(pr, k);
     const pb = gl.createProgram();
     gl.attachShader(pb, sh(gl.VERTEX_SHADER, V3_BVS)); gl.attachShader(pb, sh(gl.FRAGMENT_SHADER, V3_BFS));
     gl.linkProgram(pb);
     if (!gl.getProgramParameter(pb, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(pb));
     const ub = {}, ab = { p: gl.getAttribLocation(pb, 'p'), n: gl.getAttribLocation(pb, 'n'), e: gl.getAttribLocation(pb, 'e') };
-    for (const k of ['uM', 'uEye', 'uTop', 'uBase', 'uTopF', 'uBox', 'uBoxF', 'uWorld', 'uFog', 'uT', 'uMx', 'uBg']) ub[k] = gl.getUniformLocation(pb, k);
+    for (const k of ['uM', 'uEye', 'uTop', 'uBase', 'uTopF', 'uBox', 'uBoxF', 'uWorld', 'uFog', 'uT', 'uMx', 'uBg', 'uShM', 'uShT', 'uShOn', 'uShP']) ub[k] = gl.getUniformLocation(pb, k);
     gl.useProgram(pb); gl.uniform1i(ub.uTop, 0); gl.uniform1i(ub.uBase, 1); gl.uniform1i(ub.uTopF, 7);
     Object.assign(V3, { pb, ub, ab });
     const mk = (unit, filt) => { const t = gl.createTexture(); gl.activeTexture(gl.TEXTURE0 + unit); gl.bindTexture(gl.TEXTURE_2D, t); for (const [p, v] of [[gl.TEXTURE_MIN_FILTER, filt], [gl.TEXTURE_MAG_FILTER, filt], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D, p, v); return t; };
@@ -956,6 +1085,11 @@ function v3Draw(now) {
     V3.boxB = box.slice(); V3.fNew = true;
   }
   if (one) { V3.boxF = [0, 0, 0, 0]; V3.boxB = null; }
+  // 这一帧的兵种、地图物件实例先收集好，太阳阴影图与正常画面各画一遍
+  const m3 = !(SETTINGS && SETTINGS.models3d === false);
+  if (m3 && typeof v3mCollect === 'function') v3mCollect(C, box);
+  const pOn = typeof v3pPrep === 'function' && v3pPrep(C);
+  v3ShPass(C);
   // 3D 网格
   const W0 = R.cv.width, H0 = R.cv.height;
   if (V3.cv.width !== W0 || V3.cv.height !== H0) { V3.cv.width = W0; V3.cv.height = H0; }
@@ -988,6 +1122,7 @@ function v3Draw(now) {
   if (skyT) { gl.activeTexture(gl.TEXTURE13); gl.bindTexture(gl.TEXTURE_2D, skyT); }
   gl.uniform1f(u.uSkyOn, skyT ? 1 : 0); gl.uniform1f(u.uSkyU, V3_SKYU);
   gl.uniform1f(u.uWnOn, !mx && v3WaterTex() ? 1 : 0);
+  v3ShUni(gl, u, true);
   gl.uniform1f(u.uT, tm); gl.uniform1f(u.uMx, mx);
   gl.bindBuffer(gl.ARRAY_BUFFER, V3.buf); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, V3.ib);
   gl.enableVertexAttribArray(V3.a.p); gl.vertexAttribPointer(V3.a.p, 3, gl.FLOAT, false, 24, 0);
@@ -998,7 +1133,7 @@ function v3Draw(now) {
     gl.useProgram(V3.pb);
     gl.uniformMatrix4fv(ub.uM, false, C.M); gl.uniform3f(ub.uEye, C.E[0], C.E[1], C.E[2]);
     gl.uniform4f(ub.uBox, V3.boxN[0], V3.boxN[1], V3.boxN[2], V3.boxN[3]); gl.uniform4f(ub.uBoxF, V3.boxF[0], V3.boxF[1], V3.boxF[2] || 1, V3.boxF[3] || 1); gl.uniform2f(ub.uWorld, W, H); gl.uniform2f(ub.uFog, ...v3FogR(C));
-    gl.uniform1f(ub.uT, tm); gl.uniform1f(ub.uMx, mx); gl.uniform3f(ub.uBg, bgc[0], bgc[1], bgc[2]);
+    gl.uniform1f(ub.uT, tm); gl.uniform1f(ub.uMx, mx); gl.uniform3f(ub.uBg, bgc[0], bgc[1], bgc[2]); v3ShUni(gl, ub, true);
     gl.disableVertexAttribArray(V3.a.p); gl.disableVertexAttribArray(V3.a.n);
     gl.enableVertexAttribArray(ab.p); gl.enableVertexAttribArray(ab.n); gl.enableVertexAttribArray(ab.e);
     const fe = v3FogE(C), ex = C.E[0], ey = -C.E[1];
@@ -1010,8 +1145,8 @@ function v3Draw(now) {
     }
     gl.disableVertexAttribArray(ab.p); gl.disableVertexAttribArray(ab.n); gl.disableVertexAttribArray(ab.e);
   }
-  if (typeof v3Props === 'function') { gl.disableVertexAttribArray(V3.a.p); gl.disableVertexAttribArray(V3.a.n); v3Props(C); }   // 地图物件：树木、岩石、楼房、机场设施（v3props.js，免费资源模型）
-  if (typeof v3Units === 'function' && !(SETTINGS && SETTINGS.models3d === false)) { gl.disableVertexAttribArray(V3.a.p); gl.disableVertexAttribArray(V3.a.n); v3Units(C, box); }   // 兵种立体模型（v3units.js）
+  if (pOn) { gl.disableVertexAttribArray(V3.a.p); gl.disableVertexAttribArray(V3.a.n); v3pDraw(C); }   // 地图物件：树木、岩石、楼房、机场设施（v3props.js，免费资源模型）
+  if (m3 && typeof v3mDraw === 'function') { gl.disableVertexAttribArray(V3.a.p); gl.disableVertexAttribArray(V3.a.n); v3mDraw(C); }   // 兵种立体模型（v3units.js）
   if (typeof v3Fx === 'function' && !(SETTINGS && SETTINGS.models3d === false)) { gl.disableVertexAttribArray(V3.a.p); gl.disableVertexAttribArray(V3.a.n); v3Fx(C); }   // 立体弹道（v3fx.js）
   const ctx = R.ctx;
   ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalCompositeOperation = 'copy'; ctx.drawImage(V3.cv, 0, 0); ctx.restore();

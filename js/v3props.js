@@ -39,6 +39,7 @@ const V3P_VS = `attribute vec3 p; attribute vec3 n; attribute vec2 t; attribute 
 uniform mat4 uM; uniform vec3 uEye; uniform float uT, uSway, uImp, uNear;
 uniform vec4 uImpF[16], uImpT[16], uImpX[16];
 varying vec3 vN, vB, vV; varying vec2 vT; varying float vD, vSd, vK, vUp;
+${typeof V3_SHV === 'string' ? V3_SHV : ''}
 void main() {
   vec3 q; vec2 tt = t; float k = 0.;
   if (uImp > .5) {   // 替身：iB = (宽, 高, 变体序号, 随机数)；竖片 n.z = 0、横片 n.z = 1
@@ -57,13 +58,16 @@ void main() {
   vec3 m = uImp > .5 ? vec3(0., 0., 1.) : normalize(n / iB.xyz);
   vN = vec3(m.x * c - m.y * s, m.x * s + m.y * c, m.z);
   vB = b; vT = tt; vSd = iB.w; vK = k; vV = uEye - w; vD = length(vV); vUp = vV.z / max(vD, 1e-3);
+  ${typeof V3_SHV === 'string' ? 'vSh = uShM * vec4(w, 1.);' : ''}
   gl_Position = uM * vec4(w, 1.);
 }`;
 const V3P_FS = der => `${der ? '#extension GL_OES_standard_derivatives : enable\n#define DER 1\n' : ''}precision mediump float;
 uniform sampler2D uTex; uniform float uCut, uMode, uFol, uGlass, uEdge; uniform vec4 uCol; uniform vec2 uFog; uniform vec3 uBg, uSun, uGlow, uBody;
 varying vec3 vN, vB, vV; varying vec2 vT; varying float vD, vSd, vK, vUp;
+${typeof V3_SHF === 'string' ? V3_SHF : 'float shadowAt() { return 1.; }'}
 void main() {
   vec4 tx = texture2D(uTex, vT) * uCol;
+  if (uMode > 2.5) { if (vK > 1.5 || tx.a < uCut) discard; gl_FragColor = vec4(1.); return; }   // 阴影图：只写深度（替身只用竖片）
   float cut = uCut;
   if (vK > 1.5) cut = mix(1.01, uCut, smoothstep(.55, .8, vUp));       // 横片：俯看时才出现
   else if (vK > .5) cut = mix(uCut, 1.01, smoothstep(.82, .97, vUp));  // 竖片：快正俯视时淡出
@@ -74,6 +78,7 @@ void main() {
   vec3 V = normalize(vV);
   float ndl = dot(N, uSun), dif = uFol > .5 ? clamp(ndl * .45 + .55, 0., 1.) : clamp(ndl, 0., 1.);
   if (vK > .5) dif = .7;   // 替身没有真法线：取平均受光
+  if (uMode > .5) dif *= shadowAt();
   vec3 alb = tx.rgb * (uFol > .5 ? .84 + .3 * vSd : 1.);   // 每棵树颜色略有不同
   float e = min(min(vB.x, vB.y), vB.z);
 #ifdef DER
@@ -107,7 +112,7 @@ function v3pInit(gl) {
     if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(pr));
     V3P.pr = pr; V3P.gl = gl; V3P.ext = gl.getExtension('ANGLE_instanced_arrays');
     for (const k of ['p', 'n', 't', 'b', 'iA', 'iB']) V3P.a[k] = gl.getAttribLocation(pr, k);
-    for (const k of ['uM', 'uEye', 'uT', 'uSway', 'uImp', 'uNear', 'uTex', 'uCut', 'uMode', 'uFol', 'uGlass', 'uEdge', 'uCol', 'uFog', 'uBg', 'uSun', 'uGlow', 'uBody', 'uImpF', 'uImpT', 'uImpX']) V3P.u[k] = gl.getUniformLocation(pr, k);
+    for (const k of ['uM', 'uEye', 'uT', 'uSway', 'uImp', 'uNear', 'uTex', 'uCut', 'uMode', 'uFol', 'uGlass', 'uEdge', 'uCol', 'uFog', 'uBg', 'uSun', 'uGlow', 'uBody', 'uImpF', 'uImpT', 'uImpX', 'uShM', 'uShT', 'uShOn', 'uShP']) V3P.u[k] = gl.getUniformLocation(pr, k);
     V3P.ib = gl.createBuffer();
     V3P.white = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, V3P.white); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([255, 255, 255, 255]));
     V3P.aniso = gl.getExtension('EXT_texture_filter_anisotropic') || gl.getExtension('WEBKIT_EXT_texture_filter_anisotropic');
@@ -427,33 +432,25 @@ const v3pOn = () => !(typeof SETTINGS === 'object' && SETTINGS && SETTINGS.extMd
 const v3pReady = () => v3pOn() && !!V3P.P;
 const v3pRep = i => v3pReady() && V3P.rep.has(i);
 
-// 每帧（view3d.js v3Draw 在地形、房屋之后调用）
-function v3Props(C) {
+// 每帧：v3pPrep 在画之前调用一次（载入、摆放、挑出近处的实例并上传），v3pDraw 画（太阳阴影图一遍、正常画面一遍）
+function v3Props(C) { if (v3pPrep(C)) v3pDraw(C); }
+function v3pPrep(C) {
+  V3P.live = false;
   const on = v3pOn();
   if (on !== V3P.was) { V3P.was = on; if (V3P.P && typeof v3Bld === 'function') v3Bld(); }   // 设置里开关：自带的房屋、树跟着换回来 / 换掉
-  if (!on || typeof V3 !== 'object' || !V3.gl || !TER || !TER.type) return;
+  if (!on || typeof V3 !== 'object' || !V3.gl || !TER || !TER.type) return false;
   const gl = V3.gl;
   if (!V3P.tried) v3pInit(gl);
-  if (!V3P.ok) return;
+  if (!V3P.ok) return false;
   const sig = TER.seed + ':' + (V3.sig || '') + ':' + W + 'x' + H;
   if (V3P.sig !== sig) {
     const prev = !!V3P.P;
     if (v3pPlace()) { V3P.sig = sig; if (typeof v3Bld === 'function') v3Bld(); }   // 换好模型：房屋、树的旧几何体重建（跳过被替换的）
     else if (prev) V3P.P = null;
-    if (!V3P.P) return;
+    if (!V3P.P) return false;
   } else if (typeof afb3dSig === 'function' && afb3dSig() !== V3P.asig) { v3pStatic((pk, nm) => V3P.VL.findIndex(o => o.pk === pk && o.nm === nm)); if (typeof v3Bld === 'function') v3Bld(); }   // 机场刚被发现 / 夺取
-  const PL = V3P.P, U = V3P.u, A = V3P.a, mx = typeof v3Mx === 'function' && v3Mx(), near = V3P_NEAR(), ex = C.E[0], ey = -C.E[1], tm = (performance.now() / 1000) % 3600;
-  gl.useProgram(V3P.pr);
-  gl.uniformMatrix4fv(U.uM, false, C.M); gl.uniform3f(U.uEye, C.E[0], C.E[1], C.E[2]);
-  gl.uniform1f(U.uT, tm); gl.uniform1f(U.uNear, near); gl.uniform1i(U.uTex, 0);
-  gl.uniform2f(U.uFog, ...(typeof v3FogR === 'function' ? v3FogR(C) : [C.D * 1.3, C.D * 2.8]));
-  gl.uniform3f(U.uBg, ...(typeof v3Bg === 'function' ? v3Bg() : [.004, .02, .011]));
-  const SU = typeof V3_SUN === 'object' ? V3_SUN : [-.45, .55, .7], sl = Math.hypot(...SU); gl.uniform3f(U.uSun, SU[0] / sl, SU[1] / sl, SU[2] / sl);
-  gl.uniform1f(U.uMode, mx ? 0 : 1); gl.uniform3f(U.uBody, .015, .085, .045); gl.uniform3f(U.uGlow, .12, .68, .36);
-  gl.uniform1f(U.uImp, 0); gl.uniform1f(U.uSway, 0);
-  // 楼房、机场设施
-  for (const c of V3P.B || []) { const VV = V3P.VL[c.v]; v3pDrawVar(VV.V, VV.pk, c.b, c.n, undefined, VV); }
-  // 近处的树、灌木、岩石：挑出镜头附近的，按变体实例化
+  // 近处的树、灌木、岩石：挑出镜头附近的，按变体分好、上传（两遍共用）
+  const PL = V3P.P, near = V3P_NEAR(), ex = C.E[0], ey = -C.E[1];
   const fe = typeof v3FogE === 'function' ? v3FogE(C) : 3000, rN = [near, Math.min(near * 1.6, fe), Math.min(near * 1.8, fe)];   // 灌木、岩石小，比树稍远一点就不画
   const R2 = Math.max(...rN), b0x = clamp(Math.floor((ex - R2) / PL.BS), 0, PL.bx - 1), b1x = clamp(Math.floor((ex + R2) / PL.BS), 0, PL.bx - 1), b0y = clamp(Math.floor((ey - R2) / PL.BS), 0, PL.by - 1), b1y = clamp(Math.floor((ey + R2) / PL.BS), 0, PL.by - 1);
   const per = V3P.per || (V3P.per = new Map());
@@ -464,17 +461,36 @@ function v3Props(C) {
       const i = PL.idx[j], dx = PL.x[i] - ex, dy = PL.y[i] - ey, rr = rN[PL.k[i]];
       if (dx * dx + dy * dy > rr * rr) continue;
       let a = per.get(PL.v[i]);
-      if (!a) per.set(PL.v[i], a = { d: new Float32Array(8 * 256), n: 0 });
+      if (!a) per.set(PL.v[i], a = { d: new Float32Array(8 * 256), n: 0, b: gl.createBuffer() });
       if ((a.n + 1) * 8 > a.d.length) { const d2 = new Float32Array(a.d.length * 2); d2.set(a.d); a.d = d2; }
       a.d.set([PL.x[i], -PL.y[i], PL.z[i], -PL.a[i], PL.s[i], PL.s[i], PL.sz[i], PL.sd[i]], a.n * 8); a.n++;
     }
   }
-  for (const [v, a] of per) {
+  for (const a of per.values()) if (a.n) { gl.bindBuffer(gl.ARRAY_BUFFER, a.b); gl.bufferData(gl.ARRAY_BUFFER, a.d.subarray(0, a.n * 8), gl.DYNAMIC_DRAW); }
+  V3P.fe = fe; V3P.near = near; V3P.live = true;
+  return true;
+}
+// LM：太阳阴影图的光源矩阵（这一遍只写深度：树叶照样按透明裁剪，替身只用竖片）
+function v3pDraw(C, LM) {
+  if (!V3P.live) return;
+  const gl = V3.gl, U = V3P.u, A = V3P.a, mx = typeof v3Mx === 'function' && v3Mx(), ex = C.E[0], ey = -C.E[1], fe = V3P.fe, tm = (performance.now() / 1000) % 3600;
+  gl.useProgram(V3P.pr);
+  gl.uniformMatrix4fv(U.uM, false, LM || C.M); gl.uniform3f(U.uEye, C.E[0], C.E[1], C.E[2]);
+  gl.uniform1f(U.uT, tm); gl.uniform1f(U.uNear, V3P.near); gl.uniform1i(U.uTex, 0);
+  gl.uniform2f(U.uFog, ...(typeof v3FogR === 'function' ? v3FogR(C) : [C.D * 1.3, C.D * 2.8]));
+  gl.uniform3f(U.uBg, ...(typeof v3Bg === 'function' ? v3Bg() : [.004, .02, .011]));
+  const SU = typeof V3_SUN === 'object' ? V3_SUN : [-.45, .55, .7], sl = Math.hypot(...SU); gl.uniform3f(U.uSun, SU[0] / sl, SU[1] / sl, SU[2] / sl);
+  gl.uniform1f(U.uMode, LM ? 3 : mx ? 0 : 1); gl.uniform3f(U.uBody, .015, .085, .045); gl.uniform3f(U.uGlow, .12, .68, .36);
+  gl.uniform1f(U.uImp, 0); gl.uniform1f(U.uSway, 0);
+  if (typeof v3ShUni === 'function') v3ShUni(gl, U, !LM);
+  // 楼房、机场设施
+  for (const c of V3P.B || []) { const VV = V3P.VL[c.v]; v3pDrawVar(VV.V, VV.pk, c.b, c.n, undefined, VV); }
+  // 近处的树、灌木、岩石
+  for (const [v, a] of V3P.per) {
     if (!a.n) continue;
     const VV = V3P.VL[v];
     gl.uniform1f(U.uSway, VV.veg ? 1 : 0);
-    gl.bindBuffer(gl.ARRAY_BUFFER, V3P.ib); gl.bufferData(gl.ARRAY_BUFFER, a.d.subarray(0, a.n * 8), gl.DYNAMIC_DRAW);
-    v3pDrawVar(VV.V, VV.pk, V3P.ib, a.n, undefined, VV);
+    v3pDrawVar(VV.V, VV.pk, a.b, a.n, undefined, VV);
   }
   gl.uniform1f(U.uSway, 0);
   // 远处的树：替身（近处那几棵在着色器里丢掉）
@@ -488,9 +504,9 @@ function v3Props(C) {
     gl.enableVertexAttribArray(A.n); gl.vertexAttribPointer(A.n, 3, gl.FLOAT, false, 44, 12);
     gl.enableVertexAttribArray(A.t); gl.vertexAttribPointer(A.t, 2, gl.FLOAT, false, 44, 24);
     gl.enableVertexAttribArray(A.b); gl.vertexAttribPointer(A.b, 3, gl.FLOAT, false, 44, 32);
-    const X = V3P.ext;
+    const X = V3P.ext, sb = LM && V3SH.box;   // 阴影这一遍：只画阴影范围里的块
     for (const c of V3P.far) {
-      if (Math.hypot(Math.max(c.bb[0] - ex, 0, ex - c.bb[2]), Math.max(c.bb[1] - ey, 0, ey - c.bb[3])) > fe) continue;   // 整块在雾外
+      if (sb ? c.bb[2] < sb[0] || c.bb[0] > sb[2] || c.bb[3] < sb[1] || c.bb[1] > sb[3] : Math.hypot(Math.max(c.bb[0] - ex, 0, ex - c.bb[2]), Math.max(c.bb[1] - ey, 0, ey - c.bb[3])) > fe) continue;   // 整块在雾外
       gl.bindBuffer(gl.ARRAY_BUFFER, c.b);
       gl.enableVertexAttribArray(A.iA); gl.vertexAttribPointer(A.iA, 4, gl.FLOAT, false, 32, 0); X.vertexAttribDivisorANGLE(A.iA, 1);
       gl.enableVertexAttribArray(A.iB); gl.vertexAttribPointer(A.iB, 4, gl.FLOAT, false, 32, 16); X.vertexAttribDivisorANGLE(A.iB, 1);
