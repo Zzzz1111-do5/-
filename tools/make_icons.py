@@ -1,4 +1,4 @@
-# 生成安卓图标与启动画面（暗绿作战台风格：发光的剑 + 「暗剑」），输出到 android/app/src/main/res
+# 生成安卓图标与启动画面（暗绿作战台风格：发光的剑 + 「暗剑」），输出到 android/app/src/main/res；电脑版图标 desktop/build/icon.png；商店图标 store/
 import os, sys
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 RES = 'android/app/src/main/res'
@@ -49,4 +49,25 @@ for dp, _, fs in os.walk(RES):
             d = ImageDraw.Draw(im); ft = ImageFont.truetype(FONT, max(12, int(m * .09)))
             t = '暗剑'; bb = d.textbbox((0, 0), t, font=ft); d.text(((w - bb[2]) / 2, int(h * .42 + m * .27)), t, font=ft, fill=G)
         im.convert('RGB').save(path)
+# 电脑版图标：1024 圆角方块，electron-builder 由它生成 Windows 的 .ico、macOS 的 .icns 和 Linux 图标
+def desk_icon(size=1024):
+    im = icon(size, scale=.74); pad = int(size * .045)
+    m = Image.new('L', (size, size), 0); ImageDraw.Draw(m).rounded_rectangle([pad, pad, size - 1 - pad, size - 1 - pad], radius=int(size * .19), fill=255)
+    out = Image.new('RGBA', (size, size), (0, 0, 0, 0)); out.paste(im, (0, 0), m)
+    return out
+os.makedirs('desktop/build', exist_ok=True)
+desk_icon().save('desktop/build/icon.png')
+
+# 商店图标：TapTap 要方形、不带圆角、不能是纯黑 / 白 / 透明底 → 墨绿径向渐变底；Steam 社区图标 184 方形 JPG、客户端图标 .ico 与 32 像素 TGA
+def store_icon(size):
+    m = Image.radial_gradient('L').resize((size, size), Image.BICUBIC)
+    base = Image.composite(Image.new('RGBA', (size, size), (3, 20, 11, 255)), Image.new('RGBA', (size, size), (16, 66, 38, 255)), m)
+    grid = Image.new('RGBA', (size, size), (0, 0, 0, 0)); d = ImageDraw.Draw(grid); step = max(4, size // 12)
+    for i in range(0, size, step): d.line([(i, 0), (i, size)], fill=(61, 255, 138, 40)); d.line([(0, i), (size, i)], fill=(61, 255, 138, 40))
+    return Image.alpha_composite(Image.alpha_composite(base, grid), sword(size, .8))
+for sub in ('store/taptap', 'store/steam'): os.makedirs(sub, exist_ok=True)
+for n in (512, 1024): store_icon(n).convert('RGB').save(f'store/taptap/icon_{n}.png')
+store_icon(184).convert('RGB').save('store/steam/community_icon_184.jpg', quality=92)
+desk_icon(256).save('store/steam/client_icon.ico', sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)])
+desk_icon(32).save('store/steam/client_icon_32.tga')
 print('图标与启动画面已生成')
