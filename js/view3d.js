@@ -10,11 +10,16 @@ const V3 = { on: false, ok: false, tried: false, gl: null, cv: null, pr: null, u
   top: null, tex: null, base: null, hf: null, nx: 0, ny: 0, yaw: 0, tilt: .95, yawT: 0, tiltT: .95, box: null, cam: null, keep: null };
 const V3_HZ = 150, V3_FOV = .8, V3_TILT = [.05, 1.45], V3_SKIRT = -70;   // 俯仰：从几乎正俯视到几乎平视
 let V3_ST = 2;   // 地形网格每几格一个顶点：显卡支持 32 位索引时为 1（每 10 米一个顶点，山脊、河谷的轮廓更细），否则 2
+// 光照（所有 3D 着色器共用）：太阳方向（GL 坐标，指向太阳；与天空图 assets/sky/sky.jpg 里太阳的方位、48° 高度角一致）、日光、天光；
+//   写实画面的背景是真实天空（Poly Haven「kloofendal_48d_partly_cloudy_puresky」，CC0），远处雾成地平线的天色（大气透视）；黑绿画面仍是近黑的底
+const V3_SUN = [-.4236, .5178, .743], V3_SUNG = `normalize(vec3(${V3_SUN.join(', ')}))`, V3_HZ_COL = [.74, .75, .8];
+const V3_SKYU = .595 - Math.atan2(V3_SUN[1], V3_SUN[0]) / (2 * Math.PI);   // 天空图横坐标的偏移：太阳在图里的位置（u = 0.595）对准太阳方向
+const v3Bg = () => v3Mx() ? [.004, .02, .011] : V3_HZ_COL;   // 雾色 / 背景色
 
 const V3_VS = `attribute vec3 p; attribute vec3 n;
 uniform mat4 uM; uniform vec3 uEye;
-varying vec3 vP, vN; varying float vD;
-void main() { vP = p; vN = n; vD = distance(p, uEye); gl_Position = uM * vec4(p, 1.); }`;
+varying vec3 vP, vN, vV; varying float vD;
+void main() { vP = p; vN = n; vV = uEye - p; vD = length(vV); gl_Position = uM * vec4(p, 1.); }`;
 // 黑客帝国式数码风（黑绿画面）：地形网格的每个面都画出发光的网格线（粗糙的多边形地形反而像数字模型）、按等高线分层的明暗台阶，
 //   地面上一列列下落的点阵字符流（「数字雨」，向海的方向流下去、字形不断变换、头部最亮、拖着渐暗的尾巴），海面是暗色的字符雨与扫描线，
 //   沙盘围边与房屋墙面上字符竖着往下落；字小到看不清时只留亮度带，不闪烁
@@ -44,8 +49,15 @@ float mxRain(vec2 cell, vec2 f, float t, float px) {
 //   河流是暗色水道、两岸亮线，水道里的字符顺流而下；海岸线一道亮光；没看见的地方压暗（战争迷雾）；字符雨照常落下。
 //   单位、标号、箭头、弹坑等仍来自俯视贴图（这时贴图底色是黑的，叠加上去）
 const V3_FS = der => `${der ? '#extension GL_OES_standard_derivatives : enable\n#define DER 1\n' : ''}precision mediump float;
-uniform sampler2D uTop, uBase, uCls, uCls2, uFogT, uHt, uLf, uTopF; uniform vec4 uBox, uBoxF; uniform vec2 uWorld, uGrid, uHG; uniform vec2 uFog; uniform float uSea, uT, uMx;
-varying vec3 vP, vN; varying float vD;
+uniform sampler2D uTop, uBase, uCls, uCls2, uFogT, uHt, uLf, uTopF; uniform vec4 uBox, uBoxF; uniform vec2 uWorld, uGrid, uHG; uniform vec2 uFog; uniform float uSea, uT, uMx; uniform vec3 uBg;
+uniform sampler2D uDg, uDf, uDr, uDs; uniform float uDet;   // 写实地表细节贴图（ambientCG，CC0）：草地、林下地面、岩石、沙滩
+uniform sampler2D uCls3, uSky, uWn; uniform float uSkyOn, uSkyU, uWnOn;   // 水深分类（浅滩、礁石、近岸）、天空图（海面反射）、水面法线贴图（three.js 示例，MIT）
+varying vec3 vP, vN, vV; varying float vD;
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+#define HP highp
+#else
+#define HP mediump
+#endif
 ${V3_MX}
 #ifdef DER
 #define FW(x) fwidth(x)
@@ -58,9 +70,34 @@ vec2 mxTan(sampler2D T, vec2 cu, vec2 e, int ch) {
   vec2 g = ch == 0 ? vec2(a.r - b.r, c.r - d.r) : vec2(a.b - b.b, c.b - d.b);
   return normalize(vec2(-g.y, g.x) + vec2(1e-4, 0.));
 }
+// 海面波浪的斜率：十组方向围绕风向（西南风）散开、波长 60 米到 2 米的波叠加（波矢取 2000 米周期的整数倍，取模后无缝）；
+//   fw：一个像素在海面上有几米——比两个像素还短的波去掉（远处不闪、不出摩尔纹）；振幅再按低频噪声起伏，看不出重复；需要高精度浮点，没有就只留平静的水面
+float wNoise(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3. - 2. * f); float a = fract(sin(dot(i, vec2(127.1, 311.7))) * 43758.5453), b = fract(sin(dot(i + vec2(1., 0.), vec2(127.1, 311.7))) * 43758.5453), c = fract(sin(dot(i + vec2(0., 1.), vec2(127.1, 311.7))) * 43758.5453), d = fract(sin(dot(i + vec2(1., 1.), vec2(127.1, 311.7))) * 43758.5453); return mix(mix(a, b, f.x), mix(c, d, f.x), f.y); }
+// 水面法线：同一张法线贴图按四种尺度、四个方向流动叠加（大的慢、小的快），远处多级渐远纹理自然平均成平静的镜面；再叠两道长涌
+vec3 waterNrm(HP vec2 w, float t) {
+  vec3 n = texture2D(uWn, w / 113. + vec2(t * .012, t * .008)).rgb + texture2D(uWn, w / 67. + vec2(-t * .01, t * .014)).rgb
+         + texture2D(uWn, w / 29. + vec2(t * .021, -t * .016)).rgb + texture2D(uWn, w / 13. + vec2(-t * .033, -t * .026)).rgb;
+  n = n * .5 - 2.;
+  return vec3(n.x, n.y, n.z * 2.2 + 1.);
+}
+vec2 waveSlope(HP vec2 w, float t, float fw) {
+  vec2 g = vec2(0.);
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+  HP vec2 m = mod(w, 2000.);
+  float mod1 = .55 + .9 * wNoise(m / 170.), mod2 = .5 + 1. * wNoise(m / 47. + 7.3);
+  for (int i = 0; i < 10; i++) {
+    vec2 K = i == 0 ? vec2(23., 21.) : i == 1 ? vec2(37., 12.) : i == 2 ? vec2(18., 47.) : i == 3 ? vec2(71., 40.) : i == 4 ? vec2(52., 96.) : i == 5 ? vec2(140., 61.) : i == 6 ? vec2(97., 188.) : i == 7 ? vec2(270., 151.) : i == 8 ? vec2(203., 402.) : vec2(560., 310.);
+    float k = 6.2831853 * length(K) / 2000., st = i < 4 ? .035 : i < 7 ? .055 : .07;   // 陡度：长涌缓、短的碎浪陡
+    float aa = 1. - smoothstep(.25, .5, fw * k / 6.2831853), om = sqrt(9.8 * k);
+    HP float ph = fract(dot(K, m) / 2000. - om * t / 6.2831853) * 6.2831853;
+    g += st * aa * (i < 5 ? mod1 : mod2) * normalize(K) * cos(ph);
+  }
+#endif
+  return g;
+}
 void main() {
   vec2 w = vec2(vP.x, -vP.y);
-  vec3 bg = vec3(.004, .02, .011);
+  vec3 bg = uBg;
 #ifdef DER
   float pw = max(length(fwidth(w)), 1e-3);
 #else
@@ -76,7 +113,7 @@ void main() {
   bool inBox = uv.x > 0. && uv.y > 0. && uv.x < 1. && uv.y < 1., inF = uvF.x > 0. && uvF.y > 0. && uvF.x < 1. && uvF.y < 1.;
   float wN = inBox ? smoothstep(0., .07, min(min(uv.x, uv.y), min(1. - uv.x, 1. - uv.y))) : 0.;   // 近处贴图的边上渐变到远处那张，看不出一圈分界
   vec3 N = normalize(vN);
-  float lit = clamp(dot(N, normalize(vec3(-.45, .55, .7))), 0., 1.);
+  float lit = clamp(dot(N, ${V3_SUNG}), 0., 1.);
   float h = vP.z, land = step(uSea, h);
   vec3 c;
   // 等高线与方格网（两种画风共用）
@@ -86,9 +123,47 @@ void main() {
   vec2 g2 = abs(fract(w / 200.) - .5);
   float gl = (1. - smoothstep(0., fg * 1.5, .5 - max(g2.x, g2.y))) * .16;
   if (uMx < .5) {   // 写实 / 关闭数码风：披俯视贴图，叠山体明暗、等高线、方格网
-    vec3 cF = inF ? texture2D(uTopF, uvF).rgb : texture2D(uBase, w / uWorld).rgb;
-    c = (wN > 0. ? mix(cF, texture2D(uTop, uv).rgb, wN) : cF) * (.5 + .75 * lit);
-    c += vec3(.12, .62, .32) * (cl + gl);
+    vec3 cF = inF ? texture2D(uTopF, uvF).rgb : texture2D(uBase, w / uWorld).rgb, top = wN > 0. ? mix(cF, texture2D(uTop, uv).rgb, wN) : cF;
+    // 写实：天光（上冷下暖，按坡面朝天的程度）+ 日光；地图底色偏暗，整体提亮到白天的亮度；等高线、方格网淡一些
+    vec3 amb = mix(vec3(.3, .29, .27), vec3(.47, .52, .6), clamp(N.z, 0., 1.)), col = top * 1.22;
+    if (uDet > .5 && land > .5) {
+      // 自然地表换成真实贴图：按地形类别（林地、礁石 / 悬崖、沙滩、沼泽）和坡度（陡坡露岩）混合；两种尺度叠加避免一张贴图重复的痕迹
+      vec2 cu = w / uWorld;
+      vec4 k1 = texture2D(uCls, cu), k2 = texture2D(uCls2, cu), LF = texture2D(uLf, cu), HT = texture2D(uHt, (floor(w / 20.) + .5) / uHG);
+      float fo = smoothstep(.25, .7, k1.g), be = smoothstep(.3, .7, k2.g), rk = max(max(smoothstep(.25, .6, k2.b), HT.g * .8), smoothstep(.8, .55, N.z)), mr = smoothstep(.3, .7, k2.r);
+      float fd = smoothstep(.3, .7, k2.a), tw = smoothstep(.3, .7, k1.a);
+      vec3 G = texture2D(uDg, w / 9.).rgb, F = texture2D(uDf, w / 8.).rgb, Rk = texture2D(uDr, w / 15.).rgb, Sd = texture2D(uDs, w / 7.).rgb;
+      float mac = dot(texture2D(uDg, w / 73. + .31).rgb, vec3(.6, .3, .1)) * 1.7 + .38;   // 大尺度的明暗起伏
+      vec3 nat = mix(G, F * vec3(.9, .92, .8), max(fo, mr * .6));
+      nat = mix(nat, Rk, rk); nat = mix(nat, Sd * 1.05, be);
+      nat *= mix(1., mac, .5);
+      // 人造的（道路、城镇、田块颜色）和弹坑、车辙、标号仍在俯视贴图里：道路、城镇、河流全用贴图，田地留七成，别处留三成
+      float dR = LF.r * 12., hwR = max(LF.b * 8., 1.5), road = 1. - smoothstep(hwR - .5, hwR + 1.8, dR), riv = 1. - smoothstep(.9, 1.2, LF.g * 2.5);
+      float keep = max(max(tw, road), max(riv, .3 + .4 * fd));
+      col = mix(nat * 1.1, col, keep);
+    }
+    c = col * (amb + vec3(1., .95, .86) * lit * .8);
+    c += vec3(.12, .62, .32) * (cl + gl) * .55 * land;
+    if (h < uSea + .6) {   // 海面：波浪法线、天空反射（菲涅尔）、太阳反光、深浅水颜色（浅滩、礁石泛青绿）、近岸白浪；俯视贴图里的航迹等留一点
+      vec4 k3 = texture2D(uCls3, w / uWorld);
+      float fwm = max(FW(w.x), FW(w.y)) * 1.4;   // 一个像素在海面上有几米
+      vec3 Nw = uWnOn > .5 ? waterNrm(w, uT) : vec3(-waveSlope(w, uT, fwm), 1.);
+      Nw = normalize(vec3(Nw.xy * (1. - k3.r * .45), Nw.z));   // 浅水、礁盘上浪小
+      vec3 V = normalize(vV), Rf = reflect(-V, Nw);
+      Rf.z = abs(Rf.z);
+      float bl = clamp(log2(max(fwm, .1) * 4.), 0., 6.);   // 远处的反射模糊一些（粗糙的海面平均了很多方向）
+      vec3 sk = uSkyOn > .5 ? texture2D(uSky, vec2(atan(Rf.y, Rf.x) / 6.2831853 + uSkyU, .5 - asin(clamp(Rf.z, 0., 1.)) / 3.1415927), bl).rgb * .84 : mix(uBg, vec3(.5, .62, .8), sqrt(Rf.z));
+      float fr = .02 + .98 * pow(1. - clamp(dot(Nw, V), 0., 1.), 5.);
+      vec3 body = mix(vec3(.012, .06, .1), vec3(.05, .28, .3), k3.r);
+      body = mix(body, vec3(.1, .4, .38), k3.g * .6);
+      body *= .55 + .45 * clamp(dot(Nw, ${V3_SUNG}), 0., 1.);
+      float sp = max(dot(Rf, ${V3_SUNG}), 0.);
+      vec3 wat = mix(body, sk, fr) + vec3(1., .96, .88) * (pow(sp, 700.) * 5. + pow(sp, 60.) * .12);
+      float fo = k3.b * (.55 + .45 * sin(w.x * .21 + w.y * .17 - uT * 1.3)) * smoothstep(.2, .8, k3.b);   // 近岸白浪：一条条随时间起伏
+      wat = mix(wat, vec3(.86, .9, .92), fo * .55);
+      wat = mix(wat, top * 1.2, .14);   // 航迹、标号等
+      c = mix(wat, c, smoothstep(uSea - .4, uSea + .5, h));
+    }
     gl_FragColor = vec4(mix(c, bg, smoothstep(uFog.x, uFog.y, vD)), 1.); return;
   }
   vec2 cu = w / uWorld, ex = 1. / uGrid;
@@ -99,7 +174,7 @@ void main() {
 #ifdef DER
   vec3 Nf = normalize(cross(dFdx(vP), dFdy(vP)));
   if (Nf.z < 0.) Nf = -Nf;
-  float litF = clamp(dot(Nf, normalize(vec3(-.45, .55, .7))), 0., 1.);
+  float litF = clamp(dot(Nf, ${V3_SUNG}), 0., 1.);
 #else
   float litF = lit;
 #endif
@@ -194,14 +269,14 @@ uniform mat4 uM; uniform vec3 uEye;
 varying vec3 vP, vN; varying vec2 vE; varying float vD;
 void main() { vP = p; vN = n; vE = e; vD = distance(p, uEye); gl_Position = uM * vec4(p, 1.); }`;
 const V3_BFS = `precision mediump float;
-uniform sampler2D uTop, uBase, uTopF; uniform vec4 uBox, uBoxF; uniform vec2 uWorld, uFog; uniform float uT, uMx;
+uniform sampler2D uTop, uBase, uTopF; uniform vec4 uBox, uBoxF; uniform vec2 uWorld, uFog; uniform float uT, uMx; uniform vec3 uBg;
 varying vec3 vP, vN; varying vec2 vE; varying float vD;
 ${V3_MX}
 void main() {
   vec2 w = vec2(vP.x, -vP.y), uv = (w - uBox.xy) / uBox.zw, uvF = (w - uBoxF.xy) / uBoxF.zw;
   bool inF = uvF.x > 0. && uvF.y > 0. && uvF.x < 1. && uvF.y < 1.;
-  vec3 N = normalize(vN), bg = vec3(.004, .02, .011);
-  float lit = clamp(dot(N, normalize(vec3(-.45, .55, .7))), 0., 1.);
+  vec3 N = normalize(vN), bg = uBg;
+  float lit = clamp(dot(N, ${V3_SUNG}), 0., 1.);
   float ed = min(min(vE.x, 1. - vE.x), min(vE.y, 1. - vE.y)), edge = 1. - smoothstep(.02, .1, ed);
   vec3 c;
   if (vE.x > 1.5) {   // 树：树冠（e.x 2.5）、树干（3.5）；不画棱线，边缘（侧面）一圈淡淡的轮廓光
@@ -218,13 +293,119 @@ void main() {
       c += G * step(.78, mxH(win + floor(uT * .1) * .37)) * step(.25, fw.x) * step(fw.x, .75) * step(.3, fw.y) * step(fw.y, .7) * .35;
       c += vec3(.15, .95, .45) * mxRain(floor(u), fract(u), uT * 1.3, px) * .5;
     }
-  } else {
-    c = N.z > .5 ? ((uv.x > 0. && uv.y > 0. && uv.x < 1. && uv.y < 1.) ? texture2D(uTop, uv).rgb : inF ? texture2D(uTopF, uvF).rgb : texture2D(uBase, w / uWorld).rgb) * (.75 + .45 * lit)
-      : vec3(.015, .085, .045) * (.55 + 1.1 * lit);
-    c += vec3(.12, .68, .36) * edge * (N.z > .5 ? .55 : .9);
+  } else {   // 写实：屋顶取俯视贴图，墙面是水泥色（受日光、天光），棱线略压暗
+    vec3 amb = mix(vec3(.3, .29, .27), vec3(.47, .52, .6), clamp(N.z, 0., 1.)), L = amb + vec3(1., .95, .86) * lit * .8;
+    c = N.z > .5 ? ((uv.x > 0. && uv.y > 0. && uv.x < 1. && uv.y < 1.) ? texture2D(uTop, uv).rgb : inF ? texture2D(uTopF, uvF).rgb : texture2D(uBase, w / uWorld).rgb) * L * 1.15
+      : vec3(.6, .6, .57) * L;
+    c *= 1. - edge * .3;
   }
   gl_FragColor = vec4(mix(c, bg, smoothstep(uFog.x, uFog.y, vD)), 1.);
 }`;
+
+// —— 天空（写实画面）：全屏三角形，顶点着色器把屏幕角点反投影到远裁剪面求视线方向（插值后在片元里归一），按方位角、高度角查天空图；
+//   地平线以下渐变成雾色（地图外围看到的「地面」）——
+const V3_SKY_VS = `attribute vec2 p; uniform mat4 uInv; uniform vec3 uEye; varying vec3 vR;
+void main() { vec4 b = uInv * vec4(p, 1., 1.); vR = b.xyz / b.w - uEye; gl_Position = vec4(p, .99999, 1.); }`;
+const V3_SKY_FS = `precision mediump float;
+uniform sampler2D uSky; uniform float uU; uniform vec3 uBg; varying vec3 vR;
+void main() {
+  vec3 d = normalize(vR);
+  vec2 uv = vec2(atan(d.y, d.x) / 6.2831853 + uU, .5 - asin(clamp(d.z, -1., 1.)) / 3.1415927);
+  vec3 c = texture2D(uSky, uv).rgb;
+  gl_FragColor = vec4(mix(c, uBg, smoothstep(.03, -.08, d.z)), 1.);
+}`;
+// 地表细节贴图（写实画面）：第一次用到时载入，四张都好了才启用；绑在 8–11 号纹理单元
+function v3DetTex() {
+  const D = V3.det, gl = V3.gl;
+  if (!D) return false;
+  if (!D.req) {
+    D.req = true;
+    const v = typeof window === 'object' && window.DS_BUILD ? '?v=' + window.DS_BUILD : '';
+    ['grass', 'forest', 'rock', 'sand'].forEach((nm, i) => {
+      const img = new Image();
+      img.onload = () => {
+        const t = gl.createTexture(); gl.activeTexture(gl.TEXTURE8 + i); gl.bindTexture(gl.TEXTURE_2D, t);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, img); gl.generateMipmap(gl.TEXTURE_2D);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
+        if (V3.aniso) gl.texParameterf(gl.TEXTURE_2D, V3.aniso.TEXTURE_MAX_ANISOTROPY_EXT, V3.anMax);
+        D.t[i] = t; D.n++;
+      };
+      img.src = 'assets/terrain/' + nm + '.jpg' + v;
+    });
+  }
+  if (D.n < 4) return false;
+  for (let i = 0; i < 4; i++) { gl.activeTexture(gl.TEXTURE8 + i); gl.bindTexture(gl.TEXTURE_2D, D.t[i]); }
+  return true;
+}
+// 水面法线贴图（写实海面）：第一次用到时载入，绑在 14 号纹理单元
+function v3WaterTex() {
+  const D = V3.wn, gl = V3.gl;
+  if (!D) return false;
+  if (!D.req) {
+    D.req = true;
+    const img = new Image();
+    img.onload = () => {
+      const t = gl.createTexture(); gl.activeTexture(gl.TEXTURE14); gl.bindTexture(gl.TEXTURE_2D, t);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, img); gl.generateMipmap(gl.TEXTURE_2D);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
+      if (V3.aniso) gl.texParameterf(gl.TEXTURE_2D, V3.aniso.TEXTURE_MAX_ANISOTROPY_EXT, V3.anMax);
+      D.t = t; D.ok = true;
+    };
+    img.src = 'assets/water/normals.jpg' + (typeof window === 'object' && window.DS_BUILD ? '?v=' + window.DS_BUILD : '');
+  }
+  if (!D.ok) return false;
+  gl.activeTexture(gl.TEXTURE14); gl.bindTexture(gl.TEXTURE_2D, D.t);
+  return true;
+}
+function v3Inv(m) {   // 4×4 求逆（列主序）
+  const a = m, o = new Float32Array(16);
+  const b00 = a[0] * a[5] - a[1] * a[4], b01 = a[0] * a[6] - a[2] * a[4], b02 = a[0] * a[7] - a[3] * a[4], b03 = a[1] * a[6] - a[2] * a[5], b04 = a[1] * a[7] - a[3] * a[5], b05 = a[2] * a[7] - a[3] * a[6];
+  const b06 = a[8] * a[13] - a[9] * a[12], b07 = a[8] * a[14] - a[10] * a[12], b08 = a[8] * a[15] - a[11] * a[12], b09 = a[9] * a[14] - a[10] * a[13], b10 = a[9] * a[15] - a[11] * a[13], b11 = a[10] * a[15] - a[11] * a[14];
+  let d = b00 * b11 - b01 * b10 + b02 * b09 + b03 * b08 - b04 * b07 + b05 * b06;
+  if (!d) return null;
+  d = 1 / d;
+  o[0] = (a[5] * b11 - a[6] * b10 + a[7] * b09) * d; o[1] = (a[2] * b10 - a[1] * b11 - a[3] * b09) * d; o[2] = (a[13] * b05 - a[14] * b04 + a[15] * b03) * d; o[3] = (a[10] * b04 - a[9] * b05 - a[11] * b03) * d;
+  o[4] = (a[6] * b08 - a[4] * b11 - a[7] * b07) * d; o[5] = (a[0] * b11 - a[2] * b08 + a[3] * b07) * d; o[6] = (a[14] * b02 - a[12] * b05 - a[15] * b01) * d; o[7] = (a[8] * b05 - a[10] * b02 + a[11] * b01) * d;
+  o[8] = (a[4] * b10 - a[5] * b08 + a[7] * b06) * d; o[9] = (a[1] * b08 - a[0] * b10 - a[3] * b06) * d; o[10] = (a[12] * b04 - a[13] * b02 + a[15] * b00) * d; o[11] = (a[9] * b02 - a[8] * b04 - a[11] * b00) * d;
+  o[12] = (a[5] * b07 - a[4] * b09 - a[6] * b06) * d; o[13] = (a[0] * b09 - a[1] * b07 + a[2] * b06) * d; o[14] = (a[13] * b01 - a[12] * b03 - a[14] * b00) * d; o[15] = (a[8] * b03 - a[9] * b01 + a[10] * b00) * d;
+  return o;
+}
+function v3Sky(C) {
+  const gl = V3.gl;
+  if (!V3.sky) {
+    V3.sky = { ok: false };
+    try {
+      const sh = (type, src) => { const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)); return s; };
+      const pr = gl.createProgram(); gl.attachShader(pr, sh(gl.VERTEX_SHADER, V3_SKY_VS)); gl.attachShader(pr, sh(gl.FRAGMENT_SHADER, V3_SKY_FS)); gl.linkProgram(pr);
+      if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(pr));
+      const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+      Object.assign(V3.sky, { pr, b, a: gl.getAttribLocation(pr, 'p'), u: Object.fromEntries(['uInv', 'uEye', 'uSky', 'uU', 'uBg'].map(k => [k, gl.getUniformLocation(pr, k)])) });
+      const img = new Image();
+      img.onload = () => {
+        const t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, img); gl.generateMipmap(gl.TEXTURE_2D);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        V3.sky.tex = t; V3.sky.ok = true;
+      };
+      img.src = 'assets/sky/sky.jpg' + (typeof window === 'object' && window.DS_BUILD ? '?v=' + window.DS_BUILD : '');
+    } catch (e) { console.warn('天空不可用', e); }
+  }
+  const K = V3.sky, inv = K.ok && v3Inv(C.M);
+  if (!inv) return;
+  gl.useProgram(K.pr);
+  gl.uniformMatrix4fv(K.u.uInv, false, inv); gl.uniform3f(K.u.uEye, C.E[0], C.E[1], C.E[2]);
+  gl.uniform1f(K.u.uU, V3_SKYU); gl.uniform1i(K.u.uSky, 6); gl.uniform3f(K.u.uBg, ...V3_HZ_COL);
+  gl.activeTexture(gl.TEXTURE6); gl.bindTexture(gl.TEXTURE_2D, K.tex);
+  gl.depthMask(false); gl.disable(gl.DEPTH_TEST);
+  gl.bindBuffer(gl.ARRAY_BUFFER, K.b); gl.enableVertexAttribArray(K.a); gl.vertexAttribPointer(K.a, 2, gl.FLOAT, false, 0, 0);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+  gl.disableVertexAttribArray(K.a);
+  gl.depthMask(true); gl.enable(gl.DEPTH_TEST);
+  gl.activeTexture(gl.TEXTURE6); gl.bindTexture(gl.TEXTURE_2D, V3.lf);   // 6 号单元原本是道路、河流的距离场
+}
 
 // —— 3D 数学（列主序 4×4）——
 const v3Sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
@@ -394,6 +575,16 @@ function v3Cls() {
     blur(ch(t => t === T.MARSH ? 1 : 0), 2), blur(ch(t => t === T.BEACH ? 1 : 0), 2), blur(ch(t => t === T.CLIFF ? 1 : t === T.ROCKS ? .7 : 0), 1), blur(ch(t => t === T.FIELD ? 1 : 0), 2)];
   for (let i = 0; i < N; i++) for (let k = 0; k < 4; k++) { a[i * 4 + k] = Math.round(C[k][i] * 255); b[i * 4 + k] = Math.round(C[4 + k][i] * 255); }
   gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, V3.cls); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, GW, GH, 0, gl.RGBA, gl.UNSIGNED_BYTE, a);
+  if (V3.cls3) {   // 水深分类（写实海面）：R 浅水（浅滩、礁石、紧挨岸的水）、G 礁石、B 近岸白浪（挨着陆地的水格）
+    const land = i => !isWater(TER.type[i]);
+    const nearL = i => { const x = i % GW, y = (i / GW) | 0; for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const xx = x + dx, yy = y + dy; if (xx >= 0 && yy >= 0 && xx < GW && yy < GH && land(yy * GW + xx)) return true; } return false; };
+    const C3 = [new Float32Array(N), new Float32Array(N), new Float32Array(N)];
+    for (let i = 0; i < N; i++) { const t = TER.type[i]; if (!isWater(t)) { C3[0][i] = 1; continue; } const nl = nearL(i); C3[0][i] = t === T.SHOAL || t === T.REEF || nl ? 1 : 0; C3[1][i] = t === T.REEF ? 1 : 0; C3[2][i] = nl ? 1 : 0; }
+    blur(C3[0], 3); blur(C3[1], 2); blur(C3[2], 1);
+    const c3 = new Uint8Array(N * 4);
+    for (let i = 0; i < N; i++) { c3[i * 4] = Math.round(C3[0][i] * 255); c3[i * 4 + 1] = Math.round(C3[1][i] * 255); c3[i * 4 + 2] = Math.round(C3[2][i] * 255); c3[i * 4 + 3] = 255; }
+    gl.activeTexture(gl.TEXTURE12); gl.bindTexture(gl.TEXTURE_2D, V3.cls3); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, GW, GH, 0, gl.RGBA, gl.UNSIGNED_BYTE, c3);
+  }
   gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D, V3.cls2); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, GW, GH, 0, gl.RGBA, gl.UNSIGNED_BYTE, b);
   if (typeof terLines === 'function') { const lf = terLines(); gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1); gl.activeTexture(gl.TEXTURE6); gl.bindTexture(gl.TEXTURE_2D, V3.lf); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, lf.w, lf.h, 0, gl.RGBA, gl.UNSIGNED_BYTE, lf.d); }   // 道路、河流的中心线距离场（terrain.js）
 }
@@ -555,19 +746,25 @@ function v3Init() {
     gl.linkProgram(pr);
     if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(pr));
     const u = {}, a = { p: gl.getAttribLocation(pr, 'p'), n: gl.getAttribLocation(pr, 'n') };
-    for (const k of ['uM', 'uEye', 'uTop', 'uBase', 'uCls', 'uCls2', 'uFogT', 'uHt', 'uLf', 'uTopF', 'uBox', 'uBoxF', 'uWorld', 'uGrid', 'uHG', 'uFog', 'uSea', 'uT', 'uMx']) u[k] = gl.getUniformLocation(pr, k);
+    for (const k of ['uM', 'uEye', 'uTop', 'uBase', 'uCls', 'uCls2', 'uFogT', 'uHt', 'uLf', 'uTopF', 'uBox', 'uBoxF', 'uWorld', 'uGrid', 'uHG', 'uFog', 'uSea', 'uT', 'uMx', 'uBg', 'uDg', 'uDf', 'uDr', 'uDs', 'uDet', 'uCls3', 'uSky', 'uSkyOn', 'uSkyU', 'uWn', 'uWnOn']) u[k] = gl.getUniformLocation(pr, k);
     const pb = gl.createProgram();
     gl.attachShader(pb, sh(gl.VERTEX_SHADER, V3_BVS)); gl.attachShader(pb, sh(gl.FRAGMENT_SHADER, V3_BFS));
     gl.linkProgram(pb);
     if (!gl.getProgramParameter(pb, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(pb));
     const ub = {}, ab = { p: gl.getAttribLocation(pb, 'p'), n: gl.getAttribLocation(pb, 'n'), e: gl.getAttribLocation(pb, 'e') };
-    for (const k of ['uM', 'uEye', 'uTop', 'uBase', 'uTopF', 'uBox', 'uBoxF', 'uWorld', 'uFog', 'uT', 'uMx']) ub[k] = gl.getUniformLocation(pb, k);
+    for (const k of ['uM', 'uEye', 'uTop', 'uBase', 'uTopF', 'uBox', 'uBoxF', 'uWorld', 'uFog', 'uT', 'uMx', 'uBg']) ub[k] = gl.getUniformLocation(pb, k);
     gl.useProgram(pb); gl.uniform1i(ub.uTop, 0); gl.uniform1i(ub.uBase, 1); gl.uniform1i(ub.uTopF, 7);
     Object.assign(V3, { pb, ub, ab });
     const mk = (unit, filt) => { const t = gl.createTexture(); gl.activeTexture(gl.TEXTURE0 + unit); gl.bindTexture(gl.TEXTURE_2D, t); for (const [p, v] of [[gl.TEXTURE_MIN_FILTER, filt], [gl.TEXTURE_MAG_FILTER, filt], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D, p, v); return t; };
     Object.assign(V3, { gl, cv, pr, u, a, tex: mk(0, gl.LINEAR), base: mk(1, gl.LINEAR), cls: mk(2, gl.LINEAR), cls2: mk(3, gl.LINEAR), fog: mk(4, gl.LINEAR), ht: mk(5, gl.NEAREST), lf: mk(6, gl.LINEAR), texF: mk(7, gl.LINEAR), topF: document.createElement('canvas'), u32: !!gl.getExtension('OES_element_index_uint'), top: document.createElement('canvas'), coarse: V3.coarse ?? (typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches), maxTex: Math.min(4096, gl.getParameter(gl.MAX_TEXTURE_SIZE) || 2048), ok: true });
     gl.useProgram(pr);
     gl.uniform1i(u.uTop, 0); gl.uniform1i(u.uBase, 1); gl.uniform1i(u.uCls, 2); gl.uniform1i(u.uCls2, 3); gl.uniform1i(u.uFogT, 4); gl.uniform1i(u.uHt, 5); gl.uniform1i(u.uLf, 6); gl.uniform1i(u.uTopF, 7);
+    const tu = gl.getParameter(gl.MAX_TEXTURE_IMAGE_UNITS);
+    if (tu >= 14) { gl.uniform1i(u.uDg, 8); gl.uniform1i(u.uDf, 9); gl.uniform1i(u.uDr, 10); gl.uniform1i(u.uDs, 11); gl.uniform1i(u.uCls3, 12); gl.uniform1i(u.uSky, 13); }
+    if (tu >= 15) gl.uniform1i(u.uWn, 14);
+    V3.wn = tu >= 15 ? { ok: false } : null;
+    V3.det = tu >= 14 ? { n: 0, t: [] } : null;   // 地表细节贴图、水深分类、海面反射要 14 个纹理单元（老设备不够就不用）
+    V3.cls3 = tu >= 14 ? mk(12, gl.LINEAR) : null;
     if (V3.u32) V3_ST = 1;
     V3.aniso = gl.getExtension('EXT_texture_filter_anisotropic') || gl.getExtension('WEBKIT_EXT_texture_filter_anisotropic'); V3.anMax = V3.aniso ? Math.min(8, gl.getParameter(V3.aniso.MAX_TEXTURE_MAX_ANISOTROPY_EXT) || 1) : 1;
     gl.enable(gl.DEPTH_TEST);
@@ -773,15 +970,24 @@ function v3Draw(now) {
   gl.activeTexture(gl.TEXTURE5); gl.bindTexture(gl.TEXTURE_2D, V3.ht);
   gl.activeTexture(gl.TEXTURE4); gl.bindTexture(gl.TEXTURE_2D, V3.fog);
   if (typeof FOGB === 'object') gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE, GW, GH, 0, gl.LUMINANCE, gl.UNSIGNED_BYTE, FOGB);   // 视野（drawScene 刚按当前观察视野算好）
-  gl.clearColor(.004, .02, .011, 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  const bgc = v3Bg();
+  gl.clearColor(bgc[0], bgc[1], bgc[2], 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  if (!v3Mx()) v3Sky(C);   // 写实画面：先画天空（不写深度）
+  gl.useProgram(V3.pr);
   const u = V3.u;
   gl.uniformMatrix4fv(u.uM, false, C.M);
   gl.uniform3f(u.uEye, C.E[0], C.E[1], C.E[2]);
   gl.uniform4f(u.uBox, V3.boxN[0], V3.boxN[1], V3.boxN[2], V3.boxN[3]); gl.uniform4f(u.uBoxF, V3.boxF[0], V3.boxF[1], V3.boxF[2] || 1, V3.boxF[3] || 1);
   gl.uniform2f(u.uWorld, W, H); gl.uniform2f(u.uGrid, GW, GH); gl.uniform2f(u.uHG, Math.max(1, V3.nx - 1), Math.max(1, V3.ny - 1));
   gl.uniform2f(u.uFog, ...v3FogR(C));
-  gl.uniform1f(u.uSea, 1.5);
+  gl.uniform1f(u.uSea, 1.5); gl.uniform3f(u.uBg, bgc[0], bgc[1], bgc[2]);
   const mx = v3Mx() ? 1 : 0, tm = (now / 1000) % 3600;   // 黑绿画面：黑客帝国式数码风
+  gl.uniform1f(u.uDet, !mx && v3DetTex() ? 1 : 0);
+  const skyT = !mx && V3.sky && V3.sky.ok && V3.cls3 ? V3.sky.tex : null;
+  if (V3.cls3) { gl.activeTexture(gl.TEXTURE12); gl.bindTexture(gl.TEXTURE_2D, V3.cls3); }
+  if (skyT) { gl.activeTexture(gl.TEXTURE13); gl.bindTexture(gl.TEXTURE_2D, skyT); }
+  gl.uniform1f(u.uSkyOn, skyT ? 1 : 0); gl.uniform1f(u.uSkyU, V3_SKYU);
+  gl.uniform1f(u.uWnOn, !mx && v3WaterTex() ? 1 : 0);
   gl.uniform1f(u.uT, tm); gl.uniform1f(u.uMx, mx);
   gl.bindBuffer(gl.ARRAY_BUFFER, V3.buf); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, V3.ib);
   gl.enableVertexAttribArray(V3.a.p); gl.vertexAttribPointer(V3.a.p, 3, gl.FLOAT, false, 24, 0);
@@ -792,7 +998,7 @@ function v3Draw(now) {
     gl.useProgram(V3.pb);
     gl.uniformMatrix4fv(ub.uM, false, C.M); gl.uniform3f(ub.uEye, C.E[0], C.E[1], C.E[2]);
     gl.uniform4f(ub.uBox, V3.boxN[0], V3.boxN[1], V3.boxN[2], V3.boxN[3]); gl.uniform4f(ub.uBoxF, V3.boxF[0], V3.boxF[1], V3.boxF[2] || 1, V3.boxF[3] || 1); gl.uniform2f(ub.uWorld, W, H); gl.uniform2f(ub.uFog, ...v3FogR(C));
-    gl.uniform1f(ub.uT, tm); gl.uniform1f(ub.uMx, mx);
+    gl.uniform1f(ub.uT, tm); gl.uniform1f(ub.uMx, mx); gl.uniform3f(ub.uBg, bgc[0], bgc[1], bgc[2]);
     gl.disableVertexAttribArray(V3.a.p); gl.disableVertexAttribArray(V3.a.n);
     gl.enableVertexAttribArray(ab.p); gl.enableVertexAttribArray(ab.n); gl.enableVertexAttribArray(ab.e);
     const fe = v3FogE(C), ex = C.E[0], ey = -C.E[1];

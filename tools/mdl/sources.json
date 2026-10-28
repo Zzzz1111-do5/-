@@ -170,7 +170,7 @@
     "url": "https://sketchfab.com/3d-models/japanese-residential-home-03-1c53f4f37fc44c32a8874464025aea48",
     "unit": 0.01
   },
-  "asiantower": {
+  "asiantower_unused": {
     "mode": "tex",
     "file": "asiantower.glb",
     "name": "LOW POLY - ASIAN TOWER BLOCK",

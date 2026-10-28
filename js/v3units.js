@@ -1600,7 +1600,7 @@ void main() {
   vec3 body = vSide < .5 ? uBody0 : vSide < 1.5 ? uBody1 : vSide < 2.5 ? uBody2 : vSide < 3.5 ? uBody3 : uBody4;   // 3、4：我方 / 敌方飞机
   vec3 glow = vSide < .5 || (vSide > 2.5 && vSide < 3.5) ? uGlow0 : vSide < 1.5 || vSide > 3.5 ? uGlow1 : uGlow2;
   vec3 N = normalize(vN), V = normalize(vV);
-  float lit = clamp(dot(N, normalize(vec3(-.45, .55, .7))), 0., 1.), up = clamp(N.z, 0., 1.);
+  float lit = clamp(dot(N, ${typeof V3_SUNG === 'string' ? V3_SUNG : 'normalize(vec3(-.45, .55, .7))'}), 0., 1.), up = clamp(N.z, 0., 1.);
   float e = min(min(vB.x, vB.y), vB.z);
 #ifdef DER
   float w = max(fwidth(e), 1e-4), ed = 1. - smoothstep(w * .6, w * 1.9, e);
@@ -1624,8 +1624,8 @@ void main() {
   if (uMode < .5) {   // 黑绿：深色实体 + 发光棱线 + 边缘光；玻璃、车灯、观察镜发光
     c = body * (.45 + .95 * lit + .25 * up) * sh + glow * ed * .95 + glow * rim * .22;
     if (vS < 0.) c += glow * .75 * sh;
-  } else {   // 写实：涂装色受光 + 暗棱线，边缘描一道阵营色细光
-    c = body * (.38 + .8 * lit + .15 * up) * sh * (1. - ed * .45) + glow * rim * .18;
+  } else {   // 写实：涂装色受日光、天光（上冷下暖）+ 暗棱线，边缘描一道阵营色细光
+    c = body * (mix(vec3(.3, .29, .27), vec3(.45, .5, .58), up) + vec3(1., .95, .86) * lit * .82) * sh * (1. - ed * .4) + glow * rim * .18;
     if (vS < 0.) c = mix(c, vec3(.55, .7, .78), .6);
   }
   gl_FragColor = vec4(mix(c, uBg, smoothstep(uFog.x, uFog.y, vD)), 1.);
@@ -2011,7 +2011,7 @@ function v3Units(C, box) {
   gl.uniformMatrix4fv(V3M.u.uM, false, C.M);
   gl.uniform3f(V3M.u.uEye, C.E[0], C.E[1], C.E[2]);
   gl.uniform2f(V3M.u.uFog, ...(typeof v3FogR === 'function' ? v3FogR(C) : [C.D * 1.3, C.D * 2.8]));
-  gl.uniform3f(V3M.u.uBg, .004, .02, .011);
+  gl.uniform3f(V3M.u.uBg, ...(typeof v3Bg === 'function' ? v3Bg() : [.004, .02, .011]));
   v3mPalette(gl);
   const A = V3M.a, X = V3M.ext;
   for (const [key, L] of V3M.inst) {

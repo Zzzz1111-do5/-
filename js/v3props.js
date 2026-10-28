@@ -17,7 +17,12 @@ const V3P_PACKS = {
   oldconc: { name: '水泥楼', title: 'Old Concete Building Pack | Lowpoly', author: 'Frid.blend', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/old-concete-building-pack-lowpoly-6d070fcc86b0430dadf53da67545c6f3' },
   hangar: { name: '机库', title: 'j type hanger', author: 'ElectricL', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/j-type-hanger-d86713d61b4941378a6ad21569e0cbac' },
   atc: { name: '塔台', title: 'Air Traffic Control Tower', author: 'abass20', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/air-traffic-control-tower-84f215391662453680e646649d42b264' },
-  quonset: { name: '铁皮营房', title: 'Military Style Building (with animations)', author: 'TampaJoey', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/military-style-building-with-animations-1671685e1dd94b6e9216ead632f08f6e' }
+  quonset: { name: '铁皮营房', title: 'Military Style Building (with animations)', author: 'TampaJoey', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/military-style-building-with-animations-1671685e1dd94b6e9216ead632f08f6e' },
+  palms: { name: '棕榈树', title: 'Palm Trees', author: 'YadroGames', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/palm-trees-55690379305145488e20afb05fc687e6' },
+  rocks3: { name: '岩石', title: 'Rocks Set 3', author: 'DJMaesen', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/rocks-set-3-9a160330d1c14268948248f387889b35' },
+  sky: { name: '天空', title: 'Kloofendal 48d Partly Cloudy (Pure Sky)', author: 'Greg Zaal / Poly Haven', license: 'CC0', url: 'https://polyhaven.com/a/kloofendal_48d_partly_cloudy_puresky' },
+  terrain: { name: '地表贴图', title: 'Grass004、Ground037、Rock060、Ground054', author: 'ambientCG', license: 'CC0', url: 'https://ambientcg.com/' },
+  water: { name: '水面法线', title: 'waternormals.jpg（three.js 示例）', author: 'three.js authors', license: 'MIT', url: 'https://github.com/mrdoob/three.js/blob/dev/examples/textures/waternormals.jpg' }
 };
 // 树种：针叶（山地、高处多）、阔叶（桦、落叶松）；h：模型原高（米，载入后按包围盒取）
 const V3P_CON = ['bg0', 'bg2', 'bg3', 'bg5', 'bg6', 'bg7', 'treeA', 'treeB', 'treeC'], V3P_BRD = ['bg1', 'bg4', 'treeD'];
@@ -84,8 +89,8 @@ void main() {
     c = uBody * (uFol > .5 ? .9 + 2.2 * l : .55 + .9 * l) * (.55 + .9 * dif) + uGlow * (ed * .7 + rim * (uFol > .5 ? .2 : .22));
     if (uGlass > .5) c += uGlow * .3;
   } else {   // 写实：天光（上冷下暖）+ 太阳；树叶逆光透亮；棱线略压暗
-    vec3 sky = mix(vec3(.25, .23, .2), vec3(.37, .42, .49), N.z * .5 + .5);
-    c = alb * (sky + vec3(1., .94, .82) * dif * .82) * (1. - ed * .2);
+    vec3 sky = mix(vec3(.3, .29, .27), vec3(.47, .52, .6), N.z * .5 + .5);
+    c = alb * (sky + vec3(1., .95, .86) * dif * .82) * 1.08 * (1. - ed * .2);
     if (uFol > .5) c += alb * vec3(.2, .24, .06) * pow(clamp(dot(-V, uSun), 0., 1.), 4.);
     if (uGlass > .5) c = mix(c, vec3(.5, .62, .7), .45 + .3 * rim);
   }
@@ -442,8 +447,8 @@ function v3Props(C) {
   gl.uniformMatrix4fv(U.uM, false, C.M); gl.uniform3f(U.uEye, C.E[0], C.E[1], C.E[2]);
   gl.uniform1f(U.uT, tm); gl.uniform1f(U.uNear, near); gl.uniform1i(U.uTex, 0);
   gl.uniform2f(U.uFog, ...(typeof v3FogR === 'function' ? v3FogR(C) : [C.D * 1.3, C.D * 2.8]));
-  gl.uniform3f(U.uBg, .004, .02, .011);
-  const sl = Math.hypot(-.45, .55, .7); gl.uniform3f(U.uSun, -.45 / sl, .55 / sl, .7 / sl);
+  gl.uniform3f(U.uBg, ...(typeof v3Bg === 'function' ? v3Bg() : [.004, .02, .011]));
+  const SU = typeof V3_SUN === 'object' ? V3_SUN : [-.45, .55, .7], sl = Math.hypot(...SU); gl.uniform3f(U.uSun, SU[0] / sl, SU[1] / sl, SU[2] / sl);
   gl.uniform1f(U.uMode, mx ? 0 : 1); gl.uniform3f(U.uBody, .015, .085, .045); gl.uniform3f(U.uGlow, .12, .68, .36);
   gl.uniform1f(U.uImp, 0); gl.uniform1f(U.uSway, 0);
   // 楼房、机场设施
