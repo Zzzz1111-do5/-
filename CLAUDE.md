@@ -6,7 +6,10 @@
 
 ## 项目是什么
 - 两栖登陆作战沙盘游戏，浏览器运行：index.html 按顺序加载 js/ 下的普通脚本（共享全局变量，没有构建步骤）。
-- 安卓版用 Capacitor 打包（android/、capacitor.config.json；`npm run build` 生成 www/，`npm run sync` 同步到安卓工程）。
+- 安卓版用 Capacitor 打包（android/、capacitor.config.json；`npm run sync` 生成商店版网页 www/ 并同步到安卓工程）。
+- 电脑版（Steam）用 Electron 打包：desktop/（main.js 外壳、preload.js 给网页的 `window.dsDesktop`）；`cd desktop && npm ci && npm start` 试玩，`npm run dist:win` 打 Windows 包。
+- 商店版（安卓、电脑）与网页版的差别都在 js/platform.js（要在 menu.js 之前加载）：「退出游戏」、全屏、安卓返回键、首次打开的《用户协议》《隐私政策》确认（legal/）。`tools/build_www.mjs --app` 生成商店版网页。
+- 上架：docs/release.md（Steam、TapTap 步骤与每次更新要改的版本号）、docs/store.md（商店文案）、store/（商店素材，`tools/store_assets.js` 与 `tools/make_icons.py` 生成）、.github/workflows/release.yml（推 v 开头的标签打全部安装包）。
 - 网页版：`bash tools/publish_pages.sh` 生成 www/ 并推到 gh-pages 分支（GitHub Pages）。
 - 地图 8400 × 5600（core.js MAP_K = 2.8）。画面只有黑绿一种（look.js）；对局默认 3D——view3d.js 自由镜头、v3table.js 沙盘桌、v3post.js 后期，整体做成指挥部的兵推沙盘桌。
 - 主菜单「闯关」是 levels.js（三章十关，按预算自己布兵），建在沙盒（sandbox.js）上。
