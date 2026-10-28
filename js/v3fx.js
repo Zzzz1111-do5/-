@@ -271,10 +271,11 @@ function v3Fx(C) {
       const ch = Math.cos(h), sh = Math.sin(h), cr = Math.cos(r), sr = Math.sin(r);
       const Wp = (u, v, w) => { const y = v * cr - w * sr, zz = v * sr + w * cr; return v3fP(o.x + (u * ch + y * sh) * k, o.y + (u * sh - y * ch) * k, z + zz * k); };
       const tip = D.wing.reduce((m, q) => q[1] > m[1] ? q : m, D.wing[0]), tu = tip[0] - .6;
-      v3fSpark(out, C, Wp(tu, tip[1], 0), 1.1 * k + .5, [1, .25, .2, .95]);   // 左翼尖红灯
-      v3fSpark(out, C, Wp(tu, -tip[1], 0), 1.1 * k + .5, [.3, 1, .45, .95]);   // 右翼尖绿灯
+      const dE = Math.hypot(o.x - C.E[0], -o.y - C.E[1], z - C.E[2]), lr = Math.min(1.1 * k + .5, .012 * dE + .12);   // 灯的光晕：远处照旧，凑近时按视距缩小（不然近看是两三米的光球）
+      v3fSpark(out, C, Wp(tu, tip[1], 0), lr, [1, .25, .2, .95]);   // 左翼尖红灯
+      v3fSpark(out, C, Wp(tu, -tip[1], 0), lr, [.3, 1, .45, .95]);   // 右翼尖绿灯
       const tail = D.stab ? D.stab.reduce((m, q) => Math.min(m, q[0]), 0) : (D.body ? D.body[D.body.length - 1][0] : -9);
-      if (((S.t * .8 + o.id * .37) % 1) < .07) v3fSpark(out, C, Wp(tail + 1, 0, 2.6), 2.4 * k + 1, [1, 1, 1, 1]);   // 防撞灯
+      if (((S.t * .8 + o.id * .37) % 1) < .07) v3fSpark(out, C, Wp(tail + 1, 0, 2.6), Math.min(2.4 * k + 1, .02 * dE + .2), [1, 1, 1, 1]);   // 防撞灯
       if (FTR[key] && typeof v3dBurner === 'function') {   // 喷口发热、加力尾焰（v3det.js）：按每个喷口，随机身俯仰、滚转；加力开关时火舌平滑地长出、缩回
         const Eg = v3dEng((own ? 'p' : 'e') + o.id, burn ? 1 : .65, burn ? 1 : 0);
         v3dBurner(out, C, o, key, sz, { x: o.x, y: o.y, z, h, pt: typeof v3dPitchOf === 'function' ? v3dPitchOf(o, own ? 0 : 1) : Lc ? Lc.pitch : 0, rl: r }, Eg);

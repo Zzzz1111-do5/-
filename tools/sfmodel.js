@@ -7,6 +7,7 @@
 // 清单每项：uid、name、fwd / up（模型的前、上是哪根轴）、len（实长，米）、draft（吃水，米；飞机不给）、tris（减面后面数）、crease（棱线角度）；
 //   车辆、飞机给 floor: true（轮子着地处为 z = 0）；飞机给 air: {} 另出收起落架的 <键>_a（gearless）；
 //   lines：{ crease 度, min 米, tol 米 } 只画整理好的轮廓线（featureLines），三角形不描边；
+//   paint：没贴图、底色接近白的材质（导出时丢了颜色的模型）改涂这个颜色（'#rrggbb'）；涂装色（底色 × 贴图平均 × 顶点色）烘进每个三角形，写实画面直接用它
 //   parts：活动舵面 { 名: { box: [x0, x1, |y| 下限, |y| 上限, z0, z1], piv: [转轴 x, 转轴 z], nz: 法线竖直分量下限 } }，切成 <键>_<名>L / R；skip：不要的节点名（正则，比如展示用的地面板）；舰船可给 vls：垂发块 [x0, x1, y0, y1, 盖面高, 纵向格数, 横向格数]（转换后的建模坐标，米；对着转换结果量），垂发出弹与开盖动画按它
 'use strict';
 const fs = require('fs'), path = require('path'), https = require('https'), { execFileSync } = require('child_process');
@@ -46,6 +47,21 @@ async function fetchModel(uid) {
 // —— glTF：展开全部三角形（世界坐标），带材质类别与明暗 ——
 const CT = { 5126: Float32Array, 5125: Uint32Array, 5123: Uint16Array, 5121: Uint8Array, 5122: Int16Array, 5120: Int8Array };
 const NC = { SCALAR: 1, VEC2: 2, VEC3: 3, VEC4: 4, MAT4: 16 };
+// 贴图：用 tools/sftex.py 解成原始 RGBA（缓存在模型目录旁的 tex/），按 UV 取色；路径不许出模型目录
+const lin = c => c <= .04045 ? c / 12.92 : ((c + .055) / 1.055) ** 2.4, srgb = c => c <= .0031308 ? c * 12.92 : 1.055 * c ** (1 / 2.4) - .055;
+function loadTex(dir, uri) {
+  const f = path.resolve(dir, decodeURIComponent(uri || ''));
+  if (!f.startsWith(path.resolve(dir) + path.sep) || !fs.existsSync(f)) return null;
+  const td = path.join(dir, '..', 'tex'), out = path.join(td, path.basename(f).replace(/[^\w.-]/g, '_') + '.raw');
+  if (!fs.existsSync(out)) { fs.mkdirSync(td, { recursive: true }); try { execFileSync('python3', ['-I', path.join(__dirname, 'sftex.py'), f, out]); } catch (e) { console.warn('贴图解不开', uri, e.message); return null; } }
+  const B = fs.readFileSync(out), w = B.readUInt32LE(0), h = B.readUInt32LE(4);
+  return { w, h, d: B.subarray(8) };
+}
+function texAt(T, u, v) {
+  u -= Math.floor(u); v -= Math.floor(v);
+  const x = Math.min(T.w - 1, Math.floor(u * T.w)), y = Math.min(T.h - 1, Math.floor(v * T.h)), i = (y * T.w + x) * 4;
+  return [lin(T.d[i] / 255), lin(T.d[i + 1] / 255), lin(T.d[i + 2] / 255), T.d[i + 3] / 255];
+}
 function loadGltf(dir, skip) {
   const G = JSON.parse(fs.readFileSync(path.join(dir, 'scene.gltf'), 'utf8'));
   const bufs = G.buffers.map(b => {   // 下载来的文件不可信：缓冲区只许在模型目录里
@@ -57,7 +73,8 @@ function loadGltf(dir, skip) {
     const a = G.accessors[i], bv = G.bufferViews[a.bufferView], T = CT[a.componentType], n = NC[a.type], sz = T.BYTES_PER_ELEMENT;
     const st = bv.byteStride || sz * n, off = (bv.byteOffset || 0) + (a.byteOffset || 0), B = bufs[bv.buffer], out = new Float64Array(a.count * n);
     const dv = new DataView(B.buffer, B.byteOffset, B.byteLength), rd = { 5126: 'getFloat32', 5125: 'getUint32', 5123: 'getUint16', 5121: 'getUint8', 5122: 'getInt16', 5120: 'getInt8' }[a.componentType];
-    for (let k = 0; k < a.count; k++) for (let c = 0; c < n; c++) out[k * n + c] = dv[rd](off + k * st + c * sz, true);
+    const nk = a.normalized ? { 5121: 255, 5123: 65535, 5120: 127, 5122: 32767 }[a.componentType] || 1 : 1;   // 归一化的整数（UV、顶点色）
+    for (let k = 0; k < a.count; k++) for (let c = 0; c < n; c++) out[k * n + c] = dv[rd](off + k * st + c * sz, true) / nk;
     return out;
   };
   const mat4 = nd => {
@@ -67,7 +84,8 @@ function loadGltf(dir, skip) {
       2 * (x * z + y * w) * sz, 2 * (y * z - x * w) * sz, (1 - 2 * (x * x + y * y)) * sz, 0, tx, ty, tz, 1];
   };
   const mul = (a, b) => { const o = new Array(16).fill(0); for (let c = 0; c < 4; c++) for (let r = 0; r < 4; r++) for (let k = 0; k < 4; k++) o[c * 4 + r] += a[k * 4 + r] * b[c * 4 + k]; return o; };   // 列主序
-  const tris = [];   // { p: [9 个坐标], cls, s }
+  const tris = [];   // { p: [9 个坐标], cls, s, c: 涂装色（线性 RGB）, g: 玻璃, w: 没贴图的白底 }
+  const TX = new Map(), tex = ti => { if (ti == null) return null; if (!TX.has(ti)) { const t = (G.textures || [])[ti], im = t && (G.images || [])[t.source]; TX.set(ti, im && im.uri ? loadTex(dir, im.uri) : null); } return TX.get(ti); };
   const matCls = mi => {
     const m = (G.materials || [])[mi] || {}, nm = (m.name || '').toLowerCase(), pb = m.pbrMetallicRoughness || {}, f = pb.baseColorFactor || [1, 1, 1, 1], em = Math.max(...(m.emissiveFactor || [0, 0, 0]));
     const lum = .299 * f[0] + .587 * f[1] + .114 * f[2], tex = !!pb.baseColorTexture;
@@ -82,7 +100,23 @@ function loadGltf(dir, skip) {
       if ((pr.mode ?? 4) !== 4) continue;
       const P = acc(pr.attributes.POSITION), I = pr.indices != null ? acc(pr.indices) : Array.from({ length: P.length / 3 }, (_, k) => k), C = matCls(pr.material);
       const X = k => [W[0] * P[k * 3] + W[4] * P[k * 3 + 1] + W[8] * P[k * 3 + 2] + W[12], W[1] * P[k * 3] + W[5] * P[k * 3 + 1] + W[9] * P[k * 3 + 2] + W[13], W[2] * P[k * 3] + W[6] * P[k * 3 + 1] + W[10] * P[k * 3 + 2] + W[14]];
-      for (let t = 0; t + 2 < I.length; t += 3) tris.push({ p: [...X(I[t]), ...X(I[t + 1]), ...X(I[t + 2])], cls: C.cls, s: C.s });
+      // 涂装色：材质底色（线性）× 底色贴图在三角形里七处的平均（三个角、三条边中点、重心）× 顶点色
+      const m = (G.materials || [])[pr.material] || {}, pb = m.pbrMetallicRoughness || {}, bf = pb.baseColorFactor || [1, 1, 1, 1], bt = pb.baseColorTexture, T = bt ? tex(bt.index) : null;
+      const UV = T && pr.attributes['TEXCOORD_' + (bt.texCoord || 0)] != null ? acc(pr.attributes['TEXCOORD_' + (bt.texCoord || 0)]) : null, VC = pr.attributes.COLOR_0 != null ? acc(pr.attributes.COLOR_0) : null;
+      const vcn = VC ? G.accessors[pr.attributes.COLOR_0].type === 'VEC4' ? 4 : 3 : 0, xf = bt && bt.extensions && bt.extensions.KHR_texture_transform;
+      const glass = C.cls === 'glow' || (m.alphaMode === 'BLEND' && bf[3] < .9) || /glass|canopy|window|玻璃/i.test(m.name || ''), white = !T && !VC && Math.min(bf[0], bf[1], bf[2]) > .5;
+      const uvOf = j => { let u = UV[j * 2], v = UV[j * 2 + 1]; if (xf) { const o = xf.offset || [0, 0], sc = xf.scale || [1, 1], r = xf.rotation || 0, c = Math.cos(r), sn = Math.sin(r); u *= sc[0]; v *= sc[1]; [u, v] = [c * u + sn * v + o[0], -sn * u + c * v + o[1]]; } return [u, v]; };
+      for (let t = 0; t + 2 < I.length; t += 3) {
+        const ix = [I[t], I[t + 1], I[t + 2]];
+        let c = [bf[0], bf[1], bf[2]];
+        if (UV) {
+          const q = ix.map(uvOf), pts = [...q, [(q[0][0] + q[1][0]) / 2, (q[0][1] + q[1][1]) / 2], [(q[1][0] + q[2][0]) / 2, (q[1][1] + q[2][1]) / 2], [(q[2][0] + q[0][0]) / 2, (q[2][1] + q[0][1]) / 2], [(q[0][0] + q[1][0] + q[2][0]) / 3, (q[0][1] + q[1][1] + q[2][1]) / 3]];
+          const a = [0, 0, 0]; for (const [u, v] of pts) { const x = texAt(T, u, v); for (let k = 0; k < 3; k++) a[k] += x[k] / pts.length; }
+          c = [c[0] * a[0], c[1] * a[1], c[2] * a[2]];
+        }
+        if (VC) { const a = [0, 0, 0]; for (const j of ix) for (let k = 0; k < 3; k++) a[k] += VC[j * vcn + k] / 3; c = [c[0] * a[0], c[1] * a[1], c[2] * a[2]]; }
+        tris.push({ p: [...X(ix[0]), ...X(ix[1]), ...X(ix[2])], cls: C.cls, s: C.s, c, g: glass, w: white });
+      }
     }
     for (const c of nd.children || []) walk(c, W);
   };
@@ -137,7 +171,7 @@ async function convert(key, E) {
   // 一个变体：焊接、减面、算棱线、编码，返回一行 V3X.add(…)
   async function emit(tris, key, extra) {
   // 按类别焊接顶点（1 厘米网格）、减面
-  const out = { v: [], t: [], e: [], s: [], l: [] };
+  const out = { v: [], t: [], e: [], s: [], l: [], c: [] };
   for (const cls of ['solid', 'glow', 'mask']) {
     const T = tris.filter(t => t.cls === cls);
     if (!T.length) continue;
@@ -183,6 +217,8 @@ async function convert(key, E) {
       }
       for (let t = 0; t < nt; t++) if (flip[t]) { const q = J[t * 3 + 1]; J[t * 3 + 1] = J[t * 3 + 2]; J[t * 3 + 2] = q; }
     }
+    // 涂装色：每个减面后的三角形取最近的原三角形（重心距离，朝向差得多的加罚，免得薄机翼取到另一面）
+    const CL = triColors(T, J, out.v, E, tf);
     // 发光棱线：边界边、非流形边、两面夹角大于 E.crease 度的边
     const P = i => [out.v[i * 3], out.v[i * 3 + 1], out.v[i * 3 + 2]], nrm = (a, b, c) => { const n = cross([P(b)[0] - P(a)[0], P(b)[1] - P(a)[1], P(b)[2] - P(a)[2]], [P(c)[0] - P(a)[0], P(c)[1] - P(a)[1], P(c)[2] - P(a)[2]]), l = Math.hypot(...n) || 1; return n.map(v => v / l); };
     const N = [], adj = new Map();
@@ -198,25 +234,48 @@ async function convert(key, E) {
         const len = Math.hypot(...[0, 1, 2].map(c => out.v[a * 3 + c] - out.v[b * 3 + c]));
         if (len >= eMin) { f |= 1 << k2; ST.bound++; } else ST.short++;
       }
-      out.t.push(J[i], J[i + 1], J[i + 2]); out.e.push(f); out.s.push(Ss[i / 3]);
+      const cl = CL[i / 3];
+      out.t.push(J[i], J[i + 1], J[i + 2]); out.e.push(f | (cl.g ? 8 : 0)); out.s.push(Ss[i / 3]); out.c.push(...cl.c);
     }
   }
   // 编码：位置按包围盒量化成 16 位、索引 16 / 32 位、每个三角形一字节棱线标志 + 一字节明暗、线段索引
   const nv = out.v.length / 3, nt = out.t.length / 3, nl = out.l.length / 2, idx = nv > 65535 ? 4 : 2;
   const bb = [0, 1, 2].map(a => amin(out.v.filter((_, i) => i % 3 === a))).concat([0, 1, 2].map(a => amax(out.v.filter((_, i) => i % 3 === a))));
-  const buf = Buffer.alloc(nv * 6 + (nt * 3 + nl * 2) * idx + nt * 2); let o = 0;
+  const buf = Buffer.alloc(nv * 6 + (nt * 3 + nl * 2) * idx + nt * 5); let o = 0;
   for (let i = 0; i < nv * 3; i++) { const a = i % 3; buf.writeUInt16LE(Math.round((out.v[i] - bb[a]) / ((bb[a + 3] - bb[a]) || 1) * 65535), o); o += 2; }
   const wi = v => { if (idx === 4) buf.writeUInt32LE(v, o); else buf.writeUInt16LE(v, o); o += idx; };
   for (const v of out.t) wi(v);
   for (const f of out.e) buf.writeUInt8(f, o++);
   for (const s of out.s) buf.writeUInt8(Math.round((s + 1) * 127.5), o++);
   for (const v of out.l) wi(v);
+  for (const c of out.c) buf.writeUInt8(c, o++);   // 涂装色（写实画面用；黑绿画面按它的深浅调实体明暗）
   let xm = -Infinity, zc = 0; for (let i = 0; i < nv; i++) if (out.v[i * 3] > xm) { xm = out.v[i * 3]; zc = out.v[i * 3 + 2]; }   // 机头尖的高度（飞机：画面上对齐机身中线）
-  const meta = { name: E.name, len: E.len, nv, nt, nl, idx, bb: bb.map(v => +v.toFixed(3)), zc: +zc.toFixed(3), ...extra, ...(E.vls ? { vls: E.vls } : {}), credit: { title: info.name, author: info.author, url: info.url, license: info.license } };
+  const meta = { name: E.name, len: E.len, nv, nt, nl, idx, col: 1, bb: bb.map(v => +v.toFixed(3)), zc: +zc.toFixed(3), ...extra, ...(E.vls ? { vls: E.vls } : {}), credit: { title: info.name, author: info.author, url: info.url, license: info.license } };
   const st = STATS[key] || {};
   console.log(`${key}：${info.name}（${info.author}，${info.license}）原 ${tris.length} 面 → ${nt} 面、${nl} 条轮廓线，${(buf.length / 1024).toFixed(0)} KB；棱 ${st.crease || 0}、边界 ${st.bound || 0}（略去短的 ${st.short || 0}）`);
   return `V3X.add('${key}', ${JSON.stringify(meta)}, '${buf.toString('base64')}');\n`;
   }
+}
+// 减面后的三角形（J，顶点在 V）取涂装色：原三角形 T 的重心放进 0.3 米的格子，在附近格子里找最近的；
+//   返回每个三角形 { c: [r, g, b]（sRGB 0–255）, g: 玻璃 }；没贴图的白底按清单的 paint 改涂
+function triColors(T, J, V, E, tf) {
+  const cs = .3, grid = new Map(), key = (a, b, c) => a + ',' + b + ',' + c, paint = E.paint ? [1, 3, 5].map(i => lin(parseInt(E.paint.slice(i, i + 2), 16) / 255)) : null;
+  const O = T.map(t => { const P = [tf(t.p.slice(0, 3)), tf(t.p.slice(3, 6)), tf(t.p.slice(6, 9))], c = [0, 1, 2].map(a => (P[0][a] + P[1][a] + P[2][a]) / 3), n = cross([P[1][0] - P[0][0], P[1][1] - P[0][1], P[1][2] - P[0][2]], [P[2][0] - P[0][0], P[2][1] - P[0][1], P[2][2] - P[0][2]]), l = Math.hypot(...n) || 1; return { c, n: n.map(v => v / l), t }; });
+  O.forEach((o, i) => { const k = key(...o.c.map(v => Math.floor(v / cs))); (grid.get(k) || grid.set(k, []).get(k)).push(i); });
+  const res = [];
+  for (let i = 0; i < J.length; i += 3) {
+    const P = [0, 1, 2].map(k => [V[J[i + k] * 3], V[J[i + k] * 3 + 1], V[J[i + k] * 3 + 2]]), c = [0, 1, 2].map(a => (P[0][a] + P[1][a] + P[2][a]) / 3);
+    const n0 = cross([P[1][0] - P[0][0], P[1][1] - P[0][1], P[1][2] - P[0][2]], [P[2][0] - P[0][0], P[2][1] - P[0][1], P[2][2] - P[0][2]]), nl = Math.hypot(...n0) || 1, n = n0.map(v => v / nl);
+    const g = c.map(v => Math.floor(v / cs));
+    let best = null, bd = Infinity;
+    for (let r = 1; r <= 6 && !best; r += r < 2 ? 1 : 2) for (let x = -r; x <= r; x++) for (let y = -r; y <= r; y++) for (let z = -r; z <= r; z++) {
+      const L = grid.get(key(g[0] + x, g[1] + y, g[2] + z)); if (!L) continue;
+      for (const j of L) { const o = O[j], d = (o.c[0] - c[0]) ** 2 + (o.c[1] - c[1]) ** 2 + (o.c[2] - c[2]) ** 2, w = d * (1.6 - Math.abs(dot(o.n, n))); if (w < bd) { bd = w; best = o.t; } }
+    }
+    const t = best || T[0], lc = paint && t.w && !t.g ? paint : t.c || [.6, .6, .6];
+    res.push({ c: lc.map(v => Math.round(Math.min(1, Math.max(0, srgb(v))) * 255)), g: !!t.g });
+  }
+  return res;
 }
 // 轮廓线：在原始精度的网格上找棱（两面夹角超过 O.crease 度）与面片边界，串成连续折线，短于 O.min 米的不要（碎面片、小部件），
 //   再按 O.tol 米抽稀（Douglas-Peucker）——只留机翼、尾翼前后缘、进气道、座舱盖、机身棱线这类主要轮廓，不是满身碎线
@@ -273,7 +332,9 @@ const one = v => String(v ?? '').replace(/[\r\n\u2028\u2029]+/g, ' ');
 const creditLine = I => `This work is based on "${one(I.name)}" (${one(I.url)}) by ${one(I.author)} (${one(I.profile)}) licensed under ${one(I.license)} (${one(I.licUrl)})`;
 // 署名：docs/credits.md 里「Sketchfab 模型」一节整段重写
 function writeCredits() {
+  writeCredJs();
   const f = path.join(ROOT, 'docs', 'credits.md');
+  if (!fs.existsSync(f)) return;
   let s = fs.existsSync(f) ? fs.readFileSync(f, 'utf8') : '# 素材来源与署名\n\n游戏里用到的第三方素材及其授权。\n';
   const all = Object.entries(LIST).map(([key, E]) => { const cf = path.join(CACHE, E.uid, 'info.json'); return fs.existsSync(cf) && fs.existsSync(path.join(OUT, key + '.js')) ? { key, E, info: JSON.parse(fs.readFileSync(cf, 'utf8')) } : null; }).filter(Boolean);
   const sec = '## Sketchfab 模型（3D 模型，tools/sfmodel.js 转换）\n\n都有改动（CC-BY 要求注明）：减面、统一朝向与尺寸、按游戏的黑绿画风重新绘制。游戏里在「设置 → 素材署名」（legal/credits.html）显示。\n\n' + all.map(({ key, E, info }) => `- ${E.name}（js/mdl/${key}.js）：${creditLine(info)}`).join('\n') + '\n';
@@ -289,6 +350,12 @@ function writeCredits() {
   fs.writeFileSync(h, html);
 }
 
+// 署名清单写进 js/mdl/credits.js（游戏「设置 → 素材致谢」列出：v3import.js 的 v3imCredits 一并读 V3X_CRED）
+function writeCredJs() {
+  const all = Object.entries(LIST).map(([key, E]) => { const cf = path.join(CACHE, E.uid, 'info.json'); return fs.existsSync(cf) && fs.existsSync(path.join(OUT, key + '.js')) ? { key, E, info: JSON.parse(fs.readFileSync(cf, 'utf8')) } : null; }).filter(Boolean);
+  const L = all.map(({ E, info: I }) => ({ name: one(E.name), title: one(I.name), author: one(I.author), license: one(I.license), url: /^https?:\/\/[^\s"'<>]+$/.test(String(I.url || '')) ? I.url : '' }));
+  fs.writeFileSync(path.join(OUT, 'credits.js'), "'use strict';\n// 导入模型的署名（tools/sfmodel.js 生成，不要手改）：游戏「设置 → 素材致谢」里列出\nconst V3X_CRED = " + JSON.stringify(L, null, 1) + ';\n');
+}
 (async () => {
   const keys = process.argv.slice(2).length ? process.argv.slice(2) : Object.keys(LIST);
   for (const k of keys) {

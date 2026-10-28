@@ -11,8 +11,11 @@ function v3xLoad(key) {
   s.onerror = () => { V3X.fail.add(key); console.warn('3D 模型没加载上：' + key); };
   document.head.appendChild(s);
 }
+// 设置里「外部精细模型」关掉时不用导入的模型（与 v3import.js 同一个开关）
+const v3xOn = () => !(typeof SETTINGS === 'object' && SETTINGS && SETTINGS.extMdl === false);
 // 模型的网格（mbNew 格式）；没有就去加载、先返回 null
 function v3xMesh(key) {
+  if (!v3xOn()) return null;
   if (V3X.mesh[key]) return V3X.mesh[key];
   const D = V3X.def[key];
   if (!D) { if (!V3X.want.has(key) && !V3X.fail.has(key)) { V3X.want.add(key); v3xLoad(key); } return null; }
@@ -32,8 +35,15 @@ function v3xBuild(D) {
   const E = bin.subarray(o, o + m.nt); o += m.nt;
   const SH = bin.subarray(o, o + m.nt); o += m.nt;
   const M = mbNew(), p = i => [P[i * 3], P[i * 3 + 1], P[i * 3 + 2]];
-  for (let t = 0; t < m.nt; t++) { const e = E[t]; mbTri(M, p(I[t * 3]), p(I[t * 3 + 1]), p(I[t * 3 + 2]), SH[t] / 127.5 - 1, [e & 1, e >> 1 & 1, e >> 2 & 1]); }
-  for (let l = 0; l < m.nl; l++) { const a = rd(), b = rd(); mbLine(M, p(a), p(b), .55); }
+  const LN = []; for (let l = 0; l < m.nl; l++) LN.push(rd(), rd());
+  // 涂装色（meta.col）：每个三角形 3 字节 sRGB，编进明暗 s——|s| ≥ 16 时 s − 16 是 7 位 RGB、负数是玻璃（与 v3import.js 同一约定），
+  //   写实画面直接用涂装色，黑绿画面按它的深浅调暗实体；没有涂装色的老模型照旧用烘好的明暗
+  const CL = m.col ? bin.subarray(o, o + m.nt * 3) : null;
+  for (let t = 0; t < m.nt; t++) {
+    const e = E[t], s = CL ? (e & 8 ? -1 : 1) * (16 + (CL[t * 3] >> 1) * 16384 + (CL[t * 3 + 1] >> 1) * 128 + (CL[t * 3 + 2] >> 1)) : SH[t] / 127.5 - 1;
+    mbTri(M, p(I[t * 3]), p(I[t * 3 + 1]), p(I[t * 3 + 2]), s, [e & 1, e >> 1 & 1, e >> 2 & 1]);
+  }
+  for (let l = 0; l < LN.length; l += 2) mbLine(M, p(LN[l]), p(LN[l + 1]), .55);
   M.len = m.len; M.vls = m.vls || null;   // 垂发块（米，v3fx.js v3VlsOrigin 用）
   M.zc = m.zc || 0; M.parts = m.parts || null;   // 飞机：机身中线离着地点的高度、活动舵面（转轴，米）
   return M;

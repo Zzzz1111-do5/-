@@ -55,25 +55,28 @@ function v3mRev(M, P, n, s) {
     }
   }
   const A = ring(P[0][0], P[0][1]);
-  for (let i = 0; i < n; i++) mbTri(M, [P[0][0], 0, 0], A[(i + 1) % n], A[i], s * .8, [1, 0, 0], [-1, 0, 0]);
+  for (let i = 0; i < n; i++) mbTri(M, [P[0][0], 0, 0], A[(i + 1) % n], A[i], Math.abs(s) >= 16 ? s : s * .8, [1, 0, 0], [-1, 0, 0]);
 }
+// 涂装（写实画面直接用；黑绿画面按深浅调暗实体）：多数弹浅灰，舰空导弹白，弹道导弹、便携防空、航弹橄榄绿，隐身巡航弹深灰
+const V3MS_PAINT = { hhq9: '#e4e5e1', hhq16: '#e4e5e1', hhq10: '#e4e5e1', sm6: '#e6e6e2', aim9: '#c9ccce', manpad: '#59603f', tbm: '#57613f', df15: '#57613f', lrasm: '#5c6165', sdb: '#6c7176', nsm: '#7d8388', bomb: '#5e6347', pod: '#80868b' };
 function v3mMslT(key) {
   const T = V3MS[key] || V3MS.pl15, M = mbNew(), R = T.d / 2, x0 = -T.L / 2, xn = T.L / 2 - T.L * T.nose;
+  const pc = typeof mbRGB === 'function' ? mbRGB(V3MS_PAINT[key] || '#c4c9cd') : 0, sh = v => pc || v;   // 没有 mbRGB（老版本）就照旧用明暗
   if (T.box) {   // 扁平棱柱弹体（倒角）+ 楔形弹头
-    mbBox(M, x0, xn, -R, R, -R * .7, R * .7, .92, { taper: R * .18 });
-    mbPrism(M, [[xn, -R * .82], [T.L / 2, -R * .15], [T.L / 2, R * .15], [xn, R * .82]], -R * .5, R * .5, .92, { taper: R * .1 });
+    mbBox(M, x0, xn, -R, R, -R * .7, R * .7, sh(.92), { taper: R * .18 });
+    mbPrism(M, [[xn, -R * .82], [T.L / 2, -R * .15], [T.L / 2, R * .15], [xn, R * .82]], -R * .5, R * .5, sh(.92), { taper: R * .1 });
   } else {
     // 头部：尖拱（切线尖拱的近似）；红外弹是半球头罩；鹰击-21 是双锥（转折处描边）
     const r = t => T.dome ? Math.sqrt(Math.max(0, 1 - t * t)) : T.cone ? (t < .5 ? 1 - t * .9 : .55 * (1 - (t - .5) * 2)) : 1 - t * t, P = [[x0, R, 1], [xn, R, T.cone ? 1 : 0]], n = T.cone ? 2 : 6;
     for (let i = 1; i <= n; i++) P.push([xn + (T.L / 2 - xn) * i / n, R * r(i / n), T.cone && i === 1 ? 1 : 0]);
-    v3mRev(M, P, 12, .95);
+    v3mRev(M, P, 12, sh(.95));
   }
   const ang = T.x ? [.785, 2.356, 3.927, 5.498] : [0, 1.571, 3.142, 4.712];
-  if (T.tail) for (const a of ang) v3mFin(M, x0, R * (T.box ? .75 : 1), a, T.tail, .85);
-  if (T.strake) for (const a of ang) v3mFin(M, x0, R, a, T.strake, .8);
-  if (T.wing) for (const a of T.w2 ? [0, 3.142] : ang) v3mFin(M, x0, R * (T.box ? .75 : 1), a, T.wing, .85);
-  if (T.inl === 'belly') mbBox(M, x0 + T.L * .1, x0 + T.L * .4, -R * .35, R * .35, -R * 1.35, -R * .7, .6, { taper: R * .1 });   // 腹部进气道
-  if (T.inl === 'quad') for (const a of [.785, 2.356, 3.927, 5.498]) { const c = Math.cos(a), s = Math.sin(a); mbTube(M, [x0 + T.L * .12, c * R * 1.15, s * R * 1.15], [x0 + T.L * .62, c * R * 1.15, s * R * 1.15], R * .28, R * .22, 6, .7); }
+  if (T.tail) for (const a of ang) v3mFin(M, x0, R * (T.box ? .75 : 1), a, T.tail, sh(.85));
+  if (T.strake) for (const a of ang) v3mFin(M, x0, R, a, T.strake, sh(.8));
+  if (T.wing) for (const a of T.w2 ? [0, 3.142] : ang) v3mFin(M, x0, R * (T.box ? .75 : 1), a, T.wing, sh(.85));
+  if (T.inl === 'belly') mbBox(M, x0 + T.L * .1, x0 + T.L * .4, -R * .35, R * .35, -R * 1.35, -R * .7, sh(.6), { taper: R * .1 });   // 腹部进气道
+  if (T.inl === 'quad') for (const a of [.785, 2.356, 3.927, 5.498]) { const c = Math.cos(a), s = Math.sin(a); mbTube(M, [x0 + T.L * .12, c * R * 1.15, s * R * 1.15], [x0 + T.L * .62, c * R * 1.15, s * R * 1.15], R * .28, R * .22, 6, sh(.7)); }
   M.len = T.L;
   return M;
 }

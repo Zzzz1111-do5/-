@@ -183,7 +183,7 @@ const v3dPitchOf = (o, sd) => { const P = V3D_PT.get((sd ? 'e' : 'p') + o.id); r
 const V3D_NOZX = { j35: [[-8.4, .79, 2.17, .3, .62]], j20: [[-9.81, .775, 2.05, .42, .9]], j36: [[-10, 0, 2.6, 0, .5, .45, .33], [-10, 1.55, 2.6, 0, .5, .45, .33]], j50: [[-8.85, 0, 2.22, 0, 1.6, .4, .15]] };
 // 一架飞机的喷口（世界单位，相对锚点：空中是机身中线，ground 时是机轮着地点）：{ x, y, z, r 半径（扁平的为 0）, w、hh 半宽、半高, d 喷管深 }
 function v3dNoz(key, sz, ground) {
-  const mk = V3_PX[key], X = typeof V3X === 'object' && V3X.mesh, M = mk && X && X[mk] && (ground || X[mk + '_a']) ? X[mk] : null, N = [];
+  const mk = V3_PX[key], X = typeof V3X === 'object' && (typeof v3xOn !== 'function' || v3xOn()) && V3X.mesh, M = mk && X && X[mk] && (ground || X[mk + '_a']) ? X[mk] : null, N = [];
   if (M && V3D_NOZX[mk]) {   // 导入的模型已经加载（画面上画的就是它）
     const s = sz / M.len, z0 = ground ? 0 : M.zc;
     for (const n of V3D_NOZX[mk]) for (const sg of n[1] ? [1, -1] : [1]) N.push({ x: n[0] * s, y: n[1] * sg * s, z: (n[2] - z0) * s, r: n[3] * s, d: n[4] * s, w: (n[5] || n[3]) * s, hh: (n[6] || n[3]) * s });
