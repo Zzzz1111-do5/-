@@ -446,6 +446,7 @@ function vehGunTarget(v) {
     if (e.kind === 'bunker' && S.teams.some(q => q.side === 'p' && q.sup > 40 && dist(q.x, q.y, e.x, e.y) < 180)) val += 2;   // 正在压制我方步兵的碉堡
     consider(e, 'st', e.x, e.y, val * (g.flame ? 1.6 : at ? .7 : 1));
   }
+  if (!g.ind && typeof afgList === 'function') for (const a of afgList(v.side)) consider(a, 'ac', a.x, a.y, a.k === 'has' ? 1.2 : 2.2);   // 机场上停放的敌机（afgnd.js）
   if (!(at && v.type === 'td') || g.ind) for (const q of S.teams) if (q.side === foe && q.men.length && !q.ride) {   // 重型坦克也用榴弹打步兵，只有坦克歼击车专打装甲
     if (g.ind && !(q.side === 'e' ? inVision(q.x, q.y) : spotted(q.x, q.y))) continue;
     if (v.cons && !g.ind && dist(v.x, v.y, q.x, q.y) > 80) continue;   // 节约弹药：主炮只打车辆、工事与贴近的步兵，远处的步兵交给机枪
@@ -487,6 +488,7 @@ function vehShoot(v, tg) {
       for (let k = q.men.length; k > 0; k--) if (Math.random() < .3 * (q.inTrench ? 1.4 : 1) * (M.pow || 1)) killMan(q);
       for (const o of S.teams) if (o !== q && o.side === q.side && o.men.length && dist(o.x, o.y, tg.x, tg.y) < 16) { suppress(o, 30, v.x, v.y); if (Math.random() < .2) killMan(o); }
     } else if (tg.k === 'veh') vehDamage(tg.t, 4, 1, v.x, v.y, 'flame');
+    else if (tg.k === 'ac' && typeof afgFlame === 'function') afgFlame(tg.t);
     return;
   }
   if (g.ind) {   // 间瞄：落点散布随距离增大
@@ -1176,6 +1178,7 @@ function vehOrderAll(vs, t) {
 // 俯视剪影：履带（带滚动的履带纹）、车体、炮塔随 aim 转动、炮管后坐、炮口焰、行进扬尘、泅渡尾浪、受损冒烟起火、残骸
 // 我方绿色、敌方红色（只在看得见时画，看不见时在最后标定位置画虚线轮廓）；全图时剪影至少约 13px，放大后显示细节
 const VEHV = { S: null, trail: {} };
+const VEH_DARK = 'rgba(2,10,6,.9)', VEH_DARKE = 'rgba(28,4,10,.92)';
 const vehK = v => Math.max(1, px(13) / vehSp(v).len);
 function vehVSync() { if (VEHV.S !== S) { VEHV.S = S; VEHV.trail = {}; } }
 
@@ -1323,9 +1326,71 @@ function vehHullPath(ctx, v) {
   ctx.closePath();
 }
 
+function vehBody(ctx, v, col, a, det, lw, time, vis, enemy) {
+  const sp = vehSp(v), L = sp.len, B = sp.wid, hl = L / 2, hb = B / 2, t = v.type, dark = enemy ? VEH_DARKE : VEH_DARK;
+  const fillA = vis ? (det ? 1 : 0) : -1;   // -1：虚线轮廓（失去接触）
+  ctx.lineWidth = lw(1.1); ctx.strokeStyle = rgba(col, a);
+  // 行走机构
+  if (sp.wheel) {
+    for (const wx of [-hl * .58, hl * .5]) for (const s of [-1, 1]) {
+      ctx.beginPath(); ctx.rect(wx - L * .1, s * hb * .82 - B * .14, L * .2, B * .28);
+      if (fillA >= 0) { ctx.fillStyle = det ? 'rgba(4,8,6,.95)' : rgba(col, .5 * a); ctx.fill(); }
+      ctx.stroke();
+    }
+  } else {
+    const tw = B * (t === 'amtank' ? .2 : .26);
+    for (const s of [-1, 1]) {
+      const y0 = s < 0 ? -hb : hb - tw;
+      ctx.beginPath(); ctx.rect(-hl, y0, L, tw);
+      if (fillA >= 0) { ctx.fillStyle = det ? 'rgba(4,8,6,.95)' : rgba(col, .5 * a); ctx.fill(); }
+      ctx.stroke();
+      if (det && fillA >= 0) {   // 履带纹：随里程滚动
+        ctx.beginPath();
+        const g = 1.5, off = ((v.odo || 0) % g + g) % g;
+        for (let x = -hl + off; x < hl; x += g) { ctx.moveTo(x, y0 + .25); ctx.lineTo(x, y0 + tw - .25); }
+        ctx.strokeStyle = rgba(col, .35 * a); ctx.lineWidth = lw(.5); ctx.stroke();
+        ctx.strokeStyle = rgba(col, a); ctx.lineWidth = lw(1.1);
+      }
+    }
+  }
+  // 车体
+  vehHullPath(ctx, v);
+  ctx.fillStyle = fillA > 0 ? dark : fillA === 0 ? rgba(col, .3 * a) : rgba(col, .06); ctx.fill();
+  ctx.lineWidth = lw(det ? 1.1 : 1.4); ctx.stroke();
+  if (det && vis) vehDeck(ctx, v, col, a, lw, time);
+}
+
+// 近看细节：发动机格栅、舱盖、工具箱等
+function vehDeck(ctx, v, col, a, lw, time) {
+  const sp = vehSp(v), L = sp.len, B = sp.wid, hl = L / 2, hb = B / 2, t = v.type;
+  ctx.strokeStyle = rgba(col, .45 * a); ctx.lineWidth = lw(.55);
+  ctx.beginPath();
+  for (let x = -hl * .86; x < -hl * .52; x += .9) { ctx.moveTo(x, -hb * .42); ctx.lineTo(x, hb * .42); }   // 发动机格栅
+  ctx.stroke();
+  if (t === 'apc' || t === 'spg') {   // 敞开的载员舱 / 战斗室
+    const x0 = t === 'apc' ? -hl * .45 : -hl * .5, w = t === 'apc' ? L * .58 : L * .48;
+    ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillRect(x0, -hb * .5, w, B * .5 * 2);
+    ctx.strokeStyle = rgba(col, .6 * a); ctx.lineWidth = lw(.7); ctx.strokeRect(x0, -hb * .5, w, B * .5 * 2);
+    if (t === 'apc') {   // 搭载的步兵
+      const n = (v.ride || []).reduce((s, id) => { const q = S.teams.find(q => q.id === id); return s + (q ? q.men.length : 0); }, 0);
+      ctx.fillStyle = rgba(col, .9 * a);
+      for (let i = 0; i < n; i++) { ctx.beginPath(); ctx.arc(x0 + 1.3 + Math.floor(i / 2) * 2.6, (i % 2 ? 1 : -1) * hb * .24, .7, 0, 7); ctx.fill(); }
+    }
+  }
+  if (t === 'flame_tank') {   // 车尾燃料罐
+    ctx.strokeStyle = rgba(col, .7 * a); ctx.lineWidth = lw(.7);
+    for (const s of [-1, 1]) { ctx.beginPath(); ctx.arc(-hl * .78, s * hb * .3, B * .14, 0, 7); ctx.stroke(); }
+  }
+  if (t === 'mine_tank') {   // 连枷扫雷器：两根悬臂 + 旋转滚筒 + 铁链
+    const dx = hl + 4.6, spin = v.moving ? time * 14 : 0;
+    ctx.strokeStyle = rgba(col, .9 * a); ctx.lineWidth = lw(.9);
+    ctx.beginPath(); ctx.moveTo(hl * .6, -hb * .82); ctx.lineTo(dx, -hb * .82); ctx.moveTo(hl * .6, hb * .82); ctx.lineTo(dx, hb * .82); ctx.stroke();
+  }
+}
+
 // 炮塔 / 战斗室 / 炮管（随 aim 转动；开火后短暂后坐 + 炮口焰）
 function vehTurret(ctx, v, col, a, det, lw, vis, enemy, time) {
-  const real = vis;   // 看得见：炮塔用涂装、炮管与边线用深色金属；失去接触的只画轮廓
+  const real = vis && typeof realLook === 'function' && realLook();   // 写实：炮塔用涂装、炮管与边线用深色金属
   if (real) col = RL_EDGE;
   const sp = vehSp(v), L = sp.len, B = sp.wid, hl = L / 2, hb = B / 2, t = v.type, dark = real ? rlPal(v.side).tur : enemy ? 'rgba(44,6,16,.96)' : 'rgba(4,18,10,.96)';
   const since = S.t - v.fireT, rec = vis && since < .25 ? (1 - since / .25) * 1.6 : 0, ra = vehAng(v.aim - v.heading);
@@ -1422,10 +1487,11 @@ function vehDraw(ctx, v, x, y, h, aim, vis, time, sel) {
   }
   ctx.save(); ctx.translate(x, y); ctx.rotate(h); ctx.scale(k, k);
   if (!vis) ctx.setLineDash([px(2.5) / k, px(2) / k]);
-  const rm = vis && typeof rlModelOf === 'function' ? rlModelOf(v) : null;   // 按实车外形建模（models.js）
+  const rm = vis && typeof realLook === 'function' && realLook() && typeof rlModelOf === 'function' ? rlModelOf(v) : null;   // 写实：按实车外形建模（models.js）
   if (rm) rlVehModel(ctx, v, rm, h, aim, det, lw, a, col, time);
   else {
-    vehBodyReal(ctx, v, col, a, det, lw, time, vis, enemy);
+    if (typeof realLook === 'function' && realLook()) vehBodyReal(ctx, v, col, a, det, lw, time, vis, enemy);
+    else vehBody(ctx, v, col, a, det, lw, time, vis, enemy);
     vehTurret(ctx, v, col, a, det, lw, vis, enemy, time);
   }
   if (vis && v.swim) {   // 水线：车体半没入水中
@@ -1476,11 +1542,21 @@ function vehSmoke(ctx, x, y, k, time, seed, a0, fire) {
   }
 }
 
-// 残骸：烧黑的车体、歪斜的炮塔（real.js vehWreckReal）；击毁后 45 秒内冒黑烟
+// 残骸：压暗的虚线车体、炮塔歪斜、交叉线；击毁后 45 秒内冒黑烟
 function vehWreck(ctx, v, time) {
   if (v.side === 'e' && v.kx == null && !inVision(v.x, v.y)) return;
-  const sp = vehSp(v), k = vehK(v);
-  vehWreckReal(ctx, v, sp, k);
+  const sp = vehSp(v), k = vehK(v), col = v.side === 'e' ? COL.enemy : COL.g, lw = n => px(n) / k;
+  if (typeof realLook === 'function' && realLook()) {
+    vehWreckReal(ctx, v, sp, k);
+    const age = S.t - (v.deadT ?? -99);
+    if (age < 45) vehSmoke(ctx, v.x, v.y, k, time, v.id, 1 - age / 45, age < 12);
+    return;
+  }
+  ctx.save(); ctx.translate(v.x, v.y); ctx.rotate(v.kh ?? v.heading); ctx.scale(k, k);
+  vehHullPath(ctx, v); ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fill();
+  ctx.setLineDash([lw(2), lw(2.2)]); ctx.strokeStyle = rgba(col, .32); ctx.lineWidth = lw(1); ctx.stroke(); ctx.setLineDash([]);
+  if (sp.tur) { ctx.beginPath(); ctx.arc(sp.len * .1, sp.wid * .18, sp.tur * .9, 0, 7); ctx.strokeStyle = rgba(col, .25); ctx.stroke(); ctx.beginPath(); ctx.moveTo(sp.len * .1, sp.wid * .18); ctx.lineTo(sp.len * .1 + Math.cos(.7) * sp.bar, sp.wid * .18 + Math.sin(.7) * sp.bar); ctx.stroke(); }
+  ctx.restore();
   const age = S.t - (v.deadT ?? -99);
   if (age < 45) vehSmoke(ctx, v.x, v.y, k, time, v.id, 1 - age / 45, age < 12);
 }

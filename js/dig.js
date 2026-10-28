@@ -107,24 +107,25 @@ function digLinks() {
 function digDraw() {
   const hs = S.holes;
   if (!hs || !hs.length || R.s < .8) return;
-  const ctx = R.ctx, [x0, y0, x1, y1] = viewRect();
+  const ctx = R.ctx, [x0, y0, x1, y1] = viewRect(), real = realLook();
   const vis = h => h.side === 'p' || specAll() || R.eye === 'all' || (typeof SEEN !== 'undefined' && SEEN[ci(h.x, h.y)]);
   ctx.save(); ctx.lineCap = 'round';
   for (const [p, q] of digLinks()) {   // 交通壕：先画土，再画壕底
     if (!vis(p) || Math.max(p.x, q.x) < x0 || Math.min(p.x, q.x) > x1 || Math.max(p.y, q.y) < y0 || Math.min(p.y, q.y) > y1) continue;
-    ctx.strokeStyle = 'rgba(122,104,74,.7)'; ctx.lineWidth = 3.2;
+    ctx.strokeStyle = real ? 'rgba(122,104,74,.7)' : rgba(COL.gDim, .8); ctx.lineWidth = 3.2;
     ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(q.x, q.y); ctx.stroke();
-    ctx.strokeStyle = 'rgba(40,32,22,.85)'; ctx.lineWidth = 1.5;
+    ctx.strokeStyle = real ? 'rgba(40,32,22,.85)' : rgba(COL.bg, .9); ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(q.x, q.y); ctx.stroke();
   }
   for (const h of hs) {
     if (h.d < .08 || h.x < x0 - 6 || h.x > x1 + 6 || h.y < y0 - 6 || h.y > y1 + 6 || !vis(h)) continue;
     const k = .35 + .65 * h.d;
     ctx.save(); ctx.translate(h.x, h.y); ctx.rotate(h.a);
-    ctx.fillStyle = `rgba(126,108,78,${.75 * k})`;   // 胸墙土：朝敌一侧的月牙
+    ctx.fillStyle = real ? `rgba(126,108,78,${.75 * k})` : rgba(COL.gDim, .7 * k);   // 胸墙土：朝敌一侧的月牙
     ctx.beginPath(); ctx.ellipse(1.6, 0, 1.5, 3.3 * k, 0, -1.6, 1.6); ctx.fill();
-    ctx.fillStyle = `rgba(38,30,20,${.85 * k})`;   // 坑
+    ctx.fillStyle = real ? `rgba(38,30,20,${.85 * k})` : rgba(COL.bg, .9 * k);   // 坑
     ctx.beginPath(); ctx.ellipse(0, 0, 1.1, 2.6 * k, 0, 0, 7); ctx.fill();
+    if (!real) { ctx.strokeStyle = rgba(COL.gMid, .5 * k); ctx.lineWidth = px(.8); ctx.stroke(); }
     ctx.restore();
   }
   ctx.restore();

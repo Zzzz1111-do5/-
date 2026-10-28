@@ -4,7 +4,7 @@
 //   一开火（含单兵防空导弹）就暴露 CVL.fire 秒，一移动就暴露到停下 CVL.still 秒后。
 //   这样舰炮、航空兵在登陆前只能打已经发现的工事和暴露的部队，打不着躲在工事里不开火的守军（反过来进攻方挖好坑的部队也一样）。
 // 实现：每次算完双方视野（logistics.js updateVision 调 cvlApply），把没被近处发现的隐蔽小组所在格从对方视野里抹掉——
-//   同格还有暴露的小组、车辆、工事时不抹；被抹掉的格画面上照常显示为可见（CVL_DISP，grid.js fogBytes / camera.js 小地图），只是看不见这个小组。
+//   同格还有暴露的小组、车辆、工事时不抹；被抹掉的格画面上照常显示为可见（CVL_DISP，matrix.js fogBytes / camera.js 小地图），只是看不见这个小组。
 // 战前工事：守方在开战前早已构筑阵地——敌步兵还没上岸到 CVL.prepR 以内时，守方静止的小组挖坑快 CVL.prepK 倍（几秒就进入挖好的散兵坑）
 // 守方火炮、迫击炮、高炮、岸防炮、发射车也一样：伪装网下、坑道里，没开火（e.fireT）、没转移阵地时，只有对方地面部队 CVL.rs 以内才看得见；
 //   开火后 CVL.sfire 秒内暴露（炮口闪光、尾焰）——标定了的坐标照样记着（e.kx），转移阵地后要重新找
@@ -13,7 +13,8 @@ const CVL_ST = { arty: 1, mortar: 1, aa: 1, coastal: 1, tel: 1, ascm: 1 };
 const cvlStHid = e => !e.dead && CVL_ST[e.kind] && !e.decoy && !e.moving && S.t - (e.fireT ?? -99) >= CVL.sfire;
 // 车辆（双方）：停在林地、城镇、丘陵里熄火伪装 CVL.vstill 秒以上、没开过炮 / 机枪 / 导弹，空中、海上看不出来，地面部队 CVL.rs 以内才看得见；开阔地上的车照样一眼看见
 const cvlVHid = v => !v.dead && !v.lst && !v.swim && !v.fixed && S.t - (v.movedT ?? -99) >= CVL.vstill && S.t - Math.max(v.fireT ?? -99, v.mgT ?? -99, v.samT ?? -99) >= CVL.sfire && isLand(v.x, v.y) && coverAt(v.x, v.y) <= CVL.cover;
-const CVL_DISP = new Uint8Array(GW * GH);
+let CVL_DISP = new Uint8Array(GW * GH);
+onWorld(() => { CVL_DISP = new Uint8Array(GW * GH); });
 let CVL_CLR = [];   // 上次抹掉的格（画面掩码复位用）
 
 const cvlOn = () => !!S && !(S.v7off && S.v7off.cvl);

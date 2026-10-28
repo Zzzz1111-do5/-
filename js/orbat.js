@@ -21,23 +21,35 @@ const bgUnits = G => G.us.map(id => UNIT_MAP.get(id)).filter(u => u && teamsOf(u
 const bgVehs = G => G.vs.map(id => vehById(id)).filter(v => v && !v.dead);
 const bgRecs = G => G.rec.map(id => S.teams.find(q => q.id === id)).filter(q => q && q.men.length);
 // 战斗群在画面上的位置：成员（各组、各车）实际所在处。锚点 ax/ay 只是队形的虚拟基准——行军时跑在前面、据点易手时直接跳过去，
-//   番号牌、营标、「查看」定位按锚点画会跟部队对不上。取成员中位点 250 内的平均（掉队、被打散的不把牌子拉走）；
-//   同一时刻（且 60ms 内）只算一次；还没有成员（在海上）时用锚点
+//   番号牌、营标、「查看」定位按锚点画会跟部队对不上。取兵力最集中的那一片：每个成员数 150 米内的兵力，最多的（并列取离全体重心近的）
+//   为中心，再取它 250 米内成员的平均——营、连散成两三片时牌子立在主力那一片上，不落在几片中间的空地上，掉队的也不把牌子拉走；
+//   同一时刻（且 60ms 内）只算一次；还没有成员上岸（在海上）时用锚点，n = 0（番号牌不画，thpanel.js）
 const BGAT = { S: null, t: -1, at: 0, m: new Map() };
 function bgAt(G) {
   const now = Date.now();
   if (BGAT.S !== S || BGAT.t !== S.t || now - BGAT.at > 60) { BGAT.S = S; BGAT.t = S.t; BGAT.at = now; BGAT.m.clear(); }
   let c = BGAT.m.get(G.id);
   if (c) return c;
-  const P = [];
-  for (const u of bgUnits(G)) for (const q of teamsOf(u)) if (q.men.length && !q.ride && isFinite(q.x)) P.push([q.x, q.y]);
-  for (const v of bgVehs(G)) if (v.x >= 0 && v.x <= W && v.y >= 0 && v.y <= H) P.push([v.x, v.y]);
-  if (!P.length) c = { x: G.ax, y: G.ay };
+  const P = [];   // [x, y, 兵力]
+  for (const u of bgUnits(G)) for (const q of teamsOf(u)) if (q.men.length && !q.ride && isFinite(q.x)) P.push([q.x, q.y, q.men.length]);
+  for (const v of bgVehs(G)) if (v.x >= 0 && v.x <= W && v.y >= 0 && v.y <= H) P.push([v.x, v.y, 3]);
+  if (!P.length) c = { x: G.ax, y: G.ay, n: 0 };
   else {
-    const md = k => { const a = P.map(p => p[k]).sort((a, b) => a - b); return a[a.length >> 1]; }, mx = md(0), my = md(1);
+    let gx = 0, gy = 0, gw = 0;
+    for (const p of P) { gx += p[0] * p[2]; gy += p[1] * p[2]; gw += p[2]; }
+    gx /= gw; gy /= gw;
+    let bi = 0, bw = -1, bd = Infinity;
+    for (let i = 0; i < P.length; i++) {
+      const [x0, y0] = P[i];
+      let w = 0;
+      for (const p of P) { const dx = p[0] - x0, dy = p[1] - y0; if (dx * dx + dy * dy < 22500) w += p[2]; }
+      const d = (x0 - gx) ** 2 + (y0 - gy) ** 2;
+      if (w > bw || (w === bw && d < bd)) { bw = w; bd = d; bi = i; }
+    }
+    const mx = P[bi][0], my = P[bi][1];
     let x = 0, y = 0, n = 0;
-    for (const p of P) if (dist(p[0], p[1], mx, my) < 250) { x += p[0]; y += p[1]; n++; }
-    c = n ? { x: x / n, y: y / n } : { x: mx, y: my };
+    for (const p of P) if (dist(p[0], p[1], mx, my) < 250) { x += p[0] * p[2]; y += p[1] * p[2]; n += p[2]; }
+    c = { x: x / n, y: y / n, n: P.length };
   }
   BGAT.m.set(G.id, c);
   return c;
@@ -145,7 +157,7 @@ function bgAdvance(G, gx, gy, step) {
   const d = dist(G.ax, G.ay, gx, gy);
   if (d < 25) return true;
   let tx = gx, ty = gy;
-  if (d > 40 && !clearLine(G.ax, G.ay, gx, gy, G.side)) { const q = d > 240 ? 60 : 20, f = field(Math.round(gx / q) * q, Math.round(gy / q) * q, G.side), n = f && nextStep(f, G.ax, G.ay); if (n) [tx, ty] = n; }   // 远处的目标取整到格点：几个营共用一张流场，不每挪一步就整图重算
+  if (d > 40 && !clearLine(G.ax, G.ay, gx, gy, G.side)) { const f = field(gx, gy, G.side), n = f && nextStep(f, G.ax, G.ay); if (n) [tx, ty] = n; }
   const l = dist(G.ax, G.ay, tx, ty) || 1, k = Math.min(step, l) / l;
   G.ax += (tx - G.ax) * k; G.ay += (ty - G.ay) * k;
   const a = Math.atan2(gy - G.ay, gx - G.ax);

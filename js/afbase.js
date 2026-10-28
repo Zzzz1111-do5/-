@@ -69,7 +69,7 @@ function afbBuild(h, s) {
     const Q = (x, y) => [u + x * ca - y * sa, v + x * sa + y * ca];
     const R4 = (x0, y0, x1, y1) => [Q(x0, y0), Q(x1, y0), Q(x1, y1), Q(x0, y1)];
     const pts = R4(-l, -w, l, w);
-    shade('shade', pts, z); poly('foot', pts); G.blocks.push({ pts, z, z0 });
+    shade('shade', pts, z); poly('foot', pts); G.blocks.push({ pts, z, z0, m, r });   // m、r：3D 里按材质、屋顶类型换模型（v3props.js）
     take(Math.min(...pts.map(p => p[0])), Math.min(...pts.map(p => p[1])), Math.max(...pts.map(p => p[0])), Math.max(...pts.map(p => p[1])));
     if (r === 'flat') {
       const i1 = Math.min(.9, l * .2, w * .2);
@@ -239,8 +239,8 @@ function afbBuild(h, s) {
   bld(-215, 107, 44, 24, 0, 7, 'conc', 'flat');   // 消防站：车库门朝滑行道，门前三辆消防车
   for (let i = 0; i < 5; i++) rect('bay', -234.5 + i * 8.6, 94.6, -228.5 + i * 8.6, 95.8);
   for (const u of [-229, -215, -201]) veh('vLime', u, 90, 3.4, 8.4, -Math.PI / 2);
-  bld(-215, 136, 10, 10, 0, 30, 'conc', 'flat');  // 塔台：塔身 + 八角形玻璃塔顶
-  { const o = ngon(-215, 136, 7, 8); shade('shade', o, 36); poly('foot', o); poly('cab', o); poly('cabTop', ngon(-215, 136, 4.6, 8)); G.blocks.push({ pts: o, z: 36, z0: 30 }); line('ant', -215, 136, -211, 132.5); }
+  bld(-215, 136, 10, 10, 0, 30, 'conc', 'flat'); G.blocks[G.blocks.length - 1].k = 'tower';  // 塔台：塔身 + 八角形玻璃塔顶
+  { const o = ngon(-215, 136, 7, 8); shade('shade', o, 36); poly('foot', o); poly('cab', o); poly('cabTop', ngon(-215, 136, 4.6, 8)); G.blocks.push({ pts: o, z: 36, z0: 30, k: 'cab' }); line('ant', -215, 136, -211, 132.5); }
   bld(-215, 161, 40, 22, 0, 7, 'tan', 'flat');    // 航务楼
   for (const u of [-120, 0, 120]) {   // 维修机库：拱顶、门朝停机坪（门轨与门扇）
     bld(u, 256, 70, 48, 0, 16, 'metal', 'arch');
@@ -371,8 +371,8 @@ function eaDrawBases(time) {
   if (S.abBase && inView(S.abBase.x, S.abBase.y, 820)) eaDrawBase(ctx, S.abBase, true, time, true);   // 我方夺取的机场（abn.js）
 }
 function eaDrawBase(ctx, b, vis, time, own) {
-  const G = afbGeo(b.rh || 0, b.rs || 1), dead = !!b.dead, sc = R.s, d1 = sc >= .62, d2 = sc >= 1.6, d3 = sc >= 2.6;
-  const C = AFB_CG;   // 黑绿画面：投影、树、道面接缝的明暗差小一点（着色器按亮度差描边）
+  const G = afbGeo(b.rh || 0, b.rs || 1), rl = realLook(), dead = !!b.dead, sc = R.s, d1 = sc >= .62, d2 = sc >= 1.6, d3 = sc >= 2.6;
+  const C = typeof greenLook === 'function' && greenLook() ? AFB_CG : AFB_C;   // 黑绿画面：投影、树、道面接缝的明暗差小一点（着色器按亮度差描边）
   const park = afbParked(b, own);
   ctx.save();
   ctx.translate(b.x, b.y); ctx.rotate(b.rh || 0); ctx.scale(1, b.rs || 1);
@@ -384,44 +384,60 @@ function eaDrawBase(ctx, b, vis, time, own) {
     ctx.strokeStyle = col; ctx.lineWidth = w; ctx.lineCap = cap || 'butt'; ctx.setLineDash(dash || []); ctx.stroke(p);
   };
   const px1 = px(1);
-  // 地面、道路、停车场、地面上的场地
-  F('grass', C.grass); if (d1) { F('strip', C.strip); F('mow', C.mow); }
-  L('gravel', C.gravel, 6, null, 'round'); F('gravF', C.gravF);
-  L('road', C.road, 8, null, 'round'); L('road10', C.road, 10, null, 'round'); F('lot', C.lot);
-  F('track', C.track); F('pitch', C.pitch);
-  if (d1) { F('pile', C.pile); F('pile2', C.pile2); F('wallC', C.wallC); F('water', C.water); F('jersey', C.jersey); }
-  if (d2) { L('road', C.roadC, .45, [4, 5]); L('road10', C.roadC, .45, [4, 5]); L('lotL', C.lotL, .35); L('sportL', 'rgba(240,240,232,.8)', .3); L('pipe', 'rgba(56,56,52,.35)', .6, [3, 3]); }
-  // 滑行道（道肩、道面）、停机坪
-  L(G.TW, C.twSh, 23, null, 'round'); L(G.TL, C.twSh, 16.5, null, 'round');
-  L(G.TW, C.tw, 16, null, 'round'); L(G.TL, C.tw, 12, null, 'round');
-  F('apron', C.apron);
-  if (d3) L('joint', C.joint, .2);
-  // 跑道
-  F('rwSh', C.rwSh); F('rw', C.rw); F('bp', C.bp);
-  if (d1) {
-    F('rwP', C.paint); F('rub1', C.rub1); F('rub2', C.rub2); L('chev', C.ylw, 1.3);
-    L(G.TW, C.ylw, .55); L(G.TL, C.ylw, .55); L('apL', C.ylw, .55); L('stand', C.ylw, .45);
-    L('heliP', C.ylw, .6); L('heliH', C.paint, .7); L('padP', C.paint, 1); L('padH', C.paint, 1.4);
+  if (rl) {
+    // 地面、道路、停车场、地面上的场地
+    F('grass', C.grass); if (d1) { F('strip', C.strip); F('mow', C.mow); }
+    L('gravel', C.gravel, 6, null, 'round'); F('gravF', C.gravF);
+    L('road', C.road, 8, null, 'round'); L('road10', C.road, 10, null, 'round'); F('lot', C.lot);
+    F('track', C.track); F('pitch', C.pitch);
+    if (d1) { F('pile', C.pile); F('pile2', C.pile2); F('wallC', C.wallC); F('water', C.water); F('jersey', C.jersey); }
+    if (d2) { L('road', C.roadC, .45, [4, 5]); L('road10', C.roadC, .45, [4, 5]); L('lotL', C.lotL, .35); L('sportL', 'rgba(240,240,232,.8)', .3); L('pipe', 'rgba(56,56,52,.35)', .6, [3, 3]); }
+    // 滑行道（道肩、道面）、停机坪
+    L(G.TW, C.twSh, 23, null, 'round'); L(G.TL, C.twSh, 16.5, null, 'round');
+    L(G.TW, C.tw, 16, null, 'round'); L(G.TL, C.tw, 12, null, 'round');
+    F('apron', C.apron);
+    if (d3) L('joint', C.joint, .2);
+    // 跑道
+    F('rwSh', C.rwSh); F('rw', C.rw); F('bp', C.bp);
+    if (d1) {
+      F('rwP', C.paint); F('rub1', C.rub1); F('rub2', C.rub2); L('chev', C.ylw, 1.3);
+      L(G.TW, C.ylw, .55); L(G.TL, C.ylw, .55); L('apL', C.ylw, .55); L('stand', C.ylw, .45);
+      L('heliP', C.ylw, .6); L('heliH', C.paint, .7); L('padP', C.paint, 1); L('padH', C.paint, 1.4);
+    }
+    F('soot', C.soot); if (d1) L('mock', '#2a2826', 1.4, null, 'round');
+    if (d2) { L('hatch', C.ylw, .7); L('hold', C.ylw, .45); L('holdD', C.ylw, .45, [1.2, 1]); F('sign', C.sign); L('rose', C.paint, .4); F('roseN', C.paint); F('disc', C.ylw); L('cable', '#1e1e1e', .4); }
+    afbCraters(ctx, b, true);
+    // 土堤、沙袋（矮，不投影）
+    if (d1) { L('berm', C.berm, 3.4, null, 'round'); L('crest', C.crest, .7, null, 'round'); L('bag', C.bag, 2, null, 'round'); }
+    // 投影 → 机堡里的飞机（被拱顶盖住后半截）→ 屋顶 → 细节 → 停在外面的飞机
+    F('shade', C.shade); if (d1) { F('tshade', C.shade); F('vshade', C.vshade); }
+    afbPlanes(ctx, park, true, d1, true);
+    for (const m in AFB_MAT) for (const t in AFB_TONE) F(t + m, afbTone(m, AFB_TONE[t]));
+    F('tankR', C.tankR); F('tank', C.tank); F('tankH', C.tankH); F('stack', C.stack); F('cab', C.glass); F('cabTop', afbTone('conc', 1.02));
+    if (d1) {
+      L('ridge', 'rgba(255,255,255,.2)', .35); F('wall', afbTone('conc', 1.08)); L('hasDoor', '#2a2c2a', 1.4); L('door', 'rgba(30,32,30,.75)', 1.6); F('bay', '#2a2c2a'); F('box', C.box);
+      for (const k of ['vOl', 'vTan', 'vWh', 'vLime', 'vAge', 'car1', 'car2', 'car3', 'car4']) F(k, C[k]);
+      F('cabs', C.cabs); F('net', C.net); F('tree', C.tree); F('treeH', C.treeH); F('mast', C.mast); F('sock', C.sock);
+      L('fence', C.fence, Math.max(.45, px1 * .8), [2.4, 1.4]); L('fence2', C.fence, Math.max(.45, px1 * .8), [2.4, 1.4]); L('wire', 'rgba(200,200,190,.5)', .5, [1.2, 1.2]);
+    } else L('fence', C.fence, px1);
+    if (d2) { L('doorP', 'rgba(20,22,20,.6)', .3); L('ant', C.mast, .4); L('cable', 'rgba(30,30,28,.55)', .35, [1.5, 1.5]); }
+    if (d3) L('corr', 'rgba(60,62,60,.18)', .2);
+    if (d2) { F('lW', 'rgba(255,252,236,.95)'); F('lG', 'rgba(130,255,165,.95)'); F('lB', 'rgba(130,160,255,.9)'); F('papi', '#ffffff'); }
+  } else {
+    // 数码矩阵画面：暗底 + 发光轮廓
+    const slab = 'rgba(30,36,33,.9)', pave = 'rgba(16,20,18,.93)', dark = 'rgba(2,10,6,.92)', paint = rgba('#e8fff0', .5), con = rgba(STRUCT, .42), dim = rgba(COL.gDim, .5);
+    F('grass', 'rgba(4,14,9,.85)');
+    L('gravel', dim, 4, null, 'round'); L('road', dim, 6, null, 'round'); L('road10', dim, 8, null, 'round'); F('lot', 'rgba(14,20,17,.9)');
+    L(G.TW, con, 16 + px1 * 2, null, 'round'); L(G.TL, con, 12 + px1 * 2, null, 'round'); L(G.TW, slab, 16, null, 'round'); L(G.TL, slab, 12, null, 'round');
+    F('apron', slab); L('apron', con, px1);
+    F('rwSh', slab); F('rw', pave); F('bp', pave);
+    if (d1) { F('rwP', paint); L(G.TW, rgba(COL.amber, .35), px1, [4, 4]); L(G.TL, rgba(COL.amber, .35), px1, [4, 4]); L('stand', rgba(COL.amber, .3), px1); L('heliP', paint, px1); L('padP', paint, px1 * 1.2); }
+    afbCraters(ctx, b, false);
+    if (d1) { L('berm', rgba(COL.gDim, .8), 3, null, 'round'); L('bag', rgba(COL.gMid, .6), 2, null, 'round'); }
+    afbPlanes(ctx, park, true, d1, false);
+    F('foot', dark); L('foot', rgba(dead ? COL.smoke : own ? COL.g : COL.enemy, .7), px1 * 1.1);
+    if (d1) { L('tree', rgba(COL.gDim, .7), px1); L('fence', con, px1, [3, 2.5]); }
   }
-  F('soot', C.soot); if (d1) L('mock', '#2a2826', 1.4, null, 'round');
-  if (d2) { L('hatch', C.ylw, .7); L('hold', C.ylw, .45); L('holdD', C.ylw, .45, [1.2, 1]); F('sign', C.sign); L('rose', C.paint, .4); F('roseN', C.paint); F('disc', C.ylw); L('cable', '#1e1e1e', .4); }
-  afbCraters(ctx, b);
-  // 土堤、沙袋（矮，不投影）
-  if (d1) { L('berm', C.berm, 3.4, null, 'round'); L('crest', C.crest, .7, null, 'round'); L('bag', C.bag, 2, null, 'round'); }
-  // 投影 → 机堡里的飞机（被拱顶盖住后半截）→ 屋顶 → 细节 → 停在外面的飞机
-  F('shade', C.shade); if (d1) { F('tshade', C.shade); F('vshade', C.vshade); }
-  afbPlanes(ctx, park, true, d1);
-  for (const m in AFB_MAT) for (const t in AFB_TONE) F(t + m, afbTone(m, AFB_TONE[t]));
-  F('tankR', C.tankR); F('tank', C.tank); F('tankH', C.tankH); F('stack', C.stack); F('cab', C.glass); F('cabTop', afbTone('conc', 1.02));
-  if (d1) {
-    L('ridge', 'rgba(255,255,255,.2)', .35); F('wall', afbTone('conc', 1.08)); L('hasDoor', '#2a2c2a', 1.4); L('door', 'rgba(30,32,30,.75)', 1.6); F('bay', '#2a2c2a'); F('box', C.box);
-    for (const k of ['vOl', 'vTan', 'vWh', 'vLime', 'vAge', 'car1', 'car2', 'car3', 'car4']) F(k, C[k]);
-    F('cabs', C.cabs); F('net', C.net); F('tree', C.tree); F('treeH', C.treeH); F('mast', C.mast); F('sock', C.sock);
-    L('fence', C.fence, Math.max(.45, px1 * .8), [2.4, 1.4]); L('fence2', C.fence, Math.max(.45, px1 * .8), [2.4, 1.4]); L('wire', 'rgba(200,200,190,.5)', .5, [1.2, 1.2]);
-  } else L('fence', C.fence, px1);
-  if (d2) { L('doorP', 'rgba(20,22,20,.6)', .3); L('ant', C.mast, .4); L('cable', 'rgba(30,30,28,.55)', .35, [1.5, 1.5]); }
-  if (d3) L('corr', 'rgba(60,62,60,.18)', .2);
-  if (d2) { F('lW', 'rgba(255,252,236,.95)'); F('lG', 'rgba(130,255,165,.95)'); F('lB', 'rgba(130,160,255,.9)'); F('papi', '#ffffff'); }
   // 跑道外框（敌我标识色）
   ctx.setLineDash([]); ctx.strokeStyle = rgba(dead ? COL.smoke : own ? COL.g : COL.enemy, .55); ctx.lineWidth = px1 * 1.2; ctx.strokeRect(-460, -15, 920, 30);
   // 被毁：建筑焦黑
@@ -429,46 +445,47 @@ function eaDrawBase(ctx, b, vis, time, own) {
   // 雷达天线：机场监视雷达（转得快）、AN/TPS-80（慢）
   const ant = (u, v, l, w, sp) => {
     const a = dead ? .6 : time * sp;
-    ctx.save(); ctx.translate(u, v); ctx.rotate(a); ctx.fillStyle = '#d8dad6'; ctx.fillRect(-l / 2, -w / 2, l, w); ctx.restore();
+    ctx.save(); ctx.translate(u, v); ctx.rotate(a); ctx.fillStyle = rl ? '#d8dad6' : rgba(STRUCT, .7); ctx.fillRect(-l / 2, -w / 2, l, w); ctx.restore();
   };
   ant(288, -124, 11, 1.6, 1.6);
   ant(AFD_RAD[0], AFD_RAD[1] - 3, 8, 2.2, .9);
-  afbPlanes(ctx, park, false, d1);
+  afbPlanes(ctx, park, false, d1, rl);
   ctx.restore();
-  if (d2 && !dead) afbRwyNum(ctx, b, vis ? 1 : .5);
+  if (d2 && !dead) afbRwyNum(ctx, b, vis ? 1 : .5, rl);
 }
 // 停放的飞机：机堡里的先画（拱顶盖住后半截，机头伸出门外），停机线与直升机位的后画；整备中的暗、外加进度弧；
 // 写实近看：停机线上整备中的飞机旁边停一辆加油车、机头前一台电源车
-function afbPlanes(ctx, park, has, d1) {
+function afbPlanes(ctx, park, has, d1, rl) {
   if (R.m3d) return;   // 3D：停放的飞机是立体模型（v3units.js）
   for (const p of park) {
     if ((p.k === 'has') !== has) continue;
     drawAircraft(ctx, p.u, p.v, p.a, p.sil, p.size, p.col, p.ready ? .95 : .5, 0, px(1), undefined, { still: true });   // 停放：旋翼不转
   }
   if (has || !d1) return;
-  for (const p of park) if (!p.ready && p.k === 'line') {
-      ctx.fillStyle = AFB_C.vshade; ctx.fillRect(p.u + 9.6, p.v - 3.4, 3.6, 10); ctx.fillRect(p.u - 7.2, p.v - 11.6, 3.6, 2.4);
-      ctx.fillStyle = AFB_C.vWh; ctx.fillRect(p.u + 9, p.v - 4, 3.6, 10); ctx.fillStyle = AFB_C.cabs; ctx.fillRect(p.u + 9.2, p.v - 4, 3.2, 2.6);
-      ctx.fillStyle = AFB_C.vAge; ctx.fillRect(p.u - 7.8, p.v - 12.2, 3.6, 2.4);
-    }
-    for (const p of park) if (!p.ready) {
-      ctx.setLineDash([]); ctx.strokeStyle = rgba(COL.amber, .8); ctx.lineWidth = px(1.4);
-      ctx.beginPath(); ctx.arc(p.u, p.v, 9, -1.57, -1.57 + p.prog * 6.283); ctx.stroke();
-    }}
+  if (rl) for (const p of park) if (!p.ready && p.k === 'line') {
+    ctx.fillStyle = AFB_C.vshade; ctx.fillRect(p.u + 9.6, p.v - 3.4, 3.6, 10); ctx.fillRect(p.u - 7.2, p.v - 11.6, 3.6, 2.4);
+    ctx.fillStyle = AFB_C.vWh; ctx.fillRect(p.u + 9, p.v - 4, 3.6, 10); ctx.fillStyle = AFB_C.cabs; ctx.fillRect(p.u + 9.2, p.v - 4, 3.2, 2.6);
+    ctx.fillStyle = AFB_C.vAge; ctx.fillRect(p.u - 7.8, p.v - 12.2, 3.6, 2.4);
+  }
+  for (const p of park) if (!p.ready) {
+    ctx.setLineDash([]); ctx.strokeStyle = rgba(COL.amber, .8); ctx.lineWidth = px(1.4);
+    ctx.beginPath(); ctx.arc(p.u, p.v, 9, -1.57, -1.57 + p.prog * 6.283); ctx.stroke();
+  }
+}
 // 跑道弹坑（局部坐标 b.rc）
-function afbCraters(ctx, b) {
+function afbCraters(ctx, b, rl) {
   for (const c of b.rc || []) {
     const g = ctx.createRadialGradient(c.u, c.v, 0, c.u, c.v, c.r * 1.6);
     g.addColorStop(0, 'rgba(0,0,0,.9)'); g.addColorStop(.6, 'rgba(0,0,0,.55)'); g.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = g; ctx.beginPath(); ctx.arc(c.u, c.v, c.r * 1.6, 0, 7); ctx.fill();
-    ctx.fillStyle = 'rgba(120,104,78,.55)'; ctx.beginPath(); ctx.arc(c.u, c.v, c.r * 1.25, 0, 7); ctx.arc(c.u, c.v, c.r * .9, 0, 7, true); ctx.fill();
+    if (rl) { ctx.fillStyle = 'rgba(120,104,78,.55)'; ctx.beginPath(); ctx.arc(c.u, c.v, c.r * 1.25, 0, 7); ctx.arc(c.u, c.v, c.r * .9, 0, 7, true); ctx.fill(); }
     ctx.strokeStyle = rgba(COL.amber, .45); ctx.lineWidth = px(1); ctx.setLineDash([]); ctx.beginPath(); ctx.arc(c.u, c.v, c.r, 0, 7); ctx.stroke();
   }
 }
 // 跑道号：按跑道磁向（取真方位）写在两端入口斑马线之后，字头朝着陆方向；在世界坐标里写，不受机场镜像影响
-function afbRwyNum(ctx, b, a) {
+function afbRwyNum(ctx, b, a, rl) {
   const h = b.rh || 0, brg = (Math.atan2(Math.cos(h), -Math.sin(h)) * 180 / Math.PI + 360) % 360;
-  ctx.save(); ctx.globalAlpha = a; ctx.fillStyle = AFB_C.paint;
+  ctx.save(); ctx.globalAlpha = a; ctx.fillStyle = rl ? AFB_C.paint : rgba('#e8fff0', .5);
   ctx.font = '700 9px "IBM Plex Mono", monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   for (const e of [-1, 1]) {   // e = -1：-u 端入口（朝 +u 着陆）
     const dir = e < 0 ? brg : (brg + 180) % 360, num = String(Math.round(dir / 10) % 36 || 36).padStart(2, '0');
@@ -535,7 +552,7 @@ function afb3dBases() {
 const afb3dSig = () => afb3dBases().map(b => `${b.id}:${Math.round(b.x)},${Math.round(b.y)},${(b.rh || 0).toFixed(3)},${b.rs || 1}`).join('|');
 function afb3dBlocks() {
   const out = [];
-  for (const b of afb3dBases()) for (const k of afbGeo(b.rh || 0, b.rs || 1).blocks) out.push({ pts: k.pts.map(([u, v]) => eaW(b, u, v)), z: k.z, z0: k.z0 || 0 });
+  for (const b of afb3dBases()) for (const k of afbGeo(b.rh || 0, b.rs || 1).blocks) out.push({ pts: k.pts.map(([u, v]) => eaW(b, u, v)), z: k.z, z0: k.z0 || 0, m: k.m, r: k.r, k: k.k, base: b.id });
   return out;
 }
 

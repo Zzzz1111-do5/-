@@ -56,7 +56,7 @@ function orderUnits(units, x, y, face, total, t) {
   if (!units.length) return 0;
   if (t === 'hold') { for (const u of units) { u.order = 'hold'; for (const q of teamsOf(u)) q.order = { t: 'hold' }; } return units.length; }
   if (t === 'retreat') { for (const u of units) { u.order = 'retreat'; orderTeams(teamsOf(u), 0, 0, 'retreat'); } return units.length; }
-  if (!fieldOk(x, y, 'p')) { log('该位置无法到达', 'warn', 'unreach', 2); return 0; }   // 只判断目标点附近有没有能站的格（下令时不为它整图算流场）
+  if (!field(x, y, 'p')) { log('该位置无法到达', 'warn', 'unreach', 2); return 0; }
   for (const L of layoutUnits(units, x, y, face, total)) {
     Object.assign(L.u, { face, width: L.w, order: t, tx: L.ux, ty: L.uy });
     L.ts.forEach((q, k) => { q.order = { t, x: L.slots[k][0], y: L.slots[k][1], gx: L.ux, gy: L.uy }; q.pathT = -9; });

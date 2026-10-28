@@ -21,10 +21,12 @@ const ROLE_NAME = { radio: '通讯兵', rifle: '步枪手', mg: '机枪手', eng
 function newGame(seed, level, opts = {}) {
   level = DIFF[level] ? level : 'hard';
   seed = seed || (Math.random() * 1e9) | 0;
-  buildMap(seed);
+  const MG = opts.map && MAPGEN[opts.map];   // 另外的地图（各自登记尺寸与生成函数，见 core.js MAPGEN）
+  if (MG) { setWorld(MG.w, MG.h); MG.build(seed); }
+  else { setWorld(4200, 2800); setPathRows(GH); buildMap(seed); }
   const r = rng(seed ^ 0x5f3759df);
   S = {
-    seed, level, mode: opts.mode || (opts.sandbox ? 'sandbox' : 'pve'), role: opts.role || 'attack', t: 0, paused: true, speed: 1, nid: 1, over: null, briefed: false, holdT: 0, ai: null, phase: 'deploy', units: [], craters: [], pings: [],
+    seed, level, map: MG ? opts.map : 'std', mode: opts.mode || (opts.sandbox ? 'sandbox' : 'pve'), role: opts.role || 'attack', t: 0, paused: true, speed: 1, nid: 1, over: null, briefed: false, holdT: 0, ai: null, phase: 'deploy', units: [], craters: [], pings: [],
     ships: [], teams: [], enemies: [], planes: [], shells: [], tracers: [], fx: [], smoke: [],
     mines: [], wire: [], obst: [], trench: [], supply: [], rlines: [], boats: [], recon: [], log: [],
     groups: { 1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [], 8: [], 9: [] }, sel: [],
@@ -89,8 +91,8 @@ function deployDefenses(r, D) {
     const main = mainB.has(b), nb = main ? D.beachBunkers : 1, na = main ? D.ambush : 1;
     saved += D.ambush - na;
     for (let k = 0; k < nb; k++) {
-      const x = nb === 1 ? b.cx + (r() - .5) * 40 : lerp(b.x0, b.x1, k ? .82 : .18), f = flatNear(x, cAt(x) - 48, 40, SLOPE_MAX, (px, py) => isLand(px, py) && passInf(px, py) && cAt(px) - py > 25);   // 碉堡要平地
-      addEnemy('bunker', f ? f.x : x, f ? f.y : cAt(x) - 48);
+      const x = nb === 1 ? b.cx + (r() - .5) * 40 : lerp(b.x0, b.x1, k ? .82 : .18);
+      addEnemy('bunker', x, cAt(x) - 48);
     }
     const obj = 'E' + (TER.beaches.indexOf(b) + 1), ua = addUnit('e', 'inf', { role: 'ambush', obj });
     for (let k = 0; k < na; k++) {
@@ -102,7 +104,7 @@ function deployDefenses(r, D) {
   const gunXs = ['BT', 'BT2'].map(k => S.points.find(p => p.key === k)).filter(Boolean).map(p => p.x);
   for (let x = 40; x < W - 40; x += 20)
     if (typeAt(x, coastAt(x) - 10) === T.CLIFF && gunXs.length < D.coastal && gunXs.every(g => Math.abs(g - x) > 450)) gunXs.push(x);
-  for (const x of gunXs.slice(0, D.coastal)) { const f = flatNear(x, coastAt(x) - 45, 60, SLOPE_MAX, (px, py) => isLand(px, py) && coastAt(px) - py > 25); addEnemy('coastal', f ? f.x : x, f ? f.y : coastAt(x) - 45); }   // 岬角顶上找块平地修炮台
+  for (const x of gunXs.slice(0, D.coastal)) addEnemy('coastal', x, coastAt(x) - 45);
   for (let i = 0; i < D.arty; i++) {
     const x = 200 + i * (W - 400) / Math.max(1, D.arty - 1) + (r() - .5) * 140;
     addEnemy('arty', x, clamp(coastAt(x) - 480 - r() * 120, 60, coastAt(x) - 300));

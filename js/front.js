@@ -2,7 +2,10 @@
 // 战线（v7）：30 米粗网格上的兵力影响场 → 控制场 → 从海面连通的登陆场 → 每 30 米一列的双方前沿、无人地带、空隙、侧翼、孤立分队、进攻地段
 // 两个视角各每秒重建一次（错开 .5 秒）：'p' 进攻方所知、'e' 守方所知；两个视角里 fp 都是进攻方前沿、fe 都是守方前沿
 // 类型数组只放在 FRC（不进 S），S.front 为纯 JSON；画面上只有线、齿、淡影与虚圈，不写字
-const FR_G = 30, FR_NX = Math.ceil(W / FR_G), FR_NY = Math.ceil(H / FR_G), FR_N = FR_NX * FR_NY,   // 网格铺满整张图（原来按旧的 3000×2000 图写死成 100×67 列，地图扩大后东边 1200 米全挤在最后一列）
+const FR_G = 30;
+let FR_NX = Math.ceil(W / FR_G), FR_NY = Math.ceil(H / FR_G), FR_N = FR_NX * FR_NY;
+onWorld(() => { FR_NX = Math.ceil(W / FR_G); FR_NY = Math.ceil(H / FR_G); FR_N = FR_NX * FR_NY; if (typeof FRC === 'object') FRC.ker = null; });   // 换了世界尺寸：缓存的类型数组按新格数重建
+const   // 网格铺满整张图（原来按旧的 3000×2000 图写死成 100×67 列，地图扩大后东边 1200 米全挤在最后一列）
   FR_RS = [100, 120, 150, 170, 180];
 const FR_RC = { 100: 0, 120: 1, 150: 2, 170: 3, 180: 4 };
 const FR_ROLEW = { rifle: 1, mg: 1.6, radio: .7, eng: .5, aa: .8 };

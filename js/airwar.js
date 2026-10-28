@@ -312,7 +312,7 @@ function awJ36(p) {
   chatSay('e', '报告：雷达上偶尔闪现一个很大的回波又消失了……目视确认是一架无尾、三台发动机的大型隐身飞机，判断为中国歼-36！各机注意，它看得见我们，我们很难锁定它。', { kind: 'report', at: p, lv: 1, delay: 6 });
 }
 // 歼-36 打击型：每 1.6 秒在 900 以内挑一个已发现的高价值目标投一枚雷石-6 滑翔制导炸弹（防空 > 发射车 > 机场跑道 > 岸炮 / 炮兵 > 装甲）
-const AW_J36E = { typhon: 9.5, aa: 9, tel: 9, ascm: 9, airfield: 7.5, coastal: 7, arty: 6.5, mortar: 4, bunker: 4 }, AW_J36V = { sam_veh: 9.5, aa_veh: 8.5, spg: 6, hv_tank: 5.5, tank: 5, td: 5, flame_tank: 5, apc: 3.5 };
+const AW_J36E = { aa: 9, tel: 9, ascm: 9, airfield: 7.5, coastal: 7, arty: 6.5, mortar: 4, bunker: 4 }, AW_J36V = { sam_veh: 9.5, aa_veh: 8.5, spg: 6, hv_tank: 5.5, tank: 5, td: 5, flame_tank: 5, apc: 3.5 };
 function awJ36Strike(p, sp) {
   if (!(p.agmN > 0) || (p.agmT || 0) > S.t || p.alt < .6 || typeof msPgm !== 'function') return;
   p.agmT = S.t + 1.6;
@@ -491,22 +491,7 @@ function awCapE() {
 }
 // —— 进攻方派战斗机（航母自动派机时，carrier.js updateAirAuto 每 3 秒先问这里；返回 true 表示本轮已派机）：
 //    发现敌机就拦截；已知敌机场或近 2 分钟见过敌机，就在登陆场上空保持一架巡逻；敌方掌握制空权时至少两架 ——
-// —— 猎杀 P-8A：反航母体系的眼睛（antiship.js）。它的搜索雷达一开机，舰艇电子侦察就测向定出大致位置（S.asEsm），
-//    派一架战斗机前出到那一带（先改派在空没接敌的），雷达看见就打；它飞得慢、目标大，没有它「堤丰」和潜艇就找不到航母 ——
-function awHuntP8() {
-  const E8 = S.asEsm && S.t - S.asEsm.t < 25 ? S.asEsm : null;
-  if (!E8 || !S.air || S.planes.some(p => !p.dead && p.kind === 'fighter' && p.hunt === E8.id && p.phase !== 'rtb')) return false;
-  const P8 = S.eair && S.eair.fly.find(a => a.id === E8.id && !a.dead);
-  if (!P8) return false;
-  const x = clamp(E8.x, 60, W - 60), y = clamp(E8.y, 60, H - 60);
-  const f = typeof airEscFtr === 'function' ? airEscFtr(x, y, { hunt: E8.id, cx: x, cy: y, capT: 60 }) : null;
-  if (!f) return false;
-  awStat('huntP8');
-  if (typeof chatSay === 'function') chatSay('p', `命令：电子侦察截获敌 P-8A 海上搜索雷达，测向定位在${awWhere(x, y)}一带。${airName('fighter', f.v).split(' ')[0]}${f.retask ? '改航' : '起飞'}前出猎杀，打掉敌人盯航母的眼睛。`, { kind: 'order', at: { x, y }, key: 'huntp8', gap: 45, lv: 1 });
-  return true;
-}
 function awAutoP() {
-  if (awHuntP8()) return true;
   if (!S.air || !(S.assets.fighter > 0)) return false;
   const A = awEnsure(), foes = awFoes('p').filter(t => awSeen('p', t.x, t.y));
   if (foes.length) A.seenE = S.t;

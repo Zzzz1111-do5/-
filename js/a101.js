@@ -4,15 +4,15 @@
 //   JLTV 陶式反坦克车 ×2、AN/TWQ-1 复仇者防空车 ×2（加强：备弹 12 枚、装填快、射程远）、M1097 悍马（M2 机枪）×1。
 //   精锐加成（A101.mod）：精度 1.25 倍、射速 1.1 倍；防弹插板让两成的致命伤只是负伤；被压制程度打八折；排士气 92、按精锐排算。
 //   战役：困难 1 波、地狱 2 波；沙盒：守方目录「第 101 空降师 · C-17 空降战斗群」，每买一份多一波。开战 A101.first 秒后才可用，两波间隔 A101.gap 秒。
-//   守方 AI：我军上岸后，挑受威胁最大的己方据点（或刚被我军夺取、值得反冲击的据点），在其内陆一侧 220–760、整个落点范围离我军地面部队 400 以外、
-//     避开已知我方防空的平地选空降场（a101DZ）；C-17 从地图北缘进场，飞越空降场时依次放出伞兵与重装平台，随即北返；
+//   守方 AI：我军上岸后，挑受威胁最大的己方据点（或刚被我军夺取、值得反冲击的据点），在其内陆一侧 180–360、离我军 260 以外、
+//     避开已知我方防空的平地选空降场；C-17 从地图北缘进场，飞越空降场时依次放出伞兵与重装平台，随即北返；
 //   伞兵下降 5 秒、重装平台 7 秒，下降中挨我方地面火力；落地先在空降场集合，再整排交给守方协同（ai4.js a4Adopt）增援或反冲击。
 //   C-17 进 S.eair.fly（type = c17，4 点耐久、3 组干扰弹）：我方战斗机、舰空导弹、弹炮防空车、便携防空导弹都能打，跳伞前被击落机上人员装备全损。
 // 状态：S.e101 = { n 剩余波数, next 下一波最早时刻, lift: {id, dz, key, t, land 落地班数, veh 落地车数, lost 损失人数, us: [排 id], vs: [车 id]} | null, ch: [下降中], done }
 // 101 的打法（精锐）：agg 有效兵力比（sa.js saLook）到多少就压上去（跃进—掩护前进）；ret 低于多少就交替掩护撤退、向主力靠拢；
 //   两者之间就近占掩蔽地形以逸待劳；pick 挑打击目标时敌集团人数不超过本群战斗力的多少倍（打得过的才去打，打不过的去加强己方据点）
 const A101_TAC = { agg: 1, ret: 0.9, pick: 99 };
-const A101 = { first: { normal: 200, hard: 150, hell: 110 }, gap: 160, n: { normal: 0, hard: 1, hell: 2 }, dzMin: 220, dzMax: 760, safe: 400, aaR: 360,
+const A101 = { first: { normal: 200, hard: 150, hell: 110 }, gap: 160, n: { normal: 0, hard: 1, hell: 2 }, dzMin: 180, dzMax: 360, safe: 260, aaR: 360,
   mod: { pow: 1.25, rof: 1.1, hard: .2, calm: .8 }, jump: 5, heavy: 7, sig: 22 };
 const A101_SQ = { rifle: ['rifle', 'rifle', 'mg'], lead: ['radio', 'rifle', 'mg'], mg: ['rifle', 'mg', 'mg'], jav: ['rifle', 'rifle', 'rifle'], stg: ['rifle', 'aa', 'rifle'], rec: ['radio', 'rifle', 'rifle'] };
 const A101_ROLE = { jav: { at: 1.6, atPen: 3.4, rng: 1.5 }, mg: { sup: 1.4 }, rec: { pow: 1.6, rof: 1.25, hard: .45, calm: .45, rng: 1.25 } };   // rec：超级精锐侦察组（两组，前出侦察敌情）
@@ -52,25 +52,20 @@ function a101Ensure() {
   const lv = S.level || 'hard', sbx = S.mode === 'sandbox';
   return (S.e101 = { n: sbx ? (S.assets && S.assets.e101) || 0 : A101.n[lv] || 0, next: (A101.first[lv] || 150) * (sbx ? .8 : 1), lift: null, ch: [], done: 0 });
 }
-// 空降场（按空降条令选）：目标据点 p 内陆一侧（自己的后方）一块平坦开阔、没有河与悬崖的地方——
-//   伞兵沿南北航线撒开落地（落点范围约 200 × 340，见 a101DZClean），整个落点范围都要在我军所有地面部队（步兵、车辆）
-//   A101.safe 以外（直射火力与观察范围外，下降中的伞兵不挨枪），也不在我方已知防空范围内；
-//   满足这些的地方里，离我军远、离目标近、开阔的优先——落地集结后再机动过去增援 / 反冲击，不直接落到我军脸上
-function a101Foot(fx, fy, x, y) { const dx = Math.max(x - 100 - fx, 0, fx - x - 105), dy = Math.max(y - 140 - fy, 0, fy - y - 200); return Math.hypot(dx, dy); }   // 点到落点范围的距离
+// 空降场：据点 p 内陆一侧，按离据点近、离我军远、隐蔽好、地势开阔（伞兵好落）打分
 function a101DZ(p) {
-  const foes = [...S.teams.filter(q => q.side === 'p' && q.men.length && !q.ride && isLand(q.x, q.y)), ...(S.veh || []).filter(v => v.side === 'p' && !v.dead && !v.lst && isLand(v.x, v.y))];
+  const pT = S.teams.filter(q => q.side === 'p' && q.men.length);
   const aa = [...S.teams.filter(q => q.side === 'p' && q.men.length && q.men.includes('aa') && q.aaSeenE != null && S.t - q.aaSeenE < 180),
     ...(S.veh || []).filter(v => v.side === 'p' && !v.dead && (v.type === 'aa_veh' || v.type === 'sam_veh') && spotted(v.x, v.y))];
   let best = null, bs = -Infinity;
-  for (let k = 0; k < 140; k++) {
-    const a = -Math.PI / 2 + gauss() * .8, r = A101.dzMin + Math.random() * (A101.dzMax - A101.dzMin), x = clamp(p.x + Math.cos(a) * r, 120, W - 120), y = clamp(p.y + Math.sin(a) * r, 160, H - 60);
-    if (!isLand(x, y) || !passInf(x, y) || coastAt(x) - y < 260) continue;
-    let dp = 1e9;
-    for (const o of foes) { const d = a101Foot(o.x, o.y, x, y); if (d < dp) dp = d; }
-    if (dp < A101.safe || aa.some(o => dist(o.x, o.y, x, y) < A101.aaR + 140) || !a101DZClean(x, y)) continue;
+  for (let k = 0; k < 80; k++) {
+    const a = -Math.PI / 2 + gauss() * .7, r = A101.dzMin + Math.random() * (A101.dzMax - A101.dzMin), x = clamp(p.x + Math.cos(a) * r, 60, W - 60), y = clamp(p.y + Math.sin(a) * r, 60, H - 60);
+    if (!isLand(x, y) || !passInf(x, y) || coastAt(x) - y < 160) continue;
+    const dp = pT.length ? Math.min(...pT.map(q => dist(q.x, q.y, x, y))) : 999;
+    if (dp < A101.safe || aa.some(o => dist(o.x, o.y, x, y) < A101.aaR) || !a101DZClean(x, y)) continue;
     let open = 0;
     for (let j = 0; j < 8; j++) { const ox = x + Math.cos(j * .785) * 50, oy = y + Math.sin(j * .785) * 50; if (isLand(ox, oy) && passInf(ox, oy)) open++; }
-    const s = Math.min(dp, 900) / 150 - dist(x, y, p.x, p.y) / 260 + open * .25 + Math.random() * .3;
+    const s = -dist(x, y, p.x, p.y) / 120 + Math.min(dp, 600) / 160 + open * .25 + Math.random() * .3;
     if (s > bs) { bs = s; best = { x: Math.round(x), y: Math.round(y) }; }
   }
   return best;

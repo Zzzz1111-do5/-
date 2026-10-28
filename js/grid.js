@@ -1,21 +1,16 @@
 'use strict';
 // 视线与寻路：双方可见格（高程、林地/城镇/悬崖/烟幕遮挡）、Dijkstra 流场
-const PV = new Uint8Array(GW * GH), EV = new Uint8Array(GW * GH);   // 我方 / 敌方当前可见格
-// 视野字节图（0/255），供地形着色器（2D / 3D）与小地图共用
-const FOGB = new Uint8Array(GW * GH);
-function fogBytes() { const D = typeof CVL_DISP === 'object' ? CVL_DISP : null; for (let i = 0; i < GW * GH; i++) FOGB[i] = PV[i] || (D && D[i]) ? 255 : 0; }   // 隐蔽小组所在格照常显示为可见（conceal.js）
-const SMOKE = new Uint8Array(GW * GH);
-const MINEC = new Uint8Array(GW * GH);   // 1 = 未发现的雷区，2 = 已标定雷区
-const WIREC = new Uint8Array(GW * GH);   // 铁丝网所在格
-const OBSC = new Uint8Array(GW * GH);    // 反登陆障碍：1 未发现，2 已发现
-const CRATERC = new Uint8Array(GW * GH);   // 弹坑：提供少量掩护
+let PV, EV;   // 我方 / 敌方当前可见格
+let SMOKE;
+let MINEC;   // 1 = 未发现的雷区，2 = 已标定雷区
+let WIREC;   // 铁丝网所在格
+let OBSC;    // 反登陆障碍：1 未发现，2 已发现
+let CRATERC;   // 弹坑：提供少量掩护
 let fieldGen = 0;
 const FIELDS = new Map();
 // 流场按通行类别分组失效：舰船只看障碍，车辆看障碍与雷区（铁丝网只慢 1.2 倍，不重算），步兵看雷区与铁丝网；地形（炸桥 / 修桥）变了全部重算
-const FGEN = { ship: 0, veh: 0, inf: 0 }, FG_PREV = { m: new Uint8Array(GW * GH), w: new Uint8Array(GW * GH), o: new Uint8Array(GW * GH), t: new Uint8Array(GW * GH), ter: null };
+const FGEN = { ship: 0, veh: 0, inf: 0 }, FG_PREV = { m: null, w: null, o: null, t: null, ter: null };
 const fgKey = cls => cls === 'ship' ? 'ship' : cls === 'veh' || cls === 'vehe' || cls === 'amph' ? 'veh' : 'inf';
-// 「能不能走」的版本（连通分量 compOf 用）：只有地形变了（炸桥、修桥）才加——雷区、铁丝网只改代价，滩头障碍只挡几格，都不重算连通
-const FPASS = { ship: 0, veh: 0, inf: 0 };
 
 const inVision = (x, y) => PV[ci(x, y)] === 1;
 const spotted = (x, y) => EV[ci(x, y)] === 1;
@@ -40,7 +35,8 @@ function visDirs(n) {
   return d;
 }
 // 每格的地面视线高度、遮挡顶高（地面 + 林地 / 城镇 / 悬崖的附加高度），只随地图变（炸桥、修桥是河流 ↔ 桥梁，两者都是 0 遮挡、同一高程）
-const VIS_G = new Float64Array(GW * GH), VIS_B = new Float64Array(GW * GH), VIS_KEY = { ter: null, seed: null };
+let VIS_G, VIS_B;
+const VIS_KEY = { ter: null, seed: null };
 function visPrep() {
   if (VIS_KEY.ter === TER && VIS_KEY.seed === TER.seed) return;
   VIS_KEY.ter = TER; VIS_KEY.seed = TER.seed;
@@ -102,7 +98,6 @@ function rebuildForts() {
   if (t || o) FGEN.ship++;
   if (t || o || m) FGEN.veh++;
   if (t || m || w) FGEN.inf++;
-  if (t) { FPASS.ship++; FPASS.inf++; FPASS.veh++; }   // 障碍（滩头几格）发现 / 清除不重算连通：只是局部绕行，流场的代价里照样算
   FG_PREV.m.set(MINEC); FG_PREV.w.set(WIREC); FG_PREV.o.set(OBSC); FG_PREV.t.set(TER.type); FG_PREV.ter = TER;
 }
 
@@ -113,6 +108,7 @@ function rebuildForts() {
 // 车辆爬坡：高地越高越难开（高程 0.5 起每高 0.1 代价加五成）；高程超过 VEH_ELEV 的山头（三维里看就是高山）坦克、车辆一律上不去，只能走公路过山
 const VCOST = [Infinity, Infinity, Infinity, 1.25, 4, Infinity, 1, 3, 1.5, Infinity, 5, 6, .8, .72, 1.4, 2.5], VEH_ELEV = .68;
 function stepCost(i, cls) {
+  if (i >= PGN) return Infinity;   // 寻路带以外（大海域的远海）：寻路不进去，那里的舰船直接按航向开（units.js sailTo）
   const t = TER.type[i];
   if (cls === 'ship') return t === T.DEEP ? (OBSC[i] === 2 ? 4 : 1) : t === T.SHOAL ? (OBSC[i] === 2 ? 6 : 1.6) : Infinity;
   if (cls === 'veh' || cls === 'vehe' || cls === 'amph') {
@@ -150,34 +146,30 @@ const NDX = NB.map(n => n[0]), NDY = NB.map(n => n[1]), NDM = NB.map(n => n[2]);
 // 流场缓存：地形/工事变化只让版本号递增；每个推演步最多重算 FBUDGET 个，超出时先用旧流场，避免大地图卡顿
 let FBUDGET = 3, FCOUNT = 0;   // FCOUNT：累计重算次数（性能统计）
 const COSTS = new Map();
-const HEAP_N = new Int32Array(GW * GH * 4), HEAP_P = new Float64Array(GW * GH * 4);   // 堆满了就不再压入（n < HEAP_N.length）；惰性删除的堆实际很少超过两倍格数，大地图上省一半内存
-// 通行代价按地形版本缓存（同一版本内多个流场共用，大地图上省掉每次整图重算）；raid 依赖实时视野，每次重算。
-//   交战中铁丝网、雷区几乎每秒都在变：同一类别最多每 2.5 秒整图重算一次（raid 每秒），晚两秒生效无所谓——大地图上每次重算近五十万格
-const fgNow = () => typeof S === 'object' && S && S.phase === 'battle' && isFinite(S.t) ? S.t : null;
-function costArr(cls, gen, force) {
+let HEAP_N, HEAP_P;
+// 通行代价按地形版本缓存（同一版本内多个流场共用，大地图上省掉每次整图重算）；raid 依赖实时视野，每次重算
+function costArr(cls, gen) {
   let C = COSTS.get(cls);
-  const now = fgNow(), fresh = C && C.t != null && now != null && now - C.t >= 0 && now - C.t < (cls === 'raid' ? 1 : 2.5);
-  if (!C || (force && C.gen !== gen) || ((C.gen !== gen || cls === 'raid') && !fresh)) { C = { gen, t: now, a: (C && C.a) || new Float32Array(GW * GH) }; for (let k = 0; k < GW * GH; k++) C.a[k] = stepCost(k, cls); COSTS.set(cls, C); }
+  if (!C || C.gen !== gen || cls === 'raid') { C = { gen, a: (C && C.a) || new Float64Array(GW * GH).fill(Infinity) }; for (let k = 0; k < PGN; k++) C.a[k] = stepCost(k, cls); COSTS.set(cls, C); }   // 寻路带以外一直是 Infinity，不再逐格算
   return C.a;
 }
-// 连通分量（按通行类别缓存）：能不能开到只看两格是否同属一片，不必为了判断可达整图算一遍流场。
-//   只在地形变了（FPASS：炸桥、修桥）时重算——交战中雷区、铁丝网、滩头障碍一直在变，但不影响大片地区连不连通；fresh 参数留着兼容旧调用
+// 连通分量（按通行类别、地形版本缓存，交战中 3 秒内照用）：能不能开到只看两格是否同属一片，不必为了判断可达整图算一遍流场
 const COMPS = new Map();
 function compOf(cls, fresh) {
-  const gen = FPASS[fgKey(cls)], now = typeof S === 'object' && S && S.phase === 'battle' && isFinite(S.t) ? S.t : null;
+  const gen = FGEN[fgKey(cls)], now = typeof S === 'object' && S && S.phase === 'battle' && isFinite(S.t) ? S.t : null;
   let C = COMPS.get(cls);
-  if (C && C.gen === gen) return C.a;
-  const cost = costArr(cls, FGEN[fgKey(cls)], true), a = (C && C.a) || new Int32Array(GW * GH), st = HEAP_N;
+  if (C && (C.gen === gen || (!fresh && now != null && C.t != null && now - C.t >= 0 && now - C.t < 3))) return C.a;
+  const cost = costArr(cls, gen), a = (C && C.a) || new Int32Array(GW * GH), st = HEAP_N;
   a.fill(0);
   let id = 0;
-  for (let k0 = 0; k0 < GW * GH; k0++) {
+  for (let k0 = 0; k0 < PGN; k0++) {
     if (a[k0] || cost[k0] === Infinity) continue;
     a[k0] = ++id; let n = 0; st[n++] = k0;
     while (n) {
       const i = st[--n], gx = i % GW, gy = (i / GW) | 0;
       for (let k = 0; k < 8; k++) {
         const nx = gx + NDX[k], ny = gy + NDY[k];
-        if (nx < 0 || ny < 0 || nx >= GW || ny >= GH) continue;
+        if (nx < 0 || ny < 0 || nx >= GW || ny >= PGH) continue;
         const j = ny * GW + nx;
         if (!a[j] && cost[j] !== Infinity) { a[j] = id; st[n++] = j; }
       }
@@ -199,9 +191,31 @@ function reachable(x0, y0, x1, y1, cls) {
 const fieldOk = (x, y, cls) => nearestPassable(ci(x, y), cls) >= 0;
 // A* 寻路（单位自己的路线：代价与流场相同，启发值按最便宜的地形（公路）× 1.2 加权——只搜起终点之间的一小片，比整图流场快几十倍）
 // 返回途经各格中心 [x, y, x, y, …]（不含起点格，起点即终点为空数组）；搜了 maxN 格还没到返回 null（改用流场）
-const AS_G = new Float64Array(GW * GH), AS_FROM = new Int32Array(GW * GH), AS_SEEN = new Uint32Array(GW * GH);
+let AS_G, AS_FROM, AS_SEEN;
+// 寻路带：只有前 PGH 行参与寻路（默认整张图；大海域地图建图后收到陆地与近岸海域，远海的格子不进寻路，省掉整片大海的流场计算）
+let PGH = 0, PGN = 0;
+function setPathRows(rows) {
+  PGH = clamp(Math.ceil(rows), 1, GH); PGN = GW * PGH;
+  if (typeof FIELDS === 'object') FIELDS.clear();
+  if (typeof COSTS === 'object') COSTS.clear();
+  if (typeof COMPS === 'object') COMPS.clear();
+}
+// 按格子数开的数组：开局与换世界尺寸（setWorld）时重新分配；堆按格数的 8 倍（大地图降到 3 倍，入堆有上限检查）
+function gridAlloc() {
+  const N = GW * GH, hk = N > 300000 ? 3 : 8;
+  PV = new Uint8Array(N); EV = new Uint8Array(N); SMOKE = new Uint8Array(N); MINEC = new Uint8Array(N); WIREC = new Uint8Array(N); OBSC = new Uint8Array(N); CRATERC = new Uint8Array(N);
+  Object.assign(FG_PREV, { m: new Uint8Array(N), w: new Uint8Array(N), o: new Uint8Array(N), t: new Uint8Array(N), ter: null });
+  VIS_G = new Float64Array(N); VIS_B = new Float64Array(N); VIS_KEY.ter = null;
+  HEAP_N = new Int32Array(N * hk); HEAP_P = new Float64Array(N * hk);
+  AS_G = new Float64Array(N); AS_FROM = new Int32Array(N); AS_SEEN = new Uint32Array(N);
+  PGH = GH; PGN = N;
+  if (typeof FIELDS === 'object') FIELDS.clear();
+  if (typeof COSTS === 'object') COSTS.clear();
+  if (typeof COMPS === 'object') COMPS.clear();
+}
+gridAlloc(); onWorld(gridAlloc);
 let AS_STAMP = 0;
-function astar(s, g, cls, maxN = Math.round(40000 * Math.max(1, GW * GH / 117600))) {   // 搜索上限按地图面积放大：大地图上远距离路线也用 A*，不退回整图流场
+function astar(s, g, cls, maxN = 40000) {
   if (g < 0) return null;
   if (s === g) return [];
   const cost = costArr(cls, FGEN[fgKey(cls)]), stamp = ++AS_STAMP, mc = (cls === 'ship' ? 1 : .72) * 1.2, gx = g % GW, gy = (g / GW) | 0;
@@ -245,10 +259,10 @@ function field(tx, ty, cls) {
   const ti = nearestPassable(ci(tx, ty), cls);
   if (ti < 0) return null;
   const key = cls + ti, f = FIELDS.get(key), gen = FGEN[fgKey(cls)], now = typeof S === 'object' && S && S.phase === 'battle' && isFinite(S.t) ? S.t : null;
-  // 交战中 3 秒内（大地图 6 秒）算过的流场：工事网格又变了也先照用（炮火连连时铁丝网、雷区几乎每秒在变，每变一次就整图重算太卡；大地图上一次要几百毫秒）
-  if (f && (f.gen === gen || FBUDGET <= 0 || (now != null && f.t != null && now - f.t >= 0 && now - f.t < (GW * GH > 200000 ? 6 : 3)))) { FIELDS.delete(key); FIELDS.set(key, f); return f.d; }
+  // 交战中 3 秒内算过的流场：工事网格又变了也先照用（炮火连连时铁丝网、雷区几乎每秒在变，每变一次就整图重算太卡）
+  if (f && (f.gen === gen || FBUDGET <= 0 || (now != null && f.t != null && now - f.t >= 0 && now - f.t < 3))) { FIELDS.delete(key); FIELDS.set(key, f); return f.d; }
   FBUDGET--; FCOUNT++;
-  const d = f ? f.d : new Float32Array(GW * GH);   // 距离表用 Float32：大地图上一张近 2 MB，缓存几十张也不吃光手机内存
+  const d = f ? f.d : new Float64Array(GW * GH);
   d.fill(Infinity);
   const cost = costArr(cls, gen);
   let n = 0;
@@ -276,13 +290,13 @@ function field(tx, ty, cls) {
       if (nx < 0 || ny < 0 || nx >= GW || ny >= GH) continue;
       const j = ny * GW + nx, cj = cost[j];
       if (cj === Infinity) continue;
-      const nd = Math.fround(p + (cj + c0) * .5 * NDM[k2]);   // 按 Float32 取整后再比、再压堆，和距离表里存的一致
+      const nd = p + (cj + c0) * .5 * NDM[k2];
       if (nd < d[j] && n < HEAP_N.length) { d[j] = nd; push(j, nd); }
     }
   }
   FIELDS.delete(key);
   FIELDS.set(key, { d, gen, t: now });
-  while (FIELDS.size > (GW * GH > 200000 ? 32 : 48)) FIELDS.delete(FIELDS.keys().next().value);
+  while (FIELDS.size > 48) FIELDS.delete(FIELDS.keys().next().value);
   return d;
 }
 

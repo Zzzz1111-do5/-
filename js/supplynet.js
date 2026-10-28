@@ -114,11 +114,9 @@ function snPlan() {
   if (!fronts.length) return;
   net.front = fronts[0];
   net.fronts = fronts.map(f => ({ x: Math.round(f.x), y: Math.round(f.y) }));
-  // 大地图：每次只规划一个方向（轮流），一个方向就要整图算一张流场——几个方向一起算，一次要卡一秒多
-  const todo = GW * GH > 200000 ? [fronts[(net.rr = ((net.rr ?? -1) + 1) % fronts.length)]] : fronts;
-  for (const front of todo) {
+  for (const front of fronts) {
     if (N.length >= SN_MAX) return;
-    const f = field(Math.round(front.x / 80) * 80, Math.round(front.y / 80) * 80, 'p');   // 前线重心取整到 80 的格点：流场能复用，不每次规划都整图重算
+    const f = field(front.x, front.y, 'p');
     if (!f) continue;
     // 起点：离前线（寻路距离）最近的接通补给点，或本方向已规划 / 在建的链尾（链尾的上级必须能接上）
     const pend = N.filter(n => !n.dead && n.built < 1 && isFinite(n.x));
@@ -211,7 +209,7 @@ function updateSupplyNet(dt) {
   if (S.phase !== 'battle') return;
   snWork(dt);
   snLink();
-  if ((net.planT = (net.planT ?? 0) - dt) <= 0) { net.planT = GW * GH > 200000 ? 6 : 4; snPlan(); }   // 大地图：规划一次要算整图流场，间隔放长一点
+  if ((net.planT = (net.planT ?? 0) - dt) <= 0) { net.planT = 4; snPlan(); }
 }
 
 // 工兵任务清单（autopilot 使用）：k 为任务唯一键，pri 越小越优先
@@ -373,10 +371,10 @@ function drawSupplyNet(time) {
       if (near) {
         const a = Math.atan2(P[i][1] - P[i - 1][1], P[i][0] - P[i - 1][0]);
         ctx.save(); ctx.translate(x, y); ctx.rotate(a);
-        // 运输线上的橄榄绿卡车
-        ctx.fillStyle = '#5c663d'; ctx.fillRect(-3, -1.6, 6, 3.2);
-        ctx.strokeStyle = 'rgba(0,0,0,.55)'; ctx.lineWidth = px(1); ctx.strokeRect(-3, -1.6, 6, 3.2);
-        ctx.fillStyle = RLP.p.hull; ctx.fillRect(1.6, -1.6, 1.4, 3.2);
+        const rl = realLook();   // 写实：运输线上的橄榄绿卡车
+        ctx.fillStyle = rl ? '#5c663d' : 'rgba(2,10,6,.9)'; ctx.fillRect(-3, -1.6, 6, 3.2);
+        ctx.strokeStyle = rl ? 'rgba(0,0,0,.55)' : rgba(COL.g, .9); ctx.lineWidth = px(1); ctx.strokeRect(-3, -1.6, 6, 3.2);
+        ctx.fillStyle = rl ? RLP.p.hull : rgba(COL.g, .9); ctx.fillRect(1.6, -1.6, 1.4, 3.2);
         ctx.restore();
       } else { ctx.fillStyle = rgba(COL.g, .9); ctx.fillRect(x - px(1.5), y - px(1.5), px(3), px(3)); }
     }

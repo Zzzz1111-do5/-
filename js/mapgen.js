@@ -2,8 +2,8 @@
 // 地图生成（一）：海岸线、六处海滩、悬崖礁岸、两条河、两处山地、山脊、沼泽与基础地形
 let TER = null;
 const coastAt = x => TER.coast[clamp(Math.round(x), 0, W)];
-const BEACH_NAMES = ['红滩', '白滩', '蓝滩', '金滩', '绿滩', '银滩', '黄滩', '黑滩', '紫滩', '橙滩', '青滩', '灰滩', '赤滩', '碧滩', '褐滩', '粉滩', '玄滩', '翠滩'];
-const N_BEACH = Math.min(BEACH_NAMES.length, Math.round(6 * MAP_K / 1.15)), N_RIVER = MAP_K > 1.2 ? 3 : 2;   // 海滩沿海岸线排，按边长增加（2.8 倍边长：15 处）；河流 3 条
+const BEACH_NAMES = ['红滩', '白滩', '蓝滩', '金滩', '绿滩', '银滩', '黄滩', '黑滩', '紫滩', '橙滩'];
+const N_BEACH = Math.round(6 * MAP_K * MAP_K / 1.6), N_RIVER = MAP_K > 1.2 ? 3 : 2;   // 海滩、河流按地图大小增加（1.4 倍边长：8 处海滩、3 条河）
 // 第 k 条河在第 gy 行的中心 x；河源以北返回很大的负数
 const riverX = (k, gy) => TER.rivers[k].rx[clamp(gy, 0, GH - 1)];
 
@@ -58,7 +58,6 @@ function buildMap(seed) {
   }
 
   const type = new Uint8Array(GW * GH), elev = new Float32Array(GW * GH);
-  for (const h of hills) { h.c = 3.5 * h.r; h.k = 2 * h.r * h.r; }   // 山包只算 3.5 倍半径以内（再远贡献不到千分之二）：大地图上山包多，逐格全算太慢
   for (let gy = 0; gy < GH; gy++) for (let gx = 0; gx < GW; gx++) {
     const x = gx * CELL + 5, y = gy * CELL + 5, i = gy * GW + gx, c = cAt(x), d = c - y, b = beachAt(x);
     if (d <= 0) {
@@ -68,7 +67,7 @@ function buildMap(seed) {
     }
     let e = .05 + Math.min(.16, d / (3500 * MAP_K));
     e += .36 * Math.exp(-((y - ridgeY(x)) ** 2) / 14450);
-    for (const h of hills) { const dx = x - h.x, dy = y - h.y; if (dx < h.c && dx > -h.c && dy < h.c && dy > -h.c) e += h.h * Math.exp(-(dx * dx + dy * dy) / h.k); }
+    for (const h of hills) e += h.h * Math.exp(-((x - h.x) ** 2 + (y - h.y) ** 2) / (2 * h.r * h.r));
     if (headland(x)) e += .1 * Math.exp(-((d - 60) ** 2) / 9000);   // 岬角：低缓的岸坡（原来岸边陡起一道山包，很突兀）
     e += (noise(x / W, y / H) - .5) * .2 + (noise2(x / W, y / H) - .5) * .08;
     if (b >= 0) e *= lerp(.35, 1, smooth(30, 220, d));                 // 海滩后方平缓

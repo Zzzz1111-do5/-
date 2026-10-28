@@ -2,6 +2,7 @@
 // 镜头：缩放、平移、坐标换算、小地图
 const CAM = { x: W / 2, y: STAGING_Y + 120, z: 1, vw: 1, vh: 1, fit: 1 };
 
+onWorld(() => { if (CAM.vw > 1) camFit(CAM.vw, CAM.vh); });   // 换了世界尺寸：全图缩放重新算
 function camFit(vw, vh) {
   const first = CAM.vw === 1;
   CAM.vw = vw; CAM.vh = vh;
@@ -57,7 +58,7 @@ const MM_COL = ['#03140c', '#0a3326', '#7a1f33', '#5fae7a', '#3e6b52', '#9be3b5'
   '#11433d', '#1d6f8a', '#e6fff0', '#7fe0a4', '#57c987', '#2a8fa8'];
 
 function mmInit(cv) {
-  MM.cv = cv;   // 小地图用黑绿配色
+  MM.cv = cv; MM.real = realLook() && !(typeof greenLook === 'function' && greenLook());   // 黑绿画面的小地图用数码矩阵的配色
   const w = cv.clientWidth || 268;
   cv.width = Math.round(w * (window.devicePixelRatio || 1)); cv.height = Math.round(cv.width * H / W);
   MM.k = cv.width / W;
@@ -66,9 +67,14 @@ function mmInit(cv) {
   const g = MM.base.getContext('2d'), img = g.createImageData(GW, GH);
   for (let i = 0; i < GW * GH; i++) {
     const t = TER.type[i];
-    const c = MM_COL[t], e = isWater(t) ? 1 : .55 + TER.elev[i] * .6;
-    img.data[i * 4] = parseInt(c.slice(1, 3), 16) * e; img.data[i * 4 + 1] = parseInt(c.slice(3, 5), 16) * e;
-    img.data[i * 4 + 2] = parseInt(c.slice(5, 7), 16) * e;
+    if (MM.real) {   // 写实：与地形同一套底色，海按离岸距离加深
+      const c = TRX_FLAT[t], e = isWater(t) ? 1 - clamp((cellCY(i) - coastAt(cellCX(i))) / 900, 0, .6) : .8 + TER.elev[i] * .4;
+      for (let j = 0; j < 3; j++) img.data[i * 4 + j] = c[j] * e;
+    } else {
+      const c = MM_COL[t], e = isWater(t) ? 1 : .55 + TER.elev[i] * .6;
+      img.data[i * 4] = parseInt(c.slice(1, 3), 16) * e; img.data[i * 4 + 1] = parseInt(c.slice(3, 5), 16) * e;
+      img.data[i * 4 + 2] = parseInt(c.slice(5, 7), 16) * e;
+    }
     img.data[i * 4 + 3] = 255;
   }
   g.putImageData(img, 0, 0);
@@ -81,20 +87,20 @@ function mmDraw() {
 }
 function mmDraw1() {
   if (!MM.cv) return;
-  if (MM.seed !== TER.seed) mmInit(MM.cv);
+  if (MM.seed !== TER.seed || MM.real !== (realLook() && !(typeof greenLook === 'function' && greenLook()))) mmInit(MM.cv);
   const g = MM.cv.getContext('2d'), k = MM.k, dot = (x, y, r, c) => { g.fillStyle = c; g.fillRect(x * k - r, y * k - r, r * 2, r * 2); };
-  g.imageSmoothingEnabled = false;
+  g.imageSmoothingEnabled = MM.real;
   g.drawImage(MM.base, 0, 0, MM.cv.width, MM.cv.height);
   // 视野外压暗：每 2×2 格取一个像素拼成小图，一次贴上（原来逐块 fillRect，开局大半张图没侦察时每次上万个）
   const fw = Math.ceil(GW / 2), fh = Math.ceil(GH / 2), D = typeof CVL_DISP === 'object' ? CVL_DISP : null;
   if (!MM.fog) { MM.fog = document.createElement('canvas'); MM.fog.width = fw; MM.fog.height = fh; MM.fogImg = MM.fog.getContext('2d').createImageData(fw, fh); }
-  const fd = MM.fogImg.data, fc = [0, 4, 2, 115];
+  const fd = MM.fogImg.data, fc = MM.real ? [8, 12, 18, 128] : [0, 4, 2, 115];
   for (let y = 0; y < fh; y++) for (let x = 0; x < fw; x++) {
     const i = y * 2 * GW + x * 2, o = (y * fw + x) * 4;
     fd[o] = fc[0]; fd[o + 1] = fc[1]; fd[o + 2] = fc[2]; fd[o + 3] = !PV[i] && !(D && D[i]) ? fc[3] : 0;
   }
   MM.fog.getContext('2d').putImageData(MM.fogImg, 0, 0);
-  g.imageSmoothingEnabled = false; g.drawImage(MM.fog, 0, 0, fw * 2 * CELL * k, fh * 2 * CELL * k);
+  g.imageSmoothingEnabled = false; g.drawImage(MM.fog, 0, 0, fw * 2 * CELL * k, fh * 2 * CELL * k); g.imageSmoothingEnabled = MM.real;
   const u = Math.max(1.5, k * 6);
   for (const p of S.points) { g.strokeStyle = p.owner === 'p' ? COL.g : COL.enemy; g.lineWidth = 1.5; g.strokeRect(p.x * k - u * 1.4, p.y * k - u * 1.4, u * 2.8, u * 2.8); }
   for (const e of S.enemies) if (e.kx != null && !e.dead) dot(e.kx, e.ky, u * .7, COL.enemy);

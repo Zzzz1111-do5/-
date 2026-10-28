@@ -78,119 +78,121 @@ function manDied(q, i, role) {
 }
 
 // —— 画一个人（局部坐标 +x 朝前、+y 向右，单位：世界长度 / MAN_K）——
-function manDraw(ctx, x0, y0, a, kind, col, side, an) {
+function manDraw(ctx, x0, y0, a, kind, col, side, an, real) {
   an = an || MAN_IDLE;
   const lo = an.low;
   if (lo != null) {   // 姿态过渡（manLowStep）：站 ↔ 跪 ↔ 卧之间，相邻两个姿态叠着淡入淡出，不一下子跳过去
     if (!an.mv && lo > .06 && lo < 1.94 && Math.abs(lo - 1) > .06) {
       const g = ctx.globalAlpha, [A, B, w] = lo < 1 ? [{ kneel: false, prone: false }, { kneel: true, prone: false }, lo] : [{ kneel: true, prone: false }, { kneel: false, prone: true }, lo - 1];
-      ctx.globalAlpha = g * (1 - w); manDraw(ctx, x0, y0, a, kind, col, side, { ...an, ...A, low: null });
-      ctx.globalAlpha = g * w; manDraw(ctx, x0, y0, a, kind, col, side, { ...an, ...B, low: null });
+      ctx.globalAlpha = g * (1 - w); manDraw(ctx, x0, y0, a, kind, col, side, { ...an, ...A, low: null }, real);
+      ctx.globalAlpha = g * w; manDraw(ctx, x0, y0, a, kind, col, side, { ...an, ...B, low: null }, real);
       ctx.globalAlpha = g;
       return;
     }
     an = { ...an, kneel: Math.abs(lo - 1) <= .06 && !an.mv, prone: lo >= 1.94, low: null };
   }
-  const P = rlPal(side), mk = MAN_K * (an.k || 1), lw = px(1) / mk;   // an.k：另行缩放（飞行员、甲板人员按飞机的比例画小）
-  const uni = an.sof ? rlShade(P.uni, .8) : P.uni, packC = P.pack, helmC = P.helm, gunC = RL_EDGE, edge = 'rgba(0,0,0,.45)';
+  const P = real ? rlPal(side) : null, mk = MAN_K * (an.k || 1), lw = px(1) / mk, dark = 'rgba(2,10,6,.88)';   // an.k：另行缩放（飞行员、甲板人员按飞机的比例画小）
+  const uni = real ? (an.sof ? rlShade(P.uni, .8) : P.uni) : dark, packC = real ? P.pack : dark, helmC = real ? P.helm : col, gunC = real ? RL_EDGE : col, edge = real ? 'rgba(0,0,0,.45)' : col;
   ctx.save(); ctx.translate(x0, y0); ctx.rotate(a); ctx.scale(mk, mk);
   ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-  const fillB = c => { ctx.fillStyle = c; ctx.fill(); ctx.strokeStyle = edge; ctx.lineWidth = lw * .5; ctx.stroke(); };
+  const fillB = c => { ctx.fillStyle = c; ctx.fill(); if (!real) { ctx.globalAlpha *= .35; ctx.fillStyle = col; ctx.fill(); ctx.globalAlpha /= .35; } ctx.strokeStyle = edge; ctx.lineWidth = lw * (real ? .5 : 1); ctx.stroke(); };
   const line = (x1, y1, x2, y2, w, c) => { ctx.strokeStyle = c; ctx.lineWidth = w; ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke(); };
-  const rect = (x, y, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(x, y, w, h); };
-  // 脚下阵营淡圈（col 已含透明度 / 溃退时的琥珀色）+ 投影（光从西北来）；飞行员、甲板人员不画淡圈
-  ctx.strokeStyle = kind === 'pilot' || kind === 'deck' ? 'rgba(0,0,0,0)' : col; ctx.lineWidth = lw * .9; ctx.beginPath();
-  if (an.prone) ctx.ellipse(-1.2, 0, 3.4, 2.1, 0, 0, 7); else ctx.ellipse(0, 0, 2.5, 2.3, 0, 0, 7);
-  ctx.stroke();
-  const [sx, sy] = rlLocal(a, an.prone ? .25 : .55, an.prone ? .25 : .55);
-  ctx.fillStyle = 'rgba(0,0,0,.28)'; ctx.beginPath();
-  if (an.prone) ctx.ellipse(-1.1 + sx, sy, 2.3, .95, 0, 0, 7); else ctx.ellipse(-.1 + sx, sy, .95, 1.75, 0, 0, 7);
-  ctx.fill();
-  if (an.prone) { manProne(ctx, kind, an, lw, col, uni, packC, helmC, gunC, edge, fillB, line, rect); ctx.restore(); return; }
-  if (kind === 'pilot' || kind === 'deck') { manCrew(ctx, kind, an, lw, col, fillB, line, rect); ctx.restore(); return; }   // 飞行员、甲板人员：不带枪
+  const rect = (x, y, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(x, y, w, h); if (!real) { ctx.strokeStyle = col; ctx.lineWidth = lw * .7; ctx.strokeRect(x, y, w, h); } };
+  if (real) {   // 脚下阵营淡圈（col 已含透明度 / 溃退时的琥珀色）+ 投影（光从西北来）；飞行员、甲板人员不画淡圈
+    ctx.strokeStyle = kind === 'pilot' || kind === 'deck' ? 'rgba(0,0,0,0)' : col; ctx.lineWidth = lw * .9; ctx.beginPath();
+    if (an.prone) ctx.ellipse(-1.2, 0, 3.4, 2.1, 0, 0, 7); else ctx.ellipse(0, 0, 2.5, 2.3, 0, 0, 7);
+    ctx.stroke();
+    const [sx, sy] = rlLocal(a, an.prone ? .25 : .55, an.prone ? .25 : .55);
+    ctx.fillStyle = 'rgba(0,0,0,.28)'; ctx.beginPath();
+    if (an.prone) ctx.ellipse(-1.1 + sx, sy, 2.3, .95, 0, 0, 7); else ctx.ellipse(-.1 + sx, sy, .95, 1.75, 0, 0, 7);
+    ctx.fill();
+  }
+  if (an.prone) { manProne(ctx, kind, an, lw, real, col, uni, packC, helmC, gunC, edge, fillB, line, rect); ctx.restore(); return; }
+  if (kind === 'pilot' || kind === 'deck') { manCrew(ctx, kind, an, lw, real, col, fillB, line, rect); ctx.restore(); return; }   // 飞行员、甲板人员：不带枪
   const g = an.mv ? Math.sin(an.ph) : 0, stride = an.run ? 2.2 : 1.6, lean = an.run ? .35 : 0, duck = an.sup ? 1 : 0, sw = g * .07;
   // 腿：走动时两只脚一前一后交替迈出身体轮廓（跑步步子更大），跪姿时一膝着地、小腿贴地伸在后面
-  const legC = rlShade(P.uni, .78);
+  const legC = real ? rlShade(P.uni, .78) : col;
   if (an.mv) {
-    for (const s of [-1, 1]) { const fx = g * stride * -s; manLimb(ctx, lw, .58, legC, [-.1, s * .4, fx, s * .48]); manBoot(ctx, fx + (fx >= 0 ? .14 : -.14), s * .48, 0); }
+    for (const s of [-1, 1]) { const fx = g * stride * -s; manLimb(ctx, real, col, lw, .58, legC, [-.1, s * .4, fx, s * .48]); manBoot(ctx, real, col, fx + (fx >= 0 ? .14 : -.14), s * .48, 0); }
   } else if (an.kneel) {
-    manLimb(ctx, lw, .58, legC, [-.1, -.4, .9, -.5]); manBoot(ctx, 1.05, -.5, 0);
-    manLimb(ctx, lw, .58, legC, [-.1, .4, -1.05, .55, -1.85, .6]); manBoot(ctx, -2, .6, 0);
+    manLimb(ctx, real, col, lw, .58, legC, [-.1, -.4, .9, -.5]); manBoot(ctx, real, col, 1.05, -.5, 0);
+    manLimb(ctx, real, col, lw, .58, legC, [-.1, .4, -1.05, .55, -1.85, .6]); manBoot(ctx, real, col, -2, .6, 0);
   }
   ctx.save(); ctx.translate(lean * .3, sw); ctx.rotate(g * .06);
   // 背后：背包 / 电台 / 工具（随兵种）
-  manBack(ctx, kind, an, lw, packC, gunC, rect, line);
+  manBack(ctx, kind, an, lw, real, col, packC, gunC, rect, line);
   // 躯干与肩
   const sk = an.kneel ? .93 : 1 - duck * .06;
   ctx.beginPath(); ctx.ellipse(-.1, 0, .88 * sk, 1.68 * sk, 0, 0, 7); fillB(uni);
-  if (kind !== 'crew') { ctx.fillStyle = rlShade(P.uni, .82); ctx.fillRect(.25, -.7, .38, .55); ctx.fillRect(.25, .15, .38, .55); }   // 胸前弹匣包
-  if (kind === 'sniper' || kind === 'spot') manGhillie(ctx, lw, an.t);
+  if (real && kind !== 'crew') { ctx.fillStyle = rlShade(P.uni, .82); ctx.fillRect(.25, -.7, .38, .55); ctx.fillRect(.25, .15, .38, .55); }   // 胸前弹匣包
+  if (kind === 'sniper' || kind === 'spot') manGhillie(ctx, real, col, lw, an.t);
   // 武器与手臂
-  manArms(ctx, kind, an, lw, col, uni, gunC, line, rect);
+  manArms(ctx, kind, an, lw, real, col, uni, gunC, line, rect);
   // 头：钢盔（车组是坦克帽），受压制时缩头，待机时转头张望
   const hx = .15 + lean * .55 - duck * .3, hr = kind === 'crew' ? .72 : .8 * (1 - duck * .12);
-  ctx.fillStyle = helmC; ctx.strokeStyle = 'rgba(0,0,0,.5)'; ctx.lineWidth = lw * .8;
+  ctx.fillStyle = helmC; ctx.strokeStyle = real ? 'rgba(0,0,0,.5)' : dark; ctx.lineWidth = lw * .8;
   ctx.beginPath(); if (kind === 'crew') ctx.ellipse(hx, 0, hr * .95, hr * 1.1, 0, 0, 7); else ctx.arc(hx, 0, hr, 0, 7); ctx.fill(); ctx.stroke();
-  const [lx, ly] = rlLocal(a, -.25, -.25); ctx.fillStyle = 'rgba(255,255,255,.17)'; ctx.beginPath(); ctx.arc(hx + lx, ly, hr * .46, 0, 7); ctx.fill();
-  const la = an.look; line(hx + Math.cos(la) * hr * .45, Math.sin(la) * hr * .45, hx + Math.cos(la) * hr * 1.05, Math.sin(la) * hr * 1.05, lw * .9, 'rgba(0,0,0,.55)');   // 面朝的方向（帽檐）
-  if (kind === 'crew') line(hx - .5, -.55, hx - .5, .55, lw * .7, '#1b1a17');   // 坦克帽的耳机带
-  else if (an.sof) rect(hx + hr * .45, -.24, .5, .48, '#1d1e1b');   // 蛟龙：头盔前的夜视仪支架
+  if (real) { const [lx, ly] = rlLocal(a, -.25, -.25); ctx.fillStyle = 'rgba(255,255,255,.17)'; ctx.beginPath(); ctx.arc(hx + lx, ly, hr * .46, 0, 7); ctx.fill(); }
+  const la = an.look; line(hx + Math.cos(la) * hr * .45, Math.sin(la) * hr * .45, hx + Math.cos(la) * hr * 1.05, Math.sin(la) * hr * 1.05, lw * .9, real ? 'rgba(0,0,0,.55)' : dark);   // 面朝的方向（帽檐）
+  if (kind === 'crew') line(hx - .5, -.55, hx - .5, .55, lw * .7, real ? '#1b1a17' : dark);   // 坦克帽的耳机带
+  else if (an.sof) rect(hx + hr * .45, -.24, .5, .48, real ? '#1d1e1b' : dark);   // 蛟龙：头盔前的夜视仪支架
   ctx.restore();
   ctx.restore();
 }
 // 飞行员（橄榄绿飞行服、白头盔、救生背心）与甲板人员（彩色马甲、护耳头盔）：跑步两臂摆动；爬登机梯时面朝飞机、两手交替向前上方抓梯子、一腿抬起；
 // 弹射官（an.point）蹲下、右臂直指舰首
-function manCrew(ctx, kind, an, lw, col, fillB, line, rect) {
-  const pil = kind === 'pilot', suit = pil ? '#5d6a4e' : '#3c4248', vest = pil ? '#6e6a4c' : an.jc || '#d8b33a';
-  const legC = rlShade(pil ? '#5d6a4e' : '#33383d', .82), armC = suit, armW = lw * 2, g = an.mv ? Math.sin(an.ph) : 0;
+function manCrew(ctx, kind, an, lw, real, col, fillB, line, rect) {
+  const pil = kind === 'pilot', suit = real ? (pil ? '#5d6a4e' : '#3c4248') : 'rgba(2,10,6,.88)', vest = real ? (pil ? '#6e6a4c' : an.jc || '#d8b33a') : col;
+  const legC = real ? rlShade(pil ? '#5d6a4e' : '#33383d', .82) : col, armC = real ? suit : col, armW = lw * (real ? 2 : 1), g = an.mv ? Math.sin(an.ph) : 0;
   if (an.clb != null) {   // 爬梯：一脚踩在高一级的横档上（俯视在身前），两手交替往上抓
     const s = Math.sin(an.ph) > 0 ? 1 : -1;
-    manLimb(ctx, lw, .55, legC, [-.1, s * .4, .75, s * .42]); manBoot(ctx, .9, s * .42, 0);
-    manLimb(ctx, lw, .55, legC, [-.1, -s * .4, .2, -s * .45]); manBoot(ctx, .35, -s * .45, 0);
-  } else if (an.mv) for (const s of [-1, 1]) { const fx = g * (an.run ? 2.2 : 1.6) * -s; manLimb(ctx, lw, .55, legC, [-.1, s * .4, fx, s * .46]); manBoot(ctx, fx + (fx >= 0 ? .14 : -.14), s * .46, 0); }
-  else if (an.kneel) { manLimb(ctx, lw, .55, legC, [-.1, -.4, .9, -.5]); manBoot(ctx, 1.05, -.5, 0); manLimb(ctx, lw, .55, legC, [-.1, .4, -1.05, .55, -1.85, .6]); manBoot(ctx, -2, .6, 0); }
+    manLimb(ctx, real, col, lw, .55, legC, [-.1, s * .4, .75, s * .42]); manBoot(ctx, real, col, .9, s * .42, 0);
+    manLimb(ctx, real, col, lw, .55, legC, [-.1, -s * .4, .2, -s * .45]); manBoot(ctx, real, col, .35, -s * .45, 0);
+  } else if (an.mv) for (const s of [-1, 1]) { const fx = g * (an.run ? 2.2 : 1.6) * -s; manLimb(ctx, real, col, lw, .55, legC, [-.1, s * .4, fx, s * .46]); manBoot(ctx, real, col, fx + (fx >= 0 ? .14 : -.14), s * .46, 0); }
+  else if (an.kneel) { manLimb(ctx, real, col, lw, .55, legC, [-.1, -.4, .9, -.5]); manBoot(ctx, real, col, 1.05, -.5, 0); manLimb(ctx, real, col, lw, .55, legC, [-.1, .4, -1.05, .55, -1.85, .6]); manBoot(ctx, real, col, -2, .6, 0); }
   ctx.save(); ctx.translate((an.run ? .2 : 0) + (an.clb != null ? .25 : 0), g * .07);
   ctx.beginPath(); ctx.ellipse(-.1, 0, .82, 1.58, 0, 0, 7); fillB(suit);
   ctx.fillStyle = vest; ctx.beginPath(); ctx.ellipse(-.05, 0, .62, 1.3, 0, 0, 7); ctx.fill();   // 救生背心 / 甲板马甲
-  if (pil) { ctx.fillStyle = '#2d2f2a'; ctx.fillRect(-.95, -.55, .5, 1.1); }   // 飞行员：背后的伞包挂带
+  if (pil && real) { ctx.fillStyle = '#2d2f2a'; ctx.fillRect(-.95, -.55, .5, 1.1); }   // 飞行员：背后的伞包挂带
   if (an.clb != null) {   // 两手向前上方抓梯子 / 座舱边
     const q = Math.sin(an.ph) * .35;
     line(0, -1.15, 1.55 + q, -.55, armW, armC); line(0, 1.15, 1.55 - q, .55, armW, armC);
   } else if (an.point) { line(0, 1.15, 2.6, .9, armW, armC); line(0, -1.15, .5, -1.3, armW, armC); }   // 弹射官：右臂指向前方
   else { const sw = an.mv ? g * .5 : 0; line(0, 1.18, .45 - sw, 1.45, armW, armC); line(0, -1.18, .45 + sw, -1.45, armW, armC); }
-  const hr = .78, hc = pil ? '#e6e6df' : an.jc || '#d8b33a';
-  ctx.fillStyle = hc; ctx.strokeStyle = 'rgba(0,0,0,.5)'; ctx.lineWidth = lw * .8;
+  const hr = .78, hc = real ? (pil ? '#e6e6df' : an.jc || '#d8b33a') : col;
+  ctx.fillStyle = hc; ctx.strokeStyle = real ? 'rgba(0,0,0,.5)' : 'rgba(2,10,6,.88)'; ctx.lineWidth = lw * .8;
   ctx.beginPath(); ctx.arc(.15, 0, hr, 0, 7); ctx.fill(); ctx.stroke();
-  if (pil) { ctx.fillStyle = '#1d2329'; ctx.fillRect(.45, -.42, .42, .84); }   // 头盔面罩
-  else { ctx.fillStyle = '#222'; for (const s of [-1, 1]) { ctx.beginPath(); ctx.arc(.1, s * .72, .22, 0, 7); ctx.fill(); } }   // 护耳
+  if (pil) { ctx.fillStyle = real ? '#1d2329' : 'rgba(2,10,6,.88)'; ctx.fillRect(.45, -.42, .42, .84); }   // 头盔面罩
+  else { ctx.fillStyle = real ? '#222' : 'rgba(2,10,6,.88)'; for (const s of [-1, 1]) { ctx.beginPath(); ctx.arc(.1, s * .72, .22, 0, 7); ctx.fill(); } }   // 护耳
   ctx.restore();
 }
 // 背后的东西
-function manBack(ctx, kind, an, lw, packC, gunC, rect, line) {
+function manBack(ctx, kind, an, lw, real, col, packC, gunC, rect, line) {
   if (kind === 'crew') return;
   if (kind === 'radio') {   // 背负电台 + 鞭状天线（随步摆）
-    rect(-1.95, -.85, 1.05, 1.7, '#3a3f30');
+    rect(-1.95, -.85, 1.05, 1.7, real ? '#3a3f30' : packC);
     const sw = an.mv ? Math.sin(an.ph * 2) * .35 : Math.sin(an.t * 1.3) * .08;
-    ctx.strokeStyle = '#1e1f1b'; ctx.lineWidth = lw * .7; ctx.beginPath(); ctx.moveTo(-1.7, -.7); ctx.quadraticCurveTo(-2.6, -1.3 + sw * .3, -3.5, -2.1 + sw); ctx.stroke();
+    ctx.strokeStyle = real ? '#1e1f1b' : col; ctx.lineWidth = lw * .7; ctx.beginPath(); ctx.moveTo(-1.7, -.7); ctx.quadraticCurveTo(-2.6, -1.3 + sw * .3, -3.5, -2.1 + sw); ctx.stroke();
     return;
   }
-  if (kind === 'mg') { rect(-1.85, -.8, .95, 1.6, packC); rect(-1.55, .55, .7, .5, '#3b3a30'); return; }   // 背包 + 备用弹链箱
+  if (kind === 'mg') { rect(-1.85, -.8, .95, 1.6, packC); rect(-1.55, .55, .7, .5, real ? '#3b3a30' : packC); return; }   // 背包 + 备用弹链箱
   if (kind === 'eng') {   // 工兵：背包、锹、爆破包
     rect(-1.8, -.75, .95, 1.5, packC);
-    if (!an.work) { line(-.5, -1.15, -2.9, -1.9, lw * 1.1, '#5a4a34'); ctx.fillStyle = '#6b6b66'; ctx.fillRect(-3.45, -2.4, 1, .95); }
-    rect(-1.6, .75, .7, .55, '#6a5a3a');
+    if (!an.work) { line(-.5, -1.15, -2.9, -1.9, lw * (real ? 1.1 : .9), real ? '#5a4a34' : col); ctx.fillStyle = real ? '#6b6b66' : col; ctx.fillRect(-3.45, -2.4, 1, .95); }
+    rect(-1.6, .75, .7, .55, real ? '#6a5a3a' : packC);
     return;
   }
-  if (kind === 'flame') { for (const y of [-.55, .55]) { ctx.fillStyle = '#4a4f3c'; ctx.beginPath(); ctx.ellipse(-1.75, y, 1.05, .32, 0, 0, 7); ctx.fill(); } return; }   // 背两具 PF-97
+  if (kind === 'flame') { for (const y of [-.55, .55]) { ctx.fillStyle = real ? '#4a4f3c' : packC; ctx.beginPath(); ctx.ellipse(-1.75, y, 1.05, .32, 0, 0, 7); ctx.fill(); if (!real) { ctx.strokeStyle = col; ctx.lineWidth = lw * .7; ctx.stroke(); } } return; }   // 背两具 PF-97
   if (kind === 'at' && !an.at) { rect(-1.75, -.7, .9, 1.4, packC); return; }
   if (kind === 'medic') {   // 卫生兵：大背包上的红十字
     rect(-1.85, -.8, 1.05, 1.6, packC);
-    ctx.fillStyle = '#e9e6dc'; ctx.fillRect(-1.72, -.4, .8, .8); ctx.fillStyle = '#b3261e'; ctx.fillRect(-1.42, -.3, .2, .6); ctx.fillRect(-1.62, -.1, .6, .2);
+    if (real) { ctx.fillStyle = '#e9e6dc'; ctx.fillRect(-1.72, -.4, .8, .8); ctx.fillStyle = '#b3261e'; ctx.fillRect(-1.42, -.3, .2, .6); ctx.fillRect(-1.62, -.1, .6, .2); }
+    else { line(-1.32, -.42, -1.32, .42, lw * 1.2, col); line(-1.74, 0, -.9, 0, lw * 1.2, col); }
     return;
   }
   if (kind === 'mortar') {   // 迫击炮手：行进时座钣背在背包上
     rect(-1.75, -.72, .92, 1.44, packC);
-    if (an.mv) { ctx.fillStyle = '#3a3b33'; ctx.beginPath(); ctx.ellipse(-1.3, 0, .62, .82, 0, 0, 7); ctx.fill(); ctx.strokeStyle = 'rgba(0,0,0,.45)'; ctx.lineWidth = lw * .8; ctx.stroke(); }
+    if (an.mv) { ctx.fillStyle = real ? '#3a3b33' : 'rgba(2,10,6,.88)'; ctx.beginPath(); ctx.ellipse(-1.3, 0, .62, .82, 0, 0, 7); ctx.fill(); ctx.strokeStyle = real ? 'rgba(0,0,0,.45)' : col; ctx.lineWidth = lw * .8; ctx.stroke(); }
     return;
   }
   if (an.sof) { rect(-1.5, -.58, .68, 1.16, packC); return; }   // 蛟龙：突击小背包
@@ -198,34 +200,34 @@ function manBack(ctx, kind, an, lw, packC, gunC, rect, line) {
   if (an.bino || an.cmd) line(-1.35, -1.3, -.4, 1.2, lw * 1.05, gunC);   // 观察员 / 指挥员：步枪斜挎在背上
 }
 // 狙击手 / 观察手的伪装披挂：肩背一圈毛边
-function manGhillie(ctx, lw, t) {
-  ctx.strokeStyle = 'rgba(78,88,52,.9)'; ctx.lineWidth = lw * .8; ctx.beginPath();
+function manGhillie(ctx, real, col, lw, t) {
+  ctx.strokeStyle = real ? 'rgba(78,88,52,.9)' : rgba(COL.g, .55); ctx.lineWidth = lw * .8; ctx.beginPath();
   for (let i = 0; i < 14; i++) { const b = i / 14 * 6.283, r0 = 1.55, r1 = 2.05 + Math.sin(i * 2.7 + t * .3) * .15; ctx.moveTo(Math.cos(b) * .85 * r0 / 1.55, Math.sin(b) * r0); ctx.lineTo(Math.cos(b) * .85 * r1 / 1.55 - .2, Math.sin(b) * r1); }
   ctx.stroke();
 }
 // 武器与手臂：瞄准 / 端枪跑 / 换弹 / 投弹 / 挖掘；射击时枪口焰、后坐、烟
-function manArms(ctx, kind, an, lw, col, uni, gunC, line, rect) {
-  const armC = uni, armW = lw * 2.1;
+function manArms(ctx, kind, an, lw, real, col, uni, gunC, line, rect) {
+  const armC = real ? uni : col, armW = lw * (real ? 2.1 : 1);
   const fire = an.fire, rec = fire != null ? Math.max(0, 1 - fire / .14) * (kind === 'mg' ? .22 : kind === 'sniper' ? .5 : .32) : 0;
   if (an.work) {   // 工兵挥锹：锹头一下一下往前铲
     const k = (Math.sin(an.t * 6) + 1) / 2, bx = 1.2 + k * .9;
     line(0, 1.2, .5, .45, armW, armC); line(0, -1.2, .9, -.2, armW, armC);
-    line(.2, .5, bx, -.1, lw * 1.2, '#5a4a34');
-    ctx.fillStyle = '#6b6b66'; ctx.save(); ctx.translate(bx, -.1); ctx.rotate(-.4); ctx.fillRect(-.1, -.45, .8, .9); ctx.restore();
+    line(.2, .5, bx, -.1, lw * (real ? 1.2 : 1), real ? '#5a4a34' : col);
+    ctx.fillStyle = real ? '#6b6b66' : col; ctx.save(); ctx.translate(bx, -.1); ctx.rotate(-.4); ctx.fillRect(-.1, -.45, .8, .9); ctx.restore();
     return;
   }
   if (an.thr != null) {   // 投弹：右臂从后上方甩到前方，枪换到左手
     const u = an.thr, b = -2.4 + u * 3.2, hx = Math.cos(b) * 1.7, hy = 1.15 + Math.sin(b) * .9;
-    manGun(ctx, kind, -.6, -.4, -.55, 0, lw, gunC, rect, line, an.sof);
+    manGun(ctx, kind, -.6, -.4, -.55, 0, lw, real, col, gunC, rect, line, an.sof);
     line(0, -1.2, .7, -.55, armW, armC); line(0, 1.2, hx, hy, armW, armC);
-    if (u < .7) { ctx.fillStyle = '#3a3c2e'; ctx.beginPath(); ctx.arc(hx + Math.cos(b) * .25, hy, .3, 0, 7); ctx.fill(); }
+    if (u < .7) { ctx.fillStyle = real ? '#3a3c2e' : col; ctx.beginPath(); ctx.arc(hx + Math.cos(b) * .25, hy, .3, 0, 7); ctx.fill(); }
     return;
   }
   if (kind === 'mortar' && !an.mv) {   // 架炮：座钣、炮身（俯视是一段朝前的粗管）、两脚架；右手在炮口装填，打出一发后抽手，炮口焰与烟
-    const bx = 2.1, by = .7, mx = bx + 1.8, mo = an.mo, dk = '#3a3b33';
-    ctx.fillStyle = dk; ctx.beginPath(); ctx.ellipse(bx, by, .55, .5, 0, 0, 7); ctx.fill(); ctx.strokeStyle = 'rgba(0,0,0,.45)'; ctx.lineWidth = lw * .8; ctx.stroke();
+    const bx = 2.1, by = .7, mx = bx + 1.8, mo = an.mo, dk = real ? '#3a3b33' : 'rgba(2,10,6,.88)';
+    ctx.fillStyle = dk; ctx.beginPath(); ctx.ellipse(bx, by, .55, .5, 0, 0, 7); ctx.fill(); ctx.strokeStyle = real ? 'rgba(0,0,0,.45)' : col; ctx.lineWidth = lw * .8; ctx.stroke();
     line(bx + 1.15, by, bx + .8, by - .75, lw * .9, gunC); line(bx + 1.15, by, bx + .8, by + .75, lw * .9, gunC);
-    line(bx, by, mx, by, lw * 2.6, '#3d4234');
+    line(bx, by, mx, by, lw * (real ? 2.6 : 2), real ? '#3d4234' : gunC);
     const pull = mo != null ? clamp(mo / .25, 0, 1) * (1 - clamp((mo - .7) / .4, 0, 1)) : 0;
     line(0, 1.22, lerp(mx - .25, 1.3, pull), lerp(by + .3, 1.3, pull), armW, armC);
     line(0, -1.22, bx + .9, by - .45, armW, armC);
@@ -236,16 +238,16 @@ function manArms(ctx, kind, an, lw, col, uni, gunC, line, rect) {
     return;
   }
   if (an.bino) {   // 观察员举望远镜：两手托到眼前
-    const bc = '#23241f';
+    const bc = real ? '#23241f' : gunC;
     line(0, 1.22, .95, .45, armW, armC); line(0, -1.22, .95, -.45, armW, armC);
-    line(.9, -.28, 1.55, -.28, lw * 1.8, bc); line(.9, .28, 1.55, .28, lw * 1.8, bc); line(1.1, -.28, 1.1, .28, lw * .8, bc);
+    line(.9, -.28, 1.55, -.28, lw * (real ? 1.8 : 1.3), bc); line(.9, .28, 1.55, .28, lw * (real ? 1.8 : 1.3), bc); line(1.1, -.28, 1.1, .28, lw * .8, bc);
     return;
   }
   if (an.cmd) {   // 指挥员：左手拿平板，右手不时抬起指向前方
     const k = clamp((Math.sin(an.t * .45) - .45) / .35, 0, 1);
     ctx.save(); ctx.translate(.95, -.6); ctx.rotate(-.25);
-    ctx.fillStyle = '#2a2c27'; ctx.fillRect(-.36, -.3, .72, .6);
-    ctx.fillStyle = 'rgba(150,190,160,.8)'; ctx.fillRect(-.28, -.22, .56, .44);
+    ctx.fillStyle = real ? '#2a2c27' : 'rgba(2,10,6,.88)'; ctx.fillRect(-.36, -.3, .72, .6);
+    if (real) { ctx.fillStyle = 'rgba(150,190,160,.8)'; ctx.fillRect(-.28, -.22, .56, .44); } else { ctx.strokeStyle = col; ctx.lineWidth = lw * .7; ctx.strokeRect(-.36, -.3, .72, .6); }
     ctx.restore();
     line(0, -1.22, .78, -.8, armW, armC);
     line(0, 1.22, lerp(.9, 2.5, k), lerp(.35, 1.05, k), armW, armC);
@@ -255,40 +257,40 @@ function manArms(ctx, kind, an, lw, col, uni, gunC, line, rect) {
   const rel = an.rel, port = an.run && fire == null && kind !== 'mortar', rot = port ? -.65 : rel != null ? -.5 * Math.sin(Math.min(1, rel * 1.2) * Math.PI) : 0;
   const shoulder = kind === 'at' || kind === 'aa' || kind === 'flame' || kind === 'mortar';
   const gx = -rec, gy = shoulder ? .72 : .5;
-  manGun(ctx, kind, gx, gy, rot, an.mv ? Math.sin(an.ph) * .03 : 0, lw, gunC, rect, line, an.sof);
+  manGun(ctx, kind, gx, gy, rot, an.mv ? Math.sin(an.ph) * .03 : 0, lw, real, col, gunC, rect, line, an.sof);
   // 手：右手在扳机（握把），左手在护木；换弹时左手去弹匣
   const R0 = (x, y) => [gx + x * Math.cos(rot) - (y - gy) * Math.sin(rot), gy + x * Math.sin(rot) + (y - gy) * Math.cos(rot)];
   const [tx, ty] = R0(.55, gy + .05), [fx, fy] = rel != null && rel > .2 && rel < .85 ? R0(.45 + Math.sin(rel * 9) * .15, gy + .5) : R0(shoulder ? .9 : 1.45, gy);
   const swing = an.mv && !port ? Math.sin(an.ph) * .15 : 0;
   line(0, 1.22, tx - swing, ty, armW, armC);
   line(0, -1.22, fx + swing, fy, armW, armC);
-  if (fire != null) manFire(ctx, kind, an, gx, gy, rot, fire, lw);
+  if (fire != null) manFire(ctx, kind, an, gx, gy, rot, fire, lw, real);
 }
 // 武器本体（局部：枪托在 gx、枪身沿 +x，rot 为枪身转角）
-function manGun(ctx, kind, gx, gy, rot, wob, lw, gunC, rect, line, sof) {
+function manGun(ctx, kind, gx, gy, rot, wob, lw, real, col, gunC, rect, line, sof) {
   ctx.save(); ctx.translate(gx, gy); ctx.rotate(rot + wob);
   const w = (k, c) => { ctx.strokeStyle = c || gunC; ctx.lineWidth = lw * k; };
   if (kind === 'mg') {   // 机枪：粗枪管、机匣、弹链箱、折叠的脚架
-    w(2.2); ctx.beginPath(); ctx.moveTo(-.55, 0); ctx.lineTo(3.05, 0); ctx.stroke();
-    rect(.25, .05, .65, .55, '#30312a');
+    w(real ? 2.2 : 1.7); ctx.beginPath(); ctx.moveTo(-.55, 0); ctx.lineTo(3.05, 0); ctx.stroke();
+    rect(.25, .05, .65, .55, real ? '#30312a' : 'rgba(2,10,6,.88)');
     w(.8); ctx.beginPath(); ctx.moveTo(2.4, .05); ctx.lineTo(2.85, .35); ctx.moveTo(2.4, -.05); ctx.lineTo(2.85, -.35); ctx.stroke();
   } else if (kind === 'at') {   // 反坦克：PF-98 粗长发射筒 + 瞄准镜（守方是标枪：粗筒 + 指令发射单元方盒）
-    w(3.6, '#3b402f'); ctx.beginPath(); ctx.moveTo(-1.6, 0); ctx.lineTo(1.95, 0); ctx.stroke();
-    rect(-.25, -.62, .6, .42, '#23241f');
+    w(real ? 3.6 : 2.6, real ? '#3b402f' : undefined); ctx.beginPath(); ctx.moveTo(-1.6, 0); ctx.lineTo(1.95, 0); ctx.stroke();
+    rect(-.25, -.62, .6, .42, real ? '#23241f' : 'rgba(2,10,6,.88)');
     w(.9); ctx.beginPath(); ctx.moveTo(1.95, -.25); ctx.lineTo(1.95, .25); ctx.stroke();
   } else if (kind === 'aa') {   // 防空：长发射筒、握把电池、敌我识别天线
-    w(2.6, '#3d4234'); ctx.beginPath(); ctx.moveTo(-2.05, 0); ctx.lineTo(1.85, 0); ctx.stroke();
+    w(real ? 2.6 : 2, real ? '#3d4234' : undefined); ctx.beginPath(); ctx.moveTo(-2.05, 0); ctx.lineTo(1.85, 0); ctx.stroke();
     w(.8); ctx.beginPath(); ctx.moveTo(.4, -.2); ctx.lineTo(.4, -.75); ctx.moveTo(.1, -.75); ctx.lineTo(.7, -.75); ctx.stroke();
-    rect(-.15, .15, .45, .4, '#23241f');
+    rect(-.15, .15, .45, .4, real ? '#23241f' : 'rgba(2,10,6,.88)');
   } else if (kind === 'flame') {   // PF-97 温压火箭筒（手里一具）
-    w(3, '#4a4f3c'); ctx.beginPath(); ctx.moveTo(-1.2, 0); ctx.lineTo(1.6, 0); ctx.stroke();
+    w(real ? 3 : 2.2, real ? '#4a4f3c' : undefined); ctx.beginPath(); ctx.moveTo(-1.2, 0); ctx.lineTo(1.6, 0); ctx.stroke();
   } else if (kind === 'sniper') {   // 狙击步枪：长枪管 + 瞄准镜
     w(1.15); ctx.beginPath(); ctx.moveTo(-.45, 0); ctx.lineTo(3.35, -.02); ctx.stroke();
-    w(1.6); ctx.beginPath(); ctx.moveTo(.35, -.12); ctx.lineTo(1.2, -.12); ctx.stroke();
+    w(real ? 1.6 : 1.2); ctx.beginPath(); ctx.moveTo(.35, -.12); ctx.lineTo(1.2, -.12); ctx.stroke();
   } else if (kind === 'crew') {   // 车组：短冲锋枪
     w(1); ctx.beginPath(); ctx.moveTo(-.1, 0); ctx.lineTo(1.35, 0); ctx.stroke();
   } else if (kind === 'mortar') {   // 迫击炮：炮身扛在肩上
-    w(2.8, '#3d4234'); ctx.beginPath(); ctx.moveTo(-1.35, 0); ctx.lineTo(1.35, 0); ctx.stroke();
+    w(real ? 2.8 : 2.1, real ? '#3d4234' : undefined); ctx.beginPath(); ctx.moveTo(-1.35, 0); ctx.lineTo(1.35, 0); ctx.stroke();
     w(.8); ctx.beginPath(); ctx.moveTo(1.35, -.3); ctx.lineTo(1.35, .3); ctx.stroke();
   } else if (kind === 'officer') {   // 指挥员：短卡宾枪
     w(1); ctx.beginPath(); ctx.moveTo(-.25, 0); ctx.lineTo(1.9, -.03); ctx.stroke();
@@ -297,12 +299,12 @@ function manGun(ctx, kind, gx, gy, rot, wob, lw, gunC, rect, line, sof) {
   } else {   // 步枪：枪身、弹匣；蛟龙的步枪带消音器
     w(1.05); ctx.beginPath(); ctx.moveTo(-.3, 0); ctx.lineTo(2.45, -.05); ctx.stroke();
     w(.8); ctx.beginPath(); ctx.moveTo(.75, .05); ctx.lineTo(.75, .38); ctx.stroke();
-    if (sof) { w(2); ctx.beginPath(); ctx.moveTo(2.05, -.04); ctx.lineTo(2.85, -.06); ctx.stroke(); }
+    if (sof) { w(real ? 2 : 1.6); ctx.beginPath(); ctx.moveTo(2.05, -.04); ctx.lineTo(2.85, -.06); ctx.stroke(); }
   }
   ctx.restore();
 }
 // 射击效果：枪口焰（机枪三连发）、后喷（反坦克 / 防空）、枪口烟
-function manFire(ctx, kind, an, gx, gy, rot, t, lw) {
+function manFire(ctx, kind, an, gx, gy, rot, t, lw, real) {
   const L = kind === 'mg' ? 3.05 : kind === 'at' ? 1.95 : kind === 'aa' ? 1.85 : kind === 'flame' ? 1.6 : kind === 'sniper' ? 3.35 : kind === 'crew' ? 1.35 : kind === 'officer' ? 1.9 : an.sof ? 2.85 : 2.45;
   const mx = gx + Math.cos(rot) * L, my = gy + Math.sin(rot) * L, ca = Math.cos(rot), sa = Math.sin(rot);
   const burst = kind === 'mg' ? [0, .08, .16] : [0], hot = burst.some(b => t >= b && t < b + .055), big = kind === 'at' || kind === 'aa' || kind === 'flame';
@@ -319,73 +321,77 @@ function manFire(ctx, kind, an, gx, gy, rot, t, lw) {
   if (t < .45) { const k = t / .45; ctx.fillStyle = rgba(COL.smoke, (big ? .4 : .28) * (1 - k)); ctx.beginPath(); ctx.arc(mx + ca * (1 + k * 1.6) - sa * k * .6, my + sa * (1 + k * 1.6) + ca * k * .6, .5 + k * (big ? 1.6 : .9), 0, 7); ctx.fill(); }
 }
 // 四肢（卧姿、遗体用）：按身体比例定粗细，不随缩放变细；黑绿版是带描边的深色肢体，写实版是军装色
-function manLimb(ctx, lw, w, c, pts) {
+function manLimb(ctx, real, col, lw, w, c, pts) {
   w = Math.max(w, lw * 1.1);
   const path = () => { ctx.beginPath(); ctx.moveTo(pts[0], pts[1]); for (let i = 2; i < pts.length; i += 2) ctx.lineTo(pts[i], pts[i + 1]); };
   path();
-  ctx.strokeStyle = 'rgba(0,0,0,.35)'; ctx.lineWidth = w + lw * .7; ctx.stroke(); ctx.strokeStyle = c; ctx.lineWidth = w; ctx.stroke();
+  if (real) { ctx.strokeStyle = 'rgba(0,0,0,.35)'; ctx.lineWidth = w + lw * .7; ctx.stroke(); ctx.strokeStyle = c; ctx.lineWidth = w; ctx.stroke(); return; }
+  ctx.strokeStyle = col; ctx.lineWidth = w + lw * 1.5; ctx.stroke();
+  ctx.strokeStyle = 'rgba(2,10,6,.92)'; ctx.lineWidth = w; ctx.stroke();
+  ctx.globalAlpha *= .35; ctx.strokeStyle = col; ctx.stroke(); ctx.globalAlpha /= .35;
 }
-function manBoot(ctx, x, y, a) { ctx.fillStyle = '#26241e'; ctx.beginPath(); ctx.ellipse(x, y, .36, .24, a, 0, 7); ctx.fill(); }
+function manBoot(ctx, real, col, x, y, a) { ctx.fillStyle = real ? '#26241e' : col; ctx.beginPath(); ctx.ellipse(x, y, .36, .24, a, 0, 7); ctx.fill(); }
 // 卧倒：身体贴地、两腿稍分开伸在后面，两肘撑地端枪朝前；移动时匍匐——一侧屈膝蹬地、对侧手前伸，左右交替，身体随之扭动
-function manProne(ctx, kind, an, lw, col, uni, packC, helmC, gunC, edge, fillB, line, rect) {
-  const c = an.mv ? Math.sin(an.ph * 1.6) : 0, legC = rlShade(uni, .78), armC = uni;
+function manProne(ctx, kind, an, lw, real, col, uni, packC, helmC, gunC, edge, fillB, line, rect) {
+  const c = an.mv ? Math.sin(an.ph * 1.6) : 0, legC = real ? rlShade(uni, .78) : col, armC = real ? uni : col;
   ctx.rotate(c * .07);
   for (const s of [-1, 1]) {   // 腿：静止时脚尖外撇；匍匐时一侧膝盖往外收、脚往前蹬
     const k = Math.max(0, c * s), hx = -2.35, hy = s * .38;
-    if (k > .05) { const kx = -3.05 + k * .2, ky = s * (.5 + k * .95), fx = -4.2 + k * .35, fy = s * (.55 + k * .3); manLimb(ctx, lw, .62, legC, [hx, hy, kx, ky, fx, fy]); manBoot(ctx, fx - .15, fy, s * .5); }
-    else { const fx = -4.55, fy = s * .8; manLimb(ctx, lw, .62, legC, [hx, hy, -3.45, s * .6, fx, fy]); manBoot(ctx, fx - .15, fy + s * .08, s * .8); }
+    if (k > .05) { const kx = -3.05 + k * .2, ky = s * (.5 + k * .95), fx = -4.2 + k * .35, fy = s * (.55 + k * .3); manLimb(ctx, real, col, lw, .62, legC, [hx, hy, kx, ky, fx, fy]); manBoot(ctx, real, col, fx - .15, fy, s * .5); }
+    else { const fx = -4.55, fy = s * .8; manLimb(ctx, real, col, lw, .62, legC, [hx, hy, -3.45, s * .6, fx, fy]); manBoot(ctx, real, col, fx - .15, fy + s * .08, s * .8); }
   }
   ctx.beginPath(); ctx.ellipse(-1.1, 0, 1.75, .8, 0, 0, 7); fillB(uni);
-  if (kind === 'radio') { rect(-1.95, -.5, 1.05, 1, '#3a3f30'); line(-1.7, -.4, -3.6, -1.3 + c * .3, lw * .7, '#1e1f1b'); }
-  else if (kind === 'flame') { for (const y of [-.4, .4]) rect(-2.6, y - .2, 1.8, .4, '#4a4f3c'); }
+  if (kind === 'radio') { rect(-1.95, -.5, 1.05, 1, real ? '#3a3f30' : packC); line(-1.7, -.4, -3.6, -1.3 + c * .3, lw * .7, real ? '#1e1f1b' : col); }
+  else if (kind === 'flame') { for (const y of [-.4, .4]) rect(-2.6, y - .2, 1.8, .4, real ? '#4a4f3c' : packC); }
   else if (kind !== 'crew') rect(-1.9, -.5, 1.1, 1, packC);
-  if (kind === 'sniper' || kind === 'spot') { ctx.save(); ctx.translate(-1.1, 0); ctx.scale(2, .55); manGhillie(ctx, lw * .7, an.t); ctx.restore(); }
+  if (kind === 'sniper' || kind === 'spot') { ctx.save(); ctx.translate(-1.1, 0); ctx.scale(2, .55); manGhillie(ctx, real, col, lw * .7, an.t); ctx.restore(); }
   // 枪：枪托抵右肩、枪身贴着头右侧朝前；匍匐时枪横托在两臂上往后收
   const rec = an.fire != null ? Math.max(0, 1 - an.fire / .14) * .25 : 0, gx = (an.mv ? -.25 : .2) - rec, gy = .38;
-  if (an.bino && !an.mv) { const bc = '#23241f'; line(1.45, -.28, 2.1, -.28, lw * 1.8, bc); line(1.45, .28, 2.1, .28, lw * 1.8, bc); manLimb(ctx, lw, .5, armC, [-.05, .72, .6, 1.0, 1.45, .4]); manLimb(ctx, lw, .5, armC, [-.05, -.72, .6, -1.0, 1.45, -.4]); ctx.fillStyle = helmC; ctx.strokeStyle = 'rgba(0,0,0,.5)'; ctx.lineWidth = lw * .8; ctx.beginPath(); ctx.arc(.72, 0, .78, 0, 7); ctx.fill(); ctx.stroke(); return; }   // 观察员趴着举望远镜
-  manGun(ctx, kind, gx, gy, an.mv ? -.12 : 0, 0, lw, gunC, rect, line, an.sof);
+  if (an.bino && !an.mv) { const bc = real ? '#23241f' : gunC; line(1.45, -.28, 2.1, -.28, lw * (real ? 1.8 : 1.3), bc); line(1.45, .28, 2.1, .28, lw * (real ? 1.8 : 1.3), bc); manLimb(ctx, real, col, lw, .5, armC, [-.05, .72, .6, 1.0, 1.45, .4]); manLimb(ctx, real, col, lw, .5, armC, [-.05, -.72, .6, -1.0, 1.45, -.4]); ctx.fillStyle = helmC; ctx.strokeStyle = real ? 'rgba(0,0,0,.5)' : 'rgba(2,10,6,.88)'; ctx.lineWidth = lw * .8; ctx.beginPath(); ctx.arc(.72, 0, .78, 0, 7); ctx.fill(); ctx.stroke(); return; }   // 观察员趴着举望远镜
+  manGun(ctx, kind, gx, gy, an.mv ? -.12 : 0, 0, lw, real, col, gunC, rect, line, an.sof);
   if (kind === 'mg' && !an.mv) { line(gx + 2.85, gy, gx + 3.2, gy - .55, lw * .9, gunC); line(gx + 2.85, gy, gx + 3.2, gy + .55, lw * .9, gunC); }   // 脚架着地
   // 两臂：肘在地上撑开，右手握把、左手托护木；匍匐时一手前伸扒地、一手收回
   if (an.mv) {
-    for (const s of [-1, 1]) { const r = Math.max(0, -c * s); manLimb(ctx, lw, .5, armC, [-.05, s * .72, .45 + r * .5, s * (1.15 - r * .15), 1.05 + r * 1.05, s * (.62 - r * .1)]); }
+    for (const s of [-1, 1]) { const r = Math.max(0, -c * s); manLimb(ctx, real, col, lw, .5, armC, [-.05, s * .72, .45 + r * .5, s * (1.15 - r * .15), 1.05 + r * 1.05, s * (.62 - r * .1)]); }
   } else {
-    manLimb(ctx, lw, .5, armC, [-.05, .72, .3, 1.2, gx + .75, gy + .05]);
-    manLimb(ctx, lw, .5, armC, [-.05, -.72, .95, -.85, gx + 1.55, gy - .02]);
+    manLimb(ctx, real, col, lw, .5, armC, [-.05, .72, .3, 1.2, gx + .75, gy + .05]);
+    manLimb(ctx, real, col, lw, .5, armC, [-.05, -.72, .95, -.85, gx + 1.55, gy - .02]);
   }
-  ctx.fillStyle = helmC; ctx.strokeStyle = 'rgba(0,0,0,.5)'; ctx.lineWidth = lw * .8; ctx.beginPath(); ctx.arc(.72, 0, .78, 0, 7); ctx.fill(); ctx.stroke();
-  if (an.fire != null) manFire(ctx, kind, an, gx, gy, 0, an.fire, lw);
+  ctx.fillStyle = helmC; ctx.strokeStyle = real ? 'rgba(0,0,0,.5)' : 'rgba(2,10,6,.88)'; ctx.lineWidth = lw * .8; ctx.beginPath(); ctx.arc(.72, 0, .78, 0, 7); ctx.fill(); ctx.stroke();
+  if (an.fire != null) manFire(ctx, kind, an, gx, gy, 0, an.fire, lw, real);
 }
 // 遗体：0.55 秒内转身倒地（身体由站姿变成躺平、四肢摊开，枪脱手落在一旁），之后静止，50 秒后慢慢淡去
-function manDrawDead(ctx, d) {
+function manDrawDead(ctx, d, real, col) {
   const age = S.t - d.t0, u = clamp(age / .55, 0, 1), e = u * u * (3 - 2 * u), fade = clamp(1 - (age - 50) / 15, 0, 1);
   if (fade <= 0) return;
-  const P = rlPal(d.side), lw = px(1) / MAN_K, ink = 'rgba(0,0,0,.4)';
-  const uni = rlShade(P.uni, .8), legC = rlShade(P.uni, .66);
+  const P = real ? rlPal(d.side) : null, lw = px(1) / MAN_K, sc = d.side === 'e' ? COL.enemy : COL.g, ink = real ? 'rgba(0,0,0,.4)' : rgba(sc, .6);
+  const uni = real ? rlShade(P.uni, .8) : 'rgba(2,10,6,.92)', legC = real ? rlShade(P.uni, .66) : ink;
   ctx.save(); ctx.globalAlpha *= fade; ctx.translate(d.x, d.y); ctx.rotate(d.a + d.tw * e); ctx.scale(MAN_K, MAN_K); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-  if (e > .5) { ctx.fillStyle = 'rgba(40,24,18,.22)'; ctx.beginPath(); ctx.ellipse(-1, 0, 2.6, 1.3, 0, 0, 7); ctx.fill(); }
+  if (real && e > .5) { ctx.fillStyle = 'rgba(40,24,18,.22)'; ctx.beginPath(); ctx.ellipse(-1, 0, 2.6, 1.3, 0, 0, 7); ctx.fill(); }
   const L = d.prone ? 1.75 : lerp(.88, 1.75, e), Wd = d.prone ? .8 : lerp(1.6, .82, e), cx = d.prone ? -1.1 : lerp(-.1, -1.15, e), m = d.k % 2 ? 1 : -1, hip = cx - L + .45, sh = cx + L - .35;
   // 腿：一条伸直、一条弯着；手臂：一只摊开、一只压在身下半露
-  manLimb(ctx, lw, .62, legC, [hip, -.38, hip - 1.2 * e, -.5 - .35 * e * m, hip - 2.25 * e, -.45 - .7 * e * m]);
-  manLimb(ctx, lw, .62, legC, [hip, .38, hip - .9 * e, .55 + .75 * e, hip - 2.1 * e, .5 + .25 * e]);
-  manLimb(ctx, lw, .5, uni, [sh, -.65 * m, sh + .55 * e, -(1.05 + .55 * e) * m, sh + 1.25 * e, -(.9 + 1.0 * e) * m]);
-  manLimb(ctx, lw, .5, uni, [sh, .65 * m, sh + .7 * e, (.9 + .1 * e) * m]);
-  ctx.beginPath(); ctx.ellipse(cx, 0, L, Wd, 0, 0, 7); ctx.fillStyle = uni; ctx.fill(); ctx.strokeStyle = ink; ctx.lineWidth = lw * .5; ctx.stroke();
-  if (d.kind === 'radio' && e > .3) { ctx.fillStyle = '#3a3f30'; ctx.fillRect(cx - .9, -.5, 1.05, 1); }
-  ctx.fillStyle = rlShade(P.helm, .8); ctx.strokeStyle = ink; ctx.lineWidth = lw * .8; ctx.beginPath(); ctx.arc(cx + L + .4, (d.k % 3 - 1) * .3 * e, .74, 0, 7); ctx.fill(); ctx.stroke();   // 头（钢盔）
+  manLimb(ctx, real, ink, lw, .62, legC, [hip, -.38, hip - 1.2 * e, -.5 - .35 * e * m, hip - 2.25 * e, -.45 - .7 * e * m]);
+  manLimb(ctx, real, ink, lw, .62, legC, [hip, .38, hip - .9 * e, .55 + .75 * e, hip - 2.1 * e, .5 + .25 * e]);
+  manLimb(ctx, real, ink, lw, .5, real ? uni : ink, [sh, -.65 * m, sh + .55 * e, -(1.05 + .55 * e) * m, sh + 1.25 * e, -(.9 + 1.0 * e) * m]);
+  manLimb(ctx, real, ink, lw, .5, real ? uni : ink, [sh, .65 * m, sh + .7 * e, (.9 + .1 * e) * m]);
+  ctx.beginPath(); ctx.ellipse(cx, 0, L, Wd, 0, 0, 7); ctx.fillStyle = uni; ctx.fill(); ctx.strokeStyle = ink; ctx.lineWidth = lw * (real ? .5 : 1); ctx.stroke();
+  if (!real) { ctx.globalAlpha *= .2; ctx.fillStyle = sc; ctx.fill(); ctx.globalAlpha /= .2; }
+  if (d.kind === 'radio' && e > .3) { ctx.fillStyle = real ? '#3a3f30' : 'rgba(2,10,6,.92)'; ctx.fillRect(cx - .9, -.5, 1.05, 1); if (!real) { ctx.strokeStyle = ink; ctx.lineWidth = lw * .7; ctx.strokeRect(cx - .9, -.5, 1.05, 1); } }
+  ctx.fillStyle = real ? rlShade(P.helm, .8) : 'rgba(2,10,6,.92)'; ctx.strokeStyle = ink; ctx.lineWidth = lw * .8; ctx.beginPath(); ctx.arc(cx + L + .4, (d.k % 3 - 1) * .3 * e, .74, 0, 7); ctx.fill(); ctx.stroke();   // 头（钢盔）
   ctx.save(); ctx.translate(lerp(.4, 1.6 + (d.k % 5) * .2, e), lerp(.5, 1.9, e) * m); ctx.rotate(lerp(0, .7 + (d.k % 4) * .4, e));   // 枪脱手
-  ctx.strokeStyle = 'rgba(36,37,31,.85)'; ctx.lineWidth = lw * (d.kind === 'mg' || d.kind === 'at' || d.kind === 'aa' || d.kind === 'flame' ? 1.8 : 1.1); ctx.beginPath(); ctx.moveTo(-.5, 0); ctx.lineTo(d.kind === 'mg' ? 3 : d.kind === 'crew' ? 1.4 : d.kind === 'sniper' ? 3.2 : 2.4, 0); ctx.stroke();
+  ctx.strokeStyle = real ? 'rgba(36,37,31,.85)' : ink; ctx.lineWidth = lw * (d.kind === 'mg' || d.kind === 'at' || d.kind === 'aa' || d.kind === 'flame' ? 1.8 : 1.1); ctx.beginPath(); ctx.moveTo(-.5, 0); ctx.lineTo(d.kind === 'mg' ? 3 : d.kind === 'crew' ? 1.4 : d.kind === 'sniper' ? 3.2 : 2.4, 0); ctx.stroke();
   ctx.restore();
   ctx.restore();
 }
 // 遗体层（render2.js drawTeams 在活人之前调用）：守方的只画看得见的
 function manDrawCorpses(ctx) {
   if (!S || MANV.S !== S || !MANV.dead.length || !R.fig) return;
-  const spec = specAll() || R.eye === 'all' || R.eye === 'both' || R.eye === 'e';
+  const real = typeof realLook === 'function' && realLook(), spec = specAll() || R.eye === 'all' || R.eye === 'both' || R.eye === 'e';
   let drop = 0;
   for (const d of MANV.dead) {
     if (S.t - d.t0 > 65) { drop++; continue; }
     if (!inView(d.x, d.y, 10) || (d.side === 'e' && !spec && !inVision(d.x, d.y))) continue;
-    manDrawDead(ctx, d);
+    manDrawDead(ctx, d, real, null);
   }
   if (drop > 40) MANV.dead = MANV.dead.filter(d => S.t - d.t0 <= 65);
 }

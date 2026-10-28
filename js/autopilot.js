@@ -192,7 +192,8 @@ function apMove(u, pl, x, y, face, t) {
   if (!isFinite(x) || !isFinite(y)) return false;
   x = clamp(x, 6, W - 6); y = clamp(y, 6, H - 6);
   if (!passInf(x, y)) { const j = nearestPassable(ci(x, y), 'p'); if (j < 0) return false; x = cellCX(j); y = cellCY(j); }
-  if (!teamsOf(u).some(q => reachable(q.x, q.y, x, y, 'p'))) return false;   // 只判断走不走得到：连通分量就够，不为它整图算流场
+  const f = field(x, y, 'p');
+  if (!f || !teamsOf(u).some(q => isFinite(f[ci(q.x, q.y)]))) return false;
   u.form = S.t - (pl.artyT ?? -99) < 30 ? 'loose' : 'line';
   const n = orderUnits([u], x, y, isFinite(face) ? face : NORTH, null, t);
   if (n) { pl.dx = x; pl.dy = y; pl.ordT = S.t; }
@@ -487,7 +488,8 @@ function apInfantry(u, pl, P) {
 function apTeamGo(q, x, y, t) {
   if (!isFinite(x) || !isFinite(y)) return false;
   if (!passInf(x, y)) { const j = nearestPassable(ci(x, y), 'p'); if (j < 0) return false; x = cellCX(j); y = cellCY(j); }
-  if (!reachable(q.x, q.y, x, y, 'p')) return false;
+  const f = field(x, y, 'p');
+  if (!f || !isFinite(f[ci(q.x, q.y)])) return false;
   if (q.order.t === t && q.order.x != null && dist(q.order.x, q.order.y, x, y) < 8) return true;   // 已在途中
   orderTeams([q], x, y, t);
   return true;

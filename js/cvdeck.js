@@ -10,12 +10,11 @@
 //     甲板停满：滑到升降机舷内侧 → ewait 等升降机 → 倒上平台 → down 降到机库甲板（进机库整备），空平台再升回来
 // 停机位：每架舰载机记 w.dk（机位序号；-1 机库；null 不在舰上）。升降机 c.el[i] = { h 平台高度 0 甲板—1 机库, to 目标, w 占用的飞机 id }；
 // 偏流板：c.jl[k] 弹射器 k 上一次弹射离舰的时刻（放下的动画）
-// hook：挂上弹射杆到弹射的秒数（舵面检查、推到最大推力、点加力：小火 → 全加力，见 v3det.js v3dDeckEng）；ab：弹射前几秒点加力
-const CVD = { taxi: 16, rev: 6, run: 9, climb: 1.5, cnp: .8, eng: 1.1, hook: 4, ab: 2.1, acc: 35, elv: .32, pivot: 1.25 };
+const CVD = { taxi: 16, rev: 6, run: 9, climb: 1.5, cnp: .8, eng: 1.1, hook: 2.4, acc: 110, elv: .32, pivot: 1.25 };
 const cvCat = k => CVG.cats[clamp(k | 0, 0, CVG.cats.length - 1)];
 const cvCatPt = (k, s) => { const C = cvCat(k); return [C.u + Math.cos(C.a) * s, C.v + Math.sin(C.a) * s]; };
 // 右舷甲板边线（不算升降机缺口）：舷边通道口的位置
-const CVD_EDGE = [[158, 13], [118, 16.5], [100, 17], [90, 21], [84, 27], [74, 33], [52, 34], [50, 37], [-116, 37], [-152, 28], [-158, 26]];
+const CVD_EDGE = [[158, 2], [156, 8], [150, 14], [140, 20], [120, 27], [96, 32], [70, 34], [-140, 33], [-152, 30], [-158, 22]];
 function cvEdgeV(u) {
   for (let i = 1; i < CVD_EDGE.length; i++) { const [u0, v0] = CVD_EDGE[i - 1], [u1, v1] = CVD_EDGE[i]; if (u <= u0 && u >= u1) return lerp(v0, v1, (u0 - u) / (u0 - u1 || 1)); }
   return 18;
@@ -186,10 +185,10 @@ function cvLaunchStep(p, c, dt) {
   const h = cvHome(c), others = cvLive(c).filter(o => o !== p);
   if (p.phase === 'roll') {   // 电磁弹射：沿弹射器加速，到行程末端离舰
     const C = cvCat(p.cat);
-    p.spd = Math.min(p.spd + CVD.acc * dt, 175); p.cs = (p.cs || 0) + p.spd * dt;   // 约 3.5g：104 米行程约 2 秒，离舰约 85（之后在空中继续加速）
+    p.spd = Math.min(p.spd + CVD.acc * dt, 175); p.cs = (p.cs || 0) + p.spd * dt;
     [p.lu, p.lv] = cvCatPt(p.cat, p.cs); p.lh = C.a; p.fold = 0; p.cpo = 0;
     cvPlace(p, c);
-    if (p.cs >= C.L) { c.jl[p.cat] = S.t; airSet(p, 'out'); p.alt = .05; p.lT = S.t; p.lu = p.lv = null; p.dk = null; p.path = null; }   // lT：离舰时刻（画面用：抬头、下沉、收起落架）
+    if (p.cs >= C.L) { c.jl[p.cat] = S.t; airSet(p, 'out'); p.alt = .05; p.lu = p.lv = null; p.dk = null; p.path = null; }
     return;
   }
   switch (p.dk) {
@@ -316,24 +315,24 @@ function cvShooters(c, list) {
 }
 // 二维：登机梯（座舱盖开着、飞行员还没坐进去时挂在座舱左侧）与飞行员（drawPlanes 在飞机之后画，爬进座舱时盖在机身上）；k 远景放大
 function cvPilotDraw(ctx, p, k, time) {
-  const c = cvOf(cvHome(p)) || S.cv, P = cvPilotPose(p), Ld = cvLadder(p);
+  const c = cvOf(cvHome(p)) || S.cv, P = cvPilotPose(p), real = typeof realLook === 'function' && realLook(), Ld = cvLadder(p);
   if (!c || typeof manDraw !== 'function') return;
   const at = (u, v) => cvW(u * k, v * k, c);
   if ((p.cpo || 0) > .3 && P) {
     const ux = Ld[2] - Ld[0], vy = Ld[3] - Ld[1], l = Math.hypot(ux, vy) || 1, nu = -vy / l * .3, nv = ux / l * .3, top = .62;
-    ctx.strokeStyle = 'rgba(220,222,214,.9)'; ctx.lineWidth = Math.max(px(.8), .12 * k); ctx.beginPath();
+    ctx.strokeStyle = real ? 'rgba(220,222,214,.9)' : rgba(COL.intel, .8); ctx.lineWidth = Math.max(px(.8), .12 * k); ctx.beginPath();
     for (const s of [-1, 1]) { const [x0, y0] = at(Ld[0] + nu * s, Ld[1] + nv * s), [x1, y1] = at(Ld[0] + ux * top + nu * s, Ld[1] + vy * top + nv * s); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); }
     for (let i = 1; i < 4; i++) { const q = i / 4 * top, [x0, y0] = at(Ld[0] + ux * q - nu, Ld[1] + vy * q - nv), [x1, y1] = at(Ld[0] + ux * q + nu, Ld[1] + vy * q + nv); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); }
     ctx.stroke();
   }
   if (!P) return;
   const [x, y] = at(P.u, P.v);
-  manDraw(ctx, x, y, c.heading + P.a, 'pilot', COL.g, 'p', { ...MAN_IDLE, k: .5 * k * (1 + P.z * .05), mv: P.run, run: P.run, ph: P.ph, clb: P.clb, t: time });
+  manDraw(ctx, x, y, c.heading + P.a, 'pilot', COL.g, 'p', { ...MAN_IDLE, k: .5 * k * (1 + P.z * .05), mv: P.run, run: P.run, ph: P.ph, clb: P.clb, t: time }, real);
 }
 // —— 舰体占位：别的舰艇不能压在航母上 ——
-// 舰体（外扩 r）在甲板局部坐标里的范围：u −160…160、v −47…39（左舷斜角甲板伸得更远）；点在里面时返回推出去的最近点
+// 舰体（外扩 r）在甲板局部坐标里的范围：u −160…160、v −44…36（左舷斜角甲板伸得更远）；点在里面时返回推出去的最近点
 function cvFootOut(c, x, y, r) {
-  const [u, v] = cvL(x, y, c), u0 = -160 - r, u1 = 160 + r, v0 = -47 - r, v1 = 39 + r;
+  const [u, v] = cvL(x, y, c), u0 = -160 - r, u1 = 160 + r, v0 = -44 - r, v1 = 36 + r;
   if (u <= u0 || u >= u1 || v <= v0 || v >= v1) return null;
   const d = [[u - u0, u0, v], [u1 - u, u1, v], [v - v0, u, v0], [v1 - v, u, v1]].sort((a, b) => a[0] - b[0])[0];
   return cvW(d[1], d[2], c);
@@ -360,7 +359,7 @@ function cvCamZ(x, y) {
   let best = null;
   for (const c of cvAll()) {
     if (!(c.x > -999)) continue;
-    const [u, v] = cvL(x, y, c), d = Math.hypot(Math.max(0, Math.abs(u) - 158), Math.max(0, v > 0 ? v - 37 : -v - 42));
+    const [u, v] = cvL(x, y, c), d = Math.hypot(Math.max(0, Math.abs(u) - 158), Math.max(0, v > 0 ? v - 34 : -v - 42));
     if (d >= 60) continue;
     const k = 1 - d / 60, z = lerp(-2.6, -2.6 + CVG.zd, k * k * (3 - 2 * k));
     if (best == null || z > best) best = z;

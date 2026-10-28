@@ -85,43 +85,21 @@ function stagingSpot(p, I) {
   return best || { x: p.x, y: Math.max(20, p.y - 120) };
 }
 
-// 发射阵地（条令：基本发射阵地 + 预备发射阵地）：火炮、迫击炮开战时就有主阵地和两处预先构筑的预备阵地（e.pos），
-//   打完转移只在这几处之间换——沙袋、土堤留在原地不动（guns.js、v3units.js 按 e.pos 画），转移途中是卡车牵引 / 炮组扛着走；
-//   开过火的阵地已经暴露，90 秒内不回去；几处都刚用过再另选一处（最多 4 处）
-function gunSpot(e, P) {
-  const mortar = e.kind === 'mortar', o = P[0] || e;
+function relocate(e) {
+  const mortar = e.kind === 'mortar';
   let best = null, bs = -1;
   for (let i = 0; i < 14; i++) {
     const a = Math.random() * 6.283, r = (mortar ? 40 : 60) + Math.random() * 60;
-    const x = clamp(o.x + Math.cos(a) * r, 20, W - 20), y = clamp(o.y + Math.sin(a) * r, 15, H - 15), d = coastAt(x) - y;
-    if (!passInf(x, y) || d < (mortar ? 110 : 250) || (mortar && d > 260) || P.some(p => dist(p.x, p.y, x, y) < (mortar ? 25 : 40))) continue;
+    const x = clamp(e.x + Math.cos(a) * r, 20, W - 20), y = clamp(e.y + Math.sin(a) * r, 15, H - 15), d = coastAt(x) - y;
+    if (!passInf(x, y) || d < (mortar ? 110 : 250) || (mortar && d > 260)) continue;
     const sc = 1 - coverAt(x, y) + Math.random() * .2;
-    if (sc > bs) { bs = sc; best = { x: Math.round(x), y: Math.round(y) }; }
+    if (sc > bs) { bs = sc; best = { x, y }; }
   }
-  return best;
-}
-const gunMobile = e => (e.kind === 'arty' || e.kind === 'mortar') && !e.decoy;
-function gunPos(e) {
-  if (!e.pos) { e.pos = [{ x: e.x, y: e.y }]; for (let k = 0; k < 2; k++) { const p = gunSpot(e, e.pos); if (p) e.pos.push(p); } }
-  return e.pos;
-}
-function relocate(e) {
-  const P = gunPos(e), cur = P.find(p => dist(p.x, p.y, e.x, e.y) < 4);
-  if (cur) cur.used = S.t;
-  let best = null, bs = -Infinity;
-  for (const p of P) {
-    if (p === cur || S.t - (p.used ?? -999) < 90) continue;
-    const s = (p.used != null ? -1 : 0) + Math.random() * .5;   // 没用过的预备阵地优先
-    if (s > bs) { bs = s; best = p; }
-  }
-  if (!best && P.length < 4) { best = gunSpot(e, P); if (best) P.push(best); }
-  if (!best) best = P.filter(p => p !== cur).sort((a, b) => (a.used ?? -999) - (b.used ?? -999))[0];
-  if (best) Object.assign(e, { moving: true, mx: best.x, my: best.y, salvos: 0, mspd: e.kind === 'mortar' ? 5 : e.mspd });   // 迫击炮组扛着炮走，慢
+  if (best) Object.assign(e, { moving: true, mx: best.x, my: best.y, salvos: 0 });
 }
 
 function aiUpdate(dt) {
   const A = S.ai, D = aiD();
-  for (const e of S.enemies) if (!e.pos && !e.dead && gunMobile(e)) gunPos(e);
   for (const e of S.enemies) if (e.moving && !e.dead) {
     const d = dist(e.x, e.y, e.mx, e.my), sp = Math.min(d, (e.mspd || 9) * dt);   // 火炮牵引转移 9；导弹发射车开得快（mspd）
     if (d < 1) { e.moving = false; e.cd = Math.max(e.cd, 2); continue; }

@@ -218,7 +218,7 @@ function sprPainter(g, side) {
 
 // 生成并缓存一张贴图：w × h 米、原点在中心（ox、oy 为原点在贴图中的像素位置），draw(P)
 function sprGet(key, side, w, h, draw, ppm = SPR_PPM) {
-  if (side === 'e') side = 'eg';   // 敌方用暗红涂装（另存一份贴图）
+  if (side === 'e' && typeof greenLook === 'function' && greenLook()) side = 'eg';   // 黑绿画面：敌方用暗红涂装（另存一份贴图）
   const k = key + ':' + side + ':' + ppm;
   let s = SPR.m.get(k);
   if (s) return s;

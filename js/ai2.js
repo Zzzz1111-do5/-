@@ -57,7 +57,7 @@ function aiThink(D) {
     // 散兵合并
     if (q.men.length === 1) {
       const m = foes.find(o => o !== q && o.men.length && o.men.length < 3 && dist(o.x, o.y, q.x, q.y) < 25);
-      if (m) { m.men.push(...q.men); q.men = []; continue; }
+      if (m) { const h = manHp(m), hq = manHp(q); m.men.push(...q.men); h.push(...hq); q.men = []; q.hp = []; continue; }   // 伤势跟着人走（combat.js manHp）
     }
     // 滩头伏击组：被压倒性兵力接近时边打边撤到出口据点
     if (q.role === 'ambush') {
@@ -129,7 +129,7 @@ function aiArtillery(D, seenT, seenShips) {
     const L = S.rlines.find(l => l.id === b.line), a = Math.atan2(L.y1 - L.y0, L.x1 - L.x0);
     T.push({ x: b.x, y: b.y, v: 4, vx: Math.cos(a) * 40, vy: Math.sin(a) * 40, sea: true });
   }
-  const FO = (typeof thFocusE === 'function' && thFocusE()) || (typeof a4Focus === 'function' ? a4Focus() : null);   // 反冲击火力准备 / 延伸射击（战区 theater.js、ai4.js）
+  const FO = typeof a4Focus === 'function' ? a4Focus() : null;   // 反冲击火力准备 / 延伸射击（ai4.js）
   if (FO) for (const t of T) if (dist(t.x, t.y, FO.x, FO.y) < FO.r) t.v = t.v * 3 + 4;
   for (const t of T) for (const sh of S.shells) if (sh.side === 'e' && dist(sh.x1, sh.y1, t.x, t.y) < 40) t.v *= .35;
   T.sort((a, b) => b.v - a.v);

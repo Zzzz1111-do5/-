@@ -1,18 +1,42 @@
 'use strict';
 // 常量、工具函数、地形类型表
-// 地图尺度：边长是最初 3000 × 2000 版的 MAP_K 倍（2.8：8400 × 5600，面积约 8 倍；比上一版 4200 × 2800 大 4 倍）。
-//   地形大特征、纵深、海面位置按它换算；武器射程、车速等真实距离不变——战场更开阔，海上纵深也更大
-const MAP_K = 2.8;
+// 地图尺度：边长是最初 3000 × 2000 版的 MAP_K 倍（面积约 2 倍）。地形大特征、纵深、海面位置按它换算；武器射程等真实距离不变
+const MAP_K = 1.4;
 const AF_K = 2;   // 空军基地场区尺度：场区世界范围 = AF_BOX（mapgen2.js）× AF_K，约 1100 × 800（面积为最初的 4 倍）；场内设施按真实比例布置（afbase.js），机场局部坐标 eaW / eaL 与世界同一尺度
-const W = Math.round(3000 * MAP_K), H = Math.round(2000 * MAP_K), CELL = 10, GW = W / CELL, GH = H / CELL;
+// 世界尺寸：默认 4200 × 2800；大海域地图（MAPGEN 里登记的）在建图前用 setWorld 换尺寸（按格子数开的数组由各模块 onWorld 重新分配）
+let W = 4200, H = 2800, GW = W / 10, GH = H / 10;
+const CELL = 10;
 const SEA = y => H - (2000 - y) * MAP_K;   // 旧版（高 2000）海面上的 y 换算到现在的地图：集结海域、船位、航母
-const STAGING_Y = SEA(1500);      // 我方舰队集结海域上沿（航母在更南边）
-const CARRIER_Y = SEA(1880);
+let STAGING_Y = SEA(1500);      // 我方舰队集结海域上沿（航母在更南边）
+let CARRIER_Y = SEA(1880);
+const MAPGEN = {};   // 另外的地图：MAPGEN[名] = { w, h, build(seed) }（大海域等），newGame(seed, lv, { map: 名 }) 使用
+const WORLD_FNS = [];
+function onWorld(fn) { WORLD_FNS.push(fn); }
+// 换世界尺寸（米，须是 CELL 的整数倍）；尺寸没变返回 false
+function setWorld(w, h) {
+  if (w === W && h === H) return false;
+  W = w; H = h; GW = W / CELL; GH = H / CELL;
+  STAGING_Y = SEA(1500); CARRIER_Y = SEA(1880);
+  for (const f of WORLD_FNS) f();
+  return true;
+}
 const ELEV_H = 6;                 // 高程 1.0 对应的视线高度（格）
 const COL = {
   bg: '#020704', g: '#3dff8a', gMid: '#1fa457', gDim: '#0f4a29', enemy: '#ff3d6e',
   intel: '#5cc8ff', sel: '#b07cff', amber: '#ffc24a', text: '#c6f7d8', smoke: '#9fb8a8'
 };
+// 画面风格：green 黑绿（默认：写实画面的轮廓与模型 + 黑底绿色磷光，look.js 后处理）· real 写实（我方蓝、敌方红，颜色贴近真实地图）· matrix 数码矩阵（原配色）。
+// 切换时改写 COL 并给 <html> 标 data-look 供 CSS 换色（黑绿画面的界面沿用数码矩阵的绿色配色）
+const COL_LOOK = {
+  matrix: { ...COL },
+  green: { ...COL },
+  real: { bg: '#0b1014', g: '#52a8ff', gMid: '#2f7fd0', gDim: '#1d4a7a', enemy: '#ff4848', intel: '#8fdcff', sel: '#c78cff', amber: '#ffbb38', text: '#e6edf2', smoke: '#b4afa6' }
+};
+function applyLook(look) {
+  const k = look === 'matrix' || look === 'real' ? look : 'green';
+  Object.assign(COL, COL_LOOK[k]);
+  if (typeof document !== 'undefined' && document.documentElement) document.documentElement.dataset.look = k;
+}
 const T = { DEEP: 0, SHOAL: 1, REEF: 2, BEACH: 3, ROCKS: 4, CLIFF: 5, FIELD: 6, FOREST: 7, HILL: 8, MOUNT: 9, MARSH: 10, RIVER: 11, BRIDGE: 12, ROAD: 13, TOWN: 14, FORD: 15 };
 // n 名称 · sp 步兵速度系数（0 = 不可通行）· cv 受击系数 · bl 遮挡视线的附加高度（格）
 const TP = [
@@ -34,8 +58,8 @@ const pick = arr => arr[Math.floor(Math.random() * arr.length)];
 const bearing = (ax, ay, bx, by) => (Math.atan2(bx - ax, ay - by) * 180 / Math.PI + 360) % 360;
 const fmtBrg = b => String(Math.round(b) % 360).padStart(3, '0') + '°';
 const GRID_COLS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-const gridCol = k => k < 26 ? GRID_COLS[k] : GRID_COLS[Math.floor(k / 26) - 1] + GRID_COLS[k % 26];   // 超过 26 列（大地图 42 列）接着用 AA、AB……
-const gridRef = (x, y) => gridCol(clamp(Math.floor(x / 200), 0, Math.ceil(W / 200) - 1)) + (clamp(Math.floor(y / 200), 0, Math.ceil(H / 200) - 1) + 1);   // 200 一格：列 A–Z、AA… 自西向东，行 1… 自北向南（地图上有标注，places.js）
+const gridCol = k => k < 26 ? GRID_COLS[k] : GRID_COLS[Math.floor(k / 26) - 1] + GRID_COLS[k % 26];   // 超过 26 列（大海域地图）接着 AA、AB…
+const gridRef = (x, y) => gridCol(clamp(Math.floor(x / 200), 0, Math.ceil(W / 200) - 1)) + (clamp(Math.floor(y / 200), 0, Math.ceil(H / 200) - 1) + 1);   // 200 一格：列 A–U 自西向东，行 1–14 自北向南（地图上有标注，places.js）
 
 function segDist(px, py, x0, y0, x1, y1) {
   const dx = x1 - x0, dy = y1 - y0, l2 = dx * dx + dy * dy || 1;
@@ -77,21 +101,6 @@ const RIVER_WADE = { inf: .25, veh: .25, amph: .6 };
 const wadeInf = (x, y) => { const t = typeAt(x, y); return TP[t].sp > 0 || t === T.RIVER; };   // 能走（含涉水）
 const spInf = t => TP[t].sp || (t === T.RIVER ? RIVER_WADE.inf : 0);   // 步兵在这种地形上的速度系数
 const coverAt = (x, y) => TP[typeAt(x, y)].cv;
-// 地面坡度（度）：按 3D 地形里看到的坡度（高程 1.0 对应 view3d.js V3_HZ 高），中心差分、跨度 2r。
-//   碉堡、岸防炮台是整块浇筑的混凝土工事，只能建在 SLOPE_MAX 以内的平地上（沙盒放置、AI 布防、战役布防都按这个）
-const SLOPE_MAX = 14;
-function groundSlope(x, y, r = 10) {
-  const k = typeof V3_HZ === 'number' ? V3_HZ : 230, z = (a, b) => elevAt(clamp(a, 0, W - 1), clamp(b, 0, H - 1)) * k;
-  return Math.atan(Math.hypot((z(x + r, y) - z(x - r, y)) / (2 * r), (z(x, y + r) - z(x, y - r)) / (2 * r))) * 57.3;
-}
-// r 以内离 (x, y) 最近的一处平地（坡度不超过 max，ok 为额外条件）；没有返回 null
-function flatNear(x, y, r, max = SLOPE_MAX, ok) {
-  for (let d = 0; d <= r; d += 8) for (let i = 0, n = d ? Math.ceil(d * .8) : 1; i < n; i++) {
-    const a = i / n * 6.283, px = clamp(x + Math.cos(a) * d, 10, W - 10), py = clamp(y + Math.sin(a) * d, 10, H - 10);
-    if (groundSlope(px, py) <= max && (!ok || ok(px, py))) return { x: px, y: py };
-  }
-  return null;
-}
 // 观战看全图：双方都交给 AI、玩家不指挥任何一方时才算（指挥模式 S.ctl 下各级仍由 AI 执行，但玩家只看本方视野）
 const specAll = () => !!S && S.role === 'spectate' && !S.ctl;
 

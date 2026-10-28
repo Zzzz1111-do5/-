@@ -1242,6 +1242,7 @@ HOOK.pointer.push((e, kind, p) => {
   if (!h) return false;
   HQ.selB = HQ.selB && HQ.selB.id === h.B.id ? null : { side: h.B.side, id: h.B.id };
   HQ.selG = null;
+  if (HQ.selB && typeof sfxPing === 'function') sfxPing();   // 全团的兵、车闪一下光（selfx.js）
   hqPanel();
   return true;
 });

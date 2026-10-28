@@ -95,7 +95,8 @@ function sailTo(s, dt, speed) {
   if (d < 2) return true;
   let tx = s.tx, ty = s.ty;
   const wp = shipLaneWP(s);
-  if (wp && shipClear(s.x, s.y, wp[0], wp[1])) { [tx, ty] = wp; s.lane = true; }
+  if (TER.pathY && s.y > TER.pathY - 150) s.lane = false;   // 大海域的远海（寻路带以外，没有礁石岛屿）：直接朝目标开
+  else if (wp && shipClear(s.x, s.y, wp[0], wp[1])) { [tx, ty] = wp; s.lane = true; }
   else if (d > 20) {   // 沿路点（grid.js pathStep）往前看最多 8 格，取直线可达的最远一点当航路点（只看下一格会走成之字形）
     s.lane = false;
     const r = pathStep(s, s.tx, s.ty, 'ship', () => field(s.tx, s.ty, 'ship'), shipClear, 8, 60);
@@ -207,7 +208,7 @@ function orderTeams(teams, x, y, t) {
     log(`${teams.length} 个小组撤向滩头`, 'warn', 'ord', 1);
     return teams.length;
   }
-  if (!fieldOk(x, y, 'p')) { log('该位置无法到达', 'warn', 'unreach', 2); return 0; }   // 只判断目标点附近有没有能站的格（下令时不为它整图算流场）
+  if (!field(x, y, 'p')) { log('该位置无法到达', 'warn', 'unreach', 2); return 0; }
   const cxs = teams.reduce((a, q) => a + q.x, 0) / teams.length, cys = teams.reduce((a, q) => a + q.y, 0) / teams.length;
   const ang = Math.atan2(y - cys, x - cxs), slots = formationSlots(teams.length, x, y, ang);
   const px = -Math.sin(ang), py = Math.cos(ang), key = (a, b) => a[0] * px + a[1] * py - (b[0] * px + b[1] * py);
