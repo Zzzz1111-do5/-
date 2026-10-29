@@ -12,6 +12,7 @@ const V3U_LIST = {
   u_vt5: { name: '15 式轻型坦克（VT-5）', title: 'VT-5 Tank', author: 'Nieve5677', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/vt-5-tank-df1e74dbddb44cbbb9d359422a81d587' },
   u_m1a2: { name: 'M1A2 主战坦克', title: 'General Dynamics M1A2 Abrams Main Battle Tank', author: 'Muhamad Mirza Arrafi', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/general-dynamics-m1a2-abrams-main-battle-tank-10a16c96ca8b4ebc855915f5d5202046' },
   u_milpack: { name: '99A 主战坦克', title: '军事装甲车坦克 Military armored vehicle and tank', author: '小王子', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/military-armored-vehicle-and-tank-f809eb8491e64efc92b1b41687e8da08' },
+  u_type80: { name: 'ZTZ-80 主战坦克', title: '[OD] Type-80 MBT basic', author: 'EXcaliburK117', license: 'Sketchfab Free Standard', url: 'https://sketchfab.com/3d-models/od-type-80-mbt-basic-7e9652d9872a4ff1a724d025952ced0f' },
   u_brad4: { name: 'M2A3 布雷德利步兵战车', title: "Low Poly M2 Bradley Free Model", author: "Lasha-Georgy Bajadze", license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/low-poly-m2-bradley-free-model-f5fbaf2aa97641b082e8d2acc91092a3' },
   u_aav7: { name: 'AAV-7 两栖突击车', title: "AAV7", author: "unbekanntespezies", license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/aav7-yC4xcavDg89GZgqjJtUs5KYbrgz' },
   u_jltv: { name: 'JLTV 联合轻型战术车', title: "JLTV", author: "ALI1388", license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/jltv-429bf4a57386462db28781d910511e40' },
@@ -38,6 +39,7 @@ const V3U_LIST = {
 const V3U_VEH = {
   ztz99a: { id: 'u_milpack', piv: [-2.8, 0] },
   ztq15: { id: 'u_vt5', piv: [-1.382, 0] },
+  ztz96b: { id: 'u_type80', piv: [-1.45, 0] },   // 中型坦克（原 ZTZ-96B，换成 ZTZ-80 外形）
   pgl625: { id: 'u_t625', piv: [-1.9, 0] },
   m1a2: { id: 'u_m1a2s', piv: [-.3, 0] },
   m1a1: { id: 'u_m1a2', piv: [-1.2, 0] },   // M1A1 与 M1A2 外形几乎一样（差在车长独立热像仪），用较轻的那个模型

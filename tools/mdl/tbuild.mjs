@@ -87,7 +87,10 @@ async function matOf(m) {
   let bf = m ? m.getBaseColorFactor() : [1, 1, 1, 1], t = m && m.getBaseColorTexture();
   const am = m ? m.getAlphaMode() : 'OPAQUE';
   // mcol：按材质名换成纯色涂装（没贴图的模型上色；有贴图的连贴图一起换掉——比如替身机型去掉原机的国籍标志、舷号）
-  if (C.mcol && m && am !== 'BLEND') for (const [re, col] of Object.entries(C.mcol)) if (new RegExp(re, 'i').test(m.getName())) { bf = [...col, bf[3]]; t = null; break; }
+  let painted = false;
+  if (C.mcol && m && am !== 'BLEND') for (const [re, col] of Object.entries(C.mcol)) if (new RegExp(re, 'i').test(m.getName())) { bf = [...col, bf[3]]; t = null; painted = true; break; }
+  // 兵种模型：没贴图的材质底色是 glTF 的线性色值，换成显示用的 sRGB（不换会发暗）；mcol 给的已经是显示色
+  if (C.weld === 'pos' && !t && !painted) bf = [...bf.slice(0, 3).map(c => c <= .0031308 ? c * 12.92 : 1.055 * c ** (1 / 2.4) - .055), bf[3]];
   let mode = am === 'MASK' ? 1 : am === 'BLEND' ? (t ? 1 : 2) : 0;
   if (m && /glass|window_glass/i.test(m.getName()) && am === 'BLEND') mode = 2;
   let ti = 255;

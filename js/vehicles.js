@@ -46,7 +46,7 @@ const vehCls = (v, x, y) => !VEH_SPEC[v.type].amph ? (v.side === 'e' ? 'vehe' : 
 const vehSp = v => VEH_SPEC[v.type] || VEH_SPEC.tank;
 // 型号：进攻方按解放军装备、守方按美军装备；沙盒按目录条目（同一车型可有改型）
 const VEH_MODEL = {
-  p: { lt_tank: 'ZTQ-15 轻型坦克', tank: 'ZTZ-96B 主战坦克', hv_tank: 'ZTZ-99A 主战坦克', amtank: 'ZTD-05 两栖突击车', apc: 'ZBD-05 两栖步兵战车', spg: 'PLZ-07 自行榴弹炮', td: 'PTL-02 突击炮',
+  p: { lt_tank: 'ZTQ-15 轻型坦克', tank: 'ZTZ-80 主战坦克', hv_tank: 'ZTZ-99A 主战坦克', amtank: 'ZTD-05 两栖突击车', apc: 'ZBD-05 两栖步兵战车', spg: 'PLZ-07 自行榴弹炮', td: 'PTL-02 突击炮',
     aa_veh: 'PGZ-07 自行高炮', sam_veh: 'PGL-625 弹炮防空车', recon: '08 式侦察车', flame_tank: 'ZBD-04A 温压火箭突击车', mine_tank: '96 式扫雷坦克', abv: 'ZBD-03 伞兵战车' },
   e: { lt_tank: 'M10 布克轻型坦克', tank: 'M1A1 艾布拉姆斯', hv_tank: 'M1A2 SEPv3 艾布拉姆斯', amtank: 'AAV-7 两栖突击车', apc: 'M2A3 布雷德利', spg: 'M109A7 帕拉丁', td: 'M1134 斯特赖克反坦克车',
     aa_veh: 'M163 火神自行高炮', sam_veh: 'M-SHORAD 防空车', recon: 'M1127 斯特赖克侦察车', flame_tank: 'M1150 突击破障车', mine_tank: 'M1150 突击破障车（扫雷）' }

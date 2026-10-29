@@ -427,18 +427,6 @@
     "err": 0.04,
     "weld": "pos"
   },
-  "u_type99": {
-    "mode": "tex",
-    "unit": 1,
-    "file": "u_type99.glb",
-    "name": "",
-    "title": "Type 99 MBT",
-    "author": "philano",
-    "license": "CC BY 4.0",
-    "url": "https://sketchfab.com/3d-models/type-99-mbt-7075c92c5ef1408497f1530703ff2942",
-    "tex": 1024,
-    "yaw": 180
-  },
   "u_milpack": {
     "mode": "tex",
     "unit": 1,
@@ -1003,5 +991,43 @@
       "gun": 0.3,
       "gunx": 2.5
     }
+  },
+  "u_type80": {
+    "mode": "tex",
+    "unit": 1,
+    "file": "u_type80.glb",
+    "title": "[OD] Type-80 MBT basic",
+    "author": "EXcaliburK117",
+    "license": "Sketchfab Free Standard",
+    "url": "https://sketchfab.com/3d-models/od-type-80-mbt-basic-7e9652d9872a4ff1a724d025952ced0f",
+    "tex": 1024,
+    "weld": "pos",
+    "err": 0.04,
+    "tris": 30000,
+    "split": {
+      "z": 1.62,
+      "piv": [
+        -1.45,
+        0
+      ],
+      "r": 2.2,
+      "gun": 0.25,
+      "gunx": 5.2
+    }
+  },
+  "u_loaderx": {
+    "mode": "tex",
+    "unit": 1,
+    "file": "u_loaderx.glb",
+    "title": "Weapons Loader",
+    "author": "Sengchor",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/016ca0f9b98b4ffbbe0e55f235bef496",
+    "tex": 512,
+    "weld": "pos",
+    "err": 0.02,
+    "tris": 12000,
+    "len": 4.06,
+    "yaw": 90
   }
 }

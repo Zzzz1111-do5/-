@@ -177,9 +177,9 @@ ctE('p_manpads', '便携防空导弹组（前卫-2）', 'p', 'inf', 'inf_p', 18,
 // ———— 进攻方 · 装甲（两栖车辆在集结海域自行泅渡；其余装载到坦克登陆舰）————
 ctE('p_lt_tank', 'ZTQ-15 轻型坦克', 'p', 'armor', 'veh', 30, CT_IC.lt, [4, 2, 4, 5, 8, 6, 4], '机动快、价格低，可伴随步兵扫清机枪火力点；装甲薄，怕反坦克炮。',
   { kind: 'veh', at: 'vcargo', type: 'lt_tank' }, { counters: ['inf_e', 'car_e'], weakTo: ['e_at_casemate', 'e_at'] });
-ctE('p_tank', 'ZTZ-96B 主战坦克', 'p', 'armor', 'veh', 45, CT_IC.tank, [6, 3, 6, 6, 6, 6, 5], '主力坦克，攻防均衡，能正面摧毁碉堡、碾压守军步兵；需步兵贴身保护以防近战反坦克。',
+ctE('p_tank', 'ZTZ-80 主战坦克', 'p', 'armor', 'veh', 45, CT_IC.tank, [6, 3, 6, 6, 6, 6, 5], '主力坦克，攻防均衡，能正面摧毁碉堡、碾压守军步兵；需步兵贴身保护以防近战反坦克。',
   { kind: 'veh', at: 'vcargo', type: 'tank' }, { counters: ['bunker', 'inf_e'], weakTo: ['e_at_casemate', 'coastal'] });
-ctE('p_tank76', 'ZTZ-96B 主战坦克（穿甲弹加强）', 'p', 'armor', 'veh', 52, CT_IC.tank76, [6, 3, 7, 7, 6, 6, 5], '换装长身管火炮的中型坦克，穿甲与射程提升，适合对付守军坦克。',
+ctE('p_tank76', 'ZTZ-80 主战坦克（穿甲弹加强）', 'p', 'armor', 'veh', 52, CT_IC.tank76, [6, 3, 7, 7, 6, 6, 5], '换装长身管火炮的中型坦克，穿甲与射程提升，适合对付守军坦克。',
   { kind: 'veh', at: 'vcargo', type: 'tank', mod: { pow: 1.2, rng: 1.15 } }, { counters: ['e_tank', 'car_e'], weakTo: ['e_at_casemate'] });
 ctE('p_hv_tank', 'ZTZ-99A 主战坦克', 'p', 'armor', 'veh', 70, CT_IC.hv, [9, 4, 8, 6, 4, 5, 5], '125 毫米滑膛炮、复合装甲加反应装甲，正面几乎免疫轻型火炮，主炮可一两发拆毁碉堡；车重大，过桥与沼泽困难。',
   { kind: 'veh', at: 'vcargo', type: 'hv_tank' }, { counters: ['bunker', 'e_tank'], weakTo: ['coastal', 'mines'] });
