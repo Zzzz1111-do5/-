@@ -92,6 +92,7 @@ const sbxLandOk = (x, y) => { const t = typeAt(x, y); return !isWater(t) && t !=
 function sbxCheck(c, x, y, x2, y2, ignore) {
   if (!c) return { ok: false, why: '未知条目' };
   const s = c.spawn, bad = why => ({ ok: false, why });
+  if (S.lv && S.lv.isle && c.id === 'e_101') return bad('架空海岛战役：守方不编入真实部队番号');
   if (s.kind === 'veh' && !sbxVehOk()) return bad('装甲车辆模块未加载');
   let cost = c.cost;
   if (s.at === 'line') cost = x2 == null ? 1 : Math.max(1, Math.round(s.per * dist(x, y, x2, y2) / 100));

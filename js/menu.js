@@ -7,12 +7,14 @@ const MN_ICON = {
   pve: '<path d="M3 17l5-9 4 6 3-4 6 7z"/><path d="M15 4v6M15 4l4 1.5-4 1.5"/>',
   sbx: '<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7" stroke-dasharray="2 2"/><rect x="3" y="14" width="7" height="7" stroke-dasharray="2 2"/><path d="M17.5 14v7M14 17.5h7"/>',
   cdx: '<path d="M4 4h7a2 2 0 012 2v14a2 2 0 00-2-2H4z"/><path d="M20 4h-5a2 2 0 00-2 2v14a2 2 0 012-2h5z"/>',
+  isle: '<path d="M2 19c3-2 6-2 9 0s6 2 11 0"/><path d="M5 16c2-4 6-6 11-5 2 .4 3 2 4 5"/><path d="M11 11c0-3 1-6 3-8M14 3c-2 0-4 1-5 3M14 3c2 1 3 2 3 4"/>',
   set: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/>',
   menu: '<path d="M4 7h16M4 12h16M4 17h16"/>'
 };
 const MN_ITEMS = [
   ['cont', '继续作战', 'RESUME', '返回当前战局'],
   ['pve', '战役（PvE）', 'CAMPAIGN', '指挥登陆舰队，夺取 AI 守军的海岸据点'],
+  ['isle', '海岛战役', 'ISLAND', '架空热带海岛：超大海域，先海战、再登岛'],
   ['sbx', '沙盒模式', 'SANDBOX', '自由部署双方兵力，观战或亲自指挥'],
   ['cdx', '兵力图鉴', 'CODEX', '全部单位的属性、定位与克制关系'],
   ['set', '设置', 'SETTINGS', '音量、画面、开场转场与指挥官通讯']
@@ -208,6 +210,7 @@ function mnHi(k, snd) {
     const pts = S.points || [], own = pts.filter(p => p.owner === 'p').length, crew = typeof vehCrewOf === 'function' ? vehCrewOf('p') : 0, men = (S.teams || []).filter(q => q.side === 'p').reduce((a, q) => a + q.men.length, 0) + crew;
     body = `<p>返回当前战局，${S.phase === 'battle' ? '推演从暂停处继续' : S.phase === 'deploy' ? '继续排兵布阵' : '继续编辑部署'}。</p><dl><dt>模式</dt><dd>${S.mode === 'sandbox' ? (S.role === 'spectate' ? '沙盒 · 观战' : '沙盒') : '战役 · ' + (DIFF[S.level] ? DIFF[S.level].name : S.level)}</dd><dt>作战用时</dt><dd>${fmtT(S.t)}</dd><dt>${S.role === 'spectate' ? '进攻方据点' : '我方据点'}</dt><dd>${own} / ${pts.length}</dd><dt>在场兵力</dt><dd>${men} 人${crew ? `（含车组 ${crew} 人）` : ''}</dd></dl>`;
   } else if (k === 'pve') body = `<p>你是登陆指挥官。登陆舰队、驱逐舰与航母航空联队归你指挥，对抗据守 ${TER && TER.points ? TER.points.length : 19} 处据点的 AI 守军。先部署、再于 H 时发起登陆。</p><dl><dt>胜利条件</dt><dd>控制指挥所与七成据点分值 30 秒</dd><dt>难度</dt><dd>普通 · 困难 · 地狱</dd></dl>`;
+  else if (k === 'isle') body = `<p>架空的热带海岛「棕榈岛」（印度洋风格，岛名、地名、设施与守军都是虚构的）。舰队在南边大洋上集结，横渡约 8 公里：先击退守方舰队、顶住岸舰导弹与岛上航空兵，夺取制海权，再强行登岛，同一张图打完。</p><dl><dt>守方</dt><dd>固定部署</dd><dt>我方</dt><dd>按预算 ${typeof ISLE === 'object' ? ISLE.p : 17000} 点自己编成</dd><dt>胜利条件</dt><dd>控制指挥所与七成据点分值 30 秒</dd></dl>`;
   else if (k === 'sbx') body = `<p>在同一张海岸地图上自由部署岸防与进攻部队，按预算对抗；可以观战 AI 对 AI，也可以亲自指挥进攻方。</p><dl><dt>状态</dt><dd>${typeof openSandbox === 'function' ? '可用' : '模块加载中'}</dd></dl>`;
   else if (k === 'cdx') { const n = typeof CATALOG !== 'undefined' && Array.isArray(CATALOG) ? CATALOG.length : 0; body = `<p>查看全部兵力：步兵、装甲、火炮、航空、舰艇、工事与支援单位的属性条、定位与克制关系。</p><dl><dt>收录</dt><dd>${n ? n + ' 种单位' : '目录加载中'}</dd></dl>`; }
   else if (k === 'set') body = `<p>主音量、音乐、音效、无线电；画面风格（黑绿 / 写实 / 数码）、画质、屏幕震动；开场转场；AI 指挥官通讯详略。</p><dl><dt>当前</dt><dd>主音量 ${Math.round(SETTINGS.master * 100)}% · 画质${SETTINGS.quality === 'low' ? '低' : '高'}</dd></dl>`;
@@ -283,6 +286,7 @@ function mnAct(k) {
   if (k === 'cont') { mnSfx('ok'); mnResume(); }
   else if (k === 'pve') { mnSfx('open'); mnView('pve'); }
   else if (k === 'sbx') mnSandbox();
+  else if (k === 'isle') { if (typeof isleStart === 'function') { mnSfx('ok'); try { isleStart(); } catch (e) { console.error('isleStart', e); } } else mnToast('海岛战役模块尚未就绪'); }
   else if (k === 'cdx') { if (typeof openCodex === 'function') openCodex(); else mnToast('图鉴模块尚未就绪'); }
   else if (k === 'set') openSettings();
 }
