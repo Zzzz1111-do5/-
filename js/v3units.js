@@ -1759,8 +1759,8 @@ function v3Grad(x, y, d, id) {
 // 朝向 th 的车体在坡度 g 上的 [俯仰, 滚转]：沿车头方向的坡度抬车头，沿车身左侧（模型 +y，朝向减 90°）的坡度抬左侧
 const v3Pose = (g, th) => { const c = Math.cos(th), s = Math.sin(th); return [Math.atan(g[0] * c + g[1] * s), Math.atan(g[0] * s - g[1] * c)]; };
 const v3mHex = h => { const s = String(h).replace('#', ''), v = parseInt(s.length === 3 ? s.split('').map(c => c + c).join('') : s, 16); return [(v >> 16 & 255) / 255, (v >> 8 & 255) / 255, (v & 255) / 255]; };
-function v3mPalette(gl) {
-  const real = typeof realLook === 'function' && realLook() && !(typeof greenLook === 'function' && greenLook()), U = V3M.u;
+function v3mPalette(gl, U = V3M.u) {   // U：着色器的 uniform 表（v3utex.js 的贴图模型也用同一套配色）
+  const real = typeof realLook === 'function' && realLook() && !(typeof greenLook === 'function' && greenLook());
   gl.uniform1f(U.uMode, real ? 1 : 0);
   gl.uniform1f(U.uHl, typeof sfxHl === 'function' ? sfxHl() : 0); gl.uniform3f(U.uHlC, 1, .76, .29);   // 选中编队成员的发光（selfx.js），琥珀色
   if (real) {
@@ -1791,6 +1791,7 @@ function v3mCollect(C, box) {
   if (!V3M.tried) v3mInit(gl);
   if (!V3M.ok) return;
   for (const L of V3M.inst.values()) L.d.length = 0;
+  if (typeof v3uClear === 'function') v3uClear();   // 带贴图的精细模型（v3utex.js）
   const [bx, by, bw, bh] = box, inB = (x, y, m = 40) => x > bx - m && x < bx + bw + m && y > by - m && y < by + bh + m;
   const spec = specAll() || (typeof R === 'object' && (R.eye === 'all' || R.eye === 'both' || R.eye === 'e')), t = performance.now() / 1000;
   const seen = (x, y) => inVision(x, y), hl = o => typeof sfxHas === 'function' && sfxHas(o);
@@ -1805,6 +1806,14 @@ function v3mCollect(C, box) {
     if (!V) { V = v3mVehicle(Mm.key, side); V3M.veh.set(bk, V); }
     // 贴地：车体按脚下坡度俯仰、侧倾（上坡车头抬起、横坡车身侧倾）；炮塔装在倾斜的车体上，按它自己的朝向取同一个坡面的姿态
     const g = v3Grad(v.x, v.y, Math.max(2.5, vehSp(v).len * .45), v.id), [hp, hr] = v3Pose(g, h);
+    const U = typeof v3uVeh === 'function' ? v3uVeh(Mm.key, Math.hypot(v.x - C.E[0], -v.y - C.E[1])) : null;
+    if (U) {   // 近处有外部精细模型（v3utex.js）：车体 + 炮塔（绕转轴转），比例按车体长
+      const ku = vehSp(v).len / U.L, c = Math.cos(h), s = Math.sin(h), px0 = v.x + (U.piv[0] * c - U.piv[1] * s) * ku, py0 = v.y + (U.piv[0] * s + U.piv[1] * c) * ku, aim = v.dead ? h + .6 : (v.aim ?? h);
+      const [tp, tr] = v3Pose(g, aim);
+      v3uAdd(U.id, 'hull', v.x, v.y, z, h, ku, sd, hr, hp);
+      v3uAdd(U.id, 'tur', px0, py0, z + g[0] * (px0 - v.x) + g[1] * (py0 - v.y), aim, ku, sd, tr, tp);
+      continue;
+    }
     v3mAdd('vh:' + bk, () => V.hull, v.x, v.y, z, h, k, sd, hr, hp);
     if (V.tur.t.length) {
       const c = Math.cos(h), s = Math.sin(h), px0 = v.x + (V.piv[0] * c - V.piv[1] * s) * k, py0 = v.y + (V.piv[0] * s + V.piv[1] * c) * k, aim = v.dead ? h + .6 : (v.aim ?? h);
@@ -2127,4 +2136,5 @@ function v3mDraw(C, LM) {
     }
   }
   for (const k of ['p', 'n', 's', 'b']) gl.disableVertexAttribArray(A[k]);
+  if (typeof v3uDraw === 'function') v3uDraw(C, LM);   // 带贴图的精细模型（v3utex.js）
 }

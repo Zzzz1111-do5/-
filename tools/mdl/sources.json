@@ -394,5 +394,190 @@
     "license": "CC BY 4.0",
     "url": "https://sketchfab.com/3d-models/dragons-teeth-anti-tank-obstacle-f7a6c987711d4ed2871707da47d2f3fb",
     "unit": 1
+  },
+  "u_vt5": {
+    "mode": "tex",
+    "unit": 0.01,
+    "file": "u_vt5.glb",
+    "name": "",
+    "title": "VT-5 Tank",
+    "author": "Nieve5677",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/vt-5-tank-df1e74dbddb44cbbb9d359422a81d587",
+    "tex": 1024,
+    "yaw": 180,
+    "split": {
+      "z": 99,
+      "tur": "^object_[12]_",
+      "pivn": "^object_1_"
+    },
+    "tris": 30000,
+    "mcol": {
+      "object_[0125]$": [
+        0.36,
+        0.4,
+        0.27
+      ],
+      "object_[34]$": [
+        0.13,
+        0.13,
+        0.12
+      ]
+    },
+    "err": 0.04,
+    "weld": "pos"
+  },
+  "u_type99": {
+    "mode": "tex",
+    "unit": 1,
+    "file": "u_type99.glb",
+    "name": "",
+    "title": "Type 99 MBT",
+    "author": "philano",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/type-99-mbt-7075c92c5ef1408497f1530703ff2942",
+    "tex": 1024,
+    "yaw": 180
+  },
+  "u_milpack": {
+    "mode": "tex",
+    "unit": 1,
+    "file": "u_milpack.glb",
+    "name": "",
+    "title": "军事装甲车坦克Military armored vehicle and tank",
+    "author": "小王子",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/military-armored-vehicle-and-tank-f809eb8491e64efc92b1b41687e8da08",
+    "tex": 1024,
+    "yaw": 90,
+    "split": {
+      "z": 5.25,
+      "piv": [
+        -2.8,
+        0
+      ],
+      "r": 8.5,
+      "gun": 0.9,
+      "gunx": 17
+    },
+    "tris": 30000,
+    "err": 0.04,
+    "weld": "pos"
+  },
+  "u_t625": {
+    "mode": "tex",
+    "unit": 1,
+    "file": "u_t625.glb",
+    "name": "",
+    "title": "Type-625 Anti Aircraft Gun Missile System",
+    "author": "Muhamad Mirza Arrafi",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/type-625-anti-aircraft-gun-missile-system-8b7e85f45b954592bd4bb8e72cdd6312",
+    "tex": 1024,
+    "split": {
+      "z": 2.68,
+      "piv": [
+        -1.9,
+        0
+      ],
+      "r": 2.4,
+      "gun": 0.5,
+      "gunx": 2.3
+    },
+    "tris": 26000,
+    "err": 0.04,
+    "weld": "pos"
+  },
+  "u_m1a2": {
+    "mode": "tex",
+    "unit": 0.0138,
+    "file": "u_m1a2.glb",
+    "name": "",
+    "title": "General Dynamics M1A2 Abrams Main Battle Tank",
+    "author": "Muhamad Mirza Arrafi",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/general-dynamics-m1a2-abrams-main-battle-tank-10a16c96ca8b4ebc855915f5d5202046",
+    "tex": 1024,
+    "yaw": 0,
+    "weld": "pos",
+    "split": {
+      "z": 1.62,
+      "piv": [
+        -1.2,
+        0
+      ],
+      "r": 2.9,
+      "gun": 0.3
+    },
+    "err": 0.04
+  },
+  "u_m1a2s": {
+    "mode": "tex",
+    "unit": 1,
+    "file": "u_m1a2s.glb",
+    "name": "",
+    "title": "M1A2 SEPV2 Abrams Main Battle Tank DC",
+    "author": "Muhamad Mirza Arrafi",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/m1a2-sepv2-abrams-main-battle-tank-dc-bcc1741c924d4c259dbc801de9b5c1bb",
+    "tex": 1024,
+    "yaw": 90,
+    "split": {
+      "z": 1.68,
+      "piv": [
+        -0.3,
+        0
+      ],
+      "r": 3.6,
+      "gun": 0.35
+    },
+    "tris": 26000,
+    "err": 0.04,
+    "weld": "pos"
+  },
+  "u_m109a6": {
+    "mode": "tex",
+    "unit": 1,
+    "file": "u_m109a6.glb",
+    "name": "",
+    "title": "M109A6 Paladin Self-Propelled Howitzer",
+    "author": "Muhamad Mirza Arrafi",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/m109a6-paladin-self-propelled-howitzer-7bc24252d4b84ac5bb7fd3b67f119b0a",
+    "tex": 1024,
+    "split": {
+      "z": 99,
+      "tur": "turret|cannon|antenna",
+      "pivn": "g_turret_m109a6"
+    },
+    "tris": 26000,
+    "err": 0.04,
+    "weld": "pos"
+  },
+  "u_stryker": {
+    "mode": "tex",
+    "unit": 1,
+    "file": "u_stryker.glb",
+    "name": "",
+    "title": "M1126 Infantry Carrier Vehicle",
+    "author": "cenobyte",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/m1126-infantry-carrier-vehicle-b0c559a02c1842b0976a241c9a998360",
+    "tex": 1024,
+    "yaw": 180,
+    "split": {
+      "z": 4.3,
+      "piv": [
+        0.3,
+        0.8
+      ],
+      "r": 0.8,
+      "gun": 0.25,
+      "gunx": 2.4,
+      "tur": "^Turret"
+    },
+    "tris": 26000,
+    "err": 0.04,
+    "weld": "pos"
   }
 }

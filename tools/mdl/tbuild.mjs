@@ -6,6 +6,13 @@
 //   parts：{ 变体名: 部件名正则 / 部件序号数组 }，不写就是整个模型一个变体；drop：丢掉的部件 / 材质名正则
 //   tex 贴图最长边（默认 512）；tris 每个变体减面上限（不写不减；树叶这类插片不要减）；cut 透明裁剪阈值（默认用材质的）
 // 每个变体：原点在底面中心（x、y 居中，最低点 z = 0），单位米；按材质分组（一组一张贴图、一次绘制）
+// 兵种模型（坦克、飞机、舰船）另有：
+//   split：车体 / 炮塔按三角形拆成 hull、tur 两个变体（很多模型车体炮塔合在一个网格里）——{ z: 炮塔座圈高（米，离车底）, piv: [x, y] 炮塔转轴,
+//          r: 转轴周围多大半径内、高于 z 的算炮塔, gun: 炮管半宽（转轴前方、高于 z、离中线这么近的算炮管）, tur / hull: 强制归炮塔 / 车体的部件名正则 }
+//          两个变体共用一个原点（整车底面中心），炮塔再减去转轴（绕自己原点转）
+//   origin：'center' 包围盒中心（飞机）、'wl' 水线（船：wl 从最低点往上占总高的比例）；len：x 方向长度缩到 len（游戏单位，船用）；
+//   yaw：绕竖轴先转多少度（模型机头不朝 +x 时）；gunx：炮管规则只到这个 x；mcol：{ 材质名正则: [r, g, b] } 没贴图的模型上涂装色；
+//   weld: 'pos' 只按位置焊接（平直着色、UV 接缝多的模型才减得动面），减面后按折角重算法线、按 UV 岛重挑每个角的 UV
 // 文件格式（小端，4 字节对齐）：'DSM2'、变体数、材质数、贴图数（u32 × 3）；
 //   贴图：每张 u8 格式（0 jpg、1 webp），补齐；材质：每个 u8 贴图号（255 无）、u8 透明（0 不透明、1 裁剪、2 玻璃）、u8 双面、u8 0、f32 底色 RGBA、f32 裁剪阈值；
 //   变体：u8 名字长度 + 名字（补齐）、f32 包围盒 min[3] max[3]、u32 组数；每组：u32 材质号、u32 顶点数、u32 索引数，
@@ -76,7 +83,9 @@ function bleed(d, w, h) {   // 透明像素的颜色取周围不透明像素的�
 }
 async function matOf(m) {
   if (matIdx.has(m)) return matIdx.get(m);
-  const bf = m ? m.getBaseColorFactor() : [1, 1, 1, 1], t = m && m.getBaseColorTexture(), am = m ? m.getAlphaMode() : 'OPAQUE';
+  let bf = m ? m.getBaseColorFactor() : [1, 1, 1, 1];
+  const t = m && m.getBaseColorTexture(), am = m ? m.getAlphaMode() : 'OPAQUE';
+  if (C.mcol && m) for (const [re, col] of Object.entries(C.mcol)) if (new RegExp(re, 'i').test(m.getName())) { bf = [...col, bf[3]]; break; }   // 没贴图的模型：按材质名上涂装色
   let mode = am === 'MASK' ? 1 : am === 'BLEND' ? (t ? 1 : 2) : 0;
   if (m && /glass|window_glass/i.test(m.getName()) && am === 'BLEND') mode = 2;
   let ti = 255;
@@ -103,7 +112,8 @@ for (const [vname, nodes] of PARTS) {
         if (mat && drop && drop.test(mat.getName())) continue;
         const mi = await matOf(mat), P = pr.getAttribute('POSITION'), N = pr.getAttribute('NORMAL'), I = pr.getIndices();
         const ti = mat && mat.getBaseColorTextureInfo(), UV = pr.getAttribute('TEXCOORD_' + (ti ? ti.getTexCoord() : 0));
-        let g = G.get(mi); if (!g) G.set(mi, g = { p: [], n: [], uv: [] });
+        let g = G.get(mi); if (!g) G.set(mi, g = { p: [], n: [], uv: [], nd: [] });
+        const ndn = nd.getName() + ' ' + (mesh.getName() || '');
         const cnt = I ? I.getCount() : P.getCount(), a = [0, 0, 0], u = [0, 0];
         for (let t = 0; t + 2 < cnt; t += 3) {
           let ix = [0, 1, 2].map(k => I ? I.getScalar(t + k) : t + k);
@@ -113,16 +123,39 @@ for (const [vname, nodes] of PARTS) {
             if (N) { N.getElement(j, a); const n = toG(mulN(W, a)), l = Math.hypot(...n) || 1; g.n.push(n[0] / l, n[1] / l, n[2] / l); } else g.n.push(0, 0, 0);
             if (UV) { UV.getElement(j, u); g.uv.push(u[0], u[1]); } else g.uv.push(0, 0);
           }
+          g.nd.push(ndn);
         }
       }
     }
   }
-  // 原点：底面中心
+  // 绕竖轴转（机头朝 +x）
+  if (C.yaw) { const a = C.yaw * Math.PI / 180, c = Math.cos(a), sn = Math.sin(a); for (const g of G.values()) for (const A of [g.p, g.n]) for (let i = 0; i < A.length; i += 3) { const x = A[i], y = A[i + 1]; A[i] = x * c - y * sn; A[i + 1] = x * sn + y * c; } }
+  // 原点：底面中心（飞机：包围盒中心；船：水线）；len：按 x 方向长度缩放
   let mn = [1e9, 1e9, 1e9], mx = [-1e9, -1e9, -1e9];
   for (const g of G.values()) for (let i = 0; i < g.p.length; i++) { const k = i % 3; mn[k] = Math.min(mn[k], g.p[i]); mx[k] = Math.max(mx[k], g.p[i]); }
-  const off = [-(mn[0] + mx[0]) / 2, -(mn[1] + mx[1]) / 2, -mn[2]];
-  for (const g of G.values()) for (let i = 0; i < g.p.length; i++) g.p[i] += off[i % 3];
-  VARS.push({ name: vname, G });
+  const sc = C.len ? C.len / (mx[0] - mn[0]) : 1;
+  const off = [-(mn[0] + mx[0]) / 2, -(mn[1] + mx[1]) / 2, C.origin === 'center' ? -(mn[2] + mx[2]) / 2 : C.origin === 'wl' ? -(mn[2] + (mx[2] - mn[2]) * (C.wl || 0)) : -mn[2]];
+  for (const g of G.values()) for (let i = 0; i < g.p.length; i++) g.p[i] = (g.p[i] + off[i % 3]) * sc;
+  if (!C.split) { VARS.push({ name: vname, G }); continue; }
+  // 车体 / 炮塔拆分（按每个三角形的重心与所属部件名）
+  const Sp = C.split, rT = Sp.tur ? new RegExp(Sp.tur, 'i') : null, rH = Sp.hull ? new RegExp(Sp.hull, 'i') : null;
+  let pv = Sp.piv || [0, 0];
+  if (Sp.pivn) {   // 转轴：取这些部件（炮塔本体，不含炮管）包围盒的中心
+    const rP = new RegExp(Sp.pivn, 'i'), a = [1e9, 1e9], b = [-1e9, -1e9];
+    for (const g of G.values()) for (let t = 0; t < g.p.length / 9; t++) if (rP.test(g.nd[t])) for (let v = 0; v < 3; v++) for (let k = 0; k < 2; k++) { a[k] = Math.min(a[k], g.p[t * 9 + v * 3 + k]); b[k] = Math.max(b[k], g.p[t * 9 + v * 3 + k]); }
+    pv = [+((a[0] + b[0]) / 2).toFixed(3), +((a[1] + b[1]) / 2).toFixed(3)];
+  }
+  console.log('炮塔转轴 piv', JSON.stringify(pv));
+  const isTur = (c, nm) => rT && rT.test(nm) ? true : rH && rH.test(nm) ? false : c[2] > Sp.z && (Math.hypot(c[0] - pv[0], c[1] - pv[1]) < (Sp.r || 1e9) || (Sp.gun && c[0] > pv[0] && c[0] < (Sp.gunx ?? 1e9) && Math.abs(c[1] - pv[1]) < Sp.gun));
+  const GH = new Map(), GT = new Map();
+  for (const [mi, g] of G) for (let t = 0; t < g.p.length / 9; t++) {
+    const c = [0, 1, 2].map(k => (g.p[t * 9 + k] + g.p[t * 9 + 3 + k] + g.p[t * 9 + 6 + k]) / 3), D = isTur(c, g.nd[t]) ? GT : GH;
+    let o = D.get(mi); if (!o) D.set(mi, o = { p: [], n: [], uv: [] });
+    for (let k = 0; k < 9; k++) o.p.push(g.p[t * 9 + k] - (D === GT && k % 3 < 2 ? pv[k % 3] : 0));
+    for (let k = 0; k < 9; k++) o.n.push(g.n[t * 9 + k]);
+    for (let k = 0; k < 6; k++) o.uv.push(g.uv[t * 6 + k]);
+  }
+  VARS.push({ name: 'hull', G: GH }, { name: 'tur', G: GT });
 }
 
 // —— 每组：焊接（位置 + UV + 法线）、补法线、可选减面、算棱线 ——
@@ -141,17 +174,54 @@ for (const V of VARS) {
       let n = [u[2] * v[1] - u[1] * v[2], u[0] * v[2] - u[2] * v[0], u[1] * v[0] - u[0] * v[1]]; const l = Math.hypot(...n) || 1; n = n.map(x => x / l);   // 左手坐标里叉积取反
       for (let k = 0; k < 3; k++) g.n.splice(t * 9 + k * 3, 3, ...n);
     }
-    const map = new Map(), pos = [], nor = [], uv = [], idx = [];
+    const map = new Map(), pos = [], nor = [], uv = [], idx = [], wp = C.weld === 'pos', uvs = [];   // uvs：只按位置焊接时，每个顶点用到过的各组 UV
     for (let i = 0; i < g.p.length / 3; i++) {
-      const key = g.p.slice(i * 3, i * 3 + 3).map(v => Math.round(v * 2000)).join(',') + '|' + g.uv.slice(i * 2, i * 2 + 2).map(v => Math.round(v * 4096)).join(',') + '|' + g.n.slice(i * 3, i * 3 + 3).map(v => Math.round(v * 60)).join(',');
+      const key = g.p.slice(i * 3, i * 3 + 3).map(v => Math.round(v * 2000)).join(',') + (wp ? '' : '|' + g.uv.slice(i * 2, i * 2 + 2).map(v => Math.round(v * 4096)).join(',') + '|' + g.n.slice(i * 3, i * 3 + 3).map(v => Math.round(v * 60)).join(','));
       let j = map.get(key);
-      if (j == null) { map.set(key, j = pos.length / 3); pos.push(...g.p.slice(i * 3, i * 3 + 3)); nor.push(...g.n.slice(i * 3, i * 3 + 3)); uv.push(...g.uv.slice(i * 2, i * 2 + 2)); }
+      if (j == null) { map.set(key, j = pos.length / 3); pos.push(...g.p.slice(i * 3, i * 3 + 3)); nor.push(...g.n.slice(i * 3, i * 3 + 3)); uv.push(...g.uv.slice(i * 2, i * 2 + 2)); if (wp) uvs.push([]); }
+      if (wp) { const L = uvs[j], u0 = g.uv[i * 2], v0 = g.uv[i * 2 + 1]; if (!L.some(q => Math.abs(q[0] - u0) < 1e-4 && Math.abs(q[1] - v0) < 1e-4)) L.push([u0, v0]); }
       idx.push(j);
     }
     let I = new Uint32Array(idx);
-    if (C.tris && tot > C.tris && M.mode !== 1) {   // 透明裁剪的插片（树叶）不减
+    if (C.tris && tot > C.tris && (M.mode !== 1 || C.split || C.dmask)) {   // 透明裁剪的插片（树叶）不减；兵种模型的裁剪材质（网罩、格栅）照减
       const target = Math.min(nt0, Math.max(12, Math.round(nt0 * C.tris / tot))) * 3;
       if (target < I.length) { const [o2] = MeshoptSimplifier.simplify(I, new Float32Array(pos), 3, target, C.err ?? .01, []); I = o2; }
+    }
+    if (wp) {   // 只按位置焊接（平直着色、UV 接缝多的模型按法线 / UV 焊就连不成网、减不了面）：减面后按 40° 折角重算法线、每个角重挑 UV
+      const nt = I.length / 3, fn = new Float32Array(nt * 3), adj = Array.from({ length: pos.length / 3 }, () => []);
+      for (let t = 0; t < nt; t++) {
+        const a = I[t * 3] * 3, b = I[t * 3 + 1] * 3, c = I[t * 3 + 2] * 3;
+        const u = [pos[b] - pos[a], pos[b + 1] - pos[a + 1], pos[b + 2] - pos[a + 2]], v = [pos[c] - pos[a], pos[c + 1] - pos[a + 1], pos[c + 2] - pos[a + 2]];
+        fn[t * 3] = u[2] * v[1] - u[1] * v[2]; fn[t * 3 + 1] = u[0] * v[2] - u[2] * v[0]; fn[t * 3 + 2] = u[1] * v[0] - u[0] * v[1];   // 左手坐标里叉积取反（按面积加权）
+        for (let k = 0; k < 3; k++) adj[I[t * 3 + k]].push(t);
+      }
+      // 原模型三角形「UV 周长 / 空间周长」的中位数：减面后的三角形比它大很多，就是横跨了两块 UV 岛（贴图会被拉成条纹）
+      const rat = [], per = (A, B, Cc, d) => Math.hypot(...A.slice(0, d).map((v, k) => v - B[k])) + Math.hypot(...B.slice(0, d).map((v, k) => v - Cc[k])) + Math.hypot(...Cc.slice(0, d).map((v, k) => v - A[k]));
+      for (let t = 0; t < nt0; t += Math.max(1, Math.floor(nt0 / 4000))) { const gp = per(g.p.slice(t * 9, t * 9 + 3), g.p.slice(t * 9 + 3, t * 9 + 6), g.p.slice(t * 9 + 6, t * 9 + 9), 3); if (gp > 1e-9) rat.push(per(g.uv.slice(t * 6, t * 6 + 2), g.uv.slice(t * 6 + 2, t * 6 + 4), g.uv.slice(t * 6 + 4, t * 6 + 6), 2) / gp); }
+      rat.sort((a, b) => a - b);
+      const rMed = rat.length ? rat[rat.length >> 1] : 1;
+      let nBad = 0;
+      const cosC = Math.cos((C.crease ?? 40) * Math.PI / 180), P2 = [], N2 = [], U2 = [], I2 = [], seen = new Map();
+      for (let t = 0; t < nt; t++) {
+        const l = Math.hypot(fn[t * 3], fn[t * 3 + 1], fn[t * 3 + 2]) || 1e-12;
+        // 每个角的 UV：在三个顶点各自用过的 UV 里挑三者最靠近的组合（同一块 UV 岛），UV 接缝上的三角形不会横跨两块岛
+        const La = uvs[I[t * 3]], Lb = uvs[I[t * 3 + 1]], Lc = uvs[I[t * 3 + 2]];
+        let best = null, bd = 1e9;
+        for (const qa of La) for (const qb of Lb) for (const qc of Lc) { const d = Math.hypot(qa[0] - qb[0], qa[1] - qb[1]) + Math.hypot(qb[0] - qc[0], qb[1] - qc[1]) + Math.hypot(qc[0] - qa[0], qc[1] - qa[1]); if (d < bd) { bd = d; best = [qa, qb, qc]; } }
+        const gp = per(pos.slice(I[t * 3] * 3, I[t * 3] * 3 + 3), pos.slice(I[t * 3 + 1] * 3, I[t * 3 + 1] * 3 + 3), pos.slice(I[t * 3 + 2] * 3, I[t * 3 + 2] * 3 + 3), 3);
+        if (gp > 1e-9 && bd / gp > rMed * 4 + 1e-6) { best = [best[0], best[0], best[0]]; nBad++; }   // 横跨 UV 岛：整个三角形取一个点的颜色（不拉花）
+        for (let k = 0; k < 3; k++) {
+          const vi = I[t * 3 + k], tu = best[k]; let sx = 0, sy = 0, sz = 0;
+          for (const f of adj[vi]) { const lf = Math.hypot(fn[f * 3], fn[f * 3 + 1], fn[f * 3 + 2]) || 1e-12; if ((fn[f * 3] * fn[t * 3] + fn[f * 3 + 1] * fn[t * 3 + 1] + fn[f * 3 + 2] * fn[t * 3 + 2]) / (l * lf) > cosC) { sx += fn[f * 3]; sy += fn[f * 3 + 1]; sz += fn[f * 3 + 2]; } }
+          const ln = Math.hypot(sx, sy, sz) || 1, n = [sx / ln, sy / ln, sz / ln], key = vi + '|' + n.map(x => Math.round(x * 50)).join(',') + '|' + Math.round(tu[0] * 8192) + ',' + Math.round(tu[1] * 8192);
+          let j = seen.get(key);
+          if (j == null) { seen.set(key, j = P2.length / 3); P2.push(pos[vi * 3], pos[vi * 3 + 1], pos[vi * 3 + 2]); N2.push(...n); U2.push(tu[0], tu[1]); }
+          I2.push(j);
+        }
+      }
+      if (nBad) console.log('  组', mi, '横跨 UV 岛改单色的三角形', nBad, '/', nt);
+      groups.push({ mi, pos: P2, nor: N2, uv: U2, idx: I2 });
+      continue;
     }
     groups.push({ mi, pos, nor, uv, idx: Array.from(I) });
   }
