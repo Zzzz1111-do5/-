@@ -117,7 +117,7 @@ function buildIsle(seed) {
 //   架空的热带海岛「棕榈岛」：岛名、地名、设施与守军都是虚构的。守方固定部署（同一个种子，每次一样）；我方按预算在沙盒里自己编成，
 //   部署完点「指挥进攻方」或「观战」开战。胜利条件与登陆战役相同：夺取指挥所并控制七成据点分值、坚守 30 秒
 //   eB：守方岸上布防的预算；sea：另给舰队、岸舰导弹与航空兵的预算
-const ISLE = { seed: 222, p: 17000, eB: 11000, sea: 6000, style: 'bal', lv: 'hard', fleet: ['e_ddg', 'e_ffg', 'e_ffg', 'e_lcs', 'e_lcs'], ascm: 3,
+const ISLE = { seed: 222, p: 14000, eB: 6000, sea: 5000, style: 'bal', lv: 'hard', fleet: ['e_ddg', 'e_ffg', 'e_ffg', 'e_lcs', 'e_lcs'], ascm: 3,
   nm: '跨海登岛', island: '棕榈岛',
   brief: '架空的热带海岛（印度洋风格，岛名、地名、设施与守军都是虚构的）：中央山地覆盖雨林，河口是红树林，南岸六处海滩，湾底有港口镇，东部平原上有机场。舰队在南边大洋上集结，要横渡约 8 公里：守方一支驱护舰编队在岛南数公里外巡弋，岬角和港湾配岸舰导弹，机场有歼击机与攻击机。先夺制海权、制空权，再强行登岛，夺取指挥所。' };
 function isleStart() {
@@ -164,22 +164,22 @@ function isleDefend() {
   } finally { Math.random = mr; }
   sbxSync();
 }
-// 余款：先多开一条增援线、编后备步兵（滩头站稳后经增援线陆续上岸），再补海战需要的兵力——052D / 055 驱逐舰、054A 护卫舰（在南边集结海域）、
-//   舰载歼击机与攻击机（航母机库装得下为止）
+// 余款：多开一条增援线、编后备步兵（滩头站稳后经增援线陆续上岸），再加几艘驱护舰（南边集结海域）和舰载机（航母机库装得下为止）——
+//   各有上限，不为花光预算堆舰堆机（舰船、飞机多了推演也慢）；剩下的点数留给玩家自己加
+const ISLE_TOP = [['p_rline', 1], ['p_reserve', 12], ['p_lci', 4], ['p_dd_h', 2], ['p_cl', 1], ['p_dd_e', 1], ['p_air_ftr', 4], ['p_air_strike', 4], ['p_air_ftr_adv', 2], ['p_air_heavy', 2]];   // p_lci：第二梯队登陆舰（各载一个加强排），滩头出口夺取后再靠岸
 function isleTopUp() {
-  const pre = ['p_rline', 'p_reserve', 'p_reserve', 'p_reserve', 'p_reserve', 'p_reserve', 'p_reserve', 'p_reserve', 'p_reserve'];
-  const ids = ['p_dd_h', 'p_air_ftr', 'p_air_strike', 'p_cl', 'p_air_ftr_adv', 'p_air_heavy', 'p_dd_h', 'p_air_ftr', 'p_air_strike', 'p_dd_e'];
-  let i = 0, fail = 0, n = 0;
-  for (const id of pre) if (sbxLeft('p') >= 200 && sbxPlace(id).ok) n++;
-  while (sbxLeft('p') >= 90 && fail < 20) {
-    const id = ids[i++ % ids.length], c = typeof catalogById === 'function' && catalogById(id);
-    if (!c) { fail++; continue; }
+  let n = 0, k = 0;
+  for (const [id, cap] of ISLE_TOP) for (let i = 0; i < cap && sbxLeft('p') >= 60; i++) {
+    const c = typeof catalogById === 'function' && catalogById(id);
+    if (!c) break;
     let r;
-    if (c.spawn.at === 'sea') { const p = sbxSea(W / 2 + ((n % 7) - 3) * 170, STAGING_Y + 40 + (n % 3) * 50); r = sbxPlace(id, p.x, p.y); }
+    if (c.spawn.at === 'sea') { const p = sbxSea(W / 2 + ((k % 7) - 3) * 170, STAGING_Y + 40 + (k % 3) * 50); k++; r = sbxPlace(id, p.x, p.y); }
     else r = sbxPlace(id);
-    if (r && r.ok) { n++; fail = 0; } else fail++;
+    if (!(r && r.ok)) break;
+    if (c.spawn.kind === 'ship') r.it.wave = 2;
+    n++;
   }
-  if (n && typeof sbxSay === 'function') sbxSay('p', `海岛方案补充：余款编入 ${n} 项——多开一条增援线、后备步兵经增援线陆续上岸；驱逐舰、护卫舰与舰载机先打掉守方舰队与岸舰导弹、夺取制海权，再登岛。`, 'plan');
+  if (n && typeof sbxSay === 'function') sbxSay('p', `海岛方案补充：再编 ${n} 项——多开一条增援线、后备步兵经增援线陆续上岸，第二梯队登陆舰在滩头出口夺取后靠岸；加派驱护舰与舰载机，先打掉守方舰队与岸舰导弹、夺取制海权，再登岛。`, 'plan');
   sbxSync();
 }
 // 情报（有误差）：面板顶部、聊天里的简报，地图上画大致位置圈（看不到守方的具体部署）
