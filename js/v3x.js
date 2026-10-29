@@ -12,7 +12,7 @@ function v3xLoad(key) {
   document.head.appendChild(s);
 }
 // 导入模型的金属度（写实画面的金属反光，v3units.js mbMetal）：飞机是漆面金属，地勤车的车身、举升臂更亮
-const V3X_METAL = { j35: .5, j20: .5, j36: .5, j50: .5, y20: .4, tug: .6, loader: .65 };
+const V3X_METAL = { j35: .22, j20: .22, j36: .22, j50: .22, y20: .18, tug: .3, loader: .32 };   // 隐身涂层、漆面都偏哑：只带一点光泽，太高就成了镀铬
 // 设置里「外部精细模型」关掉时不用导入的模型（与 v3import.js 同一个开关）
 const v3xOn = () => !(typeof SETTINGS === 'object' && SETTINGS && SETTINGS.extMdl === false);
 // 模型的网格（mbNew 格式）；没有就去加载、先返回 null

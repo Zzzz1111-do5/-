@@ -78,7 +78,7 @@ function v3mMslT(key) {
   if (T.inl === 'belly') mbBox(M, x0 + T.L * .1, x0 + T.L * .4, -R * .35, R * .35, -R * 1.35, -R * .7, sh(.6), { taper: R * .1 });   // 腹部进气道
   if (T.inl === 'quad') for (const a of [.785, 2.356, 3.927, 5.498]) { const c = Math.cos(a), s = Math.sin(a); mbTube(M, [x0 + T.L * .12, c * R * 1.15, s * R * 1.15], [x0 + T.L * .62, c * R * 1.15, s * R * 1.15], R * .28, R * .22, 6, sh(.7)); }
   M.len = T.L;
-  return typeof mbMetal === 'function' ? mbMetal(M, .5) : M;   // 漆面金属弹体（写实画面的反光）
+  return typeof mbMetal === 'function' ? mbMetal(M, .32) : M;   // 漆面金属弹体（写实画面的反光）
 }
 // 某种导弹的网格（米），按型号缓存
 function v3MslMesh(key) {
