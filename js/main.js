@@ -44,6 +44,7 @@ function frame(now) {
   ema = ema * .95 + dt * .05;
   if (ema > .038 && !R.dprCap && now > 6000 && (window.devicePixelRatio || 1) > 1) { R.dprCap = 1; resize(); }
   camKeys(dt);
+  if (typeof pcFrame === 'function') pcFrame(dt);   // 玩家驾驶的歼-35（pilot.js）：飞行模型按真实帧时间积分，画面不跟 30 赫兹的推演步抖
   if (S.phase === 'battle' && !S.paused && !S.over && S.briefed) {
     acc += dt * S.speed;
     let n = 0;

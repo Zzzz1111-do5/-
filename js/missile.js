@@ -208,10 +208,11 @@ function msSamHit(m, T) {
     base = (aam || samv ? m.pk : m.src === 'dd' || m.src === 'esc' ? (T.type === 'heli' ? .55 : .6) : T.type === 'heli' ? .62 : .42) * (aam ? 1 : (1 + (typeof eaStl === 'function' ? eaStl(T) : (typeof EA_SPEC === 'object' && EA_SPEC[T.type] && EA_SPEC[T.type].stealth) || 1)) / 2);   // F-35A 隐身（久留暴露后打折变少）
     if (T.flares > 0) { T.flares--; flare = .6; MSV.fl.push({ x: T.x, y: T.y, t: S.t }); }
   }
+  if (k === 'plane' && T.pc && typeof pcEvade === 'function') base *= pcEvade(m);   // 玩家驾驶的那架：刚投干扰弹、大过载机动时难打中（pilot.js）
   if (Math.random() < base * (1 - clamp(m.sup || 0, 0, 100) / 150) * flare) {
     msStat('aaKill');
     if (k === 'plane') { if (typeof airLost === 'function') airLost(T, `${typeof airName === 'function' ? airName(T.kind, T.v) : '飞机'}被敌${aam ? '歼击机空空导弹' : m.src === 'eship' ? '舰空导弹' : samv ? '弹炮防空车' : '单兵防空导弹'}击落`); }
-    else if (typeof eaLost === 'function') eaLost(T, aam ? (m.lr ? 'aaml' : 'aam') : samv ? 'samv' : m.src === 'dd' || m.src === 'esc' ? 'sam' : 'manpads');
+    else if (typeof eaLost === 'function') eaLost(T, m.pcw ? 'pc:' + m.pcw : aam ? (m.lr ? 'aaml' : 'aam') : samv ? 'samv' : m.src === 'dd' || m.src === 'esc' ? 'sam' : 'manpads');   // pc：玩家驾驶的歼-35 打的
     if (aam && typeof awScore === 'function') awScore(m.side);
   } else msPuff(m.x, m.y, m.side);
 }

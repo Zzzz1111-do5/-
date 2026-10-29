@@ -1761,7 +1761,7 @@ void main() {
     float F = .06 + .94 * pow(1. - abs(dot(N, V)), 4.), sp = pow(max(dot(N, normalize(Ls + V)), 0.), 160.) * (uMode < .5 ? 0. : shadowAt());
     vec3 env = Rr.z > 0. ? mix(vec3(.66, .7, .76), vec3(.42, .53, .7), Rr.z) : vec3(.13, .16, .19);
     c = uMode < .5 ? glow * (.25 + .6 * F) : env * F + vec3(.05, .06, .065) + sp * vec3(1., .96, .88);
-    al = clamp(.18 + .78 * F + sp, 0., 1.);
+    al = clamp(.18 + .78 * F + sp, 0., 1.) * (uGP > 1.5 ? .42 : 1.);   // uGP 2：座舱里往外看（v3ck.js），玻璃更通透
   }
   gl_FragColor = vec4(mix(c, uBg, smoothstep(uFog.x, uFog.y, vD)), al);
 }`;
@@ -1974,6 +1974,7 @@ function v3mCollect(C, box) {
     }
     for (const p of live) {
       if (p.dk === 'lift' && !p.up) continue;   // 还在机库里
+      if (typeof ckIn === 'function' && ckIn() && PC.p === p) continue;   // 玩家坐在这架的座舱里等弹射：座舱那一遍画（v3ck.js）
       const key = airSilKey(p.kind, p.v), sz = airMdl(p.kind, p.v).size || 15, sink = typeof cvDeckSink === 'function' ? cvDeckSink(p) : 0;
       v3GroundPlane(key, sz, p.x, p.y, top - C.hang * sink, p.heading, p.fold ?? 0, p.cpo || 0, p.dk === 'brd' || p.dk === 'lift', 3, t, typeof v3dDeckSurf === 'function' ? v3dDeckSurf(p) : null);   // 挂杆后舵面检查、起飞配平
       const P = p.dk === 'brd' && typeof cvPilotPose === 'function' ? cvPilotPose(p) : null;   // 飞行员跑过来、顺登机梯爬进座舱坐下，之后坐在座舱里（v3det.js）
@@ -2116,12 +2117,13 @@ function v3mCollect(C, box) {
   }
   // 飞机：高度与 3D 地图里的标识一致（view3d.js v3AirZ：甲板上贴着甲板，空中按高度），按滚转角倾斜；直升机主旋翼转动
   const plane = (o, hd, sd, key, sz, bank) => {
-    const L = !sd && typeof v3dLaunch === 'function' ? v3dLaunch(o) : null, gear = L && L.gear && typeof AIRD === 'object' && AIRD[key];   // 刚离舰：下沉、抬头，起落架过一会儿才收（v3det.js）
+    if (!sd && o.pc && typeof ckIn === 'function' && ckIn()) return;   // 座舱视角：自己这架在座舱那一遍画（v3ck.js）
+    const L = !sd && !o.pc && typeof v3dLaunch === 'function' ? v3dLaunch(o) : null, gear = L && L.gear && typeof AIRD === 'object' && AIRD[key];   // 刚离舰：下沉、抬头，起落架过一会儿才收（v3det.js）
     const x = o.x, y = o.y, z = v3AirZ(o) + (L ? L.dz : 0), k = sz / 21, ac = sd + 3;   // 3、4：飞机涂装（写实画面灰色）
     let pt = V3_PLANE_TAIL[key] === 'heli' ? 0 : typeof v3dPitch === 'function' ? v3dPitch(o, sd, z, L, key) : L ? L.pitch : 0;   // 仰角跟着航迹 + 迎角（js/aero.js；直升机不按航迹抬头）
     const tu = sd && o.toT != null ? S.t - o.toT : -1;   // 机场起飞刚离地（eair.js eaRoll 记的离地时刻）：头 1.5 秒保持滑跑末段抬起的机头，起落架过几秒再收
     if (tu >= 0 && tu < 3) pt = Math.max(pt, V3_ROT * (1 - sm01((tu - 1.5) / 1.5)));
-    const gd = !!(L && L.gear) || (tu >= 0 && tu < (typeof EA_TO === 'object' ? EA_TO.gear : 4));
+    const gd = !sd && o.pc && o.pcA ? o.pcA.gear : !!(L && L.gear) || (tu >= 0 && tu < (typeof EA_TO === 'object' ? EA_TO.gear : 4));   // 玩家驾驶：起落架按 G 键 / 自动收
     if (typeof v3dPlaneX === 'function' && v3dPlaneX(key, sz, x, y, z, false, hd || 0, ac, bank || 0, pt, gd, typeof v3dSurf === 'function' ? v3dSurf(o, sd) : null)) {   // 导入的真机模型（v3det.js）
       const rs = typeof airRelState === 'function' ? airRelState(sd ? 'e' : 'p', o.id) : null;
       if (rs && (rs.bay > .04 || rs.sbay > .04)) {   // 弹舱门：贴着导入模型的机腹（v3dBayZ：沿机体的向上方向挪）
@@ -2190,7 +2192,7 @@ function v3mCollect(C, box) {
     if (m.t < 0 || m.done || !isFinite(m.x)) continue;
     mlive.add(m.id);
     if ((typeof AIRV === 'object' && AIRV.mv && AIRV.mv.has(m.id) && typeof airRelPos === 'function' && airRelPos(m, true)) || !inB(m.x, m.y, 300) || (m.side === 'e' && !(spec || seen(m.x, m.y)))) continue;
-    const z0 = typeof v3AltZ === 'function' ? v3AltZ(m.x, m.y, m.z * (m.kind === 'tbm' ? 620 : 230), -2.6, 2) : v3Ht(m.x, m.y) + 20;
+    const z0 = (zz => (typeof pcMslZ === 'function' ? pcMslZ(m, zz) : null) ?? zz)(typeof v3AltZ === 'function' ? v3AltZ(m.x, m.y, m.z * (m.kind === 'tbm' ? 620 : 230), -2.6, 2) : v3Ht(m.x, m.y) + 20);   // 玩家驾驶时自己打的、打向自己的导弹按真实高度飞（pilot.js）
     const VP = typeof v3MslPos === 'function' ? v3MslPos(m, z0) : null, mx = VP ? VP.x : m.x, my = VP ? VP.y : m.y, z = VP ? VP.z : z0;   // 垂发冲出阶段（v3fx.js）
     let o = mp.get(m.id);
     if (!o) mp.set(m.id, o = { x: mx, y: my, z: z - 1, h: Math.atan2(m.ty - m.y, m.tx - m.x), p: VP ? 1.5 : .8 });

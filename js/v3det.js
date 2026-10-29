@@ -244,6 +244,7 @@ function v3dAlpha(o, key, n) {
 const V3D_PT = new Map();
 function v3dPitch(o, sd, z, L, key) {
   const id = (sd ? 'e' : 'p') + o.id;
+  if (!sd && o.pc && o.pcA) { V3D_PT.set(id, { x: o.x, y: o.y, z, t: S.t, g: 0, gd: 0, pt: o.pcA.p, q: 0, b: o.bank || 0, p: 0, de: o.pcA.de, da: o.pcA.da, S }); return o.pcA.p; }   // 玩家驾驶：姿态、平尾按飞行模型（pilot.js）
   let P = V3D_PT.get(id);
   if (!P || P.S !== S || S.t < P.t) { P = { x: o.x, y: o.y, z, t: S.t, g: 0, gd: 0, pt: 0, q: 0, b: o.bank || 0, p: 0, de: 0, da: 0, S }; V3D_PT.set(id, P); }
   const dt = S.t - P.t;
@@ -316,12 +317,22 @@ const V3D_CPDEF = { j35: { x0: 1.45, x1: 5.2, sill: [[1.45, 2.62], [2.2, 2.5], [
   j20: { x0: 3.6, x1: 6.15, sill: [[3.6, 2.8], [4.6, 2.76], [5.6, 2.7], [6.15, 2.62]], top: [[3.6, 3.12], [4.2, 3.24], [5.0, 3.28], [5.6, 3.16], [6.15, 2.66]] } };
 const v3dPoly = (P, x) => { if (x <= P[0][0]) return P[0][1]; for (let i = 1; i < P.length; i++) if (x <= P[i][0]) return lerp(P[i - 1][1], P[i][1], (x - P[i - 1][0]) / (P[i][0] - P[i - 1][0])); return P[P.length - 1][1]; };
 const V3D_GLX = new WeakMap(), V3D_CPX = new Map();
+// 自带座舱的模型：头的前后位置、头盔顶高（米，模型坐标；按模型的弹射座椅量：坐垫 1.87、头靠 2.53–2.82）
+const V3D_CPIN = { j35: { hx: 3.0, head: 2.78 } };
 function v3dGlassX(M0, mk, air) {
   let M = V3D_GLX.get(M0);
   if (M) return M;
   const t = M0.t.slice();
-  for (let i = 6; i < t.length; i += 10) if (t[i] <= -16) t[i] = V3_TGL;
+  let own = false;
+  for (let i = 6; i < t.length; i += 10) { if (t[i] <= -16) t[i] = V3_TGL; else if (t[i] <= -7.5 && t[i] >= -15.5) own = true; }
   M = Object.assign({}, M0, { t, cp: null });
+  const I = own && mk && V3D_CPIN[mk];
+  if (I) {   // 模型自带透明座舱盖与座舱内饰（不减面的歼-35）：不挖不补，飞行员按模型的座椅放
+    M.cp = { hx: I.hx, head: I.head, ox: I.hx + V3_SC[1], foot: I.head - V3_SC[0] };
+    if (air && typeof v3mPilotIn === 'function') { M.l = M0.l.slice(); v3mPilotIn(M, 1, M.cp.ox, M.cp.foot); }
+    V3D_GLX.set(M0, M);
+    return M;
+  }
   const D = mk && V3D_CPDEF[mk];
   if (D) {
     const sill = x => v3dPoly(D.sill, x);
@@ -408,7 +419,7 @@ function v3dPilot(p, key, sz, z0, h, at) {
   if (crew && St) man('sc', St.x, St.y, St.z, p.heading, St.sc);
 }
 // v3fx.js：这一帧算好的仰角（加力尾焰的方向）
-const v3dPitchOf = (o, sd) => { const P = V3D_PT.get((sd ? 'e' : 'p') + o.id); return P && P.S === S ? P.pt : 0; };
+const v3dPitchOf = (o, sd) => { if (!sd && o.pc && o.pcA) return o.pcA.p; const P = V3D_PT.get((sd ? 'e' : 'p') + o.id); return P && P.S === S ? P.pt : 0; };
 
 // ———————————————— 发动机尾焰：喷口发热 → 加力点火的小火 → 变色的大火 ————————————————
 //   照加力式涡扇的结构画：涡轮后面是尾锥、涡轮后机匣的支板与喷油杆，再往后两圈同心的 V 形火焰稳定器，外面是隔热衬套和收敛扩散喷管的调节片。

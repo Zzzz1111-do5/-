@@ -564,10 +564,13 @@ function v3H0(gx, gy) {
 //   高度 alt 0.05 以下贴着基准面（地面 / 甲板），往上每 1.0 约 230（直升机悬停 0.3 约离地 60）——见 v3AltZ：高空按海拔平飞，不随山起伏
 const V3_DECK = -2.6 + 17 + 1.5;   // 舰载机在飞行甲板上的高度：甲板离水线 17（carrier.js CVG.zd）+ 放下起落架的机身高度
 function v3AirZ(o) {
+  if (o.pc && o.pcZ != null) return o.pcZ;   // 玩家驾驶：飞行模型算的机身中线高度（pilot.js）
   const ph = o.phase || o.ph;
   if (o.kind && (ph === 'cat' || ph === 'roll' || ph === 'trap')) return V3_DECK;
   const z = v3AltZ(o.x, o.y, Math.max(0, clamp(o.alt ?? 1, 0, 1) - .05) * 230, o.kind && !o.land && !o.afPh ? V3_DECK - 1.5 : -2.6, 1.5);
-  return o.kind && o.lT != null ? v3ClimbZ(o, z) : z;
+  const z2 = o.kind && o.lT != null ? v3ClimbZ(o, z) : z;
+  if (o.pcZr != null) { const u = (S.t - o.pcZt) / 6; if (u >= 0 && u < 1) return lerp(o.pcZr, z2, sm01(u)); o.pcZr = null; }   // 玩家刚交还自动驾驶：从玩家飞的高度平滑过渡过去
+  return z2;
 }
 // 刚弹射离舰的舰载机（cvdeck.js 记的离舰时刻 lT）：推演里 2 秒就升到巡航高度，照着画像坐电梯直上——
 //   画面按 JSBSim 算的离舰时间历程（js/aero.js：先下沉约 3 米，再抬头加速爬升，14 秒约 220 米），之后按末了的爬升率继续；
@@ -999,6 +1002,7 @@ function v3Dolly(sx, sy, k) {
 }
 // 镜头：画面中心（CAM.x, CAM.y）为目标点；距离按平面地图的缩放换算，使画面中心的比例与平面时相同（开始界面背景的环绕展示用）
 function v3Camera() {
+  if (typeof PC === 'object' && PC.on && typeof ckCamera === 'function') return ckCamera();   // 驾驶歼-35（v3ck.js）：座舱 / 机后跟随
   if (typeof V3O === 'object' && V3O.on) return v3oCamera();   // 观察者模式（v3obs.js）
   if (V3.on) return v3FcCamera();   // 自由镜头
   const th = V3.tilt, ps = V3.yaw, D = (CAM.vh / CAM.z) / (2 * Math.tan(V3_FOV / 2));
@@ -1064,6 +1068,7 @@ function v3Draw(now) {
   // 转向 / 俯仰缓动；注视点高度平滑
   const fdt = clamp((now - (V3.lastNow || now)) / 1000, 0, .1); V3.lastNow = now;
   if (typeof V3O === 'object' && V3O.on) v3oStep(now);
+  else if (typeof PC === 'object' && PC.on) { /* 驾驶：镜头跟着飞机（v3ck.js ckCamera） */ }
   else if (V3.on) { v3HoldStep(fdt); v3FcStep(fdt); }   // 自由镜头
   else { v3TzStep(fdt); V3.yaw += Math.atan2(Math.sin(V3.yawT - V3.yaw), Math.cos(V3.yawT - V3.yaw)) * .18; V3.tilt += (V3.tiltT - V3.tilt) * .18; }   // 开始界面背景的环绕展示
   const C = v3Camera(), box = V3.box = v3Box(Math.max(2.6, v3FogE(C) * .93 / C.D)), boxN = v3Box(1.15);   // 远处贴图（与立体模型）铺到能见距离
@@ -1167,6 +1172,7 @@ function v3Draw(now) {
   if (m3 && typeof v3mDraw === 'function') { gl.disableVertexAttribArray(V3.a.p); gl.disableVertexAttribArray(V3.a.n); v3mDraw(C); }   // 兵种立体模型（v3units.js）
   if (m3 && typeof v3dkDraw === 'function') v3dkDraw(C);   // 福建舰飞行甲板：纹路与光影（v3deck.js）
   if (typeof v3Fx === 'function' && !(SETTINGS && SETTINGS.models3d === false)) { gl.disableVertexAttribArray(V3.a.p); gl.disableVertexAttribArray(V3.a.n); v3Fx(C); }   // 立体弹道（v3fx.js）
+  if (typeof ckPass === 'function') ckPass(C);   // 驾驶歼-35：座舱那一遍（v3ck.js）
   const ctx = R.ctx;
   ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalCompositeOperation = 'copy'; ctx.drawImage(V3.cv, 0, 0); ctx.restore();
   v3Overlay(ctx, now / 1000);
@@ -1184,6 +1190,7 @@ function v3Proj(x, y, z) {
 // 立在地形上方的标识（屏幕空间，不随透视变形）：据点旗杆与菱形、战斗群北约标号、飞机按高度悬空并向地面引垂线
 function v3Overlay(ctx, time) {
   ctx.save(); ctx.setTransform(R.dpr, 0, 0, R.dpr, 0, 0);
+  if (typeof PC === 'object' && PC.on && typeof ckHud === 'function') { ckHud(ctx); ctx.restore(); return; }   // 驾驶时只画平显（v3ck.js），不画地图标签
   ctx.lineCap = 'round'; ctx.font = '11px "IBM Plex Mono", "Noto Sans SC", monospace'; ctx.textAlign = 'center';
   const near = CAM.z / CAM.fit > 2.2, spec = specAll() || R.eye === 'all', used = [];
   // 名称标签：和已画的标签重叠就不画（近处的先画，远处的让位）

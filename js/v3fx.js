@@ -154,7 +154,7 @@ function v3Fx(C) {
       }
       continue;
     }
-    const z0 = v3AltZ(m.x, m.y, m.z * (m.kind === 'tbm' ? 620 : 230), -2.6, 2), VP = v3MslPos(m, z0), p = VP ? v3fP(VP.x, VP.y, VP.z) : v3fP(m.x, m.y, z0);   // 与飞机同一套高度：低空沿地形包络、高空按海拔；垂发冲出阶段竖直往上
+    const z0 = (zz => (typeof pcMslZ === 'function' ? pcMslZ(m, zz) : null) ?? zz)(v3AltZ(m.x, m.y, m.z * (m.kind === 'tbm' ? 620 : 230), -2.6, 2)), VP = v3MslPos(m, z0), p = VP ? v3fP(VP.x, VP.y, VP.z) : v3fP(m.x, m.y, z0);   // 与飞机同一套高度：低空沿地形包络、高空按海拔；垂发冲出阶段竖直往上
     let tr = V3F.trail.get(m.id);
     if (!tr) V3F.trail.set(m.id, tr = []);
     const last = tr[tr.length - 1];
@@ -277,7 +277,7 @@ function v3Fx(C) {
       const tail = D.stab ? D.stab.reduce((m, q) => Math.min(m, q[0]), 0) : (D.body ? D.body[D.body.length - 1][0] : -9);
       if (((S.t * .8 + o.id * .37) % 1) < .07) v3fSpark(out, C, Wp(tail + 1, 0, 2.6), Math.min(2.4 * k + 1, .02 * dE + .2), [1, 1, 1, 1]);   // 防撞灯
       if (FTR[key] && typeof v3dBurner === 'function') {   // 喷口发热、加力尾焰（v3det.js）：按每个喷口，随机身俯仰、滚转；加力开关时火舌平滑地长出、缩回
-        const Eg = v3dEng((own ? 'p' : 'e') + o.id, burn ? 1 : .65, burn ? 1 : 0);
+        const Eg = own && o.pc && typeof PC === 'object' ? v3dEng('p' + o.id, .35 + .65 * PC.eng, PC.abL, true) : v3dEng((own ? 'p' : 'e') + o.id, burn ? 1 : .65, burn ? 1 : 0);   // 玩家驾驶：按油门、加力（pilot.js）
         v3dBurner(out, C, o, key, sz, { x: o.x, y: o.y, z, h, pt: typeof v3dPitchOf === 'function' ? v3dPitchOf(o, own ? 0 : 1) : Lc ? Lc.pitch : 0, rl: r }, Eg);
       } else if (typeof v3dExhaust === 'function') v3dExhaust(key, sz, { x: o.x, y: o.y, z, h, rl: r }, gnd ? .6 : 1);   // 其余发动机：排气口后的热浪
     };

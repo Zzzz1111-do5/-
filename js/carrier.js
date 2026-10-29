@@ -623,6 +623,7 @@ function flyPlane(p, dt) {
   const c = S.cv, sp = airSpec(p.kind, p.v), dead = c.hp <= 0, M = airMdl(p.kind, p.v);
   const speed = v => { p.spd += clamp(v - p.spd, -70 * dt, 45 * dt); };
   p.gunT = Math.max(0, (p.gunT || 0) - dt);
+  if (p.pc) { if (typeof PC === 'object' && PC.on && PC.p === p) return; p.pc = false; }   // 玩家在驾驶（pilot.js 飞）；存档里留下的标记清掉
   if (p.afPh && typeof abPlaneFly === 'function' && abPlaneFly(p, dt, speed)) return;   // 在夺取的机场起降（abn.js）
   if (!Array.isArray(p.wp) || !p.wp.length) p.wp = [{ x: isFinite(p.tx) ? p.tx : p.x, y: isFinite(p.ty) ? p.ty : p.y }];
   // 甲板阶段（cvdeck.js，甲板局部坐标、随航母移动）：飞行员登机 / 升降机升上来 → 滑到弹射器 → 挂弹射杆、加力 → 弹射滑跑离舰；
@@ -907,6 +908,7 @@ function airAA(p, dt) {
 function airLost(p, msg, ditch) {
   if (p.dead) return;
   p.dead = true;
+  if (typeof pcLost === 'function') pcLost(p);   // 玩家驾驶的那架：弹射跳伞，镜头拉到机外
   const w = airWing(p);
   if (w) w.state = 'lost';
   if (ditch) S.fx.push({ kind: 'flash', x: p.x, y: p.y, r: 12, life: 0, max: .8, side: 'p' });

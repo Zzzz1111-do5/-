@@ -8,6 +8,7 @@
 //   车辆、飞机给 floor: true（轮子着地处为 z = 0）；飞机给 air: {} 另出收起落架的 <键>_a（gearless）；
 //   lines：{ crease 度, min 米, tol 米 } 只画整理好的轮廓线（featureLines），三角形不描边；
 //   paint：没贴图、底色接近白的材质（导出时丢了颜色的模型）改涂这个颜色（'#rrggbb'）；涂装色（底色 × 贴图平均 × 顶点色）烘进每个三角形，写实画面直接用它
+//   glass：{ box: [x0, x1, y0, y1, z0, z1], minL }（可以给多个）只有一种材质的模型按连通块认座舱盖玻璃（整块在框里、够亮），游戏里画成透明的；
 //   parts：活动舵面 { 名: { box: [x0, x1, |y| 下限, |y| 上限, z0, z1], piv: [转轴 x, 转轴 z], nz: 法线竖直分量下限 } }，切成 <键>_<名>L / R；skip：不要的节点名（正则，比如展示用的地面板）；舰船可给 vls：垂发块 [x0, x1, y0, y1, 盖面高, 纵向格数, 横向格数]（转换后的建模坐标，米；对着转换结果量），垂发出弹与开盖动画按它
 'use strict';
 const fs = require('fs'), path = require('path'), https = require('https'), { execFileSync } = require('child_process');
@@ -144,6 +145,17 @@ async function convert(key, E) {
   const z0 = E.draft != null ? zb + E.draft / k : E.floor ? zb : (amin(zs) + amax(zs)) / 2;   // 舰船：水线（离最低点 draft 米）为 z = 0；车辆（floor）：着地点为 z = 0；导弹、飞机：包围盒中心
   const tf0 = p => [(dot(p, F) - (x0 + x1) / 2) * k, (dot(p, R) - yc) * k, (dot(p, U) - z0) * k];
   let tf = tf0;
+  // 座舱盖玻璃（glass）：只有一种材质的模型（导出时合并过）认不出玻璃——按连通块认：整块落在 box 里、颜色够亮（玻璃烘出来是浅蓝灰，
+  //   座椅、头靠这类同在框里的件是深色）的块标成玻璃，游戏里画成透明的，透过它看得见座舱
+  for (const GB of E.glass ? [].concat(E.glass) : []) {
+    const [gx0, gx1, gy0, gy1, gz0, gz1] = GB.box, gk = q => q.map(v => Math.round(v * 1e4)).join(',');   // 按 0.1 毫米认共点：贴着框的玻璃不算连在框上
+    const id = new Map(), par = [], fd = i => { while (par[i] !== i) i = par[i] = par[par[i]]; return i; }, vi = q => { const h = gk(q); let i = id.get(h); if (i == null) { i = par.length; id.set(h, i); par.push(i); } return i; };
+    const TT = tris.map(t => { const P = [tf0(t.p.slice(0, 3)), tf0(t.p.slice(3, 6)), tf0(t.p.slice(6, 9))], I = P.map(vi); par[fd(I[1])] = fd(I[0]); par[fd(I[2])] = fd(I[0]); return P; });
+    const B = new Map();
+    tris.forEach((t, i) => { const r = fd(id.get(gk(TT[i][0]))); let b = B.get(r); if (!b) B.set(r, b = { in: true, L: 0, n: 0 }); for (const q of TT[i]) if (q[0] < gx0 || q[0] > gx1 || q[1] < gy0 || q[1] > gy1 || q[2] < gz0 || q[2] > gz1) b.in = false; b.L += 255 * (.3 * srgb(t.c[0]) + .59 * srgb(t.c[1]) + .11 * srgb(t.c[2])); b.n++; });
+    let ng = 0; tris.forEach((t, i) => { const b = B.get(fd(id.get(gk(TT[i][0])))); if (b.in && b.L / b.n >= (GB.minL ?? 55)) { t.g = true; ng++; } });
+    console.log(`  座舱盖玻璃：${ng} 个三角形`);
+  }
   // 活动舵面（parts）：按区域切出近似水平的面（平尾、鸭翼），左右各一块，坐标以转轴为原点（画面里按算出的偏角转）
   const PT = [];
   if (E.parts) {
@@ -160,7 +172,7 @@ async function convert(key, E) {
     for (const [nm, D] of Object.entries(E.parts)) for (const sd of ['L', 'R']) PT.push({ key: key + '_' + nm + sd, piv: D.piv, tris: tris.filter(t => own.get(t) === nm + sd) });
     tris = tris.filter(t => !own.has(t));
   }
-  const lines = [], meta0 = PT.length ? { parts: Object.fromEntries(Object.entries(E.parts).map(([nm, D]) => [nm, D.piv])) } : {};
+  const lines = [], meta0 = { ...(PT.length ? { parts: Object.fromEntries(Object.entries(E.parts).map(([nm, D]) => [nm, D.piv])) } : {}), ...(E.glass ? { tgl: 1 } : {}) };   // tgl：玻璃画成透明的（里面有座舱内饰）
   lines.push(await emit(tris, key, meta0));
   for (const P of PT) { if (!P.tris.length) { console.warn(P.key, '这块舵面没切到面'); continue; } tf = p => { const q = tf0(p); return [q[0] - P.piv[0], q[1], q[2] - P.piv[1]]; }; lines.push(await emit(P.tris, P.key, { piv: P.piv })); }
   tf = tf0;
