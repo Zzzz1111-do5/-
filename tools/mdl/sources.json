@@ -840,5 +840,70 @@
     "gear": {
       "z": 1.7
     }
+  },
+  "u_t054a": {
+    "mode": "tex",
+    "unit": 1,
+    "file": "u_t054a.glb",
+    "title": "Type-054A Class Frigate",
+    "author": "Muhamad Mirza Arrafi",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/type-054a-class-frigate-948cca64a5274644a35e4600e023d61d",
+    "tex": 1024,
+    "weld": "pos",
+    "err": 0.03,
+    "tris": 30000,
+    "len": 134,
+    "origin": "keep",
+    "yaw": 180
+  },
+  "u_ddg125": {
+    "mode": "tex",
+    "unit": 1,
+    "file": "u_ddg125.glb",
+    "title": "USS Jack H. Lucas DDG-125",
+    "author": "SB-129",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/uss-jack-h-lucas-ddg-125-1c9229b49915454c8ff22605f8cc7b66",
+    "tex": 1024,
+    "weld": "pos",
+    "err": 0.03,
+    "tris": 30000,
+    "len": 155.3,
+    "origin": "wl",
+    "yaw": -90,
+    "wl": 0.18
+  },
+  "u_cg47": {
+    "mode": "tex",
+    "unit": 1,
+    "file": "u_cg47.glb",
+    "title": "Ticonderoga Missile Cruiser",
+    "author": "waelXcm",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/ticonderoga-missile-cruiser-397bd2b7bcd946e4b508869f4ca1e1cf",
+    "tex": 1024,
+    "weld": "pos",
+    "err": 0.03,
+    "tris": 30000,
+    "len": 172.8,
+    "origin": "wl",
+    "wl": 0.18
+  },
+  "u_lcs2": {
+    "mode": "tex",
+    "unit": 1,
+    "file": "u_lcs2.glb",
+    "title": "USS INDEPENDENCE  LCS-2",
+    "author": "Muhamad Mirza Arrafi",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/uss-independence-lcs-2-7db04398d9524a36a6e08bead0050b76",
+    "tex": 1024,
+    "weld": "pos",
+    "err": 0.03,
+    "tris": 30000,
+    "len": 127.4,
+    "origin": "wl",
+    "wl": 0.14
   }
 }

@@ -10,7 +10,7 @@
 //   split：车体 / 炮塔按三角形拆成 hull、tur 两个变体（很多模型车体炮塔合在一个网格里）——{ z: 炮塔座圈高（米，离车底）, piv: [x, y] 炮塔转轴,
 //          r: 转轴周围多大半径内、高于 z 的算炮塔, gun: 炮管半宽（转轴前方、高于 z、离中线这么近的算炮管）, tur / hull: 强制归炮塔 / 车体的部件名正则 }
 //          两个变体共用一个原点（整车底面中心），炮塔再减去转轴（绕自己原点转）
-//   origin：'center' 包围盒中心（飞机）、'wl' 水线（船：wl 从最低点往上占总高的比例）；len：x 方向长度缩到 len（游戏单位，船用）；
+//   origin：'center' 包围盒中心（飞机）、'wl' 水线（船：wl 从最低点往上占总高的比例）、'keep' 原模型的零高度就是水线；len：x 方向长度缩到 len（游戏单位，船用）；
 //   yaw：绕竖轴先转多少度（模型机头不朝 +x 时）；gunx：炮管规则只到这个 x；mcol：{ 材质名正则: [r, g, b] } 换成纯色涂装（连贴图一起换掉）；
 //   gear：{ z, re } 另出收起落架的变体 fly（飞机空中用）；
 //   weld: 'pos' 只按位置焊接（平直着色、UV 接缝多的模型才减得动面），减面后按折角重算法线、按 UV 岛重挑每个角的 UV
@@ -136,7 +136,7 @@ for (const [vname, nodes] of PARTS) {
   let mn = [1e9, 1e9, 1e9], mx = [-1e9, -1e9, -1e9];
   for (const g of G.values()) for (let i = 0; i < g.p.length; i++) { const k = i % 3; mn[k] = Math.min(mn[k], g.p[i]); mx[k] = Math.max(mx[k], g.p[i]); }
   const sc = C.len ? C.len / (mx[0] - mn[0]) : 1;
-  const off = [-(mn[0] + mx[0]) / 2, -(mn[1] + mx[1]) / 2, C.origin === 'center' ? -(mn[2] + mx[2]) / 2 : C.origin === 'wl' ? -(mn[2] + (mx[2] - mn[2]) * (C.wl || 0)) : -mn[2]];
+  const off = [-(mn[0] + mx[0]) / 2, -(mn[1] + mx[1]) / 2, C.origin === 'center' ? -(mn[2] + mx[2]) / 2 : C.origin === 'wl' ? -(mn[2] + (mx[2] - mn[2]) * (C.wl || 0)) : C.origin === 'keep' ? 0 : -mn[2]];   // keep：原模型的 z = 0 就是水线
   for (const g of G.values()) for (let i = 0; i < g.p.length; i++) g.p[i] = (g.p[i] + off[i % 3]) * sc;
   // 起落架：gear = { z: 机腹高（米，离最低点）, re: 部件名正则 }——另出一个收起落架的变体 fly（重心低于 z 的三角形、名字对上的部件去掉）
   const flyOf = H => {

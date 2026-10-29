@@ -1,5 +1,5 @@
 'use strict';
-// 3D 里带贴图的精细兵种模型（坦克、装甲车、飞机）：免费可商用的真实模型（CC BY，作者与来源见 V3U_LIST，设置面板「素材致谢」里列出），
+// 3D 里带贴图的精细兵种模型（坦克、装甲车、飞机、舰艇）：免费可商用的真实模型（CC BY，作者与来源见 V3U_LIST，设置面板「素材致谢」里列出），
 //   用 tools/mdl/tbuild.mjs 离线转换成 assets/models/<id>.bin + 贴图（格式同地图物件，v3props.js v3pParse 解析）；
 //   车辆拆成车体 hull、炮塔 tur 两个变体（炮塔绕转轴 piv 转，坐标原点是整车底面中心）；
 //   第一次用到时后台下载，下载好之前（或下载失败、设置里关掉、离得远）仍画游戏自己的模型（v3units.js）
@@ -24,7 +24,11 @@ const V3U_LIST = {
   u_uh60m: { name: 'UH-60 通用直升机', title: "Sikorsky UH-60M Blackhawk", author: "Muhamad Mirza Arrafi", license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/sikorsky-uh-60m-blackhawk-12b4e525676a49678ac3006b360c8750' },
   u_c17: { name: 'C-17 运输机', title: "C17 Globemaster III", author: "AnirudhRao", license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/c17-globemaster-iii-597e0d7f9e3446719a2f2de3dd3fa67d' },
   u_b2b: { name: 'B-2 轰炸机', title: "[PBR] B-2 Spirit", author: "Immersive3D", license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/pbr-b-2-spirit-b16592b1083948a49ae2afa90d190a08' },
-  u_p8: { name: 'P-8 巡逻机', title: "Boeing P-8 Poseidon", author: "Muhamad Mirza Arrafi", license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/boeing-p-8-poseidon-3fc134024b69403bb5df5ab3aff48919' }
+  u_p8: { name: 'P-8 巡逻机', title: "Boeing P-8 Poseidon", author: "Muhamad Mirza Arrafi", license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/boeing-p-8-poseidon-3fc134024b69403bb5df5ab3aff48919' },
+  u_t054a: { name: '054A 型护卫舰', title: "Type-054A Class Frigate", author: "Muhamad Mirza Arrafi", license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/type-054a-class-frigate-948cca64a5274644a35e4600e023d61d' },
+  u_ddg125: { name: '阿利·伯克级驱逐舰（Flight III）', title: "USS Jack H. Lucas DDG-125", author: "SB-129", license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/uss-jack-h-lucas-ddg-125-1c9229b49915454c8ff22605f8cc7b66' },
+  u_cg47: { name: '提康德罗加级巡洋舰', title: "Ticonderoga Missile Cruiser", author: "waelXcm", license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/ticonderoga-missile-cruiser-397bd2b7bcd946e4b508869f4ca1e1cf' },
+  u_lcs2: { name: '独立级濒海战斗舰', title: "USS INDEPENDENCE  LCS-2", author: "Muhamad Mirza Arrafi", license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/uss-independence-lcs-2-7db04398d9524a36a6e08bead0050b76' }
 };
 // 游戏里的车型（models.js RLM 键）→ 外部模型；piv：炮塔转轴在车体坐标里的位置（米，x 向前、y 向右），与 tools/mdl/sources.json 的 split.piv 相同
 const V3U_VEH = {
@@ -46,6 +50,8 @@ const V3U_AIR = {
   ah64: { id: 'u_ah64', zc: 1.8, piv: [1.95, 0], gp: true }, uh60: { id: 'u_uh60m', zc: 2.1, piv: [2, 0], gp: true },
   c17: { id: 'u_c17', zc: 4.6 }, b2: { id: 'u_b2b', zc: 3.1 }, p8: { id: 'u_p8', zc: 3.8 }
 };
+// 舰艇：舰型（v3units.js：我方 vls.js vlsCls 的 052D / 054A……，守方 navy.js NV_CLS 的 ddg / cg……）→ 外部模型；原点在水线、x 向船头；dz：水线再往下压多少（米）
+const V3U_SHIP = { '054A': { id: 'u_t054a', dz: -.9 }, ddg: { id: 'u_ddg125' }, ddg3: { id: 'u_ddg125' }, cg: { id: 'u_cg47' }, lcs: { id: 'u_lcs2' } };
 const V3U = { tried: false, ok: false, pr: null, a: {}, u: {}, packs: new Map(), inst: new Map(), ib: null, fr: 0 };
 // 多远以内画精细模型（再远就画自带的简化模型：省三角形，远处也看不出差别）
 const V3U_NEAR = () => (typeof V3 === 'object' && V3.coarse ? 220 : typeof SETTINGS === 'object' && SETTINGS && SETTINGS.quality === 'low' ? 260 : 420) * clamp(Math.sqrt(typeof v3RD === 'function' ? v3RD() : 1), .8, 1.4);
@@ -180,6 +186,17 @@ function v3uPlane(key, sz, x, y, z, ground, h, side, roll = 0, pitch = 0, gear =
   if (!ground) { const o = rot([0, 0, E.zc * s]); ox -= o[0]; oy += o[1]; oz -= o[2]; }   // 机身中线对准 z
   v3uAdd(E.id, vn, ox, oy, oz, h, s, side, roll, pitch);
   if (E.piv && P.vars.has('tur')) { const o = rot([E.piv[0] * s, -E.piv[1] * s, 0]); v3uAdd(E.id, 'tur', ox + o[0], oy - o[1], oz + o[2], h + spin, s, side, roll, pitch); }
+  return true;
+}
+// 画一艘外部模型的舰艇：len 游戏里的舰长，z 水线高度；没有这型、还没载入返回 false（照旧画自带模型）
+function v3uShip(cls, x, y, z, h, len, side) {
+  const E = V3U_SHIP[cls];
+  if (!E) return false;
+  if (V3U.E && Math.hypot(x - V3U.E[0], -y - V3U.E[1], z - V3U.E[2]) > V3U_NEAR() * 4) return false;   // 船大：远一些才换回简化模型
+  const P = v3uOn(E.id), hn = P && P.vars.keys().next().value, H = hn && P.vars.get(hn);
+  if (!H) return false;
+  if (!E.L) E.L = H.bb[1][0] - H.bb[0][0];
+  v3uAdd(E.id, hn, x, y, z + (E.dz || 0) * len / E.L, h, len / E.L, side);
   return true;
 }
 function v3uClear(C) { for (const L of V3U.inst.values()) L.d.length = 0; V3U.fr++; V3U.E = C && C.E; }   // 每帧开头（v3units.js v3mCollect）；记下眼睛位置（远处的飞机画自带模型）

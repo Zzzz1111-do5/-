@@ -1857,7 +1857,11 @@ function v3mCollect(C, box) {
   for (const sh of S.ships) {
     if (!alive(sh) || !inB(sh.x, sh.y, 80)) continue;
     const d = (typeof SHIP_DIM === 'object' && SHIP_DIM[sh.kind]) || [32, 11], P = pose(sh.id, sh, sh.heading ?? -1.57), nm = (sh.sbxCls && sh.sbxCls.name) || '';
-    if (sh.kind === 'dd') { const c = typeof vlsCls === 'function' ? vlsCls(sh) : '052D', [mk, mb] = v3mDDK(c); v3mAdd(mk, mb, P.x, P.y, -2.6, P.h, P.k, 0); continue; }   // 驱护舰按舰型建模
+    if (sh.kind === 'dd') {   // 驱护舰按舰型建模（有外部精细模型的用它，v3utex.js）
+      const c = typeof vlsCls === 'function' ? vlsCls(sh) : '052D';
+      if (typeof v3uShip === 'function' && v3uShip(c, P.x, P.y, -2.6, P.h, 50 * (((typeof SH_DDC === 'object' && SH_DDC[c]) || {}).k || 1) * P.k, 0)) continue;
+      const [mk, mb] = v3mDDK(c); v3mAdd(mk, mb, P.x, P.y, -2.6, P.h, P.k, 0); continue;
+    }
     v3mAdd('sh:' + sh.kind, () => v3mShip(sh.kind, d[0], d[1]), P.x, P.y, -2.6, P.h, P.k, 0);
   }
   for (const bt of S.boats || []) if (!bt.dead && isFinite(bt.x) && inB(bt.x, bt.y)) v3mAdd('sh:boat', () => v3mShip('boat', 12, 5), bt.x, bt.y, -2.6, bt.heading ?? -1.57, 1, 0);
@@ -1895,7 +1899,7 @@ function v3mCollect(C, box) {
       for (const [u, v, a0, pose] of crew) { const [x, y] = at(u, v); v3mAdd('man:deck:' + pose, () => v3mMan('deck', pose), x, y, top, h + a0, V3_PIL, 0); }
     }
   }
-  for (const e of S.eships || []) if (!e.dead && inB(e.x, e.y, 80) && (spec || seen(e.x, e.y) || S.t - (e.det ?? -99) < 4)) { const C0 = (typeof NV_CLS === 'object' && NV_CLS[e.cls]) || { L: 46, B: 9 }; v3mAdd('es:' + e.cls, () => v3mEShip(e.cls, C0.L, C0.B), e.x, e.y, -2.6, e.heading ?? -1.57, 1, 1); }
+  for (const e of S.eships || []) if (!e.dead && inB(e.x, e.y, 80) && (spec || seen(e.x, e.y) || S.t - (e.det ?? -99) < 4)) { const C0 = (typeof NV_CLS === 'object' && NV_CLS[e.cls]) || { L: 46, B: 9 }; if (!(typeof v3uShip === 'function' && v3uShip(e.cls, e.x, e.y, -2.6, e.heading ?? -1.57, C0.L, 1))) v3mAdd('es:' + e.cls, () => v3mEShip(e.cls, C0.L, C0.B), e.x, e.y, -2.6, e.heading ?? -1.57, 1, 1); }
   for (const s of S.subs || []) if (!s.dead && inB(s.x, s.y) && (spec || (typeof asSubSeen === 'function' && asSubSeen(s)))) v3mAdd('sub', v3mSub, s.x, s.y, -4.2, s.heading || 0, 1, 1);
   // 守方阵地
   for (const e of S.enemies) {
