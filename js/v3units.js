@@ -1800,15 +1800,17 @@ function v3mGet(key, build) {
 }
 // 停在甲板 / 地面上（或在地面滑行）的飞机：精细模型放下起落架（轮子着地），外翼折起程度、座舱盖开度按四档取模型；外挂、旋翼、螺旋桨另外实例化
 const V3_PIL = .95;   // 飞行员、甲板人员的比例（按飞机的真实比例，比战场上的士兵小）
-function v3GroundPlane(key, sz, x, y, ground, hd, fold, cpo, still, side, t, sf) {
-  if (typeof v3dPlaneX === 'function' && v3dPlaneX(key, sz, x, y, ground, true, hd, side, 0, 0, true, sf || null)) return;   // 导入的真机模型（放下起落架）；sf 舵面
-  if (typeof V3U_AIR === 'object' && V3U_AIR[key] && (V3U_AIR[key].gp || V3U_AIR[key].wings) && v3uPlane(key, sz, x, y, ground, true, hd, side, 0, 0, true, still ? .4 : (t || 0) * 22, fold)) return;   // 外部模型：停着的直升机、能折翼的预警机（v3utex.js；没有座舱盖开合的其他固定翼在这里仍画自带模型）
+const V3_ROT = .14;   // 起飞抬头的仰角（约 8°）
+function v3GroundPlane(key, sz, x, y, ground, hd, fold, cpo, still, side, t, sf, pt = 0) {
+  if (typeof v3dPlaneX === 'function' && v3dPlaneX(key, sz, x, y, ground, true, hd, side, 0, pt, true, sf || null)) return;   // 导入的真机模型（放下起落架）；sf 舵面
+  const XE = typeof V3U_AIR === 'object' && V3U_AIR[key], XP = XE && !XE.gp && !XE.wings && typeof v3uOn === 'function' ? v3uOn(XE.id) : null;   // 带收放起落架两个变体（hull 放着、fly 收起）的外部模型：地面上也用它（原来滑跑时画自带模型，离地一下换成真机模型）
+  if (XE && (XE.gp || XE.wings || (XP && XP.vars && XP.vars.has('fly'))) && v3uPlane(key, sz, x, y, ground, true, hd, side, 0, pt, true, still ? .4 : (t || 0) * 22, fold)) return;   // 外部模型：停着的直升机、能折翼的预警机（v3utex.js；没有座舱盖开合的其他固定翼在这里仍画自带模型）
   const k = sz / 21;
   if (typeof AIRD === 'object' && AIRD[key]) {
     const f = AIRD[key].fold ? Math.round(clamp(fold, 0, 1) * 3) : 0, c = Math.round(clamp(cpo, 0, 1) * 3), z = ground + V3_GEAR * k;
-    v3mAdd('plg:' + key + ':' + f + ':' + c, () => v3mAir(key, f / 3, { gear: true, cpo: c / 3 }), x, y, z, hd, k, side, 0);
+    v3mAdd('plg:' + key + ':' + f + ':' + c, () => v3mAir(key, f / 3, { gear: true, cpo: c / 3 }), x, y, z, hd, k, side, 0, pt);
     v3AirExtras(key, x, y, z, hd, k, side, 0, null, t, still);
-  } else { const z = ground + 1.25 * k; v3mAdd('pl:' + key, () => v3mPlane(key), x, y, z, hd, k, side, 0); v3AirExtras(key, x, y, z, hd, k, side, 0, null, t, still); }
+  } else { const z = ground + 1.25 * k; v3mAdd('pl:' + key, () => v3mPlane(key), x, y, z, hd, k, side, 0, pt); v3AirExtras(key, x, y, z, hd, k, side, 0, null, t, still); }
 }
 // 登机梯（机型单位，按飞机比例缩放）：梯脚在原点，斜靠向机身（局部 +x）
 function v3mLadder() {
@@ -2109,8 +2111,11 @@ function v3mCollect(C, box) {
   const plane = (o, hd, sd, key, sz, bank) => {
     const L = !sd && typeof v3dLaunch === 'function' ? v3dLaunch(o) : null, gear = L && L.gear && typeof AIRD === 'object' && AIRD[key];   // 刚离舰：下沉、抬头，起落架过一会儿才收（v3det.js）
     const x = o.x, y = o.y, z = v3AirZ(o) + (L ? L.dz : 0), k = sz / 21, ac = sd + 3;   // 3、4：飞机涂装（写实画面灰色）
-    const pt = V3_PLANE_TAIL[key] === 'heli' ? 0 : typeof v3dPitch === 'function' ? v3dPitch(o, sd, z, L, key) : L ? L.pitch : 0;   // 仰角跟着航迹 + 迎角（js/aero.js；直升机不按航迹抬头）
-    if (typeof v3dPlaneX === 'function' && v3dPlaneX(key, sz, x, y, z, false, hd || 0, ac, bank || 0, pt, !!(L && L.gear), typeof v3dSurf === 'function' ? v3dSurf(o, sd) : null)) {   // 导入的真机模型（v3det.js）
+    let pt = V3_PLANE_TAIL[key] === 'heli' ? 0 : typeof v3dPitch === 'function' ? v3dPitch(o, sd, z, L, key) : L ? L.pitch : 0;   // 仰角跟着航迹 + 迎角（js/aero.js；直升机不按航迹抬头）
+    const tu = sd && o.toT != null ? S.t - o.toT : -1;   // 机场起飞刚离地（eair.js eaRoll 记的离地时刻）：头 1.5 秒保持滑跑末段抬起的机头，起落架过几秒再收
+    if (tu >= 0 && tu < 3) pt = Math.max(pt, V3_ROT * (1 - sm01((tu - 1.5) / 1.5)));
+    const gd = !!(L && L.gear) || (tu >= 0 && tu < (typeof EA_TO === 'object' ? EA_TO.gear : 4));
+    if (typeof v3dPlaneX === 'function' && v3dPlaneX(key, sz, x, y, z, false, hd || 0, ac, bank || 0, pt, gd, typeof v3dSurf === 'function' ? v3dSurf(o, sd) : null)) {   // 导入的真机模型（v3det.js）
       const rs = typeof airRelState === 'function' ? airRelState(sd ? 'e' : 'p', o.id) : null;
       if (rs && (rs.bay > .04 || rs.sbay > .04)) {   // 弹舱门：贴着导入模型的机腹（v3dBayZ：沿机体的向上方向挪）
         const b = Math.round(rs.bay * 4), sb = Math.round(rs.sbay * 4), dz = typeof v3dBayZ === 'function' ? v3dBayZ(key, sz) : 0, o = typeof v3uMv === 'function' ? v3uMv(v3uM3(v3uM3(v3uRz(-(hd || 0)), v3uRy(-pt)), v3uRx(bank || 0)), [0, 0, dz]) : [0, 0, dz];
@@ -2118,7 +2123,7 @@ function v3mCollect(C, box) {
       }
       return;
     }
-    if (typeof v3uPlane === 'function' && v3uPlane(key, sz, x, y, z, false, hd || 0, ac, bank || 0, pt, !!(L && L.gear), t * 22)) {   // 带贴图的外部模型（v3utex.js；直升机主旋翼转）
+    if (typeof v3uPlane === 'function' && v3uPlane(key, sz, x, y, z, false, hd || 0, ac, bank || 0, pt, gd, t * 22)) {   // 带贴图的外部模型（v3utex.js；直升机主旋翼转）
       if (typeof v3uArm === 'function') v3uArm(key, sz, x, y, z, hd || 0, ac, bank || 0, pt, typeof airRelState === 'function' ? airRelState(sd ? 'e' : 'p', o.id) : null);   // 挂架、外挂弹（随发射消耗）、开合的弹舱门
       return;
     }
@@ -2153,7 +2158,7 @@ function v3mCollect(C, box) {
     if (a.ph !== 'gnd' && a.ph !== 'roll') { plane(a, a.heading, 1, key, sz, a.bank); continue; }
     // 机场地面作业（eair.js eaGnd）：放下起落架停在机位 / 沿滑行道滑行 / 跑道上滑跑；登机时飞行员跑过来、顺梯子爬进座舱，座舱盖开合，地勤在机头前打手势
     const b = S.enemies.find(e => e.id === a.base), Cr = typeof eaGndCrew === 'function' ? eaGndCrew(a) : null, gz = v3Ht(a.x, a.y);
-    v3GroundPlane(key, sz, a.x, a.y, gz, a.heading, 0, Cr ? Cr.cpo : 0, !!(Cr && !Cr.eng && Cr.crew && S.t - a.g.t0 < a.g.crew - EA_GND.start), 4, t);
+    v3GroundPlane(key, sz, a.x, a.y, gz, a.heading, 0, Cr ? Cr.cpo : 0, !!(Cr && !Cr.eng && Cr.crew && S.t - a.g.t0 < a.g.crew - EA_GND.start), 4, t, null, a.ph === 'roll' && typeof eaVlof === 'function' ? V3_ROT * sm01(((a.spd || 0) / eaVlof(a) - .83) / .17) : 0);   // 滑跑末段（离地速度的 83% 起）抬头
     if (!Cr || !b) continue;
     const toW = (u, v) => eaW(b, u, v), hb = (b.rh || 0), da = A => hb + Math.atan2(Math.sin(A) * (b.rs || 1), Math.cos(A));
     if (Cr.pilot) { const [x, y] = toW(Cr.pilot.u, Cr.pilot.v), pose = Cr.pilot.run ? 'r' + (Math.floor(Cr.pilot.ph / .7854) & 7) : 'cl' + (Math.floor(Cr.pilot.ph / 1.7) & 1); v3mAdd('man:pilot:' + pose, () => v3mMan('pilot', pose), x, y, v3Ht(x, y) + Cr.pilot.z, da(Cr.pilot.a), V3_PIL, 1); }
