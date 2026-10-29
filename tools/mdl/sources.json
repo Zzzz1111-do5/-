@@ -579,5 +579,266 @@
     "tris": 26000,
     "err": 0.04,
     "weld": "pos"
+  },
+  "u_e2d": {
+    "mode": "tex",
+    "unit": 1,
+    "file": "u_e2d.glb",
+    "title": "Grumman E-2D Advanced Hawkeye",
+    "author": "Muhamad Mirza Arrafi",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/grumman-e-2d-advanced-hawkeye-0082cf8f15044cfd80ebd4e11b96789d",
+    "tex": 1024,
+    "weld": "pos",
+    "err": 0.03,
+    "tris": 24000,
+    "len": 17.6,
+    "gear": {
+      "z": 1.3
+    },
+    "mcol": {
+      "0[123]___Default": [
+        0.68,
+        0.7,
+        0.72
+      ]
+    }
+  },
+  "u_su33": {
+    "mode": "tex",
+    "unit": 1,
+    "file": "u_su33.glb",
+    "title": "Sukhoi Su-33 Сухой Су-33",
+    "author": "andertan",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/sukhoi-su-33-33-d80603a8a13b49bda90f19d80cac61d4",
+    "tex": 1024,
+    "weld": "pos",
+    "err": 0.03,
+    "tris": 24000,
+    "yaw": 90,
+    "len": 21.94,
+    "mcol": {
+      "^(material_0|Facing_R_text|Facing_L_text|Whitish_grey|Greyish_color)$": [
+        0.6,
+        0.63,
+        0.65
+      ]
+    }
+  },
+  "u_h6m": {
+    "mode": "tex",
+    "unit": 1,
+    "file": "u_h6m.glb",
+    "title": "Xian H-6 Strategic Bomber",
+    "author": "Muhamad Mirza Arrafi",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/xian-h-6-strategic-bomber-07b448a2e9924f48a5fc1c91529f2280",
+    "tex": 1024,
+    "weld": "pos",
+    "err": 0.03,
+    "tris": 24000,
+    "len": 34.8,
+    "gear": {
+      "z": 0.3
+    }
+  },
+  "u_x47b": {
+    "mode": "tex",
+    "unit": 1,
+    "file": "u_x47b.glb",
+    "title": "Northrop Grumman X-47B",
+    "author": "Yakudami",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/northrop-grumman-x-47b-8d5fa8ab10ba4b8486d40248eeb9332d",
+    "tex": 1024,
+    "weld": "pos",
+    "err": 0.03,
+    "tris": 24000,
+    "parts": {
+      "hull": "Cube\\.002"
+    },
+    "len": 11.63,
+    "gear": {
+      "z": 1.15
+    },
+    "mcol": {
+      "^Material(\\.001)?$": [
+        0.4,
+        0.42,
+        0.44
+      ]
+    }
+  },
+  "u_mq9": {
+    "mode": "tex",
+    "unit": 1,
+    "file": "u_mq9.glb",
+    "title": "MQ-9 Reaper",
+    "author": "Tyler V Howell",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/mq-9-reaper-eff549610fee4f20904f7b388a3a0830",
+    "tex": 1024,
+    "weld": "pos",
+    "err": 0.03,
+    "tris": 24000,
+    "yaw": 90,
+    "len": 11.0
+  },
+  "u_f35": {
+    "mode": "tex",
+    "unit": 1,
+    "file": "u_f35.glb",
+    "title": "Lockheed Martin F35 Lightning II",
+    "author": "andertan",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/lockheed-martin-f35-lightning-ii-db911de503c74285a8d506951df786d6",
+    "tex": 1024,
+    "weld": "pos",
+    "err": 0.03,
+    "tris": 24000,
+    "len": 15.7,
+    "gear": {
+      "z": 1.35
+    }
+  },
+  "u_f22": {
+    "mode": "tex",
+    "unit": 1,
+    "file": "u_f22.glb",
+    "title": "Lockheed Martin F-22 \"Raptor\"",
+    "author": "andertan",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/lockheed-martin-f-22-raptor-7e7b3c372e374dda98e70208d09cfdcf",
+    "tex": 1024,
+    "weld": "pos",
+    "err": 0.03,
+    "tris": 24000,
+    "yaw": 90,
+    "len": 18.92
+  },
+  "u_a10": {
+    "mode": "tex",
+    "unit": 1,
+    "file": "u_a10.glb",
+    "title": "A-10 ThunderBolt II",
+    "author": "KOG_THORNS",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/a-10-thunderbolt-ii-623514b5f1f9483a9bbee7f25da77468",
+    "tex": 256,
+    "weld": "pos",
+    "err": 0.03,
+    "tris": 24000,
+    "len": 16.26,
+    "gear": {
+      "z": 0.95
+    }
+  },
+  "u_ah64": {
+    "mode": "tex",
+    "unit": 1,
+    "file": "u_ah64.glb",
+    "title": "Boeing AH-64D Apache Combat Helicopter",
+    "author": "Muhamad Mirza Arrafi",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/boeing-ah-64d-apache-combat-helicopter-c3b58008c46b45048fdd7dd283a3c8c8",
+    "tex": 1024,
+    "weld": "pos",
+    "err": 0.03,
+    "tris": 24000,
+    "yaw": 90,
+    "len": 17.7,
+    "split": {
+      "z": 3.45,
+      "piv": [
+        1.95,
+        0
+      ],
+      "r": 7.5
+    },
+    "drop": "Alpha"
+  },
+  "u_uh60m": {
+    "mode": "tex",
+    "unit": 1,
+    "file": "u_uh60m.glb",
+    "title": "Sikorsky UH-60M Blackhawk",
+    "author": "Muhamad Mirza Arrafi",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/sikorsky-uh-60m-blackhawk-12b4e525676a49678ac3006b360c8750",
+    "tex": 1024,
+    "weld": "pos",
+    "err": 0.03,
+    "tris": 24000,
+    "len": 19.8,
+    "split": {
+      "z": 3.6,
+      "piv": [
+        2.0,
+        0
+      ],
+      "r": 8.3
+    }
+  },
+  "u_c17": {
+    "mode": "tex",
+    "unit": 1,
+    "file": "u_c17.glb",
+    "title": "C17 Globemaster III",
+    "author": "AnirudhRao",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/c17-globemaster-iii-597e0d7f9e3446719a2f2de3dd3fa67d",
+    "tex": 1024,
+    "weld": "pos",
+    "err": 0.03,
+    "tris": 24000,
+    "yaw": -90,
+    "mcol": {
+      ".": [
+        0.42,
+        0.45,
+        0.47
+      ]
+    },
+    "len": 53.04,
+    "gear": {
+      "z": 1.45
+    }
+  },
+  "u_b2b": {
+    "mode": "tex",
+    "unit": 1,
+    "file": "u_b2b.glb",
+    "title": "[PBR] B-2 Spirit",
+    "author": "Immersive3D",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/pbr-b-2-spirit-b16592b1083948a49ae2afa90d190a08",
+    "tex": 1024,
+    "weld": "pos",
+    "err": 0.03,
+    "tris": 24000,
+    "yaw": 180,
+    "len": 21.0,
+    "gear": {
+      "z": 1.2
+    }
+  },
+  "u_p8": {
+    "mode": "tex",
+    "unit": 1,
+    "file": "u_p8.glb",
+    "title": "Boeing P-8 Poseidon",
+    "author": "Muhamad Mirza Arrafi",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/boeing-p-8-poseidon-3fc134024b69403bb5df5ab3aff48919",
+    "tex": 1024,
+    "weld": "pos",
+    "err": 0.03,
+    "tris": 24000,
+    "yaw": 180,
+    "len": 39.47,
+    "gear": {
+      "z": 1.7
+    }
   }
 }

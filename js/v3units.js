@@ -1727,6 +1727,7 @@ function v3mGet(key, build) {
 const V3_PIL = .95;   // 飞行员、甲板人员的比例（按飞机的真实比例，比战场上的士兵小）
 function v3GroundPlane(key, sz, x, y, ground, hd, fold, cpo, still, side, t, sf) {
   if (typeof v3dPlaneX === 'function' && v3dPlaneX(key, sz, x, y, ground, true, hd, side, 0, 0, true, sf || null)) return;   // 导入的真机模型（放下起落架）；sf 舵面
+  if (typeof V3U_AIR === 'object' && V3U_AIR[key] && V3U_AIR[key].gp && v3uPlane(key, sz, x, y, ground, true, hd, side, 0, 0, true, still ? .4 : (t || 0) * 22)) return;   // 加油弹药点停着的直升机（v3utex.js；没有座舱盖开合，舰载机、固定翼在这里仍画自带模型）
   const k = sz / 21;
   if (typeof AIRD === 'object' && AIRD[key]) {
     const f = AIRD[key].fold ? Math.round(clamp(fold, 0, 1) * 3) : 0, c = Math.round(clamp(cpo, 0, 1) * 3), z = ground + V3_GEAR * k;
@@ -1791,7 +1792,7 @@ function v3mCollect(C, box) {
   if (!V3M.tried) v3mInit(gl);
   if (!V3M.ok) return;
   for (const L of V3M.inst.values()) L.d.length = 0;
-  if (typeof v3uClear === 'function') v3uClear();   // 带贴图的精细模型（v3utex.js）
+  if (typeof v3uClear === 'function') v3uClear(C);   // 带贴图的精细模型（v3utex.js）
   const [bx, by, bw, bh] = box, inB = (x, y, m = 40) => x > bx - m && x < bx + bw + m && y > by - m && y < by + bh + m;
   const spec = specAll() || (typeof R === 'object' && (R.eye === 'all' || R.eye === 'both' || R.eye === 'e')), t = performance.now() / 1000;
   const seen = (x, y) => inVision(x, y), hl = o => typeof sfxHas === 'function' && sfxHas(o);
@@ -2007,6 +2008,7 @@ function v3mCollect(C, box) {
       const [x, y] = eaW(b, P.u, P.v);
       if (!inB(x, y, 30)) continue;
       const [x2, y2] = eaW(b, P.u + Math.cos(P.a), P.v + Math.sin(P.a)), h = Math.atan2(y2 - y, x2 - x), k = P.size / 21, z = v3Ht(x, y) + 1.25 * k, sd = own ? 0 : 1;
+      if (typeof v3uPlane === 'function' && v3uPlane(P.sil, P.size, x, y, v3Ht(x, y), true, h, sd + 3)) continue;   // 带贴图的外部模型（放下起落架停着）
       v3mAdd('pl:' + P.sil, () => v3mPlane(P.sil), x, y, z, h, k, sd + 3, 0);
       v3AirExtras(P.sil, x, y, z, h, k, sd + 3, 0, null, t, true);
     }
@@ -2028,6 +2030,7 @@ function v3mCollect(C, box) {
       if (rs && (rs.bay > .04 || rs.sbay > .04)) { const b = Math.round(rs.bay * 4), sb = Math.round(rs.sbay * 4); v3mAdd('bay:' + key + ':' + b + ':' + sb, () => v3mBay(key, b / 4, sb / 4), x, y, z, hd || 0, k, ac, bank || 0, pt); }
       return;
     }
+    if (typeof v3uPlane === 'function' && v3uPlane(key, sz, x, y, z, false, hd || 0, ac, bank || 0, pt, !!(L && L.gear), t * 22)) return;   // 带贴图的外部模型（v3utex.js；直升机主旋翼转）
     if (gear) v3mAdd('plg:' + key + ':0:0', () => v3mAir(key, 0, { gear: true, cpo: 0 }), x, y, z, hd || 0, k, ac, bank || 0, pt);
     else v3mAdd('pl:' + key, () => v3mPlane(key), x, y, z, hd || 0, k, ac, bank || 0, pt);
     const rs = typeof airRelState === 'function' ? airRelState(sd ? 'e' : 'p', o.id) : null;   // 弹舱开合、外挂消耗（airmdl.js）
@@ -2045,7 +2048,7 @@ function v3mCollect(C, box) {
     const age = S.t - w.t;
     if (age < 0 || age > T) return;
     const P = v3WreckAt(w, age, T), sp = (w.t * 7.31) % 1 < .5 ? 1 : -1;
-    if (inB(P.x, P.y, 220)) v3mAdd('pl:' + key, () => v3mPlane(key), P.x, P.y, P.z, w.h + age * .5 * sp, sz / 21, 2, age * 4.2 * sp, -.2 - P.u * .95);
+    if (inB(P.x, P.y, 220) && !(typeof v3uPlane === 'function' && v3uPlane(key, sz, P.x, P.y, P.z, false, w.h + age * .5 * sp, 2, age * 4.2 * sp, -.2 - P.u * .95))) v3mAdd('pl:' + key, () => v3mPlane(key), P.x, P.y, P.z, w.h + age * .5 * sp, sz / 21, 2, age * 4.2 * sp, -.2 - P.u * .95);
   };
   for (const w of (S.air && S.air.wrecks) || []) { const key = typeof airSilKey === 'function' ? airSilKey(w.kind, w.v) : 'j35'; wreck(w, 2.2, key, (typeof airMdl === 'function' && airMdl(w.kind, w.v).size) || 15); }
   if (S.eair) for (const w of S.eair.wr || []) if (spec || seen(w.x, w.y)) { const [key, sz] = EA_K[w.type] || ['f35', 17]; wreck(w, 2, key, sz); }

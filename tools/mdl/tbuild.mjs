@@ -11,7 +11,8 @@
 //          r: 转轴周围多大半径内、高于 z 的算炮塔, gun: 炮管半宽（转轴前方、高于 z、离中线这么近的算炮管）, tur / hull: 强制归炮塔 / 车体的部件名正则 }
 //          两个变体共用一个原点（整车底面中心），炮塔再减去转轴（绕自己原点转）
 //   origin：'center' 包围盒中心（飞机）、'wl' 水线（船：wl 从最低点往上占总高的比例）；len：x 方向长度缩到 len（游戏单位，船用）；
-//   yaw：绕竖轴先转多少度（模型机头不朝 +x 时）；gunx：炮管规则只到这个 x；mcol：{ 材质名正则: [r, g, b] } 没贴图的模型上涂装色；
+//   yaw：绕竖轴先转多少度（模型机头不朝 +x 时）；gunx：炮管规则只到这个 x；mcol：{ 材质名正则: [r, g, b] } 换成纯色涂装（连贴图一起换掉）；
+//   gear：{ z, re } 另出收起落架的变体 fly（飞机空中用）；
 //   weld: 'pos' 只按位置焊接（平直着色、UV 接缝多的模型才减得动面），减面后按折角重算法线、按 UV 岛重挑每个角的 UV
 // 文件格式（小端，4 字节对齐）：'DSM2'、变体数、材质数、贴图数（u32 × 3）；
 //   贴图：每张 u8 格式（0 jpg、1 webp），补齐；材质：每个 u8 贴图号（255 无）、u8 透明（0 不透明、1 裁剪、2 玻璃）、u8 双面、u8 0、f32 底色 RGBA、f32 裁剪阈值；
@@ -83,9 +84,10 @@ function bleed(d, w, h) {   // 透明像素的颜色取周围不透明像素的�
 }
 async function matOf(m) {
   if (matIdx.has(m)) return matIdx.get(m);
-  let bf = m ? m.getBaseColorFactor() : [1, 1, 1, 1];
-  const t = m && m.getBaseColorTexture(), am = m ? m.getAlphaMode() : 'OPAQUE';
-  if (C.mcol && m) for (const [re, col] of Object.entries(C.mcol)) if (new RegExp(re, 'i').test(m.getName())) { bf = [...col, bf[3]]; break; }   // 没贴图的模型：按材质名上涂装色
+  let bf = m ? m.getBaseColorFactor() : [1, 1, 1, 1], t = m && m.getBaseColorTexture();
+  const am = m ? m.getAlphaMode() : 'OPAQUE';
+  // mcol：按材质名换成纯色涂装（没贴图的模型上色；有贴图的连贴图一起换掉——比如替身机型去掉原机的国籍标志、舷号）
+  if (C.mcol && m && am !== 'BLEND') for (const [re, col] of Object.entries(C.mcol)) if (new RegExp(re, 'i').test(m.getName())) { bf = [...col, bf[3]]; t = null; break; }
   let mode = am === 'MASK' ? 1 : am === 'BLEND' ? (t ? 1 : 2) : 0;
   if (m && /glass|window_glass/i.test(m.getName()) && am === 'BLEND') mode = 2;
   let ti = 255;
@@ -136,7 +138,20 @@ for (const [vname, nodes] of PARTS) {
   const sc = C.len ? C.len / (mx[0] - mn[0]) : 1;
   const off = [-(mn[0] + mx[0]) / 2, -(mn[1] + mx[1]) / 2, C.origin === 'center' ? -(mn[2] + mx[2]) / 2 : C.origin === 'wl' ? -(mn[2] + (mx[2] - mn[2]) * (C.wl || 0)) : -mn[2]];
   for (const g of G.values()) for (let i = 0; i < g.p.length; i++) g.p[i] = (g.p[i] + off[i % 3]) * sc;
-  if (!C.split) { VARS.push({ name: vname, G }); continue; }
+  // 起落架：gear = { z: 机腹高（米，离最低点）, re: 部件名正则 }——另出一个收起落架的变体 fly（重心低于 z 的三角形、名字对上的部件去掉）
+  const flyOf = H => {
+    const rG = C.gear.re ? new RegExp(C.gear.re, 'i') : null, F = new Map();
+    for (const [mi, g] of H) for (let t = 0; t < g.p.length / 9; t++) {
+      const cz = (g.p[t * 9 + 2] + g.p[t * 9 + 5] + g.p[t * 9 + 8]) / 3;
+      if (cz < C.gear.z || (rG && g.nd && rG.test(g.nd[t]))) continue;
+      let o = F.get(mi); if (!o) F.set(mi, o = { p: [], n: [], uv: [], nd: [] });
+      for (let k = 0; k < 9; k++) { o.p.push(g.p[t * 9 + k]); o.n.push(g.n[t * 9 + k]); }
+      for (let k = 0; k < 6; k++) o.uv.push(g.uv[t * 6 + k]);
+      if (g.nd) o.nd.push(g.nd[t]);
+    }
+    return F;
+  };
+  if (!C.split) { VARS.push({ name: C.gear ? 'hull' : vname, G }); if (C.gear) VARS.push({ name: 'fly', G: flyOf(G) }); continue; }
   // 车体 / 炮塔拆分（按每个三角形的重心与所属部件名）
   const Sp = C.split, rT = Sp.tur ? new RegExp(Sp.tur, 'i') : null, rH = Sp.hull ? new RegExp(Sp.hull, 'i') : null;
   let pv = Sp.piv || [0, 0];
@@ -150,12 +165,14 @@ for (const [vname, nodes] of PARTS) {
   const GH = new Map(), GT = new Map();
   for (const [mi, g] of G) for (let t = 0; t < g.p.length / 9; t++) {
     const c = [0, 1, 2].map(k => (g.p[t * 9 + k] + g.p[t * 9 + 3 + k] + g.p[t * 9 + 6 + k]) / 3), D = isTur(c, g.nd[t]) ? GT : GH;
-    let o = D.get(mi); if (!o) D.set(mi, o = { p: [], n: [], uv: [] });
+    let o = D.get(mi); if (!o) D.set(mi, o = { p: [], n: [], uv: [], nd: [] });
     for (let k = 0; k < 9; k++) o.p.push(g.p[t * 9 + k] - (D === GT && k % 3 < 2 ? pv[k % 3] : 0));
     for (let k = 0; k < 9; k++) o.n.push(g.n[t * 9 + k]);
     for (let k = 0; k < 6; k++) o.uv.push(g.uv[t * 6 + k]);
+    o.nd.push(g.nd[t]);
   }
-  VARS.push({ name: 'hull', G: GH }, { name: 'tur', G: GT });
+  VARS.push({ name: 'hull', G: GH }, { name: 'tur', G: GT });   // 直升机：tur 是主旋翼（绕桨毂转）
+  if (C.gear) VARS.push({ name: 'fly', G: flyOf(GH) });
 }
 
 // —— 每组：焊接（位置 + UV + 法线）、补法线、可选减面、算棱线 ——

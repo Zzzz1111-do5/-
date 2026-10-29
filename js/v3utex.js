@@ -1,5 +1,5 @@
 'use strict';
-// 3D 里带贴图的精细兵种模型（坦克、装甲车……）：免费可商用的真实模型（CC BY，作者与来源见 V3U_LIST，设置面板「素材致谢」里列出），
+// 3D 里带贴图的精细兵种模型（坦克、装甲车、飞机）：免费可商用的真实模型（CC BY，作者与来源见 V3U_LIST，设置面板「素材致谢」里列出），
 //   用 tools/mdl/tbuild.mjs 离线转换成 assets/models/<id>.bin + 贴图（格式同地图物件，v3props.js v3pParse 解析）；
 //   车辆拆成车体 hull、炮塔 tur 两个变体（炮塔绕转轴 piv 转，坐标原点是整车底面中心）；
 //   第一次用到时后台下载，下载好之前（或下载失败、设置里关掉、离得远）仍画游戏自己的模型（v3units.js）
@@ -11,7 +11,20 @@ const V3U_LIST = {
   u_t625: { name: '625 型弹炮防空系统', title: 'Type-625 Anti Aircraft Gun Missile System', author: 'Muhamad Mirza Arrafi', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/type-625-anti-aircraft-gun-missile-system-8b7e85f45b954592bd4bb8e72cdd6312' },
   u_vt5: { name: '15 式轻型坦克（VT-5）', title: 'VT-5 Tank', author: 'Nieve5677', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/vt-5-tank-df1e74dbddb44cbbb9d359422a81d587' },
   u_m1a2: { name: 'M1A2 主战坦克', title: 'General Dynamics M1A2 Abrams Main Battle Tank', author: 'Muhamad Mirza Arrafi', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/general-dynamics-m1a2-abrams-main-battle-tank-10a16c96ca8b4ebc855915f5d5202046' },
-  u_milpack: { name: '99A 主战坦克', title: '军事装甲车坦克 Military armored vehicle and tank', author: '小王子', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/military-armored-vehicle-and-tank-f809eb8491e64efc92b1b41687e8da08' }
+  u_milpack: { name: '99A 主战坦克', title: '军事装甲车坦克 Military armored vehicle and tank', author: '小王子', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/military-armored-vehicle-and-tank-f809eb8491e64efc92b1b41687e8da08' },
+  u_e2d: { name: '空警-600（用 E-2D 外形代替，去掉原机标志）', title: "Grumman E-2D Advanced Hawkeye", author: "Muhamad Mirza Arrafi", license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/grumman-e-2d-advanced-hawkeye-0082cf8f15044cfd80ebd4e11b96789d' },
+  u_su33: { name: '歼-15（用 Su-33 外形代替，改成海军灰）', title: "Sukhoi Su-33 Сухой Су-33", author: "andertan", license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/sukhoi-su-33-33-d80603a8a13b49bda90f19d80cac61d4' },
+  u_h6m: { name: '轰-6 轰炸机', title: "Xian H-6 Strategic Bomber", author: "Muhamad Mirza Arrafi", license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/xian-h-6-strategic-bomber-07b448a2e9924f48a5fc1c91529f2280' },
+  u_x47b: { name: '攻击-11（用 X-47B 外形代替，去掉原机标志）', title: "Northrop Grumman X-47B", author: "Yakudami", license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/northrop-grumman-x-47b-8d5fa8ab10ba4b8486d40248eeb9332d' },
+  u_mq9: { name: 'MQ-9 无人机', title: "MQ-9 Reaper", author: "Tyler V Howell", license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/mq-9-reaper-eff549610fee4f20904f7b388a3a0830' },
+  u_f35: { name: 'F-35 战斗机', title: "Lockheed Martin F35 Lightning II", author: "andertan", license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/lockheed-martin-f35-lightning-ii-db911de503c74285a8d506951df786d6' },
+  u_f22: { name: 'F-22 战斗机', title: "Lockheed Martin F-22 \"Raptor\"", author: "andertan", license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/lockheed-martin-f-22-raptor-7e7b3c372e374dda98e70208d09cfdcf' },
+  u_a10: { name: 'A-10 攻击机', title: "A-10 ThunderBolt II", author: "KOG_THORNS", license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/a-10-thunderbolt-ii-623514b5f1f9483a9bbee7f25da77468' },
+  u_ah64: { name: 'AH-64 武装直升机', title: "Boeing AH-64D Apache Combat Helicopter", author: "Muhamad Mirza Arrafi", license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/boeing-ah-64d-apache-combat-helicopter-c3b58008c46b45048fdd7dd283a3c8c8' },
+  u_uh60m: { name: 'UH-60 通用直升机', title: "Sikorsky UH-60M Blackhawk", author: "Muhamad Mirza Arrafi", license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/sikorsky-uh-60m-blackhawk-12b4e525676a49678ac3006b360c8750' },
+  u_c17: { name: 'C-17 运输机', title: "C17 Globemaster III", author: "AnirudhRao", license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/c17-globemaster-iii-597e0d7f9e3446719a2f2de3dd3fa67d' },
+  u_b2b: { name: 'B-2 轰炸机', title: "[PBR] B-2 Spirit", author: "Immersive3D", license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/pbr-b-2-spirit-b16592b1083948a49ae2afa90d190a08' },
+  u_p8: { name: 'P-8 巡逻机', title: "Boeing P-8 Poseidon", author: "Muhamad Mirza Arrafi", license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/boeing-p-8-poseidon-3fc134024b69403bb5df5ab3aff48919' }
 };
 // 游戏里的车型（models.js RLM 键）→ 外部模型；piv：炮塔转轴在车体坐标里的位置（米，x 向前、y 向右），与 tools/mdl/sources.json 的 split.piv 相同
 const V3U_VEH = {
@@ -22,6 +35,16 @@ const V3U_VEH = {
   m1a1: { id: 'u_m1a2', piv: [-1.2, 0] },   // M1A1 与 M1A2 外形几乎一样（差在车长独立热像仪），用较轻的那个模型
   m109: { id: 'u_m109a6', piv: [-2.501, 0] },
   m1134: { id: 'u_stryker', piv: [.3, .8] }, m1127: { id: 'u_stryker', piv: [.3, .8] }, mshorad: { id: 'u_stryker', piv: [.3, .8] }
+};
+// 飞机：游戏里的机型键（carrier.js airSilKey、v3units.js EA_K）→ 外部模型；zc：机身中线离机轮着地点多高（米，空中按机身中线对准飞行高度）
+//   piv：直升机主旋翼桨毂（变体 tur 绕它转）；deck：舰载机在甲板 / 机场地勤作业时仍画自带模型（折翼、座舱盖开合、飞行员登机都在那上面），只在空中换
+//   gp：机场外加油弹药点停放时也用（直升机）
+const V3U_AIR = {
+  kj600: { id: 'u_e2d', zc: 2.4, deck: true }, j15: { id: 'u_su33', zc: 1.5, deck: true }, gj11: { id: 'u_x47b', zc: 2.1, deck: true },
+  h6k: { id: 'u_h6m', zc: 1.7 },
+  mq9: { id: 'u_mq9', zc: 1.55 }, f35: { id: 'u_f35', zc: 2.2 }, f35b: { id: 'u_f35', zc: 2.2 }, f22: { id: 'u_f22', zc: 1 }, a10: { id: 'u_a10', zc: 2.1 },
+  ah64: { id: 'u_ah64', zc: 1.8, piv: [1.95, 0], gp: true }, uh60: { id: 'u_uh60m', zc: 2.1, piv: [2, 0], gp: true },
+  c17: { id: 'u_c17', zc: 4.6 }, b2: { id: 'u_b2b', zc: 3.1 }, p8: { id: 'u_p8', zc: 3.8 }
 };
 const V3U = { tried: false, ok: false, pr: null, a: {}, u: {}, packs: new Map(), inst: new Map(), ib: null, fr: 0 };
 // 多远以内画精细模型（再远就画自带的简化模型：省三角形，远处也看不出差别）
@@ -140,7 +163,26 @@ function v3uVeh(key, d) {
   if (!E.L) E.L = H.bb[1][0] - H.bb[0][0];
   return E;
 }
-function v3uClear() { for (const L of V3U.inst.values()) L.d.length = 0; V3U.fr++; }
+// 画一架外部模型的飞机（参数同 v3det.js v3dPlaneX）：没有这型、还没载入、离得太远返回 false（照旧画自带模型）
+//   sz 游戏里的机型尺寸（机长），ground：z 是地面（机轮着地，放下起落架）；否则 z 是机身中线高度；gear 空中也放着起落架；spin 旋翼转角
+function v3uPlane(key, sz, x, y, z, ground, h, side, roll = 0, pitch = 0, gear = false, spin = 0) {
+  const E = V3U_AIR[key];
+  if (!E) return false;
+  if (V3U.E && Math.hypot(x - V3U.E[0], -y - V3U.E[1], z - V3U.E[2]) > V3U_NEAR() * 2.4) return false;
+  const P = v3uOn(E.id), hn = P && (P.vars.has('hull') ? 'hull' : P.vars.keys().next().value), H = hn && P.vars.get(hn);   // 没拆件的模型只有一个变体（名字是模型号）
+  if (!H) return false;
+  if (!E.L) E.L = H.bb[1][0] - H.bb[0][0];
+  const s = sz / E.L, vn = ground || gear || !P.vars.has('fly') ? hn : 'fly';
+  // 与 v3units.js 实例着色器同一约定：先绕 x 滚转、再绕 y 俯仰、再绕 z 转向（GL 坐标 y 取反）
+  const ch = Math.cos(-h), sh = Math.sin(-h), cp = Math.cos(pitch), sp = Math.sin(pitch), cr = Math.cos(roll), sr = Math.sin(roll);
+  const rot = v => { const a = [v[0], v[1] * cr - v[2] * sr, v[1] * sr + v[2] * cr], b = [a[0] * cp - a[2] * sp, a[1], a[0] * sp + a[2] * cp]; return [b[0] * ch - b[1] * sh, b[0] * sh + b[1] * ch, b[2]]; };
+  let ox = x, oy = y, oz = z;
+  if (!ground) { const o = rot([0, 0, E.zc * s]); ox -= o[0]; oy += o[1]; oz -= o[2]; }   // 机身中线对准 z
+  v3uAdd(E.id, vn, ox, oy, oz, h, s, side, roll, pitch);
+  if (E.piv && P.vars.has('tur')) { const o = rot([E.piv[0] * s, -E.piv[1] * s, 0]); v3uAdd(E.id, 'tur', ox + o[0], oy - o[1], oz + o[2], h + spin, s, side, roll, pitch); }
+  return true;
+}
+function v3uClear(C) { for (const L of V3U.inst.values()) L.d.length = 0; V3U.fr++; V3U.E = C && C.E; }   // 每帧开头（v3units.js v3mCollect）；记下眼睛位置（远处的飞机画自带模型）
 // 一个实例：参数同 v3units.js v3mAdd（x、y 世界坐标，z 高度，a 世界朝向，k 比例，side 阵营，roll 滚转，pitch 俯仰）
 function v3uAdd(id, vn, x, y, z, a, k, side, roll = 0, pitch = 0) {
   const key = id + ':' + vn;
