@@ -4,7 +4,9 @@
 // sources.json 里 mode: "tex" 的条目：
 //   file 源文件（src/ 下）；unit 每单位多少米；axes 游戏 x（正面朝向）、y（右）、z（上）取 glTF 的哪个轴（默认 ["z", "-x", "y"]）
 //   parts：{ 变体名: 部件名正则 / 部件序号数组 }，不写就是整个模型一个变体；drop：丢掉的部件 / 材质名正则
-//   tex 贴图最长边（默认 512）；tris 每个变体减面上限（不写不减；树叶这类插片不要减）；cut 透明裁剪阈值（默认用材质的）
+//   tex 贴图最长边（默认 512）；tris 每个变体减面上限（不写不减；树叶这类插片不要减；也可以写成 { 变体名: 上限 }，比如直升机旋翼 tur 少给一些）；cut 透明裁剪阈值（默认用材质的）；
+//   prune：减面时把误差内的孤立小部件整块去掉（meshoptimizer 的 Prune，由大量不相连的小面片拼成的模型普通减面减不动）；
+//   cluster：普通减面之后还超出上限 30% 的，再按这么大（米）的格子做顶点聚类（非流形的草图模型顶点被锁死、怎么减都不动；只给没贴图的模型用）
 // 每个变体：原点在底面中心（x、y 居中，最低点 z = 0），单位米；按材质分组（一组一张贴图、一次绘制）
 // 兵种模型（坦克、飞机、舰船）另有：
 //   split：车体 / 炮塔按三角形拆成 hull、tur 两个变体（很多模型车体炮塔合在一个网格里）——{ z: 炮塔座圈高（米，离车底）, piv: [x, y] 炮塔转轴,
@@ -264,9 +266,23 @@ for (const V of VARS) {
       idx.push(j);
     }
     let I = new Uint32Array(idx);
-    if (C.tris && tot > C.tris && (M.mode !== 1 || C.split || C.dmask)) {   // 透明裁剪的插片（树叶）不减；兵种模型的裁剪材质（网罩、格栅）照减
-      const target = Math.min(nt0, Math.max(12, Math.round(nt0 * C.tris / tot))) * 3;
-      if (target < I.length) { const [o2] = MeshoptSimplifier.simplify(I, new Float32Array(pos), 3, target, C.err ?? .01, []); I = o2; }
+    const TL = C.tris && typeof C.tris === 'object' ? (C.tris[V.name] ?? C.tris.hull) : C.tris;
+    if (TL && tot > TL && (M.mode !== 1 || C.split || C.dmask)) {   // 透明裁剪的插片（树叶）不减；兵种模型的裁剪材质（网罩、格栅）照减
+      const target = Math.min(nt0, Math.max(12, Math.round(nt0 * TL / tot))) * 3;
+      if (C.prune) MeshoptSimplifier.useExperimentalFeatures = true;
+      if (target < I.length) { const [o2] = MeshoptSimplifier.simplify(I, new Float32Array(pos), 3, target, C.err ?? .01, C.prune ? ['Prune'] : []); I = o2; }
+      if (C.cluster && I.length > target * 1.3) {   // 顶点聚类：吸到格子上，去掉退化、重复的三角形（顶点表不动，只改索引）
+        const q = C.cluster, cell = new Map(), rep = new Uint32Array(pos.length / 3), seen = new Set(), J = [];
+        for (let v = 0; v < pos.length / 3; v++) { const k = Math.round(pos[v * 3] / q) + ',' + Math.round(pos[v * 3 + 1] / q) + ',' + Math.round(pos[v * 3 + 2] / q); let r = cell.get(k); if (r == null) cell.set(k, r = v); rep[v] = r; }
+        for (let t = 0; t < I.length; t += 3) {
+          const a = rep[I[t]], b = rep[I[t + 1]], c = rep[I[t + 2]];
+          if (a === b || b === c || a === c) continue;
+          const k = [a, b, c].sort((x, y) => x - y).join(',');
+          if (seen.has(k)) continue;
+          seen.add(k); J.push(a, b, c);
+        }
+        I = new Uint32Array(J);
+      }
     }
     if (wp) {   // 只按位置焊接（平直着色、UV 接缝多的模型按法线 / UV 焊就连不成网、减不了面）：减面后按 40° 折角重算法线、每个角重挑 UV
       const nt = I.length / 3, fn = new Float32Array(nt * 3), adj = Array.from({ length: pos.length / 3 }, () => []);

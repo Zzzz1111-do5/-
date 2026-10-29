@@ -1812,6 +1812,9 @@ function v3GroundPlane(key, sz, x, y, ground, hd, fold, cpo, still, side, t, sf,
     v3AirExtras(key, x, y, z, hd, k, side, 0, null, t, still);
   } else { const z = ground + 1.25 * k; v3mAdd('pl:' + key, () => v3mPlane(key), x, y, z, hd, k, side, 0, pt); v3AirExtras(key, x, y, z, hd, k, side, 0, null, t, still); }
 }
+// 登陆舰艇的外部精细模型（v3utex.js V3U_SHIP）：舰名前缀 → [模型, 画多长（世界单位）]——LC 726 型气垫艇、LA 271 型登陆艇、LV 人员登陆艇；
+//   其余舰型（072A、074A、073A、072、扫雷舰、火力支援艇）没有合规的免费模型，照旧画自带模型
+const V3_SHIPX = { LC: ['lcac', 30], LA: ['lcu', 32], LV: ['lcvp', 14] };
 // 登机梯（机型单位，按飞机比例缩放）：梯脚在原点，斜靠向机身（局部 +x）
 function v3mLadder() {
   const M = mbNew();
@@ -1889,8 +1892,8 @@ function v3mCollect(C, box) {
     if (U) {   // 近处有外部精细模型（v3utex.js）：车体 + 炮塔（绕转轴转），比例按车体长
       const ku = vehSp(v).len / U.L, c = Math.cos(h), s = Math.sin(h), px0 = v.x + (U.piv[0] * c - U.piv[1] * s) * ku, py0 = v.y + (U.piv[0] * s + U.piv[1] * c) * ku, aim = v.dead ? h + .6 : (v.aim ?? h);
       const [tp, tr] = v3Pose(g, aim);
-      v3uAdd(U.id, 'hull', v.x, v.y, z, h, ku, sd, hr, hp);
-      v3uAdd(U.id, 'tur', px0, py0, z + g[0] * (px0 - v.x) + g[1] * (py0 - v.y), aim, ku, sd, tr, tp);
+      v3uAdd(U.id, U.hn || 'hull', v.x, v.y, z, h, ku, sd, hr, hp);
+      if (U.tur) v3uAdd(U.id, 'tur', px0, py0, z + g[0] * (px0 - v.x) + g[1] * (py0 - v.y), aim, ku, sd, tr, tp);
       continue;
     }
     v3mAdd('vh:' + bk, () => V.hull, v.x, v.y, z, h, k, sd, hr, hp);
@@ -1942,11 +1945,15 @@ function v3mCollect(C, box) {
       if (typeof v3uShip === 'function' && v3uShip(c, P.x, P.y, -2.6, P.h, Ld, 0)) continue;
       const [mk, mb] = v3mDDK(c); v3mAdd(mk, mb, P.x, P.y, -2.6, P.h, P.k, 0); continue;
     }
-    v3mAdd('sh:' + sh.kind, () => v3mShip(sh.kind, d[0], d[1]), P.x, P.y, -2.6, P.h, P.k, 0);
-    if (typeof v3dFunnel === 'function') v3dFunnel(P.x, P.y, P.h, d[0] * P.k, sh.kind === 'assault' ? -.4 : -.25, -2.6 + d[1] * .55, .4);   // 柴油机排气
+    const X = V3_SHIPX[String(sh.label || '').split('-')[0]], zx = X && sh.hover ? Math.max(-2.6, v3Ht(P.x, P.y)) : -2.6;   // 气垫艇冲上滩头时贴着地面
+    if (!(X && typeof v3uShip === 'function' && v3uShip(X[0], P.x, P.y, zx, P.h, X[1] * P.k, 0))) v3mAdd('sh:' + sh.kind, () => v3mShip(sh.kind, d[0], d[1]), P.x, P.y, -2.6, P.h, P.k, 0);
+    if (typeof v3dFunnel === 'function') v3dFunnel(P.x, P.y, P.h, (X ? X[1] : d[0]) * P.k, sh.kind === 'assault' ? -.4 : -.25, -2.6 + d[1] * .55, .4);   // 柴油机排气
   }
   for (const bt of S.boats || []) if (!bt.dead && isFinite(bt.x) && inB(bt.x, bt.y)) v3mAdd('sh:boat', () => v3mShip('boat', 12, 5), bt.x, bt.y, -2.6, bt.heading ?? -1.57, 1, 0);
-  if (S.dd && S.dd.state !== 'sunk' && isFinite(S.dd.x) && inB(S.dd.x, S.dd.y, 80)) { const P = pose('DD', S.dd, S.dd.heading ?? -1.57), c = typeof vlsCls === 'function' ? vlsCls(S.dd) : '055', [mk, mb] = v3mDDK(c); v3mAdd(mk, mb, P.x, P.y, -2.6, P.h, P.k, 0); }
+  if (S.dd && S.dd.state !== 'sunk' && isFinite(S.dd.x) && inB(S.dd.x, S.dd.y, 80)) {   // 旗舰：有外部精细模型（055）先用它，长度与沙盒里的同型舰一样按舰型系数
+    const P = pose('DD', S.dd, S.dd.heading ?? -1.57), c = typeof vlsCls === 'function' ? vlsCls(S.dd) : '055', Ld = 50 * (((typeof SH_DDC === 'object' && SH_DDC[c]) || {}).k || 1) * P.k;
+    if (!(typeof v3uShip === 'function' && v3uShip(c, P.x, P.y, -2.6, P.h, Ld, 0))) { const [mk, mb] = v3mDDK(c); v3mAdd(mk, mb, P.x, P.y, -2.6, P.h, P.k, 0); }
+  }
   if (typeof cvAll === 'function') for (const cv of cvAll()) {
     if (!(cv.hp > 0) || cv.x < -999 || !inB(cv.x, cv.y, 220)) continue;
     const lhd = /075/.test(cv.name || ''), h = cv.heading ?? -1.57, C = typeof CVG === 'object' ? CVG : null, top = -2.6 + (C ? C.zd : 17), home = cvHome(cv);   // top：飞行甲板顶面
@@ -1983,7 +1990,7 @@ function v3mCollect(C, box) {
     }
   }
   for (const e of S.eships || []) if (!e.dead && inB(e.x, e.y, 80) && (spec || seen(e.x, e.y) || S.t - (e.det ?? -99) < 4)) { const C0 = (typeof NV_CLS === 'object' && NV_CLS[e.cls]) || { L: 46, B: 9 }; if (!(typeof v3uShip === 'function' && v3uShip(e.cls, e.x, e.y, -2.6, e.heading ?? -1.57, C0.L, 1))) v3mAdd('es:' + e.cls, () => v3mEShip(e.cls, C0.L, C0.B), e.x, e.y, -2.6, e.heading ?? -1.57, 1, 1); if (typeof v3dFunnel === 'function') v3dFunnel(e.x, e.y, e.heading ?? -1.57, C0.L, -.08, -2.6 + C0.L * .2); }
-  for (const s of S.subs || []) if (!s.dead && inB(s.x, s.y) && (spec || (typeof asSubSeen === 'function' && asSubSeen(s)))) v3mAdd('sub', v3mSub, s.x, s.y, -4.2, s.heading || 0, 1, 1);
+  for (const s of S.subs || []) if (!s.dead && inB(s.x, s.y) && (spec || (typeof asSubSeen === 'function' && asSubSeen(s)))) { if (!(typeof v3uShip === 'function' && v3uShip('ssn', s.x, s.y, -4.2, s.heading || 0, 34, 1))) v3mAdd('sub', v3mSub, s.x, s.y, -4.2, s.heading || 0, 1, 1); }   // 外部模型：原点在耐压壳轴线，长 34 与自带模型一样
   // 守方阵地
   for (const e of S.enemies) {
     if (e.kind === 'airfield' || !inB(e.x, e.y)) continue;   // 被毁的也立着（暗色残骸），贴图里不再画平面残骸（render2.js）

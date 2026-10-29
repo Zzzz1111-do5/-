@@ -792,30 +792,6 @@
       "z": 0.95
     }
   },
-  "u_ah64": {
-    "mode": "tex",
-    "unit": 1,
-    "file": "u_ah64.glb",
-    "title": "Boeing AH-64D Apache Combat Helicopter",
-    "author": "Muhamad Mirza Arrafi",
-    "license": "CC BY 4.0",
-    "url": "https://sketchfab.com/3d-models/boeing-ah-64d-apache-combat-helicopter-c3b58008c46b45048fdd7dd283a3c8c8",
-    "tex": 1024,
-    "weld": "pos",
-    "err": 0.03,
-    "tris": 24000,
-    "yaw": 90,
-    "len": 17.7,
-    "split": {
-      "z": 3.45,
-      "piv": [
-        1.95,
-        0
-      ],
-      "r": 7.5
-    },
-    "drop": "Alpha"
-  },
   "u_uh60m": {
     "mode": "tex",
     "unit": 1,
@@ -1062,29 +1038,6 @@
       "gunx": 2.5
     }
   },
-  "u_type80": {
-    "mode": "tex",
-    "unit": 1,
-    "file": "u_type80.glb",
-    "title": "[OD] Type-80 MBT basic",
-    "author": "EXcaliburK117",
-    "license": "Sketchfab Free Standard",
-    "url": "https://sketchfab.com/3d-models/od-type-80-mbt-basic-7e9652d9872a4ff1a724d025952ced0f",
-    "tex": 1024,
-    "weld": "pos",
-    "err": 0.04,
-    "tris": 30000,
-    "split": {
-      "z": 1.62,
-      "piv": [
-        -1.45,
-        0
-      ],
-      "r": 2.2,
-      "gun": 0.25,
-      "gunx": 5.2
-    }
-  },
   "u_loaderx": {
     "mode": "tex",
     "unit": 1,
@@ -1116,5 +1069,177 @@
         ]
       }
     }
+  },
+  "u_ah64e": {
+    "mode": "tex",
+    "unit": 1,
+    "file": "u_ah64e.glb",
+    "title": "AH-64E Apache \"Guardian\"",
+    "author": "Jeyhun1985",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/ah-64e-apache-guardian-9eb641f9179d413e87367ebd9b96347a",
+    "tex": 512,
+    "weld": "pos",
+    "err": 0.03,
+    "tris": {
+      "hull": 24000,
+      "tur": 4000
+    },
+    "len": 17.7,
+    "yaw": 90,
+    "split": {
+      "z": 3.3,
+      "piv": [
+        1.35,
+        0
+      ],
+      "r": 7.6
+    }
+  },
+  "u_t055f": {
+    "mode": "tex",
+    "unit": 1,
+    "file": "u_t055f.glb",
+    "title": "CN TYPE 055 Nanchang v3.0",
+    "author": "FeriseCAT",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/cn-type-055-nanchang-v30-8850f8cf1eee409abe08519fd54809cd",
+    "tex": 1024,
+    "weld": "pos",
+    "err": 0.03,
+    "tris": 34000,
+    "len": 180,
+    "origin": "wl",
+    "wl": 0.16,
+    "yaw": 180
+  },
+  "u_lcac": {
+    "mode": "tex",
+    "unit": 1,
+    "file": "u_lcac.glb",
+    "title": "LCAC Hovercraft croqui",
+    "author": "LM3D",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/lcac-hovercraft-croqui-14ad629070db445eaf2364eda019192f",
+    "tex": 1024,
+    "weld": "pos",
+    "err": 0.02,
+    "tris": 24000,
+    "len": 33,
+    "yaw": 90,
+    "prune": true,
+    "cluster": 0.12
+  },
+  "u_lcu": {
+    "mode": "tex",
+    "unit": 1,
+    "file": "u_lcu.glb",
+    "title": "US Marine Landing Craft Utility",
+    "author": "LM3D",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/us-marine-landing-craft-utility-726157b72da347549dab62e590f4d06c",
+    "tex": 1024,
+    "weld": "pos",
+    "err": 0.02,
+    "tris": 20000,
+    "len": 41,
+    "origin": "wl",
+    "wl": 0.12,
+    "yaw": 90,
+    "prune": true
+  },
+  "u_lcvp": {
+    "mode": "tex",
+    "unit": 1,
+    "file": "u_lcvp.glb",
+    "title": "LCVP Higgins Boat",
+    "author": "Thomas Visonà",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/lcvp-higgins-boat-e2edab27282d415db2351a47d164744b",
+    "tex": 1024,
+    "weld": "pos",
+    "err": 0.03,
+    "tris": 12000,
+    "len": 11,
+    "origin": "wl",
+    "wl": 0.25
+  },
+  "u_ssn": {
+    "mode": "tex",
+    "unit": 1,
+    "file": "u_ssn.glb",
+    "title": "USS Virginia SSN-774",
+    "author": "Art Blender",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/uss-virginia-ssn-774-339f9731013e4b41b87557f261a9892f",
+    "tex": 1024,
+    "weld": "pos",
+    "err": 0.03,
+    "tris": 16000,
+    "len": 115,
+    "yaw": 180,
+    "origin": "wl",
+    "wl": 0.29
+  },
+  "u_wz551": {
+    "mode": "tex",
+    "unit": 0.01,
+    "file": "u_wz551.glb",
+    "title": "WZ-551 120mm",
+    "author": "Muhamad Mirza Arrafi",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/wz-551-120mm-7de59f6635544362ae77e638f338c27a",
+    "tex": 1024,
+    "weld": "pos",
+    "err": 0.04,
+    "tris": 20000,
+    "split": {
+      "z": 2.6,
+      "piv": [
+        -2.1,
+        0
+      ],
+      "r": 1.8,
+      "gun": 0.25,
+      "gunx": 4.4
+    }
+  },
+  "u_type80b": {
+    "mode": "tex",
+    "unit": 1,
+    "file": "u_type80b.glb",
+    "title": "[Original Design] Type-80 MBT",
+    "author": "EXcaliburK117",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/original-design-type-80-mbt-e844c260161c4ab787ac40e411513828",
+    "tex": 1024,
+    "weld": "pos",
+    "err": 0.04,
+    "tris": 30000,
+    "split": {
+      "z": 1.72,
+      "piv": [
+        -1.55,
+        0
+      ],
+      "r": 2.1,
+      "gun": 0.25,
+      "gunx": 5.2
+    }
+  },
+  "u_m1150": {
+    "mode": "tex",
+    "unit": 1,
+    "file": "u_m1150.glb",
+    "title": "M1150 ABV",
+    "author": "Kalibrovshik",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/m1150-abv-26eaeb6a7dbf498db16e02b1c232de33",
+    "tex": 1024,
+    "weld": "pos",
+    "err": 0.04,
+    "tris": 26000,
+    "len": 9.4,
+    "yaw": 180
   }
 }

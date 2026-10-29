@@ -12,7 +12,7 @@ const V3U_LIST = {
   u_vt5: { name: '15 式轻型坦克（VT-5）', title: 'VT-5 Tank', author: 'Nieve5677', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/vt-5-tank-df1e74dbddb44cbbb9d359422a81d587' },
   u_m1a2: { name: 'M1A2 主战坦克', title: 'General Dynamics M1A2 Abrams Main Battle Tank', author: 'Muhamad Mirza Arrafi', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/general-dynamics-m1a2-abrams-main-battle-tank-10a16c96ca8b4ebc855915f5d5202046' },
   u_milpack: { name: '99A 主战坦克', title: '军事装甲车坦克 Military armored vehicle and tank', author: '小王子', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/military-armored-vehicle-and-tank-f809eb8491e64efc92b1b41687e8da08' },
-  u_type80: { name: 'ZTZ-80 主战坦克', title: '[OD] Type-80 MBT basic', author: 'EXcaliburK117', license: 'Sketchfab Free Standard', url: 'https://sketchfab.com/3d-models/od-type-80-mbt-basic-7e9652d9872a4ff1a724d025952ced0f' },
+  u_type80b: { name: 'ZTZ-80 主战坦克', title: '[Original Design] Type-80 MBT', author: 'EXcaliburK117', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/original-design-type-80-mbt-e844c260161c4ab787ac40e411513828' },
   u_brad4: { name: 'M2A3 布雷德利步兵战车', title: "Low Poly M2 Bradley Free Model", author: "Lasha-Georgy Bajadze", license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/low-poly-m2-bradley-free-model-f5fbaf2aa97641b082e8d2acc91092a3' },
   u_aav7: { name: 'AAV-7 两栖突击车', title: "AAV7", author: "unbekanntespezies", license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/aav7-yC4xcavDg89GZgqjJtUs5KYbrgz' },
   u_jltv: { name: 'JLTV 联合轻型战术车', title: "JLTV", author: "ALI1388", license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/jltv-429bf4a57386462db28781d910511e40' },
@@ -25,7 +25,7 @@ const V3U_LIST = {
   u_f35: { name: 'F-35 战斗机', title: "Lockheed Martin F35 Lightning II", author: "andertan", license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/lockheed-martin-f35-lightning-ii-db911de503c74285a8d506951df786d6' },
   u_f22: { name: 'F-22 战斗机', title: "Lockheed Martin F-22 \"Raptor\"", author: "andertan", license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/lockheed-martin-f-22-raptor-7e7b3c372e374dda98e70208d09cfdcf' },
   u_a10: { name: 'A-10 攻击机', title: "A-10 ThunderBolt II", author: "KOG_THORNS", license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/a-10-thunderbolt-ii-623514b5f1f9483a9bbee7f25da77468' },
-  u_ah64: { name: 'AH-64 武装直升机', title: "Boeing AH-64D Apache Combat Helicopter", author: "Muhamad Mirza Arrafi", license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/boeing-ah-64d-apache-combat-helicopter-c3b58008c46b45048fdd7dd283a3c8c8' },
+  u_ah64e: { name: 'AH-64E 武装直升机', title: 'AH-64E Apache "Guardian"', author: 'Jeyhun1985', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/ah-64e-apache-guardian-9eb641f9179d413e87367ebd9b96347a' },
   u_uh60m: { name: 'UH-60 通用直升机', title: "Sikorsky UH-60M Blackhawk", author: "Muhamad Mirza Arrafi", license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/sikorsky-uh-60m-blackhawk-12b4e525676a49678ac3006b360c8750' },
   u_c17: { name: 'C-17 运输机', title: "C17 Globemaster III", author: "AnirudhRao", license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/c17-globemaster-iii-597e0d7f9e3446719a2f2de3dd3fa67d' },
   u_b2b: { name: 'B-2 轰炸机', title: "[PBR] B-2 Spirit", author: "Immersive3D", license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/pbr-b-2-spirit-b16592b1083948a49ae2afa90d190a08' },
@@ -33,13 +33,21 @@ const V3U_LIST = {
   u_t054a: { name: '054A 型护卫舰', title: "Type-054A Class Frigate", author: "Muhamad Mirza Arrafi", license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/type-054a-class-frigate-948cca64a5274644a35e4600e023d61d' },
   u_ddg125: { name: '阿利·伯克级驱逐舰（Flight III）', title: "USS Jack H. Lucas DDG-125", author: "SB-129", license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/uss-jack-h-lucas-ddg-125-1c9229b49915454c8ff22605f8cc7b66' },
   u_cg47: { name: '提康德罗加级巡洋舰', title: "Ticonderoga Missile Cruiser", author: "waelXcm", license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/ticonderoga-missile-cruiser-397bd2b7bcd946e4b508869f4ca1e1cf' },
-  u_lcs2: { name: '独立级濒海战斗舰', title: "USS INDEPENDENCE  LCS-2", author: "Muhamad Mirza Arrafi", license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/uss-independence-lcs-2-7db04398d9524a36a6e08bead0050b76' }
+  u_lcs2: { name: '独立级濒海战斗舰', title: "USS INDEPENDENCE  LCS-2", author: "Muhamad Mirza Arrafi", license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/uss-independence-lcs-2-7db04398d9524a36a6e08bead0050b76' },
+  u_t055f: { name: '055 型驱逐舰', title: 'CN TYPE 055 Nanchang v3.0', author: 'FeriseCAT', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/cn-type-055-nanchang-v30-8850f8cf1eee409abe08519fd54809cd' },
+  u_lcac: { name: '726 型气垫登陆艇（用 LCAC 外形代替）', title: 'LCAC Hovercraft croqui', author: 'LM3D', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/lcac-hovercraft-croqui-14ad629070db445eaf2364eda019192f' },
+  u_lcu: { name: '271 型登陆艇（用 LCU 外形代替）', title: 'US Marine Landing Craft Utility', author: 'LM3D', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/us-marine-landing-craft-utility-726157b72da347549dab62e590f4d06c' },
+  u_lcvp: { name: '人员登陆艇（用 LCVP 外形代替）', title: 'LCVP Higgins Boat', author: 'Thomas Visonà', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/lcvp-higgins-boat-e2edab27282d415db2351a47d164744b' },
+  u_ssn: { name: '弗吉尼亚级攻击核潜艇', title: 'USS Virginia SSN-774', author: 'Art Blender', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/uss-virginia-ssn-774-339f9731013e4b41b87557f261a9892f' },
+  u_wz551: { name: 'PTL-02 突击炮（WZ-551 底盘）', title: 'WZ-551 120mm', author: 'Muhamad Mirza Arrafi', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/wz-551-120mm-7de59f6635544362ae77e638f338c27a' },
+  u_m1150: { name: 'M1150 突击破障车', title: 'M1150 ABV', author: 'Kalibrovshik', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/m1150-abv-26eaeb6a7dbf498db16e02b1c232de33' },
 };
 // 游戏里的车型（models.js RLM 键）→ 外部模型；piv：炮塔转轴在车体坐标里的位置（米，x 向前、y 向右），与 tools/mdl/sources.json 的 split.piv 相同
 const V3U_VEH = {
   ztz99a: { id: 'u_milpack', piv: [-2.8, 0] },
   ztq15: { id: 'u_vt5', piv: [-1.382, 0] },
-  ztz96b: { id: 'u_type80', piv: [-1.45, 0] },   // 中型坦克（原 ZTZ-96B，换成 ZTZ-80 外形）
+  ztz96b: { id: 'u_type80b', piv: [-1.55, 0] },   // 中型坦克（原 ZTZ-96B，换成 ZTZ-80 外形；ZTZ-96 能找到的免费模型都是从游戏里拆的）
+  ptl02: { id: 'u_wz551', piv: [-2.1, 0] }, m1150: { id: 'u_m1150', piv: [0, 0] },   // PTL-02：WZ-551 底盘、后置炮塔；M1150 没有炮塔（整车一个变体）
   pgl625: { id: 'u_t625', piv: [-1.9, 0] },
   m1a2: { id: 'u_m1a2s', piv: [-.3, 0] },
   m1a1: { id: 'u_m1a2', piv: [-1.2, 0] },   // M1A1 与 M1A2 外形几乎一样（差在车长独立热像仪），用较轻的那个模型
@@ -55,11 +63,12 @@ const V3U_AIR = {
   j15: { id: 'u_su33', zc: 1.5, deck: true, arm: true }, gj11: { id: 'u_x47b', zc: 2.1, deck: true, arm: true },
   h6k: { id: 'u_h6m', zc: 1.7, arm: true },   // arm：模型不带弹，挂架、外挂弹、弹舱门由 v3uArm 画（A-10、阿帕奇、MQ-9 的模型自带外挂，不画）
   mq9: { id: 'u_mq9', zc: 1.55 }, f35: { id: 'u_f35', zc: 2.2, arm: true }, f35b: { id: 'u_f35', zc: 2.2, arm: true }, f22: { id: 'u_f22', zc: 1, arm: true }, a10: { id: 'u_a10', zc: 2.1 },
-  ah64: { id: 'u_ah64', zc: 1.8, piv: [1.95, 0], gp: true }, uh60: { id: 'u_uh60m', zc: 2.1, piv: [2, 0], gp: true },
+  ah64: { id: 'u_ah64e', zc: 1.8, piv: [1.35, 0], gp: true }, uh60: { id: 'u_uh60m', zc: 2.1, piv: [2, 0], gp: true },
   c17: { id: 'u_c17', zc: 4.6 }, b2: { id: 'u_b2b', zc: 3.1, arm: true }, p8: { id: 'u_p8', zc: 3.8 }
 };
 // 舰艇：舰型（v3units.js：我方 vls.js vlsCls 的 052D / 054A……，守方 navy.js NV_CLS 的 ddg / cg……）→ 外部模型；原点在水线、x 向船头；dz：水线再往下压多少（米）
-const V3U_SHIP = { '054A': { id: 'u_t054a', dz: -.9 }, ddg: { id: 'u_ddg125' }, ddg3: { id: 'u_ddg125' }, cg: { id: 'u_cg47' }, lcs: { id: 'u_lcs2' } };
+const V3U_SHIP = { '054A': { id: 'u_t054a', dz: -.9 }, '055': { id: 'u_t055f' }, ddg: { id: 'u_ddg125' }, ddg3: { id: 'u_ddg125' }, cg: { id: 'u_cg47' }, lcs: { id: 'u_lcs2' },
+  ssn: { id: 'u_ssn' }, lcac: { id: 'u_lcac' }, lcu: { id: 'u_lcu' }, lcvp: { id: 'u_lcvp' } };   // ssn：原点在耐压壳轴线；lcac：原点在气垫底面（上滩时贴地）；登陆艇按水线
 const V3U = { tried: false, ok: false, pr: null, a: {}, u: {}, packs: new Map(), inst: new Map(), ib: null, fr: 0 };
 // 多远以内画精细模型（再远就画自带的简化模型：省三角形，远处也看不出差别）
 const V3U_NEAR = () => (typeof V3 === 'object' && V3.coarse ? 220 : typeof SETTINGS === 'object' && SETTINGS && SETTINGS.quality === 'low' ? 260 : 420) * clamp(Math.sqrt(typeof v3RD === 'function' ? v3RD() : 1), .8, 1.4);
@@ -177,9 +186,10 @@ function v3uOn(id) {
 function v3uVeh(key, d) {
   const E = V3U_VEH[key];
   if (!E || d > V3U_NEAR()) return null;
-  const P = v3uOn(E.id), H = P && P.vars.get('hull');
+  const P = v3uOn(E.id), hn = P && (P.vars.has('hull') ? 'hull' : P.vars.size === 1 ? P.vars.keys().next().value : null), H = hn && P.vars.get(hn);   // 没拆炮塔的模型只有一个变体（名字是模型号）：整车当车体
   if (!H) return null;
   if (!E.L) E.L = H.bb[1][0] - H.bb[0][0];
+  E.hn = hn; E.tur = P.vars.has('tur');
   return E;
 }
 // 3 × 3 矩阵（行主序）与旋转（GL 坐标：x 东、y 北、z 上）；实例着色器的姿态 = Rz(朝向) · Ry(−俯仰) · Rx(滚转)
