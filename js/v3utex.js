@@ -12,6 +12,10 @@ const V3U_LIST = {
   u_vt5: { name: '15 式轻型坦克（VT-5）', title: 'VT-5 Tank', author: 'Nieve5677', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/vt-5-tank-df1e74dbddb44cbbb9d359422a81d587' },
   u_m1a2: { name: 'M1A2 主战坦克', title: 'General Dynamics M1A2 Abrams Main Battle Tank', author: 'Muhamad Mirza Arrafi', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/general-dynamics-m1a2-abrams-main-battle-tank-10a16c96ca8b4ebc855915f5d5202046' },
   u_milpack: { name: '99A 主战坦克', title: '军事装甲车坦克 Military armored vehicle and tank', author: '小王子', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/military-armored-vehicle-and-tank-f809eb8491e64efc92b1b41687e8da08' },
+  u_brad4: { name: 'M2A3 布雷德利步兵战车', title: "Low Poly M2 Bradley Free Model", author: "Lasha-Georgy Bajadze", license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/low-poly-m2-bradley-free-model-f5fbaf2aa97641b082e8d2acc91092a3' },
+  u_aav7: { name: 'AAV-7 两栖突击车', title: "AAV7", author: "unbekanntespezies", license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/aav7-yC4xcavDg89GZgqjJtUs5KYbrgz' },
+  u_jltv: { name: 'JLTV 联合轻型战术车', title: "JLTV", author: "ALI1388", license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/jltv-429bf4a57386462db28781d910511e40' },
+  u_cram: { name: '「百夫长」陆基密集阵', title: "Centurion C-RAM", author: "Muhamad Mirza Arrafi", license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/centurion-c-ram-10ea7349c7574ca7a43991eece92c9a9' },
   u_e2d: { name: '空警-600（用 E-2D 外形代替，去掉原机标志）', title: "Grumman E-2D Advanced Hawkeye", author: "Muhamad Mirza Arrafi", license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/grumman-e-2d-advanced-hawkeye-0082cf8f15044cfd80ebd4e11b96789d' },
   u_su33: { name: '歼-15（用 Su-33 外形代替，改成海军灰）', title: "Sukhoi Su-33 Сухой Су-33", author: "andertan", license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/sukhoi-su-33-33-d80603a8a13b49bda90f19d80cac61d4' },
   u_h6m: { name: '轰-6 轰炸机', title: "Xian H-6 Strategic Bomber", author: "Muhamad Mirza Arrafi", license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/xian-h-6-strategic-bomber-07b448a2e9924f48a5fc1c91529f2280' },
@@ -38,7 +42,8 @@ const V3U_VEH = {
   m1a2: { id: 'u_m1a2s', piv: [-.3, 0] },
   m1a1: { id: 'u_m1a2', piv: [-1.2, 0] },   // M1A1 与 M1A2 外形几乎一样（差在车长独立热像仪），用较轻的那个模型
   m109: { id: 'u_m109a6', piv: [-2.501, 0] },
-  m1134: { id: 'u_stryker', piv: [.3, .8] }, m1127: { id: 'u_stryker', piv: [.3, .8] }, mshorad: { id: 'u_stryker', piv: [.3, .8] }
+  m1134: { id: 'u_stryker', piv: [.3, .8] }, m1127: { id: 'u_stryker', piv: [.3, .8] }, mshorad: { id: 'u_stryker', piv: [.3, .8] },
+  m2a3: { id: 'u_brad4', piv: [-.511, .248] }, aav7: { id: 'u_aav7', piv: [0, 0] }, jltv: { id: 'u_jltv', piv: [0, 0] }, lpws: { id: 'u_cram', piv: [-.55, -.65], L: 6.5 }   // L：按这个车长缩放（自带模型连拖车算车长，模型只有炮座：给个等效车长，比例与坦克一致）
 };
 // 飞机：游戏里的机型键（carrier.js airSilKey、v3units.js EA_K）→ 外部模型；zc：机身中线离机轮着地点多高（米，空中按机身中线对准飞行高度）
 //   piv：直升机主旋翼桨毂（变体 tur 绕它转）；deck：舰载机在甲板 / 机场地勤作业时仍画自带模型（折翼、座舱盖开合、飞行员登机都在那上面），只在空中换

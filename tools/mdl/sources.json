@@ -905,5 +905,103 @@
     "len": 127.4,
     "origin": "wl",
     "wl": 0.14
+  },
+  "u_brad4": {
+    "mode": "tex",
+    "unit": 1,
+    "file": "u_brad4.glb",
+    "title": "Low Poly M2 Bradley Free Model",
+    "author": "Lasha-Georgy Bajadze",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/low-poly-m2-bradley-free-model-f5fbaf2aa97641b082e8d2acc91092a3",
+    "tex": 1024,
+    "weld": "pos",
+    "err": 0.04,
+    "tris": 24000,
+    "len": 6.55,
+    "yaw": 90,
+    "split": {
+      "z": 99,
+      "tur": "Bredley_(Tower|MainGun|RocketHatch)",
+      "pivn": "Bredley_Tower_m2a3"
+    }
+  },
+  "u_aav7": {
+    "mode": "tex",
+    "unit": 1,
+    "file": "u_aav7.glb",
+    "title": "AAV7",
+    "author": "unbekanntespezies",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/aav7-yC4xcavDg89GZgqjJtUs5KYbrgz",
+    "tex": 1024,
+    "weld": "pos",
+    "err": 0.04,
+    "tris": 24000,
+    "len": 7.94,
+    "yaw": 90,
+    "mcol": {
+      "^aav7(_NONE)?$": [
+        0.6,
+        0.56,
+        0.45
+      ],
+      "fahrwerk": [
+        0.16,
+        0.16,
+        0.15
+      ],
+      "schnure": [
+        0.2,
+        0.2,
+        0.18
+      ]
+    }
+  },
+  "u_jltv": {
+    "mode": "tex",
+    "unit": 1,
+    "file": "u_jltv.glb",
+    "title": "JLTV",
+    "author": "ALI1388",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/jltv-429bf4a57386462db28781d910511e40",
+    "tex": 1024,
+    "weld": "pos",
+    "err": 0.04,
+    "tris": 24000,
+    "len": 6.2,
+    "yaw": 180,
+    "mcol": {
+      ".": [
+        0.6,
+        0.56,
+        0.45
+      ]
+    }
+  },
+  "u_cram": {
+    "mode": "tex",
+    "unit": 1,
+    "file": "u_cram.glb",
+    "title": "Centurion C-RAM",
+    "author": "Muhamad Mirza Arrafi",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/centurion-c-ram-10ea7349c7574ca7a43991eece92c9a9",
+    "tex": 1024,
+    "weld": "pos",
+    "err": 0.04,
+    "tris": 24000,
+    "len": 4.5,
+    "split": {
+      "z": 1.75,
+      "piv": [
+        -0.55,
+        -0.65
+      ],
+      "r": 1.6,
+      "gun": 0.3,
+      "gunx": 2.5
+    }
   }
 }
