@@ -24,6 +24,19 @@ function v3xMesh(key) {
   try { V3X.mesh[key] = v3xBuild(D); } catch (e) { console.warn('3D 模型解码失败：' + key, e); V3X.fail.add(key); delete V3X.def[key]; return null; }
   return V3X.mesh[key];
 }
+// 隐身涂层：歼-35 的模型贴图是中性灰（大块深灰、几块浅灰，前缘一道粉褐），按真机换成统一的蓝灰色吸波涂层——
+//   只留一点贴图里的深浅（口盖、锯齿边隐约可见），进气道、喷口、缝隙这些深色件、红色机徽和座舱盖不动
+const V3X_COAT = { j35: [74, 82, 92] };
+function v3xCoat(CL, E, coat) {
+  const C = new Uint8Array(CL);
+  for (let t = 0; t < CL.length / 3; t++) {
+    const r = CL[t * 3], g = CL[t * 3 + 1], b = CL[t * 3 + 2], L = .3 * r + .59 * g + .11 * b;
+    if (E[t] & 8 || L < 40 || (r > 150 && g < 90 && b < 90)) continue;
+    const k = Math.pow(Math.min(1.35, Math.max(.75, L / 80)), .3);
+    for (let i = 0; i < 3; i++) C[t * 3 + i] = Math.min(255, Math.round(coat[i] * k));
+  }
+  return C;
+}
 // 平滑法线：减过面的模型每个三角形一个法线，打上光像揉皱的锡纸；按位置焊接顶点（量化后同一格就是同一点），
 //   每个角取周围折角小于 V3X_CREASE 度的面、按面积加权平均——机身、座舱盖、进气道唇口变圆，机翼前后缘、尾翼、隐身机的棱线照旧是硬边；
 //   涂装色同理：同一块平滑面上、颜色相差不到 V3X_CTOL 的面在顶点上取平均（贴图烘到每个三角形的色差不再像马赛克），红星、舷号这类差得多的照旧分明
@@ -79,7 +92,7 @@ function v3xBuild(D) {
   const LN = []; for (let l = 0; l < m.nl; l++) LN.push(rd(), rd());
   // 涂装色（meta.col）：每个三角形 3 字节 sRGB，编进明暗 s——|s| ≥ 16 时 s − 16 是 7 位 RGB、负数是玻璃（与 v3import.js 同一约定），
   //   写实画面直接用涂装色，黑绿画面按它的深浅调暗实体；没有涂装色的老模型照旧用烘好的明暗
-  const CL = m.col ? bin.subarray(o, o + m.nt * 3) : null;
+  const CL0 = m.col ? bin.subarray(o, o + m.nt * 3) : null, coat = V3X_COAT[String(D.key || '').split('_')[0]], CL = CL0 && coat ? v3xCoat(CL0, E, coat) : CL0;
   const { NC, CC } = v3xSmooth(dv, m, P, I, CL, E), c7 = v => Math.min(127, Math.round(v) >> 1);
   for (let t = 0; t < m.nt; t++) {   // 每个角各自的法线与涂装色（顶点着色器里解码，三角形内部平滑过渡）
     const e = E[t], k = [e & 1 ? 0 : 1, e >> 1 & 1 ? 0 : 1, e >> 2 & 1 ? 0 : 1];
