@@ -51,11 +51,12 @@ const V3U_VEH = {
 //   piv：直升机主旋翼桨毂（变体 tur 绕它转）；deck：舰载机在甲板 / 机场地勤作业时仍画自带模型（折翼、座舱盖开合、飞行员登机都在那上面），只在空中换
 //   gp：机场外加油弹药点停放时也用（直升机）
 const V3U_AIR = {
-  kj600: { id: 'u_e2d', zc: 2.4, wings: { wl: [.2, -5.3, 3.2], wr: [.2, 5.3, 3.2] }, props: { pl: [3.9, -3.3, 2.95], pr: [3.9, 3.3, 2.95] } },   // E-2 外形改的空警-600：外翼斜轴折叠、螺旋桨转 j15: { id: 'u_su33', zc: 1.5, deck: true }, gj11: { id: 'u_x47b', zc: 2.1, deck: true },
-  h6k: { id: 'u_h6m', zc: 1.7 },
-  mq9: { id: 'u_mq9', zc: 1.55 }, f35: { id: 'u_f35', zc: 2.2 }, f35b: { id: 'u_f35', zc: 2.2 }, f22: { id: 'u_f22', zc: 1 }, a10: { id: 'u_a10', zc: 2.1 },
+  kj600: { id: 'u_e2d', zc: 2.4, wings: { wl: [.2, -5.3, 3.2], wr: [.2, 5.3, 3.2] }, props: { pl: [3.9, -3.3, 2.95], pr: [3.9, 3.3, 2.95] } },   // E-2 外形改的空警-600：外翼斜轴折叠、螺旋桨转
+  j15: { id: 'u_su33', zc: 1.5, deck: true, arm: true }, gj11: { id: 'u_x47b', zc: 2.1, deck: true, arm: true },
+  h6k: { id: 'u_h6m', zc: 1.7, arm: true },   // arm：模型不带弹，挂架、外挂弹、弹舱门由 v3uArm 画（A-10、阿帕奇、MQ-9 的模型自带外挂，不画）
+  mq9: { id: 'u_mq9', zc: 1.55 }, f35: { id: 'u_f35', zc: 2.2, arm: true }, f35b: { id: 'u_f35', zc: 2.2, arm: true }, f22: { id: 'u_f22', zc: 1, arm: true }, a10: { id: 'u_a10', zc: 2.1 },
   ah64: { id: 'u_ah64', zc: 1.8, piv: [1.95, 0], gp: true }, uh60: { id: 'u_uh60m', zc: 2.1, piv: [2, 0], gp: true },
-  c17: { id: 'u_c17', zc: 4.6 }, b2: { id: 'u_b2b', zc: 3.1 }, p8: { id: 'u_p8', zc: 3.8 }
+  c17: { id: 'u_c17', zc: 4.6 }, b2: { id: 'u_b2b', zc: 3.1, arm: true }, p8: { id: 'u_p8', zc: 3.8 }
 };
 // 舰艇：舰型（v3units.js：我方 vls.js vlsCls 的 052D / 054A……，守方 navy.js NV_CLS 的 ddg / cg……）→ 外部模型；原点在水线、x 向船头；dz：水线再往下压多少（米）
 const V3U_SHIP = { '054A': { id: 'u_t054a', dz: -.9 }, ddg: { id: 'u_ddg125' }, ddg3: { id: 'u_ddg125' }, cg: { id: 'u_cg47' }, lcs: { id: 'u_lcs2' } };
@@ -140,6 +141,11 @@ function v3uPack(id) {
     const D = v3pParse(buf);
     P.mats = D.mats;
     for (const V of D.vars) P.vars.set(V.name, { bb: V.bb, groups: V.groups.map(g => { const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, g.data, gl.STATIC_DRAW); return { mi: g.mi, b, n: g.data.length / 11 }; }) });
+    if (/^u_(su33|h6m|f35|f22|b2b|x47b)$/.test(id)) {   // 飞机：留一份收起落架时的顶点位置（量机翼下表面、机腹的高度，挂架、弹舱门贴上去，v3uArm）
+      const V = D.vars.find(q => q.name === 'fly') || D.vars.find(q => q.name === 'hull') || D.vars[0], n = V.groups.reduce((a, g) => a + g.data.length / 11, 0), pts = new Float32Array(n * 3);
+      let o = 0; for (const g of V.groups) for (let i = 0; i < g.data.length; i += 11) { pts[o++] = g.data[i]; pts[o++] = g.data[i + 1]; pts[o++] = g.data[i + 2]; }
+      P.pts = pts;
+    }
     let left = D.tex.length;
     const done = () => { if (--left <= 0) P.st = 1; };
     if (!left) P.st = 1;
@@ -221,6 +227,42 @@ function v3uPlane(key, sz, x, y, z, ground, h, side, roll = 0, pitch = 0, gear =
   }
   return true;
 }
+// 模型在 (x, y) 附近 r 米内的最低点（米，模型坐标）：机翼下表面、机腹
+function v3uZAt(P, x, y, r) {
+  const A = P.pts, r2 = r * r;
+  let m = 1e9;
+  for (let i = 0; i < A.length; i += 3) { const dx = A[i] - x, dy = A[i + 1] - y; if (dx * dx + dy * dy < r2 && A[i + 2] < m) m = A[i + 2]; }
+  return m < 1e8 ? m : null;
+}
+// 外部模型飞机的外挂与弹舱（模型本身不带弹的机型：V3U_AIR 里 arm）：按 airmdl.js 的挂点画挂架和弹，随发射一枚枚消耗（rs.used）——
+//   挂架上端贴着模型机翼的下表面；有弹舱的画开合的舱门（v3mBay，高度贴着模型的机腹）。与 v3uPlane 同一套摆放（空中：机身中线对准 z）
+const V3U_PYL = .32;   // 挂架高（米）
+function v3uArm(key, sz, x, y, z, h, side, roll, pitch, rs) {
+  const E = V3U_AIR[key], D = typeof AIRD === 'object' && AIRD[key];
+  if (!E || !E.arm || !D || !E.L) return;
+  const P = v3uOn(E.id);
+  if (!P || !P.pts) return;
+  const s = sz / E.L, k = sz / 21, um = E.L / 21, RA = v3uM3(v3uM3(v3uRz(-h), v3uRy(-pitch)), v3uRx(roll));
+  const W = (xm, ym, zm) => { const o = v3uMv(RA, [xm * s, -ym * s, (zm - E.zc) * s]); return [x + o[0], y - o[1], z + o[2]]; };   // 模型坐标（米）→ 世界
+  const zc = E.wz || (E.wz = new Map());
+  if (D.st && typeof adStores === 'function' && typeof v3MslInst === 'function') for (const st of adStores(D, { used: rs && rs.used })) {
+    const xm = st.x * um, ym = st.y * um, ck = Math.round(xm * 10) + ':' + Math.round(ym * 10);
+    if (!zc.has(ck)) zc.set(ck, v3uZAt(P, xm, ym, .45));
+    const wz = zc.get(ck);
+    if (wz == null) continue;
+    const mk = (typeof V3_STK === 'object' && V3_STK[st.k]) || 'agm', r = (typeof V3MS === 'object' && V3MS[mk] ? V3MS[mk].d : .2) / 2, [ik, bd] = v3MslInst('st3:x:', mk);
+    const [px, py, pz] = W(xm, ym, wz + .02);
+    v3mAdd('upyl', v3uPylon, px, py, pz, h, s, side, roll, pitch);
+    const [mx, my, mz] = W(xm, ym, wz - V3U_PYL - r);
+    v3mAdd(ik, bd, mx, my, mz, h, s, side, roll, pitch);
+  }
+  if (rs && (rs.bay > .04 || rs.sbay > .04) && typeof v3mBay === 'function' && D.bay) {   // 弹舱门：自带模型的机腹高度换成外部模型的
+    if (E.bz == null) { const xm = (D.bay[0] + D.bay[1]) / 2 * um, sec = v3AirSec(D), hw0 = D.body ? Math.max(...D.body.map(b => b[1])) : 1.4; E.bz = v3uZAt(P, xm, 0, .5) ?? E.zc; E.bz0 = V3_AIRZ - hw0 * sec.kb * .9; }
+    const b = Math.round(rs.bay * 4), sb = Math.round(rs.sbay * 4), [bx, by, bz] = W(0, 0, E.bz + .03 - E.bz0 * k / s);
+    v3mAdd('bay:' + key + ':' + b + ':' + sb, () => v3mBay(key, b / 4, sb / 4), bx, by, bz, h, k, side, roll, pitch);
+  }
+}
+function v3uPylon() { const M = mbNew(); mbBox(M, -.55, .45, -.05, .05, -V3U_PYL, 0, .62, { taper: .02 }); return M; }   // 挂架（米）
 // 画一艘外部模型的舰艇：len 游戏里的舰长，z 水线高度；没有这型、还没载入返回 false（照旧画自带模型）
 function v3uShip(cls, x, y, z, h, len, side) {
   const E = V3U_SHIP[cls];

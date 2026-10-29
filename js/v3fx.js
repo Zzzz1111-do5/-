@@ -279,7 +279,7 @@ function v3Fx(C) {
       if (FTR[key] && typeof v3dBurner === 'function') {   // 喷口发热、加力尾焰（v3det.js）：按每个喷口，随机身俯仰、滚转；加力开关时火舌平滑地长出、缩回
         const Eg = v3dEng((own ? 'p' : 'e') + o.id, burn ? 1 : .65, burn ? 1 : 0);
         v3dBurner(out, C, o, key, sz, { x: o.x, y: o.y, z, h, pt: typeof v3dPitchOf === 'function' ? v3dPitchOf(o, own ? 0 : 1) : Lc ? Lc.pitch : 0, rl: r }, Eg);
-      }
+      } else if (typeof v3dExhaust === 'function') v3dExhaust(key, sz, { x: o.x, y: o.y, z, h, rl: r }, gnd ? .6 : 1);   // 其余发动机：排气口后的热浪
     };
     for (const p of S.planes || []) if (!p.dead && isFinite(p.x) && !(p.phase === 'cat' || p.phase === 'trap' || (p.phase === 'roll' && !p.afPh && !p.land))) {   // 甲板上的由航母那边画
       const key = typeof airSilKey === 'function' ? airSilKey(p.kind, p.v) : null;

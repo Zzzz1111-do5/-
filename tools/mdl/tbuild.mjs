@@ -29,7 +29,7 @@ const here = path.dirname(new URL(import.meta.url).pathname), root = path.resolv
 const args = process.argv.slice(2), id = args[0];
 const SRC = JSON.parse(fs.readFileSync(path.join(here, 'sources.json'), 'utf8')), C = SRC[id];
 if (!C) { console.error('sources.json 里没有', id); process.exit(1); }
-const pvi = args.indexOf('--preview'), preview = pvi >= 0 ? args[pvi + 1] : null, listOnly = args.includes('--list');
+const pvi = args.indexOf('--preview'), preview = pvi >= 0 ? args[pvi + 1] : null, listOnly = args.includes('--list'), nodesOnly = args.includes('--nodes');
 const io = new NodeIO().registerExtensions(ALL_EXTENSIONS);
 const doc = await io.read(path.join(here, 'src', C.file));
 const R = doc.getRoot(), scene = R.getDefaultScene() || R.listScenes()[0];
@@ -102,6 +102,7 @@ async function matOf(m) {
 
 // —— 收集每个变体的三角形（按材质分组）——
 const VARS = [];
+let ndi = 0;   // 网格节点的序号（--nodes 列出、dropNode 按它去掉）
 for (const [vname, nodes] of PARTS) {
   const G = new Map();   // 材质号 → { p: [], n: [], uv: [] }
   for (const top of nodes) {
@@ -118,7 +119,7 @@ for (const [vname, nodes] of PARTS) {
         const mi = await matOf(mat), P = pr.getAttribute('POSITION'), N = pr.getAttribute('NORMAL'), I = pr.getIndices();
         const ti = mat && mat.getBaseColorTextureInfo(), UV = pr.getAttribute('TEXCOORD_' + (ti ? ti.getTexCoord() : 0));
         let g = G.get(mi); if (!g) G.set(mi, g = { p: [], n: [], uv: [], nd: [] });
-        const ndn = nd.getName() + ' ' + (mesh.getName() || '');
+        const ndn = nd.getName() + ' ' + (mesh.getName() || '') + ' #' + (nd.__i ??= ndi++);
         const cnt = I ? I.getCount() : P.getCount(), a = [0, 0, 0], u = [0, 0];
         for (let t = 0; t + 2 < cnt; t += 3) {
           let ix = [0, 1, 2].map(k => I ? I.getScalar(t + k) : t + k);
@@ -141,6 +142,28 @@ for (const [vname, nodes] of PARTS) {
   const sc = C.len ? C.len / (mx[0] - mn[0]) : 1;
   const off = [-(mn[0] + mx[0]) / 2, -(mn[1] + mx[1]) / 2, C.origin === 'center' ? -(mn[2] + mx[2]) / 2 : C.origin === 'wl' ? -(mn[2] + (mx[2] - mn[2]) * (C.wl || 0)) : C.origin === 'keep' ? 0 : -mn[2]];   // keep：原模型的 z = 0 就是水线
   for (const g of G.values()) for (let i = 0; i < g.p.length; i++) g.p[i] = (g.p[i] + off[i % 3]) * sc;
+  // --nodes：列出每个网格节点在最终坐标里的包围盒（米），找出要去掉的部件（比如模型自带、不会消耗的外挂弹）
+  if (nodesOnly) {
+    const B = new Map();
+    for (const g of G.values()) for (let t = 0; t < g.p.length / 9; t++) { const k = g.nd[t].split('#').pop(); let b = B.get(k); if (!b) B.set(k, b = { n: 0, a: [1e9, 1e9, 1e9], b: [-1e9, -1e9, -1e9] }); b.n++; for (let v = 0; v < 3; v++) for (let j = 0; j < 3; j++) { const x = g.p[t * 9 + v * 3 + j]; b.a[j] = Math.min(b.a[j], x); b.b[j] = Math.max(b.b[j], x); } }
+    for (const [k, b] of [...B].sort((p, q) => +p[0] - +q[0])) console.log('#' + k, b.n, 'x', b.a[0].toFixed(2), b.b[0].toFixed(2), 'y', b.a[1].toFixed(2), b.b[1].toFixed(2), 'z', b.a[2].toFixed(2), b.b[2].toFixed(2));
+    process.exit(0);
+  }
+  // dropNode：按序号去掉的节点；dropBox：重心落在这些盒子 [x0, x1, y0, y1, z0, z1] 里的三角形去掉（模型自带的外挂弹，换成游戏里会随发射消耗的弹）
+  if (C.dropNode || C.dropBox) {
+    const DN = new Set((C.dropNode || []).map(String)), DB = C.dropBox || [];
+    for (const g of G.values()) {
+      const P = [], N = [], UV = [], ND = [];
+      for (let t = 0; t < g.p.length / 9; t++) {
+        const c = [0, 1, 2].map(k => (g.p[t * 9 + k] + g.p[t * 9 + 3 + k] + g.p[t * 9 + 6 + k]) / 3);
+        if (DN.has(g.nd[t].split('#').pop()) || DB.some(q => c[0] >= q[0] && c[0] <= q[1] && c[1] >= q[2] && c[1] <= q[3] && c[2] >= q[4] && c[2] <= q[5])) continue;
+        for (let k = 0; k < 9; k++) { P.push(g.p[t * 9 + k]); N.push(g.n[t * 9 + k]); }
+        for (let k = 0; k < 6; k++) UV.push(g.uv[t * 6 + k]);
+        ND.push(g.nd[t]);
+      }
+      g.p = P; g.n = N; g.uv = UV; g.nd = ND;
+    }
+  }
   // 起落架：gear = { z: 机腹高（米，离最低点）, re: 部件名正则 }——另出一个收起落架的变体 fly（重心低于 z 的三角形、名字对上的部件去掉）
   const flyOf = H => {
     const rG = C.gear.re ? new RegExp(C.gear.re, 'i') : null, F = new Map();

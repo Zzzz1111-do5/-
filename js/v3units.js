@@ -1883,6 +1883,7 @@ function v3mCollect(C, box) {
     // 贴地：车体按脚下坡度俯仰、侧倾（上坡车头抬起、横坡车身侧倾）；炮塔装在倾斜的车体上，按它自己的朝向取同一个坡面的姿态
     const g = v3Grad(v.x, v.y, Math.max(2.5, vehSp(v).len * .45), v.id), [hp, hr] = v3Pose(g, h);
     const U = typeof v3uVeh === 'function' ? v3uVeh(Mm.key, Math.hypot(v.x - C.E[0], -v.y - C.E[1])) : null;
+    if (typeof v3dVehHaze === 'function') v3dVehHaze(v, Mm.key, vehSp(v).len, z, h, C.E);   // 发动机排气的热浪（v3det.js）
     if (U) {   // 近处有外部精细模型（v3utex.js）：车体 + 炮塔（绕转轴转），比例按车体长
       const ku = vehSp(v).len / U.L, c = Math.cos(h), s = Math.sin(h), px0 = v.x + (U.piv[0] * c - U.piv[1] * s) * ku, py0 = v.y + (U.piv[0] * s + U.piv[1] * c) * ku, aim = v.dead ? h + .6 : (v.aim ?? h);
       const [tp, tr] = v3Pose(g, aim);
@@ -1934,10 +1935,13 @@ function v3mCollect(C, box) {
     const d = (typeof SHIP_DIM === 'object' && SHIP_DIM[sh.kind]) || [32, 11], P = pose(sh.id, sh, sh.heading ?? -1.57), nm = (sh.sbxCls && sh.sbxCls.name) || '';
     if (sh.kind === 'dd') {   // 驱护舰按舰型建模（有外部精细模型的用它，v3utex.js）
       const c = typeof vlsCls === 'function' ? vlsCls(sh) : '052D';
-      if (typeof v3uShip === 'function' && v3uShip(c, P.x, P.y, -2.6, P.h, 50 * (((typeof SH_DDC === 'object' && SH_DDC[c]) || {}).k || 1) * P.k, 0)) continue;
+      const Ld = 50 * (((typeof SH_DDC === 'object' && SH_DDC[c]) || {}).k || 1) * P.k;
+      if (typeof v3dFunnel === 'function') v3dFunnel(P.x, P.y, P.h, Ld, -.06, -2.6 + Ld * .21);   // 烟囱热气
+      if (typeof v3uShip === 'function' && v3uShip(c, P.x, P.y, -2.6, P.h, Ld, 0)) continue;
       const [mk, mb] = v3mDDK(c); v3mAdd(mk, mb, P.x, P.y, -2.6, P.h, P.k, 0); continue;
     }
     v3mAdd('sh:' + sh.kind, () => v3mShip(sh.kind, d[0], d[1]), P.x, P.y, -2.6, P.h, P.k, 0);
+    if (typeof v3dFunnel === 'function') v3dFunnel(P.x, P.y, P.h, d[0] * P.k, sh.kind === 'assault' ? -.4 : -.25, -2.6 + d[1] * .55, .4);   // 柴油机排气
   }
   for (const bt of S.boats || []) if (!bt.dead && isFinite(bt.x) && inB(bt.x, bt.y)) v3mAdd('sh:boat', () => v3mShip('boat', 12, 5), bt.x, bt.y, -2.6, bt.heading ?? -1.57, 1, 0);
   if (S.dd && S.dd.state !== 'sunk' && isFinite(S.dd.x) && inB(S.dd.x, S.dd.y, 80)) { const P = pose('DD', S.dd, S.dd.heading ?? -1.57), c = typeof vlsCls === 'function' ? vlsCls(S.dd) : '055', [mk, mb] = v3mDDK(c); v3mAdd(mk, mb, P.x, P.y, -2.6, P.h, P.k, 0); }
@@ -1976,7 +1980,7 @@ function v3mCollect(C, box) {
       for (const [u, v, a0, pose] of crew) { const [x, y] = at(u, v); v3mAdd('man:deck:' + pose, () => v3mMan('deck', pose), x, y, top, h + a0, V3_PIL, 0); }
     }
   }
-  for (const e of S.eships || []) if (!e.dead && inB(e.x, e.y, 80) && (spec || seen(e.x, e.y) || S.t - (e.det ?? -99) < 4)) { const C0 = (typeof NV_CLS === 'object' && NV_CLS[e.cls]) || { L: 46, B: 9 }; if (!(typeof v3uShip === 'function' && v3uShip(e.cls, e.x, e.y, -2.6, e.heading ?? -1.57, C0.L, 1))) v3mAdd('es:' + e.cls, () => v3mEShip(e.cls, C0.L, C0.B), e.x, e.y, -2.6, e.heading ?? -1.57, 1, 1); }
+  for (const e of S.eships || []) if (!e.dead && inB(e.x, e.y, 80) && (spec || seen(e.x, e.y) || S.t - (e.det ?? -99) < 4)) { const C0 = (typeof NV_CLS === 'object' && NV_CLS[e.cls]) || { L: 46, B: 9 }; if (!(typeof v3uShip === 'function' && v3uShip(e.cls, e.x, e.y, -2.6, e.heading ?? -1.57, C0.L, 1))) v3mAdd('es:' + e.cls, () => v3mEShip(e.cls, C0.L, C0.B), e.x, e.y, -2.6, e.heading ?? -1.57, 1, 1); if (typeof v3dFunnel === 'function') v3dFunnel(e.x, e.y, e.heading ?? -1.57, C0.L, -.08, -2.6 + C0.L * .2); }
   for (const s of S.subs || []) if (!s.dead && inB(s.x, s.y) && (spec || (typeof asSubSeen === 'function' && asSubSeen(s)))) v3mAdd('sub', v3mSub, s.x, s.y, -4.2, s.heading || 0, 1, 1);
   // 守方阵地
   for (const e of S.enemies) {
@@ -2108,10 +2112,16 @@ function v3mCollect(C, box) {
     const pt = V3_PLANE_TAIL[key] === 'heli' ? 0 : typeof v3dPitch === 'function' ? v3dPitch(o, sd, z, L, key) : L ? L.pitch : 0;   // 仰角跟着航迹 + 迎角（js/aero.js；直升机不按航迹抬头）
     if (typeof v3dPlaneX === 'function' && v3dPlaneX(key, sz, x, y, z, false, hd || 0, ac, bank || 0, pt, !!(L && L.gear), typeof v3dSurf === 'function' ? v3dSurf(o, sd) : null)) {   // 导入的真机模型（v3det.js）
       const rs = typeof airRelState === 'function' ? airRelState(sd ? 'e' : 'p', o.id) : null;
-      if (rs && (rs.bay > .04 || rs.sbay > .04)) { const b = Math.round(rs.bay * 4), sb = Math.round(rs.sbay * 4); v3mAdd('bay:' + key + ':' + b + ':' + sb, () => v3mBay(key, b / 4, sb / 4), x, y, z, hd || 0, k, ac, bank || 0, pt); }
+      if (rs && (rs.bay > .04 || rs.sbay > .04)) {   // 弹舱门：贴着导入模型的机腹（v3dBayZ：沿机体的向上方向挪）
+        const b = Math.round(rs.bay * 4), sb = Math.round(rs.sbay * 4), dz = typeof v3dBayZ === 'function' ? v3dBayZ(key, sz) : 0, o = typeof v3uMv === 'function' ? v3uMv(v3uM3(v3uM3(v3uRz(-(hd || 0)), v3uRy(-pt)), v3uRx(bank || 0)), [0, 0, dz]) : [0, 0, dz];
+        v3mAdd('bay:' + key + ':' + b + ':' + sb, () => v3mBay(key, b / 4, sb / 4), x + o[0], y - o[1], z + o[2], hd || 0, k, ac, bank || 0, pt);
+      }
       return;
     }
-    if (typeof v3uPlane === 'function' && v3uPlane(key, sz, x, y, z, false, hd || 0, ac, bank || 0, pt, !!(L && L.gear), t * 22)) return;   // 带贴图的外部模型（v3utex.js；直升机主旋翼转）
+    if (typeof v3uPlane === 'function' && v3uPlane(key, sz, x, y, z, false, hd || 0, ac, bank || 0, pt, !!(L && L.gear), t * 22)) {   // 带贴图的外部模型（v3utex.js；直升机主旋翼转）
+      if (typeof v3uArm === 'function') v3uArm(key, sz, x, y, z, hd || 0, ac, bank || 0, pt, typeof airRelState === 'function' ? airRelState(sd ? 'e' : 'p', o.id) : null);   // 挂架、外挂弹（随发射消耗）、开合的弹舱门
+      return;
+    }
     if (gear) v3mAdd('plg:' + key + ':0:0', () => v3mAir(key, 0, { gear: true, cpo: 0 }), x, y, z, hd || 0, k, ac, bank || 0, pt);
     else v3mAdd('pl:' + key, () => v3mPlane(key), x, y, z, hd || 0, k, ac, bank || 0, pt);
     const rs = typeof airRelState === 'function' ? airRelState(sd ? 'e' : 'p', o.id) : null;   // 弹舱开合、外挂消耗（airmdl.js）
