@@ -205,7 +205,8 @@ const v3pVar = (pk, name) => { const P = v3pPack(pk); return P ? P.vars.get(name
 // —— 摆放：按地图格子种树、灌木、岩石，城镇房屋、机场设施换模型（地图或地形变了重算）——
 const V3P_TS = 30;   // 远处替身按 30 × 30 格（300 米）分块
 function v3pPlace() {
-  const need = ['treepack', 'cliffs', 'jph1', 'jph2', 'jph3', 'house', 'oldconc', 'hangar', 'atc', 'quonset', 'firestation', 'wh3', 'sawtooth', 'smallwh', 'industrial', 'flats1', 'wh99', 'girder', 'pillbox', 'teeth'];
+  const isle = !!TER.isle;   // 架空海岛（isle.js）：热带植被——沿海一带棕榈，雨林用阔叶树，针叶树只长在高山上
+  const need = ['treepack', 'cliffs', 'jph1', 'jph2', 'jph3', 'house', 'oldconc', 'hangar', 'atc', 'quonset', 'firestation', 'wh3', 'sawtooth', 'smallwh', 'industrial', 'flats1', 'wh99', 'girder', 'pillbox', 'teeth', ...(isle ? ['palms'] : [])];
   const got = need.map(id => v3pPack(id) || (V3P.packs.get(id) || {}).st === -1);   // 先全部发起下载（同时载入），再看是不是都好了
   if (!got.every(Boolean)) return false;
   const tp = v3pPack('treepack');
@@ -214,6 +215,7 @@ function v3pPlace() {
   const con = V3P_CON.map(n => vOf('treepack', n)).filter(i => i >= 0), brd = V3P_BRD.map(n => vOf('treepack', n)).filter(i => i >= 0);
   const bush = V3P_BUSH.map(n => vOf('treepack', n)).filter(i => i >= 0), grass = vOf('treepack', 'bush0'), rock = V3P_ROCK.map(n => vOf('treepack', n)).filter(i => i >= 0);
   const cliff = ['cliffA', 'cliffB'].map(n => vOf('cliffs', n)).filter(i => i >= 0);
+  const palm = isle ? ['palm1', 'palm2', 'palm3', 'palm4'].map(n => vOf('palms', n)).filter(i => i >= 0) : [], SD = isle && typeof terSdf === 'function' ? terSdf() : null;
   // —— 植被与岩石：x, y, z, 朝向, 横比例, 竖比例, 随机数, 变体；kind：0 树（有替身）1 灌木 / 草 2 岩石 / 崖壁 ——
   const L = { x: [], y: [], z: [], a: [], s: [], sz: [], sd: [], v: [], k: [] };
   const put = (x, y, v, s, sz, k, a, sink = .15) => { L.x.push(x); L.y.push(y); L.z.push(v3Ht(clamp(x, 0, W - 1), clamp(y, 0, H - 1)) - sink); L.a.push(a); L.s.push(s); L.sz.push(sz); L.sd.push(Math.random()); L.v.push(v); L.k.push(k); };
@@ -226,17 +228,20 @@ function v3pPlace() {
     const i = gy * GW + gx, t = TER.type[i], cx = gx * CELL + CELL / 2, cy = gy * CELL + CELL / 2, el = TER.elev[i] || 0;
     if (af && Math.hypot(cx - af.x, cy - af.y) < 520) continue;   // 机场场区（跑道、滑行道）不长树
     let n = 0;
+    const cd = SD ? SD[i] : 1e9;   // 海岛：离海岸多远（米）
     if (t === T.FOREST) n = 1 + (r() < (coarse ? .15 : .45) ? 1 : 0) + (!coarse && r() < .12 ? 1 : 0);
     else if (t === T.HILL) n = r() < .16 ? 1 : 0;
     else if (t === T.MOUNT) n = r() < .09 ? 1 : 0;
-    else if (t === T.FIELD) n = r() < .01 ? 1 : 0;
+    else if (t === T.FIELD) n = r() < (cd < 600 ? .07 : .01) ? 1 : 0;   // 海岛沿海平地：椰林种植园
     else if (t === T.MARSH) n = r() < .06 ? 1 : 0;
+    else if (t === T.BEACH && isle) n = cd > 18 && r() < .07 ? 1 : 0;   // 海滩后沿稀疏的椰树
     const okHere = !(t !== T.FOREST && roadNear(gx, gy)) && !ptsNear(cx, cy);
     if (n && okHere) for (let k = 0; k < n; k++) {
-      const x = cx + (r() - .5) * CELL * .9, y = cy + (r() - .5) * CELL * .9, isCon = el > .62 || t === T.MOUNT || r() < .55;
-      const L0 = isCon ? con : brd, v = L0[(r() * L0.length) | 0] ?? con[0];
+      const x = cx + (r() - .5) * CELL * .9, y = cy + (r() - .5) * CELL * .9, pm = palm.length > 0 && t !== T.MARSH && (cd < 260 || t === T.FIELD || t === T.BEACH || (el < .3 && r() < .3));
+      const isCon = !pm && (isle ? el > .9 || t === T.MOUNT : el > .62 || t === T.MOUNT || r() < .55);   // 海岛：山地雨林也是阔叶树，针叶只在山顶附近
+      const L0 = pm ? palm : isCon ? con : brd, v = L0[(r() * L0.length) | 0] ?? con[0];
       if (v == null) continue;
-      const hgt = (t === T.FOREST ? 10 + r() * 7 : 7 + r() * 5) * (t === T.MARSH ? .6 : 1), s = hgt / VL[v].h;
+      const hgt = pm ? 9 + r() * 8 : (t === T.FOREST ? 10 + r() * 7 : 7 + r() * 5) * (t === T.MARSH ? .6 : 1), s = hgt / VL[v].h;
       put(x, y, v, s * (.9 + r() * .2), s, 0, r() * 6.283);
     }
     if (!okHere) continue;
@@ -276,7 +281,7 @@ function v3pPlace() {
   for (let i = 0; i < N; i++) idx[fill[bOf(i)]++] = i;
   Object.assign(PL, { BS, bx, by, cnt, idx });
   V3P.P = PL; V3P.VL = VL;
-  v3pImpBuild(con.concat(brd));
+  v3pImpBuild(con.concat(brd, palm));   // 远处的替身面片（最多 16 种：针叶 9、阔叶 3、棕榈 4）
   v3pFar();
   v3pStatic(vOf);
   return true;

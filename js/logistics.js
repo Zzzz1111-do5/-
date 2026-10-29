@@ -219,7 +219,7 @@ function checkEnd(dt) {
 
 function step(dt) {
   S.t += dt;
-  FBUDGET = MAP_K > 1.2 ? 2 : 3;
+  FBUDGET = PGN > BIG_PG ? 1 : MAP_K > 1.2 ? 2 : 3;   // 大地图（海岛）寻路带是默认地图的两倍多：每步只算一张流场
   indexUnits();
   if ((S.visT = (S.visT ?? 0) - dt) <= 0) { S.visT = .25; updateVision(); }
   updateShips(dt); updateDD(dt); updateTeams(dt); indexUnits(); updateUnits(dt);

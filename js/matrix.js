@@ -156,7 +156,7 @@ function mxInit() {
     const vs = sh(gl.VERTEX_SHADER, MX_VS), buf = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, buf);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
-    MX.P = [0, 1, 2, 3].map(mode => {
+    MX.mk = mode => {   // 换了世界尺寸时按新尺寸重编（着色器里写死了 GRID、WORLD）
       const pr = gl.createProgram();
       gl.attachShader(pr, vs); gl.attachShader(pr, sh(gl.FRAGMENT_SHADER, MX_FS(MX.der, mode)));
       gl.linkProgram(pr);
@@ -167,7 +167,8 @@ function mxInit() {
       for (const n of ['uRes', 'uView', 'uTime', 'uFlash', 'uGlyph', 'uRain', 'uSub', 'uMap', 'uCont', 'uTer', 'uFog', 'uAtlas', 'uCol', 'uMk']) u[n] = gl.getUniformLocation(pr, n);
       ['uTer', 'uFog', 'uAtlas', 'uCol', 'uMk'].forEach((n, i) => { if (u[n]) gl.uniform1i(u[n], i); });
       return { pr, u };
-    });
+    };
+    MX.P = [0, 1, 2, 3].map(MX.mk);
     ['ter', 'fog', 'atlas', 'col', 'mk'].forEach((k, i) => {
       const t = gl.createTexture(), filt = k === 'ter' || k === 'mk' ? gl.NEAREST : gl.LINEAR;
       gl.activeTexture(gl.TEXTURE0 + i); gl.bindTexture(gl.TEXTURE_2D, t);
@@ -273,5 +274,8 @@ function mxDraw(time, flash) {
 
 // 视野字节图（0/255），供着色器与像素降级方案共用
 let FOGB = new Uint8Array(GW * GH);
-onWorld(() => { FOGB = new Uint8Array(GW * GH); });
+onWorld(() => {
+  FOGB = new Uint8Array(GW * GH);
+  if (MX.ok && MX.mk) { { const gl = MX.gl; for (const P of MX.P) gl.deleteProgram(P.pr); MX.P = [0, 1, 2, 3].map(MX.mk); } MX.seed = null; }   // 着色器按新尺寸重编
+});
 function fogBytes() { const D = typeof CVL_DISP === 'object' ? CVL_DISP : null; for (let i = 0; i < GW * GH; i++) FOGB[i] = PV[i] || (D && D[i]) ? 255 : 0; }   // 隐蔽小组所在格照常显示为可见（conceal.js）

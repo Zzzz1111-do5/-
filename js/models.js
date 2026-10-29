@@ -393,7 +393,7 @@ function rlGunSpr(gun, side) {
 }
 
 // 型号 → 模型：按型号名（沙盒目录名、空投车辆的 mdl）匹配，否则按阵营 + 车型
-const RLM_NAME = [[/99A/, 'ztz99a'], [/96 式扫雷/, 'ztz96m'], [/GCZ/, 'gcz110'], [/96B/, 'ztz96b'], [/ZTQ-15/, 'ztq15'], [/ZTD-05/, 'ztd05'], [/ZBD-05/, 'zbd05'], [/ZSL-92/, 'zsl92b'], [/PLZ-07/, 'plz07'], [/PTL-02/, 'ptl02'],
+const RLM_NAME = [[/99A/, 'ztz99a'], [/96 式扫雷/, 'ztz96m'], [/GCZ/, 'gcz110'], [/96B|ZTZ-80/, 'ztz96b'], [/ZTQ-15/, 'ztq15'], [/ZTD-05/, 'ztd05'], [/ZBD-05/, 'zbd05'], [/ZSL-92/, 'zsl92b'], [/PLZ-07/, 'plz07'], [/PTL-02/, 'ptl02'],
   [/PGZ-07/, 'pgz07'], [/PGL-625/, 'pgl625'], [/LD-2000/, 'ld2000'], [/08 式/, 'zbl08'], [/ZBD-04A/, 'zbd04a'], [/ZBD-03/, 'zbd03'],
   [/M1A2/, 'm1a2'], [/M1A1/, 'm1a1'], [/M10 /, 'm10'], [/AAV/, 'aav7'], [/M2A3|布雷德利/, 'm2a3'], [/M109/, 'm109'], [/M1134/, 'm1134'], [/M1127/, 'm1127'], [/M-SHORAD/, 'mshorad'], [/M903|爱国者/, 'm903'],
   [/M163/, 'm163'], [/M1150/, 'm1150'], [/LPWS|密集阵/, 'lpws'], [/JLTV/, 'jltv'], [/复仇者/, 'avenger'], [/M1117/, 'm1117']];
