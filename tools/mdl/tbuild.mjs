@@ -12,7 +12,7 @@
 //          两个变体共用一个原点（整车底面中心），炮塔再减去转轴（绕自己原点转）
 //   origin：'center' 包围盒中心（飞机）、'wl' 水线（船：wl 从最低点往上占总高的比例）、'keep' 原模型的零高度就是水线；len：x 方向长度缩到 len（游戏单位，船用）；
 //   yaw：绕竖轴先转多少度（模型机头不朝 +x 时）；gunx：炮管规则只到这个 x；mcol：{ 材质名正则: [r, g, b] } 换成纯色涂装（连贴图一起换掉）；
-//   gear：{ z, re } 另出收起落架的变体 fly（飞机空中用）；
+//   gear：{ z, re } 另出收起落架的变体 fly（飞机空中用）；parts3：活动部件（折起的外翼、螺旋桨）按盒子拆成单独变体、各带转轴；
 //   weld: 'pos' 只按位置焊接（平直着色、UV 接缝多的模型才减得动面），减面后按折角重算法线、按 UV 岛重挑每个角的 UV
 // 文件格式（小端，4 字节对齐）：'DSM2'、变体数、材质数、贴图数（u32 × 3）；
 //   贴图：每张 u8 格式（0 jpg、1 webp），补齐；材质：每个 u8 贴图号（255 无）、u8 透明（0 不透明、1 裁剪、2 玻璃）、u8 双面、u8 0、f32 底色 RGBA、f32 裁剪阈值；
@@ -154,6 +154,44 @@ for (const [vname, nodes] of PARTS) {
     }
     return F;
   };
+  // 活动部件：parts3 = { 名字: { box: [x0, x1, y0, y1, z0, z1], piv: [x, y, z] } }——重心落在盒子里的三角形拆成单独变体，坐标减去转轴（折翼、螺旋桨……）
+  if (C.parts3) {
+    const PS = Object.entries(C.parts3).map(([nm, q]) => ({ nm, b: q.box, pv: q.piv || [0, 0, 0], cut: q.cut, G: new Map() })), GH = new Map();
+    // cut：[轴, 值]——跨过这个平面（折叠线）的三角形先切开（位置、法线、UV 线性插值），切出来的两边各归各的
+    for (const q of PS) if (q.cut) {
+      const ax = 'xyz'.indexOf(q.cut[0]), cv = q.cut[1];
+      for (const g of G.values()) {
+        const P = [], N = [], U = [], ND = [];
+        const put = (vs, nd) => { for (let i = 1; i < vs.length - 1; i++) for (const v of [vs[0], vs[i], vs[i + 1]]) { P.push(...v.p); N.push(...v.n); U.push(...v.u); } for (let i = 1; i < vs.length - 1; i++) ND.push(nd); };
+        for (let t = 0; t < g.p.length / 9; t++) {
+          const V = [0, 1, 2].map(k => ({ p: g.p.slice(t * 9 + k * 3, t * 9 + k * 3 + 3), n: g.n.slice(t * 9 + k * 3, t * 9 + k * 3 + 3), u: g.uv.slice(t * 6 + k * 2, t * 6 + k * 2 + 2) }));
+          const d = V.map(v => v.p[ax] - cv);
+          if (!(Math.min(...d) < -1e-6 && Math.max(...d) > 1e-6)) { put(V, g.nd[t]); continue; }
+          const A = [], B = [], mix = (a, b, f) => ({ p: a.p.map((x, i) => x + (b.p[i] - x) * f), n: a.n.map((x, i) => x + (b.n[i] - x) * f), u: a.u.map((x, i) => x + (b.u[i] - x) * f) });
+          for (let i = 0; i < 3; i++) {
+            const a = V[i], b = V[(i + 1) % 3], da = d[i], db = d[(i + 1) % 3];
+            (da <= 0 ? A : B).push(a);
+            if (da * db < 0) { const m = mix(a, b, da / (da - db)); A.push(m); B.push(m); }
+          }
+          if (A.length >= 3) put(A, g.nd[t]); if (B.length >= 3) put(B, g.nd[t]);
+        }
+        g.p = P; g.n = N; g.uv = U; g.nd = ND;
+      }
+    }
+    for (const [mi, g] of G) for (let t = 0; t < g.p.length / 9; t++) {
+      const c = [0, 1, 2].map(k => (g.p[t * 9 + k] + g.p[t * 9 + 3 + k] + g.p[t * 9 + 6 + k]) / 3);
+      const P = PS.find(q => c[0] >= q.b[0] && c[0] <= q.b[1] && c[1] >= q.b[2] && c[1] <= q.b[3] && c[2] >= q.b[4] && c[2] <= q.b[5]), D = P ? P.G : GH, pv = P ? P.pv : [0, 0, 0];
+      let o = D.get(mi); if (!o) D.set(mi, o = { p: [], n: [], uv: [], nd: [] });
+      for (let k = 0; k < 9; k++) o.p.push(g.p[t * 9 + k] - pv[k % 3]);
+      for (let k = 0; k < 9; k++) o.n.push(g.n[t * 9 + k]);
+      for (let k = 0; k < 6; k++) o.uv.push(g.uv[t * 6 + k]);
+      o.nd.push(g.nd[t]);
+    }
+    VARS.push({ name: 'hull', G: GH });
+    if (C.gear) VARS.push({ name: 'fly', G: flyOf(GH) });
+    for (const q of PS) VARS.push({ name: q.nm, G: q.G });
+    continue;
+  }
   if (!C.split) { VARS.push({ name: C.gear ? 'hull' : vname, G }); if (C.gear) VARS.push({ name: 'fly', G: flyOf(G) }); continue; }
   // 车体 / 炮塔拆分（按每个三角形的重心与所属部件名）
   const Sp = C.split, rT = Sp.tur ? new RegExp(Sp.tur, 'i') : null, rH = Sp.hull ? new RegExp(Sp.hull, 'i') : null;

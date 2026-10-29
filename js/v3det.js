@@ -241,8 +241,10 @@ const v3dMv = (M, v) => [M[0] * v[0] + M[1] * v[1] + M[2] * v[2], M[3] * v[0] + 
 function v3dPlaneX(key, sz, x, y, z, ground, h, side, roll, pitch, gear, sf) {
   const mk = V3_PX[key];
   if (!mk || typeof v3xMesh !== 'function') return false;
-  const Mg = v3xMesh(mk), Ma = v3xMesh(mk + '_a'), M = gear ? Mg : Ma;   // 两个都要：起飞、着陆来回换
-  if (!M || !Mg) return false;
+  const Mg0 = v3xMesh(mk), Ma0 = v3xMesh(mk + '_a');   // 两个都要：起飞、着陆来回换
+  if (!Mg0 || !Ma0) return false;
+  const Mg = v3dGlassX(Mg0, mk), M = gear ? Mg : v3dGlassX(Ma0, mk, true);   // 座舱玻璃换成透明的、补上座舱（空中的那个连飞行员一起）
+  if (ground) V3D_CPX.set(key, Mg.cp ? Object.assign(Mg.cp, { s: sz / Mg.len, fr: V3M.fr }) : { fr: V3M.fr });   // 这一帧按这个模型的座舱放飞行员（v3dSeatW；没量过座舱的不放）
   const s = sz / M.len, R = v3dMul(v3dMul(v3dRz(-h), v3dRy(pitch)), v3dRx(roll));
   let ox = x, oy = y, oz = z;
   if (!ground) { const o = v3dMv(R, [0, 0, M.zc * s]); ox -= o[0]; oy += o[1]; oz -= o[2]; }   // 机身中线对准 z
@@ -256,6 +258,90 @@ function v3dPlaneX(key, sz, x, y, z, ground, h, side, roll, pitch, gear, sf) {
     v3mAdd('x:' + mk + '_' + nm + sd, () => P, ox + o[0], oy - o[1], oz + o[2], -Math.atan2(Rp[3], Rp[0]), s, side, Math.atan2(Rp[7], Rp[8]), Math.asin(clamp(Rp[6], -1, 1)));
   }
   return true;
+}
+// 导入飞机模型的座舱：模型自带的玻璃（明暗 ≤ −16）换成透明玻璃 V3_TGL；歼-35 的模型没有单独的玻璃材质（座舱盖和机身一个颜色），
+//   按 V3D_CPDEF 记的座舱盖范围（米，模型坐标：x 机头、z 离着地点高；sill 座舱盖下沿的高度沿 x 变化）把座舱盖那块鼓包挖掉，
+//   照原来的外形（每个截面量出顶高与下沿处的半宽）重新蒙一层透明玻璃，里面补上深色座舱底、弹射座椅、遮光罩与大屏、平显；
+//   头盔顶在座舱盖顶下 0.12 米，往下按坐高放飞行员
+//   （歼-20 的座舱盖顶上有细长的凸起，顶高也照记下的折线 top）
+const V3D_CPDEF = { j35: { x0: 1.45, x1: 5.2, sill: [[1.45, 2.62], [2.2, 2.5], [3.6, 2.47], [4.6, 2.25], [5.2, 1.95]] },
+  j20: { x0: 3.6, x1: 6.15, sill: [[3.6, 2.8], [4.6, 2.76], [5.6, 2.7], [6.15, 2.62]], top: [[3.6, 3.12], [4.2, 3.24], [5.0, 3.28], [5.6, 3.16], [6.15, 2.66]] } };
+const v3dPoly = (P, x) => { if (x <= P[0][0]) return P[0][1]; for (let i = 1; i < P.length; i++) if (x <= P[i][0]) return lerp(P[i - 1][1], P[i][1], (x - P[i - 1][0]) / (P[i][0] - P[i - 1][0])); return P[P.length - 1][1]; };
+const V3D_GLX = new WeakMap(), V3D_CPX = new Map();
+function v3dGlassX(M0, mk, air) {
+  let M = V3D_GLX.get(M0);
+  if (M) return M;
+  const t = M0.t.slice();
+  for (let i = 6; i < t.length; i += 10) if (t[i] <= -16) t[i] = V3_TGL;
+  M = Object.assign({}, M0, { t, cp: null });
+  const D = mk && V3D_CPDEF[mk];
+  if (D) {
+    const sill = x => v3dPoly(D.sill, x);
+    // 截面 x = X：三角形各边与平面的交点 → 顶高（中线附近最高处）、下沿处的半宽
+    const sec = X => {
+      let top = -1e9, w = 0;
+      const zs = sill(X);
+      for (let i = 0; i < t.length; i += 30) for (const [a, b] of [[0, 1], [1, 2], [2, 0]]) {
+        const A = i + a * 10, B = i + b * 10, xa = t[A], xb = t[B];
+        if ((xa - X) * (xb - X) > 0 || xa === xb) continue;
+        const u = (X - xa) / (xb - xa), y = Math.abs(t[A + 1] + (t[B + 1] - t[A + 1]) * u), z = t[A + 2] + (t[B + 2] - t[A + 2]) * u;
+        if (y < .3 && y < 1.2) top = Math.max(top, z);
+        if (Math.abs(z - zs) < .07) w = Math.max(w, y);
+      }
+      return { x: X, zs, top: Math.max(D.top ? v3dPoly(D.top, X) : top, zs + .02), w: Math.max(w, .05) };
+    };
+    const N = 16, S = []; for (let i = 0; i <= N; i++) S.push(sec(lerp(D.x0, D.x1, i / N)));
+    const wAt = x => { const f = clamp((x - D.x0) / (D.x1 - D.x0), 0, 1) * N, i = Math.min(N - 1, Math.floor(f)); return lerp(S[i].w, S[i + 1].w, f - i); };
+    // 挖掉座舱盖鼓包（重心在范围里、高过下沿的三角形）
+    const keep = [];
+    for (let i = 0; i < t.length; i += 30) {
+      const cx = (t[i] + t[i + 10] + t[i + 20]) / 3, cy = Math.abs(t[i + 1] + t[i + 11] + t[i + 21]) / 3, cz = (t[i + 2] + t[i + 12] + t[i + 22]) / 3;
+      if (cx > D.x0 && cx < D.x1 && cz > sill(cx) + .015 && cy < wAt(cx) + .06) continue;
+      for (let k = 0; k < 30; k++) keep.push(t[i + k]);
+    }
+    // 透明座舱盖：每个截面一个半椭圆（下沿在 sill、顶在原来的顶高）
+    const C = mbNew(), NA = 10, P = (i, j) => { const a = j / NA * Math.PI, s0 = S[i]; return [s0.x, Math.cos(a) * s0.w, s0.zs + Math.sin(a) * (s0.top - s0.zs)]; };
+    const Nn = (i, j) => { const a = j / NA * Math.PI, s0 = S[i]; return mbNorm([0, Math.cos(a) / Math.max(.05, s0.w), Math.sin(a) / Math.max(.05, s0.top - s0.zs)]); };
+    for (let i = 0; i < N; i++) for (let j = 0; j < NA; j++) {
+      const a = P(i, j), b = P(i, j + 1), c = P(i + 1, j + 1), d = P(i + 1, j);
+      mbTriN(C, a, b, c, Nn(i, j), Nn(i, j + 1), Nn(i + 1, j + 1), V3_TGL); mbTriN(C, a, c, d, Nn(i, j), Nn(i + 1, j + 1), Nn(i + 1, j), V3_TGL);
+    }
+    for (let i = 0; i < N; i++) for (const j of [0, NA]) mbLine(C, P(i, j), P(i + 1, j), .3);   // 座舱盖下沿的框
+    for (let i = 0; i < N; i++) { const a = S[i], b = S[i + 1]; mbQuad(C, [a.x, -a.w * .97, a.zs - .02], [a.x, a.w * .97, a.zs - .02], [b.x, b.w * .97, b.zs - .02], [b.x, -b.w * .97, b.zs - .02], .1); }   // 深色座舱底，盖住挖开的口
+    const L = D.x1 - D.x0, hx = D.x1 - .48 * L, hs = S[Math.round((hx - D.x0) / L * N)], head = hs.top - .12;
+    v3mCockpit(C, { x0: D.x0, x1: D.x1, w: hs.w, L, zb: sill(hx), ak: 1, hx, head, noFloor: true, cz: x => { const f = clamp((x - D.x0) / L, 0, 1) * N, i = Math.min(N - 1, Math.floor(f)); return lerp(S[i].top, S[i + 1].top, f - i); }, ry: x => wAt(x) * .85 });
+    M.cp = { hx, head, ox: hx + V3_SC[1], foot: head - V3_SC[0] };
+    if (air && typeof v3mPilotIn === 'function') v3mPilotIn(C, 1, M.cp.ox, M.cp.foot);
+    M.t = keep.concat(C.t); M.l = M0.l.concat(C.l);
+  }
+  V3D_GLX.set(M0, M);
+  return M;
+}
+// 座舱里坐着的飞行员：世界坐标的坐姿原点（脚底）、坐垫高、比例；这一帧画的是导入模型就按它的座舱盖，否则按自带模型（v3CpSeat）
+function v3dSeatW(key, sz, x, y, z0, h) {
+  const G = V3D_CPX.get(key);
+  let hx, fz, pz, sc;
+  if (G && G.fr === V3M.fr) { if (G.ox == null) return null; hx = G.ox * G.s; fz = z0 + G.foot * G.s; pz = z0 + (G.head - .87) * G.s; sc = G.s; }
+  else { const Q = typeof v3CpSeat === 'function' && v3CpSeat(key); if (!Q) return null; const k = sz / 21; hx = Q.ox * k; fz = z0 + (V3_GEAR + Q.foot) * k; pz = z0 + (V3_GEAR + Q.head - .87 * Q.ak) * k; sc = Q.ak * k; }
+  return { x: x + Math.cos(h) * hx, y: y + Math.sin(h) * hx, z: fz, pan: pz, sc };
+}
+// 甲板上的飞行员：跑到登机梯 → 顺梯子爬上去（手脚交替）→ 跨过座舱边、站到座椅上 → 蹲下坐进座椅；之后一直坐在座舱里（透过透明座舱盖看得见头盔和肩膀），滑行、弹射、着舰都在
+function v3dPilot(p, key, sz, z0, h, at) {
+  const P = p.dk === 'brd' && typeof cvPilotPose === 'function' ? cvPilotPose(p) : null;
+  const man = (pose, x, y, z, a, sc) => v3mAdd('man:pilot:' + pose, () => v3mMan('pilot', pose), x, y, z, a, sc, 0);
+  if (P && (P.run || P.clb < .62)) { const [x, y] = at(P.u, P.v); man(P.run ? 'r' + (Math.floor(P.ph / .7854) & 7) : 'cl' + (Math.floor(P.clb / .62 * 13) & 7), x, y, z0 + P.z, h + P.a, V3_PIL); return; }
+  const St = v3dSeatW(key, sz, p.x, p.y, z0, p.heading);
+  if (P) {   // 跨进座舱（clb 0.62–1）
+    const u = (P.clb - .62) / .38, k = sz / 21, L = cvLadder(p), [lx, ly] = at(L[0], L[1]), zt = z0 + P.z - u * .3 * k * 1.25;
+    if (!St) { const [x, y] = at(P.u, P.v); man('st', x, y, z0 + P.z, h + P.a, V3_PIL); return; }
+    const sc = lerp(V3_PIL, St.sc, sm01(u / .4));
+    if (u < .4) { const e = sm01(u / .4); man('w' + (Math.floor(e * 10) & 7), lerp(lx, St.x, e), lerp(ly, St.y, e), lerp(zt, St.pan, e) + Math.sin(e * Math.PI) * .35 * sc, h + P.a + airAng(p.heading - h - P.a) * e, sc); }   // 跨过座舱边，转身朝前
+    else if (u < .78) { const e = sm01((u - .4) / .38); man('L' + Math.round(e * 6), St.x, St.y, lerp(St.pan, St.pan - .45 * St.sc, e), p.heading, St.sc); }   // 站在座椅上蹲下去
+    else man('sc', St.x, St.y, St.z, p.heading, St.sc);
+    return;
+  }
+  const crew = p.phase === 'roll' || p.phase === 'trap' || (p.phase === 'cat' && (p.dk !== 'lift' || p.up));
+  if (crew && St) man('sc', St.x, St.y, St.z, p.heading, St.sc);
 }
 // v3fx.js：这一帧算好的仰角（加力尾焰的方向）
 const v3dPitchOf = (o, sd) => { const P = V3D_PT.get((sd ? 'e' : 'p') + o.id); return P && P.S === S ? P.pt : 0; };
@@ -409,13 +495,15 @@ function v3dEjArm(P, m) {
 //   挂弹车托着导弹开到飞机侧面，举升、把导弹送进弹舱，再倒回原位，拖车上再取一枚放上托架
 //   着舰后的飞机滑到机位前：牵引车从内侧开过来，用拖杆挂上前起落架；原地转向、倒进机位都是它推着，停好后脱钩开走
 //   出动前：带武器的飞机在机位上登机时挂弹车同样把弹送进弹舱；快好时牵引车倒到机头前挂上拖杆，启动后把飞机拖出机位约 20 米再脱钩
-const V3D_TUG = new Map();
 const V3D_LOAD = { cradle: [1.75, .55], bayZ: 1.15 };   // 托架（挂弹车坐标：离车中心前方、离甲板高）、弹舱口离甲板高
 // 驾驶位（车的坐标，米：前、右、脚下踏板离甲板高）与司机马甲颜色：牵引车左前方的下沉驾驶舱，蓝马甲（飞机调运）；挂弹车尾部的操作位，红马甲（弹药）
 const V3D_SEAT = { tug: [1.15, -.5, .05, '#2d5fb0'], loader: [-1.55, 0, .3, '#b23a2e'] };
 function v3dVeh(key, fb, x, y, z, a) {
   const X = typeof v3xMesh === 'function' ? v3xMesh(key) : null;
   v3mAdd(X ? 'x:' + key : 'cvsvc:' + key, X ? () => X : fb, x, y, z, a, 1, 3);
+  v3dDrv(key, x, y, z, a);
+}
+function v3dDrv(key, x, y, z, a) {
   const St = V3D_SEAT[key];   // 有人开：坐在驾驶位上、两手握方向盘
   if (St && typeof v3mMan === 'function') {
     const c = Math.cos(a), s = Math.sin(a), vest = typeof mbRGB === 'function' ? mbRGB(St[3]) : 1.12;
@@ -426,67 +514,213 @@ function v3dDeckVeh(cv, C, live, wing, top, h, at) {
   if (typeof cvPark !== 'function' || typeof AIR_REARM !== 'number') return;
   const msl = typeof v3MslInst === 'function' ? v3MslInst('st3:x:', 'pl15') : null, K = .86;   // 导弹跟飞机同一比例
   // 机位 j 旁的挂弹车与弹药拖车：r = 挂弹进度（0 开始 – 1 挂完；挂弹车开过去、举升把弹送进弹舱、倒回原位，拖车上再取一枚放上托架）
-  const loader = (j, key, sz, r) => {
+  // 挂弹（r 进度 0–1）：挂弹车托着导弹从原位开到飞机侧面 → 慢慢伸进机腹下 → 举升臂抬起 → 把弹推进弹舱（舱门这时开着）→ 放下举升臂 → 倒出来开回原位 →
+  //   地勤从拖车上抬一枚放上托架；bay(开度)：画这架飞机的弹舱门；T：整个过程多少秒（弹药兵走 / 跑）
+  const loader = (j, key, sz, r, bay, T) => {
     const sl = C.slots[j];
     if (!sl) return;
-    const a = sl[2], ca = Math.cos(a), sa = Math.sin(a), lat = ca * sl[1] < 0 ? [-sa, ca] : [sa, -ca], la = Math.atan2(-lat[1], -lat[0]);   // lat：朝甲板内侧
+    const a = sl[2], ca = Math.cos(a), sa = Math.sin(a), lat = ca * sl[1] < 0 ? [-sa, ca] : [sa, -ca], la = Math.atan2(-lat[1], -lat[0]);   // lat：朝甲板内侧；挂弹车车头朝飞机
     const D = typeof AIRD === 'object' && AIRD[key], bx = D && D.bay ? (D.bay[0] + D.bay[1]) / 2 * sz / 21 : 0, B = [sl[0] + ca * bx, sl[1] + sa * bx];   // 弹舱中点
-    const d0 = 9.5, d1 = 3.6, dl = r < .1 ? d0 : r < .3 ? lerp(d0, d1, sm01((r - .1) / .2)) : r < .58 ? d1 : r < .78 ? lerp(d1, d0, sm01((r - .58) / .2)) : d0;
-    const Lu = B[0] + lat[0] * dl, Lv = B[1] + lat[1] * dl, [lx, ly] = at(Lu, Lv);
-    v3dVeh('loader', v3mDeckCart, lx, ly, top + .02, h + la);
-    // 弹药拖车：挂弹车原位旁边、顺着飞机方向
-    const Tu = B[0] + lat[0] * (d0 + .3) + ca * 4.6, Tv = B[1] + lat[1] * (d0 + .3) + sa * 4.6, [tx, ty] = at(Tu, Tv);
+    const d0 = 9.5, d1 = 3.6, d2 = 2.35;
+    const dlAt = r => r < .08 ? d0 : r < .26 ? lerp(d0, d1, sm01((r - .08) / .18)) : r < .34 ? lerp(d1, d2, sm01((r - .26) / .08)) : r < .62 ? d2 : r < .7 ? lerp(d2, d1, sm01((r - .62) / .08)) : r < .86 ? lerp(d1, d0, sm01((r - .7) / .16)) : d0, dl = dlAt(r);
+    const lift = r < .34 ? 0 : r < .46 ? sm01((r - .34) / .12) : r < .54 ? 1 : r < .62 ? 1 - sm01((r - .54) / .08) : 0, pitch = lerp(-.12, .1, lift);   // 举升臂：平时压低，举升时抬起
+    const Lu = B[0] + lat[0] * dl, Lv = B[1] + lat[1] * dl, [lx, ly] = at(Lu, Lv), fu = Math.cos(la), fv = Math.sin(la);
+    const U = typeof v3uOn === 'function' ? v3uOn('u_loaderx') : null;
+    if (U && U.vars.has('arm')) {   // 带举升臂的外部模型（v3utex.js）：车体 + 绕铰点俯仰的举升臂；后部操作位坐着红马甲
+      v3uAdd('u_loaderx', 'hull', lx, ly, top + .02, h + la, 1, 3);
+      const [hx, hy] = at(Lu - fu * .32, Lv - fv * .32);
+      v3uAdd('u_loaderx', 'arm', hx, hy, top + .64, h + la, 1, 3, 0, pitch);
+      v3dDrv('loader', lx, ly, top + .02, h + la);
+    } else v3dVeh('loader', v3mDeckCart, lx, ly, top + .02, h + la);
+    if (bay) bay(r < .22 ? 0 : r < .3 ? sm01((r - .22) / .08) : r < .6 ? 1 : r < .68 ? 1 - sm01((r - .6) / .08) : 0);
+    // 弹药拖车：挂弹车原位旁边、顺着飞机方向；车上的弹（取走一枚后少一枚）
+    const Tu = B[0] + lat[0] * (d0 + .3) + ca * 4.6, Tv = B[1] + lat[1] * (d0 + .3) + sa * 4.6, [tx, ty] = at(Tu, Tv), su = Tu - sa * .45, sv = Tv + ca * .45;
     v3mAdd('cvsvc:cart', v3mDeckCart, tx, ty, top + .02, h + a, 1, 3);
-    if (msl) for (const o of [-.45, .45]) { const [mx, my] = at(Tu - sa * o, Tv + ca * o); v3mAdd(msl[0], msl[1], mx, my, top + 1.1, h + a, K, 0); }
-    // 托架上的导弹：开过去时托着，举升送进弹舱（r .3–.5），之后托架空着，倒回原位后再从拖车上取一枚
-    if (msl && !(r >= .5 && r < .8)) {
-      const q = r >= .3 && r < .5 ? sm01((r - .3) / .2) : 0, cr = V3D_LOAD.cradle, reach = lerp(dl - cr[0], 0, q);
-      const [mx, my] = at(B[0] + lat[0] * reach, B[1] + lat[1] * reach);
-      v3mAdd(msl[0], msl[1], mx, my, top + lerp(cr[1], V3D_LOAD.bayZ, q), h + a, K, 0);
+    // 托架在举升臂前端（铰点前 2.32 米、高 0.3 米），随臂抬起；托架上的弹推进弹舱（r .46–.52）后托架空着，回原位后两名弹药兵从拖车上抬一枚放上去（r .88–.97）
+    const cx = 2.32 * Math.cos(pitch) - .3 * Math.sin(pitch), cz = 2.32 * Math.sin(pitch) + .3 * Math.cos(pitch);
+    const Cu = Lu + fu * (cx - .32), Cv = Lv + fv * (cx - .32), Cz = top + .64 + cz + .13;
+    let M3 = [Cu, Cv, Cz];
+    if (r >= .46 && r < .52) { const q = sm01((r - .46) / .06); M3 = [lerp(Cu, B[0], q), lerp(Cv, B[1], q), lerp(Cz, top + V3D_LOAD.bayZ + .25, q)]; }
+    else if (r >= .52 && r < .88) M3 = null;
+    else if (r >= .88 && r < .97) { const q = sm01((r - .88) / .09); M3 = [lerp(su, Cu, q), lerp(sv, Cv, q), lerp(top + 1.1, Cz, q) + Math.sin(q * Math.PI) * .5]; }
+    // 两名弹药兵（红马甲）：跟着挂弹车走到飞机旁 → 跪在机腹下两侧用手扶正导弹、对准挂钩 → 跟车退出来 → 走到拖车旁，一左一右抬起一枚放上托架
+    if (r < .99 || v3mHi()) for (const s of [-1, 1]) {
+      const side = d => [B[0] + lat[0] * d + ca * s * 1.55, B[1] + lat[1] * d + sa * s * 1.55], kn = [B[0] + lat[0] * 1.15 + ca * s * 1.05, B[1] + lat[1] * 1.15 + sa * s * 1.05];
+      const pk = [su + lat[0] * s * .6, sv + lat[1] * s * .6], pc = [Cu + lat[0] * s * .6, Cv + lat[1] * s * .6];
+      let u, v, f = la, pose = 'st';
+      // 从 P0 走到 P1（走完 q 0–1；r0、r1 这段占的挂弹进度，按速度选走 / 跑的步频）；face：面朝方向（不给就朝前进方向）
+      const walk = (P0, P1, q, r0, r1, face, cr) => {
+        const D = Math.hypot(P1[0] - P0[0], P1[1] - P0[1]), run = !cr && D / Math.max(.1, (r1 - r0) * T) > 2.8, st = run ? .55 : .3;
+        u = lerp(P0[0], P1[0], q); v = lerp(P0[1], P1[1], q); f = face ?? Math.atan2(P1[1] - P0[1], P1[0] - P0[0]);
+        pose = D < .05 ? 'st' : (cr ? 'y' : run ? 'r' : 'w') + (Math.floor(q * D / st) & 7);
+      };
+      if (r < .08 || r >= .99) [u, v] = side(d0);
+      else if (r < .34) walk(side(d0), side(d2), (d0 - dl) / (d0 - d2), .08, .34, la);
+      else if (r < .38) walk(side(d2), kn, (r - .34) / .04, .34, .38);
+      else if (r < .58) { [u, v] = kn; pose = 'kw'; }
+      else if (r < .62) walk(kn, side(d2), (r - .58) / .04, .58, .62);
+      else if (r < .72) walk(side(d2), side(dlAt(.72)), (dl - d2) / (dlAt(.72) - d2), .62, .72);
+      else if (r < .88) walk(side(dlAt(.72)), pk, (r - .72) / .16, .72, .88);
+      else if (r < .97) walk(pk, pc, sm01((r - .88) / .09), .88, .97, null, true);
+      else walk(pc, side(d0), (r - .97) / .02, .97, .99);
+      const [mx, my] = at(u, v);
+      v3mAdd('man:dkr:' + pose, () => v3mMan('deck', pose, { vest: v3dRed() }), mx, my, top, h + f, V3_PIL, 0);
     }
+    if (!msl) return;
+    for (const o of [-.45, .45].slice(0, r < .88 ? 2 : 1)) { const [mx, my] = at(Tu - sa * o, Tv + ca * o); v3mAdd(msl[0], msl[1], mx, my, top + 1.1, h + a, K, 0); }
+    if (M3) { const [mx, my] = at(M3[0], M3[1]); v3mAdd(msl[0], msl[1], mx, my, M3[2], h + a, K, 0); }
   };
+  // 弹舱门（机型有弹舱时；外部模型也按自带模型的弹舱位置画开着的舱门）
+  const bayAt = (key, sz, x, y, a) => b => { if (b > .04 && typeof AIRD === 'object' && AIRD[key] && AIRD[key].bay && typeof v3mBay === 'function') { const st = Math.round(b * 4); v3mAdd('bay:' + key + ':' + st + ':0', () => v3mBay(key, st / 4, 0), x, y, top + V3_GEAR * sz / 21, a, sz / 21, 3); } };
   // 停着待命 / 整备的飞机（着舰后整备 45 秒）
   for (const [id, j] of cvPark(cv, wing)) {
     const w = wing.find(o => o.id === id);
     if (!w) continue;
     const key = typeof airSilKey === 'function' ? airSilKey(w.type, w.v) : 'j35', sz = (typeof airMdl === 'function' && airMdl(w.type, w.v).size) || 15;
-    loader(j, key, sz, w.state === 'rearm' ? 1 - clamp(w.rearmT / AIR_REARM, 0, 1) : 1);
+    const sl = C.slots[j], [wx, wy] = sl ? at(sl[0], sl[1]) : [0, 0];
+    const r = w.state === 'rearm' ? 1 - clamp(w.rearmT / AIR_REARM, 0, 1) : 1;
+    loader(j, key, sz, r, sl && bayAt(key, sz, wx, wy, h + sl[2]), AIR_REARM);
+    if (sl && r >= .52) v3dPins(key, sz, wx, wy, top, h + sl[2]);   // 弹挂上了：插着保险销
   }
-  // 出动前挂弹：带武器的飞机在机位上登机的同时，挂弹车把弹送进弹舱（cvdeck.js 'brd'，CVD.arm 秒）
-  for (const p of live) if (p.phase === 'cat' && p.dk === 'brd' && p.arm && p.slot != null) loader(p.slot, v3dKey(p), v3dSz(p), clamp((p.dkT || 0) / CVD.arm, 0, 1));
-  // 牵引车：着舰后滑到机位前、原地转向、倒进机位
-  const seen = new Set();
+  // 出动前挂弹：带武器的飞机在机位上登机的同时，挂弹车把弹送进弹舱（cvdeck.js 'brd'，CVD.arm 秒）；保险销一直插到偏流板后解除保险时
   for (const p of live) {
-    // 出动：登机、挂弹快好时牵引车倒车开到机头前，挂上前起落架的拖杆；启动后把飞机拖出机位（cvdeck.js p.tow），拖够了脱钩开走（下面的脱钩一段）
-    const tb = p.phase === 'cat' && p.dk === 'brd' && p.tw && typeof cvBrdT === 'function' ? cvBrdT(p) : 0;
-    if (p.phase === 'cat' && p.lu != null && ((tb && (p.dkT || 0) > tb - 3) || (p.dk === 'eng' && p.tw) || (p.dk === 'taxi' && p.tow))) {
-      const kk = v3dK(p), nose = v3dNose(v3dKey(p), kk), c = Math.cos(p.lh), sn = Math.sin(p.lh), back = tb ? 12 * (1 - sm01(((p.dkT || 0) - (tb - 3)) / 3)) : 0;
-      const u = p.lu + c * (nose + 2.66 + back), v = p.lv + sn * (nose + 2.66 + back), [x, y] = at(u, v);
-      V3D_TUG.set(p.id, { u, v, a: p.lh, t: S.t, cv }); seen.add(p.id);
-      v3dVeh('tug', v3mDeckTractor, x, y, top + .02, h + p.lh);
-      continue;
-    }
-    if (p.phase !== 'trap' || !Array.isArray(p.path) || !p.path.length || p.lu == null) continue;
-    const s0 = p.path[0], tow = s0[0] === 'P' || s0[0] === 'R', near = !tow && p.path[1] && p.path[1][0] === 'P';
-    if (!tow && !near) continue;
-    const kk = v3dK(p), nose = v3dNose(v3dKey(p), kk), c = Math.cos(p.lh), sn = Math.sin(p.lh);
-    let u = p.lu + c * (nose + 2.66), v = p.lv + sn * (nose + 2.66), a = p.lh;   // 拖杆一头挂在前起落架上（牵引车模型的拖杆端在车后 2.66 米）
-    if (near) {   // 还在往机位前滑：牵引车从内侧开过来，飞机停下时正好挂上
-      const f = sm01(1 - clamp(Math.hypot(s0[0] - p.lu, s0[1] - p.lv) / 25, 0, 1)), q = (p.lv > 0) === (c > 0) ? [sn, -c] : [-sn, c];   // q：朝甲板内侧
-      const a0 = Math.atan2(-q[1], -q[0]);
-      u = lerp(u + q[0] * 10, u, f); v = lerp(v + q[1] * 10, v, f); a = a0 + airAng(p.lh - a0) * sm01((f - .6) / .4);
-    }
-    V3D_TUG.set(p.id, { u, v, a, t: S.t, cv }); seen.add(p.id);
-    const [x, y] = at(u, v);
-    v3dVeh('tug', v3mDeckTractor, x, y, top + .02, h + a);
+    if (p.phase !== 'cat' || !p.arm) continue;
+    const key = v3dKey(p), sz = v3dSz(p), r = p.dk === 'brd' ? clamp((p.dkT || 0) / CVD.arm, 0, 1) : 1;
+    if (p.dk === 'brd' && p.slot != null) loader(p.slot, key, sz, r, bayAt(key, sz, p.x, p.y, p.heading), CVD.arm);
+    if (r >= .52 && (p.dk !== 'hold' || (p.dkT || 0) < V3D_ARM.pull) && p.dk !== 'line' && p.dk !== 'hook') v3dPins(key, sz, p.x, p.y, top - C.hang * (typeof cvDeckSink === 'function' ? cvDeckSink(p) : 0), p.heading);
   }
-  for (const [id, T] of V3D_TUG) {   // 飞机停好了：牵引车脱钩，往前开走（3 秒）
-    if (seen.has(id) || T.cv !== cv) continue;
-    const age = S.t - T.t;
-    if (age > 3 || age < 0) { V3D_TUG.delete(id); continue; }
-    const a = T.a + age * .35, dd = 2.5 * age * age / 2 + age, [x, y] = at(T.u + Math.cos(a) * dd, T.v + Math.sin(a) * dd);
-    v3dVeh('tug', v3mDeckTractor, x, y, top + .02, h + a);
+  v3dArmCrew(live, top, h, at);   // 偏流板后解除保险的挂弹组
+  v3dTugs(cv, live, top, h, at);   // 牵引车
+}
+// ———————————————— 弹药保险（按航母上挂弹的真实流程）————————————————
+//   弹从弹药库经弹药升降机运上甲板，装上弹药拖车推到机位旁；挂弹车用举升臂把弹托到机腹下，弹药兵跪在两侧用手扶正、对准挂钩，
+//   挂好后插上带红飘带的保险销（"起飞前拔除"）。出动时飞机在偏流板后停稳，飞行员两手离开操纵杆举起来给人看，挂弹组钻到机腹下拔掉保险销，
+//   走到机头前把一串串销子举过头顶给飞行员看（数目对上），再退到一旁，飞机才滑上弹射器（cvdeck.js 'hold' 停 CVD.armT 秒）
+let V3D_REDV = 0;
+const v3dRed = () => V3D_REDV || (V3D_REDV = typeof mbRGB === 'function' ? mbRGB('#b23a2e') : 1.12);   // 弹药人员的红马甲
+// 解除保险的时间线（秒，进入 'hold' 起算）：走到机腹下 → 跪着拔销（pull 时刻销子离机）→ 走到机头前 → 举销给飞行员看 → 退到一旁
+const V3D_ARM = { in: 1.3, pull: 2.2, kn: 2.7, out: 3.7, show: 4.7, away: 5.5 };
+// 保险销的红飘带（机型坐标，与机体同一原点）：每个弹舱两根、侧弹舱和每个外挂点各一根，从机腹 / 挂架下垂下来，被甲板风吹得往后飘
+function v3mdPins(key) {
+  const M = mbNew(), D = typeof AIRD === 'object' && AIRD[key];
+  if (!D || typeof v3AirSec !== 'function') return M;
+  const sec = v3AirSec(D), hw0 = D.body ? Math.max(...D.body.map(b => b[1])) : 1.4, zb = V3_AIRZ - hw0 * sec.kb * .9, zw = D.hi ? V3_AIRZ + hw0 * sec.kt * .82 : V3_AIRZ - hw0 * sec.kb * .35;
+  const flag = (x, y, z) => { mbBox(M, x - .05, x + .05, y - .04, y + .04, z - .08, z + .02, .75); mbQuad(M, [x, y - .06, z - .06], [x, y + .06, z - .06], [x - .32, y + .06, z - .62], [x - .32, y - .06, z - .62], V3_PINC); };   // 销子 + 斜飘的飘带
+  if (D.bay) { const [x0, x1, hw, yc] = D.bay, dx = (x0 - x1) * .22; for (const sg of yc ? [1, -1] : [0]) { flag((x0 + x1) / 2 + dx, yc * sg + hw * .5, zb); flag((x0 + x1) / 2 - dx, yc * sg - hw * .5, zb); } }
+  if (D.sbay) { const [x0, x1, y] = D.sbay; for (const sg of [1, -1]) flag((x0 + x1) / 2, y * sg, zb + .2); }
+  for (const [x, y] of D.st || []) for (const sg of y ? [1, -1] : [1]) flag(x - .2, y * sg, zw - .34);
+  if (!D.bay && !D.sbay && !(D.st || []).length) flag(0, 0, zb);
+  return M;
+}
+function v3dPins(key, sz, x, y, top, a) { v3mAdd('pins:' + key, () => v3mdPins(key), x, y, top + V3_GEAR * sz / 21, a, sz / 21, 3); }
+// 挂弹组两人（左右各一）：从飞机两侧走到机腹下弹舱旁 → 跪着拔掉保险销 → 走到机头前方、举起销子给飞行员看 → 退到两侧；滑上弹射器到弹射时站在一旁
+const V3D_ARMP = new Map();   // 飞机 id → 退开后站的位置（甲板坐标）
+function v3dArmCrew(live, top, h, at) {
+  const now = new Set();
+  for (const p of live) {
+    if (!p.arm || p.lu == null || !((p.phase === 'cat' && (p.dk === 'hold' || p.dk === 'line' || p.dk === 'hook')) || (p.phase === 'roll' && (p.cs || 0) < 30))) continue;
+    now.add(p.id);
+    const key = v3dKey(p), k = v3dK(p), D = typeof AIRD === 'object' && AIRD[key], bx = D && D.bay ? (D.bay[0] + D.bay[1]) / 2 * k : 0, nose = v3dNose(key, k);
+    const c = Math.cos(p.lh), sn = Math.sin(p.lh), P = (f, r) => [p.lu + c * f - sn * r, p.lv + sn * f + c * r], t = p.dk === 'hold' ? p.dkT || 0 : 99;
+    if (t < V3D_ARM.away) V3D_ARMP.set(p.id, [-1, 1].map(s => [...P(bx - 3, s * 11), p.lh + s * Math.PI / 2]));   // 退到两侧 11 米、偏流板后面（弹射前加力时不在尾流里）
+    const E = V3D_ARMP.get(p.id);
+    if (!E) continue;
+    [-1, 1].forEach((s, i) => {
+      const S0 = P(bx - 1, s * 7.5), K0 = P(bx, s * 1.25), F0 = P(nose + 4, s * 2.2), A = V3D_ARM;
+      let u, v, f, pose;
+      const walk = (P0, P1, q, face) => { u = lerp(P0[0], P1[0], q); v = lerp(P0[1], P1[1], q); f = face ?? Math.atan2(P1[1] - P0[1], P1[0] - P0[0]); pose = 'w' + (Math.floor(q * Math.hypot(P1[0] - P0[0], P1[1] - P0[1]) / .3) & 7); };
+      if (t < A.in) walk(S0, K0, t / A.in);
+      else if (t < A.kn) { [u, v] = K0; f = p.lh - s * Math.PI / 2; pose = 'kw'; }
+      else if (t < A.out) walk(K0, F0, (t - A.kn) / (A.out - A.kn));
+      else if (t < A.show) { [u, v] = F0; f = p.lh + Math.PI; pose = 'hp'; }
+      else if (t < A.away) walk(F0, E[i], (t - A.show) / (A.away - A.show));
+      else { [u, v, f] = E[i]; f += Math.PI; pose = 'st'; }   // 站在一旁看着飞机
+      const [x, y] = at(u, v);
+      v3mAdd('man:dkr:' + pose, () => v3mMan('deck', pose, { vest: v3dRed() }), x, y, top, h + f, V3_PIL, 0);
+    });
   }
+  for (const id of V3D_ARMP.keys()) if (!now.has(id)) V3D_ARMP.delete(id);
+}
+// 牵引车：每艘航母 4 辆，平时停在甲板边的待命位（V3D_TUGH）；有飞机要拖就派最近的空车开过去，开到机头前方再倒过去挂上前起落架的拖杆——
+//   出动：登机快好时开过来挂钩，启动后把飞机拖出机位约 20 米（cvdeck.js p.tow）；回收：飞机滑到机位前时从内侧开过来挂上，原地转向、推着倒进机位；
+//   完事脱钩：先朝侧面拐开让出飞机的去路（飞机等它让开才滑走），再开回待命位停好
+const V3D_TUGH = [[-1, 31, -Math.PI / 2], [3.5, 31, -Math.PI / 2], [-57, 21.5, Math.PI], [-57, 26, Math.PI]];   // 待命位 [u, v, 车头朝向]：舰岛前、舰岛后各两辆，在滑行车道外侧
+const V3D_TUGS = new Map();   // 航母 → { t, list: [{ u, v, a, home, job: { id, ph 'go' / 'hook' / 'away' / 'back' } }] }
+// 这架飞机现在要不要牵引车：挂钩点（甲板坐标，车头朝向 a）；soon：还没开始拖（车先开过去就位）；不要返回 null
+function v3dTugReq(p) {
+  if (p.lu == null) return null;
+  const kk = v3dK(p), nose = v3dNose(v3dKey(p), kk), c = Math.cos(p.lh), sn = Math.sin(p.lh), hook = { u: p.lu + c * (nose + 2.66), v: p.lv + sn * (nose + 2.66), a: p.lh };   // 拖杆一头挂在前起落架上（车尾拖杆端在车后 2.66 米）
+  if (p.phase === 'cat') {
+    const tb = p.dk === 'brd' && p.tw && typeof cvBrdT === 'function' ? cvBrdT(p) : 0;
+    if (tb && (p.dkT || 0) > tb - 12) return Object.assign(hook, { soon: true });   // 登机快好时开过来等着
+    return (p.dk === 'eng' && p.tw) || (p.dk === 'taxi' && p.tow) ? hook : null;
+  }
+  if (p.phase !== 'trap' || !Array.isArray(p.path) || !p.path.length) return null;
+  const s0 = p.path[0];
+  if (s0[0] === 'P' || s0[0] === 'R') return hook;   // 原地转向、倒进机位
+  if (!(p.path[1] && p.path[1][0] === 'P')) return null;
+  const f = sm01(1 - clamp(Math.hypot(s0[0] - p.lu, s0[1] - p.lv) / 25, 0, 1)), q = (p.lv > 0) === (c > 0) ? [sn, -c] : [-sn, c], a0 = Math.atan2(-q[1], -q[0]);   // 还在往机位前滑：在内侧 10 米处跟着，飞机停下时正好挂上
+  return { u: lerp(hook.u + q[0] * 10, hook.u, f), v: lerp(hook.v + q[1] * 10, hook.v, f), a: a0 + airAng(p.lh - a0) * sm01((f - .6) / .4), soon: true, fol: true };
+}
+function v3dTugs(cv, live, top, h, at) {
+  let F = V3D_TUGS.get(cv);
+  if (!F || F.S !== S || S.t < F.t - 1) { F = { t: S.t, S, list: V3D_TUGH.map((q, i) => ({ u: q[0], v: q[1], a: q[2], home: i, job: null })) }; V3D_TUGS.set(cv, F); }
+  const dt = clamp(S.t - F.t, 0, .5); F.t = S.t;
+  const req = new Map();
+  for (const p of live) { const r = v3dTugReq(p); if (r) req.set(p.id, r); }
+  for (const [id, r] of req) {   // 没派车的派最近的空车（正在开回去的也算空车）
+    if (F.list.some(T => T.job && T.job.id === id)) continue;
+    let best = null, bd = 1e9;
+    for (const T of F.list) { if (T.job && T.job.ph !== 'back') continue; const d = Math.hypot(T.u - r.u, T.v - r.v); if (d < bd) { bd = d; best = T; } }
+    if (best) best.job = { id, ph: 'go' };
+  }
+  // 朝 (tu, tv) 开（车头朝前进方向；rev 倒车：车尾朝前进方向；快到时转到 ta）；到了返回 true
+  const drive = (T, tu, tv, sp, ta, rev) => {
+    const dx = tu - T.u, dy = tv - T.v, d = Math.hypot(dx, dy);
+    if (d < .05) { if (ta != null) T.a = ta; return true; }
+    const step = Math.min(d, sp * dt), mv = Math.atan2(dy, dx) + (rev ? Math.PI : 0), want = ta != null && d < 3 ? ta : mv;
+    T.u += dx / d * step; T.v += dy / d * step; T.a += airAng(want - T.a) * Math.min(1, dt * 5);
+    return d - step < .05;
+  };
+  for (const T of F.list) {
+    const J = T.job, r = J && req.get(J.id), H = V3D_TUGH[T.home];
+    if (J && r && (J.ph === 'go' || J.ph === 'hook')) {
+      if (J.ph === 'go') {
+        if (r.fol) drive(T, r.u, r.v, 9, r.a);   // 跟着往机位滑的飞机
+        else {
+          const c = Math.cos(r.a), sn = Math.sin(r.a);
+          if (!J.pre) { if (drive(T, r.u + c * 7, r.v + sn * 7, 7)) J.pre = true; }   // 先开到挂钩点前方 7 米
+          else if (drive(T, r.u, r.v, 1.6, r.a, true)) J.ph = 'hook';   // 倒过去挂上
+        }
+        if (!r.soon && (r.fol || Math.hypot(T.u - r.u, T.v - r.v) < 1.5 || Math.hypot(T.u - r.u, T.v - r.v) > 25)) J.ph = 'hook';   // 飞机已经动了：就地挂上（太远就直接到位）
+      }
+      if (J.ph === 'hook') { T.u = r.u; T.v = r.v; T.a = r.a; }   // 挂着：跟着飞机走
+    } else if (J && !r && J.ph !== 'back') {   // 拖完了：先朝侧面（待命位那边）拐开 9 米，让出飞机的去路
+      if (J.ph !== 'away') { const sg = Math.cos(T.a) * (H[1] - T.v) - Math.sin(T.a) * (H[0] - T.u) >= 0 ? 1 : -1, ax = T.a + sg * Math.PI / 2; J.ph = 'away'; J.au = T.u + Math.cos(ax) * 9 + Math.cos(T.a) * 4; J.av = T.v + Math.sin(ax) * 9 + Math.sin(T.a) * 4; }
+      if (drive(T, J.au, J.av, 5)) J.ph = 'back';
+    } else if (J && J.ph === 'back') { if (drive(T, H[0], H[1], 6, H[2])) T.job = null; }
+    else if (!J) { T.u = H[0]; T.v = H[1]; T.a = H[2]; }
+    const [x, y] = at(T.u, T.v);
+    v3dVeh('tug', v3mDeckTractor, x, y, top + .02, h + T.a);
+  }
+}
+
+// ———————————————— 拦阻索 ————————————————
+//   着舰区横着四道钢索（两头接甲板下的拦阻机）。着舰时尾钩挂住第一道还没越过的钢索，钢索被拉成 V 字、跟着尾钩往前滑，
+//   飞机停稳、往后退一点松开尾钩（cvdeck.js 'arr' 停稳 0.7 秒后转去滑行），钢索弹回原位
+const V3D_HOOK = .42;   // 尾钩离机身中心多远（乘飞机画面尺寸）
+function v3mdWire(L) { const M = mbNew(); mbBox(M, 0, L, -.03, .03, 0, .06, .32); return typeof mbMetal === 'function' ? mbMetal(M, .7) : M; }
+function v3dWires(live, top, h, at) {
+  if (typeof CVG !== 'object' || !CVG.wires || typeof CV_LLEN !== 'number') return;
+  const L = CVG.land, a = Math.atan2(L.v1 - L.v0, L.u1 - L.u0), nx = -Math.sin(a), ny = Math.cos(a), o = L.hw + 1.5, P = t => [lerp(L.u0, L.u1, t), lerp(L.v0, L.v1, t)];
+  const p = live.find(q => q.phase === 'trap' && q.dk === 'arr' && q.tl != null), hd = p ? v3dSz(p) * V3D_HOOK / CV_LLEN : 0, ht = p ? p.tl - hd : -1;
+  const wi = p ? CVG.wires.findIndex(t => t >= CVG.td - hd - .002) : -1;   // 尾钩着舰时前面的第一道
+  const seg = (A, B) => { const du = B[0] - A[0], dv = B[1] - A[1], n = Math.max(1, Math.round(Math.hypot(du, dv) * 2)), [x, y] = at(A[0], A[1]); v3mAdd('cvwire:' + n, () => v3mdWire(n / 2), x, y, top + .01, h + Math.atan2(dv, du), 1, 3); };
+  CVG.wires.forEach((t, i) => {
+    const [u, v] = P(t), A = [u + nx * o, v + ny * o], B = [u - nx * o, v - ny * o];
+    if (i === wi && ht > t) { const H = P(ht); seg(A, H); seg(B, H); }   // 挂住了：两头到尾钩拉成 V 字
+    else seg(A, B);
+  });
 }
 
 // v3fx.js 每帧调用：本文件各部分的发光与烟

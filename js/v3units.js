@@ -368,7 +368,11 @@ function v3ManParse(pose) {
   if (p === 'dead') return { L: 2, m: 'dead' };
   if (p === 'pt') return { L: 0, m: 'pt' };
   if (p === 'sit') return { L: 0, m: 'sit' };   // 坐着开车（牵引车、挂弹车的司机）
-  if (p === 'cl0' || p === 'cl1') return { L: 0, m: 'climb', f: p === 'cl0' ? 0 : 1 };
+  if (p === 'sc') return { L: 0, m: 'sc' };   // 坐在战斗机座舱里：座椅后仰、两腿前伸踩方向舵脚蹬，右手握中间的驾驶杆、左手握油门杆
+  if (p === 'hp') return { L: 0, m: 'hp' };   // 两手举过头顶（挂弹组把拔下的保险销举给飞行员看）
+  if (p === 'kw') return { L: 1, m: 'kw' };   // 跪在机腹下、两手向上扶着导弹
+  if (p[0] === 'y') return { L: 0, m: 'walk', ph: f / 8 * 6.2832, cr: 1 };   // 边走边两手在腰前抬着东西（从弹药拖车上抬弹）
+  if (p[0] === 'c' && p[1] === 'l') return { L: 0, m: 'climb', f: (1 - Math.cos((+p.slice(2) || 0) / 8 * 6.2832)) / 2 };   // 爬梯：cl0–cl7 一个循环，左右手脚交替往上够
   if (p[0] === 'L') return { L: clamp(f / 8, 0, 2), m: 'idle' };
   if (p[0] === 'w') return { L: 0, m: 'walk', ph: f / 8 * 6.2832 };
   if (p[0] === 'r') return { L: 0, m: 'run', ph: f / 8 * 6.2832 };
@@ -390,8 +394,9 @@ function v3ManSkel(kind, P) {
     lg = [0, 1].map(j => { const k = Math.max(0, Math.sin(P.ph + j * Math.PI)); return [-1.5 + k * 1.05, -1.55 + k * .25]; });
     sy = [0, 1].map(j => (j ? 1 : -1) * (.12 + .2 * Math.max(0, Math.sin(P.ph + j * Math.PI))));
   }
-  if (P.m === 'climb') { lg = P.f ? [[.05, -.05], [1.05, -.7]] : [[1.05, -.7], [.05, -.05]]; tor = .1; }
+  if (P.m === 'climb') { const f = P.f; lg = [[lerp(1.05, .05, f), lerp(-.7, -.05, f)], [lerp(.05, 1.05, f), lerp(-.05, -.7, f)]]; tor = .1; }   // f 0–1：一条腿抬起踩上一级、另一条伸直，交替
   if (P.m === 'sit') { lg = [[1.42, .14], [1.42, .14]]; tor = -.05; }   // 大腿平伸向前、小腿垂下踩着踏板，身子微微后靠
+  if (P.m === 'sc') { lg = [[1.3, .95], [1.3, .95]]; tor = -.22; }   // 头盔顶在脚底上方约 1.28 米、头在臀部后 0.16 米（V3_SC）
   if (P.m === 'dead') { lg = [[-1.45, -1.5], [-1.62, -1.4]]; sy = [-.18, .2]; }
   const dirA = a => [Math.sin(a), 0, -Math.cos(a)];
   // 先在髋高 0 处算腿，再把髋抬到最低点刚好着地
@@ -552,8 +557,12 @@ function v3mMan(kind, pose, opt = {}) {
   const arm = (S, T, sd) => { const k = v3ManIK(S, T, V3MAN_LEN.ua, V3MAN_LEN.fa, sd); mbTube(M, S, k.E, .056, .05, NS, U); mbTube(M, k.E, k.H, .049, .042, NS, U2); if (!lo) v3ManPart(M, k.H, v3Frame([k.H[0] - k.E[0], k.H[1] - k.E[1], k.H[2] - k.E[2]]), m => mbBox(m, -.02, .07, -.035, .035, -.03, .03, MS.blk)); return k; };
   const Sr = J.Sr, Sl = J.Sl;
   if (crw) {   // 飞行员、甲板人员：不带枪——爬梯两手交替往上抓、打手势右臂直指前方、跑步两臂前后摆
-    if (P.m === 'climb') { const up = P.f ? -1 : 1; arm(Sr, v3Add(Sr, [.3, .02, .3 + up * .16]), 1); arm(Sl, v3Add(Sl, [.3, -.02, .3 - up * .16]), -1); }
+    if (P.m === 'climb') { const up = 1 - 2 * P.f; arm(Sr, v3Add(Sr, [.3, .02, .3 + up * .16]), 1); arm(Sl, v3Add(Sl, [.3, -.02, .3 - up * .16]), -1); }
     else if (P.m === 'sit') { arm(Sr, v3Add(Sr, [.4, -.07, -.2]), 1); arm(Sl, v3Add(Sl, [.4, .07, -.2]), -1); }   // 两手握着前面的方向盘
+    else if (P.m === 'sc') { arm(Sr, v3Add(Sr, [.44, -.14, -.34]), 1); arm(Sl, v3Add(Sl, [.3, -.08, -.32]), -1); }
+    else if (P.m === 'hp') for (const [S, sd] of [[Sr, 1], [Sl, -1]]) { const H = arm(S, v3Add(S, [.1, sd * .08, .54]), sd).H; mbBox(M, H[0] - .01, H[0] + .01, H[1] - .025, H[1] + .025, H[2] - .4, H[2] - .03, V3_PINC); }   // 每只手攥着一串保险销，红飘带垂下来
+    else if (P.m === 'kw') { arm(Sr, v3Add(Sr, [.3, .1, .42]), 1); arm(Sl, v3Add(Sl, [.3, -.1, .42]), -1); }
+    else if (P.cr) { arm(Sr, v3Add(Sr, [.32, -.08, -.3]), 1); arm(Sl, v3Add(Sl, [.32, .08, -.3]), -1); }
     else if (P.m === 'pt' || P.L > .5) { arm(Sr, v3Add(Sr, [.56, .12, .06]), 1); arm(Sl, v3Add(Sl, [.08, -.12, -.5]), -1); }
     else { const sw = P.ph != null ? Math.sin(P.ph) * .3 : 0; arm(Sr, v3Add(Sr, [sw, .06, -.55]), 1); arm(Sl, v3Add(Sl, [-sw, -.06, -.55]), -1); }
     return M;
@@ -870,6 +879,7 @@ const V3_ZH = 12;   // 舰体外飘到这个高度，再往上是飞行甲板（
 function mbMetal(M, k, i0 = 0) { for (let i = i0; i < M.t.length; i += 10) if (M.t[i + 6] >= 0) { M.t[i + 3] *= 1 + k; M.t[i + 4] *= 1 + k; M.t[i + 5] *= 1 + k; } return M; }
 // 涂装色：sRGB '#rrggbb' → 明暗 s 的颜色编码（|s| ≥ 16 时 s − 16 是 7 位 RGB，负数是玻璃；v3import.js 同一约定）——写实画面直接用涂装色，黑绿画面按深浅调暗实体
 const mbRGB = h => { const v = parseInt(h.slice(1), 16); return 16 + (v >> 17 & 127) * 16384 + (v >> 9 & 127) * 128 + (v >> 1 & 127); };
+const V3_PINC = mbRGB('#c8242c');   // 保险销红飘带（"起飞前拔除"）
 // 福建舰涂装（照片）：舰体、舰岛海灰，飞行甲板深灰防滑涂层，白、黄甲板标线，橙色封闭救生艇，相控阵面深灰，窗是深色玻璃
 const V3_CVP = { side: mbRGB('#82888e'), hull: mbRGB('#8c9298'), deck: mbRGB('#4b4f52'), under: mbRGB('#62676b'), dark: mbRGB('#2c2f31'), isl: mbRGB('#979da3'), isl2: mbRGB('#8a9096'),
   win: -mbRGB('#1d242a'), door: mbRGB('#5f666c'), spy: mbRGB('#3f454a'), stack: mbRGB('#262829'), dome: mbRGB('#d3d6d8'), white: mbRGB('#e4e6e2'), yellow: mbRGB('#d9b437'),
@@ -958,7 +968,7 @@ function v3mCarrier(lhd) {
     for (const sg of [-1, 1]) { const A = [L.u0 + nx * L.hw * sg, L.v0 + ny * L.hw * sg, z], B = [L.u1 + nx * L.hw * sg, L.v1 + ny * L.hw * sg, z]; mbLine(M, A, B, V3_CVP.white); v3mStripe(M, A, B, .45, [0, 0, 1], V3_CVP.white); }   // 着舰区边线
     for (let t = .02; t < .98; t += .07) { const [u, v] = at(t), [u2, v2] = at(t + .035); mbLine(M, [u, v, z], [u2, v2, z], V3_CVP.white); v3mStripe(M, [u, v, z], [u2, v2, z], .5, [0, 0, 1], V3_CVP.white); }   // 中线虚线
     for (let t = 0; t < .98; t += .05) { const [u, v] = at(t), [u2, v2] = at(t + .025), o = L.hw + 2.5, A = [u + nx * o, v + ny * o, z], B = [u2 + nx * o, v2 + ny * o, z]; mbLine(M, A, B, V3_CVP.yellow); v3mStripe(M, A, B, .35, [0, 0, 1], V3_CVP.yellow); }   // 右侧安全线
-    for (const t of C.wires) { const [u, v] = at(t), o = L.hw + 1.5; mbLine(M, [u + nx * o, v + ny * o, z + .1], [u - nx * o, v - ny * o, z + .1], V3_CVP.steel); for (const sg of [-1, 1]) mbBox(M, u + nx * o * sg - .9, u + nx * o * sg + .9, v + ny * o * sg - .5, v + ny * o * sg + .5, zd, zd + .25, V3_CVP.steel); }   // 拦阻索（细钢索横过着舰区，两头的滑轮座）
+    for (const t of C.wires) { const [u, v] = at(t), o = L.hw + 1.5; for (const sg of [-1, 1]) mbBox(M, u + nx * o * sg - .9, u + nx * o * sg + .9, v + ny * o * sg - .5, v + ny * o * sg + .5, zd, zd + .25, V3_CVP.steel); }   // 拦阻索两头的滑轮座（钢索本身在 v3det.js v3dWires：着舰时被尾钩拉成 V 字）
     for (const c of C.cats) { const ca = Math.cos(c.a), sa = Math.sin(c.a), A = [c.u, c.v, z], B = [c.u + ca * c.L, c.v + sa * c.L, z]; mbLine(M, A, B, V3_CVP.dark); v3mStripe(M, A, B, .6, [0, 0, 1], V3_CVP.dark); for (const o of [-2.2, 2.2]) { const A2 = [c.u - sa * o, c.v + ca * o, z], B2 = [c.u + ca * c.L - sa * o, c.v + sa * c.L + ca * o, z]; mbLine(M, A2, B2, V3_CVP.white); v3mStripe(M, A2, B2, .25, [0, 0, 1], V3_CVP.white); } }   // 弹射器滑轨（槽深色，两边白线）
     for (let u = 62; u < 150; u += 9) { mbLine(M, [u, 0, z], [u + 4.5, 0, z], V3_CVP.white); v3mStripe(M, [u, 0, z], [u + 4.5, 0, z], .45, [0, 0, 1], V3_CVP.white); }   // 舰首中线
     v3mDigits(M, '18', (x, y) => [120 + y * 12, -6.5 + x * 4.6, z], V3_CVP.white, 1.1);   // 甲板舷号（字头朝舰首，从舰尾方向看是正的）
@@ -1027,6 +1037,48 @@ const V3_PLANE_ENG = { h6k: [[-.5, 4.4, 1.1]], transport: [[-.4, 4.2, .9], [-2.2
 const V3_AIRZ = .25;
 const V3_GEAR = 1.9;   // 放下起落架时机身中心离地的高度（机型单位）：停在甲板 / 地面上的飞机按它抬高
 const V3_NUP = { a10: .95, ah64: .25, h6k: 0, z10: .7, heli: .7, uh60: .85, j15: -.05, kj600: -.6 };   // 「up」短舱的中心高度（相对机身中心）
+// 水滴形座舱盖的剖面（mbCanopy 同一公式）：t 从风挡前缘 0 到后缘 1，返回 [半宽比例, 高度比例]
+function v3CanopyK(t) { const k = Math.max(.04, Math.sin(Math.PI * Math.min(1, Math.pow(t, .62))) ** .55); return [k, k * (t < .5 ? 1 : 1 - (t - .5) * .5)]; }
+// 单座战斗机座舱里的尺寸（机型单位）：头盔顶在座舱盖下留一点空，往下按真人坐高（ak：机型单位 / 米）定臀部与脚底；hx 头的前后位置在座舱盖最高处附近
+const V3_CPS = new Map(), V3_SC = [1.275, .155];   // 座舱坐姿（'sc'）：头盔顶在脚底上方多高、头在原点后多远（米）
+function v3CpSeat(key) {
+  if (V3_CPS.has(key)) return V3_CPS.get(key);
+  const D = typeof AIRD === 'object' && AIRD[key];
+  let Q = null;
+  if (D && D.cp && !D.heli && D.cp[3] === 'bubble') {
+    const [x0, x1, w] = D.cp, L = x1 - x0, ak = typeof v3MslAk === 'function' ? v3MslAk(key) : 1.2, zb = V3_AIRZ + v3AirHw(D, (x0 + x1) / 2) * v3AirSec(D).kt;
+    const cz = x => zb - .2 + w * 1.15 * v3CanopyK(clamp((x1 - x) / L, 0, 1))[1], ry = x => w * v3CanopyK(clamp((x1 - x) / L, 0, 1))[0];
+    const hx = x1 - .4 * L, head = cz(hx) - .09 * ak;
+    Q = { x0, x1, w, L, zb, ak, hx, head, ox: hx + V3_SC[1] * ak, foot: head - V3_SC[0] * ak, cz, ry };   // ox、foot：坐着的飞行员模型原点（脚底）
+  }
+  V3_CPS.set(key, Q);
+  return Q;
+}
+// 坐在座舱里的飞行员（并进飞机自己的网格：空中的飞机）：坐姿 'sc'，按机型单位缩放（ak：机型单位 / 米），颜色直接编成 RGB——
+//   橄榄绿飞行服、白头盔、深色面罩与手套，不随阵营底色变
+let V3_PILM = null;
+function v3mPilotIn(M, ak, ox, oz) {
+  if (!V3_PILM) {
+    const P = v3mMan('pilot', 'sc'), C = { 1: '#56603f', 0.88: '#4c5538', 2.5: '#b48a6c', 3.42: '#1c1d1f', 3.3: '#26282a', 4.5: '#5a5d45', 4.36: '#4f5240', 5.5: '#d7d8d0' }, R = {};
+    for (const k in C) R[k] = mbRGB(C[k]);
+    const map = v => { const a = Math.abs(v); if (a >= 16) return v; let best = null, bd = 9; for (const k in R) { const d = Math.abs(+k - a); if (d < bd) { bd = d; best = R[k]; } } return v < 0 ? -mbRGB('#202830') : best; };
+    for (const A of [P.t, P.l]) for (let i = 6; i < A.length; i += 10) A[i] = map(A[i]);
+    V3_PILM = P;
+  }
+  for (const [A, B] of [[V3_PILM.t, M.t], [V3_PILM.l, M.l]]) for (let i = 0; i < A.length; i += 10) B.push(A[i] * ak + ox, A[i + 1] * ak, A[i + 2] * ak + oz, A[i + 3], A[i + 4], A[i + 5], A[i + 6], A[i + 7], A[i + 8], A[i + 9]);
+}
+// 座舱里（透过透明座舱盖看得见）：深色的座舱内壁、弹射座椅（靠背、比头盔高一点的头枕）、仪表台遮光罩与朝飞行员的大屏、遮光罩上的平显
+function v3mCockpit(M, Q) {
+  const { x0, x1, w, L, zb, ak, hx, head } = Q, cx = (x0 + x1) / 2;
+  if (!Q.noFloor) mbPrism(M, mbCirc(0, 0, 1, 18).map(([a, b]) => [cx + a * L * .47, b * w * .8]), zb - .06, zb + .02, .1);
+  mbBox(M, hx - .36 * ak, hx - .2 * ak, -.23 * ak, .23 * ak, zb - .3, head - .1 * ak, .24, { taper: .02 });
+  mbBox(M, hx - .37 * ak, hx - .22 * ak, -.14 * ak, .14 * ak, head - .14 * ak, head + .05 * ak, .18, { taper: .02 });
+  const xp = Math.min(hx + .6 * ak, x1 - .12 * L), hw = Math.min(.34 * ak, Q.ry(xp + .15 * ak) * .9), zt = Math.min(zb + .13 * ak, Q.cz(xp + .15 * ak) - .1);
+  mbBox(M, xp, xp + .3 * ak, -hw, hw, zb - .1, zt, .14, { taper: .03 });   // 遮光罩
+  mbBox(M, xp - .015, xp, -hw * .85, hw * .85, zb - .08, zt - .03, -.9);   // 大屏（朝后）
+  for (const sg of [-1, 1]) mbTube(M, [xp + .06 * ak, sg * .06 * ak, zt], [xp + .03 * ak, sg * .06 * ak, zt + .13 * ak], .012, .012, 4, .2, false);   // 平显支架
+  mbQuad(M, [xp + .06 * ak, -.07 * ak, zt + .02], [xp + .06 * ak, .07 * ak, zt + .02], [xp + .02 * ak, .07 * ak, zt + .14 * ak], [xp + .02 * ak, -.07 * ak, zt + .14 * ak], V3_TGL);   // 平显组合镜
+}
 function v3AirSec(D) {   // 截面：上半 kt、下半 kb（乘半宽），facet 棱线六边形
   const facet = !!(D.glass === 'gold' || D.flat || D.heli);
   return D.flat ? { kt: .38, kb: .26, facet } : D.heli ? { kt: .95, kb: .8, facet, sh: 'heli' } : facet ? { kt: .55, kb: .4, facet } : D.hi || D.tt ? { kt: .9, kb: .85, facet } : { kt: .72, kb: .6, facet };
@@ -1085,7 +1137,19 @@ function v3mAir(key, fold, opt = {}) {
       mbLine(M, [p0[0], p0[1], z], [p1[0], p1[1], z], .5);
       for (const q of [p0, pm, p1]) mbLine(M, [q[0], q[1], z], [q[0] - nx * d, q[1] - ny * d * sg, zw + .02], .45);
     }
-    if (fold && D.fold) { const c = adChordAt(D.wing, D.fold), ph = fold * Math.PI / 2, h = (Math.max(...D.wing.map(p => p[1])) - D.fold) * .9, dy = h * Math.cos(ph), dz = h * Math.sin(ph); if (c) for (const sg of [1, -1]) { const y = D.fold * sg; mbQuad(M, [c[0], y, zw], [c[1], y, zw], [c[1] + .3, y + dy * sg, zw + dz], [c[0] - .6, y + dy * sg, zw + dz], .8); } }   // 折起的外翼（绕折叠线翻起，竖直 = 完全折起）
+    if (fold && D.fold && D.foldBack) {   // 斜轴向后折（预警机）：外翼绕斜铰链轴转 120°，从水平展开转到贴着机身两侧、翼弦竖直
+      const outer = adClipY(D.wing.map(([x, y]) => [x, -y]), -D.fold).map(([x, y]) => [x, -y]), c = adChordAt(D.wing, D.fold);
+      if (c && outer.length >= 3) {
+        const H = [(c[0] + c[1]) / 2, D.fold, zw], th = fold * 2.0944, cs = Math.cos(th), sn = Math.sin(th), k = [-1 / Math.sqrt(3), 1 / Math.sqrt(3), 1 / Math.sqrt(3)];
+        const rot = v => { const d = k[0] * v[0] + k[1] * v[1] + k[2] * v[2], cr = [k[1] * v[2] - k[2] * v[1], k[2] * v[0] - k[0] * v[2], k[0] * v[1] - k[1] * v[0]]; return [0, 1, 2].map(i => v[i] * cs + cr[i] * sn + k[i] * d * (1 - cs)); };
+        const T = (p, sg, dz) => { const q = rot([p[0] - H[0], p[1] - H[1], (p[2] || 0) + dz]); return [q[0] + H[0], (q[1] + H[1]) * sg, q[2] + H[2]]; };
+        for (const sg of [1, -1]) for (const dz of [thW * .8, -thW * .4]) {
+          const P3 = outer.map(p => T([p[0], p[1], 0], sg, dz));
+          const flip = (dz < 0) !== (sg < 0);   // 下表面、镜像的左翼：反转绕向，法线朝外
+          for (let i = 1; i < P3.length - 1; i++) { const e = [i === 1 ? 1 : 0, 1, i === P3.length - 2 ? 1 : 0]; if (flip) mbTri(M, P3[0], P3[i + 1], P3[i], .8, [e[2], e[1], e[0]]); else mbTri(M, P3[0], P3[i], P3[i + 1], .8, e); }
+        }
+      }
+    } else if (fold && D.fold) { const c = adChordAt(D.wing, D.fold), ph = fold * Math.PI / 2, h = (Math.max(...D.wing.map(p => p[1])) - D.fold) * .9, dy = h * Math.cos(ph), dz = h * Math.sin(ph); if (c) for (const sg of [1, -1]) { const y = D.fold * sg; mbQuad(M, [c[0], y, zw], [c[1], y, zw], [c[1] + .3, y + dy * sg, zw + dz], [c[0] - .6, y + dy * sg, zw + dz], .8); } }   // 折起的外翼（绕折叠线翻起，竖直 = 完全折起）
   }
   if (D.wing2) for (const P of [D.wing2, mir(D.wing2)]) mbPrism(M, P, zc + top * .6, zc + top * .6 + .14, .8);   // 无侦-7 的后翼（连翼）
   if (D.cnd) for (const P of [D.cnd, mir(D.cnd)]) mbWingP(M, P, zc + top * .25, .14, .08, .3, .85);
@@ -1131,23 +1195,21 @@ function v3mAir(key, fold, opt = {}) {
     const dome = (cx, rx, ry, z0, h, T = M) => mbPrism(T, (D.heli ? [[1, 0], [.45, .8], [-.55, 1], [-1, .7], [-1, -.7], [-.55, -1], [.45, -.8]] : mbCirc(0, 0, 1, 14)).map(([a, b]) => [cx + a * rx, b * ry]), z0, z0 + h, -.85, { taper: Math.min(rx, ry) * (D.heli ? .55 : .7) });   // 直升机：平板玻璃拼成的多面座舱盖
     if (kd === 'tandem') { dome(x1 - rx * .5, rx * .48, w * .85, zb - .15, w * .8); dome(x0 + rx * .5, rx * .5, w, zb - .05, w * .95); }
     else if (kd === 'win') mbPrism(M, [[x1, -w * .55], [x1 + .25, 0], [x1, w * .55], [x0, w], [x0, -w]], zb - top * .3, zb - top * .05, -.85, { taper: .15 });
-    else if ((opt.cpo || 0) > .02) {   // 座舱盖打开：后铰链往上掀，露出座舱里的弹射座椅
-      mbBox(M, x0 + .2, x1 - .25, -w * .7, w * .7, zb - .55, zb - .08, .12); mbBox(M, x0 + .35, x0 + .95, -w * .45, w * .45, zb - .5, zb + .45, .3);
-      if (v3mHi()) {   // Ultra：弹射座椅头枕、仪表台、操纵杆
-        mbBox(M, x0 + .42, x0 + .82, -w * .32, w * .32, zb + .42, zb + .66, .22);
-        mbBox(M, x1 - .95, x1 - .32, -w * .52, w * .52, zb - .34, zb - .12, .18, { taper: .06 });
-        mbTube(M, [x0 + 1.15, 0, zb - .42], [x0 + 1.2, 0, zb - .16], .025, .02, 5, .2);
-        if (kd === 'tandem') { mbBox(M, x1 - .95, x1 - .45, -w * .34, w * .34, zb - .45, zb + .22, .28); mbBox(M, x1 - .9, x1 - .55, -w * .26, w * .26, zb + .22, zb + .42, .22); }
-      }
-      const M2 = mbNew(), th = opt.cpo * .95, ct = Math.cos(th), st = Math.sin(th), hz = zb - .12;
-      if (D.heli) dome(cx, rx, w, hz, w * 1.05, M2); else mbCanopy(M2, x0, x1, w, hz - .08, w * 1.15, -.85);
-      for (const A of [M2.t, M2.l]) for (let i = 0; i < A.length; i += 10) {   // 绕后沿铰链转起来（位置与法线）
-        const dx = A[i] - x0, dz = A[i + 2] - hz, nx = A[i + 3], nz = A[i + 5];
-        A[i] = x0 + dx * ct - dz * st; A[i + 2] = hz + dx * st + dz * ct; A[i + 3] = nx * ct - nz * st; A[i + 5] = nx * st + nz * ct;
-      }
-      M.t.push(...M2.t); M.l.push(...M2.l);
-    } else if (D.heli) dome(cx, rx, w, zb - .12, w * 1.05);
-    else mbCanopy(M, x0, x1, w, zb - .2, w * 1.15, -.85);   // 水滴形座舱盖（光滑玻璃、一道风挡框）
+    else {
+      const Q = v3CpSeat(key), gls = Q ? V3_TGL : -.85;   // 单座战斗机：座舱里有座椅、仪表台、平显，座舱盖是透明玻璃
+      if (Q) { v3mCockpit(M, Q); if (!opt.gear) v3mPilotIn(M, Q.ak, Q.ox, Q.foot); }   // 空中的飞机：飞行员坐在里面（甲板上的另外画，有登机动作）
+      else if ((opt.cpo || 0) > .02) mbBox(M, x0 + .35, x0 + .95, -w * .45, w * .45, zb - .5, zb + .45, .3);   // 直升机：座舱盖打开时露出座椅
+      if ((opt.cpo || 0) > .02) {   // 座舱盖打开：后铰链往上掀
+        const M2 = mbNew(), th = opt.cpo * .95, ct = Math.cos(th), st = Math.sin(th), hz = zb - .12;
+        if (D.heli) dome(cx, rx, w, hz, w * 1.05, M2); else mbCanopy(M2, x0, x1, w, hz - .08, w * 1.15, gls);
+        for (const A of [M2.t, M2.l]) for (let i = 0; i < A.length; i += 10) {   // 绕后沿铰链转起来（位置与法线）
+          const dx = A[i] - x0, dz = A[i + 2] - hz, nx = A[i + 3], nz = A[i + 5];
+          A[i] = x0 + dx * ct - dz * st; A[i + 2] = hz + dx * st + dz * ct; A[i + 3] = nx * ct - nz * st; A[i + 5] = nx * st + nz * ct;
+        }
+        M.t.push(...M2.t); M.l.push(...M2.l);
+      } else if (D.heli) dome(cx, rx, w, zb - .12, w * 1.05);
+      else mbCanopy(M, x0, x1, w, zb - .2, w * 1.15, gls);   // 水滴形座舱盖（光滑玻璃、一道风挡框）
+    }
     if (D.glass === 'gold' && !D.flat) {   // 隐身战斗机机头下方的光电瞄准窗（EOTS）：多棱的小玻璃罩
       const ex = x1 + .9, ez = zc - v3AirHw(D, ex) * sec.kb * .9;
       mbPrism(M, [[ex + .55, 0], [ex + .2, .32], [ex - .45, .3], [ex - .45, -.3], [ex + .2, -.32]], ez - .28, ez, -.85, { taper: .12 });
@@ -1644,11 +1706,14 @@ void main() {
   gl_Position = uM * vec4(w, 1.);
 }`;
 const V3M_FS = der => `${der ? '#extension GL_OES_standard_derivatives : enable\n#define DER 1\n' : ''}precision mediump float;
-uniform vec2 uFog; uniform vec3 uBg; uniform float uMode, uHl; uniform vec3 uHlC;
+uniform vec2 uFog; uniform vec3 uBg; uniform float uMode, uHl, uGP; uniform vec3 uHlC;
 uniform vec3 uBody0, uBody1, uBody2, uBody3, uBody4, uGlow0, uGlow1, uGlow2;
 varying vec3 vN, vB, vV, vC; varying float vS, vSide, vD, vMet;
 ${typeof V3_SHF === 'string' ? V3_SHF : 'float shadowAt() { return 1.; }'}
 void main() {
+  // 透明座舱玻璃（明暗 −8 ~ −9，V3_TGL）：实体那一遍（uGP 0）不画，透明那一遍（uGP 1，混合、不写深度）只画它——透过玻璃看得见座舱里的仪表台、座椅和飞行员
+  float tg = step(7.5, -vS) * step(-vS, 15.5);
+  if (uGP < .5 ? tg > .5 : tg < .5) discard;
   float hl = step(7.5, vSide), sd = vSide - hl * 8.;   // 阵营号 + 8：选中编队的成员（selfx.js），全身发光
   vec3 body = sd < .5 ? uBody0 : sd < 1.5 ? uBody1 : sd < 2.5 ? uBody2 : sd < 3.5 ? uBody3 : uBody4;   // 3、4：我方 / 敌方飞机
   vec3 glow = sd < .5 || (sd > 2.5 && sd < 3.5) ? uGlow0 : sd < 1.5 || sd > 3.5 ? uGlow1 : uGlow2;
@@ -1690,8 +1755,17 @@ void main() {
     if (vS < 0.) c = mix(c, vec3(.55, .7, .78), .6);
   }
   if (hl > .5) c += uHlC * uHl * (.28 + .9 * rim + .55 * ed);   // 选中的：整个人 / 整辆车亮起来，轮廓与棱线更亮
-  gl_FragColor = vec4(mix(c, uBg, smoothstep(uFog.x, uFog.y, vD)), 1.);
+  float al = 1.;
+  if (tg > .5) {   // 透明玻璃：淡淡的烟灰色，按菲涅耳反射天空 / 海面，掠射角几乎全反射；太阳高光
+    vec3 Ls = ${typeof V3_SUNG === 'string' ? V3_SUNG : 'normalize(vec3(-.45, .55, .7))'}, Rr = reflect(-V, N);
+    float F = .06 + .94 * pow(1. - abs(dot(N, V)), 4.), sp = pow(max(dot(N, normalize(Ls + V)), 0.), 160.) * (uMode < .5 ? 0. : shadowAt());
+    vec3 env = Rr.z > 0. ? mix(vec3(.66, .7, .76), vec3(.42, .53, .7), Rr.z) : vec3(.13, .16, .19);
+    c = uMode < .5 ? glow * (.25 + .6 * F) : env * F + vec3(.05, .06, .065) + sp * vec3(1., .96, .88);
+    al = clamp(.18 + .78 * F + sp, 0., 1.);
+  }
+  gl_FragColor = vec4(mix(c, uBg, smoothstep(uFog.x, uFog.y, vD)), al);
 }`;
+const V3_TGL = -8.6;   // 透明座舱玻璃的明暗码（v3mAir 的座舱盖、导入飞机模型的玻璃换成它）
 function v3mInit(gl) {
   V3M.tried = true;
   try {
@@ -1704,7 +1778,7 @@ function v3mInit(gl) {
     if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(pr));
     V3M.pr = pr; V3M.gl = gl;
     for (const k of ['p', 'n', 's', 'b', 'iA', 'iB']) V3M.a[k] = gl.getAttribLocation(pr, k);
-    for (const k of ['uM', 'uEye', 'uFog', 'uBg', 'uMode', 'uHl', 'uHlC', 'uBody0', 'uBody1', 'uBody2', 'uBody3', 'uBody4', 'uGlow0', 'uGlow1', 'uGlow2', 'uShM', 'uShT', 'uShOn', 'uShP']) V3M.u[k] = gl.getUniformLocation(pr, k);
+    for (const k of ['uM', 'uEye', 'uFog', 'uBg', 'uMode', 'uHl', 'uGP', 'uHlC', 'uBody0', 'uBody1', 'uBody2', 'uBody3', 'uBody4', 'uGlow0', 'uGlow1', 'uGlow2', 'uShM', 'uShT', 'uShOn', 'uShP']) V3M.u[k] = gl.getUniformLocation(pr, k);
     V3M.ib = gl.createBuffer();
     V3M.ok = true;
   } catch (e) { V3M.ok = false; console.warn('3D 兵种模型不可用', e); }
@@ -1717,7 +1791,8 @@ function v3mGet(key, build) {
   const gl = V3M.gl;
   let MB;
   try { MB = build(); } catch (e) { console.warn('3D 模型 ' + key, e); MB = mbNew(); }
-  m = { tn: MB.t.length / 10, ln: MB.l.length / 10, tb: null, lb: null };
+  m = { tn: MB.t.length / 10, ln: MB.l.length / 10, tb: null, lb: null, gl: false };
+  for (let i = 6; i < MB.t.length; i += 10) if (MB.t[i] <= -7.5 && MB.t[i] >= -15.5) { m.gl = true; break; }   // 有透明玻璃：第二遍再画
   if (m.tn) { m.tb = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, m.tb); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(MB.t), gl.STATIC_DRAW); }
   if (m.ln) { m.lb = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, m.lb); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(MB.l), gl.STATIC_DRAW); }
   V3M.mesh.set(ck, m);
@@ -1727,7 +1802,7 @@ function v3mGet(key, build) {
 const V3_PIL = .95;   // 飞行员、甲板人员的比例（按飞机的真实比例，比战场上的士兵小）
 function v3GroundPlane(key, sz, x, y, ground, hd, fold, cpo, still, side, t, sf) {
   if (typeof v3dPlaneX === 'function' && v3dPlaneX(key, sz, x, y, ground, true, hd, side, 0, 0, true, sf || null)) return;   // 导入的真机模型（放下起落架）；sf 舵面
-  if (typeof V3U_AIR === 'object' && V3U_AIR[key] && V3U_AIR[key].gp && v3uPlane(key, sz, x, y, ground, true, hd, side, 0, 0, true, still ? .4 : (t || 0) * 22)) return;   // 加油弹药点停着的直升机（v3utex.js；没有座舱盖开合，舰载机、固定翼在这里仍画自带模型）
+  if (typeof V3U_AIR === 'object' && V3U_AIR[key] && (V3U_AIR[key].gp || V3U_AIR[key].wings) && v3uPlane(key, sz, x, y, ground, true, hd, side, 0, 0, true, still ? .4 : (t || 0) * 22, fold)) return;   // 外部模型：停着的直升机、能折翼的预警机（v3utex.js；没有座舱盖开合的其他固定翼在这里仍画自带模型）
   const k = sz / 21;
   if (typeof AIRD === 'object' && AIRD[key]) {
     const f = AIRD[key].fold ? Math.round(clamp(fold, 0, 1) * 3) : 0, c = Math.round(clamp(cpo, 0, 1) * 3), z = ground + V3_GEAR * k;
@@ -1888,11 +1963,13 @@ function v3mCollect(C, box) {
       if (p.dk === 'lift' && !p.up) continue;   // 还在机库里
       const key = airSilKey(p.kind, p.v), sz = airMdl(p.kind, p.v).size || 15, sink = typeof cvDeckSink === 'function' ? cvDeckSink(p) : 0;
       v3GroundPlane(key, sz, p.x, p.y, top - C.hang * sink, p.heading, p.fold ?? 0, p.cpo || 0, p.dk === 'brd' || p.dk === 'lift', 3, t, typeof v3dDeckSurf === 'function' ? v3dDeckSurf(p) : null);   // 挂杆后舵面检查、起飞配平
-      const P = p.dk === 'brd' && typeof cvPilotPose === 'function' ? cvPilotPose(p) : null;   // 飞行员跑过来、顺登机梯爬进座舱
-      if (P) { const [x, y] = at(P.u, P.v), pose = P.run ? 'r' + (Math.floor(P.ph / .7854) & 7) : 'cl' + (Math.floor(P.ph / 1.7) & 1); v3mAdd('man:pilot:' + pose, () => v3mMan('pilot', pose), x, y, top + P.z, h + P.a, V3_PIL, 0); }
+      const P = p.dk === 'brd' && typeof cvPilotPose === 'function' ? cvPilotPose(p) : null;   // 飞行员跑过来、顺登机梯爬进座舱坐下，之后坐在座舱里（v3det.js）
+      if (typeof v3dPilot === 'function') v3dPilot(p, key, sz, top - C.hang * sink, h, at);
+      else if (P) { const [x, y] = at(P.u, P.v), pose = P.run ? 'r' + (Math.floor(P.ph / .7854) & 7) : 'cl' + (Math.floor(P.ph / 1.7) & 7); v3mAdd('man:pilot:' + pose, () => v3mMan('pilot', pose), x, y, top + P.z, h + P.a, V3_PIL, 0); }
       if (P && (p.cpo || 0) > .3) { const L = cvLadder(p), [x, y] = at(L[0], L[1]); v3mAdd('ladder', v3mLadder, x, y, top, p.heading + Math.PI / 2, sz / 21, 0); }
     }
     if (!lhd && typeof v3dDeckVeh === 'function') v3dDeckVeh(cv, C, live, wing, top, h, at);   // 挂弹车、弹药拖车、牵引车（v3det.js）
+    if (!lhd && typeof v3dWires === 'function') v3dWires(live, top, h, at);   // 拦阻索
     for (const o of typeof cvShooters === 'function' ? cvShooters(cv, live) : []) { const [x, y] = at(o.u, o.v), pose = o.go ? 'kn' : 'pt'; v3mAdd('man:deck:' + pose, () => v3mMan('deck', pose), x, y, top, h + o.a, V3_PIL, 0); }   // 弹射官
     if (v3mHi() && !lhd) {   // Ultra：地勤人员，避开弹射器/着舰区（甲板车辆在 v3det.js v3dDeckVeh，跟着停机位与整备进度）
       const crew = [[70, -13, 0, 'pt'], [58, 17, .2, 'kn'], [-103, 24, -2.6, 'st'], [-122, 24, -2.8, 'pt'], [4, 31, 1.4, 'st']];
@@ -2115,33 +2192,45 @@ function v3mDraw(C, LM) {
   gl.uniform3f(V3M.u.uBg, ...(typeof v3Bg === 'function' ? v3Bg() : [.004, .02, .011]));
   v3mPalette(gl);
   if (typeof v3ShUni === 'function') v3ShUni(gl, V3M.u, !LM);
-  const A = V3M.a, X = V3M.ext;
+  const A = V3M.a, X = V3M.ext, glass = [];
+  gl.uniform1f(V3M.u.uGP, 0);
   for (const [key, L] of V3M.inst) {
     const n = L.d.length / 8;
     if (!n) continue;
     if (L.fr !== V3M.fr) { L.fr = V3M.fr; L.f = new Float32Array(L.d); }   // 这一帧的实例数据只转一次（两遍共用）
-    const m = v3mGet(key, L.build), data = L.f;
-    for (const [buf, cnt, mode] of [[m.tb, m.tn, gl.TRIANGLES], [m.lb, m.ln, gl.LINES]]) {
-      if (!buf || !cnt || (LM && mode === gl.LINES)) continue;
-      gl.bindBuffer(gl.ARRAY_BUFFER, buf);
-      gl.enableVertexAttribArray(A.p); gl.vertexAttribPointer(A.p, 3, gl.FLOAT, false, 40, 0);
-      gl.enableVertexAttribArray(A.n); gl.vertexAttribPointer(A.n, 3, gl.FLOAT, false, 40, 12);
-      gl.enableVertexAttribArray(A.s); gl.vertexAttribPointer(A.s, 1, gl.FLOAT, false, 40, 24);
-      gl.enableVertexAttribArray(A.b); gl.vertexAttribPointer(A.b, 3, gl.FLOAT, false, 40, 28);
-      if (X) {
-        gl.bindBuffer(gl.ARRAY_BUFFER, V3M.ib); gl.bufferData(gl.ARRAY_BUFFER, data, gl.DYNAMIC_DRAW);
-        gl.enableVertexAttribArray(A.iA); gl.vertexAttribPointer(A.iA, 4, gl.FLOAT, false, 32, 0); X.vertexAttribDivisorANGLE(A.iA, 1);
-        gl.enableVertexAttribArray(A.iB); gl.vertexAttribPointer(A.iB, 4, gl.FLOAT, false, 32, 16); X.vertexAttribDivisorANGLE(A.iB, 1);
-        X.drawArraysInstancedANGLE(mode, 0, cnt, n);
-        X.vertexAttribDivisorANGLE(A.iA, 0); X.vertexAttribDivisorANGLE(A.iB, 0);
-        gl.disableVertexAttribArray(A.iA); gl.disableVertexAttribArray(A.iB);
-      } else for (let i = 0; i < n; i++) {   // 没有实例化扩展：逐个画（实例参数用常量属性）
-        gl.vertexAttrib4f(A.iA, data[i * 8], data[i * 8 + 1], data[i * 8 + 2], data[i * 8 + 3]);
-        gl.vertexAttrib4f(A.iB, data[i * 8 + 4], data[i * 8 + 5], data[i * 8 + 6], data[i * 8 + 7]);
-        gl.drawArrays(mode, 0, cnt);
-      }
-    }
+    const m = v3mGet(key, L.build);
+    if (m.gl && !LM) glass.push([m, L.f, n]);
+    v3mDrawM(gl, m, L.f, n, LM);
+  }
+  if (glass.length) {   // 第二遍：透明座舱玻璃（混合、不写深度；实体都画完了，玻璃后面的座舱、甲板、海面都在）
+    gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); gl.depthMask(false); gl.uniform1f(V3M.u.uGP, 1);
+    for (const [m, data, n] of glass) v3mDrawM(gl, m, data, n, true);
+    gl.depthMask(true); gl.disable(gl.BLEND); gl.uniform1f(V3M.u.uGP, 0);
   }
   for (const k of ['p', 'n', 's', 'b']) gl.disableVertexAttribArray(A[k]);
   if (typeof v3uDraw === 'function') v3uDraw(C, LM);   // 带贴图的精细模型（v3utex.js）
+}
+// 画一个网格的全部实例（data：每个实例 8 个数）；noLine：不画线（阴影那一遍、透明玻璃那一遍）
+function v3mDrawM(gl, m, data, n, noLine) {
+  const A = V3M.a, X = V3M.ext;
+  for (const [buf, cnt, mode] of [[m.tb, m.tn, gl.TRIANGLES], [m.lb, m.ln, gl.LINES]]) {
+    if (!buf || !cnt || (noLine && mode === gl.LINES)) continue;
+    gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+    gl.enableVertexAttribArray(A.p); gl.vertexAttribPointer(A.p, 3, gl.FLOAT, false, 40, 0);
+    gl.enableVertexAttribArray(A.n); gl.vertexAttribPointer(A.n, 3, gl.FLOAT, false, 40, 12);
+    gl.enableVertexAttribArray(A.s); gl.vertexAttribPointer(A.s, 1, gl.FLOAT, false, 40, 24);
+    gl.enableVertexAttribArray(A.b); gl.vertexAttribPointer(A.b, 3, gl.FLOAT, false, 40, 28);
+    if (X) {
+      gl.bindBuffer(gl.ARRAY_BUFFER, V3M.ib); gl.bufferData(gl.ARRAY_BUFFER, data, gl.DYNAMIC_DRAW);
+      gl.enableVertexAttribArray(A.iA); gl.vertexAttribPointer(A.iA, 4, gl.FLOAT, false, 32, 0); X.vertexAttribDivisorANGLE(A.iA, 1);
+      gl.enableVertexAttribArray(A.iB); gl.vertexAttribPointer(A.iB, 4, gl.FLOAT, false, 32, 16); X.vertexAttribDivisorANGLE(A.iB, 1);
+      X.drawArraysInstancedANGLE(mode, 0, cnt, n);
+      X.vertexAttribDivisorANGLE(A.iA, 0); X.vertexAttribDivisorANGLE(A.iB, 0);
+      gl.disableVertexAttribArray(A.iA); gl.disableVertexAttribArray(A.iB);
+    } else for (let i = 0; i < n; i++) {   // 没有实例化扩展：逐个画（实例参数用常量属性）
+      gl.vertexAttrib4f(A.iA, data[i * 8], data[i * 8 + 1], data[i * 8 + 2], data[i * 8 + 3]);
+      gl.vertexAttrib4f(A.iB, data[i * 8 + 4], data[i * 8 + 5], data[i * 8 + 6], data[i * 8 + 7]);
+      gl.drawArrays(mode, 0, cnt);
+    }
+  }
 }

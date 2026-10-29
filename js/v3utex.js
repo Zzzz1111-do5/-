@@ -51,7 +51,7 @@ const V3U_VEH = {
 //   piv：直升机主旋翼桨毂（变体 tur 绕它转）；deck：舰载机在甲板 / 机场地勤作业时仍画自带模型（折翼、座舱盖开合、飞行员登机都在那上面），只在空中换
 //   gp：机场外加油弹药点停放时也用（直升机）
 const V3U_AIR = {
-  kj600: { id: 'u_e2d', zc: 2.4, deck: true }, j15: { id: 'u_su33', zc: 1.5, deck: true }, gj11: { id: 'u_x47b', zc: 2.1, deck: true },
+  kj600: { id: 'u_e2d', zc: 2.4, wings: { wl: [.2, -5.3, 3.2], wr: [.2, 5.3, 3.2] }, props: { pl: [3.9, -3.3, 2.95], pr: [3.9, 3.3, 2.95] } },   // E-2 外形改的空警-600：外翼斜轴折叠、螺旋桨转 j15: { id: 'u_su33', zc: 1.5, deck: true }, gj11: { id: 'u_x47b', zc: 2.1, deck: true },
   h6k: { id: 'u_h6m', zc: 1.7 },
   mq9: { id: 'u_mq9', zc: 1.55 }, f35: { id: 'u_f35', zc: 2.2 }, f35b: { id: 'u_f35', zc: 2.2 }, f22: { id: 'u_f22', zc: 1 }, a10: { id: 'u_a10', zc: 2.1 },
   ah64: { id: 'u_ah64', zc: 1.8, piv: [1.95, 0], gp: true }, uh60: { id: 'u_uh60m', zc: 2.1, piv: [2, 0], gp: true },
@@ -176,9 +176,23 @@ function v3uVeh(key, d) {
   if (!E.L) E.L = H.bb[1][0] - H.bb[0][0];
   return E;
 }
+// 3 × 3 矩阵（行主序）与旋转（GL 坐标：x 东、y 北、z 上）；实例着色器的姿态 = Rz(朝向) · Ry(−俯仰) · Rx(滚转)
+const v3uM3 = (a, b) => { const o = []; for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) o.push(a[i * 3] * b[j] + a[i * 3 + 1] * b[3 + j] + a[i * 3 + 2] * b[6 + j]); return o; };
+const v3uRx = t => { const c = Math.cos(t), s = Math.sin(t); return [1, 0, 0, 0, c, -s, 0, s, c]; };
+const v3uRy = t => { const c = Math.cos(t), s = Math.sin(t); return [c, 0, s, 0, 1, 0, -s, 0, c]; };
+const v3uRz = t => { const c = Math.cos(t), s = Math.sin(t); return [c, -s, 0, s, c, 0, 0, 0, 1]; };
+const v3uMv = (M, v) => [M[0] * v[0] + M[1] * v[1] + M[2] * v[2], M[3] * v[0] + M[4] * v[1] + M[5] * v[2], M[6] * v[0] + M[7] * v[1] + M[8] * v[2]];
+function v3uAxis(k, t) {   // 绕单位轴 k 转 t（罗德里格斯公式）
+  const c = Math.cos(t), s = Math.sin(t), d = 1 - c;
+  return [c + k[0] * k[0] * d, k[0] * k[1] * d - k[2] * s, k[0] * k[2] * d + k[1] * s, k[1] * k[0] * d + k[2] * s, c + k[1] * k[1] * d, k[1] * k[2] * d - k[0] * s, k[2] * k[0] * d - k[1] * s, k[2] * k[1] * d + k[0] * s, c + k[2] * k[2] * d];
+}
+// 姿态矩阵 → v3uAdd 的 [朝向, 滚转, 俯仰]
+const v3uEul = R => [-Math.atan2(R[3], R[0]), Math.atan2(R[7], R[8]), Math.asin(clamp(R[6], -1, 1))];
+// 斜轴折翼（E-2 / 空警-600）：右翼绕 (−1, 1, 1) 轴转 120° 从水平展开转到贴着机身、翼弦竖直；GL 坐标 y 取反，左翼是右翼的镜像
+const V3U_FOLDK = [-1 / Math.sqrt(3), 1 / Math.sqrt(3), 1 / Math.sqrt(3)], V3U_MIR = R => [R[0], -R[1], R[2], -R[3], R[4], -R[5], R[6], -R[7], R[8]];
 // 画一架外部模型的飞机（参数同 v3det.js v3dPlaneX）：没有这型、还没载入、离得太远返回 false（照旧画自带模型）
 //   sz 游戏里的机型尺寸（机长），ground：z 是地面（机轮着地，放下起落架）；否则 z 是机身中线高度；gear 空中也放着起落架；spin 旋翼转角
-function v3uPlane(key, sz, x, y, z, ground, h, side, roll = 0, pitch = 0, gear = false, spin = 0) {
+function v3uPlane(key, sz, x, y, z, ground, h, side, roll = 0, pitch = 0, gear = false, spin = 0, fold = 0) {   // fold：外翼折起程度 0–1（有 wings 的机型）
   const E = V3U_AIR[key];
   if (!E) return false;
   if (V3U.E && Math.hypot(x - V3U.E[0], -y - V3U.E[1], z - V3U.E[2]) > V3U_NEAR() * 2.4) return false;
@@ -193,6 +207,18 @@ function v3uPlane(key, sz, x, y, z, ground, h, side, roll = 0, pitch = 0, gear =
   if (!ground) { const o = rot([0, 0, E.zc * s]); ox -= o[0]; oy += o[1]; oz -= o[2]; }   // 机身中线对准 z
   v3uAdd(E.id, vn, ox, oy, oz, h, s, side, roll, pitch);
   if (E.piv && P.vars.has('tur')) { const o = rot([E.piv[0] * s, -E.piv[1] * s, 0]); v3uAdd(E.id, 'tur', ox + o[0], oy - o[1], oz + o[2], h + spin, s, side, roll, pitch); }
+  if (E.wings || E.props) {
+    const RA = v3uM3(v3uM3(v3uRz(-h), v3uRy(-pitch)), v3uRx(roll)), at = q => { const o = v3uMv(RA, [q[0] * s, -q[1] * s, q[2] * s]); return [ox + o[0], oy - o[1], oz + o[2]]; };
+    if (E.wings) {
+      const RF = v3uAxis(V3U_FOLDK, clamp(fold, 0, 1) * 2.0944);
+      for (const [vn2, q] of Object.entries(E.wings)) {
+        if (!P.vars.has(vn2)) continue;
+        const [wx, wy, wz] = at(q), [a2, r2, p2] = v3uEul(v3uM3(RA, q[1] > 0 ? V3U_MIR(RF) : RF));
+        v3uAdd(E.id, vn2, wx, wy, wz, a2, s, side, r2, p2);
+      }
+    }
+    if (E.props) for (const [vn2, q] of Object.entries(E.props)) { if (!P.vars.has(vn2)) continue; const [px, py, pz] = at(q); v3uAdd(E.id, vn2, px, py, pz, h, s, side, roll + spin * (q[1] > 0 ? 1 : -1), pitch); }
+  }
   return true;
 }
 // 画一艘外部模型的舰艇：len 游戏里的舰长，z 水线高度；没有这型、还没载入返回 false（照旧画自带模型）
