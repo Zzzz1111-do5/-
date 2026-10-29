@@ -1677,9 +1677,9 @@ void main() {
   if (uMode < .5) {   // 黑绿：深色实体 + 发光棱线 + 边缘光；玻璃、车灯、观察镜发光
     c = body * (.45 + .95 * lit + .25 * up) * sh + glow * ed * .95 + glow * rim * .22;
     if (vS < 0.) c += glow * .75 * sh;
-  } else {   // 写实：涂装色受日光、天光（上冷下暖）+ 暗棱线，边缘描一道阵营色细光
+  } else {   // 写实：涂装色受日光、天光（半球：朝天的冷、朝下的暖，竖直面各一半，与 v3props.js 楼房一致）+ 暗棱线，边缘描一道阵营色细光；金属件再加高光与倒影
     float sd2 = shadowAt();
-    c = body * (mix(vec3(.3, .29, .27), vec3(.45, .5, .58), up) + vec3(1., .95, .86) * lit * .82 * sd2) * sh * (1. - ed * .4) * (1. - vMet * .3) + glow * rim * .18;
+    c = body * (mix(vec3(.3, .29, .27), vec3(.45, .5, .58), N.z * .5 + .5) + vec3(1., .95, .86) * lit * .82 * sd2) * sh * (1. - ed * .4) * (1. - vMet * .3) + glow * rim * .18;
     if (vMet > .01) {   // 金属：太阳高光 + 天空 / 海面的倒影（菲涅耳：掠射角更亮）；越像金属，高光越尖、越带本身的颜色
       vec3 Ls = ${typeof V3_SUNG === 'string' ? V3_SUNG : 'normalize(vec3(-.45, .55, .7))'}, Hh = normalize(Ls + V), Rr = reflect(-V, N);
       float F = .04 + .96 * pow(1. - clamp(dot(N, V), 0., 1.), 5.);
