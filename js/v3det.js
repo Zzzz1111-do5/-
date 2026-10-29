@@ -367,19 +367,19 @@ function v3dBurner(out, C, p, key, sz, o, E) {
         cone(0, D2 * (.7 + .4 * g), rf * .85, rf * .4, [lerp(1, .86, g), lerp(.8, .92, g), lerp(.55, 1, g), .5 * g], [1, .85, .65, .08 * g], 2);   // 白芯
         v3fSpark(out, C, F(rf * .15), rf * 1.1, [.55, .45, 1, .2 * g]);   // 根部蓝紫
         for (let i = 0; i < 5; i++) {   // 激波马赫环：喷口后约一个直径起、间隔约 1.2 个直径，越往后越暗、越偏橙粉
-          const u = D2 * (1 + 1.2 * i) * (1 + .03 * Math.sin(S.t * 23 + i + id)), a = .34 * sm01((g - .2 - i * .12) / .3) * (1 - i * .17) * fk;
+          const u = D2 * (1 + 1.2 * i) * (1 + .03 * Math.sin(S.t * 23 + i + id)), a = .2 * sm01((g - .2 - i * .12) / .3) * (1 - i * .17) * fk;
           if (a < .02 || u > Lb * .85) continue;
-          const cd = [[1, .93, .82], [1, .82, .66], [1, .7, .58], [1, .64, .56], [1, .6, .55]][i], w = rf * (.75 - .06 * i);
+          const cd = [[1, .93, .82], [1, .82, .66], [1, .7, .58], [1, .64, .56], [1, .6, .55]][i], w = rf * (.9 - .07 * i);
           cone(u - rf * .6, u, w * .3, w, [...cd, 0], [...cd, a], 2);
           cone(u, u + rf * .45, w, w * .3, [...cd, a], [...cd, 0], 2);
         }
       }
       // 立体感：一团团小火舌顺着喷流往后流、绕着轴心错开（有前有后、互相遮叠），越往后越小、越偏红、越淡
-      const nl = Math.round(4 + 10 * Math.max(s1 * .5, g)), aL = Math.max(.6 * s1, g);
+      const nl = Math.round(8 + 22 * Math.max(s1 * .5, g)), aL = Math.max(.6 * s1, g);   // 团数多、团大、每团淡：叠成一整条有起伏的火，不是一串珠子
       for (let i = 0; i < nl; i++) {
         const ph = (S.t * (1.6 + .5 * g) + i / nl + id * .37 + j * .21) % 1, an = i * 2.39996 + S.t * 3.1 + id, rr = rf * .5 * (1 - ph * .45) * (.45 + .55 * Math.abs(Math.sin(i * 12.99 + S.t * 7.3)));
         const L2 = (g > .01 ? Lb : Ls) * .92, o = P(ph * L2, v0 + Math.cos(an) * rr, Math.sin(an) * rr), cl = ph < .35 ? [1, .86, .62] : ph < .7 ? [1, .55, .22] : [1, .32, .12];
-        v3fSpark(out, C, o, rf * (.62 - .34 * ph) * (.8 + .4 * fk), [...cl, .28 * aL * (1 - ph) * (1 - ph)]);
+        v3fSpark(out, C, o, rf * (.95 - .45 * ph) * (.85 + .3 * fk), [...cl, .11 * aL * (1 - ph) * (1 - ph)]);
       }
       v3fSpark(out, C, F(rf * .8), rf * (2.2 + 1.1 * g) + .2, [1, lerp(.5, .6, g), lerp(.2, .3, g), (.09 + .1 * g) * Math.min(1, ab * 3)]);   // 映亮周围
     }

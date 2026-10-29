@@ -1685,7 +1685,7 @@ void main() {
       float F = .04 + .96 * pow(1. - clamp(dot(N, V), 0., 1.), 5.);
       vec3 env = Rr.z > 0. ? mix(vec3(.74, .75, .8), vec3(.5, .6, .76), Rr.z) : mix(vec3(.3, .34, .38), vec3(.1, .14, .18), clamp(-Rr.z * 3., 0., 1.));
       vec3 tint = mix(vec3(1.), clamp(body * 1.7, 0., 1.), vMet * .6);
-      c += tint * (pow(max(dot(N, Hh), 0.), mix(18., 110., vMet)) * mix(.2, 1.2, vMet) * sd2 + env * (mix(.04, .28, vMet) + F * mix(.14, .5, vMet))) * (1. - ed * .3);
+      c += tint * (pow(max(dot(N, Hh), 0.), mix(18., 110., vMet)) * mix(.06, 1.2, vMet) * sd2 + env * (mix(.02, .28, vMet) + F * mix(.08, .5, vMet))) * (1. - ed * .3);
     }
     if (vS < 0.) c = mix(c, vec3(.55, .7, .78), .6);
   }
