@@ -566,7 +566,19 @@ const V3_DECK = -2.6 + 17 + 1.5;   // 舰载机在飞行甲板上的高度：甲
 function v3AirZ(o) {
   const ph = o.phase || o.ph;
   if (o.kind && (ph === 'cat' || ph === 'roll' || ph === 'trap')) return V3_DECK;
-  return v3AltZ(o.x, o.y, Math.max(0, clamp(o.alt ?? 1, 0, 1) - .05) * 230, o.kind && !o.land && !o.afPh ? V3_DECK - 1.5 : -2.6, 1.5);
+  const z = v3AltZ(o.x, o.y, Math.max(0, clamp(o.alt ?? 1, 0, 1) - .05) * 230, o.kind && !o.land && !o.afPh ? V3_DECK - 1.5 : -2.6, 1.5);
+  return o.kind && o.lT != null ? v3ClimbZ(o, z) : z;
+}
+// 刚弹射离舰的舰载机（cvdeck.js 记的离舰时刻 lT）：推演里 2 秒就升到巡航高度，照着画像坐电梯直上——
+//   画面按 JSBSim 算的离舰时间历程（js/aero.js：先下沉约 3 米，再抬头加速爬升，14 秒约 220 米），之后按末了的爬升率继续；
+//   赶上推演的高度时平滑改平；推演更低时（俯冲、低空突防）照推演
+function v3ClimbZ(o, zs) {
+  const u = S.t - o.lT;
+  if (!(u >= 0 && u < 40) || typeof AERO !== 'object') return zs;
+  const R = AERO.launch.rows, n = R.length - 1, f = u / AERO.launch.dt, i = Math.min(n - 1, Math.floor(f));
+  const h = f < n ? lerp(R[i][0], R[i + 1][0], f - i) : R[n][0] + (u - n * AERO.launch.dt) * (R[n][0] - R[n - 10][0]) / (10 * AERO.launch.dt);
+  const zp = V3_DECK + h, d = zs - zp;
+  return d <= 0 ? zs : zs - d * Math.max(sm01(d / 60), 1 - sm01((u - 2) / 2));   // 头 2 秒完全照数据（含下沉），之后只在快赶上时圆滑过渡
 }
 // 离地高度 h → 绝对高度：贴地时按脚下实际地面（lo 是海上的最低基准：舰载机 = 飞行甲板，其余 = 海面），一离地参考面就换成平滑的地形包络
 //   （v3Env，不跟着每个小山包上下抖），越高越接近海拔基准——220 以上完全按海拔平飞；低空过山时沿包络平缓爬升、越过山脊再下来
@@ -1153,6 +1165,7 @@ function v3Draw(now) {
   }
   if (pOn) { gl.disableVertexAttribArray(V3.a.p); gl.disableVertexAttribArray(V3.a.n); v3pDraw(C); }   // 地图物件：树木、岩石、楼房、机场设施（v3props.js，免费资源模型）
   if (m3 && typeof v3mDraw === 'function') { gl.disableVertexAttribArray(V3.a.p); gl.disableVertexAttribArray(V3.a.n); v3mDraw(C); }   // 兵种立体模型（v3units.js）
+  if (m3 && typeof v3dkDraw === 'function') v3dkDraw(C);   // 福建舰飞行甲板：纹路与光影（v3deck.js）
   if (typeof v3Fx === 'function' && !(SETTINGS && SETTINGS.models3d === false)) { gl.disableVertexAttribArray(V3.a.p); gl.disableVertexAttribArray(V3.a.n); v3Fx(C); }   // 立体弹道（v3fx.js）
   const ctx = R.ctx;
   ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalCompositeOperation = 'copy'; ctx.drawImage(V3.cv, 0, 0); ctx.restore();
