@@ -3,7 +3,7 @@
 //   js/mdl/<键>.js 用到时才加载（插 script 标签，本地 file:// 打开也能用），解码成与代码建模同一种网格——暗色实体 + 按棱角算好的发光棱线，
 //   建模坐标 x 船头 / 机头、y 右、z 上，单位米（v3units.js 画的时候按游戏里的尺寸缩放）；还没加载完、加载失败时照旧画代码建的模型
 const V3X = { def: {}, mesh: {}, want: new Set(), fail: new Set() };
-V3X.add = (key, meta, b64) => { V3X.def[key] = { meta, b64 }; };
+V3X.add = (key, meta, b64) => { V3X.def[key] = { meta, b64, key }; };
 function v3xLoad(key) {
   if (typeof document === 'undefined') { V3X.fail.add(key); return; }
   const s = document.createElement('script'), v = typeof window === 'object' && window.DS_BUILD ? '?v=' + encodeURIComponent(window.DS_BUILD) : '';
@@ -11,6 +11,8 @@ function v3xLoad(key) {
   s.onerror = () => { V3X.fail.add(key); console.warn('3D 模型没加载上：' + key); };
   document.head.appendChild(s);
 }
+// 导入模型的金属度（写实画面的金属反光，v3units.js mbMetal）：飞机是漆面金属，地勤车的车身、举升臂更亮
+const V3X_METAL = { j35: .5, j20: .5, j36: .5, j50: .5, y20: .4, tug: .6, loader: .65 };
 // 设置里「外部精细模型」关掉时不用导入的模型（与 v3import.js 同一个开关）
 const v3xOn = () => !(typeof SETTINGS === 'object' && SETTINGS && SETTINGS.extMdl === false);
 // 模型的网格（mbNew 格式）；没有就去加载、先返回 null
@@ -44,6 +46,8 @@ function v3xBuild(D) {
     mbTri(M, p(I[t * 3]), p(I[t * 3 + 1]), p(I[t * 3 + 2]), s, [e & 1, e >> 1 & 1, e >> 2 & 1]);
   }
   for (let l = 0; l < LN.length; l += 2) mbLine(M, p(LN[l]), p(LN[l + 1]), .55);
+  const met = V3X_METAL[String(D.key || '').split('_')[0]];
+  if (met && typeof mbMetal === 'function') mbMetal(M, met);   // 金属反光（写实画面）：飞机漆面、地勤车
   M.len = m.len; M.vls = m.vls || null;   // 垂发块（米，v3fx.js v3VlsOrigin 用）
   M.zc = m.zc || 0; M.parts = m.parts || null;   // 飞机：机身中线离着地点的高度、活动舵面（转轴，米）
   return M;

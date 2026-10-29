@@ -294,6 +294,7 @@ function v3Fx(C) {
     }
   }
   if (typeof v3dFx === 'function') v3dFx(out, C, inB, seen);   // 弹射、离机、伞降的发光与烟（v3det.js）
+  if (typeof v3dHaze === 'function') v3dHaze(C);   // 喷口后的热浪（v3det.js）：在加法特效之前，扭的是火焰后面的画面
   if (!out.length) return;
   // —— 画：加法混合，测深度不写深度 ——
   const A = V3F.a;

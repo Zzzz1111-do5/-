@@ -367,6 +367,7 @@ function v3ManParse(pose) {
   if (p === 'pr') return { L: 2, m: 'idle' };
   if (p === 'dead') return { L: 2, m: 'dead' };
   if (p === 'pt') return { L: 0, m: 'pt' };
+  if (p === 'sit') return { L: 0, m: 'sit' };   // 坐着开车（牵引车、挂弹车的司机）
   if (p === 'cl0' || p === 'cl1') return { L: 0, m: 'climb', f: p === 'cl0' ? 0 : 1 };
   if (p[0] === 'L') return { L: clamp(f / 8, 0, 2), m: 'idle' };
   if (p[0] === 'w') return { L: 0, m: 'walk', ph: f / 8 * 6.2832 };
@@ -390,6 +391,7 @@ function v3ManSkel(kind, P) {
     sy = [0, 1].map(j => (j ? 1 : -1) * (.12 + .2 * Math.max(0, Math.sin(P.ph + j * Math.PI))));
   }
   if (P.m === 'climb') { lg = P.f ? [[.05, -.05], [1.05, -.7]] : [[1.05, -.7], [.05, -.05]]; tor = .1; }
+  if (P.m === 'sit') { lg = [[1.42, .14], [1.42, .14]]; tor = -.05; }   // 大腿平伸向前、小腿垂下踩着踏板，身子微微后靠
   if (P.m === 'dead') { lg = [[-1.45, -1.5], [-1.62, -1.4]]; sy = [-.18, .2]; }
   const dirA = a => [Math.sin(a), 0, -Math.cos(a)];
   // 先在髋高 0 处算腿，再把髋抬到最低点刚好着地
@@ -517,7 +519,7 @@ function v3mMan(kind, pose, opt = {}) {
     mbBox(m, -.13, .13, -.185, .185, -.06, .06, MS.gear2);   // 腰带
     if (!crw) { mbBox(m, -.1, .02, .17, .23, -.05, .05, MS.gear); mbBox(m, -.17, -.11, -.12, .12, -.04, .05, MS.gear2); }   // 侧挂杂物袋、后腰包
     mbPrism(m, [[-.12, -.19], [.13, -.19], [.15, 0], [.13, .19], [-.12, .19], [-.14, 0]], .03, .5, U, { taper: .025 });   // 上衣（胸廓）
-    if (crw) { mbBox(m, -.135, .155, -.2, .2, .14, .44, kind === 'pilot' ? MS.gear2 : 1.12, { taper: .02 }); return; }   // 救生背心 / 甲板人员彩色马甲
+    if (crw) { mbBox(m, -.135, .155, -.2, .2, .14, .44, kind === 'pilot' ? MS.gear2 : opt.vest || 1.12, { taper: .02 }); return; }   // 救生背心 / 甲板人员彩色马甲（opt.vest：按分工的颜色）
     mbBox(m, .125, .175, -.155, .155, .12, .45, MS.gear, { taper: .01 });   // 前插板
     mbBox(m, -.175, -.125, -.16, .16, .1, .46, MS.gear, { taper: .01 });   // 后插板
     for (const sg of [-1, 1]) mbBox(m, -.12, .12, sg * .185, sg * .205, .12, .3, MS.gear2);   // 侧围
@@ -551,6 +553,7 @@ function v3mMan(kind, pose, opt = {}) {
   const Sr = J.Sr, Sl = J.Sl;
   if (crw) {   // 飞行员、甲板人员：不带枪——爬梯两手交替往上抓、打手势右臂直指前方、跑步两臂前后摆
     if (P.m === 'climb') { const up = P.f ? -1 : 1; arm(Sr, v3Add(Sr, [.3, .02, .3 + up * .16]), 1); arm(Sl, v3Add(Sl, [.3, -.02, .3 - up * .16]), -1); }
+    else if (P.m === 'sit') { arm(Sr, v3Add(Sr, [.4, -.07, -.2]), 1); arm(Sl, v3Add(Sl, [.4, .07, -.2]), -1); }   // 两手握着前面的方向盘
     else if (P.m === 'pt' || P.L > .5) { arm(Sr, v3Add(Sr, [.56, .12, .06]), 1); arm(Sl, v3Add(Sl, [.08, -.12, -.5]), -1); }
     else { const sw = P.ph != null ? Math.sin(P.ph) * .3 : 0; arm(Sr, v3Add(Sr, [sw, .06, -.55]), 1); arm(Sl, v3Add(Sl, [-sw, -.06, -.55]), -1); }
     return M;
@@ -863,6 +866,8 @@ function v3mEShip(cls, L, B) {
 const V3_CVB = [[154, 0], [140, 7], [112, 14], [80, 18.5], [40, 20], [-80, 20], [-140, 19], [-155, 16.5], [-155, -16.5], [-140, -19], [-80, -20], [40, -20], [80, -18.5], [112, -14], [140, -7]];   // 水线：飞剪型舰首、方尾
 const V3_ZH = 12;   // 舰体外飘到这个高度，再往上是飞行甲板（含舷台）
 // 七段式数字（舷号）：P(x, y) 把字格坐标（x 0–1 宽、y 0–1 高）换成 3D 点
+// 金属度（写实画面的金属反光）：把网格 M 里从第 i0 个数开始的三角形法线拉长成 1 + k 倍（着色器按长度读回；玻璃、标线不动）
+function mbMetal(M, k, i0 = 0) { for (let i = i0; i < M.t.length; i += 10) if (M.t[i + 6] >= 0) { M.t[i + 3] *= 1 + k; M.t[i + 4] *= 1 + k; M.t[i + 5] *= 1 + k; } return M; }
 // 涂装色：sRGB '#rrggbb' → 明暗 s 的颜色编码（|s| ≥ 16 时 s − 16 是 7 位 RGB，负数是玻璃；v3import.js 同一约定）——写实画面直接用涂装色，黑绿画面按深浅调暗实体
 const mbRGB = h => { const v = parseInt(h.slice(1), 16); return 16 + (v >> 17 & 127) * 16384 + (v >> 9 & 127) * 128 + (v >> 1 & 127); };
 // 福建舰涂装（照片）：舰体、舰岛海灰，飞行甲板深灰防滑涂层，白、黄甲板标线，橙色封闭救生艇，相控阵面深灰，窗是深色玻璃
@@ -893,7 +898,13 @@ function v3mCarrier(lhd) {
     mbQuad(M, [K[i][0], K[i][1], zk], [K[j][0], K[j][1], zk], [T[j][0], T[j][1], zh], [T[i][0], T[i][1], zh], V3_CVP.hull, ctr);
   }
   mbLoop(M, K, zk + .02, V3_CVP.side);
-  mbPrism(M, D, zh, zd, V3_CVP.hull, { top: V3_CVP.deck, bottom: true });   // 飞行甲板与舷台
+  const ownDeck = !lhd && typeof v3dkOn === 'function' && v3dkOn();   // 高画质：甲板顶面由 v3deck.js 的着色器画（纹路、光影），这里只画侧面与底面
+  if (typeof V3DK === 'object' && !lhd) V3DK.noTop = ownDeck;
+  if (ownDeck) {
+    const n = D.length, out = [0, 0, (zh + zd) / 2];
+    for (let i = 0; i < n; i++) { const j = (i + 1) % n; mbQuad(M, [D[i][0], D[i][1], zh], [D[j][0], D[j][1], zh], [D[j][0], D[j][1], zd], [D[i][0], D[i][1], zd], V3_CVP.hull, out); }
+    for (const [a, b, c] of mbEar(D)) mbTri(M, [D[a][0], D[a][1], zh], [D[b][0], D[b][1], zh], [D[c][0], D[c][1], zh], V3_CVP.hull, [0, 0, 0], [0, 0, -1]);
+  } else mbPrism(M, D, zh, zd, V3_CVP.hull, { top: V3_CVP.deck, bottom: true });   // 飞行甲板与舷台
   mbLine(M, [-156, -14, zh - 1], [-156, 14, zh - 1], V3_CVP.dark);   // 舰尾甲板（飞行甲板下的系泊甲板）
   mbBox(M, -157, -153, -13, 13, zh - 4, zh, V3_CVP.dark);
   if (C) for (const E of C.el) {   // 升降机井：平台降下时甲板边缺口里露出的井底、内侧与前后井壁（暗）
@@ -977,7 +988,7 @@ function v3mCarrier(lhd) {
       for (let k = 0; k <= n; k++) { const t = k / n, x = lerp(P[3][0], P[2][0], t), y = lerp(P[3][1], P[2][1], t); mbLine(M, [x, y, zw], [x, y, zw + 1], V3_CVP.rail); }
     }
   } else for (let k = 0; k < 6; k++) mbLoop(M, mbCirc(100 - k * 44, -8, 6, 10), z, .8);
-  return M;
+  return mbMetal(M, .22);   // 漆面的船体钢板：淡淡的光泽
 }
 // 升降机平台（中心为原点，顶面 z = 0）：黄色边框、防滑分块线
 function v3mCvEl(L, B) {
@@ -992,6 +1003,7 @@ function v3mCvJbd() {
   const M = mbNew();
   mbBox(M, -8, 8, 0, 5, 0, .5, V3_CVP.jbd, { top: V3_CVP.jbd });
   for (let x = -6; x <= 6; x += 3) mbLine(M, [x, .2, .52], [x, 4.8, .52], V3_CVP.steel);
+  mbMetal(M, .65);   // 偏流板：耐热钢板，金属光泽
   return M;
 }
 // 攻击核潜艇：雪茄形艇体、指挥台围壳与围壳舵、X 形尾舵
@@ -1615,9 +1627,10 @@ function v3mAscCan() {
 // 实例参数 iA = (x, y, z, 朝向)，iB = (比例, 阵营 0 我 / 1 敌 / 2 残骸, 滚转, 俯仰)，坐标是 GL 的（y 向北）；先滚转、再俯仰（车头抬起为正）、再转朝向
 const V3M_VS = `attribute vec3 p; attribute vec3 n; attribute float s; attribute vec3 b; attribute vec4 iA; attribute vec4 iB;
 uniform mat4 uM; uniform vec3 uEye;
-varying vec3 vN, vB, vV, vC; varying float vS, vSide, vD;
+varying vec3 vN, vB, vV, vC; varying float vS, vSide, vD, vMet;
 ${typeof V3_SHV === 'string' ? V3_SHV : ''}
 void main() {
+  vMet = clamp(length(n) - 1., 0., 1.);   // 金属度：法线长度 − 1（mbMetal）
   // 外部模型（v3import.js）：|s| ≥ 16 时 s − 16 是 7 位 RGB 涂装色，负数是玻璃；自己画的模型 vC 记 −1
   float a = abs(s);
   if (a >= 16.) { float q = a - 16., r = floor((q + .5) / 16384.), g = floor((q - r * 16384. + .5) / 128.); vC = vec3(r, g, q - r * 16384. - g * 128.) / 127.; vS = s < 0. ? -1. : 1.; }
@@ -1633,7 +1646,7 @@ void main() {
 const V3M_FS = der => `${der ? '#extension GL_OES_standard_derivatives : enable\n#define DER 1\n' : ''}precision mediump float;
 uniform vec2 uFog; uniform vec3 uBg; uniform float uMode, uHl; uniform vec3 uHlC;
 uniform vec3 uBody0, uBody1, uBody2, uBody3, uBody4, uGlow0, uGlow1, uGlow2;
-varying vec3 vN, vB, vV, vC; varying float vS, vSide, vD;
+varying vec3 vN, vB, vV, vC; varying float vS, vSide, vD, vMet;
 ${typeof V3_SHF === 'string' ? V3_SHF : 'float shadowAt() { return 1.; }'}
 void main() {
   float hl = step(7.5, vSide), sd = vSide - hl * 8.;   // 阵营号 + 8：选中编队的成员（selfx.js），全身发光
@@ -1665,7 +1678,15 @@ void main() {
     c = body * (.45 + .95 * lit + .25 * up) * sh + glow * ed * .95 + glow * rim * .22;
     if (vS < 0.) c += glow * .75 * sh;
   } else {   // 写实：涂装色受日光、天光（上冷下暖）+ 暗棱线，边缘描一道阵营色细光
-    c = body * (mix(vec3(.3, .29, .27), vec3(.45, .5, .58), up) + vec3(1., .95, .86) * lit * .82 * shadowAt()) * sh * (1. - ed * .4) + glow * rim * .18;
+    float sd2 = shadowAt();
+    c = body * (mix(vec3(.3, .29, .27), vec3(.45, .5, .58), up) + vec3(1., .95, .86) * lit * .82 * sd2) * sh * (1. - ed * .4) * (1. - vMet * .3) + glow * rim * .18;
+    if (vMet > .01) {   // 金属：太阳高光 + 天空 / 海面的倒影（菲涅耳：掠射角更亮）；越像金属，高光越尖、越带本身的颜色
+      vec3 Ls = ${typeof V3_SUNG === 'string' ? V3_SUNG : 'normalize(vec3(-.45, .55, .7))'}, Hh = normalize(Ls + V), Rr = reflect(-V, N);
+      float F = .04 + .96 * pow(1. - clamp(dot(N, V), 0., 1.), 5.);
+      vec3 env = Rr.z > 0. ? mix(vec3(.74, .75, .8), vec3(.5, .6, .76), Rr.z) : mix(vec3(.3, .34, .38), vec3(.1, .14, .18), clamp(-Rr.z * 3., 0., 1.));
+      vec3 tint = mix(vec3(1.), clamp(body * 1.7, 0., 1.), vMet * .6);
+      c += tint * (pow(max(dot(N, Hh), 0.), mix(18., 110., vMet)) * mix(.25, 1.4, vMet) * sd2 + env * (mix(.04, .28, vMet) + F * mix(.14, .5, vMet))) * (1. - ed * .3);
+    }
     if (vS < 0.) c = mix(c, vec3(.55, .7, .78), .6);
   }
   if (hl > .5) c += uHlC * uHl * (.28 + .9 * rim + .55 * ed);   // 选中的：整个人 / 整辆车亮起来，轮廓与棱线更亮
