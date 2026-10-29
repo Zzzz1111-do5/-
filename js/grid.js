@@ -142,6 +142,9 @@ function nearestPassable(i, cls) {
 
 const NB = [[1, 0, 1], [-1, 0, 1], [0, 1, 1], [0, -1, 1], [1, 1, 1.414], [1, -1, 1.414], [-1, 1, 1.414], [-1, -1, 1.414]];
 const NDX = NB.map(n => n[0]), NDY = NB.map(n => n[1]), NDM = NB.map(n => n[2]);
+// 按网格宽度把 8 个邻格换成下标偏移（顺序同 NB）；世界尺寸变了才重建
+let NB_OFF = null;
+const nbOff = gw => NB_OFF && NB_OFF.gw === gw ? NB_OFF.o : (NB_OFF = { gw, o: Int32Array.from(NB, n => n[1] * gw + n[0]) }).o;
 
 // 流场缓存：地形/工事变化只让版本号递增；每个推演步最多重算 FBUDGET 个，超出时先用旧流场，避免大地图卡顿
 let FBUDGET = 3, FCOUNT = 0;   // FCOUNT：累计重算次数（性能统计）
@@ -161,16 +164,22 @@ function compOf(cls, fresh) {
   if (C && (C.gen === gen || (!fresh && now != null && C.t != null && now - C.t >= 0 && now - C.t < 3))) return C.a;
   const cost = costArr(cls, gen), a = (C && C.a) || new Int32Array(GW * GH), st = HEAP_N;
   a.fill(0);
+  // 内层循环只用局部变量（外层的 let 每次读都要查作用域）；不贴边的格直接按下标偏移取 8 邻格，顺序与 NB 相同、结果不变
+  const gw = GW, ph = PGH, OFF = nbOff(gw);
   let id = 0;
   for (let k0 = 0; k0 < PGN; k0++) {
     if (a[k0] || cost[k0] === Infinity) continue;
     a[k0] = ++id; let n = 0; st[n++] = k0;
     while (n) {
-      const i = st[--n], gx = i % GW, gy = (i / GW) | 0;
+      const i = st[--n], gx = i % gw, gy = (i / gw) | 0;
+      if (gx > 0 && gy > 0 && gx < gw - 1 && gy < ph - 1) {
+        for (let k = 0; k < 8; k++) { const j = i + OFF[k]; if (!a[j] && cost[j] !== Infinity) { a[j] = id; st[n++] = j; } }
+        continue;
+      }
       for (let k = 0; k < 8; k++) {
         const nx = gx + NDX[k], ny = gy + NDY[k];
-        if (nx < 0 || ny < 0 || nx >= GW || ny >= PGH) continue;
-        const j = ny * GW + nx;
+        if (nx < 0 || ny < 0 || nx >= gw || ny >= ph) continue;
+        const j = ny * gw + nx;
         if (!a[j] && cost[j] !== Infinity) { a[j] = id; st[n++] = j; }
       }
     }
@@ -214,42 +223,48 @@ function gridAlloc() {
   if (typeof COMPS === 'object') COMPS.clear();
 }
 gridAlloc(); onWorld(gridAlloc);
-let AS_STAMP = 0;
+let AS_STAMP = 0, AS_LAST = 0;   // AS_LAST：上一次 A* 展开了多少格
+// 大地图（寻路带超过 15 万格，比如海岛）每个推演步给 A* 一个总格数预算：大批部队同时上岸时一起要路线，每条最多搜 4 万格，
+//   几十辆车挤在同一步里搜就明显卡顿；预算用完的这一步改走流场（与 A* 搜到上限时的退路一样），默认地图不设预算、行为不变
+let AS_BUD = 0, AS_BUDT = null;
+const AS_STEP = 80000, BIG_PG = 150000;
 function astar(s, g, cls, maxN = 40000) {
   if (g < 0) return null;
   if (s === g) return [];
-  const cost = costArr(cls, FGEN[fgKey(cls)]), stamp = ++AS_STAMP, mc = (cls === 'ship' ? 1 : .72) * 1.2, gx = g % GW, gy = (g / GW) | 0;
-  const h = i => { const dx = Math.abs(i % GW - gx), dy = Math.abs(((i / GW) | 0) - gy); return (Math.max(dx, dy) + .414 * Math.min(dx, dy)) * mc; };
-  let n = 0, cnt = 0, found = false;
-  const push = (i, p) => {
-    let k = n++;
-    while (k > 0) { const pa = (k - 1) >> 1; if (HEAP_P[pa] <= p) break; HEAP_N[k] = HEAP_N[pa]; HEAP_P[k] = HEAP_P[pa]; k = pa; }
-    HEAP_N[k] = i; HEAP_P[k] = p;
-  };
-  AS_SEEN[s] = stamp; AS_G[s] = 0; AS_FROM[s] = -1; push(s, h(s));
+  const cost = costArr(cls, FGEN[fgKey(cls)]), stamp = ++AS_STAMP, mc = (cls === 'ship' ? 1 : .72) * 1.2;
+  // 内层循环只用局部变量，启发值与入堆就地展开（闭包里改写的变量每次都要查作用域）；不贴边的格按下标偏移取邻格——搜索顺序与结果不变，快两三成
+  const gw = GW, gh = GH, gx = g % gw, gy = (g / gw) | 0, HN = HEAP_N, HP = HEAP_P, cap = HN.length, G = AS_G, FR = AS_FROM, SN = AS_SEEN;
+  const OFF = nbOff(gw), DX = NDX, DY = NDY, DM = NDM;
+  let n = 1, cnt = 0, found = false;
+  { const dx = Math.abs(s % gw - gx), dy = Math.abs(((s / gw) | 0) - gy); SN[s] = stamp; G[s] = 0; FR[s] = -1; HN[0] = s; HP[0] = (Math.max(dx, dy) + .414 * Math.min(dx, dy)) * mc; }
   while (n) {
-    const i = HEAP_N[0], p = HEAP_P[0], li = HEAP_N[--n], lp = HEAP_P[n];
+    const i = HN[0], p = HP[0], li = HN[--n], lp = HP[n];
     let k = 0;
-    for (;;) {
-      let c = 2 * k + 1;
-      if (c >= n) break;
-      if (c + 1 < n && HEAP_P[c + 1] < HEAP_P[c]) c++;
-      if (HEAP_P[c] >= lp) break;
-      HEAP_N[k] = HEAP_N[c]; HEAP_P[k] = HEAP_P[c]; k = c;
-    }
-    HEAP_N[k] = li; HEAP_P[k] = lp;
+    for (;;) { let c = 2 * k + 1; if (c >= n) break; if (c + 1 < n && HP[c + 1] < HP[c]) c++; if (HP[c] >= lp) break; HN[k] = HN[c]; HP[k] = HP[c]; k = c; }
+    HN[k] = li; HP[k] = lp;
     if (i === g) { found = true; break; }
-    if (p > AS_G[i] + h(i) || ++cnt > maxN) { if (cnt > maxN) break; continue; }
-    const ix = i % GW, iy = (i / GW) | 0, c0 = cost[i];
+    const ix = i % gw, iy = (i / gw) | 0, gi = G[i];
+    { const dx = Math.abs(ix - gx), dy = Math.abs(iy - gy); if (p > gi + (Math.max(dx, dy) + .414 * Math.min(dx, dy)) * mc) continue; }   // 堆里过时的条目
+    if (++cnt > maxN) break;
+    const c0 = cost[i], inner = ix > 0 && iy > 0 && ix < gw - 1 && iy < gh - 1;
     for (let k2 = 0; k2 < 8; k2++) {
-      const nx = ix + NDX[k2], ny = iy + NDY[k2];
-      if (nx < 0 || ny < 0 || nx >= GW || ny >= GH) continue;
-      const j = ny * GW + nx, cj = cost[j];
+      const nx = ix + DX[k2], ny = iy + DY[k2];
+      let j;
+      if (inner) j = i + OFF[k2];
+      else { if (nx < 0 || ny < 0 || nx >= gw || ny >= gh) continue; j = ny * gw + nx; }
+      const cj = cost[j];
       if (cj === Infinity) continue;
-      const nd = AS_G[i] + (cj + c0) * .5 * NDM[k2];
-      if ((AS_SEEN[j] !== stamp || nd < AS_G[j]) && n < HEAP_N.length) { AS_SEEN[j] = stamp; AS_G[j] = nd; AS_FROM[j] = i; push(j, nd + h(j)); }
+      const nd = gi + (cj + c0) * .5 * DM[k2];
+      if ((SN[j] !== stamp || nd < G[j]) && n < cap) {
+        SN[j] = stamp; G[j] = nd; FR[j] = i;
+        const dx = Math.abs(nx - gx), dy = Math.abs(ny - gy), pr = nd + (Math.max(dx, dy) + .414 * Math.min(dx, dy)) * mc;
+        let q = n++;
+        while (q > 0) { const pa = (q - 1) >> 1; if (HP[pa] <= pr) break; HN[q] = HN[pa]; HP[q] = HP[pa]; q = pa; }
+        HN[q] = j; HP[q] = pr;
+      }
     }
   }
+  AS_LAST = cnt;
   if (!found) return null;
   const out = [];
   for (let i = g; i !== s; i = AS_FROM[i]) out.push(cellCY(i), cellCX(i));
@@ -261,43 +276,90 @@ function field(tx, ty, cls) {
   const key = cls + ti, f = FIELDS.get(key), gen = FGEN[fgKey(cls)], now = typeof S === 'object' && S && S.phase === 'battle' && isFinite(S.t) ? S.t : null;
   // 交战中 3 秒内算过的流场：工事网格又变了也先照用（炮火连连时铁丝网、雷区几乎每秒在变，每变一次就整图重算太卡）
   if (f && (f.gen === gen || FBUDGET <= 0 || (now != null && f.t != null && now - f.t >= 0 && now - f.t < 3))) { FIELDS.delete(key); FIELDS.set(key, f); return f.d; }
+  // 大地图（寻路带超过 15 万格，比如海岛）交战中：这一步的流场预算用完了，新目标的流场留到下一步再算（调用方这一步先直奔目标）——
+  //   大批部队同时上岸、各要一张整片寻路带的流场时，挤在一步里算好几张会明显卡顿；默认地图照旧
+  if (!f && FBUDGET <= 0 && PGN > BIG_PG && now != null) return null;
   FBUDGET--; FCOUNT++;
-  const d = f ? f.d : new Float64Array(GW * GH);
+  // 大地图的流场只存寻路带（以外的格读出来是 undefined，各处按 isFinite 判断，与 Infinity 一样算不通）、用单精度：
+  //   一张从 5.8 MB 降到 1 MB，缓存满 48 张时不再吃掉两百多兆内存；默认地图照旧
+  const big = PGN > BIG_PG, d = f ? f.d : big ? new Float32Array(PGN) : new Float64Array(GW * GH);
   d.fill(Infinity);
   const cost = costArr(cls, gen);
-  let n = 0;
-  const push = (i, p) => {
-    let k = n++;
-    while (k > 0) { const pa = (k - 1) >> 1; if (HEAP_P[pa] <= p) break; HEAP_N[k] = HEAP_N[pa]; HEAP_P[k] = HEAP_P[pa]; k = pa; }
-    HEAP_N[k] = i; HEAP_P[k] = p;
-  };
-  d[ti] = 0; push(ti, 0);
+  if (fieldDial(d, ti, cls, cost, big)) return fieldPut(key, d, gen, now);
+  // 内层循环只用局部变量、入堆就地展开；不贴边的格按下标偏移取邻格（顺序同 NB，结果逐位不变）
+  const gw = GW, gh = GH, HN = HEAP_N, HP = HEAP_P, cap = HN.length, OFF = nbOff(gw), DX = NDX, DY = NDY, DM = NDM;
+  let n = 1;
+  d[ti] = 0; HN[0] = ti; HP[0] = 0;
   while (n) {
-    const i = HEAP_N[0], p = HEAP_P[0], li = HEAP_N[--n], lp = HEAP_P[n];
+    const i = HN[0], p = HP[0], li = HN[--n], lp = HP[n];
     let k = 0;
-    for (;;) {
-      let c = 2 * k + 1;
-      if (c >= n) break;
-      if (c + 1 < n && HEAP_P[c + 1] < HEAP_P[c]) c++;
-      if (HEAP_P[c] >= lp) break;
-      HEAP_N[k] = HEAP_N[c]; HEAP_P[k] = HEAP_P[c]; k = c;
-    }
-    HEAP_N[k] = li; HEAP_P[k] = lp;
+    for (;;) { let c = 2 * k + 1; if (c >= n) break; if (c + 1 < n && HP[c + 1] < HP[c]) c++; if (HP[c] >= lp) break; HN[k] = HN[c]; HP[k] = HP[c]; k = c; }
+    HN[k] = li; HP[k] = lp;
     if (p > d[i]) continue;
-    const gx = i % GW, gy = (i / GW) | 0, c0 = cost[i];
+    const gx = i % gw, gy = (i / gw) | 0, c0 = cost[i], inner = gx > 0 && gy > 0 && gx < gw - 1 && gy < gh - 1;
     for (let k2 = 0; k2 < 8; k2++) {
-      const nx = gx + NDX[k2], ny = gy + NDY[k2];
-      if (nx < 0 || ny < 0 || nx >= GW || ny >= GH) continue;
-      const j = ny * GW + nx, cj = cost[j];
+      let j;
+      if (inner) j = i + OFF[k2];
+      else { const nx = gx + DX[k2], ny = gy + DY[k2]; if (nx < 0 || ny < 0 || nx >= gw || ny >= gh) continue; j = ny * gw + nx; }
+      const cj = cost[j];
       if (cj === Infinity) continue;
-      const nd = p + (cj + c0) * .5 * NDM[k2];
-      if (nd < d[j] && n < HEAP_N.length) { d[j] = nd; push(j, nd); }
+      let nd = p + (cj + c0) * .5 * DM[k2];
+      if (big) nd = Math.fround(nd);   // 单精度存储：堆里的键也取同一个值，「过时条目」的判断才不会把有效条目丢掉
+      if (nd < d[j] && n < cap) {
+        d[j] = nd;
+        let q = n++;
+        while (q > 0) { const pa = (q - 1) >> 1; if (HP[pa] <= nd) break; HN[q] = HN[pa]; HP[q] = HP[pa]; q = pa; }
+        HN[q] = j; HP[q] = nd;
+      }
     }
   }
+  return fieldPut(key, d, gen, now);
+}
+function fieldPut(key, d, gen, now) {
   FIELDS.delete(key);
   FIELDS.set(key, { d, gen, t: now });
   while (FIELDS.size > 48) FIELDS.delete(FIELDS.keys().next().value);
   return d;
+}
+// 流场用桶队列（Dial）：桶宽取略小于最小一步代价，同一个桶里的格先出后出都不会被同桶的格再改小——每格的值都是
+//   「各邻格值 + 一步代价」的最小值，与出队顺序无关，所以结果与二叉堆逐位相同；省掉堆的上下调整，快 1.5～2 倍。
+//   f32：大地图按单精度存，每一步的和也先取成单精度；代价跨度太大（桶不够分）时返回 false 改用堆
+const DL_NB = 8192;
+let DL = null;
+function fieldDial(d, ti, cls, cost, f32) {
+  const C = COSTS.get(cls);
+  if (C.mn == null) { let mn = Infinity, mx = 0; for (let k = 0; k < PGN; k++) { const c = cost[k]; if (c < mn) mn = c; if (c > mx && c !== Infinity) mx = c; } C.mn = mn; C.mx = mx; }
+  const W = C.mn * .999, inv = 1 / W, M = DL_NB - 1;
+  if (!(W > 0) || C.mx * 1.415 * inv + 2 >= DL_NB) return false;
+  const n0 = PGN;
+  if (!DL || DL.n !== n0) DL = { n: n0, nx: new Int32Array(n0), pv: new Int32Array(n0), bk: new Int32Array(n0), head: new Int32Array(DL_NB) };
+  const NX = DL.nx, PV = DL.pv, BK = DL.bk, HD = DL.head, gw = GW, gh = GH, OFF = nbOff(gw), DX = NDX, DY = NDY, DM = NDM;
+  BK.fill(-1); HD.fill(-1);
+  let cnt = 1, cur = 0;
+  d[ti] = 0; NX[ti] = -1; PV[ti] = -1; HD[0] = ti; BK[ti] = 0;
+  while (cnt) {
+    let b = cur & M;
+    while (HD[b] < 0) b = ++cur & M;
+    const i = HD[b], nI = NX[i];
+    HD[b] = nI; if (nI >= 0) PV[nI] = -1; BK[i] = -1; cnt--;
+    const p = d[i], gx = i % gw, gy = (i / gw) | 0, c0 = cost[i], inner = gx > 0 && gy > 0 && gx < gw - 1 && gy < gh - 1;
+    for (let k2 = 0; k2 < 8; k2++) {
+      let j;
+      if (inner) j = i + OFF[k2];
+      else { const nx = gx + DX[k2], ny = gy + DY[k2]; if (nx < 0 || ny < 0 || nx >= gw || ny >= gh) continue; j = ny * gw + nx; }
+      const cj = cost[j];
+      if (cj === Infinity) continue;
+      let nd = p + (cj + c0) * .5 * DM[k2];
+      if (f32) nd = Math.fround(nd);
+      if (nd >= d[j]) continue;
+      const ob = BK[j];
+      if (ob >= 0) { const nn = NX[j], pp = PV[j]; if (pp >= 0) NX[pp] = nn; else HD[ob] = nn; if (nn >= 0) PV[nn] = pp; cnt--; }   // 从原来的桶里摘下
+      d[j] = nd;
+      const nb = Math.floor(nd * inv) & M, h = HD[nb];
+      NX[j] = h; PV[j] = -1; if (h >= 0) PV[h] = j; HD[nb] = j; BK[j] = nb; cnt++;
+    }
+  }
+  return true;
 }
 
 // 局部流场：只在 (x0, y0)、(tx, ty) 外扩 pad 格的小窗口里算（近距离绕行、近距离可达性检查用，不进全图流场缓存）；
@@ -312,26 +374,30 @@ function localField(x0, y0, tx, ty, cls, pad = 6) {
   if (ti < 0) return null;
   const tx0 = ti % GW - gx0, ty0 = ((ti / GW) | 0) - gy0;
   if (tx0 < 0 || ty0 < 0 || tx0 >= w || ty0 >= h) return null;
-  const d = LOCF.d, HN = LOCF.hn, HP = LOCF.hp;
+  const d = LOCF.d, HN = LOCF.hn, HP = LOCF.hp, cap = HN.length, gw = GW, DX = NDX, DY = NDY, DM = NDM;
   d.fill(Infinity, 0, w * h);
-  let n = 0;
-  const push = (i, p) => { let k = n++; while (k > 0) { const pa = (k - 1) >> 1; if (HP[pa] <= p) break; HN[k] = HN[pa]; HP[k] = HP[pa]; k = pa; } HN[k] = i; HP[k] = p; };
+  let n = 1;
   const t0 = ty0 * w + tx0;
-  d[t0] = 0; push(t0, 0);
+  d[t0] = 0; HN[0] = t0; HP[0] = 0;
   while (n) {
     const i = HN[0], p = HP[0], li = HN[--n], lp = HP[n];
     let k = 0;
     for (;;) { let c = 2 * k + 1; if (c >= n) break; if (c + 1 < n && HP[c + 1] < HP[c]) c++; if (HP[c] >= lp) break; HN[k] = HN[c]; HP[k] = HP[c]; k = c; }
     HN[k] = li; HP[k] = lp;
     if (p > d[i]) continue;
-    const lx = i % w, ly = (i / w) | 0, c0 = stepCost((ly + gy0) * GW + lx + gx0, cls);
+    const lx = i % w, ly = (i / w) | 0, c0 = stepCost((ly + gy0) * gw + lx + gx0, cls);
     for (let k2 = 0; k2 < 8; k2++) {
-      const nx = lx + NDX[k2], ny = ly + NDY[k2];
+      const nx = lx + DX[k2], ny = ly + DY[k2];
       if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
-      const cj = stepCost((ny + gy0) * GW + nx + gx0, cls);
+      const cj = stepCost((ny + gy0) * gw + nx + gx0, cls);
       if (cj === Infinity) continue;
-      const j = ny * w + nx, nd = p + (cj + c0) * .5 * NDM[k2];
-      if (nd < d[j] && n < HN.length) { d[j] = nd; push(j, nd); }
+      const j = ny * w + nx, nd = p + (cj + c0) * .5 * DM[k2];
+      if (nd < d[j] && n < cap) {   // 入堆就地展开（同 field）
+        d[j] = nd;
+        let q = n++;
+        while (q > 0) { const pa = (q - 1) >> 1; if (HP[pa] <= nd) break; HN[q] = HN[pa]; HP[q] = HP[pa]; q = pa; }
+        HN[q] = j; HP[q] = nd;
+      }
     }
   }
   return { d, gx0, gy0, w, h };
@@ -369,7 +435,16 @@ function pathStep(u, tx, ty, cls, fget, look, ahead = 2, off = 30) {
     let p = null, full = true;
     if (cost[i0] !== Infinity && cls !== 'raid') {   // 先看连通、再用 A* 只搜起终点之间的一片；单位站在不可通行格上（被挤进河边等）仍按流场下降走出来
       if (!reachable(u.x, u.y, tx, ty, cls)) { u.fpth = null; return { no: true }; }
-      p = astar(i0, nearestPassable(ci(tx, ty), cls), cls);
+      let mx = 40000;
+      const big = PGN > BIG_PG, F = u.asF;
+      if (big) {
+        if (AS_BUDT !== S.t) { AS_BUDT = S.t; AS_BUD = AS_STEP; }
+        mx = Math.min(mx, AS_BUD);
+        if (F && F.tx === tx && F.ty === ty && F.cls === cls && S.t - F.t < 8) mx = 0;   // 8 秒内对同一目标 A* 刚搜到上限没找到：直接用流场，不再白搜一遍
+      }
+      AS_LAST = 0;
+      p = mx >= 1500 ? astar(i0, nearestPassable(ci(tx, ty), cls), cls, mx) : null;
+      if (big) { AS_BUD -= AS_LAST; if (!p && AS_LAST > mx && mx >= 40000) u.asF = { tx, ty, cls, t: S.t }; }
       if (p && !p.length) { u.fpth = null; return { end: true }; }
     }
     if (!p) {
@@ -392,7 +467,7 @@ function pathStep(u, tx, ty, cls, fget, look, ahead = 2, off = 30) {
 // 沿流场下降一步：返回下一格中心，已在目标格返回 null
 function nextStep(d, x, y) {
   const i = ci(x, y), gx = i % GW, gy = (i / GW) | 0;
-  let best = -1, bv = d[i];
+  let best = -1, bv = d[i] ?? Infinity;   // 大地图的流场只存寻路带，带外读出 undefined
   for (const [dx, dy] of NB) {
     const nx = gx + dx, ny = gy + dy;
     if (nx < 0 || ny < 0 || nx >= GW || ny >= GH) continue;
