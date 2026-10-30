@@ -89,14 +89,14 @@ function v3gUpload(img) {
 // ———————————————— 着色器 ————————————————
 // 实例：iA = (x, y, z, 朝向)，iB = (比例, 阵营, 滚转, 俯仰)，与 v3units.js 的 v3mAdd 相同（GL 坐标，y 向北）；iC = 四个部件的角度（收起的部件 > .5 就收）
 const V3G_VS = `attribute vec3 p; attribute vec3 n; attribute vec2 uv; attribute vec4 iA; attribute vec4 iB; attribute vec4 iC;
-uniform mat4 uM; uniform vec3 uEye; uniform float uPk, uPm, uRad, uPx, uPl; uniform vec3 uPp, uPa;
+uniform mat4 uM; uniform vec3 uEye; uniform float uPk, uPm, uRad, uPx, uPl; uniform vec3 uPp, uPa; uniform vec4 uPw;
 varying vec3 vN, vV, vP; varying vec2 vUv, vW; varying float vSide, vD;
 ${typeof V3_SHV === 'string' ? V3_SHV : 'uniform mat4 uShM; varying vec4 vSh;'}
 vec3 rotA(vec3 v, vec3 a, float t) { float c = cos(t), s = sin(t); return v * c + cross(a, v) * s + a * dot(a, v) * (1. - c); }
 void main() {
   vec3 q = p, m = n;
   if (uPk > -.5) {
-    float ang = uPk < .5 ? iC.x : uPk < 1.5 ? iC.y : uPk < 2.5 ? iC.z : iC.w;
+    float ang = dot(iC, uPw);   // 实例的四个部件参数按权重组合（一般只取自己那一个；舵面 = 俯仰 + 滚转差动）
     if (uPm > 1.5) {   // 尾喷口调节片：绕前缘铰链张开（ang > 0）/ 收拢（ang < 0）——离铰链越远（越靠出口）径向缩放越多
       vec3 d = q - uPp; float ax = dot(d, uPa); q = uPp + uPa * ax + (d - uPa * ax) * (1. + ang * clamp(-ax / max(uPl, .01), 0., 1.));
     }
@@ -181,7 +181,7 @@ function v3gInit(gl) {
     if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(pr));
     V3G.pr = pr;
     for (const k of ['p', 'n', 'uv', 'iA', 'iB', 'iC']) V3G.a[k] = gl.getAttribLocation(pr, k);
-    for (const k of ['uM', 'uEye', 'uPk', 'uPm', 'uPl', 'uPp', 'uPa', 'uRad', 'uPx', 'uC', 'uSG', 'uTf', 'uTf2', 'uMR', 'uE', 'uNs', 'uAm', 'uAc', 'uTb', 'uTn', 'uTm', 'uTe', 'uTo', 'uLm', 'uFog', 'uWorld', 'uBg', 'uLmOn', 'uBm', 'uMx', 'uHl', 'uHlC', 'uShM', 'uShT', 'uShOn', 'uShP']) V3G.u[k] = gl.getUniformLocation(pr, k);
+    for (const k of ['uM', 'uEye', 'uPk', 'uPm', 'uPl', 'uPp', 'uPa', 'uPw', 'uRad', 'uPx', 'uC', 'uSG', 'uTf', 'uTf2', 'uMR', 'uE', 'uNs', 'uAm', 'uAc', 'uTb', 'uTn', 'uTm', 'uTe', 'uTo', 'uLm', 'uFog', 'uWorld', 'uBg', 'uLmOn', 'uBm', 'uMx', 'uHl', 'uHlC', 'uShM', 'uShT', 'uShOn', 'uShP']) V3G.u[k] = gl.getUniformLocation(pr, k);
     V3G.ib = gl.createBuffer();
     V3G.ok = true;
   } catch (e) { V3G.ok = false; console.warn('贴图模型不可用', e); }
@@ -251,7 +251,10 @@ function v3gDraw(C, LM) {
         if (V3G.glass && V3G.glass.key === M.key && V3G.glass.hide && V3G.glass.hide.includes(T.n)) continue;   // 坐在座舱里：模型的平显玻璃是一整块不透明的亮绿色，不画（平显符号由 v3pilot.js 画在那里）
         const P = pi >= 0 ? M.parts[pi] : null;
         gl.uniform1f(U.uPk, P ? pi : -1);
-        if (P) { gl.uniform1f(U.uPm, P.k === 'hide' ? 1 : P.k === 'noz' ? 2 : 0); gl.uniform1f(U.uPl, P.l || 1); gl.uniform3f(U.uPp, P.p[0], P.p[1], P.p[2]); gl.uniform3f(U.uPa, P.a[0], P.a[1], P.a[2]); }
+        if (P) {
+          const w = P.w || [pi === 0 ? 1 : 0, pi === 1 ? 1 : 0, pi === 2 ? 1 : 0, pi >= 3 ? 1 : 0];
+          gl.uniform1f(U.uPm, P.k === 'hide' ? 1 : P.k === 'noz' ? 2 : 0); gl.uniform1f(U.uPl, P.l || 1); gl.uniform3f(U.uPp, P.p[0], P.p[1], P.p[2]); gl.uniform3f(U.uPa, P.a[0], P.a[1], P.a[2]); gl.uniform4f(U.uPw, w[0], w[1], w[2], w[3]);
+        }
         const hv = V3G.hud && V3G.hud.key === M.key && M.hudMi === mi ? V3G.hud.tex : null;   // 平显玻璃：坐在座舱里时是实时平显（线条发光，背景透明）
         const lv = hv || (V3G.live && V3G.live.key === M.key && V3G.live.mi === mi ? V3G.live.tex : null);   // 座舱显示屏：玩家开着这架时是实时画面（v3pilot.js），自己发光
         const tb = lv || (T.t && M.tex[T.t[0]]), tn = T.nt && M.tex[T.nt[0]], tm = (T.sg ? T.sgt : T.mrt) && M.tex[(T.sg ? T.sgt : T.mrt)[0]], te = lv || (T.et && M.tex[T.et[0]]), to = T.ot && M.tex[T.ot[0]];
@@ -305,14 +308,15 @@ const v3dMv3 = (h, p, r, v) => {   // 先滚转（绕 x）、再俯仰（绕 y�
   c = Math.cos(-h); s = Math.sin(-h);
   return [x * c - y * s, x * s + y * c, z];
 };
-function v3gPlane(key, sz, x, y, z, ground, h, side, roll, pitch, gear, t, noz = 0) {   // noz：尾喷口开合（正 = 张开，负 = 收拢）
+function v3gPlane(key, sz, x, y, z, ground, h, side, roll, pitch, gear, t, noz = 0, ctl = null) {   // noz：尾喷口开合（正 = 张开，负 = 收拢）；ctl：舵面 { de 平尾（负 = 后缘上偏、抬头）, da 滚转差动 }（v3det.js v3dPitch 按气动算）
   const mk = V3G_AIR[key] || 'j31', M = v3gModel(mk);
   if (!M) return false;
   const k = sz / M.meta.len;
   let ox = x, oy = y, oz = z;
   if (!ground) { const o = v3dMv3(h, pitch, roll, [0, 0, M.meta.zc * k]); ox -= o[0]; oy += o[1]; oz -= o[2]; }   // 绕机身中线俯仰、滚转（模型原点在机轮着地处）
   const P = [0, 0, 0, 0];
-  M.parts.forEach((p, i) => { if (p.n === 'gear') P[i] = gear ? 0 : 1; else if (p.n === 'rotor') P[i] = (t || 0) * 22; else if (p.n === 'trotor') P[i] = (t || 0) * 61; else if (p.k === 'noz') P[i] = noz; });
+  M.parts.forEach((p, i) => { const j = p.slot ?? i; if (j > 3) return; if (p.n === 'gear') P[j] = gear ? 0 : 1; else if (p.n === 'rotor') P[j] = (t || 0) * 22; else if (p.n === 'trotor') P[j] = (t || 0) * 61; else if (p.k === 'noz') P[j] = noz; });
+  if (M.ctl) { P[2] = ctl ? ctl.de || 0 : 0; P[3] = ctl ? ctl.da || 0 : 0; }   // 舵面：槽 3 平尾、槽 4 滚转差动
   return v3gAdd(mk, ox, oy, oz, h, k, side, roll, pitch, P);
 }
 // 导弹：model 型号键（V3MS），sc 世界单位 / 米（v3MslK 等）；按这一型的真实长度缩放模型
@@ -332,10 +336,16 @@ const V3G_ALT = { z21: 'z10w' };
 // 带座舱内饰的模型（座舱视角坐进模型里看，v3pilot.js）：eye 飞行员眼睛、pan 仪表板上沿中点（模型坐标，米：x 前、y 左、z 上）；
 //   scr = 仪表板显示屏的材质——玩家开着这架时换成实时画面（雷达、挂载、燃油与速度）。歼-31（歼-35 用它）是一整块宽屏，左右两半各贴半张图
 //   hud = 平显玻璃的材质（坐在座舱里换成实时平显画面）；hudF = 平显外框（材质、所在范围 x0 x1 y0 y1 z0 z1、玻璃内沿 y0 y1 z0 z1、左右与上边收到原宽的几成，底边坐在遮光罩上不动）
-//   noz = 尾喷口调节片（材质、铰链 x、出口 x、离发动机轴线的半径范围）——拆成单独部件，按推力开合（v3gPlane 的 noz）
+//   noz = 尾喷口调节片（材质、铰链 x、出口 x、离发动机轴线的半径范围）——拆成单独部件，按推力开合（v3gPlane 的 noz）；ctl = 舵面（见下）
 const V3G_PIT = { j31: { eye: [4.3, 0, 2.72], pan: [5.22, 0, 2.52], scr: 'screen', hud: 'Glowing_green',
   hudF: { mat: 'Darkness', box: [5.1, 5.16, -.105, .105, 2.55, 2.8], inner: [-.076, .076, 2.599, 2.769], k: .3 },
-  noz: { mat: 'metal', x0: -6.85, x1: -7.47, r0: .44, r1: .6 } } };   // 歼-20 的座舱眼位还没对好，先用平面座舱   // hide：坐在座舱里不画的材质（挡视线的平显玻璃）
+  noz: { mat: 'metal', x0: -6.85, x1: -7.47, r0: .44, r1: .6 },
+  // 舵面（模型里本来就是单独的面，边界有错开的顶点）：全动平尾（x、|y| 范围，转轴 x、z，绕 y 轴）、内侧襟副翼与外侧副翼（铰链线两端 [x, |y|]，铰链后面的绕铰链转）；
+  //   w：实例参数的组合（第 3 个 = 平尾偏角，第 4 个 = 滚转差动）——左边（模型 y > 0）照抄，右边滚转那一项反号；偏角正 = 后缘下偏
+  ctl: { mats: ['Wing_top', 'Wing_bottom'], z: [1.6, 2.1], surf: [
+    { n: 'stab', x: [-8.6, -5.2], y: [1.3, 4.25], pv: [-6.55, 1.86], w: [0, 0, 1, .6] },
+    { n: 'flap', h: [[-4.12, 1.77], [-3.77, 4.74]], y: [1.7, 4.76], w: [0, 0, 0, 1] },
+    { n: 'ail', h: [[-3.745, 4.74], [-3.73, 5.77]], y: [4.7, 5.82], w: [0, 0, 0, 1] }] } } };   // 歼-20 的座舱眼位还没对好，先用平面座舱   // hide：坐在座舱里不画的材质（挡视线的平显玻璃）
 // 显示屏的面：模型用镜像修改器做的，左右各多出一片和正面重叠、贴图左右反的镜像面（两层贴图在同一个平面上来回打架闪烁）——
 //   只留贴图从左往右（机体 y 由大到小，飞行员看过去从左到右）的面；每块屏记下 y 范围（左、右）、z 范围（下、上）与贴图 u、v 范围
 function v3gPitScr(cf, m, M, VB, IB) {
@@ -380,24 +390,47 @@ function v3gPitHud(cf, m, M, VB, IB) {
   }
   M.hudMi = hi;
 }
-// 尾喷口：调节片的三角形从原来的绘制段里挑出来（左右发动机各一段），挂成 noz 部件——顶点着色器按铰链到出口的位置径向张开 / 收拢
-function v3gPitNoz(cf, m, M, VB, IB) {
+// 尾喷口与舵面：把这些三角形从原来的绘制段里挑出来（每段按「其余 / 各部件」重排索引、拆成几段），挂成部件——顶点着色器按实例参数转
+//   尾喷口（noz）：左右发动机各一个，绕前缘铰链径向开合（参数槽 1）；舵面（rot）：绕铰链轴转，偏角 = 实例参数按权重组合
+function v3gPitParts(cf, m, M, VB, IB) {
+  const st = m.st, parts = m.parts || (m.parts = []), G = [];   // G：{ mi: 材质集合, test(顶点) → 是否属于, pi: 部件序号 }
   const N = cf.noz, ni = N ? m.mats.findIndex(x => x.n === N.mat) : -1, noz = m.noz && m.noz[0];
-  if (ni < 0 || !noz) return;
-  const st = m.st, sides = noz[1] ? [1, -1] : [1], parts = m.parts || (m.parts = []), pi = sides.map(sg => parts.push({ n: 'noz', k: 'noz', p: [N.x0, noz[1] * sg, noz[2]], a: [1, 0, 0], l: N.x0 - N.x1 }) - 1);
-  const side = v => { const o = v * st, x = VB[o], y = VB[o + 1], z = VB[o + 2]; if (x > N.x0 + .02 || x < N.x1 - .02) return -1; for (let k = 0; k < sides.length; k++) { const r = Math.hypot(y - noz[1] * sides[k], z - noz[2]); if (r >= N.r0 && r <= N.r1) return k; } return -1; };
+  if (ni >= 0 && noz) for (const sg of noz[1] ? [1, -1] : [1]) {
+    const pi = parts.push({ n: 'noz', k: 'noz', slot: 1, w: [0, 1, 0, 0], p: [N.x0, noz[1] * sg, noz[2]], a: [1, 0, 0], l: N.x0 - N.x1 }) - 1;
+    G.push({ mi: new Set([ni]), pi, test: v => { const o = v * st, x = VB[o], y = VB[o + 1], z = VB[o + 2]; return x <= N.x0 + .02 && x >= N.x1 - .02 && Math.hypot(y - noz[1] * sg, z - noz[2]) >= N.r0 && Math.hypot(y - noz[1] * sg, z - noz[2]) <= N.r1; } });
+  }
+  const C = cf.ctl;
+  if (C) {
+    const mis = new Set(C.mats.map(n => m.mats.findIndex(x => x.n === n)).filter(i => i >= 0)), zc = (C.z[0] + C.z[1]) / 2;
+    for (const f of C.surf) for (const sg of [1, -1]) {
+      const w = [f.w[0], f.w[1], f.w[2], f.w[3] * sg];
+      let p, a, inX;
+      if (f.h) {   // 铰链线：轴平行于铰链（a.y < 0 使「偏角正 = 后缘下偏」），铰链后面的属于舵面
+        const [[x0, y0], [x1, y1]] = f.h, L = Math.hypot(x1 - x0, y1 - y0), dx = (x1 - x0) / L, dy = (y1 - y0) / L;
+        p = [x0, y0 * sg, zc]; a = sg > 0 ? [-dx, -dy, 0] : [dx, -dy, 0];
+        inX = (x, Y) => x <= x0 + (x1 - x0) * (Y - y0) / (y1 - y0) + .015;
+      } else { p = [f.pv[0], 1.4 * sg, f.pv[1]]; a = [0, -1, 0]; inX = x => x >= f.x[0] && x <= f.x[1]; }   // 全动平尾：整片绕展向轴转
+      const pi = parts.push({ n: f.n, k: 'rot', w, p, a }) - 1;
+      G.push({ mi: mis, pi, test: v => { const o = v * st, x = VB[o], y = VB[o + 1], z = VB[o + 2], Y = y * sg; return Y >= f.y[0] && Y <= f.y[1] && z >= C.z[0] && z <= C.z[1] && inX(x, Y); } });
+    }
+    M.ctl = true;
+  }
+  if (!G.length) return;
   for (const lod of m.lod) {
     const add = [];
     for (const e of lod) {
       const [mi, p0, i0, cnt] = e;
-      if (mi !== ni || p0 >= 0) continue;
-      const G = [[], ...sides.map(() => [])];
-      for (let t = i0; t + 2 < i0 + cnt; t += 3) { const a = side(IB[t]), b = side(IB[t + 1]), c = side(IB[t + 2]); G[a >= 0 && a === b && b === c ? a + 1 : 0].push(IB[t], IB[t + 1], IB[t + 2]); }
-      if (G.slice(1).every(g => !g.length)) continue;
+      if (p0 >= 0 || !G.some(g => g.mi.has(mi))) continue;
+      const B = [[], ...G.map(() => [])];
+      for (let t = i0; t + 2 < i0 + cnt; t += 3) {
+        const v = [IB[t], IB[t + 1], IB[t + 2]], k = G.findIndex(g => g.mi.has(mi) && v.every(g.test));
+        B[k + 1].push(v[0], v[1], v[2]);
+      }
+      if (B.slice(1).every(b => !b.length)) continue;
       let k = i0;
-      for (const g of G) for (const v of g) IB[k++] = v;
-      e[3] = G[0].length; let o = i0 + G[0].length;
-      G.slice(1).forEach((g, j) => { if (g.length) add.push([mi, pi[j], o, g.length]); o += g.length; });
+      for (const b of B) for (const v of b) IB[k++] = v;
+      e[3] = B[0].length; let o = i0 + B[0].length;
+      B.slice(1).forEach((b, j) => { if (b.length) add.push([mi, G[j].pi, o, b.length]); o += b.length; });
     }
     lod.push(...add);
   }
@@ -405,7 +438,7 @@ function v3gPitNoz(cf, m, M, VB, IB) {
 function v3gPrep(key, m, M, VB, IB) {
   const cf = V3G_PIT[key];
   if (!cf) return;
-  v3gPitScr(cf, m, M, VB, IB); v3gPitHud(cf, m, M, VB, IB); v3gPitNoz(cf, m, M, VB, IB);
+  v3gPitScr(cf, m, M, VB, IB); v3gPitHud(cf, m, M, VB, IB); v3gPitParts(cf, m, M, VB, IB);
 }
 // 开局就把一定会用到的模型先下载、解码（士兵、双方坦克），别的等单位第一次出现时再加载
 if (typeof HOOK === 'object' && HOOK.newGame) HOOK.newGame.push(() => v3gPreload(['army', 'ztz96', 'm1a1']));
