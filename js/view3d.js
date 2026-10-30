@@ -111,7 +111,7 @@ float wNoise(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3. - 2. * f
 // 水面法线：同一张法线贴图按四种尺度、四个方向流动叠加（大的慢、小的快）；
 //   每层按一个像素在海面上有几米（fw）淡出成平的：这层的浪纹（约一圈的 1/40）比像素还细时，多级渐远纹理平均剩下的零碎起伏
 //   会让每个像素反射的天空、太阳各跳各的，远看是一层颗粒噪点——细浪先退，远处只剩大浪，再远是平静的镜面
-vec3 wnL(vec2 uv, float L, float fw) { return mix(vec3(0., 0., 1.), texture2D(uWn, uv).rgb * 2. - 1., 1. - smoothstep(L / 40., L / 15., fw)); }
+vec3 wnL(vec2 uv, float L, float fw) { return mix(vec3(0., 0., 1.), texture2D(uWn, uv).rgb * 2. - 1., 1. - smoothstep(L / 90., L / 30., fw)); }   // 比原来早一倍淡出：苹果显卡上中远处还是一层颗粒
 vec3 waterNrm(HP vec2 w, float t, float fw) {
   vec3 n = wnL(w / 113. + vec2(t * .012, t * .008), 113., fw) + wnL(w / 67. + vec2(-t * .01, t * .014), 67., fw)
          + wnL(w / 29. + vec2(t * .021, -t * .016), 29., fw) + wnL(w / 13. + vec2(-t * .033, -t * .026), 13., fw);
@@ -213,8 +213,8 @@ void main() {
 #else
       float vn = 0.;
 #endif
-      float sp = max(dot(Rf, ${V3_SUNG}), 0.), e1 = 2. / (2. / 702. + vn) - 2., e2 = 2. / (2. / 62. + vn) - 2.;
-      float gs = pow(sp, e1) * 5. * (e1 + 2.) / 702. + pow(sp, e2) * .12 * (e2 + 2.) / 62.;
+      float sp = max(dot(Rf, ${V3_SUNG}), 0.), e1 = 2. / (2. / 420. + vn) - 2., e2 = 2. / (2. / 62. + vn) - 2.;   // 碎光的瓣宽一些、亮度低三成：一动起来满屏白点在闪，像噪点
+      float gs = pow(sp, e1) * 3.5 * (e1 + 2.) / 420. + pow(sp, e2) * .12 * (e2 + 2.) / 62.;
       gs = gs * 1.4 / (1. + gs);   // 亮处柔和地压住：成片的反光不再是一刀切的纯白斑块
       vec3 wat = mix(body, sk * (.75 + .25 * shw), fr) + vec3(1., .96, .88) * gs * shw;
       float fo = k3.b * (.55 + .45 * sin(w.x * .21 + w.y * .17 - uT * 1.3)) * smoothstep(.2, .8, k3.b);   // 近岸白浪：一条条随时间起伏
@@ -1158,7 +1158,7 @@ function v3Draw(now) {
   const cap = Math.min(V3.maxTex, R.lowCap || (SETTINGS && SETTINGS.quality === 'low') ? 1280 : V3.coarse ? 1600 : 2048, Math.max(1024, Math.max(R.cv.width, R.cv.height) * 1.3));   // 屏外俯视画布最长边（按屏幕大小，手机、低画质更小）
   // 跟不上（主循环帧间隔滑动平均超过 40ms）就把屏外画布逐步缩小，最低 45%；流畅后再慢慢放大
   if (typeof ema === 'number') V3.capK = clamp((V3.capK || 1) * (ema > .04 ? .985 : ema < .022 ? 1.004 : 1), .45, 1);
-  const dpr = R.dprCap ? 1 : Math.min(2, window.devicePixelRatio || 1), one = boxN[2] * boxN[3] > box[2] * box[3] * .7;
+  const dpr = R.dpr || 1, one = boxN[2] * boxN[3] > box[2] * box[3] * .7;
   const bN = one ? box : boxN, sTop = Math.min(CAM.z * dpr, cap * (V3.capK || 1) / Math.max(bN[2], bN[3]));
   const K = { cv: R.cv, ctx: R.ctx, s: R.s, ox: R.ox, oy: R.oy, dpr: R.dpr, vw: CAM.vw, vh: CAM.vh, z: CAM.z, x: CAM.x, y: CAM.y };
   // 有立体模型的东西（飞机、车辆、舰船、阵地，近看时的步兵）贴图里不再画平面图标——否则地面上多一层「倒影」
@@ -1183,8 +1183,12 @@ function v3Draw(now) {
     }
     return b;
   };
-  V3.boxN = paint(V3.top, bN, sTop);
-  if (!one && (!V3.boxB || (V3.fT = (V3.fT || 0) + 1) % 3 === 0 || Math.abs(V3.boxB[0] - box[0]) + Math.abs(V3.boxB[1] - box[1]) > box[2] * .12)) {
+  // 近处这张隔一帧画一次（范围移动超过边长 3%、缩放变了、换了大小时马上重画）：屏外 2D 画布画好再传成贴图，
+  //   在 Mac 的 Safari 上每张都要从显卡读回再上传，是 3D 每帧最贵的一步；地面上的东西（弹坑、烟、标号）变化慢，隔一帧看不出来
+  const nb = V3.nBox, nMove = !nb || nb[4] !== sTop || Math.abs(nb[0] - bN[0]) + Math.abs(nb[1] - bN[1]) > bN[2] * .03 || Math.abs(nb[2] - bN[2]) > bN[2] * .03;
+  V3.nT = (V3.nT || 0) + 1;
+  if (nMove || V3.nT % 2 === 0) { V3.boxN = paint(V3.top, bN, sTop); V3.nBox = [bN[0], bN[1], bN[2], bN[3], sTop]; V3.nNew = true; }
+  if (!one && (!V3.boxB || (V3.fT = (V3.fT || 0) + 1) % 4 === 0 || Math.abs(V3.boxB[0] - box[0]) + Math.abs(V3.boxB[1] - box[1]) > box[2] * .12)) {
     V3.boxF = paint(V3.topF, box, Math.min(sTop, cap * (V3.capK || 1) / Math.max(box[2], box[3])));   // 远处这张也按整幅分辨率画（原来只有六成，远景糊）
     V3.boxB = box.slice(); V3.fNew = true;
   }
@@ -1199,7 +1203,8 @@ function v3Draw(now) {
   if (V3.cv.width !== W0 || V3.cv.height !== H0) { V3.cv.width = W0; V3.cv.height = H0; }
   gl.viewport(0, 0, W0, H0);
   gl.useProgram(V3.pr);
-  v3Upload(0, V3.tex, V3.top, gl.RGB);
+  if (V3.nNew !== false) { v3Upload(0, V3.tex, V3.top, gl.RGB); V3.nNew = false; }   // 这一帧没重画就不重传（只重新绑上：别的模块用过 0 号单元）
+  else { gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, V3.tex); }
   if (V3.fNew) { v3Upload(7, V3.texF, V3.topF, gl.RGB); V3.fNew = false; }
   gl.activeTexture(gl.TEXTURE7); gl.bindTexture(gl.TEXTURE_2D, V3.texF);
   gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, V3.base);

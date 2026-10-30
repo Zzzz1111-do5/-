@@ -37,12 +37,19 @@ function bgRain() {
 }
 
 let lastT = performance.now(), acc = 0, hudT = 0, mmT = 0, ema = 1 / 60;
+const DPR_STEPS = [2, 1.5, 1.25, 1];   // 像素密度的几档（不超过屏幕本身的）
 function frame(now) {
   const dt = Math.min(.1, (now - lastT) / 1000);
   lastT = now;
-  // 设备跟不上（平均帧间隔超过约 38ms，低于 26 帧）时降到 1 倍像素密度
+  // 像素密度按帧率逐档升降（2 → 1.5 → 1.25 → 1）：持续 2.5 秒跟不上（平均帧间隔超过约 36ms）降一档，持续 10 秒很流畅（约 48 帧以上）升一档；
+  //   刚降过的档 30 秒内不再升回去（免得来回切）。原来一卡就永久降到 1 倍——Mac 的 Retina 屏上整个画面糊一倍，海面的细浪放大成颗粒
   ema = ema * .95 + dt * .05;
-  if (ema > .038 && !R.dprCap && now > 6000 && (window.devicePixelRatio || 1) > 1) { R.dprCap = 1; resize(); }
+  if (!R.lowCap && now > 6000 && (window.devicePixelRatio || 1) > 1) {
+    R.slowT = ema > .036 ? (R.slowT || 0) + dt : 0; R.fastT = ema < .021 ? (R.fastT || 0) + dt : 0;
+    const lv = R.dprLv || 0, set = k => { R.dprLv = k; R.dprCap = DPR_STEPS[k]; R.slowT = R.fastT = 0; resize(); };
+    if (R.slowT > 2.5 && lv < DPR_STEPS.length - 1 && DPR_STEPS[lv + 1] < (window.devicePixelRatio || 1) + .01) { R.dprHold = now + 30000; set(lv + 1); }
+    else if (R.fastT > 10 && lv > 0 && now > (R.dprHold || 0)) set(lv - 1);
+  }
   camKeys(dt);
   if (S.phase === 'battle' && !S.paused && !S.over && S.briefed) {
     acc += dt * S.speed;
