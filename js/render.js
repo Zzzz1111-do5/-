@@ -69,7 +69,7 @@ function draw(now) {
   const on = viewBegin();
   let d3 = false;
   try { d3 = typeof V3 === 'object' && (V3.on || v3Att()) && !V3.drawing && v3Can() && v3Draw(now); if (!d3) drawScene(now); } finally { viewEnd(on); }   // 3D 立体地图（view3d.js）在屏外按俯视画好再贴到地形上
-  if (R.d3 !== d3) { R.d3 = d3; document.body.classList.toggle('v3on', !!d3); }   // 3D 画面自带暗角（v3post.js），CSS 那层暗角关掉
+  if (R.d3 !== d3) { R.d3 = d3; document.body.classList.toggle('v3on', !!d3); if (d3 && typeof lkCss === 'function') lkCss(false); }   // 3D 写实：主画布不能留着黑绿的 CSS 滤镜   // 3D 画面自带暗角（v3post.js），CSS 那层暗角关掉
 }
 function drawScene(now) {
   const { ctx } = R, time = now / 1000;
@@ -105,7 +105,7 @@ function drawScene(now) {
   worldTf(ctx);
   drawBanners(time); drawShipMarks(); drawPings(time); runHook('drawTop', time);
   R.ox = ox; R.oy = oy; R.shx = R.shy = 0;
-  lkPost();   // 黑绿画面：整帧过着色器（look.js）
+  if (!(typeof V3 === 'object' && V3.drawing)) lkPost();   // 黑绿画面：整帧过着色器（look.js）——只在 2D；3D 是写实画面，披的贴图不过它
 }
 
 // 低画质：限制为 1 倍像素密度

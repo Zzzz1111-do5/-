@@ -68,14 +68,14 @@ vec2 mxTan(sampler2D T, vec2 cu, vec2 e, int ch) {
 }
 void main() {
   vec2 w = vec2(vP.x, -vP.y);
-  vec3 bg = vec3(.004, .02, .011);
+  vec3 bg = ${typeof V3_BGG === 'string' ? V3_BGG : 'vec3(.63, .69, .75)'};
 #ifdef DER
   float pw = max(length(fwidth(w)), 1e-3);
 #else
   float pw = vD * .0015;
 #endif
-  if (vN.z < -.5) {   // 沙盘围边（法线朝下作标记）：数码风下字符沿侧壁往下落
-    vec3 c0 = vec3(.01, .07, .035);
+  if (vN.z < -.5) {   // 沙盘围边（法线朝下作标记）：地形模型切开的侧面——土层
+    vec3 c0 = mix(vec3(.2, .15, .1), vec3(.33, .26, .18), clamp(vP.z / 60. + .6, 0., 1.)) * (.6 + .4 * clamp(dot(normalize(vN.xy), vec2(-.6, .62)) * .5 + .5, 0., 1.));
     if (uMx > .5) { vec2 u = vec2(vP.x + vP.y, -vP.z) / vec2(9., 12.); c0 = c0 * .45 + vec3(.15, .95, .45) * mxRain(floor(u), fract(u), uT, 9. / pw) * .6; }
     gl_FragColor = vec4(mix(c0, bg, smoothstep(uFog.x, uFog.y, vD)), 1.); return;
   }
@@ -93,11 +93,18 @@ void main() {
   float cl = (1. - smoothstep(0., fw * (1.2 + major), e)) * land * (.35 + .4 * major);
   vec2 g2 = abs(fract(w / 200.) - .5);
   float gl = (1. - smoothstep(0., fg * 1.5, .5 - max(g2.x, g2.y))) * .16;
-  if (uMx < .5) {   // 写实 / 关闭数码风：披俯视贴图，叠山体明暗、等高线、方格网
+  if (uMx < .5) {   // 写实：披俯视贴图（整张地图的写实地形图），叠山体明暗、山与房屋树林的投影；海面映着天光、太阳的粼粼反光
     vec3 cF = inF ? texture2D(uTopF, uvF).rgb : texture2D(uBase, w / uWorld).rgb;
     vec3 lm0 = uLmOn > .5 ? texture2D(uLm, w / uWorld).rgb : vec3(1., 1., 0.);
-    c = (wN > 0. ? mix(cF, texture2D(uTop, uv).rgb, wN) : cF) * (.5 + .75 * lit) * mix(.42, 1., lm0.r) * mix(.55, 1., lm0.g) + boomLight(w) * (.35 + .65 * lit);
-    c += vec3(.12, .62, .32) * (cl + gl);
+    c = (wN > 0. ? mix(cF, texture2D(uTop, uv).rgb, wN) : cF) * (.62 + .58 * lit) * mix(.5, 1., lm0.r) * mix(.62, 1., lm0.g) + boomLight(w) * (.35 + .65 * lit);
+    if (land < .5) {
+      vec2 wq = w * vec2(.029, .041); float t2 = uT * .55;
+      vec3 nw = normalize(vec3(sin(wq.x + t2) * .5 + sin(wq.y * 1.7 - t2 * .8) * .35 + sin((wq.x + wq.y) * 2.6 + t2 * 1.4) * .2,
+                               cos(wq.y - t2 * .7) * .5 + cos(wq.x * 1.9 + t2) * .3 + cos((wq.x - wq.y) * 3.1 - t2) * .15, 5.5));
+      vec3 Vv = normalize(vV), Hs = normalize(${V3_SUNG} + Vv);
+      float fr = pow(1. - clamp(dot(nw, Vv), 0., 1.), 4.), glint = pow(max(dot(nw, Hs), 0.), 160.), sheen = pow(max(dot(nw, Hs), 0.), 14.);
+      c = mix(c, bg * .9, fr * .55) + vec3(1., .96, .86) * (glint * 1.4 + sheen * .06) * lm0.r * (1. - smoothstep(uFog.x * .5, uFog.y, vD));
+    }
     gl_FragColor = vec4(mix(c, bg, smoothstep(uFog.x, uFog.y, vD)), 1.); return;
   }
   vec2 cu = w / uWorld, ex = 1. / uGrid;
@@ -226,7 +233,7 @@ ${typeof V3L_BOOM_GLSL === 'string' ? V3L_BOOM_GLSL : 'vec3 boomLight(vec2 w) { 
 void main() {
   vec2 w = vec2(vP.x, -vP.y), uv = (w - uBox.xy) / uBox.zw, uvF = (w - uBoxF.xy) / uBoxF.zw;
   bool inF = uvF.x > 0. && uvF.y > 0. && uvF.x < 1. && uvF.y < 1.;
-  vec3 N = normalize(vN), bg = vec3(.004, .02, .011);
+  vec3 N = normalize(vN), bg = ${typeof V3_BGG === 'string' ? V3_BGG : 'vec3(.63, .69, .75)'};
   float lit = clamp(dot(N, ${V3_SUNG}), 0., 1.);
   float ed = min(min(vE.x, 1. - vE.x), min(vE.y, 1. - vE.y)), edge = 1. - smoothstep(.02, .1, ed);
   vec3 c;
@@ -245,9 +252,11 @@ void main() {
       c += vec3(.15, .95, .45) * mxRain(floor(u), fract(u), uT * 1.3, px) * .5;
     }
   } else {
-    c = N.z > .5 ? ((uv.x > 0. && uv.y > 0. && uv.x < 1. && uv.y < 1.) ? texture2D(uTop, uv).rgb : inF ? texture2D(uTopF, uvF).rgb : texture2D(uBase, w / uWorld).rgb) * (.75 + .45 * lit)
-      : vec3(.015, .085, .045) * (.55 + 1.1 * lit);
-    c += vec3(.12, .68, .36) * edge * (N.z > .5 ? .55 : .9);
+    // 写实：屋顶取俯视贴图（与地图上画的屋顶同一张），墙面是灰白的抹灰 / 砖墙，按楼的位置略有深浅；棱上一道暗线
+    float hv = fract(sin(dot(floor(vP.xy / 14.), vec2(12.9898, 78.233))) * 43758.5453);
+    c = N.z > .5 ? ((uv.x > 0. && uv.y > 0. && uv.x < 1. && uv.y < 1.) ? texture2D(uTop, uv).rgb : inF ? texture2D(uTopF, uvF).rgb : texture2D(uBase, w / uWorld).rgb) * (.8 + .4 * lit)
+      : mix(vec3(.58, .55, .5), vec3(.66, .6, .52), hv) * (.5 + .7 * lit) * (.8 + .2 * smoothstep(0., 6., vP.z));
+    c *= 1. - edge * .25;
   }
   // 山的投影、街巷与林下的遮蔽也落在房屋、树上（v3light.js 光照贴图）；墙脚比屋顶暗一点
   vec2 lmB = uLmOn > .5 ? texture2D(uLm, w / uWorld).rg : vec2(1.);
@@ -432,8 +441,10 @@ function v3Cls() {
   gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D, V3.cls2); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, GW, GH, 0, gl.RGBA, gl.UNSIGNED_BYTE, b);
   if (typeof terLines === 'function') { const lf = terLines(); gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1); gl.activeTexture(gl.TEXTURE6); gl.bindTexture(gl.TEXTURE_2D, V3.lf); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, lf.w, lf.h, 0, gl.RGBA, gl.UNSIGNED_BYTE, lf.d); }   // 道路、河流的中心线距离场（terrain.js）
 }
-// 3D 地面用数码风画吗（默认是；SETTINGS.matrix3d = false 时改为披俯视贴图的地形图）
-const v3Mx = () => !(typeof SETTINGS === 'object' && SETTINGS && SETTINGS.matrix3d === false);
+// 3D 地面用数码风画吗：不用了——3D 只用写实画面（披整张地图的写实地形图：农田、林冠、河流道路、海水，叠山体明暗与投影）
+const v3Mx = () => false;
+// 写实画面的天空 / 远处的大气（雾的颜色、背景）：淡灰蓝
+const V3_BG = [.63, .69, .75], V3_BGG = `vec3(${V3_BG.join(', ')})`;
 
 // 房屋几何：民房是坡顶（两面坡 + 山墙，屋脊顺着长边），楼房是平顶（女儿墙、楼梯间 / 水箱），镇中心的更高；坐落在地面高度上；
 // 机场建筑（afbase.js：机库、机堡、塔台、营房、油罐等，任意朝向的多边形柱体，塔台玻璃顶与水塔水箱架空）排在前面，机场被发现 / 夺取时重建；
@@ -830,7 +841,7 @@ function v3Draw(now) {
   gl.activeTexture(gl.TEXTURE4); gl.bindTexture(gl.TEXTURE_2D, V3.fog);
   if (typeof FOGB === 'object') gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE, GW, GH, 0, gl.LUMINANCE, gl.UNSIGNED_BYTE, FOGB);   // 视野（drawScene 刚按当前观察视野算好）
   const lmOn = typeof v3LightBind === 'function' && v3LightBind(gl) ? 1 : 0;   // 光照贴图（v3light.js，第 9 个贴图单元）
-  gl.clearColor(.004, .02, .011, 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  gl.clearColor(V3_BG[0], V3_BG[1], V3_BG[2], 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);   // 写实：天空 / 远处的大气
   const u = V3.u;
   gl.uniformMatrix4fv(u.uM, false, C.M);
   gl.uniform3f(u.uEye, C.E[0], C.E[1], C.E[2]);

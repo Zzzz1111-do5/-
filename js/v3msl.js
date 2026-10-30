@@ -1,10 +1,7 @@
 'use strict';
-// 导弹的 3D 模型：按公开的真实尺寸（米）建，长细比、弹翼、尾舵、边条、进气道对得上（原来所有导弹是同一个粗短的通用弹形）；
-//   Sketchfab 上没有能商用的中国导弹模型（唯一一个 CC-BY 的霹雳-15 只有 666 个面、面片重叠），都按 V3MS 表画。建模坐标 x 弹头方向、弹体中点为原点，单位米
-//   画的时候按发射平台的比例换成世界单位（v3MslK）：舰上发射的跟驱逐舰同一比例（舰长 50 对 180 米），其余跟飞机同一比例
-// 表：L 长、d 直径、nose 头部占全长的比例（dome：红外弹的半球形头罩；cone：鹰击-21 的大锥体弹头）、box：扁平棱柱弹体（隐身巡航弹、滑翔弹）
-//   舵面 [后缘离弹尾, 根弦, 梢弦, 展长（从弹体表面量）, 前缘后掠（梢比根靠后多少）]：tail 尾舵、wing 弹翼、strake 边条
-//   x：X 形布置（空空弹挂在弹舱里是 X 形）、w2：弹翼只有左右两片（巡航弹的折叠弹翼）、inl：进气道（belly 腹部一个、quad 四周四个）
+// 导弹的型号与真实尺寸（米）：推演里的导弹是哪一型（v3MslKey）、画多大（v3MslK）——模型是用户给的（js/v3g.js 的 V3G_MSL 按型号挑，按这里的弹长缩放）；
+//   v3fx.js 按弹长定尾焰的位置。画的时候按发射平台的比例换成世界单位：舰上发射的跟驱逐舰同一比例（舰长 50 对 180 米），其余跟飞机同一比例
+// 表：L 长、d 直径（其余几项是原来代码建模用的外形数据：nose 头部比例、舵面 tail / wing / strake、x 形布置、inl 进气道）
 const V3MS = {
   pl15: { L: 4.0, d: .203, nose: .1, tail: [.04, .3, .1, .13, .2], strake: [1.2, 1.5, 1.4, .045, .05], x: 1 },   // 霹雳-15：3996 毫米 × 203 毫米，内埋用截短的尾舵
   pl10: { L: 3.0, d: .16, nose: .05, dome: 1, tail: [.02, .26, .12, .13, .12], strake: [.5, 1.9, 1.8, .045, .04], x: 1 },   // 霹雳-10：长边条 + 尾舵（推力矢量）
@@ -36,54 +33,6 @@ const V3MS = {
   bomb: { L: 2.3, d: .4, nose: .2, tail: [.03, .45, .3, .22, .1], x: 1 },   // 500 公斤级航弹（尾部十字尾翼）
   pod: { L: 2.6, d: .3, nose: .15, tail: [0, .3, .3, .02, 0] }   // 电子战 / 瞄准吊舱
 };
-// 一片舵面：弹体表面半径 R 处、绕弹轴转 a 角；f = [后缘离弹尾, 根弦, 梢弦, 展长, 后掠]，x0 弹尾
-function v3mFin(M, x0, R, a, f, s) {
-  const [te, cr, ct, sp, sw] = f, c = Math.cos(a), sn = Math.sin(a), P = (x, r) => [x, c * r, sn * r];
-  const r0 = x0 + te, r1 = r0 + cr, t1 = r1 - sw, t0 = t1 - ct;
-  mbQuad(M, P(r0, R * .98), P(r1, R * .98), P(t1, R + sp), P(t0, R + sp), s);
-}
-// 回转体：轮廓 P = [[x, 半径, 这一圈描边], …] 从弹尾到弹头，平滑明暗，只在标了的圈上描亮边（原来每段都描一圈，头部像一道道条纹）；弹尾封一个端面
-function v3mRev(M, P, n, s) {
-  const ring = (x, r) => Array.from({ length: n }, (_, i) => { const a = i / n * 6.2832; return [x, Math.cos(a) * r, Math.sin(a) * r]; });
-  const nrm = (i, k) => { const a = i / n * 6.2832, k0 = Math.max(0, k - 1), k1 = Math.min(P.length - 1, k + 1), dx = P[k1][0] - P[k0][0], dr = P[k1][1] - P[k0][1], l = Math.hypot(dx, dr) || 1; return [-dr / l, Math.cos(a) * dx / l, Math.sin(a) * dx / l]; };
-  for (let k = 0; k + 1 < P.length; k++) {
-    const A = ring(P[k][0], P[k][1]), B = ring(P[k + 1][0], Math.max(P[k + 1][1], .002));
-    for (let i = 0; i < n; i++) {
-      const j = (i + 1) % n;
-      mbTriN(M, A[i], A[j], B[j], nrm(i, k), nrm(j, k), nrm(j, k + 1), s, [0, 0, P[k][2] ? 1 : 0]);
-      mbTriN(M, A[i], B[j], B[i], nrm(i, k), nrm(j, k + 1), nrm(i, k + 1), s);
-    }
-  }
-  const A = ring(P[0][0], P[0][1]);
-  for (let i = 0; i < n; i++) mbTri(M, [P[0][0], 0, 0], A[(i + 1) % n], A[i], s * .8, [1, 0, 0], [-1, 0, 0]);
-}
-function v3mMslT(key) {
-  const T = V3MS[key] || V3MS.pl15, M = mbNew(), R = T.d / 2, x0 = -T.L / 2, xn = T.L / 2 - T.L * T.nose;
-  if (T.box) {   // 扁平棱柱弹体（倒角）+ 楔形弹头
-    mbBox(M, x0, xn, -R, R, -R * .7, R * .7, .92, { taper: R * .18 });
-    mbPrism(M, [[xn, -R * .82], [T.L / 2, -R * .15], [T.L / 2, R * .15], [xn, R * .82]], -R * .5, R * .5, .92, { taper: R * .1 });
-  } else {
-    // 头部：尖拱（切线尖拱的近似）；红外弹是半球头罩；鹰击-21 是双锥（转折处描边）
-    const r = t => T.dome ? Math.sqrt(Math.max(0, 1 - t * t)) : T.cone ? (t < .5 ? 1 - t * .9 : .55 * (1 - (t - .5) * 2)) : 1 - t * t, P = [[x0, R, 1], [xn, R, T.cone ? 1 : 0]], n = T.cone ? 2 : 6;
-    for (let i = 1; i <= n; i++) P.push([xn + (T.L / 2 - xn) * i / n, R * r(i / n), T.cone && i === 1 ? 1 : 0]);
-    v3mRev(M, P, 12, .95);
-  }
-  const ang = T.x ? [.785, 2.356, 3.927, 5.498] : [0, 1.571, 3.142, 4.712];
-  if (T.tail) for (const a of ang) v3mFin(M, x0, R * (T.box ? .75 : 1), a, T.tail, .85);
-  if (T.strake) for (const a of ang) v3mFin(M, x0, R, a, T.strake, .8);
-  if (T.wing) for (const a of T.w2 ? [0, 3.142] : ang) v3mFin(M, x0, R * (T.box ? .75 : 1), a, T.wing, .85);
-  if (T.inl === 'belly') mbBox(M, x0 + T.L * .1, x0 + T.L * .4, -R * .35, R * .35, -R * 1.35, -R * .7, .6, { taper: R * .1 });   // 腹部进气道
-  if (T.inl === 'quad') for (const a of [.785, 2.356, 3.927, 5.498]) { const c = Math.cos(a), s = Math.sin(a); mbTube(M, [x0 + T.L * .12, c * R * 1.15, s * R * 1.15], [x0 + T.L * .62, c * R * 1.15, s * R * 1.15], R * .28, R * .22, 6, .7); }
-  M.len = T.L;
-  return M;
-}
-// 某种导弹的网格（米），按型号缓存
-function v3MslMesh(key) {
-  const C = V3MS.cache || (V3MS.cache = {});
-  return C[key] || (C[key] = v3mMslT(key));
-}
-// 实例键与建网格的函数（v3mAdd 按键缓存网格）
-const v3MslInst = (pre, key) => [pre + key, () => v3MslMesh(key)];
 // 推演里的导弹是哪一型（按种类、发射来源、弹种、敌我）
 function v3MslKey(m) {
   const e = m.side === 'e';
@@ -110,5 +59,3 @@ const V3_ALEN = { j35: 17.3, j20: 20.4, j15: 21.9, j16: 21.9, j36: 22.8, j50: 19
 const v3MslAk = key => 21 / (V3_ALEN[key] || 18);   // 机型单位 / 米
 const V3_EAK = { ga: 'a10', heli: 'ah64', uh60: 'uh60', c17: 'c17', ftr: 'f35', ftrb: 'f35b', mq9: 'mq9', f22: 'f22', b2: 'b2', p8: 'p8' };
 const v3MslPlaneKey = o => o && o.kind && typeof airSilKey === 'function' ? airSilKey(o.kind, o.v) : (o && V3_EAK[o.type]) || 'j35';   // 我方按机种、敌方按 eair 的类型
-// 挂架上的弹（airmdl.js 的外挂种类）是哪一型
-const V3_STK = { aam: 'pl15', asm: 'yj83k', agm: 'agm', bomb: 'bomb', cm: 'yj12', atgm4: 'agm', pod: 'pod' };

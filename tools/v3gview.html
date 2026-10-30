@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>模型预览</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #020a06; color: #9fe8bf; font: 13px "Noto Sans SC", sans-serif; overflow: hidden; }
+  canvas { display: block; width: 100%; height: 100%; }
+  #ui { position: fixed; left: 10px; top: 8px; right: 10px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  #ui button { background: #0b2416; color: #9fe8bf; border: 1px solid #1f5a39; padding: 4px 8px; border-radius: 3px; cursor: pointer; }
+  #ui button.on { background: #1f5a39; color: #fff; }
+  #info { position: fixed; left: 10px; bottom: 8px; color: #6fae8a; }
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+<div id="ui"></div>
+<div id="info"></div>
+<script>
+// 用户模型预览（tools/v3gbake.js 烘焙出来的 js/mdl/<键>.js，用游戏里同一个渲染器 js/v3g.js 画）：
+//   拖动转镜头、滚轮拉近拉远；按钮切换模型；?m=键 指定，&side=1 敌方配色，&yaw= &pitch= &dist= 固定镜头（截图用）
+'use strict';
+const V3_SUN = (() => { const v = [-.6, .62, .42], l = Math.hypot(...v); return v.map(a => +(a / l).toFixed(4)); })(), V3_SUNG = `vec3(${V3_SUN.join(', ')})`;
+const V3_PREC = 'precision highp float;\n', V3_FOV = .8, W = 8400, H = 5600;
+const CAM = { vh: 768 }, V3 = { gl: null };
+const KEYS = ['ztz96', 'm1a1', 'j20', 'j16', 'j31', 'z10w', 'z21', 'army', 'aim120', 'aim9', 'aim54', 'aim9s', 'aim120s', 'ks172', 'asraam', 'gbu24', 'mk83', 'agm65', 'jsow', 'brimstone'];
+const Q = new URLSearchParams(location.search);
+let cur = (Q.get('m') || 'ztz96').split(','), side = +(Q.get('side') || 0);
+const cam = { yaw: +(Q.get('yaw') ?? .7), pitch: +(Q.get('pitch') ?? .45), dist: +Q.get('dist') || null, auto: !Q.get('yaw') };
+</script>
+<script>const clamp = (v, a, b) => v < a ? a : v > b ? b : v, lerp = (a, b, t) => a + (b - a) * t;</script>
+<script src="../js/v3g.js"></script>
+
+<script>
+// 模型文件按需加载（相对本页是 ../js/mdl/）
+v3gLoad = key => { const s = document.createElement('script'); s.src = '../js/mdl/' + key + '.js'; s.onerror = () => V3G.fail.add(key); document.head.appendChild(s); };
+const v3FogR = C => C.fog;
+const cv = document.getElementById('cv'), gl = cv.getContext('webgl', { antialias: true, alpha: false, preserveDrawingBuffer: true });
+V3.gl = gl;
+const ui = document.getElementById('ui');
+for (const k of KEYS) { const b = document.createElement('button'); b.textContent = k; b.onclick = () => { cur = [k]; cam.dist = null; sync(); }; b.dataset.k = k; ui.appendChild(b); }
+const sb = document.createElement('button'); sb.textContent = '敌我'; sb.onclick = () => { side = side ? 0 : 1; }; ui.appendChild(sb);
+const sync = () => { for (const b of ui.children) b.classList.toggle('on', cur.includes(b.dataset.k)); };
+sync();
+let drag = null;
+cv.onpointerdown = e => { drag = [e.clientX, e.clientY]; cam.auto = false; };
+window.onpointerup = () => { drag = null; };
+window.onpointermove = e => { if (!drag) return; cam.yaw -= (e.clientX - drag[0]) * .008; cam.pitch = Math.max(-.2, Math.min(1.5, cam.pitch + (e.clientY - drag[1]) * .006)); drag = [e.clientX, e.clientY]; };
+cv.onwheel = e => { cam.dist = (cam.dist || 20) * (e.deltaY > 0 ? 1.12 : .89); };
+const mul = (a, b) => { const o = new Float32Array(16); for (let c = 0; c < 4; c++) for (let r = 0; r < 4; r++) { let s = 0; for (let k = 0; k < 4; k++) s += a[k * 4 + r] * b[c * 4 + k]; o[c * 4 + r] = s; } return o; };
+function look(E, T) {
+  const f = [T[0] - E[0], T[1] - E[1], T[2] - E[2]], l = Math.hypot(...f); f[0] /= l; f[1] /= l; f[2] /= l;
+  let s = [f[1] * 1 - f[2] * 0, f[2] * 0 - f[0] * 1, 0]; const sl = Math.hypot(...s) || 1; s = s.map(v => v / sl);
+  const u = [s[1] * f[2] - s[2] * f[1], s[2] * f[0] - s[0] * f[2], s[0] * f[1] - s[1] * f[0]];
+  return new Float32Array([s[0], u[0], -f[0], 0, s[1], u[1], -f[1], 0, s[2], u[2], -f[2], 0, -(s[0] * E[0] + s[1] * E[1] + s[2] * E[2]), -(u[0] * E[0] + u[1] * E[1] + u[2] * E[2]), f[0] * E[0] + f[1] * E[1] + f[2] * E[2], 1]);
+}
+const info = document.getElementById('info');
+let t0 = performance.now();
+function frame(now) {
+  const dpr = Math.min(2, devicePixelRatio || 1), w = cv.clientWidth * dpr | 0, h = cv.clientHeight * dpr | 0;
+  if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
+  CAM.vh = h;
+  gl.viewport(0, 0, w, h); gl.clearColor(.004, .02, .011, 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT); gl.enable(gl.DEPTH_TEST);
+  const t = Q.get('t') != null ? +Q.get('t') : (now - t0) / 1000;
+  if (cam.auto) cam.yaw += .004;
+  // 模型并排摆在 x 轴上（GL 坐标，y 向北）
+  if (Q.get('pose')) {   // 士兵姿势一排
+    const poses = Q.get('pose').split(','), kind = Q.get('kind') || 'rifle', Mb = v3gModel('army');
+    const span2 = poses.length * 1.6, d2 = cam.dist || span2 * .9 + 3, T2 = [0, 0, .8];
+    const E2 = [d2 * Math.cos(cam.pitch) * Math.cos(cam.yaw), d2 * Math.cos(cam.pitch) * Math.sin(cam.yaw), .8 + d2 * Math.sin(cam.pitch)];
+    const fo2 = 1 / Math.tan(V3_FOV / 2), P2 = new Float32Array([fo2 / (w / h), 0, 0, 0, 0, fo2, 0, 0, 0, 0, -1.0002, -1, 0, 0, -.2, 0]);
+    const C2 = { E: E2, D: d2, M: mul(P2, look(E2, T2)), fog: [d2 * 30, d2 * 60] };
+    v3gBegin(C2);
+    let ok2 = 0;
+    poses.forEach((p, i) => { if (v3gMan(kind, p, (i - (poses.length - 1) / 2) * 1.6, 0, 0, Q.get('face') ? +Q.get('face') : 0, 1, side)) ok2++; });
+    v3gDraw(C2);
+    info.textContent = Mb ? '士兵姿势：' + poses.join(' ') : '加载中…';
+    document.title = Mb && ok2 === poses.length ? '模型预览 ✓' : '模型预览';
+    requestAnimationFrame(frame); return;
+  }
+  const Ms = cur.map(k => v3gModel(k)), lens = cur.map((k, i) => Ms[i] ? Ms[i].meta.len : 5), span = lens.reduce((s, v) => s + v * 1.15, 0);
+  const R = Math.max(span, ...cur.map((k, i) => Ms[i] ? Math.hypot(Ms[i].meta.bb[4] - Ms[i].meta.bb[1], Ms[i].meta.bb[5]) : 3)) * .62, dist = cam.dist || R * 1.5;
+  const T = [0, 0, Ms[0] ? (Ms[0].meta.bb[5] + Ms[0].meta.bb[2]) / 2 : 1];
+  const E = [T[0] + dist * Math.cos(cam.pitch) * Math.cos(cam.yaw), T[1] + dist * Math.cos(cam.pitch) * Math.sin(cam.yaw), T[2] + dist * Math.sin(cam.pitch)];
+  const fo = 1 / Math.tan(V3_FOV / 2), asp = w / h, n = dist * .01, fa = dist * 20, nf = 1 / (n - fa);
+  const P = new Float32Array([fo / asp, 0, 0, 0, 0, fo, 0, 0, 0, 0, (fa + n) * nf, -1, 0, 0, 2 * fa * n * nf, 0]);
+  const C = { E, D: dist, M: mul(P, look(E, T)), fog: [dist * 30, dist * 60] };
+  v3gBegin(C);
+  let x = -span / 2, ok = 0;
+  cur.forEach((k, i) => {
+    const L = lens[i] * 1.15; x += L / 2;
+    const tur = Math.sin(t * .7) * 1.2, rot = t * 25, gear = Math.sin(t * .8) > 0 ? 1 : 0;
+    // 世界坐标 y 向南：v3gAdd 收的是游戏世界坐标
+    if (v3gAdd(k, x, 0, 0, 0, 1, side, 0, 0, k === 'z21' ? [rot, rot * 2.2, 0, 0] : k === 'j20' || k === 'j31' ? [gear, 0, 0, 0] : [tur, 0, 0, 0])) ok++;
+    x += L / 2;
+  });
+  v3gDraw(C);
+  info.textContent = cur.map((k, i) => Ms[i] ? `${Ms[i].meta.name}（${k}）${Ms[i].meta.len} 米，${Ms[i].meta.lod[0].reduce((s, g) => s + g[3], 0) / 3} 个三角形，${Ms[i].meta.imgs.length} 张贴图` : k + ' 加载中…').join('　');
+  document.title = ok === cur.length ? '模型预览 ✓' : '模型预览';
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

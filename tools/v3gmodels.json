@@ -1,0 +1,452 @@
+{
+  "_说明": "用户给的 3D 模型（tools/v3gbake.js 烘焙成 js/mdl/<键>.js）。glb：GLB 文件（相对上传目录；OBJ / DAE / BLEND 先用 tools/v3gconv.py 转）；fwd / up：模型的前、上在 glTF 坐标里是哪个轴；len / height / span / scale：按真实长 / 高 / 宽（米）缩放，或直接给倍数，都不给就是原尺寸；origin：floor 落地（默认）/ center 居中；mats：按材质名补贴图、改透明方式；parts：能动的部件（按连通块挑）；credit：署名",
+  "models": {
+    "ztz96": {
+      "name": "96 式主战坦克",
+      "glb": "up/73b1cd0e-free_96/73b1cd0e-free_96.glb",
+      "fwd": "+z",
+      "up": "+y",
+      "credit": {
+        "title": "ZTZ96",
+        "author": "jzmhhhhh",
+        "url": "https://sketchfab.com/3d-models/ztz96-b0da178e50dc423983445841615d9e80",
+        "license": "CC-BY-4.0",
+        "lurl": "http://creativecommons.org/licenses/by/4.0/"
+      },
+      "parts": [
+        {
+          "name": "tur",
+          "kind": "yaw",
+          "pivot": [
+            -1.1,
+            0,
+            1.5
+          ],
+          "any": [
+            {
+              "zmin": 1.38,
+              "box": [
+                -3.3,
+                0.8,
+                -1.42,
+                1.42
+              ]
+            },
+            {
+              "zmin": 1.5,
+              "box": [
+                0.4,
+                5.2,
+                -0.35,
+                0.35
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "m1a1": {
+      "name": "M1A1 艾布拉姆斯",
+      "glb": "conv/m1a1.glb",
+      "fwd": "-z",
+      "up": "+y",
+      "mats": {
+        "chassis.0": {
+          "base": "up/abbcb23f-m1a1-abrams-main-battle-tank/textures/Abrams.png"
+        },
+        "misc_a.0": {
+          "base": "up/abbcb23f-m1a1-abrams-main-battle-tank/textures/Tex_0026_1.png"
+        },
+        "misc_a.1": {
+          "base": "up/abbcb23f-m1a1-abrams-main-battle-tank/textures/bags.png"
+        },
+        "misc_a.2": {
+          "base": "up/abbcb23f-m1a1-abrams-main-battle-tank/textures/Tex_0025_1.png"
+        },
+        "misc_a.3": {
+          "base": "up/abbcb23f-m1a1-abrams-main-battle-tank/textures/glass.png"
+        },
+        "misc_a.4": {
+          "base": "up/abbcb23f-m1a1-abrams-main-battle-tank/textures/Tex_0026_3.png",
+          "alpha": "BLEND"
+        },
+        "parts.2": {
+          "base": "up/abbcb23f-m1a1-abrams-main-battle-tank/textures/Tex_0034_2.png"
+        },
+        "screens.0": {
+          "base": "up/abbcb23f-m1a1-abrams-main-battle-tank/textures/Tex_0034_2.png"
+        },
+        "chassis_vlo.4": {
+          "base": "up/abbcb23f-m1a1-abrams-main-battle-tank/textures/Tex_0031_1.png"
+        },
+        "chassis_vlo.6": {
+          "base": "up/abbcb23f-m1a1-abrams-main-battle-tank/textures/Tex_0031_1.png"
+        },
+        "chassis_vlo.7": {
+          "base": "up/abbcb23f-m1a1-abrams-main-battle-tank/textures/Track.png",
+          "alpha": "MASK"
+        },
+        "parts.4": {
+          "color": [
+            0.16,
+            0.16,
+            0.15,
+            1
+          ],
+          "metal": 0.6,
+          "rough": 0.5
+        }
+      },
+      "credit": {
+        "title": "M1A1 Abrams Main Battle Tank",
+        "author": "MirzaArrafiERV_45",
+        "url": "https://sketchfab.com/3d-models/m1a1-abrams-main-battle-tank-1529f5d842cb4f578aa8cb672524f044",
+        "license": "CC-BY-4.0",
+        "lurl": "http://creativecommons.org/licenses/by/4.0/"
+      },
+      "parts": [
+        {
+          "name": "tur",
+          "kind": "yaw",
+          "pivot": [
+            -0.9,
+            0,
+            1.8
+          ],
+          "any": [
+            {
+              "zmin": 1.72,
+              "box": [
+                -4.4,
+                1.6,
+                -1.8,
+                1.8
+              ]
+            },
+            {
+              "zmin": 1.9,
+              "box": [
+                1.3,
+                5.2,
+                -0.35,
+                0.35
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "j20": {
+      "name": "歼-20",
+      "glb": "conv/j20_assimp.glb",
+      "imgdir": "up/bc559445-chinese-chengdu-j-20/source/j-20_x",
+      "fwd": "-z",
+      "up": "+y",
+      "credit": {
+        "title": "Chinese Chengdu J-20",
+        "author": "42manako",
+        "url": "https://sketchfab.com/3d-models/chinese-chengdu-j-20-b9e81062c94545ffb0232d3ac6b7adc5",
+        "license": "CC-BY-4.0",
+        "lurl": "http://creativecommons.org/licenses/by/4.0/"
+      },
+      "parts": [
+        {
+          "name": "gear",
+          "kind": "hide",
+          "any": [
+            {
+              "zlow": 0.6
+            },
+            {
+              "nodes": "ID16427/|ID16577/"
+            }
+          ]
+        }
+      ],
+      "zc": 2.27,
+      "noz": [
+        [
+          -10.5,
+          0.76,
+          2.13,
+          0.48,
+          0.9
+        ]
+      ]
+    },
+    "j16": {
+      "name": "歼-16",
+      "glb": "up/1a9500af-shenyang_j16_hidden_dragon/1a9500af-shenyang_j16_hidden_dragon.glb",
+      "fwd": "+x",
+      "up": "+y",
+      "len": 21.9,
+      "credit": {
+        "title": "Shenyang J16 Hidden Dragon",
+        "author": "andertan",
+        "url": "https://sketchfab.com/3d-models/shenyang-j16-hidden-dragon-2b950f910677457fbb52b6096f81e70b",
+        "license": "CC-BY-4.0",
+        "lurl": "http://creativecommons.org/licenses/by/4.0/"
+      },
+      "zc": 1.5,
+      "noz": [
+        [
+          -8.96,
+          1.12,
+          0.68,
+          0.48,
+          0.8
+        ]
+      ]
+    },
+    "j31": {
+      "name": "歼-31 鹘鹰",
+      "glb": "up/c49c9266-free_use_model/c49c9266-free_use_model.glb",
+      "fwd": "+z",
+      "up": "+y",
+      "len": 16.9,
+      "credit": {
+        "title": "Shenyang J31 Gyrfalcon",
+        "author": "andertan",
+        "url": "https://sketchfab.com/3d-models/shenyang-j31-gyrfalcon-23dbff530e21491299ac67bbab42b553",
+        "license": "CC-BY-4.0",
+        "lurl": "http://creativecommons.org/licenses/by/4.0/"
+      },
+      "parts": [
+        {
+          "name": "gear",
+          "kind": "hide",
+          "zlow": 0.7,
+          "maxTris": 3000
+        }
+      ],
+      "zc": 1.78,
+      "noz": [
+        [
+          -7.4,
+          0.77,
+          1.6,
+          0.45,
+          0.6
+        ]
+      ]
+    },
+    "z10w": {
+      "name": "直-10",
+      "glb": "conv/z10w.glb",
+      "fwd": "+z",
+      "up": "+y",
+      "len": 14.15,
+      "mats": {
+        "Material__25": {
+          "base": "up/2642198f-changhe-z-10w/textures/ch_ahe_z-10w_d.tga.png"
+        },
+        "Material__28": {
+          "base": "up/2642198f-changhe-z-10w/textures/ch_ahe_z-10w_d.tga.png"
+        },
+        "Material__26": {
+          "base": "conv/rotor_blur.png",
+          "alpha": "BLEND",
+          "ds": true
+        },
+        "Material__27": {
+          "base": "conv/rotor_blur.png",
+          "alpha": "BLEND",
+          "ds": true
+        }
+      },
+      "credit": {
+        "title": "Changhe Z-10W",
+        "author": "42manako",
+        "url": "https://sketchfab.com/3d-models/changhe-z-10w-617cb4a91dfd4eaaa59161e06691df7f",
+        "license": "CC-BY-4.0",
+        "lurl": "http://creativecommons.org/licenses/by/4.0/"
+      },
+      "_旋翼": "原模型的旋翼虚化贴图（mainrotorblurred_rgb_test.tga、tailrotorblurred_rgb_test.tga）没有随模型给，按原意补了一张圆盘虚化图（conv/rotor_blur.png，tools/v3gbake.js 的说明里有生成方法）"
+    },
+    "z21": {
+      "name": "直-21",
+      "glb": "up/b36a2497-mw-z-21/source/mw_z-21.glb",
+      "fwd": "-x",
+      "up": "+y",
+      "credit": {
+        "title": "[MW] Z-21",
+        "author": "xlisov",
+        "url": "https://sketchfab.com/3d-models/mw-z-21-a2d88447f0904f49b73f94fa88dccea5",
+        "license": "CC-BY-NC-4.0",
+        "lurl": "http://creativecommons.org/licenses/by-nc/4.0/"
+      },
+      "len": 18,
+      "parts": [
+        {
+          "name": "rotor",
+          "kind": "spin",
+          "axis": "z",
+          "nodes": "Z21_Rotor_01|Z21_Blades_01"
+        },
+        {
+          "name": "trotor",
+          "kind": "spin",
+          "axis": "y",
+          "nodes": "Z21_Rotor_02|Z21_Blades_02"
+        }
+      ]
+    },
+    "army": {
+      "name": "士兵",
+      "glb": "conv/army.glb",
+      "fwd": "-x",
+      "up": "+y",
+      "height": 1.8,
+      "mats": {
+        "mat_0-SK_alliedsoldier_head_D.jpg": {
+          "base": "up/089e09a9-army-character-2/textures/SK_alliedsoldier_head_D.jpg"
+        },
+        "mat_1-SK_alliedsoldier_body_D.jpg": {
+          "base": "up/089e09a9-army-character-2/textures/SK_alliedsoldier_body_D.jpg"
+        }
+      },
+      "credit": {
+        "title": "Army Character 2",
+        "author": "MirzaArrafiERV_45",
+        "url": "https://sketchfab.com/3d-models/army-character-2-e3c4da4a33bb42ed8512f423a4319c5a",
+        "license": "CC-BY-4.0",
+        "lurl": "http://creativecommons.org/licenses/by/4.0/"
+      }
+    },
+    "aim120": {
+      "name": "AIM-120C",
+      "glb": "conv/aim120.glb",
+      "fwd": "+z",
+      "up": "+y",
+      "origin": "center",
+      "len": 3.66,
+      "mats": {
+        "91e5963e-a38e-4dc4-ad22-ccfe0d39bfaf": {
+          "base": "up/16ff68cb-aim-120c-amraam/source/AIM-120C AMRAAM_x/us_aim_120c_missile_c.jpg",
+          "normal": "up/16ff68cb-aim-120c-amraam/source/AIM-120C AMRAAM_x/us_aim_120c_missile_n_n.jpg",
+          "ao": "up/16ff68cb-aim-120c-amraam/source/AIM-120C AMRAAM_x/us_aim_120c_missile_n_ao.jpg"
+        }
+      },
+      "credit": {
+        "title": "AIM-120C AMRAAM",
+        "author": "Jeyhun1985",
+        "url": "https://sketchfab.com/3d-models/aim-120c-amraam-838fa923340a4d108e05c99bf0146ff6",
+        "license": "CC-BY-4.0",
+        "lurl": "http://creativecommons.org/licenses/by/4.0/"
+      }
+    },
+    "aim9": {
+      "name": "AIM-9",
+      "glb": "conv/aim9.glb",
+      "fwd": "+z",
+      "up": "+y",
+      "origin": "center",
+      "len": 3.02,
+      "mats": {
+        "lambert1": {
+          "base": "up/e1d66a05-aim-9-missile/source/model_x/model/textures/lambert1_albedo.jpg",
+          "normal": "up/e1d66a05-aim-9-missile/source/model_x/model/textures/lambert1_normal.jpg",
+          "mr": "conv/aim9_mr.png",
+          "metal": 1,
+          "rough": 1
+        }
+      },
+      "credit": {
+        "title": "AIM-9 missile",
+        "author": "rickslash",
+        "url": "https://sketchfab.com/3d-models/aim-9-missile-caaf15b49bac4144b6c6be577c2b872a",
+        "license": "CC-BY-4.0",
+        "lurl": "http://creativecommons.org/licenses/by/4.0/"
+      }
+    },
+    "aim54": {
+      "name": "AIM-54 不死鸟",
+      "glb": "conv/aim54.glb",
+      "fwd": "-x",
+      "up": "+y",
+      "origin": "center",
+      "set": 1
+    },
+    "aim9s": {
+      "name": "AIM-9 响尾蛇（组合）",
+      "glb": "conv/aim9s.glb",
+      "fwd": "-x",
+      "up": "+y",
+      "origin": "center",
+      "set": 1
+    },
+    "aim120s": {
+      "name": "AIM-120（组合）",
+      "glb": "conv/aim120s.glb",
+      "fwd": "-x",
+      "up": "+y",
+      "origin": "center",
+      "set": 1
+    },
+    "ks172": {
+      "name": "KS-172",
+      "glb": "conv/ks172.glb",
+      "fwd": "-x",
+      "up": "+y",
+      "origin": "center",
+      "set": 1
+    },
+    "asraam": {
+      "name": "AIM-132 ASRAAM",
+      "glb": "conv/asraam.glb",
+      "fwd": "-x",
+      "up": "+y",
+      "origin": "center",
+      "set": 1
+    },
+    "gbu24": {
+      "name": "GBU-24 宝石路",
+      "glb": "conv/gbu24.glb",
+      "fwd": "-x",
+      "up": "+y",
+      "origin": "center",
+      "set": 1
+    },
+    "mk83": {
+      "name": "Mk 83 炸弹",
+      "glb": "conv/mk83.glb",
+      "fwd": "-x",
+      "up": "+y",
+      "origin": "center",
+      "set": 1
+    },
+    "agm65": {
+      "name": "AGM-65 小牛",
+      "glb": "conv/agm65.glb",
+      "fwd": "-x",
+      "up": "+y",
+      "origin": "center",
+      "set": 1
+    },
+    "jsow": {
+      "name": "AGM-154 JSOW",
+      "glb": "conv/jsow.glb",
+      "fwd": "-x",
+      "up": "+y",
+      "origin": "center",
+      "set": 1
+    },
+    "brimstone": {
+      "name": "硫磺石",
+      "glb": "conv/brimstone.glb",
+      "fwd": "-x",
+      "up": "+y",
+      "origin": "center",
+      "set": 1
+    }
+  },
+  "sets": {
+    "1": {
+      "title": "300 followers - free aircraft missile set",
+      "author": "NETRUNNER_pl",
+      "url": "https://sketchfab.com/3d-models/300-followers-free-aircraft-missile-set-2e70bc2ea0824897b2ccaea378809c9e",
+      "license": "CC-BY-4.0",
+      "lurl": "http://creativecommons.org/licenses/by/4.0/"
+    }
+  }
+}

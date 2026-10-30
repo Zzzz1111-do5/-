@@ -19,7 +19,7 @@ precision mediump float;
 uniform vec3 uEye, uLine; uniform vec2 uFog, uWorld;
 varying vec3 vP, vN; varying float vM, vD;
 void main() {
-  vec3 bg = vec3(.004, .02, .011), N = normalize(vN), V = normalize(uEye - vP);
+  vec3 bg = ${typeof V3_BGG === 'string' ? V3_BGG : 'vec3(.63, .69, .75)'}, N = normalize(vN), V = normalize(uEye - vP);
   vec2 C = vec2(uWorld.x * .5, -uWorld.y * .5);
   vec3 L = normalize(vec3(C, 9000.) - vP), Hh = normalize(L + V);   // 桌子正上方的一盏灯
   float dif = max(dot(N, L), 0.), spec = pow(max(dot(N, Hh), 0.), 48.);
@@ -35,13 +35,15 @@ void main() {
 #else
     float grid = 0.;
 #endif
-    c = vec3(.018, .028, .024) * (.25 + 1.25 * lamp) + vec3(.07, .24, .14) * grid * .3 * lamp + vec3(.3, .38, .35) * spec * .35 * lamp;
+    // 写实：深色胡桃木桌面（顺着 x 方向的木纹），方格淡淡地刻在桌面上
+    float grain = .9 + .1 * sin(vP.y * .045 + sin(vP.x * .0021) * 6.) * sin(vP.y * .011 + 1.3);
+    c = vec3(.2, .14, .09) * grain * (.45 + .9 * lamp) * (1. - grid * .25 * lamp) + vec3(.35, .3, .25) * spec * .3 * lamp;
     c *= .45 + .55 * smoothstep(0., 260., ofs);   // 边框脚下的接触阴影
   } else if (vM < 1.5) {   // 框顶：拉丝深灰金属（细斜纹）
     float br = .92 + .08 * sin((vP.x + vP.y) * 1.7);
-    c = vec3(.085, .095, .09) * (.35 + .85 * dif) * br * (.6 + .4 * lamp) + vec3(.6, .66, .63) * spec * .55;
+    c = vec3(.2, .21, .2) * (.35 + .85 * dif) * br * (.6 + .4 * lamp) + vec3(.6, .62, .6) * spec * .5;
   }
-  else if (vM < 2.5) c = vec3(.045, .052, .05) * (.4 + .7 * dif) * (.55 + .45 * lamp) + vec3(.4, .45, .43) * spec * .2;
+  else if (vM < 2.5) c = vec3(.12, .12, .11) * (.4 + .7 * dif) * (.55 + .45 * lamp) + vec3(.4, .42, .4) * spec * .2;
   else c = uLine;
   gl_FragColor = vec4(mix(c, bg, smoothstep(uFog.x, uFog.y, vD)), 1.);
 }`;
@@ -87,7 +89,7 @@ function v3Table(C) {
   const u = V3T.u, a = V3T.a, g = [1, 3, 5].map(i => parseInt(COL.g.slice(i, i + 2), 16) / 255);
   gl.useProgram(V3T.pr);
   gl.uniformMatrix4fv(u.uM, false, C.M); gl.uniform3f(u.uEye, C.E[0], C.E[1], C.E[2]);
-  gl.uniform3f(u.uLine, g[0] * .75, g[1] * .75, g[2] * .75); gl.uniform2f(u.uWorld, W, H);
+  gl.uniform3f(u.uLine, .1, .1, .09); gl.uniform2f(u.uWorld, W, H);   // 写实：里沿一道深色压边（原来是发光线）
   const [f0, f1] = v3FogR(C), k = Math.max(1, C.E[2] / 2500);   // 拉得很高时桌面也看得见：雾跟着镜头高度放远
   gl.uniform2f(u.uFog, f0 * k, f1 * k);
   gl.bindBuffer(gl.ARRAY_BUFFER, V3T.buf);

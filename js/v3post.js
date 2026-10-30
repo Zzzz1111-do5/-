@@ -96,7 +96,7 @@ function v3Post(now) {
   const w = V3.cv.width, h = V3.cv.height, qw = Math.max(1, w >> 2), qh = Math.max(1, h >> 2);
   if (V3P.w !== qw || V3P.h !== qh) v3pSize(gl, qw, qh);
   if (!V3P.ok) return;
-  const [A, B, T] = V3P.fb, dof = v3pDof(), bk = .85 * clamp(isFinite(st.bloom) ? st.bloom / .7 : 1, 0, 2.2);
+  const [A, B, T] = V3P.fb, dof = v3pDof(), bk = .55 * clamp(isFinite(st.bloom) ? st.bloom / .7 : 1, 0, 2.2);
   const tex = (unit, t) => { gl.activeTexture(gl.TEXTURE0 + unit); gl.bindTexture(gl.TEXTURE_2D, t); };
   const pass = (k, F, vw, vh, set) => {
     gl.bindFramebuffer(gl.FRAMEBUFFER, F ? F.f : null); gl.viewport(0, 0, vw, vh);
@@ -106,7 +106,7 @@ function v3Post(now) {
   gl.bindBuffer(gl.ARRAY_BUFFER, V3P.buf); gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
   tex(0, V3P.scene); gl.copyTexImage2D(gl.TEXTURE_2D, 0, gl.RGB, 0, 0, w, h, 0);   // 抓下刚画好的一帧（已做过多重采样抗锯齿）
   pass('down', A, qw, qh, u => { tex(0, V3P.scene); gl.uniform1i(u.uS, 0); gl.uniform2f(u.uPx, 1 / w, 1 / h); gl.uniform1f(u.uTh, 0); });
-  pass('down', B, qw, qh, u => { tex(0, A.t); gl.uniform1i(u.uS, 0); gl.uniform2f(u.uPx, .5 / qw, .5 / qh); gl.uniform1f(u.uTh, .42); gl.uniform1f(u.uKn, .2); });
+  pass('down', B, qw, qh, u => { tex(0, A.t); gl.uniform1i(u.uS, 0); gl.uniform2f(u.uPx, .5 / qw, .5 / qh); gl.uniform1f(u.uTh, .86); gl.uniform1f(u.uKn, .12); });   // 写实：只有很亮的（爆炸、火光、阳光反射）才泛光
   for (const r of [1, 2.2]) {   // 第二遍半径大一些：近处一圈亮、外面一圈淡淡的光晕
     pass('blur', T, qw, qh, u => { tex(0, B.t); gl.uniform1i(u.uS, 0); gl.uniform2f(u.uDir, r / qw, 0); });
     pass('blur', B, qw, qh, u => { tex(0, T.t); gl.uniform1i(u.uS, 0); gl.uniform2f(u.uDir, 0, r / qh); });

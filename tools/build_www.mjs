@@ -26,5 +26,8 @@ const tag = app ? `<script>window.DS_BUILD = '${ver}';</script>\n` :
 if (!app) fs.writeFileSync(path.join(out, 'version.json'), JSON.stringify({ v: ver }));
 const page = body.replace(/(<script src="js\/[^"?]+\.js)"/g, `$1?v=${encodeURIComponent(stamp)}"`);
 fs.writeFileSync(path.join(out, 'index.html'), head + page.replace(/(<\/style>)/, '$1\n</head>\n<body>\n' + tag) + '\n</body>\n</html>\n');
-for (const d of ['js', 'fonts', 'legal']) fs.cpSync(path.join(root, d), path.join(out, d), { recursive: true, filter: s => !/\.fontcache/.test(s) });
+// 商店版（收费）不带授权只允许非商用的模型（tools/v3gmodels.json 里 license 带 NC 的），游戏里换成同类的另一个（js/v3g.js V3G_ALT）
+const ncOut = app ? Object.entries(JSON.parse(fs.readFileSync(path.join(root, 'tools', 'v3gmodels.json'), 'utf8')).models).filter(([, C]) => C.credit && /NC/.test(C.credit.license)).map(([k]) => path.join(root, 'js', 'mdl', k + '.js')) : [];
+for (const d of ['js', 'fonts', 'legal']) fs.cpSync(path.join(root, d), path.join(out, d), { recursive: true, filter: s => !/\.fontcache/.test(s) && !ncOut.includes(s) });
+if (ncOut.length) console.log('商店版不带非商用授权的模型：', ncOut.map(f => path.basename(f)).join('、'));
 console.log(`${path.relative(root, out)}/ 已生成（${app ? '商店版' : '网页版'} ${ver}）：`, fs.readdirSync(path.join(out, 'js')).length, '个脚本');
