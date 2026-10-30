@@ -28,15 +28,21 @@ const AIR_MDL = {
   // 比歼-36 小、可上航母（占机库），隐身 0.22、雷达 800、6 枚霹雳-15 + 2 枚霹雳-10，不带航炮，只打超视距
   j50: { name: '歼-50 第六代舰载战斗机', sil: 'j50', spd: 290, aa: .03, size: 16, stealth: .22, aam: 8, aamR: 560, pkK: 1.18, radar: 800, turn: 1.9, gun: 0 },
   j36: { name: '歼-36 第六代战斗机（制空型）', sil: 'j36', spd: 300, aa: .02, size: 18, land: true, stealth: .2, aam: 6, aamR: 560, aamL: 2, aamLR: 900, pkK: 1.2, radar: 900, turn: 1.7, cap: 240, gun: 0 },
+  // 歼-16D 电子战飞机（陆基，战区机场出动）：翼尖电子干扰吊舱压制敌雷达——附近我方飞机被敌防空发现、命中的概率打七折（airJamK）；挂 4 枚雷电-10 反辐射导弹，420 外打敌防空
+  j16d: { name: '歼-16D 电子战飞机', sil: 'j15', spd: 250, aa: .07, size: 18, land: true, std: 420, sead: true, gbN: 4, arW: 'ld10', arR: 420, jam: 650 },
   j36s: { name: '歼-36 第六代战斗机（打击型）', sil: 'j36', spd: 300, aa: .02, size: 18, land: true, stealth: .2, aam: 4, aamR: 560, pkK: 1.2, radar: 900, turn: 1.7, cap: 240, gun: 0, agm: 'ls6', agmN: 4, agmR: 900 }
 };
 const AIR_BASEM = { recon: 'kj600', strike: 'j35', cas: 'gj2', bomber: 'h6k', fighter: 'j20' };
-const AIR_VMODEL = { lr: 'wz7', dive: 'gj11', heavy: 'h6k', fb: 'j15t', heli: 'z10', sead: 'j35s', adv: 'j20', j36: 'j36', j36s: 'j36s', j50: 'j50' };   // adv：旧存档里的先进战斗机
+const AIR_VMODEL = { lr: 'wz7', dive: 'gj11', heavy: 'h6k', fb: 'j15t', heli: 'z10', sead: 'j35s', ew: 'j16d', adv: 'j20', j36: 'j36', j36s: 'j36s', j50: 'j50' };   // adv：旧存档里的先进战斗机
 const airMdlKey = (type, v) => AIR_VMODEL[v] || AIR_BASEM[type];
 const airMdl = (type, v) => AIR_MDL[airMdlKey(type, v)] || {};   // 运输机（para.js）等没有型号表的返回空
 const airSpec = (type, v) => ({ ...(AIR_SPEC[type] || AIR_SPEC.strike), ...airMdl(type, v) });
 const airLandW = w => !!(w && airMdl(w.type, w.v).land);
-const airStealth = o => { const b = (o && airMdl(o.kind || o.type, o.v).stealth) || 1; return o && o.exp > 0 && typeof awStl === 'function' ? awStl(o, b) : b; };   // 飞机（p.kind）或编队记录（w.type）；在敌雷达下待久了隐身打折（airwar.js awStl）
+// 防空压制的变体：歼-35 防空压制型（sead）、歼-16D 电子战飞机（ew）
+const airSeadV = v => v === 'sead' || v === 'ew';
+// 歼-16D 的电子干扰：650 内有升空的歼-16D，我方飞机（它自己也算）被敌雷达发现、被防空打中的概率打七折
+const airJamK = o => o && isFinite(o.x) && typeof S === 'object' && S && (S.planes || []).some(j => !j.dead && j.v === 'ew' && (j.alt ?? 1) > .3 && dist(j.x, j.y, o.x, o.y) < (AIR_MDL.j16d.jam || 650)) ? .7 : 1;
+const airStealth = o => { const b = ((o && airMdl(o.kind || o.type, o.v).stealth) || 1) * (o && o.kind ? airJamK(o) : 1); return o && o.exp > 0 && typeof awStl === 'function' ? awStl(o, b) : b; };   // 飞机（p.kind）或编队记录（w.type）；在敌雷达下待久了隐身打折（airwar.js awStl）
 const AIR_REARM_LAND = 100;   // 陆基飞机：飞回战区机场加油挂弹再飞回来
 const AIR_TYPES = ['recon', 'strike', 'cas', 'bomber', 'fighter'];
 const AIR_TURN = 1.5;      // 最大转弯角速度（弧度/秒）：巡航转弯半径约 120
@@ -178,6 +184,7 @@ function initCarrier() {
   if (!S.air || !Array.isArray(S.air.wing)) {
     const wing = [];
     for (const type of AIR_TYPES) for (let k = 0; k < AIR_SPEC[type].n; k++) wing.push({ id: S.nid++, type, state: 'deck', rearmT: 0 });
+    wing.push({ id: S.nid++, type: 'strike', v: 'ew', state: 'deck', rearmT: 0 });   // 战区派来一架歼-16D 电子战飞机（陆基，不占航母机库）
     S.air = { wing, wrecks: [] };
   }
   if (!Array.isArray(S.air.wrecks)) S.air.wrecks = [];
@@ -226,7 +233,7 @@ function launchPlane(kind, tx, ty, pref) {
     const land = airLandW(o), c = land ? null : cvOf(cvHome(o)), af = o.af && S.abBase;
     if (!land && !(c && c.hp > 0)) continue;
     if (o.af && !(typeof abAfOpen === 'function' && abAfOpen())) continue;   // 停在夺取的机场上、跑道用不了的起不来
-    const d = (af ? dist(af.x, af.y, tx, ty) : land ? H - ty + 300 : dist(c.x, c.y, tx, ty)) + (want && (o.v || (kind === 'bomber' ? 'heavy' : kind === 'recon' ? 'kj600' : null)) !== want ? 1e4 : 0) + (kind === 'recon' && !pref && isAew(o) ? 3000 : 0) + (!land && !af && o.dk === -1 ? 60 : 0);   // 同一艘航母上先派甲板上的，机库里的要等升降机
+    const d = (af ? dist(af.x, af.y, tx, ty) : land ? H - ty + 300 : dist(c.x, c.y, tx, ty)) + (want && !(want === 'sead' && airSeadV(o.v)) && (o.v || (kind === 'bomber' ? 'heavy' : kind === 'recon' ? 'kj600' : null)) !== want ? 1e4 : 0) + (kind === 'recon' && !pref && isAew(o) ? 3000 : 0) + (!land && !af && o.dk === -1 ? 60 : 0);   // 同一艘航母上先派甲板上的，机库里的要等升降机
     if (d < bd) { bd = d; w = o; }
   }
   if (!w) {
@@ -341,7 +348,7 @@ function airBomberGroup(lead, fl, tx, ty, G) {
   // 防空压制：目标附近已知敌防空，派歼-35 防空压制型先打（最多两架）
   const aa = airAAKnown(tx, ty, 320).filter(o => o.k !== 'manpads');
   for (const o of aa.slice(0, 2)) {
-    if (!S.air.wing.some(w => w.type === 'strike' && w.v === 'sead' && w.state === 'deck') || !launchPlane('strike', o.x, o.y, 'sead')) break;   // 机库里待命的歼-35 防空压制型
+    if (!S.air.wing.some(w => w.type === 'strike' && airSeadV(w.v) && w.state === 'deck') || !launchPlane('strike', o.x, o.y, 'sead')) break;   // 机库里待命的歼-35 防空压制型
     tag(S.planes[S.planes.length - 1], { seadP: true }); nSd++;
   }
   // 待机点：目标向我方一侧 330（避开已知防空圈），扫荡与压制完成前在这里盘旋
@@ -636,6 +643,7 @@ function flyPlane(p, dt) {
     return;
   }
   if (p.phase === 'trap') { cvTrapStep(p, c, dt); return; }
+  if (p.fp && typeof fpFly === 'function' && fpFly(p, dt)) return;   // 第一人称驾驶（v3pilot.js，飞控物理引擎 flight.js）：玩家在飞
   // 编队与航线（ato.js）：僚机保持在长机右后 / 左后；长机先飞到岸线进入口（起飞后放慢等僚机集合）
   if (typeof atoFormP === 'function' && p.lead != null && (p.phase === 'out' || (p.kind === 'fighter' && p.phase === 'loiter'))) {
     if (p.kind === 'fighter' && typeof awFight === 'function') awFight(p, 'p', dt);   // 僚机也一直搜索敌机，接敌就散开
@@ -1079,7 +1087,7 @@ function updateAirAuto(dt) {
     const Lc = best && bs >= (awBad ? 6 : 2) && airPkg('cas', best.x, best.y);
     if (Lc) { if (typeof atoWing === 'function') atoWing(Lc, 'cas', best.x, best.y); return; }
   }
-  const seadUp = S.planes.filter(o => !o.dead && o.kind === 'strike' && o.phase !== 'rtb').length, seadV = S.air.wing.some(w => w.type === 'strike' && w.v === 'sead' && w.state === 'deck');
+  const seadUp = S.planes.filter(o => !o.dead && o.kind === 'strike' && o.phase !== 'rtb').length, seadV = S.air.wing.some(w => w.type === 'strike' && airSeadV(w.v) && w.state === 'deck');
   if (S.assets.strike > 0 && !awBad && ph >= 2 && !(ph === 2 && seadUp >= 2)) {   // 压制防空阶段：同时最多两架
     const PRI = { typhon: 6, coastal: 5, ascm: 5, tel: 5, airfield: 4.5, arty: 4, aa: 3.5, mortar: 3, bunker: 2 };   // 歼-35 在时高炮阵地（防空）优先级再乘 1.8
     let best = null, bs = 0;
@@ -1092,7 +1100,7 @@ function updateAirAuto(dt) {
     }
     // 压制防空阶段：已知的敌防空车也打（防空压制型歼-35 优先）
     if (ph === 2 && !best && typeof airAASites === 'function') { const v = airAASites().filter(s => s.k === 'veh' && !near(s.x, s.y, 90).length && !busy('strike', s.x, s.y, 70) && (seadV || airAAAt(s.x, s.y, 300) <= 2.1)).sort((a, b) => b.w - a.w)[0]; if (v) best = { kx: v.x, ky: v.y, id: null, sead: true }; }
-    const pref = ph === 2 && S.air.wing.some(w => w.type === 'strike' && w.v === 'sead' && w.state === 'deck') ? 'sead' : undefined;
+    const pref = ph === 2 && S.air.wing.some(w => w.type === 'strike' && airSeadV(w.v) && w.state === 'deck') ? 'sead' : undefined;
     const L = best && airPkg('strike', best.kx, best.ky, pref);
     if (L) { if (typeof atoWing === 'function') atoWing(L, 'strike', best.kx, best.ky, pref); if (typeof cmdAirLaunched === 'function' && best.id != null) cmdAirLaunched({ k: 'strike', x: best.kx, y: best.ky, eid: best.id }, L); return; }
   }

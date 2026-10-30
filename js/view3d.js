@@ -1069,6 +1069,7 @@ function v3Dolly(sx, sy, k) {
 }
 // 镜头：画面中心（CAM.x, CAM.y）为目标点；距离按平面地图的缩放换算，使画面中心的比例与平面时相同（开始界面背景的环绕展示用）
 function v3Camera() {
+  if (typeof V3FP === 'object' && V3FP.on) return v3fpCamera();   // 第一人称驾驶（v3pilot.js）
   if (typeof V3O === 'object' && V3O.on) return v3oCamera();   // 观察者模式（v3obs.js）
   if (V3.on) return v3FcCamera();   // 自由镜头
   const th = V3.tilt, ps = V3.yaw, D = (CAM.vh / CAM.z) / (2 * Math.tan(V3_FOV / 2)) * (V3.dk || 1), o = V3.tofs || [0, 0];
@@ -1135,7 +1136,8 @@ function v3Draw(now) {
   else if (typeof afb3dSig === 'function' && (V3.achk = (V3.achk || 0) - 1) <= 0 && (V3.achk = 30) && afb3dSig() !== V3.asig) v3Bld();   // 机场刚被发现 / 夺取
   // 转向 / 俯仰缓动；注视点高度平滑
   const fdt = clamp((now - (V3.lastNow || now)) / 1000, 0, .1); V3.lastNow = now;
-  if (typeof V3O === 'object' && V3O.on) v3oStep(now);
+  if (typeof V3FP === 'object' && V3FP.on) v3fpStep(now);
+  else if (typeof V3O === 'object' && V3O.on) v3oStep(now);
   else if (V3.on) { v3HoldStep(fdt); v3FcStep(fdt); }   // 自由镜头
   else { v3TzStep(fdt); V3.yaw += Math.atan2(Math.sin(V3.yawT - V3.yaw), Math.cos(V3.yawT - V3.yaw)) * .18; V3.tilt += (V3.tiltT - V3.tilt) * .18; }   // 开始界面背景的环绕展示
   const C = v3Camera(), box = V3.box = v3Box(Math.max(2.6, v3FogE(C) * .93 / C.D)), boxN = v3Box(1.15);   // 远处贴图（与立体模型）铺到能见距离
@@ -1335,6 +1337,7 @@ function v3Overlay(ctx, time) {
   if (typeof thMarks3 === 'function') thMarks3(ctx, stem);   // 营标：战区编队的番号牌立在每个营（连）头顶（thpanel.js）
   if (typeof shOverlay3D === 'function') shOverlay3D(ctx, (x, y, h) => v3Proj(x, y, v3Ht(x, y) + h));   // 士兵喊话气泡（shout.js）
   if (typeof v3oOverlay === 'function') v3oOverlay(ctx);   // 观察者模式的准星
+  if (typeof v3fpOverlay === 'function') v3fpOverlay(ctx);   // 第一人称驾驶的平显
   ctx.restore();
 }
 
@@ -1376,7 +1379,7 @@ function v3Pan(dx, dy) {
 // 输入：中键（或 Ctrl + 左键）拖动 → 横向转向、纵向俯仰；双指旋转 → 转向
 // 右键拖动（编队指挥模式里右键不再下命令）：同样转视角；只点一下不拖，照旧是取消（穿插选目标 / 选择）
 HOOK.pointer.push((e, kind) => {
-  if (!V3.on || (typeof V3O === 'object' && V3O.on)) return false;
+  if (!V3.on || (typeof V3O === 'object' && V3O.on) || (typeof V3FP === 'object' && V3FP.on)) return false;
   const { sx, sy } = evPos(e), rDrag = e.button === 2 && typeof thuActive === 'function' && thuActive();
   if (kind === 'down' && (e.button === 1 || (e.button === 0 && e.ctrlKey) || rDrag)) { V3.orb = { sx, sy, x0: sx, y0: sy, id: e.pointerId, r: rDrag, moved: false }; return true; }
   if (V3.orb && V3.orb.id === e.pointerId) {

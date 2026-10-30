@@ -1088,7 +1088,7 @@ function v3mCollect(C, box) {
     }
     const X = V3_SHIPX[String(sh.label || '').split('-')[0]], zx = X && sh.hover ? Math.max(-2.6, v3Ht(P.x, P.y)) : -2.6;   // 气垫艇冲上滩头时贴着地面
     if (!(X && typeof v3uShip === 'function' && v3uShip(X[0], P.x, P.y, zx, P.h, X[1] * P.k, 0))) v3mAdd('sh:' + sh.kind, () => v3mShip(sh.kind, d[0], d[1]), P.x, P.y, -2.6, P.h, P.k, 0);
-    if (typeof v3dFunnel === 'function') v3dFunnel(P.x, P.y, P.h, (X ? X[1] : d[0]) * P.k, sh.kind === 'assault' ? -.4 : -.25, -2.6 + d[1] * .55, .4);   // 柴油机排气
+    if (typeof v3dFunnel === 'function') v3dFunnel(P.x, P.y, P.h, (X ? X[1] : d[0]) * P.k, sh.kind === 'assault' ? -.4 : -.25, -2.6 + d[1] * .55, X && X[0] === 'lcac' ? 1.2 : .6);   // 柴油机排气（气垫艇是四台燃气轮机，热浪大）
   }
   for (const bt of S.boats || []) if (!bt.dead && isFinite(bt.x) && inB(bt.x, bt.y)) v3mAdd('sh:boat', () => v3mShip('boat', 12, 5), bt.x, bt.y, -2.6, bt.heading ?? -1.57, 1, 0);
   if (S.dd && S.dd.state !== 'sunk' && isFinite(S.dd.x) && inB(S.dd.x, S.dd.y, 80)) {   // 旗舰：有外部精细模型（055）先用它，长度与沙盒里的同型舰一样按舰型系数
@@ -1209,7 +1209,11 @@ function v3mCollect(C, box) {
     const h = a.heading || 0, [hp, hr] = v3Pose(v3Grad(a.x, a.y, 4, 'ar' + a.id), h);
     v3gVeh(a, 'm1117', 'e', typeof A3_LEN === 'number' ? A3_LEN : 18, a.x, a.y, v3Ht(a.x, a.y), h, a.dead ? h + .6 : (a.aim ?? h), a.dead, hp, hr);
   }
-  if (S.trk && S.trk.list) for (const tr of S.trk.list) if ((tr.ph !== 'idle' || tr.dead) && inB(tr.x, tr.y)) { const [tp, trl] = v3Pose(v3Grad(tr.x, tr.y, 3, 'trk' + tr.id), tr.h || 0); v3mAdd('truck', () => v3mTruck('cargo'), tr.x, tr.y, v3Ht(tr.x, tr.y), tr.h || 0, 1, tr.dead ? 2 : 0, trl, tp); }   // 补给卡车
+  if (S.trk && S.trk.list) for (const tr of S.trk.list) if ((tr.ph !== 'idle' || tr.dead) && inB(tr.x, tr.y)) {   // 补给卡车（排气管在驾驶室后面朝上冒热气）
+    const [tp, trl] = v3Pose(v3Grad(tr.x, tr.y, 3, 'trk' + tr.id), tr.h || 0), z = v3Ht(tr.x, tr.y), h = tr.h || 0;
+    v3mAdd('truck', () => v3mTruck('cargo'), tr.x, tr.y, z, h, 1, tr.dead ? 2 : 0, trl, tp);
+    if (!tr.dead && typeof v3dHazeD === 'function') v3dHazeD([tr.x + Math.cos(h) * 1.2, -(tr.y + Math.sin(h) * 1.2), z + 3.4], [-Math.cos(h) * .3, Math.sin(h) * .3, 1], .35, 3.2, tr.ph === 'idle' ? .6 : 1);
+  }
   if (S.rep && S.rep.crew) for (const id in S.rep.crew) {   // 抢修组：岸上抢修车 / 海上抢修艇（朝向按移动方向，只在画面里记）
     const c = S.rep.crew[id];
     if (!c.k || !inB(c.x, c.y)) continue;
@@ -1260,6 +1264,7 @@ function v3mCollect(C, box) {
   }
   // 飞机：高度与 3D 地图里的标识一致（view3d.js v3AirZ：甲板上贴着甲板，空中按高度），按滚转角倾斜；直升机主旋翼转动
   const plane = (o, hd, sd, key, sz, bank) => {
+    if (typeof V3FP === 'object' && V3FP.on && V3FP.o === o) return;   // 第一人称驾驶：镜头就在座舱里，不画自己
     const L = !sd && typeof v3dLaunch === 'function' ? v3dLaunch(o) : null;   // 刚离舰：下沉、抬头，起落架过一会儿才收（v3det.js）
     const x = o.x, y = o.y, z = v3AirZ(o) + (L ? L.dz : 0);
     let pt = typeof V3G_HELI === 'object' && V3G_HELI[key] ? 0 : typeof v3dPitch === 'function' ? v3dPitch(o, sd, z, L, key) : L ? L.pitch : 0;   // 仰角跟着航迹 + 迎角（js/aero.js；直升机不按航迹抬头）

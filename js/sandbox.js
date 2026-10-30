@@ -672,7 +672,7 @@ function sbxAIAttackBase(mi, fi) {
   let smoke = 0;
   if (dd) for (let i = 0; i < (k >= 1.3 ? 2 : 1); i++) if (sbxPlace('p_smoke').ok) smoke += 3;
   const relay = B0 >= 1150 && sbxPlace('p_relay').ok;
-  if (cv) { buyAir('p_air_strike', 'strike'); if (k >= 1.2) buyAir('p_air_ftr_adv', 'strike'); if (k >= 1.3) buyAir('p_air_dive', 'bomber'); buyAir('p_air_fb', 'cas'); }
+  if (cv) { buyAir('p_air_strike', 'strike'); if (k >= 1.2) buyAir('p_air_ftr_adv', 'strike'); if (k >= 1.1) buyAir('p_air_ew', 'strike'); if (k >= 1.3) buyAir('p_air_dive', 'bomber'); buyAir('p_air_fb', 'cas'); }
   const depot = B0 >= 1400 && sbxPlace('p_depot').ok;
   const para = B0 >= 2500 && sbxPlace('p_para').ok, drop = B0 >= 1800 && sbxPlace('p_airdrop').ok;
   if (B0 >= 1600) { sbxPlace('p_reserve'); sbxPlace('p_rline'); }
@@ -1114,7 +1114,7 @@ function sbxRkTargets(s, tx, cy) {
 // 火箭艇、火力支援艇、扫雷舰
 function sbxFireShips(dt) {
   for (const s of S.ships) {
-    if (!s.sbxRole || !alive(s)) continue;
+    if (!s.sbxRole || !alive(s) || (typeof fpDriving === 'function' && fpDriving(s))) continue;   // 玩家亲自开着（v3pilot.js）
     const st = s.sbxS || (s.sbxS = { n: 0, cd: 0, go: 0, sw: 0 });
     if (!s.sbxTgt && st.go === 0) { st.tx = sbxMainX(); if (st.tx == null && S.t < 8) continue; }   // 未指定目标：等指挥官定下主攻滩头，随主攻方向出击
     const tx = s.sbxTgt ? s.sbxTgt.x : st.tx ?? sbxBeachOf(s.x).cx, b = sbxBeachOf(tx), cy = coastAt(tx);

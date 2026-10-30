@@ -120,6 +120,7 @@ function sailTo(s, dt, speed) {
 
 function updateShips(dt) {
   for (const s of S.ships) {
+    if (typeof fpDriving === 'function' && fpDriving(s)) continue;   // 第一人称驾驶（v3pilot.js）：玩家在开船
     if (s.state === 'unloading') {
       if (s.kind === 'lst' && typeof vehUnload === 'function') { vehUnload(s, dt); continue; }   // 坦克登陆舰：车辆逐辆驶下跳板
       if ((s.ut += dt) >= 3) disembark(s);

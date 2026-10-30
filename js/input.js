@@ -99,7 +99,7 @@ function bindInput() {
     if (e.key === 'Shift') KEYS.add('Shift');   // 3D 自由镜头：按住 Shift 飞得快
     if (e.key.startsWith('Arrow')) { KEYS.add(e.key); e.preventDefault(); return; }
     // WASD：前后左右移动视角（3D 观察者模式里 WASD 归观察者飞行）
-    if (WASD[e.code] && !e.ctrlKey && !e.metaKey && !e.altKey && !(typeof V3O === 'object' && V3O.on) && !(e.target.closest && e.target.closest('#sbxPanel'))) { KEYS.add(WASD[e.code]); e.preventDefault(); return; }
+    if (WASD[e.code] && !e.ctrlKey && !e.metaKey && !e.altKey && !(typeof V3O === 'object' && V3O.on) && !(typeof V3FP === 'object' && V3FP.on) && !(e.target.closest && e.target.closest('#sbxPanel'))) { KEYS.add(WASD[e.code]); e.preventDefault(); return; }
     // 编队指挥模式：空降这些直接操控的快捷键不再有；垂发导弹（Y）、战术导弹（I）只在你指挥攻方时保留（舰艇支援见 spui.js）
     if (thUI() && ((/^Key[IY]$/.test(e.code) && S.ctl !== 'p') || (e.shiftKey && /^Key[KPO]$/.test(e.code)))) { e.preventDefault(); return; }
     if (runHook('key', e)) return;

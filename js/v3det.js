@@ -12,7 +12,7 @@ const v3dSz = p => typeof airSize3 === 'function' ? airSize3(p, 'p') : (typeof a
 //   直线电机：挂杆后整条滑轨微微发光（储能），越接近弹射越亮；弹射时滑块所在的一段定子最亮、身后一段渐暗、前面一小段刚通电
 //   喷气机挂杆后推到最大推力、弹射前约 2 秒点加力（v3dDeckEng），尾焰打在升起的偏流板上（板面映亮）；离舰后先略微下沉、抬头爬升，约 2 秒后收起落架
 const V3D_NOSE0 = 6;   // 没有飞机时滑块停在起点前 6 米（前起落架大致的位置）
-const V3D_JET = { j35: 1, j20: 1, j15: 1, j15t: 1, j36: 1, j50: 1, f35: 1, f22: 1, f35b: 1 };   // 有加力的喷气机
+const V3D_JET = { j35: 1, j20: 1, j15: 1, j15t: 1, j16: 1, j16d: 1, j36: 1, j50: 1, f35: 1, f22: 1, f35b: 1 };   // 有加力的喷气机
 // 前起落架离机身中心多远（世界单位）：用户给的模型里量的前轮位置（米，模型坐标）；没有起落架的模型按机长的两成
 const V3D_NOSEX = { j31: 4, j20: 3.18 };
 function v3dNose(key, k) {
@@ -55,25 +55,25 @@ function v3dCatUnits(cv, live, top, h) {
 //   再按热气柱画面向镜头的面片，片元里按顺着喷流滚动的噪声把取样位置错开几个像素——后面的甲板、海面、飞机看起来在抖；离镜头远的、低画质不画
 const V3DH = { list: [], tried: false, ok: false, pr: null, a: {}, u: {}, buf: null, tex: null, tw: 0, th: 0 };
 function v3dHazeAdd(c, R, r, len, k) { v3dHazeD(c, [-R[0], -R[3], -R[6]], r, len, k); }   // 喷口：顺着机身往后
-// 一段热气柱（GL 坐标：起点 c、单位方向 d、半径 r、长度 len、强度 k）；一帧最多收 160 段，画的时候只留离镜头最近的 64 段
+// 一段热气柱（GL 坐标：起点 c、单位方向 d、半径 r、长度 len、强度 k）；一帧最多收 240 段，画的时候只留离镜头最近的 96 段（手机 40 段）
 function v3dHazeD(c, d, r, len, k) {
-  if (!(k > .05) || V3DH.list.length > 160) return;
+  if (!(k > .05) || V3DH.list.length > 240) return;
   V3DH.list.push({ c: c.slice(), d, r, len, k });
 }
 // —— 各种发动机的热气（按真实的排气口位置与方向）——
 // 地面车辆（车的坐标：x 按车长、y 按车宽的比例，z 按车高；d 车的坐标里的方向）：柴油机的热气从车尾散热百叶窗往上冒、略向后飘；
 //   M1 系列的燃气轮机从车尾排气口水平向后喷，热得多；99A、96 式（这里是 80 式外形）从车体左侧后部排气；轮式车排气管在右后方朝上
 const V3D_VEXH = {
-  m1a2: { p: [[-.5, 0, .45]], d: [-1, 0, .2], r: .55, len: 4.4, k: 1 }, m1a1: 'm1a2', m1150: 'm1a2',
-  ztz99a: { p: [[-.3, -.5, .32]], d: [-.25, -1, .5], r: .35, len: 2.4, k: .8 }, ztz96b: 'ztz99a', ztz96m: 'ztz99a',
-  t: { p: [[-.42, -.2, .56], [-.42, .2, .56]], d: [-.35, 0, 1], r: .42, len: 2.6, k: .6 }, w: { p: [[-.44, .32, .66]], d: [-.15, .2, 1], r: .24, len: 1.7, k: .5 } };
+  m1a2: { p: [[-.5, 0, .45]], d: [-1, 0, .2], r: .75, len: 7, k: 1.5 }, m1a1: 'm1a2', m1150: 'm1a2',
+  ztz99a: { p: [[-.3, -.5, .32]], d: [-.25, -1, .5], r: .5, len: 4, k: 1.1 }, ztz96b: 'ztz99a', ztz96m: 'ztz99a',
+  t: { p: [[-.42, -.2, .56], [-.42, .2, .56]], d: [-.35, 0, 1], r: .55, len: 4.2, k: 1 }, w: { p: [[-.44, .32, .66]], d: [-.15, .2, 1], r: .38, len: 3, k: .85 } };
 function v3dVehHaze(v, key, len, z, h, E) {
   const M = typeof RLM === 'object' && RLM[key];
-  if (v.dead || !M || (v.x - E[0]) ** 2 + (-v.y - E[1]) ** 2 > 180 * 180) return;
+  if (v.dead || !M || (v.x - E[0]) ** 2 + (-v.y - E[1]) ** 2 > 500 * 500) return;
   let X = V3D_VEXH[key] || V3D_VEXH[M.run === 't' ? 't' : 'w'];
   if (typeof X === 'string') X = V3D_VEXH[X];
   const k = len / M.L, Lh = M.L * k, B = M.B * k, Hh = M.B * .6 * k, c = Math.cos(h), s = Math.sin(h), n = Math.hypot(...X.d), dx = X.d[0] / n, dy = X.d[1] / n, dz = X.d[2] / n;
-  const d = [dx * c - dy * s, -(dx * s + dy * c), dz], kk = X.k * (v.moving ? 1 : .55);   // 走着的发动机转速高
+  const d = [dx * c - dy * s, -(dx * s + dy * c), dz], kk = X.k * (v.moving ? 1.25 : .85);   // 走着的发动机转速高
   for (const [px, py, pz] of X.p) { const lx = px * Lh, ly = py * B; v3dHazeD([v.x + lx * c - ly * s, -(v.y + lx * s + ly * c), z + pz * Hh], d, X.r * k, X.len * k, kk); }
 }
 // 不带加力的飞机（直升机、涡桨、运输机、轰炸机、无人机）的排气口（机型单位，左右成对）：[x, y, z, 半径, 强度]——
@@ -96,12 +96,12 @@ function v3dExhaust(key, sz, o, k0) {
   const P = v3dEngPts(key);
   if (!P.length) return;
   const k = sz / 21, c = Math.cos(o.h), s = Math.sin(o.h), cr = Math.cos(o.rl || 0), sr = Math.sin(o.rl || 0), d = [-c, s, 0];   // 往后（GL 坐标 y 取反）
-  for (const [x, y, z, r, kk] of P) { const yy = y * cr - z * sr, zz = y * sr + z * cr; v3dHazeD([o.x + (x * c - yy * s) * k, -(o.y + (x * s + yy * c) * k), o.z + zz * k], d, r * k, r * k * 7, kk * k0); }
+  for (const [x, y, z, r, kk] of P) { const yy = y * cr - z * sr, zz = y * sr + z * cr; v3dHazeD([o.x + (x * c - yy * s) * k, -(o.y + (x * s + yy * c) * k), o.z + zz * k], d, r * k * 1.3, r * k * 13, kk * k0 * 1.6); }
 }
 // 舰艇烟囱上方的热气（往上冒）：x、y 舰的位置，h 航向，L 画面舰长，f 烟囱离舰中心多远（按舰长）、zt 烟囱口高
 function v3dFunnel(x, y, h, L, f, zt, k = .5) {
   const c = Math.cos(h), s = Math.sin(h);
-  v3dHazeD([x + c * f * L, -(y + s * f * L), zt], [0, 0, 1], L * .035, L * .3, k);
+  v3dHazeD([x + c * f * L, -(y + s * f * L), zt], [0, 0, 1], L * .05, L * .55, k * 1.6);
 }
 const V3DH_VS = `attribute vec3 p; attribute vec3 q; uniform mat4 uM; uniform vec3 uEye; varying vec3 vQ; varying float vD;
 void main() { vQ = q; vD = length(uEye - p); gl_Position = uM * vec4(p, 1.); }`;
@@ -114,11 +114,15 @@ uniform sampler2D uTex; uniform vec2 uSz; uniform float uT; varying vec3 vQ; var
 float h21(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * .1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
 float vn(vec2 p) { vec2 i = floor(p), f = fract(p), u = f * f * (3. - 2. * f); return mix(mix(h21(i), h21(i + vec2(1., 0.)), u.x), mix(h21(i + vec2(0., 1.)), h21(i + vec2(1., 1.)), u.x), u.y); }
 void main() {
-  float a = vQ.x, b = vQ.y, f = smoothstep(0., .12, a) * (1. - smoothstep(.5, 1., a)) * (1. - b * b) * vQ.z;   // 喷口处最强、往后散开变弱
+  float a = vQ.x, b = vQ.y, f = min(1.3, smoothstep(0., .08, a) * (1. - smoothstep(.6, 1., a)) * (1. - b * b) * vQ.z);   // 喷口处最强、往后散开变弱
   vec2 nq = vec2(a * 7. - uT * 9., b * 2.2 + uT * .7), nr = vec2(a * 17. - uT * 23., b * 5. - uT * 1.3);
   vec2 off = vec2(vn(nq), vn(nq + 17.3)) - .5 + (vec2(vn(nr + 3.1), vn(nr + 9.7)) - .5) * .5;   // 大的波纹慢慢滚、小的碎纹抖得快
-  vec2 uv = (gl_FragCoord.xy + off * clamp(220. / vD, 1.5, 14.) * uSz.y / 1080. * f) / uSz;   // 错开几个像素（离得近扭得多），按画面高度缩放
-  gl_FragColor = vec4(texture2D(uTex, uv).rgb, smoothstep(0., .3, f));
+  vec2 px = off * clamp(560. / vD, 4., 34.) * uSz.y / 1080. * f, uv = (gl_FragCoord.xy + px) / uSz, ca = px * .18 / uSz;   // 错开十几个像素（离得近扭得多），按画面高度缩放
+  vec3 c = vec3(texture2D(uTex, uv + ca).r, texture2D(uTex, uv).g, texture2D(uTex, uv - ca).b);   // 一点点色散：热空气的折射边缘
+  float sh = (vn(nr * 1.7 + 5.3) - .5) * .22 * f;   // 折光的明暗闪动
+  c *= 1. + sh;
+  c += vec3(.05, .025, 0.) * f * f * smoothstep(.35, 0., a) * min(vQ.z, 1.5);   // 喷口附近的热流微微发暖
+  gl_FragColor = vec4(c, smoothstep(0., .18, f));
 }`;
 function v3dHazeInit(gl) {
   V3DH.tried = true;
@@ -139,8 +143,9 @@ function v3dHazeInit(gl) {
 }
 function v3dHaze(C) {
   let L = V3DH.list; V3DH.list = [];
-  if (!L.length || (typeof SETTINGS === 'object' && SETTINGS && SETTINGS.quality === 'low') || (typeof V3 === 'object' && V3.coarse)) return;
-  if (L.length > 64) { const E = C.E, d2 = h => (h.c[0] - E[0]) ** 2 + (h.c[1] - E[1]) ** 2 + (h.c[2] - E[2]) ** 2; L = L.sort((a, b) => d2(a) - d2(b)).slice(0, 64); }   // 只留最近的
+  const lite = (typeof SETTINGS === 'object' && SETTINGS && SETTINGS.quality === 'low') || (typeof V3 === 'object' && V3.coarse), NMAX = lite ? 40 : 96, RMAX = lite ? 600 : 900;   // 手机、低画质也画：段数少一些、近一些
+  if (!L.length) return;
+  if (L.length > NMAX) { const E = C.E, d2 = h => (h.c[0] - E[0]) ** 2 + (h.c[1] - E[1]) ** 2 + (h.c[2] - E[2]) ** 2; L = L.sort((a, b) => d2(a) - d2(b)).slice(0, NMAX); }   // 只留最近的
   const gl = V3.gl;
   if (!V3DH.tried) v3dHazeInit(gl);
   if (!V3DH.ok) return;
@@ -149,20 +154,20 @@ function v3dHaze(C) {
   let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9, full = false;
   for (const h of L) {   // 热气柱：从喷口往后，越往后越宽（面向镜头）；顶点 = 位置 3 + (沿喷流 0–1、横向 −1–1、强度)
     const p0 = h.c, d = h.d, p1 = [p0[0] + d[0] * h.len, p0[1] + d[1] * h.len, p0[2] + d[2] * h.len];
-    if (Math.hypot(p0[0] - E[0], p0[1] - E[1], p0[2] - E[2]) > 260) continue;
+    if (Math.hypot(p0[0] - E[0], p0[1] - E[1], p0[2] - E[2]) > RMAX) continue;
     const m = [(p0[0] + p1[0]) / 2 - E[0], (p0[1] + p1[1]) / 2 - E[1], (p0[2] + p1[2]) / 2 - E[2]];
     let sv = [d[1] * m[2] - d[2] * m[1], d[2] * m[0] - d[0] * m[2], d[0] * m[1] - d[1] * m[0]];
     const l = Math.hypot(sv[0], sv[1], sv[2]);
     if (l < 1e-6) continue;
     sv = [sv[0] / l, sv[1] / l, sv[2] / l];
-    const w0 = h.r * 1.5, w1 = h.r * 3.2, A = [[p0, -w0, 0, -1], [p0, w0, 0, 1], [p1, w1, 1, 1], [p1, -w1, 1, -1]].map(([p, w, a, b]) => [p[0] + sv[0] * w, p[1] + sv[1] * w, p[2] + sv[2] * w, a, b, h.k]);
+    const w0 = h.r * 2, w1 = h.r * 5, A = [[p0, -w0, 0, -1], [p0, w0, 0, 1], [p1, w1, 1, 1], [p1, -w1, 1, -1]].map(([p, w, a, b]) => [p[0] + sv[0] * w, p[1] + sv[1] * w, p[2] + sv[2] * w, a, b, h.k]);
     let vis = false;
     for (const q of A) { const sc = prj(q); if (!sc) { full = vis = true; continue; } vis = true; x0 = Math.min(x0, sc[0]); x1 = Math.max(x1, sc[0]); y0 = Math.min(y0, sc[1]); y1 = Math.max(y1, sc[1]); }   // 有角落跑到镜头后面：整屏都拷
     if (vis) for (const i of [0, 1, 2, 0, 2, 3]) for (const v of A[i]) out.push(v);
   }
   if (!out.length) return;
   // 抓屏：只拷热气柱所在的一块（外扩一圈：错开取样也不出界）
-  const mg = Math.ceil(16 * H / 1080) + 8;
+  const mg = Math.ceil(40 * H / 1080) + 8;
   const cx0 = full ? 0 : Math.max(0, Math.floor(x0 - mg)), cy0 = full ? 0 : Math.max(0, Math.floor(y0 - mg)), cx1 = full ? W : Math.min(W, Math.ceil(x1 + mg)), cy1 = full ? H : Math.min(H, Math.ceil(y1 + mg));
   if (cx1 <= cx0 || cy1 <= cy0) return;
   gl.activeTexture(gl.TEXTURE13); gl.bindTexture(gl.TEXTURE_2D, V3DH.tex);
@@ -366,7 +371,7 @@ function v3dBurner(out, C, p, key, sz, o, E) {
         for (const f of [-.5, 0, .5]) rib(P(-d * .5, -n.w * .88, f * n.hh), P(-d * .5, n.w * .88, f * n.hh), w0, cs);
       }
     }
-    if (typeof v3dHazeAdd === 'function') v3dHazeAdd(c, R, n.r || Math.max(n.w, n.hh), 2 * (n.r || n.w) * (3 + 4 * ab), Math.max(ab, ht * .55));   // 喷口后方的热浪（v3dHaze 画）
+    if (typeof v3dHazeAdd === 'function') v3dHazeAdd(c, R, (n.r || Math.max(n.w, n.hh)) * 1.3, 2 * (n.r || n.w) * (7 + 10 * ab), Math.max(ab * 1.6, ht * 1.1));   // 喷口后方的热浪（v3dHaze 画）
     if (ab <= .02) continue;
     // —— 加力：小火 → 大火（扁平喷口按宽度分几股） ——
     const K = n.r ? 1 : clamp(Math.round(n.w / (n.hh * 1.6)), 1, 3);

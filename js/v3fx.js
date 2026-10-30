@@ -262,7 +262,7 @@ function v3Fx(C) {
   // —— 飞机灯光：左翼尖红、右翼尖绿航行灯，垂尾顶上的白色防撞灯一闪一闪；歼击机起飞滑跑、刚离地爬升时尾喷口拖出加力火焰 ——
   if (typeof AIRD === 'object') {
     const EA_K3 = { ga: ['a10', 18], heli: ['ah64', 16], uh60: ['uh60', 17], c17: ['c17', 30], ftr: ['f35', 17], ftrb: ['f35b', 17], mq9: ['mq9', 18], f22: ['f22', 18], b2: ['b2', 34], p8: ['p8', 26] };
-    const FTR = { j35: 1, j20: 1, j15: 1, j36: 1, j50: 1, f35: 1, f22: 1, j15t: 1 };
+    const FTR = { j35: 1, j20: 1, j15: 1, j16: 1, j16d: 1, j36: 1, j50: 1, f35: 1, f22: 1, f35b: 1, j15t: 1 };
     const lit = (o, key, sz, own, burn) => {
       const D = AIRD[key];
       if (!D || !D.wing || !inB(o.x, o.y, 220)) return;

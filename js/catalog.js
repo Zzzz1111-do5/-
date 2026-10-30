@@ -253,10 +253,12 @@ ctE('p_air_recon', '空警-600 舰载预警机', 'p', 'air', 'wing', 15, CT_IC.a
   { kind: 'wing', at: 'air', type: 'recon', n: 1 }, { counters: ['arty', 'coastal'], weakTo: ['aa'] });
 ctE('p_air_recon_lr', '无侦-7 高空无人侦察机（战区）', 'p', 'air', 'wing', 20, CT_IC.awz7, [3, 0, 0, 0, 7, 10, 0], '菱形连翼的高空长航时无人机，从战区机场起飞、不占航母机库：在两万米高空飞过，高炮够不着，照相带更宽、成果保留更久。',
   { kind: 'wing', at: 'none', type: 'recon', n: 1, v: 'lr', land: true }, { counters: ['arty', 'coastal'], weakTo: ['e_air_ftr'] });
-ctE('p_air_strike', '歼-35 隐身舰载战斗机', 'p', 'air', 'wing', 30, CT_IC.aj35, [3, 0, 7, 6, 9, 5, 0], '攻击机（T 键）。隐身舰载战斗机：内埋弹舱的精确制导炸弹在目标 170 外投放后立即掉头，不飞进敌防空圈；雷达难发现、防空难打中。',
+ctE('p_air_strike', '歼-35 隐身舰载战斗机', 'p', 'air', 'wing', 30, CT_IC.aj35, [3, 0, 7, 6, 9, 5, 0], '攻击机（T 键）。隐身舰载战斗机：内埋弹舱的精确制导炸弹在目标 170 外投放后立即掉头，不飞进敌防空圈；雷达难发现、防空难打中。3D 里按 P 可以亲自驾驶。',
   { kind: 'wing', at: 'air', type: 'strike', n: 1 }, { counters: ['coastal', 'arty', 'bunker', 'aa'], weakTo: ['e_air_ftr'] });
 ctE('p_air_ftr_adv', '歼-35（防空压制型）', 'p', 'air', 'wing', 32, CT_IC.aj35 + ctDots(1), [3, 0, 7, 8, 9, 6, 0], '攻击机（T 键）。挂反辐射导弹的歼-35：在 300 外自动瞄准目标附近已知的敌高炮、防空车与暴露的防空导弹组，为对地支援机、攻击机打开空中通道；指挥员会在敌防空强的地域先派它去。',
   { kind: 'wing', at: 'air', type: 'strike', n: 1, v: 'sead' }, { counters: ['aa', 'e_aa_radar', 'e_sam_veh', 'e_aa_veh', 'e_manpads'], weakTo: ['e_air_ftr'] });
+ctE('p_air_ew', '歼-16D 电子战飞机（战区）', 'p', 'air', 'wing', 34, CT_IC.aj15 + ctDots(2), [3, 0, 7, 8, 9, 6, 0], '攻击机（T 键）。从战区机场起飞、不占航母机库的电子战飞机：翼尖电子干扰吊舱压制敌雷达，650 内我方飞机被敌防空发现、打中的概率打七折；挂 4 枚雷电-10 反辐射导弹，在 420 外打敌高炮、防空车与暴露的防空导弹组。3D 里按 P 可以亲自驾驶。',
+  { kind: 'wing', at: 'air', type: 'strike', n: 1, v: 'ew' }, { counters: ['aa', 'e_aa_radar', 'e_sam_veh', 'e_aa_veh', 'e_manpads'], weakTo: ['e_air_ftr'] });
 ctE('p_air_dive', '攻击-11 隐身无人攻击机', 'p', 'air', 'wing', 26, CT_IC.agj11, [3, 0, 8, 0, 8, 4, 0], '轰炸机（Y 键）。飞翼布局的隐身无人攻击机：对点目标俯冲，投下两枚重磅炸弹，几乎正中岸防炮、碉堡；俯冲时更容易被高炮打中。',
   { kind: 'wing', at: 'air', type: 'bomber', n: 1, v: 'dive' }, { counters: ['coastal', 'bunker'], weakTo: ['aa'] });
 ctE('p_air_heavy', '轰-6K 轰炸机（战区）', 'p', 'air', 'wing', 34, CT_IC.heavy, [4, 0, 10, 0, 6, 3, 0], '轰炸机（Y 键）。陆基中程轰炸机，从战区机场起飞、不占航母机库：沿进场方向投下六枚重磅炸弹地毯轰炸炮兵阵地群与堑壕；飞得高，轻型高炮不易打中；散布大，离我军 150 以内慎用。',
