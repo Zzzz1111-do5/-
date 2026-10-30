@@ -57,7 +57,7 @@ function infoUnit(u) {
   const models = [...new Set(ts.map(infoTeamModel))];
   const st = u.state === 'rout' ? '溃退' : u.state === 'waver' ? '动摇' : '稳定', ph = pl ? INFO_PH[pl.ph] || pl.ph : null, obj = pl && pl.obj ? (S.points.find(p => p.key === pl.obj) || {}).name : null;
   return { t: unitName(u), s: u.kind === 'eng' ? '工兵分队' : u.emblem === 'para' ? '海军陆战队蛟龙突击队（特种部队，运-20 伞降）' : '步兵分队',
-    rows: [['隶属', infoEsc(infoOrg(u))], ['编成', `${ts.length} 个组 ${men} 人`], ['小组型号', infoEsc(models.join('、'))], ['兵员与武器', infoEsc(infoMen(ts, 'p').join('；'))],
+    rows: [['隶属', infoEsc(infoOrg(u))], ['编成', `${ts.length} 个组 ${men} 人`], infoWnd(ts) && ['伤员', infoWnd(ts)], ['小组型号', infoEsc(models.join('、'))], ['兵员与武器', infoEsc(infoMen(ts, 'p').join('；'))],
       ['弹药', `平均 ${Math.round(am)}/60${cons ? ' · <em>补给远，节约弹药</em>' : ''}`], ['士气', `${Math.round(u.morale)}（${st}）`],
       ['指挥', u.auto ? `自动${ph ? ` · ${ph}${obj ? ' ' + infoEsc(obj) : ''}` : ''}` : '手动']] };
 }
@@ -99,11 +99,28 @@ function infoCV() {
       ['机型', infoEsc(Object.entries(types).map(([k, n]) => `${k} ×${n}`).join('、') || '—')],
       ['自卫火力', `1130 型近防炮 ×3、红旗-10 防空导弹 ×4 座（余 ${c.hq10 ?? (typeof CV_DEF === 'object' ? CV_DEF.hq10 : 72)} 枚）——拦截来袭导弹、打靠近的敌机`], ['派机', c.auto ? '自动' : '手动']] };
 }
+// 每个人的伤势（combat.js 单兵伤势）：角色、血量条、百分比
+function infoHp(q) {
+  const R0 = INFO_ROLE[q.side] || INFO_ROLE.p, h = typeof manHp === 'function' ? manHp(q) : [];
+  return q.men.map((m, i) => {
+    const f = clamp(h[i] ?? 1, 0, 1), p = Math.round(f * 100), c = f > .6 ? 'var(--g)' : f > .3 ? 'var(--amber)' : 'var(--enemy)';
+    return `${infoEsc((R0[m] || [m])[0])} <span style="display:inline-block;width:44px;height:5px;background:rgba(255,255,255,.12);vertical-align:middle"><i style="display:block;height:100%;width:${p}%;background:${c}"></i></span> ${p}%${f < .995 ? (f > .6 ? ' 轻伤' : f > .3 ? ' 负伤' : ' 重伤') : ''}`;
+  }).join('<br>');
+}
+// 一个排的伤员：轻伤 / 负伤 / 重伤各几人（没有伤员返回空）
+function infoWnd(ts) {
+  if (typeof manHp !== 'function') return '';
+  const n = [0, 0, 0];
+  for (const q of ts) for (const f of manHp(q)) if (f < .995) n[f > .6 ? 0 : f > .3 ? 1 : 2]++;
+  return ['轻伤', '负伤', '重伤'].map((k, i) => n[i] ? `${k} ${n[i]}` : '').filter(Boolean).join('、');
+}
+// 点中的小组（编队指挥模式下点地图上的兵：本方、敌方都显示这张卡）
 function infoEnemyTeam(q) {
-  const vis = specAll() || inVision(q.x, q.y);
+  const mine = S.ctl ? q.side === S.ctl : q.side === 'p', vis = mine || specAll() || inVision(q.x, q.y);
   const u = unitOf(q), i = u ? S.units.filter(o => o.side === u.side && o.org && u.org && o.org.r === u.org.r).indexOf(u) : 0;
-  return { t: '敌 ' + infoTeamModel(q), s: vis ? '目视' : '最后发现位置',
-    rows: [['隶属', infoEsc(u ? infoOrg(u, Math.max(0, i)) : '海防守备团（散兵）')], ['人数', vis ? `${q.men.length} 人` : '不明'], vis && ['兵员与武器', infoEsc(infoMen([q], 'e').join('；'))], vis && ['状态', q.sup > 60 ? '被压制' : q.sup > 30 ? '受到压制' : '正常']] };
+  return { t: (mine ? '' : '敌 ') + infoTeamModel(q), s: mine ? '本方' : vis ? '目视' : '最后发现位置',
+    rows: [['隶属', infoEsc(u ? infoOrg(u, Math.max(0, i)) : q.side === 'e' ? '海防守备团（散兵）' : '登陆兵团（散兵）')], ['人数', vis ? `${q.men.length} 人` : '不明'], vis && ['每个人', infoHp(q)], vis && ['兵员与武器', infoEsc(infoMen([q], q.side).join('；'))],
+      mine && ['弹药', `${Math.round(q.ammo)}/60`], vis && ['状态', q.sup > 60 ? '被压制' : q.sup > 30 ? '受到压制' : '正常']] };
 }
 function infoEnemySt(e) {
   const vis = specAll() || inVision(e.x, e.y), nm = e.name || (ENEMY_SPEC[e.kind] || {}).name || '火力点';
@@ -168,7 +185,7 @@ function infoPick() {
   if (U.info) {
     const I = U.info;
     if (I.k === 'team') { const q = S.teams.find(o => o.id === I.id && o.men.length); return q && infoEnemyTeam(q); }
-    if (I.k === 'veh') { const v = vehById(I.id); return v && !v.dead && infoVeh(v, true); }
+    if (I.k === 'veh') { const v = vehById(I.id); return v && !v.dead && infoVeh(v, S.ctl ? v.side !== S.ctl : v.side === 'e'); }   // 编队指挥模式下点本方的车也走这里
     if (I.k === 'st') { const e = S.enemies.find(o => o.id === I.id); return e && infoEnemySt(e); }
     if (I.k === 'plane') { const p = (S.planes || []).find(o => o.id === I.id && !o.dead); return p && infoPlane(p); }
     if (I.k === 'eair') { const a = S.eair && S.eair.fly.find(o => o.id === I.id && !o.dead); return a && infoEair(a); }

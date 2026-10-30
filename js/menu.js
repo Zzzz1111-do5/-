@@ -7,6 +7,7 @@ const MN_ICON = {
   pve: '<path d="M3 17l5-9 4 6 3-4 6 7z"/><path d="M15 4v6M15 4l4 1.5-4 1.5"/>',
   sbx: '<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7" stroke-dasharray="2 2"/><rect x="3" y="14" width="7" height="7" stroke-dasharray="2 2"/><path d="M17.5 14v7M14 17.5h7"/>',
   cdx: '<path d="M4 4h7a2 2 0 012 2v14a2 2 0 00-2-2H4z"/><path d="M20 4h-5a2 2 0 00-2 2v14a2 2 0 012-2h5z"/>',
+  isle: '<path d="M2 19c3-2 6-2 9 0s6 2 11 0"/><path d="M5 16c2-4 6-6 11-5 2 .4 3 2 4 5"/><path d="M11 11c0-3 1-6 3-8M14 3c-2 0-4 1-5 3M14 3c2 1 3 2 3 4"/>',
   set: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/>',
   quit: '<path d="M12 3v8"/><path d="M6.3 6.8a8 8 0 1011.4 0"/>',
   menu: '<path d="M4 7h16M4 12h16M4 17h16"/>'
@@ -14,6 +15,7 @@ const MN_ICON = {
 const MN_ITEMS = [
   ['cont', '继续作战', 'RESUME', '返回当前战局'],
   ['pve', '闯关', 'CAMPAIGN', '三章十关：每关给预算，自己挑兵种、布置兵力——先夺制海权，再登陆，再向纵深推进'],
+  ['isle', '海岛战役', 'ISLAND', '架空热带海岛：超大海域，先海战、再登岛'],
   ['sbx', '沙盒模式', 'SANDBOX', '自由部署双方兵力，观战或亲自指挥'],
   ['cdx', '兵力图鉴', 'CODEX', '全部单位的属性、定位与克制关系'],
   ['set', '设置', 'SETTINGS', '音量、画面、开场转场与指挥官通讯'],
@@ -122,6 +124,7 @@ body.mn-open > :not(#bgrain):not(#stage):not(.mn-layer):not(script):not(style), 
 #mnSet .ms-sw[aria-checked="true"] { border-color: var(--line-hi); background: rgba(var(--g-rgb), .16); }
 #mnSet .ms-sw[aria-checked="true"]::after { left: 25px; background: var(--g); box-shadow: 0 0 8px var(--g); }
 #mnSet .ms-note { grid-column: 2 / -1; font-size: 11px; color: var(--mute); margin-top: -6px; }
+#mnSet .ms-cred { margin: 4px 0 6px; padding-left: 18px; font-size: 11px; line-height: 1.6; color: var(--mute); } #mnSet .ms-cred a { color: var(--g); }
 #mnSet footer { display: flex; justify-content: space-between; margin-top: 12px; gap: 10px; }
 #mnSet footer button { background: transparent; border: 1px solid var(--line); border-radius: 4px; padding: 6px 16px; color: var(--text); min-height: 34px; }
 #mnSet footer .go { border-color: var(--g); color: var(--g); }
@@ -212,8 +215,9 @@ function mnHi(k, snd) {
   let body = '';
   if (k === 'cont' && S) {
     const pts = S.points || [], own = pts.filter(p => p.owner === 'p').length, crew = typeof vehCrewOf === 'function' ? vehCrewOf('p') : 0, men = (S.teams || []).filter(q => q.side === 'p').reduce((a, q) => a + q.men.length, 0) + crew;
-    body = `<p>返回当前战局，${S.phase === 'battle' ? '推演从暂停处继续' : S.phase === 'deploy' ? '继续排兵布阵' : '继续编辑部署'}。</p><dl><dt>模式</dt><dd>${S.lv ? `闯关 · 第 ${S.lv.n} 关「${S.lv.nm}」` : S.mode === 'sandbox' ? (S.role === 'spectate' ? '沙盒 · 观战' : '沙盒') : '战役 · ' + (DIFF[S.level] ? DIFF[S.level].name : S.level)}</dd><dt>作战用时</dt><dd>${fmtT(S.t)}</dd><dt>${S.role === 'spectate' ? '进攻方据点' : '我方据点'}</dt><dd>${own} / ${pts.length}</dd><dt>在场兵力</dt><dd>${men} 人${crew ? `（含车组 ${crew} 人）` : ''}</dd></dl>`;
+    body = `<p>返回当前战局，${S.phase === 'battle' ? '推演从暂停处继续' : S.phase === 'deploy' ? '继续排兵布阵' : '继续编辑部署'}。</p><dl><dt>模式</dt><dd>${S.lv && S.lv.isle ? `海岛战役「${S.lv.nm}」` : S.lv ? `闯关 · 第 ${S.lv.n} 关「${S.lv.nm}」` : S.mode === 'sandbox' ? (S.role === 'spectate' ? '沙盒 · 观战' : '沙盒') : '战役 · ' + (DIFF[S.level] ? DIFF[S.level].name : S.level)}</dd><dt>作战用时</dt><dd>${fmtT(S.t)}</dd><dt>${S.role === 'spectate' ? '进攻方据点' : '我方据点'}</dt><dd>${own} / ${pts.length}</dd><dt>在场兵力</dt><dd>${men} 人${crew ? `（含车组 ${crew} 人）` : ''}</dd></dl>`;
   } else if (k === 'pve') { const P = typeof lvProg === 'function' ? lvProg() : null, done = P && P.done ? P.done.length : 0; body = `<p>三章十关，按真实作战顺序递进：海战夺取制海权 → 强行登陆夺取登陆场 → 从滩头向纵深推进。每关给定预算，你自己挑兵种、布置进攻兵力；守军由 AI 按本关风格布防，你只拿到一份有误差的情报。</p><dl><dt>进度</dt><dd>已通过 ${done} / ${typeof LV_DEFS === 'object' ? LV_DEFS.length : 10} 关</dd></dl>`; }
+  else if (k === 'isle') body = `<p>架空的热带海岛「棕榈岛」（印度洋风格，岛名、地名、设施与守军都是虚构的）。舰队在南边大洋上集结，横渡约 8 公里：先击退守方舰队、顶住岸舰导弹与岛上航空兵，夺取制海权，再强行登岛，同一张图打完。</p><dl><dt>守方</dt><dd>固定部署</dd><dt>我方</dt><dd>按预算 ${typeof ISLE === 'object' ? ISLE.p : 17000} 点自己编成</dd><dt>胜利条件</dt><dd>控制指挥所与七成据点分值 30 秒</dd></dl>`;
   else if (k === 'sbx') body = `<p>在同一张海岸地图上自由部署岸防与进攻部队，按预算对抗；可以观战 AI 对 AI，也可以亲自指挥进攻方。</p><dl><dt>状态</dt><dd>${typeof openSandbox === 'function' ? '可用' : '模块加载中'}</dd></dl>`;
   else if (k === 'cdx') { const n = typeof CATALOG !== 'undefined' && Array.isArray(CATALOG) ? CATALOG.length : 0; body = `<p>查看全部兵力：步兵、装甲、火炮、航空、舰艇、工事与支援单位的属性条、定位与克制关系。</p><dl><dt>收录</dt><dd>${n ? n + ' 种单位' : '目录加载中'}</dd></dl>`; }
   else if (k === 'set') body = `<p>主音量、音乐、音效、无线电；画面风格（写实 / 黑绿 / 数码）、辉光、画质、3D 渲染距离、屏幕震动；开场转场；AI 指挥官通讯详略。</p><dl><dt>当前</dt><dd>主音量 ${Math.round(SETTINGS.master * 100)}% · 画质${SETTINGS.quality === 'low' ? '低' : '高'}</dd></dl>`;
@@ -290,6 +294,7 @@ function mnAct(k) {
   if (k === 'cont') { mnSfx('ok'); mnResume(); }
   else if (k === 'pve') { mnSfx('open'); if (typeof lvOpen === 'function') { mnHide(); lvOpen(); } else mnView('pve'); }   // 闯关（levels.js）：关卡列表 → 给预算自己布兵
   else if (k === 'sbx') mnSandbox();
+  else if (k === 'isle') { if (typeof isleStart === 'function') { mnSfx('ok'); try { isleStart(); } catch (e) { console.error('isleStart', e); } } else mnToast('海岛战役模块尚未就绪'); }
   else if (k === 'cdx') { if (typeof openCodex === 'function') openCodex(); else mnToast('图鉴模块尚未就绪'); }
   else if (k === 'set') openSettings();
   else if (k === 'quit') mnQuit();
@@ -386,7 +391,7 @@ function mnKey(e) {
 // —— 设置面板 ——
 const MN_SET = [
   ['音量', 'VOLUME', [['master', '主音量', 'vol'], ['music', '音乐', 'vol'], ['musicStyle', '背景音乐', [['march', '进行曲'], ['custom', '我的歌'], ['ambient', '氛围']], '进行曲：明亮的军乐，战况越激烈编制越全；我的歌：用下面导入的歌'], ['bgm', '导入音乐', 'file', '选一首你设备上的歌（mp3 / m4a / ogg / wav），循环播放；只保存在这台设备上'], ['sfx', '音效', 'vol'], ['radio', '无线电通话', 'vol']]],
-  ['画面', 'DISPLAY', [...(typeof platCanFs === 'function' && platCanFs() ? [['fs', '全屏', 'sw', PLAT.desk ? 'F11 或 Alt+Enter 也能切换，下次打开照此' : '按 Esc 退出全屏']] : []), ['look', '画面风格', [['real', '写实'], ['green', '黑绿'], ['matrix', '数码']], '写实：真实的天空、地表、海面与光影（默认）；黑绿：写实的地形与模型，黑底绿色磷光、发光轮廓（敌方红）；数码：原来的字符矩阵风格'], ['rain', '数码雨密度', 'rain'], ['bloom', '辉光强度', 'pct'], ['quality', '画质', [['high', '高'], ['low', '低']]], ['rdist', '3D 渲染距离', 'rd', '3D 里能看多远（远处的地形、建筑、部队模型）；调远更耗性能。3D 中也可按 [ ] 键调'], ['shake', '屏幕震动', 'sw'], ['front', '战线与态势图形', 'sw', '显示双方战线、无人地带、空隙、突击群调整线']]],
+  ['画面', 'DISPLAY', [...(typeof platCanFs === 'function' && platCanFs() ? [['fs', '全屏', 'sw', PLAT.desk ? 'F11 或 Alt+Enter 也能切换，下次打开照此' : '按 Esc 退出全屏']] : []), ['look', '画面风格', [['real', '写实'], ['green', '黑绿'], ['matrix', '数码']], '写实：真实的天空、地表、海面与光影（默认）；黑绿：写实的地形与模型，黑底绿色磷光、发光轮廓（敌方红）；数码：原来的字符矩阵风格'], ['rain', '数码雨密度', 'rain'], ['bloom', '辉光强度', 'pct'], ['quality', '画质', [['high', '高'], ['low', '低']]], ['rdist', '3D 渲染距离', 'rd', '3D 里能看多远（远处的地形、建筑、部队模型）；调远更耗性能。3D 中也可按 [ ] 键调'], ['extMdl', '外部精细模型', 'sw', '3D 里的树木、岩石、楼房、机场设施和舰船换成免费可商用的真实模型（作者与授权见下方「素材致谢」）；关掉用游戏自己画的模型'], ['shake', '屏幕震动', 'sw'], ['front', '战线与态势图形', 'sw', '显示双方战线、无人地带、空隙、突击群调整线']]],
   ['流程', 'FLOW', [['intro', '开场转场', 'sw', '从国家全图推近到战场，约 7 秒']]],
   ['AI 指挥官通讯', 'COMMANDER CHAT', [['chat', '通讯详略', [['brief', '简要'], ['normal', '标准'], ['verbose', '详细']]], ['enemyChat', '显示敌方（截获）', 'sw', '战役中敌方通话以「截获」形式延迟出现']]]
 ];
@@ -408,6 +413,7 @@ function mnSetBuild() {
   };
   el.innerHTML = `<div class="ms-win"><header><h2>设置<small>SETTINGS</small></h2><button type="button" class="ms-x" aria-label="关闭" title="关闭（Esc）">×</button></header>
     ${MN_SET.map(([h, en, rows]) => `<h3>${h} · ${en}</h3>${rows.map(row).join('')}`).join('')}
+    ${typeof v3imCredits === 'function' ? `<h3>素材致谢 · CREDITS</h3><ul class="ms-cred">${v3imCredits()}</ul>` : ''}
     <footer><button type="button" class="ms-reset">恢复默认</button><button type="button" class="go ms-ok">完成</button></footer>
     <div class="ms-about">${typeof window !== 'undefined' && window.DS_BUILD ? `版本 ${window.DS_BUILD} · ` : ''}<button type="button" data-doc="terms">用户协议</button> · <button type="button" data-doc="privacy">隐私政策</button> · <button type="button" data-doc="credits">素材署名</button></div></div>`;
   document.body.appendChild(el);

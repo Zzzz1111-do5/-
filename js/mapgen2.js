@@ -46,6 +46,7 @@ function finishMap(r, cAt, headland) {
   });
   for (const v of vills) blob(v, 40, .75);
   blob(town1, 64, .8); blob(town2, 58, .8); blob(hq, 52, .82);
+  if (TER.port) blob(TER.port, 70, .82);   // 架空海岛：湾底的港口镇（isle.js）
   if (town3) blob(town3, 56, .8);
   // 空军基地（守方机场，地图自带）：指挥所一带纵深里找一块放得下跑道与整个场区（航站楼、营房、弹药库、爱国者阵地、围栏）的地；
   // 场区内的树林、沼泽、丘陵清成平地，稍后修一条进场公路
@@ -60,8 +61,9 @@ function finishMap(r, cAt, headland) {
   const roadY = new Float32Array(GW + 1);
   for (let k = 0; k <= GW; k++) {
     let s = 0, n = 0;
-    for (let dx = -120; dx <= 120; dx += 10) { s += cAt(k * CELL + dx); n++; }
-    roadY[k] = s / n - 170;
+    let mn = 1e9;
+    for (let dx = -120; dx <= 120; dx += 10) { const c = cAt(k * CELL + dx); s += c; n++; if (Math.abs(dx) <= 60) mn = Math.min(mn, c); }
+    roadY[k] = TER.isle ? Math.min(s / n - 170, mn - 120) : s / n - 170;   // 海岛：港湾、岬角两侧海岸陡，按附近最靠北的岸线再让出一段
   }
   const rdY = x => roadY[clamp(Math.round(x / CELL), 0, GW)];
   TER.roadY = roadY;
@@ -82,9 +84,9 @@ function finishMap(r, cAt, headland) {
       }
     }
   };
-  const coastal = [];
-  for (let x = 10; x <= W - 10; x += 50) coastal.push([x, rdY(x)]);
-  road(coastal);
+  let coastal = [];   // 海岸公路：只修在有陆地的岸段（海岛东西两侧的岸线收进图边，那里断开）
+  for (let x = 10; x <= W - 10; x += 50) { if (cAt(x) - 170 > 160) coastal.push([x, rdY(x)]); else { if (coastal.length > 1) road(coastal); coastal = []; } }
+  if (coastal.length > 1) road(coastal);
   for (const b of beaches) road([[b.cx, cAt(b.cx) - 22], [b.cx, rdY(b.cx)]], 2.8);
   const via = (a, b, k) => [lerp(a.x, b.x, .5) + (r() - .5) * k, lerp(a.y, b.y, .5)];
   road([[town1.x, rdY(town1.x)], [town1.x + (r() - .5) * 60, lerp(rdY(town1.x), town1.y, .5)], [town1.x, town1.y], via(town1, hq, 180), [hq.x, hq.y]]);
@@ -96,6 +98,7 @@ function finishMap(r, cAt, headland) {
     road([[town3.x, town3.y], via(town3, hq, 160), [hq.x, hq.y]]);
   }
   for (const v of vills) road([[v.x, v.y], [v.x, rdY(v.x)]], 2.8);
+  if (TER.port) road([[TER.port.x, TER.port.y], [TER.port.x, rdY(TER.port.x)]]);
   if (TER.af) {   // 机场进场公路：南门 → 最近的镇子 / 指挥所
     const [gx, gy] = afWorld(TER.af, 0, AF_BOX.v1 - 5), [ox, oy] = afWorld(TER.af, 0, AF_BOX.v1 + 30);
     const tn = [hq, town1, town2, town3].filter(Boolean).reduce((a, b) => dist(b.x, b.y, gx, gy) < dist(a.x, a.y, gx, gy) ? b : a);
@@ -161,6 +164,7 @@ function finishMap(r, cAt, headland) {
   add('X2', '东路口', town2.x, rdY(town2.x), 1);
   const ew = (n, i) => n === 3 ? ['西', '中', '东'][i] : i ? '东' : '西';   // 按条数从西到东命名
   vills.forEach((v, i) => add('V' + (i + 1), ew(vills.length, i) + '渔村', v.x, v.y, 1));
+  if (TER.port) add('PT', '港口镇', TER.port.x, TER.port.y, 2);
   TER.fords.forEach((f, i) => add('F' + (i + 1), ew(TER.fords.length, i) + '渡口', f.x, f.y, 1));
   TER.points = P;
 }

@@ -1,4 +1,4 @@
-// 生成发布用的网页目录：index.html 补成完整文档（字符集、手机视口、禁止缩放），复制 js/、fonts/、legal/（用户协议、隐私政策）
+// 生成发布用的网页目录：index.html 补成完整文档（字符集、手机视口、禁止缩放），复制 js/、fonts/、assets/（外部模型、地表与海面贴图）、legal/（用户协议、隐私政策）
 // 用法：node tools/build_www.mjs [--app] [--out 目录]
 //   默认生成网页版 www/（GitHub Pages）：右上角显示版本号，打开时检查服务器上有没有更新的版本
 //   --app：商店版（安卓 Capacitor、电脑版 Electron）：版本号只在菜单页脚和设置里显示，不检查更新（游戏随安装包更新）
@@ -28,6 +28,6 @@ const page = body.replace(/(<script src="js\/[^"?]+\.js)"/g, `$1?v=${encodeURICo
 fs.writeFileSync(path.join(out, 'index.html'), head + page.replace(/(<\/style>)/, '$1\n</head>\n<body>\n' + tag) + '\n</body>\n</html>\n');
 // 商店版（收费）不带授权只允许非商用的模型（tools/v3gmodels.json 里 license 带 NC 的），游戏里换成同类的另一个（js/v3g.js V3G_ALT）
 const ncOut = app ? Object.entries(JSON.parse(fs.readFileSync(path.join(root, 'tools', 'v3gmodels.json'), 'utf8')).models).filter(([, C]) => C.credit && /NC/.test(C.credit.license)).map(([k]) => path.join(root, 'js', 'mdl', k + '.js')) : [];
-for (const d of ['js', 'fonts', 'legal']) fs.cpSync(path.join(root, d), path.join(out, d), { recursive: true, filter: s => !/\.fontcache/.test(s) && !ncOut.includes(s) });
+for (const d of ['js', 'fonts', 'assets', 'legal']) fs.cpSync(path.join(root, d), path.join(out, d), { recursive: true, filter: s => !/\.fontcache/.test(s) && !ncOut.includes(s) });
 if (ncOut.length) console.log('商店版不带非商用授权的模型：', ncOut.map(f => path.basename(f)).join('、'));
 console.log(`${path.relative(root, out)}/ 已生成（${app ? '商店版' : '网页版'} ${ver}）：`, fs.readdirSync(path.join(out, 'js')).length, '个脚本');

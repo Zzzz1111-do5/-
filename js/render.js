@@ -122,7 +122,8 @@ const hoverNear = (x, y, r) => !!(typeof U === 'object' && U.mouse && dist(U.mou
 
 // 观察视野（沙盒观战）：只换画面所用的可见格，推演与 AI 仍按各自真实视野
 // R.eye：null / 'p' 攻方视野 · 'e' 守方视野 · 'both' 双方视野（任一方看得见即显示）· 'all' 全图
-const PV_KEEP = new Uint8Array(GW * GH);
+let PV_KEEP = new Uint8Array(GW * GH);
+onWorld(() => { PV_KEEP = new Uint8Array(GW * GH); });
 function viewBegin() {
   const v = R.eye;
   if (!v || v === 'p' || !S || S.mode !== 'sandbox') return false;

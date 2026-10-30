@@ -219,7 +219,7 @@ function checkEnd(dt) {
 
 function step(dt) {
   S.t += dt;
-  FBUDGET = MAP_K > 2 ? 1 : MAP_K > 1.2 ? 2 : 3;   // 大地图上整图流场贵：每步最多重算一个
+  FBUDGET = PGN > BIG_PG || MAP_K > 2 ? 1 : MAP_K > 1.2 ? 2 : 3;   // 大地图（默认 8400 × 5600、海岛）整图流场贵：每步最多重算一个
   indexUnits();
   if ((S.visT = (S.visT ?? 0) - dt) <= 0) { S.visT = .25; updateVision(); }
   updateShips(dt); updateDD(dt); updateTeams(dt); indexUnits(); updateUnits(dt);

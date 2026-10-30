@@ -46,7 +46,7 @@ const vehCls = (v, x, y) => !VEH_SPEC[v.type].amph ? (v.side === 'e' ? 'vehe' : 
 const vehSp = v => VEH_SPEC[v.type] || VEH_SPEC.tank;
 // 型号：进攻方按解放军装备、守方按美军装备；沙盒按目录条目（同一车型可有改型）
 const VEH_MODEL = {
-  p: { lt_tank: 'ZTQ-15 轻型坦克', tank: 'ZTZ-96B 主战坦克', hv_tank: 'ZTZ-99A 主战坦克', amtank: 'ZTD-05 两栖突击车', apc: 'ZBD-05 两栖步兵战车', spg: 'PLZ-07 自行榴弹炮', td: 'PTL-02 突击炮',
+  p: { lt_tank: 'ZTQ-15 轻型坦克', tank: 'ZTZ-80 主战坦克', hv_tank: 'ZTZ-99A 主战坦克', amtank: 'ZTD-05 两栖突击车', apc: 'ZBD-05 两栖步兵战车', spg: 'PLZ-07 自行榴弹炮', td: 'PTL-02 突击炮',
     aa_veh: 'PGZ-07 自行高炮', sam_veh: 'PGL-625 弹炮防空车', recon: '08 式侦察车', flame_tank: 'ZBD-04A 温压火箭突击车', mine_tank: '96 式扫雷坦克', abv: 'ZBD-03 伞兵战车' },
   e: { lt_tank: 'M10 布克轻型坦克', tank: 'M1A1 艾布拉姆斯', hv_tank: 'M1A2 SEPv3 艾布拉姆斯', amtank: 'AAV-7 两栖突击车', apc: 'M2A3 布雷德利', spg: 'M109A7 帕拉丁', td: 'M1134 斯特赖克反坦克车',
     aa_veh: 'M163 火神自行高炮', sam_veh: 'M-SHORAD 防空车', recon: 'M1127 斯特赖克侦察车', flame_tank: 'M1150 突击破障车', mine_tank: 'M1150 突击破障车（扫雷）' }
@@ -446,6 +446,7 @@ function vehGunTarget(v) {
     if (e.kind === 'bunker' && S.teams.some(q => q.side === 'p' && q.sup > 40 && dist(q.x, q.y, e.x, e.y) < 180)) val += 2;   // 正在压制我方步兵的碉堡
     consider(e, 'st', e.x, e.y, val * (g.flame ? 1.6 : at ? .7 : 1));
   }
+  if (!g.ind && typeof afgList === 'function') for (const a of afgList(v.side)) consider(a, 'ac', a.x, a.y, a.k === 'has' ? 1.2 : 2.2);   // 机场上停放的敌机（afgnd.js）
   if (!(at && v.type === 'td') || g.ind) for (const q of S.teams) if (q.side === foe && q.men.length && !q.ride) {   // 重型坦克也用榴弹打步兵，只有坦克歼击车专打装甲
     if (g.ind && !(q.side === 'e' ? inVision(q.x, q.y) : spotted(q.x, q.y))) continue;
     if (v.cons && !g.ind && dist(v.x, v.y, q.x, q.y) > 80) continue;   // 节约弹药：主炮只打车辆、工事与贴近的步兵，远处的步兵交给机枪
@@ -487,6 +488,7 @@ function vehShoot(v, tg) {
       for (let k = q.men.length; k > 0; k--) if (Math.random() < .3 * (q.inTrench ? 1.4 : 1) * (M.pow || 1)) killMan(q);
       for (const o of S.teams) if (o !== q && o.side === q.side && o.men.length && dist(o.x, o.y, tg.x, tg.y) < 16) { suppress(o, 30, v.x, v.y); if (Math.random() < .2) killMan(o); }
     } else if (tg.k === 'veh') vehDamage(tg.t, 4, 1, v.x, v.y, 'flame');
+    else if (tg.k === 'ac' && typeof afgFlame === 'function') afgFlame(tg.t);
     return;
   }
   if (g.ind) {   // 间瞄：落点散布随距离增大

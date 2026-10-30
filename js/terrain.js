@@ -3,7 +3,7 @@
 // 地形材质先在 CPU 上算成平滑过的权重纹理（每格一个像素，线性插值），海岸线用 TER.coast 的平滑曲线；着色器用噪声扰动边界、叠加细节，细节按缩放淡入（远看不闪）
 const TRX = { ok: false, tried: false, gl: null, cv: null, vs: null, P: {}, tex: {}, seed: null, sig: -1, chk: 0, c0: 0, cr: 1, fb: null, fbSeed: null,
   ver: 0, fbs: [], blit: null, fbOk: null, key: null, prev: null, lastSig: null, lastKey: null, lastT: 0 };   // ver 地形贴图版本；fbs 陆地缓存（全 / 低分辨率）；key 缓存对应的镜头，prev 上一帧的镜头；last* 上次合成
-const TRX_KS = Math.ceil((W + 1) / 4096);   // 海岸线纹理每几个世界单位一个采样：纹理宽 W / TRX_KS + 1，不超过手机常见的 4096 上限（8400 宽的地图每 3 个）
+const trxKS = () => Math.ceil((W + 1) / 4096), trxKN = () => Math.ceil(W / trxKS());   // 海岸线纹理每几个世界单位一个采样：纹理宽 trxKN() + 1，不超过手机常见的 4096 上限（8400 宽的地图每 3 个）；世界尺寸会变（海岛），用到时现算
 
 const TRX_VS = 'attribute vec2 p; void main(){ gl_Position = vec4(p, 0., 1.); }';
 // pass：0 一遍画完整帧（开场快照、镜头正在移动、没有帧缓冲时）· 1 只画陆地，存进缓存贴图（镜头不动就不重画）
@@ -11,7 +11,7 @@ const TRX_VS = 'attribute vec2 p; void main(){ gl_Position = vec4(p, 0., 1.); }'
 const TRX_FS = (lite, pass = 0) => `precision highp float;
 #define LITE ${lite ? 1 : 0}
 #define PASS ${pass}
-uniform vec2 uRes, uCoast, uShift; uniform vec3 uView; uniform float uTime, uFlash;
+uniform vec2 uRes, uCoast, uShift; uniform vec3 uView; uniform float uTime, uFlash, uDM;
 uniform sampler2D uA, uB, uC, uD, uK, uFog, uL, uR;
 const vec2 WORLD = vec2(${W}., ${H}.);
 const vec2 GRID = vec2(${GW}., ${GH}.);
@@ -59,10 +59,10 @@ vec3 farm(vec2 w, float pw, out float ed, out vec2 wc, out float fk) {
 }
 #endif
 // 海岸线 y：16 位（高低两字节）存储，最近点采样后手动线性插值，避免 8 位量化在岸边浪线上出现竖条
-// 每 TRX_KS 个世界单位一个采样（纹理宽 W / TRX_KS + 1，不超过手机常见的 4096 上限）
-const float KN = ${W / TRX_KS}.;
+// 每 trxKS() 个世界单位一个采样（纹理宽 trxKN() + 1，不超过手机常见的 4096 上限）
+const float KN = ${trxKN()}.;
 float coastY(float x) {
-  float fx = clamp(x, 0., WORLD.x) / ${TRX_KS}., i = floor(fx);
+  float fx = clamp(x, 0., WORLD.x) / ${trxKS()}., i = floor(fx);
   vec2 a = texture2D(uK, vec2((i + .5) / (KN + 1.), .5)).ra, b = texture2D(uK, vec2((min(i + 1., KN) + .5) / (KN + 1.), .5)).ra;
   return uCoast.x + mix(a.x * 65280. + a.y * 255., b.x * 65280. + b.y * 255., fx - i) / 65535. * uCoast.y;
 }
@@ -95,8 +95,15 @@ vec3 stones(vec2 w, vec3 base) {
   return base * (.82 + .3 * bh) * lit * mix(.55, 1., crev);
 }
 #endif
+// 海岛（uDM 1）：uK 换成每格一个的有向距离场（到岸的距离，>0 陆地，16 位），最近点采样后手动双线性插值
+float dk(vec2 c) { vec2 a = texture2D(uK, (clamp(c, vec2(0.), GRID - 1.) + .5) / GRID).ra; return a.x * 65280. + a.y * 255.; }
 // 海岸：到平滑海岸线的距离（>0 陆地）。竖直差按海岸坡度换算成垂直于岸线的距离，斜岸处水色与浪线不被压扁
 float coastD(vec2 w) {
+  if (uDM > .5) {
+    vec2 g = w / 10. - .5, i = floor(g), f = g - i;
+    float v = mix(mix(dk(i), dk(i + vec2(1., 0.)), f.x), mix(dk(i + vec2(0., 1.)), dk(i + 1.), f.x), f.y);
+    return uCoast.x + v / 65535. * uCoast.y + (vn(w * .07) - .5) * 5.;
+  }
   float cy = coastY(w.x), slope = (coastY(w.x + 6.) - coastY(w.x - 6.)) / 12.;
   return (cy - w.y) / sqrt(1. + slope * slope) + (vn(w * .07) - .5) * 5.;
 }
@@ -324,7 +331,7 @@ function trxProg(pass, lite) {
   if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(pr));
   gl.useProgram(pr);
   const u = {};
-  for (const n of ['uRes', 'uView', 'uTime', 'uFlash', 'uCoast', 'uShift', ...TRX_U]) u[n] = gl.getUniformLocation(pr, n);
+  for (const n of ['uRes', 'uView', 'uTime', 'uFlash', 'uCoast', 'uShift', 'uDM', ...TRX_U]) u[n] = gl.getUniformLocation(pr, n);
   TRX_U.forEach((n, i) => { if (u[n]) gl.uniform1i(u[n], i); });
   return (TRX.P[key] = { pr, u });
 }
@@ -449,18 +456,44 @@ function trxTerrain() {
     gl.activeTexture(gl.TEXTURE0 + i); gl.bindTexture(gl.TEXTURE_2D, TRX.tex[k]);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, GW, GH, 0, gl.RGBA, gl.UNSIGNED_BYTE, w[k]);
   });
-  // 海岸线：每 TRX_KS 个世界单位一个采样（共 W / TRX_KS + 1 个），按本图最高 / 最低点归一化到 16 位（亮度 = 高字节、透明度 = 低字节）
-  const co = TER.coast, KN = W / TRX_KS; let lo = 1e9, hi = -1e9;
-  for (let x = 0; x <= W; x++) { lo = Math.min(lo, co[x]); hi = Math.max(hi, co[x]); }
-  const cr = Math.max(1, hi - lo), k = new Uint8Array((KN + 1) * 2);
-  for (let j = 0; j <= KN; j++) { const v = Math.round((co[Math.min(W, j * TRX_KS)] - lo) / cr * 65535); k[j * 2] = v >> 8; k[j * 2 + 1] = v & 255; }
+  // 海岸线：每 trxKS() 个世界单位一个采样（共 trxKN() + 1 个），按本图最高 / 最低点归一化到 16 位（亮度 = 高字节、透明度 = 低字节）
+  //   海岛（TER.isle）：岸线三面环岛，竖直量到岸线的距离不对（东西两侧贴岸就是深海、南面一道道竖条），改传每格的有向距离场
+  let lo = 1e9, hi = -1e9, dm = 0;
   gl.activeTexture(gl.TEXTURE4); gl.bindTexture(gl.TEXTURE_2D, TRX.tex.k);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE_ALPHA, KN + 1, 1, 0, gl.LUMINANCE_ALPHA, gl.UNSIGNED_BYTE, k);
+  if (TER.isle) {
+    const D = terSdf(), k = new Uint8Array(GW * GH * 2);
+    lo = -TER_SDF_MAX; hi = TER_SDF_MAX; dm = 1;
+    for (let i = 0; i < GW * GH; i++) { const v = Math.round((D[i] - lo) / (hi - lo) * 65535); k[i * 2] = v >> 8; k[i * 2 + 1] = v & 255; }
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE_ALPHA, GW, GH, 0, gl.LUMINANCE_ALPHA, gl.UNSIGNED_BYTE, k);
+  } else {
+    const co = TER.coast, KS = trxKS(), KN = trxKN();
+    for (let x = 0; x <= W; x++) { lo = Math.min(lo, co[x]); hi = Math.max(hi, co[x]); }
+    const k = new Uint8Array((KN + 1) * 2);
+    for (let j = 0; j <= KN; j++) { const v = Math.round((co[Math.min(W, j * KS)] - lo) / Math.max(1, hi - lo) * 65535); k[j * 2] = v >> 8; k[j * 2 + 1] = v & 255; }
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE_ALPHA, KN + 1, 1, 0, gl.LUMINANCE_ALPHA, gl.UNSIGNED_BYTE, k);
+  }
+  const cr = Math.max(1, hi - lo);
   const lf = terLines();
   gl.activeTexture(gl.TEXTURE7); gl.bindTexture(gl.TEXTURE_2D, TRX.tex.lf);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, lf.w, lf.h, 0, gl.RGBA, gl.UNSIGNED_BYTE, lf.d);
-  Object.assign(TRX, { seed: TER.seed, sig: trxSig(), c0: lo, cr, ver: TRX.ver + 1 });
+  Object.assign(TRX, { seed: TER.seed, sig: trxSig(), c0: lo, cr, dm, ver: TRX.ver + 1 });
 }
+// 有向距离场（米，每格一个）：陆地格 = 到最近海水格的距离（正），海水格 = 到最近陆地格的距离（负），边界在格边上；两遍倒角距离变换
+const TER_SDF_MAX = 2000;
+function terSdf() {
+  if (TER.sdf) return TER.sdf;
+  const N = GW * GH, A = new Float32Array(N), B = new Float32Array(N), wet = i => isWater(TER.type[i]), INF = 1e9;
+  for (let i = 0; i < N; i++) { A[i] = wet(i) ? 0 : INF; B[i] = wet(i) ? INF : 0; }
+  for (const F of [A, B]) {
+    for (let y = 0; y < GH; y++) for (let x = 0; x < GW; x++) { const i = y * GW + x; let v = F[i]; if (x) v = Math.min(v, F[i - 1] + 10); if (y) { v = Math.min(v, F[i - GW] + 10); if (x) v = Math.min(v, F[i - GW - 1] + 14.14); if (x < GW - 1) v = Math.min(v, F[i - GW + 1] + 14.14); } F[i] = v; }
+    for (let y = GH - 1; y >= 0; y--) for (let x = GW - 1; x >= 0; x--) { const i = y * GW + x; let v = F[i]; if (x < GW - 1) v = Math.min(v, F[i + 1] + 10); if (y < GH - 1) { v = Math.min(v, F[i + GW] + 10); if (x < GW - 1) v = Math.min(v, F[i + GW + 1] + 14.14); if (x) v = Math.min(v, F[i + GW - 1] + 14.14); } F[i] = v; }
+  }
+  const D = new Float32Array(N);
+  for (let i = 0; i < N; i++) D[i] = clamp(A[i] > 0 ? A[i] - 5 : -(B[i] - 5), -TER_SDF_MAX, TER_SDF_MAX);
+  return (TER.sdf = D);
+}
+// 换了世界尺寸：着色器里写死的 WORLD、GRID、KN 跟着变，缓存的程序作废（下次用到时按新尺寸重编）
+onWorld(() => { if (TRX.gl) for (const k in TRX.P) TRX.gl.deleteProgram(TRX.P[k].pr); TRX.P = {}; TRX.seed = null; TRX.fbSeed = null; TRX.lastSig = null; });
 
 function trxResize() {
   TRX.cv.width = R.cv.width; TRX.cv.height = R.cv.height; TRX.lastSig = null;   // 改尺寸会清空画布，下一帧必须重画
@@ -500,7 +533,7 @@ function trxCache(k) {
     gl.activeTexture(gl.TEXTURE6); gl.bindTexture(gl.TEXTURE_2D, null);   // 画进缓存时它不能同时被绑成贴图
     gl.bindFramebuffer(gl.FRAMEBUFFER, F.fbo);
     gl.useProgram(L.pr);
-    gl.uniform2f(L.u.uRes, k.w, k.h); gl.uniform3f(L.u.uView, k.s, k.x, k.y); gl.uniform2f(L.u.uCoast, TRX.c0, TRX.cr);
+    gl.uniform2f(L.u.uRes, k.w, k.h); gl.uniform3f(L.u.uView, k.s, k.x, k.y); gl.uniform2f(L.u.uCoast, TRX.c0, TRX.cr); gl.uniform1f(L.u.uDM, TRX.dm || 0);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     TRX.key = k;
@@ -556,7 +589,7 @@ function trxDraw(time, flash) {
   if (F) { gl.bindFramebuffer(gl.FRAMEBUFFER, F.fbo); gl.viewport(0, 0, F.w, F.h); }
   gl.uniform2f(u.uRes, cv.width * sc, cv.height * sc);
   gl.uniform3f(u.uView, s * sc, ox * sc, oy * sc);
-  gl.uniform2f(u.uCoast, TRX.c0, TRX.cr);
+  gl.uniform2f(u.uCoast, TRX.c0, TRX.cr); gl.uniform1f(u.uDM, TRX.dm || 0);
   gl.uniform1f(u.uTime, time % 1000);
   gl.uniform1f(u.uFlash, flash);
   gl.drawArrays(gl.TRIANGLES, 0, 3);
@@ -580,7 +613,7 @@ function trxFallback(ctx) {
     for (let i = 0; i < GW * GH; i++) {
       const t = TER.type[i], gx = i % GW, gy = (i / GW) | 0, col = TRX_FLAT[t] || TRX_FLAT[0];
       const ex = E[gy * GW + Math.min(GW - 1, gx + 1)] - E[gy * GW + Math.max(0, gx - 1)], ey = E[Math.min(GH - 1, gy + 1) * GW + gx] - E[Math.max(0, gy - 1) * GW + gx];
-      const k = isWater(t) ? 1 - clamp((cellCY(i) - coastAt(cellCX(i))) / 900, 0, .6) : clamp(1 - (ex + ey) * 4, .55, 1.35);
+      const k = isWater(t) ? 1 - clamp((TER.isle ? -terSdf()[i] : cellCY(i) - coastAt(cellCX(i))) / 900, 0, .6) : clamp(1 - (ex + ey) * 4, .55, 1.35);
       for (let j = 0; j < 3; j++) img.data[i * 4 + j] = clamp(col[j] * k, 0, 255);
       img.data[i * 4 + 3] = 255;
     }
@@ -606,7 +639,7 @@ function trxSnapshot(wpx) {
   gl.useProgram(P.pr);
   gl.activeTexture(gl.TEXTURE5); gl.bindTexture(gl.TEXTURE_2D, TRX.tex.fog);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE, 1, 1, 0, gl.LUMINANCE, gl.UNSIGNED_BYTE, new Uint8Array([255]));
-  gl.uniform2f(u.uRes, wpx, hp); gl.uniform3f(u.uView, wpx / W, 0, 0); gl.uniform2f(u.uCoast, TRX.c0, TRX.cr);
+  gl.uniform2f(u.uRes, wpx, hp); gl.uniform3f(u.uView, wpx / W, 0, 0); gl.uniform2f(u.uCoast, TRX.c0, TRX.cr); gl.uniform1f(u.uDM, TRX.dm || 0);
   gl.uniform1f(u.uTime, 0); gl.uniform1f(u.uFlash, 0);
   gl.drawArrays(gl.TRIANGLES, 0, 3);
   const out = document.createElement('canvas');

@@ -4,10 +4,24 @@
 //   地形大特征、纵深、海面位置按它换算；武器射程、车速等真实距离不变——战场更开阔，海上纵深也更大
 const MAP_K = 2.8;
 const AF_K = 2;   // 空军基地场区尺度：场区世界范围 = AF_BOX（mapgen2.js）× AF_K，约 1100 × 800（面积为最初的 4 倍）；场内设施按真实比例布置（afbase.js），机场局部坐标 eaW / eaL 与世界同一尺度
-const W = Math.round(3000 * MAP_K), H = Math.round(2000 * MAP_K), CELL = 10, GW = W / CELL, GH = H / CELL;
+// 世界尺寸：默认 W0 × H0（8400 × 5600）；大海域地图（MAPGEN 里登记的）在建图前用 setWorld 换尺寸（按格子数开的数组由各模块 onWorld 重新分配）
+const W0 = Math.round(3000 * MAP_K), H0 = Math.round(2000 * MAP_K);
+let W = W0, H = H0, GW = W / 10, GH = H / 10;
+const CELL = 10;
 const SEA = y => H - (2000 - y) * MAP_K;   // 旧版（高 2000）海面上的 y 换算到现在的地图：集结海域、船位、航母
-const STAGING_Y = SEA(1500);      // 我方舰队集结海域上沿（航母在更南边）
-const CARRIER_Y = SEA(1880);
+let STAGING_Y = SEA(1500);      // 我方舰队集结海域上沿（航母在更南边）
+let CARRIER_Y = SEA(1880);
+const MAPGEN = {};   // 另外的地图：MAPGEN[名] = { w, h, build(seed) }（大海域等），newGame(seed, lv, { map: 名 }) 使用
+const WORLD_FNS = [];
+function onWorld(fn) { WORLD_FNS.push(fn); }
+// 换世界尺寸（米，须是 CELL 的整数倍）；尺寸没变返回 false
+function setWorld(w, h) {
+  if (w === W && h === H) return false;
+  W = w; H = h; GW = W / CELL; GH = H / CELL;
+  STAGING_Y = SEA(1500); CARRIER_Y = SEA(1880);
+  for (const f of WORLD_FNS) f();
+  return true;
+}
 const ELEV_H = 6;                 // 高程 1.0 对应的视线高度（格）
 const COL = {
   bg: '#020704', g: '#3dff8a', gMid: '#1fa457', gDim: '#0f4a29', enemy: '#ff3d6e',
@@ -46,7 +60,7 @@ const pick = arr => arr[Math.floor(Math.random() * arr.length)];
 const bearing = (ax, ay, bx, by) => (Math.atan2(bx - ax, ay - by) * 180 / Math.PI + 360) % 360;
 const fmtBrg = b => String(Math.round(b) % 360).padStart(3, '0') + '°';
 const GRID_COLS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-const gridCol = k => k < 26 ? GRID_COLS[k] : GRID_COLS[Math.floor(k / 26) - 1] + GRID_COLS[k % 26];   // 超过 26 列（大地图 42 列）接着用 AA、AB……
+const gridCol = k => k < 26 ? GRID_COLS[k] : GRID_COLS[Math.floor(k / 26) - 1] + GRID_COLS[k % 26];   // 超过 26 列（默认大地图 42 列、大海域地图）接着用 AA、AB……
 const gridRef = (x, y) => gridCol(clamp(Math.floor(x / 200), 0, Math.ceil(W / 200) - 1)) + (clamp(Math.floor(y / 200), 0, Math.ceil(H / 200) - 1) + 1);   // 200 一格：列 A–Z、AA… 自西向东，行 1… 自北向南（地图上有标注，places.js）
 
 function segDist(px, py, x0, y0, x1, y1) {

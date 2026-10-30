@@ -13,7 +13,8 @@ const CVL_ST = { arty: 1, mortar: 1, aa: 1, coastal: 1, tel: 1, ascm: 1 };
 const cvlStHid = e => !e.dead && CVL_ST[e.kind] && !e.decoy && !e.moving && S.t - (e.fireT ?? -99) >= CVL.sfire;
 // 车辆（双方）：停在林地、城镇、丘陵里熄火伪装 CVL.vstill 秒以上、没开过炮 / 机枪 / 导弹，空中、海上看不出来，地面部队 CVL.rs 以内才看得见；开阔地上的车照样一眼看见
 const cvlVHid = v => !v.dead && !v.lst && !v.swim && !v.fixed && S.t - (v.movedT ?? -99) >= CVL.vstill && S.t - Math.max(v.fireT ?? -99, v.mgT ?? -99, v.samT ?? -99) >= CVL.sfire && isLand(v.x, v.y) && coverAt(v.x, v.y) <= CVL.cover;
-const CVL_DISP = new Uint8Array(GW * GH);
+let CVL_DISP = new Uint8Array(GW * GH);
+onWorld(() => { CVL_DISP = new Uint8Array(GW * GH); });
 let CVL_CLR = [];   // 上次抹掉的格（画面掩码复位用）
 
 const cvlOn = () => !!S && !(S.v7off && S.v7off.cvl);

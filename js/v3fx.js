@@ -63,18 +63,13 @@ function v3VlsOrigin(m) {
   else { if (S.dd && S.dd.state !== 'sunk') take(S.dd, typeof vlsCls === 'function' ? vlsCls(S.dd) : '055'); for (const o of S.ships) if (o.kind === 'dd' && alive(o)) take(o, typeof vlsCls === 'function' ? vlsCls(o) : '052D'); }
   let o = null;
   if (sh) {
-    const K = cls && typeof SH_DDC === 'object' ? SH_DDC[cls] : null, blocks = K ? K.vls : [[8, 13, 2.2]], b = blocks[m.id % blocks.length], k = K ? K.k : 1;
+    const IM = cls && typeof v3imOn === 'function' ? v3imOn(cls === '055' ? 't055' : null) : null;   // 换成外部精细模型的舰：垂发位置按那个模型
+    const K = IM && IM.vls ? { k: 1, w: 1, vls: IM.vls } : cls && typeof SH_DDC === 'object' ? SH_DDC[cls] : null, blocks = K ? K.vls : [[8, 13, 2.2]], b = blocks[m.id % blocks.length], k = K ? K.k : 1;
     const pseudo = (m.id * 9301 + 49297) % 233280 / 233280, pv = (m.id * 4271 + 113) % 1000 / 1000;
+    const u = lerp(b[0], b[1], .15 + .7 * pseudo) * k, v = (pv * 2 - 1) * b[2] * .7 * k * (K ? K.w : 1);
     const key = sh === S.dd ? 'DD' : sh.id, P = typeof SHIPV === 'object' && SHIPV.pose[key], h = P ? P.h : (sh.heading ?? -1.57), px0 = P ? P.x : sh.x, py0 = P ? P.y : sh.y;
-    // 导入的模型（v3x.js）自带垂发块的实测位置（米、格数）：弹从某一格正中冲出，舱盖按格子大小、铰链在格子一边
-    const X = cls && typeof V3X_DD === 'object' && V3X_DD[cls] && typeof v3xMesh === 'function' ? v3xMesh(V3X_DD[cls]) : null, B = X && X.vls ? X.vls[m.id % X.vls.length] : null;
-    let u, v, z, lv = 0, lk = 1;
-    if (B) {
-      const sc = (P && P.k || 1) * 50 * k / X.len, cx = (B[1] - B[0]) / B[5], cy = (B[3] - B[2]) / B[6];
-      u = (B[0] + (Math.floor(pseudo * B[5]) + .5) * cx) * sc; v = (B[2] + (Math.floor(pv * B[6]) + .5) * cy) * sc; z = -2.6 + B[4] * sc; lk = Math.min(cx, cy) * sc / 1.1; lv = -cy * sc / 2;
-    } else { u = lerp(b[0], b[1], .15 + .7 * pseudo) * k; v = (pv * 2 - 1) * b[2] * .7 * k * (K ? K.w : 1); z = -2.6 + 2.8 * k + .3; }
-    const W = (u, v) => [px0 + u * Math.cos(h) - v * Math.sin(h), py0 + u * Math.sin(h) + v * Math.cos(h)], [x, y] = W(u, v), [lx, ly] = W(u, v + lv);
-    o = { x, y, z, h, lx, ly, lk, cls, up: m.kind === 'sam' ? .45 : .9 };
+    const x = px0 + u * Math.cos(h) - v * Math.sin(h), y = py0 + u * Math.sin(h) + v * Math.cos(h);
+    o = { x, y, z: -2.6 + (IM && IM.vlsZ != null ? IM.vlsZ : 2.8 * k) + .3, h, lx: x, ly: y, lk: 1, cls, up: m.kind === 'sam' ? .45 : .9 };   // lx、ly、lk：舱盖铰链处与大小（v3units.js 画舱盖）
   }
   V.set(m.id, o);
   return o;
@@ -276,14 +271,15 @@ function v3Fx(C) {
       const ch = Math.cos(h), sh = Math.sin(h), cr = Math.cos(r), sr = Math.sin(r);
       const Wp = (u, v, w) => { const y = v * cr - w * sr, zz = v * sr + w * cr; return v3fP(o.x + (u * ch + y * sh) * k, o.y + (u * sh - y * ch) * k, z + zz * k); };
       const tip = D.wing.reduce((m, q) => q[1] > m[1] ? q : m, D.wing[0]), tu = tip[0] - .6;
-      v3fSpark(out, C, Wp(tu, tip[1], 0), 1.1 * k + .5, [1, .25, .2, .95]);   // 左翼尖红灯
-      v3fSpark(out, C, Wp(tu, -tip[1], 0), 1.1 * k + .5, [.3, 1, .45, .95]);   // 右翼尖绿灯
+      const dE = Math.hypot(o.x - C.E[0], -o.y - C.E[1], z - C.E[2]), lr = Math.min(1.1 * k + .5, .012 * dE + .12);   // 灯的光晕：远处照旧，凑近时按视距缩小（不然近看是两三米的光球）
+      v3fSpark(out, C, Wp(tu, tip[1], 0), lr, [1, .25, .2, .95]);   // 左翼尖红灯
+      v3fSpark(out, C, Wp(tu, -tip[1], 0), lr, [.3, 1, .45, .95]);   // 右翼尖绿灯
       const tail = D.stab ? D.stab.reduce((m, q) => Math.min(m, q[0]), 0) : (D.body ? D.body[D.body.length - 1][0] : -9);
-      if (((S.t * .8 + o.id * .37) % 1) < .07) v3fSpark(out, C, Wp(tail + 1, 0, 2.6), 2.4 * k + 1, [1, 1, 1, 1]);   // 防撞灯
+      if (((S.t * .8 + o.id * .37) % 1) < .07) v3fSpark(out, C, Wp(tail + 1, 0, 2.6), Math.min(2.4 * k + 1, .02 * dE + .2), [1, 1, 1, 1]);   // 防撞灯
       if (FTR[key] && typeof v3dBurner === 'function') {   // 喷口发热、加力尾焰（v3det.js）：按每个喷口，随机身俯仰、滚转；加力开关时火舌平滑地长出、缩回
         const Eg = v3dEng((own ? 'p' : 'e') + o.id, burn ? 1 : .65, burn ? 1 : 0);
         v3dBurner(out, C, o, key, sz, { x: o.x, y: o.y, z, h, pt: typeof v3dPitchOf === 'function' ? v3dPitchOf(o, own ? 0 : 1) : Lc ? Lc.pitch : 0, rl: r }, Eg);
-      }
+      } else if (typeof v3dExhaust === 'function') v3dExhaust(key, sz, { x: o.x, y: o.y, z, h, rl: r }, gnd ? .6 : 1);   // 其余发动机：排气口后的热浪
     };
     for (const p of S.planes || []) if (!p.dead && isFinite(p.x) && !(p.phase === 'cat' || p.phase === 'trap' || (p.phase === 'roll' && !p.afPh && !p.land))) {   // 甲板上的由航母那边画
       const key = typeof airSilKey === 'function' ? airSilKey(p.kind, p.v) : null;
@@ -298,6 +294,7 @@ function v3Fx(C) {
     }
   }
   if (typeof v3dFx === 'function') v3dFx(out, C, inB, seen);   // 弹射、离机、伞降的发光与烟（v3det.js）
+  if (typeof v3dHaze === 'function') v3dHaze(C);   // 喷口后的热浪（v3det.js）：在加法特效之前，扭的是火焰后面的画面
   if (!out.length) return;
   // —— 画：加法混合，测深度不写深度 ——
   const A = V3F.a;

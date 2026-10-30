@@ -4,14 +4,15 @@
 //     brd  停机位上的飞机：座舱盖打开，飞行员从舰岛舱门或最近的舷边通道口跑到飞机左侧，顺登机梯爬进座舱，座舱盖合上
 //     lift 机库里的飞机：升降机先空降到机库甲板，载上飞机升回飞行甲板（飞行员在机库里已登机）
 //     eng  启动发动机 → taxi 展开机翼滑出机位（升降机上的向舷内开出），沿甲板滑到所派弹射器偏流板后的等待点
-//     hold 弹射器上还有飞机就在偏流板后等 → line 滑上弹射器 → hook 挂弹射杆、偏流板升起、弹射官示意、发动机加力
+//     hold 弹射器上还有飞机就在偏流板后等（带武器的在这里停稳解除保险：挂弹组拔掉保险销、举给飞行员看）→ line 滑上弹射器 → hook 挂弹射杆、偏流板升起、弹射官示意、发动机加力
 //   'roll'：电磁弹射，沿弹射器加速到离舰；偏流板随后放下
 //   回收（'trap' 阶段）：arr 拦阻索拉停 → 收索、折机翼 → taxi 滑出着舰区 → 甲板有空位：滑到机位前、转向、倒进机位（机尾朝舷外）；
 //     甲板停满：滑到升降机舷内侧 → ewait 等升降机 → 倒上平台 → down 降到机库甲板（进机库整备），空平台再升回来
 // 停机位：每架舰载机记 w.dk（机位序号；-1 机库；null 不在舰上）。升降机 c.el[i] = { h 平台高度 0 甲板—1 机库, to 目标, w 占用的飞机 id }；
 // 偏流板：c.jl[k] 弹射器 k 上一次弹射离舰的时刻（放下的动画）
 // hook：挂上弹射杆到弹射的秒数（舵面检查、推到最大推力、点加力：小火 → 全加力，见 v3det.js v3dDeckEng）；ab：弹射前几秒点加力
-const CVD = { taxi: 16, rev: 6, run: 9, climb: 1.5, cnp: .8, eng: 1.1, hook: 4, ab: 2.1, acc: 35, elv: .32, pivot: 1.25 };
+// arm：出动前在机位上挂弹的秒数（与飞行员登机同时，挂弹车把弹送进弹舱）；armT：在偏流板后停稳解除保险的秒数；tow、towL：牵引车把飞机拖出机位的速度（米/秒）与距离（米）
+const CVD = { taxi: 16, rev: 6, run: 9, climb: 1.5, cnp: .8, eng: 1.1, hook: 4, ab: 2.1, acc: 35, elv: .32, pivot: 1.25, arm: 12, armT: 5.5, tow: 3, towL: 20 };
 const cvCat = k => CVG.cats[clamp(k | 0, 0, CVG.cats.length - 1)];
 const cvCatPt = (k, s) => { const C = cvCat(k); return [C.u + Math.cos(C.a) * s, C.v + Math.sin(C.a) * s]; };
 // 右舷甲板边线（不算升降机缺口）：舷边通道口的位置
@@ -60,10 +61,13 @@ function cvDeckStep(c, dt) {
 // 起点：甲板机位（飞行员登机）或机库（等升降机）
 function cvLaunchStart(c, w) {
   cvDeckInit(c); cvSpots(c);
-  if (w.dk != null && w.dk >= 0 && CVG.slots[w.dk]) { const [u, v, r] = CVG.slots[w.dk]; return { lu: u, lv: v, lh: r, dk: 'brd', slot: w.dk, fold: 1, cpo: 0 }; }
+  if (w.dk != null && w.dk >= 0 && CVG.slots[w.dk]) {   // arm：带武器的先挂弹；tw：出机位时由牵引车拖出去
+    const [u, v, r] = CVG.slots[w.dk], m = typeof airMdl === 'function' ? airMdl(w.type, w.v) : {};
+    return { lu: u, lv: v, lh: r, dk: 'brd', slot: w.dk, fold: 1, cpo: 0, arm: !!(m.aam || m.agmN || m.gbN || m.arW), tw: 1 };
+  }
   w.dk = null;
-  const e = cvPickEl(c, 'lift'), E = CVG.el[e];
-  return { lu: E.u, lv: E.v, lh: -Math.PI / 2, dk: 'lift', el: e, fold: 1, cpo: 0, up: false };
+  const e = cvPickEl(c, 'lift'), E = CVG.el[e], m = typeof airMdl === 'function' ? airMdl(w.type, w.v) : {};
+  return { lu: E.u, lv: E.v, lh: -Math.PI / 2, dk: 'lift', el: e, fold: 1, cpo: 0, up: false, arm: !!(m.aam || m.agmN || m.gbN || m.arW) };   // 机库里已挂好弹（插着保险销）
 }
 // 升降机：先挑排队的飞机少、离得近的一部
 function cvPickEl(c, why, from) {
@@ -92,7 +96,7 @@ function cvPickCat(c, p) {
 // 登机梯：在座舱左侧（机头朝 lh，左 = lh − 90°）。返回 [梯脚 u, v, 座舱 u, v, 机身半宽]
 function cvLadder(p) {
   const key = airSilKey(p.kind, p.v), D = typeof AIRD === 'object' && AIRD[key], k = (airMdl(p.kind, p.v).size || 15) / 21;
-  const cx = D && D.cp ? (D.cp[0] + D.cp[1]) / 2 : 6, hw = D && D.body ? cvHalfW(D.body, cx) : 1.4;
+  const cx = D && D.door ? D.door[0] : D && D.cp ? (D.cp[0] + D.cp[1]) / 2 : 6, hw = D && D.door ? D.door[1] : D && D.body ? cvHalfW(D.body, cx) : 1.4;   // 预警机从机身左侧的登机门上去
   const ca = Math.cos(p.lh), sa = Math.sin(p.lh), lx = cx * k, ly = -(hw + 1.2) * k, cu = p.lu + ca * lx, cv = p.lv + sa * lx;
   return [p.lu + ca * lx - sa * ly, p.lv + sa * lx + ca * ly, cu, cv, hw * k];
 }
@@ -100,6 +104,8 @@ function cvHalfW(body, x) {   // 机身剖面在 x 处的半宽
   for (let i = 1; i < body.length; i++) { const [x0, w0] = body[i - 1], [x1, w1] = body[i]; if (x <= x0 && x >= x1) return lerp(w0, w1, (x0 - x) / (x0 - x1 || 1)); }
   return body[body.length - 1][1];
 }
+// 登机（'brd'）要多久：飞行员跑过来、爬梯、关座舱盖，带武器的还要等挂弹挂完
+const cvBrdT = p => Math.max((p.pT || 0) + CVD.climb + CVD.cnp, p.arm ? CVD.arm : 0);
 // 飞行员路线：飞行员从舰岛里出来——离舰岛舱门不远（70 以内）的飞机直接从舱门跑过去，远的从舷边通道口（往舰岛方向约 24 处）上到甲板再跑过去；pT = 跑的秒数
 function cvPilotPlan(p) {
   const L = cvLadder(p), door = CVG.door, du = L[0] + Math.sign(door[0] - L[0]) * 24, hatch = [du, Math.min(cvEdgeV(du) - 1.5, 31)];
@@ -114,7 +120,8 @@ function cvPilotPose(p) {
   const q = (t - p.pT) / CVD.climb;
   if (q >= 1) return null;
   const sw = clamp((q - .62) / .38, 0, 1), k = (airMdl(p.kind, p.v).size || 15) / 21;   // 前六成顺梯子往上爬，后四成跨进座舱
-  return { u: lerp(L[0], L[2], sw), v: lerp(L[1], L[3], sw), a: p.lh + Math.PI / 2, run: false, clb: q, z: (Math.min(q / .62, 1) * 2.1 + sw * .3) * k * 1.25, ph: q * 9 };
+  const D = typeof AIRD === 'object' && AIRD[airSilKey(p.kind, p.v)], zh = D && D.door ? D.door[2] / (k * 1.25) - .3 : 2.1;   // 登机门：爬到门槛高度
+  return { u: lerp(L[0], L[2], sw), v: lerp(L[1], L[3], sw), a: p.lh + Math.PI / 2, run: false, clb: q, z: (Math.min(q / .62, 1) * zh + sw * .3) * k * 1.25, ph: q * 9 };
 }
 // 座舱盖开度：登机时先打开，飞行员坐进去后合上
 function cvCanopy(p) {
@@ -148,7 +155,7 @@ function cvRouteIn(p, j, e) {
 }
 // 沿路线走一步：普通点像开车一样边转边走（偏得多就放慢，转弯半径很小）；'P' 原地转到朝向（牵引车拖着转）；'R' 倒车直线退到点；'S' 直线开到点
 // 返回 true = 走完
-function cvFollow(p, dt) {
+function cvFollow(p, dt, k = 1) {   // k：滑行速度倍数（牵引车拖着时慢）
   const P = p.path;
   p.mv = 0;
   for (let guard = 0; P && P.length && guard < 6; guard++) {
@@ -169,7 +176,7 @@ function cvFollow(p, dt) {
     if (d < (last ? .5 : 3)) { if (last) { p.lu = s[0]; p.lv = s[1]; } P.shift(); continue; }
     const err = airAng(Math.atan2(dy, dx) - p.lh);
     p.lh = airAng(p.lh + clamp(err * 3.2, -1.8, 1.8) * dt);
-    const v = CVD.taxi * Math.max(.08, Math.cos(Math.min(Math.abs(err), 1.5))) ** 2 * (last ? clamp(d / 9, .2, 1) : 1);
+    const v = CVD.taxi * k * Math.max(.08, Math.cos(Math.min(Math.abs(err), 1.5))) ** 2 * (last ? clamp(d / 9, .2, 1) : 1);
     p.lu += Math.cos(p.lh) * v * dt; p.lv += Math.sin(p.lh) * v * dt; p.mv = 1;
     return false;
   }
@@ -202,9 +209,9 @@ function cvLaunchStep(p, c, dt) {
       }
       break;
     }
-    case 'brd':   // 飞行员跑过来、爬梯子进座舱，座舱盖合上
+    case 'brd':   // 飞行员跑过来、爬梯子进座舱，座舱盖合上；带武器的同时挂弹（挂完才启动）；快好时牵引车过来挂上前起落架（v3det.js）
       p.cpo = cvCanopy(p);
-      if (p.dkT >= (p.pT || 0) + CVD.climb + CVD.cnp) { p.dk = 'eng'; p.dkT = 0; p.cpo = 0; }
+      if (p.dkT >= cvBrdT(p)) { p.dk = 'eng'; p.dkT = 0; p.cpo = 0; }
       break;
     case 'eng': {   // 启动发动机；同一条弹射器前面已有飞机在滑 / 在等，或者要穿过着舰区而有飞机正在降落，就在原地等
       if (p.dkT < CVD.eng) break;
@@ -214,16 +221,20 @@ function cvLaunchStep(p, c, dt) {
       const path = cvRouteOut(p, p.cat), cross = path.some(q => cvInLand(q[0], q[1], 4)) || cvInLand(p.lu, p.lv, 4);
       if (busy || (cross && others.some(o => o.phase === 'final' || (o.phase === 'trap' && !o.clr)))) break;
       p.path = path; p.dk = 'taxi'; p.dkT = 0;
+      if (p.tw) { p.tow = 1; p.tu0 = p.lu; p.tv0 = p.lv; } p.tw = 0;   // 从机位出发的：牵引车先把飞机慢慢拖出机位
       if (p.slot != null) { const w = airWing(p); if (w && w.dk === p.slot) w.dk = null; p.slot = null; }
       break;
     }
     case 'taxi':   // 展开机翼，滑到偏流板后的等待点；离开升降机平台就把它放开
       p.fold = Math.max(0, (p.fold ?? 1) - dt / 2.4);
       if (p.el != null && Math.hypot(p.lu - CVG.el[p.el].u, p.lv - CVG.el[p.el].v) > 12) { const E = c.el[p.el]; if (E && E.w === p.id) E.w = null; p.el = null; }
-      if (cvFollow(p, dt)) { p.dk = 'hold'; p.dkT = 0; }
+      if (p.twt > 0) { p.twt -= dt; break; }   // 牵引车刚脱钩：等它拐开让出去路
+      if (cvFollow(p, dt, p.tow ? CVD.tow / CVD.taxi : 1)) { p.dk = 'hold'; p.dkT = 0; p.tow = 0; }
+      if (p.tow && Math.hypot(p.lu - p.tu0, p.lv - p.tv0) > CVD.towL) { p.tow = 0; p.twt = 2; }   // 拖出机位了：牵引车脱钩拐开，飞机等两秒再自己滑向弹射器
       break;
-    case 'hold': {   // 弹射器空了（前一架已离舰、偏流板放下）就滑上去
+    case 'hold': {   // 弹射器空了（前一架已离舰、偏流板放下）就滑上去；带武器的先停稳解除保险（v3det.js 画挂弹组）
       p.fold = Math.max(0, (p.fold ?? 0) - dt / 2.4);
+      if (p.arm && p.dkT < CVD.armT) break;
       const C = cvCat(p.cat), on = others.some(o => o.cat === p.cat && ((o.phase === 'cat' && (o.dk === 'line' || o.dk === 'hook')) || o.phase === 'roll'));
       if (on || S.t - (c.jl[p.cat] ?? -99) < 1.6 || (p.cat === 2 && cvRecov(c))) break;
       p.path = [['P', C.a], ['S', C.u, C.v]]; p.dk = 'line'; p.dkT = 0;

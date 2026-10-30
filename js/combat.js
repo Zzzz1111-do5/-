@@ -9,13 +9,35 @@ const POWER = {
   bomb: { men: .75, ship: 3, struct: 9, seg: false, R: 34 }
 };
 
+// 单兵伤势：q.hp 与 q.men 一一对应（1 完好，越低伤得越重，最低 .08）。被打中没阵亡的会负伤（suppress 按火力与暴露程度掷），
+//   阵亡仍由各处的命中判定决定（伤亡率不变），只是优先落在伤得重的人身上；血量给画面（selfx.js）与型号卡显示
+function manHp(q) {
+  const h = q.hp || (q.hp = []), n = q.men.length;
+  while (h.length < n) h.push(1);
+  if (h.length > n) h.length = n;
+  return h;
+}
+function woundMan(q, d) {
+  if (!q.men.length) return;
+  const h = manHp(q), i = Math.floor(Math.random() * h.length);
+  h[i] = Math.max(.08, h[i] - d);
+}
 // 精锐（mod.hard）：防弹插板、单兵战斗素养——致命一击有一定几率只是负伤、继续战斗（force：核爆等必死的场合）
 function killMan(q, prefer, force) {
   if (!q.men.length) return;
-  if (!force && q.mod && q.mod.hard && Math.random() < q.mod.hard) { q.sup = Math.min(100, q.sup + 8); if (typeof v8Stat === 'function') v8Stat('hardSave'); return; }
-  const pi = prefer ? q.men.indexOf(prefer) : -1, idx = pi >= 0 ? pi : Math.floor(Math.random() * q.men.length);
+  if (!force && q.mod && q.mod.hard && Math.random() < q.mod.hard) { q.sup = Math.min(100, q.sup + 8); woundMan(q, .2 + Math.random() * .3); if (typeof v8Stat === 'function') v8Stat('hardSave'); return; }
+  const h = manHp(q);
+  let idx = prefer ? q.men.indexOf(prefer) : -1;
+  if (idx < 0) {   // 挑倒下的人：完好的权重 1，伤得越重越大（重伤约 6.5）；都完好时和原来一样均匀
+    let tot = 0;
+    for (const v of h) tot += 1 + (1 - v) * 6;
+    let r = Math.random() * tot;
+    idx = h.length - 1;
+    for (let i = 0; i < h.length; i++) { r -= 1 + (1 - h[i]) * 6; if (r < 0) { idx = i; break; } }
+  }
   if (typeof manDied === 'function') manDied(q, idx, q.men[idx]);   // 画面：这个人倒地（manim.js，只记在画面缓存里）
   const role = q.men.splice(idx, 1)[0];
+  h.splice(idx, 1);
   const u = unitOf(q);
   if (u) { u.morale -= 5 * (S.t - u.flankT < 3 ? 1.5 : 1) * (u.elite ? .5 : 1); u.hitT = S.t; }   // 精锐排：伤亡对士气的打击减半
   if (q.side === 'e') { S.stats.killed++; return; }
@@ -32,6 +54,7 @@ function suppress(q, v, sx, sy) {
     if (u) u.flankT = S.t;
   }
   q.sup = Math.min(100, q.sup + v); q.hitT = S.t;
+  if (q.men.length && Math.random() < v * .018 && Math.random() < coverAt(q.x, q.y) * shelter(q, sx, sy)) woundMan(q, .1 + Math.random() * .3);   // 负伤：火力越猛、越暴露越容易有人挂彩
   if (sx != null) { q.supX = sx; q.supY = sy; q.supT = S.t; }   // 最近一次压制来源（坦克据此找火力点）
   const u = unitOf(q);
   if (u) u.hitT = S.t;
@@ -146,6 +169,13 @@ function findTarget(q, range) {
     const d = dist(q.x, q.y, v.x, v.y), w = d * (modOf(q).at ? .7 : 1.5);
     if (w < bd && canSee(q.side, v.x, v.y, d)) { bd = w; best = { t: v, d, k: 'veh' }; }
   }
+  // 机场上停放的敌机（afgnd.js）：不还手，同样远时先打会还手的
+  if (typeof afgList === 'function') for (const a of afgList(q.side)) {
+    const dx = a.x - qx, dy = a.y - qy, lim = bd / 1.25;
+    if (dx >= lim || dx <= -lim || dy >= lim || dy <= -lim) continue;
+    const d = dist(qx, qy, a.x, a.y);
+    if (d * 1.25 < bd && canSee(q.side, a.x, a.y, d)) { bd = d * 1.25; best = { t: a, d, k: 'ac' }; }
+  }
   if (q.side === 'p') for (const e of S.enemies) if (!e.dead) {
     const dx = e.x - qx, dy = e.y - qy;
     if (dx >= bd || dx <= -bd || dy >= bd || dy <= -bd) continue;
@@ -186,6 +216,7 @@ function teamFire(q, tg) {
       }
     }
   } else if (tg.k === 'veh') vehSmallArms(t, q, acc);
+  else if (tg.k === 'ac') { if (typeof afgHit === 'function') afgHit(t, q, acc, tg.d); }   // 机场上停放的飞机（afgnd.js）
   else for (const m of q.men) {
     if (m === 'eng') continue;
     t.sup = Math.min(100, (t.sup || 0) + (m === 'mg' ? 9 : 5));

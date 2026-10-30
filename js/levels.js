@@ -290,9 +290,10 @@ function lvAllow(c) {
 }
 // 面板：关卡标题与目标
 function lvPanel(el) {
-  el.classList.toggle('lvl', !!S.lv);
+  const lv = S.lv && !S.lv.isle;   // 海岛战役（isle.js）也记在 S.lv 里，但不是闯关的某一关
+  el.classList.toggle('lvl', lv);
   let h = el.querySelector('.sbx-lvhead');
-  if (!S.lv) { if (h) h.remove(); return; }
+  if (!lv) { if (h) h.remove(); return; }
   if (!h) { h = document.createElement('div'); h.className = 'sbx-lvhead'; el.querySelector('.sbx-sides').before(h); }
   const L = lvDef(S.lv.n);
   h.innerHTML = `<b>第 ${L.n} 关 · ${L.nm}</b><span>${LV_CH[L.ch][0]}：${LV_CH[L.ch][1]}</span>`;
@@ -300,7 +301,7 @@ function lvPanel(el) {
 
 // —— 打完：过关存档；结束画面加「下一关」「关卡列表」 ——
 HOOK.frame.push(function lvFrame() {
-  if (!S || !S.lv || !S.over || typeof document === 'undefined') return;
+  if (!S || !S.lv || S.lv.isle || !S.over || typeof document === 'undefined') return;
   if (S.lv.endDone !== S.over) {
     S.lv.endDone = S.over;
     if (S.over === 'win') lvSave(S.lv.n);

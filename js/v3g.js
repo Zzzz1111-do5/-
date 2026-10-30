@@ -90,6 +90,7 @@ function v3gUpload(img) {
 const V3G_VS = `attribute vec3 p; attribute vec3 n; attribute vec2 uv; attribute vec4 iA; attribute vec4 iB; attribute vec4 iC;
 uniform mat4 uM; uniform vec3 uEye; uniform float uPk, uPm, uRad, uPx; uniform vec3 uPp, uPa;
 varying vec3 vN, vV, vP; varying vec2 vUv, vW; varying float vSide, vD;
+${typeof V3_SHV === 'string' ? V3_SHV : 'uniform mat4 uShM; varying vec4 vSh;'}
 vec3 rotA(vec3 v, vec3 a, float t) { float c = cos(t), s = sin(t); return v * c + cross(a, v) * s + a * dot(a, v) * (1. - c); }
 void main() {
   vec3 q = p, m = n;
@@ -103,17 +104,19 @@ void main() {
   q = vec3(q.x, q.y * cr - q.z * sr, q.y * sr + q.z * cr); q = vec3(q.x * cp - q.z * sp, q.y, q.x * sp + q.z * cp);
   m = vec3(m.x, m.y * cr - m.z * sr, m.y * sr + m.z * cr); m = vec3(m.x * cp - m.z * sp, m.y, m.x * sp + m.z * cp);
   vec3 w = vec3(iA.x + q.x * c - q.y * sn, iA.y + q.x * sn + q.y * c, iA.z + q.z);
-  vN = vec3(m.x * c - m.y * sn, m.x * sn + m.y * c, m.z); vUv = uv; vSide = iB.y; vV = uEye - w; vD = length(vV); vW = w.xy; vP = w;
+  vN = vec3(m.x * c - m.y * sn, m.x * sn + m.y * c, m.z); vUv = uv; vSide = iB.y; vV = uEye - w; vD = length(vV); vW = w.xy; vP = w; vSh = uShM * vec4(w, 1.);
   gl_Position = uM * vec4(w, 1.);
 }`;
 const V3G_FS = der => `${der ? '#extension GL_OES_standard_derivatives : enable\n#define DER 1\n' : ''}${typeof V3_PREC === 'string' ? V3_PREC : 'precision mediump float;'}
 uniform vec4 uC, uSG, uTf, uTf2; uniform vec2 uMR; uniform vec3 uE; uniform float uNs, uAm, uAc;
 uniform sampler2D uTb, uTn, uTm, uTe, uTo, uLm;
-uniform vec2 uFog, uWorld; uniform vec3 uBg; uniform float uLmOn;
+uniform vec2 uFog, uWorld; uniform vec3 uBg, uHlC; uniform float uLmOn, uMx, uHl;
 varying vec3 vN, vV, vP; varying vec2 vUv, vW; varying float vSide, vD;
+${typeof V3_SHF === 'string' ? V3_SHF : 'float shadowAt() { return 1.; }'}
 ${typeof V3L_BOOM_GLSL === 'string' ? V3L_BOOM_GLSL : 'vec3 boomLight(vec2 w) { return vec3(0.); }'}
 vec3 lin(vec3 c) { return pow(c, vec3(2.2)); }
 void main() {
+  float hl = step(7.5, vSide), sd = vSide - 8. * hl;   // 阵营 + 8：选中编队的成员（selfx.js），整个发光
   vec4 base = uC;
   if (uTf.x > .5) { vec4 t = texture2D(uTb, vUv); base *= vec4(lin(t.rgb), t.a); }
   if (uAm > .5 && uAm < 1.5 && base.a < uAc) discard;
@@ -144,7 +147,7 @@ void main() {
   float ao = uTf2.y > .5 ? texture2D(uTo, vUv).r : 1.;
   vec3 L = ${V3_SUNG}, H = normalize(L + V);
   float ndl = max(dot(N, L), 0.), ndv = max(dot(N, V), 0.);
-  float shd = uLmOn > .5 ? mix(.45, 1., texture2D(uLm, vec2(vW.x, -vW.y) / uWorld).r) : 1.;
+  float shd = uLmOn > .5 ? mix(.45, 1., texture2D(uLm, vec2(vW.x, -vW.y) / uWorld).r) : shadowAt();   // 黑绿画面：烘焙的光照贴图（v3light.js）；写实画面：实时太阳阴影（view3d.js）
   float a2 = rough * rough, sh = clamp(2. / max(a2 * a2, 1e-4) - 2., 1., 4096.);
   float spec = pow(max(dot(N, H), 0.), sh) * (sh + 2.) / 8.;
   vec3 Fr = F0 + (1. - F0) * pow(1. - max(dot(H, V), 0.), 5.);
@@ -153,8 +156,10 @@ void main() {
   vec3 c = diff * (sky * ao + sunC * ndl * shd) + Fr * spec * sunC * ndl * shd + env * (F0 + (1. - F0) * pow(1. - ndv, 5.) * (1. - rough)) * ao * (.35 + .65 * metal);
   c += uE * (uTf2.x > .5 ? lin(texture2D(uTe, vUv).rgb) : vec3(1.));
   c += boomLight(vec2(vW.x, -vW.y)) * diff * (.4 + .6 * ndl);   // 近处爆炸的火光
-  if (vSide > 1.5 && vSide < 2.5) c *= .2;   // 残骸：烧黑
+  if (sd > 1.5 && sd < 2.5) c *= .2;   // 残骸：烧黑
   c = pow(max(c, 0.), vec3(1. / 2.2));
+  if (uMx > .5) c = (sd > .5 && sd < 1.5 ? vec3(1., .3, .38) : vec3(.32, 1., .58)) * dot(c, vec3(.3, .59, .11)) * .6;   // 黑绿画面：按明暗换成磷光的单色（敌方红）
+  c += uHlC * uHl * hl * (.3 + .7 * pow(1. - ndv, 2.));
   gl_FragColor = vec4(mix(c, uBg, smoothstep(uFog.x, uFog.y, vD)), uAm > 1.5 ? base.a : 1.);
 }`;
 function v3gInit(gl) {
@@ -172,14 +177,14 @@ function v3gInit(gl) {
     if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(pr));
     V3G.pr = pr;
     for (const k of ['p', 'n', 'uv', 'iA', 'iB', 'iC']) V3G.a[k] = gl.getAttribLocation(pr, k);
-    for (const k of ['uM', 'uEye', 'uPk', 'uPm', 'uPp', 'uPa', 'uRad', 'uPx', 'uC', 'uSG', 'uTf', 'uTf2', 'uMR', 'uE', 'uNs', 'uAm', 'uAc', 'uTb', 'uTn', 'uTm', 'uTe', 'uTo', 'uLm', 'uFog', 'uWorld', 'uBg', 'uLmOn', 'uBm']) V3G.u[k] = gl.getUniformLocation(pr, k);
+    for (const k of ['uM', 'uEye', 'uPk', 'uPm', 'uPp', 'uPa', 'uRad', 'uPx', 'uC', 'uSG', 'uTf', 'uTf2', 'uMR', 'uE', 'uNs', 'uAm', 'uAc', 'uTb', 'uTn', 'uTm', 'uTe', 'uTo', 'uLm', 'uFog', 'uWorld', 'uBg', 'uLmOn', 'uBm', 'uMx', 'uHl', 'uHlC', 'uShM', 'uShT', 'uShOn', 'uShP']) V3G.u[k] = gl.getUniformLocation(pr, k);
     V3G.ib = gl.createBuffer();
     V3G.ok = true;
   } catch (e) { V3G.ok = false; console.warn('贴图模型不可用', e); }
 }
 
 // ———————————————— 每帧：收集实例 → 画 ————————————————
-// 一帧开始（v3units.js v3Units 开头）
+// 一帧开始（v3units.js v3mCollect 开头）
 function v3gBegin(C) {
   if (!V3G.tried && typeof V3 === 'object' && V3.gl) v3gInit(V3.gl);
   for (const L of V3G.inst.values()) L.n = 0;
@@ -202,29 +207,27 @@ function v3gAdd(key, x, y, z, a, k, side, roll = 0, pitch = 0, parts = null) {
   L.n++;
   return true;
 }
-// 地面软阴影（v3light.js）：v3Units 收集完其它模型的影子后调用
-function v3gShadows() {
-  if (typeof v3ShadowAdd !== 'function') return;
-  for (const L of V3G.inst.values()) { if (V3G_NOSH.test(L.M.key)) continue; for (let i = 0; i < L.n; i++) { const o = i * 12; v3ShadowAdd(L.d[o], -L.d[o + 1], L.d[o + 2], -L.d[o + 3], L.d[o + 4], L.M.sbb, false); } }
-}
-// 画：先画不透明、镂空的，再画半透明的（不写深度）
-function v3gDraw(C) {
+// 画：先画不透明、镂空的，再画半透明的（不写深度）。LM：太阳阴影图的光源矩阵（view3d.js v3ShPass 那一遍只写深度，半透明的不投影）
+function v3gDraw(C, LM) {
   if (!V3G.ok) return;
   let any = false;
   for (const L of V3G.inst.values()) if (L.n) { any = true; break; }
   if (!any) return;
   const gl = V3G.gl, A = V3G.a, U = V3G.u, X = V3G.ext;
   gl.useProgram(V3G.pr);
-  gl.uniformMatrix4fv(U.uM, false, C.M); gl.uniform3f(U.uEye, C.E[0], C.E[1], C.E[2]);
+  gl.uniformMatrix4fv(U.uM, false, LM || C.M); gl.uniform3f(U.uEye, C.E[0], C.E[1], C.E[2]);
   gl.uniform2f(U.uFog, ...(typeof v3FogR === 'function' ? v3FogR(C) : [C.D * 1.3, C.D * 2.8]));
-  gl.uniform3f(U.uBg, ...(typeof V3_BG === 'object' ? V3_BG : [.63, .69, .75])); gl.uniform2f(U.uWorld, W, H); gl.uniform1f(U.uPx, V3G.px);
-  const lmOn = typeof v3LightBind === 'function' && v3LightBind(gl);
+  gl.uniform3f(U.uBg, ...(typeof v3Bg === 'function' ? v3Bg() : [.74, .75, .8])); gl.uniform2f(U.uWorld, W, H); gl.uniform1f(U.uPx, V3G.px);
+  const mx = typeof v3Mx === 'function' && v3Mx() ? 1 : 0;
+  gl.uniform1f(U.uMx, mx); gl.uniform1f(U.uHl, typeof sfxHl === 'function' ? sfxHl() : 0); gl.uniform3f(U.uHlC, 1, .76, .29);   // 选中编队的发光（琥珀色，与 v3units.js 同一套）
+  if (typeof v3ShUni === 'function') v3ShUni(gl, U, !LM); else gl.uniform1f(U.uShOn, 0);
+  const lmOn = mx && !LM && typeof v3LightBind === 'function' && v3LightBind(gl);
   gl.uniform1i(U.uLm, lmOn ? V3L.unit : 0); gl.uniform1f(U.uLmOn, lmOn ? 1 : 0);
   if (U.uBm && typeof V3L_BM === 'object') gl.uniform4fv(U.uBm, V3L_BM);
   gl.uniform1i(U.uTb, 0); gl.uniform1i(U.uTn, 1); gl.uniform1i(U.uTm, 2); gl.uniform1i(U.uTe, 3); gl.uniform1i(U.uTo, 4);
   const tex = (u, t) => { gl.activeTexture(gl.TEXTURE0 + u); gl.bindTexture(gl.TEXTURE_2D, t || null); };
   const wrap = (t, w) => { if (!t) return; gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, t); const m = [gl.REPEAT, gl.CLAMP_TO_EDGE, gl.MIRRORED_REPEAT]; gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, m[w[1]] || gl.REPEAT); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, m[w[2]] || gl.REPEAT); };
-  for (const pass of [0, 1]) {
+  for (const pass of LM ? [0] : [0, 1]) {
     if (pass) { gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); gl.depthMask(false); }
     for (const L of V3G.inst.values()) {
       if (!L.n) continue;
@@ -276,14 +279,13 @@ const V3G_MSL = {
   hhq9: 'ks172', sm6: 'ks172', hhq16: 'aim54', hhq10: 'asraam', yj21: 'ks172', tbm: 'ks172', df15: 'ks172', sdb: 'gbu24', pod: 'gbu24'
 };
 const v3gMslKey = k => V3G_MSL[k] || 'jsow';   // 反舰、巡航导弹（鹰击、长剑、鱼叉、战斧、LRASM …）：AGM-154 那种带弹翼的弹形
-const V3G_NOSH = /^(aim|agm|ks|asraam|gbu|mk8|jsow|brim)/;   // 导弹太小，不投地面影子
 
 // 车辆：车体按脚下坡度俯仰、侧倾，炮塔（模型里的 tur 部件）相对车体转到瞄准方向；按游戏里的车长（车体，不算炮管）缩放
-function v3gVeh(v, rk, side, len, x, y, z, h, aim, dead, pitch, roll) {
+function v3gVeh(v, rk, side, len, x, y, z, h, aim, dead, pitch, roll, hl) {   // hl：选中编队的成员（整车发光）
   const key = v3gVehKey(rk, side), M = v3gModel(key);
   if (!M) return false;
   const k = len / (M.meta.hl || M.meta.len), da = aim == null ? 0 : -Math.atan2(Math.sin(aim - h), Math.cos(aim - h));   // 部件角度在模型坐标里（逆时针为正，世界朝向顺时针为正）
-  return v3gAdd(key, x, y, z, h, k, dead ? 2 : side === 'e' ? 1 : 0, roll, pitch, [dead ? -.6 : da, 0, 0, 0]);
+  return v3gAdd(key, x, y, z, h, k, (dead ? 2 : side === 'e' ? 1 : 0) + (hl ? 8 : 0), roll, pitch, [dead ? -.6 : da, 0, 0, 0]);
 }
 // 飞机（机型键 key，游戏里的尺寸 sz）：ground 时 z 是地面 / 甲板（机轮着地），否则 z 是机身中线；起落架只在 gear 时放下；直升机旋翼转
 const v3dMv3 = (h, p, r, v) => {   // 先滚转（绕 x）、再俯仰（绕 y，机头抬起为正）、再转朝向（GL：绕 z 转 -h），与着色器同一约定
@@ -314,6 +316,8 @@ function v3gMsl(mk, x, y, z, h, sc, side, pitch = 0) {
 const V3G_HELI = { z10: 1, heli: 1, ah64: 1, uh60: 1 };   // 直升机（不按航迹抬头）
 // 飞机机身中线离机轮着地处多高（世界单位）
 function v3gPlaneZc(key, sz) { const M = V3G.M[V3G_AIR[key] || 'j31']; return M && M.ready ? M.meta.zc * sz / M.meta.len : sz * .12; }
+// 用户给的模型的署名（tools/v3gmodels.json 的 credit；设置面板「素材致谢」里列出，v3import.js v3imCredits）
+const V3G_CRED = [{"name": "96 式主战坦克", "title": "ZTZ96", "author": "jzmhhhhh", "license": "CC-BY-4.0", "url": "https://sketchfab.com/3d-models/ztz96-b0da178e50dc423983445841615d9e80"}, {"name": "M1A1 艾布拉姆斯", "title": "M1A1 Abrams Main Battle Tank", "author": "MirzaArrafiERV_45", "license": "CC-BY-4.0", "url": "https://sketchfab.com/3d-models/m1a1-abrams-main-battle-tank-1529f5d842cb4f578aa8cb672524f044"}, {"name": "歼-20", "title": "Chinese Chengdu J-20", "author": "42manako", "license": "CC-BY-4.0", "url": "https://sketchfab.com/3d-models/chinese-chengdu-j-20-b9e81062c94545ffb0232d3ac6b7adc5"}, {"name": "歼-16", "title": "Shenyang J16 Hidden Dragon", "author": "andertan", "license": "CC-BY-4.0", "url": "https://sketchfab.com/3d-models/shenyang-j16-hidden-dragon-2b950f910677457fbb52b6096f81e70b"}, {"name": "歼-31 鹘鹰", "title": "Shenyang J31 Gyrfalcon", "author": "andertan", "license": "CC-BY-4.0", "url": "https://sketchfab.com/3d-models/shenyang-j31-gyrfalcon-23dbff530e21491299ac67bbab42b553"}, {"name": "直-10", "title": "Changhe Z-10W", "author": "42manako", "license": "CC-BY-4.0", "url": "https://sketchfab.com/3d-models/changhe-z-10w-617cb4a91dfd4eaaa59161e06691df7f"}, {"name": "直-21", "title": "[MW] Z-21", "author": "xlisov", "license": "CC-BY-NC-4.0", "url": "https://sketchfab.com/3d-models/mw-z-21-a2d88447f0904f49b73f94fa88dccea5"}, {"name": "士兵", "title": "Army Character 2", "author": "MirzaArrafiERV_45", "license": "CC-BY-4.0", "url": "https://sketchfab.com/3d-models/army-character-2-e3c4da4a33bb42ed8512f423a4319c5a"}, {"name": "AIM-120C", "title": "AIM-120C AMRAAM", "author": "Jeyhun1985", "license": "CC-BY-4.0", "url": "https://sketchfab.com/3d-models/aim-120c-amraam-838fa923340a4d108e05c99bf0146ff6"}, {"name": "AIM-9", "title": "AIM-9 missile", "author": "rickslash", "license": "CC-BY-4.0", "url": "https://sketchfab.com/3d-models/aim-9-missile-caaf15b49bac4144b6c6be577c2b872a"}, {"name": "AIM-54 不死鸟、AIM-9 响尾蛇（组合）、AIM-120（组合）、KS-172、AIM-132 ASRAAM、GBU-24 宝石路、Mk 83 炸弹、AGM-65 小牛、AGM-154 JSOW、硫磺石", "title": "300 followers - free aircraft missile set", "author": "NETRUNNER_pl", "license": "CC-BY-4.0", "url": "https://sketchfab.com/3d-models/300-followers-free-aircraft-missile-set-2e70bc2ea0824897b2ccaea378809c9e"}];
 // 授权只允许非商用的模型（直-21）商店版里不带（tools/build_www.mjs --app）：加载不到就换成同类的另一个
 const V3G_ALT = { z21: 'z10w' };
 // 开局就把一定会用到的模型先下载、解码（士兵、双方坦克），别的等单位第一次出现时再加载

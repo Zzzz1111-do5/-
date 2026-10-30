@@ -27,6 +27,15 @@ function drawBuildings() {
   if (CELL * R.s < (realLook() ? 2.5 : 5)) return;   // 写实：全图时房屋是一簇簇小色块，像卫星图上的村镇
   if (TOWN_SEED !== TER.seed) { TOWN_SEED = TER.seed; TOWN_CELLS = townBld().list; }
   const ctx = R.ctx, [x0, y0, x1, y1] = viewRect();
+  if (typeof V3 === 'object' && V3.drawing && typeof v3pRep === 'function' && v3pRep('town')) {   // 3D 里房屋是立体模型（v3props.js）：地面贴图只留一圈接地的暗影
+    ctx.fillStyle = 'rgba(0,0,0,.32)';
+    for (const b of TOWN_CELLS) {
+      if (b.x < x0 || b.x > x1 || b.y < y0 || b.y > y1) continue;
+      const w = (b.r ? b.h : b.w) + 2.2, h = (b.r ? b.w : b.h) + 2.2;
+      ctx.fillRect(b.x + b.dx - w / 2, b.y + b.dy - h / 2, w, h);
+    }
+    return;
+  }
   if (realLook()) {
     const sh = .45 + .9 * smooth(5, 14, CELL * R.s), gl = typeof greenLook === 'function' && greenLook();
     ctx.fillStyle = 'rgba(10,14,8,.38)';

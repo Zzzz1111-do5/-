@@ -21,10 +21,12 @@ const ROLE_NAME = { radio: '通讯兵', rifle: '步枪手', mg: '机枪手', eng
 function newGame(seed, level, opts = {}) {
   level = DIFF[level] ? level : 'hard';
   seed = seed || (Math.random() * 1e9) | 0;
-  buildMap(seed);
+  const MG = opts.map && MAPGEN[opts.map];   // 另外的地图（各自登记尺寸与生成函数，见 core.js MAPGEN）
+  if (MG) { setWorld(MG.w, MG.h); MG.build(seed); }
+  else { setWorld(W0, H0); setPathRows(GH); buildMap(seed); }
   const r = rng(seed ^ 0x5f3759df);
   S = {
-    seed, level, mode: opts.mode || (opts.sandbox ? 'sandbox' : 'pve'), role: opts.role || 'attack', t: 0, paused: true, speed: 1, nid: 1, over: null, briefed: false, holdT: 0, ai: null, phase: 'deploy', units: [], craters: [], pings: [],
+    seed, level, map: MG ? opts.map : 'std', mode: opts.mode || (opts.sandbox ? 'sandbox' : 'pve'), role: opts.role || 'attack', t: 0, paused: true, speed: 1, nid: 1, over: null, briefed: false, holdT: 0, ai: null, phase: 'deploy', units: [], craters: [], pings: [],
     ships: [], teams: [], enemies: [], planes: [], shells: [], tracers: [], fx: [], smoke: [],
     mines: [], wire: [], obst: [], trench: [], supply: [], rlines: [], boats: [], recon: [], log: [],
     groups: { 1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [], 8: [], 9: [] }, sel: [],

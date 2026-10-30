@@ -93,6 +93,7 @@ function sbxCheck(c, x, y, x2, y2, ignore) {
   if (!c) return { ok: false, why: '未知条目' };
   const s = c.spawn, bad = why => ({ ok: false, why });
   if (typeof lvAllow === 'function' && !lvAllow(c)) return bad(S.lv.kind === 'naval' ? '海战关只部署舰艇、航空兵与远程火力' : '陆战关不需要登陆舰艇');   // 闯关按关卡类型限制兵种（levels.js）
+  if (S.lv && S.lv.isle && c.id === 'e_101') return bad('架空海岛战役：守方不编入真实部队番号');
   if (s.kind === 'veh' && !sbxVehOk()) return bad('装甲车辆模块未加载');
   let cost = c.cost;
   if (s.at === 'line') cost = x2 == null ? 1 : Math.max(1, Math.round(s.per * dist(x, y, x2, y2) / 100));
@@ -786,7 +787,7 @@ function sbxAttStyle(style, R0) {
     for (let i = 0; i < 12 && sbxLeft('p') >= 160; i++) if (ship('p_lst', M, i, 4, 1790 + (i >> 2) * 30, ['p_hv_tank', 'p_tank', 'p_ifv'], 1, 30)) nl++;
     for (let i = 0; i < 6 && sbxLeft('p') >= 110; i++) if (ship('p_lcac', M, i, 4, 1620, ['p_hv_tank'], 1, -60)) nc++;
     for (let i = 0; i < 10 && sbxLeft('p') >= 45; i++) { const p = sbxSea(M.b.cx + (i - 4) * 30, SEA(1560)), r = sbxPlace('p_amtank', p.x, p.y); if (r.ok) { r.it.plan = R0.plan(M, i, 10, 18); na++; } }
-    say(`方案「装甲突击」：坦克登陆舰 ${nl} 艘（ZTZ-99A、96B 与步兵战车）、726 型气垫艇 ${nc} 艘各载一辆 99A、两栖突击车 ${na} 辆随第一波抢滩，坦克先上岸撕开缺口，步兵跟进。`, M.ex);
+    say(`方案「装甲突击」：坦克登陆舰 ${nl} 艘（ZTZ-99A、ZTZ-80 与步兵战车）、726 型气垫艇 ${nc} 艘各载一辆 99A、两栖突击车 ${na} 辆随第一波抢滩，坦克先上岸撕开缺口，步兵跟进。`, M.ex);
   } else if (style === 'air') {
     if (!sbxOf('cv').length) { const p = sbxSea(clamp(M.b.cx, 200, W - 200), CARRIER_Y - 20); sbxPlace('p_cv', p.x, Math.max(p.y, STAGING_Y + 60)); }
     if (sbxLeft('p') >= 900 && !(catalogById('p_air_j36').lim && sbxLimN(catalogById('p_air_j36')) >= 2)) buyAir('p_air_j36', 'fighter');
@@ -1386,10 +1387,11 @@ HOOK.step.push(dt => {
 HOOK.newGame.push(opts => { if (typeof R === 'object' && R) R.eye = null; if (!(opts && opts.sandbox)) closeSandbox(); });
 
 // ———————————————— 编辑器入口 ————————————————
-function openSandbox(seed, keep) {
+function openSandbox(seed, keep, map) {
   const prev = S && S.sbx ? S : null, lv = (prev && prev.level) || (typeof U === 'object' && U.level) || 'hard';
   const bud = keep && prev ? { ...prev.sbx.budget } : { p: SBX_BUDGET, e: SBX_BUDGET };
-  newGame(seed, lv, { sandbox: true, mode: 'sandbox' });
+  map = map || (keep && prev && prev.map && prev.map !== 'std' ? prev.map : undefined);
+  newGame(seed, lv, { sandbox: true, mode: 'sandbox', map });   // map：另外登记的地图（core.js MAPGEN），换种子重建时沿用
   Object.assign(S, { phase: 'sandbox', briefed: true, paused: true, role: 'attack', mode: 'sandbox', armor: [] });
   S.sbx = { items: [], budget: bud, nid: 1, notes: { p: [], e: [] }, live: false };
   sbxMapAF();

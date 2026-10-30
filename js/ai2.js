@@ -57,7 +57,7 @@ function aiThink(D) {
     // 散兵合并
     if (q.men.length === 1) {
       const m = foes.find(o => o !== q && o.men.length && o.men.length < 3 && dist(o.x, o.y, q.x, q.y) < 25);
-      if (m) { m.men.push(...q.men); q.men = []; continue; }
+      if (m) { const h = manHp(m), hq = manHp(q); m.men.push(...q.men); h.push(...hq); q.men = []; q.hp = []; continue; }   // 伤势跟着人走（combat.js manHp）
     }
     // 滩头伏击组：被压倒性兵力接近时边打边撤到出口据点
     if (q.role === 'ambush') {
