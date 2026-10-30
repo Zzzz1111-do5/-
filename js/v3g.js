@@ -66,7 +66,7 @@ async function v3gImage(bytes, mime) {
   return new Promise(ok => V3G.upq.push(() => ok(v3gUpload(img))));
 }
 function v3gUpload(img) {
-  const gl = V3G.gl, t = gl.createTexture(), max = Math.min(gl.getParameter(gl.MAX_TEXTURE_SIZE) || 4096, 4096);
+  const gl = V3G.gl, t = gl.createTexture(), max = V3G.maxT || (V3G.maxT = Math.min(gl.getParameter(gl.MAX_TEXTURE_SIZE) || 4096, 4096));   // 显卡参数只查一次：getParameter 要等显卡把手头的活干完（每张贴图查一次，加载时一卡一卡）
   let src = img, w = img.width, h = img.height;
   const pot = n => 2 ** Math.round(Math.log2(Math.max(1, n)));
   // WebGL1：非 2 的幂的图不能生成多级渐远、不能平铺——画到 2 的幂大小的画布上再传（超过显卡上限的同样缩一下）
@@ -81,7 +81,7 @@ function v3gUpload(img) {
   gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.BROWSER_DEFAULT_WEBGL);
   gl.generateMipmap(gl.TEXTURE_2D);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-  if (V3G.aniso) gl.texParameterf(gl.TEXTURE_2D, V3G.aniso.TEXTURE_MAX_ANISOTROPY_EXT, Math.min(8, gl.getParameter(V3G.aniso.MAX_TEXTURE_MAX_ANISOTROPY_EXT) || 1));
+  if (V3G.aniso) gl.texParameterf(gl.TEXTURE_2D, V3G.aniso.TEXTURE_MAX_ANISOTROPY_EXT, V3G.anMax || (V3G.anMax = Math.min(8, gl.getParameter(V3G.aniso.MAX_TEXTURE_MAX_ANISOTROPY_EXT) || 1)));
   if (img.close) try { img.close(); } catch (e) { /* 已经关了 */ }
   return t;
 }
@@ -194,7 +194,7 @@ function v3gBegin(C) {
   for (const L of V3G.inst.values()) L.n = 0;
   V3G.C = C; V3G.frame = (V3G.frame || 0) + 1;
   V3G.px = (typeof CAM === 'object' ? CAM.vh : 768) / 2 / Math.tan((typeof V3_FOV === 'number' ? V3_FOV : .8) / 2);   // 1 米在 1 米外占多少像素
-  for (let i = 0; i < 6 && V3G.upq.length; i++) V3G.upq.shift()();   // 每帧最多上传几张贴图
+  { const t0 = performance.now(); while (V3G.upq.length && performance.now() - t0 < 4) V3G.upq.shift()(); }   // 每帧上传贴图最多约 4 毫秒（至少一张）：大贴图连传六张会卡一下
 }
 // 一个实例。模型还没好返回 false。parts：四个部件角度（坦克炮塔相对车身的转角、旋翼转角、起落架收起 1 …）
 function v3gAdd(key, x, y, z, a, k, side, roll = 0, pitch = 0, parts = null) {

@@ -1267,11 +1267,11 @@ function v3mCollect(C, box) {
     if (typeof V3FP === 'object' && V3FP.on && V3FP.o === o && V3FP.vw === 'cock' && !(typeof fpPitOn === 'function' && fpPitOn(o))) return;   // 座舱视角：模型没有座舱内饰时不画自己（平面座舱，v3pilot.js）；有内饰就照画，镜头坐在模型座舱里
     const L = !sd && typeof v3dLaunch === 'function' ? v3dLaunch(o) : null;   // 刚离舰：下沉、抬头，起落架过一会儿才收（v3det.js）
     const x = o.x, y = o.y, z = v3AirZ(o) + (L ? L.dz : 0);
-    let pt = typeof V3G_HELI === 'object' && V3G_HELI[key] ? 0 : typeof v3dPitch === 'function' ? v3dPitch(o, sd, z, L, key) : L ? L.pitch : 0;   // 仰角跟着航迹 + 迎角（js/aero.js；直升机不按航迹抬头）
+    let pt = o.fl && o.fp ? o.pt3 || 0 : typeof V3G_HELI === 'object' && V3G_HELI[key] ? 0 : typeof v3dPitch === 'function' ? v3dPitch(o, sd, z, L, key) : L ? L.pitch : 0;   // 玩家亲自开：机身俯仰就是物理引擎的   // 仰角跟着航迹 + 迎角（js/aero.js；直升机不按航迹抬头）
     const tu = sd && o.toT != null ? S.t - o.toT : -1;   // 机场起飞刚离地（eair.js eaRoll 记的离地时刻）：头 1.5 秒保持滑跑末段抬起的机头，起落架过几秒再收
     if (tu >= 0 && tu < 3) pt = Math.max(pt, V3_ROT * (1 - sm01((tu - 1.5) / 1.5)));
     const gd = !!(L && L.gear) || (tu >= 0 && tu < (typeof EA_TO === 'object' ? EA_TO.gear : 4));
-    const Pc = typeof V3D_PT === 'object' ? V3D_PT.get((sd ? 'e' : 'p') + o.id) : null;   // v3dPitch 按气动算好的舵面：平尾按迎角配平 + 俯仰角速度，左右差动按滚转角速度
+    const Pc = o.fl && o.fp ? { de: o.fl.d[0], da: o.fl.d[1] } : typeof V3D_PT === 'object' ? V3D_PT.get((sd ? 'e' : 'p') + o.id) : null;   // 舵面：玩家开的按电传算出的真实舵偏   // v3dPitch 按气动算好的舵面：平尾按迎角配平 + 俯仰角速度，左右差动按滚转角速度
     if (typeof v3gPlane === 'function') v3gPlane(key, sz, x, y, z, false, hd || 0, sd, bank || 0, pt, gd, t, !sd && typeof fpNoz === 'function' ? fpNoz(o) : 0, Pc);   // 用户给的飞机模型（js/v3g.js）：起落架收放、直升机旋翼转、尾喷口开合、舵面偏转
   };
   for (const p of S.planes || []) if (!p.dead && isFinite(p.x) && (inB(p.x, p.y, 220) || (typeof fpDriving === 'function' && fpDriving(p))) && !(!p.land && (p.phase === 'cat' || p.phase === 'roll' || p.phase === 'trap'))) {   // 甲板上的在航母那里画（放下起落架）
