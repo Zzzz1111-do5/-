@@ -608,6 +608,7 @@ function v3H0(gx, gy) {
 //   高度 alt 0.05 以下贴着基准面（地面 / 甲板），往上每 1.0 为 V3_AIR（约 350，直升机悬停 0.3 约离地 90）——见 v3AltZ：高空按海拔平飞，不随山起伏
 const V3_DECK = -2.6 + 17 + 1.5;   // 舰载机在飞行甲板上的高度：甲板离水线 17（carrier.js CVG.zd）+ 放下起落架的机身高度
 function v3AirZ(o) {
+  if (o.fl && o.fp) return -o.fl.P[2];   // 玩家亲自开（v3pilot.js 飞控物理引擎）：真实高度，不受游戏里高度档的上限（筋斗能翻到一千多米）
   const ph = o.phase || o.ph;
   if (o.kind && (ph === 'cat' || ph === 'roll' || ph === 'trap')) return V3_DECK;
   const z = v3AltZ(o.x, o.y, Math.max(0, clamp(o.alt ?? 1, 0, 1) - .05) * V3_AIR, o.kind && !o.land && !o.afPh ? V3_DECK - 1.5 : -2.6, 1.5);

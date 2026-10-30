@@ -71,7 +71,8 @@ function flStep(F, dt, inp) {
     if (inp.law === 'd') { de = -inp.y * FL_DMAX[0]; da = inp.x * FL_DMAX[1]; dr = (inp.r || 0) * FL_DMAX[2]; }   // 直接律：杆对舵面
     else {
       // 俯仰：过载指令（松杆时按坡度补偿到能保持飞行轨迹的过载——倒飞时是负过载；拉杆往 +9 g、推杆往 −3 g）→ 迎角指令（不超迎角限制）→ 俯仰角速度指令 → 动态逆求升降舵
-      const n0 = Math.abs(phi) < 1.4 ? clamp(Math.cos(th) / Math.max(Math.cos(phi), .35), 0, 2.6) : Math.cos(th) * Math.cos(phi), nzc = inp.y >= 0 ? lerp(n0, A.nz[1], inp.y) : lerp(n0, A.nz[0], -inp.y);
+      //   坡度补偿只到约 50°（再大就是在做机动，靠拉杆），50°–60° 平滑退到「只抵重力分量」——原来在 80° 处一刀切，横滚滚过去时机头猛一点头
+      const cf = Math.cos(phi), n0 = Math.cos(th) * (cf + smooth(1.05, .85, Math.abs(phi)) * (1 / Math.max(cf, .4) - cf)), nzc = inp.y >= 0 ? lerp(n0, A.nz[1], inp.y) : lerp(n0, A.nz[0], -inp.y);
       const ac = clamp(nzc * A.m * FL_G / (qS * A.CLa), -.2, A.alim);
       const qc = clamp(2.8 * (ac - al) + FL_G / Vn * (nzc - Math.cos(th) * Math.cos(phi)), -1.3, 1.3);
       const Mreq = I[1] * 7 * (qc - q) - (I[2] - I[0]) * p * r, M0 = qS * A.c * (D.Cm0 + D.Cma * al + D.Cmq * qh);

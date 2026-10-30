@@ -495,9 +495,14 @@ function terSdf() {
 // 换了世界尺寸：着色器里写死的 WORLD、GRID、KN 跟着变，缓存的程序作废（下次用到时按新尺寸重编）
 onWorld(() => { if (TRX.gl) for (const k in TRX.P) TRX.gl.deleteProgram(TRX.P[k].pr); TRX.P = {}; TRX.seed = null; TRX.fbSeed = null; TRX.lastSig = null; });
 
+// 画布只增不减：要画的区域（TRX.vw × TRX.vh）放在画布左下角，用视口画、按区域拷出去。
+//   3D 地图每帧要画两张大小不同的屏外俯视图（近处一张、整个可见范围一张），原来每画一张就把这块 WebGL 画布改一次尺寸——
+//   改尺寸要重新分配绘图缓冲，每帧一两次，是 3D 卡顿的大头
 function trxResize() {
-  TRX.cv.width = R.cv.width; TRX.cv.height = R.cv.height; TRX.lastSig = null;   // 改尺寸会清空画布，下一帧必须重画
-  TRX.gl.viewport(0, 0, TRX.cv.width, TRX.cv.height);
+  const w = R.cv.width, h = R.cv.height;
+  if (TRX.cv.width < w || TRX.cv.height < h) { TRX.cv.width = Math.max(w, TRX.cv.width); TRX.cv.height = Math.max(h, TRX.cv.height); }
+  TRX.vw = w; TRX.vh = h; TRX.lastSig = null;   // 区域变了，下一帧必须重画
+  TRX.gl.viewport(0, 0, w, h);
 }
 
 // 地形三种画法：镜头不动（震动不算）→ 读全分辨率陆地缓存 + 合成；镜头在动（拖动、缩放）→ 整个地形按低分辨率一遍画完再放大贴上
@@ -563,7 +568,7 @@ function trxBlitProg() {
 }
 
 function trxDraw(time, flash) {
-  const { gl, cv } = TRX;
+  const { gl } = TRX, cv = { width: TRX.vw || TRX.cv.width, height: TRX.vh || TRX.cv.height };   // 要画的区域（画布左下角）
   if (TRX.seed !== TER.seed) trxTerrain();
   else if (--TRX.chk <= 0) { TRX.chk = 30; if (trxSig() !== TRX.sig) trxTerrain(); }   // 桥被炸 / 修复
   const lite = typeof SETTINGS === 'object' && !!SETTINGS && SETTINGS.quality === 'low';
@@ -586,7 +591,7 @@ function trxDraw(time, flash) {
   gl.useProgram(P.pr);
   gl.activeTexture(gl.TEXTURE6); gl.bindTexture(gl.TEXTURE_2D, mode === 2 ? TRX.fbs[0].tex : null);
   if (u.uShift) gl.uniform2f(u.uShift, TRX.key.x - ox, oy - TRX.key.y);
-  if (F) { gl.bindFramebuffer(gl.FRAMEBUFFER, F.fbo); gl.viewport(0, 0, F.w, F.h); }
+  if (F) { gl.bindFramebuffer(gl.FRAMEBUFFER, F.fbo); gl.viewport(0, 0, F.w, F.h); } else gl.viewport(0, 0, cv.width, cv.height);
   gl.uniform2f(u.uRes, cv.width * sc, cv.height * sc);
   gl.uniform3f(u.uView, s * sc, ox * sc, oy * sc);
   gl.uniform2f(u.uCoast, TRX.c0, TRX.cr); gl.uniform1f(u.uDM, TRX.dm || 0);

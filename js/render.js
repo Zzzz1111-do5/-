@@ -155,8 +155,8 @@ function drawScene(now) {
   if (mx3) { ctx.fillStyle = '#000'; ctx.fillRect(0, 0, R.cv.width, R.cv.height); worldTf(ctx); }
   else if (realLook()) {
     if (!TRX.tried) { trxInit(); if (TRX.ok) trxResize(); }
-    if (TRX.ok && (TRX.cv.width !== R.cv.width || TRX.cv.height !== R.cv.height)) trxResize();   // 3D 地图的屏外俯视画布与屏幕大小不同
-    if (TRX.ok) { trxDraw(time, flash); ctx.drawImage(TRX.cv, 0, 0); }
+    if (TRX.ok && (TRX.vw !== R.cv.width || TRX.vh !== R.cv.height || TRX.cv.width < R.cv.width || TRX.cv.height < R.cv.height)) trxResize();   // 3D 地图的屏外俯视画布与屏幕大小不同：换要画的区域，画布不重建
+    if (TRX.ok) { const w = R.cv.width, h = R.cv.height; trxDraw(time, flash); ctx.drawImage(TRX.cv, 0, TRX.cv.height - h, w, h, 0, 0, w, h); }   // 画在画布左下角
     else { ctx.fillStyle = '#05101a'; ctx.fillRect(0, 0, R.cv.width, R.cv.height); worldTf(ctx); trxFallback(ctx); }
   } else {
     if (!MX.tried) { mxInit(); if (MX.ok) mxResize(); }
