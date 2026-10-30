@@ -82,7 +82,7 @@ float mxRain(vec2 cell, vec2 f, float t, float px) {
 //   河流是暗色水道、两岸亮线，水道里的字符顺流而下；海岸线一道亮光；没看见的地方压暗（战争迷雾）；字符雨照常落下。
 //   单位、标号、箭头、弹坑等仍来自俯视贴图（这时贴图底色是黑的，叠加上去）
 const V3_FS = der => `${der ? '#extension GL_OES_standard_derivatives : enable\n#define DER 1\n' : ''}${V3_PREC}
-uniform sampler2D uTop, uBase, uCls, uCls2, uFogT, uHt, uLf, uTopF, uLm; uniform vec4 uBox, uBoxF; uniform vec2 uWorld, uGrid, uHG; uniform vec2 uFog; uniform float uSea, uT, uMx, uLmOn; uniform vec3 uBg;
+uniform sampler2D uTop, uBase, uCls, uCls2, uFogT, uHt, uLf, uTopF; uniform vec4 uBox, uBoxF; uniform vec2 uWorld, uGrid, uHG; uniform vec2 uFog; uniform float uSea, uT, uMx, uLmOn; uniform vec3 uBg;
 uniform sampler2D uDg, uDf, uDr, uDs; uniform float uDet;   // 写实地表细节贴图（ambientCG，CC0）：草地、林下地面、岩石、沙滩
 uniform sampler2D uCls3, uSky, uWn; uniform float uSkyOn, uSkyU, uWnOn;   // 水深分类（浅滩、礁石、近岸）、天空图（海面反射）、水面法线贴图（three.js 示例，MIT）
 varying vec3 vP, vN, vV; varying float vD;
@@ -314,7 +314,7 @@ void main() {
   c += vec3(.16, 1., .5) * r * mix(.5, .26, land) + vec3(.6, 1., .8) * max(r - 1., 0.) * .3;
   if (land < .5) c += vec3(.02, .1, .07) * (.5 + .5 * sin(w.y * .35 - uT * 3.)) * .45;   // 海面扫描线
   // 光影（v3light.js 烘焙的光照贴图）：R 投影、G 环境光遮蔽、B 近岸浅水；再按桌子上方那盏灯的远近压暗四周
-  vec3 lm = uLmOn > .5 ? texture2D(uLm, cu).rgb : vec3(1., 1., 0.);
+  vec3 lm = uLmOn > .5 ? texture2D(uDg, cu).rgb : vec3(1., 1., 0.);   // 光照贴图借用细节贴图的采样器（同在第 9 个单元，黑绿画面不用细节贴图）：采样器总数压在 16 个以内，多数显卡只支持 16 个
   float lampR = length((w - uWorld * .5) / (uWorld * .5));
   c *= mix(.3, 1., lm.r) * mix(.45, 1., lm.g) * (.72 + .28 * (1. - smoothstep(.55, 1.5, lampR)));
   c += boomLight(w) * (.3 + .7 * lit);   // 爆炸火光照亮周围的地面
@@ -955,8 +955,9 @@ function v3Init() {
     const mk = (unit, filt) => { const t = gl.createTexture(); gl.activeTexture(gl.TEXTURE0 + unit); gl.bindTexture(gl.TEXTURE_2D, t); for (const [p, v] of [[gl.TEXTURE_MIN_FILTER, filt], [gl.TEXTURE_MAG_FILTER, filt], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D, p, v); return t; };
     Object.assign(V3, { gl, cv, pr, u, a, tex: mk(0, gl.LINEAR), base: mk(1, gl.LINEAR), cls: mk(2, gl.LINEAR), cls2: mk(3, gl.LINEAR), fog: mk(4, gl.LINEAR), ht: mk(5, gl.NEAREST), lf: mk(6, gl.LINEAR), texF: mk(7, gl.LINEAR), topF: document.createElement('canvas'), u32: !!gl.getExtension('OES_element_index_uint'), top: document.createElement('canvas'), coarse: V3.coarse ?? (typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches), maxTex: Math.min(4096, gl.getParameter(gl.MAX_TEXTURE_SIZE) || 2048), ok: true });
     gl.useProgram(pr);
-    gl.uniform1i(u.uTop, 0); gl.uniform1i(u.uBase, 1); gl.uniform1i(u.uCls, 2); gl.uniform1i(u.uCls2, 3); gl.uniform1i(u.uFogT, 4); gl.uniform1i(u.uHt, 5); gl.uniform1i(u.uLf, 6); gl.uniform1i(u.uTopF, 7); gl.uniform1i(u.uLm, lmU);
+    gl.uniform1i(u.uTop, 0); gl.uniform1i(u.uBase, 1); gl.uniform1i(u.uCls, 2); gl.uniform1i(u.uCls2, 3); gl.uniform1i(u.uFogT, 4); gl.uniform1i(u.uHt, 5); gl.uniform1i(u.uLf, 6); gl.uniform1i(u.uTopF, 7);
     const tu = gl.getParameter(gl.MAX_TEXTURE_IMAGE_UNITS);
+    gl.uniform1i(u.uDg, lmU);
     if (tu >= 14) { gl.uniform1i(u.uDg, 8); gl.uniform1i(u.uDf, 9); gl.uniform1i(u.uDr, 10); gl.uniform1i(u.uDs, 11); gl.uniform1i(u.uCls3, 12); gl.uniform1i(u.uSky, 13); }
     if (tu >= 15) gl.uniform1i(u.uWn, 14);
     V3.wn = tu >= 15 ? { ok: false } : null;
@@ -964,7 +965,7 @@ function v3Init() {
     V3.cls3 = tu >= 14 ? mk(12, gl.LINEAR) : null;
     V3.aniso = gl.getExtension('EXT_texture_filter_anisotropic') || gl.getExtension('WEBKIT_EXT_texture_filter_anisotropic'); V3.anMax = V3.aniso ? Math.min(8, gl.getParameter(V3.aniso.MAX_TEXTURE_MAX_ANISOTROPY_EXT) || 1) : 1;
     gl.enable(gl.DEPTH_TEST);
-  } catch (e) { V3.ok = false; console.warn('3D 地图不可用', e); }
+  } catch (e) { V3.ok = false; console.warn('3D 地图不可用', e); if (typeof log === 'function') log('3D 地图在这台设备上打不开（显卡着色器出错）：' + String(e && e.message || e).slice(0, 160), 'bad', 'v3err', 8); }
 }
 
 // —— 3D 镜头：自由镜头（V3.fc）——镜头本身就是一个在战场上空自由移动的视点：位置 (x, y, z) + 偏航 yaw（0 朝东、π/2 朝南）+ 俯仰 pitch（向上为正）。
