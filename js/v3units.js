@@ -1271,7 +1271,7 @@ function v3mCollect(C, box) {
     const tu = sd && o.toT != null ? S.t - o.toT : -1;   // 机场起飞刚离地（eair.js eaRoll 记的离地时刻）：头 1.5 秒保持滑跑末段抬起的机头，起落架过几秒再收
     if (tu >= 0 && tu < 3) pt = Math.max(pt, V3_ROT * (1 - sm01((tu - 1.5) / 1.5)));
     const gd = !!(L && L.gear) || (tu >= 0 && tu < (typeof EA_TO === 'object' ? EA_TO.gear : 4));
-    if (typeof v3gPlane === 'function') v3gPlane(key, sz, x, y, z, false, hd || 0, sd, bank || 0, pt, gd, t);   // 用户给的飞机模型（js/v3g.js）：起落架收放、直升机旋翼转
+    if (typeof v3gPlane === 'function') v3gPlane(key, sz, x, y, z, false, hd || 0, sd, bank || 0, pt, gd, t, !sd && typeof fpNoz === 'function' ? fpNoz(o) : 0);   // 用户给的飞机模型（js/v3g.js）：起落架收放、直升机旋翼转、玩家开着的那架尾喷口随推力开合
   };
   for (const p of S.planes || []) if (!p.dead && isFinite(p.x) && (inB(p.x, p.y, 220) || (typeof fpDriving === 'function' && fpDriving(p))) && !(!p.land && (p.phase === 'cat' || p.phase === 'roll' || p.phase === 'trap'))) {   // 甲板上的在航母那里画（放下起落架）
     const key = typeof airSilKey === 'function' ? airSilKey(p.kind, p.v) : 'j35', sz = (typeof airMdl === 'function' && airMdl(p.kind, p.v).size) || ((typeof AIR_SPEC === 'object' && AIR_SPEC[p.kind]) || {}).size || 15;
