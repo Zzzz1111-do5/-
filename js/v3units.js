@@ -972,7 +972,7 @@ function v3mGet(key, build) {
 const V3_PIL = .95;   // 飞行员、甲板人员的比例（按飞机的真实比例，比战场上的士兵小）
 const V3_ROT = .14;   // 起飞抬头的仰角（约 8°）
 function v3GroundPlane(key, sz, x, y, ground, hd, fold, cpo, still, side, t, sf, pt = 0) {   // 用户给的飞机模型（js/v3g.js）放下起落架；side 3 / 4：我方 / 敌方飞机
-  if (typeof v3gPlane === 'function') v3gPlane(key, sz, x, y, ground, true, hd, side === 4 || side === 1 ? 1 : 0, 0, pt, true, still ? 0 : t);
+  if (typeof v3gPlane === 'function') v3gPlane(key, sz, x, y, ground, true, hd, side === 4 || side === 1 ? 1 : 0, 0, pt, true, still ? 0 : t, 0, sf);   // sf：挂上弹射杆后的舵面检查（v3det.js v3dDeckSurf）
 }
 // 登陆舰艇的外部精细模型（v3utex.js V3U_SHIP）：舰名前缀 → [模型, 画多长（世界单位）]——LC 726 型气垫艇、LA 271 型登陆艇、LV 人员登陆艇；
 //   其余舰型（072A、074A、073A、072、扫雷舰、火力支援艇）没有合规的免费模型，照旧画自带模型
@@ -1271,7 +1271,8 @@ function v3mCollect(C, box) {
     const tu = sd && o.toT != null ? S.t - o.toT : -1;   // 机场起飞刚离地（eair.js eaRoll 记的离地时刻）：头 1.5 秒保持滑跑末段抬起的机头，起落架过几秒再收
     if (tu >= 0 && tu < 3) pt = Math.max(pt, V3_ROT * (1 - sm01((tu - 1.5) / 1.5)));
     const gd = !!(L && L.gear) || (tu >= 0 && tu < (typeof EA_TO === 'object' ? EA_TO.gear : 4));
-    if (typeof v3gPlane === 'function') v3gPlane(key, sz, x, y, z, false, hd || 0, sd, bank || 0, pt, gd, t, !sd && typeof fpNoz === 'function' ? fpNoz(o) : 0);   // 用户给的飞机模型（js/v3g.js）：起落架收放、直升机旋翼转、玩家开着的那架尾喷口随推力开合
+    const Pc = typeof V3D_PT === 'object' ? V3D_PT.get((sd ? 'e' : 'p') + o.id) : null;   // v3dPitch 按气动算好的舵面：平尾按迎角配平 + 俯仰角速度，左右差动按滚转角速度
+    if (typeof v3gPlane === 'function') v3gPlane(key, sz, x, y, z, false, hd || 0, sd, bank || 0, pt, gd, t, !sd && typeof fpNoz === 'function' ? fpNoz(o) : 0, Pc);   // 用户给的飞机模型（js/v3g.js）：起落架收放、直升机旋翼转、尾喷口开合、舵面偏转
   };
   for (const p of S.planes || []) if (!p.dead && isFinite(p.x) && (inB(p.x, p.y, 220) || (typeof fpDriving === 'function' && fpDriving(p))) && !(!p.land && (p.phase === 'cat' || p.phase === 'roll' || p.phase === 'trap'))) {   // 甲板上的在航母那里画（放下起落架）
     const key = typeof airSilKey === 'function' ? airSilKey(p.kind, p.v) : 'j35', sz = (typeof airMdl === 'function' && airMdl(p.kind, p.v).size) || ((typeof AIR_SPEC === 'object' && AIR_SPEC[p.kind]) || {}).size || 15;
