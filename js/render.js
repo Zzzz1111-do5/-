@@ -185,5 +185,5 @@ function drawScene(now) {
 if (typeof onSettings === 'function') onSettings((key, v, st) => {
   if (!R.cv || (key && key !== 'quality')) return;
   const cap = st && st.quality === 'low' ? 1 : 0;
-  if (cap !== R.dprCap && (cap || R.lowCap)) { R.dprCap = cap; R.lowCap = !!cap; resize(); }
+  if (cap !== R.dprCap && (cap || R.lowCap)) { R.dprCap = cap; R.lowCap = !!cap; R.dprLv = 0; resize(); }
 });

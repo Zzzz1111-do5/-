@@ -119,7 +119,7 @@ void main() {
   vec2 off = vec2(vn(nq), vn(nq + 17.3)) - .5 + (vec2(vn(nr + 3.1), vn(nr + 9.7)) - .5) * .5;   // 大的波纹慢慢滚、小的碎纹抖得快
   vec2 px = off * clamp(560. / vD, 4., 34.) * uSz.y / 1080. * f, uv = (gl_FragCoord.xy + px) / uSz, ca = px * .18 / uSz;   // 错开十几个像素（离得近扭得多），按画面高度缩放
   vec3 c = vec3(texture2D(uTex, uv + ca).r, texture2D(uTex, uv).g, texture2D(uTex, uv - ca).b);   // 一点点色散：热空气的折射边缘
-  float sh = (vn(nr * 1.7 + 5.3) - .5) * .22 * f;   // 折光的明暗闪动
+  float sh = (vn(nr * 1.7 + 5.3) - .5) * .08 * f;   // 折光的明暗闪动（轻一点：成片的海面上原来是一层闪烁的颗粒）
   c *= 1. + sh;
   c += vec3(.05, .025, 0.) * f * f * smoothstep(.35, 0., a) * min(vQ.z, 1.5);   // 喷口附近的热流微微发暖
   gl_FragColor = vec4(c, smoothstep(0., .18, f));
