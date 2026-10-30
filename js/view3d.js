@@ -675,17 +675,27 @@ function v3Mesh() {
   const jMax = TER.pathY ? Math.min(ny - 1, Math.ceil(TER.pathY / d) + 2) : ny - 1;
   for (let j = 0; j <= jMax; j++) for (let i = 0; i < nx; i++) { const p = P(i, j), n = nor(i, j); verts.push(p[0], p[1], p[2], n[0], n[1], n[2]); }
   for (let j = 0; j < jMax; j++) for (let i = 0; i < nx - 1; i++) { const a = j * nx + i, b = a + 1, c = a + nx, e = c + 1; idx.push(a, c, b, b, c, e); }
+  // 远海平面切成约 250 米一格：原来是一整块（几公里长的两个三角形），苹果 M 系列等显卡在这么大的三角形上插值精度不够，
+  //   逐像素算的到镜头距离、视线方向乱跳——海面成一片雾色 / 海色随机交替的方块噪点（软件渲染器精度高，看不出来）
+  const FS = 250, fk = Math.max(1, Math.round(FS / d));
   if (jMax < ny - 1) {
     const s0 = verts.length / 6, zs = hf[jMax * nx], y0 = -jMax * d, y1 = -(ny - 1) * d, x1 = (nx - 1) * d;
-    for (const [x, y] of [[0, y0], [x1, y0], [0, y1], [x1, y1]]) verts.push(x, y, zs, 0, 0, 1);
-    idx.push(s0, s0 + 2, s0 + 1, s0 + 1, s0 + 2, s0 + 3);
+    const cx = Math.max(1, Math.ceil(x1 / FS)), cy = Math.max(1, Math.ceil((y0 - y1) / FS));
+    for (let j = 0; j <= cy; j++) for (let i = 0; i <= cx; i++) verts.push(x1 * i / cx, lerp(y0, y1, j / cy), zs, 0, 0, 1);
+    for (let j = 0; j < cy; j++) for (let i = 0; i < cx; i++) { const a = s0 + j * (cx + 1) + i, b = a + 1, c = a + cx + 1, e = c + 1; idx.push(a, c, b, b, c, e); }
   }
-  // 围边：沿四条边走一圈，每个边点一上一下两个顶点（远海那一段只取端点）
+  // 围边：沿四条边走一圈，每个边点一上一下两个顶点（远海那一段同样约 250 米一个点）
   const ring = [];
   for (let i = 0; i < nx; i++) ring.push([i, 0]);
   for (let j = 1; j <= jMax; j++) ring.push([nx - 1, j]);
-  if (jMax < ny - 1) ring.push([nx - 1, ny - 1], [0, ny - 1], [0, jMax]);
-  else for (let i = nx - 2; i >= 0; i--) ring.push([i, ny - 1]);
+  if (jMax < ny - 1) {
+    for (let j = jMax + fk; j < ny - 1; j += fk) ring.push([nx - 1, j]);
+    ring.push([nx - 1, ny - 1]);
+    for (let i = nx - 1 - fk; i > 0; i -= fk) ring.push([i, ny - 1]);
+    ring.push([0, ny - 1]);
+    for (let j = ny - 1 - fk; j > jMax; j -= fk) ring.push([0, j]);
+    ring.push([0, jMax]);
+  } else for (let i = nx - 2; i >= 0; i--) ring.push([i, ny - 1]);
   for (let j = (jMax < ny - 1 ? jMax : ny - 1) - 1; j > 0; j--) ring.push([0, j]);
   ring.push([0, 0]);
   const base = verts.length / 6;
@@ -1266,6 +1276,8 @@ function v3Proj(x, y, z) {
 // 立在地形上方的标识（屏幕空间，不随透视变形）：据点旗杆与菱形、战斗群北约标号、飞机按高度悬空并向地面引垂线
 function v3Overlay(ctx, time) {
   ctx.save(); ctx.setTransform(R.dpr, 0, 0, R.dpr, 0, 0);
+  // 坐在飞机座舱里（v3pilot.js）：地名、方格号、番号牌会透过仪表板画在上面——只画平显
+  if (typeof V3FP === 'object' && V3FP.on && V3FP.k === 'air' && V3FP.vw === 'cock') { if (typeof v3fpOverlay === 'function') v3fpOverlay(ctx); ctx.restore(); return; }
   ctx.lineCap = 'round'; ctx.font = '11px "IBM Plex Mono", "Noto Sans SC", monospace'; ctx.textAlign = 'center';
   const near = CAM.z / CAM.fit > 2.2, spec = specAll() || R.eye === 'all', used = [];
   if (typeof v3TableMarks === 'function') v3TableMarks(ctx);   // 沙盘桌边框上的方格坐标

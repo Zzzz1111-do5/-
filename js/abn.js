@@ -229,11 +229,11 @@ function abLift() {
   A.sig = A.pfM ? AB.sigPF : AB.sig;
   AB_LOAD.forEach((L, k) => {
     const x = clamp(A.ax + (k % 2 ? 26 : -26), 40, W - 40), y = H + 60 + k * 75;
-    const p = { id: S.nid++, kind: 'transport', ab: 'drop', x, y, heading: -Math.PI / 2, spd: 150, alt: .55, bank: 0, phase: 'in', tx: dz.x + (k % 2 ? 14 : -14), ty: dz.y, cx: dz.x, cy: dz.y, ox: 1, dropped: false, flares: AB.flares };
+    const p = { id: S.nid++, kind: 'transport', ab: 'drop', x, y, heading: -Math.PI / 2, spd: 75, alt: .55, bank: 0, phase: 'in', tx: dz.x + (k % 2 ? 14 : -14), ty: dz.y, cx: dz.x, cy: dz.y, ox: 1, dropped: false, flares: AB.flares };
     S.planes.push(p);
     A.tr.push({ id: p.id, k, co: L.co, sq: L.sq.slice(), veh: (L.veh || []).slice(), cr: L.crates || 0, done: false, gone: false });
   });
-  const sec = Math.round((H + 60 - dz.y) / 150);
+  const sec = Math.round((H + 60 - dz.y) / 75);   // 伞降进场约 75 米 / 秒（真实空投速度）
   log(`空降兵连：4 架运-20 从海上进场，约 ${sec} 秒后在 ${gridRef(dz.x, dz.y)} 伞降`, 'info', null, 0, dz);
   if (abAI()) { const how = abPrep(abAF(), true); if (how.length) abSay('p', `命令：运输机进场前，${how.join('、')}压制机场守敌，让他们抬不起头打运输机、冲空降场。`, { kind: 'order', at: abAF(), lv: 1 }); }
 }
@@ -357,7 +357,7 @@ function abRwy(b) {
 }
 function abAlLaunch(k) {
   const b = S.abBase, R0 = abRwy(b), L = AB_AL[k];
-  const p = { id: S.nid++, kind: 'transport', ab: 'land', alk: k, x: clamp(R0.fix.x + gauss() * 40, 40, W - 40), y: H + 60, heading: -Math.PI / 2, spd: 150, alt: .5, bank: 0, phase: 'app', tx: R0.fix.x, ty: R0.fix.y, ox: 1, t0: S.t, flares: AB.flares };
+  const p = { id: S.nid++, kind: 'transport', ab: 'land', alk: k, x: clamp(R0.fix.x + gauss() * 40, 40, W - 40), y: H + 60, heading: -Math.PI / 2, spd: 120, alt: .5, bank: 0, phase: 'app', tx: R0.fix.x, ty: R0.fix.y, ox: 1, t0: S.t, flares: AB.flares };
   S.planes.push(p);
   S.ab.alOn = p.id;
   log(`运-20 机降：载${L.nm}，向机场进近`, 'info', null, 0, { x: b.x, y: b.y });
@@ -444,7 +444,7 @@ function abPlaneFly(p, dt, speed) {
   if (p.afPh === 'fin') {
     if (!abAfOpen()) { p.afPh = null; return false; }
     const [tx, ty] = eaW(b, R0.u0, 0), d = dist(p.x, p.y, tx, ty);
-    speed(110); p.alt = Math.max(.02, Math.min(p.alt, d / 380));
+    speed(72); p.alt = Math.max(.02, Math.min(p.alt, d / 380));   // 运-20 进近约 260 km/h
     airSteer(p, tx, ty, dt, true);
     if (d < 18) { p.afPh = 'roll'; p.ru = R0.u0; p.alt = 0; }
     return true;

@@ -14,7 +14,7 @@
 //    潜艇发射鱼雷后暴露 20 秒，800 内的驱逐舰都能还击。没有驱逐舰护航的航母，潜艇几乎没人管
 // 状态（纯 JSON）：S.asea = { t, ships: [{k, id, x, y, nm, v}] } · S.subs = [潜艇] · S.torps = [鱼雷] · S.asP8 = { n 剩余架数, next 下一架起飞时刻 }
 const AS = {
-  p8: { r: 1500, upd: 8, err: 60, alt: .8, spd: 150, hp: 2, gap: 240, orbit: 260 },
+  p8: { r: 370000, upd: 8, err: 60, alt: .8, spd: 200, hp: 2, gap: 240, orbit: 260 },   // r：AN/APY-10 对海搜索雷达约 370 公里（真实距离，整个战场都在探测范围内）；spd 巡逻速度约 720 km/h
   ty: { salvo: 4, every: .5, gap: 45, n: 16, spd: 230, dmg: 6 },
   ssn: { spd: 7, dash: 13, sonar: 1300, fire: 460, torps: 12, salvo: 4, reload: 80, hp: 2, tspd: 50, tlife: 22, dmg: 9, expose: 20 },
   asw: { r: 380, pd: .2, cd: 12, pk: .45, rx: 800 }

@@ -7,7 +7,7 @@
 // 状态：S.airw = { v1, v 制空权 −1..1, st 'p' | 'e' | 'c' | null, k: {p, e} 空战击落数, seenP / seenE 最近发现对方飞机的时刻, thT, lnE, said }
 const AW_RNG = 700, AW_CAP = 160, AW_LEASH = 950;   // 拦截搜索半径 · 巡逻圈半径 · 目标离巡逻中心多远就不再追（不被诱离防区）
 const AW_PK = { fighter: .42, ftr: .42, ftrb: .42, f22: .36, transport: .65, recon: .62, strike: .55, cas: .55, ga: .55, bomber: .6, heli: .5, c17: .65 };   // 空空导弹单发命中率（干扰弹另算）
-// 守方歼击机按型号的挂载与实力：aam 空空导弹数、aamR 射程、pkK 命中修正、gun 机炮、radar 机载雷达发现距离、pw 制空权实力（在空 / 地面待命）
+// 守方歼击机按型号的挂载与实力：aam 空空导弹数、aamR 射程、pkK 命中修正、gun 机炮、radar 火控锁定 / 交战距离（发现敌机按真实雷达距离，见 awSeen）、pw 制空权实力（在空 / 地面待命）
 const EA_FTR = { ftr: { aam: 4, aamR: 480, pkK: 1.1, gun: 30, radar: 520, pw: 1.25, pw0: .35 },   // F-35A：4 枚 AIM-120D
   ftrb: { aam: 2, aamR: 480, pkK: 1.1, gun: 25, radar: 520, pw: 1, pw0: .3, sdb: 4 },   // F-35B：弹舱小一些，2 枚 AIM-120D + 4 枚 GBU-53/B 小直径炸弹，机炮吊舱
   f22: { aam: 8, aamR: 520, pkK: 1.25, gun: 40, gunK: 1.3, radar: 640, pw: 1.75, pw0: .5 } };   // F-22A：6 枚 AIM-120D + 2 枚 AIM-9X，AN/APG-77 雷达
@@ -26,15 +26,17 @@ function awFoes(side) {
   else if (S.eair) for (const a of S.eair.fly) if (!a.dead && a.alt > .1 && !['gnd', 'roll', 'land', 'final'].includes(a.ph)) out.push({ o: a, k: 'eair', type: a.type, x: a.x, y: a.y, ftr: eaFtr(a.type), st: eaStl(a) });
   return out;
 }
-// side 方是否发现了 (x, y) 处的飞机：进攻方 = 视野、战斗机机载雷达 520、驱逐舰 720、航母 600；守方 = 视野、雷达站 820、歼击机 520（F-22A 640）、机场 450、沙盒雷达站
+// side 方是否发现了 (x, y) 处的飞机：进攻方 = 视野、机载雷达、驱逐舰 720、航母 600；守方 = 视野、雷达站 820、歼击机机载雷达、机场 450、沙盒雷达站
+//   机载雷达按真实世界的探测距离（carrier.js AIR_REAL：歼-20 约 210 公里、歼-35 约 170、空警-600 约 450、F-35A 约 150、F-22A 约 200）——
+//   比整个战场大得多，升空的战斗机、预警机看得见全场的飞机（隐身只是把距离打折）；锁定、发射还按 awFight 里的火控距离
 // st：目标的隐身系数（F-22A 0.3、歼-20 0.35、歼-35 0.4、F-35A 0.45……）——雷达发现距离乘 st × 1.2（不超过原距离），目视发现不受影响
 function awSeen(side, x, y, st = 1) {
   const k = Math.min(1, st * 1.2);
   if (side === 'p') {
     if (inVision(x, y)) return true;
     const aew = awAew();
-    if (aew && dist(aew.x, aew.y, x, y) < 900 * k) return true;   // 空警-600 预警机
-    for (const p of S.planes || []) if (!p.dead && p.kind === 'fighter' && p.alt > .3 && dist(p.x, p.y, x, y) < (p.radar || 520) * (aew ? 1.25 : 1) * k) return true;   // 歼-36 雷达 900；预警机引导时战斗机发现距离 +25%
+    if (aew && dist(aew.x, aew.y, x, y) < (airRdrM('recon', aew.v) || 450e3) * k) return true;   // 空警-600 预警机
+    for (const p of S.planes || []) if (!p.dead && p.alt > .3 && (p.kind === 'fighter' || p.kind === 'strike') && dist(p.x, p.y, x, y) < airRdrM(p.kind, p.v) * k) return true;   // 战斗机、歼-35 / 歼-15T / 歼-16D 的火控雷达
     if (typeof msDefShips === 'function') for (const s of msDefShips()) if (dist(s.x, s.y, x, y) < 720 * k) return true;
     if (typeof cvAll === 'function') for (const c of cvAll()) if (c.hp > 0 && dist(c.x, c.y, x, y) < 600 * k) return true;
     return false;
@@ -42,7 +44,7 @@ function awSeen(side, x, y, st = 1) {
   if (spotted(x, y)) return true;
   const rd = typeof radarUp === 'function' ? radarUp() : null;
   if (rd && dist(rd.x, rd.y, x, y) < 820 * k) return true;
-  if (S.eair) for (const a of S.eair.fly) if (!a.dead && eaFtr(a.type) && a.alt > .2 && dist(a.x, a.y, x, y) < EA_FTR[a.type].radar * k) return true;
+  if (S.eair) for (const a of S.eair.fly) if (!a.dead && eaFtr(a.type) && a.alt > .2 && dist(a.x, a.y, x, y) < airRdrM(a.type) * k) return true;   // F-35 的 AN/APG-81、F-22A 的 AN/APG-77（真实探测距离）
   if (typeof eaBases === 'function') for (const b of eaBases()) if (dist(b.x, b.y, x, y) < 450 * k) return true;
   for (const o of S.sbxObs || []) if (!o.dead && o.kind === 'e_radar' && dist(o.x, o.y, x, y) < o.r * 1.4 * k) return true;
   if (typeof afdRadarSees === 'function' && afdRadarSees(x, y, k)) return true;   // 机场雷达站（afdef.js）
