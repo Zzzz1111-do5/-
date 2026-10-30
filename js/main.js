@@ -1,5 +1,5 @@
 'use strict';
-// 主循环与启动；字符解码动效与页面背景数码雨
+// 主循环与启动；字符解码动效
 function decode(el, text, dur) {
   const t0 = performance.now(), chars = [...text];
   const f = now => {
@@ -71,9 +71,9 @@ function start(data) {
   $('brief').hidden = !!S.briefed;
   new ResizeObserver(() => resize()).observe($('stage'));
   updateVision(); updateHud();
-  bgRain();
   // 开始界面；热重载恢复的对局直接继续
   if (typeof showMenu === 'function') { if (hot && !S.attract) MENU.game = true; else { $('brief').hidden = true; showMenu(); } }
+  if (typeof platBoot === 'function') platBoot();   // 电脑版 / 安卓版的接入：返回键、全屏、首次打开的协议确认（platform.js）
   requestAnimationFrame(frame);
 }
 

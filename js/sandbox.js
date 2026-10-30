@@ -92,6 +92,7 @@ const sbxLandOk = (x, y) => { const t = typeAt(x, y); return !isWater(t) && t !=
 function sbxCheck(c, x, y, x2, y2, ignore) {
   if (!c) return { ok: false, why: '未知条目' };
   const s = c.spawn, bad = why => ({ ok: false, why });
+  if (typeof lvAllow === 'function' && !lvAllow(c)) return bad(S.lv.kind === 'naval' ? '海战关只部署舰艇、航空兵与远程火力' : '陆战关不需要登陆舰艇');   // 闯关按关卡类型限制兵种（levels.js）
   if (S.lv && S.lv.isle && c.id === 'e_101') return bad('架空海岛战役：守方不编入真实部队番号');
   if (s.kind === 'veh' && !sbxVehOk()) return bad('装甲车辆模块未加载');
   let cost = c.cost;
@@ -182,6 +183,7 @@ function sbxCheck(c, x, y, x2, y2, ignore) {
   if (s.minDepth && coastAt(x) - y < s.minDepth) return bad(`须放在离海岸 ${s.minDepth} 以外的纵深`);
   if (s.ek === 'airfield' && typeof eaRunwayFit === 'function' && !eaRunwayFit(x, y, 380, sbxAirAvoid(ignore))) return bad('这里放不下机场：920 米跑道与约 1100 × 800 的场区都要落在平整的陆地上（不跨水、河、悬崖、山地），也不能压在据点或其他工事上');
   if ((s.kind === 'enemy' || s.kind === 'post') && s.ek !== 'airfield' && sbxOnAirfield(x, y, ignore)) return bad('不能压在机场的跑道、滑行道、停机坪、机库群、油库或弹药库上');
+  if (s.kind === 'enemy' && (s.ek === 'bunker' || s.ek === 'coastal')) { const sl = groundSlope(x, y); if (sl > SLOPE_MAX) return bad(`${s.ek === 'coastal' ? '炮台' : '碉堡'}是整块浇筑的混凝土工事，要建在平地上：这里坡度约 ${Math.round(sl)}°（不能超过 ${SLOPE_MAX}°）`); }
   if (s.kind === 'enemy' || s.kind === 'post') {
     if (S.sbx.items.some(it => it !== ignore && it.side === 'e' && it.x != null && ['enemy', 'post'].includes(sbxEntry(it).spawn.kind) && dist(it.x, it.y, x, y) < 12)) return bad('与其他工事重叠');
   }
@@ -670,7 +672,7 @@ function sbxAIAttackBase(mi, fi) {
   let smoke = 0;
   if (dd) for (let i = 0; i < (k >= 1.3 ? 2 : 1); i++) if (sbxPlace('p_smoke').ok) smoke += 3;
   const relay = B0 >= 1150 && sbxPlace('p_relay').ok;
-  if (cv) { buyAir('p_air_strike', 'strike'); if (k >= 1.2) buyAir('p_air_ftr_adv', 'strike'); if (k >= 1.3) buyAir('p_air_dive', 'bomber'); buyAir('p_air_fb', 'cas'); }
+  if (cv) { buyAir('p_air_strike', 'strike'); if (k >= 1.2) buyAir('p_air_ftr_adv', 'strike'); if (k >= 1.1) buyAir('p_air_ew', 'strike'); if (k >= 1.3) buyAir('p_air_dive', 'bomber'); buyAir('p_air_fb', 'cas'); }
   const depot = B0 >= 1400 && sbxPlace('p_depot').ok;
   const para = B0 >= 2500 && sbxPlace('p_para').ok, drop = B0 >= 1800 && sbxPlace('p_airdrop').ok;
   if (B0 >= 1600) { sbxPlace('p_reserve'); sbxPlace('p_rline'); }
@@ -1112,7 +1114,7 @@ function sbxRkTargets(s, tx, cy) {
 // 火箭艇、火力支援艇、扫雷舰
 function sbxFireShips(dt) {
   for (const s of S.ships) {
-    if (!s.sbxRole || !alive(s)) continue;
+    if (!s.sbxRole || !alive(s) || (typeof fpDriving === 'function' && fpDriving(s))) continue;   // 玩家亲自开着（v3pilot.js）
     const st = s.sbxS || (s.sbxS = { n: 0, cd: 0, go: 0, sw: 0 });
     if (!s.sbxTgt && st.go === 0) { st.tx = sbxMainX(); if (st.tx == null && S.t < 8) continue; }   // 未指定目标：等指挥官定下主攻滩头，随主攻方向出击
     const tx = s.sbxTgt ? s.sbxTgt.x : st.tx ?? sbxBeachOf(s.x).cx, b = sbxBeachOf(tx), cy = coastAt(tx);
@@ -1556,6 +1558,7 @@ function sbxUI() {
       if (v < sp) sbxMsg(`已部署 ${sp} 点，预算不能低于此`, true); else S.sbx.budget[SBX.side] = v;
     }
     else if (a === 'preset') { const b0 = S.sbx.budget[SBX.side]; if (SBX.side === 'e') sbxPresetDef(); else sbxPresetFleet(); sbxMsg(`已载入标准部署（${sbxSpent(SBX.side)} 点）` + (S.sbx.budget[SBX.side] > b0 ? `，预算已调至 ${S.sbx.budget[SBX.side]}` : '')); }
+    else if (a === 'ai' && S.lv && SBX.side === 'p' && typeof lvAIAttack === 'function') sbxMsg(lvAIAttack(SBX.sty.p));   // 闯关：按关卡类型部署（levels.js）
     else if (a === 'ai') { const st = SBX.sty[SBX.side], r = SBX.side === 'e' ? sbxAIDefend(st) : sbxAIAttack(st, SBX.dir.main, SBX.dir.feint); sbxMsg(SBX.side === 'e' ? `「${SBX_STY.e[st].nm}」部署完毕；判断敌主攻方向：${r.join('、')}` : `「${SBX_STY.p[st].nm}」部署完毕：主攻${r.main}${r.feint ? '，佯攻' + r.feint : '，不佯攻'}`); }
     else if (a === 'clear') { sbxClear(SBX.side); sbxMsg('已清空' + (SBX.side === 'e' ? '防守方' : '进攻方')); }
     else if (a === 'save') { const ok = sbxSaveNow(); sbxMsg(ok ? `已保存：${sbxSaves()[0].name}（双方部署、预算与地图）` : '已保存在本页（浏览器存储不可用，刷新后会丢失）', !ok); sbxSavesShow(true); }
@@ -1659,13 +1662,15 @@ function sbxPick(id) {
 function sbxInfo(c) {
   if (!SBX.el) return;
   const box = SBX.el.querySelector('.sbx-info');
-  if (!c) { box.innerHTML = `<p class="h">从目录中选择一种兵力，然后在地图上放置。${SBX.side === 'p' ? '步兵与非两栖车辆须装载到登陆舰上。' : ''}</p>`; return; }
+  if (!c) { box.innerHTML = `<p class="h">从目录中选择一种兵力，然后在地图上放置。${SBX.side !== 'p' ? '' : S.lv && S.lv.kind === 'ground' ? '陆战关：步兵、车辆直接放在滩头阵地里（海岸线以北的虚线区）。' : S.lv && S.lv.kind === 'naval' ? '海战关：只部署舰艇、航空兵与远程火力。' : '步兵与非两栖车辆须装载到登陆舰上。'}</p>`; return; }
   const arch = typeof ARCH_NAMES === 'object' ? ARCH_NAMES[c.arch] || '' : '', cost = c.spawn.at === 'line' ? `${c.spawn.per} 点 / 100 长` : `${c.cost} 点`;
   const ld = typeof ctLoadHtml === 'function' ? ctLoadHtml(c, sbxEsc) : '';
   box.innerHTML = `<b>${sbxEsc(c.name)}</b><em>◆ ${cost}</em><span class="h"> · ${sbxEsc(arch)}</span><p>${sbxEsc(c.desc)}</p>${ld ? `<details class="sbx-ld"><summary>挂载与参数</summary>${ld}</details>` : ''}<p class="h">${sbxEsc(SBX_AT[c.spawn.at] || '')}</p>`;
 }
 function sbxRender() {
   if (!SBX.el || !S || !S.sbx || typeof document === 'undefined') return;
+  if (S.lv) SBX.side = 'p';   // 闯关：只部署进攻方，守方由 AI 布好、看不到
+  if (typeof lvPanel === 'function') lvPanel(SBX.el);
   const el = SBX.el, side = SBX.side, q = s => el.querySelector(s);
   el.classList.toggle('e', side === 'e'); el.classList.toggle('p', side === 'p');
   q('.sbx-seed').textContent = `SEED ${S.seed}`;
@@ -1678,7 +1683,7 @@ function sbxRender() {
   const cats = SBX_CATS[side];
   if (SBX.cat !== 'all' && !cats.includes(SBX.cat)) SBX.cat = 'all';
   q('.sbx-cats').innerHTML = ['all', ...cats].map(k => `<button type="button" class="${SBX.cat === k ? 'on' : ''}" data-cat="${k}">${k === 'all' ? '全部' : CAT_NAMES[k]}</button>`).join('');
-  const pal = CATALOG.filter(c => (c.side === side || c.side === 'both') && (SBX.cat === 'all' || c.cat === SBX.cat) && !(c.id === 'e_airfield' && TER.af));   // 地图自带空军基地：不再出售
+  const pal = CATALOG.filter(c => (c.side === side || c.side === 'both') && (SBX.cat === 'all' || c.cat === SBX.cat) && !(c.id === 'e_airfield' && TER.af) && (typeof lvAllow !== 'function' || lvAllow(c)));   // 地图自带空军基地：不再出售；闯关按关卡类型过滤（levels.js）
   const left = bud - sp;
   q('.sbx-pal').innerHTML = pal.map(c => {
     const na = c.spawn.kind === 'veh' && !sbxVehOk(), cost = c.spawn.at === 'line' ? c.spawn.per + '/百' : c.cost;

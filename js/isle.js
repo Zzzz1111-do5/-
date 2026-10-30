@@ -166,7 +166,7 @@ function isleDefend() {
 }
 // 余款：多开一条增援线、编后备步兵（滩头站稳后经增援线陆续上岸），再加几艘驱护舰（南边集结海域）和舰载机（航母机库装得下为止）——
 //   各有上限，不为花光预算堆舰堆机（舰船、飞机多了推演也慢）；剩下的点数留给玩家自己加
-const ISLE_TOP = [['p_rline', 1], ['p_reserve', 12], ['p_lci', 4], ['p_dd_h', 2], ['p_cl', 1], ['p_dd_e', 1], ['p_air_ftr', 4], ['p_air_strike', 4], ['p_air_ftr_adv', 2], ['p_air_heavy', 2]];   // p_lci：第二梯队登陆舰（各载一个加强排），滩头出口夺取后再靠岸
+const ISLE_TOP = [['p_rline', 1], ['p_reserve', 12], ['p_lci', 4], ['p_dd_h', 2], ['p_cl', 1], ['p_dd_e', 1], ['p_air_ftr', 4], ['p_air_strike', 4], ['p_air_ftr_adv', 2], ['p_air_ew', 1], ['p_air_heavy', 2]];   // p_lci：第二梯队登陆舰（各载一个加强排），滩头出口夺取后再靠岸
 function isleTopUp() {
   let n = 0, k = 0;
   for (const [id, cap] of ISLE_TOP) for (let i = 0; i < cap && sbxLeft('p') >= 60; i++) {

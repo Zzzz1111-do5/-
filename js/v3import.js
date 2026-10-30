@@ -80,6 +80,6 @@ function v3imParse(buf) {
 // 设置面板里的「素材致谢」
 function v3imCredits() {
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
-  const all = [...Object.values(V3IM_LIST), ...(typeof V3U_LIST === 'object' ? Object.values(V3U_LIST) : []), ...(typeof V3P_PACKS === 'object' ? Object.values(V3P_PACKS) : []), ...(typeof V3X_CRED === 'object' ? V3X_CRED : [])];   // V3U_LIST：带贴图的坦克装甲车（v3utex.js）；V3X_CRED：js/mdl 的飞机、甲板车辆（tools/sfmodel.js 生成）
-  return all.map(m => `<li>${esc(m.name)}：<a href="${esc(m.url)}" target="_blank" rel="noopener">“${esc(m.title)}”</a> by ${esc(m.author)}，${esc(m.license)}（有改动：格式转换、缩小贴图或减面）</li>`).join('');
+  const all = [...Object.values(V3IM_LIST), ...(typeof V3U_LIST === 'object' ? Object.values(V3U_LIST) : []), ...(typeof V3P_PACKS === 'object' ? Object.values(V3P_PACKS) : []), ...(typeof V3X_CRED === 'object' ? V3X_CRED : []), ...(typeof V3G_CRED === 'object' ? V3G_CRED : [])];   // V3G_CRED：用户给的坦克、飞机、导弹、士兵模型（v3g.js）   // V3U_LIST：带贴图的坦克装甲车（v3utex.js）；V3X_CRED：js/mdl 的飞机、甲板车辆（tools/sfmodel.js 生成）
+  return all.map(m => `<li>${esc(m.name)}：<a href="${esc(m.url)}" target="_blank" rel="noopener">“${esc(m.title)}”</a> by ${esc(m.author)}，${esc(m.license)}${/NC/.test(m.license) ? '（非商用）' : ''}（有改动：格式转换、缩小贴图或减面）</li>`).join('');
 }

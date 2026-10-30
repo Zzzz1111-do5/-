@@ -48,6 +48,49 @@ function gunFlash(ctx, x, y, a, len, k) {   // 炮口焰：k 0–1 随时间衰�
   ctx.fillStyle = rgba(COL.amber, .5 * k); ctx.beginPath(); ctx.ellipse(mx + Math.cos(a) * 3, my + Math.sin(a) * 3, 5 * k + 1, 2.2 * k + .6, a, 0, 7); ctx.fill();
 }
 
+// 转移途中（ai.js relocate）：榴弹炮挂在 6×6 牵引车后面（大架并拢、身管朝后锁定，炮组坐车厢），火箭炮放平发射架自己开，
+//   迫击炮组扛着炮步行；阵地工事留在原地（gunPits 画空阵地）
+function gunMove(ctx, e, x, y, vis, col, dim, dark) {
+  const a = Math.atan2(e.my - e.y, e.mx - e.x);
+  if (e.kind === 'mortar') {
+    if (!R.fig || typeof manDraw !== 'function') { ctx.fillStyle = dark; ctx.strokeStyle = col; ctx.beginPath(); ctx.arc(x, y, 2.2, 0, 7); ctx.fill(); ctx.stroke(); return; }
+    const c = Math.cos(a), s = Math.sin(a), mc = realLook() ? rgba(COL.enemy, .5) : col;
+    [[2.6, -1.2, 'mortar'], [-2.6, 1.2, 'rifle']].forEach(([u, v, k], i) => manDraw(ctx, x + u * c - v * s, y + u * s + v * c, a, k, mc, 'e', { ...MAN_IDLE, mv: true, ph: S.t * 7 + e.id + i * 2.1 }, realLook()));
+    return;
+  }
+  ctx.save(); ctx.translate(x, y); ctx.rotate(a);
+  ctx.fillStyle = dark; ctx.strokeStyle = col; ctx.lineWidth = px(1.2);
+  if (gunRocket(e)) {
+    ctx.fillRect(-10, -3.6, 15, 7.2); ctx.strokeRect(-10, -3.6, 15, 7.2);
+    ctx.fillRect(5, -3, 4.5, 6); ctx.strokeRect(5, -3, 4.5, 6);
+    ctx.fillStyle = dim; for (const [u, v] of [[-8, -4.4], [-3, -4.4], [3, -4.4], [-8, 3.4], [-3, 3.4], [3, 3.4]]) ctx.fillRect(u, v, 2.6, 1);
+    ctx.fillStyle = dark; ctx.fillRect(-9, -2.6, 10, 5.2); ctx.strokeRect(-9, -2.6, 10, 5.2);
+  } else {
+    ctx.fillRect(1, -3.4, 11, 6.8); ctx.strokeRect(1, -3.4, 11, 6.8);   // 篷布货厢
+    ctx.fillRect(12, -3, 4.5, 6); ctx.strokeRect(12, -3, 4.5, 6);   // 驾驶室
+    ctx.fillStyle = dim; for (const u of [3, 7, 13.5]) for (const s of [-1, 1]) ctx.fillRect(u - 1.3, s * 3.9 - .5, 2.6, 1);
+    ctx.lineWidth = px(1.3); ctx.beginPath(); ctx.moveTo(1, -.6); ctx.lineTo(-6, -1.6); ctx.moveTo(1, .6); ctx.lineTo(-6, 1.6); ctx.stroke();   // 并拢的大架挂在车尾
+    ctx.fillStyle = dark; ctx.lineWidth = px(1.1);
+    for (const s of [-1, 1]) { ctx.fillRect(-7.8, s * 4.6 - .9, 3.6, 1.8); ctx.strokeRect(-7.8, s * 4.6 - .9, 3.6, 1.8); }   // 炮轮
+    ctx.beginPath(); ctx.moveTo(-4.5, -4); ctx.quadraticCurveTo(-3, 0, -4.5, 4); ctx.stroke();   // 防盾
+    ctx.lineWidth = 1.7; ctx.lineCap = 'butt'; ctx.beginPath(); ctx.moveTo(-5, 0); ctx.lineTo(-20, 0); ctx.stroke(); ctx.lineCap = 'round';   // 身管朝后
+  }
+  ctx.restore();
+}
+// 空着的发射阵地（主阵地 / 预备阵地里炮不在的那几处）：沙袋环留在原地；看得见那块地才画
+function gunPits(ctx) {
+  if (R.s < .75 || R.m3d) return;
+  const spec = specAll();
+  for (const e of S.enemies) {
+    if (!e.pos || !(typeof gunMobile === 'function' && gunMobile(e))) continue;
+    const mortar = e.kind === 'mortar';
+    for (const p of e.pos) {
+      if (!e.moving && !e.dead && dist(p.x, p.y, e.x, e.y) <= 4) continue;
+      if (!inView(p.x, p.y, 20) || !(spec || inVision(p.x, p.y))) continue;
+      gunSandbags(ctx, p.x, p.y, mortar ? 7 : gunRocket(e) ? 13 : 12, mortar ? null : Math.PI / 2, realLook() ? rlGun().dim : rgba(COL.enemy, .3));
+    }
+  }
+}
 // 主入口：返回 true 表示已按模型绘制（render2.js drawEnemies 调用）
 function gunModel(ctx, e, x, y, vis, time) {
   if (R.s < .75) return false;   // 约 2 倍全图以上才画模型
@@ -62,6 +105,7 @@ function gunModel(ctx, e, x, y, vis, time) {
   if (!vis) ctx.setLineDash([px(2), px(2)]);
   ctx.lineWidth = px(1.2);
   if (e.dead) { gunWreck(ctx, e, x, y, a); ctx.restore(); return true; }
+  if (e.moving && (e.kind === 'arty' || e.kind === 'mortar') && x === e.x && y === e.y) { gunMove(ctx, e, x, y, vis, col, dim, dark); ctx.restore(); return true; }
   if (e.kind === 'coastal') {
     // 圆形混凝土炮台 + 环形炮座 + 旋转炮塔与长炮管
     ctx.fillStyle = real ? rlGun().concrete : 'rgba(2,10,6,.9)'; ctx.strokeStyle = con; ctx.lineWidth = px(3);

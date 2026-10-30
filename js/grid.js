@@ -11,6 +11,8 @@ const FIELDS = new Map();
 // 流场按通行类别分组失效：舰船只看障碍，车辆看障碍与雷区（铁丝网只慢 1.2 倍，不重算），步兵看雷区与铁丝网；地形（炸桥 / 修桥）变了全部重算
 const FGEN = { ship: 0, veh: 0, inf: 0 }, FG_PREV = { m: null, w: null, o: null, t: null, ter: null };
 const fgKey = cls => cls === 'ship' ? 'ship' : cls === 'veh' || cls === 'vehe' || cls === 'amph' ? 'veh' : 'inf';
+// 「能不能走」的版本（连通分量 compOf 用）：只有地形变了（炸桥、修桥）才加——雷区、铁丝网只改代价，滩头障碍只挡几格，都不重算连通
+const FPASS = { ship: 0, veh: 0, inf: 0 };
 
 const inVision = (x, y) => PV[ci(x, y)] === 1;
 const spotted = (x, y) => EV[ci(x, y)] === 1;
@@ -98,6 +100,7 @@ function rebuildForts() {
   if (t || o) FGEN.ship++;
   if (t || o || m) FGEN.veh++;
   if (t || m || w) FGEN.inf++;
+  if (t) { FPASS.ship++; FPASS.inf++; FPASS.veh++; }   // 障碍（滩头几格）发现 / 清除不重算连通：只是局部绕行，流场的代价里照样算
   FG_PREV.m.set(MINEC); FG_PREV.w.set(WIREC); FG_PREV.o.set(OBSC); FG_PREV.t.set(TER.type); FG_PREV.ter = TER;
 }
 
@@ -150,19 +153,23 @@ const nbOff = gw => NB_OFF && NB_OFF.gw === gw ? NB_OFF.o : (NB_OFF = { gw, o: I
 let FBUDGET = 3, FCOUNT = 0;   // FCOUNT：累计重算次数（性能统计）
 const COSTS = new Map();
 let HEAP_N, HEAP_P;
-// 通行代价按地形版本缓存（同一版本内多个流场共用，大地图上省掉每次整图重算）；raid 依赖实时视野，每次重算
-function costArr(cls, gen) {
+// 通行代价按地形版本缓存（同一版本内多个流场共用，大地图上省掉每次整图重算）；raid 依赖实时视野，每次重算。
+//   交战中铁丝网、雷区几乎每秒都在变：同一类别最多每 2.5 秒整寻路带重算一次（raid 每秒），晚两秒生效无所谓——默认大地图上每次重算近五十万格
+const fgNow = () => typeof S === 'object' && S && S.phase === 'battle' && isFinite(S.t) ? S.t : null;
+function costArr(cls, gen, force) {
   let C = COSTS.get(cls);
-  if (!C || C.gen !== gen || cls === 'raid') { C = { gen, a: (C && C.a) || new Float64Array(GW * GH).fill(Infinity) }; for (let k = 0; k < PGN; k++) C.a[k] = stepCost(k, cls); COSTS.set(cls, C); }   // 寻路带以外一直是 Infinity，不再逐格算
+  const now = fgNow(), fresh = C && C.t != null && now != null && now - C.t >= 0 && now - C.t < (cls === 'raid' ? 1 : 2.5);
+  if (!C || (force && C.gen !== gen) || ((C.gen !== gen || cls === 'raid') && !fresh)) { C = { gen, t: now, a: (C && C.a) || new Float64Array(GW * GH).fill(Infinity) }; for (let k = 0; k < PGN; k++) C.a[k] = stepCost(k, cls); COSTS.set(cls, C); }   // 寻路带以外一直是 Infinity，不再逐格算
   return C.a;
 }
-// 连通分量（按通行类别、地形版本缓存，交战中 3 秒内照用）：能不能开到只看两格是否同属一片，不必为了判断可达整图算一遍流场
+// 连通分量（按通行类别缓存）：能不能开到只看两格是否同属一片，不必为了判断可达整图算一遍流场。
+//   只在地形变了（FPASS：炸桥、修桥）时重算——交战中雷区、铁丝网、滩头障碍一直在变，但不影响大片地区连不连通；fresh 参数留着兼容旧调用
 const COMPS = new Map();
 function compOf(cls, fresh) {
-  const gen = FGEN[fgKey(cls)], now = typeof S === 'object' && S && S.phase === 'battle' && isFinite(S.t) ? S.t : null;
+  const gen = FPASS[fgKey(cls)], now = typeof S === 'object' && S && S.phase === 'battle' && isFinite(S.t) ? S.t : null;
   let C = COMPS.get(cls);
-  if (C && (C.gen === gen || (!fresh && now != null && C.t != null && now - C.t >= 0 && now - C.t < 3))) return C.a;
-  const cost = costArr(cls, gen), a = (C && C.a) || new Int32Array(GW * GH), st = HEAP_N;
+  if (C && C.gen === gen) return C.a;
+  const cost = costArr(cls, FGEN[fgKey(cls)], true), a = (C && C.a) || new Int32Array(GW * GH), st = HEAP_N;
   a.fill(0);
   // 内层循环只用局部变量（外层的 let 每次读都要查作用域）；不贴边的格直接按下标偏移取 8 邻格，顺序与 NB 相同、结果不变
   const gw = GW, ph = PGH, OFF = nbOff(gw);
@@ -227,7 +234,7 @@ let AS_STAMP = 0, AS_LAST = 0;   // AS_LAST：上一次 A* 展开了多少格
 // 大地图（寻路带超过 15 万格，比如海岛）每个推演步给 A* 一个总格数预算：大批部队同时上岸时一起要路线，每条最多搜 4 万格，
 //   几十辆车挤在同一步里搜就明显卡顿；预算用完的这一步改走流场（与 A* 搜到上限时的退路一样），默认地图不设预算、行为不变
 let AS_BUD = 0, AS_BUDT = null;
-const AS_STEP = 80000, BIG_PG = 150000;
+const AS_STEP = 120000, BIG_PG = 150000;
 function astar(s, g, cls, maxN = 40000) {
   if (g < 0) return null;
   if (s === g) return [];
@@ -275,7 +282,7 @@ function field(tx, ty, cls) {
   if (ti < 0) return null;
   const key = cls + ti, f = FIELDS.get(key), gen = FGEN[fgKey(cls)], now = typeof S === 'object' && S && S.phase === 'battle' && isFinite(S.t) ? S.t : null;
   // 交战中 3 秒内算过的流场：工事网格又变了也先照用（炮火连连时铁丝网、雷区几乎每秒在变，每变一次就整图重算太卡）
-  if (f && (f.gen === gen || FBUDGET <= 0 || (now != null && f.t != null && now - f.t >= 0 && now - f.t < 3))) { FIELDS.delete(key); FIELDS.set(key, f); return f.d; }
+  if (f && (f.gen === gen || FBUDGET <= 0 || (now != null && f.t != null && now - f.t >= 0 && now - f.t < (PGN > 200000 ? 6 : 3)))) { FIELDS.delete(key); FIELDS.set(key, f); return f.d; }   // 大地图 6 秒
   // 大地图（寻路带超过 15 万格，比如海岛）交战中：这一步的流场预算用完了，新目标的流场留到下一步再算（调用方这一步先直奔目标）——
   //   大批部队同时上岸、各要一张整片寻路带的流场时，挤在一步里算好几张会明显卡顿；默认地图照旧
   if (!f && FBUDGET <= 0 && PGN > BIG_PG && now != null) return null;
@@ -318,7 +325,7 @@ function field(tx, ty, cls) {
 function fieldPut(key, d, gen, now) {
   FIELDS.delete(key);
   FIELDS.set(key, { d, gen, t: now });
-  while (FIELDS.size > 48) FIELDS.delete(FIELDS.keys().next().value);
+  while (FIELDS.size > (GW * GH > 200000 ? 32 : 48)) FIELDS.delete(FIELDS.keys().next().value);
   return d;
 }
 // 流场用桶队列（Dial）：桶宽取略小于最小一步代价，同一个桶里的格先出后出都不会被同桶的格再改小——每格的值都是
@@ -435,7 +442,7 @@ function pathStep(u, tx, ty, cls, fget, look, ahead = 2, off = 30) {
     let p = null, full = true;
     if (cost[i0] !== Infinity && cls !== 'raid') {   // 先看连通、再用 A* 只搜起终点之间的一片；单位站在不可通行格上（被挤进河边等）仍按流场下降走出来
       if (!reachable(u.x, u.y, tx, ty, cls)) { u.fpth = null; return { no: true }; }
-      let mx = 40000;
+      let mx = Math.round(40000 * Math.max(1, PGN / 300000));   // 搜索上限随寻路带放大：默认大地图（8400 × 5600）上远距离路线也尽量用 A*
       const big = PGN > BIG_PG, F = u.asF;
       if (big) {
         if (AS_BUDT !== S.t) { AS_BUDT = S.t; AS_BUD = AS_STEP; }

@@ -87,7 +87,7 @@ function thuPanelClick(e) {
 // 下令：同时选中了上级和它的下级，只对上级下（命令会自己传下去）
 function thuOrder(v) {
   if (!thuCan()) return;
-  const sel = [...THU.sel].map(thF).filter(F => F && F.side === S.ctl);
+  const sel = [...THU.sel].map(thF).filter(F => F && F.side === S.ctl && thRegsOf(F).some(R => thG(R)));
   const top = sel.filter(F => !sel.some(P => P !== F && thuAnc(P, F)));
   if (!top.length) return;
   if (v === 'spear') { THU.pick = THU.pick === 'spear' ? null : 'spear'; THU.key = ''; thuRender(true); return; }
@@ -129,7 +129,7 @@ function thuRows(side) {
   const R = thRoot(side);
   if (!R) return '';
   const out = [], add = F => {
-    if (!thRegsOf(F).length) return;
+    if (!thRegsOf(F).some(R => thG(R))) return;   // 打光的（营下面没兵了）不列
     out.push(thuRow(F));
     if (F.lvl !== 'reg' && THU.open[F.id] !== false) for (const K of thKids(F)) add(K);
   };

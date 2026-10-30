@@ -36,57 +36,6 @@ const V3MS = {
   bomb: { L: 2.3, d: .4, nose: .2, tail: [.03, .45, .3, .22, .1], x: 1 },   // 500 公斤级航弹（尾部十字尾翼）
   pod: { L: 2.6, d: .3, nose: .15, tail: [0, .3, .3, .02, 0] }   // 电子战 / 瞄准吊舱
 };
-// 一片舵面：弹体表面半径 R 处、绕弹轴转 a 角；f = [后缘离弹尾, 根弦, 梢弦, 展长, 后掠]，x0 弹尾
-function v3mFin(M, x0, R, a, f, s) {
-  const [te, cr, ct, sp, sw] = f, c = Math.cos(a), sn = Math.sin(a), P = (x, r) => [x, c * r, sn * r];
-  const r0 = x0 + te, r1 = r0 + cr, t1 = r1 - sw, t0 = t1 - ct;
-  mbQuad(M, P(r0, R * .98), P(r1, R * .98), P(t1, R + sp), P(t0, R + sp), s);
-}
-// 回转体：轮廓 P = [[x, 半径, 这一圈描边], …] 从弹尾到弹头，平滑明暗，只在标了的圈上描亮边（原来每段都描一圈，头部像一道道条纹）；弹尾封一个端面
-function v3mRev(M, P, n, s) {
-  const ring = (x, r) => Array.from({ length: n }, (_, i) => { const a = i / n * 6.2832; return [x, Math.cos(a) * r, Math.sin(a) * r]; });
-  const nrm = (i, k) => { const a = i / n * 6.2832, k0 = Math.max(0, k - 1), k1 = Math.min(P.length - 1, k + 1), dx = P[k1][0] - P[k0][0], dr = P[k1][1] - P[k0][1], l = Math.hypot(dx, dr) || 1; return [-dr / l, Math.cos(a) * dx / l, Math.sin(a) * dx / l]; };
-  for (let k = 0; k + 1 < P.length; k++) {
-    const A = ring(P[k][0], P[k][1]), B = ring(P[k + 1][0], Math.max(P[k + 1][1], .002));
-    for (let i = 0; i < n; i++) {
-      const j = (i + 1) % n;
-      mbTriN(M, A[i], A[j], B[j], nrm(i, k), nrm(j, k), nrm(j, k + 1), s, [0, 0, P[k][2] ? 1 : 0]);
-      mbTriN(M, A[i], B[j], B[i], nrm(i, k), nrm(j, k + 1), nrm(i, k + 1), s);
-    }
-  }
-  const A = ring(P[0][0], P[0][1]);
-  for (let i = 0; i < n; i++) mbTri(M, [P[0][0], 0, 0], A[(i + 1) % n], A[i], Math.abs(s) >= 16 ? s : s * .8, [1, 0, 0], [-1, 0, 0]);
-}
-// 涂装（写实画面直接用；黑绿画面按深浅调暗实体）：多数弹浅灰，舰空导弹白，弹道导弹、便携防空、航弹橄榄绿，隐身巡航弹深灰
-const V3MS_PAINT = { hhq9: '#e4e5e1', hhq16: '#e4e5e1', hhq10: '#e4e5e1', sm6: '#e6e6e2', aim9: '#c9ccce', manpad: '#59603f', tbm: '#57613f', df15: '#57613f', lrasm: '#5c6165', sdb: '#6c7176', nsm: '#7d8388', bomb: '#5e6347', pod: '#80868b' };
-function v3mMslT(key) {
-  const T = V3MS[key] || V3MS.pl15, M = mbNew(), R = T.d / 2, x0 = -T.L / 2, xn = T.L / 2 - T.L * T.nose;
-  const pc = typeof mbRGB === 'function' ? mbRGB(V3MS_PAINT[key] || '#c4c9cd') : 0, sh = v => pc || v;   // 没有 mbRGB（老版本）就照旧用明暗
-  if (T.box) {   // 扁平棱柱弹体（倒角）+ 楔形弹头
-    mbBox(M, x0, xn, -R, R, -R * .7, R * .7, sh(.92), { taper: R * .18 });
-    mbPrism(M, [[xn, -R * .82], [T.L / 2, -R * .15], [T.L / 2, R * .15], [xn, R * .82]], -R * .5, R * .5, sh(.92), { taper: R * .1 });
-  } else {
-    // 头部：尖拱（切线尖拱的近似）；红外弹是半球头罩；鹰击-21 是双锥（转折处描边）
-    const r = t => T.dome ? Math.sqrt(Math.max(0, 1 - t * t)) : T.cone ? (t < .5 ? 1 - t * .9 : .55 * (1 - (t - .5) * 2)) : 1 - t * t, P = [[x0, R, 1], [xn, R, T.cone ? 1 : 0]], n = T.cone ? 2 : 6;
-    for (let i = 1; i <= n; i++) P.push([xn + (T.L / 2 - xn) * i / n, R * r(i / n), T.cone && i === 1 ? 1 : 0]);
-    v3mRev(M, P, 12, sh(.95));
-  }
-  const ang = T.x ? [.785, 2.356, 3.927, 5.498] : [0, 1.571, 3.142, 4.712];
-  if (T.tail) for (const a of ang) v3mFin(M, x0, R * (T.box ? .75 : 1), a, T.tail, sh(.85));
-  if (T.strake) for (const a of ang) v3mFin(M, x0, R, a, T.strake, sh(.8));
-  if (T.wing) for (const a of T.w2 ? [0, 3.142] : ang) v3mFin(M, x0, R * (T.box ? .75 : 1), a, T.wing, sh(.85));
-  if (T.inl === 'belly') mbBox(M, x0 + T.L * .1, x0 + T.L * .4, -R * .35, R * .35, -R * 1.35, -R * .7, sh(.6), { taper: R * .1 });   // 腹部进气道
-  if (T.inl === 'quad') for (const a of [.785, 2.356, 3.927, 5.498]) { const c = Math.cos(a), s = Math.sin(a); mbTube(M, [x0 + T.L * .12, c * R * 1.15, s * R * 1.15], [x0 + T.L * .62, c * R * 1.15, s * R * 1.15], R * .28, R * .22, 6, sh(.7)); }
-  M.len = T.L;
-  return typeof mbMetal === 'function' ? mbMetal(M, .32) : M;   // 漆面金属弹体（写实画面的反光）
-}
-// 某种导弹的网格（米），按型号缓存
-function v3MslMesh(key) {
-  const C = V3MS.cache || (V3MS.cache = {});
-  return C[key] || (C[key] = v3mMslT(key));
-}
-// 实例键与建网格的函数（v3mAdd 按键缓存网格）
-const v3MslInst = (pre, key) => [pre + key, () => v3MslMesh(key)];
 // 推演里的导弹是哪一型（按种类、发射来源、弹种、敌我）
 function v3MslKey(m) {
   const e = m.side === 'e';
@@ -113,5 +62,3 @@ const V3_ALEN = { j35: 17.3, j20: 20.4, j15: 21.9, j16: 21.9, j36: 22.8, j50: 19
 const v3MslAk = key => 21 / (V3_ALEN[key] || 18);   // 机型单位 / 米
 const V3_EAK = { ga: 'a10', heli: 'ah64', uh60: 'uh60', c17: 'c17', ftr: 'f35', ftrb: 'f35b', mq9: 'mq9', f22: 'f22', b2: 'b2', p8: 'p8' };
 const v3MslPlaneKey = o => o && o.kind && typeof airSilKey === 'function' ? airSilKey(o.kind, o.v) : (o && V3_EAK[o.type]) || 'j35';   // 我方按机种、敌方按 eair 的类型
-// 挂架上的弹（airmdl.js 的外挂种类）是哪一型
-const V3_STK = { aam: 'pl15', asm: 'yj83k', agm: 'agm', bomb: 'bomb', cm: 'yj12', atgm4: 'agm', pod: 'pod' };

@@ -1,6 +1,6 @@
 'use strict';
 // 设置：音量、显示、流程、AI 指挥官聊天。存 localStorage 'bh-settings'（兼容旧的 'bh-rain'）；无 DOM，可在 Node 中运行
-const SETTINGS_DEF = { master: .8, music: .45, musicStyle: 'march', sfx: .8, radio: .6, rain: .25, bloom: .7, quality: 'high', look: 'green', intro: true, chat: 'normal', enemyChat: true, shake: true, front: true, rdist: 1, extMdl: true };
+const SETTINGS_DEF = { master: .8, music: .45, musicStyle: 'march', sfx: .8, radio: .6, rain: .25, bloom: .7, quality: 'high', look: 'real', intro: true, v3: true, chat: 'normal', enemyChat: true, shake: true, front: true, rdist: 1, extMdl: true };
 const SETTINGS = { ...SETTINGS_DEF };
 const SET_FNS = [];
 const SET_KEY = 'bh-settings';
@@ -25,7 +25,7 @@ function loadSettings() {
   try {
     const raw = st.getItem(SET_KEY), o = raw ? JSON.parse(raw) : null;
     if (o && typeof o === 'object') for (const k in SETTINGS_DEF) { const v = setClean(k, o[k]); if (v !== undefined) SETTINGS[k] = v; }
-    if (o && o.lookV !== 2 && SETTINGS.look === 'real') SETTINGS.look = 'green';   // 旧版存下的「写实」是当时的默认值：改用新的默认黑绿画面（之后玩家自己选的照存）
+    if (o && o.lookV !== 3) SETTINGS.look = 'real';   // 旧版存下的画面风格是当时的默认值（黑绿）：统一换成现在默认的写实（之后玩家自己选的照存）
     else { const r = st.getItem('bh-rain'); if (r != null && setClean('rain', r) !== undefined) SETTINGS.rain = setClean('rain', r); }
   } catch (e) { /* 存储损坏时用默认值 */ }
   return SETTINGS;
@@ -34,7 +34,7 @@ function loadSettings() {
 function saveSettings() {
   const st = setStore();
   if (!st) return;
-  try { st.setItem(SET_KEY, JSON.stringify({ ...SETTINGS, lookV: 2 })); st.setItem('bh-rain', SETTINGS.rain); } catch (e) { /* 存储不可用时忽略 */ }
+  try { st.setItem(SET_KEY, JSON.stringify({ ...SETTINGS, lookV: 3 })); st.setItem('bh-rain', SETTINGS.rain); } catch (e) { /* 存储不可用时忽略 */ }
 }
 
 // fn(key, value, SETTINGS)；key 为 null 表示整体重置

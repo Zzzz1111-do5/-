@@ -62,12 +62,13 @@ function updateDD(dt) {
   const dd = S.dd;
   if (dd.state === 'sunk') return;
   dd.cool = Math.max(0, dd.cool - dt);
-  if (dd.moving && sailTo(dd, dt, 18)) dd.moving = false;
+  const fp = typeof fpDriving === 'function' && fpDriving(dd);   // 第一人称驾驶（v3pilot.js）：玩家在开船
+  if (dd.moving && !fp && sailTo(dd, dt, 18)) dd.moving = false;
   if (dd.state === 'repair') {
     if ((dd.repairT += dt) >= dd.repairDur) { dd.state = 'ready'; log('损管完成，驱逐舰恢复火力掩护', 'good'); }
     return;
   }
-  if (!dd.auto || dd.cool > 0) return;
+  if (!dd.auto || dd.cool > 0 || fp) return;   // 玩家亲自开着：不替他开炮
   // 指挥官火力任务（commander.js）：火力准备、烟幕、支援受阻的攻击；停止射击（误伤后）时不开火
   navHotUpdate();
   const fm = typeof cmdDDMission === 'function' ? cmdDDMission(dd) : null;

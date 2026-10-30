@@ -184,6 +184,7 @@ function eaStep(dt) {
     if (lost && !cap && !E.said.base) { E.said.base = 1; log('敌野战机场被毁，停在地面的敌机全部损失', 'good'); }
     for (const w of E.wing) if (w.state === 'rearm' && (w.rearmT -= dt) <= 0) w.state = 'ready';
     for (const a of E.fly) if (!a.dead) { if (a.type === 'b2') { if (typeof b2Fly === 'function') b2Fly(a, dt); else a.dead = true; } else if (a.type === 'p8') { if (typeof asP8Fly === 'function') asP8Fly(a, dt); else a.dead = true; } else if (a.type === 'uh60' || a.type === 'c17') { if (typeof a101Fly === 'function') a101Fly(a, dt); else a.dead = true; } else if (a.ph === 'gnd') eaGnd(a, dt); else if (a.ph === 'roll') eaRoll(a, dt); else if (a.ph === 'vto') eaVto(a, dt); else if (a.ph === 'vl') eaRtb(a, dt); else if (a.type === 'mq9') eaFlyIsr(a, dt); else if (a.type === 'heli') eaFlyHeli(a, dt); else if (eaFtr(a.type) && typeof awFlyE === 'function') awFlyE(a, dt); else eaFlyGA(a, dt); }
+    for (const a of E.fly) if (a.toT != null && !a.dead) eaToClimb(a, dt);   // 刚离地：按起飞爬升曲线限高、先直线爬升
     E.fly = E.fly.filter(a => !a.dead);
     eaProj(dt);
     for (const w of E.wr) if (!w.hit && S.t - w.t >= 2) { w.hit = true; const x = w.x + Math.cos(w.h) * w.spd * 2, y = w.y + Math.sin(w.h) * w.spd * 2; S.fx.push({ kind: isLand(x, y) ? 'boom' : 'flash', x, y, r: 14, life: 0, max: .8, side: 'e' }); }
@@ -298,13 +299,32 @@ function eaGndCrew(a) {
   return { pilot, cpo, lad: t < walk + EA_GND.climb + .4 ? lad : null, crew: t < G.crew + 4, mar: [u0 + ca * 15 * k, v0 + sa * 15 * k], mh: G.a0 + Math.PI, eng: tc > EA_GND.cnp && t < G.crew + 1, k };   // mar：地勤站在机位前方指挥开车、引导滑出
 }
 // 起飞滑跑：从跑道入口沿跑道加速，到 150 离地转入出航（a.next 指定离地后的阶段）；机场在滑跑中被毁则损失
+//   EA_TO：加力滑跑的加速度（约 11 秒、跑大半条跑道才离地——原来每秒加 80，不到 2 秒就离地）；离地后头 20 秒按起飞爬升曲线限高：
+//   爬升率在 ramp 秒内从 0 加到 vz（每秒 .1 ≈ 23 米，航迹约 10°），各阶段自己的爬升率是按巡航定的（每秒 .3–.4 ≈ 70–90 米），离地就照它像弹起来；
+//   dv：离地后每秒最多加速多少；gear：离地后几秒收起落架（3D 画面）；离地速度按机型（最高速度的 72%，至多 150：MQ-9 这类慢飞机不必滑完整条跑道）
+const EA_TO = { acc: 14, vz: .1, ramp: 3, gear: 4, dv: 25 };
+const eaVlof = a => Math.min(150, (EA_SPEC[a.type] ? EA_SPEC[a.type].spd : 200) * .72);
 function eaRoll(a, dt) {
   const b = S.enemies.find(e => e.id === a.base && !e.dead);
   if (!b) { a.dead = true; const w = S.eair.wing.find(w => w.id === a.wid); if (w) w.state = 'lost'; return; }
   if (a.wait > 0) a.wait -= dt;
-  else { a.spd = Math.min(EA_SPEC[a.type].spd, a.spd + 80 * dt); a.ru += a.dir * a.spd * dt; }
+  else { a.spd = Math.min(EA_SPEC[a.type].spd, a.spd + EA_TO.acc * dt); a.ru += a.dir * a.spd * dt; }
   [a.x, a.y] = eaW(b, a.ru, 0); a.heading = (b.rh || 0) + (a.dir < 0 ? Math.PI : 0); a.alt = 0; a.bank = 0;
-  if (a.spd >= 150 || a.ru * a.dir > 450) { a.ph = a.next || 'out'; a.alt = .06; }
+  if (a.spd >= eaVlof(a) || a.ru * a.dir > 450) { a.ph = a.next || 'out'; a.alt = .06; a.toT = S.t; }
+}
+// 刚离地的固定翼：高度不超过起飞爬升曲线，先直线爬升、再慢慢转向（转弯率、坡度按离地时间放开）（eaStep 里每架飞完这一步后调）
+function eaToClimb(a, dt) {
+  const u = S.t - a.toT;
+  if (!(u >= 0) || u > 20) { a.toT = null; a.toHd = null; return; }
+  if (u < 8) {
+    const r = .04 + Math.max(0, u - 2) * .06, bk = .08 + Math.max(0, u - 2) * .1;   // 每秒最多转多少（弧度）、最大坡度
+    if (a.toHd != null) a.heading = eaAng(a.toHd + clamp(eaAng(a.heading - a.toHd), -r * dt, r * dt));
+    a.bank = clamp(a.bank || 0, -bk, bk);
+  }
+  a.toHd = a.heading;
+  const cap = .06 + EA_TO.vz * (u < EA_TO.ramp ? u * u / (2 * EA_TO.ramp) : u - EA_TO.ramp / 2);
+  if (a.alt > cap) a.alt = cap;
+  a.spd = Math.min(a.spd, eaVlof(a) + EA_TO.dv * u);   // 离地后边爬边加速（各阶段原本一秒多就加到巡航速度，画面上往前一窜）
 }
 // F-35B 垂直起飞：发动机推力转向下（升力风扇舱门打开），离地悬停爬升约 3 秒、机头转向航向，然后边加速边转平飞；a.next 指定转平飞后的阶段
 function eaVto(a, dt) {

@@ -152,7 +152,7 @@ function infoMisP(p) {
 }
 function infoMisE(a) {
   if (a.ph === 'rtb' || a.ph === 'app' || a.ph === 'final' || a.ph === 'land' || a.ph === 'vl') return a.farpGo || (S.eair && S.eair.wing.some(w => w.id === a.wid && w.farp)) ? '返航（落到机场外的前沿加油弹药点）' : '任务结束，返航';
-  if (a.type === 'b2') return `编队轰炸（${a.no} 号机，${B2_LOAD[a.load] ? B2_LOAD[a.load].nm : ''}，已投 ${a.i}/${(a.aims || []).length}）`;
+  if (a.type === 'b2') return a.ph === 'out' || a.i >= (a.aims || []).length ? `弹已投完，返航（${a.no} 号机）` : `编队轰炸（${a.no} 号机，${B2_LOAD[a.load] ? B2_LOAD[a.load].nm : ''}，已投 ${a.i}/${(a.aims || []).length}）`;
   if (a.type === 'p8') return '海上巡逻、搜索舰艇';
   if (a.type === 'mq9') return a.isr ? `侦察：在${infoWh(a.isr.x, a.isr.y)}上空盘旋盯着（${a.isr.why || '最久没看过的地方'}），还能飞 ${Math.max(0, Math.round(a.endur || 0))} 秒` : '侦察';
   if (a.type === 'c17' || a.type === 'uh60') return '空降 / 机降运输';

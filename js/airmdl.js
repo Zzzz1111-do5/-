@@ -579,7 +579,7 @@ function airRelPos(m, three) {
 // 3D 高度：舱里 → 弹射臂往下推出舱外 → 自由落下 → 点火后接上导弹自己的高度（与 v3fx.js 同一套）；侧弹舱、外挂在挂点上点火
 function airRelZ(P, m) {
   const side = P.r.k !== 'main', ej = clamp((P.u - AIR_REL.open) / AIR_REL.ej, 0, 1), fr = Math.max(0, P.u - AIR_REL.open - AIR_REL.ej);
-  const zp = v3AirZ(P.o) - (side ? 1 : .6 + ej) * P.sc - (side ? 0 : 16 * fr * fr), zm = v3AltZ(m.x, m.y, m.z * (m.kind === 'tbm' ? 620 : 230), -2.6, 2);
+  const zp = v3AirZ(P.o) - (side ? 1 : .6 + ej) * P.sc - (side ? 0 : 16 * fr * fr), zm = v3AltZ(m.x, m.y, m.z * (m.kind === 'tbm' ? 620 : V3_AIR), -2.6, 2);
   return lerp(zp, zm, P.e);
 }
 // 3D 里飞机的尺寸（v3units.js 的 plane()）

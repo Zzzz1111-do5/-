@@ -12,13 +12,13 @@ const v3dSz = p => typeof airSize3 === 'function' ? airSize3(p, 'p') : (typeof a
 //   直线电机：挂杆后整条滑轨微微发光（储能），越接近弹射越亮；弹射时滑块所在的一段定子最亮、身后一段渐暗、前面一小段刚通电
 //   喷气机挂杆后推到最大推力、弹射前约 2 秒点加力（v3dDeckEng），尾焰打在升起的偏流板上（板面映亮）；离舰后先略微下沉、抬头爬升，约 2 秒后收起落架
 const V3D_NOSE0 = 6;   // 没有飞机时滑块停在起点前 6 米（前起落架大致的位置）
-const V3D_JET = { j35: 1, j20: 1, j15: 1, j15t: 1, j36: 1, j50: 1, f35: 1, f22: 1, f35b: 1 };   // 有加力的喷气机
-// 前起落架离机身中心多远（世界单位，与 v3mAir 的起落架同一算法）
+const V3D_JET = { j35: 1, j20: 1, j15: 1, j15t: 1, j16: 1, j16d: 1, j36: 1, j50: 1, f35: 1, f22: 1, f35b: 1 };   // 有加力的喷气机
+// 前起落架离机身中心多远（世界单位）：用户给的模型里量的前轮位置（米，模型坐标）；没有起落架的模型按机长的两成
+const V3D_NOSEX = { j31: 4, j20: 3.18 };
 function v3dNose(key, k) {
-  const D = typeof AIRD === 'object' && AIRD[key];
-  if (!D) return V3D_NOSE0;
-  const xf = D.body ? D.body[0][0] : 10;
-  return (D.cp ? Math.min(D.cp[1] + .6, xf - 1.6) : xf * .6) * k;
+  const mk = typeof V3G_AIR === 'object' && V3G_AIR[key], M = mk && typeof V3G === 'object' && V3G.M[mk];
+  if (!M || !M.ready) return V3D_NOSE0;
+  return (V3D_NOSEX[mk] ?? M.meta.len * .2) * k * 21 / M.meta.len;
 }
 // 弹射器 k 此刻：滑块位置 s（沿弹射器离起点多远）、阶段 m、挂着的飞机 p、挂杆进度 q、加力程度 burn
 function v3dCat(cv, k, live) {
@@ -55,25 +55,25 @@ function v3dCatUnits(cv, live, top, h) {
 //   再按热气柱画面向镜头的面片，片元里按顺着喷流滚动的噪声把取样位置错开几个像素——后面的甲板、海面、飞机看起来在抖；离镜头远的、低画质不画
 const V3DH = { list: [], tried: false, ok: false, pr: null, a: {}, u: {}, buf: null, tex: null, tw: 0, th: 0 };
 function v3dHazeAdd(c, R, r, len, k) { v3dHazeD(c, [-R[0], -R[3], -R[6]], r, len, k); }   // 喷口：顺着机身往后
-// 一段热气柱（GL 坐标：起点 c、单位方向 d、半径 r、长度 len、强度 k）；一帧最多收 160 段，画的时候只留离镜头最近的 64 段
+// 一段热气柱（GL 坐标：起点 c、单位方向 d、半径 r、长度 len、强度 k）；一帧最多收 240 段，画的时候只留离镜头最近的 96 段（手机 40 段）
 function v3dHazeD(c, d, r, len, k) {
-  if (!(k > .05) || V3DH.list.length > 160) return;
+  if (!(k > .05) || V3DH.list.length > 240) return;
   V3DH.list.push({ c: c.slice(), d, r, len, k });
 }
 // —— 各种发动机的热气（按真实的排气口位置与方向）——
 // 地面车辆（车的坐标：x 按车长、y 按车宽的比例，z 按车高；d 车的坐标里的方向）：柴油机的热气从车尾散热百叶窗往上冒、略向后飘；
 //   M1 系列的燃气轮机从车尾排气口水平向后喷，热得多；99A、96 式（这里是 80 式外形）从车体左侧后部排气；轮式车排气管在右后方朝上
 const V3D_VEXH = {
-  m1a2: { p: [[-.5, 0, .45]], d: [-1, 0, .2], r: .55, len: 4.4, k: 1 }, m1a1: 'm1a2', m1150: 'm1a2',
-  ztz99a: { p: [[-.3, -.5, .32]], d: [-.25, -1, .5], r: .35, len: 2.4, k: .8 }, ztz96b: 'ztz99a', ztz96m: 'ztz99a',
-  t: { p: [[-.42, -.2, .56], [-.42, .2, .56]], d: [-.35, 0, 1], r: .42, len: 2.6, k: .6 }, w: { p: [[-.44, .32, .66]], d: [-.15, .2, 1], r: .24, len: 1.7, k: .5 } };
+  m1a2: { p: [[-.5, 0, .45]], d: [-1, 0, .2], r: .75, len: 7, k: 1.5 }, m1a1: 'm1a2', m1150: 'm1a2',
+  ztz99a: { p: [[-.3, -.5, .32]], d: [-.25, -1, .5], r: .5, len: 4, k: 1.1 }, ztz96b: 'ztz99a', ztz96m: 'ztz99a',
+  t: { p: [[-.42, -.2, .56], [-.42, .2, .56]], d: [-.35, 0, 1], r: .55, len: 4.2, k: 1 }, w: { p: [[-.44, .32, .66]], d: [-.15, .2, 1], r: .38, len: 3, k: .85 } };
 function v3dVehHaze(v, key, len, z, h, E) {
   const M = typeof RLM === 'object' && RLM[key];
-  if (v.dead || !M || (v.x - E[0]) ** 2 + (-v.y - E[1]) ** 2 > 180 * 180) return;
+  if (v.dead || !M || (v.x - E[0]) ** 2 + (-v.y - E[1]) ** 2 > 500 * 500) return;
   let X = V3D_VEXH[key] || V3D_VEXH[M.run === 't' ? 't' : 'w'];
   if (typeof X === 'string') X = V3D_VEXH[X];
   const k = len / M.L, Lh = M.L * k, B = M.B * k, Hh = M.B * .6 * k, c = Math.cos(h), s = Math.sin(h), n = Math.hypot(...X.d), dx = X.d[0] / n, dy = X.d[1] / n, dz = X.d[2] / n;
-  const d = [dx * c - dy * s, -(dx * s + dy * c), dz], kk = X.k * (v.moving ? 1 : .55);   // 走着的发动机转速高
+  const d = [dx * c - dy * s, -(dx * s + dy * c), dz], kk = X.k * (v.moving ? 1.25 : .85);   // 走着的发动机转速高
   for (const [px, py, pz] of X.p) { const lx = px * Lh, ly = py * B; v3dHazeD([v.x + lx * c - ly * s, -(v.y + lx * s + ly * c), z + pz * Hh], d, X.r * k, X.len * k, kk); }
 }
 // 不带加力的飞机（直升机、涡桨、运输机、轰炸机、无人机）的排气口（机型单位，左右成对）：[x, y, z, 半径, 强度]——
@@ -96,12 +96,12 @@ function v3dExhaust(key, sz, o, k0) {
   const P = v3dEngPts(key);
   if (!P.length) return;
   const k = sz / 21, c = Math.cos(o.h), s = Math.sin(o.h), cr = Math.cos(o.rl || 0), sr = Math.sin(o.rl || 0), d = [-c, s, 0];   // 往后（GL 坐标 y 取反）
-  for (const [x, y, z, r, kk] of P) { const yy = y * cr - z * sr, zz = y * sr + z * cr; v3dHazeD([o.x + (x * c - yy * s) * k, -(o.y + (x * s + yy * c) * k), o.z + zz * k], d, r * k, r * k * 7, kk * k0); }
+  for (const [x, y, z, r, kk] of P) { const yy = y * cr - z * sr, zz = y * sr + z * cr; v3dHazeD([o.x + (x * c - yy * s) * k, -(o.y + (x * s + yy * c) * k), o.z + zz * k], d, r * k * 1.3, r * k * 13, kk * k0 * 1.6); }
 }
 // 舰艇烟囱上方的热气（往上冒）：x、y 舰的位置，h 航向，L 画面舰长，f 烟囱离舰中心多远（按舰长）、zt 烟囱口高
 function v3dFunnel(x, y, h, L, f, zt, k = .5) {
   const c = Math.cos(h), s = Math.sin(h);
-  v3dHazeD([x + c * f * L, -(y + s * f * L), zt], [0, 0, 1], L * .035, L * .3, k);
+  v3dHazeD([x + c * f * L, -(y + s * f * L), zt], [0, 0, 1], L * .05, L * .55, k * 1.6);
 }
 const V3DH_VS = `attribute vec3 p; attribute vec3 q; uniform mat4 uM; uniform vec3 uEye; varying vec3 vQ; varying float vD;
 void main() { vQ = q; vD = length(uEye - p); gl_Position = uM * vec4(p, 1.); }`;
@@ -114,11 +114,15 @@ uniform sampler2D uTex; uniform vec2 uSz; uniform float uT; varying vec3 vQ; var
 float h21(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * .1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
 float vn(vec2 p) { vec2 i = floor(p), f = fract(p), u = f * f * (3. - 2. * f); return mix(mix(h21(i), h21(i + vec2(1., 0.)), u.x), mix(h21(i + vec2(0., 1.)), h21(i + vec2(1., 1.)), u.x), u.y); }
 void main() {
-  float a = vQ.x, b = vQ.y, f = smoothstep(0., .12, a) * (1. - smoothstep(.5, 1., a)) * (1. - b * b) * vQ.z;   // 喷口处最强、往后散开变弱
+  float a = vQ.x, b = vQ.y, f = min(1.3, smoothstep(0., .08, a) * (1. - smoothstep(.6, 1., a)) * (1. - b * b) * vQ.z);   // 喷口处最强、往后散开变弱
   vec2 nq = vec2(a * 7. - uT * 9., b * 2.2 + uT * .7), nr = vec2(a * 17. - uT * 23., b * 5. - uT * 1.3);
   vec2 off = vec2(vn(nq), vn(nq + 17.3)) - .5 + (vec2(vn(nr + 3.1), vn(nr + 9.7)) - .5) * .5;   // 大的波纹慢慢滚、小的碎纹抖得快
-  vec2 uv = (gl_FragCoord.xy + off * clamp(220. / vD, 1.5, 14.) * uSz.y / 1080. * f) / uSz;   // 错开几个像素（离得近扭得多），按画面高度缩放
-  gl_FragColor = vec4(texture2D(uTex, uv).rgb, smoothstep(0., .3, f));
+  vec2 px = off * clamp(560. / vD, 4., 34.) * uSz.y / 1080. * f, uv = (gl_FragCoord.xy + px) / uSz, ca = px * .18 / uSz;   // 错开十几个像素（离得近扭得多），按画面高度缩放
+  vec3 c = vec3(texture2D(uTex, uv + ca).r, texture2D(uTex, uv).g, texture2D(uTex, uv - ca).b);   // 一点点色散：热空气的折射边缘
+  float sh = (vn(nr * 1.7 + 5.3) - .5) * .22 * f;   // 折光的明暗闪动
+  c *= 1. + sh;
+  c += vec3(.05, .025, 0.) * f * f * smoothstep(.35, 0., a) * min(vQ.z, 1.5);   // 喷口附近的热流微微发暖
+  gl_FragColor = vec4(c, smoothstep(0., .18, f));
 }`;
 function v3dHazeInit(gl) {
   V3DH.tried = true;
@@ -139,8 +143,9 @@ function v3dHazeInit(gl) {
 }
 function v3dHaze(C) {
   let L = V3DH.list; V3DH.list = [];
-  if (!L.length || (typeof SETTINGS === 'object' && SETTINGS && SETTINGS.quality === 'low') || (typeof V3 === 'object' && V3.coarse)) return;
-  if (L.length > 64) { const E = C.E, d2 = h => (h.c[0] - E[0]) ** 2 + (h.c[1] - E[1]) ** 2 + (h.c[2] - E[2]) ** 2; L = L.sort((a, b) => d2(a) - d2(b)).slice(0, 64); }   // 只留最近的
+  const lite = (typeof SETTINGS === 'object' && SETTINGS && SETTINGS.quality === 'low') || (typeof V3 === 'object' && V3.coarse), NMAX = lite ? 40 : 96, RMAX = lite ? 600 : 900;   // 手机、低画质也画：段数少一些、近一些
+  if (!L.length) return;
+  if (L.length > NMAX) { const E = C.E, d2 = h => (h.c[0] - E[0]) ** 2 + (h.c[1] - E[1]) ** 2 + (h.c[2] - E[2]) ** 2; L = L.sort((a, b) => d2(a) - d2(b)).slice(0, NMAX); }   // 只留最近的
   const gl = V3.gl;
   if (!V3DH.tried) v3dHazeInit(gl);
   if (!V3DH.ok) return;
@@ -149,20 +154,20 @@ function v3dHaze(C) {
   let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9, full = false;
   for (const h of L) {   // 热气柱：从喷口往后，越往后越宽（面向镜头）；顶点 = 位置 3 + (沿喷流 0–1、横向 −1–1、强度)
     const p0 = h.c, d = h.d, p1 = [p0[0] + d[0] * h.len, p0[1] + d[1] * h.len, p0[2] + d[2] * h.len];
-    if (Math.hypot(p0[0] - E[0], p0[1] - E[1], p0[2] - E[2]) > 260) continue;
+    if (Math.hypot(p0[0] - E[0], p0[1] - E[1], p0[2] - E[2]) > RMAX) continue;
     const m = [(p0[0] + p1[0]) / 2 - E[0], (p0[1] + p1[1]) / 2 - E[1], (p0[2] + p1[2]) / 2 - E[2]];
     let sv = [d[1] * m[2] - d[2] * m[1], d[2] * m[0] - d[0] * m[2], d[0] * m[1] - d[1] * m[0]];
     const l = Math.hypot(sv[0], sv[1], sv[2]);
     if (l < 1e-6) continue;
     sv = [sv[0] / l, sv[1] / l, sv[2] / l];
-    const w0 = h.r * 1.5, w1 = h.r * 3.2, A = [[p0, -w0, 0, -1], [p0, w0, 0, 1], [p1, w1, 1, 1], [p1, -w1, 1, -1]].map(([p, w, a, b]) => [p[0] + sv[0] * w, p[1] + sv[1] * w, p[2] + sv[2] * w, a, b, h.k]);
+    const w0 = h.r * 2, w1 = h.r * 5, A = [[p0, -w0, 0, -1], [p0, w0, 0, 1], [p1, w1, 1, 1], [p1, -w1, 1, -1]].map(([p, w, a, b]) => [p[0] + sv[0] * w, p[1] + sv[1] * w, p[2] + sv[2] * w, a, b, h.k]);
     let vis = false;
     for (const q of A) { const sc = prj(q); if (!sc) { full = vis = true; continue; } vis = true; x0 = Math.min(x0, sc[0]); x1 = Math.max(x1, sc[0]); y0 = Math.min(y0, sc[1]); y1 = Math.max(y1, sc[1]); }   // 有角落跑到镜头后面：整屏都拷
     if (vis) for (const i of [0, 1, 2, 0, 2, 3]) for (const v of A[i]) out.push(v);
   }
   if (!out.length) return;
   // 抓屏：只拷热气柱所在的一块（外扩一圈：错开取样也不出界）
-  const mg = Math.ceil(16 * H / 1080) + 8;
+  const mg = Math.ceil(40 * H / 1080) + 8;
   const cx0 = full ? 0 : Math.max(0, Math.floor(x0 - mg)), cy0 = full ? 0 : Math.max(0, Math.floor(y0 - mg)), cx1 = full ? W : Math.min(W, Math.ceil(x1 + mg)), cy1 = full ? H : Math.min(H, Math.ceil(y1 + mg));
   if (cx1 <= cx0 || cy1 <= cy0) return;
   gl.activeTexture(gl.TEXTURE13); gl.bindTexture(gl.TEXTURE_2D, V3DH.tex);
@@ -273,139 +278,17 @@ function v3dDeckSurf(p) {
   const t = p.dkT || 0, c = t < .5 ? -.35 * Math.sin(t / .5 * Math.PI) : t < 1 ? .25 * Math.sin((t - .5) / .5 * Math.PI) : 0, r = t >= 1 && t < 1.7 ? .22 * Math.sin((t - 1) / .7 * Math.PI * 2) : 0;
   return { de: c + V3D_TOTRIM * sm01((t - 1.5) / .5), da: r };
 }
-// 这一帧的舵面偏角（弧度）：de 平尾 / 鸭翼（负 = 抬头），da 差动
-const v3dSurf = (o, sd) => { const P = V3D_PT.get((sd ? 'e' : 'p') + o.id); return P && P.S === S ? P : { de: 0, da: 0 }; };
-// ———————————————— 导入的飞机模型（Sketchfab，v3x.js）————————————————
-//   空中用收起落架的 <键>_a，地面、甲板、刚离舰还没收起落架时用 <键>；网格按米、着地点 z = 0，按游戏里的机型尺寸缩放（sz / 实长）
-//   俯仰、滚转绕机身中线转（不是绕机轮）；活动舵面（平尾、鸭翼）单独一块：先绕自己的转轴偏转，再随机身滚转、俯仰、转向
-const V3_PX = { j35: 'j35', j20: 'j20', j36: 'j36', j50: 'j50', y20: 'y20', transport: 'y20' };
 // 3 × 3 旋转（与 v3units.js 实例着色器同一约定：先绕 x 滚转、再绕 y 俯仰（机头抬起为正）、再绕 z 转向；GL 坐标 y 取反）
 const v3dRx = r => { const c = Math.cos(r), s = Math.sin(r); return [1, 0, 0, 0, c, -s, 0, s, c]; };
 const v3dRy = p => { const c = Math.cos(p), s = Math.sin(p); return [c, 0, -s, 0, 1, 0, s, 0, c]; };
 const v3dRz = a => { const c = Math.cos(a), s = Math.sin(a); return [c, -s, 0, s, c, 0, 0, 0, 1]; };
 const v3dMul = (A, B) => { const o = []; for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) o.push(A[i * 3] * B[j] + A[i * 3 + 1] * B[3 + j] + A[i * 3 + 2] * B[6 + j]); return o; };
-const v3dMv = (M, v) => [M[0] * v[0] + M[1] * v[1] + M[2] * v[2], M[3] * v[0] + M[4] * v[1] + M[5] * v[2], M[6] * v[0] + M[7] * v[1] + M[8] * v[2]];
-// 画一架导入的飞机；没有这型或还没加载完返回 false（照旧画代码建的）。ground：z 是地面（机轮着地）；否则 z 是机身中线高度
-function v3dPlaneX(key, sz, x, y, z, ground, h, side, roll, pitch, gear, sf) {
-  const mk = V3_PX[key];
-  if (!mk || typeof v3xMesh !== 'function') return false;
-  const Mg0 = v3xMesh(mk), Ma0 = v3xMesh(mk + '_a');   // 两个都要：起飞、着陆来回换
-  if (!Mg0 || !Ma0) return false;
-  const Mg = v3dGlassX(Mg0, mk), M = gear ? Mg : v3dGlassX(Ma0, mk, true);   // 座舱玻璃换成透明的、补上座舱（空中的那个连飞行员一起）
-  if (ground) V3D_CPX.set(key, Mg.cp ? Object.assign(Mg.cp, { s: sz / Mg.len, fr: V3M.fr }) : { fr: V3M.fr });   // 这一帧按这个模型的座舱放飞行员（v3dSeatW；没量过座舱的不放）
-  const s = sz / M.len, R = v3dMul(v3dMul(v3dRz(-h), v3dRy(pitch)), v3dRx(roll));
-  let ox = x, oy = y, oz = z;
-  if (!ground) { const o = v3dMv(R, [0, 0, M.zc * s]); ox -= o[0]; oy += o[1]; oz -= o[2]; }   // 机身中线对准 z
-  v3mAdd('x:' + mk + (gear ? '' : '_a'), () => M, ox, oy, oz, h, s, side, roll, pitch);
-  for (const nm in Mg.parts || {}) for (const sd of ['L', 'R']) {
-    const P = typeof V3X === 'object' && V3X.mesh[mk + '_' + nm + sd];
-    if (!P) { v3xMesh(mk + '_' + nm + sd); continue; }
-    const [px, pz] = Mg.parts[nm], de = sf ? sf.de || 0 : 0, da = sf ? sf.da || 0 : 0;
-    const d = (nm === 'canard' ? -1.6 * de : de) + (sd === 'L' ? da : -da);   // 平尾：负 = 后缘上偏（抬头）；鸭翼抬头时前缘上偏
-    const Rp = v3dMul(R, v3dRy(d)), o = v3dMv(R, [px * s, 0, pz * s]);
-    v3mAdd('x:' + mk + '_' + nm + sd, () => P, ox + o[0], oy - o[1], oz + o[2], -Math.atan2(Rp[3], Rp[0]), s, side, Math.atan2(Rp[7], Rp[8]), Math.asin(clamp(Rp[6], -1, 1)));
-  }
-  return true;
-}
-// 导入飞机模型的座舱：模型自带的玻璃（明暗 ≤ −16）换成透明玻璃 V3_TGL；歼-35 的模型没有单独的玻璃材质（座舱盖和机身一个颜色），
-//   按 V3D_CPDEF 记的座舱盖范围（米，模型坐标：x 机头、z 离着地点高；sill 座舱盖下沿的高度沿 x 变化）把座舱盖那块鼓包挖掉，
-//   照原来的外形（每个截面量出顶高与下沿处的半宽）重新蒙一层透明玻璃，里面补上深色座舱底、弹射座椅、遮光罩与大屏、平显；
-//   头盔顶在座舱盖顶下 0.12 米，往下按坐高放飞行员
-//   （歼-20 的座舱盖顶上有细长的凸起，顶高也照记下的折线 top）
-const V3D_CPDEF = { j35: { x0: 1.45, x1: 5.2, sill: [[1.45, 2.62], [2.2, 2.5], [3.6, 2.47], [4.6, 2.25], [5.2, 1.95]] },
-  j20: { x0: 3.6, x1: 6.15, sill: [[3.6, 2.8], [4.6, 2.76], [5.6, 2.7], [6.15, 2.62]], top: [[3.6, 3.12], [4.2, 3.24], [5.0, 3.28], [5.6, 3.16], [6.15, 2.66]] } };
-const v3dPoly = (P, x) => { if (x <= P[0][0]) return P[0][1]; for (let i = 1; i < P.length; i++) if (x <= P[i][0]) return lerp(P[i - 1][1], P[i][1], (x - P[i - 1][0]) / (P[i][0] - P[i - 1][0])); return P[P.length - 1][1]; };
-const V3D_GLX = new WeakMap(), V3D_CPX = new Map();
-function v3dGlassX(M0, mk, air) {
-  let M = V3D_GLX.get(M0);
-  if (M) return M;
-  const t = M0.t.slice();
-  for (let i = 6; i < t.length; i += 10) if (t[i] <= -16) t[i] = V3_TGL;
-  M = Object.assign({}, M0, { t, cp: null });
-  const D = mk && V3D_CPDEF[mk];
-  if (D) {
-    const sill = x => v3dPoly(D.sill, x);
-    // 截面 x = X：三角形各边与平面的交点 → 顶高（中线附近最高处）、下沿处的半宽
-    const sec = X => {
-      let top = -1e9, w = 0;
-      const zs = sill(X);
-      for (let i = 0; i < t.length; i += 30) for (const [a, b] of [[0, 1], [1, 2], [2, 0]]) {
-        const A = i + a * 10, B = i + b * 10, xa = t[A], xb = t[B];
-        if ((xa - X) * (xb - X) > 0 || xa === xb) continue;
-        const u = (X - xa) / (xb - xa), y = Math.abs(t[A + 1] + (t[B + 1] - t[A + 1]) * u), z = t[A + 2] + (t[B + 2] - t[A + 2]) * u;
-        if (y < .3 && y < 1.2) top = Math.max(top, z);
-        if (Math.abs(z - zs) < .07) w = Math.max(w, y);
-      }
-      return { x: X, zs, top: Math.max(D.top ? v3dPoly(D.top, X) : top, zs + .02), w: Math.max(w, .05) };
-    };
-    const N = 16, S = []; for (let i = 0; i <= N; i++) S.push(sec(lerp(D.x0, D.x1, i / N)));
-    const wAt = x => { const f = clamp((x - D.x0) / (D.x1 - D.x0), 0, 1) * N, i = Math.min(N - 1, Math.floor(f)); return lerp(S[i].w, S[i + 1].w, f - i); };
-    // 挖掉座舱盖鼓包（重心在范围里、高过下沿的三角形）
-    const keep = [];
-    for (let i = 0; i < t.length; i += 30) {
-      const cx = (t[i] + t[i + 10] + t[i + 20]) / 3, cy = Math.abs(t[i + 1] + t[i + 11] + t[i + 21]) / 3, cz = (t[i + 2] + t[i + 12] + t[i + 22]) / 3;
-      if (cx > D.x0 && cx < D.x1 && cz > sill(cx) + .015 && cy < wAt(cx) + .06) continue;
-      for (let k = 0; k < 30; k++) keep.push(t[i + k]);
-    }
-    // 透明座舱盖：每个截面一个半椭圆（下沿在 sill、顶在原来的顶高）
-    const C = mbNew(), NA = 10, P = (i, j) => { const a = j / NA * Math.PI, s0 = S[i]; return [s0.x, Math.cos(a) * s0.w, s0.zs + Math.sin(a) * (s0.top - s0.zs)]; };
-    const Nn = (i, j) => { const a = j / NA * Math.PI, s0 = S[i]; return mbNorm([0, Math.cos(a) / Math.max(.05, s0.w), Math.sin(a) / Math.max(.05, s0.top - s0.zs)]); };
-    for (let i = 0; i < N; i++) for (let j = 0; j < NA; j++) {
-      const a = P(i, j), b = P(i, j + 1), c = P(i + 1, j + 1), d = P(i + 1, j);
-      mbTriN(C, a, b, c, Nn(i, j), Nn(i, j + 1), Nn(i + 1, j + 1), V3_TGL); mbTriN(C, a, c, d, Nn(i, j), Nn(i + 1, j + 1), Nn(i + 1, j), V3_TGL);
-    }
-    for (let i = 0; i < N; i++) for (const j of [0, NA]) mbLine(C, P(i, j), P(i + 1, j), .3);   // 座舱盖下沿的框
-    for (let i = 0; i < N; i++) { const a = S[i], b = S[i + 1]; mbQuad(C, [a.x, -a.w * .97, a.zs - .02], [a.x, a.w * .97, a.zs - .02], [b.x, b.w * .97, b.zs - .02], [b.x, -b.w * .97, b.zs - .02], .1); }   // 深色座舱底，盖住挖开的口
-    const L = D.x1 - D.x0, hx = D.x1 - .48 * L, hs = S[Math.round((hx - D.x0) / L * N)], head = hs.top - .12;
-    v3mCockpit(C, { x0: D.x0, x1: D.x1, w: hs.w, L, zb: sill(hx), ak: 1, hx, head, noFloor: true, cz: x => { const f = clamp((x - D.x0) / L, 0, 1) * N, i = Math.min(N - 1, Math.floor(f)); return lerp(S[i].top, S[i + 1].top, f - i); }, ry: x => wAt(x) * .85 });
-    M.cp = { hx, head, ox: hx + V3_SC[1], foot: head - V3_SC[0] };
-    if (air && typeof v3mPilotIn === 'function') v3mPilotIn(C, 1, M.cp.ox, M.cp.foot);
-    M.t = keep.concat(C.t); M.l = M0.l.concat(C.l);
-  }
-  V3D_GLX.set(M0, M);
-  return M;
-}
-// 导入飞机模型的弹舱门高度：自带模型（v3mBay）的机腹高换成导入模型的（收起落架的那个模型，弹舱中点附近 0.5 米内的最低点）；
-//   返回弹舱门实例相对机身中线要加的高度（世界单位，机体坐标的向上方向）
-const V3D_BAYZ = new Map();
-function v3dBayZ(key, sz) {
-  const mk = V3_PX[key], D = typeof AIRD === 'object' && AIRD[key], M = mk && typeof V3X === 'object' && V3X.mesh[mk + '_a'];
-  if (!M || !D || !D.bay) return 0;
-  let q = V3D_BAYZ.get(key);
-  if (!q) {
-    const xm = (D.bay[0] + D.bay[1]) / 2 * M.len / 21, t = M.t, sec = v3AirSec(D), hw0 = D.body ? Math.max(...D.body.map(b => b[1])) : 1.4;
-    let m = 1e9; for (let i = 0; i < t.length; i += 10) if (Math.abs(t[i] - xm) < .5 && Math.abs(t[i + 1]) < .5 && t[i + 2] < m) m = t[i + 2];
-    q = { bz: m < 1e8 ? m : M.zc, zc: M.zc, len: M.len, bz0: V3_AIRZ - hw0 * sec.kb * .9 };
-    V3D_BAYZ.set(key, q);
-  }
-  const s = sz / q.len, k = sz / 21;
-  return (q.bz + .03 - q.zc) * s - q.bz0 * k;
-}
-// 座舱里坐着的飞行员：世界坐标的坐姿原点（脚底）、坐垫高、比例；这一帧画的是导入模型就按它的座舱盖，否则按自带模型（v3CpSeat）
-function v3dSeatW(key, sz, x, y, z0, h) {
-  const G = V3D_CPX.get(key);
-  let hx, fz, pz, sc;
-  if (G && G.fr === V3M.fr) { if (G.ox == null) return null; hx = G.ox * G.s; fz = z0 + G.foot * G.s; pz = z0 + (G.head - .87) * G.s; sc = G.s; }
-  else { const Q = typeof v3CpSeat === 'function' && v3CpSeat(key); if (!Q) return null; const k = sz / 21; hx = Q.ox * k; fz = z0 + (V3_GEAR + Q.foot) * k; pz = z0 + (V3_GEAR + Q.head - .87 * Q.ak) * k; sc = Q.ak * k; }
-  return { x: x + Math.cos(h) * hx, y: y + Math.sin(h) * hx, z: fz, pan: pz, sc };
-}
-// 甲板上的飞行员：跑到登机梯 → 顺梯子爬上去（手脚交替）→ 跨过座舱边、站到座椅上 → 蹲下坐进座椅；之后一直坐在座舱里（透过透明座舱盖看得见头盔和肩膀），滑行、弹射、着舰都在
+// 甲板上的飞行员（用户给的士兵模型）：跑到登机梯、顺梯子爬上去；进了座舱就不再画（用户的飞机模型座舱盖不透明，看不见里面）
 function v3dPilot(p, key, sz, z0, h, at) {
   const P = p.dk === 'brd' && typeof cvPilotPose === 'function' ? cvPilotPose(p) : null;
-  const man = (pose, x, y, z, a, sc) => v3mAdd('man:pilot:' + pose, () => v3mMan('pilot', pose), x, y, z, a, sc, 0);
-  if (P && (P.run || P.clb < .62)) { const [x, y] = at(P.u, P.v); man(P.run ? 'r' + (Math.floor(P.ph / .7854) & 7) : 'cl' + (Math.floor(P.clb / .62 * 13) & 7), x, y, z0 + P.z, h + P.a, V3_PIL); return; }
-  const St = v3dSeatW(key, sz, p.x, p.y, z0, p.heading);
-  if (P) {   // 跨进座舱（clb 0.62–1）
-    const u = (P.clb - .62) / .38, k = sz / 21, L = cvLadder(p), [lx, ly] = at(L[0], L[1]), zt = z0 + P.z - u * .3 * k * 1.25;
-    if (!St) { const [x, y] = at(P.u, P.v); man('st', x, y, z0 + P.z, h + P.a, V3_PIL); return; }
-    const sc = lerp(V3_PIL, St.sc, sm01(u / .4));
-    if (u < .4) { const e = sm01(u / .4); man('w' + (Math.floor(e * 10) & 7), lerp(lx, St.x, e), lerp(ly, St.y, e), lerp(zt, St.pan, e) + Math.sin(e * Math.PI) * .35 * sc, h + P.a + airAng(p.heading - h - P.a) * e, sc); }   // 跨过座舱边，转身朝前
-    else if (u < .78) { const e = sm01((u - .4) / .38); man('L' + Math.round(e * 6), St.x, St.y, lerp(St.pan, St.pan - .45 * St.sc, e), p.heading, St.sc); }   // 站在座椅上蹲下去
-    else man('sc', St.x, St.y, St.z, p.heading, St.sc);
-    return;
-  }
-  const crew = p.phase === 'roll' || p.phase === 'trap' || (p.phase === 'cat' && (p.dk !== 'lift' || p.up));
-  if (crew && St) man('sc', St.x, St.y, St.z, p.heading, St.sc);
+  if (!P || !(P.run || P.clb < .62) || typeof v3gMan !== 'function') return;
+  const [x, y] = at(P.u, P.v);
+  v3gMan('pilot', P.run ? 'r' + (Math.floor(P.ph / .7854) & 7) : 'cl' + (Math.floor(P.clb / .62 * 13) & 7), x, y, z0 + P.z, h + P.a, V3_PIL, 0);
 }
 // v3fx.js：这一帧算好的仰角（加力尾焰的方向）
 const v3dPitchOf = (o, sd) => { const P = V3D_PT.get((sd ? 'e' : 'p') + o.id); return P && P.S === S ? P.pt : 0; };
@@ -414,21 +297,13 @@ const v3dPitchOf = (o, sd) => { const P = V3D_PT.get((sd ? 'e' : 'p') + o.id); r
 //   照加力式涡扇的结构画：涡轮后面是尾锥、涡轮后机匣的支板与喷油杆，再往后两圈同心的 V 形火焰稳定器，外面是隔热衬套和收敛扩散喷管的调节片。
 //   推油门时这些从里往外热起来：暗红 → 橙 → 橙黄（喷口里发动机变热的纹路）；开加力先在稳定器上点着一小团火（分区加力一区一区点），
 //   根部蓝紫、尖上橙红；其余几区接连点着，火舌变长、变成白芯黄焰；全加力时喷流欠膨胀，喷口后约一个直径起一串激波马赫环，间隔约 1.2 个直径，越往后越暗、越偏橙粉
-// 导入模型的喷口（米，模型坐标 x 机头、y 右、z 离着地点高；唇口顶点拟合的圆，深是唇口到喷管里封底的距离）：[出口 x, y（不为 0 就左右各一个）, z, 半径, 喷管深]；扁平的半径记 0，再加 [半宽, 半高]
-const V3D_NOZX = { j35: [[-8.4, .79, 2.17, .3, .62]], j20: [[-9.81, .775, 2.05, .42, .9]], j36: [[-10, 0, 2.6, 0, .5, .45, .33], [-10, 1.55, 2.6, 0, .5, .45, .33]], j50: [[-8.85, 0, 2.22, 0, 1.6, .4, .15]] };
-// 一架飞机的喷口（世界单位，相对锚点：空中是机身中线，ground 时是机轮着地点）：{ x, y, z, r 半径（扁平的为 0）, w、hh 半宽、半高, d 喷管深 }
+// 一架飞机的喷口（世界单位，相对锚点：空中是机身中线，ground 时是机轮着地点）：{ x, y, z, r 半径, w、hh 半宽、半高, d 喷管深 }——
+//   用户给的模型里量的（tools/v3gmodels.json 的 noz，米，模型坐标 x 机头、y 左、z 离着地点高），按画面尺寸缩放；模型还没加载完就不画尾焰
 function v3dNoz(key, sz, ground) {
-  const mk = V3_PX[key], X = typeof V3X === 'object' && (typeof v3xOn !== 'function' || v3xOn()) && V3X.mesh, M = mk && X && X[mk] && (ground || X[mk + '_a']) ? X[mk] : null, N = [];
-  if (M && V3D_NOZX[mk]) {   // 导入的模型已经加载（画面上画的就是它）
-    const s = sz / M.len, z0 = ground ? 0 : M.zc;
-    for (const n of V3D_NOZX[mk]) for (const sg of n[1] ? [1, -1] : [1]) N.push({ x: n[0] * s, y: n[1] * sg * s, z: (n[2] - z0) * s, r: n[3] * s, d: n[4] * s, w: (n[5] || n[3]) * s, hh: (n[6] || n[3]) * s });
-    return N;
-  }
-  const D = typeof AIRD === 'object' && AIRD[key], k = sz / 21, zc = (ground ? V3_GEAR + V3_AIRZ : V3_AIRZ) * k;   // 代码建的模型（v3units.js v3mAir 的喷口）
-  for (const n of (D && D.noz) || []) for (const sg of n[1] ? [1, -1] : [1]) {
-    const fl = n[4] === 'flat';
-    N.push({ x: (n[0] - (fl ? n[3] : .35)) * k, y: n[1] * sg * k, z: zc, r: fl ? 0 : n[2] * .88 * k, d: (fl ? .25 : .9) * k, w: n[2] * (fl ? 1 : .88) * k, hh: n[2] * (fl ? .45 : .88) * k });
-  }
+  const mk = typeof V3G_AIR === 'object' && V3G_AIR[key], M = mk && typeof V3G === 'object' && V3G.M[mk], N = [];
+  if (!M || !M.ready || !M.meta.noz) return N;
+  const s = sz / M.meta.len, z0 = ground ? 0 : M.meta.zc;
+  for (const n of M.meta.noz) for (const sg of n[1] ? [1, -1] : [1]) N.push({ x: n[0] * s, y: n[1] * sg * s, z: (n[2] - z0) * s, r: n[3] * s, d: n[4] * s, w: n[3] * s, hh: n[3] * s });
   return N;
 }
 // 炽热金属的颜色（近似黑体）：t 0 暗红 → .5 橙 → 1 淡黄；a 不透明度
@@ -496,7 +371,7 @@ function v3dBurner(out, C, p, key, sz, o, E) {
         for (const f of [-.5, 0, .5]) rib(P(-d * .5, -n.w * .88, f * n.hh), P(-d * .5, n.w * .88, f * n.hh), w0, cs);
       }
     }
-    if (typeof v3dHazeAdd === 'function') v3dHazeAdd(c, R, n.r || Math.max(n.w, n.hh), 2 * (n.r || n.w) * (3 + 4 * ab), Math.max(ab, ht * .55));   // 喷口后方的热浪（v3dHaze 画）
+    if (typeof v3dHazeAdd === 'function') v3dHazeAdd(c, R, (n.r || Math.max(n.w, n.hh)) * 1.3, 2 * (n.r || n.w) * (7 + 10 * ab), Math.max(ab * 1.6, ht * 1.1));   // 喷口后方的热浪（v3dHaze 画）
     if (ab <= .02) continue;
     // —— 加力：小火 → 大火（扁平喷口按宽度分几股） ——
     const K = n.r ? 1 : clamp(Math.round(n.w / (n.hh * 1.6)), 1, 3);
@@ -536,22 +411,6 @@ function v3dBurner(out, C, p, key, sz, o, E) {
   }
 }
 
-// ———————————————— 弹舱弹射发射（airmdl.js 的离机记录 AIRV、airRelPos / airRelZ）————————————————
-//   内埋弹舱：舱门打开后，弹射臂（前后两根撑杆 + 托架）把弹从舱顶往下推出舱外，松开后收回舱里；点火的闪光、尾焰、空中那团白烟在 v3fx.js
-// 弹射臂（机型单位：舱顶在 z = 0，伸出 e 时托架到 z = −e）
-function v3mdEjArm(e) {
-  const M = mbNew(), z1 = -e;
-  for (const x of [-.9, .9]) mbTube(M, [x, 0, 0], [x * .8, 0, z1 + .15], .15, .12, 6, .8);
-  mbBox(M, -1.2, 1.2, -.2, .2, z1, z1 + .2, .75);
-  return M;
-}
-// v3units.js：主弹舱离机的弹，弹射臂伸出（推弹）→ 松开 → 收回，按四档取模型
-function v3dEjArm(P, m) {
-  const A = AIR_REL, ex = clamp((P.u - A.open) / A.ej, 0, 1) * (1 - clamp((P.u - A.open - A.ej - .08) / .22, 0, 1)), st = Math.round(ex * 4);
-  if (!st) return;
-  const o = P.o, h = o.heading || 0, c = Math.cos(h), sn = Math.sin(h), x = o.x + (P.r.ox * c - P.r.oy * sn) * P.sc, y = o.y + (P.r.ox * sn + P.r.oy * c) * P.sc;
-  v3mAdd('ejarm:' + st, () => v3mdEjArm(st / 4), x, y, v3AirZ(o) - .55 * P.sc, h, P.sc, m.side === 'e' ? 1 : 0, o.bank || 0);
-}
 
 // ———————————————— 甲板车辆（只是画面）：挂弹车、弹药拖车、牵引车 ————————————————
 //   挂弹车、牵引车用 Sketchfab 上的模型（v3x.js 的 loader、tug，CC-BY），还没加载完时画代码建的；车辆按米画（航母是 1 比 1）
@@ -568,15 +427,15 @@ function v3dVeh(key, fb, x, y, z, a) {
   v3dDrv(key, x, y, z, a);
 }
 function v3dDrv(key, x, y, z, a) {
-  const St = V3D_SEAT[key];   // 有人开：坐在驾驶位上、两手握方向盘
-  if (St && typeof v3mMan === 'function') {
-    const c = Math.cos(a), s = Math.sin(a), vest = typeof mbRGB === 'function' ? mbRGB(St[3]) : 1.12;
-    v3mAdd('man:drv:' + key, () => v3mMan('deck', 'sit', { vest }), x + St[0] * c - St[1] * s, y + St[0] * s + St[1] * c, z + St[2], a, typeof V3_PIL === 'number' ? V3_PIL : .95, 0);
+  const St = V3D_SEAT[key];   // 有人开：司机（用户给的士兵模型）站在驾驶位上
+  if (St && typeof v3gMan === 'function') {
+    const c = Math.cos(a), s = Math.sin(a);
+    v3gMan('deck', 'sit', x + St[0] * c - St[1] * s, y + St[0] * s + St[1] * c, z + St[2], a, typeof V3_PIL === 'number' ? V3_PIL : .95, 0);
   }
 }
 function v3dDeckVeh(cv, C, live, wing, top, h, at) {
   if (typeof cvPark !== 'function' || typeof AIR_REARM !== 'number') return;
-  const msl = typeof v3MslInst === 'function' ? v3MslInst('st3:x:', 'pl15') : null, K = .86;   // 导弹跟飞机同一比例
+  const msl = typeof v3gMsl === 'function', K = .86;   // 导弹（用户给的模型，js/v3g.js）跟飞机同一比例
   // 机位 j 旁的挂弹车与弹药拖车：r = 挂弹进度（0 开始 – 1 挂完；挂弹车开过去、举升把弹送进弹舱、倒回原位，拖车上再取一枚放上托架）
   // 挂弹（r 进度 0–1）：挂弹车托着导弹从原位开到飞机侧面 → 慢慢伸进机腹下 → 举升臂抬起 → 把弹推进弹舱（舱门这时开着）→ 放下举升臂 → 倒出来开回原位 →
   //   地勤从拖车上抬一枚放上托架；bay(开度)：画这架飞机的弹舱门；T：整个过程多少秒（弹药兵走 / 跑）
@@ -628,14 +487,13 @@ function v3dDeckVeh(cv, C, live, wing, top, h, at) {
       else if (r < .97) walk(pk, pc, sm01((r - .88) / .09), .88, .97, null, true);
       else walk(pc, side(d0), (r - .97) / .02, .97, .99);
       const [mx, my] = at(u, v);
-      v3mAdd('man:dkr:' + pose, () => v3mMan('deck', pose, { vest: v3dRed() }), mx, my, top, h + f, V3_PIL, 0);
+      v3gMan('deck', pose, mx, my, top, h + f, V3_PIL, 0);
     }
     if (!msl) return;
-    for (const o of [-.45, .45].slice(0, r < .88 ? 2 : 1)) { const [mx, my] = at(Tu - sa * o, Tv + ca * o); v3mAdd(msl[0], msl[1], mx, my, top + 1.1, h + a, K, 0); }
-    if (M3) { const [mx, my] = at(M3[0], M3[1]); v3mAdd(msl[0], msl[1], mx, my, M3[2], h + a, K, 0); }
+    for (const o of [-.45, .45].slice(0, r < .88 ? 2 : 1)) { const [mx, my] = at(Tu - sa * o, Tv + ca * o); v3gMsl('pl15', mx, my, top + 1.1, h + a, K, 0); }
+    if (M3) { const [mx, my] = at(M3[0], M3[1]); v3gMsl('pl15', mx, my, M3[2], h + a, K, 0); }
   };
-  // 弹舱门（机型有弹舱时；外部模型也按自带模型的弹舱位置画开着的舱门）
-  const bayAt = (key, sz, x, y, a) => b => { if (b > .04 && typeof AIRD === 'object' && AIRD[key] && AIRD[key].bay && typeof v3mBay === 'function') { const st = Math.round(b * 4); v3mAdd('bay:' + key + ':' + st + ':0', () => v3mBay(key, st / 4, 0), x, y, top + V3_GEAR * sz / 21, a, sz / 21, 3); } };
+  const bayAt = () => () => {};   // 弹舱门：用户给的飞机模型没有分开的舱门，不画
   // 停着待命 / 整备的飞机（着舰后整备 45 秒）
   for (const [id, j] of cvPark(cv, wing)) {
     const w = wing.find(o => o.id === id);
@@ -656,12 +514,6 @@ function v3dDeckVeh(cv, C, live, wing, top, h, at) {
   v3dArmCrew(live, top, h, at);   // 偏流板后解除保险的挂弹组
   v3dTugs(cv, live, top, h, at);   // 牵引车
 }
-// ———————————————— 弹药保险（按航母上挂弹的真实流程）————————————————
-//   弹从弹药库经弹药升降机运上甲板，装上弹药拖车推到机位旁；挂弹车用举升臂把弹托到机腹下，弹药兵跪在两侧用手扶正、对准挂钩，
-//   挂好后插上带红飘带的保险销（"起飞前拔除"）。出动时飞机在偏流板后停稳，飞行员两手离开操纵杆举起来给人看，挂弹组钻到机腹下拔掉保险销，
-//   走到机头前把一串串销子举过头顶给飞行员看（数目对上），再退到一旁，飞机才滑上弹射器（cvdeck.js 'hold' 停 CVD.armT 秒）
-let V3D_REDV = 0;
-const v3dRed = () => V3D_REDV || (V3D_REDV = typeof mbRGB === 'function' ? mbRGB('#b23a2e') : 1.12);   // 弹药人员的红马甲
 // 解除保险的时间线（秒，进入 'hold' 起算）：走到机腹下 → 跪着拔销（pull 时刻销子离机）→ 走到机头前 → 举销给飞行员看 → 退到一旁
 const V3D_ARM = { in: 1.3, pull: 2.2, kn: 2.7, out: 3.7, show: 4.7, away: 5.5 };
 // 保险销的红飘带（机型坐标，与机体同一原点）：每个弹舱两根、侧弹舱和每个外挂点各一根，从机腹 / 挂架下垂下来，被甲板风吹得往后飘
@@ -700,7 +552,7 @@ function v3dArmCrew(live, top, h, at) {
       else if (t < A.away) walk(F0, E[i], (t - A.show) / (A.away - A.show));
       else { [u, v, f] = E[i]; f += Math.PI; pose = 'st'; }   // 站在一旁看着飞机
       const [x, y] = at(u, v);
-      v3mAdd('man:dkr:' + pose, () => v3mMan('deck', pose, { vest: v3dRed() }), x, y, top, h + f, V3_PIL, 0);
+      v3gMan('deck', pose, x, y, top, h + f, V3_PIL, 0);
     });
   }
   for (const id of V3D_ARMP.keys()) if (!now.has(id)) V3D_ARMP.delete(id);
