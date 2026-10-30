@@ -17,7 +17,7 @@
 // 状态（纯 JSON）：S.b2 = { g: [{ id, n 剩余架数, st: 'base' 待命 | 'out' 出击中 | 'done' 已返航, k 出击次数 }] }；
 //   飞机在 S.eair.fly（type 'b2'，g 机群 id，no 机号，load 挂载，aims 瞄准点 [x, y, k?, id?]，i 已投 / 已射枚数）
 // n 一组架数 · minT 开战后最早出动 · need 出动门槛（看得见的上岸之敌价值合计：步兵每人 1、坦克 6、车辆 3、抢滩舰 7~10）· needLost 据点失守后的门槛
-const B2 = { n: 5, minT: 240, need: 90, needLost: 50, retry: 10, spd: 200, alt: .95, turn: .8, fturn: .28, hp: 3, rel: 260, every: .12, jEvery: .35, safe: 60, gps: 4, edge: 90 };
+const B2 = { n: 5, minT: 240, need: 90, needLost: 50, retry: 10, spd: 250, alt: .95, turn: .8, fturn: .28, hp: 3, rel: 260, every: .12, jEvery: .35, safe: 60, gps: 4, edge: 90 };
 // 压制（v14）：每枚 JDAM 落地除了杀伤半径内的毁伤，还有大得多的冲击波与心理震撼——RS 以内的敌步兵被死死压住、排士气大跌，
 //   车辆乘员被震晕（压制）；连续落弹沿航线一路滚过去（地毯式覆盖），爆点留下火球与久久不散的烟尘。
 //   弹多目标少时不再「其余几架补投同样的点」：GBU-38 在敌集结处按 26 的间距铺满覆盖面（藏在掩体里看不见的也一起覆盖）

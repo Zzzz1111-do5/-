@@ -11,8 +11,18 @@ const FL_G = 9.81, FL_DT = 1 / 120;
 //   CLa 升力线斜率 /rad、as 失速迎角、CLmax、CD0、K 诱导阻力因子、alim 正常律迎角限制、nz 过载限制 [负, 正]、pmax 最大滚转角速度 rad/s、L 机长（座舱位置）
 const FL_AC = {
   j35: { nm: '歼-35', m: 20000, S: 50, b: 11.5, c: 4.9, I: [3.6e4, 1.75e5, 2.0e5], Tm: 1.3e5, Ta: 2.0e5, CLa: 3.9, as: .46, CLmax: 1.75, CD0: .021, K: .12, alim: .43, nz: [-3, 9], pmax: 3.0, L: 17.3 },
-  j16d: { nm: '歼-16D', m: 26000, S: 62, b: 14.7, c: 5.3, I: [6.0e4, 2.6e5, 3.0e5], Tm: 1.5e5, Ta: 2.5e5, CLa: 4.2, as: .5, CLmax: 1.9, CD0: .03, K: .12, alim: .45, nz: [-3, 8.5], pmax: 2.4, L: 21.9 }
+  j16d: { nm: '歼-16D', m: 26000, S: 62, b: 14.7, c: 5.3, I: [6.0e4, 2.6e5, 3.0e5], Tm: 1.5e5, Ta: 2.5e5, CLa: 4.2, as: .5, CLmax: 1.9, CD0: .03, K: .12, alim: .45, nz: [-3, 8.5], pmax: 2.4, L: 21.9 },
+  j15t: { nm: '歼-15T', m: 24000, S: 62, b: 14.7, c: 5.3, I: [5.4e4, 2.5e5, 2.9e5], Tm: 1.55e5, Ta: 2.5e5, CLa: 4.2, as: .5, CLmax: 1.9, CD0: .026, K: .12, alim: .45, nz: [-3, 8.5], pmax: 2.6, L: 21.9 },
+  // 歼-20：鸭翼 + 三角翼，两台涡扇-10C（军用推力各约 90 千牛、加力约 142 千牛），作战重量约 25 吨
+  j20: { nm: '歼-20', m: 25000, S: 73, b: 13, c: 6.6, I: [5.5e4, 2.6e5, 3.0e5], Tm: 1.8e5, Ta: 2.84e5, CLa: 3.6, as: .52, CLmax: 1.85, CD0: .019, K: .14, alim: .47, nz: [-3, 9], pmax: 3.0, L: 20.4 },
+  // 歼-50 / 歼-36：官方未公布，按外界估算（歼-36 三发、约 45 吨作战重量、无尾）
+  j50: { nm: '歼-50', m: 24000, S: 70, b: 12.5, c: 6.5, I: [5.0e4, 2.4e5, 2.8e5], Tm: 1.7e5, Ta: 2.6e5, CLa: 3.5, as: .48, CLmax: 1.7, CD0: .018, K: .14, alim: .43, nz: [-3, 9], pmax: 2.8, L: 19 },
+  j36: { nm: '歼-36', m: 45000, S: 140, b: 19, c: 9, I: [1.5e5, 6.5e5, 7.5e5], Tm: 2.6e5, Ta: 4.2e5, CLa: 3.0, as: .45, CLmax: 1.6, CD0: .017, K: .15, alim: .4, nz: [-2.5, 7], pmax: 1.8, L: 23 }
 };
+// 型号键（carrier.js AIR_MDL）→ 上面的飞控参数
+const FL_KEY = { j35: 'j35', j35s: 'j35', j16d: 'j16d', j15t: 'j15t', j20: 'j20', j50: 'j50', j36: 'j36', j36s: 'j36' };
+// 耗油率（千克 / 牛 / 秒）：军用推力约 0.8、加力约 1.9 磅 / 磅力 / 小时（涡扇战斗机的典型值）
+const FL_TSFC = [2.27e-5, 5.4e-5];
 // 气动导数（机体系前右下，常见战斗机的量级；角速度按 p b / 2V、q c / 2V 无量纲化）
 const FL_D = { Cm0: .02, Cma: -.35, Cmq: -6, Cmde: -1.1, Clb: -.09, Clp: -.38, Clr: .06, Clda: .14, Cldr: .02, Cnb: .13, Cnr: -.28, Cnp: -.03, Cndr: -.09, Cnda: -.01, CYb: -.85, CYdr: .18 };
 const FL_DMAX = [.44, .38, .52], FL_DRATE = [1.3, 2.4, 1.6];   // 舵偏上限、舵偏速率（rad、rad/s）：升降舵（全动平尾）、副翼、方向舵
@@ -35,15 +45,16 @@ function flEul(q) {   // 四元数 → [滚转, 俯仰, 偏航]
 }
 const flRho = h => 1.225 * Math.exp(-Math.max(0, h) / 9000);   // 空气密度（指数大气）
 const flGround = (n, e) => typeof v3Ht === 'function' ? v3Ht(clamp(e, 0, W - 1), clamp(-n, 0, H - 1)) : 0;   // 3D 地面高度（海面 -2.6）
-const flKey = p => p.v === 'ew' ? 'j16d' : 'j35';
+const flKey = p => FL_KEY[typeof airMdlKey === 'function' ? airMdlKey(p.kind, p.v) : ''] || (p.v === 'ew' ? 'j16d' : 'j35');
 
 // 接手：按游戏里这架飞机现在的位置、航向、速度、坡度建状态（配平迎角：升力等于重力）
 function flInit(p) {
   const A = FL_AC[flKey(p)], z = typeof v3AirZ === 'function' ? v3AirZ(p) : 200, h = p.heading || 0, psi = Math.atan2(Math.cos(h), -Math.sin(h));
-  const Va = clamp((p.spd || 200) * (typeof airK === 'function' ? airK(p) : .5) * 1.6, 170, 320), qb = .5 * flRho(z) * Va * Va, at = clamp(A.m * FL_G / (qb * A.S) / A.CLa, 0, .2);
+  const Va = clamp((p.spd || 250) * (typeof airK === 'function' ? airK(p) : 1), 160, 340), qb = .5 * flRho(z) * Va * Va, at = clamp(A.m * FL_G / (qb * A.S) / A.CLa, 0, .2);
+  const cap = (typeof airReal === 'function' && airReal(p.kind, p.v).fuel) || 8000;   // 机内燃油（carrier.js AIR_REAL）；接手时按已经飞了一段、剩七成五算
   const phi = clamp(p.bank || 0, -1, 1), q = flQe(phi, at, psi), R = flRot(q);
   const vb = [Va * Math.cos(at), 0, Va * Math.sin(at)];   // 机体系：迎角 at 时气流从下前方来
-  return (p.fl = { k: flKey(p), P: [-p.y, p.x, -z], V: flMv(R, vb), q, w: [0, 0, 0], d: [0, 0, 0], ab: false, law: 'n', nz: 1, a: at, b: 0, M: Va / 340, Va, T: 0, stall: 0, sy: 0, sx: 0 });
+  return (p.fl = { k: flKey(p), P: [-p.y, p.x, -z], V: flMv(R, vb), q, w: [0, 0, 0], d: [0, 0, 0], ab: false, law: 'n', nz: 1, a: at, b: 0, M: Va / 340, Va, T: 0, stall: 0, sy: 0, sx: 0, cap, fuel: clamp(p.fuel ?? cap * .75, 0, cap), ff: 0 });
 }
 
 // 推演一帧：inp = { x 压杆（右正，−1–1）, y 拉杆（拉为正）, r 蹬舵, thr 油门 0–1, ab 加力, law 'n' 正常律 / 'd' 直接律, ap 自动驾驶（离开作战区域时）}；返回 'ground' / 'sea' 表示撞地 / 落海
@@ -81,7 +92,8 @@ function flStep(F, dt, inp) {
     const sa = smooth(A.as, A.as + .25, Math.abs(al)), CL = lerp(clamp(A.CLa * al, -A.CLmax, A.CLmax), 1.05 * Math.sin(2 * al), sa);   // 过了失速迎角升力掉下来、变成平板升力
     const CD = A.CD0 * (1 + 1.3 * smooth(.85, 1.05, M) - .4 * smooth(1.2, 1.8, M)) + A.K * CL * CL + 1.3 * Math.sin(al) ** 2 * sa + .04 * (Math.abs(F.d[0]) + Math.abs(F.d[2]));
     const CY = D.CYb * be + D.CYdr * F.d[2];
-    const ab = !!inp.ab, thr = clamp(inp.thr, 0, 1), T = (A.Tm * thr + (ab ? A.Ta - A.Tm : 0)) * (rho / 1.225) ** .75 * (1 + .25 * Math.min(M, 1.6));
+    const ab = !!inp.ab && F.fuel > 0, thr = F.fuel > 0 ? clamp(inp.thr, 0, 1) : 0, T = (A.Tm * thr + (ab ? A.Ta - A.Tm : 0)) * (rho / 1.225) ** .75 * (1 + .25 * Math.min(M, 1.6));   // 燃油耗尽：发动机熄火，只能滑翔
+    F.ff = T * FL_TSFC[ab ? 1 : 0]; F.fuel = Math.max(0, F.fuel - F.ff * h);   // 耗油（千克 / 秒）
     const ca = Math.cos(al), sn = Math.sin(al);
     const Fb = [qb * A.S * (CL * sn - CD * ca) + T, qb * A.S * CY, qb * A.S * (-CL * ca - CD * sn)];
     // —— 力矩 ——
@@ -113,4 +125,5 @@ function flToGame(p) {
   p.bank = phi; p.pt3 = th;
   p.spd = F.Va / (typeof airK === 'function' ? Math.max(airK(p), .3) : .5);
   p.alt = clamp((-F.P[2] - Math.max(g, -2.6)) / (typeof V3_AIR === 'number' ? V3_AIR : 230) + .05, .05, 1);
+  p.fuel = F.fuel;   // 交回 AI 再接手时接着用
 }

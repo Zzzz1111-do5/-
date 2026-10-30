@@ -43,6 +43,7 @@ async function v3gDecode(key, D) {
   const VB = new Float32Array(bin.buffer, bin.byteOffset + m.vb[0], m.vb[1] / 4), IB = m.it === 4 ? new Uint32Array(bin.buffer, bin.byteOffset + m.ib[0], m.ib[1] / 4) : new Uint16Array(bin.buffer, bin.byteOffset + m.ib[0], m.ib[1] / 2);
   M.vb = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, M.vb); gl.bufferData(gl.ARRAY_BUFFER, VB, gl.STATIC_DRAW);
   M.ib = gl.createBuffer(); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, M.ib);
+  v3gPitScr(key, m, M, VB, IB);   // 座舱显示屏（带座舱内饰的模型）：去掉重叠的镜像面、记下每块屏的位置与贴图坐标
   gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, IB, gl.STATIC_DRAW);
   // 包围球半径（选远近网格、远处带本方颜色用）、影子用的包围盒（v3light.js 的格式：x0 x1 y0 y1 z0 z1）
   const b = m.bb;
@@ -244,14 +245,18 @@ function v3gDraw(C, LM) {
       for (const [mi, pi, i0, cnt] of m.lod[L.lod]) {
         const T = M.mats[mi];
         if ((T.am === 2) !== !!pass) continue;
+        if (V3G.glass && V3G.glass.key === M.key && V3G.glass.hide && V3G.glass.hide.includes(T.n)) continue;   // 坐在座舱里：模型的平显玻璃是一整块不透明的亮绿色，不画（平显符号由 v3pilot.js 画在那里）
         const P = pi >= 0 ? M.parts[pi] : null;
         gl.uniform1f(U.uPk, P ? pi : -1);
         if (P) { gl.uniform1f(U.uPm, P.k === 'hide' ? 1 : 0); gl.uniform3f(U.uPp, P.p[0], P.p[1], P.p[2]); gl.uniform3f(U.uPa, P.a[0], P.a[1], P.a[2]); }
-        const tb = T.t && M.tex[T.t[0]], tn = T.nt && M.tex[T.nt[0]], tm = (T.sg ? T.sgt : T.mrt) && M.tex[(T.sg ? T.sgt : T.mrt)[0]], te = T.et && M.tex[T.et[0]], to = T.ot && M.tex[T.ot[0]];
+        const lv = V3G.live && V3G.live.key === M.key && V3G.live.mi === mi ? V3G.live.tex : null;   // 座舱显示屏：玩家开着这架时是实时画面（v3pilot.js），自己发光
+        const tb = lv || (T.t && M.tex[T.t[0]]), tn = T.nt && M.tex[T.nt[0]], tm = (T.sg ? T.sgt : T.mrt) && M.tex[(T.sg ? T.sgt : T.mrt)[0]], te = lv || (T.et && M.tex[T.et[0]]), to = T.ot && M.tex[T.ot[0]];
         if (tb) wrap(tb, T.t);
         tex(0, tb); tex(1, tn); tex(2, tm); tex(3, te); tex(4, to);
         gl.uniform4f(U.uTf, tb ? 1 : 0, tn ? 1 : 0, tm ? 1 : 0, 0); gl.uniform4f(U.uTf2, te ? 1 : 0, to ? 1 : 0, 0, 0);
-        gl.uniform4f(U.uC, T.c[0], T.c[1], T.c[2], T.c[3]); gl.uniform2f(U.uMR, T.mr[0], T.mr[1]); gl.uniform3f(U.uE, T.e[0], T.e[1], T.e[2]);
+        const ga = T.am === 2 && V3G.glass && V3G.glass.key === M.key ? V3G.glass.k : 1;   // 座舱盖等玻璃：玩家开着的这型飞机调得更透明（v3pilot.js）
+        if (lv) { gl.uniform4f(U.uC, .15, .15, .15, 1); gl.uniform3f(U.uE, 1, 1, 1); } else { gl.uniform4f(U.uC, T.c[0], T.c[1], T.c[2], T.c[3] * ga); gl.uniform3f(U.uE, T.e[0], T.e[1], T.e[2]); }
+        gl.uniform2f(U.uMR, T.mr[0], T.mr[1]);
         if (T.sg) gl.uniform4f(U.uSG, T.sg[0], T.sg[1], T.sg[2], T.sg[3]); else gl.uniform4f(U.uSG, 0, 0, 0, -1);
         gl.uniform1f(U.uNs, T.ns ?? 1); gl.uniform1f(U.uAm, T.am); gl.uniform1f(U.uAc, T.ac ?? .5);
         X.drawElementsInstancedANGLE(gl.TRIANGLES, cnt, it, i0 * m.it, L.n);
@@ -320,6 +325,28 @@ function v3gPlaneZc(key, sz) { const M = V3G.M[V3G_AIR[key] || 'j31']; return M 
 const V3G_CRED = [{"name": "96 式主战坦克", "title": "ZTZ96", "author": "jzmhhhhh", "license": "CC-BY-4.0", "url": "https://sketchfab.com/3d-models/ztz96-b0da178e50dc423983445841615d9e80"}, {"name": "M1A1 艾布拉姆斯", "title": "M1A1 Abrams Main Battle Tank", "author": "MirzaArrafiERV_45", "license": "CC-BY-4.0", "url": "https://sketchfab.com/3d-models/m1a1-abrams-main-battle-tank-1529f5d842cb4f578aa8cb672524f044"}, {"name": "歼-20", "title": "Chinese Chengdu J-20", "author": "42manako", "license": "CC-BY-4.0", "url": "https://sketchfab.com/3d-models/chinese-chengdu-j-20-b9e81062c94545ffb0232d3ac6b7adc5"}, {"name": "歼-16", "title": "Shenyang J16 Hidden Dragon", "author": "andertan", "license": "CC-BY-4.0", "url": "https://sketchfab.com/3d-models/shenyang-j16-hidden-dragon-2b950f910677457fbb52b6096f81e70b"}, {"name": "歼-31 鹘鹰", "title": "Shenyang J31 Gyrfalcon", "author": "andertan", "license": "CC-BY-4.0", "url": "https://sketchfab.com/3d-models/shenyang-j31-gyrfalcon-23dbff530e21491299ac67bbab42b553"}, {"name": "直-10", "title": "Changhe Z-10W", "author": "42manako", "license": "CC-BY-4.0", "url": "https://sketchfab.com/3d-models/changhe-z-10w-617cb4a91dfd4eaaa59161e06691df7f"}, {"name": "直-21", "title": "[MW] Z-21", "author": "xlisov", "license": "CC-BY-NC-4.0", "url": "https://sketchfab.com/3d-models/mw-z-21-a2d88447f0904f49b73f94fa88dccea5"}, {"name": "士兵", "title": "Army Character 2", "author": "MirzaArrafiERV_45", "license": "CC-BY-4.0", "url": "https://sketchfab.com/3d-models/army-character-2-e3c4da4a33bb42ed8512f423a4319c5a"}, {"name": "AIM-120C", "title": "AIM-120C AMRAAM", "author": "Jeyhun1985", "license": "CC-BY-4.0", "url": "https://sketchfab.com/3d-models/aim-120c-amraam-838fa923340a4d108e05c99bf0146ff6"}, {"name": "AIM-9", "title": "AIM-9 missile", "author": "rickslash", "license": "CC-BY-4.0", "url": "https://sketchfab.com/3d-models/aim-9-missile-caaf15b49bac4144b6c6be577c2b872a"}, {"name": "AIM-54 不死鸟、AIM-9 响尾蛇（组合）、AIM-120（组合）、KS-172、AIM-132 ASRAAM、GBU-24 宝石路、Mk 83 炸弹、AGM-65 小牛、AGM-154 JSOW、硫磺石", "title": "300 followers - free aircraft missile set", "author": "NETRUNNER_pl", "license": "CC-BY-4.0", "url": "https://sketchfab.com/3d-models/300-followers-free-aircraft-missile-set-2e70bc2ea0824897b2ccaea378809c9e"}];
 // 授权只允许非商用的模型（直-21）商店版里不带（tools/build_www.mjs --app）：加载不到就换成同类的另一个
 const V3G_ALT = { z21: 'z10w' };
+// 带座舱内饰的模型（座舱视角坐进模型里看，v3pilot.js）：eye 飞行员眼睛、pan 仪表板上沿中点（模型坐标，米：x 前、y 左、z 上）；
+//   scr = 仪表板显示屏的材质——玩家开着这架时换成实时画面（雷达、挂载、燃油与速度）。歼-31（歼-35 用它）是一整块宽屏，左右两半各贴半张图
+const V3G_PIT = { j31: { eye: [4.3, 0, 2.72], pan: [5.22, 0, 2.52], scr: 'screen', hide: ['Glowing_green'] } };   // 歼-20 的座舱眼位还没对好，先用平面座舱   // hide：坐在座舱里不画的材质（挡视线的平显玻璃）
+// 显示屏的面：模型用镜像修改器做的，左右各多出一片和正面重叠、贴图左右反的镜像面（两层贴图在同一个平面上来回打架闪烁）——
+//   只留贴图从左往右（机体 y 由大到小，飞行员看过去从左到右）的面；每块屏记下 y 范围（左、右）、z 范围（下、上）与贴图 u、v 范围
+function v3gPitScr(key, m, M, VB, IB) {
+  const cf = V3G_PIT[key], si = cf && cf.scr ? m.mats.findIndex(x => x.n === cf.scr) : -1;
+  if (si < 0) return;
+  const st = m.st, q = [];
+  for (const lod of m.lod) for (const [mi, , i0, cnt] of lod) if (mi === si) for (let t = i0; t + 2 < i0 + cnt; t += 3) {
+    const P = [0, 1, 2].map(j => { const v = IB[t + j] * st; return [VB[v + 1], VB[v + 2], VB[v + 6], VB[v + 7]]; });   // y、z、u、v
+    const e1 = [P[1][0] - P[0][0], P[1][1] - P[0][1]], e2 = [P[2][0] - P[0][0], P[2][1] - P[0][1]], det = e1[0] * e2[1] - e1[1] * e2[0];
+    if (Math.abs(det) < 1e-9) continue;
+    if (((P[1][2] - P[0][2]) * e2[1] - (P[2][2] - P[0][2]) * e1[1]) / det > 0) { IB[t + 1] = IB[t]; IB[t + 2] = IB[t]; continue; }   // 镜像面：变成退化三角形，不画
+    if (lod !== m.lod[0]) continue;
+    const y = P.map(a => a[0]), z = P.map(a => a[1]), u = P.map(a => a[2]), v = P.map(a => a[3]);
+    const r = { y0: Math.max(...y), y1: Math.min(...y), zb: Math.min(...z), zt: Math.max(...z), u0: Math.min(...u), u1: Math.max(...u), vb: v[z.indexOf(Math.min(...z))], vt: v[z.indexOf(Math.max(...z))] };
+    const o = q.find(a => Math.abs(a.y0 - r.y0) < .02 && Math.abs(a.y1 - r.y1) < .02);   // 同一块屏的两个三角形合并
+    if (o) { o.u0 = Math.min(o.u0, r.u0); o.u1 = Math.max(o.u1, r.u1); } else q.push(r);
+  }
+  M.scr = q.sort((a, b) => b.y0 - a.y0); M.scrMi = si;
+}
 // 开局就把一定会用到的模型先下载、解码（士兵、双方坦克），别的等单位第一次出现时再加载
 if (typeof HOOK === 'object' && HOOK.newGame) HOOK.newGame.push(() => v3gPreload(['army', 'ztz96', 'm1a1']));
 // 士兵：用户给的士兵模型原样摆放（T 字站姿，不改模型）；卧倒、匍匐、阵亡时整个放平（脸朝下），别的姿势都站着。k 比例（V3_MAN 一类），side 0 我 / 1 敌 / 2 遗体

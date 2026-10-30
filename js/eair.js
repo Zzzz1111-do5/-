@@ -10,16 +10,17 @@ POWER.erk = { men: .45, ship: 2, struct: 0, seg: false, R: 18 };   // 机载火�
 const EA_H5 = ['heli', 'heli', 'heli', 'heli', 'heli'];   // 阿帕奇 5 架，一次全部出动
 const EA_DIFF = { normal: { wing: [...EA_H5, 'ga', 'mq9'], first: 120, gap: 80 }, hard: { wing: ['ga', 'ga', ...EA_H5, 'ftr', 'ftrb', 'mq9'], first: 80, gap: 50 },
   hell: { wing: ['ga', 'ga', 'ga', ...EA_H5, 'ftr', 'ftrb', 'ftrb', 'f22', 'f22', 'mq9', 'mq9'], first: 55, gap: 35 } };
+// spd：真实巡航速度（米 / 秒；F-22A 是超音速巡航）；雷达、最大速度、燃油见 carrier.js AIR_REAL
 // 守方（美军）：A-10C 慢而皮实（钛合金座舱浴盆，挨一发还能飞），AH-64E，F-35A 隐身（我方雷达发现距离打折），F-22A 更隐身、超音速巡航、推力矢量
-const EA_SPEC = { ga: { name: 'A-10C 攻击机', spd: 170, turn: 1.4, hp: 2, flares: 2 }, heli: { name: 'AH-64E 武装直升机', spd: 90, turn: 2.4, hp: 2, flares: 1 },
-  uh60: { name: 'UH-60M 黑鹰运输直升机', spd: 85, turn: 2.2, hp: 2, flares: 1 },
-  c17: { name: 'C-17A 环球霸王 III 运输机', spd: 150, turn: .9, hp: 4, flares: 3 },   // 第 101 空降师空降（a101.js）：大、慢、扛打
-  ftr: { name: 'F-35A 战斗机', spd: 240, turn: 1.9, hp: 1, flares: 2, stealth: .45 },   // 守方按美军装备命名   // 歼击机：巡逻、拦截、争夺制空权（airwar.js）
-  ftrb: { name: 'F-35B 战斗机', spd: 230, turn: 1.8, hp: 1, flares: 2, stealth: .45, vtol: true },   // 短距起飞 / 垂直降落型：不要跑道，从机位、直升机坪或机场外的前沿加油弹药点垂直起降；空空导弹 2 枚 + 小直径炸弹 4 枚
-  f22: { name: 'F-22A 猛禽战斗机', spd: 285, turn: 2.4, hp: 1, flares: 3, stealth: .3 },   // 制空专用：6 枚 AIM-120D + 2 枚 AIM-9X、雷达看得更远（airwar.js EA_FTR）
-  mq9: { name: 'MQ-9A 死神无人机', spd: 110, turn: 1, hp: 1, flares: 0, isr: true },   // 中空长航时侦察：光电 / 红外转塔，飞到守方最久没看过的地方盘旋侦察（intel.js intelTask）
-  b2: { name: 'B-2A 幽灵隐身轰炸机', spd: 200, turn: .8, hp: 3, flares: 4, stealth: .1 },
-  p8: { name: 'P-8A 海神海上巡逻机', spd: 150, turn: .6, hp: 2, flares: 2, stealth: 1 } };   // 反航母体系的眼睛（antiship.js）：在海岸外高空巡逻，雷达搜索海面   // 从图外远程奔袭（b2.js）：约 12000 米高空，雷达反射截面极小
+const EA_SPEC = { ga: { name: 'A-10C 攻击机', spd: 155, turn: 1.4, hp: 2, flares: 2 }, heli: { name: 'AH-64E 武装直升机', spd: 74, turn: 2.4, hp: 2, flares: 1 },
+  uh60: { name: 'UH-60M 黑鹰运输直升机', spd: 78, turn: 2.2, hp: 2, flares: 1 },
+  c17: { name: 'C-17A 环球霸王 III 运输机', spd: 230, turn: .9, hp: 4, flares: 3 },   // 第 101 空降师空降（a101.js）：大、慢、扛打
+  ftr: { name: 'F-35A 战斗机', spd: 260, turn: 1.9, hp: 1, flares: 2, stealth: .45 },   // 守方按美军装备命名   // 歼击机：巡逻、拦截、争夺制空权（airwar.js）
+  ftrb: { name: 'F-35B 战斗机', spd: 255, turn: 1.8, hp: 1, flares: 2, stealth: .45, vtol: true },   // 短距起飞 / 垂直降落型：不要跑道，从机位、直升机坪或机场外的前沿加油弹药点垂直起降；空空导弹 2 枚 + 小直径炸弹 4 枚
+  f22: { name: 'F-22A 猛禽战斗机', spd: 340, turn: 2.4, hp: 1, flares: 3, stealth: .3 },   // 制空专用：6 枚 AIM-120D + 2 枚 AIM-9X、雷达看得更远（airwar.js EA_FTR）
+  mq9: { name: 'MQ-9A 死神无人机', spd: 87, turn: 1, hp: 1, flares: 0, isr: true },   // 中空长航时侦察：光电 / 红外转塔，飞到守方最久没看过的地方盘旋侦察（intel.js intelTask）
+  b2: { name: 'B-2A 幽灵隐身轰炸机', spd: 250, turn: .8, hp: 3, flares: 4, stealth: .1 },
+  p8: { name: 'P-8A 海神海上巡逻机', spd: 200, turn: .6, hp: 2, flares: 2, stealth: 1 } };   // 反航母体系的眼睛（antiship.js）：在海岸外高空巡逻，雷达搜索海面   // 从图外远程奔袭（b2.js）：约 12000 米高空，雷达反射截面极小
 const eaFtr = t => t === 'ftr' || t === 'ftrb' || t === 'f22';
 const eaVtol = t => !!(EA_SPEC[t] && EA_SPEC[t].vtol);   // 垂直起降（F-35B）   // 歼击机（空战由 airwar.js 接管）
 // 在巡逻高度上的战斗机（双方）：便携防空导弹、高炮、机枪、近防炮都够不着，只有舰空 / 车载防空导弹和对方战斗机能打
@@ -568,7 +569,7 @@ function eaHomeSpot(a) {
   return { x: s[0], y: s[1], h: s[2], farp: true };
 }
 function eaSteer(a, tx, ty, dt, spd) {
-  const sp = EA_SPEC[a.type], df = eaAng(Math.atan2(ty - a.y, tx - a.x) - a.heading), turn = airYaw(a, df, sp.turn, dt), k = airK(a);   // 平滑转向、地速减半（carrier.js）
+  const sp = EA_SPEC[a.type], df = eaAng(Math.atan2(ty - a.y, tx - a.x) - a.heading), turn = airYaw(a, df, sp.turn, dt), k = airK(a);   // 平滑转向、地速按真实速度（carrier.js AIR_K）
   a.heading = eaAng(a.heading + turn); a.bank = lerp(a.bank || 0, clamp(a.hr / sp.turn, -1, 1), Math.min(1, dt * 5));
   a.spd += clamp((spd ?? sp.spd) - a.spd, -60 * dt, 50 * dt);
   a.x += Math.cos(a.heading) * a.spd * k * dt; a.y += Math.sin(a.heading) * a.spd * k * dt;

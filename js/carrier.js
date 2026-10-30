@@ -3,35 +3,68 @@
 // 航母机动与受损（岸防炮可打）；绘制航母、甲板停机、飞机剪影（无文字）
 // 任务类型（每种任务默认用哪个型号见 AIR_BASEM，变体见 AIR_VMODEL）；n = 战役默认架数
 const AIR_SPEC = {
-  recon: { name: '侦察机', n: 2, aa: .06, spd: 190, size: 17 },
-  strike: { name: '攻击机', n: 4, aa: .09, spd: 180, size: 15 },
-  cas: { name: '对地支援机', n: 4, aa: .09, spd: 170, size: 15 },
-  bomber: { name: '轰炸机', n: 0, aa: .07, spd: 150, size: 22 },   // 沙盒购买：轰-6K（地毯轰炸）/ 攻击-11（俯冲精确投弹）
-  fighter: { name: '战斗机', n: 2, aa: .05, spd: 230, size: 15 }   // 制空（airwar.js）：在指定空域巡逻，拦截敌机、夺取制空权
+  recon: { name: '侦察机', n: 2, aa: .06, spd: 150, size: 17 },
+  strike: { name: '攻击机', n: 4, aa: .09, spd: 250, size: 15 },
+  cas: { name: '对地支援机', n: 4, aa: .09, spd: 70, size: 15 },
+  bomber: { name: '轰炸机', n: 0, aa: .07, spd: 215, size: 22 },   // 沙盒购买：轰-6K（地毯轰炸）/ 攻击-11（俯冲精确投弹）
+  fighter: { name: '战斗机', n: 2, aa: .05, spd: 275, size: 15 }   // 制空（airwar.js）：在指定空域巡逻，拦截敌机、夺取制空权
 };
-// 型号：名称、剪影、巡航速度、被高炮打中的基础概率、画面尺寸；land = 陆基（战区机场出动，从地图南缘飞来，不占航母机位，往返加油挂弹 100 秒）；
+// 型号：名称、剪影、巡航速度（米 / 秒，真实世界的巡航速度，见下面 AIR_REAL）、被高炮打中的基础概率、画面尺寸；land = 陆基（战区机场出动，从地图南缘飞来，不占航母机位，往返加油挂弹 100 秒）；
 // stealth = 隐身（敌雷达发现距离、防空命中按此打折）；std = 防区外投放距离（精确制导炸弹 / 反辐射导弹）；aam / aamR / pkK = 空空导弹数、射程、命中修正；loiter = 盘旋秒数
 const AIR_MDL = {
-  kj600: { name: '空警-600 舰载预警机', sil: 'kj600', spd: 175, aa: .06, size: 19 },
-  wz7: { name: '无侦-7 高空无人侦察机', sil: 'wz7', spd: 175, aa: .02, size: 19, land: true },   // 两万米高空，高炮够不着
-  j35: { name: '歼-35 隐身舰载战斗机', sil: 'j35', spd: 240, aa: .09, size: 15, stealth: .4, std: 170, gbN: 6, arW: 'ft8', arR: 260 },   // 内埋 6 枚飞腾-8 小直径制导炸弹：先防区外打指定目标，余弹自主武装侦察（airArFly）
-  j35s: { name: '歼-35 隐身舰载战斗机（防空压制型）', sil: 'j35', spd: 240, aa: .09, size: 15, stealth: .4, std: 300, sead: true, gbN: 4, arW: 'ld10', arR: 400 },   // 4 枚雷电-10 反辐射导弹，专打敌防空，余弹自主搜索防空
-  j15t: { name: '歼-15T 舰载战斗机', sil: 'j15', spd: 225, aa: .09, size: 16, agm: 'kd88', agmN: 2, agmR: 380 },   // 2 枚 KD-88 空地导弹（防区外）
-  gj11: { name: '攻击-11 隐身无人攻击机', sil: 'gj11', spd: 200, aa: .08, size: 16, stealth: .5 },
-  h6k: { name: '轰-6K 轰炸机', sil: 'h6k', spd: 165, aa: .07, size: 24, land: true },
-  gj2: { name: '攻击-2 察打一体无人机', sil: 'gj2', spd: 140, aa: .09, size: 17, land: true, loiter: 60, agm: 'ba7', agmN: 4, agmR: 320 },   // 长航时：盘旋 60 秒；4 枚蓝箭-7 空地导弹
-  z10: { name: '直-10 武装直升机', sil: 'z10', spd: 110, aa: .09, size: 15, agm: 'hj10', agmN: 8, agmR: 280 },   // 8 枚红箭-10 反坦克导弹
-  j20: { name: '歼-20 隐身战斗机', sil: 'j20', spd: 265, aa: .05, size: 17, land: true, stealth: .35, aam: 6, aamR: 560, pkK: 1.15 },   // 4 枚霹雳-15 + 2 枚霹雳-10
+  kj600: { name: '空警-600 舰载预警机', sil: 'kj600', spd: 150, aa: .06, size: 19 },
+  wz7: { name: '无侦-7 高空无人侦察机', sil: 'wz7', spd: 210, aa: .02, size: 19, land: true },   // 两万米高空，高炮够不着
+  j35: { name: '歼-35 隐身舰载战斗机', sil: 'j35', spd: 250, aa: .09, size: 15, stealth: .4, std: 170, gbN: 6, arW: 'ft8', arR: 260 },   // 内埋 6 枚飞腾-8 小直径制导炸弹：先防区外打指定目标，余弹自主武装侦察（airArFly）
+  j35s: { name: '歼-35 隐身舰载战斗机（防空压制型）', sil: 'j35', spd: 250, aa: .09, size: 15, stealth: .4, std: 300, sead: true, gbN: 4, arW: 'ld10', arR: 400 },   // 4 枚雷电-10 反辐射导弹，专打敌防空，余弹自主搜索防空
+  j15t: { name: '歼-15T 舰载战斗机', sil: 'j15', spd: 245, aa: .09, size: 16, agm: 'kd88', agmN: 2, agmR: 380 },   // 2 枚 KD-88 空地导弹（防区外）
+  gj11: { name: '攻击-11 隐身无人攻击机', sil: 'gj11', spd: 220, aa: .08, size: 16, stealth: .5 },
+  h6k: { name: '轰-6K 轰炸机', sil: 'h6k', spd: 215, aa: .07, size: 24, land: true },
+  gj2: { name: '攻击-2 察打一体无人机', sil: 'gj2', spd: 70, aa: .09, size: 17, land: true, loiter: 60, agm: 'ba7', agmN: 4, agmR: 320 },   // 长航时：盘旋 60 秒；4 枚蓝箭-7 空地导弹
+  z10: { name: '直-10 武装直升机', sil: 'z10', spd: 64, aa: .09, size: 15, agm: 'hj10', agmN: 8, agmR: 280 },   // 8 枚红箭-10 反坦克导弹
+  j20: { name: '歼-20 隐身战斗机', sil: 'j20', spd: 275, aa: .05, size: 17, land: true, stealth: .35, aam: 6, aamR: 560, pkK: 1.15 },   // 4 枚霹雳-15 + 2 枚霹雳-10
   // 彩蛋（j36.js）：歼-36。官方未公布参数，按公开估算：机长约 23 米、翼展约 19 米、最大起飞重量约 55 吨（歼-20 约 37 吨）、三发、主弹舱长约 7.6 米、作战半径约 3000 公里；
   //   体型大、无尾 → 转弯慢（turn）、不带航炮；全向隐身更好、机头大雷达看得更远（radar）、留空时间长（cap 秒）。挂载按弹舱尺寸推测：aamL / aamLR = 霹雳-17 远程空空导弹
   // 歼-50（外界称呼，沈飞第六代原型机，2024 年 12 月 26 日被拍到试飞；λ 形无尾翼、双发）：外界推测会发展舰载型。官方无任何参数，按公开估算——
   // 比歼-36 小、可上航母（占机库），隐身 0.22、雷达 800、6 枚霹雳-15 + 2 枚霹雳-10，不带航炮，只打超视距
-  j50: { name: '歼-50 第六代舰载战斗机', sil: 'j50', spd: 290, aa: .03, size: 16, stealth: .22, aam: 8, aamR: 560, pkK: 1.18, radar: 800, turn: 1.9, gun: 0 },
-  j36: { name: '歼-36 第六代战斗机（制空型）', sil: 'j36', spd: 300, aa: .02, size: 18, land: true, stealth: .2, aam: 6, aamR: 560, aamL: 2, aamLR: 900, pkK: 1.2, radar: 900, turn: 1.7, cap: 240, gun: 0 },
+  j50: { name: '歼-50 第六代舰载战斗机', sil: 'j50', spd: 280, aa: .03, size: 16, stealth: .22, aam: 8, aamR: 560, pkK: 1.18, radar: 800, turn: 1.9, gun: 0 },
+  j36: { name: '歼-36 第六代战斗机（制空型）', sil: 'j36', spd: 290, aa: .02, size: 18, land: true, stealth: .2, aam: 6, aamR: 560, aamL: 2, aamLR: 900, pkK: 1.2, radar: 900, turn: 1.7, cap: 240, gun: 0 },
   // 歼-16D 电子战飞机（陆基，战区机场出动）：翼尖电子干扰吊舱压制敌雷达——附近我方飞机被敌防空发现、命中的概率打七折（airJamK）；挂 4 枚雷电-10 反辐射导弹，420 外打敌防空
   j16d: { name: '歼-16D 电子战飞机', sil: 'j15', spd: 250, aa: .07, size: 18, land: true, std: 420, sead: true, gbN: 4, arW: 'ld10', arR: 420, jam: 650 },
-  j36s: { name: '歼-36 第六代战斗机（打击型）', sil: 'j36', spd: 300, aa: .02, size: 18, land: true, stealth: .2, aam: 4, aamR: 560, pkK: 1.2, radar: 900, turn: 1.7, cap: 240, gun: 0, agm: 'ls6', agmN: 4, agmR: 900 }
+  j36s: { name: '歼-36 第六代战斗机（打击型）', sil: 'j36', spd: 290, aa: .02, size: 18, land: true, stealth: .2, aam: 4, aamR: 560, pkK: 1.2, radar: 900, turn: 1.7, cap: 240, gun: 0, agm: 'ls6', agmN: 4, agmR: 900 }
 };
+// 真实世界的性能（公开资料；官方未公布的按外界估算）——巡航速度写在上面型号表与 eair.js EA_SPEC 的 spd 里（米 / 秒，推演里就按它飞，1 单位 = 1 米）；
+//   这里给座舱显示屏与机载雷达用：vmax 最大速度 km/h、rdr 机载雷达对战斗机大小目标的探测距离 km（0 = 没有对空搜索雷达）、rdrNm 雷达、fuel 机内燃油 kg
+const AIR_REAL = {
+  kj600: { vmax: 650, rdr: 450, rdrNm: '有源相控阵预警雷达', fuel: 5600 },
+  wz7: { vmax: 800, rdr: 0, rdrNm: '合成孔径侦察雷达', fuel: 5000 },
+  j35: { vmax: 1900, rdr: 170, rdrNm: '有源相控阵火控雷达', fuel: 8000 },
+  j35s: { vmax: 1900, rdr: 170, rdrNm: '有源相控阵火控雷达', fuel: 8000 },
+  j15t: { vmax: 2300, rdr: 200, rdrNm: '有源相控阵火控雷达', fuel: 9400 },
+  gj11: { vmax: 900, rdr: 0, rdrNm: '光电 / 红外', fuel: 4000 },
+  h6k: { vmax: 1050, rdr: 0, rdrNm: '对海搜索雷达', fuel: 34000 },
+  gj2: { vmax: 370, rdr: 0, rdrNm: '合成孔径雷达', fuel: 1300 },
+  z10: { vmax: 300, rdr: 0, rdrNm: '光电瞄准具', fuel: 1100 },
+  j20: { vmax: 2100, rdr: 210, rdrNm: '1475 型有源相控阵雷达', fuel: 12000 },
+  j50: { vmax: 2100, rdr: 220, rdrNm: '有源相控阵雷达（估算）', fuel: 12000 },
+  j36: { vmax: 2400, rdr: 300, rdrNm: '大口径有源相控阵雷达（估算）', fuel: 22000 },
+  j36s: { vmax: 2400, rdr: 300, rdrNm: '大口径有源相控阵雷达（估算）', fuel: 22000 },
+  j16d: { vmax: 2100, rdr: 200, rdrNm: '有源相控阵雷达', fuel: 9400 },
+  transport: { vmax: 920, rdr: 0, rdrNm: '气象雷达', fuel: 60000 },
+  // 守方（美军，eair.js 的机型键）
+  ga: { vmax: 706, rdr: 0, rdrNm: '无（瞄准吊舱）', fuel: 4850 },
+  heli: { vmax: 293, rdr: 8, rdrNm: 'AN/APG-78 长弓火控雷达', fuel: 1100 },
+  uh60: { vmax: 357, rdr: 0, rdrNm: '无', fuel: 1100 },
+  c17: { vmax: 950, rdr: 0, rdrNm: '气象雷达', fuel: 102600 },
+  ftr: { vmax: 1930, rdr: 150, rdrNm: 'AN/APG-81 有源相控阵雷达', fuel: 8280 },
+  ftrb: { vmax: 1930, rdr: 150, rdrNm: 'AN/APG-81 有源相控阵雷达', fuel: 6125 },
+  f22: { vmax: 2410, rdr: 200, rdrNm: 'AN/APG-77 有源相控阵雷达', fuel: 8200 },
+  mq9: { vmax: 480, rdr: 0, rdrNm: 'AN/APY-8 山猫合成孔径雷达', fuel: 1800 },
+  b2: { vmax: 1010, rdr: 0, rdrNm: 'AN/APQ-181（对地）', fuel: 75750 },
+  p8: { vmax: 907, rdr: 0, rdrNm: 'AN/APY-10 对海搜索雷达（约 370 km）', fuel: 34000 }
+};
+// 这架飞机的真实性能（我方按型号键，敌机按 eair.js 机型键）；对空雷达探测距离（米）
+const airReal = (type, v) => AIR_REAL[airMdlKey(type, v)] || AIR_REAL[type] || {};
+const airRdrM = (type, v) => (airReal(type, v).rdr || 0) * 1000;
 const AIR_BASEM = { recon: 'kj600', strike: 'j35', cas: 'gj2', bomber: 'h6k', fighter: 'j20' };
 const AIR_VMODEL = { lr: 'wz7', dive: 'gj11', heavy: 'h6k', fb: 'j15t', heli: 'z10', sead: 'j35s', ew: 'j16d', adv: 'j20', j36: 'j36', j36s: 'j36s', j50: 'j50' };   // adv：旧存档里的先进战斗机
 const airMdlKey = (type, v) => AIR_VMODEL[v] || AIR_BASEM[type];
@@ -590,8 +623,8 @@ function updatePlanes(dt) {
 
 // 转向飞行：限制角速度；固定目标落在转弯圈内时先直飞拉开（带回差，避免贴着转弯圈绕圈）
 // free：追踪前方移动的引导点（盘旋、最后进近）时不做此判断
-// 飞机的地速：速度表（spd）乘 AIR_K——空中的飞机比原来慢一半（离地 / 着舰前后逐渐过渡到真实速度，起降滑跑不变）
-const AIR_K = .5;
+// 飞机的地速：速度表（spd）乘 AIR_K。原来空中减半（0.5）；现在按真实世界的速度飞（1），各型的 spd 就是真实巡航速度（米 / 秒）
+const AIR_K = 1;
 const airK = o => !o || o.alt == null || o.alt >= .25 ? AIR_K : lerp(1, AIR_K, clamp(o.alt / .25, 0, 1));
 // 平滑转向（双方所有飞机共用）：想要的角速度按航向偏差成比例（快对准时自然收小，不过冲、不来回摆），
 //   角速度的变化有上限（压坡度、改出都要时间）——航迹是连续的圆弧，不走折线 / 波浪；返回这一步转过的角度

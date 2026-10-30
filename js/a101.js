@@ -136,9 +136,9 @@ function a101Fly(a, dt) {
   if (a.ph === 'in' || a.ph === 'drop') {
     a.alt = Math.min(.6, a.alt + dt * .2);
     const d = dist(a.x, a.y, a.lx, a.ly);
-    if (a.ph === 'in') { eaSteer(a, a.lx, a.ly + 200, dt, sp.spd); if (d < 90 || a.y > a.ly - 20) { a.ph = 'drop'; a.rT = 0; } }
+    if (a.ph === 'in') { eaSteer(a, a.lx, a.ly + 200, dt, 130); if (d < 90 || a.y > a.ly - 20) { a.ph = 'drop'; a.rT = 0; } }   // 真实的空投：低空进场约 250 节（130 米 / 秒），投放时减到约 140 节
     else {
-      eaSteer(a, a.lx, a.ly + 400, dt, sp.spd * .85);
+      eaSteer(a, a.lx, a.ly + 400, dt, 72);
       if ((a.rT -= dt) <= 0) { a.rT = .18; a101Release(a); }
       if (!a.sq.length && !a.veh.length) a.ph = 'out';
     }

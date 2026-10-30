@@ -1264,7 +1264,7 @@ function v3mCollect(C, box) {
   }
   // 飞机：高度与 3D 地图里的标识一致（view3d.js v3AirZ：甲板上贴着甲板，空中按高度），按滚转角倾斜；直升机主旋翼转动
   const plane = (o, hd, sd, key, sz, bank) => {
-    if (typeof V3FP === 'object' && V3FP.on && V3FP.o === o) return;   // 第一人称驾驶：镜头就在座舱里，不画自己
+    if (typeof V3FP === 'object' && V3FP.on && V3FP.o === o && V3FP.vw === 'cock' && !(typeof fpPitOn === 'function' && fpPitOn(o))) return;   // 座舱视角：模型没有座舱内饰时不画自己（平面座舱，v3pilot.js）；有内饰就照画，镜头坐在模型座舱里
     const L = !sd && typeof v3dLaunch === 'function' ? v3dLaunch(o) : null;   // 刚离舰：下沉、抬头，起落架过一会儿才收（v3det.js）
     const x = o.x, y = o.y, z = v3AirZ(o) + (L ? L.dz : 0);
     let pt = typeof V3G_HELI === 'object' && V3G_HELI[key] ? 0 : typeof v3dPitch === 'function' ? v3dPitch(o, sd, z, L, key) : L ? L.pitch : 0;   // 仰角跟着航迹 + 迎角（js/aero.js；直升机不按航迹抬头）
@@ -1273,7 +1273,7 @@ function v3mCollect(C, box) {
     const gd = !!(L && L.gear) || (tu >= 0 && tu < (typeof EA_TO === 'object' ? EA_TO.gear : 4));
     if (typeof v3gPlane === 'function') v3gPlane(key, sz, x, y, z, false, hd || 0, sd, bank || 0, pt, gd, t);   // 用户给的飞机模型（js/v3g.js）：起落架收放、直升机旋翼转
   };
-  for (const p of S.planes || []) if (!p.dead && isFinite(p.x) && inB(p.x, p.y, 220) && !(!p.land && (p.phase === 'cat' || p.phase === 'roll' || p.phase === 'trap'))) {   // 甲板上的在航母那里画（放下起落架）
+  for (const p of S.planes || []) if (!p.dead && isFinite(p.x) && (inB(p.x, p.y, 220) || (typeof fpDriving === 'function' && fpDriving(p))) && !(!p.land && (p.phase === 'cat' || p.phase === 'roll' || p.phase === 'trap'))) {   // 甲板上的在航母那里画（放下起落架）
     const key = typeof airSilKey === 'function' ? airSilKey(p.kind, p.v) : 'j35', sz = (typeof airMdl === 'function' && airMdl(p.kind, p.v).size) || ((typeof AIR_SPEC === 'object' && AIR_SPEC[p.kind]) || {}).size || 15;
     plane(p, p.heading, 0, key, sz, p.bank);
   }

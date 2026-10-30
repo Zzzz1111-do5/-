@@ -10,7 +10,7 @@
 //   90 以内停着的车辆补炮弹；也算补给点（supplynet.js supplyPoints：自动指挥的排弹药不足会来这里补）；敌人先到（30 以内无我方）就被缴获
 // AI（观战，或航母开了自动派机）：攻势展开后向正在攻击的目标后方空降一次，与正面夹击；有排弹药告急、又离接通的补给点很远时空投补给
 // 状态：S.para = { tr: 在途运输机, ch: 下降中的伞兵组 / 弹药箱, ca: 空投补给点, n: 架次编号, aiT, dropT }；S.assets.para / S.assets.drop 剩余次数
-const PA = { spd: 140, alt: .55, jump: 5, sig: 28, crate: 120, life: 240, feed: 6, r: 120, rv: 90, jlJump: 4, jlSig: 16 };
+const PA = { spd: 75, alt: .55, jump: 5, sig: 28, crate: 120, life: 240, feed: 6, r: 120, rv: 90, jlJump: 4, jlSig: 16 };   // spd：运-20 伞降进场速度约 270 km/h（真实空投速度）
 // 蛟龙突击队：每架运-20 的三个组 {men, role}
 const PA_STICKS = [
   [{ men: ['radio', 'rifle', 'mg'], role: 'assault' }, { men: ['rifle', 'rifle', 'mg'], role: 'assault' }, { men: ['rifle', 'rifle', 'rifle'], role: 'at' }],
