@@ -331,7 +331,7 @@ const V3G_CRED = [{"name": "96 式主战坦克", "title": "ZTZ96", "author": "jz
 const V3G_ALT = { z21: 'z10w' };
 // 带座舱内饰的模型（座舱视角坐进模型里看，v3pilot.js）：eye 飞行员眼睛、pan 仪表板上沿中点（模型坐标，米：x 前、y 左、z 上）；
 //   scr = 仪表板显示屏的材质——玩家开着这架时换成实时画面（雷达、挂载、燃油与速度）。歼-31（歼-35 用它）是一整块宽屏，左右两半各贴半张图
-//   hud = 平显玻璃的材质（坐在座舱里换成实时平显画面）；hudF = 平显外框（材质、所在范围 x0 x1 y0 y1 z0 z1、玻璃内沿 y0 y1 z0 z1、收到原宽的几成）
+//   hud = 平显玻璃的材质（坐在座舱里换成实时平显画面）；hudF = 平显外框（材质、所在范围 x0 x1 y0 y1 z0 z1、玻璃内沿 y0 y1 z0 z1、左右与上边收到原宽的几成，底边坐在遮光罩上不动）
 //   noz = 尾喷口调节片（材质、铰链 x、出口 x、离发动机轴线的半径范围）——拆成单独部件，按推力开合（v3gPlane 的 noz）
 const V3G_PIT = { j31: { eye: [4.3, 0, 2.72], pan: [5.22, 0, 2.52], scr: 'screen', hud: 'Glowing_green',
   hudF: { mat: 'Darkness', box: [5.1, 5.16, -.105, .105, 2.55, 2.8], inner: [-.076, .076, 2.599, 2.769], k: .3 },
@@ -365,7 +365,7 @@ function v3gPitHud(cf, m, M, VB, IB) {
       const o = v * st, x = VB[o], y = VB[o + 1], z = VB[o + 2];
       if (x < x0 || x > x1 || y < y0 || y > y1 || z < z0 || z > z1) continue;
       if (y > iy1 + .001) VB[o + 1] = iy1 + (y - iy1) * F.k; else if (y < iy0 - .001) VB[o + 1] = iy0 + (y - iy0) * F.k;
-      if (z > iz1 + .001) VB[o + 2] = iz1 + (z - iz1) * F.k; else if (z < iz0 - .001) VB[o + 2] = iz0 + (z - iz0) * F.k;
+      if (z > iz1 + .001) VB[o + 2] = iz1 + (z - iz1) * F.k;   // 底边不动：原来就坐在遮光罩上，收上去就悬空了
     }
   }
   if (hi < 0) return;

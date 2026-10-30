@@ -399,6 +399,7 @@ function fpMdlXf(o) {
   const Ln = typeof v3dLaunch === 'function' ? v3dLaunch(o) : null, z = v3AirZ(o) + (Ln ? Ln.dz : 0);
   const pt = typeof V3G_HELI === 'object' && V3G_HELI[key] ? 0 : typeof v3dPitch === 'function' ? v3dPitch(o, 0, z, Ln, key) : 0, k = sz / M.meta.len, h = o.heading || 0, rl = o.bank || 0, zc = M.meta.zc;
   const rot = v => v3dMv3(h, pt, rl, v);
+  V3FP.mdlPt = pt;   // 模型（机身）的俯仰 = 航迹角 + 迎角：平显的俯仰梯按它画，才和窗外的地平线对得上
   return { rot, pt: v => { const r = rot([v[0] * k, v[1] * k, (v[2] - zc) * k]); return [o.x + r[0], -o.y + r[1], z + r[2]]; } };
 }
 function fpPitCam() {
@@ -460,11 +461,11 @@ function fpPitHud(o) {
   const gz = v3Ht(clamp(P.x, 0, W - 1), clamp(P.y, 0, H - 1)), agl = Math.round(P.z - Math.max(gz, -2.6)), Mm = airMdl(o.kind, o.v);
   g.save(); g.beginPath(); g.rect(N * .04, N * .04, N * .92, N * .92); g.clip();
   g.strokeStyle = g.fillStyle = G; g.lineWidth = 4; g.lineCap = 'round'; g.textBaseline = 'middle';
-  // 俯仰梯（随坡度转）：机体仰角 = 线的仰角 − 俯仰
-  const [bx, by] = px(0, 0);
+  // 俯仰梯（随坡度转）：机体仰角 = 线的仰角 − 机身俯仰（与镜头、模型同一个，含迎角）
+  const [bx, by] = px(0, 0), pb = V3FP.mdlPt ?? P.pitch;
   g.save(); g.translate(bx, by); g.rotate(-P.roll);
   for (let a = -20; a <= 20; a += 5) {
-    const y = px((a * deg - P.pitch), 0)[1] - by;
+    const y = px((a * deg - pb), 0)[1] - by;
     if (Math.abs(y) > N) continue;
     const L = a === 0 ? N * .9 : N * .18, gp = a === 0 ? 0 : N * .09;
     g.setLineDash(a < 0 ? [14, 10] : []);
@@ -472,8 +473,10 @@ function fpPitHud(o) {
     if (a) { g.setLineDash([]); g.font = 'bold 26px "IBM Plex Mono", monospace'; g.textAlign = 'right'; g.fillText(String(Math.abs(a)), -gp - L - 6, y); }
   }
   g.restore(); g.setLineDash([]);
-  // 机头指向（水线符号）
+  // 机头指向（水线符号）、飞行轨迹标记（飞机实际往哪飞：比机头低一个迎角）
   g.beginPath(); g.moveTo(bx - 60, by); g.lineTo(bx - 22, by); g.lineTo(bx - 11, by + 14); g.lineTo(bx, by); g.lineTo(bx + 11, by + 14); g.lineTo(bx + 22, by); g.lineTo(bx + 60, by); g.stroke();
+  const [fx, fy] = px(P.pitch - pb, 0);
+  g.beginPath(); g.arc(fx, fy, 14, 0, 6.283); g.moveTo(fx - 40, fy); g.lineTo(fx - 14, fy); g.moveTo(fx + 14, fy); g.lineTo(fx + 40, fy); g.moveTo(fx, fy - 14); g.lineTo(fx, fy - 30); g.stroke();
   // 航向带（顶部）
   const hd = brg(P.yaw), y0 = N * .1;
   g.font = 'bold 28px "IBM Plex Mono", monospace'; g.textAlign = 'center';
