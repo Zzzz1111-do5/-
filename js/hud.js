@@ -19,6 +19,7 @@ const ICON = {
   ai: '<circle cx="12" cy="12" r="3.5"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4M5 5l2.8 2.8M16.2 16.2L19 19M5 19l2.8-2.8M16.2 7.8L19 5"/>',
   cas: '<path d="M12 3v12M5 10l7-3 7 3M9 15l3-1.5 3 1.5"/><circle cx="12" cy="12" r="9.5" stroke-dasharray="3 2.5"/>',
   cv: '<path d="M3 9h15l3 3-3 3H3z"/><path d="M14 9V6h3v3"/><path d="M5 12h10" stroke-dasharray="2 2"/>',
+  rain: '<path d="M6 3v6M12 3v10M18 3v4M6 13v2M12 17v3M18 11v6"/>',
   ship: '<path d="M12 4l8 15H4z"/>', supply: '<path d="M12 4l8 15H4z"/><path class="f" d="M12 11l3 5H9z"/>',
   dd: '<path d="M12 3l8 6-3 10H7L4 9z"/><path d="M12 8l3 2.3-1.2 3.7h-3.6L9 10.3z"/>',
   assault: '<path class="f" d="M12 5l6 11H6z"/><circle cx="6" cy="20" r="1.4" class="f"/><circle cx="12" cy="20" r="1.4" class="f"/><circle cx="18" cy="20" r="1.4" class="f"/>',
@@ -60,6 +61,12 @@ function buildHud() {
   if (typeof PA_ICONS === 'object') Object.assign(ICON, PA_ICONS);   // 空降 / 空投（para.js）
   if (typeof AB_ICONS === 'object') Object.assign(ICON, AB_ICONS);   // 空降夺取机场（abn.js）
   if (typeof VEH_ICONS === 'object') for (const k in VEH_ICONS) ICON['v_' + k] = VEH_ICONS[k];   // 车辆卡片图标（vehicles.js）
+  $('btnRain').innerHTML = svg('rain');
+  $('btnRain').addEventListener('click', () => {
+    R.rain = R.rain === 0 ? .25 : R.rain < .5 ? .7 : 0;
+    try { localStorage.setItem('bh-rain', R.rain); } catch (e) { /* 存储不可用时忽略 */ }
+    updateHud();
+  });
   for (const [grp, list] of BTN) $(grp).innerHTML = list.map(([k, tip, key]) =>
     `<button class="ib" id="b-${k}" type="button" title="${tip}（${key}）" aria-label="${tip}">${svg(k)}<kbd>${key}</kbd>${ASSET[k] ? `<em id="n-${k}"></em>` : ''}</button>`).join('');
   for (const [, list] of BTN) for (const [k, , , fn] of list) $('b-' + k).addEventListener('click', fn);
@@ -110,7 +117,7 @@ function restart(briefed) {
   // 新战局 / 再来一局：回到开始界面，由菜单重新选择模式与难度
   if (briefed === true && typeof showMenu === 'function') { delete $('btnNew').dataset.armed; $('btnNew').classList.remove('hot'); showMenu(); return; }
   newGame(undefined, U.level);
-  S.briefed = briefed; U.tool = null; U.logKey = null; U.cardKey = null; U.helpPause = false;
+  S.briefed = briefed; U.tool = null; U.logKey = null; U.cardKey = null; U.helpPause = false; MX.seed = null;
   mmInit($('mm')); updateVision();
   CAM.x = W / 2; CAM.y = STAGING_Y + 120; CAM.z = CAM.fit * 2.2; camClamp();
   delete $('btnNew').dataset.armed;
@@ -194,6 +201,7 @@ function updateHud() {
     el.classList.toggle('on', k === 'auto' ? D.auto : k === 'airauto' ? !!(S.cv && S.cv.auto) : k === 'ai' ? [...units, ...ships, ...vs].length > 0 && [...units, ...ships, ...vs].every(o => o.auto === true) : U.tool === k || (grp === 'forms' && (units.length ? units.every(u => u.form === k) : ships.length && ships.every(s => s.form === k))));
     if (ASSET[k]) $('n-' + k).textContent = S.assets[ASSET[k]] ?? 0;
   }
+  $('btnRain').classList.toggle('hot', R.rain > .5); $('btnRain').style.opacity = R.rain ? 1 : .45;
   $('reserve').textContent = S.assets.reserve;
   // 据点条居中：两侧各让出右上按钮组的宽度（--trw），免得右端压到时钟与按钮下面
   const tr = $('topr'), trw = tr && tr.offsetWidth ? Math.ceil(innerWidth - tr.getBoundingClientRect().left + 8) : 0;

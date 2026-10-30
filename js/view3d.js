@@ -382,10 +382,10 @@ function v3Mesh() {
   v3EnvBuild();
   if (typeof v3LightBake === 'function') v3LightBake();   // 光照贴图（v3light.js）
 }
-// 底图（远处、俯视贴图以外）：地形图地面（v3Mx 关）用整图地形渲染（terrain.js trxSnapshot，约 1.5 米一个像素，有农田、林冠、河流道路），
-//   不再是每 10 米一个色块；数码风的地面由着色器画，底图用小地图配色就够
+// 底图（远处、俯视贴图以外）：写实画面用整图地形渲染（terrain.js trxSnapshot，约 1.5 米一个像素，有农田、林冠、河流道路），
+//   不再是每 10 米一个色块；黑绿 / 数码风的地面由着色器画，底图只在写实画面里用，用小地图配色就够
 function v3BaseTex() {
-  const gl = V3.gl, real = !v3Mx();
+  const gl = V3.gl, real = typeof realLook === 'function' && realLook() && !v3Mx();
   let src = V3.baseMM;
   const pw = V3.coarse || (V3.maxTex || 2048) < 4096 ? 2048 : 4096;   // 底图按 2 的幂（2:1）存，好生成多级渐远纹理
   if (real && typeof trxSnapshot === 'function') { const snap = trxSnapshot(pw); if (snap) src = snap; }
@@ -441,8 +441,8 @@ function v3Cls() {
   gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D, V3.cls2); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, GW, GH, 0, gl.RGBA, gl.UNSIGNED_BYTE, b);
   if (typeof terLines === 'function') { const lf = terLines(); gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1); gl.activeTexture(gl.TEXTURE6); gl.bindTexture(gl.TEXTURE_2D, V3.lf); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, lf.w, lf.h, 0, gl.RGBA, gl.UNSIGNED_BYTE, lf.d); }   // 道路、河流的中心线距离场（terrain.js）
 }
-// 3D 地面用数码风画吗：不用了——3D 只用写实画面（披整张地图的写实地形图：农田、林冠、河流道路、海水，叠山体明暗与投影）
-const v3Mx = () => false;
+// 3D 地图用数码风画地面吗（黑绿画面；设置里可关）
+const v3Mx = () => typeof SETTINGS === 'object' && !!SETTINGS && (SETTINGS.look === 'green' || SETTINGS.look === 'matrix') && SETTINGS.matrix3d !== false;   // 黑绿、数码两种画面都用数码风地面
 // 写实画面的天空 / 远处的大气（雾的颜色、背景）：淡灰蓝
 const V3_BG = [.63, .69, .75], V3_BGG = `vec3(${V3_BG.join(', ')})`;
 
@@ -790,7 +790,7 @@ function v3Draw(now) {
   else if (V3.on) { v3HoldStep(fdt); v3FcStep(fdt); }   // 自由镜头
   else { v3TzStep(fdt); V3.yaw += Math.atan2(Math.sin(V3.yawT - V3.yaw), Math.cos(V3.yawT - V3.yaw)) * .18; V3.tilt += (V3.tiltT - V3.tilt) * .18; }   // 开始界面背景的环绕展示
   const C = v3Camera(), box = V3.box = v3Box(Math.max(2.6, v3FogE(C) * .93 / C.D)), boxN = v3Box(1.15);   // 远处贴图（与立体模型）铺到能见距离
-  if (V3.baseReal !== !v3Mx()) v3BaseTex();   // 换了地面画法：底图跟着换
+  if (V3.baseReal !== (typeof realLook === 'function' && realLook() && !v3Mx())) v3BaseTex();   // 切换了画面风格：底图跟着换
   // 俯视贴图：近处一张高清（每帧画），整个可见范围一张低清（每 3 帧画一次）；近处已经盖住大半个可见范围（俯看时）就只画一张
   const cap = Math.min(V3.maxTex, R.lowCap || (SETTINGS && SETTINGS.quality === 'low') ? 1280 : V3.coarse ? 1600 : 2048, Math.max(1024, Math.max(R.cv.width, R.cv.height) * 1.3));   // 屏外俯视画布最长边（按屏幕大小，手机、低画质更小）
   // 跟不上（主循环帧间隔滑动平均超过 40ms）就把屏外画布逐步缩小，最低 45%；流畅后再慢慢放大

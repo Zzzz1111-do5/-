@@ -278,9 +278,9 @@ function navyDraw(time) {
     const sink = e.dead ? clamp((S.t - e.sinkT) / 10, 0, 1) : 0;
     ctx.save(); ctx.translate(x, y); ctx.rotate(e.heading);
     ctx.globalAlpha = ghost ? .35 : 1 - sink * .85;
-    if (!e.dead && !ghost && e.spd > 4) { ctx.strokeStyle = 'rgba(238,243,242,.35)'; ctx.lineWidth = px(1.2); ctx.beginPath(); ctx.moveTo(-L / 2, -B / 3); ctx.lineTo(-L / 2 - e.spd * 1.6, -B * 1.2); ctx.moveTo(-L / 2, B / 3); ctx.lineTo(-L / 2 - e.spd * 1.6, B * 1.2); ctx.stroke(); }
+    if (!e.dead && !ghost && e.spd > 4) { ctx.strokeStyle = realLook() ? 'rgba(238,243,242,.35)' : rgba(COL.enemy, .25); ctx.lineWidth = px(1.2); ctx.beginPath(); ctx.moveTo(-L / 2, -B / 3); ctx.lineTo(-L / 2 - e.spd * 1.6, -B * 1.2); ctx.moveTo(-L / 2, B / 3); ctx.lineTo(-L / 2 - e.spd * 1.6, B * 1.2); ctx.stroke(); }
     if (R.m3d && known && !e.dead) { ctx.restore(); continue; }   // 3D：舰体是立体模型（v3units.js），贴图里只留尾浪
-    const real = !ghost;   // 看得见：美国海军灰舰体、深色甲板设备、细红边；只剩记忆位置的画暗红轮廓
+    const real = realLook() && !ghost;   // 写实：美国海军灰舰体、深色甲板设备、细红边
     ctx.fillStyle = real ? rlLit(ctx, e.heading, L, B, lkPaint('#7f878d', 'e')) : rgba(COL.enemy, .22); ctx.strokeStyle = COL.enemy; ctx.lineWidth = px(real ? 1 : 1.3);
     ctx.beginPath(); ctx.moveTo(L / 2, 0); ctx.lineTo(L * .22, -B / 2); ctx.lineTo(-L / 2, -B / 2 * .9); ctx.lineTo(-L / 2, B / 2 * .9); ctx.lineTo(L * .22, B / 2); ctx.closePath(); ctx.fill(); ctx.stroke();
     if (real) { ctx.strokeStyle = 'rgba(28,32,34,.85)'; ctx.fillStyle = lkPaint('#9aa2a7', 'e'); } else ctx.fillStyle = rgba(COL.enemy, .55);

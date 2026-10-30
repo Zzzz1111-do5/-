@@ -41,8 +41,10 @@ function a3Sync() {
   if (ch) { rebuildForts(); a3Dirty(); }
 }
 
-// 地形改变后让各处缓存失效：小地图底图、据点掩体表、小组直线判定
+// 地形改变后让各处缓存失效：着色器地形纹理、像素降级图、小地图底图、据点掩体表、小组直线判定
 function a3Dirty() {
+  if (typeof MX !== 'undefined' && MX) MX.seed = null;
+  if (typeof R !== 'undefined' && R) R.pixSeed = null;
   if (typeof MM !== 'undefined' && MM) MM.seed = null;
   if (typeof aiCache === 'function') aiCache();
   if (S) for (const q of S.teams) q.pathT = -9;

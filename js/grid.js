@@ -1,9 +1,6 @@
 'use strict';
 // 视线与寻路：双方可见格（高程、林地/城镇/悬崖/烟幕遮挡）、Dijkstra 流场
 const PV = new Uint8Array(GW * GH), EV = new Uint8Array(GW * GH);   // 我方 / 敌方当前可见格
-// 视野字节图（0/255），供地形着色器（2D / 3D）与小地图共用
-const FOGB = new Uint8Array(GW * GH);
-function fogBytes() { const D = typeof CVL_DISP === 'object' ? CVL_DISP : null; for (let i = 0; i < GW * GH; i++) FOGB[i] = PV[i] || (D && D[i]) ? 255 : 0; }   // 隐蔽小组所在格照常显示为可见（conceal.js）
 const SMOKE = new Uint8Array(GW * GH);
 const MINEC = new Uint8Array(GW * GH);   // 1 = 未发现的雷区，2 = 已标定雷区
 const WIREC = new Uint8Array(GW * GH);   // 铁丝网所在格

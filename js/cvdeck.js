@@ -316,19 +316,19 @@ function cvShooters(c, list) {
 }
 // 二维：登机梯（座舱盖开着、飞行员还没坐进去时挂在座舱左侧）与飞行员（drawPlanes 在飞机之后画，爬进座舱时盖在机身上）；k 远景放大
 function cvPilotDraw(ctx, p, k, time) {
-  const c = cvOf(cvHome(p)) || S.cv, P = cvPilotPose(p), Ld = cvLadder(p);
+  const c = cvOf(cvHome(p)) || S.cv, P = cvPilotPose(p), real = typeof realLook === 'function' && realLook(), Ld = cvLadder(p);
   if (!c || typeof manDraw !== 'function') return;
   const at = (u, v) => cvW(u * k, v * k, c);
   if ((p.cpo || 0) > .3 && P) {
     const ux = Ld[2] - Ld[0], vy = Ld[3] - Ld[1], l = Math.hypot(ux, vy) || 1, nu = -vy / l * .3, nv = ux / l * .3, top = .62;
-    ctx.strokeStyle = 'rgba(220,222,214,.9)'; ctx.lineWidth = Math.max(px(.8), .12 * k); ctx.beginPath();
+    ctx.strokeStyle = real ? 'rgba(220,222,214,.9)' : rgba(COL.intel, .8); ctx.lineWidth = Math.max(px(.8), .12 * k); ctx.beginPath();
     for (const s of [-1, 1]) { const [x0, y0] = at(Ld[0] + nu * s, Ld[1] + nv * s), [x1, y1] = at(Ld[0] + ux * top + nu * s, Ld[1] + vy * top + nv * s); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); }
     for (let i = 1; i < 4; i++) { const q = i / 4 * top, [x0, y0] = at(Ld[0] + ux * q - nu, Ld[1] + vy * q - nv), [x1, y1] = at(Ld[0] + ux * q + nu, Ld[1] + vy * q + nv); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); }
     ctx.stroke();
   }
   if (!P) return;
   const [x, y] = at(P.u, P.v);
-  manDraw(ctx, x, y, c.heading + P.a, 'pilot', COL.g, 'p', { ...MAN_IDLE, k: .5 * k * (1 + P.z * .05), mv: P.run, run: P.run, ph: P.ph, clb: P.clb, t: time });
+  manDraw(ctx, x, y, c.heading + P.a, 'pilot', COL.g, 'p', { ...MAN_IDLE, k: .5 * k * (1 + P.z * .05), mv: P.run, run: P.run, ph: P.ph, clb: P.clb, t: time }, real);
 }
 // —— 舰体占位：别的舰艇不能压在航母上 ——
 // 舰体（外扩 r）在甲板局部坐标里的范围：u −160…160、v −47…39（左舷斜角甲板伸得更远）；点在里面时返回推出去的最近点

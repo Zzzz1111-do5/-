@@ -850,7 +850,8 @@ function abDraw(time) {
     const T = c.k === 'veh' ? AB.heavy : AB.jump, u = clamp(c.t / T, 0, 1), h = (1 - u) * 40, x = c.x, y = c.y - h, big = c.k === 'veh';
     ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.beginPath(); ctx.ellipse(c.x, c.y, r * (big ? 1.6 : .9), r * (big ? .8 : .45), 0, 0, 7); ctx.fill();
     if (R.fx3d) continue;   // 3D 时伞衣立体画（v3units.js），贴图里只留地面投影
-    ctx.fillStyle = c.k === 'crate' || c.k === 'veh' ? '#d9d6c8' : '#6d7650'; ctx.strokeStyle = 'rgba(30,32,26,.75)'; ctx.lineWidth = px(.9);   // 橄榄绿人员伞、白色货运伞
+    if (realLook()) { ctx.fillStyle = c.k === 'crate' || c.k === 'veh' ? '#d9d6c8' : '#6d7650'; ctx.strokeStyle = 'rgba(30,32,26,.75)'; ctx.lineWidth = px(.9); }   // 写实：橄榄绿人员伞、白色货运伞
+    else { ctx.fillStyle = 'rgba(2,10,6,.85)'; ctx.strokeStyle = rgba(COL.g, .95); ctx.lineWidth = px(1.2); }
     for (const o of big ? [-1, 0, 1] : [0]) {
       ctx.beginPath(); ctx.arc(x + o * r * 1.8, y - r * (big ? 2.4 : 1.6), r * (big ? 1.2 : 1), Math.PI, 0); ctx.closePath(); ctx.fill(); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(x + o * r * 1.8 - r, y - r * (big ? 2.4 : 1.6)); ctx.lineTo(x, y); ctx.lineTo(x + o * r * 1.8 + r, y - r * (big ? 2.4 : 1.6)); ctx.stroke();

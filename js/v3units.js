@@ -863,8 +863,8 @@ void main() {
   vN = vec3(m.x * c - m.y * sn, m.x * sn + m.y * c, m.z); vB = b; vS = s; vSide = iB.y; vV = uEye - w; vD = length(vV); vW = w.xy;
   gl_Position = uM * vec4(w, 1.);
 }`;
-const V3M_FS = der => `${der ? '#extension GL_OES_standard_derivatives : enable\n#define DER 1\n' : ''}${typeof V3_PREC === 'string' ? V3_PREC : 'precision mediump float;'}
-uniform vec2 uFog, uWorld; uniform vec3 uBg; uniform sampler2D uLm; uniform float uLmOn;
+const V3M_FS = der => `${der ? '#extension GL_OES_standard_derivatives : enable\n#define DER 1\n' : ''}precision mediump float;
+uniform vec2 uFog; uniform vec3 uBg; uniform float uMode;
 uniform vec3 uBody0, uBody1, uBody2, uBody3, uBody4, uGlow0, uGlow1, uGlow2;
 varying vec3 vN, vB, vV; varying float vS, vSide, vD; varying vec2 vW;
 ${typeof V3L_BOOM_GLSL === 'string' ? V3L_BOOM_GLSL : 'vec3 boomLight(vec2 w) { return vec3(0.); }'}
@@ -883,16 +883,18 @@ void main() {
   // 材质（|s| ≥ 2，整数部分）：2 皮肤、3 黑色件（枪、靴、手套、护膝、耳罩）、4 装具（插板携行具、弹匣包、背包）、5 头盔盔罩；小数部分是亮度
   if (sh >= 2.) {
     float mt = floor(sh), br = .5 + fract(sh);
-    body *= mt < 2.5 ? 1.35 : mt < 3.5 ? .42 : mt < 4.5 ? .8 : 1.05;
+    if (uMode < .5) body *= mt < 2.5 ? 1.35 : mt < 3.5 ? .42 : mt < 4.5 ? .8 : 1.05;
+    else body = mt < 2.5 ? vec3(.6, .45, .35) : mt < 3.5 ? vec3(.075, .078, .074) : mt < 4.5 ? mix(body, vec3(.46, .41, .3), .5) : mix(body, vec3(.36, .37, .3), .35);
     sh = br; ed *= mt < 2.5 ? .25 : .7;   // 皮肤、装具的棱线淡一点（不像线框）
   }
-  // 写实：涂装色实体，棱上一道暗线（不发光），轮廓边上一细圈本方颜色（绿我、红敌）；玻璃、灯暖色发亮。山、房屋的投影也落在模型上（v3light.js 光照贴图）
-  float shd = uLmOn > .5 ? mix(.5, 1., texture2D(uLm, vec2(vW.x, -vW.y) / uWorld).r) : 1.;
-  vec3 c = body * (.42 + .9 * lit * shd + .22 * up) * sh * (1. - ed * .32);
-  c += vec3(.55, .58, .6) * pow(max(dot(N, normalize(${V3_SUNG} + V)), 0.), 36.) * .18 * shd;
-  c += glow * smoothstep(.22, .04, abs(dot(N, V))) * .2;
-  if (vS < 0.) c = vec3(.95, .85, .6) * .7 * sh;
-  c += boomLight(vec2(vW.x, -vW.y)) * (.3 + .7 * lit) * .8;   // 近处爆炸的火光映在车身上
+  vec3 c;
+  if (uMode < .5) {   // 黑绿：深色实体 + 发光棱线 + 边缘光；玻璃、车灯、观察镜发光
+    c = body * (.45 + .95 * lit + .25 * up) * sh + glow * ed * .95 + glow * rim * .22;
+    if (vS < 0.) c += glow * .75 * sh;
+  } else {   // 写实：涂装色受光 + 暗棱线，边缘描一道阵营色细光
+    c = body * (.38 + .8 * lit + .15 * up) * sh * (1. - ed * .45) + glow * rim * .18;
+    if (vS < 0.) c = mix(c, vec3(.55, .7, .78), .6);
+  }
   gl_FragColor = vec4(mix(c, uBg, smoothstep(uFog.x, uFog.y, vD)), 1.);
 }`;
 function v3mInit(gl) {
@@ -907,7 +909,7 @@ function v3mInit(gl) {
     if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(pr));
     V3M.pr = pr; V3M.gl = gl;
     for (const k of ['p', 'n', 's', 'b', 'iA', 'iB']) V3M.a[k] = gl.getAttribLocation(pr, k);
-    for (const k of ['uM', 'uEye', 'uFog', 'uBg', 'uWorld', 'uLm', 'uLmOn', 'uBm', 'uBody0', 'uBody1', 'uBody2', 'uBody3', 'uBody4', 'uGlow0', 'uGlow1', 'uGlow2']) V3M.u[k] = gl.getUniformLocation(pr, k);
+    for (const k of ['uM', 'uEye', 'uFog', 'uBg', 'uMode', 'uBody0', 'uBody1', 'uBody2', 'uBody3', 'uBody4', 'uGlow0', 'uGlow1', 'uGlow2']) V3M.u[k] = gl.getUniformLocation(pr, k);
     V3M.ib = gl.createBuffer();
     V3M.ok = true;
   } catch (e) { V3M.ok = false; console.warn('3D 兵种模型不可用', e); }
@@ -959,13 +961,20 @@ function v3Grad(x, y, d, id) {
 }
 // 朝向 th 的车体在坡度 g 上的 [俯仰, 滚转]：沿车头方向的坡度抬车头，沿车身左侧（模型 +y，朝向减 90°）的坡度抬左侧
 const v3Pose = (g, th) => { const c = Math.cos(th), s = Math.sin(th); return [Math.atan(g[0] * c + g[1] * s), Math.atan(g[0] * s - g[1] * c)]; };
-// 写实涂装：0 我方（舰船、卡车、补给站：海军灰 / 橄榄灰）· 1 敌方（阵地、舰船：混凝土灰黄）· 2 残骸（烧黑）· 3 航母、甲板设备（海军灰）· 4 敌方飞机；
-//   glow 只用来画轮廓边上那一细圈本方颜色
+const v3mHex = h => { const s = String(h).replace('#', ''), v = parseInt(s.length === 3 ? s.split('').map(c => c + c).join('') : s, 16); return [(v >> 16 & 255) / 255, (v >> 8 & 255) / 255, (v & 255) / 255]; };
 function v3mPalette(gl) {
-  const U = V3M.u;
-  gl.uniform3f(U.uBody0, .46, .5, .5); gl.uniform3f(U.uBody1, .52, .5, .44); gl.uniform3f(U.uBody2, .11, .1, .09);
-  gl.uniform3f(U.uBody3, .5, .54, .57); gl.uniform3f(U.uBody4, .5, .52, .55);
-  gl.uniform3f(U.uGlow0, .32, 1, .58); gl.uniform3f(U.uGlow1, 1, .3, .38); gl.uniform3f(U.uGlow2, 0, 0, 0);
+  const real = typeof realLook === 'function' && realLook() && !(typeof greenLook === 'function' && greenLook()), U = V3M.u;
+  gl.uniform1f(U.uMode, real ? 1 : 0);
+  if (real) {
+    gl.uniform3f(U.uBody0, .36, .4, .31); gl.uniform3f(U.uBody1, .5, .45, .34); gl.uniform3f(U.uBody2, .13, .12, .1);
+    gl.uniform3f(U.uBody3, .52, .56, .59); gl.uniform3f(U.uBody4, .42, .45, .48);   // 飞机：我方浅灰、敌方深灰（低可视度涂装）
+    const g = v3mHex(COL.g), e = v3mHex(COL.enemy);
+    gl.uniform3f(U.uGlow0, g[0], g[1], g[2]); gl.uniform3f(U.uGlow1, e[0], e[1], e[2]); gl.uniform3f(U.uGlow2, .2, .16, .1);
+  } else {
+    gl.uniform3f(U.uBody0, .02, .1, .055); gl.uniform3f(U.uBody1, .13, .025, .035); gl.uniform3f(U.uBody2, .035, .032, .025);
+    gl.uniform3f(U.uBody3, .02, .1, .055); gl.uniform3f(U.uBody4, .13, .025, .035);
+    gl.uniform3f(U.uGlow0, .32, 1, .58); gl.uniform3f(U.uGlow1, 1, .3, .38); gl.uniform3f(U.uGlow2, .26, .2, .1);
+  }
 }
 
 // 每帧：收集贴图覆盖范围内看得见的单位，按模型分批实例化画完

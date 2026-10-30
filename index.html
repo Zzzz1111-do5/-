@@ -17,6 +17,17 @@
   --f-px: "Silkscreen", "IBM Plex Mono", monospace;
   color-scheme: dark;
 }
+/* 写实画面（默认）：去掉霓虹与像素字，换成作战指挥台的低饱和配色——深石板灰面板、我方蓝、敌方红；与 core.js COL_LOOK.real 对应 */
+:root[data-look="real"] {
+  --bg: #0b1014; --panel: rgba(14, 19, 24, .88); --line: rgba(190, 210, 228, .16); --line-hi: rgba(82, 168, 255, .62);
+  --g: #52a8ff; --g-mid: #2f7fd0; --enemy: #ff4848; --intel: #8fdcff; --sel: #c78cff; --amber: #ffbb38;
+  --text: #e6edf2; --mute: #8b97a2; --g-hi: #cfe6ff;
+  --g-rgb: 82, 168, 255; --sel-rgb: 199, 140, 255; --enemy-rgb: 255, 72, 72; --intel-rgb: 143, 220, 255; --amber-rgb: 255, 187, 56; --pn-rgb: 14, 19, 24; --bg-rgb: 8, 12, 16;
+  --f-px: "IBM Plex Mono", "Noto Sans SC", monospace;
+}
+:root[data-look="real"] #bgrain { display: none; }
+:root[data-look="real"] #stage::after { background: radial-gradient(ellipse at center, transparent 62%, rgba(0, 0, 0, .38) 100%); }
+:root[data-look="real"] .sheet, :root[data-look="real"] #btnBrief, :root[data-look="real"] #btnAgain { background: #10151b; }
 html, body { height: 100%; }
 [hidden] { display: none !important; }
 body { margin: 0; background: var(--bg); color: var(--text); font: 13px/1.45 var(--f-ui); overflow: hidden; }
@@ -248,6 +259,7 @@ body.v3on #stage::after { display: none; }
     <span id="clock">00:00</span>
     <button class="tb" id="btnPause" type="button" title="暂停 / 继续（空格）">▶</button>
     <button class="tb" id="btnSpeed" type="button" title="推演速度">1×</button>
+    <button class="tb" id="btnRain" type="button" title="数码雨：淡 / 强 / 关"></button>
     <button class="tb" id="btnNew" type="button" title="新战局（再点一次确认）">↻</button>
     <button class="tb" id="btnHelp" type="button" title="简报与操作说明">?</button>
   </div>
@@ -369,6 +381,7 @@ body.v3on #stage::after { display: none; }
 <script src="js/recon.js"></script>
 <script src="js/theater.js"></script>
 <script src="js/ato.js"></script>
+<script src="js/matrix.js"></script>
 <script src="js/terrain.js"></script>
 <script src="js/real.js"></script>
 <script src="js/airmdl.js"></script>
