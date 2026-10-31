@@ -29,7 +29,7 @@ const AIR_MDL = {
   j50: { name: '歼-50 第六代舰载战斗机', sil: 'j50', spd: 280, aa: .03, size: 16, stealth: .22, aam: 8, aamR: 560, pkK: 1.18, radar: 800, turn: 1.9, gun: 0 },
   j36: { name: '歼-36 第六代战斗机（制空型）', sil: 'j36', spd: 290, aa: .02, size: 18, land: true, stealth: .2, aam: 6, aamR: 560, aamL: 2, aamLR: 900, pkK: 1.2, radar: 900, turn: 1.7, cap: 240, gun: 0 },
   // 歼-16D 电子战飞机（陆基，战区机场出动）：翼尖电子干扰吊舱压制敌雷达——附近我方飞机被敌防空发现、命中的概率打七折（airJamK）；挂 4 枚雷电-10 反辐射导弹，420 外打敌防空
-  j16d: { name: '歼-16D 电子战飞机', sil: 'j15', spd: 250, aa: .07, size: 18, land: true, std: 420, sead: true, gbN: 4, arW: 'ld10', arR: 420, jam: 650 },
+  j16d: { name: '歼-16D 电子战飞机', sil: 'j16', spd: 250, aa: .07, size: 18, land: true, std: 420, sead: true, gbN: 4, arW: 'ld10', arR: 420, jam: 650 },
   j36s: { name: '歼-36 第六代战斗机（打击型）', sil: 'j36', spd: 290, aa: .02, size: 18, land: true, stealth: .2, aam: 4, aamR: 560, pkK: 1.2, radar: 900, turn: 1.7, cap: 240, gun: 0, agm: 'ls6', agmN: 4, agmR: 900 }
 };
 // 真实世界的性能（公开资料；官方未公布的按外界估算）——巡航速度写在上面型号表与 eair.js EA_SPEC 的 spd 里（米 / 秒，推演里就按它飞，1 单位 = 1 米）；
@@ -139,6 +139,7 @@ const AIR_SIL = {
 AIR_SIL.f35b = AIR_SIL.f35;   // F-35B 俯视轮廓同 F-35A
 AIR_SIL.p8 = [[11.6, 0], [10.8, .9], [8, 1.15], [2.6, 1.15], [2.2, 1.15], [-3.6, 11.2], [-4.6, 11.3], [-1.4, 1.15], [-8.6, .9], [-10.9, 4.3], [-11.8, 4.3], [-11.2, .7], [-12.1, 0]];   // P-8A：737 机身、低单翼（后掠 25°、翼展 37.6 米）、两台翼吊发动机、常规尾翼
 AIR_SIL.mq9 = AIR_SIL.gj2;   // MQ-9A 与攻击-2 同类布局
+AIR_SIL.j16 = AIR_SIL.j15;   // 歼-16D 俯视轮廓同侧卫系（单独的键：3D 用歼-16 模型，歼-15T 用歼-15 模型）
 // 剪影键：按型号；守方 type（ga / heli / ftr / ftrb / f22）另映射
 const airSilKey = (type, v) => type === 'ga' ? 'a10' : type === 'ftr' ? 'f35' : type === 'ftrb' ? 'f35b' : type === 'mq9' ? 'mq9' : AIR_SIL[type] && !AIR_BASEM[type] ? type : airMdl(type, v).sil || 'j35';
 const airName = (type, v) => airMdl(type, v).name || (AIR_SPEC[type] || {}).name || '飞机';
@@ -1236,7 +1237,7 @@ function drawAircraft(ctx, x, y, a, type, size, col, alpha, bank, lw, bombs, o) 
     for (const s of [-1, 1]) { ctx.beginPath(); ctx.moveTo(.4, s * 1.5); ctx.lineTo(-4.2, s * 8.4); ctx.lineTo(-7.4, s * 2.4); ctx.stroke(); }
   } else if (type === 'j20') {   // 外倾双垂尾
     for (const s of [-1, 1]) seg(-6, s * 1.9, -9.6, s * 3);
-  } else if (type === 'j35' || type === 'f35' || type === 'j15') {   // 双垂尾
+  } else if (type === 'j35' || type === 'f35' || type === 'j15' || type === 'j16') {   // 双垂尾
     for (const s of [-1, 1]) seg(-5.6, s * 1.6, -9.2, s * 2.3);
   } else if (type === 'f22') {   // 外倾双垂尾 + 进气口
     for (const s of [-1, 1]) seg(-4.6, s * 2.1, -8.4, s * 3.4, 3.4, s * 1.9, 1.4, s * 2.5);

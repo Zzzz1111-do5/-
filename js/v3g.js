@@ -42,6 +42,7 @@ async function v3gDecode(key, D) {
   if (m.it === 4 && !V3G.u32) throw new Error('显卡不支持 32 位索引');
   const VB = new Float32Array(bin.buffer, bin.byteOffset + m.vb[0], m.vb[1] / 4), IB = m.it === 4 ? new Uint32Array(bin.buffer, bin.byteOffset + m.ib[0], m.ib[1] / 4) : new Uint16Array(bin.buffer, bin.byteOffset + m.ib[0], m.ib[1] / 2);
   const R = v3gPrep(key, m, M, VB, IB);   // 座舱显示屏、平显外框、尾喷口、舵面、弹舱（v3gPrep）：上传缓冲区之前改顶点、索引；切弹舱会换成更长的新数组
+  if (key === 'army' && typeof v3manImgs === 'function') v3manImgs(m, bin);   // 士兵贴图原图留一份（甲板人员、飞行员换装时重新着色）
   if (R && R.it === 4 && !V3G.u32) throw new Error('显卡不支持 32 位索引');
   M.vb = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, M.vb); gl.bufferData(gl.ARRAY_BUFFER, R ? R.VB : VB, gl.STATIC_DRAW);
   M.ib = gl.createBuffer(); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, M.ib);
@@ -307,7 +308,7 @@ const V3G_VEH = { ztz96b: 'ztz96', ztz96m: 'ztz96', m1a1: 'm1a1', m1a2: 'm1a1', 
   zbd05: 'zbd97', zbd04a: 'zbd97', zbd03: 'zbd97', ztd05: 'zbd97', ptl02: 'ptl02', pgl625: 't625', pgz07: 't625', plz07: 'pzh2000', zsl92b: 'lav25', zbl08: 'lav25', ld2000: 'cram' };   // 解放军：ZBD-05 / 03、ZTD-05 用 ZBD-04，PGZ-07 用 625，PLZ-07 用 PzH 2000，ZSL-92B / 08 式用 LAV-25，LD-2000 用陆基密集阵
 const v3gVehKey = (rk, side) => V3G_VEH[rk] || (side === 'e' ? 'm1a1' : 'ztz96');   // 其余装甲车：解放军的用 96 式、美军的用 M1A1 代替
 const V3G_AIR = {
-  j20: 'j20', j35: 'j31', j16: 'j16', j15: 'j16', z10: 'z10w',   // 用户给的模型（歼-35 用它的原型歼-31）
+  j20: 'j20', j35: 'j31', j16: 'j16', j15: 'j15', z10: 'z10w',   // 用户给的模型（歼-35 用它的原型歼-31；歼-15T 用歼-15，歼-16D 用歼-16）
   j36: 'j20', j50: 'j31', heli: 'z21',   // 能亲自驾驶的歼-36、歼-50：弹舱门、舱内挂点、座舱是按歼-20 / 歼-31 的模型标定的（V3G_BAY、fpwpn.js FW_ST），新模型标好之前仍用它们
   kj600: 'e2d', wz7: 'rq4', gj11: 'x47b', gj2: 'mq9', h6k: 'h6k', y20: 'y20', transport: 'y20',   // 解放军其余机型（Sketchfab，CC-BY）：空警-600 用 E-2D、无侦-7 用 RQ-4、攻击-11 用 X-47B、攻击-2 用 MQ-9 的外形代替
   f22: 'f22', f35: 'f35', f35b: 'f35', a10: 'a10', mq9: 'mq9', b2: 'b2', c17: 'c17', p8: 'p8', ah64: 'ah64', uh60: 'uh60'   // 美军（Sketchfab，CC-BY）
@@ -346,30 +347,31 @@ const v3dMv3 = (h, p, r, v) => {   // 先滚转（绕 x）、再俯仰（绕 y�
   c = Math.cos(-h); s = Math.sin(-h);
   return [x * c - y * s, x * s + y * c, z];
 };
-function v3gPlane(key, sz, x, y, z, ground, h, side, roll, pitch, gear, t, noz = 0, ctl = null, bay = null) {   // noz：尾喷口开合（正 = 张开，负 = 收拢）；ctl：舵面 { de 平尾（负 = 后缘上偏、抬头）, da 滚转差动 }（v3det.js v3dPitch 按气动算）；bay：弹舱门开度 { main, side }（fpwpn.js fwBay）
+function v3gPlane(key, sz, x, y, z, ground, h, side, roll, pitch, gear, t, noz = 0, ctl = null, bay = null, fold = 0) {   // noz：尾喷口开合（正 = 张开，负 = 收拢）；ctl：舵面 { de 平尾（负 = 后缘上偏、抬头）, da 滚转差动 }（v3det.js v3dPitch 按气动算）；bay：弹舱门开度 { main, side }（fpwpn.js fwBay）；fold：外翼折起程度（V3G_FOLD，甲板上）
   const mk = V3G_AIR[key] || 'j31', M = v3gModel(mk);
   if (!M) return false;
   const k = sz / M.meta.len;
   let ox = x, oy = y, oz = z;
   if (!ground) { const o = v3dMv3(h, pitch, roll, [0, 0, M.meta.zc * k]); ox -= o[0]; oy += o[1]; oz -= o[2]; }   // 绕机身中线俯仰、滚转（模型原点在机轮着地处）
-  const P = [0, 0, 0, 0, bay ? bay.main || 0 : 0, bay ? bay.side || 0 : 0, 0, 0];
+  const P = [0, 0, 0, 0, bay ? bay.main || 0 : 0, bay ? bay.side || 0 : 0, fold || 0, 0];
   M.parts.forEach((p, i) => { const j = p.slot ?? i; if (j > 3) return; if (p.n === 'gear') P[j] = gear ? 0 : 1; else if (p.n === 'rotor') P[j] = (t || 0) * (V3G_ROTOR[mk] || [22])[0]; else if (p.n === 'trotor') P[j] = (t || 0) * (V3G_ROTOR[mk] || [0, 61])[1]; else if (p.k === 'noz') P[j] = noz; });
   if (M.ctl) { P[2] = ctl ? ctl.de || 0 : 0; P[3] = ctl ? ctl.da || 0 : 0; }   // 舵面：槽 3 平尾、槽 4 滚转差动
   return v3gAdd(mk, ox, oy, oz, h, k, side, roll, pitch, P);
 }
 // 飞机模型上一点（模型坐标，米）此刻在世界的哪里（游戏坐标 x、y，高度 z）：和 v3gPlane 同一套变换（绕机身中线俯仰、滚转）——弹舱里的弹、挂点按它放
-function v3gAt(key, sz, x, y, z, h, pitch, roll, v) {
-  const M = V3G.M[V3G_AIR[key] || 'j31'];
+function v3gAt(key, sz, x, y, z, h, pitch, roll, v, fold = 0) {   // fold：外翼折着的（甲板上），外翼上的点跟着翻上去
+  const mk = V3G_AIR[key] || 'j31', M = V3G.M[mk];
   if (!M || !M.ready) return null;
+  if (fold > 0) v = v3gFoldPt(mk, v, fold);
   const k = sz / M.meta.len, r = v3dMv3(h, pitch, roll, [v[0] * k, v[1] * k, (v[2] - M.meta.zc) * k]);
   return [x + r[0], y - r[1], z + r[2]];
 }
-// 导弹：model 型号键（V3MS），sc 世界单位 / 米（v3MslK 等）；按这一型的真实长度缩放模型
-function v3gMsl(mk, x, y, z, h, sc, side, pitch = 0) {
+// 导弹：model 型号键（V3MS），sc 世界单位 / 米（v3MslK 等）；按这一型的真实长度缩放模型；roll：挂在折起的外翼下面时跟着翻
+function v3gMsl(mk, x, y, z, h, sc, side, pitch = 0, roll = 0) {
   const key = v3gMslKey(mk), M = v3gModel(key);
   if (!M) return false;
   const L = typeof V3MS === 'object' && V3MS[mk] ? V3MS[mk].L : M.meta.len;
-  return v3gAdd(key, x, y, z, h, sc * L / M.meta.len, side, 0, pitch);
+  return v3gAdd(key, x, y, z, h, sc * L / M.meta.len, side, roll, pitch);
 }
 const V3G_HELI = { z10: 1, heli: 1, ah64: 1, uh60: 1 };   // 直升机（不按航迹抬头）
 // 飞机机身中线离机轮着地处多高（世界单位）
@@ -390,7 +392,9 @@ const V3G_PIT = { j31: { eye: [4.3, 0, 2.72], scr: 'screen', hud: 'Glowing_green
   ctl: { mats: ['Wing_top', 'Wing_bottom'], z: [1.6, 2.1], surf: [
     { n: 'stab', x: [-8.6, -5.2], y: [1.3, 4.25], pv: [-6.55, 1.86], w: [0, 0, 1, .6] },
     { n: 'flap', h: [[-4.12, 1.77], [-3.77, 4.74]], y: [1.7, 4.76], w: [0, 0, 0, 1] },
-    { n: 'ail', h: [[-3.745, 4.74], [-3.73, 5.77]], y: [4.7, 5.82], w: [0, 0, 0, 1] }] } } };   // 歼-20 的座舱眼位还没对好：座舱视角放在机头上方，不画自己
+    { n: 'ail', h: [[-3.745, 4.74], [-3.73, 5.77]], y: [4.7, 5.82], w: [0, 0, 0, 1] }] } },
+  // 歼-15：座椅坐垫顶面约 2.79 米高（stof1）、靠背在 x 4.57–4.86；坐姿眼高约坐垫上方 0.78 米，眼睛在头靠前面一点——正好从平显组合玻璃（hud_2，x 5.44–5.61、高 3.44–3.62）中间看出去
+  j15: { eye: [4.97, 0, 3.57], hud: 'hud_2' } };   // 歼-20 的座舱眼位还没对好：座舱视角放在机头上方，不画自己
 // 显示屏的面：模型用镜像修改器做的，左右各多出一片和正面重叠、贴图左右反的镜像面（两层贴图在同一个平面上来回打架闪烁）——
 //   只留贴图从左往右（机体 y 由大到小，飞行员看过去从左到右）的面
 function v3gPitScr(cf, m, M, VB, IB) {
@@ -464,10 +468,12 @@ function v3gPitParts(cf, m, M, VB, IB) {
   }
 }
 function v3gPrep(key, m, M, VB, IB) {
+  if (key === 'army' && typeof v3manPrep === 'function') return v3manPrep(m, VB, IB);   // 士兵：焊接顶点、平滑法线、算绑骨权重（v3man.js：姿势、着装）
   const cf = V3G_PIT[key];
   if (cf) { v3gPitScr(cf, m, M, VB, IB); v3gPitHud(cf, m, M, VB, IB); v3gPitParts(cf, m, M, VB, IB); }
   if (V3G_GUN[key]) v3gGun(V3G_GUN[key], m, VB, IB);
   if (V3G_CAPS[key]) v3gCaps(V3G_CAPS[key], m, VB, IB);
+  if (V3G_FOLD[key]) return v3gFold(V3G_FOLD[key], m, VB, IB);
   if (V3G_ERA[key]) return v3gEra(V3G_ERA[key], m, VB, IB);
   return V3G_BAY[key] ? v3gBays(V3G_BAY[key], m, VB, IB) : null;
 }
@@ -693,11 +699,111 @@ function v3gBays(cf, m, VB, IB) {
   m.it = it;
   return { VB: VB2, IB: IB2, it };
 }
+// —— 舰载机折翼（甲板上停放、滑行时折着：cvdeck.js p.fold；实例参数 iD.z = 折起程度 0–1）：歼-15（苏-33 系）外翼、平尾外段向上折起。
+//   模型的外翼本来就在折叠线（|y| ≈ 3.47 米，左右差 2 厘米）处分成内外两块、端面封着口；平尾下表面是跨过折叠线的整块三角形，按线切开（多边形裁剪，位置、法线、贴图坐标按比例插）。
+//   折叠线以外的三角形（外翼、翼尖导轨上的弹、补上的挂架）挂到绕铰链转的部件上——铰链平行机身轴线、在上表面；正好落在线上的封口面内外各留一份（折起来两边断面都封着）。
+//   fold：y 折叠线 |y|、tol 落在线上的容差、z 铰链高、x / zr 这一组三角形所在的前后、高低范围、A 折起角（弧度）。
+//   折起角：外翼向上翻过竖直、翼尖斜向机身（照片估计约 115°），平尾外段约竖直（估计）；折叠线 3.47 米 → 折起后宽约 7.2 米（苏-33 公开数据：翼展 14.7 米，折叠后 7.4 米）
+//   pyl：翼下挂架（模型上没有，补上；跟着外翼折）[x 后端, x 前端, |y|, 下沿 z, 上沿 z（伸进翼面里一点）, 宽]；pc：挂架颜色（线性值，取机翼贴图的灰）
+const V3G_FOLD = { j15: { fold: [{ y: 3.47, tol: .03, z: 2.66, x: [-7.5, .6], zr: [1.6, 3.3], A: 2.0 }, { y: 3.47, tol: .03, z: 2.03, x: [-10.6, -5.9], zr: [1.85, 2.12], A: 1.57 }],
+  pyl: [[-4.3, -1.9, 3.88, 2.27, 2.53, .13], [-5.5, -3.5, 5.65, 2.3, 2.53, .11]], pc: [.17, .175, .185, 1] } };
+// 模型上一点在哪一组折叠面上（挂的弹比翼面低，高度范围往下放宽）
+function v3gFoldG(mk, v) {
+  const F = V3G_FOLD[mk], sy = v[1] >= 0 ? 1 : -1;
+  return F ? F.fold.find(g => v[1] * sy >= g.y && v[0] >= g.x[0] && v[0] <= g.x[1] && v[2] >= g.zr[0] - .8 && v[2] <= g.zr[1]) || null : null;
+}
+// 折着翼时这一点跟着转的角（左正右负；不在外翼上 = 0）、转到哪里（挂的弹、保险销按它放）
+function v3gFoldA(mk, v, f) { const g = f > 0 && v3gFoldG(mk, v); return g ? g.A * f * (v[1] >= 0 ? 1 : -1) : 0; }
+function v3gFoldPt(mk, v, f) {
+  const g = f > 0 && v3gFoldG(mk, v);
+  if (!g) return v;
+  const sy = v[1] >= 0 ? 1 : -1, a = g.A * f * sy, c = Math.cos(a), s = Math.sin(a), dy = v[1] - g.y * sy, dz = v[2] - g.z;
+  return [v[0], g.y * sy + dy * c - dz * s, g.z + dy * s + dz * c];
+}
+function v3gFold(cf, m, VB, IB) {
+  const st = m.st, nv0 = VB.length / st, add = [], parts = m.parts || (m.parts = []);
+  const V = i => i < nv0 ? Array.from(VB.subarray(i * st, i * st + st)) : add.slice((i - nv0) * st, (i - nv0 + 1) * st);
+  const push = a => { add.push(...a); for (let k = a.length; k < st; k++) add.push(0); return nv0 + add.length / st - 1; };
+  const mid = (a, b, t) => { const o = a.map((v, i) => v + (b[i] - v) * t), l = Math.hypot(o[3], o[4], o[5]) || 1; o[3] /= l; o[4] /= l; o[5] /= l; return o; };
+  const idx = c => c.i ?? (c.i = push(c.v));
+  const fan = (P, out) => { for (let k = 1; k + 1 < P.length; k++) out.push(idx(P[0]), idx(P[k]), idx(P[k + 1])); };
+  // 每组左右各一个部件：绕铰链线（平行 x）转，左边（y > 0）正角向上翻，右边反号
+  const G = cf.fold.map(g => [1, -1].map(sg => parts.push({ n: 'fold', k: 'rot', w: [0, 0, 0, 0], w2: [0, 0, g.A * sg, 0], p: [0, g.y * sg, g.z], a: [1, 0, 0] }) - 1));
+  // 翼下挂架：前后两端斜切的扁盒子（上沿伸进翼面里，看不见），面各用各的顶点（棱角分明）
+  const pmi = cf.pyl ? m.mats.push({ n: 'pylon', c: cf.pc, t: null, nt: null, ns: 1, mr: [0, .6], mrt: null, sg: null, sgt: null, e: [0, 0, 0], et: null, ot: null, am: 0, ac: .5, ds: 0 }) - 1 : -1, pyl = [[], []];
+  for (const [x0, x1, ys, zb, zt, w] of cf.pyl || []) for (const s of [0, 1]) {
+    const sg = s ? -1 : 1, y0 = ys * sg - w / 2, y1 = ys * sg + w / 2, xf = x1 - .4, xr = x0 + .3, L = pyl[s];
+    const quad = (a, b, c, d, n) => {   // 按法线定绕序（正面朝外）
+      const e1 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], e2 = [c[0] - a[0], c[1] - a[1], c[2] - a[2]], cr = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]];
+      const P = (cr[0] * n[0] + cr[1] * n[1] + cr[2] * n[2] < 0 ? [d, c, b, a] : [a, b, c, d]).map(p => push([...p, ...n, 0, 0]));
+      L.push(P[0], P[1], P[2], P[0], P[2], P[3]);
+    };
+    const nf = Math.hypot(zt - zb, .4), nr = Math.hypot(zt - zb, .3);
+    for (const [y, ny] of [[y0, -1], [y1, 1]]) quad([x0, y, zt], [xr, y, zb], [xf, y, zb], [x1, y, zt], [0, ny, 0]);   // 两侧
+    quad([xr, y0, zb], [xf, y0, zb], [xf, y1, zb], [xr, y1, zb], [0, 0, -1]);                                       // 底
+    quad([xf, y0, zb], [x1, y0, zt], [x1, y1, zt], [xf, y1, zb], [(zt - zb) / nf, 0, -.4 / nf]);                    // 前端斜面
+    quad([x0, y0, zt], [xr, y0, zb], [xr, y1, zb], [x0, y1, zt], [-(zt - zb) / nr, 0, -.3 / nr]);                   // 后端斜面
+  }
+  const segs = m.lod.map(() => []);
+  m.lod.forEach((lod, Lv) => {
+    for (const [mi, pi, i0, cnt] of lod) {
+      const keep = [], fp = G.map(() => [[], []]);
+      for (let t = i0; t + 2 < i0 + cnt; t += 3) {
+        const tri = [IB[t], IB[t + 1], IB[t + 2]];
+        if (pi >= 0) { keep.push(...tri); continue; }   // 已经是部件的（起落架）不动
+        const P = tri.map(V);
+        let done = false;
+        for (let gi = 0; gi < cf.fold.length && !done; gi++) {
+          const g = cf.fold[gi];
+          if (!P.every(p => p[0] >= g.x[0] && p[0] <= g.x[1] && p[2] >= g.zr[0] && p[2] <= g.zr[1])) continue;
+          const sy = P[0][1] + P[1][1] + P[2][1] >= 0 ? 1 : -1, f = P.map(p => p[1] * sy - g.y), O = fp[gi][sy > 0 ? 0 : 1];
+          if (!P.every(p => p[1] * sy > -.01)) continue;   // 跨过机身中线的不算
+          const out = f.every(v => v >= -g.tol), inn = f.every(v => v <= g.tol);
+          if (out && inn) { keep.push(...tri); O.push(...tri); }   // 线上的封口面：两边各一份
+          else if (out) O.push(...tri);
+          else if (inn) keep.push(...tri);
+          else {   // 跨线：沿折叠线切成里外两块
+            const I = [], X = [];
+            for (let k = 0; k < 3; k++) {
+              const a = { i: tri[k], v: P[k] }, b = P[(k + 1) % 3], fa = f[k], fb = f[(k + 1) % 3];
+              (fa <= 0 ? I : X).push(a);
+              if ((fa <= 0) !== (fb <= 0)) { const c = { v: mid(P[k], b, fa / (fa - fb)) }; I.push(c); X.push(c); }
+            }
+            if (I.length >= 3) fan(I, keep);
+            if (X.length >= 3) fan(X, O);
+          }
+          done = true;
+        }
+        if (!done) keep.push(...tri);
+      }
+      segs[Lv].push([mi, pi, keep]);
+      fp.forEach((pr, gi) => pr.forEach((I, s) => { if (I.length) segs[Lv].push([mi, G[gi][s], I]); }));
+    }
+    if (pmi >= 0) pyl.forEach((I, s) => { if (I.length) segs[Lv].push([pmi, G[0][s], I]); });   // 挂架在外翼上：跟着外翼折
+  });
+  const nv = nv0 + add.length / st, it = nv > 65535 ? 4 : m.it, out = [];
+  let o = 0;
+  m.lod = segs.map(S => S.filter(s => s[2].length).map(([mi, pi, I]) => { const e = [mi, pi, o, I.length]; out.push(I); o += I.length; return e; }));
+  const IB2 = it === 4 ? new Uint32Array(o) : new Uint16Array(o);
+  o = 0;
+  for (const I of out) { IB2.set(I, o); o += I.length; }
+  const VB2 = new Float32Array(VB.length + add.length);
+  VB2.set(VB); VB2.set(add, VB.length);
+  m.it = it;
+  return { VB: VB2, IB: IB2, it };
+}
 // 开局就把一定会用到的模型先下载、解码（士兵、双方坦克），别的等单位第一次出现时再加载
 if (typeof HOOK === 'object' && HOOK.newGame) HOOK.newGame.push(() => v3gPreload(['army', 'ztz96', 'm1a1', 'zbd97', 'm2a3']));
-// 士兵：用户给的士兵模型原样摆放（T 字站姿，不改模型）；卧倒、匍匐、阵亡时整个放平（脸朝下），别的姿势都站着。k 比例（V3_MAN 一类），side 0 我 / 1 敌 / 2 遗体
+// 人物：用户给的士兵模型按姿势摆好（v3man.js 程序化绑骨：站、走、跑、跪、卧、匍匐、爬梯、坐、手势……），甲板人员、飞行员换装（kind 'deck#rrggbb' 马甲颜色、'pilot' 飞行服）；
+//   趴着的整个放平（脸朝下）。v3man.js 还没准备好时照原样（T 字站姿）摆。k 比例（V3_MAN 一类），side 0 我 / 1 敌 / 2 遗体
 const v3gLying = p => p === 'pr' || p === 'dead' || p[0] === 'c' && p !== 'cl0' && p !== 'cl1' || (p[0] === 'L' && +p.slice(1) >= 12);
 function v3gMan(kind, pose, x, y, z, a, k, side, roll = 0) {
+  const V = typeof v3manGet === 'function' ? v3manGet(kind, pose || 'st') : null;   // 程序化绑骨后的姿势与着装（v3man.js）
+  if (V) {
+    if (!V.lie) return v3gAdd(V.key, x, y, z, a, k, side, roll, 0);
+    const b = V.bb, m = (b[2] + b[5]) / 2 * k, c = Math.cos(a), s = Math.sin(a);   // 趴着的：绕横轴转 −90°（头朝前、背朝上），身体中点放在原地，最靠前的一点（放平后最低）贴地
+    return v3gAdd(V.key, x - c * m, y - s * m, z + b[3] * k, a, k, side, 0, -Math.PI / 2);
+  }
   const M = v3gModel('army');
   if (!M) return false;
   if (!v3gLying(pose || 'st')) return v3gAdd('army', x, y, z, a, k, side, roll, 0);
