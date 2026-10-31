@@ -100,6 +100,7 @@ void main() {
   if (uPk > -.5) {
     float ang = dot(iC, uPw) + dot(iD, uPw2);   // 实例的部件参数按权重组合（一般只取自己那一个；舵面 = 俯仰 + 滚转差动；弹舱门 = 开度 × 打开角）
     if (uPm > 4.5) {   // 链式部件（炮管、发射架、炮塔上的雷达，vfn.js）：先绕自己的轴自转（加特林炮管束，uPq3 / uPa3，iD·uPg2），再沿 uPr 平移（后坐 / 举升，iD·uPw2 米），再绕 uPq / uPa2 转（俯仰、起竖、自转），最后随炮塔 / 转台绕 uPp / uPa 转
+      if (uPl > 1.5) { float mk = iD.z; for (int i = 0; i < 16; i++) { if (float(i) >= uPl - 2.) break; mk = floor(mk * .5); } if (mk - 2. * floor(mk * .5) > .5) q = vec3(0.); }   // 发射筒里的弹（v3gCaps）：iD.z 的第 uPl − 2 位 = 这一枚打出去了，筒空了
       float g3 = dot(iD, uPg2);
       q = uPq3 + rotA(q - uPq3, uPa3, g3); m = rotA(m, uPa3, g3);
       q -= uPr * dot(iD, uPw2);
@@ -273,7 +274,7 @@ function v3gDraw(C, LM) {
         if (P) {
           const w = P.w || [pi === 0 ? 1 : 0, pi === 1 ? 1 : 0, pi === 2 ? 1 : 0, pi >= 3 ? 1 : 0];
           const w2 = P.w2 || V3G_W0;
-          gl.uniform1f(U.uPm, P.k === 'hide' ? 1 : P.k === 'noz' ? 2 : P.k === 'gun' ? 3 : P.k === 'era' ? 4 : P.k === 'chain' ? 5 : 0); gl.uniform1f(U.uPl, P.l || 1); gl.uniform3f(U.uPp, P.p[0], P.p[1], P.p[2]); gl.uniform3f(U.uPa, P.a[0], P.a[1], P.a[2]); gl.uniform4f(U.uPw, w[0], w[1], w[2], w[3]); gl.uniform4f(U.uPw2, w2[0], w2[1], w2[2], w2[3]);
+          gl.uniform1f(U.uPm, P.k === 'hide' ? 1 : P.k === 'noz' ? 2 : P.k === 'gun' ? 3 : P.k === 'era' ? 4 : P.k === 'chain' ? 5 : 0); gl.uniform1f(U.uPl, P.k === 'chain' ? (P.hb != null ? P.hb + 2 : 0) : P.l || 1); gl.uniform3f(U.uPp, P.p[0], P.p[1], P.p[2]); gl.uniform3f(U.uPa, P.a[0], P.a[1], P.a[2]); gl.uniform4f(U.uPw, w[0], w[1], w[2], w[3]); gl.uniform4f(U.uPw2, w2[0], w2[1], w2[2], w2[3]);
           if (P.k === 'chain') {
             const q = P.q || P.p, a2 = P.a2 || V3G_AY, e = P.e || V3G_W0, e2 = P.e2 || V3G_W0, r = P.r || V3G_AX, q3 = P.q3 || q, a3 = P.a3 || V3G_AX, g2 = P.g2 || V3G_W0;
             gl.uniform3f(U.uPq, q[0], q[1], q[2]); gl.uniform3f(U.uPa2, a2[0], a2[1], a2[2]); gl.uniform3f(U.uPr, r[0], r[1], r[2]); gl.uniform4f(U.uPe, e[0], e[1], e[2], e[3]); gl.uniform4f(U.uPe2, e2[0], e2[1], e2[2], e2[3]);
@@ -328,6 +329,7 @@ function v3gVeh(v, rk, side, len, x, y, z, h, aim, dead, pitch, roll, hl, fs = 9
   const G = V3G_GUN[key] || (FV && FV.rock ? { L: FV.rc || 0, rock: FV.rock } : null), rc = G && !dead && fs < .8 ? G.L * (fs < .06 ? fs / .06 : 1 - sm01((fs - .06) / .7)) : 0;
   if (G && !dead && fs < 1.6) { const r = G.rock * Math.exp(-fs / .38) * Math.sin(fs * 10.5), rel = Math.atan2(Math.sin(aim - h), Math.cos(aim - h)); pitch += r * Math.cos(rel); roll -= r * Math.sin(rel); }
   const P = FP || [dead ? -.6 : da, 0, 0, 0, 0, 0, rc, 0], E = !FP && V3G_ERA[key], U = E && v && v.era && v.era.h;
+  if (FP && V3G_CAPS[key] && v && v.samN != null) { const n = (typeof vehSp === 'function' && (vehSp(v).sam || {}).n) || 8; P[6] = 2 ** clamp(n - v.samN, 0, 16) - 1; }   // 打出去几枚，就有几个发射筒空了
   if (U && U.length && typeof rlModelOf === 'function' && E.rl.includes((rlModelOf(v) || {}).key)) for (const i of U) if (i >= 0 && i < 64) P[1 + Math.floor(i / 16)] += 2 ** (i % 16);   // 炸掉的反应装甲块（era.js）：每个数 16 位
   return v3gAdd(key, x, y, z, h, k, (dead ? 2 : side === 'e' ? 1 : 0) + (hl ? 8 : 0), roll, pitch, P);
 }
@@ -461,6 +463,7 @@ function v3gPrep(key, m, M, VB, IB) {
   const cf = V3G_PIT[key];
   if (cf) { v3gPitScr(cf, m, M, VB, IB); v3gPitHud(cf, m, M, VB, IB); v3gPitParts(cf, m, M, VB, IB); }
   if (V3G_GUN[key]) v3gGun(V3G_GUN[key], m, VB, IB);
+  if (V3G_CAPS[key]) v3gCaps(V3G_CAPS[key], m, VB, IB);
   if (V3G_ERA[key]) return v3gEra(V3G_ERA[key], m, VB, IB);
   return V3G_BAY[key] ? v3gBays(V3G_BAY[key], m, VB, IB) : null;
 }
@@ -472,6 +475,53 @@ function v3gPrep(key, m, M, VB, IB) {
 //   rl：用这套块的车型（models.js RLE，块号同一套：边 × 32 + 排 × 16 + 列，右边 0）
 const V3G_ERA = { m1a1: { x0: -3.224, dx: 5.352 / 16, n: 16, zr: [.795, 1.144, 1.5], y: 1.9756, yIn: 1.83, rl: ['m1a1', 'm1a2'] } };
 const V3G_ERA_E = 1e-5;
+// —— 弹炮防空车的导弹（vehicles.js vehSam 的 v.samN：剩几枚）：PGL-625 炮塔两侧各一个 2 × 2 的发射筒组，筒里装着弹。模型里这两组筒烘焙在车体（不随炮塔转）——
+//   这里把筒组挪到炮塔部件上（随炮塔转），每个筒里的弹（弹身 + 前段）拆成单独的链式部件、只随炮塔转，各带一位（hb，看 iD.z）：打出去一枚，那一筒就空了，再装填时弹回来。
+//   打的顺序：两侧轮流、先上排、先外侧。tur：炮塔部件名；box：筒组所在（模型米：x0 x1 |y|0 |y|1 z0 z1）；msl / fr：弹身、前段的长度范围；n：几枚
+const V3G_CAPS = { t625: { tur: 'tur', box: [-1.95, 1.45, 1.25, 1.98, 2.75, 3.65], msl: [2.8, 3.2], fr: [.8, 1.1], n: 8 } };
+function v3gCaps(cf, m, VB, IB) {
+  const parts = m.parts || [], ti = parts.findIndex(p => p.n === cf.tur);
+  if (ti < 0) return;
+  const st = m.st, T = parts[ti], B = cf.box, ids = [];
+  let ctr = null;   // 第 0 级里各枚弹的中心（y、z），按打的顺序
+  const q = i => Math.round(VB[i * st] * 1000) + ',' + Math.round(VB[i * st + 1] * 1000) + ',' + Math.round(VB[i * st + 2] * 1000);
+  const inBox = b => { const ay0 = Math.min(Math.abs(b[2]), Math.abs(b[3])), ay1 = Math.max(Math.abs(b[2]), Math.abs(b[3])); return b[2] * b[3] > 0 && b[0] >= B[0] && b[1] <= B[1] && ay0 >= B[2] && ay1 <= B[3] && b[4] >= B[4] && b[5] <= B[5]; };
+  m.lod.forEach((lod, L) => {
+    const add = [];
+    for (const e of lod) {
+      const [mi, pi, i0, cnt] = e;
+      if (pi !== -1) continue;
+      const par = new Map(), find = a => { while (par.get(a) !== a) { par.set(a, par.get(par.get(a))); a = par.get(a); } return a; }, uni = (a, b) => { a = find(a); b = find(b); if (a !== b) par.set(a, b); };
+      for (let t = i0; t + 2 < i0 + cnt; t += 3) { const k = [q(IB[t]), q(IB[t + 1]), q(IB[t + 2])]; for (const x of k) if (!par.has(x)) par.set(x, x); uni(k[0], k[1]); uni(k[1], k[2]); }
+      const comp = new Map();
+      for (let t = i0; t + 2 < i0 + cnt; t += 3) { const r = find(q(IB[t])); if (!comp.has(r)) comp.set(r, { T: [], b: [1e9, -1e9, 1e9, -1e9, 1e9, -1e9] }); const C = comp.get(r); C.T.push(t); for (let j = 0; j < 3; j++) { const o = IB[t + j] * st; C.b = [Math.min(C.b[0], VB[o]), Math.max(C.b[1], VB[o]), Math.min(C.b[2], VB[o + 1]), Math.max(C.b[3], VB[o + 1]), Math.min(C.b[4], VB[o + 2]), Math.max(C.b[5], VB[o + 2])]; } }
+      const pod = [...comp.values()].filter(c => inBox(c.b)).map(c => ({ ...c, c: [(c.b[0] + c.b[1]) / 2, (c.b[2] + c.b[3]) / 2, (c.b[4] + c.b[5]) / 2], dx: c.b[1] - c.b[0], dy: c.b[3] - c.b[2] }));
+      if (!pod.length) continue;
+      const isM = c => c.dx >= cf.msl[0] && c.dx <= cf.msl[1] && c.dy < .22;
+      if (!ctr && L === 0) {
+        const M = pod.filter(isM), side = sg => M.filter(c => Math.sign(c.c[1]) === sg).sort((a, b) => (b.c[2] - a.c[2]) || (Math.abs(b.c[1]) - Math.abs(a.c[1])));
+        const Lf = side(1), Rt = side(-1), ord = [];
+        for (let i = 0; i < Math.max(Lf.length, Rt.length); i++) { if (Lf[i]) ord.push(Lf[i]); if (Rt[i]) ord.push(Rt[i]); }
+        ctr = ord.slice(0, cf.n).map(c => [c.c[1], c.c[2]]);
+        ctr.forEach((c, k) => ids.push(parts.push({ n: 'msl', k: 'chain', p: T.p.slice(), a: T.a.slice(), w: [1, 0, 0, 0], q: T.p.slice(), a2: [0, -1, 0], e: [0, 0, 0, 0], hb: k }) - 1));
+      }
+      // 弹身、前段归到同一筒（按 y、z 最近）；简化过的远处网格认不出弹的，整组随炮塔转、不拆
+      const grp = (ctr || []).map(() => []), tur = [], taken = new Set();
+      for (const c of pod) {
+        let bk = -1;
+        if (ctr && (isM(c) || (c.dx >= cf.fr[0] && c.dx <= cf.fr[1]))) { let bd = .12; ctr.forEach((p, k) => { const d = Math.hypot(c.c[1] - p[0], c.c[2] - p[1]); if (d < bd) { bd = d; bk = k; } }); }
+        for (const t of c.T) { (bk >= 0 ? grp[bk] : tur).push(IB[t], IB[t + 1], IB[t + 2]); taken.add(t); }
+      }
+      const keep = [];
+      for (let t = i0; t + 2 < i0 + cnt; t += 3) if (!taken.has(t)) keep.push(IB[t], IB[t + 1], IB[t + 2]);
+      let o = i0;
+      IB.set(keep, o); e[3] = keep.length; o += keep.length;
+      if (tur.length) { IB.set(tur, o); add.push([mi, ti, o, tur.length]); o += tur.length; }
+      grp.forEach((g, k) => { if (!g.length) return; IB.set(g, o); add.push([mi, ids[k], o, g.length]); o += g.length; });
+    }
+    lod.push(...add);
+  });
+}
 function v3gEra(cf, m, VB, IB) {
   const st = m.st, nv0 = VB.length / st, add = [], E = V3G_ERA_E, n2 = cf.n * 2, X1 = cf.x0 + cf.n * cf.dx;
   const parts = m.parts || (m.parts = []), ei = parts.push({ n: 'era', k: 'era', p: [cf.y, E, 0], a: [1, 0, 0], w: [0, 0, 0, 0] }) - 1;

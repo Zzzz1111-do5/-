@@ -52,8 +52,10 @@ body.th-on #feed li:nth-child(n+4) { display: none; }
 @media (max-width: 760px) {
   #thPanel { top: calc(96px + env(safe-area-inset-top, 0px)); width: min(276px, 74vw); bottom: calc(230px + env(safe-area-inset-bottom, 0px)); }
 }`;
+// 编队面板（师 / 团 / 营卡片 + 推进、穿插、坚守、后撤、预备队、自动按钮）已经删掉：战区 AI 统一指挥双方，玩家布好兵就看；地图上的编队标号、命令箭头照画
+const THU_PANEL = false;
 function thuEl() {
-  if (typeof document === 'undefined' || !document.getElementById) return null;
+  if (!THU_PANEL || typeof document === 'undefined' || !document.getElementById) return null;
   let el = document.getElementById('thPanel');
   if (el) return el;
   const st = document.createElement('style'); st.textContent = THU_CSS; document.head.appendChild(st);
@@ -137,10 +139,10 @@ function thuRows(side) {
   return out.join('');
 }
 function thuRender(force) {
+  if (typeof document !== 'undefined' && document.body) document.body.classList.toggle('th-on', thuActive());
   const el = thuEl();
   if (!el) return;
   const on = thuActive() && !!S.th && S.phase === 'battle';
-  document.body.classList.toggle('th-on', thuActive());
   el.hidden = !on;
   if (!on) return;
   if (!S.ctl) { if (!['p', 'e'].includes(THU.side)) THU.side = 'p'; } else THU.side = S.ctl;

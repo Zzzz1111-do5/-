@@ -52,8 +52,11 @@ function chatVoice(side, text, kind) {
   if (Math.random() < .07) t = t.replace(/。$/, '，完毕。');
   return { text: t, who, relay };
 }
+// 司令发言（作战通联）已经删掉：不再记录、不再显示（chat.js 面板也去掉了）；AI 指挥官照样下令、执行（S.cmd.q），只是不说话。
+//   原来的说话整理（chatVoice）留着，以后要恢复只需把 CMD_TALK 打开、加回面板
+const CMD_TALK = false;
 function chatSay(side, text, opts) {
-  if (!S || !text) return null;
+  if (!CMD_TALK || !S || !text) return null;
   opts = opts || {};
   if (!opts.raw && side !== 'sys') { const v = chatVoice(side, text, opts.kind); text = v.text; opts = { ...opts, ...(v.who && !opts.who ? { who: v.who } : {}), ...(v.relay ? { relay: true } : {}) }; }
   if (!text) return null;
@@ -94,7 +97,7 @@ function cmdInit() {
   S.cmd = { v: 1, q: [], p: cmdNewP(), e: cmdNewE() };
   return S.cmd;
 }
-const cmdAll = () => !!S && S.role === 'spectate';
+const cmdAll = () => !!S;   // 没有操作按钮了（TABS 式：布好兵就看）：我方所有资产（排、舰船、车辆、驱逐舰、航母、战术导弹、增援线）都由 AI 指挥官指挥；亲自驾驶的除外（fpDriving）
 const cmdCtl = o => !!o && !o.man && (cmdAll() || o.auto === true);   // man：玩家亲自下过令的单位，AI 不接管
 const cmdOn = () => !!S && S.phase === 'battle' && !S.over && !!S.cmd;
 const cmdRK = () => S && S.relay ? .5 : 1;

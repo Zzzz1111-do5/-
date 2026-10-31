@@ -173,6 +173,7 @@ function updateVision() {
   es.push(...hookSources('visionE'));
   castVision(EV, es);
   if (typeof cvlApply === 'function') cvlApply();   // 伪装隐蔽：没被近处发现的隐蔽小组从对方视野里抹掉（conceal.js）
+  if (typeof vehDlMark === 'function') vehDlMark();   // 数据链：记下此刻看得见的对方车辆（vehicles.js vehSees）
   // 情报记忆：看到过的火力点与工事留下标定；回头再看已空则撤销
   let forts = false;
   for (const e of S.enemies) {
