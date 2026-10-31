@@ -82,7 +82,7 @@ function cbFix(sh, radar, opt) {
   // 反炮兵射击：精度高、来得快的先上；打补给线的炮垂发两发、攻击机同时出动
   if (typeof vlsCan === 'function' && vlsCan('lacm', x, y)) { const who = vlsWho('lacm', x, y), f = vlsFire('lacm', x, y, sup ? 2 : 1, 'cb'); if (f) acts.push(`${who}垂发导弹 ${f} 枚`); }
   if ((!acts.length || sup) && C && typeof cmdAir === 'function' && S.assets.strike > 0 && cmdAir('strike', x, y, sh.k === 'enemy' ? e.id : null)) acts.push('攻击机');
-  if (!acts.length && C && typeof cmdFire === 'function' && S.dd && S.dd.state !== 'sunk' && dist(S.dd.x, S.dd.y, x, y) < 990 && cmdFire(x, y, sup ? 4 : 3, 'cb')) acts.push('舰炮急促射');
+  if (!acts.length && C && typeof cmdFire === 'function' && S.dd && S.dd.state !== 'sunk' && dist(S.dd.x, S.dd.y, x, y) < DD_R * .99 && cmdFire(x, y, sup ? 4 : 3, 'cb')) acts.push('舰炮急促射');
   if (!acts.length && S.assets.msl > 0 && typeof msFireP === 'function' && (typeof cmdCtl !== 'function' || cmdCtl(S.dd) || S.role === 'spectate') && msFireP(x, y, true)) acts.push('东风-15B 战术导弹');
   if (!acts.length && typeof cmdAsk === 'function' && cmdAsk(x, y)) ask.push(cmdAsk(x, y));
   if (acts.length && typeof v8Stat === 'function') v8Stat(sup ? 'cbSupFire' : 'cbFire');

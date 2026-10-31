@@ -244,7 +244,7 @@ function abPrep(af, force) {
   const f = typeof cmdFoeAt === 'function' ? cmdFoeAt(af, 160, 60) : null, t = f || (force ? { x: af.x, y: af.y } : null);
   if (!t) return out;
   A.prT = S.t;
-  if (typeof cmdFire === 'function' && S.dd && S.dd.state !== 'sunk' && dist(S.dd.x, S.dd.y, t.x, t.y) < 980 && cmdFire(t.x, t.y, 3, 'ab')) out.push('舰炮急促射');
+  if (typeof cmdFire === 'function' && S.dd && S.dd.state !== 'sunk' && dist(S.dd.x, S.dd.y, t.x, t.y) < DD_R * .98 && cmdFire(t.x, t.y, 3, 'ab')) out.push('舰炮急促射');
   if (typeof vlsCan === 'function' && vlsCan('lacm', t.x, t.y) && vlsFire('lacm', t.x, t.y, 1, 'ab')) out.push('垂发巡航导弹');
   if (out.length < 2 && typeof cmdAir === 'function' && S.cv && S.cv.auto && S.assets.cas > 0 && cmdAir('cas', t.x, t.y)) out.push('对地支援机');
   if (out.length) abStat('abPrep');
@@ -571,7 +571,7 @@ function abFires() {
   const key = Math.round(best.x / 60) + ',' + Math.round(best.y / 60);
   if (S.t - (A.shT[key] ?? -99) < 25) return;
   let how = null;
-  if (typeof cmdFire === 'function' && S.dd && S.dd.state !== 'sunk' && (S.dd.auto || S.role === 'spectate') && dist(S.dd.x, S.dd.y, best.x, best.y) < 980 && cmdFire(best.x, best.y, 2, 'ab')) how = '舰炮';
+  if (typeof cmdFire === 'function' && S.dd && S.dd.state !== 'sunk' && (S.dd.auto || S.role === 'spectate') && dist(S.dd.x, S.dd.y, best.x, best.y) < DD_R * .98 && cmdFire(best.x, best.y, 2, 'ab')) how = '舰炮';
   else if (best.v && typeof vlsCan === 'function' && vlsCan('lacm', best.x, best.y) && vlsFire('lacm', best.x, best.y, 1, 'ab')) how = '垂发导弹';
   else if (typeof cmdAir === 'function' && S.cv && S.cv.auto && S.assets.cas > 0 && cmdAir('cas', best.x, best.y)) how = '对地支援机';
   if (!how) return;
@@ -657,7 +657,7 @@ function abThink() {
       const v1 = UNIT_MAP.get(A.us[1]) || ord[0];
       for (const id of A.vs) { const v = typeof vehById === 'function' ? vehById(id) : null; if (v && !v.dead && v1) { v.buddy = v1.id; v.esc = { back: 45, lat: 0, mode: 'travel' }; } }
       const pre = typeof cmdFoeAt === 'function' ? cmdFoeAt(af, 150) : null;
-      if (pre && typeof cmdFire === 'function' && S.dd && S.dd.state !== 'sunk' && dist(S.dd.x, S.dd.y, pre.x, pre.y) < 980) cmdFire(pre.x, pre.y, 3, 'ab');
+      if (pre && typeof cmdFire === 'function' && S.dd && S.dd.state !== 'sunk' && dist(S.dd.x, S.dd.y, pre.x, pre.y) < DD_R * .98) cmdFire(pre.x, pre.y, 3, 'ab');
       abSay('p', `命令：集结完毕（${ts.length} 个组 ${ts.reduce((a, q) => a + q.men.length, 0)} 人）。${ord.length > 2 ? `${typeof cmdUName === 'function' ? cmdUName(ord[0]) : unitName(ord[0])}、${typeof cmdUName === 'function' ? cmdUName(ord[1]) : unitName(ord[1])}正面主攻，${typeof cmdUName === 'function' ? cmdUName(ord[2]) : unitName(ord[2])}从侧翼发起` : '各排'}，ZBD-03 伴随，夺取机场${pre ? '；舰炮先压制机场守敌' : ''}。`, { kind: 'order', at: af, lv: 0 });
       return;
     }

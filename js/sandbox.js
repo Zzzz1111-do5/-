@@ -1158,22 +1158,22 @@ function sbxFireShips(dt) {
         tracer(s.x, s.y, t.x + gauss() * 6, t.y + gauss() * 6, 'p', true); tracer(s.x, s.y, t.x + gauss() * 6, t.y + gauss() * 6, 'p', true);
         S.stats.shots++;
       }
-    } else if (s.sbxRole === 'naval') {   // 护航舰：滩头外 380 游弋，优先打已发现的火力点，射程 1000，我军 45 以内不射
+    } else if (s.sbxRole === 'naval') {   // 护航舰：滩头外 380 游弋，优先打已发现的火力点，射程同旗舰驱逐舰（support.js DD_R），我军 45 以内不射
       if (st.go === 0 && S.t > 6) { st.go = 1; goTo(tx + ((s.id % 5) - 2) * 80, cy + 360 + (s.id % 3) * 40); }   // 各舰错开阵位
       if (st.cd > 0) continue;
       // 分区射击（support.js navWeight）：优先本舰责任区，别的舰 6 秒内打过的不重复打，告急区可转火支援
       if (typeof navHotUpdate === 'function') navHotUpdate();
       const nw = (x, y) => typeof navWeight === 'function' ? navWeight(s, x, y) : 1;
-      let t = null, bd = 1000;
+      let t = null, bd = DD_R;
       for (const e of S.enemies) if (!e.dead && (inVision(e.x, e.y) || e.kx != null)) {
         const w = nw(e.x, e.y), d = dist(s.x, s.y, e.x, e.y) * (e.kind === 'coastal' || e.kind === 'bunker' ? .7 : 1);
-        if (w && d / w < bd && d < 1000 && sbxSafe(e.x, e.y, 45)) { bd = d / w; t = e; }
+        if (w && d / w < bd && d < DD_R && sbxSafe(e.x, e.y, 45)) { bd = d / w; t = e; }
       }
-      if (!t) { const q = sbxNearFoe(s.x, s.y, 1000, 0); if (q && sbxSafe(q.x, q.y, 45) && nw(q.x, q.y)) t = q; }
+      if (!t) { const q = sbxNearFoe(s.x, s.y, DD_R, 0); if (q && sbxSafe(q.x, q.y, 45) && nw(q.x, q.y)) t = q; }
       st.cd = t ? 5 / (s.sbxCls.rof || 1) : 1.5;
       if (!t) continue;
-      const sc = 10 + dist(s.x, s.y, t.x, t.y) / 50;
-      for (let k = 0; k < (s.sbxCls.salvo || 1); k++) { const pt = safeAim('p', t.x, t.y, sc, POWER.naval.R, 55); if (pt) fireShell(s.x, s.y, pt[0], pt[1], 'p', 'naval', 2.2, false, { t: -k * .2 }); }
+      const dT = dist(s.x, s.y, t.x, t.y), sc = ddSc(dT);
+      for (let k = 0; k < (s.sbxCls.salvo || 1); k++) { const pt = safeAim('p', t.x, t.y, sc, POWER.naval.R, 55); if (pt) fireShell(s.x, s.y, pt[0], pt[1], 'p', 'naval', ddDur(dT), false, { t: -k * .2 }); }
       Object.assign(s, { aimX: t.x, aimY: t.y, fireT: S.t });
       if (typeof navMark === 'function') navMark(s, t.x, t.y);
       S.fx.push({ kind: 'flash', x: s.x, y: s.y, r: 14, life: 0, max: .5, side: 'p' });

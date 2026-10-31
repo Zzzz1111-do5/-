@@ -191,7 +191,7 @@ ctE('p_apc', 'ZSL-92B 轮式装甲运兵车', 'p', 'armor', 'veh', 28, CT_IC.apc
   { kind: 'veh', at: 'vcargo', type: 'apc' }, { counters: ['inf_e'], weakTo: ['e_at', 'veh'] });
 ctE('p_ifv', 'ZBD-05 两栖步兵战车', 'p', 'armor', 'veh', 36, CT_IC.ifv, [5, 2, 4, 5, 7, 5, 2], '加装小口径机关炮的运兵车，火力更强，能压制机枪阵地。',
   { kind: 'veh', at: 'vcargo', type: 'apc', mod: { pow: 1.5, rof: 1.3 } }, { counters: ['inf_e', 'car_e'], weakTo: ['e_at'] });
-ctE('p_spg', 'PLZ-07 自行榴弹炮', 'p', 'armor', 'veh', 50, CT_IC.spg, [4, 1, 7, 9, 5, 4, 4], '上岸后对已知目标间接射击，射程约 600；装甲薄，不宜靠前。',
+ctE('p_spg', 'PLZ-07 自行榴弹炮', 'p', 'armor', 'veh', 50, CT_IC.spg, [4, 1, 7, 9, 5, 4, 4], '上岸后对已知目标间接射击，射程 18 公里以上，整张图都在射程内（打不打得着看有没有人发现目标）；装甲薄，不宜靠前。',
   { kind: 'veh', at: 'vcargo', type: 'spg' }, { counters: ['arty', 'bunker', 'mortar'], weakTo: ['inf_e', 'car_e'] });
 ctE('p_td', 'PTL-02 突击炮', 'p', 'armor', 'veh', 48, CT_IC.td, [5, 3, 7, 8, 6, 5, 4], '高初速反坦克炮，专门猎杀装甲目标；对步兵与工事效果一般。',
   { kind: 'veh', at: 'vcargo', type: 'td' }, { counters: ['e_tank', 'e_hv_tank', 'car_e'], weakTo: ['inf_e', 'arty'] });
@@ -233,7 +233,7 @@ ctE('p_lcs', '火力支援艇', 'p', 'naval', 'fire_ship', 32, CT_IC.lcs, [5, 1,
   { kind: 'ship', at: 'sea', ship: 'assault', cap: 0, hp: 9, pre: 'GS', role: 'gun' }, { counters: ['inf_e', 'bunker'], weakTo: ['coastal'] });
 ctE('p_sweep', '082Ⅱ型扫雷舰', 'p', 'naval', 'sweep', 30, CT_IC.sweep, [4, 1, 0, 0, 5, 4, 0], '驶往目标滩头近岸，清除水下障碍并标定滩头雷区，为登陆艇开辟航道。',
   { kind: 'ship', at: 'sea', ship: 'assault', cap: 0, hp: 8, pre: 'MS', role: 'sweep' }, { counters: ['obst', 'mines'], weakTo: ['coastal'] });
-ctE('p_dd', '052C 型驱逐舰', 'p', 'naval', 'dd', 120, CT_IC.dd, [6, 3, 7, 9, 7, 5, 0], '标准驱逐舰：舰炮射程 1000，可打烟幕弹；开火时会暴露位置招来反炮兵射击。48 个垂发单元全装红旗-9 舰空导弹（无对陆导弹）。',
+ctE('p_dd', '052C 型驱逐舰', 'p', 'naval', 'dd', 120, CT_IC.dd, [6, 3, 7, 9, 7, 5, 0], '标准驱逐舰：130 毫米舰炮射程约 30 公里，岸上看得见的目标都够得着，可打烟幕弹；开火时会暴露位置招来反炮兵射击。48 个垂发单元全装红旗-9 舰空导弹（无对陆导弹）。',
   { kind: 'dd', at: 'sea', hull: 3, rof: 1, salvo: 1, rep: 16 }, { counters: ['bunker', 'coastal'], weakTo: ['coastal'] });
 ctE('p_dd_h', '052D 型驱逐舰', 'p', 'naval', 'dd', 150, CT_IC.ddh, [7, 3, 8, 9, 7, 5, 0], '射速更快，船体能多扛一发。64 个垂发单元：红旗-9B 32、长剑-10 12、鹰击-18A 12、鱼-8 8。',
   { kind: 'dd', at: 'sea', hull: 4, rof: 1.3, salvo: 1, rep: 15 }, { counters: ['bunker', 'coastal'], weakTo: ['coastal'] });
@@ -415,13 +415,13 @@ ctE('e_coastal_r', '雷达引导岸防炮', 'e', 'arty', 'coastal', 80, CT_IC.ra
   { kind: 'enemy', at: 'coast', ek: 'coastal', hp: .9, mod: { rof: 1.15, rng: 1.05 }, vis: { r: 460, h: 4 } }, { counters: ['ship', 'dd'], weakTo: ['p_air_dive'] });
 ctE('e_fgun', 'M119A3 105 毫米榴弹炮', 'e', 'arty', 'arty', 30, CT_IC.fgun, [4, 1, 5, 6, 0, 4, 5], '轻型野战炮，射程较近、射速快。',
   { kind: 'enemy', at: 'land', ek: 'arty', hp: .8, mod: { rof: 1.35, rng: .8 } }, { counters: ['inf_p'], weakTo: ['p_air_strike', 'p_spg'] });
-ctE('e_how', 'M777A2 155 毫米榴弹炮阵地', 'e', 'arty', 'arty', 40, CT_IC.how, [5, 1, 7, 8, 0, 4, 6], '标准榴弹炮：射程 1100，打完数轮就转移阵地；对滩头与登陆舰威胁很大。',
+ctE('e_how', 'M777A2 155 毫米榴弹炮阵地', 'e', 'arty', 'arty', 40, CT_IC.how, [5, 1, 7, 8, 0, 4, 6], '标准榴弹炮：射程约 24 公里，整张图都在射程内，打完数轮就转移阵地；对滩头与登陆舰威胁很大。',
   { kind: 'enemy', at: 'land', ek: 'arty', hp: 1 }, { counters: ['inf_p', 'ship'], weakTo: ['p_air_strike', 'p_fo'] });
 ctE('e_hhow', '203 毫米重型榴弹炮', 'e', 'arty', 'arty', 60, CT_IC.hhow, [6, 1, 9, 9, 0, 4, 8], '大口径重炮：射程更远、单发威力接近岸防重炮，射速慢。',
   { kind: 'enemy', at: 'land', ek: 'arty', hp: 1.2, mod: { rof: .6, rng: 1.3, shell: 'coastal' } }, { counters: ['inf_p', 'ship', 'veh'], weakTo: ['p_air_heavy'] });
 ctE('e_rkt', 'M270 多管火箭炮排', 'e', 'arty', 'arty', 45, CT_IC.rkt, [3, 0, 8, 7, 0, 4, 6], '一次三发齐射，覆盖面大但散布也大，装填快；阵地脆弱。',
   { kind: 'enemy', at: 'land', ek: 'arty', hp: .7, mod: { salvo: 3, pow: .55, rof: 1.3 } }, { counters: ['inf_p'], weakTo: ['p_air_cas', 'p_spg'] });
-ctE('e_mortar', 'M252 81 毫米迫击炮', 'e', 'arty', 'mortar', 20, CT_IC.mortar, [3, 0, 4, 4, 0, 4, 3], '射程 420 的轻迫击炮，覆盖滩头与出口，不能打海上目标。',
+ctE('e_mortar', 'M252 81 毫米迫击炮', 'e', 'arty', 'mortar', 20, CT_IC.mortar, [3, 0, 4, 4, 0, 4, 3], '射程约 5.6 公里的轻迫击炮，覆盖滩头与出口，不能打海上目标。',
   { kind: 'enemy', at: 'land', ek: 'mortar', hp: 1 }, { counters: ['inf_p', 'p_eng'], weakTo: ['p_mortar', 'p_air_cas'] });
 ctE('e_hmortar', 'M120 120 毫米迫击炮', 'e', 'arty', 'mortar', 30, CT_IC.hmortar, [4, 0, 6, 5, 0, 4, 4], '大口径迫击炮：射程提升 35%、炮弹威力接近榴弹炮。',
   { kind: 'enemy', at: 'land', ek: 'mortar', hp: 1.3, mod: { rng: 1.35, shell: 'arty', rof: .85 } }, { counters: ['inf_p', 'trench'], weakTo: ['p_air_cas'] });

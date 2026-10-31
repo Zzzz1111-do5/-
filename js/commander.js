@@ -519,7 +519,7 @@ function cmdSayPlan(B, R, mode, prep) {
 function cmdPrepFires(main) {
   const C = S.cmd.p, b = TER.beaches[main], M = cmdExit(main);
   const sp = cmdDDSpot(M.x, M.y);
-  if (sp && (dist(S.dd.x, S.dd.y, M.x, M.y) > 900 || cmdGuns().some(g => dist(g.x, g.y, S.dd.x, S.dd.y) < 650))) orderDD(sp.x, sp.y);
+  if (sp && (dist(S.dd.x, S.dd.y, M.x, M.y) > DD_R * .9 || cmdGuns().some(g => dist(g.x, g.y, S.dd.x, S.dd.y) < 650))) orderDD(sp.x, sp.y);
   const known = S.enemies.filter(e => !e.dead && e.kx != null && dist(e.kx, e.ky, M.x, M.y) < 420).sort((a, c) => (c.kind === 'coastal') - (a.kind === 'coastal'));
   // 每次齐射都可能暴露舰位、招来反炮兵射击：火力准备只打要害，不搞长时间炮击
   if (known.length) for (const e of known.slice(0, 2)) C.fm.push({ x: e.kx, y: e.ky, n: e.kind === 'coastal' ? 2 : 1, t: S.t, why: 'prep' });
@@ -712,7 +712,7 @@ function cmdDDSpot(x, y) {
 function cmdFire(x, y, n, why) {
   const C = S.cmd.p, dd = S.dd;
   if (!cmdCtl(dd) || dd.state === 'sunk' || !isFinite(x) || !isFinite(y)) return false;
-  if (dist(dd.x, dd.y, x, y) > 980 && !cmdDDSpot(x, y)) return false;
+  if (dist(dd.x, dd.y, x, y) > DD_R * .98 && !cmdDDSpot(x, y)) return false;
   if (C.fm.some(m => dist(m.x, m.y, x, y) < 40 && m.n > 0)) return true;
   C.fm.push({ x: Math.round(x), y: Math.round(y), n, t: S.t, why });
   return true;
@@ -750,7 +750,7 @@ function cmdDDMission(dd) {
   while (C.fm.length) {
     const m = C.fm[0];
     if (m.n <= 0 || S.t - m.t > 100 || (m.smoke && S.assets.smoke <= 0)) { C.fm.shift(); continue; }
-    if (dist(dd.x, dd.y, m.x, m.y) > 990) {   // 射程外：机动到安全阵位，期间照常自卫射击
+    if (dist(dd.x, dd.y, m.x, m.y) > DD_R * .99) {   // 射程外：机动到安全阵位，期间照常自卫射击
       const sp = cmdDDSpot(m.x, m.y);
       if (!sp) { C.fm.shift(); continue; }
       if (!dd.moving || dist(dd.tx, dd.ty, sp.x, sp.y) > 80) orderDD(sp.x, sp.y);

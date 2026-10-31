@@ -8,6 +8,9 @@ const POWER = {
   naval: { men: .7, ship: 3, struct: 7, seg: false, R: 36 },
   bomb: { men: .75, ship: 3, struct: 9, seg: false, R: 34 }
 };
+// 守方火炮的射程（现实）：M777 155 毫米榴弹炮约 24 公里（增程弹 30 公里以上）、M252 81 毫米迫击炮 5.6 公里——整张图基本都在射程内，
+//   能不能打取决于有没有人看见目标；弹丸飞行时间、散布随距离增大（ai2.js aiArtillery）
+const GUN_R = { arty: 24000, mortar: 5600 };
 
 // 单兵伤势：q.hp 与 q.men 一一对应（1 完好，越低伤得越重，最低 .08）。被打中没阵亡的会负伤（suppress 按火力与暴露程度掷），
 //   阵亡仍由各处的命中判定决定（伤亡率不变），只是优先落在伤得重的人身上；血量给画面（selfx.js）与型号卡显示
@@ -97,6 +100,7 @@ function impact(x, y, pw, side, src) {
   S.fx.push({ kind: 'boom', x, y, r: R, life: 0, max: .9, side });
   if (isLand(x, y)) addCrater(x, y, R * .35);
   for (const q of S.teams) {
+    if (q.ride) continue;   // 坐在装甲车里：车外的破片伤不到（车被打爆时跟着伤亡，vehicles.js vehKill）
     const d = dist(x, y, q.x, q.y);
     if (d < R * 1.7) suppress(q, 70 * (1 - d / (R * 1.7)));
     if (d >= R) continue;

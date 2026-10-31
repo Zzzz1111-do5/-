@@ -5,22 +5,25 @@
 
 // armor 0–3：能伤到它的东西（≥1 轻武器无效，只压制乘员）；gun.ap 为穿深（对照 armor），he 为榴弹威力；speed 世界单位/秒；turn 弧度/秒
 // 剪影：len 车长、wid 车宽、tur 炮塔半径（0 = 无炮塔/固定战斗室）、bar 炮管长；crew 车组人数（计入兵力、伤亡）；fuel 满油行程（世界单位，约够一场战斗来回两趟；泅渡耗油加倍，ZTD-05 只多两成）
+// 射程、发现距离按现实（1 单位 = 1 米）：gun.range 主炮有效射程——125 毫米炮（96B、99A、M1）尾翼稳定脱壳穿甲弹有效 2.5–3 公里，105 毫米（15 式、05 式两栖突击车、02 式突击炮）2–2.5 公里，
+//   30 毫米机关炮约 1.5 公里，122 / 155 毫米自行榴弹炮 18 公里以上（整张图都在射程内）；mg 并列 / 高射机枪、步战车机关炮对步兵约 1–1.5 公里；
+//   spot [发现车辆, 发现站着的步兵]：车长周视热像仪的发现距离（spot.js 按目标逐个查通视），sight 是近处逐格算的视野圈
 const VEH_SPEC = {
-  lt_tank: { crew: 3, fuel: 5800, name: '轻型坦克', code: 'LT', hp: 26, armor: 1, speed: 25, turn: 2.2, gun: { range: 200, rof: 3.2, he: 1, ap: 1.5 }, mg: { range: 170, n: 3 }, sight: 165, amph: false, carry: 0, len: 14, wid: 8, tur: 3.2, bar: 7, ammo: 40 },
-  tank: { crew: 4, fuel: 5000, name: '中型坦克', code: 'MT', hp: 40, armor: 2, speed: 20, turn: 1.7, gun: { range: 230, rof: 4, he: 1.5, ap: 2.3 }, mg: { range: 170, n: 3 }, sight: 160, amph: false, carry: 0, len: 17, wid: 9.5, tur: 4, bar: 9, ammo: 40 },
-  hv_tank: { crew: 4, fuel: 4000, name: '重型坦克', code: 'HT', hp: 62, armor: 3, speed: 16, turn: 1.2, gun: { range: 250, rof: 5.4, he: 2, ap: 3.2 }, mg: { range: 170, n: 3 }, sight: 150, amph: false, carry: 0, len: 20, wid: 11, tur: 4.8, bar: 11, ammo: 36 },
-  amtank: { crew: 4, fuel: 4300, swimK: 1.25, name: '两栖坦克', code: 'AM', hp: 24, armor: 1, speed: 19, turn: 1.8, gun: { range: 180, rof: 3.6, he: 1.1, ap: 1.3 }, mg: { range: 160, n: 2 }, sight: 150, amph: true, carry: 0, len: 15, wid: 9, tur: 3.4, bar: 6.5, ammo: 34 },
-  apc: { crew: 2, fuel: 6300, name: '装甲运兵车', code: 'AP', hp: 24, armor: 1, speed: 25, turn: 2.2, gun: null, mg: { range: 180, n: 5 }, sight: 150, amph: false, carry: 2, len: 15, wid: 8, tur: 0, bar: 0, ammo: 0 },
-  spg: { crew: 4, fuel: 4700, name: '自行火炮', code: 'SP', hp: 22, armor: 1, speed: 16, turn: 1.4, gun: { range: 620, min: 110, rof: 7.5, he: 2.2, ap: 0, ind: true }, mg: null, sight: 130, amph: false, carry: 0, len: 17, wid: 9, tur: 0, bar: 10, ammo: 30 },
-  td: { crew: 4, fuel: 5000, name: '坦克歼击车', code: 'TD', hp: 34, armor: 2, speed: 20, turn: 1.6, gun: { range: 270, rof: 4.6, he: .9, ap: 3.6, arc: .45 }, mg: null, sight: 160, amph: false, carry: 0, len: 17, wid: 9.5, tur: 0, bar: 12, ammo: 36 },
-  aa_veh: { crew: 3, fuel: 5400, name: '自行高炮', code: 'AA', hp: 20, armor: 1, speed: 22, turn: 2, gun: null, mg: { range: 200, n: 8, quad: true }, aa: 230, sight: 170, amph: false, carry: 0, len: 14, wid: 8.5, tur: 3.6, bar: 5, ammo: 0 },
+  lt_tank: { crew: 3, fuel: 5800, name: '轻型坦克', code: 'LT', hp: 26, armor: 1, speed: 25, turn: 2.2, gun: { range: 2500, rof: 3.2, he: 1, ap: 1.5 }, mg: { range: 1000, n: 3 }, sight: 165, spot: [4000, 1800], amph: false, carry: 0, len: 14, wid: 8, tur: 3.2, bar: 7, ammo: 40 },
+  tank: { crew: 4, fuel: 5000, name: '中型坦克', code: 'MT', hp: 40, armor: 2, speed: 20, turn: 1.7, gun: { range: 2500, rof: 4, he: 1.5, ap: 2.3 }, mg: { range: 1000, n: 3 }, sight: 160, spot: [4000, 1800], amph: false, carry: 0, len: 17, wid: 9.5, tur: 4, bar: 9, ammo: 40 },
+  hv_tank: { crew: 4, fuel: 4000, name: '重型坦克', code: 'HT', hp: 62, armor: 3, speed: 16, turn: 1.2, gun: { range: 3000, rof: 5.4, he: 2, ap: 3.2 }, mg: { range: 1000, n: 3 }, sight: 150, spot: [4500, 2000], amph: false, carry: 0, len: 20, wid: 11, tur: 4.8, bar: 11, ammo: 36 },
+  amtank: { crew: 4, fuel: 4300, swimK: 1.25, name: '两栖坦克', code: 'AM', hp: 24, armor: 1, speed: 19, turn: 1.8, gun: { range: 2000, rof: 3.6, he: 1.1, ap: 1.3 }, mg: { range: 1000, n: 2 }, sight: 150, spot: [3500, 1600], amph: true, carry: 0, len: 15, wid: 9, tur: 3.4, bar: 6.5, ammo: 34 },
+  apc: { crew: 2, fuel: 6300, name: '装甲运兵车', code: 'AP', hp: 24, armor: 1, speed: 25, turn: 2.2, gun: null, mg: { range: 1500, n: 5 }, sight: 150, spot: [3500, 1600], amph: false, carry: 3, len: 15, wid: 8, tur: 0, bar: 0, ammo: 0 },
+  spg: { crew: 4, fuel: 4700, name: '自行火炮', code: 'SP', hp: 22, armor: 1, speed: 16, turn: 1.4, gun: { range: 18000, min: 1000, rof: 7.5, he: 2.2, ap: 0, ind: true }, mg: null, sight: 130, spot: [2000, 1000], amph: false, carry: 0, len: 17, wid: 9, tur: 0, bar: 10, ammo: 30 },
+  td: { crew: 4, fuel: 5000, name: '坦克歼击车', code: 'TD', hp: 34, armor: 2, speed: 20, turn: 1.6, gun: { range: 2500, rof: 4.6, he: .9, ap: 3.6, arc: .45 }, mg: null, sight: 160, spot: [4000, 1800], amph: false, carry: 0, len: 17, wid: 9.5, tur: 0, bar: 12, ammo: 36 },
+  aa_veh: { crew: 3, fuel: 5400, name: '自行高炮', code: 'AA', hp: 20, armor: 1, speed: 22, turn: 2, gun: null, mg: { range: 1500, n: 8, quad: true }, aa: 230, sight: 170, spot: [3000, 1400], amph: false, carry: 0, len: 14, wid: 8.5, tur: 3.6, bar: 5, ammo: 0 },
   // 弹炮防空车：双联装机关炮（对空 aa、对地 mg）+ 近程防空导弹 sam（射程、载弹、两发间隔、每枚补装秒数），能拦截来袭导弹（vehSam）
-  sam_veh: { crew: 3, fuel: 5400, name: '弹炮防空车', code: 'SA', hp: 22, armor: 1, speed: 22, turn: 2, gun: null, mg: { range: 200, n: 4, quad: true }, aa: 260, sam: { range: 520, n: 8, cd: 2.5, regen: 30, icp: 450 }, sight: 200, amph: false, carry: 0, len: 15, wid: 9, tur: 3.8, bar: 5, ammo: 0 },
-  recon: { crew: 3, fuel: 8100, name: '侦察车', code: 'RC', hp: 14, armor: 1, speed: 34, turn: 2.6, gun: null, mg: { range: 160, n: 2 }, sight: 285, amph: false, carry: 0, wheel: true, len: 12, wid: 6.5, tur: 2.4, bar: 3, ammo: 0 },
-  flame_tank: { crew: 4, fuel: 4300, name: '喷火坦克', code: 'FL', hp: 40, armor: 2, speed: 18, turn: 1.6, gun: { range: 95, rof: 1.1, he: 0, ap: 0, flame: true }, mg: { range: 150, n: 2 }, sight: 150, amph: false, carry: 0, len: 17, wid: 9.5, tur: 3.8, bar: 6, ammo: 40 },
-  mine_tank: { crew: 4, fuel: 4000, name: '扫雷坦克', code: 'MC', hp: 40, armor: 2, speed: 15, turn: 1.4, gun: { range: 200, rof: 4.6, he: 1.3, ap: 2 }, mg: { range: 150, n: 2 }, sight: 150, amph: false, carry: 0, flail: true, len: 17, wid: 10, tur: 3.8, bar: 8, ammo: 30 },
+  sam_veh: { crew: 3, fuel: 5400, name: '弹炮防空车', code: 'SA', hp: 22, armor: 1, speed: 22, turn: 2, gun: null, mg: { range: 1500, n: 4, quad: true }, aa: 260, sam: { range: 520, n: 8, cd: 2.5, regen: 30, icp: 450 }, sight: 200, spot: [3500, 1600], amph: false, carry: 0, len: 15, wid: 9, tur: 3.8, bar: 5, ammo: 0 },
+  recon: { crew: 3, fuel: 8100, name: '侦察车', code: 'RC', hp: 14, armor: 1, speed: 34, turn: 2.6, gun: null, mg: { range: 1500, n: 2 }, sight: 285, spot: [6000, 2500], amph: false, carry: 0, wheel: true, len: 12, wid: 6.5, tur: 2.4, bar: 3, ammo: 0 },
+  flame_tank: { crew: 4, fuel: 4300, name: '喷火坦克', code: 'FL', hp: 40, armor: 2, speed: 18, turn: 1.6, gun: { range: 95, rof: 1.1, he: 0, ap: 0, flame: true }, mg: { range: 1000, n: 2 }, sight: 150, spot: [3500, 1600], amph: false, carry: 0, len: 17, wid: 9.5, tur: 3.8, bar: 6, ammo: 40 },
+  mine_tank: { crew: 4, fuel: 4000, name: '扫雷坦克', code: 'MC', hp: 40, armor: 2, speed: 15, turn: 1.4, gun: { range: 2500, rof: 4.6, he: 1.3, ap: 2 }, mg: { range: 1000, n: 2 }, sight: 150, spot: [3500, 1600], amph: false, carry: 0, flail: true, len: 17, wid: 10, tur: 3.8, bar: 8, ammo: 30 },
   // 伞兵战车（空降兵重装空投，abn.js）：轻、快，30 毫米机关炮能打轻装甲，挡不住坦克炮
-  abv: { crew: 3, fuel: 6000, name: '伞兵战车', code: 'AB', hp: 18, armor: 1, speed: 30, turn: 2.4, gun: { range: 210, rof: 1.1, he: .8, ap: 1.3 }, mg: { range: 170, n: 3 }, sight: 170, amph: false, carry: 1, len: 13, wid: 7.5, tur: 2.8, bar: 6, ammo: 40 }
+  abv: { crew: 3, fuel: 6000, name: '伞兵战车', code: 'AB', hp: 18, armor: 1, speed: 30, turn: 2.4, gun: { range: 1500, rof: 1.1, he: .8, ap: 1.3 }, mg: { range: 1000, n: 3 }, sight: 170, spot: [3000, 1400], amph: false, carry: 1, len: 13, wid: 7.5, tur: 2.8, bar: 6, ammo: 40 }
 };
 // 各地形的车速系数（下标同 T）：道路最快，林地、沼泽、礁岸很慢；深海/浅滩只对两栖坦克有意义（泅渡 60%）
 const VEH_TSP = [.6, .6, 0, .75, .3, 0, 1, .4, .75, 0, .25, .25, 1, 1.3, .7, .45];   // 河流：涉水两成五（两栖车辆六成，vehMove）
@@ -93,7 +96,19 @@ function vehDamage(v, dmg, pen, sx, sy, src) {
   }
   if (v.hp > 0 && v.hp < v.maxhp * .3 && !v.burn && d > 2 && Math.random() < .3) v.burn = 6 + Math.random() * 8;   // 起火
   if (v.hp <= 0) vehKill(v, src);
+  else if (VEH_SMK.src.includes(src)) vehSmokeOut(v, sx, sy);
   return d;
+}
+// 车载烟幕弹（坦克、步战车炮塔两侧的烟幕弹发射器，两次齐射）：挨了穿甲弹、反坦克导弹没被打穿，或被近失弹擦过（vehShots），
+//   朝来弹方向 18 米处打出一道烟幕（半径 24 米、约 25 秒）——多光谱烟幕热像也看不透，挡住对方的视线和远距离发现（spot.js），趁机换位；
+//   自己往那个方向也看不见。两次齐射之间至少隔 20 秒；泅渡中、在登陆舰上的不打
+const VEH_SMK = { n: 2, gap: 20, r: 24, off: 18, dur: 25, src: ['ap', 'at', 'top', 'atgm', 'gren'] };
+function vehSmokeOut(v, sx, sy) {
+  if (v.dead || v.swim || v.lst || !isFinite(sx) || !isFinite(sy) || (v.smk ?? VEH_SMK.n) <= 0 || S.t - (v.smkT ?? -99) < VEH_SMK.gap) return;
+  const a = Math.atan2(sy - v.y, sx - v.x);
+  v.smk = (v.smk ?? VEH_SMK.n) - 1; v.smkT = S.t;
+  S.smoke.push({ x: v.x + Math.cos(a) * VEH_SMK.off, y: v.y + Math.sin(a) * VEH_SMK.off, r: VEH_SMK.r, until: S.t + VEH_SMK.dur });
+  v8Stat('vSmoke' + v.side);
 }
 
 function vehKill(v, src) {
@@ -414,9 +429,9 @@ const VEH_DL = 4;
 function vehDlMark() {
   for (const o of S.veh || []) if (!o.dead) { if (o.side === 'e' && PV[ci(o.x, o.y)] === 1) o.dlP = S.t; else if (o.side === 'p' && EV[ci(o.x, o.y)] === 1) o.dlE = S.t; }
 }
-// 车辆的视野半径：直瞄火炮的车（坦克、坦克歼击车、突击炮）车长有热像周视镜，看得到自己主炮够得着的地方（真车的热像观瞄看得比主炮有效射程远），
-//   一排坦克的视野连成一片、看到的全军共享（vehSees）
-const vehSight = v => { const sp = vehSp(v), g = sp.gun; return Math.max(sp.sight, g && !g.ind && !g.flame ? g.range * 1.1 : 0) * (v.swim ? .7 : 1); };
+// 车辆的视野半径（近处逐格算的视野圈，最多 290）：直瞄火炮的车车长有热像周视镜，一排坦克的视野连成一片、看到的全军共享（vehSees）；
+//   几公里外的目标由热像仪按目标逐个查通视发现（spot.js）——逐格算的开销随半径平方增长，算不了那么远
+const vehSight = v => { const sp = vehSp(v), g = sp.gun; return Math.max(sp.sight, g && !g.ind && !g.flame ? Math.min(g.range * 1.1, 290) : 0) * (v.swim ? .7 : 1); };
 // 主炮目标评分：威胁 / 价值，除以距离；穿甲炮偏好装甲，喷火偏好碉堡与战壕
 function vehGunTarget(v) {
   const sp = vehSp(v), g = sp.gun;
@@ -505,8 +520,8 @@ function vehShoot(v, tg) {
     else if (tg.k === 'ac' && typeof afgFlame === 'function') afgFlame(tg.t);
     return;
   }
-  if (g.ind) {   // 间瞄：落点散布随距离增大
-    const sc = 12 + tg.d * .05, pt = safeAim(v.side, tg.x, tg.y, sc, POWER.spg.R);
+  if (g.ind) {   // 间瞄：落点散布随距离增大（现代自行榴弹炮有气象、测地数据，概略约为射程的 1.5%）
+    const sc = 10 + tg.d * .015, pt = safeAim(v.side, tg.x, tg.y, sc, POWER.spg.R);
     if (!pt) return;   // 危险近距：自己人在落区附近，不开火
     fireShell(mx, my, pt[0], pt[1], v.side, 'spg', 1.6 + tg.d / 400, false);
     S.fx.push({ kind: 'flash', x: mx, y: my, r: 12, life: 0, max: .4, side: v.side });
@@ -531,7 +546,7 @@ function vehShots(dt) {
     if (s.k === 'he') { impact(s.x1, s.y1, s.hit && s.tk === 'tm' ? { ...vehPW(s.he, s.side), direct: { x: s.x1, y: s.y1 } } : vehPW(s.he, s.side), s.side); continue; }   // 正中小组：掩体只按开方减免（combat.js impact）
     // 穿甲弹：命中则按穿深计算伤害，未命中只在地面溅起尘土
     S.fx.push({ kind: 'flash', x: s.x1, y: s.y1, r: s.hit ? 9 : 5, life: 0, max: .35, side: s.side });
-    if (!s.hit) continue;
+    if (!s.hit) { const o = s.tk === 'veh' && vehById(s.tg); if (o && !o.dead && dist(o.x, o.y, s.x1, s.y1) < 25 && Math.random() < .6) vehSmokeOut(o, s.x0, s.y0); continue; }   // 近失弹擦过：车组发觉被瞄上了
     const dmg = 12 + s.ap * 7;   // 穿甲弹：主战坦克两发、重型坦克两到三发
     if (s.tk === 'car') { const a = (S.armor || []).find(a => a.id === s.tg); if (a) damageArmor(a, dmg); }
     else { const o = vehById(s.tg); if (o) vehDamage(o, dmg, s.ap, s.x0, s.y0, 'ap'); }

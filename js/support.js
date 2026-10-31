@@ -1,5 +1,8 @@
 'use strict';
 // 支援火力：驱逐舰（机动、榴弹、烟幕、暴露与损管）、炮弹结算；空军在 carrier.js
+// 舰炮射程（现实）：052C / 052D 的 H/PJ-38 130 毫米舰炮约 30 公里，055 同型炮——岸上看得见的目标都够得着（守方榴弹炮也是整张图都在射程内，combat.js GUN_R）；
+//   这里取 20 公里（默认地图、海岛战役都覆盖全图），弹丸飞行时间、散布随距离增大
+const DD_R = 20000;
 
 function orderDD(x, y) {
   const dd = S.dd;
@@ -17,6 +20,8 @@ function ddScoot(dd) {
     if (typeAt(nx, ny) === T.DEEP && dist(nx, ny, dd.x, dd.y) > 70) { orderDD(nx, ny); return; }
   }
 }
+// 舰炮散布：1 公里内与原来相同（10 + 距离 / 50），再远每公里多约 6 米（火控雷达、弹道计算机，无制导炮弹）；弹丸飞行时间约 2.2 秒 + 距离 / 700
+const ddSc = d => 10 + Math.min(d, 1000) / 50 + Math.max(0, d - 1000) / 160, ddDur = d => 2.2 + Math.max(0, d - 1000) / 700;
 // ai：AI 指挥的射击（自动掩护、指挥官火力任务）——落点必须避开自己人；玩家手动射击不受限
 function ddFire(tx, ty, smoke, ai) {
   const dd = S.dd;
@@ -25,11 +30,11 @@ function ddFire(tx, ty, smoke, ai) {
     return false;
   }
   const d = dist(dd.x, dd.y, tx, ty);
-  if (d > 1000) { log('超出舰炮射程（1000）', 'warn', 'ddr', 2); return false; }
+  if (d > DD_R) { log(`超出舰炮射程（${DD_R / 1000} 公里）`, 'warn', 'ddr', 2); return false; }
   if (smoke && S.assets.smoke <= 0) { log('烟幕弹已用完', 'warn', 'sm', 2); return false; }
-  const sc = 10 + d / 50, pt = ai && !smoke ? safeAim('p', tx, ty, sc, POWER.naval.R, 55) : [tx + gauss() * sc, ty + gauss() * sc];
+  const sc = ddSc(d), pt = ai && !smoke ? safeAim('p', tx, ty, sc, POWER.naval.R, 55) : [tx + gauss() * sc, ty + gauss() * sc];
   if (!pt) return false;   // 危险近距：自己人在落区，这一轮不打
-  fireShell(dd.x, dd.y, pt[0], pt[1], 'p', smoke ? 'smoke' : 'naval', 2.2, false);
+  fireShell(dd.x, dd.y, pt[0], pt[1], 'p', smoke ? 'smoke' : 'naval', ddDur(d), false);
   if (smoke) S.assets.smoke--;
   dd.cool = 5; S.stats.shots++;
   if (dd.scoot && !smoke) ddScoot(dd);
@@ -78,7 +83,7 @@ function updateDD(dt) {
   const safe = typeof cmdDDSafe === 'function' ? cmdDDSafe() : 55;
   const foes = S.enemies.filter(e => !e.dead).concat(S.teams.filter(q => q.side === 'e' && q.men.length));
   for (const e of foes) {
-    if (!inVision(e.x, e.y) || dist(dd.x, dd.y, e.x, e.y) > 1000) continue;
+    if (!inVision(e.x, e.y) || dist(dd.x, dd.y, e.x, e.y) > DD_R) continue;
     let near = 1e9;
     for (const q of S.teams) if (q.side === 'p') near = Math.min(near, dist(e.x, e.y, q.x, q.y));
     const w = navWeight(dd, e.x, e.y);
