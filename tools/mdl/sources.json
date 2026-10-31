@@ -1241,5 +1241,19 @@
     "tris": 26000,
     "len": 9.4,
     "yaw": 180
+  },
+  "cbridge": {
+    "mode": "tex",
+    "file": "cbridge.glb",
+    "name": "Concrete Bridge (low poly)",
+    "author": "Derfmode",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/concrete-bridge-low-poly-77d6c4481e6043889ea8cfe08c8fdcd2",
+    "unit": 1,
+    "parts": {
+      "cbridge": [
+        0
+      ]
+    }
   }
 }

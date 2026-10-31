@@ -47,7 +47,7 @@ function sfxMen(q, ks = 1) {
 }
 // 小组的兵力：活着的人的血量之和 / 满员（至少按 3 人算）
 const sfxTeamHp = q => manHp(q).reduce((a, v) => a + v, 0) / Math.max(3, q.men.length);
-const sfxCol = f => f > .6 ? COL.g : f > .3 ? COL.amber : COL.enemy;
+const sfxCol = f => f > .6 ? '#3dff8a' : f > .3 ? '#ffc24a' : '#ff3d6e';   // 血量固定绿 / 琥珀 / 红（写实画面里 COL.g 是我方蓝，满血会显示成蓝的）
 
 // 光斑、光环的贴图（琥珀色，画一次，按需缩放）
 function sfxSprites() {
