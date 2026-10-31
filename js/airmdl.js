@@ -502,7 +502,7 @@ function airRelScan() {
   for (let i = L.length - 1; i >= 0; i--) {   // 新导弹都在数组尾部
     const m = L[i];
     if (m.id <= AIRV.last) break;
-    if (m.done || AIR_GND.has(m.src) || typeof m.src === 'number' || !(m.src === 'aam' || m.kind === 'pgm' || m.kind === 'asm')) continue;
+    if (m.done || m.fw || AIR_GND.has(m.src) || typeof m.src === 'number' || !(m.src === 'aam' || m.kind === 'pgm' || m.kind === 'asm')) continue;
     airRelNew(m);
   }
   if (top > AIRV.last) AIRV.last = top;

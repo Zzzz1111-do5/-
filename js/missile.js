@@ -57,7 +57,7 @@ const msPuff = (x, y, side, big) => S.fx.push({ kind: 'flash', x, y, r: big ? 15
 function msStep(dt) {
   if (!S || !Array.isArray(S.missiles) || !S.missiles.length) return;
   for (const m of S.missiles) {
-    if (m.done) continue;
+    if (m.done || m.fw) continue;   // fw：亲自驾驶的飞机打出去的弹，三维弹道在 fpwpn.js 里推演
     if ((m.t += dt) < 0) continue;
     if (m.ph === 'wait') { m.ph = 'boost'; if (m.kind === 'asm') S.fx.push({ kind: 'flash', x: m.x0, y: m.y0, r: 12, life: 0, max: .5, side: m.side }); }
     if (m.kind === 'sam') { msSam(m, dt); continue; }
@@ -157,6 +157,10 @@ function msPgmFly(m, dt) {
   if (m.tgt && m.tgt.k === 'eship' && typeof navyDefend === 'function' && navyDefend(m)) return;   // 敌舰分层拦截
   if (d > Math.max(8, st)) { m.x += Math.cos(m.hd) * st; m.y += Math.sin(m.hd) * st; return; }
   m.done = true; m.x = m.tx; m.y = m.ty;
+  msPgmHit(m, T, W0);
+}
+// 到达（m.tx、m.ty 是落点）：打敌舰按舰艇毁伤，其余小范围爆炸 + 对目标直接毁伤（fpwpn.js 玩家亲自打的也用这一套）
+function msPgmHit(m, T, W0) {
   if (m.tgt && m.tgt.k === 'eship') { if (T && dist(T.x, T.y, m.tx, m.ty) < 24 && typeof navyHit === 'function') navyHit(T, m); else S.fx.push({ kind: 'flash', x: m.tx, y: m.ty, r: 10, life: 0, max: .5, side: m.side }); msStat('pgmHit'); return; }
   impact(m.tx, m.ty, W0.pw, m.side);
   if (m.src === 'b2' && typeof b2Blast === 'function') b2Blast(m.tx, m.ty, m.w);   // B-2 的重磅炸弹：大范围冲击波压制（b2.js）
@@ -200,7 +204,7 @@ function msSamHit(m, T) {
     return;
   }
   let base, flare = 1;
-  const aam = m.src === 'aam';   // 战斗机空空导弹（airwar.js）：单发命中率随弹带来（m.pk）
+  const aam = m.src === 'aam' || m.src === 'fp';   // 战斗机空空导弹（airwar.js；fp：玩家亲自驾驶时打的，fpwpn.js）：单发命中率随弹带来（m.pk）
   if (k === 'plane') {
     base = (aam || samv ? m.pk : T.kind === 'recon' ? .3 : T.v === 'heli' ? .62 : T.kind === 'bomber' && T.v !== 'dive' ? .32 : .42) * (aam ? 1 : (1 + (typeof airStealth === 'function' ? airStealth(T) : 1)) / 2);   // 隐身机：防空导弹难以锁定
     if (!T.samN) { T.samN = 1; flare = .6; MSV.fl.push({ x: T.x, y: T.y, t: S.t }); }   // 第一枚多半被干扰弹骗走
