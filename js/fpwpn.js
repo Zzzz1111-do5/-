@@ -91,15 +91,16 @@ function fwBay(o, side) {
   return r ? { main: r.bay, side: r.sbay, ext: r.sbay } : null;
 }
 
-// 弹舱打开时画舱里的弹（v3units.js 画飞机时调用，o 我方飞机，x y z h pt rl sz 与画飞机同一套）：玩家开的画选中的那种，AI 的画这一舱的头一种；
+// 飞机身上的弹（v3units.js 画飞机时调用，o 我方飞机，x y z h pt rl sz 与画飞机同一套）：外挂的一直画；弹舱打开时画舱里的——玩家开的画选中的那种，AI 的画这一舱的头一种；
 //   剩几枚画几枚（打掉的从第一个挂点开始空）；侧弹舱的弹随挂架推出舱外（ext）
 function fwBayMsl(o, key, sz, x, y, z, h, pt, rl, bay) {
   const mk = fpMdlKey(o), T = FW_ST[mk], L = FW_LOAD[airMdlKey(o.kind, o.v)];
   if (!T || !L || typeof v3gAt !== 'function' || typeof v3gMsl !== 'function' || !V3G.M[mk]) return;
   fwInit(o);
   const sel = V3FP.on && V3FP.o === o ? fwSelW() : null, k = sz / V3G.M[mk].meta.len;
+  for (const s of L) if (s.bay === 'ext' && T.ext) for (let i = T.ext.length - Math.min((o.fwN || {})[s.w] || 0, T.ext.length); i < T.ext.length; i++) { const p = v3gAt(key, sz, x, y, z, h, pt, rl, T.ext[i]); if (p) v3gMsl(FW_W[s.w].ms, p[0], p[1], p[2], h, k, 0, pt); }   // 翼下挂架
   for (const bk of ['main', 'side']) {
-    if (!(bay[bk] > .02)) continue;
+    if (!bay || !(bay[bk] > .02)) continue;
     const s = sel && sel.bay === bk ? sel : L.find(q => q.bay === bk);
     if (!s) continue;
     const Wd = FW_W[s.w], st = fwSlots(T, bk, Wd), n = Math.min((o.fwN || {})[s.w] || 0, st ? st.length : 0), e = bk === 'side' ? bay.ext || 0 : 0;
@@ -107,6 +108,33 @@ function fwBayMsl(o, key, sz, x, y, z, h, pt, rl, bay) {
       const a = st[i], X = bk === 'side' && T.sideX ? T.sideX[i % T.sideX.length] : a, p = v3gAt(key, sz, x, y, z, h, pt, rl, [lerp(a[0], X[0], e), lerp(a[1], X[1], e), lerp(a[2], X[2], e)]);
       if (p) v3gMsl(Wd.ms, p[0], p[1], p[2], h, k, 0, pt);
     }
+  }
+}
+
+// 一架满载时挂的每一枚（甲板上挂弹车按这个顺序一枚枚挂：v3det.js）：{ w 武器, ms 弹形, bay 舱, v 挂点（模型坐标）}；按机型缓存
+const FW_LD = new Map();
+function fwLoadout(type, v) {
+  const id = type + '|' + (v || '');
+  if (FW_LD.has(id)) return FW_LD.get(id);
+  const mk = typeof V3G_AIR === 'object' && typeof airSilKey === 'function' ? V3G_AIR[airSilKey(type, v)] || 'j31' : 'j31', T = FW_ST[mk] || {}, o = { kind: type, v }, out = [];
+  fwInit(o);   // 临时对象：按型号表满载
+  for (const s of FW_LOAD[airMdlKey(type, v)] || []) {
+    const Wd = FW_W[s.w], st = s.bay === 'side' ? T.side : fwSlots(T, s.bay, Wd);
+    for (let i = 0; i < (o.fwN[s.w] || 0); i++) out.push({ w: s.w, ms: Wd.ms, bay: s.bay, v: st && st.length ? st[st.length - 1 - (i % st.length)] : null });
+  }
+  FW_LD.set(id, out);
+  return out;
+}
+// 甲板上的飞机挂上的弹（v3units.js）：满载清单的前 n 枚——外挂的一直看得见，弹舱里的只在舱门开着时画；top 机轮着地处
+function fwStoresGnd(type, v, key, sz, x, y, top, hd, n, bay) {
+  if (!(n > 0) || typeof v3gMsl !== 'function' || typeof v3dGndAt !== 'function') return;
+  const LD = fwLoadout(type, v), M = V3G.M[V3G_AIR[key] || 'j31'];
+  if (!M || !M.ready) return;
+  for (let i = 0; i < Math.min(n, LD.length); i++) {
+    const e = LD[i];
+    if (!e.v || (e.bay !== 'ext' && !(bay && bay[e.bay] > .02))) continue;
+    const p = v3dGndAt(key, sz, x, y, top, hd, e.v);
+    if (p) v3gMsl(e.ms, p[0], p[1], p[2], hd, sz / M.meta.len, 0, 0);
   }
 }
 
