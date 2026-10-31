@@ -39,7 +39,8 @@ const FW_ST = {
     side: [[-.7, 1.24, 1.66], [-.7, -1.24, 1.66]], sideX: [[-.7, 1.62, 1.12], [-.7, -1.62, 1.12]] },
   j31: { main: [[0, .3, 1.28], [0, -.3, 1.28], [0, .7, 1.26], [0, -.7, 1.26]], mainS: [[.95, .3, 1.24], [.95, -.3, 1.24], [-.95, .3, 1.24], [-.95, -.3, 1.24], [.95, .7, 1.22], [.95, -.7, 1.22], [-.95, .7, 1.22], [-.95, -.7, 1.22]] },
   j16: { ext: [[-.6, 2.6, 1.02], [-.6, -2.6, 1.02], [-1.2, 4.1, 1.12], [-1.2, -4.1, 1.12]] },
-  j15: { ext: [[-.6, 2.6, 1.95], [-.6, -2.6, 1.95], [-1.2, 4.1, 1.95], [-1.2, -4.1, 1.95]] }   // 歼-15 模型放着起落架（机翼比歼-16 模型高约 0.9 米），挂点同一排位置
+  // 歼-15：翼下内、外侧挂架（v3g.js V3G_FOLD 补的挂架，下沿 2.27 / 2.30 米；位置照模型原来挂的弹），弹心在挂架下沿下面一个弹半径；重弹（鹰击 / KD-88）先挂内侧——都在折叠线外，折翼时跟着翻
+  j15: { ext: [[-4.1, 5.65, 2.15], [-4.1, -5.65, 2.15], [-2.64, 3.88, 2.09], [-2.64, -3.88, 2.09]] }
 };
 // 这一舱这种弹用哪组挂点（短弹前后两排）
 const fwSlots = (T, bay, Wd) => (bay === 'main' && T.mainS && ((typeof V3MS === 'object' && V3MS[Wd.ms]) || {}).L <= 2.4 ? T.mainS : T[bay]) || null;
@@ -128,15 +129,15 @@ function fwLoadout(type, v) {
   return out;
 }
 // 甲板上的飞机挂上的弹（v3units.js）：满载清单的前 n 枚——外挂的一直看得见，弹舱里的只在舱门开着时画；top 机轮着地处
-function fwStoresGnd(type, v, key, sz, x, y, top, hd, n, bay) {
+function fwStoresGnd(type, v, key, sz, x, y, top, hd, n, bay, fold = 0) {   // fold：外翼折起程度（挂在外翼下的弹跟着翻上去，v3g.js V3G_FOLD）
   if (!(n > 0) || typeof v3gMsl !== 'function' || typeof v3dGndAt !== 'function') return;
-  const LD = fwLoadout(type, v), M = V3G.M[V3G_AIR[key] || 'j31'];
+  const mk = V3G_AIR[key] || 'j31', LD = fwLoadout(type, v), M = V3G.M[mk];
   if (!M || !M.ready) return;
   for (let i = 0; i < Math.min(n, LD.length); i++) {
     const e = LD[i];
     if (!e.v || (e.bay !== 'ext' && !(bay && bay[e.bay] > .02))) continue;
-    const p = v3dGndAt(key, sz, x, y, top, hd, e.v);
-    if (p) v3gMsl(e.ms, p[0], p[1], p[2], hd, sz / M.meta.len, 0, 0);
+    const p = v3dGndAt(key, sz, x, y, top, hd, e.v, fold);
+    if (p) v3gMsl(e.ms, p[0], p[1], p[2], hd, sz / M.meta.len, 0, 0, fold > 0 && typeof v3gFoldA === 'function' ? v3gFoldA(mk, e.v, fold) : 0);
   }
 }
 

@@ -140,7 +140,7 @@ function bake(key, C, up) {
       if (o.hide) M.hide = 1;
     }
   }
-  if (C.opaque) for (const M of mats) if (M.am === 2 && !/glass|window|canopy|lens|cockpit|windshield|glas|vidrio/i.test(M.n)) M.am = 0;   // opaque：作者把整车材质设成了半透明混合（贴图其实不透明），按不透明画——玻璃除外
+  if (C.opaque) for (const M of mats) if (M.am === 2 && M.c[3] >= .9 && !/glass|window|canopy|lens|cockpit|windshield|glas|vidrio/i.test(M.n)) M.am = 0;   // opaque：作者把整车材质设成了半透明混合（贴图其实不透明），按不透明画——玻璃除外；底色本身就调低了不透明度的（座舱盖、车窗，作者有意做透明的）照原样；个别误设的在 mats 里写 alpha: 'OPAQUE'
   if (C.roughMin != null) for (const M of mats) if (!M.sg && M.mr[1] < C.roughMin) M.mr[1] = C.roughMin;   // roughMin：涂装按哑光算（有的作者把粗糙度设得像镜面，太阳一照一大片白）
   if (!mats.length) mats.push({ n: 'default', c: [.6, .6, .6, 1], t: null, nt: null, ns: 1, mr: [0, .8], mrt: null, sg: null, sgt: null, e: [0, 0, 0], et: null, ot: null, am: 0, ac: .5, ds: 1 });
 
@@ -187,6 +187,16 @@ function bake(key, C, up) {
   const dropMat = new Set(mats.map((M, i) => M.hide ? i : -1).filter(i => i >= 0)), dropNode = C.dropNodes ? new RegExp(C.dropNodes) : null;
   let nt = TM.length;
   for (let t = 0; t < nt; t++) if (dropMat.has(TM[t]) || (dropNode && dropNode.test(nodeName[TN[t]]))) { TM[t] = -1; }
+  // dedupBack：SketchUp 一类导出的「正反两面」——同一个面又用反面材质（多是深灰）反着存了一份。游戏里模型两面都画（不剔背面），
+  //   位置完全重合的两层互相打架，一块块忽明忽暗（像镂空的斑），减面后两层错开更明显——去掉与别的材质的面三个顶点都重合的这些材质的面
+  if (C.dedupBack) {
+    const re = new RegExp(C.dedupBack), k3 = t => [0, 1, 2].map(j => { const v = TRI[t * 3 + j]; return Math.round(P[v * 3] * 1e5) + ',' + Math.round(P[v * 3 + 1] * 1e5) + ',' + Math.round(P[v * 3 + 2] * 1e5); }).sort().join('|');
+    const front = new Set();
+    for (let t = 0; t < nt; t++) if (TM[t] >= 0 && !re.test(mats[TM[t]].n)) front.add(k3(t));
+    let nd = 0, nb = 0;
+    for (let t = 0; t < nt; t++) if (TM[t] >= 0 && re.test(mats[TM[t]].n)) { nb++; if (front.has(k3(t))) { TM[t] = -1; nd++; } }
+    console.log(`  ${key} 去掉 ${nd} / ${nb} 个与正面重合的反面（dedupBack）`);
+  }
   // 没有法线的顶点：按相邻三角形面积加权求
   const nv0 = P.length / 3;
   if (N.some(v => Number.isNaN(v))) {
@@ -239,6 +249,13 @@ function bake(key, C, up) {
     for (let j = 0; j < 3; j++) { const v = TRI[t * 3 + j]; for (let k = 0; k < 3; k++) { const x = P[v * 3 + k]; if (x < o.bb[k]) o.bb[k] = x; if (x > o.bb[k + 3]) o.bb[k + 3] = x; } }
   }
   for (const o of comp.values()) for (let k = 0; k < 3; k++) o.c[k] = (o.bb[k] + o.bb[k + 3]) / 2;
+  // drop：整块去掉命中这些规则的连通块（模型里自带的外挂弹：游戏按实际挂载另外画，打掉一枚少一枚）
+  if (C.drop && !process.argv.includes('--comps')) {
+    let nd = 0;
+    for (const [r, o] of comp) if (C.drop.some(R => ruleHit(R, o))) { for (const t of o.tris) TM[t] = -1; nd += o.tris.length; comp.delete(r); }
+    for (let i = live.length - 1; i >= 0; i--) if (TM[live[i]] < 0) live.splice(i, 1);
+    console.log(`  ${key} 去掉 ${nd} 个三角形（drop）`);
+  }
   const parts = (C.parts || []).map(p => ({ n: p.name, k: p.kind, p: p.pivot ? p.pivot.slice() : null, a: p.axis ? AXm(p.axis) : [0, 0, 1], rule: p }));
   const partOfComp = o => {
     for (let i = 0; i < parts.length; i++) if (ruleHit(parts[i].rule, o)) return i;
@@ -340,11 +357,17 @@ function bake(key, C, up) {
   if (MS && C.tri0 && IDX.length / 3 > C.tri0) {
     const pos = new Float32Array(nv * 3), att = new Float32Array(nv * 5);
     for (let i = 0; i < nv; i++) { pos.set(VB.subarray(i * stride, i * stride + 3), i * 3); att.set(VB.subarray(i * stride + 3, i * stride + 8), i * 5); }
-    const ratio = C.tri0 / (IDX.length / 3), per = groups.map(() => []), gOfV = new Int32Array(nv);
-    groups.forEach((g, gi) => { for (let k = g.i0; k < g.i0 + g.n; k++) gOfV[IDX[k]] = gi; });
-    for (const pid of [...new Set(groups.map(g => g.p))]) {
+    // tri0Keep：这些材质（外蒙皮）原样不减——有的模型外蒙皮是重合的正反两层（外面一层、里面一层黑），一起减会把两层的顶点合到一块，翻过来的面被剔掉就成了破洞
+    const keepRe = C.tri0Keep ? new RegExp(C.tri0Keep) : null, kept = g => !!keepRe && keepRe.test(mats[g.m].n);
+    const nKeep = groups.filter(kept).reduce((a, g) => a + g.n, 0) / 3, nDec = IDX.length / 3 - nKeep;
+    const ratio = Math.max(.08, (C.tri0 - nKeep) / Math.max(1, nDec)), per = groups.map(() => []), gOfV = new Int32Array(nv);
+    groups.forEach((g, gi) => { for (let k = g.i0; k < g.i0 + g.n; k++) gOfV[IDX[k]] = gi; if (kept(g)) for (let k = g.i0; k < g.i0 + g.n; k++) per[gi].push(IDX[k]); });
+    // tri0Sep：这些材质各自单独减（正反两层蒙皮的里层：不和外层的顶点合并）；其余按部件一起减
+    const sepRe = C.tri0Sep ? new RegExp(C.tri0Sep) : null, dom = g => g.p + ':' + (sepRe && sepRe.test(mats[g.m].n) ? g.m : '*');
+    for (const d of [...new Set(groups.map(dom))]) {
       const I0 = [];
-      groups.forEach(g => { if (g.p === pid) for (let k = g.i0; k < g.i0 + g.n; k++) I0.push(IDX[k]); });
+      groups.forEach(g => { if (dom(g) === d && !kept(g)) for (let k = g.i0; k < g.i0 + g.n; k++) I0.push(IDX[k]); });
+      if (!I0.length) continue;
       const want = Math.max(3, Math.floor(I0.length * ratio / 3) * 3);
       const [J2] = MS.simplifyWithAttributes(Uint32Array.from(I0), pos, 3, att, 5, [.5, .5, .5, 1, 1], null, want, C.tri0Err ?? .01, C.tri0Flags || []);
       for (let i = 0; i < J2.length; i += 3) per[gOfV[J2[i]]].push(J2[i], J2[i + 1], J2[i + 2]);
@@ -366,15 +389,15 @@ function bake(key, C, up) {
     for (let i = 0; i < nv; i++) { pos.set(VB.subarray(i * stride, i * stride + 3), i * 3); att.set(VB.subarray(i * stride + 3, i * stride + 8), i * 5); }
     groups.forEach((g, gi) => { for (let k = g.i0; k < g.i0 + g.n; k++) gOfV[IDX[k]] = gi; });
     // 每个部件单独减（炮塔和车体的顶点不会合到一起）；允许跨 UV 缝、材质交界合并（Permissive），太小的碎块直接去掉（Prune）——只在远处画，看不出来
-    const pids = [...new Set(groups.map(g => g.p))];
+    const sepL = C.tri0Sep ? new RegExp(C.tri0Sep) : null, domL = g => g.p + ':' + (sepL && sepL.test(mats[g.m].n) ? g.m : '*'), pids = [...new Set(groups.map(domL))];   // tri0Sep 的材质远处网格也各自单独减
     for (const [ratio, err] of C.lods || [[.25, .006], [.06, .03]]) {
       const per = groups.map(() => []);
       for (const pid of pids) {
         const I0 = [];
-        groups.forEach(g => { if (g.p === pid) for (let k = g.i0; k < g.i0 + g.n; k++) I0.push(IDX[k]); });
+        groups.forEach(g => { if (domL(g) === pid) for (let k = g.i0; k < g.i0 + g.n; k++) I0.push(IDX[k]); });
         if (!I0.length) continue;
         const want = Math.max(3, Math.floor(I0.length * ratio / 3) * 3);
-        const [J2] = MS.simplifyWithAttributes(Uint32Array.from(I0), pos, 3, att, 5, [.3, .3, .3, .6, .6], null, want, err, ['Permissive', 'Prune']);
+        const [J2] = MS.simplifyWithAttributes(Uint32Array.from(I0), pos, 3, att, 5, [.3, .3, .3, .6, .6], null, want, err, C.lodFlags || ['Permissive', 'Prune']);
         for (let i = 0; i < J2.length; i += 3) per[gOfV[J2[i]]].push(J2[i], J2[i + 1], J2[i + 2]);
       }
       const L = [], flat = [];
@@ -476,7 +499,7 @@ function credits() {
     const id = cr.url;
     if (!by.has(id)) by.set(id, { cr, names: [], keys: [] });
     by.get(id).names.push(C.name); by.get(id).keys.push(k);
-    if (C.texMax || C.tri0) by.get(id).mod = [C.texMax ? '贴图缩到最长边 ' + C.texMax + ' 像素' : '', C.tri0 ? '网格减到约 ' + C.tri0 + ' 个三角形' : ''].filter(Boolean).join('、');
+    if (C.texMax || C.tri0 || C.drop || C.modNote) by.get(id).mod = [C.texMax ? '贴图缩到最长边 ' + C.texMax + ' 像素' : '', C.tri0 ? '网格减到约 ' + C.tri0 + ' 个三角形' : '', C.drop ? C.dropNote || '去掉了模型自带的外挂弹' : '', C.modNote || ''].filter(Boolean).join('、');
   }
   const L = [...by.values()], nc = L.filter(o => /NC/.test(o.cr.license));
   const md = '<!-- v3g:start -->\n## 用户提供的模型（tools/v3gbake.js 烘焙，js/v3g.js 画）\n\n原样导入：网格、贴图、材质都是原来的，只统一了朝向与尺寸（落地、按真实长度缩放），远处换减了面的网格。' +

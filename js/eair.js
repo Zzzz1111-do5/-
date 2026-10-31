@@ -30,7 +30,7 @@ const eaVtol = t => !!(EA_SPEC[t] && EA_SPEC[t].vtol);   // 垂直起降（F-35B
 const eaHighUav = o => !!o && o.kind === 'cas' && (!o.v || o.v === 'gj2') && o.alt > .8;
 const eaHighAlt = o => !!o && ((o.kind === 'recon' && o.alt > .6) || (o.kind === 'transport' && !!o.halo && o.alt > .5)) && !['cat', 'roll', 'trap', 'final', 'hold'].includes(o.phase);
 const eaHigh = o => !!o && (o.kind === 'fighter' ? o.alt > .6 && !['cat', 'roll', 'trap', 'final'].includes(o.phase) : o.kind === 'recon' || o.kind === 'transport' ? eaHighAlt(o) : (eaFtr(o.type) || o.type === 'b2' || o.type === 'p8' || o.type === 'mq9') && o.alt > .6);   // MQ-9A 在 7000 米上下：便携防空导弹、高炮够不着   // B-2A 在 12000 米高空；P-8A 在 8000 米巡逻
-const EA_SIL = { ga: 'a10', heli: 'ah64', uh60: 'uh60', c17: 'c17', ftr: 'f35', ftrb: 'f35b', f22: 'f22', b2: 'b2', p8: 'c17', mq9: 'mq9' };
+const EA_SIL = { ga: 'a10', heli: 'ah64', uh60: 'uh60', c17: 'c17', ftr: 'f35', ftrb: 'f35b', f22: 'f22', b2: 'b2', p8: 'p8', mq9: 'mq9' };
 const eaSil = t => EA_SIL[t] || 'a10';
 const EA_TRAILS = new Map();   // 仅渲染用：固定翼尾迹点（不进 S）
 const EA_MANPADS = { normal: 0, hard: 1, hell: 2 };   // 战役守军单兵防空组数

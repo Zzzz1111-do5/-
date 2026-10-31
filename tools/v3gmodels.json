@@ -1857,13 +1857,15 @@
         "license": "CC-BY-4.0",
         "lurl": "http://creativecommons.org/licenses/by/4.0/"
       },
-      "parts": [
-        {
-          "name": "gear",
-          "kind": "hide",
-          "slot": 0,
-          "triBelow": 0.85
-        }
+      "parts": [],
+      "noz": [
+        [
+          -7.34,
+          0.695,
+          1.035,
+          0.5,
+          0.6
+        ]
       ]
     },
     "f35": {
@@ -1889,7 +1891,21 @@
           "slot": 0,
           "triBelow": 1.12
         }
-      ]
+      ],
+      "noz": [
+        [
+          -6.24,
+          0,
+          2.1,
+          0.55,
+          0.7
+        ]
+      ],
+      "mats": {
+        "Whitish_grey": {
+          "alpha": "OPAQUE"
+        }
+      }
     },
     "a10": {
       "name": "A-10C 雷电 II",
@@ -1914,6 +1930,15 @@
           "slot": 0,
           "triBelow": 0.5
         }
+      ],
+      "noz": [
+        [
+          -5.08,
+          1.46,
+          2.08,
+          0.41,
+          0.5
+        ]
       ]
     },
     "ah64": {
@@ -1932,7 +1957,46 @@
         "license": "CC-BY-4.0",
         "lurl": "http://creativecommons.org/licenses/by/4.0/"
       },
-      "parts": []
+      "parts": [
+        {
+          "name": "rotor",
+          "kind": "rot",
+          "slot": 0,
+          "nodes": "Object_8$",
+          "zmin": 3.2,
+          "box": [
+            -6,
+            9.5,
+            -7.5,
+            7.5
+          ],
+          "pivot": [
+            1.87,
+            0,
+            3.5
+          ],
+          "axis": "z"
+        },
+        {
+          "name": "trotor",
+          "kind": "rot",
+          "slot": 1,
+          "nodes": "Object_8$",
+          "box": [
+            -8.95,
+            -6,
+            0.2,
+            0.95
+          ],
+          "zmin": 2.7,
+          "pivot": [
+            -7.5,
+            0.7,
+            3
+          ],
+          "axis": "y"
+        }
+      ]
     },
     "uh60": {
       "name": "UH-60M 黑鹰",
@@ -1950,7 +2014,60 @@
         "license": "CC-BY-4.0",
         "lurl": "http://creativecommons.org/licenses/by/4.0/"
       },
-      "parts": []
+      "parts": [
+        {
+          "name": "rotor",
+          "kind": "rot",
+          "slot": 0,
+          "nodes": "Object_6$",
+          "zmin": 3.2,
+          "box": [
+            -6.5,
+            10,
+            -8.5,
+            8.5
+          ],
+          "pivot": [
+            1.88,
+            0,
+            3.7
+          ],
+          "axis": "z"
+        },
+        {
+          "name": "trotor",
+          "kind": "rot",
+          "slot": 1,
+          "any": [
+            {
+              "nodes": "Object_6$",
+              "box": [
+                -9,
+                -7.9,
+                -0.6,
+                0
+              ],
+              "zmin": 3.5
+            },
+            {
+              "nodes": "Object_4$",
+              "box": [
+                -9,
+                -8.6,
+                -0.1,
+                0.1
+              ],
+              "zmin": 4
+            }
+          ],
+          "pivot": [
+            -8.5,
+            -0.3,
+            4.15
+          ],
+          "axis": "y"
+        }
+      ]
     },
     "c17": {
       "name": "C-17A 环球霸王 III",
@@ -1979,6 +2096,22 @@
       "tri0": 80000,
       "tri0Flags": [
         "Permissive"
+      ],
+      "noz": [
+        [
+          -10.3,
+          7.3,
+          4.93,
+          0.85,
+          1
+        ],
+        [
+          -6.8,
+          14,
+          4.32,
+          0.85,
+          1
+        ]
       ]
     },
     "b2": {
@@ -2004,7 +2137,12 @@
           "slot": 0,
           "triBelow": 0.33
         }
-      ]
+      ],
+      "mats": {
+        "material_2": {
+          "alpha": "OPAQUE"
+        }
+      }
     },
     "p8": {
       "name": "P-8A 波塞冬",
@@ -2029,6 +2167,15 @@
           "slot": 0,
           "triBelow": 1.9
         }
+      ],
+      "noz": [
+        [
+          1.63,
+          4.98,
+          2.32,
+          0.6,
+          0.8
+        ]
       ]
     },
     "mq9": {
@@ -2057,7 +2204,7 @@
       ]
     },
     "j15": {
-      "name": "歼-15 飞鲨（代歼-15T、歼-16D）",
+      "name": "歼-15 飞鲨（代歼-15T）",
       "glb": "j15/scene.gltf",
       "fwd": "-z",
       "up": "+y",
@@ -2083,7 +2230,39 @@
       "tri0": 60000,
       "tri0Flags": [
         "Permissive"
-      ]
+      ],
+      "noz": [
+        [
+          -9.93,
+          1.2,
+          1.985,
+          0.56,
+          0.8
+        ]
+      ],
+      "drop": [
+        {
+          "box": [
+            -6.2,
+            0.2,
+            3.3,
+            6.1
+          ],
+          "zmax": 2.5
+        },
+        {
+          "box": [
+            -6.2,
+            0.2,
+            -6.1,
+            -3.3
+          ],
+          "zmax": 2.5
+        }
+      ],
+      "dropNote": "去掉了翼下自带的四枚弹（游戏按实际挂载另画）",
+      "modNote": "游戏里把外翼、平尾外段在折叠线处做成能折起的部件，补了四个翼下挂架",
+      "dedupBack": "^Body_black$"
     },
     "j36": {
       "name": "歼-36",
@@ -2146,14 +2325,23 @@
         "license": "CC-BY-4.0",
         "lurl": "http://creativecommons.org/licenses/by/4.0/"
       },
-      "parts": [
-        {
-          "name": "gear",
-          "kind": "hide",
-          "slot": 0,
-          "triBelow": 1.3
-        }
-      ]
+      "noz": [
+        [
+          -6.8,
+          6.68,
+          2.95,
+          0.9,
+          1
+        ],
+        [
+          -3.8,
+          11.79,
+          2.82,
+          0.9,
+          1
+        ]
+      ],
+      "parts": []
     },
     "h6k": {
       "name": "轰-6",
@@ -2178,7 +2366,21 @@
           "slot": 0,
           "triBelow": 2
         }
-      ]
+      ],
+      "noz": [
+        [
+          3.9,
+          1.71,
+          2.98,
+          0.6,
+          0.8
+        ]
+      ],
+      "mats": {
+        "object_3": {
+          "alpha": "OPAQUE"
+        }
+      }
     },
     "e2d": {
       "name": "E-2D 先进鹰眼（代空警-600）",
@@ -2203,7 +2405,12 @@
           "slot": 0,
           "triBelow": 1.2
         }
-      ]
+      ],
+      "mats": {
+        "04___Default": {
+          "alpha": "OPAQUE"
+        }
+      }
     },
     "x47b": {
       "name": "X-47B（代攻击-11）",
@@ -2226,9 +2433,10 @@
           "name": "gear",
           "kind": "hide",
           "slot": 0,
-          "triBelow": 0.82
+          "triBelow": 1.2
         }
-      ]
+      ],
+      "dropNodes": "Cube\\.001"
     },
     "rq4": {
       "name": "RQ-4 全球鹰（代无侦-7）",
@@ -2246,14 +2454,7 @@
         "license": "CC-BY-4.0",
         "lurl": "http://creativecommons.org/licenses/by/4.0/"
       },
-      "parts": [
-        {
-          "name": "gear",
-          "kind": "hide",
-          "slot": 0,
-          "triBelow": 0.45
-        }
-      ]
+      "parts": []
     }
   },
   "sets": {

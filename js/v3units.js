@@ -536,7 +536,7 @@ function v3mSub() {
 // —— 飞机的几个尺寸常数（机型单位，与二维 airmdl.js 的 AIRD 同一单位）：甲板作业、喷口、弹舱位置还在用 ——
 const V3_AIRZ = .25;
 const V3_GEAR = 1.9;   // 放下起落架时机身中心离地的高度（机型单位）：停在甲板 / 地面上的飞机按它抬高
-const V3_NUP = { a10: .95, ah64: .25, h6k: 0, z10: .7, heli: .7, uh60: .85, j15: -.05, kj600: -.6 };   // 「up」短舱的中心高度（相对机身中心）
+const V3_NUP = { a10: .95, ah64: .25, h6k: 0, z10: .7, heli: .7, uh60: .85, j15: -.05, j16: -.05, kj600: -.6 };   // 「up」短舱的中心高度（相对机身中心）
 function v3AirSec(D) {   // 截面：上半 kt、下半 kb（乘半宽），facet 棱线六边形
   const facet = !!(D.glass === 'gold' || D.flat || D.heli);
   return D.flat ? { kt: .38, kb: .26, facet } : D.heli ? { kt: .95, kb: .8, facet, sh: 'heli' } : facet ? { kt: .55, kb: .4, facet } : D.hi || D.tt ? { kt: .9, kb: .85, facet } : { kt: .72, kb: .6, facet };
@@ -972,7 +972,7 @@ function v3mGet(key, build) {
 const V3_PIL = .95;   // 飞行员、甲板人员的比例（按飞机的真实比例，比战场上的士兵小）
 const V3_ROT = .14;   // 起飞抬头的仰角（约 8°）
 function v3GroundPlane(key, sz, x, y, ground, hd, fold, cpo, still, side, t, sf, pt = 0, bay = null) {   // 用户给的飞机模型（js/v3g.js）放下起落架；side 3 / 4：我方 / 敌方飞机；bay：弹舱门开度（挂弹时）
-  if (typeof v3gPlane === 'function') v3gPlane(key, sz, x, y, ground, true, hd, side === 4 || side === 1 ? 1 : 0, 0, pt, true, still ? 0 : t, 0, sf, bay);   // sf：挂上弹射杆后的舵面检查（v3det.js v3dDeckSurf）
+  if (typeof v3gPlane === 'function') v3gPlane(key, sz, x, y, ground, true, hd, side === 4 || side === 1 ? 1 : 0, 0, pt, true, still ? 0 : t, 0, sf, bay, fold);   // sf：挂上弹射杆后的舵面检查（v3det.js v3dDeckSurf）；fold：外翼折起（有折翼的模型，v3g.js V3G_FOLD）
 }
 // 登陆舰艇的外部精细模型（v3utex.js V3U_SHIP）：舰名前缀 → [模型, 画多长（世界单位）]——LC 726 型气垫艇、LA 271 型登陆艇、LV 人员登陆艇；
 //   其余舰型（072A、074A、073A、072、扫雷舰、火力支援艇）没有合规的免费模型，照旧画自带模型
@@ -1113,14 +1113,15 @@ function v3mCollect(C, box) {
       const [wx, wy] = at(sl[0], sl[1]), key = airSilKey(w.type, w.v), sz = airMdl(w.type, w.v).size || 15;
       const N = typeof fwLoadout === 'function' ? fwLoadout(w.type, w.v).length : 0, r = w.state === 'rearm' ? 1 - clamp(w.rearmT / AIR_REARM, 0, 1) : 1;   // 整备：挂弹车一枚枚挂（v3det.js）
       const bm = typeof v3dArmBay === 'function' ? v3dArmBay(r, N) : 0, bay = bm > 0 ? { main: bm, side: bm, ext: 0 } : null;
-      v3GroundPlane(key, sz, wx, wy, top, h + sl[2], 1, 0, true, 3, t, undefined, 0, bay);
-      if (typeof fwStoresGnd === 'function' && typeof v3dArmLoaded === 'function') fwStoresGnd(w.type, w.v, key, sz, wx, wy, top, h + sl[2], v3dArmLoaded(r, N), bay);   // 已经挂上的弹
+      const fd = typeof v3dParkFold === 'function' ? v3dParkFold(w, key, r, N) : 1;   // 停着折翼；整备时先展开（外翼下的挂点挂弹车够得着），挂完再折起来
+      v3GroundPlane(key, sz, wx, wy, top, h + sl[2], fd, 0, true, 3, t, undefined, 0, bay);
+      if (typeof fwStoresGnd === 'function' && typeof v3dArmLoaded === 'function') fwStoresGnd(w.type, w.v, key, sz, wx, wy, top, h + sl[2], v3dArmLoaded(r, N), bay, fd);   // 已经挂上的弹（挂在外翼下的跟着折）
     }
     for (const p of live) {
       if (p.dk === 'lift' && !p.up) continue;   // 还在机库里
       const key = airSilKey(p.kind, p.v), sz = airMdl(p.kind, p.v).size || 15, sink = typeof cvDeckSink === 'function' ? cvDeckSink(p) : 0;
       v3GroundPlane(key, sz, p.x, p.y, top - C.hang * sink, p.heading, p.fold ?? 0, p.cpo || 0, p.dk === 'brd' || p.dk === 'lift', 3, t, typeof v3dDeckSurf === 'function' ? v3dDeckSurf(p) : null);   // 挂杆后舵面检查、起飞配平
-      if (typeof fwStoresGnd === 'function' && typeof fwLoadout === 'function') fwStoresGnd(p.kind, p.v, key, sz, p.x, p.y, top - C.hang * sink, p.heading, fwLoadout(p.kind, p.v).length, null);   // 外挂的弹（翼下挂架）
+      if (typeof fwStoresGnd === 'function' && typeof fwLoadout === 'function') fwStoresGnd(p.kind, p.v, key, sz, p.x, p.y, top - C.hang * sink, p.heading, fwLoadout(p.kind, p.v).length, null, p.fold ?? 0);   // 外挂的弹（翼下挂架；外翼折着的跟着折）
       const P = p.dk === 'brd' && typeof cvPilotPose === 'function' ? cvPilotPose(p) : null;   // 飞行员跑过来、顺登机梯爬进座舱坐下，之后坐在座舱里（v3det.js）
       if (typeof v3dPilot === 'function') v3dPilot(p, key, sz, top - C.hang * sink, h, at);
       else if (P) { const [x, y] = at(P.u, P.v), pose = P.run ? 'r' + (Math.floor(P.ph / .7854) & 7) : 'cl' + (Math.floor(P.ph / 1.7) & 7); v3gMan('pilot', pose, x, y, top + P.z, h + P.a, V3_PIL, 0); }
@@ -1130,8 +1131,8 @@ function v3mCollect(C, box) {
     if (!lhd && typeof v3dWires === 'function') v3dWires(live, top, h, at);   // 拦阻索
     for (const o of typeof cvShooters === 'function' ? cvShooters(cv, live) : []) { const [x, y] = at(o.u, o.v), pose = o.go ? 'kn' : 'pt'; v3gMan('deck', pose, x, y, top, h + o.a, V3_PIL, 0); }   // 弹射官
     if (v3mHi() && !lhd) {   // Ultra：地勤人员，避开弹射器/着舰区（甲板车辆在 v3det.js v3dDeckVeh，跟着停机位与整备进度）
-      const crew = [[70, -13, 0, 'pt'], [58, 17, .2, 'kn'], [-103, 24, -2.6, 'st'], [-122, 24, -2.8, 'pt'], [4, 31, 1.4, 'st']];
-      for (const [u, v, a0, pose] of crew) { const [x, y] = at(u, v); v3gMan('deck', pose, x, y, top, h + a0, V3_PIL, 0); }
+      const crew = [[70, -13, 0, 'pt', ''], [58, 17, .2, 'kn', '#2f8a3a'], [-103, 24, -2.6, 'st', '#7a5230'], [-122, 24, -2.8, 'pt', ''], [4, 31, 1.4, 'st', '#e8e8e2']];   // 马甲：黄（调度）、绿（弹射 / 拦阻）、棕（机务）、白（安全）
+      for (const [u, v, a0, pose, col] of crew) { const [x, y] = at(u, v); v3gMan('deck' + col, pose, x, y, top, h + a0, V3_PIL, 0); }
     }
   }
   for (const e of S.eships || []) if (!e.dead && inB(e.x, e.y, 80) && (spec || seen(e.x, e.y) || (S.t - (e.det ?? -99) < 4 && !(typeof nvEsmOnly === 'function' && nvEsmOnly(e))))) { const C0 = (typeof NV_CLS === 'object' && NV_CLS[e.cls]) || { L: 46, B: 9 }; if (!(typeof v3uShip === 'function' && v3uShip(e.cls, e.x, e.y, -2.6, e.heading ?? -1.57, C0.L, 1))) v3mAdd('es:' + e.cls, () => v3mEShip(e.cls, C0.L, C0.B), e.x, e.y, -2.6, e.heading ?? -1.57, 1, 1); if (typeof v3dFunnel === 'function') v3dFunnel(e.x, e.y, e.heading ?? -1.57, C0.L, -.08, -2.6 + C0.L * .2); }
@@ -1185,7 +1186,7 @@ function v3mCollect(C, box) {
     const a = Math.sin(id) * 3, roll = Math.sin(t * 1.3 + id) * .09, man = c.k === 'team', hang = 5.4 * 2.2 + 1.85 * V3_MAN;   // hang：伞衣顶到伞兵脚底
     const z = v3Ht(lx, ly) + f * 120 + (man ? hang : 1.5 + (c.k === 'veh' ? 11.3 : 7.4) * 2.2);   // 伞兵着陆那一刻脚正好踩到地面
     v3mAdd('chute:' + c.k, () => v3mChute(c.k), c.x, c.y, z, a, 2.2, sd, roll);
-    if (man) { const s = Math.sin(roll) * hang; v3gMan('rifle', 'st', c.x + s * Math.sin(a), c.y - s * Math.cos(a), z - Math.cos(roll) * hang, a, V3_MAN, sd, roll); }   // 吊在伞下的伞兵：和伞衣同一个摆（绕伞衣顶转），吊索始终连在头顶
+    if (man) { const s = Math.sin(roll) * hang; v3gMan('rifle', 'hang', c.x + s * Math.sin(a), c.y - s * Math.cos(a), z - Math.cos(roll) * hang, a, V3_MAN, sd, roll); }   // 吊在伞下的伞兵：和伞衣同一个摆（绕伞衣顶转），吊索始终连在头顶
   } };
   if (S.para && typeof PA === 'object') chutes(S.para.ch, c => c.k === 'crate' ? PA.jump : c.role ? PA.jlJump : PA.jump, 0);
   if (S.ab && typeof AB === 'object') chutes(S.ab.ch, c => c.k === 'veh' ? AB.heavy : AB.jump, 0);
@@ -1310,7 +1311,7 @@ function v3mCollect(C, box) {
     const toW = (u, v) => eaW(b, u, v), hb = (b.rh || 0), da = A => hb + Math.atan2(Math.sin(A) * (b.rs || 1), Math.cos(A));
     if (Cr.pilot) { const [x, y] = toW(Cr.pilot.u, Cr.pilot.v), pose = Cr.pilot.run ? 'r' + (Math.floor(Cr.pilot.ph / .7854) & 7) : 'cl' + (Math.floor(Cr.pilot.ph / 1.7) & 1); v3gMan('pilot', pose, x, y, v3Ht(x, y) + Cr.pilot.z, da(Cr.pilot.a), V3_PIL, 1); }
     if (Cr.lad) { const [x, y] = toW(Cr.lad[0], Cr.lad[1]); v3mAdd('ladder', v3mLadder, x, y, v3Ht(x, y), a.heading + Math.PI / 2, sz / 21, 1); }
-    if (Cr.crew) { const [nx, ny] = toW(Cr.mar[0], Cr.mar[1]), pose = Cr.eng || Math.floor(S.t * 1.5) & 1 ? 'pt' : 'kn'; v3gMan('deck', pose, nx, ny, v3Ht(nx, ny), da(Cr.mh), V3_PIL, 1); }   // 地勤：站在机位前方指挥开车、引导滑出
+    if (Cr.crew) { const [nx, ny] = toW(Cr.mar[0], Cr.mar[1]), pose = Cr.eng || Math.floor(S.t * 1.5) & 1 ? 'pt' : 'pt2'; v3gMan('deck', pose, nx, ny, v3Ht(nx, ny), da(Cr.mh), V3_PIL, 1); }   // 地勤：站在机位前方指挥开车、引导滑出
   }
   // 刚离机的导弹 / 炸弹：从弹舱 / 挂架落下（还没点火时是立体弹体，点火后由 v3fx.js 画光点与尾迹）
   if (typeof airRelPos === 'function' && typeof AIRV === 'object' && AIRV.mv && AIRV.mv.size) for (const m of S.missiles || []) {
