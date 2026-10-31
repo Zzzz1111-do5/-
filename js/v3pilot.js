@@ -560,7 +560,7 @@ function fpGfx(ctx, w, h) {
 // —— 画面（view3d.js v3Overlay 调用，屏幕空间）：只有武器平显（fpwpn.js）与过载的黑视 / 红视，别的标识都不画 ——
 function v3fpOverlay(ctx) {
   if (!V3FP.on || !V3FP.o || V3FP.k !== 'air') return;
-  if (V3FP.vw === 'cock' && V3FP.mv == null && !fpPitOn(V3FP.o)) fpHudFlat(ctx, CAM.vw, CAM.vh);
+  if (V3FP.vw === 'cock' && V3FP.mv == null && (!fpPitOn(V3FP.o) || (V3G_PIT[fpMdlKey(V3FP.o)] || {}).flatHud)) fpHudFlat(ctx, CAM.vw, CAM.vh);   // 模型座舱里没有飞行符号的（歼-15：平显组合玻璃是空的）也画
   if (typeof fwHud === 'function') fwHud(ctx);
   fpGfx(ctx, CAM.vw, CAM.vh);
 }

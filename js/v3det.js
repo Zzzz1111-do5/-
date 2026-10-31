@@ -222,7 +222,7 @@ function v3dCatFx(out, C, inB) {
 // ———————————————— 飞行姿态：js/aero.js（tools/aero_jsbsim.py 用 JSBSim 离线算）————————————————
 //   弹射离舰的头 14 秒：高度（含离舰后先下沉约 3 米）、俯仰、平尾、前缘襟翼、起落架照 JSBSim 的时间历程；
 //   之后：俯仰 = 画面上的航迹角 + 迎角，迎角按升力线从速度、过载、翼载算（AERO.a0 / cla），平尾按配平规律 + 俯仰角速度
-const V3_WS = { j35: 500, j20: 450, j15: 470, j36: 480, j50: 480, h6k: 520, y20: 620, kj600: 380 };   // 翼载（公斤 / 平方米，公开估算）：算迎角
+const V3_WS = { j35: 500, j20: 450, j15: 470, j16: 470, j36: 480, j50: 480, h6k: 520, y20: 620, kj600: 380 };   // 翼载（公斤 / 平方米，公开估算）：算迎角
 const V3D_D2R = Math.PI / 180;
 // 离舰后 u 秒的一行 [离甲板高, 俯仰, 迎角, 速度, 平尾, 前缘襟翼, 起落架]（插值）；超出 14 秒返回 null
 function v3dAeroAt(u) {
@@ -425,9 +425,15 @@ const v3dArmLoaded = (r, N) => !N ? 0 : r >= 1 ? N : (({ i, q }) => i + (q >= .5
 const v3dArmBay = (r, N) => !N || r <= 0 || r >= 1 ? 0 : clamp((r * N - .25) / .07, 0, 1) * clamp((N - .3 - r * N) / .07, 0, 1);
 const v3dLerp2 = (P, Q, k) => [P[0] + (Q[0] - P[0]) * k, P[1] + (Q[1] - P[1]) * k];
 // 停在甲板上的飞机（机轮着地在 top）模型上一点的世界位置（v3g.js v3gAt 按机身中线算）
-function v3dGndAt(key, sz, x, y, top, hd, v) {
+function v3dGndAt(key, sz, x, y, top, hd, v, fold = 0) {   // fold：外翼折着（外翼上的点跟着翻上去）
   const M = typeof V3G === 'object' && typeof V3G_AIR === 'object' && V3G.M[V3G_AIR[key] || 'j31'];
-  return M && M.ready && typeof v3gAt === 'function' ? v3gAt(key, sz, x, y, top + M.meta.zc * sz / M.meta.len, hd, 0, 0, v) : null;
+  return M && M.ready && typeof v3gAt === 'function' ? v3gAt(key, sz, x, y, top + M.meta.zc * sz / M.meta.len, hd, 0, 0, v, fold) : null;
+}
+// 停在机位上的飞机外翼折起程度（有折翼的模型，v3g.js V3G_FOLD）：平时折着；整备时先展开（外翼下的挂点挂弹车才够得着，2.4 秒，与 cvdeck.js 滑行时折、展同速），挂完再折起来
+function v3dParkFold(w, key, r, N) {
+  const mk = typeof V3G_AIR === 'object' && V3G_AIR[key];
+  if (!mk || typeof V3G_FOLD !== 'object' || !V3G_FOLD[mk] || !w || w.state !== 'rearm' || !(N > 0)) return 1;
+  return 1 - sm01(Math.min(r, 1 - r) / (2.4 / AIR_REARM));
 }
 // 导弹挂载架（js/mdl/rack.js：Sketchfab 上 CC-BY 的「Industrial Storage Rack」，原尺寸 6 米长、5.2 米高；按 0.62 倍画——约 3.7 米长、3.2 米高、三层搁板）：
 //   搁板高 z（原尺寸）、每层四条槽 y（缩放后），长弹一条槽一枚、短弹（飞腾-8 一类）前后两枚；deco：要挂的弹之外另摆的几枚
@@ -543,13 +549,14 @@ function v3dDeckVeh(cv, C, live, wing, top, h, at) {
   C.slots.forEach((sl, j) => {
     const E = byJ.get(j), w = E ? E.w : null, key = w && typeof airSilKey === 'function' ? airSilKey(w.type, w.v) : 'j35', sz = (w && typeof airMdl === 'function' && airMdl(w.type, w.v).size) || 15;
     loader(j, w, key, sz, E ? E.r : 1, AIR_REARM);
-    if (E && E.park && v3dArmLoaded(E.r, typeof fwLoadout === 'function' ? fwLoadout(w.type, w.v).length : 0) > 0) { const [wx, wy] = at(sl[0], sl[1]); v3dPins(key, sz, wx, wy, top, h + sl[2]); }   // 弹挂上了：插着保险销
+    const N = E && E.park && typeof fwLoadout === 'function' ? fwLoadout(w.type, w.v).length : 0, nL = N ? v3dArmLoaded(E.r, N) : 0;
+    if (nL > 0) { const [wx, wy] = at(sl[0], sl[1]); v3dPins(key, sz, wx, wy, top, h + sl[2], w, nL, v3dParkFold(w, key, E.r, N)); }   // 弹挂上了：插着保险销
   });
   // 出动：停着的时候已经挂好（机库里的也挂好了）；保险销一直插到偏流板后解除保险时
   for (const p of live) {
     if (p.phase !== 'cat' || !p.arm || p.dk === 'brd') continue;
     const key = v3dKey(p), sz = v3dSz(p);
-    if ((p.dk !== 'hold' || (p.dkT || 0) < V3D_ARM.pull) && p.dk !== 'line' && p.dk !== 'hook') v3dPins(key, sz, p.x, p.y, top - C.hang * (typeof cvDeckSink === 'function' ? cvDeckSink(p) : 0), p.heading);
+    if ((p.dk !== 'hold' || (p.dkT || 0) < V3D_ARM.pull) && p.dk !== 'line' && p.dk !== 'hook') v3dPins(key, sz, p.x, p.y, top - C.hang * (typeof cvDeckSink === 'function' ? cvDeckSink(p) : 0), p.heading, { type: p.kind, v: p.v }, 99, p.fold ?? 0);
   }
   v3dArmCrew(live, top, h, at);   // 偏流板后解除保险的挂弹组
   v3dTugs(cv, live, top, h, at);   // 牵引车
@@ -568,7 +575,23 @@ function v3mdPins(key) {
   if (!D.bay && !D.sbay && !(D.st || []).length) flag(0, 0, zb);
   return M;
 }
-function v3dPins(key, sz, x, y, top, a) { v3mAdd('pins:' + key, () => v3mdPins(key), x, y, top + V3_GEAR * sz / 21, a, sz / 21, 3); }
+function v3dPins(key, sz, x, y, top, a, w = null, n = 99, fold = 0) {   // w：哪一型（{ type, v }），n：挂上了几枚，fold：外翼折起程度
+  const mk = typeof V3G_AIR === 'object' && V3G_AIR[key];
+  if (w && mk && typeof V3G_FOLD === 'object' && V3G_FOLD[mk]) { v3dPinsMdl(w, key, sz, x, y, top, a, n, fold); return; }
+  v3mAdd('pins:' + key, () => v3mdPins(key), x, y, top + V3_GEAR * sz / 21, a, sz / 21, 3);
+}
+// 有折翼的用户模型（歼-15）：保险销插在模型的外挂点上（fpwpn.js 满载清单的前 n 枚），外翼折着时跟着翻上去；飘带照样往下垂、被风吹向后
+function v3dPinsMdl(w, key, sz, x, y, top, a, n, fold) {
+  if (typeof fwLoadout !== 'function') return;
+  const LD = fwLoadout(w.type, w.v);
+  for (let i = 0; i < Math.min(n, LD.length); i++) {
+    const e = LD[i];
+    if (!e.v || e.bay !== 'ext') continue;
+    const p = v3dGndAt(key, sz, x, y, top, a, [e.v[0] - .3, e.v[1], e.v[2] + .2], fold);   // 弹的上方、挂架下沿
+    if (p) v3mAdd('pin1', v3mPin1, p[0], p[1], p[2], a, sz / 21, 3);
+  }
+}
+function v3mPin1() { const M = mbNew(); mbBox(M, -.05, .05, -.04, .04, -.08, .02, .75); mbQuad(M, [0, -.06, -.06], [0, .06, -.06], [-.32, .06, -.62], [-.32, -.06, -.62], V3_PINC); return M; }
 // 挂弹组两人（左右各一）：从飞机两侧走到机腹下弹舱旁 → 跪着拔掉保险销 → 走到机头前方、举起销子给飞行员看 → 退到两侧；滑上弹射器到弹射时站在一旁
 const V3D_ARMP = new Map();   // 飞机 id → 退开后站的位置（甲板坐标）
 function v3dArmCrew(live, top, h, at) {

@@ -536,7 +536,7 @@ function v3mSub() {
 // —— 飞机的几个尺寸常数（机型单位，与二维 airmdl.js 的 AIRD 同一单位）：甲板作业、喷口、弹舱位置还在用 ——
 const V3_AIRZ = .25;
 const V3_GEAR = 1.9;   // 放下起落架时机身中心离地的高度（机型单位）：停在甲板 / 地面上的飞机按它抬高
-const V3_NUP = { a10: .95, ah64: .25, h6k: 0, z10: .7, heli: .7, uh60: .85, j15: -.05, kj600: -.6 };   // 「up」短舱的中心高度（相对机身中心）
+const V3_NUP = { a10: .95, ah64: .25, h6k: 0, z10: .7, heli: .7, uh60: .85, j15: -.05, j16: -.05, kj600: -.6 };   // 「up」短舱的中心高度（相对机身中心）
 function v3AirSec(D) {   // 截面：上半 kt、下半 kb（乘半宽），facet 棱线六边形
   const facet = !!(D.glass === 'gold' || D.flat || D.heli);
   return D.flat ? { kt: .38, kb: .26, facet } : D.heli ? { kt: .95, kb: .8, facet, sh: 'heli' } : facet ? { kt: .55, kb: .4, facet } : D.hi || D.tt ? { kt: .9, kb: .85, facet } : { kt: .72, kb: .6, facet };
@@ -972,7 +972,7 @@ function v3mGet(key, build) {
 const V3_PIL = .95;   // 飞行员、甲板人员的比例（按飞机的真实比例，比战场上的士兵小）
 const V3_ROT = .14;   // 起飞抬头的仰角（约 8°）
 function v3GroundPlane(key, sz, x, y, ground, hd, fold, cpo, still, side, t, sf, pt = 0, bay = null) {   // 用户给的飞机模型（js/v3g.js）放下起落架；side 3 / 4：我方 / 敌方飞机；bay：弹舱门开度（挂弹时）
-  if (typeof v3gPlane === 'function') v3gPlane(key, sz, x, y, ground, true, hd, side === 4 || side === 1 ? 1 : 0, 0, pt, true, still ? 0 : t, 0, sf, bay);   // sf：挂上弹射杆后的舵面检查（v3det.js v3dDeckSurf）
+  if (typeof v3gPlane === 'function') v3gPlane(key, sz, x, y, ground, true, hd, side === 4 || side === 1 ? 1 : 0, 0, pt, true, still ? 0 : t, 0, sf, bay, fold);   // sf：挂上弹射杆后的舵面检查（v3det.js v3dDeckSurf）；fold：外翼折起（有折翼的模型，v3g.js V3G_FOLD）
 }
 // 登陆舰艇的外部精细模型（v3utex.js V3U_SHIP）：舰名前缀 → [模型, 画多长（世界单位）]——LC 726 型气垫艇、LA 271 型登陆艇、LV 人员登陆艇；
 //   其余舰型（072A、074A、073A、072、扫雷舰、火力支援艇）没有合规的免费模型，照旧画自带模型
@@ -1113,14 +1113,15 @@ function v3mCollect(C, box) {
       const [wx, wy] = at(sl[0], sl[1]), key = airSilKey(w.type, w.v), sz = airMdl(w.type, w.v).size || 15;
       const N = typeof fwLoadout === 'function' ? fwLoadout(w.type, w.v).length : 0, r = w.state === 'rearm' ? 1 - clamp(w.rearmT / AIR_REARM, 0, 1) : 1;   // 整备：挂弹车一枚枚挂（v3det.js）
       const bm = typeof v3dArmBay === 'function' ? v3dArmBay(r, N) : 0, bay = bm > 0 ? { main: bm, side: bm, ext: 0 } : null;
-      v3GroundPlane(key, sz, wx, wy, top, h + sl[2], 1, 0, true, 3, t, undefined, 0, bay);
-      if (typeof fwStoresGnd === 'function' && typeof v3dArmLoaded === 'function') fwStoresGnd(w.type, w.v, key, sz, wx, wy, top, h + sl[2], v3dArmLoaded(r, N), bay);   // 已经挂上的弹
+      const fd = typeof v3dParkFold === 'function' ? v3dParkFold(w, key, r, N) : 1;   // 停着折翼；整备时先展开（外翼下的挂点挂弹车够得着），挂完再折起来
+      v3GroundPlane(key, sz, wx, wy, top, h + sl[2], fd, 0, true, 3, t, undefined, 0, bay);
+      if (typeof fwStoresGnd === 'function' && typeof v3dArmLoaded === 'function') fwStoresGnd(w.type, w.v, key, sz, wx, wy, top, h + sl[2], v3dArmLoaded(r, N), bay, fd);   // 已经挂上的弹（挂在外翼下的跟着折）
     }
     for (const p of live) {
       if (p.dk === 'lift' && !p.up) continue;   // 还在机库里
       const key = airSilKey(p.kind, p.v), sz = airMdl(p.kind, p.v).size || 15, sink = typeof cvDeckSink === 'function' ? cvDeckSink(p) : 0;
       v3GroundPlane(key, sz, p.x, p.y, top - C.hang * sink, p.heading, p.fold ?? 0, p.cpo || 0, p.dk === 'brd' || p.dk === 'lift', 3, t, typeof v3dDeckSurf === 'function' ? v3dDeckSurf(p) : null);   // 挂杆后舵面检查、起飞配平
-      if (typeof fwStoresGnd === 'function' && typeof fwLoadout === 'function') fwStoresGnd(p.kind, p.v, key, sz, p.x, p.y, top - C.hang * sink, p.heading, fwLoadout(p.kind, p.v).length, null);   // 外挂的弹（翼下挂架）
+      if (typeof fwStoresGnd === 'function' && typeof fwLoadout === 'function') fwStoresGnd(p.kind, p.v, key, sz, p.x, p.y, top - C.hang * sink, p.heading, fwLoadout(p.kind, p.v).length, null, p.fold ?? 0);   // 外挂的弹（翼下挂架；外翼折着的跟着折）
       const P = p.dk === 'brd' && typeof cvPilotPose === 'function' ? cvPilotPose(p) : null;   // 飞行员跑过来、顺登机梯爬进座舱坐下，之后坐在座舱里（v3det.js）
       if (typeof v3dPilot === 'function') v3dPilot(p, key, sz, top - C.hang * sink, h, at);
       else if (P) { const [x, y] = at(P.u, P.v), pose = P.run ? 'r' + (Math.floor(P.ph / .7854) & 7) : 'cl' + (Math.floor(P.ph / 1.7) & 7); v3gMan('pilot', pose, x, y, top + P.z, h + P.a, V3_PIL, 0); }
