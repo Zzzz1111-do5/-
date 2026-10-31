@@ -1,0 +1,1245 @@
+{
+  "t055": {
+    "file": "t055.glb",
+    "name": "Type-055 Destroyer",
+    "author": "SB-129 (hrd4588)",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/type-055-destroyer-f0a96b2475da407eb6ea2b430ba9ea85",
+    "axes": [
+      "z",
+      "-x",
+      "y"
+    ],
+    "len": 50,
+    "wl": 0.188,
+    "tris": 24000
+  },
+  "treepack": {
+    "mode": "tex",
+    "file": "treepack.glb",
+    "name": "Low Poly Forest Tree Pack",
+    "author": "99.Miles",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/low-poly-forest-tree-pack-5ff5a51e74324845a4e4905f182dfb2b",
+    "unit": 1,
+    "tex": 1024,
+    "parts": {
+      "bg0": [
+        0
+      ],
+      "bg1": [
+        1
+      ],
+      "bg2": [
+        2
+      ],
+      "bg3": [
+        3
+      ],
+      "bg4": [
+        4
+      ],
+      "bg5": [
+        5
+      ],
+      "bg6": [
+        6
+      ],
+      "bg7": [
+        7
+      ],
+      "bush0": [
+        8
+      ],
+      "bush1": [
+        9
+      ],
+      "bush2": [
+        10
+      ],
+      "bush3": [
+        11
+      ],
+      "bush4": [
+        12
+      ],
+      "rock0": [
+        13
+      ],
+      "rock1": [
+        14
+      ],
+      "rock2": [
+        15
+      ],
+      "rock3": [
+        16
+      ],
+      "rock4": [
+        17
+      ],
+      "rock5": [
+        18
+      ],
+      "rock6": [
+        19
+      ],
+      "rock7": [
+        20
+      ],
+      "rock8": [
+        21
+      ],
+      "treeA": [
+        22,
+        27
+      ],
+      "treeB": [
+        23,
+        26
+      ],
+      "treeC": [
+        24,
+        28
+      ],
+      "treeD": [
+        25,
+        29
+      ]
+    }
+  },
+  "oldbld": {
+    "mode": "tex",
+    "file": "oldbld.glb",
+    "name": "Old Building | Lowpoly",
+    "author": "Frid.blend",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/old-building-lowpoly-1f304c6e56324c19955a18aa79b15b9f",
+    "unit": 1
+  },
+  "quonset": {
+    "mode": "tex",
+    "file": "quonset.glb",
+    "name": "Military Style Building (with animations)",
+    "author": "TampaJoey",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/military-style-building-with-animations-1671685e1dd94b6e9216ead632f08f6e",
+    "unit": 1,
+    "drop": "Ceiling|Inside|Fluorescent|Tracks|Barricades|Keypads|Brackets|Fuse|Object_1[57]|DoorFrames|MetalFrame",
+    "tris": 5000
+  },
+  "atc": {
+    "mode": "tex",
+    "file": "atc.glb",
+    "name": "Air Traffic Control Tower",
+    "author": "abass20",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/air-traffic-control-tower-84f215391662453680e646649d42b264",
+    "unit": 1,
+    "drop": "Cube\\.00[789]|Cylinder\\.008"
+  },
+  "asianb3": {
+    "mode": "tex",
+    "file": "asianb3.glb",
+    "unit": 1
+  },
+  "jph1": {
+    "mode": "tex",
+    "file": "jph1.glb",
+    "name": "Japanese Residential Home 01",
+    "author": "Morrissey Alexander",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/japanese-residential-home-01-d690f83d8e8d48e6a532bebe84901595",
+    "unit": 0.01
+  },
+  "jph2": {
+    "mode": "tex",
+    "file": "jph2.glb",
+    "name": "Japanese Residential Home 02",
+    "author": "Morrissey Alexander",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/japanese-residential-home-02-c31697f09152453cb3ed215482e7a810",
+    "unit": 0.01
+  },
+  "jph3": {
+    "mode": "tex",
+    "file": "jph3.glb",
+    "name": "Japanese Residential Home 03",
+    "author": "Morrissey Alexander",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/japanese-residential-home-03-1c53f4f37fc44c32a8874464025aea48",
+    "unit": 0.01
+  },
+  "asiantower_unused": {
+    "mode": "tex",
+    "file": "asiantower.glb",
+    "name": "LOW POLY - ASIAN TOWER BLOCK",
+    "author": "Colin.Greenall",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/low-poly-asian-tower-block-694adf5094fa41f99a245ed822293f47",
+    "unit": 1
+  },
+  "oldconc": {
+    "mode": "tex",
+    "file": "oldconc.glb",
+    "name": "Old Concete Building Pack | Lowpoly",
+    "author": "Frid.blend",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/old-concete-building-pack-lowpoly-6d070fcc86b0430dadf53da67545c6f3",
+    "unit": 1,
+    "parts": {
+      "conc1": [
+        0
+      ],
+      "conc2": [
+        1
+      ],
+      "conc3": [
+        2
+      ]
+    }
+  },
+  "house": {
+    "mode": "tex",
+    "file": "house.glb",
+    "name": "House",
+    "author": "SpatialNeglect",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/house-e70c4aebc911429ba9a894b38146892c",
+    "unit": 0.065,
+    "drop": "^Plane$|ground"
+  },
+  "hangar": {
+    "mode": "tex",
+    "file": "hangar.glb",
+    "name": "j type hanger",
+    "author": "ElectricL",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/j-type-hanger-d86713d61b4941378a6ad21569e0cbac",
+    "unit": 1,
+    "tris": 4500
+  },
+  "palms": {
+    "mode": "tex",
+    "file": "palms.glb",
+    "name": "Palm Trees",
+    "author": "YadroGames",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/palm-trees-55690379305145488e20afb05fc687e6",
+    "unit": 1,
+    "parts": {
+      "palm1": [
+        0
+      ],
+      "palm2": [
+        1
+      ],
+      "palm3": [
+        2
+      ],
+      "palm4": [
+        3
+      ]
+    },
+    "tex": 1024
+  },
+  "rocks3": {
+    "mode": "tex",
+    "file": "rocks3.glb",
+    "name": "Rocks Set 3",
+    "author": "DJMaesen",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/rocks-set-3-9a160330d1c14268948248f387889b35",
+    "unit": 0.01,
+    "parts": {
+      "drock1": [
+        1
+      ],
+      "drock2": [
+        2
+      ],
+      "drock3": [
+        3
+      ],
+      "drock4": [
+        4
+      ],
+      "drock5": [
+        5
+      ],
+      "pillar": [
+        6
+      ],
+      "cliff1": [
+        8
+      ],
+      "arch": [
+        10
+      ]
+    }
+  },
+  "cliffs": {
+    "mode": "tex",
+    "file": "cliffs.glb",
+    "name": "Cliffs",
+    "author": "DJMaesen",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/cliffs-14fe5023840146179c8515093e88fae0",
+    "unit": 0.01,
+    "parts": {
+      "cliffA": [
+        0
+      ],
+      "cliffB": [
+        1
+      ]
+    }
+  },
+  "firestation": {
+    "mode": "tex",
+    "file": "firestation.glb",
+    "name": "Fire Station No. 1",
+    "author": "CommonSpence",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/fire-station-no-1-87edf04deb28434993274d9f05070865",
+    "unit": 1
+  },
+  "wh3": {
+    "mode": "tex",
+    "file": "wh3.glb",
+    "name": "Pack - Realistic - 3 Warehouse",
+    "author": "Islide",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/pack-realistic-3-warehouse-320c272513a94c0482dbb3c4e79d61f5",
+    "unit": 1
+  },
+  "sawtooth": {
+    "mode": "tex",
+    "file": "sawtooth.glb",
+    "name": "Warehouse Building",
+    "author": "OmegaRedZA",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/warehouse-building-0c37b0f92cb54e07a1e1c6c3df9f8439",
+    "unit": 1
+  },
+  "smallwh": {
+    "mode": "tex",
+    "file": "smallwh.glb",
+    "name": "Small Warehouse",
+    "author": "Wardster",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/small-warehouse-c7f4c017c20943cb9e9e559822a5c402",
+    "unit": 1,
+    "drop": "internalArea|warehouseFloor|warehouseCeiling|barricade"
+  },
+  "industrial": {
+    "mode": "tex",
+    "file": "industrial.glb",
+    "name": "industrial building",
+    "author": "spicybamer",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/industrial-building-770acf6b0da74af397f748d95141f8be",
+    "unit": 6
+  },
+  "flats1": {
+    "mode": "tex",
+    "file": "flats1.glb",
+    "name": "Davison Street Flats 1 - Flat Roof",
+    "author": "Charlie_Zane",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/davison-street-flats-1-flat-roof-0f461ea81f8541db8d6a5f5e35133588",
+    "unit": 0.01
+  },
+  "wh99": {
+    "mode": "tex",
+    "file": "wh99.glb",
+    "name": "Warehouses",
+    "author": "99.Miles",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/warehouses-e6e105d35b3f486292c42ffa52f363c0",
+    "unit": 0.2
+  },
+  "girder": {
+    "mode": "tex",
+    "file": "girder.glb",
+    "name": "Concrete Girder Beam Bridges/Tunnels [Free]",
+    "author": "JoTrain The Aussie 🇦🇺",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/concrete-girder-beam-bridgestunnels-free-1c5d6642796843c198b94124518b9f04",
+    "unit": 1,
+    "parts": {
+      "span": [
+        1,
+        4
+      ],
+      "pier": [
+        2
+      ]
+    }
+  },
+  "pillbox": {
+    "mode": "tex",
+    "file": "pillbox.glb",
+    "name": "WWII Pill Box - Saltney Quay, Flintshire, UK",
+    "author": "al3xfoster",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/wwii-pill-box-saltney-quay-flintshire-uk-be8136976b294e1fb764b5b1cba7a72c",
+    "unit": 1
+  },
+  "teeth": {
+    "mode": "tex",
+    "file": "teeth.glb",
+    "name": "Dragon's Teeth Anti-Tank obstacle",
+    "author": "AdamKozakGrafika",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/dragons-teeth-anti-tank-obstacle-f7a6c987711d4ed2871707da47d2f3fb",
+    "unit": 1
+  },
+  "u_vt5": {
+    "mode": "tex",
+    "unit": 0.01,
+    "file": "u_vt5.glb",
+    "name": "",
+    "title": "VT-5 Tank",
+    "author": "Nieve5677",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/vt-5-tank-df1e74dbddb44cbbb9d359422a81d587",
+    "tex": 1024,
+    "yaw": 180,
+    "split": {
+      "z": 99,
+      "tur": "^object_[12]_",
+      "pivn": "^object_1_"
+    },
+    "tris": 30000,
+    "mcol": {
+      "object_[0125]$": [
+        0.36,
+        0.4,
+        0.27
+      ],
+      "object_[34]$": [
+        0.13,
+        0.13,
+        0.12
+      ]
+    },
+    "err": 0.04,
+    "weld": "pos"
+  },
+  "u_milpack": {
+    "mode": "tex",
+    "unit": 1,
+    "file": "u_milpack.glb",
+    "name": "",
+    "title": "军事装甲车坦克Military armored vehicle and tank",
+    "author": "小王子",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/military-armored-vehicle-and-tank-f809eb8491e64efc92b1b41687e8da08",
+    "tex": 1024,
+    "yaw": 90,
+    "split": {
+      "z": 5.25,
+      "piv": [
+        -2.8,
+        0
+      ],
+      "r": 8.5,
+      "gun": 0.9,
+      "gunx": 17
+    },
+    "tris": 30000,
+    "err": 0.04,
+    "weld": "pos"
+  },
+  "u_t625": {
+    "mode": "tex",
+    "unit": 1,
+    "file": "u_t625.glb",
+    "name": "",
+    "title": "Type-625 Anti Aircraft Gun Missile System",
+    "author": "Muhamad Mirza Arrafi",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/type-625-anti-aircraft-gun-missile-system-8b7e85f45b954592bd4bb8e72cdd6312",
+    "tex": 1024,
+    "split": {
+      "z": 2.68,
+      "piv": [
+        -1.9,
+        0
+      ],
+      "r": 2.4,
+      "gun": 0.5,
+      "gunx": 2.3
+    },
+    "tris": 26000,
+    "err": 0.04,
+    "weld": "pos"
+  },
+  "u_m1a2": {
+    "mode": "tex",
+    "unit": 0.0138,
+    "file": "u_m1a2.glb",
+    "name": "",
+    "title": "General Dynamics M1A2 Abrams Main Battle Tank",
+    "author": "Muhamad Mirza Arrafi",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/general-dynamics-m1a2-abrams-main-battle-tank-10a16c96ca8b4ebc855915f5d5202046",
+    "tex": 1024,
+    "yaw": 0,
+    "weld": "pos",
+    "split": {
+      "z": 1.62,
+      "piv": [
+        -1.2,
+        0
+      ],
+      "r": 2.9,
+      "gun": 0.3
+    },
+    "err": 0.04
+  },
+  "u_m1a2s": {
+    "mode": "tex",
+    "unit": 1,
+    "file": "u_m1a2s.glb",
+    "name": "",
+    "title": "M1A2 SEPV2 Abrams Main Battle Tank DC",
+    "author": "Muhamad Mirza Arrafi",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/m1a2-sepv2-abrams-main-battle-tank-dc-bcc1741c924d4c259dbc801de9b5c1bb",
+    "tex": 1024,
+    "yaw": 90,
+    "split": {
+      "z": 1.68,
+      "piv": [
+        -0.3,
+        0
+      ],
+      "r": 3.6,
+      "gun": 0.35
+    },
+    "tris": 26000,
+    "err": 0.04,
+    "weld": "pos"
+  },
+  "u_m109a6": {
+    "mode": "tex",
+    "unit": 1,
+    "file": "u_m109a6.glb",
+    "name": "",
+    "title": "M109A6 Paladin Self-Propelled Howitzer",
+    "author": "Muhamad Mirza Arrafi",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/m109a6-paladin-self-propelled-howitzer-7bc24252d4b84ac5bb7fd3b67f119b0a",
+    "tex": 1024,
+    "split": {
+      "z": 99,
+      "tur": "turret|cannon|antenna",
+      "pivn": "g_turret_m109a6"
+    },
+    "tris": 26000,
+    "err": 0.04,
+    "weld": "pos"
+  },
+  "u_stryker": {
+    "mode": "tex",
+    "unit": 1,
+    "file": "u_stryker.glb",
+    "name": "",
+    "title": "M1126 Infantry Carrier Vehicle",
+    "author": "cenobyte",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/m1126-infantry-carrier-vehicle-b0c559a02c1842b0976a241c9a998360",
+    "tex": 1024,
+    "yaw": 180,
+    "split": {
+      "z": 4.3,
+      "piv": [
+        0.3,
+        0.8
+      ],
+      "r": 0.8,
+      "gun": 0.25,
+      "gunx": 2.4,
+      "tur": "^Turret"
+    },
+    "tris": 26000,
+    "err": 0.04,
+    "weld": "pos"
+  },
+  "u_e2d": {
+    "mode": "tex",
+    "unit": 1,
+    "file": "u_e2d.glb",
+    "title": "Grumman E-2D Advanced Hawkeye",
+    "author": "Muhamad Mirza Arrafi",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/grumman-e-2d-advanced-hawkeye-0082cf8f15044cfd80ebd4e11b96789d",
+    "tex": 1024,
+    "weld": "pos",
+    "err": 0.03,
+    "tris": 24000,
+    "len": 17.6,
+    "gear": {
+      "z": 1.3
+    },
+    "mcol": {
+      "0[123]___Default": [
+        0.68,
+        0.7,
+        0.72
+      ]
+    },
+    "parts3": {
+      "wl": {
+        "box": [
+          -2.6,
+          2.7,
+          -12.6,
+          -5.3,
+          1.4,
+          4.6
+        ],
+        "piv": [
+          0.2,
+          -5.3,
+          3.2
+        ],
+        "cut": [
+          "y",
+          -5.3
+        ]
+      },
+      "wr": {
+        "box": [
+          -2.6,
+          2.7,
+          5.3,
+          12.6,
+          1.4,
+          4.6
+        ],
+        "piv": [
+          0.2,
+          5.3,
+          3.2
+        ],
+        "cut": [
+          "y",
+          5.3
+        ]
+      },
+      "pl": {
+        "box": [
+          3.55,
+          4.75,
+          -5.6,
+          -1.0,
+          0.75,
+          5.2
+        ],
+        "piv": [
+          3.9,
+          -3.3,
+          2.95
+        ]
+      },
+      "pr": {
+        "box": [
+          3.55,
+          4.75,
+          1.0,
+          5.6,
+          0.75,
+          5.2
+        ],
+        "piv": [
+          3.9,
+          3.3,
+          2.95
+        ]
+      }
+    }
+  },
+  "u_su33": {
+    "mode": "tex",
+    "unit": 1,
+    "file": "u_su33.glb",
+    "title": "Sukhoi Su-33 Сухой Су-33",
+    "author": "andertan",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/sukhoi-su-33-33-d80603a8a13b49bda90f19d80cac61d4",
+    "tex": 1024,
+    "weld": "pos",
+    "err": 0.03,
+    "tris": 24000,
+    "yaw": 90,
+    "len": 21.94,
+    "mcol": {
+      "^(material_0|Facing_R_text|Facing_L_text|Whitish_grey|Greyish_color)$": [
+        0.6,
+        0.63,
+        0.65
+      ]
+    }
+  },
+  "u_h6m": {
+    "mode": "tex",
+    "unit": 1,
+    "file": "u_h6m.glb",
+    "title": "Xian H-6 Strategic Bomber",
+    "author": "Muhamad Mirza Arrafi",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/xian-h-6-strategic-bomber-07b448a2e9924f48a5fc1c91529f2280",
+    "tex": 1024,
+    "weld": "pos",
+    "err": 0.03,
+    "tris": 24000,
+    "len": 34.8,
+    "gear": {
+      "z": 0.3
+    }
+  },
+  "u_x47b": {
+    "mode": "tex",
+    "unit": 1,
+    "file": "u_x47b.glb",
+    "title": "Northrop Grumman X-47B",
+    "author": "Yakudami",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/northrop-grumman-x-47b-8d5fa8ab10ba4b8486d40248eeb9332d",
+    "tex": 1024,
+    "weld": "pos",
+    "err": 0.03,
+    "tris": 24000,
+    "parts": {
+      "hull": "Cube\\.002"
+    },
+    "len": 11.63,
+    "gear": {
+      "z": 1.15
+    },
+    "mcol": {
+      "^Material(\\.001)?$": [
+        0.4,
+        0.42,
+        0.44
+      ]
+    }
+  },
+  "u_mq9": {
+    "mode": "tex",
+    "unit": 1,
+    "file": "u_mq9.glb",
+    "title": "MQ-9 Reaper",
+    "author": "Tyler V Howell",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/mq-9-reaper-eff549610fee4f20904f7b388a3a0830",
+    "tex": 1024,
+    "weld": "pos",
+    "err": 0.03,
+    "tris": 24000,
+    "yaw": 90,
+    "len": 11.0
+  },
+  "u_f35": {
+    "mode": "tex",
+    "unit": 1,
+    "file": "u_f35.glb",
+    "title": "Lockheed Martin F35 Lightning II",
+    "author": "andertan",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/lockheed-martin-f35-lightning-ii-db911de503c74285a8d506951df786d6",
+    "tex": 1024,
+    "weld": "pos",
+    "err": 0.03,
+    "tris": 24000,
+    "len": 15.7,
+    "gear": {
+      "z": 1.35
+    }
+  },
+  "u_f22": {
+    "mode": "tex",
+    "unit": 1,
+    "file": "u_f22.glb",
+    "title": "Lockheed Martin F-22 \"Raptor\"",
+    "author": "andertan",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/lockheed-martin-f-22-raptor-7e7b3c372e374dda98e70208d09cfdcf",
+    "tex": 1024,
+    "weld": "pos",
+    "err": 0.03,
+    "tris": 24000,
+    "yaw": 270,
+    "len": 18.92
+  },
+  "u_a10": {
+    "mode": "tex",
+    "unit": 1,
+    "file": "u_a10.glb",
+    "title": "A-10 ThunderBolt II",
+    "author": "KOG_THORNS",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/a-10-thunderbolt-ii-623514b5f1f9483a9bbee7f25da77468",
+    "tex": 256,
+    "weld": "pos",
+    "err": 0.03,
+    "tris": 24000,
+    "len": 16.26,
+    "gear": {
+      "z": 0.95
+    }
+  },
+  "u_uh60m": {
+    "mode": "tex",
+    "unit": 1,
+    "file": "u_uh60m.glb",
+    "title": "Sikorsky UH-60M Blackhawk",
+    "author": "Muhamad Mirza Arrafi",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/sikorsky-uh-60m-blackhawk-12b4e525676a49678ac3006b360c8750",
+    "tex": 1024,
+    "weld": "pos",
+    "err": 0.03,
+    "tris": 24000,
+    "len": 19.8,
+    "split": {
+      "z": 3.6,
+      "piv": [
+        2.0,
+        0
+      ],
+      "r": 8.3
+    }
+  },
+  "u_c17": {
+    "mode": "tex",
+    "unit": 1,
+    "file": "u_c17.glb",
+    "title": "C17 Globemaster III",
+    "author": "AnirudhRao",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/c17-globemaster-iii-597e0d7f9e3446719a2f2de3dd3fa67d",
+    "tex": 1024,
+    "weld": "pos",
+    "err": 0.03,
+    "tris": 24000,
+    "yaw": -90,
+    "mcol": {
+      ".": [
+        0.42,
+        0.45,
+        0.47
+      ]
+    },
+    "len": 53.04,
+    "gear": {
+      "z": 1.45
+    }
+  },
+  "u_b2b": {
+    "mode": "tex",
+    "unit": 1,
+    "file": "u_b2b.glb",
+    "title": "[PBR] B-2 Spirit",
+    "author": "Immersive3D",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/pbr-b-2-spirit-b16592b1083948a49ae2afa90d190a08",
+    "tex": 1024,
+    "weld": "pos",
+    "err": 0.03,
+    "tris": 24000,
+    "yaw": 180,
+    "len": 21.0,
+    "gear": {
+      "z": 1.2
+    }
+  },
+  "u_p8": {
+    "mode": "tex",
+    "unit": 1,
+    "file": "u_p8.glb",
+    "title": "Boeing P-8 Poseidon",
+    "author": "Muhamad Mirza Arrafi",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/boeing-p-8-poseidon-3fc134024b69403bb5df5ab3aff48919",
+    "tex": 1024,
+    "weld": "pos",
+    "err": 0.03,
+    "tris": 24000,
+    "yaw": 180,
+    "len": 39.47,
+    "gear": {
+      "z": 1.7
+    }
+  },
+  "u_t054a": {
+    "mode": "tex",
+    "unit": 1,
+    "file": "u_t054a.glb",
+    "title": "Type-054A Class Frigate",
+    "author": "Muhamad Mirza Arrafi",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/type-054a-class-frigate-948cca64a5274644a35e4600e023d61d",
+    "tex": 1024,
+    "weld": "pos",
+    "err": 0.03,
+    "tris": 30000,
+    "len": 134,
+    "origin": "keep",
+    "yaw": 180
+  },
+  "u_ddg125": {
+    "mode": "tex",
+    "unit": 1,
+    "file": "u_ddg125.glb",
+    "title": "USS Jack H. Lucas DDG-125",
+    "author": "SB-129",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/uss-jack-h-lucas-ddg-125-1c9229b49915454c8ff22605f8cc7b66",
+    "tex": 1024,
+    "weld": "pos",
+    "err": 0.03,
+    "tris": 30000,
+    "len": 155.3,
+    "origin": "wl",
+    "yaw": -90,
+    "wl": 0.18
+  },
+  "u_cg47": {
+    "mode": "tex",
+    "unit": 1,
+    "file": "u_cg47.glb",
+    "title": "Ticonderoga Missile Cruiser",
+    "author": "waelXcm",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/ticonderoga-missile-cruiser-397bd2b7bcd946e4b508869f4ca1e1cf",
+    "tex": 1024,
+    "weld": "pos",
+    "err": 0.03,
+    "tris": 30000,
+    "len": 172.8,
+    "origin": "wl",
+    "wl": 0.18
+  },
+  "u_lcs2": {
+    "mode": "tex",
+    "unit": 1,
+    "file": "u_lcs2.glb",
+    "title": "USS INDEPENDENCE  LCS-2",
+    "author": "Muhamad Mirza Arrafi",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/uss-independence-lcs-2-7db04398d9524a36a6e08bead0050b76",
+    "tex": 1024,
+    "weld": "pos",
+    "err": 0.03,
+    "tris": 30000,
+    "len": 127.4,
+    "origin": "wl",
+    "wl": 0.14
+  },
+  "u_brad4": {
+    "mode": "tex",
+    "unit": 1,
+    "file": "u_brad4.glb",
+    "title": "Low Poly M2 Bradley Free Model",
+    "author": "Lasha-Georgy Bajadze",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/low-poly-m2-bradley-free-model-f5fbaf2aa97641b082e8d2acc91092a3",
+    "tex": 1024,
+    "weld": "pos",
+    "err": 0.04,
+    "tris": 24000,
+    "len": 6.55,
+    "yaw": 90,
+    "split": {
+      "z": 99,
+      "tur": "Bredley_(Tower|MainGun|RocketHatch)",
+      "pivn": "Bredley_Tower_m2a3"
+    }
+  },
+  "u_aav7": {
+    "mode": "tex",
+    "unit": 1,
+    "file": "u_aav7.glb",
+    "title": "AAV7",
+    "author": "unbekanntespezies",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/aav7-yC4xcavDg89GZgqjJtUs5KYbrgz",
+    "tex": 1024,
+    "weld": "pos",
+    "err": 0.04,
+    "tris": 24000,
+    "len": 7.94,
+    "yaw": 90,
+    "mcol": {
+      "^aav7(_NONE)?$": [
+        0.6,
+        0.56,
+        0.45
+      ],
+      "fahrwerk": [
+        0.16,
+        0.16,
+        0.15
+      ],
+      "schnure": [
+        0.2,
+        0.2,
+        0.18
+      ]
+    }
+  },
+  "u_jltv": {
+    "mode": "tex",
+    "unit": 1,
+    "file": "u_jltv.glb",
+    "title": "JLTV",
+    "author": "ALI1388",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/jltv-429bf4a57386462db28781d910511e40",
+    "tex": 1024,
+    "weld": "pos",
+    "err": 0.04,
+    "tris": 24000,
+    "len": 6.2,
+    "yaw": 180,
+    "mcol": {
+      ".": [
+        0.6,
+        0.56,
+        0.45
+      ]
+    }
+  },
+  "u_cram": {
+    "mode": "tex",
+    "unit": 1,
+    "file": "u_cram.glb",
+    "title": "Centurion C-RAM",
+    "author": "Muhamad Mirza Arrafi",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/centurion-c-ram-10ea7349c7574ca7a43991eece92c9a9",
+    "tex": 1024,
+    "weld": "pos",
+    "err": 0.04,
+    "tris": 24000,
+    "len": 4.5,
+    "split": {
+      "z": 1.75,
+      "piv": [
+        -0.55,
+        -0.65
+      ],
+      "r": 1.6,
+      "gun": 0.3,
+      "gunx": 2.5
+    }
+  },
+  "u_loaderx": {
+    "mode": "tex",
+    "unit": 1,
+    "file": "u_loaderx.glb",
+    "title": "Weapons Loader",
+    "author": "Sengchor",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/016ca0f9b98b4ffbbe0e55f235bef496",
+    "tex": 512,
+    "weld": "pos",
+    "err": 0.02,
+    "tris": 12000,
+    "len": 4.06,
+    "yaw": 90,
+    "parts3": {
+      "arm": {
+        "box": [
+          -0.34,
+          2.15,
+          -0.36,
+          0.36,
+          0.42,
+          1.45
+        ],
+        "piv": [
+          -0.32,
+          0,
+          0.62
+        ]
+      }
+    }
+  },
+  "u_ah64e": {
+    "mode": "tex",
+    "unit": 1,
+    "file": "u_ah64e.glb",
+    "title": "AH-64E Apache \"Guardian\"",
+    "author": "Jeyhun1985",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/ah-64e-apache-guardian-9eb641f9179d413e87367ebd9b96347a",
+    "tex": 512,
+    "weld": "pos",
+    "err": 0.03,
+    "tris": {
+      "hull": 24000,
+      "tur": 4000
+    },
+    "len": 17.7,
+    "yaw": 90,
+    "split": {
+      "z": 3.3,
+      "piv": [
+        1.35,
+        0
+      ],
+      "r": 7.6
+    }
+  },
+  "u_t055f": {
+    "mode": "tex",
+    "unit": 1,
+    "file": "u_t055f.glb",
+    "title": "CN TYPE 055 Nanchang v3.0",
+    "author": "FeriseCAT",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/cn-type-055-nanchang-v30-8850f8cf1eee409abe08519fd54809cd",
+    "tex": 1024,
+    "weld": "pos",
+    "err": 0.03,
+    "tris": 34000,
+    "len": 180,
+    "origin": "wl",
+    "wl": 0.16,
+    "yaw": 180
+  },
+  "u_lcac": {
+    "mode": "tex",
+    "unit": 1,
+    "file": "u_lcac.glb",
+    "title": "LCAC Hovercraft croqui",
+    "author": "LM3D",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/lcac-hovercraft-croqui-14ad629070db445eaf2364eda019192f",
+    "tex": 1024,
+    "weld": "pos",
+    "err": 0.02,
+    "tris": 24000,
+    "len": 33,
+    "yaw": 90,
+    "prune": true,
+    "cluster": 0.12
+  },
+  "u_lcu": {
+    "mode": "tex",
+    "unit": 1,
+    "file": "u_lcu.glb",
+    "title": "US Marine Landing Craft Utility",
+    "author": "LM3D",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/us-marine-landing-craft-utility-726157b72da347549dab62e590f4d06c",
+    "tex": 1024,
+    "weld": "pos",
+    "err": 0.02,
+    "tris": 20000,
+    "len": 41,
+    "origin": "wl",
+    "wl": 0.12,
+    "yaw": 90,
+    "prune": true
+  },
+  "u_lcvp": {
+    "mode": "tex",
+    "unit": 1,
+    "file": "u_lcvp.glb",
+    "title": "LCVP Higgins Boat",
+    "author": "Thomas Visonà",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/lcvp-higgins-boat-e2edab27282d415db2351a47d164744b",
+    "tex": 1024,
+    "weld": "pos",
+    "err": 0.03,
+    "tris": 12000,
+    "len": 11,
+    "origin": "wl",
+    "wl": 0.25
+  },
+  "u_ssn": {
+    "mode": "tex",
+    "unit": 1,
+    "file": "u_ssn.glb",
+    "title": "USS Virginia SSN-774",
+    "author": "Art Blender",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/uss-virginia-ssn-774-339f9731013e4b41b87557f261a9892f",
+    "tex": 1024,
+    "weld": "pos",
+    "err": 0.03,
+    "tris": 16000,
+    "len": 115,
+    "yaw": 180,
+    "origin": "wl",
+    "wl": 0.29
+  },
+  "u_wz551": {
+    "mode": "tex",
+    "unit": 0.01,
+    "file": "u_wz551.glb",
+    "title": "WZ-551 120mm",
+    "author": "Muhamad Mirza Arrafi",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/wz-551-120mm-7de59f6635544362ae77e638f338c27a",
+    "tex": 1024,
+    "weld": "pos",
+    "err": 0.04,
+    "tris": 20000,
+    "split": {
+      "z": 2.6,
+      "piv": [
+        -2.1,
+        0
+      ],
+      "r": 1.8,
+      "gun": 0.25,
+      "gunx": 4.4
+    }
+  },
+  "u_type80b": {
+    "mode": "tex",
+    "unit": 1,
+    "file": "u_type80b.glb",
+    "title": "[Original Design] Type-80 MBT",
+    "author": "EXcaliburK117",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/original-design-type-80-mbt-e844c260161c4ab787ac40e411513828",
+    "tex": 1024,
+    "weld": "pos",
+    "err": 0.04,
+    "tris": 30000,
+    "split": {
+      "z": 1.72,
+      "piv": [
+        -1.55,
+        0
+      ],
+      "r": 2.1,
+      "gun": 0.25,
+      "gunx": 5.2
+    }
+  },
+  "u_m1150": {
+    "mode": "tex",
+    "unit": 1,
+    "file": "u_m1150.glb",
+    "title": "M1150 ABV",
+    "author": "Kalibrovshik",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/m1150-abv-26eaeb6a7dbf498db16e02b1c232de33",
+    "tex": 1024,
+    "weld": "pos",
+    "err": 0.04,
+    "tris": 26000,
+    "len": 9.4,
+    "yaw": 180
+  }
+}

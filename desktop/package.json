@@ -1,0 +1,62 @@
+{
+  "name": "darksword",
+  "productName": "Darksword",
+  "version": "1.0.0",
+  "description": "暗剑 Darksword：两栖登陆作战沙盘（电脑版，Steam）",
+  "author": "Darksword",
+  "license": "UNLICENSED",
+  "private": true,
+  "main": "main.js",
+  "scripts": {
+    "prep": "node ../tools/build_www.mjs --app --out desktop/app",
+    "start": "npm run prep && electron .",
+    "dist": "npm run prep && electron-builder --dir",
+    "dist:win": "npm run prep && electron-builder --win --x64",
+    "dist:linux": "npm run prep && electron-builder --linux --x64",
+    "dist:mac": "npm run prep && electron-builder --mac --universal"
+  },
+  "optionalDependencies": {
+    "steamworks.js": "0.4.0"
+  },
+  "devDependencies": {
+    "electron": "44.9.3",
+    "electron-builder": "26.17.0"
+  },
+  "build": {
+    "appId": "com.studio.darksword",
+    "productName": "Darksword",
+    "copyright": "© 2026 Darksword",
+    "directories": { "output": "dist", "buildResources": "build" },
+    "files": ["main.js", "preload.js", "build/icon.png", "app/**/*"],
+    "asar": true,
+    "asarUnpack": ["node_modules/steamworks.js/dist/**"],
+    "electronLanguages": ["zh-CN", "en-US"],
+    "electronFuses": {
+      "runAsNode": false,
+      "enableNodeOptionsEnvironmentVariable": false,
+      "enableNodeCliInspectArguments": false,
+      "onlyLoadAppFromAsar": true
+    },
+    "win": {
+      "target": [{ "target": "dir", "arch": ["x64"] }],
+      "icon": "build/icon.png",
+      "files": ["!node_modules/steamworks.js/dist/{linux64,osx}/**"]
+    },
+    "linux": {
+      "target": [{ "target": "dir", "arch": ["x64"] }],
+      "icon": "build/icon.png",
+      "executableName": "darksword",
+      "category": "Game",
+      "files": ["!node_modules/steamworks.js/dist/{win64,osx}/**"]
+    },
+    "mac": {
+      "target": [{ "target": "dir", "arch": ["universal"] }],
+      "icon": "build/icon.png",
+      "category": "public.app-category.strategy-games",
+      "identity": "-",
+      "hardenedRuntime": false,
+      "x64ArchFiles": "**/node_modules/steamworks.js/dist/osx/*",
+      "files": ["!node_modules/steamworks.js/dist/{win64,linux64}/**"]
+    }
+  }
+}

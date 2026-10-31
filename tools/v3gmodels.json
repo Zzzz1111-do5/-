@@ -1,0 +1,2268 @@
+{
+  "_说明": "用户给的 3D 模型（tools/v3gbake.js 烘焙成 js/mdl/<键>.js）。glb：GLB 文件（相对上传目录；OBJ / DAE / BLEND 先用 tools/v3gconv.py 转）；fwd / up：模型的前、上在 glTF 坐标里是哪个轴；len / height / span / scale：按真实长 / 高 / 宽（米）缩放，或直接给倍数，都不给就是原尺寸；origin：floor 落地（默认）/ center 居中；mats：按材质名补贴图、改透明方式；parts：能动的部件（按连通块挑）；credit：署名",
+  "models": {
+    "ztz96": {
+      "name": "96 式主战坦克",
+      "glb": "up/73b1cd0e-free_96/73b1cd0e-free_96.glb",
+      "fwd": "+z",
+      "up": "+y",
+      "credit": {
+        "title": "ZTZ96",
+        "author": "jzmhhhhh",
+        "url": "https://sketchfab.com/3d-models/ztz96-b0da178e50dc423983445841615d9e80",
+        "license": "CC-BY-4.0",
+        "lurl": "http://creativecommons.org/licenses/by/4.0/"
+      },
+      "parts": [
+        {
+          "name": "tur",
+          "kind": "yaw",
+          "pivot": [
+            -1.1,
+            0,
+            1.5
+          ],
+          "any": [
+            {
+              "zmin": 1.38,
+              "box": [
+                -3.3,
+                0.8,
+                -1.42,
+                1.42
+              ]
+            },
+            {
+              "zmin": 1.5,
+              "box": [
+                0.4,
+                5.2,
+                -0.35,
+                0.35
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "m1a1": {
+      "name": "M1A1 艾布拉姆斯",
+      "glb": "conv/m1a1.glb",
+      "fwd": "-z",
+      "up": "+y",
+      "mats": {
+        "chassis.0": {
+          "base": "up/abbcb23f-m1a1-abrams-main-battle-tank/textures/Abrams.png"
+        },
+        "misc_a.0": {
+          "base": "up/abbcb23f-m1a1-abrams-main-battle-tank/textures/Tex_0026_1.png"
+        },
+        "misc_a.1": {
+          "base": "up/abbcb23f-m1a1-abrams-main-battle-tank/textures/bags.png"
+        },
+        "misc_a.2": {
+          "base": "up/abbcb23f-m1a1-abrams-main-battle-tank/textures/Tex_0025_1.png"
+        },
+        "misc_a.3": {
+          "base": "up/abbcb23f-m1a1-abrams-main-battle-tank/textures/glass.png"
+        },
+        "misc_a.4": {
+          "base": "up/abbcb23f-m1a1-abrams-main-battle-tank/textures/Tex_0026_3.png",
+          "alpha": "BLEND"
+        },
+        "parts.2": {
+          "base": "up/abbcb23f-m1a1-abrams-main-battle-tank/textures/Tex_0034_2.png"
+        },
+        "screens.0": {
+          "base": "up/abbcb23f-m1a1-abrams-main-battle-tank/textures/Tex_0034_2.png"
+        },
+        "chassis_vlo.4": {
+          "base": "up/abbcb23f-m1a1-abrams-main-battle-tank/textures/Tex_0031_1.png"
+        },
+        "chassis_vlo.6": {
+          "base": "up/abbcb23f-m1a1-abrams-main-battle-tank/textures/Tex_0031_1.png"
+        },
+        "chassis_vlo.7": {
+          "base": "up/abbcb23f-m1a1-abrams-main-battle-tank/textures/Track.png",
+          "alpha": "MASK"
+        },
+        "parts.4": {
+          "color": [
+            0.16,
+            0.16,
+            0.15,
+            1
+          ],
+          "metal": 0.6,
+          "rough": 0.5
+        }
+      },
+      "credit": {
+        "title": "M1A1 Abrams Main Battle Tank",
+        "author": "MirzaArrafiERV_45",
+        "url": "https://sketchfab.com/3d-models/m1a1-abrams-main-battle-tank-1529f5d842cb4f578aa8cb672524f044",
+        "license": "CC-BY-4.0",
+        "lurl": "http://creativecommons.org/licenses/by/4.0/"
+      },
+      "parts": [
+        {
+          "name": "tur",
+          "kind": "yaw",
+          "pivot": [
+            -0.9,
+            0,
+            1.8
+          ],
+          "any": [
+            {
+              "zmin": 1.72,
+              "box": [
+                -4.4,
+                1.6,
+                -1.8,
+                1.8
+              ]
+            },
+            {
+              "zmin": 1.9,
+              "box": [
+                1.3,
+                5.2,
+                -0.35,
+                0.35
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "j20": {
+      "name": "歼-20",
+      "glb": "conv/j20_assimp.glb",
+      "imgdir": "up/bc559445-chinese-chengdu-j-20/source/j-20_x",
+      "fwd": "-z",
+      "up": "+y",
+      "credit": {
+        "title": "Chinese Chengdu J-20",
+        "author": "42manako",
+        "url": "https://sketchfab.com/3d-models/chinese-chengdu-j-20-b9e81062c94545ffb0232d3ac6b7adc5",
+        "license": "CC-BY-4.0",
+        "lurl": "http://creativecommons.org/licenses/by/4.0/"
+      },
+      "parts": [
+        {
+          "name": "gear",
+          "kind": "hide",
+          "any": [
+            {
+              "zlow": 0.6
+            },
+            {
+              "nodes": "ID16427/|ID16577/"
+            }
+          ]
+        }
+      ],
+      "zc": 2.27,
+      "noz": [
+        [
+          -10.5,
+          0.76,
+          2.13,
+          0.48,
+          0.9
+        ]
+      ]
+    },
+    "j16": {
+      "name": "歼-16",
+      "glb": "up/1a9500af-shenyang_j16_hidden_dragon/1a9500af-shenyang_j16_hidden_dragon.glb",
+      "fwd": "+x",
+      "up": "+y",
+      "len": 21.9,
+      "credit": {
+        "title": "Shenyang J16 Hidden Dragon",
+        "author": "andertan",
+        "url": "https://sketchfab.com/3d-models/shenyang-j16-hidden-dragon-2b950f910677457fbb52b6096f81e70b",
+        "license": "CC-BY-4.0",
+        "lurl": "http://creativecommons.org/licenses/by/4.0/"
+      },
+      "zc": 1.5,
+      "noz": [
+        [
+          -8.96,
+          1.12,
+          0.68,
+          0.48,
+          0.8
+        ]
+      ]
+    },
+    "j31": {
+      "name": "歼-31 鹘鹰",
+      "glb": "up/c49c9266-free_use_model/c49c9266-free_use_model.glb",
+      "fwd": "+z",
+      "up": "+y",
+      "len": 16.9,
+      "credit": {
+        "title": "Shenyang J31 Gyrfalcon",
+        "author": "andertan",
+        "url": "https://sketchfab.com/3d-models/shenyang-j31-gyrfalcon-23dbff530e21491299ac67bbab42b553",
+        "license": "CC-BY-4.0",
+        "lurl": "http://creativecommons.org/licenses/by/4.0/"
+      },
+      "parts": [
+        {
+          "name": "gear",
+          "kind": "hide",
+          "zlow": 0.7,
+          "maxTris": 3000
+        }
+      ],
+      "zc": 1.78,
+      "noz": [
+        [
+          -7.4,
+          0.77,
+          1.6,
+          0.45,
+          0.6
+        ]
+      ]
+    },
+    "z10w": {
+      "name": "直-10",
+      "glb": "conv/z10w.glb",
+      "fwd": "+z",
+      "up": "+y",
+      "len": 14.15,
+      "mats": {
+        "Material__25": {
+          "base": "up/2642198f-changhe-z-10w/textures/ch_ahe_z-10w_d.tga.png"
+        },
+        "Material__28": {
+          "base": "up/2642198f-changhe-z-10w/textures/ch_ahe_z-10w_d.tga.png"
+        },
+        "Material__26": {
+          "base": "conv/rotor_blur.png",
+          "alpha": "BLEND",
+          "ds": true
+        },
+        "Material__27": {
+          "base": "conv/rotor_blur.png",
+          "alpha": "BLEND",
+          "ds": true
+        }
+      },
+      "credit": {
+        "title": "Changhe Z-10W",
+        "author": "42manako",
+        "url": "https://sketchfab.com/3d-models/changhe-z-10w-617cb4a91dfd4eaaa59161e06691df7f",
+        "license": "CC-BY-4.0",
+        "lurl": "http://creativecommons.org/licenses/by/4.0/"
+      },
+      "_旋翼": "原模型的旋翼虚化贴图（mainrotorblurred_rgb_test.tga、tailrotorblurred_rgb_test.tga）没有随模型给，按原意补了一张圆盘虚化图（conv/rotor_blur.png，tools/v3gbake.js 的说明里有生成方法）"
+    },
+    "z21": {
+      "name": "直-21",
+      "glb": "up/b36a2497-mw-z-21/source/mw_z-21.glb",
+      "fwd": "-x",
+      "up": "+y",
+      "credit": {
+        "title": "[MW] Z-21",
+        "author": "xlisov",
+        "url": "https://sketchfab.com/3d-models/mw-z-21-a2d88447f0904f49b73f94fa88dccea5",
+        "license": "CC-BY-NC-4.0",
+        "lurl": "http://creativecommons.org/licenses/by-nc/4.0/"
+      },
+      "len": 18,
+      "parts": [
+        {
+          "name": "rotor",
+          "kind": "spin",
+          "axis": "z",
+          "nodes": "Z21_Rotor_01|Z21_Blades_01"
+        },
+        {
+          "name": "trotor",
+          "kind": "spin",
+          "axis": "y",
+          "nodes": "Z21_Rotor_02|Z21_Blades_02"
+        }
+      ]
+    },
+    "army": {
+      "name": "士兵",
+      "glb": "conv/army.glb",
+      "fwd": "-x",
+      "up": "+y",
+      "height": 1.8,
+      "mats": {
+        "mat_0-SK_alliedsoldier_head_D.jpg": {
+          "base": "up/089e09a9-army-character-2/textures/SK_alliedsoldier_head_D.jpg"
+        },
+        "mat_1-SK_alliedsoldier_body_D.jpg": {
+          "base": "up/089e09a9-army-character-2/textures/SK_alliedsoldier_body_D.jpg"
+        }
+      },
+      "credit": {
+        "title": "Army Character 2",
+        "author": "MirzaArrafiERV_45",
+        "url": "https://sketchfab.com/3d-models/army-character-2-e3c4da4a33bb42ed8512f423a4319c5a",
+        "license": "CC-BY-4.0",
+        "lurl": "http://creativecommons.org/licenses/by/4.0/"
+      }
+    },
+    "aim120": {
+      "name": "AIM-120C",
+      "glb": "conv/aim120.glb",
+      "fwd": "+z",
+      "up": "+y",
+      "origin": "center",
+      "len": 3.66,
+      "mats": {
+        "91e5963e-a38e-4dc4-ad22-ccfe0d39bfaf": {
+          "base": "up/16ff68cb-aim-120c-amraam/source/AIM-120C AMRAAM_x/us_aim_120c_missile_c.jpg",
+          "normal": "up/16ff68cb-aim-120c-amraam/source/AIM-120C AMRAAM_x/us_aim_120c_missile_n_n.jpg",
+          "ao": "up/16ff68cb-aim-120c-amraam/source/AIM-120C AMRAAM_x/us_aim_120c_missile_n_ao.jpg"
+        }
+      },
+      "credit": {
+        "title": "AIM-120C AMRAAM",
+        "author": "Jeyhun1985",
+        "url": "https://sketchfab.com/3d-models/aim-120c-amraam-838fa923340a4d108e05c99bf0146ff6",
+        "license": "CC-BY-4.0",
+        "lurl": "http://creativecommons.org/licenses/by/4.0/"
+      }
+    },
+    "aim9": {
+      "name": "AIM-9",
+      "glb": "conv/aim9.glb",
+      "fwd": "+z",
+      "up": "+y",
+      "origin": "center",
+      "len": 3.02,
+      "mats": {
+        "lambert1": {
+          "base": "up/e1d66a05-aim-9-missile/source/model_x/model/textures/lambert1_albedo.jpg",
+          "normal": "up/e1d66a05-aim-9-missile/source/model_x/model/textures/lambert1_normal.jpg",
+          "mr": "conv/aim9_mr.png",
+          "metal": 1,
+          "rough": 1
+        }
+      },
+      "credit": {
+        "title": "AIM-9 missile",
+        "author": "rickslash",
+        "url": "https://sketchfab.com/3d-models/aim-9-missile-caaf15b49bac4144b6c6be577c2b872a",
+        "license": "CC-BY-4.0",
+        "lurl": "http://creativecommons.org/licenses/by/4.0/"
+      }
+    },
+    "aim54": {
+      "name": "AIM-54 不死鸟",
+      "glb": "conv/aim54.glb",
+      "fwd": "-x",
+      "up": "+y",
+      "origin": "center",
+      "set": 1
+    },
+    "aim9s": {
+      "name": "AIM-9 响尾蛇（组合）",
+      "glb": "conv/aim9s.glb",
+      "fwd": "-x",
+      "up": "+y",
+      "origin": "center",
+      "set": 1
+    },
+    "aim120s": {
+      "name": "AIM-120（组合）",
+      "glb": "conv/aim120s.glb",
+      "fwd": "-x",
+      "up": "+y",
+      "origin": "center",
+      "set": 1
+    },
+    "ks172": {
+      "name": "KS-172",
+      "glb": "conv/ks172.glb",
+      "fwd": "-x",
+      "up": "+y",
+      "origin": "center",
+      "set": 1
+    },
+    "asraam": {
+      "name": "AIM-132 ASRAAM",
+      "glb": "conv/asraam.glb",
+      "fwd": "-x",
+      "up": "+y",
+      "origin": "center",
+      "set": 1
+    },
+    "gbu24": {
+      "name": "GBU-24 宝石路",
+      "glb": "conv/gbu24.glb",
+      "fwd": "-x",
+      "up": "+y",
+      "origin": "center",
+      "set": 1
+    },
+    "mk83": {
+      "name": "Mk 83 炸弹",
+      "glb": "conv/mk83.glb",
+      "fwd": "-x",
+      "up": "+y",
+      "origin": "center",
+      "set": 1
+    },
+    "agm65": {
+      "name": "AGM-65 小牛",
+      "glb": "conv/agm65.glb",
+      "fwd": "-x",
+      "up": "+y",
+      "origin": "center",
+      "set": 1
+    },
+    "jsow": {
+      "name": "AGM-154 JSOW",
+      "glb": "conv/jsow.glb",
+      "fwd": "-x",
+      "up": "+y",
+      "origin": "center",
+      "set": 1
+    },
+    "brimstone": {
+      "name": "硫磺石",
+      "glb": "conv/brimstone.glb",
+      "fwd": "-x",
+      "up": "+y",
+      "origin": "center",
+      "set": 1
+    },
+    "m2a3": {
+      "name": "M2A3 布雷德利步兵战车",
+      "glb": "m2a3/scene.gltf",
+      "fwd": "+z",
+      "up": "+y",
+      "len": 6.55,
+      "credit": {
+        "title": "M2 Bradley IFV",
+        "author": "42manako",
+        "url": "https://sketchfab.com/3d-models/m2-bradley-ifv-ab022158ab5f4fbfa55d4142db7595ab",
+        "license": "CC-BY-4.0",
+        "lurl": "http://creativecommons.org/licenses/by/4.0/"
+      },
+      "parts": [
+        {
+          "name": "gun",
+          "kind": "chain",
+          "nodes": "turret",
+          "box": [
+            0.28,
+            2.4,
+            -0.5,
+            0.05
+          ],
+          "zmin": 2.25,
+          "pivot": [
+            -0.45,
+            -0.27,
+            2.05
+          ],
+          "axis": "z",
+          "q": [
+            0.36,
+            -0.12,
+            2.52
+          ],
+          "a2": [
+            0,
+            -1,
+            0
+          ],
+          "w": [
+            1,
+            0,
+            0,
+            0
+          ],
+          "e": [
+            0,
+            1,
+            0,
+            0
+          ],
+          "w2": [
+            0,
+            0,
+            1,
+            0
+          ]
+        },
+        {
+          "name": "tow",
+          "kind": "chain",
+          "nodes": "turret",
+          "box": [
+            -1.2,
+            0.25,
+            0.82,
+            1.5
+          ],
+          "zmin": 2.7,
+          "pivot": [
+            -0.45,
+            -0.27,
+            2.05
+          ],
+          "axis": "z",
+          "q": [
+            0.1,
+            1.12,
+            2.95
+          ],
+          "a2": [
+            0,
+            -1,
+            0
+          ],
+          "r": [
+            0,
+            0,
+            -1
+          ],
+          "w": [
+            1,
+            0,
+            0,
+            0
+          ],
+          "w2": [
+            0,
+            0.3,
+            0,
+            0
+          ],
+          "e2": [
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        {
+          "name": "tur",
+          "kind": "rot",
+          "nodes": "turret",
+          "pivot": [
+            -0.45,
+            -0.27,
+            2.05
+          ],
+          "axis": "z",
+          "w": [
+            1,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "name": "whl",
+          "kind": "each",
+          "nodes": "body_lod0",
+          "zlow": 0.6,
+          "zmax": 1.2,
+          "minTris": 180,
+          "box": [
+            -3.2,
+            3.3,
+            -1.5,
+            1.6
+          ],
+          "axis": "y",
+          "roll": true
+        },
+        {
+          "name": "ramp",
+          "kind": "rot",
+          "nodes": "body_lod0",
+          "box": [
+            -3.2,
+            -2.7,
+            -1.6,
+            1.7
+          ],
+          "zlow": 0.6,
+          "ztop": 2,
+          "minTris": 200,
+          "pivot": [
+            -2.95,
+            0,
+            0.55
+          ],
+          "axis": "y",
+          "w2": [
+            -1.75,
+            0,
+            0,
+            0
+          ],
+          "w": [
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      ],
+      "roughMin": 0.7,
+      "texMax": 2048
+    },
+    "m109": {
+      "name": "M109A7 帕拉丁自行榴弹炮",
+      "glb": "m109/scene.gltf",
+      "fwd": "+z",
+      "up": "+y",
+      "len": 6.95,
+      "credit": {
+        "title": "M109 PALADIN ARTILLERY",
+        "author": "Muhamad Mirza Arrafi",
+        "url": "https://sketchfab.com/3d-models/m109-paladin-artillery-3de0572475d54f7b9da18d6ed26b4a10",
+        "license": "CC-BY-4.0",
+        "lurl": "http://creativecommons.org/licenses/by/4.0/"
+      },
+      "parts": [
+        {
+          "name": "gun",
+          "kind": "chain",
+          "nodes": "g_cannon",
+          "pivot": [
+            -1.65,
+            0,
+            1.6
+          ],
+          "axis": "z",
+          "q": [
+            -0.35,
+            0,
+            2.1
+          ],
+          "a2": [
+            0,
+            -1,
+            0
+          ],
+          "w": [
+            1,
+            0,
+            0,
+            0
+          ],
+          "e": [
+            0,
+            1,
+            0,
+            0
+          ],
+          "w2": [
+            0,
+            0,
+            1,
+            0
+          ]
+        },
+        {
+          "name": "tur",
+          "kind": "rot",
+          "nodes": "g_turret",
+          "pivot": [
+            -1.65,
+            0,
+            1.6
+          ],
+          "axis": "z",
+          "w": [
+            1,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "name": "whl",
+          "kind": "each",
+          "nodes": "wheel\\d",
+          "axis": "y",
+          "roll": true,
+          "byNode": true
+        }
+      ],
+      "roughMin": 0.7,
+      "texMax": 2048
+    },
+    "stryker": {
+      "name": "斯特赖克 8×8 装甲车（M1126 步兵输送车外形）",
+      "glb": "stryker/scene.gltf",
+      "fwd": "-z",
+      "up": "+y",
+      "len": 6.95,
+      "roughMin": 0.6,
+      "credit": {
+        "title": "M1126 Infantry Carrier Vehicle",
+        "author": "cenobyte",
+        "url": "https://sketchfab.com/3d-models/m1126-infantry-carrier-vehicle-b0c559a02c1842b0976a241c9a998360",
+        "license": "CC-BY-4.0",
+        "lurl": "http://creativecommons.org/licenses/by/4.0/"
+      },
+      "parts": [
+        {
+          "name": "rws",
+          "kind": "rot",
+          "nodes": "RootNode/Turret/",
+          "pivot": [
+            -0.25,
+            -0.48,
+            2.81
+          ],
+          "axis": "z",
+          "w": [
+            1,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "name": "ramp",
+          "kind": "rot",
+          "nodes": "RootNode/Rear_Door/",
+          "pivot": [
+            -3.11,
+            0,
+            0.74
+          ],
+          "axis": "y",
+          "w": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "w2": [
+            -1.55,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "name": "whl",
+          "kind": "each",
+          "nodes": "RootNode/(Tyre\\d*|Rim|Tyre_Nuts|Wheel_Gauge)/",
+          "zmax": 1.15,
+          "merge": 0.6,
+          "axis": "y",
+          "roll": true
+        }
+      ],
+      "tri0": 60000,
+      "opaque": true,
+      "texMax": 1024
+    },
+    "patriot": {
+      "name": "M903 爱国者导弹发射车",
+      "glb": "patriot/scene.gltf",
+      "fwd": "+x",
+      "up": "+y",
+      "len": 10.4,
+      "roughMin": 0.6,
+      "opaque": true,
+      "credit": {
+        "title": "MIM-104 Patriot Air Defense System",
+        "author": "Muhamad Mirza Arrafi",
+        "url": "https://sketchfab.com/3d-models/mim-104-patriot-air-defense-system-95e1e402426f4ddcb543af7a0455cf05",
+        "license": "CC-BY-4.0",
+        "lurl": "http://creativecommons.org/licenses/by/4.0/"
+      },
+      "parts": [
+        {
+          "name": "lnch",
+          "kind": "chain",
+          "pivot": [
+            -3,
+            0,
+            1.9
+          ],
+          "axis": "z",
+          "q": [
+            -5.05,
+            0,
+            3.1
+          ],
+          "a2": [
+            0,
+            1,
+            0
+          ],
+          "w": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "e2": [
+            0,
+            -0.663,
+            0,
+            0
+          ],
+          "box": [
+            -5.3,
+            1,
+            -1.05,
+            1.05
+          ],
+          "ztop": 3.5
+        }
+      ],
+      "texMax": 2048
+    },
+    "m163": {
+      "name": "M163 火神自行高炮",
+      "glb": "m163/scene.gltf",
+      "fwd": "-z",
+      "up": "+y",
+      "len": 4.86,
+      "roughMin": 0.6,
+      "opaque": true,
+      "credit": {
+        "title": "M163 VADS",
+        "author": "42manako",
+        "url": "https://sketchfab.com/3d-models/m163-vads-66a6f08ad2d945ccb6e72267e55bc685",
+        "license": "CC-BY-4.0",
+        "lurl": "http://creativecommons.org/licenses/by/4.0/"
+      },
+      "parts": [
+        {
+          "name": "gat",
+          "kind": "chain",
+          "nodes": "Object_2$",
+          "box": [
+            0.5,
+            1.9,
+            -0.1,
+            0.1
+          ],
+          "zmin": 2.2,
+          "pivot": [
+            -0.33,
+            0.025,
+            1.81
+          ],
+          "axis": "z",
+          "q": [
+            0.05,
+            0,
+            2.33
+          ],
+          "a2": [
+            0,
+            -1,
+            0
+          ],
+          "q3": [
+            1.2,
+            0,
+            2.355
+          ],
+          "a3": [
+            1,
+            0,
+            0
+          ],
+          "g2": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "w": [
+            1,
+            0,
+            0,
+            0
+          ],
+          "e": [
+            0,
+            1,
+            0,
+            0
+          ]
+        },
+        {
+          "name": "gun",
+          "kind": "chain",
+          "any": [
+            {
+              "nodes": "Object_[23]$",
+              "box": [
+                -0.1,
+                2,
+                -0.36,
+                0.36
+              ],
+              "zmin": 2
+            },
+            {
+              "nodes": "Object_2$",
+              "box": [
+                -0.6,
+                0.05,
+                -1.3,
+                -0.4
+              ],
+              "zmin": 1.9
+            }
+          ],
+          "pivot": [
+            -0.33,
+            0.025,
+            1.81
+          ],
+          "axis": "z",
+          "q": [
+            0.05,
+            0,
+            2.33
+          ],
+          "a2": [
+            0,
+            -1,
+            0
+          ],
+          "w": [
+            1,
+            0,
+            0,
+            0
+          ],
+          "e": [
+            0,
+            1,
+            0,
+            0
+          ]
+        },
+        {
+          "name": "tur",
+          "kind": "rot",
+          "nodes": "Object_[23]$",
+          "zmin": 1.8,
+          "pivot": [
+            -0.33,
+            0.025,
+            1.81
+          ],
+          "axis": "z",
+          "w": [
+            1,
+            0,
+            0,
+            0
+          ]
+        }
+      ],
+      "texMax": 2048
+    },
+    "cram": {
+      "name": "C-RAM 陆基密集阵（百人队长）",
+      "glb": "cram/scene.gltf",
+      "fwd": "+z",
+      "up": "+y",
+      "len": 6,
+      "roughMin": 0.6,
+      "opaque": true,
+      "credit": {
+        "title": "Centurion C-RAM",
+        "author": "Muhamad Mirza Arrafi",
+        "url": "https://sketchfab.com/3d-models/centurion-c-ram-10ea7349c7574ca7a43991eece92c9a9",
+        "license": "CC-BY-4.0",
+        "lurl": "http://creativecommons.org/licenses/by/4.0/"
+      },
+      "parts": [
+        {
+          "name": "gat",
+          "kind": "chain",
+          "box": [
+            0.85,
+            2.4,
+            0.6,
+            1.1
+          ],
+          "zmin": 4.2,
+          "pivot": [
+            -0.9,
+            0.83,
+            2.3
+          ],
+          "axis": "z",
+          "q": [
+            -0.9,
+            0.83,
+            4.4
+          ],
+          "a2": [
+            0,
+            -1,
+            0
+          ],
+          "q3": [
+            1.6,
+            0.845,
+            4.425
+          ],
+          "a3": [
+            1,
+            0,
+            0
+          ],
+          "g2": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "w": [
+            1,
+            0,
+            0,
+            0
+          ],
+          "e": [
+            0,
+            1,
+            0,
+            0
+          ]
+        },
+        {
+          "name": "gun",
+          "kind": "chain",
+          "box": [
+            -2,
+            0.85,
+            -0.05,
+            1.62
+          ],
+          "zmin": 3.75,
+          "pivot": [
+            -0.9,
+            0.83,
+            2.3
+          ],
+          "axis": "z",
+          "q": [
+            -0.9,
+            0.83,
+            4.4
+          ],
+          "a2": [
+            0,
+            -1,
+            0
+          ],
+          "w": [
+            1,
+            0,
+            0,
+            0
+          ],
+          "e": [
+            0,
+            1,
+            0,
+            0
+          ]
+        },
+        {
+          "name": "tur",
+          "kind": "rot",
+          "zmin": 2.25,
+          "pivot": [
+            -0.9,
+            0.83,
+            2.3
+          ],
+          "axis": "z",
+          "w": [
+            1,
+            0,
+            0,
+            0
+          ]
+        }
+      ],
+      "texMax": 2048
+    },
+    "m1150": {
+      "name": "M1150 突击破障车",
+      "glb": "m1150/scene.gltf",
+      "fwd": "-z",
+      "up": "+y",
+      "len": 10.6,
+      "roughMin": 0.6,
+      "opaque": true,
+      "credit": {
+        "title": "M1150 ABV",
+        "author": "Kalibrovshik",
+        "url": "https://sketchfab.com/3d-models/m1150-abv-26eaeb6a7dbf498db16e02b1c232de33",
+        "license": "CC-BY-4.0",
+        "lurl": "http://creativecommons.org/licenses/by/4.0/"
+      },
+      "parts": [
+        {
+          "name": "plow",
+          "kind": "rot",
+          "box": [
+            2.3,
+            5.4,
+            -2,
+            2
+          ],
+          "zmax": 1.6,
+          "pivot": [
+            2.4,
+            0,
+            1.2
+          ],
+          "axis": "y",
+          "w": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "w2": [
+            0,
+            -0.2,
+            0,
+            0
+          ]
+        }
+      ],
+      "tri0": 60000,
+      "tri0Flags": [
+        "Permissive"
+      ],
+      "texMax": 2048
+    },
+    "matv": {
+      "name": "M-ATV 防地雷全地形车（代 JLTV、M1117）",
+      "glb": "matv/scene.gltf",
+      "fwd": "+x",
+      "up": "+y",
+      "len": 6.27,
+      "roughMin": 0.6,
+      "opaque": true,
+      "credit": {
+        "title": "Oshkosh M-ATV",
+        "author": "42manako",
+        "url": "https://sketchfab.com/3d-models/oshkosh-m-atv-291dc8f07a494751b318e623b89cf538",
+        "license": "CC-BY-4.0",
+        "lurl": "http://creativecommons.org/licenses/by/4.0/"
+      },
+      "parts": [
+        {
+          "name": "tur",
+          "kind": "rot",
+          "nodes": "LOD_0\\.001",
+          "pivot": [
+            -0.82,
+            0,
+            2.46
+          ],
+          "axis": "z",
+          "w": [
+            1,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "name": "whl",
+          "kind": "each",
+          "nodes": "matv_tire",
+          "zmax": 1.2,
+          "axis": "y",
+          "roll": true,
+          "cluster": 0.6,
+          "zlow": 0.4
+        }
+      ],
+      "texMax": 2048
+    },
+    "hmmwv": {
+      "name": "M998 悍马（代复仇者防空车底盘）",
+      "glb": "hmmwv/scene.gltf",
+      "fwd": "+z",
+      "up": "+y",
+      "len": 4.57,
+      "roughMin": 0.6,
+      "opaque": true,
+      "credit": {
+        "title": "HMMWV M998A1 (soft top)",
+        "author": "42manako",
+        "url": "https://sketchfab.com/3d-models/hmmwv-m998a1-soft-top-ffbc4b053628413fb84acf5b89595d96",
+        "license": "CC-BY-4.0",
+        "lurl": "http://creativecommons.org/licenses/by/4.0/"
+      },
+      "parts": [
+        {
+          "name": "whl",
+          "kind": "each",
+          "nodes": "mat3_D",
+          "zmax": 0.9,
+          "minTris": 600,
+          "axis": "y",
+          "roll": true
+        }
+      ],
+      "texMax": 2048
+    },
+    "zbd97": {
+      "name": "ZBD-04 步兵战车（原称 97 式）",
+      "glb": "zbd97/scene.gltf",
+      "fwd": "-z",
+      "up": "+y",
+      "len": 6.7,
+      "roughMin": 0.6,
+      "opaque": true,
+      "credit": {
+        "title": "ZBD-97",
+        "author": "42manako",
+        "url": "https://sketchfab.com/3d-models/zbd-97-b36e44ca383e4ab296e28321167e5ba4",
+        "license": "CC-BY-4.0",
+        "lurl": "http://creativecommons.org/licenses/by/4.0/"
+      },
+      "parts": [
+        {
+          "name": "gun",
+          "kind": "chain",
+          "nodes": "Sundered.001",
+          "box": [
+            -0.7,
+            2.5,
+            -0.3,
+            0.35
+          ],
+          "zmin": 2.1,
+          "pivot": [
+            -1,
+            0.04,
+            2.04
+          ],
+          "axis": "z",
+          "q": [
+            -0.55,
+            0.04,
+            2.44
+          ],
+          "a2": [
+            0,
+            -1,
+            0
+          ],
+          "w": [
+            1,
+            0,
+            0,
+            0
+          ],
+          "e": [
+            0,
+            1,
+            0,
+            0
+          ],
+          "w2": [
+            0,
+            0,
+            1,
+            0
+          ]
+        },
+        {
+          "name": "tur",
+          "kind": "rot",
+          "nodes": "Sundered.001",
+          "pivot": [
+            -1,
+            0.04,
+            2.04
+          ],
+          "axis": "z",
+          "w": [
+            1,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "name": "whl",
+          "kind": "each",
+          "any": [
+            {
+              "nodes": "Sundered_0",
+              "box": [
+                -3.4,
+                3.4,
+                1.2,
+                1.8
+              ],
+              "zmax": 0.96,
+              "minTris": 280,
+              "maxTris": 300
+            },
+            {
+              "nodes": "Sundered_0",
+              "box": [
+                -3.4,
+                3.4,
+                -1.8,
+                -1.2
+              ],
+              "zmax": 0.96,
+              "minTris": 280,
+              "maxTris": 300
+            }
+          ],
+          "axis": "y",
+          "roll": true
+        }
+      ],
+      "texMax": 2048
+    },
+    "ptl02": {
+      "name": "PTL-02 轮式突击炮",
+      "glb": "ptl02/scene.gltf",
+      "fwd": "+z",
+      "up": "+y",
+      "len": 8.35,
+      "roughMin": 0.6,
+      "opaque": true,
+      "credit": {
+        "title": "Chinese PTL-02",
+        "author": "42manako",
+        "url": "https://sketchfab.com/3d-models/chinese-ptl-02-e087eff1ed9b48cabe06d9467fec3311",
+        "license": "CC-BY-4.0",
+        "lurl": "http://creativecommons.org/licenses/by/4.0/"
+      },
+      "parts": [
+        {
+          "name": "gun",
+          "kind": "chain",
+          "nodes": "/Object_(11|12|2|5)$",
+          "pivot": [
+            -2.15,
+            0,
+            2
+          ],
+          "axis": "z",
+          "q": [
+            -0.6,
+            0,
+            2.49
+          ],
+          "a2": [
+            0,
+            -1,
+            0
+          ],
+          "w": [
+            1,
+            0,
+            0,
+            0
+          ],
+          "e": [
+            0,
+            1,
+            0,
+            0
+          ],
+          "w2": [
+            0,
+            0,
+            1,
+            0
+          ]
+        },
+        {
+          "name": "tur",
+          "kind": "rot",
+          "nodes": "/Object_(26|27|25|3|7|8|10|6)$",
+          "pivot": [
+            -2.15,
+            0,
+            2
+          ],
+          "axis": "z",
+          "w": [
+            1,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "name": "whl",
+          "kind": "each",
+          "nodes": "/Object_1[4-7]$",
+          "zmax": 1.3,
+          "cluster": 0.7,
+          "axis": "y",
+          "roll": true
+        }
+      ],
+      "tri0": 45000,
+      "tri0Err": 0.01,
+      "tri0Flags": [
+        "Permissive"
+      ],
+      "texMax": 1024
+    },
+    "t625": {
+      "name": "PGL-625 弹炮结合防空车",
+      "glb": "t625/scene.gltf",
+      "fwd": "+z",
+      "up": "+y",
+      "len": 9.4,
+      "roughMin": 0.6,
+      "opaque": true,
+      "credit": {
+        "title": "Type-625 Anti Aircraft Gun Missile System",
+        "author": "Muhamad Mirza Arrafi",
+        "url": "https://sketchfab.com/3d-models/type-625-anti-aircraft-gun-missile-system-8b7e85f45b954592bd4bb8e72cdd6312",
+        "license": "CC-BY-4.0",
+        "lurl": "http://creativecommons.org/licenses/by/4.0/"
+      },
+      "parts": [
+        {
+          "name": "gat",
+          "kind": "chain",
+          "nodes": "/Object_3$",
+          "box": [
+            1.1,
+            1.4,
+            -0.1,
+            0
+          ],
+          "zmin": 3,
+          "pivot": [
+            -0.65,
+            -0.05,
+            2.55
+          ],
+          "axis": "z",
+          "q": [
+            0.3,
+            -0.05,
+            3.15
+          ],
+          "a2": [
+            0,
+            -1,
+            0
+          ],
+          "q3": [
+            1.2,
+            -0.05,
+            3.18
+          ],
+          "a3": [
+            1,
+            0,
+            0
+          ],
+          "g2": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "w": [
+            1,
+            0,
+            0,
+            0
+          ],
+          "e": [
+            0,
+            1,
+            0,
+            0
+          ]
+        },
+        {
+          "name": "gun",
+          "kind": "chain",
+          "any": [
+            {
+              "nodes": "/Object_3$",
+              "box": [
+                0.9,
+                1.2,
+                -0.1,
+                0
+              ],
+              "zmin": 2.9
+            },
+            {
+              "nodes": "/Object_3$",
+              "box": [
+                1.1,
+                1.6,
+                0.4,
+                1
+              ],
+              "zmin": 2.75
+            },
+            {
+              "nodes": "/Object_3$",
+              "box": [
+                1.1,
+                1.6,
+                -1,
+                -0.4
+              ],
+              "zmin": 2.75
+            }
+          ],
+          "pivot": [
+            -0.65,
+            -0.05,
+            2.55
+          ],
+          "axis": "z",
+          "q": [
+            0.3,
+            -0.05,
+            3.15
+          ],
+          "a2": [
+            0,
+            -1,
+            0
+          ],
+          "w": [
+            1,
+            0,
+            0,
+            0
+          ],
+          "e": [
+            0,
+            1,
+            0,
+            0
+          ]
+        },
+        {
+          "name": "rdr",
+          "kind": "chain",
+          "nodes": "/Object_3$",
+          "box": [
+            -2.25,
+            -1.8,
+            -0.3,
+            0.2
+          ],
+          "zmin": 4,
+          "pivot": [
+            -0.65,
+            -0.05,
+            2.55
+          ],
+          "axis": "z",
+          "q": [
+            -2.035,
+            -0.045,
+            4
+          ],
+          "a2": [
+            0,
+            0,
+            1
+          ],
+          "w": [
+            1,
+            0,
+            0,
+            0
+          ],
+          "e": [
+            0,
+            0,
+            1,
+            0
+          ]
+        },
+        {
+          "name": "tur",
+          "kind": "rot",
+          "nodes": "/Object_3$",
+          "pivot": [
+            -0.65,
+            -0.05,
+            2.55
+          ],
+          "axis": "z",
+          "w": [
+            1,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "name": "whl",
+          "kind": "each",
+          "nodes": "/Object_4$",
+          "minTris": 3000,
+          "axis": "y",
+          "roll": true
+        }
+      ],
+      "tri0": 60000,
+      "tri0Flags": [
+        "Permissive"
+      ],
+      "texMax": 2048
+    },
+    "pzh2000": {
+      "name": "PzH 2000 自行榴弹炮（代 PLZ-07）",
+      "glb": "pzh2000/scene.gltf",
+      "fwd": "+z",
+      "up": "+y",
+      "len": 11.67,
+      "roughMin": 0.6,
+      "opaque": true,
+      "credit": {
+        "title": "PANZERHAUBITZE 2000 ARTILLERY (PzH-2000)",
+        "author": "Muhamad Mirza Arrafi",
+        "url": "https://sketchfab.com/3d-models/panzerhaubitze-2000-artillery-pzh-2000-da078be6bc66461e87034f29600a4982",
+        "license": "CC-BY-4.0",
+        "lurl": "http://creativecommons.org/licenses/by/4.0/"
+      },
+      "parts": [
+        {
+          "name": "gun",
+          "kind": "chain",
+          "nodes": "cannon",
+          "pivot": [
+            -3.46,
+            0,
+            1.9
+          ],
+          "axis": "z",
+          "q": [
+            -1.3,
+            0,
+            2.57
+          ],
+          "a2": [
+            0,
+            -1,
+            0
+          ],
+          "w": [
+            1,
+            0,
+            0,
+            0
+          ],
+          "e": [
+            0,
+            1,
+            0,
+            0
+          ],
+          "w2": [
+            0,
+            0,
+            1,
+            0
+          ]
+        },
+        {
+          "name": "tur",
+          "kind": "rot",
+          "nodes": "g_turret|antenna_long",
+          "pivot": [
+            -3.46,
+            0,
+            1.9
+          ],
+          "axis": "z",
+          "w": [
+            1,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "name": "whl",
+          "kind": "each",
+          "nodes": "wheel\\d",
+          "byNode": true,
+          "axis": "y",
+          "roll": true
+        }
+      ],
+      "texMax": 2048
+    },
+    "lav25": {
+      "name": "LAV-25 轮式装甲车（代 ZSL-92B、08 式）",
+      "glb": "lav25/scene.gltf",
+      "fwd": "+x",
+      "up": "+y",
+      "len": 6.39,
+      "roughMin": 0.6,
+      "opaque": true,
+      "credit": {
+        "title": "LAV-25",
+        "author": "42manako",
+        "url": "https://sketchfab.com/3d-models/lav-25-968b0681119a4b3e82d94bb085a790be",
+        "license": "CC-BY-4.0",
+        "lurl": "http://creativecommons.org/licenses/by/4.0/"
+      },
+      "parts": [
+        {
+          "name": "gun",
+          "kind": "chain",
+          "any": [
+            {
+              "nodes": "Body1Mtl_0",
+              "box": [
+                -0.3,
+                1.8,
+                -0.3,
+                0.22
+              ],
+              "zmin": 1.99
+            },
+            {
+              "nodes": "Body1Mtl_0",
+              "box": [
+                0,
+                0.25,
+                -0.3,
+                -0.1
+              ],
+              "zmin": 2.05
+            }
+          ],
+          "pivot": [
+            -1.05,
+            0.1,
+            1.95
+          ],
+          "axis": "z",
+          "q": [
+            -0.25,
+            0.03,
+            2.16
+          ],
+          "a2": [
+            0,
+            -1,
+            0
+          ],
+          "w": [
+            1,
+            0,
+            0,
+            0
+          ],
+          "e": [
+            0,
+            1,
+            0,
+            0
+          ],
+          "w2": [
+            0,
+            0,
+            1,
+            0
+          ]
+        },
+        {
+          "name": "tur",
+          "kind": "rot",
+          "any": [
+            {
+              "nodes": "Body1Mtl_0",
+              "zmin": 1.9
+            },
+            {
+              "nodes": "Mg21Mtl|Stock1Mtl|RlWheel1Mtl_0|AmmoBox1Mtl|Glass1Mtl"
+            }
+          ],
+          "pivot": [
+            -1.05,
+            0.1,
+            1.95
+          ],
+          "axis": "z",
+          "w": [
+            1,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "name": "whl",
+          "kind": "each",
+          "nodes": "RlWheel1Mtl\\.001",
+          "cluster": 0.7,
+          "axis": "y",
+          "roll": true
+        }
+      ],
+      "tri0": 50000,
+      "tri0Flags": [
+        "Permissive"
+      ],
+      "texMax": 2048
+    },
+    "f22": {
+      "name": "F-22A 猛禽",
+      "glb": "f22/scene.gltf",
+      "fwd": "-x",
+      "up": "+y",
+      "len": 18.92,
+      "roughMin": 0.45,
+      "opaque": true,
+      "texMax": 2048,
+      "credit": {
+        "title": "Lockheed Martin F-22 \"Raptor\"",
+        "author": "andertan",
+        "url": "https://sketchfab.com/3d-models/lockheed-martin-f-22-raptor-7e7b3c372e374dda98e70208d09cfdcf",
+        "license": "CC-BY-4.0",
+        "lurl": "http://creativecommons.org/licenses/by/4.0/"
+      },
+      "parts": [
+        {
+          "name": "gear",
+          "kind": "hide",
+          "slot": 0,
+          "triBelow": 0.85
+        }
+      ]
+    },
+    "f35": {
+      "name": "F-35A 闪电 II",
+      "glb": "f35/scene.gltf",
+      "fwd": "+z",
+      "up": "+y",
+      "len": 15.67,
+      "roughMin": 0.45,
+      "opaque": true,
+      "texMax": 2048,
+      "credit": {
+        "title": "Lockheed Martin F35 Lightning II",
+        "author": "andertan",
+        "url": "https://sketchfab.com/3d-models/lockheed-martin-f35-lightning-ii-db911de503c74285a8d506951df786d6",
+        "license": "CC-BY-4.0",
+        "lurl": "http://creativecommons.org/licenses/by/4.0/"
+      },
+      "parts": [
+        {
+          "name": "gear",
+          "kind": "hide",
+          "slot": 0,
+          "triBelow": 1.12
+        }
+      ]
+    },
+    "a10": {
+      "name": "A-10C 雷电 II",
+      "glb": "a10/scene.gltf",
+      "fwd": "-z",
+      "up": "+y",
+      "len": 16.26,
+      "roughMin": 0.45,
+      "opaque": true,
+      "texMax": 2048,
+      "credit": {
+        "title": "A-10 Thunderbolt II",
+        "author": "AIRMAN Magazine",
+        "url": "https://sketchfab.com/3d-models/a-10-thunderbolt-ii-9521ff6ba5d448958ea45a89e94ab23d",
+        "license": "CC-BY-4.0",
+        "lurl": "http://creativecommons.org/licenses/by/4.0/"
+      },
+      "parts": [
+        {
+          "name": "gear",
+          "kind": "hide",
+          "slot": 0,
+          "triBelow": 0.5
+        }
+      ]
+    },
+    "ah64": {
+      "name": "AH-64D 阿帕奇",
+      "glb": "ah64/scene.gltf",
+      "fwd": "+x",
+      "up": "+y",
+      "len": 17.73,
+      "roughMin": 0.45,
+      "opaque": true,
+      "texMax": 2048,
+      "credit": {
+        "title": "Boeing AH-64D Apache Combat Helicopter",
+        "author": "Muhamad Mirza Arrafi",
+        "url": "https://sketchfab.com/3d-models/boeing-ah-64d-apache-combat-helicopter-c3b58008c46b45048fdd7dd283a3c8c8",
+        "license": "CC-BY-4.0",
+        "lurl": "http://creativecommons.org/licenses/by/4.0/"
+      },
+      "parts": []
+    },
+    "uh60": {
+      "name": "UH-60M 黑鹰",
+      "glb": "uh60/scene.gltf",
+      "fwd": "+z",
+      "up": "+y",
+      "len": 19.76,
+      "roughMin": 0.45,
+      "opaque": true,
+      "texMax": 2048,
+      "credit": {
+        "title": "Sikorsky UH-60M Blackhawk",
+        "author": "Muhamad Mirza Arrafi",
+        "url": "https://sketchfab.com/3d-models/sikorsky-uh-60m-blackhawk-12b4e525676a49678ac3006b360c8750",
+        "license": "CC-BY-4.0",
+        "lurl": "http://creativecommons.org/licenses/by/4.0/"
+      },
+      "parts": []
+    },
+    "c17": {
+      "name": "C-17A 环球霸王 III",
+      "glb": "c17/scene.gltf",
+      "fwd": "-z",
+      "up": "+y",
+      "len": 53.04,
+      "roughMin": 0.45,
+      "opaque": true,
+      "texMax": 1024,
+      "credit": {
+        "title": "C-17 Globemaster III",
+        "author": "KOG_THORNS",
+        "url": "https://sketchfab.com/3d-models/c-17-globemaster-iii-552f88697c7f4aeebf254f7cb9f239ed",
+        "license": "CC-BY-4.0",
+        "lurl": "http://creativecommons.org/licenses/by/4.0/"
+      },
+      "parts": [
+        {
+          "name": "gear",
+          "kind": "hide",
+          "slot": 0,
+          "triBelow": 1.6
+        }
+      ],
+      "tri0": 80000,
+      "tri0Flags": [
+        "Permissive"
+      ]
+    },
+    "b2": {
+      "name": "B-2A 幽灵",
+      "glb": "b2/scene.gltf",
+      "fwd": "+z",
+      "up": "+y",
+      "len": 20.9,
+      "roughMin": 0.45,
+      "opaque": true,
+      "texMax": 2048,
+      "credit": {
+        "title": "B2 Spirit",
+        "author": "dannzjs",
+        "url": "https://sketchfab.com/3d-models/b2-spirit-d1fb2607daa44dde8efcdcd870655262",
+        "license": "CC-BY-4.0",
+        "lurl": "http://creativecommons.org/licenses/by/4.0/"
+      },
+      "parts": [
+        {
+          "name": "gear",
+          "kind": "hide",
+          "slot": 0,
+          "triBelow": 0.33
+        }
+      ]
+    },
+    "p8": {
+      "name": "P-8A 波塞冬",
+      "glb": "p8/scene.gltf",
+      "fwd": "-z",
+      "up": "+y",
+      "len": 39.47,
+      "roughMin": 0.45,
+      "opaque": true,
+      "texMax": 2048,
+      "credit": {
+        "title": "Boeing P-8 Poseidon",
+        "author": "Muhamad Mirza Arrafi",
+        "url": "https://sketchfab.com/3d-models/boeing-p-8-poseidon-3fc134024b69403bb5df5ab3aff48919",
+        "license": "CC-BY-4.0",
+        "lurl": "http://creativecommons.org/licenses/by/4.0/"
+      },
+      "parts": [
+        {
+          "name": "gear",
+          "kind": "hide",
+          "slot": 0,
+          "triBelow": 1.9
+        }
+      ]
+    },
+    "mq9": {
+      "name": "MQ-9A 死神（代攻击-2）",
+      "glb": "mq9/scene.gltf",
+      "fwd": "-y",
+      "up": "+z",
+      "len": 11,
+      "roughMin": 0.45,
+      "opaque": true,
+      "texMax": 2048,
+      "credit": {
+        "title": "MQ-9",
+        "author": "IProZenoN",
+        "url": "https://sketchfab.com/3d-models/mq-9-fabe963feb354c5584b51f9c470c3f7e",
+        "license": "CC-BY-4.0",
+        "lurl": "http://creativecommons.org/licenses/by/4.0/"
+      },
+      "parts": [
+        {
+          "name": "gear",
+          "kind": "hide",
+          "slot": 0,
+          "triBelow": 1.15
+        }
+      ]
+    },
+    "j15": {
+      "name": "歼-15 飞鲨（代歼-15T、歼-16D）",
+      "glb": "j15/scene.gltf",
+      "fwd": "-z",
+      "up": "+y",
+      "len": 21.9,
+      "roughMin": 0.45,
+      "opaque": true,
+      "texMax": 2048,
+      "credit": {
+        "title": "PLA Navy Shenyang J-15",
+        "author": "42manako",
+        "url": "https://sketchfab.com/3d-models/pla-navy-shenyang-j-15-f2bf5c1e2e654ee6819b696b6095a552",
+        "license": "CC-BY-4.0",
+        "lurl": "http://creativecommons.org/licenses/by/4.0/"
+      },
+      "parts": [
+        {
+          "name": "gear",
+          "kind": "hide",
+          "slot": 0,
+          "triBelow": 1.35
+        }
+      ],
+      "tri0": 60000,
+      "tri0Flags": [
+        "Permissive"
+      ]
+    },
+    "j36": {
+      "name": "歼-36",
+      "glb": "j36/scene.gltf",
+      "fwd": "+z",
+      "up": "+y",
+      "len": 23,
+      "roughMin": 0.45,
+      "opaque": true,
+      "texMax": 2048,
+      "credit": {
+        "title": "Chengdu J-36 Fighter China",
+        "author": "Chenzoss",
+        "url": "https://sketchfab.com/3d-models/chengdu-j-36-fighter-china-d5b40a31f2894b25882a7167d1d2a17d",
+        "license": "CC-BY-4.0",
+        "lurl": "http://creativecommons.org/licenses/by/4.0/"
+      },
+      "parts": [],
+      "tri0": 60000,
+      "tri0Flags": [
+        "Permissive"
+      ],
+      "level": true
+    },
+    "j50": {
+      "name": "歼-50",
+      "glb": "j50/scene.gltf",
+      "fwd": "-x",
+      "up": "+y",
+      "len": 18,
+      "roughMin": 0.45,
+      "opaque": true,
+      "texMax": 2048,
+      "credit": {
+        "title": "Shenyang J-50",
+        "author": "Chenzoss",
+        "url": "https://sketchfab.com/3d-models/shenyang-j-50-6b0cb86c094048ea811ef0faf570b4b9",
+        "license": "CC-BY-4.0",
+        "lurl": "http://creativecommons.org/licenses/by/4.0/"
+      },
+      "parts": [],
+      "tri0": 60000,
+      "tri0Flags": [
+        "Permissive"
+      ]
+    },
+    "y20": {
+      "name": "运-20 鲲鹏",
+      "glb": "y20/scene.gltf",
+      "fwd": "-x",
+      "up": "+y",
+      "len": 47,
+      "roughMin": 0.45,
+      "opaque": true,
+      "texMax": 2048,
+      "credit": {
+        "title": "Xi'an Y20 \"Kunpeng\"",
+        "author": "andertan",
+        "url": "https://sketchfab.com/3d-models/xian-y20-kunpeng-40ce0195eb07494f83304574aafbb3bc",
+        "license": "CC-BY-4.0",
+        "lurl": "http://creativecommons.org/licenses/by/4.0/"
+      },
+      "parts": [
+        {
+          "name": "gear",
+          "kind": "hide",
+          "slot": 0,
+          "triBelow": 1.3
+        }
+      ]
+    },
+    "h6k": {
+      "name": "轰-6",
+      "glb": "h6k/scene.gltf",
+      "fwd": "-z",
+      "up": "+y",
+      "len": 34.8,
+      "roughMin": 0.45,
+      "opaque": true,
+      "texMax": 2048,
+      "credit": {
+        "title": "Chinese Xi'an H-6",
+        "author": "42manako",
+        "url": "https://sketchfab.com/3d-models/chinese-xian-h-6-6990848462c54f4397cce71dffa1409f",
+        "license": "CC-BY-4.0",
+        "lurl": "http://creativecommons.org/licenses/by/4.0/"
+      },
+      "parts": [
+        {
+          "name": "gear",
+          "kind": "hide",
+          "slot": 0,
+          "triBelow": 2
+        }
+      ]
+    },
+    "e2d": {
+      "name": "E-2D 先进鹰眼（代空警-600）",
+      "glb": "e2d/scene.gltf",
+      "fwd": "+z",
+      "up": "+y",
+      "len": 17.6,
+      "roughMin": 0.45,
+      "opaque": true,
+      "texMax": 2048,
+      "credit": {
+        "title": "Grumman E-2D Advanced Hawkeye",
+        "author": "Muhamad Mirza Arrafi",
+        "url": "https://sketchfab.com/3d-models/grumman-e-2d-advanced-hawkeye-0082cf8f15044cfd80ebd4e11b96789d",
+        "license": "CC-BY-4.0",
+        "lurl": "http://creativecommons.org/licenses/by/4.0/"
+      },
+      "parts": [
+        {
+          "name": "gear",
+          "kind": "hide",
+          "slot": 0,
+          "triBelow": 1.2
+        }
+      ]
+    },
+    "x47b": {
+      "name": "X-47B（代攻击-11）",
+      "glb": "x47b/scene.gltf",
+      "fwd": "-z",
+      "up": "+y",
+      "len": 11.63,
+      "roughMin": 0.45,
+      "opaque": true,
+      "texMax": 2048,
+      "credit": {
+        "title": "Northrop Grumman X-47B",
+        "author": "yakudami",
+        "url": "https://sketchfab.com/3d-models/northrop-grumman-x-47b-8d5fa8ab10ba4b8486d40248eeb9332d",
+        "license": "CC-BY-4.0",
+        "lurl": "http://creativecommons.org/licenses/by/4.0/"
+      },
+      "parts": [
+        {
+          "name": "gear",
+          "kind": "hide",
+          "slot": 0,
+          "triBelow": 0.82
+        }
+      ]
+    },
+    "rq4": {
+      "name": "RQ-4 全球鹰（代无侦-7）",
+      "glb": "rq4/scene.gltf",
+      "fwd": "+z",
+      "up": "+y",
+      "len": 14.5,
+      "roughMin": 0.45,
+      "opaque": true,
+      "texMax": 2048,
+      "credit": {
+        "title": "RQ4_global_hawk",
+        "author": "kio",
+        "url": "https://sketchfab.com/3d-models/rq4-global-hawk-dd87adcff26b46e58639e9256f5301c4",
+        "license": "CC-BY-4.0",
+        "lurl": "http://creativecommons.org/licenses/by/4.0/"
+      },
+      "parts": [
+        {
+          "name": "gear",
+          "kind": "hide",
+          "slot": 0,
+          "triBelow": 0.45
+        }
+      ]
+    }
+  },
+  "sets": {
+    "1": {
+      "title": "300 followers - free aircraft missile set",
+      "author": "NETRUNNER_pl",
+      "url": "https://sketchfab.com/3d-models/300-followers-free-aircraft-missile-set-2e70bc2ea0824897b2ccaea378809c9e",
+      "license": "CC-BY-4.0",
+      "lurl": "http://creativecommons.org/licenses/by/4.0/"
+    }
+  }
+}
