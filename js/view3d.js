@@ -202,7 +202,7 @@ void main() {
       float ek = uRing > .5 ? 0. : smoothstep(0., 400., min(min(w.x, uWorld.x - w.x), min(w.y, uWorld.y - w.y)));
       vec4 k3 = texture2D(uCls3, w / uWorld) * ek;
 #ifdef DER
-      float fwm = max(FW(w.x), FW(w.y)) * 1.4;   // 一个像素在海面上有几米
+      float fwm = max(max(FW(w.x), FW(w.y)) * 1.4, vDp * .0012);   // 一个像素在海面上有几米；再按距离保底（屏幕导数在个别显卡上不可靠）
 #else
       float fwm = vDp * .002;
 #endif
@@ -677,6 +677,16 @@ function v3Ht(x, y) {
   const fx = clamp(x / (CELL * V3_ST), 0, V3.nx - 1.001), fy = clamp(y / (CELL * V3_ST), 0, V3.ny - 1.001), i = Math.floor(fx), j = Math.floor(fy), u = fx - i, v = fy - j, H = V3.hf, n = V3.nx;
   return lerp(lerp(H[j * n + i], H[j * n + i + 1], u), lerp(H[(j + 1) * n + i], H[(j + 1) * n + i + 1], u), v);
 }
+// 地图外也能问地面高度（飞机飞出图、镜头不钻地用）：有无边海面时，北面延伸的岛按那张高度表，别处是海面；没有时照旧取图边
+function v3HtX(x, y) {
+  if (x >= 0 && y >= 0 && x <= W && y <= H || !V3.ocean) return v3Ht(clamp(x, 0, W - 1), clamp(y, 0, H - 1));
+  const E = typeof V3_OC === 'object' && V3_OC.ext;
+  if (E && y < 0 && x >= 0 && x <= (E.nx - 1) * E.d) {
+    const fk = Math.min(E.K - 1.001, -y / E.ds), fi = Math.min(E.nx - 1.001, x / E.d), k = Math.floor(fk), i = Math.floor(fi), u = fi - i, v = fk - k, Z = E.hz, n = E.nx;
+    if (k < E.K) return Math.max(-3, lerp(lerp(Z[k * n + i], Z[k * n + i + 1], u), lerp(Z[(k + 1) * n + i], Z[(k + 1) * n + i + 1], u), v));
+  }
+  return -3;
+}
 // 网格：地形 + 四边围边（沙盘侧壁，法线 z = -1 作标记）；桥被炸 / 地形变了按签名重建
 function v3Mesh() {
   // 每格一个顶点要 32 位索引；细网格的部分（大海域地图只到寻路带）超过 30 万格时每 2 格一个（默认大地图 8400 × 5600 近百万个三角形，手机画不动）
@@ -691,9 +701,10 @@ function v3Mesh() {
   const jMax = TER.pathY ? Math.min(ny - 1, Math.ceil(TER.pathY / d) + 2) : ny - 1;
   for (let j = 0; j <= jMax; j++) for (let i = 0; i < nx; i++) { const p = P(i, j), n = nor(i, j); verts.push(p[0], p[1], p[2], n[0], n[1], n[2]); }
   for (let j = 0; j < jMax; j++) for (let i = 0; i < nx - 1; i++) { const a = j * nx + i, b = a + 1, c = a + nx, e = c + 1; idx.push(a, c, b, b, c, e); }
-  // 远海平面切成约 250 米一格：原来是一整块（几公里长的两个三角形），苹果 M 系列等显卡在这么大的三角形上插值精度不够，
-  //   逐像素算的到镜头距离、视线方向乱跳——海面成一片雾色 / 海色随机交替的方块噪点（软件渲染器精度高，看不出来）
-  const FS = 250, fk = Math.max(1, Math.round(FS / d));
+  // 远海平面切成约 40 米一格：苹果 M 系列等显卡在屏幕上占很大一块的三角形上插值精度不够，逐像素算的到镜头距离、视线方向乱跳——
+  //   海面成一片雾色 / 海色随机交替的方块噪点（软件渲染器精度高，看不出来）。原来 250 米一格，镜头在航母甲板上（离海面十几米）时
+  //   脚下一格就占半个屏幕，照样满屏噪点
+  const FS = 40, fk = Math.max(1, Math.round(FS / d));
   if (jMax < ny - 1) {
     const s0 = verts.length / 6, zs = hf[jMax * nx], y0 = -jMax * d, y1 = -(ny - 1) * d, x1 = (nx - 1) * d;
     const cx = Math.max(1, Math.ceil(x1 / FS)), cy = Math.max(1, Math.ceil((y0 - y1) / FS));
@@ -754,9 +765,9 @@ function v3OceanBuild(d) {
   V3_OC.ext = null;
   if (!V3.ocean) return;
   V3.ocRect = [0, 0, (V3.nx - 1) * d, (V3.ny - 1) * d];
-  // 无边海面网格：[-1, 1]² 上每边 24 段、按等比从中间往外加宽（第一段约是半边长的 0.5%）
+  // 无边海面网格：[-1, 1]² 上每边 48 段、按等比从中间往外加宽（每格比里面一格宽 8%，在屏幕上大约都是 5° 见方——同上，三角形不能太大）
   if (!V3_OC.b) {
-    const K = 24, a = .16, t = k => (Math.exp(a * k) - 1) / (Math.exp(a * K) - 1), xs = [];
+    const K = 48, a = .08, t = k => (Math.exp(a * k) - 1) / (Math.exp(a * K) - 1), xs = [];
     for (let k = K; k > 0; k--) xs.push(-t(k));
     xs.push(0); for (let k = 1; k <= K; k++) xs.push(t(k));
     const N = xs.length, v = [], ix = [];

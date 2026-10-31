@@ -200,6 +200,18 @@ const fpCurve = v => Math.sign(v) * ((1 - FP_EXPO) * Math.abs(v) + FP_EXPO * Mat
 const fpRamp = (v, t, dt) => { const k = Math.abs(t) > Math.abs(v) && Math.sign(t) === Math.sign(v || t) ? 3.2 : 5; return v + clamp(t - v, -k * dt, k * dt); };   // 推满约 0.3 秒、回中约 0.2 秒
 const fpAc = o => (typeof FL_AC === 'object' && typeof flKey === 'function' && FL_AC[flKey(o)]) || { nz: [-3, 8], Tm: 1.3e5, Ta: 2e5, L: 17, pmax: 3 };   // 飞控参数（flight.js：推力、过载限制、机长）
 const fpLen = o => fpAc(o).L || 17;
+// 画面用的位置、姿态：上一步与这一步之间按主循环里攒下、还没推演的时间插值（main.js 的 acc，每步 1/30 秒）
+function fpRS(o) {
+  const F = o.fl;
+  if (!F) return null;
+  const a = F.P0 && typeof acc === 'number' ? clamp(acc * 30, 0, 1) : 1, P0 = F.P0 || F.P, q0 = F.q0 || F.q;
+  const P = [lerp(P0[0], F.P[0], a), lerp(P0[1], F.P[1], a), lerp(P0[2], F.P[2], a)];
+  const dq = q0[0] * F.q[0] + q0[1] * F.q[1] + q0[2] * F.q[2] + q0[3] * F.q[3], sg = dq < 0 ? -1 : 1;   // 四元数取同一半球再插
+  const q = [0, 1, 2, 3].map(i => lerp(q0[i] * sg, F.q[i], a)), ql = Math.hypot(...q) || 1;
+  for (let i = 0; i < 4; i++) q[i] /= ql;
+  const [phi, th, psi] = flEul(q);
+  return { x: P[1], y: -P[0], z: -P[2], heading: Math.atan2(-Math.cos(psi), Math.sin(psi)), pitch: th, roll: phi, q };
+}
 // 瞄准方向（鼠标瞄准）：方位 aim[0]（游戏坐标角，0 朝东）、俯仰 aim[1]（可以超过 90°——拉筋斗时顺着翻过去）；GL 坐标（y 朝北）
 const fpAimDir = () => { const [y, p] = V3FP.aim, c = Math.cos(p); return [c * Math.cos(y), -c * Math.sin(y), Math.sin(p)]; };
 const fpAimUp = () => { const [y, p] = V3FP.aim, s = Math.sin(p); return [-s * Math.cos(y), s * Math.sin(y), Math.cos(p)]; };
@@ -207,7 +219,7 @@ const fpAimUp = () => { const [y, p] = V3FP.aim, s = Math.sin(p); return [-s * M
 function fpBody(o) {
   const F = o && o.fl;
   if (!F) { const P = fpPose(); return fpAxes(P); }
-  const R = flRot(F.q);
+  const R = flRot(fpRS(o).q);
   return { f: [R[3], R[0], -R[6]], u: [-R[5], -R[2], R[8]], r: [R[4], R[1], -R[7]], R };
 }
 // 教官：把机头带到瞄准方向（返回杆量 x 压杆、y 拉杆、r 蹬舵）
@@ -274,14 +286,17 @@ function fpFly(p, dt) {
       const B = fpBody(p); V3FP.aim = [Math.atan2(-B.f[1], B.f[0]), Math.asin(clamp(B.f[2], -1, 1))];
     } else { x = S0.x; y = S0.y; r = Math.abs(mr) > .02 ? fpCurve(mr) : S0.r; }
   }
-  // 离开作战区域 400 以外：自动驾驶转回来（压坡度对准地图中心、带一点杆），瞄准方向也跟着转过去
-  V3FP.ap = p.x < -400 || p.x > W + 400 || p.y < -400 || p.y > H + 400;
-  if (V3FP.ap) {
-    const e = airAng(Math.atan2(H / 2 - p.y, W / 2 - p.x) - p.heading);
-    x = clamp(Math.sign(e) * Math.min(1, Math.abs(e)) * 1.2 - clamp(p.bank, -1.2, 1.2) * .9, -1, 1); y = .45; r = 0;
-    V3FP.aim = [Math.atan2(H / 2 - p.y, W / 2 - p.x), 0];
+  // 离开作战区域（地图外 1.5 公里；海岛这种四周是无边海面的 5 公里）：自动驾驶转回来（压坡度对准地图中心、带一点杆），瞄准方向也跟着转过去
+  const mg = V3.ocean ? 5000 : 1500;
+  V3FP.ap = p.x < -mg || p.x > W + mg || p.y < -mg || p.y > H + mg;
+  if (V3FP.ap) {   // 交给教官：准星对着地图中心、低了往上抬一点（原来直接压大坡度拉杆，掉头时升力不够，螺旋往下掉、撞了山）
+    const agl = -F.P[2] - flGround(F.P[0], F.P[1]);
+    V3FP.aim = [Math.atan2(H / 2 - p.y, W / 2 - p.x), clamp((900 - agl) / 1500, .08, .35)];   // 准星总在地平线以上：转弯带一点爬升（准星和地平线齐平时要压到 90° 坡度转，升力全在水平方向，一路往下掉）
+    V3FP.thr = 1; if (F.Va < 170) V3FP.ab = true;
+    const I = fpInstr(F); x = I.x; y = I.y; r = I.r;
   }
   V3FP.inp = { x, y, r };
+  F.P0 = F.P.slice(); F.q0 = F.q.slice();   // 上一步的位置、姿态：画面按这一步走了多少插值（推演每秒 30 步，画面 60 帧以上，不插值飞机一顿一顿地抖）
   const hit = flStep(F, dt, { x, y, r, thr: ab ? 1 : V3FP.thr, ab, law: V3FP.ap ? 'n' : V3FP.law });
   flToGame(p);
   p.fpFF = F.ff;
@@ -459,8 +474,8 @@ function fpPose() {
   if (V3FP.k === 'air') {
     const F = o.fl;
     if (!F) return { x: o.x, y: o.y, z: v3AirZ(o), yaw: o.heading || 0, pitch: 0, roll: o.bank || 0 };   // 刚接手、物理状态还没建
-    const [phi, th, psi] = flEul(F.q);
-    return { x: F.P[1], y: -F.P[0], z: -F.P[2], yaw: Math.atan2(-Math.cos(psi), Math.sin(psi)), pitch: th, roll: phi, F };
+    const r = fpRS(o);
+    return { x: r.x, y: r.y, z: r.z, yaw: r.heading, pitch: r.pitch, roll: r.roll, F };
   }
   const L = fpShipLen(o), h = o.heading ?? -1.57, t = performance.now() / 1000;
   return { x: o.x + Math.cos(h) * L * .1, y: o.y + Math.sin(h) * L * .1, z: -2.6 + L * .17, yaw: h, pitch: -.03 + Math.sin(t * .7) * .006, roll: Math.sin(t * .5) * .012 };   // 舰随浪轻轻摇
@@ -499,15 +514,16 @@ function fpChaseCam(P) {
   const bw = V3FP.bw = clamp((V3FP.bw ?? 0) + (V3FP.ctl === 'aim' && o.fl && !V3FP.man ? -dt : dt) * 2.5, 0, 1);
   let f = V3FP.cf, c = V3FP.cu;
   if (bw < 1) { const a = fpAimDir(), au = fpAimUp(); f = v3Norm([a[0] + (f[0] - a[0]) * bw, a[1] + (f[1] - a[1]) * bw, a[2] + (f[2] - a[2]) * bw]); c = [au[0] + (c[0] - au[0]) * bw, au[1] + (c[1] - au[1]) * bw, au[2] + (c[2] - au[2]) * bw]; }
-  const q0 = v3Dot(c, f);
-  let u = v3Norm([c[0] - f[0] * q0, c[1] - f[1] * q0, c[2] - f[2] * q0]);
+  // 镜头上方：平时取世界的「上」（横滚时地平线不跟着转，看得见飞机在滚）；机头接近竖直（拉筋斗）时世界的上方没法用，换成机体的上方，顺着翻过去
+  const cl = [0, 0, 1], wv = smooth(.82, .97, Math.abs(f[2])), cm = [cl[0] + (c[0] - cl[0]) * wv, cl[1] + (c[1] - cl[1]) * wv, cl[2] + (c[2] - cl[2]) * wv], q0 = v3Dot(cm, f);
+  let u = v3Norm([cm[0] - f[0] * q0, cm[1] - f[1] * q0, cm[2] - f[2] * q0]);
   // 自由视角：松开 C 后慢慢转回机尾后方
   if (!V3FP.free && !V3FP.gpLook) { const kb = 1 - Math.exp(-dt * 4); V3FP.orb[0] *= 1 - kb; V3FP.orb[1] *= 1 - kb; }
   if (Math.abs(V3FP.orb[0]) + Math.abs(V3FP.orb[1]) > 1e-4) { f = fpRot(f, u, -V3FP.orb[0]); const r = v3Norm(v3Cross(f, u)); f = fpRot(f, r, V3FP.orb[1]); u = fpRot(u, r, V3FP.orb[1]); }
   const sh = fpShake();
   if (sh) { const r = v3Norm(v3Cross(f, u)); f = v3Norm([f[0] + r[0] * sh[0] + u[0] * sh[1], f[1] + r[1] * sh[0] + u[1] * sh[1], f[2] + r[2] * sh[0] + u[2] * sh[1]]); }
   const T = [P.x, -P.y, P.z], E = [T[0] - f[0] * d + u[0] * d * .16, T[1] - f[1] * d + u[1] * d * .16, T[2] - f[2] * d + u[2] * d * .16];
-  const g = v3Ht(clamp(E[0], 0, W - 1), clamp(-E[1], 0, H - 1));
+  const g = typeof v3HtX === 'function' ? v3HtX(E[0], -E[1]) : v3Ht(clamp(E[0], 0, W - 1), clamp(-E[1], 0, H - 1));
   if (E[2] < g + 3) E[2] = g + 3;   // 不钻到地面以下
   const z = [-f[0], -f[1], -f[2]], x = v3Norm(v3Cross(u, z)), y = v3Cross(z, x), alt = Math.max(1, E[2] - Math.max(g, -2.6));
   V3FP.camF = f;
@@ -520,12 +536,13 @@ const fpPitOn = o => { if (!o || typeof V3G_PIT !== 'object') return false; cons
 function fpMdlXf(o) {
   const key = typeof airSilKey === 'function' ? airSilKey(o.kind, o.v) : 'j35', M = V3G.M[fpMdlKey(o)], sz = airMdl(o.kind, o.v).size || ((typeof AIR_SPEC === 'object' && AIR_SPEC[o.kind]) || {}).size || 15;
   // 甲板上（登机、牵引、弹射）：和航母画的一样，机轮贴着飞行甲板顶面（升降机上的跟着平台升降），机身不俯仰
-  const k = sz / M.meta.len, zc = M.meta.zc, dk = fpOnDeck(o) && typeof CVG === 'object' ? -2.6 + CVG.zd - CVG.hang * (typeof cvDeckSink === 'function' ? cvDeckSink(o) : 0) : null;
-  const Ln = dk == null && typeof v3dLaunch === 'function' ? v3dLaunch(o) : null, z = dk != null ? dk + zc * k : v3AirZ(o) + (Ln ? Ln.dz : 0);
-  const pt = dk != null ? 0 : o.fl ? o.pt3 || 0 : typeof V3G_HELI === 'object' && V3G_HELI[key] ? 0 : typeof v3dPitch === 'function' ? v3dPitch(o, 0, z, Ln, key) : 0, h = o.heading || 0, rl = dk != null ? 0 : o.bank || 0;   // 物理引擎在飞：机身姿态就是它的
+  const k = sz / M.meta.len, zc = M.meta.zc, dk = fpOnDeck(o) && typeof CVG === 'object' ? -2.6 + CVG.zd - CVG.hang * (typeof cvDeckSink === 'function' ? cvDeckSink(o) : 0) : null, rs = o.fl && o.fp ? fpRS(o) : null;
+  const Ln = dk == null && !rs && typeof v3dLaunch === 'function' ? v3dLaunch(o) : null, z = dk != null ? dk + zc * k : rs ? rs.z : v3AirZ(o) + (Ln ? Ln.dz : 0);
+  const pt = dk != null ? 0 : rs ? rs.pitch : typeof V3G_HELI === 'object' && V3G_HELI[key] ? 0 : typeof v3dPitch === 'function' ? v3dPitch(o, 0, z, Ln, key) : 0, h = rs ? rs.heading : o.heading || 0, rl = dk != null ? 0 : rs ? rs.roll : o.bank || 0;   // 物理引擎在飞：机身姿态就是它的（插值后的）
+  const ox = rs ? rs.x : o.x, oy = rs ? rs.y : o.y;
   const rot = v => v3dMv3(h, pt, rl, v);
   V3FP.mdlPt = pt;   // 模型（机身）的俯仰 = 航迹角 + 迎角：平显的俯仰梯按它画，才和窗外的地平线对得上
-  return { rot, pt: v => { const r = rot([v[0] * k, v[1] * k, (v[2] - zc) * k]); return [o.x + r[0], -o.y + r[1], z + r[2]]; } };
+  return { rot, pt: v => { const r = rot([v[0] * k, v[1] * k, (v[2] - zc) * k]); return [ox + r[0], -oy + r[1], z + r[2]]; } };
 }
 // 座舱里头的转动：鼠标瞄准时头转向准星（像《战争雷霆》的座舱瞄准），按住 C 自由看；抖振时加一点抖动
 function fpHead(o, dt) {
@@ -544,7 +561,8 @@ function fpPitCam() {
   V3FP.ht = now;
   let f = v3Norm(X.rot([1, 0, 0])), u = v3Norm(X.rot([0, 0, 1]));
   // 头随过载下沉 / 上浮（每 g 约 1.2 厘米，最多 9 厘米）：受力回馈
-  const nz = V3FP.ffb && o.fl ? o.fl.nz : 1, dn = clamp((nz - 1) * .012, -.05, .09), E0 = X.pt(cf.eye), E = [E0[0] - u[0] * dn, E0[1] - u[1] * dn, E0[2] - u[2] * dn];
+  const nz = V3FP.ffb && o.fl ? o.fl.nz : 1; V3FP.hdn = (V3FP.hdn || 0) + (clamp((nz - 1) * .012, -.05, .09) - (V3FP.hdn || 0)) * Math.min(1, dt * 6);
+  const dn = V3FP.hdn, E0 = X.pt(cf.eye), E = [E0[0] - u[0] * dn, E0[1] - u[1] * dn, E0[2] - u[2] * dn];
   const hd = fpHead(o, dt);
   const pn = X.pt(cf.pan); V3FP.panW = [pn[0], -pn[1], pn[2]];   // 仪表板上沿（世界坐标）：平显俯仰梯画到这里为止
   f = fpRot(f, u, -hd[0]);
@@ -879,7 +897,7 @@ function v3fpOverlay(ctx) {
   const M = air ? airMdl(o.kind, o.v) : null, Fl = air ? o.fl : null, gz = v3Ht(clamp(P.x, 0, W - 1), clamp(P.y, 0, H - 1)), agl = Math.round(P.z - Math.max(gz, -2.6));
   const blink = (performance.now() / 300 | 0) % 2, warn = [];
   if (air) {
-    const fu = o.fuel ?? 1, cap = ((typeof airReal === 'function' && airReal(o.kind, o.v)) || {}).fuel || 8000;
+    const cap = ((typeof airReal === 'function' && airReal(o.kind, o.v)) || {}).fuel || 8000, fu = o.fuel ?? cap * .75;   // 还没加过油的（甲板上）按七成五算
     if (fu <= 0) warn.push('燃油耗尽'); else if (fu < cap * .15) warn.push('燃油不足  BINGO');
     if (V3FP.ap) warn.push('离开作战区域 · 自动返回');
     if (Fl && Fl.V[2] > 1 && agl / Fl.V[2] < 4) warn.push('拉起  PULL UP');
@@ -949,8 +967,8 @@ function v3fpOverlay(ctx) {
   if (air && fpOnDeck(o)) {   // 甲板作业进度（坐在座舱里等弹射）
     const t = o.phase === 'roll' ? '弹射！' : `甲板作业：${FP_DK[o.dk] || '准备弹射'}`;
     ctx.save(); ctx.font = 'bold 16px "Noto Sans SC", sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    const tw = ctx.measureText(t).width + 28; ctx.fillStyle = 'rgba(0,0,0,.5)'; ctx.fillRect(cx - tw / 2, 78, tw, 30); ctx.fillStyle = rgba(col, .95); ctx.fillText(t, cx, 93);
-    ctx.font = '12px "Noto Sans SC", sans-serif'; ctx.fillStyle = 'rgba(255,255,255,.8)'; ctx.fillText('弹射升空后由你驾驶 · V 切换外部视角 · Esc 下飞机', cx, 120); ctx.restore();
+    const by = Math.round(cy - 150), tw = ctx.measureText(t).width + 28; ctx.fillStyle = 'rgba(0,0,0,.5)'; ctx.fillRect(cx - tw / 2, by - 15, tw, 30); ctx.fillStyle = rgba(col, .95); ctx.fillText(t, cx, by);   // 画面中间偏上：顶上是制空权、态势感知面板
+    ctx.font = '12px "Noto Sans SC", sans-serif'; ctx.fillStyle = 'rgba(255,255,255,.8)'; ctx.fillText('弹射升空后由你驾驶 · V 切换外部视角 · Esc 下飞机', cx, by + 27); ctx.restore();
   }
   if (warn.length && blink) { ctx.save(); ctx.fillStyle = rgba(COL.enemy, .95); ctx.font = 'bold 18px "Noto Sans SC", sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; warn.forEach((t, i) => ctx.fillText(t, cx, cy - 70 - i * 24)); ctx.restore(); }
   if (air && Fl) fpAimMarks(ctx, o, P);

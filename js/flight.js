@@ -44,7 +44,7 @@ function flEul(q) {   // 四元数 → [滚转, 俯仰, 偏航]
   return [Math.atan2(2 * (w * x + y * z), 1 - 2 * (x * x + y * y)), Math.asin(clamp(2 * (w * y - z * x), -1, 1)), Math.atan2(2 * (w * z + x * y), 1 - 2 * (y * y + z * z))];
 }
 const flRho = h => 1.225 * Math.exp(-Math.max(0, h) / 9000);   // 空气密度（指数大气）
-const flGround = (n, e) => typeof v3Ht === 'function' ? v3Ht(clamp(e, 0, W - 1), clamp(-n, 0, H - 1)) : 0;   // 3D 地面高度（海面 -2.6）
+const flGround = (n, e) => typeof v3HtX === 'function' ? v3HtX(e, -n) : typeof v3Ht === 'function' ? v3Ht(clamp(e, 0, W - 1), clamp(-n, 0, H - 1)) : 0;   // 3D 地面高度（海面 -2.6）；飞出地图也按画面上的（无边海面、北面延伸的岛）
 const flKey = p => FL_KEY[typeof airMdlKey === 'function' ? airMdlKey(p.kind, p.v) : ''] || (p.v === 'ew' ? 'j16d' : 'j35');
 
 // 接手：按游戏里这架飞机现在的位置、航向、速度、坡度建状态（配平迎角：升力等于重力）
