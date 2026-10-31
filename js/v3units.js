@@ -1266,8 +1266,10 @@ function v3mCollect(C, box) {
   const plane = (o, hd, sd, key, sz, bank) => {
     if (typeof V3FP === 'object' && V3FP.on && V3FP.o === o && V3FP.vw === 'cock' && !(typeof fpPitOn === 'function' && fpPitOn(o))) return;   // 座舱视角：模型没有座舱内饰时不画自己（平面座舱，v3pilot.js）；有内饰就照画，镜头坐在模型座舱里
     const L = !sd && typeof v3dLaunch === 'function' ? v3dLaunch(o) : null;   // 刚离舰：下沉、抬头，起落架过一会儿才收（v3det.js）
-    const x = o.x, y = o.y, z = v3AirZ(o) + (L ? L.dz : 0);
-    let pt = o.fl && o.fp ? o.pt3 || 0 : typeof V3G_HELI === 'object' && V3G_HELI[key] ? 0 : typeof v3dPitch === 'function' ? v3dPitch(o, sd, z, L, key) : L ? L.pitch : 0;   // 玩家亲自开：机身俯仰就是物理引擎的   // 仰角跟着航迹 + 迎角（js/aero.js；直升机不按航迹抬头）
+    const rs = o.fl && o.fp && typeof fpRS === 'function' ? fpRS(o) : null;   // 玩家开的：推演两步之间插值（不插值一顿一顿地抖）
+    const x = rs ? rs.x : o.x, y = rs ? rs.y : o.y, z = rs ? rs.z : v3AirZ(o) + (L ? L.dz : 0);
+    if (rs) { hd = rs.heading; bank = rs.roll; }
+    let pt = rs ? rs.pitch : o.fl && o.fp ? o.pt3 || 0 : typeof V3G_HELI === 'object' && V3G_HELI[key] ? 0 : typeof v3dPitch === 'function' ? v3dPitch(o, sd, z, L, key) : L ? L.pitch : 0;   // 玩家亲自开：机身俯仰就是物理引擎的   // 仰角跟着航迹 + 迎角（js/aero.js；直升机不按航迹抬头）
     const tu = sd && o.toT != null ? S.t - o.toT : -1;   // 机场起飞刚离地（eair.js eaRoll 记的离地时刻）：头 1.5 秒保持滑跑末段抬起的机头，起落架过几秒再收
     if (tu >= 0 && tu < 3) pt = Math.max(pt, V3_ROT * (1 - sm01((tu - 1.5) / 1.5)));
     const gd = !!(L && L.gear) || (tu >= 0 && tu < (typeof EA_TO === 'object' ? EA_TO.gear : 4));
