@@ -412,12 +412,47 @@ function v3dBurner(out, C, p, key, sz, o, E) {
 }
 
 
-// ———————————————— 甲板车辆（只是画面）：挂弹车、弹药拖车、牵引车 ————————————————
-//   挂弹车、牵引车用 Sketchfab 上的模型（v3x.js 的 loader、tug，CC-BY），还没加载完时画代码建的；车辆按米画（航母是 1 比 1）
-//   每个停着飞机的机位内侧停一辆挂弹车，旁边一辆弹药拖车（两枚霹雳-15）。飞机着舰停好后整备 45 秒（carrier.js 的 rearm）：
-//   挂弹车托着导弹开到飞机侧面，举升、把导弹送进弹舱，再倒回原位，拖车上再取一枚放上托架
+// ———————————————— 甲板车辆（只是画面）：挂弹车、导弹挂载架、牵引车 ————————————————
+//   挂弹车、牵引车、导弹挂载架用 Sketchfab 上的模型（v3x.js 的 loader、tug、rack，CC-BY），还没加载完时画代码建的；车辆按米画（航母是 1 比 1）
+//   每个机位内侧停一辆挂弹车，旁边一个导弹挂载架（架上摆着各型导弹）。飞机着舰停好后整备 45 秒（carrier.js 的 rearm）：
+//   挂弹车一趟一枚，从架子上取弹、开到飞机机腹下举升挂好，按这架满载的枚数来回（弹舱门挂弹时开着）
 //   着舰后的飞机滑到机位前：牵引车从内侧开过来，用拖杆挂上前起落架；原地转向、倒进机位都是它推着，停好后脱钩开走
-//   出动前：带武器的飞机在机位上登机时挂弹车同样把弹送进弹舱；快好时牵引车倒到机头前挂上拖杆，启动后把飞机拖出机位约 20 米再脱钩
+//   出动前：牵引车倒到机头前挂上拖杆，启动后把飞机拖出机位约 20 米再脱钩
+// 挂弹分趟（整备进度 r 0–1 分成 N 趟）：第 i 趟、这一趟里走到 q；已经挂上几枚（这一趟过了推进挂点 q .56 才算）；
+//   停着整备时的弹舱门开度：第一趟伸进机腹（q .25）开、最后一趟退出来（q .7）关
+const v3dArmQ = (r, N) => { const x = clamp(r, 0, 1) * N, i = Math.min(N - 1, Math.floor(x)); return { i, q: x - i }; };
+const v3dArmLoaded = (r, N) => !N ? 0 : r >= 1 ? N : (({ i, q }) => i + (q >= .56 ? 1 : 0))(v3dArmQ(r, N));
+const v3dArmBay = (r, N) => !N || r <= 0 || r >= 1 ? 0 : clamp((r * N - .25) / .07, 0, 1) * clamp((N - .3 - r * N) / .07, 0, 1);
+const v3dLerp2 = (P, Q, k) => [P[0] + (Q[0] - P[0]) * k, P[1] + (Q[1] - P[1]) * k];
+// 停在甲板上的飞机（机轮着地在 top）模型上一点的世界位置（v3g.js v3gAt 按机身中线算）
+function v3dGndAt(key, sz, x, y, top, hd, v) {
+  const M = typeof V3G === 'object' && typeof V3G_AIR === 'object' && V3G.M[V3G_AIR[key] || 'j31'];
+  return M && M.ready && typeof v3gAt === 'function' ? v3gAt(key, sz, x, y, top + M.meta.zc * sz / M.meta.len, hd, 0, 0, v) : null;
+}
+// 导弹挂载架（js/mdl/rack.js：Sketchfab 上 CC-BY 的「Industrial Storage Rack」，原尺寸 6 米长、5.2 米高；按 0.62 倍画——约 3.7 米长、3.2 米高、三层搁板）：
+//   搁板高 z（原尺寸）、每层四条槽 y（缩放后），长弹一条槽一枚、短弹（飞腾-8 一类）前后两枚；deco：要挂的弹之外另摆的几枚
+const V3D_RACK = { k: .62, z: [.28, 1.89, 3.43], y: [-.33, -.11, .11, .33], deco: ['pl10', 'sdb', 'ld10', 'sdb', 'pl15', 'kd88'] };
+function v3dRack(x, y, z, a) { const X = typeof v3xMesh === 'function' ? v3xMesh('rack') : null; v3mAdd(X ? 'x:rack' : 'cvsvc:rack', X ? () => X : v3mRackFb, x, y, z, a, X ? V3D_RACK.k : 1, 3); }
+function v3mRackFb() {   // 架子模型还没加载完：立柱 + 三层搁板
+  const M = mbNew(), k = V3D_RACK.k, L = 2.95 * k, D = .76 * k, Ht = 5.18 * k;
+  for (const x of [-L, 0, L]) for (const y of [-D, D]) mbBox(M, x - .05, x + .05, y - .05, y + .05, 0, Ht, .5);
+  for (const z of V3D_RACK.z) mbBox(M, -L, L, -D, D, z * k - .05, z * k, .55);
+  return M;
+}
+// 架上每一枚的位置（架子坐标：x 顺着架子、y 横着、z 离甲板高）：先按挂的顺序摆这架要挂的（i = 序号），再摆别的弹（i = −1）
+function v3dRackSpots(LD) {
+  const k = V3D_RACK.k, out = [], cells = [];
+  for (let s = 0; s < 3; s++) for (const y of V3D_RACK.y) cells.push({ s, y, n: 0, short: false });
+  const put = (ms, i) => {
+    const sh = (typeof V3MS === 'object' && V3MS[ms]) || { L: 3, d: .2 }, short = sh.L <= 2.4, c = cells.find(c => c.n === 0 || (short && c.short && c.n === 1));
+    if (!c) return;
+    out.push({ ms, i, x: short ? (c.n ? -.88 : .88) : 0, y: c.y, z: V3D_RACK.z[c.s] * k + sh.d * .45 + .03 });
+    c.n++; c.short = short;
+  };
+  LD.forEach((e, i) => put(e.ms, i));
+  for (const ms of V3D_RACK.deco) put(ms, -1);
+  return out;
+}
 const V3D_LOAD = { cradle: [1.75, .55], bayZ: 1.15 };   // 托架（挂弹车坐标：离车中心前方、离甲板高）、弹舱口离甲板高
 // 驾驶位（车的坐标，米：前、右、脚下踏板离甲板高）与司机马甲颜色：牵引车左前方的下沉驾驶舱，蓝马甲（飞机调运）；挂弹车尾部的操作位，红马甲（弹药）
 const V3D_SEAT = { tug: [1.15, -.5, .05, '#2d5fb0'], loader: [-1.55, 0, .3, '#b23a2e'] };
@@ -436,80 +471,85 @@ function v3dDrv(key, x, y, z, a) {
 function v3dDeckVeh(cv, C, live, wing, top, h, at) {
   if (typeof cvPark !== 'function' || typeof AIR_REARM !== 'number') return;
   const msl = typeof v3gMsl === 'function', K = .86;   // 导弹（用户给的模型，js/v3g.js）跟飞机同一比例
-  // 机位 j 旁的挂弹车与弹药拖车：r = 挂弹进度（0 开始 – 1 挂完；挂弹车开过去、举升把弹送进弹舱、倒回原位，拖车上再取一枚放上托架）
-  // 挂弹（r 进度 0–1）：挂弹车托着导弹从原位开到飞机侧面 → 慢慢伸进机腹下 → 举升臂抬起 → 把弹推进弹舱（舱门这时开着）→ 放下举升臂 → 倒出来开回原位 →
-  //   地勤从拖车上抬一枚放上托架；bay(开度)：画这架飞机的弹舱门；T：整个过程多少秒（弹药兵走 / 跑）
-  const loader = (j, key, sz, r, bay, T) => {
+  // 机位 j 旁的挂弹车与导弹挂载架（v3dRack）：w 这个机位上的飞机（空机位为 null）、r 整备进度（0 开始 – 1 挂完）。这架满载要挂 N 枚（fpwpn.js fwLoadout，按挂的顺序），
+  //   r 分成 N 趟、一趟挂一枚：两名弹药兵从架上抬一枚放上托架 → 挂弹车开到飞机侧面、慢慢伸进机腹下 → 举升臂抬起 → 把弹送进挂点（弹舱里、翼下挂架）→
+  //   放下举升臂 → 倒出来开回原位；弹舱门第一趟伸进机腹时打开、最后一趟退出来后关上（v3dArmBay）；挂上的弹留在飞机上（v3units.js 按 v3dArmLoaded 画）。
+  //   挂弹车、架子的原位只看机位（换了机型、空着都在同一个地方，不会跳）；T：整个整备多少秒（弹药兵走 / 跑）
+  const loader = (j, w, key, sz, r, T) => {
     const sl = C.slots[j];
     if (!sl) return;
+    const LD = w && typeof fwLoadout === 'function' ? fwLoadout(w.type, w.v) : [], N = LD.length, busy = N > 0 && r > 0 && r < 1;
     const a = sl[2], ca = Math.cos(a), sa = Math.sin(a), lat = ca * sl[1] < 0 ? [-sa, ca] : [sa, -ca], la = Math.atan2(-lat[1], -lat[0]);   // lat：朝甲板内侧；挂弹车车头朝飞机
-    const D = typeof AIRD === 'object' && AIRD[key], bx = D && D.bay ? (D.bay[0] + D.bay[1]) / 2 * sz / 21 : 0, B = [sl[0] + ca * bx, sl[1] + sa * bx];   // 弹舱中点
-    const d0 = 9.5, d1 = 3.6, d2 = 2.35;
-    const dlAt = r => r < .08 ? d0 : r < .26 ? lerp(d0, d1, sm01((r - .08) / .18)) : r < .34 ? lerp(d1, d2, sm01((r - .26) / .08)) : r < .62 ? d2 : r < .7 ? lerp(d2, d1, sm01((r - .62) / .08)) : r < .86 ? lerp(d1, d0, sm01((r - .7) / .16)) : d0, dl = dlAt(r);
-    const lift = r < .34 ? 0 : r < .46 ? sm01((r - .34) / .12) : r < .54 ? 1 : r < .62 ? 1 - sm01((r - .54) / .08) : 0, pitch = lerp(-.12, .1, lift);   // 举升臂：平时压低，举升时抬起
-    const Lu = B[0] + lat[0] * dl, Lv = B[1] + lat[1] * dl, [lx, ly] = at(Lu, Lv), fu = Math.cos(la), fv = Math.sin(la);
+    const D = w && typeof AIRD === 'object' && AIRD[key], bx = D && D.bay ? (D.bay[0] + D.bay[1]) / 2 * sz / 21 : 0, B = [sl[0] + ca * bx, sl[1] + sa * bx];   // 弹舱中点
+    const { i: ci, q: q0 } = busy ? v3dArmQ(r, N) : { i: r >= 1 ? N : 0, q: 1 }, q = busy ? q0 : 1;   // 第几趟、这一趟走到哪儿（没在挂：停在原位）
+    const d0 = 7.5, d1 = 3.6, d2 = 2.35, Tc = T / Math.max(1, N);   // 原位离机腹 7.5 米：再往舷内就到了右舷滑行车道
+    const at2 = (P, d, s = 0) => [P[0] + lat[0] * d + ca * s, P[1] + lat[1] * d + sa * s];
+    const H = at2(sl, d0), A = at2(B, d1), Ub = at2(B, d2);   // 原位、飞机侧面、机腹下
+    const L = q < .1 ? H : q < .3 ? v3dLerp2(H, A, sm01((q - .1) / .2)) : q < .38 ? v3dLerp2(A, Ub, sm01((q - .3) / .08)) : q < .62 ? Ub : q < .7 ? v3dLerp2(Ub, A, sm01((q - .62) / .08)) : q < .92 ? v3dLerp2(A, H, sm01((q - .7) / .22)) : H;
+    const lift = q < .38 ? 0 : q < .48 ? sm01((q - .38) / .1) : q < .56 ? 1 : q < .62 ? 1 - sm01((q - .56) / .06) : 0, pitch = lerp(-.12, .1, lift);   // 举升臂：平时压低，举升时抬起
+    const [lx, ly] = at(L[0], L[1]), fu = Math.cos(la), fv = Math.sin(la);
     const U = typeof v3uOn === 'function' ? v3uOn('u_loaderx') : null;
     if (U && U.vars.has('arm')) {   // 带举升臂的外部模型（v3utex.js）：车体 + 绕铰点俯仰的举升臂；后部操作位坐着红马甲
       v3uAdd('u_loaderx', 'hull', lx, ly, top + .02, h + la, 1, 3);
-      const [hx, hy] = at(Lu - fu * .32, Lv - fv * .32);
+      const [hx, hy] = at(L[0] - fu * .32, L[1] - fv * .32);
       v3uAdd('u_loaderx', 'arm', hx, hy, top + .64, h + la, 1, 3, 0, pitch);
       v3dDrv('loader', lx, ly, top + .02, h + la);
     } else v3dVeh('loader', v3mDeckCart, lx, ly, top + .02, h + la);
-    if (bay) bay(r < .22 ? 0 : r < .3 ? sm01((r - .22) / .08) : r < .6 ? 1 : r < .68 ? 1 - sm01((r - .6) / .08) : 0);
-    // 弹药拖车：挂弹车原位旁边、顺着飞机方向；车上的弹（取走一枚后少一枚）
-    const Tu = B[0] + lat[0] * (d0 + .3) + ca * 4.6, Tv = B[1] + lat[1] * (d0 + .3) + sa * 4.6, [tx, ty] = at(Tu, Tv), su = Tu - sa * .45, sv = Tv + ca * .45;
-    v3mAdd('cvsvc:cart', v3mDeckCart, tx, ty, top + .02, h + a, 1, 3);
-    // 托架在举升臂前端（铰点前 2.32 米、高 0.3 米），随臂抬起；托架上的弹推进弹舱（r .46–.52）后托架空着，回原位后两名弹药兵从拖车上抬一枚放上去（r .88–.97）
+    // 导弹挂载架：挂弹车原位旁边、顺着机位方向；架上按顺序摆着这架要挂的弹（前几趟已经取走的不画），顶层另摆几枚别的弹
+    const R0 = [sl[0] + lat[0] * (d0 + .3) + ca * 4.6, sl[1] + lat[1] * (d0 + .3) + sa * 4.6], rh = h + a;
+    const rackAt = s => { const [x, y] = at(R0[0] + ca * s.x - sa * s.y, R0[1] + sa * s.x + ca * s.y); return [x, y, top + .02 + s.z]; };
+    const [rx, ry] = at(R0[0], R0[1]);
+    v3dRack(rx, ry, top + .02, rh);
+    const SP = v3dRackSpots(LD), pk0 = [R0[0] - lat[0] * .9, R0[1] - lat[1] * .9];   // 弹药兵在架子朝挂弹车那一面取弹
+    if (msl) for (const s of SP) if (s.i < 0 || s.i > ci || (s.i === ci && !(busy && q >= .02))) { const [x, y, z] = rackAt(s); v3gMsl(s.ms, x, y, z, rh, K, 0); }
+    // 托架在举升臂前端（铰点前 2.32 米、高 0.3 米），随臂抬起；这一趟的弹：q .02–.1 从架上抬到托架上，.48–.56 推进挂点，之后托架空着
     const cx = 2.32 * Math.cos(pitch) - .3 * Math.sin(pitch), cz = 2.32 * Math.sin(pitch) + .3 * Math.cos(pitch);
-    const Cu = Lu + fu * (cx - .32), Cv = Lv + fv * (cx - .32), Cz = top + .64 + cz + .13;
-    let M3 = [Cu, Cv, Cz];
-    if (r >= .46 && r < .52) { const q = sm01((r - .46) / .06); M3 = [lerp(Cu, B[0], q), lerp(Cv, B[1], q), lerp(Cz, top + V3D_LOAD.bayZ + .25, q)]; }
-    else if (r >= .52 && r < .88) M3 = null;
-    else if (r >= .88 && r < .97) { const q = sm01((r - .88) / .09); M3 = [lerp(su, Cu, q), lerp(sv, Cv, q), lerp(top + 1.1, Cz, q) + Math.sin(q * Math.PI) * .5]; }
-    // 两名弹药兵（红马甲）：跟着挂弹车走到飞机旁 → 跪在机腹下两侧用手扶正导弹、对准挂钩 → 跟车退出来 → 走到拖车旁，一左一右抬起一枚放上托架
-    if (r < .99 || v3mHi()) for (const s of [-1, 1]) {
-      const side = d => [B[0] + lat[0] * d + ca * s * 1.55, B[1] + lat[1] * d + sa * s * 1.55], kn = [B[0] + lat[0] * 1.15 + ca * s * 1.05, B[1] + lat[1] * 1.15 + sa * s * 1.05];
-      const pk = [su + lat[0] * s * .6, sv + lat[1] * s * .6], pc = [Cu + lat[0] * s * .6, Cv + lat[1] * s * .6];
+    const [cxw, cyw] = at(L[0] + fu * (cx - .32), L[1] + fv * (cx - .32)), Cz = top + .64 + cz + .13;
+    const E = busy ? LD[ci] : null, S0 = E ? SP.find(s => s.i === ci) : null;
+    let M3 = null;
+    if (E && q >= .02 && q < .1 && S0) { const P0 = rackAt(S0), k = sm01((q - .02) / .08); M3 = [lerp(P0[0], cxw, k), lerp(P0[1], cyw, k), lerp(P0[2], Cz, k) + Math.sin(k * Math.PI) * .5]; }
+    else if (E && q >= .1 && q < .48) M3 = [cxw, cyw, Cz];
+    else if (E && q >= .48 && q < .56) {   // 推进挂点（弹舱里 / 翼下挂架）
+      const k = sm01((q - .48) / .08), [wx, wy] = at(sl[0], sl[1]), P1 = E.v ? v3dGndAt(key, sz, wx, wy, top, h + a, E.v) : null, [bxw, byw] = at(B[0], B[1]);
+      const T1 = P1 || [bxw, byw, top + V3D_LOAD.bayZ + .25];
+      M3 = [lerp(cxw, T1[0], k), lerp(cyw, T1[1], k), lerp(Cz, T1[2], k)];
+    }
+    if (M3 && msl) v3gMsl(E.ms, M3[0], M3[1], M3[2], h + a, K, 0);
+    // 两名弹药兵（红马甲）：在架子旁抬弹放上托架 → 跟着挂弹车走到飞机旁 → 跪在机腹下两侧扶正导弹、对准挂钩 → 跟车退出来 → 走回原位
+    if (busy || v3mHi()) for (const s of [-1, 1]) {
+      const sH = at2(sl, d0, s * 1.55), sA = at2(B, d2, s * 1.55), kn = at2(B, 1.15, s * 1.05), pk = [pk0[0] + ca * s * .7, pk0[1] + sa * s * .7];
       let u, v, f = la, pose = 'st';
-      // 从 P0 走到 P1（走完 q 0–1；r0、r1 这段占的挂弹进度，按速度选走 / 跑的步频）；face：面朝方向（不给就朝前进方向）
-      const walk = (P0, P1, q, r0, r1, face, cr) => {
-        const D = Math.hypot(P1[0] - P0[0], P1[1] - P0[1]), run = !cr && D / Math.max(.1, (r1 - r0) * T) > 2.8, st = run ? .55 : .3;
-        u = lerp(P0[0], P1[0], q); v = lerp(P0[1], P1[1], q); f = face ?? Math.atan2(P1[1] - P0[1], P1[0] - P0[0]);
-        pose = D < .05 ? 'st' : (cr ? 'y' : run ? 'r' : 'w') + (Math.floor(q * D / st) & 7);
+      const walk = (P0, P1, k, q0, q1, face, cr) => {   // 从 P0 走到 P1（走完 k 0–1，这段占这一趟的 q0–q1，按速度选走 / 跑的步频）
+        const Lw = Math.hypot(P1[0] - P0[0], P1[1] - P0[1]), run = !cr && Lw / Math.max(.1, (q1 - q0) * Tc) > 2.8, st = run ? .55 : .3;
+        u = lerp(P0[0], P1[0], k); v = lerp(P0[1], P1[1], k); f = face ?? Math.atan2(P1[1] - P0[1], P1[0] - P0[0]);
+        pose = Lw < .05 ? 'st' : (cr ? 'y' : run ? 'r' : 'w') + (Math.floor(k * Lw / st) & 7);
       };
-      if (r < .08 || r >= .99) [u, v] = side(d0);
-      else if (r < .34) walk(side(d0), side(d2), (d0 - dl) / (d0 - d2), .08, .34, la);
-      else if (r < .38) walk(side(d2), kn, (r - .34) / .04, .34, .38);
-      else if (r < .58) { [u, v] = kn; pose = 'kw'; }
-      else if (r < .62) walk(kn, side(d2), (r - .58) / .04, .58, .62);
-      else if (r < .72) walk(side(d2), side(dlAt(.72)), (dl - d2) / (dlAt(.72) - d2), .62, .72);
-      else if (r < .88) walk(side(dlAt(.72)), pk, (r - .72) / .16, .72, .88);
-      else if (r < .97) walk(pk, pc, sm01((r - .88) / .09), .88, .97, null, true);
-      else walk(pc, side(d0), (r - .97) / .02, .97, .99);
+      if (!busy) [u, v] = sH;
+      else if (q < .02) walk(sH, pk, q / .02, 0, .02);
+      else if (q < .1) walk(pk, sH, sm01((q - .02) / .08), .02, .1, null, true);   // 抬着弹走到托架旁
+      else if (q < .38) walk(sH, sA, sm01((q - .1) / .28), .1, .38, la);
+      else if (q < .42) walk(sA, kn, (q - .38) / .04, .38, .42);
+      else if (q < .58) { [u, v] = kn; pose = 'kw'; }
+      else if (q < .62) walk(kn, sA, (q - .58) / .04, .58, .62);
+      else walk(sA, sH, sm01((q - .62) / .3), .62, .92, la);
       const [mx, my] = at(u, v);
       v3gMan('deck', pose, mx, my, top, h + f, V3_PIL, 0);
     }
-    if (!msl) return;
-    for (const o of [-.45, .45].slice(0, r < .88 ? 2 : 1)) { const [mx, my] = at(Tu - sa * o, Tv + ca * o); v3gMsl('pl15', mx, my, top + 1.1, h + a, K, 0); }
-    if (M3) { const [mx, my] = at(M3[0], M3[1]); v3gMsl('pl15', mx, my, M3[2], h + a, K, 0); }
   };
-  const bayAt = () => () => {};   // 弹舱门：用户给的飞机模型没有分开的舱门，不画
-  // 停着待命 / 整备的飞机（着舰后整备 45 秒）
-  for (const [id, j] of cvPark(cv, wing)) {
-    const w = wing.find(o => o.id === id);
-    if (!w) continue;
-    const key = typeof airSilKey === 'function' ? airSilKey(w.type, w.v) : 'j35', sz = (typeof airMdl === 'function' && airMdl(w.type, w.v).size) || 15;
-    const sl = C.slots[j], [wx, wy] = sl ? at(sl[0], sl[1]) : [0, 0];
-    const r = w.state === 'rearm' ? 1 - clamp(w.rearmT / AIR_REARM, 0, 1) : 1;
-    loader(j, key, sz, r, sl && bayAt(key, sz, wx, wy, h + sl[2]), AIR_REARM);
-    if (sl && r >= .52) v3dPins(key, sz, wx, wy, top, h + sl[2]);   // 弹挂上了：插着保险销
-  }
-  // 出动前挂弹：带武器的飞机在机位上登机的同时，挂弹车把弹送进弹舱（cvdeck.js 'brd'，CVD.arm 秒）；保险销一直插到偏流板后解除保险时
+  // 每个机位都画挂弹车和导弹挂载架（空着、飞机刚走也在原位，不会突然没了）：机位上停着的（待命 / 整备）、正要停进来的（着舰后滑过来：架子先摆好它要挂的弹）
+  const park = cvPark(cv, wing), byJ = new Map();
+  for (const [id, j] of park) { const w = wing.find(o => o.id === id); if (w) byJ.set(j, { w, r: w.state === 'rearm' ? 1 - clamp(w.rearmT / AIR_REARM, 0, 1) : 1, park: true }); }
+  for (const p of live) if (p.phase === 'trap' && p.rsv != null && p.rsv >= 0 && !byJ.has(p.rsv)) byJ.set(p.rsv, { w: { type: p.kind, v: p.v }, r: 0 });
+  C.slots.forEach((sl, j) => {
+    const E = byJ.get(j), w = E ? E.w : null, key = w && typeof airSilKey === 'function' ? airSilKey(w.type, w.v) : 'j35', sz = (w && typeof airMdl === 'function' && airMdl(w.type, w.v).size) || 15;
+    loader(j, w, key, sz, E ? E.r : 1, AIR_REARM);
+    if (E && E.park && v3dArmLoaded(E.r, typeof fwLoadout === 'function' ? fwLoadout(w.type, w.v).length : 0) > 0) { const [wx, wy] = at(sl[0], sl[1]); v3dPins(key, sz, wx, wy, top, h + sl[2]); }   // 弹挂上了：插着保险销
+  });
+  // 出动：停着的时候已经挂好（机库里的也挂好了）；保险销一直插到偏流板后解除保险时
   for (const p of live) {
-    if (p.phase !== 'cat' || !p.arm) continue;
-    const key = v3dKey(p), sz = v3dSz(p), r = p.dk === 'brd' ? clamp((p.dkT || 0) / CVD.arm, 0, 1) : 1;
-    if (p.dk === 'brd' && p.slot != null) loader(p.slot, key, sz, r, bayAt(key, sz, p.x, p.y, p.heading), CVD.arm);
-    if (r >= .52 && (p.dk !== 'hold' || (p.dkT || 0) < V3D_ARM.pull) && p.dk !== 'line' && p.dk !== 'hook') v3dPins(key, sz, p.x, p.y, top - C.hang * (typeof cvDeckSink === 'function' ? cvDeckSink(p) : 0), p.heading);
+    if (p.phase !== 'cat' || !p.arm || p.dk === 'brd') continue;
+    const key = v3dKey(p), sz = v3dSz(p);
+    if ((p.dk !== 'hold' || (p.dkT || 0) < V3D_ARM.pull) && p.dk !== 'line' && p.dk !== 'hook') v3dPins(key, sz, p.x, p.y, top - C.hang * (typeof cvDeckSink === 'function' ? cvDeckSink(p) : 0), p.heading);
   }
   v3dArmCrew(live, top, h, at);   // 偏流板后解除保险的挂弹组
   v3dTugs(cv, live, top, h, at);   // 牵引车
@@ -608,9 +648,12 @@ function v3dTugs(cv, live, top, h, at) {
           if (!J.pre) { if (drive(T, r.u + c * 7, r.v + sn * 7, 7)) J.pre = true; }   // 先开到挂钩点前方 7 米
           else if (drive(T, r.u, r.v, 1.6, r.a, true)) J.ph = 'hook';   // 倒过去挂上
         }
-        if (!r.soon && (r.fol || Math.hypot(T.u - r.u, T.v - r.v) < 1.5 || Math.hypot(T.u - r.u, T.v - r.v) > 25)) J.ph = 'hook';   // 飞机已经动了：就地挂上（太远就直接到位）
+        if (!r.soon) {   // 飞机已经动了：车还没到就加速开过去追上（不瞬移），到了跟前再挂上
+          if (Math.hypot(T.u - r.u, T.v - r.v) < 1.5) J.ph = 'hook';
+          else if (!r.fol) drive(T, r.u, r.v, 12, r.a);
+        }
       }
-      if (J.ph === 'hook') { T.u = r.u; T.v = r.v; T.a = r.a; }   // 挂着：跟着飞机走
+      if (J.ph === 'hook') { const k = Math.min(1, dt * 8); T.u += (r.u - T.u) * k; T.v += (r.v - T.v) * k; T.a += airAng(r.a - T.a) * k; }   // 挂着：跟着飞机走（挂上那一下平滑靠过去）
     } else if (J && !r && J.ph !== 'back') {   // 拖完了：先朝侧面（待命位那边）拐开 9 米，让出飞机的去路
       if (J.ph !== 'away') { const sg = Math.cos(T.a) * (H[1] - T.v) - Math.sin(T.a) * (H[0] - T.u) >= 0 ? 1 : -1, ax = T.a + sg * Math.PI / 2; J.ph = 'away'; J.au = T.u + Math.cos(ax) * 9 + Math.cos(T.a) * 4; J.av = T.v + Math.sin(ax) * 9 + Math.sin(T.a) * 4; }
       if (drive(T, J.au, J.av, 5)) J.ph = 'back';
