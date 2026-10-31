@@ -416,6 +416,7 @@ function v3pStatic(vOf) {
       const s = Bq.L / mL, sz = clamp((Bq.z - Bq.lo + 1.2) / deck, s, s * 1.8);
       add(cb, Bq.x, Bq.y, Bq.z - deck * sz, Bq.a, s, 8.5 / mW, sz);
     }
+    if (arches.length) V3P.rep.add('bridge');   // 黑绿画面的地面着色器据此不在水面上画过河的那段路（view3d.js uBrM）
   }
   // 海滩出口：两座地堡（射孔朝海，+y 是南）、一排龙牙；据点公路桥：完好时由上面的拱桥画，炸断了画梁式桥的桥墩（桥面按炸没炸每帧加，见 v3pPrep）
   const pb = vOf('pillbox', 'pillbox'), th = vOf('teeth', 'teeth'), gp = vOf('girder', 'pier'), gs = vOf('girder', 'span');
