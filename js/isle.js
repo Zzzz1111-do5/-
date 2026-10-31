@@ -206,12 +206,25 @@ function isleIntel() {
 const ISLE_CSS = `#sbxPanel.isle .sbx-sides button.e, #sbxPanel.isle [data-act="bud-"], #sbxPanel.isle [data-act="bud+"], #sbxPanel.isle [data-act="save"], #sbxPanel.isle [data-act="loads"],
 #sbxPanel.isle .sbx-seedin, #sbxPanel.isle [data-act="map"], #sbxPanel.isle .sbx-lv, #sbxPanel.isle [data-act="preset"] { display: none; }`;
 HOOK.frame.push(function isleFrame() {
+  if (S && S.lv && S.lv.isle && S.phase === 'battle' && !S.isleCam && typeof V3 === 'object' && (V3.on || !SETTINGS.v3) && !V3.tin) { S.isleCam = true; isleCamStart(); }   // 开战：等进 3D 的过渡走完再摆镜头（开战时面板已经关了，放在下面的 SBX.el 判断前面）
   if (typeof SBX !== 'object' || !SBX.el || typeof document === 'undefined') return;
   const on = !!(S && S.lv && S.lv.isle);
   if (on && !document.getElementById('isleCss')) { const st = document.createElement('style'); st.id = 'isleCss'; st.textContent = ISLE_CSS; document.head.appendChild(st); }
   SBX.el.classList.toggle('isle', on);
   if (on && SBX.side === 'e' && S.phase === 'sandbox') { SBX.side = 'p'; if (typeof sbxRender === 'function') sbxRender(); }   // 守方固定部署：不让切过去改
 });
+// 开战时的镜头：从舰队后上方望向海岛南岸，舰队在近处、滩头在远处——原来按整张图居中，对着岛和舰队之间的一大片空海
+function isleCamStart() {
+  const sh = (S.ships || []).filter(s => s.side !== 'e' && alive(s));
+  if (!sh.length || typeof CAM !== 'object') return;
+  const fx = sh.reduce((a, s) => a + s.x, 0) / sh.length, fy = sh.reduce((a, s) => a + s.y, 0) / sh.length, tx = W / 2, ty = coastAt(tx);
+  if (typeof V3 === 'object' && V3.on && typeof v3FcInit === 'function') {
+    const F = V3.fc || (v3FcInit(), V3.fc), d = Math.hypot(tx - fx, ty - fy) || 1, ux = (tx - fx) / d, uy = (ty - fy) / d;
+    const k = Math.min(1500, d * .3), x = clamp(fx + ux * k, 50, W - 50), y = clamp(fy + uy * k, 50, H + 2500);   // 舰队前方 1.5 公里上空：岛不至于远得只剩一小块，最前面的舰在画面下沿
+    Object.assign(F, { x, y, z: Math.max(0, v3Gnd(clamp(x, 0, W - 1), clamp(y, 0, H - 1))) + 640, yaw: Math.atan2(ty - y, tx - x), yawT: Math.atan2(ty - y, tx - x), pitch: -.17, pitchT: -.17 });
+    V3.tin = null;
+  } else { CAM.x = (fx + tx) / 2; CAM.y = (fy + ty) / 2; CAM.z = clamp(CAM.vh / (Math.abs(fy - ty) + 900), CAM.fit, CAM.fit * 4); if (typeof camClamp === 'function') camClamp(); }
+}
 HOOK.drawOver.push(function isleDraw() {
   if (!S || !S.lv || !S.lv.isle || !S.isleIntel || S.phase !== 'sandbox' || typeof R !== 'object' || !R.ctx) return;
   const ctx = R.ctx;
