@@ -141,7 +141,7 @@ function updateUnits(dt) {
     if (settled) dm += hit ? 2 : 3;
     // 友邻：在侧的友军打气，溃逃的友军动摇军心——只影响还没溃的部队，最多扣 3（溃兵挤在一起不再互相拖到 0）
     let fr = 0;
-    for (const o of S.units) if (o !== u && !o.dead && o.side === u.side && o.x != null && dist(o.x, o.y, u.x, u.y) < 150) fr += o.state === 'rout' ? (u.state === 'rout' ? 0 : -1.5) : 1;
+    for (const o of S.units) if (o !== u && !o.dead && o.side === u.side && o.x != null && Math.abs(o.x - u.x) < 150 && Math.abs(o.y - u.y) < 150 && dist(o.x, o.y, u.x, u.y) < 150) fr += o.state === 'rout' ? (u.state === 'rout' ? 0 : -1.5) : 1;   // 先按坐标差排除（每步每个排都扫一遍全体）
     dm += clamp(fr, -3, 3);
     if (u.side === 'p' && ts.every(q => q.kind !== 'inf' || q.ammo < 5)) dm -= 1.5;
     if (u.side === 'e' && dm < 0) dm *= D.nerve;

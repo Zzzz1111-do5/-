@@ -1520,7 +1520,8 @@ body.sbx-edit #objs, body.sbx-edit #bottom { display: none !important; }
 #sbxPanel.tabs { position: absolute; inset: 0; width: auto; height: auto; max-height: none; padding: 0; overflow: visible; display: block; background: none !important; border: 0 !important; box-shadow: none !important; border-radius: 0; pointer-events: none; }
 #sbxPanel.tabs > * { pointer-events: auto; }
 #sbxPanel.tabs .sbx-blk { background: rgba(var(--pn-rgb), .9); border: 1px solid var(--line); border-radius: 7px; box-shadow: 0 0 14px rgba(0, 0, 0, .45); }
-#sbxPanel.tabs .sbx-top { position: absolute; top: calc(10px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); width: min(520px, calc(100% - 560px)); min-width: 320px; display: grid; gap: 6px; padding: 8px 10px; }
+/* 双方预算：夹在左上「部署工具」与右上按钮组（--trw，hud.js 量出）之间居中，最宽 520——原来按整屏居中，平板上压住时钟和暂停按钮 */
+#sbxPanel.tabs .sbx-top { position: absolute; top: calc(10px + env(safe-area-inset-top, 0px)); left: calc(max(16px, env(safe-area-inset-left, 0px)) + 112px); right: calc(var(--trw, 380px) + 22px); width: auto; max-width: 520px; margin: 0 auto; display: grid; gap: 6px; padding: 8px 10px; }
 #sbxPanel.tabs .sbx-top h2 { font-size: 12px; }
 #sbxPanel.tabs .sbx-dock { position: absolute; left: 0; right: 0; bottom: 0; display: flex; gap: 12px; align-items: flex-end;
   padding: 8px max(14px, env(safe-area-inset-right, 0px)) calc(10px + env(safe-area-inset-bottom, 0px)) max(14px, env(safe-area-inset-left, 0px)); border-radius: 10px 10px 0 0; border-bottom: 0; }
@@ -1551,6 +1552,25 @@ body.sbx-edit #objs, body.sbx-edit #bottom { display: none !important; }
   #sbxPanel.tabs .sbx-pal button { flex-basis: 82px; height: 96px; } #sbxPanel.tabs .sbx-pal button .ic { width: 34px; height: 34px; }
   #sbxPanel.tabs .sbx-info { width: calc(100% - 32px); max-height: 26%; } #sbxPanel.tabs .sbx-msg { max-width: calc(100% - 32px); }
   #sbxPanel.tabs .sbx-more { top: auto; bottom: calc(var(--dock, 250px) + 8px); max-height: 45%; }
+}
+/* 手机横屏（高度矮，安卓版锁的就是横屏）：兵种栏压成一排小卡片、开战按钮竖着放在右边，预算条贴顶、去掉标题——原来兵种栏占了七成屏幕，预算被盖住，地图只剩一条 */
+@media (orientation: landscape) and (max-height: 520px) {
+  #sbxPanel.tabs .sbx-top { top: calc(5px + env(safe-area-inset-top, 0px)); left: calc(max(8px, env(safe-area-inset-left, 0px)) + 100px); right: calc(var(--trw, 380px) + 52px); width: auto; max-width: 440px; margin: 0 auto; transform: none; padding: 4px 7px; gap: 3px; }
+  #sbxPanel.tabs .sbx-top h2 { display: none; }
+  #sbxPanel.tabs .sbx-sides button { padding: 2px 6px; } #sbxPanel.tabs .sbx-sides button b { font-size: 12px; } #sbxPanel.tabs .sbx-sides button span { font-size: 10.5px; }
+  #sbxPanel.tabs .sbx-bud .tb { height: 20px; min-width: 22px; }
+  #sbxPanel.tabs .sbx-dock { flex-direction: row; align-items: flex-end; gap: 8px; padding-top: 4px; padding-bottom: calc(4px + env(safe-area-inset-bottom, 0px)); }
+  #sbxPanel.tabs .sbx-dl { gap: 3px; }
+  #sbxPanel.tabs .sbx-cats button { padding: 3px 10px; font-size: 12px; }
+  #sbxPanel.tabs .sbx-pal { gap: 5px; padding-bottom: 2px; }
+  #sbxPanel.tabs .sbx-pal button { flex: 0 0 66px; flex-basis: 66px; height: 74px; grid-template-rows: 28px 1fr auto; padding: 4px 3px 3px; }
+  #sbxPanel.tabs .sbx-pal button .ic { width: 26px; height: 26px; }
+  #sbxPanel.tabs .sbx-pal button b { font-size: 10px; } #sbxPanel.tabs .sbx-pal button span { font-size: 10.5px; }
+  #sbxPanel.tabs .sbx-go { flex: 0 0 118px; grid-template-columns: 1fr; gap: 5px; margin: 0 0 2px; }
+  #sbxPanel.tabs .sbx-go button { padding: 8px 4px; font-size: 13px; }
+  #sbxPanel.tabs .sbx-info { width: min(300px, 40vw); max-height: 30vh; font-size: 11.5px; padding: 5px 8px; }
+  #sbxPanel.tabs .sbx-msg { max-width: 50vw; min-width: 0; font-size: 12px; }
+  #sbxPanel.tabs .sbx-more { top: calc(5px + env(safe-area-inset-top, 0px)); bottom: auto; width: 260px; max-height: calc(100% - var(--dock, 120px) - 14px); }
 }
 /* 配色：透明的黑底、几乎看不出来的细边框、兵种图标与文字一律白色——不用霓虹的红 / 青 / 紫，不发光 */
 #sbxPanel.tabs .sbx-blk { background: rgba(0, 0, 0, .55); border: 1px solid rgba(255, 255, 255, .06); box-shadow: none; -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }

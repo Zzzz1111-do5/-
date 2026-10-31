@@ -344,7 +344,7 @@ function vehSpread(v, dt) {
   if (v.immob || v.lst || v.swim) return;
   const sp = vehSp(v), cls = vehCls(v);
   for (const o of S.veh) {
-    if (o === v || o.dead || o.side !== v.side || o.lst || o.id > v.id) continue;
+    if (o === v || o.dead || o.side !== v.side || o.lst || o.id > v.id || Math.abs(v.x - o.x) > 40 || Math.abs(v.y - o.y) > 40) continue;   // 两车半长之和 + 4 不会超过 40
     const d = dist(v.x, v.y, o.x, o.y), m = (sp.len + vehSp(o).len) * .5 + 4;
     if (d >= m) continue;
     // 只沿车身前后挪（倒车或前进），对方正好在侧面时先原地转一点车头——不横着平移
@@ -361,10 +361,10 @@ function vehBlocked(v, o) {
   if (o.t === 'retreat' || o.t === 'clear' || !(v.auto || v.side === 'e') || v.swim) return false;
   if (S.t < (v.blkN ?? 0)) return !!v.blk;
   v.blkN = S.t + .5; v.blk = false;
-  if (S.teams.some(q => q.side === v.side && q.men.length && !q.ride && dist(q.x, q.y, v.x, v.y) < 40)) return false;
+  if (S.teams.some(q => q.side === v.side && q.men.length && !q.ride && Math.abs(q.x - v.x) < 40 && Math.abs(q.y - v.y) < 40 && dist(q.x, q.y, v.x, v.y) < 40)) return false;
   const want = Math.atan2(o.y - v.y, o.x - v.x), dO = dist(v.x, v.y, o.x, o.y), foe = v.side === 'p' ? 'e' : 'p';
   for (const q of S.teams) {
-    if (q.side !== foe || !q.men.length || q.ride || q.sup >= 60) continue;
+    if (q.side !== foe || !q.men.length || q.ride || q.sup >= 60 || Math.abs(q.x - v.x) > 110 || Math.abs(q.y - v.y) > 110) continue;   // 最远看 110（反坦克组）
     const d = dist(q.x, q.y, v.x, v.y);
     if (d > (modOf(q).at ? 110 : 70) || !vehSees(v, q.x, q.y, d)) continue;
     if (angDiff(Math.atan2(q.y - v.y, q.x - v.x), want) < 1.2 && dist(q.x, q.y, o.x, o.y) < dO + 30) { v.blk = true; v.blkQ = q.id; v8Stat('vehBlk'); break; }
@@ -458,10 +458,12 @@ function vehGunTarget(v) {
   }
   if (!g.ind && typeof afgList === 'function') for (const a of afgList(v.side)) consider(a, 'ac', a.x, a.y, a.k === 'has' ? 1.2 : 2.2);   // 机场上停放的敌机（afgnd.js）
   if (!(at && v.type === 'td') || g.ind) for (const q of S.teams) if (q.side === foe && q.men.length && !q.ride) {   // 重型坦克也用榴弹打步兵，只有坦克歼击车专打装甲
+    const dq = dist(v.x, v.y, q.x, q.y);
+    if (dq > R0 || (g.min && dq < g.min)) continue;   // 射程外的（consider 也会丢掉）不用再数它周围的人：每个小组都数一遍全体小组，大地图上是推演最重的一处
     if (g.ind && !(q.side === 'e' ? inVision(q.x, q.y) : spotted(q.x, q.y))) continue;
-    if (v.cons && !g.ind && dist(v.x, v.y, q.x, q.y) > 80) continue;   // 节约弹药：主炮只打车辆、工事与贴近的步兵，远处的步兵交给机枪
+    if (v.cons && !g.ind && dq > 80) continue;   // 节约弹药：主炮只打车辆、工事与贴近的步兵，远处的步兵交给机枪
     let near = 0;   // 一发榴弹能罩住的人数：成堆的步兵优先
-    for (const o of S.teams) if (o !== q && o.side === foe && o.men.length && !o.ride && dist(o.x, o.y, q.x, q.y) < 22) near += o.men.length;
+    for (const o of S.teams) if (o !== q && o.side === foe && o.men.length && !o.ride) { const dx = o.x - q.x, dy = o.y - q.y; if (dx < 22 && dx > -22 && dy < 22 && dy > -22 && dist(o.x, o.y, q.x, q.y) < 22) near += o.men.length; }
     consider(q, 'tm', q.x, q.y, (1 + q.men.length * .2 + near * .12) * (g.flame && q.inTrench ? 2.4 : 1) * (g.ind ? .6 : 1) * (at ? .8 : 1));
   }
   return best;
@@ -473,13 +475,15 @@ function vehMgTarget(v) {
   const foe = v.side === 'p' ? 'e' : 'p', R0 = sp.mg.range * ((v.mod && v.mod.rng) || 1);
   let best = null, bd = R0;
   for (const q of S.teams) if (q.side === foe && q.men.length && !q.ride) {
+    const dx = q.x - v.x, dy = q.y - v.y;
+    if (dx >= bd || dx <= -bd || dy >= bd || dy <= -bd) continue;   // 坐标差已超出当前最近距离的直接跳过
     const d = dist(v.x, v.y, q.x, q.y);
     if (d < bd && vehSees(v, q.x, q.y, d)) { bd = d; best = { t: q, k: 'tm', x: q.x, y: q.y, d }; }
   }
   return best;
 }
-// 友军离落点太近（危险近距）就不打榴弹
-const vehDanger = (v, x, y, r) => S.teams.some(q => q.side === v.side && q.men.length && !q.ride && dist(q.x, q.y, x, y) < r);
+// 友军离落点太近（危险近距）就不打榴弹（每步每辆有目标的车都查一遍：先按坐标差排除）
+const vehDanger = (v, x, y, r) => S.teams.some(q => q.side === v.side && q.men.length && !q.ride && Math.abs(q.x - x) < r && Math.abs(q.y - y) < r && dist(q.x, q.y, x, y) < r);
 
 function vehShoot(v, tg) {
   const sp = vehSp(v), g = sp.gun, M = v.mod || {}, D = aiD();
@@ -674,7 +678,7 @@ function vehGrenades(dt) {
   if (vehCache().p.length + vehCache().e.length + cars.length) for (const q of S.teams) {
     if (!q.men.length || q.ride || q.sup >= 85 || q.order.t === 'retreat' || (q.gT || 0) > S.t) continue;
     let tg = null, bd = GREN.r, k = 'veh';
-    for (const v of vehFoes(q.side)) { if (v.swim || v.lst) continue; const d = dist(q.x, q.y, v.x, v.y); if (d < bd) { bd = d; tg = v; } }
+    for (const v of vehFoes(q.side)) { if (v.swim || v.lst || Math.abs(v.x - q.x) >= bd || Math.abs(v.y - q.y) >= bd) continue; const d = dist(q.x, q.y, v.x, v.y); if (d < bd) { bd = d; tg = v; } }   // 每步每个小组都查：先按坐标差排除
     if (q.side === 'p') for (const a of cars) { const d = dist(q.x, q.y, a.x, a.y); if (d < bd) { bd = d; tg = a; k = 'car'; } }
     if (!tg) continue;
     q.gT = S.t + GREN.cd * (.8 + Math.random() * .4); q.cd = Math.max(q.cd, .8);   // 投弹这一下不开枪

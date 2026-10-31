@@ -25,7 +25,8 @@ const V3P_PACKS = {
   industrial: { name: '办公楼', title: 'industrial building', author: 'spicybamer', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/industrial-building-770acf6b0da74af397f748d95141f8be' },
   flats1: { name: '公寓楼', title: 'Davison Street Flats 1 - Flat Roof', author: 'Charlie_Zane', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/davison-street-flats-1-flat-roof-0f461ea81f8541db8d6a5f5e35133588' },
   wh99: { name: '砖砌库房', title: 'Warehouses', author: '99.Miles', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/warehouses-e6e105d35b3f486292c42ffa52f363c0' },
-  girder: { name: '公路桥', title: 'Concrete Girder Beam Bridges/Tunnels [Free]', author: 'JoTrain The Aussie', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/concrete-girder-beam-bridgestunnels-free-1c5d6642796843c198b94124518b9f04' },
+  cbridge: { name: '公路拱桥', title: 'Concrete Bridge (low poly)', author: 'Derfmode', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/concrete-bridge-low-poly-77d6c4481e6043889ea8cfe08c8fdcd2' },
+  girder: { name: '公路桥（炸断后的桥墩）', title: 'Concrete Girder Beam Bridges/Tunnels [Free]', author: 'JoTrain The Aussie', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/concrete-girder-beam-bridgestunnels-free-1c5d6642796843c198b94124518b9f04' },
   pillbox: { name: '海滩地堡', title: 'WWII Pill Box - Saltney Quay, Flintshire, UK', author: 'al3xfoster', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/wwii-pill-box-saltney-quay-flintshire-uk-be8136976b294e1fb764b5b1cba7a72c' },
   teeth: { name: '龙牙', title: "Dragon's Teeth Anti-Tank obstacle", author: 'AdamKozakGrafika', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/dragons-teeth-anti-tank-obstacle-f7a6c987711d4ed2871707da47d2f3fb' },
   palms: { name: '棕榈树', title: 'Palm Trees', author: 'YadroGames', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/palm-trees-55690379305145488e20afb05fc687e6' },
@@ -58,8 +59,8 @@ void main() {
     vec4 R = n.z > .5 ? uImpT[vi] : uImpF[vi], X = uImpX[vi];
     q = n.z > .5 ? vec3(p.xy * iB.x * X.y, X.x * iB.y) : vec3(p.xy * iB.x, p.z * iB.y);
     tt = R.xy + t * R.zw; k = n.z > .5 ? 2. : 1.;
-    vec2 dh = iA.xy - uEye.xy;
-    if (dot(dh, dh) < uNear * uNear) { gl_Position = vec4(2., 2., 2., 1.); return; }   // 这一棵在近处画完整模型
+    vec3 dh = vec3(iA.xy - uEye.xy, iA.z - uEye.z);
+    if (dot(dh, dh) < uNear * uNear) { gl_Position = vec4(2., 2., 2., 1.); return; }   // 这一棵在近处画完整模型（与 v3pPrep 挑近处的树同样按三维距离，两边接得上）
   } else {
     q = p * iB.xyz;
     if (uSway > 0.) { float h = max(q.z, 0.), s = uSway * h * h * .0008 * (sin(uT * 1.6 + iB.w * 40.) + .35 * sin(uT * 3.3 + iB.w * 17.)); q.x += s; q.y += s * .6; }
@@ -206,7 +207,7 @@ const v3pVar = (pk, name) => { const P = v3pPack(pk); return P ? P.vars.get(name
 const V3P_TS = 30;   // 远处替身按 30 × 30 格（300 米）分块
 function v3pPlace() {
   const isle = !!TER.isle;   // 架空海岛（isle.js）：热带植被——沿海一带棕榈，雨林用阔叶树，针叶树只长在高山上
-  const need = ['treepack', 'cliffs', 'jph1', 'jph2', 'jph3', 'house', 'oldconc', 'hangar', 'atc', 'quonset', 'firestation', 'wh3', 'sawtooth', 'smallwh', 'industrial', 'flats1', 'wh99', 'girder', 'pillbox', 'teeth', ...(isle ? ['palms'] : [])];
+  const need = ['treepack', 'cliffs', 'jph1', 'jph2', 'jph3', 'house', 'oldconc', 'hangar', 'atc', 'quonset', 'firestation', 'wh3', 'sawtooth', 'smallwh', 'industrial', 'flats1', 'wh99', 'girder', 'cbridge', 'pillbox', 'teeth', ...(isle ? ['palms'] : [])];
   const got = need.map(id => v3pPack(id) || (V3P.packs.get(id) || {}).st === -1);   // 先全部发起下载（同时载入），再看是不是都好了
   if (!got.every(Boolean)) return false;
   const tp = v3pPack('treepack');
@@ -406,7 +407,17 @@ function v3pStatic(vOf) {
       add(best.v, cx, cy, zc, best.a, best.s, best.s, best.s);
     }
   }
-  // 海滩出口：两座地堡（射孔朝海，+y 是南）、一排龙牙；公路桥的桥墩（桥面按炸没炸每帧加，见 v3pPrep）
+  // 过河的公路桥：每处桥（地图上路过河的那几格）摆混凝土拱桥——沿路的方向摆，按河宽定桥长（两头各搭上岸），侧面按桥长等比缩放（拱不走形），
+  //   桥面横向拉到公路宽；桥面与两岸地面齐平，河谷深的把拱拉高一些、拱脚落到河床。炸断的桥那几格变回河，这里就没有了（据点桥留下梁式桥墩，见下）
+  const cb = vOf('cbridge', 'cbridge'), arches = cb >= 0 ? v3pBridges() : [];
+  if (cb >= 0) {
+    const bb = V3P.VL[cb].V.bb, mL = bb[1][0] - bb[0][0], mW = bb[1][1] - bb[0][1], deck = bb[1][2] - bb[0][2] - .15;   // 桥面就是模型顶面
+    for (const Bq of arches) {
+      const s = Bq.L / mL, sz = clamp((Bq.z - Bq.lo + 1.2) / deck, s, s * 1.8);
+      add(cb, Bq.x, Bq.y, Bq.z - deck * sz, Bq.a, s, 8.5 / mW, sz);
+    }
+  }
+  // 海滩出口：两座地堡（射孔朝海，+y 是南）、一排龙牙；据点公路桥：完好时由上面的拱桥画，炸断了画梁式桥的桥墩（桥面按炸没炸每帧加，见 v3pPrep）
   const pb = vOf('pillbox', 'pillbox'), th = vOf('teeth', 'teeth'), gp = vOf('girder', 'pier'), gs = vOf('girder', 'span');
   V3P.brg = [];
   for (const p of (typeof S === 'object' && S && S.points) || []) {
@@ -414,6 +425,8 @@ function v3pStatic(vOf) {
     if (k === 'exit' && pb >= 0 && th >= 0) {
       for (const sx of [-17, 17]) add(pb, p.x + sx, p.y, v3Ht(p.x + sx, p.y) - .4, Math.PI / 2, 1, 1, 1);
       for (const ox of [-18, -6, 6, 18]) add(th, p.x + ox, p.y + 11.5, v3Ht(p.x + ox, p.y + 11.5) - .1, -Math.PI / 2, 1.1, 1.1, 1.3);
+    } else if (k === 'bridge' && arches.some(Bq => Math.abs(Bq.x - p.x) < 40 && Math.abs(Bq.y - p.y) < 40)) {
+      continue;   // 这座桥完好，拱桥已经摆上
     } else if (k === 'bridge' && gp >= 0 && gs >= 0) {
       const z = Math.max(v3Ht(p.x - 26, p.y), v3Ht(p.x + 26, p.y), -2) - 2.4;   // 与自带的桥同一套高度（v3units.js）
       for (const bx of [-9, 9]) add(gp, p.x + bx, p.y, z - 3, 0, .45, .56, 3.7 / 37.5);
@@ -461,8 +474,54 @@ function v3pStatic(vOf) {
     V3P.rep.add(i);
   });
   for (const c of V3P.B || []) gl.deleteBuffer(c.b);
-  V3P.B = [...groups].map(([v, d]) => { const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(d), gl.STATIC_DRAW); return { v, b, n: d.length / 8 }; });
+  // 按变体 + 800 米见方的块分组（各块带包围盒）：画的时候远处、雾外的整块跳过——原来全图的楼一次画完，大地图上远看一帧两百多万个三角形
+  V3P.B = [];
+  for (const [v, d] of groups) {
+    const by = new Map();
+    for (let i = 0; i < d.length; i += 8) {
+      const x = d[i], y = -d[i + 1], k = Math.floor(x / 800) + ',' + Math.floor(y / 800);
+      let c = by.get(k);
+      if (!c) by.set(k, c = { d: [], bb: [x, y, x, y] });
+      for (let j = 0; j < 8; j++) c.d.push(d[i + j]);
+      c.bb[0] = Math.min(c.bb[0], x - 40); c.bb[1] = Math.min(c.bb[1], y - 40); c.bb[2] = Math.max(c.bb[2], x + 40); c.bb[3] = Math.max(c.bb[3], y + 40);
+    }
+    for (const c of by.values()) { const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(c.d), gl.STATIC_DRAW); V3P.B.push({ v, b, n: c.d.length / 8, bb: c.bb }); }
+  }
   V3P.asig = typeof afb3dSig === 'function' ? afb3dSig() : '';
+}
+
+// 过河的地方（BRIDGE 格连成的一片，隔一两格的也算同一处）：中心、沿路的方向、桥长（水面宽 + 两头各搭上岸 9 米）、
+//   桥面高（两岸地面取高者）、桥下最低的地面（河床，拱脚要够得着）
+//   方向：桥格连同两头 5 格以内的路一起取主方向；路太短看不出方向时取跨过水面最短的方向
+function v3pBridges() {
+  const out = [], N = GW * GH, seen = new Uint8Array(N), ty = TER.type;
+  const wet = (x, y) => { const gx = Math.floor(x / CELL), gy = Math.floor(y / CELL); if (gx < 0 || gy < 0 || gx >= GW || gy >= GH) return false; const t = ty[gy * GW + gx]; return t === T.RIVER || t === T.BRIDGE || t === T.FORD; };
+  const nb = (j, f, r = 1) => { const x = j % GW, y = (j / GW) | 0; for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) { const ax = x + dx, ay = y + dy; if ((dx || dy) && ax >= 0 && ay >= 0 && ax < GW && ay < GH) f(ay * GW + ax); } };
+  for (let i = 0; i < N; i++) {
+    if (ty[i] !== T.BRIDGE || seen[i]) continue;
+    const cl = [], st = [i]; seen[i] = 1;
+    while (st.length) { const j = st.pop(); cl.push(j); nb(j, k => { if (!seen[k] && ty[k] === T.BRIDGE) { seen[k] = 1; st.push(k); } }, 3); }
+    const road = new Set(cl);
+    let fr = cl;
+    for (let d = 0; d < 5; d++) { const nx = []; for (const j of fr) nb(j, k => { if (!road.has(k) && (ty[k] === T.ROAD || ty[k] === T.TOWN)) { road.add(k); nx.push(k); } }); fr = nx; }
+    let cx = 0, cy = 0, mx = 0, my = 0;
+    for (const j of cl) { cx += (j % GW + .5) * CELL; cy += (((j / GW) | 0) + .5) * CELL; }
+    cx /= cl.length; cy /= cl.length;
+    for (const j of road) { mx += j % GW; my += (j / GW) | 0; }
+    mx /= road.size; my /= road.size;
+    let sxx = 0, syy = 0, sxy = 0;
+    for (const j of road) { const dx = j % GW - mx, dy = ((j / GW) | 0) - my; sxx += dx * dx; syy += dy * dy; sxy += dx * dy; }
+    const tr = sxx + syy, det = sxx * syy - sxy * sxy, l1 = tr / 2 + Math.sqrt(Math.max(0, tr * tr / 4 - det)), l2 = tr - l1;
+    const span = a => { const c = Math.cos(a), s = Math.sin(a), g = sg => { let dry = 0, d = 0; for (; d < 90; d++) { if (wet(cx + c * d * sg, cy + s * d * sg)) dry = 0; else if (++dry >= 3) return d - 2; } return d; }; return [g(1), g(-1)]; };
+    let a = .5 * Math.atan2(2 * sxy, sxx - syy);
+    if (road.size < cl.length + 4 || l1 < l2 * 2.5) { let best = Infinity; for (let k = 0; k < 36; k++) { const t = k * Math.PI / 36, [p, q] = span(t); if (p + q < best) { best = p + q; a = t; } } }
+    const [d1, d2] = span(a), L = clamp(d1 + d2 + 18, 34, 110), off = (d1 - d2) / 2, c = Math.cos(a), s = Math.sin(a), x = cx + c * off, y = cy + s * off;
+    const zAt = k => v3Ht(clamp(x + c * k, 0, W - 1), clamp(y + s * k, 0, H - 1));
+    let lo = Infinity;
+    for (let k = -L / 2; k <= L / 2; k += 2) lo = Math.min(lo, zAt(k));
+    out.push({ x, y, a, L, z: Math.max(zAt(L / 2 - 4), zAt(-L / 2 + 4), .3) + .2, lo });
+  }
+  return out;
 }
 
 // —— 画一个变体（各组：贴图、透明裁剪、双面）；inst：实例缓冲区（null 时用常量属性），n 实例数 ——
@@ -525,8 +584,8 @@ function v3pPrep(C) {
   for (let by = b0y; by <= b1y; by++) for (let bx = b0x; bx <= b1x; bx++) {
     const bi = by * PL.bx + bx;
     for (let j = PL.cnt[bi]; j < PL.cnt[bi + 1]; j++) {
-      const i = PL.idx[j], dx = PL.x[i] - ex, dy = PL.y[i] - ey, rr = rN[PL.k[i]];
-      if (dx * dx + dy * dy > rr * rr) continue;
+      const i = PL.idx[j], dx = PL.x[i] - ex, dy = PL.y[i] - ey, dz = C.E[2] - PL.z[i], rr = rN[PL.k[i]];
+      if (dx * dx + dy * dy + dz * dz > rr * rr) continue;   // 按三维距离：镜头拉高了，脚下的树也是远处的树（原来只看水平距离，高处俯瞰时整片林子都按近处的精细模型画）
       let a = per.get(PL.v[i]);
       if (!a) per.set(PL.v[i], a = { d: new Float32Array(8 * 256), n: 0, b: gl.createBuffer() });
       if ((a.n + 1) * 8 > a.d.length) { const d2 = new Float32Array(a.d.length * 2); d2.set(a.d); a.d = d2; }
@@ -557,8 +616,12 @@ function v3pDraw(C, LM) {
   gl.uniform1f(U.uMode, LM ? 3 : mx ? 0 : 1); gl.uniform3f(U.uBody, .015, .085, .045); gl.uniform3f(U.uGlow, .12, .68, .36);
   gl.uniform1f(U.uImp, 0); gl.uniform1f(U.uSway, 0);
   if (typeof v3ShUni === 'function') v3ShUni(gl, U, !LM);
-  // 楼房、机场设施
-  for (const c of V3P.B || []) { const VV = V3P.VL[c.v]; v3pDrawVar(VV.V, VV.pk, c.b, c.n, undefined, VV); }
+  // 楼房、机场设施：整块在雾外、离镜头（连同镜头离地的高度）七公里以外的不画（远处的城镇由地面贴图表现）；阴影这一遍只画阴影范围里的块
+  { const sb = LM && typeof V3SH === 'object' && V3SH.box, ez = Math.max(0, C.E[2] - 60), bR = Math.min(fe, 7000 * clamp(typeof v3RD === 'function' ? v3RD() : 1, .6, 2));
+    for (const c of V3P.B || []) {
+      if (c.bb && (sb ? c.bb[2] < sb[0] || c.bb[0] > sb[2] || c.bb[3] < sb[1] || c.bb[1] > sb[3] : Math.hypot(Math.max(c.bb[0] - ex, 0, ex - c.bb[2]), Math.max(c.bb[1] - ey, 0, ey - c.bb[3]), ez) > bR)) continue;
+      const VV = V3P.VL[c.v]; v3pDrawVar(VV.V, VV.pk, c.b, c.n, undefined, VV);
+    } }
   // 近处的树、灌木、岩石
   for (const [v, a] of V3P.per) {
     if (!a.n) continue;

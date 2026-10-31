@@ -172,8 +172,10 @@ function v3Fx(C) {
     let pt = p;
     if (hl > 0 && tr.length > 1) { const q = tr[tr.length - 2], dx = p[0] - q[0], dy = p[1] - q[1], dz = p[2] - q[2], l = Math.hypot(dx, dy, dz); if (l > 1e-3) pt = [p[0] - dx / l * hl, p[1] - dy / l * hl, p[2] - dz / l * hl]; }
     if (tr.length > 1) { const q = tr[tr.length - 2]; v3fRib(out, E, q, pt, w0 * .9 * fs, [...col.slice(0, 3), .5], [...V3F_COL.flame.slice(0, 3), .95]); }   // 尾焰
-    v3fSpark(out, C, pt, (m.kind === 'tbm' ? 6 : 3.4) * fs, V3F_COL.white);
-    v3fSpark(out, C, pt, (m.kind === 'tbm' ? 10 : 6) * fs * (.85 + .15 * Math.sin(S.t * 40 + m.id)), [...V3F_COL.flame.slice(0, 3), .45]);   // 尾焰的光晕（闪烁）
+    // 亮点、光晕按离镜头的距离缩：五百米外照旧（远处看是一个亮点），越近越小——导弹视角贴在弹后十几米，原来 6 米的光晕盖住半个屏幕
+    const sk = clamp(Math.hypot(pt[0] - E[0], pt[1] - E[1], pt[2] - E[2]) / 500, .12, 1);
+    v3fSpark(out, C, pt, (m.kind === 'tbm' ? 6 : 3.4) * fs * sk, V3F_COL.white);
+    v3fSpark(out, C, pt, (m.kind === 'tbm' ? 10 : 6) * fs * sk * (.85 + .15 * Math.sin(S.t * 40 + m.id)), [...V3F_COL.flame.slice(0, 3), .45]);   // 尾焰的光晕（闪烁）
   }
   for (const id of V3F.trail.keys()) if (!live.has(id)) V3F.trail.delete(id);
   for (const id of V3F.seen) if (!live.has(id) && !(S.missiles || []).some(m => m.id === id)) { V3F.seen.delete(id); V3F.ign.delete(id); if (V3F.vo) V3F.vo.delete(id); }
