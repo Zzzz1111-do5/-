@@ -14,7 +14,15 @@
 - 默认地图 8400 × 5600（core.js MAP_K = 2.8，W0 × H0）；大海域地图在 MAPGEN 里登记、建图前 setWorld 换尺寸（海岛战役 isle.js：6000 × 12000，远海只在 3D 里铺一块平面）。西、东、南三边都是海的地图（海岛），3D 写实画面里地图外是无边海面（view3d.js v3OceanBuild / v3OceanDraw：跟着镜头走、铺到雾的尽头），北边是陆地时把岛按北缘镜像延伸约 3 公里再收出北岸（只是远景）。
 - 画面默认「写实」（设置里还能选黑绿 / 数码，look.js）；对局默认 3D——view3d.js 自由镜头、真实天空与地表贴图、实时太阳阴影、海面（法线贴图按像素大小分层淡出，远处不出噪点），v3post.js 后期；黑绿 / 数码画面四周是 v3table.js 的沙盘桌。
 - 坦克装甲车、飞机、直升机、导弹、单兵用的是用户给的模型，原封不动导入（js/v3g.js 渲染，js/mdl/<键>.js；转换工具 tools/v3gconv.py、tools/v3gbake.js、配置 tools/v3gmodels.json、预览 tools/v3gview.html）；兵种 → 模型的对照表在 v3g.js 的 V3G_VEH / V3G_AIR / V3G_MSL。舰艇是 Sketchfab 上 CC-BY 的模型（v3utex.js、assets/models），甲板牵引车、挂弹车、导弹挂载架（rack）是 v3x.js 的导入模型（tools/sfmodel.js + tools/sfmodels.json，密钥只从环境变量 SKETCHFAB_TOKEN 读）。
-- 模型加工都在 v3g.js 的 v3gPrep 里（上传缓冲区之前）：歼-31 尾喷口、舵面（V3G_PIT）；歼-20、歼-31 的弹舱（V3G_BAY：按真实弹舱位置把机腹蒙皮多边形裁剪切开，切出的舱门绕铰链转，补弹舱井）；坦克炮管拆成单独部件（V3G_GUN：开炮后坐、复进，车体后坐翘起）；M1A1 裙板上原有的 64 块 ARAT 拆成能逐块消失的 'era' 部件（V3G_ERA：块号编在顶点 |y| 里，一次绘制，块后面补焦黑底板）。实例参数 8 个（iC、iD）：iC.x 炮塔转角，iD 0 主弹舱开度、1 侧弹舱开度、2 炮管后坐；坦克 iC.yzw、iD.x 是炸掉的反应装甲块（各 16 位）。
+- Sketchfab 下载的车辆模型（全部 CC-BY-4.0，署名在 tools/v3gmodels.json 的 credit，烘焙时自动写进 docs/credits.md、legal/credits.html；v3g.js 的 V3G_CRED 是游戏里的致谢表）：
+  先 `python3 -I tools/sfprep.py <gltf.zip> <新空目录> [贴图最长边]` 解压并缩贴图，再 `node tools/v3gbake.js <上级目录> <键>`。v3gmodels.json 新选项：tri0 / tri0Flags 近看网格减面（Permissive 才减得动零件多的）、
+  texMax 记录贴图缩到多大（署名里写明改动）、opaque 作者误设成半透明的材质按不透明画、roughMin 涂装按哑光、level 把摆成倾斜飞行姿态的飞机摆正、rot 补转；
+  部件规则：kind each（每个连通块各成一个部件，车轮；byNode / cluster 把轮毂轮胎合成一个轮，roll 按半径换算转角）、kind chain（自转 → 平移 → 俯仰 → 随炮塔转，q / a2 / e / e2 / q3 / a3 / g2）、triBelow（按三角形高度挑起落架）。
+- 每型装备「身上能动的功能」与真实参数在 js/vfn.js 的 VFN（逐型查的资料，出处写在注释里）：炮塔回转速度（推演里的转速也用它，vfnTrav）、炮管俯仰范围与速度（直瞄按目标高低、间瞄按射程算弹道仰角、对空按飞机高度）、
+  后坐、发射架起竖（布雷德利陶式、爱国者 38°）、跳板（上下车时放下）、加特林炮管束开火时转、雷达转、扫雷犁放下、车轮按里程滚。v3g.js v3gVeh 每帧调 vfnParts 算 8 个部件参数。
+  车辆型号 → 模型在 V3G_VEH（美军：布雷德利、M109、斯特赖克、爱国者、M163、C-RAM、M1150、M-ATV、悍马；解放军：ZBD-04、PTL-02、PGL-625、PzH2000（代 PLZ-07）、LAV-25（代 ZSL-92B / 08 式））。
+  飞机模型（F-22、F-35、A-10、AH-64、UH-60、C-17、B-2、P-8、MQ-9、歼-15、歼-36、歼-50、运-20、轰-6、E-2D、X-47B、RQ-4）已烘焙进 js/mdl，但还没接进 V3G_AIR（起落架、旋翼待核对）。
+- 模型加工都在 v3g.js 的 v3gPrep 里（上传缓冲区之前）：歼-31 尾喷口、舵面（V3G_PIT）；歼-20、歼-31 的弹舱（V3G_BAY：按真实弹舱位置把机腹蒙皮多边形裁剪切开，切出的舱门绕铰链转，补弹舱井）；坦克炮管拆成单独部件（V3G_GUN：开炮后坐、复进，车体后坐翘起）；M1A1 裙板上原有的 64 块 ARAT 拆成能逐块消失的 'era' 部件（V3G_ERA：块号编在顶点 |y| 里，一次绘制，块后面补焦黑底板）。实例参数 8 个（iC、iD）：iC.x 炮塔转角，iD 0 主弹舱开度、1 侧弹舱开度、2 炮管后坐；坦克 iC.yzw、iD.x 是炸掉的反应装甲块（各 16 位）；vfn.js 管的车辆按它那套参数槽。着色器部件模式：1 收起、2 尾喷口、3 炮管、4 反应装甲块、5 链式部件。
 - 航母甲板（cvdeck.js、v3det.js）：飞机按机身 / 机翼 / 平尾三块矩形占位（cvShape），滑行每步先试、会碰上别的飞机或舰岛就原地等（cvFollow；互相挡住的低优先级那架倒一点让路，20 秒还过不去才硬走）；
   滑行令 c.tx：甲板上同一时间只滑一架（滑去弹射器、着舰后滑回机位），刚着舰的优先；滑行时折着机翼，到偏流板后展开完才上弹射器；出机位先顺机头拖 6 米再往舷内拐。
   每个机位旁一辆挂弹车 + 一个导弹挂载架（rack，0.62 倍），整备时一趟挂一枚（v3dArmQ / v3dArmLoaded / v3dArmBay，满载清单 fpwpn.js fwLoadout），挂弹时弹舱门开着，挂上的弹留在飞机上（fwStoresGnd）；牵引车不再瞬移。

@@ -19,7 +19,7 @@
 <div id="info"></div>
 <script>
 // 用户模型预览（tools/v3gbake.js 烘焙出来的 js/mdl/<键>.js，用游戏里同一个渲染器 js/v3g.js 画）：
-//   拖动转镜头、滚轮拉近拉远；按钮切换模型；?m=键 指定，&side=1 敌方配色，&yaw= &pitch= &dist= 固定镜头（截图用）
+//   拖动转镜头、滚轮拉近拉远；按钮切换模型；?m=键 指定，&side=1 敌方配色，&yaw= &pitch= &dist= 固定镜头（截图用），&p=八个部件参数（逗号分隔，看炮管俯仰、发射架、跳板等）
 'use strict';
 const V3_SUN = (() => { const v = [-.6, .62, .42], l = Math.hypot(...v); return v.map(a => +(a / l).toFixed(4)); })(), V3_SUNG = `vec3(${V3_SUN.join(', ')})`;
 const V3_PREC = 'precision highp float;\n', V3_FOV = .8, W = 8400, H = 5600;
@@ -27,6 +27,7 @@ const CAM = { vh: 768 }, V3 = { gl: null };
 const KEYS = ['ztz96', 'm1a1', 'j20', 'j16', 'j31', 'z10w', 'z21', 'army', 'aim120', 'aim9', 'aim54', 'aim9s', 'aim120s', 'ks172', 'asraam', 'gbu24', 'mk83', 'agm65', 'jsow', 'brimstone'];
 const Q = new URLSearchParams(location.search);
 let cur = (Q.get('m') || 'ztz96').split(','), side = +(Q.get('side') || 0);
+const PQ = Q.get('p') ? Q.get('p').split(',').map(Number) : null;
 const cam = { yaw: +(Q.get('yaw') ?? .7), pitch: +(Q.get('pitch') ?? .45), dist: +Q.get('dist') || null, auto: !Q.get('yaw') };
 </script>
 <script>const clamp = (v, a, b) => v < a ? a : v > b ? b : v, lerp = (a, b, t) => a + (b - a) * t;</script>
@@ -92,7 +93,7 @@ function frame(now) {
     const L = lens[i] * 1.15; x += L / 2;
     const tur = Math.sin(t * .7) * 1.2, rot = t * 25, gear = Math.sin(t * .8) > 0 ? 1 : 0;
     // 世界坐标 y 向南：v3gAdd 收的是游戏世界坐标
-    if (v3gAdd(k, x, 0, 0, 0, 1, side, 0, 0, k === 'z21' ? [rot, rot * 2.2, 0, 0] : k === 'j20' || k === 'j31' ? [gear, 0, 0, 0] : [tur, 0, 0, 0])) ok++;
+    if (v3gAdd(k, x, 0, 0, 0, 1, side, 0, 0, PQ || (k === 'z21' ? [rot, rot * 2.2, 0, 0] : k === 'j20' || k === 'j31' ? [gear, 0, 0, 0] : [tur, 0, 0, 0]))) ok++;
     x += L / 2;
   });
   v3gDraw(C);

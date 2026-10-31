@@ -140,6 +140,8 @@ function bake(key, C, up) {
       if (o.hide) M.hide = 1;
     }
   }
+  if (C.opaque) for (const M of mats) if (M.am === 2 && !/glass|window|canopy|lens|cockpit|windshield|glas|vidrio/i.test(M.n)) M.am = 0;   // opaque：作者把整车材质设成了半透明混合（贴图其实不透明），按不透明画——玻璃除外
+  if (C.roughMin != null) for (const M of mats) if (!M.sg && M.mr[1] < C.roughMin) M.mr[1] = C.roughMin;   // roughMin：涂装按哑光算（有的作者把粗糙度设得像镜面，太阳一照一大片白）
   if (!mats.length) mats.push({ n: 'default', c: [.6, .6, .6, 1], t: null, nt: null, ns: 1, mr: [0, .8], mrt: null, sg: null, sgt: null, e: [0, 0, 0], et: null, ot: null, am: 0, ac: .5, ds: 1 });
 
   // —— 场景树：每个网格图元的顶点乘上节点的世界矩阵 ——
@@ -198,6 +200,24 @@ function bake(key, C, up) {
 
   // —— 缩放、落地 ——
   const live = []; for (let t = 0; t < nt; t++) if (TM[t] >= 0) live.push(t);
+  // level：作者把飞机摆成了倾斜的飞行姿态——按面积加权的主成分找出机体最薄的方向（机翼平面的法线）转到竖直，机头方向尽量不动；
+  //   rot：再按需要绕 x / y / z 补转（度）
+  if (C.level || C.rot) {
+    let R = [1, 0, 0, 0, 1, 0, 0, 0, 1];
+    if (C.level) {
+      const m = [0, 0, 0], cv = [0, 0, 0, 0, 0, 0, 0, 0, 0]; let wsum = 0;
+      for (const t of live) { const [a, b, c] = [TRI[t * 3], TRI[t * 3 + 1], TRI[t * 3 + 2]], e1 = [0, 1, 2].map(k => P[b * 3 + k] - P[a * 3 + k]), e2 = [0, 1, 2].map(k => P[c * 3 + k] - P[a * 3 + k]), ar = Math.hypot(...cross(e1, e2)) / 2; for (const v of [a, b, c]) for (let k = 0; k < 3; k++) m[k] += P[v * 3 + k] * ar; wsum += 3 * ar; }
+      for (let k = 0; k < 3; k++) m[k] /= wsum || 1;
+      for (const t of live) { const [a, b, c] = [TRI[t * 3], TRI[t * 3 + 1], TRI[t * 3 + 2]], e1 = [0, 1, 2].map(k => P[b * 3 + k] - P[a * 3 + k]), e2 = [0, 1, 2].map(k => P[c * 3 + k] - P[a * 3 + k]), ar = Math.hypot(...cross(e1, e2)) / 2; for (const v of [a, b, c]) { const d = [0, 1, 2].map(k => P[v * 3 + k] - m[k]); for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) cv[i * 3 + j] += d[i] * d[j] * ar; } }
+      const E = jacobi3(cv), iMin = [0, 1, 2].sort((i, j) => E.val[i] - E.val[j])[0];
+      let n = [E.vec[0 * 3 + iMin], E.vec[1 * 3 + iMin], E.vec[2 * 3 + iMin]];
+      if (n[2] < 0) n = n.map(v => -v);
+      R = rotTo(n, [0, 0, 1]);
+      console.log(`  ${key} 摆正：机翼平面法线 [${n.map(v => v.toFixed(3))}] 转到竖直`);
+    }
+    if (C.rot) { const D = Math.PI / 180, [rx, ry, rz] = C.rot.map(v => v * D), cx = Math.cos(rx), sx = Math.sin(rx), cy = Math.cos(ry), sy = Math.sin(ry), cz = Math.cos(rz), sz = Math.sin(rz); const Rx = [1, 0, 0, 0, cx, -sx, 0, sx, cx], Ry = [cy, 0, sy, 0, 1, 0, -sy, 0, cy], Rz = [cz, -sz, 0, sz, cz, 0, 0, 0, 1]; R = m3mul(Rz, m3mul(Ry, m3mul(Rx, R))); }
+    for (let v = 0; v < nv0; v++) for (const A of [P, N]) { const x = A[v * 3], y = A[v * 3 + 1], z = A[v * 3 + 2]; A[v * 3] = R[0] * x + R[1] * y + R[2] * z; A[v * 3 + 1] = R[3] * x + R[4] * y + R[5] * z; A[v * 3 + 2] = R[6] * x + R[7] * y + R[8] * z; }
+  }
   const bbOf = () => { const b = [1e18, 1e18, 1e18, -1e18, -1e18, -1e18]; for (const t of live) for (let j = 0; j < 3; j++) { const v = TRI[t * 3 + j]; for (let k = 0; k < 3; k++) { const x = P[v * 3 + k]; if (x < b[k]) b[k] = x; if (x > b[k + 3]) b[k + 3] = x; } } return b; };
   let bb = bbOf();
   const s = C.scale || (C.len ? C.len / (bb[3] - bb[0]) : C.height ? C.height / (bb[5] - bb[2]) : C.span ? C.span / (bb[4] - bb[1]) : 1);
@@ -224,8 +244,45 @@ function bake(key, C, up) {
     for (let i = 0; i < parts.length; i++) if (ruleHit(parts[i].rule, o)) return i;
     return -1;
   };
-  const TP = new Int8Array(nt).fill(-1);
+  const TP = new Int16Array(nt).fill(-1);
   for (const o of comp.values()) { const pi = partOfComp(o); for (const t of o.tris) TP[t] = pi; }
+  // triBelow：按三角形挑（起落架和机身连成一整块的模型）——三个顶点都在这个高度以下的三角形归这个部件（box 限定前后左右范围）
+  parts.forEach((p, pi) => {
+    const R = p.rule; if (R.triBelow == null) return;
+    for (const t of live) {
+      if (TP[t] >= 0 && TP[t] !== pi) continue;
+      let ok = true, cx = 0, cy = 0;
+      for (let j = 0; j < 3; j++) { const v = TRI[t * 3 + j]; if (P[v * 3 + 2] > R.triBelow) ok = false; cx += P[v * 3] / 3; cy += P[v * 3 + 1] / 3; }
+      if (ok && R.box && (cx < R.box[0] || cx > R.box[1] || cy < R.box[2] || cy > R.box[3])) ok = false;
+      if (ok) TP[t] = pi;
+    }
+  });
+  // kind = each：每个命中的连通块各成一个部件（车轮：各绕自己的轮心转），转轴点取块的包围盒中心；规则那一项本身不留
+  if (parts.some(p => p.k === 'each')) {
+    const keep = [], map = new Map();
+    parts.forEach((p, i) => { if (p.k !== 'each') map.set(i, keep.push(p) - 1); });
+    const each = new Map();
+    for (const o of comp.values()) {
+      const pi = o.tris.length ? TP[o.tris[0]] : -1;
+      if (pi < 0 || parts[pi].k !== 'each') { const j = pi < 0 ? -1 : map.get(pi); for (const t of o.tris) TP[t] = j; continue; }
+      const R = parts[pi].rule;
+      let key = pi + ':' + (R.byNode ? [...o.nodes][0] : R.merge ? o.c.map(v => Math.round(v / R.merge)).join(',') : o.id);   // byNode：同一个节点里的几块（轮毂、轮胎）算一个轮子；merge：轮心挨得近的合成一个
+      if (R.cluster) {   // cluster：块中心离已有的哪个轮子中心不到这么远就并进去（按块的包围盒中心算，不受取整边界影响）
+        const hit = [...each.entries()].find(([k2, j2]) => k2.startsWith(pi + ':c') && Math.hypot(...[0, 1, 2].map(i => (keep[j2].bb[i] + keep[j2].bb[i + 3]) / 2 - o.c[i])) < R.cluster);
+        key = hit ? hit[0] : pi + ':c' + o.id;
+      }
+      let j = each.get(key);
+      if (j == null) { j = keep.push({ n: parts[pi].n, k: R.as || 'rot', p: null, a: parts[pi].a, rule: R, bb: [1e9, 1e9, 1e9, -1e9, -1e9, -1e9] }) - 1; each.set(key, j); }
+      const b = keep[j].bb; for (let k = 0; k < 3; k++) { b[k] = Math.min(b[k], o.bb[k]); b[k + 3] = Math.max(b[k + 3], o.bb[k + 3]); }
+      for (const t of o.tris) TP[t] = j;
+    }
+    for (const p of keep) if (p.bb) {
+      p.p = [(p.bb[0] + p.bb[3]) / 2, (p.bb[1] + p.bb[4]) / 2, (p.bb[2] + p.bb[5]) / 2];
+      if (p.rule.roll) p.w = [0, 0, 0, +(2 / Math.max(.02, p.bb[5] - p.bb[2])).toFixed(4)];   // roll：车轮按自己的半径把滚过的路程（参数槽 iC3，模型米）换成转角
+      delete p.bb;
+    }
+    parts.length = 0; parts.push(...keep);
+  }
   if (process.argv.includes('--comps')) {
     const SK = { z1: o => -o.bb[5], x1: o => -o.bb[3], x0: o => o.bb[0], n: o => -o.tris.length, z0: o => o.bb[2] }[process.env.SORT || 'z1'], L = [...comp.values()].sort((a, b) => SK(a) - SK(b));
     console.log('bb', bb.map(v => +v.toFixed(3)), '连通块', L.length);
@@ -271,12 +328,36 @@ function bake(key, C, up) {
   }
   for (const g of groups) g.n = 0;
   groups.forEach((g, gi) => { const nx = groups[gi + 1]; g.n = (nx ? nx.i0 : IDX.length) - g.i0; });
-  const stride = hasCol ? 12 : 8, VB = new Float32Array(nv * stride);
+  const stride = hasCol ? 12 : 8;
+  let VB = new Float32Array(nv * stride);
   V.forEach((v, i) => {
     const o = i * stride;
     VB[o] = P[v * 3]; VB[o + 1] = P[v * 3 + 1]; VB[o + 2] = P[v * 3 + 2]; VB[o + 3] = N[v * 3]; VB[o + 4] = N[v * 3 + 1]; VB[o + 5] = N[v * 3 + 2]; VB[o + 6] = UV[v * 2]; VB[o + 7] = UV[v * 2 + 1];
     if (hasCol) for (let k = 0; k < 4; k++) VB[o + 8 + k] = COL[v * 4 + k];
   });
+  // —— tri0：近看用的网格也嫌太细（几十上百万个三角形的扫描模型、雕刻模型）就先减到这么多：按部件分开减，贴图缝、材质交界不合并（形状、贴图都不走样），
+  //   减完把用不到的顶点去掉。只用于 Sketchfab 下载的模型（用户给的模型不设 tri0，照旧原样）
+  if (MS && C.tri0 && IDX.length / 3 > C.tri0) {
+    const pos = new Float32Array(nv * 3), att = new Float32Array(nv * 5);
+    for (let i = 0; i < nv; i++) { pos.set(VB.subarray(i * stride, i * stride + 3), i * 3); att.set(VB.subarray(i * stride + 3, i * stride + 8), i * 5); }
+    const ratio = C.tri0 / (IDX.length / 3), per = groups.map(() => []), gOfV = new Int32Array(nv);
+    groups.forEach((g, gi) => { for (let k = g.i0; k < g.i0 + g.n; k++) gOfV[IDX[k]] = gi; });
+    for (const pid of [...new Set(groups.map(g => g.p))]) {
+      const I0 = [];
+      groups.forEach(g => { if (g.p === pid) for (let k = g.i0; k < g.i0 + g.n; k++) I0.push(IDX[k]); });
+      const want = Math.max(3, Math.floor(I0.length * ratio / 3) * 3);
+      const [J2] = MS.simplifyWithAttributes(Uint32Array.from(I0), pos, 3, att, 5, [.5, .5, .5, 1, 1], null, want, C.tri0Err ?? .01, C.tri0Flags || []);
+      for (let i = 0; i < J2.length; i += 3) per[gOfV[J2[i]]].push(J2[i], J2[i + 1], J2[i + 2]);
+    }
+    const used = new Int32Array(nv).fill(-1), nV = [], I2 = [];
+    groups.forEach((g, gi) => { g.i0 = I2.length; for (const v of per[gi]) { if (used[v] < 0) { used[v] = nV.length; nV.push(v); } I2.push(used[v]); } g.n = I2.length - g.i0; });
+    const VB2 = new Float32Array(nV.length * stride);
+    nV.forEach((v, i) => VB2.set(VB.subarray(v * stride, v * stride + stride), i * stride));
+    console.log(`  ${key} 近看网格减面：${IDX.length / 3} → ${I2.length / 3} 个三角形，顶点 ${nv} → ${nV.length}`);
+    for (let i = groups.length - 1; i >= 0; i--) if (!groups[i].n) groups.splice(i, 1);
+    IDX.length = 0; for (const v of I2) IDX.push(v);
+    VB = VB2; nv = nV.length;
+  }
   // —— 远处用的简化网格：整模一起减（各组顶点不共用，组与组的交界、UV 缝都保得住），减完按顶点所属的组分回去 ——
   const lods = [groups.map(g => [g.m, g.p, g.i0, g.n])], allIdx = [IDX];
   let off = IDX.length;
@@ -316,7 +397,8 @@ function bake(key, C, up) {
     v: 1, key, name: C.name, len: R3(bb[3] - bb[0]), hl: R3(hb[1] - hb[0]), bb: bb.map(R3), zc: C.zc ?? R3((bb[2] + bb[5]) / 2),
     nv, st: stride, col: hasCol ? 1 : 0, vb: [vbo, nv * stride * 4], ib: [ibo, idxAll.length * it], it,
     mats: mats.map(M => ({ n: M.n, c: M.c.map(R3), t: M.t, nt: M.nt, ns: M.ns, mr: M.mr.map(R3), mrt: M.mrt, sg: M.sg && M.sg.map(R3), sgt: M.sgt, e: M.e.map(R3), et: M.et, ot: M.ot, am: M.am, ac: M.ac, ds: M.ds })),
-    imgs: imgOut, parts: parts.map(p => ({ n: p.n, k: p.k, p: p.p.map(R3), a: p.a })), noz: C.noz || null, lod: lods, credit: C.credit || (C.set && CFG.sets[C.set]) || null
+    imgs: imgOut, parts: parts.map(p => { const o = { n: p.n, k: p.k, p: p.p.map(R3), a: p.a }; for (const f of PART_X) if (p[f] != null) o[f] = p[f]; else if (p.rule[f] != null) o[f] = p.rule[f]; return o; }), noz: C.noz || null, lod: lods, credit: C.credit || (C.set && CFG.sets[C.set]) || null,
+    ...(C.meta || {})
   };
   const cr = C.credit || (C.set && CFG.sets[C.set]) || null, head = cr ? `// ${C.name}：${cr.title}，作者 ${cr.author}（${cr.url}），${cr.license} 授权（${cr.lurl}）。署名见 docs/credits.md\n` : '';
   const out = path.join(ROOT, 'js', 'mdl', key + '.js');
@@ -326,6 +408,7 @@ function bake(key, C, up) {
 }
 // 部件规则（连通块 o 是不是这个部件）：nodes 节点名正则、mats 材质名正则、zmin / zmax 块的最低 / 最高点、cyl [x, y, r] 块中心在圆柱里、box [x0, x1, y0, y1] 块中心在框里；any：几条规则任一满足
 function ruleHit(R, o) {
+  if (R.triBelow != null) return false;   // 按三角形挑的部件不整块归
   if (R.any) return R.any.some(r => ruleHit(r, o));
   if (R.nodes && ![...o.nodes].some(n => new RegExp(R.nodes).test(n))) return false;
   if (R.mats && ![...o.mats].some(n => new RegExp(R.mats).test(n))) return false;
@@ -338,9 +421,36 @@ function ruleHit(R, o) {
   if (R.xmin != null && o.bb[0] < R.xmin) return false;
   if (R.xmax != null && o.bb[3] > R.xmax) return false;
   if (R.maxTris != null && o.tris.length > R.maxTris) return false;
+  if (R.minTris != null && o.tris.length < R.minTris) return false;
   return !!(R.nodes || R.mats || R.zmin != null || R.zmax != null || R.cyl || R.box || R.ztop != null || R.zlow != null);
 }
 function AXm(s) { if (Array.isArray(s)) return s; return { x: [1, 0, 0], y: [0, 1, 0], z: [0, 0, 1] }[s] || [0, 0, 1]; }
+// 3×3 行主序矩阵乘、把单位向量 a 转到 b 的旋转（罗德里格斯）、对称矩阵的雅可比特征分解（列是特征向量）
+const m3mul = (A, B) => [0, 1, 2].flatMap(i => [0, 1, 2].map(j => A[i * 3] * B[j] + A[i * 3 + 1] * B[3 + j] + A[i * 3 + 2] * B[6 + j]));
+function rotTo(a, b) {
+  const v = cross(a, b), c = a[0] * b[0] + a[1] * b[1] + a[2] * b[2], s2 = v[0] * v[0] + v[1] * v[1] + v[2] * v[2];
+  if (s2 < 1e-12) return c > 0 ? [1, 0, 0, 0, 1, 0, 0, 0, 1] : [1, 0, 0, 0, -1, 0, 0, 0, -1];
+  const K = [0, -v[2], v[1], v[2], 0, -v[0], -v[1], v[0], 0], K2 = m3mul(K, K), f = (1 - c) / s2;
+  return [0, 1, 2, 3, 4, 5, 6, 7, 8].map(i => (i % 4 === 0 ? 1 : 0) + K[i] + K2[i] * f);
+}
+function jacobi3(S) {
+  const a = S.slice(), V = [1, 0, 0, 0, 1, 0, 0, 0, 1];
+  for (let it = 0; it < 50; it++) {
+    let p = 0, q = 1, mx = Math.abs(a[1]);
+    if (Math.abs(a[2]) > mx) { p = 0; q = 2; mx = Math.abs(a[2]); }
+    if (Math.abs(a[5]) > mx) { p = 1; q = 2; mx = Math.abs(a[5]); }
+    if (mx < 1e-15) break;
+    const th = .5 * Math.atan2(2 * a[p * 3 + q], a[q * 3 + q] - a[p * 3 + p]), c = Math.cos(th), s = Math.sin(th);
+    const J = [1, 0, 0, 0, 1, 0, 0, 0, 1]; J[p * 3 + p] = c; J[q * 3 + q] = c; J[p * 3 + q] = s; J[q * 3 + p] = -s;
+    const Jt = [J[0], J[3], J[6], J[1], J[4], J[7], J[2], J[5], J[8]], A2 = m3mul(Jt, m3mul(a, J));
+    for (let i = 0; i < 9; i++) a[i] = A2[i];
+    const V2 = m3mul(V, J); for (let i = 0; i < 9; i++) V[i] = V2[i];
+  }
+  return { val: [a[0], a[4], a[8]], vec: V };
+}
+// 部件配置里原样带进模型文件的字段（js/v3g.js 用）：w / w2 实例参数权重（iC / iD 各 4 个）、slot 参数槽、l 长度；
+//   第二个转动（kind = chain：先顺 −x 后坐 w2·iD 米，再绕 q / a2 转 e·iC + e2·iD，最后绕 pivot / axis 转 w·iC）：q 转轴点、a2 转轴、e / e2 权重
+const PART_X = ['w', 'w2', 'slot', 'l', 'q', 'a2', 'e', 'e2', 'r', 'q3', 'a3', 'g2'];
 
 // ———————————————— 入口 ————————————————
 const args = process.argv.slice(2), up = args[0];
@@ -366,16 +476,17 @@ function credits() {
     const id = cr.url;
     if (!by.has(id)) by.set(id, { cr, names: [], keys: [] });
     by.get(id).names.push(C.name); by.get(id).keys.push(k);
+    if (C.texMax || C.tri0) by.get(id).mod = [C.texMax ? '贴图缩到最长边 ' + C.texMax + ' 像素' : '', C.tri0 ? '网格减到约 ' + C.tri0 + ' 个三角形' : ''].filter(Boolean).join('、');
   }
   const L = [...by.values()], nc = L.filter(o => /NC/.test(o.cr.license));
   const md = '<!-- v3g:start -->\n## 用户提供的模型（tools/v3gbake.js 烘焙，js/v3g.js 画）\n\n原样导入：网格、贴图、材质都是原来的，只统一了朝向与尺寸（落地、按真实长度缩放），远处换减了面的网格。' +
     (nc.length ? '标了「非商用」的只能用在不收费的版本里（商店版打包时去掉，tools/build_www.mjs --app）。' : '') + '\n\n' +
-    L.map(o => `- ${o.names.join('、')}（${o.keys.map(k => 'js/mdl/' + k + '.js').join('、')}）：This work is based on "${o.cr.title}" (${o.cr.url}) by ${o.cr.author} licensed under ${o.cr.license} (${o.cr.lurl})${/NC/.test(o.cr.license) ? '——非商用' : ''}`).join('\n') + '\n<!-- v3g:end -->\n';
+    L.map(o => `- ${o.names.join('、')}（${o.keys.map(k => 'js/mdl/' + k + '.js').join('、')}）：This work is based on "${o.cr.title}" (${o.cr.url}) by ${o.cr.author} licensed under ${o.cr.license} (${o.cr.lurl})${/NC/.test(o.cr.license) ? '——非商用' : ''}${o.mod ? '（改动：' + o.mod + '）' : ''}`).join('\n') + '\n<!-- v3g:end -->\n';
   const fm = path.join(ROOT, 'docs', 'credits.md');
   let t = fs.readFileSync(fm, 'utf8');
   t = /<!-- v3g:start -->/.test(t) ? t.replace(/<!-- v3g:start -->[\s\S]*?<!-- v3g:end -->\n?/, md) : t.replace(/(## Sketchfab 模型)/, md + '\n$1');
   fs.writeFileSync(fm, t);
-  const li = L.map(o => `<li><strong>${esc(o.names.join('、'))}</strong>：This work is based on "<a href="${url(o.cr.url)}" target="_blank" rel="noopener">${esc(o.cr.title)}</a>" by ${esc(o.cr.author)} licensed under <a href="${url(o.cr.lurl)}" target="_blank" rel="noopener">${esc(o.cr.license)}</a>${/NC/.test(o.cr.license) ? '（非商用）' : ''}</li>`).join('\n');
+  const li = L.map(o => `<li><strong>${esc(o.names.join('、'))}</strong>：This work is based on "<a href="${url(o.cr.url)}" target="_blank" rel="noopener">${esc(o.cr.title)}</a>" by ${esc(o.cr.author)} licensed under <a href="${url(o.cr.lurl)}" target="_blank" rel="noopener">${esc(o.cr.license)}</a>${/NC/.test(o.cr.license) ? '（非商用）' : ''}${o.mod ? '（改动：' + esc(o.mod) + '）' : ''}</li>`).join('\n');
   const block = `<!-- v3g:start -->\n<p>坦克、飞机、直升机、导弹、士兵的模型来自 Sketchfab，按原样导入（网格、贴图、材质不改，只统一了朝向与尺寸）：</p>\n<ul>\n${li}\n</ul>\n<!-- v3g:end -->\n`;
   const fh = path.join(ROOT, 'legal', 'credits.html');
   let h = fs.readFileSync(fh, 'utf8');

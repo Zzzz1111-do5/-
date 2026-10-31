@@ -551,7 +551,7 @@ function vehAA(v, dt) {
   for (const p of S.planes) {
     if (p.dead || !(p.alt > .4) || (typeof eaHigh === 'function' && (eaHigh(p) || eaHighUav(p))) || dist(v.x, v.y, p.x, p.y) > sp.aa) continue;   // 巡逻高度上的战斗机、中空的无人机够不着
     tracer(v.x, v.y, p.x + gauss() * 14, p.y + gauss() * 14, 'e', inVision(v.x, v.y));
-    v.aim = Math.atan2(p.y - v.y, p.x - v.x); v.mgT = S.t;
+    v.aim = Math.atan2(p.y - v.y, p.x - v.x); v.mgT = S.t; v.aaId = p.id; v.aaAt = S.t;   // aaId：正在打的飞机（3D 里炮管按它的高度仰起，vfn.js）
     if (Math.random() < .12 * (1 - v.sup / 130) * (typeof airStealth === 'function' ? (1 + airStealth(p)) / 2 : 1) && typeof airLost === 'function') { airLost(p, `${typeof airName === 'function' ? airName(p.kind, p.v) : '我机'}被敌${vehModel(v)}击落`); break; }
   }
 }
@@ -628,7 +628,7 @@ function vehTick(v, dt) {
   const aimTo = tg ? Math.atan2(tg.y - v.y, tg.x - v.x) : v.mtg && !sp.tur ? null : v.mtg ? Math.atan2(v.mtg.y - v.y, v.mtg.x - v.x) : S.t - v.aimT > 3 ? v.heading : null;
   let ready = false;
   if (aimTo != null) {
-    if (sp.tur) { const da = vehAng(aimTo - v.aim); v.aim += clamp(da, -2.4 * dt, 2.4 * dt); ready = Math.abs(da) < .12; }
+    if (sp.tur) { const da = vehAng(aimTo - v.aim), tr = typeof vfnTrav === 'function' ? vfnTrav(v) : 2.4; v.aim += clamp(da, -tr * dt, tr * dt); ready = Math.abs(da) < .12; }   // 炮塔回转速度按型号的真实参数（vfn.js）
     else {
       const arc = (g && g.arc) || .12, da = vehAng(aimTo - v.heading);
       if (tg && !v.moving && Math.abs(da) > arc && !v.immob) v.heading += clamp(da, -sp.turn * dt, sp.turn * dt);
