@@ -11,7 +11,7 @@ const arg = k => { const i = process.argv.indexOf(k); return i > 0 ? process.arg
 const app = process.argv.includes('--app'), out = path.resolve(root, arg('--out') || 'www');
 fs.rmSync(out, { recursive: true, force: true });
 fs.mkdirSync(out, { recursive: true });
-const body = fs.readFileSync(path.join(root, 'index.html'), 'utf8').replace(/<meta name="claude:[^>]*>\n?/g, '');
+const body = fs.readFileSync(path.join(root, 'index.html'), 'utf8').replace(/<meta name="claude:[^>]*>\n?/g, '').replace(/^<meta charset="utf-8">\n?/, '');   // 字符集由下面的 head 声明（index.html 自带一行是为了直接打开时中文不乱码）
 const head = '<!doctype html>\n<html lang="zh-CN">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">\n<meta name="format-detection" content="telephone=no">\n';
 // 版本号：每次发布不同，脚本地址后面加 ?v=版本号，浏览器不会拿缓存里的旧脚本和新页面混用
 const sha = (() => { try { return execSync('git rev-parse --short HEAD', { cwd: root }).toString().trim(); } catch (e) { return ''; } })();

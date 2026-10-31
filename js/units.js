@@ -108,6 +108,7 @@ function sailTo(s, dt, speed) {
   if (s.kind !== 'boat' && !(s.noSep > S.t)) { let k; [want, k] = shipAvoid(s, want); sp *= k; }
   // 船头按转向速度慢慢转过去，船只沿船头方向走；离目标很近时直接对准靠上去
   s.wf = s.wf == null ? want : vehAngS(s.wf + vehAngS(want - s.wf) * Math.min(1, dt * 3));   // 目标航向先平滑，避免避让、换航路点时来回摆
+  if (s.heading == null || s.heading !== s.heading) s.heading = want;   // 没有初始航向的船（如海岛战役的旗舰驱逐舰）：一开始就正对目标时下面不会转向，cos(undefined) 让坐标变成 NaN
   const turn = (s.kind === 'boat' ? 2.2 : s.spdK > 1 ? 1.4 : .9) * dt, da = vehAngS(s.wf - (s.heading ?? want));
   if (Math.abs(da) > .01 && d >= 14) s.heading = vehAngS((s.heading ?? want) + clamp(da, -turn, turn));   // 最后十几米保持船头不动直接靠上去
   if (d < 14) { const l = d || 1; s.x += (s.tx - s.x) / l * Math.min(sp, l); s.y += (s.ty - s.y) / l * Math.min(sp, l); return false; }
