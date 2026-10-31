@@ -62,6 +62,7 @@
 - 水面法线：This work is based on "waternormals.jpg（three.js 示例）" (https://github.com/mrdoob/three.js/blob/dev/examples/textures/waternormals.jpg) by three.js authors licensed under MIT
 - 舰载飞机牵引车：This work is based on "Aircraft_Tug" (https://sketchfab.com/3d-models/aircraft-tug-ac1c0a974a734864a27fe84dbbcb0de8) by Chukk007 licensed under CC Attribution
 - 挂弹车：This work is based on "Weapons Loader" (https://sketchfab.com/3d-models/weapons-loader-016ca0f9b98b4ffbbe0e55f235bef496) by Sengchor licensed under CC Attribution
+- 导弹挂载架：This work is based on "Industrial Storage Rack" (https://sketchfab.com/3d-models/industrial-storage-rack-c21c9a687c3d48ad9e74f894c6d2791c) by siddharthkalbage licensed under CC Attribution
 - 写实地表贴图（草地、林下地面、岩石、沙滩，assets/terrain）：ambientCG（https://ambientcg.com），CC0 1.0
 - 天空（assets/sky）：Poly Haven「kloofendal_48d_partly_cloudy_puresky」（https://polyhaven.com/a/kloofendal_48d_partly_cloudy_puresky），CC0 1.0
 - 海面法线贴图（assets/water/normals.jpg）：three.js 示例（waternormals.jpg）（https://github.com/mrdoob/three.js），MIT（见 assets/water/LICENSE-three.js.txt）

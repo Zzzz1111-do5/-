@@ -1386,8 +1386,8 @@ function v3Proj(x, y, z) {
 // 立在地形上方的标识（屏幕空间，不随透视变形）：据点旗杆与菱形、战斗群北约标号、飞机按高度悬空并向地面引垂线
 function v3Overlay(ctx, time) {
   ctx.save(); ctx.setTransform(R.dpr, 0, 0, R.dpr, 0, 0);
-  // 坐在飞机座舱里（v3pilot.js）：地名、方格号、番号牌会透过仪表板画在上面——只画平显
-  if (typeof V3FP === 'object' && V3FP.on && V3FP.k === 'air' && V3FP.vw === 'cock') { if (typeof v3fpOverlay === 'function') v3fpOverlay(ctx); ctx.restore(); return; }
+  // 亲自操纵时（v3pilot.js）：地名、方格号、番号牌这些标识都不画，只画武器平显
+  if (typeof V3FP === 'object' && V3FP.on) { if (typeof v3fpOverlay === 'function') v3fpOverlay(ctx); ctx.restore(); return; }
   ctx.lineCap = 'round'; ctx.font = '11px "IBM Plex Mono", "Noto Sans SC", monospace'; ctx.textAlign = 'center';
   const near = CAM.z / CAM.fit > 2.2, spec = specAll() || R.eye === 'all', used = [];
   if (typeof v3TableMarks === 'function') v3TableMarks(ctx);   // 沙盘桌边框上的方格坐标
@@ -1460,7 +1460,6 @@ function v3Overlay(ctx, time) {
   if (typeof thMarks3 === 'function') thMarks3(ctx, stem);   // 营标：战区编队的番号牌立在每个营（连）头顶（thpanel.js）
   if (typeof shOverlay3D === 'function') shOverlay3D(ctx, (x, y, h) => v3Proj(x, y, v3Ht(x, y) + h));   // 士兵喊话气泡（shout.js）
   if (typeof v3oOverlay === 'function') v3oOverlay(ctx);   // 观察者模式的准星
-  if (typeof v3fpOverlay === 'function') v3fpOverlay(ctx);   // 第一人称驾驶的平显
   ctx.restore();
 }
 

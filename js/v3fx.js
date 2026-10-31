@@ -140,9 +140,10 @@ function v3Fx(C) {
       const air = typeof AIRV === 'object' && AIRV.mv && AIRV.mv.has(m.id);
       const vo = v3VlsOrigin(m);
       if (vo && m.t < .6) V3F.puff.push({ x: vo.x, y: vo.y, z: vo.z, t0: S.t, big: m.kind !== 'sam', side: m.side, sea: true, vls: true, up: vo.up });
-      else if (!air && m.t < .6 && isFinite(m.x0)) { const sea = !isLand(m.x0, m.y0); V3F.puff.push({ x: m.x0, y: m.y0, z: sea ? 4 : g(m.x0, m.y0) + 1.5, t0: S.t, big: m.kind === 'tbm' || m.kind === 'asm', side: m.side, sea }); }
+      else if (!air && m.z3 == null && m.t < .6 && isFinite(m.x0)) { const sea = !isLand(m.x0, m.y0); V3F.puff.push({ x: m.x0, y: m.y0, z: sea ? 4 : g(m.x0, m.y0) + 1.5, t0: S.t, big: m.kind === 'tbm' || m.kind === 'asm', side: m.side, sea }); }
     }
     if (!inB(m.x, m.y, 400) || (m.side === 'e' && !seen(m.x, m.y))) continue;
+    if (m.fw && !m.fw.lit) { V3F.trail.delete(m.id); continue; }   // 还没点火（刚推出弹舱、炸弹滑翔）：只有弹体（v3units.js），没有尾焰、烟迹
     const rp = typeof airRelPos === 'function' ? airRelPos(m, true) : null;   // 刚离机（airmdl.js）：没点火前是立体弹体（v3units.js），点火后光点从挂点接上弹道
     if (rp) {
       V3F.trail.delete(m.id);
@@ -154,7 +155,7 @@ function v3Fx(C) {
       }
       continue;
     }
-    const z0 = v3AltZ(m.x, m.y, m.z * (m.kind === 'tbm' ? 620 : V3_AIR), -2.6, 2), VP = v3MslPos(m, z0), p = VP ? v3fP(VP.x, VP.y, VP.z) : v3fP(m.x, m.y, z0);   // 与飞机同一套高度：低空沿地形包络、高空按海拔；垂发冲出阶段竖直往上
+    const z0 = m.z3 != null ? m.z3 : v3AltZ(m.x, m.y, m.z * (m.kind === 'tbm' ? 620 : V3_AIR), -2.6, 2), VP = v3MslPos(m, z0), p = VP ? v3fP(VP.x, VP.y, VP.z) : v3fP(m.x, m.y, z0);   // 与飞机同一套高度：低空沿地形包络、高空按海拔；垂发冲出阶段竖直往上
     let tr = V3F.trail.get(m.id);
     if (!tr) V3F.trail.set(m.id, tr = []);
     const last = tr[tr.length - 1];

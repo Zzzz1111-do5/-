@@ -81,6 +81,7 @@ function addVehicle(side, type, x, y, extra) {
 const vehPenMul = (pen, armor) => pen >= armor ? 1 : pen >= armor - 1 ? .3 + .7 * (pen - armor + 1) : .06;
 function vehDamage(v, dmg, pen, sx, sy, src) {
   if (!v || v.dead || !(dmg > 0)) return 0;
+  if (typeof eraHit === 'function') dmg = eraHit(v, dmg, pen, sx, sy, src);   // 爆炸反应装甲先挡一下（era.js）
   const M = v.mod || {}, top = src === 'atgm' || src === 'top', hull = !top && v.order.t === 'hold' && S.t - v.movedT > 4 && !v.swim ? .75 : 1;   // 坚守：车体半埋（hull-down）；攻顶的反坦克导弹不吃这个
   const d = dmg * vehPenMul(pen, v.armor) * hull / (M.arm || 1);
   v.hp -= d; v.hitT = S.t; v.sup = Math.min(100, v.sup + 12 + d * 3);

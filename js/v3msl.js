@@ -38,6 +38,7 @@ const V3MS = {
 };
 // 推演里的导弹是哪一型（按种类、发射来源、弹种、敌我）
 function v3MslKey(m) {
+  if (m.fw && m.fw.ms) return m.fw.ms;   // 玩家亲自驾驶时打的（fpwpn.js）：发射时就记了弹形
   const e = m.side === 'e';
   if (m.kind === 'pgm') return V3MS[m.w] ? m.w : m.w === 'ba7' || m.w === 'hj10' ? 'agm' : m.w === 'gbu53' || m.w === 'ft8' ? 'sdb' : e ? 'lrasm' : 'kd88';
   if (m.kind === 'tbm') return e ? 'tbm' : 'df15';
