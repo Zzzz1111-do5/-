@@ -567,9 +567,9 @@ function v3dTugReq(p) {
   if (p.lu == null) return null;
   const kk = v3dK(p), nose = v3dNose(v3dKey(p), kk), c = Math.cos(p.lh), sn = Math.sin(p.lh), hook = { u: p.lu + c * (nose + 2.66), v: p.lv + sn * (nose + 2.66), a: p.lh };   // 拖杆一头挂在前起落架上（车尾拖杆端在车后 2.66 米）
   if (p.phase === 'cat') {
-    const tb = p.dk === 'brd' && p.tw && typeof cvBrdT === 'function' ? cvBrdT(p) : 0;
+    const tw = p.tw || p.fpBrd, tb = p.dk === 'brd' && tw && typeof cvBrdT === 'function' ? cvBrdT(p) : 0;   // fpBrd：玩家坐着的（v3pilot.js），从升降机上来的也拖
     if (tb && (p.dkT || 0) > tb - 12) return Object.assign(hook, { soon: true });   // 登机快好时开过来等着
-    return (p.dk === 'eng' && p.tw) || (p.dk === 'taxi' && p.tow) ? hook : null;
+    return (p.dk === 'eng' && tw) || (p.dk === 'taxi' && p.tow) ? hook : null;
   }
   if (p.phase !== 'trap' || !Array.isArray(p.path) || !p.path.length) return null;
   const s0 = p.path[0];
