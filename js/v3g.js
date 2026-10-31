@@ -88,7 +88,7 @@ function v3gUpload(img) {
 }
 
 // ———————————————— 着色器 ————————————————
-// 实例：iA = (x, y, z, 朝向)，iB = (比例, 阵营, 滚转, 俯仰)，与 v3units.js 的 v3mAdd 相同（GL 坐标，y 向北）；iC、iD = 八个部件参数（收起的部件 > .5 就收；iD 是弹舱门开度）
+// 实例：iA = (x, y, z, 朝向)，iB = (比例, 阵营, 滚转, 俯仰)，与 v3units.js 的 v3mAdd 相同（GL 坐标，y 向北）；iC、iD = 八个部件参数（收起的部件 > .5 就收；飞机 iD 是弹舱门开度，坦克 iC.yzw、iD.x 是炸掉的反应装甲块、iD.z 炮管后坐）
 const V3G_VS = `attribute vec3 p; attribute vec3 n; attribute vec2 uv; attribute vec4 iA; attribute vec4 iB; attribute vec4 iC; attribute vec4 iD;
 uniform mat4 uM; uniform vec3 uEye; uniform float uPk, uPm, uRad, uPx, uPl; uniform vec3 uPp, uPa; uniform vec4 uPw, uPw2;
 varying vec3 vN, vV, vP; varying vec2 vUv, vW; varying float vSide, vD;
@@ -98,7 +98,12 @@ void main() {
   vec3 q = p, m = n;
   if (uPk > -.5) {
     float ang = dot(iC, uPw) + dot(iD, uPw2);   // 实例的部件参数按权重组合（一般只取自己那一个；舵面 = 俯仰 + 滚转差动；弹舱门 = 开度 × 打开角）
-    if (uPm > 2.5) {   // 坦克炮管：先顺着炮管往后坐（iD·uPw2 米），再随炮塔转（iC·uPw）
+    if (uPm > 3.5) {   // 反应装甲块（v3gEra）：|y| 里编着块号 t，查 iC.yzw / iD.x 里这块的位（各管 16 块），炸掉了就收成一点（整数运算，全是精确的）
+      float t = floor((abs(q.y) - uPp.x) / uPp.y + .5), f = floor((t + .5) / 16.), b = t - f * 16., mk = f < .5 ? iC.y : f < 1.5 ? iC.z : f < 2.5 ? iC.w : iD.x;
+      for (int i = 0; i < 16; i++) { if (float(i) >= b) break; mk = floor(mk * .5); }
+      if (mk - 2. * floor(mk * .5) > .5) q = vec3(0.);
+    }
+    else if (uPm > 2.5) {   // 坦克炮管：先顺着炮管往后坐（iD·uPw2 米），再随炮塔转（iC·uPw）
       float ya = dot(iC, uPw); q.x -= dot(iD, uPw2); q = uPp + rotA(q - uPp, uPa, ya); m = rotA(m, uPa, ya);
     }
     else if (uPm > 1.5) {   // 尾喷口调节片：绕前缘铰链张开（ang > 0）/ 收拢（ang < 0）——离铰链越远（越靠出口）径向缩放越多
@@ -258,7 +263,7 @@ function v3gDraw(C, LM) {
         if (P) {
           const w = P.w || [pi === 0 ? 1 : 0, pi === 1 ? 1 : 0, pi === 2 ? 1 : 0, pi >= 3 ? 1 : 0];
           const w2 = P.w2 || V3G_W0;
-          gl.uniform1f(U.uPm, P.k === 'hide' ? 1 : P.k === 'noz' ? 2 : P.k === 'gun' ? 3 : 0); gl.uniform1f(U.uPl, P.l || 1); gl.uniform3f(U.uPp, P.p[0], P.p[1], P.p[2]); gl.uniform3f(U.uPa, P.a[0], P.a[1], P.a[2]); gl.uniform4f(U.uPw, w[0], w[1], w[2], w[3]); gl.uniform4f(U.uPw2, w2[0], w2[1], w2[2], w2[3]);
+          gl.uniform1f(U.uPm, P.k === 'hide' ? 1 : P.k === 'noz' ? 2 : P.k === 'gun' ? 3 : P.k === 'era' ? 4 : 0); gl.uniform1f(U.uPl, P.l || 1); gl.uniform3f(U.uPp, P.p[0], P.p[1], P.p[2]); gl.uniform3f(U.uPa, P.a[0], P.a[1], P.a[2]); gl.uniform4f(U.uPw, w[0], w[1], w[2], w[3]); gl.uniform4f(U.uPw2, w2[0], w2[1], w2[2], w2[3]);
         }
         const tb = T.t && M.tex[T.t[0]], tn = T.nt && M.tex[T.nt[0]], tm = (T.sg ? T.sgt : T.mrt) && M.tex[(T.sg ? T.sgt : T.mrt)[0]], te = T.et && M.tex[T.et[0]], to = T.ot && M.tex[T.ot[0]];
         if (tb) wrap(tb, T.t);
@@ -303,7 +308,9 @@ function v3gVeh(v, rk, side, len, x, y, z, h, aim, dead, pitch, roll, hl, fs = 9
   // 开炮：炮管 0.06 秒内后坐到底（约 0.3 米），约 0.7 秒复进回原位；车体被后坐力推得朝炮口那边翘起、再回弹几下（悬挂），翘的方向跟着炮塔朝向
   const G = V3G_GUN[key], rc = G && !dead && fs < .8 ? G.L * (fs < .06 ? fs / .06 : 1 - sm01((fs - .06) / .7)) : 0;
   if (G && !dead && fs < 1.6) { const r = G.rock * Math.exp(-fs / .38) * Math.sin(fs * 10.5), rel = Math.atan2(Math.sin(aim - h), Math.cos(aim - h)); pitch += r * Math.cos(rel); roll -= r * Math.sin(rel); }
-  return v3gAdd(key, x, y, z, h, k, (dead ? 2 : side === 'e' ? 1 : 0) + (hl ? 8 : 0), roll, pitch, [dead ? -.6 : da, 0, 0, 0, 0, 0, rc, 0]);
+  const P = [dead ? -.6 : da, 0, 0, 0, 0, 0, rc, 0], E = V3G_ERA[key], U = E && v && v.era && v.era.h;
+  if (U && U.length && typeof rlModelOf === 'function' && E.rl.includes((rlModelOf(v) || {}).key)) for (const i of U) if (i >= 0 && i < 64) P[1 + Math.floor(i / 16)] += 2 ** (i % 16);   // 炸掉的反应装甲块（era.js）：每个数 16 位
+  return v3gAdd(key, x, y, z, h, k, (dead ? 2 : side === 'e' ? 1 : 0) + (hl ? 8 : 0), roll, pitch, P);
 }
 // 飞机（机型键 key，游戏里的尺寸 sz）：ground 时 z 是地面 / 甲板（机轮着地），否则 z 是机身中线；起落架只在 gear 时放下；直升机旋翼转
 const v3dMv3 = (h, p, r, v) => {   // 先滚转（绕 x）、再俯仰（绕 y，机头抬起为正）、再转朝向（GL：绕 z 转 -h），与着色器同一约定
@@ -435,7 +442,74 @@ function v3gPrep(key, m, M, VB, IB) {
   const cf = V3G_PIT[key];
   if (cf) { v3gPitScr(cf, m, M, VB, IB); v3gPitHud(cf, m, M, VB, IB); v3gPitParts(cf, m, M, VB, IB); }
   if (V3G_GUN[key]) v3gGun(V3G_GUN[key], m, VB, IB);
+  if (V3G_ERA[key]) return v3gEra(V3G_ERA[key], m, VB, IB);
   return V3G_BAY[key] ? v3gBays(V3G_BAY[key], m, VB, IB) : null;
+}
+// —— 反应装甲块（era.js 按块用掉）：模型上原有的块才有——M1A1 裙板外表面就是 TUSK 的 ARAT，左右各 2 排 × 16 列，每块是 |y| = y 那个面上 0.33 × 0.35 米的一格。
+//   每块的正面三角形拆出来、复制顶点，|y| 往外挪「块号 × 0.01 毫米」（看不出来）把块号编进顶点，统统挂到一个 'era' 部件上（只多一次绘制）：
+//   着色器按块号查实例参数里的位（iC.yzw、iD.x，各管 16 块；v3gVeh 按 v.era.h 填），炸掉的块收成一点；块后面补焦黑的底板和四壁，平时被块的正面挡着看不见。
+//   第 1 级细节（中远处）简化过的块面跨了好几格，换成第 0 级拆好的块面；再远的不拆（一块不到一个像素）。
+//   x0 / dx / n：列（从后往前）；zr：两排的上下沿（中间那道缝各列高低差一点）；y：块面、yIn：底板（裙板内板 1.818 外面一点）；
+//   rl：用这套块的车型（models.js RLE，块号同一套：边 × 32 + 排 × 16 + 列，右边 0）
+const V3G_ERA = { m1a1: { x0: -3.224, dx: 5.352 / 16, n: 16, zr: [.795, 1.144, 1.5], y: 1.9756, yIn: 1.83, rl: ['m1a1', 'm1a2'] } };
+const V3G_ERA_E = 1e-5;
+function v3gEra(cf, m, VB, IB) {
+  const st = m.st, nv0 = VB.length / st, add = [], E = V3G_ERA_E, n2 = cf.n * 2, X1 = cf.x0 + cf.n * cf.dx;
+  const parts = m.parts || (m.parts = []), ei = parts.push({ n: 'era', k: 'era', p: [cf.y, E, 0], a: [1, 0, 0], w: [0, 0, 0, 0] }) - 1;
+  // 一个三角形是不是某块的正面：三个顶点都在块面上（同一边）、都落在同一格里
+  const cell = (x, z) => [Math.floor((x - cf.x0) / cf.dx), z < cf.zr[1] ? 0 : 1];
+  const tile = t => {
+    const P = [0, 1, 2].map(j => IB[t + j] * st);
+    if (!P.every(o => Math.abs(Math.abs(VB[o + 1]) - cf.y) < .006) || !P.every(o => Math.sign(VB[o + 1]) === Math.sign(VB[P[0] + 1]))) return -1;
+    const cx = (VB[P[0]] + VB[P[1]] + VB[P[2]]) / 3, cz = (VB[P[0] + 2] + VB[P[1] + 2] + VB[P[2] + 2]) / 3;
+    if (cx < cf.x0 || cx > X1 || cz < cf.zr[0] - .01 || cz > cf.zr[2] + .01) return -1;
+    const [col, row] = cell(cx, cz), xa = cf.x0 + col * cf.dx - .006, xb = xa + cf.dx + .012, za = cf.zr[row] - .02, zb = cf.zr[row + 1] + .02;
+    if (!P.every(o => VB[o] >= xa && VB[o] <= xb && VB[o + 2] >= za && VB[o + 2] <= zb)) return -2;   // 跨了好几格（简化过的网格）
+    return (VB[P[0] + 1] < 0 ? 0 : n2) + row * cf.n + col;   // 模型 y 朝左：y < 0 是右边
+  };
+  const seen = new Set(), segs = m.lod.map(() => []), fr0 = [];
+  m.lod.forEach((lod, L) => {
+    for (const [mi, pi, i0, cnt] of lod) {
+      const keep = [], fr = [];
+      for (let t = i0; t + 2 < i0 + cnt; t += 3) {
+        const id = pi < 0 && L < 2 ? tile(t) : -1;
+        if (id === -1 || (id === -2 && !L)) { keep.push(IB[t], IB[t + 1], IB[t + 2]); continue; }
+        if (L) continue;   // 第 1 级：块面整片去掉，下面换成第 0 级的
+        seen.add(id);
+        for (let j = 0; j < 3; j++) { const o = IB[t + j] * st, v = Array.from(VB.subarray(o, o + st)); v[1] = Math.sign(v[1]) * (cf.y + id * E); add.push(...v); fr.push(nv0 + add.length / st - 1); }
+      }
+      segs[L].push([mi, pi, keep]);
+      if (fr.length) { const e = [mi, ei, fr]; segs[L].push(e); fr0.push(e); }
+    }
+  });
+  if (segs[1]) segs[1].push(...fr0);
+  // 底板 + 四壁（每块各一套，往自己格里收 1 毫米：相邻两块都炸掉时中间留一道隔板，不会两面重合闪烁）
+  const wi = m.mats.push({ n: 'era_base', c: [.055, .05, .045, 1], t: null, nt: null, ns: 1, mr: [.2, .95], mrt: null, sg: null, sgt: null, e: [0, 0, 0], et: null, ot: null, am: 0, ac: .5, ds: 0 }) - 1, wl = [];
+  const push = (p, nn) => { add.push(p[0], p[1], p[2], nn[0], nn[1], nn[2], 0, 0); for (let k = 8; k < st; k++) add.push(0); return nv0 + add.length / st - 1; };
+  const quad = (a, b, c, d, nn) => { const i = [a, b, c, d].map(p => push(p, nn)); wl.push(i[0], i[1], i[2], i[0], i[2], i[3]); };
+  for (const id of seen) {
+    const sd = id < n2 ? -1 : 1, row = Math.floor((id % n2) / cf.n), col = id % cf.n;
+    const xa = cf.x0 + col * cf.dx + .001, xb = xa + cf.dx - .002, za = cf.zr[row] + .001, zb = cf.zr[row + 1] - .001, y0 = sd * cf.yIn, y1 = sd * (cf.y - .003);
+    quad([xa, y0, za], [xb, y0, za], [xb, y0, zb], [xa, y0, zb], [0, sd, 0]);       // 底板（朝外）
+    quad([xa, y0, za], [xa, y1, za], [xa, y1, zb], [xa, y0, zb], [1, 0, 0]);        // 后壁（朝前）
+    quad([xb, y0, za], [xb, y0, zb], [xb, y1, zb], [xb, y1, za], [-1, 0, 0]);
+    quad([xa, y0, za], [xb, y0, za], [xb, y1, za], [xa, y1, za], [0, 0, 1]);        // 下壁（朝上）
+    quad([xa, y0, zb], [xa, y1, zb], [xb, y1, zb], [xb, y0, zb], [0, 0, -1]);
+  }
+  segs[0].push([wi, -1, wl]);
+  if (segs[1]) segs[1].push([wi, -1, wl]);   // 第 1 级细节用同一段块面、底板
+  // 重排索引（每级细节各一段；底板那段两级共用）
+  const nv = nv0 + add.length / st, it = nv > 65535 ? 4 : m.it, out = [];
+  let o = 0;
+  const pos = new Map();
+  m.lod = segs.map(G => G.map(([mi, pi, I]) => { if (!I.length) return null; if (!pos.has(I)) { pos.set(I, o); out.push(I); o += I.length; } return [mi, pi, pos.get(I), I.length]; }).filter(Boolean));
+  const IB2 = it === 4 ? new Uint32Array(o) : new Uint16Array(o);
+  o = 0;
+  for (const I of out) { IB2.set(I, o); o += I.length; }
+  const VB2 = new Float32Array(VB.length + add.length);
+  VB2.set(VB); VB2.set(add, VB.length);
+  m.it = it;
+  return { VB: VB2, IB: IB2, it };
 }
 // —— 弹舱（fpwpn.js 选中武器时打开）：用户的模型机腹是一整块蒙皮，没有单独的舱门——按真实弹舱的位置把机腹三角形精确切开（多边形裁剪），
 //   切出来的几块挂成能绕铰链转的舱门部件（实例参数 iD：0 主弹舱开度、1 侧弹舱开度；乘打开角）；舱口上面补一个深色的弹舱井，开舱时看到的是舱壁和舱里的弹，不是机身里面空的

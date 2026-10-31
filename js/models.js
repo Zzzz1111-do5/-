@@ -19,7 +19,7 @@ function rlTrk(P, o) {
   const dk = o.deck || [[o.gl, -hb + tw], [o.gl, hb - tw], [-hl + .12, hb - tw], [-hl + .12, -hb + tw]], dp = P.poly(dk);
   P.part(dp, P.paint, { ao: .18, bev: .1, mid: () => { P.camo(dp, seed); P.dirt(dp, L, B - tw * 2); } });
   if (o.glacis !== false) { const gp = P.poly([[hl - .05, -hb + tw + .15], [hl - .05, hb - tw - .15], [o.gl, hb - tw], [o.gl, -hb + tw]]); P.part(gp, P.shade(P.paint, 1.05), { ao: .08, bev: .08, mid: () => P.camo(gp, seed + 3) }); }
-  if (o.era) P.era(o.era[0], o.era[1], o.era[2], o.era[3], o.era[4], o.era[5]);
+  if (o.era) rlEraDraw(P, o.era);   // 首上的反应装甲块（RLE）
   if (o.drv) { const [x, y] = o.drv; P.hatch(x, y, .3); for (let i = 0; i < (o.peri ?? 3); i++) P.peri(x + .38, y + (i - ((o.peri ?? 3) - 1) / 2) * .24, .2, .08, Math.PI / 2); }
   if (o.lights !== false) for (const s of [-1, 1]) { P.light(hl - .32, s * (hb - .3)); P.light(hl - .32, s * (hb - .56), .16, .12); }
   for (const gr of o.grilles || []) P.grille(...gr);
@@ -53,20 +53,82 @@ function rlCab(P, x, w, B, col) {
 // 炮塔底板（带迷彩）
 const rlTur = (P, pts, seed = 5, col) => { const p = P.poly(pts); P.part(p, col || P.paint, { ao: .32, aoA: .7, bev: .14, mid: () => P.camo(p, seed, .8) }); };
 
+// —— 反应装甲块：模型上原有的那些块（贴图照这份布局画；era.js 按块记、按块挡，用掉的块运行时画成炸掉的样子）——
+// 车体 h、炮塔 t 各一组组块，米（x 前、y 右；炮塔按回转中心）。方块组 { x0, y0, x1, y1, nx, ny }：俯视矩形里 nx（前后）× ny（左右）块，c / r 整组平移、转角（块面朝 r）；
+//   楔形 { q: 四个角（外缘 q0→q1、内缘 q3→q2）, n }：沿外缘切成 n 段；裙板 { sd: 1 右 / -1 左, x0, x1, n, nz }：车体侧面竖着挂的 nz 排 × n 列（俯视看不见，3D 模型上有）；
+//   z：这组块在迎弹那一面高度上的范围（0 底 – 1 顶）；td：炮塔长宽（算迎弹面多宽）；heavy：重型（能削弱穿甲弹）
+const RLE = {
+  ztz99a: { heavy: true, td: [4.75, 3.25],
+    h: [{ x0: 2.45, y0: -1.0, x1: 3.6, y1: 1.0, nx: 3, ny: 6, z: [.45, 1] }],
+    t: [1, -1].map(s => ({ q: [[.75, s * 1.6], [2.2, s * .44], [1.65, s * .36], [.45, s * 1.18]], n: 4, z: [.1, .95] })) },   // 炮塔正面箭形楔形反应装甲
+  ztz96b: { td: [3.7, 3.1],
+    h: [{ x0: 2.2, y0: -1.0, x1: 3.3, y1: 1.0, nx: 2, ny: 6, z: [.45, 1] }],
+    t: [1, -1].flatMap(s => [{ c: [1.12, s * .86], r: s * .72, x0: -.42, y0: -.27, x1: .42, y1: .27, nx: 3, ny: 2, z: [.15, .9] }, { c: [.45, s * 1.25], r: s * .25, x0: -.36, y0: -.2, x1: .36, y1: .2, nx: 2, ny: 1, z: [.55, 1] }]) },
+  ztq15: { td: [3.8, 2.9],
+    h: [{ x0: 2.3, y0: -.95, x1: 3.2, y1: .95, nx: 2, ny: 5, z: [.45, 1] }],
+    t: [1, -1].map(s => ({ q: [[.8, s * 1.43], [1.58, s * .9], [1.05, s * .75], [.35, s * 1.15]], n: 3, z: [.1, .95] })) },
+  // M1A1 / M1A2：TUSK 的 ARAT，裙板前段左右各 2 排 × 16 块（块号 = 边 × 32 + 排 × 16 + 列，和 3D 模型 v3g.js V3G_ERA 拆出来的块一一对应）
+  m1a1: { h: [1, -1].map(sd => ({ sd, x0: -2.16, x1: 3.05, n: 16, nz: 2, z: [.39, .76] })) }
+};
+RLE.m1a2 = RLE.m1a1;
+// 一个部位（'h' 车体 / 't' 炮塔）的块，按块号排：{ P 四个角, c 中心, f 块面朝向, z 高度范围, r 大小 }（B：车宽，裙板用）
+const RLE_B = new Map();
+function rlEraBlocks(M, part) {
+  const G = M && M.era && M.era[part];
+  if (!G) return [];
+  let L = RLE_B.get(G);
+  if (L) return L;
+  RLE_B.set(G, L = []);
+  const add = (P, f, z) => { const c = [P.reduce((a, p) => a + p[0], 0) / 4, P.reduce((a, p) => a + p[1], 0) / 4]; L.push({ P, c, f, z, r: Math.max(...P.map(p => Math.hypot(p[0] - c[0], p[1] - c[1]))) }); };
+  const band = (g, b, n) => [g.z[0] + (g.z[1] - g.z[0]) * b / n, g.z[0] + (g.z[1] - g.z[0]) * (b + 1) / n];
+  for (const g of G) {
+    if (g.q) {   // 楔形：外缘的法线朝外
+      const [a, b, c, d] = g.q, e = [b[0] - a[0], b[1] - a[1]], m = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+      let nf = Math.atan2(-e[0], e[1]);
+      if (Math.cos(nf) * m[0] + Math.sin(nf) * m[1] < 0) nf += Math.PI;
+      for (let k = 0; k < g.n; k++) { const u0 = k / g.n, u1 = (k + 1) / g.n, lp = (p, q, u) => [lerp(p[0], q[0], u), lerp(p[1], q[1], u)]; add([lp(a, b, u0), lp(a, b, u1), lp(d, c, u1), lp(d, c, u0)], nf, g.z); }
+    } else if (g.sd) {   // 裙板：从后往前、从下往上
+      const y = g.sd * (M.B / 2), dx = (g.x1 - g.x0) / g.n;
+      for (let k = 0; k < g.nz; k++) for (let j = 0; j < g.n; j++) { const x = g.x0 + j * dx; add([[x, y - .06], [x + dx, y - .06], [x + dx, y + .06], [x, y + .06]], g.sd * Math.PI / 2, band(g, k, g.nz)); }
+    } else {   // 方块：朝外的那排（i 大）在斜面下面
+      const cw = (g.x1 - g.x0) / g.nx, ch = (g.y1 - g.y0) / g.ny, r = g.r || 0, [tx, ty] = g.c || [0, 0], co = Math.cos(r), si = Math.sin(r), T = (x, y) => [tx + x * co - y * si, ty + x * si + y * co];
+      for (let i = 0; i < g.nx; i++) for (let j = 0; j < g.ny; j++) { const x = g.x0 + i * cw, y = g.y0 + j * ch; add([T(x, y), T(x + cw, y), T(x + cw, y + ch), T(x, y + ch)], r, band(g, g.nx - 1 - i, g.nx)); }
+    }
+  }
+  return L;
+}
+// 贴图上画块（方块组用画笔的 era，楔形切成一段段板件；裙板俯视看不见，不画）
+function rlEraDraw(P, G) {
+  for (const g of G || []) {
+    if (g.q) { const [a, b, c, d] = g.q, lp = (p, q, u) => [lerp(p[0], q[0], u), lerp(p[1], q[1], u)]; for (let k = 0; k < g.n; k++) P.plate([lp(a, b, k / g.n), lp(a, b, (k + 1) / g.n), lp(d, c, (k + 1) / g.n), lp(d, c, k / g.n)], P.shade(P.paint, 1.04 + (k % 2) * .04), { ao: .1, bev: .07 }); }
+    else if (!g.sd) { P.g.save(); if (g.c) P.g.translate(g.c[0], g.c[1]); if (g.r) P.g.rotate(g.r); P.era(g.x0, g.y0, g.x1, g.y1, g.nx, g.ny); P.g.restore(); }
+  }
+}
+// 运行时：用掉的块画成炸掉的样子——块没了，露出熏黑的底板，四周一圈烟熏（ctx 在车体 / 炮塔坐标，米）
+function rlEraUsed(ctx, B, used) {
+  if (!used || !used.length) return;
+  for (const i of used) {
+    const b = B[i];
+    if (!b) continue;
+    const g = ctx.createRadialGradient(b.c[0], b.c[1], 0, b.c[0], b.c[1], b.r * 1.7);
+    g.addColorStop(0, 'rgba(14,12,10,.5)'); g.addColorStop(1, 'rgba(14,12,10,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(b.c[0], b.c[1], b.r * 1.7, 0, 7); ctx.fill();
+    ctx.beginPath(); b.P.forEach(([x, y], k) => k ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.closePath();
+    ctx.fillStyle = 'rgba(33,30,26,.95)'; ctx.fill(); ctx.lineWidth = .03; ctx.strokeStyle = 'rgba(0,0,0,.6)'; ctx.stroke();
+  }
+}
+
 const RLM = {
   // ———————— 解放军 ————————
-  ztz99a: { L: 7.6, B: 3.5, run: 't', tw: .6, hull: rlMbt(7.6, 3.5), tur: { x: -.4 },
+  ztz99a: { era: RLE.ztz99a, L: 7.6, B: 3.5, run: 't', tw: .6, hull: rlMbt(7.6, 3.5), tur: { x: -.4 },
     gun: { x0: 2.2, len: 5.9, r: .115, fe: [2.4, .85, .165], sl: 3, mrs: 1 },
-    H: P => rlTrk(P, { L: 7.6, B: 3.5, tw: .6, hull: rlMbt(7.6, 3.5), gl: 2.3, seed: 11, era: [2.45, -1.0, 3.6, 1.0, 3, 6], drv: [1.95, 0],
+    H: P => rlTrk(P, { L: 7.6, B: 3.5, tw: .6, hull: rlMbt(7.6, 3.5), gl: 2.3, seed: 11, era: RLE.ztz99a.h, drv: [1.95, 0],
       grilles: [[-3.35, -1.05, -2.25, -.08, 7], [-3.35, .08, -2.25, 1.05, 7], [-3.72, -.9, -3.5, .9, 6, false]],
       boxes: [[-1.4, 1.46, 2.6, .36], [-1.8, -1.46, 2, .36], [.4, -1.46, .9, .34, .9]], cables: [[[-3.3, -1.18], [-1.9, -1.2], [-.6, -1.15], [.3, -1.0]]], tools: [[1.3, -1.46, 1, 0], [1.2, 1.46, .9, 0, 'bar']], beam: 1 }),
     T: P => {
       const out = [[-2.5, -1.35], [-2.5, 1.35], [-1.9, 1.62], [.8, 1.62], [2.25, .42], [2.25, -.42], [.8, -1.62], [-1.9, -1.62]];
       rlTur(P, out, 21);
-      for (const s of [-1, 1]) {   // 箭形楔形附加装甲
-        P.plate([[.75, s * 1.6], [2.2, s * .44], [1.65, s * .36], [.45, s * 1.18]], P.shade(P.paint, 1.07), { ao: .1, bev: .08 });
-        P.line(.95, s * 1.4, 1.9, s * .5, .03);
-      }
+      rlEraDraw(P, RLE.ztz99a.t);   // 箭形楔形反应装甲（一段段的块）
       P.box(1.95, 0, .6, .82, P.shade(P.paint, .85), { r: .12 });   // 炮盾
       P.mesh(-2.46, -1.22, -1.95, 1.22, 4);
       P.box(.7, -.82, .52, .4, P.shade(P.paint, .9)); P.box(.97, -.82, .06, .3, SPR_GLASS, { tex: false });   // 炮长瞄准镜
@@ -78,28 +140,28 @@ const RLM = {
       P.disc(-2.2, .95, .07, SPR_METAL); P.disc(-1.75, -1.3, .06, SPR_METAL); P.disc(-1.75, 1.3, .06, SPR_METAL);   // 气象传感器、天线座
       P.bolts([[-1.5, -1.45], [-1.0, -1.45], [-1.5, 1.45], [-1.0, 1.45]]);
     } },
-  ztz96b: { L: 6.9, B: 3.4, run: 't', tw: .58, hull: rlMbt(6.9, 3.4, .4), tur: { x: -.15 },
+  ztz96b: { era: RLE.ztz96b, L: 6.9, B: 3.4, run: 't', tw: .58, hull: rlMbt(6.9, 3.4, .4), tur: { x: -.15 },
     gun: { x0: 1.85, len: 5.6, r: .115, fe: [2.3, .8, .16], sl: 3 },
-    H: P => rlTrk(P, { L: 6.9, B: 3.4, tw: .58, hull: rlMbt(6.9, 3.4, .4), gl: 2.1, seed: 12, era: [2.2, -1.0, 3.3, 1.0, 2, 6], drv: [1.85, 0], peri: 1,
+    H: P => rlTrk(P, { L: 6.9, B: 3.4, tw: .58, hull: rlMbt(6.9, 3.4, .4), gl: 2.1, seed: 12, era: RLE.ztz96b.h, drv: [1.85, 0], peri: 1,
       grilles: [[-2.9, -1.0, -1.95, 1.0, 9]], exh: [-2.4, -1.55, .9, .22], boxes: [[-.6, 1.45, 3.2, .36], [-1.2, -1.45, 1.6, .36], [.6, -1.45, .8, .36]],
       cables: [[[-3.2, -.95], [-2.2, -1.12], [-.8, -1.1]]], tools: [[1.1, 1.45, .9, 0]],
       extra: P => { P.box(-3.25, -.62, .48, 1.0, P.shade(P.paint, .88), { r: .22 }); P.box(-3.25, .62, .48, 1.0, P.shade(P.paint, .88), { r: .22 }); P.line(2.55, -.85, 3.1, 0); P.line(3.1, 0, 2.55, .85); } }),
     T: P => {
       rlTur(P, [[-1.8, -1], [-1.8, 1], [-1.25, 1.45], [.3, 1.56], [1.2, 1.25], [1.75, .62], [1.88, 0], [1.75, -.62], [1.2, -1.25], [.3, -1.56], [-1.25, -1.45]], 22);
-      for (const s of [-1, 1]) { P.g.save(); P.g.translate(1.12, s * .86); P.g.rotate(s * .72); P.era(-.42, -.27, .42, .27, 3, 2); P.g.restore(); P.g.save(); P.g.translate(.45, s * 1.25); P.g.rotate(s * .25); P.era(-.36, -.2, .36, .2, 2, 1); P.g.restore(); }
+      rlEraDraw(P, RLE.ztz96b.t);   // 炮塔正面、侧前的反应装甲块
       P.box(1.7, 0, .42, .62, P.shade(P.paint, .85), { r: .1 });
       P.cupola(-.45, .55, .4, 5); P.mg(-.25, .55, .1, 1.3, true);
       P.hatch(-.45, -.6, .36); P.box(.35, -.82, .45, .34, P.shade(P.paint, .9)); P.box(.58, -.82, .05, .26, SPR_GLASS, { tex: false });
       P.smoke(.15, 1.42, 4, Math.PI / 2 - .3); P.smoke(.15, -1.42, 4, -Math.PI / 2 + .3);
       P.box(-1.72, 0, .26, 1.5, P.shade(P.paint, .82), { r: .08 }); P.disc(-1.4, -1.0, .06, SPR_METAL);
     } },
-  ztq15: { L: 6.6, B: 3.3, run: 't', tw: .55, hull: rlMbt(6.6, 3.3, .3), tur: { x: -.3 },
+  ztq15: { era: RLE.ztq15, L: 6.6, B: 3.3, run: 't', tw: .55, hull: rlMbt(6.6, 3.3, .3), tur: { x: -.3 },
     gun: { x0: 1.55, len: 4.6, r: .1, fe: [1.9, .7, .145], sl: 2 },
-    H: P => rlTrk(P, { L: 6.6, B: 3.3, tw: .55, hull: rlMbt(6.6, 3.3, .3), gl: 2.2, seed: 13, era: [2.3, -.95, 3.2, .95, 2, 5], drv: [1.95, -.65],
+    H: P => rlTrk(P, { L: 6.6, B: 3.3, tw: .55, hull: rlMbt(6.6, 3.3, .3), gl: 2.2, seed: 13, era: RLE.ztq15.h, drv: [1.95, -.65],
       grilles: [[-3.05, -1.0, -2.0, -.05, 6], [-3.05, .05, -2.0, 1.0, 6]], boxes: [[-1, 1.4, 2.8, .34], [-1, -1.4, 2.8, .34]], cables: [[[-3.1, .9], [-1.6, 1.05], [-.4, 1.0]]], tools: [[1.0, -1.4, .9, 0]] }),
     T: P => {
       rlTur(P, [[-2.2, -1.2], [-2.2, 1.2], [-1.6, 1.45], [.8, 1.45], [1.6, .9], [1.6, -.9], [.8, -1.45], [-1.6, -1.45]], 23);
-      for (const s of [-1, 1]) P.plate([[.8, s * 1.43], [1.58, s * .9], [1.05, s * .75], [.35, s * 1.15]], P.shade(P.paint, 1.06), { ao: .1, bev: .07 });
+      rlEraDraw(P, RLE.ztq15.t);   // 炮塔正面楔形反应装甲
       P.box(1.45, 0, .45, .7, P.shade(P.paint, .85), { r: .1 });
       P.disc(-.1, .9, .22, SPR_METAL); P.box(-.08, .9, .34, .28, P.shade(P.paint, .82), { r: .06 }); P.box(.1, .9, .05, .2, SPR_GLASS, { tex: false });   // 车长周视镜
       P.box(-.7, -.82, .55, .45, '#2b2c28', { r: .06 }); P.mg(-.55, -.82, 0, 1.2, true);   // 遥控武器站
@@ -233,11 +295,11 @@ const RLM = {
     T: P => { rlTur(P, [[-.9, -.85], [-.9, .85], [.5, .95], [.9, .55], [.9, -.55], [.5, -.95]], 31); P.box(-.2, 1.05, .9, .2, SPR_METAL, { r: .06 }); P.hatch(-.35, .3, .26); P.smoke(.4, -.9, 3, -Math.PI / 2 + .3); } },
 
   // ———————— 美军 ————————
-  m1a1: { L: 7.9, B: 3.66, run: 't', tw: .64, hull: rlMbt(7.9, 3.66, .3), tur: { x: -.4 },
+  m1a1: { era: RLE.m1a1, L: 7.9, B: 3.66, run: 't', tw: .64, hull: rlMbt(7.9, 3.66, .3), tur: { x: -.4 },
     gun: { x0: 2.3, len: 5.3, r: .11, fe: [1.8, .8, .155], sl: 4, mrs: 1 },
     H: P => rlAbramsHull(P, 41),
     T: P => rlAbramsTur(P, false) },
-  m1a2: { L: 7.9, B: 3.66, run: 't', tw: .64, hull: rlMbt(7.9, 3.66, .3), tur: { x: -.4 },
+  m1a2: { era: RLE.m1a2, L: 7.9, B: 3.66, run: 't', tw: .64, hull: rlMbt(7.9, 3.66, .3), tur: { x: -.4 },
     gun: { x0: 2.3, len: 5.3, r: .11, fe: [1.8, .8, .155], sl: 4, mrs: 1 },
     H: P => rlAbramsHull(P, 42),
     T: P => rlAbramsTur(P, true) },
@@ -428,6 +490,7 @@ function rlVehModel(ctx, v, M, h, aim, det, lw, a, col, time) {
     }
   }
   sprDraw(ctx, HS, 0, 0, 1);
+  if (v.era && M.era) rlEraUsed(ctx, rlEraBlocks(M, 'h'), v.era.h);   // 用掉的反应装甲块（era.js）
   ctx.beginPath(); M.hull.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.closePath();
   ctx.lineWidth = lw(det ? .9 : 1.4) / sm; ctx.strokeStyle = rgba(col, (det ? .7 : .95) * a); ctx.stroke();   // 阵营细边
   if (M.mast) { const [mx, my, mr] = M.mast, r = time * 2; ctx.fillStyle = '#5d6064'; ctx.beginPath(); ctx.arc(mx, my, mr * .5, 0, 7); ctx.fill(); ctx.strokeStyle = '#2a2b27'; ctx.lineWidth = .12; ctx.beginPath(); ctx.moveTo(mx - Math.cos(r) * mr, my - Math.sin(r) * mr); ctx.lineTo(mx + Math.cos(r) * mr, my + Math.sin(r) * mr); ctx.stroke(); }
@@ -448,6 +511,7 @@ function rlVehModel(ctx, v, M, h, aim, det, lw, a, col, time) {
     if (outside) guns.forEach(drawGun);
     sprShadow(ctx, TS, 0, 0, 1, 0, h + rot, .45 / sm, .45);
     sprDraw(ctx, TS, 0, 0, 1);
+    if (v.era && M.era) rlEraUsed(ctx, rlEraBlocks(M, 't'), v.era.t);
     if (!outside) guns.forEach(drawGun);
     if (M.radar) {   // 炮塔后部旋转的搜索雷达
       const [rx, ry, rr] = M.radar, ra = time * 3;
