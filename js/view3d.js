@@ -1419,12 +1419,14 @@ function v3Overlay(ctx, time) {
   }
   // 海滩名（海面上）、方格号（近看时贴在地面每格左上角，与通联里的「D7 方格」对应）
   for (const b of TER.beaches) { const q = v3Proj(b.cx, coastAt(b.cx) + 70, 0); if (q && q.f < .7) label(b.name, q.x, q.y, COL.amber, .75 * (1 - q.f)); }
-  if (near) {
-    const gx0 = Math.floor(CAM.x / 200), gy0 = Math.floor(CAM.y / 200);
-    for (let gx = gx0 - 3; gx <= gx0 + 3; gx++) for (let gy = gy0 - 3; gy <= gy0 + 3; gy++) {
+  if (near) {   // 只标陆地上的格（海面上标一片格号没有用，低空看海时满屏都是）；写实画面里淡一些、只标镜头周围 5 × 5 格
+    const gx0 = Math.floor(CAM.x / 200), gy0 = Math.floor(CAM.y / 200), rl = typeof realLook === 'function' && realLook() && !v3Mx(), gr = rl ? 2 : 3, ga = rl ? .3 : .45;
+    for (let gx = gx0 - gr; gx <= gx0 + gr; gx++) for (let gy = gy0 - gr; gy <= gy0 + gr; gy++) {
       if (gx < 0 || gy < 0 || gx * 200 >= W || gy * 200 >= H) continue;
-      const x = gx * 200 + 14, y = gy * 200 + 16, q = v3Proj(x, y, v3Ht(x, y));
-      if (q && q.f < .5) label(gridRef(x, y), q.x, q.y, COL.g, .45 * (1 - q.f));
+      const x = gx * 200 + 14, y = gy * 200 + 16;
+      if (isWater(TER.type[ci(x, y)])) continue;
+      const q = v3Proj(x, y, v3Ht(x, y));
+      if (q && q.f < .5) label(gridRef(x, y), q.x, q.y, COL.g, ga * (1 - q.f));
     }
   }
   // 战斗群（编制标号）

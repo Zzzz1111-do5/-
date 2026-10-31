@@ -20,6 +20,7 @@ function v3gPreload(keys) { for (const k of keys) if (k && !V3G.M[k] && !V3G.def
 
 // 模型：就绪返回它，否则开始加载 / 解码、先返回 null
 function v3gModel(key) {
+  if (key && key.endsWith('~')) return v3gPlain(key);
   if (V3G.fail.has(key) && typeof V3G_ALT === 'object' && V3G_ALT[key]) return v3gModel(V3G_ALT[key]);
   const M = V3G.M[key];
   if (M) return M.ready ? M : null;
@@ -29,6 +30,15 @@ function v3gModel(key) {
   V3G.M[key] = { key, meta: D.meta, ready: false };
   v3gDecode(key, D).catch(e => { console.warn('3D 模型解码失败：' + key, e); V3G.fail.add(key); });
   return null;
+}
+// 替身模型（'e2d~'：拿美军的 E-2D 外形代空警-600 这一类）：和原模型共用顶点、贴图，只是不贴底色贴图——原机的国籍标志、舷号都画在底色贴图里，
+//   代我方机型时不能带着美军标志；法线贴图留着（板块线、铆钉还在），漆成统一的海军灰。玻璃（半透明材质）照旧
+function v3gPlain(key) {
+  const M = V3G.M[key];
+  if (M) return M;
+  const B = v3gModel(key.slice(0, -1));
+  if (!B) return null;
+  return (V3G.M[key] = Object.assign({}, B, { key, mats: B.mats.map(T => T.am === 2 ? T : Object.assign({}, T, { t: null, c: [.58, .6, .62, T.c[3]], e: [0, 0, 0] })) }));
 }
 async function v3gBytes(b64) {
   try { const r = await fetch('data:application/octet-stream;base64,' + b64); if (r.ok) return new Uint8Array(await r.arrayBuffer()); } catch (e) { /* 有的环境不让 fetch data: 地址，下面逐字节解 */ }
@@ -55,6 +65,7 @@ async function v3gDecode(key, D) {
   // 部件转轴单位化
   const un = a => { const l = Math.hypot(...a) || 1; return a.map(v => v / l); };
   M.parts = (m.parts || []).map(p => ({ ...p, a: un(p.a), ...(p.a2 ? { a2: un(p.a2) } : {}), ...(p.r ? { r: un(p.r) } : {}), ...(p.a3 ? { a3: un(p.a3) } : {}) }));
+  if (key === 'army') { M.base = new Float32Array(R ? R.VB : VB); M.baseIB = new Uint16Array(R ? R.IB : IB); }   // 士兵：留一份 T 字站姿的顶点、索引，按需烘焙各个姿势（v3gPose）、拼上步枪
   M.ready = true;
 }
 // 图片 → 贴图（等到下一帧再上传，免得几十张图挤在同一帧）
@@ -307,9 +318,9 @@ const V3G_VEH = { ztz96b: 'ztz96', ztz96m: 'ztz96', m1a1: 'm1a1', m1a2: 'm1a1', 
   zbd05: 'zbd97', zbd04a: 'zbd97', zbd03: 'zbd97', ztd05: 'zbd97', ptl02: 'ptl02', pgl625: 't625', pgz07: 't625', plz07: 'pzh2000', zsl92b: 'lav25', zbl08: 'lav25', ld2000: 'cram' };   // 解放军：ZBD-05 / 03、ZTD-05 用 ZBD-04，PGZ-07 用 625，PLZ-07 用 PzH 2000，ZSL-92B / 08 式用 LAV-25，LD-2000 用陆基密集阵
 const v3gVehKey = (rk, side) => V3G_VEH[rk] || (side === 'e' ? 'm1a1' : 'ztz96');   // 其余装甲车：解放军的用 96 式、美军的用 M1A1 代替
 const V3G_AIR = {
-  j20: 'j20', j35: 'j31', j16: 'j16', j15: 'j16', z10: 'z10w',   // 有模型（歼-35 用它的原型歼-31）
-  j36: 'j20', j50: 'j31', gj11: 'j31', gj2: 'j31', wz7: 'j31', kj600: 'j16', h6k: 'j16', y20: 'j16', transport: 'j16', heli: 'z21',   // 我方其余机型：代替
-  f22: 'j20', f35: 'j31', f35b: 'j31', a10: 'j16', mq9: 'j31', b2: 'j20', c17: 'j16', p8: 'j16', ah64: 'z21', uh60: 'z21'   // 美军：还没有模型，先用这几架代替
+  j20: 'j20', j35: 'j31', j16: 'j16', j15: 'j15', z10: 'z10w', j36: 'j36', j50: 'j50', h6k: 'h6k', y20: 'y20', transport: 'y20', heli: 'z21',   // 我方（歼-35 用它的原型歼-31）
+  kj600: 'e2d~', gj11: 'x47b~', gj2: 'mq9~', wz7: 'rq4~',   // 我方没有模型的：外形最接近的美军机代替（攻击-11 用同是飞翼的 X-47B），去掉原机涂装（v3gPlain：不带美军标志）
+  f22: 'f22', f35: 'f35', f35b: 'f35', a10: 'a10', mq9: 'mq9', b2: 'b2', c17: 'c17', p8: 'p8', ah64: 'ah64', uh60: 'uh60'   // 美军
 };
 // 导弹（v3msl.js V3MS 的型号）→ 模型：AIM-120C、AIM-9 用单独的精细模型，其余按外形从导弹组合里挑
 const V3G_MSL = {
@@ -460,12 +471,83 @@ function v3gPitParts(cf, m, M, VB, IB) {
   }
 }
 function v3gPrep(key, m, M, VB, IB) {
+  const mf = V3G_MATFIX[key];
+  if (mf) for (const i in mf) { const T = m.mats[i], F = mf[i]; if (!T) continue; if (F.am != null) T.am = F.am; if (F.a != null) T.c = [T.c[0], T.c[1], T.c[2], F.a]; }
+  if (V3G_ONE[key]) v3gOne(V3G_ONE[key], m, VB, IB);
+  if (V3G_FLIP[key]) v3gFlip(m, VB);
+  if (V3G_ROTOR[key]) v3gRotor(V3G_ROTOR[key], m, VB, IB);
   const cf = V3G_PIT[key];
   if (cf) { v3gPitScr(cf, m, M, VB, IB); v3gPitHud(cf, m, M, VB, IB); v3gPitParts(cf, m, M, VB, IB); }
   if (V3G_GUN[key]) v3gGun(V3G_GUN[key], m, VB, IB);
   if (V3G_CAPS[key]) v3gCaps(V3G_CAPS[key], m, VB, IB);
   if (V3G_ERA[key]) return v3gEra(V3G_ERA[key], m, VB, IB);
   return V3G_BAY[key] ? v3gBays(V3G_BAY[key], m, VB, IB) : null;
+}
+// —— 材质纠正：直-10 原模型四个材质全设成了 25% 不透明的半透明（整架直升机像幽灵）——机身、桨叶改回不透明；主旋翼的残影盘本是半透明，调淡到 8%（原来盖在机身上一大片发暗）——
+const V3G_MATFIX = { z10w: { 0: { am: 0, a: 1 }, 1: { am: 0, a: 1 }, 2: { a: .08 } } };
+// —— 一个模型文件里并排放了好几架的（X-47B：一架展开机翼、一架折起机翼摆在一起）：只留 mat 号材质的那一架，挪到原点、按 flip 掉头（这一架机头朝 −x），
+//   包围盒、机长、机身中线高度、部件支点跟着改（游戏里按机长缩放）
+const V3G_ONE = { x47b: { mat: 0, flip: true } };
+function v3gOne(cf, m, VB, IB) {
+  const st = m.st, b = [1e9, -1e9, 1e9, -1e9, 1e9, -1e9];
+  for (const lod of m.lod) for (let i = lod.length - 1; i >= 0; i--) if (lod[i][0] !== cf.mat) lod.splice(i, 1);
+  for (const [, , i0, cnt] of m.lod[0]) for (let t = i0; t < i0 + cnt; t++) { const o = IB[t] * st; b[0] = Math.min(b[0], VB[o]); b[1] = Math.max(b[1], VB[o]); b[2] = Math.min(b[2], VB[o + 1]); b[3] = Math.max(b[3], VB[o + 1]); b[4] = Math.min(b[4], VB[o + 2]); b[5] = Math.max(b[5], VB[o + 2]); }
+  const cx = (b[0] + b[1]) / 2, cy = (b[2] + b[3]) / 2, f = cf.flip ? -1 : 1;
+  for (let i = 0; i + 5 < VB.length; i += st) { VB[i] = (VB[i] - cx) * f; VB[i + 1] = (VB[i + 1] - cy) * f; VB[i + 3] *= f; VB[i + 4] *= f; }
+  for (const P of m.parts || []) { if (P.p) P.p = [(P.p[0] - cx) * f, (P.p[1] - cy) * f, P.p[2]]; if (P.a) P.a = [P.a[0] * f, P.a[1] * f, P.a[2]]; }
+  const hx = (b[1] - b[0]) / 2, hy = (b[3] - b[2]) / 2;
+  m.bb = [-hx, -hy, b[4], hx, hy, b[5]]; m.len = m.hl = 2 * hx; m.zc = (b[4] + b[5]) / 2;
+}
+// —— 机头朝 −x 的模型（烘焙时朝向反了：C-17、运-20、轰-6）：解码时绕竖轴转 180°——顶点、法线和部件的支点、转轴一起转（正交旋转，三角形绕向不变）——
+const V3G_FLIP = { c17: 1, y20: 1, h6k: 1 };
+function v3gFlip(m, VB) {
+  const st = m.st;
+  for (let i = 0; i + 5 < VB.length; i += st) { VB[i] = -VB[i]; VB[i + 1] = -VB[i + 1]; VB[i + 3] = -VB[i + 3]; VB[i + 4] = -VB[i + 4]; }
+  for (const P of m.parts || []) for (const k of ['p', 'a', 'q', 'a2', 'r', 'q3', 'a3']) if (P[k]) P[k] = [-P[k][0], -P[k][1], P[k][2]];
+}
+// —— 直升机旋翼：这几个模型的桨叶、桨毂和机身烘焙成了一体（没有部件），旋翼不会转。按连通块（顶点按坐标合并）挑出主旋翼与尾桨，
+//   拆成 rotor / trotor 两个部件绕各自的轴转（v3gPlane 按时间给角度，与直-21 的旋翼部件同一套）。各模型的数据是按块的包围盒量出来的：
+//   c：主旋翼桨毂中心（模型米：x 前、y 左、z 上）；z：主旋翼块的高度范围（桨叶、桨毂、桨夹；桨毂下面的旋翼轴、阿帕奇轴顶的雷达不转）；
+//   r：块中心离旋翼轴多远以内；tb：尾桨块的范围 [x0, x1, y0, y1, z0, z1]；tc：尾桨中心（绕左右轴转）
+const V3G_ROTOR = {
+  ah64: { c: [1.9, 0, 3.5], z: [3.25, 3.78], r: 7.4, tb: [-9.1, -5.9, .55, .92, 2, 3.95], tc: [-7.5, .74, 2.96] },
+  uh60: { c: [1.885, 0, 3.71], z: [3.5, 4.01], r: 8.2, tb: [-10, -7, -.56, -.1, 2.5, 5.3], tc: [-8.52, -.32, 3.9] },
+  z10w: { c: [1.21, 0, 2.95], z: [2.78, 3.17], r: 6.1, tb: [-7.2, -3.6, -.6, -.35, 1.3, 4.7], tc: [-5.41, -.46, 3.01] }
+};
+function v3gRotor(cf, m, VB, IB) {
+  const st = m.st, parts = m.parts || (m.parts = []);
+  const iR = parts.push({ n: 'rotor', k: 'spin', p: cf.c.slice(), a: [0, 0, 1] }) - 1, iT = parts.push({ n: 'trotor', k: 'spin', p: cf.tc.slice(), a: [0, 1, 0] }) - 1;
+  const q = i => Math.round(VB[i * st] * 1000) + ',' + Math.round(VB[i * st + 1] * 1000) + ',' + Math.round(VB[i * st + 2] * 1000), tb = cf.tb;
+  for (const lod of m.lod) {
+    const add = [];
+    for (const e of lod) {
+      const [mi, pi, i0, cnt] = e;
+      if (pi !== -1) continue;
+      const par = new Map(), find = a => { while (par.get(a) !== a) { par.set(a, par.get(par.get(a))); a = par.get(a); } return a; }, uni = (a, b) => { a = find(a); b = find(b); if (a !== b) par.set(a, b); };
+      for (let t = i0; t + 2 < i0 + cnt; t += 3) { const k = [q(IB[t]), q(IB[t + 1]), q(IB[t + 2])]; for (const x of k) if (!par.has(x)) par.set(x, x); uni(k[0], k[1]); uni(k[1], k[2]); }
+      const box = new Map();
+      for (let t = i0; t + 2 < i0 + cnt; t += 3) {
+        const r = find(q(IB[t]));
+        let b = box.get(r);
+        if (!b) box.set(r, b = [1e9, -1e9, 1e9, -1e9, 1e9, -1e9]);
+        for (let j = 0; j < 3; j++) { const o = IB[t + j] * st; b[0] = Math.min(b[0], VB[o]); b[1] = Math.max(b[1], VB[o]); b[2] = Math.min(b[2], VB[o + 1]); b[3] = Math.max(b[3], VB[o + 1]); b[4] = Math.min(b[4], VB[o + 2]); b[5] = Math.max(b[5], VB[o + 2]); }
+      }
+      const cls = new Map();
+      for (const [r, b] of box) {
+        const main = b[4] >= cf.z[0] && b[5] <= cf.z[1] && Math.hypot((b[0] + b[1]) / 2 - cf.c[0], (b[2] + b[3]) / 2 - cf.c[1]) < cf.r;
+        const tail = b[0] >= tb[0] && b[1] <= tb[1] && b[2] >= tb[2] && b[3] <= tb[3] && b[4] >= tb[4] && b[5] <= tb[5];
+        cls.set(r, main ? 1 : tail ? 2 : 0);
+      }
+      const keep = [], mr = [], tr = [];
+      for (let t = i0; t + 2 < i0 + cnt; t += 3) { const c = cls.get(find(q(IB[t]))); (c === 1 ? mr : c === 2 ? tr : keep).push(IB[t], IB[t + 1], IB[t + 2]); }
+      if (!mr.length && !tr.length) continue;
+      let o = i0;
+      IB.set(keep, o); e[3] = keep.length; o += keep.length;
+      if (mr.length) { IB.set(mr, o); add.push([mi, iR, o, mr.length]); o += mr.length; }
+      if (tr.length) { IB.set(tr, o); add.push([mi, iT, o, tr.length]); o += tr.length; }
+    }
+    lod.push(...add);
+  }
 }
 // —— 反应装甲块（era.js 按块用掉）：模型上原有的块才有——M1A1 裙板外表面就是 TUSK 的 ARAT，左右各 2 排 × 16 列，每块是 |y| = y 那个面上 0.33 × 0.35 米的一格。
 //   每块的正面三角形拆出来、复制顶点，|y| 往外挪「块号 × 0.01 毫米」（看不出来）把块号编进顶点，统统挂到一个 'era' 部件上（只多一次绘制）：
@@ -692,11 +774,145 @@ function v3gBays(cf, m, VB, IB) {
 // 开局就把一定会用到的模型先下载、解码（士兵、双方坦克），别的等单位第一次出现时再加载
 if (typeof HOOK === 'object' && HOOK.newGame) HOOK.newGame.push(() => v3gPreload(['army', 'ztz96', 'm1a1', 'zbd97', 'm2a3']));
 // 士兵：用户给的士兵模型原样摆放（T 字站姿，不改模型）；卧倒、匍匐、阵亡时整个放平（脸朝下），别的姿势都站着。k 比例（V3_MAN 一类），side 0 我 / 1 敌 / 2 遗体
-const v3gLying = p => p === 'pr' || p === 'dead' || p[0] === 'c' && p !== 'cl0' && p !== 'cl1' || (p[0] === 'L' && +p.slice(1) >= 12);
+const v3gLying = p => p === 'pr' || p === 'dead' || /^c\d$/.test(p) || (p[0] === 'L' && +p.slice(1) >= 12);   // 匍匐是 c0–c3（爬梯 cl0–cl7 不躺）
+// —— 士兵摆姿势：用户给的士兵模型是 T 字站姿（双臂平伸），原样摆出来一排排「T」——加载后在 CPU 上按程序骨架蒙皮，摆出持枪站立、瞄准、走 / 跑各 8 帧、跪姿、卧姿、
+//   匍匐、起卧过渡、甲板人员的指挥手势、座舱里的坐姿、爬梯，每个姿势烘一份顶点（贴图、索引、材质共用模型本身的），用到时才烘（每帧一个，没烘好的先用站姿）。
+//   关节按模型量出来（米，x 前、y 左、z 上）：肩 (−0.06, ±0.19, 1.41)、肘 |y| 0.465；髋 (0, ±0.10, 0.92)、膝 z 0.48。权重按位置平滑过渡
+//   （肩 |y| 0.15–0.25 且 z 1.2 以上、肘 0.43–0.50、髋 z 0.94–0.80、膝 0.53–0.43、腰 0.86–1.02、两腿之间 y ±0.03），线性混合蒙皮，关节处没有接缝
+const V3G_SK = { sh: [-.06, .19, 1.41], el: .465, hip: [0, .10, .92], kn: .48, wa: [.15, .25], wz: [1.2, 1.32], we: [.43, .50], wl: [.94, .80], wk: [.53, .43], wt: [.86, 1.02] };
+// 姿势参数（度；左、右）：a 手臂下放（0 平伸，90 贴着身体）、f 手臂前摆、e 肘弯（小臂往前收）、h 髋前抬（大腿往前）、k 膝弯（小腿往后收）、t 上身前倾、z 整体下沉（米）
+const V3G_PZ = {
+  st: { a: [78, 82], f: [34, 18], e: [70, 96], h: [2, -2], k: [4, 4], t: 4, z: 0 },   // 持枪站立（左手托护木在前、右手握把在胸前）
+  sa: { a: [62, 70], f: [78, 52], e: [28, 108], h: [6, -4], k: [6, 8], t: 7, z: 0 },   // 站姿瞄准：枪托抵肩，左臂前伸
+  kn: { a: [62, 70], f: [78, 52], e: [28, 108], h: [86, -6], k: [92, 96], t: 10, z: -.42 },   // 跪姿瞄准：左腿弓步、右膝着地
+  pr: { a: [86, 86], f: [112, 104], e: [92, 98], h: [0, 0], k: [0, 0], t: 0, z: 0 },   // 卧姿（放平前：手肘撑地、小臂朝前，放平后就是趴着端枪）
+  pt: { a: [80, 8], f: [10, 30], e: [8, 6], h: [0, 0], k: [3, 3], t: 2, z: 0 },   // 甲板指挥：右臂向前上方指出
+  sit: { a: [74, 74], f: [30, 30], e: [62, 62], h: [88, 88], k: [86, 86], t: -4, z: -.46 },   // 座舱里坐着，双手握杆、油门
+  dead: { a: [40, 55], f: [-10, 20], e: [20, 35], h: [8, -6], k: [10, 25], t: 0, z: 0 }   // 阵亡倒地（放平）
+};
+function v3gPoseDef(p) {
+  const P = V3G_PZ[p];
+  if (P) return P;
+  const lerpP = (A, B, u) => { const o = {}; for (const k in A) o[k] = Array.isArray(A[k]) ? A[k].map((v, i) => v + (B[k][i] - v) * u) : A[k] + (B[k] - A[k]) * u; return o; };
+  if (p[0] === 'w' || p[0] === 'r') {   // 走 / 跑一个步态周期 8 帧：大腿前后摆、摆动腿抬膝、上身前倾，手臂端着枪基本不动（跑的时候随步子起伏一点）
+    const run = p[0] === 'r', ph = +p.slice(1) * Math.PI / 4, A = run ? 34 : 22, sw = Math.sin(ph);
+    const kL = (run ? 12 : 6) + (run ? 62 : 38) * Math.max(0, Math.sin(ph + 1.9)), kR = (run ? 12 : 6) + (run ? 62 : 38) * Math.max(0, Math.sin(ph + 1.9 + Math.PI));
+    const S0 = V3G_PZ.st, bob = run ? .5 * Math.cos(2 * ph) : 0;
+    return { a: S0.a, f: [S0.f[0] + bob * 6, S0.f[1] + bob * 6], e: S0.e, h: [A * sw, -A * sw], k: [kL, kR], t: run ? 13 : 6, z: run ? -.03 + .03 * Math.abs(Math.cos(ph)) : -.008 * Math.abs(Math.sin(ph)) };
+  }
+  if (/^c\d$/.test(p)) {   // 匍匐 4 帧（放平前的姿势）：左右手交替前伸、对侧腿收膝
+    const k = +p[1], L = k === 0 ? 1 : k === 2 ? 0 : .5, Pr = V3G_PZ.pr;
+    return { a: Pr.a, f: [Pr.f[0] + 22 * (L - .5), Pr.f[1] - 22 * (L - .5)], e: Pr.e, h: [30 * (1 - L), 30 * L], k: [55 * (1 - L), 55 * L], t: 0, z: 0 };
+  }
+  if (p.startsWith('cl')) {   // 爬梯 8 帧：两手交替上举抓梯、对侧腿抬起踩横档
+    const ph = +p.slice(2) * Math.PI / 4, u = .5 + .5 * Math.sin(ph);
+    return { a: [-40 + 70 * (1 - u), -40 + 70 * u], f: [70, 70], e: [30, 30], h: [10 + 55 * (1 - u), 10 + 55 * u], k: [20 + 70 * (1 - u), 20 + 70 * u], t: 4, z: 0 };
+  }
+  if (p[0] === 'L') {   // 起卧过渡：站 → 跪（L1–L7）、跪 → 卧（L9–L11）；L12 以上已经放平，用卧姿
+    const L = +p.slice(1);
+    if (L >= 12) return V3G_PZ.pr;
+    return L <= 8 ? lerpP(V3G_PZ.st, V3G_PZ.kn, L / 8) : lerpP(V3G_PZ.kn, { ...V3G_PZ.kn, t: 40, z: -.62 }, (L - 8) / 4);
+  }
+  return V3G_PZ.st;
+}
+// 姿势键归并（同一组的过渡帧共用几份，少烘几份顶点）
+const v3gPoseKey = p => { if (!p || p === 'st' || p === 'sa' || p === 'kn' || p === 'pr' || p === 'pt' || p === 'sit' || p === 'dead' || /^[wrc]\d$/.test(p) || /^cl\d$/.test(p)) return p || 'st'; if (p[0] === 'L') { const L = +p.slice(1); return L >= 12 ? 'pr' : L <= 3 ? 'L2' : L <= 5 ? 'L4' : L <= 7 ? 'L6' : L === 8 ? 'kn' : 'L10'; } return 'st'; };
+const v3gSm = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+function v3gPose(B, P, rifle) {
+  const st = 8, n = B.length / st, out = new Float32Array(B), S = V3G_SK, d2r = Math.PI / 180;
+  const rX = t => { const c = Math.cos(t), s = Math.sin(t); return [1, 0, 0, 0, c, -s, 0, s, c]; }, rY = t => { const c = Math.cos(t), s = Math.sin(t); return [c, 0, s, 0, 1, 0, -s, 0, c]; }, rZ = t => { const c = Math.cos(t), s = Math.sin(t); return [c, -s, 0, s, c, 0, 0, 0, 1]; };
+  const mm = (A, C) => { const o = new Array(9); for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) o[i * 3 + j] = A[i * 3] * C[j] + A[i * 3 + 1] * C[3 + j] + A[i * 3 + 2] * C[6 + j]; return o; };
+  const mv = (A, v) => [A[0] * v[0] + A[1] * v[1] + A[2] * v[2], A[3] * v[0] + A[4] * v[1] + A[5] * v[2], A[6] * v[0] + A[7] * v[1] + A[8] * v[2]];
+  // 各骨骼：旋转 R 与「p → R (p − j) + j'」的变换（手臂、腿按层级：小臂先绕肘、再随大臂绕肩）
+  const arm = sd => {   // sd 1 左、−1 右
+    const i = sd > 0 ? 0 : 1, Ra = mm(rY(-P.f[i] * d2r), rX(-sd * P.a[i] * d2r)), Re = rZ(-sd * P.e[i] * d2r), Sj = [S.sh[0], sd * S.sh[1], S.sh[2]], Ej = [S.sh[0], sd * S.el, S.sh[2]];
+    return { up: { R: Ra, f: p => { const r = mv(Ra, [p[0] - Sj[0], p[1] - Sj[1], p[2] - Sj[2]]); return [r[0] + Sj[0], r[1] + Sj[1], r[2] + Sj[2]]; } },
+      fo: { R: mm(Ra, Re), f: p => { const e = mv(Re, [p[0] - Ej[0], p[1] - Ej[1], p[2] - Ej[2]]), r = mv(Ra, [e[0] + Ej[0] - Sj[0], e[1] + Ej[1] - Sj[1], e[2] + Ej[2] - Sj[2]]); return [r[0] + Sj[0], r[1] + Sj[1], r[2] + Sj[2]]; } } };
+  };
+  const leg = sd => {
+    const i = sd > 0 ? 0 : 1, Rh = rY(-P.h[i] * d2r), Rk = rY(P.k[i] * d2r), Hj = [S.hip[0], sd * S.hip[1], S.hip[2]], Kj = [S.hip[0], sd * S.hip[1], S.kn];
+    return { th: { R: Rh, f: p => { const r = mv(Rh, [p[0] - Hj[0], p[1] - Hj[1], p[2] - Hj[2]]); return [r[0] + Hj[0], r[1] + Hj[1], r[2] + Hj[2]]; } },
+      sh: { R: mm(Rh, Rk), f: p => { const e = mv(Rk, [p[0] - Kj[0], p[1] - Kj[1], p[2] - Kj[2]]), r = mv(Rh, [e[0] + Kj[0] - Hj[0], e[1] + Kj[1] - Hj[1], e[2] + Kj[2] - Hj[2]]); return [r[0] + Hj[0], r[1] + Hj[1], r[2] + Hj[2]]; } } };
+  };
+  const AL = arm(1), AR = arm(-1), LL = leg(1), LR = leg(-1), Rt = rY(P.t * d2r), Hc = [0, 0, S.hip[2]];
+  const mix = (a, b, w) => [a[0] + (b[0] - a[0]) * w, a[1] + (b[1] - a[1]) * w, a[2] + (b[2] - a[2]) * w];
+  const skin = (p0, n0) => {
+    const ay = Math.abs(p0[1]);
+    let p = p0, nn = n0;
+    const wa = v3gSm(S.wa[0], S.wa[1], ay) * v3gSm(S.wz[0], S.wz[1], p0[2]);
+    if (wa > 0) {
+      const A = p0[1] > 0 ? AL : AR, we = v3gSm(S.we[0], S.we[1], ay);
+      p = mix(p0, mix(A.up.f(p0), A.fo.f(p0), we), wa); nn = mix(n0, mix(mv(A.up.R, n0), mv(A.fo.R, n0), we), wa);
+    }
+    const wt = v3gSm(S.wt[0], S.wt[1], p0[2]);
+    if (wt > 0) { const r = mv(Rt, [p[0] - Hc[0], p[1] - Hc[1], p[2] - Hc[2]]); p = mix(p, [r[0] + Hc[0], r[1] + Hc[1], r[2] + Hc[2]], wt); nn = mix(nn, mv(Rt, nn), wt); }
+    const wl = v3gSm(S.wl[0], S.wl[1], p0[2]);
+    if (wl > 0) {
+      const wk = v3gSm(S.wk[0], S.wk[1], p0[2]), sL = v3gSm(-.03, .03, p0[1]);
+      const pl = mix(LL.th.f(p0), LL.sh.f(p0), wk), pr = mix(LR.th.f(p0), LR.sh.f(p0), wk), nl = mix(mv(LL.th.R, n0), mv(LL.sh.R, n0), wk), nr = mix(mv(LR.th.R, n0), mv(LR.sh.R, n0), wk);
+      p = mix(p, mix(pr, pl, sL), wl); nn = mix(nn, mix(nr, nl, sL), wl);
+    }
+    const nl = Math.hypot(nn[0], nn[1], nn[2]) || 1;
+    return [p[0], p[1], p[2] + P.z, nn[0] / nl, nn[1] / nl, nn[2] / nl];
+  };
+  for (let v = 0; v < n; v++) {
+    const o = v * st, r = skin([B[o], B[o + 1], B[o + 2]], [B[o + 3], B[o + 4], B[o + 5]]);
+    for (let j = 0; j < 6; j++) out[o + j] = r[j];
+  }
+  if (!rifle) return out;
+  // 步枪（模型里没有）：握把在右手掌心、护木过左手掌心，枪身沿右手 → 左手的方向；几个方块拼成枪托、机匣、弹匣、握把、护木、枪管、瞄具，深灰色
+  const hand = sd => skin([-.05, sd * .8, 1.39], [0, 0, 1]), Rh = hand(-1), Lh = hand(1);
+  let u = [Lh[0] - Rh[0], Lh[1] - Rh[1], Lh[2] - Rh[2]];
+  { const l = Math.hypot(...u) || 1; u = u.map(v => v / l); }
+  let up = [0, 0, 1]; { const d = up[0] * u[0] + up[1] * u[1] + up[2] * u[2]; up = [up[0] - u[0] * d, up[1] - u[1] * d, up[2] - u[2] * d]; const l = Math.hypot(...up) || 1; up = up.map(v => v / l); }
+  const sdv = [u[1] * up[2] - u[2] * up[1], u[2] * up[0] - u[0] * up[2], u[0] * up[1] - u[1] * up[0]], o0 = [Rh[0] - u[0] * .32 - up[0] * .02, Rh[1] - u[1] * .32 - up[1] * .02, Rh[2] - u[2] * .32 - up[2] * .02];
+  const W3 = (s, h, w) => [o0[0] + u[0] * s + up[0] * h + sdv[0] * w, o0[1] + u[1] * s + up[1] * h + sdv[1] * w, o0[2] + u[2] * s + up[2] * h + sdv[2] * w];
+  const R2 = new Float32Array(out.length + V3G_RIFLE.length * 24 * st);
+  R2.set(out);
+  let k = n * st;
+  for (const [s0, s1, h0, h1, w, fw] of V3G_RIFLE) {   // 每个方块 6 面 × 4 个顶点（每面一个法线）；fw：底部往前斜（弹匣）
+    const c = (a, b, e) => { const q = W3(a ? s1 : s0, b ? h1 : h0, (e ? 1 : -1) * w / 2); if (!b && fw) for (let j = 0; j < 3; j++) q[j] += u[j] * fw; return q; };
+    const faces = [[[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0], sdv.map(v => -v)], [[0, 0, 1], [0, 1, 1], [1, 1, 1], [1, 0, 1], sdv], [[0, 1, 0], [1, 1, 0], [1, 1, 1], [0, 1, 1], up],
+      [[0, 0, 0], [0, 0, 1], [1, 0, 1], [1, 0, 0], up.map(v => -v)], [[1, 0, 0], [1, 0, 1], [1, 1, 1], [1, 1, 0], u], [[0, 0, 0], [0, 1, 0], [0, 1, 1], [0, 0, 1], u.map(v => -v)]];
+    for (const F of faces) for (let j = 0; j < 4; j++) { const q = c(...F[j]); R2[k] = q[0]; R2[k + 1] = q[1]; R2[k + 2] = q[2]; R2[k + 3] = F[4][0]; R2[k + 4] = F[4][1]; R2[k + 5] = F[4][2]; R2[k + 6] = 0; R2[k + 7] = 0; k += st; }
+  }
+  return R2;
+}
+// 步枪的几个方块（沿枪身 s 从枪托底板算，米；h 上下、w 宽；fw 底边往前斜多少）：约 0.9 米长的突击步枪
+const V3G_RIFLE = [[0, .26, -.05, .05, .045, 0], [.24, .6, -.045, .05, .055, 0], [.58, .77, -.035, .035, .05, 0], [.76, .92, -.012, .012, .024, 0],
+  [.4, .48, -.2, -.04, .034, .05], [.3, .35, -.12, -.03, .034, .03], [.36, .52, .05, .075, .02, 0]];
+const V3G_RIFLE_MAT = { n: 'rifle', c: [.075, .078, .072, 1], t: null, nt: null, ns: 1, mr: [.55, .5], mrt: null, sg: null, sgt: null, e: [0, 0, 0], et: null, ot: null, am: 0, ac: .5, ds: 1 };
+// 某个姿势的士兵模型（'army@st' …，不带枪的加 '-'）：共用原模型的贴图、材质，只是顶点换成摆好的；还没烘焙就烘（每帧限一个），超了先返回站姿
+function v3gManM(pose, rifle) {
+  const B = v3gModel('army');
+  if (!B || !B.base) return B;
+  const pk = v3gPoseKey(pose), key = 'army@' + pk + (rifle ? '' : '-');
+  let M = V3G.M[key];
+  if (M) return M;
+  if (V3G.poseF === V3G.frame && V3G.poseN >= 1) return pk === 'st' ? null : v3gManM('st', rifle);   // 每帧只烘一个（一个约 10–30 毫秒）：这一帧烘过了先用站姿（站姿也还没烘就这一帧先不画，不闪一下 T 字）
+  if (V3G.poseF !== V3G.frame) { V3G.poseF = V3G.frame; V3G.poseN = 0; }
+  V3G.poseN++;
+  const gl = V3G.gl, VB = v3gPose(B.base, v3gPoseDef(pk), rifle), vb = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, vb); gl.bufferData(gl.ARRAY_BUFFER, VB, gl.STATIC_DRAW);
+  let ext = {};
+  if (rifle) {   // 带枪的：索引后面接上步枪的三角形（各个姿势顶点数一样，这份索引、材质、细节层次表共用）
+    if (!V3G.manR) {
+      const nv = B.base.length / 8, IB0 = B.baseIB, nb = V3G_RIFLE.length, add = new Uint16Array(nb * 36);
+      for (let b = 0, o = 0; b < nb; b++) for (let f = 0; f < 6; f++) { const v0 = nv + b * 24 + f * 4; add.set([v0, v0 + 1, v0 + 2, v0, v0 + 2, v0 + 3], o); o += 6; }
+      const IB2 = new Uint16Array(IB0.length + add.length); IB2.set(IB0); IB2.set(add, IB0.length);
+      const ib = gl.createBuffer(); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, IB2, gl.STATIC_DRAW);
+      const mi = B.mats.length, meta = Object.assign({}, B.meta, { lod: B.meta.lod.map(L => [...L, [mi, -1, IB0.length, add.length]]) });
+      V3G.manR = { ib, meta, mats: [...B.mats, V3G_RIFLE_MAT] };
+    }
+    ext = { ib: V3G.manR.ib, meta: V3G.manR.meta, mats: V3G.manR.mats };
+  }
+  return (V3G.M[key] = Object.assign({}, B, { key, vb, base: null, baseIB: null }, ext));
+}
+const V3G_NOGUN = { pilot: 1, deck: 1 };   // 飞行员、甲板人员手里没枪
 function v3gMan(kind, pose, x, y, z, a, k, side, roll = 0) {
-  const M = v3gModel('army');
+  const M = v3gManM(pose || 'st', !V3G_NOGUN[kind]);
   if (!M) return false;
-  if (!v3gLying(pose || 'st')) return v3gAdd('army', x, y, z, a, k, side, roll, 0);
+  if (!v3gLying(pose || 'st')) return v3gAdd(M.key, x, y, z, a, k, side, roll, 0);
   const b = M.meta.bb, h = (b[5] - b[2]) * k, c = Math.cos(a), s = Math.sin(a);   // 放平：绕横轴转 −90°（头朝前、背朝上），身体中点放在原地
-  return v3gAdd('army', x - c * h / 2, y - s * h / 2, z + b[3] * k, a, k, side, 0, -Math.PI / 2);
+  return v3gAdd(M.key, x - c * h / 2, y - s * h / 2, z + b[3] * k, a, k, side, 0, -Math.PI / 2);
 }
