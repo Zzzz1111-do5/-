@@ -1866,7 +1866,8 @@
           0.5,
           0.6
         ]
-      ]
+      ],
+      "modNote": "游戏里补了起落架（模型本身没有）"
     },
     "f35": {
       "name": "F-35A 闪电 II",
@@ -2201,7 +2202,8 @@
           "slot": 0,
           "triBelow": 1.15
         }
-      ]
+      ],
+      "modNote": "代我方机型时不贴底色贴图（去掉原机涂装与标志，漆成统一的灰）"
     },
     "j15": {
       "name": "歼-15 飞鲨（代歼-15T）",
@@ -2264,29 +2266,6 @@
       "modNote": "游戏里把外翼、平尾外段在折叠线处做成能折起的部件，补了四个翼下挂架",
       "dedupBack": "^Body_black$"
     },
-    "j36": {
-      "name": "歼-36",
-      "glb": "j36/scene.gltf",
-      "fwd": "+z",
-      "up": "+y",
-      "len": 23,
-      "roughMin": 0.45,
-      "opaque": true,
-      "texMax": 2048,
-      "credit": {
-        "title": "Chengdu J-36 Fighter China",
-        "author": "Chenzoss",
-        "url": "https://sketchfab.com/3d-models/chengdu-j-36-fighter-china-d5b40a31f2894b25882a7167d1d2a17d",
-        "license": "CC-BY-4.0",
-        "lurl": "http://creativecommons.org/licenses/by/4.0/"
-      },
-      "parts": [],
-      "tri0": 60000,
-      "tri0Flags": [
-        "Permissive"
-      ],
-      "level": true
-    },
     "j50": {
       "name": "歼-50",
       "glb": "j50/scene.gltf",
@@ -2307,7 +2286,19 @@
       "tri0": 60000,
       "tri0Flags": [
         "Permissive"
-      ]
+      ],
+      "noz": [
+        [
+          -8.85,
+          0.75,
+          0.95,
+          0.3,
+          0.6,
+          0.45,
+          0.1
+        ]
+      ],
+      "modNote": "游戏里补了起落架（模型本身没有），按机腹切出弹舱门"
     },
     "y20": {
       "name": "运-20 鲲鹏",
@@ -2341,7 +2332,8 @@
           1
         ]
       ],
-      "parts": []
+      "parts": [],
+      "modNote": "游戏里补了起落架（模型本身没有）"
     },
     "h6k": {
       "name": "轰-6",
@@ -2410,7 +2402,8 @@
         "04___Default": {
           "alpha": "OPAQUE"
         }
-      }
+      },
+      "modNote": "代我方机型时不贴底色贴图（去掉原机涂装与标志，漆成统一的灰）"
     },
     "x47b": {
       "name": "X-47B（代攻击-11）",
@@ -2436,7 +2429,8 @@
           "triBelow": 1.2
         }
       ],
-      "dropNodes": "Cube\\.001"
+      "dropNodes": "Cube\\.001",
+      "modNote": "代我方机型时不贴底色贴图（去掉原机涂装与标志，漆成统一的灰）"
     },
     "rq4": {
       "name": "RQ-4 全球鹰（代无侦-7）",
@@ -2454,7 +2448,8 @@
         "license": "CC-BY-4.0",
         "lurl": "http://creativecommons.org/licenses/by/4.0/"
       },
-      "parts": []
+      "parts": [],
+      "modNote": "游戏里补了起落架（模型本身没有）；代我方机型时不贴底色贴图（去掉原机涂装与标志，漆成统一的灰）"
     }
   },
   "sets": {

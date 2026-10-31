@@ -36,8 +36,8 @@ function atoAAKnown(side) {
 }
 // 这一方已损失的飞机架数
 const atoLost = side => side === 'p' ? (S.air ? S.air.wing.filter(w => w.state === 'lost').length : 0) : (S.eair ? S.eair.wing.filter(w => w.state === 'lost').length : 0);
-// 能压制防空的飞机：攻方攻击机（歼-35，防空压制型更好）、歼-36 打击型；守方 A-10C（小牛）、带小直径炸弹的 F-35A
-const atoSeadP = () => !!S.air && S.air.wing.some(w => (w.type === 'strike' || (w.type === 'fighter' && w.v === 'j36s')) && w.state !== 'lost');
+// 能压制防空的飞机：攻方攻击机（歼-35，防空压制型更好）；守方 A-10C（小牛）、带小直径炸弹的 F-35A
+const atoSeadP = () => !!S.air && S.air.wing.some(w => w.type === 'strike' && w.state !== 'lost');
 const atoSeadE = () => !!S.eair && S.eair.wing.some(w => (w.type === 'ga' || w.type === 'ftr' || w.type === 'ftrb') && w.state !== 'lost');
 function atoSay(side, ph, why) {
   const txt = { 1: `空中作战第一阶段——夺取制空权：${side === 'p' ? '歼击机' : 'F-35A / F-22A'}双机编队前出扫荡、巡逻，对地飞机一律待命，不打无制空权的仗。`,

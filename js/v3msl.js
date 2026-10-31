@@ -59,7 +59,7 @@ function v3MslK(m) {
   return { vls: 1, dd: 1, esc: 1, eship: 1 }[m.src] ? V3_MSL_SHIP : V3_MSL_AIR;
 }
 // 机型的实长（米，对应机型坐标的 21 个单位；宽的飞机按翼展）：挂架、弹舱里的弹按它换成机型单位，和飞机同一比例
-const V3_ALEN = { j35: 17.3, j20: 20.4, j15: 21.9, j16: 21.9, j36: 22.8, j50: 19, h6k: 34.8, kj600: 21.5, gj2: 20.5, gj11: 14, wz7: 24, z10: 14.2, f35: 15.7, f35b: 15.6, f22: 18.9, a10: 17.5, mq9: 20, ah64: 17.7, uh60: 19.8, b2: 52.4, p8: 39.5, c17: 51.7, y20: 47 };
+const V3_ALEN = { j35: 17.3, j20: 20.4, j15: 21.9, j16: 21.9, j50: 19, h6k: 34.8, kj600: 21.5, gj2: 20.5, gj11: 14, wz7: 24, z10: 14.2, f35: 15.7, f35b: 15.6, f22: 18.9, a10: 17.5, mq9: 20, ah64: 17.7, uh60: 19.8, b2: 52.4, p8: 39.5, c17: 51.7, y20: 47 };
 const v3MslAk = key => 21 / (V3_ALEN[key] || 18);   // 机型单位 / 米
 const V3_EAK = { ga: 'a10', heli: 'ah64', uh60: 'uh60', c17: 'c17', ftr: 'f35', ftrb: 'f35b', mq9: 'mq9', f22: 'f22', b2: 'b2', p8: 'p8' };
 const v3MslPlaneKey = o => o && o.kind && typeof airSilKey === 'function' ? airSilKey(o.kind, o.v) : (o && V3_EAK[o.type]) || 'j35';   // 我方按机种、敌方按 eair 的类型

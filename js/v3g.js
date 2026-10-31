@@ -329,7 +329,7 @@ const V3G_VEH = { ztz96b: 'ztz96', ztz96m: 'ztz96', m1a1: 'm1a1', m1a2: 'm1a1', 
   zbd05: 'zbd97', zbd04a: 'zbd97', zbd03: 'zbd97', ztd05: 'zbd97', ptl02: 'ptl02', pgl625: 't625', pgz07: 't625', plz07: 'pzh2000', zsl92b: 'lav25', zbl08: 'lav25', ld2000: 'cram' };   // 解放军：ZBD-05 / 03、ZTD-05 用 ZBD-04，PGZ-07 用 625，PLZ-07 用 PzH 2000，ZSL-92B / 08 式用 LAV-25，LD-2000 用陆基密集阵
 const v3gVehKey = (rk, side) => V3G_VEH[rk] || (side === 'e' ? 'm1a1' : 'ztz96');   // 其余装甲车：解放军的用 96 式、美军的用 M1A1 代替
 const V3G_AIR = {
-  j20: 'j20', j35: 'j31', j16: 'j16', j15: 'j15', z10: 'z10w', j36: 'j36', j50: 'j50', h6k: 'h6k', y20: 'y20', transport: 'y20', heli: 'z21',   // 我方（歼-35 用它的原型歼-31；歼-15T 用歼-15，歼-16D 用歼-16）
+  j20: 'j20', j35: 'j31', j16: 'j16', j15: 'j15', z10: 'z10w', j50: 'j50', h6k: 'h6k', y20: 'y20', transport: 'y20', heli: 'z21',   // 我方（歼-35 用它的原型歼-31；歼-15T 用歼-15，歼-16D 用歼-16）
   kj600: 'e2d~', gj11: 'x47b~', gj2: 'mq9~', wz7: 'rq4~',   // 我方没有模型的：外形最接近的美军机代替（攻击-11 用同是飞翼的 X-47B），去掉原机涂装（v3gPlain：不带美军标志）
   f22: 'f22', f35: 'f35', f35b: 'f35', a10: 'a10', mq9: 'mq9', b2: 'b2', c17: 'c17', p8: 'p8', ah64: 'ah64', uh60: 'uh60'   // 美军（Sketchfab，CC-BY）
 };
@@ -398,7 +398,7 @@ const V3G_HELI = { z10: 1, heli: 1, ah64: 1, uh60: 1 };   // 直升机（不按�
 // 飞机机身中线离机轮着地处多高（世界单位）
 function v3gPlaneZc(key, sz) { const M = V3G.M[V3G_AIR[key] || 'j31']; return M && M.ready ? M.meta.zc * sz / M.meta.len : sz * .12; }
 // 用户给的模型的署名（tools/v3gmodels.json 的 credit；设置面板「素材致谢」里列出，v3import.js v3imCredits）
-const V3G_CRED = [{"name":"96 式主战坦克","title":"ZTZ96","author":"jzmhhhhh","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/ztz96-b0da178e50dc423983445841615d9e80"},{"name":"M1A1 艾布拉姆斯","title":"M1A1 Abrams Main Battle Tank","author":"MirzaArrafiERV_45","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/m1a1-abrams-main-battle-tank-1529f5d842cb4f578aa8cb672524f044"},{"name":"歼-20","title":"Chinese Chengdu J-20","author":"42manako","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/chinese-chengdu-j-20-b9e81062c94545ffb0232d3ac6b7adc5"},{"name":"歼-16","title":"Shenyang J16 Hidden Dragon","author":"andertan","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/shenyang-j16-hidden-dragon-2b950f910677457fbb52b6096f81e70b"},{"name":"歼-31 鹘鹰","title":"Shenyang J31 Gyrfalcon","author":"andertan","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/shenyang-j31-gyrfalcon-23dbff530e21491299ac67bbab42b553"},{"name":"直-10","title":"Changhe Z-10W","author":"42manako","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/changhe-z-10w-617cb4a91dfd4eaaa59161e06691df7f"},{"name":"直-21","title":"[MW] Z-21","author":"xlisov","license":"CC-BY-NC-4.0","url":"https://sketchfab.com/3d-models/mw-z-21-a2d88447f0904f49b73f94fa88dccea5"},{"name":"士兵","title":"Army Character 2","author":"MirzaArrafiERV_45","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/army-character-2-e3c4da4a33bb42ed8512f423a4319c5a"},{"name":"AIM-120C","title":"AIM-120C AMRAAM","author":"Jeyhun1985","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/aim-120c-amraam-838fa923340a4d108e05c99bf0146ff6"},{"name":"AIM-9","title":"AIM-9 missile","author":"rickslash","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/aim-9-missile-caaf15b49bac4144b6c6be577c2b872a"},{"name":"AIM-54 不死鸟、AIM-9 响尾蛇（组合）、AIM-120（组合）、KS-172、AIM-132 ASRAAM、GBU-24 宝石路、Mk 83 炸弹、AGM-65 小牛、AGM-154 JSOW、硫磺石","title":"300 followers - free aircraft missile set","author":"NETRUNNER_pl","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/300-followers-free-aircraft-missile-set-2e70bc2ea0824897b2ccaea378809c9e"},{"name":"M2A3 布雷德利步兵战车","title":"M2 Bradley IFV","author":"42manako","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/m2-bradley-ifv-ab022158ab5f4fbfa55d4142db7595ab"},{"name":"M109A7 帕拉丁自行榴弹炮","title":"M109 PALADIN ARTILLERY","author":"Muhamad Mirza Arrafi","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/m109-paladin-artillery-3de0572475d54f7b9da18d6ed26b4a10"},{"name":"斯特赖克 8×8 装甲车（M1126 步兵输送车外形）","title":"M1126 Infantry Carrier Vehicle","author":"cenobyte","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/m1126-infantry-carrier-vehicle-b0c559a02c1842b0976a241c9a998360"},{"name":"M903 爱国者导弹发射车","title":"MIM-104 Patriot Air Defense System","author":"Muhamad Mirza Arrafi","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/mim-104-patriot-air-defense-system-95e1e402426f4ddcb543af7a0455cf05"},{"name":"M163 火神自行高炮","title":"M163 VADS","author":"42manako","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/m163-vads-66a6f08ad2d945ccb6e72267e55bc685"},{"name":"C-RAM 陆基密集阵（百人队长）","title":"Centurion C-RAM","author":"Muhamad Mirza Arrafi","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/centurion-c-ram-10ea7349c7574ca7a43991eece92c9a9"},{"name":"M1150 突击破障车","title":"M1150 ABV","author":"Kalibrovshik","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/m1150-abv-26eaeb6a7dbf498db16e02b1c232de33"},{"name":"M-ATV 防地雷全地形车（代 JLTV、M1117）","title":"Oshkosh M-ATV","author":"42manako","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/oshkosh-m-atv-291dc8f07a494751b318e623b89cf538"},{"name":"M998 悍马（代复仇者防空车底盘）","title":"HMMWV M998A1 (soft top)","author":"42manako","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/hmmwv-m998a1-soft-top-ffbc4b053628413fb84acf5b89595d96"},{"name":"ZBD-04 步兵战车（原称 97 式）","title":"ZBD-97","author":"42manako","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/zbd-97-b36e44ca383e4ab296e28321167e5ba4"},{"name":"PTL-02 轮式突击炮","title":"Chinese PTL-02","author":"42manako","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/chinese-ptl-02-e087eff1ed9b48cabe06d9467fec3311"},{"name":"PGL-625 弹炮结合防空车","title":"Type-625 Anti Aircraft Gun Missile System","author":"Muhamad Mirza Arrafi","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/type-625-anti-aircraft-gun-missile-system-8b7e85f45b954592bd4bb8e72cdd6312"},{"name":"PzH 2000 自行榴弹炮（代 PLZ-07）","title":"PANZERHAUBITZE 2000 ARTILLERY (PzH-2000)","author":"Muhamad Mirza Arrafi","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/panzerhaubitze-2000-artillery-pzh-2000-da078be6bc66461e87034f29600a4982"},{"name":"LAV-25 轮式装甲车（代 ZSL-92B、08 式）","title":"LAV-25","author":"42manako","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/lav-25-968b0681119a4b3e82d94bb085a790be"},{"name":"F-22A 猛禽","title":"Lockheed Martin F-22 \"Raptor\"","author":"andertan","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/lockheed-martin-f-22-raptor-7e7b3c372e374dda98e70208d09cfdcf"},{"name":"F-35A 闪电 II","title":"Lockheed Martin F35 Lightning II","author":"andertan","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/lockheed-martin-f35-lightning-ii-db911de503c74285a8d506951df786d6"},{"name":"A-10C 雷电 II","title":"A-10 Thunderbolt II","author":"AIRMAN Magazine","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/a-10-thunderbolt-ii-9521ff6ba5d448958ea45a89e94ab23d"},{"name":"AH-64D 阿帕奇","title":"Boeing AH-64D Apache Combat Helicopter","author":"Muhamad Mirza Arrafi","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/boeing-ah-64d-apache-combat-helicopter-c3b58008c46b45048fdd7dd283a3c8c8"},{"name":"UH-60M 黑鹰","title":"Sikorsky UH-60M Blackhawk","author":"Muhamad Mirza Arrafi","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/sikorsky-uh-60m-blackhawk-12b4e525676a49678ac3006b360c8750"},{"name":"C-17A 环球霸王 III","title":"C-17 Globemaster III","author":"KOG_THORNS","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/c-17-globemaster-iii-552f88697c7f4aeebf254f7cb9f239ed"},{"name":"B-2A 幽灵","title":"B2 Spirit","author":"dannzjs","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/b2-spirit-d1fb2607daa44dde8efcdcd870655262"},{"name":"P-8A 波塞冬","title":"Boeing P-8 Poseidon","author":"Muhamad Mirza Arrafi","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/boeing-p-8-poseidon-3fc134024b69403bb5df5ab3aff48919"},{"name":"MQ-9A 死神（代攻击-2）","title":"MQ-9","author":"IProZenoN","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/mq-9-fabe963feb354c5584b51f9c470c3f7e"},{"name":"歼-15 飞鲨（代歼-15T）","title":"PLA Navy Shenyang J-15","author":"42manako","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/pla-navy-shenyang-j-15-f2bf5c1e2e654ee6819b696b6095a552"},{"name":"歼-36","title":"Chengdu J-36 Fighter China","author":"Chenzoss","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/chengdu-j-36-fighter-china-d5b40a31f2894b25882a7167d1d2a17d"},{"name":"歼-50","title":"Shenyang J-50","author":"Chenzoss","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/shenyang-j-50-6b0cb86c094048ea811ef0faf570b4b9"},{"name":"运-20 鲲鹏","title":"Xi'an Y20 \"Kunpeng\"","author":"andertan","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/xian-y20-kunpeng-40ce0195eb07494f83304574aafbb3bc"},{"name":"轰-6","title":"Chinese Xi'an H-6","author":"42manako","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/chinese-xian-h-6-6990848462c54f4397cce71dffa1409f"},{"name":"E-2D 先进鹰眼（代空警-600）","title":"Grumman E-2D Advanced Hawkeye","author":"Muhamad Mirza Arrafi","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/grumman-e-2d-advanced-hawkeye-0082cf8f15044cfd80ebd4e11b96789d"},{"name":"X-47B（代攻击-11）","title":"Northrop Grumman X-47B","author":"yakudami","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/northrop-grumman-x-47b-8d5fa8ab10ba4b8486d40248eeb9332d"},{"name":"RQ-4 全球鹰（代无侦-7）","title":"RQ4_global_hawk","author":"kio","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/rq4-global-hawk-dd87adcff26b46e58639e9256f5301c4"}];
+const V3G_CRED = [{"name":"96 式主战坦克","title":"ZTZ96","author":"jzmhhhhh","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/ztz96-b0da178e50dc423983445841615d9e80"},{"name":"M1A1 艾布拉姆斯","title":"M1A1 Abrams Main Battle Tank","author":"MirzaArrafiERV_45","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/m1a1-abrams-main-battle-tank-1529f5d842cb4f578aa8cb672524f044"},{"name":"歼-20","title":"Chinese Chengdu J-20","author":"42manako","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/chinese-chengdu-j-20-b9e81062c94545ffb0232d3ac6b7adc5"},{"name":"歼-16","title":"Shenyang J16 Hidden Dragon","author":"andertan","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/shenyang-j16-hidden-dragon-2b950f910677457fbb52b6096f81e70b"},{"name":"歼-31 鹘鹰","title":"Shenyang J31 Gyrfalcon","author":"andertan","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/shenyang-j31-gyrfalcon-23dbff530e21491299ac67bbab42b553"},{"name":"直-10","title":"Changhe Z-10W","author":"42manako","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/changhe-z-10w-617cb4a91dfd4eaaa59161e06691df7f"},{"name":"直-21","title":"[MW] Z-21","author":"xlisov","license":"CC-BY-NC-4.0","url":"https://sketchfab.com/3d-models/mw-z-21-a2d88447f0904f49b73f94fa88dccea5"},{"name":"士兵","title":"Army Character 2","author":"MirzaArrafiERV_45","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/army-character-2-e3c4da4a33bb42ed8512f423a4319c5a"},{"name":"AIM-120C","title":"AIM-120C AMRAAM","author":"Jeyhun1985","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/aim-120c-amraam-838fa923340a4d108e05c99bf0146ff6"},{"name":"AIM-9","title":"AIM-9 missile","author":"rickslash","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/aim-9-missile-caaf15b49bac4144b6c6be577c2b872a"},{"name":"AIM-54 不死鸟、AIM-9 响尾蛇（组合）、AIM-120（组合）、KS-172、AIM-132 ASRAAM、GBU-24 宝石路、Mk 83 炸弹、AGM-65 小牛、AGM-154 JSOW、硫磺石","title":"300 followers - free aircraft missile set","author":"NETRUNNER_pl","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/300-followers-free-aircraft-missile-set-2e70bc2ea0824897b2ccaea378809c9e"},{"name":"M2A3 布雷德利步兵战车","title":"M2 Bradley IFV","author":"42manako","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/m2-bradley-ifv-ab022158ab5f4fbfa55d4142db7595ab"},{"name":"M109A7 帕拉丁自行榴弹炮","title":"M109 PALADIN ARTILLERY","author":"Muhamad Mirza Arrafi","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/m109-paladin-artillery-3de0572475d54f7b9da18d6ed26b4a10"},{"name":"斯特赖克 8×8 装甲车（M1126 步兵输送车外形）","title":"M1126 Infantry Carrier Vehicle","author":"cenobyte","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/m1126-infantry-carrier-vehicle-b0c559a02c1842b0976a241c9a998360"},{"name":"M903 爱国者导弹发射车","title":"MIM-104 Patriot Air Defense System","author":"Muhamad Mirza Arrafi","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/mim-104-patriot-air-defense-system-95e1e402426f4ddcb543af7a0455cf05"},{"name":"M163 火神自行高炮","title":"M163 VADS","author":"42manako","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/m163-vads-66a6f08ad2d945ccb6e72267e55bc685"},{"name":"C-RAM 陆基密集阵（百人队长）","title":"Centurion C-RAM","author":"Muhamad Mirza Arrafi","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/centurion-c-ram-10ea7349c7574ca7a43991eece92c9a9"},{"name":"M1150 突击破障车","title":"M1150 ABV","author":"Kalibrovshik","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/m1150-abv-26eaeb6a7dbf498db16e02b1c232de33"},{"name":"M-ATV 防地雷全地形车（代 JLTV、M1117）","title":"Oshkosh M-ATV","author":"42manako","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/oshkosh-m-atv-291dc8f07a494751b318e623b89cf538"},{"name":"M998 悍马（代复仇者防空车底盘）","title":"HMMWV M998A1 (soft top)","author":"42manako","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/hmmwv-m998a1-soft-top-ffbc4b053628413fb84acf5b89595d96"},{"name":"ZBD-04 步兵战车（原称 97 式）","title":"ZBD-97","author":"42manako","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/zbd-97-b36e44ca383e4ab296e28321167e5ba4"},{"name":"PTL-02 轮式突击炮","title":"Chinese PTL-02","author":"42manako","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/chinese-ptl-02-e087eff1ed9b48cabe06d9467fec3311"},{"name":"PGL-625 弹炮结合防空车","title":"Type-625 Anti Aircraft Gun Missile System","author":"Muhamad Mirza Arrafi","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/type-625-anti-aircraft-gun-missile-system-8b7e85f45b954592bd4bb8e72cdd6312"},{"name":"PzH 2000 自行榴弹炮（代 PLZ-07）","title":"PANZERHAUBITZE 2000 ARTILLERY (PzH-2000)","author":"Muhamad Mirza Arrafi","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/panzerhaubitze-2000-artillery-pzh-2000-da078be6bc66461e87034f29600a4982"},{"name":"LAV-25 轮式装甲车（代 ZSL-92B、08 式）","title":"LAV-25","author":"42manako","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/lav-25-968b0681119a4b3e82d94bb085a790be"},{"name":"F-22A 猛禽","title":"Lockheed Martin F-22 \"Raptor\"","author":"andertan","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/lockheed-martin-f-22-raptor-7e7b3c372e374dda98e70208d09cfdcf"},{"name":"F-35A 闪电 II","title":"Lockheed Martin F35 Lightning II","author":"andertan","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/lockheed-martin-f35-lightning-ii-db911de503c74285a8d506951df786d6"},{"name":"A-10C 雷电 II","title":"A-10 Thunderbolt II","author":"AIRMAN Magazine","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/a-10-thunderbolt-ii-9521ff6ba5d448958ea45a89e94ab23d"},{"name":"AH-64D 阿帕奇","title":"Boeing AH-64D Apache Combat Helicopter","author":"Muhamad Mirza Arrafi","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/boeing-ah-64d-apache-combat-helicopter-c3b58008c46b45048fdd7dd283a3c8c8"},{"name":"UH-60M 黑鹰","title":"Sikorsky UH-60M Blackhawk","author":"Muhamad Mirza Arrafi","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/sikorsky-uh-60m-blackhawk-12b4e525676a49678ac3006b360c8750"},{"name":"C-17A 环球霸王 III","title":"C-17 Globemaster III","author":"KOG_THORNS","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/c-17-globemaster-iii-552f88697c7f4aeebf254f7cb9f239ed"},{"name":"B-2A 幽灵","title":"B2 Spirit","author":"dannzjs","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/b2-spirit-d1fb2607daa44dde8efcdcd870655262"},{"name":"P-8A 波塞冬","title":"Boeing P-8 Poseidon","author":"Muhamad Mirza Arrafi","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/boeing-p-8-poseidon-3fc134024b69403bb5df5ab3aff48919"},{"name":"MQ-9A 死神（代攻击-2）","title":"MQ-9","author":"IProZenoN","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/mq-9-fabe963feb354c5584b51f9c470c3f7e"},{"name":"歼-15 飞鲨（代歼-15T）","title":"PLA Navy Shenyang J-15","author":"42manako","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/pla-navy-shenyang-j-15-f2bf5c1e2e654ee6819b696b6095a552"},{"name":"歼-50","title":"Shenyang J-50","author":"Chenzoss","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/shenyang-j-50-6b0cb86c094048ea811ef0faf570b4b9"},{"name":"运-20 鲲鹏","title":"Xi'an Y20 \"Kunpeng\"","author":"andertan","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/xian-y20-kunpeng-40ce0195eb07494f83304574aafbb3bc"},{"name":"轰-6","title":"Chinese Xi'an H-6","author":"42manako","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/chinese-xian-h-6-6990848462c54f4397cce71dffa1409f"},{"name":"E-2D 先进鹰眼（代空警-600）","title":"Grumman E-2D Advanced Hawkeye","author":"Muhamad Mirza Arrafi","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/grumman-e-2d-advanced-hawkeye-0082cf8f15044cfd80ebd4e11b96789d"},{"name":"X-47B（代攻击-11）","title":"Northrop Grumman X-47B","author":"yakudami","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/northrop-grumman-x-47b-8d5fa8ab10ba4b8486d40248eeb9332d"},{"name":"RQ-4 全球鹰（代无侦-7）","title":"RQ4_global_hawk","author":"kio","license":"CC-BY-4.0","url":"https://sketchfab.com/3d-models/rq4-global-hawk-dd87adcff26b46e58639e9256f5301c4"}];
 // 授权只允许非商用的模型（直-21）商店版里不带（tools/build_www.mjs --app）：加载不到就换成同类的另一个
 const V3G_ALT = { z21: 'z10w' };
 // 带座舱内饰的模型（座舱视角坐进模型里看，v3pilot.js）：eye 飞行员眼睛（模型坐标，米：x 前、y 左、z 上）；
@@ -415,7 +415,10 @@ const V3G_PIT = { j31: { eye: [4.3, 0, 2.72], scr: 'screen', hud: 'Glowing_green
     { n: 'flap', h: [[-4.12, 1.77], [-3.77, 4.74]], y: [1.7, 4.76], w: [0, 0, 0, 1] },
     { n: 'ail', h: [[-3.745, 4.74], [-3.73, 5.77]], y: [4.7, 5.82], w: [0, 0, 0, 1] }] } },
   // 歼-15：座椅坐垫顶面约 2.79 米高（stof1）、靠背在 x 4.57–4.86；坐姿眼高约坐垫上方 0.78 米，眼睛在头靠前面一点——正好从平显组合玻璃（hud_2，x 5.44–5.61、高 3.44–3.62）中间看出去
-  j15: { eye: [4.97, 0, 3.57], hud: 'hud_2' } };   // 歼-20 的座舱眼位还没对好：座舱视角放在机头上方，不画自己
+  j15: { eye: [4.97, 0, 3.57], hud: 'hud_2' },
+  // 歼-20（与歼-15 同一位作者、同一套座舱零件，同样量法）：坐垫顶面 2.44 米（stof1，x 5.05–5.43）、靠背到 x 4.99（seat_buis_1），眼高坐垫上方 0.78 米 = 3.22，
+  //   眼睛在头靠前面一点 x 5.12——正好从平显组合玻璃（hud_2，x 5.54–5.72、高 3.11–3.28）中间看出去
+  j20: { eye: [5.12, 0, 3.22], hud: 'hud_2' } };   // 歼-50 等模型没有座舱内饰：座舱视角放在机头上方，不画自己
 // 显示屏的面：模型用镜像修改器做的，左右各多出一片和正面重叠、贴图左右反的镜像面（两层贴图在同一个平面上来回打架闪烁）——
 //   只留贴图从左往右（机体 y 由大到小，飞行员看过去从左到右）的面
 function v3gPitScr(cf, m, M, VB, IB) {
@@ -494,13 +497,17 @@ function v3gPrep(key, m, M, VB, IB) {
   if (mf) for (const i in mf) { const T = m.mats[i], F = mf[i]; if (!T) continue; if (F.am != null) T.am = F.am; if (F.a != null) T.c = [T.c[0], T.c[1], T.c[2], F.a]; }
   if (V3G_FLIP[key]) v3gFlip(m, VB);
   if (V3G_ROTSPLIT[key]) v3gRotor(V3G_ROTSPLIT[key], m, VB, IB);
+  let R = null;
+  const use = r => { if (r) { R = r; VB = r.VB; IB = r.IB; } };   // 补了顶点的步骤换成更长的新数组，后面的步骤接着在新数组上做
+  if (V3G_GEAR[key]) use(v3gGear(V3G_GEAR[key], m, VB, IB));   // 补起落架（整架抬高）：弹舱、座舱、挂点都按抬高后的坐标
   const cf = V3G_PIT[key];
   if (cf) { v3gPitScr(cf, m, M, VB, IB); v3gPitHud(cf, m, M, VB, IB); v3gPitParts(cf, m, M, VB, IB); }
   if (V3G_GUN[key]) v3gGun(V3G_GUN[key], m, VB, IB);
   if (V3G_CAPS[key]) v3gCaps(V3G_CAPS[key], m, VB, IB);
-  if (V3G_FOLD[key]) return v3gFold(V3G_FOLD[key], m, VB, IB);
-  if (V3G_ERA[key]) return v3gEra(V3G_ERA[key], m, VB, IB);
-  return V3G_BAY[key] ? v3gBays(V3G_BAY[key], m, VB, IB) : null;
+  if (V3G_FOLD[key]) use(v3gFold(V3G_FOLD[key], m, VB, IB));
+  else if (V3G_ERA[key]) use(v3gEra(V3G_ERA[key], m, VB, IB));
+  else if (V3G_BAY[key]) use(v3gBays(V3G_BAY[key], m, VB, IB));
+  return R;
 }
 // —— 材质纠正：直-10 原模型四个材质全设成了 25% 不透明的半透明（整架直升机像幽灵）——机身、桨叶改回不透明；主旋翼的残影盘本是半透明，调淡到 8%（原来盖在机身上一大片发暗）——
 const V3G_MATFIX = { z10w: { 0: { am: 0, a: 1 }, 1: { am: 0, a: 1 }, 2: { a: .08 } } };
@@ -555,6 +562,109 @@ function v3gRotor(cf, m, VB, IB) {
     }
     lod.push(...add);
   }
+}
+// —— 模型里没放起落架的（按飞行状态做的模型：歼-50、F-22、运-20、RQ-4）：停在甲板、跑道上时机腹贴地。整架抬高 lift（真实全高减模型高），补上起落架——
+//   支柱（下段活塞细、上段外筒粗，顶端插进机腹：从轮轴往上打一条竖线和网格求交，取最低的交点）、斜撑、轮胎、轮毂、放下时竖在轮舱两边的舱门、舰载机前起落架的弹射杆，
+//   合成一个 'gear' 部件（离地后收起：着色器里整块收成一点，与别的模型的起落架同一套）。抬高后机身中线高 zc、喷口、部件支点跟着抬，弹舱、挂点、座舱都按抬高后的坐标标定。
+//   legs（米，模型坐标 x 前、y 左；y ≠ 0 的左右各一个）：r 轮半径、w 轮宽、n 每根轴几个轮（1 单轮偏在外侧、2 双轮夹着支柱）、tan 串列双轴的轴距（中间一根摇臂）、
+//   br 斜撑往前（+1）/ 往后（−1）、door 舱门 [长, 高]（不给就不画）、bar 弹射杆。数据来源见各行注释（公开照片估计，型号没公布的按同级飞机）
+const V3G_GEAR = {
+  j50: { lift: 1.3, legs: [{ x: 4.4, y: 0, r: .3, w: .18, n: 2, br: -1, bar: 1, door: [1.1, .5] },   // 歼-50：前起落架双轮（舰载机，带弹射杆）、主起落架单轮——公开照片的说法；主轮在两个机腹弹舱外侧
+    { x: -1.4, y: 1.95, r: .42, w: .26, n: 1, br: 1, door: [1.4, .6] }] },
+  f22: { lift: 1.04, legs: [{ x: 4.3, y: 0, r: .3, w: .19, n: 1, br: -1, door: [1.1, .5] },   // F-22：全高 5.08 米（模型 4.04）；前轮 23.5 × 7.5 英寸、主轮 37 × 11.5 英寸（单轮），主轮在主弹舱外侧
+    { x: -1.9, y: 1.6, r: .47, w: .29, n: 1, br: 1, door: [1.5, .6] }] },
+  y20: { lift: .5, legs: [{ x: 17.6, y: 0, r: .5, w: .32, n: 2, br: -1, door: [2.2, .7] },   // 运-20：全高 15 米（模型 14.5）；前起落架双轮，主起落架每侧三根轴、每轴双轮，收在机身两侧的整流罩里
+    { x: 1.7, y: 2.35, r: .62, w: .38, n: 2 }, { x: 0, y: 2.35, r: .62, w: .38, n: 2 }, { x: -1.7, y: 2.35, r: .62, w: .38, n: 2 }] },
+  rq4: { lift: .55, legs: [{ x: 4.6, y: 0, r: .26, w: .14, n: 1, br: -1 }, { x: -.6, y: 1.25, r: .3, w: .16, n: 1, br: 1 }] }   // RQ-4：全高约 4.7 米（模型 4.1），三点式单轮
+};
+// 竖线 (x, y) 和第 0 级网格（不算部件）交点里最低的高——起落架支柱顶端插进去的机腹蒙皮；打不到返回 null
+function v3gRayZ(m, VB, IB, x, y) {
+  const st = m.st;
+  let best = null;
+  for (const [, pi, i0, cnt] of m.lod[0]) {
+    if (pi >= 0) continue;
+    for (let t = i0; t + 2 < i0 + cnt; t += 3) {
+      const a = IB[t] * st, b = IB[t + 1] * st, c = IB[t + 2] * st, ax = VB[a], ay = VB[a + 1], bx = VB[b], by = VB[b + 1], cx = VB[c], cy = VB[c + 1];
+      if (x < Math.min(ax, bx, cx) || x > Math.max(ax, bx, cx) || y < Math.min(ay, by, cy) || y > Math.max(ay, by, cy)) continue;
+      const d = (by - cy) * (ax - cx) + (cx - bx) * (ay - cy);
+      if (Math.abs(d) < 1e-12) continue;
+      const l1 = ((by - cy) * (x - cx) + (cx - bx) * (y - cy)) / d, l2 = ((cy - ay) * (x - cx) + (ax - cx) * (y - cy)) / d, l3 = 1 - l1 - l2;
+      if (l1 < -1e-6 || l2 < -1e-6 || l3 < -1e-6) continue;
+      const z = l1 * VB[a + 2] + l2 * VB[b + 2] + l3 * VB[c + 2];
+      if (best == null || z < best) best = z;
+    }
+  }
+  return best;
+}
+function v3gGear(cf, m, VB, IB) {
+  const st = m.st, L = cf.lift, nv0 = VB.length / st;
+  for (let i = 2; i < VB.length; i += st) VB[i] += L;   // 1）整架抬高
+  m.bb = [m.bb[0], m.bb[1], 0, m.bb[3], m.bb[4], m.bb[5] + L]; m.zc += L;
+  for (const P of m.parts || []) for (const k of ['p', 'q', 'q3']) if (P[k]) P[k] = [P[k][0], P[k][1], P[k][2] + L];
+  if (m.noz) m.noz = m.noz.map(n => [n[0], n[1], n[2] + L, ...n.slice(3)]);
+  // 2）起落架的几何：每个面各用各的顶点（法线按面 / 按圆周），三种材质——轮胎黑、支柱和轮毂浅灰金属、舱门灰
+  const add = [], G = { tire: [], metal: [], door: [] };
+  const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]], sc = (a, k) => [a[0] * k, a[1] * k, a[2] * k], ad = (...v) => v.reduce((o, q) => [o[0] + q[0], o[1] + q[1], o[2] + q[2]], [0, 0, 0]);
+  const cr = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]], un = a => sc(a, 1 / (Math.hypot(a[0], a[1], a[2]) || 1));
+  const vtx = (p, n) => { add.push(p[0], p[1], p[2], n[0], n[1], n[2], 0, 0); for (let k = 8; k < st; k++) add.push(0); return nv0 + add.length / st - 1; };
+  const basis = ax => { const u = un(cr(ax, Math.abs(ax[2]) < .9 ? [0, 0, 1] : [1, 0, 0])); return [u, cr(ax, u)]; };
+  const disk = (c, n, r, N, g) => { const [u, v] = basis(n), ci = vtx(c, n); for (let i = 0; i < N; i++) { const a = i / N * 6.2832, b = (i + 1) / N * 6.2832; g.push(ci, vtx(ad(c, sc(u, Math.cos(a) * r), sc(v, Math.sin(a) * r)), n), vtx(ad(c, sc(u, Math.cos(b) * r), sc(v, Math.sin(b) * r)), n)); } };
+  const cyl = (c0, c1, r0, r1, N, g, cap = 3) => {   // 圆台：c0 半径 r0 到 c1 半径 r1，侧面法线按圆周平滑；cap 1 / 2 封底 / 顶
+    const ax = un(sub(c1, c0)), [u, v] = basis(ax);
+    for (let i = 0; i < N; i++) {
+      const a = i / N * 6.2832, b = (i + 1) / N * 6.2832, na = ad(sc(u, Math.cos(a)), sc(v, Math.sin(a))), nb = ad(sc(u, Math.cos(b)), sc(v, Math.sin(b)));
+      const p = [vtx(ad(c0, sc(na, r0)), na), vtx(ad(c1, sc(na, r1)), na), vtx(ad(c1, sc(nb, r1)), nb), vtx(ad(c0, sc(nb, r0)), nb)];
+      g.push(p[0], p[1], p[2], p[0], p[2], p[3]);
+    }
+    if (cap & 1) disk(c0, sc(ax, -1), r0, N, g);
+    if (cap & 2) disk(c1, ax, r1, N, g);
+  };
+  const box = (c, e, g) => {   // 长方体：中心 c、三个半轴向量 e
+    for (const [k, s] of [[0, 1], [0, -1], [1, 1], [1, -1], [2, 1], [2, -1]]) {
+      const n = un(sc(e[k], s)), a = e[(k + 1) % 3], b = e[(k + 2) % 3], f = ad(c, sc(e[k], s));
+      const q = [ad(f, sc(a, -1), sc(b, -1)), ad(f, a, sc(b, -1)), ad(f, a, b), ad(f, sc(a, -1), b)].map(p => vtx(p, n));
+      g.push(q[0], q[1], q[2], q[0], q[2], q[3]);
+    }
+  };
+  const wheel = (c, r, w) => {   // 轮子（轴沿 y）：胎面 + 胎侧（黑）、两侧轮毂（浅灰，略凸出胎侧）
+    cyl([c[0], c[1] - w / 2, c[2]], [c[0], c[1] + w / 2, c[2]], r, r, 18, G.tire);
+    for (const s of [-1, 1]) disk([c[0], c[1] + s * (w / 2 + .006), c[2]], [0, s, 0], r * .56, 12, G.metal);
+  };
+  const skinZ = (x, y) => { const z = v3gRayZ(m, VB, IB, x, y); return z == null ? L + .3 : z; };
+  for (const g of cf.legs) for (const sd of g.y ? [1, -1] : [1]) {
+    const y = g.y * sd, sr = Math.max(.06, g.r * .2), zt = skinZ(g.x, y) + .05, axles = g.tan ? [g.x + g.tan / 2, g.x - g.tan / 2] : [g.x], zA = g.r;
+    for (const xa of axles) {   // 轮：单轮偏在支柱外侧（轴从支柱伸出去），双轮夹着支柱
+      const off = g.w / 2 + sr + .03, ws = g.n === 2 ? [-off, off] : [(g.y ? sd : 1) * off];
+      for (const o of ws) wheel([xa, y + o, zA], g.r, g.w);
+      const yy = ws.map(o => y + o);
+      cyl([xa, Math.min(...yy, y), zA], [xa, Math.max(...yy, y), zA], sr * .45, sr * .45, 8, G.metal);   // 轮轴
+    }
+    if (g.tan) box([g.x, y, zA], [[g.tan / 2 + .12, 0, 0], [0, sr * .8, 0], [0, 0, sr * .7]], G.metal);   // 串列双轴的摇臂
+    const zm = zA + (zt - zA) * .45;
+    cyl([g.x, y, zA], [g.x, y, zm], sr * .62, sr * .62, 10, G.metal);   // 支柱下段（活塞杆）
+    cyl([g.x, y, zm - .04], [g.x, y, zt], sr, sr, 10, G.metal);   // 上段（外筒）
+    if (g.br) { const xb = g.x + g.br * Math.max(.6, (zt - zA) * .7), z1 = skinZ(xb, y) + .04; cyl([g.x, y, zA + (zt - zA) * .62], [xb, y, z1], sr * .42, sr * .42, 8, G.metal); }   // 斜撑：从支柱上段斜着撑到机腹
+    if (g.bar) cyl([g.x + .08, 0, zA + .05], [g.x + .95, 0, .14], .045, .045, 6, G.metal);   // 弹射杆：往前斜着垂到甲板上方
+    if (g.door) {   // 舱门：轮舱两边竖着（侧面的起落架只画外侧一扇），上沿贴着机腹
+      const [Ld, Hd] = g.door, dy = (g.n === 2 ? g.w + sr : g.w * 1.5 + sr) + .1;
+      for (const s of g.y ? [sd] : [-1, 1]) { const yd = y + s * dy, zd = skinZ(g.x, yd) + .02; box([g.x, yd, zd - Hd / 2], [[Ld / 2, 0, 0], [0, .018, 0], [0, 0, Hd / 2]], G.door); }
+    }
+  }
+  // 3）材质、部件、索引：起落架的三角形接在索引最后，每一级细节都画（几百个三角形）
+  const mat = (n, c, mr) => m.mats.push({ n, c, t: null, nt: null, ns: 1, mr, mrt: null, sg: null, sgt: null, e: [0, 0, 0], et: null, ot: null, am: 0, ac: .5, ds: 0 }) - 1;
+  const mi = { tire: mat('gear_tire', [.022, .022, .024, 1], [0, .92]), metal: mat('gear_metal', [.6, .61, .63, 1], [.7, .38]), door: mat('gear_door', [.2, .215, .235, 1], [.1, .6]) };
+  const parts = m.parts || (m.parts = []), gi = parts.push({ n: 'gear', k: 'hide', p: [0, 0, L], a: [0, 0, 1] }) - 1;
+  const nI = G.tire.length + G.metal.length + G.door.length, nv = nv0 + add.length / st, it = nv > 65535 ? 4 : m.it;
+  const IB2 = it === 4 ? new Uint32Array(IB.length + nI) : new Uint16Array(IB.length + nI);
+  IB2.set(IB);
+  let o = IB.length;
+  const ents = [];
+  for (const k of ['tire', 'metal', 'door']) if (G[k].length) { IB2.set(G[k], o); ents.push([mi[k], gi, o, G[k].length]); o += G[k].length; }
+  for (const lod of m.lod) lod.push(...ents.map(e => e.slice()));
+  const VB2 = new Float32Array(VB.length + add.length);
+  VB2.set(VB); VB2.set(add, VB.length);
+  m.it = it;
+  return { VB: VB2, IB: IB2, it };
 }
 // —— 反应装甲块（era.js 按块用掉）：模型上原有的块才有——M1A1 裙板外表面就是 TUSK 的 ARAT，左右各 2 排 × 16 列，每块是 |y| = y 那个面上 0.33 × 0.35 米的一格。
 //   每块的正面三角形拆出来、复制顶点，|y| 往外挪「块号 × 0.01 毫米」（看不出来）把块号编进顶点，统统挂到一个 'era' 部件上（只多一次绘制）：
@@ -681,7 +791,13 @@ const V3G_BAY = {
   j31: { mats: ['side', 'bottom_front', 'Material.002', 'main_body_bottom_front', 'main_body_upper_side'], z: 1.3, door: [   // 两个并列的主弹舱，中间一道龙骨，每舱两扇门（铰链在龙骨边和外侧边）
     { b: 0, x: [-2.1, 2.1], y: [.1, .51], hy: .1, A: 1.75 }, { b: 0, x: [-2.1, 2.1], y: [.51, .92], hy: .92, A: 1.75 },
     { b: 0, x: [-2.1, 2.1], y: [-.51, -.1], hy: -.1, A: 1.75 }, { b: 0, x: [-2.1, 2.1], y: [-.92, -.51], hy: -.92, A: 1.75 }],
-  well: [{ x: [-2.1, 2.1], y: [.1, .92], top: 1.52 }, { x: [-2.1, 2.1], y: [-.92, -.1], top: 1.52 }] }
+  well: [{ x: [-2.1, 2.1], y: [.1, .92], top: 1.52 }, { x: [-2.1, 2.1], y: [-.92, -.1], top: 1.52 }] },
+  // 歼-50（模型补了起落架、整架抬高过：V3G_GEAR，高度按抬高后的）。公开照片：两个机腹弹舱、中间一道中线凹槽。尺寸没公布，按模型机腹平坦的范围和要装的弹定：
+  //   每舱长 4.8 米、宽 1.3 米、深 0.75 米，各两扇门（铰链在内侧边和外侧边）
+  j50: { mats: ['Material'], z: 1.8, door: [
+    { b: 0, x: [-3.2, 1.6], y: [.45, 1.1], hy: .45, A: 1.75 }, { b: 0, x: [-3.2, 1.6], y: [1.1, 1.75], hy: 1.75, A: 1.75 },
+    { b: 0, x: [-3.2, 1.6], y: [-1.1, -.45], hy: -.45, A: 1.75 }, { b: 0, x: [-3.2, 1.6], y: [-1.75, -1.1], hy: -1.75, A: 1.75 }],
+  well: [{ x: [-3.2, 1.6], y: [.45, 1.75], top: 2.06 }, { x: [-3.2, 1.6], y: [-1.75, -.45], top: 2.06 }] }
 };
 const V3G_W0 = [0, 0, 0, 0], V3G_AX = [1, 0, 0], V3G_AY = [0, -1, 0];   // 链式部件默认：沿 −x 后坐（q -= r·d）、绕 −y 转（正角 = 炮口抬起）
 // 坦克炮管（v3gVeh 开炮时后坐、复进）：炮塔部件里炮管那一段（模型坐标：x 起点往前、|y| 以内、z 以上的三角形）拆成单独的部件，和炮塔一起转；
@@ -784,19 +900,28 @@ function v3gBays(cf, m, VB, IB) {
 //   fold：y 折叠线 |y|、tol 落在线上的容差、z 铰链高、x / zr 这一组三角形所在的前后、高低范围、A 折起角（弧度）。
 //   折起角：外翼向上翻过竖直、翼尖斜向机身（照片估计约 115°），平尾外段约竖直（估计）；折叠线 3.47 米 → 折起后宽约 7.2 米（苏-33 公开数据：翼展 14.7 米，折叠后 7.4 米）
 //   pyl：翼下挂架（模型上没有，补上；跟着外翼折）[x 后端, x 前端, |y|, 下沿 z, 上沿 z（伸进翼面里一点）, 宽]；pc：挂架颜色（线性值，取机翼贴图的灰）
+//   ax / px：斜铰链（不是平行机身轴线的）——左边的转轴方向、支点 x，右边镜像（转轴 y 分量、转角反号）。
+//   E-2D（代空警-600）：格鲁曼「Sto-Wing」式折翼——外翼绕斜轴转 120°，翼尖朝后、前缘朝下、上表面朝外，贴在机身两侧（公开数据：翼展 24.56 米、折叠后宽 8.94 米 → 铰链 |y| ≈ 4.45，
+//   正好在发动机短舱外侧）；转轴方向 (−1, 1, 1) 是把「翼展 +y → 朝后 −x、弦向 +x → 朝下 −z」这个转动解出来的。模型外翼不在这里分块，按线切开（断面不封口，翼厚不到半米）
 const V3G_FOLD = { j15: { fold: [{ y: 3.47, tol: .03, z: 2.66, x: [-7.5, .6], zr: [1.6, 3.3], A: 2.0 }, { y: 3.47, tol: .03, z: 2.03, x: [-10.6, -5.9], zr: [1.85, 2.12], A: 1.57 }],
-  pyl: [[-4.3, -1.9, 3.88, 2.27, 2.53, .13], [-5.5, -3.5, 5.65, 2.3, 2.53, .11]], pc: [.17, .175, .185, 1] } };
+  pyl: [[-4.3, -1.9, 3.88, 2.27, 2.53, .13], [-5.5, -3.5, 5.65, 2.3, 2.53, .11]], pc: [.17, .175, .185, 1] },
+  e2d: { fold: [{ y: 4.45, tol: .02, z: 3.4, px: .2, x: [-3, 3], zr: [2, 4.8], A: 2.0944, ax: [-1, 1, 1] }] } };
 // 模型上一点在哪一组折叠面上（挂的弹比翼面低，高度范围往下放宽）
 function v3gFoldG(mk, v) {
   const F = V3G_FOLD[mk], sy = v[1] >= 0 ? 1 : -1;
   return F ? F.fold.find(g => v[1] * sy >= g.y && v[0] >= g.x[0] && v[0] <= g.x[1] && v[2] >= g.zr[0] - .8 && v[2] <= g.zr[1]) || null : null;
 }
 // 折着翼时这一点跟着转的角（左正右负；不在外翼上 = 0）、转到哪里（挂的弹、保险销按它放）
-function v3gFoldA(mk, v, f) { const g = f > 0 && v3gFoldG(mk, v); return g ? g.A * f * (v[1] >= 0 ? 1 : -1) : 0; }
+function v3gFoldA(mk, v, f) { const g = f > 0 && v3gFoldG(mk, v); return g && !g.ax ? g.A * f * (v[1] >= 0 ? 1 : -1) : 0; }   // 斜铰链的（E-2D）翼下不挂弹，不算
 function v3gFoldPt(mk, v, f) {
   const g = f > 0 && v3gFoldG(mk, v);
   if (!g) return v;
-  const sy = v[1] >= 0 ? 1 : -1, a = g.A * f * sy, c = Math.cos(a), s = Math.sin(a), dy = v[1] - g.y * sy, dz = v[2] - g.z;
+  const sy = v[1] >= 0 ? 1 : -1, a = g.A * f * sy, c = Math.cos(a), s = Math.sin(a);
+  if (g.ax) {   // 斜铰链：绕过支点的斜轴转（罗德里格斯公式）
+    const l = Math.hypot(...g.ax), n = [g.ax[0] / l, g.ax[1] * sy / l, g.ax[2] / l], P = [g.px || 0, g.y * sy, g.z], d = [v[0] - P[0], v[1] - P[1], v[2] - P[2]], k = (n[0] * d[0] + n[1] * d[1] + n[2] * d[2]) * (1 - c);
+    return [P[0] + d[0] * c + (n[1] * d[2] - n[2] * d[1]) * s + n[0] * k, P[1] + d[1] * c + (n[2] * d[0] - n[0] * d[2]) * s + n[1] * k, P[2] + d[2] * c + (n[0] * d[1] - n[1] * d[0]) * s + n[2] * k];
+  }
+  const dy = v[1] - g.y * sy, dz = v[2] - g.z;
   return [v[0], g.y * sy + dy * c - dz * s, g.z + dy * s + dz * c];
 }
 function v3gFold(cf, m, VB, IB) {
@@ -807,7 +932,7 @@ function v3gFold(cf, m, VB, IB) {
   const idx = c => c.i ?? (c.i = push(c.v));
   const fan = (P, out) => { for (let k = 1; k + 1 < P.length; k++) out.push(idx(P[0]), idx(P[k]), idx(P[k + 1])); };
   // 每组左右各一个部件：绕铰链线（平行 x）转，左边（y > 0）正角向上翻，右边反号
-  const G = cf.fold.map(g => [1, -1].map(sg => parts.push({ n: 'fold', k: 'rot', w: [0, 0, 0, 0], w2: [0, 0, g.A * sg, 0], p: [0, g.y * sg, g.z], a: [1, 0, 0] }) - 1));
+  const G = cf.fold.map(g => [1, -1].map(sg => parts.push({ n: 'fold', k: 'rot', w: [0, 0, 0, 0], w2: [0, 0, g.A * sg, 0], p: [g.px || 0, g.y * sg, g.z], a: g.ax ? [g.ax[0], g.ax[1] * sg, g.ax[2]] : [1, 0, 0] }) - 1));
   // 翼下挂架：前后两端斜切的扁盒子（上沿伸进翼面里，看不见），面各用各的顶点（棱角分明）
   const pmi = cf.pyl ? m.mats.push({ n: 'pylon', c: cf.pc, t: null, nt: null, ns: 1, mr: [0, .6], mrt: null, sg: null, sgt: null, e: [0, 0, 0], et: null, ot: null, am: 0, ac: .5, ds: 0 }) - 1 : -1, pyl = [[], []];
   for (const [x0, x1, ys, zb, zt, w] of cf.pyl || []) for (const s of [0, 1]) {

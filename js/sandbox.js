@@ -697,7 +697,6 @@ function sbxAIAttackBase(mi, fi) {
   if (F && k >= 3) { const it = ship('p_lct', F, 1, 2, 1600, ['p_rifle', 'p_mg', 'p_rifle', 'p_marine'], 1); if (it) feint.push(it); }
   if (cv) for (const [id, t] of [['p_air_fb', 'cas'], ['p_air_strike', 'strike'], ['p_air_ftr_adv', 'strike'], ['p_air_recon', 'recon'], ['p_air_fb', 'cas'], ['p_air_dive', 'bomber'], ['p_air_strike', 'strike']]) { if (sbxWingN() >= sbxWingCap() || sbxLeft('p') < 80) break; buyAir(id, t); }
   for (const [id, t] of [['p_air_ftr', 'fighter'], ['p_air_cas', 'cas']]) { if (sbxLeft('p') < 120) break; buyAir(id, t); }   // 大预算：再加战区歼-20、攻击-2
-  if (sbxLeft('p') >= 1200) buyAir('p_air_j36', 'fighter');   // 超大预算还有富余：一架歼-36 制空型
   if (sbxOf('enemy').some(it => sbxEntry(it).spawn.ek === 'airfield') && sbxLeft('p') >= 300 && sbxPlace('p_abn').ok) say('空降：空降兵连一个，待主力在滩头站稳、航线上的防空打掉后伞降夺取敌野战机场，修通跑道后机降轻型坦克，我方飞机就近起降。', null);
   sbxSync();
   const men = w1.reduce((a, it) => a + sbxShipLoad(it).t, 0) * 3;
@@ -790,7 +789,6 @@ function sbxAttStyle(style, R0) {
     say(`方案「装甲突击」：坦克登陆舰 ${nl} 艘（ZTZ-99A、ZTZ-80 与步兵战车）、726 型气垫艇 ${nc} 艘各载一辆 99A、两栖突击车 ${na} 辆随第一波抢滩，坦克先上岸撕开缺口，步兵跟进。`, M.ex);
   } else if (style === 'air') {
     if (!sbxOf('cv').length) { const p = sbxSea(clamp(M.b.cx, 200, W - 200), CARRIER_Y - 20); sbxPlace('p_cv', p.x, Math.max(p.y, STAGING_Y + 60)); }
-    if (sbxLeft('p') >= 900 && !(catalogById('p_air_j36').lim && sbxLimN(catalogById('p_air_j36')) >= 2)) buyAir('p_air_j36', 'fighter');
     const n = sbxLoop(['p_air_ftr', 'p_air_ftr_adv', 'p_air_heavy', 'p_air_strike', 'p_air_ftr', 'p_air_dive', 'p_air_heavy', 'p_air_cas'], id => sbxPlace(id).ok, 22, 70);
     say(`方案「空中优势」：先夺制空权再登陆——${sbxCnt(n)}；歼-20 先扫荡敌歼击机，歼-35 防空压制型拔掉防空，轰-6K 编组护航轰炸岸炮、炮兵与机场。`, M.ex);
   } else if (style === 'vert') {
