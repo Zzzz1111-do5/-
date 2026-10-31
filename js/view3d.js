@@ -82,7 +82,7 @@ float mxRain(vec2 cell, vec2 f, float t, float px) {
 //   河流是暗色水道、两岸亮线，水道里的字符顺流而下；海岸线一道亮光；没看见的地方压暗（战争迷雾）；字符雨照常落下。
 //   单位、标号、箭头、弹坑等仍来自俯视贴图（这时贴图底色是黑的，叠加上去）
 const V3_FS = der => `${der ? '#extension GL_OES_standard_derivatives : enable\n#define DER 1\n' : ''}${V3_PREC}
-uniform sampler2D uTop, uBase, uCls, uCls2, uFogT, uHt, uLf, uTopF; uniform vec4 uBox, uBoxF; uniform vec2 uWorld, uGrid, uHG; uniform vec2 uFog; uniform float uSea, uT, uMx, uLmOn; uniform vec3 uBg;
+uniform sampler2D uTop, uBase, uCls, uCls2, uFogT, uHt, uLf, uTopF; uniform vec4 uBox, uBoxF; uniform vec2 uWorld, uGrid, uHG; uniform vec2 uFog; uniform float uSea, uT, uMx, uLmOn, uBrM; uniform vec3 uBg;
 uniform sampler2D uDg, uDf, uDr, uDs; uniform float uDet;   // 写实地表细节贴图（ambientCG，CC0）：草地、林下地面、岩石、沙滩
 uniform sampler2D uCls3, uSky, uWn; uniform float uSkyOn, uSkyU, uWnOn;   // 水深分类（浅滩、礁石、近岸）、天空图（海面反射）、水面法线贴图（three.js 示例，MIT）
 uniform float uRing, uOcn; uniform vec4 uRect;   // 地图外：1 = 无边海面（地图里面丢掉，那里是地形网格），2 = 北面延伸的陆地（贴图照地图北缘镜像）
@@ -195,7 +195,8 @@ void main() {
     if (uRing > 1.5) col = mix(col, vec3(.6, .56, .45), (1. - smoothstep(1.5, 7., h)) * .75);   // 延伸陆地新收出来的北岸：一圈沙滩、礁石色
     c = col * (amb + vec3(1., .95, .86) * lit * .8 * shadowAt());
     c += boomLight(w) * (.35 + .65 * lit);   // 近处爆炸的火光照亮地面（v3light.js）
-    c += vec3(.12, .62, .32) * (cl + gl) * .55 * land;
+    // 等高线、方格网：画成地形图那样细而淡的深色线（原来叠一层发亮的绿光，远看挤成一片绿雾，和写实画面不搭），离镜头两公里外渐渐淡掉
+    c *= 1. - (cl * .3 + gl * .45) * land * (1. - smoothstep(1800., 4200., vDp));
     if (h < uSea + .6) {   // 海面：波浪法线、天空反射（菲涅尔）、太阳反光、深浅水颜色（浅滩、礁石泛青绿）、近岸白浪；俯视贴图里的航迹等留一点
       // 离地图边 400 米内慢慢变成纯深海（不再混图里的浅滩分类和俯视贴图）：图外的无边海面就是纯深海，边上接得上；
       //   图外原来按图边那一圈的贴图着色，北边那一圈是陆地和浅滩，拉长成一条条青绿色的光带伸到天边
@@ -299,21 +300,33 @@ void main() {
   // 河流、道路按中心线距离场画（uLf：R 到路中心 / 12 米、G 到河中心 / 半宽 / 2.5、B 路半宽 / 8；4 倍网格精度，边是光滑的曲线）
   vec4 LF = texture2D(uLf, cu);
   vec2 el = ex / 4.;
-  // 河流：暗色水道、两岸亮线，水道里的字符顺流而下
+  // 河流：深色水道（河心深、近岸浅），两岸亮线外再一道淡的岸坡线；水面上一条条顺流的水纹亮线（河心流得快、近岸慢，长短、快慢各不相同），
+  //   零星闪烁的波光；水里的字符顺流而下（淡一些）。远看水纹细到看不清时只留平均亮度，不闪
   float rq = LF.g * 2.5;
   if (rq < 1.6) {
     float band = 1. - smoothstep(.92, 1.04, rq);
     vec2 gr = vec2(texture2D(uLf, cu + vec2(el.x, 0.)).g - texture2D(uLf, cu - vec2(el.x, 0.)).g, texture2D(uLf, cu + vec2(0., el.y)).g - texture2D(uLf, cu - vec2(0., el.y)).g);
     vec2 tg = normalize(vec2(-gr.y, gr.x) + vec2(0., 1e-4)); if (tg.y < 0.) tg = -tg;   // 顺流（向海，y 增大）
     vec2 nr = vec2(tg.y, -tg.x);
-    c = mix(c, vec3(.0, .022, .028), band * .85);
+    float deep = 1. - smoothstep(.15, .95, rq);
+    c = mix(c, mix(vec3(.004, .03, .036), vec3(.0, .012, .018), deep), band * .9);
     c += vec3(.15, .95, .7) * (1. - smoothstep(0., max(FW(rq), .01) * 1.5, abs(rq - 1.))) * .6;
-    vec2 q = vec2(dot(w, nr) / 4.5, dot(w, tg) / 5.5 - uT * 1.6);
-    c += vec3(.2, 1., .8) * mxGlyph(floor(q), fract(q), uT, 4.5 / pw) * band * .5;
+    c += vec3(.1, .7, .5) * (1. - smoothstep(0., max(FW(rq), .01) * 2.5, abs(rq - 1.28))) * .16;   // 岸坡
+    float ua = dot(w, nr), va = dot(w, tg), ln = floor(ua / 1.3), lf = fract(ua / 1.3) - .5;
+    float sp = (.6 + mxH(vec2(ln, 7.)) * .8) * (2.4 - 1.8 * smoothstep(.2, 1., rq)), L0 = 7. + mxH(vec2(ln, 3.)) * 14.;
+    float ph = fract(va / L0 - uT * sp / L0 + mxH(vec2(ln, 5.)));
+    float streak = smoothstep(0., .08, ph) * (1. - smoothstep(.12, .42, ph)) * (1. - smoothstep(.12, .42, abs(lf))) * step(.35, mxH(vec2(ln, floor(va / L0 - uT * sp / L0 + mxH(vec2(ln, 5.))))));
+    float fine = 1. - smoothstep(.25, .7, pw / 1.3);   // 水纹比像素粗才画，远看取平均
+    c += vec3(.16, .95, .72) * band * mix(.05, streak * .55, fine);
+    vec2 g2 = floor(w / 2.2);
+    float tw = step(.985, mxH(g2 + floor(uT * 1.7 + mxH(g2) * 9.)));   // 波光：随机的格子一闪一闪
+    c += vec3(.5, 1., .85) * tw * band * fine * (1. - smoothstep(.0, .35, length(fract(w / 2.2) - .5))) * .8;
+    vec2 q = vec2(ua / 4.5, va / 5.5 - uT * 1.6);
+    c += vec3(.2, 1., .8) * mxGlyph(floor(q), fract(q), uT, 4.5 / pw) * band * .3;
   }
-  // 道路：带亮边的通道，中线上一段段「数据包」沿路流动
+  // 道路：带亮边的通道，中线上一段段「数据包」沿路流动（过河那一段由立体拱桥画，不在水面上画路）
   float dR = LF.r * 12., hwR = max(LF.b * 8., 1.5);
-  if (dR < hwR + 2.) {
+  if (dR < hwR + 2. && !(uBrM > .5 && rq < 1.1)) {
     float band = 1. - smoothstep(hwR - .3, hwR + .3, dR);
     vec2 gd = vec2(texture2D(uLf, cu + vec2(el.x, 0.)).r - texture2D(uLf, cu - vec2(el.x, 0.)).r, texture2D(uLf, cu + vec2(0., el.y)).r - texture2D(uLf, cu - vec2(0., el.y)).r);
     vec2 tg = normalize(vec2(-gd.y, gd.x) + vec2(1e-4, 0.));
@@ -1054,7 +1067,7 @@ function v3Init() {
     gl.linkProgram(pr);
     if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(pr));
     const u = {}, a = { p: gl.getAttribLocation(pr, 'p'), n: gl.getAttribLocation(pr, 'n') };
-    for (const k of ['uM', 'uEye', 'uTop', 'uBase', 'uCls', 'uCls2', 'uFogT', 'uHt', 'uLf', 'uTopF', 'uBox', 'uBoxF', 'uWorld', 'uGrid', 'uHG', 'uFog', 'uSea', 'uT', 'uMx', 'uLm', 'uLmOn', 'uBm', 'uBg', 'uDg', 'uDf', 'uDr', 'uDs', 'uDet', 'uCls3', 'uSky', 'uSkyOn', 'uSkyU', 'uWn', 'uWnOn', 'uShM', 'uShT', 'uShOn', 'uShP', 'uOff', 'uScl', 'uRing', 'uRect', 'uOcn']) u[k] = gl.getUniformLocation(pr, k);
+    for (const k of ['uM', 'uEye', 'uTop', 'uBase', 'uCls', 'uCls2', 'uFogT', 'uHt', 'uLf', 'uTopF', 'uBox', 'uBoxF', 'uWorld', 'uGrid', 'uHG', 'uFog', 'uSea', 'uT', 'uMx', 'uBrM', 'uLm', 'uLmOn', 'uBm', 'uBg', 'uDg', 'uDf', 'uDr', 'uDs', 'uDet', 'uCls3', 'uSky', 'uSkyOn', 'uSkyU', 'uWn', 'uWnOn', 'uShM', 'uShT', 'uShOn', 'uShP', 'uOff', 'uScl', 'uRing', 'uRect', 'uOcn']) u[k] = gl.getUniformLocation(pr, k);
     const pb = gl.createProgram();
     gl.attachShader(pb, sh(gl.VERTEX_SHADER, V3_BVS)); gl.attachShader(pb, sh(gl.FRAGMENT_SHADER, V3_BFS()));   // 着色器源码用到时再拼：爆炸火光的 GLSL 在后加载的 v3light.js 里
     gl.linkProgram(pb);
@@ -1337,6 +1350,7 @@ function v3Draw(now) {
   gl.uniform1f(u.uOcn, !mx && V3.ocean ? 1 : 0);
   v3ShUni(gl, u, true);
   gl.uniform1f(u.uT, tm); gl.uniform1f(u.uMx, mx); gl.uniform1f(u.uLmOn, lmOn);
+  gl.uniform1f(u.uBrM, typeof v3pRep === 'function' && v3pRep('bridge') ? 1 : 0);   // 过河的路都有立体拱桥（v3props.js）：水面上不再画那段路
   const bm = typeof v3Booms === 'function' ? v3Booms() : null;   // 爆炸火光（v3light.js）
   if (bm && u.uBm) gl.uniform4fv(u.uBm, bm);
   gl.bindBuffer(gl.ARRAY_BUFFER, V3.buf); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, V3.ib);
@@ -1419,12 +1433,14 @@ function v3Overlay(ctx, time) {
   }
   // 海滩名（海面上）、方格号（近看时贴在地面每格左上角，与通联里的「D7 方格」对应）
   for (const b of TER.beaches) { const q = v3Proj(b.cx, coastAt(b.cx) + 70, 0); if (q && q.f < .7) label(b.name, q.x, q.y, COL.amber, .75 * (1 - q.f)); }
-  if (near) {
-    const gx0 = Math.floor(CAM.x / 200), gy0 = Math.floor(CAM.y / 200);
-    for (let gx = gx0 - 3; gx <= gx0 + 3; gx++) for (let gy = gy0 - 3; gy <= gy0 + 3; gy++) {
+  if (near) {   // 只标陆地上的格（海面上标一片格号没有用，低空看海时满屏都是）；写实画面里淡一些、只标镜头周围 5 × 5 格
+    const gx0 = Math.floor(CAM.x / 200), gy0 = Math.floor(CAM.y / 200), rl = typeof realLook === 'function' && realLook() && !v3Mx(), gr = rl ? 2 : 3, ga = rl ? .3 : .45;
+    for (let gx = gx0 - gr; gx <= gx0 + gr; gx++) for (let gy = gy0 - gr; gy <= gy0 + gr; gy++) {
       if (gx < 0 || gy < 0 || gx * 200 >= W || gy * 200 >= H) continue;
-      const x = gx * 200 + 14, y = gy * 200 + 16, q = v3Proj(x, y, v3Ht(x, y));
-      if (q && q.f < .5) label(gridRef(x, y), q.x, q.y, COL.g, .45 * (1 - q.f));
+      const x = gx * 200 + 14, y = gy * 200 + 16;
+      if (isWater(TER.type[ci(x, y)])) continue;
+      const q = v3Proj(x, y, v3Ht(x, y));
+      if (q && q.f < .5) label(gridRef(x, y), q.x, q.y, COL.g, ga * (1 - q.f));
     }
   }
   // 战斗群（编制标号）

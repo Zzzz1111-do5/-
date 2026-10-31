@@ -560,8 +560,65 @@ function fpGfx(ctx, w, h) {
 // —— 画面（view3d.js v3Overlay 调用，屏幕空间）：只有武器平显（fpwpn.js）与过载的黑视 / 红视，别的标识都不画 ——
 function v3fpOverlay(ctx) {
   if (!V3FP.on || !V3FP.o || V3FP.k !== 'air') return;
+  if (V3FP.vw === 'cock' && V3FP.mv == null && (!fpPitOn(V3FP.o) || (V3G_PIT[fpMdlKey(V3FP.o)] || {}).flatHud)) fpHudFlat(ctx, CAM.vw, CAM.vh);   // 模型座舱里没有飞行符号的（歼-15：平显组合玻璃是空的）也画
   if (typeof fwHud === 'function') fwHud(ctx);
   fpGfx(ctx, CAM.vw, CAM.vh);
+}
+// 平面座舱（模型没有座舱内饰的歼-20、歼-50、歼-36、歼-15T、歼-16D：座舱视角里只看得到天空，原来什么参照都没有）的平显，固定在机头方向上（转头时跟着机头走开）：
+//   水线符号、随坡度转动的俯仰梯（每 5° 一格，负俯仰虚线）、飞行轨迹标记（速度方向，偏开的就是迎角、侧滑）、顶上航向带、左边空速 / 马赫 / 过载、右边高度 / 升降速度、下面油门与加力、余油
+function fpHudFlat(ctx, w, h) {
+  const o = V3FP.o, F = o && o.fl, C = V3.cam;
+  if (!F || !C || typeof v3Proj !== 'function') return;
+  const [phi, th, psi] = flEul(F.q), B = fpBody(o), E = C.E, D = 2000;
+  const at = d => { const q = v3Proj(E[0] + d[0] * D, -(E[1] + d[1] * D), E[2] + d[2] * D); return q && q.f < 1.5 ? q : null; };
+  const bo = at(B.f);
+  if (!bo || bo.x < -w * .2 || bo.x > w * 1.2 || bo.y < -h * .2 || bo.y > h * 1.2) return;   // 头转开了，平显不在视野里
+  const k = (h / 2) / Math.tan(V3_FOV / 2), col = typeof FW_HUD === 'string' ? FW_HUD : '#7dffb0', cx = bo.x, cy = bo.y;
+  ctx.save();
+  ctx.strokeStyle = ctx.fillStyle = col; ctx.lineWidth = 1.5; ctx.font = '12px "IBM Plex Mono", monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.shadowColor = 'rgba(0,0,0,.55)'; ctx.shadowBlur = 3;
+  // 俯仰梯：每 5° 一格，地平线最长；画在平显框里
+  ctx.save(); ctx.beginPath(); ctx.rect(cx - w * .17, cy - h * .26, w * .34, h * .52); ctx.clip();   // 俯仰梯只在中间这一块（不压到两边的速度、高度框）
+  ctx.translate(cx, cy); ctx.rotate(-phi);
+  for (let d = -85; d <= 85; d += 5) {
+    const y = (th - d * Math.PI / 180) * k;
+    if (Math.abs(y) > h * .45) continue;
+    const L = d === 0 ? w * .11 : d % 10 ? w * .03 : w * .05, gp = w * .03, tk = d > 0 ? 7 : -7;
+    ctx.setLineDash(d < 0 ? [6, 5] : []);
+    ctx.beginPath(); ctx.moveTo(-gp - L, y); ctx.lineTo(-gp, y); ctx.moveTo(gp, y); ctx.lineTo(gp + L, y);
+    if (d) { ctx.moveTo(-gp - L, y); ctx.lineTo(-gp - L, y + tk); ctx.moveTo(gp + L, y); ctx.lineTo(gp + L, y + tk); }   // 两端的小钩指向地平线
+    ctx.stroke();
+    if (d && !(d % 10)) { ctx.fillText(String(Math.abs(d)), -gp - L - 16, y); ctx.fillText(String(Math.abs(d)), gp + L + 16, y); }
+  }
+  ctx.setLineDash([]); ctx.restore();
+  // 水线符号（机头指向）
+  ctx.beginPath(); ctx.moveTo(cx - 24, cy); ctx.lineTo(cx - 11, cy); ctx.lineTo(cx - 5.5, cy + 7); ctx.lineTo(cx, cy); ctx.lineTo(cx + 5.5, cy + 7); ctx.lineTo(cx + 11, cy); ctx.lineTo(cx + 24, cy); ctx.stroke();
+  // 飞行轨迹标记：速度方向（GL：东、北、上）
+  const vl = Math.hypot(F.V[0], F.V[1], F.V[2]), fp = vl > 5 ? at([F.V[1] / vl, F.V[0] / vl, -F.V[2] / vl]) : null;
+  if (fp) { ctx.beginPath(); ctx.arc(fp.x, fp.y, 6.5, 0, 6.2832); ctx.moveTo(fp.x - 6.5, fp.y); ctx.lineTo(fp.x - 17, fp.y); ctx.moveTo(fp.x + 6.5, fp.y); ctx.lineTo(fp.x + 17, fp.y); ctx.moveTo(fp.x, fp.y - 6.5); ctx.lineTo(fp.x, fp.y - 13); ctx.stroke(); }
+  // 航向带（顶上）：真航向，0 = 北；每 5° 一刻、每 10° 标两位数
+  const hdg = ((psi * 180 / Math.PI) % 360 + 360) % 360, hy = cy - h * .23, pd = w * .006;   // 航向带放在俯仰梯上沿：再往上会被屏幕顶上的制空权、态势条挡住
+  ctx.save(); ctx.beginPath(); ctx.rect(cx - w * .16, hy - 22, w * .32, 34); ctx.clip();
+  for (let a = Math.floor((hdg - 30) / 5) * 5; a <= hdg + 30; a += 5) {
+    const x = cx + (a - hdg) * pd * 1.8, a2 = ((a % 360) + 360) % 360;
+    ctx.beginPath(); ctx.moveTo(x, hy); ctx.lineTo(x, hy - (a2 % 10 ? 5 : 9)); ctx.stroke();
+    if (!(a2 % 10)) ctx.fillText(String(a2 / 10).padStart(2, '0'), x, hy - 17);
+  }
+  ctx.restore();
+  ctx.beginPath(); ctx.moveTo(cx, hy + 2); ctx.lineTo(cx - 5, hy + 9); ctx.lineTo(cx + 5, hy + 9); ctx.closePath(); ctx.fill();
+  ctx.fillText(String(Math.round(hdg)).padStart(3, '0'), cx, hy + 20);
+  // 左：空速（千米 / 时）、马赫、过载；右：高度（米）、升降速度（米 / 秒）
+  const lx = cx - w * .22, rx = cx + w * .22, box = (x, t) => { ctx.strokeRect(x - 34, cy - 12, 68, 24); ctx.fillText(t, x, cy); };
+  box(lx, String(Math.round(F.Va * 3.6))); box(rx, String(Math.round(-F.P[2])));
+  ctx.font = '11px "IBM Plex Mono", monospace';
+  ctx.fillText('空速 km/h', lx, cy - 22); ctx.fillText('高度 m', rx, cy - 22);
+  ctx.fillText('M ' + F.M.toFixed(2), lx, cy + 24); ctx.fillText('G ' + F.nz.toFixed(1), lx, cy + 39);
+  const vs = -F.V[2]; ctx.fillText((vs >= 0 ? '↑' : '↓') + Math.abs(Math.round(vs)), rx, cy + 24);
+  // 下：油门（加力）、余油
+  ctx.fillText(`油门 ${Math.round(V3FP.thr * 100)}%${F.ab ? ' · 加力' : ''}`, cx - w * .14, cy + h * .29);
+  ctx.fillText(`燃油 ${Math.round(F.fuel)} kg`, cx + w * .14, cy + h * .29);
+  if (F.stall > .3) { ctx.fillStyle = typeof FW_RED === 'string' ? FW_RED : '#ff4a4a'; ctx.font = '14px "IBM Plex Mono", monospace'; ctx.fillText('失速', cx, cy + h * .2); }
+  ctx.restore();
 }
 
 // —— 输入 ——

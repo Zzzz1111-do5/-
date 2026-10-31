@@ -142,10 +142,11 @@ function aiArtillery(D, seenT, seenShips) {
     for (const e of guns) {
       if (fired >= n || used.has(e)) continue;
       // 兵种修正 e.mod：rng 射程、pow 精度（散布反比）、rof 射速；shell 弹种、salvo 齐射发数（沙盒变体）
-      const mortar = e.kind === 'mortar', M = e.mod || {}, range = (mortar ? 420 : 1100) * (M.rng || 1);
-      if (dist(e.x, e.y, t.x, t.y) > range || (mortar && t.sea)) continue;
+      const mortar = e.kind === 'mortar', M = e.mod || {}, range = GUN_R[mortar ? 'mortar' : 'arty'] * (M.rng || 1), dd = dist(e.x, e.y, t.x, t.y);
+      if (dd > range || (mortar && t.sea)) continue;
       if (e.kx == null && ((quiet && t.mv) || t.v < 4)) continue;   // 隐蔽的炮位守火力纪律
-      const dur = mortar ? 2.2 : 3.2, err = D.err * reg * (mortar ? .8 : 1) / (M.pow || 1), ax = t.x + t.vx * dur * D.lead, ay = t.y + t.vy * dur * D.lead;
+      // 飞行时间、散布随距离增大（打远处的目标弹着慢、偏得多；迫击炮弹道高，同样距离飞得更久）
+      const dur = mortar ? 2.2 + dd / 450 : 3.2 + dd / 650, err = D.err * reg * (mortar ? .8 : 1) / (M.pow || 1) * (1 + dd / 6000), ax = t.x + t.vx * dur * D.lead, ay = t.y + t.vy * dur * D.lead;
       const kind = POWER[M.shell] ? M.shell : mortar ? 'mortar' : 'arty', R0 = POWER[kind].R;
       if (ownNear('e', ax, ay, R0 + err * 1.6)) continue;   // 危险近距：自己人在散布范围内，换目标（火箭炮散布大，留的距离也大）
       for (let k = 0; k < (M.salvo || 1); k++) { const pt = safeAim('e', ax, ay, err, R0); if (pt) fireShell(e.x, e.y, pt[0], pt[1], 'e', kind, dur + k * .22, !inVision(e.x, e.y)); }

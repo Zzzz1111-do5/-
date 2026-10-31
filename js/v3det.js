@@ -471,7 +471,7 @@ function v3dDrv(key, x, y, z, a) {
   const St = V3D_SEAT[key];   // 有人开：司机（用户给的士兵模型）站在驾驶位上
   if (St && typeof v3gMan === 'function') {
     const c = Math.cos(a), s = Math.sin(a);
-    v3gMan('deck' + (St[3] || ''), 'sit', x + St[0] * c - St[1] * s, y + St[0] * s + St[1] * c, z + St[2], a, typeof V3_PIL === 'number' ? V3_PIL : .95, 0);   // 马甲颜色按车种（牵引车蓝、挂弹车红）
+    v3gMan('deck', 'sit', x + St[0] * c - St[1] * s, y + St[0] * s + St[1] * c, z + St[2], a, typeof V3_PIL === 'number' ? V3_PIL : .95, 0);
   }
 }
 function v3dDeckVeh(cv, C, live, wing, top, h, at) {
@@ -539,7 +539,7 @@ function v3dDeckVeh(cv, C, live, wing, top, h, at) {
       else if (q < .62) walk(kn, sA, (q - .58) / .04, .58, .62);
       else walk(sA, sH, sm01((q - .62) / .3), .62, .92, la);
       const [mx, my] = at(u, v);
-      v3gMan('deck#b23a2e', pose, mx, my, top, h + f, V3_PIL, 0);   // 红马甲：弹药兵
+      v3gMan('deck', pose, mx, my, top, h + f, V3_PIL, 0);
     }
   };
   // 每个机位都画挂弹车和导弹挂载架（空着、飞机刚走也在原位，不会突然没了）：机位上停着的（待命 / 整备）、正要停进来的（着舰后滑过来：架子先摆好它要挂的弹）
@@ -615,7 +615,7 @@ function v3dArmCrew(live, top, h, at) {
       else if (t < A.away) walk(F0, E[i], (t - A.show) / (A.away - A.show));
       else { [u, v, f] = E[i]; f += Math.PI; pose = 'st'; }   // 站在一旁看着飞机
       const [x, y] = at(u, v);
-      v3gMan('deck#b23a2e', pose, x, y, top, h + f, V3_PIL, 0);   // 红马甲：挂弹组拔保险销
+      v3gMan('deck', pose, x, y, top, h + f, V3_PIL, 0);
     });
   }
   for (const id of V3D_ARMP.keys()) if (!now.has(id)) V3D_ARMP.delete(id);
