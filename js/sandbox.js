@@ -1427,6 +1427,7 @@ function sbxShow() {
 // 编辑面板在左侧时（宽屏）：镜头可向左多卷出面板宽度，西端滩头与集结海域不再压在面板下
 function sbxPad() {
   if (typeof CAM !== 'object') return;
+  if (SBX.el && !SBX.el.hidden) { const dk = SBX.el.querySelector('.sbx-dock'), h = dk && dk.offsetHeight; if (h && SBX.dockH !== h) { SBX.dockH = h; SBX.el.style.setProperty('--dock', h + 'px'); } }   // 窗口变了：单位说明跟着兵种栏的高度
   const el = sbxOn() && SBX.el && !SBX.el.hidden && typeof R === 'object' && R.cv ? SBX.el : null, r = el && el.getBoundingClientRect(), c = el && R.cv.getBoundingClientRect();
   const v = r && r.width && r.width < c.width * .6 && r.top < c.top + c.height * .5 ? Math.max(0, Math.round(r.right - c.left + 6)) : 0;
   if (v !== (CAM.padL || 0)) { CAM.padL = v; if (typeof camClamp === 'function') camClamp(); }
@@ -1445,6 +1446,8 @@ function closeSandbox() {
 const SBX_CATS = { e: ['inf', 'armor', 'arty', 'naval', 'air', 'fort', 'support'], p: ['inf', 'armor', 'naval', 'air', 'support'] };
 const SBX_LV = [['normal', '普通'], ['hard', '困难'], ['hell', '地狱']];
 const sbxEsc = s => String(s).replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch]);
+const SBX_WHITE = '#f4f4f0';
+const sbxShort = c => String(c.name).replace(/[（(][^）)]*[）)]/g, '').trim();   // 卡片上的名称：去掉括注
 const sbxIc = (c, cls) => `<svg viewBox="0 0 24 24" class="ic ${cls || ''}" aria-hidden="true">${c && c.icon || ''}</svg>`;
 function sbxCss() {
   if (document.getElementById('sbxCss')) return;
@@ -1511,28 +1514,97 @@ body.sbx-edit #bottom { grid-template-columns: minmax(0, 1fr) auto; pointer-even
   #sbxPanel { position: fixed; top: auto; bottom: 0; left: 0; right: 0; width: auto; height: 38vh; max-height: none; border-radius: 10px 10px 0 0; padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)); }
   body.sbx-edit #objs, body.sbx-edit #bottom { display: none !important; } .sbx-pal { max-height: 112px; } .sbx-notes ol { max-height: 90px; }
   .sbx-info { min-height: 0; } .sbx-keys { display: none; } .sbx-go { bottom: calc(-10px - env(safe-area-inset-bottom, 0px)); }
-}`;
+}
+/* —— TABS 式布兵：底部兵种栏（分类页签 + 一排大卡片：图标、名称、点数）、顶上双方预算、右下开始；其余工具收进左上角「部署工具」，单位说明浮在兵种栏上方 —— */
+body.sbx-edit #objs, body.sbx-edit #bottom { display: none !important; }
+#sbxPanel.tabs { position: absolute; inset: 0; width: auto; height: auto; max-height: none; padding: 0; overflow: visible; display: block; background: none !important; border: 0 !important; box-shadow: none !important; border-radius: 0; pointer-events: none; }
+#sbxPanel.tabs > * { pointer-events: auto; }
+#sbxPanel.tabs .sbx-blk { background: rgba(var(--pn-rgb), .9); border: 1px solid var(--line); border-radius: 7px; box-shadow: 0 0 14px rgba(0, 0, 0, .45); }
+#sbxPanel.tabs .sbx-top { position: absolute; top: calc(10px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); width: min(520px, calc(100% - 560px)); min-width: 320px; display: grid; gap: 6px; padding: 8px 10px; }
+#sbxPanel.tabs .sbx-top h2 { font-size: 12px; }
+#sbxPanel.tabs .sbx-dock { position: absolute; left: 0; right: 0; bottom: 0; display: flex; gap: 12px; align-items: flex-end;
+  padding: 8px max(14px, env(safe-area-inset-right, 0px)) calc(10px + env(safe-area-inset-bottom, 0px)) max(14px, env(safe-area-inset-left, 0px)); border-radius: 10px 10px 0 0; border-bottom: 0; }
+#sbxPanel.tabs .sbx-dl { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+#sbxPanel.tabs .sbx-cats { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+#sbxPanel.tabs .sbx-cats button { padding: 5px 14px; font-size: 13px; border-radius: 6px 6px 0 0; white-space: nowrap; }
+#sbxPanel.tabs .sbx-pal { display: flex; flex-wrap: nowrap; gap: 7px; overflow-x: auto; overflow-y: hidden; max-height: none; padding: 2px 2px 6px; scroll-snap-type: x proximity; }
+#sbxPanel.tabs .sbx-pal button { flex: 0 0 98px; height: 112px; display: grid; grid-template-rows: 46px 1fr auto; justify-items: center; align-items: center; padding: 7px 5px 5px; border-radius: 8px; scroll-snap-align: start; }
+#sbxPanel.tabs .sbx-pal button .ic { width: 42px; height: 42px; }
+#sbxPanel.tabs .sbx-pal button b { font-size: 11px; font-weight: 600; color: var(--text); line-height: 1.25; max-height: 2.5em; overflow: hidden; text-align: center; word-break: break-all; }
+#sbxPanel.tabs .sbx-pal button span { font-size: 12px; color: var(--amber); opacity: 1; }
+#sbxPanel.tabs .sbx-go { flex: 0 0 200px; position: static; margin: 0 0 6px; padding: 0; background: none; border: 0; display: grid; grid-template-columns: 1fr; gap: 8px; }
+#sbxPanel.tabs .sbx-go button { padding: 15px 8px; font-size: 16px; }
+#sbxPanel.tabs .sbx-info { position: absolute; left: max(16px, env(safe-area-inset-left, 0px)); bottom: calc(var(--dock, 190px) + 8px); width: 330px; max-height: 40%; overflow-y: auto; min-height: 0; padding: 8px 10px; border-left-width: 3px; }
+#sbxPanel.tabs .sbx-msg { position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(var(--dock, 190px) + 8px); max-width: calc(100% - 720px); min-width: 260px; text-align: center; padding: 4px 12px; border-radius: 6px; background: rgba(var(--pn-rgb), .85); font-size: 13px; }
+#sbxPanel.tabs .sbx-msg:empty { display: none; }
+#sbxPanel.tabs .sbx-more { position: absolute; top: calc(10px + env(safe-area-inset-top, 0px)); left: max(16px, env(safe-area-inset-left, 0px)); width: 300px; max-height: calc(100% - 230px); overflow-y: auto; padding: 6px 10px; display: grid; gap: 7px; scrollbar-width: thin; }
+#sbxPanel.tabs .sbx-more > summary { cursor: pointer; color: var(--g); font-size: 13px; padding: 2px 0; }
+#sbxPanel.tabs .sbx-more:not([open]) { width: auto; }
+#sbxPanel.tabs.e .sbx-pal button span { color: #ffb3c4; }
+@media (max-width: 900px) {
+  #sbxPanel.tabs { position: fixed; inset: 0; height: auto; padding: 0; border-radius: 0; }   /* 窄屏：贴着视口底边（舞台下面原来留给部队卡片栏的地方也用上） */
+  #sbxPanel.tabs .sbx-top { width: auto; min-width: 0; left: 8px; right: 8px; transform: none; top: calc(112px + env(safe-area-inset-top, 0px)); }
+  #sbxPanel.tabs .sbx-more { top: auto; }
+  #sbxPanel.tabs .sbx-dock { flex-direction: column; align-items: stretch; }
+  #sbxPanel.tabs .sbx-go { flex: none; grid-template-columns: 1fr 1fr; }
+  #sbxPanel.tabs .sbx-go button { padding: 10px 6px; font-size: 14px; }
+  #sbxPanel.tabs .sbx-pal button { flex-basis: 82px; height: 96px; } #sbxPanel.tabs .sbx-pal button .ic { width: 34px; height: 34px; }
+  #sbxPanel.tabs .sbx-info { width: calc(100% - 32px); max-height: 26%; } #sbxPanel.tabs .sbx-msg { max-width: calc(100% - 32px); }
+  #sbxPanel.tabs .sbx-more { top: auto; bottom: calc(var(--dock, 250px) + 8px); max-height: 45%; }
+}
+/* 配色：透明的黑底、几乎看不出来的细边框、兵种图标与文字一律白色——不用霓虹的红 / 青 / 紫，不发光 */
+#sbxPanel.tabs .sbx-blk { background: rgba(0, 0, 0, .55); border: 1px solid rgba(255, 255, 255, .06); box-shadow: none; -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+#sbxPanel.tabs h2 { color: rgba(255, 255, 255, .85); } #sbxPanel.tabs h2 small { color: rgba(255, 255, 255, .4); }
+#sbxPanel.tabs .sbx-sides button, #sbxPanel.tabs .sbx-sides button.e.on, #sbxPanel.tabs .sbx-sides button.p.on { border: 1px solid rgba(255, 255, 255, .05); background: rgba(255, 255, 255, .03); color: rgba(255, 255, 255, .65); box-shadow: none; }
+#sbxPanel.tabs .sbx-sides button.on { background: rgba(255, 255, 255, .13) !important; color: #fff !important; border-color: rgba(255, 255, 255, .12) !important; }
+#sbxPanel.tabs .sbx-sides button.over span { color: #e9a3a3; }
+#sbxPanel.tabs .sbx-bar { background: rgba(255, 255, 255, .08); border-color: transparent; } #sbxPanel.tabs .sbx-bar i, #sbxPanel.tabs.e .sbx-bar i { background: rgba(255, 255, 255, .7); }
+#sbxPanel.tabs .sbx-bar.over i { background: #d6a35c !important; }
+#sbxPanel.tabs .tb { background: rgba(255, 255, 255, .06); border-color: rgba(255, 255, 255, .07); color: #fff; box-shadow: none; }
+#sbxPanel.tabs .sbx-cats button, #sbxPanel.tabs.e .sbx-cats button { border: 0; background: transparent; color: rgba(255, 255, 255, .55); }
+#sbxPanel.tabs .sbx-cats button.on, #sbxPanel.tabs.e .sbx-cats button.on { background: rgba(255, 255, 255, .12); color: #fff; border: 0; }
+#sbxPanel.tabs .sbx-pal button, #sbxPanel.tabs.e .sbx-pal button { background: rgba(0, 0, 0, .3); border: 1px solid rgba(255, 255, 255, .05); color: #fff; box-shadow: none; }
+#sbxPanel.tabs .sbx-pal button:hover { background: rgba(255, 255, 255, .07); border-color: rgba(255, 255, 255, .1); }
+#sbxPanel.tabs .sbx-pal button.on { background: rgba(255, 255, 255, .17); border-color: rgba(255, 255, 255, .22); box-shadow: none; }
+#sbxPanel.tabs .sbx-pal button b { color: rgba(255, 255, 255, .92); } #sbxPanel.tabs .sbx-pal button span, #sbxPanel.tabs.e .sbx-pal button span { color: rgba(255, 255, 255, .5); }
+#sbxPanel.tabs .sbx-go button, #sbxPanel.tabs .sbx-go button.alt { background: rgba(255, 255, 255, .12); border: 1px solid rgba(255, 255, 255, .08); color: #fff; box-shadow: none; }
+#sbxPanel.tabs .sbx-go button:hover { background: rgba(255, 255, 255, .2); } #sbxPanel.tabs .sbx-go button.alt { background: rgba(255, 255, 255, .04); color: rgba(255, 255, 255, .78); }
+#sbxPanel.tabs .sbx-info, #sbxPanel.tabs.e .sbx-info { border-left: 1px solid rgba(255, 255, 255, .06); color: rgba(255, 255, 255, .82); background: rgba(0, 0, 0, .55); }
+#sbxPanel.tabs .sbx-info b, #sbxPanel.tabs.e .sbx-info b { color: #fff; } #sbxPanel.tabs .sbx-info em { color: rgba(255, 255, 255, .6); } #sbxPanel.tabs .sbx-info .h { color: rgba(255, 255, 255, .5); }
+#sbxPanel.tabs .sbx-msg { background: rgba(0, 0, 0, .55); color: rgba(255, 255, 255, .85); } #sbxPanel.tabs .sbx-msg.bad { color: #efa9a9; }
+#sbxPanel.tabs .sbx-more > summary, #sbxPanel.tabs .sbx-notes summary { color: rgba(255, 255, 255, .8); }
+#sbxPanel.tabs .sbx-row button, #sbxPanel.tabs .sbx-lv button, #sbxPanel.tabs .sbx-row button.ai, #sbxPanel.tabs .sbx-saves .sv button { border-color: rgba(255, 255, 255, .07); color: rgba(255, 255, 255, .85); background: rgba(255, 255, 255, .04); }
+#sbxPanel.tabs .sbx-lv button.on, #sbxPanel.tabs .sbx-row button.on { background: rgba(255, 255, 255, .14); color: #fff; }
+#sbxPanel.tabs select, #sbxPanel.tabs input { border-color: rgba(255, 255, 255, .08); color: #fff; background: rgba(0, 0, 0, .4); }
+#sbxPanel.tabs .sbx-hint { color: rgba(255, 255, 255, .5); } #sbxPanel.tabs .sbx-notes { border-color: rgba(255, 255, 255, .06); }
+#sbxPanel.tabs .sbx-list button, #sbxPanel.tabs .sbx-list button .ic { color: #fff; border-color: rgba(255, 255, 255, .08); }`;
   document.head.appendChild(st);
 }
 function sbxUI() {
   sbxCss();
   if (SBX.el) return SBX.el;
   const el = document.createElement('section');
-  el.id = 'sbxPanel'; el.className = 'box ov'; el.setAttribute('aria-label', '沙盒部署'); el.hidden = true;
-  el.innerHTML = `<h2>沙盒部署<small class="sbx-seed"></small></h2>
+  el.id = 'sbxPanel'; el.setAttribute('aria-label', '沙盒部署'); el.hidden = true;
+  el.className = 'tabs';
+  el.innerHTML = `<div class="sbx-top sbx-blk"><h2>沙盒部署<small class="sbx-seed"></small></h2>
     <div class="sbx-sides" role="tablist"></div>
     <div class="sbx-bud"><span>预算</span><div class="sbx-bar"><i></i></div><span><button class="tb" type="button" data-act="bud-" title="预算 −250（3000 以上 −500，1 万以上 −1000）">−</button> <button class="tb" type="button" data-act="bud+" title="预算 ＋250（3000 以上 ＋500，1 万以上 ＋1000，最高 30000）">＋</button></span></div>
-    <div class="sbx-cats"></div><div class="sbx-pal" role="listbox" aria-label="兵力目录"></div>
-    <div class="sbx-info"></div><div class="sbx-msg" role="status"></div><div class="sbx-list"></div>
+    </div>
+    <details class="sbx-more sbx-blk"><summary>部署工具</summary>
     <div class="sbx-row"><button type="button" data-act="preset"></button><button type="button" class="ai" data-act="ai">AI 帮我部署</button><button type="button" data-act="clear">清空</button></div>
     <div class="sbx-row sbx-plan"><label>方案<select data-sel="sty"></select></label><label class="sbx-dir">主攻<select data-sel="main"></select></label><label class="sbx-dir">佯攻<select data-sel="feint"></select></label></div>
     <p class="sbx-hint sbx-styd"></p>
     <div class="sbx-row"><button type="button" data-act="save">保存部署</button><button type="button" data-act="loads" aria-expanded="false">读取部署</button></div>
     <div class="sbx-saves" hidden></div>
     <div class="sbx-row"><input type="text" inputmode="numeric" aria-label="地图种子" class="sbx-seedin"><button type="button" data-act="map">新地图</button><span class="sbx-lv" role="radiogroup" aria-label="守军 AI 水平"></span></div>
-    <details class="sbx-notes" open><summary>部署思路</summary><p class="sbx-hint">点「AI 帮我部署」，由高级指挥官按地形判读完成部署并说明理由。</p><ol></ol></details>
+    <details class="sbx-notes"><summary>部署思路</summary><p class="sbx-hint">点「AI 帮我部署」，由高级指挥官按地形判读完成部署并说明理由。</p><ol></ol></details>
     <div class="sbx-hint sbx-keys">左键放置（按住拖动可连续放置）· 运兵船自带满编步兵，选兵种点船可逐个替换 · 右键 / Delete 移除（按住右键拖动连续移除） · 拖动已放置的条目可移位 · Tab 切换攻守 · Esc 取消 · 滚轮缩放、中键拖动平移</div>
-    <div class="sbx-go"><button type="button" data-act="spectate">观战：AI 对 AI</button><button type="button" class="alt" data-act="command">指挥进攻方</button></div>`;
+    </details>
+    <div class="sbx-info sbx-blk"></div><div class="sbx-msg" role="status"></div>
+    <div class="sbx-dock sbx-blk">
+      <div class="sbx-dl"><div class="sbx-cats" role="tablist" aria-label="兵种分类"></div><div class="sbx-list"></div><div class="sbx-pal" role="listbox" aria-label="兵种"></div></div>
+      <div class="sbx-go"><button type="button" data-act="command">开始战斗</button><button type="button" class="alt" data-act="spectate">观战（双方都看得见）</button></div>
+    </div>`;
   ($('stage') || document.body).appendChild(el);
   SBX.el = el;
   el.addEventListener('change', e => {
@@ -1689,7 +1761,7 @@ function sbxRender() {
     const na = c.spawn.kind === 'veh' && !sbxVehOk(), cost = c.spawn.at === 'line' ? c.spawn.per + '/百' : c.cost;
     const nb = c.spawn.kind === 'ewing' ? sbxOf('enemy').filter(it => sbxEntry(it).spawn.ek === 'airfield').length : 0;
     const need = c.lim && sbxLimN(c) >= c.lim.n ? `限购 ${c.lim.n} ${c.lim.u || '架'}，已满` : c.spawn.kind === 'ewing' ? (!nb ? '需先部署野战机场' : sbxOf('ewing').length >= nb * sbxEaCap() ? `机场已满（每座 ${sbxEaCap()} 个机位）` : '') : c.spawn.at === 'air' ? (!sbxOf('cv').length ? '需先部署航母' : sbxWingN() + (c.spawn.n || 1) > sbxWingCap() ? `机库已满（${sbxWingCap()} 架），再部署一艘航母可扩充` : '') : '';
-    return `<button type="button" role="option" data-id="${c.id}" class="${SBX.pick === c.id ? 'on' : ''}${need ? ' need' : ''}" title="${sbxEsc(c.name)}（${cost} 点）${need ? '：' + need : ''}" aria-selected="${SBX.pick === c.id}" ${na || (c.spawn.at !== 'line' && c.cost > left) ? 'disabled' : ''}>${sbxIc(c)}<span>${cost}</span></button>`;
+    return `<button type="button" role="option" data-id="${c.id}" class="${SBX.pick === c.id ? 'on' : ''}${need ? ' need' : ''}" title="${sbxEsc(c.name)}（${cost} 点）${need ? '：' + need : ''}" aria-selected="${SBX.pick === c.id}" ${na || (c.spawn.at !== 'line' && c.cost > left) ? 'disabled' : ''}>${sbxIc(c)}<b>${sbxEsc(sbxShort(c))}</b><span>${cost}</span></button>`;
   }).join('');
   sbxInfo(SBX.pick ? catalogById(SBX.pick) : null);
   // 无需位置的条目（舰载机、后勤、增援波次）：同类合并计数，点击移除一项
@@ -1711,6 +1783,7 @@ function sbxRender() {
   q('.sbx-notes ol').innerHTML = ns.map(t => `<li>${sbxEsc(t)}</li>`).join('');
   q('.sbx-notes ol').hidden = !ns.length; q('.sbx-notes .sbx-hint').hidden = !!ns.length;
   const m = q('.sbx-msg'); m.textContent = SBX.msg; m.classList.toggle('bad', !!SBX.msgBad);
+  const dk = q('.sbx-dock'); if (dk && dk.offsetHeight) el.style.setProperty('--dock', dk.offsetHeight + 'px');   // 单位说明、提示浮在兵种栏上方
 }
 
 // ———————————————— 地图上的放置交互 ————————————————
@@ -1902,7 +1975,7 @@ function sbxRange(c, it) {
   return 0;
 }
 function sbxGlyph(ctx, c, x, y, col, a, it, ghost) {
-  const s = c.spawn, u = Math.max(4.5, px(5.5)), lw = px(1.3), fill = `rgba(2,10,6,${.78 * a})`;
+  const s = c.spawn, u = Math.max(4.5, px(5.5)), lw = px(1.3), fill = `rgba(0,0,0,${.5 * a})`;   // 透明的黑底
   ctx.save();
   ctx.globalAlpha = a; ctx.strokeStyle = col; ctx.fillStyle = fill; ctx.lineWidth = lw; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
   const dot = (dx, dy, r) => { ctx.beginPath(); ctx.arc(x + dx, y + dy, r, 0, 6.283); ctx.fill(); ctx.stroke(); };
@@ -2042,7 +2115,7 @@ function sbxDrawEdit(time) {
     const c = sbxEntry(it);
     if (!c || it.x == null || it === flag || c.spawn.kind === 'cv') continue;
     if (S.lv && it.side === 'e') continue;   // 闯关：看不到守方部署（只有情报圈，levels.js 画）
-    const mine = it.side === side, col = it.side === 'e' ? COL.enemy : COL.g;
+    const mine = it.side === side, col = SBX_WHITE;   // 布兵时地图上的兵种一律白色（本方实、对方淡）
     if (it.plan && mine) {   // 预定登陆点
       ctx.save(); ctx.strokeStyle = rgba(COL.g, .3); ctx.lineWidth = px(1); ctx.setLineDash([px(3), px(4)]);
       ctx.beginPath(); ctx.moveTo(it.x, it.y); ctx.lineTo(it.plan.x, it.plan.y); ctx.stroke(); ctx.setLineDash([]);
@@ -2054,7 +2127,7 @@ function sbxDrawEdit(time) {
   for (const it of [flag, ...sbxOf('cv')]) { if (it && it.plan && side === 'p') { ctx.save(); ctx.strokeStyle = rgba(COL.g, .3); ctx.lineWidth = px(1); ctx.setLineDash([px(3), px(4)]); ctx.beginPath(); ctx.moveTo(it.x, it.y); ctx.lineTo(it.plan.x, it.plan.y); ctx.stroke(); ctx.restore(); } }
   const h = SBX.drag ? SBX.drag.it : SBX.hover;
   if (h) {
-    const c = sbxEntry(h), col = h.side === 'e' ? COL.enemy : COL.g;
+    const c = sbxEntry(h), col = SBX_WHITE;
     ctx.save(); ctx.strokeStyle = rgba(COL.sel, .8); ctx.lineWidth = px(1.2);
     ctx.beginPath(); ctx.arc(h.x2 != null ? (h.x + h.x2) / 2 : h.x, h.x2 != null ? (h.y + h.y2) / 2 : h.y, Math.max(10, px(13)), 0, 6.283); ctx.stroke(); ctx.restore();
     if (c.arch !== 'mines') sbxRing(ctx, h.x, h.y, sbxRange(c, h), col, .35);
@@ -2068,10 +2141,10 @@ function sbxDrawEdit(time) {
   if (SBX.placedAt && (!m || dist(m.x, m.y, SBX.placedAt.x, SBX.placedAt.y) * R.s > 8)) SBX.placedAt = null;   // 刚放下的条目上先不画预览（否则重叠校验失败，像是放置失败）
   if (pick && m && !SBX.placedAt) {
     if (pick.spawn.at === 'line' && SBX.line) {
-      const r = sbxCheck(pick, SBX.line.x, SBX.line.y, m.x, m.y), col = r.ok ? (pick.side === 'e' ? COL.enemy : COL.g) : COL.amber;
+      const r = sbxCheck(pick, SBX.line.x, SBX.line.y, m.x, m.y), col = r.ok ? SBX_WHITE : COL.amber;
       sbxGlyph(ctx, pick, SBX.line.x, SBX.line.y, col, .75, { x: SBX.line.x, y: SBX.line.y, x2: m.x, y2: m.y });
     } else {
-      const r = sbxCheck(pick, m.x, m.y), ok = r.ok, col = ok ? (pick.side === 'e' ? COL.enemy : COL.g) : COL.amber;
+      const r = sbxCheck(pick, m.x, m.y), ok = r.ok, col = ok ? SBX_WHITE : COL.amber;
       if (r.host) { ctx.save(); ctx.strokeStyle = rgba(COL.sel, .9); ctx.lineWidth = px(1.4); ctx.beginPath(); ctx.arc(r.host.x, r.host.y, Math.max(16, px(18)), 0, 6.283); ctx.stroke(); ctx.restore(); }
       if (!r.host) sbxGlyph(ctx, pick, m.x, m.y, col, ok ? .7 : .55, null, true);
       if (!ok) { ctx.save(); ctx.strokeStyle = rgba(COL.enemy, .8); ctx.lineWidth = px(1.6); const d = Math.max(5, px(7)); ctx.beginPath(); ctx.moveTo(m.x - d, m.y - d); ctx.lineTo(m.x + d, m.y + d); ctx.moveTo(m.x - d, m.y + d); ctx.lineTo(m.x + d, m.y - d); ctx.stroke(); ctx.restore(); }

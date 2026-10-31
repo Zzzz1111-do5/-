@@ -139,6 +139,8 @@ body.v3on #stage::after { display: none; }
 @media (prefers-reduced-motion: reduce) { .modal:not([hidden]), .modal:not([hidden]) > * { animation: none; } }
 /* 指令按钮：不再垫一整块深色底板（左半边空着也挡地图），只有按钮自己有底，空当点得到地图 */
 #cmdBox { padding: 0; display: grid; gap: 4px; justify-items: end; pointer-events: none !important; }
+/* 部队卡片栏、命令 / 阵型 / 支援按钮栏已经去掉（TABS 式：布好兵由 AI 打，玩家只看；沙盒的布兵见 sandbox.js 底部兵种栏） */
+#cards, #cmdBox { display: none !important; }
 #cmdBox .ib, #reserveBox { pointer-events: auto; background: rgba(var(--pn-rgb), .88); box-shadow: 0 0 10px rgba(0, 0, 0, .5); }
 #cmdBox .sep { width: 4px; background: transparent; margin: 0; }
 #reserveBox { border: 1px solid var(--line); border-radius: 5px; padding: 0 7px; height: 40px; }
@@ -426,7 +428,6 @@ body.v3on #stage::after { display: none; }
 <script src="js/hud.js"></script>
 <script src="js/info.js"></script>
 <script src="js/intel.js"></script>
-<script src="js/chat.js"></script>
 <script src="js/thpanel.js"></script>
 <script src="js/selfx.js"></script>
 <script src="js/spui.js"></script>

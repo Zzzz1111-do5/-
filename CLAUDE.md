@@ -36,7 +36,8 @@
 - 全部状态在全局 `S`（纯 JSON，可存档）；类型数组、渲染缓存放在 S 之外，S 换了就重建。
 - 模块之间用 core.js 的 `HOOK`（newGame / step / impact / visionP / visionE / drawUnder / drawOver / drawTop / frame / pointer / key）挂接；调用后加载的文件里的函数，先判断 `typeof fn === 'function'`。
 - 每个文件开头 `'use strict';`；两格缩进、单引号、分号，紧凑写法；注释用简短中文，写清楚为什么这么做。
-- 通联（chatSay）说话要像人：不加「命令：」「判断：」之类的公文标签，一条最多两三句，数字用推演里的真实数字。
+- 司令发言（作战通联 chat.js）已删除：commander.js 的 chatSay 不再记录、不显示（CMD_TALK 关着），AI 指挥官照样下令执行；对局里没有操作按钮了（编队面板、命令 / 阵型 / 支援栏都去掉），我方全部资产由 AI 指挥（cmdAll 恒为真），玩家布好兵就看、可以亲自驾驶（P）。
+- 沙盒 / 闯关布兵是 TABS 式（sandbox.js sbxUI）：底部兵种栏（分类页签 + 大卡片：白色图标、名称、点数），顶上双方预算，右下「开始战斗」「观战」，其余工具收在左上角「部署工具」；配色透明黑、细边框不明显，地图上布兵的兵种也画白色。
 
 ## AI：要求与现状
 - 改 AI 之前先读 docs/ai_requirements.md（用户原话整理的硬性要求 + 实现对照），改完同步更新其中的「实现对照」。
