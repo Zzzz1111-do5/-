@@ -11,7 +11,8 @@
 // 推演：carrier.js flyPlane、support.js updateDD、units.js updateShips、sandbox.js sbxFireShips 见到 o.fp 就不再替它做主（飞机在 fpFly 里飞，舰在 fpSail 里开）
 const V3FP = { on: false, k: null, o: null, keys: new Set(), look: [0, 0], thr: .8, tele: 3, rud: 0, cool: 0, drag: null, touch: { x: 0, y: 0, ab: false }, lock: null, law: 'n', ap: false,
   vw: 'chase', orb: [0, 0], cd: 80, ws: -1, lk: {}, fwC: [], bay: { main: 0, side: 0, ext: 0 },
-  ctl: 'aim', aim: [0, 0], ms: [0, 0], kx: { r: 0, p: 0, y: 0 }, ins: { x: 0, y: 0, r: 0 }, ab: false, abT: 0, ffb: true, gb: 0, rb: 0, buf: 0, imp: 0, free: false, gpB: [] };
+  ctl: 'aim', aim: [0, 0], ms: [0, 0], kx: { r: 0, p: 0, y: 0 }, ins: { x: 0, y: 0, r: 0 }, ab: false, abT: 0, ffb: true, gb: 0, rb: 0, buf: 0, imp: 0, free: false, gpB: [],
+  mv: null, mo: [0, 0], mf: null, mp: null, mEnd: null, fq: null, msg: null };   // mv：导弹视角正跟着的弹；fq：按了开火、等舱门开好
 const V3FP_KEYS = { KeyW: 1, KeyA: 1, KeyS: 1, KeyD: 1, KeyQ: 1, KeyE: 1, KeyC: 1, KeyF: 1, KeyX: 1, KeyV: 1, KeyT: 1, KeyM: 1, KeyG: 1, Space: 1, ShiftLeft: 1, ShiftRight: 1, ArrowLeft: 1, ArrowRight: 1, ArrowUp: 1, ArrowDown: 1, Digit1: 1, Digit2: 1, Digit3: 1, Digit4: 1, Digit5: 1, Digit6: 1 };
 const FP_TELE = [-.3, 0, .35, .7, 1];   // 车钟：后退一 · 停车 · 前进一二三
 
@@ -116,8 +117,8 @@ if (typeof window !== 'undefined' && window.addEventListener) window.addEventLis
 // 退出操纵、交回 AI（Esc、列表里「退出操纵」、单位没了、退出 3D、换局）：自由镜头接着从这里看
 function fpExit() {
   if (V3FP.on && V3.fc && V3.cam) { const P = fpPose(); if (P) Object.assign(V3.fc, { x: P.x, y: P.y, z: Math.max(P.z, v3Ht(clamp(P.x, 0, W - 1), clamp(P.y, 0, H - 1)) + 20), yaw: P.yaw, yawT: P.yaw, pitch: -.35, pitchT: -.35, cx: null, cy: null }); }
-  fpRelease();
-  Object.assign(V3FP, { on: false, k: null, o: null, drag: null, lock: null, nozV: 0 });
+  fpRelease(); fpMslOff();
+  Object.assign(V3FP, { on: false, k: null, o: null, drag: null, lock: null, nozV: 0, fq: null, msg: null });
   if (typeof V3G === 'object') V3G.glass = null;
   V3FP.keys.clear();
   if (typeof document !== 'undefined' && document.pointerLockElement && document.exitPointerLock) document.exitPointerLock();
@@ -470,8 +471,32 @@ function fpPitCam() {
 // 尾喷口开合（v3units.js 画飞机时传给 v3gPlane）：真实的收扩喷口——慢车张开、巡航中间、不开加力的最大推力收到最小、开加力张到最大；作动筒约一秒到位
 const FP_NOZ = [.1, 0, -.13, .24];
 const fpNoz = o => V3FP.on && V3FP.o === o ? V3FP.nozV || 0 : 0;
+// —— 导弹视角：发射后镜头跟着刚打出去的那枚弹（弹后上方十几米，顺着弹的速度方向看；鼠标绕着弹转），弹炸了在原地停一秒半看爆炸，再回到飞机；V 提前回去。
+//   这时飞机照原来的航向飞（鼠标不再带机头），键盘的杆、舵、油门照样管用 ——
+function fpMslOn(m) { if (V3FP.k !== 'air' || !m) return; Object.assign(V3FP, { mv: m.id, mo: [0, 0], mf: null, mp: null, mEnd: null, mt: null }); }
+function fpMslOff() { Object.assign(V3FP, { mv: null, mf: null, mp: null, mEnd: null }); }
+function fpMslCam() {
+  const now = performance.now(), dt = clamp((now - (V3FP.mt || now)) / 1000, 0, .1), m = S.missiles.find(q => q.id === V3FP.mv && q.fw);
+  V3FP.mt = now;
+  if (m && !m.done) {
+    const v = m.fw.v, sp = Math.hypot(v[0], v[1], v[2]) || 1, f0 = [v[0] / sp, v[1] / sp, v[2] / sp], k = 1 - Math.exp(-dt * 5);
+    V3FP.mf = V3FP.mf ? v3Norm([0, 1, 2].map(i => V3FP.mf[i] + (f0[i] - V3FP.mf[i]) * k)) : f0;
+    V3FP.mp = [m.x, -m.y, m.z3];
+  } else if (!V3FP.mp || (V3FP.mEnd = V3FP.mEnd || now, now - V3FP.mEnd > 1500)) { fpMslOff(); return null; }
+  let f = V3FP.mf;
+  const hz = Math.hypot(f[0], f[1]), r0 = hz > .05 ? v3Norm([f[1], -f[0], 0]) : v3Norm(v3Cross(f, fpBody(V3FP.o).u));   // 弹接近竖直时用飞机的上方定左右
+  let u = v3Norm(v3Cross(r0, f));
+  if (V3FP.mo[0] || V3FP.mo[1]) { f = fpRot(f, u, -V3FP.mo[0]); const r = v3Norm(v3Cross(f, u)); f = fpRot(f, r, V3FP.mo[1]); u = fpRot(u, r, V3FP.mo[1]); }
+  const d = 16, T = V3FP.mp, E = [T[0] - f[0] * d + u[0] * d * .22, T[1] - f[1] * d + u[1] * d * .22, T[2] - f[2] * d + u[2] * d * .22];
+  const g = typeof v3HtX === 'function' ? v3HtX(E[0], -E[1]) : v3Ht(clamp(E[0], 0, W - 1), clamp(-E[1], 0, H - 1));
+  if (E[2] < Math.max(g, -2.6) + 2) E[2] = Math.max(g, -2.6) + 2;
+  const z = [-f[0], -f[1], -f[2]], x = v3Norm(v3Cross(u, z)), y = v3Cross(z, x);
+  V3FP.camF = f;
+  return fpProj(E, x, y, z, 1600, .3);
+}
 function v3fpCamera() {
   const P = fpPose() || { x: CAM.x, y: CAM.y, z: 200, yaw: 0, pitch: -.3, roll: 0 };
+  if (V3FP.k === 'air' && V3FP.mv != null) { const C = fpMslCam(); if (C) return C; }
   if (V3FP.k === 'air' && V3FP.vw !== 'cock') return fpChaseCam(P);
   if (V3FP.k === 'air' && fpPitOn(V3FP.o)) return fpPitCam();
   const B = V3FP.k === 'air' ? fpBody(V3FP.o) : fpAxes(P);
@@ -498,6 +523,7 @@ function v3fpStep(now) {
   const cp = Math.cos(pitch), down = -Math.sin(pitch), reach = chase ? clamp(V3FP.cd * 2 + 200, 250, 1400) : down > .08 ? Math.min(1600, alt / down * cp) : 900;
   CAM.x = clamp(P.x + Math.cos(yaw) * reach * (chase ? .5 : 1), 0, W); CAM.y = clamp(P.y + Math.sin(yaw) * reach * (chase ? .5 : 1), 0, H);
   CAM.z = CAM.fit * clamp(1800 / Math.max(60, alt + reach * .35), 1.2, 9);
+  if (V3FP.mv != null && V3FP.mp) { const mx = V3FP.mp[0], my = -V3FP.mp[1], ma = Math.max(1, V3FP.mp[2] - v3Ht(clamp(mx, 0, W - 1), clamp(my, 0, H - 1))); CAM.x = clamp(mx, 0, W); CAM.y = clamp(my, 0, H); CAM.z = CAM.fit * clamp(1800 / Math.max(60, ma + 300), 1.2, 9); }   // 导弹视角：贴图、细节按弹附近
   V3FP.lock = V3.cam && V3FP.k === 'ship' ? fpLockTarget() : null;
   if (V3FP.k === 'air') {   // 尾喷口：按油门、加力（油尽熄火时张开）慢慢开合
     const dt = clamp((now - (V3FP.nozT || now)) / 1000, 0, .1), F = o.fl, want = (o.fuel ?? 1) > 0 ? (F && F.ab ? FP_NOZ[3] : V3FP.thr > .92 ? FP_NOZ[2] : V3FP.thr > .45 ? FP_NOZ[1] : FP_NOZ[0]) : .15;
@@ -548,7 +574,7 @@ if (typeof window !== 'undefined' && window.addEventListener) {
     if (e.repeat) return;
     V3FP.keys.add(e.code);
     if (V3FP.k === 'air') {   // 杆、舵、油门在 fpFly 里按住多久推多少；这里只处理按一下的
-      if (e.code === 'KeyV') fpView();
+      if (e.code === 'KeyV') { if (V3FP.mv != null) fpMslOff(); else fpView(); }   // 导弹视角里按 V 回到飞机
       if (e.code === 'KeyF') fwFire();
       const dg = /^Digit([1-6])$/.exec(e.code);
       if (dg) fwSel(+dg[1] - 1);
@@ -572,6 +598,7 @@ if (typeof window !== 'undefined' && window.addEventListener) {
     else if (V3FP.drag) { dx = e.clientX - V3FP.drag[0]; dy = e.clientY - V3FP.drag[1]; V3FP.drag = [e.clientX, e.clientY]; }
     if (!dx && !dy) return;
     if (V3FP.k === 'air') {
+      if (V3FP.mv != null) { V3FP.mo[0] = airAng(V3FP.mo[0] + dx * .005); V3FP.mo[1] = clamp(V3FP.mo[1] - dy * .004, -1.3, 1.3); return; }   // 导弹视角：鼠标绕着弹看，不带机头
       if (V3FP.free || (V3FP.drag && V3FP.dbtn === 2)) {   // 自由视角（按住 C 或右键拖动）：追尾绕着飞机转、座舱里转头
         if (V3FP.vw === 'cock') { V3FP.look[0] = clamp(V3FP.look[0] + dx * .0024, -2.6, 2.6); V3FP.look[1] = clamp(V3FP.look[1] - dy * .0024, -1.2, .9); }
         else { V3FP.orb[0] = airAng(V3FP.orb[0] - dx * .005); V3FP.orb[1] = clamp(V3FP.orb[1] - dy * .004, -1.4, 1.4); }
@@ -608,7 +635,7 @@ HOOK.pointer.push((e, kind) => {
   if (!V3FP.on) return false;
   if (e.target && e.target.closest && e.target.closest('#fpPad')) return true;
   if (V3FP.k === 'air') {
-    if (kind === 'down') { V3FP.dbtn = e.button; if (fpLocked()) V3FP.drag = e.button === 2 ? [e.clientX, e.clientY] : null; else { V3FP.drag = [e.clientX, e.clientY]; if (!V3.coarse) fpLock(); } }
+    if (kind === 'down') { V3FP.dbtn = e.button; if (fpLocked()) { V3FP.drag = e.button === 2 ? [e.clientX, e.clientY] : null; if (e.button === 0) fwFire(); } else { V3FP.drag = [e.clientX, e.clientY]; if (!V3.coarse) fpLock(); } }   // 锁定鼠标后左键开火（头一下先锁定鼠标）
     if (kind === 'up') V3FP.drag = null;
     return true;
   }

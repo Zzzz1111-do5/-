@@ -407,7 +407,16 @@ function vehTerrain(v, dt) {
 }
 
 // —— 火力：主炮（直瞄榴弹/穿甲、间瞄、火焰）与并列/高射机枪 ——
-const vehSees = (v, x, y, d) => d < 45 || (v.side === 'p' ? PV : EV)[ci(x, y)] === 1;
+// 看得见：本方视野（全军共享：步兵、车辆、舰、飞机看到的都算）；o 是车辆的话，数据链再把 4 秒内被本方任何单位看到过的敌车算上（拐过山包、钻进林子不会一下子丢了目标）
+const vehSees = (v, x, y, d, o) => d < 45 || (v.side === 'p' ? PV : EV)[ci(x, y)] === 1 || (!!o && S.t - ((v.side === 'p' ? o.dlP : o.dlE) ?? -99) < VEH_DL);
+const VEH_DL = 4;
+// 每次算完视野（logistics.js updateVision）：记下对方哪些车此刻被看见了（数据链的目标记忆）
+function vehDlMark() {
+  for (const o of S.veh || []) if (!o.dead) { if (o.side === 'e' && PV[ci(o.x, o.y)] === 1) o.dlP = S.t; else if (o.side === 'p' && EV[ci(o.x, o.y)] === 1) o.dlE = S.t; }
+}
+// 车辆的视野半径：直瞄火炮的车（坦克、坦克歼击车、突击炮）车长有热像周视镜，看得到自己主炮够得着的地方（真车的热像观瞄看得比主炮有效射程远），
+//   一排坦克的视野连成一片、看到的全军共享（vehSees）
+const vehSight = v => { const sp = vehSp(v), g = sp.gun; return Math.max(sp.sight, g && !g.ind && !g.flame ? g.range * 1.1 : 0) * (v.swim ? .7 : 1); };
 // 主炮目标评分：威胁 / 价值，除以距离；穿甲炮偏好装甲，喷火偏好碉堡与战壕
 function vehGunTarget(v) {
   const sp = vehSp(v), g = sp.gun;
@@ -419,7 +428,7 @@ function vehGunTarget(v) {
     let arm = null, as = 0;
     const armor = (t, k, x, y, a, w) => {
       const d = dist(v.x, v.y, x, y);
-      if (d > R0 || !vehSees(v, x, y, d) || vehPenMul(g.ap * (M.pow || 1), a) < .25) return;
+      if (d > R0 || !vehSees(v, x, y, d, k === 'veh' ? t : null) || vehPenMul(g.ap * (M.pow || 1), a) < .25) return;
       const s = w / (1 + d / R0);
       if (s > as) { as = s; arm = { t, k, x, y, d }; }
     };
@@ -431,7 +440,7 @@ function vehGunTarget(v) {
   const consider = (t, k, x, y, val) => {
     const d = dist(v.x, v.y, x, y);
     if (d > R0 || (g.min && d < g.min)) return;
-    if (!g.ind && !vehSees(v, x, y, d)) return;
+    if (!g.ind && !vehSees(v, x, y, d, k === 'veh' ? t : null)) return;
     const eng = v.esc && v.esc.eng && S.t < v.esc.eng.until && dist(x, y, v.esc.eng.x, v.esc.eng.y) < 25;   // 步坦协同：优先打压制伙伴步兵的火力点
     const s = val / (1 + d / R0) * (eng ? 2.2 : 1);
     if (s > bs) { bs = s; best = { t, k, x, y, d }; }
@@ -728,12 +737,12 @@ const vehMates = v => (S.veh || []).filter(o => o !== v && !o.dead && o.side ===
 const vehAmmoF = v => { const sp = vehSp(v); return sp.gun && !sp.gun.flame && sp.ammo ? v.ammo / sp.ammo : 1; };
 
 // 车辆视野（并入 PV/EV）；开火暴露自己：枪口焰让敌方看见车辆所在格
-HOOK.visionP.push(() => (S && S.veh || []).filter(v => !v.dead && v.side === 'p' && !v.lst).map(v => ({ x: v.x, y: v.y, r: vehSp(v).sight * (v.swim ? .7 : 1) * (v.sup > 70 ? .7 : 1), h: .5 })));
+HOOK.visionP.push(() => (S && S.veh || []).filter(v => !v.dead && v.side === 'p' && !v.lst).map(v => ({ x: v.x, y: v.y, r: vehSight(v) * (v.sup > 70 ? .7 : 1), h: .5 })));
 HOOK.visionE.push(() => {
   const out = [];
   for (const v of S && S.veh || []) {
     if (v.dead || v.lst) continue;
-    if (v.side === 'e') out.push({ x: v.x, y: v.y, r: vehSp(v).sight, h: .5 });
+    if (v.side === 'e') out.push({ x: v.x, y: v.y, r: vehSight(v), h: .5 });
     else if (S.t - v.fireT < 3 || S.t - (v.mgT ?? -99) < 2) out.push({ x: v.x, y: v.y, r: 12, h: 1.5 });
   }
   return out;

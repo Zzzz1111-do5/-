@@ -2,7 +2,8 @@
 // 战机武器系统（亲自驾驶飞机时，v3pilot.js）：数字键选武器（再按一次收起），F 开火——
 //   选中时打开对应的弹舱门（v3g.js 画舱门、舱里的弹），歼-20 的侧弹舱门开了以后挂架把霹雳-10 推出舱外；外挂的不用等；
 //   平显：选中武器的大环——导引头 / 火控雷达能锁定的偏离角，按真实角度画在视野里（座舱里的平显玻璃只有十度宽，装不下）；
-//     环里、射程内的目标出锁定框，锁稳了框变红，这时按 F 才发射；连按 F 依次打环里还没挨打的红框目标
+//     环里、射程内的目标出锁定框，锁稳了框变红；按 F（或鼠标左键）先打红框，连按依次打环里还没挨打的红框目标——
+//     没有红框也能打：环里正在锁的（发射后再截获，命中率打折）；环里没有目标时空空弹沿视轴飞出去、导引头自己在前方找敌机，对地的打准星指着的地面
 //   弹按真实参数在三维里飞：内埋的先被弹射臂推出舱外再点火，侧弹舱、外挂的在挂架上点火；助推加速、比例导引、过载限制、近炸引信；
 //     空空命中按单发杀伤概率结算（missile.js msSamHit：隐身、干扰弹打折），对地按精确制导弹药的毁伤（missile.js msPgmHit）
 const FW_G = 9.81, FW_A = 340, FW_HUD = '#7dffb0', FW_RED = '#ff4a4a';   // 重力加速度、音速（米 / 秒，低空）、平显绿、锁定红
@@ -175,23 +176,63 @@ HOOK.step.push(dt => {
     fwDoors(dt);
     const s = fwSelW();
     if (s && !fpOnDeck(V3FP.o)) fwScan(V3FP.o, s, dt); else { V3FP.fwC = []; V3FP.lk = {}; }
+    if (V3FP.fq != null) { if (S.t - V3FP.fq > 2.5 || !s) V3FP.fq = null; else if (V3FP.cool <= 0 && fwReady(s)) fwFire(); }   // 按下开火时舱门还在开：开好了打出去
   }
   for (const m of S.missiles || []) if (m.fw && !m.done) fwFly(m, dt);
 });
 
-// —— 开火（F、手柄 A、手机「开火」）：打环里锁定变红、还没有弹在飞向它的目标里离视轴最近的 ——
+// —— 开火（F、鼠标左键、手柄 A、手机「开火」）：按下就打——
+//   没选武器（或选中的打光了）自动换成还有弹的；舱门还没开好先开门，开好了自动打出去（按下后 2.5 秒内）；
+//   目标：锁定变红、还没有弹在飞向它的里离视轴最近的 → 别的红框 → 环里正在锁的 → 都没有就沿视轴（fwBore）
 function fwFire() {
   const o = V3FP.o;
   if (!V3FP.on || V3FP.k !== 'air' || !o) return;
-  if (fpOnDeck(o)) { log('还在甲板上：弹射升空后才能开火', 'warn', 'fpdk', 2); return; }
-  const s = fwSelW();
-  if (!s) { log('还没选武器', 'warn', 'fw0', 2); return; }
-  if (!(s.n > 0)) { log(`${s.W.nm}打光了`, 'warn', 'fw1', 2); return; }
-  if (V3FP.cool > 0 || !fwReady(s)) return;
+  if (fpOnDeck(o)) { fwMsg('还在甲板上，弹射升空后才能开火'); return; }
+  let s = fwSelW();
+  if (!s || !(s.n > 0)) {
+    const L = fwList(o), i = L.findIndex(q => q.n > 0);
+    if (i < 0) { fwMsg('弹打光了'); return; }
+    if (V3FP.ws !== i) { V3FP.ws = i; V3FP.lk = {}; }
+    s = L[i];
+  }
+  if (V3FP.cool > 0 || !fwReady(s)) { V3FP.fq = S.t; return; }
+  V3FP.fq = null;
   const busy = new Set(S.missiles.filter(m => m.fw && !m.done && m.tgt).map(m => m.tgt.k + ':' + m.tgt.id));
-  const c = V3FP.fwC.find(c => c.red && !busy.has((c.t || 'eair') + ':' + c.o.id)) || V3FP.fwC.find(c => c.red);
-  if (!c) { log('没有锁定目标', 'warn', 'fw2', 2); return; }
+  const c = V3FP.fwC.find(c => c.red && !busy.has((c.t || 'eair') + ':' + c.o.id)) || V3FP.fwC.find(c => c.red) || V3FP.fwC[0] || fwBore(o, s);
   fwLaunch(o, s, c);
+}
+// 平显上的一行短提示（打光了、还在甲板上），一秒半后消失
+function fwMsg(t) { V3FP.msg = { t, at: performance.now() }; }
+// 环里没有目标：空空弹沿视轴打出去（导引头在前方自己找）；对地的沿视轴往前找落地点（每 40 米一步，最远到射程），机头没对着地面就打正前方射程内的地面
+function fwBore(o, s) {
+  const B = fpBody(o), P = fpPose(), Wd = s.W, f = B.f;
+  if (Wd.k === 'aam') return { o: null, x: P.x + f[0] * 3000, y: P.y - f[1] * 3000, z: P.z + f[2] * 3000, nm: '前方', d: 3000, bore: true };
+  const Rm = Math.min(fwRange(o, Wd), 60000);
+  for (let d = 150; d <= Rm; d += 40) {
+    const x = P.x + f[0] * d, y = P.y - f[1] * d, z = P.z + f[2] * d, g = Math.max(fwGz(x, y), -2.6);
+    if (z <= g) return { o: null, x, y, z: g, nm: '准星下的地面', d, bore: true };
+  }
+  const hl = Math.hypot(f[0], f[1]) || 1, d = Math.min(Rm * .8, 15000), x = P.x + f[0] / hl * d, y = P.y - f[1] / hl * d;
+  return { o: null, x, y, z: Math.max(fwGz(x, y), -2.6), nm: '正前方的地面', d, bore: true };
+}
+// 空空弹的导引头自己找目标（沿视轴发射、或原来的目标没了）：弹速度方向 30° 锥里、导引头作用距离内离弹轴最近的敌机
+function fwSeek(m, Wd, v) {
+  if (!S.eair || !S.eair.fly) return null;
+  const sp = Math.hypot(v[0], v[1], v[2]) || 1, R = Wd.sk === 'ir' ? 12000 : 25000, c0 = Math.cos(30 * Math.PI / 180);
+  let best = null, bc = c0;
+  for (const a of S.eair.fly) {
+    if (a.dead || !isFinite(a.x) || !((a.alt ?? 1) > .05)) continue;
+    const L = [a.x - m.x, m.y - a.y, v3AirZ(a) - m.z3], d = Math.hypot(L[0], L[1], L[2]);
+    if (d < 1 || d > R) continue;
+    const ca = (L[0] * v[0] + L[1] * v[1] + L[2] * v[2]) / (d * sp);
+    if (ca > bc) { bc = ca; best = a; }
+  }
+  return best;
+}
+// 空空弹对这架敌机的单发杀伤概率：战斗机机动规避、隐身打折
+function fwPk(Wd, a, lock) {
+  const ty = a && a.type, stl = a && typeof eaStl === 'function' ? eaStl(a) : 1, ftr = ty === 'ftr' || ty === 'ftrb' || ty === 'f22';
+  return Wd.pk * (Wd.k === 'aam' ? (ftr ? .9 : 1.05) * (stl < .6 ? .9 : 1) : 1) * (lock ? 1 : .85);
 }
 // 弹从哪个挂点出去（模型坐标 → 游戏坐标，跟着机身姿态）：按已经打掉的枚数轮换左右
 function fwStation(o, s) {
@@ -205,11 +246,10 @@ function fwLaunch(o, s, c) {
   const vA = F ? [F.V[1], F.V[0], -F.V[2]] : [Math.cos(o.heading || 0) * (o.spd || 200), -Math.sin(o.heading || 0) * (o.spd || 200), 0];   // 飞机的速度（GL：东、北、上）
   const push = s.bay === 'main' ? (Wd.k === 'gb' ? 5 : 7) : s.bay === 'ext' ? 2 : 0;   // 内埋的被弹射臂往下推出舱外，外挂的脱离挂架
   const v = [0, 1, 2].map(i => vA[i] - B.u[i] * push);
-  const ty = c.o.type, stl = typeof eaStl === 'function' && c.t === 'eair' ? eaStl(c.o) : 1, ftr = ty === 'ftr' || ty === 'ftrb' || ty === 'f22';
-  const pk = Wd.pk * (Wd.k === 'aam' ? (ftr ? .9 : 1.05) * (stl < .6 ? .9 : 1) : 1);
+  const pk = c.o ? fwPk(Wd, c.t === 'eair' ? c.o : null, c.red) : Wd.pk;
   const m = { id: S.nid++, kind: Wd.k === 'aam' ? 'sam' : 'pgm', side: 'p', src: 'fp', x0: p[0], y0: p[1], x: p[0], y: p[1], z: .5, z3: p[2], tx: c.x, ty: c.y, t: 0, dur: Wd.M > 0 ? 80 : 150, ph: 'boost',
-    tgt: { k: c.t || 'eair', id: c.o.id }, pk, w: Wd.pg || s.w, lr: s.w === 'pl17' || undefined, icp: false, sup: 0,
-    fw: { w: s.w, ms: Wd.ms, v, ign: s.bay === 'main' ? .35 : s.bay === 'ext' ? .12 : 0, lit: false } };
+    tgt: c.o ? { k: c.t || 'eair', id: c.o.id } : null, pk, w: Wd.pg || s.w, lr: s.w === 'pl17' || undefined, icp: false, sup: 0,
+    fw: { w: s.w, ms: Wd.ms, v, ign: s.bay === 'main' ? .35 : s.bay === 'ext' ? .12 : 0, lit: false, bore: !c.o } };
   S.missiles.push(m);
   o.fwN[s.w]--;
   const f = fwField(s.w); o[f] = Math.max(0, (o[f] ?? 0) - 1);
@@ -217,7 +257,8 @@ function fwLaunch(o, s, c) {
   S.stats.shots++;
   if (Wd.k === 'aam' && typeof awStat === 'function') awStat(s.w === 'pl17' ? 'aamL' : 'aamP');
   V3FP.cool = Wd.k === 'aam' ? .5 : .8; V3FP.imp = .5;   // 挂架、弹射臂的冲击（受力回馈）
-  log(`发射${Wd.nm}，打 ${(c.d / 1000).toFixed(1)} 公里外的${c.nm}（还剩 ${o.fwN[s.w]} 枚）`, 'info', 'fwl', 0, { x: c.x, y: c.y });
+  if (typeof fpMslOn === 'function') fpMslOn(m);   // 镜头跟着这枚弹（v3pilot.js：导弹视角，V 回到飞机）
+  log(c.o ? `发射${Wd.nm}，打 ${(c.d / 1000).toFixed(1)} 公里外的${c.nm}（还剩 ${o.fwN[s.w]} 枚）` : `发射${Wd.nm}，${Wd.k === 'aam' ? '沿机头方向打出去，导引头自己找目标' : `打${c.nm}`}（还剩 ${o.fwN[s.w]} 枚）`, 'info', 'fwl', 0, { x: c.x, y: c.y });
 }
 
 // —— 弹道（每步 1/30 秒）：GL 坐标（东、北、上），游戏坐标 x = 东、y = −北 ——
@@ -230,7 +271,12 @@ function fwFly(m, dt) {
   m.t += dt;
   const air = Wd.k === 'aam';
   let T = null, tp = null;
-  if (air) { T = msTgtObj(m.tgt); if (T) tp = [T.x, -T.y, v3AirZ(T)]; }
+  if (air) {
+    T = msTgtObj(m.tgt);
+    if (!T && m.tgt) { m.tgt = null; F.tq = F.tv = null; }   // 原来的目标没了：导引头重新找
+    if (!T && m.t > F.ign + .3) { const a = fwSeek(m, Wd, F.v); if (a) { T = a; m.tgt = { k: 'eair', id: a.id }; m.pk = fwPk(Wd, a, false); } }
+    if (T) tp = [T.x, -T.y, v3AirZ(T)];
+  }
   else {
     T = m.tgt ? msPgmTgt(m.tgt) : null;
     if (T) { m.tx = T.x; m.ty = T.y; }
@@ -245,6 +291,7 @@ function fwFly(m, dt) {
   if (lit && m.t - F.ign < Wd.tb) { const vm = Wd.M * FW_A, k = sp < vm ? 20 * FW_G : (vm - sp) * 2; for (let i = 0; i < 3; i++) a[i] += u[i] * k; }
   else if (lit || Wd.M === 0) { const kd = Wd.M === 0 ? 4e-5 : 1.4e-5; for (let i = 0; i < 3; i++) a[i] -= u[i] * kd * sp * sp; }
   if (Wd.M === 0) a[2] += FW_G * .85;   // 炸弹的弹翼升力：滑翔（不然像石头一样掉）
+  else if (air && !tp && lit) a[2] += FW_G;   // 空空弹还在找目标：弹体升力托住，沿原方向直飞
   if (tp && m.t >= F.ign + (Wd.M === 0 ? .3 : .15)) {
     const R = [tp[0] - p[0], tp[1] - p[1], tp[2] - p[2]], Rl2 = Math.max(1, R[0] * R[0] + R[1] * R[1] + R[2] * R[2]), tv = F.tv || [0, 0, 0];
     const Om = v3Cross(R, [tv[0] - v[0], tv[1] - v[1], tv[2] - v[2]]).map(c => c / Rl2), ac = v3Cross(Om, v).map(c => c * 4);
@@ -267,7 +314,7 @@ function fwFly(m, dt) {
   }
   if (!air && p[2] <= Math.max(gz, -2.6) + .3) { fwGround(m, T, m.x, m.y); return; }   // 打在地上 / 海面上
   const slow = Wd.M > 0 && m.t > F.ign + Wd.tb && sp < 260;   // 发动机停了、速度掉下来：没有能量了，自毁
-  if (m.t > m.dur || slow || (air && !T && m.t > 2) || p[2] < Math.max(gz, -2.6) || m.x < -12000 || m.x > W + 12000 || m.y < -12000 || m.y > H + 12000) { m.done = true; msPuff(m.x, m.y, 'p'); }
+  if (m.t > m.dur || slow || (air && !T && m.t > 20) || p[2] < Math.max(gz, -2.6) || m.x < -12000 || m.x > W + 12000 || m.y < -12000 || m.y > H + 12000) { m.done = true; msPuff(m.x, m.y, 'p'); }
 }
 function fwGround(m, T, x, y) {
   m.done = true; m.x = m.tx = x; m.y = m.ty = y;
@@ -277,7 +324,11 @@ function fwGround(m, T, x, y) {
 // —— 平显（v3pilot.js v3fpOverlay 调用）：选中武器的大环、环里目标的锁定框（锁稳了变红）、环下方武器名与余弹 ——
 function fwHud(ctx) {
   const o = V3FP.o, s = fwSelW();
-  if (!o || !s || !V3.cam || fpOnDeck(o)) return;
+  if (V3FP.msg && performance.now() - V3FP.msg.at < 1500 && V3FP.mv == null) {   // 短提示：画面中间偏下
+    ctx.save(); ctx.fillStyle = FW_RED; ctx.font = '14px "IBM Plex Mono", "Noto Sans SC", monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.shadowColor = 'rgba(0,0,0,.6)'; ctx.shadowBlur = 3; ctx.fillText(V3FP.msg.t, CAM.vw / 2, CAM.vh * .72); ctx.restore();
+  }
+  if (!o || !s || !V3.cam || fpOnDeck(o) || V3FP.mv != null) return;
   const B = fpBody(o), P = fpPose(), E = V3.cam.E, ck = V3FP.vw === 'cock';
   const b = ck ? [E[0], -E[1], E[2]] : [P.x, P.y, P.z], D = 4000;   // 座舱里从眼睛看出去（符号在无穷远，和窗外对齐）；跟随视角从飞机出发
   const at = d => v3Proj(b[0] + d[0] * D, b[1] - d[1] * D, b[2] + d[2] * D);

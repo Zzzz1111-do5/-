@@ -92,7 +92,7 @@ function v3Fx(C) {
   if (!V3F.tried) v3fxInit(gl);
   if (!V3F.ok) return;
   if (V3F.S !== S) { V3F.S = S; V3F.trail.clear(); V3F.puff.length = 0; V3F.seen.clear(); V3F.ign.clear(); V3F.ex.length = 0; V3F.exSeen = new WeakSet(); if (V3F.vo) V3F.vo.clear(); }
-  const out = [], E = C.E, box = V3.box || [0, 0, W, H], inB = (x, y, m = 200) => x > box[0] - m && x < box[0] + box[2] + m && y > box[1] - m && y < box[1] + box[3] + m;
+  const out = [], sm = [], E = C.E, box = V3.box || [0, 0, W, H], inB = (x, y, m = 200) => x > box[0] - m && x < box[0] + box[2] + m && y > box[1] - m && y < box[1] + box[3] + m;   // sm：遮挡的烟（普通混合，先画；发光的 out 加法混合后画）
   const spec = specAll() || (typeof R === 'object' && (R.eye === 'all' || R.eye === 'both' || R.eye === 'e'));
   const seen = (x, y) => spec || inVision(x, y);
   const g = (x, y) => v3Ht(clamp(x, 0, W - 1), clamp(y, 0, H - 1));
@@ -161,10 +161,11 @@ function v3Fx(C) {
     const last = tr[tr.length - 1];
     if (!last || Math.hypot(p[0] - last[0], p[1] - last[1], p[2] - last[2]) > 2) tr.push([...p, S.t]);
     while (tr.length && S.t - tr[0][3] > 4) tr.shift();
-    const col = m.side === 'p' ? V3F_COL.p : V3F_COL.e, w0 = m.kind === 'tbm' ? 4 : 2.2, sm = V3F_COL.smoke;
+    const col = m.side === 'p' ? V3F_COL.p : V3F_COL.e, w0 = m.kind === 'tbm' ? 4 : 2.2, smc = V3F_COL.smoke;
     for (let i = 1; i < tr.length; i++) {
       const a0 = S.t - tr[i - 1][3], a1 = S.t - tr[i][3], hot = a1 < .35;   // 越老的一段越宽、越淡（烟在空中散开）
-      v3fRib(out, E, tr[i - 1], tr[i], w0 * (1 + a1 * 1.6), [sm[0], sm[1], sm[2], .3 * (1 - a0 / 4)], hot ? [...V3F_COL.amber.slice(0, 3), .85] : [sm[0], sm[1], sm[2], .3 * (1 - a1 / 4)]);
+      v3fRib(out, E, tr[i - 1], tr[i], w0 * (1 + a1 * 1.6), [smc[0], smc[1], smc[2], .3 * (1 - a0 / 4)], hot ? [...V3F_COL.amber.slice(0, 3), .85] : [smc[0], smc[1], smc[2], .3 * (1 - a1 / 4)]);
+      if (i % 2 === 0 && a1 > .15) v3fSpark(sm, C, tr[i], w0 * (.9 + a1 * 1.3), [.86, .87, .86, .3 * (1 - a1 / 4)]);   // 固体火箭的白烟：遮得住后面的东西，几秒里散开变淡
     }
     // 尾焰挂在弹尾（导弹按真实长度画，v3msl.js），光晕按弹体大小
     const hl = typeof v3MslKey === 'function' ? ((V3MS[v3MslKey(m)] || V3MS.pl15).L / 2) * v3MslK(m) : 0, fs = hl > 0 ? clamp(hl / 2, .5, 2) : 1;
@@ -177,10 +178,12 @@ function v3Fx(C) {
   for (const id of V3F.trail.keys()) if (!live.has(id)) V3F.trail.delete(id);
   for (const id of V3F.seen) if (!live.has(id) && !(S.missiles || []).some(m => m.id === id)) { V3F.seen.delete(id); V3F.ign.delete(id); if (V3F.vo) V3F.vo.delete(id); }
   // 发射点：点火瞬间的闪光、发射筒 / 发射箱口喷出的一团烟（地面上贴地翻滚、海面上是水汽），4 秒里翻滚扩散、往上飘、变淡
-  V3F.puff = V3F.puff.filter(o => S.t - o.t0 < 4.5);
+  V3F.puff = V3F.puff.filter(o => S.t - o.t0 < 7);
   for (const o of V3F.puff) {
     if (!inB(o.x, o.y, 200) || (o.side === 'e' && !seen(o.x, o.y))) continue;
     const a = S.t - o.t0, k = o.big ? 1.6 : 1;
+    v3fLaunchSmoke(sm, C, o, a, k);   // 发射药的烟团（遮挡的白烟 / 扬尘）
+    if (a > 4.5) continue;
     if (o.vls) {   // 垂发：舱口一团闪光，燃气沿出筒方向拉成一根竖直的白色烟柱（随风慢慢散开、变淡）
       if (a < .35) v3fSpark(out, C, v3fP(o.x, o.y, o.z + 1), (5 + a * 18) * k, [1, .92, .75, .95 * (1 - a / .35)]);
       const top = 34 * (o.up > .6 ? 1.3 : 1) * clamp(a / o.up, 0, 1), fade = clamp(1 - a / 3.5, 0, 1);
@@ -296,18 +299,43 @@ function v3Fx(C) {
   }
   if (typeof v3dFx === 'function') v3dFx(out, C, inB, seen);   // 弹射、离机、伞降的发光与烟（v3det.js）
   if (typeof v3dHaze === 'function') v3dHaze(C);   // 喷口后的热浪（v3det.js）：在加法特效之前，扭的是火焰后面的画面
-  if (!out.length) return;
-  // —— 画：加法混合，测深度不写深度 ——
+  if (!out.length && !sm.length) return;
+  // —— 画：先画遮挡的烟（预乘透明度的普通混合），再画发光（加法混合）；都测深度、不写深度 ——
   const A = V3F.a;
   gl.useProgram(V3F.pr);
   gl.uniformMatrix4fv(V3F.u.uM, false, C.M);
   gl.bindBuffer(gl.ARRAY_BUFFER, V3F.buf);
-  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(out), gl.DYNAMIC_DRAW);
-  gl.enableVertexAttribArray(A.p); gl.vertexAttribPointer(A.p, 3, gl.FLOAT, false, 36, 0);
-  gl.enableVertexAttribArray(A.c); gl.vertexAttribPointer(A.c, 4, gl.FLOAT, false, 36, 12);
-  gl.enableVertexAttribArray(A.q); gl.vertexAttribPointer(A.q, 2, gl.FLOAT, false, 36, 28);
-  gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE); gl.depthMask(false);
-  gl.drawArrays(gl.TRIANGLES, 0, out.length / 9);
+  gl.enableVertexAttribArray(A.p); gl.enableVertexAttribArray(A.c); gl.enableVertexAttribArray(A.q);
+  gl.enable(gl.BLEND); gl.depthMask(false);
+  for (const [L, add] of [[sm, false], [out, true]]) {
+    if (!L.length) continue;
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(L), gl.DYNAMIC_DRAW);
+    gl.vertexAttribPointer(A.p, 3, gl.FLOAT, false, 36, 0); gl.vertexAttribPointer(A.c, 4, gl.FLOAT, false, 36, 12); gl.vertexAttribPointer(A.q, 2, gl.FLOAT, false, 36, 28);
+    gl.blendFunc(gl.ONE, add ? gl.ONE : gl.ONE_MINUS_SRC_ALPHA);
+    gl.drawArrays(gl.TRIANGLES, 0, L.length / 9);
+  }
   gl.depthMask(true); gl.disable(gl.BLEND);
   gl.disableVertexAttribArray(A.p); gl.disableVertexAttribArray(A.c); gl.disableVertexAttribArray(A.q);
+}
+// 发射药的烟（普通混合，遮得住后面）：地面发射——燃气冲到地上往四周翻滚的扬尘 / 白烟（海面上是水汽），再一股顺着出筒方向往上的白烟柱；
+//   垂发——舱口涌出的白烟顺着弹道往上拉成一根烟柱；空中点火——一团白烟留在原地。7 秒里扩散、往上飘、变淡
+function v3fLaunchSmoke(sm, C, o, a, k) {
+  const fade = clamp(1 - a / 7, 0, 1);
+  if (fade <= 0) return;
+  if (o.air) {
+    for (let i = 0; i < 5; i++) { const an = i * 2.4 + o.t0, r = .8 + a * 1.6; v3fSpark(sm, C, v3fP(o.x + Math.cos(an) * r, o.y + Math.sin(an) * r, o.z + (i % 3 - 1) * r * .4 + a * .3), (1.6 + a * 2.2) * k, [.88, .89, .88, .42 * fade]); }
+    return;
+  }
+  if (o.vls) {
+    const top = 34 * (o.up > .6 ? 1.3 : 1) * clamp(a / Math.max(.1, o.up), 0, 1);
+    for (let i = 0; i < 7; i++) { const u = i / 6, dr = a * 1.6 * u; v3fSpark(sm, C, v3fP(o.x + dr, o.y - dr * .5, o.z + 1 + top * u), (1.8 + a * 1.4 + u * 2) * k, [.9, .92, .93, .5 * fade * (1 - u * .4)]); }
+    for (let i = 0; i < 5; i++) { const an = i * 2.4 + o.t0, r = (1.5 + a * 2.2) * k; v3fSpark(sm, C, v3fP(o.x + Math.cos(an) * r, o.y + Math.sin(an) * r, o.z + 1.5 + a * .5), (2.2 + a * 1.8) * k, [.9, .92, .93, .4 * fade]); }   // 甲板上漫开的一层
+    return;
+  }
+  const c = o.sea ? [.88, .91, .93] : [.8, .77, .7];   // 海面上白色水汽，陆上带土色的扬尘
+  for (let i = 0; i < 10; i++) {   // 贴地往四周翻滚
+    const an = i * 2.4 + o.t0, r = (2.5 + a * (o.sea ? 6 : 4.5) * (.7 + (i * 37 % 10) / 25)) * k;
+    v3fSpark(sm, C, v3fP(o.x + Math.cos(an) * r, o.y + Math.sin(an) * r, o.z + .5 + a * (.4 + (i % 4) * .25) * k), (3 + a * 3.2) * k, [c[0], c[1], c[2], .55 * fade]);
+  }
+  for (let i = 0; i < 6; i++) { const u = i / 5, h = Math.min(1, a / .8) * 40 * u * k; v3fSpark(sm, C, v3fP(o.x + a * 1.2 * u, o.y - a * .6 * u, o.z + 2 + h), (2 + u * 2.5 + a * 1.5) * k, [.92, .92, .9, .45 * fade * (1 - u * .5)]); }   // 往上的白烟柱（出筒方向）
 }
