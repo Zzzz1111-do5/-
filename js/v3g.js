@@ -8,15 +8,26 @@
 const V3G = { def: {}, M: {}, want: new Set(), fail: new Set(), tried: false, ok: false, pr: null, a: {}, u: {}, inst: new Map(), ib: null, ext: null, u32: null, aniso: null, der: false, upq: [] };
 V3G.add = (key, meta, b64) => { V3G.def[key] = { meta, b64 }; };
 
-function v3gLoad(key) {
+// 下载排队：同时最多两个（一个模型几兆到几十兆，一起下会和字体、界面抢带宽，脚本解析也会挤在同一时刻卡一下）；画面上马上要用的插到队首，预加载的排在后面
+function v3gLoad(key, pre) {
   if (typeof document === 'undefined') { V3G.fail.add(key); return; }
-  const s = document.createElement('script'), v = typeof window === 'object' && window.DS_BUILD ? '?v=' + encodeURIComponent(window.DS_BUILD) : '';
-  s.src = 'js/mdl/' + key + '.js' + v; s.async = true;
-  s.onerror = () => { V3G.fail.add(key); console.warn('3D 模型没加载上：' + key); };
-  document.head.appendChild(s);
+  const Q = V3G.lq || (V3G.lq = []);
+  if (pre) Q.push(key); else Q.unshift(key);
+  v3gPump();
+}
+function v3gPump() {
+  const Q = V3G.lq || [];
+  while ((V3G.ln || 0) < 2 && Q.length) {
+    const key = Q.shift(), s = document.createElement('script'), v = typeof window === 'object' && window.DS_BUILD ? '?v=' + encodeURIComponent(window.DS_BUILD) : '';
+    V3G.ln = (V3G.ln || 0) + 1;
+    s.src = 'js/mdl/' + key + '.js' + v; s.async = true;
+    s.onload = () => { V3G.ln--; v3gPump(); };
+    s.onerror = () => { V3G.ln--; V3G.fail.add(key); console.warn('3D 模型没加载上：' + key); v3gPump(); };
+    document.head.appendChild(s);
+  }
 }
 // 预先加载（开局时把这一局会用到的模型先下载、解码，免得单位出现时才开始加载）
-function v3gPreload(keys) { for (const k of keys) if (k && !V3G.M[k] && !V3G.def[k] && !V3G.want.has(k) && !V3G.fail.has(k)) { V3G.want.add(k); v3gLoad(k); } }
+function v3gPreload(keys) { for (const k of keys) if (k && !V3G.M[k] && !V3G.def[k] && !V3G.want.has(k) && !V3G.fail.has(k)) { V3G.want.add(k); v3gLoad(k, true); } }
 
 // 模型：就绪返回它，否则开始加载 / 解码、先返回 null
 function v3gModel(key) {
@@ -772,7 +783,8 @@ function v3gBays(cf, m, VB, IB) {
   return { VB: VB2, IB: IB2, it };
 }
 // 开局就把一定会用到的模型先下载、解码（士兵、双方坦克），别的等单位第一次出现时再加载
-if (typeof HOOK === 'object' && HOOK.newGame) HOOK.newGame.push(() => v3gPreload(['army', 'ztz96', 'm1a1', 'zbd97', 'm2a3']));
+// 主菜单背后的那一局（还没开始玩）：等页面先显示出来、空闲几秒再下，不和首屏抢带宽
+if (typeof HOOK === 'object' && HOOK.newGame) HOOK.newGame.push(() => { const L = ['army', 'ztz96', 'm1a1', 'zbd97', 'm2a3']; if (typeof MENU === 'object' && !MENU.game && typeof setTimeout === 'function') setTimeout(() => v3gPreload(L), 4000); else v3gPreload(L); });
 // 士兵：用户给的士兵模型原样摆放（T 字站姿，不改模型）；卧倒、匍匐、阵亡时整个放平（脸朝下），别的姿势都站着。k 比例（V3_MAN 一类），side 0 我 / 1 敌 / 2 遗体
 const v3gLying = p => p === 'pr' || p === 'dead' || /^c\d$/.test(p) || (p[0] === 'L' && +p.slice(1) >= 12);   // 匍匐是 c0–c3（爬梯 cl0–cl7 不躺）
 // —— 士兵摆姿势：用户给的士兵模型是 T 字站姿（双臂平伸），原样摆出来一排排「T」——加载后在 CPU 上按程序骨架蒙皮，摆出持枪站立、瞄准、走 / 跑各 8 帧、跪姿、卧姿、

@@ -58,8 +58,8 @@ void main() {
     vec4 R = n.z > .5 ? uImpT[vi] : uImpF[vi], X = uImpX[vi];
     q = n.z > .5 ? vec3(p.xy * iB.x * X.y, X.x * iB.y) : vec3(p.xy * iB.x, p.z * iB.y);
     tt = R.xy + t * R.zw; k = n.z > .5 ? 2. : 1.;
-    vec2 dh = iA.xy - uEye.xy;
-    if (dot(dh, dh) < uNear * uNear) { gl_Position = vec4(2., 2., 2., 1.); return; }   // 这一棵在近处画完整模型
+    vec3 dh = vec3(iA.xy - uEye.xy, iA.z - uEye.z);
+    if (dot(dh, dh) < uNear * uNear) { gl_Position = vec4(2., 2., 2., 1.); return; }   // 这一棵在近处画完整模型（与 v3pPrep 挑近处的树同样按三维距离，两边接得上）
   } else {
     q = p * iB.xyz;
     if (uSway > 0.) { float h = max(q.z, 0.), s = uSway * h * h * .0008 * (sin(uT * 1.6 + iB.w * 40.) + .35 * sin(uT * 3.3 + iB.w * 17.)); q.x += s; q.y += s * .6; }
@@ -461,7 +461,19 @@ function v3pStatic(vOf) {
     V3P.rep.add(i);
   });
   for (const c of V3P.B || []) gl.deleteBuffer(c.b);
-  V3P.B = [...groups].map(([v, d]) => { const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(d), gl.STATIC_DRAW); return { v, b, n: d.length / 8 }; });
+  // 按变体 + 800 米见方的块分组（各块带包围盒）：画的时候远处、雾外的整块跳过——原来全图的楼一次画完，大地图上远看一帧两百多万个三角形
+  V3P.B = [];
+  for (const [v, d] of groups) {
+    const by = new Map();
+    for (let i = 0; i < d.length; i += 8) {
+      const x = d[i], y = -d[i + 1], k = Math.floor(x / 800) + ',' + Math.floor(y / 800);
+      let c = by.get(k);
+      if (!c) by.set(k, c = { d: [], bb: [x, y, x, y] });
+      for (let j = 0; j < 8; j++) c.d.push(d[i + j]);
+      c.bb[0] = Math.min(c.bb[0], x - 40); c.bb[1] = Math.min(c.bb[1], y - 40); c.bb[2] = Math.max(c.bb[2], x + 40); c.bb[3] = Math.max(c.bb[3], y + 40);
+    }
+    for (const c of by.values()) { const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(c.d), gl.STATIC_DRAW); V3P.B.push({ v, b, n: c.d.length / 8, bb: c.bb }); }
+  }
   V3P.asig = typeof afb3dSig === 'function' ? afb3dSig() : '';
 }
 
@@ -525,8 +537,8 @@ function v3pPrep(C) {
   for (let by = b0y; by <= b1y; by++) for (let bx = b0x; bx <= b1x; bx++) {
     const bi = by * PL.bx + bx;
     for (let j = PL.cnt[bi]; j < PL.cnt[bi + 1]; j++) {
-      const i = PL.idx[j], dx = PL.x[i] - ex, dy = PL.y[i] - ey, rr = rN[PL.k[i]];
-      if (dx * dx + dy * dy > rr * rr) continue;
+      const i = PL.idx[j], dx = PL.x[i] - ex, dy = PL.y[i] - ey, dz = C.E[2] - PL.z[i], rr = rN[PL.k[i]];
+      if (dx * dx + dy * dy + dz * dz > rr * rr) continue;   // 按三维距离：镜头拉高了，脚下的树也是远处的树（原来只看水平距离，高处俯瞰时整片林子都按近处的精细模型画）
       let a = per.get(PL.v[i]);
       if (!a) per.set(PL.v[i], a = { d: new Float32Array(8 * 256), n: 0, b: gl.createBuffer() });
       if ((a.n + 1) * 8 > a.d.length) { const d2 = new Float32Array(a.d.length * 2); d2.set(a.d); a.d = d2; }
@@ -557,8 +569,12 @@ function v3pDraw(C, LM) {
   gl.uniform1f(U.uMode, LM ? 3 : mx ? 0 : 1); gl.uniform3f(U.uBody, .015, .085, .045); gl.uniform3f(U.uGlow, .12, .68, .36);
   gl.uniform1f(U.uImp, 0); gl.uniform1f(U.uSway, 0);
   if (typeof v3ShUni === 'function') v3ShUni(gl, U, !LM);
-  // 楼房、机场设施
-  for (const c of V3P.B || []) { const VV = V3P.VL[c.v]; v3pDrawVar(VV.V, VV.pk, c.b, c.n, undefined, VV); }
+  // 楼房、机场设施：整块在雾外、离镜头（连同镜头离地的高度）七公里以外的不画（远处的城镇由地面贴图表现）；阴影这一遍只画阴影范围里的块
+  { const sb = LM && typeof V3SH === 'object' && V3SH.box, ez = Math.max(0, C.E[2] - 60), bR = Math.min(fe, 7000 * clamp(typeof v3RD === 'function' ? v3RD() : 1, .6, 2));
+    for (const c of V3P.B || []) {
+      if (c.bb && (sb ? c.bb[2] < sb[0] || c.bb[0] > sb[2] || c.bb[3] < sb[1] || c.bb[1] > sb[3] : Math.hypot(Math.max(c.bb[0] - ex, 0, ex - c.bb[2]), Math.max(c.bb[1] - ey, 0, ey - c.bb[3]), ez) > bR)) continue;
+      const VV = V3P.VL[c.v]; v3pDrawVar(VV.V, VV.pk, c.b, c.n, undefined, VV);
+    } }
   // 近处的树、灌木、岩石
   for (const [v, a] of V3P.per) {
     if (!a.n) continue;
