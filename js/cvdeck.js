@@ -12,7 +12,7 @@
 // 偏流板：c.jl[k] 弹射器 k 上一次弹射离舰的时刻（放下的动画）
 // hook：挂上弹射杆到弹射的秒数（舵面检查、推到最大推力、点加力：小火 → 全加力，见 v3det.js v3dDeckEng）；ab：弹射前几秒点加力
 // arm：出动前在机位上挂弹的秒数（与飞行员登机同时，挂弹车把弹送进弹舱）；armT：在偏流板后停稳解除保险的秒数；tow、towL：牵引车把飞机拖出机位的速度（米/秒）与距离（米）
-const CVD = { taxi: 16, rev: 6, run: 9, climb: 1.5, cnp: .8, eng: 1.1, hook: 4, ab: 2.1, acc: 35, elv: .32, pivot: 1.25, arm: 12, armT: 5.5, tow: 3, towL: 20 };
+const CVD = { taxi: 16, rev: 6, run: 9, climb: 1.5, cnp: .8, eng: 1.1, hook: 4, ab: 2.1, acc: 35, elv: .32, pivot: 1.25, arm: 12, armT: 5.5, tow: 3, towL: 20, towP: 4.5 };   // towP：玩家坐着的那架一路拖到弹射器后（米/秒，快一点免得干等）
 const cvCat = k => CVG.cats[clamp(k | 0, 0, CVG.cats.length - 1)];
 const cvCatPt = (k, s) => { const C = cvCat(k); return [C.u + Math.cos(C.a) * s, C.v + Math.sin(C.a) * s]; };
 // 右舷甲板边线（不算升降机缺口）：舷边通道口的位置
@@ -221,7 +221,7 @@ function cvLaunchStep(p, c, dt) {
       const path = cvRouteOut(p, p.cat), cross = path.some(q => cvInLand(q[0], q[1], 4)) || cvInLand(p.lu, p.lv, 4);
       if (busy || (cross && others.some(o => o.phase === 'final' || (o.phase === 'trap' && !o.clr)))) break;
       p.path = path; p.dk = 'taxi'; p.dkT = 0;
-      if (p.tw) { p.tow = 1; p.tu0 = p.lu; p.tv0 = p.lv; } p.tw = 0;   // 从机位出发的：牵引车先把飞机慢慢拖出机位
+      if (p.tw || p.fpBrd) { p.tow = 1; p.tu0 = p.lu; p.tv0 = p.lv; } p.tw = 0;   // 从机位出发的：牵引车先把飞机慢慢拖出机位；玩家坐着的（v3pilot.js 登机）一路拖到偏流板后
       if (p.slot != null) { const w = airWing(p); if (w && w.dk === p.slot) w.dk = null; p.slot = null; }
       break;
     }
@@ -229,8 +229,8 @@ function cvLaunchStep(p, c, dt) {
       p.fold = Math.max(0, (p.fold ?? 1) - dt / 2.4);
       if (p.el != null && Math.hypot(p.lu - CVG.el[p.el].u, p.lv - CVG.el[p.el].v) > 12) { const E = c.el[p.el]; if (E && E.w === p.id) E.w = null; p.el = null; }
       if (p.twt > 0) { p.twt -= dt; break; }   // 牵引车刚脱钩：等它拐开让出去路
-      if (cvFollow(p, dt, p.tow ? CVD.tow / CVD.taxi : 1)) { p.dk = 'hold'; p.dkT = 0; p.tow = 0; }
-      if (p.tow && Math.hypot(p.lu - p.tu0, p.lv - p.tv0) > CVD.towL) { p.tow = 0; p.twt = 2; }   // 拖出机位了：牵引车脱钩拐开，飞机等两秒再自己滑向弹射器
+      if (cvFollow(p, dt, p.tow ? (p.fpBrd ? CVD.towP : CVD.tow) / CVD.taxi : 1)) { p.dk = 'hold'; p.dkT = 0; p.tow = 0; }
+      if (p.tow && !p.fpBrd && Math.hypot(p.lu - p.tu0, p.lv - p.tv0) > CVD.towL) { p.tow = 0; p.twt = 2; }   // 拖出机位了：牵引车脱钩拐开，飞机等两秒再自己滑向弹射器
       break;
     case 'hold': {   // 弹射器空了（前一架已离舰、偏流板放下）就滑上去；带武器的先停稳解除保险（v3det.js 画挂弹组）
       p.fold = Math.max(0, (p.fold ?? 0) - dt / 2.4);

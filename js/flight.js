@@ -50,7 +50,7 @@ const flKey = p => FL_KEY[typeof airMdlKey === 'function' ? airMdlKey(p.kind, p.
 // 接手：按游戏里这架飞机现在的位置、航向、速度、坡度建状态（配平迎角：升力等于重力）
 function flInit(p) {
   const A = FL_AC[flKey(p)], z = typeof v3AirZ === 'function' ? v3AirZ(p) : 200, h = p.heading || 0, psi = Math.atan2(Math.cos(h), -Math.sin(h));
-  const Va = clamp((p.spd || 250) * (typeof airK === 'function' ? airK(p) : 1), 160, 340), qb = .5 * flRho(z) * Va * Va, at = clamp(A.m * FL_G / (qb * A.S) / A.CLa, 0, .2);
+  const Va = clamp((p.spd || 250) * (typeof airK === 'function' ? airK(p) : 1), 70, 340), qb = .5 * flRho(z) * Va * Va, at = clamp(A.m * FL_G / (qb * A.S) / A.CLa, 0, .2);
   const cap = (typeof airReal === 'function' && airReal(p.kind, p.v).fuel) || 8000;   // 机内燃油（carrier.js AIR_REAL）；接手时按已经飞了一段、剩七成五算
   const phi = clamp(p.bank || 0, -1, 1), q = flQe(phi, at, psi), R = flRot(q);
   const vb = [Va * Math.cos(at), 0, Va * Math.sin(at)];   // 机体系：迎角 at 时气流从下前方来
