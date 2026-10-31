@@ -11,6 +11,7 @@ function updateTeams(dt) {
   for (const q of S.teams) {
     if (!q.men.length) continue;
     if (S.t - q.hitT > 2) q.sup = Math.max(0, q.sup - (q.order.t === 'hold' ? 16 : 11) * dt);
+    if (q.ride) continue;   // 乘车（vehicles.js vehRiders 带着走）：不开火、不自己走、不触雷（车自己压雷）
     if (S.t - (q.trT ?? -9) > 1) { q.trT = S.t; q.inTrench = S.trench.some(t => polyDist(q.x, q.y, t.pts) < 10); }
     q.cd -= dt;
     mineCheck(q, dt);

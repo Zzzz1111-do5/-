@@ -46,13 +46,14 @@ function navyStep(dt) {
   for (const e of S.eships) {
     if (e.dead) continue;
     nvMove(e, dt);
-    // 我方发现：驱逐舰 / 护航舰雷达 720、航母 600、空警-600 900、视野
+    // 我方发现（现实距离）：驱逐舰 / 护航舰对海雷达约 25 公里（雷达地平线）、航母约 20 公里、空警-600 对海约 300 公里、
+    //   无侦-7 合成孔径雷达约 150 公里、战斗机雷达对海模式按它对空的探测距离、其余飞机的光电吊舱约 30 公里；视野
     const sees = (x, y, r) => dist(x, y, e.x, e.y) < r;
     let det = inVision(e.x, e.y);
-    if (!det && S.dd && S.dd.state !== 'sunk' && sees(S.dd.x, S.dd.y, 720)) det = true;
-    if (!det) for (const s of S.ships) if (s.kind === 'dd' && alive(s) && sees(s.x, s.y, 720)) { det = true; break; }
-    if (!det && typeof cvAll === 'function') det = cvAll().some(c => c.hp > 0 && sees(c.x, c.y, 600));
-    if (!det) det = (S.planes || []).some(p => !p.dead && p.alt > .3 && (p.kind === 'recon' ? sees(p.x, p.y, (p.v || 'kj600') === 'kj600' ? 900 : 420) : sees(p.x, p.y, p.kind === 'fighter' ? (p.radar || 520) : 260)));
+    if (!det && S.dd && S.dd.state !== 'sunk' && sees(S.dd.x, S.dd.y, 25000)) det = true;
+    if (!det) for (const s of S.ships) if (s.kind === 'dd' && alive(s) && sees(s.x, s.y, 25000)) { det = true; break; }
+    if (!det && typeof cvAll === 'function') det = cvAll().some(c => c.hp > 0 && sees(c.x, c.y, 20000));
+    if (!det) det = (S.planes || []).some(p => !p.dead && p.alt > .3 && (p.kind === 'recon' ? sees(p.x, p.y, (p.v || 'kj600') === 'kj600' ? 300000 : 150000) : sees(p.x, p.y, p.kind === 'fighter' ? Math.max(airRdrM(p.kind, p.v), 30000) : 30000)));
     if (det) { if (e.det < S.t - 30 && !N.said['d' + e.id]) { N.said['d' + e.id] = 1; log(`发现敌${e.nm}`, 'warn', null, 0, e); } e.det = S.t; e.kx = e.x; e.ky = e.y; }
     else if (nvEsm(e)) {   // 电子侦察：敌舰的搜索雷达一直开着，照到我方舰艇时，舰上电子侦察在更远处就截获了信号，几条舰交叉测向定出大致位置
       if (!N.said['e' + e.id]) { N.said['e' + e.id] = 1; log(`电子侦察截获敌${e.nm}的雷达信号，交叉测向定位`, 'warn', null, 0, e); }

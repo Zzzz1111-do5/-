@@ -44,7 +44,7 @@ function cfOptions(c, near) {
     }
     if (bp) O.push({ a: 'cas', eta: bd / 150 + 1, p: bp });
   }
-  if (near >= 70 && ddOk && dd.state === 'ready' && dist(dd.x, dd.y, c.x, c.y) < 990) {
+  if (near >= 70 && ddOk && dd.state === 'ready' && dist(dd.x, dd.y, c.x, c.y) < DD_R * .99) {
     const q = cmdOn() ? S.cmd.p.fm.filter(m => m.n > 0).length : 0;
     O.push({ a: cmdCtl(dd) ? 'naval' : 'ask', eta: Math.max(0, dd.cool) + 2.2 + q * 5 + (cmdCtl(dd) ? 0 : 8) });
   }

@@ -216,7 +216,10 @@ function regOrder(G, sl, t0) {
   for (const s of sl) {
     const t = s.t || t0;
     if (s.k === 'u') {
-      const u = s.m, ts = teamsOf(u).filter(q => q.men.length && !q.ride && !q.rc);   // 借出去当侦察分队的组不管（recon.js）
+      const u = s.m;
+      u.slX = s.x; u.slY = s.y;   // 排的槽位：乘车机动按它开车（mount.js）
+      if (u.mt && (u.mt.st === 'pick' || u.mt.st === 'ride')) continue;   // 正在上车 / 乘车：由乘车机动指挥（mount.js）
+      const ts = teamsOf(u).filter(q => q.men.length && !q.ride && !q.rc);   // 借出去当侦察分队的组不管（recon.js）
       if (!ts.length) continue;
       const idle = t !== 'hold' && S.t - (u.bgOT ?? -99) > 8 && ts.some(q => (q.order.t === 'hold' || q.order.x == null) && q.sup < 60 && dist(q.x, q.y, s.x, s.y) > 40);
       if (u.bgX != null && dist(u.bgX, u.bgY, s.x, s.y) < BG.reorder && u.bgT2 === t && !idle) continue;
@@ -225,14 +228,14 @@ function regOrder(G, sl, t0) {
       ts.forEach((q, i) => { if (t === 'hold' && dist(q.x, q.y, fs[i][0], fs[i][1]) < 6) return; aiGo(q, fs[i][0], fs[i][1], t === 'hold' ? 'move' : t, fx, fy); q.px = null; });
     } else {
       const v = s.m;
-      if (v.rc || v.ai === 'repair' || v.ai === 'resup' || vehAmmoF(v) < .25 || (v.fuel ?? 1) < .2 || v.hp < v.maxhp * .35) continue;   // 侦察分队（recon.js）、该补给 / 抢修的车交给各自的控制
+      if (v.mtU != null || v.rc || v.ai === 'repair' || v.ai === 'resup' || vehAmmoF(v) < .25 || (v.fuel ?? 1) < .2 || v.hp < v.maxhp * .35) continue;   // 运兵中（mount.js）、侦察分队（recon.js）、该补给 / 抢修的车交给各自的控制
       // 队形整体移动：锚点在走时，目标放在槽位前方一小段、车速压到锚点的速度（落后就稍快追上，超前就放慢），整排匀速前进
       let x = s.x, y = s.y, cap = null;
       if (G.vel > 1.5 && t !== 'hold' && G.st !== 'withdraw') {   // 后撤时锚点往背后跳，不往正面（敌人方向）超前
         const fx2 = Math.cos(G.face), fy2 = Math.sin(G.face), lead = Math.min(40, G.vel * 3), ahead = (v.x - s.x) * fx2 + (v.y - s.y) * fy2, dS = dist(v.x, v.y, s.x, s.y);
         [x, y] = bgSnap(G, s.x + fx2 * lead, s.y + fy2 * lead, G.side === 'e' ? 'vehe' : 'veh');
         if (dS < 45) cap = ahead > 4 ? G.vel * .7 : ahead < -12 ? G.vel * 1.4 : G.vel * 1.05;
-      }
+      } else if ((t === 'hold' || G.st === 'deploy') && G.st !== 'withdraw' && typeof owSpot === 'function') [x, y] = owSpot(G, v, x, y);   // 坚守、展开：在槽位附近占一处看得出去的射击阵地（overwatch.js）
       v.cmd = { x, y, t: t === 'amove' && v.type !== 'spg' && !hqAA(v) ? 'amove' : 'move', face: G.face, until: S.t + 4, ai: 'bg', cap: cap && Math.max(3, cap) };
     }
   }
@@ -287,8 +290,9 @@ function regThink(G) {
     case 'move': {   // 行军：沿寻路场开向任务位置；途中接敌按任务处置
       mode = 'march';
       const sl = regSlots(G, mode), lag = bgLag(G, sl);
+      G.goD = Math.round(dist(G.ax, G.ay, tx, ty)); G.goT = S.t;   // 离任务位置多远：远了步兵乘车开进（mount.js）
       if (near.n >= 4) { regFace(G, near.x, near.y); regSet(G, atk || r >= D.press * 1.3 ? 'deploy' : 'hold', 'contact'); break; }
-      if (lag < BG.lag && bgAdvance(G, tx, ty, BG.pace)) { G.face = tf; regSet(G, atk ? 'deploy' : T.v === 'reserve' || T.v === 'follow' ? 'reserve' : 'hold'); }
+      if (lag < BG.lag && bgAdvance(G, tx, ty, BG.pace * (G.mtd && typeof MT === 'object' ? MT.pace : 1))) { G.face = tf; regSet(G, atk ? 'deploy' : T.v === 'reserve' || T.v === 'follow' ? 'reserve' : 'hold'); }   // 步兵大多在车上（mount.js）：按车速开进
       break;
     }
     case 'deploy': {   // 攻击出发位置：展开成战斗队形，火力准备，等团长统一发起

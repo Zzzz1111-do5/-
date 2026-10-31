@@ -25,7 +25,7 @@ function saSup(side, x, y) {
   let s = 0;
   if (side === 'p') {
     const dd = S.dd;
-    if (dd && dd.state !== 'sunk' && isFinite(dd.x) && dist(dd.x, dd.y, x, y) < 980) s += .45;
+    if (dd && dd.state !== 'sunk' && isFinite(dd.x) && dist(dd.x, dd.y, x, y) < DD_R * .98) s += .45;
     if (typeof vlsCan === 'function' && vlsCan('lacm', x, y)) s += .25;
     if ((S.planes || []).some(p => !p.dead && (p.kind === 'cas' || p.kind === 'strike') && (p.phase === 'out' || p.phase === 'loiter'))) s += .3;
   } else {
