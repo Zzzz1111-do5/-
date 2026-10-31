@@ -248,6 +248,8 @@ function moveTeam(q, dt, mul) {
   const rx = q.x + (tx - q.x) / l * Math.min(sp, l), ry = q.y + (ty - q.y) / l * Math.min(sp, l);
   let px = 0, py = 0;
   for (const o2 of S.teams) if (o2 !== q && o2.side === q.side) {
+    const ex = rx - o2.x, ey = ry - o2.y;
+    if (ex >= 9 || ex <= -9 || ey >= 9 || ey <= -9) continue;   // 每步每个走动的小组都扫一遍本方全体：坐标差超过 9 的直接跳过
     const d2 = dist(rx, ry, o2.x, o2.y);
     if (d2 < 9 && d2 > .01) { px += (rx - o2.x) / d2 * (9 - d2) * .3; py += (ry - o2.y) / d2 * (9 - d2) * .3; }
   }

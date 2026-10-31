@@ -45,9 +45,23 @@ function visPrep() {
   for (let i = 0; i < GW * GH; i++) { const t = TER.type[i], g = isWater(t) ? 0 : TER.elev[i] * ELEV_H; VIS_G[i] = g; VIS_B[i] = g + TP[t].bl; }
 }
 const VIS_ST = [1];   // 射线步长 1, 1.7, 2.4 …（格），与逐次累加 .7 得到的值完全相同；视距更远时再往后补
+// 每个视野源照亮的格子只取决于它的位置、视高、视距、地形与视距内的烟幕：阵地里不动的守军、工事、停着的车每 0.25 秒算出来都一样，
+//   缓存起来直接用（键是精确坐标，烟幕按视距内每团的位置与当前半径比对，结果与重算逐格相同）；地图换了清空，用得少的定期淘汰
+const VISC = { m: new Map(), ter: null, n: 0, mark: null, sid: 0 };
+function visSmoke(x, y, r) {
+  let sig = '';
+  for (const s of S.smoke || []) {
+    if (!(s.until > S.t)) continue;
+    const R = s.r * Math.min(1, (s.until - S.t) / 6);
+    if (Math.abs(s.x - x) < r + R + 15 && Math.abs(s.y - y) < r + R + 15) sig += s.x + ',' + s.y + ',' + R + ';';   // 比 smokeMask 圈的格子再宽一格
+  }
+  return sig;
+}
 function castVision(out, sources) {
   out.fill(0);
   visPrep();
+  if (VISC.ter !== VIS_KEY.ter || VISC.gw !== GW || VISC.gh !== GH) { VISC.m.clear(); VISC.ter = VIS_KEY.ter; VISC.gw = GW; VISC.gh = GH; VISC.mark = new Uint32Array(GW * GH); VISC.sid = 0; }
+  const call = ++VISC.n, mark = VISC.mark;
   const done = [];
   for (const s of sources) {
     const h = s.h || .35;
@@ -55,9 +69,13 @@ function castVision(out, sources) {
     for (const o of done) if (o.h === h && o.r >= s.r && Math.abs(o.x - s.x) < 6 && Math.abs(o.y - s.y) < 6) { dup = true; break; }
     if (dup) continue;
     done.push({ x: s.x, y: s.y, r: s.r, h });
+    const key = s.x + ',' + s.y + ',' + s.r + ',' + h, sm = visSmoke(s.x, s.y, s.r), c = VISC.m.get(key);
+    if (c && c.sm === sm) { const L = c.cells; for (let k = 0; k < L.length; k++) out[L[k]] = 1; c.n = call; continue; }
+    const cells = [], sid = ++VISC.sid;
+    const lit = i => { out[i] = 1; if (mark[i] !== sid) { mark[i] = sid; cells.push(i); } };
     const gx0 = s.x / CELL, gy0 = s.y / CELL, i0 = ci(s.x, s.y), rc = s.r / CELL;
     const eye = VIS_G[i0] + h;
-    out[i0] = 1;
+    lit(i0);
     const n = Math.ceil(rc * 7.5), D = visDirs(n);
     while (VIS_ST[VIS_ST.length - 1] + .7 <= rc) VIS_ST.push(VIS_ST[VIS_ST.length - 1] + .7);
     let ns = 0;
@@ -69,13 +87,15 @@ function castVision(out, sources) {
         const st = VIS_ST[j], fx = gx0 + dx * st, fy = gy0 + dy * st;
         if (fx < 0 || fy < 0 || fx >= GW || fy >= GH) break;
         const i = (fy | 0) * GW + (fx | 0);
-        if ((VIS_G[i] - eye) / st >= maxS - .02) out[i] = 1;
+        if ((VIS_G[i] - eye) / st >= maxS - .02) lit(i);
         const top = (VIS_B[i] - eye) / st;
         if (top > maxS) maxS = top;
         if (SMOKE[i]) break;
       }
     }
+    VISC.m.set(key, { cells: Int32Array.from(cells), sm, n: call });
   }
+  if (VISC.m.size > 1200) for (const [k, c] of VISC.m) if (call - c.n > 8) VISC.m.delete(k);   // 两秒没用上的（走开了的单位留下的）淘汰
 }
 
 function addCrater(x, y, r) {
