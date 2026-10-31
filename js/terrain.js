@@ -307,7 +307,12 @@ void main() {
 #if PASS != 1
   c *= mix(1., .78, smoothstep(0., 160., outD));
   // 视野外：去饱和、压暗、偏冷
-  float vis = texture2D(uFog, uv0).r, lum = dot(c, vec3(.3, .59, .11));
+  // 视野贴图每格 10 米：直接采样（双线性）边缘是一格格的台阶，按 1.4 格的 3 × 3 平均成柔和的圆边
+  vec2 fd = 1.4 / GRID;
+  float vis = 0.;
+  for (int fi = -1; fi <= 1; fi++) for (int fj = -1; fj <= 1; fj++) vis += texture2D(uFog, uv0 + vec2(float(fi), float(fj)) * fd).r * (fi == 0 && fj == 0 ? 4. : fi == 0 || fj == 0 ? 2. : 1.);
+  vis /= 16.;
+  float lum = dot(c, vec3(.3, .59, .11));
   c = mix(mix(vec3(lum), c, .35) * vec3(.84, .9, .98) * .62, c, vis);
   c += vec3(1., .95, .85) * uFlash * .18;
   gl_FragColor = vec4(c, 1.);
