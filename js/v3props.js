@@ -25,6 +25,8 @@ const V3P_PACKS = {
   industrial: { name: '办公楼', title: 'industrial building', author: 'spicybamer', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/industrial-building-770acf6b0da74af397f748d95141f8be' },
   flats1: { name: '公寓楼', title: 'Davison Street Flats 1 - Flat Roof', author: 'Charlie_Zane', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/davison-street-flats-1-flat-roof-0f461ea81f8541db8d6a5f5e35133588' },
   wh99: { name: '砖砌库房', title: 'Warehouses', author: '99.Miles', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/warehouses-e6e105d35b3f486292c42ffa52f363c0' },
+  lptrees: { name: '多面体树木（黑绿画面）', title: 'Low poly trees', author: 'Aditya Voxel', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/low-poly-trees-51cae4a194344e8bbfbd0a4cff205f76' },
+  lppine: { name: '多面体松树（黑绿画面）', title: 'Low Poly Pine', author: 'Afloat Above the World', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/low-poly-pine-107e3eab9dcb4e29a282c6709178752f' },
   cbridge: { name: '公路拱桥', title: 'Concrete Bridge (low poly)', author: 'Derfmode', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/concrete-bridge-low-poly-77d6c4481e6043889ea8cfe08c8fdcd2' },
   girder: { name: '公路桥（炸断后的桥墩）', title: 'Concrete Girder Beam Bridges/Tunnels [Free]', author: 'JoTrain The Aussie', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/concrete-girder-beam-bridgestunnels-free-1c5d6642796843c198b94124518b9f04' },
   pillbox: { name: '海滩地堡', title: 'WWII Pill Box - Saltney Quay, Flintshire, UK', author: 'al3xfoster', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/wwii-pill-box-saltney-quay-flintshire-uk-be8136976b294e1fb764b5b1cba7a72c' },
@@ -37,6 +39,10 @@ const V3P_PACKS = {
 };
 // 树种：针叶（山地、高处多）、阔叶（桦、落叶松）；h：模型原高（米，载入后按包围盒取）
 const V3P_CON = ['bg0', 'bg2', 'bg3', 'bg5', 'bg6', 'bg7', 'treeA', 'treeB', 'treeC'], V3P_BRD = ['bg1', 'bg4', 'treeD'];
+// 黑绿 / 数码画面用的多面体树：针叶（云杉、松）、阔叶（圆冠、白桦、橡、杨）；在写实画面里还是上面带贴图的树
+const V3P_CON_G = [['lptrees', 'ltc1'], ['lptrees', 'ltc2'], ['lptrees', 'ltc3'], ['lptrees', 'ltc4'], ['lppine', 'lppine']];
+const V3P_BRD_G = [['lptrees', 'ltb1'], ['lptrees', 'ltb2'], ['lptrees', 'ltb3'], ['lptrees', 'ltb4'], ['lptrees', 'ltb5'], ['lptrees', 'ltb6']];
+const v3pFacet = () => typeof v3Mx === 'function' && v3Mx();
 const V3P_BUSH = ['bush1', 'bush2', 'bush3', 'bush4'], V3P_ROCK = ['rock0', 'rock1', 'rock2', 'rock3', 'rock4', 'rock5', 'rock6', 'rock7', 'rock8'];
 const V3P_TINT = { bg1: [.56, .84, .44], bg4: [.6, .86, .42], treeD: [.55, .82, .42] };   // 模型里的桦树、落叶松是秋天的黄叶：压成夏天的绿
 const V3P_MUL = { girder: [.5, .5, .48], teeth: [.85, .85, .82] };   // 没贴图（纯白底色）的模型压成混凝土灰
@@ -207,13 +213,14 @@ const v3pVar = (pk, name) => { const P = v3pPack(pk); return P ? P.vars.get(name
 const V3P_TS = 30;   // 远处替身按 30 × 30 格（300 米）分块
 function v3pPlace() {
   const isle = !!TER.isle;   // 架空海岛（isle.js）：热带植被——沿海一带棕榈，雨林用阔叶树，针叶树只长在高山上
-  const need = ['treepack', 'cliffs', 'jph1', 'jph2', 'jph3', 'house', 'oldconc', 'hangar', 'atc', 'quonset', 'firestation', 'wh3', 'sawtooth', 'smallwh', 'industrial', 'flats1', 'wh99', 'girder', 'cbridge', 'pillbox', 'teeth', ...(isle ? ['palms'] : [])];
+  const fac = V3P.fac = v3pFacet();   // 黑绿 / 数码画面：树换成多面体的低多边形树（每个面一种颜色，棱线发光，不是贴图插片）
+  const need = ['treepack', 'cliffs', 'jph1', 'jph2', 'jph3', 'house', 'oldconc', 'hangar', 'atc', 'quonset', 'firestation', 'wh3', 'sawtooth', 'smallwh', 'industrial', 'flats1', 'wh99', 'girder', 'cbridge', 'pillbox', 'teeth', ...(isle ? ['palms'] : []), ...(fac ? ['lptrees', 'lppine'] : [])];
   const got = need.map(id => v3pPack(id) || (V3P.packs.get(id) || {}).st === -1);   // 先全部发起下载（同时载入），再看是不是都好了
   if (!got.every(Boolean)) return false;
   const tp = v3pPack('treepack');
   if (!tp) return false;
   const VL = [], vIdx = new Map(), vOf = (pk, nm) => { const k = pk + '/' + nm; if (vIdx.has(k)) return vIdx.get(k); const V = v3pVar(pk, nm); if (!V) return -1; vIdx.set(k, VL.length); VL.push({ pk, nm, V, h: V.bb[1][2] - V.bb[0][2], w: Math.max(V.bb[1][0] - V.bb[0][0], V.bb[1][1] - V.bb[0][1]), tint: pk === 'treepack' ? V3P_TINT[nm] || null : null, mul: V3P_MUL[pk] || null, veg: pk === 'treepack' && !/^rock/.test(nm) }); return VL.length - 1; };
-  const con = V3P_CON.map(n => vOf('treepack', n)).filter(i => i >= 0), brd = V3P_BRD.map(n => vOf('treepack', n)).filter(i => i >= 0);
+  const con = (fac ? V3P_CON_G.map(([pk, n]) => vOf(pk, n)) : V3P_CON.map(n => vOf('treepack', n))).filter(i => i >= 0), brd = (fac ? V3P_BRD_G.map(([pk, n]) => vOf(pk, n)) : V3P_BRD.map(n => vOf('treepack', n))).filter(i => i >= 0);
   const bush = V3P_BUSH.map(n => vOf('treepack', n)).filter(i => i >= 0), grass = vOf('treepack', 'bush0'), rock = V3P_ROCK.map(n => vOf('treepack', n)).filter(i => i >= 0);
   const cliff = ['cliffA', 'cliffB'].map(n => vOf('cliffs', n)).filter(i => i >= 0);
   const palm = isle ? ['palm1', 'palm2', 'palm3', 'palm4'].map(n => vOf('palms', n)).filter(i => i >= 0) : [], SD = isle && typeof terSdf === 'function' ? terSdf() : null;
@@ -569,7 +576,7 @@ function v3pPrep(C) {
   const gl = V3.gl;
   if (!V3P.tried) v3pInit(gl);
   if (!V3P.ok) return false;
-  const sig = TER.seed + ':' + (V3.sig || '') + ':' + W + 'x' + H;
+  const sig = TER.seed + ':' + (V3.sig || '') + ':' + W + 'x' + H + (v3pFacet() ? ':g' : '');   // 换画面风格时树跟着换（v3pFacet）
   if (V3P.sig !== sig) {
     const prev = !!V3P.P;
     if (v3pPlace()) { V3P.sig = sig; if (typeof v3Bld === 'function') v3Bld(); }   // 换好模型：房屋、树的旧几何体重建（跳过被替换的）
@@ -577,8 +584,8 @@ function v3pPrep(C) {
     if (!V3P.P) return false;
   } else if (typeof afb3dSig === 'function' && afb3dSig() !== V3P.asig) { v3pStatic((pk, nm) => V3P.VL.findIndex(o => o.pk === pk && o.nm === nm)); if (typeof v3Bld === 'function') v3Bld(); }   // 机场刚被发现 / 夺取
   // 近处的树、灌木、岩石：挑出镜头附近的，按变体分好、上传（两遍共用）
-  const PL = V3P.P, near = V3P_NEAR(), ex = C.E[0], ey = -C.E[1];
-  const fe = typeof v3FogE === 'function' ? v3FogE(C) : 3000, rN = [near, Math.min(near * 1.6, fe), Math.min(near * 1.8, fe)];   // 灌木、岩石小，比树稍远一点就不画
+  const PL = V3P.P, near0 = V3P_NEAR(), near = near0 * (V3P.fac ? .6 : 1), ex = C.E[0], ey = -C.E[1];   // 多面体树每棵面数是带贴图的树的好几倍：精细模型只画到六成远，再远画替身
+  const fe = typeof v3FogE === 'function' ? v3FogE(C) : 3000, rN = [near, Math.min(near0 * 1.6, fe), Math.min(near0 * 1.8, fe)];   // 灌木、岩石小，比树稍远一点就不画
   const R2 = Math.max(...rN), b0x = clamp(Math.floor((ex - R2) / PL.BS), 0, PL.bx - 1), b1x = clamp(Math.floor((ex + R2) / PL.BS), 0, PL.bx - 1), b0y = clamp(Math.floor((ey - R2) / PL.BS), 0, PL.by - 1), b1y = clamp(Math.floor((ey + R2) / PL.BS), 0, PL.by - 1);
   const per = V3P.per || (V3P.per = new Map());
   for (const a of per.values()) a.n = 0;

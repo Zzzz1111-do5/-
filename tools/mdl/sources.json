@@ -1255,5 +1255,65 @@
         0
       ]
     }
+  },
+  "lptrees": {
+    "mode": "tex",
+    "file": "lptrees.glb",
+    "name": "Low poly trees",
+    "author": "Aditya Voxel",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/low-poly-trees-51cae4a194344e8bbfbd0a4cff205f76",
+    "unit": 1,
+    "tex": 256,
+    "tris": 450,
+    "parts": {
+      "ltc1": [
+        0
+      ],
+      "ltc2": [
+        1
+      ],
+      "ltb1": [
+        2
+      ],
+      "ltb2": [
+        3
+      ],
+      "ltb3": [
+        4
+      ],
+      "ltb4": [
+        5
+      ],
+      "ltb5": [
+        6
+      ],
+      "ltb6": [
+        7
+      ],
+      "ltc3": [
+        10
+      ],
+      "ltc4": [
+        11
+      ]
+    }
+  },
+  "lppine": {
+    "mode": "tex",
+    "file": "lppine.glb",
+    "name": "Low Poly Pine",
+    "author": "Afloat Above the World",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/low-poly-pine-107e3eab9dcb4e29a282c6709178752f",
+    "unit": 1,
+    "tex": 256,
+    "tris": 450,
+    "parts": {
+      "lppine": [
+        0,
+        1
+      ]
+    }
   }
 }

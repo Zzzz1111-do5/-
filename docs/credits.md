@@ -85,6 +85,8 @@
 - 砖砌库房：This work is based on "Warehouses" (https://sketchfab.com/3d-models/warehouses-e6e105d35b3f486292c42ffa52f363c0) by 99.Miles licensed under CC BY 4.0
 - 公路桥（炸断后的桥墩）：This work is based on "Concrete Girder Beam Bridges/Tunnels [Free]" (https://sketchfab.com/3d-models/concrete-girder-beam-bridgestunnels-free-1c5d6642796843c198b94124518b9f04) by JoTrain The Aussie licensed under CC BY 4.0
 - 公路拱桥：This work is based on "Concrete Bridge (low poly)" (https://sketchfab.com/3d-models/concrete-bridge-low-poly-77d6c4481e6043889ea8cfe08c8fdcd2) by Derfmode licensed under CC BY 4.0
+- 多面体树木（黑绿画面）：This work is based on "Low poly trees" (https://sketchfab.com/3d-models/low-poly-trees-51cae4a194344e8bbfbd0a4cff205f76) by Aditya Voxel licensed under CC BY 4.0
+- 多面体松树（黑绿画面）：This work is based on "Low Poly Pine" (https://sketchfab.com/3d-models/low-poly-pine-107e3eab9dcb4e29a282c6709178752f) by Afloat Above the World licensed under CC BY 4.0
 - 海滩地堡：This work is based on "WWII Pill Box - Saltney Quay, Flintshire, UK" (https://sketchfab.com/3d-models/wwii-pill-box-saltney-quay-flintshire-uk-be8136976b294e1fb764b5b1cba7a72c) by al3xfoster licensed under CC BY 4.0
 - 龙牙：This work is based on "Dragon's Teeth Anti-Tank obstacle" (https://sketchfab.com/3d-models/dragons-teeth-anti-tank-obstacle-f7a6c987711d4ed2871707da47d2f3fb) by AdamKozakGrafika licensed under CC BY 4.0
 - 棕榈树：This work is based on "Palm Trees" (https://sketchfab.com/3d-models/palm-trees-55690379305145488e20afb05fc687e6) by YadroGames licensed under CC BY 4.0
