@@ -110,6 +110,7 @@ function frUpdate(dt) {
   if (!S || S.phase !== 'battle' || !frOn() || typeof TER === 'undefined' || !TER || !TER.coast) return;
   if (FRC.S !== S || FRC.T !== TER) frReset();
   if (!S.front || S.front.v !== 1 || S.front.nb !== FR_NX) frNew();
+  if (S.visT === .25 && FRC.nP >= 0 && FRC.nE >= 0) return;   // 这一步刚算过视野（logistics.js 每 0.25 秒）：重建顺延一步，两样别挤在同一步里
   if (FRC.nP < 0 || S.t >= FRC.nP) { FRC.nP = S.t + 1; frBuild('p'); }
   if (FRC.nE < 0 || S.t >= FRC.nE) { FRC.nE = S.t + (FRC.nE < 0 ? 1.5 : 1); frBuild('e'); }
 }

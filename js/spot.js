@@ -103,7 +103,7 @@ function spotScan(side) {
 }
 HOOK.step.push(dt => {
   if (!S || S.phase !== 'battle' || typeof VIS_G === 'undefined' || !VIS_G) return;
-  if (SPOT.S !== S) { SPOT.S = S; SPOT.p.clear(); SPOT.e.clear(); SPOT.k = 0; SPOT.t = 0; }
+  if (SPOT.S !== S) { SPOT.S = S; SPOT.p.clear(); SPOT.e.clear(); SPOT.k = 0; SPOT.t = .125; }   // 比视野（logistics.js S.visT，同样 0.25 秒一次）晚半个周期：两样都不便宜，错开免得挤在同一步里卡一下
   if ((SPOT.t -= dt) > 0) return;
   SPOT.t = .25;
   spotScan(SPOT.k++ & 1 ? 'e' : 'p');

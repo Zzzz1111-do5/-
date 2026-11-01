@@ -72,8 +72,8 @@ function visSmoke(x, y, r) {
   return sig;
 }
 let VIS_BUF = new Int32Array(4096);
-function castVision(out, sources) {
-  out.fill(0);
+function castVision(out, sources, keep) {   // keep：接着上一次往 out 里点亮（不先清空）
+  if (!keep) out.fill(0);
   visPrep();
   if (VISC.ter !== VIS_KEY.ter || VISC.gw !== GW || VISC.gh !== GH) { VISC.m.clear(); VISC.ter = VIS_KEY.ter; VISC.gw = GW; VISC.gh = GH; VISC.mark = new Uint32Array(GW * GH); VISC.sid = 0; }
   const call = ++VISC.n, mark = VISC.mark;

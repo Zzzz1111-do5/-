@@ -497,6 +497,15 @@ function v3ShInit(gl) {
     Object.assign(V3SH, { tex, fb, pr, a: gl.getAttribLocation(pr, 'p'), uM: gl.getUniformLocation(pr, 'uM'), ok: true });
   } catch (e) { V3SH.ok = false; console.warn('阴影不可用', e); }
 }
+// 画地形网格的一段：世界坐标 y0–y1（米，向南为正）之间的细网格行，加上行以外的远海平面与围边；y0 不给就整张画
+function v3TerRows(gl, y0, y1) {
+  const it = V3.it || gl.UNSIGNED_SHORT, n = V3.nRow;
+  if (!n || y0 == null) { gl.drawElements(gl.TRIANGLES, V3.n, it, 0); return; }
+  const q = V3.rq * 6, by = it === gl.UNSIGNED_INT ? 4 : 2;
+  const j0 = clamp(Math.floor(y0 / V3.rd), 0, V3.rj), j1 = clamp(Math.ceil(y1 / V3.rd), j0, V3.rj);
+  if (j1 > j0) gl.drawElements(gl.TRIANGLES, (j1 - j0) * q, it, j0 * q * by);
+  if (V3.n > n) gl.drawElements(gl.TRIANGLES, V3.n - n, it, n * by);
+}
 // 光源矩阵：以注视点为中心、边长 2R 的正交投影，从太阳方向看；中心按阴影图的像素对齐（镜头移动时阴影边不闪）
 function v3ShMatrix(C) {
   // 范围按镜头离地高度（贴地看时一百米左右，越高越大）；中心取画面中心的落地点，但离镜头脚下不超过范围的七成（平视时影子落在近处）
@@ -539,7 +548,10 @@ function v3ShPass(C) {
   if (!V3.coarse) {
     gl.bindBuffer(gl.ARRAY_BUFFER, V3.buf); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, V3.ib);
     gl.vertexAttribPointer(V3SH.a, 3, gl.FLOAT, false, 24, 0);
-    gl.drawElements(gl.TRIANGLES, V3.n, V3.it || gl.UNSIGNED_SHORT, 0);
+    // 只画阴影范围附近的行（原来每帧整张网格都画进阴影图，海岛七十多万个三角形）：往太阳那边（北）多画「最大高差 × 光线水平 / 竖直分量」，
+    //   范围外的山投进来的影子照样有；远海平面、围边照画
+    const L = v3Norm(V3_SUN), dh = Math.max(0, (V3.hHi ?? 0) - (V3.hLo ?? 0)), kN = Math.max(0, L[1] / Math.max(.05, L[2])), kS = Math.max(0, -L[1] / Math.max(.05, L[2])), b = V3SH.box;
+    v3TerRows(gl, b[1] - dh * kN - 2 * (V3.rd || CELL), b[3] + dh * kS + 2 * (V3.rd || CELL));
   }
   for (const c of V3.bch || []) {
     if (c.bb && (c.bb[2] < V3SH.box[0] || c.bb[0] > V3SH.box[2] || c.bb[3] < V3SH.box[1] || c.bb[1] > V3SH.box[3])) continue;
@@ -747,6 +759,8 @@ function v3Mesh() {
   V3.it = big ? gl.UNSIGNED_INT : gl.UNSIGNED_SHORT;
   gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, V3.ib); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, big ? new Uint32Array(idx) : new Uint16Array(idx), gl.STATIC_DRAW);
   V3.n = idx.length; V3.seed = TER.seed; V3.sig = typeof trxSig === 'function' ? trxSig() : null;
+  // 按行取一段画（v3TerRows）：细网格每行 (nx − 1) 个四边形、6 个索引，行在前，远海平面与围边在后
+  { let lo = 1e9, hi = -1e9; for (let k = 0; k < (jMax + 1) * nx; k++) { const h = hf[k]; if (h < lo) lo = h; if (h > hi) hi = h; } Object.assign(V3, { rq: nx - 1, rj: jMax, rd: d, nRow: jMax * (nx - 1) * 6, hLo: lo, hHi: hi }); }
   v3OceanBuild(d);
   v3Bld();
   // 底图（俯视贴图以外的远处）：小地图同款黑绿配色，每格一个像素

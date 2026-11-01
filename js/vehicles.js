@@ -47,6 +47,8 @@ const vehById = id => (S && S.veh && S.veh.find(v => v.id === id)) || null;
 // 寻路类：我方两栖坦克只在泅渡、或目标/所在格是水面时用 'amph'（海陆全图流场较贵），上岸后与其他车辆共用 'veh' 流场
 const vehCls = (v, x, y) => !VEH_SPEC[v.type].amph ? (v.side === 'e' ? 'vehe' : 'veh') : v.side === 'e' || v.swim || vehWater(v.x, v.y) || (x != null && vehWater(x, y)) ? 'amph' : 'veh';
 const vehSp = v => VEH_SPEC[v.type] || VEH_SPEC.tank;
+let VEH_LMAX = 0;
+const vehLmax = () => VEH_LMAX || (VEH_LMAX = Math.max(...Object.values(VEH_SPEC).map(s => s.len || 0)));   // 最长的车长（粗筛用的上界）
 // 型号：进攻方按解放军装备、守方按美军装备；沙盒按目录条目（同一车型可有改型）
 const VEH_MODEL = {
   p: { lt_tank: 'ZTQ-15 轻型坦克', tank: 'ZTZ-80 主战坦克', hv_tank: 'ZTZ-99A 主战坦克', amtank: 'ZTD-05 两栖突击车', apc: 'ZBD-05 两栖步兵战车', spg: 'PLZ-07 自行榴弹炮', td: 'PTL-02 突击炮',
@@ -275,10 +277,12 @@ function vehDrive(v, dt, mul) {
   if (S.t < (v.sideT ?? 0)) want += v.sideS * 1.1;   // 侧向让开（看门狗 / 前方有本方车辆）
   // 与本方车辆保持间距：前方有车就转向绕开、靠得太近就减速停车让行——车只沿车头方向走，不横着平移（以前侧推车身，看着像滑步）
   let slow = 1, park = null;
-  { const fx = Math.cos(v.heading), fy = Math.sin(v.heading);
+  { const fx = Math.cos(v.heading), fy = Math.sin(v.heading), reach = (sp.len + vehLmax()) * .5 + 18;   // m + 12 的上界：坐标差超过它的车一定在范围外，先粗筛掉（结果不变，省掉大半 hypot）
     for (const o2 of S.veh) {
       if (o2 === v || o2.dead || o2.side !== v.side || o2.lst) continue;
-      const dx = o2.x - v.x, dy = o2.y - v.y, d2 = Math.hypot(dx, dy), m = (sp.len + vehSp(o2).len) * .5 + 6;
+      const dx = o2.x - v.x, dy = o2.y - v.y;
+      if (dx > reach || dx < -reach || dy > reach || dy < -reach) continue;
+      const d2 = Math.hypot(dx, dy), m = (sp.len + vehSp(o2).len) * .5 + 6;
       if (d2 > m + 12 || d2 < .01) continue;
       const along = (dx * fx + dy * fy) / d2, lat = (dy * fx - dx * fy) / d2;
       if (along < .25) continue;   // 在侧后方：由对方让
@@ -426,8 +430,9 @@ function vehTerrain(v, dt) {
 const vehSees = (v, x, y, d, o) => d < 45 || (v.side === 'p' ? PV : EV)[ci(x, y)] === 1 || (!!o && S.t - ((v.side === 'p' ? o.dlP : o.dlE) ?? -99) < VEH_DL);
 const VEH_DL = 4;
 // 每次算完视野（logistics.js updateVision）：记下对方哪些车此刻被看见了（数据链的目标记忆）
-function vehDlMark() {
-  for (const o of S.veh || []) if (!o.dead) { if (o.side === 'e' && PV[ci(o.x, o.y)] === 1) o.dlP = S.t; else if (o.side === 'p' && EV[ci(o.x, o.y)] === 1) o.dlE = S.t; }
+function vehDlMark(part) {   // part：'a' 只看攻方视野、'b' 只看守方视野（视野分两步算，logistics.js updateVision），不给 = 两边
+  const p = part !== 'b', e = part !== 'a';
+  for (const o of S.veh || []) if (!o.dead) { if (o.side === 'e') { if (p && PV[ci(o.x, o.y)] === 1) o.dlP = S.t; } else if (o.side === 'p' && e && EV[ci(o.x, o.y)] === 1) o.dlE = S.t; }
 }
 // 车辆的视野半径（近处逐格算的视野圈，最多 290）：直瞄火炮的车车长有热像周视镜，一排坦克的视野连成一片、看到的全军共享（vehSees）；
 //   几公里外的目标由热像仪按目标逐个查通视发现（spot.js）——逐格算的开销随半径平方增长，算不了那么远

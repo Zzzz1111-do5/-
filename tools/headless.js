@@ -37,7 +37,9 @@ function load(opts = {}) {
   };
   ctx.window = ctx; ctx.globalThis = ctx; ctx.self = ctx; ctx.document = doc; ctx.location = { search: '', hash: '', href: '' };
   vm.createContext(ctx);
-  let src = '(function () {\n';
+  // 常用的全局量在外层函数里做局部别名：vm 沙箱里每次读 Math、Infinity 这类全局量都要走沙箱的拦截器，比浏览器慢得多
+  //   （推演的热循环里到处是 Math.floor、=== Infinity）；值完全相同，推演结果不变，无头推演快将近一倍
+  let src = '(function () {\nconst { Math, JSON, Number, Object, Array, Map, Set, Float64Array, Float32Array, Int32Array, Uint32Array, Uint8Array, Uint16Array, Int16Array, Int8Array, Uint8ClampedArray, isFinite, isNaN, parseInt, parseFloat, String, Boolean, Symbol, Promise, Error } = globalThis; const Infinity = 1 / 0, NaN = 0 / 0;\n';
   for (const f of files) src += fs.readFileSync(path.join(ROOT, f), 'utf8').replace(/^'use strict';/, '') + '\n;\n';
   src += '\nglobalThis.__run = c => eval(c);\n})();';
   vm.runInContext(src, ctx, { filename: 'darksword.js' });
