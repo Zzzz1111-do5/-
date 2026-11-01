@@ -124,6 +124,7 @@ function a82Think() {
 
 // 守方飞机里属于 82 师的（eair.js 交过来）：C-17 伞降 / 重装空投，CH-47F 吊运火炮
 function a82Fly(a, dt) {
+  if (a.type === 'sh60b') return typeof mh60Fly === 'function' ? mh60Fly(a, dt) : (a.dead = true);   // 美舰的舰载直升机（mh60.js）
   if (a.type === 'ch47') return a82Heli(a, dt);
   const E8 = a82Ensure(), L = E8.lift && E8.lift.id === a.lift ? E8.lift : null, left = a.sq82.length + a.veh82.length;
   if (!L) { a.ph = 'out'; a.sq82 = []; a.veh82 = []; }
@@ -285,7 +286,7 @@ function a82Chinook(L) {
 function a82Heli(a, dt) {
   const E8 = a82Ensure(), C = A82_CH, d = dist(a.x, a.y, a.gx, a.gy);
   if (a.ph === 'rtb') a.ph = a.load && d > 900 ? 'abort' : a.load ? 'app' : 'out';   // 中弹：离炮位还远就带着炮回去
-  const alt = m => { a.alt += (a82Alt(m) - a.alt) * Math.min(1, dt * 1.2); };
+  const alt = m => { const k = a82AirH(), d = (a82Alt(m) - a.alt) * k; a.alt += clamp(d * Math.min(1, dt * 1.2), -6 * dt, 7.6 * dt) / k; };   // 升降最快约 7.6 米/秒（CH-47F 爬升约 1500 英尺/分），下降 6 米/秒
   if (a.ph === 'in') {
     eaSteer(a, a.gx, a.gy, dt, C.cruise); alt(45);
     if (d < C.app) a.ph = 'app';

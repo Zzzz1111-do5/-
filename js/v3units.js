@@ -1288,7 +1288,7 @@ function v3mCollect(C, box) {
     const key = typeof airSilKey === 'function' ? airSilKey(p.kind, p.v) : 'j35', sz = (typeof airMdl === 'function' && airMdl(p.kind, p.v).size) || ((typeof AIR_SPEC === 'object' && AIR_SPEC[p.kind]) || {}).size || 15;
     plane(p, p.heading, 0, key, sz, p.bank);
   }
-  const EA_K = { ga: ['a10', 18], heli: ['ah64', 16], uh60: ['uh60', 17], ch47: ['ch47', 20.8], c17: ['c17', 30], ftr: ['f35', 17], ftrb: ['f35b', 17], mq9: ['mq9', 18], f22: ['f22', 18], b2: ['b2', 34], p8: ['p8', 26] };
+  const EA_K = { ga: ['a10', 18], heli: ['ah64', 16], uh60: ['uh60', 17], ch47: ['ch47', 20.8], sh60b: ['sh60b', 17], c17: ['c17', 30], ftr: ['f35', 17], ftrb: ['f35b', 17], mq9: ['mq9', 18], f22: ['f22', 18], b2: ['b2', 34], p8: ['p8', 26] };
   // 被击落的飞机：烧黑的机体（2：残骸色）从被击中的高度翻滚着、机头朝下栽下去（火球与拖着的黑烟在 v3fx.js）
   const wreck = (w, T, key, sz) => {
     const age = S.t - w.t;
