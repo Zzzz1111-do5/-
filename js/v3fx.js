@@ -267,7 +267,7 @@ function v3Fx(C) {
   }
   // —— 飞机灯光：左翼尖红、右翼尖绿航行灯，垂尾顶上的白色防撞灯一闪一闪；歼击机起飞滑跑、刚离地爬升时尾喷口拖出加力火焰 ——
   if (typeof AIRD === 'object') {
-    const EA_K3 = { ga: ['a10', 18], heli: ['ah64', 16], uh60: ['uh60', 17], c17: ['c17', 30], ftr: ['f35', 17], ftrb: ['f35b', 17], mq9: ['mq9', 18], f22: ['f22', 18], b2: ['b2', 34], p8: ['p8', 26] };
+    const EA_K3 = { ga: ['a10', 18], heli: ['ah64', 16], uh60: ['uh60', 17], ch47: ['ch47', 20.8], c17: ['c17', 30], ftr: ['f35', 17], ftrb: ['f35b', 17], mq9: ['mq9', 18], f22: ['f22', 18], b2: ['b2', 34], p8: ['p8', 26] };
     const FTR = { j35: 1, j20: 1, j15: 1, j16: 1, j16d: 1, j50: 1, f35: 1, f22: 1, f35b: 1, j15t: 1 };
     const lit = (o, key, sz, own, burn) => {
       const D = AIRD[key];
@@ -300,6 +300,7 @@ function v3Fx(C) {
     }
   }
   if (typeof v3dFx === 'function') v3dFx(out, C, inB, seen);   // 弹射、离机、伞降的发光与烟（v3det.js）
+  if (typeof a82Fx === 'function') a82Fx(out, sm, C, inB, seen);   // 82 空降师：标枪的烟迹与尾焰、CH-47F 旋翼下洗的尘土（v3a82.js）
   if (typeof v3dHaze === 'function') v3dHaze(C);   // 喷口后的热浪（v3det.js）：在加法特效之前，扭的是火焰后面的画面
   if (!out.length && !sm.length) return;
   // —— 画：先画遮挡的烟（预乘透明度的普通混合），再画发光（加法混合）；都测深度、不写深度 ——

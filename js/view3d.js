@@ -214,7 +214,13 @@ void main() {
       float bl = clamp(log2(max(fwm, .1) * 4.), 0., 6.);   // 远处的反射模糊一些（粗糙的海面平均了很多方向）
       float su = atan(Rf.y, Rf.x) / 6.2831853 + uSkyU;
 #ifdef DER
-      float sa = fract(su), sb = fract(su + .5) - .5; su = fwidth(sa) < fwidth(sb) ? sa : sb;   // 方位角在 ±180° 处跳一整圈：取导数小的那种写法，接缝上不会掉到最糊的一级（一条竖线）
+      // 方位角在 ±180° 处跳一整圈：离接缝远的那种写法取样（接缝上不会掉到最糊的一级，一条竖线）。同一个 2×2 像素块必须用同一种写法——
+      //   原来逐像素比较两种写法的导数：两种写法在半圈方位上相差整 1、导数本来一样大，谁小全看舍入；真显卡的导数逐行算，一个块里选成两种写法，
+      //   块内坐标差 1，整块掉到天空图最糊的一级——镜头朝北时屏幕左半边（反射朝西北那半圈）一层颗粒噪点（软件渲染器按整块算导数，看不出来）。
+      //   现在按块里第一个像素的方位角挑（由本像素和导数推回去，块里四个像素算出来一样）
+      vec2 qo = mod(floor(gl_FragCoord.xy), 2.);
+      float fq = fract(su - dFdx(su) * qo.x - dFdy(su) * qo.y);
+      su = fq > .25 && fq < .75 ? fract(su) : fract(su + .5) - .5;
 #endif
       vec3 sk = uSkyOn > .5 ? texture2D(uSky, vec2(su, .5 - asin(clamp(Rf.z, 0., 1.)) / 3.1415927), bl).rgb * .84 : mix(uBg, vec3(.5, .62, .8), sqrt(Rf.z));
       float fr = .02 + .98 * pow(1. - clamp(dot(Nw, V), 0., 1.), 5.);

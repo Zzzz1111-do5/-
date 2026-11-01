@@ -1061,7 +1061,7 @@ function v3mCollect(C, box) {
       if (bo) [mx, my] = bo;
       const kind = typeof manKind === 'function' ? manKind(q, i, role) : role, P = T ? manPose3(q, T, i, kind) : { p: q.prone ? 'pr' : 'st', fire: null }, z = v3Ht(mx, my);
       const K = V3_MAN * ks;
-      if (typeof v3gMan === 'function') v3gMan(kind, P.p, mx, my, z, f, K, sd);   // 用户给的士兵模型原样摆放（卧倒、匍匐时放平）
+      if (!(q.a82 && typeof a82Man === 'function' && a82Man(q, i, kind, P.p, mx, my, z, f, K, sd)) && typeof v3gMan === 'function') v3gMan(kind, P.p, mx, my, z, f, K, sd);   // 用户给的士兵模型原样摆放（卧倒、匍匐时放平）；82 空降师的拿各自的真实枪械模型（v3a82.js）
       if (P.fire != null && P.fire < .07) {   // 枪口焰：站姿在胸高、跪姿低一些、卧倒贴地（按姿态高度 L 插值）
         const Lp = P.L ?? (P.p === 'pr' || P.p[0] === 'c' ? 2 : P.p === 'kn' ? 1 : 0), low = Lp > 1.5, L = (low ? 1.35 : kind === 'mg' ? 1.45 : 1.1) * K, h = (Lp <= 1 ? lerp(1.32, .9, Lp) : lerp(.9, .2, Lp - 1)) * K;
         v3mAdd('mflash', v3mFlash, mx + Math.cos(f) * L, my + Math.sin(f) * L, z + h, f, K, sd);
@@ -1172,6 +1172,7 @@ function v3mCollect(C, box) {
       put('ty:gen', v3mTyGen, TY3.gen[0], TY3.gen[1], TU.u[gi].dead);
       continue;
     }
+    if (typeof a82Emp === 'function' && a82Emp(e, a, z0, v3Seat)) continue;   // M777 / M270 / 82 师 M224 用用户给的模型（v3a82.js）
     v3mAdd('st:' + e.kind, () => v3mFort(e.kind), e.x, e.y, SEAT[e.kind] ? v3Seat(e.x, e.y, SEAT[e.kind]) : z0, a, 1, e.dead ? 2 : 1);
     if (!e.dead && e.kind === 'ascm' && typeof ASC_RIG === 'object') for (let k = 0; k < ASC_RIG.n; k++) {   // 发射箱：转台转向目标、仰起（missile.js ascPose）
       const P = ascPose(e, k), v0 = (k - (ASC_RIG.n - 1) / 2) * ASC_RIG.gap, b = a + P.tr, [cx, cy] = at(-3.4, v0), o = ASC_RIG.piv + 3.4;
@@ -1191,6 +1192,7 @@ function v3mCollect(C, box) {
   if (S.para && typeof PA === 'object') chutes(S.para.ch, c => c.k === 'crate' ? PA.jump : c.role ? PA.jlJump : PA.jump, 0);
   if (S.ab && typeof AB === 'object') chutes(S.ab.ch, c => c.k === 'veh' ? AB.heavy : AB.jump, 0);
   if (S.e101 && typeof A101 === 'object') chutes(S.e101.ch, c => c.k === 'veh' ? A101.heavy : A101.jump, 1);
+  if (typeof a82Collect === 'function') a82Collect(inB, seen, spec, t);   // 82 空降师：伞、重装平台、CH-47F 吊的炮、标枪（v3a82.js）
   // —— 地面构筑物与杂项：原来只在地面贴图上画成平面图（render4 / render2 / ai3 / trucks / repair / afbase / afdef / para 在 3D 时不再画），这里立起来 ——
   const sea = (x, y) => Math.max(v3Ht(x, y), -3.2);   // 水里的东西露出水面
   for (const p of S.points || []) {   // 据点建筑（海滩出口的地堡与龙牙、指挥所、雷达站、炮兵排、哨所、村舍、渡口、桥）
@@ -1286,7 +1288,7 @@ function v3mCollect(C, box) {
     const key = typeof airSilKey === 'function' ? airSilKey(p.kind, p.v) : 'j35', sz = (typeof airMdl === 'function' && airMdl(p.kind, p.v).size) || ((typeof AIR_SPEC === 'object' && AIR_SPEC[p.kind]) || {}).size || 15;
     plane(p, p.heading, 0, key, sz, p.bank);
   }
-  const EA_K = { ga: ['a10', 18], heli: ['ah64', 16], uh60: ['uh60', 17], c17: ['c17', 30], ftr: ['f35', 17], ftrb: ['f35b', 17], mq9: ['mq9', 18], f22: ['f22', 18], b2: ['b2', 34], p8: ['p8', 26] };
+  const EA_K = { ga: ['a10', 18], heli: ['ah64', 16], uh60: ['uh60', 17], ch47: ['ch47', 20.8], c17: ['c17', 30], ftr: ['f35', 17], ftrb: ['f35b', 17], mq9: ['mq9', 18], f22: ['f22', 18], b2: ['b2', 34], p8: ['p8', 26] };
   // 被击落的飞机：烧黑的机体（2：残骸色）从被击中的高度翻滚着、机头朝下栽下去（火球与拖着的黑烟在 v3fx.js）
   const wreck = (w, T, key, sz) => {
     const age = S.t - w.t;
