@@ -172,6 +172,9 @@ function drawScene(now) {
   drawEnemies(time); opt('drawArmor');
   ctx.globalAlpha = R.zr > 2.5 ? .55 : .75; opt('drawAutoRoutes'); ctx.globalAlpha = 1;   // 自动驾驶路线压暗，避免满屏虚线
   drawTeams(time); opt('drawCarrier'); drawShips(time); drawDD(time); runHook('drawOver', time); drawPlans(time);
+  if (S.night && !(typeof V3 === 'object' && V3.drawing)) {   // 黑夜：地面、单位压暗成夜色，之后画的弹道、炮口焰、爆炸照旧亮（3D 由 v3neb.js 压暗，给 3D 的俯视贴图不压）
+    ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalCompositeOperation = 'multiply'; ctx.fillStyle = TER.flat ? '#4c3a40' : '#33405e'; ctx.fillRect(0, 0, R.cv.width, R.cv.height); ctx.restore(); worldTf(ctx);
+  }
   if (!R.fx3d) { drawShells(time); drawTracers(); }   // 3D 时弹道立体画（v3fx.js）
   drawPlanes(time); drawFx(); drawTool(time); drawFormPreview();
   bloom();

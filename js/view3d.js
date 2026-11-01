@@ -16,7 +16,8 @@ let V3_ST = 2;   // 地形网格每几格一个顶点：显卡支持 32 位索�
 //   写实画面的背景是真实天空（Poly Haven「kloofendal_48d_partly_cloudy_puresky」，CC0），远处雾成地平线的天色（大气透视）；黑绿画面仍是近黑的底
 const V3_SUN = [-.4236, .5178, .743], V3_SUNG = `normalize(vec3(${V3_SUN.join(', ')}))`, V3_HZ_COL = [.74, .75, .8];
 const V3_SKYU = .595 - Math.atan2(V3_SUN[1], V3_SUN[0]) / (2 * Math.PI);   // 天空图横坐标的偏移：太阳在图里的位置（u = 0.595）对准太阳方向
-const v3Bg = () => v3Mx() ? [.004, .02, .011] : V3_HZ_COL;   // 雾色 / 背景色
+const v3Bg = () => v3Mx() ? [.004, .02, .011] : typeof TER === 'object' && TER && TER.flat ? V3_SPACE : V3_HZ_COL;   // 雾色 / 背景色（白色平原：太空，近黑带一点星云的暗红）
+const V3_SPACE = [.016, .011, .014];
 // 太阳阴影（写实画面）：镜头注视点周围一块（几百米到一千多米见方）从太阳方向渲染成深度图；各着色器的顶点里算 vSh = uShM × 世界坐标，
 //   片元里比较深度（4 点柔化），只压暗日光那一项（天光照旧）；阴影范围边上渐变消失。需要深度纹理扩展与片元高精度浮点，老设备没有就不画
 const V3_SHV = `uniform mat4 uShM; varying vec4 vSh;`;
@@ -86,6 +87,7 @@ uniform sampler2D uTop, uBase, uCls, uCls2, uFogT, uHt, uLf, uTopF; uniform vec4
 uniform sampler2D uDg, uDf, uDr, uDs; uniform float uDet;   // 写实地表细节贴图（ambientCG，CC0）：草地、林下地面、岩石、沙滩
 uniform sampler2D uCls3, uSky, uWn; uniform float uSkyOn, uSkyU, uWnOn;   // 水深分类（浅滩、礁石、近岸）、天空图（海面反射）、水面法线贴图（three.js 示例，MIT）
 uniform float uRing, uOcn; uniform vec4 uRect;   // 地图外：1 = 无边海面（地图里面丢掉，那里是地形网格），2 = 北面延伸的陆地（贴图照地图北缘镜像）
+uniform float uFlat;   // 白色平原（flat.js）：太空里的灰色平台，侧壁是深灰的金属
 varying vec3 vP, vN, vV; varying float vD;
 ${V3_SHF}
 #ifdef GL_FRAGMENT_PRECISION_HIGH
@@ -154,7 +156,7 @@ void main() {
 #endif
   if (vN.z < -.5) {   // 沙盘围边（法线朝下作标记）：地形模型切开的侧面——土层
     if (uOcn > .5) discard;   // 地图外是无边海面 / 延伸陆地时不要围边：它的顶边和海面一样高，从上往下看图边上漏出一串灰点
-    vec3 c0 = mix(vec3(.2, .15, .1), vec3(.33, .26, .18), clamp(vP.z / 60. + .6, 0., 1.)) * (.6 + .4 * clamp(dot(normalize(vN.xy), vec2(-.6, .62)) * .5 + .5, 0., 1.));
+    vec3 c0 = (uFlat > .5 ? mix(vec3(.1, .105, .11), vec3(.24, .25, .26), clamp(vP.z / 60. + .6, 0., 1.)) : mix(vec3(.2, .15, .1), vec3(.33, .26, .18), clamp(vP.z / 60. + .6, 0., 1.))) * (.6 + .4 * clamp(dot(normalize(vN.xy), vec2(-.6, .62)) * .5 + .5, 0., 1.));
     if (uMx > .5) { vec2 u = vec2(vP.x + vP.y, -vP.z) / vec2(9., 12.); c0 = c0 * .45 + vec3(.15, .95, .45) * mxRain(floor(u), fract(u), uT, 9. / pw) * .6; }
     gl_FragColor = vec4(mix(c0, bg, smoothstep(uFog.x, uFog.y, vDp)), 1.); return;
   }
@@ -752,7 +754,7 @@ function v3Mesh() {
   // 底图（俯视贴图以外的远处）：小地图同款黑绿配色，每格一个像素
   const c = document.createElement('canvas'), g = c.getContext('2d'), img = g.createImageData(GW, GH);
   for (let i = 0; i < GW * GH; i++) {
-    const t = TER.type[i], col = (typeof MM_COL === 'object' && MM_COL[t]) || '#0a2a18', e = isWater(t) ? .5 : .45 + TER.elev[i] * .5;
+    const t = TER.type[i], col = TER.flat ? '#a6a8aa' : (typeof MM_COL === 'object' && MM_COL[t]) || '#0a2a18', e = isWater(t) ? .5 : .45 + TER.elev[i] * .5;   // 白色平原：灰色平台
     for (let k = 0; k < 3; k++) img.data[i * 4 + k] = parseInt(col.slice(1 + k * 2, 3 + k * 2), 16) * e;
     img.data[i * 4 + 3] = 255;
   }
@@ -1036,7 +1038,7 @@ function v3Trees() {
     if (t === T.FOREST) n = 1 + (r() < (V3.coarse ? .15 : .45) ? 1 : 0) + (!V3.coarse && r() < .12 ? 1 : 0);   // 触屏（手机、平板）少种一些
     else if (t === T.HILL) n = r() < .16 ? 1 : 0;
     else if (t === T.MOUNT) n = r() < .09 ? 1 : 0;
-    else if (t === T.FIELD) n = r() < .01 ? 1 : 0;
+    else if (t === T.FIELD) n = !TER.flat && r() < .01 ? 1 : 0;   // 白色平原：光秃的平台，一棵树也没有
     else if (t === T.MARSH) n = r() < .06 ? 1 : 0;
     if (!n || (t !== T.FOREST && roadNear(gx, gy))) continue;
     const cx = gx * CELL + CELL / 2, cy = gy * CELL + CELL / 2;
@@ -1067,7 +1069,7 @@ function v3Init() {
     gl.linkProgram(pr);
     if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(pr));
     const u = {}, a = { p: gl.getAttribLocation(pr, 'p'), n: gl.getAttribLocation(pr, 'n') };
-    for (const k of ['uM', 'uEye', 'uTop', 'uBase', 'uCls', 'uCls2', 'uFogT', 'uHt', 'uLf', 'uTopF', 'uBox', 'uBoxF', 'uWorld', 'uGrid', 'uHG', 'uFog', 'uSea', 'uT', 'uMx', 'uBrM', 'uLm', 'uLmOn', 'uBm', 'uBg', 'uDg', 'uDf', 'uDr', 'uDs', 'uDet', 'uCls3', 'uSky', 'uSkyOn', 'uSkyU', 'uWn', 'uWnOn', 'uShM', 'uShT', 'uShOn', 'uShP', 'uOff', 'uScl', 'uRing', 'uRect', 'uOcn']) u[k] = gl.getUniformLocation(pr, k);
+    for (const k of ['uM', 'uEye', 'uTop', 'uBase', 'uCls', 'uCls2', 'uFogT', 'uHt', 'uLf', 'uTopF', 'uBox', 'uBoxF', 'uWorld', 'uGrid', 'uHG', 'uFog', 'uSea', 'uT', 'uMx', 'uBrM', 'uLm', 'uLmOn', 'uBm', 'uBg', 'uDg', 'uDf', 'uDr', 'uDs', 'uDet', 'uCls3', 'uSky', 'uSkyOn', 'uSkyU', 'uWn', 'uWnOn', 'uShM', 'uShT', 'uShOn', 'uShP', 'uOff', 'uScl', 'uRing', 'uRect', 'uOcn', 'uFlat']) u[k] = gl.getUniformLocation(pr, k);
     const pb = gl.createProgram();
     gl.attachShader(pb, sh(gl.VERTEX_SHADER, V3_BVS)); gl.attachShader(pb, sh(gl.FRAGMENT_SHADER, V3_BFS()));   // 着色器源码用到时再拼：爆炸火光的 GLSL 在后加载的 v3light.js 里
     gl.linkProgram(pb);
@@ -1331,7 +1333,7 @@ function v3Draw(now) {
   const lmOn = v3Mx() && typeof v3LightBind === 'function' && v3LightBind(gl) ? 1 : 0;   // 光照贴图（v3light.js，第 9 个贴图单元）：只给黑绿 / 数码画面；写实画面用实时阴影
   const bgc = v3Bg();
   gl.clearColor(bgc[0], bgc[1], bgc[2], 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-  if (!v3Mx()) v3Sky(C);   // 写实画面：先画天空（不写深度）
+  if (!v3Mx() && !(typeof v3nebOn === 'function' && v3nebOn())) v3Sky(C);   // 写实画面：先画天空（不写深度）；白色平原在太空里，背景是星云（v3neb.js）
   gl.useProgram(V3.pr);
   const u = V3.u;
   gl.uniformMatrix4fv(u.uM, false, C.M);
@@ -1341,7 +1343,8 @@ function v3Draw(now) {
   gl.uniform2f(u.uFog, ...v3FogR(C));
   gl.uniform1f(u.uSea, 1.5); gl.uniform3f(u.uBg, bgc[0], bgc[1], bgc[2]);
   const mx = v3Mx() ? 1 : 0, tm = (now / 1000) % 3600;   // 黑绿画面：黑客帝国式数码风
-  gl.uniform1f(u.uDet, !mx && v3DetTex() ? 1 : 0);
+  gl.uniform1f(u.uDet, !mx && v3DetTex() && !TER.flat ? 1 : 0);   // 白色平原：灰色地面就是俯视贴图本身，不叠草地、岩石细节
+  gl.uniform1f(u.uFlat, TER.flat ? 1 : 0);
   const skyT = !mx && V3.sky && V3.sky.ok && V3.cls3 ? V3.sky.tex : null;
   if (V3.cls3) { gl.activeTexture(gl.TEXTURE12); gl.bindTexture(gl.TEXTURE_2D, V3.cls3); }
   if (skyT) { gl.activeTexture(gl.TEXTURE13); gl.bindTexture(gl.TEXTURE_2D, skyT); }
@@ -1381,6 +1384,7 @@ function v3Draw(now) {
   if (pOn) { gl.disableVertexAttribArray(V3.a.p); gl.disableVertexAttribArray(V3.a.n); v3pDraw(C); }   // 地图物件：树木、岩石、楼房、机场设施（v3props.js，免费资源模型）
   if (m3 && typeof v3mDraw === 'function') { gl.disableVertexAttribArray(V3.a.p); gl.disableVertexAttribArray(V3.a.n); v3mDraw(C); }   // 兵种立体模型（v3units.js）
   if (m3 && typeof v3dkDraw === 'function') v3dkDraw(C);   // 福建舰飞行甲板：纹路与光影（v3deck.js）
+  if (typeof v3Night === 'function') { gl.disableVertexAttribArray(V3.a.p); gl.disableVertexAttribArray(V3.a.n); v3Night(C); v3Neb(C); }   // 黑夜压暗、太空星云（v3neb.js）：在发光的弹道、爆炸之前
   if (typeof v3Fx === 'function' && !(SETTINGS && SETTINGS.models3d === false)) { gl.disableVertexAttribArray(V3.a.p); gl.disableVertexAttribArray(V3.a.n); v3Fx(C); }   // 立体弹道（v3fx.js）
   if (typeof v3Post === 'function') { gl.disableVertexAttribArray(V3.a.p); gl.disableVertexAttribArray(V3.a.n); v3Post(now); }   // 辉光、景深、暗角（v3post.js）
   const ctx = R.ctx;

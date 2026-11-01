@@ -155,8 +155,8 @@ function fireShell(x0, y0, x1, y1, side, kind, dur, fuzzy, extra) {
   if (fuzzy) log(`炮击来自方位约 ${fmtBrg(bearing(x1, y1, fx0, fy0))}`, 'warn', 'arty', 6, { x: fx0, y: fy0 });
 }
 
-// —— 步兵交火：目标须在本方视野内或近在 50 以内 ——
-const canSee = (side, x, y, d) => d < 50 || (side === 'p' ? PV : EV)[ci(x, y)] === 1;
+// —— 步兵交火：目标须在本方视野内或近在 50 以内；给了射手位置 (sx, sy) 时，弹道线穿过烟幕也打不了（grid.js smokeBlk）——
+const canSee = (side, x, y, d, sx, sy) => d < 50 || ((side === 'p' ? PV : EV)[ci(x, y)] === 1 && (sx == null || !smokeBlk(sx, sy, x, y)));
 // 兵种修正 mod（目录/沙盒写入，可缺省）：{ pow 命中倍率, rng 射程倍率, rof 射速倍率, sup 压制倍率 }
 const modOf = o => o.mod || {};
 function findTarget(q, range) {
@@ -166,25 +166,25 @@ function findTarget(q, range) {
     const dx = o.x - qx, dy = o.y - qy;
     if (dx >= bd || dx <= -bd || dy >= bd || dy <= -bd) continue;   // 坐标差已超出当前最近距离的直接跳过（每步每个小组都要扫一遍全体）
     const d = dist(qx, qy, o.x, o.y);
-    if (d < bd && canSee(q.side, o.x, o.y, d)) { bd = d; best = { t: o, d, k: 'tm' }; }
+    if (d < bd && canSee(q.side, o.x, o.y, d, qx, qy)) { bd = d; best = { t: o, d, k: 'tm' }; }
   }
   // 对方车辆（vehicles.js）：轻武器只能压制乘员，优先打步兵；带反坦克手段（mod.at）的小组优先打车
   if (typeof vehFoes === 'function') for (const v of vehFoes(q.side)) {
     const d = dist(q.x, q.y, v.x, v.y), w = d * (modOf(q).at ? .7 : 1.5);
-    if (w < bd && canSee(q.side, v.x, v.y, d)) { bd = w; best = { t: v, d, k: 'veh' }; }
+    if (w < bd && canSee(q.side, v.x, v.y, d, qx, qy)) { bd = w; best = { t: v, d, k: 'veh' }; }
   }
   // 机场上停放的敌机（afgnd.js）：不还手，同样远时先打会还手的
   if (typeof afgList === 'function') for (const a of afgList(q.side)) {
     const dx = a.x - qx, dy = a.y - qy, lim = bd / 1.25;
     if (dx >= lim || dx <= -lim || dy >= lim || dy <= -lim) continue;
     const d = dist(qx, qy, a.x, a.y);
-    if (d * 1.25 < bd && canSee(q.side, a.x, a.y, d)) { bd = d * 1.25; best = { t: a, d, k: 'ac' }; }
+    if (d * 1.25 < bd && canSee(q.side, a.x, a.y, d, qx, qy)) { bd = d * 1.25; best = { t: a, d, k: 'ac' }; }
   }
   if (q.side === 'p') for (const e of S.enemies) if (!e.dead) {
     const dx = e.x - qx, dy = e.y - qy;
     if (dx >= bd || dx <= -bd || dy >= bd || dy <= -bd) continue;
     const d = dist(qx, qy, e.x, e.y);
-    if (d < bd && canSee('p', e.x, e.y, d)) { bd = d; best = { t: e, d, k: 'st' }; }
+    if (d < bd && canSee('p', e.x, e.y, d, qx, qy)) { bd = d; best = { t: e, d, k: 'st' }; }
   }
   return best;
 }
@@ -237,12 +237,12 @@ function bunkerFire(e) {
   let best = null, bd = 170 * (M.rng || 1);
   for (const q of S.teams) if (q.side === 'p' && q.men.length && !q.ride) {
     const d = dist(e.x, e.y, q.x, q.y);
-    if (d < bd && spotted(q.x, q.y)) { bd = d; best = { t: q, k: 'tm' }; }
+    if (d < bd && spotted(q.x, q.y) && (d < 50 || !smokeBlk(e.x, e.y, q.x, q.y))) { bd = d; best = { t: q, k: 'tm' }; }
   }
   // 我方车辆：机枪只能压制乘员、对轻装甲偶有损伤，故优先打步兵（反坦克炮位 mod.at 例外）
   if (typeof vehFoes === 'function') for (const v of vehFoes('e')) {
     const d = dist(e.x, e.y, v.x, v.y), w = d * (M.at ? .7 : 1.4);
-    if (w < bd && d < 170 * (M.rng || 1) && spotted(v.x, v.y)) { bd = w; best = { t: v, k: 'veh' }; }
+    if (w < bd && d < 170 * (M.rng || 1) && spotted(v.x, v.y) && (d < 50 || !smokeBlk(e.x, e.y, v.x, v.y))) { bd = w; best = { t: v, k: 'veh' }; }
   }
   for (const s of S.ships) if (alive(s) && s.state !== 'beached') {
     const d = dist(e.x, e.y, s.x, s.y);

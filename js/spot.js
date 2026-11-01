@@ -68,12 +68,25 @@ function spotTargets(side) {
   return out;
 }
 
-// 每 0.25 秒轮流查一方：每个目标逐个看观察车辆，有一辆看得见就算发现（不用再查别的车）
+// 炮口焰：坦克、步战车、装甲车一开炮，炮口焰、扬尘和热像上的亮斑几公里外都看得见——步兵（没有车载热像）在 2.5 公里内、有通视就能报出它的位置
+//   （登陆部队抢滩时没有一辆车在岸上当观察哨，原来只能挨打、报不出是谁在打；双方一样）
+const SPOT_FLASH = 2500;
+// 每 0.25 秒轮流查一方：每个目标逐个看观察车辆，有一辆看得见就算发现（不用再查别的车）；刚开过火的车再让步兵看一遍
 function spotScan(side) {
   const M = SPOT[side], sens = spotSensors(side), until = S.t + SPOT_KEEP;
   for (const [o, until0] of M) if (until0 < S.t || o.dead || (o.men && !o.men.length)) M.delete(o);
+  const T = spotTargets(side);
+  for (const [o, x, y, f, th, inf, fired] of T) {
+    if (inf || !fired || M.has(o) || !(o.fireT != null)) continue;
+    for (const q of S.teams) {
+      if (q.side !== side || !q.men.length || q.ride) continue;
+      const dx = x - q.x, dy = y - q.y, d2 = dx * dx + dy * dy;
+      if (d2 > SPOT_FLASH * SPOT_FLASH * (S.night ? 2.56 : 1) || d2 < 2500) continue;   // 夜里枪口焰、炮口焰老远就看得见（1.6 倍距离）
+      if (spotLos(q.x, q.y, .17, x, y, th, true)) { M.set(o, until); break; }
+    }
+  }
   if (!sens.length) return;
-  for (const [o, x, y, f, th, inf, fired] of spotTargets(side)) {
+  for (const [o, x, y, f, th, inf, fired] of T) {
     for (const s of sens) {
       const R = (inf ? s[3] : s[2]) * f, dx = x - s[0], dy = y - s[1];
       if (dx > R || dx < -R || dy > R || dy < -R || dx * dx + dy * dy > R * R) continue;
