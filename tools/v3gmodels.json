@@ -2450,6 +2450,208 @@
       },
       "parts": [],
       "modNote": "游戏里补了起落架（模型本身没有）；代我方机型时不贴底色贴图（去掉原机涂装与标志，漆成统一的灰）"
+    },
+    "ztz99": {
+      "name": "ZTZ-99A 主战坦克",
+      "glb": "ztz99/scene.gltf",
+      "fwd": "-z",
+      "up": "+y",
+      "roughMin": 0.6,
+      "credit": {
+        "title": "Type 99 MBT",
+        "author": "philano",
+        "url": "https://sketchfab.com/3d-models/type-99-mbt-7075c92c5ef1408497f1530703ff2942",
+        "license": "CC-BY-4.0",
+        "lurl": "http://creativecommons.org/licenses/by/4.0/"
+      },
+      "len": 11.0,
+      "parts": [
+        {
+          "name": "gun",
+          "kind": "chain",
+          "any": [
+            {
+              "zmin": 1.38,
+              "box": [
+                1.5,
+                5.5,
+                -0.3,
+                0.3
+              ]
+            }
+          ],
+          "pivot": [
+            -0.8,
+            0,
+            1.6
+          ],
+          "axis": "z",
+          "q": [
+            0.5,
+            0,
+            1.64
+          ],
+          "a2": [
+            0,
+            -1,
+            0
+          ],
+          "w": [
+            1,
+            0,
+            0,
+            0
+          ],
+          "e": [
+            0,
+            1,
+            0,
+            0
+          ],
+          "w2": [
+            0,
+            0,
+            1,
+            0
+          ]
+        },
+        {
+          "name": "tur",
+          "kind": "rot",
+          "any": [
+            {
+              "zmin": 1.16,
+              "box": [
+                -2.7,
+                1.0,
+                -0.2,
+                0.2
+              ]
+            },
+            {
+              "zmin": 1.44,
+              "box": [
+                -3.0,
+                0.4,
+                -1.5,
+                1.5
+              ]
+            }
+          ],
+          "pivot": [
+            -0.8,
+            0,
+            1.6
+          ],
+          "axis": "z",
+          "w": [
+            1,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "name": "whl",
+          "kind": "each",
+          "zmax": 1.05,
+          "minTris": 200,
+          "box": [
+            -4.6,
+            2.75,
+            -1.85,
+            1.85
+          ],
+          "axis": "y",
+          "roll": true
+        }
+      ]
+    },
+    "m1a2v3": {
+      "name": "M1A2 SEPv3 艾布拉姆斯",
+      "glb": "m1a2v3_1k/scene.gltf",
+      "fwd": "+z",
+      "up": "+y",
+      "roughMin": 0.6,
+      "texMax": 1024,
+      "credit": {
+        "title": "Abrams M1A2 SEPv3",
+        "author": "dannzjs",
+        "url": "https://sketchfab.com/3d-models/abrams-m1a2-sepv3-eb6f5560198740269507e9948376414c",
+        "license": "CC-BY-4.0",
+        "lurl": "http://creativecommons.org/licenses/by/4.0/"
+      },
+      "len": 9.77,
+      "parts": [
+        {
+          "name": "gun",
+          "kind": "chain",
+          "nodes": "/Object_13$",
+          "pivot": [
+            -0.6,
+            -0.1,
+            1.9
+          ],
+          "axis": "z",
+          "q": [
+            0.75,
+            -0.1,
+            1.93
+          ],
+          "a2": [
+            0,
+            -1,
+            0
+          ],
+          "w": [
+            1,
+            0,
+            0,
+            0
+          ],
+          "e": [
+            0,
+            1,
+            0,
+            0
+          ],
+          "w2": [
+            0,
+            0,
+            1,
+            0
+          ]
+        },
+        {
+          "name": "tur",
+          "kind": "rot",
+          "nodes": "/Object_(17|18|23|28|6|4)$",
+          "pivot": [
+            -0.6,
+            -0.1,
+            1.9
+          ],
+          "axis": "z",
+          "w": [
+            1,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "name": "whl",
+          "kind": "each",
+          "nodes": "/Object_(25|20)$",
+          "axis": "y",
+          "roll": true
+        }
+      ],
+      "tri0": 110000,
+      "tri0Flags": [
+        "Permissive"
+      ],
+      "modNote": "近看网格减到约 11 万个三角形、贴图缩到 1024"
     }
   },
   "sets": {

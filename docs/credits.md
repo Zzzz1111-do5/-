@@ -48,6 +48,8 @@
 - E-2D 先进鹰眼（代空警-600）（js/mdl/e2d.js）：This work is based on "Grumman E-2D Advanced Hawkeye" (https://sketchfab.com/3d-models/grumman-e-2d-advanced-hawkeye-0082cf8f15044cfd80ebd4e11b96789d) by Muhamad Mirza Arrafi licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)（改动：贴图缩到最长边 2048 像素、代我方机型时不贴底色贴图（去掉原机涂装与标志，漆成统一的灰））
 - X-47B（代攻击-11）（js/mdl/x47b.js）：This work is based on "Northrop Grumman X-47B" (https://sketchfab.com/3d-models/northrop-grumman-x-47b-8d5fa8ab10ba4b8486d40248eeb9332d) by yakudami licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)（改动：贴图缩到最长边 2048 像素、代我方机型时不贴底色贴图（去掉原机涂装与标志，漆成统一的灰））
 - RQ-4 全球鹰（代无侦-7）（js/mdl/rq4.js）：This work is based on "RQ4_global_hawk" (https://sketchfab.com/3d-models/rq4-global-hawk-dd87adcff26b46e58639e9256f5301c4) by kio licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)（改动：贴图缩到最长边 2048 像素、游戏里补了起落架（模型本身没有）；代我方机型时不贴底色贴图（去掉原机涂装与标志，漆成统一的灰））
+- ZTZ-99A 主战坦克（js/mdl/ztz99.js）：This work is based on "Type 99 MBT" (https://sketchfab.com/3d-models/type-99-mbt-7075c92c5ef1408497f1530703ff2942) by philano licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+- M1A2 SEPv3 艾布拉姆斯（js/mdl/m1a2v3.js）：This work is based on "Abrams M1A2 SEPv3" (https://sketchfab.com/3d-models/abrams-m1a2-sepv3-eb6f5560198740269507e9948376414c) by dannzjs licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)（改动：贴图缩到最长边 1024 像素、网格减到约 110000 个三角形、近看网格减到约 11 万个三角形、贴图缩到 1024）
 <!-- v3g:end -->
 
 <!-- ext:start -->
