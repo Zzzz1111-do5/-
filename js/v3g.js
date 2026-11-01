@@ -483,9 +483,9 @@ const V3G_PIT = { j31: { eye: [4.3, 0, 2.72], scr: 'screen', hud: 'Glowing_green
   //   眼睛在头靠前面一点 x 5.12——正好从平显组合玻璃（hud_2，x 5.54–5.72、高 3.11–3.28）中间看出去
   // 歼-20 新模型：平显玻璃本来就是透明的。喷管（模型实测，发动机轴线 y ±0.785、z 0.805）：机身短舱到 x −8.93 收口，扩散段调节片（Material.001，整架飞机很多零件也用这个材质）
   //   从喉道（x −8.95，内半径 0.35）张到出口（x −9.65，内半径 0.50、外半径约 0.57）——按位置、离轴半径挑出来做开合部件，外表面、内锥面各拆成自己的材质（as / asIn，按三角形中心离轴半径 rin 分），好单独上色；
-  //   喉道后面原来是一块平板圆盘（hole：挖掉），从后面看进去改成 v3jet.js 画的发动机后段（thr：放在出口前 u 米、半径 r、深 d）
+  //   喉道后面原来是平板圆盘和一串粗糙的灰色内部结构（短舱壳里、离轴 0.5 米以内，外面看不见，只从喉道露出来；hole：挖掉），从后面看进去改成 v3jet.js 画的发动机后段（thr：放在出口前 u 米、半径 r、深 d）
   j20: { eye: [5.7, 0, 3.25], noz: { mat: 'Material.001', x0: -8.93, x1: -9.67, r0: .3, r1: .64, as: 'nozzle', rin: .52, asIn: 'nozzle_in' },
-    hole: { mat: 'grey', x: [-8.97, -8.8], r: .545, nx: -.5 }, thr: { u: .61, r: .35, d: 1.5 } } };   // 歼-50 等模型没有座舱内饰：座舱视角放在机头上方，不画自己
+    hole: [{ mat: 'grey', x: [-8.97, -7.3], r: .5 }, { mat: 'Material.001', x: [-9.01, -8.9], r: .345 }], thr: { u: .61, r: .35, d: 1.5 } } };   // 歼-50 等模型没有座舱内饰：座舱视角放在机头上方，不画自己
 // 显示屏的面：模型用镜像修改器做的，左右各多出一片和正面重叠、贴图左右反的镜像面（两层贴图在同一个平面上来回打架闪烁）——
 //   只留贴图从左往右（机体 y 由大到小，飞行员看过去从左到右）的面
 function v3gPitScr(cf, m, M, VB, IB) {
@@ -566,17 +566,21 @@ function v3gPitParts(cf, m, M, VB, IB) {
     lod.push(...add);
   }
 }
-// 挖洞：喷管喉道后面模型自带的平板圆盘（从后面看进去是一块亮灰的盘子）——按材质、x 范围、离两台发动机轴线的半径、朝后的法线挑出这些三角形，从绘制段里去掉
+// 挖洞：喷管喉道后面模型自带的东西（平板圆盘、粗糙的内部结构，从后面看进去是一块亮灰的盘子）——每条规则按材质、x 范围、离两台发动机轴线的半径挑出三角形（三个顶点都在里面），从绘制段里去掉
 function v3gPitHole(cf, m, VB, IB) {
-  const H = cf.hole, hi = H ? m.mats.findIndex(x => x.n === H.mat) : -1, noz = m.noz && m.noz[0];
-  if (hi < 0 || !noz) return;
+  const noz = m.noz && m.noz[0];
+  if (!cf.hole || !noz) return;
   const st = m.st, ax = noz[1] ? [noz[1], -noz[1]] : [0];
-  const hit = v => { const o = v * st, x = VB[o]; return x >= H.x[0] && x <= H.x[1] && VB[o + 3] < H.nx && ax.some(y => Math.hypot(VB[o + 1] - y, VB[o + 2] - noz[2]) < H.r); };
-  for (const lod of m.lod) for (const e of lod) {
-    if (e[0] !== hi || e[1] >= 0) continue;
-    let k = e[2];
-    for (let t = e[2]; t + 2 < e[2] + e[3]; t += 3) if (!(hit(IB[t]) && hit(IB[t + 1]) && hit(IB[t + 2]))) { IB[k] = IB[t]; IB[k + 1] = IB[t + 1]; IB[k + 2] = IB[t + 2]; k += 3; }
-    e[3] = k - e[2];
+  for (const H of [].concat(cf.hole)) {
+    const hi = m.mats.findIndex(x => x.n === H.mat);
+    if (hi < 0) continue;
+    const hit = v => { const o = v * st, x = VB[o]; return x >= H.x[0] && x <= H.x[1] && ax.some(y => Math.hypot(VB[o + 1] - y, VB[o + 2] - noz[2]) < H.r); };
+    for (const lod of m.lod) for (const e of lod) {
+      if (e[0] !== hi || e[1] >= 0) continue;
+      let k = e[2];
+      for (let t = e[2]; t + 2 < e[2] + e[3]; t += 3) if (!(hit(IB[t]) && hit(IB[t + 1]) && hit(IB[t + 2]))) { IB[k] = IB[t]; IB[k + 1] = IB[t + 1]; IB[k + 2] = IB[t + 2]; k += 3; }
+      e[3] = k - e[2];
+    }
   }
 }
 function v3gPrep(key, m, M, VB, IB) {
