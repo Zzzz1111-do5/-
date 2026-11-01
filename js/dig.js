@@ -6,6 +6,9 @@
 //   卧倒：被压制、刚挨打、身边刚落炮弹 / 炸弹、被看得见自己的敌坦克盯着时卧倒，平静 DIG.calm 秒后起身；卧倒中弹面小，移动改为匍匐 / 短促跃进
 //   躲坦克：没有反坦克武器、在开阔地坚守、坑还没挖好的小组被敌坦克盯上：背着坦克就近躲进林地 / 房屋 / 弹坑 / 散兵坑
 const DIG = { t: 35, still: 3, holeR: 5, pit: .55, pitD: .45, prone: .65, proneDug: .85, calm: 4, link: 30, max: 700, tankR: 260 };
+// 烟幕弹（单兵发烟手榴弹，每组 n 枚，连锁反应）：被敌车辆在自己够不着的距离上用主炮、机枪打（far 米以外），朝来火方向 off 米处扔一枚——
+//   烟幕挡住对方的视线和热像（castVision、spot.js 都看 SMOKE），罩在烟里的组也难打中；趁烟卧倒、跃进到掩蔽处。双方一样；两枚之间至少隔 gap 秒
+const DIG_SMK = { n: 2, gap: 25, far: 250, r: 16, off: 12, dur: 50 };
 let DIG_BL = [];   // 最近 2.5 秒的爆炸点（不存档）
 
 function digHole(q) {
@@ -66,6 +69,13 @@ function digStep(dt) {
     const was = q.prone;
     q.prone = S.t - (q.proneT ?? -99) < DIG.calm;
     if (q.prone && !was) v8Stat('digProne');
+    // 烟幕弹：最近 3 秒被敌车辆远距离直射（vehicles.js 记下的来火车辆位置），身边还没有烟
+    if ((q.smk ?? DIG_SMK.n) > 0 && S.t - (q.smkT ?? -99) > DIG_SMK.gap && S.t - (q.vhT ?? -99) < 3 && dist(q.x, q.y, q.vhX, q.vhY) > DIG_SMK.far && !SMOKE[ci(q.x, q.y)]) {
+      const a = Math.atan2(q.vhY - q.y, q.vhX - q.x);
+      q.smk = (q.smk ?? DIG_SMK.n) - 1; q.smkT = S.t;
+      S.smoke.push({ x: q.x + Math.cos(a) * DIG_SMK.off, y: q.y + Math.sin(a) * DIG_SMK.off, r: DIG_SMK.r, until: S.t + DIG_SMK.dur });
+      v8Stat('digSmoke' + q.side);
+    }
     // 躲坦克：无反坦克武器、坚守在开阔地、坑没挖好、不是玩家亲自下令的
     if (th === 'tank' && (!q.order || q.order.t === 'hold') && !q.man && S.t - (q.dodgeT ?? -99) > 12 &&
         !q.men.includes('at') && !(q.mod && q.mod.at) && coverAt(q.x, q.y) > .8 && !((digHole(q) || {}).d > .5)) digDodge(q);

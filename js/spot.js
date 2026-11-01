@@ -10,6 +10,9 @@ const SPOT_ARMOR = [3000, 1400];   // 守方 M1117 装甲警戒车：遥控武�
 // 攻方驱逐舰 / 护卫舰的光电跟踪仪（舰炮火控的红外 + 电视 + 激光测距转塔，装在上层建筑高处，约 25 米）：近岸几公里内的车辆、开过火的步兵都看得见——
 //   滩头外海的舰艇正好能看到朝滩头开火的守军坦克、防空车（炮口焰、热信号），舰炮据此还击（support.js navArmorTarget）；地形、林地照样挡
 const SPOT_SHIP = [7000, 2200], SPOT_SHIP_H = 2.5;
+// 侦察机、无人机、武装直升机的光电吊舱（红外 + 电视，从几百到几千米高往下看，地形、林地很少挡得住）：在空中的才算——
+//   攻方侦察机 / 无侦-7 / 攻击-2 / 直-10，守方 MQ-9、阿帕奇。登陆前侦察照相时就能把藏在林缘的守军坦克找出来，交给舰炮、飞机（整体配合）
+const SPOT_AIR = { recon: [8000, 3000], cas: [6000, 2500], heli: [5000, 2000] }, SPOT_AIR_H = 60;
 
 // 两点之间有没有通视：沿线每格取遮挡顶高（地面 + 林地 / 城镇 / 悬崖），高过视线就挡住；烟幕挡。
 //   林缘、镇子边上 SPOT_EDGE 米以内的树木、房屋不算遮挡（观察车停在林缘往外看、目标在林缘也露着——双方一样）：
@@ -38,9 +41,18 @@ function spotLos(sx, sy, sh, tx, ty, th, fired) {
 // 一方的观察点：[x, y, 发现车辆的距离, 发现步兵的距离, 观察点离地高（格，不给 = 车长周视镜 0.3）]
 function spotSensors(side) {
   const out = [];
-  if (side === 'p') {   // 驱护舰的光电跟踪仪
+  if (side === 'p') {   // 驱护舰的光电跟踪仪；侦察机、无人机、直升机的光电吊舱
     if (S.dd && S.dd.state !== 'sunk' && isFinite(S.dd.x) && S.dd.x > -999) out.push([S.dd.x, S.dd.y, SPOT_SHIP[0], SPOT_SHIP[1], SPOT_SHIP_H]);
     for (const sh of S.ships) if (sh.kind === 'dd' && alive(sh)) out.push([sh.x, sh.y, SPOT_SHIP[0], SPOT_SHIP[1], SPOT_SHIP_H]);
+    for (const p of S.planes || []) {
+      if (p.dead || !(p.alt > .25) || !isFinite(p.x)) continue;
+      const k = p.kind === 'recon' && !p.aew ? 'recon' : p.kind === 'cas' && (!p.v || p.v === 'gj2' || p.v === 'heli') ? (p.v === 'heli' ? 'heli' : 'cas') : null;   // 攻击-2（cas 默认机型）、直-10
+      if (k) out.push([p.x, p.y, SPOT_AIR[k][0], SPOT_AIR[k][1], SPOT_AIR_H]);
+    }
+  } else if (S.eair) for (const a of S.eair.fly || []) {   // 守方 MQ-9（光电 / 红外转塔）、阿帕奇（目标截获指示瞄准具）
+    if (a.dead || !isFinite(a.x) || a.ph === 'gnd' || a.ph === 'roll') continue;
+    const k = a.type === 'mq9' ? 'cas' : a.type === 'heli' ? 'heli' : null;
+    if (k) out.push([a.x, a.y, SPOT_AIR[k][0], SPOT_AIR[k][1], SPOT_AIR_H]);
   }
   for (const v of S.veh || []) {
     if (v.dead || v.lst || v.side !== side) continue;

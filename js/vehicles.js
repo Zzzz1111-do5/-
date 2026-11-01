@@ -528,6 +528,7 @@ function vehShoot(v, tg) {
     return;
   }
   const sz = tg.k === 'st' ? .85 : tg.k === 'tm' ? .7 : (tg.t.moving ? .65 : .9);
+  if (tg.k === 'tm') Object.assign(tg.t, { vhT: S.t, vhX: v.x, vhY: v.y });   // 挨车炮打的组记下来火的车（dig.js：远了够不着就扔烟幕弹）
   let ph = .82 * (1 - tg.d / g.range * .45) * (moving ? .45 : 1) * (v.swim ? .4 : 1) * (1 - v.sup / 160) * sz * (M.pow || 1) * (v.side === 'e' ? D.acc : 1);
   if (tg.k === 'tm') ph *= SMOKE[ci(tg.x, tg.y)] ? .5 : 1;
   const hit = Math.random() < ph, ap = tg.k === 'veh' || tg.k === 'car';
@@ -568,6 +569,7 @@ function vehMg(v, tg) {
   const moving = S.t - v.movedT < .4, acc = vehDispK(tg.d, m.quad) * (moving ? .6 : 1) * (1 - v.sup / 140) * (M.pow || 1) * (v.side === 'e' ? D.acc : 1);
   const def = coverAt(q.x, q.y) * shelter(q, v.x, v.y) * (SMOKE[ci(q.x, q.y)] ? .4 : 1);
   if (q.side === 'e') q.hitT = S.t;
+  Object.assign(q, { vhT: S.t, vhX: v.x, vhY: v.y });   // 挨车载机枪打的组记下来火的车（dig.js 烟幕弹）
   for (let s = 0; s < m.n; s++) {
     suppress(q, (m.quad ? 9 : 8.5) * (M.sup || 1), v.x, v.y);
     if (q.men.length && Math.random() < (m.quad ? .1 : .11) * acc * def) killMan(q, v.side === 'e' && Math.random() < D.radio ? 'radio' : null);
