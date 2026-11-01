@@ -251,35 +251,36 @@ function ftLockMark(ctx) {
   ctx.restore();
 }
 function ftTgpHud(ctx) {
-  const T = V3FP.tg, w = CAM.vw, h = CAM.vh, cx = w / 2, cy = h / 2, P = fpPose(), G = ftPt();
-  ctx.save();
-  ctx.strokeStyle = ctx.fillStyle = '#f4f4ee'; ctx.lineWidth = 1.5; ctx.shadowColor = 'rgba(0,0,0,.85)'; ctx.shadowBlur = 2;
+  const T = V3FP.tg, w = CAM.vw, h = CAM.vh, cx = w / 2, cy = h / 2, P = fpPose(), G = ftPt(), INK = '#f4f4ee', EDGE = 'rgba(0,0,0,.8)';
+  // 符号都描一圈暗边：黑热（背景大片发白）、白热（背景发黑）、电视里都看得清
+  const line = (path, col = INK, lw = 1.5) => { ctx.beginPath(); path(); ctx.strokeStyle = EDGE; ctx.lineWidth = lw + 2.5; ctx.stroke(); ctx.strokeStyle = col; ctx.lineWidth = lw; ctx.stroke(); };
+  const text = (t, x, y, col = INK) => { ctx.lineWidth = 3; ctx.strokeStyle = EDGE; ctx.strokeText(t, x, y); ctx.fillStyle = col; ctx.fillText(t, x, y); };
+  ctx.save(); ctx.lineJoin = 'round';
   // 十字（中间留空）与四角取景框
-  const g = 14, L = Math.min(w, h) * .09;
-  ctx.beginPath();
-  ctx.moveTo(cx - g - L, cy); ctx.lineTo(cx - g, cy); ctx.moveTo(cx + g, cy); ctx.lineTo(cx + g + L, cy);
-  ctx.moveTo(cx, cy - g - L); ctx.lineTo(cx, cy - g); ctx.moveTo(cx, cy + g); ctx.lineTo(cx, cy + g + L);
-  const bx = w * .3, by = h * .3, c = Math.min(w, h) * .05;
-  for (const [sx, sy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) { ctx.moveTo(cx + sx * bx, cy + sy * (by - c)); ctx.lineTo(cx + sx * bx, cy + sy * by); ctx.lineTo(cx + sx * (bx - c), cy + sy * by); }
-  ctx.stroke();
+  const g = 14, L = Math.min(w, h) * .09, bx = w * .3, by = h * .3, c = Math.min(w, h) * .05;
+  line(() => {
+    ctx.moveTo(cx - g - L, cy); ctx.lineTo(cx - g, cy); ctx.moveTo(cx + g, cy); ctx.lineTo(cx + g + L, cy);
+    ctx.moveTo(cx, cy - g - L); ctx.lineTo(cx, cy - g); ctx.moveTo(cx, cy + g); ctx.lineTo(cx, cy + g + L);
+    for (const [sx, sy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) { ctx.moveTo(cx + sx * bx, cy + sy * (by - c)); ctx.lineTo(cx + sx * bx, cy + sy * by); ctx.lineTo(cx + sx * (bx - c), cy + sy * by); }
+  });
   // 锁定的目标：跟踪框
   const LP = ftLockPos();
-  if (LP) { const q = v3Proj(LP.x, LP.y, LP.z); if (q) { ctx.strokeStyle = FW_RED; ctx.lineWidth = 2; ctx.strokeRect(q.x - 18, q.y - 18, 36, 36); ctx.strokeStyle = '#f4f4ee'; ctx.lineWidth = 1.5; } }
+  if (LP) { const q = v3Proj(LP.x, LP.y, LP.z); if (q) line(() => ctx.rect(q.x - 18, q.y - 18, 36, 36), FW_RED, 2); }
   ctx.font = '13px "IBM Plex Mono", "Noto Sans SC", monospace'; ctx.textBaseline = 'top';
   const fovD = T.fov * 180 / Math.PI, fv = fovD > 20 ? '宽视场' : fovD > 6 ? '中视场' : fovD > 2 ? '窄视场' : '超窄视场';
   ctx.textAlign = 'left';
-  ctx.fillText(`光电吊舱 · ${ftMode[T.mode]}`, 18, 16);
-  ctx.fillText(`${fv} ${fovD.toFixed(1)}° · ×${(40 / fovD).toFixed(1)}`, 18, 36);
+  text(`光电吊舱 · ${ftMode[T.mode]}`, 18, 16);
+  text(`${fv} ${fovD.toFixed(1)}° · ×${(40 / fovD).toFixed(1)}`, 18, 36);
   ctx.textAlign = 'right';
   const dist = G ? Math.hypot(G[0] - P.x, -G[1] - P.y, G[2] - P.z) : 0;
-  ctx.fillText(`斜距 ${(dist / 1000).toFixed(2)} km`, w - 18, 16);
-  if (G) ctx.fillText(`${typeof gridRef === 'function' ? gridRef(clamp(G[0], 0, W - 1), clamp(-G[1], 0, H - 1)) : ''} · 高 ${Math.round(G[2])} m`, w - 18, 36);
+  text(`斜距 ${(dist / 1000).toFixed(2)} km`, w - 18, 16);
+  if (G) text(`${typeof gridRef === 'function' ? gridRef(clamp(G[0], 0, W - 1), clamp(-G[1], 0, H - 1)) : ''} · 高 ${Math.round(G[2])} m`, w - 18, 36);
   ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
-  ctx.fillText(LP ? `跟踪：${V3FP.gl.nm}` : '地面点稳定（L 锁定）', cx, h - 64);
-  if (T.mask) { ctx.fillStyle = FW_RED; ctx.font = '15px "IBM Plex Mono", "Noto Sans SC", monospace'; ctx.fillText('遮挡：目标在机身上方 / 后方，吊舱看不到', cx, cy - L - g - 12); }
-  ctx.font = '11px "IBM Plex Mono", "Noto Sans SC", monospace'; ctx.fillStyle = 'rgba(244,244,238,.75)'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-  ctx.fillText('鼠标 转视线 · 滚轮 / Z 变焦 · N 白热 / 黑热 / 电视 · L 锁定 · B 退出', 18, 56);
-  if (V3FP.msg && performance.now() - V3FP.msg.at < 1800) { ctx.fillStyle = FW_RED; ctx.font = '14px "IBM Plex Mono", "Noto Sans SC", monospace'; ctx.textAlign = 'center'; ctx.fillText(V3FP.msg.t, cx, h * .72); }
+  text(LP ? `跟踪：${V3FP.gl.nm}` : '地面点稳定（L 锁定）', cx, h - 64);
+  if (T.mask) { ctx.font = '15px "IBM Plex Mono", "Noto Sans SC", monospace'; text('遮挡：目标在机身上方 / 后方，吊舱看不到', cx, cy - L - g - 12, FW_RED); }
+  ctx.font = '11px "IBM Plex Mono", "Noto Sans SC", monospace'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+  text('鼠标 转视线 · 滚轮 / Z 变焦 · N 白热 / 黑热 / 电视 · L 锁定 · B 退出', 18, 56, 'rgba(244,244,238,.85)');
+  if (V3FP.msg && performance.now() - V3FP.msg.at < 1800) { ctx.font = '14px "IBM Plex Mono", "Noto Sans SC", monospace'; ctx.textAlign = 'center'; text(V3FP.msg.t, cx, h * .72, FW_RED); }
   ctx.restore();
 }
 // 武器栏：一排，按键 + 名称 + 剩余
@@ -306,8 +307,8 @@ function ftBar(ctx) {
   let x = -tot / 2;
   it.forEach((t, i) => {
     const empty = t.n === 0;
-    ctx.fillStyle = t.sel ? 'rgba(255,255,255,.2)' : 'rgba(0,0,0,.5)'; ctx.fillRect(x, 0, wd[i], h);
-    ctx.strokeStyle = t.sel ? 'rgba(255,255,255,.55)' : 'rgba(255,255,255,.1)'; ctx.lineWidth = 1; ctx.strokeRect(x + .5, .5, wd[i] - 1, h - 1);
+    ctx.fillStyle = t.sel ? 'rgba(0,0,0,.72)' : 'rgba(0,0,0,.55)'; ctx.fillRect(x, 0, wd[i], h);   // 底色都压暗：黑热时背景大片发白也看得清
+    ctx.strokeStyle = t.sel ? 'rgba(255,255,255,.85)' : 'rgba(255,255,255,.12)'; ctx.lineWidth = t.sel ? 1.5 : 1; ctx.strokeRect(x + .75, .75, wd[i] - 1.5, h - 1.5);
     ctx.fillStyle = empty ? 'rgba(255,255,255,.18)' : 'rgba(255,255,255,.88)'; ctx.fillRect(x + 6, 5, kw, h - 10);   // 按键
     ctx.fillStyle = '#111'; ctx.textAlign = 'center'; ctx.fillText(t.k, x + 6 + kw / 2, h / 2 + 1);
     ctx.fillStyle = empty ? 'rgba(255,255,255,.35)' : t.sel ? '#ffffff' : 'rgba(255,255,255,.85)'; ctx.textAlign = 'left';
