@@ -13,7 +13,7 @@ const V3FP = { on: false, k: null, o: null, keys: new Set(), look: [0, 0], thr: 
   vw: 'chase', orb: [0, 0], cd: 80, ws: -1, lk: {}, fwC: [], bay: { main: 0, side: 0, ext: 0 },
   ctl: 'aim', aim: [0, 0], ms: [0, 0], kx: { r: 0, p: 0, y: 0 }, ins: { x: 0, y: 0, r: 0 }, ab: false, abT: 0, ffb: true, gb: 0, rb: 0, buf: 0, imp: 0, free: false, gpB: [],
   mv: null, mo: [0, 0], mf: null, mp: null, mEnd: null, fq: null, msg: null };   // mv：导弹视角正跟着的弹；fq：按了开火、等舱门开好
-const V3FP_KEYS = { KeyW: 1, KeyA: 1, KeyS: 1, KeyD: 1, KeyQ: 1, KeyE: 1, KeyC: 1, KeyF: 1, KeyX: 1, KeyV: 1, KeyT: 1, KeyM: 1, KeyG: 1, Space: 1, ShiftLeft: 1, ShiftRight: 1, ArrowLeft: 1, ArrowRight: 1, ArrowUp: 1, ArrowDown: 1, Digit1: 1, Digit2: 1, Digit3: 1, Digit4: 1, Digit5: 1, Digit6: 1 };
+const V3FP_KEYS = { KeyW: 1, KeyA: 1, KeyS: 1, KeyD: 1, KeyQ: 1, KeyE: 1, KeyC: 1, KeyF: 1, KeyX: 1, KeyV: 1, KeyT: 1, KeyM: 1, KeyG: 1, Space: 1, ShiftLeft: 1, ShiftRight: 1, ArrowLeft: 1, ArrowRight: 1, ArrowUp: 1, ArrowDown: 1, Digit1: 1, Digit2: 1, Digit3: 1, Digit4: 1, Digit5: 1, Digit6: 1, KeyB: 1, KeyL: 1, KeyR: 1, KeyN: 1, KeyZ: 1 };   // B 光电吊舱、L 锁定地面目标、R 热诱弹、N 红外极性、Z 变焦（fptgp.js）
 const FP_TELE = [-.3, 0, .35, .7, 1];   // 车钟：后退一 · 停车 · 前进一二三
 
 // —— 能驾驶的单位 ——
@@ -118,7 +118,7 @@ if (typeof window !== 'undefined' && window.addEventListener) window.addEventLis
 function fpExit() {
   if (V3FP.on && V3.fc && V3.cam) { const P = fpPose(); if (P) Object.assign(V3.fc, { x: P.x, y: P.y, z: Math.max(P.z, v3Ht(clamp(P.x, 0, W - 1), clamp(P.y, 0, H - 1)) + 20), yaw: P.yaw, yawT: P.yaw, pitch: -.35, pitchT: -.35, cx: null, cy: null }); }
   fpRelease(); fpMslOff(); fpAudio(null);
-  Object.assign(V3FP, { on: false, k: null, o: null, drag: null, lock: null, nozV: 0, fq: null, msg: null });
+  Object.assign(V3FP, { on: false, k: null, o: null, drag: null, lock: null, nozV: 0, fq: null, msg: null, tg: null, gl: null, vw: V3FP.vw === 'tgp' ? 'chase' : V3FP.vw });
   if (typeof V3G === 'object') V3G.glass = null;
   V3FP.keys.clear();
   if (typeof document !== 'undefined' && document.pointerLockElement && document.exitPointerLock) document.exitPointerLock();
@@ -396,7 +396,7 @@ function fpProj(E, x, y, z, D, n) {
 //   视野随空速放大（120 → 420 米/秒：46° → 约 55°），开加力那一下猛地一推、追尾镜头被甩开一点再追上；贴地高速（离地 220 米以下）气流颠簸，跨音速抖振（镜头抖动 fpShake）；
 //   声音 fpAudio（audio.js 的 Web Audio，全合成）：涡轮啸叫随转速升高、推力的低频轰鸣、加力的爆燃轰鸣与次低音、气流的风噪随动压变响（大迎角抖振时一阵一阵）；
 //   画面 fpFx（v3fx.js 调）：过载 4.5 g 以上或大迎角时翼尖拖出两道白色涡流，6 g 以上机翼上方一片水汽；离地近、速度快时迎面掠过的风线
-const fpFov = () => (V3FP.on && V3FP.k === 'air' && V3FP.fov) || V3_FOV;
+const fpFov = () => (V3FP.on && V3FP.k === 'air' && (V3FP.vw === 'tgp' && V3FP.tg ? V3FP.tg.fov : V3FP.fov)) || V3_FOV;   // 光电吊舱：真实变焦的视场角（fptgp.js）
 function fpFeel(dt) {
   const o = V3FP.o, F = V3FP.on && V3FP.k === 'air' && o && o.fl;
   if (!F) { V3FP.fov = null; V3FP.turb = V3FP.trans = 0; fpAudio(null); return; }
@@ -444,7 +444,8 @@ function fpAudio(F) {
 // 画面上的速度感（v3fx.js 每帧调，out 发光、sm 遮挡的烟；镜头 C）
 function fpFx(out, sm, C) {
   const o = V3FP.o, F = V3FP.on && V3FP.k === 'air' && o && o.fl;
-  if (!F || typeof v3fSpark !== 'function' || typeof v3fRib !== 'function' || V3FP.mv != null) return;
+  if (V3FP.on && V3FP.k === 'air' && typeof ftFx === 'function' && typeof v3fSpark === 'function') ftFx(out, sm, C);   // 热诱弹、蒸汽锥、音爆、吊舱红外的热源（fptgp.js）
+  if (!F || typeof v3fSpark !== 'function' || typeof v3fRib !== 'function' || V3FP.mv != null || V3FP.vw === 'tgp') return;
   const rs = fpRS(o), B = fpBody(o), V = F.Va || 0, nz = F.nz || 1, E = C.E, now = performance.now() / 1000;
   const P = [rs.x, -rs.y, rs.z], sz = (typeof airSize3 === 'function' ? airSize3(o, 'p') : 15), D = typeof AIRD === 'object' ? AIRD[typeof airSilKey === 'function' ? airSilKey(o.kind, o.v) : ''] : null;
   const tip = D && D.wing ? D.wing.reduce((m, q) => q[1] > m[1] ? q : m, D.wing[0]) : [-2, 7], k = sz / 21;
@@ -586,6 +587,7 @@ function fpMslCam() {
 function v3fpCamera() {
   const P = fpPose() || { x: CAM.x, y: CAM.y, z: 200, yaw: 0, pitch: -.3, roll: 0 };
   if (V3FP.k === 'air' && V3FP.mv != null) { const C = fpMslCam(); if (C) return C; }
+  if (V3FP.k === 'air' && V3FP.vw === 'tgp' && typeof ftCam === 'function') { const C = ftCam(); if (C) return C; }   // 光电吊舱（fptgp.js）
   if (V3FP.k === 'air' && V3FP.vw !== 'cock') return fpChaseCam(P);
   if (V3FP.k === 'air' && fpPitOn(V3FP.o)) return fpPitCam();
   const B = V3FP.k === 'air' ? fpBody(V3FP.o) : fpAxes(P);
@@ -614,6 +616,7 @@ function v3fpStep(now) {
   CAM.x = clamp(P.x + Math.cos(yaw) * reach * (chase ? .5 : 1), 0, W); CAM.y = clamp(P.y + Math.sin(yaw) * reach * (chase ? .5 : 1), 0, H);
   CAM.z = CAM.fit * clamp(1800 / Math.max(60, alt + reach * .35), 1.2, 9);
   if (V3FP.mv != null && V3FP.mp) { const mx = V3FP.mp[0], my = -V3FP.mp[1], ma = Math.max(1, V3FP.mp[2] - v3Ht(clamp(mx, 0, W - 1), clamp(my, 0, H - 1))); CAM.x = clamp(mx, 0, W); CAM.y = clamp(my, 0, H); CAM.z = CAM.fit * clamp(1800 / Math.max(60, ma + 300), 1.2, 9); }   // 导弹视角：贴图、细节按弹附近
+  if (V3FP.k === 'air' && V3FP.vw === 'tgp' && typeof ftCenter === 'function') ftCenter();   // 吊舱：画面中心是它盯着的那一点
   V3FP.lock = V3.cam && V3FP.k === 'ship' ? fpLockTarget() : null;
   if (V3FP.k === 'air') {   // 尾喷口：按油门、加力（油尽熄火时张开）慢慢开合
     const dt = clamp((now - (V3FP.nozT || now)) / 1000, 0, .1), F = o.fl, want = (o.fuel ?? 1) > 0 ? (F && F.ab ? FP_NOZ[3] : V3FP.thr > .92 ? FP_NOZ[2] : V3FP.thr > .45 ? FP_NOZ[1] : FP_NOZ[0]) : .15;
@@ -650,8 +653,10 @@ function fpGfx(ctx, w, h) {
 // —— 画面（view3d.js v3Overlay 调用，屏幕空间）：只有武器平显（fpwpn.js）与过载的黑视 / 红视，别的标识都不画 ——
 function v3fpOverlay(ctx) {
   if (!V3FP.on || !V3FP.o || V3FP.k !== 'air') return;
-  if (V3FP.vw === 'cock' && V3FP.mv == null && !fpPitOn(V3FP.o)) fpHudFlat(ctx, CAM.vw, CAM.vh);
-  if (typeof fwHud === 'function') fwHud(ctx);
+  const tgp = V3FP.vw === 'tgp' && V3FP.mv == null;   // 光电吊舱：画吊舱自己的符号，不画平显（fptgp.js）
+  if (!tgp && V3FP.vw === 'cock' && V3FP.mv == null && !fpPitOn(V3FP.o)) fpHudFlat(ctx, CAM.vw, CAM.vh);
+  if (!tgp && typeof fwHud === 'function') fwHud(ctx);
+  if (typeof ftOverlay === 'function') ftOverlay(ctx);   // 武器栏（按键、余弹、热诱弹）、锁定框、吊舱符号
   fpGfx(ctx, CAM.vw, CAM.vh);
 }
 // 平面座舱（模型没有座舱内饰的歼-50、歼-16D 等：座舱视角里只看得到天空，原来什么参照都没有）的平显，固定在机头方向上（转头时跟着机头走开）：
@@ -723,6 +728,13 @@ if (typeof window !== 'undefined' && window.addEventListener) {
     if (V3FP.k === 'air') {   // 杆、舵、油门在 fpFly 里按住多久推多少；这里只处理按一下的
       if (e.code === 'KeyV') { if (V3FP.mv != null) fpMslOff(); else fpView(); }   // 导弹视角里按 V 回到飞机
       if (e.code === 'KeyF') fwFire();
+      if (typeof ftOn === 'function') {   // 光电吊舱、锁定、热诱弹（fptgp.js）
+        if (e.code === 'KeyB') { if (V3FP.vw === 'tgp') ftOff(); else ftOn(); }
+        if (e.code === 'KeyL') ftLock();
+        if (e.code === 'KeyR') ftFlare();
+        if (e.code === 'KeyN' && V3FP.vw === 'tgp') ftModeNext();
+        if (e.code === 'KeyZ' && V3FP.vw === 'tgp') ftZoomStep();
+      }
       const dg = /^Digit([1-6])$/.exec(e.code);
       if (dg) fwSel(+dg[1] - 1);
       if (e.code === 'KeyC') { V3FP.free = true; if (V3FP.ctl === 'stick') V3FP.ms = [0, 0]; }   // 按住自由视角（鼠标摇杆时顺便杆回中）
@@ -746,6 +758,7 @@ if (typeof window !== 'undefined' && window.addEventListener) {
     if (!dx && !dy) return;
     if (V3FP.k === 'air') {
       if (V3FP.mv != null) { V3FP.mo[0] = airAng(V3FP.mo[0] + dx * .005); V3FP.mo[1] = clamp(V3FP.mo[1] - dy * .004, -1.3, 1.3); return; }   // 导弹视角：鼠标绕着弹看，不带机头
+      if (V3FP.vw === 'tgp' && typeof ftSlew === 'function') { ftSlew(dx, dy); return; }   // 光电吊舱：鼠标转视线（fptgp.js）
       if (V3FP.free || (V3FP.drag && V3FP.dbtn === 2)) {   // 自由视角（按住 C 或右键拖动）：追尾绕着飞机转、座舱里转头
         if (V3FP.vw === 'cock') { V3FP.look[0] = clamp(V3FP.look[0] + dx * .0024, -2.6, 2.6); V3FP.look[1] = clamp(V3FP.look[1] - dy * .0024, -1.2, .9); }
         else { V3FP.orb[0] = airAng(V3FP.orb[0] - dx * .005); V3FP.orb[1] = clamp(V3FP.orb[1] - dy * .004, -1.4, 1.4); }
@@ -762,6 +775,7 @@ if (typeof window !== 'undefined' && window.addEventListener) {
   window.addEventListener('mouseup', () => { V3FP.drag = null; });
   // 滚轮：跟随视角拉远拉近（不交给 3D 自由镜头）
   window.addEventListener('wheel', e => {
+    if (V3FP.on && V3FP.k === 'air' && V3FP.vw === 'tgp' && typeof ftZoom === 'function' && typeof R === 'object' && e.target === R.cv) { ftZoom(e.deltaY); e.preventDefault(); e.stopPropagation(); return; }   // 吊舱：滚轮变焦
     if (!V3FP.on || V3FP.k !== 'air' || V3FP.vw === 'cock' || typeof R !== 'object' || e.target !== R.cv) return;
     V3FP.cd = clamp(V3FP.cd * Math.exp(e.deltaY * .0012), fpLen(V3FP.o) * 1.3, 600);
     e.preventDefault(); e.stopPropagation();
@@ -823,8 +837,15 @@ function fpUi() {
     mk(Rg, '开火', () => { if (air()) fwFire(); else fpFire(false); });
     mk(Rg, '武器', () => { if (air()) fwNext(); else fpFire(true); });
     mk(Rg, '加力', () => { if (air()) V3FP.ab = !V3FP.ab; });
-    mk(Rg, '回正', () => { V3FP.look = [0, 0]; V3FP.orb = [0, 0]; V3FP.ms = [0, 0]; });
+    if (typeof ftOn === 'function') {   // 光电吊舱（进出、拖动画面转视线）、锁定地面目标、热诱弹、变焦、白热 / 黑热 / 电视（fptgp.js）
+      mk(Rg, '吊舱', () => { if (!air()) return; if (V3FP.vw === 'tgp') ftOff(); else ftOn(); });
+      mk(Rg, '锁定', () => { if (air()) ftLock(); });
+      mk(Rg, '诱弹', () => { if (air()) ftFlare(); });
+      mk(Rg, '变焦', () => { if (air() && V3FP.vw === 'tgp') ftZoomStep(); });
+      mk(Rg, '红外', () => { if (air() && V3FP.vw === 'tgp') ftModeNext(); });
+    }
     mk(Rg, '视角', () => { if (air()) fpView(); });
+    mk(Rg, '回正', () => { V3FP.look = [0, 0]; V3FP.orb = [0, 0]; V3FP.ms = [0, 0]; });
     mk(Rg, '列表', () => fpMenu(true));
     mk(Rg, '退出', () => fpExit());
     pad.append(L, Rg);

@@ -291,7 +291,7 @@ function v3Fx(C) {
       const key = typeof airSilKey === 'function' ? airSilKey(p.kind, p.v) : null;
       if (!key) continue;
       const sz = typeof airSize3 === 'function' ? airSize3(p, 'p') : (typeof airMdl === 'function' && airMdl(p.kind, p.v).size) || 15;   // 与画机体同一个尺寸（喷口对得上）
-      lit(p, key, sz, true, !!FTR[key] && p.phase === 'out' && ((p.alt ?? 1) < .5 || (p.lT != null && S.t - p.lT < 14)));   // 弹射离舰后全加力爬升约 14 秒（与 js/aero.js 的离舰剖面一致）
+      lit(p, key, sz, true, !!FTR[key] && (typeof fpDriving === 'function' && fpDriving(p) && p.fl ? !!p.fl.ab : p.phase === 'out' && ((p.alt ?? 1) < .5 || (p.lT != null && S.t - p.lT < 14))));   // 亲自驾驶：按真实的加力开关画尾焰（马赫环）   // 弹射离舰后全加力爬升约 14 秒（与 js/aero.js 的离舰剖面一致）
     }
     if (S.eair) for (const a of S.eair.fly) {
       if (a.dead || !isFinite(a.x) || !(spec || a.pv || inVision(a.x, a.y))) continue;

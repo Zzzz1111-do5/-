@@ -156,7 +156,7 @@ void main() {
 const V3G_FS = der => `${der ? '#extension GL_OES_standard_derivatives : enable\n#define DER 1\n' : ''}${typeof V3_PREC === 'string' ? V3_PREC : 'precision mediump float;'}
 uniform vec4 uC, uSG, uTf, uTf2; uniform vec2 uMR; uniform vec3 uE; uniform float uNs, uAm, uAc;
 uniform sampler2D uTb, uTn, uTm, uTe, uTo, uLm;
-uniform vec2 uFog, uWorld; uniform vec3 uBg, uHlC; uniform float uLmOn, uMx, uHl;
+uniform vec2 uFog, uWorld; uniform vec3 uBg, uHlC; uniform float uLmOn, uMx, uHl, uIRh;
 varying vec3 vN, vV, vP; varying vec2 vUv, vW; varying float vSide, vD;
 ${typeof V3_SHF === 'string' ? V3_SHF : 'float shadowAt() { return 1.; }'}
 ${typeof V3L_BOOM_GLSL === 'string' ? V3L_BOOM_GLSL : 'vec3 boomLight(vec2 w) { return vec3(0.); }'}
@@ -203,6 +203,7 @@ void main() {
   c += uE * (uTf2.x > .5 ? lin(texture2D(uTe, vUv).rgb) : vec3(1.));
   c += boomLight(vec2(vW.x, -vW.y)) * diff * (.4 + .6 * ndl);   // 近处爆炸的火光
   if (sd > 1.5 && sd < 2.5) c *= .2;   // 残骸：烧黑
+  if (uIRh > 0.) c = mix(c, vec3(1.1, 1.04, .98) * (.55 + .45 * ndl * shd), clamp(uIRh * (sd > 1.5 && sd < 2.5 ? 1.25 : 1.), 0., 1.));   // 吊舱红外（fptgp.js ftHeat）：人、车、直升机、导弹比地面热，晒着太阳的面更热；残骸还在烧（后期换算成白热 / 黑热）
   c = pow(max(c, 0.), vec3(1. / 2.2));
   if (uMx > .5) c = (sd > .5 && sd < 1.5 ? vec3(1., .3, .38) : vec3(.32, 1., .58)) * dot(c, vec3(.3, .59, .11)) * .6;   // 黑绿画面：按明暗换成磷光的单色（敌方红）
   c += uHlC * uHl * hl * (.3 + .7 * pow(1. - ndv, 2.));
@@ -223,7 +224,7 @@ function v3gInit(gl) {
     if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(pr));
     V3G.pr = pr;
     for (const k of ['p', 'n', 'uv', 'iA', 'iB', 'iC', 'iD']) V3G.a[k] = gl.getAttribLocation(pr, k);
-    for (const k of ['uM', 'uEye', 'uPk', 'uPm', 'uPl', 'uPp', 'uPa', 'uPw', 'uPw2', 'uPq', 'uPa2', 'uPr', 'uPe', 'uPe2', 'uPq3', 'uPa3', 'uPg2', 'uRad', 'uPx', 'uC', 'uSG', 'uTf', 'uTf2', 'uMR', 'uE', 'uNs', 'uAm', 'uAc', 'uTb', 'uTn', 'uTm', 'uTe', 'uTo', 'uLm', 'uFog', 'uWorld', 'uBg', 'uLmOn', 'uBm', 'uMx', 'uHl', 'uHlC', 'uShM', 'uShT', 'uShOn', 'uShP']) V3G.u[k] = gl.getUniformLocation(pr, k);
+    for (const k of ['uM', 'uEye', 'uPk', 'uPm', 'uPl', 'uPp', 'uPa', 'uPw', 'uPw2', 'uPq', 'uPa2', 'uPr', 'uPe', 'uPe2', 'uPq3', 'uPa3', 'uPg2', 'uRad', 'uPx', 'uC', 'uSG', 'uTf', 'uTf2', 'uMR', 'uE', 'uNs', 'uAm', 'uAc', 'uTb', 'uTn', 'uTm', 'uTe', 'uTo', 'uLm', 'uFog', 'uWorld', 'uBg', 'uLmOn', 'uBm', 'uMx', 'uHl', 'uHlC', 'uIRh', 'uShM', 'uShT', 'uShOn', 'uShP']) V3G.u[k] = gl.getUniformLocation(pr, k);
     V3G.ib = gl.createBuffer();
     V3G.ok = true;
   } catch (e) { V3G.ok = false; console.warn('贴图模型不可用', e); }
@@ -235,7 +236,7 @@ function v3gBegin(C) {
   if (!V3G.tried && typeof V3 === 'object' && V3.gl) v3gInit(V3.gl);
   for (const L of V3G.inst.values()) L.n = 0;
   V3G.C = C; V3G.frame = (V3G.frame || 0) + 1;
-  V3G.px = (typeof CAM === 'object' ? CAM.vh : 768) / 2 / Math.tan((typeof V3_FOV === 'number' ? V3_FOV : .8) / 2);   // 1 米在 1 米外占多少像素
+  V3G.px = (typeof CAM === 'object' ? CAM.vh : 768) / 2 / Math.tan((typeof fpFov === 'function' ? fpFov() : typeof V3_FOV === 'number' ? V3_FOV : .8) / 2);   // 1 米在 1 米外占多少像素（驾驶时按真实视场角：吊舱变焦后远处的车照样用精细模型）
   { const t0 = performance.now(); while (V3G.upq.length && performance.now() - t0 < 4) V3G.upq.shift()(); }   // 每帧上传贴图最多约 4 毫秒（至少一张）：大贴图连传六张会卡一下
 }
 // 一个实例。模型还没好返回 false。parts：四个部件角度（坦克炮塔相对车身的转角、旋翼转角、起落架收起 1 …）
@@ -270,6 +271,7 @@ function v3gDraw(C, LM) {
   const lmOn = mx && !LM && typeof v3LightBind === 'function' && v3LightBind(gl);
   gl.uniform1i(U.uLm, lmOn ? V3L.unit : 0); gl.uniform1f(U.uLmOn, lmOn ? 1 : 0);
   if (U.uBm && typeof V3L_BM === 'object') gl.uniform4fv(U.uBm, V3L_BM);
+  const ir = !LM && typeof ftIR === 'function' && ftIR() && typeof ftHeat === 'function';   // 吊舱红外：每型模型按它有多热提亮
   gl.uniform1i(U.uTb, 0); gl.uniform1i(U.uTn, 1); gl.uniform1i(U.uTm, 2); gl.uniform1i(U.uTe, 3); gl.uniform1i(U.uTo, 4);
   const tex = (u, t) => { gl.activeTexture(gl.TEXTURE0 + u); gl.bindTexture(gl.TEXTURE_2D, t || null); };
   const wrap = (t, w) => { if (!t) return; gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, t); const m = [gl.REPEAT, gl.CLAMP_TO_EDGE, gl.MIRRORED_REPEAT]; gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, m[w[1]] || gl.REPEAT); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, m[w[2]] || gl.REPEAT); };
@@ -286,6 +288,7 @@ function v3gDraw(C, LM) {
       for (const [k, o] of [['iA', 0], ['iB', 16], ['iC', 32], ['iD', 48]]) { gl.enableVertexAttribArray(A[k]); gl.vertexAttribPointer(A[k], 4, gl.FLOAT, false, 64, o); X.vertexAttribDivisorANGLE(A[k], 1); }
       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, M.ib);
       gl.uniform1f(U.uRad, M.rad);
+      gl.uniform1f(U.uIRh, ir ? ftHeat(M.key) : 0);
       const it = m.it === 4 ? gl.UNSIGNED_INT : gl.UNSIGNED_SHORT;
       for (const [mi, pi, i0, cnt] of m.lod[L.lod]) {
         const T = M.mats[mi];

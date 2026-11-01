@@ -30,7 +30,7 @@ void main() {
   gl_FragColor = vec4(c, 1.);
 }`,
   // 合成：景深（按屏幕纵向离清晰带的距离混入模糊图）→ 叠辉光 → 暗角 → 颗粒
-  comp: V3PO_HEAD + `uniform sampler2D uS, uB, uD; uniform vec4 uTs; uniform float uBk, uVig, uGr, uT; uniform vec2 uRes;
+  comp: V3PO_HEAD + `uniform sampler2D uS, uB, uD; uniform vec4 uTs; uniform float uBk, uVig, uGr, uT, uIR; uniform vec2 uRes;
 float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
 void main() {
   vec3 c = texture2D(uS, vU).rgb;
@@ -40,6 +40,14 @@ void main() {
   c = c / (1. + c * .12);
   c = pow(max(c, 0.), vec3(.94));
   c = mix(vec3(dot(c, vec3(.299, .587, .114))), c, 1.1);
+  // 光电吊舱的红外（驾驶战斗机时 B 键，fptgp.js）：按「温度」换成灰度——偏暖的颜色亮、偏蓝的天空和水面冷；热源（发动机、人、火）在特效里已经点得很亮；
+  //   拉开对比、加一点热像传感器的噪声；黑热把明暗反过来
+  if (uIR > .5) {
+    float l = dot(c, vec3(.52, .36, .12)), cold = smoothstep(.03, .2, c.b - c.r);
+    l = clamp((l * (1. - .7 * cold) - .1) * 1.6, 0., 1.);
+    l = pow(l, .85) + (hash(floor(vU * uRes) + floor(uT * 24.)) - .5) * .035;
+    c = vec3(uIR > 1.5 ? 1. - l : l);
+  }
   vec2 d = (vU - .5) * vec2(uRes.x / uRes.y, 1.);
   c *= 1. - uVig * smoothstep(.3, 1.05, length(d));
   c += (hash(floor(vU * uRes) + uT) - .5) * uGr;
@@ -57,7 +65,7 @@ function v3poInit(gl) {
       gl.attachShader(p, vs); gl.attachShader(p, sh(gl.FRAGMENT_SHADER, V3PO_FS[k])); gl.bindAttribLocation(p, 0, 'p'); gl.linkProgram(p);
       if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
       const u = {};
-      for (const n of ['uS', 'uB', 'uD', 'uPx', 'uTh', 'uKn', 'uDir', 'uTs', 'uBk', 'uVig', 'uGr', 'uT', 'uRes']) u[n] = gl.getUniformLocation(p, n);
+      for (const n of ['uS', 'uB', 'uD', 'uPx', 'uTh', 'uKn', 'uDir', 'uTs', 'uBk', 'uVig', 'uGr', 'uT', 'uRes', 'uIR']) u[n] = gl.getUniformLocation(p, n);
       V3PO.pr[k] = { p, u };
     }
     V3PO.buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, V3PO.buf); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);   // 盖满屏幕的一个三角形
@@ -89,7 +97,7 @@ function v3poDof() {
 
 function v3Post(now) {
   const st = typeof SETTINGS === 'object' && SETTINGS ? SETTINGS : {};
-  if (st.quality === 'low' || R.lowCap) return;
+  if ((st.quality === 'low' || R.lowCap) && !(typeof ftIR === 'function' && ftIR())) return;   // 画质低时不做后期；吊舱红外例外（换算在这一遍里）
   const gl = V3.gl;
   if (!V3PO.tried) v3poInit(gl);
   if (!V3PO.ok) return;
@@ -120,7 +128,7 @@ function v3Post(now) {
     tex(0, V3PO.scene); tex(1, B.t); tex(2, A.t);
     gl.uniform1i(u.uS, 0); gl.uniform1i(u.uB, 1); gl.uniform1i(u.uD, 2);
     gl.uniform4f(u.uTs, dof, .5, .1, .32); gl.uniform1f(u.uBk, bk); gl.uniform1f(u.uVig, mx ? .42 : .2); gl.uniform1f(u.uGr, mx ? .022 : 0);
-    gl.uniform1f(u.uT, (now / 1000) % 100); gl.uniform2f(u.uRes, w, h);
+    gl.uniform1f(u.uT, (now / 1000) % 100); gl.uniform2f(u.uRes, w, h); gl.uniform1f(u.uIR, typeof ftIR === 'function' ? ftIR() : 0);
   });
   gl.disableVertexAttribArray(0); gl.enable(gl.DEPTH_TEST); gl.activeTexture(gl.TEXTURE0);   // 下一帧画地形时 0、1、2 号贴图单元都会重新绑定
 }

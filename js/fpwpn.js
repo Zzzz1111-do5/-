@@ -203,7 +203,9 @@ function fwFire() {
   if (V3FP.cool > 0 || !fwReady(s)) { V3FP.fq = S.t; return; }
   V3FP.fq = null;
   const busy = new Set(S.missiles.filter(m => m.fw && !m.done && m.tgt).map(m => m.tgt.k + ':' + m.tgt.id));
-  const c = V3FP.fwC.find(c => c.red && !busy.has((c.t || 'eair') + ':' + c.o.id)) || V3FP.fwC.find(c => c.red) || V3FP.fwC[0] || fwBore(o, s);
+  const gl = s.W.k !== 'aam' && typeof ftLockTgt === 'function' ? ftLockTgt(o, s) : null;   // 对地武器：先打锁定的目标（fptgp.js；在射程外就不打）
+  if (gl === 'far') return;
+  const c = gl || V3FP.fwC.find(c => c.red && !busy.has((c.t || 'eair') + ':' + c.o.id)) || V3FP.fwC.find(c => c.red) || V3FP.fwC[0] || fwBore(o, s);
   fwLaunch(o, s, c);
 }
 // 平显上的一行短提示（打光了、还在甲板上），一秒半后消失
