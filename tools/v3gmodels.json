@@ -138,41 +138,34 @@
     },
     "j20": {
       "name": "歼-20",
-      "glb": "conv/j20_assimp.glb",
-      "imgdir": "up/bc559445-chinese-chengdu-j-20/source/j-20_x",
-      "fwd": "-z",
+      "glb": "j20a/scene.gltf",
+      "fwd": "+x",
       "up": "+y",
+      "len": 20.4,
+      "roughMin": 0.45,
+      "tri0": 130000,
+      "tri0Flags": [
+        "Permissive"
+      ],
       "credit": {
-        "title": "Chinese Chengdu J-20",
-        "author": "42manako",
-        "url": "https://sketchfab.com/3d-models/chinese-chengdu-j-20-b9e81062c94545ffb0232d3ac6b7adc5",
+        "title": "Chengdu J-20 Fighter",
+        "author": "andertan",
+        "url": "https://sketchfab.com/3d-models/chengdu-j-20-fighter-817bcfb55c3e4fcb864e4296e2e57a95",
         "license": "CC-BY-4.0",
         "lurl": "http://creativecommons.org/licenses/by/4.0/"
       },
-      "parts": [
-        {
-          "name": "gear",
-          "kind": "hide",
-          "any": [
-            {
-              "zlow": 0.6
-            },
-            {
-              "nodes": "ID16427/|ID16577/"
-            }
-          ]
-        }
-      ],
-      "zc": 2.27,
+      "parts": [],
       "noz": [
         [
-          -10.5,
-          0.76,
-          2.13,
-          0.48,
-          0.9
+          -9.64,
+          0.785,
+          0.805,
+          0.5,
+          0.7
         ]
-      ]
+      ],
+      "modNote": "游戏里补了起落架（模型本身没有），按机腹切出弹舱门；近看的网格减面到约 13 万个三角形",
+      "zc": 1.0
     },
     "j16": {
       "name": "歼-16",

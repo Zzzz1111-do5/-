@@ -105,10 +105,11 @@ async function v3gDecode(key, D) {
   // 贴图：原图字节解码后上传；全部好了才算就绪
   // 重新涂装的模型（V3G_PAINT）：换掉的照片贴图不再解码、上传（省下几十兆显存），涂装材质贴一张淡淡的漆面斑驳纹理
   const mats = m.mats.map(x => Object.assign({}, x)), PT = V3G_PAINT[key], nT = m.imgs.length;
-  if (PT) for (const T of mats) { const c = PT.m[T.n] || (T.t && !PT.keep.includes(T.n) ? PT.def : null); if (c) Object.assign(T, { c: [c[0], c[1], c[2], T.c[3]], t: [nT, 0, 0], mr: c[3] || PT.mr, e: [0, 0, 0] }); }
+  if (PT) for (const T of mats) { const c = PT.m[T.n] || (T.t && !PT.keep.includes(T.n) ? PT.def : null); if (c) Object.assign(T, { c: [c[0], c[1], c[2], T.c[3]], t: c[4] ? null : [nT, 0, 0], mr: c[3] || PT.mr, e: [0, 0, 0] }); }   // c[4]：不贴漆面纹理（金属件）
+  if (PT && PT.glow) for (const T of mats) { const g = PT.glow[T.n]; if (g) T.e = T.e.map(v => v * g); }   // 自发光加亮（歼-20 的绿色编队灯带：原来的亮度白天几乎看不出来）
   const used = new Set(); for (const T of mats) for (const k of ['t', 'nt', 'mrt', 'sgt', 'et', 'ot']) if (T[k]) used.add(T[k][0]);
   M.tex = await Promise.all(m.imgs.map((I, i) => used.has(i) ? v3gImage(bin.subarray(I.o, I.o + I.n), I.m) : null));
-  if (PT) M.tex.push(v3gPaintTex());
+  if (PT) M.tex.push(PT.tex === 'panel' ? v3gPaintTexPanel() : v3gPaintTex());
   M.mats = mats;
   // 部件转轴单位化
   const un = a => { const l = Math.hypot(...a) || 1; return a.map(v => v / l); };
@@ -480,7 +481,11 @@ const V3G_PIT = { j31: { eye: [4.3, 0, 2.72], scr: 'screen', hud: 'Glowing_green
   j15: { eye: [4.97, 0, 3.57], hud: 'hud_2' },
   // 歼-20（与歼-15 同一位作者、同一套座舱零件，同样量法）：坐垫顶面 2.44 米（stof1，x 5.05–5.43）、靠背到 x 4.99（seat_buis_1），眼高坐垫上方 0.78 米 = 3.22，
   //   眼睛在头靠前面一点 x 5.12——正好从平显组合玻璃（hud_2，x 5.54–5.72、高 3.11–3.28）中间看出去
-  j20: { eye: [5.12, 0, 3.22], hud: 'hud_2' } };   // 歼-50 等模型没有座舱内饰：座舱视角放在机头上方，不画自己
+  // 歼-20 新模型：平显玻璃本来就是透明的。喷管（模型实测，发动机轴线 y ±0.785、z 0.805）：机身短舱到 x −8.93 收口，扩散段调节片（Material.001，整架飞机很多零件也用这个材质）
+  //   从喉道（x −8.95，内半径 0.35）张到出口（x −9.65，内半径 0.50、外半径约 0.57）——按位置、离轴半径挑出来做开合部件，外表面、内锥面各拆成自己的材质（as / asIn，按三角形中心离轴半径 rin 分），好单独上色；
+  //   喉道后面原来是一块平板圆盘（hole：挖掉），从后面看进去改成 v3jet.js 画的发动机后段（thr：放在出口前 u 米、半径 r、深 d）
+  j20: { eye: [5.7, 0, 3.25], noz: { mat: 'Material.001', x0: -8.93, x1: -9.67, r0: .3, r1: .64, as: 'nozzle', rin: .52, asIn: 'nozzle_in' },
+    hole: { mat: 'grey', x: [-8.97, -8.8], r: .545, nx: -.5 }, thr: { u: .61, r: .35, d: 1.5 } } };   // 歼-50 等模型没有座舱内饰：座舱视角放在机头上方，不画自己
 // 显示屏的面：模型用镜像修改器做的，左右各多出一片和正面重叠、贴图左右反的镜像面（两层贴图在同一个平面上来回打架闪烁）——
 //   只留贴图从左往右（机体 y 由大到小，飞行员看过去从左到右）的面
 function v3gPitScr(cf, m, M, VB, IB) {
@@ -513,9 +518,17 @@ function v3gPitHud(cf, m, M, VB, IB) {
 function v3gPitParts(cf, m, M, VB, IB) {
   const st = m.st, parts = m.parts || (m.parts = []), G = [];   // G：{ mi: 材质集合, test(顶点) → 是否属于, pi: 部件序号 }
   const N = cf.noz, ni = N ? m.mats.findIndex(x => x.n === N.mat) : -1, noz = m.noz && m.noz[0];
+  const clone = nm => nm ? m.mats.push({ ...m.mats[ni], n: nm }) - 1 : undefined;   // 拆出来的三角形换成新材质（V3G_PAINT 按名字上色）
+  const mo = ni >= 0 && N.as ? clone(N.as) : undefined, mIn = ni >= 0 && N.asIn ? clone(N.asIn) : mo;
   if (ni >= 0 && noz) for (const sg of noz[1] ? [1, -1] : [1]) {
     const pi = parts.push({ n: 'noz', k: 'noz', slot: 1, w: [0, 1, 0, 0], p: [N.x0, noz[1] * sg, noz[2]], a: [1, 0, 0], l: N.x0 - N.x1 }) - 1;
-    G.push({ mi: new Set([ni]), pi, test: v => { const o = v * st, x = VB[o], y = VB[o + 1], z = VB[o + 2]; return x <= N.x0 + .02 && x >= N.x1 - .02 && Math.hypot(y - noz[1] * sg, z - noz[2]) >= N.r0 && Math.hypot(y - noz[1] * sg, z - noz[2]) <= N.r1; } });
+    const rr = v => { const o = v * st; return Math.hypot(VB[o + 1] - noz[1] * sg, VB[o + 2] - noz[2]); };
+    const test = v => { const o = v * st, x = VB[o], r = rr(v); return x <= N.x0 + .02 && x >= N.x1 - .02 && r >= N.r0 && r <= N.r1; };
+    if (N.rin) {   // 内锥面、外表面分开（按三角形中心离轴半径）：同一个部件，一起开合
+      const rc = v => { const o = v.map(i => i * st); return Math.hypot((VB[o[0] + 1] + VB[o[1] + 1] + VB[o[2] + 1]) / 3 - noz[1] * sg, (VB[o[0] + 2] + VB[o[1] + 2] + VB[o[2] + 2]) / 3 - noz[2]); };
+      G.push({ mi: new Set([ni]), pi, mo: mIn, tri: v => v.every(test) && rc(v) < N.rin });
+      G.push({ mi: new Set([ni]), pi, mo, tri: v => v.every(test) && rc(v) >= N.rin });
+    } else G.push({ mi: new Set([ni]), pi, mo, test });
   }
   const C = cf.ctl;
   if (C) {
@@ -541,16 +554,29 @@ function v3gPitParts(cf, m, M, VB, IB) {
       if (p0 >= 0 || !G.some(g => g.mi.has(mi))) continue;
       const B = [[], ...G.map(() => [])];
       for (let t = i0; t + 2 < i0 + cnt; t += 3) {
-        const v = [IB[t], IB[t + 1], IB[t + 2]], k = G.findIndex(g => g.mi.has(mi) && v.every(g.test));
+        const v = [IB[t], IB[t + 1], IB[t + 2]], k = G.findIndex(g => g.mi.has(mi) && (g.tri ? g.tri(v) : v.every(g.test)));
         B[k + 1].push(v[0], v[1], v[2]);
       }
       if (B.slice(1).every(b => !b.length)) continue;
       let k = i0;
       for (const b of B) for (const v of b) IB[k++] = v;
       e[3] = B[0].length; let o = i0 + B[0].length;
-      B.slice(1).forEach((b, j) => { if (b.length) add.push([mi, G[j].pi, o, b.length]); o += b.length; });
+      B.slice(1).forEach((b, j) => { if (b.length) add.push([G[j].mo ?? mi, G[j].pi, o, b.length]); o += b.length; });
     }
     lod.push(...add);
+  }
+}
+// 挖洞：喷管喉道后面模型自带的平板圆盘（从后面看进去是一块亮灰的盘子）——按材质、x 范围、离两台发动机轴线的半径、朝后的法线挑出这些三角形，从绘制段里去掉
+function v3gPitHole(cf, m, VB, IB) {
+  const H = cf.hole, hi = H ? m.mats.findIndex(x => x.n === H.mat) : -1, noz = m.noz && m.noz[0];
+  if (hi < 0 || !noz) return;
+  const st = m.st, ax = noz[1] ? [noz[1], -noz[1]] : [0];
+  const hit = v => { const o = v * st, x = VB[o]; return x >= H.x[0] && x <= H.x[1] && VB[o + 3] < H.nx && ax.some(y => Math.hypot(VB[o + 1] - y, VB[o + 2] - noz[2]) < H.r); };
+  for (const lod of m.lod) for (const e of lod) {
+    if (e[0] !== hi || e[1] >= 0) continue;
+    let k = e[2];
+    for (let t = e[2]; t + 2 < e[2] + e[3]; t += 3) if (!(hit(IB[t]) && hit(IB[t + 1]) && hit(IB[t + 2]))) { IB[k] = IB[t]; IB[k + 1] = IB[t + 1]; IB[k + 2] = IB[t + 2]; k += 3; }
+    e[3] = k - e[2];
   }
 }
 function v3gPrep(key, m, M, VB, IB) {
@@ -563,7 +589,7 @@ function v3gPrep(key, m, M, VB, IB) {
   const use = r => { if (r) { R = r; VB = r.VB; IB = r.IB; } };   // 补了顶点的步骤换成更长的新数组，后面的步骤接着在新数组上做
   if (V3G_GEAR[key]) use(v3gGear(V3G_GEAR[key], m, VB, IB));   // 补起落架（整架抬高）：弹舱、座舱、挂点都按抬高后的坐标
   const cf = V3G_PIT[key];
-  if (cf) { v3gPitScr(cf, m, M, VB, IB); v3gPitHud(cf, m, M, VB, IB); v3gPitParts(cf, m, M, VB, IB); }
+  if (cf) { v3gPitScr(cf, m, M, VB, IB); v3gPitHud(cf, m, M, VB, IB); v3gPitHole(cf, m, VB, IB); v3gPitParts(cf, m, M, VB, IB); }
   if (V3G_GUN[key]) v3gGun(V3G_GUN[key], m, VB, IB);
   if (V3G_CAPS[key]) v3gCaps(V3G_CAPS[key], m, VB, IB);
   if (V3G_FOLD[key]) use(v3gFold(V3G_FOLD[key], m, VB, IB));
@@ -579,9 +605,45 @@ const V3G_MATFIX = { z10w: { 0: { am: 0, a: 1 }, 1: { am: 0, a: 1 }, 2: { a: .08
 const V3G_PAINT = {
   j31: { def: [.17, .19, .21], mr: [.12, .58], keep: ['screen'], m: { Wing_bottom: [.23, .25, .27], main_body_bottom: [.23, .25, .27], main_body_bottom_front: [.23, .25, .27], bottom_front: [.23, .25, .27] } },
   j16: { def: [.1, .12, .15], mr: [.12, .55], keep: [], m: {} },
-  y20: { def: [.23, .24, .25], mr: [.1, .55], keep: [], m: { Engine_metal: [.09, .09, .1, [.6, .4]], engine_mat: [.14, .14, .15] } }
+  y20: { def: [.23, .24, .25], mr: [.1, .55], keep: [], m: { Engine_metal: [.09, .09, .1, [.6, .4]], engine_mat: [.14, .14, .15] } },
+  // 歼-20（andertan 的模型没有贴图，蒙皮是浅灰带金属感）：现役歼-20 是深灰的吸波涂层、哑光——机身蒙皮、舱门、口盖板几种灰都压成同一种深灰；喷口、金属件照原样
+  j20: { def: [.11, .12, .13], mr: [.15, .56], keep: [], tex: 'panel', m: { grey: [.105, .112, .122], 'grey.001': [.105, .112, .122], 'grey.003': [.105, .112, .122], 'grey.011': [.105, .112, .122], 'grey.012': [.105, .112, .122],
+    'Material.007': [.118, .126, .137], 'Material.008': [.118, .126, .137], 'Material.016': [.118, .126, .137], 'Material.017': [.118, .126, .137], 'Material.025': [.118, .126, .137], 'Material.010': [.118, .126, .137],   // 舱门、口盖板略浅一点（各家飞机常见：后换的板子颜色新）
+    // 喷管不涂吸波漆，是裸露的耐热合金：锯齿调节片外表面烧成橄榄青铜色（钛合金、高温合金受热后的回火色），内锥面亮一些的钢灰——与深灰机身明显不同
+    nozzle: [.15, .128, .058, [.82, .42], 1], nozzle_in: [.34, .33, .31, [.9, .34], 1] },
+    // 绿色电致发光编队灯带（机头两侧座舱下方、两片垂尾上各一条，夜间编队飞行看僚机用）：模型里本来就有，亮度加到白天也看得出、能泛一点光
+    glow: { 'Material.009': 2.4, 'Material.014': 2.4, 'Material.020': 2.4, 'Material.022': 2.4, 'Material.024': 2.4 } }
 };
 // 漆面纹理（所有重新涂装的模型共用一张）：256 见方、能平铺的几层平滑噪声，亮度在 0.94–1 之间——不至于一整块纯色，像风吹日晒过的漆面
+// 吸波涂层的面板感（歼-20 这类重新涂装、模型又没有贴图的）：大小不一的面板各自深浅差一点、面板缝暗一条、零星浅色的锯齿形吸波胶带、斑驳——
+//   照模型自带的贴图坐标铺（一块块展开的面就是一块块蒙皮），整架不再是一模一样的一种灰
+function v3gPaintTexPanel() {
+  if (V3G.paintTexP) return V3G.paintTexP;
+  const N = 512, cv = document.createElement('canvas'); cv.width = cv.height = N;
+  const g = cv.getContext('2d'), im = g.createImageData(N, N), T = new Float32Array(N * N).fill(.955);
+  let sd = 20240511; const rnd = () => (sd = (sd * 16807) % 2147483647) / 2147483647;
+  const R = [], cut = (x0, y0, x1, y1, d) => {
+    const w = x1 - x0, h = y1 - y0;
+    if (w < 28 || h < 28 || (w < 150 && h < 150 && rnd() < .5 + d * .08)) { R.push([x0, y0, x1, y1]); return; }
+    if (w > h ? rnd() < .8 : rnd() < .2) { const m = Math.round(x0 + w * (.3 + .4 * rnd())); cut(x0, y0, m, y1, d + 1); cut(m, y0, x1, y1, d + 1); }
+    else { const m = Math.round(y0 + h * (.3 + .4 * rnd())); cut(x0, y0, x1, m, d + 1); cut(x0, m, x1, y1, d + 1); }
+  };
+  cut(0, 0, N, N, 0);
+  for (const [x0, y0, x1, y1] of R) {
+    const t = (rnd() - .5) * .085, tape = rnd() < .18;   // 这块面板深浅；少数面板边上贴着浅色的锯齿形吸波胶带
+    for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) T[y * N + x] += t;
+    for (let x = x0; x < x1; x++) { T[y0 * N + x] -= .07; if (tape) for (let k = 1; k < 4 + (x % 8 < 4 ? x % 8 : 8 - x % 8); k++) if (y0 + k < y1) T[(y0 + k) * N + x] += .06; }
+    for (let y = y0; y < y1; y++) T[y * N + x0] -= .07;
+  }
+  const h2 = (i, j, s) => { const v = Math.sin((i % s) * 127.1 + (j % s) * 311.7 + s * 74.7) * 43758.5453; return v - Math.floor(v); };
+  const vn = (x, y, s) => { const i = Math.floor(x), j = Math.floor(y), fx = x - i, fy = y - j, u = fx * fx * (3 - 2 * fx), v = fy * fy * (3 - 2 * fy), a = h2(i, j, s), b = h2(i + 1, j, s), c = h2(i, j + 1, s), d = h2(i + 1, j + 1, s); return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v; };
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    const v = clamp(T[y * N + x] + .035 * (vn(x / 96, y / 96, 6) - .5) + .016 * (vn(x / 12, y / 12, 43) - .5) + .01 * (rnd() - .5), .7, 1), o = (y * N + x) * 4;
+    im.data[o] = im.data[o + 1] = im.data[o + 2] = Math.round(255 * v); im.data[o + 3] = 255;
+  }
+  g.putImageData(im, 0, 0);
+  return (V3G.paintTexP = v3gUpload(cv));
+}
 function v3gPaintTex() {
   if (V3G.paintTex) return V3G.paintTex;
   const N = 256, cv = document.createElement('canvas'), g = cv.getContext('2d'), im = g.createImageData(N, N), rnd = (i, j, s) => { const h = Math.sin((i % s) * 127.1 + (j % s) * 311.7 + s * 74.7) * 43758.5453; return h - Math.floor(h); };
@@ -653,6 +715,8 @@ function v3gRotor(cf, m, VB, IB) {
 const V3G_GEAR = {
   j50: { lift: 1.3, legs: [{ x: 4.4, y: 0, r: .3, w: .18, n: 2, br: -1, bar: 1, door: [1.1, .5] },   // 歼-50：前起落架双轮（舰载机，带弹射杆）、主起落架单轮——公开照片的说法；主轮在两个机腹弹舱外侧
     { x: -1.4, y: 1.95, r: .42, w: .26, n: 1, br: 1, door: [1.4, .6] }] },
+  // 歼-20：全高 4.45 米（模型 3.2）；前起落架单轮，主起落架单轮——位置照模型机腹上画的起落架舱门（前轮舱 x 4.0–5.3，主轮舱 x −6.7 – −5.1）
+  j20: { lift: 1.25, legs: [{ x: 4.6, y: 0, r: .31, w: .19, n: 1, br: -1, door: [1.2, .5] }, { x: -5.9, y: 1.7, r: .45, w: .28, n: 1, br: 1, door: [1.5, .6] }] },
   f22: { lift: 1.04, legs: [{ x: 4.3, y: 0, r: .3, w: .19, n: 1, br: -1, door: [1.1, .5] },   // F-22：全高 5.08 米（模型 4.04）；前轮 23.5 × 7.5 英寸、主轮 37 × 11.5 英寸（单轮），主轮在主弹舱外侧
     { x: -1.9, y: 1.6, r: .47, w: .29, n: 1, br: 1, door: [1.5, .6] }] },
   y20: { lift: .5, legs: [{ x: 17.6, y: 0, r: .5, w: .32, n: 2, br: -1, door: [2.2, .7] },   // 运-20：全高 15 米（模型 14.5）；前起落架双轮，主起落架每侧三根轴、每轴双轮，收在机身两侧的整流罩里
@@ -864,12 +928,14 @@ function v3gEra(cf, m, VB, IB) {
 // —— 弹舱（fpwpn.js 选中武器时打开）：用户的模型机腹是一整块蒙皮，没有单独的舱门——按真实弹舱的位置把机腹三角形精确切开（多边形裁剪），
 //   切出来的几块挂成能绕铰链转的舱门部件（实例参数 iD：0 主弹舱开度、1 侧弹舱开度；乘打开角）；舱口上面补一个深色的弹舱井，开舱时看到的是舱壁和舱里的弹，不是机身里面空的
 // 表（模型坐标，米：x 前、y 左、z 上；对着模型机腹的高度量的）：mats 机腹蒙皮材质、z 只切这个高度以下的面；
-//   door：b 槽（0 主弹舱 / 1 侧弹舱）、x / y 范围、hy 铰链（舱门绕这条平行机身的线转，开角 A 弧度，自由边往下翻出去）；well：弹舱井 x / y 范围、顶高 top
+//   door：b 槽（0 主弹舱 / 1 侧弹舱）、x / y 范围、hy 铰链（舱门绕这条平行机身的线转，开角 A 弧度，自由边往下翻出去）、z 这扇门自己的切面高度（不给用 z）；well：弹舱井 x / y 范围、顶高 top
 const V3G_BAY = {
-  j20: { mats: ['sd', '__Color_008_7', '_6TOJLMO200AH0001', 'scz', 'wad'], z: 2.0, door: [
-    { b: 0, x: [-2.2, 2.5], y: [0, .66], hy: .66, A: 1.75 }, { b: 0, x: [-2.2, 2.5], y: [-.66, 0], hy: -.66, A: 1.75 },   // 主弹舱：中线分开的两扇，铰链在外侧
-    { b: 1, x: [-2.3, .9], y: [1.06, 1.42], hy: 1.42, A: 1.6 }, { b: 1, x: [-2.3, .9], y: [-1.42, -1.06], hy: -1.42, A: 1.6 }],   // 侧弹舱：进气道下面斜面上的一扇，铰链在外上沿
-  well: [{ x: [-2.2, 2.5], y: [-.66, .66], top: 1.95 }, { x: [-2.3, .9], y: [1.06, 1.42], top: 2.02 }, { x: [-2.3, .9], y: [-1.42, -1.06], top: 2.02 }] },
+  // 歼-20（andertan 的模型，补了起落架、整架抬高 1.25 米：高度按抬高后的）：模型机腹上本来就画着弹舱门板——主弹舱在两个进气道之间（门板 3.3 米长，
+  //   这里切 4.3 米，装得下 4 米长的霹雳-15），机腹蒙皮里面 0.2 米就是进气道底，弹舱井不能更深；侧弹舱在进气道下侧的斜面上（门板 3.4 米长）
+  j20: { mats: ['Material.008', 'Material.016', 'grey'], z: 1.37, door: [
+    { b: 0, x: [-2.1, 2.2], y: [0, .78], hy: .78, A: 1.75 }, { b: 0, x: [-2.1, 2.2], y: [-.78, 0], hy: -.78, A: 1.75 },   // 主弹舱：中线分开的两扇，铰链在外侧
+    { b: 1, x: [-1.55, 1.89], y: [1.22, 1.57], hy: 1.57, A: 1.6, z: 2.2 }, { b: 1, x: [-1.55, 1.89], y: [-1.57, -1.22], hy: -1.57, A: 1.6, z: 2.2 }],   // 侧弹舱：铰链在外上沿
+  well: [{ x: [-2.1, 2.2], y: [-.78, .78], top: 1.47 }, { x: [-1.55, 1.89], y: [1.22, 1.57], top: 2.3 }, { x: [-1.55, 1.89], y: [-1.57, -1.22], top: 2.3 }] },
   j31: { mats: ['side', 'bottom_front', 'Material.002', 'main_body_bottom_front', 'main_body_upper_side'], z: 1.3, door: [   // 两个并列的主弹舱，中间一道龙骨，每舱两扇门（铰链在龙骨边和外侧边）
     { b: 0, x: [-2.1, 2.1], y: [.1, .51], hy: .1, A: 1.75 }, { b: 0, x: [-2.1, 2.1], y: [.51, .92], hy: .92, A: 1.75 },
     { b: 0, x: [-2.1, 2.1], y: [-.51, -.1], hy: -.1, A: 1.75 }, { b: 0, x: [-2.1, 2.1], y: [-.92, -.51], hy: -.92, A: 1.75 }],
@@ -926,17 +992,18 @@ function v3gBays(cf, m, VB, IB) {
     const w2 = [0, 0, 0, 0]; w2[d.b] = d.A * Math.sign(d.hy - (d.y[0] + d.y[1]) / 2);
     return parts.push({ n: 'door', k: 'rot', w: [0, 0, 0, 0], w2, p: [0, d.hy, 0], a: [1, 0, 0] }) - 1;
   }), hz = cf.door.map(() => [0, 0]);
-  const L0 = m.lod[0], out = [], segs = [];
+  const L0 = m.lod[0], out = [], segs = [], zTop = Math.max(cf.z, ...cf.door.map(d => d.z ?? cf.z));
   for (const [mi, pi, i0, cnt] of L0) {
     const keep = [], doors = cf.door.map(() => []);
     for (let t = i0; t + 2 < i0 + cnt; t += 3) {
       const tri = [IB[t], IB[t + 1], IB[t + 2]];
       if (pi >= 0 || !mis.has(mi)) { keep.push(...tri); continue; }
       let rest = [tri.map(i => ({ i, v: V(i) }))];
-      if (rest[0].some(c => c.v[2] > cf.z)) { keep.push(...tri); continue; }
+      if (rest[0].some(c => c.v[2] > zTop)) { keep.push(...tri); continue; }
       cf.door.forEach((d, k) => {
         const nx = [];
         for (const P of rest) {
+          if (P.some(c => c.v[2] > (d.z ?? cf.z))) { nx.push(P); continue; }   // 这扇门只切它那个高度以下的面（d.z：进气道侧面斜着的侧弹舱比机腹高）
           const xs = P.map(c => c.v[0]), ys = P.map(c => c.v[1]);
           if (Math.max(...xs) <= d.x[0] || Math.min(...xs) >= d.x[1] || Math.max(...ys) <= d.y[0] || Math.min(...ys) >= d.y[1]) { nx.push(P); continue; }
           let I = P;

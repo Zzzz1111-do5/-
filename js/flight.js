@@ -83,8 +83,9 @@ function flInit(p) {
   const cap = (typeof airReal === 'function' && airReal(p.kind, p.v).fuel) || 8000;   // 机内燃油（carrier.js AIR_REAL）；接手时按已经飞了一段、剩七成五算
   const phi = clamp(p.bank || 0, -1, 1), q = flQe(phi, at, psi), R = flRot(q);
   const vb = [Va * Math.cos(at), 0, Va * Math.sin(at)];   // 机体系：迎角 at 时气流从下前方来
+  const sz = typeof airMdl === 'function' ? airMdl(p.kind, p.v).size || 15 : 15, gh = typeof v3gPlaneZc === 'function' && typeof airSilKey === 'function' ? clamp(v3gPlaneZc(airSilKey(p.kind, p.v), sz), 1, 2.6) : FL_GH;   // 机轮着地时重心离地多高：按画出来的模型（起落架长短、补起落架抬高的都不一样），落地时机轮正好贴着地面
   return (p.fl = { k: flKey(p), P: [-p.y, p.x, -z], V: flMv(R, vb), q, w: [0, 0, 0], d: [0, 0, 0], ab: false, law: 'n', nz: 1, a: at, b: 0, M: Va / 340, Va, T: 0, stall: 0, sy: 0, sx: 0, cap, fuel: clamp(p.fuel ?? cap * .75, 0, cap), ff: 0,
-    gear: 0, flap: 0, gnd: false, gs: 0, ev: null });
+    gear: 0, flap: 0, gnd: false, gs: 0, ev: null, gh });
 }
 
 // 推演一帧：inp = { x 压杆（右正，−1–1）, y 拉杆（拉为正）, r 蹬舵, thr 油门 0–1, ab 加力, law 'n' 正常律 / 'd' 直接律, ap 自动驾驶（离开作战区域时）,
@@ -153,15 +154,15 @@ function flStep(F, dt, inp) {
     const ql = Math.hypot(...F.q); for (let i = 0; i < 4; i++) F.q[i] /= ql;
     Object.assign(F, { a: al, b: be, M, Va, T, nz: -Fb[2] / (A.m * FL_G), stall: sa, ab });
     // 接地：航母甲板、跑道上放着起落架、姿态和下沉率都在限内就转入地面滑跑；别处、没放起落架、太猛都是摔
-    const sf = flSurf(F.P[0], F.P[1]), hz = -F.P[2] - sf.z;
-    if (hz < FL_GH) {
+    const sf = flSurf(F.P[0], F.P[1]), hz = -F.P[2] - sf.z, GH = F.gh || FL_GH;
+    if (hz < GH) {
       const [ph2, th2] = flEul(F.q), vs = F.V[2], ok = sf.k === 'deck' || sf.k === 'rwy', lim = A.cv ? FL_LND.sinkCv : FL_LND.sinkRw;
-      const why = !ok ? null : hz < FL_GH - 2.5 ? (sf.k === 'deck' ? '撞上舰体' : '撞地') : F.gear < .95 ? '没放起落架' : vs > lim ? `接地太猛（下沉 ${vs.toFixed(1)} 米 / 秒）` : Math.abs(ph2) > FL_LND.roll ? '翼尖擦地' : th2 < FL_LND.pmin ? '前轮先着地' : th2 > FL_LND.pmax ? '机尾擦地' : '';
+      const why = !ok ? null : hz < GH - 2.5 ? (sf.k === 'deck' ? '撞上舰体' : '撞地') : F.gear < .95 ? '没放起落架' : vs > lim ? `接地太猛（下沉 ${vs.toFixed(1)} 米 / 秒）` : Math.abs(ph2) > FL_LND.roll ? '翼尖擦地' : th2 < FL_LND.pmin ? '前轮先着地' : th2 > FL_LND.pmax ? '机尾擦地' : '';
       if (!ok || why) { hit = sf.k === 'sea' ? 'sea' : 'ground'; F.crash = why || (sf.k === 'land' ? '在跑道外接地' : ''); }
       else {
         const psi = flEul(F.q)[2];
         Object.assign(F, { gnd: true, gk: sf.k, gs: Math.max(0, F.V[0] * Math.cos(psi) + F.V[1] * Math.sin(psi)), tdV: vs, tw: sf.k === 'deck' ? flLandT(sf.u, sf.v).t : null, w: [0, 0, 0] });
-        F.P[2] = -(sf.z + FL_GH); F.V[2] = 0;
+        F.P[2] = -(sf.z + GH); F.V[2] = 0;
         F.ev = { k: 'td', vs, sf: sf.k };
       }
     }
@@ -188,7 +189,7 @@ function flRoll(F, h, inp) {
   const st = clamp((inp.r || 0) + (inp.x || 0) * .7, -1, 1), yr = st * (F.gs < 25 ? .45 : .45 * 25 / F.gs) * Math.min(1, F.gs / 3);
   const psi = psi0 + yr * h, c = Math.cos(psi), s = Math.sin(psi);
   F.V = [F.gs * c, F.gs * s, 0];
-  F.P[0] += F.V[0] * h; F.P[1] += F.V[1] * h; F.P[2] = -(sf.z + FL_GH);
+  F.P[0] += F.V[0] * h; F.P[1] += F.V[1] * h; F.P[2] = -(sf.z + (F.gh || FL_GH));
   F.q = flQe(0, th, psi); F.w = [0, 0, 0];
   Object.assign(F, { Va: F.gs, M: F.gs / 340, a: th, b: 0, nz: 1, T, stall: 0, ab });
   if (L > A.m * FL_G * 1.02 && th > .05) { F.gnd = false; F.V[2] = -1.5; F.ev = { k: 'lo' }; return null; }   // 离地

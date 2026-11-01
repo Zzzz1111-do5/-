@@ -4,7 +4,8 @@
 //   飞机：飞控物理引擎（flight.js 六自由度 + 电传飞控）真飞；操纵默认照《皇牌空战》——A / D（手柄左摇杆左右）压到对应坡度并顺势带杆转弯、松手自动改平，↑ / ↓ 推杆 / 拉杆；
 //         M 依次切换《战争雷霆》式鼠标瞄准（鼠标指哪儿，教官压坡度、拉杆把机头带过去）、鼠标摇杆（鼠标移动的就是杆）；W / S 油门（推满后按住 W 开加力）、Q / E 方向舵（按住时这一轴归玩家）；
 //         能连续横滚、筋斗、反筋斗；杆量有平滑、死区与指数响应曲线；受力回馈：手柄震动、大迎角抖振、过载黑视 / 红视、头部随过载晃动（G 开关）；
-//         镜头是跟在机尾的追尾视角（皇牌空战式操纵时鼠标就是看四周，别的方式按住 C；滚轮拉远拉近）——座舱视角去掉了；手柄也能飞；
+//         镜头绕着飞机：皇牌空战式操纵时一直是自由视角（鼠标 / 右摇杆转，世界坐标里的方向，飞机翻滚时不跟着转、不自己回去；C 转回机尾后方），
+//         别的方式跟在机尾（按住 C 自由视角）；滚轮拉远拉近——座舱视角去掉了；手柄也能飞；
 //         武器（fpwpn.js）：数字键选武器、F / 左键开火（要锁稳）、R / 右键单击换目标、空格航炮；发射后右上角小屏跟着导弹看，V 放大 / 缩回；
 //         降落（自己飞）：G 起落架、L 襟翼、B 减速板（地上是刹车）、H 尾钩——航母斜角甲板上挂住拦阻索、夺取的机场跑道上停下来，就交给地勤整备；
 //         弹射起飞仍由甲板作业流程完成（坐在里面看）；
@@ -142,7 +143,7 @@ function fpTake(E) {
     if (E.k === 'ship') { V3FP.tele = 3; V3FP.rud = 0; E.o.fpV = E.o.fpV ?? 0; E.o.moving = false; if (E.o.state === 'move') E.o.state = 'idle'; }
     else {   // 飞机：物理状态接手时按现在的位置、速度建；瞄准方向先对着机头；油门八成五
       E.o.fl = null;
-      Object.assign(V3FP, { vw: 'chase', orb: [0, 0], cd: fpLen(E.o) * 3.2, cf: null, cu: null, camF: null, head: null,
+      Object.assign(V3FP, { vw: 'chase', orb: [0, 0], cy: null, cp: 0, rcT: 0, cd: fpLen(E.o) * 3.2, cf: null, cu: null, camF: null, head: null,
         aim: [E.o.heading || 0, 0], ms: [0, 0], kx: { r: 0, p: 0, y: 0 }, ins: { x: 0, y: 0, r: 0 }, thr: .85, ab: false, abT: 0, gb: 0, rb: 0, buf: 0, imp: 0, free: false });
       if (typeof fwTake === 'function') fwTake(E.o);   // 武器：按推演里的余弹分到各型弹上，先不选（舱门关着）
       Object.assign(V3FP, { gear: !!brd, flapC: 0, hook: false, landed: null, mBig: false });   // 空中接手的起落架是收着的；甲板上登机的弹射出去时还放着（自己按 G 收）
@@ -310,7 +311,11 @@ function fpFly(p, dt) {
   V3FP.buf = clamp(smooth((A.alim || .43) * .72, (A.alim || .43) * 1.05, Math.abs(F.a)) + (F.stall || 0), 0, 1);
   V3FP.imp = Math.max(0, V3FP.imp - dt * 3);
   fpRumble(gp, F, ab);
-  if (gp && (Math.abs(gp.lx) > .05 || Math.abs(gp.ly) > .05)) { V3FP.orb[0] = airAng(V3FP.orb[0] + gp.lx * 2.2 * dt); V3FP.orb[1] = clamp(V3FP.orb[1] - gp.ly * 1.6 * dt, -1.4, 1.4); V3FP.gpLook = true; } else V3FP.gpLook = false;
+  if (gp && (Math.abs(gp.lx) > .05 || Math.abs(gp.ly) > .05)) {   // 右摇杆看四周：皇牌空战式转自由视角（不回去），别的方式松手转回机尾
+    if (V3FP.ctl === 'ace' && V3FP.cy != null) { V3FP.cy = airAng(V3FP.cy - gp.lx * 2.2 * dt); V3FP.cp = clamp(V3FP.cp - gp.ly * 1.6 * dt, -1.45, 1.45); V3FP.rcT = 0; }
+    else { V3FP.orb[0] = airAng(V3FP.orb[0] + gp.lx * 2.2 * dt); V3FP.orb[1] = clamp(V3FP.orb[1] - gp.ly * 1.6 * dt, -1.4, 1.4); }
+    V3FP.gpLook = true;
+  } else V3FP.gpLook = false;
   if (hit) airLost(p, `${airMdl(p.kind, p.v).name}${F.crash ? F.crash + '，' : ''}${hit === 'sea' ? '坠海' : '撞地坠毁'}`, hit === 'sea');
   return true;
 }
@@ -484,9 +489,22 @@ function fpChaseCam(P) {
   //   皇牌空战式：地平线跟着坡度歪四成五（看得出在压坡度转弯，又不至于整个世界跟着转晕）
   const cl = [0, 0, 1], wv = Math.max(smooth(.82, .97, Math.abs(f[2])), V3FP.ctl === 'ace' ? .45 : 0), cm = [cl[0] + (c[0] - cl[0]) * wv, cl[1] + (c[1] - cl[1]) * wv, cl[2] + (c[2] - cl[2]) * wv], q0 = v3Dot(cm, f);
   let u = v3Norm([cm[0] - f[0] * q0, cm[1] - f[1] * q0, cm[2] - f[2] * q0]);
-  // 自由视角：松开 C 后慢慢转回机尾后方
-  if (!V3FP.free && !V3FP.gpLook && now - (V3FP.mlT || 0) > 1500) { const kb = 1 - Math.exp(-dt * 4); V3FP.orb[0] *= 1 - kb; V3FP.orb[1] *= 1 - kb; }
-  if (Math.abs(V3FP.orb[0]) + Math.abs(V3FP.orb[1]) > 1e-4) { f = fpRot(f, u, -V3FP.orb[0]); const r = v3Norm(v3Cross(f, u)); f = fpRot(f, r, V3FP.orb[1]); u = fpRot(u, r, V3FP.orb[1]); }
+  if (V3FP.ctl === 'ace') {
+    // 皇牌空战式：一直是自由视角——镜头方向只听鼠标（世界坐标里的方位、俯仰），飞机滚转、翻筋斗时镜头不跟着转、不锁死，也不自己转回去；
+    //   镜头始终绕着飞机（飞机在画面中间），C 键平滑转回机尾后方
+    if (V3FP.cy == null || V3FP.rcT) {
+      const ty = Math.atan2(B.f[1], B.f[0]), tp = clamp(Math.asin(clamp(B.f[2], -1, 1)), -1.3, 1.3) - .1;
+      if (V3FP.cy == null) { V3FP.cy = ty; V3FP.cp = tp; }
+      else { const kk = 1 - Math.exp(-dt * 9); V3FP.cy = airAng(V3FP.cy + airAng(ty - V3FP.cy) * kk); V3FP.cp += (tp - V3FP.cp) * kk; if (Math.abs(airAng(ty - V3FP.cy)) + Math.abs(tp - V3FP.cp) < .01 || now - V3FP.rcT > 1500) V3FP.rcT = 0; }   // 转到位（或 1.5 秒）为止
+    }
+    const cp = V3FP.cp = clamp(V3FP.cp, -1.45, 1.45), cc = Math.cos(cp);
+    f = [cc * Math.cos(V3FP.cy), cc * Math.sin(V3FP.cy), Math.sin(cp)];
+    u = v3Norm([-f[0] * f[2], -f[1] * f[2], 1 - f[2] * f[2]]);   // 世界的「上」（去掉沿视线的分量）：地平线永远是平的
+  } else {
+    // 别的操纵方式（鼠标管飞行）：按住 C 自由视角，松开后慢慢转回机尾后方
+    if (!V3FP.free && !V3FP.gpLook && now - (V3FP.mlT || 0) > 1500) { const kb = 1 - Math.exp(-dt * 4); V3FP.orb[0] *= 1 - kb; V3FP.orb[1] *= 1 - kb; }
+    if (Math.abs(V3FP.orb[0]) + Math.abs(V3FP.orb[1]) > 1e-4) { f = fpRot(f, u, -V3FP.orb[0]); const r = v3Norm(v3Cross(f, u)); f = fpRot(f, r, V3FP.orb[1]); u = fpRot(u, r, V3FP.orb[1]); }
+  }
   // 锁头视角（按住 T，皇牌空战的目标视角）：镜头从飞机后面看向选定目标，没选就看最近的敌机——缠斗时不丢目标；按真实时间平滑转过去
   const pt = V3FP.keys.has('KeyT') ? fpPadT() : null;
   V3FP.padK = clamp((V3FP.padK || 0) + (pt ? dt : -dt) * 3, 0, 1);
@@ -648,7 +666,7 @@ function fpPipFrame(ctx) {
 function fpHudData(ctx, w, h) {
   const o = V3FP.o, F = o && o.fl;
   if (!F) return;
-  const [phi, th] = flEul(F.q), P = fpPose(), sf = flSurf(F.P[0], F.P[1]), agl = -F.P[2] - FL_GH - Math.max(sf.z, -2.6), vs = -F.V[2], col = '#7dffb0', warn = '#ffb84a', red = '#ff4a4a';
+  const [phi, th] = flEul(F.q), P = fpPose(), sf = flSurf(F.P[0], F.P[1]), agl = -F.P[2] - (F.gh || FL_GH) - Math.max(sf.z, -2.6), vs = -F.V[2], col = '#7dffb0', warn = '#ffb84a', red = '#ff4a4a';
   const font = n => `${n}px "IBM Plex Mono", "Noto Sans SC", monospace`, cx = w / 2, y0 = h - 92;
   ctx.save(); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.shadowColor = 'rgba(0,0,0,.7)'; ctx.shadowBlur = 3;
   ctx.font = font(13); ctx.fillStyle = col;
@@ -713,7 +731,7 @@ function fpMeatball(ctx, w, h, P) {
     if (!best || -along < -best.along) best = { along, lat };
   }
   if (!best) return;
-  const hd = P.z - (-2.6 + CVG.zd) - FL_GH, ang = Math.atan2(hd, -best.along) * 180 / Math.PI, dev = ang - 3.5;
+  const hd = P.z - (-2.6 + CVG.zd) - ((V3FP.o.fl || {}).gh || FL_GH), ang = Math.atan2(hd, -best.along) * 180 / Math.PI, dev = ang - 3.5;
   const x = w / 2 - 230, y = h - 150, H2 = 70, by = y + clamp(-dev / 1.5, -1, 1) * H2 * .5;
   ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.7)'; ctx.shadowBlur = 3;
   ctx.strokeStyle = 'rgba(125,255,176,.8)'; ctx.lineWidth = 1.5;
@@ -764,8 +782,8 @@ if (typeof window !== 'undefined' && window.addEventListener) {
       if (e.code === 'KeyJ') fpJam();
       const dg = /^Digit([1-6])$/.exec(e.code);
       if (dg) fwSel(+dg[1] - 1);
-      if (e.code === 'KeyC') { V3FP.free = true; if (V3FP.ctl === 'stick') V3FP.ms = [0, 0]; }   // 按住自由视角（鼠标摇杆时顺便杆回中）
-      if (e.code === 'KeyM') { V3FP.ctl = V3FP.ctl === 'ace' ? 'aim' : V3FP.ctl === 'aim' ? 'stick' : 'ace'; V3FP.ms = [0, 0]; if (V3FP.ctl === 'aim' && V3FP.o) { const B = fpBody(V3FP.o); V3FP.aim = [Math.atan2(-B.f[1], B.f[0]), Math.asin(clamp(B.f[2], -1, 1))]; } log(V3FP.ctl === 'aim' ? '鼠标瞄准（战争雷霆式）' : V3FP.ctl === 'stick' ? '鼠标摇杆' : '皇牌空战式：A / D 压坡度转弯（松手自动改平）、↑ / ↓ 推拉杆', 'info', 'fpctl', 1); }
+      if (e.code === 'KeyC') { if (V3FP.ctl === 'ace') V3FP.rcT = performance.now(); else { V3FP.free = true; if (V3FP.ctl === 'stick') V3FP.ms = [0, 0]; } }   // 皇牌空战式：镜头转回机尾后方；别的方式按住自由视角（鼠标摇杆时顺便杆回中）
+      if (e.code === 'KeyM') { V3FP.ctl = V3FP.ctl === 'ace' ? 'aim' : V3FP.ctl === 'aim' ? 'stick' : 'ace'; V3FP.ms = [0, 0]; V3FP.orb = [0, 0]; V3FP.cy = null; if (V3FP.ctl === 'aim' && V3FP.o) { const B = fpBody(V3FP.o); V3FP.aim = [Math.atan2(-B.f[1], B.f[0]), Math.asin(clamp(B.f[2], -1, 1))]; } log(V3FP.ctl === 'aim' ? '鼠标瞄准（战争雷霆式）' : V3FP.ctl === 'stick' ? '鼠标摇杆' : '皇牌空战式：A / D 压坡度转弯（松手自动改平）、↑ / ↓ 推拉杆', 'info', 'fpctl', 1); }
       if (e.code === 'KeyK') { V3FP.ffb = !V3FP.ffb; log(V3FP.ffb ? '受力回馈：开' : '受力回馈：关', 'info', 'fpffb', 1); }
       if (e.code === 'KeyX') { V3FP.law = V3FP.law === 'n' ? 'd' : 'n'; log(V3FP.law === 'd' ? '飞控：直接律' : '飞控：正常律', 'info', 'fplaw', 1); }
     } else {
@@ -786,8 +804,13 @@ if (typeof window !== 'undefined' && window.addEventListener) {
     if (V3FP.k === 'air') {
       if (V3FP.mv != null && V3FP.mBig) { V3FP.mo[0] = airAng(V3FP.mo[0] + dx * .005); V3FP.mo[1] = clamp(V3FP.mo[1] - dy * .004, -1.3, 1.3); return; }   // 导弹全屏视角：鼠标绕着弹看，不带机头
       if (V3FP.drag && V3FP.dbtn === 2) V3FP.rmv = (V3FP.rmv || 0) + Math.abs(dx) + Math.abs(dy);   // 右键拖动了多远（拖得少算单击：换目标）
-      if (V3FP.free || (V3FP.drag && V3FP.dbtn === 2) || V3FP.ctl === 'ace') {   // 自由视角（按住 C、右键拖动；皇牌空战式时鼠标就是看四周，停下 1.5 秒转回机尾）
-        if (V3FP.ctl === 'ace' && !V3FP.free && !V3FP.drag && Math.abs(dx) + Math.abs(dy) < 3) return;   // 手搭在鼠标上的小抖动不转镜头
+      if (V3FP.ctl === 'ace') {   // 皇牌空战式：鼠标一直管视角（世界坐标里的方位、俯仰，不跟飞机翻、不自己回去；C 回到机尾后方）
+        if (!V3FP.drag && Math.abs(dx) + Math.abs(dy) < 2) return;   // 手搭在鼠标上的小抖动不转镜头
+        if (V3FP.cy == null) return;
+        V3FP.cy = airAng(V3FP.cy - dx * .004); V3FP.cp = clamp(V3FP.cp - dy * .0032, -1.45, 1.45); V3FP.rcT = 0;
+        return;
+      }
+      if (V3FP.free || (V3FP.drag && V3FP.dbtn === 2)) {   // 自由视角（按住 C、右键拖动），松开后慢慢转回机尾后方
         V3FP.orb[0] = airAng(V3FP.orb[0] - dx * .004); V3FP.orb[1] = clamp(V3FP.orb[1] - dy * .0032, -1.4, 1.4); V3FP.mlT = performance.now();
         return;
       }
@@ -867,7 +890,7 @@ function fpUi() {
     mk(Rg, '加力', () => { if (air()) V3FP.ab = !V3FP.ab; });
     mk(Rg, '起落架', () => { if (air()) fpGear(); });
     mk(Rg, '刹车', () => { T.sb = true; }, () => { T.sb = false; });
-    mk(Rg, '回正', () => { V3FP.look = [0, 0]; V3FP.orb = [0, 0]; V3FP.ms = [0, 0]; });
+    mk(Rg, '回正', () => { V3FP.look = [0, 0]; V3FP.orb = [0, 0]; V3FP.ms = [0, 0]; V3FP.rcT = performance.now(); });
     mk(Rg, '导弹', () => { if (air()) fpView(); });
     mk(Rg, '列表', () => fpMenu(true));
     mk(Rg, '退出', () => fpExit());

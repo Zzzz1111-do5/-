@@ -9,7 +9,7 @@
 
 - 96 式主战坦克（js/mdl/ztz96.js）：This work is based on "ZTZ96" (https://sketchfab.com/3d-models/ztz96-b0da178e50dc423983445841615d9e80) by jzmhhhhh licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
 - M1A1 艾布拉姆斯（js/mdl/m1a1.js）：This work is based on "M1A1 Abrams Main Battle Tank" (https://sketchfab.com/3d-models/m1a1-abrams-main-battle-tank-1529f5d842cb4f578aa8cb672524f044) by MirzaArrafiERV_45 licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
-- 歼-20（js/mdl/j20.js）：This work is based on "Chinese Chengdu J-20" (https://sketchfab.com/3d-models/chinese-chengdu-j-20-b9e81062c94545ffb0232d3ac6b7adc5) by 42manako licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+- 歼-20（js/mdl/j20.js）：This work is based on "Chengdu J-20 Fighter" (https://sketchfab.com/3d-models/chengdu-j-20-fighter-817bcfb55c3e4fcb864e4296e2e57a95) by andertan licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)（改动：网格减到约 130000 个三角形、游戏里补了起落架（模型本身没有），按机腹切出弹舱门；近看的网格减面到约 13 万个三角形）
 - 歼-16（js/mdl/j16.js）：This work is based on "Shenyang J16 Hidden Dragon" (https://sketchfab.com/3d-models/shenyang-j16-hidden-dragon-2b950f910677457fbb52b6096f81e70b) by andertan licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
 - 歼-31 鹘鹰（js/mdl/j31.js）：This work is based on "Shenyang J31 Gyrfalcon" (https://sketchfab.com/3d-models/shenyang-j31-gyrfalcon-23dbff530e21491299ac67bbab42b553) by andertan licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
 - 直-10（js/mdl/z10w.js）：This work is based on "Changhe Z-10W" (https://sketchfab.com/3d-models/changhe-z-10w-617cb4a91dfd4eaaa59161e06691df7f) by 42manako licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
