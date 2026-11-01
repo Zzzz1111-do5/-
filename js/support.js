@@ -116,6 +116,29 @@ function navArmorTarget(o) {
   }
   return best;
 }
+// 登陆支援（整体配合）：第一波抵近到抵滩后 2 分钟内，沙盒护航舰按责任区急袭第一波各登陆滩头（主攻、拓宽的一翼）的出口与附近已发现的火力点——
+//   旗舰驱逐舰打主攻出口（commander.js cmdCloseFires），护航舰把两翼、相邻滩头的出口也压住；出口已到手的不打，别的舰刚打过的不重复打（navWeight）。
+//   bare = false：只取出口 350 米内已发现的火力点（实打实的目标）；true：出口本身（没有确认目标时的压制射击，只在别的目标都没有时才打）。返回 {x, y} 或 null
+const NAV_LAND_K = { bunker: 1, coastal: 1, mortar: 1, aa: 1, arty: 1 };
+function navLandTarget(o, bare) {
+  const C = S.cmd && S.cmd.p, pl = C && C.plan;
+  if (!pl || C.prep2 == null || (C.landT1 != null && S.t - C.landT1 > 120) || typeof cmdExit !== 'function' || typeof cmdOwned !== 'function') return null;
+  let best = null, bs = 0;
+  for (const bi of [pl.main, pl.wide]) {
+    if (bi == null || bi < 0) continue;
+    const M = cmdExit(bi);
+    if (!M || cmdOwned(M)) continue;
+    const pts = bare ? [{ x: M.x, y: M.y }] : [];
+    if (!bare) for (const e of S.enemies) if (!e.dead && e.kx != null && NAV_LAND_K[e.kind] && dist(e.kx, e.ky, M.x, M.y) < 350) pts.push({ x: e.kx, y: e.ky });
+    for (const p of pts) {
+      const d = dist(o.x, o.y, p.x, p.y), w = d > DD_R ? 0 : navWeight(o, p.x, p.y);
+      if (!w) continue;
+      const sc = w / (1 + d / DD_R);
+      if (sc > bs) { bs = sc; best = p; }
+    }
+  }
+  return best;
+}
 // 舰炮还在不在：旗舰驱逐舰没沉，或沙盒护航舰（驱逐舰 / 护卫舰）还有——通联、喊话按这个说，都沉了就不再提舰炮
 const ddUp = () => !!S.dd && S.dd.state !== 'sunk' && isFinite(S.dd.x) && S.dd.x > -999;
 const navGunUp = () => ddUp() || (S.ships || []).some(s => s.kind === 'dd' && alive(s));
