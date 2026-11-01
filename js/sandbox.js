@@ -117,9 +117,12 @@ function sbxCheck(c, x, y, x2, y2, ignore) {
   const t = typeAt(x, y);
   if (S.lv && S.lv.kind !== 'landing' && s.kind === 'ship') return bad(S.lv.kind === 'naval' ? '海战关不带登陆舰艇' : '陆战关：滩头已巩固，不需要登陆舰艇');
   if (S.lv && S.lv.kind === 'naval' && (s.at === 'cargo' || s.at === 'vcargo')) return bad('海战关不带登陆部队');
-  if (S.lv && S.lv.kind === 'ground' && (s.at === 'cargo' || s.at === 'vcargo')) {   // 陆战关：步兵、车辆直接放在滩头阵地里
-    const d = coastAt(x) - y;
-    if (!isLand(x, y) || d < 15 || d > LV_ZONE) return bad(`放在滩头阵地里（海岸线以北 ${LV_ZONE} 以内的陆地）`);
+  if (TER.flat && typeof flatAllow === 'function' && !flatAllow(c)) return bad('白色平原没有海：舰艇、舰载机、岸防、滩头障碍都用不上');
+  const fz = !S.lv && TER.flat && typeof FLAT === 'object' && (s.at === 'cargo' || s.at === 'vcargo');   // 白色平原：步兵、车辆直接摆进出发阵地
+  if (c.side === 'e' && TER.flat && typeof flatFront === 'function' && x != null && (flatFront(x, y) && isLand(x, y) || (x2 != null && flatFront(x2, y2) && isLand(x2, y2)))) return bad(`白色平原：守方部署在进攻方出发阵地以北 ${FLAT.gap} 以外（离海岸 ${FLAT.zone + FLAT.gap} 以上）`);
+  if ((fz || (S.lv && S.lv.kind === 'ground')) && (s.at === 'cargo' || s.at === 'vcargo')) {   // 陆战关 / 白色平原：步兵、车辆直接放在滩头阵地（出发阵地）里
+    const d = coastAt(x) - y, Z = fz ? FLAT.zone : LV_ZONE;
+    if (!isLand(x, y) || d < (fz ? FLAT.off : 15) || d > Z) return bad(fz ? `放在出发阵地里（南缘往北 ${Z - FLAT.off} 以内，虚线区）` : `放在滩头阵地里（海岸线以北 ${LV_ZONE} 以内的陆地）`);
     if (!(TP[t].sp > 0) || !passInf(x, y)) return bad('不可通行的地形');
     if (S.sbx.items.some(it => it !== ignore && it.side === 'p' && it.x != null && ['cargo', 'vcargo'].includes(sbxEntry(it).spawn.at) && dist(it.x, it.y, x, y) < 12)) return bad('太挤了');
     return { ok: true };
@@ -775,10 +778,22 @@ function sbxAIDefend(style = 'bal') {
   // 余款不留：补步兵排、坦克、守备排（放在枢纽附近，作预备队）
   const hubs = (R0.cands || [R0.hub]).filter(Boolean).slice(0, 3);
   if (hubs.length) sbxLoop(sbxVehOk() ? ['e_reserve', 'e_tank', 'e_garrison', 'e_apc'] : ['e_reserve', 'e_garrison'], (id, i) => { const h = hubs[i % hubs.length], p = sbxCoverAt(h.x + Math.cos(i * 1.7) * 60, h.y - 50 - Math.abs(Math.sin(i * 1.7)) * 60); return sbxTry(id, p.x, p.y, 40); }, 14, 60);
+  if (TER.flat && !S.lv) sbxFlatDefend();
   (S.sbx.aiSty || (S.sbx.aiSty = {})).e = style;   // 指挥体系（hq.js）按部署方案定战术
   sbxSync();
   R0.say(`部署完毕（方案「${DS.nm}」）：共 ${S.sbx.items.filter(it => it.side === 'e').length} 项，用去 ${sbxSpent('e')} / ${Btot} 点。`, null);
   return R0.names;
+}
+// 白色平原：出发阵地前方不许部署，滩头防御用不上的点数投到纵深要点——离海近的要点先布，每处轮着摆碉堡、反坦克、守备队、坦克、雷场、迫击炮，到预算用完
+function sbxFlatDefend() {
+  const lim = FLAT.zone + FLAT.gap + 60, ids = ['e_mg_bunker', 'e_at_casemate', 'e_garrison', 'e_at', 'e_tank', 'e_mines_mx', 'e_casemate', 'e_td', 'e_mortar', 'e_apc', 'e_reserve'];
+  const pts = S.points.filter(p => !/^E\d/.test(p.key) && coastAt(p.x) - p.y > lim).sort((a, b) => (coastAt(a.x) - a.y) - (coastAt(b.x) - b.y));
+  let i = 0, fail = 0;
+  while (sbxLeft('e') >= 20 && fail < 40 && pts.length) {
+    const p = pts[i % pts.length], id = ids[Math.floor(i / pts.length) % ids.length], a = (i * 2.4) % 6.28;
+    if (sbxTry(id, p.x + Math.cos(a) * 70, p.y + 50 + Math.abs(Math.sin(a)) * 60, 50)) fail = 0; else fail++;
+    i++;
+  }
 }
 function sbxAttStyle(style, R0) {
   const { M, F, ship, veh, say, buyAir } = R0;
@@ -809,6 +824,14 @@ function sbxAttStyle(style, R0) {
   }
 }
 function sbxAIAttack(style = 'bal', mi = -1, fi = -2) {
+  if (TER.flat && !S.lv && typeof lvAIGround === 'function') {   // 白色平原：步兵、车辆直接摆进出发阵地（levels.js 陆战关的部署：主攻、助攻两处），炮兵、航空兵、舰艇照常
+    sbxClear('p');
+    lvAIGround((t, at) => sbxSay('p', t, 'plan', at));
+    (S.sbx.aiSty || (S.sbx.aiSty = {})).p = style;
+    sbxSync();
+    const L = lvAIGround.last || {};
+    return { main: L.main || '出发阵地', feint: L.feint || '' };
+  }
   const Btot = S.sbx.budget.p, DS = SBX_STY.p[style] || SBX_STY.p.bal;
   S.sbx.budget.p = Btot - Math.round(Btot * DS.share);
   let R0;
@@ -941,6 +964,7 @@ function sbxBuild(role) {
   }
   if (!afOk && typeof abMakeAF === 'function') abMakeAF();
   if (S.lv && S.lv.kind === 'ground' && typeof lvGroundSpawn === 'function') lvGroundSpawn(items);   // 陆战关：滩头阵地上的部队、补给站，滩头出口归我
+  else if (!S.lv && TER.flat && typeof flatGroundSpawn === 'function') flatGroundSpawn(items);   // 白色平原：出发阵地上的部队编成排、开设补给站（flat.js）
   const ddI = sbxFlag(), cvI = sbxFlagCV();
   if (ddI) {
     const s = sbxEntry(ddI).spawn;
@@ -1161,6 +1185,7 @@ function sbxFireShips(dt) {
     } else if (s.sbxRole === 'naval') {   // 护航舰：滩头外 380 游弋，优先打已发现的火力点，射程同旗舰驱逐舰（support.js DD_R），我军 45 以内不射
       if (st.go === 0 && S.t > 6) { st.go = 1; goTo(tx + ((s.id % 5) - 2) * 80, cy + 360 + (s.id % 3) * 40); }   // 各舰错开阵位
       if (st.cd > 0) continue;
+      if (typeof lcvTask === 'function' && lcvTask(s)) continue;   // 登陆掩护优先：烟幕墙、压制刚开过火的敌坦克（lcover.js）
       // 分区射击（support.js navWeight）：优先本舰责任区，别的舰 6 秒内打过的不重复打，告急区可转火支援
       if (typeof navHotUpdate === 'function') navHotUpdate();
       const nw = (x, y) => typeof navWeight === 'function' ? navWeight(s, x, y) : 1;
@@ -1393,6 +1418,7 @@ function openSandbox(seed, keep, map) {
   map = map || (keep && prev && prev.map && prev.map !== 'std' ? prev.map : undefined);
   newGame(seed, lv, { sandbox: true, mode: 'sandbox', map });   // map：另外登记的地图（core.js MAPGEN），换种子重建时沿用
   Object.assign(S, { phase: 'sandbox', briefed: true, paused: true, role: 'attack', mode: 'sandbox', armor: [] });
+  if (keep && prev && prev.night) S.night = true;   // 黑夜：换种子、换地图时沿用
   S.sbx = { items: [], budget: bud, nid: 1, notes: { p: [], e: [] }, live: false };
   sbxMapAF();
   Object.assign(SBX, { pick: null, line: null, lineDown: null, hover: null, drag: null, pv: false, msg: '', endKey: null, savesOpen: false });
@@ -1616,6 +1642,7 @@ function sbxUI() {
     <p class="sbx-hint sbx-styd"></p>
     <div class="sbx-row"><button type="button" data-act="save">保存部署</button><button type="button" data-act="loads" aria-expanded="false">读取部署</button></div>
     <div class="sbx-saves" hidden></div>
+    <div class="sbx-row sbx-mapsel"><label>地图<select data-sel="map"><option value="std">海岸登陆</option><option value="flat">白色平原（超大）</option></select></label><button type="button" data-act="night" aria-pressed="false" title="夜战：肉眼看得近，热像照旧，枪口焰在夜里老远就看得见">黑夜</button></div>
     <div class="sbx-row"><input type="text" inputmode="numeric" aria-label="地图种子" class="sbx-seedin"><button type="button" data-act="map">新地图</button><span class="sbx-lv" role="radiogroup" aria-label="守军 AI 水平"></span></div>
     <details class="sbx-notes"><summary>部署思路</summary><p class="sbx-hint">点「AI 帮我部署」，由高级指挥官按地形判读完成部署并说明理由。</p><ol></ol></details>
     <div class="sbx-hint sbx-keys">左键放置（按住拖动可连续放置）· 运兵船自带满编步兵，选兵种点船可逐个替换 · 右键 / Delete 移除（按住右键拖动连续移除） · 拖动已放置的条目可移位 · Tab 切换攻守 · Esc 取消 · 滚轮缩放、中键拖动平移</div>
@@ -1631,6 +1658,7 @@ function sbxUI() {
     const sel = e.target.closest('select[data-sel]');
     if (!sel || !S || !S.sbx || S.sbx.live) return;
     const k = sel.dataset.sel, v = sel.value;
+    if (k === 'map') { if (v !== (S.map || 'std')) { openSandbox(S.seed, true, v); sbxMsg(v === 'flat' ? '白色平原：16.8 × 11.2 公里的灰色平台，浮在超新星遗迹星云里（3D 看）。没有海：步兵、车辆直接摆进南缘的出发阵地，守方在 1.5 公里以北' : '已换回海岸登陆地图'); } return; }
     if (k === 'sty') SBX.sty[SBX.side] = v;
     else SBX.dir[k] = +v;
     sbxRender();
@@ -1658,6 +1686,7 @@ function sbxUI() {
     else if (b.dataset.load != null) { const d = b.dataset.load === 'last' ? sbxLast() : sbxSaves()[+b.dataset.load]; if (sbxLoad(d)) { sbxMsg(`已读取：${b.dataset.load === 'last' ? '上一局部署' : d.name}，可以继续修改`); sbxSavesShow(false); } else sbxMsg('存档已损坏，无法读取', true); return; }
     else if (b.dataset.del != null) { sbxDelSave(+b.dataset.del); sbxSavesShow(true); sbxMsg('已删除存档'); }
     else if (a === 'map') { const v = parseInt(el.querySelector('.sbx-seedin').value, 10); openSandbox(isFinite(v) && v > 0 && v !== S.seed ? v : (Math.random() * 1e9) | 0, true); return; }
+    else if (a === 'night') { S.night = !S.night; sbxMsg(S.night ? '黑夜：步兵肉眼看得近（有夜视仪），车辆热像照旧；开火的枪口焰、炮口焰夜里老远就暴露位置' : '白天'); }
     else if (a === 'spectate' || a === 'command') { sbxGo(a === 'spectate' ? 'spectate' : 'attack'); return; }
     sbxRender();
   });
@@ -1679,7 +1708,7 @@ function sbxGo(role) {
   const amph = S.sbx.items.some(it => it.side === 'p' && sbxEntry(it).spawn.kind === 'veh');
   const lvk = S.lv && S.lv.kind, ashore = S.sbx.items.some(it => it.side === 'p' && it.x != null && !it.host && ['cargo', 'vcargo'].includes(sbxEntry(it).spawn.at));
   if (lvk === 'naval') { if (!S.sbx.items.some(it => it.side === 'p' && ['dd', 'cv'].includes(sbxEntry(it).spawn.kind))) { sbxMsg('海战至少要部署一艘驱逐舰 / 护卫舰或航母', true); SBX.side = 'p'; sbxRender(); return; } }
-  else if (!ships && !amph && !(lvk === 'ground' && ashore)) { sbxMsg(lvk === 'ground' ? '先在滩头阵地（虚线区域）部署步兵或坦克' : '进攻方没有可登陆的部队：先部署登陆舰并装载步兵（或用「AI 帮我部署」）', true); SBX.side = 'p'; sbxRender(); return; }
+  else if (!ships && !amph && !((lvk === 'ground' || TER.flat) && ashore)) { sbxMsg(lvk === 'ground' ? '先在滩头阵地（虚线区域）部署步兵或坦克' : '进攻方没有可登陆的部队：先部署登陆舰并装载步兵（或用「AI 帮我部署」）', true); SBX.side = 'p'; sbxRender(); return; }
   const over = ['e', 'p'].find(k => sbxLeft(k) < 0);
   if (over) { SBX.side = over; sbxMsg(`${over === 'p' ? '进攻方' : '防守方'}超出预算 ${-sbxLeft(over)} 点：提高预算或移除部分条目`, true); sbxRender(); return; }
   if (sbxWingN() > sbxWingCap()) { SBX.side = 'p'; sbxMsg(`舰载机 ${sbxWingN()} 架超出航母机库（${sbxWingCap()} 架）：右键移除多余飞机`, true); sbxRender(); return; }
@@ -1692,7 +1721,7 @@ const sbxClone = o => JSON.parse(JSON.stringify(o));
 function sbxStore(key, val) { try { if (val == null) localStorage.removeItem(key); else localStorage.setItem(key, JSON.stringify(val)); return true; } catch (e) { return false; } }
 function sbxFetch(key) { try { return JSON.parse(localStorage.getItem(key)); } catch (e) { return null; } }
 function sbxSnap(name) {
-  return { v: 1, name, seed: S.seed, level: S.level, budget: { ...S.sbx.budget }, items: sbxClone(S.sbx.items), notes: sbxClone(S.sbx.notes || { p: [], e: [] }),
+  return { v: 1, name, seed: S.seed, map: S.map && S.map !== 'std' ? S.map : undefined, night: S.night || undefined, level: S.level, budget: { ...S.sbx.budget }, items: sbxClone(S.sbx.items), notes: sbxClone(S.sbx.notes || { p: [], e: [] }),
     spent: { p: sbxSpent('p'), e: sbxSpent('e') }, at: Date.now() };
 }
 const sbxSaves = () => { const a = sbxFetch(SBX_SAVE_KEY); return Array.isArray(a) ? a : SBX.saves || []; };
@@ -1711,7 +1740,8 @@ function sbxLoad(d) {
   if (typeof U === 'object' && DIFF[d.level]) U.level = d.level;
   if (S) S.level = DIFF[d.level] ? d.level : S.level;
   const keepSide = SBX.side;
-  openSandbox(d.seed, false);
+  openSandbox(d.seed, false, d.map && MAPGEN[d.map] ? d.map : 'std');
+  S.night = !!d.night;
   if (DIFF[d.level]) S.level = d.level;
   const items = sbxClone(d.items).filter(it => catalogById(it.cat));
   for (const it of items) if (it.cargo) it.cargo = it.cargo.filter(id => catalogById(id));
@@ -1754,7 +1784,7 @@ function sbxPick(id) {
 function sbxInfo(c) {
   if (!SBX.el) return;
   const box = SBX.el.querySelector('.sbx-info');
-  if (!c) { box.innerHTML = `<p class="h">从目录中选择一种兵力，然后在地图上放置。${SBX.side !== 'p' ? '' : S.lv && S.lv.kind === 'ground' ? '陆战关：步兵、车辆直接放在滩头阵地里（海岸线以北的虚线区）。' : S.lv && S.lv.kind === 'naval' ? '海战关：只部署舰艇、航空兵与远程火力。' : '步兵与非两栖车辆须装载到登陆舰上。'}</p>`; return; }
+  if (!c) { box.innerHTML = `<p class="h">从目录中选择一种兵力，然后在地图上放置。${SBX.side !== 'p' ? '' : S.lv && S.lv.kind === 'ground' ? '陆战关：步兵、车辆直接放在滩头阵地里（海岸线以北的虚线区）。' : S.lv && S.lv.kind === 'naval' ? '海战关：只部署舰艇、航空兵与远程火力。' : TER.flat ? '白色平原：步兵、车辆直接放进南缘往北约 1 公里的出发阵地（虚线区）。这张图没有海，不用登陆舰。' : '步兵与非两栖车辆须装载到登陆舰上。'}</p>`; return; }
   const arch = typeof ARCH_NAMES === 'object' ? ARCH_NAMES[c.arch] || '' : '', cost = c.spawn.at === 'line' ? `${c.spawn.per} 点 / 100 长` : `${c.cost} 点`;
   const ld = typeof ctLoadHtml === 'function' ? ctLoadHtml(c, sbxEsc) : '';
   box.innerHTML = `<b>${sbxEsc(c.name)}</b><em>◆ ${cost}</em><span class="h"> · ${sbxEsc(arch)}</span><p>${sbxEsc(c.desc)}</p>${ld ? `<details class="sbx-ld"><summary>挂载与参数</summary>${ld}</details>` : ''}<p class="h">${sbxEsc(SBX_AT[c.spawn.at] || '')}</p>`;
@@ -1766,6 +1796,10 @@ function sbxRender() {
   const el = SBX.el, side = SBX.side, q = s => el.querySelector(s);
   el.classList.toggle('e', side === 'e'); el.classList.toggle('p', side === 'p');
   q('.sbx-seed').textContent = `SEED ${S.seed}`;
+  const ms = q('select[data-sel="map"]'), nb = q('[data-act="night"]');
+  q('.sbx-mapsel').hidden = !!S.lv;   // 闯关、海岛战役：地图固定
+  if (ms && document.activeElement !== ms) ms.value = S.map && MAPGEN[S.map] ? S.map : 'std';
+  if (nb) { nb.classList.toggle('on', !!S.night); nb.setAttribute('aria-pressed', String(!!S.night)); }
   const si = q('.sbx-seedin'); if (document.activeElement !== si) si.value = S.seed;
   q('.sbx-sides').innerHTML = ['e', 'p'].map(k => { const sp = sbxSpent(k), b = S.sbx.budget[k];
     return `<button type="button" role="tab" class="${k}${side === k ? ' on' : ''}${sp > b ? ' over' : ''}" data-side="${k}" aria-selected="${side === k}"><b>${k === 'e' ? '防守方' : '进攻方'}</b><span>${sp} / ${b} 点</span></button>`; }).join('');
@@ -1775,7 +1809,7 @@ function sbxRender() {
   const cats = SBX_CATS[side];
   if (SBX.cat !== 'all' && !cats.includes(SBX.cat)) SBX.cat = 'all';
   q('.sbx-cats').innerHTML = ['all', ...cats].map(k => `<button type="button" class="${SBX.cat === k ? 'on' : ''}" data-cat="${k}">${k === 'all' ? '全部' : CAT_NAMES[k]}</button>`).join('');
-  const pal = CATALOG.filter(c => (c.side === side || c.side === 'both') && (SBX.cat === 'all' || c.cat === SBX.cat) && !(c.id === 'e_airfield' && TER.af) && (typeof lvAllow !== 'function' || lvAllow(c)));   // 地图自带空军基地：不再出售；闯关按关卡类型过滤（levels.js）
+  const pal = CATALOG.filter(c => (c.side === side || c.side === 'both') && (SBX.cat === 'all' || c.cat === SBX.cat) && !(c.id === 'e_airfield' && TER.af) && (typeof lvAllow !== 'function' || lvAllow(c)) && !(TER.flat && typeof flatAllow === 'function' && !flatAllow(c)));   // 白色平原：没有海，不卖舰艇、舰载机（flat.js）   // 地图自带空军基地：不再出售；闯关按关卡类型过滤（levels.js）
   const left = bud - sp;
   q('.sbx-pal').innerHTML = pal.map(c => {
     const na = c.spawn.kind === 'veh' && !sbxVehOk(), cost = c.spawn.at === 'line' ? c.spawn.per + '/百' : c.cost;
@@ -2130,6 +2164,11 @@ function sbxDrawEdit(time) {
   if (S.lv && S.lv.kind === 'ground') {   // 陆战关：滩头阵地（攻方部署区）
     ctx.save(); ctx.fillStyle = rgba(COL.g, .06); ctx.strokeStyle = rgba(COL.g, .4); ctx.lineWidth = px(1); ctx.setLineDash([px(8), px(6)]);
     ctx.beginPath(); for (let x = 0; x <= W; x += 20) { const y = coastAt(x) - LV_ZONE; x ? ctx.lineTo(x, y) : ctx.moveTo(x, y); } for (let x = W; x >= 0; x -= 20) ctx.lineTo(x, coastAt(x)); ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.restore();
+  } else if (TER.flat && typeof FLAT === 'object' && !S.lv) {   // 白色平原：进攻方出发阵地（海岸以北 FLAT.zone）与守方部署线（再往北 FLAT.gap）——海岸是一条直线
+    const y0 = coastAt(0), yz = y0 - FLAT.zone, yg = yz - FLAT.gap;
+    ctx.save(); ctx.fillStyle = rgba(COL.g, side === 'p' ? .07 : .04); ctx.strokeStyle = rgba(COL.g, side === 'p' ? .45 : .25); ctx.lineWidth = px(1); ctx.setLineDash([px(8), px(6)]);
+    ctx.fillRect(0, yz, W, FLAT.zone); ctx.beginPath(); ctx.moveTo(0, yz); ctx.lineTo(W, yz); ctx.stroke();
+    ctx.strokeStyle = rgba(COL.enemy, side === 'e' ? .5 : .25); ctx.beginPath(); ctx.moveTo(0, yg); ctx.lineTo(W, yg); ctx.stroke(); ctx.restore();
   }
   for (const it of S.sbx.items) {
     const c = sbxEntry(it);

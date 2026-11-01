@@ -76,6 +76,7 @@ function updateDD(dt) {
   if (!dd.auto || dd.cool > 0 || fp) return;   // 玩家亲自开着：不替他开炮
   // 指挥官火力任务（commander.js）：火力准备、烟幕、支援受阻的攻击；停止射击（误伤后）时不开火
   navHotUpdate();
+  if (typeof lcvTask === 'function' && lcvTask(dd)) return;   // 登陆掩护优先：烟幕墙、压制刚开过火的敌坦克（lcover.js）
   const fm = typeof cmdDDMission === 'function' ? cmdDDMission(dd) : null;
   if (fm) { if (!fm.hold && ddFire(fm.x, fm.y, !!fm.smoke, true) && !fm.smoke) navMark(dd, fm.x, fm.y); return; }
   // 自动掩护：射击视野内、靠近我方小组（但不贴脸）的敌人；按责任区加权，别的舰刚打过的不重复打

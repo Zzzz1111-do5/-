@@ -88,6 +88,7 @@ function vehDamage(v, dmg, pen, sx, sy, src) {
   const M = v.mod || {}, top = src === 'atgm' || src === 'top', hull = !top && v.order.t === 'hold' && S.t - v.movedT > 4 && !v.swim ? .75 : 1;   // 坚守：车体半埋（hull-down）；攻顶的反坦克导弹不吃这个
   const d = dmg * vehPenMul(pen, v.armor) * hull / (M.arm || 1);
   v.hp -= d; v.hitT = S.t; v.sup = Math.min(100, v.sup + 12 + d * 3);
+  if (isFinite(sx) && isFinite(sy) && dist(sx, sy, v.x, v.y) > 40) { v.hitX = sx; v.hitY = sy; }   // 来弹方向（车载烟幕弹往那边打，vsmoke.js）
   if (src === 'mine' || (d > 5 && Math.random() < .12)) {
     if (!v.immob && !vehSp(v).wheel && !v.swim && Math.random() < (src === 'mine' ? .65 : .5)) {
       v.immob = true; v.immobT = S.t;
@@ -100,10 +101,12 @@ function vehDamage(v, dmg, pen, sx, sy, src) {
   return d;
 }
 // 车载烟幕弹（坦克、步战车炮塔两侧的烟幕弹发射器，两次齐射）：挨了穿甲弹、反坦克导弹没被打穿，或被近失弹擦过（vehShots），
-//   朝来弹方向 18 米处打出一道烟幕（半径 24 米、约 25 秒）——多光谱烟幕热像也看不透，挡住对方的视线和远距离发现（spot.js），趁机换位；
-//   自己往那个方向也看不见。两次齐射之间至少隔 20 秒；泅渡中、在登陆舰上的不打
+//   朝来弹方向打出一道烟幕（约 25 秒）——多光谱烟幕热像也看不透，挡住对方的视线和远距离发现（spot.js），趁机换位；
+//   自己往那个方向也看不见。两次齐射之间至少隔 20 秒；泅渡中、在登陆舰上的不打。
+//   vsmoke.js 接管发射：一组弹扇形打到车前约 30 米连成烟墙，同排的车一起齐射；另外掩护挨打的步兵、后撤时也主动打（下面 r、off 是没有 vsmoke.js 时的单团烟）
 const VEH_SMK = { n: 2, gap: 20, r: 24, off: 18, dur: 25, src: ['ap', 'at', 'top', 'atgm', 'gren'] };
 function vehSmokeOut(v, sx, sy) {
+  if (typeof vsmVolley === 'function') { vsmVolley(v, sx, sy, 'hit'); return; }   // 扇形齐射，同排的车一起打（vsmoke.js）
   if (v.dead || v.swim || v.lst || !isFinite(sx) || !isFinite(sy) || (v.smk ?? VEH_SMK.n) <= 0 || S.t - (v.smkT ?? -99) < VEH_SMK.gap) return;
   const a = Math.atan2(sy - v.y, sx - v.x);
   v.smk = (v.smk ?? VEH_SMK.n) - 1; v.smkT = S.t;
@@ -422,8 +425,9 @@ function vehTerrain(v, dt) {
 }
 
 // —— 火力：主炮（直瞄榴弹/穿甲、间瞄、火焰）与并列/高射机枪 ——
-// 看得见：本方视野（全军共享：步兵、车辆、舰、飞机看到的都算）；o 是车辆的话，数据链再把 4 秒内被本方任何单位看到过的敌车算上（拐过山包、钻进林子不会一下子丢了目标）
-const vehSees = (v, x, y, d, o) => d < 45 || (v.side === 'p' ? PV : EV)[ci(x, y)] === 1 || (!!o && S.t - ((v.side === 'p' ? o.dlP : o.dlE) ?? -99) < VEH_DL);
+// 看得见：本方视野（全军共享：步兵、车辆、舰、飞机看到的都算）；o 是车辆的话，数据链再把 4 秒内被本方任何单位看到过的敌车算上（拐过山包、钻进林子不会一下子丢了目标）；
+//   但这辆车到目标的弹道线穿过烟幕就打不了（grid.js smokeBlk）
+const vehSees = (v, x, y, d, o) => d < 45 || (((v.side === 'p' ? PV : EV)[ci(x, y)] === 1 || (!!o && S.t - ((v.side === 'p' ? o.dlP : o.dlE) ?? -99) < VEH_DL)) && !smokeBlk(v.x, v.y, x, y));
 const VEH_DL = 4;
 // 每次算完视野（logistics.js updateVision）：记下对方哪些车此刻被看见了（数据链的目标记忆）
 function vehDlMark() {
@@ -734,6 +738,7 @@ function vehDepotTick(v, dt) {
     if (v.moving || !(S.points.some(p => p.owner === 'e' && dist(p.x, p.y, v.x, v.y) < 150) || (v.hx != null && dist(v.hx, v.hy, v.x, v.y) < 80))) return;
     if (v.ammo < sp.ammo) v.ammo = Math.min(sp.ammo, v.ammo + 1);
     v.fuel = Math.min(1, (v.fuel ?? 1) + .04);
+    vehSmkLoad(v);
     return;
   }
   const p = vehDepot(v), d = p ? dist(p.x, p.y, v.x, v.y) : Infinity;
@@ -747,11 +752,17 @@ function vehDepotTick(v, dt) {
   const a0 = v.ammo, f0 = v.fuel ?? 1;
   if (v.ammo < sp.ammo) v.ammo = Math.min(sp.ammo, v.ammo + 2);
   v.fuel = Math.min(1, (v.fuel ?? 1) + .05);
+  vehSmkLoad(v);
   if (p.kind === 'node') { const n = snById(p.id); if (n) n.stock = Math.max(0, (n.stock ?? 1) - (v.ammo - a0) * .006 - (v.fuel - f0) * .25); }   // 前沿点的存量：一车炮弹约 0.25、加满油 0.25
   if (v.immob && S.t - v.hitT > 8) { v.immob = false; log(`${vehName(v)}在补给点修复履带`, 'good', 'vfix' + v.id, 10, v); }
 }
+// 补给点里重新装填烟幕弹发射器：停着每 20 秒装好一组（一次齐射的量）
+function vehSmkLoad(v) {
+  if ((v.smk ?? VEH_SMK.n) >= VEH_SMK.n) return;
+  if ((v.smkL = (v.smkL || 0) + 1) >= 20) { v.smkL = 0; v.smk = (v.smk ?? VEH_SMK.n) + 1; }
+}
 // 同排（同一伙伴排 / 同一进攻目标）的车辆
-const vehMates = v => (S.veh || []).filter(o => o !== v && !o.dead && o.side === v.side && !o.lst && ((v.buddy != null && o.buddy === v.buddy) || (v.sk != null && o.sk === v.sk)));
+const vehMates =v => (S.veh || []).filter(o => o !== v && !o.dead && o.side === v.side && !o.lst && ((v.buddy != null && o.buddy === v.buddy) || (v.sk != null && o.sk === v.sk)));
 // 弹药（主炮占满载的比例）与油料
 const vehAmmoF = v => { const sp = vehSp(v); return sp.gun && !sp.gun.flame && sp.ammo ? v.ammo / sp.ammo : 1; };
 

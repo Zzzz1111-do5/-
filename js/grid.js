@@ -23,9 +23,42 @@ function eachCellIn(x, y, rad, fn) {
       if (dist(gx * CELL + 5, gy * CELL + 5, x, y) <= rad) fn(gy * GW + gx);
 }
 
+// 烟团此刻的半径：最后 6 秒收小散去；车载烟幕弹（带 t0）弹还在飞时没有烟，炸开后 1.6 秒里从三成半长满（vsmoke.js）
+const SMK_FLY = .35;
+const smkR = s => s.r * Math.min(1, (s.until - S.t) / 6) * (s.t0 == null ? 1 : S.t < s.t0 + SMK_FLY ? 0 : Math.min(1, .35 + (S.t - s.t0 - SMK_FLY) / 1.6));
+// 烟团清单（与 SMOKE 同时更新，每 0.25 秒）：x、y、挡弹道的半径（烟团半径的八成半，边上稀薄处不算）；SMK_BB 全部烟团的外框
+let SMK_L = new Float64Array(96), SMK_N = 0;
+const SMK_BB = [0, 0, 0, 0];
 function smokeMask() {
   SMOKE.fill(0);
-  for (const s of S.smoke) if (s.until > S.t) eachCellIn(s.x, s.y, s.r * Math.min(1, (s.until - S.t) / 6), i => { SMOKE[i] = 1; });
+  if (SMK_L.length < S.smoke.length * 3) SMK_L = new Float64Array(S.smoke.length * 3 + 96);
+  let n = 0, x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const s of S.smoke) if (s.until > S.t) {
+    const r = smkR(s);
+    if (!(r > 0)) continue;
+    eachCellIn(s.x, s.y, r, i => { SMOKE[i] = 1; });
+    const rb = r * .85;
+    SMK_L[n * 3] = s.x; SMK_L[n * 3 + 1] = s.y; SMK_L[n * 3 + 2] = rb; n++;
+    if (s.x - rb < x0) x0 = s.x - rb; if (s.y - rb < y0) y0 = s.y - rb; if (s.x + rb > x1) x1 = s.x + rb; if (s.y + rb > y1) y1 = s.y + rb;
+  }
+  SMK_N = n; SMK_BB[0] = x0; SMK_BB[1] = y0; SMK_BB[2] = x1; SMK_BB[3] = y1;
+}
+// 直瞄射击的弹道线 (ax, ay) → (bx, by) 穿过烟团：打不了（多光谱烟幕，热像也看不透；目标在烟里同样看不见）。
+//   视野是全军共享的（别人看见的目标都能打），没有这一条的话，躲在自己烟幕后面的车照样能打别人看见的目标，烟只挡了被掩护的一方
+function smokeBlk(ax, ay, bx, by) {
+  if (!SMK_N) return false;
+  const lx = ax < bx ? ax : bx, hx = ax < bx ? bx : ax, ly = ay < by ? ay : by, hy = ay < by ? by : ay;
+  if (hx < SMK_BB[0] || lx > SMK_BB[2] || hy < SMK_BB[1] || ly > SMK_BB[3]) return false;
+  const dx = bx - ax, dy = by - ay, l2 = dx * dx + dy * dy || 1, L = SMK_L;
+  for (let k = 0, n = SMK_N * 3; k < n; k += 3) {
+    const cx = L[k], cy = L[k + 1], r = L[k + 2];
+    if (cx + r < lx || cx - r > hx || cy + r < ly || cy - r > hy) continue;
+    let t = ((cx - ax) * dx + (cy - ay) * dy) / l2;
+    t = t < 0 ? 0 : t > 1 ? 1 : t;
+    const ex = ax + dx * t - cx, ey = ay + dy * t - cy;
+    if (ex * ex + ey * ey < r * r) return true;
+  }
+  return false;
 }
 
 // 射线投射：地表坡度不低于此前最高遮挡坡度即可见
@@ -52,7 +85,8 @@ function visSmoke(x, y, r) {
   let sig = '';
   for (const s of S.smoke || []) {
     if (!(s.until > S.t)) continue;
-    const R = s.r * Math.min(1, (s.until - S.t) / 6);
+    const R = smkR(s);
+    if (!(R > 0)) continue;
     if (Math.abs(s.x - x) < r + R + 15 && Math.abs(s.y - y) < r + R + 15) sig += s.x + ',' + s.y + ',' + R + ';';   // 比 smokeMask 圈的格子再宽一格
   }
   return sig;
@@ -171,6 +205,7 @@ const nbOff = gw => NB_OFF && NB_OFF.gw === gw ? NB_OFF.o : (NB_OFF = { gw, o: I
 
 // 流场缓存：地形/工事变化只让版本号递增；每个推演步最多重算 FBUDGET 个，超出时先用旧流场，避免大地图卡顿
 let FBUDGET = 3, FCOUNT = 0;   // FCOUNT：累计重算次数（性能统计）
+const BIG_N = 1.2e6;   // 超过 120 万格的地图（白色平原 1680 × 1120 格）：通行代价、视线高度改单精度，堆按格数开，流场少缓存几张——省下上百兆内存
 const COSTS = new Map();
 let HEAP_N, HEAP_P;
 // 通行代价按地形版本缓存（同一版本内多个流场共用，大地图上省掉每次整图重算）；raid 依赖实时视野，每次重算。
@@ -179,7 +214,7 @@ const fgNow = () => typeof S === 'object' && S && S.phase === 'battle' && isFini
 function costArr(cls, gen, force) {
   let C = COSTS.get(cls);
   const now = fgNow(), fresh = C && C.t != null && now != null && now - C.t >= 0 && now - C.t < (cls === 'raid' ? 1 : 2.5);
-  if (!C || (force && C.gen !== gen) || ((C.gen !== gen || cls === 'raid') && !fresh)) { C = { gen, t: now, a: (C && C.a) || new Float64Array(GW * GH).fill(Infinity) }; for (let k = 0; k < PGN; k++) C.a[k] = stepCost(k, cls); COSTS.set(cls, C); }   // 寻路带以外一直是 Infinity，不再逐格算
+  if (!C || (force && C.gen !== gen) || ((C.gen !== gen || cls === 'raid') && !fresh)) { C = { gen, t: now, a: (C && C.a) || new (GW * GH > BIG_N ? Float32Array : Float64Array)(GW * GH).fill(Infinity) }; for (let k = 0; k < PGN; k++) C.a[k] = stepCost(k, cls); COSTS.set(cls, C); }   // 寻路带以外一直是 Infinity，不再逐格算
   return C.a;
 }
 // 连通分量（按通行类别缓存）：能不能开到只看两格是否同属一片，不必为了判断可达整图算一遍流场。
@@ -238,10 +273,10 @@ function setPathRows(rows) {
 }
 // 按格子数开的数组：开局与换世界尺寸（setWorld）时重新分配；堆按格数的 8 倍（大地图降到 3 倍，入堆有上限检查）
 function gridAlloc() {
-  const N = GW * GH, hk = N > 300000 ? 3 : 8;
+  const N = GW * GH, big = N > BIG_N, hk = big ? 1 : N > 300000 ? 3 : 8;   // 超大地图（白色平原）：堆只按格数开，A* 入堆有上限检查
   PV = new Uint8Array(N); EV = new Uint8Array(N); SMOKE = new Uint8Array(N); MINEC = new Uint8Array(N); WIREC = new Uint8Array(N); OBSC = new Uint8Array(N); CRATERC = new Uint8Array(N);
   Object.assign(FG_PREV, { m: new Uint8Array(N), w: new Uint8Array(N), o: new Uint8Array(N), t: new Uint8Array(N), ter: null });
-  VIS_G = new Float64Array(N); VIS_B = new Float64Array(N); VIS_KEY.ter = null;
+  VIS_G = new (big ? Float32Array : Float64Array)(N); VIS_B = new (big ? Float32Array : Float64Array)(N); VIS_KEY.ter = null;   // 视线高度：单精度足够（同一张表里比较）
   HEAP_N = new Int32Array(N * hk); HEAP_P = new Float64Array(N * hk);
   AS_G = new Float64Array(N); AS_FROM = new Int32Array(N); AS_SEEN = new Uint32Array(N);
   PGH = GH; PGN = N;
@@ -345,7 +380,7 @@ function field(tx, ty, cls) {
 function fieldPut(key, d, gen, now) {
   FIELDS.delete(key);
   FIELDS.set(key, { d, gen, t: now });
-  while (FIELDS.size > (GW * GH > 200000 ? 32 : 48)) FIELDS.delete(FIELDS.keys().next().value);
+  while (FIELDS.size > (GW * GH > BIG_N ? 12 : GW * GH > 200000 ? 32 : 48)) FIELDS.delete(FIELDS.keys().next().value);   // 超大地图一张流场 7 MB：少存几张
   return d;
 }
 // 流场用桶队列（Dial）：桶宽取略小于最小一步代价，同一个桶里的格先出后出都不会被同桶的格再改小——每格的值都是

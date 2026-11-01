@@ -100,4 +100,5 @@
 - 写实地表贴图（草地、林下地面、岩石、沙滩，assets/terrain）：ambientCG（https://ambientcg.com），CC0 1.0
 - 天空（assets/sky）：Poly Haven「kloofendal_48d_partly_cloudy_puresky」（https://polyhaven.com/a/kloofendal_48d_partly_cloudy_puresky），CC0 1.0
 - 海面法线贴图（assets/water/normals.jpg）：three.js 示例（waternormals.jpg）（https://github.com/mrdoob/three.js），MIT（见 assets/water/LICENSE-three.js.txt）
+- 超新星遗迹星云（白色平原的太空背景，js/mdl/nebula.js）：This work is based on "Supernova remnant : lighting 2" (https://sketchfab.com/3d-models/supernova-remnant-lighting-2-68cbcb486c7f41f2b842a36a543a54a1) by Aiekick (https://sketchfab.com/Aiekick) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)（改动：217 万个点去掉近乎全黑的、抽样到 30 万个，坐标量化为 16 位、颜色 8 位，tools/nebula_bake.py）
 <!-- ext:end -->

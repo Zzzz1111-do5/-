@@ -71,7 +71,7 @@ function mmInit(cv) {
       const c = TRX_FLAT[t], e = isWater(t) ? 1 - clamp((cellCY(i) - coastAt(cellCX(i))) / 900, 0, .6) : .8 + TER.elev[i] * .4;
       for (let j = 0; j < 3; j++) img.data[i * 4 + j] = c[j] * e;
     } else {
-      const c = MM_COL[t], e = isWater(t) ? 1 : .55 + TER.elev[i] * .6;
+      const c = TER.flat ? '#8a8c8e' : MM_COL[t], e = isWater(t) ? 1 : .55 + TER.elev[i] * .6;   // 白色平原：灰色平台
       img.data[i * 4] = parseInt(c.slice(1, 3), 16) * e; img.data[i * 4 + 1] = parseInt(c.slice(3, 5), 16) * e;
       img.data[i * 4 + 2] = parseInt(c.slice(5, 7), 16) * e;
     }
