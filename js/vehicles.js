@@ -554,12 +554,18 @@ function vehShots(dt) {
   S.vshots = S.vshots.filter(s => !s.done || (s.k === 'flame' && s.t < s.dur));
 }
 
+// 车载自动武器的散布随距离增大（单个武器的细节）：一个点射落到人形目标上的概率约为「目标尺寸² /（目标尺寸² + 散布²）」，散布与距离成正比——
+//   命中率按实际距离衰减，不按「占最大射程的几成」：射程按现实放大到一千多米以后，原来的线性衰减让机枪在 1 公里外和原来在 170 米内一样准（登陆滩头整排被机枪扫倒）。
+//   VEH_DISP0 以内与原来（机枪射程 170 米时）一样；再远按距离平方衰减——500 米约为近距离的 1/9，1000 米约 1/35：远距离机枪主要是压制（压制量不变）。
+//   四联机关炮（自行高炮、弹炮防空车）打的是爆破弹，破片让等效目标大一倍
+const VEH_DISP0 = 170;
+const vehDispK = (d, quad) => 1 / (1 + (d / (quad ? VEH_DISP0 * 2 : VEH_DISP0)) ** 2);
 // 机枪：与小组机枪手相同的压制/杀伤模型；四联高射机枪火力更猛
 function vehMg(v, tg) {
   const sp = vehSp(v), m = sp.mg, M = v.mod || {}, D = aiD(), q = tg.t;
   v.mcd = (m.quad ? 1 : 1.2) * (1 + v.sup / 150) / (M.rof || 1);
   v.mgT = S.t;
-  const moving = S.t - v.movedT < .4, acc = (1 - tg.d / m.range * .5) * (moving ? .6 : 1) * (1 - v.sup / 140) * (M.pow || 1) * (v.side === 'e' ? D.acc : 1);
+  const moving = S.t - v.movedT < .4, acc = vehDispK(tg.d, m.quad) * (moving ? .6 : 1) * (1 - v.sup / 140) * (M.pow || 1) * (v.side === 'e' ? D.acc : 1);
   const def = coverAt(q.x, q.y) * shelter(q, v.x, v.y) * (SMOKE[ci(q.x, q.y)] ? .4 : 1);
   if (q.side === 'e') q.hitT = S.t;
   for (let s = 0; s < m.n; s++) {

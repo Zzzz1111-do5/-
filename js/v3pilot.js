@@ -1,8 +1,8 @@
 'use strict';
 // 亲自操纵（3D 地图里，P 键或右上角「驾驶」按钮）：055 驱逐舰，以及升空的战斗机（歼-20、歼-50）、歼-35、歼-15T、歼-16D——
 //   这一个单位的 AI 让出指挥（别的照常推演）；按 P 或「驾驶」弹出列表自己选要开的，Esc 退出、交回 AI。画面上不画别的标识，只有武器平显（fpwpn.js）
-//   飞机：飞控物理引擎（flight.js 六自由度 + 电传飞控）真飞，操纵照《战争雷霆》——默认鼠标瞄准（鼠标指哪儿，教官压坡度、拉杆把机头带过去），
-//         M 切换鼠标摇杆（鼠标移动的就是杆）；W / S 油门（推满后按住 W 开加力）、A / D 滚转、↑ / ↓ 推杆 / 拉杆、Q / E 方向舵（按住时这一轴归玩家）；
+//   飞机：飞控物理引擎（flight.js 六自由度 + 电传飞控）真飞；操纵默认照《皇牌空战》——A / D（手柄左摇杆左右）压到对应坡度并顺势带杆转弯、松手自动改平，↑ / ↓ 推杆 / 拉杆；
+//         M 依次切换《战争雷霆》式鼠标瞄准（鼠标指哪儿，教官压坡度、拉杆把机头带过去）、鼠标摇杆（鼠标移动的就是杆）；W / S 油门（推满后按住 W 开加力）、Q / E 方向舵（按住时这一轴归玩家）；
 //         能连续横滚、筋斗、反筋斗；杆量有平滑、死区与指数响应曲线；受力回馈：手柄震动、大迎角抖振、过载黑视 / 红视、头部随过载晃动（G 开关）；
 //         镜头是跟在机尾的追尾视角（按住 C 自由视角、滚轮拉远拉近），V 切换座舱视角（透明座舱盖）；手柄也能飞；
 //         武器（fpwpn.js）：数字键选武器、F 开火，选中时打开弹舱门；平显上是导弹的大环，环里的目标锁稳了框变红才能打。起飞、着舰仍由飞行员（AI）完成
@@ -11,7 +11,7 @@
 // 推演：carrier.js flyPlane、support.js updateDD、units.js updateShips、sandbox.js sbxFireShips 见到 o.fp 就不再替它做主（飞机在 fpFly 里飞，舰在 fpSail 里开）
 const V3FP = { on: false, k: null, o: null, keys: new Set(), look: [0, 0], thr: .8, tele: 3, rud: 0, cool: 0, drag: null, touch: { x: 0, y: 0, ab: false }, lock: null, law: 'n', ap: false,
   vw: 'chase', orb: [0, 0], cd: 80, ws: -1, lk: {}, fwC: [], bay: { main: 0, side: 0, ext: 0 },
-  ctl: 'aim', aim: [0, 0], ms: [0, 0], kx: { r: 0, p: 0, y: 0 }, ins: { x: 0, y: 0, r: 0 }, ab: false, abT: 0, ffb: true, gb: 0, rb: 0, buf: 0, imp: 0, free: false, gpB: [],
+  ctl: 'ace', aim: [0, 0], ms: [0, 0], kx: { r: 0, p: 0, y: 0 }, ins: { x: 0, y: 0, r: 0 }, ab: false, abT: 0, ffb: true, gb: 0, rb: 0, buf: 0, imp: 0, free: false, gpB: [],
   mv: null, mo: [0, 0], mf: null, mp: null, mEnd: null, fq: null, msg: null };   // mv：导弹视角正跟着的弹；fq：按了开火、等舱门开好
 const V3FP_KEYS = { KeyW: 1, KeyA: 1, KeyS: 1, KeyD: 1, KeyQ: 1, KeyE: 1, KeyC: 1, KeyF: 1, KeyX: 1, KeyV: 1, KeyT: 1, KeyM: 1, KeyG: 1, Space: 1, ShiftLeft: 1, ShiftRight: 1, ArrowLeft: 1, ArrowRight: 1, ArrowUp: 1, ArrowDown: 1, Digit1: 1, Digit2: 1, Digit3: 1, Digit4: 1, Digit5: 1, Digit6: 1 };
 const FP_TELE = [-.3, 0, .35, .7, 1];   // 车钟：后退一 · 停车 · 前进一二三
@@ -256,7 +256,12 @@ function fpFly(p, dt) {
   const mx = clamp(kx.r + (gp ? gp.x : 0), -1, 1), my = clamp(kx.p + (gp ? gp.y : 0), -1, 1), mr = clamp(kx.y + (gp ? gp.r : 0), -1, 1);
   let x, y, r;
   if (V3FP.ctl === 'stick') { x = fpCurve(clamp(mx + fpDz(V3FP.ms[0]), -1, 1)); y = fpCurve(clamp(my + fpDz(V3FP.ms[1]), -1, 1)); r = fpCurve(mr); }
-  else {
+  else if (V3FP.ctl === 'ace') {   // 皇牌空战式：左右 = 压到对应坡度（满压约 75°，松手自动改平）并顺势带杆转弯；上下 = 拉杆 / 推杆；舵 = 微调机头。飞控、气动照旧是真实的
+    const phi = flEul(F.q)[0], pm = (FL_AC[F.k] || {}).pmax || 3, ix = fpCurve(mx), iy = fpCurve(my);
+    x = clamp((airAng(ix * 1.31 - phi) * 2.6 - F.w[0] * .32) / pm, -1, 1);
+    y = clamp(iy + (iy < -.1 ? 0 : Math.abs(ix) * .45), -1, 1);   // 压坡度时自动带约 4–5 g 的杆转过去；推杆时不加
+    r = fpCurve(mr);
+  } else {
     // 玩家压杆或拉杆时教官整个让出来（不然它还在按准星滚转，和玩家打架），准星跟着机头走——松手后接着往机头方向飞，不会猛地扳回去
     V3FP.man = Math.abs(mx) > .02 || Math.abs(my) > .02;
     const I = fpInstr(F), S0 = V3FP.ins, k = Math.min(1, dt / .08);   // 教官的杆量也滤一下（约 0.08 秒），不来回抖
@@ -636,7 +641,7 @@ if (typeof window !== 'undefined' && window.addEventListener) {
       const dg = /^Digit([1-6])$/.exec(e.code);
       if (dg) fwSel(+dg[1] - 1);
       if (e.code === 'KeyC') { V3FP.free = true; if (V3FP.ctl === 'stick') V3FP.ms = [0, 0]; }   // 按住自由视角（鼠标摇杆时顺便杆回中）
-      if (e.code === 'KeyM') { V3FP.ctl = V3FP.ctl === 'aim' ? 'stick' : 'aim'; V3FP.ms = [0, 0]; if (V3FP.ctl === 'aim' && V3FP.o) { const B = fpBody(V3FP.o); V3FP.aim = [Math.atan2(-B.f[1], B.f[0]), Math.asin(clamp(B.f[2], -1, 1))]; } log(V3FP.ctl === 'aim' ? '鼠标瞄准' : '鼠标摇杆', 'info', 'fpctl', 1); }
+      if (e.code === 'KeyM') { V3FP.ctl = V3FP.ctl === 'ace' ? 'aim' : V3FP.ctl === 'aim' ? 'stick' : 'ace'; V3FP.ms = [0, 0]; if (V3FP.ctl === 'aim' && V3FP.o) { const B = fpBody(V3FP.o); V3FP.aim = [Math.atan2(-B.f[1], B.f[0]), Math.asin(clamp(B.f[2], -1, 1))]; } log(V3FP.ctl === 'aim' ? '鼠标瞄准（战争雷霆式）' : V3FP.ctl === 'stick' ? '鼠标摇杆' : '皇牌空战式：A / D 压坡度转弯（松手自动改平）、↑ / ↓ 推拉杆', 'info', 'fpctl', 1); }
       if (e.code === 'KeyG') { V3FP.ffb = !V3FP.ffb; log(V3FP.ffb ? '受力回馈：开' : '受力回馈：关', 'info', 'fpffb', 1); }
       if (e.code === 'KeyX') { V3FP.law = V3FP.law === 'n' ? 'd' : 'n'; log(V3FP.law === 'd' ? '飞控：直接律' : '飞控：正常律', 'info', 'fplaw', 1); }
     } else {

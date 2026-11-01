@@ -1162,7 +1162,7 @@ function sbxFireShips(dt) {
       // 分区射击（support.js navWeight）：优先本舰责任区，别的舰 6 秒内打过的不重复打，告急区可转火支援
       if (typeof navHotUpdate === 'function') navHotUpdate();
       const nw = (x, y) => typeof navWeight === 'function' ? navWeight(s, x, y) : 1;
-      let t = null, bd = DD_R;
+      let t = typeof navArmorTarget === 'function' ? navArmorTarget(s) : null, bd = t ? 0 : DD_R;   // 正朝我军开火的敌车辆先打（support.js）
       for (const e of S.enemies) if (!e.dead && (inVision(e.x, e.y) || e.kx != null)) {
         const w = nw(e.x, e.y), d = dist(s.x, s.y, e.x, e.y) * (e.kind === 'coastal' || e.kind === 'bunker' ? .7 : 1);
         if (w && d / w < bd && d < DD_R && sbxSafe(e.x, e.y, 45)) { bd = d / w; t = e; }

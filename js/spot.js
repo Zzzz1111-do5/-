@@ -7,6 +7,9 @@
 const SPOT = { S: null, k: 0, p: new Map(), e: new Map() };   // p：攻方发现的守方目标（目标对象 → 有效到的推演时间）
 const SPOT_KEEP = 1.6;   // 一次确认后保持几秒（每 0.5 秒复查一次，转过山包丢了目标不会马上消失）
 const SPOT_ARMOR = [3000, 1400];   // 守方 M1117 装甲警戒车：遥控武器站的热像仪
+// 攻方驱逐舰 / 护卫舰的光电跟踪仪（舰炮火控的红外 + 电视 + 激光测距转塔，装在上层建筑高处，约 25 米）：近岸几公里内的车辆、开过火的步兵都看得见——
+//   滩头外海的舰艇正好能看到朝滩头开火的守军坦克、防空车（炮口焰、热信号），舰炮据此还击（support.js navArmorTarget）；地形、林地照样挡
+const SPOT_SHIP = [7000, 2200], SPOT_SHIP_H = 2.5;
 
 // 两点之间有没有通视：沿线每格取遮挡顶高（地面 + 林地 / 城镇 / 悬崖），高过视线就挡住；烟幕挡。
 //   林缘、镇子边上 SPOT_EDGE 米以内的树木、房屋不算遮挡（观察车停在林缘往外看、目标在林缘也露着——双方一样）：
@@ -32,9 +35,13 @@ function spotLos(sx, sy, sh, tx, ty, th, fired) {
   return true;
 }
 
-// 一方的观察车辆：[x, y, 发现车辆的距离, 发现步兵的距离]
+// 一方的观察点：[x, y, 发现车辆的距离, 发现步兵的距离, 观察点离地高（格，不给 = 车长周视镜 0.3）]
 function spotSensors(side) {
   const out = [];
+  if (side === 'p') {   // 驱护舰的光电跟踪仪
+    if (S.dd && S.dd.state !== 'sunk' && isFinite(S.dd.x) && S.dd.x > -999) out.push([S.dd.x, S.dd.y, SPOT_SHIP[0], SPOT_SHIP[1], SPOT_SHIP_H]);
+    for (const sh of S.ships) if (sh.kind === 'dd' && alive(sh)) out.push([sh.x, sh.y, SPOT_SHIP[0], SPOT_SHIP[1], SPOT_SHIP_H]);
+  }
   for (const v of S.veh || []) {
     if (v.dead || v.lst || v.side !== side) continue;
     const s = vehSp(v).spot;
@@ -50,7 +57,7 @@ function spotTargets(side) {
   const foe = side === 'p' ? 'e' : 'p', out = [], t = S.t;
   for (const v of S.veh || []) {
     if (v.dead || v.lst || v.side !== foe) continue;
-    const fired = t - (v.fireT ?? -99) < 3;
+    const fired = t - Math.max(v.fireT ?? -99, v.mgT ?? -99) < 3;   // 主炮、机枪开火都会暴露（炮口焰、曳光弹）
     // 泅渡中：车体大半没在水里，只露出炮塔，海浪杂波里热像对比度也差——发现距离打六折、目标高度减半
     out.push([v, v.x, v.y, (v.moving ? 1 : .85) * (fired ? 1.5 : 1) * (v.swim ? .6 : 1), v.swim ? .12 : .24, false, fired]);
   }
@@ -78,7 +85,7 @@ function spotScan(side) {
       const R = (inf ? s[3] : s[2]) * f, dx = x - s[0], dy = y - s[1];
       if (dx > R || dx < -R || dy > R || dy < -R || dx * dx + dy * dy > R * R) continue;
       if (dx * dx + dy * dy < 2500) continue;   // 50 米内全格视野已经看得见
-      if (spotLos(s[0], s[1], .3, x, y, th, fired)) { M.set(o, until); break; }
+      if (spotLos(s[0], s[1], s[4] ?? .3, x, y, th, fired)) { M.set(o, until); break; }
     }
   }
 }
