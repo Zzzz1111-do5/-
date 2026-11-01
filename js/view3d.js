@@ -531,7 +531,7 @@ function v3ShMatrix(C) {
 function v3ShPass(C) {
   const gl = V3.gl;
   V3SH.on = false;
-  if (v3Mx() || (SETTINGS && SETTINGS.quality === 'low')) return false;
+  if (v3Mx() || (SETTINGS && SETTINGS.quality === 'low') || R.autoLow) return false;   // 持续卡顿自动降画质时（main.js）不画实时阴影
   if (!V3SH.tried) v3ShInit(gl);
   if (!V3SH.ok) return false;
   const M = v3ShMatrix(C), S0 = V3SH.size;
@@ -1308,10 +1308,11 @@ function v3Draw(now) {
   };
   // 近处这张隔一帧画一次（范围移动超过边长 3%、缩放变了、换了大小时马上重画）：屏外 2D 画布画好再传成贴图，
   //   在 Mac 的 Safari 上每张都要从显卡读回再上传，是 3D 每帧最贵的一步；地面上的东西（弹坑、烟、标号）变化慢，隔一帧看不出来
+  //   镜头不动时按时间节流：近处最多每 50 毫秒、远处每 150 毫秒重画重传一次（原来按帧数：高刷新率屏上每秒传六七十次，传贴图是每帧最贵的一步）；镜头一动照旧马上重画
   const nb = V3.nBox, nMove = !nb || nb[4] !== sTop || Math.abs(nb[0] - bN[0]) + Math.abs(nb[1] - bN[1]) > bN[2] * .03 || Math.abs(nb[2] - bN[2]) > bN[2] * .03;
-  V3.nT = (V3.nT || 0) + 1;
-  if (nMove || V3.nT % 2 === 0) { V3.boxN = paint(V3.top, bN, sTop); V3.nBox = [bN[0], bN[1], bN[2], bN[3], sTop]; V3.nNew = true; }
-  if (!one && (!V3.boxB || (V3.fT = (V3.fT || 0) + 1) % 4 === 0 || Math.abs(V3.boxB[0] - box[0]) + Math.abs(V3.boxB[1] - box[1]) > box[2] * .12)) {
+  if (nMove || !(now - (V3.nPT ?? -1e9) < 50)) { V3.nPT = now; V3.boxN = paint(V3.top, bN, sTop); V3.nBox = [bN[0], bN[1], bN[2], bN[3], sTop]; V3.nNew = true; }
+  if (!one && (!V3.boxB || !(now - (V3.fPT ?? -1e9) < 150) || Math.abs(V3.boxB[0] - box[0]) + Math.abs(V3.boxB[1] - box[1]) > box[2] * .12)) {
+    V3.fPT = now;
     V3.boxF = paint(V3.topF, box, Math.min(sTop, cap * (V3.capK || 1) / Math.max(box[2], box[3])));   // 远处这张也按整幅分辨率画（原来只有六成，远景糊）
     V3.boxB = box.slice(); V3.fNew = true;
   }

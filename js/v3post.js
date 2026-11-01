@@ -97,7 +97,7 @@ function v3poDof() {
 
 function v3Post(now) {
   const st = typeof SETTINGS === 'object' && SETTINGS ? SETTINGS : {};
-  if ((st.quality === 'low' || R.lowCap) && !(typeof ftIR === 'function' && ftIR())) return;   // 画质低时不做后期；吊舱红外例外（换算在这一遍里）
+  if ((st.quality === 'low' || R.lowCap || R.autoLow) && !(typeof ftIR === 'function' && ftIR())) return;   // 画质低（或持续卡顿自动降画质，main.js）时不做后期；吊舱红外例外（换算在这一遍里）
   const gl = V3.gl;
   if (!V3PO.tried) v3poInit(gl);
   if (!V3PO.ok) return;

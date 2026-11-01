@@ -61,6 +61,8 @@ const vehCrew = v => (VEH_SPEC[v.type] || VEH_SPEC.tank).crew || 3;
 const vehCrewOf = (side, f) => (S && S.veh || []).reduce((a, v) => a + (v.side === side && !v.dead && !v.lst && (!f || f(v)) ? vehCrew(v) : 0), 0);
 const vehWater = (x, y) => isWater(typeAt(x, y));
 const vehPass = (x, y, cls) => stepCost(ci(x, y), cls) < Infinity;
+// 行进中避让本方车辆的最大距离（两车车长之和的一半 + 6 + 12）：坐标差超过它的车不用细算
+const VEH_AVOID = Math.max(...Object.values(VEH_SPEC).map(o => o.len || 0)) + 6 + 12 + 1;
 const vehAng = a => Math.atan2(Math.sin(a), Math.cos(a));
 
 function addVehicle(side, type, x, y, extra) {
@@ -279,9 +281,11 @@ function vehDrive(v, dt, mul) {
   // 与本方车辆保持间距：前方有车就转向绕开、靠得太近就减速停车让行——车只沿车头方向走，不横着平移（以前侧推车身，看着像滑步）
   let slow = 1, park = null;
   { const fx = Math.cos(v.heading), fy = Math.sin(v.heading);
-    for (const o2 of S.veh) {
+    for (const o2 of vehCache()[v.side]) {   // 只扫本方活着的车（顺序与 S.veh 相同）；坐标差超过最大避让距离的先跳过，不算 hypot——结果不变
       if (o2 === v || o2.dead || o2.side !== v.side || o2.lst) continue;
-      const dx = o2.x - v.x, dy = o2.y - v.y, d2 = Math.hypot(dx, dy), m = (sp.len + vehSp(o2).len) * .5 + 6;
+      const dx = o2.x - v.x, dy = o2.y - v.y;
+      if (dx > VEH_AVOID || dx < -VEH_AVOID || dy > VEH_AVOID || dy < -VEH_AVOID) continue;
+      const d2 = Math.hypot(dx, dy), m = (sp.len + vehSp(o2).len) * .5 + 6;
       if (d2 > m + 12 || d2 < .01) continue;
       const along = (dx * fx + dy * fy) / d2, lat = (dy * fx - dx * fy) / d2;
       if (along < .25) continue;   // 在侧后方：由对方让
@@ -343,7 +347,7 @@ function vehSep(v, dt) {
   if (v.lst || v.ramp || v.swim || v.immob || v.fixed) return;
   const sp = vehSp(v), cls = vehCls(v);
   let px = 0, py = 0;
-  for (const o of S.veh) {
+  for (const o of vehCache()[v.side]) {   // 只扫本方活着的车（顺序与 S.veh 相同，结果不变）
     if (o === v || o.dead || o.side !== v.side || o.lst || o.ramp) continue;
     const dx = v.x - o.x, dy = v.y - o.y;
     if (Math.abs(dx) > 30 || Math.abs(dy) > 30) continue;
@@ -481,8 +485,9 @@ function vehGunTarget(v) {
     if (dq > R0 || (g.min && dq < g.min)) continue;   // 射程外的（consider 也会丢掉）不用再数它周围的人：每个小组都数一遍全体小组，大地图上是推演最重的一处
     if (g.ind && !(q.side === 'e' ? inVision(q.x, q.y) : spotted(q.x, q.y))) continue;
     if (v.cons && !g.ind && dq > 80) continue;   // 节约弹药：主炮只打车辆、工事与贴近的步兵，远处的步兵交给机枪
-    let near = 0;   // 一发榴弹能罩住的人数：成堆的步兵优先
-    for (const o of S.teams) if (o !== q && o.side === foe && o.men.length && !o.ride) { const dx = o.x - q.x, dy = o.y - q.y; if (dx < 22 && dx > -22 && dy < 22 && dy > -22 && dist(o.x, o.y, q.x, q.y) < 22) near += o.men.length; }
+    let near = 0;   // 一发榴弹能罩住的人数：成堆的步兵优先（只看附近桶里的小组，combat.js ftNear——原来每个候选都把全体小组扫一遍）
+    { const T = S.teams, N = typeof ftNear === 'function' ? ftNear(q.x, q.y, 52) : null;
+      for (let n = 0, L = N ? N.length : T.length; n < L; n++) { const o = T[N ? N[n] : n]; if (o !== q && o.side === foe && o.men.length && !o.ride) { const dx = o.x - q.x, dy = o.y - q.y; if (dx < 22 && dx > -22 && dy < 22 && dy > -22 && dist(o.x, o.y, q.x, q.y) < 22) near += o.men.length; } } }
     consider(q, 'tm', q.x, q.y, (1 + q.men.length * .2 + near * .12) * (g.flame && q.inTrench ? 2.4 : 1) * (g.ind ? .6 : 1) * (at ? .8 : 1));
   }
   return best;

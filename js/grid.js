@@ -89,7 +89,7 @@ const VIS_ST = [1];   // 射线步长 1, 1.7, 2.4 …（格），与逐次累加
 //   缓存起来直接用（键是精确坐标，烟幕按视距内每团的位置与当前半径比对，结果与重算逐格相同）；地图换了清空，用得少的定期淘汰
 const VISC = { m: new Map(), ter: null, n: 0, mark: null, sid: 0 };
 // 烟团清单（视线缓存的签名用）：每次投射视线前算一遍（原来每个视野源都把全部烟团的半径重算一遍）
-let VIS_SL = [];
+let VIS_SL = [], VIS_BUF = new Int32Array(0);
 function visSmokeList() {
   const L = [];
   for (const s of S.smoke || []) {
@@ -124,10 +124,13 @@ function castVision(out, sources) {
     { const k = bkey(s.x, s.y); let L = bk.get(k); if (!L) bk.set(k, L = []); L.push({ x: s.x, y: s.y, r: s.r, h }); }
     const key = s.x + ',' + s.y + ',' + s.r + ',' + h, sm = visSmoke(s.x, s.y, s.r, SL), c = VISC.m.get(key);
     if (c && c.sm === sm) { const L = c.cells; for (let k = 0; k < L.length; k++) out[L[k]] = 1; c.n = call; continue; }
-    const cells = [], sid = ++VISC.sid;
-    const gx0 = s.x / CELL, gy0 = s.y / CELL, i0 = ci(s.x, s.y), rc = s.r / CELL;
+    const sid = ++VISC.sid;
+    let nc = 0;
+    const gx0 = s.x / CELL, gy0 = s.y / CELL, i0 = ci(s.x, s.y), rc = s.r / CELL, need = (2 * Math.ceil(rc) + 4) ** 2;
+    if (VIS_BUF.length < need) VIS_BUF = new Int32Array(need);   // 视距圆的外接方块：点亮的格不会更多
+    const cells = VIS_BUF;   // 点亮的格先记在预分配的缓冲里，最后整段拷一份进缓存（原来 JS 数组逐个 push 再 Int32Array.from，占视线开销的四分之一）
     const eye = G[i0] + h;
-    out[i0] = 1; if (mark[i0] !== sid) { mark[i0] = sid; cells.push(i0); }
+    out[i0] = 1; if (mark[i0] !== sid) { mark[i0] = sid; cells[nc++] = i0; }
     const n = Math.ceil(rc * 7.5), D = visDirs(n);
     while (ST[ST.length - 1] + .7 <= rc) ST.push(ST[ST.length - 1] + .7);
     let ns = 0;
@@ -139,13 +142,13 @@ function castVision(out, sources) {
         const st = ST[j], fx = gx0 + dx * st, fy = gy0 + dy * st;
         if (fx < 0 || fy < 0 || fx >= gw || fy >= gh) break;
         const i = (fy | 0) * gw + (fx | 0);
-        if ((G[i] - eye) / st >= maxS - .02) { out[i] = 1; if (mark[i] !== sid) { mark[i] = sid; cells.push(i); } }
+        if ((G[i] - eye) / st >= maxS - .02) { out[i] = 1; if (mark[i] !== sid) { mark[i] = sid; cells[nc++] = i; } }
         const top = (B[i] - eye) / st;
         if (top > maxS) maxS = top;
         if (SM[i]) break;
       }
     }
-    VISC.m.set(key, { cells: Int32Array.from(cells), sm, n: call });
+    VISC.m.set(key, { cells: cells.slice(0, nc), sm, n: call });
   }
   if (VISC.m.size > 1200) for (const [k, c] of VISC.m) if (call - c.n > 8) VISC.m.delete(k);   // 两秒没用上的（走开了的单位留下的）淘汰
 }

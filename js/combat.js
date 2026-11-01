@@ -159,15 +159,36 @@ function fireShell(x0, y0, x1, y1, side, kind, dur, fuzzy, extra) {
 const canSee = (side, x, y, d, sx, sy) => d < 50 || ((side === 'p' ? PV : EV)[ci(x, y)] === 1 && (sx == null || !smokeBlk(sx, sy, x, y)));
 // 兵种修正 mod（目录/沙盒写入，可缺省）：{ pow 命中倍率, rng 射程倍率, rof 射速倍率, sup 压制倍率 }
 const modOf = o => o.mod || {};
+// 小组分桶（findTarget 用）：每个推演步按 160 米分桶建一次，找目标只看附近几个桶——原来每个小组每步都把全体小组扫一遍（白色平原上九百个组，每步八十万次）。
+//   候选按在 S.teams 里的顺序比较（与原来逐个扫一样，距离相等时选中的也一样）；桶按建桶时的位置，取候选范围时多放 30 米（这一步里先走的组挪不了那么远）
+const FT_B = 160, FTIX = { key: '', arr: null, m: new Map() };
+function ftIndex() {
+  const key = S.t + '|' + S.nid + '|' + S.teams.length;
+  if (FTIX.key === key && FTIX.arr === S.teams) return FTIX;
+  FTIX.key = key; FTIX.arr = S.teams; FTIX.m.clear();
+  const T = S.teams;
+  for (let i = 0; i < T.length; i++) { const o = T[i], k = Math.floor(o.x / FT_B) * 4096 + Math.floor(o.y / FT_B); let L = FTIX.m.get(k); if (!L) FTIX.m.set(k, L = []); L.push(i); }   // 桶里存下标（递增）
+  return FTIX;
+}
+// (x, y) 附近 r 以内可能有的小组下标，按在 S.teams 里的顺序
+function ftNear(x, y, r) {
+  const F = ftIndex(), out = [];
+  const x0 = Math.floor((x - r) / FT_B), x1 = Math.floor((x + r) / FT_B), y0 = Math.floor((y - r) / FT_B), y1 = Math.floor((y + r) / FT_B);
+  let nb = 0;
+  for (let bx = x0; bx <= x1; bx++) for (let by = y0; by <= y1; by++) { const L = F.m.get(bx * 4096 + by); if (L) { nb++; for (let k = 0; k < L.length; k++) out.push(L[k]); } }
+  if (nb > 1) out.sort((a, b) => a - b);
+  return out;
+}
 function findTarget(q, range) {
   let best = null, bd = range * (modOf(q).rng || 1);
   const qx = q.x, qy = q.y;
-  for (const o of S.teams) if (o.side !== q.side && o.men.length && !o.ride) {   // ride：搭乘装甲运兵车中
+  const T = S.teams, near = ftNear(qx, qy, bd + 30);
+  for (let n = 0; n < near.length; n++) { const o = T[near[n]]; if (o.side !== q.side && o.men.length && !o.ride) {   // ride：搭乘装甲运兵车中
     const dx = o.x - qx, dy = o.y - qy;
     if (dx >= bd || dx <= -bd || dy >= bd || dy <= -bd) continue;   // 坐标差已超出当前最近距离的直接跳过（每步每个小组都要扫一遍全体）
     const d = dist(qx, qy, o.x, o.y);
     if (d < bd && canSee(q.side, o.x, o.y, d, qx, qy)) { bd = d; best = { t: o, d, k: 'tm' }; }
-  }
+  } }
   // 对方车辆（vehicles.js）：轻武器只能压制乘员，优先打步兵；带反坦克手段（mod.at）的小组优先打车
   if (typeof vehFoes === 'function') for (const v of vehFoes(q.side)) {
     const d = dist(q.x, q.y, v.x, v.y), w = d * (modOf(q).at ? .7 : 1.5);
