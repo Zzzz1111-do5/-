@@ -85,7 +85,8 @@ function bgSlots(G, mode) {
   const vcls = G.side === 'e' ? 'vehe' : 'veh';
   const snap = (sx, sy) => bgSnap(G, sx, sy, vcls);
   const row = (list, x, w) => list.forEach((v, i) => { const [sx, sy] = snap(...at(x, list.length > 1 ? (i / (list.length - 1) - .5) * w : 0)); out.push({ m: v, k: 'v', x: sx, y: sy }); });
-  row(tk, march ? 70 : 55, Math.max(wid, tk.length * 26));
+  if (march) tk.forEach((v, i) => { const [sx, sy] = snap(...at(70 - i * 30, i % 2 ? 10 : -10)); out.push({ m: v, k: 'v', x: sx, y: sy }); });   // 行军：坦克成纵队，前后约 45 米（纵向放大 1.5 倍）、左右稍错开
+  else row(tk, 55, Math.max(wid, tk.length * 65));   // 展开：车间距 65 米（条令 50–100 米）——原来 26 米，行军时还压到四成五，并排挤在一起
   row(ifv, -28, wid * .8);
   td.forEach((v, i) => { const [sx, sy] = snap(...at(15, (i % 2 ? 1 : -1) * (wid / 2 + 40 + Math.floor(i / 2) * 25))); out.push({ m: v, k: 'v', x: sx, y: sy }); });
   row(aa, -90, Math.min(120, aa.length * 30));

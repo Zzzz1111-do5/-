@@ -1084,8 +1084,10 @@ function vehThinkE(v) {
   }
   if (!best) { v.ai = 'reserve'; vehGo(v, v.hx, v.hy, 'move', SOUTH); return; }
   const inf = S.teams.filter(q => q.side === 'e' && q.men.length && dist(q.x, q.y, best.x, best.y) < 220).length;
-  if ((inf >= 2 || best.key === 'HQ') && !vehSp(v).aa) { v.ai = 'counter'; vehGo(v, best.x + gauss() * 15, best.y - 55, 'amove', SOUTH); }   // 防空车不打反冲击，只在后方掩护
-  else { v.ai = 'cover'; vehGo(v, best.x, best.y - 150, 'move', SOUTH); }
+  // 几辆车去同一个据点：各占一个位置，左右错开 60 米、前后错开 25 米（按车号固定，不每次随机）——原来都开到同一点，挤成一团
+  const k = v.id % 5, ox = (k % 2 ? 1 : -1) * Math.ceil(k / 2) * 60, oy = (k % 3) * 25;
+  if ((inf >= 2 || best.key === 'HQ') && !vehSp(v).aa) { v.ai = 'counter'; vehGo(v, best.x + ox, best.y - 55 - oy, 'amove', SOUTH); }   // 防空车不打反冲击，只在后方掩护
+  else { v.ai = 'cover'; vehGo(v, best.x + ox, best.y - 150 - oy, 'move', SOUTH); }
 }
 
 // 地狱难度：守军另有一辆中型坦克、一辆轻型坦克作机动预备队，停在镇子背面（沙盘模式由玩家自行摆放）
