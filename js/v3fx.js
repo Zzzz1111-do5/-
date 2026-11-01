@@ -255,7 +255,11 @@ function v3Fx(C) {
   if (S.eair) for (const p of S.eair.proj || []) {
     if (p.t < 0 || p.done || (!spec && !inVision(p.tx, p.ty) && !inVision(p.x0, p.y0)) || !inB(p.tx, p.ty, 100)) continue;
     const za = v3AltZ(p.x0, p.y0, .25 * V3_AIR, -2.6, 1.5), zb = g(p.tx, p.ty) + 1;   // 直升机悬停高度（view3d.js v3AirZ）
-    if (p.k === 'rk') {
+    if (p.k === 'bomb') {   // A-10C 的 JDAM：从攻击高度加速落下（没有发动机，不拖烟）
+      const zt = v3AltZ(p.x0, p.y0, .35 * V3_AIR, -2.6, 1.5), u = clamp(p.t / p.dur, 0, 1), f = v => v3fP(lerp(p.x0, p.tx, v), lerp(p.y0, p.ty, v), zb + (zt - zb) * (1 - v * v));
+      v3fTrail(out, E, f, Math.max(0, u - .08), u, 3, 1, [.35, .37, .34, .5]);
+      v3fSpark(out, C, f(u), 1.6, [.22, .24, .22, .95]);
+    } else if (p.k === 'rk') {
       const u = clamp(p.t / p.dur, 0, 1), f = v => v3fP(lerp(p.x0, p.tx, v), lerp(p.y0, p.ty, v), lerp(za, zb, v));
       v3fTrail(out, E, f, Math.max(0, u - .12), u, 3, 1.6, V3F_COL.e);
       v3fSpark(out, C, f(u), 2.4, V3F_COL.amber);

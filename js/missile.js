@@ -118,6 +118,7 @@ const MS_PGM = {
   ba7: { nm: '蓝箭-7 空地导弹', spd: 330, z: .3, dmg: 36, pen: 3.4, st: 7, icp: 0, pw: { men: .5, ship: 2, struct: 0, seg: false, R: 14, vb: 4, veh: true } },
   hj10: { nm: '红箭-10 反坦克导弹', spd: 300, z: .25, dmg: 50, pen: 4, st: 6, icp: 0, pw: { men: .45, ship: 1.5, struct: 0, seg: false, R: 12, vb: 3, veh: true } },
   cj10: { nm: '长剑-10 对陆巡航导弹', spd: 150, z: .08, dmg: 40, pen: 3.4, st: 22, icp: .5, pw: { men: .85, ship: 5, struct: 0, seg: true, R: 34, vb: 10, veh: true } },
+  kd20: { nm: '空地-20 空射巡航导弹', spd: 150, z: .08, dmg: 44, pen: 3.6, st: 24, icp: .5, pw: { men: .85, ship: 5, struct: 0, seg: true, R: 34, vb: 10, veh: true } },   // 轰-6K 翼下 6 枚（长剑-20 的空射型，约 500 公斤战斗部）：防区外打已知的工事、阵地，贴地飞，能被拦截
   yj18: { nm: '鹰击-18A 导弹', spd: 180, sprint: 620, sr: 260, z: .06, dmg: 44, pen: 3.8, st: 24, icp: .22, pw: { men: .85, ship: 6, struct: 0, seg: true, R: 32, vb: 10, veh: true } },
   yj21: { nm: '鹰击-21 高超音速导弹', spd: 900, z: .9, dmg: 60, pen: 4, st: 40, icp: .06, pw: { men: .95, ship: 8, struct: 0, seg: true, R: 42, vb: 14, veh: true } },
   gbu53: { nm: 'GBU-53/B 风暴破坏者小直径炸弹', spd: 200, z: .5, dmg: 40, pen: 3.6, st: 12, icp: .3, pw: { men: .6, ship: 2.5, struct: 0, seg: false, R: 16, vb: 5, veh: true } },   // F-35A 内埋 4 枚：三模导引头，防区外打活动车辆

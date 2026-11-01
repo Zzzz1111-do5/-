@@ -253,6 +253,7 @@ function navyPlaneAsm(p, dt, speed) {
   nvStat('nvAirAsm', n);
   log(`${airName(p.kind, p.v).split(' ')[0]}在 ${Math.round(d)} 米外发射 ${n} 枚${MS_PGM[p.asm.w].nm}，攻击敌${E.nm}`, 'info', 'nvaf' + p.id, 3, E);
   p.asm = null; p.dropped = true; p.std = true; p.egT = 3;
+  if (p.kind === 'bomber') p.agmN = 0;   // 轰-6K 这一趟换挂的是鹰击-12，没带空地-20（fpwpn.js FW_ASM）
   return false;
 }
 // 胜负（闯关海战关）：击沉守方舰艇八成吨位胜；我方驱逐舰、护航舰、航母全损或 15 分钟未达成则败

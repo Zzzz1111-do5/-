@@ -42,6 +42,7 @@ function v3gPreload(keys) { for (const k of keys) if (k && !V3G.M[k] && !V3G.def
 // 模型：就绪返回它，否则开始加载 / 解码、先返回 null
 function v3gModel(key) {
   if (key && key.endsWith('~')) return v3gPlain(key);
+  if (key === 'podm') return V3G.M.podm || (V3G.ok ? v3gPodModel() : null);
   if (V3G.fail.has(key) && typeof V3G_ALT === 'object' && V3G_ALT[key]) return v3gModel(V3G_ALT[key]);
   const M = V3G.M[key];
   if (M) return M.ready ? M : null;
@@ -60,6 +61,26 @@ function v3gPlain(key) {
   const B = v3gModel(key.slice(0, -1));
   if (!B) return null;
   return (V3G.M[key] = Object.assign({}, B, { key, mats: B.mats.map(T => T.am === 2 ? T : Object.assign({}, T, { t: null, c: [.58, .6, .62, T.c[3]], e: [0, 0, 0] })) }));
+}
+// 吊舱（电子战、干扰吊舱；Sketchfab 上没有能单独用的）：程序化的回转体，沿 x、长 1、中点为原点、直径 0.1 倍长——
+//   尖头（介质天线罩）、圆柱段、收尾到一个小平底；只有一种灰漆材质，v3gMsl 按 V3MS 的真实长度缩放
+function v3gPodModel() {
+  const gl = V3G.gl, R = .05, NS = 18, P = [[.5, 0], [.485, .3], [.46, .55], [.41, .8], [.34, .95], [.27, 1], [-.33, 1], [-.4, .93], [-.47, .72], [-.5, .5], [-.5, 0]];
+  const V = [], I = [];
+  for (let j = 0; j + 1 < P.length; j++) {   // 每段一条带子，法线按这一段母线的斜率（相邻两段斜率差得不多时取平均，看着是光滑的）
+    const sn = k => { const a = P[k], b = P[k + 1], dx = b[0] - a[0], dr = (b[1] - a[1]) * R, l = Math.hypot(dx, dr) || 1; return [dr / l, -dx / l]; };   // (法线 x, 法线 r)：母线从头到尾 x 递减，朝外是 (dr, -dx)
+    const n0 = sn(j), nP = j > 0 ? sn(j - 1) : n0, nN = j + 2 < P.length ? sn(j + 1) : n0;
+    const sm = (a, b) => a[0] * b[0] + a[1] * b[1] > .85 ? (q => { const l = Math.hypot(q[0], q[1]); return [q[0] / l, q[1] / l]; })([a[0] + b[0], a[1] + b[1]]) : a;
+    const ends = [[P[j], sm(n0, nP)], [P[j + 1], sm(n0, nN)]], b0 = V.length / 8;
+    for (const [[x, r], [nx, nr]] of ends) for (let i = 0; i <= NS; i++) { const a = i / NS * Math.PI * 2, c = Math.cos(a), si = Math.sin(a); V.push(x, r * R * c, r * R * si, nx, nr * c, nr * si, i / NS, x + .5); }
+    for (let i = 0; i < NS; i++) { const a = b0 + i, b = a + NS + 1; I.push(a, a + 1, b, a + 1, b + 1, b); }
+  }
+  const M = { key: 'podm', ready: true, tex: [], parts: [], rad: Math.hypot(1, 2 * R, 2 * R) / 2, sbb: [-.5, .5, -R, R, -R, R],
+    meta: { len: 1, st: 8, it: 2, zc: 0, bb: [-.5, -R, -R, .5, R, R], lod: [0, 1, 2].map(() => [[0, -1, 0, I.length]]) },
+    mats: [{ n: 'pod', c: [.5, .53, .55, 1], e: [0, 0, 0], mr: [.15, .5], t: null, nt: null, am: 0, ns: 1, ac: .5 }] };
+  M.vb = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, M.vb); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(V), gl.STATIC_DRAW);
+  M.ib = gl.createBuffer(); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, M.ib); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(I), gl.STATIC_DRAW);
+  return (V3G.M.podm = M);
 }
 async function v3gBytes(b64) {
   try { const r = await fetch('data:application/octet-stream;base64,' + b64); if (r.ok) return new Uint8Array(await r.arrayBuffer()); } catch (e) { /* 有的环境不让 fetch data: 地址，下面逐字节解 */ }
@@ -350,7 +371,7 @@ const V3G_ROTOR = { ah64: [30.3, 60], uh60: [27, 60], z10w: [34, 60] };
 // 导弹（v3msl.js V3MS 的型号）→ 模型：AIM-120C、AIM-9 用单独的精细模型，其余按外形从导弹组合里挑
 const V3G_MSL = {
   aim120: 'aim120', aim9: 'aim9', agm65: 'agm65', bomb: 'mk83', agm: 'brimstone', pl15: 'aim120s', pl10: 'asraam', pl17: 'ks172', ld10: 'aim120s', manpad: 'aim9s',
-  hhq9: 'ks172', sm6: 'ks172', hhq16: 'aim54', hhq10: 'asraam', yj21: 'ks172', tbm: 'ks172', df15: 'ks172', sdb: 'gbu24', pod: 'gbu24'
+  hhq9: 'ks172', sm6: 'ks172', hhq16: 'aim54', hhq10: 'asraam', yj21: 'ks172', tbm: 'ks172', df15: 'ks172', sdb: 'gbu24', pod: 'podm', tpod: 'podm', jpod: 'podm'   // 吊舱：程序化的回转体（v3gPodModel）
 };
 const v3gMslKey = k => V3G_MSL[k] || 'jsow';   // 反舰、巡航导弹（鹰击、长剑、鱼叉、战斧、LRASM …）：AGM-154 那种带弹翼的弹形
 

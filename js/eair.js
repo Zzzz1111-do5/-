@@ -1,11 +1,12 @@
 'use strict';
-// 守方航空（v7）：野战机场 → 对地攻击机（一次通场：6 枚火箭齐射 + 机炮扫射）与武装直升机（300–380 外悬停，反坦克导弹 + 火箭）；
+// 守方航空（v7）：野战机场 → 对地攻击机（一次通场：3 枚 500 磅 JDAM + 机炮扫射，先在防区外打小牛）与武装直升机（300–380 外悬停，8 枚地狱火 + 火箭）；
 // 双方单兵防空导弹组（防空导弹在 missile.js 飞行与结算）；我方自行高炮、驱逐舰舰空导弹与近防炮、机枪打直升机；
 // 守方视野（飞机是视野源）、绘制（剪影、旋翼、火箭、导弹、残骸，只用形状）
 // 状态：S.eair = { wing: [{id, type, state: ready|out|rearm|lost, rearmT}], fly: [飞机], proj: [弹药], wr: [残骸], flash: [发射暴露], cratT, nextT, first, gap }
 const eaOn = () => !!S && !(S.v7off && S.v7off.air);
 const eaStat = (k, n = 1) => { const o = S.v7s || (S.v7s = {}); o[k] = (o[k] || 0) + n; };
 POWER.erk = { men: .45, ship: 2, struct: 0, seg: false, R: 18 };   // 机载火箭（守方只打进攻方，不伤自家工事）
+POWER.ejdam = { men: .65, ship: 2.5, struct: 0, seg: false, R: 26 };   // A-10C 的 GBU-38/B 500 磅 JDAM（卫星制导，落点散布几米；同样不算自家工事）
 // 战役各难度：机队、首次出击时刻、两次出击的间隔（v13 出动更快、机队更大）
 const EA_H5 = ['heli', 'heli', 'heli', 'heli', 'heli'];   // 阿帕奇 5 架，一次全部出动
 const EA_DIFF = { normal: { wing: [...EA_H5, 'ga', 'mq9'], first: 120, gap: 80 }, hard: { wing: ['ga', 'ga', ...EA_H5, 'ftr', 'ftrb', 'mq9'], first: 80, gap: 50 },
@@ -624,13 +625,13 @@ function eaFlyGA(a, dt) {
     if (a.ph === 'out' && d < 420) { a.ph = 'attack'; eaSpotSay(a); if (thr >= 1) a.pass = Math.max(a.pass || 0, 1); }   // 有防空：只通场一次
     if (a.ph === 'attack') {
       const df = Math.abs(eaAng(Math.atan2(a.ty - a.y, a.tx - a.x) - a.heading));
-      if (d < 190 && df < .3 && a.ammo > 0) { if (!a.rkDone) { eaRockets(a, 6, 20, .6, a.tx, a.ty); a.rkDone = true; } eaStrafe(a); a.ammo--; a.ph = 'egress'; a.egT = 3; }   // 第一次通场火箭 + 机炮，之后只用机炮
+      if (d < 190 && df < .3 && a.ammo > 0) { if (!a.rkDone) { eaJdam(a, 3, a.tx, a.ty); a.rkDone = true; } eaStrafe(a); a.ammo--; a.ph = 'egress'; a.egT = 3; }   // 第一次通场投翼下的 3 枚 JDAM + 机炮，之后只用机炮
       else if (d < 140 && df > 1.2) { a.ph = 'egress'; a.egT = 2.5; a.pass = (a.pass || 0) + 1; }   // 冲过头：拉起重新进入
     }
   } else if (a.ph === 'egress') {
     eaSteer(a, a.x + Math.cos(a.heading) * 200, a.y + Math.sin(a.heading) * 200, dt);
     a.alt = Math.min(.7, a.alt + dt * .3);
-    if ((a.egT -= dt) <= 0) a.ph = a.ammo > 0 && !a.rkDone && !(a.mav0 > a.mav) && !(a.pass > 1) && !a.lost ? 'out' : 'rtb';   // 打完一波（打过火箭 / 小牛）就返航，不掉头再来；冲过头没打着的才重新进入一次
+    if ((a.egT -= dt) <= 0) a.ph = a.ammo > 0 && !a.rkDone && !(a.mav0 > a.mav) && !(a.pass > 1) && !a.lost ? 'out' : 'rtb';   // 打完一波（投过 JDAM / 打过小牛）就返航，不掉头再来；冲过头没打着的才重新进入一次
   } else eaRtb(a, dt);
 }
 // 直升机：在目标与机场连线上、离目标 340 处悬停（守方一侧），面向目标开火
@@ -698,7 +699,7 @@ function eaFlyHeli(a, dt) {
 }
 // 武装直升机：一次出击把弹打光才回去（地狱火、火箭、30 毫米链炮），每一发都挑当时看得见的价值最高的目标；
 //   只有油料到了、遭两次导弹 / 火力攻击、或附近再也找不到目标才提前回
-const EA_HELI = { station: 95, atgm: 4, rk: 3, gun: 6, rAtgm: 430, rGun: 300, idle: 10 };
+const EA_HELI = { station: 95, atgm: 8, rk: 3, gun: 6, rAtgm: 430, rGun: 300, idle: 10 };   // 标准反装甲挂法：短翼内侧两具四联装地狱火（8 枚）、外侧两具 19 管火箭巢（3D 模型上挂的就是这些）
 const eaHeliAmmo = a => a.atgm > 0 || a.rk > 0 || a.gunN > 0;
 // 目标价值：卸载 / 抢滩的登陆舰 10、坦克 8、防空车 7、装甲车 6、其余车辆 4（越近越好，但价值优先）
 function eaHeliVal(k, o) {
@@ -803,6 +804,12 @@ function eaRockets(a, n, spread, dur, tx, ty) {
   for (let i = 0; i < n; i++) E.proj.push({ k: 'rk', x0: a.x, y0: a.y, tx: tx + gauss() * spread, ty: ty + gauss() * spread, t: -i * .08, dur });
   eaStat('eaAtk');
 }
+// A-10C 投 JDAM：沿航向一字排开（间隔 12）、卫星制导散布约 4；从飞机高度落下约 1.1 秒
+function eaJdam(a, n, tx, ty) {
+  const E = S.eair, c = Math.cos(a.heading), s = Math.sin(a.heading);
+  for (let i = 0; i < n; i++) { const o = (i - (n - 1) / 2) * 12; E.proj.push({ k: 'bomb', x0: a.x, y0: a.y, tx: clamp(tx + c * o + gauss() * 4, 0, W), ty: clamp(ty + s * o + gauss() * 4, 0, H), t: -i * .12, dur: 1.1 }); }
+  eaStat('eaAtk'); eaStat('eaJdam', n);
+}
 function eaATGM(a) {
   const o = eaTgtObj(a.tgt);
   if (!o) return;
@@ -857,9 +864,9 @@ function eaProj(dt) {
     }
     if (p.t < p.dur) continue;
     p.done = true;
-    const before = eaMenNear(p.tx, p.ty, POWER.erk.R);
-    impact(p.tx, p.ty, POWER.erk, 'e');
-    const k = before - eaMenNear(p.tx, p.ty, POWER.erk.R);
+    const pw = p.k === 'bomb' ? POWER.ejdam : POWER.erk, before = eaMenNear(p.tx, p.ty, pw.R);
+    impact(p.tx, p.ty, pw, 'e');
+    const k = before - eaMenNear(p.tx, p.ty, pw.R);
     if (k > 0) eaStat('eaKillMen', k);
   }
   E.proj = E.proj.filter(p => !p.done);
@@ -1137,7 +1144,10 @@ function eaDraw(time) {
   for (const p of E.proj) {
     if (p.t < 0 || p.done || R.fx3d) continue;   // 3D 时立体画（v3fx.js）
     if (!spec && !inVision(p.tx, p.ty) && !inVision(p.x0, p.y0)) continue;
-    if (p.k === 'rk') {
+    if (p.k === 'bomb') {   // JDAM：从飞机下面沿投弹线落向落点
+      const u = clamp(p.t / p.dur, 0, 1), x = lerp(p.x0, p.tx, u), y = lerp(p.y0, p.ty, u);
+      ctx.fillStyle = 'rgba(40,44,40,.9)'; ctx.strokeStyle = rgba(COL.enemy, .9); ctx.lineWidth = px(1); ctx.beginPath(); ctx.arc(x, y, Math.max(1, px(2.2)), 0, 7); ctx.fill(); ctx.stroke();
+    } else if (p.k === 'rk') {
       const u = clamp(p.t / p.dur, 0, 1), x = lerp(p.x0, p.tx, u), y = lerp(p.y0, p.ty, u), a = Math.atan2(p.ty - p.y0, p.tx - p.x0);
       ctx.strokeStyle = rgba(COL.enemy, .9); ctx.lineWidth = px(1.6); ctx.beginPath(); ctx.moveTo(x - Math.cos(a) * 9, y - Math.sin(a) * 9); ctx.lineTo(x, y); ctx.stroke();
       ctx.fillStyle = rgba(COL.amber, .9); ctx.beginPath(); ctx.arc(x, y, Math.max(.8, px(1.6)), 0, 7); ctx.fill();

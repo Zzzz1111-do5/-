@@ -20,7 +20,7 @@ const AIRD = {
     tail: [[-9.4, .55], [-12.4, .38], [-12.8, 0]],   // 两台发动机之间的尾椎
     wing: [[4.6, 1.3], [2.2, 2.6], [.3, 3], [-4, 9.2], [-5.6, 9.2], [-5.2, 2.7]], cnd: [[4.9, 1.25], [3, 4.1], [2.1, 4.1], [2.5, 1.4]], stab: [[-7.2, 2.6], [-9.6, 6.6], [-11.2, 6.6], [-10.6, 2.3]],
     fin: [-6.2, 3.6, 1.95, 3.6, .08, 2.8], cp: [6.2, 9.2, .58, 'bubble'], noz: [[-11.1, 1.35, .82]], nac: [[-.6, -11, 1.38, .95, 'up', 1]],
-    st: [[-4.6, 9.4, 'aam'], [-1.4, 5.8, 'asm'], [-.6, 3.9, 'aam']], mk: [[-3.6, 7.2, .85]], fold: 6 },
+    st: [[-4.6, 9.4, 'aam'], [-2.1, 6.9, 'aam'], [-.7, 4.8, 'asm']], mk: [[-3.6, 7.2, .85]], fold: 6 },   // 歼-15T：翼尖霹雳-10、外侧霹雳-15、内侧 KD-88（fpwpn.js FW_LOAD）
   j20: { paint: '#6c757c', glass: 'gold', nat: 'pla',
     body: [[11.6, 0], [10.8, .28], [9.6, .55], [8.2, .82], [6.8, 1.05], [5.4, 1.3], [4, 1.55], [2.4, 1.85], [0, 2.05], [-3, 2.1], [-6, 2.05], [-8.4, 1.9], [-10.2, 1.65], [-11.2, 1.45]],
     wing: [[2.8, 1.9], [1.6, 2.1], [-6, 8.6], [-7.6, 8.6], [-6.9, 2]], cnd: [[5.3, 1.3], [3.4, 4.4], [2.6, 4.4], [2.7, 1.55]],
@@ -62,7 +62,7 @@ const AIRD = {
   z10: { paint: '#5d6650', nat: 'pla', heli: true,
     body: [[8.7, 0], [8.5, .5], [7.6, .85], [7, 1], [5, 1.2], [3, 1.35], [1, 1.45], [-1, 1.45], [-3, 1.15], [-5, .65], [-8, .45], [-10.6, .4], [-12.6, .3]],
     wing: [[.5, 1.4], [.4, 3.8], [-1.2, 3.8], [-1.3, 1.4]], stab: [[-10.4, .4], [-10.8, 2.4], [-12, 2.4], [-12, .35]], fin: [-11, 1.6, 0, 2.4, 0, .9],
-    nac: [[.6, -2.8, .95, .5, 'up']], cp: [3.8, 7.6, .78, 'tandem'], st: [[-.4, 2.45, 'atgm4'], [-.4, 3.55, 'atgm4']], rot: [.6, 9.5, 5], tr: [-12.4, -.55, 1.5], mk: [[-6.6, 0, .55]] },
+    nac: [[.6, -2.8, .95, .5, 'up']], cp: [3.8, 7.6, .78, 'tandem'], st: [[-.4, 2.45, 'pod'], [-.4, 3.55, 'atgm4']], rot: [.6, 9.5, 5], tr: [-12.4, -.55, 1.5], mk: [[-6.6, 0, .55]] },
   ah64: { paint: '#3f4433', nat: 'us', heli: true,
     body: [[8.6, 0], [8.45, .5], [7.9, .72], [7, .9], [5.4, 1.15], [3.6, 1.25], [2.4, 1.3], [1, 1.4], [-1.2, 1.4], [-2.8, 1.1], [-4, .75], [-7, .5], [-10.6, .45], [-12.6, .35]],
     wing: [[.7, 1.3], [.55, 4.3], [-1.35, 4.3], [-1.45, 1.3]], stab: [[-10.6, .45], [-10.9, 2.7], [-12.1, 2.7], [-12.2, .4]], fin: [-10.8, 1.8, 0, 2.6, 0, 1],
@@ -85,7 +85,7 @@ const AIRD = {
     body: [[10.4, 0], [10, .35], [9.2, .75], [8, 1], [6, 1.15], [3, 1.2], [0, 1.2], [-3, 1.1], [-6, .95], [-8.4, .75], [-10.6, .5]], gun: true,
     wing: [[3.2, 1.15], [2.6, 9.4], [-.6, 9.4], [-1.3, 1.15]], stab: [[-8.2, .9], [-8.4, 4.8], [-10.4, 4.8], [-10.4, .8]],
     fin: [-8.2, 2.4, 4.75, 3.2, 0, .5], nac: [[-3.4, -7.2, 2.05, .85, 'up']], cp: [5.6, 8.2, .6, 'bubble'], pods: [1.4, 2.6],
-    st: [[2.9, 3.7, 'agm'], [2.6, 5.2, 'bomb'], [2.9, 6.8, 'agm'], [2.4, 8.3, 'aam']], mk: [[.6, 7.4, .7]] },
+    st: [[2.6, 0, 'bomb'], [2.6, 3.7, 'bomb'], [2.9, 6.8, 'agm'], [2.4, 8.3, 'aam']], mk: [[.6, 7.4, .7]] },   // A-10C：机腹中线和内侧 3 枚 500 磅 JDAM、外侧 2 枚小牛、翼尖侧 AIM-9X（和 3D 模型挂的一样）
   b2: { paint: '#4a5056', nat: 'us', flat: true,
     wing: [[5.6, 0], [4.8, .9], [-2.6, 11.4], [-3.5, 11.6], [-3.8, 11.1], [-1.2, 7.9], [-4.1, 4.7], [-2.1, 2.4], [-4.4, .7], [-4.4, 0]], ctl: 'elevon',
     body: [[5.4, 0], [4.6, .7], [3, 1.3], [1, 1.9], [-1.4, 2.1], [-3.6, 1.6], [-4.3, .6]],
@@ -98,9 +98,9 @@ AIRD.p8 = { paint: '#c4c9cd', nat: 'us',
   body: [[11.6, 0], [11.1, .6], [10.3, 1], [8.6, 1.15], [5, 1.15], [0, 1.15], [-4, 1.15], [-7.4, 1], [-9.6, .75], [-11.6, .45], [-12.1, .2]],
   wing: [[2.6, 1.15], [-3.6, 11.2], [-4.6, 11.3], [-1.4, 1.15]], stab: [[-8.6, .9], [-10.9, 4.3], [-11.8, 4.3], [-11.2, .7]],
   fin: [-7.4, 3.4, 0, 4.2, 0, 2.8], nac: [[3.8, 1, 3, .6, 'dn']], cp: [10, 11.1, 1, 'win'], mk: [[-3.4, 8.6, .8]] };
-AIRD.mq9 = { ...AIRD.gj2, paint: '#9aa1a6', nat: 'us', st: [[1.25, 3.4, 'agm']], mk: [[-.2, 8.2, .7]] };   // MQ-9A：外形与攻击-2 同类（细长机身、直翼、V 尾、推进式螺旋桨），浅灰涂装，翼下一具光电吊舱
+AIRD.mq9 = { ...AIRD.gj2, paint: '#9aa1a6', nat: 'us', st: null, mk: [[-.2, 8.2, .7]] };   // MQ-9A：外形与攻击-2 同类（细长机身、直翼、V 尾、推进式螺旋桨），浅灰涂装；这里只当侦察用（光电转塔在机头下），翼下不挂弹
 AIRD.heli = AIRD.z10; AIRD.transport = AIRD.y20;
-AIRD.j16 = { ...AIRD.j15, cnd: null, fold: 0, st: [[-4.6, 9.4, 'pod'], [-1.4, 5.8, 'aam'], [-.6, 3.9, 'aam']] };   // 歼-16D：歼-16 的陆基电子战型——侧卫系同一外形，没有鸭翼、机翼不折，翼尖是电子战吊舱（取代近距弹导轨），翼下挂反辐射弹
+AIRD.j16 = { ...AIRD.j15, cnd: null, fold: 0, st: [[-4.6, 9.4, 'pod'], [-2.3, 7.4, 'aam'], [-1.2, 5.1, 'arm'], [-.4, 3.3, 'arm']] };   // 歼-16D：歼-16 的陆基电子战型——侧卫系同一外形，没有鸭翼、机翼不折，翼尖是电子战吊舱（取代近距弹导轨），外侧霹雳-15，内侧、中间 4 枚雷电-10 反辐射弹
 const AIRV = { path: new Map() };   // 渲染缓存：Path2D（局部坐标，按机型 + 部件）
 
 // —— 路径 ——
@@ -157,14 +157,14 @@ function adTE(pts) {
 }
 
 // —— 外挂：导弹 / 炸弹 / 吊舱（局部坐标，弹头朝 +x）——
-const AD_ST = { aam: [2.6, .17], asm: [3.4, .3], agm: [1.9, .2], bomb: [2.2, .34], cm: [4.6, .36], atgm4: [1.5, .13], pod: [1.9, .42] };
+const AD_ST = { aam: [2.6, .17], arm: [2.9, .2], asm: [3.4, .3], agm: [1.9, .2], bomb: [2.2, .34], cm: [4.6, .36], atgm4: [1.5, .13], pod: [1.9, .42] };   // arm：反辐射弹
 function adStore(ctx, kind, x, y, real, col, lw, n) {
   const [L, r] = AD_ST[kind] || AD_ST.agm, body = real ? (kind === 'bomb' ? '#6b6f5e' : '#c9cdc8') : 'rgba(2,10,6,.9)', edge = real ? 'rgba(20,22,24,.7)' : col;
   const one = (cx, cy) => {
     ctx.fillStyle = body; ctx.strokeStyle = edge; ctx.lineWidth = lw * .5;
     ctx.beginPath(); ctx.moveTo(cx + L / 2, cy); ctx.quadraticCurveTo(cx + L / 2 - r * 1.2, cy + r, cx + L / 2 - r * 2.2, cy + r); ctx.lineTo(cx - L / 2, cy + r); ctx.lineTo(cx - L / 2, cy - r); ctx.lineTo(cx + L / 2 - r * 2.2, cy - r); ctx.quadraticCurveTo(cx + L / 2 - r * 1.2, cy - r, cx + L / 2, cy); ctx.closePath(); ctx.fill(); ctx.stroke();
     if (kind !== 'pod') { ctx.beginPath(); ctx.moveTo(cx - L / 2 + .45, cy - r); ctx.lineTo(cx - L / 2, cy - r * 2.6); ctx.lineTo(cx - L / 2, cy + r * 2.6); ctx.lineTo(cx - L / 2 + .45, cy + r); ctx.fillStyle = real ? 'rgba(60,64,62,.9)' : body; ctx.fill(); ctx.stroke(); }   // 尾翼
-    if (real && (kind === 'aam' || kind === 'agm' || kind === 'asm' || kind === 'cm')) { ctx.fillStyle = kind === 'aam' ? '#d8c25a' : '#9a7b4a'; ctx.fillRect(cx + L / 2 - r * 2.6, cy - r, r * .6, r * 2); }   // 战斗部色带
+    if (real && (kind === 'aam' || kind === 'arm' || kind === 'agm' || kind === 'asm' || kind === 'cm')) { ctx.fillStyle = kind === 'aam' || kind === 'arm' ? '#d8c25a' : '#9a7b4a'; ctx.fillRect(cx + L / 2 - r * 2.6, cy - r, r * .6, r * 2); }   // 战斗部色带
   };
   if (kind === 'atgm4') { for (let i = 0; i < Math.min(4, n ?? 4); i++) one(x, y + (i % 2 ? .22 : -.22) + (i > 1 ? 0 : 0)); return; }   // 四联装架：俯视看到并排两枚（上下各两枚）
   if (kind === 'pod') { ctx.fillStyle = real ? '#4b4f45' : 'rgba(2,10,6,.9)'; ctx.strokeStyle = edge; ctx.lineWidth = lw * .5; ctx.beginPath(); ctx.ellipse(x, y, L / 2, r, 0, 0, 7); ctx.fill(); ctx.stroke(); ctx.fillStyle = real ? '#23251f' : col; ctx.beginPath(); ctx.ellipse(x + L / 2 - .08, y, .1, r * .8, 0, 0, 7); ctx.fill(); return; }   // 火箭巢
@@ -490,8 +490,8 @@ function adDome(ctx, d, real, col, lw, t, ly) {
 // AIRV.ev：飞机键（阵营 + id）→ { ts 最近几次发射 [{t0, k}], rel 外挂消耗 [{t, sk}], w 弹种 }；AIRV.mv：导弹 id → 挂点与时刻
 const AIR_REL = { open: .25, ej: .1, ign: .6, done: 1.3, shut: .85 };   // 开舱、弹射臂行程、点火、并入弹道、开始关舱（离机后的秒数）
 const AIR_GND = new Set(['dd', 'esc', 'cv', 'samv', 'manpads', 'eship', 'vls', 'theatre']);   // 舰艇 / 地面发射的，不是飞机
-const AIR_W = { ft8: 'bomb', gbu53: 'bomb', gbu38: 'bomb', gbu31: 'bomb', ls6: 'bomb', yj12: 'cm', yj83k: 'cm', yj18: 'cm' };
-const AIR_SK = { aam: ['aam'], agm: ['atgm4', 'agm', 'asm', 'pod', 'cm'], cm: ['cm', 'asm'], bomb: ['bomb', 'cm'] };   // 弹种 → 从哪类挂点上取
+const AIR_W = { ft8: 'bomb', gbu53: 'bomb', gbu38: 'bomb', gbu31: 'bomb', ls6: 'bomb', yj12: 'cm', yj83k: 'cm', yj18: 'cm', kd20: 'cm', ld10: 'arm' };
+const AIR_SK = { aam: ['aam'], arm: ['arm'], agm: ['atgm4', 'agm', 'asm', 'cm'], cm: ['cm', 'asm'], bomb: ['bomb', 'cm'] };   // 弹种 → 从哪类挂点上取（吊舱不消耗，不在里面）
 const airRelW = m => m.kind === 'sam' ? 'aam' : m.kind === 'asm' ? 'cm' : AIR_W[m.w] || 'agm';
 function airRelReset() { AIRV.S = S; AIRV.ev = new Map(); AIRV.mv = new Map(); AIRV.last = -1; AIRV.st = null; AIRV.proj = new WeakSet(); }
 function airRelScan() {
@@ -507,7 +507,7 @@ function airRelScan() {
     airRelNew(m);
   }
   if (top > AIRV.last) AIRV.last = top;
-  if (pj) for (const p of pj) if (p.k === 'atgm' && !AIRV.proj.has(p)) { AIRV.proj.add(p); airRelNew({ id: null, side: 'e', x0: p.x0, y0: p.y0, t: p.t, kind: 'pgm', w: 'hellfire', tx: p.tx, ty: p.ty }); }   // 阿帕奇的地狱火（eair.js 的投射物）
+  if (pj) for (const p of pj) if ((p.k === 'atgm' || p.k === 'bomb') && !AIRV.proj.has(p)) { AIRV.proj.add(p); airRelNew({ id: null, side: 'e', x0: p.x0, y0: p.y0, t: p.t, kind: 'pgm', w: p.k === 'bomb' ? 'gbu38' : 'hellfire', tx: p.tx, ty: p.ty }); }   // 阿帕奇的地狱火、A-10C 的 JDAM（eair.js 的投射物）
   if (AIRV.mv.size > 80) for (const [id, r] of AIRV.mv) if (S.t - r.t0 > 3) AIRV.mv.delete(id);
 }
 // 发射平台：同阵营、发射点 70 以内最近的空中飞机
