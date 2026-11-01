@@ -84,12 +84,39 @@ function addVehicle(side, type, x, y, extra) {
 
 // —— 伤害：穿深对装甲；轻武器只压制乘员；残骸留作掩体；乘员有机会弃车逃生 ——
 const vehPenMul = (pen, armor) => pen >= armor ? 1 : pen >= armor - 1 ? .3 + .7 * (pen - armor + 1) : .06;
+// 方向装甲（单个武器的细节）：v.armor 是正面装甲（车体首上、炮塔正面）——图鉴里「正面几乎免疫轻型火炮」说的就是它；侧面比正面薄一级、后部薄一级半、
+//   车顶薄两级（本游戏的装甲、穿深按级算：穿深够装甲值才打得穿，差一级以内打掉一部分）。真实的主战坦克也是这样：正面几百毫米，侧面几十毫米加裙板，后部、车顶更薄。
+//   来弹打在炮塔、车体上各一半：炮塔按炮塔朝向（v.aim）算，车体按车头朝向算；来向在正面 ±30° 内算正面、后面 ±30° 内算后部，其余是侧面。
+//   直射（坦克炮、单兵反坦克武器、手榴弹 / 炸药包、机枪、航炮扫射）按射手方位算；攻顶导弹打车顶；炮弹破片、地雷、燃烧、核爆不分方向（照旧按正面装甲值）
+const VEH_ARC = { side: 1, rear: 1.5, top: 2, front: Math.PI / 6, back: Math.PI * 5 / 6 };
+const VEH_DIR_SRC = { ap: 1, at: 1, gren: 1, mg: 1, small: 1, gau8: 1 }, VEH_TOP_SRC = { top: 1, atgm: 1 };
+const vehArcArm = (a, arc) => arc === 'f' ? a : Math.max(.2, a - (arc === 's' ? VEH_ARC.side : arc === 'r' ? VEH_ARC.rear : VEH_ARC.top));
+const vehArcOf = (v, ref, sx, sy) => { const g = Math.atan2(sy - v.y, sx - v.x), rel = Math.abs(Math.atan2(Math.sin(g - ref), Math.cos(g - ref))); return rel < VEH_ARC.front ? 'f' : rel > VEH_ARC.back ? 'r' : 's'; };
+// 这一发打在哪一面、那里的装甲值：{ a, arc（'f' 正面 / 's' 侧面 / 'r' 后部 / 't' 车顶 / null 不分方向）, tur（打在炮塔上） }
+function vehArmorAt(v, sx, sy, src) {
+  const a = v.armor;
+  if (VEH_TOP_SRC[src]) return { a: vehArcArm(a, 't'), arc: 't', tur: false };
+  if (!VEH_DIR_SRC[src] || sx == null || !isFinite(sx) || !isFinite(sy)) return { a, arc: null, tur: false };
+  const tur = !!vehSp(v).tur && Math.random() < .5, arc = vehArcOf(v, tur ? (v.aim ?? v.heading) : v.heading, sx, sy);
+  return { a: vehArcArm(a, arc), arc, tur };
+}
+// 从 (sx, sy) 用穿深 pen 打 v 的期望毁伤系数（炮塔、车体各一半）：选目标时用——能打穿侧后的目标优先
+function vehPenExp(v, sx, sy, pen, src) {
+  if (VEH_TOP_SRC[src]) return vehPenMul(pen, vehArcArm(v.armor, 't'));
+  const h = vehPenMul(pen, vehArcArm(v.armor, vehArcOf(v, v.heading, sx, sy)));
+  return vehSp(v).tur ? (h + vehPenMul(pen, vehArcArm(v.armor, vehArcOf(v, v.aim ?? v.heading, sx, sy)))) / 2 : h;
+}
 function vehDamage(v, dmg, pen, sx, sy, src) {
   if (!v || v.dead || !(dmg > 0)) return 0;
   if (typeof eraHit === 'function') dmg = eraHit(v, dmg, pen, sx, sy, src);   // 爆炸反应装甲先挡一下（era.js）
   const M = v.mod || {}, top = src === 'atgm' || src === 'top', hull = !top && v.order.t === 'hold' && S.t - v.movedT > 4 && !v.swim ? .75 : 1;   // 坚守：车体半埋（hull-down）；攻顶的反坦克导弹不吃这个
-  const d = dmg * vehPenMul(pen, v.armor) * hull / (M.arm || 1);
+  const A = vehArmorAt(v, sx, sy, src), pm = vehPenMul(pen, A.a);   // 方向装甲：正面 / 侧面 / 后部 / 车顶
+  const d = dmg * pm * hull / (M.arm || 1);
   v.hp -= d; v.hitT = S.t; v.sup = Math.min(100, v.sup + 12 + d * 3);
+  if (pm >= .5 && !A.tur && v.hp > 0) {   // 打穿车体侧面：常打坏履带、负重轮；打穿后部：发动机舱、油箱，容易起火
+    if (A.arc === 's' && !v.immob && !vehSp(v).wheel && !v.swim && d > 3 && Math.random() < .25) { v.immob = true; v.immobT = S.t; if (v.side === 'p') log(`${vehName(v)}侧面中弹，履带被打断`, 'bad', 'vimm' + v.id, 20, v); }
+    if (A.arc === 'r' && !v.burn && d > 2 && Math.random() < .35) v.burn = 6 + Math.random() * 8;
+  }
   if (src === 'mine' || (d > 5 && Math.random() < .12)) {
     if (!v.immob && !vehSp(v).wheel && !v.swim && Math.random() < (src === 'mine' ? .65 : .5)) {
       v.immob = true; v.immobT = S.t;
@@ -240,12 +267,20 @@ function vehFreeSpot(v, x, y, cls) {
   return [x, y];
 }
 
+// 遭敌坦克炮射击（命中或近失弹擦过）：记下来火方位。中、重型坦克（正面装甲比侧面强得多）照战斗动作停车、车体正面转向来火方向 VEH_TURN 秒、还击；
+//   装甲薄的车（正面也挡不住）照旧继续机动——移动中的目标难打中。撤退中的不停
+const VEH_TURN = 6;
+function vehApFrom(v, x, y) { if (!v.dead && isFinite(x)) { v.apT = S.t; v.apX = x; v.apY = y; } }
+const vehDrill = v => v.armor >= 2 && S.t - (v.apT ?? -99) < VEH_TURN && !v.immob && !v.swim && !v.lst && v.order.t !== 'retreat' && !!vehSp(v).gun;
+// 正在交手的敌装甲（主炮目标是有炮的车、装甲车）的方位：停车时车体正面转过去（有炮塔的车；无炮塔的车本来就整车对着目标）
+const vehFaceTg = v => { if (vehDrill(v)) return Math.atan2(v.apY - v.y, v.apX - v.x); const t = v.tg; return t && (t.k === 'veh' || t.k === 'car') && vehSp(v).tur && !v.immob ? Math.atan2(t.y - v.y, t.x - v.x) : null; };
 function vehDrive(v, dt, mul) {
   const o = v.order, sp = vehSp(v);
   v.moving = false;
   if (v.immob || v.lst || v.fixed) return;   // fixed：机场等固定阵地上的防空装备，不机动
-  if (o.t === 'hold' || o.x == null) {   // 停车：转向指定朝向（坚守时车体正对威胁）
-    if (o.face != null) v.heading += clamp(vehAng(o.face - v.heading), -sp.turn * .6 * dt, sp.turn * .6 * dt);
+  if (o.t === 'hold' || o.x == null) {   // 停车：转向指定朝向（坚守时车体正对威胁）；正在和敌装甲交手时把车体正面对着它（方向装甲：别把侧面露给它）
+    const fc = vehFaceTg(v) ?? o.face;
+    if (fc != null) v.heading += clamp(vehAng(fc - v.heading), -sp.turn * .6 * dt, sp.turn * .6 * dt);
     vehSpread(v, dt);
     return;
   }
@@ -448,8 +483,10 @@ function vehGunTarget(v) {
     let arm = null, as = 0;
     const armor = (t, k, x, y, a, w) => {
       const d = dist(v.x, v.y, x, y);
-      if (d > R0 || !vehSees(v, x, y, d, k === 'veh' ? t : null) || vehPenMul(g.ap * (M.pow || 1), a) < .25) return;
-      const s = w / (1 + d / R0);
+      if (d > R0 || !vehSees(v, x, y, d, k === 'veh' ? t : null)) return;
+      const pm = k === 'veh' ? vehPenExp(t, v.x, v.y, g.ap * (M.pow || 1), 'ap') : vehPenMul(g.ap * (M.pow || 1), a);   // 方向装甲：从这里打过去打在它哪一面
+      if (pm < .25) return;
+      const s = w * (.5 + .5 * pm) / (1 + d / R0);   // 打得穿的（侧后暴露的）优先
       if (s > as) { as = s; arm = { t, k, x, y, d }; }
     };
     for (const o of vehFoes(v.side)) if (vehSp(o).gun && !o.lst) armor(o, 'veh', o.x, o.y, o.armor, o.type === 'hv_tank' || o.type === 'td' ? 1.3 : 1);
@@ -552,10 +589,10 @@ function vehShots(dt) {
     if (s.k === 'he') { impact(s.x1, s.y1, s.hit && s.tk === 'tm' ? { ...vehPW(s.he, s.side), direct: { x: s.x1, y: s.y1 } } : vehPW(s.he, s.side), s.side); continue; }   // 正中小组：掩体只按开方减免（combat.js impact）
     // 穿甲弹：命中则按穿深计算伤害，未命中只在地面溅起尘土
     S.fx.push({ kind: 'flash', x: s.x1, y: s.y1, r: s.hit ? 9 : 5, life: 0, max: .35, side: s.side });
-    if (!s.hit) { const o = s.tk === 'veh' && vehById(s.tg); if (o && !o.dead && dist(o.x, o.y, s.x1, s.y1) < 25 && Math.random() < .6) vehSmokeOut(o, s.x0, s.y0); continue; }   // 近失弹擦过：车组发觉被瞄上了
+    if (!s.hit) { const o = s.tk === 'veh' && vehById(s.tg); if (o && !o.dead && dist(o.x, o.y, s.x1, s.y1) < 25) { vehApFrom(o, s.x0, s.y0); if (Math.random() < .6) vehSmokeOut(o, s.x0, s.y0); } continue; }   // 近失弹擦过：车组发觉被瞄上了
     const dmg = 12 + s.ap * 7;   // 穿甲弹：主战坦克两发、重型坦克两到三发
     if (s.tk === 'car') { const a = (S.armor || []).find(a => a.id === s.tg); if (a) damageArmor(a, dmg); }
-    else { const o = vehById(s.tg); if (o) vehDamage(o, dmg, s.ap, s.x0, s.y0, 'ap'); }
+    else { const o = vehById(s.tg); if (o) { vehApFrom(o, s.x0, s.y0); vehDamage(o, dmg, s.ap, s.x0, s.y0, 'ap'); } }
   }
   S.vshots = S.vshots.filter(s => !s.done || (s.k === 'flame' && s.t < s.dur));
 }
@@ -689,8 +726,9 @@ function vehTick(v, dt) {
   vehAA(v, dt);
   vehSam(v, dt);
   // 机动：攻击前进遇到主炮目标即停车射击
-  const o = v.order, hold = o.t === 'amove' && ((tg && (!g || tg.d < g.range * .92)) || (!g && v.mtg && sp.mg && v.mtg.d < sp.mg.range * .8));
-  if (!hold) vehDrive(v, dt, o.t === 'retreat' ? 1.1 : 1); else v.moving = false;
+  const o = v.order, hold = vehDrill(v) || (o.t === 'amove' && ((tg && (!g || tg.d < g.range * .92)) || (!g && v.mtg && sp.mg && v.mtg.d < sp.mg.range * .8)));   // 遭敌坦克炮射击：停车、车体正面转向来火方向（vehDrill）
+  if (!hold) vehDrive(v, dt, o.t === 'retreat' ? 1.1 : 1);
+  else { v.moving = false; const fc = vehFaceTg(v); if (fc != null) v.heading = vehAng(v.heading + clamp(vehAng(fc - v.heading), -sp.turn * .6 * dt, sp.turn * .6 * dt)); }   // 停车射击：车体正面转向交手的敌装甲
   vehSep(v, dt);
   vehTerrain(v, dt);
   if (v.side === 'e') { if (PV[ci(v.x, v.y)]) { if (v.seen < 0) log(`发现敌${vehModel(v)}`, 'warn', null, 0, v); v.kx = v.x; v.ky = v.y; v.kh = v.heading; v.seen = S.t; } else if (v.kx != null && dist(v.kx, v.ky, v.x, v.y) > 20 && PV[ci(v.kx, v.ky)]) v.kx = v.ky = v.kh = null; }
