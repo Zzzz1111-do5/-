@@ -291,6 +291,20 @@ function v3Fx(C) {
     for (const v of S.veh || []) if (v.dead && !v.lst) wreck(v.x, v.y, typeof vehSp === 'function' ? vehSp(v).len : 9, S.t - (v.deadT ?? -999), v.id);
     for (const v of S.armor || []) if (v.dead) wreck(v.x, v.y, 8, S.t - (v.deadT ?? -999), v.id);
   }
+  // —— 行进中的车辆扬起的尘土（陆上）：车尾两侧拖出一溜黄土色的烟，离车越远越大越淡；在水里、刚上岸湿沙上的不扬 ——
+  {
+    let nD = 0;
+    for (const v of S.veh || []) {
+      if (v.dead || v.lst || v.swim || !(S.t - (v.movedT ?? -99) < .5) || !inB(v.x, v.y, 60) || (v.side === 'e' && !seen(v.x, v.y))) continue;
+      const z = g(v.x, v.y);
+      if (z < -1 || Math.hypot(v.x - E[0], -v.y - E[1]) > 2600 || ++nD > 40) continue;
+      const L = typeof vehSp === 'function' ? vehSp(v).len : 8, h = v.heading || 0, c = Math.cos(h), s2 = Math.sin(h), sid = v.id & 15;
+      for (let i = 0; i < 4; i++) {
+        const u = (S.t * 1.1 + i / 4 + v.id * .37) % 1, back = L * (.45 + u * 2.2), sd = (i % 2 ? 1 : -1) * L * .22 * (1 + u);
+        v3fPuff(sm, C, v3fP(v.x - c * back - s2 * sd, v.y - s2 * back + c * sd, z + L * (.12 + u * .35)), L * (.22 + u * .55), [.55, .48, .37, .3 * Math.sin(u * Math.PI)], 1, sid + i);
+      }
+    }
+  }
   // —— 被击落的飞机往下栽：机身上的火、身后拖着的一条越来越宽的黑烟（残骸本身是 v3units.js 的立体模型）——
   const wtr = (w, T) => {
     const age = S.t - w.t;

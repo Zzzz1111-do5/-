@@ -11,7 +11,7 @@
 - 商店版（安卓、电脑）与网页版的差别都在 js/platform.js（要在 menu.js 之前加载）：「退出游戏」、全屏、安卓返回键、首次打开的《用户协议》《隐私政策》确认（legal/）。`tools/build_www.mjs --app` 生成商店版网页。
 - 上架：docs/release.md（Steam、TapTap 步骤与每次更新要改的版本号）、docs/store.md（商店文案）、store/（商店素材，`tools/store_assets.js` 与 `tools/make_icons.py` 生成；宣传片 `tools/trailer.js`，视频不进仓库）、.github/workflows/release.yml（推 v 开头的标签打全部安装包）。
 - 网页版：`bash tools/publish_pages.sh` 生成 www/ 并推到 gh-pages 分支（GitHub Pages）。
-- 默认地图 8400 × 5600（core.js MAP_K = 2.8，W0 × H0）；大海域地图在 MAPGEN 里登记、建图前 setWorld 换尺寸（海岛战役 isle.js：6000 × 12000，远海只在 3D 里铺一块平面）。西、东、南三边都是海的地图（海岛），3D 写实画面里地图外是无边海面（view3d.js v3OceanBuild / v3OceanDraw：跟着镜头走、铺到雾的尽头），北边是陆地时把岛按北缘镜像延伸约 3 公里再收出北岸（只是远景）。
+- 默认地图 8400 × 5600（core.js MAP_K = 2.8，W0 × H0）；大海域地图在 MAPGEN 里登记、建图前 setWorld 换尺寸（海岛战役 isle.js：6000 × 12000，远海只在 3D 里铺一块平面）。南边是海的地图（海岛、默认地图），3D 写实画面里地图外是无边海面（view3d.js v3OceanBuild / v3OceanDraw：跟着镜头走、铺到雾的尽头），北、西、东边上的陆地按图边镜像往外延伸、按每段陆地的宽度收出约 3 公里的圆弧形海岸（v3ExtBuild，只是远景；v3HtX 查延伸陆地的高度）——地图不再是一块悬在灰底上的沙盘。
 - 画面默认「写实」（设置里还能选黑绿 / 数码，look.js）；对局默认 3D——view3d.js 自由镜头、真实天空与地表贴图、实时太阳阴影、海面（法线贴图按像素大小分层淡出，远处不出噪点），v3post.js 后期；黑绿 / 数码画面四周是 v3table.js 的沙盘桌。
 - 坦克装甲车、飞机、直升机、导弹、单兵用的是用户给的模型，原封不动导入（js/v3g.js 渲染，js/mdl/<键>.js；转换工具 tools/v3gconv.py、tools/v3gbake.js、配置 tools/v3gmodels.json、预览 tools/v3gview.html）；兵种 → 模型的对照表在 v3g.js 的 V3G_VEH / V3G_AIR / V3G_MSL。舰艇是 Sketchfab 上 CC-BY 的模型（v3utex.js、assets/models），甲板牵引车、挂弹车、导弹挂载架（rack）是 v3x.js 的导入模型（tools/sfmodel.js + tools/sfmodels.json，密钥只从环境变量 SKETCHFAB_TOKEN 读）。
 - Sketchfab 下载的车辆模型（全部 CC-BY-4.0，署名在 tools/v3gmodels.json 的 credit，烘焙时自动写进 docs/credits.md、legal/credits.html；v3g.js 的 V3G_CRED 是游戏里的致谢表）：
@@ -47,6 +47,7 @@
   太阳在镜头前方时的光晕 / 横向拉丝 / 鬼影（v3poSun 算太阳在画面上的位置，辉光图里太阳那块不亮就是被挡住了，uSun）；黑夜、白色平原、黑绿 / 数码画面不做。
   特效（v3fx.js）：v3fPuff 画翻滚的烟团（遮光，放 sm）和火球（加法，放 out）——带内坐标里编进画法（x + 8 × 1 烟 / 2 火）和噪声种子（y + 4 × 0–15），片元着色器用两层随时间翻卷的值噪声啃边；
   爆炸 = 白热闪光 + 贴地冲击波圈 + 翻滚冷却的火球 + 碎片 + 往下风飘的浓烟柱（V3F_WIND）+ 掀起的尘土（水面是白色水汽）；被打掉的车辆起火约 50 秒、黑烟柱约两分钟（最多 24 辆）。
+  地面云影（view3d.js 地形着色器 cloudSh：几公里大的云影随风飘，只挡太阳直射，细节贴图开着时才有）；行进中的车辆车尾扬尘（v3fx.js，最多 40 辆）；音效总线分一路进卷积混响（audio.js auIR 程序生成的室外回声，湿声 0.2）。
   界面（js/polish.js）：写实画面、桌面、画质高时面板是毛玻璃（data-glass，backdrop-filter 模糊背后的战场），开新局黑场淡入，3D 自由镜头被附近的大爆炸震一下（plShake3，设置里「屏幕震动」可关，暂停不震）。
 - 海面反射天空（view3d.js）：方位角接缝的两种写法必须按 2×2 像素块统一挑（按块首像素的方位角），不能逐像素比较 fwidth——真显卡的导数逐行算，块里选成两种写法会整块取最糊的一级，镜头朝北时左半屏一层颗粒（软件渲染器测不出来）。
 - 航母甲板（cvdeck.js、v3det.js）：飞机按机身 / 机翼 / 平尾三块矩形占位（cvShape），滑行每步先试、会碰上别的飞机或舰岛就原地等（cvFollow；互相挡住的低优先级那架倒一点让路，20 秒还过不去才硬走）；
