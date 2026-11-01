@@ -52,7 +52,7 @@ function frame(now) {
   }
   camKeys(dt);
   if (S.phase === 'battle' && !S.paused && !S.over && S.briefed) {
-    acc += dt * S.speed;
+    acc += dt * (typeof V3FP === 'object' && V3FP.on && V3FP.k === 'air' ? 1 : S.speed);   // 亲自开飞机时按真实时间推演：快进时飞机的动态跟着变快，根本没法操纵（v3pilot.js）
     let n = 0;
     while (acc >= 1 / 30 && n++ < 8) { step(1 / 30); acc -= 1 / 30; }
     if (n >= 8) acc = 0;

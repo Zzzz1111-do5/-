@@ -111,8 +111,8 @@ function flStep(F, dt, inp) {
     else {
       // 俯仰：过载指令（松杆时按坡度补偿到能保持飞行轨迹的过载——倒飞时是负过载；拉杆往 +9 g、推杆往 −3 g）→ 迎角指令（不超迎角限制）→ 俯仰角速度指令 → 动态逆求升降舵
       //   坡度补偿只到约 50°（再大就是在做机动，靠拉杆），50°–60° 平滑退到「只抵重力分量」——原来在 80° 处一刀切，横滚滚过去时机头猛一点头
-      const cf = Math.cos(phi), n0 = Math.cos(th) * (cf + smooth(1.05, .85, Math.abs(phi)) * (1 / Math.max(cf, .4) - cf)), nzc = inp.y >= 0 ? lerp(n0, A.nz[1], inp.y) : lerp(n0, A.nz[0], -inp.y);
-      const ac = clamp(nzc * A.m * FL_G / (qS * A.CLa), -.2, A.alim);
+      const cf = Math.cos(phi), n0 = Math.cos(th) * (cf + smooth(1.05, .85, Math.abs(phi)) * (1 / Math.max(cf, .4) - cf)), nzc = inp.y >= 0 ? lerp(n0, A.nz[1] + (inp.hg ? 2 : 0), inp.y) : lerp(n0, A.nz[0], -inp.y);
+      const ac = clamp(nzc * A.m * FL_G / (qS * A.CLa), -.2, A.alim + (inp.hg ? .1 : 0));   // hg：高 G 急转——越过飞控的过载限制（多 2 g）、迎角多放 6°：转得更急，掉速度、黑视都快得多
       const qc = clamp(2.8 * (ac - al) + FL_G / Vn * (nzc - Math.cos(th) * Math.cos(phi)), -1.3, 1.3);
       const Mreq = I[1] * 7 * (qc - q) - (I[2] - I[0]) * p * r, M0 = qS * A.c * (D.Cm0 + D.Cma * al + D.Cmq * qh);
       de = (Mreq - M0) / (qS * A.c * D.Cmde);

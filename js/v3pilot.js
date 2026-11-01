@@ -182,7 +182,7 @@ const fpLocked = () => typeof document !== 'undefined' && !!document.pointerLock
 const FP_DZ = .03, FP_EXPO = .55;
 const fpDz = v => Math.abs(v) < FP_DZ ? 0 : Math.sign(v) * (Math.abs(v) - FP_DZ) / (1 - FP_DZ);
 const fpCurve = v => Math.sign(v) * ((1 - FP_EXPO) * Math.abs(v) + FP_EXPO * Math.abs(v) ** 3);
-const fpRamp = (v, t, dt) => { const k = Math.abs(t) > Math.abs(v) && Math.sign(t) === Math.sign(v || t) ? 3.2 : 5; return v + clamp(t - v, -k * dt, k * dt); };   // 推满约 0.3 秒、回中约 0.2 秒
+const fpRamp = (v, t, dt, up = 3.2) => { const k = Math.abs(t) > Math.abs(v) && Math.sign(t) === Math.sign(v || t) ? up : 7; return v + clamp(t - v, -k * dt, k * dt); };   // 推满约 0.3 秒（滚转 0.38 秒：轻点一下只压十度左右，细修航向）、回中约 0.14 秒
 const fpAc = o => (typeof FL_AC === 'object' && typeof flKey === 'function' && FL_AC[flKey(o)]) || { nz: [-3, 8], Tm: 1.3e5, Ta: 2e5, L: 17, pmax: 3 };   // 飞控参数（flight.js：推力、过载限制、机长）
 const fpLen = o => fpAc(o).L || 17;
 // 画面用的位置、姿态：上一步与这一步之间按主循环里攒下、还没推演的时间插值（main.js 的 acc，每步 1/30 秒）
@@ -218,7 +218,8 @@ function fpInstr(F) {
   const yS = clamp(eL * 6, -.3, .7), yB = clamp(off * 3, 0, .7) * Math.max(0, Math.cos(phiE)) ** 2;   // 教官最多拉到约 6.6 g（玩家自己拉杆能到 9 g）
   return { x: clamp((rollE * 2.6 - F.w[0] * .32) / pm, -1, 1), y: lerp(yS, yB, w), r: clamp(eY * 3, -1, 1) * (1 - w) * .5 };
 }
-// 手柄（标准布局）：左摇杆杆、扳机油门、肩键方向舵、右摇杆自由视角；A 开火、B 航炮、X 加力、Y 换武器、十字键起降与换目标
+// 手柄（标准布局）：左摇杆杆、扳机油门、肩键方向舵、右摇杆自由视角；A 开火、B 航炮、X 加力、Y 换武器、十字键起降与换目标；两个扳机一起按到底 = 高 G 急转
+const bt7 = gp => gp.g && (gp.g.buttons[6] || {}).value > .8 && (gp.g.buttons[7] || {}).value > .8;
 function fpGamepad() {
   const g = typeof navigator !== 'undefined' && navigator.getGamepads ? [...navigator.getGamepads()].find(x => x && x.connected && x.axes.length >= 2) : null;
   if (!g) return null;
@@ -254,11 +255,13 @@ function fpFly(p, dt) {
   if (brd) F.gear = 1;
   // 键盘轴：杆量按速率推过去
   const key = (a, b) => (K.has(a) ? 1 : 0) - (K.has(b) ? 1 : 0);
-  kx.r = fpRamp(kx.r, clamp(key('KeyD', 'KeyA') + key('ArrowRight', 'ArrowLeft') + T.x, -1, 1), dt);
+  kx.r = fpRamp(kx.r, clamp(key('KeyD', 'KeyA') + key('ArrowRight', 'ArrowLeft') + T.x, -1, 1), dt, 2.6);
   kx.p = fpRamp(kx.p, clamp(key('ArrowDown', 'ArrowUp') + T.y, -1, 1), dt);
   kx.y = fpRamp(kx.y, clamp(key('KeyE', 'KeyQ'), -1, 1), dt);
   // 油门：W / S 连续加减；推满后再按住 W 0.4 秒开加力，S 关加力；按住 Shift 临时加力；手柄扳机
-  const tu = K.has('KeyW') ? 1 : K.has('KeyS') ? -1 : 0, gt = gp ? gp.thr : 0;
+  const hg = K.has('KeyW') && K.has('KeyS') || (gp && bt7(gp));   // 高 G 急转（皇牌空战那样同时按加速、减速）：油门不动，放开迎角限制拉到底
+  const tu = hg ? 0 : K.has('KeyW') ? 1 : K.has('KeyS') ? -1 : 0, gt = gp && !hg ? gp.thr : 0;
+  if (hg && !V3FP.hgOn) fwMsg('高 G 急转'); V3FP.hgOn = hg;
   V3FP.thr = clamp(V3FP.thr + (tu + gt) * .6 * dt, 0, 1);
   if (tu > 0 && V3FP.thr >= 1) { V3FP.abT += dt; if (V3FP.abT > .4) V3FP.ab = true; } else V3FP.abT = 0;
   if (tu < 0 || gt < -.3) V3FP.ab = false;
@@ -267,10 +270,15 @@ function fpFly(p, dt) {
   const mx = clamp(kx.r + (gp ? gp.x : 0), -1, 1), my = clamp(kx.p + (gp ? gp.y : 0), -1, 1), mr = clamp(kx.y + (gp ? gp.r : 0), -1, 1);
   let x, y, r;
   if (V3FP.ctl === 'stick') { x = fpCurve(clamp(mx + fpDz(V3FP.ms[0]), -1, 1)); y = fpCurve(clamp(my + fpDz(V3FP.ms[1]), -1, 1)); r = fpCurve(mr); }
-  else if (V3FP.ctl === 'ace') {   // 皇牌空战式：左右 = 压到对应坡度（满压约 75°，松手自动改平）并顺势带杆转弯；上下 = 拉杆 / 推杆；舵 = 微调机头。飞控、气动照旧是真实的
-    const phi = flEul(F.q)[0], pm = (FL_AC[F.k] || {}).pmax || 3, ix = fpCurve(mx), iy = fpCurve(my);
-    x = clamp((airAng(ix * 1.31 - phi) * 2.6 - F.w[0] * .32) / pm, -1, 1);
-    y = clamp(iy + (iy < -.1 ? 0 : Math.abs(ix) * .45), -1, 1);   // 压坡度时自动带约 4–5 g 的杆转过去；推杆时不加
+  else if (V3FP.ctl === 'ace') {   // 皇牌空战式：A / D 压到对应坡度（满压 80°，松手回平），按坡度自动带杆保持平飞转弯；↑ / ↓ 在这上面加拉杆 / 推杆（拉杆转得更急）；舵 = 微调机头。飞控、气动照旧是真实的
+    //   滚转按坡度差的比例 + 角速度阻尼：压到 70° 约 0.7 秒、改平约 0.7 秒，不过冲（原来增益小一半，最后二十度要磨一秒多）；
+    //   自动带杆按水平转弯要的过载（1 / cos 坡度）补——原来固定带约一半杆，小坡度时机头一路往上翘、边转边爬
+    const [phi, th] = flEul(F.q), A1 = FL_AC[F.k] || {}, pm = A1.pmax || 3, nm = A1.nz ? A1.nz[1] : 9, ix = fpCurve(mx), iy = fpCurve(my);
+    x = clamp((airAng(ix * 1.4 - phi) * 5 - F.w[0] * .25) / pm, -1, 1);
+    const cf = Math.cos(phi), n0 = Math.cos(th) * (cf + smooth(1.05, .85, Math.abs(phi)) * (1 / Math.max(cf, .4) - cf)), nr = Math.cos(th) / Math.max(cf, .2);   // n0：飞控松杆时自己按坡度补到的过载（与 flight.js 一致，约到 50°）
+    const ya = Math.abs(ix) > .02 && cf > 0 ? clamp((Math.min(nr, nm) - n0) / (nm - n0), 0, 1) : 0;   // 再大的坡度要的过载这里补上；超出机体能力就边转边掉高度
+    y = clamp(iy >= 0 ? iy + ya * (1 - iy) : iy, -1, 1);
+    if (hg && iy > -.1) y = 1;   // 高 G 急转：沿当前坡度拉到底
     r = fpCurve(mr);
   } else {
     // 玩家压杆或拉杆时教官整个让出来（不然它还在按准星滚转，和玩家打架），准星跟着机头走——松手后接着往机头方向飞，不会猛地扳回去
@@ -292,7 +300,7 @@ function fpFly(p, dt) {
     const I = fpInstr(F); x = I.x; y = I.y; r = I.r;
   }
   F.P0 = F.P.slice(); F.q0 = F.q.slice();   // 上一步的位置、姿态：画面按这一步走了多少插值（推演每秒 30 步，画面 60 帧以上，不插值飞机一顿一顿地抖）
-  const hit = flStep(F, dt, { x, y, r, thr: ab ? 1 : V3FP.thr, ab, law: V3FP.ap ? 'n' : V3FP.law, gear: V3FP.gear, flap: V3FP.flapC, sb: K.has('KeyB') || !!T.sb, hook: V3FP.hook });
+  const hit = flStep(F, dt, { x, y, r, thr: ab ? 1 : V3FP.thr, ab, law: V3FP.ap ? 'n' : V3FP.law, gear: V3FP.gear, flap: V3FP.flapC, sb: K.has('KeyB') || !!T.sb, hook: V3FP.hook, hg: hg && !V3FP.ap });
   flToGame(p);
   if (F.ev) { const ev = F.ev; F.ev = null; if (fpLandEv(p, ev)) return true; }   // 接地、离地、挂索、冲出甲板（挂上索、跑道上停下来：交给地勤，不再走物理引擎）
   if (F.gnd && F.gk === 'rwy' && F.gs < 18 && V3FP.thr < .5) { fpRwyStop(p); return true; }
@@ -434,9 +442,9 @@ function fpAxes(P) {
   return { f, u, r: v3Norm(v3Cross(f, u)) };
 }
 // 投影矩阵（近裁剪面 n、雾的尺度 D）
-function fpProj(E, x, y, z, D, n) {
+function fpProj(E, x, y, z, D, n, fov = V3_FOV) {   // fov：视野（追尾镜头按速度略放宽）
   const view = new Float32Array([x[0], y[0], z[0], 0, x[1], y[1], z[1], 0, x[2], y[2], z[2], 0, -v3Dot(x, E), -v3Dot(y, E), -v3Dot(z, E), 1]);
-  const rd = v3RD(), fog = [D * 1.3 * rd, D * 2.8 * rd], asp = CAM.vw / Math.max(1, CAM.vh), fo = 1 / Math.tan(V3_FOV / 2), fa = Math.max(D * 9, fog[1] * 1.5), nf = 1 / (n - fa);
+  const rd = v3RD(), fog = [D * 1.3 * rd, D * 2.8 * rd], asp = CAM.vw / Math.max(1, CAM.vh), fo = 1 / Math.tan(fov / 2), fa = Math.max(D * 9, fog[1] * 1.5), nf = 1 / (n - fa);
   const proj = new Float32Array([fo / asp, 0, 0, 0, 0, fo, 0, 0, 0, 0, (fa + n) * nf, -1, 0, 0, 2 * fa * n * nf, 0]);
   return (V3.cam = { E, x, y, z, D, rd, fog, asp, M: v3Mul(proj, view) });
 }
@@ -450,9 +458,21 @@ function fpShake() {
 }
 // 飞机的追尾镜头：鼠标瞄准时镜头顺着瞄准方向看（飞机飞进准星），鼠标摇杆时跟着机体姿态（略带滞后）——筋斗、横滚时镜头跟着翻过去；
 //   按住 C（或手柄右摇杆）自由视角绕着飞机转；滚轮改远近
+// 锁头视角看谁：选定目标（武器环里锁的那个），没有就最近的看得见的敌机（20 公里内）；GL 坐标
+function fpPadT() {
+  const T = V3FP.fwT, o = V3FP.o;
+  if (T) return [T.x, -T.y, T.z];
+  let best = null, bd = 20000;
+  for (const c of fpFoes(true)) { const d = Math.hypot(c.x - o.x, c.y - o.y); if (d < bd) { bd = d; best = c; } }
+  return best ? [best.x, -best.y, best.z] : null;
+}
 function fpChaseCam(P) {
-  const o = V3FP.o, L = fpLen(o), d = clamp(V3FP.cd, L * 1.3, 2000), now = performance.now(), dt = clamp((now - (V3FP.ct || now)) / 1000, 0, .1);
+  const o = V3FP.o, L = fpLen(o), now = performance.now(), dt = clamp((now - (V3FP.ct || now)) / 1000, 0, .1), F0 = o.fl;
   V3FP.ct = now;
+  // 速度感：快了视野放宽一点、镜头往后让一点，开加力再宽一点（按真实时间平滑，不一下跳过去）
+  const sk = F0 ? smooth(150, 420, F0.Va) : 0, fw = 1 + .07 * sk + (F0 && F0.ab ? .04 : 0);
+  V3FP.fovK = (V3FP.fovK || 1) + (fw - (V3FP.fovK || 1)) * (1 - Math.exp(-dt * 2.5));
+  const d = clamp(V3FP.cd * (1 + .12 * sk), L * 1.3, 2000);
   const B = fpBody(o), k = 1 - Math.exp(-dt * 7);   // 机体轴带一点滞后
   const lerp3 = (a, b) => a ? v3Norm([a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k]) : b;
   V3FP.cf = lerp3(V3FP.cf, B.f); V3FP.cu = lerp3(V3FP.cu, B.u);
@@ -461,11 +481,21 @@ function fpChaseCam(P) {
   let f = V3FP.cf, c = V3FP.cu;
   if (bw < 1) { const a = fpAimDir(), au = fpAimUp(); f = v3Norm([a[0] + (f[0] - a[0]) * bw, a[1] + (f[1] - a[1]) * bw, a[2] + (f[2] - a[2]) * bw]); c = [au[0] + (c[0] - au[0]) * bw, au[1] + (c[1] - au[1]) * bw, au[2] + (c[2] - au[2]) * bw]; }
   // 镜头上方：平时取世界的「上」（横滚时地平线不跟着转，看得见飞机在滚）；机头接近竖直（拉筋斗）时世界的上方没法用，换成机体的上方，顺着翻过去
-  const cl = [0, 0, 1], wv = smooth(.82, .97, Math.abs(f[2])), cm = [cl[0] + (c[0] - cl[0]) * wv, cl[1] + (c[1] - cl[1]) * wv, cl[2] + (c[2] - cl[2]) * wv], q0 = v3Dot(cm, f);
+  //   皇牌空战式：地平线跟着坡度歪四成五（看得出在压坡度转弯，又不至于整个世界跟着转晕）
+  const cl = [0, 0, 1], wv = Math.max(smooth(.82, .97, Math.abs(f[2])), V3FP.ctl === 'ace' ? .45 : 0), cm = [cl[0] + (c[0] - cl[0]) * wv, cl[1] + (c[1] - cl[1]) * wv, cl[2] + (c[2] - cl[2]) * wv], q0 = v3Dot(cm, f);
   let u = v3Norm([cm[0] - f[0] * q0, cm[1] - f[1] * q0, cm[2] - f[2] * q0]);
   // 自由视角：松开 C 后慢慢转回机尾后方
   if (!V3FP.free && !V3FP.gpLook && now - (V3FP.mlT || 0) > 1500) { const kb = 1 - Math.exp(-dt * 4); V3FP.orb[0] *= 1 - kb; V3FP.orb[1] *= 1 - kb; }
   if (Math.abs(V3FP.orb[0]) + Math.abs(V3FP.orb[1]) > 1e-4) { f = fpRot(f, u, -V3FP.orb[0]); const r = v3Norm(v3Cross(f, u)); f = fpRot(f, r, V3FP.orb[1]); u = fpRot(u, r, V3FP.orb[1]); }
+  // 锁头视角（按住 T，皇牌空战的目标视角）：镜头从飞机后面看向选定目标，没选就看最近的敌机——缠斗时不丢目标；按真实时间平滑转过去
+  const pt = V3FP.keys.has('KeyT') ? fpPadT() : null;
+  V3FP.padK = clamp((V3FP.padK || 0) + (pt ? dt : -dt) * 3, 0, 1);
+  if (pt) V3FP.padP = pt;
+  if (V3FP.padK > .001 && V3FP.padP) {
+    const T0 = V3FP.padP, dv = v3Norm([T0[0] - P.x, T0[1] + P.y, T0[2] - P.z]), k = smooth(0, 1, V3FP.padK);
+    f = v3Norm([f[0] + (dv[0] - f[0]) * k, f[1] + (dv[1] - f[1]) * k, f[2] + (dv[2] - f[2]) * k]);
+    const q1 = v3Dot(u, f); u = v3Norm([u[0] - f[0] * q1, u[1] - f[1] * q1, u[2] - f[2] * q1]);
+  }
   const sh = fpShake();
   if (sh) { const r = v3Norm(v3Cross(f, u)); f = v3Norm([f[0] + r[0] * sh[0] + u[0] * sh[1], f[1] + r[1] * sh[0] + u[1] * sh[1], f[2] + r[2] * sh[0] + u[2] * sh[1]]); }
   const T = [P.x, -P.y, P.z], E = [T[0] - f[0] * d + u[0] * d * .16, T[1] - f[1] * d + u[1] * d * .16, T[2] - f[2] * d + u[2] * d * .16];
@@ -473,7 +503,7 @@ function fpChaseCam(P) {
   if (E[2] < g + 3) E[2] = g + 3;   // 不钻到地面以下
   const z = [-f[0], -f[1], -f[2]], x = v3Norm(v3Cross(u, z)), y = v3Cross(z, x), alt = Math.max(1, E[2] - Math.max(g, -2.6));
   V3FP.camF = f;
-  return fpProj(E, x, y, z, clamp(Math.max(alt * 5, d * 6), 520, 2600), clamp(d * .015, .4, 8));
+  return fpProj(E, x, y, z, clamp(Math.max(alt * 5, d * 6), 520, 2600), clamp(d * .015, .4, 8), V3_FOV * (V3FP.fovK || 1));
 }
 // 模型键（v3g.js V3G_AIR）与模型在世界里的变换（挂点、炮口位置用）
 const fpMdlKey = o => (typeof V3G_AIR === 'object' && typeof airSilKey === 'function' && V3G_AIR[airSilKey(o.kind, o.v)]) || 'j31';
@@ -757,7 +787,8 @@ if (typeof window !== 'undefined' && window.addEventListener) {
       if (V3FP.mv != null && V3FP.mBig) { V3FP.mo[0] = airAng(V3FP.mo[0] + dx * .005); V3FP.mo[1] = clamp(V3FP.mo[1] - dy * .004, -1.3, 1.3); return; }   // 导弹全屏视角：鼠标绕着弹看，不带机头
       if (V3FP.drag && V3FP.dbtn === 2) V3FP.rmv = (V3FP.rmv || 0) + Math.abs(dx) + Math.abs(dy);   // 右键拖动了多远（拖得少算单击：换目标）
       if (V3FP.free || (V3FP.drag && V3FP.dbtn === 2) || V3FP.ctl === 'ace') {   // 自由视角（按住 C、右键拖动；皇牌空战式时鼠标就是看四周，停下 1.5 秒转回机尾）
-        V3FP.orb[0] = airAng(V3FP.orb[0] - dx * .005); V3FP.orb[1] = clamp(V3FP.orb[1] - dy * .004, -1.4, 1.4); V3FP.mlT = performance.now();
+        if (V3FP.ctl === 'ace' && !V3FP.free && !V3FP.drag && Math.abs(dx) + Math.abs(dy) < 3) return;   // 手搭在鼠标上的小抖动不转镜头
+        V3FP.orb[0] = airAng(V3FP.orb[0] - dx * .004); V3FP.orb[1] = clamp(V3FP.orb[1] - dy * .0032, -1.4, 1.4); V3FP.mlT = performance.now();
         return;
       }
       if (V3FP.ctl === 'stick') { V3FP.ms[0] = clamp(V3FP.ms[0] + dx * .0035, -1, 1); V3FP.ms[1] = clamp(V3FP.ms[1] + dy * .0035, -1, 1); return; }   // 鼠标往下拉 = 拉杆
