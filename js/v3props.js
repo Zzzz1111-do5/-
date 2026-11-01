@@ -38,6 +38,8 @@ const V3P_PACKS = {
   water: { name: '水面法线', title: 'waternormals.jpg（three.js 示例）', author: 'three.js authors', license: 'MIT', url: 'https://github.com/mrdoob/three.js/blob/dev/examples/textures/waternormals.jpg' }
 };
 // 树种：针叶（山地、高处多）、阔叶（桦、落叶松）；h：模型原高（米，载入后按包围盒取）
+// 不种树、灌木（用户：地图上的树太卡）——林地只在地面贴图上表现；岩石、崖壁照旧摆
+const V3P_VEG = false;
 const V3P_CON = ['bg0', 'bg2', 'bg3', 'bg5', 'bg6', 'bg7', 'treeA', 'treeB', 'treeC'], V3P_BRD = ['bg1', 'bg4', 'treeD'];
 // 黑绿 / 数码画面用的多面体树：针叶（云杉、松）、阔叶（圆冠、白桦、橡、杨）；在写实画面里还是上面带贴图的树
 const V3P_CON_G = [['lptrees', 'ltc1'], ['lptrees', 'ltc2'], ['lptrees', 'ltc3'], ['lptrees', 'ltc4'], ['lppine', 'lppine']];
@@ -214,7 +216,7 @@ const V3P_TS = 30;   // 远处替身按 30 × 30 格（300 米）分块
 function v3pPlace() {
   const isle = !!TER.isle;   // 架空海岛（isle.js）：热带植被——沿海一带棕榈，雨林用阔叶树，针叶树只长在高山上
   const fac = V3P.fac = v3pFacet();   // 黑绿 / 数码画面：树换成多面体的低多边形树（每个面一种颜色，棱线发光，不是贴图插片）
-  const need = ['treepack', 'cliffs', 'jph1', 'jph2', 'jph3', 'house', 'oldconc', 'hangar', 'atc', 'quonset', 'firestation', 'wh3', 'sawtooth', 'smallwh', 'industrial', 'flats1', 'wh99', 'girder', 'cbridge', 'pillbox', 'teeth', ...(isle ? ['palms'] : []), ...(fac ? ['lptrees', 'lppine'] : [])];
+  const need = ['treepack', 'cliffs', 'jph1', 'jph2', 'jph3', 'house', 'oldconc', 'hangar', 'atc', 'quonset', 'firestation', 'wh3', 'sawtooth', 'smallwh', 'industrial', 'flats1', 'wh99', 'girder', 'cbridge', 'pillbox', 'teeth', ...(isle && V3P_VEG ? ['palms'] : []), ...(fac && V3P_VEG ? ['lptrees', 'lppine'] : [])];
   const got = need.map(id => v3pPack(id) || (V3P.packs.get(id) || {}).st === -1);   // 先全部发起下载（同时载入），再看是不是都好了
   if (!got.every(Boolean)) return false;
   const tp = v3pPack('treepack');
@@ -244,6 +246,7 @@ function v3pPlace() {
     else if (t === T.MARSH) n = r() < .06 ? 1 : 0;
     else if (t === T.BEACH && isle) n = cd > 18 && r() < .07 ? 1 : 0;   // 海滩后沿稀疏的椰树
     const okHere = !(t !== T.FOREST && roadNear(gx, gy)) && !ptsNear(cx, cy);
+    if (!V3P_VEG) n = 0;
     if (n && okHere) for (let k = 0; k < n; k++) {
       const x = cx + (r() - .5) * CELL * .9, y = cy + (r() - .5) * CELL * .9, pm = palm.length > 0 && t !== T.MARSH && (cd < 260 || t === T.FIELD || t === T.BEACH || (el < .3 && r() < .3));
       const isCon = !pm && (isle ? el > .9 || t === T.MOUNT : el > .62 || t === T.MOUNT || r() < .55);   // 海岛：山地雨林也是阔叶树，针叶只在山顶附近
@@ -259,7 +262,7 @@ function v3pPlace() {
     else if (t === T.HILL) nb = r() < .1 ? 1 : 0;
     else if (t === T.MARSH) nb = r() < .25 ? 1 : 0;
     else if (t === T.FIELD) nb = r() < .012 ? 1 : 0;
-    for (let k = 0; k < nb && bush.length; k++) {
+    for (let k = 0; k < nb && bush.length && V3P_VEG; k++) {
       const x = cx + (r() - .5) * CELL * .9, y = cy + (r() - .5) * CELL * .9, gr = t === T.MARSH || r() < .25, v = gr && grass >= 0 ? grass : bush[(r() * bush.length) | 0], s = (gr ? .7 : .45) + r() * .35;
       put(x, y, v, s, s, 1, r() * 6.283, .05);
     }
@@ -289,7 +292,7 @@ function v3pPlace() {
   for (let i = 0; i < N; i++) idx[fill[bOf(i)]++] = i;
   Object.assign(PL, { BS, bx, by, cnt, idx });
   V3P.P = PL; V3P.VL = VL;
-  v3pImpBuild(con.concat(brd, palm));   // 远处的替身面片（最多 16 种：针叶 9、阔叶 3、棕榈 4）
+  v3pImpBuild(V3P_VEG ? con.concat(brd, palm) : []);   // 远处的替身面片（最多 16 种：针叶 9、阔叶 3、棕榈 4）
   v3pFar();
   v3pStatic(vOf);
   return true;

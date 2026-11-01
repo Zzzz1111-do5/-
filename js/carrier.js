@@ -29,7 +29,10 @@ const AIR_MDL = {
   j50: { name: '歼-50 第六代舰载战斗机', sil: 'j50', spd: 280, aa: .03, size: 16, stealth: .22, aam: 8, aamR: 560, pkK: 1.18, radar: 800, turn: 1.9, gun: 0 },
   // 歼-16D 电子战飞机（陆基，战区机场出动）：翼尖电子战吊舱 + 进气道下两个大型干扰吊舱压制敌雷达——附近我方飞机被敌防空发现、命中的概率打七折（airJamK）；
   //   翼下 4 枚雷电-10 反辐射导弹（420 外打敌防空）、外侧 2 枚霹雳-15 自卫（没有航炮、光电球，换成了电子战设备）
-  j16d: { name: '歼-16D 电子战飞机', sil: 'j16', spd: 250, aa: .07, size: 18, land: true, std: 420, sead: true, gbN: 4, aam: 2, arW: 'ld10', arR: 420, jam: 650 }
+  j16d: { name: '歼-16D 电子战飞机', sil: 'j16', spd: 250, aa: .07, size: 18, land: true, std: 420, sead: true, gbN: 4, aam: 2, arW: 'ld10', arR: 420, jam: 650 },
+  // 歼-16 多用途战斗机，对地满挂（「炸弹卡车」，陆基，战区机场出动）：翼下内侧、中间挂架和两个进气道挂点共 6 枚雷石-6 五百公斤级滑翔制导炸弹，外侧 2 枚霹雳-15、翼尖 2 枚霹雳-10 自卫，
+  //   还有 GSh-30-1 航炮（150 发）；防区外 300 投放，余弹自主武装侦察
+  j16: { name: '歼-16 多用途战斗机（对地满挂）', sil: 'j16b', spd: 245, aa: .08, size: 18, land: true, std: 300, gbN: 6, aam: 4, arW: 'ls6', arR: 320 }
 };
 // 真实世界的性能（公开资料；官方未公布的按外界估算）——巡航速度写在上面型号表与 eair.js EA_SPEC 的 spd 里（米 / 秒，推演里就按它飞，1 单位 = 1 米）；
 //   这里给座舱显示屏与机载雷达用：vmax 最大速度 km/h、rdr 机载雷达对战斗机大小目标的探测距离 km（0 = 没有对空搜索雷达）、rdrNm 雷达、fuel 机内燃油 kg
@@ -46,6 +49,7 @@ const AIR_REAL = {
   j20: { vmax: 2100, rdr: 210, rdrNm: '1475 型有源相控阵雷达', fuel: 12000 },
   j50: { vmax: 2100, rdr: 220, rdrNm: '有源相控阵雷达（估算）', fuel: 12000 },
   j16d: { vmax: 2100, rdr: 200, rdrNm: '有源相控阵雷达', fuel: 9400 },
+  j16: { vmax: 2100, rdr: 200, rdrNm: '有源相控阵雷达', fuel: 9400 },
   transport: { vmax: 920, rdr: 0, rdrNm: '气象雷达', fuel: 60000 },
   // 守方（美军，eair.js 的机型键）
   ga: { vmax: 706, rdr: 0, rdrNm: '无（瞄准吊舱）', fuel: 4850 },
@@ -63,7 +67,7 @@ const AIR_REAL = {
 const airReal = (type, v) => AIR_REAL[airMdlKey(type, v)] || AIR_REAL[type] || {};
 const airRdrM = (type, v) => (airReal(type, v).rdr || 0) * 1000;
 const AIR_BASEM = { recon: 'kj600', strike: 'j35', cas: 'gj2', bomber: 'h6k', fighter: 'j20' };
-const AIR_VMODEL = { lr: 'wz7', dive: 'gj11', heavy: 'h6k', fb: 'j15t', heli: 'z10', sead: 'j35s', ew: 'j16d', adv: 'j20', j50: 'j50' };   // adv：旧存档里的先进战斗机
+const AIR_VMODEL = { lr: 'wz7', dive: 'gj11', heavy: 'h6k', fb: 'j15t', heli: 'z10', sead: 'j35s', ew: 'j16d', bt: 'j16', adv: 'j20', j50: 'j50' };   // bt：歼-16 对地满挂   // adv：旧存档里的先进战斗机
 const airMdlKey = (type, v) => AIR_VMODEL[v] || AIR_BASEM[type];
 const airMdl = (type, v) => AIR_MDL[airMdlKey(type, v)] || {};   // 运输机（para.js）等没有型号表的返回空
 const airSpec = (type, v) => ({ ...(AIR_SPEC[type] || AIR_SPEC.strike), ...airMdl(type, v) });
@@ -136,6 +140,7 @@ AIR_SIL.f35b = AIR_SIL.f35;   // F-35B 俯视轮廓同 F-35A
 AIR_SIL.p8 = [[11.6, 0], [10.8, .9], [8, 1.15], [2.6, 1.15], [2.2, 1.15], [-3.6, 11.2], [-4.6, 11.3], [-1.4, 1.15], [-8.6, .9], [-10.9, 4.3], [-11.8, 4.3], [-11.2, .7], [-12.1, 0]];   // P-8A：737 机身、低单翼（后掠 25°、翼展 37.6 米）、两台翼吊发动机、常规尾翼
 AIR_SIL.mq9 = AIR_SIL.gj2;   // MQ-9A 与攻击-2 同类布局
 AIR_SIL.j16 = AIR_SIL.j15;   // 歼-16D 俯视轮廓同侧卫系（单独的键：3D 用歼-16 模型，歼-15T 用歼-15 模型）
+AIR_SIL.j16b = AIR_SIL.j15;   // 歼-16 对地满挂：同一外形，2D 挂的是炸弹（airmdl.js AIRD.j16b）
 // 剪影键：按型号；守方 type（ga / heli / ftr / ftrb / f22）另映射
 const airSilKey = (type, v) => type === 'ga' ? 'a10' : type === 'ftr' ? 'f35' : type === 'ftrb' ? 'f35b' : type === 'mq9' ? 'mq9' : AIR_SIL[type] && !AIR_BASEM[type] ? type : airMdl(type, v).sil || 'j35';
 const airName = (type, v) => airMdl(type, v).name || (AIR_SPEC[type] || {}).name || '飞机';
@@ -216,6 +221,7 @@ function initCarrier() {
     const wing = [];
     for (const type of AIR_TYPES) for (let k = 0; k < AIR_SPEC[type].n; k++) wing.push({ id: S.nid++, type, state: 'deck', rearmT: 0 });
     wing.push({ id: S.nid++, type: 'strike', v: 'ew', state: 'deck', rearmT: 0 });   // 战区派来一架歼-16D 电子战飞机（陆基，不占航母机库）
+    wing.push({ id: S.nid++, type: 'strike', v: 'bt', state: 'deck', rearmT: 0 });   // 还有一架对地满挂的歼-16（陆基）
     S.air = { wing, wrecks: [] };
   }
   if (!Array.isArray(S.air.wrecks)) S.air.wrecks = [];

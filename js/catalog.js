@@ -259,6 +259,8 @@ ctE('p_air_ftr_adv', '歼-35（防空压制型）', 'p', 'air', 'wing', 32, CT_I
   { kind: 'wing', at: 'air', type: 'strike', n: 1, v: 'sead' }, { counters: ['aa', 'e_aa_radar', 'e_sam_veh', 'e_aa_veh', 'e_manpads'], weakTo: ['e_air_ftr'] });
 ctE('p_air_ew', '歼-16D 电子战飞机（战区）', 'p', 'air', 'wing', 34, CT_IC.aj15 + ctDots(2), [3, 0, 7, 8, 9, 6, 0], '攻击机（T 键）。从战区机场起飞、不占航母机库的电子战飞机：翼尖电子战吊舱和进气道下两个大型干扰吊舱压制敌雷达，650 内我方飞机被敌防空发现、打中的概率打七折；翼下挂 4 枚雷电-10 反辐射导弹（420 外打敌高炮、防空车与暴露的防空导弹组）、2 枚霹雳-15 自卫。3D 里按 P 可以亲自驾驶。',
   { kind: 'wing', at: 'air', type: 'strike', n: 1, v: 'ew' }, { counters: ['aa', 'e_aa_radar', 'e_sam_veh', 'e_aa_veh', 'e_manpads'], weakTo: ['e_air_ftr'] });
+ctE('p_air_bt', '歼-16 对地满挂（战区）', 'p', 'air', 'wing', 36, CT_IC.aj15 + ctDots(1), [3, 0, 9, 7, 8, 5, 0], '攻击机（T 键）。「炸弹卡车」：从战区机场起飞、不占航母机库的歼-16 多用途战斗机，翼下和进气道下 6 枚雷石-6 五百公斤级滑翔制导炸弹，防区外 300 投放、余弹自主搜索战车与炮位；外侧 2 枚霹雳-15、翼尖 2 枚霹雳-10 自卫，30 毫米航炮 150 发。满挂很重：转弯、爬升都比空载慢。3D 里按 P 可以亲自驾驶。',
+  { kind: 'wing', at: 'air', type: 'strike', n: 1, v: 'bt' }, { counters: ['coastal', 'arty', 'bunker', 'tel'], weakTo: ['e_air_ftr', 'aa'] });
 ctE('p_air_dive', '攻击-11 隐身无人攻击机', 'p', 'air', 'wing', 26, CT_IC.agj11, [3, 0, 8, 0, 8, 4, 0], '轰炸机（Y 键）。飞翼布局的隐身无人攻击机：对点目标中空平飞，打开内埋弹舱投下两枚精确制导炸弹，几乎正中岸防炮、碉堡；隐身，不用俯冲进高炮射界。',
   { kind: 'wing', at: 'air', type: 'bomber', n: 1, v: 'dive' }, { counters: ['coastal', 'bunker'], weakTo: ['aa'] });
 ctE('p_air_heavy', '轰-6K 轰炸机（战区）', 'p', 'air', 'wing', 34, CT_IC.heavy, [4, 0, 10, 0, 6, 3, 0], '轰炸机（Y 键）。陆基中程轰炸机，从战区机场起飞、不占航母机库：翼下挂 6 枚空地-20 巡航导弹，进场就在防区外（离目标 1800 外）发射，发射完返航、不飞临目标——导弹按目标一带已标定的炮兵阵地、岸防炮、碉堡一枚一枚分（硬目标两枚），没有标定的就均布在目标区；导弹贴地飞，敌防空能拦下一部分；离我军 150 以内慎用。',

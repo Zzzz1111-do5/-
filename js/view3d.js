@@ -1023,6 +1023,7 @@ function v3Bld() {
 // 树：阔叶树（两层收拢的多面树冠）、针叶树（尖塔形）、细树干；e.x = 2.5 标记树冠、3.5 树干（着色器另配颜色，不画棱线）
 // 返回若干小块（每块的顶点、索引，按地图种子缓存；地形改了（弹坑等）重算高度）
 function v3Trees() {
+  if (typeof V3P_VEG !== 'undefined' && !V3P_VEG) return [];   // 不种树（v3props.js V3P_VEG：用户嫌卡）
   if (!(typeof TER === 'object' && TER && TER.type)) return [];
   const sig = TER.seed + ':' + (V3.sig || '');
   if (V3.trees && V3.trees.sig === sig) return V3.trees.list;
@@ -1339,7 +1340,25 @@ function v3Draw(now) {
   // 3D 网格
   const W0 = R.cv.width, H0 = R.cv.height;
   if (V3.cv.width !== W0 || V3.cv.height !== H0) { V3.cv.width = W0; V3.cv.height = H0; }
-  gl.viewport(0, 0, W0, H0);
+  V3.pOn = pOn;
+  v3Scene(C, now, null);
+  if (typeof v3Post === 'function') { gl.disableVertexAttribArray(V3.a.p); gl.disableVertexAttribArray(V3.a.n); v3Post(now); }   // 辉光、景深、暗角（v3post.js）
+  if (typeof v3fpPip === 'function') { gl.disableVertexAttribArray(V3.a.p); gl.disableVertexAttribArray(V3.a.n); v3fpPip(now); }   // 亲自驾驶：导弹视角小屏（v3pilot.js，再画一遍场景到画面右上角）
+  const ctx = R.ctx;
+  ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);
+  if (V3.cv.parentNode) ctx.clearRect(0, 0, R.cv.width, R.cv.height);   // 3D 画布垫在底下（v3Init），2D 画布只留文字和标识
+  else { ctx.globalCompositeOperation = 'copy'; ctx.drawImage(V3.cv, 0, 0); }   // 没能放进页面时照旧贴过来
+  ctx.restore();
+  v3Overlay(ctx, now / 1000);
+  return true;
+}
+
+// 画一遍场景：天空、地形、海、沙盘桌、房屋、地图物件、兵种模型、甲板、弹道。vp 给了就是画面里的一小块（导弹视角小屏，v3pilot.js v3fpPip）：
+//   剪刀测试圈住那一块，不画阴影、沙盘桌、地图物件，兵种模型按这个镜头重新收集；后期处理只做主画面
+function v3Scene(C, now, vp) {
+  const gl = V3.gl, pip = !!vp, W0 = R.cv.width, H0 = R.cv.height, sh0 = V3SH.on;
+  if (pip) { gl.enable(gl.SCISSOR_TEST); gl.scissor(vp[0], vp[1], vp[2], vp[3]); gl.viewport(vp[0], vp[1], vp[2], vp[3]); V3SH.on = false; }   // 小屏：只动画面里那一块，不画阴影（阴影图是按主镜头那一片算的）
+  else gl.viewport(0, 0, W0, H0);
   gl.useProgram(V3.pr);
   if (V3.nNew !== false) { v3Upload(0, V3.tex, V3.top, gl.RGB); V3.nNew = false; }   // 这一帧没重画就不重传（只重新绑上：别的模块用过 0 号单元）
   else { gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, V3.tex); }
@@ -1350,7 +1369,7 @@ function v3Draw(now) {
   gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D, V3.cls2);
   gl.activeTexture(gl.TEXTURE5); gl.bindTexture(gl.TEXTURE_2D, V3.ht);
   gl.activeTexture(gl.TEXTURE4); gl.bindTexture(gl.TEXTURE_2D, V3.fog);
-  if (typeof FOGB === 'object') gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE, GW, GH, 0, gl.LUMINANCE, gl.UNSIGNED_BYTE, FOGB);   // 视野（drawScene 刚按当前观察视野算好）
+  if (!pip && typeof FOGB === 'object') gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE, GW, GH, 0, gl.LUMINANCE, gl.UNSIGNED_BYTE, FOGB);   // 视野（drawScene 刚按当前观察视野算好；小屏那一遍已经传过）
   const lmOn = v3Mx() && typeof v3LightBind === 'function' && v3LightBind(gl) ? 1 : 0;   // 光照贴图（v3light.js，第 9 个贴图单元）：只给黑绿 / 数码画面；写实画面用实时阴影
   const bgc = v3Bg();
   gl.clearColor(bgc[0], bgc[1], bgc[2], 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
@@ -1381,7 +1400,7 @@ function v3Draw(now) {
   gl.enableVertexAttribArray(V3.a.n); gl.vertexAttribPointer(V3.a.n, 3, gl.FLOAT, false, 24, 12);
   gl.drawElements(gl.TRIANGLES, V3.n, V3.it || gl.UNSIGNED_SHORT, 0);
   if (!mx) v3OceanDraw(C);   // 地图外的海（海岛：三面无边大洋 + 北面延伸的岛）
-  if (typeof v3Table === 'function') { gl.disableVertexAttribArray(V3.a.p); gl.disableVertexAttribArray(V3.a.n); v3Table(C); gl.useProgram(V3.pr); }   // 沙盘桌：边框、桌面（v3table.js）
+  if (!pip && typeof v3Table === 'function') { gl.disableVertexAttribArray(V3.a.p); gl.disableVertexAttribArray(V3.a.n); v3Table(C); gl.useProgram(V3.pr); }   // 沙盘桌：边框、桌面（v3table.js）
   if (V3.bn && V3.pb && V3.bch) {   // 城镇房屋、机场建筑、树木（分块的静态缓冲区）
     const ub = V3.ub, ab = V3.ab;
     gl.useProgram(V3.pb);
@@ -1401,18 +1420,13 @@ function v3Draw(now) {
     }
     gl.disableVertexAttribArray(ab.p); gl.disableVertexAttribArray(ab.n); gl.disableVertexAttribArray(ab.e);
   }
-  if (pOn) { gl.disableVertexAttribArray(V3.a.p); gl.disableVertexAttribArray(V3.a.n); v3pDraw(C); }   // 地图物件：树木、岩石、楼房、机场设施（v3props.js，免费资源模型）
+  const m3 = !(SETTINGS && SETTINGS.models3d === false);
+  if (!pip && V3.pOn) { gl.disableVertexAttribArray(V3.a.p); gl.disableVertexAttribArray(V3.a.n); v3pDraw(C); }   // 地图物件：树木、岩石、楼房、机场设施（v3props.js，免费资源模型）
+  if (pip && m3 && typeof v3mCollect === 'function') v3mCollect(C, v3Box(1.6));   // 小屏：兵种模型按导弹镜头重新收集
   if (m3 && typeof v3mDraw === 'function') { gl.disableVertexAttribArray(V3.a.p); gl.disableVertexAttribArray(V3.a.n); v3mDraw(C); }   // 兵种立体模型（v3units.js）
   if (m3 && typeof v3dkDraw === 'function') v3dkDraw(C);   // 福建舰飞行甲板：纹路与光影（v3deck.js）
   if (typeof v3Fx === 'function' && !(SETTINGS && SETTINGS.models3d === false)) { gl.disableVertexAttribArray(V3.a.p); gl.disableVertexAttribArray(V3.a.n); v3Fx(C); }   // 立体弹道（v3fx.js）
-  if (typeof v3Post === 'function') { gl.disableVertexAttribArray(V3.a.p); gl.disableVertexAttribArray(V3.a.n); v3Post(now); }   // 辉光、景深、暗角（v3post.js）
-  const ctx = R.ctx;
-  ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);
-  if (V3.cv.parentNode) ctx.clearRect(0, 0, R.cv.width, R.cv.height);   // 3D 画布垫在底下（v3Init），2D 画布只留文字和标识
-  else { ctx.globalCompositeOperation = 'copy'; ctx.drawImage(V3.cv, 0, 0); }   // 没能放进页面时照旧贴过来
-  ctx.restore();
-  v3Overlay(ctx, now / 1000);
-  return true;
+  if (pip) { gl.disable(gl.SCISSOR_TEST); V3SH.on = sh0; }
 }
 
 // 世界坐标（含高度）→ 屏幕（CSS 像素）；在镜头背后返回 null。f：按距离的雾（0 清楚 … 1 看不见）

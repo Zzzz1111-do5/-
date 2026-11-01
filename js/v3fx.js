@@ -117,6 +117,11 @@ function v3Fx(C) {
     const p0 = v3fP(lerp(t.x0, t.x1, u0), lerp(t.y0, t.y1, u0), g(t.x0, t.y0) + 1.6), p1 = v3fP(lerp(t.x0, t.x1, u), lerp(t.y0, t.y1, u), lerp(g(t.x0, t.y0) + 1.6, g(t.x1, t.y1) + 1, u));
     v3fRib(out, E, p0, p1, .7, [col[0], col[1], col[2], 0], [col[0], col[1], col[2], .95 * a]);
   }
+  // —— 玩家亲自开的飞机的航炮（fpwpn.js）：每发弹这一步走过的一段画成曳光，刚开火时炮口一团焰 ——
+  if (typeof fwBul === 'function') {
+    for (const b of fwBul()) v3fRib(out, E, b.q, b.p, .45, [V3F_COL.amber[0], V3F_COL.amber[1], V3F_COL.amber[2], 0], V3F_COL.amber);
+    if (typeof V3FP === 'object' && V3FP.gunMz && performance.now() - (V3FP.gunT || 0) < 70) v3fSpark(out, C, V3FP.gunMz, 2.4, V3F_COL.amber);
+  }
   // —— 坦克炮、机关炮、喷火 ——
   for (const s of S.vshots || []) {
     if (!inB(s.x1, s.y1, 60)) continue;
@@ -272,7 +277,7 @@ function v3Fx(C) {
   // —— 飞机灯光：左翼尖红、右翼尖绿航行灯，垂尾顶上的白色防撞灯一闪一闪；歼击机起飞滑跑、刚离地爬升时尾喷口拖出加力火焰 ——
   if (typeof AIRD === 'object') {
     const EA_K3 = { ga: ['a10', 18], heli: ['ah64', 16], uh60: ['uh60', 17], c17: ['c17', 30], ftr: ['f35', 17], ftrb: ['f35b', 17], mq9: ['mq9', 18], f22: ['f22', 18], b2: ['b2', 34], p8: ['p8', 26] };
-    const FTR = { j35: 1, j20: 1, j15: 1, j16: 1, j16d: 1, j50: 1, f35: 1, f22: 1, f35b: 1, j15t: 1 };
+    const FTR = { j35: 1, j20: 1, j15: 1, j16: 1, j16b: 1, j16d: 1, j50: 1, f35: 1, f22: 1, f35b: 1, j15t: 1 };
     const lit = (o, key, sz, own, burn) => {
       const D = AIRD[key];
       if (!D || !D.wing || !inB(o.x, o.y, 220)) return;
