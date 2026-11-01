@@ -46,7 +46,9 @@ function buildMap(seed) {
   const headland = x => beachAt(x) < 0 && !nearMouth(x, 80) && cliffN(x / W, 0) > .42;
   const massif = { x: r() < .5 ? 300 + r() * 300 : W - 300 - r() * 300, y: 150 + r() * 100 * MAP_K, r: 260 * Math.sqrt(MAP_K), h: .9 };
   const hills = [massif, { x: W * .5 + (r() - .5) * 600 * MAP_K, y: 120 + r() * 80 * MAP_K, r: 200 * Math.sqrt(MAP_K), h: .75 }];
-  for (let i = 0; i < Math.round(12 * MAP_K * MAP_K); i++) hills.push({ x: 100 + r() * (W - 200), y: 100 + r() * (C0 - 400), r: 60 + r() * 70, h: .2 + r() * .3 });
+  // 丘陵起伏：Sketchfab 上的「Soft Hills」高度场（hmap.js，缓坡丘陵、自然冲沟，一个个山丘宽一两公里、高二三十到八九十米）——
+  //   原来在内陆随机撒近百个半径 60–130 米、高 50–110 米的小山包，再叠两层波长几十到一百多米的噪声，满地小鼓包，坦克一团团躲在小山背后
+  const hm = typeof hmapWin === 'function' ? hmapWin(r, W) : null;
   const ridgeY = x => cAt(x) - 420 * MAP_K + 60 * Math.sin(x / 260 + ph[5]);
   // 空军基地预留地块（地图自带设施，场区约 1100 × 800）：跑道东西向，放在主河一侧的北部纵深；
   // 场区里推平成平地，流到场区里的支流改从场区南面才发源
@@ -67,14 +69,15 @@ function buildMap(seed) {
       continue;
     }
     let e = .05 + Math.min(.16, d / (3500 * MAP_K));
-    e += .36 * Math.exp(-((y - ridgeY(x)) ** 2) / 14450);
+    e += (hm ? .26 : .36) * Math.exp(-((y - ridgeY(x)) ** 2) / (hm ? 52000 : 14450));   // 内陆山脊（有高度场时放宽、放缓：原来一道 200 来米宽的窄梁横贯全图，很假）
     for (const h of hills) { const dx = x - h.x, dy = y - h.y; if (dx < h.c && dx > -h.c && dy < h.c && dy > -h.c) e += h.h * Math.exp(-(dx * dx + dy * dy) / h.k); }
     if (headland(x)) e += .1 * Math.exp(-((d - 60) ** 2) / 9000);   // 岬角：低缓的岸坡（原来岸边陡起一道山包，很突兀）
-    e += (noise(x / W, y / H) - .5) * .2 + (noise2(x / W, y / H) - .5) * .08;
+    e += hm ? .62 * hm(x, y) ** .8 * smooth(60, 700, d) : (noise(x / W, y / H) - .5) * .2 + (noise2(x / W, y / H) - .5) * .08;   // 离海岸 700 米以内逐渐压平：滩头后面是平缓的海岸平原
     if (b >= 0) e *= lerp(.35, 1, smooth(30, 220, d));                 // 海滩后方平缓
     let rd = 1e9, rw = 9;
     for (const rv of rivers) { const dd = Math.abs(x - rv.rx[gy]); if (dd < rd) { rd = dd; rw = rv.w; } }
-    e *= lerp(.35, 1, smooth(10, 130, rd));                              // 河谷
+    e *= lerp(.35, 1, smooth(10, hm ? 260 : 130, rd));                   // 河谷（缓丘里放宽：130 米宽的深槽像人工沟）
+    if (hm && e > .7) e = .7 + .3 * (1 - Math.exp(-(e - .7) / .3));     // 高处柔和压缩：山顶是圆的，不会顶到 1 削成一块平顶台地
     e = clamp(e, 0, 1);
     elev[i] = e;
     const inAF = afr && x > afr.x0 && x < afr.x1 && y > afr.y0 && y < afr.y1 && rd >= rw;

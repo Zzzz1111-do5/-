@@ -99,4 +99,5 @@
 - 写实地表贴图（草地、林下地面、岩石、沙滩，assets/terrain）：ambientCG（https://ambientcg.com），CC0 1.0
 - 天空（assets/sky）：Poly Haven「kloofendal_48d_partly_cloudy_puresky」（https://polyhaven.com/a/kloofendal_48d_partly_cloudy_puresky），CC0 1.0
 - 海面法线贴图（assets/water/normals.jpg）：three.js 示例（waternormals.jpg）（https://github.com/mrdoob/three.js），MIT（见 assets/water/LICENSE-three.js.txt）
+- 地图丘陵地势（js/hmap.js，默认地图、海岛地图的高度场）：This work is based on "Soft Hills" (https://sketchfab.com/3d-models/soft-hills-7450a967693e49bf8fd9e6da42f5b292) by hirnlaich (https://sketchfab.com/hirnlaich) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)；改动：只取顶点高度、平滑后缩成 384 × 384、按地图缩放与翻转（tools/hmap_build.py）
 <!-- ext:end -->

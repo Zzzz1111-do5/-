@@ -11,6 +11,7 @@
 - 商店版（安卓、电脑）与网页版的差别都在 js/platform.js（要在 menu.js 之前加载）：「退出游戏」、全屏、安卓返回键、首次打开的《用户协议》《隐私政策》确认（legal/）。`tools/build_www.mjs --app` 生成商店版网页。
 - 上架：docs/release.md（Steam、TapTap 步骤与每次更新要改的版本号）、docs/store.md（商店文案）、store/（商店素材，`tools/store_assets.js` 与 `tools/make_icons.py` 生成；宣传片 `tools/trailer.js`，视频不进仓库）、.github/workflows/release.yml（推 v 开头的标签打全部安装包）。
 - 网页版：`bash tools/publish_pages.sh` 生成 www/ 并推到 gh-pages 分支（GitHub Pages）。
+- 地势：默认地图、海岛地图的丘陵起伏照 js/hmap.js（Sketchfab 上 hirnlaich 的「Soft Hills」高度场，CC-BY，`python3 -I tools/hmap_build.py <glTF 目录>` 生成；hmapWin 按种子翻转、错开），不再随机撒小山包、叠高频噪声；大山体、内陆山脊、海岸、海滩、河流仍由程序生成。
 - 默认地图 8400 × 5600（core.js MAP_K = 2.8，W0 × H0）；大海域地图在 MAPGEN 里登记、建图前 setWorld 换尺寸（海岛战役 isle.js：6000 × 12000，远海只在 3D 里铺一块平面）。西、东、南三边都是海的地图（海岛），3D 写实画面里地图外是无边海面（view3d.js v3OceanBuild / v3OceanDraw：跟着镜头走、铺到雾的尽头），北边是陆地时把岛按北缘镜像延伸约 3 公里再收出北岸（只是远景）。
 - 画面默认「写实」（设置里还能选黑绿 / 数码，look.js）；对局默认 3D——view3d.js 自由镜头、真实天空与地表贴图、实时太阳阴影、海面（法线贴图按像素大小分层淡出，远处不出噪点），v3post.js 后期；黑绿 / 数码画面四周是 v3table.js 的沙盘桌。
 - 坦克装甲车、飞机、直升机、导弹、单兵用的是用户给的模型，原封不动导入（js/v3g.js 渲染，js/mdl/<键>.js；转换工具 tools/v3gconv.py、tools/v3gbake.js、配置 tools/v3gmodels.json、预览 tools/v3gview.html）；兵种 → 模型的对照表在 v3g.js 的 V3G_VEH / V3G_AIR / V3G_MSL。舰艇是 Sketchfab 上 CC-BY 的模型（v3utex.js、assets/models），甲板牵引车、挂弹车、导弹挂载架（rack）是 v3x.js 的导入模型（tools/sfmodel.js + tools/sfmodels.json，密钥只从环境变量 SKETCHFAB_TOKEN 读）。
@@ -38,6 +39,7 @@
 - 航母甲板（cvdeck.js、v3det.js）：飞机按机身 / 机翼 / 平尾三块矩形占位（cvShape），滑行每步先试、会碰上别的飞机或舰岛就原地等（cvFollow；互相挡住的低优先级那架倒一点让路，20 秒还过不去才硬走）；
   滑行令 c.tx：甲板上同一时间只滑一架（滑去弹射器、着舰后滑回机位），刚着舰的优先；滑行时折着机翼，到偏流板后展开完才上弹射器；出机位先顺机头拖 6 米再往舷内拐。
   每个机位旁一辆挂弹车 + 一个导弹挂载架（rack，0.62 倍），整备时一趟挂一枚（v3dArmQ / v3dArmLoaded / v3dArmBay，满载清单 fpwpn.js fwLoadout），挂弹时弹舱门开着，挂上的弹留在飞机上（fwStoresGnd）；牵引车不再瞬移。
+- 车辆疏散：坦克排内车间距按条令 45–55 米（hq.js regPltOff），战线车辆最小间距 60 米（theater.js TH.vgap），行军纵队前后约 45 米，沙盒 AI 布防车辆彼此 55 米以上（sandbox.js sbxCoverAt 的 gap）。
 - 方向装甲（vehicles.js vehArmorAt）：v.armor 是正面，侧面 −1、后部 −1.5、车顶 −2 级；直射按射手方位、炮塔 / 车体各一半，攻顶导弹打车顶，破片地雷不分方向；中、重型坦克遭坦克炮射击停车转向来火方向（vehDrill）。
 - 爆炸反应装甲（js/era.js，vehicles.js vehDamage 先过 eraHit）：用的就是模型上原有的块——布局登记在 models.js 的 RLE（99A、96B、15 式首上和炮塔正面的块，2D 贴图照它画；M1A1 / M1A2 裙板的 ARAT，与 3D 模型的块一一对应），按块记（v.era.h / v.era.t 炸掉的块号）。来弹按来向落在迎弹面某一点，正好打在还在的块上才挡（破甲弹挡九成多，重型的削弱穿甲弹三成），块炸掉后那里就是本体装甲；炸掉的块 2D 画成焦黑空位（rlEraUsed）、3D 从模型上消失。96 式 3D 模型本身没挂反应装甲。攻顶导弹不管用。
 - 亲自操纵（3D 里 P 键 / 「驾驶」按钮，js/v3pilot.js）：055 驱逐舰（舰桥视角，车钟、转舵、主炮、垂发）；升空的战斗机（歼-20、歼-50）、歼-35、歼-15T、歼-16D 用飞控物理引擎 js/flight.js 真飞（六自由度 + 电传飞控，正常律 / 直接律），操纵默认照《皇牌空战》：左右压到对应坡度并顺势带杆转弯、松手自动改平，上下推拉杆（V3FP.ctl 'ace'）；M 依次切《战争雷霆》式鼠标瞄准（教官把机头带向准星，fpInstr）、鼠标摇杆；键盘杆量有平滑、死区、指数响应曲线；能横滚、筋斗；受力回馈（手柄震动、抖振、黑视红视、头随过载晃，G 开关）；追尾镜头（手动操纵时跟机体姿态翻），V 切座舱视角（座舱盖、平显玻璃透明）；手柄也能飞。画面上除了武器平显不画任何标识（地名、番号牌、状态行、按键提示都不画）。
