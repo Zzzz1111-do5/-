@@ -291,8 +291,18 @@ function ftBar(ctx) {
   ctx.save();
   ctx.font = '13px "IBM Plex Mono", "Noto Sans SC", monospace'; ctx.textBaseline = 'middle';
   const h = 28, gap = 6, kw = 20, wd = it.map(x => kw + 10 + ctx.measureText(x.t + (x.n != null ? ` ×${x.n}` : '')).width + 12);
-  const tot = wd.reduce((a, b) => a + b, 0) + gap * (it.length - 1), sc = Math.min(1, (CAM.vw - 24) / tot);
-  ctx.translate(CAM.vw / 2, CAM.vh - 14 - h * sc); ctx.scale(sc, sc);
+  // 左下角的小地图挡着时，放在它右边的空当里居中（小地图的位置每半秒量一次，不每帧读版面）
+  const nowMs = performance.now();
+  if (!FT.mmAt || nowMs - FT.mmAt > 500) {
+    FT.mmAt = nowMs; FT.mmX = 0;
+    const mb = typeof document !== 'undefined' && document.getElementById('mmBox'), cv = typeof R === 'object' && R.cv;
+    if (mb && cv && cv.getBoundingClientRect && mb.offsetParent !== null) { const r = mb.getBoundingClientRect(), c = cv.getBoundingClientRect(); if (r.width > 0 && r.height > 0) FT.mmX = { right: r.right - c.left, top: r.top - c.top }; }
+  }
+  const tot = wd.reduce((a, b) => a + b, 0) + gap * (it.length - 1), x1 = CAM.vw - 12;
+  let x0 = 12;
+  if (FT.mmX && FT.mmX.top < CAM.vh - 14 - h) x0 = Math.max(x0, Math.min(FT.mmX.right + 10, x1 - 200));
+  const sc = Math.min(1, (x1 - x0) / tot), cx = tot * sc <= CAM.vw - 24 && CAM.vw / 2 - tot * sc / 2 >= x0 ? CAM.vw / 2 : (x0 + x1) / 2;   // 屏幕正中放得下就放正中
+  ctx.translate(cx, CAM.vh - 14 - h * sc); ctx.scale(sc, sc);
   let x = -tot / 2;
   it.forEach((t, i) => {
     const empty = t.n === 0;
