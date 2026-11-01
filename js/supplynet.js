@@ -118,20 +118,23 @@ function snPlan() {
   const todo = GW * GH > 200000 ? [fronts[(net.rr = ((net.rr ?? -1) + 1) % fronts.length)]] : fronts;
   for (const front of todo) {
     if (N.length >= SN_MAX) return;
-    const f = field(Math.round(front.x / 80) * 80, Math.round(front.y / 80) * 80, 'p');   // 前线重心取整到 80 的格点：流场能复用，不每次规划都整图重算
-    if (!f) continue;
+    // 白色平原（flat.js）：一整块平地，按直线距离、直线走——不为规划一个补给点整图算流场（1680 × 1120 格，一张要半秒）
+    const gx = Math.round(front.x / 80) * 80, gy = Math.round(front.y / 80) * 80, f = TER.flat ? null : field(gx, gy, 'p');   // 前线重心取整到 80 的格点：流场能复用，不每次规划都整图重算
+    if (!f && !TER.flat) continue;
+    const fD = (x, y) => f ? f[ci(x, y)] : dist(x, y, gx, gy);
+    const fNext = (x, y) => { if (f) return nextStep(f, x, y); const d = dist(x, y, gx, gy); return d < 10 ? null : [x + (gx - x) / d * 10, y + (gy - y) / d * 10]; };
     // 起点：离前线（寻路距离）最近的接通补给点，或本方向已规划 / 在建的链尾（链尾的上级必须能接上）
     const pend = N.filter(n => !n.dead && n.built < 1 && isFinite(n.x));
-    const ahead = pend.filter(n => isFinite(f[ci(n.x, n.y)]) && f[ci(n.x, n.y)] < Infinity && dist(n.x, n.y, front.x, front.y) < 700);
+    const ahead = pend.filter(n => isFinite(fD(n.x, n.y)) && fD(n.x, n.y) < Infinity && dist(n.x, n.y, front.x, front.y) < 700);
     if (ahead.length >= SN_AHEAD) continue;
     let an = null, ad = Infinity;
-    for (const p of pts) { const v = f[ci(p.x, p.y)]; if (v < ad) { ad = v; an = p; } }
-    for (const n of ahead) { const v = f[ci(n.x, n.y)]; if (v < ad) { ad = v; an = { kind: 'node', id: n.id, x: n.x, y: n.y, root: n.root }; } }
+    for (const p of pts) { const v = fD(p.x, p.y); if (v < ad) { ad = v; an = p; } }
+    for (const n of ahead) { const v = fD(n.x, n.y); if (v < ad) { ad = v; an = { kind: 'node', id: n.id, x: n.x, y: n.y, root: n.root }; } }
     if (!an || !isFinite(ad) || dist(an.x, an.y, front.x, front.y) < 150) continue;
     let x = an.x, y = an.y;
     const path = [[x, y]], trail = [[x, y]];
     for (let k = 1; k <= SN_STEP; k++) {
-      const n = nextStep(f, x, y);
+      const n = fNext(x, y);
       if (!n) break;
       [x, y] = n;
       trail.push([x, y]);

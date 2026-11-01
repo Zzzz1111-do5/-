@@ -825,6 +825,13 @@ function sbxAIAttack(style = 'bal', mi = -1, fi = -2) {
   if (TER.flat && !S.lv && typeof lvAIGround === 'function') {   // 白色平原：步兵、车辆直接摆进出发阵地（levels.js 陆战关的部署：主攻、助攻两处），炮兵、航空兵、舰艇照常
     sbxClear('p');
     lvAIGround((t, at) => sbxSay('p', t, 'plan', at));
+    // 陆战关的方案里航母、舰艇在这张图上放不下：剩下的预算补成陆上兵力——坦克、步战车在前，步兵跟进，自行火炮、防空车在后，铺满整个出发阵地
+    const ids = ['p_hv_tank', 'p_ifv', 'p_marine', 'p_tank', 'p_marine', 'p_mg', 'p_at', 'p_ifv', 'p_spg', 'p_td', 'p_marine', 'p_sam_veh', 'p_mortar', 'p_aa_veh', 'p_spg', 'p_rifle'];
+    const back = id => /spg|aa_veh|sam_veh|mortar/.test(id) ? 700 : /tank|ifv|td/.test(id) ? 260 : 380;
+    for (let i = 0, fail = 0; sbxLeft('p') >= 10 && fail < 60 && i < 2000; i++) {
+      const id = ids[i % ids.length], x = W * (.06 + .88 * ((i * .618034) % 1)), y = coastAt(x) - back(id) - (i % 5) * 40;
+      if (sbxTry(id, x, y, 60)) fail = 0; else fail++;
+    }
     (S.sbx.aiSty || (S.sbx.aiSty = {})).p = style;
     sbxSync();
     const L = lvAIGround.last || {};

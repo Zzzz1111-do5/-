@@ -52,6 +52,8 @@ def main():
     if len(P) > n_out:
         idx = np.sort(rng.choice(len(P), n_out, replace=False))
         P, C = P[idx], C[idx]
+    perm = rng.permutation(len(P))   # 打乱顺序：画面按画质只画前一部分时，前面任意一段都是均匀的抽样
+    P, C = P[perm], C[perm]
     P -= P.mean(0)
     s = float(np.abs(P).max())
     q = np.round(P / s * 32767).astype('<i2')

@@ -37,7 +37,12 @@ function load(opts = {}) {
   };
   ctx.window = ctx; ctx.globalThis = ctx; ctx.self = ctx; ctx.document = doc; ctx.location = { search: '', hash: '', href: '' };
   vm.createContext(ctx);
-  let src = '(function () {\n';
+  // 严格模式包起来（浏览器里每个文件都是 'use strict'）：非严格的函数里有直接 eval（__run）时，V8 把里面的变量全按动态查找处理，热循环慢几十倍，测出来的耗时不准
+  let src = '(function () {\n\'use strict\';\n';
+  // vm 沙箱里访问全局（Math、Infinity、类型数组……）每次都要过沙箱对象的拦截器，热循环里比浏览器慢一二十倍：内建对象先绑成局部常量
+  src += 'const { Math, JSON, Date, Number, String, Boolean, Array, Object, Map, Set, WeakMap, WeakSet, Symbol, Promise, Error, TypeError, RangeError, Proxy, Reflect, BigInt, ' +
+    'Float32Array, Float64Array, Int32Array, Uint8Array, Uint16Array, Uint32Array, Int16Array, Int8Array, Uint8ClampedArray, isFinite, isNaN, parseInt, parseFloat, performance, console } = globalThis;\n' +
+    'const Infinity = 1 / 0, NaN = 0 / 0, undefined = void 0;\n';
   for (const f of files) src += fs.readFileSync(path.join(ROOT, f), 'utf8').replace(/^'use strict';/, '') + '\n;\n';
   src += '\nglobalThis.__run = c => eval(c);\n})();';
   vm.runInContext(src, ctx, { filename: 'darksword.js' });

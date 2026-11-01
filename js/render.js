@@ -124,11 +124,17 @@ const hoverNear = (x, y, r) => !!(typeof U === 'object' && U.mouse && dist(U.mou
 // R.eye：null / 'p' 攻方视野 · 'e' 守方视野 · 'both' 双方视野（任一方看得见即显示）· 'all' 全图
 let PV_KEEP = new Uint8Array(GW * GH);
 onWorld(() => { PV_KEEP = new Uint8Array(GW * GH); });
+// 双方视野（并集）按视野版本缓存（logistics.js VIS_GEN 每 0.25 秒变一次）：每帧只整块拷贝，不再逐格求并
+let PV_U = null, PV_UK = '';
 function viewBegin() {
   const v = R.eye;
   if (!v || v === 'p' || !S || S.mode !== 'sandbox') return false;
   PV_KEEP.set(PV);
-  if (v === 'all') PV.fill(1); else if (v === 'e') PV.set(EV); else for (let i = 0; i < PV.length; i++) PV[i] |= EV[i];
+  if (v === 'all') PV.fill(1); else if (v === 'e') PV.set(EV); else {
+    const k = (typeof VIS_GEN === 'number' ? VIS_GEN : -1) + '|' + S.seed + '|' + PV.length;
+    if (!PV_U || PV_U.length !== PV.length || PV_UK !== k || typeof VIS_GEN !== 'number') { if (!PV_U || PV_U.length !== PV.length) PV_U = new Uint8Array(PV.length); for (let i = 0; i < PV.length; i++) PV_U[i] = PV[i] | EV[i]; PV_UK = k; }
+    PV.set(PV_U);
+  }
   return true;
 }
 function viewEnd(on) { if (on) PV.set(PV_KEEP); }

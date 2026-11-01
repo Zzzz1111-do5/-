@@ -711,7 +711,7 @@ function v3HtX(x, y) {
 // 网格：地形 + 四边围边（沙盘侧壁，法线 z = -1 作标记）；桥被炸 / 地形变了按签名重建
 function v3Mesh() {
   // 每格一个顶点要 32 位索引；细网格的部分（大海域地图只到寻路带）超过 30 万格时每 2 格一个（默认大地图 8400 × 5600 近百万个三角形，手机画不动）
-  V3_ST = V3.u32 && GW * Math.min(GH, TER.pathY ? Math.ceil(TER.pathY / CELL) + 20 : GH) <= 300000 ? 1 : 2;
+  V3_ST = TER.flat ? 8 : V3.u32 && GW * Math.min(GH, TER.pathY ? Math.ceil(TER.pathY / CELL) + 20 : GH) <= 300000 ? 1 : 2;   // 白色平原是一整块平地：每 80 米一个顶点就够（每 20 米要 94 万个三角形）
   const gl = V3.gl, st = V3_ST, nx = Math.floor((GW - 1) / st) + 1, ny = Math.floor((GH - 1) / st) + 1, hf = new Float32Array(nx * ny);
   for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) { const gx = i * st, gy = j * st; hf[j * nx + i] = (v3H0(gx - 1, gy - 1) + v3H0(gx, gy - 1) + v3H0(gx - 1, gy) + v3H0(gx, gy)) / 4; }
   V3.hf = hf; V3.nx = nx; V3.ny = ny;
@@ -1335,7 +1335,7 @@ function v3Draw(now) {
   gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D, V3.cls2);
   gl.activeTexture(gl.TEXTURE5); gl.bindTexture(gl.TEXTURE_2D, V3.ht);
   gl.activeTexture(gl.TEXTURE4); gl.bindTexture(gl.TEXTURE_2D, V3.fog);
-  if (typeof FOGB === 'object') gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE, GW, GH, 0, gl.LUMINANCE, gl.UNSIGNED_BYTE, FOGB);   // 视野（drawScene 刚按当前观察视野算好）
+  if (typeof FOGB === 'object' && (V3.fogV !== FOGB_V || V3.fogT !== V3.fog)) { V3.fogV = FOGB_V; V3.fogT = V3.fog; gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE, GW, GH, 0, gl.LUMINANCE, gl.UNSIGNED_BYTE, FOGB); }   // 视野没变不重传   // 视野（drawScene 刚按当前观察视野算好）
   const lmOn = v3Mx() && typeof v3LightBind === 'function' && v3LightBind(gl) ? 1 : 0;   // 光照贴图（v3light.js，第 9 个贴图单元）：只给黑绿 / 数码画面；写实画面用实时阴影
   const bgc = v3Bg();
   gl.clearColor(bgc[0], bgc[1], bgc[2], 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);

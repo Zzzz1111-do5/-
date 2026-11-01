@@ -605,7 +605,7 @@ function trxDraw(time, flash) {
   if (mode === 2 && TRX.lastSig === sig && TRX.lastKey === TRX.key && time >= TRX.lastT && time - TRX.lastT < 1 / 31) return;
   TRX.lastSig = sig; TRX.lastKey = mode === 2 ? TRX.key : null; TRX.lastT = time;
   gl.activeTexture(gl.TEXTURE5); gl.bindTexture(gl.TEXTURE_2D, TRX.tex.fog);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE, GW, GH, 0, gl.LUMINANCE, gl.UNSIGNED_BYTE, FOGB);
+  if (TRX.fogV !== FOGB_V || TRX.fogT !== TRX.tex.fog) { TRX.fogV = FOGB_V; TRX.fogT = TRX.tex.fog; gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE, GW, GH, 0, gl.LUMINANCE, gl.UNSIGNED_BYTE, FOGB); }   // 视野没变不重传
   const P = trxProg(mode === 2 ? 2 : 0, lite), u = P.u;
   gl.useProgram(P.pr);
   gl.activeTexture(gl.TEXTURE6); gl.bindTexture(gl.TEXTURE_2D, mode === 2 ? TRX.fbs[0].tex : null);

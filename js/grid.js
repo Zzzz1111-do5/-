@@ -26,6 +26,13 @@ function eachCellIn(x, y, rad, fn) {
 // 烟团此刻的半径：最后 6 秒收小散去；车载烟幕弹（带 t0）弹还在飞时没有烟，炸开后 1.6 秒里从三成半长满（vsmoke.js）
 const SMK_FLY = .35;
 const smkR = s => s.r * Math.min(1, (s.until - S.t) / 6) * (s.t0 == null ? 1 : S.t < s.t0 + SMK_FLY ? 0 : Math.min(1, .35 + (S.t - s.t0 - SMK_FLY) / 1.6));
+// 推演用的半径（挡视线、挡弹道）：成形、消散按档跳变（散去分三档，成形两档），画面仍用平滑的 smkR——
+//   半径每 0.25 秒都变一点的话，烟团附近每个视野源的视线缓存每次都作废、整圈重新投射（castVision 是推演里最重的一块）
+const smkRv = s => {
+  if (s.t0 != null && S.t < s.t0 + SMK_FLY) return 0;
+  const f = Math.ceil(Math.min(1, (s.until - S.t) / 6) * 3) / 3, g = s.t0 == null || S.t - s.t0 - SMK_FLY >= .8 ? 1 : .6;
+  return s.r * f * g;
+};
 // 烟团清单（与 SMOKE 同时更新，每 0.25 秒）：x、y、挡弹道的半径（烟团半径的八成半，边上稀薄处不算）；SMK_BB 全部烟团的外框
 let SMK_L = new Float64Array(96), SMK_N = 0;
 const SMK_BB = [0, 0, 0, 0];
@@ -34,7 +41,7 @@ function smokeMask() {
   if (SMK_L.length < S.smoke.length * 3) SMK_L = new Float64Array(S.smoke.length * 3 + 96);
   let n = 0, x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   for (const s of S.smoke) if (s.until > S.t) {
-    const r = smkR(s);
+    const r = smkRv(s);
     if (!(r > 0)) continue;
     eachCellIn(s.x, s.y, r, i => { SMOKE[i] = 1; });
     const rb = r * .85;
@@ -81,50 +88,61 @@ const VIS_ST = [1];   // 射线步长 1, 1.7, 2.4 …（格），与逐次累加
 // 每个视野源照亮的格子只取决于它的位置、视高、视距、地形与视距内的烟幕：阵地里不动的守军、工事、停着的车每 0.25 秒算出来都一样，
 //   缓存起来直接用（键是精确坐标，烟幕按视距内每团的位置与当前半径比对，结果与重算逐格相同）；地图换了清空，用得少的定期淘汰
 const VISC = { m: new Map(), ter: null, n: 0, mark: null, sid: 0 };
-function visSmoke(x, y, r) {
-  let sig = '';
+// 烟团清单（视线缓存的签名用）：每次投射视线前算一遍（原来每个视野源都把全部烟团的半径重算一遍）
+let VIS_SL = [];
+function visSmokeList() {
+  const L = [];
   for (const s of S.smoke || []) {
     if (!(s.until > S.t)) continue;
-    const R = smkR(s);
-    if (!(R > 0)) continue;
-    if (Math.abs(s.x - x) < r + R + 15 && Math.abs(s.y - y) < r + R + 15) sig += s.x + ',' + s.y + ',' + R + ';';   // 比 smokeMask 圈的格子再宽一格
+    const R = smkRv(s);
+    if (R > 0) L.push(s.x, s.y, R);
   }
+  return (VIS_SL = L);
+}
+function visSmoke(x, y, r, L = VIS_SL) {
+  let sig = '';
+  for (let k = 0; k < L.length; k += 3) { const R = L[k + 2]; if (Math.abs(L[k] - x) < r + R + 15 && Math.abs(L[k + 1] - y) < r + R + 15) sig += L[k] + ',' + L[k + 1] + ',' + R + ';'; }   // 比 smokeMask 圈的格子再宽一格
   return sig;
 }
+// 内层循环只用局部变量、点亮格子就地展开（原来是闭包，每格调用一次）；同一位置的重复视野源按 6 米分桶查（原来每个源都和前面所有源逐个比）——结果逐位相同
 function castVision(out, sources) {
   out.fill(0);
   visPrep();
   if (VISC.ter !== VIS_KEY.ter || VISC.gw !== GW || VISC.gh !== GH) { VISC.m.clear(); VISC.ter = VIS_KEY.ter; VISC.gw = GW; VISC.gh = GH; VISC.mark = new Uint32Array(GW * GH); VISC.sid = 0; }
-  const call = ++VISC.n, mark = VISC.mark;
-  const done = [];
+  const call = ++VISC.n, mark = VISC.mark, SL = visSmokeList();
+  const gw = GW, gh = GH, G = VIS_G, B = VIS_B, SM = SMOKE, ST = VIS_ST;
+  const bk = new Map(), bkey = (x, y) => Math.floor(x / 6) * 65536 + Math.floor(y / 6);
   for (const s of sources) {
     const h = s.h || .35;
     let dup = false;
-    for (const o of done) if (o.h === h && o.r >= s.r && Math.abs(o.x - s.x) < 6 && Math.abs(o.y - s.y) < 6) { dup = true; break; }
+    const bx = Math.floor(s.x / 6), by = Math.floor(s.y / 6);
+    for (let ox = -1; ox <= 1 && !dup; ox++) for (let oy = -1; oy <= 1 && !dup; oy++) {
+      const L = bk.get((bx + ox) * 65536 + by + oy);
+      if (L) for (const o of L) if (o.h === h && o.r >= s.r && Math.abs(o.x - s.x) < 6 && Math.abs(o.y - s.y) < 6) { dup = true; break; }
+    }
     if (dup) continue;
-    done.push({ x: s.x, y: s.y, r: s.r, h });
-    const key = s.x + ',' + s.y + ',' + s.r + ',' + h, sm = visSmoke(s.x, s.y, s.r), c = VISC.m.get(key);
+    { const k = bkey(s.x, s.y); let L = bk.get(k); if (!L) bk.set(k, L = []); L.push({ x: s.x, y: s.y, r: s.r, h }); }
+    const key = s.x + ',' + s.y + ',' + s.r + ',' + h, sm = visSmoke(s.x, s.y, s.r, SL), c = VISC.m.get(key);
     if (c && c.sm === sm) { const L = c.cells; for (let k = 0; k < L.length; k++) out[L[k]] = 1; c.n = call; continue; }
     const cells = [], sid = ++VISC.sid;
-    const lit = i => { out[i] = 1; if (mark[i] !== sid) { mark[i] = sid; cells.push(i); } };
     const gx0 = s.x / CELL, gy0 = s.y / CELL, i0 = ci(s.x, s.y), rc = s.r / CELL;
-    const eye = VIS_G[i0] + h;
-    lit(i0);
+    const eye = G[i0] + h;
+    out[i0] = 1; if (mark[i0] !== sid) { mark[i0] = sid; cells.push(i0); }
     const n = Math.ceil(rc * 7.5), D = visDirs(n);
-    while (VIS_ST[VIS_ST.length - 1] + .7 <= rc) VIS_ST.push(VIS_ST[VIS_ST.length - 1] + .7);
+    while (ST[ST.length - 1] + .7 <= rc) ST.push(ST[ST.length - 1] + .7);
     let ns = 0;
-    while (ns < VIS_ST.length && VIS_ST[ns] <= rc) ns++;
+    while (ns < ST.length && ST[ns] <= rc) ns++;
     for (let k = 0; k < n; k++) {
       const dx = D[k * 2], dy = D[k * 2 + 1];
       let maxS = -1e9;
       for (let j = 0; j < ns; j++) {
-        const st = VIS_ST[j], fx = gx0 + dx * st, fy = gy0 + dy * st;
-        if (fx < 0 || fy < 0 || fx >= GW || fy >= GH) break;
-        const i = (fy | 0) * GW + (fx | 0);
-        if ((VIS_G[i] - eye) / st >= maxS - .02) lit(i);
-        const top = (VIS_B[i] - eye) / st;
+        const st = ST[j], fx = gx0 + dx * st, fy = gy0 + dy * st;
+        if (fx < 0 || fy < 0 || fx >= gw || fy >= gh) break;
+        const i = (fy | 0) * gw + (fx | 0);
+        if ((G[i] - eye) / st >= maxS - .02) { out[i] = 1; if (mark[i] !== sid) { mark[i] = sid; cells.push(i); } }
+        const top = (B[i] - eye) / st;
         if (top > maxS) maxS = top;
-        if (SMOKE[i]) break;
+        if (SM[i]) break;
       }
     }
     VISC.m.set(key, { cells: Int32Array.from(cells), sm, n: call });
@@ -139,23 +157,37 @@ function addCrater(x, y, r) {
 }
 function rebuildCraters() { CRATERC.fill(0); for (const c of S.craters) eachCellIn(c.x, c.y, c.r, i => { CRATERC[i] = 1; }); }
 
-// 工事网格（地雷/铁丝网/障碍）变化后重建并让寻路缓存失效
+// 工事网格（地雷/铁丝网/障碍）变化后重建并让寻路缓存失效。
+//   工事只占几千格：FORT_IDX 记下这一次标过的格（可能重复），下一次只清这些格、只比较上一次与这一次的工事格——
+//   原来每次都整图清零、整图比四遍（交战中雷区、铁丝网每秒都在变）；换了地图（TER 变了）照旧整图重来。结果与原来相同
+let FORT_IDX = new Int32Array(0);
 function rebuildForts() {
-  MINEC.fill(0); WIREC.fill(0); OBSC.fill(0);
-  for (const m of S.mines) if (m.clr < 1) eachCellIn(m.x, m.y, m.r, i => { MINEC[i] = m.known ? 2 : Math.max(MINEC[i], 1); });
+  const full = FG_PREV.ter !== TER, old = FORT_IDX;
+  if (full) { MINEC.fill(0); WIREC.fill(0); OBSC.fill(0); }
+  else for (let k = 0; k < old.length; k++) { const i = old[k]; MINEC[i] = 0; WIREC[i] = 0; OBSC[i] = 0; }
+  const fi = [];
+  for (const m of S.mines) if (m.clr < 1) eachCellIn(m.x, m.y, m.r, i => { MINEC[i] = m.known ? 2 : Math.max(MINEC[i], 1); fi.push(i); });
   for (const w of S.wire) if (!w.cut) {
     const n = Math.ceil(dist(w.x0, w.y0, w.x1, w.y1) / 5);
-    for (let s = 0; s <= n; s++) WIREC[ci(lerp(w.x0, w.x1, s / n), lerp(w.y0, w.y1, s / n))] = 1;
+    for (let s = 0; s <= n; s++) { const i = ci(lerp(w.x0, w.x1, s / n), lerp(w.y0, w.y1, s / n)); WIREC[i] = 1; fi.push(i); }
   }
-  for (const o of S.obst) if (!o.dead) OBSC[ci(o.x, o.y)] = o.known ? 2 : 1;
+  for (const o of S.obst) if (!o.dead) { const i = ci(o.x, o.y); OBSC[i] = o.known ? 2 : 1; fi.push(i); }
+  FORT_IDX = Int32Array.from(fi);
   fieldGen++;
   const diff = (a, b) => { for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return true; return false; };
-  const t = FG_PREV.ter !== TER || diff(TER.type, FG_PREV.t), m = diff(MINEC, FG_PREV.m), w = diff(WIREC, FG_PREV.w), o = diff(OBSC, FG_PREV.o);
+  const t = full || diff(TER.type, FG_PREV.t);
+  let m = false, w = false, o = false;
+  if (full) { m = diff(MINEC, FG_PREV.m); w = diff(WIREC, FG_PREV.w); o = diff(OBSC, FG_PREV.o); FG_PREV.m.set(MINEC); FG_PREV.w.set(WIREC); FG_PREV.o.set(OBSC); }
+  else {
+    const chk = L => { for (let k = 0; k < L.length; k++) { const i = L[k]; if (MINEC[i] !== FG_PREV.m[i]) { m = true; FG_PREV.m[i] = MINEC[i]; } if (WIREC[i] !== FG_PREV.w[i]) { w = true; FG_PREV.w[i] = WIREC[i]; } if (OBSC[i] !== FG_PREV.o[i]) { o = true; FG_PREV.o[i] = OBSC[i]; } } };
+    chk(old); chk(FORT_IDX);
+  }
   if (t || o) FGEN.ship++;
   if (t || o || m) FGEN.veh++;
   if (t || m || w) FGEN.inf++;
   if (t) { FPASS.ship++; FPASS.inf++; FPASS.veh++; }   // 障碍（滩头几格）发现 / 清除不重算连通：只是局部绕行，流场的代价里照样算
-  FG_PREV.m.set(MINEC); FG_PREV.w.set(WIREC); FG_PREV.o.set(OBSC); FG_PREV.t.set(TER.type); FG_PREV.ter = TER;
+  if (t) FG_PREV.t.set(TER.type);
+  FG_PREV.ter = TER;
 }
 
 // cls：'p' 我方步兵（只回避已知雷区），'e' 守军（熟悉自己的雷区），'ship' 舰船，
@@ -214,7 +246,22 @@ const fgNow = () => typeof S === 'object' && S && S.phase === 'battle' && isFini
 function costArr(cls, gen, force) {
   let C = COSTS.get(cls);
   const now = fgNow(), fresh = C && C.t != null && now != null && now - C.t >= 0 && now - C.t < (cls === 'raid' ? 1 : 2.5);
-  if (!C || (force && C.gen !== gen) || ((C.gen !== gen || cls === 'raid') && !fresh)) { C = { gen, t: now, a: (C && C.a) || new (GW * GH > BIG_N ? Float32Array : Float64Array)(GW * GH).fill(Infinity) }; for (let k = 0; k < PGN; k++) C.a[k] = stepCost(k, cls); COSTS.set(cls, C); }   // 寻路带以外一直是 Infinity，不再逐格算
+  if (!C || (force && C.gen !== gen) || ((C.gen !== gen || cls === 'raid') && !fresh)) {
+    // 地形没变（同一张图、同一寻路带、没炸桥修桥）：只有工事格（上一次与这一次的）和视野变了的格（raid）代价会变，只重算它们——
+    //   原来每次整寻路带逐格重算（默认地图近五十万格，raid 每秒一次）；结果与整图重算逐位相同
+    const tv = FPASS[fgKey(cls)];
+    if (C && C.a && C.tv === tv && C.ter === TER && C.pgn === PGN) {
+      const a = C.a, F0 = C.fi, F1 = FORT_IDX;
+      for (let k = 0; k < F0.length; k++) a[F0[k]] = stepCost(F0[k], cls);
+      for (let k = 0; k < F1.length; k++) a[F1[k]] = stepCost(F1[k], cls);
+      if (C.pv) { const P0 = C.pv; for (let k = 0; k < PGN; k++) if (PV[k] !== P0[k]) a[k] = stepCost(k, cls); P0.set(PV); }
+      C = { gen, t: now, a, tv, ter: TER, pgn: PGN, fi: F1, pv: C.pv };
+    } else {
+      C = { gen, t: now, a: (C && C.a) || new (GW * GH > BIG_N ? Float32Array : Float64Array)(GW * GH).fill(Infinity), tv, ter: TER, pgn: PGN, fi: FORT_IDX, pv: cls === 'raid' ? Uint8Array.from(PV) : null };
+      for (let k = 0; k < PGN; k++) C.a[k] = stepCost(k, cls);   // 寻路带以外一直是 Infinity，不再逐格算
+    }
+    COSTS.set(cls, C);
+  }
   return C.a;
 }
 // 连通分量（按通行类别缓存）：能不能开到只看两格是否同属一片，不必为了判断可达整图算一遍流场。
@@ -276,6 +323,7 @@ function gridAlloc() {
   const N = GW * GH, big = N > BIG_N, hk = big ? 1 : N > 300000 ? 3 : 8;   // 超大地图（白色平原）：堆只按格数开，A* 入堆有上限检查
   PV = new Uint8Array(N); EV = new Uint8Array(N); SMOKE = new Uint8Array(N); MINEC = new Uint8Array(N); WIREC = new Uint8Array(N); OBSC = new Uint8Array(N); CRATERC = new Uint8Array(N);
   Object.assign(FG_PREV, { m: new Uint8Array(N), w: new Uint8Array(N), o: new Uint8Array(N), t: new Uint8Array(N), ter: null });
+  FORT_IDX = new Int32Array(0);
   VIS_G = new (big ? Float32Array : Float64Array)(N); VIS_B = new (big ? Float32Array : Float64Array)(N); VIS_KEY.ter = null;   // 视线高度：单精度足够（同一张表里比较）
   HEAP_N = new Int32Array(N * hk); HEAP_P = new Float64Array(N * hk);
   AS_G = new Float64Array(N); AS_FROM = new Int32Array(N); AS_SEEN = new Uint32Array(N);
