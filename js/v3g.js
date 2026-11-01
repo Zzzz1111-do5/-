@@ -15,15 +15,25 @@ function v3gLoad(key, pre) {
   if (pre) Q.push(key); else Q.unshift(key);
   v3gPump();
 }
+// http(s)（网页版、安卓版）：fetch 取文本，切出「键、元数据 JSON、base64」直接交给 V3G.add，不当脚本执行——
+//   当脚本加载时 V8 会一直留着几十兆的源码和字符串字面量（菜单阶段就多占一百多兆内存，手机上容易卡、被系统杀掉）；
+//   file://（本地打开、电脑版）浏览器不让 fetch 本地文件，照旧插 script 标签；文本格式不对时也退回 script 标签
+const V3G_FETCH = typeof fetch === 'function' && typeof location === 'object' && /^https?:$/.test(location.protocol);
+function v3gParse(txt) {
+  const a = txt.indexOf('V3G.add('), q = txt.lastIndexOf(", '"), e = txt.lastIndexOf("')");
+  if (a < 0 || q < a || e < q) return false;
+  const head = txt.slice(a + 8, q), c = head.indexOf(',');
+  try { V3G.add(JSON.parse(head.slice(0, c)), JSON.parse(head.slice(c + 1)), txt.slice(q + 3, e)); return true; } catch (err) { return false; }
+}
 function v3gPump() {
   const Q = V3G.lq || [];
   while ((V3G.ln || 0) < 2 && Q.length) {
-    const key = Q.shift(), s = document.createElement('script'), v = typeof window === 'object' && window.DS_BUILD ? '?v=' + encodeURIComponent(window.DS_BUILD) : '';
+    const key = Q.shift(), v = typeof window === 'object' && window.DS_BUILD ? '?v=' + encodeURIComponent(window.DS_BUILD) : '', url = 'js/mdl/' + key + '.js' + v;
     V3G.ln = (V3G.ln || 0) + 1;
-    s.src = 'js/mdl/' + key + '.js' + v; s.async = true;
-    s.onload = () => { V3G.ln--; v3gPump(); };
-    s.onerror = () => { V3G.ln--; V3G.fail.add(key); console.warn('3D 模型没加载上：' + key); v3gPump(); };
-    document.head.appendChild(s);
+    const done = () => { V3G.ln--; v3gPump(); }, fail = () => { V3G.ln--; V3G.fail.add(key); console.warn('3D 模型没加载上：' + key); v3gPump(); };
+    const tag = () => { const s = document.createElement('script'); s.src = url; s.async = true; s.onload = done; s.onerror = fail; document.head.appendChild(s); };
+    if (!V3G_FETCH) { tag(); continue; }
+    fetch(url).then(r => r.ok ? r.text() : Promise.reject(new Error(r.status))).then(t => { if (v3gParse(t)) done(); else tag(); }, fail);
   }
 }
 // 预先加载（开局时把这一局会用到的模型先下载、解码，免得单位出现时才开始加载）

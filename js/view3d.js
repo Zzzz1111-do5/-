@@ -1004,15 +1004,19 @@ function v3Bld() {
       }
     }
   }
-  const up = L => L.filter(c => c.ib.length).map(c => {
+  const up = L => L.filter(c => c.ib && c.ib.length).map(c => {
     const o = { b: gl.createBuffer(), i: gl.createBuffer(), n: c.ib.length, bb: c.bb };
     gl.bindBuffer(gl.ARRAY_BUFFER, o.b); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(c.vb), gl.STATIC_DRAW);
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, o.i); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(c.ib), gl.STATIC_DRAW);
     return o;
   }), drop = L => { for (const c of L || []) { gl.deleteBuffer(c.b); gl.deleteBuffer(c.i); } };
   drop((V3.bch || []).filter(c => !c.tree));   // 只删房屋块：树块沿用（以前连树的缓冲区一起删了，机场被发现、重建房屋后全图的树就不见了）
-  const TL = typeof v3pReady === 'function' && v3pReady() ? [] : v3Trees();   // 树换成外部模型后不再种自己的
-  if (V3.tchL !== TL) { drop(V3.tch); V3.tch = up(TL).map(c => Object.assign(c, { tree: true })); V3.tchL = TL; }   // 树只在地图 / 地形变了时重传（机场被发现时只重建房屋）
+  const ext = typeof v3pReady === 'function' && v3pReady(), TL = ext ? [] : v3Trees();   // 树换成外部模型后不再种自己的
+  if (ext) V3.trees = null;   // 自己种的树用不上了：缓存的几何一起放掉
+  if (V3.tchL !== TL) {   // 树只在地图 / 地形变了时重传（机场被发现时只重建房屋）
+    drop(V3.tch); V3.tch = up(TL).map(c => Object.assign(c, { tree: true })); V3.tchL = TL;
+    for (const c of TL) c.vb = c.ib = null;   // 传进显卡就放掉 CPU 这份（全图的树是几百万个数的普通数组，原来一直留着，菜单阶段就占了近两百兆内存）
+  }
   V3.bch = [...up(K.out), ...V3.tch];
   V3.bn = V3.bch.reduce((a, c) => a + c.n, 0);
 }
