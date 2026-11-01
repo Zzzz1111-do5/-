@@ -655,7 +655,7 @@ function trxFallback(ctx) {
 function trxSnapshot(wpx) {
   if (!TRX.tried) trxInit();
   if (!TRX.ok || typeof TER !== 'object' || !TER) return null;
-  const { gl } = TRX, hp = Math.round(wpx * H / W), cv = TRX.cv;
+  const { gl } = TRX, hp = Math.round(wpx * H / W), cv = TRX.cv, w0 = cv.width, h0 = cv.height;
   if (TRX.seed !== TER.seed) trxTerrain();
   cv.width = wpx; cv.height = hp; gl.viewport(0, 0, wpx, hp); TRX.lastSig = null;
   const P = trxProg(0, false), u = P.u;
@@ -667,6 +667,9 @@ function trxSnapshot(wpx) {
   gl.drawArrays(gl.TRIANGLES, 0, 3);
   const out = document.createElement('canvas');
   out.width = wpx; out.height = hp; out.getContext('2d').drawImage(cv, 0, 0);
+  // 画布改回快照前的尺寸——trxResize 只增不减，不改回来的话它一直是快照那么大（3D 底图 4096 宽，海岛地图 4096 × 8192），
+  //   3D 每次画屏外俯视都要从这块 WebGL 画布拷一块到 2D 画布，浏览器按整块绘图缓冲取快照，几千万像素，3D 里一卡一卡的大头
+  cv.width = Math.min(w0, wpx); cv.height = Math.min(h0, hp);
   if (R.cv) trxResize(); else { cv.width = 1; cv.height = 1; }
   return out;
 }

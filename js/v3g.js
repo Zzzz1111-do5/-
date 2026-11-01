@@ -284,7 +284,29 @@ function v3gAdd(key, x, y, z, a, k, side, roll = 0, pitch = 0, parts = null) {
   L.n++;
   return true;
 }
-// 画：先画不透明、镂空的，再画半透明的（不写深度）。LM：太阳阴影图的光源矩阵（view3d.js v3ShPass 那一遍只写深度，半透明的不投影）
+// 视锥的六个面（GL 坐标，列主序的视图投影矩阵；平面已归一化，点到面的距离 < −半径 就整个在外面）
+function v3gFrustum(M) {
+  const P = new Float32Array(24), row = r => [M[r], M[4 + r], M[8 + r], M[12 + r]], w = row(3);
+  [[0, 1], [0, -1], [1, 1], [1, -1], [2, 1], [2, -1]].forEach(([r, sg], i) => { const q = row(r), a = w.map((v, j) => v + sg * q[j]), l = Math.hypot(a[0], a[1], a[2]) || 1; for (let j = 0; j < 4; j++) P[i * 4 + j] = a[j] / l; });
+  return P;
+}
+// 模型离原点最远能到多远（米，按包围盒、留两成余量：旋翼转起来、外翼折起、起落架补高都在里面）
+const v3gRadO = M => M.radO || (M.radO = M.meta.bb ? 1.25 * Math.hypot(...[0, 1, 2].map(i => Math.max(Math.abs(M.meta.bb[i]), Math.abs(M.meta.bb[i + 3])))) : 2 * (M.rad || 1));
+// 正常那一遍只画视锥里的实例（阴影那一遍照画全部：视野外的东西影子会落进画面）：每帧每个列表筛一次，挤到 L.vd
+function v3gCull(L, P, key) {
+  const d = L.d, R0 = v3gRadO(L.M);
+  if (!L.vd || L.vd.length < d.length) L.vd = new Float32Array(d.length);
+  let n = 0;
+  for (let i = 0; i < L.n; i++) {
+    const o = i * 16, x = d[o], y = d[o + 1], z = d[o + 2], r = -R0 * d[o + 4];
+    let ok = true;
+    for (let j = 0; j < 24; j += 4) if (P[j] * x + P[j + 1] * y + P[j + 2] * z + P[j + 3] < r) { ok = false; break; }
+    if (ok) { L.vd.set(d.subarray(o, o + 16), n * 16); n++; }
+  }
+  L.vn = n; L.vk = key;
+}
+// 画：先画不透明、镂空的，再画半透明的（不写深度）。LM：太阳阴影图的光源矩阵（view3d.js v3ShPass 那一遍只写深度，半透明的不投影）——
+//   阴影那一遍用简化一级的网格（飞机模型最精细一级五万到二十多万个面，影子贴图分辨率有限，看不出差别），航母上空一群飞机时显卡的活少一大截
 function v3gDraw(C, LM) {
   if (!V3G.ok) return;
   let any = false;
@@ -304,21 +326,25 @@ function v3gDraw(C, LM) {
   gl.uniform1i(U.uTb, 0); gl.uniform1i(U.uTn, 1); gl.uniform1i(U.uTm, 2); gl.uniform1i(U.uTe, 3); gl.uniform1i(U.uTo, 4);
   const tex = (u, t) => { gl.activeTexture(gl.TEXTURE0 + u); gl.bindTexture(gl.TEXTURE_2D, t || null); };
   const wrap = (t, w) => { if (!t) return; gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, t); const m = [gl.REPEAT, gl.CLAMP_TO_EDGE, gl.MIRRORED_REPEAT]; gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, m[w[1]] || gl.REPEAT); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, m[w[2]] || gl.REPEAT); };
+  const FR = LM ? null : v3gFrustum(C.M);
   for (const pass of LM ? [0] : [0, 1]) {
     if (pass) { gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); gl.depthMask(false); }
     for (const L of V3G.inst.values()) {
       if (!L.n) continue;
+      if (FR && (L.vk !== C.M || L.vf !== V3G.frame)) { v3gCull(L, FR, C.M); L.vf = V3G.frame; }
+      const N = FR ? L.vn : L.n, Dt = FR ? L.vd : L.d;
+      if (!N) continue;
       const M = L.M, m = M.meta, st = m.st * 4;
       gl.bindBuffer(gl.ARRAY_BUFFER, M.vb);
       gl.enableVertexAttribArray(A.p); gl.vertexAttribPointer(A.p, 3, gl.FLOAT, false, st, 0);
       gl.enableVertexAttribArray(A.n); gl.vertexAttribPointer(A.n, 3, gl.FLOAT, false, st, 12);
       gl.enableVertexAttribArray(A.uv); gl.vertexAttribPointer(A.uv, 2, gl.FLOAT, false, st, 24);
-      gl.bindBuffer(gl.ARRAY_BUFFER, V3G.ib); gl.bufferData(gl.ARRAY_BUFFER, L.d.subarray(0, L.n * 16), gl.DYNAMIC_DRAW);
+      gl.bindBuffer(gl.ARRAY_BUFFER, V3G.ib); gl.bufferData(gl.ARRAY_BUFFER, Dt.subarray(0, N * 16), gl.DYNAMIC_DRAW);
       for (const [k, o] of [['iA', 0], ['iB', 16], ['iC', 32], ['iD', 48]]) { gl.enableVertexAttribArray(A[k]); gl.vertexAttribPointer(A[k], 4, gl.FLOAT, false, 64, o); X.vertexAttribDivisorANGLE(A[k], 1); }
       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, M.ib);
       gl.uniform1f(U.uRad, M.rad);
       const it = m.it === 4 ? gl.UNSIGNED_INT : gl.UNSIGNED_SHORT;
-      for (const [mi, pi, i0, cnt] of m.lod[L.lod]) {
+      for (const [mi, pi, i0, cnt] of m.lod[LM ? Math.min(m.lod.length - 1, L.lod + 1) : L.lod]) {
         const T = M.mats[mi];
         const gh = !!V3G.glass && V3G.glass.key === M.key && V3G.glass.hud === T.n;   // 玩家开着的这型飞机：平显玻璃（模型里是一整块不透明的亮绿色）当透明玻璃画
         if ((T.am === 2 || gh) !== !!pass) continue;
@@ -343,7 +369,7 @@ function v3gDraw(C, LM) {
         gl.uniform2f(U.uMR, T.mr[0], T.mr[1]);
         if (T.sg) gl.uniform4f(U.uSG, T.sg[0], T.sg[1], T.sg[2], T.sg[3]); else gl.uniform4f(U.uSG, 0, 0, 0, -1);
         gl.uniform1f(U.uNs, T.ns ?? 1); gl.uniform1f(U.uAm, gh ? 2 : T.am); gl.uniform1f(U.uAc, T.ac ?? .5);
-        X.drawElementsInstancedANGLE(gl.TRIANGLES, cnt, it, i0 * m.it, L.n);
+        X.drawElementsInstancedANGLE(gl.TRIANGLES, cnt, it, i0 * m.it, N);
       }
       for (const k of ['iA', 'iB', 'iC', 'iD']) { X.vertexAttribDivisorANGLE(A[k], 0); gl.disableVertexAttribArray(A[k]); }
     }

@@ -151,7 +151,7 @@ function v3dHaze(C) {
   if (!V3DH.ok) return;
   const E = C.E, M = C.M, W = gl.drawingBufferWidth, H = gl.drawingBufferHeight, out = [];
   const prj = p => { const x = M[0] * p[0] + M[4] * p[1] + M[8] * p[2] + M[12], y = M[1] * p[0] + M[5] * p[1] + M[9] * p[2] + M[13], w = M[3] * p[0] + M[7] * p[1] + M[11] * p[2] + M[15]; return w > .01 ? [(x / w * .5 + .5) * W, (y / w * .5 + .5) * H] : null; };
-  let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9, full = false;
+  let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
   for (const h of L) {   // 热气柱：从喷口往后，越往后越宽（面向镜头）；顶点 = 位置 3 + (沿喷流 0–1、横向 −1–1、强度)
     const p0 = h.c, d = h.d, p1 = [p0[0] + d[0] * h.len, p0[1] + d[1] * h.len, p0[2] + d[2] * h.len];
     if (Math.hypot(p0[0] - E[0], p0[1] - E[1], p0[2] - E[2]) > RMAX) continue;
@@ -161,14 +161,15 @@ function v3dHaze(C) {
     if (l < 1e-6) continue;
     sv = [sv[0] / l, sv[1] / l, sv[2] / l];
     const w0 = h.r * 2, w1 = h.r * 5, A = [[p0, -w0, 0, -1], [p0, w0, 0, 1], [p1, w1, 1, 1], [p1, -w1, 1, -1]].map(([p, w, a, b]) => [p[0] + sv[0] * w, p[1] + sv[1] * w, p[2] + sv[2] * w, a, b, h.k]);
-    let vis = false;
-    for (const q of A) { const sc = prj(q); if (!sc) { full = vis = true; continue; } vis = true; x0 = Math.min(x0, sc[0]); x1 = Math.max(x1, sc[0]); y0 = Math.min(y0, sc[1]); y1 = Math.max(y1, sc[1]); }   // 有角落跑到镜头后面：整屏都拷
-    if (vis) for (const i of [0, 1, 2, 0, 2, 3]) for (const v of A[i]) out.push(v);
+    const sc = A.map(prj);
+    if (sc.some(q => !q)) continue;   // 有角落跑到镜头后面（热气柱擦着镜头）：这一根不画——原来为它整屏抓图，镜头贴近甲板上的飞机时每帧整屏拷一次（开了抗锯齿还要整屏解析）
+    for (const q of sc) { x0 = Math.min(x0, q[0]); x1 = Math.max(x1, q[0]); y0 = Math.min(y0, q[1]); y1 = Math.max(y1, q[1]); }
+    for (const i of [0, 1, 2, 0, 2, 3]) for (const v of A[i]) out.push(v);
   }
   if (!out.length) return;
   // 抓屏：只拷热气柱所在的一块（外扩一圈：错开取样也不出界）
   const mg = Math.ceil(40 * H / 1080) + 8;
-  const cx0 = full ? 0 : Math.max(0, Math.floor(x0 - mg)), cy0 = full ? 0 : Math.max(0, Math.floor(y0 - mg)), cx1 = full ? W : Math.min(W, Math.ceil(x1 + mg)), cy1 = full ? H : Math.min(H, Math.ceil(y1 + mg));
+  const cx0 = Math.max(0, Math.floor(x0 - mg)), cy0 = Math.max(0, Math.floor(y0 - mg)), cx1 = Math.min(W, Math.ceil(x1 + mg)), cy1 = Math.min(H, Math.ceil(y1 + mg));
   if (cx1 <= cx0 || cy1 <= cy0) return;
   gl.activeTexture(gl.TEXTURE13); gl.bindTexture(gl.TEXTURE_2D, V3DH.tex);
   if (V3DH.tw !== W || V3DH.th !== H) { gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, W, H, 0, gl.RGB, gl.UNSIGNED_BYTE, null); V3DH.tw = W; V3DH.th = H; }
