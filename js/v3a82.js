@@ -47,8 +47,9 @@ function a82Pose(pk) {
 }
 // 画一个 82 师的伞兵（v3units.js 画步兵时先问这里）：画了返回 true
 function a82Man(q, i, kind, pose, x, y, z, a, k, sd) {
-  const gk = q.a82w && q.a82w[i];
+  const gk = q.a82w && q.a82w[i], E = V3G.C && V3G.C.E;
   if (!gk || !V3A_GUN[gk] || typeof v3manAlias !== 'function' || typeof V3MAN_NOGUN !== 'object') return false;
+  if (E && Math.hypot(x - E[0], -y - E[1], z - E[2]) > 260) return false;   // 远处看不清手里拿的什么：照普通士兵画（和别的步兵合批，少画一个枪模型）
   const pk = v3manAlias('rifle', pose || 'st');
   if (V3MAN_NOGUN.test(pk)) return false;
   const P = a82Pose(pk);

@@ -68,13 +68,22 @@ function a82Clean(x0, y0, L, w) {
   }
   return true;
 }
-// 空降场：目标据点 p 内陆一侧（北）1.2–3.2 公里；整条离我军地面部队 safe 以外、离已知防空 aaR 以外；近目标、远离我军、平坦的优先
+// 目标背后（背着我军）的方向：从我军地面部队的重心指向目标；没有就朝北
+function a82Back(p) {
+  const F = a82Foes();
+  if (!F.length) return -Math.PI / 2;
+  const cx = F.reduce((a, o) => a + o.x, 0) / F.length, cy = F.reduce((a, o) => a + o.y, 0) / F.length;
+  return Math.hypot(p.x - cx, p.y - cy) > 50 ? Math.atan2(p.y - cy, p.x - cx) : -Math.PI / 2;
+}
+// 空降场：目标据点 p 背着我军的一侧 1.2–3.2 公里（多半是内陆），离图边 350 米以上（伞随风往北飘，不落到图外）；
+//   整条离我军地面部队 safe 以外、离已知防空 aaR 以外；近目标、远离我军、平坦的优先
 function a82DZ(p) {
-  const foes = a82Foes(), aa = a82AA(), L = A82.dzLen;
+  const foes = a82Foes(), aa = a82AA(), L = A82.dzLen, back = a82Back(p);
   let best = null, bs = -Infinity;
-  for (let k = 0; k < 160; k++) {
-    const r = A82.dzMin + Math.random() * (A82.dzMax - A82.dzMin), a = -Math.PI / 2 + gauss() * .55;
-    const x = clamp(p.x + Math.cos(a) * r, L / 2 + 150, W - L / 2 - 150), y = clamp(p.y + Math.sin(a) * r, 200, H - 200);
+  for (let k = 0; k < 200; k++) {
+    const r = A82.dzMin + Math.random() * (A82.dzMax - A82.dzMin), a = back + gauss() * .7;
+    const x = p.x + Math.cos(a) * r, y = p.y + Math.sin(a) * r;
+    if (x < L / 2 + 150 || x > W - L / 2 - 150 || y < 350 || y > H - 200) continue;
     if (!isLand(x, y) || coastAt(x) - y < 600 || !a82Clean(x, y, L, 240)) continue;
     let dp = 1e9;
     for (const o of foes) { const dx = Math.max(0, Math.abs(o.x - x) - L / 2), d = Math.hypot(dx, o.y - y); if (d < dp) dp = d; }
@@ -84,12 +93,13 @@ function a82DZ(p) {
   }
   return best;
 }
-// 炮位（CH-47F 放 M777A2）：空降场再往北 2.5–4.5 公里（目标在射程里，离我军远），平坦、离我军与已知防空远
+// 炮位（CH-47F 放 M777A2）：目标背着我军一侧 2.5–4.5 公里（目标在射程里，离我军远），平坦、离我军与已知防空远
 function a82GunPos(p, dz) {
-  const foes = a82Foes(), aa = a82AA();
+  const foes = a82Foes(), aa = a82AA(), back = a82Back(p);
   let best = null, bs = -Infinity;
-  for (let k = 0; k < 120; k++) {
-    const r = 2500 + Math.random() * 2000, a = -Math.PI / 2 + gauss() * .5, x = clamp(p.x + Math.cos(a) * r, 150, W - 150), y = clamp(p.y + Math.sin(a) * r, 150, H - 150);
+  for (let k = 0; k < 260; k++) {   // 背后没地方（目标就在图边上）：慢慢放宽方向、拉近距离，侧后方也行
+    const r = (k < 130 ? 2500 : 1500) + Math.random() * 2000, a = back + gauss() * (.6 + k / 90), x = p.x + Math.cos(a) * r, y = p.y + Math.sin(a) * r;
+    if (x < 300 || x > W - 300 || y < 300 || y > H - 300) continue;
     if (!isLand(x, y) || !a82Clean(x, y, 160, 120)) continue;
     let dp = 1e9;
     for (const o of foes) { const d = dist(o.x, o.y, x, y); if (d < dp) dp = d; }
@@ -97,7 +107,7 @@ function a82GunPos(p, dz) {
     const s = Math.min(dp, 3500) / 500 - Math.abs(r - 3200) / 800 + Math.random() * .3;
     if (s > bs) { bs = s; best = { x: Math.round(x), y: Math.round(y) }; }
   }
-  return best || (dz ? { x: dz.x, y: Math.max(150, dz.y - 900) } : null);
+  return best || (dz ? { x: dz.x, y: clamp(dz.y - 600, 400, H - 400) } : null);
 }
 
 // —— 起飞：4 架伞兵机 + 1 架重装机，同一条航线前后拉开（每架间隔约 25 秒），交替左右偏 60 米避开前机尾流 ——

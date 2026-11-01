@@ -302,6 +302,7 @@ function v3Fx(C) {
   v3fScreens(sm, out, C, inB, g);   // 烟幕：舰炮 / 炮兵烟幕弹、发烟罐、车载烟幕弹
   if (typeof v3dFx === 'function') v3dFx(out, C, inB, seen);   // 弹射、离机、伞降的发光与烟（v3det.js）
   if (typeof a82Fx === 'function') a82Fx(out, sm, C, inB, seen);   // 82 空降师：标枪的烟迹与尾焰、CH-47F 旋翼下洗的尘土（v3a82.js）
+  if (typeof fpFx === 'function') fpFx(out, sm, C);   // 亲自驾驶：翼尖涡流、机翼水汽、迎面的风线（v3pilot.js）
   if (typeof v3dHaze === 'function') v3dHaze(C);   // 喷口后的热浪（v3det.js）：在加法特效之前，扭的是火焰后面的画面
   if (!out.length && !sm.length) return;
   // —— 画：先画遮挡的烟（预乘透明度的普通混合），再画发光（加法混合）；都测深度、不写深度 ——
