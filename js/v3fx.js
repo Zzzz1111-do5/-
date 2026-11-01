@@ -272,20 +272,30 @@ function v3Fx(C) {
     const lit = (o, key, sz, own, burn) => {
       const D = AIRD[key];
       if (!D || !D.wing || !inB(o.x, o.y, 220)) return;
-      const Lc = own && typeof v3dLaunch === 'function' ? v3dLaunch(o) : null;   // 刚离舰：下沉、抬头（v3det.js）
-      const k = sz / 21, gnd = o.ph === 'gnd' || o.ph === 'roll' || o.phase === 'roll' && !o.kind, z = (gnd ? g(o.x, o.y) + 1.9 * k : v3AirZ(o)) + (Lc ? Lc.dz : 0), h = o.heading || 0, r = o.bank || 0;
-      const ch = Math.cos(h), sh = Math.sin(h), cr = Math.cos(r), sr = Math.sin(r);
-      const Wp = (u, v, w) => { const y = v * cr - w * sr, zz = v * sr + w * cr; return v3fP(o.x + (u * ch + y * sh) * k, o.y + (u * sh - y * ch) * k, z + zz * k); };
+      // 玩家亲自开的：用和机体模型同一个插值后的位置与姿态（v3units.js plane 用 fpRS）——原来按推演位置、航向、坡度画，没有俯仰，
+      //   机头一抬尾焰、航行灯就跟机体错开（推演位置还比画面上的机体超前一步）
+      const rs = own && o.fl && o.fp && typeof fpRS === 'function' ? fpRS(o) : null;
+      const Lc = !rs && own && typeof v3dLaunch === 'function' ? v3dLaunch(o) : null;   // 刚离舰：下沉、抬头（v3det.js）
+      // 机场上的敌机（停机、滑行、滑跑）：机体按机轮着地画（v3units.js v3GroundPlane），这里也按机轮着地点、绕它抬头——原来按「地面 + 1.9」当机身中线，
+      //   不同机型中线高低不一样，滑跑开加力时尾焰比喷口低半米到一米
+      const gnd = !own && !rs && (o.ph === 'gnd' || o.ph === 'roll'), k = sz / 21, ox = rs ? rs.x : o.x, oy = rs ? rs.y : o.y;
+      const z = rs ? rs.z : gnd ? g(o.x, o.y) : v3AirZ(o) + (Lc ? Lc.dz : 0), h = rs ? rs.heading : o.heading || 0, r = rs || !gnd ? (rs ? rs.roll : o.bank || 0) : 0;
+      let pt = rs ? rs.pitch : gnd ? (o.ph === 'roll' && typeof eaVlof === 'function' ? V3_ROT * sm01(((o.spd || 0) / eaVlof(o) - .83) / .17) : 0) : typeof v3dPitchOf === 'function' ? v3dPitchOf(o, own ? 0 : 1) : Lc ? Lc.pitch : 0;
+      if (!own && !gnd && o.toT != null) { const tu = S.t - o.toT; if (tu >= 0 && tu < 3) pt = Math.max(pt, V3_ROT * (1 - sm01((tu - 1.5) / 1.5))); }   // 刚离地头 1.5 秒保持抬起的机头（与 v3units.js plane 一样）
+      const zg = gnd && typeof v3gPlaneZc === 'function' ? v3gPlaneZc(key, sz) : 0;   // 着地画法：机身中线在机轮着地点上方多高
+      // 机体坐标（前、左、上）→ GL：先滚转、再俯仰、再航向，和画机体（v3g.js）、喷口（v3det.js v3dBurner）同一个顺序
+      const R = typeof v3dMul === 'function' ? v3dMul(v3dMul(v3dRz(-h), v3dRy(pt)), v3dRx(r)) : [Math.cos(h), Math.sin(h), 0, -Math.sin(h), Math.cos(h), 0, 0, 0, 1];
+      const Wp = (u, v, w) => { u *= k; v *= k; w = w * k + zg; return [ox + R[0] * u + R[1] * v + R[2] * w, -oy + R[3] * u + R[4] * v + R[5] * w, z + R[6] * u + R[7] * v + R[8] * w]; };
       const tip = D.wing.reduce((m, q) => q[1] > m[1] ? q : m, D.wing[0]), tu = tip[0] - .6;
-      const dE = Math.hypot(o.x - C.E[0], -o.y - C.E[1], z - C.E[2]), lr = Math.min(1.1 * k + .5, .012 * dE + .12);   // 灯的光晕：远处照旧，凑近时按视距缩小（不然近看是两三米的光球）
+      const dE = Math.hypot(ox - C.E[0], -oy - C.E[1], z - C.E[2]), lr = Math.min(1.1 * k + .5, .012 * dE + .12);   // 灯的光晕：远处照旧，凑近时按视距缩小（不然近看是两三米的光球）
       v3fSpark(out, C, Wp(tu, tip[1], 0), lr, [1, .25, .2, .95]);   // 左翼尖红灯
       v3fSpark(out, C, Wp(tu, -tip[1], 0), lr, [.3, 1, .45, .95]);   // 右翼尖绿灯
       const tail = D.stab ? D.stab.reduce((m, q) => Math.min(m, q[0]), 0) : (D.body ? D.body[D.body.length - 1][0] : -9);
       if (((S.t * .8 + o.id * .37) % 1) < .07) v3fSpark(out, C, Wp(tail + 1, 0, 2.6), Math.min(2.4 * k + 1, .02 * dE + .2), [1, 1, 1, 1]);   // 防撞灯
       if (FTR[key] && typeof v3dBurner === 'function') {   // 喷口发热、加力尾焰（v3det.js）：按每个喷口，随机身俯仰、滚转；加力开关时火舌平滑地长出、缩回
         const Eg = v3dEng((own ? 'p' : 'e') + o.id, burn ? 1 : .65, burn ? 1 : 0);
-        v3dBurner(out, C, o, key, sz, { x: o.x, y: o.y, z, h, pt: typeof v3dPitchOf === 'function' ? v3dPitchOf(o, own ? 0 : 1) : Lc ? Lc.pitch : 0, rl: r }, Eg);
-      } else if (typeof v3dExhaust === 'function') v3dExhaust(key, sz, { x: o.x, y: o.y, z, h, rl: r }, gnd ? .6 : 1);   // 其余发动机：排气口后的热浪
+        v3dBurner(out, C, o, key, sz, { x: ox, y: oy, z, h, pt, rl: r, ground: gnd }, Eg);
+      } else if (typeof v3dExhaust === 'function') v3dExhaust(key, sz, { x: ox, y: oy, z: z + zg, h, pt, rl: r }, gnd ? .6 : 1);   // 其余发动机：排气口后的热浪
     };
     for (const p of S.planes || []) if (!p.dead && isFinite(p.x) && !(p.phase === 'cat' || p.phase === 'trap' || (p.phase === 'roll' && !p.afPh && !p.land))) {   // 甲板上的由航母那边画
       const key = typeof airSilKey === 'function' ? airSilKey(p.kind, p.v) : null;
