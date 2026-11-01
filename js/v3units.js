@@ -1374,6 +1374,7 @@ function v3mDraw(C, LM) {
   for (const k of ['p', 'n', 's', 'b']) gl.disableVertexAttribArray(A[k]);
   if (typeof v3uDraw === 'function') v3uDraw(C, LM);   // 带贴图的精细模型（v3utex.js）
   if (typeof v3gDraw === 'function') v3gDraw(C, LM);   // 用户给的模型（js/v3g.js）
+  if (typeof v3nzDraw === 'function') v3nzDraw(C, LM);   // 真实喷口模型（js/v3noz.js）
 }
 // 画一个网格的全部实例（data：每个实例 8 个数）；noLine：不画线（阴影那一遍、透明玻璃那一遍）
 function v3mDrawM(gl, m, data, n, noLine) {

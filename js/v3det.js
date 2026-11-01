@@ -304,7 +304,7 @@ const v3dPitchOf = (o, sd) => { const P = V3D_PT.get((sd ? 'e' : 'p') + o.id); r
 function v3dNoz(key, sz, ground) {
   const mk = typeof V3G_AIR === 'object' && V3G_AIR[key], M = mk && typeof V3G === 'object' && V3G.M[mk], N = [];
   if (!M || !M.ready || !M.meta.noz) return N;
-  const s = sz / M.meta.len, z0 = ground ? 0 : M.meta.zc, PC = typeof V3G_PIT === 'object' && V3G_PIT[mk], T = PC && PC.thr;
+  const s = sz / M.meta.len, z0 = ground ? 0 : M.meta.zc, PC = typeof V3G_PIT === 'object' && V3G_PIT[mk], T = (typeof v3nzThr === 'function' && v3nzThr(mk)) || (PC && PC.thr);   // 换了真实喷口（v3noz.js）：发动机后段放到收敛段入口
   // an：模型的调节片会开合（出口半径跟着变）；t：喷口里的发动机后段放在喉道（出口前 u、半径 r、深 d），没有就放在出口
   for (const n of M.meta.noz) for (const sg of n[1] ? [1, -1] : [1]) N.push(n[5] ? { x: n[0] * s, y: n[1] * sg * s, z: (n[2] - z0) * s, r: 0, d: n[4] * s, w: n[5] * s, hh: n[6] * s }   // 扁平的二元喷口：n[5] 半宽、n[6] 半高
     : { x: n[0] * s, y: n[1] * sg * s, z: (n[2] - z0) * s, r: n[3] * s, d: n[4] * s, w: n[3] * s, hh: n[3] * s, an: !!(PC && PC.noz), t: T ? { u: -T.u * s, r: T.r * s, d: T.d * s } : null });

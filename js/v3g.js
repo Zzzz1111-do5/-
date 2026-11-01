@@ -355,6 +355,7 @@ function v3gDraw(C, LM) {
         const gh = !!V3G.glass && V3G.glass.key === M.key && V3G.glass.hud === T.n;   // 玩家开着的这型飞机：平显玻璃（模型里是一整块不透明的亮绿色）当透明玻璃画
         if ((T.am === 2 || gh) !== !!pass) continue;
         const P = pi >= 0 ? M.parts[pi] : null;
+        if (P && P.k === 'noz' && M.nzRep) continue;   // 换上了真实喷口模型（v3noz.js）：模型自带的调节片不画
         gl.uniform1f(U.uPk, P ? pi : -1);
         if (P) {
           const w = P.w || [pi === 0 ? 1 : 0, pi === 1 ? 1 : 0, pi === 2 ? 1 : 0, pi >= 3 ? 1 : 0];
@@ -440,6 +441,7 @@ function v3gPlane(key, sz, x, y, z, ground, h, side, roll, pitch, gear, t, noz =
   const P = [0, 0, 0, 0, bay ? bay.main || 0 : 0, bay ? bay.side || 0 : 0, fold || 0, 0];
   M.parts.forEach((p, i) => { const j = p.slot ?? i; if (j > 3) return; if (p.n === 'gear') P[j] = gear ? 0 : 1; else if (p.n === 'rotor') P[j] = (t || 0) * (V3G_ROTOR[mk] || [22])[0]; else if (p.n === 'trotor') P[j] = (t || 0) * (V3G_ROTOR[mk] || [0, 61])[1]; else if (p.k === 'noz') P[j] = noz; });
   if (M.ctl) { P[2] = ctl ? ctl.de || 0 : 0; P[3] = ctl ? ctl.da || 0 : 0; }   // 舵面：槽 3 平尾、槽 4 滚转差动
+  if (typeof v3nzPlane === 'function') v3nzPlane(mk, M, ox, oy, oz, h, k, roll, pitch, noz);   // 换装了真实喷口模型的机型（v3noz.js：会收缩的收敛扩散喷口）
   return v3gAdd(mk, ox, oy, oz, h, k, side, roll, pitch, P);
 }
 // 飞机模型上一点（模型坐标，米）此刻在世界的哪里（游戏坐标 x、y，高度 z）：和 v3gPlane 同一套变换（绕机身中线俯仰、滚转）——弹舱里的弹、挂点按它放
