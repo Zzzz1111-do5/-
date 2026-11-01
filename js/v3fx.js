@@ -299,6 +299,7 @@ function v3Fx(C) {
       lit(a, key, sz, false, !!FTR[key] && ((a.ph === 'roll' && !(a.wait > 0)) || (a.ph === 'out' && (a.alt ?? 1) < .4)));
     }
   }
+  v3fScreens(sm, out, C, inB, g);   // 烟幕：舰炮 / 炮兵烟幕弹、发烟罐、车载烟幕弹
   if (typeof v3dFx === 'function') v3dFx(out, C, inB, seen);   // 弹射、离机、伞降的发光与烟（v3det.js）
   if (typeof a82Fx === 'function') a82Fx(out, sm, C, inB, seen);   // 82 空降师：标枪的烟迹与尾焰、CH-47F 旋翼下洗的尘土（v3a82.js）
   if (typeof v3dHaze === 'function') v3dHaze(C);   // 喷口后的热浪（v3det.js）：在加法特效之前，扭的是火焰后面的画面
@@ -319,6 +320,42 @@ function v3Fx(C) {
   }
   gl.depthMask(true); gl.disable(gl.BLEND);
   gl.disableVertexAttribArray(A.p); gl.disableVertexAttribArray(A.c); gl.disableVertexAttribArray(A.q);
+}
+// 烟幕（S.smoke）：一团团贴地翻滚的白烟（普通混合，遮得住后面），大小与推演里挡视线的范围一致（grid.js smkR），最后 6 秒变淡散去；
+//   车载烟幕弹（vsmoke.js，k: 'vg'）先画弹从炮塔顶上飞出去的小亮点、炸开时一闪，烟墙几米高；舰炮、炮兵烟幕弹的大团烟二三十米高。
+//   烟团位置按烟团坐标定死的伪随机数排（每帧一样，不闪），远处少画几团
+function v3fScreens(sm, out, C, inB, g) {
+  const E = C.E;
+  for (const s of S.smoke || []) {
+    if (!(s.until > S.t) || !inB(s.x, s.y, s.r + 80)) continue;
+    if (s.t0 != null) {
+      const a = S.t - s.t0;
+      if (a < 0) continue;
+      if (a < SMK_FLY) {   // 弹在飞：从炮塔顶上划一道低弧线到炸点
+        if (s.lx == null) continue;
+        const u = a / SMK_FLY, z0 = g(s.lx, s.ly) + 2.6, z1 = g(s.x, s.y) + 3, f = v => v3fP(lerp(s.lx, s.x, v), lerp(s.ly, s.y, v), lerp(z0, z1, v) + Math.sin(Math.PI * v) * 5);
+        v3fTrail(out, E, f, Math.max(0, u - .4), u, 3, .45, [.95, .95, .9, .8]);
+        v3fSpark(out, C, f(u), .7, [1, .95, .85, .95]);
+        continue;
+      }
+      if (a < SMK_FLY + .22) v3fSpark(out, C, v3fP(s.x, s.y, g(s.x, s.y) + 3), 2.5 + (a - SMK_FLY) * 24, [1, .95, .85, .85 * (1 - (a - SMK_FLY) / .22)]);   // 炸开一闪
+    }
+    const r = smkR(s);
+    if (!(r > 1)) continue;
+    const fd = Math.min(1, (s.until - S.t) / 6), z = Math.max(g(s.x, s.y), -2.6), vg = s.k === 'vg', h = vg ? 5 + r * .3 : Math.min(28, 8 + r * .25);
+    const de = Math.hypot(s.x - E[0], -s.y - E[1], z - E[2]), lod = de > 3000 ? .4 : de > 1500 ? .7 : 1;
+    const n = Math.max(4, Math.round(clamp(r / 4, 5, 18) * lod)), sd = Math.abs(s.x * 12.9898 + s.y * 78.233) % 6.283;
+    for (let i = 0; i < n; i++) {
+      const lv = (i * .618 + sd * .1) % 1, rr = r * .62 * Math.sqrt((i + .5) / n), ang = sd + i * 2.39996 + S.t * (.03 + (i % 3) * .012);
+      const pr = r * (.36 + .2 * ((i * 37 % 10) / 10)) * (1 - lv * .25), zz = z + pr * .5 + h * .6 * lv + Math.sin(S.t * .35 + i) * .5;
+      v3fPuff(sm, C, v3fP(s.x + Math.cos(ang) * rr, s.y + Math.sin(ang) * rr, zz), pr, [.86, .87, .85, .6 * fd]);
+    }
+  }
+}
+// 烟团：面向镜头的方块，下半截往底边淡出——贴地的烟团被地面切掉的那条硬边就看不出来了
+function v3fPuff(out, C, p, r, c, bot = .12) {
+  const X = C.x, Y = C.y, P = (a, b) => out.push(p[0] + (X[0] * a + Y[0] * b) * r, p[1] + (X[1] * a + Y[1] * b) * r, p[2] + (X[2] * a + Y[2] * b) * r, c[0], c[1], c[2], c[3] * (b < 0 ? bot : 1), a, b);
+  P(-1, -1); P(1, -1); P(1, 1); P(-1, -1); P(1, 1); P(-1, 1);
 }
 // 发射药的烟（普通混合，遮得住后面）：地面发射——燃气冲到地上往四周翻滚的扬尘 / 白烟（海面上是水汽），再一股顺着出筒方向往上的白烟柱；
 //   垂发——舱口涌出的白烟顺着弹道往上拉成一根烟柱；空中点火——一团白烟留在原地。7 秒里扩散、往上飘、变淡

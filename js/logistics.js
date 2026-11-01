@@ -155,10 +155,12 @@ function updatePoints(dt) {
   }
 }
 
+// 黑夜（S.night，沙盒「黑夜」）：步兵（夜视仪）与工事里的人眼视野缩到六成；车辆热像（vehicles.js）、舰艇、飞机、雷达、远距离热像发现（spot.js）照旧
+const NIGHT_EYE = .6;
 function updateVision() {
   smokeMask();
-  const ps = [];
-  for (const q of S.teams) if (q.side === 'p' && q.men.includes('radio')) ps.push({ x: q.x, y: q.y, r: 150 });
+  const ps = [], nk = S.night ? NIGHT_EYE : 1;
+  for (const q of S.teams) if (q.side === 'p' && q.men.includes('radio')) ps.push({ x: q.x, y: q.y, r: 150 * nk });
   for (const s of S.ships) if (alive(s)) ps.push({ x: s.x, y: s.y, r: s.state === 'beached' ? 60 : 80, h: .8 });
   if (S.dd.state !== 'sunk') ps.push({ x: S.dd.x, y: S.dd.y, r: 70, h: 1 });
   if (typeof carrierVision === 'function') ps.push(...carrierVision());
@@ -168,8 +170,8 @@ function updateVision() {
   ps.push(...hookSources('visionP'));
   castVision(PV, ps);
   const es = [];
-  for (const q of S.teams) if (q.side === 'e') es.push({ x: q.x, y: q.y, r: 160 });
-  for (const e of S.enemies) if (!e.dead) es.push({ x: e.x, y: e.y, r: e.kind === 'coastal' ? 220 : e.kind === 'bunker' ? 170 : 90, h: e.kind === 'coastal' ? 1.2 : .6 });
+  for (const q of S.teams) if (q.side === 'e') es.push({ x: q.x, y: q.y, r: 160 * nk });
+  for (const e of S.enemies) if (!e.dead) es.push({ x: e.x, y: e.y, r: e.kind === 'coastal' ? 220 : (e.kind === 'bunker' ? 170 : 90) * nk, h: e.kind === 'coastal' ? 1.2 : .6 });   // 岸防炮靠雷达，夜里照旧
   if (typeof armorVisionSources === 'function') es.push(...armorVisionSources());
   es.push(...hookSources('visionE'));
   castVision(EV, es);
