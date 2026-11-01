@@ -280,13 +280,13 @@ function v3Fx(C) {
   {
     let nW = 0;
     const wreck = (x, y, L, age, id) => {
-      if (age < 0 || age > 120 || !inB(x, y, 150) || ++nW > 24) return;
+      if (age < 0 || age > 120 || !inB(x, y, 150) || ++nW > 18) return;
       const z = g(x, y), k = 1 - age / 120, sid = id & 15;
       if (age < 50) { const fk = 1 - age / 50; for (let i = 0; i < 2; i++) v3fBillow(out, C, v3fP(x + (i - .5) * L * .18, y, z + L * (.2 + .1 * i)), L * (.2 + .12 * fk), [1, .48, .14, .6 * fk], 2, sid + i); }
       for (let i = 0; i < 8; i++) {   // 一串烟团从车上升起到 u = 1 消失，循环接上，连成一根烟柱：根上又黑又浓，越往上越散、越灰、越淡
         const u = (S.t * .07 + i / 8 + id * .131) % 1, wx = u * u * L * 7;
-        const a = .74 * Math.pow(k, .6) * Math.pow(1 - u, 1.1) * Math.min(1, u / .06);
-        v3fBillow(sm, C, v3fP(x + wx * WX / 1.7, y + wx * WY / 1.7, z + L * .3 + u * L * 10), L * (.3 + u * 1.5), [.08 + u * .16, .075 + u * .16, .07 + u * .16, a], 1, sid + 3 + i);
+        const a = .58 * Math.pow(k, .6) * Math.pow(1 - u, 1.2) * Math.min(1, u / .06);   // 残骸一多（十几根烟柱）也不至于把战场整片遮黑
+        v3fBillow(sm, C, v3fP(x + wx * WX / 1.7, y + wx * WY / 1.7, z + L * .3 + u * L * 10), L * (.26 + u * 1.15), [.08 + u * .16, .075 + u * .16, .07 + u * .16, a], 1, sid + 3 + i);
       }
     };
     for (const v of S.veh || []) if (v.dead && !v.lst) wreck(v.x, v.y, typeof vehSp === 'function' ? vehSp(v).len : 9, S.t - (v.deadT ?? -999), v.id);
