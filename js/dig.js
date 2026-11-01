@@ -8,9 +8,16 @@
 const DIG = { t: 35, still: 3, holeR: 5, pit: .55, pitD: .45, prone: .65, proneDug: .85, calm: 4, link: 30, max: 700, tankR: 260 };
 let DIG_BL = [];   // 最近 2.5 秒的爆炸点（不存档）
 
+// 编号 → 坑：S.holes 换了、长度或首尾的编号变了（新挖、淘汰）就重建；坑只在 digStep 里增删
+const DIG_IX = { a: null, n: -1, f: null, l: null, m: new Map() };
+function digById(id) {
+  const hs = S.holes, n = hs.length, f = n ? hs[0].id : null, l = n ? hs[n - 1].id : null;
+  if (DIG_IX.a !== hs || DIG_IX.n !== n || DIG_IX.f !== f || DIG_IX.l !== l) { DIG_IX.a = hs; DIG_IX.n = n; DIG_IX.f = f; DIG_IX.l = l; DIG_IX.m.clear(); for (const h of hs) if (!DIG_IX.m.has(h.id)) DIG_IX.m.set(h.id, h); }
+  return DIG_IX.m.get(id);
+}
 function digHole(q) {
   if (q.hole == null || !S.holes) return null;
-  const h = S.holes.find(h => h.id === q.hole);
+  const h = digById(q.hole);
   return h && dist(h.x, h.y, q.x, q.y) <= DIG.holeR ? h : null;
 }
 // 掩体系数里属于工事 / 卧倒的部分：直射（有来源 sx）与炮击分开算
@@ -27,7 +34,10 @@ function digThreat(q) {
   for (const b of DIG_BL) if (S.t - b.t < 2 && dist(b.x, b.y, q.x, q.y) < Math.max(45, b.R * 1.6)) return 'blast';
   if (S.t >= (q.tkN ?? 0)) {
     q.tkN = S.t + .5; q.tk = null;
-    for (const v of S.veh || []) {
+    const fr = typeof vehFresh === 'function' && S.veh && vehFresh(), C = fr && vehCache(), sd = q.side === 'e' ? 'p' : 'e', L = fr ? C[sd] : S.veh || [], RM = DIG.tankR + 8;
+    for (let n = 0; n < L.length; n++) {
+      if (fr) { const ex = C.X[sd][n] - q.x, ey = C.Y[sd][n] - q.y; if (ex > RM || ex < -RM || ey > RM || ey < -RM) continue; }
+      const v = L[n];
       if (v.dead || v.side === q.side || v.lst) continue;
       const g = vehSp(v).gun, d = dist(v.x, v.y, q.x, q.y);
       if (!g || g.ind || d > DIG.tankR || !vehSees(v, q.x, q.y, d)) continue;

@@ -825,11 +825,13 @@ function sbxAIAttack(style = 'bal', mi = -1, fi = -2) {
   if (TER.flat && !S.lv && typeof lvAIGround === 'function') {   // 白色平原：步兵、车辆直接摆进出发阵地（levels.js 陆战关的部署：主攻、助攻两处），炮兵、航空兵、舰艇照常
     sbxClear('p');
     lvAIGround((t, at) => sbxSay('p', t, 'plan', at));
+    // 陆战关的部署贴着海岸（滩头纵深 300 以内）：这张图的出发阵地有 FLAT.zone 深，主攻、助攻部队整体前移到靠出发线一侧，开战不用先走两公里
+    for (const it of S.sbx.items) if (it.side === 'p' && it.x != null && flatZone(it.x, it.y - FLAT.zone * .45)) it.y = Math.round(it.y - FLAT.zone * .45);
     // 陆战关的方案里航母、舰艇在这张图上放不下：剩下的预算补成陆上兵力——坦克、步战车在前，步兵跟进，自行火炮、防空车在后，铺满整个出发阵地
     const ids = ['p_hv_tank', 'p_ifv', 'p_marine', 'p_tank', 'p_marine', 'p_mg', 'p_at', 'p_ifv', 'p_spg', 'p_td', 'p_marine', 'p_sam_veh', 'p_mortar', 'p_aa_veh', 'p_spg', 'p_rifle'];
-    const back = id => /spg|aa_veh|sam_veh|mortar/.test(id) ? 700 : /tank|ifv|td/.test(id) ? 260 : 380;
+    const back = id => FLAT.zone * (/spg|aa_veh|sam_veh|mortar/.test(id) ? .22 : /tank|ifv|td/.test(id) ? .5 : .4);   // 按出发阵地纵深摆：装甲在前沿一侧，炮兵、防空在后
     for (let i = 0, fail = 0; sbxLeft('p') >= 10 && fail < 60 && i < 2000; i++) {
-      const id = ids[i % ids.length], x = W * (.06 + .88 * ((i * .618034) % 1)), y = coastAt(x) - back(id) - (i % 5) * 40;
+      const id = ids[i % ids.length], x = W * (.06 + .88 * ((i * .618034) % 1)), y = coastAt(x) - back(id) - ((i * .381966) % 1 - .5) * FLAT.zone * .3;
       if (sbxTry(id, x, y, 60)) fail = 0; else fail++;
     }
     (S.sbx.aiSty || (S.sbx.aiSty = {})).p = style;

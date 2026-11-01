@@ -92,12 +92,17 @@ const frGrid = () => ({ ip: new Float32Array(FR_N), ie: new Float32Array(FR_N), 
 function frReset() {
   if (!FRC.ker) {
     FRC.ker = FR_RS.map(frKer); FRC.sea = new Uint8Array(FR_N); FRC.bp = new Float32Array(FR_N * 5); FRC.be = new Float32Array(FR_N * 5); FRC.bl = new Int32Array(FR_N * 5);
-    FRC.st = new Int32Array(FR_N); FRC.tmp = new Float32Array(FR_N); FRC.qx = new Float32Array(4096); FRC.qy = new Float32Array(4096);
+    FRC.zon = new Uint8Array(FR_N); FRC.st = new Int32Array(FR_N); FRC.tmp = new Float32Array(FR_N); FRC.qx = new Float32Array(4096); FRC.qy = new Float32Array(4096);
     for (const k of ['r1', 'r2', 'r3', 'r4', 's1', 's2']) FRC[k] = new Float64Array(FR_NX);
     FRC.p = frGrid(); FRC.e = frGrid();
   }
   FRC.S = S; FRC.T = TER;
   for (let j = 0; j < FR_NY; j++) for (let i = 0; i < FR_NX; i++) FRC.sea[j * FR_NX + i] = (j + .5) * FR_G > coastAt(Math.min(W, (i + .5) * FR_G)) + 5 || (TER.flat && j === FR_NY - 1) ? 1 : 0;   // 海面格（河流算陆地，线可以跨河）；白色平原没有海：南缘一排当作进攻方的后方，登陆场从那里往北连
+  // 白色平原：进攻方整块出发阵地（南缘往北 FLAT.zone）算登陆场——没有海，部队开局就摆满出发阵地；只从南缘一排泛洪的话，
+  //   中间隔着空地的部队连不上，前沿一直算在南缘，战区的阶段线、各营推进目标都卡在南缘附近（攻方原地不动）
+  FRC.zon.fill(0); FRC.zf = null;
+  if (TER.flat && typeof FLAT === 'object') FRC.zf = Float64Array.from({ length: FR_NX }, (_, b) => coastAt(Math.min(W, frBX(b))) - FLAT.zone);   // 各列出发阵地前沿
+  if (TER.flat && typeof FLAT === 'object') for (let j = 0; j < FR_NY; j++) for (let i = 0; i < FR_NX; i++) if ((j + .5) * FR_G >= coastAt(Math.min(W, (i + .5) * FR_G)) - FLAT.zone) FRC.zon[j * FR_NX + i] = 1;
   for (const G of [FRC.p, FRC.e]) { G.init = false; G.fet.fill(-99); }
   FRC.nP = FRC.nE = -1; FRC.ver++;
 }
@@ -178,7 +183,16 @@ function frBuild(view) {
   // 控制场：进攻方视角给陆地加 .6 的先验（未拿下的地方算敌控）；海面 = +1；3×3 盒式平滑；时间低通 .6/.4
   const pr = P ? .6 : 0;
   for (let i = 0; i < FR_N; i++) T[i] = sea[i] ? 1 : (ip[i] - ie[i] - pr) / (ip[i] + ie[i] + pr + 2);
+  // 内部格（不在图边）九个邻格都在：按原来的次序直接相加（结果逐位相同），不逐个判越界——白色平原 56 万格，原来这一段占建一次前沿的一半
+  const ini = G.init;
+  for (let j = 1; j < FR_NY - 1; j++) for (let i = 1; i < NX - 1; i++) {
+    const idx = j * NX + i; if (sea[idx]) { c[idx] = 1; continue; }
+    const a = idx - NX, b = idx + NX;
+    const s = T[a - 1] + T[a] + T[a + 1] + T[idx - 1] + T[idx] + T[idx + 1] + T[b - 1] + T[b] + T[b + 1];
+    c[idx] = ini ? .6 * c[idx] + .4 * s / 9 : s / 9;
+  }
   for (let j = 0; j < FR_NY; j++) for (let i = 0; i < NX; i++) {
+    if (j > 0 && j < FR_NY - 1 && i > 0 && i < NX - 1) { i = NX - 2; continue; }   // 内部格上面算过了：跳到这一行最后一格
     const idx = j * NX + i; if (sea[idx]) { c[idx] = 1; continue; }
     let s = 0, w = 0;
     for (let dj = -1; dj <= 1; dj++) { const jj = j + dj; if (jj < 0 || jj >= FR_NY) continue; for (let di = -1; di <= 1; di++) { const ii = i + di; if (ii < 0 || ii >= NX) continue; s += T[jj * NX + ii]; w++; } }
@@ -187,7 +201,7 @@ function frBuild(view) {
   G.init = true;
   // 登陆场：从海面四连通泛洪进 C ≥ .15 的陆地格
   const st = FRC.st; let sp = 0;
-  for (let i = 0; i < FR_N; i++) { lod[i] = sea[i]; if (sea[i]) st[sp++] = i; }
+  for (let i = 0; i < FR_N; i++) { lod[i] = sea[i] || FRC.zon[i]; if (lod[i]) st[sp++] = i; }   // 海面（白色平原：出发阵地）是登陆场的起点
   while (sp) {
     const i = st[--sp], x = i % NX;
     if (x > 0 && !lod[i - 1] && c[i - 1] >= .15) { lod[i - 1] = 1; st[sp++] = i - 1; }
@@ -208,6 +222,7 @@ function frBuild(view) {
       const ref = l === l && r === r ? (l * dr + r * dl) / (dl + dr) : l === l ? l : r;
       if (ref === ref) y = Math.max(y, ref - 35);
     }
+    if (FRC.zf && y === y) y = Math.min(y, FRC.zf[b]);   // 白色平原：出发阵地整块是攻方的，前沿至少在出发阵地前沿（不被还在后面的炮兵、补给站的兵拖回南缘）
     raw[b] = y === y && coastAt(frBX(b)) - y >= 25 ? y : NaN;
   }
   frSmooth(raw, V.fp, V.ft);

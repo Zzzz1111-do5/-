@@ -247,7 +247,8 @@ function moveTeam(q, dt, mul) {
   const l = dist(q.x, q.y, tx, ty) || 1;
   const rx = q.x + (tx - q.x) / l * Math.min(sp, l), ry = q.y + (ty - q.y) / l * Math.min(sp, l);
   let px = 0, py = 0;
-  for (const o2 of S.teams) if (o2 !== q && o2.side === q.side) {
+  const TM = S.teams, near = typeof ftNear === 'function' ? ftNear(rx, ry, 9 + 30) : null;   // 附近的小组（combat.js 按 160 米分桶，与 S.teams 同序；原来每个走动的小组每步都扫一遍全体）
+  for (let n = 0, N = near ? near.length : TM.length; n < N; n++) { const o2 = TM[near ? near[n] : n]; if (o2 === q || o2.side !== q.side) continue;
     const ex = rx - o2.x, ey = ry - o2.y;
     if (ex >= 9 || ex <= -9 || ey >= 9 || ey <= -9) continue;   // 每步每个走动的小组都扫一遍本方全体：坐标差超过 9 的直接跳过
     const d2 = dist(rx, ry, o2.x, o2.y);

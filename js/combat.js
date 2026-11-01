@@ -190,9 +190,14 @@ function findTarget(q, range) {
     if (d < bd && canSee(q.side, o.x, o.y, d, qx, qy)) { bd = d; best = { t: o, d, k: 'tm' }; }
   } }
   // 对方车辆（vehicles.js）：轻武器只能压制乘员，优先打步兵；带反坦克手段（mod.at）的小组优先打车
-  if (typeof vehFoes === 'function') for (const v of vehFoes(q.side)) {
-    const d = dist(q.x, q.y, v.x, v.y), w = d * (modOf(q).at ? .7 : 1.5);
-    if (w < bd && canSee(q.side, v.x, v.y, d, qx, qy)) { bd = w; best = { t: v, d, k: 'veh' }; }
+  if (typeof vehFoes === 'function' && S.veh && S.veh.length) {   // 先按本步的车辆坐标快照粗筛（vehicles.js vehCache，多留 VEHC_M 余量），远的不读车辆对象——结果不变
+    const C = vehCache(), sd = q.side === 'e' ? 'p' : 'e', L = C[sd], X = C.X[sd], Y = C.Y[sd], kw = modOf(q).at ? .7 : 1.5;
+    for (let k = 0; k < L.length; k++) {
+      const lim = bd / kw + VEHC_M, ex = X[k] - qx, ey = Y[k] - qy;
+      if (ex > lim || ex < -lim || ey > lim || ey < -lim) continue;
+      const v = L[k], d = dist(q.x, q.y, v.x, v.y), w = d * kw;
+      if (w < bd && canSee(q.side, v.x, v.y, d, qx, qy)) { bd = w; best = { t: v, d, k: 'veh' }; }
+    }
   }
   // 机场上停放的敌机（afgnd.js）：不还手，同样远时先打会还手的
   if (typeof afgList === 'function') for (const a of afgList(q.side)) {

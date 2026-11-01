@@ -712,7 +712,9 @@ function v3HtX(x, y) {
 function v3Mesh() {
   // 每格一个顶点要 32 位索引；细网格的部分（大海域地图只到寻路带）超过 30 万格时每 2 格一个（默认大地图 8400 × 5600 近百万个三角形，手机画不动）
   V3_ST = TER.flat ? 8 : V3.u32 && GW * Math.min(GH, TER.pathY ? Math.ceil(TER.pathY / CELL) + 20 : GH) <= 300000 ? 1 : 2;   // 白色平原是一整块平地：每 80 米一个顶点就够（每 20 米要 94 万个三角形）
-  const gl = V3.gl, st = V3_ST, nx = Math.floor((GW - 1) / st) + 1, ny = Math.floor((GH - 1) / st) + 1, hf = new Float32Array(nx * ny);
+  // 顶点数向上取整：最后一个顶点落在地图边上或边外（v3H0 取边上那格的高度）。原来向下取整，地图东、南边最后不到一个网格宽的一条没有地面——
+  //   白色平原每 80 米一个顶点，南缘出发阵地最后 80 米的部队悬在空中
+  const gl = V3.gl, st = V3_ST, nx = Math.ceil((GW - 1) / st) + 1, ny = Math.ceil((GH - 1) / st) + 1, hf = new Float32Array(nx * ny);
   for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) { const gx = i * st, gy = j * st; hf[j * nx + i] = (v3H0(gx - 1, gy - 1) + v3H0(gx, gy - 1) + v3H0(gx - 1, gy) + v3H0(gx, gy)) / 4; }
   V3.hf = hf; V3.nx = nx; V3.ny = ny;
   const d = CELL * st, verts = [], idx = [];
@@ -754,7 +756,8 @@ function v3Mesh() {
   const big = verts.length / 6 > 65535 && V3.u32;   // 顶点超过 16 位索引的上限：用 32 位索引（OES_element_index_uint）
   V3.it = big ? gl.UNSIGNED_INT : gl.UNSIGNED_SHORT;
   gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, V3.ib); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, big ? new Uint32Array(idx) : new Uint16Array(idx), gl.STATIC_DRAW);
-  V3.n = idx.length; V3.seed = TER.seed; V3.sig = typeof trxSig === 'function' ? trxSig() : null;
+  V3.n = idx.length; V3.seed = TER.seed; V3.ter = TER;   // 按地图对象认（换了同种子、不同尺寸的地图也重建网格）
+  V3.sig = typeof trxSig === 'function' ? trxSig() : null;
   v3OceanBuild(d);
   v3Bld();
   // 底图（俯视贴图以外的远处）：小地图同款黑绿配色，每格一个像素
@@ -1267,7 +1270,7 @@ function v3Draw(now) {
   if (!V3.tried) v3Init();
   if (!V3.ok) { V3.on = false; return false; }
   const gl = V3.gl;
-  if (V3.seed !== TER.seed || (typeof trxSig === 'function' && (V3.chk = (V3.chk || 0) - 1) <= 0 && (V3.chk = 60) && trxSig() !== V3.sig)) v3Mesh();
+  if (V3.seed !== TER.seed || V3.ter !== TER || (typeof trxSig === 'function' && (V3.chk = (V3.chk || 0) - 1) <= 0 && (V3.chk = 60) && trxSig() !== V3.sig)) v3Mesh();
   else if (typeof afb3dSig === 'function' && (V3.achk = (V3.achk || 0) - 1) <= 0 && (V3.achk = 30) && afb3dSig() !== V3.asig) v3Bld();   // 机场刚被发现 / 夺取
   // 转向 / 俯仰缓动；注视点高度平滑
   const fdt = clamp((now - (V3.lastNow || now)) / 1000, 0, .1); V3.lastNow = now;

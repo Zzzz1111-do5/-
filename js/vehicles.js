@@ -34,11 +34,23 @@ const VEH_ICONS = typeof WI === 'object' ? { lt_tank: WI.ztq15, tank: WI.ztz96b,
 
 // —— 创建与查询 ——
 // 只在本步内有效的分方缓存，供 combat.js 每个小组每步查询（避免反复 filter）
-const VEHC = { t: -1, S: null, p: [], e: [] };
+//   X / Y：本步开始时各车坐标的快照（类型数组，与 p / e 同序）——车辆两两避让、分开的循环先拿它粗筛，近的才读车辆对象本身：
+//   存档对象属性多、是字典模式，每读一个属性都是一次哈希查找，六十辆车两两比较每步几千次，原来占推演一成多。
+//   一步之内车最多挪几米，粗筛多留 VEHC_M 的余量，结果与逐个比较完全相同；在船上、在跳板上的车坐标会跳，记成 NaN（一定逐个比较）
+const VEHC = { t: -1, S: null, p: [], e: [], X: { p: new Float64Array(64), e: new Float64Array(64) }, Y: { p: new Float64Array(64), e: new Float64Array(64) } };
+const VEHC_M = 8;
+// 这一步里车辆清单没变（没有新车加入、没有移除）：本来扫 S.veh 全体的循环可以改用缓存的分方清单，结果相同
+const vehFresh = () => { const C = vehCache(); return C.len === S.veh.length; };
 function vehCache() {
   if (VEHC.t === S.t && VEHC.S === S) return VEHC;
-  VEHC.t = S.t; VEHC.S = S; VEHC.p = []; VEHC.e = [];
+  VEHC.t = S.t; VEHC.S = S; VEHC.p = []; VEHC.e = []; VEHC.len = (S.veh || []).length;
   for (const v of S.veh || []) if (!v.dead) (v.side === 'e' ? VEHC.e : VEHC.p).push(v);
+  for (const sd of ['p', 'e']) {
+    const L = VEHC[sd];
+    if (VEHC.X[sd].length < L.length) { VEHC.X[sd] = new Float64Array(L.length * 2); VEHC.Y[sd] = new Float64Array(L.length * 2); }
+    const X = VEHC.X[sd], Y = VEHC.Y[sd];
+    for (let k = 0; k < L.length; k++) { const v = L[k]; if (v.lst || v.ramp) X[k] = Y[k] = NaN; else { X[k] = v.x; Y[k] = v.y; } }
+  }
   return VEHC;
 }
 // side 方的敌对车辆（活着的）
@@ -280,8 +292,11 @@ function vehDrive(v, dt, mul) {
   if (S.t < (v.sideT ?? 0)) want += v.sideS * 1.1;   // 侧向让开（看门狗 / 前方有本方车辆）
   // 与本方车辆保持间距：前方有车就转向绕开、靠得太近就减速停车让行——车只沿车头方向走，不横着平移（以前侧推车身，看着像滑步）
   let slow = 1, park = null;
-  { const fx = Math.cos(v.heading), fy = Math.sin(v.heading);
-    for (const o2 of vehCache()[v.side]) {   // 只扫本方活着的车（顺序与 S.veh 相同）；坐标差超过最大避让距离的先跳过，不算 hypot——结果不变
+  { const fx = Math.cos(v.heading), fy = Math.sin(v.heading), C = vehCache(), L = C[v.side], X = C.X[v.side], Y = C.Y[v.side], vx = v.x, vy = v.y, RM = VEH_AVOID + VEHC_M;
+    for (let k = 0; k < L.length; k++) {   // 只扫本方活着的车（顺序与 S.veh 相同）；先按本步的坐标快照粗筛，坐标差超过最大避让距离的跳过，不算 hypot——结果不变
+      const ex = X[k] - vx, ey = Y[k] - vy;
+      if (ex > RM || ex < -RM || ey > RM || ey < -RM) continue;
+      const o2 = L[k];
       if (o2 === v || o2.dead || o2.side !== v.side || o2.lst) continue;
       const dx = o2.x - v.x, dy = o2.y - v.y;
       if (dx > VEH_AVOID || dx < -VEH_AVOID || dy > VEH_AVOID || dy < -VEH_AVOID) continue;
@@ -347,7 +362,11 @@ function vehSep(v, dt) {
   if (v.lst || v.ramp || v.swim || v.immob || v.fixed) return;
   const sp = vehSp(v), cls = vehCls(v);
   let px = 0, py = 0;
-  for (const o of vehCache()[v.side]) {   // 只扫本方活着的车（顺序与 S.veh 相同，结果不变）
+  const C = vehCache(), L = C[v.side], X = C.X[v.side], Y = C.Y[v.side], vx = v.x, vy = v.y, RM = 30 + VEHC_M;
+  for (let k = 0; k < L.length; k++) {   // 只扫本方活着的车（顺序与 S.veh 相同）；先按坐标快照粗筛（见 vehCache），结果不变
+    const ex = X[k] - vx, ey = Y[k] - vy;
+    if (ex > RM || ex < -RM || ey > RM || ey < -RM) continue;
+    const o = L[k];
     if (o === v || o.dead || o.side !== v.side || o.lst || o.ramp) continue;
     const dx = v.x - o.x, dy = v.y - o.y;
     if (Math.abs(dx) > 30 || Math.abs(dy) > 30) continue;
@@ -364,8 +383,10 @@ function vehSep(v, dt) {
 // 停着的车与本方车辆贴得太近（车身间隙不足 4）：编号大的那辆每秒挪开 6，把已经挤成一团的慢慢摊开
 function vehSpread(v, dt) {
   if (v.immob || v.lst || v.swim) return;
-  const sp = vehSp(v), cls = vehCls(v);
-  for (const o of S.veh) {
+  const sp = vehSp(v), cls = vehCls(v), fr = vehFresh(), C = vehCache(), L = fr ? C[v.side] : S.veh, X = C.X[v.side], Y = C.Y[v.side], vx = v.x, vy = v.y, RM = 40 + VEHC_M;
+  for (let k = 0; k < L.length; k++) {   // 本方活着的车（与 S.veh 同序），先按坐标快照粗筛（见 vehCache）；这一步里车辆清单变过就逐个扫全体
+    if (fr) { const ex = X[k] - vx, ey = Y[k] - vy; if (ex > RM || ex < -RM || ey > RM || ey < -RM) continue; }
+    const o = L[k];
     if (o === v || o.dead || o.side !== v.side || o.lst || o.id > v.id || Math.abs(v.x - o.x) > 40 || Math.abs(v.y - o.y) > 40) continue;   // 两车半长之和 + 4 不会超过 40
     const d = dist(v.x, v.y, o.x, o.y), m = (sp.len + vehSp(o).len) * .5 + 4;
     if (d >= m) continue;
@@ -702,7 +723,9 @@ function vehGrenades(dt) {
   if (vehCache().p.length + vehCache().e.length + cars.length) for (const q of S.teams) {
     if (!q.men.length || q.ride || q.sup >= 85 || q.order.t === 'retreat' || (q.gT || 0) > S.t) continue;
     let tg = null, bd = GREN.r, k = 'veh';
-    for (const v of vehFoes(q.side)) { if (v.swim || v.lst || Math.abs(v.x - q.x) >= bd || Math.abs(v.y - q.y) >= bd) continue; const d = dist(q.x, q.y, v.x, v.y); if (d < bd) { bd = d; tg = v; } }   // 每步每个小组都查：先按坐标差排除
+    { const C = vehCache(), sd = q.side === 'e' ? 'p' : 'e', L = C[sd], X = C.X[sd], Y = C.Y[sd], qx = q.x, qy = q.y;   // 每步每个小组都查：先按本步的车辆坐标快照粗筛（vehCache），再按坐标差排除——结果不变
+      for (let n = 0; n < L.length; n++) { const lim = bd + VEHC_M, ex = X[n] - qx, ey = Y[n] - qy; if (ex > lim || ex < -lim || ey > lim || ey < -lim) continue;
+        const v = L[n]; if (v.swim || v.lst || Math.abs(v.x - q.x) >= bd || Math.abs(v.y - q.y) >= bd) continue; const d = dist(q.x, q.y, v.x, v.y); if (d < bd) { bd = d; tg = v; } } }
     if (q.side === 'p') for (const a of cars) { const d = dist(q.x, q.y, a.x, a.y); if (d < bd) { bd = d; tg = a; k = 'car'; } }
     if (!tg) continue;
     q.gT = S.t + GREN.cd * (.8 + Math.random() * .4); q.cd = Math.max(q.cd, .8);   // 投弹这一下不开枪
