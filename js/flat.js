@@ -6,7 +6,7 @@
 //   据点：出发阵地前沿 6 处出发线（开战时归进攻方）、北面的指挥所、西 / 东 / 北三个要点、雷达站、两个集结地（只是方位，没有房子）。
 //   「海岸线」放在图外南边（coastAt 恒为 H + 60）：全图都是陆地，按离岸距离算纵深的代码照常用；集结海域、航母位置也挪到图外（补给线朝南通到图外）。
 //   地图大，寻路、视野等按格子开的数组也大：grid.js 对超过 120 万格的地图改用单精度、少缓存几张流场（BIG_N）
-const FLAT = { w: 16800, h: 11200, zone: 1000, gap: 500, nb: 6, el: .012, off: 60 };
+const FLAT = { w: 16800, h: 11200, zone: 2800, gap: 800, nb: 6, el: .012, off: 60 };   // 出发阵地纵深 2.8 公里（原来 1 公里，一个加强团摆不开）
 MAPGEN.flat = { w: FLAT.w, h: FLAT.h, build: buildFlat, nm: '白色平原' };
 const FLAT_SECT = ['甲', '乙', '丙', '丁', '戊', '己'];
 
@@ -80,5 +80,12 @@ function flatGroundSpawn(items) {
   if (typeof indexUnits === 'function') indexUnits();
   log('出发阵地展开完毕：补给站开设，向纵深发起进攻', 'good');
 }
+// 战区司令（theater.js）的阶段线从海岸往里数（第 k 道 = 海岸以北 260 + 300k）：这张图上整块出发阵地已经是登陆场，开战时阶段线直接从出发阵地前沿那一道算起——
+//   否则头几道阶段线落在出发阵地里面，推进目标被压在阶段线以南，前面的部队反而往回撤
+HOOK.step.push(() => {
+  if (!S || S.phase !== 'battle' || !TER || !TER.flat || !S.th || !S.th.p || S.th.p.flatK) return;
+  const k0 = Math.max(0, Math.ceil((FLAT.zone - (typeof TH === 'object' ? TH.head : 260)) / (typeof TH === 'object' ? TH.phase : 300)));
+  S.th.p.k = Math.max(S.th.p.k || 0, k0); S.th.p.kT = S.t; S.th.p.flatK = true;
+});
 // 新开一局：055 旗舰没地方停（没有海）——移到图外、算作不在场
 HOOK.newGame.push(() => { if (S && TER && TER.flat && S.dd) Object.assign(S.dd, { x: -9999, y: H + 9999, tx: -9999, ty: H + 9999, hull: 0, state: 'sunk', moving: false, auto: false }); });

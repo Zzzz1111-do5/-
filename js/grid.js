@@ -83,7 +83,11 @@ function visPrep() {
   if (VIS_KEY.ter === TER && VIS_KEY.seed === TER.seed) return;
   VIS_KEY.ter = TER; VIS_KEY.seed = TER.seed;
   for (let i = 0; i < GW * GH; i++) { const t = TER.type[i], g = isWater(t) ? 0 : TER.elev[i] * ELEV_H; VIS_G[i] = g; VIS_B[i] = g + TP[t].bl; }
+  // 整张图一样高、没有任何遮挡（白色平原）：视线投射时地面坡度判据恒成立（见 castVision），只剩烟幕能截断射线
+  VIS_UNI = true;
+  for (let i = 0, g0 = VIS_G[0]; i < GW * GH; i++) if (VIS_G[i] !== g0 || VIS_B[i] !== g0) { VIS_UNI = false; break; }
 }
+let VIS_UNI = false;
 const VIS_ST = [1];   // 射线步长 1, 1.7, 2.4 …（格），与逐次累加 .7 得到的值完全相同；视距更远时再往后补
 // 每个视野源照亮的格子只取决于它的位置、视高、视距、地形与视距内的烟幕：阵地里不动的守军、工事、停着的车每 0.25 秒算出来都一样，
 //   缓存起来直接用（键是精确坐标，烟幕按视距内每团的位置与当前半径比对，结果与重算逐格相同）；地图换了清空，用得少的定期淘汰
@@ -135,7 +139,19 @@ function castVision(out, sources) {
     while (ST[ST.length - 1] + .7 <= rc) ST.push(ST[ST.length - 1] + .7);
     let ns = 0;
     while (ns < ST.length && ST[ns] <= rc) ns++;
-    for (let k = 0; k < n; k++) {
+    // 平坦无遮挡（VIS_UNI）且视高为正：第 j 步地面坡度 −h / st 一定高于此前最高遮挡坡度 −h / st(j−1) 减 0.02，格子一定点亮——
+    //   省掉两次除法与比较，只按烟幕截断（结果与下面的通用循环逐格相同）
+    if (VIS_UNI && h > 0) for (let k = 0; k < n; k++) {
+      const dx = D[k * 2], dy = D[k * 2 + 1];
+      for (let j = 0; j < ns; j++) {
+        const st = ST[j], fx = gx0 + dx * st, fy = gy0 + dy * st;
+        if (fx < 0 || fy < 0 || fx >= gw || fy >= gh) break;
+        const i = (fy | 0) * gw + (fx | 0);
+        out[i] = 1; if (mark[i] !== sid) { mark[i] = sid; cells[nc++] = i; }
+        if (SM[i]) break;
+      }
+    }
+    else for (let k = 0; k < n; k++) {
       const dx = D[k * 2], dy = D[k * 2 + 1];
       let maxS = -1e9;
       for (let j = 0; j < ns; j++) {
