@@ -1058,8 +1058,13 @@ function v3Init() {
   V3.tried = true;
   try {
     const cv = document.createElement('canvas');
-    const gl = cv.getContext('webgl', { antialias: true, preserveDrawingBuffer: true, alpha: false });
+    // 3D 画布直接放进页面，垫在 2D 画布（#cv）底下：2D 画布每帧清空后只画文字、标识、平显，由合成器叠上去——
+    //   原来每帧把整张 3D 画面 drawImage 到 2D 画布上（全屏拷贝，还要等显卡画完；软件渲染时占了九成多的时间）。
+    //   不再有人回读 3D 画布，所以不保留绘制缓冲区（浏览器可以直接交换缓冲，不必每帧再拷一遍）
+    const gl = cv.getContext('webgl', { antialias: true, preserveDrawingBuffer: false, alpha: false });
     if (!gl) return;
+    const st = typeof R === 'object' && R.cv && R.cv.parentNode;
+    if (st) { cv.id = 'cv3'; cv.setAttribute('aria-hidden', 'true'); cv.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;display:none;pointer-events:none'; st.insertBefore(cv, R.cv); }
     const der = !!gl.getExtension('OES_standard_derivatives');
     const sh = (type, src) => { const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)); return s; };
     const pr = gl.createProgram();
@@ -1384,7 +1389,10 @@ function v3Draw(now) {
   if (typeof v3Fx === 'function' && !(SETTINGS && SETTINGS.models3d === false)) { gl.disableVertexAttribArray(V3.a.p); gl.disableVertexAttribArray(V3.a.n); v3Fx(C); }   // 立体弹道（v3fx.js）
   if (typeof v3Post === 'function') { gl.disableVertexAttribArray(V3.a.p); gl.disableVertexAttribArray(V3.a.n); v3Post(now); }   // 辉光、景深、暗角（v3post.js）
   const ctx = R.ctx;
-  ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalCompositeOperation = 'copy'; ctx.drawImage(V3.cv, 0, 0); ctx.restore();
+  ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);
+  if (V3.cv.parentNode) ctx.clearRect(0, 0, R.cv.width, R.cv.height);   // 3D 画布垫在底下（v3Init），2D 画布只留文字和标识
+  else { ctx.globalCompositeOperation = 'copy'; ctx.drawImage(V3.cv, 0, 0); }   // 没能放进页面时照旧贴过来
+  ctx.restore();
   v3Overlay(ctx, now / 1000);
   return true;
 }
