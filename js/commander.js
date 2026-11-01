@@ -515,9 +515,26 @@ function cmdSayPlan(B, R, mode, prep) {
   if (veh.length && mode !== 'self') chatSay('p', `命令：${veh.length} 辆装甲车辆随第一波在${M.b.name}上陆，伴随步兵攻击，不得脱离步兵单独突入。`, { kind: 'order', at, delay: 7.2 });
 }
 
+// 抵近火力准备 / 火力延伸：主攻滩头出口一带已发现的火力点（碉堡、岸防炮、迫击炮、高炮、炮兵阵地，离出口 350 米内、最多 3 个，离滩近的先打）
+//   和出口本身各 n 发，排在火力任务最前面（登陆这一两分钟最急）；同一点 40 米内已有任务的不重复下
+function cmdCloseFires(main, n, why) {
+  const C = S.cmd.p, M = cmdExit(main);
+  if (!M) return;
+  const K = { bunker: 1, coastal: 1, mortar: 1, aa: 1, arty: 1 };
+  const tg = S.enemies.filter(e => !e.dead && e.kx != null && K[e.kind] && dist(e.kx, e.ky, M.x, M.y) < 350).sort((a, c) => (c.ky - coastAt(c.kx)) - (a.ky - coastAt(a.kx))).slice(0, 3).map(e => ({ x: e.kx, y: e.ky }));
+  tg.push({ x: M.x, y: M.y });
+  for (const t of tg.reverse()) {
+    if (C.fm.some(m => !m.smoke && m.n > 0 && dist(m.x, m.y, t.x, t.y) < 40)) continue;
+    if (dist(S.dd.x, S.dd.y, t.x, t.y) > DD_R * .98 && !cmdDDSpot(t.x, t.y)) continue;
+    C.fm.unshift({ x: Math.round(t.x), y: Math.round(t.y), n, t: S.t, why });
+  }
+}
 // 火力准备：已知目标逐一急促射；没有已知目标时对出口与两翼可疑位置概略射击
 function cmdPrepFires(main) {
   const C = S.cmd.p, b = TER.beaches[main], M = cmdExit(main);
+  // 舰炮支援一开打就边打边机动（每次齐射后机动 70 米以上，support.js ddScoot）：守军的岸防炮、榴弹炮会按炮口焰反炮兵射击，
+  //   停着打的舰几轮就挨上；原来要先挨一发才「学会」，登陆前常已被打掉两格船体、只剩节约射击，抵滩时没有火力支援
+  if (S.dd && cmdCtl(S.dd)) S.dd.scoot = true;
   const sp = cmdDDSpot(M.x, M.y);
   if (sp && (dist(S.dd.x, S.dd.y, M.x, M.y) > DD_R * .9 || cmdGuns().some(g => dist(g.x, g.y, S.dd.x, S.dd.y) < 650))) orderDD(sp.x, sp.y);
   const known = S.enemies.filter(e => !e.dead && e.kx != null && dist(e.kx, e.ky, M.x, M.y) < 420).sort((a, c) => (c.kind === 'coastal') - (a.kind === 'coastal'));
@@ -827,6 +844,16 @@ function cmdFiresP(C) {
         chatSay('p', `命令：驱逐舰向${b.name}滩头施放烟幕，遮蔽守军观察，掩护第一波抢滩。`, { kind: 'order', at: { x: b.cx, y: coastAt(b.cx) } });
       }
     }
+  }
+  // 抵近火力准备与火力延伸（联合登陆）：第一波离岸 900 米内急袭滩头要点；抵滩后火力向出口、纵深延伸，每 25 秒补一轮，
+  //   压住守军直到步兵冲上去、出口到手（最多 2 分钟）。驱逐舰离我军 55 米内不打、弹着随我军逼近往前推（cmdDDMission、ddFire safeAim）——
+  //   原来火力准备在 H 时一次打完，登陆艇两三分钟后才到滩，步兵冲出口时守军早缓过来了（条令评估：冲击前有火力准备的不到四成）
+  if (b && cmdCtl(S.dd) && S.dd.state !== 'sunk') {
+    const w1 = S.ships.filter(s => alive(s) && C.ship[s.id] && C.ship[s.id].r === 'w1');
+    const dmin = w1.reduce((m, s) => s.state === 'move' ? Math.min(m, s.y - coastAt(s.x)) : m, 1e9), landed = w1.some(s => s.state !== 'move' && s.state !== 'idle');
+    if (landed && C.landT1 == null) C.landT1 = S.t;
+    if (!C.prep2 && (dmin < 900 || landed)) { C.prep2 = S.t; cmdCloseFires(pl.main, 2, 'prep2'); }
+    else if (landed && S.t - C.landT1 < 120 && S.t - (C.liftT ?? C.prep2) >= 25 && !cmdOwned(cmdExit(pl.main))) { C.liftT = S.t; cmdCloseFires(pl.main, 2, 'lift'); }
   }
   // 驱逐舰中弹：报告损伤与火力来源，机动脱离射界，航空兵压制该炮
   const dd = S.dd;
