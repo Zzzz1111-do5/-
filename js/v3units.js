@@ -975,7 +975,7 @@ function v3GroundPlane(key, sz, x, y, ground, hd, fold, cpo, still, side, t, sf,
   if (typeof v3gPlane === 'function') v3gPlane(key, sz, x, y, ground, true, hd, side === 4 || side === 1 ? 1 : 0, 0, pt, true, still ? 0 : t, 0, sf, bay, fold);   // sf：挂上弹射杆后的舵面检查（v3det.js v3dDeckSurf）；fold：外翼折起（有折翼的模型，v3g.js V3G_FOLD）
 }
 // 登陆舰艇的外部精细模型（v3utex.js V3U_SHIP）：舰名前缀 → [模型, 画多长（世界单位）]——LC 726 型气垫艇、LA 271 型登陆艇、LV 人员登陆艇；
-//   其余舰型（072A、074A、073A、072、扫雷舰、火力支援艇）没有合规的免费模型，照旧画自带模型
+//   其余舰型（072A、074A、073A、072、火箭 / 火力支援艇、扫雷舰）没有合规的免费模型，照真舰程序建模（v3lst.js V3L_PRE）
 const V3_SHIPX = { LC: ['lcac', 30], LA: ['lcu', 32], LV: ['lcvp', 14] };
 // 登机梯（机型单位，按飞机比例缩放）：梯脚在原点，斜靠向机身（局部 +x）
 function v3mLadder() {
@@ -1086,7 +1086,14 @@ function v3mCollect(C, box) {
       if (typeof v3uShip === 'function' && v3uShip(c, P.x, P.y, -2.6, P.h, Ld, 0)) continue;
       const [mk, mb] = v3mDDK(c); v3mAdd(mk, mb, P.x, P.y, -2.6, P.h, P.k, 0); continue;
     }
-    const X = V3_SHIPX[String(sh.label || '').split('-')[0]], zx = X && sh.hover ? Math.max(-2.6, v3Ht(P.x, P.y)) : -2.6;   // 气垫艇冲上滩头时贴着地面
+    const pre = String(sh.label || '').split('-')[0], X = V3_SHIPX[pre], zx = X && sh.hover ? Math.max(-2.6, v3Ht(P.x, P.y)) : -2.6;   // 气垫艇冲上滩头时贴着地面
+    const Q = !X && typeof V3L_PRE === 'object' && V3L_PRE[pre];   // 登陆舰、火力支援艇、扫雷舰（v3lst.js：按真舰以米建模，这里按游戏长度缩放）
+    if (Q) {
+      const [v, f] = Q, len = d[0] * f * P.k, off = (d[0] * P.k - len) / 2, c = Math.cos(P.h), s = Math.sin(P.h), k = len / V3L_DIM[v][0], F = V3L_FUN[v];
+      v3mAdd('sh:l:' + v, () => v3mLST(v), P.x + c * off, P.y + s * off, -2.6, P.h, k, 0);
+      if (typeof v3dFunnel === 'function') v3dFunnel(P.x + c * off, P.y + s * off, P.h, len, F[0], -2.6 + F[1] * k, .6);
+      continue;
+    }
     if (!(X && typeof v3uShip === 'function' && v3uShip(X[0], P.x, P.y, zx, P.h, X[1] * P.k, 0))) v3mAdd('sh:' + sh.kind, () => v3mShip(sh.kind, d[0], d[1]), P.x, P.y, -2.6, P.h, P.k, 0);
     if (typeof v3dFunnel === 'function') v3dFunnel(P.x, P.y, P.h, (X ? X[1] : d[0]) * P.k, sh.kind === 'assault' ? -.4 : -.25, -2.6 + d[1] * .55, X && X[0] === 'lcac' ? 1.2 : .6);   // 柴油机排气（气垫艇是四台燃气轮机，热浪大）
   }
