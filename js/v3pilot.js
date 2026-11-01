@@ -476,7 +476,8 @@ function fpFx(out, sm, C) {
     const p = W0[i], rel = [p[0] - E[0], p[1] - E[1], p[2] - E[2]], ahead = v3Dot(rel, cf);
     if (ahead < 4 || ahead > 260 || Math.hypot(rel[0] - cf[0] * ahead, rel[1] - cf[1] * ahead, rel[2] - cf[2] * ahead) > 60) { W0[i] = spawn(); continue; }
     const q = [p[0] - dir[0] * len, p[1] - dir[1] * len, p[2] - dir[2] * len], f = smooth(4, 30, ahead) * smooth(260, 120, ahead) * wI;
-    v3fRib(out, E, q, p, .05 + ahead * .0016, [1, 1, 1, 0], [1, 1, 1, .32 * f]);
+    if (i > 14 + 32 * wI) continue;   // 速度不太快、离地高时少几道
+    v3fRib(out, E, q, p, .05 + ahead * .0016, [1, 1, 1, 0], [1, 1, 1, .26 * f]);
   }
 }
 // 受力回馈：镜头抖动（大迎角抖振最猛，过载、加力、开火冲击次之），返回 [右, 上] 两个小角度（弧度）
