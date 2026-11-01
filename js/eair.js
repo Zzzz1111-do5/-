@@ -957,7 +957,7 @@ function eaLost(a, how) {
   S.fx.push({ kind: 'boom', x: a.x, y: a.y, r: a.type === 'b2' || a.type === 'c17' ? 34 : 20, life: 0, max: 1, side: 'e', air: 1, alt: a.alt ?? 1 });   // air / alt：3D 里在空中这个高度炸开（v3fx.js）
   if (E) E.wr.push({ x: a.x, y: a.y, h: a.heading, spd: Math.min(70, a.spd * .4 + 10), t: S.t, type: a.type, hit: false, alt: a.alt ?? 1 });
   eaStat('eaLost');
-  const nm = EA_SPEC[a.type].name, by = { manpads: '便携防空导弹', sam: '舰空导弹', samv: '弹炮防空车', aa: '防空车机炮', mg: '机枪火力', ciws: '舰上近防炮', aam: '我方战斗机空空导弹', aaml: '歼-36 的霹雳-17 远程空空导弹', gun: '我方战斗机机炮', nuke: '核爆冲击波' }[how] || '防空火力';
+  const nm = EA_SPEC[a.type].name, by = { manpads: '便携防空导弹', sam: '舰空导弹', samv: '弹炮防空车', aa: '防空车机炮', mg: '机枪火力', ciws: '舰上近防炮', aam: '我方战斗机空空导弹', aaml: '我方战斗机的霹雳-17 远程空空导弹', gun: '我方战斗机机炮', nuke: '核爆冲击波' }[how] || '防空火力';
   log(`${by}击落敌${nm}`, 'good', null, 0, a);
   if (typeof chatSay === 'function') {
     chatSay('p', `报告：${by}击落敌${nm} 1 架。`, { kind: 'report', at: { x: a.x, y: a.y }, key: 'eakill' + a.id, gap: 5 });

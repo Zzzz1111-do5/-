@@ -12,7 +12,7 @@ const v3dSz = p => typeof airSize3 === 'function' ? airSize3(p, 'p') : (typeof a
 //   直线电机：挂杆后整条滑轨微微发光（储能），越接近弹射越亮；弹射时滑块所在的一段定子最亮、身后一段渐暗、前面一小段刚通电
 //   喷气机挂杆后推到最大推力、弹射前约 2 秒点加力（v3dDeckEng），尾焰打在升起的偏流板上（板面映亮）；离舰后先略微下沉、抬头爬升，约 2 秒后收起落架
 const V3D_NOSE0 = 6;   // 没有飞机时滑块停在起点前 6 米（前起落架大致的位置）
-const V3D_JET = { j35: 1, j20: 1, j15: 1, j15t: 1, j16: 1, j16d: 1, j36: 1, j50: 1, f35: 1, f22: 1, f35b: 1 };   // 有加力的喷气机
+const V3D_JET = { j35: 1, j20: 1, j15: 1, j15t: 1, j16: 1, j16d: 1, j50: 1, f35: 1, f22: 1, f35b: 1 };   // 有加力的喷气机
 // 前起落架离机身中心多远（世界单位）：用户给的模型里量的前轮位置（米，模型坐标）；没有起落架的模型按机长的两成
 const V3D_NOSEX = { j31: 4, j20: 3.18 };
 function v3dNose(key, k) {
@@ -222,7 +222,7 @@ function v3dCatFx(out, C, inB) {
 // ———————————————— 飞行姿态：js/aero.js（tools/aero_jsbsim.py 用 JSBSim 离线算）————————————————
 //   弹射离舰的头 14 秒：高度（含离舰后先下沉约 3 米）、俯仰、平尾、前缘襟翼、起落架照 JSBSim 的时间历程；
 //   之后：俯仰 = 画面上的航迹角 + 迎角，迎角按升力线从速度、过载、翼载算（AERO.a0 / cla），平尾按配平规律 + 俯仰角速度
-const V3_WS = { j35: 500, j20: 450, j15: 470, j16: 470, j36: 480, j50: 480, h6k: 520, y20: 620, kj600: 380 };   // 翼载（公斤 / 平方米，公开估算）：算迎角
+const V3_WS = { j35: 500, j20: 450, j15: 470, j16: 470, j50: 480, h6k: 520, y20: 620, kj600: 380 };   // 翼载（公斤 / 平方米，公开估算）：算迎角
 const V3D_D2R = Math.PI / 180;
 // 离舰后 u 秒的一行 [离甲板高, 俯仰, 迎角, 速度, 平尾, 前缘襟翼, 起落架]（插值）；超出 14 秒返回 null
 function v3dAeroAt(u) {
@@ -298,12 +298,13 @@ const v3dPitchOf = (o, sd) => { const P = V3D_PT.get((sd ? 'e' : 'p') + o.id); r
 //   推油门时这些从里往外热起来：暗红 → 橙 → 橙黄（喷口里发动机变热的纹路）；开加力先在稳定器上点着一小团火（分区加力一区一区点），
 //   根部蓝紫、尖上橙红；其余几区接连点着，火舌变长、变成白芯黄焰；全加力时喷流欠膨胀，喷口后约一个直径起一串激波马赫环，间隔约 1.2 个直径，越往后越暗、越偏橙粉
 // 一架飞机的喷口（世界单位，相对锚点：空中是机身中线，ground 时是机轮着地点）：{ x, y, z, r 半径, w、hh 半宽、半高, d 喷管深 }——
-//   用户给的模型里量的（tools/v3gmodels.json 的 noz，米，模型坐标 x 机头、y 左、z 离着地点高），按画面尺寸缩放；模型还没加载完就不画尾焰
+//   用户给的模型里量的（tools/v3gmodels.json 的 noz，米，模型坐标 x 机头、y 左、z 离着地点高；[x, y, z, 半径, 喷管深] 圆喷口，后面再跟 [半宽, 半高] 是扁平的二元喷口），按画面尺寸缩放；模型还没加载完就不画尾焰
 function v3dNoz(key, sz, ground) {
   const mk = typeof V3G_AIR === 'object' && V3G_AIR[key], M = mk && typeof V3G === 'object' && V3G.M[mk], N = [];
   if (!M || !M.ready || !M.meta.noz) return N;
   const s = sz / M.meta.len, z0 = ground ? 0 : M.meta.zc;
-  for (const n of M.meta.noz) for (const sg of n[1] ? [1, -1] : [1]) N.push({ x: n[0] * s, y: n[1] * sg * s, z: (n[2] - z0) * s, r: n[3] * s, d: n[4] * s, w: n[3] * s, hh: n[3] * s });
+  for (const n of M.meta.noz) for (const sg of n[1] ? [1, -1] : [1]) N.push(n[5] ? { x: n[0] * s, y: n[1] * sg * s, z: (n[2] - z0) * s, r: 0, d: n[4] * s, w: n[5] * s, hh: n[6] * s }   // 扁平的二元喷口：n[5] 半宽、n[6] 半高
+    : { x: n[0] * s, y: n[1] * sg * s, z: (n[2] - z0) * s, r: n[3] * s, d: n[4] * s, w: n[3] * s, hh: n[3] * s });
   return N;
 }
 // 炽热金属的颜色（近似黑体）：t 0 暗红 → .5 橙 → 1 淡黄；a 不透明度
@@ -471,7 +472,7 @@ function v3dDrv(key, x, y, z, a) {
   const St = V3D_SEAT[key];   // 有人开：司机（用户给的士兵模型）站在驾驶位上
   if (St && typeof v3gMan === 'function') {
     const c = Math.cos(a), s = Math.sin(a);
-    v3gMan('deck', 'sit', x + St[0] * c - St[1] * s, y + St[0] * s + St[1] * c, z + St[2], a, typeof V3_PIL === 'number' ? V3_PIL : .95, 0);
+    v3gMan('deck' + (St[3] || ''), 'sit', x + St[0] * c - St[1] * s, y + St[0] * s + St[1] * c, z + St[2], a, typeof V3_PIL === 'number' ? V3_PIL : .95, 0);   // 马甲颜色按车种（牵引车蓝、挂弹车红）
   }
 }
 function v3dDeckVeh(cv, C, live, wing, top, h, at) {
@@ -539,7 +540,7 @@ function v3dDeckVeh(cv, C, live, wing, top, h, at) {
       else if (q < .62) walk(kn, sA, (q - .58) / .04, .58, .62);
       else walk(sA, sH, sm01((q - .62) / .3), .62, .92, la);
       const [mx, my] = at(u, v);
-      v3gMan('deck', pose, mx, my, top, h + f, V3_PIL, 0);
+      v3gMan('deck#b23a2e', pose, mx, my, top, h + f, V3_PIL, 0);   // 红马甲：弹药兵
     }
   };
   // 每个机位都画挂弹车和导弹挂载架（空着、飞机刚走也在原位，不会突然没了）：机位上停着的（待命 / 整备）、正要停进来的（着舰后滑过来：架子先摆好它要挂的弹）
@@ -615,7 +616,7 @@ function v3dArmCrew(live, top, h, at) {
       else if (t < A.away) walk(F0, E[i], (t - A.show) / (A.away - A.show));
       else { [u, v, f] = E[i]; f += Math.PI; pose = 'st'; }   // 站在一旁看着飞机
       const [x, y] = at(u, v);
-      v3gMan('deck', pose, x, y, top, h + f, V3_PIL, 0);
+      v3gMan('deck#b23a2e', pose, x, y, top, h + f, V3_PIL, 0);   // 红马甲：挂弹组拔保险销
     });
   }
   for (const id of V3D_ARMP.keys()) if (!now.has(id)) V3D_ARMP.delete(id);
