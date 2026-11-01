@@ -38,7 +38,7 @@ void main() {
     gl_FragColor = vec4(vC.rgb * (.74 + .32 * q.y + .14 * (n - .5)) * a, a);
   } else {   // 火（加法）：噪声亮的一团团接近白黄，边上是本身的橙红
     float h = e * (.4 + .8 * n);
-    gl_FragColor = vec4(mix(vC.rgb, vec3(1., .9, .66), smoothstep(.55, 1.05, h)) * vC.a * h, vC.a * h);
+    gl_FragColor = vec4(mix(vC.rgb, vec3(1., .88, .62), smoothstep(.68, 1.12, h)) * vC.a * h, vC.a * h);
   }
 }`;
 function v3fxInit(gl) {
@@ -69,9 +69,10 @@ function v3fSpark(out, C, p, r, c) {
   const X = C.x, Y = C.y, P = (a, b) => out.push(p[0] + (X[0] * a + Y[0] * b) * r, p[1] + (X[1] * a + Y[1] * b) * r, p[2] + (X[2] * a + Y[2] * b) * r, c[0], c[1], c[2], c[3], a, b);
   P(-1, -1); P(1, -1); P(1, 1); P(-1, -1); P(1, 1); P(-1, 1);
 }
-// 翻滚的烟团（m 1，放进遮光的 sm）/ 火球（m 2，放进加法的 out）：和 v3fSpark 一样面向镜头的方块，带内坐标里编进画法和噪声种子（着色器解出来）
-function v3fPuff(L, C, p, r, c, m, seed) {
-  const X = C.x, Y = C.y, ox = 8 * m, oy = 4 * ((seed | 0) & 15), P = (a, b) => L.push(p[0] + (X[0] * a + Y[0] * b) * r, p[1] + (X[1] * a + Y[1] * b) * r, p[2] + (X[2] * a + Y[2] * b) * r, c[0], c[1], c[2], c[3], a + ox, b + oy);
+// 翻滚的烟团（m 1，放进遮光的 sm）/ 火球（m 2，放进加法的 out）：和 v3fSpark 一样面向镜头的方块，带内坐标里编进画法和噪声种子（着色器解出来）；
+//   bot：下半截的不透明度倍数（贴地的烟团往底边淡出，被地面切掉的硬边看不出来）。注意下面另有画烟幕的 v3fPuff（不翻滚），名字不能重
+function v3fBillow(L, C, p, r, c, m, seed, bot = 1) {
+  const X = C.x, Y = C.y, ox = 8 * m, oy = 4 * ((seed | 0) & 15), P = (a, b) => L.push(p[0] + (X[0] * a + Y[0] * b) * r, p[1] + (X[1] * a + Y[1] * b) * r, p[2] + (X[2] * a + Y[2] * b) * r, c[0], c[1], c[2], c[3] * (b < 0 ? bot : 1), a + ox, b + oy);
   P(-1, -1); P(1, -1); P(1, 1); P(-1, -1); P(1, 1); P(-1, 1);
 }
 const V3F_WIND = [1.6, -.55];   // 烟往下风飘（米 / 秒，游戏坐标：往东、偏北）
@@ -257,7 +258,7 @@ function v3Fx(C) {
       const an = o.sd + i * 2.39, el = (i % 3 - 1) * .55, d = r * (.1 + .42 * Math.sqrt(a / 1.4)) * (.7 + (i * 37 % 10) / 25);
       const p = v3fP(o.x + Math.cos(an) * Math.cos(el) * d, o.y + Math.sin(an) * Math.cos(el) * d, o.z + (Math.sin(el) * d + up * (r * .22 + a * r * .5)) * (o.air ? 1 : .9));
       const k = 1 - a / 1.4, cool = smooth(.08, 1.1, a);
-      v3fPuff(out, C, p, r * (.42 + .42 * a), [1, .8 - .42 * cool, .45 - .36 * cool, (.95 - .3 * cool) * k], 2, sid + i);
+      v3fBillow(out, C, p, r * (.42 + .42 * a), [1, .66 - .34 * cool, .3 - .24 * cool, (.72 - .2 * cool) * k], 2, sid + i);   // 几团叠起来（加法）不至于整片发白：单团偏橙、淡一些
     }
     if (a < 1.6) for (let i = 0; i < 12; i++) {   // 碎片：亮点四散，受重力往下掉
       const an = o.sd * 1.7 + i * 2.1, el = .25 + (i * 53 % 10) / 14, v = r * (1.4 + (i * 29 % 10) / 6), c = Math.cos(el) * v * a, zz = Math.sin(el) * v * a - 4.9 * a * a * (o.air ? 3 : 4);
@@ -268,11 +269,11 @@ function v3Fx(C) {
       const u = a / 9, an = o.sd + i * 1.05, d = r * (.22 + a * .1), rise = o.air ? a * 1.2 - a * a * .05 : r * .3 + a * (2.6 + i * .8);
       const fade = Math.min(1, (a - .12) / .5) * Math.pow(1 - u, 1.4), sh = .02 * i;
       const col = sea ? [.78 + sh, .8 + sh, .82 + sh, .55 * fade] : [.17 + sh, .155 + sh, .14 + sh, .78 * fade];
-      v3fPuff(sm, C, v3fP(o.x + Math.cos(an) * d + WX * a, o.y + Math.sin(an) * d + WY * a, o.z + rise), r * (.48 + a * .3 + i * .05), col, 1, sid + 20 + i);
+      v3fBillow(sm, C, v3fP(o.x + Math.cos(an) * d + WX * a, o.y + Math.sin(an) * d + WY * a, o.z + rise), r * (.48 + a * .3 + i * .05), col, 1, sid + 20 + i);
     }
     if (!o.air && a < 3.6) for (let i = 0; i < 6; i++) {   // 地面爆炸掀起的尘土（水面是水花雾）：贴地往外推、慢慢落下散开
       const an = o.sd * 1.3 + i * 1.047, d = r * (.35 + 1.15 * Math.sqrt(a / 3.6)), k = 1 - a / 3.6;
-      v3fPuff(sm, C, v3fP(o.x + Math.cos(an) * d + WX * a * .5, o.y + Math.sin(an) * d + WY * a * .5, o.z + r * .12 + a * .7), r * (.32 + a * .26), sea ? [.85, .9, .93, .45 * k] : [.44, .37, .28, .55 * k], 1, sid + 40 + i);
+      v3fBillow(sm, C, v3fP(o.x + Math.cos(an) * d + WX * a * .5, o.y + Math.sin(an) * d + WY * a * .5, o.z + r * .12 + a * .7), r * (.32 + a * .26), sea ? [.85, .9, .93, .45 * k] : [.44, .37, .28, .55 * k], 1, sid + 40 + i);
     }
   }
   // —— 被打掉的车辆：车上起火（约 50 秒，越烧越小），一根往下风飘的黑烟柱（约两分钟后散尽）——
@@ -281,11 +282,11 @@ function v3Fx(C) {
     const wreck = (x, y, L, age, id) => {
       if (age < 0 || age > 120 || !inB(x, y, 150) || ++nW > 24) return;
       const z = g(x, y), k = 1 - age / 120, sid = id & 15;
-      if (age < 50) { const fk = 1 - age / 50; for (let i = 0; i < 2; i++) v3fPuff(out, C, v3fP(x + (i - .5) * L * .18, y, z + L * (.2 + .1 * i)), L * (.2 + .12 * fk), [1, .48, .14, .6 * fk], 2, sid + i); }
-      for (let i = 0; i < 7; i++) {   // 一串烟团从车上升起到 u = 1 消失，循环接上，连成一根烟柱
-        const u = (S.t * .07 + i / 7 + id * .131) % 1, wx = u * u * L * 7;
-        const a = .6 * Math.pow(k, .7) * Math.pow(Math.sin(u * Math.PI), .8);
-        v3fPuff(sm, C, v3fP(x + wx * WX / 1.7, y + wx * WY / 1.7, z + L * .3 + u * L * 10), L * (.3 + u * 1.5), [.11 + u * .08, .105 + u * .08, .1 + u * .08, a], 1, sid + 3 + i);
+      if (age < 50) { const fk = 1 - age / 50; for (let i = 0; i < 2; i++) v3fBillow(out, C, v3fP(x + (i - .5) * L * .18, y, z + L * (.2 + .1 * i)), L * (.2 + .12 * fk), [1, .48, .14, .6 * fk], 2, sid + i); }
+      for (let i = 0; i < 8; i++) {   // 一串烟团从车上升起到 u = 1 消失，循环接上，连成一根烟柱：根上又黑又浓，越往上越散、越灰、越淡
+        const u = (S.t * .07 + i / 8 + id * .131) % 1, wx = u * u * L * 7;
+        const a = .74 * Math.pow(k, .6) * Math.pow(1 - u, 1.1) * Math.min(1, u / .06);
+        v3fBillow(sm, C, v3fP(x + wx * WX / 1.7, y + wx * WY / 1.7, z + L * .3 + u * L * 10), L * (.3 + u * 1.5), [.08 + u * .16, .075 + u * .16, .07 + u * .16, a], 1, sid + 3 + i);
       }
     };
     for (const v of S.veh || []) if (v.dead && !v.lst) wreck(v.x, v.y, typeof vehSp === 'function' ? vehSp(v).len : 9, S.t - (v.deadT ?? -999), v.id);
@@ -301,7 +302,7 @@ function v3Fx(C) {
       const L = typeof vehSp === 'function' ? vehSp(v).len : 8, h = v.heading || 0, c = Math.cos(h), s2 = Math.sin(h), sid = v.id & 15;
       for (let i = 0; i < 4; i++) {
         const u = (S.t * 1.1 + i / 4 + v.id * .37) % 1, back = L * (.45 + u * 2.2), sd = (i % 2 ? 1 : -1) * L * .22 * (1 + u);
-        v3fPuff(sm, C, v3fP(v.x - c * back - s2 * sd, v.y - s2 * back + c * sd, z + L * (.12 + u * .35)), L * (.22 + u * .55), [.55, .48, .37, .3 * Math.sin(u * Math.PI)], 1, sid + i);
+        v3fBillow(sm, C, v3fP(v.x - c * back - s2 * sd, v.y - s2 * back + c * sd, z + L * (.12 + u * .35)), L * (.22 + u * .55), [.55, .48, .37, .3 * Math.sin(u * Math.PI)], 1, sid + i);
       }
     }
   }
@@ -433,7 +434,7 @@ function v3fScreens(sm, out, C, inB, g) {
     for (let i = 0; i < n; i++) {
       const lv = (i * .618 + sd * .1) % 1, rr = r * .62 * Math.sqrt((i + .5) / n), ang = sd + i * 2.39996 + S.t * (.03 + (i % 3) * .012);
       const pr = r * (.36 + .2 * ((i * 37 % 10) / 10)) * (1 - lv * .25), zz = z + pr * .5 + h * .6 * lv + Math.sin(S.t * .35 + i) * .5;
-      v3fPuff(sm, C, v3fP(s.x + Math.cos(ang) * rr, s.y + Math.sin(ang) * rr, zz), pr, [.86, .87, .85, .6 * fd]);
+      v3fBillow(sm, C, v3fP(s.x + Math.cos(ang) * rr, s.y + Math.sin(ang) * rr, zz), pr, [.86, .87, .85, .62 * fd], 1, i + (sd * 10 | 0), .12);   // 翻滚的烟团（底边淡出）
     }
   }
 }
