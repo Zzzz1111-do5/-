@@ -97,7 +97,7 @@ function frReset() {
     FRC.p = frGrid(); FRC.e = frGrid();
   }
   FRC.S = S; FRC.T = TER;
-  for (let j = 0; j < FR_NY; j++) for (let i = 0; i < FR_NX; i++) FRC.sea[j * FR_NX + i] = (j + .5) * FR_G > coastAt(Math.min(W, (i + .5) * FR_G)) + 5 ? 1 : 0;   // 海面格（河流算陆地，线可以跨河）
+  for (let j = 0; j < FR_NY; j++) for (let i = 0; i < FR_NX; i++) FRC.sea[j * FR_NX + i] = (j + .5) * FR_G > coastAt(Math.min(W, (i + .5) * FR_G)) + 5 || (TER.flat && j === FR_NY - 1) ? 1 : 0;   // 海面格（河流算陆地，线可以跨河）；白色平原没有海：南缘一排当作进攻方的后方，登陆场从那里往北连
   for (const G of [FRC.p, FRC.e]) { G.init = false; G.fet.fill(-99); }
   FRC.nP = FRC.nE = -1; FRC.ver++;
 }

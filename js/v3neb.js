@@ -8,7 +8,8 @@
 //      之后再画星云、弹道、爆炸、枪口焰——这些发光的东西不被压暗，夜里格外显眼。平面画面在 render.js drawScene 里同样压暗
 const V3N = { tried: false, ok: false, pr: null, a: {}, u: {}, pb: null, cb: null, n: 0, dec: false, np: null, nu: {}, qb: null };
 const V3N_K = 25000;   // 点云每个单位多少米（坐标范围约 ±2.16 → 半径约 35–55 公里的球壳）
-const V3N_PT = 340;    // 一个点画成多大的光斑（米）：30 万个点铺满整个球壳，这个大小正好连成一片
+const V3N_PT = 460;    // 一个点画成多大的光斑（米）：画 16 万个点（手机、低画质 9 万）铺满整个球壳，这个大小正好连成一片
+const V3N_CNT = () => (V3.coarse || R.autoLow || (typeof SETTINGS === 'object' && SETTINGS && SETTINGS.quality === 'low')) ? 90000 : 160000;   // 点在烘焙时已打乱，前面任意一段都是均匀抽样
 const V3N_NIGHT = { std: [.2, .24, .36], flat: [.3, .2, .24], mx: [.55, .6, .6] };   // 夜色：月光、太空（星云的暗红）、黑绿画面（本来就暗，压得轻）
 const v3nebOn = () => !!(typeof TER === 'object' && TER && TER.flat);
 
@@ -33,7 +34,7 @@ void main() {
   vec4 q = uM * vec4(uC + vec3(p.x, -p.z, p.y) * uK, 1.);
   q.z = q.w * .99999;
   gl_Position = q;
-  gl_PointSize = clamp(uPx / max(q.w, 1.), 1.5, 14.);
+  gl_PointSize = clamp(uPx / max(q.w, 1.), 2., 8.);   // 小于 2 像素的点一动就闪（噪点），大于 8 像素填充太费
   vC = c * uI;
 }`, `precision mediump float;
 varying vec3 vC;
@@ -93,7 +94,7 @@ function v3Neb(C) {
   gl.bindBuffer(gl.ARRAY_BUFFER, V3N.cb); gl.enableVertexAttribArray(V3N.a.c); gl.vertexAttribPointer(V3N.a.c, 3, gl.UNSIGNED_BYTE, true, 0, 0);
   gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LEQUAL); gl.depthMask(false);
   gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE);
-  gl.drawArrays(gl.POINTS, 0, V3N.n);
+  gl.drawArrays(gl.POINTS, 0, Math.min(V3N.n, V3N_CNT()));
   gl.disable(gl.BLEND); gl.depthMask(true); gl.depthFunc(gl.LESS);
   gl.disableVertexAttribArray(V3N.a.p); gl.disableVertexAttribArray(V3N.a.c);
 }

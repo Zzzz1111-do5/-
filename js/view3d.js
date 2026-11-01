@@ -216,7 +216,13 @@ void main() {
       float bl = clamp(log2(max(fwm, .1) * 4.), 0., 6.);   // 远处的反射模糊一些（粗糙的海面平均了很多方向）
       float su = atan(Rf.y, Rf.x) / 6.2831853 + uSkyU;
 #ifdef DER
-      float sa = fract(su), sb = fract(su + .5) - .5; su = fwidth(sa) < fwidth(sb) ? sa : sb;   // 方位角在 ±180° 处跳一整圈：取导数小的那种写法，接缝上不会掉到最糊的一级（一条竖线）
+      // 方位角在 ±180° 处跳一整圈：离接缝远的那种写法取样（接缝上不会掉到最糊的一级，一条竖线）。同一个 2×2 像素块必须用同一种写法——
+      //   原来逐像素比较两种写法的导数：两种写法在半圈方位上相差整 1、导数本来一样大，谁小全看舍入；真显卡的导数逐行算，一个块里选成两种写法，
+      //   块内坐标差 1，整块掉到天空图最糊的一级——镜头朝北时屏幕左半边（反射朝西北那半圈）一层颗粒噪点（软件渲染器按整块算导数，看不出来）。
+      //   现在按块里第一个像素的方位角挑（由本像素和导数推回去，块里四个像素算出来一样）
+      vec2 qo = mod(floor(gl_FragCoord.xy), 2.);
+      float fq = fract(su - dFdx(su) * qo.x - dFdy(su) * qo.y);
+      su = fq > .25 && fq < .75 ? fract(su) : fract(su + .5) - .5;
 #endif
       vec3 sk = uSkyOn > .5 ? texture2D(uSky, vec2(su, .5 - asin(clamp(Rf.z, 0., 1.)) / 3.1415927), bl).rgb * .84 : mix(uBg, vec3(.5, .62, .8), sqrt(Rf.z));
       float fr = .02 + .98 * pow(1. - clamp(dot(Nw, V), 0., 1.), 5.);
@@ -525,7 +531,7 @@ function v3ShMatrix(C) {
 function v3ShPass(C) {
   const gl = V3.gl;
   V3SH.on = false;
-  if (v3Mx() || (SETTINGS && SETTINGS.quality === 'low')) return false;
+  if (v3Mx() || (SETTINGS && SETTINGS.quality === 'low') || R.autoLow) return false;   // 持续卡顿自动降画质时（main.js）不画实时阴影
   if (!V3SH.tried) v3ShInit(gl);
   if (!V3SH.ok) return false;
   const M = v3ShMatrix(C), S0 = V3SH.size;
@@ -705,7 +711,7 @@ function v3HtX(x, y) {
 // 网格：地形 + 四边围边（沙盘侧壁，法线 z = -1 作标记）；桥被炸 / 地形变了按签名重建
 function v3Mesh() {
   // 每格一个顶点要 32 位索引；细网格的部分（大海域地图只到寻路带）超过 30 万格时每 2 格一个（默认大地图 8400 × 5600 近百万个三角形，手机画不动）
-  V3_ST = V3.u32 && GW * Math.min(GH, TER.pathY ? Math.ceil(TER.pathY / CELL) + 20 : GH) <= 300000 ? 1 : 2;
+  V3_ST = TER.flat ? 8 : V3.u32 && GW * Math.min(GH, TER.pathY ? Math.ceil(TER.pathY / CELL) + 20 : GH) <= 300000 ? 1 : 2;   // 白色平原是一整块平地：每 80 米一个顶点就够（每 20 米要 94 万个三角形）
   const gl = V3.gl, st = V3_ST, nx = Math.floor((GW - 1) / st) + 1, ny = Math.floor((GH - 1) / st) + 1, hf = new Float32Array(nx * ny);
   for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) { const gx = i * st, gy = j * st; hf[j * nx + i] = (v3H0(gx - 1, gy - 1) + v3H0(gx, gy - 1) + v3H0(gx - 1, gy) + v3H0(gx, gy)) / 4; }
   V3.hf = hf; V3.nx = nx; V3.ny = ny;
@@ -1302,10 +1308,11 @@ function v3Draw(now) {
   };
   // 近处这张隔一帧画一次（范围移动超过边长 3%、缩放变了、换了大小时马上重画）：屏外 2D 画布画好再传成贴图，
   //   在 Mac 的 Safari 上每张都要从显卡读回再上传，是 3D 每帧最贵的一步；地面上的东西（弹坑、烟、标号）变化慢，隔一帧看不出来
+  //   镜头不动时按时间节流：近处最多每 50 毫秒、远处每 150 毫秒重画重传一次（原来按帧数：高刷新率屏上每秒传六七十次，传贴图是每帧最贵的一步）；镜头一动照旧马上重画
   const nb = V3.nBox, nMove = !nb || nb[4] !== sTop || Math.abs(nb[0] - bN[0]) + Math.abs(nb[1] - bN[1]) > bN[2] * .03 || Math.abs(nb[2] - bN[2]) > bN[2] * .03;
-  V3.nT = (V3.nT || 0) + 1;
-  if (nMove || V3.nT % 2 === 0) { V3.boxN = paint(V3.top, bN, sTop); V3.nBox = [bN[0], bN[1], bN[2], bN[3], sTop]; V3.nNew = true; }
-  if (!one && (!V3.boxB || (V3.fT = (V3.fT || 0) + 1) % 4 === 0 || Math.abs(V3.boxB[0] - box[0]) + Math.abs(V3.boxB[1] - box[1]) > box[2] * .12)) {
+  if (nMove || !(now - (V3.nPT ?? -1e9) < 50)) { V3.nPT = now; V3.boxN = paint(V3.top, bN, sTop); V3.nBox = [bN[0], bN[1], bN[2], bN[3], sTop]; V3.nNew = true; }
+  if (!one && (!V3.boxB || !(now - (V3.fPT ?? -1e9) < 150) || Math.abs(V3.boxB[0] - box[0]) + Math.abs(V3.boxB[1] - box[1]) > box[2] * .12)) {
+    V3.fPT = now;
     V3.boxF = paint(V3.topF, box, Math.min(sTop, cap * (V3.capK || 1) / Math.max(box[2], box[3])));   // 远处这张也按整幅分辨率画（原来只有六成，远景糊）
     V3.boxB = box.slice(); V3.fNew = true;
   }
@@ -1329,7 +1336,7 @@ function v3Draw(now) {
   gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D, V3.cls2);
   gl.activeTexture(gl.TEXTURE5); gl.bindTexture(gl.TEXTURE_2D, V3.ht);
   gl.activeTexture(gl.TEXTURE4); gl.bindTexture(gl.TEXTURE_2D, V3.fog);
-  if (typeof FOGB === 'object') gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE, GW, GH, 0, gl.LUMINANCE, gl.UNSIGNED_BYTE, FOGB);   // 视野（drawScene 刚按当前观察视野算好）
+  if (typeof FOGB === 'object' && (V3.fogV !== FOGB_V || V3.fogT !== V3.fog)) { V3.fogV = FOGB_V; V3.fogT = V3.fog; gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE, GW, GH, 0, gl.LUMINANCE, gl.UNSIGNED_BYTE, FOGB); }   // 视野没变不重传   // 视野（drawScene 刚按当前观察视野算好）
   const lmOn = v3Mx() && typeof v3LightBind === 'function' && v3LightBind(gl) ? 1 : 0;   // 光照贴图（v3light.js，第 9 个贴图单元）：只给黑绿 / 数码画面；写实画面用实时阴影
   const bgc = v3Bg();
   gl.clearColor(bgc[0], bgc[1], bgc[2], 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);

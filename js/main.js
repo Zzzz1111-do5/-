@@ -50,6 +50,13 @@ function frame(now) {
     if (R.slowT > 2.5 && lv < DPR_STEPS.length - 1 && DPR_STEPS[lv + 1] < (window.devicePixelRatio || 1) + .01) { R.dprHold = now + 30000; set(lv + 1); }
     else if (R.fastT > 10 && lv > 0 && now > (R.dprHold || 0)) set(lv - 1);
   }
+  // 像素密度降到底（或屏幕本来就是 1 倍）还是持续卡（平均帧间隔超过约 45ms 达 4 秒）：自动降画质——3D 不做后期辉光、不画实时阴影、星云少画点；
+  //   持续 15 秒流畅（约 45 帧以上）再恢复。原来 1 倍屏上卡了没有任何退路
+  if (now > 8000 && ((window.devicePixelRatio || 1) <= 1.01 || (R.dprCap && R.dprCap <= 1) || R.lowCap)) {
+    R.slowLT = ema > .045 ? (R.slowLT || 0) + dt : 0; R.fastLT = ema < .022 ? (R.fastLT || 0) + dt : 0;
+    if (!R.autoLow && R.slowLT > 4) { R.autoLow = true; R.fastLT = 0; }
+    else if (R.autoLow && R.fastLT > 15) { R.autoLow = false; R.slowLT = 0; }
+  }
   camKeys(dt);
   if (S.phase === 'battle' && !S.paused && !S.over && S.briefed) {
     acc += dt * S.speed;

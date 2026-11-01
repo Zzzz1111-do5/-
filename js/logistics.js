@@ -75,7 +75,7 @@ function updateSupply(dt) {
     const go = (x, y) => {
       let tx = x, ty = y;
       // 人在内陆时先沿道路寻路回到滩头补给站，再沿浮桥直线前往断点
-      if (isLand(eng.x, eng.y) && dist(eng.x, eng.y, L.x, L.y) > 40) {
+      if (isLand(eng.x, eng.y) && dist(eng.x, eng.y, L.x, L.y) > 40 && !clearLine(eng.x, eng.y, L.x, L.y, 'p')) {   // 直线走得通就直走：不为一组工兵整图算流场（白色平原上一张要半秒）
         const f = field(L.x, L.y, 'p'), n = f && nextStep(f, eng.x, eng.y);
         if (n) [tx, ty] = n; else { tx = L.x; ty = L.y; }
       }
@@ -157,6 +157,7 @@ function updatePoints(dt) {
 
 // 黑夜（S.night，沙盒「黑夜」）：步兵（夜视仪）与工事里的人眼视野缩到六成；车辆热像（vehicles.js）、舰艇、飞机、雷达、远距离热像发现（spot.js）照旧
 const NIGHT_EYE = .6;
+let VIS_GEN = 0;   // 视野版本：每算一次加一（matrix.js fogBytes 据此决定要不要重算画面用的视野图）
 function updateVision() {
   smokeMask();
   const ps = [], nk = S.night ? NIGHT_EYE : 1;
@@ -177,6 +178,7 @@ function updateVision() {
   castVision(EV, es);
   if (typeof cvlApply === 'function') cvlApply();   // 伪装隐蔽：没被近处发现的隐蔽小组从对方视野里抹掉（conceal.js）
   if (typeof vehDlMark === 'function') vehDlMark();   // 数据链：记下此刻看得见的对方车辆（vehicles.js vehSees）
+  VIS_GEN++;
   // 情报记忆：看到过的火力点与工事留下标定；回头再看已空则撤销
   let forts = false;
   for (const e of S.enemies) {

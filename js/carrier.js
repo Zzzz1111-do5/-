@@ -22,15 +22,11 @@ const AIR_MDL = {
   gj2: { name: '攻击-2 察打一体无人机', sil: 'gj2', spd: 70, aa: .09, size: 17, land: true, loiter: 60, agm: 'ba7', agmN: 4, agmR: 320 },   // 长航时：盘旋 60 秒；4 枚蓝箭-7 空地导弹
   z10: { name: '直-10 武装直升机', sil: 'z10', spd: 64, aa: .09, size: 15, agm: 'hj10', agmN: 8, agmR: 280 },   // 8 枚红箭-10 反坦克导弹
   j20: { name: '歼-20 隐身战斗机', sil: 'j20', spd: 275, aa: .05, size: 17, land: true, stealth: .35, aam: 6, aamR: 560, pkK: 1.15 },   // 4 枚霹雳-15 + 2 枚霹雳-10
-  // 彩蛋（j36.js）：歼-36。官方未公布参数，按公开估算：机长约 23 米、翼展约 19 米、最大起飞重量约 55 吨（歼-20 约 37 吨）、三发、主弹舱长约 7.6 米、作战半径约 3000 公里；
-  //   体型大、无尾 → 转弯慢（turn）、不带航炮；全向隐身更好、机头大雷达看得更远（radar）、留空时间长（cap 秒）。挂载按弹舱尺寸推测：aamL / aamLR = 霹雳-17 远程空空导弹
   // 歼-50（外界称呼，沈飞第六代原型机，2024 年 12 月 26 日被拍到试飞；λ 形无尾翼、双发）：外界推测会发展舰载型。官方无任何参数，按公开估算——
-  // 比歼-36 小、可上航母（占机库），隐身 0.22、雷达 800、6 枚霹雳-15 + 2 枚霹雳-10，不带航炮，只打超视距
+  // 可上航母（占机库），隐身 0.22、雷达 800、6 枚霹雳-15 + 2 枚霹雳-10，不带航炮，只打超视距；无尾、转弯慢（turn）
   j50: { name: '歼-50 第六代舰载战斗机', sil: 'j50', spd: 280, aa: .03, size: 16, stealth: .22, aam: 8, aamR: 560, pkK: 1.18, radar: 800, turn: 1.9, gun: 0 },
-  j36: { name: '歼-36 第六代战斗机（制空型）', sil: 'j36', spd: 290, aa: .02, size: 18, land: true, stealth: .2, aam: 6, aamR: 560, aamL: 2, aamLR: 900, pkK: 1.2, radar: 900, turn: 1.7, cap: 240, gun: 0 },
   // 歼-16D 电子战飞机（陆基，战区机场出动）：翼尖电子干扰吊舱压制敌雷达——附近我方飞机被敌防空发现、命中的概率打七折（airJamK）；挂 4 枚雷电-10 反辐射导弹，420 外打敌防空
-  j16d: { name: '歼-16D 电子战飞机', sil: 'j16', spd: 250, aa: .07, size: 18, land: true, std: 420, sead: true, gbN: 4, arW: 'ld10', arR: 420, jam: 650 },
-  j36s: { name: '歼-36 第六代战斗机（打击型）', sil: 'j36', spd: 290, aa: .02, size: 18, land: true, stealth: .2, aam: 4, aamR: 560, pkK: 1.2, radar: 900, turn: 1.7, cap: 240, gun: 0, agm: 'ls6', agmN: 4, agmR: 900 }
+  j16d: { name: '歼-16D 电子战飞机', sil: 'j16', spd: 250, aa: .07, size: 18, land: true, std: 420, sead: true, gbN: 4, arW: 'ld10', arR: 420, jam: 650 }
 };
 // 真实世界的性能（公开资料；官方未公布的按外界估算）——巡航速度写在上面型号表与 eair.js EA_SPEC 的 spd 里（米 / 秒，推演里就按它飞，1 单位 = 1 米）；
 //   这里给座舱显示屏与机载雷达用：vmax 最大速度 km/h、rdr 机载雷达对战斗机大小目标的探测距离 km（0 = 没有对空搜索雷达）、rdrNm 雷达、fuel 机内燃油 kg
@@ -46,8 +42,6 @@ const AIR_REAL = {
   z10: { vmax: 300, rdr: 0, rdrNm: '光电瞄准具', fuel: 1100 },
   j20: { vmax: 2100, rdr: 210, rdrNm: '1475 型有源相控阵雷达', fuel: 12000 },
   j50: { vmax: 2100, rdr: 220, rdrNm: '有源相控阵雷达（估算）', fuel: 12000 },
-  j36: { vmax: 2400, rdr: 300, rdrNm: '大口径有源相控阵雷达（估算）', fuel: 22000 },
-  j36s: { vmax: 2400, rdr: 300, rdrNm: '大口径有源相控阵雷达（估算）', fuel: 22000 },
   j16d: { vmax: 2100, rdr: 200, rdrNm: '有源相控阵雷达', fuel: 9400 },
   transport: { vmax: 920, rdr: 0, rdrNm: '气象雷达', fuel: 60000 },
   // 守方（美军，eair.js 的机型键）
@@ -66,7 +60,7 @@ const AIR_REAL = {
 const airReal = (type, v) => AIR_REAL[airMdlKey(type, v)] || AIR_REAL[type] || {};
 const airRdrM = (type, v) => (airReal(type, v).rdr || 0) * 1000;
 const AIR_BASEM = { recon: 'kj600', strike: 'j35', cas: 'gj2', bomber: 'h6k', fighter: 'j20' };
-const AIR_VMODEL = { lr: 'wz7', dive: 'gj11', heavy: 'h6k', fb: 'j15t', heli: 'z10', sead: 'j35s', ew: 'j16d', adv: 'j20', j36: 'j36', j36s: 'j36s', j50: 'j50' };   // adv：旧存档里的先进战斗机
+const AIR_VMODEL = { lr: 'wz7', dive: 'gj11', heavy: 'h6k', fb: 'j15t', heli: 'z10', sead: 'j35s', ew: 'j16d', adv: 'j20', j50: 'j50' };   // adv：旧存档里的先进战斗机
 const airMdlKey = (type, v) => AIR_VMODEL[v] || AIR_BASEM[type];
 const airMdl = (type, v) => AIR_MDL[airMdlKey(type, v)] || {};   // 运输机（para.js）等没有型号表的返回空
 const airSpec = (type, v) => ({ ...(AIR_SPEC[type] || AIR_SPEC.strike), ...airMdl(type, v) });
@@ -134,7 +128,6 @@ const AIR_SIL = {
   f22: [[10.6, 0], [8.2, .9], [4.6, 1.8], [2.6, 2.4], [1.6, 2.6], [-2.8, 7.4], [-4.6, 7.4], [-6.1, 2.8], [-6.6, 2.6], [-8.6, 5.4], [-9.8, 5.4], [-10.1, 1.6], [-10.6, 1.2], [-10.6, 0]],   // 菱形翼（后缘前掠）、全动平尾、二元矢量喷管
   // 彩蛋
   j50: [[11, 0], [8.6, .9], [5, 1.8], [1.6, 2.4], [-4.4, 8.2], [-6, 8.2], [-5.4, 5.2], [-8.4, 3.4], [-10.2, 2.4], [-9.6, 0]],   // 歼-50：λ 形无尾翼，后缘锯齿
-  j36: [[12.6, 0], [10.6, .8], [8.2, 1.6], [5.6, 2.6], [1, 5.4], [-5.8, 10.3], [-7.4, 10.3], [-6.4, 6], [-10.6, 2.8], [-11.6, 2.2], [-12.2, 1.2], [-12.2, 0]]   // 歼-36：无尾双菱形翼（翼尖切尖、后缘 W 形），机长 : 翼展约 23 : 19，与歼-20 同一比例尺
 };
 AIR_SIL.f35b = AIR_SIL.f35;   // F-35B 俯视轮廓同 F-35A
 AIR_SIL.p8 = [[11.6, 0], [10.8, .9], [8, 1.15], [2.6, 1.15], [2.2, 1.15], [-3.6, 11.2], [-4.6, 11.3], [-1.4, 1.15], [-8.6, .9], [-10.9, 4.3], [-11.8, 4.3], [-11.2, .7], [-12.1, 0]];   // P-8A：737 机身、低单翼（后掠 25°、翼展 37.6 米）、两台翼吊发动机、常规尾翼
@@ -1223,7 +1216,7 @@ function drawAircraft(ctx, x, y, a, type, size, col, alpha, bank, lw, bombs, o) 
     else if (!heliT && !bigT && type !== 'gj11' && type !== 'wz7' && type !== 'gj2') {
       ctx.fillStyle = `rgba(52,78,94,${alpha})`; ctx.beginPath(); ctx.ellipse(6.6, 0, type === 'a10' ? 1.3 : 1.8, .62, 0, 0, 7); ctx.fill();
       ctx.fillStyle = `rgba(210,230,240,${.35 * alpha})`; ctx.beginPath(); ctx.ellipse(7, -.18, .7, .2, 0, 0, 7); ctx.fill();
-      const nz = type === 'f35' ? [0] : type === 'j36' ? [] : type === 'a10' ? [] : [-.75, .75];
+      const nz = type === 'f35' ? [0] : type === 'a10' ? [] : [-.75, .75];
       ctx.fillStyle = `rgba(28,28,26,${alpha})`; for (const y of nz) { ctx.beginPath(); ctx.arc(-10.6, y, .62, 0, 7); ctx.fill(); }
     } else if (bigT || heliT) { ctx.fillStyle = `rgba(40,58,68,${alpha})`; ctx.beginPath(); ctx.ellipse(heliT ? 6.6 : 10.2, 0, heliT ? 1.4 : .9, heliT ? .75 : 1, 0, 0, 7); ctx.fill(); }   // 风挡
     ctx.strokeStyle = `rgba(20,22,24,${.25 * alpha})`; seg(9, 0, -9, 0);
@@ -1241,10 +1234,6 @@ function drawAircraft(ctx, x, y, a, type, size, col, alpha, bank, lw, bombs, o) 
     for (const s of [-1, 1]) seg(-5.6, s * 1.6, -9.2, s * 2.3);
   } else if (type === 'f22') {   // 外倾双垂尾 + 进气口
     for (const s of [-1, 1]) seg(-4.6, s * 2.1, -8.4, s * 3.4, 3.4, s * 1.9, 1.4, s * 2.5);
-  } else if (type === 'j36') {   // 背部进气口 + 三台发动机的扁平喷口，翼尖开裂式方向舵，无垂尾
-    ctx.strokeRect(-.6, -1, 3.4, 2);
-    for (const y of [-1.7, 0, 1.7]) ctx.strokeRect(-12, y - .5, 1.5, 1);
-    for (const s of [-1, 1]) seg(-6.2, s * 9.4, -7.4, s * 9.4);
   } else if (type === 'h6k') {   // 翼根两台发动机
     for (const s of [-1, 1]) ctx.strokeRect(-1.8, s * 3.2 - .9, 6, 1.8);
   } else if (type === 'a10') {   // 尾部背负双发 + 双垂尾

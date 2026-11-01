@@ -700,7 +700,6 @@ function sbxAIAttackBase(mi, fi) {
   if (F && k >= 3) { const it = ship('p_lct', F, 1, 2, 1600, ['p_rifle', 'p_mg', 'p_rifle', 'p_marine'], 1); if (it) feint.push(it); }
   if (cv) for (const [id, t] of [['p_air_fb', 'cas'], ['p_air_strike', 'strike'], ['p_air_ftr_adv', 'strike'], ['p_air_recon', 'recon'], ['p_air_fb', 'cas'], ['p_air_dive', 'bomber'], ['p_air_strike', 'strike']]) { if (sbxWingN() >= sbxWingCap() || sbxLeft('p') < 80) break; buyAir(id, t); }
   for (const [id, t] of [['p_air_ftr', 'fighter'], ['p_air_cas', 'cas']]) { if (sbxLeft('p') < 120) break; buyAir(id, t); }   // 大预算：再加战区歼-20、攻击-2
-  if (sbxLeft('p') >= 1200) buyAir('p_air_j36', 'fighter');   // 超大预算还有富余：一架歼-36 制空型
   if (sbxOf('enemy').some(it => sbxEntry(it).spawn.ek === 'airfield') && sbxLeft('p') >= 300 && sbxPlace('p_abn').ok) say('空降：空降兵连一个，待主力在滩头站稳、航线上的防空打掉后伞降夺取敌野战机场，修通跑道后机降轻型坦克，我方飞机就近起降。', null);
   sbxSync();
   const men = w1.reduce((a, it) => a + sbxShipLoad(it).t, 0) * 3;
@@ -805,7 +804,6 @@ function sbxAttStyle(style, R0) {
     say(`方案「装甲突击」：坦克登陆舰 ${nl} 艘（ZTZ-99A、ZTZ-80 与步兵战车）、726 型气垫艇 ${nc} 艘各载一辆 99A、两栖突击车 ${na} 辆随第一波抢滩，坦克先上岸撕开缺口，步兵跟进。`, M.ex);
   } else if (style === 'air') {
     if (!sbxOf('cv').length) { const p = sbxSea(clamp(M.b.cx, 200, W - 200), CARRIER_Y - 20); sbxPlace('p_cv', p.x, Math.max(p.y, STAGING_Y + 60)); }
-    if (sbxLeft('p') >= 900 && !(catalogById('p_air_j36').lim && sbxLimN(catalogById('p_air_j36')) >= 2)) buyAir('p_air_j36', 'fighter');
     const n = sbxLoop(['p_air_ftr', 'p_air_ftr_adv', 'p_air_heavy', 'p_air_strike', 'p_air_ftr', 'p_air_dive', 'p_air_heavy', 'p_air_cas'], id => sbxPlace(id).ok, 22, 70);
     say(`方案「空中优势」：先夺制空权再登陆——${sbxCnt(n)}；歼-20 先扫荡敌歼击机，歼-35 防空压制型拔掉防空，轰-6K 编组护航轰炸岸炮、炮兵与机场。`, M.ex);
   } else if (style === 'vert') {
@@ -827,6 +825,13 @@ function sbxAIAttack(style = 'bal', mi = -1, fi = -2) {
   if (TER.flat && !S.lv && typeof lvAIGround === 'function') {   // 白色平原：步兵、车辆直接摆进出发阵地（levels.js 陆战关的部署：主攻、助攻两处），炮兵、航空兵、舰艇照常
     sbxClear('p');
     lvAIGround((t, at) => sbxSay('p', t, 'plan', at));
+    // 陆战关的方案里航母、舰艇在这张图上放不下：剩下的预算补成陆上兵力——坦克、步战车在前，步兵跟进，自行火炮、防空车在后，铺满整个出发阵地
+    const ids = ['p_hv_tank', 'p_ifv', 'p_marine', 'p_tank', 'p_marine', 'p_mg', 'p_at', 'p_ifv', 'p_spg', 'p_td', 'p_marine', 'p_sam_veh', 'p_mortar', 'p_aa_veh', 'p_spg', 'p_rifle'];
+    const back = id => /spg|aa_veh|sam_veh|mortar/.test(id) ? 700 : /tank|ifv|td/.test(id) ? 260 : 380;
+    for (let i = 0, fail = 0; sbxLeft('p') >= 10 && fail < 60 && i < 2000; i++) {
+      const id = ids[i % ids.length], x = W * (.06 + .88 * ((i * .618034) % 1)), y = coastAt(x) - back(id) - (i % 5) * 40;
+      if (sbxTry(id, x, y, 60)) fail = 0; else fail++;
+    }
     (S.sbx.aiSty || (S.sbx.aiSty = {})).p = style;
     sbxSync();
     const L = lvAIGround.last || {};

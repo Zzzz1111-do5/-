@@ -31,7 +31,7 @@ function msLaunch(kind, side, x0, y0, tgt, opts = {}) {
   msEnsure();
   const d = dist(x0, y0, tgt.x, tgt.y), dur = opts.dur || (kind === 'tbm' ? 5 + d / 600 : 2.2);
   const m = { id: S.nid++, kind, side, x0, y0, x: x0, y: y0, z: 0, tx: tgt.x, ty: tgt.y, t: -(opts.delay || 0), dur, tgt: opts.tgt || null, ph: opts.delay ? 'wait' : 'boost', icp: false, src: opts.src || null,
-    spd: opts.spd || null, pk: opts.pk || null, sup: opts.sup || 0, w: opts.w || null, ...(opts.lr ? { lr: true } : {}) };   // lr：远程空空导弹（歼-36 的霹雳-17）
+    spd: opts.spd || null, pk: opts.pk || null, sup: opts.sup || 0, w: opts.w || null, ...(opts.lr ? { lr: true } : {}) };   // lr：远程空空导弹（霹雳-17 一类）
   S.missiles.push(m);
   if (kind === 'asm' && side === 'e') S.asmSrc = { x: Math.round(x0), y: Math.round(y0), t: S.t };   // 反舰导弹从哪个方向来（舰队预警机按它定阵位，carrier.js cvAewP）
   return m;
@@ -128,7 +128,7 @@ const MS_PGM = {
   ld10: { nm: '雷电-10 反辐射导弹', spd: 420, z: .6, dmg: 34, pen: 3, st: 10, icp: .1, pw: { men: .5, ship: 2, struct: 0, seg: false, R: 14, vb: 4, veh: true } },   // 歼-35 防空压制型：追防空雷达辐射源
   yj62: { nm: '鹰击-62 反舰 / 对陆巡航导弹', spd: 170, z: .07, dmg: 40, pen: 3.6, st: 22, icp: .45, pw: { men: .8, ship: 5, struct: 0, seg: true, R: 30, vb: 9, veh: true } },   // 052C 舰面倾斜发射架 8 枚，亚音速掠海
   yj83: { nm: '鹰击-83 反舰导弹', spd: 260, z: .06, dmg: 36, pen: 3.6, st: 18, icp: .3, pw: { men: .6, ship: 4, struct: 0, seg: true, R: 22, vb: 6, veh: true } },   // 054A 舰面发射筒 8 枚，亚音速掠海、末段高速
-  ls6: { nm: '雷石-6 滑翔制导炸弹', spd: 220, z: .55, dmg: 50, pen: 4, st: 30, icp: .35, pw: { men: .9, ship: 6, struct: 0, seg: true, R: 30, vb: 10, veh: true } },   // 歼-36 打击型：500 公斤级，高空投放滑翔，慢、可被近程防空拦截
+  ls6: { nm: '雷石-6 滑翔制导炸弹', spd: 220, z: .55, dmg: 50, pen: 4, st: 30, icp: .35, pw: { men: .9, ship: 6, struct: 0, seg: true, R: 30, vb: 10, veh: true } },   // 500 公斤级，高空投放滑翔，慢、可被近程防空拦截（现在没有机型挂）
   // B-2A 投放的联合直接攻击弹药（b2.js）：从约 12000 米高空投下、GPS / 惯导滑翔约 6 秒落地；不跟踪活动目标（按投放时的坐标打）
   gbu38: { nm: 'GBU-38/B 500 磅 JDAM', spd: 45, z: .9, dmg: 30, pen: 3, st: 0, icp: .15, pw: { men: .8, ship: 2.2, struct: 0, seg: true, R: 20, vb: 9, pen: 2, veh: true } },
   gbu31: { nm: 'GBU-31(V)3/B 2000 磅 JDAM', spd: 45, z: .9, dmg: 60, pen: 4, st: 0, icp: .1, pw: { men: .95, ship: 9, struct: 0, seg: true, R: 34, vb: 22, pen: 4, veh: true } }

@@ -23,8 +23,6 @@ const FW_W = {
 const FW_LOAD = {
   j20: [{ w: 'pl15', bay: 'main' }, { w: 'pl10', bay: 'side', sr: 2 }],   // 主弹舱 4 枚霹雳-15，两侧小弹舱各 1 枚霹雳-10
   j50: [{ w: 'pl15', bay: 'main' }, { w: 'pl10', bay: 'main', sr: 2 }],
-  j36: [{ w: 'pl15', bay: 'main' }, { w: 'pl17', bay: 'main' }],
-  j36s: [{ w: 'pl15', bay: 'main' }, { w: 'ls6', bay: 'main' }],
   j35: [{ w: 'ft8', bay: 'main' }],
   j35s: [{ w: 'ld10', bay: 'main' }],
   j16d: [{ w: 'ld10', bay: 'ext' }],
@@ -40,10 +38,13 @@ const FW_ST = {
   j31: { main: [[0, .3, 1.28], [0, -.3, 1.28], [0, .7, 1.26], [0, -.7, 1.26]], mainS: [[.95, .3, 1.24], [.95, -.3, 1.24], [-.95, .3, 1.24], [-.95, -.3, 1.24], [.95, .7, 1.22], [.95, -.7, 1.22], [-.95, .7, 1.22], [-.95, -.7, 1.22]] },
   j16: { ext: [[-.6, 2.6, 1.02], [-.6, -2.6, 1.02], [-1.2, 4.1, 1.12], [-1.2, -4.1, 1.12]] },
   // 歼-15：翼下内、外侧挂架（v3g.js V3G_FOLD 补的挂架，下沿 2.27 / 2.30 米；位置照模型原来挂的弹），弹心在挂架下沿下面一个弹半径；重弹（鹰击 / KD-88）先挂内侧——都在折叠线外，折翼时跟着翻
-  j15: { ext: [[-4.1, 5.65, 2.15], [-4.1, -5.65, 2.15], [-2.64, 3.88, 2.09], [-2.64, -3.88, 2.09]] }
+  j15: { ext: [[-4.1, 5.65, 2.15], [-4.1, -5.65, 2.15], [-2.64, 3.88, 2.09], [-2.64, -3.88, 2.09]] },
+  // 歼-50：一个舱里挂两种弹，按武器各给一组挂点（不互相重叠；先打的排前面——靠舱门的下层先出去）。模型补了起落架、整架抬高过（v3g.js V3G_GEAR），高度按抬高后的；
+  //   两个机腹弹舱（中间隔着一道中线凹槽，公开照片的样子）：每舱下层两枚、上层一枚霹雳-15，霹雳-10 在上层内侧
+  j50: { pl15: [[-.8, .75, 1.51], [-.8, -.75, 1.51], [-.8, 1.45, 1.51], [-.8, -1.45, 1.51], [-.8, 1.1, 1.81], [-.8, -1.1, 1.81]], pl10: [[-1.1, .72, 1.82], [-1.1, -.72, 1.82]] }
 };
-// 这一舱这种弹用哪组挂点（短弹前后两排）
-const fwSlots = (T, bay, Wd) => (bay === 'main' && T.mainS && ((typeof V3MS === 'object' && V3MS[Wd.ms]) || {}).L <= 2.4 ? T.mainS : T[bay]) || null;
+// 这一舱这种弹用哪组挂点：按武器单给的优先（w 武器键），否则短弹前后两排（mainS）、长弹一排
+const fwSlots = (T, bay, Wd, w) => (w && bay !== 'side' && T[w]) || (bay === 'main' && T.mainS && ((typeof V3MS === 'object' && V3MS[Wd.ms]) || {}).L <= 2.4 ? T.mainS : T[bay]) || null;
 
 // —— 挂载 ——
 // 接手时把推演里的计数分到各型弹上（AI 飞的时候打掉了几枚就少几枚）；之后两边一起减，交回 AI 时它照样知道还剩多少
@@ -104,12 +105,14 @@ function fwBayMsl(o, key, sz, x, y, z, h, pt, rl, bay) {
   for (const s of L) if (s.bay === 'ext' && T.ext) for (let i = T.ext.length - Math.min((o.fwN || {})[s.w] || 0, T.ext.length); i < T.ext.length; i++) { const p = v3gAt(key, sz, x, y, z, h, pt, rl, T.ext[i]); if (p) v3gMsl(FW_W[s.w].ms, p[0], p[1], p[2], h, k, 0, pt); }   // 翼下挂架
   for (const bk of ['main', 'side']) {
     if (!bay || !(bay[bk] > .02)) continue;
-    const s = sel && sel.bay === bk ? sel : L.find(q => q.bay === bk);
-    if (!s) continue;
-    const Wd = FW_W[s.w], st = fwSlots(T, bk, Wd), n = Math.min((o.fwN || {})[s.w] || 0, st ? st.length : 0), e = bk === 'side' ? bay.ext || 0 : 0;
-    for (let i = st ? st.length - n : 0; st && i < st.length; i++) {
-      const a = st[i], X = bk === 'side' && T.sideX ? T.sideX[i % T.sideX.length] : a, p = v3gAt(key, sz, x, y, z, h, pt, rl, [lerp(a[0], X[0], e), lerp(a[1], X[1], e), lerp(a[2], X[2], e)]);
-      if (p) v3gMsl(Wd.ms, p[0], p[1], p[2], h, k, 0, pt);
+    const own = L.filter(q => q.bay === bk);   // 每种弹都有自己的挂点（不重叠）：舱里的全画；共用一组挂点的只画选中的那种（AI 的画头一种）
+    const ss = own.length && own.every(q => T[q.w]) ? own : [sel && sel.bay === bk ? sel : own[0]].filter(Boolean);
+    for (const s of ss) {
+      const Wd = FW_W[s.w], st = fwSlots(T, bk, Wd, s.w), n = Math.min((o.fwN || {})[s.w] || 0, st ? st.length : 0), e = bk === 'side' ? bay.ext || 0 : 0;
+      for (let i = st ? st.length - n : 0; st && i < st.length; i++) {
+        const a = st[i], X = bk === 'side' && T.sideX ? T.sideX[i % T.sideX.length] : a, p = v3gAt(key, sz, x, y, z, h, pt, rl, [lerp(a[0], X[0], e), lerp(a[1], X[1], e), lerp(a[2], X[2], e)]);
+        if (p) v3gMsl(Wd.ms, p[0], p[1], p[2], h, k, 0, pt);
+      }
     }
   }
 }
@@ -122,7 +125,7 @@ function fwLoadout(type, v) {
   const mk = typeof V3G_AIR === 'object' && typeof airSilKey === 'function' ? V3G_AIR[airSilKey(type, v)] || 'j31' : 'j31', T = FW_ST[mk] || {}, o = { kind: type, v }, out = [];
   fwInit(o);   // 临时对象：按型号表满载
   for (const s of FW_LOAD[airMdlKey(type, v)] || []) {
-    const Wd = FW_W[s.w], st = s.bay === 'side' ? T.side : fwSlots(T, s.bay, Wd);
+    const Wd = FW_W[s.w], st = s.bay === 'side' ? T.side : fwSlots(T, s.bay, Wd, s.w);
     for (let i = 0; i < (o.fwN[s.w] || 0); i++) out.push({ w: s.w, ms: Wd.ms, bay: s.bay, v: st && st.length ? st[st.length - 1 - (i % st.length)] : null });
   }
   FW_LD.set(id, out);
@@ -200,7 +203,9 @@ function fwFire() {
   if (V3FP.cool > 0 || !fwReady(s)) { V3FP.fq = S.t; return; }
   V3FP.fq = null;
   const busy = new Set(S.missiles.filter(m => m.fw && !m.done && m.tgt).map(m => m.tgt.k + ':' + m.tgt.id));
-  const c = V3FP.fwC.find(c => c.red && !busy.has((c.t || 'eair') + ':' + c.o.id)) || V3FP.fwC.find(c => c.red) || V3FP.fwC[0] || fwBore(o, s);
+  const gl = s.W.k !== 'aam' && typeof ftLockTgt === 'function' ? ftLockTgt(o, s) : null;   // 对地武器：先打锁定的目标（fptgp.js；在射程外就不打）
+  if (gl === 'far') return;
+  const c = gl || V3FP.fwC.find(c => c.red && !busy.has((c.t || 'eair') + ':' + c.o.id)) || V3FP.fwC.find(c => c.red) || V3FP.fwC[0] || fwBore(o, s);
   fwLaunch(o, s, c);
 }
 // 平显上的一行短提示（打光了、还在甲板上），一秒半后消失
@@ -238,7 +243,7 @@ function fwPk(Wd, a, lock) {
 }
 // 弹从哪个挂点出去（模型坐标 → 游戏坐标，跟着机身姿态）：按已经打掉的枚数轮换左右
 function fwStation(o, s) {
-  const mk = fpMdlKey(o), T = FW_ST[mk] || {}, L = s.bay === 'side' ? T.sideX : fwSlots(T, s.bay, s.W), M = typeof V3G === 'object' && V3G.M[mk];
+  const mk = fpMdlKey(o), T = FW_ST[mk] || {}, L = s.bay === 'side' ? T.sideX : fwSlots(T, s.bay, s.W, s.w), M = typeof V3G === 'object' && V3G.M[mk];
   if (L && M && M.ready) { const n = L.length, p = fpMdlXf(o).pt(L[((n - s.n) % n + n) % n]); return [p[0], -p[1], p[2]]; }   // 剩 n 枚打第一个挂点，剩一枚打最后一个
   const P = fpPose(), B = fpBody(o);
   return [P.x - B.u[0] * 1.2, P.y + B.u[1] * 1.2, P.z - B.u[2] * 1.2];   // 模型还没下载好：机腹下面
