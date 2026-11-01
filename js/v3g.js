@@ -103,8 +103,13 @@ async function v3gDecode(key, D) {
   const b = m.bb;
   M.rad = Math.hypot(b[3] - b[0], b[4] - b[1], b[5] - b[2]) / 2; M.sbb = [b[0], b[3], b[1], b[4], b[2], b[5]];
   // 贴图：原图字节解码后上传；全部好了才算就绪
-  M.tex = await Promise.all(m.imgs.map(I => v3gImage(bin.subarray(I.o, I.o + I.n), I.m)));
-  M.mats = m.mats.map(x => Object.assign({}, x));
+  // 重新涂装的模型（V3G_PAINT）：换掉的照片贴图不再解码、上传（省下几十兆显存），涂装材质贴一张淡淡的漆面斑驳纹理
+  const mats = m.mats.map(x => Object.assign({}, x)), PT = V3G_PAINT[key], nT = m.imgs.length;
+  if (PT) for (const T of mats) { const c = PT.m[T.n] || (T.t && !PT.keep.includes(T.n) ? PT.def : null); if (c) Object.assign(T, { c: [c[0], c[1], c[2], T.c[3]], t: [nT, 0, 0], mr: c[3] || PT.mr, e: [0, 0, 0] }); }
+  const used = new Set(); for (const T of mats) for (const k of ['t', 'nt', 'mrt', 'sgt', 'et', 'ot']) if (T[k]) used.add(T[k][0]);
+  M.tex = await Promise.all(m.imgs.map((I, i) => used.has(i) ? v3gImage(bin.subarray(I.o, I.o + I.n), I.m) : null));
+  if (PT) M.tex.push(v3gPaintTex());
+  M.mats = mats;
   // 部件转轴单位化
   const un = a => { const l = Math.hypot(...a) || 1; return a.map(v => v / l); };
   M.parts = (m.parts || []).map(p => ({ ...p, a: un(p.a), ...(p.a2 ? { a2: un(p.a2) } : {}), ...(p.r ? { r: un(p.r) } : {}), ...(p.a3 ? { a3: un(p.a3) } : {}) }));
@@ -568,6 +573,26 @@ function v3gPrep(key, m, M, VB, IB) {
 }
 // —— 材质纠正：直-10 原模型四个材质全设成了 25% 不透明的半透明（整架直升机像幽灵）——机身、桨叶改回不透明；主旋翼的残影盘本是半透明，调淡到 8%（原来盖在机身上一大片发暗）——
 const V3G_MATFIX = { z10w: { 0: { am: 0, a: 1 }, 1: { am: 0, a: 1 }, 2: { a: .08 } } };
+// 重新涂装：歼-31、歼-16、运-20（同一位作者）的「贴图」是把真机照片投影上去的——带着蓝天、跑道背景和照片水印，近看一块块拼起来，
+//   歼-31 还是 31001 验证机深蓝底、橙色折线的试飞涂装。改成部队的标准涂装（颜色是线性空间）：m 按材质名给，其余带贴图的材质用 def，keep 里的照原样（座舱显示屏）；
+//   歼-35 海军浅灰（下表面更浅）、歼-16D 空军中灰（偏蓝）、运-20 空军浅灰（发动机短舱深一些）；mr 金属度、粗糙度（哑光漆）
+const V3G_PAINT = {
+  j31: { def: [.17, .19, .21], mr: [.12, .58], keep: ['screen'], m: { Wing_bottom: [.23, .25, .27], main_body_bottom: [.23, .25, .27], main_body_bottom_front: [.23, .25, .27], bottom_front: [.23, .25, .27] } },
+  j16: { def: [.1, .12, .15], mr: [.12, .55], keep: [], m: {} },
+  y20: { def: [.23, .24, .25], mr: [.1, .55], keep: [], m: { Engine_metal: [.09, .09, .1, [.6, .4]], engine_mat: [.14, .14, .15] } }
+};
+// 漆面纹理（所有重新涂装的模型共用一张）：256 见方、能平铺的几层平滑噪声，亮度在 0.94–1 之间——不至于一整块纯色，像风吹日晒过的漆面
+function v3gPaintTex() {
+  if (V3G.paintTex) return V3G.paintTex;
+  const N = 256, cv = document.createElement('canvas'), g = cv.getContext('2d'), im = g.createImageData(N, N), rnd = (i, j, s) => { const h = Math.sin((i % s) * 127.1 + (j % s) * 311.7 + s * 74.7) * 43758.5453; return h - Math.floor(h); };
+  const vn = (x, y, s) => { const i = Math.floor(x), j = Math.floor(y), fx = x - i, fy = y - j, u = fx * fx * (3 - 2 * fx), v = fy * fy * (3 - 2 * fy), a = rnd(i, j, s), b = rnd(i + 1, j, s), c = rnd(i, j + 1, s), d = rnd(i + 1, j + 1, s); return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v; };
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    const n = .5 * vn(x / 64, y / 64, 4) + .3 * vn(x / 16, y / 16, 16) + .2 * vn(x / 4, y / 4, 64), v = Math.round(255 * (.94 + .06 * n)), o = (y * N + x) * 4;
+    im.data[o] = im.data[o + 1] = im.data[o + 2] = v; im.data[o + 3] = 255;
+  }
+  g.putImageData(im, 0, 0);
+  return (V3G.paintTex = v3gUpload(cv));
+}
 // —— 机头朝 −x 的模型（烘焙时朝向反了：C-17、运-20、轰-6、X-47B）：解码时绕竖轴转 180°——顶点、法线和部件的支点、转轴、喷口位置一起转（正交旋转，三角形绕向不变）。
 //   X-47B 的文件里原来并排放着两架（一架折翼），重新烘焙时已按节点去掉了一架（tools/v3gmodels.json dropNodes）；
 //   v3gmodels.json 里这几型的喷口 noz 是烘焙出来的坐标（机头朝 −x），这里跟着转——
