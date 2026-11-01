@@ -39,10 +39,24 @@ function visDirs(n) {
 // 每格的地面视线高度、遮挡顶高（地面 + 林地 / 城镇 / 悬崖的附加高度），只随地图变（炸桥、修桥是河流 ↔ 桥梁，两者都是 0 遮挡、同一高程）
 let VIS_G, VIS_B;
 const VIS_KEY = { ter: null, seed: null };
+// 每 8 × 8 格一块的最高地面（射线提前结束用）：只随地形变
+const VIS_BK = 8;
+let VIS_BM = null, VIS_BW = 0;
 function visPrep() {
   if (VIS_KEY.ter === TER && VIS_KEY.seed === TER.seed) return;
   VIS_KEY.ter = TER; VIS_KEY.seed = TER.seed;
   for (let i = 0; i < GW * GH; i++) { const t = TER.type[i], g = isWater(t) ? 0 : TER.elev[i] * ELEV_H; VIS_G[i] = g; VIS_B[i] = g + TP[t].bl; }
+  const bw = VIS_BW = Math.ceil(GW / VIS_BK), bh = Math.ceil(GH / VIS_BK), bm = VIS_BM = new Float64Array(bw * bh).fill(-1e9);
+  for (let gy = 0; gy < GH; gy++) for (let gx = 0; gx < GW; gx++) { const k = ((gy / VIS_BK) | 0) * bw + ((gx / VIS_BK) | 0), g = VIS_G[gy * GW + gx]; if (g > bm[k]) bm[k] = g; }
+}
+// 以 (gx0, gy0) 为圆心、rc 格内（按块，偏大）最高的地面
+function visLocMax(gx0, gy0, rc) {
+  const bw = VIS_BW, bm = VIS_BM, b = VIS_BK;
+  const x0 = Math.max(0, Math.floor(gx0 - rc) - 1), x1 = Math.min(GW - 1, Math.floor(gx0 + rc) + 1);
+  const y0 = Math.max(0, Math.floor(gy0 - rc) - 1), y1 = Math.min(GH - 1, Math.floor(gy0 + rc) + 1);
+  let m = -1e9;
+  for (let by = (y0 / b) | 0; by <= ((y1 / b) | 0); by++) for (let bx = (x0 / b) | 0; bx <= ((x1 / b) | 0); bx++) { const v = bm[by * bw + bx]; if (v > m) m = v; }
+  return m;
 }
 const VIS_ST = [1];   // 射线步长 1, 1.7, 2.4 …（格），与逐次累加 .7 得到的值完全相同；视距更远时再往后补
 // 每个视野源照亮的格子只取决于它的位置、视高、视距、地形与视距内的烟幕：阵地里不动的守军、工事、停着的车每 0.25 秒算出来都一样，
@@ -57,11 +71,14 @@ function visSmoke(x, y, r) {
   }
   return sig;
 }
+let VIS_BUF = new Int32Array(4096);
 function castVision(out, sources) {
   out.fill(0);
   visPrep();
   if (VISC.ter !== VIS_KEY.ter || VISC.gw !== GW || VISC.gh !== GH) { VISC.m.clear(); VISC.ter = VIS_KEY.ter; VISC.gw = GW; VISC.gh = GH; VISC.mark = new Uint32Array(GW * GH); VISC.sid = 0; }
   const call = ++VISC.n, mark = VISC.mark;
+  // 内层循环只用局部变量（模块级的 let 每次读都要查作用域，循环里也不能提出去）
+  const G = VIS_G, B = VIS_B, SM = SMOKE, gw = GW, gh = GH;
   const done = [];
   for (const s of sources) {
     const h = s.h || .35;
@@ -71,29 +88,36 @@ function castVision(out, sources) {
     done.push({ x: s.x, y: s.y, r: s.r, h });
     const key = s.x + ',' + s.y + ',' + s.r + ',' + h, sm = visSmoke(s.x, s.y, s.r), c = VISC.m.get(key);
     if (c && c.sm === sm) { const L = c.cells; for (let k = 0; k < L.length; k++) out[L[k]] = 1; c.n = call; continue; }
-    const cells = [], sid = ++VISC.sid;
-    const lit = i => { out[i] = 1; if (mark[i] !== sid) { mark[i] = sid; cells.push(i); } };
-    const gx0 = s.x / CELL, gy0 = s.y / CELL, i0 = ci(s.x, s.y), rc = s.r / CELL;
-    const eye = VIS_G[i0] + h;
-    lit(i0);
+    const sid = ++VISC.sid, gx0 = s.x / CELL, gy0 = s.y / CELL, i0 = ci(s.x, s.y), rc = s.r / CELL;
+    const eye = G[i0] + h;
+    const nb = (2 * Math.ceil(rc) + 4) ** 2;
+    if (VIS_BUF.length < nb) VIS_BUF = new Int32Array(nb);
+    const buf = VIS_BUF;
+    let nc = 0;
+    out[i0] = 1; mark[i0] = sid; buf[nc++] = i0;
     const n = Math.ceil(rc * 7.5), D = visDirs(n);
     while (VIS_ST[VIS_ST.length - 1] + .7 <= rc) VIS_ST.push(VIS_ST[VIS_ST.length - 1] + .7);
+    const ST = VIS_ST;
     let ns = 0;
-    while (ns < VIS_ST.length && VIS_ST[ns] <= rc) ns++;
+    while (ns < ST.length && ST[ns] <= rc) ns++;
+    // 射线提前结束（结果逐格不变）：圈内最高的地面 g（相对眼高）也够不着「此前最高遮挡坡度 − .02」，这条射线后面就一格也点不亮了——
+    //   g ≥ 0 时 g / 距离 随距离变小，看下一步；g < 0 时上界是最远一步的 g / stL。翻过山脊、穿过林带后的射线大多能早早停下
+    const g = visLocMax(gx0, gy0, rc) - eye, stL = ns ? ST[ns - 1] : 1, gFar = g / stL;
     for (let k = 0; k < n; k++) {
       const dx = D[k * 2], dy = D[k * 2 + 1];
       let maxS = -1e9;
       for (let j = 0; j < ns; j++) {
-        const st = VIS_ST[j], fx = gx0 + dx * st, fy = gy0 + dy * st;
-        if (fx < 0 || fy < 0 || fx >= GW || fy >= GH) break;
-        const i = (fy | 0) * GW + (fx | 0);
-        if ((VIS_G[i] - eye) / st >= maxS - .02) lit(i);
-        const top = (VIS_B[i] - eye) / st;
+        const st = ST[j], fx = gx0 + dx * st, fy = gy0 + dy * st;
+        if (fx < 0 || fy < 0 || fx >= gw || fy >= gh) break;
+        const i = (fy | 0) * gw + (fx | 0);
+        if ((G[i] - eye) / st >= maxS - .02) { out[i] = 1; if (mark[i] !== sid) { mark[i] = sid; buf[nc++] = i; } }
+        const top = (B[i] - eye) / st;
         if (top > maxS) maxS = top;
-        if (SMOKE[i]) break;
+        if (SM[i]) break;
+        if (j + 1 < ns && (g >= 0 ? g / ST[j + 1] : gFar) < maxS - .02) break;
       }
     }
-    VISC.m.set(key, { cells: Int32Array.from(cells), sm, n: call });
+    VISC.m.set(key, { cells: buf.slice(0, nc), sm, n: call });
   }
   if (VISC.m.size > 1200) for (const [k, c] of VISC.m) if (call - c.n > 8) VISC.m.delete(k);   // 两秒没用上的（走开了的单位留下的）淘汰
 }
@@ -179,8 +203,45 @@ const fgNow = () => typeof S === 'object' && S && S.phase === 'battle' && isFini
 function costArr(cls, gen, force) {
   let C = COSTS.get(cls);
   const now = fgNow(), fresh = C && C.t != null && now != null && now - C.t >= 0 && now - C.t < (cls === 'raid' ? 1 : 2.5);
-  if (!C || (force && C.gen !== gen) || ((C.gen !== gen || cls === 'raid') && !fresh)) { C = { gen, t: now, a: (C && C.a) || new Float64Array(GW * GH).fill(Infinity) }; for (let k = 0; k < PGN; k++) C.a[k] = stepCost(k, cls); COSTS.set(cls, C); }   // 寻路带以外一直是 Infinity，不再逐格算
+  if (!C || (force && C.gen !== gen) || ((C.gen !== gen || cls === 'raid') && !fresh)) { C = { gen, t: now, a: (C && C.a) || new Float64Array(GW * GH).fill(Infinity) }; costFill(C.a, cls); COSTS.set(cls, C); }   // 寻路带以外一直是 Infinity，不再逐格算
   return C.a;
+}
+// 整个寻路带的 stepCost（逐格结果与 stepCost 完全相同，乘法顺序也一样）：按类别拆成专用循环、地形底价先按类型查表——
+//   原来逐格调 stepCost，海岛（寻路带七十多万格）车辆这一类重算一次要七八十毫秒，雷区、障碍一变就整整卡一下
+function costFill(a, cls) {
+  const ty = TER.type, el = TER.elev, ob = OBSC, mi = MINEC, wi = WIREC, n = PGN, D = T.DEEP, SH = T.SHOAL, HL = T.HILL;
+  if (cls === 'ship') {
+    for (let k = 0; k < n; k++) { const t = ty[k]; a[k] = t === D ? (ob[k] === 2 ? 4 : 1) : t === SH ? (ob[k] === 2 ? 6 : 1.6) : Infinity; }
+    return;
+  }
+  const base = new Float64Array(VCOST.length);
+  if (cls === 'veh' || cls === 'vehe' || cls === 'amph') {
+    for (let t = 0; t < base.length; t++) base[t] = cls === 'amph' && (t === D || t === SH) ? 1.7 : cls === 'amph' && t === T.RIVER ? 2.5 : VCOST[t];
+    const ve = cls === 'vehe', mk = ve ? 25 : 8, e0 = VEH_ELEV;
+    for (let k = 0; k < n; k++) {
+      const t = ty[k], o = ob[k];
+      let c = base[t];
+      if (c === Infinity || o === 2 || (ve && o)) { a[k] = Infinity; continue; }
+      if (t === HL) { const e = el[k]; if (e > e0) { a[k] = Infinity; continue; } c *= 1 + (e - .5) * 5; }
+      const m = mi[k];
+      if (m && (ve || m === 2)) c *= mk;
+      a[k] = wi[k] ? c * 1.2 : c;
+    }
+    return;
+  }
+  for (let t = 0; t < base.length; t++) { const sp = spInf(t); base[t] = sp ? 1 / sp : Infinity; }
+  const ec = cls === 'e' || cls === 'raid', raid = cls === 'raid', mk = ec ? 25 : 6, wk = ec ? 1.5 : 3, pv = PV;
+  const FO = T.FOREST, TO = T.TOWN, FI = T.FIELD, RO = T.ROAD, BE = T.BEACH;
+  for (let k = 0; k < n; k++) {
+    const t = ty[k];
+    let c = base[t];
+    if (c === Infinity) { a[k] = Infinity; continue; }
+    const m = mi[k];
+    if (m && (ec || m === 2)) c *= mk;
+    if (wi[k]) c *= wk;
+    if (raid) c *= (t === FO || t === TO ? .7 : t === FI || t === RO || t === BE ? 1.6 : 1) * (pv[k] ? 3 : 1);
+    a[k] = c;
+  }
 }
 // 连通分量（按通行类别缓存）：能不能开到只看两格是否同属一片，不必为了判断可达整图算一遍流场。
 //   只在地形变了（FPASS：炸桥、修桥）时重算——交战中雷区、铁丝网、滩头障碍一直在变，但不影响大片地区连不连通；fresh 参数留着兼容旧调用
