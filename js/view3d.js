@@ -1151,7 +1151,8 @@ function v3NearGap(F) {
   return g;
 }
 function v3FcCamera() {
-  const F = V3.fc || (v3FcInit(), V3.fc), cp = Math.cos(F.pitch), f = [cp * Math.cos(F.yaw), -cp * Math.sin(F.yaw), Math.sin(F.pitch)];   // 视线方向（GL 坐标）
+  const F = V3.fc || (v3FcInit(), V3.fc), sh = typeof plShake3 === 'function' ? plShake3(F.x, F.y, F.z) : null, pitch = F.pitch + (sh ? sh[1] : 0), yaw = F.yaw + (sh ? sh[0] : 0);   // 附近的大爆炸：镜头一震（polish.js）
+  const cp = Math.cos(pitch), f = [cp * Math.cos(yaw), -cp * Math.sin(yaw), Math.sin(pitch)];   // 视线方向（GL 坐标）
   const E = [F.x, -F.y, F.z], z = [-f[0], -f[1], -f[2]], x = v3Norm(v3Cross([0, 0, 1], z)), y = v3Cross(z, x);
   const view = new Float32Array([x[0], y[0], z[0], 0, x[1], y[1], z[1], 0, x[2], y[2], z[2], 0, -v3Dot(x, E), -v3Dot(y, E), -v3Dot(z, E), 1]);
   const D = clamp(F.d || 600, 80, 16000), rd = v3RD(), fog = v3Fog(D, rd);
