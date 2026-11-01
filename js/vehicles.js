@@ -630,7 +630,8 @@ function vehAA(v, dt) {
     if (p.dead || !(p.alt > .4) || (typeof eaHigh === 'function' && (eaHigh(p) || eaHighUav(p))) || dist(v.x, v.y, p.x, p.y) > sp.aa) continue;   // 巡逻高度上的战斗机、中空的无人机够不着
     tracer(v.x, v.y, p.x + gauss() * 14, p.y + gauss() * 14, 'e', inVision(v.x, v.y));
     v.aim = Math.atan2(p.y - v.y, p.x - v.x); v.mgT = S.t; v.aaId = p.id; v.aaAt = S.t;   // aaId：正在打的飞机（3D 里炮管按它的高度仰起，vfn.js）
-    if (Math.random() < .12 * (1 - v.sup / 130) * (typeof airStealth === 'function' ? (1 + airStealth(p)) / 2 : 1) && typeof airLost === 'function') { airLost(p, `${typeof airName === 'function' ? airName(p.kind, p.v) : '我机'}被敌${vehModel(v)}击落`); break; }
+    const ew = typeof ewK === 'function' && ewRadarVeh(v) ? (v.emT > S.t || dist(v.x, v.y, p.x, p.y) > sp.aa * ewK('v' + v.id, sp.aa) ? .4 : 1) : 1;   // 火控雷达被压 / 关机：只能光学瞄准（ew.js）
+    if (Math.random() < .12 * ew * (1 - v.sup / 130) * (typeof airStealth === 'function' ? (1 + airStealth(p)) / 2 : 1) && typeof airLost === 'function') { airLost(p, `${typeof airName === 'function' ? airName(p.kind, p.v) : '我机'}被敌${vehModel(v)}击落`); break; }
   }
 }
 
@@ -643,6 +644,8 @@ function vehSam(v, dt) {
   if (v.samN == null) v.samN = M.n;
   if (v.samN < M.n && (v.samR = (v.samR || 0) + dt) >= M.regen) { v.samR = 0; v.samN++; }
   if ((v.samCd = (v.samCd || 0) - dt) > 0 || v.samN <= 0 || v.sup >= 80) return;
+  const rdr = v.side === 'e' && typeof ewRadarVeh === 'function' && ewRadarVeh(v), ek = rdr ? ewK('v' + v.id, M.range) : 1;   // 有雷达的：被我方干扰压着，对飞机的跟踪距离缩短；关机规避时不用雷达（ew.js）
+  if (rdr && v.emT > S.t) return;
   const foe = v.side === 'e' ? 'p' : 'e', mine = (k, id) => S.missiles.some(m => m.kind === 'sam' && !m.done && m.side === v.side && m.tgt && m.tgt.k === k && m.tgt.id === id);
   let tg = null, k = null, bd = Infinity;
   for (const m of S.missiles || []) {
@@ -656,12 +659,12 @@ function vehSam(v, dt) {
   if (tg) (tg.svTry || (tg.svTry = [])).push(v.id);
   else {
     const air = v.side === 'p' ? (S.eair && S.eair.fly || []).filter(a => !a.dead && a.alt > .1) : (S.planes || []).filter(p => !p.dead && p.alt > .25 && !['cat', 'roll', 'trap', 'final'].includes(p.phase));
-    for (const a of air) { const d = dist(v.x, v.y, a.x, a.y), st = v.side === 'e' && typeof airStealth === 'function' ? airStealth(a) : 1, rr = M.range * (M.hi ? Math.min(1, st * 1.2) : (1 + st) / 2);   // 隐身：雷达制导（爱国者）发现距离按隐身系数打折，红外制导（毒刺）打折一半
+    for (const a of air) { const d = dist(v.x, v.y, a.x, a.y), st = v.side === 'e' && typeof airStealth === 'function' ? airStealth(a) : 1, rr = M.range * (M.hi ? Math.min(1, st * 1.2) : (1 + st) / 2) * ek;   // 隐身：雷达制导（爱国者）发现距离按隐身系数打折，红外制导（毒刺）打折一半
       if (d < rr && d < bd && !(!M.hi && typeof eaHigh === 'function' && eaHigh(a)) && !mine(v.side === 'p' ? 'eair' : 'plane', a.id)) { bd = d; tg = a; } }   // 近程红外弹够不着巡逻高度上的战斗机（hi：爱国者等中远程防空够得着）
     if (!tg) return;
     k = v.side === 'p' ? 'eair' : 'plane';
   }
-  msLaunch('sam', v.side, v.x, v.y, { x: tg.x, y: tg.y }, { tgt: { k, id: tg.id }, src: 'samv', spd: 620, dur: 3, pk: (k === 'msl' ? (tg.kind === 'tbm' ? (tg.nuke ? .2 : .5) : tg.kind === 'pgm' ? MS_PGM[tg.w].icp : .55) : .6) * (M.pkK || 1), sup: v.sup });
+  msLaunch('sam', v.side, v.x, v.y, { x: tg.x, y: tg.y }, { tgt: { k, id: tg.id }, src: 'samv', spd: 620, dur: 3, pk: (k === 'msl' ? (tg.kind === 'tbm' ? (tg.nuke ? .2 : .5) : tg.kind === 'pgm' ? MS_PGM[tg.w].icp : .55) : .6 * (rdr && k === 'plane' ? ewPk('v' + v.id, tg, false) : 1)) * (M.pkK || 1), sup: v.sup });   // 打飞机：被欺骗干扰掩护的命中率打折
   v.samN--; v.samCd = M.cd; v.aim = Math.atan2(tg.y - v.y, tg.x - v.x); v.samT = S.t;
   S.fx.push({ kind: 'flash', x: v.x, y: v.y, r: 8, life: 0, max: .4, side: v.side });
   if (v.side === 'e') { v.kx = v.x; v.ky = v.y; v.kh = v.heading; v.seen = S.t; }   // 导弹尾焰暴露发射车

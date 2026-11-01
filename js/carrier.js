@@ -27,9 +27,9 @@ const AIR_MDL = {
   // 歼-50（外界称呼，沈飞第六代原型机，2024 年 12 月 26 日被拍到试飞；λ 形无尾翼、双发）：外界推测会发展舰载型。官方无任何参数，按公开估算——
   // 可上航母（占机库），隐身 0.22、雷达 800、6 枚霹雳-15 + 2 枚霹雳-10，不带航炮，只打超视距；无尾、转弯慢（turn）
   j50: { name: '歼-50 第六代舰载战斗机', sil: 'j50', spd: 280, aa: .03, size: 16, stealth: .22, aam: 8, aamR: 560, pkK: 1.18, radar: 800, turn: 1.9, gun: 0 },
-  // 歼-16D 电子战飞机（陆基，战区机场出动）：翼尖电子战吊舱 + 进气道下两个大型干扰吊舱压制敌雷达——附近我方飞机被敌防空发现、命中的概率打七折（airJamK）；
+  // 歼-16D 电子战飞机（陆基，战区机场出动）：翼尖电子侦察吊舱 + 进气道下两个大型干扰吊舱——测敌雷达位置、压制敌雷达（ew.js：烧穿距离、欺骗干扰、反辐射）；
   //   翼下 4 枚雷电-10 反辐射导弹（420 外打敌防空）、外侧 2 枚霹雳-15 自卫（没有航炮、光电球，换成了电子战设备）
-  j16d: { name: '歼-16D 电子战飞机', sil: 'j16', spd: 250, aa: .07, size: 18, land: true, std: 420, sead: true, gbN: 4, aam: 2, arW: 'ld10', arR: 420, jam: 650 },
+  j16d: { name: '歼-16D 电子战飞机', sil: 'j16', spd: 250, aa: .07, size: 18, land: true, std: 420, sead: true, gbN: 4, aam: 2, arW: 'ld10', arR: 420 },
   // 歼-16 多用途战斗机，对地满挂（「炸弹卡车」，陆基，战区机场出动）：翼下内侧、中间挂架和两个进气道挂点共 6 枚雷石-6 五百公斤级滑翔制导炸弹，外侧 2 枚霹雳-15、翼尖 2 枚霹雳-10 自卫，
   //   还有 GSh-30-1 航炮（150 发）；防区外 300 投放，余弹自主武装侦察
   j16: { name: '歼-16 多用途战斗机（对地满挂）', sil: 'j16b', spd: 245, aa: .08, size: 18, land: true, std: 300, gbN: 6, aam: 4, arW: 'ls6', arR: 320 }
@@ -74,9 +74,7 @@ const airSpec = (type, v) => ({ ...(AIR_SPEC[type] || AIR_SPEC.strike), ...airMd
 const airLandW = w => !!(w && airMdl(w.type, w.v).land);
 // 防空压制的变体：歼-35 防空压制型（sead）、歼-16D 电子战飞机（ew）
 const airSeadV = v => v === 'sead' || v === 'ew';
-// 歼-16D 的电子干扰：650 内有升空的歼-16D，我方飞机（它自己也算）被敌雷达发现、被防空打中的概率打七折
-const airJamK = o => o && isFinite(o.x) && typeof S === 'object' && S && (S.planes || []).some(j => !j.dead && j.v === 'ew' && (j.alt ?? 1) > .3 && dist(j.x, j.y, o.x, o.y) < (AIR_MDL.j16d.jam || 650)) ? .7 : 1;
-const airStealth = o => { const b = ((o && airMdl(o.kind || o.type, o.v).stealth) || 1) * (o && o.kind ? airJamK(o) : 1); return o && o.exp > 0 && typeof awStl === 'function' ? awStl(o, b) : b; };   // 飞机（p.kind）或编队记录（w.type）；在敌雷达下待久了隐身打折（airwar.js awStl）
+const airStealth = o => { const b = (o && airMdl(o.kind || o.type, o.v).stealth) || 1; return o && o.exp > 0 && typeof awStl === 'function' ? awStl(o, b) : b; };   // 电子干扰不再折进隐身系数：按每部雷达算（ew.js）   // 飞机（p.kind）或编队记录（w.type）；在敌雷达下待久了隐身打折（airwar.js awStl）
 const AIR_REARM_LAND = 100;   // 陆基飞机：飞回战区机场加油挂弹再飞回来
 const AIR_TYPES = ['recon', 'strike', 'cas', 'bomber', 'fighter'];
 const AIR_TURN = 1.5;      // 最大转弯角速度（弧度/秒）：巡航转弯半径约 120
@@ -968,11 +966,12 @@ function airAA(p, dt) {
   const sp = airSpec(p.kind, p.v), s0 = airStealth(p), st = s0 < 1 ? (1 + s0) / 2 : 1;   // 隐身机：雷达高炮难以跟踪，光学瞄准仍可能打中（久留暴露后打折变少）
   for (const a of S.enemies) {
     if (a.dead || a.kind !== 'aa' || dist(a.x, a.y, p.x, p.y) > 190) continue;
+    const ek = typeof ewK === 'function' ? (a.emT > S.t ? 0 : dist(a.x, a.y, p.x, p.y) < 190 * ewK('e' + a.id, 190) ? 1 : 0) : 1, ew = .4 + .6 * ek;   // 炮瞄雷达被压 / 关机：跟踪距离外只能光学瞄准，准头差得多（ew.js）
     tracer(a.x, a.y, p.x + gauss() * 14, p.y + gauss() * 14, 'e', inVision(a.x, a.y)); a.fireT = S.t;   // 开火即暴露（conceal.js）
     if (p.v === 'heli' && typeof heliShotAt === 'function') heliShotAt(p, a.x, a.y, 210, 1.2);   // 直升机机组看得见曳光从哪来
     if (a.kx == null && Math.random() < .15) { a.kx = a.x; a.ky = a.y; log('防空炮火暴露位置', 'warn', null, 0, a); }
     const k = p.kind === 'bomber' && p.v !== 'dive' ? .75 : 1;   // 轰-6K 飞得高，轻型高炮不易打中
-    if (Math.random() < sp.aa * k * st * (1 - (a.sup || 0) / 130)) { airLost(p, `${airName(p.kind, p.v)}被击落`); break; }
+    if (Math.random() < sp.aa * k * st * ew * (1 - (a.sup || 0) / 130)) { airLost(p, `${airName(p.kind, p.v)}被击落`); break; }
   }
 }
 

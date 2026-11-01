@@ -7,7 +7,8 @@
 //         镜头是跟在机尾的追尾视角（皇牌空战式操纵时鼠标就是看四周，别的方式按住 C；滚轮拉远拉近）——座舱视角去掉了；手柄也能飞；
 //         武器（fpwpn.js）：数字键选武器、F / 左键开火（要锁稳）、R / 右键单击换目标、空格航炮；发射后右上角小屏跟着导弹看，V 放大 / 缩回；
 //         降落（自己飞）：G 起落架、L 襟翼、B 减速板（地上是刹车）、H 尾钩——航母斜角甲板上挂住拦阻索、夺取的机场跑道上停下来，就交给地勤整备；
-//         弹射起飞仍由甲板作业流程完成（坐在里面看）
+//         弹射起飞仍由甲板作业流程完成（坐在里面看）；
+//         电子战（ew.js）：歼-16D 按 J 开关干扰吊舱；所有机型右下角有雷达告警（照着你的敌雷达的方位、种类，被压制的、正用导弹打你的），导弹来袭报警
 //   军舰：A / D 转舵，W / S 车钟加减一档（后退一 · 停车 · 前进一二三），空格主炮打视线中心的点，F 垂发导弹（按目标自动选弹）；鼠标看四周（点一下画面锁定鼠标，或按住左键拖动），C 视线回正
 //   手机：屏幕下方出现操纵按钮
 // 推演：carrier.js flyPlane、support.js updateDD、units.js updateShips、sandbox.js sbxFireShips 见到 o.fp 就不再替它做主（飞机在 fpFly 里飞，舰在 fpSail 里开）
@@ -16,7 +17,7 @@ const V3FP = { on: false, k: null, o: null, keys: new Set(), look: [0, 0], thr: 
   ctl: 'ace', aim: [0, 0], ms: [0, 0], kx: { r: 0, p: 0, y: 0 }, ins: { x: 0, y: 0, r: 0 }, ab: false, abT: 0, ffb: true, gb: 0, rb: 0, buf: 0, imp: 0, free: false, gpB: [],
   mv: null, mo: [0, 0], mf: null, mp: null, mEnd: null, fq: null, msg: null, mBig: false, mlT: 0,
   gear: false, flapC: 0, hook: false, landed: null, bul: [], gunA: 0, tgK: null, lkT: 0, fwT: null };   // mv：导弹小屏正跟着的弹（mBig：放大成全屏）；fq：按了开火、等舱门开好 / 锁稳；gear / flapC / hook：起落架、襟翼、尾钩的手柄位置
-const V3FP_KEYS = { KeyW: 1, KeyA: 1, KeyS: 1, KeyD: 1, KeyQ: 1, KeyE: 1, KeyC: 1, KeyF: 1, KeyX: 1, KeyV: 1, KeyT: 1, KeyM: 1, KeyG: 1, KeyR: 1, KeyB: 1, KeyH: 1, KeyL: 1, KeyK: 1, Space: 1, ShiftLeft: 1, ShiftRight: 1, ArrowLeft: 1, ArrowRight: 1, ArrowUp: 1, ArrowDown: 1, Digit1: 1, Digit2: 1, Digit3: 1, Digit4: 1, Digit5: 1, Digit6: 1 };
+const V3FP_KEYS = { KeyW: 1, KeyA: 1, KeyS: 1, KeyD: 1, KeyQ: 1, KeyE: 1, KeyC: 1, KeyF: 1, KeyX: 1, KeyV: 1, KeyT: 1, KeyM: 1, KeyG: 1, KeyR: 1, KeyB: 1, KeyH: 1, KeyL: 1, KeyK: 1, KeyJ: 1, Space: 1, ShiftLeft: 1, ShiftRight: 1, ArrowLeft: 1, ArrowRight: 1, ArrowUp: 1, ArrowDown: 1, Digit1: 1, Digit2: 1, Digit3: 1, Digit4: 1, Digit5: 1, Digit6: 1 };
 const FP_TELE = [-.3, 0, .35, .7, 1];   // 车钟：后退一 · 停车 · 前进一二三
 
 // —— 能驾驶的单位 ——
@@ -157,7 +158,7 @@ function fpTake(E) {
 function fpRelease() {
   const o = V3FP.o;
   if (!o) return;
-  o.fp = false; o.fpBrd = false;
+  o.fp = false; o.fpBrd = false; o.jam = undefined;   // 交回 AI：干扰吊舱照常开着（ew.js）
   if (V3FP.k === 'air' && typeof fwRelease === 'function') fwRelease();   // 舱门关上
   if (V3FP.k === 'air' && fpOnDeck(o)) { V3FP.o = null; return; }   // 还在甲板上：照常由甲板作业流程送上弹射器
   if (V3FP.k === 'air' && o.phase !== 'trap' && !o.afPh) { o.fl = null; o.pt3 = null; o.fpVz = 0; if (!o.dead) o.alt = clamp(o.alt, .3, 1); }   // 交回 AI：按游戏里的简化飞行接着飞（已经着舰、落地的照地勤流程走）
@@ -628,11 +629,45 @@ function fpHudData(ctx, w, h) {
   const cvOk = (FL_AC[F.k] || {}).cv;
   ctx.fillStyle = g > .01 && g < .99 ? warn : col;
   ctx.fillText(`起落架 ${gs}（G）   襟翼 ${fl}（L）${cvOk ? `   尾钩 ${V3FP.hook ? '放下' : '收起'}（H）` : ''}${F.sb ? '   减速板' : ''}`, cx, y0 + 54);
+  const ew = typeof ewStat === 'function' ? ewStat(o) : null;
+  if (ew) { ctx.fillStyle = ew.on ? '#7fd8ff' : col; ctx.fillText(`电子战：干扰${ew.on ? `开 · 压制 ${ew.nj} 部雷达` : '关'}（J）   侦察到 ${ew.ns} 部敌雷达`, cx, y0 + 72); }
   ctx.font = font(15); ctx.fillStyle = red;
   if (F.stall > .3 && !F.gnd) ctx.fillText('失速', cx, y0 - 26);
   else if (!F.gnd && agl < 400 && vs < -Math.max(8, agl / 6) && !(g > .99 && agl < 60 && vs > -6)) ctx.fillText('拉起', cx, y0 - 26);   // 低空、下沉快：再这样几秒就撞了
   ctx.restore();
   if (g > .5 && cvOk && !F.gnd) fpMeatball(ctx, w, h, P);
+  fpRwr(ctx, w, h, P);
+}
+// 雷达告警（右下角武器表上面一个小圆）：机头朝上，照着你的敌雷达按方位画——S 防空导弹、A 高炮、F 战斗机、N 军舰、E 警戒雷达；
+//   越危险越靠里（正在用导弹打你的在最里圈、红色闪），被我方干扰压着的画成淡蓝带个斜杠；飞向你的导弹在外圈画红三角，下面「导弹来袭」和钟点方位
+function fpRwr(ctx, w, h, P) {
+  const o = V3FP.o;
+  if (!o || typeof ewRwr !== 'function') return;
+  const R = ewRwr(o), r = 44, cx = w - 16 - r, cy = h - 16 - 18 * 5 - r - 14, blink = (performance.now() / 250 | 0) % 2;
+  ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.7)'; ctx.shadowBlur = 3;
+  ctx.fillStyle = 'rgba(0,14,8,.45)'; ctx.beginPath(); ctx.arc(cx, cy, r, 0, 6.2832); ctx.fill();
+  ctx.strokeStyle = 'rgba(125,255,176,.7)'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.arc(cx, cy, r, 0, 6.2832); ctx.stroke();
+  ctx.strokeStyle = 'rgba(125,255,176,.3)'; ctx.beginPath(); ctx.arc(cx, cy, r * .5, 0, 6.2832); ctx.moveTo(cx, cy - r); ctx.lineTo(cx, cy - r + 6); ctx.stroke();
+  ctx.font = '11px "IBM Plex Mono", monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  const at = (x, y, k) => { const rel = Math.atan2(y - P.y, x - P.x) - P.yaw; return [cx + Math.sin(rel) * k, cy - Math.cos(rel) * k]; };   // rel：相对机头的方位（顺时针为正），正前方画在最上面
+  for (const e of R.em) {
+    const k = r * (e.lock ? .3 : .45 + .45 * clamp(e.d / (e.R0 * 1.6), 0, 1)), [x, y] = at(e.x, e.y, k), L = { sam: 'S', aaa: 'A', ftr: 'F', ship: 'N', ews: 'E' }[e.k] || '?';
+    ctx.fillStyle = e.lock ? (blink ? '#ff4a4a' : '#ffd0d0') : e.jam ? '#7fd8ff' : e.d < e.R0 ? '#ffb84a' : '#7dffb0';
+    ctx.fillText(L, x, y);
+    if (e.jam) { ctx.strokeStyle = '#7fd8ff'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x - 5, y + 5); ctx.lineTo(x + 5, y - 5); ctx.stroke(); }
+  }
+  let near = null;
+  for (const m of R.msl) {
+    const [x, y] = at(m.x, m.y, r - 4);
+    ctx.fillStyle = '#ff4a4a'; ctx.beginPath(); ctx.moveTo(x, y - 5); ctx.lineTo(x + 4.5, y + 4); ctx.lineTo(x - 4.5, y + 4); ctx.closePath(); ctx.fill();
+    if (!near || m.d < near.d) near = m;
+  }
+  if (near) {
+    const rel = Math.atan2(near.y - P.y, near.x - P.x) - P.yaw, ck = Math.round(((rel % 6.2832) + 6.2832) % 6.2832 / 6.2832 * 12) % 12 || 12;   // 钟点方位：正前方 12 点
+    ctx.font = '14px "IBM Plex Mono", "Noto Sans SC", monospace'; ctx.fillStyle = blink ? '#ff4a4a' : '#ffd0d0';
+    ctx.fillText(`导弹来袭 ${ck} 点 ${(near.d / 1000).toFixed(1)}km`, cx - r - 70, cy);
+  }
+  ctx.restore();
 }
 // 着舰引导（光学助降系统的样子）：放下起落架、在航母斜角甲板延长线后方 6 公里内——下滑道 3.5°，光球在中间就对了，偏高往上、偏低往下；
 //   下面一行：离接地点多远、偏左偏右多少米、该飞的迎角
@@ -671,6 +706,12 @@ function fpGear() {
   V3FP.gear = !V3FP.gear; fwMsg(V3FP.gear ? '放起落架' : '收起落架');
 }
 function fpFlap() { V3FP.flapC = V3FP.flapC > .75 ? 0 : V3FP.flapC > .25 ? 1 : .5; fwMsg(V3FP.flapC > .75 ? '襟翼：着陆' : V3FP.flapC > .25 ? '襟翼：起飞' : '襟翼：收起'); }
+// J：歼-16D 的干扰吊舱开 / 关（关了不压制敌雷达，也不再因为一直发射被敌方无源侦察测到；电子侦察是无源的，一直在收）
+function fpJam() {
+  const o = V3FP.o;
+  if (!o || typeof ewIsJ !== 'function' || !ewIsJ(o)) { fwMsg('这型飞机没有干扰吊舱（歼-16D 才有）'); return; }
+  o.jam = o.jam === false; fwMsg(o.jam ? '干扰吊舱：开（压制敌雷达，但自己会被测到方位）' : '干扰吊舱：关（只做电子侦察）');
+}
 function fpHook() {
   const F = V3FP.o && V3FP.o.fl;
   if (!F || !(FL_AC[F.k] || {}).cv) { fwMsg('陆基飞机没有尾钩'); return; }
@@ -690,6 +731,7 @@ if (typeof window !== 'undefined' && window.addEventListener) {
       if (e.code === 'KeyG') fpGear();
       if (e.code === 'KeyL') fpFlap();
       if (e.code === 'KeyH') fpHook();
+      if (e.code === 'KeyJ') fpJam();
       const dg = /^Digit([1-6])$/.exec(e.code);
       if (dg) fwSel(+dg[1] - 1);
       if (e.code === 'KeyC') { V3FP.free = true; if (V3FP.ctl === 'stick') V3FP.ms = [0, 0]; }   // 按住自由视角（鼠标摇杆时顺便杆回中）

@@ -102,7 +102,7 @@ function aiThink(D) {
 
 // 火控：按预期杀伤挑目标，移动目标打提前量，高价值目标多炮同时弹着，打完转移
 function aiArtillery(D, seenT, seenShips) {
-  const guns = S.enemies.filter(e => (e.kind === 'arty' || e.kind === 'mortar') && !e.dead && !e.moving && e.cd <= 0);
+  const guns = S.enemies.filter(e => (e.kind === 'arty' || e.kind === 'mortar') && !e.dead && !e.moving && e.cd <= 0 && !(typeof ewComm === 'function' && ewComm(e.x, e.y)));   // 通信干扰：电台被压的炮位这一回收不到呼叫（ew.js）
   if (!guns.length) return;
   const T = [];
   for (const s of seenShips) {

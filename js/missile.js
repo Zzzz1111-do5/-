@@ -146,6 +146,7 @@ function msPgmTgt(t) {
 function msPgm(w, side, x0, y0, T, src, delay = 0) {
   const W0 = MS_PGM[w];
   if (!W0) return null;
+  if (w === 'ld10' && T.k && T.id != null && typeof ewArm === 'function') { const o = msPgmTgt({ k: T.k, id: T.id }); if (o) ewArm(o); }   // 反辐射弹盯上了：雷达可能关机规避（ew.js）
   return msLaunch('pgm', side, x0, y0, { x: T.x, y: T.y }, { tgt: T.k && T.id != null ? { k: T.k, id: T.id } : null, src, delay, dur: 60, w });
 }
 function msPgmFly(m, dt) {
@@ -162,6 +163,7 @@ function msPgmFly(m, dt) {
 }
 // 到达（m.tx、m.ty 是落点）：打敌舰按舰艇毁伤，其余小范围爆炸 + 对目标直接毁伤（fpwpn.js 玩家亲自打的也用这一套）
 function msPgmHit(m, T, W0) {
+  if (m.w === 'ld10' && T && T.emT > S.t && Math.random() < .6) T = null;   // 反辐射弹：目标雷达关机规避了（ew.js），只能打记忆位置
   if (m.tgt && m.tgt.k === 'eship') { if (T && dist(T.x, T.y, m.tx, m.ty) < 24 && typeof navyHit === 'function') navyHit(T, m); else S.fx.push({ kind: 'flash', x: m.tx, y: m.ty, r: 10, life: 0, max: .5, side: m.side }); msStat('pgmHit'); return; }
   impact(m.tx, m.ty, W0.pw, m.side);
   if (m.src === 'b2' && typeof b2Blast === 'function') b2Blast(m.tx, m.ty, m.w);   // B-2 的重磅炸弹：大范围冲击波压制（b2.js）

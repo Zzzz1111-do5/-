@@ -52,6 +52,10 @@
 - 飞机挂载按真实的典型挂法，推演计数（carrier.js AIR_MDL、eair.js）、驾驶武器表、2D（airmdl.js st）、3D 挂点（fpwpn.js FW_LOAD / FW_ST，按武器各一组）一致：歼-35 4 飞腾-8 + 2 霹雳-15；歼-15T 2 KD-88 + 2 霹雳-15 + 2 霹雳-10；歼-16D 4 雷电-10 + 2 霹雳-15 + 翼尖 / 进气道电子战吊舱（FW_POD，v3g.js v3gPodModel 程序化吊舱）；
   歼-16 对地满挂（「炸弹卡车」，变体键 v 'bt'、型号键 j16、剪影键 j16b，陆基）6 雷石-6 + 2 霹雳-15 + 2 霹雳-10 + 航炮；
   轰-6K 6 枚空地-20 防区外发射（carrier.js bomberStd / airH6Aims）；攻击-11 平飞投 2 枚精确制导炸弹；攻击-2 4 枚蓝箭-7；防空压制型发射真正飞的反辐射导弹；海战换挂的反舰导弹见 FW_ASM；美军阿帕奇 8 枚地狱火、A-10 第一次通场投 3 枚 JDAM（eaJdam）。非战斗机的 aam 是自卫弹，AI 不用、亲自驾驶能打。
+- 电子战（js/ew.js）：歼-16D 翼尖电子侦察吊舱测出开机的敌雷达（高炮炮瞄雷达、有雷达的防空车 / 爱国者 / C-RAM、岸基警戒雷达 RD、舰载雷达、敌战斗机火控雷达；复仇者没雷达），地面的标 kx / ky、舰标 det、战斗机 esmT（awSeen('p') 用 ewSeenP）；
+  干扰吊舱每架同时压 4 部（EW.nj，按威胁挑），被压雷达对我机的距离 × ewK = √(干扰机到雷达距离 ÷ (名义距离 × EW.jk))（最低 0.15；自卫干扰烧穿 = 名义距离 ÷ jk），各雷达用自己代码里的名义距离：carrier.js airAA、vehicles.js vehAA / vehSam、airwar.js awSeen / awFight、navy.js 舰空导弹；
+  雷达制导弹打干扰机或它 900 内掩护的飞机 Pk × 0.55（ewPk；AIM-120 打干扰机本身不打折：跟踪干扰源）；开着干扰的飞机敌方无源侦察测得到（ewJamSeen）；反辐射弹盯上的雷达一半关机规避 25 秒（ewArm，o.emT）；通信干扰让 1800 内敌炮兵常收不到呼叫（ai2.js aiArtillery 的 ewComm）。
+  原来的「歼-16D 650 内一律打七折」（airJamK）已删。驾驶时 J 开关干扰，右下角雷达告警（ewRwr）、导弹来袭报警。
 - 飞机按真实世界的速度飞（carrier.js AIR_K = 1，型号表 spd 是真实巡航速度，米 / 秒）；机载雷达按真实探测距离（carrier.js AIR_REAL，airwar.js awSeen），锁定、发射仍按游戏里的火控距离。
 - 主菜单「闯关」是 levels.js（三章十关，按预算自己布兵），「海岛战役」是 isle.js，都建在沙盒（sandbox.js）上；两者都记在 S.lv 里（海岛是 S.lv.isle），闯关的逻辑要跳过海岛。
 
