@@ -503,6 +503,19 @@ onWorld(() => { if (TRX.gl) for (const k in TRX.P) TRX.gl.deleteProgram(TRX.P[k]
 // 画布只增不减：要画的区域（TRX.vw × TRX.vh）放在画布左下角，用视口画、按区域拷出去。
 //   3D 地图每帧要画两张大小不同的屏外俯视图（近处一张、整个可见范围一张），原来每画一张就把这块 WebGL 画布改一次尺寸——
 //   改尺寸要重新分配绘图缓冲，每帧一两次，是 3D 卡顿的大头
+// 平面地图（写实画面、画在屏幕上）：地形画布直接垫在 2D 画布（#cv）底下，2D 画布清空后只画单位、标号，由浏览器合成——
+//   原来每帧把整屏地形 drawImage 到 2D 画布上（两块显卡画布之间整屏拷贝；有的手机、Safari 要从显卡读回再上传，平面地图最贵的一步）。
+//   地形画布也给 3D 的屏外俯视用（那时会长得比屏幕大、而且藏着）：垫到底下时尺寸改回与主画布一致，CSS 与 #cv 一样铺满，像素一一对齐
+function trxLayer(on) {
+  const cv = TRX.cv, st = R.cv && R.cv.parentNode;
+  if (!cv || !st || typeof document === 'undefined') return false;
+  if (on) {
+    if (cv.parentNode !== st) { cv.id = 'cvt'; cv.setAttribute('aria-hidden', 'true'); cv.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;display:none;pointer-events:none'; st.insertBefore(cv, st.firstChild); }
+    if (cv.width !== R.cv.width || cv.height !== R.cv.height) { cv.width = R.cv.width; cv.height = R.cv.height; TRX.vw = cv.width; TRX.vh = cv.height; TRX.lastSig = null; TRX.gl.viewport(0, 0, cv.width, cv.height); }
+  }
+  if (cv.parentNode === st) { const d = on ? 'block' : 'none'; if (cv.style.display !== d) cv.style.display = d; }
+  return on && cv.parentNode === st;
+}
 function trxResize() {
   const w = R.cv.width, h = R.cv.height;
   if (TRX.cv.width < w || TRX.cv.height < h) { TRX.cv.width = Math.max(w, TRX.cv.width); TRX.cv.height = Math.max(h, TRX.cv.height); }
