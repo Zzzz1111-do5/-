@@ -68,6 +68,8 @@
 - 浏览器检查：Playwright 已全局安装（`NODE_PATH=$(npm root -g)`），打开 `file://…/index.html`，调用 `startPvE('hard')` 或 `mnSandbox()` 后用 `step(1 / 30)` 同步推演，截图、看 pageerror。
 - 性能：推演、渲染的耗时都在真浏览器里量（Playwright 打开页面，`draw = () => {}` 后同步 `step(1 / 30)` 逐步计时，或 CDP Profiler 剖析）——无头环境（vm 沙箱）的绝对耗时和热点都失真，只能用来比结果。
   卡顿主要看尖峰（单步超过 8 / 16 毫秒的次数）而不只是平均：周期性的重活要错开（视野每 0.25 秒分两步算：logistics.js updateVision 'a' / 'b'；远距离发现 spot.js 比视野晚半个周期；战线重建 front.js 遇到视野那一步顺延）。
+  画面：3D（view3d.js 的 #cv3）和平面地图写实画面的地形（terrain.js trxLayer 的 #cvt）都是 WebGL 画布垫在 2D 画布 #cv 底下、由浏览器合成，#cv 每帧清空只画单位标号——
+  不要再往主画布里 drawImage 整屏的 WebGL 画布（显卡画布间整屏拷贝，软件渲染、Safari、部分手机要读回）。内存：大块几何上传显卡后放掉 CPU 那份；模型在 http(s) 下 fetch 取文本解析（v3g.js v3gPump），不当脚本执行。
   优化尽量保持结果逐格不变：同一种子的推演结束时给状态算指纹，改动前后应相同。推演里不要用真实时间（performance.now / Date.now）做缓存失效或限量——机器快慢会让结局不同（orbat.js bgAt 原来就有这个问题，已改成按推演时刻）。
 
 ## 分支与协作
