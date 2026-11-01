@@ -78,9 +78,11 @@ function updateDD(dt) {
   navHotUpdate();
   const fm = typeof cmdDDMission === 'function' ? cmdDDMission(dd) : null;
   if (fm && fm.hold) return;
-  const av = navArmorTarget(dd);   // 正朝我军开火的敌车辆：比面积射击任务、自动掩护都急——先打它
-  if (av) { if (ddFire(av.x, av.y, false, true)) navMark(dd, av.x, av.y); return; }
+  // 先执行指挥官的火力计划（冲击前的火力准备、冲击支援、反炮兵、呼叫火力，里面本来就有打装甲车的任务）——
+  //   原来把「正朝我军开火的敌车辆」排在火力计划前面，交战中敌车几乎一直在开火，火力准备就被挤掉了（条令评估里攻方冲击前有火力准备的比例掉到三成）
   if (fm) { if (ddFire(fm.x, fm.y, !!fm.smoke, true) && !fm.smoke) navMark(dd, fm.x, fm.y); return; }
+  const av = navArmorTarget(dd);   // 没有指定任务时：正朝我军开火的敌车辆比自动掩护急，先打它
+  if (av) { if (ddFire(av.x, av.y, false, true)) navMark(dd, av.x, av.y); return; }
   // 自动掩护：射击视野内、靠近我方小组（但不贴脸）的敌人；按责任区加权，别的舰刚打过的不重复打
   let best = null, bd = 180;
   const safe = typeof cmdDDSafe === 'function' ? cmdDDSafe() : 55;
