@@ -1665,7 +1665,7 @@ function sbxUI() {
     const sel = e.target.closest('select[data-sel]');
     if (!sel || !S || !S.sbx || S.sbx.live) return;
     const k = sel.dataset.sel, v = sel.value;
-    if (k === 'map') { if (v !== (S.map || 'std')) { openSandbox(S.seed, true, v); sbxMsg(v === 'flat' ? '白色平原：16.8 × 11.2 公里的灰色平台，浮在超新星遗迹星云里（3D 看）。没有海：步兵、车辆直接摆进南缘的出发阵地，守方在 1.5 公里以北' : '已换回海岸登陆地图'); } return; }
+    if (k === 'map') { if (v !== (S.map || 'std')) { openSandbox(S.seed, true, v); sbxMsg(v === 'flat' ? `白色平原：16.8 × 11.2 公里的灰色平台，浮在超新星遗迹星云里（3D 看）。没有海：步兵、车辆直接摆进南缘往北 ${((FLAT.zone - FLAT.off) / 1000).toFixed(1)} 公里的出发阵地，守方在 ${((FLAT.zone + FLAT.gap) / 1000).toFixed(1)} 公里以北` : '已换回海岸登陆地图'); } return; }
     if (k === 'sty') SBX.sty[SBX.side] = v;
     else SBX.dir[k] = +v;
     sbxRender();

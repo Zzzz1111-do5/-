@@ -665,6 +665,7 @@ function trxSnapshot(wpx) {
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE, 1, 1, 0, gl.LUMINANCE, gl.UNSIGNED_BYTE, new Uint8Array([255]));
   gl.uniform2f(u.uRes, wpx, hp); gl.uniform3f(u.uView, wpx / W, 0, 0); gl.uniform2f(u.uCoast, TRX.c0, TRX.cr); gl.uniform1f(u.uDM, TRX.dm || 0);
   gl.uniform1f(u.uTime, 0); gl.uniform1f(u.uFlash, 0);
+  gl.uniform1f(u.uWh, TER.flat ? 1 : 0);   // 白色平原：灰色平台（原来快照没设这一项，沿用着色器里上次的值——开局直接进 3D 时 3D 远处的底图是默认地图的绿色田地）
   gl.drawArrays(gl.TRIANGLES, 0, 3);
   const out = document.createElement('canvas');
   out.width = wpx; out.height = hp; out.getContext('2d').drawImage(cv, 0, 0);
