@@ -14,7 +14,7 @@
 - 地势：默认地图、海岛地图的丘陵起伏照 js/hmap.js（Sketchfab 上 hirnlaich 的「Soft Hills」高度场，CC-BY，`python3 -I tools/hmap_build.py <glTF 目录>` 生成；hmapWin 按种子翻转、错开），不再随机撒小山包、叠高频噪声；大山体、内陆山脊、海岸、海滩、河流仍由程序生成。
 - 默认地图 8400 × 5600（core.js MAP_K = 2.8，W0 × H0）；大海域地图在 MAPGEN 里登记、建图前 setWorld 换尺寸（海岛战役 isle.js：6000 × 12000，远海只在 3D 里铺一块平面）。西、东、南三边都是海的地图（海岛），3D 写实画面里地图外是无边海面（view3d.js v3OceanBuild / v3OceanDraw：跟着镜头走、铺到雾的尽头），北边是陆地时把岛按北缘镜像延伸约 3 公里再收出北岸（只是远景）。
 - 地图上不种树、灌木（v3props.js V3P_VEG = false，用户嫌卡）：林地只在地面贴图上表现。
-- 画面默认「写实」（设置里还能选黑绿 / 数码，look.js）；对局默认 3D——view3d.js 自由镜头、真实天空与地表贴图、实时太阳阴影、海面（法线贴图按像素大小分层淡出，远处不出噪点），v3post.js 后期；黑绿 / 数码画面四周是 v3table.js 的沙盘桌。
+- 画面默认「写实」（设置里还能选黑绿 / 数码，look.js）；对局一律 3D（平面 2D 模式已删掉：没有切换按钮、Shift + L，旧设置、低画质也开 3D；只有设备不支持 WebGL 时留在平面。新东西不再做 2D 画法，2D 的机型外形数据 airmdl.js AIRD 只给 3D 的航行灯、喷口位置用）——view3d.js 自由镜头、真实天空与地表贴图、实时太阳阴影、海面（法线贴图按像素大小分层淡出，远处不出噪点），v3post.js 后期；黑绿 / 数码画面四周是 v3table.js 的沙盘桌。
 - 坦克装甲车、飞机、直升机、导弹、单兵用的是用户给的模型，原封不动导入（js/v3g.js 渲染，js/mdl/<键>.js；转换工具 tools/v3gconv.py、tools/v3gbake.js、配置 tools/v3gmodels.json、预览 tools/v3gview.html）；兵种 → 模型的对照表在 v3g.js 的 V3G_VEH / V3G_AIR / V3G_MSL。舰艇是 Sketchfab 上 CC-BY 的模型（v3utex.js、assets/models），甲板牵引车、挂弹车、导弹挂载架（rack）是 v3x.js 的导入模型（tools/sfmodel.js + tools/sfmodels.json，密钥只从环境变量 SKETCHFAB_TOKEN 读）。
 - Sketchfab 下载的车辆模型（全部 CC-BY-4.0，署名在 tools/v3gmodels.json 的 credit，烘焙时自动写进 docs/credits.md、legal/credits.html；v3g.js 的 V3G_CRED 是游戏里的致谢表）：
   先 `python3 -I tools/sfprep.py <gltf.zip> <新空目录> [贴图最长边]` 解压并缩贴图，再 `node tools/v3gbake.js <上级目录> <键>`。v3gmodels.json 新选项：tri0 / tri0Flags 近看网格减面（Permissive 才减得动零件多的）、
@@ -55,6 +55,7 @@
   起降（flight.js flSurf / flRoll）：G 起落架、L 襟翼、B 减速板（地上刹车）、H 尾钩（舰载机）；只能落在航母飞行甲板、夺取的机场跑道上（别处、没放起落架、下沉超限、坡度 / 俯仰超限都是摔）；斜角甲板上尾钩越过拦阻索就挂住，交给 cvdeck.js cvTrapStep（拉停、滑去机位整备）；跑道上减到滑行速度交给 abn.js 收尾；放下起落架靠近航母时平显有着舰引导（3.5° 下滑道光球、对中偏差）。
   武器系统 js/fpwpn.js：数字键选武器（再按收起）、F / 左键开火；选中时打开对应弹舱门（歼-20 侧弹舱把霹雳-10 连挂架推出舱外），开着时画舱里的弹；武器按真实参数（FW_W：霹雳-15 / 10、雷电-10、KD-88、飞腾-8、雷石-6；霹雳-17 的参数还在，现在没有机型挂），各机型挂载 FW_LOAD、挂点 FW_ST；平显画选中武器的大环（导引头 / 火控能锁的偏离角，按真实角度），环里射程内的目标都标小菱形，只锁一个选定目标（默认离机头最近，R / 右键单击换），锁稳了变红才能打（还在锁时按开火就等锁稳自动打；滑翔炸弹没有目标时投在准星下）；右下角武器表；
   航炮 FW_GUN（只有真有炮的：歼-15T、歼-16 的 GSh-30-1，150 发；歼-20 / 35 / 50、歼-16D 没有）：空格按住，每发弹三维弹道、命中判定；发射后右上角小屏是导弹视角（v3pilot.js v3fpPip → view3d.js v3Scene 再画一遍场景到那一块），V 放大成全屏；弹在三维里飞（助推、比例导引、过载限制、近炸引信，m.fw / m.z3，missile.js 不再推演它），命中走 msSamHit / msPgmHit。玩家开的飞机 v3AirZ 返回真实高度（不受高度档上限）。「驾驶」列表里还能选待命的飞机登机（fpBoard：派出这一架，舰载机坐在座舱里看登机、牵引车一路拖到偏流板后（cvdeck.js 见到 p.fpBrd）、上弹射器、弹射，离舰后物理引擎接手，满油门加力；陆基的从战区机场直接飞来）。被操纵的单位推演里用 fpDriving(o) 判断，AI 让出指挥。
+- 歼-16 导弹卡车（战斗机变体 v 'mt'、型号键 j16m，陆基）：8 枚霹雳-15 + 2 枚霹雳-10（照公开照片）；和歼-20 数据链协同（airwar.js awCue / awTruckCan：卡车按歼-20 跟踪的航迹在霹雳-15 射程内发射，歼-20 有卡车可用时 200 外不开火；awWantV：已有歼-20 在空时先放卡车）。
 - 飞机挂载按真实的典型挂法，推演计数（carrier.js AIR_MDL、eair.js）、驾驶武器表、2D（airmdl.js st）、3D 挂点（fpwpn.js FW_LOAD / FW_ST，按武器各一组）一致：歼-35 4 飞腾-8 + 2 霹雳-15；歼-15T 2 KD-88 + 2 霹雳-15 + 2 霹雳-10；歼-16D 4 雷电-10 + 2 霹雳-15 + 翼尖 / 进气道电子战吊舱（FW_POD，v3g.js v3gPodModel 程序化吊舱）；
   歼-16 对地满挂（「炸弹卡车」，变体键 v 'bt'、型号键 j16、剪影键 j16b，陆基）6 雷石-6 + 2 霹雳-15 + 2 霹雳-10 + 航炮；
   轰-6K 6 枚空地-20 防区外发射（carrier.js bomberStd / airH6Aims）；攻击-11 平飞投 2 枚精确制导炸弹；攻击-2 4 枚蓝箭-7；防空压制型发射真正飞的反辐射导弹；海战换挂的反舰导弹见 FW_ASM；美军阿帕奇 8 枚地狱火、A-10 第一次通场投 3 枚 JDAM（eaJdam）。非战斗机的 aam 是自卫弹，AI 不用、亲自驾驶能打。

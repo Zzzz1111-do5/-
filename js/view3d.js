@@ -1531,9 +1531,10 @@ function v3Att() {
   V3.dk = 1.32; V3.tofs = [-Math.cos(V3.yaw) * 2900, Math.sin(V3.yaw) * 2900];
   return true;
 }
-// user：玩家自己按的（按钮、Shift + L）——记住选择，下一局照此默认
-function v3Toggle(on = !V3.on, user = false) {
-  if (on && !v3Can()) return;
+// 平面（2D）模式已删掉：对局一律是 3D，没有切回平面的按钮、快捷键（只有设备根本不支持 WebGL 时才留在平面，否则什么都看不见）
+function v3Toggle(on = true, user = false) {
+  if (!on) return;
+  if (!v3Can()) return;
   if (on && !V3.tried) v3Init();
   const was = V3.on;
   V3.on = on && V3.ok;
@@ -1583,7 +1584,6 @@ if (typeof window === 'object' && window.addEventListener) {
 }
 HOOK.key.push(e => {
   const k = e.key;
-  if ((k === 'l' || k === 'L') && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) { v3Toggle(!V3.on, true); return true; }   // 单按 L 是通讯面板（chat.js）
   if (!V3.on) return false;
   if (k === ',' || k === '<') { v3Turn(-1); return true; }
   if (k === '.' || k === '>') { v3Turn(1); return true; }
@@ -1597,22 +1597,16 @@ HOOK.key.push(e => {
   return false;
 });
 
-// 默认 3D：进了对局（部署、沙盒、闯关、开战后）就自动打开，每局只开一次——玩家中途切回平面不再强开；低画质、显卡不支持时留在平面
+// 一律 3D：进了对局（部署、沙盒、闯关、开战后）就打开——平面模式已删掉，旧设置里记着「平面」、低画质也照样开 3D（低画质只减特效）；只有显卡不支持 WebGL 时留在平面
 HOOK.frame.push(() => {
   if (V3.on || !S || V3.auto === S || S.attract || !v3Can() || (typeof MENU === 'object' && MENU.open)) return;
   V3.auto = S;
-  if (typeof SETTINGS === 'object' && (SETTINGS.v3 === false || SETTINGS.quality === 'low')) return;
   v3Toggle(true);
 });
 
 // 右上角按钮
 function v3Button() {
-  if (typeof document === 'undefined' || !document.getElementById('topr') || document.getElementById('btn3d')) return;
-  const b = document.createElement('button');
-  b.id = 'btn3d'; b.className = 'tb'; b.type = 'button'; b.textContent = '3D'; b.title = '3D 立体地图（Shift + L）'; b.setAttribute('aria-pressed', 'false');
-  b.addEventListener('click', () => v3Toggle(!V3.on, true));
-  const help = document.getElementById('btnHelp');
-  help.parentNode.insertBefore(b, help);
+  if (typeof document === 'undefined' || !document.getElementById('topr') || document.getElementById('v3ctl')) return;   // 原来这里还有个「3D」切换按钮：平面模式删掉后不再要
   // 3D 时显示的转向 / 俯仰按钮（手机没有键盘、中键）
   const c = document.createElement('div');
   c.id = 'v3ctl'; c.className = 'ov box'; c.hidden = true; c.setAttribute('role', 'group'); c.setAttribute('aria-label', '3D 镜头');
