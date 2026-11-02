@@ -528,7 +528,7 @@ function fwList0(ctx, o, font) {
   if (typeof ftFlareN === 'function') { const n = ftFlareN(o); rows.push({ k: 'Z', t: `热诱弹 ×${n}`, on: false, out: !(n > 0) }); }   // 热诱弹（fptgp.js）
   if (typeof ftOn === 'function') rows.push({ k: 'Y', t: V3FP.vw === 'tgp' ? '退出吊舱' : '光电吊舱', on: V3FP.vw === 'tgp', dim: true }, ...(typeof fiToggle === 'function' ? [{ k: 'I', t: '参数', on: typeof FI === 'object' && FI.on, dim: true }] : []));
   if (!rows.length) return;
-  const lh = 18, x = CAM.vw - 16, y0 = CAM.vh - 16 - lh * rows.length;
+  const lh = 18, x = CAM.vw - 16, y0 = V3FP.wtTop = CAM.vh - 16 - lh * rows.length;   // wtTop：武器表顶边（雷达告警的小圆画在它上面，v3pilot.js fpRwr）
   ctx.save(); ctx.font = font(13); ctx.textAlign = 'right'; ctx.textBaseline = 'top'; ctx.shadowColor = 'rgba(0,0,0,.7)'; ctx.shadowBlur = 3;
   rows.forEach((r, i) => { ctx.fillStyle = r.out ? FW_RED : r.on ? '#e8fff2' : r.dim ? 'rgba(125,255,176,.5)' : 'rgba(125,255,176,.75)'; ctx.fillText(`${r.on ? '▶ ' : ''}${r.k}  ${r.t}`, x, y0 + i * lh); });
   ctx.restore();
