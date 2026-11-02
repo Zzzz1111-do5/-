@@ -93,7 +93,7 @@ function flInit(p) {
 // 推演一帧：inp = { x 压杆（右正，−1–1）, y 拉杆（拉为正）, r 蹬舵, thr 油门 0–1, ab 加力, law 'n' 正常律 / 'd' 直接律, ap 自动驾驶（离开作战区域时）,
 //   gear 起落架放下（true / false）, flap 襟翼档 0–1, sb 减速板（地面上是刹车）, hook 尾钩放下 }；返回 'ground' / 'sea' 表示撞地 / 落海；起降事件记在 F.ev
 function flStep(F, dt, inp) {
-  const A = FL_AC[F.k], D = FL_D, I = A.I, mk = inp.mk || 1;   // mk：机动性放大（皇牌空战式操纵，v3pilot.js FP_MK）——升力、过载限制、滚转角速度一起乘上，飞机像机翼大三成、结构强三成，转得急、滚得快
+  const A = FL_AC[F.k], D = FL_D, I = A.I, mk = inp.mk || 1, mp = inp.mkp || mk;   // mp：滚转角速度的放大（单独给，免得滚得太快不好控）   // mk：机动性放大（皇牌空战式操纵，v3pilot.js FP_MK）——升力、过载限制、滚转角速度一起乘上，飞机像机翼大三成、结构强三成，转得急、滚得快
   let hit = null;
   // 起落架：放下 / 收起各约 5 秒；超过限速放不下（F.ev 提示一次）
   const gw = inp.gear ? 1 : 0;
@@ -116,12 +116,14 @@ function flStep(F, dt, inp) {
       //   坡度补偿只到约 50°（再大就是在做机动，靠拉杆），50°–60° 平滑退到「只抵重力分量」——原来在 80° 处一刀切，横滚滚过去时机头猛一点头
       const cf = Math.cos(phi), n0 = Math.cos(th) * (cf + smooth(1.05, .85, Math.abs(phi)) * (1 / Math.max(cf, .4) - cf)), nzc = inp.y >= 0 ? lerp(n0, A.nz[1] * mk + (inp.hg ? 2 : 0), inp.y) : lerp(n0, A.nz[0], -inp.y);
       const ac = clamp(nzc * A.m * FL_G / (qS * A.CLa * mk), -.2, A.alim + (inp.hg ? .1 : 0));   // hg：高 G 急转——越过飞控的过载限制（多 2 g）、迎角多放 6°：转得更急，掉速度、黑视都快得多
-      const qc = clamp(3.6 * (ac - al) + FL_G / Vn * (nzc - Math.cos(th) * Math.cos(phi)), -1.5, 1.5);   // 迎角跟上指令约 0.28 秒（原来 0.36 秒，拉杆到 9 g 要 0.8 秒，手感发肉）
-      const Mreq = I[1] * 7 * (qc - q) - (I[2] - I[0]) * p * r, M0 = qS * A.c * (D.Cm0 + D.Cma * al + D.Cmq * qh);
+      //   迎角回路增益按动压排（电传的增益调度）：高速 3.6（迎角约 0.28 秒跟上，拉到 9 g 约 0.6 秒），低速动压只有十分之一，舵面推不动、作动筒跟不上，
+      //   还按 3.6 要就来回过冲（迎角 −19° ↔ +24° 地点头，带着左右摇：用户说的低速摇摆），慢到进近速度退到 1.4
+      const ka = lerp(1.4, 3.6, smooth(4000, 16000, qb)), qc = clamp(ka * (ac - al) + FL_G / Vn * (nzc - Math.cos(th) * Math.cos(phi)), -1.5, 1.5);
+      const Mreq = I[1] * lerp(3.5, 7, smooth(4000, 16000, qb)) * (qc - q) - (I[2] - I[0]) * p * r, M0 = qS * A.c * (D.Cm0 + D.Cma * al + D.Cmq * qh);   // 俯仰角速度回路同样按动压排：低速舵面饱和、作动筒跟不上时不来回打满舵
       de = (Mreq - M0) / (qS * A.c * D.Cmde);
       // 滚转：角速度指令（松杆保持坡度，坡度小于 8° 时自动改平）
-      const pc = inp.x ? inp.x * A.pmax * mk : Math.abs(phi) < .14 ? -2.5 * phi : 0;
-      const Lreq = I[0] * 13 * (pc - p) - (I[1] - I[2]) * q * r, L0 = qS * A.b * (D.Clb * be + D.Clp * ph + D.Clr * rh);
+      const pc = inp.x ? inp.x * A.pmax * mp : Math.abs(phi) < .14 ? -2.5 * phi : 0;
+      const Lreq = I[0] * lerp(7, 13, smooth(4000, 16000, qb)) * (pc - p) - (I[1] - I[2]) * q * r, L0 = qS * A.b * (D.Clb * be + D.Clp * ph + D.Clr * rh);
       da = (Lreq - L0) / (qS * A.b * D.Clda);
       // 偏航：协调转弯（偏航角速度跟着坡度）+ 侧滑归零（偏航阻尼）
       const rc = FL_G / Vn * Math.sin(phi) * Math.cos(th) + 3 * be + (inp.r || 0) * .4;

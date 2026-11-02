@@ -32,9 +32,9 @@ function fiData(o) {
   if (RL.fuel) perf.push(['机内燃油', `${fiNum(RL.fuel)} 公斤`]);
   if (A) {
     perf.push(['发动机推力', `两台合计 军用 ${Math.round(A.Tm / 1000)} 千牛 · 加力 ${Math.round(A.Ta / 1000)} 千牛`]);
-    const mk = typeof fpMk === 'function' ? fpMk() : 1, mt = mk > 1 ? `（皇牌空战式放大 ${mk} 倍：+${+(A.nz[1] * mk).toFixed(1)} g、${Math.round(A.pmax * mk * 57.3)}°/秒）` : '';   // 皇牌空战式操纵的机动性放大（v3pilot.js FP_MK）
-    perf.push(['过载限制', `${A.nz[0]} ～ +${A.nz[1]} g（正常律）${mt && mt.replace(/、.*）/, '）')}`]);
-    perf.push(['最大滚转率', `${Math.round(A.pmax * 57.3)}°/秒${mk > 1 ? `（放大后 ${Math.round(A.pmax * mk * 57.3)}°/秒）` : ''}`]);
+    const mk = typeof fpMk === 'function' ? fpMk() : 1, mp = typeof fpMkP === 'function' ? fpMkP() : 1, mt = mk > 1 ? `（皇牌空战式放大 ${mk} 倍：+${+(A.nz[1] * mk).toFixed(1)} g）` : '';   // 皇牌空战式操纵的机动性放大（v3pilot.js FP_MK）
+    perf.push(['过载限制', `${A.nz[0]} ～ +${A.nz[1]} g（正常律）${mt}`]);
+    perf.push(['最大滚转率', `${Math.round(A.pmax * 57.3)}°/秒${mp > 1 ? `（放大后 ${Math.round(A.pmax * mp * 57.3)}°/秒）` : ''}`]);
     perf.push(['作战重量 · 翼展', `约 ${Math.round(A.m / 1000)} 吨 · ${A.b} 米`]);
   }
   if (M.stealth) perf.push(['隐身', `系数 ${M.stealth}（越小越难被雷达发现；在敌雷达下待久了会被稳定跟踪）`]);
