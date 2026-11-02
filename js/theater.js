@@ -937,6 +937,28 @@ function thLine(G, F, v, O) {
     busy.addU(best[0], best[1], w);
     out.push({ m: u, k: 'u', x: best[0], y: best[1], ...(t ? { t } : {}) });
   };
+  // 当面没有敌情（攻方推进中、8 秒内没接触、全营 800 米内看不见敌人）：不再顶着战线一跃一跃地挪——守方没人时战线只是自己兵力的边，
+  //   各营地段一调整就前后来回走、看着像不进攻（用户：防守方没人也不进攻）。整营直奔认领的敌占据点（离营最近、别的营没认领的），
+  //   各排在它周围展开（amove：路上见敌就打）、车辆跟上；一接敌就照常按战线打
+  let free = null, ctr = null;
+  if (side === 'p' && v === 'advance' && !fb && !contact && us0.length) {
+    ctr = us0.reduce((a, u) => { const [x, y] = regUnitAt(u); return [a[0] + x / us0.length, a[1] + y / us0.length]; }, [0, 0]);
+    if (!hqFoe(side, ctr[0], ctr[1], 800).n) {
+      const cl = S.th.p.cl || (S.th.p.cl = {}), alive = id => (S.bgs || []).some(H => H.id === +id && !H.dead);
+      let p0 = cl[G.id] != null ? S.points.find(p => p.key === cl[G.id]) : null;
+      if (!p0 || hqMine(side, p0)) {
+        const other = new Set(Object.entries(cl).filter(([id]) => +id !== G.id && alive(id)).map(([, k]) => k));
+        p0 = S.points.filter(p => !hqMine(side, p) && !other.has(p.key) && isLand(p.x, p.y)).sort((a, b) => dist(a.x, a.y, ctr[0], ctr[1]) - dist(b.x, b.y, ctr[0], ctr[1]))[0] || null;
+        if (p0) cl[G.id] = p0.key; else delete cl[G.id];
+      }
+      free = p0;
+    }
+  }
+  if (free) {
+    const all = rows.flat(), fa = Math.atan2(free.y - ctr[1], free.x - ctr[0]), lx = -Math.sin(fa), ly = Math.cos(fa);
+    G.face = fa;
+    all.forEach((u, i) => { const k = i - (all.length - 1) / 2, bk = (i % 2) * 45; place(u, free.x + lx * k * 65 - Math.cos(fa) * bk, free.y + ly * k * 65 - Math.sin(fa) * bk, null, 'amove'); });
+  } else {
   for (const u of line) { const p = taken.get(u); if (p) place(u, p.x, p.y, null, 'amove'); }
   const lineXs = rowXs(line);
   line.forEach((u, i) => {
@@ -945,6 +967,7 @@ function thLine(G, F, v, O) {
     place(u, sx, sy, u.bgX != null && dist(u.bgX, u.bgY, sx, sy) < 60 ? [u.bgX, u.bgY] : null);
   });
   rows.slice(1).forEach((R0, r) => { const X = rowXs(R0); R0.forEach((u, i) => place(u, X[i], tgtY(X[i]) - dir * (110 + r * TH.row), null)); });
+  }
   // 车辆：坦克、步战车在步兵线后（推进时贴上来），反坦克 / 侦察车护两翼，防空在后 120，自行火炮在后 240
   const tk = vs.filter(hqTank), ifv = vs.filter(o => o.type === 'apc' || o.type === 'abv'), aa = vs.filter(hqAA), art = vs.filter(o => o.type === 'spg');
   const oth = vs.filter(o => !tk.includes(o) && !ifv.includes(o) && !aa.includes(o) && !art.includes(o));
@@ -960,21 +983,29 @@ function thLine(G, F, v, O) {
     out.push({ m: o, k: 'v', x: best[0], y: best[1] });
   };
   const spread = (list, back, key) => { const L2 = regLatOrder(G, key, list, o => o.x); L2.forEach((o, i) => { const x = xs[Math.min(xs.length - 1, Math.floor((i + .5) * xs.length / L2.length))]; placeV(o, x + (i % 2 ? 30 : -30), tgtY(x) - dir * (back + (i % 3) * 20)); }); };   // 前后也错开，不排成一条直线
+  if (free) {   // 直奔据点：坦克、步战车、其余车辆在据点周围，防空在后 150、自行火炮在后 300（往来路方向退）
+    const fa = G.face, bx = -Math.cos(fa), by = -Math.sin(fa), lx = -Math.sin(fa), ly = Math.cos(fa);
+    [...tk, ...ifv, ...oth].forEach((o, i, A) => { const k = i - (A.length - 1) / 2; placeV(o, free.x + lx * k * TH.vgap + bx * 30, free.y + ly * k * TH.vgap + by * 30); });
+    aa.forEach((o, i) => placeV(o, free.x + bx * 150 + lx * (i - (aa.length - 1) / 2) * 40, free.y + by * 150 + ly * (i - (aa.length - 1) / 2) * 40));
+    art.forEach((o, i) => placeV(o, free.x + bx * 300 + lx * (i - (art.length - 1) / 2) * 35, free.y + by * 300 + ly * (i - (art.length - 1) / 2) * 35));
+  } else {
   spread(tk, v === 'advance' && !stall ? 18 : 40, 'tht');
   spread(ifv, 55, 'thi');
   const xm = xs[Math.floor(xs.length / 2)];
   oth.forEach((o, i) => { const x = i % 2 ? xs[xs.length - 1] + 30 : xs[0] - 30; placeV(o, x, tgtY(clamp(x, xs[0], xs[xs.length - 1])) - dir * 40); });
   aa.forEach((o, i) => placeV(o, xm + (i - (aa.length - 1) / 2) * 40, tgtY(xm) - dir * 120));
   art.forEach((o, i) => placeV(o, xm + (i - (art.length - 1) / 2) * 35, tgtY(xm) - dir * 240));
+  }
   // 锚点 = 一线的中心（画营标、态势感知用）；车辆按锚点移动的速度跟进
   const lo = out.filter(s => s.k === 'u' && line.includes(s.m));
   const ax0 = G.ax, ay0 = G.ay;
-  if (lo.length) { G.ax = lo.reduce((a, s) => a + s.x, 0) / lo.length; G.ay = lo.reduce((a, s) => a + s.y, 0) / lo.length; }
+  if (free) { const d = dist(ctr[0], ctr[1], free.x, free.y), k = d > 1 ? Math.min(300, d) / d : 0; G.ax = ctr[0] + (free.x - ctr[0]) * k; G.ay = ctr[1] + (free.y - ctr[1]) * k; }   // 直奔据点：锚点放在全营前方 300 米（接敌判断、态势感知按部队实际所在）
+  else if (lo.length) { G.ax = lo.reduce((a, s) => a + s.x, 0) / lo.length; G.ay = lo.reduce((a, s) => a + s.y, 0) / lo.length; }
   else if (out.length) { G.ax = out.reduce((a, s) => a + s.x, 0) / out.length; G.ay = out.reduce((a, s) => a + s.y, 0) / out.length; }
   G.vel = Math.min(30, dist(ax0, ay0, G.ax, G.ay));
   const st = fb || v === 'retreat' ? 'withdraw' : v === 'advance' ? (stall ? 'hold' : contact ? 'assault' : 'move') : 'hold';
   if (G.st !== st) { G.st = st; G.stT = S.t; }
-  G.thMode = fb ? 'fb' : stall ? 'stall' : v;
+  G.thMode = fb ? 'fb' : stall ? 'stall' : free ? 'free' : v;
   regOrder(G, out, v === 'retreat' || fb ? 'move' : v === 'advance' && !stall ? 'amove' : 'hold');
 }
 
