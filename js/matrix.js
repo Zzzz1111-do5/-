@@ -259,7 +259,7 @@ function mxDraw(time, flash) {
   MX.u = u;
   mxAtlas();
   gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, MX.tex.fog);
-  if (MX.fogV !== FOGB_V || MX.fogT !== MX.tex.fog) { MX.fogV = FOGB_V; MX.fogT = MX.tex.fog; gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE, GW, GH, 0, gl.LUMINANCE, gl.UNSIGNED_BYTE, FOGB); }   // 视野没变不重传
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE, GW, GH, 0, gl.LUMINANCE, gl.UNSIGNED_BYTE, FOGB);
   gl.uniform2f(u.uRes, MX.cv.width, MX.cv.height);
   gl.uniform3f(u.uView, R.s * R.dpr, R.ox * R.dpr, R.oy * R.dpr);
   gl.uniform1f(u.uTime, time % 1000);
@@ -273,17 +273,9 @@ function mxDraw(time, flash) {
 }
 
 // 视野字节图（0/255），供着色器与像素降级方案共用
-let FOGB = new Uint8Array(GW * GH), FOGB_V = 0, FOGB_K = '';   // FOGB_V：内容版本（各处按它决定要不要重新上传贴图）
+let FOGB = new Uint8Array(GW * GH);
 onWorld(() => {
-  FOGB = new Uint8Array(GW * GH); FOGB_K = '';
+  FOGB = new Uint8Array(GW * GH);
   if (MX.ok && MX.mk) { { const gl = MX.gl; for (const P of MX.P) gl.deleteProgram(P.pr); MX.P = [0, 1, 2, 3].map(MX.mk); } MX.seed = null; }   // 着色器按新尺寸重编
 });
-// 视野只在推演里每 0.25 秒更新一次（logistics.js updateVision 的 VIS_GEN）：没变就不重算、各处也不重传贴图——原来每画一次（3D 每帧两三次）都整图重算、重传
-//   键里再带上观察视野、沙盒编辑时全图可见、局面与阶段，另外至少每秒刷新一次（防漏）
-function fogBytes() {
-  const k = `${typeof VIS_GEN === 'number' ? VIS_GEN : 0}|${typeof R === 'object' && R.eye || ''}|${typeof SBX === 'object' && SBX && SBX.pv ? 1 : 0}|${S ? S.seed + S.phase : ''}|${Math.floor(performance.now() / 1000)}`;
-  if (k === FOGB_K) return;
-  FOGB_K = k; FOGB_V++;
-  const D = typeof CVL_DISP === 'object' ? CVL_DISP : null;
-  for (let i = 0; i < GW * GH; i++) FOGB[i] = PV[i] || (D && D[i]) ? 255 : 0;   // 隐蔽小组所在格照常显示为可见（conceal.js）
-}
+function fogBytes() { const D = typeof CVL_DISP === 'object' ? CVL_DISP : null; for (let i = 0; i < GW * GH; i++) FOGB[i] = PV[i] || (D && D[i]) ? 255 : 0; }   // 隐蔽小组所在格照常显示为可见（conceal.js）

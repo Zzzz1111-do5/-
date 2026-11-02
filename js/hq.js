@@ -119,12 +119,13 @@ function regSlots(G, mode) {
   const row = (list, x, w, t, key) => regLatOrder(G, key || 'r' + x, list, lat).forEach((v, i) => put(v, 'v', x, list.length > 1 ? (i / (list.length - 1) - .5) * w : 0, t));
   if (mode === 'march') {   // 行军纵队：前卫坦克在前，各排依次跟进（间隔 70），步战车夹在排间，防空居中，火炮殿后
     let x = 0;
-    tk.slice(0, 2).forEach((v, i) => put(v, 'v', 60 - i * 22, 0));
+    tk.slice(0, 2).forEach((v, i) => put(v, 'v', 60 - i * 45, 0));   // 行军间距约 45 米（原来 22–28 米，一串车头尾相接）
+    x = Math.min(0, 60 - Math.min(2, tk.length) * 45);   // 第二辆前卫坦克后面再隔一个间距才是步兵
     us.forEach((u, i) => { put(u, 'u', x, 0); x -= 70; if (ifv[i]) put(ifv[i], 'v', x + 35, 14); });
-    tk.slice(2).forEach((v, i) => put(v, 'v', x - i * 24, (i % 2 ? 12 : -12)));
-    x -= Math.max(0, tk.length - 2) * 24;
-    [...ifv.slice(us.length), ...td, ...aa, ...rest].forEach((v, i) => put(v, 'v', x - 20 - i * 26, 0));
-    art.forEach((v, i) => put(v, 'v', x - 90 - i * 28, 0));
+    tk.slice(2).forEach((v, i) => put(v, 'v', x - i * 45, (i % 2 ? 12 : -12)));
+    x -= Math.max(0, tk.length - 2) * 45;
+    [...ifv.slice(us.length), ...td, ...aa, ...rest].forEach((v, i) => put(v, 'v', x - 30 - i * 40, 0));
+    art.forEach((v, i) => put(v, 'v', x - 110 - i * 40, 0));
     return out;
   }
   if (mode === 'sweep') {
@@ -198,15 +199,16 @@ function regPlatoons(list, lat) {
   return Array.from({ length: k }, (_, i) => L.slice(Math.round(i * n / k), Math.round((i + 1) * n / k)));
 }
 // 排内队形（相对排中心，x 向前、y 向右）：楔形（排长车居中突前）、横队、倒楔形（两翼突前）、左 / 右梯形
+// 坦克排内的车间距按条令（开阔地 50–100 米）：横队 55 米、楔形纵深 30 米 × 横向 48 米——原来 18–26 米，一个排挤成一团，一发炮弹、一颗炸弹能端掉两三辆
 function regPltOff(f, m) {
   return Array.from({ length: m }, (_, k) => {
     const r = Math.ceil(k / 2), s = k % 2 ? -1 : 1;
     switch (f) {
-      case 'line': return [0, (k - (m - 1) / 2) * 26];
-      case 'vee': return [r * 18 - 18, k ? s * r * 24 : 0];
-      case 'echL': return [k * 16, -k * 24];
-      case 'echR': return [k * 16, k * 24];
-      default: return [-r * 18, k ? s * r * 24 : 0];
+      case 'line': return [0, (k - (m - 1) / 2) * 55];
+      case 'vee': return [r * 30 - 30, k ? s * r * 48 : 0];
+      case 'echL': return [k * 28, -k * 48];
+      case 'echR': return [k * 28, k * 48];
+      default: return [-r * 30, k ? s * r * 48 : 0];
     }
   });
 }

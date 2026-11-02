@@ -20,28 +20,11 @@ function auInit() {
     for (const k of ['music', 'sfx', 'radio', 'ui']) { const g = AU.bus[k] = c.createGain(); g.gain.value = 0; g.connect(AU.comp); }
     const n = c.sampleRate * 2, b = AU.noise = c.createBuffer(1, n, c.sampleRate), d = b.getChannelData(0);
     for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
-    // 战场混响：音效总线分一路进卷积混响（程序生成的室外回声），爆炸、炮声在开阔地上滚出一串回声，不再干巴巴；混响也跟着音效音量走
-    try { const rv = c.createConvolver(), wet = c.createGain(); rv.buffer = auIR(c, 2.2); wet.gain.value = .2; AU.bus.sfx.connect(rv); rv.connect(wet); wet.connect(AU.comp); AU.rev = wet; } catch (e) { /* 不支持卷积就不要混响 */ }
     auApply();
     auMusicStart();
   } catch (e) { AU.ctx = null; console.warn('音频不可用', e); }
 }
 
-// 室外脉冲响应（两声道略有不同，听着宽）：开头几次地面、建筑的早期反射，后面约两秒指数衰减的尾巴，越往后越闷（高频衰减得快）
-function auIR(c, dur) {
-  const sr = c.sampleRate, n = Math.floor(sr * dur), b = c.createBuffer(2, n, sr);
-  for (let ch = 0; ch < 2; ch++) {
-    const d = b.getChannelData(ch);
-    let lp = 0;
-    for (let i = 0; i < n; i++) {
-      const t = i / sr, env = Math.exp(-t * 3.1) * Math.min(1, t / .015);
-      lp += (Math.random() * 2 - 1 - lp) * (.55 * Math.exp(-t * 1.7) + .04);
-      d[i] = lp * env * .7;
-    }
-    for (const [tt, g] of [[.021, .42], [.038, .3], [.064, .26], [.105, .2], [.16, .14], [.24, .1]]) { const i = Math.floor((tt + ch * .0047) * sr); if (i < n) d[i] += g * (ch ? -1 : 1); }
-  }
-  return b;
-}
 function auApply() {
   if (!AU.ctx) return;
   const t = AU.ctx.currentTime, set = (n, v) => n.gain.setTargetAtTime(v, t, .06);

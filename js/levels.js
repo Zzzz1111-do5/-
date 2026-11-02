@@ -263,7 +263,6 @@ function lvAIGround(say) {
   const BS = typeof sbxBeaches === 'function' ? sbxBeaches().sort((a, b) => a.dHQ - b.dHQ) : [];
   if (!BS.length) return '找不到滩头';
   const M = BS[0], F = BS.find(B => Math.abs(B.b.cx - M.b.cx) > 400) || BS[1] || M, B0 = sbxLeft('p');
-  lvAIGround.last = { main: M.b.name, feint: F !== M ? F.b.name : '' };   // 沙盒白色平原借用这套部署（sandbox.js sbxAIAttack）
   const spot = (B, i, back) => { const x = clamp(B.ex.x + ((i * 37) % 9 - 4) * 26, 30, W - 30); return { x, y: coastAt(x) - back }; };
   // 规模：步兵 18–60 组、车辆 6–28 辆（一个加强团上下，按预算），其余给炮兵、航空兵——便宜的步兵不堆成几百组
   const NI = clamp(Math.round(B0 / 110), 18, 60), NV = clamp(Math.round(B0 / 260), 6, 28);

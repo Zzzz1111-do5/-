@@ -50,24 +50,17 @@ function aiRout(q) {
 
 // 据点附近、面向威胁一侧且掩护好的位置：能挖散兵坑的地方（道路、桥梁、城镇以外）挖好后约相当于林地的掩护；
 // 各组散开（18 以内重罚、30 以内轻罚）——挤在一处，一发舰炮（杀伤半径 36）就能打掉几个组
-// L：可能挤到候选位置的组（aiSpot 预先按离据点的距离筛过；不给就比全部小组）
-function aiSpotSc(q, p, s, fx, fy, L) {
+function aiSpotSc(q, p, s, fx, fy) {
   const dx0 = fx - p.x, dy0 = fy - p.y, l = Math.hypot(dx0, dy0) || 1, dx = s.x - p.x, dy = s.y - p.y, dd = Math.hypot(dx, dy) || 1;
   let crowd = 0;
-  for (const o of L || S.teams) if (o !== q && o.side === 'e' && o.px != null && o.men.length) { const d = dist(o.px, o.py, s.x, s.y); if (d < 18) crowd += 2.5; else if (d < 30) crowd += .8; }
+  for (const o of S.teams) if (o !== q && o.side === 'e' && o.px != null && o.men.length) { const d = dist(o.px, o.py, s.x, s.y); if (d < 18) crowd += 2.5; else if (d < 30) crowd += .8; }
   const t = typeAt(s.x, s.y), dig = t !== T.TOWN && t !== T.ROAD && t !== T.BRIDGE ? .45 : 0;
   return Math.max(s.c ?? 1 - coverAt(s.x, s.y), dig) * 2 + (dx * dx0 + dy * dy0) / dd / l * .8 - crowd - dd / 110;
 }
-// 每 15 秒各组一起重选位置：原来每个候选格（约 90 个）都把全部小组比一遍，守军一多一次要 10–30 毫秒（周期性卡一下）；
-//   候选格离据点不超过 r，能挤到它（30 米以内）的组离据点必在 r + 30 以内——先筛出这几个组再逐格比，结果逐位相同（筛掉的都只加 0）
 function aiSpot(q, p, fx, fy) {
   let best = null, bs = -1e9;
-  const C = AIC.cover[p.key] || [];
-  let r = 0; for (const s of C) { const d = dist(s.x, s.y, p.x, p.y); if (d > r) r = d; }
-  const L = [], R2 = (r + 31) * (r + 31);
-  for (const o of S.teams) if (o !== q && o.side === 'e' && o.px != null && o.men.length) { const dx = o.px - p.x, dy = o.py - p.y; if (dx * dx + dy * dy < R2) L.push(o); }
-  for (const s of C) {
-    const sc = aiSpotSc(q, p, s, fx, fy, L) + Math.random() * .1;
+  for (const s of AIC.cover[p.key] || []) {
+    const sc = aiSpotSc(q, p, s, fx, fy) + Math.random() * .1;
     if (sc > bs) { bs = sc; best = s; }
   }
   return best || p;

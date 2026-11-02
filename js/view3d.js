@@ -16,8 +16,7 @@ let V3_ST = 2;   // 地形网格每几格一个顶点：显卡支持 32 位索�
 //   写实画面的背景是真实天空（Poly Haven「kloofendal_48d_partly_cloudy_puresky」，CC0），远处雾成地平线的天色（大气透视）；黑绿画面仍是近黑的底
 const V3_SUN = [-.4236, .5178, .743], V3_SUNG = `normalize(vec3(${V3_SUN.join(', ')}))`, V3_HZ_COL = [.74, .75, .8];
 const V3_SKYU = .595 - Math.atan2(V3_SUN[1], V3_SUN[0]) / (2 * Math.PI);   // 天空图横坐标的偏移：太阳在图里的位置（u = 0.595）对准太阳方向
-const v3Bg = () => v3Mx() ? [.004, .02, .011] : typeof TER === 'object' && TER && TER.flat ? V3_SPACE : V3_HZ_COL;   // 雾色 / 背景色（白色平原：太空，近黑带一点星云的暗红）
-const V3_SPACE = [.016, .011, .014];
+const v3Bg = () => v3Mx() ? [.004, .02, .011] : V3_HZ_COL;   // 雾色 / 背景色
 // 太阳阴影（写实画面）：镜头注视点周围一块（几百米到一千多米见方）从太阳方向渲染成深度图；各着色器的顶点里算 vSh = uShM × 世界坐标，
 //   片元里比较深度（4 点柔化），只压暗日光那一项（天光照旧）；阴影范围边上渐变消失。需要深度纹理扩展与片元高精度浮点，老设备没有就不画
 const V3_SHV = `uniform mat4 uShM; varying vec4 vSh;`;
@@ -82,12 +81,11 @@ float mxRain(vec2 cell, vec2 f, float t, float px) {
 //   田地是稀疏的数据点阵；沼泽横向虚线；沙滩细密点、礁石稀疏亮点；道路是带亮边的通道，中线上一段段「数据包」沿路流动；
 //   河流是暗色水道、两岸亮线，水道里的字符顺流而下；海岸线一道亮光；没看见的地方压暗（战争迷雾）；字符雨照常落下。
 //   单位、标号、箭头、弹坑等仍来自俯视贴图（这时贴图底色是黑的，叠加上去）
-const V3_FS = (der, tl) => `${der ? '#extension GL_OES_standard_derivatives : enable\n#define DER 1\n' : ''}${tl ? '#extension GL_EXT_shader_texture_lod : enable\n#define TLOD 1\n' : ''}${V3_PREC}
+const V3_FS = der => `${der ? '#extension GL_OES_standard_derivatives : enable\n#define DER 1\n' : ''}${V3_PREC}
 uniform sampler2D uTop, uBase, uCls, uCls2, uFogT, uHt, uLf, uTopF; uniform vec4 uBox, uBoxF; uniform vec2 uWorld, uGrid, uHG; uniform vec2 uFog; uniform float uSea, uT, uMx, uLmOn, uBrM; uniform vec3 uBg;
 uniform sampler2D uDg, uDf, uDr, uDs; uniform float uDet;   // 写实地表细节贴图（ambientCG，CC0）：草地、林下地面、岩石、沙滩
 uniform sampler2D uCls3, uSky, uWn; uniform float uSkyOn, uSkyU, uWnOn;   // 水深分类（浅滩、礁石、近岸）、天空图（海面反射）、水面法线贴图（three.js 示例，MIT）
 uniform float uRing, uOcn; uniform vec4 uRect;   // 地图外：1 = 无边海面（地图里面丢掉，那里是地形网格），2 = 北面延伸的陆地（贴图照地图北缘镜像）
-uniform float uFlat;   // 白色平原（flat.js）：太空里的灰色平台，侧壁是深灰的金属
 varying vec3 vP, vN, vV; varying float vD;
 ${V3_SHF}
 #ifdef GL_FRAGMENT_PRECISION_HIGH
@@ -96,10 +94,6 @@ ${V3_SHF}
 #define HP mediump
 #endif
 ${typeof V3L_BOOM_GLSL === 'string' ? V3L_BOOM_GLSL : 'vec3 boomLight(vec2 w) { return vec3(0.); }'}
-// 云影（写实画面、细节贴图开着时）：几公里大的一团团云的影子随风慢慢飘过地面，只挡太阳直射、天光照旧——大尺度、边缘很软，没有颗粒
-float cH(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
-float cN(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3. - 2. * f); return mix(mix(cH(i), cH(i + vec2(1., 0.)), f.x), mix(cH(i + vec2(0., 1.)), cH(i + vec2(1., 1.)), f.x), f.y); }
-float cloudSh(vec2 w) { vec2 p = w / 2600. + uT * vec2(.0011, .0004); float n = cN(p) * .65 + cN(p * 2.7 + 7.3) * .35; return 1. - .48 * smoothstep(.52, .8, n); }
 ${V3_MX}
 #ifdef DER
 #define FW(x) fwidth(x)
@@ -151,7 +145,7 @@ void main() {
   // 无边海面：地图里面由地形网格画——只丢掉离图边两个像素以上的部分。丢弃是整个像素一起丢、深度却按多重采样的子样本测，
   //   正好丢在边上的话，这个像素里图外的子样本两边都没画，露出背景，图边上一串亮点
   if (uRing > .5 && uRing < 1.5 && w.x > uRect.x + fq.x && w.y > uRect.y + fq.y && w.x < uRect.z - fq.x && w.y < uRect.w - fq.y) discard;
-  if (uRing > 1.5) { w.y = abs(w.y); w.x = uWorld.x - abs(uWorld.x - abs(w.x)); }   // 延伸的陆地：地形照地图北、西、东边镜像，贴图坐标也镜像——接缝处连续
+  if (uRing > 1.5) w.y = abs(w.y);   // 北面延伸的陆地：地形照地图北缘镜像，贴图坐标也镜像——接缝处连续
   vec3 bg = uBg;
 #ifdef DER
   float pw = max(length(fwidth(w)), 1e-3);
@@ -160,7 +154,7 @@ void main() {
 #endif
   if (vN.z < -.5) {   // 沙盘围边（法线朝下作标记）：地形模型切开的侧面——土层
     if (uOcn > .5) discard;   // 地图外是无边海面 / 延伸陆地时不要围边：它的顶边和海面一样高，从上往下看图边上漏出一串灰点
-    vec3 c0 = (uFlat > .5 ? mix(vec3(.1, .105, .11), vec3(.24, .25, .26), clamp(vP.z / 60. + .6, 0., 1.)) : mix(vec3(.2, .15, .1), vec3(.33, .26, .18), clamp(vP.z / 60. + .6, 0., 1.))) * (.6 + .4 * clamp(dot(normalize(vN.xy), vec2(-.6, .62)) * .5 + .5, 0., 1.));
+    vec3 c0 = mix(vec3(.2, .15, .1), vec3(.33, .26, .18), clamp(vP.z / 60. + .6, 0., 1.)) * (.6 + .4 * clamp(dot(normalize(vN.xy), vec2(-.6, .62)) * .5 + .5, 0., 1.));
     if (uMx > .5) { vec2 u = vec2(vP.x + vP.y, -vP.z) / vec2(9., 12.); c0 = c0 * .45 + vec3(.15, .95, .45) * mxRain(floor(u), fract(u), uT, 9. / pw) * .6; }
     gl_FragColor = vec4(mix(c0, bg, smoothstep(uFog.x, uFog.y, vDp)), 1.); return;
   }
@@ -199,7 +193,7 @@ void main() {
       col = mix(nat * 1.1, col, keep);
     }
     if (uRing > 1.5) col = mix(col, vec3(.6, .56, .45), (1. - smoothstep(1.5, 7., h)) * .75);   // 延伸陆地新收出来的北岸：一圈沙滩、礁石色
-    c = col * (amb + vec3(1., .95, .86) * lit * .8 * shadowAt() * (uDet > .5 ? cloudSh(vec2(vP.x, -vP.y)) : 1.));
+    c = col * (amb + vec3(1., .95, .86) * lit * .8 * shadowAt());
     c += boomLight(w) * (.35 + .65 * lit);   // 近处爆炸的火光照亮地面（v3light.js）
     // 等高线、方格网：画成地形图那样细而淡的深色线（原来叠一层发亮的绿光，远看挤成一片绿雾，和写实画面不搭），离镜头两公里外渐渐淡掉
     c *= 1. - (cl * .3 + gl * .45) * land * (1. - smoothstep(1800., 4200., vDp));
@@ -219,30 +213,10 @@ void main() {
       Rf.z = abs(Rf.z);
       float bl = clamp(log2(max(fwm, .1) * 4.), 0., 6.);   // 远处的反射模糊一些（粗糙的海面平均了很多方向）
       float su = atan(Rf.y, Rf.x) / 6.2831853 + uSkyU;
-      vec3 sk;
-#if defined(DER) && defined(TLOD)
-      // 显式取级：按反射方向本身的屏幕导数算该用哪一级（方位角 atan 的导数 = (x·dy − y·dx)/(x² + y²)，接缝两边一样连续），不让硬件按纹理坐标求导——
-      //   方位角在 ±180° 处跳一整圈，硬件按坐标求导会在那里选到最糊的一级；原来靠「同一个 2×2 块用同一种写法」绕开，那要求各家显卡的导数、
-      //   像素坐标都按块算得准，个别显卡上左半屏（反射朝西北那半圈）又是一层颗粒。现在完全不碰接缝。天空图 2048 × 1024
-      {
-        vec3 rx = dFdx(Rf), ry = dFdy(Rf);
-        float hq = max(dot(Rf.xy, Rf.xy), 1e-5), vz = max(sqrt(max(1. - Rf.z * Rf.z, 0.)), .02);
-        vec2 gx = vec2((Rf.x * rx.y - Rf.y * rx.x) / hq * 325.95, rx.z / vz * 325.95), gy = vec2((Rf.x * ry.y - Rf.y * ry.x) / hq * 325.95, ry.z / vz * 325.95);   // 2048 / 2π = 1024 / π
-        float lod = clamp(.5 * log2(max(max(dot(gx, gx), dot(gy, gy)), 1e-6)) + bl, 0., 11.);
-        sk = uSkyOn > .5 ? texture2DLodEXT(uSky, vec2(fract(su), .5 - asin(clamp(Rf.z, 0., 1.)) / 3.1415927), lod).rgb * .84 : mix(uBg, vec3(.5, .62, .8), sqrt(Rf.z));
-      }
-#else
 #ifdef DER
-      // 方位角在 ±180° 处跳一整圈：离接缝远的那种写法取样（接缝上不会掉到最糊的一级，一条竖线）。同一个 2×2 像素块必须用同一种写法——
-      //   原来逐像素比较两种写法的导数：两种写法在半圈方位上相差整 1、导数本来一样大，谁小全看舍入；真显卡的导数逐行算，一个块里选成两种写法，
-      //   块内坐标差 1，整块掉到天空图最糊的一级——镜头朝北时屏幕左半边（反射朝西北那半圈）一层颗粒噪点（软件渲染器按整块算导数，看不出来）。
-      //   现在按块里第一个像素的方位角挑（由本像素和导数推回去，块里四个像素算出来一样）
-      vec2 qo = mod(floor(gl_FragCoord.xy), 2.);
-      float fq = fract(su - dFdx(su) * qo.x - dFdy(su) * qo.y);
-      su = fq > .25 && fq < .75 ? fract(su) : fract(su + .5) - .5;
+      float sa = fract(su), sb = fract(su + .5) - .5; su = fwidth(sa) < fwidth(sb) ? sa : sb;   // 方位角在 ±180° 处跳一整圈：取导数小的那种写法，接缝上不会掉到最糊的一级（一条竖线）
 #endif
-      sk = uSkyOn > .5 ? texture2D(uSky, vec2(su, .5 - asin(clamp(Rf.z, 0., 1.)) / 3.1415927), bl).rgb * .84 : mix(uBg, vec3(.5, .62, .8), sqrt(Rf.z));
-#endif
+      vec3 sk = uSkyOn > .5 ? texture2D(uSky, vec2(su, .5 - asin(clamp(Rf.z, 0., 1.)) / 3.1415927), bl).rgb * .84 : mix(uBg, vec3(.5, .62, .8), sqrt(Rf.z));
       float fr = .02 + .98 * pow(1. - clamp(dot(Nw, V), 0., 1.), 5.);
       vec3 body = mix(vec3(.04, .15, .25), vec3(.05, .28, .3), k3.r);   // 深海是深蓝（原来近乎纯黑：一千米高往远处看七成是这个颜色，整片海像一块黑板，亮点落在上面格外扎眼）
       body = mix(body, vec3(.1, .4, .38), k3.g * .6);
@@ -441,13 +415,12 @@ void main() {
 //   地平线以下渐变成雾色（地图外围看到的「地面」）——
 const V3_SKY_VS = `attribute vec2 p; uniform mat4 uInv; uniform vec3 uEye; varying vec3 vR;
 void main() { vec4 b = uInv * vec4(p, 1., 1.); vR = b.xyz / b.w - uEye; gl_Position = vec4(p, .99999, 1.); }`;
-// 高精度（苹果的显卡上 mediump 真的是半精度：方位角坐标只剩千分之一的分辨率，天空图上一格格台阶）；有显式取级扩展时直接取最清楚的一级
-const V3_SKY_FS = tl => `${tl ? '#extension GL_EXT_shader_texture_lod : enable\n' : ''}${V3_PREC}
+const V3_SKY_FS = `precision mediump float;
 uniform sampler2D uSky; uniform float uU; uniform vec3 uBg; varying vec3 vR;
 void main() {
   vec3 d = normalize(vR);
-  vec2 uv = vec2(fract(atan(d.y, d.x) / 6.2831853 + uU), .5 - asin(clamp(d.z, -1., 1.)) / 3.1415927);
-  vec3 c = ${tl ? 'texture2DLodEXT(uSky, uv, 0.)' : 'texture2D(uSky, uv, -16.)'}.rgb;   // 天空图一个像素比屏幕像素大，总用最清楚的一级（方位角的接缝处导数很大，按坐标求导会糊出一条竖线）
+  vec2 uv = vec2(atan(d.y, d.x) / 6.2831853 + uU, .5 - asin(clamp(d.z, -1., 1.)) / 3.1415927);
+  vec3 c = texture2D(uSky, uv, -16.).rgb;   // 天空图一个像素比屏幕像素大，总用最清楚的一级（方位角的接缝处导数很大，不加偏置会糊出一条竖线）
   gl_FragColor = vec4(mix(c, uBg, smoothstep(.03, -.08, d.z)), 1.);
 }`;
 // 地表细节贴图（写实画面）：第一次用到时载入，四张都好了才启用；绑在 8–11 号纹理单元
@@ -524,6 +497,15 @@ function v3ShInit(gl) {
     Object.assign(V3SH, { tex, fb, pr, a: gl.getAttribLocation(pr, 'p'), uM: gl.getUniformLocation(pr, 'uM'), ok: true });
   } catch (e) { V3SH.ok = false; console.warn('阴影不可用', e); }
 }
+// 画地形网格的一段：世界坐标 y0–y1（米，向南为正）之间的细网格行，加上行以外的远海平面与围边；y0 不给就整张画
+function v3TerRows(gl, y0, y1) {
+  const it = V3.it || gl.UNSIGNED_SHORT, n = V3.nRow;
+  if (!n || y0 == null) { gl.drawElements(gl.TRIANGLES, V3.n, it, 0); return; }
+  const q = V3.rq * 6, by = it === gl.UNSIGNED_INT ? 4 : 2;
+  const j0 = clamp(Math.floor(y0 / V3.rd), 0, V3.rj), j1 = clamp(Math.ceil(y1 / V3.rd), j0, V3.rj);
+  if (j1 > j0) gl.drawElements(gl.TRIANGLES, (j1 - j0) * q, it, j0 * q * by);
+  if (V3.n > n) gl.drawElements(gl.TRIANGLES, V3.n - n, it, n * by);
+}
 // 光源矩阵：以注视点为中心、边长 2R 的正交投影，从太阳方向看；中心按阴影图的像素对齐（镜头移动时阴影边不闪）
 function v3ShMatrix(C) {
   // 范围按镜头离地高度（贴地看时一百米左右，越高越大）；中心取画面中心的落地点，但离镜头脚下不超过范围的七成（平视时影子落在近处）
@@ -550,7 +532,7 @@ function v3ShMatrix(C) {
 function v3ShPass(C) {
   const gl = V3.gl;
   V3SH.on = false;
-  if (v3Mx() || (SETTINGS && SETTINGS.quality === 'low') || R.autoLow) return false;   // 持续卡顿自动降画质时（main.js）不画实时阴影
+  if (v3Mx() || (SETTINGS && SETTINGS.quality === 'low')) return false;
   if (!V3SH.tried) v3ShInit(gl);
   if (!V3SH.ok) return false;
   const M = v3ShMatrix(C), S0 = V3SH.size;
@@ -566,7 +548,10 @@ function v3ShPass(C) {
   if (!V3.coarse) {
     gl.bindBuffer(gl.ARRAY_BUFFER, V3.buf); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, V3.ib);
     gl.vertexAttribPointer(V3SH.a, 3, gl.FLOAT, false, 24, 0);
-    gl.drawElements(gl.TRIANGLES, V3.n, V3.it || gl.UNSIGNED_SHORT, 0);
+    // 只画阴影范围附近的行（原来每帧整张网格都画进阴影图，海岛七十多万个三角形）：往太阳那边（北）多画「最大高差 × 光线水平 / 竖直分量」，
+    //   范围外的山投进来的影子照样有；远海平面、围边照画
+    const L = v3Norm(V3_SUN), dh = Math.max(0, (V3.hHi ?? 0) - (V3.hLo ?? 0)), kN = Math.max(0, L[1] / Math.max(.05, L[2])), kS = Math.max(0, -L[1] / Math.max(.05, L[2])), b = V3SH.box;
+    v3TerRows(gl, b[1] - dh * kN - 2 * (V3.rd || CELL), b[3] + dh * kS + 2 * (V3.rd || CELL));
   }
   for (const c of V3.bch || []) {
     if (c.bb && (c.bb[2] < V3SH.box[0] || c.bb[0] > V3SH.box[2] || c.bb[3] < V3SH.box[1] || c.bb[1] > V3SH.box[3])) continue;
@@ -612,7 +597,7 @@ function v3Sky(C) {
     V3.sky = { ok: false };
     try {
       const sh = (type, src) => { const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)); return s; };
-      const pr = gl.createProgram(); gl.attachShader(pr, sh(gl.VERTEX_SHADER, V3_SKY_VS)); gl.attachShader(pr, sh(gl.FRAGMENT_SHADER, V3_SKY_FS(!!V3.tlod))); gl.linkProgram(pr);
+      const pr = gl.createProgram(); gl.attachShader(pr, sh(gl.VERTEX_SHADER, V3_SKY_VS)); gl.attachShader(pr, sh(gl.FRAGMENT_SHADER, V3_SKY_FS)); gl.linkProgram(pr);
       if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(pr));
       const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
       Object.assign(V3.sky, { pr, b, a: gl.getAttribLocation(pr, 'p'), u: Object.fromEntries(['uInv', 'uEye', 'uSky', 'uU', 'uBg'].map(k => [k, gl.getUniformLocation(pr, k)])) });
@@ -720,21 +705,18 @@ function v3Ht(x, y) {
 // 地图外也能问地面高度（飞机飞出图、镜头不钻地用）：有无边海面时，北面延伸的岛按那张高度表，别处是海面；没有时照旧取图边
 function v3HtX(x, y) {
   if (x >= 0 && y >= 0 && x <= W && y <= H || !V3.ocean) return v3Ht(clamp(x, 0, W - 1), clamp(y, 0, H - 1));
-  for (const E of (typeof V3_OC === 'object' && V3_OC.exts) || []) {   // 北、西、东延伸的陆地：按那块的高度表（沿边 a、往外 k）
-    const Wm = (V3.nx - 1) * E.d, out = E.side === 'n' ? -y : E.side === 'w' ? -x : x - Wm, al = E.side === 'n' ? x : y;
-    if (!(out > 0) || al < 0 || al > (E.nx - 1) * E.d) continue;
-    const fk = Math.min(E.K - 1.001, out / E.ds), fi = Math.min(E.nx - 1.001, al / E.d), k = Math.floor(fk), i = Math.floor(fi), u = fi - i, v = fk - k, Z = E.hz, n = E.nx;
-    return Math.max(-3, lerp(lerp(Z[k * n + i], Z[k * n + i + 1], u), lerp(Z[(k + 1) * n + i], Z[(k + 1) * n + i + 1], u), v));
+  const E = typeof V3_OC === 'object' && V3_OC.ext;
+  if (E && y < 0 && x >= 0 && x <= (E.nx - 1) * E.d) {
+    const fk = Math.min(E.K - 1.001, -y / E.ds), fi = Math.min(E.nx - 1.001, x / E.d), k = Math.floor(fk), i = Math.floor(fi), u = fi - i, v = fk - k, Z = E.hz, n = E.nx;
+    if (k < E.K) return Math.max(-3, lerp(lerp(Z[k * n + i], Z[k * n + i + 1], u), lerp(Z[(k + 1) * n + i], Z[(k + 1) * n + i + 1], u), v));
   }
   return -3;
 }
 // 网格：地形 + 四边围边（沙盘侧壁，法线 z = -1 作标记）；桥被炸 / 地形变了按签名重建
 function v3Mesh() {
   // 每格一个顶点要 32 位索引；细网格的部分（大海域地图只到寻路带）超过 30 万格时每 2 格一个（默认大地图 8400 × 5600 近百万个三角形，手机画不动）
-  V3_ST = TER.flat ? 8 : V3.u32 && GW * Math.min(GH, TER.pathY ? Math.ceil(TER.pathY / CELL) + 20 : GH) <= 300000 ? 1 : 2;   // 白色平原是一整块平地：每 80 米一个顶点就够（每 20 米要 94 万个三角形）
-  // 顶点数向上取整：最后一个顶点落在地图边上或边外（v3H0 取边上那格的高度）。原来向下取整，地图东、南边最后不到一个网格宽的一条没有地面——
-  //   白色平原每 80 米一个顶点，南缘出发阵地最后 80 米的部队悬在空中
-  const gl = V3.gl, st = V3_ST, nx = Math.ceil((GW - 1) / st) + 1, ny = Math.ceil((GH - 1) / st) + 1, hf = new Float32Array(nx * ny);
+  V3_ST = V3.u32 && GW * Math.min(GH, TER.pathY ? Math.ceil(TER.pathY / CELL) + 20 : GH) <= 300000 ? 1 : 2;
+  const gl = V3.gl, st = V3_ST, nx = Math.floor((GW - 1) / st) + 1, ny = Math.floor((GH - 1) / st) + 1, hf = new Float32Array(nx * ny);
   for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) { const gx = i * st, gy = j * st; hf[j * nx + i] = (v3H0(gx - 1, gy - 1) + v3H0(gx, gy - 1) + v3H0(gx - 1, gy) + v3H0(gx, gy)) / 4; }
   V3.hf = hf; V3.nx = nx; V3.ny = ny;
   const d = CELL * st, verts = [], idx = [];
@@ -776,14 +758,15 @@ function v3Mesh() {
   const big = verts.length / 6 > 65535 && V3.u32;   // 顶点超过 16 位索引的上限：用 32 位索引（OES_element_index_uint）
   V3.it = big ? gl.UNSIGNED_INT : gl.UNSIGNED_SHORT;
   gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, V3.ib); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, big ? new Uint32Array(idx) : new Uint16Array(idx), gl.STATIC_DRAW);
-  V3.n = idx.length; V3.seed = TER.seed; V3.ter = TER;   // 按地图对象认（换了同种子、不同尺寸的地图也重建网格）
-  V3.sig = typeof trxSig === 'function' ? trxSig() : null;
+  V3.n = idx.length; V3.seed = TER.seed; V3.sig = typeof trxSig === 'function' ? trxSig() : null;
+  // 按行取一段画（v3TerRows）：细网格每行 (nx − 1) 个四边形、6 个索引，行在前，远海平面与围边在后
+  { let lo = 1e9, hi = -1e9; for (let k = 0; k < (jMax + 1) * nx; k++) { const h = hf[k]; if (h < lo) lo = h; if (h > hi) hi = h; } Object.assign(V3, { rq: nx - 1, rj: jMax, rd: d, nRow: jMax * (nx - 1) * 6, hLo: lo, hHi: hi }); }
   v3OceanBuild(d);
   v3Bld();
   // 底图（俯视贴图以外的远处）：小地图同款黑绿配色，每格一个像素
   const c = document.createElement('canvas'), g = c.getContext('2d'), img = g.createImageData(GW, GH);
   for (let i = 0; i < GW * GH; i++) {
-    const t = TER.type[i], col = TER.flat ? '#a6a8aa' : (typeof MM_COL === 'object' && MM_COL[t]) || '#0a2a18', e = isWater(t) ? .5 : .45 + TER.elev[i] * .5;   // 白色平原：灰色平台
+    const t = TER.type[i], col = (typeof MM_COL === 'object' && MM_COL[t]) || '#0a2a18', e = isWater(t) ? .5 : .45 + TER.elev[i] * .5;
     for (let k = 0; k < 3; k++) img.data[i * 4 + k] = parseInt(col.slice(1 + k * 2, 3 + k * 2), 16) * e;
     img.data[i * 4 + 3] = 255;
   }
@@ -800,16 +783,13 @@ function v3Mesh() {
 //     海面的浪、反光全按世界坐标逐像素算，所以网格跟着镜头挪也看不出来；贴图坐标出了图就取图边那一圈（深海），颜色和图里接得上
 //   北面延伸：地图北边是陆地时（海岛的图里只有岛的南半部），把岛顺着北缘镜像延伸出去，地形、林地贴图在接缝处连续，
 //     再按北缘陆地那一段的宽度收出一道圆弧形的北岸（最远约 3 公里），沉到无边海面下面；只是远景，部队到不了
-// 条件：南边九成五以上是海（海岛、默认地图都有；白色平原那种四边都是陆地的没有）；北、西、东边上有陆地的段各自往外延伸
-const V3_OC = { n: 0, b: null, i: null, ext: null, exts: [] };
+// 条件：西、东、南三条边九成五以上是海（默认地图北边是陆地、东西两边一半是陆地，不加）；北边也全是海时不用延伸
+const V3_OC = { n: 0, b: null, i: null, ext: null };
 function v3OceanBuild(d) {
   const gl = V3.gl, edge = (pts) => { let w = 0; for (const [x, y] of pts) if (isWater(TER.type[y * GW + x])) w++; return w / Math.max(1, pts.length); };
   const col = x => Array.from({ length: GH }, (_, y) => [x, y]), row = y => Array.from({ length: GW }, (_, x) => [x, y]);
-  // 默认地图（南边是海、北边和东西两边的北半截是陆地）也铺：写实画面里地图不再是一块悬在灰底上的沙盘，海一直铺到天边，陆地顺着图边往外延伸、收出海岸
-  const sea = s0 => edge(s0) > .95;
-  V3.ocean = sea(row(GH - 1)) && (sea(col(0)) && sea(col(GW - 1)) || !TER.flat);
-  if (V3_OC.exts) for (const X of V3_OC.exts) { gl.deleteBuffer(X.b); gl.deleteBuffer(X.i); }
-  V3_OC.ext = null; V3_OC.exts = [];
+  V3.ocean = edge(col(0)) > .95 && edge(col(GW - 1)) > .95 && edge(row(GH - 1)) > .95;
+  V3_OC.ext = null;
   if (!V3.ocean) return;
   V3.ocRect = [0, 0, (V3.nx - 1) * d, (V3.ny - 1) * d];
   // 无边海面网格：[-1, 1]² 上每边 48 段、按等比从中间往外加宽（每格比里面一格宽 8%，在屏幕上大约都是 5° 见方——同上，三角形不能太大）
@@ -824,51 +804,46 @@ function v3OceanBuild(d) {
     V3_OC.i = gl.createBuffer(); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, V3_OC.i); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(ix), gl.STATIC_DRAW);
     V3_OC.n = ix.length;
   }
-  for (const side of ['n', 'w', 'e']) { const X = v3ExtBuild(side, d); if (X) V3_OC.exts.push(X); }
-  V3_OC.ext = V3_OC.exts.find(X => X.side === 'n') || null;
-}
-// 一条边的延伸（只是远景，部队到不了）：side n 北、w 西、e 东。沿边的顶点与地图同一套（接缝那一排完全重合），往外每 40 米一排，
-//   高度取地图边往里同样距离那一排（镜像，地形、林地贴图在接缝处连续）；这条边上每段连续的陆地按段宽收出一道圆弧形的岸
-//   （段中间最远约 3.2 公里、不超过段宽的八成，两头为 0），沉到无边海面下面
-function v3ExtBuild(side, d) {
-  const gl = V3.gl, nx = V3.nx, ny = V3.ny, hf = V3.hf, ds = 40, Dmax = 3200, K = Math.ceil((Dmax + 300) / ds), n = side === 'n' ? nx : ny;
-  const at = (a, m) => side === 'n' ? hf[m * nx + a] : side === 'w' ? hf[a * nx + m] : hf[a * nx + (nx - 1 - m)];   // 沿边第 a 个、往里第 m 排的高度
-  const Dn = new Float32Array(n);
-  for (let i = 0; i < n;) {
-    if (at(i, 0) <= -2.9) { i++; continue; }
-    let j = i; while (j < n && at(j, 0) > -2.9) j++;
+  if (edge(row(0)) > .95) return;
+  // 北面延伸：列与地图同一套（接缝那一行顶点完全重合），行每 40 米一行；高度取地图北缘往南同样距离那一行（镜像）
+  const nx = V3.nx, ny = V3.ny, hf = V3.hf, ds = 40, Dmax = 3200, K = Math.ceil((Dmax + 300) / ds), Dn = new Float32Array(nx);
+  // 北缘每一段连续的陆地：往北延伸的距离按圆弧收（段中间最远，两头为 0），最远约 3.2 公里、不超过段宽的八成
+  for (let i = 0; i < nx;) {
+    if (hf[i] <= -2.9) { i++; continue; }
+    let j = i; while (j < nx && hf[j] > -2.9) j++;
     const L = (j - i) * d, Dm = Math.min(Dmax, L * .8);
     for (let k = i; k < j; k++) { const u = ((k + .5) - (i + j) / 2) / ((j - i) / 2); Dn[k] = Dm * Math.sqrt(Math.max(0, 1 - Math.abs(u) ** 2.2)) * (.9 + .1 * Math.sin(k * d / 430) * Math.sin(k * d / 170 + 1.3)); }
     i = j;
   }
-  if (!Dn.some(v => v > 50)) return null;
-  const mMax = side === 'n' ? ny - 1 : nx - 1, hz = new Float32Array(n * (K + 1));
+  const hz = new Float32Array(nx * (K + 1));
   for (let k = 0; k <= K; k++) {
-    const sk = k * ds, m = Math.min(mMax, Math.round(sk / d));
-    for (let i = 0; i < n; i++) { const zm = k === 0 ? at(i, 0) : at(i, m); hz[k * n + i] = k === 0 ? zm : zm <= -2.9 ? -9 : lerp(-9, zm, smooth(0, 380, Dn[i] - sk)); }   // 水下压到 -9：别和无边海面（-3）抢深度
+    const s = k * ds, jm = Math.min(ny - 1, Math.round(s / d));
+    for (let i = 0; i < nx; i++) {
+      const zm = k === 0 ? hf[i] : hf[jm * nx + i];
+      hz[k * nx + i] = k === 0 ? zm : zm <= -2.9 ? -9 : lerp(-9, zm, smooth(0, 380, Dn[i] - s));   // 水下压到 -9：别和无边海面（-3）抢深度
+    }
   }
-  // GL 坐标（y 朝北）：沿边一格 A、往外一排 O；北：A 东、O 北；西：A 南、O 西；东：A 南、O 东
-  const A = side === 'n' ? [d, 0] : [0, -d], O = side === 'n' ? [0, ds] : side === 'w' ? [-ds, 0] : [ds, 0], P0 = side === 'e' ? [(nx - 1) * d, 0] : [0, 0];
   const v = [], ix = [];
-  for (let k = 0; k <= K; k++) for (let i = 0; i < n; i++) {
-    const z = hz[k * n + i], za = (hz[k * n + Math.min(n - 1, i + 1)] - hz[k * n + Math.max(0, i - 1)]) / 2, zk = (hz[Math.min(K, k + 1) * n + i] - hz[Math.max(0, k - 1) * n + i]) / (k > 0 && k < K ? 2 : 1);
-    const gx = A[0] * za / (d * d) + O[0] * zk / (ds * ds), gy = A[1] * za / (d * d) + O[1] * zk / (ds * ds), nr = v3Norm([-gx, -gy, 1]);
-    v.push(P0[0] + A[0] * i + O[0] * k, P0[1] + A[1] * i + O[1] * k, z, nr[0], nr[1], nr[2]);
+  for (let k = 0; k <= K; k++) for (let i = 0; i < nx; i++) {
+    const z = hz[k * nx + i], zx = hz[k * nx + Math.min(nx - 1, i + 1)] - hz[k * nx + Math.max(0, i - 1)], zy = hz[Math.min(K, k + 1) * nx + i] - hz[Math.max(0, k - 1) * nx + i];
+    const nr = v3Norm([-zx / (2 * d), -zy / (k > 0 && k < K ? 2 * ds : ds), 1]);
+    v.push(i * d, k * ds, z, nr[0], nr[1], nr[2]);   // GL y 朝北：北缘外 s 米 = y = +s
   }
-  const flip = side === 'w';   // 西边这一块的 A × O 朝下：三角形绕向反过来（与地形网格同一个正面）
-  for (let k = 0; k < K; k++) for (let i = 0; i < n - 1; i++) { const a = k * n + i, b = a + 1, c = a + n, e = c + 1; if (flip) idx2(ix, a, c, b, e); else idx2(ix, a, b, c, e); }
+  for (let k = 0; k < K; k++) for (let i = 0; i < nx - 1; i++) { const a = k * nx + i, b = a + 1, c = a + nx, e = c + 1; idx2(ix, a, b, c, e); }
   const big = v.length / 6 > 65535;
-  if (big && !V3.u32) return null;
+  if (big && !V3.u32) return;
   const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(v), gl.STATIC_DRAW);
   const ib = gl.createBuffer(); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, big ? new Uint32Array(ix) : new Uint16Array(ix), gl.STATIC_DRAW);
-  return { side, b, i: ib, n: ix.length, it: big ? gl.UNSIGNED_INT : gl.UNSIGNED_SHORT, hz, K, ds, nx: n, d };   // hz 留着：延伸陆地上空的地面高度（镜头不钻地）
+  if (V3_OC.ext) { gl.deleteBuffer(V3_OC.ext.b); gl.deleteBuffer(V3_OC.ext.i); }
+  V3_OC.ext = { b, i: ib, n: ix.length, it: big ? gl.UNSIGNED_INT : gl.UNSIGNED_SHORT, hz, K, ds, nx, d };   // hz 留着：延伸陆地上空的地面高度（镜头不钻地）
 }
 const idx2 = (ix, a, b, c, e) => ix.push(a, b, c, b, e, c);   // 一格两个三角形（与地形网格同一绕向）
 function v3OceanDraw(C) {
   if (!V3.ocean || !V3_OC.b) return;
   const gl = V3.gl, u = V3.u, A = V3.a;
   const dr = (b, i, n, it) => { gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, i); gl.vertexAttribPointer(A.p, 3, gl.FLOAT, false, 24, 0); gl.vertexAttribPointer(A.n, 3, gl.FLOAT, false, 24, 12); gl.drawElements(gl.TRIANGLES, n, it, 0); };
-  if (V3_OC.exts && V3_OC.exts.length) { gl.uniform1f(u.uRing, 2); for (const E of V3_OC.exts) dr(E.b, E.i, E.n, E.it); }   // 先画延伸的陆地，再画海（海面在陆地低处、水下的地方盖上去）
+  const E = V3_OC.ext;
+  if (E) { gl.uniform1f(u.uRing, 2); dr(E.b, E.i, E.n, E.it); }   // 先画延伸的陆地，再画海（海面在陆地低处、水下的地方盖上去）
   const R = Math.max(3000, v3FogE(C) * 1.1), r = V3.ocRect;
   gl.uniform1f(u.uRing, 1); gl.uniform4f(u.uRect, r[0], r[1], r[2], r[3]);
   gl.uniform1f(u.uScl, R); gl.uniform3f(u.uOff, C.E[0], C.E[1], -2.97);   // 比图里的海面高 3 厘米：图边围边的顶和海面一样高，抢深度时图边上一条虚线
@@ -1029,21 +1004,26 @@ function v3Bld() {
       }
     }
   }
-  const up = L => L.filter(c => c.ib.length).map(c => {
+  const up = L => L.filter(c => c.ib && c.ib.length).map(c => {
     const o = { b: gl.createBuffer(), i: gl.createBuffer(), n: c.ib.length, bb: c.bb };
     gl.bindBuffer(gl.ARRAY_BUFFER, o.b); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(c.vb), gl.STATIC_DRAW);
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, o.i); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(c.ib), gl.STATIC_DRAW);
     return o;
   }), drop = L => { for (const c of L || []) { gl.deleteBuffer(c.b); gl.deleteBuffer(c.i); } };
   drop((V3.bch || []).filter(c => !c.tree));   // 只删房屋块：树块沿用（以前连树的缓冲区一起删了，机场被发现、重建房屋后全图的树就不见了）
-  const TL = typeof v3pReady === 'function' && v3pReady() ? [] : v3Trees();   // 树换成外部模型后不再种自己的
-  if (V3.tchL !== TL) { drop(V3.tch); V3.tch = up(TL).map(c => Object.assign(c, { tree: true })); V3.tchL = TL; }   // 树只在地图 / 地形变了时重传（机场被发现时只重建房屋）
+  const ext = typeof v3pReady === 'function' && v3pReady(), TL = ext ? [] : v3Trees();   // 树换成外部模型后不再种自己的
+  if (ext) V3.trees = null;   // 自己种的树用不上了：缓存的几何一起放掉
+  if (V3.tchL !== TL) {   // 树只在地图 / 地形变了时重传（机场被发现时只重建房屋）
+    drop(V3.tch); V3.tch = up(TL).map(c => Object.assign(c, { tree: true })); V3.tchL = TL;
+    for (const c of TL) c.vb = c.ib = null;   // 传进显卡就放掉 CPU 这份（全图的树是几百万个数的普通数组，原来一直留着，菜单阶段就占了近两百兆内存）
+  }
   V3.bch = [...up(K.out), ...V3.tch];
   V3.bn = V3.bch.reduce((a, c) => a + c.n, 0);
 }
 // 树：阔叶树（两层收拢的多面树冠）、针叶树（尖塔形）、细树干；e.x = 2.5 标记树冠、3.5 树干（着色器另配颜色，不画棱线）
 // 返回若干小块（每块的顶点、索引，按地图种子缓存；地形改了（弹坑等）重算高度）
 function v3Trees() {
+  if (typeof V3P_VEG !== 'undefined' && !V3P_VEG) return [];   // 不种树（v3props.js V3P_VEG：用户嫌卡）
   if (!(typeof TER === 'object' && TER && TER.type)) return [];
   const sig = TER.seed + ':' + (V3.sig || '');
   if (V3.trees && V3.trees.sig === sig) return V3.trees.list;
@@ -1075,7 +1055,7 @@ function v3Trees() {
     if (t === T.FOREST) n = 1 + (r() < (V3.coarse ? .15 : .45) ? 1 : 0) + (!V3.coarse && r() < .12 ? 1 : 0);   // 触屏（手机、平板）少种一些
     else if (t === T.HILL) n = r() < .16 ? 1 : 0;
     else if (t === T.MOUNT) n = r() < .09 ? 1 : 0;
-    else if (t === T.FIELD) n = !TER.flat && r() < .01 ? 1 : 0;   // 白色平原：光秃的平台，一棵树也没有
+    else if (t === T.FIELD) n = r() < .01 ? 1 : 0;
     else if (t === T.MARSH) n = r() < .06 ? 1 : 0;
     if (!n || (t !== T.FOREST && roadNear(gx, gy))) continue;
     const cx = gx * CELL + CELL / 2, cy = gy * CELL + CELL / 2;
@@ -1097,16 +1077,21 @@ function v3Init() {
   V3.tried = true;
   try {
     const cv = document.createElement('canvas');
-    const gl = cv.getContext('webgl', { antialias: true, preserveDrawingBuffer: true, alpha: false });
+    // 3D 画布直接放进页面，垫在 2D 画布（#cv）底下：2D 画布每帧清空后只画文字、标识、平显，由合成器叠上去——
+    //   原来每帧把整张 3D 画面 drawImage 到 2D 画布上（全屏拷贝，还要等显卡画完；软件渲染时占了九成多的时间）。
+    //   不再有人回读 3D 画布，所以不保留绘制缓冲区（浏览器可以直接交换缓冲，不必每帧再拷一遍）
+    const gl = cv.getContext('webgl', { antialias: true, preserveDrawingBuffer: false, alpha: false });
     if (!gl) return;
-    const der = !!gl.getExtension('OES_standard_derivatives'), tlod = !!gl.getExtension('EXT_shader_texture_lod');   // 显式取级：海面反射、天空按自己算的清晰度级别取样（不靠硬件按坐标求导）
+    const st = typeof R === 'object' && R.cv && R.cv.parentNode;
+    if (st) { cv.id = 'cv3'; cv.setAttribute('aria-hidden', 'true'); cv.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;display:none;pointer-events:none'; st.insertBefore(cv, R.cv); }
+    const der = !!gl.getExtension('OES_standard_derivatives');
     const sh = (type, src) => { const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)); return s; };
     const pr = gl.createProgram();
-    gl.attachShader(pr, sh(gl.VERTEX_SHADER, V3_VS)); gl.attachShader(pr, sh(gl.FRAGMENT_SHADER, V3_FS(der, tlod))); V3.tlod = tlod;
+    gl.attachShader(pr, sh(gl.VERTEX_SHADER, V3_VS)); gl.attachShader(pr, sh(gl.FRAGMENT_SHADER, V3_FS(der)));
     gl.linkProgram(pr);
     if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(pr));
     const u = {}, a = { p: gl.getAttribLocation(pr, 'p'), n: gl.getAttribLocation(pr, 'n') };
-    for (const k of ['uM', 'uEye', 'uTop', 'uBase', 'uCls', 'uCls2', 'uFogT', 'uHt', 'uLf', 'uTopF', 'uBox', 'uBoxF', 'uWorld', 'uGrid', 'uHG', 'uFog', 'uSea', 'uT', 'uMx', 'uBrM', 'uLm', 'uLmOn', 'uBm', 'uBg', 'uDg', 'uDf', 'uDr', 'uDs', 'uDet', 'uCls3', 'uSky', 'uSkyOn', 'uSkyU', 'uWn', 'uWnOn', 'uShM', 'uShT', 'uShOn', 'uShP', 'uOff', 'uScl', 'uRing', 'uRect', 'uOcn', 'uFlat']) u[k] = gl.getUniformLocation(pr, k);
+    for (const k of ['uM', 'uEye', 'uTop', 'uBase', 'uCls', 'uCls2', 'uFogT', 'uHt', 'uLf', 'uTopF', 'uBox', 'uBoxF', 'uWorld', 'uGrid', 'uHG', 'uFog', 'uSea', 'uT', 'uMx', 'uBrM', 'uLm', 'uLmOn', 'uBm', 'uBg', 'uDg', 'uDf', 'uDr', 'uDs', 'uDet', 'uCls3', 'uSky', 'uSkyOn', 'uSkyU', 'uWn', 'uWnOn', 'uShM', 'uShT', 'uShOn', 'uShP', 'uOff', 'uScl', 'uRing', 'uRect', 'uOcn']) u[k] = gl.getUniformLocation(pr, k);
     const pb = gl.createProgram();
     gl.attachShader(pb, sh(gl.VERTEX_SHADER, V3_BVS)); gl.attachShader(pb, sh(gl.FRAGMENT_SHADER, V3_BFS()));   // 着色器源码用到时再拼：爆炸火光的 GLSL 在后加载的 v3light.js 里
     gl.linkProgram(pb);
@@ -1179,8 +1164,7 @@ function v3NearGap(F) {
   return g;
 }
 function v3FcCamera() {
-  const F = V3.fc || (v3FcInit(), V3.fc), sh = typeof plShake3 === 'function' ? plShake3(F.x, F.y, F.z) : null, pitch = F.pitch + (sh ? sh[1] : 0), yaw = F.yaw + (sh ? sh[0] : 0);   // 附近的大爆炸：镜头一震（polish.js）
-  const cp = Math.cos(pitch), f = [cp * Math.cos(yaw), -cp * Math.sin(yaw), Math.sin(pitch)];   // 视线方向（GL 坐标）
+  const F = V3.fc || (v3FcInit(), V3.fc), cp = Math.cos(F.pitch), f = [cp * Math.cos(F.yaw), -cp * Math.sin(F.yaw), Math.sin(F.pitch)];   // 视线方向（GL 坐标）
   const E = [F.x, -F.y, F.z], z = [-f[0], -f[1], -f[2]], x = v3Norm(v3Cross([0, 0, 1], z)), y = v3Cross(z, x);
   const view = new Float32Array([x[0], y[0], z[0], 0, x[1], y[1], z[1], 0, x[2], y[2], z[2], 0, -v3Dot(x, E), -v3Dot(y, E), -v3Dot(z, E), 1]);
   const D = clamp(F.d || 600, 80, 16000), rd = v3RD(), fog = v3Fog(D, rd);
@@ -1299,7 +1283,7 @@ function v3Draw(now) {
   if (!V3.tried) v3Init();
   if (!V3.ok) { V3.on = false; return false; }
   const gl = V3.gl;
-  if (V3.seed !== TER.seed || V3.ter !== TER || (typeof trxSig === 'function' && (V3.chk = (V3.chk || 0) - 1) <= 0 && (V3.chk = 60) && trxSig() !== V3.sig)) v3Mesh();
+  if (V3.seed !== TER.seed || (typeof trxSig === 'function' && (V3.chk = (V3.chk || 0) - 1) <= 0 && (V3.chk = 60) && trxSig() !== V3.sig)) v3Mesh();
   else if (typeof afb3dSig === 'function' && (V3.achk = (V3.achk || 0) - 1) <= 0 && (V3.achk = 30) && afb3dSig() !== V3.asig) v3Bld();   // 机场刚被发现 / 夺取
   // 转向 / 俯仰缓动；注视点高度平滑
   const fdt = clamp((now - (V3.lastNow || now)) / 1000, 0, .1); V3.lastNow = now;
@@ -1340,11 +1324,10 @@ function v3Draw(now) {
   };
   // 近处这张隔一帧画一次（范围移动超过边长 3%、缩放变了、换了大小时马上重画）：屏外 2D 画布画好再传成贴图，
   //   在 Mac 的 Safari 上每张都要从显卡读回再上传，是 3D 每帧最贵的一步；地面上的东西（弹坑、烟、标号）变化慢，隔一帧看不出来
-  //   镜头不动时按时间节流：近处最多每 50 毫秒、远处每 150 毫秒重画重传一次（原来按帧数：高刷新率屏上每秒传六七十次，传贴图是每帧最贵的一步）；镜头一动照旧马上重画
   const nb = V3.nBox, nMove = !nb || nb[4] !== sTop || Math.abs(nb[0] - bN[0]) + Math.abs(nb[1] - bN[1]) > bN[2] * .03 || Math.abs(nb[2] - bN[2]) > bN[2] * .03;
-  if (nMove || !(now - (V3.nPT ?? -1e9) < 50)) { V3.nPT = now; V3.boxN = paint(V3.top, bN, sTop); V3.nBox = [bN[0], bN[1], bN[2], bN[3], sTop]; V3.nNew = true; }
-  if (!one && (!V3.boxB || !(now - (V3.fPT ?? -1e9) < 150) || Math.abs(V3.boxB[0] - box[0]) + Math.abs(V3.boxB[1] - box[1]) > box[2] * .12)) {
-    V3.fPT = now;
+  V3.nT = (V3.nT || 0) + 1;
+  if (nMove || V3.nT % 2 === 0) { V3.boxN = paint(V3.top, bN, sTop); V3.nBox = [bN[0], bN[1], bN[2], bN[3], sTop]; V3.nNew = true; }
+  if (!one && (!V3.boxB || (V3.fT = (V3.fT || 0) + 1) % 4 === 0 || Math.abs(V3.boxB[0] - box[0]) + Math.abs(V3.boxB[1] - box[1]) > box[2] * .12)) {
     V3.boxF = paint(V3.topF, box, Math.min(sTop, cap * (V3.capK || 1) / Math.max(box[2], box[3])));   // 远处这张也按整幅分辨率画（原来只有六成，远景糊）
     V3.boxB = box.slice(); V3.fNew = true;
   }
@@ -1357,7 +1340,25 @@ function v3Draw(now) {
   // 3D 网格
   const W0 = R.cv.width, H0 = R.cv.height;
   if (V3.cv.width !== W0 || V3.cv.height !== H0) { V3.cv.width = W0; V3.cv.height = H0; }
-  gl.viewport(0, 0, W0, H0);
+  V3.pOn = pOn;
+  v3Scene(C, now, null);
+  if (typeof v3Post === 'function') { gl.disableVertexAttribArray(V3.a.p); gl.disableVertexAttribArray(V3.a.n); v3Post(now); }   // 辉光、景深、暗角（v3post.js）
+  if (typeof v3fpPip === 'function') { gl.disableVertexAttribArray(V3.a.p); gl.disableVertexAttribArray(V3.a.n); v3fpPip(now); }   // 亲自驾驶：导弹视角小屏（v3pilot.js，再画一遍场景到画面右上角）
+  const ctx = R.ctx;
+  ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);
+  if (V3.cv.parentNode) ctx.clearRect(0, 0, R.cv.width, R.cv.height);   // 3D 画布垫在底下（v3Init），2D 画布只留文字和标识
+  else { ctx.globalCompositeOperation = 'copy'; ctx.drawImage(V3.cv, 0, 0); }   // 没能放进页面时照旧贴过来
+  ctx.restore();
+  v3Overlay(ctx, now / 1000);
+  return true;
+}
+
+// 画一遍场景：天空、地形、海、沙盘桌、房屋、地图物件、兵种模型、甲板、弹道。vp 给了就是画面里的一小块（导弹视角小屏，v3pilot.js v3fpPip）：
+//   剪刀测试圈住那一块，不画阴影、沙盘桌、地图物件，兵种模型按这个镜头重新收集；后期处理只做主画面
+function v3Scene(C, now, vp) {
+  const gl = V3.gl, pip = !!vp, W0 = R.cv.width, H0 = R.cv.height, sh0 = V3SH.on;
+  if (pip) { gl.enable(gl.SCISSOR_TEST); gl.scissor(vp[0], vp[1], vp[2], vp[3]); gl.viewport(vp[0], vp[1], vp[2], vp[3]); V3SH.on = false; }   // 小屏：只动画面里那一块，不画阴影（阴影图是按主镜头那一片算的）
+  else gl.viewport(0, 0, W0, H0);
   gl.useProgram(V3.pr);
   if (V3.nNew !== false) { v3Upload(0, V3.tex, V3.top, gl.RGB); V3.nNew = false; }   // 这一帧没重画就不重传（只重新绑上：别的模块用过 0 号单元）
   else { gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, V3.tex); }
@@ -1368,11 +1369,11 @@ function v3Draw(now) {
   gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D, V3.cls2);
   gl.activeTexture(gl.TEXTURE5); gl.bindTexture(gl.TEXTURE_2D, V3.ht);
   gl.activeTexture(gl.TEXTURE4); gl.bindTexture(gl.TEXTURE_2D, V3.fog);
-  if (typeof FOGB === 'object' && (V3.fogV !== FOGB_V || V3.fogT !== V3.fog)) { V3.fogV = FOGB_V; V3.fogT = V3.fog; gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE, GW, GH, 0, gl.LUMINANCE, gl.UNSIGNED_BYTE, FOGB); }   // 视野没变不重传   // 视野（drawScene 刚按当前观察视野算好）
+  if (!pip && typeof FOGB === 'object') gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE, GW, GH, 0, gl.LUMINANCE, gl.UNSIGNED_BYTE, FOGB);   // 视野（drawScene 刚按当前观察视野算好；小屏那一遍已经传过）
   const lmOn = v3Mx() && typeof v3LightBind === 'function' && v3LightBind(gl) ? 1 : 0;   // 光照贴图（v3light.js，第 9 个贴图单元）：只给黑绿 / 数码画面；写实画面用实时阴影
   const bgc = v3Bg();
   gl.clearColor(bgc[0], bgc[1], bgc[2], 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-  if (!v3Mx() && !(typeof v3nebOn === 'function' && v3nebOn())) v3Sky(C);   // 写实画面：先画天空（不写深度）；白色平原在太空里，背景是星云（v3neb.js）
+  if (!v3Mx()) v3Sky(C);   // 写实画面：先画天空（不写深度）
   gl.useProgram(V3.pr);
   const u = V3.u;
   gl.uniformMatrix4fv(u.uM, false, C.M);
@@ -1382,8 +1383,7 @@ function v3Draw(now) {
   gl.uniform2f(u.uFog, ...v3FogR(C));
   gl.uniform1f(u.uSea, 1.5); gl.uniform3f(u.uBg, bgc[0], bgc[1], bgc[2]);
   const mx = v3Mx() ? 1 : 0, tm = (now / 1000) % 3600;   // 黑绿画面：黑客帝国式数码风
-  gl.uniform1f(u.uDet, !mx && v3DetTex() && !TER.flat ? 1 : 0);   // 白色平原：灰色地面就是俯视贴图本身，不叠草地、岩石细节
-  gl.uniform1f(u.uFlat, TER.flat ? 1 : 0);
+  gl.uniform1f(u.uDet, !mx && v3DetTex() ? 1 : 0);
   const skyT = !mx && V3.sky && V3.sky.ok && V3.cls3 ? V3.sky.tex : null;
   if (V3.cls3) { gl.activeTexture(gl.TEXTURE12); gl.bindTexture(gl.TEXTURE_2D, V3.cls3); }
   if (skyT) { gl.activeTexture(gl.TEXTURE13); gl.bindTexture(gl.TEXTURE_2D, skyT); }
@@ -1400,7 +1400,7 @@ function v3Draw(now) {
   gl.enableVertexAttribArray(V3.a.n); gl.vertexAttribPointer(V3.a.n, 3, gl.FLOAT, false, 24, 12);
   gl.drawElements(gl.TRIANGLES, V3.n, V3.it || gl.UNSIGNED_SHORT, 0);
   if (!mx) v3OceanDraw(C);   // 地图外的海（海岛：三面无边大洋 + 北面延伸的岛）
-  if (typeof v3Table === 'function') { gl.disableVertexAttribArray(V3.a.p); gl.disableVertexAttribArray(V3.a.n); v3Table(C); gl.useProgram(V3.pr); }   // 沙盘桌：边框、桌面（v3table.js）
+  if (!pip && typeof v3Table === 'function') { gl.disableVertexAttribArray(V3.a.p); gl.disableVertexAttribArray(V3.a.n); v3Table(C); gl.useProgram(V3.pr); }   // 沙盘桌：边框、桌面（v3table.js）
   if (V3.bn && V3.pb && V3.bch) {   // 城镇房屋、机场建筑、树木（分块的静态缓冲区）
     const ub = V3.ub, ab = V3.ab;
     gl.useProgram(V3.pb);
@@ -1420,16 +1420,13 @@ function v3Draw(now) {
     }
     gl.disableVertexAttribArray(ab.p); gl.disableVertexAttribArray(ab.n); gl.disableVertexAttribArray(ab.e);
   }
-  if (pOn) { gl.disableVertexAttribArray(V3.a.p); gl.disableVertexAttribArray(V3.a.n); v3pDraw(C); }   // 地图物件：树木、岩石、楼房、机场设施（v3props.js，免费资源模型）
+  const m3 = !(SETTINGS && SETTINGS.models3d === false);
+  if (!pip && V3.pOn) { gl.disableVertexAttribArray(V3.a.p); gl.disableVertexAttribArray(V3.a.n); v3pDraw(C); }   // 地图物件：树木、岩石、楼房、机场设施（v3props.js，免费资源模型）
+  if (pip && m3 && typeof v3mCollect === 'function') v3mCollect(C, v3Box(1.6));   // 小屏：兵种模型按导弹镜头重新收集
   if (m3 && typeof v3mDraw === 'function') { gl.disableVertexAttribArray(V3.a.p); gl.disableVertexAttribArray(V3.a.n); v3mDraw(C); }   // 兵种立体模型（v3units.js）
   if (m3 && typeof v3dkDraw === 'function') v3dkDraw(C);   // 福建舰飞行甲板：纹路与光影（v3deck.js）
-  if (typeof v3Night === 'function') { gl.disableVertexAttribArray(V3.a.p); gl.disableVertexAttribArray(V3.a.n); v3Night(C); v3Neb(C); }   // 黑夜压暗、太空星云（v3neb.js）：在发光的弹道、爆炸之前
   if (typeof v3Fx === 'function' && !(SETTINGS && SETTINGS.models3d === false)) { gl.disableVertexAttribArray(V3.a.p); gl.disableVertexAttribArray(V3.a.n); v3Fx(C); }   // 立体弹道（v3fx.js）
-  if (typeof v3Post === 'function') { gl.disableVertexAttribArray(V3.a.p); gl.disableVertexAttribArray(V3.a.n); v3Post(now); }   // 辉光、景深、暗角（v3post.js）
-  const ctx = R.ctx;
-  ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalCompositeOperation = 'copy'; ctx.drawImage(V3.cv, 0, 0); ctx.restore();
-  v3Overlay(ctx, now / 1000);
-  return true;
+  if (pip) { gl.disable(gl.SCISSOR_TEST); V3SH.on = sh0; }
 }
 
 // 世界坐标（含高度）→ 屏幕（CSS 像素）；在镜头背后返回 null。f：按距离的雾（0 清楚 … 1 看不见）
@@ -1449,12 +1446,8 @@ function v3Overlay(ctx, time) {
   const near = CAM.z / CAM.fit > 2.2, spec = specAll() || R.eye === 'all', used = [];
   if (typeof v3TableMarks === 'function') v3TableMarks(ctx);   // 沙盘桌边框上的方格坐标
   // 名称标签：和已画的标签重叠就不画（近处的先画，远处的让位）
-  const MW = V3.mwC || (V3.mwC = new Map());   // 标签宽度按字体 + 文字缓存：每帧对几十个地名量字宽是白费的
   const label = (t, x, y, col, al) => {
-    const mk = ctx.font + '|' + t;
-    let tw = MW.get(mk);
-    if (tw == null) { tw = ctx.measureText(t).width; if (MW.size > 4000) MW.clear(); MW.set(mk, tw); }
-    const w = tw + 4, r = [x - w / 2, y - 11, x + w / 2, y + 2];
+    const w = ctx.measureText(t).width + 4, r = [x - w / 2, y - 11, x + w / 2, y + 2];
     if (used.some(o => r[0] < o[2] && r[2] > o[0] && r[1] < o[3] && r[3] > o[1])) return;
     used.push(r); ctx.fillStyle = rgba(col, al); ctx.fillText(t, x, y);
   };
@@ -1538,9 +1531,10 @@ function v3Att() {
   V3.dk = 1.32; V3.tofs = [-Math.cos(V3.yaw) * 2900, Math.sin(V3.yaw) * 2900];
   return true;
 }
-// user：玩家自己按的（按钮、Shift + L）——记住选择，下一局照此默认
-function v3Toggle(on = !V3.on, user = false) {
-  if (on && !v3Can()) return;
+// 平面（2D）模式已删掉：对局一律是 3D，没有切回平面的按钮、快捷键（只有设备根本不支持 WebGL 时才留在平面，否则什么都看不见）
+function v3Toggle(on = true, user = false) {
+  if (!on) return;
+  if (!v3Can()) return;
   if (on && !V3.tried) v3Init();
   const was = V3.on;
   V3.on = on && V3.ok;
@@ -1590,7 +1584,6 @@ if (typeof window === 'object' && window.addEventListener) {
 }
 HOOK.key.push(e => {
   const k = e.key;
-  if ((k === 'l' || k === 'L') && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) { v3Toggle(!V3.on, true); return true; }   // 单按 L 是通讯面板（chat.js）
   if (!V3.on) return false;
   if (k === ',' || k === '<') { v3Turn(-1); return true; }
   if (k === '.' || k === '>') { v3Turn(1); return true; }
@@ -1604,22 +1597,16 @@ HOOK.key.push(e => {
   return false;
 });
 
-// 默认 3D：进了对局（部署、沙盒、闯关、开战后）就自动打开，每局只开一次——玩家中途切回平面不再强开；低画质、显卡不支持时留在平面
+// 一律 3D：进了对局（部署、沙盒、闯关、开战后）就打开——平面模式已删掉，旧设置里记着「平面」、低画质也照样开 3D（低画质只减特效）；只有显卡不支持 WebGL 时留在平面
 HOOK.frame.push(() => {
   if (V3.on || !S || V3.auto === S || S.attract || !v3Can() || (typeof MENU === 'object' && MENU.open)) return;
   V3.auto = S;
-  if (typeof SETTINGS === 'object' && (SETTINGS.v3 === false || SETTINGS.quality === 'low')) return;
   v3Toggle(true);
 });
 
 // 右上角按钮
 function v3Button() {
-  if (typeof document === 'undefined' || !document.getElementById('topr') || document.getElementById('btn3d')) return;
-  const b = document.createElement('button');
-  b.id = 'btn3d'; b.className = 'tb'; b.type = 'button'; b.textContent = '3D'; b.title = '3D 立体地图（Shift + L）'; b.setAttribute('aria-pressed', 'false');
-  b.addEventListener('click', () => v3Toggle(!V3.on, true));
-  const help = document.getElementById('btnHelp');
-  help.parentNode.insertBefore(b, help);
+  if (typeof document === 'undefined' || !document.getElementById('topr') || document.getElementById('v3ctl')) return;   // 原来这里还有个「3D」切换按钮：平面模式删掉后不再要
   // 3D 时显示的转向 / 俯仰按钮（手机没有键盘、中键）
   const c = document.createElement('div');
   c.id = 'v3ctl'; c.className = 'ov box'; c.hidden = true; c.setAttribute('role', 'group'); c.setAttribute('aria-label', '3D 镜头');

@@ -44,7 +44,7 @@ const BTN = [
     ['loose', '散开：降低炮火伤亡', 'B', () => formNow('loose')]]],
   ['support', [['fire', '舰炮射击：每发 70% 暴露坐标', 'F', () => setTool('fire')], ['smoke', '烟幕弹：遮断双方视线', 'S', () => setTool('smoke')],
     ['recon', '侦察机：空警-600 舰载预警机 / 无侦-7 高空无人机纵贯照相侦察', 'R', () => setTool('recon')], ['strike', '攻击机：歼-35 隐身战斗机在目标 170 外投放精确制导炸弹后掉头（防空压制型在 300 外发射反辐射导弹打敌防空）', 'T', () => setTool('strike')],
-    ['bomber', '轰炸机：点已标定的火力点 → 攻击-11 隐身无人机俯冲精确投弹；点其他地方 → 轰-6K 六弹地毯轰炸', 'Y', () => setTool('bomber')],
+    ['bomber', '轰炸机：点已标定的火力点 → 攻击-11 隐身无人机平飞投精确制导炸弹；点其他地方 → 轰-6K 防区外发射 6 枚空地-20 巡航导弹', 'Y', () => setTool('bomber')],
     ['cas', '近距空中支援：攻击-2 无人机 / 歼-15T / 直-10 盘旋压制', 'V', () => setTool('cas')],
     ['fighter', '战斗机：歼-20 从战区机场起飞，在指定空域巡逻 90 秒，拦截敌机、夺取制空权', 'W', () => setTool('fighter')],
     ['para', '蛟龙突击队：两架运-20 向指定地点高跳低开 6 个组 18 人（突击、火力、反坦克、狙击、防空），特种部队火力强、抗打、不易溃退，落地后自动夺取附近据点', '⇧P', () => setTool('para')],
@@ -204,12 +204,10 @@ function updateHud() {
   $('btnRain').classList.toggle('hot', R.rain > .5); $('btnRain').style.opacity = R.rain ? 1 : .45;
   $('reserve').textContent = S.assets.reserve;
   // 据点条居中：两侧各让出右上按钮组的宽度（--trw），免得右端压到时钟与按钮下面
-  // 量右上按钮组的宽度会强制浏览器重新排版：只在窗口大小变了、或隔两秒才量一次（原来每 0.2 秒一次）
-  const tr = $('topr'), mk = innerWidth + 'x' + innerHeight, trw = tr && (mk !== U.trwK || !(performance.now() - (U.trwT || 0) < 2000)) && tr.offsetWidth ? (U.trwK = mk, U.trwT = performance.now(), Math.ceil(innerWidth - tr.getBoundingClientRect().left + 8)) : 0;
+  const tr = $('topr'), trw = tr && tr.offsetWidth ? Math.ceil(innerWidth - tr.getBoundingClientRect().left + 8) : 0;
   if (trw && trw !== U.trw) { U.trw = trw; document.documentElement.style.setProperty('--trw', trw + 'px'); }
-  const objHtml = U.objMin ? '' : S.points.map(p => `<button type="button" class="ob ${p.owner}${p.contested ? ' hot' : ''}" data-k="${p.key}" title="${p.name}">${svg(PKIND(p.key))}<i style="width:${p.prog * 100}%"></i></button>`).join('') +
+  $('objList').innerHTML = U.objMin ? '' : S.points.map(p => `<button type="button" class="ob ${p.owner}${p.contested ? ' hot' : ''}" data-k="${p.key}" title="${p.name}">${svg(PKIND(p.key))}<i style="width:${p.prog * 100}%"></i></button>`).join('') +
     (S.holdT ? `<span class="hold"><i style="width:${S.holdT / HOLD * 100}%"></i></span>` : '');
-  if (objHtml !== U.objHtml) { U.objHtml = objHtml; $('objList').innerHTML = objHtml; }   // 据点条只在内容变了时重建（原来每 0.2 秒把几十个带图标的按钮整排重建一遍）
   // 收起时按钮上显示摘要：还有几个据点未攻占、是否有据点在争夺、坚守倒计时
   const left = S.points.filter(p => p.owner !== 'p').length, hot = S.points.some(p => p.contested);
   const ot = U.objMin ? `<span>据点 未攻占 <b>${left}</b>/${S.points.length}${hot ? ' · <em>争夺中</em>' : ''}${S.holdT ? ` · 坚守 ${Math.max(0, Math.ceil(HOLD - S.holdT))} 秒` : ''} ▾</span>` : '▴';
@@ -222,8 +220,7 @@ function updateHud() {
   const lk = S.log.length && S.log[0].id;
   if (lk !== U.logKey || S.t - (U.feedT || 0) > 1) {
     U.logKey = lk; U.feedT = S.t;
-    const fh = S.log.filter(l => S.t - l.t < 14).slice(0, 5).map(l => `<li class="${l.kind}" ${l.x != null ? `data-x="${l.x}" data-y="${l.y}"` : ''}>${l.msg}</li>`).join('');
-    if (fh !== U.feedHtml) { U.feedHtml = fh; $('feed').innerHTML = fh; }   // 消息没变就不动
+    $('feed').innerHTML = S.log.filter(l => S.t - l.t < 14).slice(0, 5).map(l => `<li class="${l.kind}" ${l.x != null ? `data-x="${l.x}" data-y="${l.y}"` : ''}>${l.msg}</li>`).join('');
   }
   $('end').hidden = !S.over;
   if (S.over) {

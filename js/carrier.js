@@ -6,27 +6,36 @@ const AIR_SPEC = {
   recon: { name: '侦察机', n: 2, aa: .06, spd: 150, size: 17 },
   strike: { name: '攻击机', n: 4, aa: .09, spd: 250, size: 15 },
   cas: { name: '对地支援机', n: 4, aa: .09, spd: 70, size: 15 },
-  bomber: { name: '轰炸机', n: 0, aa: .07, spd: 215, size: 22 },   // 沙盒购买：轰-6K（地毯轰炸）/ 攻击-11（俯冲精确投弹）
+  bomber: { name: '轰炸机', n: 0, aa: .07, spd: 215, size: 22 },   // 沙盒购买：轰-6K（防区外发射空地-20 巡航导弹）/ 攻击-11（内埋弹舱平飞投精确制导炸弹）
   fighter: { name: '战斗机', n: 2, aa: .05, spd: 275, size: 15 }   // 制空（airwar.js）：在指定空域巡逻，拦截敌机、夺取制空权
 };
 // 型号：名称、剪影、巡航速度（米 / 秒，真实世界的巡航速度，见下面 AIR_REAL）、被高炮打中的基础概率、画面尺寸；land = 陆基（战区机场出动，从地图南缘飞来，不占航母机位，往返加油挂弹 100 秒）；
-// stealth = 隐身（敌雷达发现距离、防空命中按此打折）；std = 防区外投放距离（精确制导炸弹 / 反辐射导弹）；aam / aamR / pkK = 空空导弹数、射程、命中修正；loiter = 盘旋秒数
+// stealth = 隐身（敌雷达发现距离、防空命中按此打折）；std = 防区外投放距离（精确制导炸弹 / 反辐射导弹 / 巡航导弹）；aam / aamR / pkK = 空空导弹数、射程、命中修正；loiter = 盘旋秒数；
+//   cm = 挂的巡航导弹（轰-6K）；挂载数按真实的典型挂法（驾驶时的武器表、3D 挂架上画的弹都按这里的数：fpwpn.js FW_LOAD / FW_ST）——非战斗机的 aam 是自卫空空弹，AI 出击时不用，亲自驾驶时能打
 const AIR_MDL = {
   kj600: { name: '空警-600 舰载预警机', sil: 'kj600', spd: 150, aa: .06, size: 19 },
   wz7: { name: '无侦-7 高空无人侦察机', sil: 'wz7', spd: 210, aa: .02, size: 19, land: true },   // 两万米高空，高炮够不着
-  j35: { name: '歼-35 隐身舰载战斗机', sil: 'j35', spd: 250, aa: .09, size: 15, stealth: .4, std: 170, gbN: 6, arW: 'ft8', arR: 260 },   // 内埋 6 枚飞腾-8 小直径制导炸弹：先防区外打指定目标，余弹自主武装侦察（airArFly）
+  j35: { name: '歼-35 隐身舰载战斗机', sil: 'j35', spd: 250, aa: .09, size: 15, stealth: .4, std: 170, gbN: 4, aam: 2, arW: 'ft8', arR: 260 },   // 主弹舱内埋 4 枚飞腾-8 小直径制导炸弹 + 2 枚霹雳-15 自卫（和 F-35 对地时 4 枚小直径炸弹 + 2 枚 AIM-120 同一种挂法）：先防区外打指定目标，余弹自主武装侦察（airArFly）
   j35s: { name: '歼-35 隐身舰载战斗机（防空压制型）', sil: 'j35', spd: 250, aa: .09, size: 15, stealth: .4, std: 300, sead: true, gbN: 4, arW: 'ld10', arR: 400 },   // 4 枚雷电-10 反辐射导弹，专打敌防空，余弹自主搜索防空
-  j15t: { name: '歼-15T 舰载战斗机', sil: 'j15', spd: 245, aa: .09, size: 16, agm: 'kd88', agmN: 2, agmR: 380 },   // 2 枚 KD-88 空地导弹（防区外）
-  gj11: { name: '攻击-11 隐身无人攻击机', sil: 'gj11', spd: 220, aa: .08, size: 16, stealth: .5 },
-  h6k: { name: '轰-6K 轰炸机', sil: 'h6k', spd: 215, aa: .07, size: 24, land: true },
+  j15t: { name: '歼-15T 舰载战斗机', sil: 'j15', spd: 245, aa: .09, size: 16, agm: 'kd88', agmN: 2, agmR: 380, aam: 4 },   // 翼下内侧 2 枚 KD-88 空地导弹（防区外）、外侧 2 枚霹雳-15、翼尖 2 枚霹雳-10 自卫
+  gj11: { name: '攻击-11 隐身无人攻击机', sil: 'gj11', spd: 220, aa: .08, size: 16, stealth: .5 },   // 飞翼、两个内埋弹舱：中空平飞投 2 枚精确制导炸弹（不用俯冲，隐身的意义就在不进高炮射界）
+  // 轰-6K：翼下 6 个挂架挂 6 枚空地-20（长剑-20 的空射型）巡航导弹——防区外发射，不飞临目标；进场 600 米或离目标 1800 米就发射（真实射程远超整张地图）
+  h6k: { name: '轰-6K 轰炸机', sil: 'h6k', spd: 215, aa: .07, size: 24, land: true, cm: 'kd20', agmN: 6, std: 1800 },
   gj2: { name: '攻击-2 察打一体无人机', sil: 'gj2', spd: 70, aa: .09, size: 17, land: true, loiter: 60, agm: 'ba7', agmN: 4, agmR: 320 },   // 长航时：盘旋 60 秒；4 枚蓝箭-7 空地导弹
   z10: { name: '直-10 武装直升机', sil: 'z10', spd: 64, aa: .09, size: 15, agm: 'hj10', agmN: 8, agmR: 280 },   // 8 枚红箭-10 反坦克导弹
   j20: { name: '歼-20 隐身战斗机', sil: 'j20', spd: 275, aa: .05, size: 17, land: true, stealth: .35, aam: 6, aamR: 560, pkK: 1.15 },   // 4 枚霹雳-15 + 2 枚霹雳-10
   // 歼-50（外界称呼，沈飞第六代原型机，2024 年 12 月 26 日被拍到试飞；λ 形无尾翼、双发）：外界推测会发展舰载型。官方无任何参数，按公开估算——
   // 可上航母（占机库），隐身 0.22、雷达 800、6 枚霹雳-15 + 2 枚霹雳-10，不带航炮，只打超视距；无尾、转弯慢（turn）
   j50: { name: '歼-50 第六代舰载战斗机', sil: 'j50', spd: 280, aa: .03, size: 16, stealth: .22, aam: 8, aamR: 560, pkK: 1.18, radar: 800, turn: 1.9, gun: 0 },
-  // 歼-16D 电子战飞机（陆基，战区机场出动）：翼尖电子干扰吊舱压制敌雷达——附近我方飞机被敌防空发现、命中的概率打七折（airJamK）；挂 4 枚雷电-10 反辐射导弹，420 外打敌防空
-  j16d: { name: '歼-16D 电子战飞机', sil: 'j16', spd: 250, aa: .07, size: 18, land: true, std: 420, sead: true, gbN: 4, arW: 'ld10', arR: 420, jam: 650 }
+  // 歼-16D 电子战飞机（陆基，战区机场出动）：翼尖电子侦察吊舱 + 进气道下两个大型干扰吊舱——测敌雷达位置、压制敌雷达（ew.js：烧穿距离、欺骗干扰、反辐射）；
+  //   翼下 4 枚雷电-10 反辐射导弹（420 外打敌防空）、外侧 2 枚霹雳-15 自卫（没有航炮、光电球，换成了电子战设备）
+  j16d: { name: '歼-16D 电子战飞机', sil: 'j16', spd: 250, aa: .07, size: 18, land: true, std: 420, sead: true, gbN: 4, aam: 2, arW: 'ld10', arR: 420 },
+  // 歼-16 多用途战斗机，对地满挂（「炸弹卡车」，陆基，战区机场出动）：翼下内侧、中间挂架和两个进气道挂点共 6 枚雷石-6 五百公斤级滑翔制导炸弹，外侧 2 枚霹雳-15、翼尖 2 枚霹雳-10 自卫，
+  //   还有 GSh-30-1 航炮（150 发）；防区外 300 投放，余弹自主武装侦察
+  j16: { name: '歼-16 多用途战斗机（对地满挂）', sil: 'j16b', spd: 245, aa: .08, size: 18, land: true, std: 300, gbN: 6, aam: 4, arW: 'ls6', arR: 320 },
+  // 歼-16「导弹卡车」（陆基制空，照公开照片：翼下内侧、中间、外侧和两个进气道挂点共 8 枚霹雳-15，翼尖 2 枚霹雳-10，机腹中线挂点空着；报道称纯空战挂法）——
+  //   和歼-20 协同（airwar.js awCue）：歼-20 隐身前出、悄悄跟踪敌机，把航迹用数据链传过来，导弹卡车在自己的雷达还锁不上的距离按它的航迹发射霹雳-15；歼-20 有卡车可用时自己尽量不开火
+  j16m: { name: '歼-16 导弹卡车', sil: 'j16m', spd: 245, aa: .08, size: 18, land: true, aam: 10, aamR: 560, pkK: 1, gun: 40, cap: 130, mt: true }
 };
 // 真实世界的性能（公开资料；官方未公布的按外界估算）——巡航速度写在上面型号表与 eair.js EA_SPEC 的 spd 里（米 / 秒，推演里就按它飞，1 单位 = 1 米）；
 //   这里给座舱显示屏与机载雷达用：vmax 最大速度 km/h、rdr 机载雷达对战斗机大小目标的探测距离 km（0 = 没有对空搜索雷达）、rdrNm 雷达、fuel 机内燃油 kg
@@ -43,6 +52,8 @@ const AIR_REAL = {
   j20: { vmax: 2100, rdr: 210, rdrNm: '1475 型有源相控阵雷达', fuel: 12000 },
   j50: { vmax: 2100, rdr: 220, rdrNm: '有源相控阵雷达（估算）', fuel: 12000 },
   j16d: { vmax: 2100, rdr: 200, rdrNm: '有源相控阵雷达', fuel: 9400 },
+  j16: { vmax: 2100, rdr: 200, rdrNm: '有源相控阵雷达', fuel: 9400 },
+  j16m: { vmax: 2100, rdr: 200, rdrNm: '有源相控阵雷达', fuel: 9400 },
   transport: { vmax: 920, rdr: 0, rdrNm: '气象雷达', fuel: 60000 },
   // 守方（美军，eair.js 的机型键）
   ga: { vmax: 706, rdr: 0, rdrNm: '无（瞄准吊舱）', fuel: 4850 },
@@ -60,16 +71,14 @@ const AIR_REAL = {
 const airReal = (type, v) => AIR_REAL[airMdlKey(type, v)] || AIR_REAL[type] || {};
 const airRdrM = (type, v) => (airReal(type, v).rdr || 0) * 1000;
 const AIR_BASEM = { recon: 'kj600', strike: 'j35', cas: 'gj2', bomber: 'h6k', fighter: 'j20' };
-const AIR_VMODEL = { lr: 'wz7', dive: 'gj11', heavy: 'h6k', fb: 'j15t', heli: 'z10', sead: 'j35s', ew: 'j16d', adv: 'j20', j50: 'j50' };   // adv：旧存档里的先进战斗机
+const AIR_VMODEL = { lr: 'wz7', dive: 'gj11', heavy: 'h6k', fb: 'j15t', heli: 'z10', sead: 'j35s', ew: 'j16d', bt: 'j16', mt: 'j16m', adv: 'j20', j50: 'j50' };   // bt：歼-16 对地满挂；mt：歼-16 导弹卡车   // adv：旧存档里的先进战斗机
 const airMdlKey = (type, v) => AIR_VMODEL[v] || AIR_BASEM[type];
 const airMdl = (type, v) => AIR_MDL[airMdlKey(type, v)] || {};   // 运输机（para.js）等没有型号表的返回空
 const airSpec = (type, v) => ({ ...(AIR_SPEC[type] || AIR_SPEC.strike), ...airMdl(type, v) });
 const airLandW = w => !!(w && airMdl(w.type, w.v).land);
 // 防空压制的变体：歼-35 防空压制型（sead）、歼-16D 电子战飞机（ew）
 const airSeadV = v => v === 'sead' || v === 'ew';
-// 歼-16D 的电子干扰：650 内有升空的歼-16D，我方飞机（它自己也算）被敌雷达发现、被防空打中的概率打七折
-const airJamK = o => o && isFinite(o.x) && typeof S === 'object' && S && (S.planes || []).some(j => !j.dead && j.v === 'ew' && (j.alt ?? 1) > .3 && dist(j.x, j.y, o.x, o.y) < (AIR_MDL.j16d.jam || 650)) ? .7 : 1;
-const airStealth = o => { const b = ((o && airMdl(o.kind || o.type, o.v).stealth) || 1) * (o && o.kind ? airJamK(o) : 1); return o && o.exp > 0 && typeof awStl === 'function' ? awStl(o, b) : b; };   // 飞机（p.kind）或编队记录（w.type）；在敌雷达下待久了隐身打折（airwar.js awStl）
+const airStealth = o => { const b = (o && airMdl(o.kind || o.type, o.v).stealth) || 1; return o && o.exp > 0 && typeof awStl === 'function' ? awStl(o, b) : b; };   // 电子干扰不再折进隐身系数：按每部雷达算（ew.js）   // 飞机（p.kind）或编队记录（w.type）；在敌雷达下待久了隐身打折（airwar.js awStl）
 const AIR_REARM_LAND = 100;   // 陆基飞机：飞回战区机场加油挂弹再飞回来
 const AIR_TYPES = ['recon', 'strike', 'cas', 'bomber', 'fighter'];
 const AIR_TURN = 1.5;      // 最大转弯角速度（弧度/秒）：巡航转弯半径约 120
@@ -133,6 +142,7 @@ AIR_SIL.f35b = AIR_SIL.f35;   // F-35B 俯视轮廓同 F-35A
 AIR_SIL.p8 = [[11.6, 0], [10.8, .9], [8, 1.15], [2.6, 1.15], [2.2, 1.15], [-3.6, 11.2], [-4.6, 11.3], [-1.4, 1.15], [-8.6, .9], [-10.9, 4.3], [-11.8, 4.3], [-11.2, .7], [-12.1, 0]];   // P-8A：737 机身、低单翼（后掠 25°、翼展 37.6 米）、两台翼吊发动机、常规尾翼
 AIR_SIL.mq9 = AIR_SIL.gj2;   // MQ-9A 与攻击-2 同类布局
 AIR_SIL.j16 = AIR_SIL.j15;   // 歼-16D 俯视轮廓同侧卫系（单独的键：3D 用歼-16 模型，歼-15T 用歼-15 模型）
+AIR_SIL.j16b = AIR_SIL.j15; AIR_SIL.j16m = AIR_SIL.j15;   // 歼-16 对地满挂：同一外形，2D 挂的是炸弹（airmdl.js AIRD.j16b）
 // 剪影键：按型号；守方 type（ga / heli / ftr / ftrb / f22）另映射
 const airSilKey = (type, v) => type === 'ga' ? 'a10' : type === 'ftr' ? 'f35' : type === 'ftrb' ? 'f35b' : type === 'mq9' ? 'mq9' : AIR_SIL[type] && !AIR_BASEM[type] ? type : airMdl(type, v).sil || 'j35';
 const airName = (type, v) => airMdl(type, v).name || (AIR_SPEC[type] || {}).name || '飞机';
@@ -213,6 +223,8 @@ function initCarrier() {
     const wing = [];
     for (const type of AIR_TYPES) for (let k = 0; k < AIR_SPEC[type].n; k++) wing.push({ id: S.nid++, type, state: 'deck', rearmT: 0 });
     wing.push({ id: S.nid++, type: 'strike', v: 'ew', state: 'deck', rearmT: 0 });   // 战区派来一架歼-16D 电子战飞机（陆基，不占航母机库）
+    wing.push({ id: S.nid++, type: 'strike', v: 'bt', state: 'deck', rearmT: 0 });   // 还有一架对地满挂的歼-16（陆基）
+    for (let k = 0; k < 2; k++) wing.push({ id: S.nid++, type: 'fighter', v: 'mt', state: 'deck', rearmT: 0 });   // 两架歼-16 导弹卡车（陆基）：跟着歼-20 打协同
     S.air = { wing, wrecks: [] };
   }
   if (!Array.isArray(S.air.wrecks)) S.air.wrecks = [];
@@ -252,7 +264,7 @@ function launchPlane(kind, tx, ty, pref) {
   const cvOk = cvAll().some(c => c.hp > 0);
   if (!cvOk && !S.air.wing.some(o => o.type === kind && o.state === 'deck' && airLandW(o))) { log('航母飞行甲板瘫痪，舰载机无法起飞', 'warn', 'cvdead', 2); return false; }
   // 多艘航母时：从离目标最近、且有该机型待命的那艘起飞；陆基飞机从战区机场（地图南缘以外）飞来，算作稍远
-  const want = pref || (kind === 'bomber' ? (S.enemies.some(e => !e.dead && e.kx != null && dist(e.kx, e.ky, tx, ty) < 40) ? 'dive' : 'heavy') : null);
+  const want = pref || (kind === 'bomber' ? (S.enemies.some(e => !e.dead && e.kx != null && dist(e.kx, e.ky, tx, ty) < 40) ? 'dive' : 'heavy') : kind === 'fighter' && typeof awWantV === 'function' ? awWantV() : null);   // 战斗机：已有歼-20 在空、还没配卡车时先放导弹卡车
   let w = null, bd = Infinity;
   const isAew = o => (o.v || 'kj600') === 'kj600';   // 空警-600：舰队预警的眼睛——陆上侦察先派无侦-7，最后一架空警-600 留给舰队预警（cvAewP）
   const aewRes = kind === 'recon' && pref !== 'kj600' && !S.planes.some(p => !p.dead && p.aew) && S.air.wing.filter(o => o.type === 'recon' && o.state === 'deck' && isAew(o)).length <= 1;
@@ -549,8 +561,9 @@ function airNew(w, kind, x, y, heading, tx, ty, extra) {
   const M = airMdl(kind, w.v), p = { id: S.nid++, wid: w.id, home: cvHome(w), kind, v: w.v || null, x, y, heading, spd: 0, alt: 0, bank: 0,
     tx, ty, cx: tx, cy: ty, wp: [{ x: tx, y: ty }], leg: 0, aaT: Math.random() * .5, rt: 0, gunT: 0, strafeT: 1, loiterT: M.loiter || 40, odir: 1, dropped: false, rtbT: 0, ...extra };
   if (kind === 'recon') p.wp = airRcRoute(x, y, tx, ty);   // 侦察机：在目标一带按往返航线扫一片（airRcRoute）
-  if (kind === 'fighter') Object.assign(p, { aam: M.aam || 4, gun: M.gun ?? 40, capT: M.cap || 90, aamR: M.aamR || 480, pkK: M.pkK || 1, aamL: M.aamL || 0, aamLR: M.aamLR || 0, radar: M.radar || 520, aam0: (M.aam || 4) + (M.aamL || 0) });   // 空空导弹 · 机炮点射次数 · 巡逻秒数 · 远程弹 · 机载雷达（airwar.js）
-  if (M.agm) p.agmN = M.agmN;   // 空地导弹（airAgm）
+  if (kind === 'fighter' && M.mt) p.cy = Math.min(H - 60, (p.cy ?? ty) + 450);   // 导弹卡车：巡逻点往我方一侧退 450（不隐身，待在歼-20 后面、敌防空圈外）
+  if (kind === 'fighter') Object.assign(p, { mt: !!M.mt, aam: M.aam || 4, gun: M.gun ?? 40, capT: M.cap || 90, aamR: M.aamR || 480, pkK: M.pkK || 1, aamL: M.aamL || 0, aamLR: M.aamLR || 0, radar: M.radar || 520, aam0: (M.aam || 4) + (M.aamL || 0) });   // 空空导弹 · 机炮点射次数 · 巡逻秒数 · 远程弹 · 机载雷达（airwar.js）
+  if (M.agm || M.cm) p.agmN = M.agmN;   // 空地导弹（airAgm）、巡航导弹（轰-6K：bomberStd）
   return p;
 }
 // 陆基飞机（歼-20、轰-6K、无侦-7、攻击-2）：从战区机场起飞，由地图南缘进入战场
@@ -659,7 +672,7 @@ const cvDeckBusy = p => S.planes.some(o => o !== p && !o.dead && cvHome(o) === c
 
 function flyPlane(p, dt) {
   const c = S.cv, sp = airSpec(p.kind, p.v), dead = c.hp <= 0, M = airMdl(p.kind, p.v);
-  const speed = v => { p.spd += clamp(v - p.spd, -70 * dt, 45 * dt); };
+  const speed = v => { const r = p.alt >= .25 && typeof apDv === 'function' ? apDv(airMdlKey(p.kind, p.v), p.spd, v, p.hr, dt) : null; p.spd = r ?? p.spd + clamp(v - p.spd, -70 * dt, 45 * dt); };   // 空中按各型的剩余推力加减速、急转掉速（airperf.js）
   p.gunT = Math.max(0, (p.gunT || 0) - dt);
   if (p.afPh && typeof abPlaneFly === 'function' && abPlaneFly(p, dt, speed)) return;   // 在夺取的机场起降（abn.js）
   if (!Array.isArray(p.wp) || !p.wp.length) p.wp = [{ x: isFinite(p.tx) ? p.tx : p.x, y: isFinite(p.ty) ? p.ty : p.y }];
@@ -697,19 +710,19 @@ function flyPlane(p, dt) {
     } else if (p.kind === 'strike' || p.kind === 'bomber') {
       if (p.hold && !p.dropped && airHoldP(p, dt, speed)) return;   // 突击群：防空圈外待机
       if (p.asm && !p.dropped && typeof navyPlaneAsm === 'function' && navyPlaneAsm(p, dt, speed)) return;   // 挂反舰导弹打敌舰（navy.js）
-      const dive = p.kind === 'bomber' && p.v === 'dive', heavy = p.kind === 'bomber' && !dive, std = p.kind === 'strike' && M.std;   // 歼-35：防区外投放精确制导弹药
+      const cm = p.kind === 'bomber' && M.cm, std = p.kind === 'strike' && M.std;   // 轰-6K：防区外发射巡航导弹；歼-35：防区外投放精确制导弹药
       if (std && p.gbN == null) { p.gbN = M.gbN || 2; p.acx = p.tx; p.acy = p.ty; p.arLeft = 50; }
       if (p.ar) { airArFly(p, dt, speed, M, sp); return; }   // 歼-35 自主武装侦察
       if (!p.dropped) {
         const df = Math.abs(airAng(Math.atan2(p.ty - p.y, p.tx - p.x) - p.heading)), d = airSteer(p, p.tx, p.ty, dt);
-        if (dive && d < 280 && df < .5) { p.diving = true; speed(235); p.alt = Math.max(.32, p.alt - dt * .9); }   // 俯冲：压低高度加速
-        if (std ? d < M.std && df < .3 : dive ? d < 42 : heavy ? d < 95 && df < .3 : d < 80 && df < .35) (std ? guidedDrop : p.kind === 'bomber' ? bomberDrop : strikeDrop)(p);
+        if (cm) { if ((d < M.std || p.y < H - 600) && df < .5) bomberStd(p); }   // 进场 600 米或离目标 1800 米：对准目标方向就发射
+        else if (std ? d < M.std && df < .3 : p.kind === 'bomber' ? d < 70 && df < .35 : d < 80 && df < .35) (std ? guidedDrop : p.kind === 'bomber' ? bomberDrop : strikeDrop)(p);
       } else if (p.std) {   // 投完立即掉头，不飞进敌防空圈；弹舱还有弹就转入自主武装侦察
         airSteer(p, p.x - Math.cos(p.heading) * 300, Math.min(H - 40, p.y + 300), dt, true);
         if ((p.egT -= dt) <= 0) { if (M.gbN && p.gbN > 0) { p.ar = true; p.arT = 0; } else airSet(p, 'rtb'); }
       } else {
         airSteer(p, p.x + Math.cos(p.heading) * 200, p.y + Math.sin(p.heading) * 200, dt);
-        if ((p.egT -= dt) <= 0) { p.diving = false; airSet(p, 'rtb'); }
+        if ((p.egT -= dt) <= 0) airSet(p, 'rtb');
       }
     } else {
       // 对地支援：先飞到任务区外的待机点（避开已知防空圈），到了转入待机（airCasFly）
@@ -797,14 +810,23 @@ function airAASites() {
   return out;
 }
 const airAAAt = (x, y, r = 300) => airAASites().reduce((a, s) => a + (dist(s.x, s.y, x, y) < r ? s.w : 0), 0);
-// 歼-35：防区外投放两枚精确制导炸弹（散布很小）；防空压制型发射反辐射导弹，自动对准目标 140 以内已知的敌防空
+// 歼-35：防区外投放两枚精确制导炸弹（散布很小）；防空压制型（歼-35、歼-16D）发射两枚反辐射导弹——在三维里真的飞过去（missile.js msPgm），
+//   每枚追目标 140 以内一个已知的敌防空（雷达开着就追得上；防空车、高炮各算一个辐射源）；只有单兵防空导弹组（没有雷达）或什么都没发现时，按目标点打过去
 function guidedDrop(p) {
   p.dropped = true; p.std = true; p.egT = 2.5;
-  const M = airMdl(p.kind, p.v);
+  const M = airMdl(p.kind, p.v), n = Math.min(2, p.gbN ?? 2);
   let tx = p.tx, ty = p.ty;
-  if (M.sead) { let bd = 140; for (const a of airAASites()) { const d = dist(a.x, a.y, p.tx, p.ty); if (d < bd) { bd = d; tx = a.x; ty = a.y; } } }
-  const d = dist(p.x, p.y, tx, ty), n = Math.min(2, p.gbN ?? 2);
-  for (let i = 0; i < n; i++) fireShell(p.x, p.y, clamp(tx + gauss() * 4, 0, W), clamp(ty + gauss() * 4, 0, H), 'p', 'bomb', .4 + d / 260, false, { t: -i * .3, gd: true });
+  if (M.sead) {
+    const S0 = airAASites().filter(a => dist(a.x, a.y, p.tx, p.ty) < 140).sort((a, b) => (a.k === 'mp') - (b.k === 'mp') || dist(a.x, a.y, p.tx, p.ty) - dist(b.x, b.y, p.tx, p.ty));
+    for (let i = 0; i < n; i++) {
+      const a = S0[i % Math.max(1, S0.length)];
+      msPgm(M.arW || 'ld10', 'p', p.x, p.y, a && a.k !== 'mp' && a.o ? { k: a.k === 'veh' ? 'veh' : 'enemy', id: a.o.id, x: a.x, y: a.y } : { x: a ? a.x : tx, y: a ? a.y : ty }, p.kind, i * .35);
+    }
+    if (S0.length) { tx = S0[0].x; ty = S0[0].y; }
+  } else {
+    const d = dist(p.x, p.y, tx, ty);
+    for (let i = 0; i < n; i++) fireShell(p.x, p.y, clamp(tx + gauss() * 4, 0, W), clamp(ty + gauss() * 4, 0, H), 'p', 'bomb', .4 + d / 260, false, { t: -i * .3, gd: true });
+  }
   if (p.gbN != null) p.gbN -= n;
   if (typeof v8Stat === 'function') v8Stat(M.sead ? 'seadArm' : 'gdrop');
   log(M.sead ? `${M.name}在防区外发射反辐射导弹，压制敌防空` : `${M.name}在防区外投放精确制导炸弹`, 'info', 'gdrop', 10, { x: tx, y: ty });
@@ -862,15 +884,28 @@ function airArFly(p, dt, speed, M, sp) {
   }
 }
 
-// 轰炸机投弹：俯冲轰炸机两枚重磅弹几乎正中目标；重型轰炸机沿进场方向六弹地毯轰炸（间隔 26）
+// 攻击-11：中空平飞，接近目标时打开内埋弹舱投下两枚精确制导炸弹（卫星 / 激光制导，落点散布几米）——隐身飞翼不用俯冲进高炮射界
 function bomberDrop(p) {
   p.dropped = true; p.egT = 1.6;
-  const ch = Math.cos(p.heading), sh = Math.sin(p.heading);
-  if (p.v === 'dive') for (let i = 0; i < 2; i++) fireShell(p.x, p.y, clamp(p.tx + gauss() * 7, 0, W), clamp(p.ty + gauss() * 7, 0, H), 'p', 'bomb', .45, false, { t: -i * .12 });
-  else for (let i = 0; i < 6; i++) {
-    const off = (i - 2.5) * 26 + gauss() * 6, side = gauss() * 10;
-    fireShell(p.x, p.y, clamp(p.tx + ch * off - sh * side, 0, W), clamp(p.ty + sh * off + ch * side, 0, H), 'p', 'bomb', .9, false, { t: -i * .14 });
-  }
+  for (let i = 0; i < 2; i++) fireShell(p.x, p.y, clamp(p.tx + gauss() * 3.5, 0, W), clamp(p.ty + gauss() * 3.5, 0, H), 'p', 'bomb', .8, false, { t: -i * .15 });
+}
+// 轰-6K 的空地-20 打哪儿：目标 160 以内已标定的敌工事、阵地按价值一枚一枚分（碉堡、岸防炮这类硬目标两枚），分完了剩下的均布在目标区（半径约 45 的一圈）
+const H6_PRI = { typhon: 6, coastal: 5, airfield: 5, ascm: 5, tel: 5, arty: 4.5, aa: 4, bunker: 3.5, mortar: 3, mg: 2, trench: 1.5 };
+function airH6Aims(tx, ty, n) {
+  const out = [], cand = S.enemies.filter(e => !e.dead && e.kx != null && dist(e.kx, e.ky, tx, ty) < 160 && !(e.kind === 'airfield' && typeof abKeep === 'function' && abKeep()))
+    .sort((a, b) => (H6_PRI[b.kind] || 1) - (H6_PRI[a.kind] || 1) || dist(a.kx, a.ky, tx, ty) - dist(b.kx, b.ky, tx, ty));
+  for (const e of cand) for (let k = e.kind === 'bunker' || e.kind === 'coastal' ? 2 : 1; k > 0 && out.length < n; k--) out.push({ k: 'enemy', id: e.id, x: e.kx, y: e.ky });
+  for (let i = 0, m = n - out.length; i < m; i++) { const a = i / Math.max(1, m) * Math.PI * 2 + .4, r = m > 1 ? 45 : 0; out.push({ x: clamp(tx + Math.cos(a) * r, 0, W), y: clamp(ty + Math.sin(a) * r, 0, H) }); }
+  return out;
+}
+// 轰-6K：防区外依次发射翼下的空地-20（间隔 0.6 秒，外侧挂架先打），发射完立即掉头返航——不飞临目标、不进敌防空圈
+function bomberStd(p) {
+  const M = airMdl(p.kind, p.v), n = Math.min(p.agmN ?? M.agmN ?? 6, 6), A = airH6Aims(p.tx, p.ty, n);
+  A.forEach((T, i) => msPgm(M.cm, 'p', p.x, p.y, T, p.kind, i * .6));
+  p.agmN = (p.agmN ?? n) - A.length; p.dropped = true; p.std = true; p.egT = 3;
+  if (typeof v8Stat === 'function') v8Stat('h6Cm', A.length);
+  const nk = A.filter(T => T.k).length;
+  log(`${M.name}在 ${Math.round(dist(p.x, p.y, p.tx, p.ty))} 米外发射 ${A.length} 枚${MS_PGM[M.cm].nm}${nk ? `，其中 ${nk} 枚打已标定的火力点` : '，覆盖目标区'}`, 'info', 'h6cm' + p.id, 6, { x: p.tx, y: p.ty });
 }
 
 // 对地支援机扫射：盘旋中心 160 内、我方视野内、距任何我方小组 45 以上的最近目标
@@ -937,11 +972,12 @@ function airAA(p, dt) {
   const sp = airSpec(p.kind, p.v), s0 = airStealth(p), st = s0 < 1 ? (1 + s0) / 2 : 1;   // 隐身机：雷达高炮难以跟踪，光学瞄准仍可能打中（久留暴露后打折变少）
   for (const a of S.enemies) {
     if (a.dead || a.kind !== 'aa' || dist(a.x, a.y, p.x, p.y) > 190) continue;
+    const ek = typeof ewK === 'function' ? (a.emT > S.t ? 0 : dist(a.x, a.y, p.x, p.y) < 190 * ewK('e' + a.id, 190) ? 1 : 0) : 1, ew = .4 + .6 * ek;   // 炮瞄雷达被压 / 关机：跟踪距离外只能光学瞄准，准头差得多（ew.js）
     tracer(a.x, a.y, p.x + gauss() * 14, p.y + gauss() * 14, 'e', inVision(a.x, a.y)); a.fireT = S.t;   // 开火即暴露（conceal.js）
     if (p.v === 'heli' && typeof heliShotAt === 'function') heliShotAt(p, a.x, a.y, 210, 1.2);   // 直升机机组看得见曳光从哪来
     if (a.kx == null && Math.random() < .15) { a.kx = a.x; a.ky = a.y; log('防空炮火暴露位置', 'warn', null, 0, a); }
-    const k = p.kind === 'bomber' ? (p.v === 'dive' ? (p.diving ? 1.3 : 1) : .75) : 1;
-    if (Math.random() < sp.aa * k * st * (1 - (a.sup || 0) / 130)) { airLost(p, `${airName(p.kind, p.v)}被击落`); break; }
+    const k = p.kind === 'bomber' && p.v !== 'dive' ? .75 : 1;   // 轰-6K 飞得高，轻型高炮不易打中
+    if (Math.random() < sp.aa * k * st * ew * (1 - (a.sup || 0) / 130)) { airLost(p, `${airName(p.kind, p.v)}被击落`); break; }
   }
 }
 
@@ -1136,7 +1172,8 @@ function updateAirAuto(dt) {
     const PRI = { typhon: 5.5, coastal: 5, airfield: 5, ascm: 4.5, tel: 4.5, arty: 4.5, aa: 3, mortar: 3, bunker: 2.5 };
     let best = null, bs = 0;
     for (const e of S.enemies) if (!e.dead && e.kx != null && !(e.kind === 'airfield' && typeof abKeep === 'function' && abKeep())) {
-      if (near(e.kx, e.ky, 150).length || busy('bomber', e.kx, e.ky, 90) || S.shells.some(s => s.side === 'p' && s.kind === 'bomb' && dist(s.x1, s.y1, e.kx, e.ky) < 60)) continue;
+      if (near(e.kx, e.ky, 150).length || busy('bomber', e.kx, e.ky, 90) || S.shells.some(s => s.side === 'p' && s.kind === 'bomb' && dist(s.x1, s.y1, e.kx, e.ky) < 60)
+        || S.missiles.some(m => !m.done && m.side === 'p' && m.kind === 'pgm' && m.w === 'kd20' && dist(m.tx, m.ty, e.kx, e.ky) < 90)) continue;   // 轰-6K 的空地-20 还在飞向这一带
       const s = (PRI[e.kind] || 1) + .8 * S.enemies.filter(o => o !== e && !o.dead && o.kx != null && dist(o.kx, o.ky, e.kx, e.ky) < 90).length;
       if (s > bs) { bs = s; best = e; }
     }
@@ -1572,15 +1609,14 @@ function drawAirTool(time) {
     ctx.beginPath(); ctx.moveTo(m.x + nx, m.y + ny); ctx.lineTo(bx + nx, by + ny); ctx.lineTo(bx - nx, by - ny); ctx.lineTo(m.x - nx, m.y - ny); ctx.closePath(); ctx.fill();
     ctx.strokeStyle = rgba(col, .55); ctx.beginPath(); ctx.moveTo(m.x, m.y); ctx.lineTo(bx, by); ctx.stroke();
     ctx.strokeStyle = rgba(col, .38); ctx.beginPath(); ctx.moveTo(m.x + nx, m.y + ny); ctx.lineTo(bx + nx, by + ny); ctx.moveTo(m.x - nx, m.y - ny); ctx.lineTo(bx - nx, by - ny); ctx.stroke();
-  } else if (t === 'bomber') {   // 会出击的变体：点目标 → 俯冲轰炸机（单个小圈）；其余 → 重型轰炸机（六弹地毯）
+  } else if (t === 'bomber') {   // 会出击的变体：点目标 → 攻击-11 两枚精确制导炸弹（单个小圈）；其余 → 轰-6K 六枚空地-20 各自的落点（airH6Aims）
     const pt = S.enemies.some(e => !e.dead && e.kx != null && dist(e.kx, e.ky, m.x, m.y) < 40), has = v => S.air.wing.some(w => w.type === 'bomber' && w.state === 'deck' && (w.v || 'heavy') === v);
     const dive = pt ? has('dive') || !has('heavy') : !has('heavy') && has('dive');
     ctx.strokeStyle = rgba(ok ? COL.amber : COL.enemy, .9); ctx.lineWidth = px(1.7);
-    const offs = dive ? [0] : [-2.5, -1.5, -.5, .5, 1.5, 2.5].map(i => i * 26);
-    for (const o of offs) {
-      const bx = m.x + Math.cos(a) * o, by = m.y + Math.sin(a) * o;
-      ctx.setLineDash([px(3), px(4)]); ctx.beginPath(); ctx.arc(bx, by, dive ? 14 : POWER.bomb.R, 0, 7); ctx.stroke();
-      ctx.setLineDash([]); ctx.beginPath(); ctx.arc(bx, by, px(2.5), 0, 7); ctx.stroke();
+    const R0 = dive ? 14 : MS_PGM[AIR_MDL.h6k.cm].pw.R;
+    for (const q of dive ? [m] : airH6Aims(m.x, m.y, AIR_MDL.h6k.agmN)) {
+      ctx.setLineDash([px(3), px(4)]); ctx.beginPath(); ctx.arc(q.x, q.y, R0, 0, 7); ctx.stroke();
+      ctx.setLineDash([]); ctx.beginPath(); ctx.arc(q.x, q.y, px(2.5), 0, 7); ctx.stroke();
     }
     arrowAir(ctx, m.x - Math.cos(a) * 110, m.y - Math.sin(a) * 110, a, rgba(ok ? COL.amber : COL.enemy, .9));
   } else if (t === 'strike' && (() => { const w = S.air && S.air.wing.find(o => o.type === 'strike' && o.state === 'deck'); return airMdl('strike', w ? w.v : null).std; })()) {   // 歼-35：精确制导，防区外投放

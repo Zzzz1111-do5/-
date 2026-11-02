@@ -975,7 +975,7 @@ function v3GroundPlane(key, sz, x, y, ground, hd, fold, cpo, still, side, t, sf,
   if (typeof v3gPlane === 'function') v3gPlane(key, sz, x, y, ground, true, hd, side === 4 || side === 1 ? 1 : 0, 0, pt, true, still ? 0 : t, 0, sf, bay, fold);   // sf：挂上弹射杆后的舵面检查（v3det.js v3dDeckSurf）；fold：外翼折起（有折翼的模型，v3g.js V3G_FOLD）
 }
 // 登陆舰艇的外部精细模型（v3utex.js V3U_SHIP）：舰名前缀 → [模型, 画多长（世界单位）]——LC 726 型气垫艇、LA 271 型登陆艇、LV 人员登陆艇；
-//   其余舰型（072A、074A、073A、072、扫雷舰、火力支援艇）没有合规的免费模型，照旧画自带模型
+//   其余舰型（072A、074A、073A、072、火箭 / 火力支援艇、扫雷舰）没有合规的免费模型，照真舰程序建模（v3lst.js V3L_PRE）
 const V3_SHIPX = { LC: ['lcac', 30], LA: ['lcu', 32], LV: ['lcvp', 14] };
 // 登机梯（机型单位，按飞机比例缩放）：梯脚在原点，斜靠向机身（局部 +x）
 function v3mLadder() {
@@ -1061,7 +1061,7 @@ function v3mCollect(C, box) {
       if (bo) [mx, my] = bo;
       const kind = typeof manKind === 'function' ? manKind(q, i, role) : role, P = T ? manPose3(q, T, i, kind) : { p: q.prone ? 'pr' : 'st', fire: null }, z = v3Ht(mx, my);
       const K = V3_MAN * ks;
-      if (!(q.a82 && typeof a82Man === 'function' && a82Man(q, i, kind, P.p, mx, my, z, f, K, sd)) && typeof v3gMan === 'function') v3gMan(kind, P.p, mx, my, z, f, K, sd);   // 用户给的士兵模型原样摆放（卧倒、匍匐时放平）；82 空降师的拿各自的真实枪械模型（v3a82.js）
+      if (typeof v3gMan === 'function') v3gMan(kind, P.p, mx, my, z, f, K, sd);   // 用户给的士兵模型原样摆放（卧倒、匍匐时放平）
       if (P.fire != null && P.fire < .07) {   // 枪口焰：站姿在胸高、跪姿低一些、卧倒贴地（按姿态高度 L 插值）
         const Lp = P.L ?? (P.p === 'pr' || P.p[0] === 'c' ? 2 : P.p === 'kn' ? 1 : 0), low = Lp > 1.5, L = (low ? 1.35 : kind === 'mg' ? 1.45 : 1.1) * K, h = (Lp <= 1 ? lerp(1.32, .9, Lp) : lerp(.9, .2, Lp - 1)) * K;
         v3mAdd('mflash', v3mFlash, mx + Math.cos(f) * L, my + Math.sin(f) * L, z + h, f, K, sd);
@@ -1086,7 +1086,14 @@ function v3mCollect(C, box) {
       if (typeof v3uShip === 'function' && v3uShip(c, P.x, P.y, -2.6, P.h, Ld, 0)) continue;
       const [mk, mb] = v3mDDK(c); v3mAdd(mk, mb, P.x, P.y, -2.6, P.h, P.k, 0); continue;
     }
-    const X = V3_SHIPX[String(sh.label || '').split('-')[0]], zx = X && sh.hover ? Math.max(-2.6, v3Ht(P.x, P.y)) : -2.6;   // 气垫艇冲上滩头时贴着地面
+    const pre = String(sh.label || '').split('-')[0], X = V3_SHIPX[pre], zx = X && sh.hover ? Math.max(-2.6, v3Ht(P.x, P.y)) : -2.6;   // 气垫艇冲上滩头时贴着地面
+    const Q = !X && typeof V3L_PRE === 'object' && V3L_PRE[pre];   // 登陆舰、火力支援艇、扫雷舰（v3lst.js：按真舰以米建模，这里按游戏长度缩放）
+    if (Q) {
+      const [v, f] = Q, len = d[0] * f * P.k, off = (d[0] * P.k - len) / 2, c = Math.cos(P.h), s = Math.sin(P.h), k = len / V3L_DIM[v][0], F = V3L_FUN[v];
+      v3mAdd('sh:l:' + v, () => v3mLST(v), P.x + c * off, P.y + s * off, -2.6, P.h, k, 0);
+      if (typeof v3dFunnel === 'function') v3dFunnel(P.x + c * off, P.y + s * off, P.h, len, F[0], -2.6 + F[1] * k, .6);
+      continue;
+    }
     if (!(X && typeof v3uShip === 'function' && v3uShip(X[0], P.x, P.y, zx, P.h, X[1] * P.k, 0))) v3mAdd('sh:' + sh.kind, () => v3mShip(sh.kind, d[0], d[1]), P.x, P.y, -2.6, P.h, P.k, 0);
     if (typeof v3dFunnel === 'function') v3dFunnel(P.x, P.y, P.h, (X ? X[1] : d[0]) * P.k, sh.kind === 'assault' ? -.4 : -.25, -2.6 + d[1] * .55, X && X[0] === 'lcac' ? 1.2 : .6);   // 柴油机排气（气垫艇是四台燃气轮机，热浪大）
   }
@@ -1172,7 +1179,6 @@ function v3mCollect(C, box) {
       put('ty:gen', v3mTyGen, TY3.gen[0], TY3.gen[1], TU.u[gi].dead);
       continue;
     }
-    if (typeof a82Emp === 'function' && a82Emp(e, a, z0, v3Seat)) continue;   // M777 / M270 / 82 师 M224 用用户给的模型（v3a82.js）
     v3mAdd('st:' + e.kind, () => v3mFort(e.kind), e.x, e.y, SEAT[e.kind] ? v3Seat(e.x, e.y, SEAT[e.kind]) : z0, a, 1, e.dead ? 2 : 1);
     if (!e.dead && e.kind === 'ascm' && typeof ASC_RIG === 'object') for (let k = 0; k < ASC_RIG.n; k++) {   // 发射箱：转台转向目标、仰起（missile.js ascPose）
       const P = ascPose(e, k), v0 = (k - (ASC_RIG.n - 1) / 2) * ASC_RIG.gap, b = a + P.tr, [cx, cy] = at(-3.4, v0), o = ASC_RIG.piv + 3.4;
@@ -1192,7 +1198,6 @@ function v3mCollect(C, box) {
   if (S.para && typeof PA === 'object') chutes(S.para.ch, c => c.k === 'crate' ? PA.jump : c.role ? PA.jlJump : PA.jump, 0);
   if (S.ab && typeof AB === 'object') chutes(S.ab.ch, c => c.k === 'veh' ? AB.heavy : AB.jump, 0);
   if (S.e101 && typeof A101 === 'object') chutes(S.e101.ch, c => c.k === 'veh' ? A101.heavy : A101.jump, 1);
-  if (typeof a82Collect === 'function') a82Collect(inB, seen, spec, t);   // 82 空降师：伞、重装平台、CH-47F 吊的炮、标枪（v3a82.js）
   // —— 地面构筑物与杂项：原来只在地面贴图上画成平面图（render4 / render2 / ai3 / trucks / repair / afbase / afdef / para 在 3D 时不再画），这里立起来 ——
   const sea = (x, y) => Math.max(v3Ht(x, y), -3.2);   // 水里的东西露出水面
   for (const p of S.points || []) {   // 据点建筑（海滩出口的地堡与龙牙、指挥所、雷达站、炮兵排、哨所、村舍、渡口、桥）
@@ -1271,7 +1276,6 @@ function v3mCollect(C, box) {
   }
   // 飞机：高度与 3D 地图里的标识一致（view3d.js v3AirZ：甲板上贴着甲板，空中按高度），按滚转角倾斜；直升机主旋翼转动
   const plane = (o, hd, sd, key, sz, bank) => {
-    if (typeof V3FP === 'object' && V3FP.on && V3FP.o === o && V3FP.vw === 'cock' && !(typeof fpPitOn === 'function' && fpPitOn(o))) return;   // 座舱视角：模型没有座舱内饰时不画自己（平面座舱，v3pilot.js）；有内饰就照画，镜头坐在模型座舱里
     const L = !sd && typeof v3dLaunch === 'function' ? v3dLaunch(o) : null;   // 刚离舰：下沉、抬头，起落架过一会儿才收（v3det.js）
     const rs = o.fl && o.fp && typeof fpRS === 'function' ? fpRS(o) : null;   // 玩家开的：推演两步之间插值（不插值一顿一顿地抖）
     const x = rs ? rs.x : o.x, y = rs ? rs.y : o.y, z = rs ? rs.z : v3AirZ(o) + (L ? L.dz : 0);
@@ -1279,16 +1283,18 @@ function v3mCollect(C, box) {
     let pt = rs ? rs.pitch : o.fl && o.fp ? o.pt3 || 0 : typeof V3G_HELI === 'object' && V3G_HELI[key] ? 0 : typeof v3dPitch === 'function' ? v3dPitch(o, sd, z, L, key) : L ? L.pitch : 0;   // 玩家亲自开：机身俯仰就是物理引擎的   // 仰角跟着航迹 + 迎角（js/aero.js；直升机不按航迹抬头）
     const tu = sd && o.toT != null ? S.t - o.toT : -1;   // 机场起飞刚离地（eair.js eaRoll 记的离地时刻）：头 1.5 秒保持滑跑末段抬起的机头，起落架过几秒再收
     if (tu >= 0 && tu < 3) pt = Math.max(pt, V3_ROT * (1 - sm01((tu - 1.5) / 1.5)));
-    const gd = !!(L && L.gear) || (tu >= 0 && tu < (typeof EA_TO === 'object' ? EA_TO.gear : 4));
-    const Pc = o.fl && o.fp ? { de: o.fl.d[0], da: o.fl.d[1] } : typeof V3D_PT === 'object' ? V3D_PT.get((sd ? 'e' : 'p') + o.id) : null;   // 舵面：玩家开的按电传算出的真实舵偏   // v3dPitch 按气动算好的舵面：平尾按迎角配平 + 俯仰角速度，左右差动按滚转角速度
+    const gd = !!(L && L.gear) || (tu >= 0 && tu < (typeof EA_TO === 'object' ? EA_TO.gear : 4)) || !!(o.fl && o.fp && o.fl.gear > .5);   // 玩家开的：按起落架手柄（v3pilot.js G 键）
+    const Pq = o.fl && o.fp ? null : typeof V3D_PT === 'object' ? V3D_PT.get((sd ? 'e' : 'p') + o.id) : null;   // v3dPitch 按气动算好的舵面：平尾按迎角配平 + 俯仰角速度，左右差动按滚转角速度
+    const Pc = typeof v3dCtlP !== 'function' ? null : o.fl && o.fp ? v3dCtlP(o.fl) : Pq ? v3dCtlAI(Pq, gd) : null;   // 舵面各通道：玩家开的按电传算出的真实舵偏 + 襟翼、减速板；AI 的按气动 + 起降构型
     const bay = typeof fwBay === 'function' ? fwBay(o, sd ? 'e' : 'p') : null;   // 弹舱门开度（fpwpn.js：玩家开的按选中的武器，AI 的按发射时刻）
-    if (typeof v3gPlane === 'function' && v3gPlane(key, sz, x, y, z, false, hd || 0, sd, bank || 0, pt, gd, t, !sd && typeof fpNoz === 'function' ? fpNoz(o) : 0, Pc, bay) && !sd && typeof fwBayMsl === 'function') fwBayMsl(o, key, sz, x, y, z, hd || 0, pt, bank || 0, bay);   // 用户给的飞机模型（js/v3g.js）：起落架收放、直升机旋翼转、尾喷口开合、舵面偏转、弹舱门开合（开着时画舱里的弹）
+    const nz = !sd && typeof fpNoz === 'function' && typeof fpDriving === 'function' && fpDriving(o) ? fpNoz(o) : typeof v3dNozAI === 'function' ? v3dNozAI(o, sd) : 0;   // 尾喷口开合：玩家开的按油门，AI 的按它的发动机状态
+    if (typeof v3gPlane === 'function' && v3gPlane(key, sz, x, y, z, false, hd || 0, sd, bank || 0, pt, gd, t, nz, Pc, bay) && !sd && typeof fwBayMsl === 'function') fwBayMsl(o, key, sz, x, y, z, hd || 0, pt, bank || 0, bay);   // 用户给的飞机模型（js/v3g.js）：起落架收放、直升机旋翼转、尾喷口开合、舵面偏转、弹舱门开合（开着时画舱里的弹）
   };
   for (const p of S.planes || []) if (!p.dead && isFinite(p.x) && (inB(p.x, p.y, 220) || (typeof fpDriving === 'function' && fpDriving(p))) && !(!p.land && (p.phase === 'cat' || p.phase === 'roll' || p.phase === 'trap'))) {   // 甲板上的在航母那里画（放下起落架）
     const key = typeof airSilKey === 'function' ? airSilKey(p.kind, p.v) : 'j35', sz = (typeof airMdl === 'function' && airMdl(p.kind, p.v).size) || ((typeof AIR_SPEC === 'object' && AIR_SPEC[p.kind]) || {}).size || 15;
     plane(p, p.heading, 0, key, sz, p.bank);
   }
-  const EA_K = { ga: ['a10', 18], heli: ['ah64', 16], uh60: ['uh60', 17], ch47: ['ch47', 20.8], sh60b: ['sh60b', 17], c17: ['c17', 30], ftr: ['f35', 17], ftrb: ['f35b', 17], mq9: ['mq9', 18], f22: ['f22', 18], b2: ['b2', 34], p8: ['p8', 26] };
+  const EA_K = { ga: ['a10', 18], heli: ['ah64', 16], uh60: ['uh60', 17], c17: ['c17', 30], ftr: ['f35', 17], ftrb: ['f35b', 17], mq9: ['mq9', 18], f22: ['f22', 18], b2: ['b2', 34], p8: ['p8', 26] };
   // 被击落的飞机：烧黑的机体（2：残骸色）从被击中的高度翻滚着、机头朝下栽下去（火球与拖着的黑烟在 v3fx.js）
   const wreck = (w, T, key, sz) => {
     const age = S.t - w.t;
@@ -1356,29 +1362,23 @@ function v3mDraw(C, LM) {
   for (const [key, L] of V3M.inst) {
     const n = L.d.length / 8;
     if (!n) continue;
-    // 这一帧的实例数据只转一次、只传一次显卡（阴影、正常、玻璃几遍和三角形 / 线都用这同一块）：原来每遍每种图元都新传一次，
-    //   还每帧新建一个 Float32Array——数据量不大，但几十种物件 × 四次上传的调用开销和垃圾回收是每帧实打实的毫秒
-    if (L.fr !== V3M.fr) {
-      L.fr = V3M.fr;
-      if (!L.f || L.f.length < L.d.length) L.f = new Float32Array(Math.max(64, L.d.length * 1.5 | 0));
-      L.f.set(L.d);
-      if (V3M.ext) { if (!L.gb) L.gb = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, L.gb); gl.bufferData(gl.ARRAY_BUFFER, L.f.subarray(0, L.d.length), gl.DYNAMIC_DRAW); }
-    }
+    if (L.fr !== V3M.fr) { L.fr = V3M.fr; L.f = new Float32Array(L.d); }   // 这一帧的实例数据只转一次（两遍共用）
     const m = v3mGet(key, L.build);
-    if (m.gl && !LM) glass.push([m, L.f, n, L.gb]);
-    v3mDrawM(gl, m, L.f, n, LM, L.gb);
+    if (m.gl && !LM) glass.push([m, L.f, n]);
+    v3mDrawM(gl, m, L.f, n, LM);
   }
   if (glass.length) {   // 第二遍：透明座舱玻璃（混合、不写深度；实体都画完了，玻璃后面的座舱、甲板、海面都在）
     gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); gl.depthMask(false); gl.uniform1f(V3M.u.uGP, 1);
-    for (const [m, data, n, gb] of glass) v3mDrawM(gl, m, data, n, true, gb);
+    for (const [m, data, n] of glass) v3mDrawM(gl, m, data, n, true);
     gl.depthMask(true); gl.disable(gl.BLEND); gl.uniform1f(V3M.u.uGP, 0);
   }
   for (const k of ['p', 'n', 's', 'b']) gl.disableVertexAttribArray(A[k]);
   if (typeof v3uDraw === 'function') v3uDraw(C, LM);   // 带贴图的精细模型（v3utex.js）
   if (typeof v3gDraw === 'function') v3gDraw(C, LM);   // 用户给的模型（js/v3g.js）
+  if (typeof v3nzDraw === 'function') v3nzDraw(C, LM);   // 真实喷口模型（js/v3noz.js）
 }
-// 画一个网格的全部实例（data：每个实例 8 个数；gb：这一帧已传好的实例缓冲，有就直接绑上）；noLine：不画线（阴影那一遍、透明玻璃那一遍）
-function v3mDrawM(gl, m, data, n, noLine, gb) {
+// 画一个网格的全部实例（data：每个实例 8 个数）；noLine：不画线（阴影那一遍、透明玻璃那一遍）
+function v3mDrawM(gl, m, data, n, noLine) {
   const A = V3M.a, X = V3M.ext;
   for (const [buf, cnt, mode] of [[m.tb, m.tn, gl.TRIANGLES], [m.lb, m.ln, gl.LINES]]) {
     if (!buf || !cnt || (noLine && mode === gl.LINES)) continue;
@@ -1388,7 +1388,7 @@ function v3mDrawM(gl, m, data, n, noLine, gb) {
     gl.enableVertexAttribArray(A.s); gl.vertexAttribPointer(A.s, 1, gl.FLOAT, false, 40, 24);
     gl.enableVertexAttribArray(A.b); gl.vertexAttribPointer(A.b, 3, gl.FLOAT, false, 40, 28);
     if (X) {
-      if (gb) gl.bindBuffer(gl.ARRAY_BUFFER, gb); else { gl.bindBuffer(gl.ARRAY_BUFFER, V3M.ib); gl.bufferData(gl.ARRAY_BUFFER, data.subarray ? data.subarray(0, n * 8) : data, gl.DYNAMIC_DRAW); }
+      gl.bindBuffer(gl.ARRAY_BUFFER, V3M.ib); gl.bufferData(gl.ARRAY_BUFFER, data, gl.DYNAMIC_DRAW);
       gl.enableVertexAttribArray(A.iA); gl.vertexAttribPointer(A.iA, 4, gl.FLOAT, false, 32, 0); X.vertexAttribDivisorANGLE(A.iA, 1);
       gl.enableVertexAttribArray(A.iB); gl.vertexAttribPointer(A.iB, 4, gl.FLOAT, false, 32, 16); X.vertexAttribDivisorANGLE(A.iB, 1);
       X.drawArraysInstancedANGLE(mode, 0, cnt, n);

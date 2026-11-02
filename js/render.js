@@ -124,25 +124,21 @@ const hoverNear = (x, y, r) => !!(typeof U === 'object' && U.mouse && dist(U.mou
 // R.eye：null / 'p' 攻方视野 · 'e' 守方视野 · 'both' 双方视野（任一方看得见即显示）· 'all' 全图
 let PV_KEEP = new Uint8Array(GW * GH);
 onWorld(() => { PV_KEEP = new Uint8Array(GW * GH); });
-// 双方视野（并集）按视野版本缓存（logistics.js VIS_GEN 每 0.25 秒变一次）：每帧只整块拷贝，不再逐格求并
-let PV_U = null, PV_UK = '';
 function viewBegin() {
   const v = R.eye;
   if (!v || v === 'p' || !S || S.mode !== 'sandbox') return false;
   PV_KEEP.set(PV);
-  if (v === 'all') PV.fill(1); else if (v === 'e') PV.set(EV); else {
-    const k = (typeof VIS_GEN === 'number' ? VIS_GEN : -1) + '|' + S.seed + '|' + PV.length;
-    if (!PV_U || PV_U.length !== PV.length || PV_UK !== k || typeof VIS_GEN !== 'number') { if (!PV_U || PV_U.length !== PV.length) PV_U = new Uint8Array(PV.length); for (let i = 0; i < PV.length; i++) PV_U[i] = PV[i] | EV[i]; PV_UK = k; }
-    PV.set(PV_U);
-  }
+  if (v === 'all') PV.fill(1); else if (v === 'e') PV.set(EV); else for (let i = 0; i < PV.length; i++) PV[i] |= EV[i];
   return true;
 }
 function viewEnd(on) { if (on) PV.set(PV_KEEP); }
 function draw(now) {
   const on = viewBegin();
   let d3 = false;
-  try { d3 = typeof V3 === 'object' && (V3.on || v3Att()) && !V3.drawing && v3Can() && v3Draw(now); if (!d3) drawScene(now); } finally { viewEnd(on); }   // 3D 立体地图（view3d.js）在屏外按俯视画好再贴到地形上
-  if (R.d3 !== d3) { R.d3 = d3; document.body.classList.toggle('v3on', !!d3); if (d3 && typeof lkCss === 'function') lkCss(false); }   // 3D 写实：主画布不能留着黑绿的 CSS 滤镜   // 3D 画面自带暗角（v3post.js），CSS 那层暗角关掉
+  R.trxL = false;   // 这一帧地形画布垫在底下了没有（drawScene）：没有就藏起来
+  try { d3 = typeof V3 === 'object' && (V3.on || v3Att()) && !V3.drawing && v3Can() && v3Draw(now); if (!d3) drawScene(now); } finally { viewEnd(on); }
+  if (!R.trxL && typeof trxLayer === 'function' && typeof TRX === 'object' && TRX.cv) trxLayer(false);   // 3D 立体地图（view3d.js）在屏外按俯视画好再贴到地形上
+  if (R.d3 !== d3) { R.d3 = d3; document.body.classList.toggle('v3on', !!d3); if (d3 && typeof lkCss === 'function') lkCss(false); if (typeof V3 === 'object' && V3.cv && V3.cv.parentNode) V3.cv.style.display = d3 ? 'block' : 'none'; }   // 3D 画布在 2D 画布底下：平面地图时藏起来   // 3D 写实：主画布不能留着黑绿的 CSS 滤镜   // 3D 画面自带暗角（v3post.js），CSS 那层暗角关掉
 }
 function drawScene(now) {
   const { ctx } = R, time = now / 1000;
@@ -162,7 +158,12 @@ function drawScene(now) {
   else if (realLook()) {
     if (!TRX.tried) { trxInit(); if (TRX.ok) trxResize(); }
     if (TRX.ok && (TRX.vw !== R.cv.width || TRX.vh !== R.cv.height || TRX.cv.width < R.cv.width || TRX.cv.height < R.cv.height)) trxResize();   // 3D 地图的屏外俯视画布与屏幕大小不同：换要画的区域，画布不重建
-    if (TRX.ok) { const w = R.cv.width, h = R.cv.height; trxDraw(time, flash); ctx.drawImage(TRX.cv, 0, TRX.cv.height - h, w, h, 0, 0, w, h); }   // 画在画布左下角
+    if (TRX.ok) {
+      const w = R.cv.width, h = R.cv.height, lay = !(typeof V3 === 'object' && V3.drawing) && !(typeof greenLook === 'function' && greenLook()) && trxLayer(true);   // 画在屏幕上：地形画布垫在底下（terrain.js trxLayer）；黑绿画面要把整帧（连地形）过着色器，照旧贴进主画布
+      trxDraw(time, flash);
+      if (lay) { ctx.clearRect(0, 0, w, h); R.trxL = true; }
+      else ctx.drawImage(TRX.cv, 0, TRX.cv.height - h, w, h, 0, 0, w, h);   // 3D 的屏外俯视：画在画布左下角，贴过去
+    }
     else { ctx.fillStyle = '#05101a'; ctx.fillRect(0, 0, R.cv.width, R.cv.height); worldTf(ctx); trxFallback(ctx); }
   } else {
     if (!MX.tried) { mxInit(); if (MX.ok) mxResize(); }
@@ -178,9 +179,6 @@ function drawScene(now) {
   drawEnemies(time); opt('drawArmor');
   ctx.globalAlpha = R.zr > 2.5 ? .55 : .75; opt('drawAutoRoutes'); ctx.globalAlpha = 1;   // 自动驾驶路线压暗，避免满屏虚线
   drawTeams(time); opt('drawCarrier'); drawShips(time); drawDD(time); runHook('drawOver', time); drawPlans(time);
-  if (S.night && !(typeof V3 === 'object' && V3.drawing)) {   // 黑夜：地面、单位压暗成夜色，之后画的弹道、炮口焰、爆炸照旧亮（3D 由 v3neb.js 压暗，给 3D 的俯视贴图不压）
-    ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalCompositeOperation = 'multiply'; ctx.fillStyle = TER.flat ? '#4c3a40' : '#33405e'; ctx.fillRect(0, 0, R.cv.width, R.cv.height); ctx.restore(); worldTf(ctx);
-  }
   if (!R.fx3d) { drawShells(time); drawTracers(); }   // 3D 时弹道立体画（v3fx.js）
   drawPlanes(time); drawFx(); drawTool(time); drawFormPreview();
   bloom();

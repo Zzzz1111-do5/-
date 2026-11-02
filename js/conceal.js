@@ -27,11 +27,11 @@ function cvlCovered(q) {
 const cvlQuiet = q => S.t - (q.movedT ?? -99) >= CVL.still && S.t - Math.max(q.fT ?? -99, q.aaSeen ?? -99, q.aaSeenE ?? -99) >= CVL.fire;
 const cvlHid = q => !q.boarded && cvlQuiet(q) && isLand(q.x, q.y) && cvlCovered(q);
 
-function cvlApply() {
-  for (const i of CVL_CLR) CVL_DISP[i] = 0;
-  CVL_CLR = [];
+// part（logistics.js updateVision）：'a' 刚算完攻方视野 → 只抹守方的隐蔽小组；'b' 刚换上守方视野 → 只抹攻方的；不给 = 两边
+function cvlApply(part) {
+  if (part !== 'b') { for (const i of CVL_CLR) CVL_DISP[i] = 0; CVL_CLR = []; }
   if (!cvlOn() || S.phase !== 'battle') return;
-  for (const side of ['e', 'p']) {
+  for (const side of part === 'a' ? ['e'] : part === 'b' ? ['p'] : ['e', 'p']) {
     const foe = side === 'e' ? 'p' : 'e', vis = side === 'e' ? PV : EV;
     // 对方的地面观察者：上岸的步兵小组、车辆（按 100 见方分桶）
     const B = new Map(), put = (x, y, r) => { const k = Math.floor(x / CVL.cell) * 1000 + Math.floor(y / CVL.cell); let a = B.get(k); if (!a) B.set(k, a = []); a.push(x, y, r); };

@@ -114,11 +114,11 @@ function nvThink(e) {
     for (const p of S.planes || []) {
       if (p.dead || p.alt < .2 || ['cat', 'roll', 'trap', 'final'].includes(p.phase)) continue;
       const st = typeof airStealth === 'function' ? airStealth(p) : 1, d = dist(e.x, e.y, p.x, p.y);
-      if (d > Math.min(C.samR, C.radar * Math.min(1, st * 1.6))) continue;
+      if (d > Math.min(C.samR, C.radar * Math.min(1, st * 1.6) * (typeof ewK === 'function' ? ewK('s' + e.id, C.radar) : 1))) continue;   // 舰载雷达被我方干扰压着：跟踪距离缩短（ew.js）
       if (S.missiles.some(m => m.src === 'eship' && m.kind === 'sam' && !m.done && m.tgt && m.tgt.k === 'plane' && m.tgt.id === p.id)) continue;
       if (d < pd) { pd = d; p0 = p; }
     }
-    if (p0) { msLaunch('sam', 'e', e.x, e.y, { x: p0.x, y: p0.y }, { tgt: { k: 'plane', id: p0.id }, src: 'eship', spd: 620, dur: 2.6, pk: .5 }); e.sam--; e.samCd = S.t + 2; nvStat('nvSamE'); }
+    if (p0) { msLaunch('sam', 'e', e.x, e.y, { x: p0.x, y: p0.y }, { tgt: { k: 'plane', id: p0.id }, src: 'eship', spd: 620, dur: 2.6, pk: .5 * (typeof ewPk === 'function' ? ewPk('s' + e.id, p0, false) : 1) }); e.sam--; e.samCd = S.t + 2; nvStat('nvSamE'); }
   }
   // 主炮（Mk45 127 毫米）：射程内的我方舰船优先（抢滩卸载的登陆舰最先），其次岸上看得见的我方登陆部队（舰炮火力支援）；
   //   每 3 秒一发真炮弹（有飞行时间、散布，按目标航速打提前量），落点按炮弹毁伤结算（combat.js impact）
@@ -253,6 +253,7 @@ function navyPlaneAsm(p, dt, speed) {
   nvStat('nvAirAsm', n);
   log(`${airName(p.kind, p.v).split(' ')[0]}在 ${Math.round(d)} 米外发射 ${n} 枚${MS_PGM[p.asm.w].nm}，攻击敌${E.nm}`, 'info', 'nvaf' + p.id, 3, E);
   p.asm = null; p.dropped = true; p.std = true; p.egT = 3;
+  if (p.kind === 'bomber') p.agmN = 0;   // 轰-6K 这一趟换挂的是鹰击-12，没带空地-20（fpwpn.js FW_ASM）
   return false;
 }
 // 胜负（闯关海战关）：击沉守方舰艇八成吨位胜；我方驱逐舰、护航舰、航母全损或 15 分钟未达成则败

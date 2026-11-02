@@ -17,7 +17,7 @@
 //     ord { v, x, y, src: ai / pl, t } 正在执行的命令, box [{ ord, at }] 在途命令, man 玩家接管, aiSp AI 派出的穿插, p0 初始兵力 }
 const TH = { org: 2, think: 4, dly: { div: 5, bde: 3, reg: 2 }, bound: 130, lead: 150, back: 240, rest: 30, minW: 60, maxReg: 4, maxBde: 3, maxDiv: 3,
   head: 260, phase: 300, phaseK: .7, spear: 700, spearT: 160, link: 380, wait: 20,
-  gap: 30, vgap: 25, row: 100, rows: 3, focus: 1.2 };   // gap 相邻两排形之间留的空当 · vgap 车辆最小间距 · row 后几排的排距 · focus 正面超出能守宽度多少倍就收缩
+  gap: 30, vgap: 60, row: 100, rows: 3, focus: 1.2 };   // gap 相邻两排形之间留的空当 · vgap 车辆最小间距（条令：车间距 50 米以上，原来 25 米挤成一团） · row 后几排的排距 · focus 正面超出能守宽度多少倍就收缩
 // 战区条令参数（司令训练场 tools/train_real.js 按「胜负 + 条令符合度」调出来；S.thFix = { p: {…}, e: {…} } 可覆盖，训练时用）
 //   攻方：ech 留作第二梯队的营占上陆营数的比例（联合登陆战役：第一梯队约三分之二）· adv 由坚守恢复推进要的兵力比（推进中掉到它的七成就转入坚守）·
 //         prep 由坚守转入推进前的火力准备秒数（舰炮、垂发导弹打当面已知火力点，到点再推进）
@@ -953,7 +953,7 @@ function thLine(G, F, v, O) {
     busy.addV(best[0], best[1]);
     out.push({ m: o, k: 'v', x: best[0], y: best[1] });
   };
-  const spread = (list, back, key) => { const L2 = regLatOrder(G, key, list, o => o.x); L2.forEach((o, i) => { const x = xs[Math.min(xs.length - 1, Math.floor((i + .5) * xs.length / L2.length))]; placeV(o, x + (i % 2 ? 12 : -12), tgtY(x) - dir * back); }); };
+  const spread = (list, back, key) => { const L2 = regLatOrder(G, key, list, o => o.x); L2.forEach((o, i) => { const x = xs[Math.min(xs.length - 1, Math.floor((i + .5) * xs.length / L2.length))]; placeV(o, x + (i % 2 ? 30 : -30), tgtY(x) - dir * (back + (i % 3) * 20)); }); };   // 前后也错开，不排成一条直线
   spread(tk, v === 'advance' && !stall ? 18 : 40, 'tht');
   spread(ifv, 55, 'thi');
   const xm = xs[Math.floor(xs.length / 2)];

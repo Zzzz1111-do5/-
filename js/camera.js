@@ -68,17 +68,17 @@ function mmInit(cv) {
   for (let i = 0; i < GW * GH; i++) {
     const t = TER.type[i];
     if (MM.real) {   // 写实：与地形同一套底色，海按离岸距离加深
-      const c = TER.flat ? [150, 152, 155] : TRX_FLAT[t], e = isWater(t) ? 1 - clamp((cellCY(i) - coastAt(cellCX(i))) / 900, 0, .6) : .8 + TER.elev[i] * .4;   // 白色平原：灰色平台（与 3D 地面同色）
+      const c = TRX_FLAT[t], e = isWater(t) ? 1 - clamp((cellCY(i) - coastAt(cellCX(i))) / 900, 0, .6) : .8 + TER.elev[i] * .4;
       for (let j = 0; j < 3; j++) img.data[i * 4 + j] = c[j] * e;
     } else {
-      const c = TER.flat ? '#8a8c8e' : MM_COL[t], e = isWater(t) ? 1 : .55 + TER.elev[i] * .6;   // 白色平原：灰色平台
+      const c = MM_COL[t], e = isWater(t) ? 1 : .55 + TER.elev[i] * .6;
       img.data[i * 4] = parseInt(c.slice(1, 3), 16) * e; img.data[i * 4 + 1] = parseInt(c.slice(3, 5), 16) * e;
       img.data[i * 4 + 2] = parseInt(c.slice(5, 7), 16) * e;
     }
     img.data[i * 4 + 3] = 255;
   }
   g.putImageData(img, 0, 0);
-  MM.seed = TER.seed; MM.ter = TER; MM.fog = null;   // 按地图对象认：换了一张同种子的地图（白色平原与默认图可以同种子）也重建；视野小图按新尺寸重开
+  MM.seed = TER.seed;
 }
 
 function mmDraw() {
@@ -87,7 +87,7 @@ function mmDraw() {
 }
 function mmDraw1() {
   if (!MM.cv) return;
-  if (MM.seed !== TER.seed || MM.ter !== TER || MM.real !== (realLook() && !(typeof greenLook === 'function' && greenLook()))) mmInit(MM.cv);
+  if (MM.seed !== TER.seed || MM.real !== (realLook() && !(typeof greenLook === 'function' && greenLook()))) mmInit(MM.cv);
   const g = MM.cv.getContext('2d'), k = MM.k, dot = (x, y, r, c) => { g.fillStyle = c; g.fillRect(x * k - r, y * k - r, r * 2, r * 2); };
   g.imageSmoothingEnabled = MM.real;
   g.drawImage(MM.base, 0, 0, MM.cv.width, MM.cv.height);

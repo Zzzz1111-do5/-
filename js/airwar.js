@@ -37,14 +37,16 @@ function awSeen(side, x, y, st = 1) {
     const aew = awAew();
     if (aew && dist(aew.x, aew.y, x, y) < (airRdrM('recon', aew.v) || 450e3) * k) return true;   // 空警-600 预警机
     for (const p of S.planes || []) if (!p.dead && p.alt > .3 && (p.kind === 'fighter' || p.kind === 'strike') && dist(p.x, p.y, x, y) < airRdrM(p.kind, p.v) * k) return true;   // 战斗机、歼-35 / 歼-15T / 歼-16D 的火控雷达
+    if (typeof ewSeenP === 'function' && ewSeenP(x, y)) return true;   // 歼-16D 电子侦察测到的、开着雷达的敌战斗机（ew.js）
     if (typeof msDefShips === 'function') for (const s of msDefShips()) if (dist(s.x, s.y, x, y) < 720 * k) return true;
     if (typeof cvAll === 'function') for (const c of cvAll()) if (c.hp > 0 && dist(c.x, c.y, x, y) < 600 * k) return true;
     return false;
   }
   if (spotted(x, y)) return true;
-  const rd = typeof radarUp === 'function' ? radarUp() : null;
-  if (rd && dist(rd.x, rd.y, x, y) < 820 * k) return true;
-  if (S.eair) for (const a of S.eair.fly) if (!a.dead && eaFtr(a.type) && a.alt > .2 && dist(a.x, a.y, x, y) < airRdrM(a.type) * k) return true;   // F-35 的 AN/APG-81、F-22A 的 AN/APG-77（真实探测距离）
+  const rd = typeof radarUp === 'function' ? radarUp() : null, ew = typeof ewK === 'function';
+  if (ew && ewJamSeen(x, y)) return true;   // 开着干扰的飞机：敌方无源侦察老远测得到（ew.js）
+  if (rd && dist(rd.x, rd.y, x, y) < 820 * k * (ew ? ewK('rd', 820) : 1)) return true;   // 岸基警戒雷达：被干扰压着探测距离缩短
+  if (S.eair) for (const a of S.eair.fly) if (!a.dead && eaFtr(a.type) && a.alt > .2 && dist(a.x, a.y, x, y) < airRdrM(a.type) * k * (ew ? ewK('a' + a.id, airRdrM(a.type)) : 1)) return true;   // F-35 的 AN/APG-81、F-22A 的 AN/APG-77（真实探测距离）
   if (typeof eaBases === 'function') for (const b of eaBases()) if (dist(b.x, b.y, x, y) < 450 * k) return true;
   for (const o of S.sbxObs || []) if (!o.dead && o.kind === 'e_radar' && dist(o.x, o.y, x, y) < o.r * 1.4 * k) return true;
   if (typeof afdRadarSees === 'function' && afdRadarSees(x, y, k)) return true;   // 机场雷达站（afdef.js）
@@ -161,6 +163,7 @@ function awFleetCover(x, y, m = 0) {
 }
 // 追踪：瞄准目标的提前位置（按目标速度与距离，最多 1.2 秒），转弯率 turn（战斗机比攻击机灵活）
 function awPursue(f, T, dt, turn) {
+  if (typeof apTurn === 'function') turn = apTurn(f.kind ? airMdlKey(f.kind, f.v) : f.type, f.spd, turn);   // 各型自己的瞬时转弯（airperf.js：速度掉了能拉的过载跟着少）
   const k = airK(f), d = dist(f.x, f.y, T.x, T.y), lead = Math.min(1.2, d / Math.max(60, f.spd * k * 1.5)), h = T.heading ?? 0, v = (T.spd || 0) * (T.alt != null ? airK(T) : 1);
   const tx = clamp(T.x + Math.cos(h) * v * lead, 20, W - 20), ty = clamp(T.y + Math.sin(h) * v * lead, 20, H - 20);
   const tr = airYaw(f, awAng(Math.atan2(ty - f.y, tx - f.x) - f.heading), turn, dt);   // 平滑转向（carrier.js）
@@ -228,15 +231,18 @@ function awFight(f, side, dt) {
   // 中距弹：射程按弹种（霹雳-15 560、AIM-120 480）；隐身目标要飞进本机雷达的锁定距离（雷达距离 × 隐身系数 × 1.6）才能发射，命中打八五折
   //   ——F-22A（0.3）只有 250 以内才被歼-20 锁定，而它在 360 外就能锁定歼-20：先敌发现、先敌开火
   //   远程弹（霹雳-17 一类，aamL；现在没有机型挂）：目标在中距弹射程外、或中距弹打光时才用；打运输机、攻击机这种大而笨的目标最准，打战斗机差些。雷达大的（> 700）能同时制导多枚，间隔 1.2 秒
-  const lock = (side === 'p' ? f.radar || 520 : (EA_FTR[f.type] || EA_FTR.ftr).radar) * Math.min(1, (T.st || 1) * 1.6);
-  const aR = Math.min(f.aamR || 480, lock), aLR = f.aamL > 0 ? Math.min(f.aamLR || 900, lock) : 0;
-  if (d > 130 && off < .7 && (f.aamT || 0) <= S.t && !S.missiles.some(m => m.src === 'aam' && m.side === side && !m.done && m.tgt && m.tgt.k === T.k && m.tgt.id === T.o.id)) {
+  const R0 = side === 'p' ? f.radar || 520 : (EA_FTR[f.type] || EA_FTR.ftr).radar, lock = R0 * Math.min(1, (T.st || 1) * 1.6) * (side === 'e' && typeof ewK === 'function' ? ewK('a' + f.id, R0) : 1);   // 敌战斗机的火控雷达被我方干扰压着：锁定距离缩短（ew.js）
+  // 导弹卡车：歼-20 用数据链传来航迹的目标，在霹雳-15 射程内就能打（不用等自己的雷达锁上）；歼-20 有卡车可用时 200 以外自己不开火（发射会暴露自己）
+  const cue = side === 'p' && f.mt && f.aam > 2 ? awCue(T) : null, hold = side === 'p' && awJ20(f) && d > 200 && awTruckCan(T);
+  const aR = Math.min(f.aamR || 480, cue ? Infinity : lock), aLR = f.aamL > 0 ? Math.min(f.aamLR || 900, lock) : 0;
+  if (!hold && d > 130 && off < .7 && (f.aamT || 0) <= S.t && !S.missiles.some(m => m.src === 'aam' && m.side === side && !m.done && m.tgt && m.tgt.k === T.k && m.tgt.id === T.o.id)) {
     const st = (T.st || 1) < .6 ? .85 : 1, gap = f.radar > 700 ? 1.2 : 3;
     if (f.aam > 0 && d < aR) {
-      const pk = (AW_PK[T.type] || .5) * (f.pkK || 1) * (d > aR * .8 ? .85 : 1) * st;
+      const pk = (AW_PK[T.type] || .5) * (f.pkK || 1) * (d > aR * .8 ? .85 : 1) * st * (side === 'e' && typeof ewPk === 'function' ? ewPk('a' + f.id, T.o, true) : 1);   // AIM-120：被欺骗干扰掩护的打折，打干扰机本身能跟踪干扰源
       msLaunch('sam', side, f.x, f.y, { x: T.x, y: T.y }, { tgt: { k: T.k, id: T.o.id }, src: 'aam', spd: 640, dur: 2.6, pk });
       f.aam--; f.aamT = S.t + gap; f.fired = S.t;
       awStat(side === 'p' ? 'aamP' : 'aamE');
+      if (cue && d > lock) { awStat('mtCue'); log(`歼-16 导弹卡车按歼-20 数据链传来的航迹，向 ${Math.round(d)} 米外的敌${(EA_SPEC[T.type] || {}).name || '机'}发射霹雳-15（余 ${f.aam} 枚）`, 'info', 'mtcue' + f.id, 4, T); }
       if (g5) { f.crankT = S.t + AW_BVR.crankT; f.crankS = Math.random() < .5 ? 1 : -1; }   // 五代机：发射后侧转
     } else if (f.aamL > 0 && d < aLR) {
       const pk = (AW_PK[T.type] || .5) * (T.ftr ? .75 : 1.15) * (f.pkK || 1) * st;
@@ -256,6 +262,22 @@ function awFight(f, side, dt) {
       awScore(side);
     }
   }
+}
+// —— 歼-16 导弹卡车与歼-20 协同（数据链）：报道里歼-20 担任侦察，把数据传给歼-16、歼-10C 这些「导弹卡车」——
+//   awCue：有没有在空的歼-20 正用自己的雷达跟踪着这个目标（目标在它的锁定距离里：雷达 × 目标隐身系数 × 1.6）；
+//   awTruckCan：有没有导弹卡车够得着这个目标（霹雳-15 射程内、还有中距弹：留着的 2 枚霹雳-10 不算）；awWantV：起飞时先放谁（已有歼-20 在空、卡车不够配对就先放卡车）
+const awJ20 = p => !p.dead && p.kind === 'fighter' && p.alt > .3 && typeof airMdlKey === 'function' && airMdlKey('fighter', p.v) === 'j20';
+function awCue(T) {
+  for (const p of S.planes || []) if (awJ20(p) && dist(p.x, p.y, T.x, T.y) < (p.radar || 520) * Math.min(1, (T.st || 1) * 1.6)) return p;
+  return null;
+}
+function awTruckCan(T) {
+  return (S.planes || []).some(p => !p.dead && p.mt && p.alt > .3 && (p.aam || 0) > 2 && (p.aamT || 0) <= S.t + 1 && dist(p.x, p.y, T.x, T.y) < (p.aamR || 560) && awCue(T));
+}
+function awWantV() {
+  if (!S.air) return null;
+  const up = S.planes.filter(p => !p.dead && p.kind === 'fighter' && ['cat', 'roll', 'out', 'loiter'].includes(p.phase)), j20 = up.filter(awJ20).length, mt = up.filter(p => p.mt).length;
+  return j20 > mt && S.air.wing.some(o => o.type === 'fighter' && o.v === 'mt' && o.state === 'deck') ? 'mt' : null;
 }
 // 空战击落（导弹由 missile.js msSamHit 报来，机炮在上面）
 function awScore(side) { const A = awEnsure(); A.k[side]++; awStat(side === 'p' ? 'awKillP' : 'awKillE'); }
@@ -286,6 +308,14 @@ function awFlyP(p, dt, speed) {
     speed(sp.spd * 1.15);
     const a = Math.atan2(p.y - T.y, p.x - T.x);
     airSteer(p, clamp(p.x + Math.cos(a) * 400, 40, W - 40), clamp(p.y + Math.sin(a) * 400, 40, H - 40), dt, true);
+  }
+  else if (T && p.mt) {   // 导弹卡车：不往前拱——霹雳-15 射程八成五以内就侧转（目标留在机头 ±40° 里照样能打）、七成以内掉头拉开；目标在敌防空圈里不追进去（发射交给 awFight）
+    const d = dist(p.x, p.y, T.x, T.y), R = p.aamR || 560, thr = typeof airThreats === 'function' ? airThreats('p') : [], inThr = typeof airThreatAt === 'function' && airThreatAt(thr, T.x, T.y, 60) > 0;
+    const a = Math.atan2(T.y - p.y, T.x - p.x), s = p.crankS || (p.crankS = Math.random() < .5 ? 1 : -1);
+    const b = d < R * .7 ? a + Math.PI : d < R * .85 || inThr ? a + .55 * s : null;
+    if (b != null) { speed(sp.spd); airSteer(p, clamp(p.x + Math.cos(b) * 300, 40, W - 40), clamp(p.y + Math.sin(b) * 300, 40, H - 40), dt, true); }
+    else { speed(sp.spd * 1.05); awPursue(p, T, dt, sp.turn || 2.3); }
+    p.ext = false;
   }
   else if (T) {
     const mv = sp.stealth ? awBvrMove(p, T) : null;

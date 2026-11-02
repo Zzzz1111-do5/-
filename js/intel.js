@@ -130,16 +130,13 @@ HOOK.drawOver.push(function intelDraw() {
     if (tr.k === 'team') c.men += tr.n; else if (tr.k === 'ship') c.ship++; else c.veh.push(tr.nm);
     if (Math.hypot(tr.vx, tr.vy) > 1) c.mv.push([tr.x, tr.y, x, y]);
   }
-  // 3D 地面贴图（V3.drawing）：字号、线宽按贴图像素算会变成几十米高的大字，贴在地上又扁又糊——只画实际大小的虚线框，不写字
-  const in3 = typeof V3 === 'object' && V3.drawing, q = n => in3 ? n * .6 : px(n);
   ctx.save(); ctx.font = font(10); ctx.textAlign = 'center';
   for (const c of CL) {
-    const a = clamp(1 - c.age / INTEL.keep, .35, 1), s = Math.max(in3 ? 0 : px(9), 8 + Math.min(c.men / 2 + c.veh.length * 3 + c.ship * 6, 14));
-    ctx.strokeStyle = rgba(col, a); ctx.lineWidth = Math.max(q(1.6), px(1)); ctx.setLineDash([q(3) + px(1), q(3) + px(1)]);
+    const a = clamp(1 - c.age / INTEL.keep, .35, 1), s = Math.max(px(9), 8 + Math.min(c.men / 2 + c.veh.length * 3 + c.ship * 6, 14));
+    ctx.strokeStyle = rgba(col, a); ctx.lineWidth = px(1.6); ctx.setLineDash([px(3), px(3)]);
     ctx.beginPath(); ctx.moveTo(c.x, c.y - s); ctx.lineTo(c.x + s, c.y); ctx.lineTo(c.x, c.y + s); ctx.lineTo(c.x - s, c.y); ctx.closePath(); ctx.stroke();
     for (const [x0, y0, x1, y1] of c.mv) { ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke(); }   // 最后位置 → 推算位置
     ctx.setLineDash([]);
-    if (in3) continue;
     const vn = c.veh.length === 1 ? c.veh[0] : c.veh.length ? `车 ${c.veh.length} 辆` : '';
     const txt = `${[c.men && `步兵约 ${c.men} 人`, vn, c.ship && `舰船 ${c.ship}`].filter(Boolean).join('、')} · ${Math.round(c.age)}秒前`, tw = ctx.measureText(txt).width, ty = c.y - s - px(5);
     ctx.fillStyle = `rgba(0,10,6,${.72 * a})`; ctx.fillRect(c.x - tw / 2 - px(3), ty - px(10), tw + px(6), px(13));   // 标签底衬：压在城镇、林地上也看得清

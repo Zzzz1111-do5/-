@@ -124,20 +124,14 @@ function setForm(units, form) {
 }
 
 // —— 士气：伤亡、压制、侧后受袭、友军在侧、溃逃友军都会影响 ——
-// 各排坐标（与 S.units 同序）：友邻扫描先比这两个数组，近的才读排对象（存档对象是字典模式，每排每步扫全体排，读属性很慢）
-let UN_X = new Float64Array(64), UN_Y = new Float64Array(64);
 function updateUnits(dt) {
-  const D = aiD(), US = S.units, NU = US.length;
-  if (UN_X.length < NU) { UN_X = new Float64Array(NU * 2); UN_Y = new Float64Array(NU * 2); }
-  for (let k = 0; k < NU; k++) { const o = US[k]; if (o.x == null) UN_X[k] = UN_Y[k] = NaN; else { UN_X[k] = o.x; UN_Y[k] = o.y; } }
-  for (let ui = 0; ui < NU; ui++) {
-    const u = US[ui];
+  const D = aiD();
+  for (const u of S.units) {
     const ts = teamsOf(u);
     if (!ts.length) { u.dead = true; continue; }
     const men = ts.reduce((a, q) => a + q.men.length, 0);
     u.men = men; u.men0 = Math.max(u.men0 || 0, men);
     u.x = ts.reduce((a, q) => a + q.x, 0) / ts.length; u.y = ts.reduce((a, q) => a + q.y, 0) / ts.length;
-    UN_X[ui] = u.x; UN_Y[ui] = u.y;
     const sup = ts.reduce((a, q) => a + q.sup, 0) / ts.length, hit = S.t - u.hitT < 3;
     // 溃退到位（撤到落脚点、趴在掩蔽处 12 秒以上）：压制的影响减半以上，军官、骨干收拢溃兵——不会一直卡在 0
     const settled = u.state === 'rout' && S.t - (u.routT ?? 0) > 12 && ts.every(q => !q.order || q.order.t !== 'retreat');
@@ -147,7 +141,7 @@ function updateUnits(dt) {
     if (settled) dm += hit ? 2 : 3;
     // 友邻：在侧的友军打气，溃逃的友军动摇军心——只影响还没溃的部队，最多扣 3（溃兵挤在一起不再互相拖到 0）
     let fr = 0;
-    for (let k = 0; k < NU; k++) { if (!(Math.abs(UN_X[k] - u.x) < 150 && Math.abs(UN_Y[k] - u.y) < 150)) continue; const o = US[k]; if (o !== u && !o.dead && o.side === u.side && o.x != null && Math.abs(o.x - u.x) < 150 && Math.abs(o.y - u.y) < 150 && dist(o.x, o.y, u.x, u.y) < 150) fr += o.state === 'rout' ? (u.state === 'rout' ? 0 : -1.5) : 1; }   // 先按坐标数组粗筛（每步每个排都扫一遍全体）
+    for (const o of S.units) if (o !== u && !o.dead && o.side === u.side && o.x != null && Math.abs(o.x - u.x) < 150 && Math.abs(o.y - u.y) < 150 && dist(o.x, o.y, u.x, u.y) < 150) fr += o.state === 'rout' ? (u.state === 'rout' ? 0 : -1.5) : 1;   // 先按坐标差排除（每步每个排都扫一遍全体）
     dm += clamp(fr, -3, 3);
     if (u.side === 'p' && ts.every(q => q.kind !== 'inf' || q.ammo < 5)) dm -= 1.5;
     if (u.side === 'e' && dm < 0) dm *= D.nerve;

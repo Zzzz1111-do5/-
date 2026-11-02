@@ -6,18 +6,14 @@
 //   卧倒：被压制、刚挨打、身边刚落炮弹 / 炸弹、被看得见自己的敌坦克盯着时卧倒，平静 DIG.calm 秒后起身；卧倒中弹面小，移动改为匍匐 / 短促跃进
 //   躲坦克：没有反坦克武器、在开阔地坚守、坑还没挖好的小组被敌坦克盯上：背着坦克就近躲进林地 / 房屋 / 弹坑 / 散兵坑
 const DIG = { t: 35, still: 3, holeR: 5, pit: .55, pitD: .45, prone: .65, proneDug: .85, calm: 4, link: 30, max: 700, tankR: 260 };
+// 烟幕弹（单兵发烟手榴弹，每组 n 枚，连锁反应）：被敌车辆在自己够不着的距离上用主炮、机枪打（far 米以外），朝来火方向 off 米处扔一枚——
+//   烟幕挡住对方的视线和热像（castVision、spot.js 都看 SMOKE），罩在烟里的组也难打中；趁烟卧倒、跃进到掩蔽处。双方一样；两枚之间至少隔 gap 秒
+const DIG_SMK = { n: 2, gap: 25, far: 250, r: 16, off: 12, dur: 50 };
 let DIG_BL = [];   // 最近 2.5 秒的爆炸点（不存档）
 
-// 编号 → 坑：S.holes 换了、长度或首尾的编号变了（新挖、淘汰）就重建；坑只在 digStep 里增删
-const DIG_IX = { a: null, n: -1, f: null, l: null, m: new Map() };
-function digById(id) {
-  const hs = S.holes, n = hs.length, f = n ? hs[0].id : null, l = n ? hs[n - 1].id : null;
-  if (DIG_IX.a !== hs || DIG_IX.n !== n || DIG_IX.f !== f || DIG_IX.l !== l) { DIG_IX.a = hs; DIG_IX.n = n; DIG_IX.f = f; DIG_IX.l = l; DIG_IX.m.clear(); for (const h of hs) if (!DIG_IX.m.has(h.id)) DIG_IX.m.set(h.id, h); }
-  return DIG_IX.m.get(id);
-}
 function digHole(q) {
   if (q.hole == null || !S.holes) return null;
-  const h = digById(q.hole);
+  const h = S.holes.find(h => h.id === q.hole);
   return h && dist(h.x, h.y, q.x, q.y) <= DIG.holeR ? h : null;
 }
 // 掩体系数里属于工事 / 卧倒的部分：直射（有来源 sx）与炮击分开算
@@ -34,10 +30,7 @@ function digThreat(q) {
   for (const b of DIG_BL) if (S.t - b.t < 2 && dist(b.x, b.y, q.x, q.y) < Math.max(45, b.R * 1.6)) return 'blast';
   if (S.t >= (q.tkN ?? 0)) {
     q.tkN = S.t + .5; q.tk = null;
-    const fr = typeof vehFresh === 'function' && S.veh && vehFresh(), C = fr && vehCache(), sd = q.side === 'e' ? 'p' : 'e', L = fr ? C[sd] : S.veh || [], RM = DIG.tankR + 8;
-    for (let n = 0; n < L.length; n++) {
-      if (fr) { const ex = C.X[sd][n] - q.x, ey = C.Y[sd][n] - q.y; if (ex > RM || ex < -RM || ey > RM || ey < -RM) continue; }
-      const v = L[n];
+    for (const v of S.veh || []) {
       if (v.dead || v.side === q.side || v.lst) continue;
       const g = vehSp(v).gun, d = dist(v.x, v.y, q.x, q.y);
       if (!g || g.ind || d > DIG.tankR || !vehSees(v, q.x, q.y, d)) continue;
@@ -76,6 +69,13 @@ function digStep(dt) {
     const was = q.prone;
     q.prone = S.t - (q.proneT ?? -99) < DIG.calm;
     if (q.prone && !was) v8Stat('digProne');
+    // 烟幕弹：最近 3 秒被敌车辆远距离直射（vehicles.js 记下的来火车辆位置），身边还没有烟
+    if ((q.smk ?? DIG_SMK.n) > 0 && S.t - (q.smkT ?? -99) > DIG_SMK.gap && S.t - (q.vhT ?? -99) < 3 && dist(q.x, q.y, q.vhX, q.vhY) > DIG_SMK.far && !SMOKE[ci(q.x, q.y)]) {
+      const a = Math.atan2(q.vhY - q.y, q.vhX - q.x);
+      q.smk = (q.smk ?? DIG_SMK.n) - 1; q.smkT = S.t;
+      S.smoke.push({ x: q.x + Math.cos(a) * DIG_SMK.off, y: q.y + Math.sin(a) * DIG_SMK.off, r: DIG_SMK.r, until: S.t + DIG_SMK.dur });
+      v8Stat('digSmoke' + q.side);
+    }
     // 躲坦克：无反坦克武器、坚守在开阔地、坑没挖好、不是玩家亲自下令的
     if (th === 'tank' && (!q.order || q.order.t === 'hold') && !q.man && S.t - (q.dodgeT ?? -99) > 12 &&
         !q.men.includes('at') && !(q.mod && q.mod.at) && coverAt(q.x, q.y) > .8 && !((digHole(q) || {}).d > .5)) digDodge(q);

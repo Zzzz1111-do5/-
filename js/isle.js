@@ -65,7 +65,8 @@ function buildIsle(seed) {
   // 中央山脊与几座主峰（图上沿一带），东西两侧各一片丘陵
   const massif = { x: xc - 380 + r() * 200, y: 520 + r() * 160, r: 760, h: .85 };
   const hills = [massif, { x: U(-.48), y: 900 + r() * 200, r: 500, h: .5 }, { x: U(.3), y: 760 + r() * 160, r: 540, h: .55 }, { x: U(.72), y: 640, r: 380, h: .4 }];
-  for (let i = 0; i < 22; i++) { const x = U(-.85 + r() * 1.7); hills.push({ x, y: 200 + r() * Math.max(200, cAt(x) - 900), r: 70 + r() * 110, h: .12 + r() * .22 }); }
+  const hm = typeof hmapWin === 'function' ? hmapWin(r, W) : null;   // 丘陵起伏照「Soft Hills」高度场（hmap.js），不再随机撒二十几个小山包、叠高频噪声
+  if (!hm) for (let i = 0; i < 22; i++) { const x = U(-.85 + r() * 1.7); hills.push({ x, y: 200 + r() * Math.max(200, cAt(x) - 900), r: 70 + r() * 110, h: .12 + r() * .22 }); }
   const ridgeY = x => 1050 + 130 * Math.sin(x / 520 + ph[5]) + 60 * Math.sin(x / 170 + ph[6]);
 
   const type = new Uint8Array(GW * GH), elev = new Float32Array(GW * GH);
@@ -85,12 +86,12 @@ function buildIsle(seed) {
     e += .3 * Math.exp(-((y - ridgeY(x)) ** 2) / 90000) * smooth(0, .5, 1 - Math.abs(x - xc) / hs);
     for (const h of hills) e += h.h * Math.exp(-((x - h.x) ** 2 + (y - h.y) ** 2) / (2 * h.r * h.r));
     if (headland(x)) e += .14 * Math.exp(-((d - 70) ** 2) / 9000);   // 岬角：岸边陡起的崖顶
-    e += (noise(x / W, y / H) - .5) * .2 + (noise2(x / W, y / H) - .5) * .08;
+    e += hm ? .55 * hm(x, y) ** .8 : (noise(x / W, y / H) - .5) * .2 + (noise2(x / W, y / H) - .5) * .08;
     e *= lerp(.4, 1, smooth(40, 650, d));   // 沿海平原
     if (b >= 0) e *= lerp(.35, 1, smooth(30, 240, d));   // 海滩后方平缓
     let rd = 1e9, rw = 9;
     for (const rv of rivers) { const dd = Math.abs(x - rv.rx[gy]); if (dd < rd) { rd = dd; rw = rv.w; } }
-    e *= lerp(.35, 1, smooth(10, 140, rd));   // 河谷
+    e *= lerp(.35, 1, smooth(10, hm ? 260 : 140, rd));   // 河谷（缓丘里放宽）
     e = clamp(1 - Math.exp(-1.35 * Math.max(0, e)), 0, 1);   // 软压缩：高处越来越缓，不会削成一块平顶台地
     elev[i] = e;
     if (x > afr.x0 && x < afr.x1 && y > afr.y0 && y < afr.y1 && rd >= rw) { e = .26 + (e - .26) * .12; elev[i] = e; type[i] = T.FIELD; continue; }   // 机场场区：推平

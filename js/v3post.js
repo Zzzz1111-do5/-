@@ -3,8 +3,6 @@
 //   辉光：亮线、曳光、爆炸、发光的棱线向外泛一圈光（亮部提取 → 四分之一分辨率两遍高斯模糊 → 叠加回去）；
 //   移轴景深：斜着看时画面上下两边虚化、中间一条清楚，整片战场像桌上的微缩沙盘；正俯视时不虚化；
 //   调色：亮部柔和压缩、中间调略提、饱和度加一成；暗角与细颗粒：四角压暗、极轻的胶片颗粒，不是一张「干净的电脑图」。
-//   写实画面另加电影感的一层：中间调 S 形对比、暗部偏青蓝亮部偏暖金的分色、高光略压饱和；镜头色差（四角红蓝错开一两个像素）；
-//   太阳在镜头前方时的光晕、横向拉丝与鬼影（太阳被挡住就没有，v3poSun 算太阳在画面上的位置）。
 // 在 WebGL 里做完再交给主画布（文字、标号由 v3Overlay 之后画在主画布上，不跟着泛光、不虚化，照样清楚）
 // 画质「低」时不做；帧间隔偏大（设备跟不上）时先关景深，辉光留着
 const V3PO = { ok: false, tried: false, pr: {}, buf: null, scene: null, fb: [], w: 0, h: 0 };
@@ -32,48 +30,16 @@ void main() {
   gl_FragColor = vec4(c, 1.);
 }`,
   // 合成：景深（按屏幕纵向离清晰带的距离混入模糊图）→ 叠辉光 → 暗角 → 颗粒
-  comp: V3PO_HEAD + `uniform sampler2D uS, uB, uD; uniform vec4 uTs; uniform float uBk, uVig, uGr, uT, uIR, uCA, uGrade; uniform vec2 uRes; uniform vec3 uSun;
+  comp: V3PO_HEAD + `uniform sampler2D uS, uB, uD; uniform vec4 uTs; uniform float uBk, uVig, uGr, uT; uniform vec2 uRes;
 float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
 void main() {
-  vec2 dc = vU - .5;
-  vec3 c;
-  // 镜头色差（写实画面）：越往画面四角红、蓝通道错开得越多，正中没有——真实镜头的样子，量很轻（角上一两个像素）
-  if (uCA > 0. && uIR < .5) { vec2 o = dc * dot(dc, dc) * uCA; c = vec3(texture2D(uS, vU + o).r, texture2D(uS, vU).g, texture2D(uS, vU - o).b); }
-  else c = texture2D(uS, vU).rgb;
+  vec3 c = texture2D(uS, vU).rgb;
   if (uTs.x > 0.) c = mix(c, texture2D(uD, vU).rgb, smoothstep(uTs.z, uTs.z + uTs.w, abs(vU.y - uTs.y)) * uTs.x);
   c += texture2D(uB, vU).rgb * uBk;
-  // 太阳眩光（写实画面的白天，太阳在镜头前方）：太阳周围的光晕、一道横向的镜头拉丝、沿太阳过画面中心那条线上的几个淡淡的鬼影；
-  //   太阳被地形、飞机挡住就没有（看辉光图里太阳那一块亮不亮）
-  if (uSun.z > 0. && uIR < .5) {
-    vec2 asp = vec2(uRes.x / uRes.y, 1.), ds = (vU - uSun.xy) * asp;
-    float occ = smoothstep(.2, .7, dot(texture2D(uB, clamp(uSun.xy, .002, .998)).rgb, vec3(.3333))), k = uSun.z * occ, r = length(ds);
-    c += vec3(1., .86, .66) * k * (.3 * exp(-r * 5.5) + .09 * exp(-r * 1.5));
-    c += vec3(.8, .88, 1.) * k * .16 * exp(-abs(ds.y) * 140.) * exp(-abs(ds.x) * 2.4);
-    for (int i = 0; i < 3; i++) {
-      float f = i == 0 ? -.3 : i == 1 ? -.7 : -1.2, rr = i == 0 ? .045 : i == 1 ? .085 : .03;
-      vec2 gp = .5 + (uSun.xy - .5) * f;
-      c += (i == 1 ? vec3(.45, .75, .6) : vec3(.95, .6, .35)) * k * .045 * smoothstep(rr, rr * .35, length((vU - gp) * asp));
-    }
-  }
   // 调色：亮部柔和地压一点（辉光叠上去不发白）、中间调略提、饱和度加一成——像胶片，不是平的电脑图
   c = c / (1. + c * .12);
   c = pow(max(c, 0.), vec3(.94));
   c = mix(vec3(dot(c, vec3(.299, .587, .114))), c, 1.1);
-  // 光电吊舱的红外（驾驶战斗机时 B 键，fptgp.js）：按「温度」换成灰度——偏暖的颜色亮、偏蓝的天空和水面冷；热源（发动机、人、火）在特效里已经点得很亮；
-  //   拉开对比、加一点热像传感器的噪声；黑热把明暗反过来
-  if (uIR > .5) {
-    float l = dot(c, vec3(.52, .36, .12)), cold = smoothstep(.03, .2, c.b - c.r);
-    l = clamp((l * (1. - .7 * cold) - .1) * 1.6, 0., 1.);
-    l = pow(l, .85) + (hash(floor(vU * uRes) + floor(uT * 24.)) - .5) * .035;
-    c = vec3(uIR > 1.5 ? 1. - l : l);
-  } else if (uGrade > 0.) {
-    // 电影感调色（写实画面）：中间调加一点 S 形对比；暗部偏青蓝、亮部偏暖金（大片里常见的冷暖分离，量很轻）；高光略压饱和，不刺眼
-    vec3 cc = clamp(c, 0., 1.);
-    c = mix(c, cc * cc * (3. - 2. * cc), .18 * uGrade);
-    float L = dot(c, vec3(.2126, .7152, .0722));
-    c *= mix(vec3(1.), mix(vec3(.94, .99, 1.05), vec3(1.045, 1., .93), smoothstep(.12, .72, L)), uGrade);
-    c = mix(vec3(L), c, 1. - .12 * uGrade * smoothstep(.75, 1., L));
-  }
   vec2 d = (vU - .5) * vec2(uRes.x / uRes.y, 1.);
   c *= 1. - uVig * smoothstep(.3, 1.05, length(d));
   c += (hash(floor(vU * uRes) + uT) - .5) * uGr;
@@ -91,7 +57,7 @@ function v3poInit(gl) {
       gl.attachShader(p, vs); gl.attachShader(p, sh(gl.FRAGMENT_SHADER, V3PO_FS[k])); gl.bindAttribLocation(p, 0, 'p'); gl.linkProgram(p);
       if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
       const u = {};
-      for (const n of ['uS', 'uB', 'uD', 'uPx', 'uTh', 'uKn', 'uDir', 'uTs', 'uBk', 'uVig', 'uGr', 'uT', 'uRes', 'uIR', 'uCA', 'uGrade', 'uSun']) u[n] = gl.getUniformLocation(p, n);
+      for (const n of ['uS', 'uB', 'uD', 'uPx', 'uTh', 'uKn', 'uDir', 'uTs', 'uBk', 'uVig', 'uGr', 'uT', 'uRes']) u[n] = gl.getUniformLocation(p, n);
       V3PO.pr[k] = { p, u };
     }
     V3PO.buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, V3PO.buf); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);   // 盖满屏幕的一个三角形
@@ -121,20 +87,9 @@ function v3poDof() {
   return .85 * clamp((pitch + 1.38) / .55, 0, 1);
 }
 
-// 太阳在画面上的位置（0–1，左下为原点）与眩光强度：写实画面的白天；太阳在镜头前方，出了画面一点也还有一圈光晕
-function v3poSun() {
-  const C = V3.cam;
-  if (!C || !C.M || (typeof S === 'object' && S && S.night) || (typeof TER === 'object' && TER && TER.flat) || typeof V3_SUN !== 'object') return [0, 0, 0];
-  const M = C.M, s = V3_SUN, l = Math.hypot(s[0], s[1], s[2]) || 1, x = C.E[0] + s[0] / l * 1e4, y = C.E[1] + s[1] / l * 1e4, z = C.E[2] + s[2] / l * 1e4;
-  const w = M[3] * x + M[7] * y + M[11] * z + M[15];
-  if (w <= 0) return [0, 0, 0];
-  const u = ((M[0] * x + M[4] * y + M[8] * z + M[12]) / w + 1) / 2, v = ((M[1] * x + M[5] * y + M[9] * z + M[13]) / w + 1) / 2;
-  const off = Math.max(0, -u, u - 1, -v, v - 1);
-  return [u, v, off > .3 ? 0 : 1 - off / .3];
-}
 function v3Post(now) {
   const st = typeof SETTINGS === 'object' && SETTINGS ? SETTINGS : {};
-  if ((st.quality === 'low' || R.lowCap || R.autoLow) && !(typeof ftIR === 'function' && ftIR())) return;   // 画质低（或持续卡顿自动降画质，main.js）时不做后期；吊舱红外例外（换算在这一遍里）
+  if (st.quality === 'low' || R.lowCap) return;
   const gl = V3.gl;
   if (!V3PO.tried) v3poInit(gl);
   if (!V3PO.ok) return;
@@ -165,9 +120,7 @@ function v3Post(now) {
     tex(0, V3PO.scene); tex(1, B.t); tex(2, A.t);
     gl.uniform1i(u.uS, 0); gl.uniform1i(u.uB, 1); gl.uniform1i(u.uD, 2);
     gl.uniform4f(u.uTs, dof, .5, .1, .32); gl.uniform1f(u.uBk, bk); gl.uniform1f(u.uVig, mx ? .42 : .2); gl.uniform1f(u.uGr, mx ? .022 : 0);
-    gl.uniform1f(u.uT, (now / 1000) % 100); gl.uniform2f(u.uRes, w, h); gl.uniform1f(u.uIR, typeof ftIR === 'function' ? ftIR() : 0);
-    const sun = mx ? [0, 0, 0] : v3poSun();
-    gl.uniform1f(u.uCA, mx ? 0 : .005); gl.uniform1f(u.uGrade, mx ? 0 : 1); gl.uniform3f(u.uSun, sun[0], sun[1], sun[2]);
+    gl.uniform1f(u.uT, (now / 1000) % 100); gl.uniform2f(u.uRes, w, h);
   });
   gl.disableVertexAttribArray(0); gl.enable(gl.DEPTH_TEST); gl.activeTexture(gl.TEXTURE0);   // 下一帧画地形时 0、1、2 号贴图单元都会重新绑定
 }
