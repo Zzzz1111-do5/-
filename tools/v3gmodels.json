@@ -169,7 +169,7 @@
     },
     "j16": {
       "name": "歼-16",
-      "glb": "up/1a9500af-shenyang_j16_hidden_dragon/1a9500af-shenyang_j16_hidden_dragon.glb",
+      "glb": "j16su30/j16_su30noz.glb",
       "fwd": "+x",
       "up": "+y",
       "len": 21.9,
@@ -189,7 +189,16 @@
           0.48,
           0.8
         ]
-      ]
+      ],
+      "credit2": {
+        "title": "Sukhoi Su-30 flanker c",
+        "author": "andertan",
+        "url": "https://sketchfab.com/3d-models/sukhoi-su-30-flanker-c-92ca062c90fd45ffb6ce8144dc46004a",
+        "license": "CC-BY-4.0",
+        "lurl": "http://creativecommons.org/licenses/by/4.0/",
+        "part": "歼-16 喷口里的发动机内腔（涡轮面、火焰稳定器）"
+      },
+      "modNote": "喷口里装上 Su-30 flanker c 模型的发动机内腔（tools/su30noz.py 按两个模型相同的发动机短舱网格逐轴对齐）；游戏里把喷口扩散段按方位切成 18 片调节片，随推力绕铰链转动"
     },
     "j31": {
       "name": "歼-31 鹘鹰",

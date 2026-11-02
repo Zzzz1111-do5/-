@@ -19,7 +19,7 @@
 <div id="info"></div>
 <script>
 // 用户模型预览（tools/v3gbake.js 烘焙出来的 js/mdl/<键>.js，用游戏里同一个渲染器 js/v3g.js 画）：
-//   拖动转镜头、滚轮拉近拉远；按钮切换模型；?m=键 指定，&side=1 敌方配色，&yaw= &pitch= &dist= 固定镜头（截图用），&p=八个部件参数（逗号分隔，看炮管俯仰、发射架、跳板等）
+//   拖动转镜头、滚轮拉近拉远；按钮切换模型；?m=键 指定，&side=1 敌方配色，&yaw= &pitch= &dist= 固定镜头（截图用，&tx= &ty= &tz= 对准哪一点），&p=八个部件参数（逗号分隔，看炮管俯仰、发射架、跳板等）
 'use strict';
 const V3_SUN = (() => { const v = [-.6, .62, .42], l = Math.hypot(...v); return v.map(a => +(a / l).toFixed(4)); })(), V3_SUNG = `vec3(${V3_SUN.join(', ')})`;
 const V3_PREC = 'precision highp float;\n', V3_FOV = .8, W = 8400, H = 5600;
@@ -83,7 +83,7 @@ function frame(now) {
   }
   const Ms = cur.map(k => v3gModel(k)), lens = cur.map((k, i) => Ms[i] ? Ms[i].meta.len : 5), span = lens.reduce((s, v) => s + v * 1.15, 0);
   const R = Math.max(span, ...cur.map((k, i) => Ms[i] ? Math.hypot(Ms[i].meta.bb[4] - Ms[i].meta.bb[1], Ms[i].meta.bb[5]) : 3)) * .62, dist = cam.dist || R * 1.5;
-  const T = [0, 0, Ms[0] ? (Ms[0].meta.bb[5] + Ms[0].meta.bb[2]) / 2 : 1];
+  const T = [+(Q.get('tx') || 0), +(Q.get('ty') || 0), Q.get('tz') != null ? +Q.get('tz') : Ms[0] ? (Ms[0].meta.bb[5] + Ms[0].meta.bb[2]) / 2 : 1];   // &tx &ty &tz：镜头对准的点（GL 坐标，米；不给就是模型中心）
   const E = [T[0] + dist * Math.cos(cam.pitch) * Math.cos(cam.yaw), T[1] + dist * Math.cos(cam.pitch) * Math.sin(cam.yaw), T[2] + dist * Math.sin(cam.pitch)];
   const fo = 1 / Math.tan(V3_FOV / 2), asp = w / h, n = dist * .01, fa = dist * 20, nf = 1 / (n - fa);
   const P = new Float32Array([fo / asp, 0, 0, 0, 0, fo, 0, 0, 0, 0, (fa + n) * nf, -1, 0, 0, 2 * fa * n * nf, 0]);

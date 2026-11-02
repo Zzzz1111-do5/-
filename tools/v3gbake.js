@@ -499,6 +499,8 @@ function credits() {
     const id = cr.url;
     if (!by.has(id)) by.set(id, { cr, names: [], keys: [] });
     by.get(id).names.push(C.name); by.get(id).keys.push(k);
+    const c2 = C.credit2;   // 另一个作品里取来的零件（歼-16 喷口里的 Su-30 发动机内腔）：单独列一条署名
+    if (c2) { if (!by.has(c2.url)) by.set(c2.url, { cr: c2, names: [], keys: [] }); by.get(c2.url).names.push(c2.part || C.name); by.get(c2.url).keys.push(k); }
     if (C.texMax || C.tri0 || C.drop || C.modNote) by.get(id).mod = [C.texMax ? '贴图缩到最长边 ' + C.texMax + ' 像素' : '', C.tri0 ? '网格减到约 ' + C.tri0 + ' 个三角形' : '', C.drop ? C.dropNote || '去掉了模型自带的外挂弹' : '', C.modNote || ''].filter(Boolean).join('、');
   }
   const L = [...by.values()], nc = L.filter(o => /NC/.test(o.cr.license));
