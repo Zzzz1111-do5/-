@@ -43,7 +43,12 @@ function drawForts(time) {
 function drawSmoke(time) {
   const ctx = R.ctx;
   for (const s of S.smoke) {
-    const a = Math.min(1, (s.until - S.t) / 6), r = s.r * a;
+    if (s.t0 != null && S.t < s.t0 + SMK_FLY) {   // 车载烟幕弹还在飞：一个小亮点从车上飞向炸点（vsmoke.js）
+      if (S.t >= s.t0 && s.lx != null) { const u = (S.t - s.t0) / SMK_FLY; ctx.fillStyle = rgba(COL.smoke, .95); ctx.beginPath(); ctx.arc(lerp(s.lx, s.x, u), lerp(s.ly, s.y, u), Math.max(.8, px(1.6)), 0, 7); ctx.fill(); }
+      continue;
+    }
+    const a = Math.min(1, (s.until - S.t) / 6), r = smkR(s);   // 与挡视线的范围一致（grid.js）
+    if (!(r > 0)) continue;
     for (let k = 0; k < 7; k++) {
       const ang = k * .9 + time * .05, d = r * .45 * ((k * 37) % 10) / 10, x = s.x + Math.cos(ang) * d, y = s.y + Math.sin(ang) * d - k;
       const gr = ctx.createRadialGradient(x, y, 0, x, y, r * .7);

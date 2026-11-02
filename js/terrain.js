@@ -11,7 +11,7 @@ const TRX_VS = 'attribute vec2 p; void main(){ gl_Position = vec4(p, 0., 1.); }'
 const TRX_FS = (lite, pass = 0) => `precision highp float;
 #define LITE ${lite ? 1 : 0}
 #define PASS ${pass}
-uniform vec2 uRes, uCoast, uShift; uniform vec3 uView; uniform float uTime, uFlash, uDM;
+uniform vec2 uRes, uCoast, uShift; uniform vec3 uView; uniform float uTime, uFlash, uDM, uWh;   // uWh：白色平原（flat.js）——灰色平台、方格，图外是太空
 uniform sampler2D uA, uB, uC, uD, uK, uFog, uL, uR;
 const vec2 WORLD = vec2(${W}., ${H}.);
 const vec2 GRID = vec2(${GW}., ${GH}.);
@@ -177,6 +177,14 @@ void main() {
   vec2 uv = wq / WORLD, uvr = (w + (wq - w) * .3) / WORLD;
   vec4 A = texture2D(uA, uv), B = texture2D(uB, uv), C = texture2D(uC, uvr), D = texture2D(uD, uv);
   float sd = coastD(w), land = smoothstep(-pw, pw, sd);
+  // 白色平原：整块灰色平台，近看有一点斑驳；百米细格、千米粗格（像素比格线还细时淡出，远看不糊成一片）
+  if (uWh > .5) {
+    vec2 f1 = abs(fract(w / 100. + .5) - .5) * 100., f2 = abs(fract(w / 1000. + .5) - .5) * 1000.;
+    float l1 = (1. - smoothstep(pw * .6, pw * 1.6, min(f1.x, f1.y))) * (1. - smoothstep(2.5, 7., pw)) * .12;
+    float l2 = (1. - smoothstep(pw * .8, pw * 2.2, min(f2.x, f2.y))) * (1. - smoothstep(30., 80., pw)) * .22;
+    c = vec3(.5, .51, .52) * (.95 + .06 * vn(w * .011) + .03 * vn(w * .13)) * (1. - l1 - l2);
+    land = 1.;
+  } else
   // —— 陆地 ——（各材质只在权重非零处计算）
   if (land > .001) {
     float e = A.r, n1 = fbm(w * .02, pw * .02), n2 = vn(w * .11), n3 = pw < 1.2 ? vn(w * .4) : .5;
@@ -306,6 +314,7 @@ void main() {
 #endif
 #if PASS != 1
   c *= mix(1., .78, smoothstep(0., 160., outD));
+  if (uWh > .5) c = mix(c, vec3(.016, .011, .014), smoothstep(0., 12., outD));   // 白色平原：平台外是太空
   // 视野外：去饱和、压暗、偏冷
   // 视野贴图每格 10 米：直接采样（双线性）边缘是一格格的台阶，按 1.4 格的 3 × 3 平均成柔和的圆边
   vec2 fd = 1.4 / GRID;
@@ -336,7 +345,7 @@ function trxProg(pass, lite) {
   if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(pr));
   gl.useProgram(pr);
   const u = {};
-  for (const n of ['uRes', 'uView', 'uTime', 'uFlash', 'uCoast', 'uShift', 'uDM', ...TRX_U]) u[n] = gl.getUniformLocation(pr, n);
+  for (const n of ['uRes', 'uView', 'uTime', 'uFlash', 'uCoast', 'uShift', 'uDM', 'uWh', ...TRX_U]) u[n] = gl.getUniformLocation(pr, n);
   TRX_U.forEach((n, i) => { if (u[n]) gl.uniform1i(u[n], i); });
   return (TRX.P[key] = { pr, u });
 }
@@ -383,6 +392,11 @@ function trxBlur(a, n) {
 const LF_K = 4;
 function terLines() {
   if (TER.lf && TER.lf.seed === TER.seed) return TER.lf;
+  if (TER.flat) {   // 白色平原：没有路、没有河——一张 4 × 4 的「都很远」就够了（按 4 倍格子开要 6720 × 4480，超过多数显卡的贴图上限）
+    const d = new Uint8Array(64);
+    for (let q = 0; q < 16; q++) { d[q * 4] = 255; d[q * 4 + 1] = 255; d[q * 4 + 2] = 0; d[q * 4 + 3] = 128; }
+    return (TER.lf = { seed: TER.seed, w: 4, h: 4, d });
+  }
   const w = GW * LF_K, h = GH * LF_K, px = CELL / LF_K, n = w * h;
   const dR = new Float32Array(n).fill(99), hR = new Float32Array(n), sR = new Float32Array(n), dV = new Float32Array(n).fill(9);
   for (const rd of TER.roads || []) {
@@ -604,7 +618,7 @@ function trxDraw(time, flash) {
   if (mode === 2 && TRX.lastSig === sig && TRX.lastKey === TRX.key && time >= TRX.lastT && time - TRX.lastT < 1 / 31) return;
   TRX.lastSig = sig; TRX.lastKey = mode === 2 ? TRX.key : null; TRX.lastT = time;
   gl.activeTexture(gl.TEXTURE5); gl.bindTexture(gl.TEXTURE_2D, TRX.tex.fog);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE, GW, GH, 0, gl.LUMINANCE, gl.UNSIGNED_BYTE, FOGB);
+  if (TRX.fogV !== FOGB_V || TRX.fogT !== TRX.tex.fog) { TRX.fogV = FOGB_V; TRX.fogT = TRX.tex.fog; gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE, GW, GH, 0, gl.LUMINANCE, gl.UNSIGNED_BYTE, FOGB); }   // 视野没变不重传
   const P = trxProg(mode === 2 ? 2 : 0, lite), u = P.u;
   gl.useProgram(P.pr);
   gl.activeTexture(gl.TEXTURE6); gl.bindTexture(gl.TEXTURE_2D, mode === 2 ? TRX.fbs[0].tex : null);
@@ -612,7 +626,7 @@ function trxDraw(time, flash) {
   if (F) { gl.bindFramebuffer(gl.FRAMEBUFFER, F.fbo); gl.viewport(0, 0, F.w, F.h); } else gl.viewport(0, 0, cv.width, cv.height);
   gl.uniform2f(u.uRes, cv.width * sc, cv.height * sc);
   gl.uniform3f(u.uView, s * sc, ox * sc, oy * sc);
-  gl.uniform2f(u.uCoast, TRX.c0, TRX.cr); gl.uniform1f(u.uDM, TRX.dm || 0);
+  gl.uniform2f(u.uCoast, TRX.c0, TRX.cr); gl.uniform1f(u.uDM, TRX.dm || 0); gl.uniform1f(u.uWh, TER.flat ? 1 : 0);
   gl.uniform1f(u.uTime, time % 1000);
   gl.uniform1f(u.uFlash, flash);
   gl.drawArrays(gl.TRIANGLES, 0, 3);
@@ -634,7 +648,7 @@ function trxFallback(ctx) {
     c.width = GW; c.height = GH;
     const img = g.createImageData(GW, GH);
     for (let i = 0; i < GW * GH; i++) {
-      const t = TER.type[i], gx = i % GW, gy = (i / GW) | 0, col = TRX_FLAT[t] || TRX_FLAT[0];
+      const t = TER.type[i], gx = i % GW, gy = (i / GW) | 0, col = TER.flat ? [128, 130, 132] : TRX_FLAT[t] || TRX_FLAT[0];   // 白色平原：灰色
       const ex = E[gy * GW + Math.min(GW - 1, gx + 1)] - E[gy * GW + Math.max(0, gx - 1)], ey = E[Math.min(GH - 1, gy + 1) * GW + gx] - E[Math.max(0, gy - 1) * GW + gx];
       const k = isWater(t) ? 1 - clamp((TER.isle ? -terSdf()[i] : cellCY(i) - coastAt(cellCX(i))) / 900, 0, .6) : clamp(1 - (ex + ey) * 4, .55, 1.35);
       for (let j = 0; j < 3; j++) img.data[i * 4 + j] = clamp(col[j] * k, 0, 255);
@@ -664,6 +678,7 @@ function trxSnapshot(wpx) {
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE, 1, 1, 0, gl.LUMINANCE, gl.UNSIGNED_BYTE, new Uint8Array([255]));
   gl.uniform2f(u.uRes, wpx, hp); gl.uniform3f(u.uView, wpx / W, 0, 0); gl.uniform2f(u.uCoast, TRX.c0, TRX.cr); gl.uniform1f(u.uDM, TRX.dm || 0);
   gl.uniform1f(u.uTime, 0); gl.uniform1f(u.uFlash, 0);
+  gl.uniform1f(u.uWh, TER.flat ? 1 : 0);   // 白色平原：灰色平台（原来快照没设这一项，沿用着色器里上次的值——开局直接进 3D 时 3D 远处的底图是默认地图的绿色田地）
   gl.drawArrays(gl.TRIANGLES, 0, 3);
   const out = document.createElement('canvas');
   out.width = wpx; out.height = hp; out.getContext('2d').drawImage(cv, 0, 0);

@@ -34,11 +34,23 @@ const VEH_ICONS = typeof WI === 'object' ? { lt_tank: WI.ztq15, tank: WI.ztz96b,
 
 // —— 创建与查询 ——
 // 只在本步内有效的分方缓存，供 combat.js 每个小组每步查询（避免反复 filter）
-const VEHC = { t: -1, S: null, p: [], e: [] };
+//   X / Y：本步开始时各车坐标的快照（类型数组，与 p / e 同序）——车辆两两避让、分开的循环先拿它粗筛，近的才读车辆对象本身：
+//   存档对象属性多、是字典模式，每读一个属性都是一次哈希查找，六十辆车两两比较每步几千次，原来占推演一成多。
+//   一步之内车最多挪几米，粗筛多留 VEHC_M 的余量，结果与逐个比较完全相同；在船上、在跳板上的车坐标会跳，记成 NaN（一定逐个比较）
+const VEHC = { t: -1, S: null, p: [], e: [], X: { p: new Float64Array(64), e: new Float64Array(64) }, Y: { p: new Float64Array(64), e: new Float64Array(64) } };
+const VEHC_M = 8;
+// 这一步里车辆清单没变（没有新车加入、没有移除）：本来扫 S.veh 全体的循环可以改用缓存的分方清单，结果相同
+const vehFresh = () => { const C = vehCache(); return C.len === S.veh.length; };
 function vehCache() {
   if (VEHC.t === S.t && VEHC.S === S) return VEHC;
-  VEHC.t = S.t; VEHC.S = S; VEHC.p = []; VEHC.e = [];
+  VEHC.t = S.t; VEHC.S = S; VEHC.p = []; VEHC.e = []; VEHC.len = (S.veh || []).length;
   for (const v of S.veh || []) if (!v.dead) (v.side === 'e' ? VEHC.e : VEHC.p).push(v);
+  for (const sd of ['p', 'e']) {
+    const L = VEHC[sd];
+    if (VEHC.X[sd].length < L.length) { VEHC.X[sd] = new Float64Array(L.length * 2); VEHC.Y[sd] = new Float64Array(L.length * 2); }
+    const X = VEHC.X[sd], Y = VEHC.Y[sd];
+    for (let k = 0; k < L.length; k++) { const v = L[k]; if (v.lst || v.ramp) X[k] = Y[k] = NaN; else { X[k] = v.x; Y[k] = v.y; } }
+  }
   return VEHC;
 }
 // side 方的敌对车辆（活着的）
@@ -47,8 +59,6 @@ const vehById = id => (S && S.veh && S.veh.find(v => v.id === id)) || null;
 // 寻路类：我方两栖坦克只在泅渡、或目标/所在格是水面时用 'amph'（海陆全图流场较贵），上岸后与其他车辆共用 'veh' 流场
 const vehCls = (v, x, y) => !VEH_SPEC[v.type].amph ? (v.side === 'e' ? 'vehe' : 'veh') : v.side === 'e' || v.swim || vehWater(v.x, v.y) || (x != null && vehWater(x, y)) ? 'amph' : 'veh';
 const vehSp = v => VEH_SPEC[v.type] || VEH_SPEC.tank;
-let VEH_LMAX = 0;
-const vehLmax = () => VEH_LMAX || (VEH_LMAX = Math.max(...Object.values(VEH_SPEC).map(s => s.len || 0)));   // 最长的车长（粗筛用的上界）
 // 型号：进攻方按解放军装备、守方按美军装备；沙盒按目录条目（同一车型可有改型）
 const VEH_MODEL = {
   p: { lt_tank: 'ZTQ-15 轻型坦克', tank: 'ZTZ-80 主战坦克', hv_tank: 'ZTZ-99A 主战坦克', amtank: 'ZTD-05 两栖突击车', apc: 'ZBD-05 两栖步兵战车', spg: 'PLZ-07 自行榴弹炮', td: 'PTL-02 突击炮',
@@ -63,6 +73,8 @@ const vehCrew = v => (VEH_SPEC[v.type] || VEH_SPEC.tank).crew || 3;
 const vehCrewOf = (side, f) => (S && S.veh || []).reduce((a, v) => a + (v.side === side && !v.dead && !v.lst && (!f || f(v)) ? vehCrew(v) : 0), 0);
 const vehWater = (x, y) => isWater(typeAt(x, y));
 const vehPass = (x, y, cls) => stepCost(ci(x, y), cls) < Infinity;
+// 行进中避让本方车辆的最大距离（两车车长之和的一半 + 6 + 12）：坐标差超过它的车不用细算
+const VEH_AVOID = Math.max(...Object.values(VEH_SPEC).map(o => o.len || 0)) + 6 + 12 + 1;
 const vehAng = a => Math.atan2(Math.sin(a), Math.cos(a));
 
 function addVehicle(side, type, x, y, extra) {
@@ -113,6 +125,7 @@ function vehDamage(v, dmg, pen, sx, sy, src) {
   const A = vehArmorAt(v, sx, sy, src), pm = vehPenMul(pen, A.a);   // 方向装甲：正面 / 侧面 / 后部 / 车顶
   const d = dmg * pm * hull / (M.arm || 1);
   v.hp -= d; v.hitT = S.t; v.sup = Math.min(100, v.sup + 12 + d * 3);
+  if (isFinite(sx) && isFinite(sy) && dist(sx, sy, v.x, v.y) > 40) { v.hitX = sx; v.hitY = sy; }   // 来弹方向（车载烟幕弹往那边打，vsmoke.js）
   if (pm >= .5 && !A.tur && v.hp > 0) {   // 打穿车体侧面：常打坏履带、负重轮；打穿后部：发动机舱、油箱，容易起火
     if (A.arc === 's' && !v.immob && !vehSp(v).wheel && !v.swim && d > 3 && Math.random() < .25) { v.immob = true; v.immobT = S.t; if (v.side === 'p') log(`${vehName(v)}侧面中弹，履带被打断`, 'bad', 'vimm' + v.id, 20, v); }
     if (A.arc === 'r' && !v.burn && d > 2 && Math.random() < .35) v.burn = 6 + Math.random() * 8;
@@ -129,10 +142,12 @@ function vehDamage(v, dmg, pen, sx, sy, src) {
   return d;
 }
 // 车载烟幕弹（坦克、步战车炮塔两侧的烟幕弹发射器，两次齐射）：挨了穿甲弹、反坦克导弹没被打穿，或被近失弹擦过（vehShots），
-//   朝来弹方向 18 米处打出一道烟幕（半径 24 米、约 25 秒）——多光谱烟幕热像也看不透，挡住对方的视线和远距离发现（spot.js），趁机换位；
-//   自己往那个方向也看不见。两次齐射之间至少隔 20 秒；泅渡中、在登陆舰上的不打
+//   朝来弹方向打出一道烟幕（约 25 秒）——多光谱烟幕热像也看不透，挡住对方的视线和远距离发现（spot.js），趁机换位；
+//   自己往那个方向也看不见。两次齐射之间至少隔 20 秒；泅渡中、在登陆舰上的不打。
+//   vsmoke.js 接管发射：一组弹扇形打到车前约 30 米连成烟墙，同排的车一起齐射；另外掩护挨打的步兵、后撤时也主动打（下面 r、off 是没有 vsmoke.js 时的单团烟）
 const VEH_SMK = { n: 2, gap: 20, r: 24, off: 18, dur: 25, src: ['ap', 'at', 'top', 'atgm', 'gren'] };
 function vehSmokeOut(v, sx, sy) {
+  if (typeof vsmVolley === 'function') { vsmVolley(v, sx, sy, 'hit'); return; }   // 扇形齐射，同排的车一起打（vsmoke.js）
   if (v.dead || v.swim || v.lst || !isFinite(sx) || !isFinite(sy) || (v.smk ?? VEH_SMK.n) <= 0 || S.t - (v.smkT ?? -99) < VEH_SMK.gap) return;
   const a = Math.atan2(sy - v.y, sx - v.x);
   v.smk = (v.smk ?? VEH_SMK.n) - 1; v.smkT = S.t;
@@ -312,11 +327,14 @@ function vehDrive(v, dt, mul) {
   if (S.t < (v.sideT ?? 0)) want += v.sideS * 1.1;   // 侧向让开（看门狗 / 前方有本方车辆）
   // 与本方车辆保持间距：前方有车就转向绕开、靠得太近就减速停车让行——车只沿车头方向走，不横着平移（以前侧推车身，看着像滑步）
   let slow = 1, park = null;
-  { const fx = Math.cos(v.heading), fy = Math.sin(v.heading), reach = (sp.len + vehLmax()) * .5 + 18;   // m + 12 的上界：坐标差超过它的车一定在范围外，先粗筛掉（结果不变，省掉大半 hypot）
-    for (const o2 of S.veh) {
+  { const fx = Math.cos(v.heading), fy = Math.sin(v.heading), C = vehCache(), L = C[v.side], X = C.X[v.side], Y = C.Y[v.side], vx = v.x, vy = v.y, RM = VEH_AVOID + VEHC_M;
+    for (let k = 0; k < L.length; k++) {   // 只扫本方活着的车（顺序与 S.veh 相同）；先按本步的坐标快照粗筛，坐标差超过最大避让距离的跳过，不算 hypot——结果不变
+      const ex = X[k] - vx, ey = Y[k] - vy;
+      if (ex > RM || ex < -RM || ey > RM || ey < -RM) continue;
+      const o2 = L[k];
       if (o2 === v || o2.dead || o2.side !== v.side || o2.lst) continue;
       const dx = o2.x - v.x, dy = o2.y - v.y;
-      if (dx > reach || dx < -reach || dy > reach || dy < -reach) continue;
+      if (dx > VEH_AVOID || dx < -VEH_AVOID || dy > VEH_AVOID || dy < -VEH_AVOID) continue;
       const d2 = Math.hypot(dx, dy), m = (sp.len + vehSp(o2).len) * .5 + 6;
       if (d2 > m + 12 || d2 < .01) continue;
       const along = (dx * fx + dy * fy) / d2, lat = (dy * fx - dx * fy) / d2;
@@ -379,7 +397,11 @@ function vehSep(v, dt) {
   if (v.lst || v.ramp || v.swim || v.immob || v.fixed) return;
   const sp = vehSp(v), cls = vehCls(v);
   let px = 0, py = 0;
-  for (const o of S.veh) {
+  const C = vehCache(), L = C[v.side], X = C.X[v.side], Y = C.Y[v.side], vx = v.x, vy = v.y, RM = 30 + VEHC_M;
+  for (let k = 0; k < L.length; k++) {   // 只扫本方活着的车（顺序与 S.veh 相同）；先按坐标快照粗筛（见 vehCache），结果不变
+    const ex = X[k] - vx, ey = Y[k] - vy;
+    if (ex > RM || ex < -RM || ey > RM || ey < -RM) continue;
+    const o = L[k];
     if (o === v || o.dead || o.side !== v.side || o.lst || o.ramp) continue;
     const dx = v.x - o.x, dy = v.y - o.y;
     if (Math.abs(dx) > 30 || Math.abs(dy) > 30) continue;
@@ -396,8 +418,10 @@ function vehSep(v, dt) {
 // 停着的车与本方车辆贴得太近（车身间隙不足 4）：编号大的那辆每秒挪开 6，把已经挤成一团的慢慢摊开
 function vehSpread(v, dt) {
   if (v.immob || v.lst || v.swim) return;
-  const sp = vehSp(v), cls = vehCls(v);
-  for (const o of S.veh) {
+  const sp = vehSp(v), cls = vehCls(v), fr = vehFresh(), C = vehCache(), L = fr ? C[v.side] : S.veh, X = C.X[v.side], Y = C.Y[v.side], vx = v.x, vy = v.y, RM = 40 + VEHC_M;
+  for (let k = 0; k < L.length; k++) {   // 本方活着的车（与 S.veh 同序），先按坐标快照粗筛（见 vehCache）；这一步里车辆清单变过就逐个扫全体
+    if (fr) { const ex = X[k] - vx, ey = Y[k] - vy; if (ex > RM || ex < -RM || ey > RM || ey < -RM) continue; }
+    const o = L[k];
     if (o === v || o.dead || o.side !== v.side || o.lst || o.id > v.id || Math.abs(v.x - o.x) > 40 || Math.abs(v.y - o.y) > 40) continue;   // 两车半长之和 + 4 不会超过 40
     const d = dist(v.x, v.y, o.x, o.y), m = (sp.len + vehSp(o).len) * .5 + 4;
     if (d >= m) continue;
@@ -461,8 +485,9 @@ function vehTerrain(v, dt) {
 }
 
 // —— 火力：主炮（直瞄榴弹/穿甲、间瞄、火焰）与并列/高射机枪 ——
-// 看得见：本方视野（全军共享：步兵、车辆、舰、飞机看到的都算）；o 是车辆的话，数据链再把 4 秒内被本方任何单位看到过的敌车算上（拐过山包、钻进林子不会一下子丢了目标）
-const vehSees = (v, x, y, d, o) => d < 45 || (v.side === 'p' ? PV : EV)[ci(x, y)] === 1 || (!!o && S.t - ((v.side === 'p' ? o.dlP : o.dlE) ?? -99) < VEH_DL);
+// 看得见：本方视野（全军共享：步兵、车辆、舰、飞机看到的都算）；o 是车辆的话，数据链再把 4 秒内被本方任何单位看到过的敌车算上（拐过山包、钻进林子不会一下子丢了目标）；
+//   但这辆车到目标的弹道线穿过烟幕就打不了（grid.js smokeBlk）
+const vehSees = (v, x, y, d, o) => d < 45 || (((v.side === 'p' ? PV : EV)[ci(x, y)] === 1 || (!!o && S.t - ((v.side === 'p' ? o.dlP : o.dlE) ?? -99) < VEH_DL)) && !smokeBlk(v.x, v.y, x, y));
 const VEH_DL = 4;
 // 每次算完视野（logistics.js updateVision）：记下对方哪些车此刻被看见了（数据链的目标记忆）
 function vehDlMark(part) {   // part：'a' 只看攻方视野、'b' 只看守方视野（视野分两步算，logistics.js updateVision），不给 = 两边
@@ -519,8 +544,9 @@ function vehGunTarget(v) {
     if (dq > R0 || (g.min && dq < g.min)) continue;   // 射程外的（consider 也会丢掉）不用再数它周围的人：每个小组都数一遍全体小组，大地图上是推演最重的一处
     if (g.ind && !(q.side === 'e' ? inVision(q.x, q.y) : spotted(q.x, q.y))) continue;
     if (v.cons && !g.ind && dq > 80) continue;   // 节约弹药：主炮只打车辆、工事与贴近的步兵，远处的步兵交给机枪
-    let near = 0;   // 一发榴弹能罩住的人数：成堆的步兵优先
-    for (const o of S.teams) if (o !== q && o.side === foe && o.men.length && !o.ride) { const dx = o.x - q.x, dy = o.y - q.y; if (dx < 22 && dx > -22 && dy < 22 && dy > -22 && dist(o.x, o.y, q.x, q.y) < 22) near += o.men.length; }
+    let near = 0;   // 一发榴弹能罩住的人数：成堆的步兵优先（只看附近桶里的小组，combat.js ftNear——原来每个候选都把全体小组扫一遍）
+    { const T = S.teams, N = typeof ftNear === 'function' ? ftNear(q.x, q.y, 52) : null;
+      for (let n = 0, L = N ? N.length : T.length; n < L; n++) { const o = T[N ? N[n] : n]; if (o !== q && o.side === foe && o.men.length && !o.ride) { const dx = o.x - q.x, dy = o.y - q.y; if (dx < 22 && dx > -22 && dy < 22 && dy > -22 && dist(o.x, o.y, q.x, q.y) < 22) near += o.men.length; } } }
     consider(q, 'tm', q.x, q.y, (1 + q.men.length * .2 + near * .12) * (g.flame && q.inTrench ? 2.4 : 1) * (g.ind ? .6 : 1) * (at ? .8 : 1));
   }
   return best;
@@ -747,7 +773,9 @@ function vehGrenades(dt) {
   if (vehCache().p.length + vehCache().e.length + cars.length) for (const q of S.teams) {
     if (!q.men.length || q.ride || q.sup >= 85 || q.order.t === 'retreat' || (q.gT || 0) > S.t) continue;
     let tg = null, bd = GREN.r, k = 'veh';
-    for (const v of vehFoes(q.side)) { if (v.swim || v.lst || Math.abs(v.x - q.x) >= bd || Math.abs(v.y - q.y) >= bd) continue; const d = dist(q.x, q.y, v.x, v.y); if (d < bd) { bd = d; tg = v; } }   // 每步每个小组都查：先按坐标差排除
+    { const C = vehCache(), sd = q.side === 'e' ? 'p' : 'e', L = C[sd], X = C.X[sd], Y = C.Y[sd], qx = q.x, qy = q.y;   // 每步每个小组都查：先按本步的车辆坐标快照粗筛（vehCache），再按坐标差排除——结果不变
+      for (let n = 0; n < L.length; n++) { const lim = bd + VEHC_M, ex = X[n] - qx, ey = Y[n] - qy; if (ex > lim || ex < -lim || ey > lim || ey < -lim) continue;
+        const v = L[n]; if (v.swim || v.lst || Math.abs(v.x - q.x) >= bd || Math.abs(v.y - q.y) >= bd) continue; const d = dist(q.x, q.y, v.x, v.y); if (d < bd) { bd = d; tg = v; } } }
     if (q.side === 'p') for (const a of cars) { const d = dist(q.x, q.y, a.x, a.y); if (d < bd) { bd = d; tg = a; k = 'car'; } }
     if (!tg) continue;
     q.gT = S.t + GREN.cd * (.8 + Math.random() * .4); q.cd = Math.max(q.cd, .8);   // 投弹这一下不开枪
@@ -788,6 +816,7 @@ function vehDepotTick(v, dt) {
     if (v.moving || !(S.points.some(p => p.owner === 'e' && dist(p.x, p.y, v.x, v.y) < 150) || (v.hx != null && dist(v.hx, v.hy, v.x, v.y) < 80))) return;
     if (v.ammo < sp.ammo) v.ammo = Math.min(sp.ammo, v.ammo + 1);
     v.fuel = Math.min(1, (v.fuel ?? 1) + .04);
+    vehSmkLoad(v);
     return;
   }
   const p = vehDepot(v), d = p ? dist(p.x, p.y, v.x, v.y) : Infinity;
@@ -801,11 +830,17 @@ function vehDepotTick(v, dt) {
   const a0 = v.ammo, f0 = v.fuel ?? 1;
   if (v.ammo < sp.ammo) v.ammo = Math.min(sp.ammo, v.ammo + 2);
   v.fuel = Math.min(1, (v.fuel ?? 1) + .05);
+  vehSmkLoad(v);
   if (p.kind === 'node') { const n = snById(p.id); if (n) n.stock = Math.max(0, (n.stock ?? 1) - (v.ammo - a0) * .006 - (v.fuel - f0) * .25); }   // 前沿点的存量：一车炮弹约 0.25、加满油 0.25
   if (v.immob && S.t - v.hitT > 8) { v.immob = false; log(`${vehName(v)}在补给点修复履带`, 'good', 'vfix' + v.id, 10, v); }
 }
+// 补给点里重新装填烟幕弹发射器：停着每 20 秒装好一组（一次齐射的量）
+function vehSmkLoad(v) {
+  if ((v.smk ?? VEH_SMK.n) >= VEH_SMK.n) return;
+  if ((v.smkL = (v.smkL || 0) + 1) >= 20) { v.smkL = 0; v.smk = (v.smk ?? VEH_SMK.n) + 1; }
+}
 // 同排（同一伙伴排 / 同一进攻目标）的车辆
-const vehMates = v => (S.veh || []).filter(o => o !== v && !o.dead && o.side === v.side && !o.lst && ((v.buddy != null && o.buddy === v.buddy) || (v.sk != null && o.sk === v.sk)));
+const vehMates =v => (S.veh || []).filter(o => o !== v && !o.dead && o.side === v.side && !o.lst && ((v.buddy != null && o.buddy === v.buddy) || (v.sk != null && o.sk === v.sk)));
 // 弹药（主炮占满载的比例）与油料
 const vehAmmoF = v => { const sp = vehSp(v); return sp.gun && !sp.gun.flame && sp.ammo ? v.ammo / sp.ammo : 1; };
 

@@ -8,11 +8,38 @@ const V3F = { ok: false, tried: false, pr: null, a: {}, u: {}, buf: null, trail:
 const V3F_VS = `attribute vec3 p; attribute vec4 c; attribute vec2 q;
 uniform mat4 uM; varying vec4 vC; varying vec2 vQ;
 void main() { vC = c; vQ = q; gl_Position = uM * vec4(p, 1.); }`;
-const V3F_FS = `precision mediump float;
+// 片元：普通亮点 / 光带是高斯光斑（中心发白）；翻滚的烟团、火球（v3fPuff）在带内坐标里编了画法和噪声种子——
+//   带内坐标 x 加 8 × 画法（1 烟、2 火），y 加 4 × 种子（0–15），这里解出来，用两层随时间翻卷的值噪声把边缘啃得参差不齐、里面一团团明暗
+const V3F_FS = `#ifdef GL_FRAGMENT_PRECISION_HIGH
+precision highp float;
+#else
+precision mediump float;
+#endif
+uniform float uT;
 varying vec4 vC; varying vec2 vQ;
+float h2(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float vn(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3. - 2. * f); return mix(mix(h2(i), h2(i + vec2(1., 0.)), f.x), mix(h2(i + vec2(0., 1.)), h2(i + vec2(1., 1.)), f.x), f.y); }
 void main() {
-  float r = dot(vQ, vQ), a = vC.a * exp(-2.6 * r) * step(r, 1.);
-  gl_FragColor = vec4(vC.rgb * a + vec3(1.) * a * a * .35, a);   // 中心发白
+  float md = floor((vQ.x + 4.) / 8.), sd = floor((vQ.y + 2.) / 4.);
+  vec2 q = vec2(vQ.x - 8. * md, vQ.y - 4. * sd);
+  float r = dot(q, q);
+  if (md < .5) {
+    float a = vC.a * exp(-2.6 * r) * step(r, 1.);
+    gl_FragColor = vec4(vC.rgb * a + vec3(1.) * a * a * .35, a);   // 中心发白
+    return;
+  }
+  if (r > 1.) discard;
+  vec2 np = q * 1.7 + vec2(sd * 7.31, sd * 3.17);
+  float t = uT * (md > 1.5 ? .9 : .22);
+  float n = vn(np + vec2(t * .6, -t)) * .62 + vn(np * 2.3 - vec2(t, t * .4) + 5.1) * .38;
+  float e = 1. - smoothstep(.22, 1., r + (n - .5) * .75);
+  if (md < 1.5) {   // 烟（预乘透明度、遮光）：顶上受光亮一点、底下暗，噪声暗的地方更透
+    float a = vC.a * e * (.5 + .65 * n);
+    gl_FragColor = vec4(vC.rgb * (.74 + .32 * q.y + .14 * (n - .5)) * a, a);
+  } else {   // 火（加法）：噪声亮的一团团接近白黄，边上是本身的橙红
+    float h = e * (.4 + .8 * n);
+    gl_FragColor = vec4(mix(vC.rgb, vec3(1., .88, .62), smoothstep(.68, 1.12, h)) * vC.a * h, vC.a * h);
+  }
 }`;
 function v3fxInit(gl) {
   V3F.tried = true;
@@ -22,8 +49,21 @@ function v3fxInit(gl) {
     gl.attachShader(pr, sh(gl.VERTEX_SHADER, V3F_VS)); gl.attachShader(pr, sh(gl.FRAGMENT_SHADER, V3F_FS));
     gl.linkProgram(pr);
     if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(pr));
-    Object.assign(V3F, { pr, a: { p: gl.getAttribLocation(pr, 'p'), c: gl.getAttribLocation(pr, 'c'), q: gl.getAttribLocation(pr, 'q') }, u: { uM: gl.getUniformLocation(pr, 'uM') }, buf: gl.createBuffer(), ok: true });
+    Object.assign(V3F, { pr, a: { p: gl.getAttribLocation(pr, 'p'), c: gl.getAttribLocation(pr, 'c'), q: gl.getAttribLocation(pr, 'q') }, u: { uM: gl.getUniformLocation(pr, 'uM'), uT: gl.getUniformLocation(pr, 'uT') }, buf: gl.createBuffer(), ok: true });
   } catch (e) { V3F.ok = false; console.warn('3D 弹道不可用', e); }
+}
+// 特效顶点的预分配缓冲：和数组一样用 push（每个顶点 9 个数）、length，写进一块 Float32Array，不够了翻倍；每帧把 length 清零复用
+class V3FBuf {
+  constructor(n) { this.a = new Float32Array(n); this.length = 0; }
+  grow(k) { if (this.length + k > this.a.length) { const B = new Float32Array(Math.max(this.a.length * 2, this.length + k)); B.set(this.a.subarray(0, this.length)); this.a = B; } }
+  push(a, b, c, d, e, f, g, h, i) {
+    const n = arguments.length;
+    if (n !== 9) { this.grow(n); for (let k = 0; k < n; k++) this.a[this.length++] = arguments[k]; return this.length; }
+    if (this.length + 9 > this.a.length) this.grow(9);
+    const A = this.a, j = this.length;
+    A[j] = a; A[j + 1] = b; A[j + 2] = c; A[j + 3] = d; A[j + 4] = e; A[j + 5] = f; A[j + 6] = g; A[j + 7] = h; A[j + 8] = i;
+    return (this.length = j + 9);
+  }
 }
 // 世界坐标 + 高度 → GL 坐标
 const v3fP = (x, y, z) => [x, -y, z];
@@ -42,6 +82,13 @@ function v3fSpark(out, C, p, r, c) {
   const X = C.x, Y = C.y, P = (a, b) => out.push(p[0] + (X[0] * a + Y[0] * b) * r, p[1] + (X[1] * a + Y[1] * b) * r, p[2] + (X[2] * a + Y[2] * b) * r, c[0], c[1], c[2], c[3], a, b);
   P(-1, -1); P(1, -1); P(1, 1); P(-1, -1); P(1, 1); P(-1, 1);
 }
+// 翻滚的烟团（m 1，放进遮光的 sm）/ 火球（m 2，放进加法的 out）：和 v3fSpark 一样面向镜头的方块，带内坐标里编进画法和噪声种子（着色器解出来）；
+//   bot：下半截的不透明度倍数（贴地的烟团往底边淡出，被地面切掉的硬边看不出来）。注意下面另有画烟幕的 v3fPuff（不翻滚），名字不能重
+function v3fBillow(L, C, p, r, c, m, seed, bot = 1) {
+  const X = C.x, Y = C.y, ox = 8 * m, oy = 4 * ((seed | 0) & 15), P = (a, b) => L.push(p[0] + (X[0] * a + Y[0] * b) * r, p[1] + (X[1] * a + Y[1] * b) * r, p[2] + (X[2] * a + Y[2] * b) * r, c[0], c[1], c[2], c[3] * (b < 0 ? bot : 1), a + ox, b + oy);
+  P(-1, -1); P(1, -1); P(1, 1); P(-1, -1); P(1, 1); P(-1, 1);
+}
+const V3F_WIND = [1.6, -.55];   // 烟往下风飘（米 / 秒，游戏坐标：往东、偏北）
 // 一条沿参数曲线 f(u)（返回 GL 坐标）的光迹：从 u0 到 u1 分 n 段，越靠弹头越亮
 function v3fTrail(out, E, f, u0, u1, n, w, col) {
   let prev = f(u0);
@@ -92,8 +139,9 @@ function v3Fx(C) {
   if (!V3F.tried) v3fxInit(gl);
   if (!V3F.ok) return;
   if (V3F.S !== S) { V3F.S = S; V3F.trail.clear(); V3F.puff.length = 0; V3F.seen.clear(); V3F.ign.clear(); V3F.ex.length = 0; V3F.exSeen = new WeakSet(); if (V3F.vo) V3F.vo.clear(); }
+  const out = V3F.bo || (V3F.bo = new V3FBuf(1 << 16)), sm = V3F.bs || (V3F.bs = new V3FBuf(1 << 15)), E = C.E, box = V3.box || [0, 0, W, H], inB = (x, y, m = 200) => x > box[0] - m && x < box[0] + box[2] + m && y > box[1] - m && y < box[1] + box[3] + m;   // sm：遮挡的烟（普通混合，先画；发光的 out 加法混合后画）
+  out.length = 0; sm.length = 0;   // 每帧复用同两块缓冲（不再每帧新建 JS 数组、再拷成 Float32Array——那是每帧最多的垃圾，垃圾回收时画面一顿）
   if (typeof v3jBegin === 'function') v3jBegin();   // 喷口内部、加力尾焰（v3jet.js）：这一帧重新收集
-  const out = [], sm = [], E = C.E, box = V3.box || [0, 0, W, H], inB = (x, y, m = 200) => x > box[0] - m && x < box[0] + box[2] + m && y > box[1] - m && y < box[1] + box[3] + m;   // sm：遮挡的烟（普通混合，先画；发光的 out 加法混合后画）
   const spec = specAll() || (typeof R === 'object' && (R.eye === 'all' || R.eye === 'both' || R.eye === 'e'));
   const seen = (x, y) => spec || inVision(x, y);
   const g = (x, y) => v3Ht(clamp(x, 0, W - 1), clamp(y, 0, H - 1));
@@ -221,25 +269,66 @@ function v3Fx(C) {
     const air = !!f.air, z = air ? v3AltZ(f.x, f.y, Math.max(0, clamp(f.alt ?? 1, 0, 1) - .05) * V3_AIR, -2.6, 1.5) : Math.max(g(f.x, f.y), -2.6);
     V3F.ex.push({ x: f.x, y: f.y, z, r: f.r * (f.kind === 'b2' ? 1.4 : 1), t0: S.t - f.life, air, side: f.side, sd: (f.x * 13.7 + f.y * 7.1) % 6.283 });
   }
-  V3F.ex = V3F.ex.filter(o => S.t - o.t0 < 4);
+  V3F.ex = V3F.ex.filter(o => S.t - o.t0 < 9);
+  const WX = V3F_WIND[0], WY = V3F_WIND[1];
   for (const o of V3F.ex) {
     if (!inB(o.x, o.y, 300)) continue;   // 与平面画面一样：爆炸都画（看得见火光）
-    const a = S.t - o.t0, r = clamp(o.r, 6, 90), up = o.air ? 0 : 1;
+    const a = S.t - o.t0, r = clamp(o.r, 6, 90), up = o.air ? 0 : 1, sid = Math.floor(o.sd * 97), sea = !o.air && o.z < -1.5;
     if (a < .18) v3fSpark(out, C, v3fP(o.x, o.y, o.z + r * .3 * up), r * (1.1 + a * 3), [1, .95, .8, 1 - a / .18]);   // 白热闪光
-    if (a < 1.3) for (let i = 0; i < 9; i++) {   // 火球：几团橙红的火往外翻滚、膨胀，地面的往上腾
-      const an = o.sd + i * 2.39, el = (i % 3 - 1) * .6, d = r * (.12 + .5 * Math.sqrt(a / 1.3)) * (.6 + (i * 37 % 10) / 20);
-      const p = v3fP(o.x + Math.cos(an) * Math.cos(el) * d, o.y + Math.sin(an) * Math.cos(el) * d, o.z + (Math.sin(el) * d + up * (r * .25 + a * r * .55)) * (o.air ? 1 : .9));
-      const k = 1 - a / 1.3, hot = a < .35;
-      v3fSpark(out, C, p, r * (.35 + .35 * a), hot ? [1, .75, .35, .75 * k] : [1, .42 + .2 * k, .12, .55 * k]);
+    if (!o.air && a < .32) {   // 冲击波：贴地往外扩的一圈（掀起的尘土、水面的一圈白），一闪就过
+      const R0 = r * (.5 + a * 11), al = .3 * (1 - a / .32), col = sea ? [.9, .95, 1, al] : [.95, .82, .6, al];
+      for (let i = 0; i < 20; i++) { const a0 = i / 20 * 6.2832, a1 = a0 + .3142; v3fRib(out, E, v3fP(o.x + Math.cos(a0) * R0, o.y + Math.sin(a0) * R0, o.z + .6), v3fP(o.x + Math.cos(a1) * R0, o.y + Math.sin(a1) * R0, o.z + .6), r * .14, col, col); }
+    }
+    if (a < 1.4) for (let i = 0; i < 6; i++) {   // 火球：几团翻滚的火往外膨胀、往上腾，从白黄冷却成橙红、暗红
+      const an = o.sd + i * 2.39, el = (i % 3 - 1) * .55, d = r * (.1 + .42 * Math.sqrt(a / 1.4)) * (.7 + (i * 37 % 10) / 25);
+      const p = v3fP(o.x + Math.cos(an) * Math.cos(el) * d, o.y + Math.sin(an) * Math.cos(el) * d, o.z + (Math.sin(el) * d + up * (r * .22 + a * r * .5)) * (o.air ? 1 : .9));
+      const k = 1 - a / 1.4, cool = smooth(.08, 1.1, a);
+      v3fBillow(out, C, p, r * (.42 + .42 * a), [1, .66 - .34 * cool, .3 - .24 * cool, (.72 - .2 * cool) * k], 2, sid + i);   // 几团叠起来（加法）不至于整片发白：单团偏橙、淡一些
     }
     if (a < 1.6) for (let i = 0; i < 12; i++) {   // 碎片：亮点四散，受重力往下掉
       const an = o.sd * 1.7 + i * 2.1, el = .25 + (i * 53 % 10) / 14, v = r * (1.4 + (i * 29 % 10) / 6), c = Math.cos(el) * v * a, zz = Math.sin(el) * v * a - 4.9 * a * a * (o.air ? 3 : 4);
       const zp = Math.max(o.air ? -1e9 : o.z, o.z + zz);
       v3fSpark(out, C, v3fP(o.x + Math.cos(an) * c, o.y + Math.sin(an) * c, zp), Math.max(.5, r * .045), [1, .7, .3, .9 * (1 - a / 1.6)]);
     }
-    if (a > .25) for (let i = 0; i < 6; i++) {   // 烟：往上飘、扩散、变淡（加法混合下用暗灰，叠起来也不发白）
-      const an = o.sd + i * 1.05, d = r * (.3 + a * .25), sm = V3F_COL.smoke;
-      v3fSpark(out, C, v3fP(o.x + Math.cos(an) * d, o.y + Math.sin(an) * d, o.z + r * .4 * up + a * (2.5 + i * .6) * (o.air ? .6 : 1.4)), r * (.45 + a * .28), [sm[0] * .55, sm[1] * .55, sm[2] * .55, .16 * (1 - a / 4)]);
+    if (a > .12) for (let i = 0; i < 6; i++) {   // 烟：浓的灰黑烟从火球里翻滚着升起，越来越大、往下风飘、慢慢变淡（遮光）；水面上是白色的水汽
+      const u = a / 9, an = o.sd + i * 1.05, d = r * (.22 + a * .1), rise = o.air ? a * 1.2 - a * a * .05 : r * .3 + a * (2.6 + i * .8);
+      const fade = Math.min(1, (a - .12) / .5) * Math.pow(1 - u, 1.4), sh = .02 * i;
+      const col = sea ? [.78 + sh, .8 + sh, .82 + sh, .55 * fade] : [.17 + sh, .155 + sh, .14 + sh, .78 * fade];
+      v3fBillow(sm, C, v3fP(o.x + Math.cos(an) * d + WX * a, o.y + Math.sin(an) * d + WY * a, o.z + rise), r * (.48 + a * .3 + i * .05), col, 1, sid + 20 + i);
+    }
+    if (!o.air && a < 3.6) for (let i = 0; i < 6; i++) {   // 地面爆炸掀起的尘土（水面是水花雾）：贴地往外推、慢慢落下散开
+      const an = o.sd * 1.3 + i * 1.047, d = r * (.35 + 1.15 * Math.sqrt(a / 3.6)), k = 1 - a / 3.6;
+      v3fBillow(sm, C, v3fP(o.x + Math.cos(an) * d + WX * a * .5, o.y + Math.sin(an) * d + WY * a * .5, o.z + r * .12 + a * .7), r * (.32 + a * .26), sea ? [.85, .9, .93, .45 * k] : [.44, .37, .28, .55 * k], 1, sid + 40 + i);
+    }
+  }
+  // —— 被打掉的车辆：车上起火（约 50 秒，越烧越小），一根往下风飘的黑烟柱（约两分钟后散尽）——
+  {
+    let nW = 0;
+    const wreck = (x, y, L, age, id) => {
+      if (age < 0 || age > 120 || !inB(x, y, 150) || ++nW > 18) return;
+      const z = g(x, y), k = 1 - age / 120, sid = id & 15;
+      if (age < 50) { const fk = 1 - age / 50; for (let i = 0; i < 2; i++) v3fBillow(out, C, v3fP(x + (i - .5) * L * .18, y, z + L * (.2 + .1 * i)), L * (.2 + .12 * fk), [1, .48, .14, .6 * fk], 2, sid + i); }
+      for (let i = 0; i < 8; i++) {   // 一串烟团从车上升起到 u = 1 消失，循环接上，连成一根烟柱：根上又黑又浓，越往上越散、越灰、越淡
+        const u = (S.t * .07 + i / 8 + id * .131) % 1, wx = u * u * L * 7;
+        const a = .58 * Math.pow(k, .6) * Math.pow(1 - u, 1.2) * Math.min(1, u / .06);   // 残骸一多（十几根烟柱）也不至于把战场整片遮黑
+        v3fBillow(sm, C, v3fP(x + wx * WX / 1.7, y + wx * WY / 1.7, z + L * .3 + u * L * 10), L * (.26 + u * 1.15), [.08 + u * .16, .075 + u * .16, .07 + u * .16, a], 1, sid + 3 + i);
+      }
+    };
+    for (const v of S.veh || []) if (v.dead && !v.lst) wreck(v.x, v.y, typeof vehSp === 'function' ? vehSp(v).len : 9, S.t - (v.deadT ?? -999), v.id);
+    for (const v of S.armor || []) if (v.dead) wreck(v.x, v.y, 8, S.t - (v.deadT ?? -999), v.id);
+  }
+  // —— 行进中的车辆扬起的尘土（陆上）：车尾两侧拖出一溜黄土色的烟，离车越远越大越淡；在水里、刚上岸湿沙上的不扬 ——
+  {
+    let nD = 0;
+    for (const v of S.veh || []) {
+      if (v.dead || v.lst || v.swim || !(S.t - (v.movedT ?? -99) < .5) || !inB(v.x, v.y, 60) || (v.side === 'e' && !seen(v.x, v.y))) continue;
+      const z = g(v.x, v.y);
+      if (z < -1 || Math.hypot(v.x - E[0], -v.y - E[1]) > 2600 || ++nD > 40) continue;
+      const L = typeof vehSp === 'function' ? vehSp(v).len : 8, h = v.heading || 0, c = Math.cos(h), s2 = Math.sin(h), sid = v.id & 15;
+      for (let i = 0; i < 4; i++) {
+        const u = (S.t * 1.1 + i / 4 + v.id * .37) % 1, back = L * (.45 + u * 2.2), sd = (i % 2 ? 1 : -1) * L * .22 * (1 + u);
+        v3fBillow(sm, C, v3fP(v.x - c * back - s2 * sd, v.y - s2 * back + c * sd, z + L * (.12 + u * .35)), L * (.22 + u * .55), [.55, .48, .37, .3 * Math.sin(u * Math.PI)], 1, sid + i);
+      }
     }
   }
   // —— 被击落的飞机往下栽：机身上的火、身后拖着的一条越来越宽的黑烟（残骸本身是 v3units.js 的立体模型）——
@@ -282,30 +371,38 @@ function v3Fx(C) {
   }
   // —— 飞机灯光：左翼尖红、右翼尖绿航行灯，垂尾顶上的白色防撞灯一闪一闪；歼击机起飞滑跑、刚离地爬升时尾喷口拖出加力火焰 ——
   if (typeof AIRD === 'object') {
-    const EA_K3 = { ga: ['a10', 18], heli: ['ah64', 16], uh60: ['uh60', 17], c17: ['c17', 30], ftr: ['f35', 17], ftrb: ['f35b', 17], mq9: ['mq9', 18], f22: ['f22', 18], b2: ['b2', 34], p8: ['p8', 26] };
-    const FTR = { j35: 1, j20: 1, j15: 1, j16: 1, j16b: 1, j16d: 1, j50: 1, f35: 1, f22: 1, f35b: 1, j15t: 1 };
+    const EA_K3 = { ga: ['a10', 18], heli: ['ah64', 16], uh60: ['uh60', 17], ch47: ['ch47', 20.8], sh60b: ['sh60b', 17], c17: ['c17', 30], ftr: ['f35', 17], ftrb: ['f35b', 17], mq9: ['mq9', 18], f22: ['f22', 18], b2: ['b2', 34], p8: ['p8', 26] };
+    const FTR = { j35: 1, j20: 1, j15: 1, j16: 1, j16b: 1, j16m: 1, j16d: 1, j50: 1, f35: 1, f22: 1, f35b: 1, j15t: 1 };
     const lit = (o, key, sz, own, burn) => {
       const D = AIRD[key];
       if (!D || !D.wing || !inB(o.x, o.y, 220)) return;
-      const Lc = own && typeof v3dLaunch === 'function' ? v3dLaunch(o) : null;   // 刚离舰：下沉、抬头（v3det.js）
-      const fp = own && o.fl && o.fp && typeof fpRS === 'function' ? fpRS(o) : null;   // 玩家亲自开的：位置、姿态按物理引擎插值后的（和画出来的飞机对得上）
-      const k = sz / 21, gnd = o.ph === 'gnd' || o.ph === 'roll' || o.phase === 'roll' && !o.kind, z = fp ? fp.z : (gnd ? g(o.x, o.y) + 1.9 * k : v3AirZ(o)) + (Lc ? Lc.dz : 0), h = fp ? fp.heading : o.heading || 0, r = fp ? fp.roll : o.bank || 0;
-      if (fp) o = { ...o, x: fp.x, y: fp.y };
-      const ch = Math.cos(h), sh = Math.sin(h), cr = Math.cos(r), sr = Math.sin(r);
-      const Wp = (u, v, w) => { const y = v * cr - w * sr, zz = v * sr + w * cr; return v3fP(o.x + (u * ch + y * sh) * k, o.y + (u * sh - y * ch) * k, z + zz * k); };
+      // 玩家亲自开的：用和机体模型同一个插值后的位置与姿态（v3units.js plane 用 fpRS）——原来按推演位置、航向、坡度画，没有俯仰，
+      //   机头一抬尾焰、航行灯就跟机体错开（推演位置还比画面上的机体超前一步）
+      const rs = own && o.fl && o.fp && typeof fpRS === 'function' ? fpRS(o) : null;
+      const Lc = !rs && own && typeof v3dLaunch === 'function' ? v3dLaunch(o) : null;   // 刚离舰：下沉、抬头（v3det.js）
+      // 机场上的敌机（停机、滑行、滑跑）：机体按机轮着地画（v3units.js v3GroundPlane），这里也按机轮着地点、绕它抬头——原来按「地面 + 1.9」当机身中线，
+      //   不同机型中线高低不一样，滑跑开加力时尾焰比喷口低半米到一米
+      const gnd = !own && !rs && (o.ph === 'gnd' || o.ph === 'roll'), k = sz / 21, ox = rs ? rs.x : o.x, oy = rs ? rs.y : o.y;
+      const z = rs ? rs.z : gnd ? g(o.x, o.y) : v3AirZ(o) + (Lc ? Lc.dz : 0), h = rs ? rs.heading : o.heading || 0, r = rs || !gnd ? (rs ? rs.roll : o.bank || 0) : 0;
+      let pt = rs ? rs.pitch : gnd ? (o.ph === 'roll' && typeof eaVlof === 'function' ? V3_ROT * sm01(((o.spd || 0) / eaVlof(o) - .83) / .17) : 0) : typeof v3dPitchOf === 'function' ? v3dPitchOf(o, own ? 0 : 1) : Lc ? Lc.pitch : 0;
+      if (!own && !gnd && o.toT != null) { const tu = S.t - o.toT; if (tu >= 0 && tu < 3) pt = Math.max(pt, V3_ROT * (1 - sm01((tu - 1.5) / 1.5))); }   // 刚离地头 1.5 秒保持抬起的机头（与 v3units.js plane 一样）
+      const zg = gnd && typeof v3gPlaneZc === 'function' ? v3gPlaneZc(key, sz) : 0;   // 着地画法：机身中线在机轮着地点上方多高
+      // 机体坐标（前、左、上）→ GL：先滚转、再俯仰、再航向，和画机体（v3g.js）、喷口（v3det.js v3dBurner）同一个顺序
+      const R = typeof v3dMul === 'function' ? v3dMul(v3dMul(v3dRz(-h), v3dRy(pt)), v3dRx(r)) : [Math.cos(h), Math.sin(h), 0, -Math.sin(h), Math.cos(h), 0, 0, 0, 1];
+      const Wp = (u, v, w) => { u *= k; v *= k; w = w * k + zg; return [ox + R[0] * u + R[1] * v + R[2] * w, -oy + R[3] * u + R[4] * v + R[5] * w, z + R[6] * u + R[7] * v + R[8] * w]; };
       const tip = D.wing.reduce((m, q) => q[1] > m[1] ? q : m, D.wing[0]), tu = tip[0] - .6;
-      const dE = Math.hypot(o.x - C.E[0], -o.y - C.E[1], z - C.E[2]), lr = Math.min(1.1 * k + .5, .006 * dE + .07);   // 灯的光晕：远处照旧，凑近时按视距缩小（不然近看是一两米的光球，追尾镜头里像两只灯笼）
+      const dE = Math.hypot(ox - C.E[0], -oy - C.E[1], z - C.E[2]), lr = Math.min(1.1 * k + .5, .012 * dE + .12);   // 灯的光晕：远处照旧，凑近时按视距缩小（不然近看是两三米的光球）
       v3fSpark(out, C, Wp(tu, tip[1], 0), lr, [1, .25, .2, .95]);   // 左翼尖红灯
       v3fSpark(out, C, Wp(tu, -tip[1], 0), lr, [.3, 1, .45, .95]);   // 右翼尖绿灯
       const tail = D.stab ? D.stab.reduce((m, q) => Math.min(m, q[0]), 0) : (D.body ? D.body[D.body.length - 1][0] : -9);
       if (((S.t * .8 + o.id * .37) % 1) < .07) v3fSpark(out, C, Wp(tail + 1, 0, 2.6), Math.min(2.4 * k + 1, .01 * dE + .1), [1, 1, 1, 1]);   // 防撞灯
       const MG = typeof V3G_AIR === 'object' && typeof V3G === 'object' && V3G.M[V3G_AIR[key]];
       if (MG && MG.ready && MG.glowS && typeof v3gAt === 'function' && dE < 2500) {   // 绿色电致发光编队灯带（歼-20）：沿模型里的灯带画发光的光带（里层亮、外层泛光），白天、远一点也看得见
-        const pg = fp ? fp.pitch : typeof v3dPitchOf === 'function' ? v3dPitchOf(o, own ? 0 : 1) : Lc ? Lc.pitch : 0, kk = sz / MG.meta.len;
+        const pg = pt, kk = sz / MG.meta.len;
         const wc = Math.max(.08 * kk, dE * .002), wh = Math.max(.42 * kk, dE * .007), fa = 1 - sm01((dE - 1500) / 1000);
         for (const gs of MG.glowS) {
           const off = q => [q[0] + gs.n[0] * .03, q[1] + gs.n[1] * .03, q[2] + gs.n[2] * .03];   // 离开蒙皮一点，免得和蒙皮抢深度
-          const A = v3gAt(key, sz, o.x, o.y, z, h, pg, r, off(gs.a)), B = v3gAt(key, sz, o.x, o.y, z, h, pg, r, off(gs.b));
+          const A = v3gAt(key, sz, ox, oy, z + zg, h, pg, r, off(gs.a)), B = v3gAt(key, sz, ox, oy, z + zg, h, pg, r, off(gs.b));
           if (!A || !B) continue;
           const PA = v3fP(A[0], A[1], A[2]), PB = v3fP(B[0], B[1], B[2]);
           v3fRib(out, C.E, PA, PB, wh, [.25, 1, .45, .22 * fa], [.25, 1, .45, .22 * fa]);
@@ -313,16 +410,16 @@ function v3Fx(C) {
         }
       }
       if (FTR[key] && typeof v3dBurner === 'function') {   // 喷口发热、加力尾焰（v3det.js）：按每个喷口，随机身俯仰、滚转；加力开关时火舌平滑地长出、缩回
-        const F2 = fp && o.fl, Eg = F2 ? v3dEng('p' + o.id, (o.fuel ?? 1) > 0 ? .3 + .7 * (typeof V3FP === 'object' ? V3FP.thr : .85) : 0, F2.ab ? 1 : 0)   // 玩家开的：按油门（慢车 .3 → 最大 1）、加力开关
+        const F2 = rs && o.fl, Eg = F2 ? v3dEng('p' + o.id, (o.fuel ?? 1) > 0 ? .3 + .7 * (typeof V3FP === 'object' ? V3FP.thr : .85) : 0, F2.ab ? 1 : 0)   // 玩家开的：按油门（慢车 .3 → 最大 1）、加力开关
           : v3dEng((own ? 'p' : 'e') + o.id, burn ? 1 : .65, burn ? 1 : 0);
-        v3dBurner(out, C, o, key, sz, { x: o.x, y: o.y, z, h, pt: fp ? fp.pitch : typeof v3dPitchOf === 'function' ? v3dPitchOf(o, own ? 0 : 1) : Lc ? Lc.pitch : 0, rl: r }, Eg);
-      } else if (typeof v3dExhaust === 'function') v3dExhaust(key, sz, { x: o.x, y: o.y, z, h, rl: r }, gnd ? .6 : 1);   // 其余发动机：排气口后的热浪
+        v3dBurner(out, C, o, key, sz, { x: ox, y: oy, z, h, pt, rl: r, ground: gnd }, Eg);
+      } else if (typeof v3dExhaust === 'function') v3dExhaust(key, sz, { x: ox, y: oy, z: z + zg, h, pt, rl: r }, gnd ? .6 : 1);   // 其余发动机：排气口后的热浪
     };
     for (const p of S.planes || []) if (!p.dead && isFinite(p.x) && !(p.phase === 'cat' || p.phase === 'trap' || (p.phase === 'roll' && !p.afPh && !p.land))) {   // 甲板上的由航母那边画
       const key = typeof airSilKey === 'function' ? airSilKey(p.kind, p.v) : null;
       if (!key) continue;
       const sz = typeof airSize3 === 'function' ? airSize3(p, 'p') : (typeof airMdl === 'function' && airMdl(p.kind, p.v).size) || 15;   // 与画机体同一个尺寸（喷口对得上）
-      lit(p, key, sz, true, !!FTR[key] && p.phase === 'out' && ((p.alt ?? 1) < .5 || (p.lT != null && S.t - p.lT < 14)));   // 弹射离舰后全加力爬升约 14 秒（与 js/aero.js 的离舰剖面一致）
+      lit(p, key, sz, true, !!FTR[key] && (typeof fpDriving === 'function' && fpDriving(p) && p.fl ? !!p.fl.ab : p.phase === 'out' && ((p.alt ?? 1) < .5 || (p.lT != null && S.t - p.lT < 14))));   // 亲自驾驶：按真实的加力开关画尾焰（马赫环）   // 弹射离舰后全加力爬升约 14 秒（与 js/aero.js 的离舰剖面一致）
     }
     if (S.eair) for (const a of S.eair.fly) {
       if (a.dead || !isFinite(a.x) || !(spec || a.pv || inVision(a.x, a.y))) continue;
@@ -330,26 +427,65 @@ function v3Fx(C) {
       lit(a, key, sz, false, !!FTR[key] && ((a.ph === 'roll' && !(a.wait > 0)) || (a.ph === 'out' && (a.alt ?? 1) < .4)));
     }
   }
+  v3fScreens(sm, out, C, inB, g);   // 烟幕：舰炮 / 炮兵烟幕弹、发烟罐、车载烟幕弹
   if (typeof v3dFx === 'function') v3dFx(out, C, inB, seen);   // 弹射、离机、伞降的发光与烟（v3det.js）
+  if (typeof a82Fx === 'function') a82Fx(out, sm, C, inB, seen);   // 82 空降师：标枪的烟迹与尾焰、CH-47F 旋翼下洗的尘土（v3a82.js）
+  if (typeof fpFx === 'function') fpFx(out, sm, C);   // 亲自驾驶：翼尖涡流、机翼水汽、迎面的风线（v3pilot.js）
   if (typeof v3dHaze === 'function') v3dHaze(C);   // 喷口后的热浪（v3det.js）：在加法特效之前，扭的是火焰后面的画面
   if (typeof v3jDraw === 'function') v3jDraw(C);   // 喷口内部（不透明）、加力尾焰（加法）
   if (!out.length && !sm.length) return;
   // —— 画：先画遮挡的烟（预乘透明度的普通混合），再画发光（加法混合）；都测深度、不写深度 ——
   const A = V3F.a;
   gl.useProgram(V3F.pr);
-  gl.uniformMatrix4fv(V3F.u.uM, false, C.M);
+  gl.uniformMatrix4fv(V3F.u.uM, false, C.M); gl.uniform1f(V3F.u.uT, (S.t || 0) % 600);   // 烟团、火球按推演时间翻卷（暂停时定住）
   gl.bindBuffer(gl.ARRAY_BUFFER, V3F.buf);
   gl.enableVertexAttribArray(A.p); gl.enableVertexAttribArray(A.c); gl.enableVertexAttribArray(A.q);
   gl.enable(gl.BLEND); gl.depthMask(false);
   for (const [L, add] of [[sm, false], [out, true]]) {
     if (!L.length) continue;
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(L), gl.DYNAMIC_DRAW);
+    gl.bufferData(gl.ARRAY_BUFFER, L.a.subarray(0, L.length), gl.DYNAMIC_DRAW);
     gl.vertexAttribPointer(A.p, 3, gl.FLOAT, false, 36, 0); gl.vertexAttribPointer(A.c, 4, gl.FLOAT, false, 36, 12); gl.vertexAttribPointer(A.q, 2, gl.FLOAT, false, 36, 28);
     gl.blendFunc(gl.ONE, add ? gl.ONE : gl.ONE_MINUS_SRC_ALPHA);
     gl.drawArrays(gl.TRIANGLES, 0, L.length / 9);
   }
   gl.depthMask(true); gl.disable(gl.BLEND);
   gl.disableVertexAttribArray(A.p); gl.disableVertexAttribArray(A.c); gl.disableVertexAttribArray(A.q);
+}
+// 烟幕（S.smoke）：一团团贴地翻滚的白烟（普通混合，遮得住后面），大小与推演里挡视线的范围一致（grid.js smkR），最后 6 秒变淡散去；
+//   车载烟幕弹（vsmoke.js，k: 'vg'）先画弹从炮塔顶上飞出去的小亮点、炸开时一闪，烟墙几米高；舰炮、炮兵烟幕弹的大团烟二三十米高。
+//   烟团位置按烟团坐标定死的伪随机数排（每帧一样，不闪），远处少画几团
+function v3fScreens(sm, out, C, inB, g) {
+  const E = C.E;
+  for (const s of S.smoke || []) {
+    if (!(s.until > S.t) || !inB(s.x, s.y, s.r + 80)) continue;
+    if (s.t0 != null) {
+      const a = S.t - s.t0;
+      if (a < 0) continue;
+      if (a < SMK_FLY) {   // 弹在飞：从炮塔顶上划一道低弧线到炸点
+        if (s.lx == null) continue;
+        const u = a / SMK_FLY, z0 = g(s.lx, s.ly) + 2.6, z1 = g(s.x, s.y) + 3, f = v => v3fP(lerp(s.lx, s.x, v), lerp(s.ly, s.y, v), lerp(z0, z1, v) + Math.sin(Math.PI * v) * 5);
+        v3fTrail(out, E, f, Math.max(0, u - .4), u, 3, .45, [.95, .95, .9, .8]);
+        v3fSpark(out, C, f(u), .7, [1, .95, .85, .95]);
+        continue;
+      }
+      if (a < SMK_FLY + .22) v3fSpark(out, C, v3fP(s.x, s.y, g(s.x, s.y) + 3), 2.5 + (a - SMK_FLY) * 24, [1, .95, .85, .85 * (1 - (a - SMK_FLY) / .22)]);   // 炸开一闪
+    }
+    const r = smkR(s);
+    if (!(r > 1)) continue;
+    const fd = Math.min(1, (s.until - S.t) / 6), z = Math.max(g(s.x, s.y), -2.6), vg = s.k === 'vg', h = vg ? 5 + r * .3 : Math.min(28, 8 + r * .25);
+    const de = Math.hypot(s.x - E[0], -s.y - E[1], z - E[2]), lod = de > 3000 ? .4 : de > 1500 ? .7 : 1;
+    const n = Math.max(4, Math.round(clamp(r / 4, 5, 18) * lod)), sd = Math.abs(s.x * 12.9898 + s.y * 78.233) % 6.283;
+    for (let i = 0; i < n; i++) {
+      const lv = (i * .618 + sd * .1) % 1, rr = r * .62 * Math.sqrt((i + .5) / n), ang = sd + i * 2.39996 + S.t * (.03 + (i % 3) * .012);
+      const pr = r * (.36 + .2 * ((i * 37 % 10) / 10)) * (1 - lv * .25), zz = z + pr * .5 + h * .6 * lv + Math.sin(S.t * .35 + i) * .5;
+      v3fBillow(sm, C, v3fP(s.x + Math.cos(ang) * rr, s.y + Math.sin(ang) * rr, zz), pr, [.86, .87, .85, .62 * fd], 1, i + (sd * 10 | 0), .12);   // 翻滚的烟团（底边淡出）
+    }
+  }
+}
+// 烟团：面向镜头的方块，下半截往底边淡出——贴地的烟团被地面切掉的那条硬边就看不出来了
+function v3fPuff(out, C, p, r, c, bot = .12) {
+  const X = C.x, Y = C.y, P = (a, b) => out.push(p[0] + (X[0] * a + Y[0] * b) * r, p[1] + (X[1] * a + Y[1] * b) * r, p[2] + (X[2] * a + Y[2] * b) * r, c[0], c[1], c[2], c[3] * (b < 0 ? bot : 1), a, b);
+  P(-1, -1); P(1, -1); P(1, 1); P(-1, -1); P(1, 1); P(-1, 1);
 }
 // 发射药的烟（普通混合，遮得住后面）：地面发射——燃气冲到地上往四周翻滚的扬尘 / 白烟（海面上是水汽），再一股顺着出筒方向往上的白烟柱；
 //   垂发——舱口涌出的白烟顺着弹道往上拉成一根烟柱；空中点火——一团白烟留在原地。7 秒里扩散、往上飘、变淡

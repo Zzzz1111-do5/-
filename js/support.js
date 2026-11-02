@@ -76,6 +76,7 @@ function updateDD(dt) {
   if (!dd.auto || dd.cool > 0 || fp) return;   // 玩家亲自开着：不替他开炮
   // 指挥官火力任务（commander.js）：火力准备、烟幕、支援受阻的攻击；停止射击（误伤后）时不开火
   navHotUpdate();
+  if (typeof lcvTask === 'function' && lcvTask(dd)) return;   // 登陆掩护优先：烟幕墙、压制刚开过火的敌坦克（lcover.js）
   const fm = typeof cmdDDMission === 'function' ? cmdDDMission(dd) : null;
   if (fm && fm.hold) return;
   // 先执行指挥官的火力计划（冲击前的火力准备、冲击支援、反炮兵、呼叫火力，里面本来就有打装甲车的任务）——

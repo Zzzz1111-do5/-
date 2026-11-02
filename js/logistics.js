@@ -75,7 +75,7 @@ function updateSupply(dt) {
     const go = (x, y) => {
       let tx = x, ty = y;
       // 人在内陆时先沿道路寻路回到滩头补给站，再沿浮桥直线前往断点
-      if (isLand(eng.x, eng.y) && dist(eng.x, eng.y, L.x, L.y) > 40) {
+      if (isLand(eng.x, eng.y) && dist(eng.x, eng.y, L.x, L.y) > 40 && !clearLine(eng.x, eng.y, L.x, L.y, 'p')) {   // 直线走得通就直走：不为一组工兵整图算流场（白色平原上一张要半秒）
         const f = field(L.x, L.y, 'p'), n = f && nextStep(f, eng.x, eng.y);
         if (n) [tx, ty] = n; else { tx = L.x; ty = L.y; }
       }
@@ -155,12 +155,15 @@ function updatePoints(dt) {
   }
 }
 
+// 黑夜（S.night，沙盒「黑夜」）：步兵（夜视仪）与工事里的人眼视野缩到六成；车辆热像（vehicles.js）、舰艇、飞机、雷达、远距离热像发现（spot.js）照旧
+const NIGHT_EYE = .6;
+let VIS_GEN = 0;   // 视野版本：每算一次加一（matrix.js fogBytes、render.js 据此决定要不要重算画面用的视野图）
 // 守方视野的视野源；half 'a' 只取视高 .35 的（步兵小组等），'b' 取其余的，不给就是全部（各组内的先后顺序与全部时相同）
 function visSrcE(half) {
-  const es = [], a = half !== 'b', b = half !== 'a';
-  if (a) for (const q of S.teams) if (q.side === 'e') es.push({ x: q.x, y: q.y, r: 160 });
+  const es = [], a = half !== 'b', b = half !== 'a', nk = S.night ? NIGHT_EYE : 1;
+  if (a) for (const q of S.teams) if (q.side === 'e') es.push({ x: q.x, y: q.y, r: 160 * nk });
   if (b) {
-    for (const e of S.enemies) if (!e.dead) es.push({ x: e.x, y: e.y, r: e.kind === 'coastal' ? 220 : e.kind === 'bunker' ? 170 : 90, h: e.kind === 'coastal' ? 1.2 : .6 });
+    for (const e of S.enemies) if (!e.dead) es.push({ x: e.x, y: e.y, r: e.kind === 'coastal' ? 220 : (e.kind === 'bunker' ? 170 : 90) * nk, h: e.kind === 'coastal' ? 1.2 : .6 });   // 岸防炮靠雷达，夜里照旧
     if (typeof armorVisionSources === 'function') es.push(...armorVisionSources());
   }
   for (const s of hookSources('visionE')) if ((s.h || .35) === .35 ? a : b) es.push(s);
@@ -173,8 +176,8 @@ let EVB = null, EVB_S = null;
 function updateVision(part) {
   smokeMask();
   if (part !== 'b') {
-    const ps = [];
-    for (const q of S.teams) if (q.side === 'p' && q.men.includes('radio')) ps.push({ x: q.x, y: q.y, r: 150 });
+    const ps = [], nk = S.night ? NIGHT_EYE : 1;
+    for (const q of S.teams) if (q.side === 'p' && q.men.includes('radio')) ps.push({ x: q.x, y: q.y, r: 150 * nk });
     for (const s of S.ships) if (alive(s)) ps.push({ x: s.x, y: s.y, r: s.state === 'beached' ? 60 : 80, h: .8 });
     if (S.dd.state !== 'sunk') ps.push({ x: S.dd.x, y: S.dd.y, r: 70, h: 1 });
     if (typeof carrierVision === 'function') ps.push(...carrierVision());
@@ -193,6 +196,7 @@ function updateVision(part) {
   }
   if (typeof cvlApply === 'function') cvlApply(part);   // 伪装隐蔽：没被近处发现的隐蔽小组从对方视野里抹掉（conceal.js）
   if (typeof vehDlMark === 'function') vehDlMark(part);   // 数据链：记下此刻看得见的对方车辆（vehicles.js vehSees）
+  VIS_GEN++;   // 攻方视野（'a'）、守方视野（'b' 整张换上）都变了：画面用的视野图要重算
   if (part === 'b') return;
   // 情报记忆：看到过的火力点与工事留下标定；回头再看已空则撤销
   let forts = false;
@@ -254,9 +258,7 @@ function step(dt) {
     S.teams = S.teams.filter(q => q.men.length);
     S.sel = S.sel.filter(id => id === 'DD' || id === 'CV' || S.units.some(u => u.id === id) || S.ships.some(s => s.id === id) || (S.veh || []).some(v => v.id === id && !v.dead));
   }
-  for (const t of S.tracers) t.life += dt;
-  S.tracers = S.tracers.filter(t => t.life < t.max);
-  for (const f of S.fx) f.life += dt;
-  S.fx = S.fx.filter(f => f.life < f.max);
+  // 曳光、特效到时就删：原地挤掉（原来每步 filter 新建两个数组，是推演里最常见的垃圾之一，垃圾回收时画面一顿）——结果与原来逐位相同
+  for (const L of [S.tracers, S.fx]) { let j = 0; for (let i = 0; i < L.length; i++) { const t = L[i]; t.life += dt; if (t.life < t.max) L[j++] = t; } L.length = j; }
   checkEnd(dt);
 }

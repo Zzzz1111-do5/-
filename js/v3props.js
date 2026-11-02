@@ -234,7 +234,7 @@ function v3pPlace() {
   const ptsNear = (x, y) => (TER.points || []).some(p => Math.abs(p.x - x) < 26 && Math.abs(p.y - y) < 26);
   const edge = (gx, gy, t) => { for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const x = gx + dx, y = gy + dy; if (x >= 0 && y >= 0 && x < GW && y < GH && TER.type[y * GW + x] !== t) return true; } return false; };
   const coarse = typeof V3 === 'object' && V3.coarse;
-  for (let gy = 0; gy < GH; gy++) for (let gx = 0; gx < GW; gx++) {
+  for (let gy = 0; gy < (TER.flat ? 0 : GH); gy++) for (let gx = 0; gx < GW; gx++) {   // 白色平原：光秃的平台，不种树、不摆岩石
     const i = gy * GW + gx, t = TER.type[i], cx = gx * CELL + CELL / 2, cy = gy * CELL + CELL / 2, el = TER.elev[i] || 0;
     if (af && Math.hypot(cx - af.x, cy - af.y) < 520) continue;   // 机场场区（跑道、滑行道）不长树
     let n = 0;
