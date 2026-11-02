@@ -94,6 +94,8 @@ async function v3gDecode(key, D) {
   if (m.it === 4 && !V3G.u32) throw new Error('显卡不支持 32 位索引');
   const VB = new Float32Array(bin.buffer, bin.byteOffset + m.vb[0], m.vb[1] / 4), IB = m.it === 4 ? new Uint32Array(bin.buffer, bin.byteOffset + m.ib[0], m.ib[1] / 4) : new Uint16Array(bin.buffer, bin.byteOffset + m.ib[0], m.ib[1] / 2);
   const R = v3gPrep(key, m, M, VB, IB);   // 座舱显示屏、平显外框、尾喷口、舵面、弹舱（v3gPrep）：上传缓冲区之前改顶点、索引；切弹舱会换成更长的新数组
+  const PTg = V3G_PAINT[key];
+  if (PTg && PTg.glow) M.glowS = v3gGlowSeg(m, R ? R.VB : VB, R ? R.IB : IB, PTg.glow);   // 发光灯带的线段（v3fx.js 沿着画发光的光带）
   if (key === 'army' && typeof v3manImgs === 'function') v3manImgs(m, bin);   // 士兵贴图原图留一份（甲板人员、飞行员换装时重新着色）
   if (R && R.it === 4 && !V3G.u32) throw new Error('显卡不支持 32 位索引');
   M.vb = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, M.vb); gl.bufferData(gl.ARRAY_BUFFER, R ? R.VB : VB, gl.STATIC_DRAW);
@@ -569,6 +571,34 @@ function v3gPitParts(cf, m, M, VB, IB) {
   }
 }
 // 挖洞：喷管喉道后面模型自带的东西（平板圆盘、粗糙的内部结构，从后面看进去是一块亮灰的盘子）——每条规则按材质、x 范围、离两台发动机轴线的半径挑出三角形（三个顶点都在里面），从绘制段里去掉
+// 发光灯带（V3G_PAINT 的 glow 材质，歼-20 的绿色电致发光编队灯）：模型里只有几厘米宽，追尾镜头 20 米外就不到一个像素，白天基本看不见——
+//   解码时把每条灯带（按位置焊接后的连通块）算成一段线（相距最远的两点、朝外的平均法线）；左右缺了的按对称补上（模型左边机头少一串）。v3fx.js 沿着画发光的光带
+function v3gGlowSeg(m, VB, IB, glow) {
+  const st = m.st, S = [];
+  for (const [mi, , i0, cnt] of m.lod[0]) {
+    if (!glow[m.mats[mi].n]) continue;
+    const key = v => Math.round(VB[v * st] * 200) + ',' + Math.round(VB[v * st + 1] * 200) + ',' + Math.round(VB[v * st + 2] * 200);
+    const par = new Map(), f = a => { while (par.get(a) !== a) { const g = par.get(par.get(a)); par.set(a, g); a = g; } return a; }, T = [];
+    for (let t = i0; t + 2 < i0 + cnt; t += 3) { const tr = [IB[t], IB[t + 1], IB[t + 2]]; T.push(tr); for (const v of tr) { const k = key(v); if (!par.has(k)) par.set(k, k); } }
+    for (const tr of T) { const a = f(key(tr[0])); for (const v of tr.slice(1)) { const b = f(key(v)); if (a !== b) par.set(b, a); } }
+    const C = new Map();
+    for (const tr of T) {
+      const r = f(key(tr[0]));
+      let c = C.get(r);
+      if (!c) C.set(r, c = { P: [], n: [0, 0, 0] });
+      for (const v of tr) { const o = v * st; c.P.push([VB[o], VB[o + 1], VB[o + 2]]); c.n[0] += VB[o + 3]; c.n[1] += VB[o + 4]; c.n[2] += VB[o + 5]; }
+    }
+    for (const c of C.values()) {
+      const P = c.P, cen = [0, 1, 2].map(j => P.reduce((sm, p) => sm + p[j], 0) / P.length), d2 = (p, q) => (p[0] - q[0]) ** 2 + (p[1] - q[1]) ** 2 + (p[2] - q[2]) ** 2;
+      const far = q => P.reduce((b, p) => d2(p, q) > d2(b, q) ? p : b, P[0]), a = far(cen), b = far(a), nl = Math.hypot(...c.n) || 1;
+      S.push({ a, b, n: c.n.map(v => v / nl) });
+    }
+  }
+  const near = (p, q) => Math.abs(p[0] - q[0]) < .12 && Math.abs(p[1] + q[1]) < .12 && Math.abs(p[2] - q[2]) < .12;   // p 是不是 q 的镜像点
+  for (const sg of S.slice()) if (Math.abs(sg.a[1]) > .2 && !S.some(o => near(o.a, sg.a) || near(o.b, sg.a)))
+    S.push({ a: [sg.a[0], -sg.a[1], sg.a[2]], b: [sg.b[0], -sg.b[1], sg.b[2]], n: [sg.n[0], -sg.n[1], sg.n[2]] });
+  return S;
+}
 function v3gPitHole(cf, m, VB, IB) {
   const noz = m.noz && m.noz[0];
   if (!cf.hole || !noz) return;
@@ -618,7 +648,7 @@ const V3G_PAINT = {
     // 喷管不涂吸波漆，是裸露的耐热合金：锯齿调节片外表面烧成橄榄青铜色（钛合金、高温合金受热后的回火色），内锥面亮一些的钢灰——与深灰机身明显不同
     nozzle: [.15, .128, .058, [.82, .42], 1], nozzle_in: [.34, .33, .31, [.9, .34], 1] },
     // 绿色电致发光编队灯带（机头两侧座舱下方、两片垂尾上各一条，夜间编队飞行看僚机用）：模型里本来就有，亮度加到白天也看得出、能泛一点光
-    glow: { 'Material.009': 2.4, 'Material.014': 2.4, 'Material.020': 2.4, 'Material.022': 2.4, 'Material.024': 2.4 } }
+    glow: { 'Material.009': 4, 'Material.014': 4, 'Material.020': 4, 'Material.022': 4, 'Material.024': 4 } }
 };
 // 漆面纹理（所有重新涂装的模型共用一张）：256 见方、能平铺的几层平滑噪声，亮度在 0.94–1 之间——不至于一整块纯色，像风吹日晒过的漆面
 // 吸波涂层的面板感（歼-20 这类重新涂装、模型又没有贴图的）：大小不一的面板各自深浅差一点、面板缝暗一条、零星浅色的锯齿形吸波胶带、斑驳——

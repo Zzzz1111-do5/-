@@ -294,6 +294,19 @@ function v3Fx(C) {
       v3fSpark(out, C, Wp(tu, -tip[1], 0), lr, [.3, 1, .45, .95]);   // 右翼尖绿灯
       const tail = D.stab ? D.stab.reduce((m, q) => Math.min(m, q[0]), 0) : (D.body ? D.body[D.body.length - 1][0] : -9);
       if (((S.t * .8 + o.id * .37) % 1) < .07) v3fSpark(out, C, Wp(tail + 1, 0, 2.6), Math.min(2.4 * k + 1, .01 * dE + .1), [1, 1, 1, 1]);   // 防撞灯
+      const MG = typeof V3G_AIR === 'object' && typeof V3G === 'object' && V3G.M[V3G_AIR[key]];
+      if (MG && MG.ready && MG.glowS && typeof v3gAt === 'function' && dE < 2500) {   // 绿色电致发光编队灯带（歼-20）：沿模型里的灯带画发光的光带（里层亮、外层泛光），白天、远一点也看得见
+        const pg = fp ? fp.pitch : typeof v3dPitchOf === 'function' ? v3dPitchOf(o, own ? 0 : 1) : Lc ? Lc.pitch : 0, kk = sz / MG.meta.len;
+        const wc = Math.max(.08 * kk, dE * .002), wh = Math.max(.42 * kk, dE * .007), fa = 1 - sm01((dE - 1500) / 1000);
+        for (const gs of MG.glowS) {
+          const off = q => [q[0] + gs.n[0] * .03, q[1] + gs.n[1] * .03, q[2] + gs.n[2] * .03];   // 离开蒙皮一点，免得和蒙皮抢深度
+          const A = v3gAt(key, sz, o.x, o.y, z, h, pg, r, off(gs.a)), B = v3gAt(key, sz, o.x, o.y, z, h, pg, r, off(gs.b));
+          if (!A || !B) continue;
+          const PA = v3fP(A[0], A[1], A[2]), PB = v3fP(B[0], B[1], B[2]);
+          v3fRib(out, C.E, PA, PB, wh, [.25, 1, .45, .22 * fa], [.25, 1, .45, .22 * fa]);
+          v3fRib(out, C.E, PA, PB, wc, [.55, 1, .65, .95 * fa], [.55, 1, .65, .95 * fa]);
+        }
+      }
       if (FTR[key] && typeof v3dBurner === 'function') {   // 喷口发热、加力尾焰（v3det.js）：按每个喷口，随机身俯仰、滚转；加力开关时火舌平滑地长出、缩回
         const F2 = fp && o.fl, Eg = F2 ? v3dEng('p' + o.id, (o.fuel ?? 1) > 0 ? .3 + .7 * (typeof V3FP === 'object' ? V3FP.thr : .85) : 0, F2.ab ? 1 : 0)   // 玩家开的：按油门（慢车 .3 → 最大 1）、加力开关
           : v3dEng((own ? 'p' : 'e') + o.id, burn ? 1 : .65, burn ? 1 : 0);
