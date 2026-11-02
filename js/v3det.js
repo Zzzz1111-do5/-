@@ -12,7 +12,7 @@ const v3dSz = p => typeof airSize3 === 'function' ? airSize3(p, 'p') : (typeof a
 //   直线电机：挂杆后整条滑轨微微发光（储能），越接近弹射越亮；弹射时滑块所在的一段定子最亮、身后一段渐暗、前面一小段刚通电
 //   喷气机挂杆后推到最大推力、弹射前约 2 秒点加力（v3dDeckEng），尾焰打在升起的偏流板上（板面映亮）；离舰后先略微下沉、抬头爬升，约 2 秒后收起落架
 const V3D_NOSE0 = 6;   // 没有飞机时滑块停在起点前 6 米（前起落架大致的位置）
-const V3D_JET = { j35: 1, j20: 1, j15: 1, j15t: 1, j16: 1, j16b: 1, j16d: 1, j50: 1, f35: 1, f22: 1, f35b: 1 };   // 有加力的喷气机
+const V3D_JET = { j35: 1, j20: 1, j15: 1, j15t: 1, j16: 1, j16b: 1, j16m: 1, j16d: 1, j50: 1, f35: 1, f22: 1, f35b: 1 };   // 有加力的喷气机（j16m 歼-16 导弹卡车原来漏了：喷口不发热、开加力没有火）
 // 前起落架离机身中心多远（世界单位）：用户给的模型里量的前轮位置（米，模型坐标）；没有起落架的模型按机长的两成
 const V3D_NOSEX = { j31: 4, j20: 3.18 };
 function v3dNose(key, k) {
@@ -313,9 +313,13 @@ function v3dNoz(key, sz, ground) {
   const mk = typeof V3G_AIR === 'object' && V3G_AIR[key], M = mk && typeof V3G === 'object' && V3G.M[mk], N = [];
   if (!M || !M.ready || !M.meta.noz) return N;
   const s = sz / M.meta.len, z0 = ground ? 0 : M.meta.zc, PC = typeof V3G_PIT === 'object' && V3G_PIT[mk], T = (typeof v3nzThr === 'function' && v3nzThr(mk)) || (PC && PC.thr);   // 换了真实喷口（v3noz.js）：发动机后段放到收敛段入口
-  // an：模型的调节片会开合（出口半径跟着变）；t：喷口里的发动机后段放在喉道（出口前 u、半径 r、深 d），没有就放在出口
+  // an：模型的调节片会开合（出口半径跟着变；整圈开合 noz、一片片的调节片 pet）；t：喷口里的发动机后段放在喉道（出口前 u、半径 r、深 d），没有就放在出口；
+  //   fc：喷口里装了现成的发动机内腔（歼-16：Su-30 的涡轮面、火焰稳定器）——不再画程序的发动机后段，只在内腔前面画热光（离出口多深）；
+  //   PC.pet.c：左右发动机轴心分别量的（模型左右不完全对称），比按 noz 的 y 左右镜像准
+  const C2 = PC && PC.pet && PC.pet.c;
   for (const n of M.meta.noz) for (const sg of n[1] ? [1, -1] : [1]) N.push(n[5] ? { x: n[0] * s, y: n[1] * sg * s, z: (n[2] - z0) * s, r: 0, d: n[4] * s, w: n[5] * s, hh: n[6] * s }   // 扁平的二元喷口：n[5] 半宽、n[6] 半高
-    : { x: n[0] * s, y: n[1] * sg * s, z: (n[2] - z0) * s, r: n[3] * s, d: n[4] * s, w: n[3] * s, hh: n[3] * s, an: !!(PC && PC.noz), t: T ? { u: -T.u * s, r: T.r * s, d: T.d * s } : null });
+    : { x: n[0] * s, y: (C2 ? C2[sg > 0 ? 0 : 1][0] : n[1] * sg) * s, z: ((C2 ? C2[sg > 0 ? 0 : 1][1] : n[2]) - z0) * s, r: n[3] * s, d: n[4] * s, w: n[3] * s, hh: n[3] * s, an: !!(PC && (PC.noz || PC.pet)),
+      t: T ? { u: -T.u * s, r: T.r * s, d: T.d * s } : null, fc: PC && PC.face ? PC.face * s : 0 });
   return N;
 }
 // 炽热金属的颜色（近似黑体）：t 0 暗红 → .5 橙 → 1 淡黄；a 不透明度
@@ -375,7 +379,8 @@ function v3dBurner(out, C, p, key, sz, o, E) {
     const rib = (a, b, w, c0, c1) => v3fRib(out, Ey, a, b, w, c0, c1 || c0);
     const U = [-R[0], -R[3], -R[6]], Vv = [R[1], R[4], R[7]];   // 喷流方向（向后）、喷口平面里的一个方向
     // —— 喷口里：圆喷口画实体的发动机后端（v3jet.js：涡轮、尾锥、支板、喷油杆、火焰稳定器、衬套，按热度发光）；远处只画一团光；扁平喷口画几道导流片 ——
-    if (n.r) {
+    if (n.r && n.fc) { if (ht > .03 || ab > .02) v3fSpark(out, C, P(-n.fc, 0, 0), r * .9, v3dHot(Math.max(hk(0), .9 * s1), Math.min(.9, .55 * hk(0) + .3 * s1))); }   // 装了现成内腔的（歼-16）：内腔前面一团热光，推油门从暗红到橙黄、开加力更亮
+    else if (n.r) {
       if (q > .01 && (ht > .03 || ab > .02) && typeof v3jEng === 'function') { if (n.t) v3jEng(P(n.t.u, 0, 0), U, Vv, n.t.r, n.t.d / n.t.r, ht, ab); else v3jEng(c, U, Vv, r, Math.max(1.2, d / r), ht, ab); }
       else if (ht > .03) v3fSpark(out, C, P(-d * .8, 0, 0), r * .9, v3dHot(hk(0), .5 * hk(0)));   // 远处：喷管深处的光
     } else if (ht > .03) {

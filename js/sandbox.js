@@ -2,7 +2,8 @@
 // 沙盒模式：同一张海岸地图上按预算自由部署岸防与进攻部队（CATALOG 条目），可让「高级指挥官」AI 替任一方部署并在聊天框说明理由；
 // 开战时把部署条目转换为引擎对象，观战 AI 对 AI 或亲自指挥进攻方。部署数据 S.sbx = {items, budget, notes, ...}（纯 JSON）。
 // 条目字段：{id, cat(目录 id), side, x, y, x2, y2, cargo:[目录 id], plan:{x,y}, wave, n(兵组/数量覆盖), r(雷区半径), pts(折线), t(增援时刻)}
-const SBX_BUDGET = 1500, SBX_BUDGET_MAX = 30000;   // 每方初始预算 · 预算上限
+const SBX_BUDGET = 1500, SBX_BUDGET_MAX = 30000;   // 预算的基准（AI 布兵按「预算 ÷ 基准」放大编成）· 预算上限
+const SBX_BUDGET0 = SBX_BUDGET_MAX;   // 每方初始预算：直接给到上限 30000（用户：不用每次手动把双方预算调上去）
 const SBX = { sty: { e: 'bal', p: 'bal' }, dir: { main: -1, feint: -2 }, erase: null, el: null, side: 'e', cat: 'all', pick: null, hover: null, line: null, lineDown: null, drag: null, mouse: null, tip: null, msg: '', msgT: 0, pv: false, endKey: null };
 const sbxEntry = it => it && typeof catalogById === 'function' ? catalogById(it.cat) : null;
 const sbxOn = () => !!(S && S.phase === 'sandbox' && S.sbx);
@@ -1423,7 +1424,7 @@ HOOK.newGame.push(opts => { if (typeof R === 'object' && R) R.eye = null; if (!(
 // ———————————————— 编辑器入口 ————————————————
 function openSandbox(seed, keep, map) {
   const prev = S && S.sbx ? S : null, lv = (prev && prev.level) || (typeof U === 'object' && U.level) || 'hard';
-  const bud = keep && prev ? { ...prev.sbx.budget } : { p: SBX_BUDGET, e: SBX_BUDGET };
+  const bud = keep && prev ? { ...prev.sbx.budget } : { p: SBX_BUDGET0, e: SBX_BUDGET0 };
   map = map || (keep && prev && prev.map && prev.map !== 'std' ? prev.map : undefined);
   newGame(seed, lv, { sandbox: true, mode: 'sandbox', map });   // map：另外登记的地图（core.js MAPGEN），换种子重建时沿用
   Object.assign(S, { phase: 'sandbox', briefed: true, paused: true, role: 'attack', mode: 'sandbox', armor: [] });
@@ -1754,7 +1755,7 @@ function sbxLoad(d) {
   if (DIFF[d.level]) S.level = d.level;
   const items = sbxClone(d.items).filter(it => catalogById(it.cat));
   for (const it of items) if (it.cargo) it.cargo = it.cargo.filter(id => catalogById(id));
-  Object.assign(S.sbx, { items, budget: { p: (d.budget && d.budget.p) || SBX_BUDGET, e: (d.budget && d.budget.e) || SBX_BUDGET }, notes: sbxClone(d.notes || { p: [], e: [] }) });
+  Object.assign(S.sbx, { items, budget: { p: (d.budget && d.budget.p) || SBX_BUDGET0, e: (d.budget && d.budget.e) || SBX_BUDGET0 }, notes: sbxClone(d.notes || { p: [], e: [] }) });
   S.sbx.nid = items.reduce((m, it) => Math.max(m, it.id || 0), 0) + 1;
   if (TER.af) S.sbx.items = S.sbx.items.filter(it => it.cat !== 'e_airfield');   // 旧存档里买的机场：换成地图自带的空军基地
   sbxMapAF();
