@@ -15,7 +15,7 @@ precision highp float;
 #else
 precision mediump float;
 #endif
-uniform float uT;
+uniform float uT; uniform vec3 uNt;   // uNt：夜里遮光的烟按月光压暗（发光的那一遍是 1）
 varying vec4 vC; varying vec2 vQ;
 float h2(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float vn(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3. - 2. * f); return mix(mix(h2(i), h2(i + vec2(1., 0.)), f.x), mix(h2(i + vec2(0., 1.)), h2(i + vec2(1., 1.)), f.x), f.y); }
@@ -25,7 +25,7 @@ void main() {
   float r = dot(q, q);
   if (md < .5) {
     float a = vC.a * exp(-2.6 * r) * step(r, 1.);
-    gl_FragColor = vec4(vC.rgb * a + vec3(1.) * a * a * .35, a);   // 中心发白
+    gl_FragColor = vec4((vC.rgb * a + vec3(1.) * a * a * .35) * uNt, a);   // 中心发白
     return;
   }
   if (r > 1.) discard;
@@ -35,10 +35,10 @@ void main() {
   float e = 1. - smoothstep(.22, 1., r + (n - .5) * .75);
   if (md < 1.5) {   // 烟（预乘透明度、遮光）：顶上受光亮一点、底下暗，噪声暗的地方更透
     float a = vC.a * e * (.5 + .65 * n);
-    gl_FragColor = vec4(vC.rgb * (.74 + .32 * q.y + .14 * (n - .5)) * a, a);
+    gl_FragColor = vec4(vC.rgb * (.74 + .32 * q.y + .14 * (n - .5)) * a * uNt, a);
   } else {   // 火（加法）：噪声亮的一团团接近白黄，边上是本身的橙红
     float h = e * (.4 + .8 * n);
-    gl_FragColor = vec4(mix(vC.rgb, vec3(1., .88, .62), smoothstep(.68, 1.12, h)) * vC.a * h, vC.a * h);
+    gl_FragColor = vec4(mix(vC.rgb, vec3(1., .88, .62), smoothstep(.68, 1.12, h)) * vC.a * h * uNt, vC.a * h);
   }
 }`;
 function v3fxInit(gl) {
@@ -49,7 +49,7 @@ function v3fxInit(gl) {
     gl.attachShader(pr, sh(gl.VERTEX_SHADER, V3F_VS)); gl.attachShader(pr, sh(gl.FRAGMENT_SHADER, V3F_FS));
     gl.linkProgram(pr);
     if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(pr));
-    Object.assign(V3F, { pr, a: { p: gl.getAttribLocation(pr, 'p'), c: gl.getAttribLocation(pr, 'c'), q: gl.getAttribLocation(pr, 'q') }, u: { uM: gl.getUniformLocation(pr, 'uM'), uT: gl.getUniformLocation(pr, 'uT') }, buf: gl.createBuffer(), ok: true });
+    Object.assign(V3F, { pr, a: { p: gl.getAttribLocation(pr, 'p'), c: gl.getAttribLocation(pr, 'c'), q: gl.getAttribLocation(pr, 'q') }, u: { uM: gl.getUniformLocation(pr, 'uM'), uT: gl.getUniformLocation(pr, 'uT'), uNt: gl.getUniformLocation(pr, 'uNt') }, buf: gl.createBuffer(), ok: true });
   } catch (e) { V3F.ok = false; console.warn('3D 弹道不可用', e); }
 }
 // 特效顶点的预分配缓冲：和数组一样用 push（每个顶点 9 个数）、length，写进一块 Float32Array，不够了翻倍；每帧把 length 清零复用
@@ -403,6 +403,7 @@ function v3Fx(C) {
   if (typeof a82Fx === 'function') a82Fx(out, sm, C, inB, seen);   // 82 空降师：标枪的烟迹与尾焰、CH-47F 旋翼下洗的尘土（v3a82.js）
   if (typeof fpFx === 'function') fpFx(out, sm, C);   // 亲自驾驶：翼尖涡流、机翼水汽、迎面的风线（v3pilot.js）
   if (typeof v3dHaze === 'function') v3dHaze(C);   // 喷口后的热浪（v3det.js）：在加法特效之前，扭的是火焰后面的画面
+  if (typeof v3ntLamps === 'function') v3ntLamps(out, C);   // 夜里：车灯、尾灯、舰艇航行灯、直升机防撞灯（v3nite.js）
   if (!out.length && !sm.length) return;
   // —— 画：先画遮挡的烟（预乘透明度的普通混合），再画发光（加法混合）；都测深度、不写深度 ——
   const A = V3F.a;
@@ -416,6 +417,8 @@ function v3Fx(C) {
     gl.bufferData(gl.ARRAY_BUFFER, L.a.subarray(0, L.length), gl.DYNAMIC_DRAW);
     gl.vertexAttribPointer(A.p, 3, gl.FLOAT, false, 36, 0); gl.vertexAttribPointer(A.c, 4, gl.FLOAT, false, 36, 12); gl.vertexAttribPointer(A.q, 2, gl.FLOAT, false, 36, 28);
     gl.blendFunc(gl.ONE, add ? gl.ONE : gl.ONE_MINUS_SRC_ALPHA);
+    const nk = !add && S.night && typeof v3Mx === 'function' && !v3Mx() ? [.3, .34, .46] : [1, 1, 1];   // 夜里的烟：只有月光照着，暗灰偏蓝（火光、灯这些发光的照旧）
+    gl.uniform3f(V3F.u.uNt, nk[0], nk[1], nk[2]);
     gl.drawArrays(gl.TRIANGLES, 0, L.length / 9);
   }
   gl.depthMask(true); gl.disable(gl.BLEND);

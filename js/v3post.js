@@ -152,7 +152,7 @@ function v3Post(now) {
   gl.bindBuffer(gl.ARRAY_BUFFER, V3PO.buf); gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
   tex(0, V3PO.scene); gl.copyTexImage2D(gl.TEXTURE_2D, 0, gl.RGB, 0, 0, w, h, 0);   // 抓下刚画好的一帧（已做过多重采样抗锯齿）
   pass('down', A, qw, qh, u => { tex(0, V3PO.scene); gl.uniform1i(u.uS, 0); gl.uniform2f(u.uPx, 1 / w, 1 / h); gl.uniform1f(u.uTh, 0); });
-  pass('down', B, qw, qh, u => { tex(0, A.t); gl.uniform1i(u.uS, 0); gl.uniform2f(u.uPx, .5 / qw, .5 / qh); gl.uniform1f(u.uTh, mx ? .42 : .86); gl.uniform1f(u.uKn, mx ? .2 : .12); });   // 黑绿：亮线都泛光；写实：只有很亮的（爆炸、火光、阳光反射）泛光
+  pass('down', B, qw, qh, u => { tex(0, A.t); gl.uniform1i(u.uS, 0); gl.uniform2f(u.uPx, .5 / qw, .5 / qh); gl.uniform1f(u.uTh, mx ? .42 : S && S.night ? .5 : .86); gl.uniform1f(u.uKn, mx ? .2 : S && S.night ? .16 : .12); });   // 夜里：车灯、火光这些亮点晕开一圈   // 黑绿：亮线都泛光；写实：只有很亮的（爆炸、火光、阳光反射）泛光
   for (const r of [1, 2.2]) {   // 第二遍半径大一些：近处一圈亮、外面一圈淡淡的光晕
     pass('blur', T, qw, qh, u => { tex(0, B.t); gl.uniform1i(u.uS, 0); gl.uniform2f(u.uDir, r / qw, 0); });
     pass('blur', B, qw, qh, u => { tex(0, T.t); gl.uniform1i(u.uS, 0); gl.uniform2f(u.uDir, 0, r / qh); });
