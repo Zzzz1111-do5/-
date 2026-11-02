@@ -268,16 +268,24 @@ function v3dPitch(o, sd, z, L, key) {
   const trim = typeof AERO === 'object' ? (AERO.d0 + AERO.d1 * al / V3D_D2R) * V3D_D2R : 0;
   P.de = L ? lerp(V3D_TOTRIM, L.de, sm01(L.u / .8)) * (1 - w) + (trim - .35 * P.q) * w : clamp(trim - .35 * P.q, -.3, .15);   // 离舰：从起飞配平过渡到 JSBSim 的平尾
   P.da = clamp(.3 * P.p, -.2, .2);   // 滚转：左右舵面差动
+  P.al = al;   // 迎角（前缘机动襟翼按它放，v3dCtlAI）
   P.t = S.t; P.pt = pt;
   return pt;
 }
+// 舵面各通道（弧度，v3g.js V3G_CS 按权重组合成每片舵面的偏角）：玩家开的按飞控算出的真实舵偏（升降、副翼、方向舵）+ 襟翼手柄 + 减速板 + 按迎角放的前缘机动襟翼；
+//   AI 的平尾、滚转差动按气动（v3dPitch），襟翼跟着起落架放（起降构型）、前缘襟翼按迎角、滚转时方向舵配一点（协调转弯）
+const V3D_FLAP = .6, V3D_LEF = .44, V3D_SB = 1;   // 襟翼放到底约 35°、前缘襟翼最多约 25°、减速板约 57°
+const v3dLef = al => clamp((al - 4 * V3D_D2R) * 1.1, 0, V3D_LEF);   // 机动襟翼：迎角过 4° 后跟着迎角往下放
+function v3dCtlP(F) { const fl = F.flap || 0; return { de: F.d[0], da: F.d[1], dr: F.d[2], df: fl * V3D_FLAP, dl: Math.max(v3dLef(F.a || 0), fl * .5 * V3D_LEF), sb: F.sb ? V3D_SB : 0 }; }
+function v3dCtlAI(P, gd) { return { de: P.de || 0, da: P.da || 0, dr: .3 * (P.da || 0), df: gd ? .8 * V3D_FLAP : 0, dl: Math.max(v3dLef(P.al || 0), gd ? .5 * V3D_LEF : 0), sb: 0 }; }
 // 甲板上的舰载机：挂杆后先做舵面检查（杆前后左右推一遍，平尾上下摆、左右差动），之后停在起飞配平（后缘上偏约 10°）直到弹射
 const V3D_TOTRIM = -.18;
 function v3dDeckSurf(p) {
-  if (p.phase === 'roll') return { de: V3D_TOTRIM, da: 0 };
+  if (p.phase === 'roll') return { de: V3D_TOTRIM, da: 0, df: V3D_FLAP, dl: .6 * V3D_LEF };   // 弹射起飞：襟翼放到底、前缘襟翼放下
   if (p.phase !== 'cat' || p.dk !== 'hook') return null;
   const t = p.dkT || 0, c = t < .5 ? -.35 * Math.sin(t / .5 * Math.PI) : t < 1 ? .25 * Math.sin((t - .5) / .5 * Math.PI) : 0, r = t >= 1 && t < 1.7 ? .22 * Math.sin((t - 1) / .7 * Math.PI * 2) : 0;
-  return { de: c + V3D_TOTRIM * sm01((t - 1.5) / .5), da: r };
+  const y = t >= 1.7 && t < 2.4 ? .3 * Math.sin((t - 1.7) / .7 * Math.PI * 2) : 0, f = sm01((t - 2.2) / 1.2);   // 方向舵左右摆一遍；检查完放襟翼、前缘襟翼（起飞构型）
+  return { de: c + V3D_TOTRIM * sm01((t - 1.5) / .5), da: r, dr: y, df: f * V3D_FLAP, dl: f * .6 * V3D_LEF };
 }
 // 3 × 3 旋转（与 v3units.js 实例着色器同一约定：先绕 x 滚转、再绕 y 俯仰（机头抬起为正）、再绕 z 转向；GL 坐标 y 取反）
 const v3dRx = r => { const c = Math.cos(r), s = Math.sin(r); return [1, 0, 0, 0, c, -s, 0, s, c]; };

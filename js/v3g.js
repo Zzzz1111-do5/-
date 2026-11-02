@@ -151,15 +151,15 @@ function v3gUpload(img) {
 
 // ———————————————— 着色器 ————————————————
 // 实例：iA = (x, y, z, 朝向)，iB = (比例, 阵营, 滚转, 俯仰)，与 v3units.js 的 v3mAdd 相同（GL 坐标，y 向北）；iC、iD = 八个部件参数（收起的部件 > .5 就收；飞机 iD 是弹舱门开度，坦克 iC.yzw、iD.x 是炸掉的反应装甲块、iD.z 炮管后坐）
-const V3G_VS = `attribute vec3 p; attribute vec3 n; attribute vec2 uv; attribute vec4 iA; attribute vec4 iB; attribute vec4 iC; attribute vec4 iD;
-uniform mat4 uM; uniform vec3 uEye; uniform float uPk, uPm, uRad, uPx, uPl; uniform vec3 uPp, uPa, uPq, uPa2, uPr, uPq3, uPa3; uniform vec4 uPw, uPw2, uPe, uPe2, uPg2;
+const V3G_VS = `attribute vec3 p; attribute vec3 n; attribute vec2 uv; attribute vec4 iA; attribute vec4 iB; attribute vec4 iC; attribute vec4 iD; attribute vec4 iE;
+uniform mat4 uM; uniform vec3 uEye; uniform float uPk, uPm, uRad, uPx, uPl; uniform vec3 uPp, uPa, uPq, uPa2, uPr, uPq3, uPa3; uniform vec4 uPw, uPw2, uPw3, uPe, uPe2, uPg2;
 varying vec3 vN, vV, vP; varying vec2 vUv, vW; varying float vSide, vD;
 ${typeof V3_SHV === 'string' ? V3_SHV : 'uniform mat4 uShM; varying vec4 vSh;'}
 vec3 rotA(vec3 v, vec3 a, float t) { float c = cos(t), s = sin(t); return v * c + cross(a, v) * s + a * dot(a, v) * (1. - c); }
 void main() {
   vec3 q = p, m = n;
   if (uPk > -.5) {
-    float ang = dot(iC, uPw) + dot(iD, uPw2);   // 实例的部件参数按权重组合（一般只取自己那一个；舵面 = 俯仰 + 滚转差动；弹舱门 = 开度 × 打开角）
+    float ang = dot(iC, uPw) + dot(iD, uPw2) + dot(iE, uPw3);   // 实例的部件参数按权重组合（一般只取自己那一个；舵面 = 俯仰、滚转、偏航、襟翼、前缘、减速几个通道按权重；弹舱门 = 开度 × 打开角）
     if (uPm > 4.5) {   // 链式部件（炮管、发射架、炮塔上的雷达，vfn.js）：先绕自己的轴自转（加特林炮管束，uPq3 / uPa3，iD·uPg2），再沿 uPr 平移（后坐 / 举升，iD·uPw2 米），再绕 uPq / uPa2 转（俯仰、起竖、自转），最后随炮塔 / 转台绕 uPp / uPa 转
       if (uPl > 1.5) { float mk = iD.z; for (int i = 0; i < 16; i++) { if (float(i) >= uPl - 2.) break; mk = floor(mk * .5); } if (mk - 2. * floor(mk * .5) > .5) q = vec3(0.); }   // 发射筒里的弹（v3gCaps）：iD.z 的第 uPl − 2 位 = 这一枚打出去了，筒空了
       float g3 = dot(iD, uPg2);
@@ -261,8 +261,8 @@ function v3gInit(gl) {
     gl.linkProgram(pr);
     if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(pr));
     V3G.pr = pr;
-    for (const k of ['p', 'n', 'uv', 'iA', 'iB', 'iC', 'iD']) V3G.a[k] = gl.getAttribLocation(pr, k);
-    for (const k of ['uM', 'uEye', 'uPk', 'uPm', 'uPl', 'uPp', 'uPa', 'uPw', 'uPw2', 'uPq', 'uPa2', 'uPr', 'uPe', 'uPe2', 'uPq3', 'uPa3', 'uPg2', 'uRad', 'uPx', 'uC', 'uSG', 'uTf', 'uTf2', 'uMR', 'uE', 'uNs', 'uAm', 'uAc', 'uTb', 'uTn', 'uTm', 'uTe', 'uTo', 'uLm', 'uFog', 'uWorld', 'uBg', 'uLmOn', 'uBm', 'uMx', 'uHl', 'uHlC', 'uShM', 'uShT', 'uShOn', 'uShP']) V3G.u[k] = gl.getUniformLocation(pr, k);
+    for (const k of ['p', 'n', 'uv', 'iA', 'iB', 'iC', 'iD', 'iE']) V3G.a[k] = gl.getAttribLocation(pr, k);
+    for (const k of ['uM', 'uEye', 'uPk', 'uPm', 'uPl', 'uPp', 'uPa', 'uPw', 'uPw2', 'uPw3', 'uPq', 'uPa2', 'uPr', 'uPe', 'uPe2', 'uPq3', 'uPa3', 'uPg2', 'uRad', 'uPx', 'uC', 'uSG', 'uTf', 'uTf2', 'uMR', 'uE', 'uNs', 'uAm', 'uAc', 'uTb', 'uTn', 'uTm', 'uTe', 'uTo', 'uLm', 'uFog', 'uWorld', 'uBg', 'uLmOn', 'uBm', 'uMx', 'uHl', 'uHlC', 'uShM', 'uShT', 'uShOn', 'uShP']) V3G.u[k] = gl.getUniformLocation(pr, k);
     V3G.ib = gl.createBuffer();
     V3G.ok = true;
   } catch (e) { V3G.ok = false; console.warn('贴图模型不可用', e); }
@@ -278,17 +278,19 @@ function v3gBegin(C) {
   { const t0 = performance.now(); while (V3G.upq.length && performance.now() - t0 < 4) V3G.upq.shift()(); }   // 每帧上传贴图最多约 4 毫秒（至少一张）：大贴图连传六张会卡一下
 }
 // 一个实例。模型还没好返回 false。parts：四个部件角度（坦克炮塔相对车身的转角、旋翼转角、起落架收起 1 …）
+// 每个实例 20 个数：位置、朝向（iA）、缩放、敌我、滚转、俯仰（iB）、部件参数 12 个（iC、iD、iE：iE 是舵面的偏航、襟翼、前缘襟翼、减速板通道）
+const V3G_IST = 20;
 function v3gAdd(key, x, y, z, a, k, side, roll = 0, pitch = 0, parts = null) {
   const M = v3gModel(key);
   if (!M) return false;
   const C = V3G.C, E = C ? C.E : [x, -y, z + 100], d = Math.hypot(x - E[0], -y - E[1], z - E[2]), px = M.rad * k / Math.max(d, 1) * V3G.px;
   const lod = Math.min(M.meta.lod.length - 1, px > 70 ? 0 : px > 22 ? 1 : 2), ik = key + '#' + lod;
   let L = V3G.inst.get(ik);
-  if (!L) V3G.inst.set(ik, L = { M, lod, d: new Float32Array(16 * 16), n: 0 });
-  if ((L.n + 1) * 16 > L.d.length) { const d2 = new Float32Array(L.d.length * 2); d2.set(L.d); L.d = d2; }
-  const o = L.n * 16;
+  if (!L) V3G.inst.set(ik, L = { M, lod, d: new Float32Array(16 * V3G_IST), n: 0 });
+  if ((L.n + 1) * V3G_IST > L.d.length) { const d2 = new Float32Array(L.d.length * 2); d2.set(L.d); L.d = d2; }
+  const o = L.n * V3G_IST;
   L.d[o] = x; L.d[o + 1] = -y; L.d[o + 2] = z; L.d[o + 3] = -a; L.d[o + 4] = k; L.d[o + 5] = side; L.d[o + 6] = roll; L.d[o + 7] = pitch;
-  for (let i = 0; i < 8; i++) L.d[o + 8 + i] = parts ? parts[i] || 0 : 0;
+  for (let i = 0; i < 12; i++) L.d[o + 8 + i] = parts ? parts[i] || 0 : 0;
   L.n++;
   return true;
 }
@@ -306,10 +308,10 @@ function v3gCull(L, P, key) {
   if (!L.vd || L.vd.length < d.length) L.vd = new Float32Array(d.length);
   let n = 0;
   for (let i = 0; i < L.n; i++) {
-    const o = i * 16, x = d[o], y = d[o + 1], z = d[o + 2], r = -R0 * d[o + 4];
+    const o = i * V3G_IST, x = d[o], y = d[o + 1], z = d[o + 2], r = -R0 * d[o + 4];
     let ok = true;
     for (let j = 0; j < 24; j += 4) if (P[j] * x + P[j + 1] * y + P[j + 2] * z + P[j + 3] < r) { ok = false; break; }
-    if (ok) { L.vd.set(d.subarray(o, o + 16), n * 16); n++; }
+    if (ok) { L.vd.set(d.subarray(o, o + V3G_IST), n * V3G_IST); n++; }
   }
   L.vn = n; L.vk = key;
 }
@@ -347,8 +349,8 @@ function v3gDraw(C, LM) {
       gl.enableVertexAttribArray(A.p); gl.vertexAttribPointer(A.p, 3, gl.FLOAT, false, st, 0);
       gl.enableVertexAttribArray(A.n); gl.vertexAttribPointer(A.n, 3, gl.FLOAT, false, st, 12);
       gl.enableVertexAttribArray(A.uv); gl.vertexAttribPointer(A.uv, 2, gl.FLOAT, false, st, 24);
-      gl.bindBuffer(gl.ARRAY_BUFFER, V3G.ib); gl.bufferData(gl.ARRAY_BUFFER, Dt.subarray(0, N * 16), gl.DYNAMIC_DRAW);
-      for (const [k, o] of [['iA', 0], ['iB', 16], ['iC', 32], ['iD', 48]]) { gl.enableVertexAttribArray(A[k]); gl.vertexAttribPointer(A[k], 4, gl.FLOAT, false, 64, o); X.vertexAttribDivisorANGLE(A[k], 1); }
+      gl.bindBuffer(gl.ARRAY_BUFFER, V3G.ib); gl.bufferData(gl.ARRAY_BUFFER, Dt.subarray(0, N * V3G_IST), gl.DYNAMIC_DRAW);
+      for (const [k, o] of [['iA', 0], ['iB', 16], ['iC', 32], ['iD', 48], ['iE', 64]]) { if (A[k] < 0) continue; gl.enableVertexAttribArray(A[k]); gl.vertexAttribPointer(A[k], 4, gl.FLOAT, false, V3G_IST * 4, o); X.vertexAttribDivisorANGLE(A[k], 1); }
       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, M.ib);
       gl.uniform1f(U.uRad, M.rad);
       const it = m.it === 4 ? gl.UNSIGNED_INT : gl.UNSIGNED_SHORT;
@@ -362,7 +364,7 @@ function v3gDraw(C, LM) {
         if (P) {
           const w = P.w || [pi === 0 ? 1 : 0, pi === 1 ? 1 : 0, pi === 2 ? 1 : 0, pi >= 3 ? 1 : 0];
           const w2 = P.w2 || V3G_W0;
-          gl.uniform1f(U.uPm, P.k === 'hide' ? 1 : P.k === 'noz' ? 2 : P.k === 'gun' ? 3 : P.k === 'era' ? 4 : P.k === 'chain' ? 5 : 0); gl.uniform1f(U.uPl, P.k === 'chain' ? (P.hb != null ? P.hb + 2 : 0) : P.l || 1); gl.uniform3f(U.uPp, P.p[0], P.p[1], P.p[2]); gl.uniform3f(U.uPa, P.a[0], P.a[1], P.a[2]); gl.uniform4f(U.uPw, w[0], w[1], w[2], w[3]); gl.uniform4f(U.uPw2, w2[0], w2[1], w2[2], w2[3]);
+          gl.uniform1f(U.uPm, P.k === 'hide' ? 1 : P.k === 'noz' ? 2 : P.k === 'gun' ? 3 : P.k === 'era' ? 4 : P.k === 'chain' ? 5 : 0); gl.uniform1f(U.uPl, P.k === 'chain' ? (P.hb != null ? P.hb + 2 : 0) : P.l || 1); gl.uniform3f(U.uPp, P.p[0], P.p[1], P.p[2]); gl.uniform3f(U.uPa, P.a[0], P.a[1], P.a[2]); gl.uniform4f(U.uPw, w[0], w[1], w[2], w[3]); gl.uniform4f(U.uPw2, w2[0], w2[1], w2[2], w2[3]); const w3 = P.w3 || V3G_W0; gl.uniform4f(U.uPw3, w3[0], w3[1], w3[2], w3[3]);
           if (P.k === 'chain') {
             const q = P.q || P.p, a2 = P.a2 || V3G_AY, e = P.e || V3G_W0, e2 = P.e2 || V3G_W0, r = P.r || V3G_AX, q3 = P.q3 || q, a3 = P.a3 || V3G_AX, g2 = P.g2 || V3G_W0;
             gl.uniform3f(U.uPq, q[0], q[1], q[2]); gl.uniform3f(U.uPa2, a2[0], a2[1], a2[2]); gl.uniform3f(U.uPr, r[0], r[1], r[2]); gl.uniform4f(U.uPe, e[0], e[1], e[2], e[3]); gl.uniform4f(U.uPe2, e2[0], e2[1], e2[2], e2[3]);
@@ -380,7 +382,7 @@ function v3gDraw(C, LM) {
         gl.uniform1f(U.uNs, T.ns ?? 1); gl.uniform1f(U.uAm, gh ? 2 : T.am); gl.uniform1f(U.uAc, T.ac ?? .5);
         X.drawElementsInstancedANGLE(gl.TRIANGLES, cnt, it, i0 * m.it, N);
       }
-      for (const k of ['iA', 'iB', 'iC', 'iD']) { X.vertexAttribDivisorANGLE(A[k], 0); gl.disableVertexAttribArray(A[k]); }
+      for (const k of ['iA', 'iB', 'iC', 'iD', 'iE']) { if (A[k] < 0) continue; X.vertexAttribDivisorANGLE(A[k], 0); gl.disableVertexAttribArray(A[k]); }
     }
     if (pass) { gl.depthMask(true); gl.disable(gl.BLEND); }
   }
@@ -440,9 +442,9 @@ function v3gPlane(key, sz, x, y, z, ground, h, side, roll, pitch, gear, t, noz =
   const k = sz / M.meta.len;
   let ox = x, oy = y, oz = z;
   if (!ground) { const o = v3dMv3(h, pitch, roll, [0, 0, M.meta.zc * k]); ox -= o[0]; oy += o[1]; oz -= o[2]; }   // 绕机身中线俯仰、滚转（模型原点在机轮着地处）
-  const P = [0, 0, 0, 0, bay ? bay.main || 0 : 0, bay ? bay.side || 0 : 0, fold || 0, 0];
+  const P = [0, 0, 0, 0, bay ? bay.main || 0 : 0, bay ? bay.side || 0 : 0, fold || 0, 0, 0, 0, 0, 0];
   M.parts.forEach((p, i) => { const j = p.slot ?? i; if (j > 3) return; if (p.n === 'gear') P[j] = gear ? 0 : 1; else if (p.n === 'rotor') P[j] = (t || 0) * (V3G_ROTOR[mk] || [22])[0]; else if (p.n === 'trotor') P[j] = (t || 0) * (V3G_ROTOR[mk] || [0, 61])[1]; else if (p.k === 'noz') P[j] = noz; });
-  if (M.ctl) { P[2] = ctl ? ctl.de || 0 : 0; P[3] = ctl ? ctl.da || 0 : 0; }   // 舵面：槽 3 平尾、槽 4 滚转差动
+  if (M.ctl && ctl) { P[2] = ctl.de || 0; P[3] = ctl.da || 0; P[8] = ctl.dr || 0; P[9] = ctl.df || 0; P[10] = ctl.dl || 0; P[11] = ctl.sb || 0; }   // 舵面（弧度）：俯仰、滚转、偏航、后缘襟翼、前缘襟翼、减速板
   if (typeof v3nzPlane === 'function') v3nzPlane(mk, M, ox, oy, oz, h, k, roll, pitch, noz);   // 换装了真实喷口模型的机型（v3noz.js：会收缩的收敛扩散喷口）
   return v3gAdd(mk, ox, oy, oz, h, k, side, roll, pitch, P);
 }
@@ -570,6 +572,122 @@ function v3gPitParts(cf, m, M, VB, IB) {
     lod.push(...add);
   }
 }
+// —— 舵面（所有固定翼飞机机翼、尾翼上能动的地方）：按铰链线把网格切开（凸多边形裁剪，位置、法线、贴图坐标按比例插），切出来的那块挂成绕铰链转的部件 ——
+//   不管模型的舵面是不是单独的面都能切；舵面两头的边顺着气流（与 x 轴平行的面切），弦向切到 c 米为止（不会切到后面的平尾），离铰链面 th 米以外的三角形不动（不切机身、挂架、弹）。
+//   表 V3G_CS[模型键]：mats 只切这些材质（不给就全切）；s 舵面表，每片：
+//     n 名字；h 铰链两端 [[x, y, z], [x, y, z]]（模型坐标，米：x 前、y 左、z 上，有补起落架的按抬高后的）；左右对称的写左边（y > 0）一侧，自动镜像（mir: false 不镜像）；
+//     d 'aft' 后缘舵面（铰链后面那块转）/ 'fwd' 前缘襟翼（铰链前面那块转）；t 厚度方向（机翼 [0, 0, 1]，垂尾 [0, 1, 0]，外倾的写法线）；c 弦长上限、th 厚度上限（米）；
+//     cf 全动舵面（鸭翼、全动平尾、全动垂尾）转轴另一边也要切的弦长（米）；
+//   ex：不切的区域 [x0, x1, |y|0, |y|1, z0, z1]（襟翼作动筒整流罩之类挂在翼下的东西：有顶点落在里面的三角形不动）；
+//   切口补封口面：铰链处固定的那半、转动的那半各封一面（舵面偏转时看到的是实心的断面，不是机翼里面空的），舵面两头的切口也封上
+//     w 各通道的权重 { de 俯仰, da 滚转, dr 偏航, df 后缘襟翼, dl 前缘襟翼, sb 减速板 }：转角 = Σ 权重 × 通道（弧度）；正角 = 转动的那块往 −t 偏（后缘 / 前缘下偏）；镜像那一侧 da、dr 反号
+//   通道（v3gPlane 的 ctl）：de 平尾（JSBSim 符号：正 = 后缘下偏 = 低头）、da 滚转（正 = 右滚：左副翼下偏）、dr 方向舵（正 = 机头向左）、df 襟翼放下、dl 前缘襟翼放下、sb 减速板打开
+function v3gCtlCut(cf, m, VB, IB) {
+  const st = m.st, nv0 = VB.length / st, add = [], parts = m.parts || (m.parts = []);
+  const mis = cf.mats ? new Set(cf.mats.map(n => m.mats.findIndex(x => x.n === n)).filter(i => i >= 0)) : null;
+  const V = i => i < nv0 ? Array.from(VB.subarray(i * st, i * st + st)) : add.slice((i - nv0) * st, (i - nv0) * st + st);
+  const push = a => { add.push(...a); return nv0 + add.length / st - 1; };
+  const mid = (a, b, t) => { const o = a.map((v, i) => v + (b[i] - v) * t), l = Math.hypot(o[3], o[4], o[5]) || 1; o[3] /= l; o[4] /= l; o[5] /= l; return o; };
+  const split = (P, f) => {
+    const I = [], O = [], X = [];
+    P.forEach((a, k) => {
+      const b = P[(k + 1) % P.length], fa = f(a.v), fb = f(b.v);
+      (fa >= 0 ? I : O).push(a);
+      if ((fa >= 0) !== (fb >= 0)) { const c = { v: mid(a.v, b.v, fa / (fa - fb)) }; I.push(c); O.push(c); X.push(c); }
+    });
+    return [I, O, X];
+  };
+  const idx = c => c.i ?? (c.i = push(c.v));
+  const fan = (P, out) => { if (P.length < 3) return; for (let k = 1; k + 1 < P.length; k++) out.push(idx(P[0]), idx(P[k]), idx(P[k + 1])); };
+  const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]], dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  const exc = v => cf.ex && cf.ex.some(b => v[0] >= b[0] && v[0] <= b[1] && Math.abs(v[1]) >= b[2] && Math.abs(v[1]) <= b[3] && v[2] >= b[4] && v[2] <= b[5]);
+  const crs = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]], nrm = a => { const l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0] / l, a[1] / l, a[2] / l]; };
+  const G = [];
+  for (const s of cf.s) for (const sg of s.mir === false ? [1] : [1, -1]) {
+    const P0 = [s.h[0][0], s.h[0][1] * sg, s.h[0][2]], P1 = [s.h[1][0], s.h[1][1] * sg, s.h[1][2]], t0 = s.t || [0, 0, 1];
+    const a = nrm(sub(P1, P0)), t = [t0[0], t0[1] * sg, t0[2]], tn = nrm(sub(t, a.map(v => v * dot(t, a))));
+    let c = nrm(crs(tn, a));
+    if (s.d === 'fwd' ? c[0] < 0 : c[0] > 0) c = c.map(v => -v);
+    const sx = nrm([0, a[1], a[2]]), cm = s.c || 1.5, cf = s.cf || 0, th = s.th || .45, W = s.w || {};
+    let s0 = dot(P0, sx), s1 = dot(P1, sx);
+    if (s0 > s1) [s0, s1] = [s1, s0];
+    const pi = parts.push({ n: s.n, k: 'rot', p: P0, a: crs(tn, c), w: [0, 0, W.de || 0, (W.da || 0) * sg], w2: [0, 0, 0, 0], w3: [(W.dr || 0) * sg, W.df || 0, W.dl || 0, W.sb || 0] }) - 1;
+    const xs = [P0[0], P1[0], P0[0] + c[0] * cm, P1[0] + c[0] * cm, P0[0] - c[0] * cf, P1[0] - c[0] * cf];
+    G.push({ P0, a, c, tn, sx, s0, s1, cm, cf, th, pi, cap: [[], [], []], x0: Math.min(...xs) - .05, x1: Math.max(...xs) + .05 });
+  }
+  const segs = [];
+  for (const [mi, pi, i0, cnt] of m.lod[0]) {
+    const keep = [], outp = G.map(() => []);
+    for (let t = i0; t + 2 < i0 + cnt; t += 3) {
+      const tri = [IB[t], IB[t + 1], IB[t + 2]];
+      if (pi >= 0 || (mis && !mis.has(mi))) { keep.push(...tri); continue; }
+      let rest = [tri.map(i => ({ i, v: V(i) }))], hit = false;
+      if (cf.ex && rest[0].some(q => exc(q.v))) { keep.push(...tri); continue; }
+      G.forEach((g, k) => {
+        const nx = [];
+        for (const P of rest) {
+          const xs = P.map(q => q.v[0]);
+          if (Math.max(...xs) < g.x0 || Math.min(...xs) > g.x1) { nx.push(P); continue; }
+          const dn = P.map(q => dot(sub(q.v, g.P0), g.tn)), sv = P.map(q => dot(q.v, g.sx)), cv = P.map(q => dot(sub(q.v, g.P0), g.c));
+          if (dn.some(d => Math.abs(d) > g.th) || Math.max(...sv) <= g.s0 || Math.min(...sv) >= g.s1 || Math.max(...cv) <= -g.cf || Math.min(...cv) >= g.cm) { nx.push(P); continue; }
+          let I = P;
+          const F = [v => dot(sub(v, g.P0), g.c) + g.cf, v => g.cm - dot(sub(v, g.P0), g.c), v => dot(v, g.sx) - g.s0, v => g.s1 - dot(v, g.sx)];
+          for (let j = 0; j < 4; j++) {
+            const [A, B, X] = split(I, F[j]);
+            if (B.length >= 3) nx.push(B);
+            if (X.length === 2 && A.length >= 3 && j !== 1) g.cap[j === 0 ? 0 : j - 1].push([X[0].v, X[1].v, mi]);   // 切口线段（铰链面 / 两头）：最后补封口面
+            I = A;
+            if (I.length < 3) break;
+          }
+          if (I.length >= 3) { fan(I, outp[k]); hit = true; }
+        }
+        rest = nx;
+      });
+      if (!hit && rest.length === 1 && rest[0].length === 3 && rest[0].every((q, j) => q.i === tri[j])) keep.push(...tri);
+      else for (const P of rest) fan(P, keep);
+    }
+    segs.push([mi, pi, keep]);
+    outp.forEach((L, k) => { if (L.length) segs.push([mi, G[k].pi, L]); });
+  }
+  // 封口面：铰链面上的切口线段连到铰链轴线上（窄长的断面不会画出界），两头的切口扇形连到断面中心；固定的一半、转动的一半各一面，法线朝着缺口
+  const capV = (v, n) => { const o = v.slice(); o[3] = n[0]; o[4] = n[1]; o[5] = n[2]; return push(o); };
+  G.forEach(g => {
+    const byM = new Map(), put = (mi, part, a) => { const kk = mi + '#' + part; if (!byM.has(kk)) byM.set(kk, [mi, part, []]); byM.get(kk)[2].push(...a); };
+    for (const [A, B, mi] of g.cap[0]) {
+      const O = g.P0.map((v, j) => v - g.c[j] * g.cf), pr = p => { const t = dot(sub(p, O), g.a); return [O[0] + g.a[0] * t, O[1] + g.a[1] * t, O[2] + g.a[2] * t, ...p.slice(3)]; }, qA = pr(A), qB = pr(B);   // 切面所在的那条线（全动舵面切在转轴前 cf 处）
+      for (const [n, part] of [[g.c, -1], [g.c.map(v => -v), g.pi]]) { const i = [A, B, qB, qA].map(p => capV(p, n)); put(mi, part, [i[0], i[1], i[2], i[0], i[2], i[3]]); }
+    }
+    for (const [L, sgn] of [[g.cap[1], 1], [g.cap[2], -1]]) {
+      if (!L.length) continue;
+      const cen = [0, 1, 2].map(j => L.reduce((sm, q) => sm + q[0][j] + q[1][j], 0) / (2 * L.length)), nOut = g.sx.map(v => v * sgn);
+      for (const [A, B, mi] of L) {
+        const C = [...cen, ...A.slice(3)];
+        for (const [n, part] of [[nOut, -1], [nOut.map(v => -v), g.pi]]) { const i = [A, B, C].map(p => capV(p, n)); put(mi, part, i); }
+      }
+    }
+    for (const q of byM.values()) segs.push(q);
+  });
+  const nI = segs.reduce((a, q) => a + q[2].length, 0) + m.lod.slice(1).reduce((a, L) => a + L.reduce((b, e) => b + e[3], 0), 0), nv = nv0 + add.length / st, it = nv > 65535 ? 4 : m.it;
+  const IB2 = it === 4 ? new Uint32Array(nI) : new Uint16Array(nI);
+  let o = 0;
+  m.lod[0] = segs.map(([mi, pi, L]) => { const e = [mi, pi, o, L.length]; IB2.set(L, o); o += L.length; return e; }).filter(e => e[3]);
+  for (const L of m.lod.slice(1)) for (const e of L) { const a = IB.subarray(e[2], e[2] + e[3]); e[2] = o; IB2.set(a, o); o += e[3]; }
+  const VB2 = new Float32Array(VB.length + add.length);
+  VB2.set(VB); VB2.set(add, VB.length);
+  m.it = it;
+  return { VB: VB2, IB: IB2, it };
+}
+const V3G_CS = {
+  // 歼-20（andertan 的模型：机翼、鸭翼是几块大平板，舵面没有单独建，按真机的布局切；坐标按抬高 1.25 米后的）——鸭式三角翼：
+  //   全动鸭翼（转轴约在平均气动弦 1/4 处，抬头时前缘上偏）、后缘内侧襟副翼与外侧副翼（升降副翼：俯仰、滚转一起管，起降时襟副翼放下）、
+  //   前缘机动襟翼（迎角大了放下）、全动垂尾（外倾约 27°，偏航；降落时两片对着偏当减速板）
+  j20: { ex: [[-7.7, -6.1, 3.42, 3.84, 2, 2.5], [-7.5, -6, 5.13, 5.57, 2, 2.5]], s: [
+    { n: 'can', h: [[2.4, 1.98, 2.42], [2.4, 4.08, 2.44]], d: 'aft', c: 1.85, cf: 1.6, th: .14, w: { de: -1.2, da: .25 } },
+    { n: 'flpr', h: [[-6.3, 2.55, 2.45], [-6.35, 4.35, 2.41]], d: 'aft', c: 1.6, th: .13, w: { de: .8, da: .8, df: 1 } },
+    { n: 'ail', h: [[-7.15, 4.45, 2.4], [-7, 6.5, 2.36]], d: 'aft', c: 1.1, th: .13, w: { de: .5, da: 1, df: .3 } },
+    { n: 'lef', h: [[-2.3, 2.6, 2.45], [-6.35, 5.7, 2.37]], d: 'fwd', c: .8, th: .13, w: { dl: 1 } },
+    { n: 'vt', h: [[-9.25, 1.9, 2.56], [-9.5, 2.88, 4.5]], t: [0, .894, -.447], d: 'aft', c: 1.05, cf: .95, th: .18, w: { dr: -.7, sb: .5 } }] }
+};
 // 挖洞：喷管喉道后面模型自带的东西（平板圆盘、粗糙的内部结构，从后面看进去是一块亮灰的盘子）——每条规则按材质、x 范围、离两台发动机轴线的半径挑出三角形（三个顶点都在里面），从绘制段里去掉
 // 发光灯带（V3G_PAINT 的 glow 材质，歼-20 的绿色电致发光编队灯）：模型里只有几厘米宽，追尾镜头 20 米外就不到一个像素，白天基本看不见——
 //   解码时把每条灯带（按位置焊接后的连通块）算成一段线（相距最远的两点、朝外的平均法线）；左右缺了的按对称补上（模型左边机头少一串）。v3fx.js 沿着画发光的光带
@@ -624,6 +742,7 @@ function v3gPrep(key, m, M, VB, IB) {
   let R = null;
   const use = r => { if (r) { R = r; VB = r.VB; IB = r.IB; } };   // 补了顶点的步骤换成更长的新数组，后面的步骤接着在新数组上做
   if (V3G_GEAR[key]) use(v3gGear(V3G_GEAR[key], m, VB, IB));   // 补起落架（整架抬高）：弹舱、座舱、挂点都按抬高后的坐标
+  if (V3G_CS[key]) { use(v3gCtlCut(V3G_CS[key], m, VB, IB)); M.ctl = true; }   // 舵面：按铰链线切开机翼、尾翼，切出来的挂成绕铰链转的部件
   const cf = V3G_PIT[key];
   if (cf) { v3gPitScr(cf, m, M, VB, IB); v3gPitHud(cf, m, M, VB, IB); v3gPitHole(cf, m, VB, IB); v3gPitParts(cf, m, M, VB, IB); }
   if (V3G_GUN[key]) v3gGun(V3G_GUN[key], m, VB, IB);
