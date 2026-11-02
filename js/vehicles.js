@@ -1153,7 +1153,7 @@ function vehLSTTick(s, dt) {
   if (s.auto !== true || s.state !== 'idle' || !s.vn || (S.autoPlan && S.autoPlan.holdLST)) return;
   if ((s.lstT = (s.lstT ?? 0) - dt) > 0) return;
   s.lstT = 2;
-  if (!S.ships.some(o => o.kind === 'assault' && (o.state === 'beached' || o.state === 'unloading')) && S.t < 120) return;
+  // 与突击舰同时出发、同时抵滩（用户：抢滩别分批登陆；原来等突击舰上滩、滩头有 8 人站住才出发）
   let best = null, bs = -Infinity, bi = -1, bfr = 0;
   TER.beaches.forEach((b, i) => {
     const ex = b.cx, ey = coastAt(b.cx) - 60;
@@ -1164,11 +1164,11 @@ function vehLSTTick(s, dt) {
     const sc = Math.min(fr, 40) * .4 - def * 1.5 - lst * 4 - Math.abs(b.cx - s.x) / 400 + (b.x1 - b.x0) / 200;
     if (sc > bs) { bs = sc; best = b; bi = i; bfr = fr; }
   });
-  if (!best || (bfr < 8 && S.t < 150)) return;   // 滩头尚未站稳：继续待命
+  if (!best) return;
   const x = clamp(best.cx + (s.id % 3 - 1) * 30, best.x0 + 14, best.x1 - 14);
   if (orderShips([s], x, coastAt(x) - 20)) {
     if (S.autoPlan && S.autoPlan.s) S.autoPlan.s[s.id] = { b: bi, x };
-    log(`${s.label} 驶向${best.name || '滩头'}：装甲第二波上陆`, 'info', 'lstgo' + s.id, 30, { x, y: coastAt(x) });
+    log(`${s.label} 驶向${best.name || '滩头'}：装甲与突击舰同时上陆`, 'info', 'lstgo' + s.id, 30, { x, y: coastAt(x) });
   }
 }
 

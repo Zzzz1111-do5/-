@@ -100,7 +100,8 @@
 - 默认对局的指挥体系是 js/theater.js（战区 → 师 → 团 → 营，钢铁雄心式战线推演）。它启用时关掉旧的 hq.js 司令与团（S.v7off.hq）、brain.js（br）、tf.js（tf）。所以：
   - 默认对局里不生效：js/cmddoc.js（hq.js 守方司令战法表）、js/jointdoc.js 的 BDE_DOC（hq.js 团的协同）；
   - 仍然生效：hq.js 的营长状态机 regThink（穿插、预备队、第二梯队）与 js/doctrine.js 团长战法表、js/sa.js 的态势感知与边打边撤（SA_DOC）。
-- 战区司令的条令参数在 js/theater.js 的 `TH_DOC`（攻方：第二梯队比例、恢复推进的兵力比、火力准备；守方：战役预备队比例、反击兵力比、炮火准备、吃紧投入门槛、判明主攻门槛），由 tools/train_real.js 训练，记录在 docs/real_train.md。改 `TH_DOC` 时同步改 tools/train_real.js 的 `DEF`（训练场把它当「现行参数」比较）。
+- 抢滩不分批、见敌就打（用户要求，docs/ai_requirements.md）：登陆兵力一次同时抵滩（commander.js 不留第二波，坦克登陆舰、补给舰同时到），攻方上岸后一律推进、营接敌不停不退、看见的敌人派排扑上去（theater.js thLine 的 hunt），攻方不再边打边撤。
+- 战区司令的条令参数在 js/theater.js 的 `TH_DOC`（攻方：第二梯队比例（现为 0，用户要求不分批）、火力准备；守方：战役预备队比例、反击兵力比、炮火准备、吃紧投入门槛、判明主攻门槛），由 tools/train_real.js 训练，记录在 docs/real_train.md。改 `TH_DOC` 时同步改 tools/train_real.js 的 `DEF`（训练场把它当「现行参数」比较）。
 
 ## 测试与训练（Node 无头运行；tools/headless.js 按 index.html 的顺序加载 js/）
 - 语法检查：`for f in js/*.js; do node --check $f || echo FAIL $f; done`

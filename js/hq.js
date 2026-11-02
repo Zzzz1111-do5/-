@@ -284,7 +284,7 @@ function regThink(G) {
     return;
   }
   // 打残了（不到两成五）且有敌人压上来、打不过：撤；打不过又伤亡过大：脱离接触。刚撤完 30 秒内不再撤（除非被压得更狠），不来回折腾
-  const wdOk = G.st !== 'withdraw' && (S.t - (G.wdEnd ?? -99) > 30 || r < D.ret * .5);
+  const wdOk = G.side !== 'p' && G.st !== 'withdraw' && (S.t - (G.wdEnd ?? -99) > 30 || r < D.ret * .5);   // 攻方见敌就打，不后撤（用户：抢滩方进攻欲望太低）
   if (wdOk && pw.tot < (G.p0 || pw.tot) * .25 && near.n >= 3 && r < D.press) { regSet(G, 'withdraw', 'weak'); G.wx = null; }
   else if (wdOk && L && near.n >= 3 && r < D.ret * saP(G.side).brk && pw.tot < (G.p0 || pw.tot) * SA.brkPw) { regSet(G, 'withdraw', 'break'); G.wx = null; }
   let mode = 'fight', ot = 'move', custom = null;

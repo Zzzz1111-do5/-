@@ -933,7 +933,6 @@ function sbxSpawn(it, role, acc) {
     if (vs.length) sh.sbxVeh = vs.map(k => ({ id: k.id, type: k.spawn.type, mod: k.spawn.mod || null, tag: k.spawn.tag || null }));
     if (s.role) { Object.assign(sh, { sbxRole: s.role, load: { teams: 0, eng: 0 } }); if (it.plan) sh.sbxTgt = { x: it.plan.x }; }
     else if (role === 'spectate' && sbxCmd()) { if (it.plan) sh.sbxHint = { ...it.plan }; }   // 观战：指挥官先派侦察机照相、再定登陆点与梯队，部署时的预定点只作参考
-    else if (role === 'spectate' && (it.wave || 1) > 1) Object.assign(sh, { sbxPlan: it.plan ? { ...it.plan } : null, sbxHold: true, auto: false });   // 无指挥官：本模块扣留到出口夺取
     else if (it.plan) sh.plan = { ...it.plan };
     if (kind === 'assault') sh.form = 'wedge';
     S.groups[s.role ? 5 : kind === 'supply' ? 3 : lst ? 4 : (it.wave || 1) > 1 ? 2 : 1].push(sh.id);

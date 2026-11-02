@@ -251,11 +251,11 @@ function bgThink(G) {
     const fa = Math.atan2(c[1] - G.ay, c[0] - G.ax);
     G.face = G.face + clamp(Math.atan2(Math.sin(fa - G.face), Math.cos(fa - G.face)), -.35, .35);
     const odds = L ? L.odds : r, pw0 = G.p0 || (G.p0 = ours);
-    if (L && odds < (G.ret ?? .6) && near.length && (S.t - (G.wdEnd ?? -99) > 30 || odds < (G.ret ?? .6) * .5)) {   // 打不过：边打边撤（伤亡过大就放烟幕脱离接触）；刚撤完 30 秒内不再撤
+    if (G.side !== 'p' && L && odds < (G.ret ?? .6) && near.length && (S.t - (G.wdEnd ?? -99) > 30 || odds < (G.ret ?? .6) * .5)) {   // 打不过：边打边撤（伤亡过大就放烟幕脱离接触）；刚撤完 30 秒内不再撤——攻方见敌就打，不撤（用户要求）
       G.st = 'delay'; G.stT = S.t; G.wd = null; G.ov = null; G.amove = false;
       saDelayStart(G, L, odds < (G.ret ?? .6) * saP(G.side).brk && ours < pw0 * SA.brkPw);
       custom = saDelay(G, L, () => bgSlots(G, 'fight')).sl;
-    } else if (odds > (G.agg || 1.6) && lag < BG.lag * 1.4) {   // 占优：成战斗队形向敌推进（反冲击任务 agg 1.2）
+    } else if ((G.side === 'p' || odds > (G.agg || 1.6)) && lag < BG.lag * 1.4) {   // 占优：成战斗队形向敌推进（反冲击任务 agg 1.2）；攻方不看兵力比，见敌就扑上去
       if (G.a101 && L) custom = bgOverwatch(G, c[0], c[1]);   // 101：跃进—掩护，一组前进一组掩护
       else bgAdvance(G, c[0], c[1], BG.pace * .6);
       G.amove = true;

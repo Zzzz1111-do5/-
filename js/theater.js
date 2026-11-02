@@ -15,7 +15,7 @@
 // 状态（纯 JSON）：S.th = { on, nid, f: { id: 编队 }, p: { id 战区编队, k 阶段线序号, kT, sp 进行中的穿插 }, e: { … } }
 //   编队 = { id, side, lvl: thr / div / bde / reg, no, name, ech, par, kids: [id], g 营对应的战斗群（S.bgs）id, cols 战线列, sec [x0, x1],
 //     ord { v, x, y, src: ai / pl, t } 正在执行的命令, box [{ ord, at }] 在途命令, man 玩家接管, aiSp AI 派出的穿插, p0 初始兵力 }
-const TH = { org: 2, think: 4, dly: { div: 5, bde: 3, reg: 2 }, bound: 130, lead: 150, back: 240, rest: 30, minW: 60, maxReg: 4, maxBde: 3, maxDiv: 3,
+const TH = { hunt: 450, org: 2, think: 4, dly: { div: 5, bde: 3, reg: 2 }, bound: 130, lead: 150, back: 240, rest: 30, minW: 60, maxReg: 4, maxBde: 3, maxDiv: 3,
   head: 260, phase: 300, phaseK: .7, spear: 700, spearT: 160, link: 380, wait: 20,
   gap: 30, vgap: 60, row: 100, rows: 3, focus: 1.2 };   // gap 相邻两排形之间留的空当 · vgap 车辆最小间距（条令：车间距 50 米以上，原来 25 米挤成一团） · row 后几排的排距 · focus 正面超出能守宽度多少倍就收缩
 // 战区条令参数（司令训练场 tools/train_real.js 按「胜负 + 条令符合度」调出来；S.thFix = { p: {…}, e: {…} } 可覆盖，训练时用）
@@ -24,7 +24,7 @@ const TH = { org: 2, think: 4, dly: { div: 5, bde: 3, reg: 2 }, bound: 130, lead
 //   守方：res 登陆场出现后留作战役预备队的机动营比例（美军机动防御：机动兵力的 1/9–1/3）· ctr 向海反击要的兵力比 ·
 //         prep 反击前的炮火准备秒数 · commit 一线吃紧到什么程度（当面敌兵力 / 当面全部守军，含守备队与工事）不等判明主攻就投入预备队 ·
 //         det 判明敌主攻要的上陆兵力（一段里已知敌兵力达到它、又比别处多五成）
-const TH_DOC = { p: { ech: .25, adv: 2, prep: 0 }, e: { res: .25, ctr: 2, prep: 12, commit: 1.5, det: 15 } };   // 2026-10-27 训练结果（docs/real_train.md）
+const TH_DOC = { p: { ech: 0, prep: 0 }, e: { res: .25, ctr: 2, prep: 12, commit: 1.5, det: 15 } };   // 2026-10-27 训练结果（docs/real_train.md）；攻方 2026-11-02 按用户要求改成「全部一次上去、见敌就打」：不留第二梯队（ech 0），不再按兵力比转入坚守（去掉 adv）
 const thDoc = side => ({ ...TH_DOC[side], ...(S && S.thFix && S.thFix[side] || {}) });
 const TH_V = { auto: '自动', advance: '推进', spear: '穿插', hold: '坚守', retreat: '后撤', reserve: '预备队', follow: '第二梯队', ext: '独立作战' };
 const TH_LV = { thr: '战区', div: '师', bde: '团', reg: '营' };
@@ -479,27 +479,18 @@ function thThinkP(T) {
       thStat('thPhase');
     }
   }
-  // 巩固登陆场：后续梯队（还载着兵、正驶向滩头的舰艇）没上来之前，先沿滩头一线挖工事顶住反冲击（第一批上岸后最多等 150 秒）
-  const afloat = S.ships.some(s => alive(s) && s.land && (s.state === 'move' || s.state === 'unloading') && s.load && (s.load.teams > 0 || (Array.isArray(s.load.veh) && s.load.veh.length)));
-  if (T.landT == null && divs.length) T.landT = S.t;
-  const consol = T.k === 0 && afloat && S.t - T.landT < 150, dc = thDoc('p');
+  // 见敌就打（用户：抢滩方进攻欲望太低——全部登上去，然后见人就砍）：上岸就全线推进。原来先「巩固登陆场」等后续梯队（最多 150 秒），
+  //   当面兵力比不够 2:1、或一分半钟伤亡一成二以上就地转入坚守，伤亡过大的师撤下来整补——攻方大半时间趴在滩头挖工事
+  const dc = thDoc('p');
   for (const D of divs) {
-    const o = thPress('p', D), drop = thDrop(D), str = thPow(D) / Math.max(1, thP0(D)), org = thOrg(D), cur = D.aiK ? D.aiK.split(':')[0] : null;
-    // 转入防御要的门槛低、恢复推进要的门槛高（不在两个命令之间来回切）
-    const weak = o.foe > 4 && (cur === 'hold' ? o.r < dc.adv || drop > .12 : o.r < dc.adv * .7 || drop > .3);
-    if (weak || consol) D.prepT = null;
-    if ((str < .3 || org < 22) && divs.length > 1 && divs.some(d => d !== D && thPow(d) > thPow(D))) thAiSend(D, 'reserve', '伤亡过大，撤下来整补');
-    else if (consol && !weak) thAiSend(D, 'hold', '后续梯队正在上陆，先沿滩头一线挖工事巩固登陆场');
-    else if (weak) thAiSend(D, 'hold', drop > .25 ? `近一分半钟伤亡${Math.round(drop * 100)}%，当面敌反击猛烈，就地转入防御、挖工事，等舰炮和航空兵削弱敌人再攻` : `当面之敌约 ${Math.round(o.foe)}，兵力比 ${o.r.toFixed(1)}:1，不够 ${dc.adv}:1，就地巩固、等火力削弱后再攻`);
-    else {
-      // 由坚守转入推进：先火力准备（舰炮、垂发导弹打当面已知火力点），到点再全线推进
-      if (cur !== 'advance' && o.foe > 2 && dc.prep > 0) {
-        if (D.prepT == null) { const n = thPrepFire('p', D, dc.prep); D.prepT = S.t + (n ? dc.prep : 0); }
-        if (S.t < D.prepT) continue;
-      }
-      D.prepT = null;
-      thAiSend(D, 'advance', T.k === 0 ? '扩大登陆场，前出至第一阶段线' : `向第 ${T.k} 阶段线推进`);
+    const o = thPress('p', D), cur = D.aiK ? D.aiK.split(':')[0] : null;
+    // 由别的命令转入推进：先火力准备（舰炮、垂发导弹打当面已知火力点；prep 为 0 时不等）
+    if (cur !== 'advance' && o.foe > 2 && dc.prep > 0) {
+      if (D.prepT == null) { const n = thPrepFire('p', D, dc.prep); D.prepT = S.t + (n ? dc.prep : 0); }
+      if (S.t < D.prepT) continue;
     }
+    D.prepT = null;
+    thAiSend(D, 'advance', T.k === 0 ? '扩大登陆场，见敌就打，前出至第一阶段线' : `见敌就打，向第 ${T.k} 阶段线推进`);
   }
   thEchP(T, dc);
   thPrepPts(T, dc);
@@ -854,16 +845,15 @@ function thLine(G, F, v, O) {
   const pw = hqRegPow(G), near = hqFoe(side, G.ax, G.ay, 320), L = typeof saLook === 'function' ? saLook(G, pw, near) : null, r = L ? L.odds : pw.tot / Math.max(1, near.n);
   if (near.n) G.nearT = S.t;
   const contact = S.t - (G.nearT ?? -99) < 8, D = G.doc || (typeof DOC_BASE === 'object' ? DOC_BASE : { ret: .5, press: 1 });
-  // 顶不住：就地后撤一段（25 秒内不再前压）
-  if (near.n >= 3 && r < (D.ret || .5) * .85 && v !== 'retreat') G.thFb = S.t;
+  // 顶不住：就地后撤一段（25 秒内不再前压）——只有守方；攻方见敌就打（用户要求），推进中接敌不停、不后撤（原来兵力比不到 1.2 就停下、更差就退）
+  if (side === 'e' && near.n >= 3 && r < (D.ret || .5) * .85 && v !== 'retreat') G.thFb = S.t;
   const fb = S.t - (G.thFb ?? -99) < 25;
-  const stall = v === 'advance' && contact && r < 1.2 && near.n >= 3;
+  const stall = side === 'e' && v === 'advance' && contact && r < 1.2 && near.n >= 3;
   // 推不动、或坚守中被优势之敌压着打：叫火力（攻方舰炮 / 对地支援机，守方炮兵）
   if ((stall || (contact && near.n >= 3 && r < 1.5)) && S.t - (G.prepT2 ?? -99) > 40) { G.prepT2 = S.t; regPrep(G, near.x, near.y); }
   // 本营地段两侧各外扩 4 列里最靠后的战线（不甩开友邻）
   let rear = null;
   if (cols) for (let b = cols[0] - 4; b <= cols[cols.length - 1] + 4; b++) { if (b < 0 || b >= FR_NX) continue; const y = thLineY(side, frBX(b)); if (y != null) rear = rear == null ? y : dir < 0 ? Math.max(rear, y) : Math.min(rear, y); }
-  const T = S.th[side], pl = side === 'p' && O.src !== 'pl' ? T.k : null;
   // 后撤：接令时的战线往后一个后撤距离，记下来（战线跟着后退，目标不跟着退）
   const RY = v === 'retreat' ? (G.thRY && G.thRY.t === O.t ? G.thRY.m : (G.thRY = { t: O.t, m: {} }).m) : null;
   // 战线是兵力场的边缘，在兵的前面；坚守就守在现在的位置（已经在线后 15–150 米之间的不挪），不一次次往线上凑、越守越往前
@@ -875,7 +865,7 @@ function thLine(G, F, v, O) {
     else if (v === 'advance' && !stall) {
       y = y0 + dir * TH.bound;
       if (rear != null) y = dir < 0 ? Math.max(y, rear - TH.lead) : Math.min(y, rear + TH.lead);
-      if (pl != null) y = Math.max(y, thPL(pl, x));
+      // 阶段线不再拦着推进（原来七成战线到线之前，到了线的营就停在线上等友邻——见敌就打之后成了最大的停顿）；只靠上面的 rear + TH.lead 不甩开友邻 150 米以上
       if (side === 'e') { const f = thFoeY('e', x); if (f != null) y = Math.min(y, f + 20); }
     } else if (yc != null) { const a = (yc - y0) * dir; y = a > -15 ? y0 - dir * 15 : a < -keep ? y0 - dir * keep : yc; }
     else y = y0 - dir * 15;
@@ -902,7 +892,6 @@ function thLine(G, F, v, O) {
     if (p.x < x0 || p.x > x1 || hqMine(side, p) || (side === 'e' && p.owner !== 'p')) continue;
     const ahead = (p.y - cy(p.x)) * dir;
     if (ahead < -80 || ahead > (v === 'advance' && !fb && !stall ? 260 : 60)) continue;
-    if (pl != null && p.y < thPL(pl, p.x) - 40) continue;
     if (side === 'e') {   // 守方就地反冲击：本营在据点 300 以内的兵力对当面已知之敌够 ctr 倍才派，不够就封堵、等预备队（不一个排一个排地往里送）
       const foe = frKnown('e', p.x, p.y, 180).foe;
       let own = 0;
@@ -913,6 +902,23 @@ function thLine(G, F, v, O) {
     const u = line.filter(o => !taken.has(o)).sort((a, b) => Math.abs(regUnitAt(a)[0] - p.x) - Math.abs(regUnitAt(b)[0] - p.x))[0];
     if (u) taken.set(u, p);
     if (u && side === 'e' && !thFocusE()) S.th.e.focus = { x: p.x, y: p.y, r: 120, until: S.t + 20 };   // 就地反冲击也要炮兵先压住据点里的敌人
+  }
+  // 见敌就打（攻方推进中，用户：见人就砍）：本营地段（两侧再放宽 150）战线前方 TH.hunt 米内看得见的敌步兵组、车辆，按 80 米聚成一股股，
+  //   由近到远各派最近的一个一线排扑上去（amove：边冲边打），不等阶段线、不看兵力比；剩下的排照常整线推进
+  if (side === 'p' && v === 'advance' && !fb) {
+    const vis = hqVis(side), hx0 = xs[0] - 150, hx1 = xs[xs.length - 1] + 150, fs = [];
+    const seen = o => { if (o.x < hx0 || o.x > hx1 || !isLand(o.x, o.y)) return false; const a = (o.y - cy(o.x)) * dir; return a > -80 && a < TH.hunt && vis(o.x, o.y); };   // a：在战线前方多远
+    for (const q of S.teams) if (q.side !== side && q.men.length && !q.ride && seen(q)) fs.push([q.x, q.y, q.men.length]);
+    for (const o of S.veh || []) if (o.side !== side && !o.dead && !o.lst && seen(o)) fs.push([o.x, o.y, bgPow(o)]);
+    const cl = [];
+    for (const [x, y, w] of fs) { const c = cl.find(c => dist(c.x, c.y, x, y) < 80); if (c) { c.x = (c.x * c.w + x * w) / (c.w + w); c.y = (c.y * c.w + y * w) / (c.w + w); c.w += w; } else cl.push({ x, y, w }); }
+    cl.sort((a, b) => (a.y - cy(a.x)) * dir - (b.y - cy(b.x)) * dir);
+    for (const c of cl) {
+      const u = line.filter(o => !taken.has(o)).sort((a, b) => { const [ax, ay] = regUnitAt(a), [bx, by] = regUnitAt(b); return dist(ax, ay, c.x, c.y) - dist(bx, by, c.x, c.y); })[0];
+      if (!u) break;
+      taken.set(u, c);
+    }
+    if (cl.length) G.huntT = S.t;
   }
   // 一排里各排按占地比例分完整段正面，排中心放在各自那一份的中点
   const rowXs = R0 => { const tot = R0.reduce((a, u) => a + needW(u), 0); let acc = 0; return R0.map(u => { const w = needW(u), f = (acc + w / 2) / tot; acc += w; return xs[Math.min(xs.length - 1, Math.floor(f * xs.length))]; }); };
