@@ -397,7 +397,7 @@ const V3G_VEH = { ztz99a: 'ztz99', ztz96b: 'ztz96', ztz96m: 'ztz96', m1a1: 'm1a1
   zbd05: 'zbd97', zbd04a: 'zbd97', zbd03: 'zbd97', ztd05: 'zbd97', ptl02: 'ptl02', pgl625: 't625', pgz07: 't625', plz07: 'pzh2000', zsl92b: 'lav25', zbl08: 'lav25', ld2000: 'cram' };   // 解放军：ZBD-05 / 03、ZTD-05 用 ZBD-04，PGZ-07 用 625，PLZ-07 用 PzH 2000，ZSL-92B / 08 式用 LAV-25，LD-2000 用陆基密集阵
 const v3gVehKey = (rk, side) => V3G_VEH[rk] || (side === 'e' ? 'm1a1' : 'ztz96');   // 其余装甲车：解放军的用 96 式、美军的用 M1A1 代替
 const V3G_AIR = {
-  j20: 'j20', j35: 'j31', j16: 'j16', j16b: 'j16', j15: 'j15', z10: 'z10w', j50: 'j50', h6k: 'h6k', y20: 'y20', transport: 'y20', heli: 'z21',   // 我方（歼-35 用它的原型歼-31；歼-15T 用歼-15，歼-16D 用歼-16）
+  j20: 'j20', j35: 'j31', j16: 'j16', j16b: 'j16', j16m: 'j16', j15: 'j15', z10: 'z10w', j50: 'j50', h6k: 'h6k', y20: 'y20', transport: 'y20', heli: 'z21',   // 我方（歼-35 用它的原型歼-31；歼-15T 用歼-15，歼-16D 用歼-16）
   kj600: 'e2d~', gj11: 'x47b~', gj2: 'mq9~', wz7: 'rq4~',   // 我方没有模型的：外形最接近的美军机代替（攻击-11 用同是飞翼的 X-47B），去掉原机涂装（v3gPlain：不带美军标志）
   f22: 'f22', f35: 'f35', f35b: 'f35', a10: 'a10', mq9: 'mq9', b2: 'b2', c17: 'c17', p8: 'p8', ah64: 'ah64', uh60: 'uh60'   // 美军（Sketchfab，CC-BY）
 };

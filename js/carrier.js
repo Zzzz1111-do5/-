@@ -32,7 +32,10 @@ const AIR_MDL = {
   j16d: { name: '歼-16D 电子战飞机', sil: 'j16', spd: 250, aa: .07, size: 18, land: true, std: 420, sead: true, gbN: 4, aam: 2, arW: 'ld10', arR: 420 },
   // 歼-16 多用途战斗机，对地满挂（「炸弹卡车」，陆基，战区机场出动）：翼下内侧、中间挂架和两个进气道挂点共 6 枚雷石-6 五百公斤级滑翔制导炸弹，外侧 2 枚霹雳-15、翼尖 2 枚霹雳-10 自卫，
   //   还有 GSh-30-1 航炮（150 发）；防区外 300 投放，余弹自主武装侦察
-  j16: { name: '歼-16 多用途战斗机（对地满挂）', sil: 'j16b', spd: 245, aa: .08, size: 18, land: true, std: 300, gbN: 6, aam: 4, arW: 'ls6', arR: 320 }
+  j16: { name: '歼-16 多用途战斗机（对地满挂）', sil: 'j16b', spd: 245, aa: .08, size: 18, land: true, std: 300, gbN: 6, aam: 4, arW: 'ls6', arR: 320 },
+  // 歼-16「导弹卡车」（陆基制空，照公开照片：翼下内侧、中间、外侧和两个进气道挂点共 8 枚霹雳-15，翼尖 2 枚霹雳-10，机腹中线挂点空着；报道称纯空战挂法）——
+  //   和歼-20 协同（airwar.js awCue）：歼-20 隐身前出、悄悄跟踪敌机，把航迹用数据链传过来，导弹卡车在自己的雷达还锁不上的距离按它的航迹发射霹雳-15；歼-20 有卡车可用时自己尽量不开火
+  j16m: { name: '歼-16 导弹卡车', sil: 'j16m', spd: 245, aa: .08, size: 18, land: true, aam: 10, aamR: 560, pkK: 1, gun: 40, cap: 130, mt: true }
 };
 // 真实世界的性能（公开资料；官方未公布的按外界估算）——巡航速度写在上面型号表与 eair.js EA_SPEC 的 spd 里（米 / 秒，推演里就按它飞，1 单位 = 1 米）；
 //   这里给座舱显示屏与机载雷达用：vmax 最大速度 km/h、rdr 机载雷达对战斗机大小目标的探测距离 km（0 = 没有对空搜索雷达）、rdrNm 雷达、fuel 机内燃油 kg
@@ -50,6 +53,7 @@ const AIR_REAL = {
   j50: { vmax: 2100, rdr: 220, rdrNm: '有源相控阵雷达（估算）', fuel: 12000 },
   j16d: { vmax: 2100, rdr: 200, rdrNm: '有源相控阵雷达', fuel: 9400 },
   j16: { vmax: 2100, rdr: 200, rdrNm: '有源相控阵雷达', fuel: 9400 },
+  j16m: { vmax: 2100, rdr: 200, rdrNm: '有源相控阵雷达', fuel: 9400 },
   transport: { vmax: 920, rdr: 0, rdrNm: '气象雷达', fuel: 60000 },
   // 守方（美军，eair.js 的机型键）
   ga: { vmax: 706, rdr: 0, rdrNm: '无（瞄准吊舱）', fuel: 4850 },
@@ -67,7 +71,7 @@ const AIR_REAL = {
 const airReal = (type, v) => AIR_REAL[airMdlKey(type, v)] || AIR_REAL[type] || {};
 const airRdrM = (type, v) => (airReal(type, v).rdr || 0) * 1000;
 const AIR_BASEM = { recon: 'kj600', strike: 'j35', cas: 'gj2', bomber: 'h6k', fighter: 'j20' };
-const AIR_VMODEL = { lr: 'wz7', dive: 'gj11', heavy: 'h6k', fb: 'j15t', heli: 'z10', sead: 'j35s', ew: 'j16d', bt: 'j16', adv: 'j20', j50: 'j50' };   // bt：歼-16 对地满挂   // adv：旧存档里的先进战斗机
+const AIR_VMODEL = { lr: 'wz7', dive: 'gj11', heavy: 'h6k', fb: 'j15t', heli: 'z10', sead: 'j35s', ew: 'j16d', bt: 'j16', mt: 'j16m', adv: 'j20', j50: 'j50' };   // bt：歼-16 对地满挂；mt：歼-16 导弹卡车   // adv：旧存档里的先进战斗机
 const airMdlKey = (type, v) => AIR_VMODEL[v] || AIR_BASEM[type];
 const airMdl = (type, v) => AIR_MDL[airMdlKey(type, v)] || {};   // 运输机（para.js）等没有型号表的返回空
 const airSpec = (type, v) => ({ ...(AIR_SPEC[type] || AIR_SPEC.strike), ...airMdl(type, v) });
@@ -138,7 +142,7 @@ AIR_SIL.f35b = AIR_SIL.f35;   // F-35B 俯视轮廓同 F-35A
 AIR_SIL.p8 = [[11.6, 0], [10.8, .9], [8, 1.15], [2.6, 1.15], [2.2, 1.15], [-3.6, 11.2], [-4.6, 11.3], [-1.4, 1.15], [-8.6, .9], [-10.9, 4.3], [-11.8, 4.3], [-11.2, .7], [-12.1, 0]];   // P-8A：737 机身、低单翼（后掠 25°、翼展 37.6 米）、两台翼吊发动机、常规尾翼
 AIR_SIL.mq9 = AIR_SIL.gj2;   // MQ-9A 与攻击-2 同类布局
 AIR_SIL.j16 = AIR_SIL.j15;   // 歼-16D 俯视轮廓同侧卫系（单独的键：3D 用歼-16 模型，歼-15T 用歼-15 模型）
-AIR_SIL.j16b = AIR_SIL.j15;   // 歼-16 对地满挂：同一外形，2D 挂的是炸弹（airmdl.js AIRD.j16b）
+AIR_SIL.j16b = AIR_SIL.j15; AIR_SIL.j16m = AIR_SIL.j15;   // 歼-16 对地满挂：同一外形，2D 挂的是炸弹（airmdl.js AIRD.j16b）
 // 剪影键：按型号；守方 type（ga / heli / ftr / ftrb / f22）另映射
 const airSilKey = (type, v) => type === 'ga' ? 'a10' : type === 'ftr' ? 'f35' : type === 'ftrb' ? 'f35b' : type === 'mq9' ? 'mq9' : AIR_SIL[type] && !AIR_BASEM[type] ? type : airMdl(type, v).sil || 'j35';
 const airName = (type, v) => airMdl(type, v).name || (AIR_SPEC[type] || {}).name || '飞机';
@@ -220,6 +224,7 @@ function initCarrier() {
     for (const type of AIR_TYPES) for (let k = 0; k < AIR_SPEC[type].n; k++) wing.push({ id: S.nid++, type, state: 'deck', rearmT: 0 });
     wing.push({ id: S.nid++, type: 'strike', v: 'ew', state: 'deck', rearmT: 0 });   // 战区派来一架歼-16D 电子战飞机（陆基，不占航母机库）
     wing.push({ id: S.nid++, type: 'strike', v: 'bt', state: 'deck', rearmT: 0 });   // 还有一架对地满挂的歼-16（陆基）
+    for (let k = 0; k < 2; k++) wing.push({ id: S.nid++, type: 'fighter', v: 'mt', state: 'deck', rearmT: 0 });   // 两架歼-16 导弹卡车（陆基）：跟着歼-20 打协同
     S.air = { wing, wrecks: [] };
   }
   if (!Array.isArray(S.air.wrecks)) S.air.wrecks = [];
@@ -259,7 +264,7 @@ function launchPlane(kind, tx, ty, pref) {
   const cvOk = cvAll().some(c => c.hp > 0);
   if (!cvOk && !S.air.wing.some(o => o.type === kind && o.state === 'deck' && airLandW(o))) { log('航母飞行甲板瘫痪，舰载机无法起飞', 'warn', 'cvdead', 2); return false; }
   // 多艘航母时：从离目标最近、且有该机型待命的那艘起飞；陆基飞机从战区机场（地图南缘以外）飞来，算作稍远
-  const want = pref || (kind === 'bomber' ? (S.enemies.some(e => !e.dead && e.kx != null && dist(e.kx, e.ky, tx, ty) < 40) ? 'dive' : 'heavy') : null);
+  const want = pref || (kind === 'bomber' ? (S.enemies.some(e => !e.dead && e.kx != null && dist(e.kx, e.ky, tx, ty) < 40) ? 'dive' : 'heavy') : kind === 'fighter' && typeof awWantV === 'function' ? awWantV() : null);   // 战斗机：已有歼-20 在空、还没配卡车时先放导弹卡车
   let w = null, bd = Infinity;
   const isAew = o => (o.v || 'kj600') === 'kj600';   // 空警-600：舰队预警的眼睛——陆上侦察先派无侦-7，最后一架空警-600 留给舰队预警（cvAewP）
   const aewRes = kind === 'recon' && pref !== 'kj600' && !S.planes.some(p => !p.dead && p.aew) && S.air.wing.filter(o => o.type === 'recon' && o.state === 'deck' && isAew(o)).length <= 1;
@@ -556,7 +561,7 @@ function airNew(w, kind, x, y, heading, tx, ty, extra) {
   const M = airMdl(kind, w.v), p = { id: S.nid++, wid: w.id, home: cvHome(w), kind, v: w.v || null, x, y, heading, spd: 0, alt: 0, bank: 0,
     tx, ty, cx: tx, cy: ty, wp: [{ x: tx, y: ty }], leg: 0, aaT: Math.random() * .5, rt: 0, gunT: 0, strafeT: 1, loiterT: M.loiter || 40, odir: 1, dropped: false, rtbT: 0, ...extra };
   if (kind === 'recon') p.wp = airRcRoute(x, y, tx, ty);   // 侦察机：在目标一带按往返航线扫一片（airRcRoute）
-  if (kind === 'fighter') Object.assign(p, { aam: M.aam || 4, gun: M.gun ?? 40, capT: M.cap || 90, aamR: M.aamR || 480, pkK: M.pkK || 1, aamL: M.aamL || 0, aamLR: M.aamLR || 0, radar: M.radar || 520, aam0: (M.aam || 4) + (M.aamL || 0) });   // 空空导弹 · 机炮点射次数 · 巡逻秒数 · 远程弹 · 机载雷达（airwar.js）
+  if (kind === 'fighter') Object.assign(p, { mt: !!M.mt, aam: M.aam || 4, gun: M.gun ?? 40, capT: M.cap || 90, aamR: M.aamR || 480, pkK: M.pkK || 1, aamL: M.aamL || 0, aamLR: M.aamLR || 0, radar: M.radar || 520, aam0: (M.aam || 4) + (M.aamL || 0) });   // 空空导弹 · 机炮点射次数 · 巡逻秒数 · 远程弹 · 机载雷达（airwar.js）
   if (M.agm || M.cm) p.agmN = M.agmN;   // 空地导弹（airAgm）、巡航导弹（轰-6K：bomberStd）
   return p;
 }
