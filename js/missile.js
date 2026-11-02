@@ -38,14 +38,15 @@ function msLaunch(kind, side, x0, y0, tgt, opts = {}) {
 }
 
 // 玩家（或 AI）对地面一点发射战术导弹：圆概率误差 σ 8
-function msFireP(x, y, ai) {
+function msFireP(x, y, ai, only15) {   // only15：只打东风-15B（rocket.js 点名要的）；否则东风-15B 用完接着用东风-16、长剑-10
   msEnsure();
   if (!msOn() || S.phase !== 'battle') { if (!ai) log('战术导弹在 H 时之后才能使用', 'warn', 'msl0', 2); return false; }
-  if (!(S.assets.msl > 0)) { if (!ai) log('战术导弹已用完', 'warn', 'msl0', 2); return false; }
+  if (!(S.assets.msl > 0)) { if (!only15 && typeof rfFireAny === 'function' && rfFireAny(x, y, ai)) return true; if (!ai) log('战术导弹已用完', 'warn', 'msl0', 2); return false; }
   if (!isLand(x, y)) { if (!ai) log('战术导弹只能打击陆上目标', 'warn', 'msl1', 2); return false; }
   // 东风-15B 由战区火箭军从地图南缘以外发射（驱逐舰的垂发导弹另见 vls.js）
   const tx = clamp(x + gauss() * 8, 0, W), ty = clamp(y + gauss() * 8, 0, H);
   const m = msLaunch('tbm', 'p', tx, H + 60, { x: tx, y: ty }, { src: 'theatre', delay: 4 });
+  m.rf = 'df15b';
   S.assets.msl--; S.msl.p.used++; S.stats.shots++;
   log(`战区火箭军发射东风-15B 战术导弹，约 ${Math.round(m.dur + 4)} 秒后命中`, 'info', null, 0, { x: tx, y: ty });
   return true;
@@ -65,13 +66,15 @@ function msStep(dt) {
     if (m.kind === 'pgm') { msPgmFly(m, dt); continue; }
     const u = clamp(m.t / m.dur, 0, 1);
     m.x = lerp(m.x0, m.tx, u); m.y = lerp(m.y0, m.ty, u); m.z = Math.sin(Math.PI * u) * (m.kind === 'tbm' ? 1 : .15);
+    if (m.rf && typeof rfPath === 'function') rfPath(m, u);   // 东风-17：高超音速滑翔、横向机动（rocket.js）
+    const RFm = m.rf && typeof RF === 'object' ? RF[m.rf] : null;
     if (m.t > 1) m.ph = u > .8 ? 'term' : 'mid';
     // 末段：目标 200 以内的守军高炮各有一次拦截机会（雷达高炮更高）
     if (m.side === 'p' && u > .85 && !m.aaTry) {
       m.aaTry = true;
       for (const a of S.enemies) {
         if (a.dead || a.kind !== 'aa' || dist(a.x, a.y, m.tx, m.ty) > 200) continue;
-        if (Math.random() < .1 * ((a.mod && a.mod.aa) || 1) * (1 - (a.sup || 0) / 130) * (m.nuke ? .5 : 1)) {
+        if (Math.random() < .1 * ((a.mod && a.mod.aa) || 1) * (1 - (a.sup || 0) / 130) * (m.nuke ? .5 : 1) * (RFm ? RFm.icp : 1)) {   // 东风-16 末段机动、东风-17 滑翔弹头更难拦
           m.done = m.icp = true;
           S.fx.push({ kind: 'flash', x: m.x, y: m.y - 20, r: 14, life: 0, max: .7, side: 'e' });
           log(m.nuke ? '战术核弹在末段被敌防空火力拦截，未能起爆' : '战术导弹在末段被敌防空火力拦截', 'bad', null, 0, { x: m.x, y: m.y });
@@ -94,12 +97,13 @@ function msStep(dt) {
     if (u >= 1) {
       m.done = true;
       const before = m.side === 'e' ? S.teams.filter(q => q.side === 'p').reduce((a, q) => a + q.men.length, 0) : 0;
-      impact(m.tx, m.ty, m.side === 'e' ? POWER.etbm : POWER.tbm, m.side);
+      impact(m.tx, m.ty, m.side === 'e' ? POWER.etbm : RFm && RFm.pw ? RFm.pw : POWER.tbm, m.side);   // 东风-16 弹头约 1 吨，毁伤半径大
       S.fx.push({ kind: 'boom', x: m.tx, y: m.ty, r: 52, life: 0, max: 1.5, side: m.side });
       if (m.side === 'p') {
         S.msl.p.hit++;
         const hit = S.enemies.filter(e => e.dead && dist(e.x, e.y, m.tx, m.ty) < 50);
-        log(hit.length ? `战术导弹命中，摧毁${msName(hit[0])}` : '战术导弹命中目标区', 'good', null, 0, { x: m.tx, y: m.ty });
+        const nmR = RFm ? RFm.nm : '战术导弹';
+        log(hit.length ? `${nmR}命中，摧毁${msName(hit[0])}` : `${nmR}命中目标区`, 'good', null, 0, { x: m.tx, y: m.ty });
       } else {
         const k = before - S.teams.filter(q => q.side === 'p').reduce((a, q) => a + q.men.length, 0);
         msStat('telHit'); if (k > 0) msStat('telKill', k);

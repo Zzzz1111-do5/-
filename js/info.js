@@ -87,7 +87,7 @@ function infoDD() {
       V && ['垂发', infoEsc(`${C.cells} 单元：${vlsText(d)}${d.vls0.yu8 ? ` · 鱼-8 ${V.yu8}` : ''}`)],
       V && (V.cj10 != null || V.yj18 != null) && ['对陆导弹', infoEsc(`亚音速：长剑-10 ${V.cj10 ?? 0}；超音速：鹰击-18A ${V.yj18 ?? 0}、鹰击-21 ${V.yj21 ?? 0}`)],
       S.aor && ['补给舰', infoEsc(`${AOR.name}${S.aor.st === 'go' ? '驶来' : S.aor.st === 'rep' ? `补给中 ${Math.round(S.aor.p * 100)}%` : '返航'}`)],
-      ['战术导弹', `${S.assets.msl ?? 0} 枚（东风-15B，战区火箭军）`],
+      ['火箭军', `东风-15B ${S.assets.msl ?? 0} · 东风-16 ${S.assets.df16 ?? 0} · 东风-17 ${S.assets.df17 ?? 0} · 长剑-10 ${S.assets.cj10 ?? 0} 枚`],
       ['状态', d.state === 'repair' ? '损管抢修中' : d.state === 'sunk' ? '—' : d.cool > 0 ? '装填中' : '待命'], ['指挥', d.auto ? '自动掩护' : '手动']] };
 }
 function infoCV() {

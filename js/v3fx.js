@@ -182,6 +182,11 @@ function v3Fx(C) {
     const sk = clamp(Math.hypot(pt[0] - E[0], pt[1] - E[1], pt[2] - E[2]) / 500, .12, 1);
     v3fSpark(out, C, pt, (m.kind === 'tbm' ? 6 : 3.4) * fs * sk, V3F_COL.white);
     v3fSpark(out, C, pt, (m.kind === 'tbm' ? 10 : 6) * fs * sk * (.85 + .15 * Math.sin(S.t * 40 + m.id)), [...V3F_COL.flame.slice(0, 3), .45]);   // 尾焰的光晕（闪烁）
+    if (m.kind === 'tbm' && m.rf && typeof RF === 'object' && RF[m.rf]) {   // 火箭军的弹道导弹（rocket.js）：末段再入时弹头被压缩的空气烧成等离子体，越接近落地越亮；东风-17 滑翔时一路拖着等离子体
+      const u = clamp(m.t / m.dur, 0, 1), re = clamp((u - .72) / .28, 0, 1), gl = RF[m.rf].hgv ? clamp((u - .22) / .08, 0, 1) * (1 - clamp((u - .86) / .1, 0, 1)) : 0;
+      if (re > 0) { v3fSpark(out, C, p, (5 + 9 * re) * sk, [1, .86, .62, .55 + .4 * re]); v3fSpark(out, C, p, (12 + 16 * re) * sk, [1, .5, .3, .18 + .2 * re]); }
+      if (gl > 0) for (let i = Math.max(1, tr.length - 8); i < tr.length; i++) { const k = (i - tr.length + 8) / 8; v3fRib(out, E, tr[i - 1], tr[i], 3 + 5 * k, [1, .5, .38, .5 * gl * k], [1, .7, .5, .7 * gl * k]); }
+    }
   }
   for (const id of V3F.trail.keys()) if (!live.has(id)) V3F.trail.delete(id);
   for (const id of V3F.seen) if (!live.has(id) && !(S.missiles || []).some(m => m.id === id)) { V3F.seen.delete(id); V3F.ign.delete(id); if (V3F.vo) V3F.vo.delete(id); }
