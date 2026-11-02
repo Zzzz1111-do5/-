@@ -86,7 +86,7 @@ const V3_FS = (der, tl) => `${der ? '#extension GL_OES_standard_derivatives : en
 uniform sampler2D uTop, uBase, uCls, uCls2, uFogT, uHt, uLf, uTopF; uniform vec4 uBox, uBoxF; uniform vec2 uWorld, uGrid, uHG; uniform vec2 uFog; uniform float uSea, uT, uMx, uLmOn, uBrM; uniform vec3 uBg;
 uniform sampler2D uDg, uDf, uDr, uDs; uniform float uDet;   // 写实地表细节贴图（ambientCG，CC0）：草地、林下地面、岩石、沙滩
 uniform sampler2D uCls3, uSky, uWn; uniform float uSkyOn, uSkyU, uWnOn;   // 水深分类（浅滩、礁石、近岸）、天空图（海面反射）、水面法线贴图（three.js 示例，MIT）
-uniform float uRing, uOcn; uniform vec4 uRect;   // 地图外：1 = 无边海面（地图里面丢掉，那里是地形网格），2 = 北面延伸的陆地（贴图照地图北缘镜像）
+uniform float uRing, uOcn; uniform vec4 uRect;   // 地图外：1 = 无边海面（地图里面丢掉，那里是地形网格），2 = 北面延伸的陆地（贴图照地图北缘镜像），3 = 南缘外的攻方海岸（afp.js 战区机场；uRect 是机场图案的范围，图案临时绑在 uTopF）
 uniform float uFlat;   // 白色平原（flat.js）：太空里的灰色平台，侧壁是深灰的金属
 varying vec3 vP, vN, vV; varying float vD;
 ${V3_SHF}
@@ -151,7 +151,7 @@ void main() {
   // 无边海面：地图里面由地形网格画——只丢掉离图边两个像素以上的部分。丢弃是整个像素一起丢、深度却按多重采样的子样本测，
   //   正好丢在边上的话，这个像素里图外的子样本两边都没画，露出背景，图边上一串亮点
   if (uRing > .5 && uRing < 1.5 && w.x > uRect.x + fq.x && w.y > uRect.y + fq.y && w.x < uRect.z - fq.x && w.y < uRect.w - fq.y) discard;
-  if (uRing > 1.5) { w.y = abs(w.y); w.x = uWorld.x - abs(uWorld.x - abs(w.x)); }   // 延伸的陆地：地形照地图北、西、东边镜像，贴图坐标也镜像——接缝处连续
+  if (uRing > 1.5 && uRing < 2.5) { w.y = abs(w.y); w.x = uWorld.x - abs(uWorld.x - abs(w.x)); }   // 延伸的陆地：地形照地图北、西、东边镜像，贴图坐标也镜像——接缝处连续
   vec3 bg = uBg;
 #ifdef DER
   float pw = max(length(fwidth(w)), 1e-3);
@@ -198,7 +198,20 @@ void main() {
       float keep = max(max(tw, road), max(riv, .3 + .4 * fd));
       col = mix(nat * 1.1, col, keep);
     }
-    if (uRing > 1.5) col = mix(col, vec3(.6, .56, .45), (1. - smoothstep(1.5, 7., h)) * .75);   // 延伸陆地新收出来的北岸：一圈沙滩、礁石色
+    if (uRing > 1.5 && uRing < 2.5) col = mix(col, vec3(.6, .56, .45), (1. - smoothstep(1.5, 7., h)) * .75);   // 延伸陆地新收出来的北岸：一圈沙滩、礁石色
+    if (uRing > 2.5) {   // 南缘外的攻方海岸：草地 + 一块块林地 + 岸边沙滩（细节贴图），机场那一块铺机场图案（道面、标线、建筑、草坪）
+      vec3 nat = vec3(.24, .28, .17);
+      if (uDet > .5) {
+        vec3 G = texture2D(uDg, w / 9.).rgb, F = texture2D(uDf, w / 8.).rgb, Sd = texture2D(uDs, w / 7.).rgb;
+        float mac = dot(texture2D(uDg, w / 73. + .31).rgb, vec3(.6, .3, .1)) * 1.7 + .38, fo = smoothstep(.56, .72, cN(w / 900.) * .7 + cN(w / 260. + 3.1) * .3);
+        nat = mix(G, F * vec3(.9, .92, .8), fo) * mix(1., mac, .5);
+        nat = mix(nat, Sd * 1.05, 1. - smoothstep(2.4, 3.8, h));
+        nat *= 1.1;
+      } else nat = mix(nat, vec3(.6, .56, .45), 1. - smoothstep(2.4, 3.8, h));
+      vec2 au = (w - uRect.xy) / uRect.zw;
+      vec4 af = au.x > 0. && au.y > 0. && au.x < 1. && au.y < 1. ? texture2D(uTopF, au) : vec4(0.);
+      col = mix(nat, af.rgb * 1.22, af.a);
+    }
     c = col * (amb + vec3(1., .95, .86) * lit * .8 * shadowAt() * (uDet > .5 ? cloudSh(vec2(vP.x, -vP.y)) : 1.));
     c += boomLight(w) * (.35 + .65 * lit);   // 近处爆炸的火光照亮地面（v3light.js）
     // 等高线、方格网：画成地形图那样细而淡的深色线（原来叠一层发亮的绿光，远看挤成一片绿雾，和写实画面不搭），离镜头两公里外渐渐淡掉
@@ -696,7 +709,7 @@ function v3ClimbZ(o, zs) {
 //   （v3Env，不跟着每个小山包上下抖），越高越接近海拔基准——巡航高度（约 V3_AIR）完全按海拔平飞；低空过山时沿包络平缓爬升、越过山脊再下来
 const sm01 = v => { v = clamp(v, 0, 1); return v * v * (3 - 2 * v); };
 function v3AltZ(x, y, h, lo, lift) {
-  const g = Math.max(v3Ht(x, y), lo);
+  const g = Math.max(x < 0 || y < 0 || x > W || y > H ? v3HtX(x, y) : v3Ht(x, y), lo);   // 地图外（南缘外的战区机场、延伸的陆地）按那里的地面
   if (!(h > 0)) return g + lift;
   const F = Math.max(v3Env(x, y), g), gr = lerp(g, F, sm01(h / 20));
   return Math.max(h + lift + lerp(gr, lo, sm01(h / (V3_AIR * .96))), g + lift + Math.min(h, 6));
@@ -729,9 +742,11 @@ function v3Ht(x, y) {
   const fx = clamp(x / (CELL * V3_ST), 0, V3.nx - 1.001), fy = clamp(y / (CELL * V3_ST), 0, V3.ny - 1.001), i = Math.floor(fx), j = Math.floor(fy), u = fx - i, v = fy - j, H = V3.hf, n = V3.nx;
   return lerp(lerp(H[j * n + i], H[j * n + i + 1], u), lerp(H[(j + 1) * n + i], H[(j + 1) * n + i + 1], u), v);
 }
-// 地图外也能问地面高度（飞机飞出图、镜头不钻地用）：有无边海面时，北面延伸的岛按那张高度表，别处是海面；没有时照旧取图边
+// 地图外也能问地面高度（飞机飞出图、镜头不钻地用）：有无边海面时，北面延伸的岛按那张高度表，南缘外的攻方海岸（战区机场，afp.js）按它的地形，别处是海面；没有时照旧取图边
+const v3HtO = (x, y) => x < 0 || y < 0 || x > W || y > H ? v3HtX(x, y) : v3Ht(x, y);   // 图里按地形网格，图外（南缘外的战区机场）按 v3HtX
 function v3HtX(x, y) {
   if (x >= 0 && y >= 0 && x <= W && y <= H || !V3.ocean) return v3Ht(clamp(x, 0, W - 1), clamp(y, 0, H - 1));
+  if (y > H && typeof afpOn === 'function' && afpOn()) return Math.max(-3, afpHt(x, y));
   for (const E of (typeof V3_OC === 'object' && V3_OC.exts) || []) {   // 北、西、东延伸的陆地：按那块的高度表（沿边 a、往外 k）
     const Wm = (V3.nx - 1) * E.d, out = E.side === 'n' ? -y : E.side === 'w' ? -x : x - Wm, al = E.side === 'n' ? x : y;
     if (!(out > 0) || al < 0 || al > (E.nx - 1) * E.d) continue;
@@ -823,7 +838,8 @@ function v3OceanBuild(d) {
   const sea = s0 => edge(s0) > .95;
   V3.ocean = sea(row(GH - 1)) && (sea(col(0)) && sea(col(GW - 1)) || !TER.flat);
   if (V3_OC.exts) for (const X of V3_OC.exts) { gl.deleteBuffer(X.b); gl.deleteBuffer(X.i); }
-  V3_OC.ext = null; V3_OC.exts = [];
+  if (V3_OC.south) { gl.deleteBuffer(V3_OC.south.b); gl.deleteBuffer(V3_OC.south.i); }
+  V3_OC.ext = null; V3_OC.exts = []; V3_OC.south = null;
   if (!V3.ocean) return;
   V3.ocRect = [0, 0, (V3.nx - 1) * d, (V3.ny - 1) * d];
   // 无边海面网格：[-1, 1]² 上每边 48 段、按等比从中间往外加宽（每格比里面一格宽 8%，在屏幕上大约都是 5° 见方——同上，三角形不能太大）
@@ -840,6 +856,25 @@ function v3OceanBuild(d) {
   }
   for (const side of ['n', 'w', 'e']) { const X = v3ExtBuild(side, d); if (X) V3_OC.exts.push(X); }
   V3_OC.ext = V3_OC.exts.find(X => X.side === 'n') || null;
+  if (typeof afpOn === 'function' && afpOn()) V3_OC.south = v3SouthBuild();
+}
+// 南缘外的攻方海岸（战区机场，afp.js）：东西向一长条陆地网格（每 50 米一个顶点），高度按 afpHt（海峡里沉到 −9，岸上约 4 米、往南缓丘，机场场区推平）；
+//   北边沉在无边海面下面，看起来是从海里升起的岸；只是远景和飞机起降的地面，部队到不了
+function v3SouthBuild() {
+  const gl = V3.gl, d = 50, x0 = -7000, x1 = W + 7000, y0 = H + AFP.shore - 400, y1 = H + AFP.off + 4500;
+  const nx = Math.ceil((x1 - x0) / d) + 1, ny = Math.ceil((y1 - y0) / d) + 1, hz = new Float32Array(nx * ny);
+  for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) hz[j * nx + i] = afpHt(x0 + i * d, y0 + j * d);
+  const v = [], ix = [];
+  for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
+    const zx = (hz[j * nx + Math.min(nx - 1, i + 1)] - hz[j * nx + Math.max(0, i - 1)]) / (2 * d), zy = (hz[Math.min(ny - 1, j + 1) * nx + i] - hz[Math.max(0, j - 1) * nx + i]) / (2 * d), nr = v3Norm([-zx, zy, 1]);   // GL 的 y 朝北（= −游戏 y）
+    v.push(x0 + i * d, -(y0 + j * d), hz[j * nx + i], nr[0], nr[1], nr[2]);
+  }
+  for (let j = 0; j < ny - 1; j++) for (let i = 0; i < nx - 1; i++) { const a = j * nx + i, b = a + 1, c = a + nx, e = c + 1; idx2(ix, a, c, b, e); }   // 往南 = GL y 减小：绕向反过来（与地形网格同一个正面）
+  const big = v.length / 6 > 65535;
+  if (big && !V3.u32) return null;
+  const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(v), gl.STATIC_DRAW);
+  const ib = gl.createBuffer(); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, big ? new Uint32Array(ix) : new Uint16Array(ix), gl.STATIC_DRAW);
+  return { b, i: ib, n: ix.length, it: big ? gl.UNSIGNED_INT : gl.UNSIGNED_SHORT };
 }
 // 一条边的延伸（只是远景，部队到不了）：side n 北、w 西、e 东。沿边的顶点与地图同一套（接缝那一排完全重合），往外每 40 米一排，
 //   高度取地图边往里同样距离那一排（镜像，地形、林地贴图在接缝处连续）；这条边上每段连续的陆地按段宽收出一道圆弧形的岸
@@ -883,6 +918,22 @@ function v3OceanDraw(C) {
   const gl = V3.gl, u = V3.u, A = V3.a;
   const dr = (b, i, n, it) => { gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, i); gl.vertexAttribPointer(A.p, 3, gl.FLOAT, false, 24, 0); gl.vertexAttribPointer(A.n, 3, gl.FLOAT, false, 24, 12); gl.drawElements(gl.TRIANGLES, n, it, 0); };
   if (V3_OC.exts && V3_OC.exts.length) { gl.uniform1f(u.uRing, 2); for (const E of V3_OC.exts) dr(E.b, E.i, E.n, E.it); }   // 先画延伸的陆地，再画海（海面在陆地低处、水下的地方盖上去）
+  const So = V3_OC.south, Bp = typeof S === 'object' && S && S.afP;
+  if (So && Bp) {   // 南缘外的攻方海岸与战区机场（afp.js）
+    const cv = typeof afpTex === 'function' ? afpTex() : null;
+    if (cv && V3_OC.afV !== AFP.ver) {
+      V3_OC.afV = AFP.ver; V3_OC.afT = V3_OC.afT || gl.createTexture();
+      gl.activeTexture(gl.TEXTURE7); gl.bindTexture(gl.TEXTURE_2D, V3_OC.afT);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, cv); gl.generateMipmap(gl.TEXTURE_2D);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    }
+    const r0 = AFP.rect;
+    gl.uniform1f(u.uRing, 3); gl.uniform4f(u.uRect, Bp.x + r0[0], Bp.y + r0[1], r0[2], r0[3]);
+    gl.activeTexture(gl.TEXTURE7); gl.bindTexture(gl.TEXTURE_2D, V3_OC.afT || V3.texF);
+    dr(So.b, So.i, So.n, So.it);
+    gl.activeTexture(gl.TEXTURE7); gl.bindTexture(gl.TEXTURE_2D, V3.texF);   // 还回俯视贴图：后面画的东西还要用
+  }
   const R = Math.max(3000, v3FogE(C) * 1.1), r = V3.ocRect;
   gl.uniform1f(u.uRing, 1); gl.uniform4f(u.uRect, r[0], r[1], r[2], r[3]);
   gl.uniform1f(u.uScl, R); gl.uniform3f(u.uOff, C.E[0], C.E[1], -2.97);   // 比图里的海面高 3 厘米：图边围边的顶和海面一样高，抢深度时图边上一条虚线
@@ -985,7 +1036,7 @@ function v3Bld() {
     const k = A[ai];
     if (rep(ai)) continue;
     const n = k.pts.length, ch = K.need(n * 5 + 2), vb = ch.vb, ib = ch.ib;
-    const P = k.pts.map(([x, y]) => [x, -y]), g = Math.min(...k.pts.map(([x, y]) => v3Ht(x, y))) - .5, z0 = g + k.z0 * 1.6, top = g + k.z * 1.6;
+    const P = k.pts.map(([x, y]) => [x, -y]), g = Math.min(...k.pts.map(([x, y]) => v3HtO(x, y))) - .5, z0 = g + k.z0 * 1.6, top = g + k.z * 1.6;
     const cx = P.reduce((a, p) => a + p[0], 0) / n, cy = P.reduce((a, p) => a + p[1], 0) / n, b0 = vb.length / 8;
     vb.push(cx, cy, top, 0, 0, 1, .5, .5);   // 顶面：从中心扇形三角化，边缘的 e 取 0（棱线发光）
     for (const [x, y] of P) vb.push(x, y, top, 0, 0, 1, 0, .5);

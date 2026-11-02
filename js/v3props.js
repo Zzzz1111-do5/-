@@ -397,7 +397,7 @@ function v3pStatic(vOf) {
       if (s >= .55 && (!best || score < best.score)) best = { v, rot, s: Math.min(s, 1.05), score, k };
     }
     if (!best) continue;
-    const zc = Math.min(...[[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([sx, sy]) => v3Ht(cx + sx * fw / 2, cy + sy * fh / 2)), v3Ht(cx, cy)) - .3;
+    const zc = Math.min(...[[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([sx, sy]) => v3HtO(cx + sx * fw / 2, cy + sy * fh / 2)), v3HtO(cx, cy)) - .3;
     add(best.v, cx, cy, zc, face + best.rot, best.s, best.s, best.s * (b.f ? 1.05 : 1));
   }
   if (hv.length && fv.length) V3P.rep.add('town');
@@ -413,7 +413,7 @@ function v3pStatic(vOf) {
         const s0 = Math.min((w + 1) / mw, (h + 1) / mh), sc0 = Math.abs(Math.log(s0)) + hr() * .2;
         if (!best || sc0 < best.sc) best = { v, a: rot + (q ? Math.PI / 2 : 0) + (hr() < .5 ? Math.PI : 0), s: s0, sc: sc0 };
       }
-      const zc = Math.min(...[[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([sx, sy]) => v3Ht(cx + sx * w / 2, cy + sy * h / 2))) - .3;
+      const zc = Math.min(...[[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([sx, sy]) => v3HtO(cx + sx * w / 2, cy + sy * h / 2))) - .3;
       add(best.v, cx, cy, zc, best.a, best.s, best.s, best.s);
     }
   }
@@ -469,13 +469,13 @@ function v3pStatic(vOf) {
       V3P.rep.add(i);
       if (k.k === 'cab') return;
       const cx = P.reduce((a, p) => a + p[0], 0) / 4, cy = P.reduce((a, p) => a + p[1], 0) / 4, s = 60 / V3P.VL[tw].h;
-      add(tw, cx, cy, v3Ht(cx, cy) - .4, 0, s, s, s);
+      add(tw, cx, cy, v3HtO(cx, cy) - .4, 0, s, s, s);
       return;
     }
     const L = Math.hypot(P[1][0] - P[0][0], P[1][1] - P[0][1]), Wd = Math.hypot(P[2][0] - P[1][0], P[2][1] - P[1][1]), a = Math.atan2(P[1][1] - P[0][1], P[1][0] - P[0][0]);
     const big = Math.max(L, Wd), small = Math.min(L, Wd), v = pick(k, big, small);
     if (v < 0) return;
-    const cx = P.reduce((s, p) => s + p[0], 0) / 4, cy = P.reduce((s, p) => s + p[1], 0) / 4, g = Math.min(...P.map(([x, y]) => v3Ht(x, y))) - .4;
+    const cx = P.reduce((s, p) => s + p[0], 0) / 4, cy = P.reduce((s, p) => s + p[1], 0) / 4, g = Math.min(...P.map(([x, y]) => v3HtO(x, y))) - .4;
     const bb = V3P.VL[v].V.bb, mL = bb[1][0] - bb[0][0], mW = bb[1][1] - bb[0][1], mBig = Math.max(mL, mW), mSmall = Math.min(mL, mW);
     const aL = L >= Wd ? a : a + Math.PI / 2, yaw = mL >= mW ? aL : aL - Math.PI / 2;   // 模型长边转到建筑长边
     const n = v === hg ? 1 : Math.max(1, Math.round((big / small) / (mBig / mSmall))), seg = big / n;

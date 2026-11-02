@@ -13,6 +13,9 @@
 - 网页版：`bash tools/publish_pages.sh` 生成 www/ 并推到 gh-pages 分支（GitHub Pages）。
 - 地势：默认地图、海岛地图的丘陵起伏照 js/hmap.js（Sketchfab 上 hirnlaich 的「Soft Hills」高度场，CC-BY，`python3 -I tools/hmap_build.py <glTF 目录>` 生成；hmapWin 按种子翻转、错开），不再随机撒小山包、叠高频噪声；大山体、内陆山脊、海岸、海滩、河流仍由程序生成。
 - 默认地图 8400 × 5600（core.js MAP_K = 2.8，W0 × H0）；大海域地图在 MAPGEN 里登记、建图前 setWorld 换尺寸（海岛战役 isle.js：6000 × 12000，远海只在 3D 里铺一块平面）。西、东、南三边都是海的地图（海岛），3D 写实画面里地图外是无边海面（view3d.js v3OceanBuild / v3OceanDraw：跟着镜头走、铺到雾的尽头），北边是陆地时把岛按北缘镜像延伸约 3 公里再收出北岸（只是远景）。
+- 进攻方战区机场（js/afp.js，S.afP）：南边是海的地图（默认、海岛）在南缘外约 2.7 公里的攻方海岸上（海岸线 afpShoreY 约南缘外 1.8 公里，中间一道海峡），版图同守方野战机场（afbase.js，rh 0、rs 1：跑道东西向、营区在南）；
+  陆基飞机在这里待命、滑跑起飞（afpTakeoff，abn.js abPlaneFly 按 p.afB === 'home' 选这座机场）、返航进近降落整备（afpRtb，60 秒）；驾驶时登陆基飞机坐在跑道上看它滑跑，离地后接手（fpOnRwy），也能自己落回这条跑道（flight.js flSurf）。
+  地面战场的格子不动：南缘外只在 3D 写实画面里画（view3d.js v3SouthBuild 南岸网格、着色器 uRing 3、机场图案 afpTex 用平面画法画进 2048² 贴图，临时绑在 7 号单元），高度 v3HtX / v3HtO 按 afpHt；部队到不了。
 - 地图上不种树、灌木（v3props.js V3P_VEG = false，用户嫌卡）：林地只在地面贴图上表现。
 - 画面默认「写实」（设置里还能选黑绿 / 数码，look.js）；对局一律 3D（平面 2D 模式已删掉：没有切换按钮、Shift + L，旧设置、低画质也开 3D；只有设备不支持 WebGL 时留在平面。新东西不再做 2D 画法，2D 的机型外形数据 airmdl.js AIRD 只给 3D 的航行灯、喷口位置用）——view3d.js 自由镜头、真实天空与地表贴图、实时太阳阴影、海面（法线贴图按像素大小分层淡出，远处不出噪点），v3post.js 后期；黑绿 / 数码画面四周是 v3table.js 的沙盘桌。
 - 坦克装甲车、飞机、直升机、导弹、单兵用的是用户给的模型，原封不动导入（js/v3g.js 渲染，js/mdl/<键>.js；转换工具 tools/v3gconv.py、tools/v3gbake.js、配置 tools/v3gmodels.json、预览 tools/v3gview.html）；兵种 → 模型的对照表在 v3g.js 的 V3G_VEH / V3G_AIR / V3G_MSL。舰艇是 Sketchfab 上 CC-BY 的模型（v3utex.js、assets/models），甲板牵引车、挂弹车、导弹挂载架（rack）是 v3x.js 的导入模型（tools/sfmodel.js + tools/sfmodels.json，密钥只从环境变量 SKETCHFAB_TOKEN 读）。
