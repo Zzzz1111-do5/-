@@ -61,8 +61,11 @@ function frame(now) {
   if (S.phase === 'battle' && !S.paused && !S.over && S.briefed) {
     acc += dt * S.speed;
     let n = 0;
-    while (acc >= 1 / 30 && n++ < 8) { step(1 / 30); acc -= 1 / 30; }
-    if (n >= 8) acc = 0;
+    // 这一帧按正常节奏（含快进倍数）该推的步数照推；卡了一下之后积压的补算才受时间预算限制——超过约 7 毫秒就留到下一帧
+    //   （原来一卡就连补八步，下一帧又被拖慢，一顿接一顿）；积压最多留四步，再多就不追了
+    const t0 = performance.now(), due = Math.ceil(dt * S.speed * 30 - 1e-6);
+    while (acc >= 1 / 30 && n < 8) { step(1 / 30); acc -= 1 / 30; n++; if (n >= due && performance.now() - t0 > 7) break; }
+    if (n >= 8 || acc > 4 / 30) acc = Math.min(acc, 4 / 30);
   }
   if (!(typeof INTRO === 'object' && INTRO.on && INTRO.cover)) draw(now);   // 开场转场完全遮住战场时不画
   runHook('frame', now, dt);

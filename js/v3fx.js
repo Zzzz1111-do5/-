@@ -52,6 +52,19 @@ function v3fxInit(gl) {
     Object.assign(V3F, { pr, a: { p: gl.getAttribLocation(pr, 'p'), c: gl.getAttribLocation(pr, 'c'), q: gl.getAttribLocation(pr, 'q') }, u: { uM: gl.getUniformLocation(pr, 'uM'), uT: gl.getUniformLocation(pr, 'uT') }, buf: gl.createBuffer(), ok: true });
   } catch (e) { V3F.ok = false; console.warn('3D 弹道不可用', e); }
 }
+// 特效顶点的预分配缓冲：和数组一样用 push（每个顶点 9 个数）、length，写进一块 Float32Array，不够了翻倍；每帧把 length 清零复用
+class V3FBuf {
+  constructor(n) { this.a = new Float32Array(n); this.length = 0; }
+  grow(k) { if (this.length + k > this.a.length) { const B = new Float32Array(Math.max(this.a.length * 2, this.length + k)); B.set(this.a.subarray(0, this.length)); this.a = B; } }
+  push(a, b, c, d, e, f, g, h, i) {
+    const n = arguments.length;
+    if (n !== 9) { this.grow(n); for (let k = 0; k < n; k++) this.a[this.length++] = arguments[k]; return this.length; }
+    if (this.length + 9 > this.a.length) this.grow(9);
+    const A = this.a, j = this.length;
+    A[j] = a; A[j + 1] = b; A[j + 2] = c; A[j + 3] = d; A[j + 4] = e; A[j + 5] = f; A[j + 6] = g; A[j + 7] = h; A[j + 8] = i;
+    return (this.length = j + 9);
+  }
+}
 // 世界坐标 + 高度 → GL 坐标
 const v3fP = (x, y, z) => [x, -y, z];
 // 发光带：p0 → p1，宽 w，两头颜色 c0 / c1（rgba）；顶点 = 位置 3、颜色 4、带内坐标 2
@@ -126,7 +139,8 @@ function v3Fx(C) {
   if (!V3F.tried) v3fxInit(gl);
   if (!V3F.ok) return;
   if (V3F.S !== S) { V3F.S = S; V3F.trail.clear(); V3F.puff.length = 0; V3F.seen.clear(); V3F.ign.clear(); V3F.ex.length = 0; V3F.exSeen = new WeakSet(); if (V3F.vo) V3F.vo.clear(); }
-  const out = [], sm = [], E = C.E, box = V3.box || [0, 0, W, H], inB = (x, y, m = 200) => x > box[0] - m && x < box[0] + box[2] + m && y > box[1] - m && y < box[1] + box[3] + m;   // sm：遮挡的烟（普通混合，先画；发光的 out 加法混合后画）
+  const out = V3F.bo || (V3F.bo = new V3FBuf(1 << 16)), sm = V3F.bs || (V3F.bs = new V3FBuf(1 << 15)), E = C.E, box = V3.box || [0, 0, W, H], inB = (x, y, m = 200) => x > box[0] - m && x < box[0] + box[2] + m && y > box[1] - m && y < box[1] + box[3] + m;   // sm：遮挡的烟（普通混合，先画；发光的 out 加法混合后画）
+  out.length = 0; sm.length = 0;   // 每帧复用同两块缓冲（不再每帧新建 JS 数组、再拷成 Float32Array——那是每帧最多的垃圾，垃圾回收时画面一顿）
   const spec = specAll() || (typeof R === 'object' && (R.eye === 'all' || R.eye === 'both' || R.eye === 'e'));
   const seen = (x, y) => spec || inVision(x, y);
   const g = (x, y) => v3Ht(clamp(x, 0, W - 1), clamp(y, 0, H - 1));
@@ -399,7 +413,7 @@ function v3Fx(C) {
   gl.enable(gl.BLEND); gl.depthMask(false);
   for (const [L, add] of [[sm, false], [out, true]]) {
     if (!L.length) continue;
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(L), gl.DYNAMIC_DRAW);
+    gl.bufferData(gl.ARRAY_BUFFER, L.a.subarray(0, L.length), gl.DYNAMIC_DRAW);
     gl.vertexAttribPointer(A.p, 3, gl.FLOAT, false, 36, 0); gl.vertexAttribPointer(A.c, 4, gl.FLOAT, false, 36, 12); gl.vertexAttribPointer(A.q, 2, gl.FLOAT, false, 36, 28);
     gl.blendFunc(gl.ONE, add ? gl.ONE : gl.ONE_MINUS_SRC_ALPHA);
     gl.drawArrays(gl.TRIANGLES, 0, L.length / 9);

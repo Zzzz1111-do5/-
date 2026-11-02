@@ -238,9 +238,7 @@ function step(dt) {
     S.teams = S.teams.filter(q => q.men.length);
     S.sel = S.sel.filter(id => id === 'DD' || id === 'CV' || S.units.some(u => u.id === id) || S.ships.some(s => s.id === id) || (S.veh || []).some(v => v.id === id && !v.dead));
   }
-  for (const t of S.tracers) t.life += dt;
-  S.tracers = S.tracers.filter(t => t.life < t.max);
-  for (const f of S.fx) f.life += dt;
-  S.fx = S.fx.filter(f => f.life < f.max);
+  // 曳光、特效到时就删：原地挤掉（原来每步 filter 新建两个数组，是推演里最常见的垃圾之一，垃圾回收时画面一顿）——结果与原来逐位相同
+  for (const L of [S.tracers, S.fx]) { let j = 0; for (let i = 0; i < L.length; i++) { const t = L[i]; t.life += dt; if (t.life < t.max) L[j++] = t; } L.length = j; }
   checkEnd(dt);
 }

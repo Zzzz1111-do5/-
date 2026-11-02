@@ -1356,22 +1356,29 @@ function v3mDraw(C, LM) {
   for (const [key, L] of V3M.inst) {
     const n = L.d.length / 8;
     if (!n) continue;
-    if (L.fr !== V3M.fr) { L.fr = V3M.fr; L.f = new Float32Array(L.d); }   // 这一帧的实例数据只转一次（两遍共用）
+    // 这一帧的实例数据只转一次、只传一次显卡（阴影、正常、玻璃几遍和三角形 / 线都用这同一块）：原来每遍每种图元都新传一次，
+    //   还每帧新建一个 Float32Array——数据量不大，但几十种物件 × 四次上传的调用开销和垃圾回收是每帧实打实的毫秒
+    if (L.fr !== V3M.fr) {
+      L.fr = V3M.fr;
+      if (!L.f || L.f.length < L.d.length) L.f = new Float32Array(Math.max(64, L.d.length * 1.5 | 0));
+      L.f.set(L.d);
+      if (V3M.ext) { if (!L.gb) L.gb = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, L.gb); gl.bufferData(gl.ARRAY_BUFFER, L.f.subarray(0, L.d.length), gl.DYNAMIC_DRAW); }
+    }
     const m = v3mGet(key, L.build);
-    if (m.gl && !LM) glass.push([m, L.f, n]);
-    v3mDrawM(gl, m, L.f, n, LM);
+    if (m.gl && !LM) glass.push([m, L.f, n, L.gb]);
+    v3mDrawM(gl, m, L.f, n, LM, L.gb);
   }
   if (glass.length) {   // 第二遍：透明座舱玻璃（混合、不写深度；实体都画完了，玻璃后面的座舱、甲板、海面都在）
     gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); gl.depthMask(false); gl.uniform1f(V3M.u.uGP, 1);
-    for (const [m, data, n] of glass) v3mDrawM(gl, m, data, n, true);
+    for (const [m, data, n, gb] of glass) v3mDrawM(gl, m, data, n, true, gb);
     gl.depthMask(true); gl.disable(gl.BLEND); gl.uniform1f(V3M.u.uGP, 0);
   }
   for (const k of ['p', 'n', 's', 'b']) gl.disableVertexAttribArray(A[k]);
   if (typeof v3uDraw === 'function') v3uDraw(C, LM);   // 带贴图的精细模型（v3utex.js）
   if (typeof v3gDraw === 'function') v3gDraw(C, LM);   // 用户给的模型（js/v3g.js）
 }
-// 画一个网格的全部实例（data：每个实例 8 个数）；noLine：不画线（阴影那一遍、透明玻璃那一遍）
-function v3mDrawM(gl, m, data, n, noLine) {
+// 画一个网格的全部实例（data：每个实例 8 个数；gb：这一帧已传好的实例缓冲，有就直接绑上）；noLine：不画线（阴影那一遍、透明玻璃那一遍）
+function v3mDrawM(gl, m, data, n, noLine, gb) {
   const A = V3M.a, X = V3M.ext;
   for (const [buf, cnt, mode] of [[m.tb, m.tn, gl.TRIANGLES], [m.lb, m.ln, gl.LINES]]) {
     if (!buf || !cnt || (noLine && mode === gl.LINES)) continue;
@@ -1381,7 +1388,7 @@ function v3mDrawM(gl, m, data, n, noLine) {
     gl.enableVertexAttribArray(A.s); gl.vertexAttribPointer(A.s, 1, gl.FLOAT, false, 40, 24);
     gl.enableVertexAttribArray(A.b); gl.vertexAttribPointer(A.b, 3, gl.FLOAT, false, 40, 28);
     if (X) {
-      gl.bindBuffer(gl.ARRAY_BUFFER, V3M.ib); gl.bufferData(gl.ARRAY_BUFFER, data, gl.DYNAMIC_DRAW);
+      if (gb) gl.bindBuffer(gl.ARRAY_BUFFER, gb); else { gl.bindBuffer(gl.ARRAY_BUFFER, V3M.ib); gl.bufferData(gl.ARRAY_BUFFER, data.subarray ? data.subarray(0, n * 8) : data, gl.DYNAMIC_DRAW); }
       gl.enableVertexAttribArray(A.iA); gl.vertexAttribPointer(A.iA, 4, gl.FLOAT, false, 32, 0); X.vertexAttribDivisorANGLE(A.iA, 1);
       gl.enableVertexAttribArray(A.iB); gl.vertexAttribPointer(A.iB, 4, gl.FLOAT, false, 32, 16); X.vertexAttribDivisorANGLE(A.iB, 1);
       X.drawArraysInstancedANGLE(mode, 0, cnt, n);

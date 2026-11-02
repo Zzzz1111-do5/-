@@ -284,7 +284,10 @@ function v3gDraw(C, LM) {
       gl.enableVertexAttribArray(A.p); gl.vertexAttribPointer(A.p, 3, gl.FLOAT, false, st, 0);
       gl.enableVertexAttribArray(A.n); gl.vertexAttribPointer(A.n, 3, gl.FLOAT, false, st, 12);
       gl.enableVertexAttribArray(A.uv); gl.vertexAttribPointer(A.uv, 2, gl.FLOAT, false, st, 24);
-      gl.bindBuffer(gl.ARRAY_BUFFER, V3G.ib); gl.bufferData(gl.ARRAY_BUFFER, L.d.subarray(0, L.n * 16), gl.DYNAMIC_DRAW);
+      // 实例数据每帧只传一次显卡（阴影、不透明、半透明几遍共用这一块）：原来每遍都重传一次
+      if (!L.gb) L.gb = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, L.gb);
+      if (L.up !== V3G.frame || L.upN !== L.n) { L.up = V3G.frame; L.upN = L.n; gl.bufferData(gl.ARRAY_BUFFER, L.d.subarray(0, L.n * 16), gl.DYNAMIC_DRAW); }
       for (const [k, o] of [['iA', 0], ['iB', 16], ['iC', 32], ['iD', 48]]) { gl.enableVertexAttribArray(A[k]); gl.vertexAttribPointer(A[k], 4, gl.FLOAT, false, 64, o); X.vertexAttribDivisorANGLE(A[k], 1); }
       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, M.ib);
       gl.uniform1f(U.uRad, M.rad);
