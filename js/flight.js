@@ -93,7 +93,7 @@ function flInit(p) {
 // 推演一帧：inp = { x 压杆（右正，−1–1）, y 拉杆（拉为正）, r 蹬舵, thr 油门 0–1, ab 加力, law 'n' 正常律 / 'd' 直接律, ap 自动驾驶（离开作战区域时）,
 //   gear 起落架放下（true / false）, flap 襟翼档 0–1, sb 减速板（地面上是刹车）, hook 尾钩放下 }；返回 'ground' / 'sea' 表示撞地 / 落海；起降事件记在 F.ev
 function flStep(F, dt, inp) {
-  const A = FL_AC[F.k], D = FL_D, I = A.I;
+  const A = FL_AC[F.k], D = FL_D, I = A.I, mk = inp.mk || 1;   // mk：机动性放大（皇牌空战式操纵，v3pilot.js FP_MK）——升力、过载限制、滚转角速度一起乘上，飞机像机翼大三成、结构强三成，转得急、滚得快
   let hit = null;
   // 起落架：放下 / 收起各约 5 秒；超过限速放不下（F.ev 提示一次）
   const gw = inp.gear ? 1 : 0;
@@ -114,13 +114,13 @@ function flStep(F, dt, inp) {
     else {
       // 俯仰：过载指令（松杆时按坡度补偿到能保持飞行轨迹的过载——倒飞时是负过载；拉杆往 +9 g、推杆往 −3 g）→ 迎角指令（不超迎角限制）→ 俯仰角速度指令 → 动态逆求升降舵
       //   坡度补偿只到约 50°（再大就是在做机动，靠拉杆），50°–60° 平滑退到「只抵重力分量」——原来在 80° 处一刀切，横滚滚过去时机头猛一点头
-      const cf = Math.cos(phi), n0 = Math.cos(th) * (cf + smooth(1.05, .85, Math.abs(phi)) * (1 / Math.max(cf, .4) - cf)), nzc = inp.y >= 0 ? lerp(n0, A.nz[1] + (inp.hg ? 2 : 0), inp.y) : lerp(n0, A.nz[0], -inp.y);
-      const ac = clamp(nzc * A.m * FL_G / (qS * A.CLa), -.2, A.alim + (inp.hg ? .1 : 0));   // hg：高 G 急转——越过飞控的过载限制（多 2 g）、迎角多放 6°：转得更急，掉速度、黑视都快得多
-      const qc = clamp(2.8 * (ac - al) + FL_G / Vn * (nzc - Math.cos(th) * Math.cos(phi)), -1.3, 1.3);
+      const cf = Math.cos(phi), n0 = Math.cos(th) * (cf + smooth(1.05, .85, Math.abs(phi)) * (1 / Math.max(cf, .4) - cf)), nzc = inp.y >= 0 ? lerp(n0, A.nz[1] * mk + (inp.hg ? 2 : 0), inp.y) : lerp(n0, A.nz[0], -inp.y);
+      const ac = clamp(nzc * A.m * FL_G / (qS * A.CLa * mk), -.2, A.alim + (inp.hg ? .1 : 0));   // hg：高 G 急转——越过飞控的过载限制（多 2 g）、迎角多放 6°：转得更急，掉速度、黑视都快得多
+      const qc = clamp(3.6 * (ac - al) + FL_G / Vn * (nzc - Math.cos(th) * Math.cos(phi)), -1.5, 1.5);   // 迎角跟上指令约 0.28 秒（原来 0.36 秒，拉杆到 9 g 要 0.8 秒，手感发肉）
       const Mreq = I[1] * 7 * (qc - q) - (I[2] - I[0]) * p * r, M0 = qS * A.c * (D.Cm0 + D.Cma * al + D.Cmq * qh);
       de = (Mreq - M0) / (qS * A.c * D.Cmde);
       // 滚转：角速度指令（松杆保持坡度，坡度小于 8° 时自动改平）
-      const pc = inp.x ? inp.x * A.pmax : Math.abs(phi) < .14 ? -2.5 * phi : 0;
+      const pc = inp.x ? inp.x * A.pmax * mk : Math.abs(phi) < .14 ? -2.5 * phi : 0;
       const Lreq = I[0] * 13 * (pc - p) - (I[1] - I[2]) * q * r, L0 = qS * A.b * (D.Clb * be + D.Clp * ph + D.Clr * rh);
       da = (Lreq - L0) / (qS * A.b * D.Clda);
       // 偏航：协调转弯（偏航角速度跟着坡度）+ 侧滑归零（偏航阻尼）
@@ -132,7 +132,7 @@ function flStep(F, dt, inp) {
     const cmd = [de, da, dr];
     for (let i = 0; i < 3; i++) F.d[i] = clamp(F.d[i] + clamp(clamp(cmd[i], -FL_DMAX[i], FL_DMAX[i]) - F.d[i], -FL_DRATE[i] * h, FL_DRATE[i] * h), -FL_DMAX[i], FL_DMAX[i]);
     // —— 气动力 ——
-    const fl = F.flap || 0, sa = smooth(A.as, A.as + .25, Math.abs(al)), CL = lerp(clamp(A.CLa * al + .45 * fl, -A.CLmax, A.CLmax + .45 * fl), 1.05 * Math.sin(2 * al), sa);   // 过了失速迎角升力掉下来、变成平板升力；襟翼加升力
+    const fl = F.flap || 0, sa = smooth(A.as, A.as + .25, Math.abs(al)), CL = mk * lerp(clamp(A.CLa * al + .45 * fl, -A.CLmax, A.CLmax + .45 * fl), 1.05 * Math.sin(2 * al), sa);   // 过了失速迎角升力掉下来、变成平板升力；襟翼加升力
     const CD = A.CD0 * (1 + 1.3 * smooth(.85, 1.05, M) - .4 * smooth(1.2, 1.8, M)) + A.K * CL * CL + 1.3 * Math.sin(al) ** 2 * sa + .04 * (Math.abs(F.d[0]) + Math.abs(F.d[2]))
       + .018 * F.gear + .035 * fl + (F.sb ? .06 : 0);   // 起落架、襟翼、减速板的阻力
     const CY = D.CYb * be + D.CYdr * F.d[2];
