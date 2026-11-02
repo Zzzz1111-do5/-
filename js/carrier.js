@@ -561,6 +561,7 @@ function airNew(w, kind, x, y, heading, tx, ty, extra) {
   const M = airMdl(kind, w.v), p = { id: S.nid++, wid: w.id, home: cvHome(w), kind, v: w.v || null, x, y, heading, spd: 0, alt: 0, bank: 0,
     tx, ty, cx: tx, cy: ty, wp: [{ x: tx, y: ty }], leg: 0, aaT: Math.random() * .5, rt: 0, gunT: 0, strafeT: 1, loiterT: M.loiter || 40, odir: 1, dropped: false, rtbT: 0, ...extra };
   if (kind === 'recon') p.wp = airRcRoute(x, y, tx, ty);   // 侦察机：在目标一带按往返航线扫一片（airRcRoute）
+  if (kind === 'fighter' && M.mt) p.cy = Math.min(H - 60, (p.cy ?? ty) + 450);   // 导弹卡车：巡逻点往我方一侧退 450（不隐身，待在歼-20 后面、敌防空圈外）
   if (kind === 'fighter') Object.assign(p, { mt: !!M.mt, aam: M.aam || 4, gun: M.gun ?? 40, capT: M.cap || 90, aamR: M.aamR || 480, pkK: M.pkK || 1, aamL: M.aamL || 0, aamLR: M.aamLR || 0, radar: M.radar || 520, aam0: (M.aam || 4) + (M.aamL || 0) });   // 空空导弹 · 机炮点射次数 · 巡逻秒数 · 远程弹 · 机载雷达（airwar.js）
   if (M.agm || M.cm) p.agmN = M.agmN;   // 空地导弹（airAgm）、巡航导弹（轰-6K：bomberStd）
   return p;
@@ -671,7 +672,7 @@ const cvDeckBusy = p => S.planes.some(o => o !== p && !o.dead && cvHome(o) === c
 
 function flyPlane(p, dt) {
   const c = S.cv, sp = airSpec(p.kind, p.v), dead = c.hp <= 0, M = airMdl(p.kind, p.v);
-  const speed = v => { p.spd += clamp(v - p.spd, -70 * dt, 45 * dt); };
+  const speed = v => { const r = p.alt >= .25 && typeof apDv === 'function' ? apDv(airMdlKey(p.kind, p.v), p.spd, v, p.hr, dt) : null; p.spd = r ?? p.spd + clamp(v - p.spd, -70 * dt, 45 * dt); };   // 空中按各型的剩余推力加减速、急转掉速（airperf.js）
   p.gunT = Math.max(0, (p.gunT || 0) - dt);
   if (p.afPh && typeof abPlaneFly === 'function' && abPlaneFly(p, dt, speed)) return;   // 在夺取的机场起降（abn.js）
   if (!Array.isArray(p.wp) || !p.wp.length) p.wp = [{ x: isFinite(p.tx) ? p.tx : p.x, y: isFinite(p.ty) ? p.ty : p.y }];

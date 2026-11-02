@@ -163,6 +163,7 @@ function awFleetCover(x, y, m = 0) {
 }
 // 追踪：瞄准目标的提前位置（按目标速度与距离，最多 1.2 秒），转弯率 turn（战斗机比攻击机灵活）
 function awPursue(f, T, dt, turn) {
+  if (typeof apTurn === 'function') turn = apTurn(f.kind ? airMdlKey(f.kind, f.v) : f.type, f.spd, turn);   // 各型自己的瞬时转弯（airperf.js：速度掉了能拉的过载跟着少）
   const k = airK(f), d = dist(f.x, f.y, T.x, T.y), lead = Math.min(1.2, d / Math.max(60, f.spd * k * 1.5)), h = T.heading ?? 0, v = (T.spd || 0) * (T.alt != null ? airK(T) : 1);
   const tx = clamp(T.x + Math.cos(h) * v * lead, 20, W - 20), ty = clamp(T.y + Math.sin(h) * v * lead, 20, H - 20);
   const tr = airYaw(f, awAng(Math.atan2(ty - f.y, tx - f.x) - f.heading), turn, dt);   // 平滑转向（carrier.js）
@@ -307,6 +308,14 @@ function awFlyP(p, dt, speed) {
     speed(sp.spd * 1.15);
     const a = Math.atan2(p.y - T.y, p.x - T.x);
     airSteer(p, clamp(p.x + Math.cos(a) * 400, 40, W - 40), clamp(p.y + Math.sin(a) * 400, 40, H - 40), dt, true);
+  }
+  else if (T && p.mt) {   // 导弹卡车：不往前拱——霹雳-15 射程八成五以内就侧转（目标留在机头 ±40° 里照样能打）、七成以内掉头拉开；目标在敌防空圈里不追进去（发射交给 awFight）
+    const d = dist(p.x, p.y, T.x, T.y), R = p.aamR || 560, thr = typeof airThreats === 'function' ? airThreats('p') : [], inThr = typeof airThreatAt === 'function' && airThreatAt(thr, T.x, T.y, 60) > 0;
+    const a = Math.atan2(T.y - p.y, T.x - p.x), s = p.crankS || (p.crankS = Math.random() < .5 ? 1 : -1);
+    const b = d < R * .7 ? a + Math.PI : d < R * .85 || inThr ? a + .55 * s : null;
+    if (b != null) { speed(sp.spd); airSteer(p, clamp(p.x + Math.cos(b) * 300, 40, W - 40), clamp(p.y + Math.sin(b) * 300, 40, H - 40), dt, true); }
+    else { speed(sp.spd * 1.05); awPursue(p, T, dt, sp.turn || 2.3); }
+    p.ext = false;
   }
   else if (T) {
     const mv = sp.stealth ? awBvrMove(p, T) : null;

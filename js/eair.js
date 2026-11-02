@@ -570,9 +570,11 @@ function eaHomeSpot(a) {
   return { x: s[0], y: s[1], h: s[2], farp: true };
 }
 function eaSteer(a, tx, ty, dt, spd) {
-  const sp = EA_SPEC[a.type], df = eaAng(Math.atan2(ty - a.y, tx - a.x) - a.heading), turn = airYaw(a, df, sp.turn, dt), k = airK(a);   // 平滑转向、地速按真实速度（carrier.js AIR_K）
-  a.heading = eaAng(a.heading + turn); a.bank = lerp(a.bank || 0, clamp(a.hr / sp.turn, -1, 1), Math.min(1, dt * 5));
-  a.spd += clamp((spd ?? sp.spd) - a.spd, -60 * dt, 50 * dt);
+  const sp = EA_SPEC[a.type], tr = a.tg && typeof apTurn === 'function' ? apTurn(a.type, a.spd, sp.turn) : sp.turn;   // 交战时按各型自己的瞬时转弯（airperf.js），平时照航线转弯
+  const df = eaAng(Math.atan2(ty - a.y, tx - a.x) - a.heading), turn = airYaw(a, df, tr, dt), k = airK(a);   // 平滑转向、地速按真实速度（carrier.js AIR_K）
+  a.heading = eaAng(a.heading + turn); a.bank = lerp(a.bank || 0, clamp(a.hr / tr, -1, 1), Math.min(1, dt * 5));
+  const r = (a.alt ?? 1) >= .25 && typeof apDv === 'function' ? apDv(a.type, a.spd, spd ?? sp.spd, a.hr, dt) : null;   // 空中按剩余推力加减速、急转掉速
+  a.spd = r ?? a.spd + clamp((spd ?? sp.spd) - a.spd, -60 * dt, 50 * dt);
   a.x += Math.cos(a.heading) * a.spd * k * dt; a.y += Math.sin(a.heading) * a.spd * k * dt;
   return dist(a.x, a.y, tx, ty);
 }

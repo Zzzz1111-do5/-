@@ -169,6 +169,7 @@ function infoPlane(p) {
   return { t: nm, s: `${INFO_AIRK[p.kind] || p.kind}`,
     rows: [['状态', infoEsc(INFO_AIRPH[p.phase] || p.phase || '')], infoMisP(p) && ['任务', infoEsc(infoMisP(p))], ['速度', `${Math.round(p.spd || 0)}（最大 ${sp.spd || '?'}）`], ['隐身', infoEsc(infoStl(sp.stealth) + infoExp(p))],
       sp.radar && ['机载雷达', `发现距离 ${sp.radar}`], wpn && ['挂载', infoEsc(wpn)], p.flares != null && ['干扰弹', `${p.flares} 组`],
+      typeof apCard === 'function' && apCard(airMdlKey(p.kind, p.v)) && ['机动性', infoEsc(apCard(airMdlKey(p.kind, p.v)))],   // 各型自己的推重比、翼载、转弯、加速（airperf.js，推演里就按它算）
       sp.stealth && p.kind === 'fighter' && ['空战打法', '超视距：发射后侧转保持照射，敌机逼近就拖开，不进格斗'], ['起降', sp.land ? '战区陆基机场' : '航母']] };
 }
 function infoEair(a) {
@@ -178,6 +179,7 @@ function infoEair(a) {
   return { t: '敌 ' + (sp.name || a.type), s: specAll() || inVision(a.x, a.y) ? '目视' : '雷达发现',
     rows: [['状态', infoEsc(INFO_AIRPH[a.ph] || a.ph || '')], ['任务', infoEsc(infoMisE(a))], ['耐久', `${a.hp ?? '?'}/${sp.hp ?? '?'}`], ['速度', `${Math.round(a.spd || 0)}（最大 ${sp.spd || '?'}）`], ['隐身', infoEsc(infoStl(sp.stealth) + infoExp(a))],
       F && ['机载雷达', `发现距离 ${F.radar}`], wpn && ['挂载', infoEsc(wpn)], a.flares != null && ['干扰弹', `${a.flares} 组`],
+      typeof apCard === 'function' && apCard(a.type) && ['机动性', infoEsc(apCard(a.type))],
       sp.stealth && F && ['空战打法', '超视距：发射后侧转，被逼近就拖开'], a.type === 'c17' && ['机上', `${(a.sq || []).length} 个班、${(a.veh || []).length} 辆空投车辆`]] };
 }
 
