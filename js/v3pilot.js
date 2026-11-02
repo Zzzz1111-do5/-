@@ -1,10 +1,10 @@
 'use strict';
 // 亲自操纵（3D 地图里，P 键或右上角「驾驶」按钮）：055 驱逐舰，以及升空的战斗机（歼-20、歼-50）、歼-35、歼-15T、歼-16D——
 //   这一个单位的 AI 让出指挥（别的照常推演）；按 P 或「驾驶」弹出列表自己选要开的，Esc 退出、交回 AI。画面上不画别的标识，只有武器平显（fpwpn.js）
-//   飞机：飞控物理引擎（flight.js 六自由度 + 电传飞控）真飞；操纵默认照《皇牌空战》——A / D（手柄左摇杆左右）压到对应坡度并顺势带杆转弯、松手自动改平，↑ / ↓ 推杆 / 拉杆；
+//   飞机：飞控物理引擎（flight.js 六自由度 + 电传飞控）真飞；操纵默认照《皇牌空战》——鼠标（右摇杆）移动准心、飞机朝准心飞（教官压坡度带杆），A / D（左摇杆左右）横滚、按住一直滚，↑ / ↓ 推杆 / 拉杆，机动性放大 FP_MK 倍；
 //         M 依次切换《战争雷霆》式鼠标瞄准（鼠标指哪儿，教官压坡度、拉杆把机头带过去）、鼠标摇杆（鼠标移动的就是杆）；W / S 油门（推满后按住 W 开加力）、Q / E 方向舵（按住时这一轴归玩家）；
 //         能连续横滚、筋斗、反筋斗；杆量有平滑、死区与指数响应曲线；受力回馈：手柄震动、大迎角抖振、过载黑视 / 红视、头部随过载晃动（G 开关）；
-//         镜头绕着飞机：皇牌空战式操纵时一直是自由视角（鼠标 / 右摇杆转，世界坐标里的方向，飞机翻滚时不跟着转、不自己回去；C 转回机尾后方），
+//         镜头绕着飞机：皇牌空战式操纵时顺着准心看（世界坐标里的方向，飞机翻滚时不跟着转；C 把准心转回机头方向，按住右键拖动看四周），
 //         别的方式跟在机尾（按住 C 自由视角）；滚轮拉远拉近——座舱视角去掉了；手柄也能飞；
 //         武器（fpwpn.js）：数字键选武器、F / 左键开火（要锁稳）、R / 右键单击换目标、空格航炮；发射后右上角小屏跟着导弹看，V 放大 / 缩回；
 //         降落（自己飞）：G 起落架、L 襟翼、B 减速板（地上是刹车）、H 尾钩——航母斜角甲板上挂住拦阻索、夺取的机场跑道上停下来，就交给地勤整备；
@@ -183,6 +183,11 @@ const fpLocked = () => typeof document !== 'undefined' && !!document.pointerLock
 //     再过指数响应曲线（中间细腻、推到头才满量）；电传把杆量换成过载 / 滚转角速度指令
 const FP_DZ = .03, FP_EXPO = .55;
 const fpDz = v => Math.abs(v) < FP_DZ ? 0 : Math.sign(v) * (Math.abs(v) - FP_DZ) / (1 - FP_DZ);
+// 机动性放大（用户：飞机机动性有点低）：皇牌空战式操纵时升力、过载限制、滚转角速度都乘 FP_MK（flight.js inp.mk）——像机翼大三成、结构强三成，
+//   转弯半径小三成、横滚快三成；飞行员的抗荷能力按同样比例算（黑视门槛跟着放大）。地图小（八公里宽），照真实的转弯半径一个掉头要飞出去两三公里，
+//   推演里 AI 的空战机动本来就比真实快 6 倍（airperf.js AP_K）。战争雷霆式、鼠标摇杆照真实
+const FP_MK = 1.3;
+const fpMk = () => V3FP.ctl === 'ace' ? FP_MK : 1;
 const FP_GK = 1.2, FP_GN = [2.5, 4.5];   // 准心控制上下：航迹倾角差 → 倾角变化率的增益（1 / 秒）；为跟准心最多多推 / 多拉几 g（用真实飞控仿真调的：不过冲、不来回摆，最大约 5.5 g 不黑视）
 const fpCurve = v => Math.sign(v) * ((1 - FP_EXPO) * Math.abs(v) + FP_EXPO * Math.abs(v) ** 3);
 const fpRamp = (v, t, dt, up = 3.2) => { const k = Math.abs(t) > Math.abs(v) && Math.sign(t) === Math.sign(v || t) ? up : 7; return v + clamp(t - v, -k * dt, k * dt); };   // 推满约 0.3 秒（滚转 0.38 秒：轻点一下只压十度左右，细修航向）、回中约 0.14 秒
@@ -217,8 +222,8 @@ function fpBody(o) {
 //   横向偏差几度以内：机头靠方向舵先蹬过去，坡度按「航迹」（速度方向）还差多少压，航迹约 0.7 秒跟上——机头、航迹一起对上，松舵不会偏回去；
 //   正飞时准星在下方 20° 以内：保持正飞直接推杆；离地近时准星压得再低也只按安全的下滑角飞（像《战争雷霆》的教官不让飞机撞地）
 //   原来偏差小时只按偏差压一点坡度、保持 1 g：转弯角速度跟偏差的平方一样小，偏 8° 要十几秒才对上，鼠标指哪儿飞机半天转不过去
-function fpInstr(F) {
-  const A0 = FL_AC[F.k] || {}, R = flRot(F.q), [phi, th, psi] = flEul(F.q), Va = Math.max(F.Va || 0, 60), pm = A0.pmax || 3, nz = A0.nz || [-3, 8], M = V3FP.ins;
+function fpInstr(F, mk = 1) {   // mk：机动性放大（皇牌空战式 FP_MK，flight.js 同一个数）——教官能用的过载、滚转跟着放大
+  const A0 = FL_AC[F.k] || {}, R = flRot(F.q), [phi, th, psi] = flEul(F.q), Va = Math.max(F.Va || 0, 60), pm = (A0.pmax || 3) * mk, nz0 = A0.nz || [-3, 8], nz = [nz0[0], nz0[1] * mk], gi = 7.5 * mk, M = V3FP.ins;   // gi：教官最多拉到「黑视门槛」，自己不让飞行员黑视
   // 避地：按离地高度（往前 2、4 秒的地面也算上）限制最陡的下滑角，6 秒内掉的高度不超过离地高度减 80 米
   let [ay0, ap0] = V3FP.aim;
   if (Math.abs(ap0) < 1.5 && typeof flGround === 'function') {
@@ -230,7 +235,7 @@ function fpInstr(F) {
   const off = Math.acos(clamp(b[0], -1, 1)), eY = Math.atan2(b[1], b[0]), be = F.b || 0, fine = 1 - smooth(.045, .12, Math.abs(eY));   // 横向偏差 2.5° 以内全按航迹修、7° 以上全按机头的矢量；be 侧滑（航迹在机头右边为正）
   // 垂直于机头、朝着准星的方向（准星在正后方时先往座舱顶方向拉）；要的角速度 → 加速度
   const tl = Math.hypot(b[1], b[2]), back = b[0] < 0 && tl < .05, ty = back || tl < 1e-9 ? 0 : b[1] / tl, tz = back ? -1 : tl < 1e-9 ? 0 : b[2] / tl;
-  const om = Math.min(1.6 * off, 7.5 * FL_G / Va), gb = flMtv(R, [0, 0, FL_G]);   // 重力（机体系）
+  const om = Math.min(1.6 * off, gi * FL_G / Va), gb = flMtv(R, [0, 0, FL_G]);   // 重力（机体系）
   const ay = lerp(ty * Va * om, clamp(Va * 1.4 * (eY - be), -4 * FL_G, 4 * FL_G), fine), az = tz * Va * om;
   const fy = ay - gb[1], fz = az - gb[2], fl = Math.hypot(fy, fz) / FL_G;   // 机翼该给的升力（比力，机体系的右、下分量）
   // 推杆：正飞（坡度 60° 以内）、准星在下方 20° 以内（要往下的比重力还多）——保持正飞直接推；有滞回，不来回跳
@@ -241,9 +246,10 @@ function fpInstr(F) {
   const soft = airAng(clamp(Math.atan2(ayW, FL_G), -1.3, 1.3) - phi), wr = M.push ? 0 : smooth(1.2, 2.5, fl);
   let rollE = soft + airAng(Math.atan2(fy, -fz) - soft) * wr;
   if (Math.abs(rollE) > 2.6 && M.rs && Math.sign(rollE) !== M.rs) rollE += 2 * Math.PI * M.rs;   // 要滚将近半圈：接着往刚才那边滚，不在 ±180° 处来回换方向
+  else if (Math.abs(F.w[0]) > 1.5 && Math.sign(F.w[0]) !== Math.sign(rollE) && Math.abs(rollE) > 1.9) rollE += 2 * Math.PI * Math.sign(F.w[0]);   // 玩家横滚到一半松手（还滚得很快）：顺着滚完这一圈，不刹住再倒滚回去
   M.rs = Math.sign(rollE) || M.rs || 1;
   // 过载：升力在现在的座舱顶方向上的分量（滚到位之前少拉）；推杆时可以到负过载下限。换成电传的杆量（flight.js：松杆 = 保持航迹的过载 n0）
-  const nc = clamp(-fz / FL_G, M.push ? nz[0] : -1, 7.5), cf = Math.cos(phi), n0 = Math.cos(th) * (cf + smooth(1.05, .85, Math.abs(phi)) * (1 / Math.max(cf, .4) - cf));
+  const nc = clamp(-fz / FL_G, M.push ? nz[0] : -1, gi), cf = Math.cos(phi), n0 = Math.cos(th) * (cf + smooth(1.05, .85, Math.abs(phi)) * (1 / Math.max(cf, .4) - cf));
   const y = nc >= n0 ? (nc - n0) / Math.max(.5, nz[1] - n0) : -(n0 - nc) / Math.max(.5, n0 - nz[0]);
   return { x: clamp((rollE * 4 - F.w[0] * .35) / pm, -1, 1), y: clamp(y, -1, 1), r: clamp(eY * 16, -1, 1) * fine };
 }
@@ -299,17 +305,31 @@ function fpFly(p, dt) {
   const mx = clamp(kx.r + (gp ? gp.x : 0), -1, 1), my = clamp(kx.p + (gp ? gp.y : 0), -1, 1), mr = clamp(kx.y + (gp ? gp.r : 0), -1, 1);
   let x, y, r;
   if (V3FP.ctl === 'stick') { x = fpCurve(clamp(mx + fpDz(V3FP.ms[0]), -1, 1)); y = fpCurve(clamp(my + fpDz(V3FP.ms[1]), -1, 1)); r = fpCurve(mr); }
-  else if (V3FP.ctl === 'ace') {   // 皇牌空战式：A / D 压到对应坡度（满压 80°，松手回平），按坡度自动带杆保持平飞转弯；↑ / ↓ 在这上面加拉杆 / 推杆（拉杆转得更急）；舵 = 微调机头。飞控、气动照旧是真实的
-    //   滚转按坡度差的比例 + 角速度阻尼：压到 70° 约 0.7 秒、改平约 0.7 秒，不过冲（原来增益小一半，最后二十度要磨一秒多）；
-    //   自动带杆按水平转弯要的过载（1 / cos 坡度）补——原来固定带约一半杆，小坡度时机头一路往上翘、边转边爬
-    const [phi, th] = flEul(F.q), A1 = FL_AC[F.k] || {}, pm = A1.pmax || 3, nm = A1.nz ? A1.nz[1] : 9, nn = A1.nz ? A1.nz[0] : -3, ix = fpCurve(mx), iy = fpCurve(my);
-    x = clamp((airAng(ix * 1.4 - phi) * 5 - F.w[0] * .25) / pm, -1, 1);
+  else if (V3FP.ctl === 'ace') {   // 皇牌空战式：准心（鼠标）管飞去哪儿，A / D 横滚、↑ / ↓ 推拉杆随时接手；舵 = 微调机头。飞控、气动是真实的那一套，机动性按 FP_MK 放大
+    const [phi, th] = flEul(F.q), A1 = FL_AC[F.k] || {}, nm = (A1.nz ? A1.nz[1] : 9) * FP_MK, nn = A1.nz ? A1.nz[0] : -3, ix = fpCurve(mx), iy = fpCurve(my);
+    // 准心管方向（用户：飞机操作太难受——原来鼠标左右只转镜头、飞机不跟着转，得另按 A / D 压坡度，镜头和飞机各走各的）：
+    //   没按 A / D、↑ / ↓ 时，准心（方位 V3FP.cy、高度角 V3FP.ael，鼠标 / 右摇杆移动）就是要飞去的方向，交给教官（fpInstr，同《战争雷霆》鼠标瞄准：
+    //   压坡度 + 拉杆把机头带过去，偏得多转得急，最多拉到黑视门槛，不过冲）；镜头一直顺着准心看，飞机始终在画面中间朝准心飞。
+    //   按着 A / D、↑ / ↓ 时是手动：准心方位紧跟航迹（松手接着往现在飞的方向飞，不扳回去；原来按 3 / 秒慢慢追，松手时准心落在身后，飞机左右来回摆）
+    const hand = Math.abs(ix) > .02 || Math.abs(iy) > .02 || hg, Vh = Math.hypot(F.V[0], F.V[1]), Va = Math.max(F.Va || 0, 60), gam = Math.asin(clamp(-F.V[2] / Va, -1, 1));
+    if (V3FP.ael == null || V3FP.aelO !== p.id) { V3FP.ael = gam; V3FP.aelO = p.id; }   // 换了一架飞机：准心高度角从它现在的航迹开始
+    if (!hand && V3FP.cy != null) {
+      V3FP.aim = [-V3FP.cy, V3FP.ael];   // fpInstr 的方位按推演坐标（y 朝南），镜头的按 GL 坐标（y 朝北）：取负
+      const I = fpInstr(F, FP_MK), S0 = V3FP.ins, k = Math.min(1, dt / .08);   // 教官的杆量滤一下（约 0.08 秒），不来回抖
+      S0.x += (I.x - S0.x) * k; S0.y += (I.y - S0.y) * k; S0.r += (I.r - S0.r) * k;
+      x = S0.x; y = S0.y; r = Math.abs(mr) > .02 ? fpCurve(mr) : S0.r;
+    } else {
+    // 准心方位跟着航迹：航迹接近竖直（筋斗顶上）时不跟（水平分量太小、方位乱跳），出来后最快 3 rad / 秒转过去，不一下甩 180°
+    if (V3FP.cy != null && Vh > .3 * Math.max(F.Va || 0, 1)) { const ps = Math.atan2(F.V[0], F.V[1]); V3FP.cy = airAng(V3FP.cy + clamp(airAng(ps - V3FP.cy), -3 * dt, 3 * dt)); }
+    V3FP.ins.x = V3FP.ins.y = V3FP.ins.r = 0;
+    // 滚转：A / D 就是滚转角速度（按住一直滚——横滚、滚筒都能做；原来压到 80° 就停住）
+    x = ix;
     const cf = Math.cos(phi), n0 = Math.cos(th) * (cf + smooth(1.05, .85, Math.abs(phi)) * (1 / Math.max(cf, .4) - cf));   // n0：飞控松杆时自己按坡度补到的过载（与 flight.js 一致，约到 50°）
     // 上下：准心控制（V3FP.ael：准心在地平线上下多少度，鼠标上下移动它）——飞机按准心的高度角爬升 / 俯冲：按航迹倾角差要一个倾角变化率，
     //   换成竖直方向要的过载、再除以 cos 坡度（压坡度转弯时自动多拉，保持高度角；超出机体能力就边转边掉高度）→ 飞控的拉杆量。
     //   离地太近不让往下扎（6 秒内不低于离地 80 米，同鼠标瞄准的教官）；↑ / ↓ 照样直接推拉杆，按着的时候准心跟着航迹走，松手不扳回去
-    const Va = Math.max(F.Va || 0, 60), gam = Math.asin(clamp(-F.V[2] / Va, -1, 1));
-    if (V3FP.ael == null || V3FP.aelO !== p.id) { V3FP.ael = gam; V3FP.aelO = p.id; }
+    //   滚过 70° 以后这份「保持高度角」的带杆渐渐退掉（86° 以上不带）：横滚滚到倒飞时还按 1 / cos 坡度拉，就是朝地面拉、边滚边往下钻；
+    //   不带杆时电传自己保持航迹（flight.js n0），按住 A / D 滚一整圈机头还对着原来的方向
     if (Math.abs(iy) > .02 || hg) {
       const nr = Math.cos(th) / Math.max(cf, .2), ya = Math.abs(ix) > .02 && cf > 0 ? clamp((Math.min(nr, nm) - n0) / (nm - n0), 0, 1) : 0;
       y = clamp(iy >= 0 ? iy + ya * (1 - iy) : iy, -1, 1);
@@ -320,9 +340,10 @@ function fpFly(p, dt) {
       for (const k of [0, 2, 4]) gz = Math.max(gz, flGround(F.P[0] + F.V[0] * k, F.P[1] + F.V[1] * k));
       gc = Math.max(gc, -Math.asin(clamp((-F.P[2] - gz - 80) / (Va * 6), 0, .95)));
       const nreq = (Math.cos(gam) + clamp(Va * FP_GK * (gc - gam), -FP_GN[0] * FL_G, FP_GN[1] * FL_G) / FL_G) / Math.max(cf, .2);
-      y = clamp(nreq >= n0 ? (Math.min(nreq, nm) - n0) / Math.max(.5, nm - n0) : -(n0 - Math.max(nreq, nn)) / Math.max(.5, n0 - nn), -1, 1);
+      y = clamp(nreq >= n0 ? (Math.min(nreq, nm) - n0) / Math.max(.5, nm - n0) : -(n0 - Math.max(nreq, nn)) / Math.max(.5, n0 - nn), -1, 1) * (1 - smooth(1.22, 1.5, Math.abs(phi)));
     }
     r = fpCurve(mr);
+    }
   } else {
     // 玩家压杆或拉杆时教官整个让出来（不然它还在按准星滚转，和玩家打架），准星跟着机头走——松手后接着往机头方向飞，不会猛地扳回去
     V3FP.man = Math.abs(mx) > .02 || Math.abs(my) > .02;
@@ -340,16 +361,17 @@ function fpFly(p, dt) {
     const agl = -F.P[2] - flGround(F.P[0], F.P[1]);
     V3FP.aim = [Math.atan2(H / 2 - p.y, W / 2 - p.x), clamp((900 - agl) / 1500, .08, .35)];   // 准星总在地平线以上：转弯带一点爬升（准星和地平线齐平时要压到 90° 坡度转，升力全在水平方向，一路往下掉）
     V3FP.thr = 1; if (F.Va < 170) V3FP.ab = true;
-    const I = fpInstr(F); x = I.x; y = I.y; r = I.r;
+    const I = fpInstr(F, fpMk()); x = I.x; y = I.y; r = I.r;
     if (F.Va > 1) V3FP.ael = Math.asin(clamp(-F.V[2] / F.Va, -1, 1));   // 交回来时准心在航迹上，不猛地扳
   }
   F.P0 = F.P.slice(); F.q0 = F.q.slice();   // 上一步的位置、姿态：画面按这一步走了多少插值（推演每秒 30 步，画面 60 帧以上，不插值飞机一顿一顿地抖）
-  const hit = flStep(F, dt, { x, y, r, thr: ab ? 1 : V3FP.thr, ab, law: V3FP.ap ? 'n' : V3FP.law, gear: V3FP.gear, flap: V3FP.flapC, sb: K.has('KeyB') || !!T.sb, hook: V3FP.hook, hg: hg && !V3FP.ap });
+  const hit = flStep(F, dt, { x, y, r, thr: ab ? 1 : V3FP.thr, ab, law: V3FP.ap ? 'n' : V3FP.law, gear: V3FP.gear, flap: V3FP.flapC, sb: K.has('KeyB') || !!T.sb, hook: V3FP.hook, hg: hg && !V3FP.ap, mk: fpMk() });
   flToGame(p);
   if (F.ev) { const ev = F.ev; F.ev = null; if (fpLandEv(p, ev)) return true; }   // 接地、离地、挂索、冲出甲板（挂上索、跑道上停下来：交给地勤，不再走物理引擎）
   if (F.gnd && F.gk === 'rwy' && F.gs < 18 && V3FP.thr < .5) { fpRwyStop(p); return true; }
   // 受力回馈：过载黑视（持续 6 g 以上视野变暗收窄）、红视（−2 g 以下）、大迎角抖振、开火冲击
-  V3FP.gb = clamp(V3FP.gb + (F.nz > 7 ? (F.nz - 7) * .3 : -.5) * dt, 0, 1);   // 有抗荷服：7 g 以上才开始，9 g 撑 1.6 秒左右视野收窄到最小
+  const gz = F.nz / fpMk();   // 按放大前的过载算（飞行员抗荷能力随 FP_MK 放大）
+  V3FP.gb = clamp(V3FP.gb + (gz > 7.5 ? (gz - 7.5) * .25 : -.5) * dt, 0, 1);   // 有抗荷服：7.5 g 以上才开始，9 g 撑 2.7 秒左右视野收窄到最小（原来 7 g 起、1.6 秒——真飞行员在离心机里 9 g 能撑十几秒）；教官最多拉到 7.5 g，不会自己把人拉黑
   V3FP.rb = clamp(V3FP.rb + (F.nz < -2 ? (-2 - F.nz) * .5 : -.5) * dt, 0, 1);
   V3FP.buf = clamp(smooth((A.alim || .43) * .72, (A.alim || .43) * 1.05, Math.abs(F.a)) + (F.stall || 0), 0, 1);
   V3FP.imp = Math.max(0, V3FP.imp - dt * 3);
@@ -619,16 +641,17 @@ function fpChaseCam(P) {
   const cl = [0, 0, 1], wv = Math.max(smooth(.82, .97, Math.abs(f[2])), V3FP.ctl === 'ace' ? .45 : 0), cm = [cl[0] + (c[0] - cl[0]) * wv, cl[1] + (c[1] - cl[1]) * wv, cl[2] + (c[2] - cl[2]) * wv], q0 = v3Dot(cm, f);
   let u = v3Norm([cm[0] - f[0] * q0, cm[1] - f[1] * q0, cm[2] - f[2] * q0]);
   if (V3FP.ctl === 'ace') {
-    // 皇牌空战式：一直是自由视角——镜头方向只听鼠标（世界坐标里的方位、俯仰），飞机滚转、翻筋斗时镜头不跟着转、不锁死，也不自己转回去；
-    //   镜头始终绕着飞机（飞机在画面中间），C 键平滑转回机尾后方
-    //   准心控制上下：镜头的俯仰就是准心的高度角（V3FP.ael，鼠标上下）——往前看时准心在画面正中；方位照旧是自由视角（鼠标左右），C 转回机尾后方
+    // 皇牌空战式：镜头顺着准心看（世界坐标里的方位 V3FP.cy、高度角 V3FP.ael，鼠标移动它，飞机朝它飞）——飞机滚转、翻筋斗时镜头不跟着转；
+    //   镜头始终绕着飞机（飞机在画面中间），C 键把准心平滑转回机头方向；按住右键拖动看四周（V3FP.orb，不动准心），松开约半秒转回准心
     if (V3FP.cy == null || V3FP.rcT) {
       const ty = Math.atan2(B.f[1], B.f[0]);
       if (V3FP.cy == null) V3FP.cy = ty;
       else { const kk = 1 - Math.exp(-dt * 9); V3FP.cy = airAng(V3FP.cy + airAng(ty - V3FP.cy) * kk); if (Math.abs(airAng(ty - V3FP.cy)) < .01 || now - V3FP.rcT > 1500) V3FP.rcT = 0; }   // 转到位（或 1.5 秒）为止
     }
     const cp = V3FP.cp = clamp(V3FP.ael != null ? V3FP.ael : Math.asin(clamp(B.f[2], -1, 1)), -1.45, 1.45), cc = Math.cos(cp);
-    f = [cc * Math.cos(V3FP.cy), cc * Math.sin(V3FP.cy), Math.sin(cp)];
+    if (!(V3FP.drag && V3FP.dbtn === 2) && now - (V3FP.mlT || 0) > 250) { const kb = 1 - Math.exp(-dt * 5); V3FP.orb[0] *= 1 - kb; V3FP.orb[1] *= 1 - kb; }
+    const lo = Math.abs(V3FP.orb[0]) + Math.abs(V3FP.orb[1]) > 1e-4, ly = V3FP.cy + (lo ? V3FP.orb[0] : 0), lp = lo ? clamp(cp + V3FP.orb[1], -1.45, 1.45) : cp, lc = Math.cos(lp);
+    f = [lc * Math.cos(ly), lc * Math.sin(ly), Math.sin(lp)];
     u = v3Norm([-f[0] * f[2], -f[1] * f[2], 1 - f[2] * f[2]]);   // 世界的「上」（去掉沿视线的分量）：地平线永远是平的
   } else {
     // 别的操纵方式（鼠标管飞行）：按住 C 自由视角，松开后慢慢转回机尾后方
@@ -1036,7 +1059,7 @@ if (typeof window !== 'undefined' && window.addEventListener) {
       const dg = /^Digit([1-6])$/.exec(e.code);
       if (dg) fwSel(+dg[1] - 1);
       if (e.code === 'KeyC') { if (V3FP.ctl === 'ace') V3FP.rcT = performance.now(); else { V3FP.free = true; if (V3FP.ctl === 'stick') V3FP.ms = [0, 0]; } }   // 皇牌空战式：镜头转回机尾后方；别的方式按住自由视角（鼠标摇杆时顺便杆回中）
-      if (e.code === 'KeyM') { V3FP.ctl = V3FP.ctl === 'ace' ? 'aim' : V3FP.ctl === 'aim' ? 'stick' : 'ace'; V3FP.ms = [0, 0]; V3FP.orb = [0, 0]; V3FP.cy = null; if (V3FP.ctl === 'aim' && V3FP.o) { const B = fpBody(V3FP.o); V3FP.aim = [Math.atan2(-B.f[1], B.f[0]), Math.asin(clamp(B.f[2], -1, 1))]; } log(V3FP.ctl === 'aim' ? '鼠标瞄准（战争雷霆式）' : V3FP.ctl === 'stick' ? '鼠标摇杆' : '皇牌空战式：A / D 压坡度转弯（松手自动改平）、↑ / ↓ 推拉杆', 'info', 'fpctl', 1); }
+      if (e.code === 'KeyM') { V3FP.ctl = V3FP.ctl === 'ace' ? 'aim' : V3FP.ctl === 'aim' ? 'stick' : 'ace'; V3FP.ms = [0, 0]; V3FP.orb = [0, 0]; V3FP.cy = null; if (V3FP.ctl === 'aim' && V3FP.o) { const B = fpBody(V3FP.o); V3FP.aim = [Math.atan2(-B.f[1], B.f[0]), Math.asin(clamp(B.f[2], -1, 1))]; } log(V3FP.ctl === 'aim' ? '鼠标瞄准（战争雷霆式）' : V3FP.ctl === 'stick' ? '鼠标摇杆' : '皇牌空战式：鼠标准心管飞去哪儿，A / D 横滚（按住一直滚）、↑ / ↓ 推拉杆，机动性放大 ' + FP_MK + ' 倍', 'info', 'fpctl', 1); }
       if (e.code === 'KeyK') { V3FP.ffb = !V3FP.ffb; log(V3FP.ffb ? '受力回馈：开' : '受力回馈：关', 'info', 'fpffb', 1); }
       if (e.code === 'KeyX') { V3FP.law = V3FP.law === 'n' ? 'd' : 'n'; log(V3FP.law === 'd' ? '飞控：直接律' : '飞控：正常律', 'info', 'fplaw', 1); }
     } else {
@@ -1058,8 +1081,9 @@ if (typeof window !== 'undefined' && window.addEventListener) {
       if (V3FP.mv != null && V3FP.mBig) return;   // 导弹全屏视角是导引头画面（镜头钉在弹头上），鼠标不转它、也不带机头
       if (V3FP.vw === 'tgp' && typeof ftSlew === 'function') { ftSlew(dx, dy); return; }   // 光电吊舱：鼠标转视线（fptgp.js）
       if (V3FP.drag && V3FP.dbtn === 2) V3FP.rmv = (V3FP.rmv || 0) + Math.abs(dx) + Math.abs(dy);   // 右键拖动了多远（拖得少算单击：换目标）
-      if (V3FP.ctl === 'ace') {   // 皇牌空战式：鼠标一直管视角（世界坐标里的方位、俯仰，不跟飞机翻、不自己回去；C 回到机尾后方）
-        if (!V3FP.drag && Math.abs(dx) + Math.abs(dy) < 2) return;   // 手搭在鼠标上的小抖动不转镜头
+      if (V3FP.ctl === 'ace') {   // 皇牌空战式：鼠标移动准心（世界坐标里的方位、高度角，飞机朝它飞，镜头顺着它看；C 转回机头方向）
+        if (V3FP.drag && V3FP.dbtn === 2) { V3FP.orb[0] = airAng(V3FP.orb[0] - dx * .004); V3FP.orb[1] = clamp(V3FP.orb[1] - dy * .0032, -1.4, 1.4); V3FP.mlT = performance.now(); return; }   // 按住右键拖动：看四周，不动准心
+        if (!V3FP.drag && Math.abs(dx) + Math.abs(dy) < 2) return;   // 手搭在鼠标上的小抖动不动准心
         if (V3FP.cy == null) return;
         V3FP.cy = airAng(V3FP.cy - dx * .004); V3FP.rcT = 0;
         if (V3FP.ael != null) V3FP.ael = clamp(V3FP.ael - dy * .0026, -1.2, 1.2);   // 上下：移动准心（飞机跟着爬升 / 俯冲，镜头俯仰跟着准心）

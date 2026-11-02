@@ -76,7 +76,6 @@ function apBeachScore(s, b, i) {
 }
 const apLoaded = s => !!s.load && (s.load.teams > 0 || s.load.eng > 0 || (Array.isArray(s.load.veh) && s.load.veh.length > 0));
 function apShips(P) {
-  const first = S.ships.some(s => s.kind === 'assault' && (s.state === 'beached' || s.state === 'unloading'));
   let sent = 0, at = null;
   for (const s of S.ships) {
     if (s.auto !== true || s.state !== 'idle' || !alive(s) || !apLoaded(s)) continue;
@@ -89,7 +88,7 @@ function apShips(P) {
       continue;
     }
     if (s.kind === 'lst' && typeof vehLSTTick === 'function') continue;   // 坦克登陆舰由 vehicles.js 自行择机抢滩
-    if ((s.kind === 'supply' || s.kind === 'lst') && !first && S.t < 45) continue;   // 补给舰、坦克登陆舰等第一波突击舰上滩后再靠岸
+    // 补给舰、坦克登陆舰与突击舰同时出发（用户：抢滩别分批登陆；原来等第一波上滩后再靠岸）
     let best = null, bs = -Infinity, bi = -1;
     TER.beaches.forEach((b, i) => { const sc = apBeachScore(s, b, i); if (sc > bs) { bs = sc; best = b; bi = i; } });
     if (!best) continue;
