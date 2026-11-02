@@ -282,6 +282,7 @@ function launchPlane(kind, tx, ty, pref) {
     return false;
   }
   if (w.af && typeof abTakeoff === 'function') return abTakeoff(w, kind, tx, ty);   // 从夺取的机场起飞（abn.js）
+  if (airLandW(w) && typeof afpOn === 'function' && afpOn()) return afpTakeoff(w, kind, tx, ty);   // 进攻方战区机场（afp.js，南缘外的海岸）：在跑道上滑跑起飞
   return airLandW(w) ? launchLand(w, kind, tx, ty) : withCV(cvOf(cvHome(w)), () => launchFrom(w, kind, sp, tx, ty));
 }
 // —— 天上每一架飞机都是机库里的在册飞机（不再有不占机库的僚机、随队机）；护航、扫荡、防空压制也派在册飞机 ——
@@ -744,6 +745,7 @@ function flyPlane(p, dt) {
   if (p.phase === 'rtb' && typeof atoEgressP === 'function' && atoEgressP(p, dt, speed)) return;   // 返航先走出口（ato.js），不原路折返
   if (p.land) {   // 陆基飞机：向南飞出地图，回战区机场加油挂弹（100 秒后再出击）；夺取了敌机场、有油料就改降那里（abn.js）
     if (typeof abRtbLand === 'function' && abRtbLand(p) && abPlaneFly(p, dt, speed)) return;
+    if (typeof afpRtb === 'function' && afpRtb(p) && abPlaneFly(p, dt, speed)) return;   // 飞回南缘外的战区机场进近降落（afp.js）
     p.alt = Math.min(1, p.alt + dt / 3); speed(sp.spd);
     airSteer(p, clamp(p.x, 40, W - 40), H + 60, dt, true);
     if (p.y > H + 15) { p.dead = true; const w = airWing(p); if (w && w.state !== 'lost') { w.state = 'rearm'; w.rearmT = AIR_REARM_LAND; w.af = false; } }

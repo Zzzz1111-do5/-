@@ -39,6 +39,7 @@ function fpList() {
 }
 // 甲板上、还没弹射的（出动流程 'cat' 各步、正在弹射 'roll'）：可以坐进去，等弹射升空后接手
 const fpOnDeck = p => !!p && !p.dead && fpJetType(p) && !p.land && (p.phase === 'cat' || p.phase === 'roll');
+const fpOnRwy = p => !!p && !p.dead && fpJetType(p) && p.afPh === 'tko';   // 机场跑道上正在滑跑起飞（战区机场 afp.js / 夺取的机场）：可以坐进去，离地后接手
 // 甲板 / 机库 / 战区机场上待命的在册飞机（S.air.wing，还没派出去）：能开的机型
 const fpWingIdle = () => (S.air && S.air.wing || []).filter(w => w.state === 'deck' && typeof FL_KEY === 'object' && FL_KEY[airMdlKey(w.type, w.v)] && (airLandW(w) || (cvOf(cvHome(w)) || { hp: 0 }).hp > 0));
 // 登机：把这一架派出去（目标先给最近的已知敌情，没有就地图中间），舰载机的飞行员就是你——坐进座舱看着牵引、弹射；陆基的从战区机场直接飞来
@@ -47,7 +48,7 @@ function fpBoard(w) {
   const c = airLandW(w) ? null : cvOf(cvHome(w)), x0 = c ? c.x : W / 2, y0 = c ? c.y : H;
   const e = (S.enemies || []).filter(e => !e.dead && e.kx != null).sort((a, b) => dist(a.kx, a.ky, x0, y0) - dist(b.kx, b.ky, x0, y0))[0];
   const tx = e ? e.kx : W / 2, ty = e ? e.ky : H / 2, n = S.planes.length;
-  const ok = w.af && typeof abTakeoff === 'function' ? abTakeoff(w, w.type, tx, ty) : airLandW(w) ? launchLand(w, w.type, tx, ty) : withCV(c, () => launchFrom(w, w.type, AIR_SPEC[w.type], tx, ty));
+  const ok = w.af && typeof abTakeoff === 'function' ? abTakeoff(w, w.type, tx, ty) : airLandW(w) ? (typeof afpOn === 'function' && afpOn() ? afpTakeoff(w, w.type, tx, ty) : launchLand(w, w.type, tx, ty)) : withCV(c, () => launchFrom(w, w.type, AIR_SPEC[w.type], tx, ty));   // 陆基：在战区机场跑道上滑跑起飞（afp.js），离地后接手
   const p = ok && S.planes.length > n ? S.planes[S.planes.length - 1] : null;
   if (!p) { log('这架飞机现在起飞不了', 'warn', 'fp0', 2); return; }
   if (p.dk === 'brd') p.dkT = Math.max(p.dkT || 0, cvBrdT(p) - 5);   // 飞行员就是你：不用再从舰岛跑过来，坐进去、座舱盖合上
@@ -132,7 +133,7 @@ function fpExit() {
 }
 // 接手一个单位（列表里点的）：这个单位的 AI 让出指挥
 function fpTake(E) {
-  const brd = E && E.o && E.k === 'air' && fpOnDeck(E.o);   // 甲板上等着弹射的：坐进座舱，牵引车拖上弹射器、弹射升空后接手
+  const brd = E && E.o && E.k === 'air' && (fpOnDeck(E.o) || fpOnRwy(E.o));   // 甲板上等着弹射的、跑道上正滑跑起飞的：坐进座舱，升空后接手
   if (!E || !E.o || (E.k === 'air' ? !fpJet(E.o) && !brd : E.o === S.dd ? S.dd.state === 'sunk' : !alive(E.o))) { log('这个单位现在开不了（刚落地、着舰或被击落）', 'warn', 'fp0', 2); return; }
   if (typeof v3Toggle === 'function' && !V3.on) v3Toggle(true);
   if (!V3.on) return;
@@ -152,7 +153,7 @@ function fpTake(E) {
     }
     V3FP.keys.clear();
     fpLock();   // 鼠标瞄准、鼠标摇杆都要锁定鼠标（移动不出窗口）；没锁上时点一下画面再锁
-    log(brd ? `坐进 ${fpName('air', E.o)} 的座舱：牵引车把飞机拖上弹射器，弹射升空后由你驾驶` : `驾驶 ${fpName(E.k, E.o)}`, 'info', 'fp1', 1);
+    log(brd ? (E.o.land ? `坐进 ${fpName('air', E.o)} 的座舱：在战区机场跑道上滑跑起飞，离地后由你驾驶` : `坐进 ${fpName('air', E.o)} 的座舱：牵引车把飞机拖上弹射器，弹射升空后由你驾驶`) : `驾驶 ${fpName(E.k, E.o)}`, 'info', 'fp1', 1);
   }
   fpUi();
 }
@@ -290,9 +291,10 @@ function fpRumble(gp, F, ab) {
 function fpFly(p, dt) {
   if (!V3FP.on || V3FP.o !== p) { p.fp = false; p.fl = null; return false; }
   if (!FP_UP[p.phase]) return false;   // 起飞爬升前、着舰进近：飞行员自己飞
+  if (p.afPh && !p.fl) return false;   // 机场跑道上滑跑起飞（abn.js abPlaneFly 'tko'）：坐在里面看它离地，离地后物理引擎接手
   if (p.phase !== 'out') p.phase = 'out';   // 玩家接手：任务状态回到「出击中」（返航、待机、等着舰都打断）
   const brd = p.fpBrd && !p.fl;
-  if (brd) { p.fpBrd = false; Object.assign(V3FP, { thr: 1, ab: true, aim: [p.heading || 0, .14], gear: true }); log('弹射离舰，飞机交给你了（G 收起落架）', 'info', 'fpcat', 1); }   // 刚弹射离舰：满油门加力
+  if (brd) { p.fpBrd = false; Object.assign(V3FP, { thr: 1, ab: true, aim: [p.heading || 0, .14], gear: true }); log(p.land ? '离地了，飞机交给你了（G 收起落架）' : '弹射离舰，飞机交给你了（G 收起落架）', 'info', 'fpcat', 1); }   // 刚弹射离舰：满油门加力
   const F = p.fl || flInit(p), K = V3FP.keys, T = V3FP.touch, kx = V3FP.kx, gp = fpGamepad(), A = FL_AC[F.k] || {};
   if (brd) F.gear = 1;
   // 键盘轴：杆量按速率推过去
@@ -363,7 +365,7 @@ function fpFly(p, dt) {
   }
   // 离开作战区域（地图外 1.5 公里；海岛这种四周是无边海面的 5 公里）：自动驾驶转回来（压坡度对准地图中心、带一点杆），瞄准方向也跟着转过去
   const mg = V3.ocean ? 5000 : 1500;
-  V3FP.ap = p.x < -mg || p.x > W + mg || p.y < -mg || p.y > H + mg;
+  V3FP.ap = p.x < -mg || p.x > W + mg || p.y < -mg || p.y > H + Math.max(mg, typeof afpOn === 'function' && afpOn() ? AFP.off + 2500 : 0);   // 南边让出战区机场（afp.js）一带
   if (V3FP.ap) {   // 交给教官：准星对着地图中心、低了往上抬一点（原来直接压大坡度拉杆，掉头时升力不够，螺旋往下掉、撞了山）
     const agl = -F.P[2] - flGround(F.P[0], F.P[1]);
     V3FP.aim = [Math.atan2(H / 2 - p.y, W / 2 - p.x), clamp((900 - agl) / 1500, .08, .35)];   // 准星总在地平线以上：转弯带一点爬升（准星和地平线齐平时要压到 90° 坡度转，升力全在水平方向，一路往下掉）
@@ -411,10 +413,10 @@ function fpLandEv(p, ev) {
 }
 // 夺取的机场跑道上减到滑行速度：交给机场地勤（abn.js abPlaneFly 'roll' 那一步收尾：进机位整备）
 function fpRwyStop(p) {
-  const b = S.abBase;
-  Object.assign(p, { fl: null, fp: false, pt3: null, alt: 0, bank: 0, spd: 12, afPh: 'roll', ru: b && typeof eaL === 'function' ? eaL(b, p.x, p.y)[0] : 0 });
+  const hb = S.afP, home = !!(hb && typeof eaL === 'function' && Math.abs(eaL(hb, p.x, p.y)[1]) < 60 && dist(p.x, p.y, hb.x, hb.y) < 900), b = home ? hb : S.abBase;   // 落在战区机场（afp.js）还是夺取的机场
+  Object.assign(p, { fl: null, fp: false, pt3: null, alt: 0, bank: 0, spd: 12, afPh: 'roll', afB: home ? 'home' : undefined, ru: b && typeof eaL === 'function' ? eaL(b, p.x, p.y)[0] : 0 });
   V3FP.landed = { t: S.t, how: 'rwy' };
-  log(`${airMdl(p.kind, p.v).name}在夺取的机场跑道上降落`, 'good', 'fprwy', 1, p);
+  log(`${airMdl(p.kind, p.v).name}在${home ? '战区机场' : '夺取的机场'}跑道上降落`, 'good', 'fprwy', 1, p);
 }
 // —— 推演：舰（HOOK.step）——
 function fpSail(o, dt) {

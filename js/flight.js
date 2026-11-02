@@ -63,6 +63,8 @@ function flSurf(n, e) {
     if (u < -160 || u > 160 || v < -45 || v > 40 || !flIn(CVG.deck, u, v)) continue;
     return { z: -2.6 + CVG.zd, k: 'deck', c, u, v };
   }
+  const hb = typeof S === 'object' && S && S.afP;   // 进攻方战区机场（afp.js，南缘外）的跑道
+  if (hb && typeof eaL === 'function' && typeof EA_RW === 'object') { const [u, v] = eaL(hb, x, y); if (Math.abs(u) <= EA_RW.hl && Math.abs(v) <= EA_RW.hw) return { z: AFP.z, k: 'rwy', u, v, b: hb }; }
   const b = typeof S === 'object' && S && S.abBase;
   if (b && !b.dead && typeof eaL === 'function' && typeof EA_RW === 'object') {
     const [u, v] = eaL(b, x, y);

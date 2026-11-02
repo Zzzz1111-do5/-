@@ -432,17 +432,17 @@ function abRtbLand(p) {
   return true;
 }
 function abPlaneFly(p, dt, speed) {
-  const b = S.abBase;
+  const home = p.afB === 'home', b = home ? S.afP : S.abBase, open = () => home || abAfOpen();   // home：进攻方自己的战区机场（afp.js），总能起降、不耗油料
   if (!b) { p.afPh = null; return false; }
   const R0 = abRwy(b);
   if (p.afPh === 'app') {
     p.alt = Math.min(1, p.alt + dt / 3); speed(Math.min(220, airSpec(p.kind, p.v).spd));
     if (airSteer(p, R0.fix.x, R0.fix.y, dt) < 60) p.afPh = 'fin';
-    if (!abAfOpen() || S.t - p.afT > 80) { p.afPh = null; return false; }   // 机场用不了：照旧回战区机场
+    if (!open() || S.t - p.afT > (home ? 240 : 80)) { p.afPh = null; return false; }   // 机场用不了：照旧回战区机场
     return true;
   }
   if (p.afPh === 'fin') {
-    if (!abAfOpen()) { p.afPh = null; return false; }
+    if (!open()) { p.afPh = null; return false; }
     const [tx, ty] = eaW(b, R0.u0, 0), d = dist(p.x, p.y, tx, ty);
     speed(72); p.alt = Math.max(.02, Math.min(p.alt, d / 380));   // 运-20 进近约 260 km/h
     airSteer(p, tx, ty, dt, true);
@@ -455,10 +455,9 @@ function abPlaneFly(p, dt, speed) {
     if (p.spd <= 12 || Math.abs(p.ru) < 10) {
       p.dead = true;
       const w = airWing(p);
-      if (w && w.state !== 'lost') { w.state = 'rearm'; w.rearmT = AB.rearm; w.af = true; }
-      S.ab.fuel = Math.max(0, S.ab.fuel - 1);
-      abStat('abAfLand');
-      log(`${airName(p.kind, p.v)}在夺取的机场降落整备`, 'info', 'abafl', 6, p);
+      if (w && w.state !== 'lost') { w.state = 'rearm'; w.rearmT = home ? AFP.rearm : AB.rearm; w.af = !home; }
+      if (!home) { S.ab.fuel = Math.max(0, S.ab.fuel - 1); abStat('abAfLand'); }
+      log(`${airName(p.kind, p.v)}在${home ? '战区机场' : '夺取的机场'}降落整备`, 'info', 'abafl', 6, p);
     }
     return true;
   }

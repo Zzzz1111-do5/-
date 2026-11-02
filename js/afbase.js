@@ -352,6 +352,7 @@ const AFB_CG = { ...AFB_C, rub1: 'rgba(0,0,0,.12)', rub2: 'rgba(0,0,0,.07)', sha
 // 停放的飞机：{u, v, a, k 位置类型, sil, size, col, ready, prog 整备进度}
 function afbParked(b, own) {
   if (b.dead || typeof drawAircraft !== 'function') return [];
+  if (b.home) return (typeof afpParked === 'function' ? afpParked() : []).slice(0, EA_STAND.length).map((w, k) => { const [u, v, a, kd] = EA_STAND[k]; return { u, v, a, k: kd, sil: airSilKey(w.type, w.v), size: 14, col: COL.intel, ready: w.state === 'deck', prog: w.state === 'deck' ? 1 : 1 - clamp((w.rearmT || 0) / AFP.rearm, 0, 1) }; });   // 战区机场（afp.js）：待命、整备中的陆基飞机
   if (own) {
     if (typeof abParked !== 'function') return [];
     return abParked().slice(0, EA_STAND.length).map((w, k) => { const [u, v, a, kd] = EA_STAND[k]; return { u, v, a, k: kd, sil: airSilKey(w.type, w.v), size: 14, col: COL.intel, ready: w.state === 'deck', prog: 1 - clamp(w.rearmT / 45, 0, 1) }; });
@@ -543,10 +544,14 @@ function afbPreview(ctx, x, y, f, lw) {
 }
 // 3D 立体地图的建筑块（view3d.js）：看得见 / 已标定的机场与我方夺取的机场；世界坐标角点 + 高度（z0 起、z 止）
 function afb3dBases() {
-  if (!S || !S.enemies || typeof eaOn !== 'function' || !eaOn()) return [];
-  const spec = specAll() || (typeof R === 'object' && R.eye === 'all');
-  const out = S.enemies.filter(e => e.kind === 'airfield' && !e.dead && (spec || e.kx != null));
-  if (S.abBase && !S.abBase.dead) out.push(S.abBase);
+  if (!S) return [];
+  const out = [];
+  if (S.enemies && typeof eaOn === 'function' && eaOn()) {
+    const spec = specAll() || (typeof R === 'object' && R.eye === 'all');
+    out.push(...S.enemies.filter(e => e.kind === 'airfield' && !e.dead && (spec || e.kx != null)));
+    if (S.abBase && !S.abBase.dead) out.push(S.abBase);
+  }
+  if (S.afP) out.push(S.afP);   // 进攻方战区机场（afp.js，南缘外）
   return out;
 }
 const afb3dSig = () => afb3dBases().map(b => `${b.id}:${Math.round(b.x)},${Math.round(b.y)},${(b.rh || 0).toFixed(3)},${b.rs || 1}`).join('|');
