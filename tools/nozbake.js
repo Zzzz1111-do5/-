@@ -1,6 +1,6 @@
 'use strict';
 // 收敛扩散喷口模型 → 游戏数据（js/mdl/<键>.js，js/v3noz.js 用）：node tools/nozbake.js <scene.gltf> <键>
-//   源模型：Sketchfab「F-15 SE Thrust Vector Nozzle」（F100 发动机的收敛扩散喷口，作者 ACshibu，CC-BY-4.0）——作者在 Blender 里用驱动和约束
+//   源模型：Sketchfab「F-15 SE Thrust Vector Nozzle」（F100 发动机的收敛扩散喷口，作者 CollenAaron，原名 ACshibu，CC-BY-4.0）——作者在 Blender 里用驱动和约束
 //   把调节片、密封片、作动筒的真实联动做好，再压成一个形态键：权重 0 = 喷口收到最小、1 = 张到最大。这里两个形态都存下来，游戏里按推力插值
 //   （每个顶点在两个形态之间直线走：调节片转角不大，看不出和绕铰链转的区别）。
 //   只取喷口网格（Nozzle）；前面那圈白色的整流环（Shroud）在机身短舱里面看不见，不要。
@@ -78,8 +78,8 @@ if (nv > 65535) throw new Error('顶点太多，16 位索引放不下');
 const i0 = Uint16Array.from(idx0), i1 = Uint16Array.from(idx1);
 const parts = [p0, dp, n0, n1, i0, i1], buf = Buffer.concat(parts.map(a => Buffer.from(a.buffer, a.byteOffset, a.byteLength)));
 const meta = { v: 1, key, n: nv, ni0: i0.length, ni1: i1.length, ps, ds, r1: R1 / R0, u1: -(zE1 - zE) / R0,
-  src: 'F-15 SE Thrust Vector Nozzle（F100 发动机收敛扩散喷口）', author: 'ACshibu', license: 'CC-BY-4.0', url: 'https://sketchfab.com/3d-models/f-15-se-thrust-vector-nozzle-46f9e71656f84a509eca268aaddf2cbc' };
-const head = `// F100 发动机收敛扩散喷口（两个形态：收到最小 / 张到最大）：源模型「F-15 SE Thrust Vector Nozzle」，作者 ACshibu（${meta.url}），CC-BY-4.0 授权（http://creativecommons.org/licenses/by/4.0/）。` +
+  src: 'F-15 SE Thrust Vector Nozzle（F100 发动机收敛扩散喷口）', author: 'CollenAaron（原名 ACshibu）', license: 'CC-BY-4.0', url: 'https://sketchfab.com/3d-models/f-15-se-thrust-vector-nozzle-46f9e71656f84a509eca268aaddf2cbc' };
+const head = `// F100 发动机收敛扩散喷口（两个形态：收到最小 / 张到最大）：源模型「F-15 SE Thrust Vector Nozzle」，作者 CollenAaron（原名 ACshibu，${meta.url}），CC-BY-4.0 授权（http://creativecommons.org/licenses/by/4.0/）。` +
   `改动：去掉前面的整流环，换成喷口坐标、按出口半径归一化，加一级简化网格（tools/nozbake.js）。署名见 docs/credits.md\n`;
 fs.writeFileSync(path.join(__dirname, '..', 'js', 'mdl', key + '.js'), head + `V3G.add(${JSON.stringify(key)}, ${JSON.stringify(meta)}, '${buf.toString('base64')}');\n`);
 console.log(`${key}：${nv} 个顶点，${i0.length / 3} 面（远处一级 ${i1.length / 3} 面，误差 ${err.toFixed(4)}），收到最小出口内半径 ${R0.toFixed(3)}、张到最大 ${R1.toFixed(3)}（${(R1 / R0).toFixed(2)} 倍），` +

@@ -1,10 +1,11 @@
 'use strict';
-// 真实的收敛扩散喷口（歼-20）：Sketchfab「F-15 SE Thrust Vector Nozzle」（F100 发动机的喷口，作者 ACshibu，CC-BY-4.0）——
+// 真实的收敛扩散喷口（歼-20）：Sketchfab「F-15 SE Thrust Vector Nozzle」（F100 发动机的喷口，作者 CollenAaron，原名 ACshibu，CC-BY-4.0）——
 //   作者在 Blender 里把 15 片调节片、密封片、作动筒的真实联动做好，压成两个形态（收到最小 / 张到最大）；tools/nozbake.js 烘焙成 js/mdl/f100noz.js
 //   ① 会收缩：每个顶点在两个形态之间按推力插值——慢车张开、不开加力的最大推力收到最小、开加力张到最大（v3gPlane 的 noz，与 v3det.js v3dNozK 同一套；
 //      出口半径与尾焰半径对得上）；作动筒跟着推拉，调节片绕喉道转，出口截面跟着前后挪
-//   ② 内部纹路：调节片内壁按部位着色——沿流向的刷纹与热流痕、片与片之间的缝、收敛段一排排冷却孔、喉道附近烧出的回火色（金黄 → 蓝紫）、出口边上的积碳；
-//      外表面是烧成橄榄青铜色的钛合金，作动筒、拉杆是钢；喷管深处天光进不去、越往里越暗；推力大时内壁从喉道往外发出暗红到橙的热光，开加力映亮
+//   ② 颜色照真实的喷管：调节片、密封片内壁是灰白的陶瓷热障涂层，顺着气流一道道褐色烧痕，出口边上积碳发黑，片与片之间有缝，收敛段一排排冷却孔；
+//      外表面是不涂漆的耐热合金，暗枪灰、哑光，受热多的后段泛一点褐铜色，调节片和密封片深浅交替；作动筒、拉杆是钢；
+//      喷管深处天光进不去、越往里越暗；推力大时内壁从喉道往外发出暗红到橙的热光，开加力映亮
 //   换上它时，模型自带的调节片（V3G_PIT.noz 拆出来的 'noz' 部件）不再画（v3g.js v3gDraw 按 M.nzRep 跳过），喷口里的发动机后段（v3jet.js）挪到收敛段入口（v3nzThr）
 // 喷口坐标（烘焙时定好）：u 沿喷流向后（收到最小时出口截面 u = 0，喷管里 u < 0），长度单位 = 收到最小时出口的内半径；喉道在 u ≈ −2.0，收敛段入口 u ≈ −2.7
 const V3NZ = { dec: false, ok: false, tried: false, gl: null, fr: -1, near: [], far: [], meta: null };
@@ -61,18 +62,21 @@ void main() {
   float inner = vCls > .5 && vCls < 1.5 && vIn < -.25 ? 1. : 0.;
   float st = vn(vec2(a * 95., u * 1.3)) * .6 + vn(vec2(a * 260., u * 3.)) * .4;   // 沿流向的细条纹：绕轴变化快、沿轴变化慢
   vec3 base; float metal, rough;
-  if (vCls < .5) { base = vec3(.15, .15, .16); metal = .8; rough = .45; }   // 不动的结构环
-  else if (vCls > 1.5) { base = vec3(.44, .44, .45) * (.9 + .2 * st); metal = .95; rough = .26; }   // 作动筒、拉杆：钢
-  else if (inner > .5) {   // 调节片、密封片内壁
-    float tz = clamp((u + 2.4) / 2.4, 0., 1.);   // 0 喉道上游 – 1 出口
-    vec3 tm = mix(vec3(.62, .47, .25), vec3(.33, .29, .5), smoothstep(.15, .45, tz));   // 回火色：喉道附近金黄 → 稍往后蓝紫 → 再往后褪回钢灰
-    tm = mix(tm, vec3(.44, .42, .4), smoothstep(.5, .85, tz));
-    base = mix(vec3(.5, .49, .47), tm, .6) * (.8 + .32 * st);
-    base *= 1. - .55 * smoothstep(.72, 1., tz) * (.55 + .45 * vn(vec2(a * 40., u * 6.)));   // 出口边上的积碳，一道道顺着流向
+  float tz = clamp((u + 2.4) / 2.4, 0., 1.);   // 0 喉道上游 – 1 出口
+  if (vCls < .5) { base = vec3(.075, .075, .08); metal = .7; rough = .55; }   // 不动的结构环：发暗的钢
+  else if (vCls > 1.5) { base = vec3(.3, .3, .31) * (.9 + .2 * st); metal = .9; rough = .35; }   // 作动筒、拉杆：钢
+  else if (inner > .5) {   // 调节片、密封片内壁：灰白的陶瓷热障涂层
+    float pv = hs(vec2(floor(fa), 3.)), burn = smoothstep(.05, .55, tz) * (.3 + .7 * st);
+    base = mix(vec3(.44, .42, .39) * (.92 + .12 * pv), vec3(.24, .17, .1), burn * .75) * (.86 + .24 * st);   // 顺着气流的褐色烧痕：喉道往后越来越重
+    base *= 1. - .62 * smoothstep(.7, 1., tz) * (.55 + .45 * vn(vec2(a * 40., u * 6.)));   // 出口边上的积碳，一道道顺着流向
     base *= .5 + .5 * smoothstep(0., .035, seg) * smoothstep(1., .965, seg);   // 片与片之间的缝
     if (u < -2.05) { vec2 g = fract(vec2(fa * 7., u * 9.)) - .5; base *= .4 + .6 * smoothstep(.1, .19, length(g)); }   // 收敛段：一排排冷却孔
-    metal = .7; rough = .5;
-  } else { base = vec3(.2, .175, .1) * (.82 + .32 * st); metal = .75; rough = .4; }   // 外表面：烧成橄榄青铜色的钛合金
+    metal = .05; rough = .72;
+  } else {   // 外表面：不涂漆的耐热合金，暗枪灰、哑光；受热多的后段泛一点褐铜色，调节片、密封片深浅交替
+    float pv = hs(vec2(floor(fa * 2.), 7.));
+    base = mix(vec3(.1, .1, .105), vec3(.13, .1, .07), smoothstep(.2, .95, tz) * (.45 + .55 * st)) * (.86 + .26 * pv) * (.86 + .22 * st);
+    metal = .65; rough = .55;
+  }
   vec3 F0 = mix(vec3(.04), base, metal), diff = base * (1. - metal);
   vec3 L = ${typeof V3_SUNG === 'string' ? V3_SUNG : 'normalize(vec3(-.42, .52, .74))'}, H = normalize(L + V);
   float ndl = max(dot(N, L), 0.), ndv = max(dot(N, V), 0.);
@@ -162,4 +166,4 @@ function v3nzDraw(C, LM) {
 }
 // 游戏里「素材致谢」（v3import.js 汇总 V3G_CRED）
 if (typeof V3G_CRED === 'object' && Array.isArray(V3G_CRED) && !V3G_CRED.some(c => c.title === 'F-15 SE Thrust Vector Nozzle'))
-  V3G_CRED.push({ name: '歼-20 尾喷口（F100 发动机收敛扩散喷口：调节片、密封片、作动筒开合）', title: 'F-15 SE Thrust Vector Nozzle', author: 'ACshibu', license: 'CC-BY-4.0', url: 'https://sketchfab.com/3d-models/f-15-se-thrust-vector-nozzle-46f9e71656f84a509eca268aaddf2cbc' });
+  V3G_CRED.push({ name: '歼-20 尾喷口（F100 发动机收敛扩散喷口：调节片、密封片、作动筒开合）', title: 'F-15 SE Thrust Vector Nozzle', author: 'CollenAaron（原名 ACshibu）', license: 'CC-BY-4.0', url: 'https://sketchfab.com/3d-models/f-15-se-thrust-vector-nozzle-46f9e71656f84a509eca268aaddf2cbc' });
