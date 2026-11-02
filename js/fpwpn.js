@@ -231,6 +231,7 @@ HOOK.step.push(dt => {
     const s = fwSelW();
     if (s && !fpOnDeck(V3FP.o)) fwScan(V3FP.o, s, dt); else { V3FP.fwC = []; V3FP.fwT = null; V3FP.lkT = 0; }
     if (V3FP.fq != null) { if (S.t - V3FP.fq > 2.5 || !s) V3FP.fq = null; else if (V3FP.cool <= 0 && fwReady(s)) fwFire(true); }   // 按下开火时舱门还在开、还没锁稳：好了就打出去
+    fwGunLock(V3FP.o, dt);
     fwGunStep(V3FP.o, dt);
   }
   if (V3FP.bul && V3FP.bul.length) fwBulStep(dt);
@@ -387,9 +388,53 @@ function fwGround(m, T, x, y) {
   if (typeof msPgmHit === 'function') msPgmHit(m, T, MS_PGM[m.w] || MS_PGM.ft8);
 }
 
-// —— 航炮（空格按住连发；手柄 B、手机「机炮」）：每发弹在三维里飞——初速 860 米 / 秒叠加飞机速度、约 3.5 密位散布、重力下坠、空气阻力减速；
-//   这一步的弹道线段离敌机够近就算命中（30 毫米高爆燃烧弹：战斗机、直升机两发、大飞机六发击落），落地处 3 米内的车辆、7 米内的工事受损，6 米内的步兵被压制、可能伤亡 ——
+// —— 航炮（空格按住连发；手柄 B、手机「机炮」）——
+//   炮瞄雷达（用户：机炮改成雷达近距离锁定，然后射击，有散布）：战斗机雷达的近距格斗方式——机头前 ±12° 的圆锥、2.5 公里内最近的敌机自动截获，
+//     锁上后跟踪到 ±40°、3.2 公里不丢；火控按距离、两机速度、弹丸减速与下坠解出提前量（gLd.a：炮管该指的方向），平显画提前量瞄准点——
+//     把航炮十字压到瞄准点附近（2.5° 以内）开火，火控把弹道修过去（真实的航炮是固定的，这一点修正相当于飞行员细修 + 火控引导）；
+//   每发弹在三维里飞：初速 860 米 / 秒叠加飞机速度、重力下坠、空气阻力减速；散布：每发 σ 4 密位（GSh-30-1 散布约 8 密位的八成圆），
+//     连射中后坐让炮口再晃 2.5 密位——五百米大多数打得中，一公里外散布圈比战斗机还大；
+//   每三发一发曳光弹（v3fx.js 画亮黄白的弹芯 + 橙红光晕，烧 3 秒熄灭），其余看不见但照样飞、照样算命中；
+//   这一步的弹道线段离敌机够近就算命中（30 毫米高爆燃烧弹：战斗机、直升机两发、大飞机六发击落），落地处 3 米内的车辆、7 米内的工事受损，6 米内的步兵被压制、可能伤亡
+const FW_GLK = { cone: .21, R: 2500, keepCone: .7, keepR: 3200, assist: .105, sig: .004, wob: .0025, tr: 3, k0: 2.5e-4 };
 const fwGunHeld = () => V3FP.keys.has('Space') || !!V3FP.touchGun || !!V3FP.gpGun;
+const fwAirTgts = () => S.eair && S.eair.fly ? S.eair.fly.filter(a => !a.dead && isFinite(a.x) && (a.alt ?? 1) > .05) : [];
+function fwGunLock(o, dt) {
+  const G = fwGunOf(o), F = o.fl;
+  if (!G || !F || F.gnd || fpOnDeck(o)) { V3FP.gLk = V3FP.gLd = null; return; }
+  const B = fpBody(o), P = fpPose(), p = [P.x, -P.y, P.z];
+  const geo = a => { const q = [a.x, -a.y, v3AirZ(a)], d = [q[0] - p[0], q[1] - p[1], q[2] - p[2]], r = Math.hypot(d[0], d[1], d[2]) || 1; return { q, r, off: Math.acos(clamp((d[0] * B.f[0] + d[1] * B.f[1] + d[2] * B.f[2]) / r, -1, 1)) }; };
+  const air = fwAirTgts();
+  let L = V3FP.gLk, A = L ? air.find(a => a.id === L.id) : null, g = A ? geo(A) : null;
+  if (g && (g.r > FW_GLK.keepR || g.off > FW_GLK.keepCone)) { A = g = null; }
+  if (!A) {   // 截获：圆锥里「偏角 × 2 公里 + 距离」最小的
+    let bs = Infinity;
+    for (const a of air) { const h = geo(a); if (h.r > FW_GLK.R || h.off > FW_GLK.cone) continue; const sc = h.off * 2000 + h.r; if (sc < bs) { bs = sc; A = a; g = h; } }
+    if (A) fwMsg('炮瞄雷达锁定');
+  }
+  if (!A) { V3FP.gLk = V3FP.gLd = null; return; }
+  if (!L || L.id !== A.id) L = { id: A.id, q: g.q, v: [0, 0, 0], ac: [0, 0, 0], r: g.r, rr: 0, n: 0 };
+  else if (dt > 0) {   // 目标速度、加速度（转弯）、接近率：位置差分后平滑——提前量按二阶外推，转弯的目标也打得中
+    const k = Math.min(1, dt * 7), ka = Math.min(1, dt * 4);
+    for (let i = 0; i < 3; i++) { const v = (g.q[i] - L.q[i]) / dt, v0 = L.v[i]; L.v[i] += (v - L.v[i]) * k; if (L.n > 3) L.ac[i] += ((L.v[i] - v0) / dt - L.ac[i]) * ka; }
+    L.rr += ((g.r - L.r) / dt - L.rr) * k; L.q = g.q; L.r = g.r; L.n++;
+  }
+  V3FP.gLk = L;
+  // 提前量：弹丸沿出膛速度方向飞（本机速度 + 炮口初速，阻力只减速不改方向），走 d 米要 t = (e^(k0 d) − 1) / (k0 v) 秒；目标按现在的速度外推，再补下坠
+  const vS = [F.V[1], F.V[0], -F.V[2]], vs2 = vS[0] * vS[0] + vS[1] * vS[1] + vS[2] * vS[2];
+  let t = 0, Dh = null, lam = G.v0;
+  for (let it = 0; it < 4; it++) {
+    const t2 = .5 * t * t, D = [g.q[0] + L.v[0] * t + L.ac[0] * t2 - p[0], g.q[1] + L.v[1] * t + L.ac[1] * t2 - p[1], g.q[2] + L.v[2] * t + L.ac[2] * t2 - p[2] + FW_G * t2], dl = Math.hypot(D[0], D[1], D[2]) || 1;
+    Dh = [D[0] / dl, D[1] / dl, D[2] / dl];
+    const b = Dh[0] * vS[0] + Dh[1] * vS[1] + Dh[2] * vS[2];
+    lam = b + Math.sqrt(Math.max(0, b * b - vs2 + G.v0 * G.v0));   // 出膛速度大小（沿 Dh）：|λ Dh − 本机速度| = 炮口初速
+    t = (Math.exp(FW_GLK.k0 * dl) - 1) / (FW_GLK.k0 * Math.max(300, lam));
+  }
+  const a = [0, 1, 2].map(i => (lam * Dh[i] - vS[i]) / G.v0), al = Math.hypot(a[0], a[1], a[2]) || 1;
+  for (let i = 0; i < 3; i++) a[i] /= al;
+  const off = Math.acos(clamp(a[0] * B.f[0] + a[1] * B.f[1] + a[2] * B.f[2], -1, 1));
+  V3FP.gLd = { a, t, r: g.r, rr: L.rr, off, ok: off < FW_GLK.assist, q: g.q, nm: (typeof EA_SPEC === 'object' && EA_SPEC[A.type] || {}).name || '敌机' };
+}
 function fwGunStep(o, dt) {
   const G = fwGunOf(o), F = o.fl;
   if (!G || !F || F.gnd || fpOnDeck(o) || !fwGunHeld()) { V3FP.gunA = 0; return; }
@@ -398,15 +443,26 @@ function fwGunStep(o, dt) {
   V3FP.gunA = (V3FP.gunA || 0) + G.rpm / 60 * dt;
   const B = fpBody(o), X = typeof V3G === 'object' && V3G.M[fpMdlKey(o)] && V3G.M[fpMdlKey(o)].ready ? fpMdlXf(o) : null, P = fpPose();
   const mz = X ? X.pt(G.at) : [P.x + B.f[0] * 6, -P.y + B.f[1] * 6, P.z + B.f[2] * 6], vA = [F.V[1], F.V[0], -F.V[2]], L = V3FP.bul || (V3FP.bul = []);
+  // 炮管指向：锁定了就往提前量方向修（最多 2.5°），没锁就是机身轴线
+  let f = B.f;
+  const Ld = V3FP.gLd;
+  if (Ld) { const k = Ld.off > 1e-5 ? Math.min(1, FW_GLK.assist / Ld.off) : 1, d = [0, 1, 2].map(i => B.f[i] + (Ld.a[i] - B.f[i]) * k), l = Math.hypot(d[0], d[1], d[2]) || 1; f = d.map(x => x / l); }
+  const Wb = V3FP.gW || (V3FP.gW = [0, 0]);
   while (V3FP.gunA >= 1 && o.gunN > 0) {
     V3FP.gunA -= 1; o.gunN--;
-    const e1 = gauss() * .0035, e2 = gauss() * .0035, d = [0, 1, 2].map(i => B.f[i] + B.r[i] * e1 + B.u[i] * e2);
-    L.push({ p: mz.slice(), q: mz.slice(), v: [0, 1, 2].map(i => vA[i] + d[i] * G.v0), t: 0 });
+    Wb[0] = Wb[0] * .8 + gauss() * FW_GLK.wob * .6; Wb[1] = Wb[1] * .8 + gauss() * FW_GLK.wob * .6;   // 后坐让炮口晃（连射越久晃得越开，松开很快回正）
+    const e1 = gauss() * FW_GLK.sig + Wb[0], e2 = gauss() * FW_GLK.sig + Wb[1], d = [0, 1, 2].map(i => f[i] + B.r[i] * e1 + B.u[i] * e2);
+    V3FP.gunC = ((V3FP.gunC || 0) + 1) % FW_GLK.tr;
+    L.push({ p: mz.slice(), q: mz.slice(), v: [0, 1, 2].map(i => vA[i] + d[i] * G.v0), t: 0, tr: V3FP.gunC === 0 });
   }
   V3FP.gunT = performance.now(); V3FP.gunMz = mz; V3FP.imp = Math.max(V3FP.imp || 0, .22);   // 炮口焰（v3fx.js）、开火的震动
-  if (L.length > 240) L.splice(0, L.length - 240);
+  const sm = V3FP.gSm || (V3FP.gSm = []);   // 炮口硝烟：留在空中，飞机一下就把它甩在后面（画面用，按真实时间）
+  if (!sm.length || V3FP.gunT - sm[sm.length - 1].t > 45) { sm.push({ p: mz.slice(), t: V3FP.gunT, s: Math.random() }); if (sm.length > 60) sm.shift(); }
+  if (L.length > 300) L.splice(0, L.length - 300);
   S.stats.shots++;
 }
+// 画面用的命中效果（空中高爆弹的闪光火球黑烟、地上的尘土、水面的水柱；按真实时间，v3fx.js 画）
+function fwGfx(p, k) { const L = V3FP.gFx || (V3FP.gFx = []); L.push({ p: p.slice(), t: performance.now(), k, s: Math.random() }); if (L.length > 90) L.shift(); }
 function fwBulStep(dt) {
   const L = V3FP.bul, air = S.eair && S.eair.fly ? S.eair.fly.filter(a => !a.dead && isFinite(a.x) && (a.alt ?? 1) > .05) : [];
   for (let i = L.length - 1; i >= 0; i--) {
@@ -419,16 +475,17 @@ function fwBulStep(dt) {
     for (const a of air) {   // 这一步的线段离敌机最近处
       const A = [a.x, -a.y, v3AirZ(a)], d = [b.p[0] - p0[0], b.p[1] - p0[1], b.p[2] - p0[2]], w = [A[0] - p0[0], A[1] - p0[1], A[2] - p0[2]];
       const dd = d[0] * d[0] + d[1] * d[1] + d[2] * d[2], u = dd > 1e-6 ? clamp((w[0] * d[0] + w[1] * d[1] + w[2] * d[2]) / dd, 0, 1) : 0;
-      const big = a.type === 'c17' || a.type === 'b2' || a.type === 'p8', r = big ? 14 : a.type === 'heli' || a.type === 'uh60' ? 6.5 : 5.5;
+      const big = a.type === 'c17' || a.type === 'b2' || a.type === 'p8', r = big ? 12 : a.type === 'heli' || a.type === 'uh60' ? 5.5 : 4;   // 弹道离机体中心多近算打中（战斗机翼展 13 米、机身高 2 米左右：4 米；原来 5.5 米太宽）
       if (Math.hypot(w[0] - d[0] * u, w[1] - d[1] * u, w[2] - d[2] * u) > r) continue;
       a.gunHit = (a.gunHit || 0) + 1; done = true;
-      if (a.gunHit >= (big ? 6 : 2)) { eaLost(a, 'gun'); if (typeof awScore === 'function') awScore('p'); }
+      fwGfx([p0[0] + d[0] * u, p0[1] + d[1] * u, p0[2] + d[2] * u], 'air');   // 高爆燃烧弹在机体上炸开
+      if (a.gunHit >= (big ? 6 : 2)) { eaLost(a, 'gun'); if (typeof awScore === 'function') awScore('p'); fwMsg('击落'); }
       else S.fx.push({ kind: 'flash', x: a.x, y: a.y, r: 3, life: 0, max: .25, side: 'p', air: 1, alt: a.alt ?? 1 });
       break;
     }
     if (!done) {
       const x = b.p[0], y = -b.p[1], g = Math.max(fwGz(x, y), -2.6);
-      if (b.p[2] <= g) { done = true; fwGunHit(x, y, g < -2.5, p0); }
+      if (b.p[2] <= g) { done = true; fwGfx([x, -y, g], g < -2.5 ? 'sea' : 'gnd'); fwGunHit(x, y, g < -2.5, p0); }
     }
     if (done) L.splice(i, 1);
   }
@@ -462,6 +519,27 @@ function fwGunPip(o) {
   return null;
 }
 
+// 炮瞄雷达锁定的平显：目标方框（打得中时变红）、距离与接近率；提前量瞄准点（圆 + 中心点，旁边一圈距离弧：满圈 2 公里）；航炮十字（机身轴线，同距离处）；
+//   瞄准点到目标连一条虚线——把十字压到瞄准点上（2.5° 以内火控修过去），十字、瞄准点、方框一起变红就开火
+function fwGunHud(ctx, o, font) {
+  const L = V3FP.gLd, B = fpBody(o), P = fpPose(), p = [P.x, -P.y, P.z];
+  const at = d => v3Proj(p[0] + d[0] * L.r, -(p[1] + d[1] * L.r), p[2] + d[2] * L.r);
+  const qt = v3Proj(L.q[0], -L.q[1], L.q[2]), qa = at(L.a), qb = at(B.f), red = L.ok && L.r < 2000, col = red ? FW_RED : FW_HUD;
+  ctx.save(); ctx.lineWidth = 1.6; ctx.strokeStyle = ctx.fillStyle = col; ctx.shadowColor = 'rgba(0,0,0,.55)'; ctx.shadowBlur = 2;
+  if (qt) {
+    ctx.strokeRect(qt.x - 12, qt.y - 12, 24, 24);
+    ctx.font = font(12); ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.fillText(`${L.nm} ${Math.round(L.r)}m  ${L.rr < 0 ? '接近' : '远离'} ${Math.round(Math.abs(L.rr) * 3.6)}km/h`, qt.x + 18, qt.y - 6);
+    ctx.fillText(red ? '射程内 · 开火' : L.r < 2000 ? (L.ok ? '' : '把十字压到瞄准点') : '距离远', qt.x + 18, qt.y + 9);
+  }
+  if (qa) {
+    ctx.beginPath(); ctx.arc(qa.x, qa.y, 11, 0, 6.2832); ctx.stroke(); ctx.fillRect(qa.x - 1.5, qa.y - 1.5, 3, 3);
+    const f = clamp(L.r / 2000, 0, 1); ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(qa.x, qa.y, 16, -Math.PI / 2, -Math.PI / 2 + f * 6.2832); ctx.stroke(); ctx.lineWidth = 1.6;   // 距离弧
+    if (qt) { ctx.setLineDash([4, 4]); ctx.beginPath(); ctx.moveTo(qt.x, qt.y); ctx.lineTo(qa.x, qa.y); ctx.stroke(); ctx.setLineDash([]); }
+  }
+  if (qb) { ctx.beginPath(); ctx.moveTo(qb.x - 10, qb.y); ctx.lineTo(qb.x - 3, qb.y); ctx.moveTo(qb.x + 3, qb.y); ctx.lineTo(qb.x + 10, qb.y); ctx.moveTo(qb.x, qb.y - 10); ctx.lineTo(qb.x, qb.y - 3); ctx.moveTo(qb.x, qb.y + 3); ctx.lineTo(qb.x, qb.y + 10); ctx.stroke(); }
+  ctx.restore();
+}
 // —— 平显（v3pilot.js v3fpOverlay 调用）：选中武器的大环、环里的目标（小菱形）、选定目标的锁定框（锁稳了变红）、环下方武器名与余弹；右下角武器表；航炮准星 ——
 function fwHud(ctx) {
   const o = V3FP.o, s = fwSelW(), font = n => `${n}px "IBM Plex Mono", "Noto Sans SC", monospace`;
@@ -471,7 +549,8 @@ function fwHud(ctx) {
   }
   if (!o || !V3.cam || fpOnDeck(o) || (V3FP.mv != null && V3FP.mBig)) return;
   fwList0(ctx, o, font);
-  const gp = fwGunOf(o) && !(o.fl && o.fl.gnd) ? fwGunPip(o) : null;
+  if (V3FP.gLd) fwGunHud(ctx, o, font);
+  const gp = fwGunOf(o) && !(o.fl && o.fl.gnd) && !V3FP.gLd ? fwGunPip(o) : null;
   if (gp && gp.q && gp.q.x > 0 && gp.q.x < CAM.vw && gp.q.y > 0 && gp.q.y < CAM.vh) {   // 航炮准星：空中目标是带中心点的小圆，对地是十字
     ctx.save(); ctx.strokeStyle = ctx.fillStyle = FW_HUD; ctx.lineWidth = 1.5; ctx.shadowColor = 'rgba(0,0,0,.55)'; ctx.shadowBlur = 2;
     const { x, y } = gp.q;

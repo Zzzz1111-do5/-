@@ -268,6 +268,7 @@ function v3dPitch(o, sd, z, L, key) {
   const trim = typeof AERO === 'object' ? (AERO.d0 + AERO.d1 * al / V3D_D2R) * V3D_D2R : 0;
   P.de = L ? lerp(V3D_TOTRIM, L.de, sm01(L.u / .8)) * (1 - w) + (trim - .35 * P.q) * w : clamp(trim - .35 * P.q, -.3, .15);   // 离舰：从起飞配平过渡到 JSBSim 的平尾
   P.da = clamp(.3 * P.p, -.2, .2);   // 滚转：左右舵面差动
+  if (dt > 1e-4 && P.al != null) P.ad = (P.ad || 0) + ((al - P.al) / dt - (P.ad || 0)) * Math.min(1, dt * 8);   // 迎角变化率（鸭翼的拉杆前导）
   P.al = al;   // 迎角（前缘机动襟翼按它放，v3dCtlAI）
   P.t = S.t; P.pt = pt;
   return pt;
@@ -276,8 +277,11 @@ function v3dPitch(o, sd, z, L, key) {
 //   AI 的平尾、滚转差动按气动（v3dPitch），襟翼跟着起落架放（起降构型）、前缘襟翼按迎角、滚转时方向舵配一点（协调转弯）
 const V3D_FLAP = .6, V3D_LEF = .44, V3D_SB = 1;   // 襟翼放到底约 35°、前缘襟翼最多约 25°、减速板约 57°
 const v3dLef = al => clamp((al - 4 * V3D_D2R) * 1.1, 0, V3D_LEF);   // 机动襟翼：迎角过 4° 后跟着迎角往下放
-function v3dCtlP(F) { const fl = F.flap || 0; return { de: F.d[0], da: F.d[1], dr: F.d[2], df: fl * V3D_FLAP, dl: Math.max(v3dLef(F.a || 0), fl * .5 * V3D_LEF), sb: F.sb ? V3D_SB : 0 }; }
-function v3dCtlAI(P, gd) { return { de: P.de || 0, da: P.da || 0, dr: .3 * (P.da || 0), df: gd ? .8 * V3D_FLAP : 0, dl: Math.max(v3dLef(P.al || 0), gd ? .5 * V3D_LEF : 0), sb: 0 }; }
+// 全动鸭翼（歼-20，v3g.js V3G_CS 的 can，正 = 前缘上偏）：静不稳定的鸭式布局——拉杆瞬间鸭翼前缘先猛地上偏把机头带起来（按迎角变化率），
+//   迎角起来以后前缘反过来往下压（按迎角，持续大迎角转弯时鸭翼前缘明显低于机身），平飞几乎顺着气流；原来只按平尾舵量 × 1.2，大过载也就 8°，平飞纹丝不动
+const v3dCan = (al, ad) => clamp(.35 * (ad || 0) - .6 * (al || 0), -.5, .45);
+function v3dCtlP(F) { const fl = F.flap || 0; return { de: F.d[0], da: F.d[1], dr: F.d[2], df: fl * V3D_FLAP, dl: Math.max(v3dLef(F.a || 0), fl * .5 * V3D_LEF), sb: F.sb ? V3D_SB : 0, dc: v3dCan(F.a, F.ad) }; }
+function v3dCtlAI(P, gd) { return { de: P.de || 0, da: P.da || 0, dr: .3 * (P.da || 0), df: gd ? .8 * V3D_FLAP : 0, dl: Math.max(v3dLef(P.al || 0), gd ? .5 * V3D_LEF : 0), sb: 0, dc: gd ? 0 : v3dCan(P.al, P.ad) }; }
 // 甲板上的舰载机：挂杆后先做舵面检查（杆前后左右推一遍，平尾上下摆、左右差动），之后停在起飞配平（后缘上偏约 10°）直到弹射
 const V3D_TOTRIM = -.18;
 function v3dDeckSurf(p) {

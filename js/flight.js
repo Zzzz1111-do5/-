@@ -154,6 +154,7 @@ function flStep(F, dt, inp) {
     const dq = flQmul(F.q, [0, F.w[0], F.w[1], F.w[2]]);
     for (let i = 0; i < 4; i++) F.q[i] += .5 * dq[i] * h;
     const ql = Math.hypot(...F.q); for (let i = 0; i < 4; i++) F.q[i] /= ql;
+    F.ad = (F.ad || 0) + ((al - (F.a ?? al)) / h - (F.ad || 0)) * Math.min(1, h * 10);   // 迎角变化率（约 0.1 秒平滑）：歼-20 鸭翼画面上的拉杆前导（v3det.js v3dCtlP）
     Object.assign(F, { a: al, b: be, M, Va, T, nz: -Fb[2] / (A.m * FL_G), stall: sa, ab });
     // 接地：航母甲板、跑道上放着起落架、姿态和下沉率都在限内就转入地面滑跑；别处、没放起落架、太猛都是摔
     const sf = flSurf(F.P[0], F.P[1]), hz = -F.P[2] - sf.z, GH = F.gh || FL_GH;

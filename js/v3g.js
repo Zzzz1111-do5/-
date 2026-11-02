@@ -451,7 +451,7 @@ function v3gPlane(key, sz, x, y, z, ground, h, side, roll, pitch, gear, t, noz =
   if (!ground) { const o = v3dMv3(h, pitch, roll, [0, 0, M.meta.zc * k]); ox -= o[0]; oy += o[1]; oz -= o[2]; }   // 绕机身中线俯仰、滚转（模型原点在机轮着地处）
   const P = [0, 0, 0, 0, bay ? bay.main || 0 : 0, bay ? bay.side || 0 : 0, fold || 0, 0, 0, 0, 0, 0];
   M.parts.forEach((p, i) => { const j = p.slot ?? i; if (j > 3) return; if (p.n === 'gear') P[j] = gear ? 0 : 1; else if (p.n === 'rotor') P[j] = (t || 0) * (V3G_ROTOR[mk] || [22])[0]; else if (p.n === 'trotor') P[j] = (t || 0) * (V3G_ROTOR[mk] || [0, 61])[1]; else if (p.k === 'noz' || p.k === 'pet') P[j] = noz; });
-  if (M.ctl && ctl) { P[2] = ctl.de || 0; P[3] = ctl.da || 0; P[8] = ctl.dr || 0; P[9] = ctl.df || 0; P[10] = ctl.dl || 0; P[11] = ctl.sb || 0; }   // 舵面（弧度）：俯仰、滚转、偏航、后缘襟翼、前缘襟翼、减速板
+  if (M.ctl && ctl) { P[2] = ctl.de || 0; P[3] = ctl.da || 0; P[7] = ctl.dc || 0; P[8] = ctl.dr || 0; P[9] = ctl.df || 0; P[10] = ctl.dl || 0; P[11] = ctl.sb || 0; }   // 舵面（弧度）：俯仰、滚转、鸭翼、偏航、后缘襟翼、前缘襟翼、减速板
   if (typeof v3nzPlane === 'function') v3nzPlane(mk, M, ox, oy, oz, h, k, roll, pitch, noz);   // 换装了真实喷口模型的机型（v3noz.js：会收缩的收敛扩散喷口）
   return v3gAdd(mk, ox, oy, oz, h, k, side, roll, pitch, P);
 }
@@ -670,7 +670,7 @@ function v3gCtlCut(cf, m, VB, IB) {
     const sx = nrm([0, a[1], a[2]]), cm = s.c || 1.5, cf = s.cf || 0, th = s.th || .45, W = s.w || {};
     let s0 = dot(P0, sx), s1 = dot(P1, sx);
     if (s0 > s1) [s0, s1] = [s1, s0];
-    const pi = parts.push({ n: s.n, k: 'rot', p: P0, a: crs(tn, c), w: [0, 0, W.de || 0, (W.da || 0) * sg], w2: [0, 0, 0, 0], w3: [(W.dr || 0) * sg, W.df || 0, W.dl || 0, W.sb || 0] }) - 1;
+    const pi = parts.push({ n: s.n, k: 'rot', p: P0, a: crs(tn, c), w: [0, 0, W.de || 0, (W.da || 0) * sg], w2: [0, 0, 0, W.dc || 0], w3: [(W.dr || 0) * sg, W.df || 0, W.dl || 0, W.sb || 0] }) - 1;
     const xs = [P0[0], P1[0], P0[0] + c[0] * cm, P1[0] + c[0] * cm, P0[0] - c[0] * cf, P1[0] - c[0] * cf];
     G.push({ P0, a, c, tn, sx, s0, s1, cm, cf, th, pi, cap: [[], [], []], x0: Math.min(...xs) - .05, x1: Math.max(...xs) + .05 });
   }
@@ -769,7 +769,7 @@ const V3G_CS = {
   //   全动鸭翼（转轴约在平均气动弦 1/4 处，抬头时前缘上偏）、后缘内侧襟副翼与外侧副翼（升降副翼：俯仰、滚转一起管，起降时襟副翼放下）、
   //   前缘机动襟翼（迎角大了放下）、全动垂尾（外倾约 27°，偏航；降落时两片对着偏当减速板）
   j20: { ex: [[-7.7, -6.1, 3.42, 3.84, 2, 2.5], [-7.5, -6, 5.13, 5.57, 2, 2.5]], s: [
-    { n: 'can', h: [[2.4, 1.98, 2.42], [2.4, 4.08, 2.44]], d: 'aft', c: 1.85, cf: 1.6, th: .14, w: { de: -1.2, da: .25 } },
+    { n: 'can', h: [[2.4, 1.98, 2.42], [2.4, 4.08, 2.44]], d: 'aft', c: 1.85, cf: 1.6, th: .14, w: { dc: 1, da: .25 } },   // dc：鸭翼偏角（v3det.js v3dCan，拉杆前导 + 按迎角下压）
     { n: 'flpr', h: [[-6.3, 2.55, 2.45], [-6.35, 4.35, 2.41]], d: 'aft', c: 1.6, th: .13, w: { de: .8, da: .8, df: 1 } },
     { n: 'ail', h: [[-7.15, 4.45, 2.4], [-7, 6.5, 2.36]], d: 'aft', c: 1.1, th: .13, w: { de: .5, da: 1, df: .3 } },
     { n: 'lef', h: [[-2.3, 2.6, 2.45], [-6.35, 5.7, 2.37]], d: 'fwd', c: .8, th: .13, w: { dl: 1 } },
