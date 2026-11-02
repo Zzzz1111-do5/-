@@ -217,6 +217,7 @@ function fwScan(o, s, dt) {
 }
 // R 键 / 鼠标右键单击：换下一个目标——按离机头的角度从近到远轮着来（到头了回到最近的），重新锁
 function fwCycle() {
+  if (V3FP.vw === 'tgp' && typeof ftLock === 'function') { ftLock(); return; }   // 光电吊舱里：锁定十字下的目标（再按解锁，fptgp.js）
   const L = V3FP.fwC || [];
   if (!L.length) { if (fwSelW()) fwMsg('环里没有目标：机头对准目标'); return; }
   const cur = L.find(c => c.key === V3FP.tgK), nx = cur ? L.find(c => c.ca < cur.ca - 1e-9) || L[0] : L[0];
@@ -254,7 +255,9 @@ function fwFire(auto) {
     return;
   }
   if (!(s.n > 0)) { V3FP.fq = null; fwMsg(`${s.W.nm}打光了，按数字键换别的`); return; }
-  const T = V3FP.fwT, gb = s.W.k === 'gb';
+  const gl = s.W.k !== 'aam' && typeof ftLockTgt === 'function' ? ftLockTgt(o, s) : null;   // 对地武器：先打吊舱锁定的目标（fptgp.js；在射程外就不打）
+  if (gl === 'far') { V3FP.fq = null; return; }
+  const T = gl || V3FP.fwT, gb = s.W.k === 'gb';
   if (!T && !gb) { V3FP.fq = null; if (!auto) fwMsg(s.W.k === 'aam' ? '环里没有敌机：机头对准目标' : '环里没有目标：机头对准目标'); return; }
   if (V3FP.cool > 0 || !fwReady(s) || (T && !T.red)) {   // 等舱门、等冷却、等锁稳
     if (!auto) { V3FP.fq = S.t; if (T && !T.red) fwMsg('锁定中，锁稳了自动发射'); }
@@ -372,12 +375,12 @@ function fwFly(m, dt) {
   if (tp) {
     const r0 = [tq0[0] - p0[0], tq0[1] - p0[1], tq0[2] - p0[2]], dr = [tp[0] - p[0] - r0[0], tp[1] - p[1] - r0[1], tp[2] - p[2] - r0[2]], dd = dr[0] * dr[0] + dr[1] * dr[1] + dr[2] * dr[2];
     const s = dd > 1e-6 ? clamp(-(r0[0] * dr[0] + r0[1] * dr[1] + r0[2] * dr[2]) / dd, 0, 1) : 1, miss = Math.hypot(r0[0] + dr[0] * s, r0[1] + dr[1] * s, r0[2] + dr[2] * s);
-    if (air && T && miss < 12) { m.done = true; m.x = T.x; m.y = T.y; msSamHit(m, T); return; }
-    if (!air && miss < 3) { fwGround(m, T, tp[0], -tp[1]); return; }
+    if (air && T && miss < 12) { m.done = true; F.end = 'hit'; m.x = T.x; m.y = T.y; msSamHit(m, T); return; }
+    if (!air && miss < 3) { F.end = 'hit'; fwGround(m, T, tp[0], -tp[1]); return; }
   }
-  if (!air && p[2] <= Math.max(gz, -2.6) + .3) { fwGround(m, T, m.x, m.y); return; }   // 打在地上 / 海面上
+  if (!air && p[2] <= Math.max(gz, -2.6) + .3) { F.end = T && Math.hypot(T.x - m.x, T.y - m.y) < 15 ? 'hit' : 'gnd'; fwGround(m, T, m.x, m.y); return; }   // 打在地上 / 海面上（F.end：导弹小屏上写命中 / 落地 / 自毁）
   const slow = Wd.M > 0 && m.t > F.ign + Wd.tb && sp < 260;   // 发动机停了、速度掉下来：没有能量了，自毁
-  if (m.t > m.dur || slow || (air && !T && m.t > 20) || p[2] < Math.max(gz, -2.6) || m.x < -12000 || m.x > W + 12000 || m.y < -12000 || m.y > H + 12000) { m.done = true; msPuff(m.x, m.y, 'p'); }
+  if (m.t > m.dur || slow || (air && !T && m.t > 20) || p[2] < Math.max(gz, -2.6) || m.x < -12000 || m.x > W + 12000 || m.y < -12000 || m.y > H + 12000) { m.done = true; F.end = p[2] < Math.max(gz, -2.6) ? 'gnd' : 'sd'; msPuff(m.x, m.y, 'p'); }
 }
 function fwGround(m, T, x, y) {
   m.done = true; m.x = m.tx = x; m.y = m.ty = y;
@@ -522,9 +525,11 @@ function fwHud(ctx) {
 function fwList0(ctx, o, font) {
   const L = fwList(o), G = fwGunOf(o), rows = L.map((s, i) => ({ k: String(i + 1), t: `${s.W.nm} ×${s.n}`, on: V3FP.ws === i, out: !(s.n > 0) }));
   if (G) rows.push({ k: '空格', t: `${G.nm} ×${o.gunN ?? G.n}`, on: fwGunHeld(), out: !(o.gunN > 0) });
+  if (typeof ftFlareN === 'function') { const n = ftFlareN(o); rows.push({ k: 'Z', t: `热诱弹 ×${n}`, on: false, out: !(n > 0) }); }   // 热诱弹（fptgp.js）
+  if (typeof ftOn === 'function') rows.push({ k: 'Y', t: V3FP.vw === 'tgp' ? '退出吊舱' : '光电吊舱', on: V3FP.vw === 'tgp', dim: true }, ...(typeof fiToggle === 'function' ? [{ k: 'I', t: '参数', on: typeof FI === 'object' && FI.on, dim: true }] : []));
   if (!rows.length) return;
   const lh = 18, x = CAM.vw - 16, y0 = CAM.vh - 16 - lh * rows.length;
   ctx.save(); ctx.font = font(13); ctx.textAlign = 'right'; ctx.textBaseline = 'top'; ctx.shadowColor = 'rgba(0,0,0,.7)'; ctx.shadowBlur = 3;
-  rows.forEach((r, i) => { ctx.fillStyle = r.out ? FW_RED : r.on ? '#e8fff2' : 'rgba(125,255,176,.75)'; ctx.fillText(`${r.on ? '▶ ' : ''}${r.k}  ${r.t}`, x, y0 + i * lh); });
+  rows.forEach((r, i) => { ctx.fillStyle = r.out ? FW_RED : r.on ? '#e8fff2' : r.dim ? 'rgba(125,255,176,.5)' : 'rgba(125,255,176,.75)'; ctx.fillText(`${r.on ? '▶ ' : ''}${r.k}  ${r.t}`, x, y0 + i * lh); });
   ctx.restore();
 }

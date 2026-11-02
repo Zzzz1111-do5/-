@@ -204,10 +204,12 @@ function updateHud() {
   $('btnRain').classList.toggle('hot', R.rain > .5); $('btnRain').style.opacity = R.rain ? 1 : .45;
   $('reserve').textContent = S.assets.reserve;
   // 据点条居中：两侧各让出右上按钮组的宽度（--trw），免得右端压到时钟与按钮下面
-  const tr = $('topr'), trw = tr && tr.offsetWidth ? Math.ceil(innerWidth - tr.getBoundingClientRect().left + 8) : 0;
+  // 量右上按钮组的宽度会强制浏览器重新排版：只在窗口大小变了、或隔两秒才量一次（原来每 0.2 秒一次）
+  const tr = $('topr'), mk = innerWidth + 'x' + innerHeight, trw = tr && (mk !== U.trwK || !(performance.now() - (U.trwT || 0) < 2000)) && tr.offsetWidth ? (U.trwK = mk, U.trwT = performance.now(), Math.ceil(innerWidth - tr.getBoundingClientRect().left + 8)) : 0;
   if (trw && trw !== U.trw) { U.trw = trw; document.documentElement.style.setProperty('--trw', trw + 'px'); }
-  $('objList').innerHTML = U.objMin ? '' : S.points.map(p => `<button type="button" class="ob ${p.owner}${p.contested ? ' hot' : ''}" data-k="${p.key}" title="${p.name}">${svg(PKIND(p.key))}<i style="width:${p.prog * 100}%"></i></button>`).join('') +
+  const objHtml = U.objMin ? '' : S.points.map(p => `<button type="button" class="ob ${p.owner}${p.contested ? ' hot' : ''}" data-k="${p.key}" title="${p.name}">${svg(PKIND(p.key))}<i style="width:${p.prog * 100}%"></i></button>`).join('') +
     (S.holdT ? `<span class="hold"><i style="width:${S.holdT / HOLD * 100}%"></i></span>` : '');
+  if (objHtml !== U.objHtml) { U.objHtml = objHtml; $('objList').innerHTML = objHtml; }   // 据点条只在内容变了时重建（原来每 0.2 秒把几十个带图标的按钮整排重建一遍）
   // 收起时按钮上显示摘要：还有几个据点未攻占、是否有据点在争夺、坚守倒计时
   const left = S.points.filter(p => p.owner !== 'p').length, hot = S.points.some(p => p.contested);
   const ot = U.objMin ? `<span>据点 未攻占 <b>${left}</b>/${S.points.length}${hot ? ' · <em>争夺中</em>' : ''}${S.holdT ? ` · 坚守 ${Math.max(0, Math.ceil(HOLD - S.holdT))} 秒` : ''} ▾</span>` : '▴';
@@ -220,7 +222,8 @@ function updateHud() {
   const lk = S.log.length && S.log[0].id;
   if (lk !== U.logKey || S.t - (U.feedT || 0) > 1) {
     U.logKey = lk; U.feedT = S.t;
-    $('feed').innerHTML = S.log.filter(l => S.t - l.t < 14).slice(0, 5).map(l => `<li class="${l.kind}" ${l.x != null ? `data-x="${l.x}" data-y="${l.y}"` : ''}>${l.msg}</li>`).join('');
+    const fh = S.log.filter(l => S.t - l.t < 14).slice(0, 5).map(l => `<li class="${l.kind}" ${l.x != null ? `data-x="${l.x}" data-y="${l.y}"` : ''}>${l.msg}</li>`).join('');
+    if (fh !== U.feedHtml) { U.feedHtml = fh; $('feed').innerHTML = fh; }   // 消息没变就不动
   }
   $('end').hidden = !S.over;
   if (S.over) {

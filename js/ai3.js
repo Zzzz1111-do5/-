@@ -412,7 +412,7 @@ function a3CarFire(a, D) {
   let best = null, bd = 180;
   for (const q of S.teams) if (q.side === 'p' && q.men.length) {
     const d = dist(a.x, a.y, q.x, q.y);
-    if (d < bd && (d < 50 || spotted(q.x, q.y))) { bd = d; best = q; }
+    if (d < bd && (d < 50 || (spotted(q.x, q.y) && !smokeBlk(a.x, a.y, q.x, q.y)))) { bd = d; best = q; }   // 弹道线穿过烟幕打不了（grid.js）
   }
   if (!best) { a.cd = .6; return; }
   a.cd = 1.2; a.aim = Math.atan2(best.y - a.y, best.x - a.x); a.fireT = S.t;
