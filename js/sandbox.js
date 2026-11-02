@@ -649,6 +649,7 @@ function sbxAIAttackBase(mi, fi) {
   if (cv) { buyAir('p_air_recon', 'recon'); if (k >= 1) buyAir('p_air_strike', 'strike'); }
   // 战区航空兵（不需要航母）：攻击-2 无人机、无侦-7、歼-20
   buyAir('p_air_cas', 'cas'); buyAir('p_air_cas', 'cas'); if (k >= 1) buyAir('p_air_recon_lr', 'recon'); if (k >= 1.2) buyAir('p_air_ftr', 'fighter');
+  if (k >= 1.1) buyAir('p_air_bt', 'strike');   // 歼-16 对地满挂（陆基「炸弹卡车」：6 枚雷石-6），打岸防炮、炮位、发射车
   // 5. 两栖坦克、火箭艇、扫雷舰
   let nAm = 0;
   if (veh && typeof VEH_SPEC === 'object' && VEH_SPEC.amtank) for (let i = 0; i < clamp(Math.round(2.4 * k), 1, 5); i++) {
