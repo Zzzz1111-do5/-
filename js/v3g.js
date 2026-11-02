@@ -107,7 +107,7 @@ async function v3gDecode(key, D) {
   // 贴图：原图字节解码后上传；全部好了才算就绪
   // 重新涂装的模型（V3G_PAINT）：换掉的照片贴图不再解码、上传（省下几十兆显存），涂装材质贴一张淡淡的漆面斑驳纹理
   const mats = m.mats.map(x => Object.assign({}, x)), PT = V3G_PAINT[key], nT = m.imgs.length;
-  if (PT) for (const T of mats) { const c = PT.m[T.n] || (T.t && !PT.keep.includes(T.n) ? PT.def : null); if (c) Object.assign(T, { c: [c[0], c[1], c[2], T.c[3]], t: c[4] ? null : [nT, 0, 0], mr: c[3] || PT.mr, e: [0, 0, 0] }); }   // c[4]：不贴漆面纹理（金属件）
+  if (PT) for (const T of mats) { const c = PT.m[T.n] || (T.t && !PT.keep.includes(T.n) ? PT.def : null); if (c) Object.assign(T, { c: [c[0], c[1], c[2], T.c[3]], t: c[4] ? null : [nT, 0, 0], mr: c[3] || PT.mr, e: [0, 0, 0], mot: c === PT.def ? PT.mot || 0 : c[5] || 0 }); }   // c[4]：不贴漆面纹理（金属件）；mot / c[5]：涂层斑驳
   if (PT && PT.glow) for (const T of mats) { const g = PT.glow[T.n]; if (g) T.e = T.e.map(v => v * g); }   // 自发光加亮（歼-20 的绿色编队灯带：原来的亮度白天几乎看不出来）
   const used = new Set(); for (const T of mats) for (const k of ['t', 'nt', 'mrt', 'sgt', 'et', 'ot']) if (T[k]) used.add(T[k][0]);
   M.tex = await Promise.all(m.imgs.map((I, i) => used.has(i) ? v3gImage(bin.subarray(I.o, I.o + I.n), I.m) : null));
@@ -153,7 +153,7 @@ function v3gUpload(img) {
 // 实例：iA = (x, y, z, 朝向)，iB = (比例, 阵营, 滚转, 俯仰)，与 v3units.js 的 v3mAdd 相同（GL 坐标，y 向北）；iC、iD = 八个部件参数（收起的部件 > .5 就收；飞机 iD 是弹舱门开度，坦克 iC.yzw、iD.x 是炸掉的反应装甲块、iD.z 炮管后坐）
 const V3G_VS = `attribute vec3 p; attribute vec3 n; attribute vec2 uv; attribute vec4 iA; attribute vec4 iB; attribute vec4 iC; attribute vec4 iD; attribute vec4 iE;
 uniform mat4 uM; uniform vec3 uEye; uniform float uPk, uPm, uRad, uPx, uPl; uniform vec3 uPp, uPa, uPq, uPa2, uPr, uPq3, uPa3; uniform vec4 uPw, uPw2, uPw3, uPe, uPe2, uPg2;
-varying vec3 vN, vV, vP; varying vec2 vUv, vW; varying float vSide, vD;
+varying vec3 vN, vV, vP, vMP; varying vec2 vUv, vW; varying float vSide, vD;
 ${typeof V3_SHV === 'string' ? V3_SHV : 'uniform mat4 uShM; varying vec4 vSh;'}
 vec3 rotA(vec3 v, vec3 a, float t) { float c = cos(t), s = sin(t); return v * c + cross(a, v) * s + a * dot(a, v) * (1. - c); }
 void main() {
@@ -184,6 +184,7 @@ void main() {
     else if (uPm > .5) { if (ang > .5) q = uPp; }
     else { q = uPp + rotA(q - uPp, uPa, ang); m = rotA(m, uPa, ang); }
   }
+  vMP = q;   // 模型坐标（米）：涂层斑驳按它算（V3G_PAINT 的 mot）
   q *= iB.x;
   float c = cos(iA.w), sn = sin(iA.w), cr = cos(iB.z), sr = sin(iB.z), cp = cos(iB.w), sp = sin(iB.w);
   q = vec3(q.x, q.y * cr - q.z * sr, q.y * sr + q.z * cr); q = vec3(q.x * cp - q.z * sp, q.y, q.x * sp + q.z * cp);
@@ -192,19 +193,28 @@ void main() {
   vN = vec3(m.x * c - m.y * sn, m.x * sn + m.y * c, m.z); vUv = uv; vSide = iB.y; vV = uEye - w; vD = length(vV); vW = w.xy; vP = w; vSh = uShM * vec4(w, 1.);
   gl_Position = uM * vec4(w, 1.);
 }`;
-const V3G_FS = der => `${der ? '#extension GL_OES_standard_derivatives : enable\n#define DER 1\n' : ''}${typeof V3_PREC === 'string' ? V3_PREC : 'precision mediump float;'}
+const V3G_FS = (der, tl) => `${der ? '#extension GL_OES_standard_derivatives : enable\n#define DER 1\n' : ''}${tl ? '#extension GL_EXT_shader_texture_lod : enable\n#define TLOD 1\n' : ''}${typeof V3_PREC === 'string' ? V3_PREC : 'precision mediump float;'}
 uniform vec4 uC, uSG, uTf, uTf2; uniform vec2 uMR; uniform vec3 uE; uniform float uNs, uAm, uAc;
-uniform sampler2D uTb, uTn, uTm, uTe, uTo, uLm;
+uniform sampler2D uTb, uTn, uTm, uTe, uTo, uLm, uEnvT; uniform float uEnvOn, uEnvU;
 uniform vec2 uFog, uWorld; uniform vec3 uBg, uHlC; uniform float uLmOn, uMx, uHl, uIRh;
-varying vec3 vN, vV, vP; varying vec2 vUv, vW; varying float vSide, vD;
+varying vec3 vN, vV, vP, vMP; varying vec2 vUv, vW; varying float vSide, vD;
 ${typeof V3_SHF === 'string' ? V3_SHF : 'float shadowAt() { return 1.; }'}
 ${typeof V3L_BOOM_GLSL === 'string' ? V3L_BOOM_GLSL : 'vec3 boomLight(vec2 w) { return vec3(0.); }'}
 vec3 lin(vec3 c) { return pow(c, vec3(2.2)); }
+uniform float uMot;
+float h3(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
+float vn3(vec3 p) { vec3 i = floor(p), f = fract(p); f = f * f * (3. - 2. * f);
+  return mix(mix(mix(h3(i), h3(i + vec3(1., 0., 0.)), f.x), mix(h3(i + vec3(0., 1., 0.)), h3(i + vec3(1., 1., 0.)), f.x), f.y),
+             mix(mix(h3(i + vec3(0., 0., 1.)), h3(i + vec3(1., 0., 1.)), f.x), mix(h3(i + vec3(0., 1., 1.)), h3(i + vec3(1., 1., 1.)), f.x), f.y), f.z); }
 void main() {
   float hl = step(7.5, vSide), sd = vSide - 8. * hl;   // 阵营 + 8：选中编队的成员（selfx.js），整个发光
   vec4 base = uC;
   if (uTf.x > .5) { vec4 t = texture2D(uTb, vUv); base *= vec4(lin(t.rgb), t.a); }
   if (uAm > .5 && uAm < 1.5 && base.a < uAc) discard;
+  // 涂层斑驳（V3G_PAINT 的 mot，整架一种颜色的机型）：吸波涂层喷得不可能绝对均匀，补漆、磨损、受热处深浅、光泽各差一点——
+  //   按机体坐标的三层噪声（约 0.6 / 0.25 / 0.1 米），不靠贴图坐标，所以没有接缝、没有拼接感（用户嫌照片投影贴图一块块拼起来）
+  float mot = 0.;
+  if (uMot > 0.) { mot = vn3(vMP * 1.6) * .5 + vn3(vMP * 4.1 + 7.3) * .32 + vn3(vMP * 10.7 + 3.1) * .18 - .5; base.rgb *= 1. + mot * uMot; }
   vec3 N = normalize(vN), V = normalize(vV);
   if (dot(N, V) < 0.) N = -N;   // 背面朝着镜头（双面的薄片、法线朝里的面）：翻过来照
 #ifdef DER
@@ -227,7 +237,7 @@ void main() {
     if (uTf.z > .5) { vec4 t = texture2D(uTm, vUv); rough *= t.g; metal *= t.b; }
     F0 = mix(vec3(.04), base.rgb, metal);
   }
-  rough = clamp(rough, .04, 1.);
+  rough = clamp(rough + mot * uMot * .9, .04, 1.);   // 斑驳处光泽也不一样
   vec3 diff = base.rgb * (1. - metal);
   float ao = uTf2.y > .5 ? texture2D(uTo, vUv).r : 1.;
   vec3 L = ${V3_SUNG}, H = normalize(L + V);
@@ -237,12 +247,23 @@ void main() {
   float spec = pow(max(dot(N, H), 0.), sh) * (sh + 2.) / 8.;
   vec3 Fr = F0 + (1. - F0) * pow(1. - max(dot(H, V), 0.), 5.);
   vec3 sunC = vec3(1., .96, .9) * 2.6, sky = mix(vec3(.05, .055, .055), vec3(.3, .32, .34), N.z * .5 + .5);
-  vec3 env = mix(vec3(.04, .045, .045), vec3(.34, .36, .38), clamp(reflect(-V, N).z * .5 + .5, 0., 1.));   // 金属反射的环境：上亮下暗
+  vec3 R = reflect(-V, N), env = mix(vec3(.04, .045, .045), vec3(.34, .36, .38), clamp(R.z * .5 + .5, 0., 1.));   // 金属反射的环境：上亮下暗（黑绿画面、天空图还没载入时）
+  if (uEnvOn > .5) {   // 写实画面：照反射方向取真实的天空图（同 view3d.js 的天空，等距柱状投影）——机身、座舱盖倒映天空、云和地平线；越粗糙取越模糊的一级；
+    //   地平线以下反射的是地面：雾色压暗（看不清细节的远处地面），过地平线那一段柔和过渡
+    vec2 ev = vec2(fract(atan(R.y, R.x) / 6.2831853 + uEnvU), .5 - asin(clamp(R.z, 0., 1.)) / 3.1415927);
+#ifdef TLOD
+    vec3 sk = lin(texture2DLodEXT(uEnvT, ev, 1. + rough * 7.).rgb);
+#else
+    vec3 sk = lin(texture2D(uEnvT, ev, rough * 7.).rgb);
+#endif
+    env = mix(lin(uBg) * vec3(.32, .34, .3), sk * .95, smoothstep(-.1, .05, R.z));
+  }
   vec3 c = diff * (sky * ao + sunC * ndl * shd) + Fr * spec * sunC * ndl * shd + env * (F0 + (1. - F0) * pow(1. - ndv, 5.) * (1. - rough)) * ao * (.35 + .65 * metal);
   c += uE * (uTf2.x > .5 ? lin(texture2D(uTe, vUv).rgb) : vec3(1.));
   c += boomLight(vec2(vW.x, -vW.y)) * diff * (.4 + .6 * ndl);   // 近处爆炸的火光
   if (sd > 1.5 && sd < 2.5) c *= .2;   // 残骸：烧黑
   if (uIRh > 0.) c = mix(c, vec3(1.1, 1.04, .98) * (.55 + .45 * ndl * shd), clamp(uIRh * (sd > 1.5 && sd < 2.5 ? 1.25 : 1.), 0., 1.));   // 吊舱红外（fptgp.js ftHeat）：人、车、直升机、导弹比地面热，晒着太阳的面更热；残骸还在烧（后期换算成白热 / 黑热）
+  if (uMx < .5) { vec3 k = max(c - .8, 0.); c = min(c, .8) + .2 * (1. - exp(-k / .2)); }   // 写实画面：亮过 0.8 的柔和地收住（阳光下的金属高光、发白的漆面不再一片死白，像胶片的肩部）
   c = pow(max(c, 0.), vec3(1. / 2.2));
   if (uMx > .5) c = (sd > .5 && sd < 1.5 ? vec3(1., .3, .38) : vec3(.32, 1., .58)) * dot(c, vec3(.3, .59, .11)) * .6;   // 黑绿画面：按明暗换成磷光的单色（敌方红）
   c += uHlC * uHl * hl * (.3 + .7 * pow(1. - ndv, 2.));
@@ -254,16 +275,17 @@ function v3gInit(gl) {
     V3G.ext = gl.getExtension('ANGLE_instanced_arrays');
     V3G.u32 = gl.getExtension('OES_element_index_uint');
     V3G.der = !!gl.getExtension('OES_standard_derivatives');
+    V3G.tlod = !!gl.getExtension('EXT_shader_texture_lod');
     V3G.aniso = gl.getExtension('EXT_texture_filter_anisotropic') || gl.getExtension('WEBKIT_EXT_texture_filter_anisotropic');
     if (!V3G.ext) throw new Error('没有实例化扩展');
     const sh = (type, src) => { const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)); return s; };
     const pr = gl.createProgram();
-    gl.attachShader(pr, sh(gl.VERTEX_SHADER, V3G_VS)); gl.attachShader(pr, sh(gl.FRAGMENT_SHADER, V3G_FS(V3G.der)));
+    gl.attachShader(pr, sh(gl.VERTEX_SHADER, V3G_VS)); gl.attachShader(pr, sh(gl.FRAGMENT_SHADER, V3G_FS(V3G.der, V3G.tlod)));
     gl.linkProgram(pr);
     if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(pr));
     V3G.pr = pr;
     for (const k of ['p', 'n', 'uv', 'iA', 'iB', 'iC', 'iD', 'iE']) V3G.a[k] = gl.getAttribLocation(pr, k);
-    for (const k of ['uM', 'uEye', 'uPk', 'uPm', 'uPl', 'uPp', 'uPa', 'uPw', 'uPw2', 'uPw3', 'uPq', 'uPa2', 'uPr', 'uPe', 'uPe2', 'uPq3', 'uPa3', 'uPg2', 'uRad', 'uPx', 'uC', 'uSG', 'uTf', 'uTf2', 'uMR', 'uE', 'uNs', 'uAm', 'uAc', 'uTb', 'uTn', 'uTm', 'uTe', 'uTo', 'uLm', 'uFog', 'uWorld', 'uBg', 'uLmOn', 'uBm', 'uMx', 'uHl', 'uHlC', 'uIRh', 'uShM', 'uShT', 'uShOn', 'uShP']) V3G.u[k] = gl.getUniformLocation(pr, k);
+    for (const k of ['uEnvT', 'uEnvOn', 'uEnvU', 'uMot', 'uM', 'uEye', 'uPk', 'uPm', 'uPl', 'uPp', 'uPa', 'uPw', 'uPw2', 'uPw3', 'uPq', 'uPa2', 'uPr', 'uPe', 'uPe2', 'uPq3', 'uPa3', 'uPg2', 'uRad', 'uPx', 'uC', 'uSG', 'uTf', 'uTf2', 'uMR', 'uE', 'uNs', 'uAm', 'uAc', 'uTb', 'uTn', 'uTm', 'uTe', 'uTo', 'uLm', 'uFog', 'uWorld', 'uBg', 'uLmOn', 'uBm', 'uMx', 'uHl', 'uHlC', 'uIRh', 'uShM', 'uShT', 'uShOn', 'uShP']) V3G.u[k] = gl.getUniformLocation(pr, k);
     V3G.ib = gl.createBuffer();
     V3G.ok = true;
   } catch (e) { V3G.ok = false; console.warn('贴图模型不可用', e); }
@@ -336,6 +358,10 @@ function v3gDraw(C, LM) {
   if (U.uBm && typeof V3L_BM === 'object') gl.uniform4fv(U.uBm, V3L_BM);
   const ir = !LM && typeof ftIR === 'function' && ftIR() && typeof ftHeat === 'function';   // 吊舱红外：每型模型按它有多热提亮
   gl.uniform1i(U.uTb, 0); gl.uniform1i(U.uTn, 1); gl.uniform1i(U.uTm, 2); gl.uniform1i(U.uTe, 3); gl.uniform1i(U.uTo, 4);
+  // 天空图做环境反射（写实画面、天空图已载入、显卡至少 14 个纹理单元）：绑在 13 号单元（地形那一遍海面反射也用它）；画影子那一遍不用
+  const envT = !mx && !LM && typeof V3 === 'object' && V3.sky && V3.sky.ok && V3.sky.tex && (V3G.tu || (V3G.tu = gl.getParameter(gl.MAX_TEXTURE_IMAGE_UNITS) || 8)) >= 14 ? V3.sky.tex : null;
+  gl.uniform1f(U.uEnvOn, envT ? 1 : 0); gl.uniform1i(U.uEnvT, envT ? 13 : 0); gl.uniform1f(U.uEnvU, typeof V3_SKYU === 'number' ? V3_SKYU : 0);
+  if (envT) { gl.activeTexture(gl.TEXTURE13); gl.bindTexture(gl.TEXTURE_2D, envT); }
   const tex = (u, t) => { gl.activeTexture(gl.TEXTURE0 + u); gl.bindTexture(gl.TEXTURE_2D, t || null); };
   const wrap = (t, w) => { if (!t) return; gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, t); const m = [gl.REPEAT, gl.CLAMP_TO_EDGE, gl.MIRRORED_REPEAT]; gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, m[w[1]] || gl.REPEAT); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, m[w[2]] || gl.REPEAT); };
   const FR = LM ? null : v3gFrustum(C.M);
@@ -384,7 +410,7 @@ function v3gDraw(C, LM) {
         gl.uniform4f(U.uTf, tb ? 1 : 0, tn ? 1 : 0, tm ? 1 : 0, 0); gl.uniform4f(U.uTf2, te ? 1 : 0, to ? 1 : 0, 0, 0);
         const ga = gh ? .12 : T.am === 2 && V3G.glass && V3G.glass.key === M.key ? V3G.glass.k : 1;   // 座舱盖等玻璃：玩家开着的这型飞机调得更透明（v3pilot.js）
         gl.uniform4f(U.uC, T.c[0], T.c[1], T.c[2], T.c[3] * ga); gl.uniform3f(U.uE, T.e[0] * ga, T.e[1] * ga, T.e[2] * ga);
-        gl.uniform2f(U.uMR, T.mr[0], T.mr[1]);
+        gl.uniform2f(U.uMR, T.mr[0], T.mr[1]); gl.uniform1f(U.uMot, T.mot || 0);
         if (T.sg) gl.uniform4f(U.uSG, T.sg[0], T.sg[1], T.sg[2], T.sg[3]); else gl.uniform4f(U.uSG, 0, 0, 0, -1);
         gl.uniform1f(U.uNs, T.ns ?? 1); gl.uniform1f(U.uAm, gh ? 2 : T.am); gl.uniform1f(U.uAc, T.ac ?? .5);
         X.drawElementsInstancedANGLE(gl.TRIANGLES, cnt, it, i0 * m.it, N);
@@ -848,7 +874,9 @@ const V3G_MATFIX = { z10w: { 0: { am: 0, a: 1 }, 1: { am: 0, a: 1 }, 2: { a: .08
 //   歼-35 海军浅灰、运-20 空军浅灰——照真机整架一种颜色（原来上下表面分两种灰、还顺着照片投影的贴图坐标贴一层平铺的漆面噪声：
 //   投影的各块贴图坐标疏密、方向不一，接缝处深浅和纹路都对不上，看着一块块拼起来——用户：涂装不要有拼接感），不贴漆面纹理（第 5 个值 1）；mr 金属度、粗糙度（哑光漆，略带一点光泽）
 const V3G_PAINT = {
-  j31: { def: [.2, .215, .23, [.14, .5], 1], mr: [.14, .5], keep: ['screen'], m: {} },
+  // 歼-35（用户：质感不行——原来一种灰、粗糙度 0.5 的哑光，像没上色的塑料）：海军浅灰略偏蓝，缎面吸波涂层（金属度 0.04、粗糙度 0.36：倒映天空、高光柔和），
+  //   加机体坐标的涂层斑驳（mot 0.09：深浅、光泽各差一点，没有接缝）
+  j31: { def: [.22, .238, .262, [.04, .36], 1], mr: [.04, .36], mot: .09, keep: ['screen'], m: {} },
   y20: { def: [.25, .26, .27, [.1, .5], 1], mr: [.1, .5], keep: [], m: { Engine_metal: [.09, .09, .1, [.6, .4], 1], engine_mat: [.25, .26, .27, [.1, .5], 1] } },
   // 歼-16：机身照模型原贴图（不给 def）；只有喷口调节片（v3gPetals 拆出来的）涂成真喷口的不涂漆耐热合金——外表面暗枪灰带一点回火的褐铜色、哑光，内壁浅一些的钢灰（热障涂层）
   j16: { keep: [], mr: [.85, .5], m: { nozzle: [.1, .092, .078, [.85, .5], 1], nozzle_in: [.3, .29, .275, [.7, .42], 1] } },
