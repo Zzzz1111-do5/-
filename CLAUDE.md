@@ -82,6 +82,7 @@
   临机打击仍走 msFireP，东风-15B 用完接着用东风-16、长剑-10；战役按难度给库存（RF_STOCK），沙盒目录可买；3D 里末段再入有等离子体亮光，东风-17 滑翔拖等离子体光带（v3fx.js）。
 - 合并进来的另一条开发线（只发布过网页、源码没推，从 gh-pages 的 69a1ab7 三方合并）：海面反射天空图显式取级（view3d.js TLOD，修镜头朝北时屏幕左半边的颗粒噪点）、高级感画面（polish.js）、黑夜（S.night、logistics.js NIGHT_EYE）、
   白色平原地图（flat.js，星云背景 v3neb.js）、82 空降师（a82.js / v3a82.js）、MH-60（mh60.js）、车载烟幕弹（vsmoke.js）、驾驶时的速度感与发动机声（v3pilot.js fpFeel / fpAudio）、实例数据每帧只传一次（v3g.js）、视野与寻路代价的增量计算（grid.js）。
+  那条线之后的「夜间模式（一）」（beachhead-sandtable 的 031cab8）单独摘了过来：js/v3nite.js 写实画面黑夜的星空、月亮、银河，车灯、火光、爆炸照亮地面（v3neb.js v3Night 调 v3ntDraw），车辆前大灯 / 尾灯、舰艇航行灯、直升机防撞灯（v3fx.js 调 v3ntLamps）。
 - 沙盒每方初始预算直接给 30000（sandbox.js SBX_BUDGET0 = 上限；SBX_BUDGET 1500 是 AI 布兵按「预算 ÷ 基准」放大编成的基准，别改）。
 - 烘焙工具的署名（tools/v3gbake.js credits）按 tools/v3gmodels.json 整段重写 docs/credits.md、legal/credits.html 的 v3g 一节——别处加进来、配置里没有的条目（支奴干、海鹰、M777、M270、单兵武器、F100 喷口……）会被冲掉：
   烘焙后 `git diff docs/credits.md legal/credits.html`，冲掉的恢复（git checkout 后手工加新的那几条）。模型预览 tools/v3gview.html 的 &tx &ty &tz 指定镜头对准的点（看喷口、起落架等局部）。

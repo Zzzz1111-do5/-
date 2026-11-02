@@ -10,7 +10,7 @@ const V3N = { tried: false, ok: false, pr: null, a: {}, u: {}, pb: null, cb: nul
 const V3N_K = 25000;   // 点云每个单位多少米（坐标范围约 ±2.16 → 半径约 35–55 公里的球壳）
 const V3N_PT = 460;    // 一个点画成多大的光斑（米）：画 16 万个点（手机、低画质 9 万）铺满整个球壳，这个大小正好连成一片
 const V3N_CNT = () => (V3.coarse || R.autoLow || (typeof SETTINGS === 'object' && SETTINGS && SETTINGS.quality === 'low')) ? 90000 : 160000;   // 点在烘焙时已打乱，前面任意一段都是均匀抽样
-const V3N_NIGHT = { std: [.2, .24, .36], flat: [.3, .2, .24], mx: [.55, .6, .6] };   // 夜色：月光、太空（星云的暗红）、黑绿画面（本来就暗，压得轻）
+const V3N_NIGHT = { std: [.16, .2, .32], flat: [.3, .2, .24], mx: [.55, .6, .6] };   // 夜色：月光、太空（星云的暗红）、黑绿画面（本来就暗，压得轻）
 const v3nebOn = () => !!(typeof TER === 'object' && TER && TER.flat);
 
 function v3nInit(gl) {
@@ -76,6 +76,7 @@ function v3Night(C) {
   gl.drawArrays(gl.TRIANGLES, 0, 3);
   gl.disable(gl.BLEND); gl.enable(gl.DEPTH_TEST); gl.depthMask(true);
   gl.disableVertexAttribArray(V3N.na.p);
+  if (k === V3N_NIGHT.std && typeof v3ntDraw === 'function') v3ntDraw(C, k);   // 写实画面：星空、月亮，车灯、火光、爆炸照亮的地面（v3nite.js）
 }
 // ① 星云
 function v3Neb(C) {
