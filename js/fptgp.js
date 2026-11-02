@@ -237,6 +237,7 @@ function ftOverlay(ctx) {
   if (V3FP.vw === 'tgp' && V3FP.tg && V3FP.mv == null) ftTgpHud(ctx);
   else ftLockMark(ctx);
   if (V3FP.mv == null) ftBar(ctx);
+  if (typeof fiDraw === 'function') fiDraw(ctx);   // 机型与挂载参数面板（按 I，fpinfo.js）
 }
 function ftLockMark(ctx) {
   const T = ftLockPos();
@@ -289,6 +290,7 @@ function ftBar(ctx) {
   if (typeof fwInit === 'function') fwInit(o);
   const L = typeof fwList === 'function' ? fwList(o) : [], it = L.map((s, i) => ({ k: String(i + 1), t: s.W.nm, n: s.n, sel: V3FP.ws === i }));
   it.push({ k: 'R', t: '热诱弹', n: ftFlareN(o) }, { k: 'B', t: V3FP.vw === 'tgp' ? '退出吊舱' : '光电吊舱', sel: V3FP.vw === 'tgp' }, { k: 'L', t: V3FP.gl ? '解除锁定' : '锁定地面', sel: !!V3FP.gl }, { k: 'F', t: '开火' });
+  if (typeof FI === 'object') it.push({ k: 'I', t: '参数', sel: FI.on });   // 机型与挂载参数面板（fpinfo.js）
   ctx.save();
   ctx.font = '13px "IBM Plex Mono", "Noto Sans SC", monospace'; ctx.textBaseline = 'middle';
   const h = 28, gap = 6, kw = 20, wd = it.map(x => kw + 10 + ctx.measureText(x.t + (x.n != null ? ` ×${x.n}` : '')).width + 12);

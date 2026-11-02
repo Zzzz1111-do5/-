@@ -82,7 +82,7 @@ float mxRain(vec2 cell, vec2 f, float t, float px) {
 //   田地是稀疏的数据点阵；沼泽横向虚线；沙滩细密点、礁石稀疏亮点；道路是带亮边的通道，中线上一段段「数据包」沿路流动；
 //   河流是暗色水道、两岸亮线，水道里的字符顺流而下；海岸线一道亮光；没看见的地方压暗（战争迷雾）；字符雨照常落下。
 //   单位、标号、箭头、弹坑等仍来自俯视贴图（这时贴图底色是黑的，叠加上去）
-const V3_FS = der => `${der ? '#extension GL_OES_standard_derivatives : enable\n#define DER 1\n' : ''}${V3_PREC}
+const V3_FS = (der, tl) => `${der ? '#extension GL_OES_standard_derivatives : enable\n#define DER 1\n' : ''}${tl ? '#extension GL_EXT_shader_texture_lod : enable\n#define TLOD 1\n' : ''}${V3_PREC}
 uniform sampler2D uTop, uBase, uCls, uCls2, uFogT, uHt, uLf, uTopF; uniform vec4 uBox, uBoxF; uniform vec2 uWorld, uGrid, uHG; uniform vec2 uFog; uniform float uSea, uT, uMx, uLmOn, uBrM; uniform vec3 uBg;
 uniform sampler2D uDg, uDf, uDr, uDs; uniform float uDet;   // 写实地表细节贴图（ambientCG，CC0）：草地、林下地面、岩石、沙滩
 uniform sampler2D uCls3, uSky, uWn; uniform float uSkyOn, uSkyU, uWnOn;   // 水深分类（浅滩、礁石、近岸）、天空图（海面反射）、水面法线贴图（three.js 示例，MIT）
@@ -219,6 +219,19 @@ void main() {
       Rf.z = abs(Rf.z);
       float bl = clamp(log2(max(fwm, .1) * 4.), 0., 6.);   // 远处的反射模糊一些（粗糙的海面平均了很多方向）
       float su = atan(Rf.y, Rf.x) / 6.2831853 + uSkyU;
+      vec3 sk;
+#if defined(DER) && defined(TLOD)
+      // 显式取级：按反射方向本身的屏幕导数算该用哪一级（方位角 atan 的导数 = (x·dy − y·dx)/(x² + y²)，接缝两边一样连续），不让硬件按纹理坐标求导——
+      //   方位角在 ±180° 处跳一整圈，硬件按坐标求导会在那里选到最糊的一级；原来靠「同一个 2×2 块用同一种写法」绕开，那要求各家显卡的导数、
+      //   像素坐标都按块算得准，个别显卡上左半屏（反射朝西北那半圈）又是一层颗粒。现在完全不碰接缝。天空图 2048 × 1024
+      {
+        vec3 rx = dFdx(Rf), ry = dFdy(Rf);
+        float hq = max(dot(Rf.xy, Rf.xy), 1e-5), vz = max(sqrt(max(1. - Rf.z * Rf.z, 0.)), .02);
+        vec2 gx = vec2((Rf.x * rx.y - Rf.y * rx.x) / hq * 325.95, rx.z / vz * 325.95), gy = vec2((Rf.x * ry.y - Rf.y * ry.x) / hq * 325.95, ry.z / vz * 325.95);   // 2048 / 2π = 1024 / π
+        float lod = clamp(.5 * log2(max(max(dot(gx, gx), dot(gy, gy)), 1e-6)) + bl, 0., 11.);
+        sk = uSkyOn > .5 ? texture2DLodEXT(uSky, vec2(fract(su), .5 - asin(clamp(Rf.z, 0., 1.)) / 3.1415927), lod).rgb * .84 : mix(uBg, vec3(.5, .62, .8), sqrt(Rf.z));
+      }
+#else
 #ifdef DER
       // 方位角在 ±180° 处跳一整圈：离接缝远的那种写法取样（接缝上不会掉到最糊的一级，一条竖线）。同一个 2×2 像素块必须用同一种写法——
       //   原来逐像素比较两种写法的导数：两种写法在半圈方位上相差整 1、导数本来一样大，谁小全看舍入；真显卡的导数逐行算，一个块里选成两种写法，
@@ -228,7 +241,8 @@ void main() {
       float fq = fract(su - dFdx(su) * qo.x - dFdy(su) * qo.y);
       su = fq > .25 && fq < .75 ? fract(su) : fract(su + .5) - .5;
 #endif
-      vec3 sk = uSkyOn > .5 ? texture2D(uSky, vec2(su, .5 - asin(clamp(Rf.z, 0., 1.)) / 3.1415927), bl).rgb * .84 : mix(uBg, vec3(.5, .62, .8), sqrt(Rf.z));
+      sk = uSkyOn > .5 ? texture2D(uSky, vec2(su, .5 - asin(clamp(Rf.z, 0., 1.)) / 3.1415927), bl).rgb * .84 : mix(uBg, vec3(.5, .62, .8), sqrt(Rf.z));
+#endif
       float fr = .02 + .98 * pow(1. - clamp(dot(Nw, V), 0., 1.), 5.);
       vec3 body = mix(vec3(.04, .15, .25), vec3(.05, .28, .3), k3.r);   // 深海是深蓝（原来近乎纯黑：一千米高往远处看七成是这个颜色，整片海像一块黑板，亮点落在上面格外扎眼）
       body = mix(body, vec3(.1, .4, .38), k3.g * .6);
@@ -427,12 +441,13 @@ void main() {
 //   地平线以下渐变成雾色（地图外围看到的「地面」）——
 const V3_SKY_VS = `attribute vec2 p; uniform mat4 uInv; uniform vec3 uEye; varying vec3 vR;
 void main() { vec4 b = uInv * vec4(p, 1., 1.); vR = b.xyz / b.w - uEye; gl_Position = vec4(p, .99999, 1.); }`;
-const V3_SKY_FS = `precision mediump float;
+// 高精度（苹果的显卡上 mediump 真的是半精度：方位角坐标只剩千分之一的分辨率，天空图上一格格台阶）；有显式取级扩展时直接取最清楚的一级
+const V3_SKY_FS = tl => `${tl ? '#extension GL_EXT_shader_texture_lod : enable\n' : ''}${V3_PREC}
 uniform sampler2D uSky; uniform float uU; uniform vec3 uBg; varying vec3 vR;
 void main() {
   vec3 d = normalize(vR);
-  vec2 uv = vec2(atan(d.y, d.x) / 6.2831853 + uU, .5 - asin(clamp(d.z, -1., 1.)) / 3.1415927);
-  vec3 c = texture2D(uSky, uv, -16.).rgb;   // 天空图一个像素比屏幕像素大，总用最清楚的一级（方位角的接缝处导数很大，不加偏置会糊出一条竖线）
+  vec2 uv = vec2(fract(atan(d.y, d.x) / 6.2831853 + uU), .5 - asin(clamp(d.z, -1., 1.)) / 3.1415927);
+  vec3 c = ${tl ? 'texture2DLodEXT(uSky, uv, 0.)' : 'texture2D(uSky, uv, -16.)'}.rgb;   // 天空图一个像素比屏幕像素大，总用最清楚的一级（方位角的接缝处导数很大，按坐标求导会糊出一条竖线）
   gl_FragColor = vec4(mix(c, uBg, smoothstep(.03, -.08, d.z)), 1.);
 }`;
 // 地表细节贴图（写实画面）：第一次用到时载入，四张都好了才启用；绑在 8–11 号纹理单元
@@ -597,7 +612,7 @@ function v3Sky(C) {
     V3.sky = { ok: false };
     try {
       const sh = (type, src) => { const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)); return s; };
-      const pr = gl.createProgram(); gl.attachShader(pr, sh(gl.VERTEX_SHADER, V3_SKY_VS)); gl.attachShader(pr, sh(gl.FRAGMENT_SHADER, V3_SKY_FS)); gl.linkProgram(pr);
+      const pr = gl.createProgram(); gl.attachShader(pr, sh(gl.VERTEX_SHADER, V3_SKY_VS)); gl.attachShader(pr, sh(gl.FRAGMENT_SHADER, V3_SKY_FS(!!V3.tlod))); gl.linkProgram(pr);
       if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(pr));
       const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
       Object.assign(V3.sky, { pr, b, a: gl.getAttribLocation(pr, 'p'), u: Object.fromEntries(['uInv', 'uEye', 'uSky', 'uU', 'uBg'].map(k => [k, gl.getUniformLocation(pr, k)])) });
@@ -1084,10 +1099,10 @@ function v3Init() {
     const cv = document.createElement('canvas');
     const gl = cv.getContext('webgl', { antialias: true, preserveDrawingBuffer: true, alpha: false });
     if (!gl) return;
-    const der = !!gl.getExtension('OES_standard_derivatives');
+    const der = !!gl.getExtension('OES_standard_derivatives'), tlod = !!gl.getExtension('EXT_shader_texture_lod');   // 显式取级：海面反射、天空按自己算的清晰度级别取样（不靠硬件按坐标求导）
     const sh = (type, src) => { const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)); return s; };
     const pr = gl.createProgram();
-    gl.attachShader(pr, sh(gl.VERTEX_SHADER, V3_VS)); gl.attachShader(pr, sh(gl.FRAGMENT_SHADER, V3_FS(der)));
+    gl.attachShader(pr, sh(gl.VERTEX_SHADER, V3_VS)); gl.attachShader(pr, sh(gl.FRAGMENT_SHADER, V3_FS(der, tlod))); V3.tlod = tlod;
     gl.linkProgram(pr);
     if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(pr));
     const u = {}, a = { p: gl.getAttribLocation(pr, 'p'), n: gl.getAttribLocation(pr, 'n') };
@@ -1434,8 +1449,12 @@ function v3Overlay(ctx, time) {
   const near = CAM.z / CAM.fit > 2.2, spec = specAll() || R.eye === 'all', used = [];
   if (typeof v3TableMarks === 'function') v3TableMarks(ctx);   // 沙盘桌边框上的方格坐标
   // 名称标签：和已画的标签重叠就不画（近处的先画，远处的让位）
+  const MW = V3.mwC || (V3.mwC = new Map());   // 标签宽度按字体 + 文字缓存：每帧对几十个地名量字宽是白费的
   const label = (t, x, y, col, al) => {
-    const w = ctx.measureText(t).width + 4, r = [x - w / 2, y - 11, x + w / 2, y + 2];
+    const mk = ctx.font + '|' + t;
+    let tw = MW.get(mk);
+    if (tw == null) { tw = ctx.measureText(t).width; if (MW.size > 4000) MW.clear(); MW.set(mk, tw); }
+    const w = tw + 4, r = [x - w / 2, y - 11, x + w / 2, y + 2];
     if (used.some(o => r[0] < o[2] && r[2] > o[0] && r[1] < o[3] && r[3] > o[1])) return;
     used.push(r); ctx.fillStyle = rgba(col, al); ctx.fillText(t, x, y);
   };

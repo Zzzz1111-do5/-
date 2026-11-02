@@ -13,7 +13,7 @@ const V3FP = { on: false, k: null, o: null, keys: new Set(), look: [0, 0], thr: 
   vw: 'chase', orb: [0, 0], cd: 80, ws: -1, lk: {}, fwC: [], bay: { main: 0, side: 0, ext: 0 },
   ctl: 'aim', aim: [0, 0], ms: [0, 0], kx: { r: 0, p: 0, y: 0 }, ins: { x: 0, y: 0, r: 0 }, ab: false, abT: 0, ffb: true, gb: 0, rb: 0, buf: 0, imp: 0, free: false, gpB: [],
   mv: null, mo: [0, 0], mf: null, mp: null, mEnd: null, fq: null, msg: null };   // mv：导弹视角正跟着的弹；fq：按了开火、等舱门开好
-const V3FP_KEYS = { KeyW: 1, KeyA: 1, KeyS: 1, KeyD: 1, KeyQ: 1, KeyE: 1, KeyC: 1, KeyF: 1, KeyX: 1, KeyV: 1, KeyT: 1, KeyM: 1, KeyG: 1, Space: 1, ShiftLeft: 1, ShiftRight: 1, ArrowLeft: 1, ArrowRight: 1, ArrowUp: 1, ArrowDown: 1, Digit1: 1, Digit2: 1, Digit3: 1, Digit4: 1, Digit5: 1, Digit6: 1, KeyB: 1, KeyL: 1, KeyR: 1, KeyN: 1, KeyZ: 1 };   // B 光电吊舱、L 锁定地面目标、R 热诱弹、N 红外极性、Z 变焦（fptgp.js）
+const V3FP_KEYS = { KeyW: 1, KeyA: 1, KeyS: 1, KeyD: 1, KeyQ: 1, KeyE: 1, KeyC: 1, KeyF: 1, KeyX: 1, KeyV: 1, KeyT: 1, KeyM: 1, KeyG: 1, Space: 1, ShiftLeft: 1, ShiftRight: 1, ArrowLeft: 1, ArrowRight: 1, ArrowUp: 1, ArrowDown: 1, Digit1: 1, Digit2: 1, Digit3: 1, Digit4: 1, Digit5: 1, Digit6: 1, KeyB: 1, KeyL: 1, KeyR: 1, KeyN: 1, KeyZ: 1, KeyI: 1 };   // B 光电吊舱、L 锁定地面目标、R 热诱弹、N 红外极性、Z 变焦（fptgp.js）、I 机型与挂载参数（fpinfo.js）
 const FP_TELE = [-.3, 0, .35, .7, 1];   // 车钟：后退一 · 停车 · 前进一二三
 
 // —— 能驾驶的单位 ——
@@ -92,8 +92,9 @@ function fpMenuFill(el) {
   };
   add('div', 'sec', `飞机 · 已升空 ${air.length} 架`);
   if (!air.length) add('div', 'sub', '还没有升空的战斗机或攻击机：先派出战斗机（制空）或攻击机');
-  for (const E of air) { const o = E.o; item(E, `${airMdl(o.kind, o.v).name} · ${ph[o.phase] || o.phase}`, `${gridRef(o.x, o.y)} · 高度 ${Math.round(v3AirZ(o))} 米 · ${Math.round((o.spd || 0) * 3.6)} km/h · ${wpn(o)}`); }
-  if (deck.length) { add('div', 'sec', '甲板上 / 起降中（准备弹射的可以坐进去，弹射升空后接手）'); for (const o of deck) item(fpOnDeck(o) ? { k: 'air', o } : null, `${airMdl(o.kind, o.v).name} · ${o.phase === 'cat' ? FP_DK[o.dk] || ph.cat : ph[o.phase] || o.phase}`, wpn(o), !fpOnDeck(o)); }
+  const info = o => { const d = typeof fiDetails === 'function' ? fiDetails(o) : null; if (d) el.appendChild(d); };   // 可展开的机型与挂载参数（fpinfo.js）
+  for (const E of air) { const o = E.o; item(E, `${airMdl(o.kind, o.v).name} · ${ph[o.phase] || o.phase}`, `${gridRef(o.x, o.y)} · 高度 ${Math.round(v3AirZ(o))} 米 · ${Math.round((o.spd || 0) * 3.6)} km/h · ${wpn(o)}`); info(o); }
+  if (deck.length) { add('div', 'sec', '甲板上 / 起降中（准备弹射的可以坐进去，弹射升空后接手）'); for (const o of deck) { item(fpOnDeck(o) ? { k: 'air', o } : null, `${airMdl(o.kind, o.v).name} · ${o.phase === 'cat' ? FP_DK[o.dk] || ph.cat : ph[o.phase] || o.phase}`, wpn(o), !fpOnDeck(o)); info(o); } }
   if (idle.length) {
     add('div', 'sec', `待命 · ${idle.length} 架（点一下登机：舰载机由牵引车拖上弹射器弹射起飞，陆基的从战区机场起飞）`);
     for (const w of idle) {
@@ -101,7 +102,7 @@ function fpMenuFill(el) {
       const b = document.createElement('button'); b.type = 'button'; b.className = 'it';
       const t = document.createElement('div'); t.textContent = `登机 · ${M.name}`; const u = document.createElement('div'); u.className = 'sub'; u.textContent = `${where} · ${wpn({ kind: w.type, v: w.v })}`; b.append(t, u);
       b.addEventListener('click', () => { fpMenu(false); fpBoard(w); });
-      el.appendChild(b);
+      el.appendChild(b); info({ kind: w.type, v: w.v });
     }
   }
   if (sh.length) { add('div', 'sec', '军舰'); for (const E of sh) item(E, fpName('ship', E.o), `${gridRef(E.o.x, E.o.y)}${E.o.fpV ? ` · ${Math.round(Math.abs(E.o.fpV) * 1.94)} 节` : ''}`); }
@@ -202,16 +203,42 @@ function fpBody(o) {
   const R = flRot(fpRS(o).q);
   return { f: [R[3], R[0], -R[6]], u: [-R[5], -R[2], R[8]], r: [R[4], R[1], -R[7]], R };
 }
-// 教官：把机头带到瞄准方向（返回杆量 x 压杆、y 拉杆、r 蹬舵）
+// 教官：把机头带到瞄准方向（返回杆量 x 压杆、y 拉杆、r 蹬舵）——升力矢量指向：
+//   机头按偏差的 1.6 倍角速度转向准星（最多按 7.5 g 能转的那么快），算出要的横向加速度，再加上抵消重力的那一份，就是机翼该给的升力；
+//   要的升力大：滚转让升力（座舱顶方向）对准它，按它在座舱顶方向上的分量要过载（滚到位之前不往别处拉）；
+//   要的升力小（准星就在前方附近）：按水平方向要的那一份压坡度（倒飞时先滚回正飞），竖直方向靠拉杆 / 推杆——升力很小时它的方向极不稳定，照着滚会来回晃；
+//   横向偏差几度以内：机头靠方向舵先蹬过去，坡度按「航迹」（速度方向）还差多少压，航迹约 0.7 秒跟上——机头、航迹一起对上，松舵不会偏回去；
+//   正飞时准星在下方 20° 以内：保持正飞直接推杆；离地近时准星压得再低也只按安全的下滑角飞（像《战争雷霆》的教官不让飞机撞地）
+//   原来偏差小时只按偏差压一点坡度、保持 1 g：转弯角速度跟偏差的平方一样小，偏 8° 要十几秒才对上，鼠标指哪儿飞机半天转不过去
 function fpInstr(F) {
-  const R = flRot(F.q), A = fpAimDir(), b = flMtv(R, [A[1], A[0], -A[2]]);   // 瞄准方向换到机体系（前右下）
-  const off = Math.acos(clamp(b[0], -1, 1)), phiE = Math.atan2(b[1], -b[2]), eL = Math.atan2(-b[2], b[0]), eY = Math.atan2(b[1], b[0]);
-  // 准星在机头附近（20° 以内）：只按左右偏差压坡度（最多约 55°）、按上下偏差拉杆——目标在机头附近时「滚到目标在头顶」的方位来回跳，会左右乱压杆；
-  //   偏得多（35° 以上）：滚到目标在座舱顶方向，滚到位了再拉；中间平滑过渡。滚转加角速度阻尼，压杆不过头
-  const phi = flEul(F.q)[0], pm = (FL_AC[F.k] || {}).pmax || 3, w = smooth(.35, .6, off);
-  const phD = clamp(eY * 4, -.95, .95), rollE = lerp(airAng(phD - phi), phiE, w);
-  const yS = clamp(eL * 7.5, -.32, .8), yB = clamp(off * 3.4, 0, .8) * Math.max(0, Math.cos(phiE)) ** 2;   // 教官最多拉到约 7.5 g（玩家自己拉杆能到 9 g）：准星甩过去机头跟得紧，不发肉
-  return { x: clamp((rollE * 3.4 - F.w[0] * .34) / pm, -1, 1), y: lerp(yS, yB, w), r: clamp(eY * 3, -1, 1) * (1 - w) * .5 };
+  const A0 = FL_AC[F.k] || {}, R = flRot(F.q), [phi, th, psi] = flEul(F.q), Va = Math.max(F.Va || 0, 60), pm = A0.pmax || 3, nz = A0.nz || [-3, 8], M = V3FP.ins;
+  // 避地：按离地高度（往前 2、4 秒的地面也算上）限制最陡的下滑角，6 秒内掉的高度不超过离地高度减 80 米
+  let [ay0, ap0] = V3FP.aim;
+  if (Math.abs(ap0) < 1.5 && typeof flGround === 'function') {
+    let gz = -2.6; for (const k of [0, 2, 4]) gz = Math.max(gz, flGround(F.P[0] + F.V[0] * k, F.P[1] + F.V[1] * k));
+    const gmin = -Math.asin(clamp((-F.P[2] - gz - 80) / (Va * 6), 0, .95));
+    if (ap0 < gmin) ap0 = gmin;
+  }
+  const c0 = Math.cos(ap0), A = [c0 * Math.cos(ay0), -c0 * Math.sin(ay0), Math.sin(ap0)], b = flMtv(R, [A[1], A[0], -A[2]]);   // 瞄准方向换到机体系（前右下）
+  const off = Math.acos(clamp(b[0], -1, 1)), eY = Math.atan2(b[1], b[0]), be = F.b || 0, fine = 1 - smooth(.045, .12, Math.abs(eY));   // 横向偏差 2.5° 以内全按航迹修、7° 以上全按机头的矢量；be 侧滑（航迹在机头右边为正）
+  // 垂直于机头、朝着准星的方向（准星在正后方时先往座舱顶方向拉）；要的角速度 → 加速度
+  const tl = Math.hypot(b[1], b[2]), back = b[0] < 0 && tl < .05, ty = back || tl < 1e-9 ? 0 : b[1] / tl, tz = back ? -1 : tl < 1e-9 ? 0 : b[2] / tl;
+  const om = Math.min(1.6 * off, 7.5 * FL_G / Va), gb = flMtv(R, [0, 0, FL_G]);   // 重力（机体系）
+  const ay = lerp(ty * Va * om, clamp(Va * 1.4 * (eY - be), -4 * FL_G, 4 * FL_G), fine), az = tz * Va * om;
+  const fy = ay - gb[1], fz = az - gb[2], fl = Math.hypot(fy, fz) / FL_G;   // 机翼该给的升力（比力，机体系的右、下分量）
+  // 推杆：正飞（坡度 60° 以内）、准星在下方 20° 以内（要往下的比重力还多）——保持正飞直接推；有滞回，不来回跳
+  if (M.push) { if (fz < -.3 * FL_G || off > .45 || Math.abs(phi) > 1.2) M.push = false; }
+  else if (fz > .2 * FL_G && off < .35 && Math.abs(phi) < 1) M.push = true;
+  // 滚转（都是「还要再滚多少」）：full 让座舱顶对准要的升力；soft 按水平方向要的加速度算该有的坡度（世界水平为准，倒飞时滚回正飞）
+  const dN = flMv(R, [0, ay, az]), ayW = -Math.sin(psi) * dN[0] + Math.cos(psi) * dN[1];   // 要的加速度在水平「右」方向上的分量
+  const soft = airAng(clamp(Math.atan2(ayW, FL_G), -1.3, 1.3) - phi), wr = M.push ? 0 : smooth(1.2, 2.5, fl);
+  let rollE = soft + airAng(Math.atan2(fy, -fz) - soft) * wr;
+  if (Math.abs(rollE) > 2.6 && M.rs && Math.sign(rollE) !== M.rs) rollE += 2 * Math.PI * M.rs;   // 要滚将近半圈：接着往刚才那边滚，不在 ±180° 处来回换方向
+  M.rs = Math.sign(rollE) || M.rs || 1;
+  // 过载：升力在现在的座舱顶方向上的分量（滚到位之前少拉）；推杆时可以到负过载下限。换成电传的杆量（flight.js：松杆 = 保持航迹的过载 n0）
+  const nc = clamp(-fz / FL_G, M.push ? nz[0] : -1, 7.5), cf = Math.cos(phi), n0 = Math.cos(th) * (cf + smooth(1.05, .85, Math.abs(phi)) * (1 / Math.max(cf, .4) - cf));
+  const y = nc >= n0 ? (nc - n0) / Math.max(.5, nz[1] - n0) : -(n0 - nc) / Math.max(.5, n0 - nz[0]);
+  return { x: clamp((rollE * 4 - F.w[0] * .35) / pm, -1, 1), y: clamp(y, -1, 1), r: clamp(eY * 16, -1, 1) * fine };
 }
 // 手柄（标准布局）：左摇杆杆、扳机油门、肩键方向舵、右摇杆自由视角；A 开火、B 视角、X 加力、Y 换武器
 function fpGamepad() {
@@ -735,6 +762,7 @@ if (typeof window !== 'undefined' && window.addEventListener) {
         if (e.code === 'KeyN' && V3FP.vw === 'tgp') ftModeNext();
         if (e.code === 'KeyZ' && V3FP.vw === 'tgp') ftZoomStep();
       }
+      if (e.code === 'KeyI' && typeof fiToggle === 'function') fiToggle();   // 机型与挂载参数面板（fpinfo.js）
       const dg = /^Digit([1-6])$/.exec(e.code);
       if (dg) fwSel(+dg[1] - 1);
       if (e.code === 'KeyC') { V3FP.free = true; if (V3FP.ctl === 'stick') V3FP.ms = [0, 0]; }   // 按住自由视角（鼠标摇杆时顺便杆回中）
@@ -753,7 +781,7 @@ if (typeof window !== 'undefined' && window.addEventListener) {
   window.addEventListener('pointermove', e => {
     if (!V3FP.on) return;
     let dx = 0, dy = 0;
-    if (fpLocked()) { dx = e.movementX || 0; dy = e.movementY || 0; }
+    if (fpLocked()) { dx = e.movementX || 0; dy = e.movementY || 0; if (Math.abs(dx) > 250 || Math.abs(dy) > 250) return; }   // 刚锁定鼠标、切窗口回来时浏览器偶尔报一次几百像素的假位移：丢掉（不然准星一下甩到身后，飞机莫名其妙掉头）
     else if (V3FP.drag) { dx = e.clientX - V3FP.drag[0]; dy = e.clientY - V3FP.drag[1]; V3FP.drag = [e.clientX, e.clientY]; }
     if (!dx && !dy) return;
     if (V3FP.k === 'air') {
@@ -845,6 +873,7 @@ function fpUi() {
       mk(Rg, '红外', () => { if (air() && V3FP.vw === 'tgp') ftModeNext(); });
     }
     mk(Rg, '视角', () => { if (air()) fpView(); });
+    if (typeof fiToggle === 'function') mk(Rg, '参数', () => { if (air()) fiToggle(); });   // 机型与挂载参数（fpinfo.js）
     mk(Rg, '回正', () => { V3FP.look = [0, 0]; V3FP.orb = [0, 0]; V3FP.ms = [0, 0]; });
     mk(Rg, '列表', () => fpMenu(true));
     mk(Rg, '退出', () => fpExit());
