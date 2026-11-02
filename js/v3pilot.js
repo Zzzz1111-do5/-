@@ -819,6 +819,7 @@ function v3fpOverlay(ctx) {
   if (!tgp && typeof fwHud === 'function') fwHud(ctx);
   if (!tgp && !big && V3FP.ctl === 'ace') fpAimMark(ctx);   // 准心（鼠标上下移动它）与飞机实际飞去的方向
   if (!tgp && !big) fpHudData(ctx, CAM.vw, CAM.vh);
+  { const P = fpPose(); if (P) fpRwr(ctx, CAM.vw, CAM.vh, P, tgp || big); }   // 雷达告警：吊舱、导弹全屏视角里也照样响、照样出字
   if (typeof ftOverlay === 'function') ftOverlay(ctx);   // 吊舱符号、吊舱锁定框、机型与挂载参数面板（fptgp.js、fpinfo.js）
   if (V3FP.mv != null && !V3FP.mBig && V3FP.pipOn) fpPipFrame(ctx);
   if (big) fpSeekHud(ctx, 0, 0, CAM.vw, CAM.vh, V3.cam, true);   // 全屏导弹视角：导引头的符号
@@ -903,38 +904,64 @@ function fpHudData(ctx, w, h) {
   else if (!F.gnd && agl < 400 && vs < -Math.max(8, agl / 6) && !(g > .99 && agl < 60 && vs > -6)) ctx.fillText('拉起', cx, y0 - 26);   // 低空、下沉快：再这样几秒就撞了
   ctx.restore();
   if (g > .5 && cvOk && !F.gnd) fpMeatball(ctx, w, h, P);
-  fpRwr(ctx, w, h, P);
 }
-// 雷达告警（右下角武器表上面一个小圆）：机头朝上，照着你的敌雷达按方位画——S 防空导弹、A 高炮、F 战斗机、N 军舰、E 警戒雷达；
-//   越危险越靠里（正在用导弹打你的在最里圈、红色闪），被我方干扰压着的画成淡蓝带个斜杠；飞向你的导弹在外圈画红三角，下面「导弹来袭」和钟点方位
-function fpRwr(ctx, w, h, P) {
+// 雷达告警（照真实战斗机的雷达告警接收机）：
+//   右下角武器表上面一个小圆，机头朝上，照着你的敌雷达按方位画——S 防空导弹、A 高炮、F 战斗机、N 军舰、E 警戒雷达；越危险越靠里：
+//     只是在搜索、照到你的绿色，进了它射程的橙色，锁定了你的红色（最里圈），正在用导弹打你的红色闪；被我方干扰压着的淡蓝带斜杠；飞向你的导弹在外圈画红三角。
+//   声音（Web Audio）：被锁定——每 0.25 秒一声「嘀」；导弹来袭——高低音交替的急促警报。平显上方出大字：「雷达锁定」（方位）/「导弹来袭」（钟点方位、距离，Z 热诱弹）。
+//   clean：吊舱、导弹全屏视角里只出大字、响声音，不画小圆
+function fpRwr(ctx, w, h, P, clean) {
   const o = V3FP.o;
   if (!o || typeof ewRwr !== 'function') return;
-  const R = ewRwr(o), r = 44, cx = w - 16 - r, cy = h - 16 - 18 * 5 - r - 14, blink = (performance.now() / 250 | 0) % 2;
-  ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.7)'; ctx.shadowBlur = 3;
-  ctx.fillStyle = 'rgba(0,14,8,.45)'; ctx.beginPath(); ctx.arc(cx, cy, r, 0, 6.2832); ctx.fill();
-  ctx.strokeStyle = 'rgba(125,255,176,.7)'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.arc(cx, cy, r, 0, 6.2832); ctx.stroke();
-  ctx.strokeStyle = 'rgba(125,255,176,.3)'; ctx.beginPath(); ctx.arc(cx, cy, r * .5, 0, 6.2832); ctx.moveTo(cx, cy - r); ctx.lineTo(cx, cy - r + 6); ctx.stroke();
-  ctx.font = '11px "IBM Plex Mono", monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  const at = (x, y, k) => { const rel = Math.atan2(y - P.y, x - P.x) - P.yaw; return [cx + Math.sin(rel) * k, cy - Math.cos(rel) * k]; };   // rel：相对机头的方位（顺时针为正），正前方画在最上面
-  for (const e of R.em) {
-    const k = r * (e.lock ? .3 : .45 + .45 * clamp(e.d / (e.R0 * 1.6), 0, 1)), [x, y] = at(e.x, e.y, k), L = { sam: 'S', aaa: 'A', ftr: 'F', ship: 'N', ews: 'E' }[e.k] || '?';
-    ctx.fillStyle = e.lock ? (blink ? '#ff4a4a' : '#ffd0d0') : e.jam ? '#7fd8ff' : e.d < e.R0 ? '#ffb84a' : '#7dffb0';
-    ctx.fillText(L, x, y);
-    if (e.jam) { ctx.strokeStyle = '#7fd8ff'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x - 5, y + 5); ctx.lineTo(x + 5, y - 5); ctx.stroke(); }
+  const R = ewRwr(o), r = 44, cx = w - 16 - r, cy = Math.min(h - 16 - 18 * 5, V3FP.wtTop || h) - r - 14, blink = (performance.now() / 250 | 0) % 2;
+  const rel = (x, y) => Math.atan2(y - P.y, x - P.x) - P.yaw, clock = a => Math.round(((a % 6.2832) + 6.2832) % 6.2832 / 6.2832 * 12) % 12 || 12;   // rel：相对机头的方位（顺时针为正）；钟点方位：正前方 12 点
+  let near = null, lk = null;
+  for (const m of R.msl) if (!near || m.d < near.d) near = m;
+  for (const e of R.em) if (e.trk && (!lk || e.d < lk.d)) lk = e;
+  fpRwrSound(near ? 2 : lk ? 1 : 0);
+  ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.7)'; ctx.shadowBlur = 3; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  if (!clean) {
+    ctx.fillStyle = 'rgba(0,14,8,.45)'; ctx.beginPath(); ctx.arc(cx, cy, r, 0, 6.2832); ctx.fill();
+    ctx.strokeStyle = near || lk ? 'rgba(255,74,74,.85)' : 'rgba(125,255,176,.7)'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.arc(cx, cy, r, 0, 6.2832); ctx.stroke();
+    ctx.strokeStyle = 'rgba(125,255,176,.3)'; ctx.beginPath(); ctx.arc(cx, cy, r * .5, 0, 6.2832); ctx.moveTo(cx, cy - r); ctx.lineTo(cx, cy - r + 6); ctx.stroke();
+    ctx.font = '11px "IBM Plex Mono", monospace';
+    const at = (x, y, k) => { const a = rel(x, y); return [cx + Math.sin(a) * k, cy - Math.cos(a) * k]; };
+    for (const e of R.em) {
+      const k = r * (e.trk ? .3 : .45 + .45 * clamp(e.d / (e.R0 * 1.6), 0, 1)), [x, y] = at(e.x, e.y, k), L = { sam: 'S', aaa: 'A', ftr: 'F', ship: 'N', ews: 'E' }[e.k] || '?';
+      ctx.fillStyle = e.lock ? (blink ? '#ff4a4a' : '#ffd0d0') : e.trk ? '#ff4a4a' : e.jam ? '#7fd8ff' : e.d < e.R0 ? '#ffb84a' : '#7dffb0';
+      ctx.fillText(L, x, y);
+      if (e.trk) { ctx.strokeStyle = ctx.fillStyle; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(x, y, 7, 0, 6.2832); ctx.stroke(); }   // 锁定的：符号外加一圈
+      if (e.jam) { ctx.strokeStyle = '#7fd8ff'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x - 5, y + 5); ctx.lineTo(x + 5, y - 5); ctx.stroke(); }
+    }
+    for (const m of R.msl) {
+      const [x, y] = at(m.x, m.y, r - 4);
+      ctx.fillStyle = '#ff4a4a'; ctx.beginPath(); ctx.moveTo(x, y - 5); ctx.lineTo(x + 4.5, y + 4); ctx.lineTo(x - 4.5, y + 4); ctx.closePath(); ctx.fill();
+    }
   }
-  let near = null;
-  for (const m of R.msl) {
-    const [x, y] = at(m.x, m.y, r - 4);
-    ctx.fillStyle = '#ff4a4a'; ctx.beginPath(); ctx.moveTo(x, y - 5); ctx.lineTo(x + 4.5, y + 4); ctx.lineTo(x - 4.5, y + 4); ctx.closePath(); ctx.fill();
-    if (!near || m.d < near.d) near = m;
-  }
+  // 平显上方的大字（画面中间偏上，不挡准心）
+  const ty = h * .24;
   if (near) {
-    const rel = Math.atan2(near.y - P.y, near.x - P.x) - P.yaw, ck = Math.round(((rel % 6.2832) + 6.2832) % 6.2832 / 6.2832 * 12) % 12 || 12;   // 钟点方位：正前方 12 点
-    ctx.font = '14px "IBM Plex Mono", "Noto Sans SC", monospace'; ctx.fillStyle = blink ? '#ff4a4a' : '#ffd0d0';
-    ctx.fillText(`导弹来袭 ${ck} 点 ${(near.d / 1000).toFixed(1)}km`, cx - r - 70, cy);
+    ctx.font = 'bold 22px "IBM Plex Mono", "Noto Sans SC", monospace'; ctx.fillStyle = blink ? '#ff3b3b' : '#ffd0d0';
+    ctx.fillText(`导弹来袭  ${clock(rel(near.x, near.y))} 点  ${(near.d / 1000).toFixed(1)} km`, w / 2, ty);
+    ctx.font = '13px "IBM Plex Mono", "Noto Sans SC", monospace'; ctx.fillStyle = '#ffd0d0';
+    ctx.fillText(`${R.msl.length > 1 ? `${R.msl.length} 枚 · ` : ''}Z 热诱弹 · 急转、往下拉开距离`, w / 2, ty + 22);
+  } else if (lk) {
+    const L = { sam: '防空导弹', aaa: '高炮', ftr: '战斗机', ship: '军舰' }[lk.k] || '火控雷达';
+    ctx.font = 'bold 20px "IBM Plex Mono", "Noto Sans SC", monospace'; ctx.fillStyle = '#ff6a4a';
+    ctx.fillText(`雷达锁定  ${L}  ${clock(rel(lk.x, lk.y))} 点`, w / 2, ty);
   }
   ctx.restore();
+}
+// 雷达告警的声音（audio.js 的 Web Audio，按音频时钟排好下一声，不受帧率影响）：mode 0 静音、1 锁定（每 0.25 秒一声 1100 Hz）、2 导弹来袭（900 / 1400 Hz 交替，每 0.09 秒换一次）
+function fpRwrSound(mode) {
+  if (typeof AU !== 'object' || !AU.ctx || typeof auOk !== 'function' || !auOk() || typeof auTone !== 'function') return;
+  const t = AU.ctx.currentTime;
+  if (!mode) { V3FP.rwM = 0; return; }
+  if (V3FP.rwM !== mode || !(V3FP.rwT > t - .3)) { V3FP.rwM = mode; V3FP.rwT = t + .02; V3FP.rwI = 0; }
+  while (V3FP.rwT < t + .15) {
+    if (mode === 1) { auTone('sfx', 'square', 1100, V3FP.rwT, .1, .05); V3FP.rwT += .25; }
+    else { auTone('sfx', 'square', V3FP.rwI++ % 2 ? 1400 : 900, V3FP.rwT, .08, .06); V3FP.rwT += .09; }
+  }
 }
 // 着舰引导（光学助降系统的样子）：放下起落架、在航母斜角甲板延长线后方 6 公里内——下滑道 3.5°，光球在中间就对了，偏高往上、偏低往下；
 //   下面一行：离接地点多远、偏左偏右多少米、该飞的迎角
