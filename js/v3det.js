@@ -330,7 +330,9 @@ function v3dHot(t, a) {
 }
 // AI 开的喷气机的尾喷口开合（画面用，v3units.js 画飞机时传给 v3gPlane）：照真实的收敛扩散喷口——慢车张开、巡航中间、不开加力的最大推力收到最小、
 //   开加力张到最大（加力燃烧后燃气体积大得多，喷口不张大发动机会喘振）；与玩家开的（v3pilot.js FP_NOZ）同一套，按 v3dEng 记的热度、加力
-const v3dNozK = E => E.b > .02 ? lerp(-.13, .24, sm01(E.b)) : E.h < .65 ? lerp(.1, 0, clamp((E.h - .3) / .35, 0, 1)) : lerp(0, -.13, clamp((E.h - .65) / .35, 0, 1));
+//   幅度按真实收敛扩散喷口：出口半径军推 0.8、加力 1.38（比 1.7 倍，F100 喷口模型两个形态之比 1.66）、慢车 1.18——原来 0.87–1.24，追尾镜头里只差一两个像素，看着像不会动（用户：喷口加力还是不会收缩）
+const NZ_LO = -.2, NZ_HI = .38, NZ_IDLE = .18;
+const v3dNozK = E => E.b > .02 ? lerp(NZ_LO, NZ_HI, sm01(E.b)) : E.h < .65 ? lerp(NZ_IDLE, 0, clamp((E.h - .3) / .35, 0, 1)) : lerp(0, NZ_LO, clamp((E.h - .65) / .35, 0, 1));
 function v3dNozAI(o, sd) {
   const E = V3D_ENG.get((sd ? 'e' : 'p') + o.id);
   return !E || E.S !== S ? 0 : v3dNozK(E);
