@@ -117,8 +117,9 @@ function v3nzPlane(mk, M, ox, oy, oz, h, k, roll, pitch, noz) {
   const m = V3NZ.meta, C = V3G.C, E = C ? C.E : null;
   const U = v3dMv3(h, pitch, roll, [-1, 0, 0]), Vv = v3dMv3(h, pitch, roll, [0, 1, 0]);
   // 开合：出口内半径 = 模型 noz 半径 × (1 + noz)；收到最小（noz = kmin）对应形态 0，往上按出口半径线性插值
-  const w = clamp(((1 + noz) / (1 + F.kmin) - 1) / (m.r1 - 1), 0, 1);
-  const ht = noz < 0 ? clamp(-noz / .13, 0, 1) : 0, ab = clamp((noz - .12) / .12, 0, 1);   // 推力大小（只用来定内壁热光：收得越小推力越大；张过慢车那一档就是开了加力）
+  //   开合参数（v3det.js NZ_LO 军推 – NZ_HI 加力）直接对两个形态：军推收到最小（形态 0）、加力张到最大（形态 1），慢车约张开三分之二
+  const w = clamp((noz - NZ_LO) / (NZ_HI - NZ_LO), 0, 1);
+  const ht = noz < 0 ? clamp(noz / NZ_LO, 0, 1) : 0, ab = clamp((noz - NZ_IDLE) / (NZ_HI - NZ_IDLE), 0, 1);   // 推力大小（只用来定内壁热光：收得越小推力越大；张过慢车那一档就是开了加力）
   for (const n of M.meta.noz || []) {
     if (n[5]) continue;   // 扁平的二元喷口不换
     const S = n[3] * (1 + F.kmin) * k;

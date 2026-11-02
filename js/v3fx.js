@@ -166,10 +166,41 @@ function v3Fx(C) {
     const p0 = v3fP(lerp(t.x0, t.x1, u0), lerp(t.y0, t.y1, u0), g(t.x0, t.y0) + 1.6), p1 = v3fP(lerp(t.x0, t.x1, u), lerp(t.y0, t.y1, u), lerp(g(t.x0, t.y0) + 1.6, g(t.x1, t.y1) + 1, u));
     v3fRib(out, E, p0, p1, .7, [col[0], col[1], col[2], 0], [col[0], col[1], col[2], .95 * a]);
   }
-  // —— 玩家亲自开的飞机的航炮（fpwpn.js）：每发弹这一步走过的一段画成曳光，刚开火时炮口一团焰 ——
-  if (typeof fwBul === 'function') {
-    for (const b of fwBul()) v3fRib(out, E, b.q, b.p, .45, [V3F_COL.amber[0], V3F_COL.amber[1], V3F_COL.amber[2], 0], V3F_COL.amber);
-    if (typeof V3FP === 'object' && V3FP.gunMz && performance.now() - (V3FP.gunT || 0) < 70) v3fSpark(out, C, V3FP.gunMz, 2.4, V3F_COL.amber);
+  // —— 玩家亲自开的飞机的航炮（fpwpn.js）——
+  //   曳光弹（每三发一发）：亮黄白的弹芯拖着这一步走过的一段、外面一圈更长的橙红光晕，越往后越淡，烧 2.4 秒后暗下去、3 秒熄灭（其余弹丸看不见，照样飞、算命中）；
+  //   炮口焰：每帧大小不一的一闪；炮口硝烟：一团团留在空中慢慢胀大、变淡（飞机一下就飞过去，拖出一条烟）；
+  //   命中：空中——高爆弹一闪、一小团火球、一团黑烟；地上——一闪、一团往上翻的土黄尘土；水面——一股白色水柱
+  if (typeof fwBul === 'function' && typeof V3FP === 'object') {
+    const now = performance.now();
+    for (const b of fwBul()) {
+      if (!b.tr || b.t > 3) continue;
+      const fd = b.t > 2.4 ? 1 - (b.t - 2.4) / .6 : 1, d = [b.p[0] - b.q[0], b.p[1] - b.q[1], b.p[2] - b.q[2]], tl = [b.p[0] - d[0] * 1.5, b.p[1] - d[1] * 1.5, b.p[2] - d[2] * 1.5];
+      v3fRib(out, E, tl, b.p, 1.5, [1, .3, .06, 0], [1, .42, .1, .5 * fd]);   // 光晕
+      v3fRib(out, E, b.q, b.p, .34, [1, .62, .25, 0], [1, .93, .7, fd]);   // 弹芯
+      v3fSpark(out, C, b.p, .55, [1, .85, .55, .9 * fd]);   // 弹头最亮的一点
+    }
+    if (V3FP.gunMz && now - (V3FP.gunT || 0) < 70) { const r = 1.4 + Math.random() * 1.8; v3fSpark(out, C, V3FP.gunMz, r, [1, .78, .42, .95]); v3fSpark(out, C, V3FP.gunMz, r * .45, [1, .97, .9, 1]); }
+    for (const s of V3FP.gSm || []) {
+      const a = (now - s.t) / 1000;
+      if (a < 0 || a > 1.6) continue;
+      v3fBillow(sm, C, [s.p[0], s.p[1], s.p[2] + a * .4], .5 + a * 1.9 + s.s * .4, [.72, .72, .69, .32 * (1 - a / 1.6)], 1, (s.s * 15) | 0);
+    }
+    for (const f of V3FP.gFx || []) {
+      const a = (now - f.t) / 1000, p = f.p;
+      if (a < 0 || a > 2) continue;
+      if (f.k === 'air') {
+        if (a < .07) v3fSpark(out, C, p, 3.2, [1, .95, .8, 1]);
+        if (a < .4) v3fBillow(out, C, p, 1.4 + a * 5, [1, .5, .14, .85 * (1 - a / .4)], 2, (f.s * 15) | 0);   // 火球
+        if (a < 1.8) v3fBillow(sm, C, [p[0], p[1], p[2] + a * .6], 1 + a * 2.2 + f.s, [.13, .12, .11, .6 * (1 - a / 1.8)], 1, (f.s * 15 + 3) | 0);   // 黑烟
+      } else if (f.k === 'gnd') {
+        if (a < .06) v3fSpark(out, C, [p[0], p[1], p[2] + .8], 1.8, [1, .85, .55, .95]);
+        if (a < 1.8) v3fBillow(sm, C, [p[0], p[1], p[2] + .6 + a * 1.4], .9 + a * 2.4 + f.s * .6, [.42, .36, .27, .65 * (1 - a / 1.8)], 1, (f.s * 15) | 0, .3);   // 尘土
+      } else if (a < 1.3) {   // 水面：一股白色水柱，先往上冲、再落下散开
+        const h = 3.2 * Math.sin(Math.min(1, a / 1.1) * Math.PI);
+        v3fBillow(sm, C, [p[0], p[1], p[2] + h * .5], .6 + a * 1.3, [.88, .92, .95, .65 * (1 - a / 1.3)], 1, (f.s * 15) | 0, .5);
+        v3fBillow(sm, C, [p[0], p[1], p[2] + h], .4 + a, [.92, .95, .97, .5 * (1 - a / 1.3)], 1, (f.s * 15 + 5) | 0, .5);
+      }
+    }
   }
   // —— 坦克炮、机关炮、喷火 ——
   for (const s of S.vshots || []) {

@@ -691,7 +691,7 @@ function fpMdlXf(o) {
   return { rot, pt: v => { const r = rot([v[0] * k, v[1] * k, (v[2] - zc) * k]); return [ox + r[0], -oy + r[1], z + r[2]]; } };
 }
 // 尾喷口开合（v3units.js 画飞机时传给 v3gPlane）：真实的收扩喷口——慢车张开、巡航中间、不开加力的最大推力收到最小、开加力张到最大；作动筒约一秒到位
-const FP_NOZ = [.1, 0, -.13, .24];
+const FP_NOZ = [.18, 0, -.2, .38];   // 慢车、巡航、军推（收到最小）、加力（张到最大）——同 v3det.js NZ_*
 const fpNoz = o => V3FP.on && V3FP.o === o ? V3FP.nozV || 0 : 0;
 // —— 导弹视角：发射后右上角一块小屏放这枚弹的导引头画面（不切走主画面，主画面还是你的飞机，照常飞、照常开火）——
 //   像真实的电视 / 红外制导弹回传给座舱的画面：镜头在弹头上、盯着导引头跟踪的目标点（fwFly 平滑过的 m.fw.tq；离弹轴 70° 以外看不到就顺着弹飞的方向看），
@@ -804,8 +804,11 @@ function v3fpStep(now) {
   if (V3FP.k === 'air' && V3FP.vw === 'tgp' && typeof ftCenter === 'function') ftCenter();   // 吊舱：画面中心是它盯着的那一点
   V3FP.lock = V3.cam && V3FP.k === 'ship' ? fpLockTarget() : null;
   if (V3FP.k === 'air') {   // 尾喷口：按油门、加力（油尽熄火时张开）慢慢开合
-    const dt = clamp((now - (V3FP.nozT || now)) / 1000, 0, .1), F = o.fl, want = (o.fuel ?? 1) > 0 ? (F && F.ab ? FP_NOZ[3] : V3FP.thr > .92 ? FP_NOZ[2] : V3FP.thr > .45 ? FP_NOZ[1] : FP_NOZ[0]) : .15;
-    V3FP.nozT = now; V3FP.nozV = (V3FP.nozV || 0) + (want - (V3FP.nozV || 0)) * Math.min(1, dt * 1.6);
+    //   推加力时照真实的顺序：发动机先转到军推、喷口收到最小，约 0.6 秒后加力点着、喷口张到最大（看得出先收后张）；作动筒约 0.3 秒跟上
+    const dt = clamp((now - (V3FP.nozT || now)) / 1000, 0, .1), F = o.fl, abOn = !!(F && F.ab);
+    V3FP.abLt = abOn ? (V3FP.abLt || 0) + dt : 0;
+    const want = (o.fuel ?? 1) > 0 ? (abOn ? (V3FP.abLt < .6 ? FP_NOZ[2] : FP_NOZ[3]) : V3FP.thr > .92 ? FP_NOZ[2] : V3FP.thr > .45 ? FP_NOZ[1] : FP_NOZ[0]) : .25;   // 油尽熄火：喷口张开
+    V3FP.nozT = now; V3FP.nozV = (V3FP.nozV || 0) + (want - (V3FP.nozV || 0)) * Math.min(1, dt * 3.2);
   }
   // 这型飞机的座舱盖玻璃：从外面也看得见座舱里面；平显玻璃（模型里是一整块不透明的亮绿色）换成透明的淡绿玻璃（v3g.js）
   if (typeof V3G === 'object') { const mk = V3FP.k === 'air' ? fpMdlKey(o) : null; V3G.glass = mk ? { key: mk, k: .6, hud: typeof V3G_PIT === 'object' && V3G_PIT[mk] ? V3G_PIT[mk].hud : null } : null; }
