@@ -332,11 +332,11 @@ async function uiSetup(p, sh) {
 //    渲染时记下的音效按时间线回放；换幕处加重击 ——
 async function stepAudio(b) {
   const snd = JSON.parse(fs.readFileSync(SFX, 'utf8'));
-  const b2 = await chromium.launch({ args: ['--autoplay-policy=no-user-gesture-required'] });
+  const b2 = await chromium.launch({ args: ['--autoplay-policy=no-user-gesture-required', '--allow-file-access-from-files'] });
   const p = await b2.newPage();
   await p.addInitScript(() => { window.requestAnimationFrame = () => 0; try { localStorage.clear(); localStorage.setItem('bh-settings', JSON.stringify({ intro: false, music: .9, sfx: .5, radio: .45, musicStyle: 'ambient' })); } catch (e) { /* 只影响声音 */ } });
-  await p.goto('file://' + ROOT + '/index.html');
-  await p.waitForFunction(() => typeof MENU === 'object' && MENU.open, null, { timeout: 90000 });
+  await p.goto('file://' + ROOT + '/index.html', { timeout: 300000, waitUntil: 'domcontentloaded' });
+  await p.waitForFunction(() => typeof MENU === 'object' && MENU.open, null, { timeout: 300000, polling: 1000 });
   const b64 = await p.evaluate(async ([snd, LEN, PRE]) => {
     auInit(); await AU.ctx.resume();
     const c = AU.ctx, d = c.createMediaStreamDestination(); AU.master.connect(d);
