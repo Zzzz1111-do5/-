@@ -764,7 +764,65 @@ function v3gCtlCut(cf, m, VB, IB) {
 }
 // 按位置拆材质：mat 这种材质里三角形中心落在 box [x0, x1, y0, y1, z0, z1]（抬高后的坐标）里的，换成新材质 as（照原材质复制一份，V3G_PAINT 按名字上色）——
 //   歼-20 的雷达罩在模型里和喷管调节片等零件共用 Material.001，要单独涂深一点
-const V3G_RECOL = { j20: [{ mat: 'Material.001', box: [8.4, 11, -1.2, 1.2, 0, 6], as: 'radome' }] };
+//   歼-31 后机身腹部那一大块蒙皮在模型里是「Darkness」材质（原来照片贴图时代的黑色），整架涂成深灰后成了一块黑补丁——拆出来跟机身一个涂装
+const V3G_RECOL = { j20: [{ mat: 'Material.001', box: [8.4, 11, -1.2, 1.2, 0, 6], as: 'radome' }], j31: [{ mat: 'Darkness', box: [-6.3, -2.1, -1.9, 1.9, .9, 2.2], as: 'belly' }] };
+// 去掉模型里的内部结构：mat 这种材质里三个顶点都落在 box [x0, x1, y0, y1, z0, z1] 里的三角形——
+//   歼-31 机身里有一个浅灰的内部结构（base）和一块黑色隔框，都从蒙皮里戳出来一点：机背中线一串浅色亮点、机身中段一圈黑色虚线（用户：歼-35 有一种拼接感）；外面本来看不见，直接去掉
+const V3G_DROP = { j31: [{ mat: 'base', box: [-3.8, 3.2, -.5, .5, 1.2, 2.9] }, { mat: 'Darkness', box: [-.8, -.6, -1.9, 1.9, .9, 2.5] }] };
+function v3gDrop(cf, m, VB, IB) {
+  const st = m.st;
+  for (const R of cf) {
+    const mi = m.mats.findIndex(x => x.n === R.mat), b = R.box, In = v => { const o = v * st; return VB[o] >= b[0] && VB[o] <= b[1] && VB[o + 1] >= b[2] && VB[o + 1] <= b[3] && VB[o + 2] >= b[4] && VB[o + 2] <= b[5]; };
+    if (mi < 0) continue;
+    for (const lod of m.lod) for (const e of lod) {
+      if (e[0] !== mi || e[1] >= 0) continue;
+      let k = e[2];
+      for (let t = e[2]; t + 2 < e[2] + e[3]; t += 3) if (!(In(IB[t]) && In(IB[t + 1]) && In(IB[t + 2]))) { IB[k] = IB[t]; IB[k + 1] = IB[t + 1]; IB[k + 2] = IB[t + 2]; k += 3; }
+      e[3] = k - e[2];
+    }
+  }
+}
+// 重算平滑法线（用户：歼-35 有一种拼接感）——歼-31 原模型的蒙皮是一块块拼起来的：接缝两边的法线各算各的，接缝上几百个细长三角形的法线乱指（机背中线上有的法线偏了 60° 以上），
+//   原来贴着真机照片看不出；换成金属感强的歼-20 涂装后，接缝成了一串串亮点、相邻两块深浅对不上。
+//   mats 里的材质按坐标焊在一起（跨材质、跨块；同一部件里），每个顶点的法线 = 同一位置上、面法线与它自己那几个面夹角小于 ang 的所有面的面法线（按面积加权）之和；
+//   折角大于 ang 的棱（机翼前后缘、边条、垂尾根）照旧是硬边；自己那几个面全是细长三角形（面积不到 1 平方厘米）的顶点跟着周围的大面走
+const V3G_SMOOTH = { j31: { mats: ['Wing_bottom', 'main_body_bottom', 'main_body_bottom_front', 'side', 'main_body_upper_side', 'Wing_top', 'Tails.005', 'bottom_front'], ang: 40 } };
+function v3gSmooth(cf, m, VB, IB) {
+  const st = m.st, ms = new Set(cf.mats.map(n => m.mats.findIndex(x => x.n === n)).filter(i => i >= 0)), ct = Math.cos(cf.ang * Math.PI / 180);
+  const q = v => Math.round(VB[v * st] * 500) + ',' + Math.round(VB[v * st + 1] * 500) + ',' + Math.round(VB[v * st + 2] * 500);   // 2 毫米内算同一位置
+  for (let L = m.lod.length - 1; L >= 0; L--) {   // 各级网格各按自己的面算；和近处网格共用的顶点最后按近处的算
+    const F = [], G = new Map(), own = new Map();
+    for (const e of m.lod[L]) {
+      if (!ms.has(e[0])) continue;
+      for (let t = e[2]; t + 2 < e[2] + e[3]; t += 3) {
+        const a = IB[t] * st, b = IB[t + 1] * st, c = IB[t + 2] * st;
+        const ux = VB[b] - VB[a], uy = VB[b + 1] - VB[a + 1], uz = VB[b + 2] - VB[a + 2], wx = VB[c] - VB[a], wy = VB[c + 1] - VB[a + 1], wz = VB[c + 2] - VB[a + 2];
+        const nx = uy * wz - uz * wy, ny = uz * wx - ux * wz, nz = ux * wy - uy * wx, l = Math.hypot(nx, ny, nz);
+        if (l < 1e-10) continue;
+        const f = F.push([nx, ny, nz, nx / l, ny / l, nz / l, l]) - 1;   // 叉积长度 = 两倍面积（按面积加权）
+        for (let j = 0; j < 3; j++) {
+          const v = IB[t + j], k = q(v) + '|' + e[1];
+          let g = G.get(k); if (!g) G.set(k, g = new Set()); g.add(f);
+          let o = own.get(v); if (!o) own.set(v, o = { k, f: [] }); o.f.push(f);
+        }
+      }
+    }
+    for (const [v, o] of own) {
+      let rx = 0, ry = 0, rz = 0, ar = 0;
+      for (const f of o.f) { rx += F[f][0]; ry += F[f][1]; rz += F[f][2]; ar += F[f][6]; }
+      const g = G.get(o.k);
+      if (ar < 2e-4) { rx = ry = rz = 0; for (const f of g) { rx += F[f][0]; ry += F[f][1]; rz += F[f][2]; } }
+      const rl = Math.hypot(rx, ry, rz);
+      if (rl < 1e-12) continue;
+      rx /= rl; ry /= rl; rz /= rl;
+      let sx = 0, sy = 0, sz = 0;
+      for (const f of g) { const P = F[f]; if (P[3] * rx + P[4] * ry + P[5] * rz >= ct) { sx += P[0]; sy += P[1]; sz += P[2]; } }
+      const sl = Math.hypot(sx, sy, sz);
+      if (sl < 1e-12) continue;
+      VB[v * st + 3] = sx / sl; VB[v * st + 4] = sy / sl; VB[v * st + 5] = sz / sl;
+    }
+  }
+}
 function v3gRecol(cf, m, VB, IB) {
   const st = m.st;
   for (const R of cf) {
@@ -852,6 +910,8 @@ function v3gPrep(key, m, M, VB, IB) {
   if (mf) for (const i in mf) { const T = m.mats[i], F = mf[i]; if (!T) continue; if (F.am != null) T.am = F.am; if (F.a != null) T.c = [T.c[0], T.c[1], T.c[2], F.a]; }
   if (V3G_FLIP[key]) v3gFlip(m, VB);
   if (V3G_ROTSPLIT[key]) v3gRotor(V3G_ROTSPLIT[key], m, VB, IB);
+  if (V3G_DROP[key]) v3gDrop(V3G_DROP[key], m, VB, IB);   // 去掉从蒙皮里戳出来的内部结构（歼-31）
+  if (V3G_SMOOTH[key]) v3gSmooth(V3G_SMOOTH[key], m, VB, IB);   // 拼起来的蒙皮重算平滑法线（歼-31）
   let R = null;
   const use = r => { if (r) { R = r; VB = r.VB; IB = r.IB; } };   // 补了顶点的步骤换成更长的新数组，后面的步骤接着在新数组上做
   if (V3G_GEAR[key]) use(v3gGear(V3G_GEAR[key], m, VB, IB));   // 补起落架（整架抬高）：弹舱、座舱、挂点都按抬高后的坐标
@@ -874,8 +934,10 @@ const V3G_MATFIX = { z10w: { 0: { am: 0, a: 1 }, 1: { am: 0, a: 1 }, 2: { a: .08
 //   歼-35 海军浅灰、运-20 空军浅灰——照真机整架一种颜色（原来上下表面分两种灰、还顺着照片投影的贴图坐标贴一层平铺的漆面噪声：
 //   投影的各块贴图坐标疏密、方向不一，接缝处深浅和纹路都对不上，看着一块块拼起来——用户：涂装不要有拼接感），不贴漆面纹理（第 5 个值 1）；mr 金属度、粗糙度（哑光漆，略带一点光泽）
 const V3G_PAINT = {
-  // 歼-35：和歼-20 一个涂装（用户指定）——深灰微带青、吸波涂层里掺金属粉的那种反光（金属度 0.95、粗糙度 0.42），整架一种颜色、不叠纹理
-  j31: { def: [.21, .22, .215, [.95, .42], 1], mr: [.95, .42], keep: ['screen'], m: {} },
+  // 歼-35：和歼-20 一个色调（用户指定）——深灰微带青，整架一种颜色、不叠纹理；用户又要稍微哑光一点：
+  //   金属度 0.95 → 0.75、粗糙度 0.42 → 0.62（反光不再像镜面，高光铺开变柔），漫反射多了会显浅，底色压暗一点保持深灰。
+  //   模型里几块没贴图、原来是别的颜色的蒙皮（后机身腹部的 belly、机腹两块浅灰的 Material.002）也涂成一样的
+  j31: { def: [.165, .175, .17, [.75, .62], 1], mr: [.75, .62], keep: ['screen'], m: { belly: [.165, .175, .17, [.75, .62], 1], 'Material.002': [.165, .175, .17, [.75, .62], 1] } },
   y20: { def: [.25, .26, .27, [.1, .5], 1], mr: [.1, .5], keep: [], m: { Engine_metal: [.09, .09, .1, [.6, .4], 1], engine_mat: [.25, .26, .27, [.1, .5], 1] } },
   // 歼-16：机身照模型原贴图（不给 def）；只有喷口调节片（v3gPetals 拆出来的）涂成真喷口的不涂漆耐热合金——外表面暗枪灰带一点回火的褐铜色、哑光，内壁浅一些的钢灰（热障涂层）
   j16: { keep: [], mr: [.85, .5], m: { nozzle: [.1, .092, .078, [.85, .5], 1], nozzle_in: [.3, .29, .275, [.7, .42], 1] } },

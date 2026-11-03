@@ -95,7 +95,8 @@ function flInit(p) {
 // 推演一帧：inp = { x 压杆（右正，−1–1）, y 拉杆（拉为正）, r 蹬舵, thr 油门 0–1, ab 加力, law 'n' 正常律 / 'd' 直接律, ap 自动驾驶（离开作战区域时）,
 //   gear 起落架放下（true / false）, flap 襟翼档 0–1, sb 减速板（地面上是刹车）, hook 尾钩放下 }；返回 'ground' / 'sea' 表示撞地 / 落海；起降事件记在 F.ev
 function flStep(F, dt, inp) {
-  const A = FL_AC[F.k], D = FL_D, I = A.I, mk = inp.mk || 1, mp = inp.mkp || mk;   // mp：滚转角速度的放大（单独给，免得滚得太快不好控）   // mk：机动性放大（皇牌空战式操纵，v3pilot.js FP_MK）——升力、过载限制、滚转角速度一起乘上，飞机像机翼大三成、结构强三成，转得急、滚得快
+  const A = FL_AC[F.k], D = FL_D, I = A.I, mk = inp.mk || 1, mp = inp.mkp || mk, mt = inp.mt || 1;   // mp：滚转角速度的放大（单独给，免得滚得太快不好控）   // mk：机动性放大（皇牌空战式操纵，v3pilot.js FP_MK）——升力、过载限制、滚转角速度一起乘上，飞机像机翼大三成、结构强三成，转得急、滚得快
+  //   mt：推力放大（同上，FP_MT：推重比跟着机动性提高，耗油仍按真实推力算）
   let hit = null;
   // 起落架：放下 / 收起各约 5 秒；超过限速放不下（F.ev 提示一次）
   const gw = inp.gear ? 1 : 0;
@@ -117,10 +118,13 @@ function flStep(F, dt, inp) {
       // 俯仰：过载指令（松杆时按坡度补偿到能保持飞行轨迹的过载——倒飞时是负过载；拉杆往 +9 g、推杆往 −3 g）→ 迎角指令（不超迎角限制）→ 俯仰角速度指令 → 动态逆求升降舵
       //   坡度补偿只到约 50°（再大就是在做机动，靠拉杆），50°–60° 平滑退到「只抵重力分量」——原来在 80° 处一刀切，横滚滚过去时机头猛一点头
       const cf = Math.cos(phi), n0 = Math.cos(th) * (cf + smooth(1.05, .85, Math.abs(phi)) * (1 / Math.max(cf, .4) - cf)), nzc = inp.y >= 0 ? lerp(n0, A.nz[1] * mk + (inp.hg ? 2 : 0), inp.y) : lerp(n0, A.nz[0], -inp.y);
-      const ac = clamp(nzc * A.m * FL_G / (qS * A.CLa * mk), -.2, A.alim + (inp.hg ? .1 : 0));   // hg：高 G 急转——越过飞控的过载限制（多 2 g）、迎角多放 6°：转得更急，掉速度、黑视都快得多
+      //   hg：高 G 急转——越过飞控的过载限制（多 2 g）、迎角多放一点，但不过失速迎角（原来多放 6°，歼-20 一拉就进失速）
+      const kn = qS * A.CLa * mk / (A.m * FL_G), ac = clamp(nzc / kn, -.2, Math.min(A.alim + (inp.hg ? .1 : 0), A.as - .02));
       //   迎角回路增益按动压排（电传的增益调度）：高速 3.6（迎角约 0.28 秒跟上，拉到 9 g 约 0.6 秒），低速动压只有十分之一，舵面推不动、作动筒跟不上，
-      //   还按 3.6 要就来回过冲（迎角 −19° ↔ +24° 地点头，带着左右摇：用户说的低速摇摆），慢到进近速度退到 1.4
-      const ka = lerp(1.4, 3.6, smooth(4000, 16000, qb)), qc = clamp(ka * (ac - al) + FL_G / Vn * (nzc - Math.cos(th) * Math.cos(phi)), -1.5, 1.5);
+      //   还按 3.6 要就来回过冲（迎角 −19° ↔ +24° 地点头，带着左右摇：用户说的低速摇摆），慢到进近速度退到 1.4。
+      //   俯仰角速度的前馈按「迎角限制下拉得出的过载」ac × kn 算（用户：很容易失速）——原来按要的过载算：速度不够、要的过载拉不出来时，
+      //   前馈要的角速度比迎角回路往回收的还大，迎角一路冲过失速迎角（缠斗时 20 秒里有 17 秒在 40° 迎角的深失速里，边转边掉高度）
+      const ka = lerp(1.4, 3.6, smooth(4000, 16000, qb)), qc = clamp(ka * (ac - al) + FL_G / Vn * (ac * kn - Math.cos(th) * Math.cos(phi)), -1.5, 1.5);
       const Mreq = I[1] * lerp(3.5, 7, smooth(4000, 16000, qb)) * (qc - q) - (I[2] - I[0]) * p * r, M0 = qS * A.c * (D.Cm0 + D.Cma * al + D.Cmq * qh);   // 俯仰角速度回路同样按动压排：低速舵面饱和、作动筒跟不上时不来回打满舵
       de = (Mreq - M0) / (qS * A.c * D.Cmde);
       // 滚转：角速度指令（松杆保持坡度，坡度小于 8° 时自动改平）
@@ -137,11 +141,12 @@ function flStep(F, dt, inp) {
     for (let i = 0; i < 3; i++) F.d[i] = clamp(F.d[i] + clamp(clamp(cmd[i], -FL_DMAX[i], FL_DMAX[i]) - F.d[i], -FL_DRATE[i] * h, FL_DRATE[i] * h), -FL_DMAX[i], FL_DMAX[i]);
     // —— 气动力 ——
     const fl = F.flap || 0, sa = smooth(A.as, A.as + .25, Math.abs(al)), CL = mk * lerp(clamp(A.CLa * al + .45 * fl, -A.CLmax, A.CLmax + .45 * fl), 1.05 * Math.sin(2 * al), sa);   // 过了失速迎角升力掉下来、变成平板升力；襟翼加升力
-    const CD = A.CD0 * (1 + 1.3 * smooth(.85, 1.05, M) - .4 * smooth(1.2, 1.8, M)) + A.K * CL * CL + 1.3 * Math.sin(al) ** 2 * sa + .04 * (Math.abs(F.d[0]) + Math.abs(F.d[2]))
+    // 诱导阻力按机动性放大倍数除一下：升力放大后同样迎角的诱导阻力涨到 mk² 倍，满过载急转几秒就把速度耗光（用户：容易失速）——相当于翼展效率也跟着好一些
+    const CD = A.CD0 * (1 + 1.3 * smooth(.85, 1.05, M) - .4 * smooth(1.2, 1.8, M)) + A.K * CL * CL / mk + 1.3 * Math.sin(al) ** 2 * sa + .04 * (Math.abs(F.d[0]) + Math.abs(F.d[2]))
       + .018 * F.gear + .035 * fl + (F.sb ? .06 : 0);   // 起落架、襟翼、减速板的阻力
     const CY = D.CYb * be + D.CYdr * F.d[2];
-    const ab = !!inp.ab && F.fuel > 0, thr = F.fuel > 0 ? clamp(inp.thr, 0, 1) : 0, T = (A.Tm * thr + (ab ? A.Ta - A.Tm : 0)) * (rho / 1.225) ** .75 * (1 + .25 * Math.min(M, 1.6));   // 燃油耗尽：发动机熄火，只能滑翔
-    F.ff = T * FL_TSFC[ab ? 1 : 0]; F.fuel = Math.max(0, F.fuel - F.ff * h);   // 耗油（千克 / 秒）
+    const ab = !!inp.ab && F.fuel > 0, thr = F.fuel > 0 ? clamp(inp.thr, 0, 1) : 0, T = (A.Tm * thr + (ab ? A.Ta - A.Tm : 0)) * (rho / 1.225) ** .75 * (1 + .25 * Math.min(M, 1.6)) * mt;   // 燃油耗尽：发动机熄火，只能滑翔
+    F.ff = T / mt * FL_TSFC[ab ? 1 : 0]; F.fuel = Math.max(0, F.fuel - F.ff * h);   // 耗油（千克 / 秒）
     const ca = Math.cos(al), sn = Math.sin(al);
     const Fb = [qb * A.S * (CL * sn - CD * ca) + T, qb * A.S * CY, qb * A.S * (-CL * ca - CD * sn)];
     // —— 力矩 ——
