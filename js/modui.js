@@ -108,6 +108,8 @@ const MDX_CSS = `
 #mdx footer { display: flex; gap: 8px; align-items: center; padding: 8px 14px; border-top: 1px solid var(--line); }
 #mdx footer .msg { flex: 1; color: var(--mute); font-size: 12px; }
 #mdx .mdx-load { display: grid; grid-template-columns: 1.6fr 1fr .7fr auto; gap: 6px; align-items: center; margin: 4px 0; }
+#mdx .mdx-ldw { grid-column: 1 / -1; display: flex; gap: 8px; align-items: center; color: var(--amber, #ffc24a); font-size: 12px; }
+#mdx .mdx-ldw .mdx-btn { padding: 2px 8px; font-size: 12px; }
 #mdx .mdx-it.add { color: var(--g-hi); border-style: dashed; border-color: rgba(var(--g-rgb), .35); }
 #mdx .mdx-view { margin: 0 0 4px; }
 #mdx .mdx-stk { position: sticky; top: -12px; z-index: 3; margin: 0 -16px 8px; padding: 8px 16px 2px; background: rgba(var(--pn-rgb), .98); border-bottom: 1px solid var(--line); }   /* 预览和点选那一行钉在表单顶上：往下翻按钮时还能在模型上点 */
@@ -274,7 +276,7 @@ function mdxForm() {
     const a = MOD_DEF.air[k] || AIR_MDL[k], cur = W0.air[k] || {}, load = cur.load || (MOD_DEF.load[k] !== undefined ? MOD_DEF.load[k] : FW_LOAD[k]) || [];
     const rows = (cur.load || load.map(r => ({ w: r.w, bay: r.bay, n: mdxLoadN(k, r) }))).map((r, i) => `<div class="mdx-load"><select data-ld="${i}" data-lf="w">${Object.keys(FW_W).map(w => `<option value="${w}"${w === r.w ? ' selected' : ''}>${mdxEsc((MOD_DEF.wpn[w] || FW_W[w]).nm)}</option>`).join('')}</select>
       <select data-ld="${i}" data-lf="bay">${[['main', '主弹舱'], ['side', '侧弹舱'], ['ext', '外挂']].map(([b, n]) => `<option value="${b}"${b === r.bay ? ' selected' : ''}>${n}</option>`).join('')}</select>
-      <input type="number" min="0" max="16" step="1" data-ld="${i}" data-lf="n" value="${r.n}" aria-label="枚数"><button type="button" class="mdx-rst" data-ldx="${i}" title="去掉这一项">✕</button></div>`).join('');
+      <input type="number" min="0" max="16" step="1" data-ld="${i}" data-lf="n" value="${r.n}" aria-label="枚数"><button type="button" class="mdx-rst" data-ldx="${i}" title="去掉这一项">✕</button>${mdxLoadWarn(k, cur, r)}</div>`).join('');
     return `<h3>${mdxEsc(a.name)}</h3><p class="note">推演里的距离是游戏尺度（地图比真实小），速度是真实的。挂载改的是驾驶时的武器表、3D 挂架上画的弹，以及 AI 出击时带几枚；挂点、尾喷口的位置在「模型与挂点」页。</p>` +
       mdxMdlSel('air|' + k, cur.mdl, mdxAirDef()[modAirSil(k)], 'air') + mdxAirRows('air|' + k, MDX_AIR_F, a, k, cur) +
       (mdxAP0(k) ? `<h3 style="margin-top:14px">性能（加速度、转弯、推力）</h3>${mdxPerf(k, cur, a.spd)}` + mdxAirRows('air|' + k, MDX_PERF_F, a, k, cur, 1) : '') +
@@ -945,7 +947,19 @@ function mdxFxAnim(cv) {
 }
 const W0_DEF = () => 8400, H0_DEF = () => 5600;
 // 原挂载里每一项的枚数（从机型表的计数分出来，同 fpwpn.js fwLoadout 的规则）
+// 这一行的弹在模型上有没有挂点（没有的数量照算、能打，只是画面上看不到）：提示一下，点「去点挂点」直接跳到「模型与挂点」页
+function mdxLoadWarn(k, cur, r) {
+  const W1 = FW_W[r.w], n = +r.n || 0;
+  if (!W1 || !n || typeof fwSlots !== 'function') return '';
+  const mk = cur.mdl && modMdlOk(cur.mdl) ? cur.mdl : mdxAirDef()[modAirSil(k)];
+  if (!mk) return '';
+  const T = (MDX_W.mdl[mk] && MDX_W.mdl[mk].st) || (mk in MOD_DEF.st ? MOD_DEF.st[mk] : FW_ST[mk]) || {}, st = r.bay === 'side' ? T.side : fwSlots(T, r.bay, W1, r.w), m = st ? st.length : 0;
+  if (m >= n) return '';
+  const nm = { main: '主弹舱', side: '侧弹舱', ext: '外挂' }[r.bay] || r.bay;
+  return `<div class="mdx-ldw">${m ? `「${nm}」挂点只有 ${m} 个：多的 ${n - m} 枚照样能打，画面上画不出来` : `这个模型没有「${nm}」挂点：${n} 枚照样带、能打，画面上看不到`}<button type="button" class="mdx-btn" data-a="gohp" data-mk="${mdxEsc(mk)}" data-hg="${r.bay === 'side' ? 'side' : r.bay}">去点挂点</button></div>`;
+}
 function mdxLoadN(k, r) {
+  if (r.n != null) return r.n;   // 编辑器存过的挂载每行带着枚数
   const a = MOD_DEF.air[k] || AIR_MDL[k], W1 = FW_W[r.w];
   if (!a || !W1) return 0;
   if (W1.k === 'aam') return r.sr ? r.sr : Math.max(0, (r.w === 'pl17' ? a.aamL || 0 : a.aam || 0) - ((MOD_DEF.load[k] || FW_LOAD[k] || []).find(o => o.sr && o !== r) || { sr: 0 }).sr);
@@ -1060,6 +1074,7 @@ function mdxClick(e) {
   if (a === 'close') closeModEditor();
   else if (a === 'save') { for (const k of MOD_SEC) if (k !== 'lib') MOD[k] = modClone(MDX_W[k]); modSave(); MDX.dirty = false; MDX.keep = true; mdxRender(); mdxMsg('已保存：下一局生效，正在打的这一局里的车辆也已更新'); }
   else if (a === 'undo') { MDX_W = modClone(MOD); MDX.dirty = false; mdxRender(); mdxMsg('已放弃没保存的改动'); }
+  else if (a === 'gohp') { MDX.tab = 'mdl'; MDX.sel = b.dataset.mk; MDX.pk = 'hp'; MDX.hg = b.dataset.hg || 'ext'; MDX.q = ''; mdxRender(); mdxMsg('在模型上点挂点（「' + ({ main: '主弹舱', side: '侧弹舱', ext: '外挂' }[MDX.hg] || MDX.hg) + '」那一组；左右对称会自动在另一边也挂一个），点「保存」生效'); }
   else if (a === 'ldadd') { const k = MDX.sel, A = MDX_W.air[k] = MDX_W.air[k] || {}; if (!A.load) A.load = (FW_LOAD[k] || []).map(r => ({ w: r.w, bay: r.bay, n: mdxLoadN(k, r) })); A.load.push({ w: 'pl15', bay: 'ext', n: 2 }); MDX.dirty = true; MDX.keep = true; mdxRender(); }
   else if (a === 'ldrst') { const A = MDX_W.air[MDX.sel]; if (A) { delete A.load; if (!Object.keys(A).length) delete MDX_W.air[MDX.sel]; } MDX.dirty = true; MDX.keep = true; mdxRender(); }
   else if (a === 'export' || a === 'exportf') {
