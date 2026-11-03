@@ -450,7 +450,7 @@ async function mimModelData(key) {
 //   pt：导入模型的部件显示（编辑器 modui.js mdxPtSync 给）——codes 每个顶点的用途代码（mod.js MOD_PTR 的下标，选中的 + 10）、off 删过以后的原点、
 //   T / G / Ma / Mb / Rt / Qt 炮塔、炮管、机枪塔、机枪、主旋翼、尾桨的转轴 { p, a }（删过以后的坐标），ta / el / my / me / rs 试转的角度，gh 删掉的半透明画出来，tint 按用途上色；
 //   gz 切割薄片 { c, n, u, v, hu, hv }；deco 叠加的线、圆、点（转轴、圆心定位器）；box 框选（编辑器给的回调，拖出的方框交给它）
-const MIV = { wrap: null, cv: null, ov: null, gl: null, pr: null, A: {}, U: {}, M: null, key: null, yaw: 2.3, pit: .32, dist: 30, tgt: [0, 0, 1], marks: [], deco: [], pick: null, msg: '', ld: 0, pt: null, gz: null, box: null, boxR: null };
+const MIV = { wrap: null, cv: null, ov: null, gl: null, pr: null, A: {}, U: {}, M: null, key: null, yaw: 2.3, pit: .32, dist: 30, tgt: [0, 0, 1], marks: [], deco: [], pick: null, msg: '', ld: 0, pt: null, gz: null, box: null, boxR: null, hz: null, hzAnim: true, hp: null, raf: 0 };   // hz：设计中的热浪源（模型坐标，编辑器给），预览里用游戏同一套三维热浪着色器画、一直动
 const MIV_VS = `attribute vec3 p; attribute vec3 n; attribute vec2 uv; attribute float r;
 uniform mat4 uPV; uniform vec3 uOff, uTP, uTA, uGP, uGA, uMP, uMA, uBP, uBA, uRP, uRA, uQP, uQA; uniform float uTa, uEl, uMy, uMe, uRs, uGh;
 varying vec3 vN, vP; varying vec2 vUv; varying float vR;
@@ -690,6 +690,20 @@ function mivDraw() {
     gl.drawArrays(gl.TRIANGLE_FAN, 0, 4);
     gl.disable(gl.BLEND); gl.depthMask(true); gl.uniform1f(U.uSolid, 0);
     gl.disableVertexAttribArray(A.p);
+  }
+  // 三维热浪（v3det.js 同一套着色器）：先把画好的模型拷进贴图，再画热气柱的盒子；有热浪就一直动
+  if (MIV.hz && MIV.hz.length && typeof v3dhProgram === 'function' && MIV.hp !== false) {
+    try {
+      if (!MIV.hp) { MIV.hp = v3dhProgram(gl); MIV.hb = gl.createBuffer(); MIV.ht = gl.createTexture(); gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, MIV.ht); for (const [k, v] of [[gl.TEXTURE_MIN_FILTER, gl.LINEAR], [gl.TEXTURE_MAG_FILTER, gl.LINEAR], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D, k, v); }
+      const Lh = MIV.hz.filter(e => e && e.r > 0 && e.len > 0 && Math.hypot(...e.d) > 1e-6).map(e => { const l = Math.hypot(...e.d); return { c: e.p, d: e.d.map(x => x / l), r: e.r, len: e.len, k: e.k ?? 1, o: { sp: e.sp ?? 2.4, rise: e.rise || 0, tb: e.tb ?? 1, spd: e.spd ?? 1, warm: e.warm ?? 1, seed: e.p[0] * 3.7 % 50 } }; });
+      if (Lh.length) {
+        gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, MIV.ht); gl.copyTexImage2D(gl.TEXTURE_2D, 0, gl.RGB, 0, 0, w, h, 0);
+        const PV = C.PV, prj = p => { const x = PV[0] * p[0] + PV[4] * p[1] + PV[8] * p[2] + PV[12], y = PV[1] * p[0] + PV[5] * p[1] + PV[9] * p[2] + PV[13], ww = PV[3] * p[0] + PV[7] * p[1] + PV[11] * p[2] + PV[15]; return ww > .01 ? [(x / ww * .5 + .5) * w, (y / ww * .5 + .5) * h] : null; };
+        v3dhDraw(gl, MIV.hp, MIV.hb, v3dhBuild(Lh, C.E, prj), new Float32Array(PV), C.E, 1, w, h, performance.now() / 1000);
+        gl.activeTexture(gl.TEXTURE0);
+        if (MIV.hzAnim && !MIV.raf) MIV.raf = requestAnimationFrame(() => { MIV.raf = 0; if (MIV.wrap && MIV.wrap.isConnected) mivDraw(); });
+      }
+    } catch (e) { MIV.hp = false; console.warn('预览热浪不可用', e); }
   }
   // 叠加层（2D）：前方箭头、标记、转轴、圆、切割薄片的边框、框选
   const g = MIV.ov.getContext('2d');

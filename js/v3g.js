@@ -469,7 +469,15 @@ function v3gVeh(v, rk, side, len, x, y, z, h, aim, dead, pitch, roll, hl, fs = 9
   if (FP && V3G_CAPS[key] && v && v.samN != null) { const n = (typeof vehSp === 'function' && (vehSp(v).sam || {}).n) || 8; P[6] = 2 ** clamp(n - v.samN, 0, 16) - 1; }   // 打出去几枚，就有几个发射筒空了
   if (U && U.length && typeof rlModelOf === 'function' && E.rl.includes((rlModelOf(v) || {}).key)) for (const i of U) if (i >= 0 && i < 64) P[1 + Math.floor(i / 16)] += 2 ** (i % 16);   // 炸掉的反应装甲块（era.js）：每个数 16 位
   if (v && v.id != null && typeof modMuzOf === 'function' && (modMuzOf(key) || modMgOf(key))) { if (V3G_VT.S !== S) { V3G_VT.clear(); V3G_VT.S = S; } V3G_VT.set(v.id, { key, x, y, z, h, k, da: dead ? 0 : P[0], el: FP && !dead ? P[1] || 0 : 0, my: FP && !dead ? P[2] || 0 : 0, me: FP && !dead ? P[7] || 0 : 0, pitch, roll }); }   // 编辑器设了炮口、机枪口的模型：记下这一帧怎么摆的（v3gMuzzle / v3gMgMuzzle；炮塔、炮管、机枪塔的角度按画面上的）
+  const HZ = !dead && typeof modHazeOf === 'function' ? modHazeOf(key) : null;   // 编辑器设计的热浪：走着的发动机转速高、热得多
+  if (HZ && V3G.C && (x - V3G.C.E[0]) ** 2 + (-y - V3G.C.E[1]) ** 2 < 500 * 500) for (const e of HZ) v3gHazeEmit(e, x, y, z, h, k, pitch, roll, v && v.moving ? 1.25 : .85, v ? v.id : 0);
   return v3gAdd(key, x, y, z, h, k, (dead ? 2 : side === 'e' ? 1 : 0) + (hl ? 8 : 0), roll, pitch, P);
+}
+// 一个设计好的热浪源（模型坐标）按这一帧的摆法换成世界里的三维热气柱（GL 坐标：y 取反），交给 v3det.js
+function v3gHazeEmit(e, x, y, z, h, k, pitch, roll, kk, id) {
+  if (typeof v3dHazeD !== 'function') return;
+  const r = v3dMv3(h, pitch || 0, roll || 0, [e.p[0] * k, e.p[1] * k, e.p[2] * k]), d = v3dMv3(h, pitch || 0, roll || 0, e.d);
+  v3dHazeD([x + r[0], -y + r[1], z + r[2]], d, e.r * k, e.len * k, (e.k ?? 1) * kk, { sp: e.sp ?? 2.4, rise: (e.rise || 0) * k, tb: e.tb ?? 1, spd: e.spd ?? 1, warm: e.warm ?? 1, seed: ((id || 0) * 7.31 + e.p[0] * 3.7 + e.p[1] * 1.9) % 50 });
 }
 // 车辆主炮炮口此刻在世界的哪里（游戏坐标 x、y，高度 z）：编辑器在模型上点的炮口（mod.js modMuzOf），跟着炮塔（模型里的 tur 部件）转；没设的返回 null（v3fx.js 照旧从车顶出）
 const V3G_VT = new Map();
@@ -518,6 +526,8 @@ function v3gPlane(key, sz, x, y, z, ground, h, side, roll, pitch, gear, t, noz =
   M.parts.forEach((p, i) => { const j = p.slot ?? i; if (j > 3) return; if (p.n === 'gear') P[j] = gear ? 0 : 1; else if (p.n === 'rotor') P[j] = (t || 0) * (V3G_ROTOR[mk] || [22])[0]; else if (p.n === 'trotor') P[j] = (t || 0) * (V3G_ROTOR[mk] || [0, 61])[1]; else if (p.k === 'noz' || p.k === 'pet') P[j] = noz; });
   if (M.ctl && ctl) { P[2] = ctl.de || 0; P[3] = ctl.da || 0; P[7] = ctl.dc || 0; P[8] = ctl.dr || 0; P[9] = ctl.df || 0; P[10] = ctl.dl || 0; P[11] = ctl.sb || 0; }   // 舵面（弧度）：俯仰、滚转、鸭翼、偏航、后缘襟翼、前缘襟翼、减速板
   if (typeof v3nzPlane === 'function') v3nzPlane(mk, M, ox, oy, oz, h, k, roll, pitch, noz);   // 换装了真实喷口模型的机型（v3noz.js：会收缩的收敛扩散喷口）
+  const HZ = typeof modHazeOf === 'function' ? modHazeOf(mk) : null;   // 编辑器设计的热浪（地上怠速弱一些）
+  if (HZ && V3G.C && (ox - V3G.C.E[0]) ** 2 + (-oy - V3G.C.E[1]) ** 2 < 900 * 900) for (const e of HZ) v3gHazeEmit(e, ox, oy, oz, h, k, pitch, roll, ground ? .5 : 1, Math.round(x * 13 + y * 7));
   return v3gAdd(mk, ox, oy, oz, h, k, side, roll, pitch, P);
 }
 // 飞机模型上一点（模型坐标，米）此刻在世界的哪里（游戏坐标 x、y，高度 z）：和 v3gPlane 同一套变换（绕机身中线俯仰、滚转）——弹舱里的弹、挂点按它放

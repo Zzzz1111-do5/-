@@ -146,7 +146,7 @@ function mdxBuild() {
   document.body.appendChild(el);
   el.addEventListener('click', mdxClick);
   el.addEventListener('change', mdxChange);
-  el.addEventListener('input', e => { if (e.target.matches('.mdx-list input')) { MDX.q = e.target.value.trim(); mdxRender(true); } else mdxPtInput(e.target); });
+  el.addEventListener('input', e => { if (e.target.matches('.mdx-list input')) { MDX.q = e.target.value.trim(); mdxRender(true); } else if (!mdxHzInput(e.target)) mdxPtInput(e.target); });
   MDX.el = el;
   return el;
 }
@@ -221,11 +221,12 @@ function mdxRender(listOnly) {
   const vh = body.querySelector('.mdx-view');
   if (vh && typeof mivInit === 'function') {
     vh.appendChild(mivInit()); MIV.marks = mdxMarks(); MIV.pick = MDX.pk ? mdxOnPick : null;
+    MIV.hz = MDX.tab === 'mdl' && MDX.sel && MDX.sel[0] !== '+' ? (MDX_W.mdl[MDX.sel] || {}).hz || null : null;
     mdxPtSync(); mdxPcBar();
     MIV.onLoad = k => { if (MDX.tab === 'mdl' && MDX.el && !MDX.el.hidden && MDX.sel && MDX.sel.replace(/~$/, '') === k) { MDX.keep = true; mdxRender(); } };
     mivShow(vh.dataset.k);
   }
-  else mdxPtSync();
+  else { if (typeof MIV === 'object') MIV.hz = null; mdxPtSync(); }
   const fv = body.querySelector('.mdx-fxv');
   if (fv) mdxFxAnim(fv);
 }
@@ -362,6 +363,7 @@ function mdxOnPick(h, e) {
     L.push(p);
     if (MDX.mir && Math.abs(p[1]) > .05) L.push([p[0], -p[1], p[2]]);   // 左右对称：另一边也挂一个
   } else if (MDX.pk === 'mgm') A.mg = p;
+  else if (MDX.pk.startsWith('hz:')) { const m = mdxHzPick(p); MDX.keep = true; mdxRender(); mdxMsg(m); return; }
   else if (MDX.pk === 'noz') {
     if (!A.noz) A.noz = modClone(C.noz) || [];
     A.noz.push([p[0], Math.abs(p[1]) < .05 ? 0 : Math.abs(p[1]), p[2], MDX.nzR || .45, .6]);
@@ -396,6 +398,7 @@ function mdxMdlForm(mk) {
     h += `<h3 style="margin-top:12px">机枪口 ${rst('mg', !C.A.mg)}</h3><p class="note">车载机枪打步兵时曳光弹、枪口焰从这里出；装在哪就跟着哪动（机枪塔：转向机枪的目标）。没设的从车中间出。</p>
       <div class="mdx-row"><label>机枪口 x / y / z</label>${xyz('mg', C.mg)}<span></span><span></span></div>
       <div class="mdx-row"><label>机枪装在</label><select data-mf="mgOn"><option value=""${!C.mgOn ? ' selected' : ''}>自动（有机枪塔就在机枪塔上，否则在炮塔上）</option>${[['mg', '机枪塔（遥控武器站）'], ['g', '炮管（并列机枪）'], ['t', '炮塔'], ['hull', '车体']].map(([v, n]) => `<option value="${v}"${C.mgOn === v ? ' selected' : ''}>${n}</option>`).join('')}</select><span></span><span></span></div>`;
+    h += mdxHzForm(mk, false);
     return h;
   }
   // 挂点
@@ -419,6 +422,7 @@ function mdxMdlForm(mk) {
     (fx.spr ? frow('sprS', '序列帧大小', 1) : '');
   // 航炮口
   h += `<h3 style="margin-top:12px">航炮炮口 ${rst('gun', C.gunD)}</h3><p class="note">亲自驾驶时航炮的炮弹从这里出（有没有航炮、备弹在「飞机」页）。</p><div class="mdx-row"><label>炮口 x / y / z</label>${xyz('gun', C.gun)}<span></span><span></span></div>`;
+  h += mdxHzForm(mk, true);
   return h;
 }
 // 改模型上的一个值：path 「muz.0」「st.ext.3.1」「noz.0.3」「fx.len」
@@ -565,6 +569,7 @@ function mdxXfPts(A, fp, fd) {
   if (A.gun) A.gun = P3(A.gun);
   if (A.st) for (const g in A.st) A.st[g] = (A.st[g] || []).map(P3);
   if (A.noz) A.noz = A.noz.map(P3);
+  if (Array.isArray(A.hz)) for (const e of A.hz) { if (Array.isArray(e.p)) e.p = fp(e.p).map(R); if (fd && Array.isArray(e.d)) e.d = fd(e.d).map(v => Math.round(v * 1e6) / 1e6); }
   if (A.pt) for (const k in MDX_AXN) { const X = A.pt[k]; if (X && Array.isArray(X.p)) { X.p = fp(X.p).map(R); if (fd && Array.isArray(X.a)) X.a = fd(X.a).map(v => Math.round(v * 1e6) / 1e6); } }
 }
 // 把选中的块设成某种用途（0 车体 / 机身、6 删除……）；删的东西变了，原点跟着变，已经点好的位置一起挪
@@ -819,6 +824,83 @@ function mdxPtInput(t) {
   }
   return false;
 }
+// —— 热浪（三维，按模型：MDX_W.mdl[模型键].hz，格式见 mod.js modHazeOf）——
+//   [字段, 名称, 单位, 最小, 最大, 步长]；默认值车辆按柴油机排气（慢、往上飘），飞机按喷气发动机（快、顺着往后）
+const MDX_HZF = [['r', '起点半径', '米', .02, 3, .01], ['len', '长度', '米', .2, 40, .1], ['k', '强度', '倍', 0, 3, .05], ['sp', '末端变粗', '倍', .3, 6, .05], ['rise', '往上飘', '米', -3, 8, .05], ['tb', '湍流疏密', '倍', .2, 4, .05], ['spd', '流速', '倍', 0, 5, .05], ['warm', '发暖', '倍', 0, 3, .05]];
+const mdxHzDef = air => air ? { r: .45, len: 7, k: 1.2, sp: 2.6, rise: 0, tb: 1, spd: 1.6, warm: 1 } : { r: .25, len: 2.5, k: 1, sp: 2.2, rise: .8, tb: 1, spd: .6, warm: .6 };
+const MDX_HZD = { back: [-1, 0, 0], up: [0, 0, 1], bu: [-1, 0, .6], left: [0, 1, 0], right: [0, -1, 0] };
+const mdxIsAir = mk => { const r = mdxModels().find(o => o.id === mk); return !!r && r.kind === 'air'; };
+function mdxHzForm(mk, air) {
+  const A = MDX_W.mdl[mk] || {}, L = Array.isArray(A.hz) ? A.hz : [], D = mdxHzDef(air), R3 = v => Math.round(v * 1000) / 1000;
+  const btn = (attr, t, on) => `<button type="button" class="mdx-btn${on ? ' pri' : ''}" ${attr}>${t}</button>`, num = (attr, v, w = 64) => `<input type="number" step="any" ${attr} value="${v ?? ''}" style="width:${w}px">`;
+  let h = `<h3 style="margin-top:12px">热浪（三维）</h3><p class="note">排气口、喷口后面被烤热的空气：是一个立体的热气柱——侧面看、顺着看都不一样，厚的地方扭得多，前面的东西挡得住它，不是贴在屏幕上的平面。
+    点「加一个热浪源」再在模型上点排气口；方向、粗细、长度、往上飘这些拖滑块调，预览里直接看到。${air ? '尾喷口本身的热浪在上面「尾焰」里调倍数，这里是另外加的（辅助动力、发动机舱的热气……）。' : '设计了热浪的车，游戏里就不用默认的排气位置了。'}</p>
+    <div class="mdx-pcbar">${btn('data-hza="add"', MDX.pk === 'hz:new' ? '在模型上点排气口…' : '＋ 加一个热浪源', MDX.pk === 'hz:new')}<label><input type="checkbox" data-hzanim="1"${typeof MIV === 'object' && MIV.hzAnim ? ' checked' : ''}> 预览里一直动</label></div>`;
+  L.forEach((e, i) => {
+    h += `<div class="mdx-ax"><div class="mdx-pcbar"><b>热浪 ${i + 1}</b>${btn(`data-hza="pick" data-i="${i}"`, MDX.pk === 'hz:' + i ? '在模型上点…' : '换起点', MDX.pk === 'hz:' + i)}${btn(`data-hza="mir" data-i="${i}"`, '左右对称复制一个')}${btn(`data-hza="del" data-i="${i}"`, '删除')}</div>
+      <div class="mdx-pcbar">起点 ${[0, 1, 2].map(k => 'xyz'[k] + ' ' + num(`data-hzp="${i}.p.${k}"`, R3(e.p[k]))).join(' ')}　方向 ${[0, 1, 2].map(k => 'xyz'[k] + ' ' + num(`data-hzp="${i}.d.${k}"`, R3(e.d[k]), 58)).join(' ')}</div>
+      <div class="mdx-pcbar">方向：${[['back', '向后'], ['bu', '向后上方'], ['up', '向上'], ['left', '向左'], ['right', '向右']].map(([k, n]) => btn(`data-hzd="${k}" data-i="${i}"`, n)).join('')}</div>` +
+      MDX_HZF.map(([f, nm, unit, mn, mx, stp]) => { const v = e[f] ?? D[f]; return `<div class="mdx-row"><label>${nm}（${unit}）</label><input type="range" min="${mn}" max="${mx}" step="${stp}" data-hzs="${i}.${f}" value="${v}"><span class="def">${num(`data-hzs="${i}.${f}"`, v)}</span><span></span></div>`; }).join('') + '</div>';
+  });
+  return h;
+}
+// 改热浪（没有就建）；fn 返回 false 表示不算改动
+function mdxHzEdit(fn) {
+  const mk = MDX.sel, A = MDX_W.mdl[mk] = MDX_W.mdl[mk] || {};
+  if (!Array.isArray(A.hz)) A.hz = [];
+  fn(A.hz, A);
+  if (!A.hz.length) delete A.hz;
+  if (!Object.keys(A).length) delete MDX_W.mdl[mk];
+  MDX.dirty = true;
+  if (typeof MIV === 'object') MIV.hz = (MDX_W.mdl[mk] || {}).hz || null;
+}
+// 在模型上点了一下：加热浪源 / 换起点
+function mdxHzPick(p) {
+  const pk = MDX.pk, air = mdxIsAir(MDX.sel);
+  if (pk === 'hz:new') { mdxHzEdit(L => L.push({ p: p.slice(), d: (air ? MDX_HZD.back : MDX_HZD.bu).slice(), ...mdxHzDef(air) })); MDX.pk = ''; return '加了一个热浪源：拖下面的滑块调方向、粗细、长度'; }
+  const i = +pk.slice(3);
+  mdxHzEdit(L => { if (L[i]) L[i].p = p.slice(); });
+  MDX.pk = '';
+  return '热浪 ' + (i + 1) + ' 的起点换到（' + p.join(', ') + '）';
+}
+function mdxHzClick(b) {
+  const d = b.dataset;
+  if (d.hza) {
+    const i = +d.i;
+    if (d.hza === 'add') MDX.pk = MDX.pk === 'hz:new' ? '' : 'hz:new';
+    else if (d.hza === 'pick') MDX.pk = MDX.pk === 'hz:' + i ? '' : 'hz:' + i;
+    else if (d.hza === 'del') mdxHzEdit(L => L.splice(i, 1));
+    else if (d.hza === 'mir') mdxHzEdit(L => { const e = L[i]; if (e) L.splice(i + 1, 0, { ...e, p: [e.p[0], -e.p[1], e.p[2]], d: [e.d[0], -e.d[1], e.d[2]] }); });
+    MDX.keep = true; mdxRender(); mdxMsg(MDX.pk.startsWith('hz:') ? '在模型上点一下：热浪从那里出' : '改了，点「保存」生效');
+    return true;
+  }
+  if (d.hzd) { mdxHzEdit(L => { if (L[+d.i]) L[+d.i].d = MDX_HZD[d.hzd].slice(); }); MDX.keep = true; mdxRender(); mdxMsg('改了，点「保存」生效'); return true; }
+  return false;
+}
+function mdxHzChange(t) {
+  const d = t.dataset;
+  if (d.hzanim) { MIV.hzAnim = t.checked; mivDraw(); return true; }
+  if (d.hzp) {
+    const [i, f, k] = d.hzp.split('.'), v = +t.value;
+    if (t.value === '' || !isFinite(v)) return true;
+    mdxHzEdit(L => { if (L[+i]) L[+i][f][+k] = v; });
+    MDX.keep = true; mdxRender(); mdxMsg('改了，点「保存」生效');
+    return true;
+  }
+  return false;
+}
+// 拖滑块：只改数、刷新预览，不重建整页
+function mdxHzInput(t) {
+  const d = t.dataset;
+  if (!d.hzs) return false;
+  const [i, f] = d.hzs.split('.'), v = +t.value;
+  if (t.value === '' || !isFinite(v)) return true;
+  mdxHzEdit(L => { if (L[+i]) L[+i][f] = v; });
+  for (const o of MDX.el.querySelectorAll(`[data-hzs="${d.hzs}"]`)) if (o !== t) o.value = v;
+  if (typeof MIV === 'object' && !MIV.hzAnim) mivDraw();
+  mdxMsg('改了，点「保存」生效');
+  return true;
+}
 // —— 特效贴图 ——
 const MDX_SLOT = [['expl', '爆炸（火球 + 烟，放一遍）'], ['fire', '残骸起火（循环）'], ['mzl', '坦克 / 车炮炮口焰'], ['mzla', '火炮炮口焰'], ['puff', '烟团']];
 const MDX_FXM = [['2', '发光（火焰、尾焰、爆炸）'], ['1', '受光（烟）'], ['0', '分通道（ArmyVFX 的格式：A 透明、B 火光、R / G 受光）']];
@@ -887,7 +969,7 @@ function mdxLibSet(id, f, v) {
 }
 function mdxChange(e) {
   const t = e.target;
-  if (MDX.tab === 'mdl' && mdxPtChange(t)) return;
+  if (MDX.tab === 'mdl' && (mdxHzChange(t) || mdxPtChange(t))) return;
   if (t.dataset.set) {   // 画面：直接改设置
     const v = t.tagName === 'SELECT' && (t.value === 'true' || t.value === 'false') ? t.value === 'true' : t.type === 'range' ? +t.value : t.value;
     if (typeof setSetting === 'function') setSetting(t.dataset.set, v);
@@ -970,7 +1052,7 @@ function mdxClick(e) {
   if (b.dataset.it) { MDX.sel = b.dataset.it; MDX.pk = ''; mdxRender(); return; }
   if (b.dataset.rst) { const [p, f] = b.dataset.rst.split('|').length > 2 ? [b.dataset.rst.split('|').slice(0, 2).join('|'), b.dataset.rst.split('|')[2]] : b.dataset.rst.split('|'); mdxSet(p, f, ''); MDX.keep = true; mdxRender(); mdxMsg('恢复成默认，点「保存」生效'); return; }
   if (b.dataset.ldx != null) { const A = MDX_W.air[MDX.sel]; if (A && A.load) { A.load.splice(+b.dataset.ldx, 1); MDX.dirty = true; MDX.keep = true; mdxRender(); } return; }
-  if (MDX.tab === 'mdl' && mdxPtClick(b)) return;
+  if (MDX.tab === 'mdl' && (mdxHzClick(b) || mdxPtClick(b))) return;
   if (b.dataset.pk != null) { MDX.pk = b.dataset.pk; MDX.keep = true; mdxRender(); mdxMsg(MDX.pk ? '在上面的模型上点一下' : ''); return; }
   if (b.dataset.mrst) { const A = MDX_W.mdl[MDX.sel]; if (A) { delete A[b.dataset.mrst]; if (!Object.keys(A).length) delete MDX_W.mdl[MDX.sel]; } MDX.dirty = true; MDX.keep = true; mdxRender(); mdxMsg('恢复成游戏原来的，点「保存」生效'); return; }
   if (b.dataset.mdel) { mdxMdlDel(b.dataset.mdel); MDX.keep = true; mdxRender(); return; }
