@@ -101,6 +101,12 @@
 - 沙盒每方初始预算直接给 30000（sandbox.js SBX_BUDGET0 = 上限；SBX_BUDGET 1500 是 AI 布兵按「预算 ÷ 基准」放大编成的基准，别改）。
 - 烘焙工具的署名（tools/v3gbake.js credits）按 tools/v3gmodels.json 整段重写 docs/credits.md、legal/credits.html 的 v3g 一节——别处加进来、配置里没有的条目（支奴干、海鹰、M777、M270、单兵武器、F100 喷口……）会被冲掉：
   烘焙后 `git diff docs/credits.md legal/credits.html`，冲掉的恢复（git checkout 后手工加新的那几条）。模型预览 tools/v3gview.html 的 &tx &ty &tz 指定镜头对准的点（看喷口、起落架等局部）。
+- 编辑器（主菜单「编辑器」；用户：能自己导入模型、改飞机坦克导弹的参数、开火位置、挂点、尾喷特效、加速度速度、战场大小、渲染距离画质）：js/mod.js 数据与套用、js/modui.js 界面、js/modimp.js 导入模型与预览。
+  MOD 存 localStorage（bh-mod），表格类的存盘时直接改进表（AIR_MDL、EA_SPEC、AP、FL_AC、FW_W、FW_LOAD、FW_ST、FW_GUN、MS_PGM、V3G_AIR，MOD_DEF 记原值、恢复默认时还原；各表能改的字段在 MOD_F）；
+  车辆按型号（rlModelOf 的键）在推演里第一次见到时套（modVehApply：装甲按毫米 ÷ MOD_MM 220 = 级、各面 armX、穿深 penL、加速度 accA、转向 turnK、炮塔 travM……），车辆换模型只改画面（MOD_VMDL → v3g.js v3gVehKey，vfn.js 仍按原模型）；
+  模型上的点按模型键记（MOD.mdl：炮口 muz → v3g.js v3gMuzzle / v3fx.js 坦克炮出膛，航炮口 gun → FW_GUN.at，挂点 st → FW_ST，尾喷口 noz → v3det.js v3dNoz，尾焰 fx → v3dBurner 的长度 / 亮度 / 马赫环 / 序列帧尾焰）。
+  导入的文件存 IndexedDB（bh-mod-files，modFilePut），MOD.lib 只记名字和参数：模型键 u_…，v3g.js v3gModel 不去网上找，V3G.def[键] = { meta, bin }（v3gDecode 认 D.bin）；序列帧贴图键 uf_…（v3vfx.js v3vUser、v3vSlots 换掉内置的爆炸 / 火 / 炮口焰 / 烟，帧号按总帧数换算）。
+  导入（modimp.js mimBuild）照 v3gbake.js 的坐标约定拼 { meta, bin }，只有一级网格、没有部件；mimTurn 转方向。不改推演结果：没改的字段一律走原值（车辆加速度没设就是原来的一下到速）。
 - 主菜单「闯关」是 levels.js（三章十关，按预算自己布兵），「海岛战役」是 isle.js，都建在沙盒（sandbox.js）上；两者都记在 S.lv 里（海岛是 S.lv.isle），闯关的逻辑要跳过海岛。
 
 ## 代码约定

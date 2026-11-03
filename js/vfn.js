@@ -75,6 +75,7 @@ const VFN = {
 const vfnOf = key => VFN[key] || null;
 // 推演里的炮塔回转速度（弧度 / 秒）：有型号参数就按真实的，没有照旧 2.4
 function vfnTrav(v) {
+  if (v.travM) return v.travM;   // 编辑器改的炮塔回转速度（mod.js，弧度 / 秒）
   const k = typeof rlModelOf === 'function' && typeof V3G_VEH === 'object' ? (rlModelOf(v) || {}).key : null, F = k && VFN[V3G_VEH[k] || k];
   return F && F.trav ? F.trav * Math.PI / 180 : 2.4;
 }

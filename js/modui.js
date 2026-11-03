@@ -1,0 +1,661 @@
+'use strict';
+// 编辑器界面（主菜单「编辑器」；数据与套用在 mod.js）：左边按页签列出型号，右边一项项参数——改了的高亮，每项能单独恢复默认，「保存」后下一局生效
+//   （正在打的这一局里的车辆也马上重新套）。页签：坦克装甲车（各面装甲、穿深、爆反、速度、加速度、转向……）、飞机（性能、推力重量、挂载、航炮，攻守双方）、机载武器、
+//   导弹（速度、加速度、弹道、毁伤）、模型与挂点（导入模型，预览里点炮口 / 航炮口 / 挂点 / 尾喷口，尾焰参数，modimp.js）、特效贴图（导入序列帧换掉爆炸、炮口焰……）、
+//   战场大小、画面、模组包（导出 / 导入 JSON）
+const MDX = { el: null, tab: 'veh', sel: null, q: '', dirty: false, pk: '', hg: 'ext', mir: true, nzR: .45, imp: { kind: 'veh', fwd: '+z', up: '+y', tex: 2048 }, impF: null, fxImp: { n: 8, f: 64, mode: 2 }, fxF: null };
+const mdxEsc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+const mdxR = (v, d = 1) => modNum(v) ? Math.round(v * d) / d : v;
+// —— 车辆型号：模型键 → 名称、车种（VEH_SPEC 的键）、目录里的修正（spawn.mod）——
+function mdxVehList() {
+  const L = new Map(), add = (k, nm, type, side, md) => { if (!k || !(typeof RLM === 'object' && RLM[k]) || L.has(k)) return; L.set(k, { k, nm, type, side, md: md || {} }); };
+  if (typeof CATALOG === 'object') for (const c of CATALOG) {
+    if (!c.spawn || c.spawn.kind !== 'veh' || !VEH_SPEC[c.spawn.type]) continue;
+    const k = (RLM_NAME.find(([re]) => re.test(c.name)) || [])[1] || (RLM_TYPE[c.side === 'e' ? 'e' : 'p'] || {})[c.spawn.type];
+    add(k, c.name, c.spawn.type, c.side, c.spawn.mod);
+  }
+  for (const sd of ['p', 'e']) for (const t in RLM_TYPE[sd] || {}) add(RLM_TYPE[sd][t], (VEH_MODEL[sd] || {})[t] || RLM_TYPE[sd][t], t, sd);
+  return [...L.values()];
+}
+const mdxMM = a => Math.round(a * MOD_MM);
+const MDX_VEH_F = [
+  ['hp', '结构值', '', o => o.sp.hp],
+  ['speed', '最高速度', '千米 / 时', o => mdxR(o.sp.speed * 3.6, 1)],
+  ['armF', '正面装甲', '毫米', o => mdxMM(o.sp.armor)],
+  ['armS', '侧面装甲', '毫米', o => mdxMM(vehArcArm(o.sp.armor, 's'))],
+  ['armR', '后部装甲', '毫米', o => mdxMM(vehArcArm(o.sp.armor, 'r'))],
+  ['armT', '顶部装甲', '毫米', o => mdxMM(vehArcArm(o.sp.armor, 't'))],
+  ['pen', '主炮穿深', '毫米', o => o.sp.gun && o.sp.gun.ap ? mdxMM(o.sp.gun.ap * (o.md.pow || 1)) : null],
+  ['range', '主炮射程', '米', o => o.sp.gun ? Math.round(o.sp.gun.range * (o.md.rng || 1)) : null],
+  ['rof', '装填时间', '秒', o => o.sp.gun ? mdxR(o.sp.gun.rof / (o.md.rof || 1), 10) : null],
+  ['acc', '加速度（空着 = 一下就到速度）', '米 / 秒²', o => null],
+  ['turn', '车体转向速度', '度 / 秒', o => o.sp.turn ? mdxR(o.sp.turn * 180 / Math.PI, 10) : null],
+  ['trav', '炮塔回转速度', '度 / 秒', o => { const F = typeof VFN === 'object' && VFN[V3G_VEH[o.k] || o.k]; return F && F.trav ? F.trav : mdxR(2.4 * 180 / Math.PI, 10); }],
+  ['sight', '视野', '米', o => o.sp.sight],
+  ['era', '爆炸反应装甲', [['auto', '照模型'], ['on', '挂上'], ['off', '拆掉']], o => 'auto'],
+  ['eraHeat', '爆反挡破甲弹', '%', o => 92],
+  ['eraKe', '爆反挡穿甲弹', '%', o => RLM[o.k] && RLM[o.k].era && RLM[o.k].era.heavy ? 30 : 0],
+  ['eraCov', '爆反覆盖率（模型上没有块时）', '%', o => 60],
+  ['eraN', '爆反块数（模型上没有块时）', '块', o => 16]
+];
+// 飞机：[字段, 名称, 单位, 默认值（显示单位）(a 型号表, k 型号键), 显示 → 存的值, 存的值 → 显示]
+const mdxAP0 = k => MOD_DEF.ap[k] || (typeof AP === 'object' && AP[k]) || null;
+const mdxFL0 = k => typeof FL_KEY === 'object' && FL_KEY[k] === k ? MOD_DEF.fl[k] || FL_AC[k] : null;
+const mdxGun0 = k => k in MOD_DEF.gun ? MOD_DEF.gun[k] : typeof FW_GUN === 'object' ? FW_GUN[k] : null;
+const MDX_PERF_F = [
+  ['apM', '作战重量', '千克', (a, k) => mdxAP0(k) && mdxAP0(k).m], ['apT', '最大推力（开加力）', '千牛', (a, k) => mdxAP0(k) && mdxR(mdxAP0(k).T / 1000, 10), v => v * 1000, v => mdxR(v / 1000, 10)],
+  ['flTm', '军用推力（不开加力，亲自驾驶时）', '千牛', (a, k) => mdxFL0(k) && mdxR(mdxFL0(k).Tm / 1000, 10), v => v * 1000, v => mdxR(v / 1000, 10), 'fl'],
+  ['apS', '翼面积', '平方米', (a, k) => mdxAP0(k) && mdxAP0(k).S], ['apCD0', '零升阻力系数', '', (a, k) => mdxAP0(k) && mdxAP0(k).CD0], ['apK', '诱导阻力因子', '', (a, k) => mdxAP0(k) && mdxAP0(k).K],
+  ['apCL', '最大升力系数', '', (a, k) => mdxAP0(k) && mdxAP0(k).CL], ['apNz', '最大过载', 'G', (a, k) => mdxAP0(k) && mdxAP0(k).nz],
+  ['flP', '最大滚转速度（亲自驾驶）', '度 / 秒', (a, k) => mdxFL0(k) && mdxR(mdxFL0(k).pmax * 180 / Math.PI), null, null, 'fl'], ['flA', '最大迎角（亲自驾驶）', '度', (a, k) => mdxFL0(k) && mdxR(mdxFL0(k).alim * 180 / Math.PI, 10), null, null, 'fl']
+];
+const MDX_GUN_F = [['gunN', '航炮备弹（0 = 没有航炮）', '发', (a, k) => (mdxGun0(k) || { n: 0 }).n], ['gunRpm', '航炮射速', '发 / 分', (a, k) => (mdxGun0(k) || { rpm: 1650 }).rpm], ['gunV0', '航炮初速', '米 / 秒', (a, k) => (mdxGun0(k) || { v0: 860 }).v0]];
+const MDX_EAIR_F = [
+  ['spd', '巡航速度', '千米 / 时', a => mdxR(a.spd * 3.6), v => v / 3.6, v => mdxR(v * 3.6)], ['turn', '转弯（推演）', '', a => a.turn], ['hp', '耐打（挨几下才掉）', '', a => a.hp],
+  ['flares', '热诱弹（组）', '', a => a.flares], ['stealth', '雷达截面系数（越小越隐身，1 = 不隐身）', '', a => a.stealth ?? 1]
+];
+const MDX_AIR_F = [
+  ['spd', '巡航速度', '千米 / 时', a => mdxR(a.spd * 3.6), v => v / 3.6, v => mdxR(v * 3.6)],
+  ['aa', '被高炮打中的概率', '%', a => mdxR((a.aa || 0) * 100, 10), v => v / 100, v => mdxR(v * 100, 10)],
+  ['stealth', '雷达截面系数（越小越隐身，1 = 不隐身）', '', a => a.stealth ?? 1],
+  ['radar', '机载雷达距离（推演）', '米', a => a.radar ?? null],
+  ['aamR', '空空弹射程（推演）', '米', a => a.aamR ?? null],
+  ['pkK', '空空弹命中修正', '倍', a => a.pkK ?? 1],
+  ['agmR', '空地弹射程（推演）', '米', a => a.agmR ?? null],
+  ['std', '防区外投弹距离（推演）', '米', a => a.std ?? null],
+  ['turn', '转弯修正', '倍', a => a.turn ?? 1],
+  ['loiter', '盘旋时间', '秒', a => a.loiter ?? null]
+];
+const MDX_WPN_F = [['M', '速度', '马赫'], ['R', '射程', '公里'], ['Rmin', '最小射程', '米'], ['tb', '发动机工作时间', '秒'], ['g', '最大过载', 'G'], ['cone', '导引头视场', '度'], ['lk', '锁定时间', '秒'], ['pk', '命中概率', '0–1'], ['acc', '助推加速度（默认 20）', 'G']];
+const MDX_PROF = [['cruise', '平飞巡航'], ['skim', '掠海超低空'], ['loft', '高抛（中段爬高）'], ['popup', '末段跃升俯冲']];
+const MDX_MSL_F = [
+  ['spd', '飞行速度', '米 / 秒', m => m.spd], ['acc', '加速度（空着 = 一出筒就是巡航速度）', '米 / 秒²', m => m.acc ?? null], ['v0', '出筒速度（设了加速度时）', '米 / 秒', m => m.v0 ?? null],
+  ['sprint', '末段冲刺速度', '米 / 秒', m => m.sprint ?? null], ['sr', '末段冲刺距离', '米', m => m.sr ?? null],
+  ['prof', '弹道', MDX_PROF, m => m.prof || 'cruise'], ['z', '巡航高度（0 贴地 – 1 高空）', '', m => m.z], ['lz', '高抛 / 跃升高度（加多少）', '', m => m.lz ?? .5], ['pd', '跃升开始离目标', '米', m => m.pd ?? 700],
+  ['dmg', '毁伤', '', m => m.dmg], ['pen', '穿深', '毫米', m => mdxMM(m.pen), v => v / MOD_MM], ['R', '爆炸半径', '米', m => m.pw && m.pw.R], ['icp', '被拦截修正（越小越难拦）', '', m => m.icp]
+];
+const MDX_TABS = [['veh', '坦克装甲车'], ['air', '飞机'], ['wpn', '机载武器'], ['msl', '导弹'], ['mdl', '模型与挂点'], ['fx', '特效贴图'], ['map', '战场'], ['ren', '画面'], ['pack', '模组包']];
+const MDX_CSS = `
+#mdx { position: fixed; inset: 0; z-index: 46; display: grid; place-items: center; background: rgba(var(--bg-rgb), .86); padding: max(10px, env(safe-area-inset-top, 0px)) 12px; }
+#mdx[hidden] { display: none; }
+#mdx .mdx-win { width: min(1180px, 100%); height: min(780px, 100%); display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; background: rgba(var(--pn-rgb), .95); border: 1px solid var(--line-hi); border-radius: 8px; overflow: hidden; }
+#mdx header { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+#mdx header h2 { margin: 0; font-size: 18px; color: var(--g-hi); letter-spacing: .08em; flex: 1; }
+#mdx .mdx-tabs { display: flex; gap: 4px; padding: 6px 10px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+#mdx .mdx-tabs button, #mdx .mdx-btn { background: transparent; color: var(--text); border: 1px solid var(--line); border-radius: 5px; padding: 6px 12px; font: inherit; font-size: 13px; cursor: pointer; }
+#mdx .mdx-tabs button.on { background: rgba(var(--g-rgb), .16); border-color: var(--g); color: var(--g-hi); }
+#mdx .mdx-btn:hover, #mdx .mdx-tabs button:hover { border-color: var(--g); }
+#mdx .mdx-btn.pri { background: rgba(var(--g-rgb), .2); border-color: var(--g); color: var(--g-hi); }
+#mdx .mdx-body { display: grid; grid-template-columns: 260px minmax(0, 1fr); min-height: 0; }
+#mdx .mdx-body.one { grid-template-columns: minmax(0, 1fr); }
+#mdx .mdx-list { border-right: 1px solid var(--line); overflow: auto; padding: 6px; display: flex; flex-direction: column; gap: 3px; }
+#mdx .mdx-list input { margin-bottom: 4px; }
+#mdx .mdx-it { text-align: left; background: transparent; color: var(--text); border: 1px solid transparent; border-radius: 4px; padding: 6px 8px; font: inherit; font-size: 13px; cursor: pointer; }
+#mdx .mdx-it.on { border-color: var(--g); background: rgba(var(--g-rgb), .12); }
+#mdx .mdx-it .md { color: var(--amber, #ffc24a); margin-left: 6px; font-size: 11px; }
+#mdx .mdx-it small { display: block; color: var(--mute); font-size: 11px; }
+#mdx .mdx-form { overflow: auto; padding: 12px 16px; }
+#mdx .mdx-form h3 { margin: 0 0 4px; font-size: 16px; color: var(--g-hi); }
+#mdx .mdx-form p.note { margin: 2px 0 12px; color: var(--mute); font-size: 12px; line-height: 1.5; }
+#mdx .mdx-row { display: grid; grid-template-columns: minmax(150px, 1.3fr) minmax(110px, 1fr) auto auto; gap: 8px; align-items: center; padding: 5px 0; border-bottom: 1px dashed rgba(var(--g-rgb), .1); }
+#mdx .mdx-row label { font-size: 13px; color: var(--text); }
+#mdx .mdx-row .def { font-size: 11px; color: var(--mute); white-space: nowrap; }
+#mdx .mdx-row.chg label { color: var(--amber, #ffc24a); }
+#mdx input[type=number], #mdx input[type=text], #mdx select, #mdx textarea { background: rgba(0, 0, 0, .35); color: var(--text); border: 1px solid var(--line); border-radius: 4px; padding: 5px 7px; font: inherit; font-size: 13px; width: 100%; box-sizing: border-box; }
+#mdx textarea { min-height: 260px; font-family: var(--mono, monospace); font-size: 12px; }
+#mdx .mdx-rst { background: transparent; border: 0; color: var(--mute); cursor: pointer; font-size: 14px; padding: 2px 6px; }
+#mdx .mdx-rst:hover { color: var(--g-hi); }
+#mdx footer { display: flex; gap: 8px; align-items: center; padding: 8px 14px; border-top: 1px solid var(--line); }
+#mdx footer .msg { flex: 1; color: var(--mute); font-size: 12px; }
+#mdx .mdx-load { display: grid; grid-template-columns: 1.6fr 1fr .7fr auto; gap: 6px; align-items: center; margin: 4px 0; }
+#mdx .mdx-it.add { color: var(--g-hi); border-style: dashed; border-color: rgba(var(--g-rgb), .35); }
+#mdx .mdx-view { margin: 6px 0 8px; }
+#mdx .miv { position: relative; width: 100%; height: min(46vh, 380px); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: #202528; }
+#mdx .miv canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+#mdx .miv .miv-ov { pointer-events: none; }
+#mdx .miv .miv-msg { position: absolute; left: 10px; bottom: 8px; color: var(--mute); font-size: 12px; pointer-events: none; }
+#mdx .mdx-pick { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 4px 0 8px; font-size: 13px; }
+#mdx .mdx-pick label { display: flex; gap: 4px; align-items: center; color: var(--mute); }
+#mdx .mdx-xyz { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 4px; }
+#mdx .mdx-bind { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 4px 10px; font-size: 13px; }
+#mdx .mdx-bind label { display: flex; gap: 6px; align-items: center; }
+#mdx .mdx-fxv { width: 192px; height: 192px; border: 1px solid var(--line); border-radius: 6px; display: block; margin: 6px 0; }
+#mdx .mdx-btn[disabled] { opacity: .45; cursor: default; }
+@media (max-width: 720px) { #mdx .mdx-body { grid-template-columns: 1fr; grid-template-rows: 160px minmax(0, 1fr); } #mdx .mdx-list { border-right: 0; border-bottom: 1px solid var(--line); } #mdx .mdx-row { grid-template-columns: 1fr 1fr auto; } #mdx .mdx-row .def { display: none; } }`;
+function mdxBuild() {
+  if (MDX.el) return MDX.el;
+  const st = document.createElement('style'); st.textContent = MDX_CSS; document.head.appendChild(st);
+  const el = document.createElement('div');
+  el.id = 'mdx'; el.hidden = true; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', '编辑器');
+  el.innerHTML = `<div class="mdx-win"><header><h2>编辑器 · 自定义装备与战场</h2><button type="button" class="mdx-btn" data-a="close">关闭</button></header>
+    <nav class="mdx-tabs">${MDX_TABS.map(([k, n]) => `<button type="button" data-tab="${k}">${n}</button>`).join('')}</nav><div class="mdx-body"></div>
+    <footer><span class="msg"></span><button type="button" class="mdx-btn" data-a="undo">放弃没保存的改动</button><button type="button" class="mdx-btn pri" data-a="save">保存</button></footer></div>`;
+  document.body.appendChild(el);
+  el.addEventListener('click', mdxClick);
+  el.addEventListener('change', mdxChange);
+  el.addEventListener('input', e => { if (e.target.matches('.mdx-list input')) { MDX.q = e.target.value.trim(); mdxRender(true); } });
+  MDX.el = el;
+  return el;
+}
+let MDX_W = null;   // 正在编辑的副本（保存才写回 MOD）
+function openModEditor() {
+  if (typeof document === 'undefined') return;
+  const el = mdxBuild();
+  MDX_W = JSON.parse(JSON.stringify(MOD)); MDX.dirty = false;
+  el.hidden = false;
+  if (typeof lyPush === 'function') lyPush(el, e => { if (e.key === 'Escape') { e.preventDefault(); closeModEditor(); } });
+  mdxRender();
+}
+function closeModEditor() {
+  if (!MDX.el || MDX.el.hidden) return;
+  if (MDX.dirty && !confirm('有没保存的改动，关掉就不要了？')) return;
+  MDX.el.hidden = true;
+  if (typeof lyPop === 'function') lyPop(MDX.el);
+  if (typeof MENU === 'object' && MENU.open && typeof mnFocus === 'function') mnFocus();
+}
+const mdxMsg = t => { const m = MDX.el && MDX.el.querySelector('footer .msg'); if (m) m.textContent = t; };
+// —— 3D 模型：内置的（飞机按剪影键、车辆按型号的原表）+ 导入的 ——
+const mdxLibOf = k => (MDX_W && MDX_W.lib && MDX_W.lib[k]) || MOD.lib[k] || null;
+const mdxAirDef = () => Object.keys(MOD_DEF.v3air).length ? MOD_DEF.v3air : V3G_AIR;
+function mdxModels() {
+  const L = [], seen = new Map(), add = (id, nm, kind, imp) => { if (!id) return; const o = seen.get(id); if (o) { if (nm && !o.nms.includes(nm)) o.nms.push(nm); return; } const r = { id, nms: nm ? [nm] : [], kind, imp }; seen.set(id, r); L.push(r); };
+  for (const id in MOD.lib) if (MOD.lib[id].k === 'mdl' && !MODX.bad.has(id)) add(id, MOD.lib[id].nm, MOD.lib[id].kind || 'veh', 1);
+  const AD = mdxAirDef();
+  for (const k in AIR_MDL) { const id = AD[modAirSil(k)]; if (id) add(id, (MOD_DEF.air[k] || AIR_MDL[k]).name, 'air', 0); }
+  if (typeof EA_SPEC === 'object') for (const t in EA_SPEC) { const id = AD[modEairSil(t)]; if (id) add(id, (MOD_DEF.eair[t] || EA_SPEC[t]).name, 'air', 0); }
+  for (const s in AD) if (typeof AD[s] === 'string' && AD[s] !== 'podm') add(AD[s], null, 'air', 0);   // 运输机、直升机……没在型号表里的也列上
+  for (const o of mdxVehList()) add(V3G_VEH[o.k] || (o.side === 'e' ? 'm1a1' : 'ztz96'), o.nm, 'veh', 0);
+  for (const r of L) r.nm = (r.imp ? r.nms[0] : r.nms.slice(0, 2).join('、') + (r.nms.length > 2 ? ' 等' : '')) || r.id;
+  return L;
+}
+// 选模型的下拉框：原来的 + 导入的 + 内置的（同类在前）
+function mdxMdlSel(path, cur, defId, kind) {
+  const L = mdxModels(), opt = r => `<option value="${mdxEsc(r.id)}"${r.id === cur ? ' selected' : ''}>${mdxEsc(r.nm)}${r.imp ? '（导入）' : ''}</option>`;
+  const imp = L.filter(r => r.imp), bi = L.filter(r => !r.imp && r.id !== defId).sort((a, b) => (a.kind !== kind) - (b.kind !== kind));
+  const dn = (L.find(r => r.id === defId) || { nm: defId }).nm;
+  return `<div class="mdx-row${cur ? ' chg' : ''}"><label>3D 模型</label><select data-p="${path}" data-f="mdl"><option value="">原来的（${mdxEsc(dn)}）</option>${imp.length ? `<optgroup label="导入的">${imp.map(opt).join('')}</optgroup>` : ''}<optgroup label="游戏里的">${bi.map(opt).join('')}</optgroup></select><span class="def">「模型与挂点」页导入</span><button type="button" class="mdx-rst" data-rst="${path}|mdl" title="恢复默认" aria-label="3D 模型恢复默认">↺</button></div>`;
+}
+// 列表项：[{ id, nm, sub, mod（改过） }]
+function mdxItems() {
+  const W0 = MDX_W;
+  if (MDX.tab === 'veh') return mdxVehList().map(o => ({ id: o.k, nm: o.nm, sub: (o.side === 'e' ? '守方 · ' : '攻方 · ') + (VEH_SPEC[o.type].name || o.type), mod: !!W0.veh[o.k] }));
+  if (MDX.tab === 'air') return [...Object.keys(AIR_MDL).map(k => ({ id: k, nm: (MOD_DEF.air[k] || AIR_MDL[k]).name, sub: '攻方 · ' + k, mod: !!W0.air[k] })),
+    ...(typeof EA_SPEC === 'object' ? Object.keys(EA_SPEC).map(t => ({ id: 'e:' + t, nm: (MOD_DEF.eair[t] || EA_SPEC[t]).name, sub: '守方 · ' + t, mod: !!W0.eair[t] })) : [])];
+  if (MDX.tab === 'wpn') return Object.keys(FW_W).map(k => ({ id: k, nm: (MOD_DEF.wpn[k] || FW_W[k]).nm, sub: { aam: '空空导弹', agm: '空地导弹', arm: '反辐射导弹', gb: '制导炸弹' }[FW_W[k].k] || '', mod: !!W0.wpn[k] }));
+  if (MDX.tab === 'msl') return Object.keys(MS_PGM).map(k => ({ id: k, nm: (MOD_DEF.msl[k] || MS_PGM[k]).nm, sub: k, mod: !!W0.msl[k] }));
+  if (MDX.tab === 'mdl') return [{ id: '+imp', nm: '＋ 导入模型', sub: '.glb / .gltf / Sketchfab 压缩包', mod: false },
+    ...mdxModels().map(r => ({ id: r.id, nm: r.nm, sub: (r.kind === 'air' ? '飞机' : '车辆') + (r.imp ? ' · 导入 · ' + (mdxLibOf(r.id) || {}).tri + ' 个三角形' : ' · ' + r.id), mod: !!W0.mdl[r.id] }))];
+  if (MDX.tab === 'fx') return [{ id: '+imp', nm: '＋ 导入序列帧贴图', sub: 'PNG / WebP / JPEG 拼图', mod: false }, { id: 'slots', nm: '换掉游戏里的特效', sub: '爆炸、残骸火、炮口焰、烟团', mod: !!Object.keys(W0.fx).length },
+    ...Object.keys(MOD.lib).filter(id => MOD.lib[id].k === 'fx').map(id => ({ id, nm: MOD.lib[id].nm, sub: `${MOD.lib[id].n} × ${MOD.lib[id].n} 格 · ${MOD.lib[id].f} 帧`, mod: false }))];
+  return [];
+}
+function mdxRender(listOnly) {
+  const el = MDX.el, body = el.querySelector('.mdx-body');
+  el.querySelectorAll('.mdx-tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === MDX.tab));
+  const items = mdxItems();
+  if (items.length) {
+    if (!items.some(i => i.id === MDX.sel)) MDX.sel = (items.find(i => i.id[0] !== '+') || items[0]).id;
+    const q = MDX.q.toLowerCase(), shown = items.filter(i => !q || i.id[0] === '+' || i.nm.toLowerCase().includes(q) || i.id.includes(q));
+    const list = `<input type="text" placeholder="搜索" value="${mdxEsc(MDX.q)}" aria-label="搜索">${shown.map(i => `<button type="button" class="mdx-it${i.id === MDX.sel ? ' on' : ''}${i.id[0] === '+' ? ' add' : ''}" data-it="${mdxEsc(i.id)}">${mdxEsc(i.nm)}${i.mod ? '<span class="md">已改</span>' : ''}<small>${mdxEsc(i.sub)}</small></button>`).join('')}`;
+    if (listOnly) { const L = body.querySelector('.mdx-list'); if (L) { const inp = L.querySelector('input'), pos = inp && inp.selectionStart; L.innerHTML = list; const i2 = L.querySelector('input'); if (i2) { i2.focus(); i2.setSelectionRange(pos, pos); } return; } }
+    body.className = 'mdx-body';
+    const sc = body.querySelector('.mdx-form'), top = sc && MDX.keep ? sc.scrollTop : 0;
+    body.innerHTML = `<div class="mdx-list">${list}</div><div class="mdx-form">${mdxForm()}</div>`;
+    if (top) body.querySelector('.mdx-form').scrollTop = top;
+  } else { body.className = 'mdx-body one'; body.innerHTML = `<div class="mdx-form">${mdxForm()}</div>`; }
+  MDX.keep = false;
+  // 模型预览：画布留着（不随表单重建），挂回占位处
+  const vh = body.querySelector('.mdx-view');
+  if (vh && typeof mivInit === 'function') {
+    vh.appendChild(mivInit()); MIV.marks = mdxMarks(); MIV.pick = MDX.pk ? mdxOnPick : null;
+    MIV.onLoad = k => { if (MDX.tab === 'mdl' && MDX.el && !MDX.el.hidden && MDX.sel && MDX.sel.replace(/~$/, '') === k) { MDX.keep = true; mdxRender(); } };
+    mivShow(vh.dataset.k);
+  }
+  const fv = body.querySelector('.mdx-fxv');
+  if (fv) mdxFxAnim(fv);
+}
+// 一行参数：值（改过的用改过的）、默认值、恢复默认
+function mdxRow(path, f, nm, unit, def, cur, conv) {
+  const chg = cur !== undefined && cur !== null && cur !== '', v = chg ? (conv ? conv[0](cur) : cur) : def;
+  const inp = Array.isArray(unit) ? `<select data-p="${path}" data-f="${f}">${unit.map(([k, n]) => `<option value="${k}"${String(v) === k ? ' selected' : ''}>${n}</option>`).join('')}</select>`
+    : `<input type="number" step="any" data-p="${path}" data-f="${f}" value="${v ?? ''}" placeholder="${def == null ? '（没有）' : ''}">`;
+  const du = Array.isArray(unit) ? (unit.find(o => o[0] === String(def)) || [, def])[1] : (def ?? '—') + (unit ? ' ' + unit : '');
+  return `<div class="mdx-row${chg ? ' chg' : ''}"><label>${nm}${!Array.isArray(unit) && unit ? `（${unit}）` : ''}</label>${inp}<span class="def">默认 ${mdxEsc(du)}</span><button type="button" class="mdx-rst" data-rst="${path}|${f}" title="恢复默认" aria-label="${nm}恢复默认">↺</button></div>`;
+}
+// 飞机的一组参数行（F 的格式见 MDX_AIR_F）
+const mdxAirRows = (path, F, a, k, cur, hide) => F.filter(r => !hide || r[3](a, k) != null || cur[r[0]] != null).map(([f, nm, unit, d, back, show]) => mdxRow(path, f, nm, unit, d(a, k), cur[f], back ? [show, back] : null)).join('');
+// 按现在的参数算一下真实性能（airperf.js apPerf）：巡航速度下的平飞加速度、持续 / 瞬时转弯
+function mdxPerf(k, cur, spd) {
+  const A0 = mdxAP0(k);
+  if (!A0 || typeof apPerf !== 'function') return '';
+  const A = { ...A0 };
+  for (const f in MOD_APF) if (modNum(cur[f])) A[MOD_APF[f]] = cur[f];
+  AP.__mdx = A;
+  const out = [];
+  for (const V of [spd, 250]) { const P = apPerf('__mdx', V); if (P) out.push(`${Math.round(V * 3.6)} 千米 / 时：平飞加速度 ${P.acc.toFixed(1)} 米 / 秒²，持续过载 ${P.ns.toFixed(1)} G（转弯 ${(P.ws * 57.3).toFixed(1)}° / 秒），瞬时 ${P.ni.toFixed(1)} G（${(P.wi * 57.3).toFixed(1)}° / 秒）`); }
+  delete AP.__mdx;
+  return `<p class="note">按现在的参数（真实值，推演里空战机动按它算，地图小所以再快 ${typeof AP_K === 'number' ? AP_K : 6} 倍）：<br>${out.join('<br>')}</p>`;
+}
+function mdxForm() {
+  const W0 = MDX_W, k = MDX.sel;
+  if (MDX.tab === 'veh') {
+    const o = mdxVehList().find(x => x.k === k);
+    if (!o) return '';
+    o.sp = VEH_SPEC[o.type];
+    const cur = W0.veh[k] || {}, hasEra = RLM[k] && RLM[k].era;
+    return `<h3>${mdxEsc(o.nm)}</h3><p class="note">车种：${mdxEsc(o.sp.name)}${hasEra ? ' · 模型上挂着爆炸反应装甲块' : ''}。装甲、穿深按毫米均质钢写（推演里 ${MOD_MM} 毫米算一级：穿深够装甲才打得穿，差一级以内打掉一部分）。
+      空着或恢复默认就用原来的数。保存后下一局生效，正在打的这一局里的这型车也马上更新。</p>` +
+      mdxMdlSel('veh|' + k, cur.mdl, V3G_VEH[k] || (o.side === 'e' ? 'm1a1' : 'ztz96'), 'veh') +
+      MDX_VEH_F.map(([f, nm, unit, d]) => mdxRow('veh|' + k, f, nm, unit, d(o), cur[f])).join('');
+  }
+  if (MDX.tab === 'air' && k.startsWith('e:')) {
+    const t = k.slice(2), a = MOD_DEF.eair[t] || EA_SPEC[t], cur = W0.eair[t] || {};
+    return `<h3>${mdxEsc(a.name)}</h3><p class="note">守方飞机。速度是真实的；作战重量、推力、阻力这几项是能量机动的物理量（转得多急、加速多快按它们算）。</p>` +
+      mdxMdlSel('eair|' + t, cur.mdl, mdxAirDef()[modEairSil(t)], 'air') + mdxAirRows('eair|' + t, MDX_EAIR_F, a, t, cur) +
+      (mdxAP0(t) ? `<h3 style="margin-top:14px">性能（加速度、转弯）</h3>${mdxPerf(t, cur, a.spd)}` + mdxAirRows('eair|' + t, MDX_PERF_F.filter(r => r[6] !== 'fl'), a, t, cur, 1) : '');
+  }
+  if (MDX.tab === 'air') {
+    const a = MOD_DEF.air[k] || AIR_MDL[k], cur = W0.air[k] || {}, load = cur.load || (MOD_DEF.load[k] !== undefined ? MOD_DEF.load[k] : FW_LOAD[k]) || [];
+    const rows = (cur.load || load.map(r => ({ w: r.w, bay: r.bay, n: mdxLoadN(k, r) }))).map((r, i) => `<div class="mdx-load"><select data-ld="${i}" data-lf="w">${Object.keys(FW_W).map(w => `<option value="${w}"${w === r.w ? ' selected' : ''}>${mdxEsc((MOD_DEF.wpn[w] || FW_W[w]).nm)}</option>`).join('')}</select>
+      <select data-ld="${i}" data-lf="bay">${[['main', '主弹舱'], ['side', '侧弹舱'], ['ext', '外挂']].map(([b, n]) => `<option value="${b}"${b === r.bay ? ' selected' : ''}>${n}</option>`).join('')}</select>
+      <input type="number" min="0" max="16" step="1" data-ld="${i}" data-lf="n" value="${r.n}" aria-label="枚数"><button type="button" class="mdx-rst" data-ldx="${i}" title="去掉这一项">✕</button></div>`).join('');
+    return `<h3>${mdxEsc(a.name)}</h3><p class="note">推演里的距离是游戏尺度（地图比真实小），速度是真实的。挂载改的是驾驶时的武器表、3D 挂架上画的弹，以及 AI 出击时带几枚；挂点、尾喷口的位置在「模型与挂点」页。</p>` +
+      mdxMdlSel('air|' + k, cur.mdl, mdxAirDef()[modAirSil(k)], 'air') + mdxAirRows('air|' + k, MDX_AIR_F, a, k, cur) +
+      (mdxAP0(k) ? `<h3 style="margin-top:14px">性能（加速度、转弯、推力）</h3>${mdxPerf(k, cur, a.spd)}` + mdxAirRows('air|' + k, MDX_PERF_F, a, k, cur, 1) : '') +
+      `<h3 style="margin-top:14px">航炮</h3><p class="note">亲自驾驶时空格开炮；炮口位置在「模型与挂点」页点。</p>` + mdxAirRows('air|' + k, MDX_GUN_F, a, k, cur) +
+      `<h3 style="margin-top:14px">挂载</h3><p class="note">${cur.load ? '已改过（' : '原来的挂法（'}武器 · 位置 · 枚数）</p>${rows}<button type="button" class="mdx-btn" data-a="ldadd">加一项武器</button> <button type="button" class="mdx-btn" data-a="ldrst">恢复原来的挂载</button>`;
+  }
+  if (MDX.tab === 'wpn') {
+    const w = MOD_DEF.wpn[k] || FW_W[k], cur = W0.wpn[k] || {};
+    return `<h3>${mdxEsc(w.nm)}</h3><p class="note">亲自驾驶时用的机载武器（真实参数）：速度、射程、导引头视场、锁定时间、过载、助推加速度。</p>` + MDX_WPN_F.map(([f, nm, unit]) => mdxRow('wpn|' + k, f, nm, unit, w[f] ?? (f === 'acc' ? 20 : null), cur[f])).join('');
+  }
+  if (MDX.tab === 'msl') {
+    const m = MOD_DEF.msl[k] || MS_PGM[k], cur = W0.msl[k] || {};
+    return `<h3>${mdxEsc(m.nm)}</h3><p class="note">推演里飞的导弹、制导炸弹：速度、加速度、弹道（平飞、掠海、高抛、末段跃升俯冲）、毁伤。巡航高度 0 是贴地 / 贴海，1 是高空。</p>` +
+      MDX_MSL_F.map(([f, nm, unit, d, back]) => mdxRow('msl|' + k, f, nm, unit, d(m), cur[f], back ? [v => mdxR(d({ ...m, [f]: v })), back] : null)).join('');
+  }
+  if (MDX.tab === 'mdl') return k === '+imp' ? mdxImpForm() : mdxMdlForm(k);
+  if (MDX.tab === 'fx') return mdxFxForm(k);
+  if (MDX.tab === 'map') {
+    const w = W0.map.w ?? W0_DEF(), h = W0.map.h ?? H0_DEF();
+    return `<h3>战场大小</h3><p class="note">程序生成的「海岸登陆」地图（沙盒、闯关里选它时）的宽（东西）和纵深（南北，海在南边），单位米；默认 8400 × 5600。宽 4000–30000、纵深 3000–20000；太大的地图按 20 米一格算，推演会慢一些。台湾东海岸是按真实地形做的，大小固定。</p>` +
+      mdxRow('map', 'w', '宽', '米', 8400, W0.map.w) + mdxRow('map', 'h', '纵深', '米', 5600, W0.map.h) +
+      `<p class="note">现在：${Math.round(w)} × ${Math.round(h)} 米（${(w * h / 1e6).toFixed(1)} 平方公里）。保存后新开的一局生效。</p>`;
+  }
+  if (MDX.tab === 'ren') {
+    const s = SETTINGS, sl = (k, nm, mn, mx, stp, tip) => `<div class="mdx-row"><label>${nm}</label><input type="range" min="${mn}" max="${mx}" step="${stp}" data-set="${k}" value="${s[k]}"><span class="def">${tip(s[k])}</span><span></span></div>`;
+    const sw = (k, nm) => `<div class="mdx-row"><label>${nm}</label><select data-set="${k}"><option value="true"${s[k] !== false ? ' selected' : ''}>开</option><option value="false"${s[k] === false ? ' selected' : ''}>关</option></select><span></span><span></span></div>`;
+    return `<h3>画面</h3><p class="note">改了马上生效（不用点保存）。卡的话先关阴影、把渲染距离调近、云量调低。</p>` +
+      sl('rdist', '3D 渲染距离', .5, 4, .25, v => (+v).toFixed(2) + ' 倍') +
+      `<div class="mdx-row"><label>画质</label><select data-set="quality"><option value="high"${s.quality !== 'low' ? ' selected' : ''}>高</option><option value="low"${s.quality === 'low' ? ' selected' : ''}>低（不画阴影、贴图小一些）</option></select><span></span><span></span></div>` +
+      sw('shadow', '实时阴影') + sl('cloud', '云量', 0, 1, .05, v => Math.round(v * 100) + '%') + sw('vfx', '序列帧爆炸特效') + sw('film', '电影后期（光束、胶片颗粒、景深）') + sl('bloom', '辉光强度', 0, 1.5, .05, v => Math.round(v * 100) + '%');
+  }
+  if (MDX.tab === 'pack') {
+    return `<h3>模组包</h3><p class="note">把这里改的全部参数（坦克、飞机、挂载、武器、导弹、模型上的点、特效、战场大小、画面）存成一个 JSON 文件，换台设备或分享给别人；
+      「连同导入的模型和贴图」会把导入的文件也打进去（文件会大）。也可以直接在下面的文本框里改参数再点「应用文本」。</p>
+      <p><button type="button" class="mdx-btn pri" data-a="export">导出模组包</button> <button type="button" class="mdx-btn" data-a="exportf">导出（连同导入的模型和贴图）</button> <label class="mdx-btn">导入模组包<input type="file" accept=".json,application/json" data-a="import" hidden></label> <button type="button" class="mdx-btn" data-a="wipe">全部恢复默认</button></p>
+      <textarea spellcheck="false" aria-label="模组包内容">${mdxEsc(JSON.stringify(Object.fromEntries([['v', 1], ...MOD_SEC.filter(s => s !== 'lib').map(s => [s, W0[s]])]), null, 1))}</textarea><p><button type="button" class="mdx-btn" data-a="applytxt">应用文本</button></p>`;
+  }
+  return '';
+}
+// —— 模型与挂点 ——
+const MDX_AXO = [['+z', '+Z（glTF 常见）'], ['-z', '−Z'], ['+x', '+X'], ['-x', '−X'], ['+y', '+Y'], ['-y', '−Y']];
+function mdxImpForm() {
+  const I = MDX.imp, sel = (k, L) => `<select data-imp="${k}">${L.map(([v, n]) => `<option value="${v}"${String(I[k]) === v ? ' selected' : ''}>${n}</option>`).join('')}</select>`;
+  const row = (nm, inp, tip = '') => `<div class="mdx-row"><label>${nm}</label>${inp}<span class="def">${tip}</span><span></span></div>`;
+  return `<h3>导入模型</h3><p class="note">支持 .glb、.gltf（连同 .bin 和贴图一起选）、Sketchfab 下载的 glTF 压缩包（.zip）。导入后存在这台设备的浏览器里，在左边列表里选它：预览里点炮口、挂点、尾喷口，
+    再到「坦克装甲车」/「飞机」页把它换到型号上（或者在它的页面里直接勾）。模型的前方、上方不对就在预览下面转一下。网格压缩（Draco / meshopt）的模型解不开，导出时选不压缩。
+    署名：Sketchfab 导出的文件里带着作者和授权，会列进「设置 → 素材致谢」；自己做的或别处下载的注意授权。</p>
+    ${row('文件', '<input type="file" multiple accept=".glb,.gltf,.zip,.bin,.png,.jpg,.jpeg,.webp" data-imp="files">', MDX.impF ? MDX.impF.length + ' 个文件' : '')}
+    ${row('名称', `<input type="text" data-imp="name" value="${mdxEsc(I.name || '')}">`)}
+    ${row('类型', sel('kind', [['veh', '坦克装甲车'], ['air', '飞机']]))}
+    ${row('实际全长（米）', `<input type="number" step="any" data-imp="len" value="${I.len ?? ''}" placeholder="空着 = 文件里的单位就是米">`, '机头到机尾 / 车头到车尾（含炮管）')}
+    ${I.kind === 'veh' ? row('车体长（米）', `<input type="number" step="any" data-imp="hl" value="${I.hl ?? ''}" placeholder="空着 = 全长">`, '游戏按车体长（不含炮管）摆') : ''}
+    ${row('模型的前方', sel('fwd', MDX_AXO), '文件里哪根轴朝前')}
+    ${row('模型的上方', sel('up', [['+y', '+Y（glTF 标准）'], ['+z', '+Z'], ['-y', '−Y'], ['-z', '−Z']]))}
+    ${row('贴图最大边', sel('tex', [['1024', '1024'], ['2048', '2048（推荐）'], ['4096', '4096']]), '太大的缩小，省显存')}
+    <p><button type="button" class="mdx-btn pri" data-a="doimp"${MDX.impF ? '' : ' disabled'}>导入</button></p>`;
+}
+// 模型上现有的点（编辑器改过的用改过的，没改的用游戏原来的）
+function mdxMdlCur(mk) {
+  const A = MDX_W.mdl[mk] || {}, M = typeof MIV === 'object' && MIV.key === mk.replace(/~$/, '') && MIV.M ? MIV.M.m : null, M3 = typeof V3G === 'object' && V3G.M[mk.replace(/~$/, '')];
+  const st0 = (mk in MOD_DEF.st ? MOD_DEF.st[mk] : FW_ST[mk]) || {}, noz0 = (M && M.noz) || (M3 && M3.meta && M3.meta.noz) || [];
+  const gk = Object.keys(MOD_DEF.gun).length ? MOD_DEF.gun : FW_GUN, gun0 = (Object.keys(gk).map(k => gk[k] && mdxAirDef()[modAirSil(k)] === mk ? gk[k].at : null).find(x => x)) || null;
+  return { A, st: A.st || st0, stD: !A.st, noz: A.noz || noz0, nozD: !A.noz, gun: A.gun || gun0, gunD: !A.gun, muz: A.muz || null, fx: A.fx || {} };
+}
+// 预览上的标记
+function mdxMarks() {
+  const mk = MDX.sel;
+  if (MDX.tab !== 'mdl' || !mk || mk[0] === '+') return [];
+  const C = mdxMdlCur(mk), out = [];
+  if (C.muz) out.push({ p: C.muz, c: '#ff8a3d', t: '炮口', r: 6 });
+  if (C.gun) out.push({ p: C.gun, c: '#ff4d4d', t: '航炮', r: 5, dim: C.gunD });
+  for (const g in C.st) (C.st[g] || []).forEach((p, i) => out.push({ p, c: g === MDX.hg ? '#3de0ff' : '#7fa8b8', t: g === MDX.hg ? g + ' ' + (i + 1) : '', r: g === MDX.hg ? 5 : 3.5, dim: C.stD }));
+  for (const n of C.noz) for (const sg of n[1] ? [1, -1] : [1]) out.push({ p: [n[0], n[1] * sg, n[2]], c: '#ff5cf0', t: sg > 0 ? '喷口' : '', r: Math.max(4, 6), dim: C.nozD });
+  return out;
+}
+function mdxOnPick(h) {
+  const mk = MDX.sel, A = MDX_W.mdl[mk] = MDX_W.mdl[mk] || {}, C = mdxMdlCur(mk), p = h.p;
+  if (MDX.pk === 'muz') A.muz = p;
+  else if (MDX.pk === 'gun') A.gun = p;
+  else if (MDX.pk === 'hp') {
+    if (!A.st) A.st = modClone(C.st) || {};
+    const g = MDX.hg || 'ext', L = A.st[g] = A.st[g] || [];
+    L.push(p);
+    if (MDX.mir && Math.abs(p[1]) > .05) L.push([p[0], -p[1], p[2]]);   // 左右对称：另一边也挂一个
+  } else if (MDX.pk === 'noz') {
+    if (!A.noz) A.noz = modClone(C.noz) || [];
+    A.noz.push([p[0], Math.abs(p[1]) < .05 ? 0 : Math.abs(p[1]), p[2], MDX.nzR || .45, .6]);
+  } else return;
+  MDX.dirty = true; MDX.keep = true; mdxRender(); mdxMsg('点上了（' + p.join(', ') + '），点「保存」生效');
+}
+function mdxMdlForm(mk) {
+  const md = mdxModels().find(r => r.id === mk);
+  if (!md) return '';
+  const C = mdxMdlCur(mk), air = md.kind === 'air', L = md.imp ? mdxLibOf(mk) : null, num = (path, v) => `<input type="number" step="any" data-mf="${path}" value="${v ?? ''}">`;
+  const xyz = (path, P) => `<span class="mdx-xyz">${[0, 1, 2].map(i => num(path + '.' + i, P ? P[i] : '')).join('')}</span>`;
+  const pk = (k, n) => `<button type="button" class="mdx-btn${MDX.pk === k ? ' pri' : ''}" data-pk="${k}">${n}</button>`;
+  let h = `<h3>${mdxEsc(md.nm)}</h3><p class="note">${md.imp ? `导入的模型 · ${L.tri} 个三角形 · 全长 ${L.len} 米 · ${Math.round(L.kb / 1024 * 10) / 10} MB` : '游戏里的模型 · ' + mdxEsc(mk)}。坐标是模型坐标（米）：x 朝前、y 朝左、z 朝上，原点在底面中间。
+    拖动转、滚轮缩放、右键拖动平移。先选下面要点的东西，再在模型上点一下。</p>
+    <div class="mdx-view" data-k="${mdxEsc(mk.replace(/~$/, ''))}"></div>
+    <div class="mdx-pick">点选：${pk('', '不点')}${air ? pk('hp', '挂点') + pk('noz', '尾喷口') + pk('gun', '航炮口') : pk('muz', '主炮炮口')}
+      ${MDX.pk === 'hp' ? `<label><input type="checkbox" data-mir="1"${MDX.mir ? ' checked' : ''}> 左右对称</label>` : ''}${MDX.pk === 'noz' ? `<label>喷口内半径 <input type="number" step="any" data-nzr="1" value="${MDX.nzR}" style="width:70px"> 米</label>` : ''}</div>`;
+  if (md.imp) {
+    h += `<div class="mdx-row"><label>名称</label><input type="text" data-lib="nm" value="${mdxEsc(L.nm)}"><span></span><span></span></div>
+      <div class="mdx-row"><label>类型</label><select data-lib="kind"><option value="veh"${L.kind !== 'air' ? ' selected' : ''}>坦克装甲车</option><option value="air"${L.kind === 'air' ? ' selected' : ''}>飞机</option></select><span></span><span></span></div>
+      <p>朝向不对：<button type="button" class="mdx-btn" data-a="turn" data-ax="z">绕竖轴转 90°</button> <button type="button" class="mdx-btn" data-a="turn" data-ax="fz">前后掉头</button> <button type="button" class="mdx-btn" data-a="turn" data-ax="y">抬头 90°</button> <button type="button" class="mdx-btn" data-a="turn" data-ax="x">侧滚 90°</button>
+      <button type="button" class="mdx-btn" data-a="mdel">删除这个模型</button></p>`;
+    // 装到哪些型号上
+    const ts = air ? [...Object.keys(AIR_MDL).map(k => ['air', k, (MOD_DEF.air[k] || AIR_MDL[k]).name]), ...(typeof EA_SPEC === 'object' ? Object.keys(EA_SPEC).map(t => ['eair', t, (MOD_DEF.eair[t] || EA_SPEC[t]).name]) : [])]
+      : mdxVehList().map(o => ['veh', o.k, o.nm]);
+    h += `<h3 style="margin-top:12px">用在这些型号上</h3><div class="mdx-bind">${ts.map(([s, k, n]) => `<label><input type="checkbox" data-bind="${s}|${k}"${(MDX_W[s][k] || {}).mdl === mk ? ' checked' : ''}> ${mdxEsc(n)}</label>`).join('')}</div>`;
+  }
+  const rst = (s, d) => d ? '<span class="def">（游戏原来的）</span>' : `<button type="button" class="mdx-btn" data-mrst="${s}">恢复原来的</button>`;
+  if (!air) {
+    h += `<h3 style="margin-top:12px">主炮炮口 ${rst('muz', !C.A.muz)}</h3><p class="note">坦克炮的曳光弹、炮口焰从这里出（跟着炮塔转）；没设的从车顶出。</p><div class="mdx-row"><label>炮口 x / y / z</label>${xyz('muz', C.muz)}<span></span><span></span></div>`;
+    return h;
+  }
+  // 挂点
+  const groups = [...new Set(['main', 'side', 'ext', ...Object.keys(C.st), ...(FW_W[MDX.hg] ? [MDX.hg] : [])])];   // 刚选的「新建：专挂 某型弹」还没有点，也要留着
+  if (!groups.includes(MDX.hg)) MDX.hg = 'ext';
+  const gname = g => ({ main: '主弹舱', mainS: '主弹舱（短弹两排）', side: '侧弹舱', sideX: '侧弹舱（推出舱外）', ext: '外挂', tip: '翼尖', jpod: '干扰吊舱' })[g] || ((MOD_DEF.wpn[g] || FW_W[g] || {}).nm ? '专挂 ' + (MOD_DEF.wpn[g] || FW_W[g]).nm : g);
+  const P = C.st[MDX.hg] || [];
+  h += `<h3 style="margin-top:12px">挂点 ${rst('st', C.stD)}</h3><p class="note">按挂载里的「位置」挂：主弹舱、侧弹舱、外挂；某型武器有专门的一组（「专挂 霹雳-15」）就挂在那组。先打的排在前面。</p>
+    <div class="mdx-row"><label>挂点组</label><select data-hg="1">${groups.map(g => `<option value="${g}"${g === MDX.hg ? ' selected' : ''}>${mdxEsc(gname(g))}（${(C.st[g] || []).length}）</option>`).join('')}${Object.keys(FW_W).filter(w => !groups.includes(w)).map(w => `<option value="${w}">新建：专挂 ${mdxEsc((MOD_DEF.wpn[w] || FW_W[w]).nm)}</option>`).join('')}</select><span></span><span></span></div>
+    ${P.map((p, i) => `<div class="mdx-row"><label>${i + 1}</label>${xyz(`st.${MDX.hg}.${i}`, p)}<span></span><button type="button" class="mdx-rst" data-mdel="st.${MDX.hg}.${i}" title="去掉">✕</button></div>`).join('') || '<p class="note">这一组还没有挂点：选「挂点」后在模型上点。</p>'}`;
+  // 尾喷口
+  h += `<h3 style="margin-top:12px">尾喷口 ${rst('noz', C.nozD)}</h3><p class="note">喷口出口截面的中心、内半径、出口到喉道的深（米）；y 不为 0 的左右各一个。尾焰、热浪、喷口里的发光都按它画。</p>
+    ${C.noz.map((n, i) => `<div class="mdx-row"><label>${i + 1}（x y z · 半径 · 深）</label><span class="mdx-xyz">${[0, 1, 2, 3, 4].map(j => num(`noz.${i}.${j}`, n[j])).join('')}</span><span></span><button type="button" class="mdx-rst" data-mdel="noz.${i}" title="去掉">✕</button></div>`).join('') || '<p class="note">没有喷口（螺旋桨飞机、直升机不用）。</p>'}`;
+  // 尾焰
+  const fx = C.fx, fsel = (f, L) => `<select data-mf="fx.${f}">${L.map(([v, n]) => `<option value="${v}"${String(fx[f] ?? L[0][0]) === v ? ' selected' : ''}>${n}</option>`).join('')}</select>`;
+  const frow = (f, nm, d, unit = '倍') => `<div class="mdx-row${fx[f] != null ? ' chg' : ''}"><label>${nm}（${unit}）</label>${num('fx.' + f, fx[f] ?? d)}<span class="def">默认 ${d}</span><button type="button" class="mdx-rst" data-mdel="fx.${f}" title="恢复默认">↺</button></div>`;
+  const fxs = Object.keys(MOD.lib).filter(id => MOD.lib[id].k === 'fx');
+  h += `<h3 style="margin-top:12px">尾焰（开加力时）</h3>` + frow('len', '长度', 1) + frow('wid', '粗细', 1) + frow('bri', '亮度', 1) + frow('dia', '马赫环个数', 5, '个') + frow('haze', '热浪', 1) +
+    `<div class="mdx-row"><label>体渲染尾焰</label>${fsel('vol', [['true', '画'], ['false', '不画（只用序列帧）']])}<span></span><span></span></div>
+    <div class="mdx-row"><label>序列帧尾焰</label><select data-mf="fx.spr"><option value="">不用</option>${fxs.map(id => `<option value="${id}"${fx.spr === id ? ' selected' : ''}>${mdxEsc(MOD.lib[id].nm)}</option>`).join('')}</select><span class="def">「特效贴图」页导入</span><span></span></div>` +
+    (fx.spr ? frow('sprS', '序列帧大小', 1) : '');
+  // 航炮口
+  h += `<h3 style="margin-top:12px">航炮炮口 ${rst('gun', C.gunD)}</h3><p class="note">亲自驾驶时航炮的炮弹从这里出（有没有航炮、备弹在「飞机」页）。</p><div class="mdx-row"><label>炮口 x / y / z</label>${xyz('gun', C.gun)}<span></span><span></span></div>`;
+  return h;
+}
+// 改模型上的一个值：path 「muz.0」「st.ext.3.1」「noz.0.3」「fx.len」
+function mdxMdlSet(path, v) {
+  const mk = MDX.sel, A = MDX_W.mdl[mk] = MDX_W.mdl[mk] || {}, C = mdxMdlCur(mk), ks = path.split('.');
+  if (ks[0] === 'st' && !A.st) A.st = modClone(C.st) || {};
+  if (ks[0] === 'noz' && !A.noz) A.noz = modClone(C.noz) || [];
+  if (ks[0] === 'gun' && !A.gun) A.gun = C.gun ? C.gun.slice() : [0, 0, 0];
+  if (ks[0] === 'muz' && !A.muz) A.muz = [0, 0, 0];
+  let o = A;
+  for (let i = 0; i < ks.length - 1; i++) { const kk = ks[i]; if (o[kk] == null) o[kk] = /^\d+$/.test(ks[i + 1]) ? [] : {}; o = o[kk]; }
+  const last = ks[ks.length - 1];
+  if (v === '' || v == null) { if (Array.isArray(o)) o[+last] = 0; else delete o[last]; } else o[last] = v;
+  if (A.fx && !Object.keys(A.fx).length) delete A.fx;
+  if (!Object.keys(A).length) delete MDX_W.mdl[mk];
+  MDX.dirty = true;
+}
+function mdxMdlDel(path) {
+  const mk = MDX.sel, A = MDX_W.mdl[mk] = MDX_W.mdl[mk] || {}, C = mdxMdlCur(mk), ks = path.split('.');
+  if (ks[0] === 'st' && !A.st) A.st = modClone(C.st) || {};
+  if (ks[0] === 'noz' && !A.noz) A.noz = modClone(C.noz) || [];
+  let o = A;
+  for (let i = 0; i < ks.length - 1; i++) { o = o[ks[i]]; if (o == null) return; }
+  const last = ks[ks.length - 1];
+  if (Array.isArray(o)) o.splice(+last, 1); else delete o[last];
+  if (A.fx && !Object.keys(A.fx).length) delete A.fx;
+  if (!Object.keys(A).length) delete MDX_W.mdl[mk];
+  MDX.dirty = true;
+}
+// —— 特效贴图 ——
+const MDX_SLOT = [['expl', '爆炸（火球 + 烟，放一遍）'], ['fire', '残骸起火（循环）'], ['mzl', '坦克 / 车炮炮口焰'], ['mzla', '火炮炮口焰'], ['puff', '烟团']];
+const MDX_FXM = [['2', '发光（火焰、尾焰、爆炸）'], ['1', '受光（烟）'], ['0', '分通道（ArmyVFX 的格式：A 透明、B 火光、R / G 受光）']];
+function mdxFxForm(k) {
+  const row = (nm, inp, tip = '') => `<div class="mdx-row"><label>${nm}</label>${inp}<span class="def">${tip}</span><span></span></div>`;
+  const fxs = Object.keys(MOD.lib).filter(id => MOD.lib[id].k === 'fx'), ms = (cur, attr) => `<select ${attr}>${MDX_FXM.map(([v, n]) => `<option value="${v}"${String(cur) === v ? ' selected' : ''}>${n}</option>`).join('')}</select>`;
+  if (k === '+imp') {
+    const I = MDX.fxImp;
+    return `<h3>导入序列帧贴图</h3><p class="note">一张图里按行排好的动画帧（每行 n 格、共 n 行，从左上角开始一行行往下），比如虚幻、Unity 特效包里的 SubUV / Flipbook 贴图。
+      导入后可以换掉游戏里的爆炸、炮口焰、烟（「换掉游戏里的特效」），或者在「模型与挂点」里当飞机的尾焰。</p>
+      ${row('图片', '<input type="file" accept="image/png,image/webp,image/jpeg" data-fxi="file">', MDX.fxF ? mdxEsc(MDX.fxF.name) : '')}
+      ${row('名称', `<input type="text" data-fxi="name" value="${mdxEsc(I.name || '')}">`)}
+      ${row('每行几格', `<input type="number" min="1" max="32" step="1" data-fxi="n" value="${I.n}">`, '8 × 8、11 × 11 这样')}
+      ${row('一共几帧', `<input type="number" min="1" max="1024" step="1" data-fxi="f" value="${I.f}">`, '最后一行没排满就写实际帧数')}
+      ${row('画法', ms(I.mode, 'data-fxi="mode"'))}
+      <p><button type="button" class="mdx-btn pri" data-a="fximp"${MDX.fxF ? '' : ' disabled'}>导入</button></p>`;
+  }
+  if (k === 'slots') return `<h3>换掉游戏里的特效</h3><p class="note">用导入的序列帧换掉写实画面里的特效（帧数不一样也行，按总帧数换算）。保存后马上生效。</p>` +
+    MDX_SLOT.map(([s, n]) => row(n, `<select data-fxs="${s}"><option value="">原来的（ArmyVFX）</option>${fxs.map(id => `<option value="${id}"${MDX_W.fx[s] === id ? ' selected' : ''}>${mdxEsc(MOD.lib[id].nm)}</option>`).join('')}</select>`)).join('') +
+    (fxs.length ? '' : '<p class="note">还没有导入的贴图：先点左边「＋ 导入序列帧贴图」。</p>');
+  const L = MOD.lib[k];
+  if (!L) return '';
+  return `<h3>${mdxEsc(L.nm)}</h3><canvas class="mdx-fxv" data-k="${mdxEsc(k)}" width="256" height="256"></canvas>
+    ${row('名称', `<input type="text" data-lib="nm" value="${mdxEsc(L.nm)}">`)}${row('每行几格', `<input type="number" min="1" max="32" step="1" data-lib="n" value="${L.n}">`)}${row('一共几帧', `<input type="number" min="1" max="1024" step="1" data-lib="f" value="${L.f}">`)}
+    ${row('画法', ms(L.mode, 'data-lib="mode"'))}<p><button type="button" class="mdx-btn" data-a="fxdel">删除这张贴图</button></p>`;
+}
+// 序列帧预览：按帧循环播放
+const MDXF = { raf: 0, img: null, k: null };
+function mdxFxAnim(cv) {
+  const k = cv.dataset.k, L = MOD.lib[k];
+  cancelAnimationFrame(MDXF.raf);
+  if (!L) return;
+  const go = () => {
+    if (!cv.isConnected) return;
+    const g = cv.getContext('2d'), I = MDXF.img, n = L.n, f = L.f, t = performance.now() / 1000, fr = Math.floor(t * 24) % f;
+    g.fillStyle = '#1c2124'; g.fillRect(0, 0, cv.width, cv.height);
+    if (I) { const cw = I.width / n, ch = I.height / n; g.globalCompositeOperation = L.mode === 2 ? 'lighter' : 'source-over'; g.drawImage(I, (fr % n) * cw, Math.floor(fr / n) * ch, cw, ch, 0, 0, cv.width, cv.height); g.globalCompositeOperation = 'source-over'; }
+    MDXF.raf = requestAnimationFrame(go);
+  };
+  if (MDXF.k !== k) { MDXF.k = k; MDXF.img = null; modFileGet(k).then(rec => rec && rec.blob && createImageBitmap(rec.blob)).then(img => { if (MDXF.k === k) MDXF.img = img; }).catch(() => {}); }
+  go();
+}
+const W0_DEF = () => 8400, H0_DEF = () => 5600;
+// 原挂载里每一项的枚数（从机型表的计数分出来，同 fpwpn.js fwLoadout 的规则）
+function mdxLoadN(k, r) {
+  const a = MOD_DEF.air[k] || AIR_MDL[k], W1 = FW_W[r.w];
+  if (!a || !W1) return 0;
+  if (W1.k === 'aam') return r.sr ? r.sr : Math.max(0, (r.w === 'pl17' ? a.aamL || 0 : a.aam || 0) - ((MOD_DEF.load[k] || FW_LOAD[k] || []).find(o => o.sr && o !== r) || { sr: 0 }).sr);
+  return W1.k === 'agm' ? a.agmN || 0 : a.gbN || 0;
+}
+function mdxSet(path, f, raw) {
+  const [tab, k] = path.split('|'), W0 = MDX_W;
+  const o = k ? (W0[tab][k] = W0[tab][k] || {}) : W0[tab];
+  if (raw === '' || raw == null) delete o[f]; else o[f] = raw;
+  if (k && !Object.keys(o).length) delete W0[tab][k];
+  MDX.dirty = true;
+}
+// 库里的条目（导入的模型、贴图）：改了马上存（文件已经在 IndexedDB 里了）
+function mdxLibSet(id, f, v) {
+  const L = MOD.lib[id];
+  if (!L) return;
+  L[f] = v;
+  if (MDX_W.lib) MDX_W.lib[id] = L;
+  modStoreSave();
+  if (L.k === 'fx' && f !== 'nm') modFileGet(id).then(rec => { modReg(id, rec); modApply(); });
+}
+function mdxChange(e) {
+  const t = e.target;
+  if (t.dataset.set) {   // 画面：直接改设置
+    const v = t.tagName === 'SELECT' && (t.value === 'true' || t.value === 'false') ? t.value === 'true' : t.type === 'range' ? +t.value : t.value;
+    if (typeof setSetting === 'function') setSetting(t.dataset.set, v);
+    mdxRender(); mdxMsg('画面设置已生效');
+    return;
+  }
+  if (t.dataset.a === 'import' && t.files && t.files[0]) {
+    const fr = new FileReader();
+    fr.onload = () => { modImport(String(fr.result)).then(() => { MDX_W = modClone(MOD); MDX.dirty = false; mdxRender(); mdxMsg('模组包已导入并保存'); }, err => mdxMsg('导入失败：' + err.message)); };
+    fr.readAsText(t.files[0]);
+    return;
+  }
+  if (t.dataset.imp) {   // 导入模型的表单
+    const f = t.dataset.imp;
+    if (f === 'files') { MDX.impF = t.files && t.files.length ? [...t.files] : null; if (MDX.impF && !MDX.imp.name) MDX.imp.name = MDX.impF[0].name.replace(/\.(glb|gltf|zip)$/i, ''); }
+    else MDX.imp[f] = t.type === 'number' ? (t.value === '' ? undefined : +t.value) : t.value;
+    mdxRender();
+    return;
+  }
+  if (t.dataset.fxi) {   // 导入序列帧的表单
+    const f = t.dataset.fxi;
+    if (f === 'file') { MDX.fxF = t.files && t.files[0] || null; if (MDX.fxF && !MDX.fxImp.name) MDX.fxImp.name = MDX.fxF.name.replace(/\.\w+$/, ''); }
+    else MDX.fxImp[f] = t.type === 'number' || f === 'mode' ? Math.max(f === 'mode' ? 0 : 1, Math.round(+t.value || 0)) : t.value;
+    mdxRender();
+    return;
+  }
+  if (t.dataset.lib) { const f = t.dataset.lib, v = t.type === 'number' || f === 'mode' ? Math.max(f === 'mode' ? 0 : 1, Math.round(+t.value || 0)) : t.value; mdxLibSet(MDX.sel, f, v); MDX.keep = true; mdxRender(); mdxMsg('已改'); return; }
+  if (t.dataset.bind) {   // 导入的模型换到型号上
+    const [s, k] = t.dataset.bind.split('|');
+    if (t.checked) mdxSet(s + '|' + k, 'mdl', MDX.sel); else if ((MDX_W[s][k] || {}).mdl === MDX.sel) mdxSet(s + '|' + k, 'mdl', '');
+    mdxMsg('改了，点「保存」生效');
+    return;
+  }
+  if (t.dataset.fxs) { if (t.value) MDX_W.fx[t.dataset.fxs] = t.value; else delete MDX_W.fx[t.dataset.fxs]; MDX.dirty = true; mdxMsg('改了，点「保存」生效'); return; }
+  if (t.dataset.hg) { MDX.hg = t.value; MDX.keep = true; mdxRender(); return; }
+  if (t.dataset.mir) { MDX.mir = t.checked; return; }
+  if (t.dataset.nzr) { MDX.nzR = Math.max(.05, +t.value || .45); return; }
+  if (t.dataset.mf) {
+    const p = t.dataset.mf;
+    let v = t.tagName === 'SELECT' ? (t.value === 'true' ? true : t.value === 'false' ? false : t.value) : t.value === '' ? '' : +t.value;
+    if (t.tagName !== 'SELECT' && v !== '' && !isFinite(v)) return;
+    if (p === 'fx.vol' && v === true) v = '';
+    mdxMdlSet(p, v); MDX.keep = true; mdxRender(); mdxMsg('改了，点「保存」生效');
+    return;
+  }
+  if (t.dataset.ld != null) {   // 挂载
+    const k = MDX.sel, A = MDX_W.air[k] = MDX_W.air[k] || {};
+    if (!A.load) A.load = (FW_LOAD[k] || []).map(r => ({ w: r.w, bay: r.bay, n: mdxLoadN(k, r) }));
+    const r = A.load[+t.dataset.ld];
+    if (r) r[t.dataset.lf] = t.dataset.lf === 'n' ? Math.max(0, Math.round(+t.value || 0)) : t.value;
+    MDX.dirty = true; MDX.keep = true; mdxRender(); mdxMsg('挂载改了，点「保存」生效');
+    return;
+  }
+  if (t.dataset.p) {
+    const [tab, k] = t.dataset.p.split('|'), f = t.dataset.f;
+    let v = t.tagName === 'SELECT' ? t.value : t.value === '' ? '' : +t.value;
+    if (v !== '' && t.tagName !== 'SELECT' && !isFinite(v)) return;
+    // 换回表里的单位
+    const F = tab === 'air' ? [...MDX_AIR_F, ...MDX_PERF_F, ...MDX_GUN_F] : tab === 'eair' ? [...MDX_EAIR_F, ...MDX_PERF_F] : tab === 'msl' ? MDX_MSL_F : null, d = F && F.find(x => x[0] === f);
+    if (d && d[4] && v !== '') v = d[4](v);
+    if (tab === 'veh' && f === 'era' && v === 'auto') v = '';
+    mdxSet(t.dataset.p, f, v);
+    MDX.keep = true; mdxRender(); mdxMsg('改了，点「保存」生效');
+  }
+}
+// 导入的模型改了文件以后：重新登记、预览重新读
+async function mdxRecUpdate(id, fn) {
+  const rec = await modFileGet(id);
+  if (!rec) throw new Error('模型文件不见了');
+  fn(rec);
+  await modFilePut(id, rec);
+  modReg(id, rec);
+  if (MOD.lib[id]) { MOD.lib[id].len = rec.meta.len; modStoreSave(); }
+  if (typeof MIV === 'object') MIV.key = null;
+}
+function mdxClick(e) {
+  const b = e.target.closest('button, [data-tab], [data-it], [data-rst], [data-ldx]');
+  if (!b) return;
+  if (b.dataset.tab) { MDX.tab = b.dataset.tab; MDX.sel = null; MDX.q = ''; MDX.pk = ''; mdxRender(); return; }
+  if (b.dataset.it) { MDX.sel = b.dataset.it; MDX.pk = ''; mdxRender(); return; }
+  if (b.dataset.rst) { const [p, f] = b.dataset.rst.split('|').length > 2 ? [b.dataset.rst.split('|').slice(0, 2).join('|'), b.dataset.rst.split('|')[2]] : b.dataset.rst.split('|'); mdxSet(p, f, ''); MDX.keep = true; mdxRender(); mdxMsg('恢复成默认，点「保存」生效'); return; }
+  if (b.dataset.ldx != null) { const A = MDX_W.air[MDX.sel]; if (A && A.load) { A.load.splice(+b.dataset.ldx, 1); MDX.dirty = true; MDX.keep = true; mdxRender(); } return; }
+  if (b.dataset.pk != null) { MDX.pk = b.dataset.pk; MDX.keep = true; mdxRender(); mdxMsg(MDX.pk ? '在上面的模型上点一下' : ''); return; }
+  if (b.dataset.mrst) { const A = MDX_W.mdl[MDX.sel]; if (A) { delete A[b.dataset.mrst]; if (!Object.keys(A).length) delete MDX_W.mdl[MDX.sel]; } MDX.dirty = true; MDX.keep = true; mdxRender(); mdxMsg('恢复成游戏原来的，点「保存」生效'); return; }
+  if (b.dataset.mdel) { mdxMdlDel(b.dataset.mdel); MDX.keep = true; mdxRender(); return; }
+  const a = b.dataset.a;
+  if (a === 'close') closeModEditor();
+  else if (a === 'save') { for (const k of MOD_SEC) if (k !== 'lib') MOD[k] = MDX_W[k]; modSave(); MDX.dirty = false; MDX.keep = true; mdxRender(); mdxMsg('已保存：下一局生效，正在打的这一局里的车辆也已更新'); }
+  else if (a === 'undo') { MDX_W = modClone(MOD); MDX.dirty = false; mdxRender(); mdxMsg('已放弃没保存的改动'); }
+  else if (a === 'ldadd') { const k = MDX.sel, A = MDX_W.air[k] = MDX_W.air[k] || {}; if (!A.load) A.load = (FW_LOAD[k] || []).map(r => ({ w: r.w, bay: r.bay, n: mdxLoadN(k, r) })); A.load.push({ w: 'pl15', bay: 'ext', n: 2 }); MDX.dirty = true; MDX.keep = true; mdxRender(); }
+  else if (a === 'ldrst') { const A = MDX_W.air[MDX.sel]; if (A) { delete A.load; if (!Object.keys(A).length) delete MDX_W.air[MDX.sel]; } MDX.dirty = true; MDX.keep = true; mdxRender(); }
+  else if (a === 'export' || a === 'exportf') {
+    mdxMsg('正在打包…');
+    modExport(a === 'exportf').then(txt => {
+      const blob = new Blob([txt], { type: 'application/json' }), u = URL.createObjectURL(blob), l = document.createElement('a');
+      l.href = u; l.download = '暗剑模组包.json'; document.body.appendChild(l); l.click(); l.remove(); setTimeout(() => URL.revokeObjectURL(u), 4000);
+      mdxMsg('已导出（导出的是已保存的内容，' + Math.round(blob.size / 1024) + ' KB）');
+    }, err => mdxMsg('导出失败：' + err.message));
+  }
+  else if (a === 'wipe') { if (!confirm('把编辑器里改的全部恢复成默认？（导入的模型、贴图还留着）')) return; for (const k of MOD_SEC) if (k !== 'lib') MDX_W[k] = {}; MDX.dirty = true; mdxRender(); mdxMsg('已清空，点「保存」生效'); }
+  else if (a === 'applytxt') {
+    const ta = MDX.el.querySelector('textarea');
+    try { const o = JSON.parse(ta.value); for (const k of MOD_SEC) if (k !== 'lib') MDX_W[k] = o[k] && typeof o[k] === 'object' ? o[k] : {}; MDX.dirty = true; mdxRender(); mdxMsg('文本已读进来，点「保存」生效'); }
+    catch (err) { mdxMsg('文本不是合法的 JSON：' + err.message); }
+  }
+  else if (a === 'doimp') {
+    if (!MDX.impF || typeof mimImport !== 'function') return;
+    const I = MDX.imp;
+    b.disabled = true; MIM.texMax = +I.tex || 2048;
+    mdxMsg('正在导入…');
+    mimImport(MDX.impF, { name: I.name, kind: I.kind, len: +I.len || 0, hl: I.kind === 'veh' ? +I.hl || 0 : 0, fwd: I.fwd, up: I.up, prog: t => mdxMsg('正在导入：' + t + '…') }).then(id => {
+      MDX_W.lib = modClone(MOD.lib); MDX.impF = null; MDX.imp = { kind: I.kind, fwd: I.fwd, up: I.up, tex: I.tex };
+      MDX.sel = id; MDX.pk = ''; mdxRender();
+      mdxMsg('导入好了：在预览里看看朝向对不对，再点炮口 / 挂点 / 尾喷口；勾上要用它的型号，点「保存」');
+    }, err => { b.disabled = false; mdxMsg('导入失败：' + err.message); console.warn(err); });
+  }
+  else if (a === 'turn') {
+    const id = MDX.sel;
+    mdxMsg('正在转…');
+    mdxRecUpdate(id, rec => mimTurn(rec, b.dataset.ax)).then(() => { MDX.keep = true; mdxRender(); mdxMsg('转好了（之前点的位置要重新点）'); }, err => mdxMsg('转不了：' + err.message));
+  }
+  else if (a === 'mdel' || a === 'fxdel') {
+    const id = MDX.sel, L = MOD.lib[id];
+    if (!L || !confirm(`删除「${L.nm}」？用它的型号会换回原来的。`)) return;
+    modFileDel(id).catch(() => {});
+    delete MOD.lib[id];
+    if (MDX_W.lib) delete MDX_W.lib[id];
+    for (const W1 of [MOD, MDX_W]) {
+      for (const s of ['veh', 'air', 'eair']) for (const k in W1[s]) if (W1[s][k].mdl === id) { delete W1[s][k].mdl; if (!Object.keys(W1[s][k]).length) delete W1[s][k]; }
+      delete W1.mdl[id];
+      for (const s in W1.fx) if (W1.fx[s] === id) delete W1.fx[s];
+      for (const mk in W1.mdl) if (W1.mdl[mk].fx && W1.mdl[mk].fx.spr === id) delete W1.mdl[mk].fx.spr;
+    }
+    if (typeof V3G === 'object') { delete V3G.def[id]; delete V3G.M[id]; }
+    if (typeof V3G_CRED === 'object') { const i = V3G_CRED.findIndex(c => c.uid === id); if (i >= 0) V3G_CRED.splice(i, 1); }
+    modStoreSave(); modApply();
+    MDX.sel = null; mdxRender(); mdxMsg('已删除');
+  }
+  else if (a === 'fximp') {
+    const F = MDX.fxF, I = MDX.fxImp;
+    if (!F) return;
+    const id = modNewId('uf_');
+    b.disabled = true;
+    modFilePut(id, { blob: F }).then(() => {
+      MOD.lib[id] = { k: 'fx', nm: I.name || F.name, n: clamp(I.n | 0, 1, 32), f: clamp(I.f | 0, 1, (I.n | 0) ** 2), mode: I.mode | 0, kb: Math.round(F.size / 1024) };
+      if (MDX_W.lib) MDX_W.lib[id] = MOD.lib[id];
+      modStoreSave(); modReg(id, { blob: F });
+      MDX.fxF = null; MDX.fxImp = { n: I.n, f: I.f, mode: I.mode }; MDX.sel = id; mdxRender(); mdxMsg('导入好了：到「换掉游戏里的特效」或「模型与挂点」的尾焰里用它');
+    }, err => { b.disabled = false; mdxMsg('导入失败：' + err.message); });
+  }
+}
+// 主菜单加一项「编辑器」（menu.js 的 MN_ITEMS / mnAct）
+if (typeof MN_ITEMS === 'object' && Array.isArray(MN_ITEMS) && !MN_ITEMS.some(i => i[0] === 'edit')) {
+  const i = MN_ITEMS.findIndex(it => it[0] === 'set');
+  MN_ITEMS.splice(i < 0 ? MN_ITEMS.length : i, 0, ['edit', '编辑器', 'EDITOR', '改坦克、飞机、导弹的参数与弹道、挂载，战场大小，画质；导出导入模组包']);
+  if (typeof MN_ICON === 'object' && !MN_ICON.edit) MN_ICON.edit = '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/>';
+  if (typeof mnAct === 'function') { const f0 = mnAct; mnAct = function (k) { if (k === 'edit') { if (typeof mnSfx === 'function') mnSfx('open'); openModEditor(); return; } return f0.apply(this, arguments); }; }
+  // 菜单在 menu.js 加载时已经建好了：把这一项补进列表（同样的写法），放在「设置」前面
+  const list = typeof MENU === 'object' && MENU.el && MENU.el.querySelector('.mn-list');
+  if (list && !list.querySelector('[data-k="edit"]') && typeof mnSvg === 'function') {
+    const it = MN_ITEMS.find(x => x[0] === 'edit'), b = document.createElement('button');
+    b.type = 'button'; b.setAttribute('role', 'menuitem'); b.className = 'mn-it'; b.dataset.k = 'edit';
+    b.innerHTML = `${mnSvg('edit')}<div><b>${it[1]}<small>${it[2]}</small></b><span>${it[3]}</span></div><kbd></kbd>`;
+    list.insertBefore(b, list.querySelector('[data-k="set"]'));
+  }
+}

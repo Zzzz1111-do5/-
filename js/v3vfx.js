@@ -6,6 +6,33 @@
 //   相邻两帧按小数部分混合（不一顿一顿）。贴图没载入好（或加载失败）时 v3vReady() 为假，v3fx.js 照旧画程序的火球、烟团
 const V3V_TEX = { expl: { n: 11, f: 121 }, fire: { n: 8, f: 64 }, mzl: { n: 3, f: 9 }, mzla: { n: 10, f: 100 }, puff: { n: 8, f: 64, col: 1 } };
 const V3V = { tried: false, ok: false, pr: null, tex: {}, nOk: 0, fail: false, q: [], buf: null, a: {}, u: {}, data: null };
+const V3V_TEX0 = JSON.parse(JSON.stringify(V3V_TEX)), V3V_N0 = Object.keys(V3V_TEX).length;   // 内置的几张（编辑器导入的另外登记，不算进「全部好了」）
+// 编辑器导入的序列帧（modui.js「特效贴图」，mod.js 存在 IndexedDB）：v3vUser 登记成新的贴图键（col：0 分通道（ArmyVFX 的格式）、1 受光的烟、2 发光的火）；
+//   v3vSlots 拿它们换掉内置的爆炸、残骸火、炮口焰、烟团——帧号按两张图的总帧数换算（v3fx.js 照内置贴图的帧数算的帧号照样能用）；用到时才解码、上传
+const V3V_USR = {}, V3V_SLOT = {};
+function v3vUser(key, blob, n, f, col) {
+  const U = V3V_USR[key];
+  if (U && U.tex && V3.gl) V3.gl.deleteTexture(U.tex);
+  V3V_USR[key] = { blob, tex: null, ld: false };
+  V3V_TEX[key] = { n: Math.max(1, n | 0), f: Math.max(1, Math.min(f | 0, n * n)), col: col | 0, u: 1 };
+}
+function v3vSlots(sl) { for (const k in V3V_SLOT) delete V3V_SLOT[k]; for (const k in sl) if (V3V_TEX0[k] && V3V_TEX[sl[k]]) V3V_SLOT[k] = sl[k]; }
+function v3vUserTex(key) {
+  const U = V3V_USR[key], gl = typeof V3 === 'object' && V3.gl;
+  if (!U || !gl) return null;
+  if (U.tex || U.ld) return U.tex;
+  U.ld = true;
+  const up = img => { const t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t); gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+    let src = img;   // WebGL1：不是 2 的幂的图画到 2 的幂的画布上再传（多级渐远）
+    const p2 = n => 2 ** Math.round(Math.log2(Math.max(1, n)));
+    if ((img.width & (img.width - 1)) || (img.height & (img.height - 1))) { const cv = document.createElement('canvas'); cv.width = Math.min(4096, p2(img.width)); cv.height = Math.min(4096, p2(img.height)); cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height); src = cv; }
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, src); gl.generateMipmap(gl.TEXTURE_2D);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    U.tex = t; };
+  (typeof createImageBitmap === 'function' ? createImageBitmap(U.blob) : Promise.reject(new Error())).then(up, () => { const u = URL.createObjectURL(U.blob), I = new Image(); I.onload = () => { URL.revokeObjectURL(u); up(I); }; I.src = u; });
+  return null;
+}
 const V3V_VS = `attribute vec3 p; attribute vec2 uv; attribute vec4 k; attribute vec3 tn;
 uniform mat4 uM; uniform vec3 uEye; varying vec2 vUv; varying vec4 vK; varying vec3 vTn; varying float vD;
 void main() { vUv = uv; vK = k; vTn = tn; vD = length(p - uEye); gl_Position = uM * vec4(p, 1.); }`;
@@ -19,7 +46,8 @@ void main() {
   float fog = smoothstep(uFog.x, uFog.y, vD), a = t.a * vK.y;
   if (a < .003) discard;
   vec3 c;
-  if (uCol > .5) c = mix(t.rgb * vTn * (uAmb + uSunC * vK.w) * uNt, uBg, fog) * a;   // 带颜色的烟团：按太阳和天光照
+  if (uCol > 1.5) c = t.rgb * a * (1. - .5 * fog);   // 导入的发光序列帧（火焰、尾焰）：原色发光
+  else if (uCol > .5) c = mix(t.rgb * vTn * (uAmb + uSunC * vK.w) * uNt, uBg, fog) * a;   // 带颜色的烟团：按太阳和天光照
   else {
     float l = t.r * .4 + t.g * .6;   // 两个方向的受光合成一个（太阳在上方偏一侧）
     vec3 sm = vTn * (uAmb * (.55 + .45 * l) + uSunC * l * vK.w) * uNt;
@@ -41,7 +69,7 @@ function v3vInit(gl) {
     for (const k of ['uM', 'uEye', 'uT', 'uN', 'uF', 'uCol', 'uNt', 'uBg', 'uSunC', 'uAmb', 'uFog']) V3V.u[k] = gl.getUniformLocation(pr, k);
     V3V.buf = gl.createBuffer();
     const v = typeof window === 'object' && window.DS_BUILD ? '?v=' + window.DS_BUILD : '';
-    for (const key in V3V_TEX) {
+    for (const key in V3V_TEX0) {
       if (typeof Image === 'undefined') { V3V.fail = true; break; }
       const img = new Image();
       img.onload = () => {
@@ -50,7 +78,7 @@ function v3vInit(gl) {
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img); gl.generateMipmap(gl.TEXTURE_2D);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-        V3V.tex[key] = t; if (++V3V.nOk === Object.keys(V3V_TEX).length) V3V.ok = true;
+        V3V.tex[key] = t; if (++V3V.nOk === V3V_N0) V3V.ok = true;
       };
       img.onerror = () => { V3V.fail = true; };
       img.src = 'assets/vfx/' + key + '.webp' + v;
@@ -59,15 +87,18 @@ function v3vInit(gl) {
 }
 // 贴图都好了（写实画面才用；黑绿 / 数码画面照旧是发光的程序特效）
 function v3vReady() {
-  if (typeof V3 !== 'object' || !V3.gl || (typeof v3Mx === 'function' && v3Mx())) return false;
+  if (typeof V3 !== 'object' || !V3.gl || (typeof v3Mx === 'function' && v3Mx()) || (typeof SETTINGS === 'object' && SETTINGS && SETTINGS.vfx === false)) return false;   // 编辑器 / 设置里可以关
   if (!V3V.tried) v3vInit(V3.gl);
   return V3V.ok && !V3V.fail;
 }
 // 放一个精灵：t 贴图键、p GL 坐标中心、s 半边长（米）、fr 帧号（可带小数）、a 透明度、e 火光强度、tn 烟的颜色、ax 竖直方向（GL 向量，null 就是正对镜头、竖直朝上）、rot 绕视线转
-function v3vAdd(t, p, s, fr, a, e = 1, tn = [.3, .28, .26], ax = null, rot = 0, lit = 1) {
+//   asp：沿 ax 方向拉长几倍（尾焰）
+function v3vAdd(t, p, s, fr, a, e = 1, tn = [.3, .28, .26], ax = null, rot = 0, lit = 1, asp = 1) {
+  const sl = V3V_SLOT[t];
+  if (sl) { fr *= V3V_TEX[sl].f / V3V_TEX0[t].f; t = sl; }   // 编辑器换成了导入的贴图
   const T = V3V_TEX[t];
-  if (!T || a <= .003 || s <= 0) return;
-  V3V.q.push({ t, p, s, fr: clamp(fr, 0, T.f - 1.001), a: Math.min(1, a), e, tn, ax, rot, lit });
+  if (!T || a <= .003 || s <= 0 || (T.u && !v3vUserTex(t))) return;
+  V3V.q.push({ t, p, s, fr: clamp(fr, 0, T.f - 1.001), a: Math.min(1, a), e, tn, ax, rot, lit, asp });
 }
 function v3vDraw(C) {
   const Q = V3V.q;
@@ -107,16 +138,16 @@ function v3vDraw(C) {
         const c = Math.cos(o.rot), s2 = Math.sin(o.rot);
         r = [R0[0] * c + U0[0] * s2, R0[1] * c + U0[1] * s2, R0[2] * c + U0[2] * s2]; u = [U0[0] * c - R0[0] * s2, U0[1] * c - R0[1] * s2, U0[2] * c - R0[2] * s2];
       }
-      const s = o.s, P = o.p;
-      const V = (cx, cy) => { const j = n * NV; D[j] = P[0] + (r[0] * cx + u[0] * cy) * s; D[j + 1] = P[1] + (r[1] * cx + u[1] * cy) * s; D[j + 2] = P[2] + (r[2] * cx + u[2] * cy) * s;
+      const s = o.s, su = s * (o.asp || 1), P = o.p;
+      const V = (cx, cy) => { const j = n * NV; D[j] = P[0] + r[0] * cx * s + u[0] * cy * su; D[j + 1] = P[1] + r[1] * cx * s + u[1] * cy * su; D[j + 2] = P[2] + r[2] * cx * s + u[2] * cy * su;
         D[j + 3] = (cx + 1) / 2; D[j + 4] = (1 - cy) / 2; D[j + 5] = o.fr; D[j + 6] = o.a; D[j + 7] = o.e; D[j + 8] = o.lit; D[j + 9] = o.tn[0]; D[j + 10] = o.tn[1]; D[j + 11] = o.tn[2]; D[j + 12] = 0; n++; };
       V(-1, -1); V(1, -1); V(1, 1); V(-1, -1); V(1, 1); V(-1, 1);
     }
     gl.bufferData(gl.ARRAY_BUFFER, D.subarray(0, n * NV), gl.DYNAMIC_DRAW);
     gl.vertexAttribPointer(A.p, 3, gl.FLOAT, false, NV * 4, 0); gl.vertexAttribPointer(A.uv, 2, gl.FLOAT, false, NV * 4, 12);
     gl.vertexAttribPointer(A.k, 4, gl.FLOAT, false, NV * 4, 20); gl.vertexAttribPointer(A.tn, 3, gl.FLOAT, false, NV * 4, 36);
-    gl.bindTexture(gl.TEXTURE_2D, V3V.tex[tk]);
-    gl.uniform1f(V3V.u.uN, T.n); gl.uniform1f(V3V.u.uF, T.f); gl.uniform1f(V3V.u.uCol, T.col ? 1 : 0);
+    gl.bindTexture(gl.TEXTURE_2D, T.u ? V3V_USR[tk].tex : V3V.tex[tk]);
+    gl.uniform1f(V3V.u.uN, T.n); gl.uniform1f(V3V.u.uF, T.f); gl.uniform1f(V3V.u.uCol, T.col || 0);
     gl.drawArrays(gl.TRIANGLES, 0, n);
     i0 = i1;
   }

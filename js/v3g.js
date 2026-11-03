@@ -48,7 +48,7 @@ function v3gModel(key) {
   if (M) return M.ready ? M : null;
   if (!V3G.ok) return null;
   const D = V3G.def[key];
-  if (!D) { if (!V3G.want.has(key) && !V3G.fail.has(key)) { V3G.want.add(key); v3gLoad(key); } return null; }
+  if (!D) { if (key.startsWith('u_')) return null; if (!V3G.want.has(key) && !V3G.fail.has(key)) { V3G.want.add(key); v3gLoad(key); } return null; }   // u_：编辑器导入的模型（mod.js 从 IndexedDB 读出来登记），不去网上找
   V3G.M[key] = { key, meta: D.meta, ready: false };
   v3gDecode(key, D).catch(e => { console.warn('3D 模型解码失败：' + key, e); V3G.fail.add(key); });
   return null;
@@ -89,7 +89,7 @@ async function v3gBytes(b64) {
   return u;
 }
 async function v3gDecode(key, D) {
-  const gl = V3G.gl, m = D.meta, M = V3G.M[key], bin = await v3gBytes(D.b64);
+  const gl = V3G.gl, m = D.meta, M = V3G.M[key], bin = D.bin ? new Uint8Array(D.bin.slice(0)) : await v3gBytes(D.b64);   // bin：编辑器导入的模型（modimp.js 拼好的字节，留着原件）
   delete D.b64;   // 几十兆的字符串，解完就放掉
   if (m.it === 4 && !V3G.u32) throw new Error('显卡不支持 32 位索引');
   const VB = new Float32Array(bin.buffer, bin.byteOffset + m.vb[0], m.vb[1] / 4), IB = m.it === 4 ? new Uint32Array(bin.buffer, bin.byteOffset + m.ib[0], m.ib[1] / 4) : new Uint16Array(bin.buffer, bin.byteOffset + m.ib[0], m.ib[1] / 2);
@@ -438,7 +438,7 @@ function v3gDraw(C, LM) {
 const V3G_VEH = { ztz99a: 'ztz99', ztz96b: 'ztz96', ztz96m: 'ztz96', m1a1: 'm1a1', m1a2: 'm1a2v3', m2a3: 'm2a3', m109: 'm109', m1134: 'stryker', m1127: 'stryker', mshorad: 'stryker', m903: 'patriot', m163: 'm163',
   m1150: 'm1150', lpws: 'cram', jltv: 'matv', m1117: 'matv', avenger: 'hmmwv',   // 美军（Sketchfab 模型，tools/v3gmodels.json；没有精确型号的用最接近的：JLTV、M1117 用 M-ATV，复仇者用悍马底盘）
   zbd05: 'zbd97', zbd04a: 'zbd97', zbd03: 'zbd97', ztd05: 'zbd97', ptl02: 'ptl02', pgl625: 't625', pgz07: 't625', plz07: 'pzh2000', zsl92b: 'lav25', zbl08: 'lav25', ld2000: 'cram' };   // 解放军：ZBD-05 / 03、ZTD-05 用 ZBD-04，PGZ-07 用 625，PLZ-07 用 PzH 2000，ZSL-92B / 08 式用 LAV-25，LD-2000 用陆基密集阵
-const v3gVehKey = (rk, side) => V3G_VEH[rk] || (side === 'e' ? 'm1a1' : 'ztz96');   // 其余装甲车：解放军的用 96 式、美军的用 M1A1 代替
+const v3gVehKey = (rk, side) => (typeof MOD_VMDL === 'object' && MOD_VMDL[rk]) || V3G_VEH[rk] || (side === 'e' ? 'm1a1' : 'ztz96');   // MOD_VMDL：编辑器给这一型换的模型（mod.js）   // 其余装甲车：解放军的用 96 式、美军的用 M1A1 代替
 const V3G_AIR = {
   j20: 'j20', j35: 'j31', j16: 'j16', j16b: 'j16', j16m: 'j16', j15: 'j15', z10: 'z10w', j50: 'j50', h6k: 'h6k', y20: 'y20', transport: 'y20', heli: 'z21',   // 我方（歼-35 用它的原型歼-31；歼-15T 用歼-15，歼-16D 用歼-16）
   kj600: 'e2d~', gj11: 'x47b~', gj2: 'mq9~', wz7: 'rq4~',   // 我方没有模型的：外形最接近的美军机代替（攻击-11 用同是飞翼的 X-47B），去掉原机涂装（v3gPlain：不带美军标志）
@@ -468,7 +468,19 @@ function v3gVeh(v, rk, side, len, x, y, z, h, aim, dead, pitch, roll, hl, fs = 9
   const P = FP || [dead ? -.6 : da, 0, 0, 0, 0, 0, rc, 0], E = !FP && V3G_ERA[key], U = E && v && v.era && v.era.h;
   if (FP && V3G_CAPS[key] && v && v.samN != null) { const n = (typeof vehSp === 'function' && (vehSp(v).sam || {}).n) || 8; P[6] = 2 ** clamp(n - v.samN, 0, 16) - 1; }   // 打出去几枚，就有几个发射筒空了
   if (U && U.length && typeof rlModelOf === 'function' && E.rl.includes((rlModelOf(v) || {}).key)) for (const i of U) if (i >= 0 && i < 64) P[1 + Math.floor(i / 16)] += 2 ** (i % 16);   // 炸掉的反应装甲块（era.js）：每个数 16 位
+  if (v && v.id != null && typeof modMuzOf === 'function' && modMuzOf(key)) { if (V3G_VT.S !== S) { V3G_VT.clear(); V3G_VT.S = S; } V3G_VT.set(v.id, { key, x, y, z, h, k, da: dead ? 0 : da, pitch, roll }); }   // 编辑器设了炮口的模型：记下这一帧怎么摆的（v3gMuzzle）
   return v3gAdd(key, x, y, z, h, k, (dead ? 2 : side === 'e' ? 1 : 0) + (hl ? 8 : 0), roll, pitch, P);
+}
+// 车辆主炮炮口此刻在世界的哪里（游戏坐标 x、y，高度 z）：编辑器在模型上点的炮口（mod.js modMuzOf），跟着炮塔（模型里的 tur 部件）转；没设的返回 null（v3fx.js 照旧从车顶出）
+const V3G_VT = new Map();
+function v3gMuzzle(id) {
+  const T = V3G_VT.S === S && V3G_VT.get(id), mz = T && modMuzOf(T.key), M = T && V3G.M[T.key];
+  if (!mz || !M || !M.ready) return null;
+  let [px, py, pz] = mz;
+  const tp = (M.parts || []).find(p => p.n === 'tur');
+  if (tp && tp.p) { const c = Math.cos(T.da), s2 = Math.sin(T.da), dx = px - tp.p[0], dy = py - tp.p[1]; px = tp.p[0] + dx * c - dy * s2; py = tp.p[1] + dx * s2 + dy * c; }
+  const r = v3dMv3(T.h, T.pitch || 0, T.roll || 0, [px * T.k, py * T.k, pz * T.k]);
+  return [T.x + r[0], T.y - r[1], T.z + r[2]];
 }
 // 飞机（机型键 key，游戏里的尺寸 sz）：ground 时 z 是地面 / 甲板（机轮着地），否则 z 是机身中线；起落架只在 gear 时放下；直升机旋翼转
 const v3dMv3 = (h, p, r, v) => {   // 先滚转（绕 x）、再俯仰（绕 y，机头抬起为正）、再转朝向（GL：绕 z 转 -h），与着色器同一约定
