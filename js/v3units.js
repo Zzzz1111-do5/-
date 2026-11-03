@@ -1360,6 +1360,7 @@ function v3mCollect(C, box) {
       if (!inB(x, y, 30)) continue;
       const [x2, y2] = eaW(b, P.u + Math.cos(P.a), P.v + Math.sin(P.a)), h = Math.atan2(y2 - y, x2 - x);
       if (typeof v3gPlane === 'function') v3gPlane(P.sil, P.size, x, y, v3Ht(x, y), true, h, own ? 0 : 1, 0, 0, true, 0, 0, null, null, 0, typeof v3gPlaneAn === 'function' ? v3gPlaneAn(P.sil, Math.round(x * 3 + y * 7), !own, false) : null);   // 放下起落架停着（编辑器设计的「停着时」动画）
+      if (P.w && typeof fwStoresGnd === 'function' && typeof fwLoadout === 'function') { const n = fwLoadout(P.w.type, P.w.v).length; fwStoresGnd(P.w.type, P.w.v, P.sil, P.size, x, y, v3Ht(x, y), h, P.ready ? n : Math.round(n * clamp(P.prog ?? 1, 0, 1)), null); }   // 我方停着的飞机身上挂好的弹（原来只有航母甲板上画；整备中的按进度挂上一部分）
     }
   }
   // 机场外的前沿加油弹药点（eair.js）：停着的直升机 / F-35B、油囊、弹药箱
