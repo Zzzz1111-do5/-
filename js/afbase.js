@@ -352,10 +352,10 @@ const AFB_CG = { ...AFB_C, rub1: 'rgba(0,0,0,.12)', rub2: 'rgba(0,0,0,.07)', sha
 // 停放的飞机：{u, v, a, k 位置类型, sil, size, col, ready, prog 整备进度}
 function afbParked(b, own) {
   if (b.dead || typeof drawAircraft !== 'function') return [];
-  if (b.home) return (typeof afpParked === 'function' ? afpParked() : []).slice(0, EA_STAND.length).map((w, k) => { const [u, v, a, kd] = EA_STAND[k]; return { u, v, a, k: kd, sil: airSilKey(w.type, w.v), size: 14, col: COL.intel, ready: w.state === 'deck', prog: w.state === 'deck' ? 1 : 1 - clamp((w.rearmT || 0) / AFP.rearm, 0, 1) }; });   // 战区机场（afp.js）：待命、整备中的陆基飞机
+  if (b.home) return (typeof afpParked === 'function' ? afpParked() : []).slice(0, EA_STAND.length).map((w, k) => { const [u, v, a, kd] = EA_STAND[k]; return { u, v, a, k: kd, w, sil: airSilKey(w.type, w.v), size: 14, col: COL.intel, ready: w.state === 'deck', prog: w.state === 'deck' ? 1 : 1 - clamp((w.rearmT || 0) / AFP.rearm, 0, 1) }; });   // 战区机场（afp.js）：待命、整备中的陆基飞机
   if (own) {
     if (typeof abParked !== 'function') return [];
-    return abParked().slice(0, EA_STAND.length).map((w, k) => { const [u, v, a, kd] = EA_STAND[k]; return { u, v, a, k: kd, sil: airSilKey(w.type, w.v), size: 14, col: COL.intel, ready: w.state === 'deck', prog: 1 - clamp(w.rearmT / 45, 0, 1) }; });
+    return abParked().slice(0, EA_STAND.length).map((w, k) => { const [u, v, a, kd] = EA_STAND[k]; return { u, v, a, k: kd, w, sil: airSilKey(w.type, w.v), size: 14, col: COL.intel, ready: w.state === 'deck', prog: 1 - clamp(w.rearmT / 45, 0, 1) }; });
   }
   return eaParked(b).map(P => ({ u: P.u, v: P.v, a: P.a, k: P.k, sil: eaSil(P.w.type), size: P.w.type === 'heli' ? 13 : P.w.type === 'f22' ? 15 : 14, col: COL.enemy,
     ready: P.w.state === 'ready', prog: 1 - clamp(P.w.rearmT / EA_REARM, 0, 1) }));

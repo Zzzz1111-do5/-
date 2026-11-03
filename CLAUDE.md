@@ -105,6 +105,8 @@
   MOD 存 localStorage（bh-mod），表格类的存盘时直接改进表（AIR_MDL、EA_SPEC、AP、FL_AC、FW_W、FW_LOAD、FW_ST、FW_GUN、MS_PGM、V3G_AIR，MOD_DEF 记原值、恢复默认时还原；各表能改的字段在 MOD_F）；
   挂载：编辑器存的 FW_LOAD 每行带枚数 n（红外近距弹 sr = 自己的 n），fpwpn.js fwInit 按行分（上限 n，型号表原来的行不写 n = 这一类剩多少都归它）；o.fwN 的键 fwKey：这种弹只占一行就是弹名（老存档照用），同一种弹放在几处（主弹舱 + 外挂）各行分开记 w#行号——
   原来只记各类弹的总数、按类分给头一行，同一种弹的第二行把第一行盖成 0（用户：给飞机挂导弹进游戏实现不了）。挂载行里的弹在模型上没有挂点 / 挂点不够时编辑器提示，「去点挂点」跳到「模型与挂点」页那一组。
+  歼-20、歼-35（歼-31）、歼-50 的模型只有弹舱 / 专用挂点、没有通用外挂组，其余飞机一个挂点都没有：外挂弹要先放挂点——「模型与挂点」页「机翼下自动放 n 对」（modui.js mdxAutoPylons：翼展 34% / 50% / 66% 处竖直射线找机翼下表面、弦长中间往下 0.35 米）或手点。
+  停在我方机场（afp.js、夺取的机场）的飞机也画挂好的弹（v3units.js 调 fwStoresGnd，afbParked 带上编队 w；整备中的按进度画一部分），原来只有航母甲板上画。
   车辆按型号（rlModelOf 的键）在推演里第一次见到时套（modVehApply：装甲按毫米 ÷ MOD_MM 220 = 级、各面 armX、穿深 penL、加速度 accA、转向 turnK、炮塔 travM……），车辆换模型只改画面（MOD_VMDL → v3g.js v3gVehKey，vfn.js 仍按原模型）；
   模型上的点按模型键记（MOD.mdl：炮口 muz → v3g.js v3gMuzzle / v3fx.js 坦克炮出膛，航炮口 gun → FW_GUN.at，挂点 st → FW_ST，尾喷口 noz → v3det.js v3dNoz，尾焰 fx → v3dBurner 的长度 / 亮度 / 马赫环 / 序列帧尾焰）。
   导入的文件存 IndexedDB（bh-mod-files，modFilePut），MOD.lib 只记名字和参数：模型键 u_…，v3g.js v3gModel 不去网上找，V3G.def[键] = { meta, bin }（v3gDecode 认 D.bin）；序列帧贴图键 uf_…（v3vfx.js v3vUser、v3vSlots 换掉内置的爆炸 / 火 / 炮口焰 / 烟，帧号按总帧数换算）。
