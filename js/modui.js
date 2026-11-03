@@ -109,8 +109,9 @@ const MDX_CSS = `
 #mdx footer .msg { flex: 1; color: var(--mute); font-size: 12px; }
 #mdx .mdx-load { display: grid; grid-template-columns: 1.6fr 1fr .7fr auto; gap: 6px; align-items: center; margin: 4px 0; }
 #mdx .mdx-it.add { color: var(--g-hi); border-style: dashed; border-color: rgba(var(--g-rgb), .35); }
-#mdx .mdx-view { margin: 6px 0 8px; }
-#mdx .miv { position: relative; width: 100%; height: min(46vh, 380px); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: #202528; }
+#mdx .mdx-view { margin: 0 0 4px; }
+#mdx .mdx-stk { position: sticky; top: -12px; z-index: 3; margin: 0 -16px 8px; padding: 8px 16px 2px; background: rgba(var(--pn-rgb), .98); border-bottom: 1px solid var(--line); }   /* 预览和点选那一行钉在表单顶上：往下翻按钮时还能在模型上点 */
+#mdx .miv { position: relative; width: 100%; height: min(40vh, 340px); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: #202528; }
 #mdx .miv canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
 #mdx .miv .miv-ov { pointer-events: none; }
 #mdx .miv .miv-msg { position: absolute; left: 10px; bottom: 8px; color: var(--mute); font-size: 12px; pointer-events: none; }
@@ -121,19 +122,31 @@ const MDX_CSS = `
 #mdx .mdx-bind label { display: flex; gap: 6px; align-items: center; }
 #mdx .mdx-fxv { width: 192px; height: 192px; border: 1px solid var(--line); border-radius: 6px; display: block; margin: 6px 0; }
 #mdx .mdx-btn[disabled] { opacity: .45; cursor: default; }
+#mdx .mdx-pcbar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 6px 0; font-size: 13px; }
+#mdx .mdx-pcbar .mdx-btn { padding: 4px 9px; font-size: 12px; }
+#mdx .mdx-pcbar label { display: inline-flex; gap: 4px; align-items: center; color: var(--mute); }
+#mdx .mdx-pcbar input[type=number] { padding: 3px 5px; }
+#mdx .mdx-pcbar select { width: auto; }
+#mdx .mdx-pcsel { color: var(--amber, #ffc24a); margin-left: auto; }
+#mdx .mdx-ax { border-left: 2px solid var(--line); padding-left: 8px; margin: 6px 0; }
+#mdx .mdx-nodes { margin: 8px 0; font-size: 13px; }
+#mdx .mdx-nodes summary { cursor: pointer; color: var(--g-hi); padding: 4px 0; }
+#mdx .mdx-nodes .mdx-it { display: block; width: 100%; }
+#mdx .mdx-row input[type=range] { width: 100%; }
+#mdx .mdx-row .def input[type=number] { width: 74px; padding: 2px 4px; }
 @media (max-width: 720px) { #mdx .mdx-body { grid-template-columns: 1fr; grid-template-rows: 160px minmax(0, 1fr); } #mdx .mdx-list { border-right: 0; border-bottom: 1px solid var(--line); } #mdx .mdx-row { grid-template-columns: 1fr 1fr auto; } #mdx .mdx-row .def { display: none; } }`;
 function mdxBuild() {
   if (MDX.el) return MDX.el;
   const st = document.createElement('style'); st.textContent = MDX_CSS; document.head.appendChild(st);
   const el = document.createElement('div');
-  el.id = 'mdx'; el.hidden = true; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', '编辑器');
+  el.id = 'mdx'; el.className = 'mn-layer'; el.hidden = true; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', '编辑器');   // mn-layer：主菜单开着时别的页面元素都被藏起来（menu.js），只有这一类浮层看得见
   el.innerHTML = `<div class="mdx-win"><header><h2>编辑器 · 自定义装备与战场</h2><button type="button" class="mdx-btn" data-a="close">关闭</button></header>
     <nav class="mdx-tabs">${MDX_TABS.map(([k, n]) => `<button type="button" data-tab="${k}">${n}</button>`).join('')}</nav><div class="mdx-body"></div>
     <footer><span class="msg"></span><button type="button" class="mdx-btn" data-a="undo">放弃没保存的改动</button><button type="button" class="mdx-btn pri" data-a="save">保存</button></footer></div>`;
   document.body.appendChild(el);
   el.addEventListener('click', mdxClick);
   el.addEventListener('change', mdxChange);
-  el.addEventListener('input', e => { if (e.target.matches('.mdx-list input')) { MDX.q = e.target.value.trim(); mdxRender(true); } });
+  el.addEventListener('input', e => { if (e.target.matches('.mdx-list input')) { MDX.q = e.target.value.trim(); mdxRender(true); } else mdxPtInput(e.target); });
   MDX.el = el;
   return el;
 }
@@ -208,9 +221,11 @@ function mdxRender(listOnly) {
   const vh = body.querySelector('.mdx-view');
   if (vh && typeof mivInit === 'function') {
     vh.appendChild(mivInit()); MIV.marks = mdxMarks(); MIV.pick = MDX.pk ? mdxOnPick : null;
+    mdxPtSync(); mdxPcBar();
     MIV.onLoad = k => { if (MDX.tab === 'mdl' && MDX.el && !MDX.el.hidden && MDX.sel && MDX.sel.replace(/~$/, '') === k) { MDX.keep = true; mdxRender(); } };
     mivShow(vh.dataset.k);
   }
+  else mdxPtSync();
   const fv = body.querySelector('.mdx-fxv');
   if (fv) mdxFxAnim(fv);
 }
@@ -321,21 +336,24 @@ function mdxMdlCur(mk) {
   const A = MDX_W.mdl[mk] || {}, M = typeof MIV === 'object' && MIV.key === mk.replace(/~$/, '') && MIV.M ? MIV.M.m : null, M3 = typeof V3G === 'object' && V3G.M[mk.replace(/~$/, '')];
   const st0 = (mk in MOD_DEF.st ? MOD_DEF.st[mk] : FW_ST[mk]) || {}, noz0 = (M && M.noz) || (M3 && M3.meta && M3.meta.noz) || [];
   const gk = Object.keys(MOD_DEF.gun).length ? MOD_DEF.gun : FW_GUN, gun0 = (Object.keys(gk).map(k => gk[k] && mdxAirDef()[modAirSil(k)] === mk ? gk[k].at : null).find(x => x)) || null;
-  return { A, st: A.st || st0, stD: !A.st, noz: A.noz || noz0, nozD: !A.noz, gun: A.gun || gun0, gunD: !A.gun, muz: A.muz || null, fx: A.fx || {} };
+  return { A, st: A.st || st0, stD: !A.st, noz: A.noz || noz0, nozD: !A.noz, gun: A.gun || gun0, gunD: !A.gun, muz: A.muz || null, mg: A.mg || null, mgOn: A.mgOn || '', fx: A.fx || {} };
 }
 // 预览上的标记
 function mdxMarks() {
   const mk = MDX.sel;
   if (MDX.tab !== 'mdl' || !mk || mk[0] === '+') return [];
   const C = mdxMdlCur(mk), out = [];
-  if (C.muz) out.push({ p: C.muz, c: '#ff8a3d', t: '炮口', r: 6 });
+  const pv = (p, rr) => typeof mivXf === 'function' && MIV.pt ? mivXf(p.slice(), rr, 0) : p;   // 装在试转着的部件上的点：画在转过的位置
+  if (C.muz) out.push({ p: pv(C.muz, 2), c: '#ff8a3d', t: '炮口', r: 6 });
+  if (C.mg) { const G = modMgOf(mk) || { on: 'hull' }, on = C.mgOn || (MDX_W.mdl[mk] && MDX_W.mdl[mk].pt && (MDX_W.mdl[mk].pt.mg || MDX_W.mdl[mk].pt.mt) ? 'mg' : G.on); out.push({ p: pv(C.mg, { hull: 0, t: 1, g: 2, mg: 8 }[on] || 0), c: '#ff6bb8', t: '机枪口', r: 5.5 }); }
   if (C.gun) out.push({ p: C.gun, c: '#ff4d4d', t: '航炮', r: 5, dim: C.gunD });
   for (const g in C.st) (C.st[g] || []).forEach((p, i) => out.push({ p, c: g === MDX.hg ? '#3de0ff' : '#7fa8b8', t: g === MDX.hg ? g + ' ' + (i + 1) : '', r: g === MDX.hg ? 5 : 3.5, dim: C.stD }));
   for (const n of C.noz) for (const sg of n[1] ? [1, -1] : [1]) out.push({ p: [n[0], n[1] * sg, n[2]], c: '#ff5cf0', t: sg > 0 ? '喷口' : '', r: Math.max(4, 6), dim: C.nozD });
   return out;
 }
-function mdxOnPick(h) {
-  const mk = MDX.sel, A = MDX_W.mdl[mk] = MDX_W.mdl[mk] || {}, C = mdxMdlCur(mk), p = h.p;
+function mdxOnPick(h, e) {
+  if (mdxPtPick(h, e)) return;
+  const mk = MDX.sel, A = MDX_W.mdl[mk] = MDX_W.mdl[mk] || {}, C = mdxMdlCur(mk), p = typeof mivXf === 'function' && MIV.pt ? mivXf(h.p.slice(), h.rr || 0, 1).map(v => Math.round(v * 1000) / 1000) : h.p;   // 点在试转着的部件上：记没转时的位置
   if (MDX.pk === 'muz') A.muz = p;
   else if (MDX.pk === 'gun') A.gun = p;
   else if (MDX.pk === 'hp') {
@@ -343,7 +361,8 @@ function mdxOnPick(h) {
     const g = MDX.hg || 'ext', L = A.st[g] = A.st[g] || [];
     L.push(p);
     if (MDX.mir && Math.abs(p[1]) > .05) L.push([p[0], -p[1], p[2]]);   // 左右对称：另一边也挂一个
-  } else if (MDX.pk === 'noz') {
+  } else if (MDX.pk === 'mgm') A.mg = p;
+  else if (MDX.pk === 'noz') {
     if (!A.noz) A.noz = modClone(C.noz) || [];
     A.noz.push([p[0], Math.abs(p[1]) < .05 ? 0 : Math.abs(p[1]), p[2], MDX.nzR || .45, .6]);
   } else return;
@@ -356,12 +375,13 @@ function mdxMdlForm(mk) {
   const xyz = (path, P) => `<span class="mdx-xyz">${[0, 1, 2].map(i => num(path + '.' + i, P ? P[i] : '')).join('')}</span>`;
   const pk = (k, n) => `<button type="button" class="mdx-btn${MDX.pk === k ? ' pri' : ''}" data-pk="${k}">${n}</button>`;
   let h = `<h3>${mdxEsc(md.nm)}</h3><p class="note">${md.imp ? `导入的模型 · ${L.tri} 个三角形 · 全长 ${L.len} 米 · ${Math.round(L.kb / 1024 * 10) / 10} MB` : '游戏里的模型 · ' + mdxEsc(mk)}。坐标是模型坐标（米）：x 朝前、y 朝左、z 朝上，原点在底面中间。
-    拖动转、滚轮缩放、右键拖动平移。先选下面要点的东西，再在模型上点一下。</p>
-    <div class="mdx-view" data-k="${mdxEsc(mk.replace(/~$/, ''))}"></div>
-    <div class="mdx-pick">点选：${pk('', '不点')}${air ? pk('hp', '挂点') + pk('noz', '尾喷口') + pk('gun', '航炮口') : pk('muz', '主炮炮口')}
-      ${MDX.pk === 'hp' ? `<label><input type="checkbox" data-mir="1"${MDX.mir ? ' checked' : ''}> 左右对称</label>` : ''}${MDX.pk === 'noz' ? `<label>喷口内半径 <input type="number" step="any" data-nzr="1" value="${MDX.nzR}" style="width:70px"> 米</label>` : ''}</div>`;
+    拖动转、滚轮缩放、右键拖动平移（手机上两个手指捏合缩放、一起挪平移）。先选下面要点的东西，再在模型上点一下。</p>
+    <div class="mdx-stk"><div class="mdx-view" data-k="${mdxEsc(mk.replace(/~$/, ''))}"></div>
+    <div class="mdx-pick">点选：${pk('', '不点')}${md.imp ? pk('pc', '选部件') : ''}${air ? pk('hp', '挂点') + pk('noz', '尾喷口') + pk('gun', '航炮口') : pk('muz', '主炮炮口') + pk('mgm', '机枪口')}
+      ${MDX.pk === 'hp' ? `<label><input type="checkbox" data-mir="1"${MDX.mir ? ' checked' : ''}> 左右对称</label>` : ''}${MDX.pk === 'noz' ? `<label>喷口内半径 <input type="number" step="any" data-nzr="1" value="${MDX.nzR}" style="width:70px"> 米</label>` : ''}${md.imp ? '<span class="mdx-pcsel"></span>' : ''}</div></div>`;
   if (md.imp) {
-    h += `<div class="mdx-row"><label>名称</label><input type="text" data-lib="nm" value="${mdxEsc(L.nm)}"><span></span><span></span></div>
+    h += mdxPtForm(mk, air);
+    h += `<h3 style="margin-top:12px">模型</h3><div class="mdx-row"><label>名称</label><input type="text" data-lib="nm" value="${mdxEsc(L.nm)}"><span></span><span></span></div>
       <div class="mdx-row"><label>类型</label><select data-lib="kind"><option value="veh"${L.kind !== 'air' ? ' selected' : ''}>坦克装甲车</option><option value="air"${L.kind === 'air' ? ' selected' : ''}>飞机</option></select><span></span><span></span></div>
       <p>朝向不对：<button type="button" class="mdx-btn" data-a="turn" data-ax="z">绕竖轴转 90°</button> <button type="button" class="mdx-btn" data-a="turn" data-ax="fz">前后掉头</button> <button type="button" class="mdx-btn" data-a="turn" data-ax="y">抬头 90°</button> <button type="button" class="mdx-btn" data-a="turn" data-ax="x">侧滚 90°</button>
       <button type="button" class="mdx-btn" data-a="mdel">删除这个模型</button></p>`;
@@ -372,7 +392,10 @@ function mdxMdlForm(mk) {
   }
   const rst = (s, d) => d ? '<span class="def">（游戏原来的）</span>' : `<button type="button" class="mdx-btn" data-mrst="${s}">恢复原来的</button>`;
   if (!air) {
-    h += `<h3 style="margin-top:12px">主炮炮口 ${rst('muz', !C.A.muz)}</h3><p class="note">坦克炮的曳光弹、炮口焰从这里出（跟着炮塔转）；没设的从车顶出。</p><div class="mdx-row"><label>炮口 x / y / z</label>${xyz('muz', C.muz)}<span></span><span></span></div>`;
+    h += `<h3 style="margin-top:12px">主炮炮口 ${rst('muz', !C.A.muz)}</h3><p class="note">坦克炮的曳光弹、炮口焰从这里出（跟着炮塔转、炮管俯仰）；没设的从车顶出。</p><div class="mdx-row"><label>炮口 x / y / z</label>${xyz('muz', C.muz)}<span></span><span></span></div>`;
+    h += `<h3 style="margin-top:12px">机枪口 ${rst('mg', !C.A.mg)}</h3><p class="note">车载机枪打步兵时曳光弹、枪口焰从这里出；装在哪就跟着哪动（机枪塔：转向机枪的目标）。没设的从车中间出。</p>
+      <div class="mdx-row"><label>机枪口 x / y / z</label>${xyz('mg', C.mg)}<span></span><span></span></div>
+      <div class="mdx-row"><label>机枪装在</label><select data-mf="mgOn"><option value=""${!C.mgOn ? ' selected' : ''}>自动（有机枪塔就在机枪塔上，否则在炮塔上）</option>${[['mg', '机枪塔（遥控武器站）'], ['g', '炮管（并列机枪）'], ['t', '炮塔'], ['hull', '车体']].map(([v, n]) => `<option value="${v}"${C.mgOn === v ? ' selected' : ''}>${n}</option>`).join('')}</select><span></span><span></span></div>`;
     return h;
   }
   // 挂点
@@ -405,6 +428,7 @@ function mdxMdlSet(path, v) {
   if (ks[0] === 'noz' && !A.noz) A.noz = modClone(C.noz) || [];
   if (ks[0] === 'gun' && !A.gun) A.gun = C.gun ? C.gun.slice() : [0, 0, 0];
   if (ks[0] === 'muz' && !A.muz) A.muz = [0, 0, 0];
+  if (ks[0] === 'mg' && !A.mg) A.mg = [0, 0, 0];
   let o = A;
   for (let i = 0; i < ks.length - 1; i++) { const kk = ks[i]; if (o[kk] == null) o[kk] = /^\d+$/.test(ks[i + 1]) ? [] : {}; o = o[kk]; }
   const last = ks[ks.length - 1];
@@ -424,6 +448,376 @@ function mdxMdlDel(path) {
   if (A.fx && !Object.keys(A.fx).length) delete A.fx;
   if (!Object.keys(A).length) delete MDX_W.mdl[mk];
   MDX.dirty = true;
+}
+// —— 部件（导入的模型：切开、选块、手动定转轴；数据在 MDX_W.mdl[模型键].pt，格式见 mod.js MOD_PTR）——
+//   pc：选中的块（sel）、按一块 / 整个物体选（g）、框选（box）、显示删掉的（gh）、试转角度（ta 炮塔、el 炮管、rs 旋翼，度）、
+//   切割薄片（cut：on 打开、c 中心（删过以后的坐标）、az 法线方位角、el 法线仰角（90 = 水平薄片）、sp 绕法线转、w / h 宽高，米）、
+//   圆心定位器（cc：tgt 定哪根轴、pts 点了的点、res 算出的圆）、snap 点模型时吸附到最近的顶点、ud 撤销（改之前的整条记录）、cutUd 撤销切割
+MDX.pc = { k: null, sel: new Set(), g: 'pc', box: false, gh: false, ta: 0, el: 0, my: 0, me: 0, rs: 0, cut: { on: false, c: [0, 0, 1], az: 0, el: 90, sp: 0, w: 4, h: 4 }, cc: { tgt: '', pts: [], res: null }, snap: true, ud: [], cutUd: [] };
+const MDX_AXN = { ta: '炮塔转轴', ga: '炮管俯仰轴（炮耳）', ma: '机枪塔转轴', mb: '机枪俯仰轴', ra: '主旋翼轴', qa: '尾桨轴' }, MDX_AXD = { ta: [0, 0, 1], ga: [0, 1, 0], ma: [0, 0, 1], mb: [0, 1, 0], ra: [0, 0, 1], qa: [0, 1, 0] };
+const MDX_ROLE = { veh: [[1, '炮塔'], [2, '炮管'], [7, '机枪塔'], [8, '机枪'], [0, '车体（不动）'], [6, '删除']], air: [[3, '起落架'], [4, '主旋翼'], [5, '尾桨'], [0, '机身（不动）'], [6, '删除']] };
+const MDX_ROLE_N = ['车体 / 机身', '炮塔', '炮管', '起落架', '主旋翼', '尾桨', '删掉', '机枪塔', '机枪'];
+// 预览里读出来的就是这个导入模型（有分块）
+const mdxPcM = mk => typeof MIV === 'object' && MIV.M && MIV.key === mk && MIV.M.pv ? MIV.M : null;
+// 换了模型：选择、圆心定位器清掉，切割薄片放到模型中间
+function mdxPcReset(mk) {
+  const P = MDX.pc;
+  if (P.k === mk) return;
+  P.k = mk; P.sel.clear(); P.cc = { tgt: '', pts: [], res: null }; P.ta = P.el = P.my = P.me = P.rs = 0; P.ud = [];
+  const M = mdxPcM(mk);
+  if (M) { const b = M.m.bb; P.cut.c = [0, 0, +((b[5] - b[2]) * .55).toFixed(3)]; P.cut.w = +((b[3] - b[0]) * .7).toFixed(2); P.cut.h = +((b[4] - b[1]) * .9).toFixed(2); }
+}
+// 这个模型现在各块的用途、删过以后的原点（按 pt 缓存）
+function mdxPtState(mk, A = MDX_W.mdl[mk]) {
+  const M = mdxPcM(mk);
+  if (!M) return null;
+  const pt = A && A.pt, sig = JSON.stringify(pt ? MOD_PTR.map(k => pt[k] || '') : null);
+  if (M.ptC && M.ptC.sig === sig) return M.ptC;
+  const R = modPtRoles(pt, M.pn), off = modPtOff(M.VB, M.st, M.nv, M.pv, R);
+  return (M.ptC = { sig, R, off });
+}
+// 每一块的包围盒（原始坐标；框选、物体列表用）
+function mdxPcBB(M) {
+  if (M.pbb) return M.pbb;
+  const n = M.pn, B = new Float32Array(n * 6), T = new Uint32Array(n);
+  for (let i = 0; i < n; i++) { B[i * 6] = B[i * 6 + 1] = B[i * 6 + 2] = 1e30; B[i * 6 + 3] = B[i * 6 + 4] = B[i * 6 + 5] = -1e30; }
+  for (let v = 0; v < M.nv; v++) { const i = M.pv[v] * 6, o = v * M.st; for (let k = 0; k < 3; k++) { const x = M.VB[o + k]; if (x < B[i + k]) B[i + k] = x; if (x > B[i + k + 3]) B[i + k + 3] = x; } }
+  for (const [, , i0, cnt] of M.m.lod[0]) for (let t = i0; t < i0 + cnt; t += 3) T[M.pv[M.IB[t]]]++;
+  M.ptri = T;
+  return (M.pbb = B);
+}
+// 切割薄片（删过以后的坐标）：法线按方位角、仰角；两条边先取和法线垂直的「水平」方向，再绕法线转
+function mdxCutPlane() {
+  const K = MDX.pc.cut, D = Math.PI / 180, az = K.az * D, el = K.el * D, n = [Math.cos(el) * Math.cos(az), Math.cos(el) * Math.sin(az), Math.sin(el)];
+  let u = Math.abs(n[2]) > .999 ? [Math.cos(az), Math.sin(az), 0] : mimCross([0, 0, 1], n);
+  const ul = Math.hypot(...u); u = u.map(x => x / ul);
+  let v = mimCross(n, u);
+  const c = Math.cos(K.sp * D), s = Math.sin(K.sp * D), u2 = u.map((x, k) => x * c + v[k] * s), v2 = v.map((x, k) => -u[k] * s + x * c);
+  return { c: K.c.slice(), n, u: u2, v: v2, hu: Math.max(.01, K.w / 2), hv: Math.max(.01, K.h / 2) };
+}
+// 转轴（删过以后的坐标；没定的 null）：炮塔、炮管按游戏里的正方向摆（mod.js modAxUp / modAxEl），试转的方向和游戏一致
+function mdxAxes(pt) {
+  return { T: modAxUp(modAx(pt && pt.ta)), G: modAxEl(modAx(pt && pt.ga)), Ma: modAxUp(modAx(pt && pt.ma)), Mb: modAxEl(modAx(pt && pt.mb)), Rt: modAx(pt && pt.ra), Qt: modAx(pt && pt.qa) };
+}
+// 把部件的显示同步给预览：每个顶点的用途代码（选中的 + 10）、原点、转轴、试转角度、切割薄片、转轴线和圆心定位器
+function mdxPtSync() {
+  const mk = MDX.sel, M = mk && mdxPcM(mk);
+  if (!M || MDX.tab !== 'mdl') { if (typeof MIV === 'object') { MIV.gz = null; MIV.deco = []; MIV.box = null; if (MIV.pt) mivSetPt(null); } return; }
+  const P = MDX.pc, S = mdxPtState(mk), A = MDX_W.mdl[mk] || {}, X = mdxAxes(A.pt), D = Math.PI / 180;
+  const ck = S.sig + '|' + [...P.sel].join(',');
+  if (!M.codes || M.codesK !== ck) {
+    const C = M.codes && M.codes.length === M.nv && M.codesK == null ? M.codes : new Float32Array(M.nv), R = S.R, sel = P.sel;
+    for (let v = 0; v < M.nv; v++) { const i = M.pv[v]; C[v] = R[i] + (sel.has(i) ? 10 : 0); }
+    M.codes = C; M.codesK = ck;
+  }
+  const b = M.m.bb, L = Math.hypot(b[3] - b[0], b[4] - b[1], b[5] - b[2]) * .35, deco = [];
+  const axLine = (X1, col, t) => { if (X1) deco.push({ k: 'line', a: X1.p.map((x, k) => x - X1.a[k] * L), b: X1.p.map((x, k) => x + X1.a[k] * L), col, w: 2, dash: 1 }, { k: 'pt', p: X1.p, col, t, r: 4.5 }); };
+  axLine(X.T, MIV_ROLE_C[1], '炮塔转轴'); axLine(X.G, MIV_ROLE_C[2], '炮耳'); axLine(X.Ma, MIV_ROLE_C[7], '机枪塔转轴'); axLine(X.Mb, MIV_ROLE_C[8], '机枪俯仰轴'); axLine(X.Rt, MIV_ROLE_C[4], '旋翼轴'); axLine(X.Qt, MIV_ROLE_C[5], '尾桨轴');
+  P.cc.pts.forEach((p, i) => deco.push({ k: 'pt', p, col: '#ffd84a', t: '圆边 ' + (i + 1), r: 4 }));
+  if (P.cc.res) { const r = P.cc.res; deco.push({ k: 'ring', c: r.c, n: r.n, r: r.r, col: '#ffd84a', w: 2 }, { k: 'pt', p: r.c, col: '#ffd84a', t: '圆心', r: 4 }); }
+  MIV.deco = deco;
+  MIV.gz = P.cut.on ? mdxCutPlane() : null;
+  MIV.box = MDX.pk === 'pc' && P.box ? mdxPcBox : null;
+  mivSetPt({ codes: M.codes, off: S.off, ...X, ta: P.ta * D, el: P.el * D, my: P.my * D, me: P.me * D, rs: P.rs * D, gh: P.gh, tint: true });
+  MIV.marks = mdxMarks(); mivDraw();   // 炮口、机枪口跟着试转的部件走
+}
+// 点选一块（或它所在的整个物体）：选上 / 取消
+function mdxPcPick(h, e) {
+  const M = mdxPcM(MDX.sel), P = MDX.pc;
+  if (!M || h.pc < 0) return;
+  const ids = P.g === 'nd' && M.pnd ? mdxNodePieces(M, M.pnd[h.pc], false) : [h.pc], on = !P.sel.has(h.pc);
+  for (const i of ids) if (on) P.sel.add(i); else P.sel.delete(i);
+  mdxPtSync(); mdxPcBar();
+  mdxMsg((on ? '选上了' : '取消了') + ' ' + ids.length + ' 块（块号 ' + h.pc + (M.pnd && M.nodes && M.nodes[M.pnd[h.pc]] ? '，物体「' + M.nodes[M.pnd[h.pc]].n + '」' : '') + '）');
+}
+// 一个物体（及它下面所有物体，sub）的块
+function mdxNodePieces(M, nd, sub) {
+  const out = [], N = M.nodes || [], under = q => { for (let d = 0; q >= 0 && d < 80; d++, q = N[q] ? N[q].p : -1) if (q === nd) return true; return false; };
+  for (let i = 0; i < M.pn; i++) if (sub ? under(M.pnd[i]) : M.pnd[i] === nd) out.push(i);
+  return out;
+}
+// 框选：整块都在方框里的块选上（试转着的部件按转过的样子算）
+function mdxPcBox(B) {
+  const M = mdxPcM(MDX.sel), P = MDX.pc, S = mdxPtState(MDX.sel);
+  if (!M || !S) return;
+  const bb = mdxPcBB(M), C = mivCam(), off = S.off;
+  let k = 0;
+  for (let i = 0; i < M.pn; i++) {
+    if (S.R[i] === MOD_PT_DEL && !P.gh) continue;
+    if (bb[i * 6] > bb[i * 6 + 3]) continue;
+    let all = true;
+    for (let c = 0; c < 8 && all; c++) {
+      const q = mivXf([bb[i * 6 + (c & 1 ? 3 : 0)] - off[0], bb[i * 6 + 1 + (c & 2 ? 3 : 0)] - off[1], bb[i * 6 + 2 + (c & 4 ? 3 : 0)] - off[2]], S.R[i], 0), s = mivProj(q, C);
+      if (!s || s[0] < B[0] || s[0] > B[2] || s[1] < B[1] || s[1] > B[3]) all = false;
+    }
+    if (all && !P.sel.has(i)) { P.sel.add(i); k++; }
+  }
+  mdxPtSync(); mdxPcBar(); mdxMsg(k ? '框选：多选上 ' + k + ' 块' : '框里没有整块落在里面的块（框大一点，或者转个角度）');
+}
+// 撤销记录：改之前这个模型的整条（部件、点、转轴）
+function mdxPtPush(mk) { const P = MDX.pc; P.ud.push({ mk, A: JSON.stringify(MDX_W.mdl[mk] || null) }); if (P.ud.length > 60) P.ud.shift(); }
+// 模型上记着的点、转轴一起变（fp：点怎么变，fd：方向怎么变）——删东西挪了原点、转了模型方向都用它
+function mdxXfPts(A, fp, fd) {
+  if (!A) return;
+  const R = v => Math.round(v * 1e4) / 1e4, P3 = p => Array.isArray(p) && p.length >= 3 ? [...fp(p.slice(0, 3)).map(R), ...p.slice(3)] : p;
+  if (A.muz) A.muz = P3(A.muz);
+  if (A.mg) A.mg = P3(A.mg);
+  if (A.gun) A.gun = P3(A.gun);
+  if (A.st) for (const g in A.st) A.st[g] = (A.st[g] || []).map(P3);
+  if (A.noz) A.noz = A.noz.map(P3);
+  if (A.pt) for (const k in MDX_AXN) { const X = A.pt[k]; if (X && Array.isArray(X.p)) { X.p = fp(X.p).map(R); if (fd && Array.isArray(X.a)) X.a = fd(X.a).map(v => Math.round(v * 1e6) / 1e6); } }
+}
+// 把选中的块设成某种用途（0 车体 / 机身、6 删除……）；删的东西变了，原点跟着变，已经点好的位置一起挪
+function mdxPcSet(code) {
+  const mk = MDX.sel, M = mdxPcM(mk), P = MDX.pc;
+  if (!M || !P.sel.size) { mdxMsg('先选中块：点「选部件」，再在预览里点要设的那几块'); return; }
+  mdxPtPush(mk);
+  const A = MDX_W.mdl[mk] = MDX_W.mdl[mk] || {}, pt = A.pt = A.pt || {}, S0 = mdxPtState(mk), R = S0.R.slice(), off0 = S0.off;
+  for (const i of P.sel) R[i] = code;
+  for (let c = 1; c < MOD_PTR.length; c++) { const ids = []; for (let i = 0; i < M.pn; i++) if (R[i] === c) ids.push(i); if (ids.length) pt[MOD_PTR[c]] = modIdsEnc(ids); else delete pt[MOD_PTR[c]]; }
+  const off1 = mdxPtState(mk).off, d = [0, 1, 2].map(k => off0[k] - off1[k]);
+  if (d.some(x => Math.abs(x) > 1e-7)) { mdxXfPts(A, p => p.map((x, k) => x + d[k])); P.cut.c = P.cut.c.map((x, k) => x + d[k]); P.cc.pts = P.cc.pts.map(p => p.map((x, k) => x + d[k])); if (P.cc.res) P.cc.res.c = P.cc.res.c.map((x, k) => x + d[k]); }
+  if (!Object.keys(pt).length) delete A.pt;
+  if (!Object.keys(A).length) delete MDX_W.mdl[mk];
+  const n = P.sel.size; P.sel.clear();
+  MDX.dirty = true; MDX.keep = true; mdxRender();
+  mdxMsg(n + ' 块设成了「' + MDX_ROLE_N[code] + '」' + (d.some(x => Math.abs(x) > 1e-7) ? '；删了东西，模型按剩下的部分重新落地、居中（点好的位置跟着挪了）' : '') + '，点「保存」生效');
+}
+// 圆心定位器：三点定圆（圆心、半径、圆所在平面的法线 = 转轴方向）
+function mdxCircle(a, b, c) {
+  const s = (p, q) => [p[0] - q[0], p[1] - q[1], p[2] - q[2]], dt = (p, q) => p[0] * q[0] + p[1] * q[1] + p[2] * q[2];
+  const ab = s(b, a), ac = s(c, a), n = mimCross(ab, ac), nn = dt(n, n);
+  if (nn < 1e-10) return null;   // 三点在一条线上
+  const t1 = mimCross(n, ab), t2 = mimCross(ac, n), k1 = dt(ac, ac) / (2 * nn), k2 = dt(ab, ab) / (2 * nn), ctr = [0, 1, 2].map(i => a[i] + t1[i] * k1 + t2[i] * k2), nl = Math.sqrt(nn);
+  return { c: ctr, n: n.map(x => x / nl), r: Math.hypot(...s(a, ctr)) };
+}
+// 改一根转轴（没有就按默认方向建）
+function mdxAxSet(ax, fn) {
+  const mk = MDX.sel;
+  mdxPtPush(mk);
+  const A = MDX_W.mdl[mk] = MDX_W.mdl[mk] || {}, pt = A.pt = A.pt || {}, X = pt[ax] = pt[ax] || { p: [0, 0, 0], a: MDX_AXD[ax].slice() };
+  fn(X, pt);
+  if (pt[ax] === null) delete pt[ax];
+  if (!Object.keys(pt).length) delete A.pt;
+  if (!Object.keys(A).length) delete MDX_W.mdl[mk];
+  MDX.dirty = true;
+}
+// 在模型上点了一下（部件、切割、转轴的点选模式）：返回 true 表示处理了
+function mdxPtPick(h, e) {
+  const P = MDX.pc, pk = MDX.pk, q = mivXf((P.snap ? h.vp : h.p).slice(), h.rr || 0, 1), R3 = v => Math.round(v * 1e4) / 1e4;   // 点在试转着的部件上：换回没转时的位置
+  if (pk === 'pc') { mdxPcPick(h, e); return true; }
+  if (pk === 'cutp') { P.cut.c = q.map(R3); MDX.pk = 'pc'; MDX.keep = true; mdxRender(); mdxMsg('薄片挪到了（' + P.cut.c.join(', ') + '）：再调方向、大小，点「切开」'); return true; }
+  if (pk.startsWith('ap:')) { const ax = pk.slice(3); mdxAxSet(ax, X => { X.p = q.map(R3); }); MDX.pk = ''; MDX.keep = true; mdxRender(); mdxMsg(MDX_AXN[ax] + '过（' + q.map(R3).join(', ') + '），方向不变；点「保存」生效'); return true; }
+  if (pk.startsWith('cc:')) {
+    const ax = pk.slice(3);
+    P.cc.tgt = ax; P.cc.pts.push(q.slice()); P.cc.res = null;
+    if (P.cc.pts.length < 3) { mdxPtSync(); mdxMsg('圆心定位器：圆边上第 ' + P.cc.pts.length + ' 个点点好了，再点第 ' + (P.cc.pts.length + 1) + ' 个（三个点尽量隔开）'); return true; }
+    const r = mdxCircle(...P.cc.pts);
+    P.cc.pts = [];
+    if (!r) { mdxPtSync(); mdxMsg('三个点差不多在一条直线上，定不出圆：重新点'); return true; }
+    P.cc.res = r;
+    mdxAxSet(ax, X => { X.p = r.c.map(R3); X.a = r.n.map(v => Math.round(v * 1e6) / 1e6); });
+    MDX.pk = ''; MDX.keep = true; mdxRender();
+    mdxMsg('圆心（' + r.c.map(R3).join(', ') + '），半径 ' + R3(r.r) + ' 米；' + MDX_AXN[ax] + '过圆心、垂直于这个圆。点「保存」生效');
+    return true;
+  }
+  return false;
+}
+// 切开（直接改存着的模型文件，能撤销）：切开的块拆出来的新块继承原来的用途
+async function mdxDoCut() {
+  const mk = MDX.sel, P = MDX.pc, S = mdxPtState(mk);
+  if (!S) return;
+  const G = mdxCutPlane(), off = S.off, only = P.sel.size ? new Set(P.sel) : null;
+  mdxMsg('正在切…');
+  const rec0 = await modFileGet(mk);
+  if (!rec0) { mdxMsg('模型文件不见了'); return; }
+  mimEnsure(rec0);
+  const R = mimCut(rec0, { c: G.c.map((x, k) => x + off[k]), n: G.n, u: G.u, v: G.v, hu: G.hu, hv: G.hv }, only);
+  if (!R.n) { mdxMsg('薄片没有切到东西：把它挪到要切开的地方（半透明的面要穿过模型），大小盖住要切的那一圈' + (only ? '；现在只切选中的块' : '')); return; }
+  const back = { mk, rec: await modFileGet(mk), W: JSON.stringify(MDX_W.mdl[mk] || null), S: JSON.stringify(MOD.mdl[mk] || null) };
+  let nNew = 0;
+  for (const W1 of [MDX_W, MOD]) {   // 新块继承原块的用途（已保存的和正在改的两份都改：模型文件已经变了）
+    const pt = W1.mdl[mk] && W1.mdl[mk].pt;
+    if (!pt) continue;
+    for (let c = 1; c < MOD_PTR.length; c++) { const ids = modIdsDec(pt[MOD_PTR[c]]), add = []; for (const i of ids) if (R.map.has(i)) add.push(...R.map.get(i)); if (add.length) pt[MOD_PTR[c]] = modIdsEnc([...ids, ...add]); }
+  }
+  for (const L of R.map.values()) nNew += L.length;
+  modStoreSave();
+  await modFilePut(mk, R.rec);
+  modReg(mk, R.rec);
+  if (MOD.lib[mk]) { MOD.lib[mk].tri = R.rec.meta.imp ? R.rec.meta.imp.tri : MOD.lib[mk].tri; modStoreSave(); if (MDX_W.lib) MDX_W.lib[mk] = MOD.lib[mk]; }
+  P.cutUd.push(back); if (P.cutUd.length > 3) P.cutUd.shift();
+  P.sel.clear();
+  if (typeof MIV === 'object') { MIV.key = null; MIV.keepCam = mk; }
+  MDX.pk = 'pc'; MDX.keep = true; mdxRender();
+  mdxMsg('切开了（切了 ' + R.n + ' 处），多出 ' + nNew + ' 块：点切下来的那块选中它，再「设为……」' + (nNew ? '' : '——没有多出块：薄片没把它整圈切断（薄片再大一点，或者位置再准一点）'));
+}
+async function mdxUndoCut() {
+  const P = MDX.pc, b = P.cutUd.pop();
+  if (!b) return;
+  await modFilePut(b.mk, b.rec);
+  modReg(b.mk, b.rec);
+  const W = JSON.parse(b.W), S2 = JSON.parse(b.S);
+  if (W) MDX_W.mdl[b.mk] = W; else delete MDX_W.mdl[b.mk];
+  if (S2) MOD.mdl[b.mk] = S2; else delete MOD.mdl[b.mk];
+  if (MOD.lib[b.mk] && b.rec.meta.imp) MOD.lib[b.mk].tri = b.rec.meta.imp.tri;
+  modStoreSave();
+  P.sel.clear();
+  if (typeof MIV === 'object') { MIV.key = null; MIV.keepCam = b.mk; }
+  MDX.keep = true; mdxRender(); mdxMsg('切割撤销了');
+}
+// 部件工具栏里「选中几块」那一行（选择变了只刷新这一小块，不重建整页）
+function mdxPcBar() {
+  const el = MDX.el && MDX.el.querySelector('.mdx-pcsel'), M = mdxPcM(MDX.sel);
+  if (!el || !M) return;
+  mdxPcBB(M);
+  let t = 0;
+  for (const i of MDX.pc.sel) t += M.ptri[i] || 0;
+  el.textContent = MDX.pc.sel.size ? '选中 ' + MDX.pc.sel.size + ' 块（' + t + ' 个三角形）' : '没选中';
+}
+// 部件这一段的表单
+function mdxPtForm(mk, air) {
+  const M = mdxPcM(mk), P = MDX.pc;
+  if (!M) return `<h3 style="margin-top:12px">部件：切开、选块、定转轴</h3><p class="note">模型读出来以后才能拆部件……</p>`;
+  mdxPcReset(mk);
+  const A = MDX_W.mdl[mk] || {}, pt = A.pt || {}, S = mdxPtState(mk), cnt = new Array(7).fill(0);
+  for (let i = 0; i < M.pn; i++) cnt[S.R[i]]++;
+  const btn = (attr, t, on, tip) => `<button type="button" class="mdx-btn${on ? ' pri' : ''}" ${attr}${tip ? ` title="${mdxEsc(tip)}"` : ''}>${t}</button>`;
+  const num = (attr, v, w = 74) => `<input type="number" step="any" ${attr} value="${v ?? ''}" style="width:${w}px">`;
+  const R3 = v => Math.round(v * 1000) / 1000, b = M.m.bb;
+  let h = `<h3 style="margin-top:12px">部件：切开、选块、定转轴</h3><p class="note">模型按连在一起的网格分成一块一块（这个模型 ${M.pn} 块）。点「选部件」后在预览里点一块就选上 / 取消（黄色）；
+    炮塔和车体连成一整块的，先用下面的「切割薄片」切开。选好了点「设为……」（蓝 = 炮塔、橙 = 炮管${air ? '、紫 = 起落架、青 = 旋翼' : ''}）。
+    ${air ? '旋翼' : '炮塔'}转的时候只有设成${air ? '旋翼的块' : '炮塔、炮管的块'}跟着转，其余不动。转轴不自动估：自己输数、在模型上点，或用圆心定位器在圆边上点三个点。</p>
+    <div class="mdx-pcbar">
+      <label>按 <select data-pcg="1"><option value="pc"${P.g === 'pc' ? ' selected' : ''}>一块</option>${M.pnd && M.nodes ? `<option value="nd"${P.g === 'nd' ? ' selected' : ''}>整个物体</option>` : ''}</select> 选</label>
+      ${btn('data-pca="box"', '框选', P.box, '打开后在预览里拖出方框，整块都在框里的选上')}${btn('data-pca="all"', '全选')}${btn('data-pca="inv"', '反选')}${btn('data-pca="none"', '清空')}${M.pnd && M.nodes ? btn('data-pca="up"', '扩到上一级物体', false, '选中的块所在物体的上一级（比如「炮塔」下面的全部）都选上') : ''}</div>
+    <div class="mdx-pcbar">设为：${MDX_ROLE[air ? 'air' : 'veh'].map(([c, n]) => `<button type="button" class="mdx-btn" data-pcs="${c}"${c ? ` style="border-color:${MIV_ROLE_C[c]}"` : ''}>${n}</button>`).join('')}
+      <label><input type="checkbox" data-pcgh="1"${P.gh ? ' checked' : ''}> 显示删掉的</label>${btn('data-pca="undo"', '撤销', false, '撤销上一步（选块、设用途、转轴）')}</div>
+    <p class="note">${cnt.map((k, c) => c && k ? MDX_ROLE_N[c] + ' ' + k + ' 块' : '').filter(Boolean).join(' · ') || '还没设部件：全部是' + (air ? '机身' : '车体') + '，不动'}</p>`;
+  // 切割薄片
+  const K = P.cut;
+  h += `<div class="mdx-pcbar"><b>切割薄片</b>${btn('data-cuta="on"', K.on ? '收起薄片' : '拿出薄片', K.on)}${K.on ? btn('data-cuta="pick"', '放到点击处', MDX.pk === 'cutp', '再在模型上点一下，薄片中心挪到那里') + btn('data-cuta="cut"', '切开', false, '沿薄片把穿过它的网格切开') + (P.cutUd.length ? btn('data-cuta="undo"', '撤销切割') : '') : ''}</div>`;
+  if (K.on) {
+    const sl = (f, nm, mn, mx, stp, v, unit) => `<div class="mdx-row"><label>${nm}</label><input type="range" min="${mn}" max="${mx}" step="${stp}" data-cut="${f}" value="${v}"><span class="def">${num(`data-cut="${f}"`, v)} ${unit}</span><span></span></div>`;
+    const ext = Math.max(b[3] - b[0], b[4] - b[1], b[5] - b[2]) * .7 + 1;
+    h += `<p class="note">半透明蓝色的面就是薄片，穿过模型的地方就是要切的地方；只切交线落在薄片范围里的（大小别盖住不想切的东西）。${P.sel.size ? '<b>现在只切选中的 ' + P.sel.size + ' 块</b>（清空选择就切薄片范围里的全部）。' : '没选中块：切薄片范围里的全部。'}</p>
+      <div class="mdx-pcbar">方向：${btn('data-cuta="hz"', '水平')}${btn('data-cuta="fx"', '竖直·前后切')}${btn('data-cuta="fy"', '竖直·左右切')}　沿法线挪：${[-.05, -.01, .01, .05].map(d => btn(`data-cutn="${d}"`, (d > 0 ? '+' : '−') + Math.abs(d * 100) + ' 厘米')).join('')}</div>` +
+      sl('c.0', '中心 x（前后）', R3(b[0] - 1), R3(b[3] + 1), .005, K.c[0], '米') + sl('c.1', '中心 y（左右）', R3(b[1] - 1), R3(b[4] + 1), .005, K.c[1], '米') + sl('c.2', '中心 z（高低）', R3(b[2] - .5), R3(b[5] + .5), .005, K.c[2], '米') +
+      sl('el', '倾角（90 = 水平）', -90, 90, .5, K.el, '度') + sl('az', '方位', -180, 180, .5, K.az, '度') + sl('sp', '绕法线转', -180, 180, .5, K.sp, '度') +
+      sl('w', '宽', .05, R3(ext * 2), .01, K.w, '米') + sl('h', '高', .05, R3(ext * 2), .01, K.h, '米');
+  }
+  // 转轴
+  const axes = air ? ['ra', 'qa'] : ['ta', 'ga', 'ma', 'mb'];
+  h += `<div class="mdx-pcbar"><b>转轴</b><label><input type="checkbox" data-snap="1"${P.snap ? ' checked' : ''}> 点模型时吸附到最近的顶点</label></div>`;
+  for (const ax of axes) {
+    const X = pt[ax], has = !!modAx(X), cc = MDX.pk === 'cc:' + ax;
+    h += `<div class="mdx-ax"><div class="mdx-pcbar"><b style="color:${MIV_ROLE_C[MOD_PT_AX[ax]]}">${MDX_AXN[ax]}</b>${has ? '' : '<span class="def">还没定（这种部件不会动）</span>'}
+        ${btn(`data-axa="cc" data-ax="${ax}"`, cc ? '圆心定位器：点第 ' + (P.cc.pts.length + 1) + ' 个点…' : '圆心定位器', cc, '在圆边上点三个点：圆心就是转轴经过的点，方向垂直于这个圆（比如沿炮塔座圈点三下）')}${btn(`data-axa="pick" data-ax="${ax}"`, '点一下定中心', MDX.pk === 'ap:' + ax, '在模型上点一下：转轴经过这一点，方向不变')}
+        ${btn(`data-axa="dz" data-ax="${ax}"`, '竖直')}${btn(`data-axa="dy" data-ax="${ax}"`, '左右')}${btn(`data-axa="dx" data-ax="${ax}"`, '前后')}${has ? btn(`data-axa="clr" data-ax="${ax}"`, '清除') : ''}</div>
+      <div class="mdx-pcbar">经过 ${[0, 1, 2].map(i => 'xyz'[i] + ' ' + num(`data-axf="${ax}.p.${i}"`, has ? X.p[i] : '')).join(' ')}　方向 ${[0, 1, 2].map(i => 'xyz'[i] + ' ' + num(`data-axf="${ax}.a.${i}"`, has ? X.a[i] : '', 64)).join(' ')}</div></div>`;
+  }
+  // 试转（只在预览里）、动作参数
+  const tsl = (f, nm, mn, mx, v) => `<div class="mdx-row"><label>${nm}</label><input type="range" min="${mn}" max="${mx}" step="1" data-pct="${f}" value="${v}"><span class="def" data-pctv="${f}">${v}°</span><span></span></div>`;
+  if (air) h += tsl('rs', '试转旋翼（只在预览里）', 0, 360, P.rs);
+  else {
+    h += tsl('ta', '试转炮塔（只在预览里）', -180, 180, P.ta) + tsl('el', '试抬炮管（只在预览里）', -20, 60, P.el) + tsl('my', '试转机枪塔（只在预览里）', -180, 180, P.my) + tsl('me', '试抬机枪（只在预览里）', -20, 70, P.me);
+    const el = Array.isArray(pt.el) ? pt.el : [];
+    h += `<div class="mdx-pcbar"><b>炮塔、炮管怎么动（游戏里）</b></div>
+      <div class="mdx-pcbar">炮管俯仰 ${num('data-ptf="el.0"', el[0] ?? '', 60)} 到 ${num('data-ptf="el.1"', el[1] ?? '', 60)} 度（默认 −6 到 18）　俯仰速度 ${num('data-ptf="elR"', pt.elR ?? '', 60)} 度 / 秒（默认 20）</div>
+      <div class="mdx-pcbar">后坐 ${num('data-ptf="rc"', pt.rc ?? '', 60)} 米（默认 0.3）　炮塔转速 ${num('data-ptf="trav"', pt.trav ?? '', 60)} 度 / 秒（推演里没有炮塔的车种上用，默认 40；有炮塔的按「坦克装甲车」页的炮塔回转速度）</div>
+      <div class="mdx-pcbar"><b>机枪塔、机枪怎么动（游戏里）</b>：机枪开火时机枪塔转向机枪的目标、机枪按目标高低抬，不打了 3 秒回正</div>
+      <div class="mdx-pcbar">机枪塔转速 ${num('data-ptf="mtr"', pt.mtr ?? '', 60)} 度 / 秒（默认 90）　机枪俯仰 ${num('data-ptf="mel.0"', (pt.mel || [])[0] ?? '', 60)} 到 ${num('data-ptf="mel.1"', (pt.mel || [])[1] ?? '', 60)} 度（默认 −10 到 60）　俯仰速度 ${num('data-ptf="melR"', pt.melR ?? '', 60)} 度 / 秒（默认 60）</div>`;
+  }
+  // 物体列表（glTF 节点）
+  if (M.pnd && M.nodes && M.nodes.length > 1) {
+    const N = M.nodes, kids = N.map(() => []), dep = N.map(() => 0), per = new Map();
+    N.forEach((d, i) => { if (d.p >= 0 && N[d.p]) kids[d.p].push(i); });
+    N.forEach((d, i) => { let k = 0; for (let q = d.p; q >= 0 && k < 80; q = N[q] ? N[q].p : -1) k++; dep[i] = k; });
+    for (let i = 0; i < M.pn; i++) per.set(M.pnd[i], (per.get(M.pnd[i]) || 0) + 1);
+    const rows = [], walk = i => { if (rows.length >= 400) return; rows.push(i); for (const c of kids[i]) walk(c); };
+    N.forEach((d, i) => { if (d.p < 0) walk(i); });
+    h += `<details class="mdx-nodes"><summary>物体列表（${N.length} 个，点名字把它和它下面的全部选上 / 取消）</summary>${rows.map(i => `<button type="button" class="mdx-it" data-pcn="${i}" style="padding-left:${8 + dep[i] * 14}px">${mdxEsc(N[i].n)}<small>${per.get(i) ? per.get(i) + ' 块' : '（只是分组）'}</small></button>`).join('')}${N.length > rows.length ? '<p class="note">太多了，只列出前 400 个</p>' : ''}</details>`;
+  }
+  return h;
+}
+// 部件面板的点击
+function mdxPtClick(b) {
+  const mk = MDX.sel, M = mdxPcM(mk), P = MDX.pc, d = b.dataset;
+  if (!M) return false;
+  if (d.pca) {
+    const a = d.pca;
+    if (a === 'box') { P.box = !P.box; if (P.box) MDX.pk = 'pc'; MDX.keep = true; mdxRender(); mdxMsg(P.box ? '框选：在预览里按住左键拖出方框（右键或 Shift 拖动还是平移）' : ''); return true; }
+    if (a === 'all' || a === 'inv' || a === 'none') { const S = mdxPtState(mk); for (let i = 0; i < M.pn; i++) { const on = a === 'all' ? S.R[i] !== MOD_PT_DEL || P.gh : a === 'inv' ? !P.sel.has(i) && (S.R[i] !== MOD_PT_DEL || P.gh) : false; if (on) P.sel.add(i); else P.sel.delete(i); } mdxPtSync(); mdxPcBar(); return true; }
+    if (a === 'up' && M.pnd && M.nodes) { const par = new Set(); for (const i of P.sel) { const nd = M.pnd[i], p = M.nodes[nd] ? M.nodes[nd].p : -1; par.add(p >= 0 ? p : nd); } for (const nd of par) for (const i of mdxNodePieces(M, nd, true)) P.sel.add(i); mdxPtSync(); mdxPcBar(); mdxMsg('扩到上一级：选中 ' + P.sel.size + ' 块'); return true; }
+    if (a === 'undo') { const u = P.ud.pop(); if (!u || u.mk !== mk) { if (u) P.ud.push(u); mdxMsg('没有可以撤销的了'); return true; } const o = JSON.parse(u.A); if (o) MDX_W.mdl[mk] = o; else delete MDX_W.mdl[mk]; MDX.dirty = true; MDX.keep = true; mdxRender(); mdxMsg('撤销了一步'); return true; }
+  }
+  if (d.pcs != null) { mdxPcSet(+d.pcs); return true; }
+  if (d.pcn != null) { const ids = mdxNodePieces(M, +d.pcn, true), on = ids.some(i => !P.sel.has(i)); for (const i of ids) if (on) P.sel.add(i); else P.sel.delete(i); mdxPtSync(); mdxPcBar(); mdxMsg((on ? '选上了' : '取消了') + '「' + M.nodes[+d.pcn].n + '」' + ids.length + ' 块'); return true; }
+  if (d.cuta) {
+    const a = d.cuta, K = P.cut;
+    if (a === 'on') K.on = !K.on;
+    else if (a === 'pick') MDX.pk = MDX.pk === 'cutp' ? 'pc' : 'cutp';
+    else if (a === 'hz') { K.el = 90; K.az = 0; K.sp = 0; }
+    else if (a === 'fx') { K.el = 0; K.az = 0; K.sp = 0; }
+    else if (a === 'fy') { K.el = 0; K.az = 90; K.sp = 0; }
+    else if (a === 'cut') { mdxDoCut().catch(err => mdxMsg('切不了：' + err.message)); return true; }
+    else if (a === 'undo') { mdxUndoCut().catch(err => mdxMsg('撤销不了：' + err.message)); return true; }
+    MDX.keep = true; mdxRender(); if (a === 'pick' && MDX.pk === 'cutp') mdxMsg('在模型上点一下：薄片中心挪到那里');
+    return true;
+  }
+  if (d.cutn != null) { const G = mdxCutPlane(), s = +d.cutn; P.cut.c = P.cut.c.map((x, k) => Math.round((x + G.n[k] * s) * 1e4) / 1e4); MDX.keep = true; mdxRender(); return true; }
+  if (d.axa) {
+    const a = d.axa, ax = d.ax;
+    if (a === 'cc') { MDX.pk = MDX.pk === 'cc:' + ax ? '' : 'cc:' + ax; P.cc = { tgt: ax, pts: [], res: null }; MDX.keep = true; mdxRender(); if (MDX.pk) mdxMsg('圆心定位器：在圆的边上点三个点（比如炮塔座圈、炮塔底边一圈），尽量隔开'); return true; }
+    if (a === 'pick') { MDX.pk = MDX.pk === 'ap:' + ax ? '' : 'ap:' + ax; MDX.keep = true; mdxRender(); if (MDX.pk) mdxMsg('在模型上点一下：' + MDX_AXN[ax] + '经过那一点'); return true; }
+    if (a === 'clr') { mdxAxSet(ax, (X, pt) => { pt[ax] = null; }); }
+    else mdxAxSet(ax, X => { X.a = { dz: [0, 0, 1], dy: [0, 1, 0], dx: [1, 0, 0] }[a]; });
+    MDX.keep = true; mdxRender(); mdxMsg('改了，点「保存」生效');
+    return true;
+  }
+  return false;
+}
+// 部件面板的输入（change）
+function mdxPtChange(t) {
+  const mk = MDX.sel, P = MDX.pc, d = t.dataset;
+  if (d.pcg) { P.g = t.value; return true; }
+  if (d.pcgh) { P.gh = t.checked; mdxPtSync(); return true; }
+  if (d.snap) { P.snap = t.checked; return true; }
+  if (d.axf) {
+    const [ax, f, i] = d.axf.split('.'), v = t.value === '' ? null : +t.value;
+    if (v != null && !isFinite(v)) return true;
+    mdxAxSet(ax, X => { X[f][+i] = v ?? (f === 'a' ? MDX_AXD[ax][+i] : 0); });
+    MDX.keep = true; mdxRender(); mdxMsg('改了，点「保存」生效');
+    return true;
+  }
+  if (d.ptf) {
+    const f = d.ptf, v = t.value === '' ? null : +t.value;
+    if (v != null && !isFinite(v)) return true;
+    mdxPtPush(mk);
+    const A = MDX_W.mdl[mk] = MDX_W.mdl[mk] || {}, pt = A.pt = A.pt || {};
+    if (/^m?el\.\d$/.test(f)) { const k = f.slice(0, -2), D0 = k === 'el' ? [-6, 18] : [-10, 60], i = +f.slice(-1), el = Array.isArray(pt[k]) ? pt[k].slice() : D0.slice(); el[i] = v ?? D0[i]; pt[k] = el; if (el[0] === D0[0] && el[1] === D0[1]) delete pt[k]; }
+    else if (v == null) delete pt[f]; else pt[f] = v;
+    if (!Object.keys(pt).length) delete A.pt;
+    if (!Object.keys(A).length) delete MDX_W.mdl[mk];
+    MDX.dirty = true; mdxMsg('改了，点「保存」生效');
+    return true;
+  }
+  return false;
+}
+// 部件面板的拖动（input）：试转、切割薄片——只刷新预览，不重建整页
+function mdxPtInput(t) {
+  const P = MDX.pc, d = t.dataset;
+  if (d.pct) { P[d.pct] = +t.value; const s = MDX.el.querySelector(`[data-pctv="${d.pct}"]`); if (s) s.textContent = t.value + '°'; mdxPtSync(); return true; }
+  if (d.cut) {
+    const v = +t.value;
+    if (!isFinite(v) || t.value === '') return true;
+    const f = d.cut;
+    if (f.startsWith('c.')) P.cut.c[+f[2]] = v; else P.cut[f] = v;
+    for (const o of MDX.el.querySelectorAll(`[data-cut="${f}"]`)) if (o !== t) o.value = v;
+    mdxPtSync();
+    return true;
+  }
+  return false;
 }
 // —— 特效贴图 ——
 const MDX_SLOT = [['expl', '爆炸（火球 + 烟，放一遍）'], ['fire', '残骸起火（循环）'], ['mzl', '坦克 / 车炮炮口焰'], ['mzla', '火炮炮口焰'], ['puff', '烟团']];
@@ -493,6 +887,7 @@ function mdxLibSet(id, f, v) {
 }
 function mdxChange(e) {
   const t = e.target;
+  if (MDX.tab === 'mdl' && mdxPtChange(t)) return;
   if (t.dataset.set) {   // 画面：直接改设置
     const v = t.tagName === 'SELECT' && (t.value === 'true' || t.value === 'false') ? t.value === 'true' : t.type === 'range' ? +t.value : t.value;
     if (typeof setSetting === 'function') setSetting(t.dataset.set, v);
@@ -566,7 +961,7 @@ async function mdxRecUpdate(id, fn) {
   await modFilePut(id, rec);
   modReg(id, rec);
   if (MOD.lib[id]) { MOD.lib[id].len = rec.meta.len; modStoreSave(); }
-  if (typeof MIV === 'object') MIV.key = null;
+  if (typeof MIV === 'object') { MIV.key = null; MIV.keepCam = id; }
 }
 function mdxClick(e) {
   const b = e.target.closest('button, [data-tab], [data-it], [data-rst], [data-ldx]');
@@ -575,12 +970,13 @@ function mdxClick(e) {
   if (b.dataset.it) { MDX.sel = b.dataset.it; MDX.pk = ''; mdxRender(); return; }
   if (b.dataset.rst) { const [p, f] = b.dataset.rst.split('|').length > 2 ? [b.dataset.rst.split('|').slice(0, 2).join('|'), b.dataset.rst.split('|')[2]] : b.dataset.rst.split('|'); mdxSet(p, f, ''); MDX.keep = true; mdxRender(); mdxMsg('恢复成默认，点「保存」生效'); return; }
   if (b.dataset.ldx != null) { const A = MDX_W.air[MDX.sel]; if (A && A.load) { A.load.splice(+b.dataset.ldx, 1); MDX.dirty = true; MDX.keep = true; mdxRender(); } return; }
+  if (MDX.tab === 'mdl' && mdxPtClick(b)) return;
   if (b.dataset.pk != null) { MDX.pk = b.dataset.pk; MDX.keep = true; mdxRender(); mdxMsg(MDX.pk ? '在上面的模型上点一下' : ''); return; }
   if (b.dataset.mrst) { const A = MDX_W.mdl[MDX.sel]; if (A) { delete A[b.dataset.mrst]; if (!Object.keys(A).length) delete MDX_W.mdl[MDX.sel]; } MDX.dirty = true; MDX.keep = true; mdxRender(); mdxMsg('恢复成游戏原来的，点「保存」生效'); return; }
   if (b.dataset.mdel) { mdxMdlDel(b.dataset.mdel); MDX.keep = true; mdxRender(); return; }
   const a = b.dataset.a;
   if (a === 'close') closeModEditor();
-  else if (a === 'save') { for (const k of MOD_SEC) if (k !== 'lib') MOD[k] = MDX_W[k]; modSave(); MDX.dirty = false; MDX.keep = true; mdxRender(); mdxMsg('已保存：下一局生效，正在打的这一局里的车辆也已更新'); }
+  else if (a === 'save') { for (const k of MOD_SEC) if (k !== 'lib') MOD[k] = modClone(MDX_W[k]); modSave(); MDX.dirty = false; MDX.keep = true; mdxRender(); mdxMsg('已保存：下一局生效，正在打的这一局里的车辆也已更新'); }
   else if (a === 'undo') { MDX_W = modClone(MOD); MDX.dirty = false; mdxRender(); mdxMsg('已放弃没保存的改动'); }
   else if (a === 'ldadd') { const k = MDX.sel, A = MDX_W.air[k] = MDX_W.air[k] || {}; if (!A.load) A.load = (FW_LOAD[k] || []).map(r => ({ w: r.w, bay: r.bay, n: mdxLoadN(k, r) })); A.load.push({ w: 'pl15', bay: 'ext', n: 2 }); MDX.dirty = true; MDX.keep = true; mdxRender(); }
   else if (a === 'ldrst') { const A = MDX_W.air[MDX.sel]; if (A) { delete A.load; if (!Object.keys(A).length) delete MDX_W.air[MDX.sel]; } MDX.dirty = true; MDX.keep = true; mdxRender(); }
@@ -610,9 +1006,14 @@ function mdxClick(e) {
     }, err => { b.disabled = false; mdxMsg('导入失败：' + err.message); console.warn(err); });
   }
   else if (a === 'turn') {
-    const id = MDX.sel;
+    const id = MDX.sel, offOf = (rec, W1) => { const V = mimViews(rec); return V.pv ? modPtOff(V.VB, V.st, V.nv, V.pv, modPtRoles(W1.mdl[id] && W1.mdl[id].pt, rec.meta.pn || 0)) : [0, 0, 0]; };
     mdxMsg('正在转…');
-    mdxRecUpdate(id, rec => mimTurn(rec, b.dataset.ax)).then(() => { MDX.keep = true; mdxRender(); mdxMsg('转好了（之前点的位置要重新点）'); }, err => mdxMsg('转不了：' + err.message));
+    mdxRecUpdate(id, rec => {   // 点好的位置、转轴跟着一起转（已保存的和正在改的两份：模型文件已经转了）
+      mimEnsure(rec);
+      const W2 = [MDX_W, MOD], o0 = W2.map(W1 => offOf(rec, W1)), X = mimTurn(rec, b.dataset.ax), o1 = W2.map(W1 => offOf(rec, W1));
+      if (X) W2.forEach((W1, i) => mdxXfPts(W1.mdl[id], p => { const q = X.xf([p[0] + o0[i][0], p[1] + o0[i][1], p[2] + o0[i][2]]); return [q[0] - o1[i][0], q[1] - o1[i][1], q[2] - o1[i][2]]; }, X.xd));
+      MDX.pc.cc = { tgt: '', pts: [], res: null };
+    }).then(() => { modStoreSave(); MDX.keep = true; mdxRender(); mdxMsg('转好了（点好的位置、转轴跟着转了）'); }, err => mdxMsg('转不了：' + err.message));
   }
   else if (a === 'mdel' || a === 'fxdel') {
     const id = MDX.sel, L = MOD.lib[id];
@@ -626,7 +1027,7 @@ function mdxClick(e) {
       for (const s in W1.fx) if (W1.fx[s] === id) delete W1.fx[s];
       for (const mk in W1.mdl) if (W1.mdl[mk].fx && W1.mdl[mk].fx.spr === id) delete W1.mdl[mk].fx.spr;
     }
-    if (typeof V3G === 'object') { delete V3G.def[id]; delete V3G.M[id]; }
+    if (typeof modUnreg === 'function') modUnreg(id);
     if (typeof V3G_CRED === 'object') { const i = V3G_CRED.findIndex(c => c.uid === id); if (i >= 0) V3G_CRED.splice(i, 1); }
     modStoreSave(); modApply();
     MDX.sel = null; mdxRender(); mdxMsg('已删除');

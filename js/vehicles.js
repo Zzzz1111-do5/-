@@ -654,6 +654,7 @@ function vehMg(v, tg) {
   const vis = v.side === 'p' || inVision(v.x, v.y);
   tracer(v.x, v.y, q.x + gauss() * 5, q.y + gauss() * 5, v.side, vis);
   if (m.n > 3) tracer(v.x, v.y, q.x + gauss() * 8, q.y + gauss() * 8, v.side, vis);
+  if (vis && typeof modMgOf === 'function') { const k = modVehMdl(v); if (k && modMgOf(k)) for (let i = Math.max(0, S.tracers.length - (m.n > 3 ? 2 : 1)); i < S.tracers.length; i++) S.tracers[i].src = v.id; }   // 编辑器在模型上点了机枪口：3D 里曳光弹从那里出（v3fx.js）
 }
 
 // 守军的自行高炮射击我方飞机（我方自行高炮只在出现敌机时开火——本作敌方没有空军）

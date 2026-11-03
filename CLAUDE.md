@@ -106,7 +106,14 @@
   车辆按型号（rlModelOf 的键）在推演里第一次见到时套（modVehApply：装甲按毫米 ÷ MOD_MM 220 = 级、各面 armX、穿深 penL、加速度 accA、转向 turnK、炮塔 travM……），车辆换模型只改画面（MOD_VMDL → v3g.js v3gVehKey，vfn.js 仍按原模型）；
   模型上的点按模型键记（MOD.mdl：炮口 muz → v3g.js v3gMuzzle / v3fx.js 坦克炮出膛，航炮口 gun → FW_GUN.at，挂点 st → FW_ST，尾喷口 noz → v3det.js v3dNoz，尾焰 fx → v3dBurner 的长度 / 亮度 / 马赫环 / 序列帧尾焰）。
   导入的文件存 IndexedDB（bh-mod-files，modFilePut），MOD.lib 只记名字和参数：模型键 u_…，v3g.js v3gModel 不去网上找，V3G.def[键] = { meta, bin }（v3gDecode 认 D.bin）；序列帧贴图键 uf_…（v3vfx.js v3vUser、v3vSlots 换掉内置的爆炸 / 火 / 炮口焰 / 烟，帧号按总帧数换算）。
-  导入（modimp.js mimBuild）照 v3gbake.js 的坐标约定拼 { meta, bin }，只有一级网格、没有部件；mimTurn 转方向。不改推演结果：没改的字段一律走原值（车辆加速度没设就是原来的一下到速）。
+  导入（modimp.js mimBuild）照 v3gbake.js 的坐标约定拼 { meta, bin }，只有一级网格；mimTurn 转方向（点好的位置、转轴跟着转）。不改推演结果：没改的字段一律走原值（车辆加速度没设就是原来的一下到速）。
+  部件（用户：不要自动估，自己切、自己定转轴）：导入时按连通块编号（mimPieces：三角形连着的、同一个 glTF 节点里位置相同的顶点算一块；bin 后面接每顶点块号 meta.pv / pvt / pn、每块节点号 pnd，meta.nodes 节点树；老的导入 mimEnsure 补算）；
+  编辑器「模型与挂点」页选块（点一块 / 整个物体 / 框选整块在框里的 / 扩到上一级物体），设为炮塔 t、炮管 g、机枪塔 mt、机枪 mg（遥控武器站）、起落架、主旋翼、尾桨、删除 x，存在 MOD.mdl[键].pt（块号区间字符串，mod.js MOD_PTR）；
+  连成一张网格的用切割薄片切开（mimCut：沿平面真切三角形、交线上的新顶点两边各一份；薄片正好在一圈边上时负边换用原顶点的另一份，躺在平面里的三角形按朝向归边；直接改存着的模型文件、能撤销，新块继承原块用途）；
+  转轴全手动（pt.ta / ga / ma / mb / ra / qa = { p, a }：输数、点模型定中心、圆心定位器三点定圆——圆心、半径、法线 = 方向）；删了东西按剩下的部分重新落地居中（modPtOff），点好的位置一起挪。
+  游戏里 v3g.js v3gPrep 对 u_ 键调 mod.js modPrep：删的块不画，部件按手动转轴挂成 rot / gun / chain 部件，车辆登记进 VFN（ta：装到推演里没炮塔的车种上时炮塔自己转向目标；mg：机枪塔转向机枪目标 iC2、机枪俯仰 iD3）；pt 改了 modApply 重新解码（modRegMdl，旧缓冲区、贴图、实例列表一起放掉）。
+  机枪口 MOD.mdl[键].mg（mgOn 装在车体 / 炮塔 / 炮管 / 机枪塔）：vehicles.js vehMg 给曳光弹记 src，v3fx.js 从 v3g.js v3gMgMuzzle 打出、枪口一闪；炮口 v3gMuzzle 也跟炮管仰角走。预览（MIV）着色器按每顶点用途代码试转、上色，钉在表单顶上（sticky），手机双指缩放平移。
+  编辑器浮层要带 mn-layer 类（主菜单开着时其余元素都被藏起来）；保存时 MOD 存的是 MDX_W 的拷贝（原来共用对象，没保存的改动漏进 MOD）。
 - 主菜单「闯关」是 levels.js（三章十关，按预算自己布兵），「海岛战役」是 isle.js，都建在沙盒（sandbox.js）上；两者都记在 S.lv 里（海岛是 S.lv.isle），闯关的逻辑要跳过海岛。
 
 ## 代码约定

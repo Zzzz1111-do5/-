@@ -109,7 +109,7 @@ function vfnParts(v, key, k, h, aim, dead, fs, z) {
   const dt = Math.max(0, Math.min(.2, now - st.t)), D2R = Math.PI / 180;
   st.t = now;
   P[0] = dead ? -.6 : -vfnAng(aim - h);
-  if (F.tur3d && !dead) {   // 推演里没有炮塔：画面上的炮塔按真实转速转向正在打的目标，没目标时回正
+  if ((F.tur3d || (F.ta && !(typeof vehSp === 'function' && (vehSp(v) || {}).tur))) && !dead) {   // 推演里没有炮塔：画面上的炮塔按真实转速转向正在打的目标，没目标时回正（ta：编辑器导入的模型，装到没有炮塔的车种上时才这样）
     const tg = vfnTgt(v), want = tg ? -vfnAng(Math.atan2((tg.t ? tg.t.y : tg.y) - v.y, (tg.t ? tg.t.x : tg.x) - v.x) - h) : (v.aaAt != null && S.t - v.aaAt < 1.2 ? P[0] : 0);
     st.ty += Math.max(-1, Math.min(1, vfnAng(want - st.ty) / Math.max(1e-6, (F.trav || 40) * D2R * dt))) * (F.trav || 40) * D2R * dt;
     P[0] = st.ty = vfnAng(st.ty);
@@ -117,6 +117,19 @@ function vfnParts(v, key, k, h, aim, dead, fs, z) {
   if (dead) { P[1] = F.el ? F.el[0] * D2R * .6 : 0; return P; }   // 残骸：炮管耷拉
   if (F.el) { st.el = vfnSlew(st.el, vfnElWant(v, F, z, 2.6 * k), (F.elR || 30) * D2R * dt); P[1] = st.el; }
   if (F.spin) P[2] = (now * F.spin / 60 * 2 * Math.PI + (v.id || 0) * 1.7) % (2 * Math.PI);
+  if (F.mg) {   // 机枪塔（编辑器导入的模型，mod.js modPrep）：转向车载机枪正在打的目标（相对炮塔，参数槽 2），机枪按目标高低俯仰（参数槽 7）；不打了 3 秒回正
+    const G = F.mg, mt = v.mtg && v.mtg.t && !(v.mtg.t.men && !v.mtg.t.men.length) && S.t - (v.mgT ?? -99) < 3 ? v.mtg : null;
+    let wy = 0, we = 0;
+    if (mt) {
+      const tx = mt.t ? mt.t.x : mt.x, ty = mt.t ? mt.t.y : mt.y, tw = h - P[0];   // 炮塔此刻在世界里的朝向
+      if (G.yaw) wy = -vfnAng(Math.atan2(ty - v.y, tx - v.x) - tw);
+      if (G.el) { const d = Math.max(1, Math.hypot(tx - v.x, ty - v.y)), tz = typeof v3Ht === 'function' ? v3Ht(tx, ty) + .9 : z; we = Math.max(G.el[0] * D2R, Math.min(G.el[1] * D2R, Math.atan2(tz - z - G.hz * k, d))); }
+    }
+    const r = G.trav * D2R * dt;
+    st.my = vfnAng((st.my || 0) + Math.max(-r, Math.min(r, vfnAng(wy - (st.my || 0)))));
+    st.me = vfnSlew(st.me || 0, we, G.elR * D2R * dt);
+    P[2] = st.my; P[7] = st.me;
+  }
   if (F.roll) P[3] = (v.odo || 0) / k;
   if (F.ramp) {   // 跳板：等人上车（v.pick）、刚有人上下车的 8 秒里放下，车在走就收起
     const n = (v.ride || []).length;

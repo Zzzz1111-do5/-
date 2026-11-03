@@ -468,18 +468,35 @@ function v3gVeh(v, rk, side, len, x, y, z, h, aim, dead, pitch, roll, hl, fs = 9
   const P = FP || [dead ? -.6 : da, 0, 0, 0, 0, 0, rc, 0], E = !FP && V3G_ERA[key], U = E && v && v.era && v.era.h;
   if (FP && V3G_CAPS[key] && v && v.samN != null) { const n = (typeof vehSp === 'function' && (vehSp(v).sam || {}).n) || 8; P[6] = 2 ** clamp(n - v.samN, 0, 16) - 1; }   // 打出去几枚，就有几个发射筒空了
   if (U && U.length && typeof rlModelOf === 'function' && E.rl.includes((rlModelOf(v) || {}).key)) for (const i of U) if (i >= 0 && i < 64) P[1 + Math.floor(i / 16)] += 2 ** (i % 16);   // 炸掉的反应装甲块（era.js）：每个数 16 位
-  if (v && v.id != null && typeof modMuzOf === 'function' && modMuzOf(key)) { if (V3G_VT.S !== S) { V3G_VT.clear(); V3G_VT.S = S; } V3G_VT.set(v.id, { key, x, y, z, h, k, da: dead ? 0 : da, pitch, roll }); }   // 编辑器设了炮口的模型：记下这一帧怎么摆的（v3gMuzzle）
+  if (v && v.id != null && typeof modMuzOf === 'function' && (modMuzOf(key) || modMgOf(key))) { if (V3G_VT.S !== S) { V3G_VT.clear(); V3G_VT.S = S; } V3G_VT.set(v.id, { key, x, y, z, h, k, da: dead ? 0 : P[0], el: FP && !dead ? P[1] || 0 : 0, my: FP && !dead ? P[2] || 0 : 0, me: FP && !dead ? P[7] || 0 : 0, pitch, roll }); }   // 编辑器设了炮口、机枪口的模型：记下这一帧怎么摆的（v3gMuzzle / v3gMgMuzzle；炮塔、炮管、机枪塔的角度按画面上的）
   return v3gAdd(key, x, y, z, h, k, (dead ? 2 : side === 'e' ? 1 : 0) + (hl ? 8 : 0), roll, pitch, P);
 }
 // 车辆主炮炮口此刻在世界的哪里（游戏坐标 x、y，高度 z）：编辑器在模型上点的炮口（mod.js modMuzOf），跟着炮塔（模型里的 tur 部件）转；没设的返回 null（v3fx.js 照旧从车顶出）
 const V3G_VT = new Map();
+const v3gRotP = (v, c, a, t) => { const x = v[0] - c[0], y = v[1] - c[1], z = v[2] - c[2], l = Math.hypot(a[0], a[1], a[2]) || 1, ax = a[0] / l, ay = a[1] / l, az = a[2] / l, cs = Math.cos(t), sn = Math.sin(t), d = (ax * x + ay * y + az * z) * (1 - cs);   // 点 v 绕过 c、方向 a 的轴转 t（同着色器 rotA）
+  return [c[0] + x * cs + (ay * z - az * y) * sn + ax * d, c[1] + y * cs + (az * x - ax * z) * sn + ay * d, c[2] + z * cs + (ax * y - ay * x) * sn + az * d]; };
 function v3gMuzzle(id) {
   const T = V3G_VT.S === S && V3G_VT.get(id), mz = T && modMuzOf(T.key), M = T && V3G.M[T.key];
   if (!mz || !M || !M.ready) return null;
-  let [px, py, pz] = mz;
+  let q = mz.slice();
+  const gp = T.el && (M.parts || []).find(p => p.n === 'gun' && p.k === 'chain' && p.q);   // 炮管抬起来了：炮口绕炮耳跟着抬（同着色器：绕 q / a2 转仰角）
+  if (gp) q = v3gRotP(q, gp.q, gp.a2 || V3G_AY, T.el);
   const tp = (M.parts || []).find(p => p.n === 'tur');
-  if (tp && tp.p) { const c = Math.cos(T.da), s2 = Math.sin(T.da), dx = px - tp.p[0], dy = py - tp.p[1]; px = tp.p[0] + dx * c - dy * s2; py = tp.p[1] + dx * s2 + dy * c; }
+  if (tp && tp.p) q = v3gRotP(q, tp.p, tp.a || [0, 0, 1], T.da);
+  const [px, py, pz] = q;
   const r = v3dMv3(T.h, T.pitch || 0, T.roll || 0, [px * T.k, py * T.k, pz * T.k]);
+  return [T.x + r[0], T.y - r[1], T.z + r[2]];
+}
+// 车载机枪的枪口此刻在世界的哪里（编辑器点的机枪口，mod.js modMgOf）：装在机枪塔上的先绕机枪俯仰轴抬、再绕机枪塔转轴转，并列机枪随炮管俯仰，再随炮塔转；没设的返回 null
+function v3gMgMuzzle(id) {
+  const T = V3G_VT.S === S && V3G_VT.get(id), G = T && typeof modMgOf === 'function' && modMgOf(T.key), M = T && V3G.M[T.key];
+  if (!G || !M || !M.ready) return null;
+  let q = G.p.slice();
+  const P2 = M.parts || [], part = n => P2.find(p => p.n === n);
+  if (G.on === 'mg') { const g = part('mgg') || part('mgt'); if (g) { if (g.q3 && g.g2 && g.g2[3]) q = v3gRotP(q, g.q3, g.a3 || V3G_AY, T.me); if (g.e && g.e[2]) q = v3gRotP(q, g.q, g.a2 || [0, 0, 1], T.my); } }
+  if (G.on === 'g') { const g = part('gun'); if (g && g.k === 'chain' && g.q) q = v3gRotP(q, g.q, g.a2 || V3G_AY, T.el); }
+  if (G.on !== 'hull') { const tp = part('tur'); if (tp && tp.p) q = v3gRotP(q, tp.p, tp.a || [0, 0, 1], T.da); }
+  const r = v3dMv3(T.h, T.pitch || 0, T.roll || 0, [q[0] * T.k, q[1] * T.k, q[2] * T.k]);
   return [T.x + r[0], T.y - r[1], T.z + r[2]];
 }
 // 飞机（机型键 key，游戏里的尺寸 sz）：ground 时 z 是地面 / 甲板（机轮着地），否则 z 是机身中线；起落架只在 gear 时放下；直升机旋翼转
@@ -927,6 +944,7 @@ function v3gPitHole(cf, m, VB, IB) {
   }
 }
 function v3gPrep(key, m, M, VB, IB) {
+  if (key.startsWith('u_')) { if (typeof modPrep === 'function') modPrep(key, m, VB, IB); return null; }   // 编辑器导入的模型：删掉的块不画，炮塔、炮管、车轮……挂成部件（mod.js）
   if (key === 'army' && typeof v3manPrep === 'function') return v3manPrep(m, VB, IB);   // 士兵：焊接顶点、平滑法线、算绑骨权重（v3man.js：姿势、着装）
   const mf = V3G_MATFIX[key];
   if (mf) for (const i in mf) { const T = m.mats[i], F = mf[i]; if (!T) continue; if (F.am != null) T.am = F.am; if (F.a != null) T.c = [T.c[0], T.c[1], T.c[2], F.a]; }
