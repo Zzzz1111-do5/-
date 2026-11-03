@@ -471,7 +471,31 @@ function v3gVeh(v, rk, side, len, x, y, z, h, aim, dead, pitch, roll, hl, fs = 9
   if (v && v.id != null && typeof modMuzOf === 'function' && (modMuzOf(key) || modMgOf(key))) { if (V3G_VT.S !== S) { V3G_VT.clear(); V3G_VT.S = S; } V3G_VT.set(v.id, { key, x, y, z, h, k, da: dead ? 0 : P[0], el: FP && !dead ? P[1] || 0 : 0, my: FP && !dead ? P[2] || 0 : 0, me: FP && !dead ? P[7] || 0 : 0, pitch, roll }); }   // 编辑器设了炮口、机枪口的模型：记下这一帧怎么摆的（v3gMuzzle / v3gMgMuzzle；炮塔、炮管、机枪塔的角度按画面上的）
   const HZ = !dead && typeof modHazeOf === 'function' ? modHazeOf(key) : null;   // 编辑器设计的热浪：走着的发动机转速高、热得多
   if (HZ && V3G.C && (x - V3G.C.E[0]) ** 2 + (-y - V3G.C.E[1]) ** 2 < 500 * 500) for (const e of HZ) v3gHazeEmit(e, x, y, z, h, k, pitch, roll, v && v.moving ? 1.25 : .85, v ? v.id : 0);
+  const AN = v && typeof modAnimNow === 'function' ? modAnimNow(key, v, fs, dead) : null;   // 编辑器设计的动画（mod.js）：这一刻在播就按组分开画
+  if (AN) return v3gAnimDraw(key, AN, x, y, z, h, k, (dead ? 2 : side === 'e' ? 1 : 0) + (hl ? 8 : 0), roll, pitch, P);
   return v3gAdd(key, x, y, z, h, k, (dead ? 2 : side === 'e' ? 1 : 0) + (hl ? 8 : 0), roll, pitch, P);
+}
+// 播动画的一辆车（mod.js modAnimNow 给每组此刻的姿势）：不动的部分照常画一个实例，每个动画组一个实例——组的平移、绕中心转、缩放
+//   折算成这个实例的位置、朝向、俯仰、侧滚和比例（和着色器同一套欧拉角：先侧滚、再俯仰、再转朝向），不用改着色器；子模型共用原模型的顶点、贴图，只是绘制段不同
+function v3gAnimDraw(key, AN, x, y, z, h, k, side, roll, pitch, P) {
+  const M = v3gModel(key);
+  if (!M) return false;
+  const A = typeof MOD === 'object' && MOD.mdl[key], G = A && A.ag;
+  if (!M.meta.agN || !Array.isArray(G) || M.meta.agN !== G.length) return v3gAdd(key, x, y, z, h, k, side, roll, pitch, P);   // 解码时还没分组（刚改的分组要重新加载）
+  const sub = gi => { const sk = key + '@' + gi; let Q = V3G.M[sk]; if (!Q || Q.base !== M) Q = V3G.M[sk] = Object.assign({}, M, { key: sk, base: M, meta: Object.assign({}, M.meta, { lod: M.meta.lod.map(L => L.filter(e => (e[4] ?? -1) === gi)) }) }); return sk; };
+  v3gAdd(sub(-1), x, y, z, h, k, side, roll, pitch, P);
+  const ex = v3dMv3(h, pitch, roll, [1, 0, 0]), ey = v3dMv3(h, pitch, roll, [0, 1, 0]), ez = v3dMv3(h, pitch, roll, [0, 0, 1]), Ru = [ex[0], ey[0], ez[0], ex[1], ey[1], ez[1], ex[2], ey[2], ez[2]];
+  for (let gi = 0; gi < G.length; gi++) {
+    const sk = sub(gi), T = AN[gi];
+    if (!T) { v3gAdd(sk, x, y, z, h, k, side, roll, pitch, P); continue; }
+    const cp = Array.isArray(G[gi].cp) ? G[gi].cp : [0, 0, 0], s = T.s > .001 ? T.s : .001, Rt = modRotM(T.r), R = new Array(9);
+    for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) R[i * 3 + j] = Ru[i * 3] * Rt[j] + Ru[i * 3 + 1] * Rt[3 + j] + Ru[i * 3 + 2] * Rt[6 + j];
+    const rc = [0, 1, 2].map(i => Rt[i * 3] * cp[0] + Rt[i * 3 + 1] * cp[1] + Rt[i * 3 + 2] * cp[2]), o = [0, 1, 2].map(i => (cp[i] + T.p[i] - s * rc[i]) * k);
+    const d = [0, 1, 2].map(i => Ru[i * 3] * o[0] + Ru[i * 3 + 1] * o[1] + Ru[i * 3 + 2] * o[2]);
+    const p2 = Math.asin(clamp(R[6], -1, 1)), r2 = Math.atan2(R[7], R[8]), h2 = -Math.atan2(R[3], R[0]);
+    v3gAdd(sk, x + d[0], y - d[1], z + d[2], h2, k * s, side, r2, p2, P);
+  }
+  return true;
 }
 // 一个设计好的热浪源（模型坐标）按这一帧的摆法换成世界里的三维热气柱（GL 坐标：y 取反），交给 v3det.js
 function v3gHazeEmit(e, x, y, z, h, k, pitch, roll, kk, id) {

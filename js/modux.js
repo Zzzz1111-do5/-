@@ -136,7 +136,7 @@ function muxToolClick(b) {
   return false;
 }
 // —— 「改动」页：改过的全部列出来 ——
-const MUX_MDL = { muz: '主炮炮口', gun: '航炮口', st: '挂点', noz: '尾喷口', fx: '尾焰', hz: '热浪', pt: '部件', mg: '机枪口' };
+const MUX_MDL = { muz: '主炮炮口', gun: '航炮口', st: '挂点', noz: '尾喷口', fx: '尾焰', hz: '热浪', pt: '部件', mg: '机枪口', ed: '部件改造', fn: '炮塔炮管动作', ag: '动画分组', an: '动画' };
 function muxChgForm() {
   const W0 = MDX_W, out = [], row = (go, nm, val, def, rst) => `<div class="mdx-row"><label>${go}${nm}</label><span class="mux-v">${mdxEsc(val)}</span><span class="def">${def == null ? '' : '默认 ' + mdxEsc(def)}</span>${rst ? `<button type="button" class="mdx-rst" data-mux-rst="${rst}" title="恢复默认">↺</button>` : '<span></span>'}</div>`;
   const fmt = (r, v) => Array.isArray(r.unit) ? ((r.unit.find(o => o[0] === String(v)) || [, v])[1]) : (v ?? '—') + (r.unit ? ' ' + r.unit : '');

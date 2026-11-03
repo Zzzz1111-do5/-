@@ -130,7 +130,7 @@ function modApply() {
   // 序列帧特效：换掉内置的爆炸、火、炮口焰、烟团（v3vfx.js）
   if (typeof v3vSlots === 'function') { const sl = {}; for (const k in MOD.fx) if (MOD.lib[MOD.fx[k]] && !MODX.bad.has(MOD.fx[k])) sl[k] = MOD.fx[k]; v3vSlots(sl); }
   if (typeof FW_LD === 'object' && FW_LD && typeof FW_LD.clear === 'function') FW_LD.clear();   // 甲板上挂弹的满载清单按机型缓存着（fpwpn.js fwLoadout）：挂载、挂点改了要重算
-  for (const id in MODX.raw) if (MODX.sig[id] !== JSON.stringify((MOD.mdl[id] || {}).pt || null)) modRegMdl(id);   // 部件改了：导入的模型重新解码
+  for (const id in MODX.raw) if (MODX.sig[id] !== modISig(id)) modRegMdl(id);   // 部件、动画分组改了：导入的模型重新解码
   modBApply();   // 游戏里的模型：删掉的部件、改造（移动 / 旋转 / 缩放 / 换色）、炮塔炮管怎么动
   if (typeof AIR_IGN === 'object') { Object.assign(AIR_IGN, AIR_IGN0); for (const k of ['main', 'side', 'ext']) if (modNum(MOD.rel[k]) && MOD.rel[k] >= 0) AIR_IGN[k] = Math.min(8, MOD.rel[k]); }   // 抛离后几秒点火
 }
@@ -159,6 +159,11 @@ function modPieces(m, VB, IB) {
   return { pv, pn: n, vp };
 }
 const modHex = c => { const m = /^#?([0-9a-f]{6})$/i.exec(String(c || '')); if (!m) return null; const n = parseInt(m[1], 16); return [(n >> 16 & 255) / 255, (n >> 8 & 255) / 255, (n & 255) / 255]; };
+// 绕 x、y、z 转（度）的旋转矩阵（行主序 3 × 3，Rz · Ry · Rx）：改造、动画都用它
+function modRotM(r) {
+  const D = Math.PI / 180, x = (+r[0] || 0) * D, y = (+r[1] || 0) * D, z = (+r[2] || 0) * D, cx = Math.cos(x), sx = Math.sin(x), cy = Math.cos(y), sy = Math.sin(y), cz = Math.cos(z), sz = Math.sin(z);
+  return [cz * cy, cz * sy * sx - sz * cx, cz * sy * cx + sz * sx, sz * cy, sz * sy * sx + cz * cx, sz * sy * cx - cz * sx, -sy, cy * sx, cy * cx];
+}
 // 改造套到顶点上（预览、游戏同一套）：VB 原地改；返回每块用哪条改造的颜色（-1 不换色）
 function modEdApply(ed, VB, st, pv, pn) {
   const col = new Int16Array(pn).fill(-1), D = Math.PI / 180;
@@ -214,15 +219,17 @@ function modEdSplit(m, IB, pv, col, ed, del) {
 function modPrepB(key, m, VB, IB) {
   const A = MOD.mdl[key];
   if (MODX.noB || !A || key.startsWith('u_') || key === 'army') return;   // noB：编辑器预览自己套正在改的那份
-  const pt = A.pt, ed = Array.isArray(A.ed) ? A.ed : [];
-  if (!(pt && pt.x) && !ed.length) return;
+  const pt = A.pt, ed = Array.isArray(A.ed) ? A.ed : [], ag = Array.isArray(A.ag) && A.ag.length;
+  if (!(pt && pt.x) && !ed.length && !ag) return;
   const st = m.st || 8, P = modPieces(m, VB, IB), del = new Uint8Array(P.pn);
   for (const i of modIdsDec(pt && pt.x)) if (i < P.pn) del[i] = 1;
   const col = modEdApply(ed, VB, st, P.pv, P.pn);
   modEdSplit(m, IB, P.pv, col, ed, del);
+  modAnimSplit(key, m, IB, P.pv);
   MODX.bsig[key] = modBSig(key);
 }
-const modBSig = k => { const A = MOD.mdl[k] || {}; return JSON.stringify([(A.pt && A.pt.x) || '', A.ed || null]); };
+const modBSig = k => { const A = MOD.mdl[k] || {}; return JSON.stringify([(A.pt && A.pt.x) || '', A.ed || null, (A.ag || []).map(g => g.id)]); };
+const modISig = id => { const A = MOD.mdl[id] || {}; return JSON.stringify([A.pt || null, (A.ag || []).map(g => g.id)]); };
 // 改了游戏里模型的部件：已经解码的那份放掉、重新加载（下次画到时从 js/mdl 重新取）
 function modReloadB(key) {
   if (typeof V3G !== 'object') return;
@@ -235,6 +242,7 @@ function modReloadB(key) {
   }
   delete V3G.def[key]; V3G.want.delete(key); V3G.fail.delete(key);
   delete MODX.bsig[key];
+  modAnimDrop(key);
 }
 function modBApply() {
   if (!MODX.bsig) MODX.bsig = {};
@@ -352,7 +360,8 @@ const modAxEl = A => A && A.a[1] > 0 ? { p: A.p, a: A.a.map(v => -v) } : A;
 function modPrep(key, m, VB, IB) {
   if (typeof VFN === 'object') delete VFN[key];
   const A = MOD.mdl[key], pt = A && A.pt, D = typeof V3G === 'object' && V3G.def[key];
-  if (!pt || !D || !m.pv) return;
+  if (!D || !m.pv) return;
+  if (!pt) { const pv0 = modPv(m, D.bin); if (pv0 && A && Array.isArray(A.ag) && A.ag.length) modAnimSplit(key, m, IB, pv0); return; }   // 只分了动画组（没拆部件）
   const pv = modPv(m, D.bin), st = m.st || 8, nv = VB.length / st;
   if (!pv || pv.length < nv) return;
   const n = m.pn || 0, R = modPtRoles(pt, n), off = modPtOff(VB, st, nv, pv, R), R3 = v => Math.round(v * 1e4) / 1e4;
@@ -402,6 +411,7 @@ function modPrep(key, m, VB, IB) {
     for (const [q, L] of [...B.entries()].sort((a, b) => a[0] - b[0])) { IB.set(L, o); out.push([mi, q, o, L.length]); o += L.length; }
   }
   m.lod = [out, out, out]; m.parts = parts;
+  modAnimSplit(key, m, IB, pv);   // 动画分组：每组的三角形单独一段（游戏里播动画时各组各自摆）
   if (typeof VFN === 'object' && (MOD.lib[key] || {}).kind !== 'air' && (ti >= 0 || gi >= 0 || mti >= 0 || mgi >= 0)) {
     const r2 = (a, d) => Array.isArray(a) && a.length === 2 && a.every(modNum) ? [Math.min(a[0], a[1]), Math.max(a[0], a[1])] : d, rc = modNum(pt.rc) && pt.rc >= 0 ? pt.rc : .3;
     VFN[key] = { trav: +pt.trav > 0 ? +pt.trav : 40, ta: 1, ...(gi >= 0 ? { rc, ...(rc >= .15 ? { rock: .03 } : {}) } : {}), ...(gi >= 0 && GA ? { el: r2(pt.el, [-6, 18]), elR: +pt.elR > 0 ? +pt.elR : 20 } : {}),
@@ -500,7 +510,8 @@ function modRegMdl(id) {
   for (const [k, L] of [...V3G.inst.entries()]) if (k.slice(0, k.lastIndexOf('#')) === id) { if (gl) for (const b of [L.gb, L.gbv]) if (b) gl.deleteBuffer(b); V3G.inst.delete(k); }
   delete V3G.M[id]; V3G.fail.delete(id);
   if (typeof VFN === 'object') delete VFN[id];
-  if (rec) { V3G.def[id] = { meta: modClone(rec.meta), bin: rec.bin }; MODX.sig[id] = JSON.stringify((MOD.mdl[id] || {}).pt || null); }
+  if (rec) { V3G.def[id] = { meta: modClone(rec.meta), bin: rec.bin }; MODX.sig[id] = modISig(id); }
+  if (typeof modAnimDrop === 'function') modAnimDrop(id);
   else { delete V3G.def[id]; delete MODX.sig[id]; }
 }
 // 删掉一个导入的模型（编辑器里点「删除这个模型」）
@@ -552,4 +563,73 @@ async function modImport(txt) {
 }
 modLoad();
 modApply();
+// —— 动画（用户：能自己设计动画，比如坦克开火时原地分成 10 块碎片跳舞；自由度拉满、好上手）——
+//   MOD.mdl[模型键].ag 动画组 [{ nm 名字, id 块号（区间字符串，同部件的块号）, cp 转动缩放的中心（模型坐标）}]——每块只属于一组（先列的算）；
+//   .an 各个时机的动画 { fire 开炮、hit 挨打、move 走着、idle 停着、die 被打掉 }：{ dur 时长, loop 循环, back 播完回原位, tr: { 组号: [关键帧 { t 秒, p 平移 [x, y, z] 米, r 转 [x, y, z] 度, s 缩放, e 缓动 }] } }
+//   游戏里：解码时每组的三角形各成一段（modAnimSplit，绘制段第 5 项是组号）；播的时候整辆车画成「不动的部分 + 每组一个实例」，每组按此刻的姿势单独摆（v3g.js v3gAnimDraw），
+//   不用改着色器：组的平移、绕中心转、缩放折算成这个实例的位置、朝向、俯仰、侧滚和比例
+function modAnimSplit(key, m, IB, pv) {
+  const A = MOD.mdl[key], G = A && Array.isArray(A.ag) ? A.ag : null;
+  if (!G || !G.length || !pv) return;
+  let n = 0;
+  for (let i = 0; i < pv.length; i++) if (pv[i] + 1 > n) n = pv[i] + 1;
+  const pg = new Int16Array(n).fill(-1);
+  G.forEach((g, gi) => { for (const i of modIdsDec(g && g.id)) if (i < n && pg[i] < 0) pg[i] = gi; });
+  m.lod = m.lod.map(L => {
+    const out = [];
+    for (const e of L) {
+      const [mi, pi, i0, cnt] = e, B = new Map();
+      for (let t = i0; t + 2 < i0 + cnt; t += 3) { const g = pg[pv[IB[t]]] ?? -1; let Q = B.get(g); if (!Q) B.set(g, Q = []); Q.push(IB[t], IB[t + 1], IB[t + 2]); }
+      let o = i0;
+      for (const [g, Q] of [...B.entries()].sort((a, b) => a[0] - b[0])) { IB.set(Q, o); out.push([mi, pi, o, Q.length, g]); o += Q.length; }
+    }
+    return out;
+  });
+  m.agN = G.length;
+}
+// 缓动
+const MOD_EASE = { lin: u => u, io: u => u * u * (3 - 2 * u), in: u => u * u, out: u => 1 - (1 - u) * (1 - u), back: u => { const c = 1.70158; return 1 + (c + 1) * (u - 1) ** 3 + c * (u - 1) ** 2; }, bounce: u => { const n = 7.5625, d = 2.75; if (u < 1 / d) return n * u * u; if (u < 2 / d) return n * (u -= 1.5 / d) * u + .75; if (u < 2.5 / d) return n * (u -= 2.25 / d) * u + .9375; return n * (u -= 2.625 / d) * u + .984375; }, step: u => u < 1 ? 0 : 1 };
+// 一组此刻的姿势：{ p, r（度）, s }；没有关键帧的组不动
+function modAnimPose(K, t, dur, back) {
+  if (!Array.isArray(K) || !K.length) return null;
+  const Z = { t: 0, p: [0, 0, 0], r: [0, 0, 0], s: 1 }, L = K.filter(k => k && modNum(k.t)).slice().sort((a, b) => a.t - b.t);
+  if (!L.length) return null;
+  if (L[0].t > 1e-4) L.unshift({ ...Z, t: 0 });
+  if (back !== false && L[L.length - 1].t < dur - 1e-4) L.push({ ...Z, t: dur });
+  let i = 0;
+  while (i + 1 < L.length && L[i + 1].t <= t) i++;
+  const a = L[i], b = L[Math.min(i + 1, L.length - 1)], u = b === a || b.t <= a.t ? 0 : clamp((t - a.t) / (b.t - a.t), 0, 1), w = (MOD_EASE[b.e] || MOD_EASE.io)(u);
+  const v3 = (x, y, d) => [0, 1, 2].map(j => { const p = Array.isArray(x) ? +x[j] || 0 : d, q = Array.isArray(y) ? +y[j] || 0 : d; return p + (q - p) * w; });
+  const sa = modNum(a.s) ? a.s : 1, sb = modNum(b.s) ? b.s : 1;
+  return { p: v3(a.p, b.p, 0), r: v3(a.r, b.r, 0), s: sa + (sb - sa) * w };
+}
+// 一个动画片段在 t 秒时每组的姿势
+function modAnimEval(c, t) {
+  const dur = Math.max(.05, +c.dur || 1), out = {};
+  for (const gi in c.tr || {}) { const P = modAnimPose(c.tr[gi], t, dur, c.back); if (P) out[gi] = P; }
+  return out;
+}
+// 这辆车此刻该播哪段、播到哪：被打掉 → 挨打 → 开炮 → 走着 → 停着
+function modAnimNow(key, v, fs, dead) {
+  const A = MOD.mdl[key], an = A && A.an;
+  if (!an || !Array.isArray(A.ag) || !A.ag.length || !v) return null;
+  const t = S.t;
+  let c = null, ct = 0;
+  if (dead) { if (!an.die) return null; c = an.die; ct = t - (v.deadT ?? t); }
+  else if (an.hit && t - (v.hitT ?? -99) < (an.hit.dur || 1)) { c = an.hit; ct = t - v.hitT; }
+  else if (an.fire && fs >= 0 && fs < (an.fire.dur || 1)) { c = an.fire; ct = fs; }
+  else if (an.move && v.moving) { c = an.move; ct = t + (v.id || 0) * .37; }
+  else if (an.idle) { c = an.idle; ct = t + (v.id || 0) * .37; }
+  if (!c || !c.tr) return null;
+  const dur = Math.max(.05, +c.dur || 1);
+  ct = c.loop ? ((ct % dur) + dur) % dur : Math.min(Math.max(ct, 0), dur);
+  return modAnimEval(c, ct);
+}
+// 放掉某个模型的分组子模型（重新解码、换模型时）
+function modAnimDrop(key) {
+  if (typeof V3G !== 'object') return;
+  const gl = V3G.gl, pre = key + '@';
+  for (const k of Object.keys(V3G.M)) if (k.startsWith(pre)) delete V3G.M[k];
+  for (const [ik, L] of [...V3G.inst.entries()]) if (ik.startsWith(pre)) { if (gl) for (const b of [L.gb, L.gbv]) if (b) gl.deleteBuffer(b); V3G.inst.delete(ik); }
+}
 if (typeof indexedDB !== 'undefined' && Object.keys(MOD.lib).length) modLibInit().catch(e => console.warn('编辑器导入的文件读不出来', e)); else MODX.ready = true;
