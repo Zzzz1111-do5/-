@@ -491,6 +491,11 @@ function adDome(ctx, d, real, col, lw, t, ly) {
 //   侧弹舱（歼-20 / F-22 的近距格斗弹）：舱门打开、挂架把弹推出舱外，在舱外点火；外挂：弹从挂架脱离后点火，挂架上少一枚
 // AIRV.ev：飞机键（阵营 + id）→ { ts 最近几次发射 [{t0, k}], rel 外挂消耗 [{t, sk}], w 弹种 }；AIRV.mv：导弹 id → 挂点与时刻
 const AIR_REL = { open: .25, ej: .1, ign: .6, done: 1.3, shut: .85 };   // 开舱、弹射臂行程、点火、并入弹道、开始关舱（离机后的秒数）
+// 抛离后几秒点火（用户：飞机把导弹抛下后几秒才点火）：内埋主弹舱的被弹射臂推出舱外、自由落下一段才点火，外挂的脱离挂架后掉一段，侧弹舱的在舱外挂架上点火；
+//   编辑器「机载武器」页「抛射与点火」可改（mod.js 写进来），亲自驾驶打的弹（fpwpn.js）也按它，每型武器还能单独设（FW_W 的 ign）
+const AIR_IGN = { main: 1.2, side: .3, ext: .8 }, AIR_IGN0 = { ...AIR_IGN };
+const airRelIgn = k => Math.max(0, AIR_IGN[k] ?? AIR_IGN.ext);
+const airRelDone = k => airRelIgn(k) + .8;   // 点火后 0.8 秒接上真实弹道
 const AIR_GND = new Set(['dd', 'esc', 'cv', 'samv', 'manpads', 'eship', 'vls', 'theatre']);   // 舰艇 / 地面发射的，不是飞机
 const AIR_W = { ft8: 'bomb', gbu53: 'bomb', gbu38: 'bomb', gbu31: 'bomb', ls6: 'bomb', yj12: 'cm', yj83k: 'cm', yj18: 'cm', kd20: 'cm', ld10: 'arm' };
 const AIR_SK = { aam: ['aam'], arm: ['arm'], agm: ['atgm4', 'agm', 'asm', 'cm'], cm: ['cm', 'asm'], bomb: ['bomb', 'cm'] };   // 弹种 → 从哪类挂点上取（吊舱不消耗，不在里面）
@@ -570,19 +575,20 @@ function airRelPos(m, three) {
   const r = AIRV.mv.get(m.id);
   if (!r) return null;
   const u = S.t - r.t0;
-  if (u < 0 || u > AIR_REL.done) return null;
+  const ig = airRelIgn(r.k), dn = airRelDone(r.k);
+  if (u < 0 || u > dn) return null;
   const L = r.side === 'p' ? S.planes || [] : (S.eair && S.eair.fly) || [], o = L.find(p => p.id === r.id);
   if (!o || o.dead) return null;
   const h = o.heading || 0, c = Math.cos(h), sn = Math.sin(h), sc = three ? airSize3(o, r.side) / 21 : airDrawSize(o, r.side) / 21;
   const fr = Math.max(0, u - AIR_REL.open - AIR_REL.ej), back = r.k === 'side' ? 0 : 2.2 * fr ** 2 * 6, out = r.k === 'side' ? 0 : .6 * fr;   // 弹射臂松开后被气流往后、往外带
   const lx = r.ox - back, ly = r.oy + Math.sign(r.oy || 1) * out, bx = o.x + (lx * c - ly * sn) * sc, by = o.y + (lx * sn + ly * c) * sc;
-  const e = sm01((u - AIR_REL.ign) / (AIR_REL.done - AIR_REL.ign));
-  return { x: lerp(bx, m.x, e), y: lerp(by, m.y, e), h: Math.atan2(lerp(Math.sin(h), Math.sin(m.hd ?? h), e), lerp(c, Math.cos(m.hd ?? h), e)), sc, u, e, lit: u >= AIR_REL.ign, o, r };
+  const e = sm01((u - ig) / (dn - ig));
+  return { x: lerp(bx, m.x, e), y: lerp(by, m.y, e), h: Math.atan2(lerp(Math.sin(h), Math.sin(m.hd ?? h), e), lerp(c, Math.cos(m.hd ?? h), e)), sc, u, e, lit: u >= ig, ign: ig, o, r };
 }
 // 3D 高度：舱里 → 弹射臂往下推出舱外 → 自由落下 → 点火后接上导弹自己的高度（与 v3fx.js 同一套）；侧弹舱、外挂在挂点上点火
 function airRelZ(P, m) {
   const side = P.r.k !== 'main', ej = clamp((P.u - AIR_REL.open) / AIR_REL.ej, 0, 1), fr = Math.max(0, P.u - AIR_REL.open - AIR_REL.ej);
-  const zp = v3AirZ(P.o) - (side ? 1 : .6 + ej) * P.sc - (side ? 0 : 16 * fr * fr), zm = v3AltZ(m.x, m.y, m.z * (m.kind === 'tbm' ? 620 : V3_AIR), -2.6, 2);
+  const zp = v3AirZ(P.o) - (side ? 1 : .6 + ej) * P.sc - (side ? 0 : 5.5 * fr * fr + 2.5 * fr * (P.r.k === 'main' ? 1 : .3)), zm = v3AltZ(m.x, m.y, m.z * (m.kind === 'tbm' ? 620 : V3_AIR), -2.6, 2);
   return lerp(zp, zm, P.e);
 }
 // 3D 里飞机的尺寸（v3units.js 的 plane()）
@@ -598,7 +604,7 @@ function airRelDraw(ctx, m) {
   if (P.u < (P.r.k === 'main' ? AIR_REL.open : .05)) return true;   // 还在舱里 / 挂架上（飞机自己画）
   ctx.save(); ctx.translate(P.x, P.y); ctx.rotate(P.h); ctx.scale(P.sc, P.sc);
   if (P.lit && P.r.w !== 'bomb') {   // 点火：尾焰 + 一团烟（炸弹没有发动机）
-    const k = Math.min(1, (P.u - AIR_REL.ign) / .12), L = (AD_ST[sk] || AD_ST.agm)[0];
+    const k = Math.min(1, (P.u - P.ign) / .12), L = (AD_ST[sk] || AD_ST.agm)[0];
     const g = ctx.createLinearGradient(-L / 2, 0, -L / 2 - 4 * k, 0); g.addColorStop(0, 'rgba(255,245,210,.95)'); g.addColorStop(.4, 'rgba(255,160,60,.75)'); g.addColorStop(1, 'rgba(255,100,40,0)');
     ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(-L / 2, -.25); ctx.lineTo(-L / 2 - 4 * k, 0); ctx.lineTo(-L / 2, .25); ctx.closePath(); ctx.fill();
     ctx.fillStyle = 'rgba(220,220,215,.35)'; ctx.beginPath(); ctx.arc(-L / 2 - 1.2, 0, .8 + k, 0, 7); ctx.fill();

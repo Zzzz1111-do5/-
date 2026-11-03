@@ -222,7 +222,8 @@ function ftFx(out, sm, C) {
     v3fSpark(sm, C, [P[0] + ax[0] * x + (B.r[0] * c + B.u[0] * si) * r, P[1] + ax[1] * x + (B.r[1] * c + B.u[1] * si) * r, P[2] + ax[2] * x + (B.r[2] * c + B.u[2] * si) * r], s, [.96, .97, .98, a]); } };
   // 蒸汽锥：马赫 0.93–1.03，机翼前缘往后张开的一圈白雾（前沿清楚、往后淡）
   const M = F.M || 0, vc = smooth(.93, .985, M) * smooth(1.035, 1.0, M);
-  if (vc > .02) for (let i = 0; i < 6; i++) { const u = i / 5; ring(sz * (.12 - .32 * u), hs * (.35 + .75 * u), 22, .3 * vc * (1 - .6 * u) * (.85 + .15 * Math.sin(now * 13 + i)), hs * (.16 + .08 * u), i * .7 + now * 2); }
+  const AV = typeof v3aeroPlane === 'function' && typeof v3aK === 'function' && v3aK() > 0;   // 有三维的气动特效（v3aero.js）就不画这一圈贴片了
+  if (vc > .02 && !AV) for (let i = 0; i < 6; i++) { const u = i / 5; ring(sz * (.12 - .32 * u), hs * (.35 + .75 * u), 22, .3 * vc * (1 - .6 * u) * (.85 + .15 * Math.sin(now * 13 + i)), hs * (.16 + .08 * u), i * .7 + now * 2); }
   // 音爆：刚越过 1 马赫那一下
   if ((V3FP.Mp ?? M) < 1 && M >= 1) {
     V3FP.boomT = now; V3FP.imp = Math.max(V3FP.imp || 0, .9);
@@ -230,7 +231,7 @@ function ftFx(out, sm, C) {
   }
   V3FP.Mp = M;
   const ba = now - (V3FP.boomT ?? -99);
-  if (ba >= 0 && ba < .8) { const u = ba / .8; ring(-sz * .1 - u * sz * .6, hs * (.8 + 3.2 * u), 30, .55 * (1 - u), hs * (.25 + .4 * u), 0); }
+  if (ba >= 0 && ba < .8 && !AV) { const u = ba / .8; ring(-sz * .1 - u * sz * .6, hs * (.8 + 3.2 * u), 30, .55 * (1 - u), hs * (.25 + .4 * u), 0); }
   // 吊舱红外：车身、人按模型外形提亮（v3g.js uIRh、ftHeat）；这里再点亮最热的发动机舱、排气口（白热 / 黑热都由后期换算）
   if (ftIR()) {   // 吊舱：盯着的那一片；导弹导引头（v3pilot.js 小屏、全屏）：导引头跟踪的目标点那一片
     const T = V3FP.tg, ms = V3FP.pipEO != null || (V3FP.mBig && V3FP.mv != null), G = ms ? V3FP.mq || V3FP.mhp : ftPt();

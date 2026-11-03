@@ -577,12 +577,21 @@ async function mivShow(key) {
     const m = D.meta, bin = D.bin;
     let VB = new Float32Array(bin.buffer, bin.byteOffset + m.vb[0], m.vb[1] / 4), IB = m.it === 4 ? new Uint32Array(bin.buffer, bin.byteOffset + m.ib[0], m.ib[1] / 4) : new Uint16Array(bin.buffer, bin.byteOffset + m.ib[0], m.ib[1] / 2);
     // 内置模型照游戏里那样加工一遍（补起落架整架抬高、机头朝向转 180° 的……）：挂点、喷口的坐标是按加工以后的
-    if (!key.startsWith('u_') && key !== 'army' && typeof v3gPrep === 'function' && !(typeof V3G_ERA === 'object' && V3G_ERA[key])) {
-      try { const R = v3gPrep(key, m, { key, meta: m, ready: false }, VB, IB); if (R) { VB = R.VB; IB = R.IB; } } catch (e) { console.warn('预览加工失败', e); }
+    let BP = null;   // 游戏里的模型：加工完按连通块分块（mod.js modPieces，和游戏里解码时同一套，块号对得上），编辑器里也能选块、删、改造
+    if (!key.startsWith('u_') && key !== 'army' && typeof v3gPrep === 'function') {
+      try { MODX.noB = true; const R = v3gPrep(key, m, { key, meta: m, ready: false }, VB, IB); if (R) { VB = R.VB; IB = R.IB; } } catch (e) { console.warn('预览加工失败', e); } finally { MODX.noB = false; }
+      if (typeof modPieces === 'function') try { BP = modPieces(m, VB, IB); } catch (e) { console.warn('分块失败', e); }
     }
     if (IB instanceof Uint32Array && !MIV.u32) throw new Error('显卡不支持 32 位索引');
     if (MIV.M) mivFree(MIV.M);
     const M = { m, VB, IB, st: (m.st || 8), tex: [], nv: VB.length / (m.st || 8), pv: D.rec ? modPv(m, D.rec.bin) : null, pnd: D.rec ? modPnd(m, D.rec.bin) : null, pn: m.pn || 0, nodes: m.nodes || null };
+    if (BP) {   // 「物体」= 模型自带的部件（炮塔、炮管、车轮、起落架……）和车体 / 机身：按物体选一下就选上整个炮塔
+      const PN = { tur: '炮塔', gun: '炮管', gear: '起落架', rotor: '主旋翼', trotor: '尾桨', era: '反应装甲块', wheel: '车轮', noz: '尾喷口调节片', pet: '尾喷口调节片', fold: '折叠外翼', bay: '弹舱门', door: '舱门', ramp: '跳板' };
+      const parts = m.parts || [], nodes = [{ n: '车体 / 机身', p: -1 }, ...parts.map((q, i) => ({ n: (PN[q.n] || PN[q.k] || q.n || '部件') + '（' + (q.n || i) + '）', p: 0 }))], pnd = new Uint16Array(BP.pn);
+      for (let v = 0; v < M.nv; v++) { const pi = BP.vp[v]; if (pi !== -9) pnd[BP.pv[v]] = pi >= 0 ? pi + 1 : 0; }
+      Object.assign(M, { pv: BP.pv, pn: BP.pn, pnd, nodes, bi: true, VB0: VB.slice(), IB0: IB.slice(), lod0: JSON.parse(JSON.stringify(m.lod)), mats0: JSON.parse(JSON.stringify(m.mats)) });
+      M.VB = VB = VB.slice(); M.IB = IB = IB.slice();
+    }
     M.vb = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, M.vb); gl.bufferData(gl.ARRAY_BUFFER, VB, gl.STATIC_DRAW);
     M.ib = gl.createBuffer(); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, M.ib); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, IB, gl.STATIC_DRAW);
     if (M.pv) { M.rb = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, M.rb); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(M.nv), gl.DYNAMIC_DRAW); }

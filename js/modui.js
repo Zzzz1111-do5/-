@@ -304,7 +304,7 @@ function mdxForm() {
     return `<h3>画面</h3><p class="note">改了马上生效（不用点保存）。卡的话先关阴影、把渲染距离调近、云量调低。</p>` +
       sl('rdist', '3D 渲染距离', .5, 4, .25, v => (+v).toFixed(2) + ' 倍') +
       `<div class="mdx-row"><label>画质</label><select data-set="quality"><option value="high"${s.quality !== 'low' ? ' selected' : ''}>高</option><option value="low"${s.quality === 'low' ? ' selected' : ''}>低（不画阴影、贴图小一些）</option></select><span></span><span></span></div>` +
-      sw('shadow', '实时阴影') + sl('cloud', '云量', 0, 1, .05, v => Math.round(v * 100) + '%') + sw('vfx', '序列帧爆炸特效') + sw('film', '电影后期（光束、胶片颗粒、景深）') + sl('bloom', '辉光强度', 0, 1.5, .05, v => Math.round(v * 100) + '%');
+      sw('shadow', '实时阴影') + sl('cloud', '云量', 0, 1, .05, v => Math.round(v * 100) + '%') + sw('vfx', '序列帧爆炸特效') + sl('aero', '气动特效（蒸汽锥、机翼水汽、音爆、翼尖涡流）', 0, 1.5, .05, v => Math.round(v * 100) + '%') + sw('film', '电影后期（光束、胶片颗粒、景深）') + sl('bloom', '辉光强度', 0, 1.5, .05, v => Math.round(v * 100) + '%');
   }
   if (MDX.tab === 'pack') {
     return `<h3>模组包</h3><p class="note">把这里改的全部参数（坦克、飞机、挂载、武器、导弹、模型上的点、特效、战场大小、画面）存成一个 JSON 文件，换台设备或分享给别人；
