@@ -218,9 +218,38 @@ function v3Fx(C) {
   for (const t of S.tracers || []) {
     if (!inB(t.x1, t.y1, 60)) continue;
     const a = 1 - t.life / t.max, u = t.life / t.max, u0 = Math.max(0, u - .4), col = t.side === 'p' ? V3F_COL.p : V3F_COL.e;
-    if (t.fuzzy) continue;   // 模糊曳光只在平面上示意方向
+    if (t.fuzzy || t.cw) continue;   // 模糊曳光只在平面上示意方向；近防炮的另画（下面 CW_FX）
     const p0 = v3fP(lerp(t.x0, t.x1, u0), lerp(t.y0, t.y1, u0), g(t.x0, t.y0) + 1.6), p1 = v3fP(lerp(t.x0, t.x1, u), lerp(t.y0, t.y1, u), lerp(g(t.x0, t.y0) + 1.6, g(t.x1, t.y1) + 1, u));
     v3fRib(out, E, p0, p1, .7, [col[0], col[1], col[2], 0], [col[0], col[1], col[2], .95 * a]);
+  }
+  // —— 近防炮（陆基密集阵 / LD-2000 / 舰上近防炮）拦截来袭炮弹（ciws.js CW_FX）——
+  //   真实的密集阵每秒 75 发、炮口初速约 1100 米 / 秒、发发带曳光：画成一道从炮口射向空中来袭弹的弹流（每秒画 30 条短曳光，按初速飞过去，
+  //   末端按弹丸散布错开几米），开火时炮口焰一闪一闪；打中——来袭弹在空中一闪、一团火球、一团黑烟；没打中——飞过头的弹丸自毁，空中一串灰白小烟团
+  if (typeof CW_FX === 'object') for (const c of CW_FX) {
+    const a = S.t - c.t0;
+    if (a < 0 || a > 2.4 || !inB(c.gx, c.gy, 400) || !(c.side === 'p' || spec || seen(c.gx, c.gy) || seen(c.s.x1, c.s.y1))) continue;
+    const s = c.s, d = dist(s.x0, s.y0, s.x1, s.y1), apex = s.kind === 'mortar' ? Math.min(320, d * .75) : Math.min(420, d * .32), z0 = g(s.x0, s.y0) + 3, z1 = g(s.x1, s.y1);
+    const at = u => [lerp(s.x0, s.x1, u), lerp(s.y0, s.y1, u), lerp(z0, z1, u) + Math.sin(Math.PI * u) * apex];
+    const T = at(Math.min(1, c.u + .012)), M = [c.gx, c.gy, g(c.gx, c.gy) + c.gz], dx = T[0] - M[0], dy = T[1] - M[1], dz = T[2] - M[2], L = Math.max(1, Math.hypot(dx, dy, dz)), tf = L / 1100, burst = .55;
+    const ux = dx / L, uy = dy / L, uz = dz / L, hs = k => { const q = Math.sin((c.t0 * 97 + k * 12.9898) * 43758.5453); return q - Math.floor(q); };
+    for (let k = 0; k < burst * 30; k++) {
+      const f = (a - k / 30) / tf;
+      if (f < 0 || f > 1.6) continue;
+      const sp = 1 + f * L * .012, ex = (hs(k) - .5) * sp * 2, ey = (hs(k + 50) - .5) * sp * 2, ez = (hs(k + 99) - .5) * sp * 2;   // 散布：越远越开
+      const P = l => v3fP(M[0] + ux * l + ex * l / L, M[1] + uy * l + ey * l / L, M[2] + uz * l + ez * l / L), l1 = f * L, fd = f > 1 ? 1 - (f - 1) / .6 : 1;
+      v3fRib(out, E, P(Math.max(0, l1 - 26)), P(l1), 1.1, [1, .32, .06, 0], [1, .45, .12, .45 * fd]);   // 光晕
+      v3fRib(out, E, P(Math.max(0, l1 - 11)), P(l1), .32, [1, .7, .3, 0], [1, .95, .75, fd]);   // 弹芯
+      if (f > 1 && f < 1.6 && !c.kill && (k & 3) === 0) v3fBillow(sm, C, P(l1), .8 + (f - 1) * 4, [.8, .8, .78, .5 * fd], 1, k & 15);   // 自毁的小烟团
+    }
+    if (a < burst) { const r = 1.1 + hs((a * 60) | 0) * 1.2; v3fSpark(out, C, v3fP(M[0] + ux * 1.6, M[1] + uy * 1.6, M[2] + uz * 1.6), r, [1, .78, .4, .95]); v3fSpark(out, C, v3fP(M[0] + ux * 1.2, M[1] + uy * 1.2, M[2] + uz * 1.2), r * .4, [1, .97, .9, 1]); }
+    if (a < burst + .9) v3fBillow(sm, C, v3fP(M[0] + ux * 3, M[1] + uy * 3, M[2] + uz * 3 + a * .8), 1.2 + a * 2.2, [.75, .74, .7, .28 * (1 - a / (burst + .9))], 1, 3);   // 炮口硝烟
+    const b = a - tf;
+    if (c.kill && b > 0) {
+      const p = v3fP(T[0], T[1], T[2]);
+      if (b < .08) v3fSpark(out, C, p, 9, [1, .95, .8, 1]);
+      if (b < .5) v3fBillow(out, C, p, 2.5 + b * 9, [1, .5, .14, .85 * (1 - b / .5)], 2, 7);
+      if (b < 2.2) v3fBillow(sm, C, v3fP(T[0], T[1], T[2] + b * .8), 2 + b * 3.2, [.14, .13, .12, .6 * (1 - b / 2.2)], 1, 9);
+    }
   }
   // —— 玩家亲自开的飞机的航炮（fpwpn.js）——
   //   曳光弹（每三发一发）：亮黄白的弹芯拖着这一步走过的一段、外面一圈更长的橙红光晕，越往后越淡，烧 2.4 秒后暗下去、3 秒熄灭（其余弹丸看不见，照样飞、算命中）；

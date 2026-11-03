@@ -122,12 +122,13 @@
 - 棕榈树：This work is based on "Palm Trees" (https://sketchfab.com/3d-models/palm-trees-55690379305145488e20afb05fc687e6) by YadroGames licensed under CC BY 4.0
 - 岩石：This work is based on "Rocks Set 3" (https://sketchfab.com/3d-models/rocks-set-3-9a160330d1c14268948248f387889b35) by DJMaesen licensed under CC BY 4.0
 - 天空：This work is based on "Kloofendal 48d Partly Cloudy (Pure Sky)" (https://polyhaven.com/a/kloofendal_48d_partly_cloudy_puresky) by Greg Zaal / Poly Haven licensed under CC0
-- 地表贴图：This work is based on "Grass004、Ground037、Rock060、Ground054" (https://ambientcg.com/) by ambientCG licensed under CC0
+- 地表贴图：This work is based on "Grass004、Ground037、Rock060" (https://ambientcg.com/) by ambientCG licensed under CC0
+- 沙地贴图（沙滩、沙漠地表）：This work is based on "Sand at Sunset Beach" (https://sketchfab.com/3d-models/sand-at-sunset-beach-1ac0847acae44ffe9c3783be28e82bcf) by Terrie Simmons-Ehrhardt (https://sketchfab.com/terrielsimmons) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)；改动：扫描模型俯视渲染成图，裁中间一块、去掉大尺度明暗、做成无缝平铺，颜色均值按游戏原沙地贴图调整（tools/sandtex_render.py、tools/sandtex_tile.py，assets/terrain/sand.jpg）
 - 海面法线贴图（assets/water/normals.jpg）：用户提供的海洋素材（ocean.zip 里的 water_new_height.png）
 - 舰载飞机牵引车：This work is based on "Aircraft_Tug" (https://sketchfab.com/3d-models/aircraft-tug-ac1c0a974a734864a27fe84dbbcb0de8) by Chukk007 licensed under CC Attribution
 - 挂弹车：This work is based on "Weapons Loader" (https://sketchfab.com/3d-models/weapons-loader-016ca0f9b98b4ffbbe0e55f235bef496) by Sengchor licensed under CC Attribution
 - 导弹挂载架：This work is based on "Industrial Storage Rack" (https://sketchfab.com/3d-models/industrial-storage-rack-c21c9a687c3d48ad9e74f894c6d2791c) by siddharthkalbage licensed under CC Attribution
-- 写实地表贴图（草地、林下地面、岩石、沙滩，assets/terrain）：ambientCG（https://ambientcg.com），CC0 1.0
+- 写实地表贴图（草地、林下地面、岩石，assets/terrain）：ambientCG（https://ambientcg.com），CC0 1.0；沙地见上面「沙地贴图」
 - 天空（assets/sky）：Poly Haven「kloofendal_48d_partly_cloudy_puresky」（https://polyhaven.com/a/kloofendal_48d_partly_cloudy_puresky），CC0 1.0
 - 地图丘陵地势（js/hmap.js，默认地图、海岛地图的高度场）：This work is based on "Soft Hills" (https://sketchfab.com/3d-models/soft-hills-7450a967693e49bf8fd9e6da42f5b292) by hirnlaich (https://sketchfab.com/hirnlaich) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)；改动：只取顶点高度、平滑后缩成 384 × 384、按地图缩放与翻转（tools/hmap_build.py）
 - 超新星遗迹星云（js/mdl/nebula.js，白色平原的太空背景，v3neb.js）：This work is based on "Supernova remnant : lighting 2" (https://sketchfab.com/3d-models/supernova-remnant-lighting-2-68cbcb486c7f41f2b842a36a543a54a1) by Aiekick licensed under CC BY 4.0 (http://creativecommons.org/licenses/by/4.0/)（改动：点云抽样到 30 万个点、坐标与颜色量化）

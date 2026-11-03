@@ -64,5 +64,6 @@ onSettings((k) => { if ((k === 'look' || k === null) && typeof applyLook === 'fu
 
 loadSettings();
 if (typeof applyLook === 'function') applyLook(SETTINGS.look);
-// 地表（用户：地图换皮成沙漠）：沙漠（默认）/ 绿地——只是写实画面的颜色（view3d.js 地形着色器 uDes、小地图 camera.js），地形、推演不变
+// 地表（用户：地图换皮成沙漠）：沙漠（默认）/ 绿地——写实画面的颜色（view3d.js 地形着色器 uDes、小地图 camera.js）；
+//   新开的一局按它建图：沙漠没有河流、沼泽、渔村，镇子换成兵营（mapgen.js buildMap 的 dry，记在 S.dry）
 const landDesert = () => SETTINGS.land === 'desert';

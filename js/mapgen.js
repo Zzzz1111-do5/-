@@ -7,7 +7,9 @@ const N_BEACH = Math.min(BEACH_NAMES.length, Math.round(6 * MAP_K / 1.15)), N_RI
 // 第 k 条河在第 gy 行的中心 x；河源以北返回很大的负数
 const riverX = (k, gy) => TER.rivers[k].rx[clamp(gy, 0, GH - 1)];
 
-function buildMap(seed) {
+// dry：沙漠地图（设置「地表」沙漠，用户：沙漠里不要河流、不要住宅）——河道只留干河谷（地形照样下切，没有水、桥、渡口），
+//   河口沼泽、岸边湿地都不要；村镇在 finishMap 里换成兵营。随机数的取用顺序不变，同一个种子的海岸、海滩、山体与绿地版一样
+function buildMap(seed, dry = false) {
   const r = rng(seed);
   const ph = Array.from({ length: 10 }, () => r() * 6.28);
   const coast = new Float32Array(W + 1), C0 = H * .54;
@@ -83,16 +85,16 @@ function buildMap(seed) {
     const inAF = afr && x > afr.x0 && x < afr.x1 && y > afr.y0 && y < afr.y1 && rd >= rw;
     if (inAF) { e = .28 + (e - .28) * .12; elev[i] = e; type[i] = T.FIELD; continue; }   // 机场场区：推平
     let t;
-    if (rd < rw) t = T.RIVER;
-    else if (d < 24) t = b >= 0 ? T.BEACH : headland(x) ? T.CLIFF : nearMouth(x, 70) ? T.MARSH : T.ROCKS;
-    else if (mouths.some(m => dist(x, y, m, cAt(m)) < 150) && e < .32 && noise2(rf(x / W + .5), y / H) > .38) t = T.MARSH;
+    if (rd < rw && !dry) t = T.RIVER;
+    else if (d < 24) t = b >= 0 ? T.BEACH : headland(x) ? T.CLIFF : nearMouth(x, 70) && !dry ? T.MARSH : T.ROCKS;
+    else if (!dry && mouths.some(m => dist(x, y, m, cAt(m)) < 150) && e < .32 && noise2(rf(x / W + .5), y / H) > .38) t = T.MARSH;
     else if (e > .8) t = T.MOUNT;
     else if (e > .5) t = T.HILL;
     else if (noise2(rf(x / W + .37), rf(y / H + .21)) > .64 || (noise(rf(x / W + .1), rf(y / H + .6)) > .7 && e > .25)) t = T.FOREST;
     else t = T.FIELD;
     type[i] = t;
   }
-  TER = { seed, type, elev, coast, beaches, mouths, rivers, massif, bridges: [], fords: [], points: [], af: afr ? { x: afr.x, y: afr.y, h: afr.h, s: afr.s } : null, afr };
+  TER = { seed, type, elev, coast, beaches, mouths, rivers: dry ? [] : rivers, massif, bridges: [], fords: [], points: [], af: afr ? { x: afr.x, y: afr.y, h: afr.h, s: afr.s } : null, afr, dry };
   finishMap(r, cAt, headland);
 }
 

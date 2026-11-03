@@ -78,7 +78,7 @@ function frame(now) {
 function start(data) {
   const hot = !!(data && data.S && data.S.points && data.S.dd);
   if (hot) {
-    S = data.S; buildMap(S.seed); aiCache(); rebuildForts(); rebuildCraters(); indexUnits();
+    S = data.S; buildMap(S.seed, !!S.dry); aiCache(); rebuildForts(); rebuildCraters(); indexUnits();
     if (typeof initCarrier === 'function') initCarrier();
   } else { newGame(undefined, 'hard'); S.attract = true; }   // attract：开始界面背后的展示局，尚未开打
   U.level = S.level;

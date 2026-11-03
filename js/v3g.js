@@ -221,7 +221,11 @@ void main() {
     float h = clamp(vMP.z / uCld * .5 + .5, 0., 1.), w = dot(N, ${V3_SUNG}) * .5 + .5, f = abs(dot(N, V));
     vec3 cc = mix(vec3(.55, .6, .68), vec3(1., .985, .955), smoothstep(.1, .9, h * .55 + w * .6));
     cc *= .93 + .12 * pow(1. - f, 2.);
-    float al = smoothstep(.02, .4, f) * .88 * smoothstep(220., 900., vD) * mix(1., .03, uCldF * smoothstep(150., 900., vV.z));   // 离镜头近的、镜头在它上面往下看的（看战场）淡掉
+    // 离镜头近的、镜头在它上面往下看的（看战场）淡掉：原来要高出 900 米才淡、最低也留 3%——部署镜头（约 3.5 公里高）离下面的云顶只有几百米，
+    //   这个云模型是七万多个三角形的层层薄壳，每层 3% 叠几十层仍把半个战场、整支舰队盖住；改成高出 300 米、俯角超过约 17° 就淡到没有（丢掉片元），
+    //   平着看远处地平线上的云仍然在
+    float al = smoothstep(.02, .4, f) * .88 * smoothstep(220., 900., vD) * (1. - uCldF * smoothstep(40., 300., vV.z) * smoothstep(.1, .3, vV.z / max(vD, 1.)));
+    if (al < .006) discard;
     gl_FragColor = vec4(mix(cc, uBg, smoothstep(uFog.x, uFog.y, vD)), al);
     return;
   }
@@ -456,10 +460,13 @@ const V3G_MSL = {
 const v3gMslKey = k => V3G_MSL[k] || 'jsow';   // 反舰、巡航导弹（鹰击、长剑、鱼叉、战斧、LRASM …）：AGM-154 那种带弹翼的弹形
 
 // 车辆：车体按脚下坡度俯仰、侧倾，炮塔（模型里的 tur 部件）相对车体转到瞄准方向；按游戏里的车长（车体，不算炮管）缩放
+const V3G_REAL = { cram: 7 };   // 按真实尺寸画的车（全长，米）：百人队长 C-RAM（密集阵 Block 1B 炮塔 + 拖车，炮塔顶离地约 6 米）
 function v3gVeh(v, rk, side, len, x, y, z, h, aim, dead, pitch, roll, hl, fs = 99) {   // hl：选中编队的成员（整车发光）；fs：主炮开火后几秒
   const key = v3gVehKey(rk, side), M = v3gModel(key);
   if (!M) return false;
-  const k = len / (M.meta.hl || M.meta.len), da = aim == null ? 0 : -Math.atan2(Math.sin(aim - h), Math.cos(aim - h));   // 部件角度在模型坐标里（逆时针为正，世界朝向顺时针为正）
+  // 车辆按游戏长度放大（约真车的两倍，和 1.9 倍的士兵一致）；V3G_REAL 里的按真实尺寸（米）：陆基密集阵摆在机场、营区里，
+  //   旁边的机库、楼房、飞机都是真实大小，原来按自行高炮的游戏长度 14 米画，炮塔比三层楼还高（用户：密集阵比例不对）
+  const k = V3G_REAL[key] ? V3G_REAL[key] / M.meta.len : len / (M.meta.hl || M.meta.len), da = aim == null ? 0 : -Math.atan2(Math.sin(aim - h), Math.cos(aim - h));   // 部件角度在模型坐标里（逆时针为正，世界朝向顺时针为正）
   // 型号功能表（vfn.js）：炮塔、炮管俯仰、发射架起竖、跳板、车轮、雷达按车辆此刻的状态动
   const FP = v && typeof vfnParts === 'function' ? vfnParts(v, key, k, h, aim ?? h, dead, fs, z) : null, FV = FP && VFN[key];
   // 开炮：炮管 0.06 秒内后坐到底（约 0.3 米），约 0.7 秒复进回原位；车体被后坐力推得朝炮口那边翘起、再回弹几下（悬挂），翘的方向跟着炮塔朝向

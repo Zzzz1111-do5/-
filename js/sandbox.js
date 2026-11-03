@@ -904,8 +904,12 @@ function sbxSpawn(it, role, acc) {
     const role = s.role, p = role === 'ambush' ? sbxNearPt(x, y, p => /^E\d/.test(p.key)) : sbxNearPt(x, y), n = it.n ?? s.teams;
     const u = addUnit('e', 'inf', { role, obj: p.key });
     if (s.morale) u.morale = s.morale;
+    // 坚守的（守备队、伏击组）原地挖工事：几个组围成一圈的挖环形堑壕，单独一组挖一道 24 米的横壕（朝海）；附近已有堑壕就不再挖
+    const rr0 = n > 1 ? 9 + n * 2.5 : 0;
+    if ((role === 'garrison' || role === 'ambush') && typeof trenchRing === 'function' && !S.trench.some(t => polyDist(x, y, t.pts) < rr0 + 8))
+      trenchAdd(n > 1 ? trenchRing(x, y, rr0, rr0 * .8, Math.max(10, Math.round(rr0 * 6.3 / 4.5))) : passInf(x - 12, y) && passInf(x + 12, y) ? [[[x - 12, y - 1.5], [x - 4, y + 1.5], [x + 4, y - 1.5], [x + 12, y + 1.5]]] : []);
     for (let k = 0; k < n; k++) {
-      const a = k / Math.max(1, n) * 6.283 + .4, rr = n > 1 ? 9 + n * 2.5 : 0, sp = sbxSpot(x + Math.cos(a) * rr, y + Math.sin(a) * rr * .8);
+      const a = k / Math.max(1, n) * 6.283 + .4, rr = rr0, sp = sbxSpot(x + Math.cos(a) * rr, y + Math.sin(a) * rr * .8);
       addTeam('e', sp.x, sp.y, s.men, { role, obj: p.key, u: u.id, ...(role === 'ambush' ? { hold: true } : {}), ...(s.mod ? { mod: { ...s.mod } } : {}), ...(s.tag ? { sbxTag: s.tag } : {}), cat: c.id });
     }
   } else if (s.kind === 'car') {
@@ -1422,11 +1426,11 @@ HOOK.step.push(dt => {
 HOOK.newGame.push(opts => { if (typeof R === 'object' && R) R.eye = null; if (!(opts && opts.sandbox)) closeSandbox(); });
 
 // ———————————————— 编辑器入口 ————————————————
-function openSandbox(seed, keep, map) {
+function openSandbox(seed, keep, map, dry) {   // dry：沙漠地图（不给就按设置「地表」；读存档时按存档）
   const prev = S && S.sbx ? S : null, lv = (prev && prev.level) || (typeof U === 'object' && U.level) || 'hard';
   const bud = keep && prev ? { ...prev.sbx.budget } : { p: SBX_BUDGET0, e: SBX_BUDGET0 };
   map = map || (keep && prev && prev.map && prev.map !== 'std' ? prev.map : undefined);
-  newGame(seed, lv, { sandbox: true, mode: 'sandbox', map });   // map：另外登记的地图（core.js MAPGEN），换种子重建时沿用
+  newGame(seed, lv, { sandbox: true, mode: 'sandbox', map, dry });   // map：另外登记的地图（core.js MAPGEN），换种子重建时沿用
   Object.assign(S, { phase: 'sandbox', briefed: true, paused: true, role: 'attack', mode: 'sandbox', armor: [] });
   if (keep && prev && prev.night) S.night = true;   // 黑夜：换种子、换地图时沿用
   S.sbx = { items: [], budget: bud, nid: 1, notes: { p: [], e: [] }, live: false };
@@ -1731,7 +1735,7 @@ const sbxClone = o => JSON.parse(JSON.stringify(o));
 function sbxStore(key, val) { try { if (val == null) localStorage.removeItem(key); else localStorage.setItem(key, JSON.stringify(val)); return true; } catch (e) { return false; } }
 function sbxFetch(key) { try { return JSON.parse(localStorage.getItem(key)); } catch (e) { return null; } }
 function sbxSnap(name) {
-  return { v: 1, name, seed: S.seed, map: S.map && S.map !== 'std' ? S.map : undefined, night: S.night || undefined, level: S.level, budget: { ...S.sbx.budget }, items: sbxClone(S.sbx.items), notes: sbxClone(S.sbx.notes || { p: [], e: [] }),
+  return { v: 1, name, seed: S.seed, map: S.map && S.map !== 'std' ? S.map : undefined, night: S.night || undefined, dry: !!S.dry, level: S.level, budget: { ...S.sbx.budget }, items: sbxClone(S.sbx.items), notes: sbxClone(S.sbx.notes || { p: [], e: [] }),
     spent: { p: sbxSpent('p'), e: sbxSpent('e') }, at: Date.now() };
 }
 const sbxSaves = () => { const a = sbxFetch(SBX_SAVE_KEY); return Array.isArray(a) ? a : SBX.saves || []; };
@@ -1750,7 +1754,7 @@ function sbxLoad(d) {
   if (typeof U === 'object' && DIFF[d.level]) U.level = d.level;
   if (S) S.level = DIFF[d.level] ? d.level : S.level;
   const keepSide = SBX.side;
-  openSandbox(d.seed, false, d.map && MAPGEN[d.map] ? d.map : 'std');
+  openSandbox(d.seed, false, d.map && MAPGEN[d.map] ? d.map : 'std', !!d.dry);   // 以前的存档没记 dry：当时的地图有河，照原样重建
   S.night = !!d.night;
   if (DIFF[d.level]) S.level = d.level;
   const items = sbxClone(d.items).filter(it => catalogById(it.cat));

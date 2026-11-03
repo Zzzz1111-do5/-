@@ -84,7 +84,7 @@ float mxRain(vec2 cell, vec2 f, float t, float px) {
 //   单位、标号、箭头、弹坑等仍来自俯视贴图（这时贴图底色是黑的，叠加上去）
 const V3_FS = (der, tl) => `${der ? '#extension GL_OES_standard_derivatives : enable\n#define DER 1\n' : ''}${tl ? '#extension GL_EXT_shader_texture_lod : enable\n#define TLOD 1\n' : ''}${V3_PREC}
 uniform sampler2D uTop, uBase, uCls, uCls2, uFogT, uHt, uLf, uTopF; uniform vec4 uBox, uBoxF; uniform vec2 uWorld, uGrid, uHG; uniform vec2 uFog; uniform float uSea, uT, uMx, uLmOn, uBrM; uniform vec3 uBg;
-uniform sampler2D uDg, uDf, uDr, uDs; uniform float uDet, uDes;   // 写实地表细节贴图（ambientCG，CC0）：草地、林下地面、岩石、沙滩
+uniform sampler2D uDg, uDf, uDr, uDs; uniform float uDet, uDes; uniform vec4 uAfb[2];   // 写实地表细节贴图（ambientCG，CC0）：草地、林下地面、岩石、沙滩
 uniform sampler2D uCls3, uSky, uWn; uniform float uSkyOn, uSkyU, uWnOn;   // 水深分类（浅滩、礁石、近岸）、天空图（海面反射）、水面法线贴图（用户提供的海洋素材 ocean.zip 的 water_new_height.png）
 uniform float uRing, uOcn; uniform vec4 uRect;   // 地图外：1 = 无边海面（地图里面丢掉，那里是地形网格），2 = 北面延伸的陆地（贴图照地图北缘镜像），3 = 南缘外的攻方海岸（afp.js 战区机场；uRect 是机场图案的范围，图案临时绑在 uTopF）
 uniform float uFlat;   // 白色平原（flat.js）：太空里的灰色平台，侧壁是深灰的金属
@@ -182,8 +182,15 @@ void main() {
     vec3 cF = inF ? texture2D(uTopF, uvF).rgb : texture2D(uBase, w / uWorld).rgb, top = wN > 0. ? mix(cF, texture2D(uTop, uv).rgb, wN) : cF;
     // 写实：天光（上冷下暖，按坡面朝天的程度）+ 日光；地图底色偏暗，整体提亮到白天的亮度；等高线、方格网淡一些
     vec3 amb = mix(vec3(.3, .29, .27), vec3(.47, .52, .6), clamp(N.z, 0., 1.)), col = top * 1.22;
-    if (uDes > .5 && land > .5) {   // 沙漠（设置「地表」，默认）：俯视贴图里绿的、黄的（草地、林地、田块）按明暗换成沙土色，灰的道路、城镇不动
-      float veg = smoothstep(.02, .1, col.g - col.b), l = dot(col, vec3(.3, .59, .11));
+    float veg = smoothstep(.02, .1, col.g - col.b);   // 绿的、黄的（草地、林地、田块）
+    // 机场围栏以内（afbase.js 场区，局部坐标 |u| < 548、v −180 … 620）：图里的道面全用俯视贴图；北面延伸的远景（地图镜像出去）里不要它——
+    //   原来离北缘七百米的野战机场被镜像出一座只有道面没有房子的「重影机场」
+    float afIn = 0., ext = uRing > 1.5 && uRing < 2.5 ? 1. : 0.;
+    for (int i = 0; i < 2; i++) { vec4 b = uAfb[i]; if (b.w != 0.) { vec2 d = w - b.xy; float ca = cos(b.z), sa = sin(b.z), lu = d.x * ca + d.y * sa, lv = (d.y * ca - d.x * sa) * b.w;
+      afIn = max(afIn, step(abs(lu), 548.) * step(-180., lv) * step(lv, 620.)); } }
+    if (ext > .5) col = mix(col, uDes > .5 ? vec3(.84, .74, .58) : vec3(.36, .42, .25), afIn);
+    if (uDes > .5 && land > .5) {   // 沙漠（设置「地表」，默认）：俯视贴图里绿的、黄的按明暗换成沙土色，灰的道路、城镇不动
+      float l = dot(col, vec3(.3, .59, .11));
       col = mix(col, vec3(.84, .74, .58) * clamp(l * 1.9, .5, 1.25), veg);
     }
     if (uDet > .5 && land > .5) {
@@ -192,7 +199,10 @@ void main() {
       vec4 k1 = texture2D(uCls, cu), k2 = texture2D(uCls2, cu), LF = texture2D(uLf, cu), HT = texture2D(uHt, (floor(w / 20.) + .5) / uHG);
       float fo = smoothstep(.25, .7, k1.g), be = smoothstep(.3, .7, k2.g), rk = max(max(smoothstep(.25, .6, k2.b), HT.g * .8), smoothstep(.8, .55, N.z)), mr = smoothstep(.3, .7, k2.r);
       float fd = smoothstep(.3, .7, k2.a), tw = smoothstep(.3, .7, k1.a);
-      vec3 G = texture2D(uDg, w / 9.).rgb, F = texture2D(uDf, w / 8.).rgb, Rk = texture2D(uDr, w / 15.).rgb, Sd = texture2D(uDs, w / 7.).rgb;
+      // 沙地（assets/terrain/sand.jpg：Sketchfab 上 Terrie Simmons-Ehrhardt 实拍扫描的「Sand at Sunset Beach」，CC-BY，俯视渲染后做成无缝平铺，实地约 2 米见方，
+      //   这里约 2.3 倍放大铺开）：两套不同转角、尺度的采样按大尺度噪声成片交替，远看不出一格一格的重复
+      vec2 sw = mat2(.8, -.6, .6, .8) * w;
+      vec3 G = texture2D(uDg, w / 9.).rgb, F = texture2D(uDf, w / 8.).rgb, Rk = texture2D(uDr, w / 15.).rgb, Sd = mix(texture2D(uDs, w / 4.6).rgb, texture2D(uDs, sw / 5.4 + .37).rgb, smoothstep(.35, .65, texture2D(uDg, w / 157. + .61).g));
       float mac = dot(texture2D(uDg, w / 73. + .31).rgb, vec3(.6, .3, .1)) * 1.7 + .38;   // 大尺度的明暗起伏
       vec3 nat = mix(G, F * vec3(.9, .92, .8), max(fo, mr * .6));
       nat = mix(nat, Rk, rk); nat = mix(nat, Sd * 1.05, be);
@@ -206,13 +216,17 @@ void main() {
       // 人造的（道路、城镇、田块颜色）和弹坑、车辙、标号仍在俯视贴图里：道路、城镇、河流全用贴图，田地留七成，别处留三成
       float dR = LF.r * 12., hwR = max(LF.b * 8., 1.5), road = 1. - smoothstep(hwR - .5, hwR + 1.8, dR), riv = 1. - smoothstep(.9, 1.2, LF.g * 2.5);
       float keep = max(max(tw, road), max(riv, uDes > .5 ? .1 + .15 * fd : .3 + .4 * fd));   // 沙漠里田块只留一点影子
+      // 机场围栏里的道面、建筑、标线（afbase.js 画在俯视贴图里）全用贴图：原来不算城镇也不算道路，跑道、滑行道、停机坪九成被沙地细节贴图盖掉，近看几乎看不出跑道；场内草地照旧换细节贴图
+      //   北面延伸的远景：机场、城镇的地面图案都不要（镜像出去只有地面没有房子），换成自然地表
+      keep = ext > .5 ? keep * (1. - afIn) * (1. - tw) : max(keep, afIn * (1. - veg));
       col = mix(nat * 1.1, col, keep);
     }
     if (uRing > 1.5 && uRing < 2.5) col = mix(col, vec3(.6, .56, .45), (1. - smoothstep(1.5, 7., h)) * .75);   // 延伸陆地新收出来的北岸：一圈沙滩、礁石色
     if (uRing > 2.5) {   // 南缘外的攻方海岸：草地 + 一块块林地 + 岸边沙滩（细节贴图），机场那一块铺机场图案（道面、标线、建筑、草坪）
       vec3 nat = vec3(.24, .28, .17);
       if (uDet > .5) {
-        vec3 G = texture2D(uDg, w / 9.).rgb, F = texture2D(uDf, w / 8.).rgb, Sd = texture2D(uDs, w / 7.).rgb;
+        vec2 sw = mat2(.8, -.6, .6, .8) * w;
+        vec3 G = texture2D(uDg, w / 9.).rgb, F = texture2D(uDf, w / 8.).rgb, Sd = mix(texture2D(uDs, w / 4.6).rgb, texture2D(uDs, sw / 5.4 + .37).rgb, smoothstep(.35, .65, texture2D(uDg, w / 157. + .61).g));
         float mac = dot(texture2D(uDg, w / 73. + .31).rgb, vec3(.6, .3, .1)) * 1.7 + .38, fo = smoothstep(.56, .72, cN(w / 900.) * .7 + cN(w / 260. + 3.1) * .3);
         nat = mix(G, F * vec3(.9, .92, .8), fo) * mix(1., mac, .5);
         if (uDes > .5) nat = mix(Sd * vec3(1.1, .94, .74), mix(texture2D(uDr, w / 15.).rgb, Sd, .35) * vec3(.96, .82, .64), fo * .6) * mix(1., mac, .45);
@@ -1192,7 +1206,7 @@ function v3Init() {
     gl.linkProgram(pr);
     if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(pr));
     const u = {}, a = { p: gl.getAttribLocation(pr, 'p'), n: gl.getAttribLocation(pr, 'n') };
-    for (const k of ['uDes', 'uM', 'uEye', 'uTop', 'uBase', 'uCls', 'uCls2', 'uFogT', 'uHt', 'uLf', 'uTopF', 'uBox', 'uBoxF', 'uWorld', 'uGrid', 'uHG', 'uFog', 'uSea', 'uT', 'uMx', 'uBrM', 'uLm', 'uLmOn', 'uBm', 'uBg', 'uDg', 'uDf', 'uDr', 'uDs', 'uDet', 'uCls3', 'uSky', 'uSkyOn', 'uSkyU', 'uWn', 'uWnOn', 'uShM', 'uShT', 'uShOn', 'uShP', 'uOff', 'uScl', 'uRing', 'uRect', 'uOcn', 'uFlat']) u[k] = gl.getUniformLocation(pr, k);
+    for (const k of ['uDes', 'uAfb', 'uM', 'uEye', 'uTop', 'uBase', 'uCls', 'uCls2', 'uFogT', 'uHt', 'uLf', 'uTopF', 'uBox', 'uBoxF', 'uWorld', 'uGrid', 'uHG', 'uFog', 'uSea', 'uT', 'uMx', 'uBrM', 'uLm', 'uLmOn', 'uBm', 'uBg', 'uDg', 'uDf', 'uDr', 'uDs', 'uDet', 'uCls3', 'uSky', 'uSkyOn', 'uSkyU', 'uWn', 'uWnOn', 'uShM', 'uShT', 'uShOn', 'uShP', 'uOff', 'uScl', 'uRing', 'uRect', 'uOcn', 'uFlat']) u[k] = gl.getUniformLocation(pr, k);
     const pb = gl.createProgram();
     gl.attachShader(pb, sh(gl.VERTEX_SHADER, V3_BVS)); gl.attachShader(pb, sh(gl.FRAGMENT_SHADER, V3_BFS()));   // 着色器源码用到时再拼：爆炸火光的 GLSL 在后加载的 v3light.js 里
     gl.linkProgram(pb);
@@ -1490,6 +1504,8 @@ function v3Scene(C, now, vp) {
   const mx = v3Mx() ? 1 : 0, tm = (now / 1000) % 3600;   // 黑绿画面：黑客帝国式数码风
   gl.uniform1f(u.uDet, !mx && v3DetTex() && !TER.flat ? 1 : 0);   // 白色平原：灰色地面就是俯视贴图本身，不叠草地、岩石细节
   gl.uniform1f(u.uDes, !mx && !TER.flat && typeof landDesert === 'function' && landDesert() ? 1 : 0);   // 沙漠地表（设置「地表」）
+  { const A = new Float32Array(8), L = typeof afb3dBases === 'function' ? afb3dBases().filter(b => b.x >= 0 && b.y >= 0 && b.x <= W && b.y <= H).slice(0, 2) : [];   // 图里的机场（南缘外的战区机场走 uRing 3）
+    L.forEach((b, i) => A.set([b.x, b.y, b.rh || 0, b.rs || 1], i * 4)); gl.uniform4fv(u.uAfb, A); }
   gl.uniform1f(u.uFlat, TER.flat ? 1 : 0);
   const skyT = !mx && V3.sky && V3.sky.ok && V3.cls3 ? V3.sky.tex : null;
   if (V3.cls3) { gl.activeTexture(gl.TEXTURE12); gl.bindTexture(gl.TEXTURE_2D, V3.cls3); }
