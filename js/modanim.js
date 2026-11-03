@@ -1,14 +1,17 @@
 'use strict';
-// 编辑器：动画设计（用户：能设计动画，比如坦克的开火动画，想怎么设计就怎么设计——甚至开火时原地分成 10 块碎片跳舞；自由度拉满、非常好上手）
+// 编辑器：局部自由动画（用户：能设计动画，比如坦克的开火动画——模型上任何一个部件都能单独动，想怎么动就怎么动；「拆成碎片跳舞」只是打个比方；自由度拉满、非常好上手）
 //   「模型与挂点」页里车辆模型多一段「动画」：
 //   ① 分组：自动拆成 N 块（按块的位置聚类）、按模型自带的部件分（炮塔、炮管、车轮……）、或者把选中的块设成一组；
 //   ② 选时机：开炮时、挨打时、走着时（循环）、停着时（循环）、被打掉时；
 //   ③ 点预设（散开跳舞、炸开再合上、原地转圈、弹跳、摇摆、震动、后坐、脉冲、悬浮、波浪），或者自己拖时间轴、给某一组在某一刻摆姿势（挪、转、缩放）记成关键帧；
 //   ④ ▶ 预览里马上动起来看；保存后游戏里到那个时机就播（mod.js modAnimNow → v3g.js v3gAnimDraw）。数据格式见 mod.js「动画」那一段
-const MAN = { ev: 'fire', play: false, t: 0, raf: 0, last: 0, g: -1, amp: 1, n: 10, pre: 'dance', key: '', vg: null, vgK: '' };
+const MAN = { ev: 'fire', play: false, t: 0, raf: 0, last: 0, g: -1, amp: 1, n: 10, ax: 'y', key: '', vg: null, vgK: '' };
 const MAN_EV = [['fire', '开炮时'], ['hit', '挨打时'], ['move', '走着时（循环）'], ['idle', '停着时（循环）'], ['die', '被打掉时']];
 const MAN_DEF = { fire: { dur: 2.5, loop: 0 }, hit: { dur: .8, loop: 0 }, move: { dur: 2, loop: 1 }, idle: { dur: 3, loop: 1 }, die: { dur: 3, loop: 0, back: false } };
-const MAN_PRE = [['dance', '散开跳舞'], ['explode', '炸开再合上'], ['spin', '原地转圈'], ['bounce', '弹跳'], ['sway', '摇摆'], ['shake', '震动'], ['recoil', '后坐'], ['pulse', '变大变小'], ['float', '飘起来'], ['wave', '波浪']];
+const MAN_PRE = [['recoil', '后坐（往后一顿再复位）'], ['shake', '震动'], ['open', '开合（绕转动中心转过去再回来）'], ['lift', '升降'], ['push', '伸出再缩回'], ['spin', '转一圈'], ['sway', '来回摆'], ['pulse', '变大变小'],
+  ['bounce', '弹跳'], ['float', '飘起来'], ['wave', '波浪'], ['explode', '炸开再合上'], ['dance', '散开乱跳']];
+const MAN_AX = [['y', '绕左右轴（抬起 / 放下）'], ['x', '绕前后轴（侧倾）'], ['z', '绕竖轴（左右转）']];
+const manAxI = () => ({ x: 0, y: 1, z: 2 })[MAN.ax] ?? 1;
 const MAN_EASE = [['io', '平滑'], ['lin', '匀速'], ['out', '先快后慢'], ['in', '先慢后快'], ['back', '冲过头再回来'], ['bounce', '弹几下'], ['step', '一下跳过去']];
 const MAN_COL = ['#ff6b6b', '#ffd93d', '#6bcB77', '#4d96ff', '#c77dff', '#ff9f45', '#00c2d1', '#f15bb5', '#9bdeac', '#fee440', '#7b8cde', '#e07a5f'];
 const manM = mk => { const M = typeof mdxPcM === 'function' ? mdxPcM(mk) : null; return M && M.pv ? M : null; };
@@ -68,9 +71,12 @@ function manPreset(mk, ev, pre, only) {
     } else if (pre === 'explode') {
       const rr = [((gi * 47) % 120) - 60, ((gi * 83) % 120) - 60, ((gi * 29) % 240) - 120];
       K.push({ t: at(.3), p: out(2.6, [0, 0, amp]), r: rr, s: 1, e: 'out' }, { t: at(.62), p: out(2.6, [0, 0, amp * .8]), r: rr, s: 1, e: 'io' });
-    } else if (pre === 'spin') K.push({ t: 0, p: [0, 0, 0], r: [0, 0, 0], s: 1 }, { t: at(1), p: [0, 0, 0], r: [0, 0, 360], s: 1, e: 'lin' });
+    } else if (pre === 'spin') { const r = [0, 0, 0]; r[manAxI()] = 360; K.push({ t: 0, p: [0, 0, 0], r: [0, 0, 0], s: 1 }, { t: at(1), p: [0, 0, 0], r, s: 1, e: 'lin' }); }
+    else if (pre === 'open') { const r = [0, 0, 0]; r[manAxI()] = +(-75 * MAN.amp).toFixed(1); K.push({ t: at(.3), p: [0, 0, 0], r, s: 1, e: 'out' }, { t: at(.7), p: [0, 0, 0], r, s: 1, e: 'io' }); }
+    else if (pre === 'lift') K.push({ t: at(.35), p: [0, 0, +(amp * .4).toFixed(3)], r: [0, 0, 0], s: 1, e: 'io' }, { t: at(.65), p: [0, 0, +(amp * .4).toFixed(3)], r: [0, 0, 0], s: 1, e: 'io' });
+    else if (pre === 'push') K.push({ t: at(.3), p: [+(amp * .45).toFixed(3), 0, 0], r: [0, 0, 0], s: 1, e: 'out' }, { t: at(.65), p: [+(amp * .45).toFixed(3), 0, 0], r: [0, 0, 0], s: 1, e: 'io' });
     else if (pre === 'bounce') K.push({ t: at(.3), p: [0, 0, +(amp * 1.2).toFixed(3)], r: [0, 0, 0], s: 1, e: 'out' }, { t: at(.75), p: [0, 0, 0], r: [0, 0, 0], s: 1, e: 'bounce' });
-    else if (pre === 'sway') K.push({ t: at(.25), p: [0, 0, 0], r: [12, 0, 0], s: 1, e: 'io' }, { t: at(.75), p: [0, 0, 0], r: [-12, 0, 0], s: 1, e: 'io' });
+    else if (pre === 'sway') { const a1 = [0, 0, 0], a2 = [0, 0, 0]; a1[manAxI()] = +(12 * MAN.amp).toFixed(1); a2[manAxI()] = -a1[manAxI()]; K.push({ t: at(.25), p: [0, 0, 0], r: a1, s: 1, e: 'io' }, { t: at(.75), p: [0, 0, 0], r: a2, s: 1, e: 'io' }); }
     else if (pre === 'shake') for (let j = 1; j < 12; j++) { const q = amp * .12 * (1 - j / 13); K.push({ t: at(j / 12), p: [+(Math.sin(j * 7.1 + ph) * q).toFixed(3), +(Math.sin(j * 4.3 + ph) * q).toFixed(3), +(Math.sin(j * 9.7 + ph) * q * .5).toFixed(3)], r: [0, 0, 0], s: 1, e: 'lin' }); }
     else if (pre === 'recoil') K.push({ t: +(Math.min(.08, dur * .05)).toFixed(3), p: [+(-amp * .45).toFixed(3), 0, 0], r: [0, 0, 0], s: 1, e: 'out' }, { t: at(.55), p: [0, 0, 0], r: [0, 0, 0], s: 1, e: 'io' });
     else if (pre === 'pulse') K.push({ t: at(.5), p: [0, 0, 0], r: [0, 0, 0], s: +(1 + .3 * MAN.amp).toFixed(3), e: 'io' });
@@ -147,15 +153,17 @@ function manForm(mk) {
   let h = `<h3 style="margin-top:12px">动画：自己设计开炮、挨打、走、停、被打掉时怎么动</h3>`;
   if (!M) return h + '<p class="note">模型读出来以后才能做动画（上面的预览加载完会自动刷新这一段）。</p>';
   const c = (A.an || {})[MAN.ev], dur = Math.max(.05, (c && +c.dur) || MAN_DEF[MAN.ev].dur);
-  h += `<p class="note">四步：① 分组（比如「自动拆成 10 块」）② 选什么时候播 ③ 点一个预设，或者自己拖时间轴、给某一组摆姿势记关键帧 ④ ▶ 播放看效果，满意就保存，游戏里到那个时机就这么动。</p>
-    <div class="mdx-pcbar">${btn('data-mana="demo"', '一键示例：开炮时拆成 10 块跳舞', false, '自动拆成 10 块 + 开炮时「散开跳舞」+ 播放')}</div>
-    <div class="mdx-pcbar"><b>① 分组</b>${btn('data-mana="split"', '自动拆成', false, '按块的位置聚成几组')} <input type="number" min="2" max="60" step="1" data-manf="n" value="${MAN.n}" style="width:56px"> 块
-      ${btn('data-mana="bynode"', '按模型自带的部件分', false, '炮塔、炮管、车轮……各一组')}${btn('data-mana="bysel"', '选中的块设成一组', false, '先用「部件」那一段的「选部件」点选')}${G.length ? btn('data-mana="clr"', '清空分组') : ''}</div>
+  h += `<p class="note">模型上任何一部分都能单独动：① 选出要动的部件（在模型上点选，或者按模型自带的炮塔、炮管、车轮……分）② 选什么时候播 ③ 点一个动作预设，或者自己拖时间轴、给这个部件在某一刻摆姿势（挪、转、缩放）记成关键帧，
+      转动中心可以在模型上点、也能输数（舱盖绕铰链开合就把中心放在铰链上）④ ▶ 播放看效果，满意就保存，游戏里到那个时机就这么动。</p>
+    <div class="mdx-pcbar">${btn('data-mana="demo"', '示例：开炮时炮管后坐、炮塔一震', false, '按模型自带的部件找出炮管、炮塔，开炮时炮管往后坐、炮塔跟着一震')}</div>
+    <div class="mdx-pcbar"><b>① 要动的部件</b>${btn('data-pk="pc"', '在模型上点选', MDX.pk === 'pc', '在预览里点一块就选上 / 取消（黄色）；部件那一段有框选、按整个部件选')}${btn('data-mana="bysel"', '选中的设成一个部件', false, '点选好以后点这个')}
+      ${btn('data-mana="bynode"', '按模型自带的部件分', false, '炮塔、炮管、车轮……各一个')}${btn('data-mana="split"', '自动拆成', false, '按位置聚成几块（拆碎片的效果用）')} <input type="number" min="2" max="60" step="1" data-manf="n" value="${MAN.n}" style="width:56px"> 块${G.length ? btn('data-mana="clr"', '清空分组') : ''}</div>
     <div class="man-chips">${G.length ? G.map((g, gi) => `<button type="button" class="man-chip${MAN.g === gi ? ' on' : ''}" data-mang="${gi}" style="--c:${MAN_COL[gi % MAN_COL.length]}">${mdxEsc(g.nm)}<small>${modIdsDec(g.id).length} 块</small></button>`).join('') + `<button type="button" class="man-chip${MAN.g < 0 ? ' on' : ''}" data-mang="-1" style="--c:#aaa">全部组</button>` : '<span class="def">还没分组：整车不动（先分组才能让各部分各动各的）</span>'}</div>
     <div class="mdx-pcbar"><b>② 什么时候播</b>${MAN_EV.map(([k, n]) => btn(`data-mane="${k}"`, n + ((A.an || {})[k] ? ' ●' : ''), MAN.ev === k)).join('')}</div>
     <div class="mdx-pcbar">时长 <input type="number" min=".1" max="60" step=".1" data-manf="dur" value="${dur}" style="width:64px"> 秒
       <label><input type="checkbox" data-manf="loop"${(c ? c.loop : MAN_DEF[MAN.ev].loop) ? ' checked' : ''}> 循环</label><label><input type="checkbox" data-manf="back"${(c ? c.back : MAN_DEF[MAN.ev].back) !== false ? ' checked' : ''}> 播完回到原位</label>${c ? btn('data-mana="delclip"', '删掉这一段动画') : ''}</div>
-    <div class="mdx-pcbar"><b>③ 预设</b><span class="def">套给${MAN.g >= 0 && G[MAN.g] ? '「' + mdxEsc(G[MAN.g].nm) + '」' : '全部组'}</span> 幅度 <input type="range" min=".2" max="4" step=".1" data-manf="amp" value="${MAN.amp}" style="width:90px"></div>
+    <div class="mdx-pcbar"><b>③ 动作预设</b><span class="def">套给${MAN.g >= 0 && G[MAN.g] ? '「' + mdxEsc(G[MAN.g].nm) + '」' : '全部部件'}</span> 幅度 <input type="range" min=".2" max="4" step=".1" data-manf="amp" value="${MAN.amp}" style="width:90px">
+      转的话 <select data-manf="ax">${MAN_AX.map(([k, n]) => `<option value="${k}"${MAN.ax === k ? ' selected' : ''}>${n}</option>`).join('')}</select></div>
     <div class="mdx-pcbar">${MAN_PRE.map(([k, n]) => btn(`data-manpre="${k}"`, n)).join('')}</div>`;
   // 时间轴：每组一行、关键帧是点；游标跟着播
   const rows = G.map((g, gi) => { const K = (c && c.tr && c.tr[gi]) || []; return `<div class="man-row${MAN.g === gi ? ' on' : ''}" data-mang="${gi}"><span class="man-rn" style="color:${MAN_COL[gi % MAN_COL.length]}">${mdxEsc(g.nm)}</span><span class="man-track">${K.map(k => `<i class="man-key" data-mank="${gi}|${k.t}" style="left:${clamp(k.t / dur, 0, 1) * 100}%;background:${MAN_COL[gi % MAN_COL.length]}" title="${k.t} 秒"></i>`).join('')}<i class="man-cur"></i></span></div>`; }).join('');
@@ -166,7 +174,10 @@ function manForm(mk) {
   if (MAN.g >= 0 && G[MAN.g]) {
     const K = (c && c.tr && c.tr[MAN.g]) || [], kn = K.find(k => Math.abs(k.t - MAN.t) < .03), P = kn ? { p: kn.p || [0, 0, 0], r: kn.r || [0, 0, 0], s: kn.s ?? 1 } : (c ? modAnimPose(K, MAN.t, dur, c.back) : null) || { p: [0, 0, 0], r: [0, 0, 0], s: 1 }, e = (kn && kn.e) || 'io';
     const num = (f, v, w = 64) => `<input type="number" step="any" data-mank-f="${f}" value="${+(+v).toFixed(3)}" style="width:${w}px">`;
-    h += `<div class="mdx-pcbar"><b>「${mdxEsc(G[MAN.g].nm)}」在 ${MAN.t.toFixed(2)} 秒的姿势</b>${kn ? '<span class="def">（这一刻有关键帧，改了直接更新）</span>' : '<span class="def">（改了就在这一刻加一个关键帧）</span>'}</div>
+    const cp = G[MAN.g].cp || [0, 0, 0];
+    h += `<div class="mdx-pcbar"><b>「${mdxEsc(G[MAN.g].nm)}」的转动中心</b> x <input type="number" step="any" data-manc="0" value="${cp[0]}" style="width:70px"> y <input type="number" step="any" data-manc="1" value="${cp[1]}" style="width:70px"> z <input type="number" step="any" data-manc="2" value="${cp[2]}" style="width:70px"> 米
+      ${btn('data-mana="pickcp"', MDX.pk === 'anpv' ? '在模型上点一下…' : '在模型上点一下定中心', MDX.pk === 'anpv', '转、缩放都绕这一点（舱盖开合放在铰链上，炮管抬起放在炮耳上）')}${btn('data-mana="cpmid"', '放回部件中间')}</div>
+      <div class="mdx-pcbar"><b>「${mdxEsc(G[MAN.g].nm)}」在 ${MAN.t.toFixed(2)} 秒的姿势</b>${kn ? '<span class="def">（这一刻有关键帧，改了直接更新）</span>' : '<span class="def">（改了就在这一刻加一个关键帧）</span>'}</div>
       <div class="mdx-pcbar">挪 x ${num('p.0', P.p[0])} y ${num('p.1', P.p[1])} z ${num('p.2', P.p[2])} 米　转 侧滚 ${num('r.0', P.r[0])} 俯仰 ${num('r.1', P.r[1])} 方位 ${num('r.2', P.r[2])} 度　缩放 ${num('s', P.s, 56)} 倍</div>
       <div class="mdx-pcbar">到这一帧的缓动 <select data-mank-f="e">${MAN_EASE.map(([k, n]) => `<option value="${k}"${e === k ? ' selected' : ''}>${n}</option>`).join('')}</select>
         ${kn ? btn('data-mana="kdel"', '删掉这一帧') : btn('data-mana="kadd"', '在这一刻记关键帧')}${K.length ? btn('data-mana="kclr"', '清空这一组的关键帧') : ''}</div>`;
@@ -194,7 +205,23 @@ function manClick(b) {
   const A = manA(mk);
   if (d.mana) {
     const a = d.mana;
-    if (a === 'demo') { const n = manSplit(mk, 10); MAN.ev = 'fire'; const c = manClip(mk, 'fire', true); c.dur = 3; c.loop = 0; delete c.back; MAN.g = -1; manPreset(mk, 'fire', 'dance'); MAN.t = 0; MDX.keep = true; mdxRender(); manPlay(true); mdxMsg(`拆成了 ${n} 块，开炮时散开跳舞（预览在播）；满意就点「保存」，游戏里这辆车开炮就这么跳`); return true; }
+    if (a === 'demo') {   // 局部动画的示例：按模型自带的部件找出炮管、炮塔，开炮时炮管往后坐、炮口一抬，炮塔跟着一震
+      const nodes = M.nodes || [], find = re => nodes.map((nd, i) => re.test(nd.n) ? i : -1).filter(i => i >= 0), gN = find(/炮管/), tN = find(/炮塔/);
+      if (!gN.length && !tN.length) { mdxMsg('这个模型没有现成的炮管、炮塔部件：先点「在模型上点选」把炮管点出来，「选中的设成一个部件」，再点「后坐」'); return true; }
+      const of = L => { const o = []; if (M.pnd) for (let i = 0; i < M.pn; i++) if (L.includes(M.pnd[i])) o.push(i); return o; }, G0 = [];
+      if (gN.length) G0.push({ nm: '炮管', ids: of(gN) });
+      if (tN.length) G0.push({ nm: '炮塔', ids: of(tN) });
+      manSetGroups(mk, G0);
+      MAN.ev = 'fire'; const c = manClip(mk, 'fire', true); c.dur = 1.2; c.loop = 0; delete c.back; c.tr = {};
+      const A2 = manA(mk), gi = A2.ag.findIndex(g => g.nm === '炮管'), ti = A2.ag.findIndex(g => g.nm === '炮塔');
+      if (gi >= 0) c.tr[gi] = [{ t: .05, p: [-.45, 0, 0], r: [0, -1.5, 0], s: 1, e: 'out' }, { t: .7, p: [0, 0, 0], r: [0, 0, 0], s: 1, e: 'io' }];
+      if (ti >= 0) c.tr[ti] = [{ t: .04, p: [-.06, 0, .02], r: [0, -1.2, 0], s: 1, e: 'out' }, { t: .25, p: [.02, 0, 0], r: [0, .5, 0], s: 1, e: 'io' }, { t: .5, p: [0, 0, 0], r: [0, 0, 0], s: 1, e: 'io' }];
+      MAN.g = gi; MAN.t = 0; MDX.dirty = true; MDX.keep = true; mdxRender(); manPlay(true);
+      mdxMsg('开炮时：炮管往后坐 0.45 米、炮口一抬，炮塔跟着一震（预览在播）。点部件、拖时间轴接着改；别的部件同样点选出来自己做');
+      return true;
+    }
+    if (a === 'pickcp') { MDX.pk = MDX.pk === 'anpv' ? '' : 'anpv'; MDX.keep = true; mdxRender(); if (MDX.pk) mdxMsg('在模型上点一下：转动中心挪到那里'); return true; }
+    if (a === 'cpmid') { const g = (A.ag || [])[MAN.g]; if (g) { const b2 = manGroupBox(M, modIdsDec(g.id), manOff(mk)); if (b2) g.cp = [(b2[0] + b2[3]) / 2, (b2[1] + b2[4]) / 2, (b2[2] + b2[5]) / 2].map(R4); MDX.dirty = true; } }
     if (a === 'split') { const n = manSplit(mk, MAN.n); mdxMsg(`拆成了 ${n} 组`); }
     else if (a === 'bynode') { const L = (M.nodes || []).map((nd, i) => ({ nm: nd.n, ids: [] })); if (M.pnd) for (let i = 0; i < M.pn; i++) if (L[M.pnd[i]]) L[M.pnd[i]].ids.push(i); const G = L.filter(g => g.ids.length).slice(0, 40); manSetGroups(mk, G); mdxMsg(`按部件分成了 ${G.length} 组`); }
     else if (a === 'bysel') { if (!MDX.pc.sel.size) { mdxMsg('先在「部件」那一段点「选部件」，在预览里点选要一起动的块'); return true; } const S0 = new Set(MDX.pc.sel), L = (A.ag || []).map(g => ({ nm: g.nm, ids: modIdsDec(g.id).filter(i => !S0.has(i)) })); L.push({ nm: '组 ' + (L.length + 1), ids: [...S0] }); manSetGroups(mk, L); MAN.g = (manA(mk).ag || []).length - 1; mdxMsg('选中的 ' + S0.size + ' 块设成了一组'); }
@@ -221,12 +248,19 @@ function manChange(t, live) {
     const f = d.manf;
     if (f === 'n') { MAN.n = clamp(Math.round(+t.value || 10), 2, 60); return true; }
     if (f === 'amp') { MAN.amp = clamp(+t.value || 1, .2, 4); return true; }
+    if (f === 'ax') { MAN.ax = t.value; return true; }
     if (live) return true;
     const c = manClip(mk, MAN.ev, true);
     if (f === 'dur') { const v = +t.value; if (v > 0) { const k = v / (+c.dur || v); c.dur = v; for (const gi in c.tr) for (const q of c.tr[gi]) q.t = +(q.t * k).toFixed(3); } }   // 改时长：关键帧按比例跟着伸缩
     else if (f === 'loop') c.loop = t.checked ? 1 : 0;
     else if (f === 'back') { if (t.checked) delete c.back; else c.back = false; }
     MDX.dirty = true; MDX.keep = true; mdxRender(); manPose(mk, MAN.t);
+    return true;
+  }
+  if (d.manc != null) {   // 转动中心
+    if (live) return true;
+    const g = (manA(mk).ag || [])[MAN.g], v = +t.value;
+    if (g && isFinite(v)) { g.cp = (g.cp || [0, 0, 0]).slice(); g.cp[+d.manc] = v; MDX.dirty = true; MDX.keep = true; mdxRender(); manPose(mk, MAN.t); }
     return true;
   }
   if (d.mant) { MAN.t = Math.max(0, +t.value || 0); if (MAN.play) manPlay(false); manPose(mk, MAN.t); manBar(); if (!live) { MDX.keep = true; mdxRender(); } return true; }
@@ -275,8 +309,8 @@ if (typeof mdxBuild === 'function') {
       if ((b.dataset.mana || b.dataset.manpre) && typeof muxBefore === 'function') muxBefore(false);   // 改数据的记撤销（modux.js）
       if (manClick(b)) e.stopPropagation();
     }, true);
-    el.addEventListener('input', e => { const t = e.target; if (MDX.tab === 'mdl' && (t.dataset.manf || t.dataset.mant || t.dataset.mankF) && manChange(t, true)) e.stopPropagation(); }, true);
-    el.addEventListener('change', e => { const t = e.target; if (MDX.tab === 'mdl' && (t.dataset.manf || t.dataset.mant || t.dataset.mankF)) { if (typeof muxBefore === 'function' && !t.dataset.mant) muxBefore(false); if (manChange(t, false)) e.stopPropagation(); } }, true);
+    el.addEventListener('input', e => { const t = e.target; if (MDX.tab === 'mdl' && (t.dataset.manf || t.dataset.mant || t.dataset.mankF || t.dataset.manc != null) && manChange(t, true)) e.stopPropagation(); }, true);
+    el.addEventListener('change', e => { const t = e.target; if (MDX.tab === 'mdl' && (t.dataset.manf || t.dataset.mant || t.dataset.mankF || t.dataset.manc != null)) { if (typeof muxBefore === 'function' && !t.dataset.mant) muxBefore(false); if (manChange(t, false)) e.stopPropagation(); } }, true);
     return el;
   };
 }
@@ -287,6 +321,28 @@ if (typeof mdxRender === 'function') {
     const k0 = MAN.key, out = r0.apply(this, arguments);
     if (!listOnly && (MDX.tab !== 'mdl' || MDX.sel !== k0)) { MAN.play = false; manRestore(); }
     else if (!listOnly && MAN.posed && !MAN.play) manPose(MDX.sel, MAN.t);
+    return out;
+  };
+}
+
+// 在模型上点转动中心（点选模式 anpv）；预览上标出选中部件的转动中心
+if (typeof mdxOnPick === 'function') {
+  const o0 = mdxOnPick;
+  mdxOnPick = function (h) {
+    if (MDX.pk === 'anpv') {
+      const mk = MDX.sel, g = (manA(mk).ag || [])[MAN.g], p = (MDX.pc && MDX.pc.snap && h.vp ? h.vp : h.p).map(R4);
+      if (g) { g.cp = p; MDX.dirty = true; }
+      MDX.pk = ''; MDX.keep = true; mdxRender(); manPose(mk, MAN.t); mdxMsg('转动中心挪到了（' + p.join(', ') + '）');
+      return;
+    }
+    return o0.apply(this, arguments);
+  };
+}
+if (typeof mdxMarks === 'function') {
+  const k0 = mdxMarks;
+  mdxMarks = function () {
+    const out = k0.apply(this, arguments), g = MDX.tab === 'mdl' && MDX.sel ? (manA(MDX.sel).ag || [])[MAN.g] : null;
+    if (g && Array.isArray(g.cp)) out.push({ p: g.cp, c: '#ffffff', t: '转动中心', r: 6 });
     return out;
   };
 }
