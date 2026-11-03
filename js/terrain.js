@@ -415,7 +415,7 @@ function terLines() {
   for (const rv of TER.rivers || []) {
     const top = rv.top, X = gy => rv.rx[clamp(gy, 0, GH - 1)];
     for (let j = 0; j < h; j++) {
-      const y = (j + .5) * px, g = (y - 5) / CELL, g0 = Math.floor(g), f = g - g0, a = X(g0), b = X(g0 + 1);
+      const y = (j + .5) * px, g = (y - CELL / 2) / CELL, g0 = Math.floor(g), f = g - g0, a = X(g0), b = X(g0 + 1);
       if (a < -1e8 || b < -1e8 || y < top) continue;
       const cx = a + (b - a) * f, cy = coastAt(cx);
       if (y > cy + 10) continue;   // 河道到海岸线为止（中心线在海里一直延伸到图边，以前海面上留着一道河形的直线）

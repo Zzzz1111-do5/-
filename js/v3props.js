@@ -382,7 +382,7 @@ function v3pStatic(vOf) {
   const hr = rng(TER.seed + 913);
   // 据点房屋占的地方（城镇里的指挥所）：这里的普通民房不放，免得叠在一起
   const ptR = [];
-  if (typeof V3_PTHOUSE === 'object') for (const p of (typeof S === 'object' && S && S.points) || []) { const L = V3_PTHOUSE[typeof PKIND === 'function' ? PKIND(p.key) : '']; if (L) for (const [hx, hy, w, h] of L) ptR.push([p.x + hx - w / 2 - 2, p.y + hy - h / 2 - 2, p.x + hx + w / 2 + 2, p.y + hy + h / 2 + 2]); }
+  if (typeof V3_PTHOUSE === 'object' && !TER.tw) for (const p of (typeof S === 'object' && S && S.points) || []) { const L = V3_PTHOUSE[typeof PKIND === 'function' ? PKIND(p.key) : '']; if (L) for (const [hx, hy, w, h] of L) ptR.push([p.x + hx - w / 2 - 2, p.y + hy - h / 2 - 2, p.x + hx + w / 2 + 2, p.y + hy + h / 2 + 2]); }
   if (hv.length && fv.length) for (const b of B) {
     const fw = (b.r ? b.h : b.w) + 1, fh = (b.r ? b.w : b.h) + 1, cx = b.x + b.dx, cy = b.y + b.dy, gx = Math.floor(b.x / CELL), gy = Math.floor(b.y / CELL);
     if (ptR.some(r => cx + fw / 2 > r[0] && cx - fw / 2 < r[2] && cy + fh / 2 > r[1] && cy - fh / 2 < r[3])) continue;
@@ -402,7 +402,7 @@ function v3pStatic(vOf) {
   }
   if (hv.length && fv.length) V3P.rep.add('town');
   // 据点里的房屋（指挥所、雷达站、炮兵排的平房，哨所，渔村的坡顶房）：按占地放水泥楼 / 民房模型，整体缩放（不压扁），朝向随机转 180°
-  if (hv.length && fv.length && typeof V3_PTHOUSE === 'object') for (const p of (typeof S === 'object' && S && S.points) || []) {
+  if (hv.length && fv.length && typeof V3_PTHOUSE === 'object' && !TER.tw) for (const p of (typeof S === 'object' && S && S.points) || []) {
     const k = typeof PKIND === 'function' ? PKIND(p.key) : null, L = V3_PTHOUSE[k];
     if (!L) continue;
     for (const [hx, hy, w, h, , roof] of L) {

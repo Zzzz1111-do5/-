@@ -108,7 +108,7 @@ function lvStart(n) {
   if (typeof mnHide === 'function') mnHide();
   if (typeof MENU === 'object') { MENU.pausedBy = false; MENU.game = true; MENU.last = 'lvl'; }
   if (typeof U === 'object') U.level = L.lv;
-  openSandbox(L.seed);
+  openSandbox(L.seed, false, 'std');   // 闯关按程序生成的海岸登陆地图设计（不用台湾东海岸）
   S.level = L.lv;
   S.lv = { n: L.n, kind: L.kind, nm: L.nm, ch: L.ch };
   S.sbx.budget = { p: L.p, e: L.eB || 30000 };

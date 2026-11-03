@@ -21,9 +21,12 @@ const ROLE_NAME = { radio: '通讯兵', rifle: '步枪手', mg: '机枪手', eng
 function newGame(seed, level, opts = {}) {
   level = DIFF[level] ? level : 'hard';
   seed = seed || (Math.random() * 1e9) | 0;
+  if (!opts.map && !opts.sandbox && MAPGEN.tw) opts = { ...opts, map: 'tw' };   // 战役默认在台湾东海岸打（taiwan.js；商店版没有这张图就照旧）
   const MG = opts.map && MAPGEN[opts.map];   // 另外的地图（各自登记尺寸与生成函数，见 core.js MAPGEN）
-  if (MG) { setWorld(MG.w, MG.h); MG.build(seed); }
+  if (MG) { setWorld(MG.w, MG.h, MG.cell || 10); MG.build(seed); }
   else { setWorld(W0, H0); setPathRows(GH); buildMap(seed); }
+  ELEV_H = TER.hz ? TER.hz / CELL : 6;   // 真实地形（台湾东海岸）：视线高度按真实米数换成格
+  if (typeof v3SetHz === 'function') v3SetHz(TER.hz || 230);   // 3D 里高程 1.0 是多少米（view3d.js）
   const r = rng(seed ^ 0x5f3759df);
   S = {
     seed, level, map: MG ? opts.map : 'std', mode: opts.mode || (opts.sandbox ? 'sandbox' : 'pve'), role: opts.role || 'attack', t: 0, paused: true, speed: 1, nid: 1, over: null, briefed: false, holdT: 0, ai: null, phase: 'deploy', units: [], craters: [], pings: [],
