@@ -72,7 +72,7 @@ async function stepUi(b) {
 
 // 闯关「困难」开局（固定地图），攻守双方都交给 AI，推演 t 秒；返回取景点：登陆部队最密的一团、舰队、航母
 async function battle(p, t) {
-  await p.evaluate(SEED => { __seed(7); const ng = newGame; window.newGame = (s, l, o) => ng(SEED, l, o); try { startPvE('hard'); } finally { window.newGame = ng; } }, SEED);
+  await p.evaluate(SEED => { __seed(7); const ng = newGame; window.newGame = (s, l, o) => ng(SEED, l, { ...(o || {}), map: 'std' }); try { startPvE('hard'); } finally { window.newGame = ng; } }, SEED);   // 程序生成的地图（台湾东海岸的模型只许非商用，商店素材、宣传片不用）
   await sleep(500);
   await p.evaluate(() => { if (!$('brief').hidden) $('btnBrief').click(); }); await sleep(800);
   await p.evaluate(() => {

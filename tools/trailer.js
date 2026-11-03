@@ -1,12 +1,13 @@
 // 宣传片（66 秒，1080p）：跟着游戏自己的进行曲剪——固定 120 拍、一小节 2 秒，换幕和切镜头都在重拍上
-//   开场（氛围乐）桌上的兵推沙盘 → 第一幕 先夺制海权（航母、舰队、空袭岸防）→ 第二幕 再强行登陆（抢滩、滩头交火）
-//   → 第三幕 向纵深推进（纵深激战、战线、AI 指挥官通联）→ 内容一览（图鉴、闯关、部署）→ 高潮 → 片尾标志（胜利号角）
+//   开场 海上低空看向满天云的海岸 → 第一幕 先夺制海权（航母、舰队、空袭岸防、战斗机追拍）→ 第二幕 再强行登陆（抢滩、滩头交火）
+//   → 第三幕 向纵深推进（纵深激战、战线）→ 编辑器（坦克开炮时拆成碎片跳舞、导弹尾烟设计）、图鉴、部署 → 高潮 → 片尾标志（胜利号角）
 // 画面：同一局（固定地图与随机数）逐帧推演、逐帧截图。推演和画面的随机数分开存：画画用掉的随机数不影响战局，
 //   所以先不画画「侦察」一遍，记下每个时刻爆炸落在哪、部队在哪，再正式渲染时镜头就能对准，每次生成都一样
+//   地图用程序生成的（store_assets.js battle：台湾东海岸的地形模型只许非商用，宣传片不用）
 // 声音：渲染时让游戏自己的音效系统按每一帧的镜头判断该响什么（声像、远近），只记下来；录音时按剪辑时间线回放，叠在进行曲上
 // 用法：NODE_PATH=$(npm root -g) node tools/trailer.js [输出目录，默认 store/video] [步骤，默认 shots,audio,edit]
-//   需要 Playwright 与 ffmpeg；没有显卡的机器上约一个半小时（逐帧渲染占大半）；输出 trailer_1080p.mp4（不进仓库）
-//   调试：ONLY=A,B 只渲染这几个镜头，FROM=30 FRAMES=8 每个镜头只渲染从第 30 帧起的 8 帧（不推演跳过的帧），SCOUT=reuse 用上次的侦察结果
+//   需要 Playwright 与 ffmpeg；没有显卡的机器上要一两个小时（逐帧渲染占大半）；输出 trailer_1080p.mp4（不进仓库）
+//   调试：ONLY=A,B 只渲染这几个镜头，FROM=30 FRAMES=8 每个镜头只渲染从第 30 帧起的 8 帧（不推演跳过的帧），SCOUT=reuse 用上次的侦察结果；W=1280 H=720 改分辨率
 'use strict';
 const { chromium } = require('playwright');
 const fs = require('fs'), path = require('path'), { execFileSync } = require('child_process');
@@ -22,23 +23,23 @@ const lerp = (a, b, u) => a + (b - a) * u, ease = u => u * u * (3 - 2 * u), clam
 //   fire 真实爆炸放大一些、隔几帧在旁边再炸一团——S.fx 在推演里只计时、清理，不影响战局）
 const C = (kick, title, sub, at, out, pos) => ({ kick, title, sub, at, out, pos: pos || 'left' });
 const SHOTS = [
-  { id: 'A', at: 0, dur: 6, T: 24, tg: 'table', cam: [[12500, -1.5708, -1.18], [7200, -1.42, -0.92]], card: C('COMMAND POST // SANDTABLE', '一张兵推沙盘', '一场完整的两栖登陆战', 1.2, 5.3), fadeIn: .9 },
+  { id: 'A', at: 0, dur: 6, T: 24, tg: 'fleet', ahead: 900, cam: [[2600, -1.36, -0.07], [1900, -1.30, -0.11]], card: C('DARKSWORD // AMPHIBIOUS WARFARE', '一场完整的两栖登陆战', '海 · 空 · 陆　实时推演', 1.2, 5.3), fadeIn: .9 },
   { id: 'B', at: 6, dur: 4, T: 36, tg: 'cv', cam: [[460, -2.3, -0.30], [330, -1.75, -0.22]], card: C('PHASE 01 // SEA CONTROL', '先夺制海权', '航母舰载机 · 驱逐舰 · 战区航空兵', .15, 3.7), flash: true },
   { id: 'D', at: 14, dur: 4, T: 102, tg: 'boom', fire: true, cam: [[820, -1.32, -0.44], [640, -1.18, -0.40]] },
   { id: 'C', at: 10, dur: 4, T: 150, tg: 'ships', ahead: 250, cam: [[760, -1.62, -0.17], [560, -1.50, -0.20]] },
-  { id: 'E', at: 18, dur: 4, T: 188, tg: 'fleet', hud: true, cam: [[2600, -1.48, -0.78], [2150, -1.36, -0.72]] },
+  { id: 'E', at: 18, dur: 4, T: 188, tg: 'plane', cam: [[70, 0.55, -0.12], [52, 0.25, -0.08]] },
   { id: 'F', at: 22, dur: 4, T: 200, tg: 'landing', cam: [[520, -1.75, -0.20], [380, -1.55, -0.25]], card: C('PHASE 02 // ASSAULT', '再强行登陆', '抢滩，夺取登陆场', .15, 3.7), flash: true },
   { id: 'G', at: 26, dur: 4, T: 232, tg: 'boom', fire: true, cam: [[420, -0.95, -0.34], [330, -1.35, -0.36]] },
   { id: 'H', at: 30, dur: 4, T: 275, tg: 'boom', fire: true, cam: [[460, -1.95, -0.30], [360, -1.65, -0.28]] },
-  { id: 'I', at: 34, dur: 4, T: 300, tg: 'land', hud: true, cam: [[1300, -1.2, -0.62], [1080, -1.05, -0.58]] },
-  { id: 'J', at: 38, dur: 4, T: 358, tg: 'boom', fire: true, cam: [[430, -1.38, -0.36], [340, -1.08, -0.33]], card: C('PHASE 03 // DEPTH', '向纵深推进', '战区 → 师 → 团 → 营 逐级指挥', .15, 3.7), flash: true },
+  { id: 'I', at: 34, dur: 4, T: 300, tg: 'land', cam: [[560, -1.25, -0.22], [420, -1.0, -0.20]] },
+  { id: 'J', at: 38, dur: 4, T: 358, tg: 'boom', fire: true, cam: [[430, -1.38, -0.36], [340, -1.08, -0.33]], card: C('PHASE 03 // DEPTH', '向纵深推进', '战区 → 师 → 团 → 营　逐级指挥', .15, 3.7), flash: true },
   { id: 'K', at: 42, dur: 4, T: 398, tg: 'land', hud: true, cam: [[3300, -1.5708, -1.02], [2700, -1.5708, -0.88]] },
-  { id: 'L', at: 46, dur: 4, T: 410, tg: 'land', hud: true, chat: true, cam: [[1250, -1.0, -0.55], [1050, -1.2, -0.55]], card: C('AI COMMANDERS', '会打仗的 AI', '按条令打仗，还会在通联里跟你汇报', .2, 3.8, 'mid') },
   { id: 'N', at: 54, dur: 4, T: 380, tg: 'boom', fire: true, cam: [[400, -1.18, -0.24], [300, -1.36, -0.27]], flash: true, booms: [0, .5, 1, 1.5, 2, 2.25, 2.5, 2.75, 3, 3.25, 3.5] },
   { id: 'O', at: 58, dur: 8, T: 428, tg: 'land', end: true },
-  // 内容一览：最后拍（会换掉战局）
-  { id: 'M1', at: 50, dur: 4 / 3, ui: 'codex', card: C('ORDER OF BATTLE', '156 种兵力', '', .05, 1.3, 'low') },
-  { id: 'M2', at: 50 + 4 / 3, dur: 4 / 3, ui: 'campaign', card: C('CAMPAIGN', '三章十关', '', .05, 1.3, 'low') },
+  // 编辑器、内容一览：最后拍（编辑器只是盖在上面；部署会换掉战局，放最后）
+  { id: 'L', at: 46, dur: 4, ui: 'eanim', card: C('EDITOR // DESIGN ANYTHING', '想怎么设计就怎么设计', '参数 · 模型 · 部件 · 动画 · 特效', .2, 3.8, 'low') },
+  { id: 'M2', at: 50 + 4 / 3, dur: 4 / 3, ui: 'etrail', card: C('MISSILE TRAILS', '尾烟、尾焰自己设计', '', .05, 1.3, 'low') },
+  { id: 'M1', at: 50, dur: 4 / 3, ui: 'codex', card: C('ORDER OF BATTLE', '一百多种兵力', '', .05, 1.3, 'low') },
   { id: 'M3', at: 50 + 8 / 3, dur: 4 / 3, ui: 'deploy', card: C('SANDBOX', '自由部署 · 攻守对抗', '', .05, 1.3, 'low') }
 ];
 
@@ -93,7 +94,7 @@ async function scout(b) {
     while (S.t < last && !S.over) {
       step(1 / 30); i++;
       for (const f of S.fx) if (f.kind === 'boom' && !seen.has(f)) { seen.add(f); booms.push([S.t, f.x, f.y, f.r]); }
-      if (i % 15 === 0) samp.push({ t: S.t, land: window.__land(), fleet: avg(S.ships.filter(s => !s.dead)), cv: S.cv && !S.cv.dead ? [S.cv.x, S.cv.y] : null });
+      if (i % 15 === 0) samp.push({ t: S.t, land: window.__land(), fleet: avg(S.ships.filter(s => !s.dead)), cv: S.cv && !S.cv.dead ? [S.cv.x, S.cv.y] : null, pl: (S.planes || []).filter(p => !p.dead && p.phase === 'out' && (p.alt ?? 1) > .12).length });
     }
     return { samp, booms };
   }, last);
@@ -106,7 +107,7 @@ async function scoutSaved(b) {
   fs.writeFileSync(path.join(OUT, 'trailer_scout.json'), JSON.stringify(sc));
   for (let t = 0; t < sc.samp[sc.samp.length - 1].t; t += 10) {   // 每 10 秒：爆炸数、中心、登陆部队位置——选镜头时间时看
     const B = sc.booms.filter(q => q[0] >= t && q[0] < t + 10), s = sc.samp.find(q => q.t >= t + 9.9);
-    console.log(`${String(t).padStart(3)}–${t + 10} 秒：爆炸 ${String(B.length).padStart(2)}${B.length ? ' 在 ' + [B.reduce((a, q) => a + q[1], 0) / B.length, B.reduce((a, q) => a + q[2], 0) / B.length].map(Math.round) : ''}；登陆部队 ${s && s.land ? s.land.map(Math.round) : '-'}；舰队 ${s && s.fleet ? s.fleet.map(Math.round) : '-'}`);
+    console.log(`${String(t).padStart(3)}–${t + 10} 秒：空中 ${s ? s.pl ?? '-' : '-'} 架，爆炸 ${String(B.length).padStart(2)}${B.length ? ' 在 ' + [B.reduce((a, q) => a + q[1], 0) / B.length, B.reduce((a, q) => a + q[2], 0) / B.length].map(Math.round) : ''}；登陆部队 ${s && s.land ? s.land.map(Math.round) : '-'}；舰队 ${s && s.fleet ? s.fleet.map(Math.round) : '-'}`);
   }
   return sc;
 }
@@ -124,6 +125,13 @@ const PAGE_FNS = () => {
     return avg(window.__grp.filter(s => !s.dead));
   };
   window.__cvp = () => S.cv && !S.cv.dead ? [S.cv.x, S.cv.y] : window.__fleet();
+  window.__plane = () => {   // 追拍的战斗机：在空中飞的（开拍时挑一架，之后一直跟着它）
+    const L = (S.planes || []).filter(p => !p.dead && isFinite(p.x) && p.phase === 'out' && (p.alt ?? 1) > .12);
+    if (!L.length) return null;
+    let o = L.find(p => p.id === window.__plId);
+    if (!o) { o = L.reduce((a, p) => !a || (p.spd || 0) > (a.spd || 0) ? p : a, null); window.__plId = o.id; }
+    return { x: o.x, y: o.y, z: v3AirZ(o), h: o.heading || 0 };
+  };
 };
 
 // 本镜头的固定取景点（boom、landing 用侦察记录；其余逐帧跟着走）
@@ -212,7 +220,10 @@ async function stepShots(b) {
         }
         window.__st = sh.at + t;
         window.__ss = __rng(); __seed(window.__rs);   // 画面用画面的随机数
-        if (cam) { V3.tin = null; const cp = Math.cos(cam.pitch); Object.assign(V3.fc, { x: cam.tg[0] - Math.cos(cam.yaw) * cp * cam.d, y: cam.tg[1] - Math.sin(cam.yaw) * cp * cam.d, z: v3Ht(cam.tg[0], cam.tg[1]) - Math.sin(cam.pitch) * cam.d, yaw: cam.yaw, pitch: cam.pitch, yawT: cam.yaw, pitchT: cam.pitch, cx: null, cy: null }); }
+        if (cam && cam.live === 'plane') { const P = window.__plane(); if (P) { cam.tg = [P.x, P.y]; cam.tz = P.z; cam.yaw = P.h + cam.yo; } }
+        if (sh.ui === 'eanim') { MAN.t = (t * 1.05) % 3; manPose('ztz99', MAN.t); MIV.yaw = 1.9 + t * .32; mivDraw(); }   // 编辑器：坦克开炮时拆成 10 块跳舞（预览按帧驱动，动画循环被接管了）
+        if (sh.ui === 'etrail' && typeof mfxTick === 'function') mfxTick(window.__vt);   // 导弹尾烟设计：预览、预设卡片按帧动
+        if (cam) { V3.tin = null; const cp = Math.cos(cam.pitch); Object.assign(V3.fc, { x: cam.tg[0] - Math.cos(cam.yaw) * cp * cam.d, y: cam.tg[1] - Math.sin(cam.yaw) * cp * cam.d, z: (cam.tz ?? v3Ht(cam.tg[0], cam.tg[1])) - Math.sin(cam.pitch) * cam.d, yaw: cam.yaw, pitch: cam.pitch, yawT: cam.yaw, pitchT: cam.pitch, cx: null, cy: null }); }
         if (sh.ui === 'codex' && i >= f0 && i % 10 === 0) {   // 图鉴：隔 10 帧换一个有代表性的兵种
           const cs = [...document.querySelectorAll('#cdx .cdx-card')], pick = ['055 型驱逐舰', '歼-20', '福建舰', 'ZTD-05', '东风-15B', '轰-6K'].map(k => cs.find(e => e.textContent.includes(k))).filter(Boolean), c = pick[(i / 10) % pick.length | 0];
           if (c) { c.click(); c.scrollIntoView({ block: 'nearest' }); }
@@ -264,6 +275,12 @@ async function shotCam(p, sh, u, fixed, cur, geo, mem) {
     const v = ease(clamp(u / .55, 0, 1)), a = mem.start;
     return { tg: [lerp(a[0], geo.W / 2, v), lerp(a[1], geo.H / 2 + 300, v)], d: Math.exp(lerp(Math.log(600), Math.log(10500), v)), yaw: lerp(-1.3, -1.5708, v), pitch: lerp(-0.45, -1.08, v) };
   }
+  if (sh.tg === 'plane') {   // 战斗机追拍：机尾后方、侧一点；对准点在推演那两步之后再取（飞得快，不然飞机跑到画面前头）
+    const P = await p.evaluate(() => window.__plane());
+    if (P) { const e = ease(u), [a, b] = sh.cam, yo = lerp(a[1], b[1], e); return { tg: [P.x, P.y], tz: P.z, d: lerp(a[0], b[0], e), yaw: P.h + yo, yo, pitch: lerp(a[2], b[2], e), live: 'plane' }; }
+    const F = await p.evaluate(() => window.__fleet()) || [geo.W / 2, geo.H / 2];   // 天上没飞机：拍舰队
+    return { tg: F, d: 2400, yaw: -1.45, pitch: -0.72 };
+  }
   let tg = fixed;
   if (!tg) {
     const live = await p.evaluate(([k, first]) => k === 'cv' ? window.__cvp() : k === 'fleet' ? window.__fleet() : k === 'ships' ? window.__ships(first) : window.__land(), [sh.tg, !cur]) || cur || [geo.W / 2, geo.H / 2];
@@ -276,8 +293,28 @@ async function shotCam(p, sh, u, fixed, cur, geo, mem) {
 
 // 内容一览：图鉴（隔几帧换一个兵种）、闯关列表、闯关部署（AI 帮我部署，看部署好的舰队与对岸）
 async function uiSetup(p, sh) {
+  if (sh.ui === 'eanim' || sh.ui === 'etrail') {   // 编辑器：开着它拍（盖在暂停的战局上）
+    await p.evaluate(k => {
+      document.body.classList.remove('trClean');
+      if (!MDX.el || MDX.el.hidden) openModEditor();
+      MDX.dirty = false; MDX.q = ''; MDX.pk = '';
+      if (k === 'eanim') { MDX.tab = 'mdl'; MDX.sel = 'ztz99'; } else { MDX.tab = 'trl'; MDX.sel = 'pl15'; MDX_W.trl.pl15 = { ...MFX_PRE[1][1] }; }
+      mdxRender();
+    }, sh.ui);
+    if (sh.ui === 'eanim') {
+      await p.waitForFunction(() => MIV.M && MIV.M.bi && MIV.key === 'ztz99' && document.querySelector('#mdx [data-mana="demo"]'), null, { timeout: 120000, polling: 500 });
+      await p.evaluate(() => {
+        manSplit('ztz99', 10); MAN.ev = 'fire'; const c = manClip('ztz99', 'fire', true); c.dur = 3; c.loop = 0; delete c.back; MAN.g = -1;
+        manPreset('ztz99', 'fire', 'dance'); MAN.play = false; MAN.t = 0; MDX.pc.sel.clear(); MDX.keep = true; mdxRender();
+        MIV.pit = .3; const b = MIV.M.m.bb; MIV.dist = Math.hypot(b[3] - b[0], b[4] - b[1], b[5] - b[2]) * 1.55; mivDraw();
+      });
+    }
+    await sleep(800);
+    return;
+  }
   await p.evaluate(k => {
     document.body.classList.remove('trClean');
+    if (MDX && MDX.el && !MDX.el.hidden) { MDX.dirty = false; closeModEditor(); }   // 编辑器拍完：关掉（没保存的不存）
     if (k === 'codex') { showMenu(); openCodex(); }
     if (k === 'campaign') { if (typeof closeCodex === 'function') closeCodex(); const cx = document.getElementById('cdx'); if (cx) cx.hidden = true; if (typeof lyPop === 'function' && cx) lyPop(cx); mnAct('pve'); }
     if (k === 'deploy') { lvClose(); lvStart(4); const a = document.querySelector('#sbxPanel [data-act="ai"]'); if (a) a.click(); }
