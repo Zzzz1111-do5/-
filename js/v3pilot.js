@@ -366,8 +366,8 @@ function fpFly(p, dt) {
       const B = fpBody(p); V3FP.aim = [Math.atan2(-B.f[1], B.f[0]), Math.asin(clamp(B.f[2], -1, 1))];
     } else { x = S0.x; y = S0.y; r = Math.abs(mr) > .02 ? fpCurve(mr) : S0.r; }
   }
-  // 离开作战区域（地图外 1.5 公里；海岛这种四周是无边海面的 5 公里）：自动驾驶转回来（压坡度对准地图中心、带一点杆），瞄准方向也跟着转过去
-  const mg = V3.ocean ? 5000 : 1500;
+  // 离开作战区域（地图外 3 公里；默认地图、海岛这种外面铺着无边海面的 20 公里——用户：战场区域太小，战斗机一个转弯就飞出去被拉回来）：自动驾驶转回来（压坡度对准地图中心、带一点杆），瞄准方向也跟着转过去
+  const mg = V3.ocean ? 20000 : 3000;
   V3FP.ap = p.x < -mg || p.x > W + mg || p.y < -mg || p.y > H + Math.max(mg, typeof afpOn === 'function' && afpOn() ? AFP.off + 2500 : 0);   // 南边让出战区机场（afp.js）一带
   if (V3FP.ap) {   // 交给教官：准星对着地图中心、低了往上抬一点（原来直接压大坡度拉杆，掉头时升力不够，螺旋往下掉、撞了山）
     const agl = -F.P[2] - flGround(F.P[0], F.P[1]);
@@ -526,7 +526,9 @@ function fpAxes(P) {
 // 投影矩阵（近裁剪面 n、雾的尺度 D）
 function fpProj(E, x, y, z, D, n, fov = fpFov()) {   // fov：视野（追尾镜头按速度略放宽、吊舱按变焦，fpFov）
   const view = new Float32Array([x[0], y[0], z[0], 0, x[1], y[1], z[1], 0, x[2], y[2], z[2], 0, -v3Dot(x, E), -v3Dot(y, E), -v3Dot(z, E), 1]);
-  const rd = v3RD(), fog = [D * 1.3 * rd, D * 2.8 * rd], asp = CAM.vw / Math.max(1, CAM.vh), fo = 1 / Math.tan(fov / 2), fa = Math.max(D * 9, fog[1] * 1.5), nf = 1 / (n - fa);
+  // 远裁剪面：雾的尽头再外一点就够了（雾后面什么都看不见）——原来取 9 倍镜头尺度，和很近的近裁剪面一除，远处的深度精度只剩十几米，
+  //   地面、道路、海岸、海面这些贴得很近的层互相打架闪烁（用户：飞得快时有马赛克、贴图冲突——速度快镜头拉高、看得更远，更明显）
+  const rd = v3RD(), fog = [D * 1.3 * rd, D * 2.8 * rd], asp = CAM.vw / Math.max(1, CAM.vh), fo = 1 / Math.tan(fov / 2), fa = Math.max(D * 4, fog[1] * 1.3), nf = 1 / (n - fa);
   const proj = new Float32Array([fo / asp, 0, 0, 0, 0, fo, 0, 0, 0, 0, (fa + n) * nf, -1, 0, 0, 2 * fa * n * nf, 0]);
   return (V3.cam = { E, x, y, z, D, rd, fog, asp, M: v3Mul(proj, view) });
 }
@@ -687,7 +689,7 @@ function fpChaseCam(P) {
   if (E[2] < g + 3) E[2] = g + 3;   // 不钻到地面以下
   const z = [-f[0], -f[1], -f[2]], x = v3Norm(v3Cross(u, z)), y = v3Cross(z, x), alt = Math.max(1, E[2] - Math.max(g, -2.6));
   V3FP.camF = f;
-  return fpProj(E, x, y, z, clamp(Math.max(alt * 5, d * 6), 520, 2600), clamp(d * .015, .4, 8));   // 视野按 fpFov（速度感放宽、吊舱变焦）
+  return fpProj(E, x, y, z, clamp(Math.max(alt * 5, d * 6), 520, 2600), clamp(d * .2, 1.5, 40));   // 视野按 fpFov（速度感放宽、吊舱变焦）；近裁剪面取镜头离飞机距离的两成（飞机最近的部分也在十几米外）：深度精度高十几倍
 }
 // 模型键（v3g.js V3G_AIR）与模型在世界里的变换（挂点、炮口位置用）
 const fpMdlKey = o => (typeof V3G_AIR === 'object' && typeof airSilKey === 'function' && V3G_AIR[airSilKey(o.kind, o.v)]) || 'j31';

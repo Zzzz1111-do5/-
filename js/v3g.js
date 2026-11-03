@@ -1058,7 +1058,10 @@ const V3G_GEAR = {
     { x: -1.9, y: 1.6, r: .47, w: .29, n: 1, br: 1, door: [1.5, .6] }] },
   y20: { lift: .5, legs: [{ x: 17.6, y: 0, r: .5, w: .32, n: 2, br: -1, door: [2.2, .7] },   // 运-20：全高 15 米（模型 14.5）；前起落架双轮，主起落架每侧三根轴、每轴双轮，收在机身两侧的整流罩里
     { x: 1.7, y: 2.35, r: .62, w: .38, n: 2 }, { x: 0, y: 2.35, r: .62, w: .38, n: 2 }, { x: -1.7, y: 2.35, r: .62, w: .38, n: 2 }] },
-  rq4: { lift: .55, legs: [{ x: 4.6, y: 0, r: .26, w: .14, n: 1, br: -1 }, { x: -.6, y: 1.25, r: .3, w: .16, n: 1, br: 1 }] }   // RQ-4：全高约 4.7 米（模型 4.1），三点式单轮
+  rq4: { lift: .55, legs: [{ x: 4.6, y: 0, r: .26, w: .14, n: 1, br: -1 }, { x: -.6, y: 1.25, r: .3, w: .16, n: 1, br: 1 }] },   // RQ-4：全高约 4.7 米（模型 4.1），三点式单轮
+  // 歼-16（苏-30 系，用户：很多飞机没有轮子——模型本身没放起落架）：全高 6.36 米（模型 4.75）；前起落架双轮 620 × 180 毫米，主起落架单个大轮 1030 × 350 毫米、
+  //   轮距 4.34 米、前后轮距 5.88 米，主轮在发动机舱外侧的翼根下。shift：歼-16 的挂点（fpwpn.js FW_ST.j16）、喷口调节片轴心（V3G_PIT.j16.pet.c）是按没抬高的模型量的，跟着抬
+  j16: { lift: 1.6, shift: 1, legs: [{ x: 4.85, y: 0, r: .31, w: .18, n: 2, br: -1, door: [1.4, .5] }, { x: -1.03, y: 2.17, r: .52, w: .35, n: 1, br: 1, door: [1.8, .7] }] }
 };
 // 竖线 (x, y) 和第 0 级网格（不算部件）交点里最低的高——起落架支柱顶端插进去的机腹蒙皮；打不到返回 null
 function v3gRayZ(m, VB, IB, x, y) {
@@ -1085,6 +1088,12 @@ function v3gGear(cf, m, VB, IB) {
   m.bb = [m.bb[0], m.bb[1], 0, m.bb[3], m.bb[4], m.bb[5] + L]; m.zc += L;
   for (const P of m.parts || []) for (const k of ['p', 'q', 'q3']) if (P[k]) P[k] = [P[k][0], P[k][1], P[k][2] + L];
   if (m.noz) m.noz = m.noz.map(n => [n[0], n[1], n[2] + L, ...n.slice(3)]);
+  if (cf.shift && !cf.shifted) {   // 按没抬高的模型量的坐标跟着抬（只做一次：配置表是全局的）
+    cf.shifted = 1;
+    const key = Object.keys(V3G_GEAR).find(k => V3G_GEAR[k] === cf), T = typeof FW_ST === 'object' && FW_ST[key], P = V3G_PIT[key];
+    if (T) for (const k in T) if (Array.isArray(T[k])) T[k] = T[k].map(v => Array.isArray(v) && v.length >= 3 ? [v[0], v[1], v[2] + L, ...v.slice(3)] : v);
+    if (P && P.pet && P.pet.c) P.pet.c = P.pet.c.map(c => [c[0], c[1] + L]);
+  }
   // 2）起落架的几何：每个面各用各的顶点（法线按面 / 按圆周），三种材质——轮胎黑、支柱和轮毂浅灰金属、舱门灰
   const add = [], G = { tire: [], metal: [], door: [] };
   const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]], sc = (a, k) => [a[0] * k, a[1] * k, a[2] * k], ad = (...v) => v.reduce((o, q) => [o[0] + q[0], o[1] + q[1], o[2] + q[2]], [0, 0, 0]);

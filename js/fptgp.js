@@ -3,7 +3,8 @@
 //   光电吊舱（Y 进出）：从机腹吊舱看出去。真实变焦——投影的视场角从 40° 缩到 0.6°（滚轮连续，U 按档：宽 40° / 中 12° / 窄 4° / 超窄 1.2°），
 //     整幅画面按这个视场角重新渲染，不是把图放大；模型的细节档也按真实视场角挑（v3g.js），远处的车放大了照样是精细模型。
 //     画面：红外白热 / 红外黑热 / 可见光电视（N 切换；红外在 v3post.js 后期里换算：发动机、人、火、爆炸亮，草木、水面、天空冷），热的东西（车辆发动机舱、人）另外点亮（ftFx）。
-//     视线：鼠标自由转动，吊舱稳定在地面一点上（飞机怎么飞，十字都钉在那一点）；锁了目标就跟着目标走；吊舱在机腹，看不到机身上方和正后方（画面提示「遮挡」）。
+//     视线：锁在机头正前方（用户：光电视角锁向前的视角），飞机往哪飞就看哪；鼠标在这个基础上偏转视线（相对机头的方位、俯仰偏角 T.oa / T.oe）；锁了目标就跟着目标走；
+//     吊舱在机腹，看不到机身上方和正后方（画面提示「遮挡」）。
 //     开吊舱时鼠标用来转视线，飞机按进吊舱前的准星方向直飞（键盘照样能飞）。
 //   锁定（吊舱里按 R / 右键单击，再按解锁；吊舱外 R 是平显里换目标）：吊舱里锁十字附近的目标（车辆、阵地、装甲车、敌舰、步兵；没有就锁那一点的地面坐标）；平常的视角锁视线方向附近看得见的地面目标。
 //     对地武器（飞腾-8、KD-88、雷电-10）开火时先打锁定的目标；锁定的目标在画面上画红色菱形框（距离、名称）。
@@ -23,7 +24,7 @@ function ftOn() {
   let f = v3Norm([cf[0], cf[1], Math.min(cf[2], -.25)]);   // 进吊舱时看视线前方的地面（视线朝天就压到下视 15°）
   let p = ftRay(E, f);
   if (!p) { f = v3Norm([B.f[0], B.f[1], -.45]); p = ftRay(E, f) || [E[0] + f[0] * 3000, E[1] + f[1] * 3000, 0]; }
-  V3FP.tg = { prev: V3FP.vw === 'tgp' ? 'chase' : V3FP.vw, fov: FT.fovs[0], mode: (V3FP.tg && V3FP.tg.mode) || 'wh', gx: p[0], gy: -p[1], gz: p[2], dist: 3000, mask: false };
+  V3FP.tg = { prev: V3FP.vw === 'tgp' ? 'chase' : V3FP.vw, fov: FT.fovs[0], mode: (V3FP.tg && V3FP.tg.mode) || 'wh', gx: p[0], gy: -p[1], gz: p[2], dist: 3000, mask: false, oa: 0, oe: 0 };
   V3FP.vw = 'tgp'; V3FP.look = [0, 0];
 }
 function ftOff() { const T = V3FP.tg; V3FP.vw = T && T.prev && T.prev !== 'tgp' ? T.prev : 'chase'; }
@@ -33,8 +34,18 @@ function ftEye(o) { const rs = fpRS(o); if (!rs) return null; const B = fpBody(o
 function ftPt() {
   const L = ftLockPos();
   if (L) return [L.x, -L.y, L.z];
-  const T = V3FP.tg;
-  return T ? [T.gx, -T.gy, T.gz] : null;
+  const T = V3FP.tg, o = V3FP.o, E = T && o && ftEye(o);
+  if (!T) return null;
+  if (!E) return [T.gx, -T.gy, T.gz];
+  // 机头正前方（加上鼠标偏的角）：视线打到的地面点；看着天、地平线时取前方 20 公里的点（同一帧里只算一次）
+  const k = E.map(v => v.toFixed(1)).join() + ',' + T.oa.toFixed(4) + ',' + T.oe.toFixed(4);
+  if (T.fk === k && T.fp) return T.fp;
+  const B = fpBody(o);
+  let f = fpRot(B.f, [0, 0, 1], T.oa);
+  f = fpRot(f, v3Norm(v3Cross(f, [0, 0, 1])), T.oe);
+  const p = ftRay(E, f, 20000) || [E[0] + f[0] * 20000, E[1] + f[1] * 20000, E[2] + f[2] * 20000];
+  T.gx = p[0]; T.gy = -p[1]; T.gz = p[2]; T.fk = k; T.fp = p;
+  return p;
 }
 // 视线和地面的交点（GL）：先粗步进、再二分；朝天的视线没有交点
 function ftRay(E, f, max = 45000) {
@@ -49,17 +60,10 @@ function ftRay(E, f, max = 45000) {
 }
 // 鼠标转动视线（按视场角换算：视场越窄转得越细），转了就从锁定改成跟踪新的地面点
 function ftSlew(dx, dy) {
-  const o = V3FP.o, T = V3FP.tg, G = ftPt();
-  const E = o && ftEye(o);
-  if (!E || !T || !G) return;
+  const T = V3FP.tg;
+  if (!T) return;
   const k = T.fov / Math.max(240, CAM.vh) * .85;
-  let f = v3Norm([G[0] - E[0], G[1] - E[1], G[2] - E[2]]);
-  f = fpRot(f, [0, 0, 1], -dx * k);
-  f = fpRot(f, v3Norm(v3Cross(f, [0, 0, 1])), -dy * k);
-  if (f[2] > -.01) f = v3Norm([f[0], f[1], -.01]);   // 不抬过地平线（吊舱对地用，找不到地面就停在地平线）
-  const p = ftRay(E, f);
-  if (!p) return;
-  T.gx = p[0]; T.gy = -p[1]; T.gz = p[2];
+  T.oa = clamp(T.oa - dx * k, -2.6, 2.6); T.oe = clamp(T.oe - dy * k, -1.45, .35);   // 相对机头的偏角：吊舱万向架的转动范围（看不到的方向画面提示遮挡）
   if (V3FP.gl) V3FP.gl = null;
 }
 function ftZoom(dy) { const T = V3FP.tg; if (T) T.fov = clamp(T.fov * Math.exp(dy * .0016), FT.fmin, FT.fmax); }

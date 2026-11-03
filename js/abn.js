@@ -431,6 +431,24 @@ function abRtbLand(p) {
   p.afPh = 'app'; p.afT = S.t;
   return true;
 }
+// 离地速度（同敌机 eair.js eaVlof：最大速度的七成二，至多 150）
+const abVlof = p => Math.min(150, airSpec(p.kind, p.v).spd * .72);
+// 刚离地（p.toT）：头 20 秒按起飞爬升曲线限高（同敌机 eaToClimb：爬升率 3 秒内从 0 加到每秒 0.1 档 ≈ 23 米，航迹约 10°），
+//   头 8 秒转弯率、坡度慢慢放开，边爬边加速（原来离地就按巡航爬升率往上弹、马上压坡度转向）
+function abToClimb(p, dt) {
+  const u = S.t - p.toT;
+  if (!(u >= 0) || u > 20 || p.dead || (p.fl && p.fp)) { p.toT = null; p.toHd = null; return; }
+  if (u < 8 && p.toHd != null) {
+    const r = .04 + Math.max(0, u - 2) * .06, bk = .08 + Math.max(0, u - 2) * .1;
+    p.heading = p.toHd + clamp(Math.atan2(Math.sin(p.heading - p.toHd), Math.cos(p.heading - p.toHd)), -r * dt, r * dt);
+    p.bank = clamp(p.bank || 0, -bk, bk);
+  }
+  p.toHd = p.heading;
+  const cap = .06 + .1 * (u < 3 ? u * u / 6 : u - 1.5);
+  if (p.alt > cap) p.alt = cap;
+  p.spd = Math.min(p.spd, abVlof(p) + 25 * u);
+}
+HOOK.step.push(dt => { if (S && S.planes) for (const p of S.planes) if (p.toT != null) abToClimb(p, dt); });
 function abPlaneFly(p, dt, speed) {
   const home = p.afB === 'home', b = home ? S.afP : S.abBase, open = () => home || abAfOpen();   // home：进攻方自己的战区机场（afp.js），总能起降、不耗油料
   if (!b) { p.afPh = null; return false; }
@@ -461,10 +479,12 @@ function abPlaneFly(p, dt, speed) {
     }
     return true;
   }
-  if (p.afPh === 'tko') {   // 从机场起飞：沿跑道加速，滑跑 250 或速度够了离地，转入出航
-    speed(airSpec(p.kind, p.v).spd); const st = Math.max(30, p.spd) * dt; p.ru += R0.dir * st; p.rd = (p.rd || 0) + st;
-    [p.x, p.y] = eaW(b, p.ru, 0); p.heading = Math.atan2(R0.hy, R0.hx); p.alt = Math.max(0, (p.spd - 120) / 140);
-    if (p.rd > 250 || p.spd > 200) { p.afPh = null; p.alt = Math.max(p.alt, .2); }
+  if (p.afPh === 'tko') {   // 从机场起飞（用户：机场起飞很怪——原来滑跑中就按速度一路抬高、250 米就离地窜上去）：照敌机（eair.js eaRoll）
+    //   沿跑道加力加速（EA_TO.acc），机轮贴着跑道（alt 0，3D 里放下起落架、按着地画），到离地速度（最大速度七成二，至多 150）或跑出 450 才离地；离地后按起飞爬升曲线限高（abToClimb）
+    const vs = airSpec(p.kind, p.v).spd, vl = abVlof(p);
+    p.spd = Math.min(vs, Math.max(p.spd || 0, 20) + (typeof EA_TO === 'object' ? EA_TO.acc : 14) * dt); const st = p.spd * dt; p.ru += R0.dir * st; p.rd = (p.rd || 0) + st;
+    [p.x, p.y] = eaW(b, p.ru, 0); p.heading = Math.atan2(R0.hy, R0.hx); p.alt = 0; p.bank = 0;
+    if (p.spd >= vl || p.rd > 450) { p.afPh = null; p.alt = .06; p.toT = S.t; p.toHd = p.heading; }
     return true;
   }
   p.afPh = null;

@@ -538,6 +538,12 @@ function vehGunTarget(v) {
     if (e.kind === 'bunker' && S.teams.some(q => q.side === 'p' && q.sup > 40 && dist(q.x, q.y, e.x, e.y) < 180)) val += 2;   // 正在压制我方步兵的碉堡
     consider(e, 'st', e.x, e.y, val * (g.flame ? 1.6 : at ? .7 : 1));
   }
+  // 守方坦克、车炮也打登陆船（用户要求）：看得见、射程内的抢滩 / 卸载 / 驶近的登陆舰艇，载着兵、车的优先（榴弹落在船边按 combat.js impact 伤船）
+  if (v.side === 'e' && !g.flame && !g.ind) for (const s of S.ships) {
+    if (!alive(s) || s.sbxPv || !(s.state === 'move' || s.state === 'unloading' || s.state === 'beached')) continue;
+    const full = s.load && (s.load.teams > 0 || s.load.eng > 0 || (Array.isArray(s.load.veh) && s.load.veh.length));
+    consider(s, 'sh', s.x, s.y, (s.kind === 'dd' ? 1.2 : full ? 3.4 : 1.8) * (s.state === 'move' ? .8 : 1));
+  }
   if (!g.ind && typeof afgList === 'function') for (const a of afgList(v.side)) consider(a, 'ac', a.x, a.y, a.k === 'has' ? 1.2 : 2.2);   // 机场上停放的敌机（afgnd.js）
   if (!(at && v.type === 'td') || g.ind) for (const q of S.teams) if (q.side === foe && q.men.length && !q.ride) {   // 重型坦克也用榴弹打步兵，只有坦克歼击车专打装甲
     const dq = dist(v.x, v.y, q.x, q.y);
@@ -595,7 +601,7 @@ function vehShoot(v, tg) {
     S.fx.push({ kind: 'flash', x: mx, y: my, r: 12, life: 0, max: .4, side: v.side });
     return;
   }
-  const sz = tg.k === 'st' ? .85 : tg.k === 'tm' ? .7 : (tg.t.moving ? .65 : .9);
+  const sz = tg.k === 'sh' ? (tg.t.state === 'move' ? .8 : 1) : tg.k === 'st' ? .85 : tg.k === 'tm' ? .7 : (tg.t.moving ? .65 : .9);   // 登陆船目标大
   if (tg.k === 'tm') Object.assign(tg.t, { vhT: S.t, vhX: v.x, vhY: v.y });   // 挨车炮打的组记下来火的车（dig.js：远了够不着就扔烟幕弹）
   let ph = .82 * (1 - tg.d / g.range * .45) * (moving ? .45 : 1) * (v.swim ? .4 : 1) * (1 - v.sup / 160) * sz * (M.pow || 1) * (v.side === 'e' ? D.acc : 1);
   if (tg.k === 'tm') ph *= SMOKE[ci(tg.x, tg.y)] ? .5 : 1;
