@@ -159,17 +159,37 @@ function v3fMot(m, M) {
   if (t < M.sus) return { on: .45, sm: M.smoke * .3 };
   return null;
 }
+// 编辑器设计的尾烟、尾焰（mod.js MOD.trl，按导弹型号键，或「@ + 发动机类」整类一起改；modfx.js 的设计页）：
+//   sm 烟量、life 留几秒、w 起始粗细（米）、grow 变粗、op 浓淡、col 烟色、rise 往上飘（米 / 秒）、wind 随风、tw 扭着散开、spr 用序列帧烟团（'puff' 或导入的贴图）、
+//   burn 主发动机烧几秒、sus 续航到第几秒、jet 1 涡喷 / 冲压续航（不冒烟）、fl 尾焰长（米）、fw 尾焰粗细、fc 尾焰颜色、cc 焰芯颜色、glow 光晕
+const V3F_TC = new Map();
+const v3fHex = c => { const m = /^#?([0-9a-f]{6})$/i.exec(String(c || '')); if (!m) return null; const n = parseInt(m[1], 16); return [(n >> 16 & 255) / 255, (n >> 8 & 255) / 255, (n & 255) / 255]; };
+function v3fTrl(key, cls) {
+  const T = typeof MOD === 'object' && MOD && MOD.trl;
+  if (!T) return null;
+  const a = T['@' + cls], b = T[key];
+  if (!a && !b) return null;
+  const sig = JSON.stringify([a, b]), c = V3F_TC.get(key + '|' + cls);
+  if (c && c.sig === sig) return c.v;
+  const st = { ...(a || {}), ...(b || {}) }, M0 = V3F_MOT[cls] || V3F_MOT.aam, num = (k, d) => typeof st[k] === 'number' && isFinite(st[k]) ? st[k] : d;
+  const MO = { ...M0, smoke: num('sm', M0.smoke), life: Math.max(.5, num('life', M0.life)), w: Math.max(.05, num('w', M0.w)), burn: num('burn', M0.burn), sus: num('sus', M0.sus), fl: num('fl', M0.fl), jet: st.jet != null ? (st.jet ? 1 : 0) : M0.jet };
+  const v = { MO, st: { grow: num('grow', 1), op: num('op', 1), col: v3fHex(st.col), rise: num('rise', .3), wind: num('wind', 1), tw: num('tw', 1), spr: st.spr || '', fw: num('fw', 1), fc: v3fHex(st.fc), cc: v3fHex(st.cc), glow: num('glow', 1) } };
+  V3F_TC.set(key + '|' + cls, { sig, v });
+  return v;
+}
 // 一条烟迹：一团团翻滚的烟（越老越粗、越淡，被风吹、往上升、扭着散开），中间一条柔和的烟带把团与团连起来；离镜头太近的淡掉（导弹视角贴在弹后，不糊满屏）
 function v3fSmokeTrail(sm, C, E, tr, id) {
   const P = tr.pts, n = P.length, L = tr.life, w = tr.w, Pl = P[n - 1];
   const cd = Math.hypot(Pl[0] - E[0], Pl[1] - E[1], Pl[2] - E[2]), fk = cd > 5000 ? 1.8 : cd > 2200 ? 1.35 : 1;   // 远处的烟团少画几团、画大一点
   if (V3F.npT !== S.t) { V3F.npT = S.t; V3F.np = 0; }   // 这一帧画了多少团烟（太多就只画近弹头的一段，免得齐射时卡）
   // 第 i 个轨迹点此刻的样子：被风吹走、往上升、扭着散开（每个点有自己的扰动种子）
+  const St = tr.st || null, gw = St ? St.grow : 1, ri = St ? St.rise : .3, wk = St ? St.wind : 1, tk = St ? St.tw : 1;   // 编辑器设计的样子（v3fTrl）
   const at = (i) => {
-    const Q = P[i], a = S.t - Q[3], sd = ((i * 7919 + id * 131) % 97) / 97, tw = w * .45 * Math.sqrt(a);
-    return { x: Q[0] + V3F_WIND[0] * a + Math.sin(sd * 6.28 + a * .6) * tw, y: Q[1] - V3F_WIND[1] * a + Math.cos(sd * 5.1 + a * .5) * tw, z: Q[2] + .3 * a + Math.sin(sd * 9.7 + a * .4) * tw * .6,
-      a, s: Q[4], r: w * (.7 + 1.3 * Math.sqrt(a) + .1 * a) * fk };
+    const Q = P[i], a = S.t - Q[3], sd = ((i * 7919 + id * 131) % 97) / 97, tw = w * .45 * Math.sqrt(a) * tk;
+    return { x: Q[0] + V3F_WIND[0] * a * wk + Math.sin(sd * 6.28 + a * .6) * tw, y: Q[1] - V3F_WIND[1] * a * wk + Math.cos(sd * 5.1 + a * .5) * tw, z: Q[2] + ri * a + Math.sin(sd * 9.7 + a * .4) * tw * .6,
+      a, s: Q[4], r: w * (.7 + 1.3 * gw * Math.sqrt(a) + .1 * a) * fk };
   };
+  const spr = St && St.spr && typeof v3vReady === 'function' && v3vReady() && typeof V3V_TEX === 'object' && V3V_TEX[St.spr] ? St.spr : null, sF = spr ? V3V_TEX[St.spr].f : 0;
   let B = at(n - 1), k = 0;
   for (let i = n - 2; i >= -1; i--) {
     const A = B;   // A 新、B 老：这一段上按烟团大小一团挨一团地补
@@ -182,8 +202,10 @@ function v3fSmokeTrail(sm, C, E, tr, id) {
       if (f <= 0) continue;
       if (++V3F.np > 4000) return;
       const dc = Math.hypot(x - E[0], y - E[1], z - E[2]), near = clamp((dc - r * .6) / (r * 2.5), 0, 1);   // 离镜头太近的淡掉（导弹视角贴在弹后，不糊满屏）
-      const al = .5 * A.s * f * Math.sqrt(f) * Math.min(1, a / .15) * near, c = a < 1.5 ? .96 : a < 6 ? .9 : .84;
-      if (al > .01) v3fBillow(sm, C, [x, y, z], r, [c, c, c * .985, al], 1, (k++ + id) & 15);
+      const al = .5 * A.s * f * Math.sqrt(f) * Math.min(1, a / .15) * near * (St ? St.op : 1), c = a < 1.5 ? .96 : a < 6 ? .9 : .84, cl = St && St.col;
+      if (al <= .01) continue;
+      if (spr) { v3vAdd(spr, [x, y, z], r * 1.15, Math.min(sF - 1, a / L * sF), Math.min(1, al * 1.6), 0, cl ? cl.map(v => v * c / .96) : [c * .4, c * .4, c * .39], null, ((k++ * 2.3 + id) % 6.28)); continue; }
+      v3fBillow(sm, C, [x, y, z], r, cl ? [cl[0] * c / .96, cl[1] * c / .96, cl[2] * c / .96, al] : [c, c, c * .985, al], 1, (k++ + id) & 15);
     }
   }
 }
@@ -311,7 +333,7 @@ function v3Fx(C) {
     if (rp) {
       V3F.trail.delete(m.id);
       if (rp.lit && rp.r.w !== 'bomb') {   // 点火（炸弹没有发动机，只是落下去）：弹尾一闪、一束尾焰；点火的地方空中留一团白烟（飞机飞走了烟还在原地慢慢散开）
-        const zq = airRelZ(rp, m), q = v3fP(rp.x, rp.y, zq), k = clamp((rp.u - AIR_REL.ign) / .12, 0, 1), L = (2.5 + 6 * k) * rp.sc, tx = rp.x - Math.cos(rp.h) * L, ty = rp.y - Math.sin(rp.h) * L;
+        const zq = airRelZ(rp, m), q = v3fP(rp.x, rp.y, zq), k = clamp((rp.u - rp.ign) / .12, 0, 1), L = (2.5 + 6 * k) * rp.sc, tx = rp.x - Math.cos(rp.h) * L, ty = rp.y - Math.sin(rp.h) * L;
         if (!V3F.ign.has(m.id)) { V3F.ign.add(m.id); V3F.puff.push({ x: rp.x, y: rp.y, z: zq, t0: S.t, big: false, side: m.side, air: true }); }
         v3fRib(out, E, q, v3fP(tx, ty, zq), 1.3 * rp.sc + .5, [1, .95, .8, .95], [1, .45, .1, 0]);
         v3fSpark(out, C, q, 2.2 + rp.e * 1.4 + (1 - k) * 3, V3F_COL.amber);
@@ -319,9 +341,9 @@ function v3Fx(C) {
       continue;
     }
     const z0 = m.z3 != null ? m.z3 : v3AltZ(m.x, m.y, m.z * (m.kind === 'tbm' ? 620 : V3_AIR), -2.6, 2), VP = v3MslPos(m, z0), p = VP ? v3fP(VP.x, VP.y, VP.z) : v3fP(m.x, m.y, z0);   // 与飞机同一套高度：低空沿地形包络、高空按海拔；垂发冲出阶段竖直往上
-    const key = typeof v3MslKey === 'function' ? v3MslKey(m) : 'pl15', MO = V3F_MOT[V3F_MK[key] || 'aam'], mo = v3fMot(m, MO), kk = typeof v3MslK === 'function' ? v3MslK(m) : 1;
+    const key = typeof v3MslKey === 'function' ? v3MslKey(m) : 'pl15', cls = V3F_MK[key] || 'aam', TS = v3fTrl(key, cls), MO = TS ? TS.MO : V3F_MOT[cls], mo = v3fMot(m, MO), kk = typeof v3MslK === 'function' ? v3MslK(m) : 1;
     let tr = V3F.trail.get(m.id);
-    if (!tr) V3F.trail.set(m.id, tr = { pts: [], life: MO.life, w: MO.w, end: null, side: m.side });
+    if (!tr) V3F.trail.set(m.id, tr = { pts: [], life: MO.life, w: MO.w, end: null, side: m.side, st: TS ? TS.st : null });
     tr.end = null;
     const pts = tr.pts, last = pts[pts.length - 1], sp = Math.max(1.6, MO.w * .55);
     if (!last || Math.hypot(p[0] - last[0], p[1] - last[1], p[2] - last[2]) > sp) pts.push([p[0], p[1], p[2], S.t, mo ? mo.sm : 0]);
@@ -333,10 +355,11 @@ function v3Fx(C) {
     const pt = dir ? [p[0] - dir[0] * hl, p[1] - dir[1] * hl, p[2] - dir[2] * hl] : p, dc = Math.hypot(pt[0] - E[0], pt[1] - E[1], pt[2] - E[2]), far = Math.max(1, dc * .0035);   // far：远处至少这么大（远远看是一个亮点）
     if (mo && mo.on > 0 && dir) {   // 尾焰：白热的芯、外面一层橙色的火、烧得一闪一闪；弹尾一团白光、外面一圈橙红光晕
       const fk = .82 + .18 * Math.sin(S.t * 57 + m.id * 1.7) * Math.sin(S.t * 23 + m.id), fl = MO.fl * kk * mo.on * fk, at = (k) => [pt[0] - dir[0] * fl * k, pt[1] - dir[1] * fl * k, pt[2] - dir[2] * fl * k];
-      v3fRib(out, E, pt, at(1), Math.max(fl * .3, far * .6), [1, .66, .26, .75], [1, .3, .06, 0]);
-      v3fRib(out, E, pt, at(.5), Math.max(fl * .15, far * .35), [1, .98, .92, 1], [1, .82, .5, .55]);
-      v3fSpark(out, C, pt, Math.max(fl * .22, far), [1, .97, .9, 1]);
-      v3fSpark(out, C, pt, Math.max(fl * .7, far * 2.2) * fk, [1, .55, .2, .32]);
+      const ts = TS && TS.st, fw = ts ? ts.fw : 1, fc = ts && ts.fc, cc = ts && ts.cc, gk = ts ? ts.glow : 1;   // 编辑器设计的尾焰颜色、粗细、光晕
+      v3fRib(out, E, pt, at(1), Math.max(fl * .3 * fw, far * .6), fc ? [fc[0], fc[1], fc[2], .75] : [1, .66, .26, .75], fc ? [fc[0], fc[1] * .5, fc[2] * .3, 0] : [1, .3, .06, 0]);
+      v3fRib(out, E, pt, at(.5), Math.max(fl * .15 * fw, far * .35), cc ? [cc[0], cc[1], cc[2], 1] : [1, .98, .92, 1], cc ? [cc[0], cc[1] * .85, cc[2] * .6, .55] : [1, .82, .5, .55]);
+      v3fSpark(out, C, pt, Math.max(fl * .22 * fw, far), cc ? [cc[0], cc[1], cc[2], 1] : [1, .97, .9, 1]);
+      if (gk > 0) v3fSpark(out, C, pt, Math.max(fl * .7 * fw, far * 2.2) * fk * gk, fc ? [fc[0], fc[1] * .85, fc[2] * .75, .32] : [1, .55, .2, .32]);
     } else if (mo && mo.jet) v3fSpark(out, C, pt, Math.max(.5 * kk, far * .5), [1, .32, .1, .55]);   // 涡喷 / 冲压续航：弹尾一点暗红光
     const sk = clamp(dc / 500, .12, 1);
     if (m.kind === 'tbm' && m.rf && typeof RF === 'object' && RF[m.rf]) {   // 火箭军的弹道导弹（rocket.js）：末段再入时弹头被压缩的空气烧成等离子体，越接近落地越亮；东风-17 滑翔时一路拖着等离子体
@@ -540,6 +563,7 @@ function v3Fx(C) {
           v3fRib(out, C.E, PA, PB, wc, [.55, 1, .65, .95 * fa], [.55, 1, .65, .95 * fa]);
         }
       }
+      if (typeof v3aeroPlane === 'function' && !gnd) v3aeroPlane(o, key, sz, own, R, [ox, -oy, z], k, D, !!FTR[key], C);   // 蒸汽锥、音爆、机翼水汽、翼尖涡流（v3aero.js）
       if (FTR[key] && typeof v3dBurner === 'function') {   // 喷口发热、加力尾焰（v3det.js）：按每个喷口，随机身俯仰、滚转；加力开关时火舌平滑地长出、缩回
         const F2 = rs && o.fl, Eg = F2 ? v3dEng('p' + o.id, (o.fuel ?? 1) > 0 ? .3 + .7 * (typeof V3FP === 'object' ? V3FP.thr : .85) : 0, F2.ab ? 1 : 0)   // 玩家开的：按油门（慢车 .3 → 最大 1）、加力开关
           : v3dEng((own ? 'p' : 'e') + o.id, burn ? 1 : .65, burn ? 1 : 0);
@@ -564,6 +588,8 @@ function v3Fx(C) {
   if (typeof fpFx === 'function') fpFx(out, sm, C);   // 亲自驾驶：翼尖涡流、机翼水汽、迎面的风线（v3pilot.js）
   if (typeof v3dHaze === 'function') v3dHaze(C);   // 喷口后的热浪（v3det.js）：在加法特效之前，扭的是火焰后面的画面
   if (typeof v3jDraw === 'function') v3jDraw(C);   // 喷口内部（不透明）、加力尾焰（加法）
+  if (typeof v3aeroFx === 'function') v3aeroFx(sm, C);   // 音爆激波壳、AI 飞机的翼尖涡流（v3aero.js）
+  if (typeof v3aeroDraw === 'function') v3aeroDraw(C);   // 三维的蒸汽锥、机翼水汽、音爆（v3aero.js）
   if (typeof v3ntLamps === 'function') v3ntLamps(out, C);   // 夜里：车灯、尾灯、舰艇航行灯、直升机防撞灯（v3nite.js）
   if (typeof v3vDraw === 'function') v3vDraw(C);   // 序列帧特效（v3vfx.js）：在程序的烟、发光之前画
   if (!out.length && !sm.length) return;

@@ -315,7 +315,7 @@ function fwLaunch(o, s, c) {
   const pk = c.o ? fwPk(Wd, c.t === 'eair' ? c.o : null, c.red) : Wd.pk;
   const m = { id: S.nid++, kind: Wd.k === 'aam' ? 'sam' : 'pgm', side: 'p', src: 'fp', x0: p[0], y0: p[1], x: p[0], y: p[1], z: .5, z3: p[2], tx: c.x, ty: c.y, t: 0, dur: Wd.M > 0 ? 80 : 150, ph: 'boost',
     tgt: c.o ? { k: c.t || 'eair', id: c.o.id } : null, pk, w: Wd.pg || s.w, lr: s.w === 'pl17' || undefined, icp: false, sup: 0,
-    fw: { w: s.w, ms: Wd.ms, v, ign: s.bay === 'main' ? .35 : s.bay === 'ext' ? .12 : 0, lit: false, bore: !c.o } };
+    fw: { w: s.w, ms: Wd.ms, v, ign: Wd.ign != null && Wd.ign >= 0 ? Wd.ign : typeof airRelIgn === 'function' ? airRelIgn(s.bay) : s.bay === 'main' ? 1.2 : s.bay === 'ext' ? .8 : .3, lit: false, bore: !c.o } };
   S.missiles.push(m);
   if (Wd.k === 'arm' && c.o && typeof ewArm === 'function') ewArm(c.o, c.nm);   // 反辐射弹盯上了：雷达可能关机规避（ew.js）
   o.fwN[s.w]--;

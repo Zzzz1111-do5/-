@@ -974,6 +974,7 @@ function v3gPrep(key, m, M, VB, IB) {
   if (V3G_FOLD[key]) use(v3gFold(V3G_FOLD[key], m, VB, IB));
   else if (V3G_ERA[key]) use(v3gEra(V3G_ERA[key], m, VB, IB));
   else if (V3G_BAY[key]) use(v3gBays(V3G_BAY[key], m, VB, IB));
+  if (typeof modPrepB === 'function') modPrepB(key, m, VB, IB);   // 编辑器：游戏里的模型也能删部件、改造（mod.js；加工完以后按连通块分，编辑器预览同一套）
   return R;
 }
 // —— 材质纠正：直-10 原模型四个材质全设成了 25% 不透明的半透明（整架直升机像幽灵）——机身、桨叶改回不透明；主旋翼的残影盘本是半透明，调淡到 8%（原来盖在机身上一大片发暗）——

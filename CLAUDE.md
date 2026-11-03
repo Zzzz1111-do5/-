@@ -115,6 +115,12 @@
   机枪口 MOD.mdl[键].mg（mgOn 装在车体 / 炮塔 / 炮管 / 机枪塔）：vehicles.js vehMg 给曳光弹记 src，v3fx.js 从 v3g.js v3gMgMuzzle 打出、枪口一闪；炮口 v3gMuzzle 也跟炮管仰角走。预览（MIV）着色器按每顶点用途代码试转、上色，钉在表单顶上（sticky），手机双指缩放平移。
   编辑器浮层要带 mn-layer 类（主菜单开着时其余元素都被藏起来）；保存时 MOD 存的是 MDX_W 的拷贝（原来共用对象，没保存的改动漏进 MOD）。
   热浪设计（用户：不要二维热浪）：MOD.mdl[键].hz 热浪源 { p, d, r, len, k, sp 末端变粗, rise 往上飘, tb 湍流, spd 流速, warm 发暖 }（mod.js modHazeOf），v3g.js v3gVeh / v3gPlane 按姿态登记（v3gHazeEmit），设计了的车不再用 V3D_VEXH 默认排气；编辑器预览用同一套着色器画（modimp.js，一直动）。
+- 编辑器的便捷功能（js/modux.js，只往 modui.js 上加）：撤销 / 重做（Ctrl + Z / Y，比较操作前后的 MDX_W）、Ctrl + S、筛选参数、复制粘贴一型的改动、套用到同类、「改动」页（全部改动一览）、「批量」页（一批型号的同一项乘 / 加 / 设成）、保存并试玩。
+  游戏里自带的模型也能拆（js/modpart.js；用户：载具任何一个部件都能精准去掉、单独拿出来 360° 看、再设计）：预览读模型时按连通块分块（mod.js modPieces，不跨模型自带的部件），游戏里解码时 v3gPrep 最后调 mod.js modPrepB 用同一套算法分，块号对得上；
+  删掉的块记在 MOD.mdl[键].pt.x（不重新落地居中），改造 ed（平移 / 旋转 / 缩放 / 换色，modEdApply / modEdSplit），炮塔炮管怎么动 fn → VFN；保存后已解码的内置模型放掉重新加载（modReloadB）。选块、框选、删除沿用 modui.js 导入模型那一套（MDX.pc）。
+  导弹尾烟设计、特效动图、抛射点火（js/modfx.js）：MOD.trl[导弹型号键 或 '@' + 发动机类] → v3fx.js v3fTrl（烟量、留多久、粗细、变粗、颜色、上飘、随风、扭动、发动机时间、尾焰、序列帧烟团）；特效页的卡片按 ArmyVFX 的分通道合成颜色播放；
+  MOD.rel → airmdl.js AIR_IGN（主弹舱 / 外挂 / 侧弹舱抛离后几秒点火，AI 的离机画面 airRelPos 与亲自驾驶 fpwpn.js 的 ign 都按它，FW_W 的 ign 单独设）。
+- 气动特效（js/v3aero.js，用户：超音速云爆太敷衍）：体渲染的蒸汽锥（马赫 0.9–1.07）、音爆激波壳、机翼上表面水汽（大过载）、AI 飞机的翼尖涡流；v3fx.js 画飞机灯光时 v3aeroPlane 登记，v3aeroDraw 在尾焰之后画；设置 aero 调强弱（0 关）。fptgp.js 原来那一圈贴片在有三维气动特效时不画。
 - 主菜单「闯关」是 levels.js（三章十关，按预算自己布兵），「海岛战役」是 isle.js，都建在沙盒（sandbox.js）上；两者都记在 S.lv 里（海岛是 S.lv.isle），闯关的逻辑要跳过海岛。
 
 ## 代码约定

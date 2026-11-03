@@ -9,17 +9,17 @@
 //   导入的文件（模型、序列帧贴图）太大放不进 localStorage：存在 IndexedDB（modFilePut），MOD.lib 只记名字和参数；开机时读出来登记给 v3g.js / v3vfx.js。
 //   战场大小只管程序生成的「海岸登陆」地图（state.js newGame）；画面设置在 SETTINGS 里（settings.js）
 const MOD_KEY = 'bh-mod', MOD_MM = 220;   // 装甲、穿深：推演里按「级」算（vehicles.js vehPenMul），编辑器里写毫米均质钢，1 级 ≈ 220 毫米
-const MOD_SEC = ['veh', 'air', 'eair', 'wpn', 'msl', 'map', 'mdl', 'fx', 'lib'];
+const MOD_SEC = ['veh', 'air', 'eair', 'wpn', 'msl', 'map', 'mdl', 'fx', 'rel', 'trl', 'lib'];   // rel 抛离后几秒点火（airmdl.js AIR_IGN）、trl 导弹尾烟尾焰（v3fx.js v3fTrl）
 const MOD = { v: 1 };
 for (const k of MOD_SEC) MOD[k] = {};
 const MOD_DEF = { air: {}, eair: {}, wpn: {}, msl: {}, load: {}, ap: {}, fl: {}, gun: {}, st: {}, v3air: {} };   // 表里改之前的原值
 const MOD_VMDL = {};   // 车辆型号 → 换上的 3D 模型（只管画面；推演里查型号功能表 vfn.js 仍按原来的模型）
-const MODX = { db: null, bad: new Set(), ready: false, raw: {}, sig: {} };   // IndexedDB、读不出来的导入文件；raw 导入模型的原件（{ meta, bin }，拆部件改了以后照它重新解码），sig 解码时用的部件设置
+const MODX = { db: null, bad: new Set(), ready: false, raw: {}, sig: {}, bsig: {} };   // IndexedDB、读不出来的导入文件；raw 导入模型的原件（{ meta, bin }，拆部件改了以后照它重新解码），sig 解码时用的部件设置
 // 各表能改的字段（别的字段不往表里写，免得和表里原有的字段撞名）
 const MOD_F = {
   air: ['spd', 'aa', 'stealth', 'radar', 'aamR', 'pkK', 'agmR', 'std', 'turn', 'loiter'],
   eair: ['spd', 'turn', 'hp', 'flares', 'stealth'],
-  wpn: ['M', 'R', 'Rmin', 'tb', 'g', 'cone', 'lk', 'pk', 'acc'],
+  wpn: ['M', 'R', 'Rmin', 'tb', 'g', 'cone', 'lk', 'pk', 'acc', 'ign'],
   msl: ['spd', 'sprint', 'sr', 'prof', 'z', 'lz', 'pd', 'dmg', 'pen', 'R', 'icp', 'acc', 'v0']
 };
 // 能量机动（airperf.js AP）与飞控（flight.js FL_AC，亲自驾驶）：编辑器字段 → 表里的字段；两张表同口径，改一处两边一起改
@@ -131,6 +131,133 @@ function modApply() {
   if (typeof v3vSlots === 'function') { const sl = {}; for (const k in MOD.fx) if (MOD.lib[MOD.fx[k]] && !MODX.bad.has(MOD.fx[k])) sl[k] = MOD.fx[k]; v3vSlots(sl); }
   if (typeof FW_LD === 'object' && FW_LD && typeof FW_LD.clear === 'function') FW_LD.clear();   // 甲板上挂弹的满载清单按机型缓存着（fpwpn.js fwLoadout）：挂载、挂点改了要重算
   for (const id in MODX.raw) if (MODX.sig[id] !== JSON.stringify((MOD.mdl[id] || {}).pt || null)) modRegMdl(id);   // 部件改了：导入的模型重新解码
+  modBApply();   // 游戏里的模型：删掉的部件、改造（移动 / 旋转 / 缩放 / 换色）、炮塔炮管怎么动
+  if (typeof AIR_IGN === 'object') { Object.assign(AIR_IGN, AIR_IGN0); for (const k of ['main', 'side', 'ext']) if (modNum(MOD.rel[k]) && MOD.rel[k] >= 0) AIR_IGN[k] = Math.min(8, MOD.rel[k]); }   // 抛离后几秒点火
+}
+// —— 游戏里自带的模型（js/mdl/<键>.js）也能拆（用户：载具任何一个部件都能精准去掉、单独拿出来看、再设计）——
+//   分块：解码加工完（v3gPrep 的最后）按连通块编号（modPieces：三角形连着的、位置相同的顶点算一块，不跨部件——炮塔、车轮、起落架各自分开），
+//   编辑器预览（modimp.js mivShow）对同样加工过的网格用同一个算法，块号对得上。MOD.mdl[模型键]：
+//   pt.x 删掉的块（区间字符串，同导入模型的格式；不重新落地居中：挂点、喷口、座舱这些按原来的坐标）；
+//   ed 改造 [{ id 块号, t 平移 [x, y, z] 米, r 旋转 [绕 x, 绕 y, 绕 z] 度, s 缩放, cp 旋转缩放的中心, c 颜色 #rrggbb, cm 涂多少（1 = 完全盖住贴图）}]，按顺序套；
+//   fn 动作参数（炮塔回转、炮管俯仰范围 / 速度、后坐）→ vfn.js VFN[模型键]（推演里的炮塔转速也按它）
+function modPieces(m, VB, IB) {
+  const st = m.st || 8, nv = VB.length / st, par = new Int32Array(nv), vp = new Int16Array(nv).fill(-9);
+  for (let i = 0; i < nv; i++) par[i] = i;
+  const find = x => { while (par[x] !== x) x = par[x] = par[par[x]]; return x; };
+  for (const [, pi, i0, cnt] of m.lod[0]) for (let t = i0; t < i0 + cnt; t++) vp[IB[t]] = pi;
+  const weld = new Map();
+  for (let v = 0; v < nv; v++) {
+    if (vp[v] === -9) continue;
+    const o = v * st, k = vp[v] + ':' + Math.round(VB[o] * 1e4) + ',' + Math.round(VB[o + 1] * 1e4) + ',' + Math.round(VB[o + 2] * 1e4), w = weld.get(k);
+    if (w == null) weld.set(k, v); else { const a = find(v), b = find(w); if (a !== b) par[a] = b; }
+  }
+  for (const [, , i0, cnt] of m.lod[0]) for (let t = i0; t + 2 < i0 + cnt; t += 3) { const a = find(IB[t]), b = find(IB[t + 1]), c = find(IB[t + 2]); if (b !== a) par[b] = a; if (c !== a && find(c) !== a) par[find(c)] = a; }
+  const id = new Int32Array(nv).fill(-1), pv = new Uint32Array(nv);
+  let n = 0;
+  for (const [, , i0, cnt] of m.lod[0]) for (let t = i0; t < i0 + cnt; t++) { const r = find(IB[t]); if (id[r] < 0) id[r] = n++; }
+  for (let v = 0; v < nv; v++) { const r = id[find(v)]; pv[v] = r < 0 ? 0 : r; }
+  return { pv, pn: n, vp };
+}
+const modHex = c => { const m = /^#?([0-9a-f]{6})$/i.exec(String(c || '')); if (!m) return null; const n = parseInt(m[1], 16); return [(n >> 16 & 255) / 255, (n >> 8 & 255) / 255, (n & 255) / 255]; };
+// 改造套到顶点上（预览、游戏同一套）：VB 原地改；返回每块用哪条改造的颜色（-1 不换色）
+function modEdApply(ed, VB, st, pv, pn) {
+  const col = new Int16Array(pn).fill(-1), D = Math.PI / 180;
+  (ed || []).forEach((e, ei) => {
+    if (!e) return;
+    const ids = new Uint8Array(pn);
+    for (const i of modIdsDec(e.id)) if (i < pn) ids[i] = 1;
+    const t = Array.isArray(e.t) ? e.t.map(v => +v || 0) : [0, 0, 0], r = Array.isArray(e.r) ? e.r.map(v => (+v || 0) * D) : [0, 0, 0], s = modNum(e.s) && e.s > 0 ? e.s : 1, c = Array.isArray(e.cp) ? e.cp : [0, 0, 0];
+    const cx = Math.cos(r[0]), sx = Math.sin(r[0]), cy = Math.cos(r[1]), sy = Math.sin(r[1]), cz = Math.cos(r[2]), sz = Math.sin(r[2]);
+    const M = [cz * cy, cz * sy * sx - sz * cx, cz * sy * cx + sz * sx, sz * cy, sz * sy * sx + cz * cx, sz * sy * cx - cz * sx, -sy, cy * sx, cy * cx];   // Rz · Ry · Rx
+    const moved = t[0] || t[1] || t[2] || r[0] || r[1] || r[2] || s !== 1;
+    if (moved) for (let v = 0; v < VB.length / st; v++) {
+      if (!ids[pv[v]]) continue;
+      const o = v * st, x = (VB[o] - c[0]) * s, y = (VB[o + 1] - c[1]) * s, z = (VB[o + 2] - c[2]) * s, nx = VB[o + 3], ny = VB[o + 4], nz = VB[o + 5];
+      VB[o] = c[0] + M[0] * x + M[1] * y + M[2] * z + t[0]; VB[o + 1] = c[1] + M[3] * x + M[4] * y + M[5] * z + t[1]; VB[o + 2] = c[2] + M[6] * x + M[7] * y + M[8] * z + t[2];
+      VB[o + 3] = M[0] * nx + M[1] * ny + M[2] * nz; VB[o + 4] = M[3] * nx + M[4] * ny + M[5] * nz; VB[o + 5] = M[6] * nx + M[7] * ny + M[8] * nz;
+    }
+    if (modHex(e.c)) for (let i = 0; i < pn; i++) if (ids[i]) col[i] = ei;
+  });
+  return col;
+}
+// 换色：按（原材质、哪条改造）拆出新材质，把这些块的三角形挪到新材质那一段；del：删掉的块（游戏里不画；预览里靠用途码藏，不删）
+function modEdSplit(m, IB, pv, col, ed, del) {
+  const mats = m.mats, nm = new Map();
+  const matOf = (mi, ei) => {
+    const k = mi + ':' + ei;
+    if (nm.has(k)) return nm.get(k);
+    const T = mats[mi], e = ed[ei], c = modHex(e.c), f = clamp(modNum(e.cm) ? e.cm : .85, 0, 1);
+    const N = { ...T, n: (T.n || '') + '·改色', c: [T.c[0] + (c[0] - T.c[0]) * f, T.c[1] + (c[1] - T.c[1]) * f, T.c[2] + (c[2] - T.c[2]) * f, T.c[3]] };
+    if (f >= .999) { N.t = null; N.sgt = null; }   // 完全涂成这个颜色：不贴原来的底色贴图
+    const j = mats.push(N) - 1;
+    nm.set(k, j);
+    return j;
+  };
+  m.lod = m.lod.map(L => {
+    const out = [];
+    for (const [mi, pi, i0, cnt] of L) {
+      const B = new Map();
+      for (let t = i0; t + 2 < i0 + cnt; t += 3) {
+        const q = pv[IB[t]];
+        if (del && del[q]) continue;
+        const ei = col[q], k = ei < 0 ? mi : matOf(mi, ei);
+        let A = B.get(k); if (!A) B.set(k, A = []);
+        A.push(IB[t], IB[t + 1], IB[t + 2]);
+      }
+      let o = i0;
+      for (const [k, A] of B) { IB.set(A, o); out.push([k, pi, o, A.length]); o += A.length; }
+    }
+    return out;
+  });
+}
+// 游戏里解码（v3g.js v3gPrep 的最后调）
+function modPrepB(key, m, VB, IB) {
+  const A = MOD.mdl[key];
+  if (MODX.noB || !A || key.startsWith('u_') || key === 'army') return;   // noB：编辑器预览自己套正在改的那份
+  const pt = A.pt, ed = Array.isArray(A.ed) ? A.ed : [];
+  if (!(pt && pt.x) && !ed.length) return;
+  const st = m.st || 8, P = modPieces(m, VB, IB), del = new Uint8Array(P.pn);
+  for (const i of modIdsDec(pt && pt.x)) if (i < P.pn) del[i] = 1;
+  const col = modEdApply(ed, VB, st, P.pv, P.pn);
+  modEdSplit(m, IB, P.pv, col, ed, del);
+  MODX.bsig[key] = modBSig(key);
+}
+const modBSig = k => { const A = MOD.mdl[k] || {}; return JSON.stringify([(A.pt && A.pt.x) || '', A.ed || null]); };
+// 改了游戏里模型的部件：已经解码的那份放掉、重新加载（下次画到时从 js/mdl 重新取）
+function modReloadB(key) {
+  if (typeof V3G !== 'object') return;
+  const gl = V3G.gl;
+  for (const k of [key, key + '~']) {
+    const old = V3G.M[k];
+    if (old && old.ready && gl && k === key) { try { gl.deleteBuffer(old.vb); gl.deleteBuffer(old.ib); for (const t of old.tex || []) if (t) gl.deleteTexture(t); } catch (e) { /* 已经没了 */ } }
+    for (const [ik, L] of [...V3G.inst.entries()]) if (ik.slice(0, ik.lastIndexOf('#')) === k) { if (gl) for (const b of [L.gb, L.gbv]) if (b) gl.deleteBuffer(b); V3G.inst.delete(ik); }
+    delete V3G.M[k];
+  }
+  delete V3G.def[key]; V3G.want.delete(key); V3G.fail.delete(key);
+  delete MODX.bsig[key];
+}
+function modBApply() {
+  if (!MODX.bsig) MODX.bsig = {};
+  if (typeof V3G === 'object') for (const k of new Set([...Object.keys(MOD.mdl), ...Object.keys(MODX.bsig)])) {
+    if (k.startsWith('u_') || !V3G.M[k] || !V3G.M[k].ready) continue;
+    const want = modBSig(k), had = MODX.bsig[k] ?? JSON.stringify(['', null]);
+    if (want !== had) modReloadB(k);
+  }
+  // 动作参数（炮塔、炮管）
+  if (typeof VFN === 'object') {
+    if (!MOD_DEF.vfn) MOD_DEF.vfn = {};
+    for (const k in MOD.mdl) if (MOD.mdl[k].fn && !(k in MOD_DEF.vfn) && !k.startsWith('u_')) MOD_DEF.vfn[k] = VFN[k] ? modClone(VFN[k]) : null;
+    for (const k in MOD_DEF.vfn) {
+      const D = MOD_DEF.vfn[k], f = MOD.mdl[k] && MOD.mdl[k].fn;
+      if (!f) { if (D) VFN[k] = modClone(D); else delete VFN[k]; continue; }
+      const o = D ? modClone(D) : { trav: 40, el: [-6, 18], elR: 20, rc: .3 };
+      if (modNum(f.trav) && f.trav > 0) o.trav = f.trav;
+      if (Array.isArray(f.el) && f.el.length === 2 && f.el.every(modNum)) o.el = [Math.min(f.el[0], f.el[1]), Math.max(f.el[0], f.el[1])];
+      if (modNum(f.elR) && f.elR > 0) o.elR = f.elR;
+      if (modNum(f.rc) && f.rc >= 0) o.rc = f.rc;
+      VFN[k] = o;
+    }
+  }
 }
 // 模型上的点（模型坐标，米：x 前、y 左、z 上）
 const modMdlOf = mk => (mk && MOD.mdl[mk]) || null;
