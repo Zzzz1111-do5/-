@@ -57,8 +57,13 @@ const MM = { cv: null, base: null, k: 1 };
 const MM_COL = ['#03140c', '#0a3326', '#7a1f33', '#5fae7a', '#3e6b52', '#9be3b5', '#103d24', '#0d5a2e', '#1b7a42', '#3bb56a',
   '#11433d', '#1d6f8a', '#e6fff0', '#7fe0a4', '#57c987', '#2a8fa8'];
 
+// 沙漠地表（settings.js landDesert）：绿的、黄的按明暗换成沙土色，灰的道路、城镇不动（同 view3d.js 地形着色器）
+function mmDesert(c) {
+  const v = clamp((c[1] - c[2] - 5) / 20, 0, 1), l = (c[0] * .3 + c[1] * .59 + c[2] * .11) / 255, k = clamp(l * 1.9, .5, 1.25);
+  return [0, 1, 2].map(j => c[j] + ([219, 186, 140][j] * k - c[j]) * v);
+}
 function mmInit(cv) {
-  MM.cv = cv; MM.real = realLook() && !(typeof greenLook === 'function' && greenLook());   // 黑绿画面的小地图用数码矩阵的配色
+  MM.cv = cv; MM.real = realLook() && !(typeof greenLook === 'function' && greenLook()); MM.land = SETTINGS.land;   // 黑绿画面的小地图用数码矩阵的配色
   const w = cv.clientWidth || 268;
   cv.width = Math.round(w * (window.devicePixelRatio || 1)); cv.height = Math.round(cv.width * H / W);
   MM.k = cv.width / W;
@@ -68,7 +73,7 @@ function mmInit(cv) {
   for (let i = 0; i < GW * GH; i++) {
     const t = TER.type[i];
     if (MM.real) {   // 写实：与地形同一套底色，海按离岸距离加深
-      const c = TER.flat ? [150, 152, 155] : TRX_FLAT[t], e = isWater(t) ? 1 - clamp((cellCY(i) - coastAt(cellCX(i))) / 900, 0, .6) : .8 + TER.elev[i] * .4;   // 白色平原：灰色平台（与 3D 地面同色）
+      const c0 = TER.flat ? [150, 152, 155] : TRX_FLAT[t], c = !TER.flat && !isWater(t) && typeof landDesert === 'function' && landDesert() ? mmDesert(c0) : c0, e = isWater(t) ? 1 - clamp((cellCY(i) - coastAt(cellCX(i))) / 900, 0, .6) : .8 + TER.elev[i] * .4;   // 白色平原：灰色平台（与 3D 地面同色）
       for (let j = 0; j < 3; j++) img.data[i * 4 + j] = c[j] * e;
     } else {
       const c = TER.flat ? '#8a8c8e' : MM_COL[t], e = isWater(t) ? 1 : .55 + TER.elev[i] * .6;   // 白色平原：灰色平台
@@ -87,7 +92,7 @@ function mmDraw() {
 }
 function mmDraw1() {
   if (!MM.cv) return;
-  if (MM.seed !== TER.seed || MM.ter !== TER || MM.real !== (realLook() && !(typeof greenLook === 'function' && greenLook()))) mmInit(MM.cv);
+  if (MM.seed !== TER.seed || MM.ter !== TER || MM.real !== (realLook() && !(typeof greenLook === 'function' && greenLook())) || MM.land !== SETTINGS.land) mmInit(MM.cv);   // 换了地表（沙漠 / 绿地）也重画
   const g = MM.cv.getContext('2d'), k = MM.k, dot = (x, y, r, c) => { g.fillStyle = c; g.fillRect(x * k - r, y * k - r, r * 2, r * 2); };
   g.imageSmoothingEnabled = MM.real;
   g.drawImage(MM.base, 0, 0, MM.cv.width, MM.cv.height);
