@@ -16,9 +16,9 @@ const MN_ITEMS = [
   ['cont', '继续作战', 'RESUME', '返回当前战局'],
   ['pve', '闯关', 'CAMPAIGN', '三章十关：每关给预算，自己挑兵种、布置兵力——先夺制海权，再登陆，再向纵深推进'],
   ['isle', '海岛战役', 'ISLAND', '架空热带海岛：超大海域，先海战、再登岛'],
-  ['sbx', '沙盒模式', 'SANDBOX', '自由部署双方兵力，观战或亲自指挥'],
+  ['sbx', '沙盒模式', 'SANDBOX', '自由部署双方兵力，观战或亲自驾驶参战'],
   ['cdx', '兵力图鉴', 'CODEX', '全部单位的属性、定位与克制关系'],
-  ['set', '设置', 'SETTINGS', '音量、画面、开场转场与指挥官通讯'],
+  ['set', '设置', 'SETTINGS', '音量、画面、地表与开场转场'],
   ...(typeof platCanQuit === 'function' && platCanQuit() ? [['quit', '退出游戏', 'QUIT', '关闭暗剑，回到桌面']] : [])   // 电脑版、安卓版（platform.js）
 ];
 const MN_LV = [
@@ -220,7 +220,7 @@ function mnHi(k, snd) {
   else if (k === 'isle') body = `<p>架空的热带海岛「棕榈岛」（印度洋风格，岛名、地名、设施与守军都是虚构的）。舰队在南边大洋上集结，横渡约 8 公里：先击退守方舰队、顶住岸舰导弹与岛上航空兵，夺取制海权，再强行登岛，同一张图打完。</p><dl><dt>守方</dt><dd>固定部署</dd><dt>我方</dt><dd>按预算 ${typeof ISLE === 'object' ? ISLE.p : 17000} 点自己编成</dd><dt>胜利条件</dt><dd>控制指挥所与七成据点分值 30 秒</dd></dl>`;
   else if (k === 'sbx') body = `<p>在同一张海岸地图上自由部署岸防与进攻部队，按预算对抗；可以观战 AI 对 AI，也可以开战后亲自驾驶战机、055 驱逐舰参战。</p><dl><dt>状态</dt><dd>${typeof openSandbox === 'function' ? '可用' : '模块加载中'}</dd></dl>`;
   else if (k === 'cdx') { const n = typeof CATALOG !== 'undefined' && Array.isArray(CATALOG) ? CATALOG.length : 0; body = `<p>查看全部兵力：步兵、装甲、火炮、航空、舰艇、工事与支援单位的属性条、定位与克制关系。</p><dl><dt>收录</dt><dd>${n ? n + ' 种单位' : '目录加载中'}</dd></dl>`; }
-  else if (k === 'set') body = `<p>主音量、音乐、音效、无线电；画面风格（写实 / 黑绿 / 数码）、辉光、画质、3D 渲染距离、屏幕震动；开场转场；AI 指挥官通讯详略。</p><dl><dt>当前</dt><dd>主音量 ${Math.round(SETTINGS.master * 100)}% · 画质${SETTINGS.quality === 'low' ? '低' : '高'}</dd></dl>`;
+  else if (k === 'set') body = `<p>主音量、音乐、音效、无线电；画面风格（写实 / 黑绿 / 数码）、地表（沙漠 / 绿地）、辉光、画质、3D 渲染距离、屏幕震动；开场转场。</p><dl><dt>当前</dt><dd>主音量 ${Math.round(SETTINGS.master * 100)}% · 画质${SETTINGS.quality === 'low' ? '低' : '高'}</dd></dl>`;
   else if (k === 'quit') body = `<p>关闭暗剑。设置、闯关进度和部署存档都存在本机，下次打开还在。</p>${mnCanResume() ? '<p>打到一半的这一局不会保存。</p>' : ''}`;
   info.innerHTML = `<h2>${it[2]}</h2>${body}`;
 }
@@ -392,9 +392,8 @@ function mnKey(e) {
 const MN_SET = [
   ['音量', 'VOLUME', [['master', '主音量', 'vol'], ['music', '音乐', 'vol'], ['musicStyle', '背景音乐', [['march', '进行曲'], ['custom', '我的歌'], ['ambient', '氛围']], '进行曲：明亮的军乐，战况越激烈编制越全；我的歌：用下面导入的歌'], ['bgm', '导入音乐', 'file', '选一首你设备上的歌（mp3 / m4a / ogg / wav），循环播放；只保存在这台设备上'], ['sfx', '音效', 'vol'], ['radio', '无线电通话', 'vol']]],
   ['画面', 'DISPLAY', [...(typeof platCanFs === 'function' && platCanFs() ? [['fs', '全屏', 'sw', PLAT.desk ? 'F11 或 Alt+Enter 也能切换，下次打开照此' : '按 Esc 退出全屏']] : []), ['look', '画面风格', [['real', '写实'], ['green', '黑绿'], ['matrix', '数码']], '写实：真实的天空、地表、海面与光影（默认）；黑绿：写实的地形与模型，黑底绿色磷光、发光轮廓（敌方红）；数码：原来的字符矩阵风格'], ['land', '地表', [['desert', '沙漠'], ['green', '绿地']], '写实画面的地表颜色：沙漠（沙地、砾石、岩石，默认）或绿地（草地、林地、农田）'], ['rain', '数码雨密度', 'rain'], ['bloom', '辉光强度', 'pct'], ['quality', '画质', [['high', '高'], ['low', '低']]], ['rdist', '3D 渲染距离', 'rd', '3D 里能看多远（远处的地形、建筑、部队模型）；调远更耗性能。3D 中也可按 [ ] 键调'], ['extMdl', '外部精细模型', 'sw', '3D 里的树木、岩石、楼房、机场设施和舰船换成免费可商用的真实模型（作者与授权见下方「素材致谢」）；关掉用游戏自己画的模型'], ['shake', '屏幕震动', 'sw'], ['front', '战线与态势图形', 'sw', '显示双方战线、无人地带、空隙、突击群调整线']]],
-  ['流程', 'FLOW', [['intro', '开场转场', 'sw', '从国家全图推近到战场，约 7 秒']]],
-  ['AI 指挥官通讯', 'COMMANDER CHAT', [['chat', '通讯详略', [['brief', '简要'], ['normal', '标准'], ['verbose', '详细']]], ['enemyChat', '显示敌方（截获）', 'sw', '战役中敌方通话以「截获」形式延迟出现']]]
-];
+  ['流程', 'FLOW', [['intro', '开场转场', 'sw', '从国家全图推近到战场，约 7 秒']]]
+];   // 原来还有「AI 指挥官通讯」一节（通讯详略、显示敌方截获）：作战通联已删掉，那两个开关调了没有作用
 const mnFmt = (k, v) => k === 'rdist' ? (v < .9 ? '近 ' : v <= 1.1 ? '标准 ' : v < 2.5 ? '远 ' : '极远 ') + (+v).toFixed(2).replace(/0$/, '') + '×' : k === 'rain' ? (v <= 0 ? '关' : v < .45 ? '淡 ' : '强 ') + (v > 0 ? Math.round(v * 100) + '%' : '') : Math.round(v * 100) + '%';
 
 function mnSetBuild() {
