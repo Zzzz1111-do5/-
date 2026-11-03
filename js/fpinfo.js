@@ -55,7 +55,7 @@ function fiData(o) {
   const L = typeof fwList === 'function' && o.kind ? fwList(o) : [], full = fiFull(o);
   const load = L.map((s, i) => {
     const W = s.W;
-    return { k: String(i + 1), nm: W.nm, n: s.n, full: full[s.w] ?? s.n, bay: FI_BAY[s.bay] || s.bay, kind: FI_K[W.k] || W.k, sk: FI_SK[W.sk] || W.sk,
+    return { k: String(i + 1), nm: W.nm, n: s.n, full: full[s.key || s.w] ?? s.n, bay: FI_BAY[s.bay] || s.bay, kind: FI_K[W.k] || W.k, sk: FI_SK[W.sk] || W.sk,
       rng: `${fiKm(W.Rmin)} – ${W.R} 公里`, spd: W.M ? `马赫 ${W.M}` : `无动力滑翔（升阻比 ${W.LD || '—'}）`, g: `${W.g} g`, cone: `±${W.cone}°`, lk: `${W.lk} 秒`,
       tb: W.M ? (W.tb < 1e8 ? `${W.tb} 秒` : '全程（涡喷）') : null, ds: FI_WD[s.w] || '' };
   });

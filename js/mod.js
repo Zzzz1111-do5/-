@@ -115,9 +115,9 @@ function modApply() {
     for (const k in MOD_DEF.load) {
       const L = MOD.air[k] && MOD.air[k].load;
       if (!L) { if (MOD_DEF.load[k]) FW_LOAD[k] = modClone(MOD_DEF.load[k]); else delete FW_LOAD[k]; continue; }
-      const rows = L.filter(r => r && FW_W[r.w] && r.n > 0), A = AIR_MDL[k];
-      const sr = rows.filter(r => FW_W[r.w].k === 'aam' && FW_W[r.w].sk === 'ir').reduce((a, r) => a + r.n, 0);
-      FW_LOAD[k] = rows.map(r => ({ w: r.w, bay: r.bay || 'ext', ...(FW_W[r.w].k === 'aam' && FW_W[r.w].sk === 'ir' ? { sr } : {}) }));
+      const rows = L.filter(r => r && FW_W[r.w] && r.n > 0).map(r => ({ ...r, n: Math.round(r.n) })), A = AIR_MDL[k];
+      // 每行带着自己的枚数（fpwpn.js fwInit 按行分：同一种弹放在几处各算各的；原来只记各类弹的总数，再按类分给头一行，同一种弹的第二行把第一行盖成 0）；红外近距弹先分
+      FW_LOAD[k] = rows.map(r => ({ w: r.w, bay: r.bay || 'ext', n: r.n, ...(FW_W[r.w].k === 'aam' && FW_W[r.w].sk === 'ir' ? { sr: r.n } : {}) }));
       if (A) {
         const sum = f => rows.filter(f).reduce((a, r) => a + r.n, 0), agm = rows.find(r => FW_W[r.w].k === 'agm'), gb = rows.find(r => FW_W[r.w].k === 'gb' || FW_W[r.w].k === 'arm');
         A.aam = sum(r => FW_W[r.w].k === 'aam' && r.w !== 'pl17'); A.aamL = sum(r => r.w === 'pl17') || undefined;
