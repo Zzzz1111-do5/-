@@ -8,6 +8,9 @@
 // 用法：NODE_PATH=$(npm root -g) node tools/trailer.js [输出目录，默认 store/video] [步骤，默认 shots,audio,edit]
 //   需要 Playwright 与 ffmpeg；没有显卡的机器上要一两个小时（逐帧渲染占大半）；输出 trailer_1080p.mp4（不进仓库）
 //   调试：ONLY=A,B 只渲染这几个镜头，FROM=30 FRAMES=8 每个镜头只渲染从第 30 帧起的 8 帧（不推演跳过的帧），SCOUT=reuse 用上次的侦察结果；W=1280 H=720 改分辨率
+//   每个镜头渲染完就存 <镜头>.mp4 和它的音效记录 <镜头>.sfx.json：SKIP=1 跳过两样都有的镜头（中断了接着渲）；
+//   SFXONLY=1 只走一遍记音效、不截图（镜头的视频已经有了；可以用小窗口跑：W=640 H=360，声像按画面比例算，和 1080p 一样）；
+//   没有显卡时可以开两个进程分头渲（ONLY 各给一半、输出目录分开），最后把 trailer_shots 里的文件拷到一起再跑 audio,edit
 'use strict';
 const { chromium } = require('playwright');
 const fs = require('fs'), path = require('path'), { execFileSync } = require('child_process');
@@ -151,11 +154,21 @@ function staticTarget(sh, sc, W, H) {
 }
 
 // —— 逐帧渲染全部镜头 ——
+// 各镜头的音效记录合成一份（按时间排）；没有单独记录的镜头沿用旧的总记录里落在它时段里的
+function combineSfx() {
+  const old = fs.existsSync(SFX) ? JSON.parse(fs.readFileSync(SFX, 'utf8')) : [], has = SHOTS.filter(s => fs.existsSync(path.join(SHOT_DIR, s.id + '.sfx.json')));
+  const snd = old.filter(([t]) => !has.some(s => t >= s.at - 1e-6 && t < s.at + s.dur - 1e-6));
+  for (const s of has) snd.push(...JSON.parse(fs.readFileSync(path.join(SHOT_DIR, s.id + '.sfx.json'), 'utf8')));
+  snd.sort((a, b) => a[0] - b[0]);
+  fs.writeFileSync(SFX, JSON.stringify(snd));
+  return snd;
+}
 async function stepShots(b) {
   fs.mkdirSync(SHOT_DIR, { recursive: true });
+  const sfxOnly = !!process.env.SFXONLY;
   const scf = path.join(OUT, 'trailer_scout.json');
   const sc = process.env.SCOUT === 'reuse' && fs.existsSync(scf) ? JSON.parse(fs.readFileSync(scf, 'utf8')) : await scoutSaved(b);   // SCOUT=reuse：调试时用上次的侦察结果
-  const p = await boot(b, 1920, 1080);
+  const p = await boot(b, +process.env.W || 1920, +process.env.H || 1080);
   p.on('console', m => { if (m.type() === 'error') console.warn('页面：', m.text().slice(0, 200)); });
   await p.addStyleTag({ content: OVERLAY_CSS });
   await p.evaluate(PAGE_FNS);
@@ -185,8 +198,9 @@ async function stepShots(b) {
   const only = process.env.ONLY ? process.env.ONLY.split(',') : null;
   const order = SHOTS.filter(s => s.T).sort((a, b) => a.T - b.T).concat(SHOTS.filter(s => s.ui)).filter(s => !only || only.includes(s.id));
   for (const sh of order) {
-    const N0 = Math.round(sh.dur * FPS), F0 = +process.env.FROM || 0, N = Math.min(N0, F0 + (+process.env.FRAMES || 1e9)), dir = path.join(SHOT_DIR, sh.id);
-    fs.rmSync(dir, { recursive: true, force: true }); fs.mkdirSync(dir, { recursive: true });
+    const N0 = Math.round(sh.dur * FPS), F0 = +process.env.FROM || 0, N = Math.min(N0, F0 + (+process.env.FRAMES || 1e9)), dir = path.join(SHOT_DIR, sh.id), sfxf = path.join(SHOT_DIR, sh.id + '.sfx.json');
+    if (process.env.SKIP && fs.existsSync(path.join(SHOT_DIR, sh.id + '.mp4')) && fs.existsSync(sfxf)) { console.log(`镜头 ${sh.id} 已有，跳过`); continue; }   // 推演不用补：下一个镜头开拍前照样推演到它的时刻，随机数是一条连续的流
+    if (!sfxOnly) { fs.rmSync(dir, { recursive: true, force: true }); fs.mkdirSync(dir, { recursive: true }); }
     if (sh.T) {
       const st = await p.evaluate(T => { __seed(window.__ss); while (S.t < T && !S.over) step(1 / 30); window.__ss = __rng(); __seed(window.__rs); return { t: S.t, land: window.__land(), fleet: window.__fleet(), cv: window.__cvp(), en: S.enemies.filter(e => !e.dead).length, tm: S.teams.filter(q => q.side === 'p' && q.men.length).length }; }, sh.T);
       const ss = sc.samp.find(q => q.t >= sh.T - .01);
@@ -251,20 +265,17 @@ async function stepShots(b) {
         }
         acc = -1e9; window.__vt += 1000 / 30; frame(window.__vt);   // 推演已经在上面做了，frame() 只画
       }, [i, cam, ov, sh, t, GLYPHS, F0]);
-      if (i >= F0) await p.screenshot({ path: path.join(dir, String(i - F0).padStart(4, '0') + '.jpg'), type: 'jpeg', quality: 93 });
+      if (i >= F0 && !sfxOnly) await p.screenshot({ path: path.join(dir, String(i - F0).padStart(4, '0') + '.jpg'), type: 'jpeg', quality: 93 });
     }
-    execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-framerate', String(FPS), '-i', path.join(dir, '%04d.jpg'), '-c:v', 'libx264', '-preset', 'medium', '-crf', '14', '-pix_fmt', 'yuv420p', path.join(SHOT_DIR, sh.id + '.mp4')]);
-    fs.rmSync(dir, { recursive: true, force: true });
-    await p.evaluate(() => { window.__rec = false; });
-    console.log(`镜头 ${sh.id} 完成（${N} 帧）`);
+    if (!sfxOnly) {
+      execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-framerate', String(FPS), '-i', path.join(dir, '%04d.jpg'), '-c:v', 'libx264', '-preset', 'medium', '-crf', '14', '-pix_fmt', 'yuv420p', path.join(SHOT_DIR, sh.id + '.mp4')]);
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+    const rec = await p.evaluate(() => { const r = window.__snd; window.__snd = []; window.__rec = false; return r; });   // 这个镜头的音效（时间都落在它的时段里）
+    fs.writeFileSync(sfxf, JSON.stringify(rec));
+    console.log(`镜头 ${sh.id} 完成（${N} 帧，音效 ${rec.length} 条）`);
   }
-  let snd = await p.evaluate(() => window.__snd);
-  if (only && fs.existsSync(SFX)) {   // 只重渲了几个镜头：保留别的镜头的音效记录
-    const redo = order.map(s => [s.at, s.at + s.dur]);
-    snd = JSON.parse(fs.readFileSync(SFX, 'utf8')).filter(([t]) => !redo.some(([a, b]) => t >= a - 1e-6 && t < b - 1e-6)).concat(snd);
-  }
-  fs.writeFileSync(SFX, JSON.stringify(snd));
-  console.log('音效记录', snd.length, '条');
+  console.log('音效记录', combineSfx().length, '条');
   await p.close();
 }
 const GLYPHS = 'アイウエオカキクケコサシスセソタチツテトナニヌネノ0123456789#%&*+=<>/\\|';
@@ -332,7 +343,7 @@ async function uiSetup(p, sh) {
 // —— 录音：游戏自己的音频引擎实时录下来——氛围乐开场，第 6 秒进行曲（固定 120 拍）起，强度逐幕加大，第 58 秒胜利号角；
 //    渲染时记下的音效按时间线回放；换幕处加重击 ——
 async function stepAudio(b) {
-  const snd = JSON.parse(fs.readFileSync(SFX, 'utf8'));
+  const snd = combineSfx();
   const b2 = await chromium.launch({ args: ['--autoplay-policy=no-user-gesture-required', '--allow-file-access-from-files'] });
   const p = await b2.newPage();
   await p.addInitScript(() => { window.requestAnimationFrame = () => 0; try { localStorage.clear(); localStorage.setItem('bh-settings', JSON.stringify({ intro: false, music: .9, sfx: .5, radio: .45, musicStyle: 'ambient' })); } catch (e) { /* 只影响声音 */ } });
