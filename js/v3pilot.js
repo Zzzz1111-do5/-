@@ -188,9 +188,12 @@ const fpDz = v => Math.abs(v) < FP_DZ ? 0 : Math.sign(v) * (Math.abs(v) - FP_DZ)
 //   转弯半径小三成、横滚快三成；飞行员的抗荷能力按同样比例算（黑视门槛跟着放大）。地图小（八公里宽），照真实的转弯半径一个掉头要飞出去两三公里，
 //   推演里 AI 的空战机动本来就比真实快 6 倍（airperf.js AP_K）。战争雷霆式、鼠标摇杆照真实
 //   1.3 倍还嫌不够（用户：飞机机动性还是不够）：升力、过载放大到 1.8 倍（低速一个掉头约 4 秒）；滚转单独 1.35 倍（再快就不好控了）
-const FP_MK = 1.8, FP_MKP = 1.35;
+//   推力同时放大 FP_MT 倍（用户：容易失速、推重比太低了）——升力放大 1.8 倍以后满过载急转的诱导阻力是真机的三倍多，推力不变就一转弯速度掉到三四百公里、
+//   边转边掉高度；推力 1.4 倍（歼-20 推重比约 1.6、歼-35 约 1.4），诱导阻力按放大倍数除一下（flight.js），急转后还留得住速度、掉高少一半
+const FP_MK = 1.8, FP_MKP = 1.35, FP_MT = 1.4;
 const fpMk = () => V3FP.ctl === 'ace' ? FP_MK : 1;
 const fpMkP = () => V3FP.ctl === 'ace' ? FP_MKP : 1;
+const fpMt = () => V3FP.ctl === 'ace' ? FP_MT : 1;
 const FP_GK = 1.2, FP_GN = [2.5, 4.5];   // 准心控制上下：航迹倾角差 → 倾角变化率的增益（1 / 秒）；为跟准心最多多推 / 多拉几 g（用真实飞控仿真调的：不过冲、不来回摆，最大约 5.5 g 不黑视）
 const fpCurve = v => Math.sign(v) * ((1 - FP_EXPO) * Math.abs(v) + FP_EXPO * Math.abs(v) ** 3);
 const fpRamp = (v, t, dt, up = 3.2) => { const k = Math.abs(t) > Math.abs(v) && Math.sign(t) === Math.sign(v || t) ? up : 7; return v + clamp(t - v, -k * dt, k * dt); };   // 推满约 0.3 秒（滚转 0.38 秒：轻点一下只压十度左右，细修航向）、回中约 0.14 秒
@@ -374,7 +377,7 @@ function fpFly(p, dt) {
     if (F.Va > 1) V3FP.ael = Math.asin(clamp(-F.V[2] / F.Va, -1, 1));   // 交回来时准心在航迹上，不猛地扳
   }
   F.P0 = F.P.slice(); F.q0 = F.q.slice();   // 上一步的位置、姿态：画面按这一步走了多少插值（推演每秒 30 步，画面 60 帧以上，不插值飞机一顿一顿地抖）
-  const hit = flStep(F, dt, { x, y, r, thr: ab ? 1 : V3FP.thr, ab, law: V3FP.ap ? 'n' : V3FP.law, gear: V3FP.gear, flap: V3FP.flapC, sb: K.has('KeyB') || !!T.sb, hook: V3FP.hook, hg: hg && !V3FP.ap, mk: fpMk(), mkp: fpMkP() });
+  const hit = flStep(F, dt, { x, y, r, thr: ab ? 1 : V3FP.thr, ab, law: V3FP.ap ? 'n' : V3FP.law, gear: V3FP.gear, flap: V3FP.flapC, sb: K.has('KeyB') || !!T.sb, hook: V3FP.hook, hg: hg && !V3FP.ap, mk: fpMk(), mkp: fpMkP(), mt: fpMt() });
   flToGame(p);
   if (F.ev) { const ev = F.ev; F.ev = null; if (fpLandEv(p, ev)) return true; }   // 接地、离地、挂索、冲出甲板（挂上索、跑道上停下来：交给地勤，不再走物理引擎）
   if (F.gnd && F.gk === 'rwy' && F.gs < 18 && V3FP.thr < .5) { fpRwyStop(p); return true; }
