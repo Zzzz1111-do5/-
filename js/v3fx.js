@@ -266,19 +266,21 @@ function v3Fx(C) {
   // —— 坦克炮、机关炮、喷火 ——
   for (const s of S.vshots || []) {
     if (!inB(s.x1, s.y1, 60)) continue;
-    const u = clamp(s.t / s.dur, 0, 1), z0 = g(s.x0, s.y0) + 2.6, z1 = g(s.x1, s.y1) + 1.5;
+    const mz = s.src != null && typeof v3gMuzzle === 'function' ? v3gMuzzle(s.src) : null;   // 编辑器在模型上点的炮口（v3g.js v3gMuzzle）：从那里出膛
+    const sx0 = mz ? mz[0] : s.x0, sy0 = mz ? mz[1] : s.y0;
+    const u = clamp(s.t / s.dur, 0, 1), z0 = mz ? mz[2] : g(s.x0, s.y0) + 2.6, z1 = g(s.x1, s.y1) + 1.5;
     if (s.k === 'flame') {
-      const f = v => v3fP(lerp(s.x0, s.x1, v), lerp(s.y0, s.y1, v), lerp(z0, z1, v) + Math.sin(Math.PI * v) * 2);
+      const f = v => v3fP(lerp(sx0, s.x1, v), lerp(sy0, s.y1, v), lerp(z0, z1, v) + Math.sin(Math.PI * v) * 2);
       v3fTrail(out, E, f, 0, Math.min(1, u * 2.5), 5, 5.5, [...V3F_COL.flame.slice(0, 3), .7 * (1 - u)]);
       continue;
     }
     const col = s.k === 'ap' ? V3F_COL.white : V3F_COL.amber, b = Math.max(0, u - .35);
-    v3fRib(out, E, v3fP(lerp(s.x0, s.x1, b), lerp(s.y0, s.y1, b), lerp(z0, z1, b)), v3fP(lerp(s.x0, s.x1, u), lerp(s.y0, s.y1, u), lerp(z0, z1, u)), 1.3, [col[0], col[1], col[2], 0], col);
+    v3fRib(out, E, v3fP(lerp(sx0, s.x1, b), lerp(sy0, s.y1, b), lerp(z0, z1, b)), v3fP(lerp(sx0, s.x1, u), lerp(sy0, s.y1, u), lerp(z0, z1, u)), 1.3, [col[0], col[1], col[2], 0], col);
     if (VX0 && s.t < .4) {   // 序列帧的炮口焰：顺着炮管喷出去的一团火光和硝烟（9 帧放 0.4 秒）；大小按车长（坦克炮大、步战车的机关炮小）
       const v = s.src != null && (S.veh || []).find(o => o.id === s.src), L = v && typeof vehSp === 'function' ? vehSp(v).len : 12, sz = clamp(L * .32, 1.6, 4.8);
-      const dx = s.x1 - s.x0, dy = s.y1 - s.y0, l = Math.hypot(dx, dy) || 1, ax = [dx / l, -dy / l, .08], w = s.t / .4;
-      v3vAdd('mzl', v3fP(s.x0 + dx / l * sz * .8, s.y0 + dy / l * sz * .8, z0 + .3), sz, w * 8, 1, 1.6 * (1 - w), [.6, .58, .55], ax);
-    } else if (u < .15) v3fSpark(out, C, v3fP(s.x0, s.y0, z0), 4.5 * (1 - u / .15), V3F_COL.amber);   // 炮口焰
+      const dx = s.x1 - sx0, dy = s.y1 - sy0, l = Math.hypot(dx, dy) || 1, ax = [dx / l, -dy / l, .08], w = s.t / .4, f0 = mz ? .55 : .8;
+      v3vAdd('mzl', v3fP(sx0 + dx / l * sz * f0, sy0 + dy / l * sz * f0, z0 + (mz ? 0 : .3)), sz, w * 8, 1, 1.6 * (1 - w), [.6, .58, .55], ax);
+    } else if (u < .15) v3fSpark(out, C, v3fP(sx0, sy0, z0), 4.5 * (1 - u / .15), V3F_COL.amber);   // 炮口焰
   }
   // —— 导弹（用户：导弹飞行效果不够真、不够帅，海军空军都是）——
   //   每一型按真实的发动机工作方式画（V3F_MOT，v3fMot）：固体火箭烧着时弹尾一团白热的尾焰（芯白、外橙、一闪一闪），身后拖出浓浓的白烟；

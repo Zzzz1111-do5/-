@@ -355,7 +355,7 @@ function fwFly(m, dt) {
   const lit = Wd.M > 0 && m.t >= F.ign;
   if (lit && !F.lit) { F.lit = true; if (typeof V3F === 'object' && V3F.puff) V3F.puff.push({ x: m.x, y: m.y, z: m.z3, t0: S.t, big: false, side: 'p', air: true }); }   // 点火：空中留一团白烟
   const a = [0, 0, -FW_G];
-  if (lit && m.t - F.ign < Wd.tb) { const vm = Wd.M * FW_A, k = sp < vm ? 20 * FW_G : (vm - sp) * 2; for (let i = 0; i < 3; i++) a[i] += u[i] * k; }
+  if (lit && m.t - F.ign < Wd.tb) { const vm = Wd.M * FW_A, k = sp < vm ? (Wd.acc || 20) * FW_G : (vm - sp) * 2; for (let i = 0; i < 3; i++) a[i] += u[i] * k; }   // acc：助推加速度（G，编辑器可改，默认 20）
   else if (lit || Wd.M === 0) { const kd = Wd.M === 0 ? 4e-5 : 1.4e-5; for (let i = 0; i < 3; i++) a[i] -= u[i] * kd * sp * sp; }
   if (Wd.M === 0) a[2] += FW_G * .85;   // 炸弹的弹翼升力：滑翔（不然像石头一样掉）
   else if (air && !tp && lit) a[2] += FW_G;   // 空空弹还在找目标：弹体升力托住，沿原方向直飞

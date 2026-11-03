@@ -586,7 +586,7 @@ function v3ShMatrix(C) {
 function v3ShPass(C) {
   const gl = V3.gl;
   V3SH.on = false;
-  if (v3Mx() || (SETTINGS && SETTINGS.quality === 'low') || R.autoLow) return false;   // 持续卡顿自动降画质时（main.js）不画实时阴影
+  if (v3Mx() || (SETTINGS && (SETTINGS.quality === 'low' || SETTINGS.shadow === false)) || R.autoLow) return false;   // 持续卡顿自动降画质时（main.js）不画实时阴影；编辑器 / 设置里可以关
   if (!V3SH.tried) v3ShInit(gl);
   if (!V3SH.ok) return false;
   const M = v3ShMatrix(C), S0 = V3SH.size;

@@ -157,9 +157,17 @@ function msPgmFly(m, dt) {
   const W0 = MS_PGM[m.w || (m.w = 'cj10')], T = msPgmTgt(m.tgt);
   if (T) { m.tx = T.x; m.ty = T.y; }
   if (m.t > m.dur) { m.done = true; return; }
-  const d = dist(m.x, m.y, m.tx, m.ty), v = W0.sprint && d < W0.sr ? W0.sprint : W0.spd, st = v * dt;
+  const d = dist(m.x, m.y, m.tx, m.ty);
+  let v = W0.sprint && d < W0.sr ? W0.sprint : W0.spd;
+  if (W0.acc > 0) { m.cs = Math.min(v, (m.cs ?? (W0.v0 ?? v * .3)) + W0.acc * dt); v = m.cs; }   // 编辑器设了加速度（mod.js）：从出筒速度 v0 加速到巡航 / 冲刺速度
+  const st = v * dt;
   m.hd = Math.atan2(m.ty - m.y, m.tx - m.x);
-  m.z = W0.z * (d < 120 ? Math.max(.1, d / 120) : Math.min(1, m.t * 2));
+  // 弹道（编辑器 mod.js 可改 prof）：cruise 平飞（默认）、skim 掠海超低空、loft 高抛（中段爬到 lz 再下来）、popup 末段跃升俯冲（离目标 pd 内先爬 lz 再扎下去）
+  const P = W0.prof || 'cruise', d0 = P === 'loft' ? m.d0 || (m.d0 = Math.max(1, d)) : 1, u = P === 'loft' ? clamp(1 - d / d0, 0, 1) : 0;   // 起飞时离目标多远只有高抛要记（默认的平飞不往状态里加东西）
+  let zc = P === 'skim' ? Math.min(W0.z, .03) : W0.z;
+  if (P === 'loft') zc = W0.z + (W0.lz ?? .5) * Math.sin(Math.PI * u);
+  else if (P === 'popup') { const pd = W0.pd ?? 700; if (d < pd && d > 120) zc += (W0.lz ?? .3) * Math.sin(Math.PI * clamp(1 - (d - 120) / (pd - 120), 0, 1) * .8); }
+  m.z = zc * (d < 120 ? Math.max(.1, d / 120) : Math.min(1, m.t * 2));
   if (m.tgt && m.tgt.k === 'eship' && typeof navyDefend === 'function' && navyDefend(m)) return;   // 敌舰分层拦截
   if (d > Math.max(8, st)) { m.x += Math.cos(m.hd) * st; m.y += Math.sin(m.hd) * st; return; }
   m.done = true; m.x = m.tx; m.y = m.ty;

@@ -1,6 +1,6 @@
 'use strict';
 // 设置：音量、显示、流程、AI 指挥官聊天。存 localStorage 'bh-settings'（兼容旧的 'bh-rain'）；无 DOM，可在 Node 中运行
-const SETTINGS_DEF = { master: .8, music: .45, musicStyle: 'march', sfx: .8, radio: .6, rain: .25, bloom: .7, quality: 'high', look: 'real', intro: true, v3: true, chat: 'normal', enemyChat: true, shake: true, front: true, rdist: 1, extMdl: true, land: 'desert' };
+const SETTINGS_DEF = { master: .8, music: .45, musicStyle: 'march', sfx: .8, radio: .6, rain: .25, bloom: .7, quality: 'high', look: 'real', intro: true, v3: true, chat: 'normal', enemyChat: true, shake: true, front: true, rdist: 1, extMdl: true, land: 'desert', shadow: true, cloud: 1, vfx: true, film: true };   // shadow 实时阴影、cloud 云量（0 不画）、vfx 序列帧特效、film 电影后期（光束、颗粒、景深）
 const SETTINGS = { ...SETTINGS_DEF };
 const SET_FNS = [];
 const SET_KEY = 'bh-settings';
