@@ -562,6 +562,8 @@ function airRelState(side, id) {
   }
   return { bay, sbay, used: airUsed(ev, S.t), bayW: ev.w, bayN: bay > 0 ? (S.t - ev.ts[ev.ts.length - 1].t0 < AIR_REL.open ? undefined : 0) : 0 };
 }
+// 这架飞机最近一次抛射（开舱）的时刻：编辑器设计的「发射时」动画用（v3g.js v3gPlaneAn）
+function airRelLast(side, id) { airRelScan(); const ev = AIRV.ev && AIRV.ev.get(side + id); return ev && ev.ts.length ? ev.ts[ev.ts.length - 1].t0 : null; }
 // 二维画飞机时用的尺寸（与 drawPlanes / eair.js 一致）
 function airDrawSize(o, side) {
   if (side === 'p') { const sp = typeof airSpec === 'function' ? airSpec(o.kind, o.v) : { size: 15 }; return Math.max(sp.size, px(20)); }

@@ -973,7 +973,7 @@ function v3mGet(key, build) {
 const V3_PIL = .95;   // 飞行员、甲板人员的比例（按飞机的真实比例，比战场上的士兵小）
 const V3_ROT = .14;   // 起飞抬头的仰角（约 8°）
 function v3GroundPlane(key, sz, x, y, ground, hd, fold, cpo, still, side, t, sf, pt = 0, bay = null) {   // 用户给的飞机模型（js/v3g.js）放下起落架；side 3 / 4：我方 / 敌方飞机；bay：弹舱门开度（挂弹时）
-  if (typeof v3gPlane === 'function') v3gPlane(key, sz, x, y, ground, true, hd, side === 4 || side === 1 ? 1 : 0, 0, pt, true, still ? 0 : t, 0, sf, bay, fold);   // sf：挂上弹射杆后的舵面检查（v3det.js v3dDeckSurf）；fold：外翼折起（有折翼的模型，v3g.js V3G_FOLD）
+  if (typeof v3gPlane === 'function') v3gPlane(key, sz, x, y, ground, true, hd, side === 4 || side === 1 ? 1 : 0, 0, pt, true, still ? 0 : t, 0, sf, bay, fold, typeof v3gPlaneAn === 'function' ? v3gPlaneAn(key, Math.round(x * 3 + y * 7), side === 4 || side === 1, false) : null);   // sf：挂上弹射杆后的舵面检查（v3det.js v3dDeckSurf）；fold：外翼折起（有折翼的模型，v3g.js V3G_FOLD）
 }
 // 登陆舰艇的外部精细模型（v3utex.js V3U_SHIP）：舰名前缀 → [模型, 画多长（世界单位）]——LC 726 型气垫艇、LA 271 型登陆艇、LV 人员登陆艇；
 //   其余舰型（072A、074A、073A、072、火箭 / 火力支援艇、扫雷舰）没有合规的免费模型，照真舰程序建模（v3lst.js V3L_PRE）
@@ -1359,7 +1359,7 @@ function v3mCollect(C, box) {
       const [x, y] = eaW(b, P.u, P.v);
       if (!inB(x, y, 30)) continue;
       const [x2, y2] = eaW(b, P.u + Math.cos(P.a), P.v + Math.sin(P.a)), h = Math.atan2(y2 - y, x2 - x);
-      if (typeof v3gPlane === 'function') v3gPlane(P.sil, P.size, x, y, v3Ht(x, y), true, h, own ? 0 : 1, 0, 0, true, 0);   // 放下起落架停着
+      if (typeof v3gPlane === 'function') v3gPlane(P.sil, P.size, x, y, v3Ht(x, y), true, h, own ? 0 : 1, 0, 0, true, 0, 0, null, null, 0, typeof v3gPlaneAn === 'function' ? v3gPlaneAn(P.sil, Math.round(x * 3 + y * 7), !own, false) : null);   // 放下起落架停着（编辑器设计的「停着时」动画）
     }
   }
   // 机场外的前沿加油弹药点（eair.js）：停着的直升机 / F-35B、油囊、弹药箱
@@ -1385,7 +1385,8 @@ function v3mCollect(C, box) {
     const Pc = typeof v3dCtlP !== 'function' ? null : o.fl && o.fp ? v3dCtlP(o.fl) : Pq ? v3dCtlAI(Pq, gd) : null;   // 舵面各通道：玩家开的按电传算出的真实舵偏 + 襟翼、减速板；AI 的按气动 + 起降构型
     const bay = typeof fwBay === 'function' ? fwBay(o, sd ? 'e' : 'p') : null;   // 弹舱门开度（fpwpn.js：玩家开的按选中的武器，AI 的按发射时刻）
     const nz = !sd && typeof fpNoz === 'function' && typeof fpDriving === 'function' && fpDriving(o) ? fpNoz(o) : typeof v3dNozAI === 'function' ? v3dNozAI(o, sd) : 0;   // 尾喷口开合：玩家开的按油门，AI 的按它的发动机状态
-    if (typeof v3gPlane === 'function' && v3gPlane(key, sz, x, y, z, rwy, hd || 0, sd, bank || 0, pt, gd, t, nz, Pc, bay) && !sd && typeof fwBayMsl === 'function') fwBayMsl(o, key, sz, x, y, z, hd || 0, pt, bank || 0, bay);   // 用户给的飞机模型（js/v3g.js）：起落架收放、直升机旋翼转、尾喷口开合、舵面偏转、弹舱门开合（开着时画舱里的弹）
+    const An = typeof v3gPlaneAn === 'function' ? v3gPlaneAn(key, o.id, sd, true) : null;   // 编辑器设计的动画（飞着、发射时）
+    if (typeof v3gPlane === 'function' && v3gPlane(key, sz, x, y, z, rwy, hd || 0, sd, bank || 0, pt, gd, t, nz, Pc, bay, 0, An) && !sd && typeof fwBayMsl === 'function') fwBayMsl(o, key, sz, x, y, z, hd || 0, pt, bank || 0, bay);   // 用户给的飞机模型（js/v3g.js）：起落架收放、直升机旋翼转、尾喷口开合、舵面偏转、弹舱门开合（开着时画舱里的弹）
   };
   for (const p of S.planes || []) if (!p.dead && isFinite(p.x) && (inB(p.x, p.y, 220) || (typeof fpDriving === 'function' && fpDriving(p))) && !(!p.land && (p.phase === 'cat' || p.phase === 'roll' || p.phase === 'trap'))) {   // 甲板上的在航母那里画（放下起落架）
     const key = typeof airSilKey === 'function' ? airSilKey(p.kind, p.v) : 'j35', sz = (typeof airMdl === 'function' && airMdl(p.kind, p.v).size) || ((typeof AIR_SPEC === 'object' && AIR_SPEC[p.kind]) || {}).size || 15;
@@ -1397,7 +1398,7 @@ function v3mCollect(C, box) {
     const age = S.t - w.t;
     if (age < 0 || age > T) return;
     const P = v3WreckAt(w, age, T), sp = (w.t * 7.31) % 1 < .5 ? 1 : -1;
-    if (inB(P.x, P.y, 220) && typeof v3gPlane === 'function') v3gPlane(key, sz, P.x, P.y, P.z, false, w.h + age * .5 * sp, 2, age * 4.2 * sp, -.2 - P.u * .95, false, 0);
+    if (inB(P.x, P.y, 220) && typeof v3gPlane === 'function') v3gPlane(key, sz, P.x, P.y, P.z, false, w.h + age * .5 * sp, 2, age * 4.2 * sp, -.2 - P.u * .95, false, 0, 0, null, null, 0, typeof v3gPlaneAn === 'function' ? v3gPlaneAn(key, Math.round(w.t * 100), 0, false, w.t) : null);   // 编辑器设计的「被击落时」动画
   };
   for (const w of (S.air && S.air.wrecks) || []) { const key = typeof airSilKey === 'function' ? airSilKey(w.kind, w.v) : 'j35'; wreck(w, 2.2, key, (typeof airMdl === 'function' && airMdl(w.kind, w.v).size) || 15); }
   if (S.eair) for (const w of S.eair.wr || []) if (spec || seen(w.x, w.y)) { const [key, sz] = EA_K[w.type] || ['f35', 17]; wreck(w, 2, key, sz); }

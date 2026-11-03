@@ -619,7 +619,7 @@ function modAnimNow(key, v, fs, dead) {
   else if (an.hit && t - (v.hitT ?? -99) < (an.hit.dur || 1)) { c = an.hit; ct = t - v.hitT; }
   else if (an.fire && fs >= 0 && fs < (an.fire.dur || 1)) { c = an.fire; ct = fs; }
   else if (an.move && v.moving) { c = an.move; ct = t + (v.id || 0) * .37; }
-  else if (an.idle) { c = an.idle; ct = t + (v.id || 0) * .37; }
+  else if (an.idle && !v.moving) { c = an.idle; ct = t + (v.id || 0) * .37; }   // 停着时：走着、飞着的不播（舱盖开着飞不像话）
   if (!c || !c.tr) return null;
   const dur = Math.max(.05, +c.dur || 1);
   ct = c.loop ? ((ct % dur) + dur) % dur : Math.min(Math.max(ct, 0), dur);
