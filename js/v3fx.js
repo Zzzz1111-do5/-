@@ -202,6 +202,7 @@ function v3Fx(C) {
   const seen = (x, y) => spec || inVision(x, y);
   const g = (x, y) => v3Ht(clamp(x, 0, W - 1), clamp(y, 0, H - 1));
   // —— 炮弹与炸弹 ——
+  const VX0 = typeof v3vReady === 'function' && v3vReady();
   for (const s of S.shells || []) {
     if (s.t < 0 || !inB(s.x1, s.y1)) continue;
     const u = clamp(s.t / s.dur, 0, 1), sx = s.fuzzy ? s.fx0 : s.x0, sy = s.fuzzy ? s.fy0 : s.y0;
@@ -212,6 +213,10 @@ function v3Fx(C) {
     else { const apex = s.kind === 'mortar' ? Math.min(320, d * .75) : Math.min(420, d * .32); f = v => v3fP(lerp(sx, s.x1, v), lerp(sy, s.y1, v), lerp(z0, z1, v) + Math.sin(Math.PI * v) * apex); }
     const col = s.kind === 'smoke' ? V3F_COL.smoke : s.kind === 'bomb' ? V3F_COL.amber : s.side === 'p' ? V3F_COL.p : V3F_COL.e;
     v3fTrail(out, E, f, Math.max(0, u - .1), u, 6, s.kind === 'bomb' ? 2.2 : 1.8, col);
+    if (VX0 && s.kind !== 'bomb' && s.t < 1.4 && !s.fuzzy && (s.side === 'p' || seen(sx, sy))) {   // 火炮出膛：炮口一团火光，顺着炮身冲出去、翻成硝烟（序列帧 100 帧放 1.4 秒）
+      const p0 = f(0), p1 = f(.02), ax = [p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]], al = Math.hypot(...ax) || 1, sz = s.kind === 'mortar' ? 3 : 7;
+      v3vAdd('mzla', [p0[0] + ax[0] / al * sz * .8, p0[1] + ax[1] / al * sz * .8, p0[2] + ax[2] / al * sz * .8], sz, s.t / 1.4 * 99, 1 - smooth(1, 1.4, s.t), 1.4, [.58, .56, .53], ax);
+    }
     v3fSpark(out, C, f(u), s.kind === 'bomb' ? 3.2 : 2.6, s.kind === 'smoke' ? col : V3F_COL.white);
   }
   // —— 步兵曳光弹：枪口高度平直飞 ——
@@ -269,7 +274,11 @@ function v3Fx(C) {
     }
     const col = s.k === 'ap' ? V3F_COL.white : V3F_COL.amber, b = Math.max(0, u - .35);
     v3fRib(out, E, v3fP(lerp(s.x0, s.x1, b), lerp(s.y0, s.y1, b), lerp(z0, z1, b)), v3fP(lerp(s.x0, s.x1, u), lerp(s.y0, s.y1, u), lerp(z0, z1, u)), 1.3, [col[0], col[1], col[2], 0], col);
-    if (u < .15) v3fSpark(out, C, v3fP(s.x0, s.y0, z0), 4.5 * (1 - u / .15), V3F_COL.amber);   // 炮口焰
+    if (VX0 && s.t < .4) {   // 序列帧的炮口焰：顺着炮管喷出去的一团火光和硝烟（9 帧放 0.4 秒）；大小按车长（坦克炮大、步战车的机关炮小）
+      const v = s.src != null && (S.veh || []).find(o => o.id === s.src), L = v && typeof vehSp === 'function' ? vehSp(v).len : 12, sz = clamp(L * .32, 1.6, 4.8);
+      const dx = s.x1 - s.x0, dy = s.y1 - s.y0, l = Math.hypot(dx, dy) || 1, ax = [dx / l, -dy / l, .08], w = s.t / .4;
+      v3vAdd('mzl', v3fP(s.x0 + dx / l * sz * .8, s.y0 + dy / l * sz * .8, z0 + .3), sz, w * 8, 1, 1.6 * (1 - w), [.6, .58, .55], ax);
+    } else if (u < .15) v3fSpark(out, C, v3fP(s.x0, s.y0, z0), 4.5 * (1 - u / .15), V3F_COL.amber);   // 炮口焰
   }
   // —— 导弹（用户：导弹飞行效果不够真、不够帅，海军空军都是）——
   //   每一型按真实的发动机工作方式画（V3F_MOT，v3fMot）：固体火箭烧着时弹尾一团白热的尾焰（芯白、外橙、一闪一闪），身后拖出浓浓的白烟；
@@ -368,7 +377,7 @@ function v3Fx(C) {
     V3F.ex.push({ x: f.x, y: f.y, z, r: f.r * (f.kind === 'b2' ? 1.4 : 1), t0: S.t - f.life, air, side: f.side, sd: (f.x * 13.7 + f.y * 7.1) % 6.283 });
   }
   V3F.ex = V3F.ex.filter(o => S.t - o.t0 < 9);
-  const WX = V3F_WIND[0], WY = V3F_WIND[1];
+  const WX = V3F_WIND[0], WY = V3F_WIND[1], VX = VX0;   // VX：序列帧特效（v3vfx.js，ArmyVFX 的贴图）载入好了
   for (const o of V3F.ex) {
     if (!inB(o.x, o.y, 300)) continue;   // 与平面画面一样：爆炸都画（看得见火光）
     const a = S.t - o.t0, r = clamp(o.r, 6, 90), up = o.air ? 0 : 1, sid = Math.floor(o.sd * 97), sea = !o.air && o.z < -1.5;
@@ -377,7 +386,18 @@ function v3Fx(C) {
       const R0 = r * (.5 + a * 11), al = .3 * (1 - a / .32), col = sea ? [.9, .95, 1, al] : [.95, .82, .6, al];
       for (let i = 0; i < 20; i++) { const a0 = i / 20 * 6.2832, a1 = a0 + .3142; v3fRib(out, E, v3fP(o.x + Math.cos(a0) * R0, o.y + Math.sin(a0) * R0, o.z + .6), v3fP(o.x + Math.cos(a1) * R0, o.y + Math.sin(a1) * R0, o.z + .6), r * .14, col, col); }
     }
-    if (a < 1.4) for (let i = 0; i < 6; i++) {   // 火球：几团翻滚的火往外膨胀、往上腾，从白黄冷却成橙红、暗红
+    const VXo = VX && !sea;   // 地面、空中的爆炸用序列帧；水面的水柱照旧
+    if (VXo) {   // 序列帧：火球炸开、翻滚着冷却成黑烟（121 帧放 2.8 秒，大的 3.6 秒），之后几团烟团接着往上飘、往下风散开
+      const T = o.r > 40 ? 3.6 : 2.8, u = a / T, s = r * 1.4;
+      if (u < 1) v3vAdd('expl', v3fP(o.x, o.y, o.z + (o.air ? 0 : s * (.12 + .45 * u))), s, u * 120, 1, 1.7 * (1 - smooth(.12, .55, u)) + .15, [.25, .23, .21], null, o.sd);
+      for (let i = 0; i < 3; i++) {
+        const b = a - T * .7 - i * .5;
+        if (b < 0 || b > 6.5) continue;
+        const an = o.sd + i * 2.1, d = r * .25 + b * 1.5;
+        v3vAdd('puff', v3fP(o.x + Math.cos(an) * d + WX * b * 1.6, o.y + Math.sin(an) * d + WY * b * 1.6, o.z + s * .75 + b * (2.2 + i * .6)), r * (.75 + b * .22), 12 + b / 6.5 * 51, .75 * (1 - b / 6.5), 0, [.36, .34, .32], null, o.sd + i, .8);
+      }
+    }
+    if (a < 1.4 && !VXo) for (let i = 0; i < 6; i++) {   // 火球：几团翻滚的火往外膨胀、往上腾，从白黄冷却成橙红、暗红
       const an = o.sd + i * 2.39, el = (i % 3 - 1) * .55, d = r * (.1 + .42 * Math.sqrt(a / 1.4)) * (.7 + (i * 37 % 10) / 25);
       const p = v3fP(o.x + Math.cos(an) * Math.cos(el) * d, o.y + Math.sin(an) * Math.cos(el) * d, o.z + (Math.sin(el) * d + up * (r * .22 + a * r * .5)) * (o.air ? 1 : .9));
       const k = 1 - a / 1.4, cool = smooth(.08, 1.1, a);
@@ -388,7 +408,7 @@ function v3Fx(C) {
       const zp = Math.max(o.air ? -1e9 : o.z, o.z + zz);
       v3fSpark(out, C, v3fP(o.x + Math.cos(an) * c, o.y + Math.sin(an) * c, zp), Math.max(.5, r * .045), [1, .7, .3, .9 * (1 - a / 1.6)]);
     }
-    if (a > .12) for (let i = 0; i < 6; i++) {   // 烟：浓的灰黑烟从火球里翻滚着升起，越来越大、往下风飘、慢慢变淡（遮光）；水面上是白色的水汽
+    if (a > .12 && !VXo) for (let i = 0; i < 6; i++) {   // 烟：浓的灰黑烟从火球里翻滚着升起，越来越大、往下风飘、慢慢变淡（遮光）；水面上是白色的水汽
       const u = a / 9, an = o.sd + i * 1.05, d = r * (.22 + a * .1), rise = o.air ? a * 1.2 - a * a * .05 : r * .3 + a * (2.6 + i * .8);
       const fade = Math.min(1, (a - .12) / .5) * Math.pow(1 - u, 1.4), sh = .02 * i;
       const col = sea ? [.78 + sh, .8 + sh, .82 + sh, .55 * fade] : [.17 + sh, .155 + sh, .14 + sh, .78 * fade];
@@ -405,7 +425,11 @@ function v3Fx(C) {
     const wreck = (x, y, L, age, id) => {
       if (age < 0 || age > 120 || !inB(x, y, 150) || ++nW > 18) return;
       const z = g(x, y), k = 1 - age / 120, sid = id & 15;
-      if (age < 50) { const fk = 1 - age / 50; for (let i = 0; i < 2; i++) v3fBillow(out, C, v3fP(x + (i - .5) * L * .18, y, z + L * (.2 + .1 * i)), L * (.2 + .12 * fk), [1, .48, .14, .6 * fk], 2, sid + i); }
+      if (age < 50) {
+        const fk = 1 - age / 50;
+        if (VX) for (let i = 0; i < 2; i++) { const s = L * (.32 + .2 * fk) * (1 - i * .25); v3vAdd('fire', v3fP(x + (i - .5) * L * .22, y, z + s * .85), s, ((S.t * 24 + i * 23 + id * 7) % 64 + 64) % 64, Math.min(1, fk * 2.5), 1.25, [.2, .18, .16]); }   // 序列帧的火（循环）
+        else for (let i = 0; i < 2; i++) v3fBillow(out, C, v3fP(x + (i - .5) * L * .18, y, z + L * (.2 + .1 * i)), L * (.2 + .12 * fk), [1, .48, .14, .6 * fk], 2, sid + i);
+      }
       for (let i = 0; i < 8; i++) {   // 一串烟团从车上升起到 u = 1 消失，循环接上，连成一根烟柱：根上又黑又浓，越往上越散、越灰、越淡
         const u = (S.t * .07 + i / 8 + id * .131) % 1, wx = u * u * L * 7;
         const a = .58 * Math.pow(k, .6) * Math.pow(1 - u, 1.2) * Math.min(1, u / .06);   // 残骸一多（十几根烟柱）也不至于把战场整片遮黑
@@ -532,6 +556,7 @@ function v3Fx(C) {
   if (typeof v3dHaze === 'function') v3dHaze(C);   // 喷口后的热浪（v3det.js）：在加法特效之前，扭的是火焰后面的画面
   if (typeof v3jDraw === 'function') v3jDraw(C);   // 喷口内部（不透明）、加力尾焰（加法）
   if (typeof v3ntLamps === 'function') v3ntLamps(out, C);   // 夜里：车灯、尾灯、舰艇航行灯、直升机防撞灯（v3nite.js）
+  if (typeof v3vDraw === 'function') v3vDraw(C);   // 序列帧特效（v3vfx.js）：在程序的烟、发光之前画
   if (!out.length && !sm.length) return;
   // —— 画：先画遮挡的烟（预乘透明度的普通混合），再画发光（加法混合）；都测深度、不写深度 ——
   const A = V3F.a;
