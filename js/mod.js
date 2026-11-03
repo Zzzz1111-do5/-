@@ -14,7 +14,7 @@ const MOD = { v: 1 };
 for (const k of MOD_SEC) MOD[k] = {};
 const MOD_DEF = { air: {}, eair: {}, wpn: {}, msl: {}, load: {}, ap: {}, fl: {}, gun: {}, st: {}, v3air: {} };   // 表里改之前的原值
 const MOD_VMDL = {};   // 车辆型号 → 换上的 3D 模型（只管画面；推演里查型号功能表 vfn.js 仍按原来的模型）
-const MODX = { db: null, bad: new Set(), ready: false };   // IndexedDB、读不出来的导入文件
+const MODX = { db: null, bad: new Set(), ready: false, raw: {}, sig: {} };   // IndexedDB、读不出来的导入文件；raw 导入模型的原件（{ meta, bin }，拆部件改了以后照它重新解码），sig 解码时用的部件设置
 // 各表能改的字段（别的字段不往表里写，免得和表里原有的字段撞名）
 const MOD_F = {
   air: ['spd', 'aa', 'stealth', 'radar', 'aamR', 'pkK', 'agmR', 'std', 'turn', 'loiter'],
@@ -129,12 +129,148 @@ function modApply() {
   }
   // 序列帧特效：换掉内置的爆炸、火、炮口焰、烟团（v3vfx.js）
   if (typeof v3vSlots === 'function') { const sl = {}; for (const k in MOD.fx) if (MOD.lib[MOD.fx[k]] && !MODX.bad.has(MOD.fx[k])) sl[k] = MOD.fx[k]; v3vSlots(sl); }
+  if (typeof FW_LD === 'object' && FW_LD && typeof FW_LD.clear === 'function') FW_LD.clear();   // 甲板上挂弹的满载清单按机型缓存着（fpwpn.js fwLoadout）：挂载、挂点改了要重算
+  for (const id in MODX.raw) if (MODX.sig[id] !== JSON.stringify((MOD.mdl[id] || {}).pt || null)) modRegMdl(id);   // 部件改了：导入的模型重新解码
 }
 // 模型上的点（模型坐标，米：x 前、y 左、z 上）
 const modMdlOf = mk => (mk && MOD.mdl[mk]) || null;
 const modNozOf = mk => { const o = modMdlOf(mk); return o && Array.isArray(o.noz) && o.noz.length ? o.noz : null; };   // 尾喷口 [x, y, z, 内半径, 深]（y 不为 0 时左右各一个）
 const modFxOf = mk => { const o = modMdlOf(mk); return o && o.fx ? o.fx : null; };   // 尾焰：len 长度、bri 亮度、dia 马赫环数、wid 粗细、haze 热浪（倍数），spr 序列帧尾焰、sprS 大小、vol 体渲染尾焰开关
 const modMuzOf = mk => { const o = modMdlOf(mk); return o && Array.isArray(o.muz) && o.muz.length === 3 ? o.muz : null; };   // 车辆主炮炮口
+// 车载机枪的枪口：{ p 位置, on 装在哪（hull 车体 / t 炮塔 / g 炮管 / mg 机枪塔）}；没设 on 的按模型有什么部件猜（有机枪的部件就在机枪塔上，有炮塔就在炮塔上）
+function modMgOf(mk) {
+  const o = modMdlOf(mk);
+  if (!o || !Array.isArray(o.mg) || o.mg.length !== 3) return null;
+  const pt = o.pt || {}, on = ['hull', 't', 'g', 'mg'].includes(o.mgOn) ? o.mgOn : pt.mg || pt.mt ? 'mg' : pt.t ? 't' : 'hull';
+  return { p: o.mg, on };
+}
+// 这辆车画面上用的模型键（编辑器换过的按换的）
+const modVehMdl = v => { const M = typeof rlModelOf === 'function' ? rlModelOf(v) : null; return M && typeof v3gVehKey === 'function' ? v3gVehKey(M.key, v.side === 'e' ? 'e' : 'p') : null; };
+// —— 导入模型的部件（编辑器「部件」页：MOD.mdl[模型键].pt）——
+//   导入时按「连通块」编号（modimp.js mimPieces：三角形连着的、同一个物体里位置相同的顶点算一块），每个顶点记着自己是第几块（meta.pv，接在模型数据后面）；
+//   连成一整块分不开的（炮塔和车体是一张网格）用编辑器里的切割薄片切开（modimp.js mimCut：沿平面真的把三角形切开，切下来的是新的块）。
+//   pt 按用途列块号（区间字符串「0-5,9」）：t 炮塔、g 炮管、gear 起落架（收起时藏起来）、rot 主旋翼、trot 尾桨、x 删除、mt 机枪塔（遥控武器站的转台，转向机枪的目标）、mg 机枪（随机枪塔转、自己俯仰）；
+//   没列的块是车体 / 机身，不动——炮塔转的时候只有列进 t、g、mt、mg 的块跟着转。转轴全是手动定的（不自动估）：ta 炮塔转轴、ga 炮管俯仰轴（炮耳）、ma 机枪塔转轴、mb 机枪俯仰轴、
+//   ra 主旋翼轴、qa 尾桨轴，各是 { p 轴上一点 [x, y, z], a 方向 [x, y, z] }
+//   （编辑器里输数、在模型上点、或用圆心定位器在圆边上点三个点）；没定转轴的部件不动。
+//   el 俯仰范围 [俯, 仰]（度）、elR 俯仰速度（度 / 秒）、rc 后坐行程（米）、trav 画面上炮塔转速（装到推演里没有炮塔的车种上时用）；mtr 机枪塔转速、mel 机枪俯仰范围、melR 机枪俯仰速度。
+//   机枪口在 MOD.mdl[模型键].mg（mgOn 装在哪：hull 车体、t 炮塔、g 炮管（并列机枪）、mg 机枪塔；不设按有没有机枪塔 / 炮塔猜）：推演里车载机枪打的曳光弹从这里出（combat.js tracer 的 src、v3fx.js）
+//   删了东西：按剩下的部分重新落地、前后左右居中（modPtOff），模型上的点（炮口、挂点、转轴……）都按这个坐标记
+const MOD_PTR = ['', 't', 'g', 'gear', 'rot', 'trot', 'x', 'mt', 'mg'];   // 用途代码（下标）：0 车体 / 机身（不动）、1 炮塔、2 炮管、3 起落架、4 主旋翼、5 尾桨、6 删除、7 机枪塔、8 机枪
+const MOD_PT_DEL = 6;
+const MOD_PT_AX = { ta: 1, ga: 2, ma: 7, mb: 8, ra: 4, qa: 5 };   // 转轴 → 它管哪种用途的块
+const modIdsDec = s => {
+  const out = [];
+  for (const a of String(s ?? '').split(',')) { const m = a.match(/^\s*(\d+)(?:\s*-\s*(\d+))?\s*$/); if (!m) continue; const lo = +m[1], hi = m[2] != null ? Math.min(+m[2], lo + 4e6) : lo; for (let i = lo; i <= hi; i++) out.push(i); }
+  return out;
+};
+const modIdsEnc = ids => {
+  const a = [...new Set(ids)].sort((x, y) => x - y), o = [];
+  for (let i = 0; i < a.length;) { let j = i; while (j + 1 < a.length && a[j + 1] === a[j] + 1) j++; o.push(j > i ? a[i] + '-' + a[j] : String(a[i])); i = j + 1; }
+  return o.join(',');
+};
+// 每一块的用途代码（Uint8Array，下标是块号）
+function modPtRoles(pt, n) {
+  const R = new Uint8Array(n);
+  if (pt) for (let c = 1; c < MOD_PTR.length; c++) for (const i of modIdsDec(pt[MOD_PTR[c]])) if (i < n) R[i] = c;
+  return R;
+}
+// 每个顶点是第几块（模型数据后面那一段；没有的返回 null）
+function modPv(m, bin) {
+  if (!m || !m.pv || !bin) return null;
+  const B = bin instanceof ArrayBuffer ? bin : bin.buffer, o = (bin.byteOffset || 0) + m.pv[0];
+  if (o + m.pv[1] > B.byteLength) return null;
+  return m.pvt === 4 ? new Uint32Array(B, o, m.pv[1] / 4) : new Uint16Array(B, o, m.pv[1] / 2);
+}
+// 每一块属于哪个物体（glTF 节点；老的导入没有）
+function modPnd(m, bin) {
+  if (!m || !m.pnd || !bin) return null;
+  const B = bin instanceof ArrayBuffer ? bin : bin.buffer, o = (bin.byteOffset || 0) + m.pnd[0];
+  return o + m.pnd[1] <= B.byteLength ? new Uint16Array(B, o, m.pnd[1] / 2) : null;
+}
+// 删了东西以后的坐标原点：剩下部分的包围盒底面中心（原始坐标）；什么都没删就是原点（不动以前的数据）
+function modPtOff(VB, st, nv, pv, R) {
+  let del = false;
+  for (let i = 0; i < R.length; i++) if (R[i] === MOD_PT_DEL) { del = true; break; }
+  if (!del) return [0, 0, 0];
+  const b = [1e30, 1e30, 1e30, -1e30, -1e30, -1e30];
+  for (let v = 0; v < nv; v++) {
+    if (R[pv[v]] === MOD_PT_DEL) continue;
+    const o = v * st;
+    for (let k = 0; k < 3; k++) { const x = VB[o + k]; if (x < b[k]) b[k] = x; if (x > b[k + 3]) b[k + 3] = x; }
+  }
+  return b[0] > b[3] ? [0, 0, 0] : [(b[0] + b[3]) / 2, (b[1] + b[4]) / 2, b[2]];
+}
+// 转轴 { p, a }：合法就返回方向单位化的一份，否则 null
+function modAx(o) {
+  if (!o || !Array.isArray(o.p) || !Array.isArray(o.a) || o.p.length !== 3 || o.a.length !== 3 || !o.p.every(modNum) || !o.a.every(modNum)) return null;
+  const l = Math.hypot(o.a[0], o.a[1], o.a[2]);
+  return l > 1e-9 ? { p: o.p.slice(), a: o.a.map(v => v / l) } : null;
+}
+// 转轴的正方向：炮塔正角 = 从上往下看逆时针（同游戏里炮塔转角的符号）；炮管正角 = 炮口抬起（轴指向右边）
+const modAxUp = A => A && A.a[2] < 0 ? { p: A.p, a: A.a.map(v => -v) } : A;
+const modAxEl = A => A && A.a[1] > 0 ? { p: A.p, a: A.a.map(v => -v) } : A;
+// 游戏里解码导入的模型时（v3g.js v3gPrep 调）：删掉的块不画，炮塔、炮管、起落架、旋翼按手动定的转轴挂成部件（顶点着色器按实例参数转），
+//   删了东西重新落地、居中；车辆登记进 vfn.js 的 VFN（炮塔转、炮管俯仰、后坐走和内置坦克同一套）
+function modPrep(key, m, VB, IB) {
+  if (typeof VFN === 'object') delete VFN[key];
+  const A = MOD.mdl[key], pt = A && A.pt, D = typeof V3G === 'object' && V3G.def[key];
+  if (!pt || !D || !m.pv) return;
+  const pv = modPv(m, D.bin), st = m.st || 8, nv = VB.length / st;
+  if (!pv || pv.length < nv) return;
+  const n = m.pn || 0, R = modPtRoles(pt, n), off = modPtOff(VB, st, nv, pv, R), R3 = v => Math.round(v * 1e4) / 1e4;
+  if (off[0] || off[1] || off[2]) {
+    const b = [1e30, 1e30, 1e30, -1e30, -1e30, -1e30];
+    for (let v = 0; v < nv; v++) {
+      const o = v * st;
+      VB[o] -= off[0]; VB[o + 1] -= off[1]; VB[o + 2] -= off[2];
+      if (R[pv[v]] === MOD_PT_DEL) continue;
+      for (let k = 0; k < 3; k++) { const x = VB[o + k]; if (x < b[k]) b[k] = x; if (x > b[k + 3]) b[k + 3] = x; }
+    }
+    const len0 = m.len;
+    m.bb = b.map(R3); m.len = R3(b[3] - b[0]); m.zc = R3((b[5] - b[2]) / 2);
+    if (!(m.hl > 0) || Math.abs(m.hl - len0) < 1e-3) m.hl = m.len;   // 车体长没单独给：跟着全长
+  }
+  const has = c => R.includes(c), parts = [], pidx = new Int16Array(n).fill(-1);
+  for (let i = 0; i < n; i++) if (R[i] === MOD_PT_DEL) pidx[i] = -2;
+  const TA = modAxUp(modAx(pt.ta)), GA = modAxEl(modAx(pt.ga)), RA = modAx(pt.ra), QA = modAx(pt.qa), put = (c, j) => { for (let i = 0; i < n; i++) if (R[i] === c) pidx[i] = j; };
+  let ti = -1, gi = -1;
+  if (TA && (has(1) || has(2))) ti = parts.push({ n: 'tur', k: 'rot', p: TA.p, a: TA.a, w: [1, 0, 0, 0] }) - 1;
+  if (has(2) && GA) gi = parts.push({ n: 'gun', k: 'chain', p: TA ? TA.p : GA.p, a: TA ? TA.a : [0, 0, 1], w: TA ? [1, 0, 0, 0] : [0, 0, 0, 0], q: GA.p, a2: GA.a, e: [0, 1, 0, 0], r: [1, 0, 0], w2: [0, 0, 1, 0] }) - 1;   // 先后坐、再绕炮耳俯仰、最后随炮塔转
+  else if (has(2) && TA) gi = parts.push({ n: 'gun', k: 'gun', p: TA.p, a: TA.a, w: [1, 0, 0, 0], w2: [0, 0, 1, 0] }) - 1;   // 没定炮耳：炮管只随炮塔转、后坐，不俯仰
+  if (ti >= 0) put(1, ti);
+  if (gi >= 0) put(2, gi);
+  // 机枪塔、机枪（遥控武器站）：先绕机枪俯仰轴抬（iD3 = 参数槽 7），再绕机枪塔转轴转向机枪的目标（iC2 = 参数槽 2），最后随炮塔转
+  const MA = modAxUp(modAx(pt.ma)), MB = modAxEl(modAx(pt.mb)), onT = TA ? { p: TA.p, a: TA.a, w: [1, 0, 0, 0] } : { p: [0, 0, 0], a: [0, 0, 1], w: [0, 0, 0, 0] };
+  let mti = -1, mgi = -1;
+  if (has(7) && (MA || TA)) mti = parts.push({ n: 'mgt', k: 'chain', ...onT, q: MA ? MA.p : [0, 0, 0], a2: MA ? MA.a : [0, 0, 1], e: MA ? [0, 0, 1, 0] : [0, 0, 0, 0], r: [1, 0, 0], w2: [0, 0, 0, 0] }) - 1;
+  if (has(8) && (MA || MB || TA)) mgi = parts.push({ n: 'mgg', k: 'chain', ...onT, q: MA ? MA.p : [0, 0, 0], a2: MA ? MA.a : [0, 0, 1], e: MA ? [0, 0, 1, 0] : [0, 0, 0, 0], q3: MB ? MB.p : [0, 0, 0], a3: MB ? MB.a : [0, -1, 0], g2: MB ? [0, 0, 0, 1] : [0, 0, 0, 0], r: [1, 0, 0], w2: [0, 0, 0, 0] }) - 1;
+  if (mti >= 0) put(7, mti);
+  if (mgi >= 0) put(8, mgi);
+  // 飞机：起落架、主旋翼、尾桨（v3gPlane 按部件名给参数：起落架收起时 1、旋翼按时间转），各占一个参数槽
+  if (has(3)) {   // 起落架收起：缩到它顶上那一点（在机身里，看不见）
+    const b = [1e30, 1e30, 1e30, -1e30, -1e30, -1e30];
+    for (let v = 0; v < nv; v++) { if (R[pv[v]] !== 3) continue; const o = v * st; for (let k = 0; k < 3; k++) { const x = VB[o + k]; if (x < b[k]) b[k] = x; if (x > b[k + 3]) b[k + 3] = x; } }
+    put(3, parts.push({ n: 'gear', k: 'hide', slot: 0, p: [(b[0] + b[3]) / 2, (b[1] + b[4]) / 2, b[5]], a: [0, 0, 1], w: [1, 0, 0, 0] }) - 1);
+  }
+  if (has(4) && RA) put(4, parts.push({ n: 'rotor', k: 'rot', slot: 1, p: RA.p, a: RA.a, w: [0, 1, 0, 0] }) - 1);
+  if (has(5) && QA) put(5, parts.push({ n: 'trotor', k: 'rot', slot: 2, p: QA.p, a: QA.a, w: [0, 0, 1, 0] }) - 1);
+  // 绘制段：每个材质段按「车体 / 各部件」重排三角形、拆成几段，删掉的不画
+  const out = [];
+  for (const [mi, pi0, i0, cnt] of m.lod[0]) {
+    if (pi0 >= 0) { out.push([mi, pi0, i0, cnt]); continue; }
+    const B = new Map();
+    for (let t = i0; t + 2 < i0 + cnt; t += 3) { const q = pidx[pv[IB[t]]]; if (q === -2) continue; let L = B.get(q); if (!L) B.set(q, L = []); L.push(IB[t], IB[t + 1], IB[t + 2]); }
+    let o = i0;
+    for (const [q, L] of [...B.entries()].sort((a, b) => a[0] - b[0])) { IB.set(L, o); out.push([mi, q, o, L.length]); o += L.length; }
+  }
+  m.lod = [out, out, out]; m.parts = parts;
+  if (typeof VFN === 'object' && (MOD.lib[key] || {}).kind !== 'air' && (ti >= 0 || gi >= 0 || mti >= 0 || mgi >= 0)) {
+    const r2 = (a, d) => Array.isArray(a) && a.length === 2 && a.every(modNum) ? [Math.min(a[0], a[1]), Math.max(a[0], a[1])] : d, rc = modNum(pt.rc) && pt.rc >= 0 ? pt.rc : .3;
+    VFN[key] = { trav: +pt.trav > 0 ? +pt.trav : 40, ta: 1, ...(gi >= 0 ? { rc, ...(rc >= .15 ? { rock: .03 } : {}) } : {}), ...(gi >= 0 && GA ? { el: r2(pt.el, [-6, 18]), elR: +pt.elR > 0 ? +pt.elR : 20 } : {}),
+      ...(mti >= 0 || mgi >= 0 ? { mg: { trav: +pt.mtr > 0 ? +pt.mtr : 90, el: MB && mgi >= 0 ? r2(pt.mel, [-10, 60]) : null, elR: +pt.melR > 0 ? +pt.melR : 60, yaw: !!MA, hz: (MB || MA || { p: [0, 0, 2.5] }).p[2] } } : {}) };
+  }
+}
 // —— 车辆（按型号）——
 const modVehKey = v => { const M = typeof rlModelOf === 'function' ? rlModelOf(v) : null; return M ? M.key : null; };
 const modVehOf = v => { const k = v && modVehKey(v); return k ? MOD.veh[k] || null : null; };
@@ -208,10 +344,8 @@ function modReg(id, rec) {
   const L = MOD.lib[id];
   if (!L || !rec) return false;
   if (L.k === 'mdl' && rec.meta && rec.bin && typeof V3G === 'object') {
-    const old = V3G.M[id];
-    if (old && old.ready && V3G.gl) { try { V3G.gl.deleteBuffer(old.vb); V3G.gl.deleteBuffer(old.ib); } catch (e) { /* 换掉旧的 */ } }
-    delete V3G.M[id]; V3G.fail.delete(id);
-    V3G.def[id] = { meta: rec.meta, bin: rec.bin };
+    MODX.raw[id] = { meta: rec.meta, bin: rec.bin };
+    modRegMdl(id);
     const cr = rec.meta.credit;   // 模型自带的署名（Sketchfab 导出的 glTF 里有）：列进「素材致谢」
     if (cr && typeof V3G_CRED === 'object' && Array.isArray(V3G_CRED) && !V3G_CRED.some(c => c.uid === id)) V3G_CRED.push({ uid: id, name: L.nm + '（导入）', title: cr.title || L.nm, author: cr.author || '', license: cr.license || '', url: cr.url || '' });
     return true;
@@ -219,6 +353,21 @@ function modReg(id, rec) {
   if (L.k === 'fx' && rec.blob && typeof v3vUser === 'function') { v3vUser(id, rec.blob, L.n || 8, L.f || 64, L.mode ?? 2); return true; }
   return false;
 }
+// 导入的模型交给 v3g.js 解码：每次给原件 meta 的一份拷贝（解码时 modPrep 会改绘制段、部件，原件留着下次再拆）；
+//   换下来的旧模型：显卡缓冲区、贴图放掉，实例列表里挂着它的也去掉（不然还拿着已经删掉的缓冲区画）
+function modRegMdl(id) {
+  const rec = MODX.raw[id];
+  if (typeof V3G !== 'object') return;
+  const old = V3G.M[id], gl = V3G.gl;
+  if (old && old.ready && gl) { try { gl.deleteBuffer(old.vb); gl.deleteBuffer(old.ib); for (const t of old.tex || []) if (t) gl.deleteTexture(t); } catch (e) { /* 换掉旧的 */ } }
+  for (const [k, L] of [...V3G.inst.entries()]) if (k.slice(0, k.lastIndexOf('#')) === id) { if (gl) for (const b of [L.gb, L.gbv]) if (b) gl.deleteBuffer(b); V3G.inst.delete(k); }
+  delete V3G.M[id]; V3G.fail.delete(id);
+  if (typeof VFN === 'object') delete VFN[id];
+  if (rec) { V3G.def[id] = { meta: modClone(rec.meta), bin: rec.bin }; MODX.sig[id] = JSON.stringify((MOD.mdl[id] || {}).pt || null); }
+  else { delete V3G.def[id]; delete MODX.sig[id]; }
+}
+// 删掉一个导入的模型（编辑器里点「删除这个模型」）
+function modUnreg(id) { delete MODX.raw[id]; modRegMdl(id); }
 // 开机时：把库里的文件都读出来登记；读不出来的（换了浏览器、被清掉了）标记成坏的，绑定退回原来的模型
 async function modLibInit() {
   const ids = Object.keys(MOD.lib);
@@ -250,7 +399,9 @@ async function modExport(full) {
 async function modImport(txt) {
   const o = JSON.parse(txt);
   if (!o || o.v !== 1) throw new Error('不是暗剑的模组包');
-  for (const k of MOD_SEC) MOD[k] = o[k] && typeof o[k] === 'object' ? o[k] : (k === 'lib' ? MOD.lib : {});
+  const lib0 = MOD.lib;
+  for (const k of MOD_SEC) MOD[k] = o[k] && typeof o[k] === 'object' ? o[k] : {};
+  MOD.lib = { ...lib0, ...(o.lib && typeof o.lib === 'object' ? o.lib : {}) };   // 这台设备上已经导入的模型、贴图留着
   if (o.set && typeof SETTINGS === 'object' && typeof setClean === 'function') for (const k in o.set) { const v = setClean(k, o.set[k]); if (v !== undefined) SETTINGS[k] = v; }
   if (typeof saveSettings === 'function') saveSettings();
   if (o.files) for (const id in o.files) {
@@ -258,6 +409,8 @@ async function modImport(txt) {
     const rec = F.meta ? { meta: F.meta, bin: u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength) } : { blob: new Blob([u8], { type: F.mime || 'image/png' }) };
     try { await modFilePut(id, rec); MODX.bad.delete(id); modReg(id, rec); } catch (e) { MODX.bad.add(id); }
   }
+  // 包里提到、但没带文件的（只导出了参数）：这台设备上也没有的标成读不出来——用到它的型号退回原来的模型（不然那一型在画面上就没了）
+  for (const id in o.lib || {}) if (!(o.files && o.files[id]) && !(id in lib0)) { const rec = await modFileGet(id).catch(() => null); if (rec && modReg(id, rec)) MODX.bad.delete(id); else MODX.bad.add(id); }
   modSave();
 }
 modLoad();

@@ -224,6 +224,13 @@ function v3Fx(C) {
     if (!inB(t.x1, t.y1, 60)) continue;
     const a = 1 - t.life / t.max, u = t.life / t.max, u0 = Math.max(0, u - .4), col = t.side === 'p' ? V3F_COL.p : V3F_COL.e;
     if (t.fuzzy) continue;   // 模糊曳光只在平面上示意方向
+    const mz = t.src != null && typeof v3gMgMuzzle === 'function' ? v3gMgMuzzle(t.src) : null;   // 编辑器点了机枪口的车载机枪：从枪口打出去，刚打出时枪口一闪
+    if (mz) {
+      const z1 = g(t.x1, t.y1) + 1, Q = w => v3fP(lerp(mz[0], t.x1, w), lerp(mz[1], t.y1, w), lerp(mz[2], z1, w));
+      v3fRib(out, E, Q(u0), Q(u), .7, [col[0], col[1], col[2], 0], [col[0], col[1], col[2], .95 * a]);
+      if (t.life < .08) v3fSpark(out, C, v3fP(mz[0], mz[1], mz[2]), 2.2 * (1 - t.life / .08) + .6, V3F_COL.amber);
+      continue;
+    }
     const p0 = v3fP(lerp(t.x0, t.x1, u0), lerp(t.y0, t.y1, u0), g(t.x0, t.y0) + 1.6), p1 = v3fP(lerp(t.x0, t.x1, u), lerp(t.y0, t.y1, u), lerp(g(t.x0, t.y0) + 1.6, g(t.x1, t.y1) + 1, u));
     v3fRib(out, E, p0, p1, .7, [col[0], col[1], col[2], 0], [col[0], col[1], col[2], .95 * a]);
   }
