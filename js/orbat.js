@@ -120,7 +120,7 @@ function bgOrder(G, sl, t0) {
   for (const s of sl) {
     const t = s.t || t0;   // 槽位可逐个指定（边打边撤时掩护组 hold、后撤组 move）
     if (s.k === 'u') {
-      const u = s.m, ts = teamsOf(u).filter(q => q.men.length && !q.ride && !q.rc);   // 借出去当侦察分队的组不管（recon.js）
+      const u = s.m, ts = teamsOf(u).filter(q => q.men.length && !q.ride);
       if (!ts.length) continue;
       // 位置没变就不重下——但有组离位置 40 以上却停着（中途遇敌停下、提前「到达」等），8 秒后重新下令，不让全群干等
       const idle = t !== 'hold' && S.t - (u.bgOT ?? -99) > 8 && ts.some(q => (q.order.t === 'hold' || q.order.x == null) && q.sup < 60 && dist(q.x, q.y, s.x, s.y) > 40);
@@ -143,7 +143,7 @@ function bgLag(G, sl) {
   for (const s of sl) {
     let x, y;
     if (s.k === 'u') { const ts = teamsOf(s.m).filter(q => q.men.length && !q.ride && !q.rc); if (!ts.length) continue; x = ts.reduce((a, q) => a + q.x, 0) / ts.length; y = ts.reduce((a, q) => a + q.y, 0) / ts.length; }
-    else { if (s.m.rc) continue; x = s.m.x; y = s.m.y; }   // 侦察分队不算掉队（recon.js）
+    else { x = s.m.x; y = s.m.y; }
     const k = s.k + s.m.id, r = lp[k], d = dist(x, y, s.x, s.y);
     if (!r || d <= BG.lag || d < r[0] - 10) lp[k] = [d, S.t];
     else if (S.t - r[1] > 20) continue;

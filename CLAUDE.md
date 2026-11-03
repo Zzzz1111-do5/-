@@ -101,19 +101,19 @@
 
 ## AI：要求与现状
 - 改 AI 之前先读 docs/ai_requirements.md（用户原话整理的硬性要求 + 实现对照），改完同步更新其中的「实现对照」。
-- 默认对局的指挥体系是 js/theater.js（战区 → 师 → 团 → 营，钢铁雄心式战线推演）。它启用时关掉旧的 hq.js 司令与团（S.v7off.hq）、brain.js（br）、tf.js（tf）。所以：
-  - 默认对局里不生效：js/cmddoc.js（hq.js 守方司令战法表）、js/jointdoc.js 的 BDE_DOC（hq.js 团的协同）；
-  - 仍然生效：hq.js 的营长状态机 regThink（穿插、预备队、第二梯队）与 js/doctrine.js 团长战法表、js/sa.js 的态势感知与边打边撤（SA_DOC）。
-- 抢滩不分批、见敌就打（用户要求，docs/ai_requirements.md）：登陆兵力一次同时抵滩（commander.js 不留第二波，坦克登陆舰、补给舰同时到），攻方上岸后一律推进、营接敌不停不退、看见的敌人派排扑上去（theater.js thLine 的 hunt），没有敌情时整营直奔认领的敌占据点（thLine 的 free），攻方不再边打边撤。
-- 战区司令的条令参数在 js/theater.js 的 `TH_DOC`（攻方：第二梯队比例（现为 0，用户要求不分批）、火力准备；守方：战役预备队比例、反击兵力比、炮火准备、吃紧投入门槛、判明主攻门槛），由 tools/train_real.js 训练，记录在 docs/real_train.md。改 `TH_DOC` 时同步改 tools/train_real.js 的 `DEF`（训练场把它当「现行参数」比较）。
+- 指挥体系是 js/theater.js（战区 → 师 → 团 → 营，钢铁雄心式战线推演），所有模式都开着；brain.js、tf.js 还在但不生效（S.v7off.br / tf）。
+  战法表全删了（用户：不要那么多战法表全删了，乱七八糟的全部删掉）：js/doctrine.js（团长战法表）、cmddoc.js（守方司令战法表）、jointdoc.js（团协同、边打边撤参数表）、recon.js（旧司令部的侦察）、
+  hq.js 里旧的司令、团两级，以及战区条令表 TH_DOC 和全部训练场（tools/train_*.js、doctrine_eval.js、docs/*_train.md）。hq.js 只剩营长状态机 regThink（一套固定打法 HQ_DOC：横队、步坦交错，不迂回、不等火力准备；
+  守方预备队反冲击、预备队 / 第二梯队待机用）和编组、队形工具；js/sa.js 的态势感知与边打边撤（只有守方边打边撤，参数在 SA）。
+- 攻方全线推进（用户：不要一个师过去偷，要全线推进；站位可以有讲究，但全部往前推，要么等后面的到了一起推要么直接推）：登陆兵力一次同时抵滩（commander.js 不留第二波），
+  上岸后只有一条推进线（theater.js thAdvLine，S.th.p.adv：每 30 米一列一个目标 y）——各师、团、营照地段沿线排开（thLine），一线各营七成到了线上全线往前挪 TH.adv 米；
+  还有营在上岸编组时不挪；等不齐 TH.advWait 秒、大半个营离线 TH.advMax 以内就直接推；每跃两头展开一点（扩大登陆场，正面宽到兵力能守为止）；冲到线前的排就地等、不往回退；
+  路上见敌照打（amove）、据点随战线推过时由最近的排夺取；攻方不边打边撤。阶段线、第二梯队、冲击前火力准备、穿插（双方的 AI 穿插都删了）、各营各自直奔据点、排扑向远处的敌人都删了。
+- 守方战区的几个固定参数在 TH（res 预备队比例、ctr 反击兵力比、prep 反击前炮火准备秒数、commit 吃紧投入门槛、det 判明主攻门槛）。
 
-## 测试与训练（Node 无头运行；tools/headless.js 按 index.html 的顺序加载 js/）
+## 测试（Node 无头运行；tools/headless.js 按 index.html 的顺序加载 js/）
 - 语法检查：`for f in js/*.js; do node --check $f || echo FAIL $f; done`
-- 条令符合度：`node tools/doctrine_eval.js [局数（最多 20）] [每局秒数]`。沙盒 AI 对 AI 加战役，测双方「打得像不像真的」：冲击前火力准备、局部兵力比、主攻集中、梯队、零打碎敲、步坦协同、防空伞、兵力闲置、守方预备队与纵深、反冲击兵力比等，对照条令目标范围打分，并报结局。改 AI 前后各跑一次对比。随机性大：10 局之间差几个百分点属正常波动；守方反冲击每局只有一两次，相关指标至少看 20 局。
-- 训练场（同一局面配对比较、逐轮淘汰、冠军变异复赛，稳健分 = 平均 − 0.4 × 标准差，四个进程并行；成绩缓存在 tools/.cache/，不进仓库，代码改了自动作废）：
-  - tools/train_real.js：战区司令 TH_DOC，打分一半胜负、一半条令符合度（`PFIX` / `EFIX` 环境变量指定对手参数）；
-  - tools/train_reg.js：团长战法（js/doctrine.js）；tools/train_101.js：101 空降师；tools/train_joint.js、tools/train_cmd.js：hq.js 体系（默认对局里不生效）。
-  - 一次训练常要一两个小时，放后台跑；中途打断可以重跑，已打过的局直接读缓存。
+- AI 检查：用 tools/headless.js 跑几局短的（沙盒 AI 对 AI、守方不布兵，七八分钟），看攻方推进线跃了几次、各营离线多远、步兵离岸深度、据点；条令符合度评估和训练场已随战法表删掉。用户不要长时间的批量战役对比。
 - 浏览器检查：Playwright 已全局安装（`NODE_PATH=$(npm root -g)`），打开 `file://…/index.html`，调用 `startPvE('hard')` 或 `mnSandbox()` 后用 `step(1 / 30)` 同步推演，截图、看 pageerror。
 - 性能：推演、渲染的耗时都在真浏览器里量（Playwright 打开页面，`draw = () => {}` 后同步 `step(1 / 30)` 逐步计时，或 CDP Profiler 剖析）——无头环境（vm 沙箱）的绝对耗时和热点都失真，只能用来比结果。
   卡顿主要看尖峰（单步超过 8 / 16 毫秒的次数）而不只是平均：周期性的重活要错开（视野每 0.25 秒分两步算：logistics.js updateVision 'a' / 'b'；远距离发现 spot.js 比视野晚半个周期；战线重建 front.js 遇到视野那一步顺延）。
