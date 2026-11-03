@@ -120,10 +120,10 @@ float wNoise(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3. - 2. * f
 //   会让每个像素反射的天空、太阳各跳各的，远看是一层颗粒噪点——细浪先退，远处只剩大浪，再远是平静的镜面
 vec3 wnL(vec2 uv, float L, float fw) { return mix(vec3(0., 0., 1.), texture2D(uWn, uv).rgb * 2. - 1., 1. - smoothstep(L / 90., L / 30., fw)); }   // 比原来早一倍淡出：苹果显卡上中远处还是一层颗粒
 vec3 waterNrm(HP vec2 w, float t, float fw) {
-  vec3 n = wnL(w / 113. + vec2(t * .012, t * .008), 113., fw) + wnL(w / 67. + vec2(-t * .01, t * .014), 67., fw)
-         + wnL(w / 29. + vec2(t * .021, -t * .016), 29., fw) + wnL(w / 13. + vec2(-t * .033, -t * .026), 13., fw);
-  n *= .25;   // 四层的平均
-  return vec3(n.x, -n.y, n.z * 2.2 + 1.);   // 贴图 v 朝南（w.y），GL 的 y 朝北
+  // 用户给的海浪贴图（ocean.zip）：大的两层占大头、浪纹放大、起伏加深，让贴图里的浪形看得出来（原来四层平均、法线压平，换了贴图也看不出差别）
+  vec3 n = wnL(w / 240. + vec2(t * .010, t * .006), 240., fw) * .4 + wnL(w / 120. + vec2(-t * .008, t * .012), 120., fw) * .3
+         + wnL(w / 52. + vec2(t * .018, -t * .014), 52., fw) * .2 + wnL(w / 21. + vec2(-t * .03, -t * .024), 21., fw) * .1;
+  return vec3(n.x, -n.y, n.z * .9 + .25);   // 贴图 v 朝南（w.y），GL 的 y 朝北
 }
 vec2 waveSlope(HP vec2 w, float t, float fw) {
   vec2 g = vec2(0.);
