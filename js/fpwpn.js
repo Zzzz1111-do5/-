@@ -323,6 +323,7 @@ function fwLaunch(o, s, c) {
     tgt: c.o ? { k: c.t || 'eair', id: c.o.id } : null, pk, w: Wd.pg || s.w, lr: s.w === 'pl17' || undefined, icp: false, sup: 0,
     fw: { w: s.w, ms: Wd.ms, v, ign: Wd.ign != null && Wd.ign >= 0 ? Wd.ign : typeof airRelIgn === 'function' ? airRelIgn(s.bay) : s.bay === 'main' ? 1.2 : s.bay === 'ext' ? .8 : .3, lit: false, bore: !c.o } };
   S.missiles.push(m);
+  if (typeof v3gFired === 'function') v3gFired('p' + o.id);   // 编辑器设计的「发射时」动画（v3g.js）
   if (Wd.k === 'arm' && c.o && typeof ewArm === 'function') ewArm(c.o, c.nm);   // 反辐射弹盯上了：雷达可能关机规避（ew.js）
   const fk = s.key || s.w; o.fwN[fk]--;
   const f = fwField(s.w); o[f] = Math.max(0, (o[f] ?? airMdl(o.kind, o.v)[f] ?? 0) - 1);   // 推演里没记这一项的（攻击机的自卫空空弹）从型号表的满载数减
