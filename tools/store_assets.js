@@ -12,6 +12,20 @@ const STEPS = (process.argv[3] || 'ui,battle,compose,video').split(',');
 const SEED = 464956244, T0 = 390, T = 520;   // 挑过的地图（中段滩头背后有城镇、树林和河口）；T0 登陆部队正冲上滩头（近景与视频），T 登陆场已建立
 const LAUNCH = { args: ['--use-gl=swiftshader', '--enable-webgl', '--ignore-gpu-blocklist', '--enable-unsafe-swiftshader', '--allow-file-access-from-files'] };   // file:// 打开时本地图片算同源，贴图（天空、地表、特效）才能上传给 WebGL
 const dir = d => { const p = path.join(OUT, d); fs.mkdirSync(p, { recursive: true }); return p; };
+// 本地 HTTP 服务（file:// 打开时 fetch 不能取本地文件：舰艇模型、地形数据这些取不到；贴图也算跨域，上不了 WebGL）
+const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.bin': 'application/octet-stream', '.glb': 'model/gltf-binary', '.svg': 'image/svg+xml', '.woff2': 'font/woff2', '.mp3': 'audio/mpeg', '.ogg': 'audio/ogg' };
+let SRV = null;
+function serve() {
+  if (SRV) return SRV;
+  return (SRV = new Promise(res => {
+    const http = require('http'), s = http.createServer((q, r) => {
+      const p = path.join(ROOT, decodeURIComponent(q.url.split('?')[0]));
+      if (!p.startsWith(ROOT)) { r.writeHead(403); return r.end(); }
+      fs.readFile(p, (e, d) => { if (e) { r.writeHead(404); return r.end(); } r.writeHead(200, { 'Content-Type': MIME[path.extname(p)] || 'application/octet-stream' }); r.end(d); });
+    });
+    s.listen(0, '127.0.0.1', () => { s.unref(); res('http://127.0.0.1:' + s.address().port); });
+  }));
+}
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 // 开一页游戏：随机数固定（同一份代码每次推演结果一样）、不放开场转场、闯关进度设成打过前三关
@@ -25,7 +39,7 @@ async function boot(b, w, h) {
     window.__rng = () => s;   // 读出当前状态（宣传片把推演和画面的随机数分开：画画用掉的随机数不影响战局）
     try { localStorage.clear(); localStorage.setItem('bh-settings', JSON.stringify({ intro: false })); localStorage.setItem('bh-levels', JSON.stringify({ done: [1, 2, 3] })); } catch (e) { /* 只影响取景 */ }
   });
-  await p.goto('file://' + ROOT + '/index.html', { timeout: 300000, waitUntil: 'domcontentloaded' });   // 一百多个脚本、几十兆数据：软件渲染的机器上要等一会儿
+  await p.goto((await serve()) + '/index.html', { timeout: 300000, waitUntil: 'domcontentloaded' });   // 一百多个脚本、几十兆数据：软件渲染的机器上要等一会儿
   await p.waitForFunction(() => typeof MENU === 'object' && MENU.open, null, { timeout: 300000, polling: 1000 });
   await sleep(3000);
   await p.addStyleTag({ content: '#pauseBand, #buildTag { display: none !important; }' });   // 截图里不要「PAUSED」
@@ -49,7 +63,7 @@ async function clean(p, on) {
     if (on && !window.__v3o) { window.__v3o = v3Overlay; window.v3Overlay = () => {}; }
     if (!on && window.__v3o) { window.v3Overlay = window.__v3o; window.__v3o = null; }
     let st = document.getElementById('shotClean');
-    if (on && !st) { st = document.createElement('style'); st.id = 'shotClean'; st.textContent = 'body > :not(#stage):not(script):not(style), #stage > :not(#cv) { visibility: hidden !important; }'; document.head.appendChild(st); }
+    if (on && !st) { st = document.createElement('style'); st.id = 'shotClean'; st.textContent = 'body > :not(#stage):not(script):not(style), #stage > :not(#cv):not(#cv3):not(#cvt) { visibility: hidden !important; }'; document.head.appendChild(st); }   // #cv3 3D、#cvt 地形是垫在 #cv 底下的 WebGL 画布，不能藏
     if (!on && st) st.remove();
   }, on);
 }
@@ -216,7 +230,7 @@ async function stepVideo(b) {
   fs.rmSync(F, { recursive: true, force: true });
 }
 
-module.exports = { ROOT, SEED, LAUNCH, sleep, boot, battle, advance, look, clean };   // tools/trailer.js 共用
+module.exports = { ROOT, SEED, LAUNCH, sleep, boot, battle, advance, look, clean, serve };   // tools/trailer.js 共用
 if (require.main === module) (async () => {
   const b = await chromium.launch(LAUNCH);
   try {

@@ -11,7 +11,7 @@
 'use strict';
 const { chromium } = require('playwright');
 const fs = require('fs'), path = require('path'), { execFileSync } = require('child_process');
-const { ROOT, LAUNCH, sleep, boot, battle } = require('./store_assets.js');
+const { ROOT, LAUNCH, sleep, boot, battle, serve } = require('./store_assets.js');
 const OUT = path.resolve(process.argv[2] || path.join(ROOT, 'store', 'video'));
 const STEPS = (process.argv[3] || 'shots,audio,edit').split(',');
 const FPS = 30, LEN = 66, PRE = 1;   // 帧率、片长（秒）；录音提前 1 秒开录，前面放一声对齐用的哔
@@ -24,20 +24,20 @@ const lerp = (a, b, u) => a + (b - a) * u, ease = u => u * u * (3 - 2 * u), clam
 const C = (kick, title, sub, at, out, pos) => ({ kick, title, sub, at, out, pos: pos || 'left' });
 const SHOTS = [
   { id: 'A', at: 0, dur: 6, T: 24, tg: 'fleet', ahead: 900, cam: [[2600, -1.36, -0.07], [1900, -1.30, -0.11]], card: C('DARKSWORD // AMPHIBIOUS WARFARE', '一场完整的两栖登陆战', '海 · 空 · 陆　实时推演', 1.2, 5.3), fadeIn: .9 },
-  { id: 'B', at: 6, dur: 4, T: 36, tg: 'cv', cam: [[460, -2.3, -0.30], [330, -1.75, -0.22]], card: C('PHASE 01 // SEA CONTROL', '先夺制海权', '航母舰载机 · 驱逐舰 · 战区航空兵', .15, 3.7), flash: true },
-  { id: 'D', at: 14, dur: 4, T: 102, tg: 'boom', fire: true, cam: [[820, -1.32, -0.44], [640, -1.18, -0.40]] },
+  { id: 'B', at: 6, dur: 4, T: 44, tg: 'cv', cam: [[460, -2.3, -0.30], [330, -1.75, -0.22]], card: C('PHASE 01 // SEA CONTROL', '先夺制海权', '航母舰载机 · 驱逐舰 · 战区航空兵', .15, 3.7), flash: true },
+  { id: 'D', at: 14, dur: 4, T: 52, tg: 'boom', fire: true, cam: [[820, -1.32, -0.44], [640, -1.18, -0.40]] },
   { id: 'C', at: 10, dur: 4, T: 150, tg: 'ships', ahead: 250, cam: [[760, -1.62, -0.17], [560, -1.50, -0.20]] },
-  { id: 'E', at: 18, dur: 4, T: 188, tg: 'plane', cam: [[70, 0.55, -0.12], [52, 0.25, -0.08]] },
-  { id: 'F', at: 22, dur: 4, T: 200, tg: 'landing', cam: [[520, -1.75, -0.20], [380, -1.55, -0.25]], card: C('PHASE 02 // ASSAULT', '再强行登陆', '抢滩，夺取登陆场', .15, 3.7), flash: true },
-  { id: 'G', at: 26, dur: 4, T: 232, tg: 'boom', fire: true, cam: [[420, -0.95, -0.34], [330, -1.35, -0.36]] },
-  { id: 'H', at: 30, dur: 4, T: 275, tg: 'boom', fire: true, cam: [[460, -1.95, -0.30], [360, -1.65, -0.28]] },
-  { id: 'I', at: 34, dur: 4, T: 300, tg: 'land', cam: [[560, -1.25, -0.22], [420, -1.0, -0.20]] },
-  { id: 'J', at: 38, dur: 4, T: 358, tg: 'boom', fire: true, cam: [[430, -1.38, -0.36], [340, -1.08, -0.33]], card: C('PHASE 03 // DEPTH', '向纵深推进', '战区 → 师 → 团 → 营　逐级指挥', .15, 3.7), flash: true },
-  { id: 'K', at: 42, dur: 4, T: 398, tg: 'land', hud: true, cam: [[3300, -1.5708, -1.02], [2700, -1.5708, -0.88]] },
-  { id: 'N', at: 54, dur: 4, T: 380, tg: 'boom', fire: true, cam: [[400, -1.18, -0.24], [300, -1.36, -0.27]], flash: true, booms: [0, .5, 1, 1.5, 2, 2.25, 2.5, 2.75, 3, 3.25, 3.5] },
+  { id: 'E', at: 18, dur: 4, T: 36, tg: 'plane', cam: [[46, 0.6, -0.12], [34, 0.3, -0.08]] },
+  { id: 'F', at: 22, dur: 4, T: 262, tg: 'landing', cam: [[520, -1.75, -0.20], [380, -1.55, -0.25]], card: C('PHASE 02 // ASSAULT', '再强行登陆', '抢滩，夺取登陆场', .15, 3.7), flash: true },
+  { id: 'G', at: 26, dur: 4, T: 272, tg: 'boom', fire: true, cam: [[420, -0.95, -0.34], [330, -1.35, -0.36]] },
+  { id: 'H', at: 30, dur: 4, T: 300, tg: 'boom', fire: true, cam: [[460, -1.95, -0.30], [360, -1.65, -0.28]] },
+  { id: 'I', at: 34, dur: 4, T: 318, tg: 'land', cam: [[560, -1.25, -0.22], [420, -1.0, -0.20]] },
+  { id: 'J', at: 38, dur: 4, T: 340, tg: 'boom', fire: true, cam: [[430, -1.38, -0.36], [340, -1.08, -0.33]], card: C('PHASE 03 // DEPTH', '向纵深推进', '战区 → 师 → 团 → 营　逐级指挥', .15, 3.7), flash: true },
+  { id: 'K', at: 42, dur: 4, T: 360, tg: 'land', hud: true, cam: [[3300, -1.5708, -1.02], [2700, -1.5708, -0.88]] },
+  { id: 'N', at: 54, dur: 4, T: 410, tg: 'boom', fire: true, cam: [[400, -1.18, -0.24], [300, -1.36, -0.27]], flash: true, booms: [0, .5, 1, 1.5, 2, 2.25, 2.5, 2.75, 3, 3.25, 3.5] },
   { id: 'O', at: 58, dur: 8, T: 428, tg: 'land', end: true },
   // 编辑器、内容一览：最后拍（编辑器只是盖在上面；部署会换掉战局，放最后）
-  { id: 'L', at: 46, dur: 4, ui: 'eanim', card: C('EDITOR // DESIGN ANYTHING', '想怎么设计就怎么设计', '参数 · 模型 · 部件 · 动画 · 特效', .2, 3.8, 'low') },
+  { id: 'L', at: 46, dur: 4, ui: 'eanim', card: C('EDITOR // DESIGN ANYTHING', '想怎么设计就怎么设计', '参数 · 模型 · 部件 · 局部动画 · 特效', .2, 3.8, 'low') },
   { id: 'M2', at: 50 + 4 / 3, dur: 4 / 3, ui: 'etrail', card: C('MISSILE TRAILS', '尾烟、尾焰自己设计', '', .05, 1.3, 'low') },
   { id: 'M1', at: 50, dur: 4 / 3, ui: 'codex', card: C('ORDER OF BATTLE', '一百多种兵力', '', .05, 1.3, 'low') },
   { id: 'M3', at: 50 + 8 / 3, dur: 4 / 3, ui: 'deploy', card: C('SANDBOX', '自由部署 · 攻守对抗', '', .05, 1.3, 'low') }
@@ -60,7 +60,7 @@ const OVERLAY_CSS = `
 #trCard.logo .r { margin: 22px auto 0; background: linear-gradient(90deg, rgba(61, 255, 138, 0), #3dff8a, rgba(61, 255, 138, 0)); }
 #trCard.logo .s { font-size: 28px; letter-spacing: .4em; margin-right: -.4em; margin-top: 30px; }
 body.trChat #chat { box-shadow: 0 0 0 2px #3dff8a, 0 0 32px rgba(61, 255, 138, .55) !important; }
-body.trClean > :not(#stage):not(#trShade):not(#trFlash):not(#trCard):not(script):not(style), body.trClean #stage > :not(#cv) { visibility: hidden !important; }
+body.trClean > :not(#stage):not(#trShade):not(#trFlash):not(#trCard):not(script):not(style), body.trClean #stage > :not(#cv):not(#cv3):not(#cvt) { visibility: hidden !important; }
 #pauseBand { display: none !important; }`;
 function overlayState(sh, t) {   // 本镜头第 t 秒的字幕卡、遮罩、闪白、黑场
   const st = { flash: 0, black: 0, shade: 0, card: null };
@@ -126,7 +126,8 @@ const PAGE_FNS = () => {
   };
   window.__cvp = () => S.cv && !S.cv.dead ? [S.cv.x, S.cv.y] : window.__fleet();
   window.__plane = () => {   // 追拍的战斗机：在空中飞的（开拍时挑一架，之后一直跟着它）
-    const L = (S.planes || []).filter(p => !p.dead && isFinite(p.x) && p.phase === 'out' && (p.alt ?? 1) > .12);
+    const A = (S.planes || []).filter(p => !p.dead && isFinite(p.x) && p.phase === 'out' && (p.alt ?? 1) > .12), FT = ['j20', 'j35', 'j15', 'j16', 'j16b', 'j16m', 'j16d', 'j50'];
+    const F = A.filter(p => typeof airSilKey === 'function' && FT.includes(airSilKey(p.kind, p.v))), L = F.length ? F : A;   // 战斗机优先
     if (!L.length) return null;
     let o = L.find(p => p.id === window.__plId);
     if (!o) { o = L.reduce((a, p) => !a || (p.spd || 0) > (a.spd || 0) ? p : a, null); window.__plId = o.id; }
@@ -221,7 +222,7 @@ async function stepShots(b) {
         window.__st = sh.at + t;
         window.__ss = __rng(); __seed(window.__rs);   // 画面用画面的随机数
         if (cam && cam.live === 'plane') { const P = window.__plane(); if (P) { cam.tg = [P.x, P.y]; cam.tz = P.z; cam.yaw = P.h + cam.yo; } }
-        if (sh.ui === 'eanim') { MAN.t = (t * 1.05) % 3; manPose('ztz99', MAN.t); MIV.yaw = 1.9 + t * .32; mivDraw(); }   // 编辑器：坦克开炮时拆成 10 块跳舞（预览按帧驱动，动画循环被接管了）
+        if (sh.ui === 'eanim') { MAN.t = (t * .9) % 1.25; manPose('ztz99', Math.min(MAN.t, 1.2)); MIV.yaw = 2.5 + t * .22; mivDraw(); }   // 编辑器：局部动画——开炮时炮管后坐、炮塔一震（预览按帧驱动，动画循环被接管了）
         if (sh.ui === 'etrail' && typeof mfxTick === 'function') mfxTick(window.__vt);   // 导弹尾烟设计：预览、预设卡片按帧动
         if (cam) { V3.tin = null; const cp = Math.cos(cam.pitch); Object.assign(V3.fc, { x: cam.tg[0] - Math.cos(cam.yaw) * cp * cam.d, y: cam.tg[1] - Math.sin(cam.yaw) * cp * cam.d, z: (cam.tz ?? v3Ht(cam.tg[0], cam.tg[1])) - Math.sin(cam.pitch) * cam.d, yaw: cam.yaw, pitch: cam.pitch, yawT: cam.yaw, pitchT: cam.pitch, cx: null, cy: null }); }
         if (sh.ui === 'codex' && i >= f0 && i % 10 === 0) {   // 图鉴：隔 10 帧换一个有代表性的兵种
@@ -304,9 +305,9 @@ async function uiSetup(p, sh) {
     if (sh.ui === 'eanim') {
       await p.waitForFunction(() => MIV.M && MIV.M.bi && MIV.key === 'ztz99' && document.querySelector('#mdx [data-mana="demo"]'), null, { timeout: 120000, polling: 500 });
       await p.evaluate(() => {
-        manSplit('ztz99', 10); MAN.ev = 'fire'; const c = manClip('ztz99', 'fire', true); c.dur = 3; c.loop = 0; delete c.back; MAN.g = -1;
-        manPreset('ztz99', 'fire', 'dance'); MAN.play = false; MAN.t = 0; MDX.pc.sel.clear(); MDX.keep = true; mdxRender();
-        MIV.pit = .3; const b = MIV.M.m.bb; MIV.dist = Math.hypot(b[3] - b[0], b[4] - b[1], b[5] - b[2]) * 1.55; mivDraw();
+        const b = document.querySelector('#mdx [data-mana="demo"]'); if (b) b.click();   // 「示例：开炮时炮管后坐、炮塔一震」
+        manPlay(false); MAN.t = 0; MDX.keep = true; mdxRender();
+        const g = (MDX_W.mdl.ztz99 && MDX_W.mdl.ztz99.ag || [])[0]; if (g && g.cp) MIV.tgt = g.cp.slice(); MIV.pit = .2; MIV.dist = 7.5; mivDraw();   // 凑近炮塔、炮管：看得清后坐
       });
     }
     await sleep(800);
@@ -335,7 +336,7 @@ async function stepAudio(b) {
   const b2 = await chromium.launch({ args: ['--autoplay-policy=no-user-gesture-required', '--allow-file-access-from-files'] });
   const p = await b2.newPage();
   await p.addInitScript(() => { window.requestAnimationFrame = () => 0; try { localStorage.clear(); localStorage.setItem('bh-settings', JSON.stringify({ intro: false, music: .9, sfx: .5, radio: .45, musicStyle: 'ambient' })); } catch (e) { /* 只影响声音 */ } });
-  await p.goto('file://' + ROOT + '/index.html', { timeout: 300000, waitUntil: 'domcontentloaded' });
+  await p.goto((await serve()) + '/index.html', { timeout: 300000, waitUntil: 'domcontentloaded' });
   await p.waitForFunction(() => typeof MENU === 'object' && MENU.open, null, { timeout: 300000, polling: 1000 });
   const b64 = await p.evaluate(async ([snd, LEN, PRE]) => {
     auInit(); await AU.ctx.resume();
