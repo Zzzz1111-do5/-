@@ -586,8 +586,8 @@ async function mivShow(key) {
     if (MIV.M) mivFree(MIV.M);
     const M = { m, VB, IB, st: (m.st || 8), tex: [], nv: VB.length / (m.st || 8), pv: D.rec ? modPv(m, D.rec.bin) : null, pnd: D.rec ? modPnd(m, D.rec.bin) : null, pn: m.pn || 0, nodes: m.nodes || null };
     if (BP) {   // 「物体」= 模型自带的部件（炮塔、炮管、车轮、起落架……）和车体 / 机身：按物体选一下就选上整个炮塔
-      const PN = { tur: '炮塔', gun: '炮管', gear: '起落架', rotor: '主旋翼', trotor: '尾桨', era: '反应装甲块', wheel: '车轮', noz: '尾喷口调节片', pet: '尾喷口调节片', fold: '折叠外翼', bay: '弹舱门', door: '舱门', ramp: '跳板' };
-      const parts = m.parts || [], nodes = [{ n: '车体 / 机身', p: -1 }, ...parts.map((q, i) => ({ n: (PN[q.n] || PN[q.k] || q.n || '部件') + '（' + (q.n || i) + '）', p: 0 }))], pnd = new Uint16Array(BP.pn);
+      const PN = { tur: '炮塔', gun: '炮管', gear: '起落架', rotor: '主旋翼', trotor: '尾桨', era: '反应装甲块', wheel: '车轮', whl: '车轮', wh: '车轮', trk: '履带', rad: '雷达', lch: '发射架', mg: '机枪', mgt: '机枪塔', noz: '尾喷口调节片', pet: '尾喷口调节片', fold: '折叠外翼', bay: '弹舱门', door: '舱门', ramp: '跳板', hatch: '舱盖', can: '座舱盖', ail: '副翼', elev: '升降舵', rud: '方向舵', cnd: '鸭翼', flap: '襟翼' };
+      const parts = m.parts || [], nodes = [{ n: '车体 / 机身', p: -1 }, ...parts.map((q, i) => ({ n: (PN[q.n] || PN[q.k] || q.n || '部件') + '（' + (q.n || i) + '）', p: -1 }))], pnd = new Uint16Array(BP.pn);
       for (let v = 0; v < M.nv; v++) { const pi = BP.vp[v]; if (pi !== -9) pnd[BP.pv[v]] = pi >= 0 ? pi + 1 : 0; }
       Object.assign(M, { pv: BP.pv, pn: BP.pn, pnd, nodes, bi: true, VB0: VB.slice(), IB0: IB.slice(), lod0: JSON.parse(JSON.stringify(m.lod)), mats0: JSON.parse(JSON.stringify(m.mats)) });
       M.VB = VB = VB.slice(); M.IB = IB = IB.slice();

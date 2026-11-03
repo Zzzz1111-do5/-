@@ -39,7 +39,7 @@ function mptForm(mk, air) {
     <div class="mdx-pcbar">${btn('data-pk="pc"', '选部件', MDX.pk === 'pc', '打开后在预览里点一块选上 / 取消')}
       <label>按 <select data-pcg="1"><option value="pc"${P.g === 'pc' ? ' selected' : ''}>一块</option><option value="nd"${P.g === 'nd' ? ' selected' : ''}>整个部件</option></select> 选</label>
       ${btn('data-pca="box"', '框选', P.box, '打开后在预览里拖出方框，整块都在框里的选上')}${btn('data-pca="all"', '全选')}${btn('data-pca="inv"', '反选')}${btn('data-pca="none"', '清空')}<span class="mdx-pcsel def"></span></div>
-    <div class="mdx-pcbar">${M.nodes.map((d, i) => btn(`data-pcn="${i}"`, mdxEsc(d.n), false, '把整个' + d.n + '选上 / 取消')).join('')}</div>
+    <div class="mdx-pcbar">${(() => { const U = new Map(); M.nodes.forEach((d, i) => { const n = d.n.replace(/（[^）]*）$/, ''); if (!U.has(n)) U.set(n, []); U.get(n).push(i); }); return [...U].map(([n, L]) => btn(`data-mpt="nd:${L.join(',')}"`, mdxEsc(n) + (L.length > 1 ? ' × ' + L.length : ''), false, '把' + n + '全部选上 / 取消')).join(''); })()}</div>
     <div class="mdx-pcbar"><b>选中的</b>${btn('data-pcs="6"', '去掉', false, '游戏里不画这些块')}${btn('data-pcs="0"', '恢复', false, '去掉的再放回来')}
       <label><input type="checkbox" data-pcgh="1"${P.gh ? ' checked' : ''}> 显示去掉的（半透明）</label>${btn('data-pca="undo"', '撤销')}${nDel ? `<span class="def">已去掉 ${nDel} 块</span>${btn('data-mpt="undel"', '全部放回来')}` : ''}</div>
     <div class="mdx-pcbar"><b>看</b>${btn('data-mpt="iso"', MPT.iso ? '只看选中的（' + MPT.iso.size + ' 块）' : '只看选中的', !!MPT.iso, '别的先藏起来（只在预览里）')}${MPT.iso ? btn('data-mpt="all"', '全部显示') : ''}
@@ -114,6 +114,11 @@ function mptClick(b) {
   else if (a === 'fit') { mptFit(); return true; }
   else if (a === 'turn') { MPT.turn = !MPT.turn; mptTurn(); }
   else if (a.startsWith('v:')) { mptView(a.slice(2)); return true; }
+  else if (a.startsWith('nd:')) {   // 同名的部件一起选（模型里每个车轮各是一个部件）
+    const ids = []; for (const nd of a.slice(3).split(',').map(Number)) ids.push(...mdxNodePieces(M, nd, false));
+    const on = ids.some(i => !P.sel.has(i)); for (const i of ids) if (on) P.sel.add(i); else P.sel.delete(i);
+    mdxPtSync(); mdxPcBar(); mdxMsg((on ? '选上了 ' : '取消了 ') + ids.length + ' 块'); return true;
+  }
   else if (a === 'undel') { const A = MDX_W.mdl[mk]; if (A && A.pt) { delete A.pt.x; if (!Object.keys(A.pt).length) delete A.pt; if (!Object.keys(A).length) delete MDX_W.mdl[mk]; MDX.dirty = true; } mdxMsg('去掉的全部放回来了，点「保存」生效'); }
   else if (a === 'apply') { if (!mptEdSet(e => { const E = MPT.ed; e.t = E.t.slice(); e.r = E.r.slice(); e.s = E.s; if (E.paint) { e.c = E.c; e.cm = E.cm; } else { delete e.c; delete e.cm; } })) return true; mdxMsg('改造套上了（预览里马上看得到），点「保存」生效'); }
   else if (a === 'unapply') { const A = MDX_W.mdl[mk], id = mptIds(); if (A && Array.isArray(A.ed)) { A.ed = A.ed.filter(e => e.id !== id); if (!A.ed.length) delete A.ed; if (!Object.keys(A).length) delete MDX_W.mdl[mk]; MDX.dirty = true; } }
