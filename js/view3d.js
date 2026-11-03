@@ -1312,6 +1312,7 @@ function v3Dolly(sx, sy, k) {
 // 镜头：画面中心（CAM.x, CAM.y）为目标点；距离按平面地图的缩放换算，使画面中心的比例与平面时相同（开始界面背景的环绕展示用）
 function v3Camera() {
   if (typeof V3FP === 'object' && V3FP.on) return v3fpCamera();   // 第一人称驾驶（v3pilot.js）
+  if (typeof V3C === 'object' && V3C.on) return v3cCamera();   // 电影镜头（v3cine.js）
   if (typeof V3O === 'object' && V3O.on) return v3oCamera();   // 观察者模式（v3obs.js）
   if (V3.on) return v3FcCamera();   // 自由镜头
   const th = V3.tilt, ps = V3.yaw, D = (CAM.vh / CAM.z) / (2 * Math.tan(V3_FOV / 2)) * (V3.dk || 1), o = V3.tofs || [0, 0];
@@ -1379,6 +1380,7 @@ function v3Draw(now) {
   // 转向 / 俯仰缓动；注视点高度平滑
   const fdt = clamp((now - (V3.lastNow || now)) / 1000, 0, .1); V3.lastNow = now;
   if (typeof V3FP === 'object' && V3FP.on) v3fpStep(now);
+  else if (typeof V3C === 'object' && V3C.on) v3cStep(now);   // 电影镜头（v3cine.js）
   else if (typeof V3O === 'object' && V3O.on) v3oStep(now);
   else if (V3.on) { v3HoldStep(fdt); v3FcStep(fdt); }   // 自由镜头
   else { v3TzStep(fdt); V3.yaw += Math.atan2(Math.sin(V3.yawT - V3.yaw), Math.cos(V3.yawT - V3.yaw)) * .18; V3.tilt += (V3.tiltT - V3.tilt) * .18; }   // 开始界面背景的环绕展示
@@ -1441,7 +1443,7 @@ function v3Draw(now) {
   if (V3.cv.parentNode) ctx.clearRect(0, 0, R.cv.width, R.cv.height);   // 3D 画布垫在底下（v3Init），2D 画布只留文字和标识
   else { ctx.globalCompositeOperation = 'copy'; ctx.drawImage(V3.cv, 0, 0); }   // 没能放进页面时照旧贴过来
   ctx.restore();
-  v3Overlay(ctx, now / 1000);
+  if (!(typeof V3C === 'object' && V3C.on)) v3Overlay(ctx, now / 1000);   // 电影镜头：干净的画面，不画地名、标号
   return true;
 }
 

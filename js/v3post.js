@@ -52,8 +52,21 @@ void main() {
   c += (texture2D(uS, vU + uDir * 3.2308).rgb + texture2D(uS, vU - uDir * 3.2308).rgb) * .07027;
   gl_FragColor = vec4(c, 1.);
 }`,
+  // 体积光束（写实画面的白天，太阳在镜头前方）：从每个像素朝太阳在画面上的位置走 32 步，累加沿途亮的天空（太阳附近发亮的天）——
+  //   云、山、飞机、烟挡住的地方是暗的，于是从它们的边缘透出一道道光（电影里逆光的「耶稣光」）；离太阳越远越淡。四分之一分辨率算，合成时放大叠上
+  rays: V3PO_HEAD + `uniform sampler2D uS; uniform vec3 uSun; uniform vec2 uRes;
+void main() {
+  vec2 asp = vec2(uRes.x / uRes.y, 1.), d = uSun.xy - vU;
+  vec3 acc = vec3(0.); float il = 1.;
+  for (int i = 0; i < 32; i++) {
+    vec3 s = texture2D(uS, clamp(vU + d * (float(i) / 32.), .002, .998)).rgb;
+    acc += s * smoothstep(.6, .9, dot(s, vec3(.2126, .7152, .0722))) * il;
+    il *= .955;
+  }
+  gl_FragColor = vec4(acc / 32. * exp(-length(d * asp) * 2.4) * uSun.z, 1.);
+}`,
   // 合成：景深（按屏幕纵向离清晰带的距离混入模糊图）→ 叠辉光 → 暗角 → 颗粒
-  comp: V3PO_HEAD + `uniform sampler2D uS, uB, uD; uniform vec4 uTs; uniform float uBk, uVig, uGr, uT, uIR, uCA, uGrade; uniform vec2 uRes; uniform vec3 uSun;
+  comp: V3PO_HEAD + `uniform sampler2D uS, uB, uD, uRy; uniform vec4 uTs; uniform float uBk, uVig, uGr, uT, uIR, uCA, uGrade, uRyK, uRad; uniform vec2 uRes; uniform vec3 uSun;
 float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
 void main() {
   vec2 dc = vU - .5;
@@ -61,8 +74,10 @@ void main() {
   // 镜头色差（写实画面）：越往画面四角红、蓝通道错开得越多，正中没有——真实镜头的样子，量很轻（角上一两个像素）
   if (uCA > 0. && uIR < .5) { vec2 o = dc * dot(dc, dc) * uCA; c = vec3(texture2D(uS, vU + o).r, texture2D(uS, vU).g, texture2D(uS, vU - o).b); }
   else c = texture2D(uS, vU).rgb;
-  if (uTs.x > 0.) c = mix(c, texture2D(uD, vU).rgb, smoothstep(uTs.z, uTs.z + uTs.w, abs(vU.y - uTs.y)) * uTs.x);
+  // 景深：沙盘画面是移轴（上下两边虚），电影镜头是以画面中心为焦点的浅景深（四周虚，uRad）
+  if (uTs.x > 0.) c = mix(c, texture2D(uD, vU).rgb, (uRad > .5 ? smoothstep(.2, .62, length(dc * vec2(uRes.x / uRes.y, 1.))) : smoothstep(uTs.z, uTs.z + uTs.w, abs(vU.y - uTs.y))) * uTs.x);
   c += texture2D(uB, vU).rgb * uBk;
+  if (uRyK > 0. && uIR < .5) c += texture2D(uRy, vU).rgb * vec3(1., .9, .74) * uRyK;   // 体积光束（暖色）
   // 太阳眩光（写实画面的白天，太阳在镜头前方）：太阳周围的光晕、一道横向的镜头拉丝、沿太阳过画面中心那条线上的几个淡淡的鬼影；
   //   太阳被地形、飞机挡住就没有（看辉光图里太阳那一块亮不亮）
   if (uSun.z > 0. && uIR < .5) {
@@ -101,7 +116,8 @@ void main() {
   }
   vec2 d = (vU - .5) * vec2(uRes.x / uRes.y, 1.);
   c *= 1. - uVig * smoothstep(.3, 1.05, length(d));
-  c += (hash(floor(vU * uRes) + uT) - .5) * uGr;
+  float Lg = clamp(dot(c, vec3(.2126, .7152, .0722)), 0., 1.);
+  c += (hash(floor(vU * uRes) + floor(uT * 24.)) - .5) * uGr * (uGrade > 0. ? 4. * Lg * (1. - Lg) : 1.);   // 胶片颗粒：每秒 24 格换一次；写实画面只落在中间调（暗的海面、亮的天空不起噪点）
   gl_FragColor = vec4(c, 1.);
 }`
 };
@@ -116,7 +132,7 @@ function v3poInit(gl) {
       gl.attachShader(p, vs); gl.attachShader(p, sh(gl.FRAGMENT_SHADER, V3PO_FS[k])); gl.bindAttribLocation(p, 0, 'p'); gl.linkProgram(p);
       if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
       const u = {};
-      for (const n of ['uS', 'uB', 'uD', 'uPx', 'uTh', 'uKn', 'uDir', 'uTs', 'uBk', 'uVig', 'uGr', 'uT', 'uRes', 'uIR', 'uCA', 'uGrade', 'uSun', 'uMode']) u[n] = gl.getUniformLocation(p, n);
+      for (const n of ['uS', 'uB', 'uD', 'uRy', 'uRyK', 'uRad', 'uPx', 'uTh', 'uKn', 'uDir', 'uTs', 'uBk', 'uVig', 'uGr', 'uT', 'uRes', 'uIR', 'uCA', 'uGrade', 'uSun', 'uMode']) u[n] = gl.getUniformLocation(p, n);
       V3PO.pr[k] = { p, u };
     }
     V3PO.buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, V3PO.buf); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);   // 盖满屏幕的一个三角形
@@ -167,7 +183,8 @@ function v3Post(now) {
   if (V3PO.w !== qw || V3PO.h !== qh) v3poSize(gl, qw, qh);
   if (!V3PO.ok) return;
   const mx = typeof v3Mx === 'function' && v3Mx();   // 写实画面：不做移轴虚化和胶片颗粒（颗粒在暗的海面上就是一层噪点），暗角减半——只留辉光
-  const [A, B, T] = V3PO.fb, dof = mx ? v3poDof() : 0, bk = (mx ? .85 : .55) * clamp(isFinite(st.bloom) ? st.bloom / .7 : 1, 0, 2.2);
+  const cine = typeof V3C === 'object' && V3C.on && !mx;   // 电影镜头（v3cine.js）：浅景深、调色加重、暗角、颗粒
+  const [A, B, T] = V3PO.fb, dof = mx ? v3poDof() : cine ? .7 : 0, bk = (mx ? .85 : .55) * clamp(isFinite(st.bloom) ? st.bloom / .7 : 1, 0, 2.2);
   const tex = (unit, t) => { gl.activeTexture(gl.TEXTURE0 + unit); gl.bindTexture(gl.TEXTURE_2D, t); };
   const pass = (k, F, vw, vh, set) => {
     gl.bindFramebuffer(gl.FRAMEBUFFER, F ? F.f : null); gl.viewport(0, 0, vw, vh);
@@ -186,13 +203,14 @@ function v3Post(now) {
     pass('blur', T, qw, qh, u => { tex(0, A.t); gl.uniform1i(u.uS, 0); gl.uniform2f(u.uDir, r / qw, 0); });
     pass('blur', A, qw, qh, u => { tex(0, T.t); gl.uniform1i(u.uS, 0); gl.uniform2f(u.uDir, 0, r / qh); });
   }
+  const sun = mx ? [0, 0, 0] : v3poSun(), ir = typeof ftEO === 'function' ? ftEO() : 0, ry = !mx && !ir && sun[2] > .01 ? (cine ? 1.1 : .85) : 0;   // 光束：写实画面白天太阳在镜头前方（景深那两遍做完 T 就空出来了）
+  if (ry) pass('rays', T, qw, qh, u => { tex(0, A.t); gl.uniform1i(u.uS, 0); gl.uniform3f(u.uSun, sun[0], sun[1], sun[2]); gl.uniform2f(u.uRes, w, h); });
   pass('comp', null, w, h, u => {
-    tex(0, V3PO.scene); tex(1, B.t); tex(2, A.t);
-    gl.uniform1i(u.uS, 0); gl.uniform1i(u.uB, 1); gl.uniform1i(u.uD, 2);
-    gl.uniform4f(u.uTs, dof, .5, .1, .32); gl.uniform1f(u.uBk, bk); gl.uniform1f(u.uVig, mx ? .42 : .2); gl.uniform1f(u.uGr, mx ? .022 : 0);
-    gl.uniform1f(u.uT, (now / 1000) % 100); gl.uniform2f(u.uRes, w, h); gl.uniform1f(u.uIR, typeof ftEO === 'function' ? ftEO() : 0);
-    const sun = mx ? [0, 0, 0] : v3poSun();
-    gl.uniform1f(u.uCA, mx ? 0 : .005); gl.uniform1f(u.uGrade, mx ? 0 : 1); gl.uniform3f(u.uSun, sun[0], sun[1], sun[2]);
+    tex(0, V3PO.scene); tex(1, B.t); tex(2, A.t); tex(7, T.t);   // 光束图放 7 号单元：地形每帧都会重绑它（3 号常驻水深分类图，不能占）
+    gl.uniform1i(u.uS, 0); gl.uniform1i(u.uB, 1); gl.uniform1i(u.uD, 2); gl.uniform1i(u.uRy, 7); gl.uniform1f(u.uRyK, ry); gl.uniform1f(u.uRad, cine ? 1 : 0);
+    gl.uniform4f(u.uTs, dof, .5, .1, .32); gl.uniform1f(u.uBk, bk); gl.uniform1f(u.uVig, mx ? .42 : cine ? .38 : .22); gl.uniform1f(u.uGr, mx ? .022 : cine ? .045 : .03);
+    gl.uniform1f(u.uT, (now / 1000) % 100); gl.uniform2f(u.uRes, w, h); gl.uniform1f(u.uIR, ir);
+    gl.uniform1f(u.uCA, mx ? 0 : .005); gl.uniform1f(u.uGrade, mx ? 0 : cine ? 1.45 : 1.15); gl.uniform3f(u.uSun, sun[0], sun[1], sun[2]);
   });
   gl.disableVertexAttribArray(0); gl.enable(gl.DEPTH_TEST); gl.activeTexture(gl.TEXTURE0);   // 下一帧画地形时 0、1、2 号贴图单元都会重新绑定
 }
