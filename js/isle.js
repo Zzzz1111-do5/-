@@ -116,7 +116,7 @@ function buildIsle(seed) {
 
 // ———————————————— 海岛战役（主菜单「海岛战役」）————————————————
 //   架空的热带海岛「棕榈岛」：岛名、地名、设施与守军都是虚构的。守方固定部署（同一个种子，每次一样）；我方按预算在沙盒里自己编成，
-//   部署完点「指挥进攻方」或「观战」开战。胜利条件与登陆战役相同：夺取指挥所并控制七成据点分值、坚守 30 秒
+//   部署完点「开始战斗」或「观战」开战。胜利条件与登陆战役相同：夺取指挥所并控制七成据点分值、坚守 30 秒
 //   eB：守方岸上布防的预算；sea：另给舰队、岸舰导弹与航空兵的预算
 const ISLE = { seed: 222, p: 14000, eB: 6000, sea: 5000, style: 'bal', lv: 'hard', fleet: ['e_ddg', 'e_ffg', 'e_ffg', 'e_lcs', 'e_lcs'], ascm: 3,
   nm: '跨海登岛', island: '棕榈岛',
@@ -142,7 +142,7 @@ function isleStart() {
   if (typeof SBX === 'object') { SBX.side = 'p'; SBX.sty.p = 'bal'; SBX.dir = { main: -1, feint: -2 }; SBX.pick = null; }
   isleIntel();
   if (typeof sbxRender === 'function') sbxRender();
-  if (typeof sbxMsg === 'function') sbxMsg(`海岛战役「${ISLE.nm}」：预算 ${ISLE.p} 点，部署完点「指挥进攻方」或「观战」开战`);
+  if (typeof sbxMsg === 'function') sbxMsg(`海岛战役「${ISLE.nm}」：预算 ${ISLE.p} 点，部署完点「开始战斗」或「观战」开战`);
   if (typeof updateHud === 'function') updateHud();
 }
 // 守方固定部署：岸上按风格布防，再另给预算——驱护舰编队在岛南 2.4–3.4 公里的海面成编队巡弋，岬角炮台与港湾两侧配岸舰导弹排，
