@@ -114,6 +114,7 @@
   游戏里 v3g.js v3gPrep 对 u_ 键调 mod.js modPrep：删的块不画，部件按手动转轴挂成 rot / gun / chain 部件，车辆登记进 VFN（ta：装到推演里没炮塔的车种上时炮塔自己转向目标；mg：机枪塔转向机枪目标 iC2、机枪俯仰 iD3）；pt 改了 modApply 重新解码（modRegMdl，旧缓冲区、贴图、实例列表一起放掉）。
   机枪口 MOD.mdl[键].mg（mgOn 装在车体 / 炮塔 / 炮管 / 机枪塔）：vehicles.js vehMg 给曳光弹记 src，v3fx.js 从 v3g.js v3gMgMuzzle 打出、枪口一闪；炮口 v3gMuzzle 也跟炮管仰角走。预览（MIV）着色器按每顶点用途代码试转、上色，钉在表单顶上（sticky），手机双指缩放平移。
   编辑器浮层要带 mn-layer 类（主菜单开着时其余元素都被藏起来）；保存时 MOD 存的是 MDX_W 的拷贝（原来共用对象，没保存的改动漏进 MOD）。
+  热浪设计（用户：不要二维热浪）：MOD.mdl[键].hz 热浪源 { p, d, r, len, k, sp 末端变粗, rise 往上飘, tb 湍流, spd 流速, warm 发暖 }（mod.js modHazeOf），v3g.js v3gVeh / v3gPlane 按姿态登记（v3gHazeEmit），设计了的车不再用 V3D_VEXH 默认排气；编辑器预览用同一套着色器画（modimp.js，一直动）。
 - 主菜单「闯关」是 levels.js（三章十关，按预算自己布兵），「海岛战役」是 isle.js，都建在沙盒（sandbox.js）上；两者都记在 S.lv 里（海岛是 S.lv.isle），闯关的逻辑要跳过海岛。
 
 ## 代码约定
@@ -143,7 +144,7 @@
   卡顿主要看尖峰（单步超过 8 / 16 毫秒的次数）而不只是平均：周期性的重活要错开（视野每 0.25 秒分两步算：logistics.js updateVision 'a' / 'b'；远距离发现 spot.js 比视野晚半个周期；战线重建 front.js 遇到视野那一步顺延）。
   画面：3D（view3d.js 的 #cv3）和平面地图写实画面的地形（terrain.js trxLayer 的 #cvt）都是 WebGL 画布垫在 2D 画布 #cv 底下、由浏览器合成，#cv 每帧清空只画单位标号——
   不要再往主画布里 drawImage 整屏的 WebGL 画布（显卡画布间整屏拷贝，软件渲染、Safari、部分手机要读回）；地形画布 TRX.cv 只增不减，临时改尺寸（trxSnapshot）用完要改回去。
-  导入模型（v3g.js v3gDraw）：正常那一遍按视锥剔除实例（v3gCull），阴影那一遍用简化一级的网格；热浪（v3det.js v3dHaze）只抓热气柱所在的一块屏幕，擦着镜头的那根不画。内存：大块几何上传显卡后放掉 CPU 那份；模型在 http(s) 下 fetch 取文本解析（v3g.js v3gPump），不当脚本执行。
+  导入模型（v3g.js v3gDraw）：正常那一遍按视锥剔除实例（v3gCull），阴影那一遍用简化一级的网格；热浪（v3det.js v3dHaze）是三维的：每段热气柱画一个包住它的盒子（镜头在外面画正面、做深度测试，在里面画背面），片元里沿视线积分 12 步三维噪声算折射——只抓热气柱所在的一块屏幕（镜头在热气柱里时整屏）。内存：大块几何上传显卡后放掉 CPU 那份；模型在 http(s) 下 fetch 取文本解析（v3g.js v3gPump），不当脚本执行。
   优化尽量保持结果逐格不变：同一种子的推演结束时给状态算指纹，改动前后应相同。推演里不要用真实时间（performance.now / Date.now）做缓存失效或限量——机器快慢会让结局不同（orbat.js bgAt 原来就有这个问题，已改成按推演时刻）。
 
 ## 分支与协作

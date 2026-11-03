@@ -144,6 +144,16 @@ function modMgOf(mk) {
   const pt = o.pt || {}, on = ['hull', 't', 'g', 'mg'].includes(o.mgOn) ? o.mgOn : pt.mg || pt.mt ? 'mg' : pt.t ? 't' : 'hull';
   return { p: o.mg, on };
 }
+// 编辑器设计的热浪（按模型，MOD.mdl[模型键].hz）：每个热浪源 { p 起点, d 方向（模型坐标，米）, r 起点半径, len 长度, k 强度, sp 末端变粗几倍, rise 末端往上飘（米）, tb 湍流疏密, spd 流速, warm 发暖 }
+//   游戏里（v3g.js v3gVeh / v3gPlane）按车、飞机此刻的姿态登记成三维热气柱（v3det.js v3dHazeD）；设计了的车辆不再用默认的排气位置（v3dVehHaze）
+const MOD_HZC = new WeakMap();
+function modHazeOf(mk) {
+  const o = modMdlOf(mk);
+  if (!o || !Array.isArray(o.hz) || !o.hz.length) return null;
+  let L = MOD_HZC.get(o.hz);
+  if (!L) MOD_HZC.set(o.hz, L = o.hz.filter(e => e && Array.isArray(e.p) && Array.isArray(e.d) && e.p.length === 3 && e.d.length === 3 && e.p.every(modNum) && e.d.every(modNum) && Math.hypot(...e.d) > 1e-6 && e.r > 0 && e.len > 0));
+  return L.length ? L : null;
+}
 // 这辆车画面上用的模型键（编辑器换过的按换的）
 const modVehMdl = v => { const M = typeof rlModelOf === 'function' ? rlModelOf(v) : null; return M && typeof v3gVehKey === 'function' ? v3gVehKey(M.key, v.side === 'e' ? 'e' : 'p') : null; };
 // —— 导入模型的部件（编辑器「部件」页：MOD.mdl[模型键].pt）——
