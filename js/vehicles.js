@@ -1159,7 +1159,15 @@ function vehLSTTick(s, dt) {
   if (s.auto !== true || s.state !== 'idle' || !s.vn || (S.autoPlan && S.autoPlan.holdLST)) return;
   if ((s.lstT = (s.lstT ?? 0) - dt) > 0) return;
   s.lstT = 2;
-  // 与突击舰同时出发、同时抵滩（用户：抢滩别分批登陆；原来等突击舰上滩、滩头有 8 人站住才出发）
+  // 与突击舰同时出发、同时抵滩（用户：抢滩别分批登陆；原来等突击舰上滩、滩头有 8 人站住才出发）：
+  //   有指挥官时照它排的出发时刻（commander.js cmdShipTask：照相侦察期间待命，按航速错开出发、和突击舰同一时刻抵滩）——
+  //   原来这里一开战就自己挑滩头冲上去，比突击舰早到三分钟左右，坦克在滩头没有步兵掩护，被近战反坦克一辆辆打掉
+  const T = typeof cmdShipTask === 'function' ? cmdShipTask(s) : null;
+  if (T && T.hold) return;
+  if (T && isFinite(T.x)) {
+    if (orderShips([s], T.x, coastAt(T.x) - 20)) log(`${s.label} 驶向滩头：装甲与突击舰同时上陆`, 'info', 'lstgo' + s.id, 30, { x: T.x, y: coastAt(T.x) });
+    return;
+  }
   let best = null, bs = -Infinity, bi = -1, bfr = 0;
   TER.beaches.forEach((b, i) => {
     const ex = b.cx, ey = coastAt(b.cx) - 60;

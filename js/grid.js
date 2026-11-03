@@ -20,7 +20,7 @@ const spotted = (x, y) => EV[ci(x, y)] === 1;
 function eachCellIn(x, y, rad, fn) {
   for (let gy = Math.max(0, Math.floor((y - rad) / CELL)); gy <= Math.min(GH - 1, Math.floor((y + rad) / CELL)); gy++)
     for (let gx = Math.max(0, Math.floor((x - rad) / CELL)); gx <= Math.min(GW - 1, Math.floor((x + rad) / CELL)); gx++)
-      if (dist(gx * CELL + 5, gy * CELL + 5, x, y) <= rad) fn(gy * GW + gx);
+      if (dist(gx * CELL + CELL / 2, gy * CELL + CELL / 2, x, y) <= rad) fn(gy * GW + gx);
 }
 
 // 烟团此刻的半径：最后 6 秒收小散去；车载烟幕弹（带 t0）弹还在飞时没有烟，炸开后 1.6 秒里从三成半长满（vsmoke.js）

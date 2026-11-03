@@ -1012,7 +1012,7 @@ function sbxBuild(role) {
 // 开战：spectate 观战 AI 对 AI；attack 亲自指挥进攻方（进入常规部署阶段）
 function sbxStart(role) {
   if (!S || !S.sbx || S.sbx.live) return false;
-  // 「指挥进攻方」也是双方 AI 接管全部兵力（舰船、航母、排都不能直接操控），玩家只在编队面板（thpanel.js）给攻方的师 / 团 / 营下令
+  // 「开始战斗」也是双方 AI 接管全部兵力（舰船、航母、排都不能直接操控），玩家看攻方视野、可以亲自驾驶（编队面板已去掉）
   const ctl = role !== 'spectate' ? 'p' : null;
   role = 'spectate';
   const spent = { p: sbxSpent('p'), e: sbxSpent('e') };
@@ -1032,7 +1032,7 @@ function sbxStart(role) {
     S.ctl = ctl;
     startBattle();
     S.paused = false;
-    log(ctl ? '沙盒：你是攻方战区司令——在左侧编队面板给师、团、营下令（推进 / 穿插 / 坚守 / 后撤 / 预备队），舰船与各排由 AI 执行' : '沙盒观战：双方指挥官 AI 接管全部兵力', 'info');
+    log(ctl ? '沙盒开战：双方指挥官 AI 接管全部兵力，你看攻方的视野；按 P 可以亲自驾驶战机、055 驱逐舰' : '沙盒观战：双方指挥官 AI 接管全部兵力，双方都看得见', 'info');   // 编队面板已去掉（thpanel.js THU_PANEL），原来这里还让玩家去面板下令
   } else {
     S.phase = 'deploy'; S.paused = true;
     log('沙盒：进攻方由你指挥。预定登陆点后按 H-HOUR 开始。', 'info');
@@ -1425,7 +1425,7 @@ HOOK.newGame.push(opts => { if (typeof R === 'object' && R) R.eye = null; if (!(
 function openSandbox(seed, keep, map) {
   const prev = S && S.sbx ? S : null, lv = (prev && prev.level) || (typeof U === 'object' && U.level) || 'hard';
   const bud = keep && prev ? { ...prev.sbx.budget } : { p: SBX_BUDGET0, e: SBX_BUDGET0 };
-  map = map || (keep && prev && prev.map && prev.map !== 'std' ? prev.map : undefined);
+  map = map || (keep && prev && prev.map ? prev.map : undefined) || (MAPGEN.tw ? 'tw' : undefined);   // 沙盒默认台湾东海岸（taiwan.js）；选「海岸登陆」时是 'std'；闯关指定 'std'
   newGame(seed, lv, { sandbox: true, mode: 'sandbox', map });   // map：另外登记的地图（core.js MAPGEN），换种子重建时沿用
   Object.assign(S, { phase: 'sandbox', briefed: true, paused: true, role: 'attack', mode: 'sandbox', armor: [] });
   if (keep && prev && prev.night) S.night = true;   // 黑夜：换种子、换地图时沿用
@@ -1652,7 +1652,7 @@ function sbxUI() {
     <p class="sbx-hint sbx-styd"></p>
     <div class="sbx-row"><button type="button" data-act="save">保存部署</button><button type="button" data-act="loads" aria-expanded="false">读取部署</button></div>
     <div class="sbx-saves" hidden></div>
-    <div class="sbx-row sbx-mapsel"><label>地图<select data-sel="map"><option value="std">海岸登陆</option><option value="flat">白色平原（超大）</option></select></label><button type="button" data-act="night" aria-pressed="false" title="夜战：肉眼看得近，热像照旧，枪口焰在夜里老远就看得见">黑夜</button></div>
+    <div class="sbx-row sbx-mapsel"><label>地图<select data-sel="map">${MAPGEN.tw ? '<option value="tw">台湾东海岸（真实地形）</option>' : ''}<option value="std">海岸登陆</option><option value="flat">白色平原（超大）</option></select></label><button type="button" data-act="night" aria-pressed="false" title="夜战：肉眼看得近，热像照旧，枪口焰在夜里老远就看得见">黑夜</button></div>
     <div class="sbx-row"><input type="text" inputmode="numeric" aria-label="地图种子" class="sbx-seedin"><button type="button" data-act="map">新地图</button><span class="sbx-lv" role="radiogroup" aria-label="守军 AI 水平"></span></div>
     <details class="sbx-notes"><summary>部署思路</summary><p class="sbx-hint">点「AI 帮我部署」，由高级指挥官按地形判读完成部署并说明理由。</p><ol></ol></details>
     <div class="sbx-hint sbx-keys">左键放置（按住拖动可连续放置）· 运兵船自带满编步兵，选兵种点船可逐个替换 · 右键 / Delete 移除（按住右键拖动连续移除） · 拖动已放置的条目可移位 · Tab 切换攻守 · Esc 取消 · 滚轮缩放、中键拖动平移</div>
@@ -1981,7 +1981,7 @@ HOOK.frame.push(() => {
       let n = $('sbxEnd');
       if (!n) { n = document.createElement('p'); n.id = 'sbxEnd'; n.style.cssText = 'margin:0;font-size:12px;color:var(--intel)'; $('endStats').after(n); }
       const s0 = S.sbx.spent || { p: 0, e: 0 };
-      n.textContent = `沙盒${sp ? ' · 观战 AI 对 AI' : ' · 指挥进攻方'} · 进攻方 ${s0.p} 点 / 防守方 ${s0.e} 点 · 守军 AI ${DIFF[S.level].name}`;
+      n.textContent = `沙盒${sp ? ' · 观战 AI 对 AI' : ' · 攻方视野'} · 进攻方 ${s0.p} 点 / 防守方 ${s0.e} 点 · 守军 AI ${DIFF[S.level].name}`;
       n.hidden = false;
       sbxEditBtn('btnSbxEdit', $('btnAgain'), 'go', '修改部署再战');
     }
@@ -2021,7 +2021,7 @@ function sbxEditBtn(id, ref, cls, text, before) {
     const d = sbxLast();
     if (!d) return;
     $('end').hidden = true;
-    if (sbxLoad(d)) sbxMsg('已恢复上一局的部署：修改后点「观战」或「指挥进攻方」再战');
+    if (sbxLoad(d)) sbxMsg('已恢复上一局的部署：修改后点「开始战斗」或「观战」再战');
   });
   before ? ref.before(b) : ref.after(b);
 }

@@ -6,23 +6,22 @@ const MAP_K = 2.8;
 const AF_K = 2;   // 空军基地场区尺度：场区世界范围 = AF_BOX（mapgen2.js）× AF_K，约 1100 × 800（面积为最初的 4 倍）；场内设施按真实比例布置（afbase.js），机场局部坐标 eaW / eaL 与世界同一尺度
 // 世界尺寸：默认 W0 × H0（8400 × 5600）；大海域地图（MAPGEN 里登记的）在建图前用 setWorld 换尺寸（按格子数开的数组由各模块 onWorld 重新分配）
 const W0 = Math.round(3000 * MAP_K), H0 = Math.round(2000 * MAP_K);
-let W = W0, H = H0, GW = W / 10, GH = H / 10;
-const CELL = 10;
+let W = W0, H = H0, CELL = 10, GW = W / CELL, GH = H / CELL;   // CELL：一格多少米（默认 10；超大的真实地图按 MAPGEN 的 cell 放大，台湾东海岸 20）
 const SEA = y => H - (2000 - y) * MAP_K;   // 旧版（高 2000）海面上的 y 换算到现在的地图：集结海域、船位、航母
 let STAGING_Y = SEA(1500);      // 我方舰队集结海域上沿（航母在更南边）
 let CARRIER_Y = SEA(1880);
 const MAPGEN = {};   // 另外的地图：MAPGEN[名] = { w, h, build(seed) }（大海域等），newGame(seed, lv, { map: 名 }) 使用
 const WORLD_FNS = [];
 function onWorld(fn) { WORLD_FNS.push(fn); }
-// 换世界尺寸（米，须是 CELL 的整数倍）；尺寸没变返回 false
-function setWorld(w, h) {
-  if (w === W && h === H) return false;
-  W = w; H = h; GW = W / CELL; GH = H / CELL;
+// 换世界尺寸（米，须是格子边长的整数倍）与格子边长；都没变返回 false
+function setWorld(w, h, cell = 10) {
+  if (w === W && h === H && cell === CELL) return false;
+  W = w; H = h; CELL = cell; GW = W / CELL; GH = H / CELL;
   STAGING_Y = SEA(1500); CARRIER_Y = SEA(1880);
   for (const f of WORLD_FNS) f();
   return true;
 }
-const ELEV_H = 6;                 // 高程 1.0 对应的视线高度（格）
+let ELEV_H = 6;                   // 高程 1.0 对应的视线高度（格）；真实地形（TER.hz：高程 1.0 是多少米）按 TER.hz / CELL（state.js newGame）
 const COL = {
   bg: '#020704', g: '#3dff8a', gMid: '#1fa457', gDim: '#0f4a29', enemy: '#ff3d6e',
   intel: '#5cc8ff', sel: '#b07cff', amber: '#ffc24a', text: '#c6f7d8', smoke: '#9fb8a8'

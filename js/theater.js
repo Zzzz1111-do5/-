@@ -18,7 +18,7 @@
 //     ord { v, x, y, src: ai / pl, t } 正在执行的命令, box [{ ord, at }] 在途命令, man 玩家接管, aiSp AI 派出的穿插, p0 初始兵力 }
 const TH = { org: 2, think: 4, dly: { div: 5, bde: 3, reg: 2 }, bound: 130, lead: 150, back: 240, rest: 30, minW: 60, maxReg: 4, maxBde: 3, maxDiv: 3, link: 380, wait: 20,
   gap: 30, vgap: 60, row: 100, rows: 3, focus: 1.2,   // gap 相邻两排形之间留的空当 · vgap 车辆最小间距（条令：车间距 50 米以上，原来 25 米挤成一团） · row 后几排的排距 · focus 正面超出能守宽度多少倍就收缩
-  adv: 180, advWait: 90, advArr: .7, advNear: 90, advMax: 300, advW: 3,   // 攻方推进线：一次往前挪 adv 米；一线各营 advArr 以上到了线上（一线的排六成在自己位置 advNear 米内）才挪，
+  adv: 180, advWait: 90, advArr: .7, advNear: 90, advMax: 300, advW: 3, adv0: 160,   // 攻方推进线：一次往前挪 adv 米；一线各营 advArr 以上到了线上（一线的排六成在自己位置 advNear 米内）才挪，
                                                                              //   最多等 advWait 秒（大半个营离线 advMax 以内才直接推）；每跃两头各展开 advW 列
   res: .25, ctr: 2, prep: 12, commit: 1.5, det: 15 };   // 守方：res 登陆场出现后留作预备队的机动营比例 · ctr 反击要的兵力比 · prep 反击前炮火准备秒数 · commit 一线吃紧（当面敌 / 当面守军）到几倍不等判明主攻就投入预备队 · det 判明敌主攻要的上陆兵力
 const TH_V = { auto: '自动', advance: '推进', spear: '穿插', hold: '坚守', retreat: '后撤', reserve: '预备队', follow: '第二梯队', ext: '独立作战' };
@@ -484,9 +484,11 @@ function thAdvLine(T) {
   const A = T.adv || (T.adv = { d: null, t: S.t, n: 0, ext: [] }), fp = S.front.p.fp;
   const regs = thDivs('p').flatMap(thRegsOf).filter(R => thG(R) && thInLine(R) && !R.man);
   if (!regs.length) { A.t = S.t; return; }
-  if (A.d == null) {   // 起点：部队上岸后的前沿离岸深度（各列的中位数）
+  if (A.d == null) {   // 起点：部队上岸后的前沿离岸深度（各列的中位数），但至少到滩头后面 TH.adv0 米——
+    //   原来就取刚上岸时的前沿（三四十米，还在沙滩上），后面的舰还在卸载时线不动，先上岸的营到了线上就趴在沙滩上等，被岸上火力成片打倒（沙盒 AI 对 AI：滩头 267 人打到 111 人线才第一次往前挪）；
+    //   第一道线定在滩头后面：先冲出沙滩、夺下滩头出口一线，再在那里等齐、全线往前推
     const ds = thCols('p').filter(b => fp[b] != null).map(b => coastAt(clamp(frBX(b), 0, W - 1)) - fp[b]).sort((a, b) => a - b);
-    A.d = Math.max(0, ds.length ? ds[ds.length >> 1] : 0); A.t = S.t;
+    A.d = Math.max(TH.adv0, ds.length ? ds[ds.length >> 1] : 0); A.t = S.t;
   }
   let sea = 0, land = 0;
   for (const s of S.ships) if (alive(s) && s.load && s.load.teams > 0 && (s.state === 'move' || s.state === 'beached' || s.state === 'unloading')) sea += s.load.teams;

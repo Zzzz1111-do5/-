@@ -5,7 +5,7 @@ function finishMap(r, cAt, headland) {
   const eachCell = (x, y, rad, fn) => {
     for (let gy = Math.max(0, Math.floor((y - rad) / CELL)); gy <= Math.min(GH - 1, Math.ceil((y + rad) / CELL)); gy++)
       for (let gx = Math.max(0, Math.floor((x - rad) / CELL)); gx <= Math.min(GW - 1, Math.ceil((x + rad) / CELL)); gx++) {
-        const px = gx * CELL + 5, py = gy * CELL + 5;
+        const px = gx * CELL + CELL / 2, py = gy * CELL + CELL / 2;
         if (dist(px, py, x, y) < rad) fn(gy * GW + gx, px, py);
       }
   };
@@ -124,7 +124,7 @@ function finishMap(r, cAt, headland) {
     for (let tries = 0; tries < 10; tries++) {
       const top = Math.max(rv.top, 120), fy = top + r() * (cAt(rv.mx) - 200 - top), fgy = Math.floor(fy / CELL);
       if (bridges.some(b => Math.abs(b.y - fy) < 140) || riverX(k, fgy) < 0) continue;
-      for (let gy = fgy; gy <= fgy + 1; gy++) for (let gx = 0; gx < GW; gx++) if (type[gy * GW + gx] === T.RIVER && Math.abs(gx * CELL + 5 - riverX(k, gy)) < 20) type[gy * GW + gx] = T.FORD;
+      for (let gy = fgy; gy <= fgy + 1; gy++) for (let gx = 0; gx < GW; gx++) if (type[gy * GW + gx] === T.RIVER && Math.abs(gx * CELL + CELL / 2 - riverX(k, gy)) < 20) type[gy * GW + gx] = T.FORD;
       TER.fords.push({ x: riverX(k, fgy), y: fgy * CELL + 10 });
       break;
     }
@@ -140,7 +140,7 @@ function finishMap(r, cAt, headland) {
   if (town3) add('T3', '北镇', town3.x, town3.y, 2);
   let best = null, be = -1;
   for (let gy = 0; gy < GH; gy++) for (let gx = 0; gx < GW; gx++) {
-    const x = gx * CELL + 5, y = gy * CELL + 5, i = gy * GW + gx, d = cAt(x) - y;
+    const x = gx * CELL + CELL / 2, y = gy * CELL + CELL / 2, i = gy * GW + gx, d = cAt(x) - y;
     if (x > W * .2 && x < W * .8 && d > 250 * MAP_K && d < 650 * MAP_K && type[i] !== T.TOWN && TER.elev[i] > be && riverGap({ x, y }) > 80) { be = TER.elev[i]; best = { x, y }; }
   }
   if (best) add('RD', '雷达站', best.x, best.y, 2);
