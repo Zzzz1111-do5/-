@@ -152,8 +152,8 @@ function thuRender(force) {
   const sw = el.querySelector('.th-sw');
   sw.hidden = !!S.ctl;
   for (const b of sw.querySelectorAll('button')) b.classList.toggle('on', b.dataset.side === THU.side);
-  const R = thRoot(THU.side), T = S.th[THU.side];
-  el.querySelector('#thTitle').textContent = `${R ? R.name : '战区'}${THU.side === 'p' && T ? ` · 阶段线 ${T.k}` : ''}`;
+  const R = thRoot(THU.side);
+  el.querySelector('#thTitle').textContent = R ? R.name : '战区';
   const rows = thuRows(THU.side) || `<div class="th-empty">${THU.side === 'p' ? '部队还在海上：上岸后按地段编成师、团、营。' : '机动兵力编组中。'}</div>`;
   const list = el.querySelector('.th-list');
   if (force || rows !== THU.key) { const top = list.scrollTop; list.innerHTML = rows; list.scrollTop = top; THU.key = rows; }
@@ -278,13 +278,14 @@ function thuDraw(time) {
   if (!thOn() || typeof R === 'undefined' || !R.ctx || (typeof V3 === 'object' && V3.drawing)) return;
   const ctx = R.ctx, zr = CAM.z / CAM.fit, far = zr < 2.1;
   ctx.save(); ctx.lineJoin = 'round'; ctx.lineCap = 'round';
-  // 攻方阶段线（攻方视角或观战时）：沿当前战线所在的范围画虚线
-  const T = S.th.p, cols = thCols('p');
-  if (T && cols.length && (S.ctl === 'p' || !S.ctl) && S.points.some(p => p.owner !== 'p')) {
-    const x0 = Math.max(0, frBX(cols[0]) - 300), x1 = Math.min(W, frBX(cols[cols.length - 1]) + 300);
+  // 攻方推进线（攻方视角或观战时）：全线一起往前挪的那条线（theater.js thAdvLine / thAdvY），沿战线正面画虚线（隔开的几段分开画）
+  const cols = thCols('p');
+  if (cols.length && thAdvY(0) != null && (S.ctl === 'p' || !S.ctl)) {
     ctx.strokeStyle = rgba(COL.g, .5); ctx.lineWidth = px(1.4); ctx.setLineDash([px(10), px(6)]);
-    ctx.beginPath(); for (let x = x0; x <= x1; x += 30) { const y = thPL(T.k, x); x === x0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y); } ctx.stroke(); ctx.setLineDash([]);
-    if (zr > 1.2) { ctx.fillStyle = rgba(COL.g, .75); ctx.font = font(10); ctx.textAlign = 'left'; ctx.fillText(`阶段线 ${T.k}`, x0 + px(6), thPL(T.k, x0) - px(5)); }
+    ctx.beginPath();
+    let pb = -9;
+    for (const b of cols) { const x = frBX(b), y = thAdvY(x); b - pb > 3 ? ctx.moveTo(x, y) : ctx.lineTo(x, y); pb = b; }
+    ctx.stroke(); ctx.setLineDash([]);
   }
   for (const side of ['e', 'p']) {
     const R0 = thRoot(side);

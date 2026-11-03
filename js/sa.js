@@ -15,10 +15,10 @@
 //   兵力比回到 ret × 1.3 以上（追兵被打掉、或与主力汇合）就停下重整再战；撤出 700 还没摆脱也转入重整
 // saGarrison：守方不编营的守备排——据点还没丢、排在阵地外（不在碉堡、城镇里）被三倍以上的敌人压上来，交替掩护退到据点后方的二线位置，
 //   不在开阔地上被一口吃掉；退到位或兵力比好转就交还守军 AI（ai2.js 跳过 q.saFall 的组）
-const SA = { r: 320, mem: 25, friend: 450, fw: .5, trendT: 15, trendK: 1.3, trendW: 1.25, bound: 110, swap: 24, fireGap: 12, link: 260, linkMax: 1200, maxW: 700, brk: .5, brkPw: .35, cover: .5, sup: .3, every: 3, smoke: 30 };
+const SA = { r: 320, mem: 25, friend: 450, fw: .5, trendT: 15, trendK: 1.3, trendW: 1.25, bound: 80, swap: 24, fireGap: 18, link: 200, linkMax: 1200, maxW: 700, brk: .5, brkPw: .35, cover: .5, sup: .3, every: 3, smoke: 30 };
 const saStat = (k, n = 1) => { if (typeof v8Stat === 'function') v8Stat(k, n); };
-// 按方的协同参数（jointdoc.js saDoc：每跃距离、叫火力间隔、脱离接触线、汇合距离，联合训练场训练）
-const saP = side => typeof saDoc === 'function' ? saDoc(side) : { bound: SA.bound, fire: SA.fireGap, brk: SA.brk, link: SA.link };
+// 边打边撤的参数（只有守方用；原来按方查协同参数表，表已删，取的就是守方那一组）：每跃距离、叫火力间隔、脱离接触线、汇合距离
+const saP = () => ({ bound: SA.bound, fire: SA.fireGap, brk: SA.brk, link: SA.link });
 
 // 本方在 (x, y) 一带叫得到的火力支援（0–1）
 function saSup(side, x, y) {
