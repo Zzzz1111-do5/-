@@ -1,6 +1,6 @@
 'use strict';
 // 设置：音量、显示、流程、AI 指挥官聊天。存 localStorage 'bh-settings'（兼容旧的 'bh-rain'）；无 DOM，可在 Node 中运行
-const SETTINGS_DEF = { master: .8, music: .45, musicStyle: 'march', sfx: .8, radio: .6, rain: .25, bloom: .7, quality: 'high', look: 'real', intro: true, v3: true, chat: 'normal', enemyChat: true, shake: true, front: true, rdist: 1, extMdl: true };
+const SETTINGS_DEF = { master: .8, music: .45, musicStyle: 'march', sfx: .8, radio: .6, rain: .25, bloom: .7, quality: 'high', look: 'real', intro: true, v3: true, chat: 'normal', enemyChat: true, shake: true, front: true, rdist: 1, extMdl: true, land: 'desert' };
 const SETTINGS = { ...SETTINGS_DEF };
 const SET_FNS = [];
 const SET_KEY = 'bh-settings';
@@ -14,6 +14,7 @@ function setClean(k, v) {
   if (typeof d === 'boolean') return typeof v === 'boolean' ? v : v === 'true' ? true : v === 'false' ? false : undefined;
   if (k === 'quality') return v === 'low' || v === 'high' ? v : undefined;
   if (k === 'look') return v === 'green' || v === 'real' || v === 'matrix' ? v : undefined;
+  if (k === 'land') return v === 'desert' || v === 'green' ? v : undefined;
   if (k === 'chat') return v === 'brief' || v === 'normal' || v === 'verbose' ? v : undefined;
   if (k === 'musicStyle') return v === 'march' || v === 'ambient' || v === 'custom' ? v : undefined;
   return undefined;
@@ -63,3 +64,5 @@ onSettings((k) => { if ((k === 'look' || k === null) && typeof applyLook === 'fu
 
 loadSettings();
 if (typeof applyLook === 'function') applyLook(SETTINGS.look);
+// 地表（用户：地图换皮成沙漠）：沙漠（默认）/ 绿地——只是写实画面的颜色（view3d.js 地形着色器 uDes、小地图 camera.js），地形、推演不变
+const landDesert = () => SETTINGS.land === 'desert';

@@ -2654,6 +2654,227 @@
         "Permissive"
       ],
       "modNote": "近看网格减到约 11 万个三角形、贴图缩到 1024"
+    },
+    "hedgehog": {
+      "name": "捷克刺猬（海滩反登陆障碍）",
+      "glb": "up/hedgehog/scene.gltf",
+      "fwd": "+x",
+      "up": "+y",
+      "height": 1.4,
+      "roughMin": 0.5,
+      "texMax": 1024,
+      "credit": {
+        "title": "Rusted Czech Hedgehog",
+        "author": "GrostyBoi",
+        "url": "https://sketchfab.com/3d-models/rusted-czech-hedgehog-cfa712e8851a4881989ea890bfc6910e",
+        "license": "CC-BY-4.0",
+        "lurl": "http://creativecommons.org/licenses/by/4.0/"
+      }
+    },
+    "bunker": {
+      "name": "混凝土碉堡（机枪工事）",
+      "glb": "up/bunker/scene.gltf",
+      "fwd": "+z",
+      "up": "+y",
+      "len": 6.5,
+      "roughMin": 0.6,
+      "credit": {
+        "title": "'Stekelvarken S3' Kazemat (Dutch WWII bunker)",
+        "author": "Sjoerd van Riel",
+        "url": "https://sketchfab.com/3d-models/stekelvarken-s3-kazemat-dutch-wwii-bunker-f409a77deaaf4e3888d47f76ec48dbdd",
+        "license": "CC-BY-4.0",
+        "lurl": "http://creativecommons.org/licenses/by/4.0/"
+      }
+    },
+    "ak130": {
+      "name": "岸防炮（用 AK-130 舰炮外形代替）",
+      "glb": "up/ak130/scene.gltf",
+      "fwd": "-z",
+      "up": "+y",
+      "height": 4.2,
+      "roughMin": 0.5,
+      "credit": {
+        "title": "Naval Artillery AK-130",
+        "author": "Muhamad Mirza Arrafi",
+        "url": "https://sketchfab.com/3d-models/naval-artillery-ak-130-bc44975689a94b31b6084ba9e0374318",
+        "license": "CC-BY-4.0",
+        "lurl": "http://creativecommons.org/licenses/by/4.0/"
+      }
+    },
+    "chute": {
+      "name": "圆形军用降落伞",
+      "glb": "up/chute/scene.gltf",
+      "fwd": "+x",
+      "up": "+y",
+      "span": 10.7,
+      "roughMin": 0.7,
+      "texMax": 1024,
+      "credit": {
+        "title": "Army Parachute",
+        "author": "amaraklov",
+        "url": "https://sketchfab.com/3d-models/army-parachute-af52e08feebc4d94a244692212ac25bb",
+        "license": "CC-BY-4.0",
+        "lurl": "http://creativecommons.org/licenses/by/4.0/"
+      }
+    },
+    "crate": {
+      "name": "弹药箱",
+      "glb": "up/crate/scene.gltf",
+      "fwd": "+x",
+      "up": "+y",
+      "len": 1.1,
+      "roughMin": 0.6,
+      "texMax": 512,
+      "credit": {
+        "title": "Ammo Crate PBR",
+        "author": "avhatar",
+        "url": "https://sketchfab.com/3d-models/ammo-crate-pbr-4c1ae64a96934083b0250752cac78595",
+        "license": "CC-BY-4.0",
+        "lurl": "http://creativecommons.org/licenses/by/4.0/"
+      }
+    },
+    "mcrate": {
+      "name": "军用器材箱",
+      "glb": "up/mcrate/scene.gltf",
+      "fwd": "+x",
+      "up": "+y",
+      "len": 1.2,
+      "roughMin": 0.5,
+      "texMax": 512,
+      "credit": {
+        "title": "Military crate",
+        "author": "Noah",
+        "url": "https://sketchfab.com/3d-models/military-crate-b658f15a9708442c956f5d0baa0ea665",
+        "license": "CC-BY-4.0",
+        "lurl": "http://creativecommons.org/licenses/by/4.0/"
+      }
+    },
+    "sandbag": {
+      "name": "沙袋墙",
+      "glb": "up/sandbag/scene.gltf",
+      "fwd": "+z",
+      "up": "+y",
+      "len": 3,
+      "roughMin": 0.8,
+      "texMax": 512,
+      "credit": {
+        "title": "Sandbag Wall 02",
+        "author": "Pypunk",
+        "url": "https://sketchfab.com/3d-models/sandbag-wall-02-6ab8f2c7db3d46f49b5b58ae0b686e2e",
+        "license": "CC-BY-4.0",
+        "lurl": "http://creativecommons.org/licenses/by/4.0/"
+      }
+    },
+    "cloud": {
+      "name": "积云",
+      "glb": "up/cloud/scene.gltf",
+      "fwd": "+x",
+      "up": "+y",
+      "len": 1000,
+      "origin": "center",
+      "texMax": 1024,
+      "credit": {
+        "title": "Cloud",
+        "author": "RandyGF",
+        "url": "https://sketchfab.com/3d-models/cloud-3a76eb255e3c4c0199bbfedb2b54342f",
+        "license": "CC-BY-4.0",
+        "lurl": "http://creativecommons.org/licenses/by/4.0/"
+      },
+      "tri0": 14000,
+      "tri0Flags": [
+        "Permissive"
+      ],
+      "modNote": "近看网格减到约 1.4 万个三角形、不用原贴图（贴图用第二套 UV），游戏里涂成白色"
+    },
+    "ladder": {
+      "name": "登机梯",
+      "glb": "up/ladder/scene.gltf",
+      "fwd": "+x",
+      "up": "+y",
+      "height": 2.6,
+      "roughMin": 0.5,
+      "texMax": 512,
+      "credit": {
+        "title": "Aircraft Maintenance Ladder",
+        "author": "himanshurawathr0987",
+        "url": "https://sketchfab.com/3d-models/aircraft-maintenance-ladder-4b943d26fa1e4c4ab0f0a99931ab8371",
+        "license": "CC-BY-4.0",
+        "lurl": "http://creativecommons.org/licenses/by/4.0/"
+      }
+    },
+    "sx2220": {
+      "name": "陕汽 SX2220 越野卡车（补给车、抢修车）",
+      "glb": "up/sx2220/scene.gltf",
+      "fwd": "+z",
+      "up": "+y",
+      "len": 8.6,
+      "roughMin": 0.6,
+      "texMax": 1024,
+      "credit": {
+        "title": "Shaanxi SX2220（原作者 anzob_rp）",
+        "author": "42manako",
+        "url": "https://sketchfab.com/3d-models/shaanxi-sx2220-81d4d683b27e4b5383541485f1529961",
+        "license": "CC-BY-4.0",
+        "lurl": "http://creativecommons.org/licenses/by/4.0/"
+      },
+      "tri0": 30000,
+      "tri0Flags": [
+        "Permissive"
+      ],
+      "modNote": "近看网格减到约 3 万个三角形、贴图缩到 1024"
+    },
+    "type22": {
+      "name": "022 型导弹艇（代火箭 / 火力支援艇）",
+      "glb": "up/type22/scene.gltf",
+      "fwd": "+z",
+      "up": "+y",
+      "len": 42.6,
+      "roughMin": 0.5,
+      "texMax": 1024,
+      "credit": {
+        "title": "Type 22 missile boat",
+        "author": "dannzjs",
+        "url": "https://sketchfab.com/3d-models/type-22-missile-boat-623de3c8e01c411d8764a779d12f1622",
+        "license": "CC-BY-4.0",
+        "lurl": "http://creativecommons.org/licenses/by/4.0/"
+      }
+    },
+    "sentinel": {
+      "name": "AN/MPQ-64 哨兵防空雷达（悍马 + 天线拖车）",
+      "glb": "up/sentinel/scene.gltf",
+      "fwd": "-z",
+      "up": "+y",
+      "len": 9.6,
+      "roughMin": 0.6,
+      "texMax": 1024,
+      "credit": {
+        "title": "AN/MPQ-64 Sentinel Radar (HMMWV + Trailer)",
+        "author": "xFORTUNAx",
+        "url": "https://sketchfab.com/3d-models/anmpq-64-sentinel-radar-hmmwv-trailer-b76ef9d61c604521aba7387385761497",
+        "license": "CC-BY-4.0",
+        "lurl": "http://creativecommons.org/licenses/by/4.0/"
+      },
+      "tri0": 30000,
+      "tri0Flags": [
+        "Permissive"
+      ],
+      "modNote": "近看网格减到约 3 万个三角形、贴图缩到 1024"
+    },
+    "pbr": {
+      "name": "内河巡逻艇（代海上抢修艇）",
+      "glb": "up/pbr/scene.gltf",
+      "fwd": "-x",
+      "up": "+y",
+      "len": 9.5,
+      "roughMin": 0.5,
+      "texMax": 1024,
+      "credit": {
+        "title": "Patrol Boat PBR MK2",
+        "author": "Savy",
+        "url": "https://sketchfab.com/3d-models/patrol-boat-pbr-mk2-dbd87172b2934063aa93ffd0c6f85750",
+        "license": "CC-BY-4.0",
+        "lurl": "http://creativecommons.org/licenses/by/4.0/"
+      }
     }
   },
   "sets": {

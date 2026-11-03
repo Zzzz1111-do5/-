@@ -66,6 +66,19 @@
 - FGM-148 标枪导弹（弹体）（js/mdl/javm.js）：This work is based on "FGM-148 Javelin Missile (Low-Poly)" (https://sketchfab.com/3d-models/fgm-148-javelin-missile-low-poly-39b071dbbcbc4a5e9ca1646527b940ef) by GoldbergR licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
 - M224A1 60 毫米迫击炮（js/mdl/m224.js）：This work is based on "Mortar - M224" (https://sketchfab.com/3d-models/mortar-m224-c86a73e40d994431bcdb57dc741cf8be) by jcherry3d licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)（改动：贴图缩到最长边 1024 像素）
 - FIM-92 毒刺便携防空导弹（js/mdl/stinger.js）：This work is based on "FIM-92 Stinger (Low-Poly)" (https://sketchfab.com/3d-models/fim-92-stinger-low-poly-c97e321bae1249a78ac4eed43a932ed7) by GoldbergR licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+- 捷克刺猬（海滩反登陆障碍）（js/mdl/hedgehog.js）：This work is based on "Rusted Czech Hedgehog" (https://sketchfab.com/3d-models/rusted-czech-hedgehog-cfa712e8851a4881989ea890bfc6910e) by GrostyBoi licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)（改动：贴图缩到最长边 1024 像素）
+- 混凝土碉堡（机枪工事）（js/mdl/bunker.js）：This work is based on "'Stekelvarken S3' Kazemat (Dutch WWII bunker)" (https://sketchfab.com/3d-models/stekelvarken-s3-kazemat-dutch-wwii-bunker-f409a77deaaf4e3888d47f76ec48dbdd) by Sjoerd van Riel licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+- 岸防炮（用 AK-130 舰炮外形代替）（js/mdl/ak130.js）：This work is based on "Naval Artillery AK-130" (https://sketchfab.com/3d-models/naval-artillery-ak-130-bc44975689a94b31b6084ba9e0374318) by Muhamad Mirza Arrafi licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+- 圆形军用降落伞（js/mdl/chute.js）：This work is based on "Army Parachute" (https://sketchfab.com/3d-models/army-parachute-af52e08feebc4d94a244692212ac25bb) by amaraklov licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)（改动：贴图缩到最长边 1024 像素）
+- 弹药箱（js/mdl/crate.js）：This work is based on "Ammo Crate PBR" (https://sketchfab.com/3d-models/ammo-crate-pbr-4c1ae64a96934083b0250752cac78595) by avhatar licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)（改动：贴图缩到最长边 512 像素）
+- 军用器材箱（js/mdl/mcrate.js）：This work is based on "Military crate" (https://sketchfab.com/3d-models/military-crate-b658f15a9708442c956f5d0baa0ea665) by Noah licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)（改动：贴图缩到最长边 512 像素）
+- 沙袋墙（js/mdl/sandbag.js）：This work is based on "Sandbag Wall 02" (https://sketchfab.com/3d-models/sandbag-wall-02-6ab8f2c7db3d46f49b5b58ae0b686e2e) by Pypunk licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)（改动：贴图缩到最长边 512 像素）
+- 积云（js/mdl/cloud.js）：This work is based on "Cloud" (https://sketchfab.com/3d-models/cloud-3a76eb255e3c4c0199bbfedb2b54342f) by RandyGF licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)（改动：贴图缩到最长边 1024 像素、网格减到约 14000 个三角形、近看网格减到约 1.4 万个三角形、不用原贴图（贴图用第二套 UV），游戏里涂成白色）
+- 登机梯（js/mdl/ladder.js）：This work is based on "Aircraft Maintenance Ladder" (https://sketchfab.com/3d-models/aircraft-maintenance-ladder-4b943d26fa1e4c4ab0f0a99931ab8371) by himanshurawathr0987 licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)（改动：贴图缩到最长边 512 像素）
+- 陕汽 SX2220 越野卡车（补给车、抢修车）（js/mdl/sx2220.js）：This work is based on "Shaanxi SX2220（原作者 anzob_rp）" (https://sketchfab.com/3d-models/shaanxi-sx2220-81d4d683b27e4b5383541485f1529961) by 42manako licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)（改动：贴图缩到最长边 1024 像素、网格减到约 30000 个三角形、近看网格减到约 3 万个三角形、贴图缩到 1024）
+- 022 型导弹艇（代火箭 / 火力支援艇）（js/mdl/type22.js）：This work is based on "Type 22 missile boat" (https://sketchfab.com/3d-models/type-22-missile-boat-623de3c8e01c411d8764a779d12f1622) by dannzjs licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)（改动：贴图缩到最长边 1024 像素）
+- AN/MPQ-64 哨兵防空雷达（悍马 + 天线拖车）（js/mdl/sentinel.js）：This work is based on "AN/MPQ-64 Sentinel Radar (HMMWV + Trailer)" (https://sketchfab.com/3d-models/anmpq-64-sentinel-radar-hmmwv-trailer-b76ef9d61c604521aba7387385761497) by xFORTUNAx licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)（改动：贴图缩到最长边 1024 像素、网格减到约 30000 个三角形、近看网格减到约 3 万个三角形、贴图缩到 1024）
+- 内河巡逻艇（代海上抢修艇）（js/mdl/pbr.js）：This work is based on "Patrol Boat PBR MK2" (https://sketchfab.com/3d-models/patrol-boat-pbr-mk2-dbd87172b2934063aa93ffd0c6f85750) by Savy licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)（改动：贴图缩到最长边 1024 像素）
 <!-- v3g:end -->
 
 <!-- ext:start -->
@@ -110,13 +123,12 @@
 - 岩石：This work is based on "Rocks Set 3" (https://sketchfab.com/3d-models/rocks-set-3-9a160330d1c14268948248f387889b35) by DJMaesen licensed under CC BY 4.0
 - 天空：This work is based on "Kloofendal 48d Partly Cloudy (Pure Sky)" (https://polyhaven.com/a/kloofendal_48d_partly_cloudy_puresky) by Greg Zaal / Poly Haven licensed under CC0
 - 地表贴图：This work is based on "Grass004、Ground037、Rock060、Ground054" (https://ambientcg.com/) by ambientCG licensed under CC0
-- 水面法线：This work is based on "waternormals.jpg（three.js 示例）" (https://github.com/mrdoob/three.js/blob/dev/examples/textures/waternormals.jpg) by three.js authors licensed under MIT
+- 海面法线贴图（assets/water/normals.jpg）：用户提供的海洋素材（ocean.zip 里的 water_new_height.png）
 - 舰载飞机牵引车：This work is based on "Aircraft_Tug" (https://sketchfab.com/3d-models/aircraft-tug-ac1c0a974a734864a27fe84dbbcb0de8) by Chukk007 licensed under CC Attribution
 - 挂弹车：This work is based on "Weapons Loader" (https://sketchfab.com/3d-models/weapons-loader-016ca0f9b98b4ffbbe0e55f235bef496) by Sengchor licensed under CC Attribution
 - 导弹挂载架：This work is based on "Industrial Storage Rack" (https://sketchfab.com/3d-models/industrial-storage-rack-c21c9a687c3d48ad9e74f894c6d2791c) by siddharthkalbage licensed under CC Attribution
 - 写实地表贴图（草地、林下地面、岩石、沙滩，assets/terrain）：ambientCG（https://ambientcg.com），CC0 1.0
 - 天空（assets/sky）：Poly Haven「kloofendal_48d_partly_cloudy_puresky」（https://polyhaven.com/a/kloofendal_48d_partly_cloudy_puresky），CC0 1.0
-- 海面法线贴图（assets/water/normals.jpg）：three.js 示例（waternormals.jpg）（https://github.com/mrdoob/three.js），MIT（见 assets/water/LICENSE-three.js.txt）
 - 地图丘陵地势（js/hmap.js，默认地图、海岛地图的高度场）：This work is based on "Soft Hills" (https://sketchfab.com/3d-models/soft-hills-7450a967693e49bf8fd9e6da42f5b292) by hirnlaich (https://sketchfab.com/hirnlaich) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)；改动：只取顶点高度、平滑后缩成 384 × 384、按地图缩放与翻转（tools/hmap_build.py）
 - 超新星遗迹星云（js/mdl/nebula.js，白色平原的太空背景，v3neb.js）：This work is based on "Supernova remnant : lighting 2" (https://sketchfab.com/3d-models/supernova-remnant-lighting-2-68cbcb486c7f41f2b842a36a543a54a1) by Aiekick licensed under CC BY 4.0 (http://creativecommons.org/licenses/by/4.0/)（改动：点云抽样到 30 万个点、坐标与颜色量化）
 <!-- ext:end -->

@@ -699,15 +699,16 @@ function v3mWorkBoat() {
   return M;
 }
 // 空投补给点：一堆弹药箱 + 伞衣摊在一旁
-function v3mCrates() {
+const V3M_CRATES = [[-1.3, -1, 0], [1.3, -1, 0], [0, 1.2, 0], [0, 0, 1.4]];   // 箱子的位置（换成导入的器材箱时同一套摆法，v3mSfBoxes）
+function v3mCrates(noBox) {
   const M = mbNew();
-  for (const [x, y, z] of [[-1.3, -1, 0], [1.3, -1, 0], [0, 1.2, 0], [0, 0, 1.4]]) mbBox(M, x - 1.2, x + 1.2, y - .9, y + .9, z, z + 1.4, .8);
+  if (!noBox) for (const [x, y, z] of V3M_CRATES) mbBox(M, x - 1.2, x + 1.2, y - .9, y + .9, z, z + 1.4, .8);
   mbPrism(M, mbCirc(4.5, 2, 2.2, 10), 0, .15, .6);
   return M;
 }
 // 补给站（supplynet.js 前沿补给点 / 滩头补给站）：碎石垫层、沙袋矮墙、托盘物资箱堆（捆扎带）、油桶、伪装网棚（四根立杆、网面经纬线）、天线杆；
 //   big = 滩头补给站：更大，多两只集装箱（波纹板）和一台叉车。n = 0–3 箱堆的多少（前沿点按存量、在建的按进度）；dead = 被毁：散落的焦黑箱子
-function v3mDepot(big, n, dead) {
+function v3mDepot(big, n, dead, noBox) {   // noBox：沙袋墙、物资箱堆换成了导入的模型（v3mSfDepot），这里不建
   const M = mbNew(), R0 = big ? 13 : 8;
   mbPrism(M, mbCirc(0, 0, R0 + 1.5, 16), 0, .12, .5);   // 碎石垫层
   if (dead) {
@@ -716,14 +717,14 @@ function v3mDepot(big, n, dead) {
     return M;
   }
   // 沙袋矮墙：一圈短墙，留出口
-  for (let i = 0; i < 14; i++) { if (i === 3 || i === 4) continue; const a0 = i / 14 * 6.283, a1 = (i + .85) / 14 * 6.283; const P = [[Math.cos(a0) * R0, Math.sin(a0) * R0], [Math.cos(a1) * R0, Math.sin(a1) * R0], [Math.cos(a1) * (R0 - .7), Math.sin(a1) * (R0 - .7)], [Math.cos(a0) * (R0 - .7), Math.sin(a0) * (R0 - .7)]]; mbPrism(M, P, 0, .8, .62, { taper: .15 }); }
+  if (!noBox) for (let i = 0; i < 14; i++) { if (i === 3 || i === 4) continue; const a0 = i / 14 * 6.283, a1 = (i + .85) / 14 * 6.283; const P = [[Math.cos(a0) * R0, Math.sin(a0) * R0], [Math.cos(a1) * R0, Math.sin(a1) * R0], [Math.cos(a1) * (R0 - .7), Math.sin(a1) * (R0 - .7)], [Math.cos(a0) * (R0 - .7), Math.sin(a0) * (R0 - .7)]]; mbPrism(M, P, 0, .8, .62, { taper: .15 }); }
   // 托盘物资箱：每堆一个托盘 + 两三层箱子，箱面一道捆扎带
   const stack = (x, y, h) => {
     mbBox(M, x - .65, x + .65, y - .55, y + .55, 0, .15, .55);
     for (let k = 0; k < h; k++) { const z = .15 + k * .62; mbBox(M, x - .58, x + .58, y - .48, y + .48, z, z + .58, .78 + (k % 2) * .06); mbLoop(M, [[x - .59, y - .1], [x + .59, y - .1], [x + .59, y + .1], [x - .59, y + .1]], z + .29, .9); }
   };
   const cnt = big ? [8, 12, 16, 20][n] : [3, 6, 9, 12][n];
-  for (let i = 0; i < cnt; i++) { const c = i % (big ? 5 : 4), r = Math.floor(i / (big ? 5 : 4)); stack(-R0 * .55 + c * 1.6, -R0 * .35 + r * 1.4, 1 + ((i * 7) % 3)); }
+  if (!noBox) for (let i = 0; i < cnt; i++) { const c = i % (big ? 5 : 4), r = Math.floor(i / (big ? 5 : 4)); stack(-R0 * .55 + c * 1.6, -R0 * .35 + r * 1.4, 1 + ((i * 7) % 3)); }
   // 油桶：一簇立着的 200 升桶
   for (let i = 0; i < (big ? 10 : 5); i++) { const x = R0 * .35 + (i % 3) * .75, y = R0 * .2 + Math.floor(i / 3) * .75; mbTube(M, [x, y, 0], [x, y, .9], .3, .3, 8, .7); mbLoop(M, mbCirc(x, y, .31, 8), .45, .85); }
   // 伪装网棚：四根立杆、斜坡网面、经纬线
@@ -986,9 +987,93 @@ function v3mLadder() {
 }
 // 一个实例：x、y 世界坐标，z 高度，a 世界朝向（屏幕坐标角），k 比例，side 0 我 / 1 敌 / 2 残骸，roll 滚转，pitch 俯仰（车头抬起为正）
 function v3mAdd(key, build, x, y, z, a, k, side, roll = 0, pitch = 0) {
+  const R = V3M_SF[key];
+  if (R && !(typeof v3Mx === 'function' && v3Mx()) && v3mSf(R, key, build, x, y, z, a, k, side, roll, pitch)) return;   // 换成 Sketchfab 模型了（写实画面；黑绿 / 数码画面仍是代码建的发光棱线模型）
   let L = V3M.inst.get(key);
   if (!L) { L = { build, d: [] }; V3M.inst.set(key, L); }
   L.d.push(x, -y, z, -a, k, side, roll, pitch);
+}
+// —— 代码建的模型换成 Sketchfab 上的真实模型（用户：游戏里自己做的模型都去 Sketchfab 找来换掉；tools/v3gmodels.json 烘焙，js/v3g.js 画）——
+//   代码模型的键 → 导入模型 g（函数时按阵营挑）：按代码模型的包围盒摆——水平最长边一样长再乘 f、水平中心对齐、底面落在代码模型的底面
+//   （top：按顶面对齐，伞；fz：按高度对齐）；a 补转（弧度）。ring：一圈沙袋墙 [半径, 段数, 后面留几段空当, 每段比例]（炮位土堤、迫击炮掩体）。
+//   模型还没加载好（或加载失败）照旧画代码建的
+const V3M_SF = {
+  'st:bunker': { g: 'bunker', f: .75 }, 'st:coastal': { g: 'ak130', f: .5 }, 'st:aa': { g: 'm163', f: .85 },
+  'st:arty': { g: 'm777', k: 2.1, z: .3 }, 'st:mortar': { g: 'm224', k: 1.9, z: -.2 },
+  'st:berm': { g: 'sandbag', ring: [12.4, 15, 2, 1.55] }, 'st:pit': { g: 'sandbag', ring: [3.5, 7, 1, .85] },
+  hedge: { g: 'hedgehog' }, ladder: { g: 'ladder', fz: 1 },
+  truck: { g: 'sx2220' }, 'truck:fix': { g: s => s === 1 ? 'hmmwv' : 'sx2220', f: .95 }, wboat: { g: 'pbr', f: 1.1 },
+  radmast: { g: 'sentinel', f: 1.7 }, 'chute:team': { g: 'chute', fz: 1, top: 1 }
+};
+const v3mSfSide = s => s === 2 ? 2 : s === 1 || s === 4 ? 1 : 0;
+// 代码模型的包围盒（建一次网格量出来，只在 CPU 上算）
+function v3mBB(key, build) {
+  const C = V3M.bb || (V3M.bb = new Map());
+  let b = C.get(key);
+  if (b) return b;
+  let MB = null;
+  try { MB = build(); } catch (e) { MB = null; }
+  b = [1e9, 1e9, 1e9, -1e9, -1e9, -1e9];
+  if (MB) for (const A of [MB.t, MB.l]) for (let i = 0; i < A.length; i += 10) for (let j = 0; j < 3; j++) { b[j] = Math.min(b[j], A[i + j]); b[j + 3] = Math.max(b[j + 3], A[i + j]); }
+  if (b[0] > b[3]) b = [-1, -1, 0, 1, 1, 1];
+  C.set(key, b);
+  return b;
+}
+function v3mSf(R, key, build, x, y, z, a, k, side, roll, pitch) {
+  if (typeof v3gAdd !== 'function') return false;
+  const g = typeof R.g === 'function' ? R.g(side) : R.g, M = v3gModel(g);
+  if (!M) return false;
+  const sd = v3mSfSide(side), c = Math.cos(a), s = Math.sin(a);
+  if (R.ring) {   // 一圈沙袋墙：沿圆周切向摆，后方（朝向反方向）留出口
+    const [r, n, gap, ks] = R.ring, sl = (M.meta.bb[3] - M.meta.bb[0]) * ks;
+    for (let i = 0; i < n; i++) {
+      if (Math.abs(i - n / 2 + .5) < gap / 2) continue;
+      const t = a + i / n * 6.2832, px = x + Math.cos(t) * r * k, py = y + Math.sin(t) * r * k;
+      v3gAdd(g, px, py, v3mSfGz(px, py, z), t + Math.PI / 2, ks * k * Math.max(1, 6.2832 * r / n / sl * .98), sd);   // 每段各自贴地（坡上的阵地按最低点摆，一圈摆同一高度会有半圈埋进坡里）
+    }
+    return true;
+  }
+  if (R.k) { v3gAdd(g, x, y, z + (R.z || 0) * k, a + (R.a || 0), R.k * k, sd, roll, pitch); return true; }   // 按固定比例（与发射阵地上原来的炮一样大）
+  const P = v3mBB(key, build), B = M.meta.bb;
+  const sc = R.fz ? (P[5] - P[2]) / (B[5] - B[2]) : Math.max(P[3] - P[0], P[4] - P[1]) / Math.max(B[3] - B[0], B[4] - B[1]) * (R.f || 1);
+  const ox = (P[0] + P[3]) / 2 - (B[0] + B[3]) / 2 * sc, oy = (P[1] + P[4]) / 2 - (B[1] + B[4]) / 2 * sc, oz = R.top ? P[5] - B[5] * sc : P[2] - B[2] * sc;   // 模型局部坐标里要挪多少
+  v3gAdd(g, x + (ox * c + oy * s) * k, y + (ox * s - oy * c) * k, z + oz * k, a + (R.a || 0), sc * k, sd, roll, pitch);
+  return true;
+}
+// 补给站（v3mDepot）里的沙袋矮墙、托盘物资箱堆换成导入的沙袋墙、器材箱，摆法同代码模型；碎石垫层、油桶、伪装网棚、天线、集装箱、叉车仍是代码建的（noBox）。
+//   空投补给点（v3mCrates）的四只箱子同样。模型没好返回 false（照旧整个画代码建的）
+const v3mSfGz = (x, y, z0) => Math.max(z0, v3Ht(clamp(x, 0, W - 1), clamp(y, 0, H - 1)) - .15);   // 地面高度（沙袋墙底稍微埋进土里一点）
+// 据点「炮兵排」（v3mPoint battery）：三个半圆土堤炮位换成半圈沙袋墙 + M777（炮口朝模型 +y，同代码模型）
+function v3mSfBattery(x, y, z, sd) {
+  if (!v3mSfReady('m777', 'sandbag')) return false;
+  const sl = V3G.M.sandbag.meta.bb[3] - V3G.M.sandbag.meta.bb[0];
+  for (const [dx, dy] of [[-20, 0], [0, 5], [20, 0]]) {
+    v3gAdd('m777', x + dx, y - dy, v3Ht(x + dx, y - dy) + .3, -Math.PI / 2, 1.25, sd);
+    for (let i = 0; i < 6; i++) { const t = Math.PI + (i + .5) / 6 * Math.PI, px = x + dx + Math.cos(t) * 7.5, py = y - dy - Math.sin(t) * 7.5; v3gAdd('sandbag', px, py, v3mSfGz(px, py, -9), -t - Math.PI / 2, 7.5 * Math.PI / 6 * .95 / sl, sd); }
+  }
+  return true;
+}
+const v3mSfReady = (...K) => !(typeof v3Mx === 'function' && v3Mx()) && typeof v3gModel === 'function' && K.every(k => v3gModel(k));
+function v3mSfDepot(big, n, x, y, z, a, sd) {
+  if (!v3mSfReady('sandbag', 'mcrate')) return false;
+  const R0 = big ? 13 : 8, c = Math.cos(a), s = Math.sin(a), at = (u, v) => [x + u * c + v * s, y + u * s - v * c], Ms = V3G.M.sandbag.meta.bb, sl = Ms[3] - Ms[0];
+  for (let i = 0; i < 14; i++) {
+    if (i === 3 || i === 4) continue;
+    const t = (i + .425) / 14 * 6.2832, r = R0 - .35, [px, py] = at(Math.cos(t) * r, Math.sin(t) * r);
+    v3gAdd('sandbag', px, py, v3mSfGz(px, py, z), a - t - Math.PI / 2, 6.2832 * R0 / 14 * .85 / sl, sd);
+  }
+  const cnt = big ? [8, 12, 16, 20][n] : [3, 6, 9, 12][n];
+  for (let i = 0; i < cnt; i++) {
+    const cc = i % (big ? 5 : 4), rr = Math.floor(i / (big ? 5 : 4)), [px, py] = at(-R0 * .55 + cc * 1.6, -R0 * .35 + rr * 1.4), h = 1 + ((i * 7) % 3);
+    for (let k = 0; k < h; k++) v3gAdd('mcrate', px, py, z + k * .6, a + (k % 2) * .08, 1, sd);
+  }
+  return true;
+}
+function v3mSfCrates(x, y, z, a, sd) {
+  if (!v3mSfReady('mcrate')) return false;
+  const c = Math.cos(a), s = Math.sin(a);
+  for (const [u, v, w] of V3M_CRATES) v3gAdd('mcrate', x + u * c + v * s, y + u * s - v * c, z + (w ? 1.2 : 0), a + (w ? .3 : 0), 2, sd);
+  return true;
 }
 // 贴地姿态：地面在 (x, y) 处的坡度（dz/dx、dz/dy，中心差分，跨度 d）；id 给了就按帧平滑（车辆翻过坡顶时车身平顺地俯仰，不一帧一跳）
 function v3Grad(x, y, d, id) {
@@ -1090,7 +1175,8 @@ function v3mCollect(C, box) {
     const Q = !X && typeof V3L_PRE === 'object' && V3L_PRE[pre];   // 登陆舰、火力支援艇、扫雷舰（v3lst.js：按真舰以米建模，这里按游戏长度缩放）
     if (Q) {
       const [v, f] = Q, len = d[0] * f * P.k, off = (d[0] * P.k - len) / 2, c = Math.cos(P.h), s = Math.sin(P.h), k = len / V3L_DIM[v][0], F = V3L_FUN[v];
-      v3mAdd('sh:l:' + v, () => v3mLST(v), P.x + c * off, P.y + s * off, -2.6, P.h, k, 0);
+      if ((v === 'rkt' || v === 'gun') && v3mSfReady('type22')) v3gAdd('type22', P.x + c * off, P.y + s * off, -2.6 - 1.6 * len / 42.6, P.h, len / 42.6, 0);   // 火箭 / 火力支援艇换成 022 型导弹艇的模型（Sketchfab，dannzjs）
+      else v3mAdd('sh:l:' + v, () => v3mLST(v), P.x + c * off, P.y + s * off, -2.6, P.h, k, 0);
       if (typeof v3dFunnel === 'function') v3dFunnel(P.x + c * off, P.y + s * off, P.h, len, F[0], -2.6 + F[1] * k, .6);
       continue;
     }
@@ -1193,7 +1279,11 @@ function v3mCollect(C, box) {
     const T = jump(c), r = Math.max(0, T - c.t), lx = c.x + 3 * r, ly = c.y - 2 * r, f = clamp(1 - c.t / T, 0, 1), id = c.id ?? (lx * 7 + ly * 3);
     const a = Math.sin(id) * 3, roll = Math.sin(t * 1.3 + id) * .09, man = c.k === 'team', hang = 5.4 * 2.2 + 1.85 * V3_MAN;   // hang：伞衣顶到伞兵脚底
     const z = v3Ht(lx, ly) + f * 120 + (man ? hang : 1.5 + (c.k === 'veh' ? 11.3 : 7.4) * 2.2);   // 伞兵着陆那一刻脚正好踩到地面
-    v3mAdd('chute:' + c.k, () => v3mChute(c.k), c.x, c.y, z, a, 2.2, sd, roll);
+    if (c.k === 'crate' && v3mSfReady('chute', 'mcrate')) {   // 空投补给箱：伞衣同伞兵的（导入模型），伞下吊一只器材箱
+      v3mSf(V3M_SF['chute:team'], 'chute:team', () => v3mChute('team'), c.x, c.y, z, a, 2.2, sd, roll);
+      const hb = 6.1 * 2.2, s = Math.sin(roll) * hb;
+      v3gAdd('mcrate', c.x + s * Math.sin(a), c.y - s * Math.cos(a), z - Math.cos(roll) * hb - .6, a, 2.2, v3mSfSide(sd), roll);
+    } else v3mAdd('chute:' + c.k, () => v3mChute(c.k), c.x, c.y, z, a, 2.2, sd, roll);
     if (man) { const s = Math.sin(roll) * hang; v3gMan('rifle', 'hang', c.x + s * Math.sin(a), c.y - s * Math.cos(a), z - Math.cos(roll) * hang, a, V3_MAN, sd, roll); }   // 吊在伞下的伞兵：和伞衣同一个摆（绕伞衣顶转），吊索始终连在头顶
   } };
   if (S.para && typeof PA === 'object') chutes(S.para.ch, c => c.k === 'crate' ? PA.jump : c.role ? PA.jlJump : PA.jump, 0);
@@ -1210,7 +1300,7 @@ function v3mCollect(C, box) {
     const z = k === 'bridge' ? Math.max(v3Ht(p.x - 26, p.y), v3Ht(p.x + 26, p.y), -2) - 2.4 : k === 'ford' ? sea(p.x, p.y) : v3Ht(p.x, p.y);
     const nh = (!!V3_PTHOUSE[k] || k === 'exit' || k === 'bridge') && typeof v3pReady === 'function' && v3pReady();   // 房屋、地堡、桥换成了外部模型（v3props.js）
     const sv = typeof v3Mx === 'function' && !v3Mx() ? 3 : sd;   // 写实画面：混凝土、土堤用中性的灰，不按归属涂色（归属看旗子）
-    v3mAdd((nh ? 'ptn:' : 'pt:') + k + (blown ? ':x' : ''), () => v3mPoint(k, blown, nh), p.x, p.y, z, 0, 1, sv);
+    if (!(k === 'battery' && nh && v3mSfBattery(p.x, p.y, z, sd === 2 ? 0 : sd))) v3mAdd((nh ? 'ptn:' : 'pt:') + k + (blown ? ':x' : ''), () => v3mPoint(k, blown, nh), p.x, p.y, z, 0, 1, sv);
     if (k === 'radar') v3mAdd('rad:4', () => v3mRadar(4), p.x + 4, p.y - 4, z + 9.6, p.owner === 'e' ? t * 1.4 : .5, 1, sd);
   }
   for (const o of S.obst || []) if (o.known && !o.dead && inB(o.x, o.y)) v3mAdd('hedge', v3mHedgehog, o.x, o.y, sea(o.x, o.y), (o.x * 7.1 + o.y * 3.3) % 6.28, 1.3, 1);   // 海滩反登陆障碍
@@ -1240,7 +1330,7 @@ function v3mCollect(C, box) {
     for (const r of S.afd.radar || []) if (inB(r.x, r.y) && (spec || seen(r.x, r.y) || r.kx != null)) {   // 机场对空监视雷达站
       const z = v3Ht(r.x, r.y);
       v3mAdd('radmast', v3mRadarMast, r.x, r.y, z, 0, 1, r.dead ? 2 : 1);
-      if (!r.dead) v3mAdd('rad:3', () => v3mRadar(3), r.x, r.y, z + 8.7, t * 1.6 + r.x, 1, 1);
+      if (!r.dead && !v3mSfReady('sentinel')) v3mAdd('rad:3', () => v3mRadar(3), r.x, r.y, z + 8.7, t * 1.6 + r.x, 1, 1);   // 换成哨兵雷达（V3M_SF radmast）时天线是模型自带的
     }
     for (const id in S.afd.bases) {   // 机场抢修车（afdef.js）：从出发点开到弹坑旁
       const F = S.afd.bases[id].fix;
@@ -1249,15 +1339,18 @@ function v3mCollect(C, box) {
       v3mAdd('truck:fix', () => v3mTruck('fix'), x, y, v3Ht(x, y), u < 1 ? a : a + .6, .55, 1);
     }
   }
-  if (S.para && S.para.ca) for (const c of S.para.ca) if (inB(c.x, c.y)) v3mAdd('crates', v3mCrates, c.x, c.y, v3Ht(c.x, c.y), 0, 1, 0);   // 空投补给点
+  const crates = (x, y, z, a, sd) => v3mSfCrates(x, y, z, a, sd === 2 ? 0 : sd) ? v3mAdd('crates:nb', () => v3mCrates(true), x, y, z, a, 1, sd) : v3mAdd('crates', v3mCrates, x, y, z, a, 1, sd);
+  if (S.para && S.para.ca) for (const c of S.para.ca) if (inB(c.x, c.y)) crates(c.x, c.y, v3Ht(c.x, c.y), 0, 0);   // 空投补给点
   // 补给站：滩头补给站（浮桥补给线终点）与前沿补给点；箱堆随存量增减，在建的按进度一堆堆码起来，被毁的散落一地
-  for (const L of S.supply || []) if (inB(L.x, L.y)) { const z = Math.max(v3Ht(L.x, L.y), -1); v3mAdd('depot:b:3', () => v3mDepot(true, 3, false), L.x, L.y, z, 0, 1, 0); }
+  for (const L of S.supply || []) if (inB(L.x, L.y)) { const z = Math.max(v3Ht(L.x, L.y), -1); if (v3mSfDepot(true, 3, L.x, L.y, z, 0, 0)) v3mAdd('depot:b:3:nb', () => v3mDepot(true, 3, false, true), L.x, L.y, z, 0, 1, 0); else v3mAdd('depot:b:3', () => v3mDepot(true, 3, false), L.x, L.y, z, 0, 1, 0); }
   if (S.snet) for (const n of S.snet.nodes) {
     if (!isFinite(n.x) || !inB(n.x, n.y)) continue;
     const live = typeof snLive === 'function' ? snLive(n) : !n.dead, dead = n.dead && !(n.built > 0);
     if (!live && !dead && !(n.built > 0)) continue;   // 只是规划，还没动工
     const k = dead ? 0 : live ? Math.round(clamp(n.stock ?? 1, 0, 1) * 3) : Math.round(clamp(n.built, 0, 1) * 3), key = `depot:n:${k}:${dead ? 1 : 0}`;
-    v3mAdd(key, () => v3mDepot(false, k, dead), n.x, n.y, v3Ht(n.x, n.y), (n.id || 0) * .7, 1, dead ? 2 : 0);
+    const zn = v3Ht(n.x, n.y), an = (n.id || 0) * .7;
+    if (!dead && v3mSfDepot(false, k, n.x, n.y, zn, an, 0)) v3mAdd(key + ':nb', () => v3mDepot(false, k, false, true), n.x, n.y, zn, an, 1, 0);
+    else v3mAdd(key, () => v3mDepot(false, k, dead), n.x, n.y, zn, an, 1, dead ? 2 : 0);
   }
   if (typeof afb3dBases === 'function' && typeof afbParked === 'function') for (const b of afb3dBases()) {   // 机场停放的飞机（机堡里、停机线、直升机位）
     const own = b === S.abBase;
@@ -1274,7 +1367,7 @@ function v3mCollect(C, box) {
     const F = S.eair.farp, K = { heli: ['ah64', 16], ftrb: ['f35b', 17], uh60: ['uh60', 17] };
     for (const P of eaFarpParked()) { const [key, sz] = K[P.w.type] || ['ah64', 16]; v3GroundPlane(key, sz, P.x, P.y, v3Ht(P.x, P.y), P.h, 0, 0, true, 4, t); }
     for (const [dx, dy] of [[-62, -40], [-62, -28], [62, -40]]) v3mAdd('farpbl', () => { const M = mbNew(); mbBox(M, -6.5, 6.5, -3.2, 3.2, 0, 1.4, .6, { taper: 1.1 }); return M; }, F.x + dx, F.y + dy, v3Ht(F.x + dx, F.y + dy), 0, 1, 2);   // 油囊
-    v3mAdd('crates', v3mCrates, F.x + 54, F.y + 38, v3Ht(F.x + 54, F.y + 38), .3, 1, 2);
+    crates(F.x + 54, F.y + 38, v3Ht(F.x + 54, F.y + 38), .3, 2);
   }
   // 飞机：高度与 3D 地图里的标识一致（view3d.js v3AirZ：甲板上贴着甲板，空中按高度），按滚转角倾斜；直升机主旋翼转动
   const plane = (o, hd, sd, key, sz, bank) => {
@@ -1349,6 +1442,7 @@ function v3mCollect(C, box) {
     if (VP && m.t < 2.2 && typeof v3VlsOrigin === 'function') { const vo = v3VlsOrigin(m); if (vo) v3mAdd('vlslid', v3mVlsLid, vo.x, vo.y, vo.z, vo.h, 1, m.side === 'e' ? 1 : 0, -1.25 * clamp(m.t / .25, 0, 1) * clamp((2.2 - m.t) / .4, 0, 1)); }
   }
   for (const id of mp.keys()) if (!mlive.has(id)) mp.delete(id);
+  if (typeof v3cloudAdd === 'function') v3cloudAdd(C);   // 天上的云朵（v3cloud.js）
 }
 // 画收集好的实例；LM：太阳阴影图的光源矩阵（这一遍只写深度，不画发光线）
 function v3mDraw(C, LM) {
