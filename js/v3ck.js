@@ -67,7 +67,7 @@ function ckCamera() {
   } else {
     // 机后跟随：在飞机后上方约 36 米（只跟航向，不跟着滚转，地平线不歪），鼠标绕着转；被击落时看着坠落处
     const h = P.h + Math.PI + PC.orbit[0], op = PC.orbit[1], D = PC.dead ? 70 : 38, T = PC.dead && PC.p ? ckWreck() || P.C : P.C;
-    const want = [T[0] + Math.cos(-h) * Math.cos(op) * D * -1 * -1, T[1] + Math.sin(-h) * Math.cos(op) * D, T[2] - Math.sin(op) * D + 4];
+    const want = [T[0] + Math.cos(-h) * Math.cos(op) * D, T[1] + Math.sin(-h) * Math.cos(op) * D, T[2] - Math.sin(op) * D + 4];
     if (!CK.cam || CK.camV !== 'ext') CK.cam = want.slice();
     for (let i = 0; i < 3; i++) CK.cam[i] += (want[i] - CK.cam[i]) * .25;
     const g = v3Gnd(clamp(CK.cam[0], 0, W - 1), clamp(-CK.cam[1], 0, H - 1)) + 3; if (CK.cam[2] < g) CK.cam[2] = g;
@@ -136,7 +136,7 @@ function ckPass(C) {
   gl.uniformMatrix4fv(U.uM, false, K.M); gl.uniform3f(U.uEye, K.E[0], K.E[1], K.E[2]);
   gl.uniform2f(U.uFog, 1e5, 2e5); gl.uniform3f(U.uBg, ...v3Bg());
   v3mPalette(gl); v3ShUni(gl, U, false); gl.uniform1f(U.uHl, 0); gl.uniform1f(U.uGP, 0);
-  const inst = [new Float32Array([0, 0, 0, P.h, 1, 3, P.rl, P.pt])];
+  const inst = [new Float32Array([0, 0, 0, -P.h, 1, 3, P.rl, P.pt])];   // 实例朝向是 GL 角（= −世界航向，同 v3mAdd）
   v3mDrawM(gl, m, inst[0], 1, false);
   // 平尾（全动）：按杆量偏转
   const Mg = typeof v3xMesh === 'function' ? v3xMesh('j35') : null, sf = PC.p && PC.p.pcA ? PC.p.pcA : { de: 0, da: 0 };
@@ -243,7 +243,7 @@ function ckSit(g, w, h, T) {
   }
   const P = (x, y) => ckMapXY(T, x, y, cx, cy, k), inR = q => q[0] > 8 && q[0] < w - 8 && q[1] > 30 && q[1] < h - 26;
   // 已知防空火力圈
-  if (typeof airAASites === 'function') for (const s of airAASites().slice(0, 40)) { const q = P(s.x, s.y); if (!inR(q)) continue; g.strokeStyle = 'rgba(255,74,74,.55)'; g.beginPath(); g.arc(q[0], q[1], Math.max(6, (s.r || 220) * k), 0, 7); g.stroke(); ckTxt(g, 'S', q[0], q[1], CKC.r, 11, 'center', true); }
+  if (typeof airAASites === 'function') for (const s of airAASites().slice(0, 40)) { const q = P(s.x, s.y); if (!inR(q)) continue; g.strokeStyle = 'rgba(255,74,74,.55)'; g.beginPath(); g.arc(q[0], q[1], Math.max(6, (s.k === 'veh' ? 300 : s.k === 'mp' ? 150 : 220) * k), 0, 7);   // 防空导弹车 / 便携防空 / 高炮的大致射程 g.stroke(); ckTxt(g, 'S', q[0], q[1], CKC.r, 11, 'center', true); }
   // 友舰（方块）、母舰
   for (const s of S.ships || []) if ((typeof alive !== 'function' || alive(s)) && s.side !== 'e') { const q = P(s.x, s.y); if (inR(q)) { g.fillStyle = 'rgba(86,216,255,.7)'; g.fillRect(q[0] - 2.5, q[1] - 2.5, 5, 5); } }
   for (const c of typeof cvAll === 'function' ? cvAll() : []) { const q = P(c.x, c.y); if (inR(q)) { g.strokeStyle = CKC.c; g.lineWidth = 2; g.strokeRect(q[0] - 6, q[1] - 4, 12, 8); ckTxt(g, '福建', q[0], q[1] + 13, CKC.c, 11, 'center'); } }
@@ -279,12 +279,12 @@ function ckFcr(g, w, h, T) {
     CK.sweep = (CK.sweep || 0) + .055; const sa = Math.sin(CK.sweep) * 60, sx = x0 + aw * (sa + 60) / 120;
     if (PC.radarOn) { g.strokeStyle = 'rgba(70,240,138,.55)'; g.lineWidth = 2; g.beginPath(); g.moveTo(sx, y0); g.lineTo(sx, y1); g.stroke(); }
     for (const c of T.air) {
-      const az = -c.az * 180 / Math.PI, x = x0 + aw * (az + 60) / 120, y = y1 - ah * Math.min(1, c.d / Rr);
+      const az = c.az * 180 / Math.PI, x = x0 + aw * (az + 60) / 120, y = y1 - ah * Math.min(1, c.d / Rr);
       if (az < -62 || az > 62 || c.d > Rr) continue;
       const lk = T.tg && T.tg.o === c.o, col = lk ? CKC.y : c.radar ? CKC.r : CKC.m;
       g.strokeStyle = col; g.fillStyle = col; g.lineWidth = 2;
       if (c.radar) g.fillRect(x - 5, y - 5, 10, 10); else g.strokeRect(x - 5, y - 5, 10, 10);
-      const hv = (c.o.heading || 0) - T.P.h; g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.sin(-hv + Math.PI / 2) * 14, y - Math.cos(-hv + Math.PI / 2) * 14); g.stroke();
+      const hv = (c.o.heading || 0) - T.P.h; g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.sin(hv) * 14, y - Math.cos(hv) * 14); g.stroke();   // 目标航向（朝上 = 与本机同向飞远）
       if (lk) { g.beginPath(); g.arc(x, y, 11, 0, 7); g.stroke(); }
     }
     ckTxt(g, PC.radarOn ? (T.tg ? '单目标跟踪' : '边扫描边跟踪') : '雷达静默', x0 + 4, y0 + 12, PC.radarOn ? CKC.g : CKC.y, 12);
