@@ -228,10 +228,17 @@ function muxBulkForm() {
 }
 // 保存并试玩：存盘、关掉编辑器、开一局沙盒
 function muxPlay() {
+  const cu = MDX.tab === 'veh' && /^cu_/.test(MDX.sel || '') ? MDX.sel : null;   // 在自制兵种页上点的：开局后兵种栏直接选中它
   for (const k of MOD_SEC) if (k !== 'lib') MOD[k] = modClone(MDX_W[k]);
   modSave(); MDX.dirty = false;
   closeModEditor();
   if (typeof mnAct === 'function') mnAct('sbx');
+  const c = cu && typeof catalogById === 'function' ? catalogById(cu) : null;
+  if (c && typeof SBX === 'object' && S && S.sbx) {
+    Object.assign(SBX, { side: c.side === 'e' ? 'e' : 'p', cat: c.cat, pick: cu, line: null });
+    if (typeof sbxFrameSide === 'function') sbxFrameSide();
+    if (typeof sbxRender === 'function') sbxRender();
+  }
 }
 // —— 接到 modui.js 上 ——
 if (typeof MDX_TABS === 'object' && !MDX_TABS.some(t => t[0] === 'chg')) {

@@ -9,7 +9,7 @@
 //   导入的文件（模型、序列帧贴图）太大放不进 localStorage：存在 IndexedDB（modFilePut），MOD.lib 只记名字和参数；开机时读出来登记给 v3g.js / v3vfx.js。
 //   战场大小只管程序生成的「海岸登陆」地图（state.js newGame）；画面设置在 SETTINGS 里（settings.js）
 const MOD_KEY = 'bh-mod', MOD_MM = 220;   // 装甲、穿深：推演里按「级」算（vehicles.js vehPenMul），编辑器里写毫米均质钢，1 级 ≈ 220 毫米
-const MOD_SEC = ['veh', 'air', 'eair', 'wpn', 'msl', 'map', 'mdl', 'fx', 'rel', 'trl', 'lib'];   // rel 抛离后几秒点火（airmdl.js AIR_IGN）、trl 导弹尾烟尾焰（v3fx.js v3fTrl）
+const MOD_SEC = ['veh', 'air', 'eair', 'wpn', 'msl', 'map', 'mdl', 'fx', 'rel', 'trl', 'unit', 'lib'];   // rel 抛离后几秒点火（airmdl.js AIR_IGN）、trl 导弹尾烟尾焰（v3fx.js v3fTrl）、unit 自制兵种（modUnitApply）
 const MOD = { v: 1 };
 for (const k of MOD_SEC) MOD[k] = {};
 const MOD_DEF = { air: {}, eair: {}, wpn: {}, msl: {}, load: {}, ap: {}, fl: {}, gun: {}, st: {}, v3air: {} };   // 表里改之前的原值
@@ -89,6 +89,7 @@ function modApply() {
   }
   for (const k in MOD_VMDL) delete MOD_VMDL[k];
   for (const k in MOD.veh) if (modMdlOk(MOD.veh[k].mdl)) MOD_VMDL[k] = MOD.veh[k].mdl;
+  modUnitApply();
   // 挂点（fpwpn.js FW_ST，按模型）：编辑器里改过的整组换掉
   if (typeof FW_ST === 'object') {
     for (const mk in MOD.mdl) if (MOD.mdl[mk].st && !(mk in MOD_DEF.st)) MOD_DEF.st[mk] = FW_ST[mk] ? modClone(FW_ST[mk]) : null;
@@ -419,15 +420,67 @@ function modPrep(key, m, VB, IB) {
   }
 }
 // —— 车辆（按型号）——
+// —— 自制兵种（用户：我自己弄了个坦克，为什么游戏里没有添加我的坦克）——
+//   原来导入的车辆只能「换掉」某个已有型号的外形，兵种栏里不会多出东西。MOD.unit[兵种号 cu_…] = { nm 名称, mdl 模型键, base 照哪个兵种（catalog.js 的条目号）, cost 点数 }：
+//   照那个兵种的性能、编成、上场方式（攻方坐登陆舰抢滩、守方在岸上布防）复制一条目录（CATALOG，排在最后：原有条目的「同类第几种」不变），沙盒、闯关布兵的兵种栏、兵力图鉴里都有；
+//   推演里这辆车的型号键就是兵种号（models.js rlModelOf 认 v.sbxV）：RLM[兵种号] 是照着那一型的平面外形（不带它的反应装甲块：自己的模型上没有），
+//   V3G_VEH[兵种号] 是照着那一型的 3D 模型（自己的模型读不出来时画它；vfn.js 推演里的炮塔转速也按它），MOD_VMDL[兵种号] 是自己的模型；
+//   参数（速度、装甲、加速度……）按 MOD.veh[兵种号]，在编辑器「坦克装甲车」页单独改，没改的照着那一型原来的
+const MOD_CU = new Set();   // 已经加进目录的自制兵种号
+// 目录条目 → 型号键（同 models.js rlModelOf 对这个条目生出来的车）
+function modCatRlm(c) {
+  if (!c || !c.spawn || typeof RLM_NAME !== 'object') return null;
+  let k = (RLM_NAME.find(([re]) => re.test(c.name)) || [])[1] || (c.spawn.tag === 'dozer' ? 'gcz110' : null) || (RLM_TYPE[c.side === 'e' ? 'e' : 'p'] || {})[c.spawn.type] || null;
+  if (c.spawn.mod && c.spawn.mod.cram && !/LPWS|LD-2000|密集阵/.test(c.name)) k = c.side === 'e' ? 'lpws' : 'ld2000';
+  return k;
+}
+// 能拿来照的兵种：目录里的车辆（不含自制的）
+const modCuBases = () => typeof CATALOG === 'object' ? CATALOG.filter(c => c.spawn && c.spawn.kind === 'veh' && !c.cu && typeof VEH_SPEC === 'object' && VEH_SPEC[c.spawn.type]) : [];
+function modUnitApply() {
+  if (typeof CATALOG !== 'object' || typeof CATALOG_MAP !== 'object') return;
+  for (const id of MOD_CU) {
+    const i = CATALOG.findIndex(c => c.id === id);
+    if (i >= 0) CATALOG.splice(i, 1);
+    CATALOG_MAP.delete(id);
+    if (typeof RLM === 'object') delete RLM[id];
+    if (typeof V3G_VEH === 'object') delete V3G_VEH[id];
+  }
+  MOD_CU.clear();
+  for (const id in MOD.unit) {
+    const u = MOD.unit[id], B = u && typeof catalogById === 'function' ? catalogById(u.base) : null, L = u && MOD.lib[u.mdl];
+    if (!B || !B.spawn || B.spawn.kind !== 'veh' || B.cu || !L) continue;
+    const rk = modCatRlm(B), nm = String(u.nm || L.nm || '自制坦克').slice(0, 40);
+    const c = { ...B, id, name: nm, cost: modNum(u.cost) && u.cost > 0 ? Math.round(u.cost) : B.cost, spawn: { ...B.spawn, mod: B.spawn.mod ? { ...B.spawn.mod } : undefined },
+      desc: `自制兵种（编辑器导入的模型「${L.nm}」）：性能、上场方式照 ${B.name}。` + (B.desc || ''), cu: { mdl: u.mdl, base: B.id } };
+    if (!c.spawn.mod) delete c.spawn.mod;
+    CATALOG.push(c); CATALOG_MAP.set(id, c);
+    if (typeof RLM === 'object' && rk && RLM[rk]) { const M = { ...RLM[rk], key: id }; delete M.era; RLM[id] = M; }
+    if (typeof V3G_VEH === 'object') V3G_VEH[id] = V3G_VEH[rk] || (B.side === 'e' ? 'm1a1' : 'ztz96');
+    const mk = MOD.veh[id] && modMdlOk(MOD.veh[id].mdl) ? MOD.veh[id].mdl : u.mdl;
+    if (modMdlOk(mk)) MOD_VMDL[id] = mk;
+    MOD_CU.add(id);
+  }
+  // 正在布兵的沙盒里放了已经去掉的自制兵种：一起拿掉（读档时 sandbox.js 本来就会滤掉目录里没有的）
+  if (typeof S === 'object' && S && S.sbx && Array.isArray(S.sbx.items)) {
+    const ok = id => !String(id).startsWith('cu_') || CATALOG_MAP.has(id);
+    S.sbx.items = S.sbx.items.filter(it => ok(it.cat));
+    for (const it of S.sbx.items) if (Array.isArray(it.cargo)) it.cargo = it.cargo.filter(ok);   // 登陆舰装的车
+  }
+}
 const modVehKey = v => { const M = typeof rlModelOf === 'function' ? rlModelOf(v) : null; return M ? M.key : null; };
 const modVehOf = v => { const k = v && modVehKey(v); return k ? MOD.veh[k] || null : null; };
 const modLvl = mm => Math.max(.1, mm / MOD_MM);
 function modVehApply(v) {
-  v.modK = 1;
+  v.modK = v.sbxV || 1;   // 沙盒登陆舰卸下的车稍后才记上兵种号（sandbox.js sbxVehVar）：号变了重新套（自制兵种按它自己那份参数）
   // 第一次套之前记下这辆车的原值；每次重新套（编辑器里又改了、恢复了默认）先还原再套
-  if (!v.mod0) v.mod0 = { armor: v.armor, maxhp: v.maxhp, mod: v.mod ? { ...v.mod } : null };
+  if (!v.mod0) v.mod0 = { armor: v.armor, maxhp: v.maxhp, mod: v.mod ? { ...v.mod } : null, sv: v.sbxV };
+  if (v.mod0.sv !== v.sbxV) {   // 兵种号是后记上的：那时并进来的变体修正（目录的 spawn.mod）也算原值，不然重新套时被还原掉
+    const c = v.sbxV && typeof catalogById === 'function' ? catalogById(v.sbxV) : null;
+    if (c && c.spawn && c.spawn.mod) v.mod0.mod = { ...(v.mod0.mod || {}), ...c.spawn.mod };
+    v.mod0.sv = v.sbxV;
+  }
   const B = v.mod0, f0 = v.maxhp ? clamp(v.hp / v.maxhp, 0, 1) : 1;
-  v.armor = B.armor; v.maxhp = B.maxhp; v.hp = B.maxhp * f0; v.mod = B.mod ? { ...B.mod } : undefined;
+  v.armor = B.armor; if (v.maxhp !== B.maxhp) { v.hp = B.maxhp * f0; v.maxhp = B.maxhp; } v.mod = B.mod ? { ...B.mod } : undefined;   // 结构值没变的不重算血量（免得反复套时浮点误差一点点改了推演）
   delete v.armX; delete v.penL; delete v.sightM; delete v.eraLeft; delete v.accA; delete v.turnK; delete v.travM;
   const o = modVehOf(v);
   if (!o) { if (!v.mod) delete v.mod; return; }
@@ -467,7 +520,7 @@ function modWorld() {
   return { w, h, cell: w * h / 100 > 2.4e6 ? 20 : 10 };
 }
 // 推演里：新出现的车辆第一次见到时套上编辑器的改动
-HOOK.step.push(() => { if (S && S.veh) for (const v of S.veh) if (!v.modK) modVehApply(v); });
+HOOK.step.push(() => { if (S && S.veh) for (const v of S.veh) if (v.modK !== (v.sbxV || 1)) modVehApply(v); });
 
 // —— 导入的文件（IndexedDB：键 → 记录）：模型 { meta, bin: ArrayBuffer }，序列帧贴图 { blob } ——
 const MOD_DB = 'bh-mod-files';
@@ -511,8 +564,8 @@ function modRegMdl(id) {
   delete V3G.M[id]; V3G.fail.delete(id);
   if (typeof VFN === 'object') delete VFN[id];
   if (rec) { V3G.def[id] = { meta: modClone(rec.meta), bin: rec.bin }; MODX.sig[id] = modISig(id); }
-  if (typeof modAnimDrop === 'function') modAnimDrop(id);
   else { delete V3G.def[id]; delete MODX.sig[id]; }
+  if (typeof modAnimDrop === 'function') modAnimDrop(id);
 }
 // 删掉一个导入的模型（编辑器里点「删除这个模型」）
 function modUnreg(id) { delete MODX.raw[id]; modRegMdl(id); }

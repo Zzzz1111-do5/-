@@ -9,8 +9,11 @@ const mdxR = (v, d = 1) => modNum(v) ? Math.round(v * d) / d : v;
 // —— 车辆型号：模型键 → 名称、车种（VEH_SPEC 的键）、目录里的修正（spawn.mod）——
 function mdxVehList() {
   const L = new Map(), add = (k, nm, type, side, md) => { if (!k || !(typeof RLM === 'object' && RLM[k]) || L.has(k)) return; L.set(k, { k, nm, type, side, md: md || {} }); };
+  // 自制兵种（mod.js modUnitApply）：按正在改的那份列（没保存的也在），型号键就是兵种号，性能照着的那一型
+  const U = (MDX_W && MDX_W.unit) || MOD.unit || {};
+  for (const id in U) { const u = U[id], B = u && typeof catalogById === 'function' ? catalogById(u.base) : null; if (B && B.spawn && VEH_SPEC[B.spawn.type]) L.set(id, { k: id, nm: u.nm || (mdxLibOf(u.mdl) || {}).nm || '自制兵种', type: B.spawn.type, side: B.side, md: B.spawn.mod || {}, cu: u, base: B }); }
   if (typeof CATALOG === 'object') for (const c of CATALOG) {
-    if (!c.spawn || c.spawn.kind !== 'veh' || !VEH_SPEC[c.spawn.type]) continue;
+    if (!c.spawn || c.spawn.kind !== 'veh' || !VEH_SPEC[c.spawn.type] || c.cu) continue;
     const k = (RLM_NAME.find(([re]) => re.test(c.name)) || [])[1] || (RLM_TYPE[c.side === 'e' ? 'e' : 'p'] || {})[c.spawn.type];
     add(k, c.name, c.spawn.type, c.side, c.spawn.mod);
   }
@@ -30,7 +33,7 @@ const MDX_VEH_F = [
   ['rof', '装填时间', '秒', o => o.sp.gun ? mdxR(o.sp.gun.rof / (o.md.rof || 1), 10) : null],
   ['acc', '加速度（空着 = 一下就到速度）', '米 / 秒²', o => null],
   ['turn', '车体转向速度', '度 / 秒', o => o.sp.turn ? mdxR(o.sp.turn * 180 / Math.PI, 10) : null],
-  ['trav', '炮塔回转速度', '度 / 秒', o => { const F = typeof VFN === 'object' && VFN[V3G_VEH[o.k] || o.k]; return F && F.trav ? F.trav : mdxR(2.4 * 180 / Math.PI, 10); }],
+  ['trav', '炮塔回转速度', '度 / 秒', o => { const rk = o.cu ? modCatRlm(o.base) : o.k, F = typeof VFN === 'object' && VFN[V3G_VEH[rk] || rk]; return F && F.trav ? F.trav : mdxR(2.4 * 180 / Math.PI, 10); }],
   ['sight', '视野', '米', o => o.sp.sight],
   ['era', '爆炸反应装甲', [['auto', '照模型'], ['on', '挂上'], ['off', '拆掉']], o => 'auto'],
   ['eraHeat', '爆反挡破甲弹', '%', o => 92],
@@ -179,7 +182,7 @@ function mdxModels() {
   for (const k in AIR_MDL) { const id = AD[modAirSil(k)]; if (id) add(id, (MOD_DEF.air[k] || AIR_MDL[k]).name, 'air', 0); }
   if (typeof EA_SPEC === 'object') for (const t in EA_SPEC) { const id = AD[modEairSil(t)]; if (id) add(id, (MOD_DEF.eair[t] || EA_SPEC[t]).name, 'air', 0); }
   for (const s in AD) if (typeof AD[s] === 'string' && AD[s] !== 'podm') add(AD[s], null, 'air', 0);   // 运输机、直升机……没在型号表里的也列上
-  for (const o of mdxVehList()) add(V3G_VEH[o.k] || (o.side === 'e' ? 'm1a1' : 'ztz96'), o.nm, 'veh', 0);
+  for (const o of mdxVehList()) if (!o.cu) add(V3G_VEH[o.k] || (o.side === 'e' ? 'm1a1' : 'ztz96'), o.nm, 'veh', 0);
   for (const r of L) r.nm = (r.imp ? r.nms[0] : r.nms.slice(0, 2).join('、') + (r.nms.length > 2 ? ' 等' : '')) || r.id;
   return L;
 }
@@ -193,7 +196,8 @@ function mdxMdlSel(path, cur, defId, kind) {
 // 列表项：[{ id, nm, sub, mod（改过） }]
 function mdxItems() {
   const W0 = MDX_W;
-  if (MDX.tab === 'veh') return mdxVehList().map(o => ({ id: o.k, nm: o.nm, sub: (o.side === 'e' ? '守方 · ' : '攻方 · ') + (VEH_SPEC[o.type].name || o.type), mod: !!W0.veh[o.k] }));
+  if (MDX.tab === 'veh') return [{ id: '+cu', nm: '＋ 新兵种（用导入的模型）', sub: '加进沙盒、闯关布兵的兵种栏', mod: false },
+    ...mdxVehList().map(o => ({ id: o.k, nm: o.nm, sub: (o.cu ? '自制 · ' : '') + (o.side === 'e' ? '守方 · ' : '攻方 · ') + (o.cu ? '照 ' + o.base.name : VEH_SPEC[o.type].name || o.type), mod: !!W0.veh[o.k] }))];
   if (MDX.tab === 'air') return [...Object.keys(AIR_MDL).map(k => ({ id: k, nm: (MOD_DEF.air[k] || AIR_MDL[k]).name, sub: '攻方 · ' + k, mod: !!W0.air[k] })),
     ...(typeof EA_SPEC === 'object' ? Object.keys(EA_SPEC).map(t => ({ id: 'e:' + t, nm: (MOD_DEF.eair[t] || EA_SPEC[t]).name, sub: '守方 · ' + t, mod: !!W0.eair[t] })) : [])];
   if (MDX.tab === 'wpn') return Object.keys(FW_W).map(k => ({ id: k, nm: (MOD_DEF.wpn[k] || FW_W[k]).nm, sub: { aam: '空空导弹', agm: '空地导弹', arm: '反辐射导弹', gb: '制导炸弹' }[FW_W[k].k] || '', mod: !!W0.wpn[k] }));
@@ -254,16 +258,39 @@ function mdxPerf(k, cur, spd) {
   delete AP.__mdx;
   return `<p class="note">按现在的参数（真实值，推演里空战机动按它算，地图小所以再快 ${typeof AP_K === 'number' ? AP_K : 6} 倍）：<br>${out.join('<br>')}</p>`;
 }
+// 「＋ 新兵种」：导入的车辆模型一个个列出来，点「加进兵种栏」
+function mdxCuNew() {
+  const mdls = mdxModels().filter(r => r.imp && r.kind !== 'air');
+  return `<h3>用导入的模型做一个新兵种</h3><p class="note">导入的坦克装甲车可以当成一个新兵种：用你的模型，照一个现有兵种的性能、编成和上场方式（攻方的装上坦克登陆舰抢滩，守方的直接摆在岸上），
+    保存后出现在沙盒、闯关布兵的兵种栏里（「装甲」页签最后），兵力图鉴里也有；名称、点数、速度、装甲这些都能单独改。<br>
+    另一种用法是换掉游戏里已有型号的外形：在「模型与挂点」页那个模型下面「换掉这些型号的外形」里打勾。</p>` +
+    (mdls.length ? mdls.map(r => `<div class="mdx-row"><label>${mdxEsc(r.nm)}</label><span class="def">${(mdxLibOf(r.id) || {}).tri || '?'} 个三角形</span><button type="button" class="mdx-btn pri" data-a="cuadd" data-mk="${mdxEsc(r.id)}">加进兵种栏</button><span></span></div>`).join('')
+      : '<p class="note">还没有导入的车辆模型：先到「模型与挂点」页「＋ 导入模型」（类型选坦克装甲车）。</p><p><button type="button" class="mdx-btn" data-a="cuimp">去导入模型</button></p>');
+}
+// 自制兵种的头几行：名称、照哪个兵种（攻方 / 守方分开列）、点数、用哪个导入的模型；从兵种栏去掉
+function mdxCuForm(id, o) {
+  const u = o.cu, B = o.base, bases = modCuBases(), mdls = mdxModels().filter(r => r.imp && r.kind !== 'air');
+  const grp = sd => bases.filter(c => (c.side === 'e') === (sd === 'e')).map(c => `<option value="${mdxEsc(c.id)}"${c.id === u.base ? ' selected' : ''}>${mdxEsc(c.name)}（${c.cost} 点）</option>`).join('');
+  const cat = typeof CAT_NAMES === 'object' && CAT_NAMES[B.cat] || '装甲';
+  return `<h3>${mdxEsc(o.nm)}</h3><p class="note">自制兵种：保存后在沙盒、闯关布兵的兵种栏「${mdxEsc(cat)}」页签的最后（${B.side === 'e' ? '守方：直接摆在岸上布防' : '攻方：在登陆舰的装载里选它，抢滩后开下来'}），兵力图鉴里也有。
+    性能、编成、上场方式照「${mdxEsc(B.name)}」，下面的参数可以单独改；炮塔、炮管、机枪怎么动在「模型与挂点」页给模型设。</p>
+    <div class="mdx-row"><label>名称</label><input type="text" data-cu="nm" maxlength="40" value="${mdxEsc(u.nm || '')}"><span></span><span></span></div>
+    <div class="mdx-row"><label>性能照</label><select data-cu="base"><optgroup label="攻方（我方）">${grp('p')}</optgroup><optgroup label="守方">${grp('e')}</optgroup></select><span></span><span></span></div>
+    <div class="mdx-row${modNum(u.cost) && u.cost !== B.cost ? ' chg' : ''}"><label>点数</label><input type="number" min="1" step="1" data-cu="cost" value="${modNum(u.cost) ? u.cost : B.cost}"><span class="def">默认 ${B.cost}</span><span></span></div>
+    <div class="mdx-row"><label>3D 模型</label><select data-cu="mdl">${mdls.some(r => r.id === u.mdl) ? '' : `<option value="${mdxEsc(u.mdl)}" selected>（模型文件读不出来）</option>`}${mdls.map(r => `<option value="${mdxEsc(r.id)}"${r.id === u.mdl ? ' selected' : ''}>${mdxEsc(r.nm)}</option>`).join('')}</select><button type="button" class="mdx-btn" data-a="cumdl">去改模型</button><span></span></div>
+    <p><button type="button" class="mdx-btn" data-a="cudel">从兵种栏去掉</button></p><h3 style="margin-top:12px">性能</h3>`;
+}
 function mdxForm() {
   const W0 = MDX_W, k = MDX.sel;
   if (MDX.tab === 'veh') {
+    if (k === '+cu') return mdxCuNew();
     const o = mdxVehList().find(x => x.k === k);
     if (!o) return '';
     o.sp = VEH_SPEC[o.type];
-    const cur = W0.veh[k] || {}, hasEra = RLM[k] && RLM[k].era;
-    return `<h3>${mdxEsc(o.nm)}</h3><p class="note">车种：${mdxEsc(o.sp.name)}${hasEra ? ' · 模型上挂着爆炸反应装甲块' : ''}。装甲、穿深按毫米均质钢写（推演里 ${MOD_MM} 毫米算一级：穿深够装甲才打得穿，差一级以内打掉一部分）。
-      空着或恢复默认就用原来的数。保存后下一局生效，正在打的这一局里的这型车也马上更新。</p>` +
-      mdxMdlSel('veh|' + k, cur.mdl, V3G_VEH[k] || (o.side === 'e' ? 'm1a1' : 'ztz96'), 'veh') +
+    const cur = W0.veh[k] || {}, hasEra = !o.cu && RLM[k] && RLM[k].era;
+    return (o.cu ? mdxCuForm(k, o) : `<h3>${mdxEsc(o.nm)}</h3>`) + `<p class="note">车种：${mdxEsc(o.sp.name)}${hasEra ? ' · 模型上挂着爆炸反应装甲块' : ''}。装甲、穿深按毫米均质钢写（推演里 ${MOD_MM} 毫米算一级：穿深够装甲才打得穿，差一级以内打掉一部分）。
+      空着或恢复默认就用${o.cu ? '照着的那一型' : ''}原来的数。保存后下一局生效，正在打的这一局里的这型车也马上更新。</p>` +
+      (o.cu ? '' : mdxMdlSel('veh|' + k, cur.mdl, V3G_VEH[k] || (o.side === 'e' ? 'm1a1' : 'ztz96'), 'veh')) +
       MDX_VEH_F.map(([f, nm, unit, d]) => mdxRow('veh|' + k, f, nm, unit, d(o), cur[f])).join('');
   }
   if (MDX.tab === 'air' && k.startsWith('e:')) {
@@ -392,7 +419,13 @@ function mdxMdlForm(mk) {
     // 装到哪些型号上
     const ts = air ? [...Object.keys(AIR_MDL).map(k => ['air', k, (MOD_DEF.air[k] || AIR_MDL[k]).name]), ...(typeof EA_SPEC === 'object' ? Object.keys(EA_SPEC).map(t => ['eair', t, (MOD_DEF.eair[t] || EA_SPEC[t]).name]) : [])]
       : mdxVehList().map(o => ['veh', o.k, o.nm]);
-    h += `<h3 style="margin-top:12px">用在这些型号上</h3><div class="mdx-bind">${ts.map(([s, k, n]) => `<label><input type="checkbox" data-bind="${s}|${k}"${(MDX_W[s][k] || {}).mdl === mk ? ' checked' : ''}> ${mdxEsc(n)}</label>`).join('')}</div>`;
+    if (!air) {   // 车辆：当成新兵种加进兵种栏（mod.js modUnitApply），或者换掉已有型号的外形
+      const us = Object.entries(MDX_W.unit || {}).filter(([, u]) => u && u.mdl === mk);
+      h += `<h3 style="margin-top:12px">加进游戏</h3><p class="note">两种用法，都要点「保存」才生效：① 当成一个新兵种，加进沙盒、闯关布兵的兵种栏（「装甲」页签最后）；② 换掉游戏里已有型号的外形（下面打勾，那一型上场时画这个模型）。</p>
+        ${us.map(([id, u]) => { const B = typeof catalogById === 'function' ? catalogById(u.base) : null; return `<div class="mdx-row"><label>${mdxEsc(u.nm || L.nm)}</label><span class="def">${B ? (B.side === 'e' ? '守方 · 照 ' : '攻方 · 照 ') + mdxEsc(B.name) : ''}</span><button type="button" class="mdx-btn" data-a="cugo" data-id="${mdxEsc(id)}">改名字、性能</button><span></span></div>`; }).join('')}
+        <p><button type="button" class="mdx-btn pri" data-a="cuadd" data-mk="${mdxEsc(mk)}">＋ 加进兵种栏（当成新兵种）</button></p>`;
+    }
+    h += `<h3 style="margin-top:12px">${air ? '用在这些型号上' : '换掉这些型号的外形'}</h3><div class="mdx-bind">${ts.filter(([s, k]) => !String(k).startsWith('cu_')).map(([s, k, n]) => `<label><input type="checkbox" data-bind="${s}|${k}"${(MDX_W[s][k] || {}).mdl === mk ? ' checked' : ''}> ${mdxEsc(n)}</label>`).join('')}</div>`;
   }
   const rst = (s, d) => d ? '<span class="def">（游戏原来的）</span>' : `<button type="button" class="mdx-btn" data-mrst="${s}">恢复原来的</button>`;
   if (!air) {
@@ -1049,6 +1082,16 @@ function mdxChange(e) {
     return;
   }
   if (t.dataset.lib) { const f = t.dataset.lib, v = t.type === 'number' || f === 'mode' ? Math.max(f === 'mode' ? 0 : 1, Math.round(+t.value || 0)) : t.value; mdxLibSet(MDX.sel, f, v); MDX.keep = true; mdxRender(); mdxMsg('已改'); return; }
+  if (t.dataset.cu) {   // 自制兵种的名称、照哪一型、点数、模型
+    const u = (MDX_W.unit || {})[MDX.sel], f = t.dataset.cu;
+    if (!u) return;
+    if (f === 'nm') { const v = t.value.trim().slice(0, 40); if (v) u.nm = v; }
+    else if (f === 'cost') { const v = Math.round(+t.value); if (v > 0) u.cost = v; }
+    else if (f === 'base') { const B0 = catalogById(u.base), B = catalogById(t.value); if (!B) return; if (!modNum(u.cost) || (B0 && u.cost === B0.cost)) u.cost = B.cost; u.base = B.id; }   // 点数没改过的跟着换
+    else if (f === 'mdl') { if (t.value) u.mdl = t.value; }
+    MDX.dirty = true; MDX.keep = true; mdxRender(); mdxMsg('改了，点「保存」生效');
+    return;
+  }
   if (t.dataset.bind) {   // 导入的模型换到型号上
     const [s, k] = t.dataset.bind.split('|');
     if (t.checked) mdxSet(s + '|' + k, 'mdl', MDX.sel); else if ((MDX_W[s][k] || {}).mdl === MDX.sel) mdxSet(s + '|' + k, 'mdl', '');
@@ -1159,14 +1202,32 @@ function mdxClick(e) {
       MDX.pc.cc = { tgt: '', pts: [], res: null };
     }).then(() => { modStoreSave(); MDX.keep = true; mdxRender(); mdxMsg('转好了（点好的位置、转轴跟着转了）'); }, err => mdxMsg('转不了：' + err.message));
   }
+  else if (a === 'cuadd') {   // 导入的车辆模型加进兵种栏：默认照攻方的 99A，名称就是模型的名字
+    const mk = b.dataset.mk, L = mdxLibOf(mk), B = catalogById('p_hv_tank') || modCuBases().find(c => c.side === 'p') || modCuBases()[0];
+    if (!L || !B) return;
+    const id = modNewId('cu_');
+    (MDX_W.unit = MDX_W.unit || {})[id] = { nm: String(L.nm || '自制坦克').slice(0, 40), mdl: mk, base: B.id, cost: B.cost };
+    MDX.dirty = true; MDX.tab = 'veh'; MDX.sel = id; MDX.q = ''; MDX.pk = ''; mdxRender();
+    mdxMsg('加好了：在这里改名字、照哪一型、点数和性能，点「保存」后到沙盒 / 闯关布兵的兵种栏「装甲」页签最后找它');
+  }
+  else if (a === 'cudel') {
+    const id = MDX.sel, u = (MDX_W.unit || {})[id];
+    if (!u || !confirm(`把「${u.nm}」从兵种栏去掉？（模型还留着）`)) return;
+    delete MDX_W.unit[id]; delete MDX_W.veh[id];
+    MDX.dirty = true; MDX.sel = null; mdxRender(); mdxMsg('去掉了，点「保存」生效');
+  }
+  else if (a === 'cugo') { MDX.tab = 'veh'; MDX.sel = b.dataset.id; MDX.q = ''; MDX.pk = ''; mdxRender(); }
+  else if (a === 'cumdl') { const u = (MDX_W.unit || {})[MDX.sel]; if (u && MOD.lib[u.mdl]) { MDX.tab = 'mdl'; MDX.sel = u.mdl; MDX.q = ''; MDX.pk = ''; mdxRender(); } }
+  else if (a === 'cuimp') { MDX.tab = 'mdl'; MDX.sel = '+imp'; MDX.q = ''; MDX.pk = ''; mdxRender(); }
   else if (a === 'mdel' || a === 'fxdel') {
-    const id = MDX.sel, L = MOD.lib[id];
-    if (!L || !confirm(`删除「${L.nm}」？用它的型号会换回原来的。`)) return;
+    const id = MDX.sel, L = MOD.lib[id], nu = Object.values(MDX_W.unit || {}).filter(u => u && u.mdl === id).length;
+    if (!L || !confirm(`删除「${L.nm}」？用它的型号会换回原来的${nu ? `，用它做的 ${nu} 个自制兵种也从兵种栏去掉` : ''}。`)) return;
     modFileDel(id).catch(() => {});
     delete MOD.lib[id];
     if (MDX_W.lib) delete MDX_W.lib[id];
     for (const W1 of [MOD, MDX_W]) {
       for (const s of ['veh', 'air', 'eair']) for (const k in W1[s]) if (W1[s][k].mdl === id) { delete W1[s][k].mdl; if (!Object.keys(W1[s][k]).length) delete W1[s][k]; }
+      for (const u in W1.unit || {}) if (W1.unit[u] && W1.unit[u].mdl === id) { delete W1.unit[u]; delete W1.veh[u]; }   // 用它做的自制兵种
       delete W1.mdl[id];
       for (const s in W1.fx) if (W1.fx[s] === id) delete W1.fx[s];
       for (const mk in W1.mdl) if (W1.mdl[mk].fx && W1.mdl[mk].fx.spr === id) delete W1.mdl[mk].fx.spr;

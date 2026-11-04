@@ -1163,6 +1163,9 @@ function v3mCollect(C, box) {
   if (typeof v3uClear === 'function') v3uClear(C);   // 带贴图的精细模型（v3utex.js：舰艇）
   if (typeof v3gBegin === 'function') v3gBegin(C);   // 用户给的模型（js/v3g.js：坦克装甲车、飞机、直升机、导弹、士兵）
   const [bx, by, bw, bh] = box, inB = (x, y, m = 40) => x > bx - m && x < bx + bw + m && y > by - m && y < by + bh + m;
+  // 地图外（南缘外战区机场的小岛、远海上空）：取景框 box 卡在地图以内（view3d.js v3Box），原来岛上停着的、滑跑起飞的飞机一律不画；
+  //   那边按离镜头多远（雾的尽头以内）判断，看不看得见再交给视锥剔除（v3g.js v3gCull）
+  const fe = typeof v3FogE === 'function' ? v3FogE(C) : 9000, inX = (x, y, m = 40) => inB(x, y, m) || ((x < 0 || y < 0 || x > W || y > H) && (x - C.E[0]) ** 2 + (y + C.E[1]) ** 2 < (fe + m) ** 2);
   const spec = specAll() || (typeof R === 'object' && (R.eye === 'all' || R.eye === 'both' || R.eye === 'e')), t = performance.now() / 1000;
   const seen = (x, y) => inVision(x, y), hl = o => typeof sfxHas === 'function' && sfxHas(o);
   // 车辆：用户给的坦克模型（js/v3g.js）——车体贴地（按脚下坡度俯仰、侧倾），炮塔随瞄准转
@@ -1423,14 +1426,14 @@ function v3mCollect(C, box) {
     else v3mAdd(key, () => v3mDepot(false, k, dead), n.x, n.y, zn, an, 1, dead ? 2 : 0);
   }
   if (typeof afb3dBases === 'function' && typeof afbParked === 'function') for (const b of afb3dBases()) {   // 机场停放的飞机（机堡里、停机线、直升机位）
-    const own = b === S.abBase;
-    if (!own && !(spec || (typeof eaBaseSeen === 'function' && eaBaseSeen(b)))) continue;
+    const own = b === S.abBase, mine = own || !!b.home;   // 我方的：夺取的机场、战区机场（afp.js 南缘外的小岛：原来当成敌方机场，要侦察到才画、画成敌方的颜色）
+    if (!mine && !(spec || (typeof eaBaseSeen === 'function' && eaBaseSeen(b)))) continue;
     for (const P of afbParked(b, own)) {
       const [x, y] = eaW(b, P.u, P.v);
-      if (!inB(x, y, 30)) continue;
-      const [x2, y2] = eaW(b, P.u + Math.cos(P.a), P.v + Math.sin(P.a)), h = Math.atan2(y2 - y, x2 - x);
-      if (typeof v3gPlane === 'function') v3gPlane(P.sil, P.size, x, y, v3Ht(x, y), true, h, own ? 0 : 1, 0, 0, true, 0, 0, null, null, 0, typeof v3gPlaneAn === 'function' ? v3gPlaneAn(P.sil, Math.round(x * 3 + y * 7), !own, false) : null);   // 放下起落架停着（编辑器设计的「停着时」动画）
-      if (P.w && typeof fwStoresGnd === 'function' && typeof fwLoadout === 'function') { const n = fwLoadout(P.w.type, P.w.v).length; fwStoresGnd(P.w.type, P.w.v, P.sil, P.size, x, y, v3Ht(x, y), h, P.ready ? n : Math.round(n * clamp(P.prog ?? 1, 0, 1)), null); }   // 我方停着的飞机身上挂好的弹（原来只有航母甲板上画；整备中的按进度挂上一部分）
+      if (!inX(x, y, 30)) continue;
+      const [x2, y2] = eaW(b, P.u + Math.cos(P.a), P.v + Math.sin(P.a)), h = Math.atan2(y2 - y, x2 - x), gz = typeof v3HtX === 'function' ? v3HtX(x, y) : v3Ht(x, y);   // 地图外的机场按那里的地面高（v3HtX：小岛）
+      if (typeof v3gPlane === 'function') v3gPlane(P.sil, P.size, x, y, gz, true, h, mine ? 0 : 1, 0, 0, true, 0, 0, null, null, 0, typeof v3gPlaneAn === 'function' ? v3gPlaneAn(P.sil, Math.round(x * 3 + y * 7), !mine, false) : null);   // 放下起落架停着（编辑器设计的「停着时」动画）
+      if (P.w && typeof fwStoresGnd === 'function' && typeof fwLoadout === 'function') { const n = fwLoadout(P.w.type, P.w.v).length; fwStoresGnd(P.w.type, P.w.v, P.sil, P.size, x, y, gz, h, P.ready ? n : Math.round(n * clamp(P.prog ?? 1, 0, 1)), null); }   // 我方停着的飞机身上挂好的弹（原来只有航母甲板上画；整备中的按进度挂上一部分）
     }
   }
   // 机场外的前沿加油弹药点（eair.js）：停着的直升机 / F-35B、油囊、弹药箱
@@ -1459,7 +1462,7 @@ function v3mCollect(C, box) {
     const An = typeof v3gPlaneAn === 'function' ? v3gPlaneAn(key, o.id, sd, true) : null;   // 编辑器设计的动画（飞着、发射时）
     if (typeof v3gPlane === 'function' && v3gPlane(key, sz, x, y, z, rwy, hd || 0, sd, bank || 0, pt, gd, t, nz, Pc, bay, 0, An) && !sd && typeof fwBayMsl === 'function') fwBayMsl(o, key, sz, x, y, z, hd || 0, pt, bank || 0, bay);   // 用户给的飞机模型（js/v3g.js）：起落架收放、直升机旋翼转、尾喷口开合、舵面偏转、弹舱门开合（开着时画舱里的弹）
   };
-  for (const p of S.planes || []) if (!p.dead && isFinite(p.x) && (inB(p.x, p.y, 220) || (typeof fpDriving === 'function' && fpDriving(p))) && !(!p.land && (p.phase === 'cat' || p.phase === 'roll' || p.phase === 'trap'))) {   // 甲板上的在航母那里画（放下起落架）
+  for (const p of S.planes || []) if (!p.dead && isFinite(p.x) && (inX(p.x, p.y, 220) || (typeof fpDriving === 'function' && fpDriving(p))) && !(!p.land && (p.phase === 'cat' || p.phase === 'roll' || p.phase === 'trap'))) {   // 甲板上的在航母那里画（放下起落架）
     const key = typeof airSilKey === 'function' ? airSilKey(p.kind, p.v) : 'j35', sz = (typeof airMdl === 'function' && airMdl(p.kind, p.v).size) || ((typeof AIR_SPEC === 'object' && AIR_SPEC[p.kind]) || {}).size || 15;
     plane(p, p.heading, 0, key, sz, p.bank);
   }
@@ -1469,11 +1472,11 @@ function v3mCollect(C, box) {
     const age = S.t - w.t;
     if (age < 0 || age > T) return;
     const P = v3WreckAt(w, age, T), sp = (w.t * 7.31) % 1 < .5 ? 1 : -1;
-    if (inB(P.x, P.y, 220) && typeof v3gPlane === 'function') v3gPlane(key, sz, P.x, P.y, P.z, false, w.h + age * .5 * sp, 2, age * 4.2 * sp, -.2 - P.u * .95, false, 0, 0, null, null, 0, typeof v3gPlaneAn === 'function' ? v3gPlaneAn(key, Math.round(w.t * 100), 0, false, w.t) : null);   // 编辑器设计的「被击落时」动画
+    if (inX(P.x, P.y, 220) && typeof v3gPlane === 'function') v3gPlane(key, sz, P.x, P.y, P.z, false, w.h + age * .5 * sp, 2, age * 4.2 * sp, -.2 - P.u * .95, false, 0, 0, null, null, 0, typeof v3gPlaneAn === 'function' ? v3gPlaneAn(key, Math.round(w.t * 100), 0, false, w.t) : null);   // 编辑器设计的「被击落时」动画
   };
   for (const w of (S.air && S.air.wrecks) || []) { const key = typeof airSilKey === 'function' ? airSilKey(w.kind, w.v) : 'j35'; wreck(w, 2.2, key, (typeof airMdl === 'function' && airMdl(w.kind, w.v).size) || 15); }
   if (S.eair) for (const w of S.eair.wr || []) if (spec || seen(w.x, w.y)) { const [key, sz] = EA_K[w.type] || ['f35', 17]; wreck(w, 2, key, sz); }
-  if (S.eair) for (const a of S.eair.fly) if (!a.dead && isFinite(a.x) && (spec || a.pv || seen(a.x, a.y)) && inB(a.x, a.y, 220)) {
+  if (S.eair) for (const a of S.eair.fly) if (!a.dead && isFinite(a.x) && (spec || a.pv || seen(a.x, a.y)) && inX(a.x, a.y, 220)) {
     const [key, sz] = EA_K[a.type] || ['f35', 17];
     if (a.ph === 'vto' || a.ph === 'vl') {   // F-35B 垂直起降：放下起落架，悬停着升降
       const zg = v3Ht(a.x, a.y), z = v3AirZ(a), zc = typeof v3gPlaneZc === 'function' ? v3gPlaneZc(key, sz) : 2;
