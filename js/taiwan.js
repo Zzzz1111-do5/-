@@ -6,7 +6,10 @@
 //   3D 地面直接贴模型的卫星图（assets/tw/sat.jpg，view3d.js v3BaseTex / uSat），原封不动：居民区不立房屋、据点不盖房子（用户要求），卫星图里的居民区只用来定镇子、指挥所的位置。
 //   授权不许商用：只在网页版里用，商店版（tools/build_www.mjs --app）不带 twmap.js、assets/tw，这时 MAPGEN.tw 不登记，一切照旧用程序生成的地图
 const TW = { nm: '台湾东海岸', sat: 'assets/tw/sat.jpg', dec: null };
-if (typeof TW_DATA === 'object' && TW_DATA) MAPGEN.tw = { w: TW_DATA.w, h: TW_DATA.h, cell: TW_DATA.cell, build: buildTw, nm: TW.nm };
+// 南边再加长 TW_EXT 米的远海（用户：战区机场搞远一点，但半路都要是战场区域）：攻方战区机场（afp.js）在新的南缘外，离滩头约 20 公里，
+//   中间整段海峡都在地图里——舰船、飞机都能在上面作战；集结海域、航母照旧按加长前的南缘（core.js SEA_H），远海不进寻路带、地形网格是一块平的海面
+const TW_EXT = 12000;
+if (typeof TW_DATA === 'object' && TW_DATA) MAPGEN.tw = { w: TW_DATA.w, h: TW_DATA.h + TW_EXT, seaH: TW_DATA.h, cell: TW_DATA.cell, build: buildTw, nm: TW.nm };
 // 游戏里「素材致谢」（v3import.js 汇总 V3G_CRED）：有这张图时加上
 const TW_CRED = { name: '台湾东海岸地图（只在网页版）', title: 'Taiwan (East coast)', author: 'Miguel Cueva', license: 'CC-BY-NC-SA-4.0', url: 'https://sketchfab.com/3d-models/taiwan-east-coast-eb170c63b22b4410a79524709d561c3c' };
 if (MAPGEN.tw) HOOK.newGame.push(() => { if (typeof V3G_CRED === 'object' && Array.isArray(V3G_CRED) && !V3G_CRED.includes(TW_CRED)) V3G_CRED.push(TW_CRED); });
@@ -38,17 +41,18 @@ function buildTw(seed) {
     const fx = clamp(x / dx, 0, D.dw - 1.001), fy = clamp(y / dx, 0, D.dh - 1.001), i = fx | 0, j = fy | 0, u = fx - i, v = fy - j, k = j * D.dw + i;
     return E40[k] * (1 - u) * (1 - v) + E40[k + 1] * u * (1 - v) + E40[k + D.dw] * (1 - u) * v + E40[k + D.dw + 1] * u * v;
   };
-  const N = GW * GH, type = new Uint8Array(N), elev = new Float32Array(N), hC = new Float32Array(N);
+  const N = GW * GH, type = new Uint8Array(N), elev = new Float32Array(N), hC = new Float32Array(N), DGH = Math.round(D.h / CELL);   // DGH：数据本身的行数，以南是加长的远海（地表类别 0 = 海）
+  const cv = i => i < DGH * GW ? cov[i] : 0;
   for (let gy = 0; gy < GH; gy++) for (let gx = 0; gx < GW; gx++) hC[gy * GW + gx] = hAt((gx + .5) * CELL, (gy + .5) * CELL);
   // 海岸线：每列从南往北第一个陆地格的南沿
   const colC = new Float32Array(GW);
-  for (let gx = 0; gx < GW; gx++) { let gy = GH - 1; while (gy > 0 && cov[gy * GW + gx] === 0) gy--; colC[gx] = (gy + 1) * CELL; }
+  for (let gx = 0; gx < GW; gx++) { let gy = DGH - 1; while (gy > 0 && cov[gy * GW + gx] === 0) gy--; colC[gx] = (gy + 1) * CELL; }
   const coast = new Float32Array(W + 1);
   for (let x = 0; x <= W; x++) { const g = clamp(Math.floor(x / CELL), 0, GW - 1); let s = 0, n = 0; for (let k = -2; k <= 2; k++) { const q = g + k; if (q >= 0 && q < GW) { s += colC[q]; n++; } } coast[x] = s / n; }
   const cAt = x => coast[clamp(Math.round(x), 0, W)];
   // 地表类别 + 坡度 → 地形类型：陡坡（> 26°）是山地（车辆上不去、步兵很慢），15–26° 是丘陵；沿岸陡的是礁岸
   for (let gy = 0; gy < GH; gy++) for (let gx = 0; gx < GW; gx++) {
-    const i = gy * GW + gx, c = cov[i], h = hC[i];
+    const i = gy * GW + gx, c = cv(i), h = gy < DGH ? hC[i] : Math.min(0, hC[i]);
     elev[i] = clamp(h / hmax, 0, 1);
     if (c === 0) { type[i] = gy * CELL < colC[gx] + 110 ? T.SHOAL : T.DEEP; continue; }
     const hx = hC[gy * GW + Math.min(GW - 1, gx + 1)] - hC[gy * GW + Math.max(0, gx - 1)], hy = hC[Math.min(GH - 1, gy + 1) * GW + gx] - hC[Math.max(0, gy - 1) * GW + gx];
