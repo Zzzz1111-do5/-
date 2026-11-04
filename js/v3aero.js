@@ -62,16 +62,16 @@ void main() {
   float L = vE.x, R = vE.y, H = vE.z, ty = vE.w, a = vX.x, sd = vX.y, tO = occ(ro, rd), jt = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(.06711056, .00583715))));
   vec3 col = vec3(0.); float al = 0.;
   if (abs(ty - 1.) > .5) {
-    // 蒸汽锥（0）/ 音爆（2）：钟形的一团雾——外缘是抛物面 r² = r0² + (r1² − r0²)·x / L（外面清楚的一道轮廓），贴着外缘那一层最浓，
-    //   往里渐淡、锥心也有一层薄雾（照片里飞机后半截半隐在雾里；原来是空心的一圈）；音爆脱开的那一圈是空心的环。
+    // 蒸汽锥（0）/ 音爆（2）：实心的一团白雾锥（用户：要实心锥）——外缘是抛物面 r² = r0² + (r1² − r0²)·x / L（清楚的一道轮廓），
+    //   里面整个填满（外层略浓），锥后段几乎不透明、前段薄一些：机头、座舱露在前面，后半截埋在雾里，和照片一样；音爆脱开的那一圈是空心的环。
     //   解出视线在外缘里面的一段，只在这一段里取 16 个样、前到后合成（原来只算和一张薄壳的交点，看着像一层玻璃）
-    float w = ty > 1.5 ? .32 : .2, r1 = R * .76, r0 = r1 * vX.z, B = (r1 * r1 - r0 * r0) / L, s0 = vX.w, fill = ty > 1.5 ? 0. : .14, ko = 1. + w * .6;
+    float w = ty > 1.5 ? .32 : .16, r1 = R * .76, r0 = r1 * vX.z, B = (r1 * r1 - r0 * r0) / L, s0 = vX.w, fill = ty > 1.5 ? 0. : .9, ko = 1. + w * .5;
     vec2 tx = abs(rd.x) > 1e-6 ? vec2(-ro.x, L - ro.x) / rd.x : (ro.x > 0. && ro.x < L ? vec2(-1e9, 1e9) : vec2(1., 0.));
     if (tx.x > tx.y) tx = tx.yx;
     vec2 A = parIn(ro, rd, ko * ko, r0, B);
     A = vec2(max(A.x, max(tx.x, 0.)), min(A.y, min(tx.y, tO)));   // 镜头前面、x 在 0–L、被机身机翼挡住之前
     if (A.x >= A.y) discard;
-    float dt = (A.y - A.x) / 16., Kx = 1.5 / (w * r1), Tr = 1.;
+    float dt = (A.y - A.x) / 16., Kx = ty > 1.5 ? 1.5 / (w * r1) : 4.2 / r1, Tr = 1.;   // 实心锥按每米消光：挡在飞机前面那几米就盖住大半，穿过锥心看不透
     for (int k = 0; k < 16; k++) {
       vec3 q = ro + rd * (A.x + (float(k) + jt) * dt);
       float s = q.x / L, lq = length(q.yz), rn = lq / sqrt(max(r0 * r0 + B * q.x, 1e-4));
@@ -80,10 +80,10 @@ void main() {
       float n2 = n3(vec3(cs * 8.5, s * 4.2 - uT * 2.4) + vec3(rn * 2.5) + sd * 1.7), n4 = n3(vec3(cs * 23., s * 10. - uT * 4.) + vec3(rn * 6.) + sd * 2.9);
       float se = 1. - .08 * n1 - .05 * n2;   // 后缘（激波）：破碎的一道边
       float rr = rn + .1 * (n2 - .5);   // 外缘轮廓也起伏一点
-      float sh = (1. - smoothstep(.9, ko, rr)) * (fill + (1. - fill) * smoothstep(1. - w * 1.8, 1. - w * .2, rr));   // 贴着外缘一层最浓，往里淡到 fill
+      float sh = (1. - smoothstep(.93, ko, rr)) * (fill + (1. - fill) * smoothstep(1. - w * 1.8, 1. - w * .2, rr));   // 外缘清楚；锥里填满（音爆的环是空心的）
       float d = sh * smoothstep(s0, s0 + .35, s) * (1. - smoothstep(se - .04, se, s)) * (.55 + .75 * s)
-        * mix(.38, 1.2, smoothstep(-.75, .65, cs.y))   // 上面浓、下面淡（机翼、座舱上方压力最低，凝结得多）
-        * (.15 + 1.6 * n1 * n1) * (.5 + .75 * n2) * (.75 + .45 * n4) * a;
+        * mix(.55, 1.15, smoothstep(-.75, .65, cs.y))   // 上面浓、下面淡一点（机翼、座舱上方压力最低，凝结得多）
+        * (ty > 1.5 ? (.15 + 1.6 * n1 * n1) * (.5 + .75 * n2) : (.45 + .9 * n1) * (.7 + .5 * n2)) * (.85 + .3 * n4) * a;   // 实心锥：噪声只管明暗起伏，不挖洞
       if (d < .002) continue;
       float ab = 1. - exp(-d * dt * Kx);
       float lam = .5 + .5 * dot(vec3(0., cs), sun), fw = pow(max(dot(rd, sun), 0.), 6.);   // 朝太阳的一面亮；逆着太阳看水滴往前散射，发亮
