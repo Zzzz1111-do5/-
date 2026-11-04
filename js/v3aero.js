@@ -48,43 +48,55 @@ float occ(vec3 ro, vec3 rd) {
   }
   return t;
 }
+// 视线在抛物面 y² + z² < k·(r0² + B·x) 里面的那一段（没有就返回 x > y）
+vec2 parIn(vec3 ro, vec3 rd, float k, float r0, float B) {
+  float qa = dot(rd.yz, rd.yz), qb = 2. * dot(ro.yz, rd.yz) - k * B * rd.x, qc = dot(ro.yz, ro.yz) - k * (r0 * r0 + B * ro.x);
+  if (qa < 1e-7) { if (abs(qb) < 1e-7) return qc < 0. ? vec2(-1e9, 1e9) : vec2(1., 0.); float t = -qc / qb; return qb > 0. ? vec2(-1e9, t) : vec2(t, 1e9); }
+  float dc = qb * qb - 4. * qa * qc;
+  if (dc <= 0.) return vec2(1., 0.);
+  float sq = sqrt(dc);
+  return vec2(-qb - sq, -qb + sq) / (2. * qa);
+}
 void main() {
   vec3 ro = vRo, rd = normalize(vLp - vRo), sun = vS.xyz;
-  float L = vE.x, R = vE.y, H = vE.z, ty = vE.w, a = vX.x, sd = vX.y, tO = occ(ro, rd);
-  vec3 col = vec3(0.); float ws = 0., od = 0.;
-  if (abs(ty - 1.) > .5) {   // 蒸汽锥（0）/ 音爆（2）：抛物面薄壳 r² = r0² + (r1² − r0²)·x / L，直接解视线和它的两个交点
-    float r1 = R * .8, r0 = r1 * vX.z, B = (r1 * r1 - r0 * r0) / L, s0 = vX.w;
-    float qa = dot(rd.yz, rd.yz), qb = 2. * dot(ro.yz, rd.yz) - B * rd.x, qc = dot(ro.yz, ro.yz) - r0 * r0 - B * ro.x, ta = -1., tb = -1.;
-    if (qa < 1e-6) { if (abs(qb) > 1e-6) ta = -qc / qb; }
-    else { float dc = qb * qb - 4. * qa * qc; if (dc < 0.) discard; float sq = sqrt(dc); ta = (-qb - sq) / (2. * qa); tb = (-qb + sq) / (2. * qa); }
-    float fm = 0., fs = 0., fn = 0.;   // 两个交点都在：中间那段是锥里面（也有一层薄雾）
-    for (int i = 0; i < 2; i++) {
-      float t = i == 0 ? ta : tb;
-      if (t <= 0. || t > tO) continue;   // 在镜头后面，或者被机身、机翼挡住
-      vec3 q = ro + rd * t; float s = q.x / L;
-      if (s < 0. || s > 1.05) continue;
-      vec2 cs = q.yz / max(length(q.yz), 1e-4);
-      float n1 = fbm(vec3(cs * 2.6, s * 1.6 - uT * 1.1) + sd), n2 = n3(vec3(cs * 11., s * 4. - uT * 2.7) + sd * 1.7), n4 = n3(vec3(cs * 27., s * 9. - uT * 4.) + sd * 2.3);
-      float se = 1. - .1 * n1 - .05 * n2;   // 后缘（激波）那一圈起伏、破碎
-      float m = smoothstep(s0, s0 + .45, s) * (1. - smoothstep(se - .07, se, s));
-      float dn = m * (.2 + 1.7 * n1 * n1) * (.45 + .75 * n2) * (.7 + .5 * n4) * mix(.5, 1.25, s);
-      vec3 nr = normalize(vec3(-B, 2. * q.y, 2. * q.z));
-      float o = dn * a / max(abs(dot(rd, nr)), .22);   // 斜穿薄壳的长度：边上浓，正对着淡
-      fm += t; fs += s; fn += 1.;
-      if (o < .001) continue;
-      float lam = .55 + .45 * dot(vec3(0., cs), sun), fw = pow(max(dot(rd, sun), 0.), 6.);   // 逆着太阳看：水滴往前散射，发亮
-      col += mix(vec3(.6, .66, .76), vec3(1., .995, .985), clamp(lam, 0., 1.)) * (1. + .5 * fw) * o; ws += o;
+  float L = vE.x, R = vE.y, H = vE.z, ty = vE.w, a = vX.x, sd = vX.y, tO = occ(ro, rd), jt = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(.06711056, .00583715))));
+  vec3 col = vec3(0.); float al = 0.;
+  if (abs(ty - 1.) > .5) {
+    // 蒸汽锥（0）/ 音爆（2）：钟形的一团雾——外缘是抛物面 r² = r0² + (r1² − r0²)·x / L（外面清楚的一道轮廓），贴着外缘那一层最浓，
+    //   往里渐淡、锥心也有一层薄雾（照片里飞机后半截半隐在雾里；原来是空心的一圈）；音爆脱开的那一圈是空心的环。
+    //   解出视线在外缘里面的一段，只在这一段里取 16 个样、前到后合成（原来只算和一张薄壳的交点，看着像一层玻璃）
+    float w = ty > 1.5 ? .32 : .2, r1 = R * .76, r0 = r1 * vX.z, B = (r1 * r1 - r0 * r0) / L, s0 = vX.w, fill = ty > 1.5 ? 0. : .14, ko = 1. + w * .6;
+    vec2 tx = abs(rd.x) > 1e-6 ? vec2(-ro.x, L - ro.x) / rd.x : (ro.x > 0. && ro.x < L ? vec2(-1e9, 1e9) : vec2(1., 0.));
+    if (tx.x > tx.y) tx = tx.yx;
+    vec2 A = parIn(ro, rd, ko * ko, r0, B);
+    A = vec2(max(A.x, max(tx.x, 0.)), min(A.y, min(tx.y, tO)));   // 镜头前面、x 在 0–L、被机身机翼挡住之前
+    if (A.x >= A.y) discard;
+    float dt = (A.y - A.x) / 16., Kx = 1.5 / (w * r1), Tr = 1.;
+    for (int k = 0; k < 16; k++) {
+      vec3 q = ro + rd * (A.x + (float(k) + jt) * dt);
+      float s = q.x / L, lq = length(q.yz), rn = lq / sqrt(max(r0 * r0 + B * q.x, 1e-4));
+      vec2 cs = q.yz / max(lq, 1e-4);
+      float n1 = fbm(vec3(cs * 2.3, s * 1.4 - uT * .9) + sd);   // 顺着气流的一条条（绕轴方向细、沿轴方向长）
+      float n2 = n3(vec3(cs * 8.5, s * 4.2 - uT * 2.4) + vec3(rn * 2.5) + sd * 1.7), n4 = n3(vec3(cs * 23., s * 10. - uT * 4.) + vec3(rn * 6.) + sd * 2.9);
+      float se = 1. - .08 * n1 - .05 * n2;   // 后缘（激波）：破碎的一道边
+      float rr = rn + .1 * (n2 - .5);   // 外缘轮廓也起伏一点
+      float sh = (1. - smoothstep(.9, ko, rr)) * (fill + (1. - fill) * smoothstep(1. - w * 1.8, 1. - w * .2, rr));   // 贴着外缘一层最浓，往里淡到 fill
+      float d = sh * smoothstep(s0, s0 + .35, s) * (1. - smoothstep(se - .04, se, s)) * (.55 + .75 * s)
+        * mix(.38, 1.2, smoothstep(-.75, .65, cs.y))   // 上面浓、下面淡（机翼、座舱上方压力最低，凝结得多）
+        * (.15 + 1.6 * n1 * n1) * (.5 + .75 * n2) * (.75 + .45 * n4) * a;
+      if (d < .002) continue;
+      float ab = 1. - exp(-d * dt * Kx);
+      float lam = .5 + .5 * dot(vec3(0., cs), sun), fw = pow(max(dot(rd, sun), 0.), 6.);   // 朝太阳的一面亮；逆着太阳看水滴往前散射，发亮
+      vec3 c = mix(vec3(.6, .65, .75), vec3(1., .995, .985), clamp(lam * (.7 + .3 * min(rn, 1.)), 0., 1.)) * (1. + .45 * fw);   // 锥里面的暗一点（外面一层挡光）
+      col += Tr * ab * c; Tr *= 1. - ab;
+      if (Tr < .02) break;
     }
-    if (fn > 1.5 && tb > ta && ta > 0.) {   // 锥里面：两交点之间按长度加一点雾
-      float s = fs * .5, f = (min(tb, tO) - ta) * .045 * smoothstep(s0, s0 + .5, s) * (1. - smoothstep(.8, 1., s)) * a * (.5 + fbm(vec3(ro + rd * fm * .5) * .35 + sd));
-      col += vec3(.9, .92, .95) * f; ws += f;
-    }
-    od = ws * .5;
+    al = 1. - Tr;
   } else {   // 机翼水汽：沿视线积分；翼面挡住下面的视线，机身挡住另一边机翼
     vec3 lo = vec3(0., -R, -.08 * H), hi = vec3(L, R, H), ia = 1. / (rd + vec3(1e-6)), ta = (lo - ro) * ia, tb = (hi - ro) * ia, tmn = min(ta, tb), tmx = max(ta, tb);
     float t0 = max(max(max(tmn.x, tmn.y), tmn.z), 0.), t1 = min(min(min(tmx.x, tmx.y), tmx.z), tO);
     if (t1 <= t0) discard;
-    float dt = (t1 - t0) / uN, jt = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(.06711056, .00583715)))), hs = max(vY.w, .1), lam = .55 + .45 * sun.z;
+    float dt = (t1 - t0) / uN, hs = max(vY.w, .1), lam = .55 + .45 * sun.z, ws = 0.;
     for (int k = 0; k < 12; k++) {
       if (float(k) >= uN) break;
       vec3 q = ro + rd * (t0 + (float(k) + jt) * dt);
@@ -97,11 +109,12 @@ void main() {
       if (d <= .001) continue;
       col += mix(vec3(.6, .66, .76), vec3(1., .995, .985), clamp(lam, 0., 1.)) * d * dt; ws += d * dt;
     }
-    od = ws * 2.6 / max(H, .3);
+    al = 1. - exp(-ws * 2.6 / max(H, .3));
+    col = col / max(ws, 1e-5) * al;
   }
-  float al = 1. - exp(-od), fog = 1. - smoothstep(uFog.x, uFog.y, vS.w);
+  float fog = 1. - smoothstep(uFog.x, uFog.y, vS.w);
   if (al < .003) discard;
-  gl_FragColor = vec4(col / max(ws, 1e-5) * al * fog, al * fog);   // 预乘透明度
+  gl_FragColor = vec4(col * fog, al * fog);   // 预乘透明度
 }`;
 // 包围盒：x 0–1、y −1–1、z −1–1
 function v3aBox() {
@@ -187,8 +200,8 @@ function v3aeroFx(sm, C) {
   for (let i = V3AE.boom.length - 1; i >= 0; i--) {
     const B = V3AE.boom[i], u = (S.t - B.t0) / .55;
     if (u < 0 || u > 1) { V3AE.boom.splice(i, 1); continue; }
-    const g = 1 + 1.3 * Math.sqrt(u), a = (1 - u) ** 1.5 * B.hum * v3aK() * 1.3, r = B.r1 * g;
-    v3aAdd(2, B.c, B.U, B.V, B.W, B.L * (1 + .35 * u), r / .8, r / .8, a, B.sd, .45, .55);   // 只剩后半截那一圈：从 0.55 往后
+    const g = 1 + 1.3 * Math.sqrt(u), a = (1 - u) ** 1.3 * B.hum * v3aK() * 1.5, r = B.r1 * g;
+    v3aAdd(2, B.c, B.U, B.V, B.W, B.L * (1 + .35 * u), r / .72, r / .72, a, B.sd, .45, .55);   // 只剩后半截那一圈：从 0.55 往后（壳厚一些，盒子放大一点包住外壳）
   }
   if (typeof v3fRib !== 'function') return;
   for (const [id, T] of V3AE.vtx) {
