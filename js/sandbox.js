@@ -1429,7 +1429,7 @@ HOOK.newGame.push(opts => { if (typeof R === 'object' && R) R.eye = null; if (!(
 function openSandbox(seed, keep, map, dry) {   // dry：沙漠地图（不给就按设置「地表」；读存档时按存档）
   const prev = S && S.sbx ? S : null, lv = (prev && prev.level) || (typeof U === 'object' && U.level) || 'hard';
   const bud = keep && prev ? { ...prev.sbx.budget } : { p: SBX_BUDGET0, e: SBX_BUDGET0 };
-  map = map || (keep && prev && prev.map && prev.map !== 'std' ? prev.map : undefined);
+  map = map || (keep && prev && prev.map ? prev.map : undefined) || (MAPGEN.tw ? 'tw' : undefined);   // 沙盒默认台湾东海岸（taiwan.js）；选「海岸登陆」时是 'std'；闯关指定 'std'
   newGame(seed, lv, { sandbox: true, mode: 'sandbox', map, dry });   // map：另外登记的地图（core.js MAPGEN），换种子重建时沿用
   Object.assign(S, { phase: 'sandbox', briefed: true, paused: true, role: 'attack', mode: 'sandbox', armor: [] });
   if (keep && prev && prev.night) S.night = true;   // 黑夜：换种子、换地图时沿用
@@ -1656,7 +1656,7 @@ function sbxUI() {
     <p class="sbx-hint sbx-styd"></p>
     <div class="sbx-row"><button type="button" data-act="save">保存部署</button><button type="button" data-act="loads" aria-expanded="false">读取部署</button></div>
     <div class="sbx-saves" hidden></div>
-    <div class="sbx-row sbx-mapsel"><label>地图<select data-sel="map"><option value="std">海岸登陆</option><option value="flat">白色平原（超大）</option></select></label><button type="button" data-act="night" aria-pressed="false" title="夜战：肉眼看得近，热像照旧，枪口焰在夜里老远就看得见">黑夜</button></div>
+    <div class="sbx-row sbx-mapsel"><label>地图<select data-sel="map">${MAPGEN.tw ? '<option value="tw">台湾东海岸（真实地形）</option>' : ''}<option value="std">海岸登陆</option><option value="flat">白色平原（超大）</option></select></label><button type="button" data-act="night" aria-pressed="false" title="夜战：肉眼看得近，热像照旧，枪口焰在夜里老远就看得见">黑夜</button></div>
     <div class="sbx-row"><input type="text" inputmode="numeric" aria-label="地图种子" class="sbx-seedin"><button type="button" data-act="map">新地图</button><span class="sbx-lv" role="radiogroup" aria-label="守军 AI 水平"></span></div>
     <details class="sbx-notes"><summary>部署思路</summary><p class="sbx-hint">点「AI 帮我部署」，由高级指挥官按地形判读完成部署并说明理由。</p><ol></ol></details>
     <div class="sbx-hint sbx-keys">左键放置（按住拖动可连续放置）· 运兵船自带满编步兵，选兵种点船可逐个替换 · 右键 / Delete 移除（按住右键拖动连续移除） · 拖动已放置的条目可移位 · Tab 切换攻守 · Esc 取消 · 滚轮缩放、中键拖动平移</div>

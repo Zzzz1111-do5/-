@@ -315,7 +315,7 @@ function fwLaunch(o, s, c) {
   const pk = c.o ? fwPk(Wd, c.t === 'eair' ? c.o : null, c.red) : Wd.pk;
   const m = { id: S.nid++, kind: Wd.k === 'aam' ? 'sam' : 'pgm', side: 'p', src: 'fp', x0: p[0], y0: p[1], x: p[0], y: p[1], z: .5, z3: p[2], tx: c.x, ty: c.y, t: 0, dur: Wd.M > 0 ? 80 : 150, ph: 'boost',
     tgt: c.o ? { k: c.t || 'eair', id: c.o.id } : null, pk, w: Wd.pg || s.w, lr: s.w === 'pl17' || undefined, icp: false, sup: 0,
-    fw: { w: s.w, ms: Wd.ms, v, ign: s.bay === 'main' ? .35 : s.bay === 'ext' ? .12 : 0, lit: false, bore: !c.o } };
+    fw: { w: s.w, ms: Wd.ms, v, ign: Wd.ign != null && Wd.ign >= 0 ? Wd.ign : typeof airRelIgn === 'function' ? airRelIgn(s.bay) : s.bay === 'main' ? 1.2 : s.bay === 'ext' ? .8 : .3, lit: false, bore: !c.o } };
   S.missiles.push(m);
   if (Wd.k === 'arm' && c.o && typeof ewArm === 'function') ewArm(c.o, c.nm);   // 反辐射弹盯上了：雷达可能关机规避（ew.js）
   o.fwN[s.w]--;
@@ -355,7 +355,7 @@ function fwFly(m, dt) {
   const lit = Wd.M > 0 && m.t >= F.ign;
   if (lit && !F.lit) { F.lit = true; if (typeof V3F === 'object' && V3F.puff) V3F.puff.push({ x: m.x, y: m.y, z: m.z3, t0: S.t, big: false, side: 'p', air: true }); }   // 点火：空中留一团白烟
   const a = [0, 0, -FW_G];
-  if (lit && m.t - F.ign < Wd.tb) { const vm = Wd.M * FW_A, k = sp < vm ? 20 * FW_G : (vm - sp) * 2; for (let i = 0; i < 3; i++) a[i] += u[i] * k; }
+  if (lit && m.t - F.ign < Wd.tb) { const vm = Wd.M * FW_A, k = sp < vm ? (Wd.acc || 20) * FW_G : (vm - sp) * 2; for (let i = 0; i < 3; i++) a[i] += u[i] * k; }   // acc：助推加速度（G，编辑器可改，默认 20）
   else if (lit || Wd.M === 0) { const kd = Wd.M === 0 ? 4e-5 : 1.4e-5; for (let i = 0; i < 3; i++) a[i] -= u[i] * kd * sp * sp; }
   if (Wd.M === 0) a[2] += FW_G * .85;   // 炸弹的弹翼升力：滑翔（不然像石头一样掉）
   else if (air && !tp && lit) a[2] += FW_G;   // 空空弹还在找目标：弹体升力托住，沿原方向直飞

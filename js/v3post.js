@@ -184,7 +184,7 @@ function v3Post(now) {
   if (!V3PO.ok) return;
   const mx = typeof v3Mx === 'function' && v3Mx();   // 写实画面：不做移轴虚化和胶片颗粒（颗粒在暗的海面上就是一层噪点），暗角减半——只留辉光
   const cine = typeof V3C === 'object' && V3C.on && !mx;   // 电影镜头（v3cine.js）：浅景深、调色加重、暗角、颗粒
-  const [A, B, T] = V3PO.fb, dof = mx ? v3poDof() : cine ? .7 : 0, bk = (mx ? .85 : .55) * clamp(isFinite(st.bloom) ? st.bloom / .7 : 1, 0, 2.2);
+  const [A, B, T] = V3PO.fb, film = !(typeof SETTINGS === 'object' && SETTINGS && SETTINGS.film === false), dof = mx ? v3poDof() : cine && film ? .7 : 0, bk = (mx ? .85 : .55) * clamp(isFinite(st.bloom) ? st.bloom / .7 : 1, 0, 2.2);
   const tex = (unit, t) => { gl.activeTexture(gl.TEXTURE0 + unit); gl.bindTexture(gl.TEXTURE_2D, t); };
   const pass = (k, F, vw, vh, set) => {
     gl.bindFramebuffer(gl.FRAMEBUFFER, F ? F.f : null); gl.viewport(0, 0, vw, vh);
@@ -203,12 +203,12 @@ function v3Post(now) {
     pass('blur', T, qw, qh, u => { tex(0, A.t); gl.uniform1i(u.uS, 0); gl.uniform2f(u.uDir, r / qw, 0); });
     pass('blur', A, qw, qh, u => { tex(0, T.t); gl.uniform1i(u.uS, 0); gl.uniform2f(u.uDir, 0, r / qh); });
   }
-  const sun = mx ? [0, 0, 0] : v3poSun(), ir = typeof ftEO === 'function' ? ftEO() : 0, ry = !mx && !ir && sun[2] > .01 ? (cine ? 1.1 : .85) : 0;   // 光束：写实画面白天太阳在镜头前方（景深那两遍做完 T 就空出来了）
+  const sun = mx ? [0, 0, 0] : v3poSun(), ir = typeof ftEO === 'function' ? ftEO() : 0, ry = !mx && !ir && film && sun[2] > .01 ? (cine ? 1.1 : .85) : 0;   // 光束：写实画面白天太阳在镜头前方（景深那两遍做完 T 就空出来了）
   if (ry) pass('rays', T, qw, qh, u => { tex(0, A.t); gl.uniform1i(u.uS, 0); gl.uniform3f(u.uSun, sun[0], sun[1], sun[2]); gl.uniform2f(u.uRes, w, h); });
   pass('comp', null, w, h, u => {
     tex(0, V3PO.scene); tex(1, B.t); tex(2, A.t); tex(7, T.t);   // 光束图放 7 号单元：地形每帧都会重绑它（3 号常驻水深分类图，不能占）
-    gl.uniform1i(u.uS, 0); gl.uniform1i(u.uB, 1); gl.uniform1i(u.uD, 2); gl.uniform1i(u.uRy, 7); gl.uniform1f(u.uRyK, ry); gl.uniform1f(u.uRad, cine ? 1 : 0);
-    gl.uniform4f(u.uTs, dof, .5, .1, .32); gl.uniform1f(u.uBk, bk); gl.uniform1f(u.uVig, mx ? .42 : cine ? .38 : .22); gl.uniform1f(u.uGr, mx ? .022 : cine ? .045 : .03);
+    gl.uniform1i(u.uS, 0); gl.uniform1i(u.uB, 1); gl.uniform1i(u.uD, 2); gl.uniform1i(u.uRy, 7); gl.uniform1f(u.uRyK, ry); gl.uniform1f(u.uRad, cine && film ? 1 : 0);
+    gl.uniform4f(u.uTs, dof, .5, .1, .32); gl.uniform1f(u.uBk, bk); gl.uniform1f(u.uVig, mx ? .42 : cine ? .38 : .22); gl.uniform1f(u.uGr, mx ? .022 : !film ? 0 : cine ? .045 : .03);   // 电影后期关掉（编辑器 / 设置）：不加颗粒、光束、景深
     gl.uniform1f(u.uT, (now / 1000) % 100); gl.uniform2f(u.uRes, w, h); gl.uniform1f(u.uIR, ir);
     gl.uniform1f(u.uCA, mx ? 0 : .005); gl.uniform1f(u.uGrade, mx ? 0 : cine ? 1.45 : 1.15); gl.uniform3f(u.uSun, sun[0], sun[1], sun[2]);
   });

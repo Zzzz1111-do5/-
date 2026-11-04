@@ -8,9 +8,11 @@
 // 坐标：GL 里用 (x, -y, 高) 的右手系（x 东、y 北、z 上），世界坐标 y 向南，换算时取负
 const V3 = { on: false, ok: false, tried: false, gl: null, cv: null, pr: null, u: {}, a: {}, buf: null, n: 0, seed: null, sig: null,
   top: null, tex: null, base: null, hf: null, nx: 0, ny: 0, yaw: 0, tilt: .95, yawT: 0, tiltT: .95, box: null, cam: null, keep: null };
-const V3_HZ = 230, V3_FOV = .8, V3_TILT = [.05, 1.45], V3_SKIRT = -70;   // 俯仰：从几乎正俯视到几乎平视
+let V3_HZ = 230;   // 高程 1.0 在 3D 里多高（米）：程序生成的地图 230；真实地形按 TER.hz（v3SetHz）
+const V3_FOV = .8, V3_TILT = [.05, 1.45], V3_SKIRT = -70;   // 俯仰：从几乎正俯视到几乎平视
 const V3_ZMAX = 11000, V3_OUT = 2400;   // 镜头最高高度、能飞出地图边多远：拉远能看见整张地图（黑绿画面是整张沙盘桌，v3table.js）
-const V3_AIR = 230 * V3_HZ / 150;   // 飞机、导弹高度 alt 1.0 对应的 3D 高度：随地形高程放大，高空飞机始终在最高的山顶之上
+let V3_AIR = 230 * V3_HZ / 150;
+function v3SetHz(hz) { V3_HZ = hz; V3_AIR = 230 * Math.max(hz, 230) / 150; }   // 飞机、导弹高度 alt 1.0 对应的 3D 高度：随地形高程放大，高空飞机始终在最高的山顶之上
 let V3_ST = 2;   // 地形网格每几格一个顶点：显卡支持 32 位索引时为 1（每 10 米一个顶点，山脊、河谷的轮廓更细），否则 2
 // 光照（所有 3D 着色器共用）：太阳方向（GL 坐标，指向太阳；与天空图 assets/sky/sky.jpg 里太阳的方位、48° 高度角一致）、日光、天光；
 //   写实画面的背景是真实天空（Poly Haven「kloofendal_48d_partly_cloudy_puresky」，CC0），远处雾成地平线的天色（大气透视）；黑绿画面仍是近黑的底
@@ -87,6 +89,7 @@ uniform sampler2D uTop, uBase, uCls, uCls2, uFogT, uHt, uLf, uTopF; uniform vec4
 uniform sampler2D uDg, uDf, uDr, uDs; uniform float uDet, uDes; uniform vec4 uAfb[2];   // 写实地表细节贴图（ambientCG，CC0）：草地、林下地面、岩石、沙滩
 uniform sampler2D uCls3, uSky, uWn; uniform float uSkyOn, uSkyU, uWnOn;   // 水深分类（浅滩、礁石、近岸）、天空图（海面反射）、水面法线贴图（用户提供的海洋素材 ocean.zip 的 water_new_height.png）
 uniform float uRing, uOcn; uniform vec4 uRect;   // 地图外：1 = 无边海面（地图里面丢掉，那里是地形网格），2 = 北面延伸的陆地（贴图照地图北缘镜像），3 = 南缘外的攻方海岸（afp.js 战区机场；uRect 是机场图案的范围，图案临时绑在 uTopF）
+uniform float uSat;   // 真实地图（台湾东海岸 taiwan.js）：地面直接是卫星图（uBase），不叠程序画的俯视贴图、细节贴图、沙漠换色
 uniform float uFlat;   // 白色平原（flat.js）：太空里的灰色平台，侧壁是深灰的金属
 varying vec3 vP, vN, vV; varying float vD;
 ${V3_SHF}
@@ -179,9 +182,9 @@ void main() {
   vec2 g2 = abs(fract(w / 200.) - .5);
   float gl = (1. - smoothstep(0., fg * 1.5, .5 - max(g2.x, g2.y))) * .16;
   if (uMx < .5) {   // 写实 / 关闭数码风：披俯视贴图，叠山体明暗、等高线、方格网
-    vec3 cF = inF ? texture2D(uTopF, uvF).rgb : texture2D(uBase, w / uWorld).rgb, top = wN > 0. ? mix(cF, texture2D(uTop, uv).rgb, wN) : cF;
+    vec3 cF = uSat > .5 ? texture2D(uBase, w / uWorld).rgb : inF ? texture2D(uTopF, uvF).rgb : texture2D(uBase, w / uWorld).rgb, top = wN > 0. && uSat < .5 ? mix(cF, texture2D(uTop, uv).rgb, wN) : cF;
     // 写实：天光（上冷下暖，按坡面朝天的程度）+ 日光；地图底色偏暗，整体提亮到白天的亮度；等高线、方格网淡一些
-    vec3 amb = mix(vec3(.3, .29, .27), vec3(.47, .52, .6), clamp(N.z, 0., 1.)), col = top * 1.22;
+    vec3 amb = mix(vec3(.3, .29, .27), vec3(.47, .52, .6), clamp(N.z, 0., 1.)), col = top * (uSat > .5 ? 1.05 : 1.22);   // 卫星图本身带着山体明暗，提亮少一点
     float veg = smoothstep(.02, .1, col.g - col.b);   // 绿的、黄的（草地、林地、田块）
     // 机场围栏以内（afbase.js 场区，局部坐标 |u| < 548、v −180 … 620）：图里的道面全用俯视贴图；北面延伸的远景（地图镜像出去）里不要它——
     //   原来离北缘七百米的野战机场被镜像出一座只有道面没有房子的「重影机场」
@@ -193,7 +196,7 @@ void main() {
       float l = dot(col, vec3(.3, .59, .11));
       col = mix(col, vec3(.84, .74, .58) * clamp(l * 1.9, .5, 1.25), veg);
     }
-    if (uDet > .5 && land > .5) {
+    if (uDet > .5 && land > .5 && uSat < .5) {
       // 自然地表换成真实贴图：按地形类别（林地、礁石 / 悬崖、沙滩、沼泽）和坡度（陡坡露岩）混合；两种尺度叠加避免一张贴图重复的痕迹
       vec2 cu = w / uWorld;
       vec4 k1 = texture2D(uCls, cu), k2 = texture2D(uCls2, cu), LF = texture2D(uLf, cu), HT = texture2D(uHt, (floor(w / 20.) + .5) / uHG);
@@ -597,7 +600,7 @@ function v3ShMatrix(C) {
 function v3ShPass(C) {
   const gl = V3.gl;
   V3SH.on = false;
-  if (v3Mx() || (SETTINGS && SETTINGS.quality === 'low') || R.autoLow) return false;   // 持续卡顿自动降画质时（main.js）不画实时阴影
+  if (v3Mx() || (SETTINGS && (SETTINGS.quality === 'low' || SETTINGS.shadow === false)) || R.autoLow) return false;   // 持续卡顿自动降画质时（main.js）不画实时阴影；编辑器 / 设置里可以关
   if (!V3SH.tried) v3ShInit(gl);
   if (!V3SH.ok) return false;
   const M = v3ShMatrix(C), S0 = V3SH.size;
@@ -973,12 +976,21 @@ function v3BaseTex() {
   const gl = V3.gl, real = typeof realLook === 'function' && realLook() && !v3Mx();
   let src = V3.baseMM;
   const pw = V3.coarse || (V3.maxTex || 2048) < 4096 ? 2048 : 4096;   // 底图按 2 的幂（2:1）存，好生成多级渐远纹理
-  if (real && typeof trxSnapshot === 'function') { const snap = trxSnapshot(pw); if (snap) src = snap; }
+  if (TER.tw && typeof TW === 'object') {   // 台湾东海岸：底图就是模型的卫星图（taiwan.js），后台载入，好了再传一次
+    const im = V3.satImg && V3.satImg.src.indexOf(TW.sat) >= 0 ? V3.satImg : (V3.satImg = new Image());
+    if (!im.src) { const t0 = TER; im.onload = () => { if (TER === t0 && V3.gl) { V3.satOk = null; v3BaseTex(); } }; im.src = TW.sat + (typeof window === 'object' && window.DS_BUILD ? '?v=' + window.DS_BUILD : ''); }
+    if (im.complete && im.naturalWidth) { src = im; V3.satOk = TER; }
+  } else if (real && typeof trxSnapshot === 'function') { const snap = trxSnapshot(pw); if (snap) src = snap; }
   V3.baseReal = real;
   if (!src) return;
   const P = V3.basePot || (V3.basePot = document.createElement('canvas'));
   if (P.width !== pw) { P.width = pw; P.height = pw / 2; }
-  const cx = P.getContext('2d'); cx.imageSmoothingQuality = 'high'; cx.drawImage(src, 0, 0, P.width, P.height);
+  const cx = P.getContext('2d'); cx.imageSmoothingQuality = 'high';
+  const fh = TER.tw && typeof TW_DATA === 'object' && src === V3.satImg ? Math.min(1, TW_DATA.h / H) : 1;   // 台湾东海岸往南加长了远海（taiwan.js TW_EXT）：卫星图只铺数据那一块，以南填卫星图南沿的海色
+  if (fh < 1) {
+    cx.drawImage(src, 0, src.naturalHeight - 2, src.naturalWidth, 2, 0, 0, P.width, P.height);   // 南沿那两行拉满整张：远海的颜色和卫星图里的海接得上
+    cx.drawImage(src, 0, 0, P.width, Math.round(P.height * fh));
+  } else cx.drawImage(src, 0, 0, P.width, P.height);
   v3Upload(1, V3.base, P, gl.RGBA);
 }
 // 上传贴图：边长都是 2 的幂时生成多级渐远纹理、开各向异性过滤——斜着看远处的地面不再糊成一片，也不闪烁
@@ -1206,7 +1218,7 @@ function v3Init() {
     gl.linkProgram(pr);
     if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(pr));
     const u = {}, a = { p: gl.getAttribLocation(pr, 'p'), n: gl.getAttribLocation(pr, 'n') };
-    for (const k of ['uDes', 'uAfb', 'uM', 'uEye', 'uTop', 'uBase', 'uCls', 'uCls2', 'uFogT', 'uHt', 'uLf', 'uTopF', 'uBox', 'uBoxF', 'uWorld', 'uGrid', 'uHG', 'uFog', 'uSea', 'uT', 'uMx', 'uBrM', 'uLm', 'uLmOn', 'uBm', 'uBg', 'uDg', 'uDf', 'uDr', 'uDs', 'uDet', 'uCls3', 'uSky', 'uSkyOn', 'uSkyU', 'uWn', 'uWnOn', 'uShM', 'uShT', 'uShOn', 'uShP', 'uOff', 'uScl', 'uRing', 'uRect', 'uOcn', 'uFlat']) u[k] = gl.getUniformLocation(pr, k);
+    for (const k of ['uSat', 'uDes', 'uAfb', 'uM', 'uEye', 'uTop', 'uBase', 'uCls', 'uCls2', 'uFogT', 'uHt', 'uLf', 'uTopF', 'uBox', 'uBoxF', 'uWorld', 'uGrid', 'uHG', 'uFog', 'uSea', 'uT', 'uMx', 'uBrM', 'uLm', 'uLmOn', 'uBm', 'uBg', 'uDg', 'uDf', 'uDr', 'uDs', 'uDet', 'uCls3', 'uSky', 'uSkyOn', 'uSkyU', 'uWn', 'uWnOn', 'uShM', 'uShT', 'uShOn', 'uShP', 'uOff', 'uScl', 'uRing', 'uRect', 'uOcn', 'uFlat']) u[k] = gl.getUniformLocation(pr, k);
     const pb = gl.createProgram();
     gl.attachShader(pb, sh(gl.VERTEX_SHADER, V3_BVS)); gl.attachShader(pb, sh(gl.FRAGMENT_SHADER, V3_BFS()));   // 着色器源码用到时再拼：爆炸火光的 GLSL 在后加载的 v3light.js 里
     gl.linkProgram(pb);
@@ -1503,10 +1515,11 @@ function v3Scene(C, now, vp) {
   gl.uniform1f(u.uSea, 1.5); gl.uniform3f(u.uBg, bgc[0], bgc[1], bgc[2]);
   const mx = v3Mx() ? 1 : 0, tm = (now / 1000) % 3600;   // 黑绿画面：黑客帝国式数码风
   gl.uniform1f(u.uDet, !mx && v3DetTex() && !TER.flat ? 1 : 0);   // 白色平原：灰色地面就是俯视贴图本身，不叠草地、岩石细节
-  gl.uniform1f(u.uDes, !mx && !TER.flat && typeof landDesert === 'function' && landDesert() ? 1 : 0);   // 沙漠地表（设置「地表」）
+  gl.uniform1f(u.uDes, !mx && !TER.flat && !TER.tw && typeof landDesert === 'function' && landDesert() ? 1 : 0);   // 沙漠地表（设置「地表」）
   { const A = new Float32Array(8), L = typeof afb3dBases === 'function' ? afb3dBases().filter(b => b.x >= 0 && b.y >= 0 && b.x <= W && b.y <= H).slice(0, 2) : [];   // 图里的机场（南缘外的战区机场走 uRing 3）
     L.forEach((b, i) => A.set([b.x, b.y, b.rh || 0, b.rs || 1], i * 4)); gl.uniform4fv(u.uAfb, A); }
   gl.uniform1f(u.uFlat, TER.flat ? 1 : 0);
+  gl.uniform1f(u.uSat, TER.tw && V3.satOk === TER ? 1 : 0);   // 卫星图载入好了才用（v3BaseTex）
   const skyT = !mx && V3.sky && V3.sky.ok && V3.cls3 ? V3.sky.tex : null;
   if (V3.cls3) { gl.activeTexture(gl.TEXTURE12); gl.bindTexture(gl.TEXTURE_2D, V3.cls3); }
   if (skyT) { gl.activeTexture(gl.TEXTURE13); gl.bindTexture(gl.TEXTURE_2D, skyT); }

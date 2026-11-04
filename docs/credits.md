@@ -131,5 +131,7 @@
 - 写实地表贴图（草地、林下地面、岩石，assets/terrain）：ambientCG（https://ambientcg.com），CC0 1.0；沙地见上面「沙地贴图」
 - 天空（assets/sky）：Poly Haven「kloofendal_48d_partly_cloudy_puresky」（https://polyhaven.com/a/kloofendal_48d_partly_cloudy_puresky），CC0 1.0
 - 地图丘陵地势（js/hmap.js，默认地图、海岛地图的高度场）：This work is based on "Soft Hills" (https://sketchfab.com/3d-models/soft-hills-7450a967693e49bf8fd9e6da42f5b292) by hirnlaich (https://sketchfab.com/hirnlaich) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)；改动：只取顶点高度、平滑后缩成 384 × 384、按地图缩放与翻转（tools/hmap_build.py）
+- 台湾东海岸地图（js/twmap.js、assets/tw/sat.jpg，只在网页版）：This work is based on "Taiwan (East coast)" (https://sketchfab.com/3d-models/taiwan-east-coast-eb170c63b22b4410a79524709d561c3c) by Miguel Cueva (https://sketchfab.com/MiguelCueva) licensed under CC-BY-NC-SA-4.0 (http://creativecommons.org/licenses/by-nc-sa/4.0/)（高程 SRTM GL1 / OpenTopography，影像 Esri World Imagery；改动：高度还原成真实高度、转 90° 让东海岸朝南、南边补海面，按地表颜色分出海、河床、农田、林地、城镇；非商用，商店版不带）
+- 爆炸、火焰、炮口焰、烟团序列帧（assets/vfx/*.webp）：「ArmyVFX」特效包的贴图（Fab，用户购买，Fab 标准授权），缩小、转 WebP
 - 超新星遗迹星云（js/mdl/nebula.js，白色平原的太空背景，v3neb.js）：This work is based on "Supernova remnant : lighting 2" (https://sketchfab.com/3d-models/supernova-remnant-lighting-2-68cbcb486c7f41f2b842a36a543a54a1) by Aiekick licensed under CC BY 4.0 (http://creativecommons.org/licenses/by/4.0/)（改动：点云抽样到 30 万个点、坐标与颜色量化）
 <!-- ext:end -->

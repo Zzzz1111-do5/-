@@ -30,7 +30,7 @@ function buildIsle(seed, dry = false) {   // dry：沙漠（同 mapgen.js buildM
   const rivers = mouths.map((mx, k) => {
     const top = k === main ? -1 : cAt(mx) - (1250 + r() * 300), rx = new Float32Array(GH);
     for (let gy = 0; gy < GH; gy++) {
-      const y = gy * CELL + 5;
+      const y = gy * CELL + CELL / 2;
       rx[gy] = y < top || y > cAt(mx) + 40 ? -1e9 : mx + (75 * Math.sin(y / 200 + ph[3] + k * 2) + 26 * Math.sin(y / 63 + ph[4] + k)) * smooth(0, 240, cAt(mx) - y);
     }
     return { mx, top, w: k === main ? 9 : 7, rx };
@@ -43,7 +43,7 @@ function buildIsle(seed, dry = false) {   // dry：沙漠（同 mapgen.js buildM
   for (const [k, rv] of rivers.entries()) {
     if (k === main || rv.mx < afr.x0 - 160 || rv.mx > afr.x1 + 160) continue;
     rv.top = Math.max(rv.top, afr.y1 + 40);
-    for (let gy = 0; gy < GH; gy++) if (gy * CELL + 5 < rv.top) rv.rx[gy] = -1e9;
+    for (let gy = 0; gy < GH; gy++) if (gy * CELL + CELL / 2 < rv.top) rv.rx[gy] = -1e9;
   }
 
   // 海滩：南岸平缓的岸段上六处（避开河口、港湾、岬角和东西两侧的陡岸）
@@ -72,7 +72,7 @@ function buildIsle(seed, dry = false) {   // dry：沙漠（同 mapgen.js buildM
   const type = new Uint8Array(GW * GH), elev = new Float32Array(GW * GH);
   const yMax = Math.min(H, Math.ceil(Math.max(...coast) + 900));   // 再往南全是深海（下面统一填）
   for (let gy = 0; gy < GH; gy++) for (let gx = 0; gx < GW; gx++) {
-    const x = gx * CELL + 5, y = gy * CELL + 5, i = gy * GW + gx;
+    const x = gx * CELL + CELL / 2, y = gy * CELL + CELL / 2, i = gy * GW + gx;
     if (y > yMax) { type[i] = T.DEEP; continue; }
     const c = cAt(x), d = c - y, b = beachAt(x);
     if (d <= 0) {   // 海：海滩外是浅水泻湖，河口、港湾有浅滩；外面一圈断续的珊瑚礁（海滩、港湾口、河口留出水道）

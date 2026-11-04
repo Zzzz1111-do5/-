@@ -16,8 +16,10 @@ function eraOf(v) {
 // 返回反应装甲挡过以后还剩多少毁伤
 function eraHit(v, dmg, pen, sx, sy, src) {
   if ((src !== 'at' && src !== 'ap') || sx == null || v.dead || typeof rlEraBlocks !== 'function') return dmg;
+  const md = typeof modEra === 'function' ? modEra(v, dmg, src, sx, sy) : null;   // 编辑器（mod.js）拆掉了爆反、或给没有块布局的车型加了爆反
+  if (md != null) return md;
   const E = eraOf(v), M = E && rlModelOf(v), R = M && M.era;
-  if (!R || (src === 'ap' && !R.heavy)) return dmg;
+  if (!R || (src === 'ap' && !R.heavy && !(typeof modEraK === 'function' && modEraK(v, 'ap') != null && modEraK(v, 'ap') < 1))) return dmg;
   const part = Math.random() < .5 ? 't' : 'h', tur = part === 't';   // 一半打在炮塔上、一半打在车体上（炮塔上没挂块的，打在炮塔上就是硬扛）
   if (!R[part]) return dmg;
   const a = Math.atan2(sy - v.y, sx - v.x), ref = tur ? v.aim ?? v.heading : v.heading, rel = a - ref, d = [Math.cos(rel), Math.sin(rel)], n = [-d[1], d[0]];   // d：在车体 / 炮塔坐标里朝来弹方向
@@ -44,5 +46,6 @@ function eraHit(v, dmg, pen, sx, sy, src) {
     const left = BL.length - U.length, where = tur ? '炮塔正面' : b.f === 0 ? '首上' : '车体';
     log(`${vehName(v)}${where}的反应装甲炸开一块，${src === 'ap' ? '削弱了这发穿甲弹' : '挡住了这发破甲弹'}，${tur ? '炮塔' : '车体'}上还剩 ${left} 块`, 'info', 'era' + v.id, 6, v);
   }
-  return dmg * (src === 'ap' ? .7 : .08);
+  const mk = typeof modEraK === 'function' ? modEraK(v, src) : null;   // 编辑器设的挡弹百分比
+  return dmg * (mk != null ? mk : src === 'ap' ? .7 : .08);
 }

@@ -23,7 +23,7 @@ function buildMap(seed, dry = false) {
   const rivers = mouths.map((mx, k) => {
     const top = k === main ? -1 : cAt(mx) - (620 + r() * 220) * MAP_K, rx = new Float32Array(GH);
     for (let gy = 0; gy < GH; gy++) {
-      const y = gy * CELL + 5;
+      const y = gy * CELL + CELL / 2;
       rx[gy] = y < top ? -1e9 : mx + (70 * Math.sin(y / 190 + ph[3] + k * 2) + 26 * Math.sin(y / 60 + ph[4] + k)) * smooth(0, 220, cAt(mx) - y);
     }
     return { mx, top, w: k === main ? 9 : 7, rx };
@@ -58,13 +58,13 @@ function buildMap(seed, dry = false) {
   if (afr) for (const [k, rv] of rivers.entries()) {
     if (k === main || rv.mx < afr.x0 - 160 || rv.mx > afr.x1 + 160) continue;
     rv.top = Math.max(rv.top, afr.y1 + 40);
-    for (let gy = 0; gy < GH; gy++) if (gy * CELL + 5 < rv.top) rv.rx[gy] = -1e9;
+    for (let gy = 0; gy < GH; gy++) if (gy * CELL + CELL / 2 < rv.top) rv.rx[gy] = -1e9;
   }
 
   const type = new Uint8Array(GW * GH), elev = new Float32Array(GW * GH);
   for (const h of hills) { h.c = 3.5 * h.r; h.k = 2 * h.r * h.r; }   // 山包只算 3.5 倍半径以内（再远贡献不到千分之二）：大地图上山包多，逐格全算太慢
   for (let gy = 0; gy < GH; gy++) for (let gx = 0; gx < GW; gx++) {
-    const x = gx * CELL + 5, y = gy * CELL + 5, i = gy * GW + gx, c = cAt(x), d = c - y, b = beachAt(x);
+    const x = gx * CELL + CELL / 2, y = gy * CELL + CELL / 2, i = gy * GW + gx, c = cAt(x), d = c - y, b = beachAt(x);
     if (d <= 0) {
       const shoalW = b >= 0 ? 70 : nearMouth(x, 90) ? 80 : 30;
       type[i] = -d < shoalW ? T.SHOAL : T.DEEP;

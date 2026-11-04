@@ -16,7 +16,9 @@
 - 进攻方战区机场（js/afp.js，S.afP）：南边是海的地图（默认、海岛）在南缘外约 2.7 公里的攻方海岸上（海岸线 afpShoreY 约南缘外 1.8 公里，中间一道海峡），版图同守方野战机场（afbase.js，rh 0、rs 1：跑道东西向、营区在南）；
   陆基飞机在这里待命、滑跑起飞（afpTakeoff，abn.js abPlaneFly 按 p.afB === 'home' 选这座机场；同敌机：加力加速、机轮贴跑道到离地速度 abVlof 才离地，离地后 abToClimb 按起飞爬升曲线限高；3D 里跑道上按着地画、放轮，进近放轮、离地几秒收轮）、返航进近降落整备（afpRtb，60 秒）；驾驶时登陆基飞机坐在跑道上看它滑跑，离地后接手（fpOnRwy），也能自己落回这条跑道（flight.js flSurf）。
   地面战场的格子不动：南缘外只在 3D 写实画面里画（view3d.js v3SouthBuild 南岸网格、着色器 uRing 3、机场图案 afpTex 用平面画法画进 2048² 贴图，临时绑在 7 号单元），高度 v3HtX / v3HtO 按 afpHt；部队到不了。
+- 台湾东海岸（js/taiwan.js + 数据 js/twmap.js + 卫星图 assets/tw/sat.jpg；战役、沙盒的默认战场，闯关仍用 std）：Sketchfab「Taiwan (East coast)」（Miguel Cueva，CC BY-NC-SA）原样用——真实大小 32.4 × 27.4 公里（南边补 3 公里海，再往南加长 TW_EXT = 12 公里远海：用户要战区机场远一点、半路都是战场——机场离滩头约 20 公里，中间的海峡都在地图里；舰队集结、航母按加长前的南缘 core.js SEA_H / setWorld 的 seaH，远海不进寻路带、地形是一块平海面，卫星图只铺数据那一块 view3d.js v3BaseTex），高度还原成真实米数（模型放大了 1.5 倍），转 90° 让东海岸朝南；每格 20 米（core.js CELL 现在是 let，setWorld(w, h, cell)，MAPGEN 的 cell）；TER.hz = 高程 1.0 的米数 → view3d.js v3SetHz（V3_HZ、V3_AIR 是 let）、ELEV_H = hz / CELL；3D 地面直接贴卫星图（uSat：不叠俯视贴图、细节贴图、沙漠换色）；用户要求原封不动：居民区不立房屋（cover 4 只用来定镇子位置，类型是 FIELD）、据点不盖房子（v3props / v3units 见 TER.tw）。数据是一次性转换（scratchpad 里的 rast.py / prep.py：模型网格落格成高度、贴图转 90°、按颜色和坡度分海 / 砾石 / 农田 / 林地 / 居民区）。授权不许商用：tools/build_www.mjs --app 不带 twmap.js、assets/tw，MAPGEN.tw 不登记，一切回到程序生成的地图。
 - 代码建的模型换成 Sketchfab 模型（用户：游戏里自己做的模型都去 Sketchfab 找来换）：v3units.js V3M_SF（代码模型键 → v3g 模型键），v3mAdd 先试 v3mSf——按代码模型的包围盒摆（水平最长边 × f、底面 / 顶面对齐，或固定比例 k），模型没加载好、黑绿 / 数码画面照旧画代码建的。已换：碉堡 bunker、岸防炮 ak130（AK-130 外形）、高炮 m163、阵地榴弹炮 m777、迫击炮 m224、炮位 / 掩体一圈沙袋墙 sandbag（ring）、据点炮兵排（v3mSfBattery）、捷克刺猬 hedgehog、补给 / 抢修卡车 sx2220（守方机场抢修车 hmmwv）、抢修艇 pbr、机场对空雷达 sentinel（AN/MPQ-64，天线是模型自带的）、伞 chute（空投箱吊 mcrate）、补给站 / 空投点的沙袋与器材箱（v3mSfDepot / v3mSfCrates，noBox）、登机梯 ladder、火箭 / 火力支援艇 type22（022 型）。没换（没找到合规的模型）：072A / 072 / 073A / 074A 登陆舰、扫雷舰（Sketchfab 上的 Ropucha、Tapir 是从《Cold Waters》扒的）、堤丰、NMESIS 发射箱、重装空投平台、油桶 / 伪装网 / 集装箱、美军牵引车；航母（福建舰 / 075）的现成模型舰岛位置和 carrier.js CVG 的停机位、弹射器对不上，暂不换。新收模型照样查简介：写着 Ripped / 某游戏的（42manako 的不少、KojfDiscord 的 WARNO / War Thunder）、「Not my model」的不收。烘焙要 meshoptimizer（package.json 的 devDependencies，`npm ci` 后才有远处的简化网格；没有时 v3gbake.js 只打一句警告）。
+- 序列帧特效（js/v3vfx.js，assets/vfx/*.webp）：用户在 Fab 买的虚幻商城特效包「ArmyVFX」的贴图（从 .uasset 里拆的原图：源图是 Oodle Kraken 压缩的 PNG，用开源解码器 ooz 在本机解开，缩小转 WebP）——expl 爆炸 11 × 11、fire 火 8 × 8（循环）、mzl 车炮口焰 3 × 3、mzla 火炮口焰 10 × 10、puff 烟团 8 × 8（带颜色）；前四张分通道：A 透明度、B 火光、R / G 烟的受光。v3fx.js 里爆炸（火球 + 之后的烟团）、残骸起火、坦克 / 车炮（vshots，大小按车长）、火炮出膛（shells，顺着炮身）用 v3vAdd 放精灵，v3vDraw 在程序的烟、发光之前画（按远近排序、预乘透明度、相邻帧混合）；贴图没好、黑绿 / 数码画面、水面爆炸照旧是程序特效。
 - 云朵（js/v3cloud.js，用户：天空七成是云）：RandyGF 的「Cloud」（键 cloud），按地图铺一层积云（云底 1.2–2.6 公里，地面投影约四成半，从地面看约七成天空是云），随高空风飘，雾以外不画；v3g.js 着色 uCld（白顶灰蓝底、边缘按视角淡出、离镜头近的淡掉；镜头比云高 300 米以上、俯角超过约 17° 时整个丢掉——模型是七万多个三角形的层层薄壳，留几个百分比叠起来照样不透明；亲自开飞机时不淡 uCldF），不进阴影那一遍；地面云影 view3d.js cloudSh 同时加多。
 - 海面法线贴图 assets/water/normals.jpg 换成用户给的海洋素材（ocean.zip 的 water_new_height.png，512²，原来是 three.js 的 waternormals）。
 - 地表皮肤（用户：地图换皮成沙漠）：设置「地表」沙漠（默认）/ 绿地，settings.js landDesert()；写实画面的颜色——view3d.js 地形着色器 uDes（俯视贴图里绿、黄的按明暗换成沙土色，细节贴图草地 → 沙地、林地 → 砾石、陡坡暖色岩石，田块只留一点影子；南岸攻方海岸同样），小地图 camera.js mmDesert。
@@ -104,6 +106,30 @@
 - 沙盒每方初始预算直接给 30000（sandbox.js SBX_BUDGET0 = 上限；SBX_BUDGET 1500 是 AI 布兵按「预算 ÷ 基准」放大编成的基准，别改）。
 - 烘焙工具的署名（tools/v3gbake.js credits）按 tools/v3gmodels.json 整段重写 docs/credits.md、legal/credits.html 的 v3g 一节——别处加进来、配置里没有的条目（支奴干、海鹰、M777、M270、单兵武器、F100 喷口……）会被冲掉：
   烘焙后 `git diff docs/credits.md legal/credits.html`，冲掉的恢复（git checkout 后手工加新的那几条）。模型预览 tools/v3gview.html 的 &tx &ty &tz 指定镜头对准的点（看喷口、起落架等局部）。
+- 编辑器（主菜单「编辑器」；用户：能自己导入模型、改飞机坦克导弹的参数、开火位置、挂点、尾喷特效、加速度速度、战场大小、渲染距离画质）：js/mod.js 数据与套用、js/modui.js 界面、js/modimp.js 导入模型与预览。
+  MOD 存 localStorage（bh-mod），表格类的存盘时直接改进表（AIR_MDL、EA_SPEC、AP、FL_AC、FW_W、FW_LOAD、FW_ST、FW_GUN、MS_PGM、V3G_AIR，MOD_DEF 记原值、恢复默认时还原；各表能改的字段在 MOD_F）；
+  车辆按型号（rlModelOf 的键）在推演里第一次见到时套（modVehApply：装甲按毫米 ÷ MOD_MM 220 = 级、各面 armX、穿深 penL、加速度 accA、转向 turnK、炮塔 travM……），车辆换模型只改画面（MOD_VMDL → v3g.js v3gVehKey，vfn.js 仍按原模型）；
+  模型上的点按模型键记（MOD.mdl：炮口 muz → v3g.js v3gMuzzle / v3fx.js 坦克炮出膛，航炮口 gun → FW_GUN.at，挂点 st → FW_ST，尾喷口 noz → v3det.js v3dNoz，尾焰 fx → v3dBurner 的长度 / 亮度 / 马赫环 / 序列帧尾焰）。
+  导入的文件存 IndexedDB（bh-mod-files，modFilePut），MOD.lib 只记名字和参数：模型键 u_…，v3g.js v3gModel 不去网上找，V3G.def[键] = { meta, bin }（v3gDecode 认 D.bin）；序列帧贴图键 uf_…（v3vfx.js v3vUser、v3vSlots 换掉内置的爆炸 / 火 / 炮口焰 / 烟，帧号按总帧数换算）。
+  导入（modimp.js mimBuild）照 v3gbake.js 的坐标约定拼 { meta, bin }，只有一级网格；mimTurn 转方向（点好的位置、转轴跟着转）。不改推演结果：没改的字段一律走原值（车辆加速度没设就是原来的一下到速）。
+  部件（用户：不要自动估，自己切、自己定转轴）：导入时按连通块编号（mimPieces：三角形连着的、同一个 glTF 节点里位置相同的顶点算一块；bin 后面接每顶点块号 meta.pv / pvt / pn、每块节点号 pnd，meta.nodes 节点树；老的导入 mimEnsure 补算）；
+  编辑器「模型与挂点」页选块（点一块 / 整个物体 / 框选整块在框里的 / 扩到上一级物体），设为炮塔 t、炮管 g、机枪塔 mt、机枪 mg（遥控武器站）、起落架、主旋翼、尾桨、删除 x，存在 MOD.mdl[键].pt（块号区间字符串，mod.js MOD_PTR）；
+  连成一张网格的用切割薄片切开（mimCut：沿平面真切三角形、交线上的新顶点两边各一份；薄片正好在一圈边上时负边换用原顶点的另一份，躺在平面里的三角形按朝向归边；直接改存着的模型文件、能撤销，新块继承原块用途）；
+  转轴全手动（pt.ta / ga / ma / mb / ra / qa = { p, a }：输数、点模型定中心、圆心定位器三点定圆——圆心、半径、法线 = 方向）；删了东西按剩下的部分重新落地居中（modPtOff），点好的位置一起挪。
+  游戏里 v3g.js v3gPrep 对 u_ 键调 mod.js modPrep：删的块不画，部件按手动转轴挂成 rot / gun / chain 部件，车辆登记进 VFN（ta：装到推演里没炮塔的车种上时炮塔自己转向目标；mg：机枪塔转向机枪目标 iC2、机枪俯仰 iD3）；pt 改了 modApply 重新解码（modRegMdl，旧缓冲区、贴图、实例列表一起放掉）。
+  机枪口 MOD.mdl[键].mg（mgOn 装在车体 / 炮塔 / 炮管 / 机枪塔）：vehicles.js vehMg 给曳光弹记 src，v3fx.js 从 v3g.js v3gMgMuzzle 打出、枪口一闪；炮口 v3gMuzzle 也跟炮管仰角走。预览（MIV）着色器按每顶点用途代码试转、上色，钉在表单顶上（sticky），手机双指缩放平移。
+  编辑器浮层要带 mn-layer 类（主菜单开着时其余元素都被藏起来）；保存时 MOD 存的是 MDX_W 的拷贝（原来共用对象，没保存的改动漏进 MOD）。
+  热浪设计（用户：不要二维热浪）：MOD.mdl[键].hz 热浪源 { p, d, r, len, k, sp 末端变粗, rise 往上飘, tb 湍流, spd 流速, warm 发暖 }（mod.js modHazeOf），v3g.js v3gVeh / v3gPlane 按姿态登记（v3gHazeEmit），设计了的车不再用 V3D_VEXH 默认排气；编辑器预览用同一套着色器画（modimp.js，一直动）。
+- 编辑器的便捷功能（js/modux.js，只往 modui.js 上加）：撤销 / 重做（Ctrl + Z / Y，比较操作前后的 MDX_W）、Ctrl + S、筛选参数、复制粘贴一型的改动、套用到同类、「改动」页（全部改动一览）、「批量」页（一批型号的同一项乘 / 加 / 设成）、保存并试玩。
+  游戏里自带的模型也能拆（js/modpart.js；用户：载具任何一个部件都能精准去掉、单独拿出来 360° 看、再设计）：预览读模型时按连通块分块（mod.js modPieces，不跨模型自带的部件），游戏里解码时 v3gPrep 最后调 mod.js modPrepB 用同一套算法分，块号对得上；
+  删掉的块记在 MOD.mdl[键].pt.x（不重新落地居中），改造 ed（平移 / 旋转 / 缩放 / 换色，modEdApply / modEdSplit），炮塔炮管怎么动 fn → VFN；保存后已解码的内置模型放掉重新加载（modReloadB）。选块、框选、删除沿用 modui.js 导入模型那一套（MDX.pc）。
+  导弹尾烟设计、特效动图、抛射点火（js/modfx.js）：MOD.trl[导弹型号键 或 '@' + 发动机类] → v3fx.js v3fTrl（烟量、留多久、粗细、变粗、颜色、上飘、随风、扭动、发动机时间、尾焰、序列帧烟团）；特效页的卡片按 ArmyVFX 的分通道合成颜色播放；
+  MOD.rel → airmdl.js AIR_IGN（主弹舱 / 外挂 / 侧弹舱抛离后几秒点火，AI 的离机画面 airRelPos 与亲自驾驶 fpwpn.js 的 ign 都按它，FW_W 的 ign 单独设）。
+- 局部自由动画（js/modanim.js，用户：模型上任何一个部件都能单独设计动作，比如开火动画；「拆成碎片跳舞」只是打比方，别当成功能做成噱头；自由度拉满、好上手）：「模型与挂点」页车辆模型的「动画」一段——要动的部件（在模型上点选 / 按模型自带的部件 / 自动拆成 N 块）、转动中心（在模型上点或输数）、
+  时机（开炮 fire、挨打 hit、走着 move、停着 idle、被打掉 die）、预设（散开跳舞、炸开再合上、转圈、弹跳、摇摆、震动、后坐、变大变小、飘起来、波浪）、时间轴与关键帧（每组某一刻的平移 / 旋转 / 缩放 + 缓动），预览里 CPU 把顶点按姿势挪了重传；
+  数据 MOD.mdl[键].ag（组：块号区间 + 中心 cp）、.an（片段 { dur, loop, back, tr: { 组号: 关键帧 } }）。游戏里：解码时 mod.js modAnimSplit 把每组的三角形拆成单独的绘制段（第 5 项是组号），
+  v3g.js v3gVeh 用 modAnimNow 挑这一刻的片段，v3gAnimDraw 把车画成「不动的部分 + 每组一个实例」（组的平移、绕中心转、缩放折算成实例的位置和欧拉角，不改着色器；子模型键 键@组号，modAnimDrop 放掉）。飞机还没接。
+- 气动特效（js/v3aero.js，用户：超音速云爆太敷衍）：体渲染的蒸汽锥（马赫 0.9–1.07）、音爆激波壳、机翼上表面水汽（大过载）、AI 飞机的翼尖涡流；v3fx.js 画飞机灯光时 v3aeroPlane 登记，v3aeroDraw 在尾焰之后画；设置 aero 调强弱（0 关）。fptgp.js 原来那一圈贴片在有三维气动特效时不画。
 - 主菜单「闯关」是 levels.js（三章十关，按预算自己布兵），「海岛战役」是 isle.js，都建在沙盒（sandbox.js）上；两者都记在 S.lv 里（海岛是 S.lv.isle），闯关的逻辑要跳过海岛。
 
 ## 代码约定
@@ -133,7 +159,7 @@
   卡顿主要看尖峰（单步超过 8 / 16 毫秒的次数）而不只是平均：周期性的重活要错开（视野每 0.25 秒分两步算：logistics.js updateVision 'a' / 'b'；远距离发现 spot.js 比视野晚半个周期；战线重建 front.js 遇到视野那一步顺延）。
   画面：3D（view3d.js 的 #cv3）和平面地图写实画面的地形（terrain.js trxLayer 的 #cvt）都是 WebGL 画布垫在 2D 画布 #cv 底下、由浏览器合成，#cv 每帧清空只画单位标号——
   不要再往主画布里 drawImage 整屏的 WebGL 画布（显卡画布间整屏拷贝，软件渲染、Safari、部分手机要读回）；地形画布 TRX.cv 只增不减，临时改尺寸（trxSnapshot）用完要改回去。
-  导入模型（v3g.js v3gDraw）：正常那一遍按视锥剔除实例（v3gCull），阴影那一遍用简化一级的网格；热浪（v3det.js v3dHaze）只抓热气柱所在的一块屏幕，擦着镜头的那根不画。内存：大块几何上传显卡后放掉 CPU 那份；模型在 http(s) 下 fetch 取文本解析（v3g.js v3gPump），不当脚本执行。
+  导入模型（v3g.js v3gDraw）：正常那一遍按视锥剔除实例（v3gCull），阴影那一遍用简化一级的网格；热浪（v3det.js v3dHaze）是三维的：每段热气柱画一个包住它的盒子（镜头在外面画正面、做深度测试，在里面画背面），片元里沿视线积分 12 步三维噪声算折射——只抓热气柱所在的一块屏幕（镜头在热气柱里时整屏）。内存：大块几何上传显卡后放掉 CPU 那份；模型在 http(s) 下 fetch 取文本解析（v3g.js v3gPump），不当脚本执行。
   优化尽量保持结果逐格不变：同一种子的推演结束时给状态算指纹，改动前后应相同。推演里不要用真实时间（performance.now / Date.now）做缓存失效或限量——机器快慢会让结局不同（orbat.js bgAt 原来就有这个问题，已改成按推演时刻）。
 
 ## 分支与协作

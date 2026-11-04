@@ -16,7 +16,7 @@ function v3LightBake() {
   let hMax = 0;
   for (let gy = 0; gy < GH; gy++) for (let gx = 0; gx < GW; gx++) {
     const i = gy * GW + gx, t = TER.type[i];
-    const h = v3Ht(gx * CELL + 5, gy * CELL + 5) + (t === T.TOWN ? 9 : t === T.FOREST ? 11 : 0);
+    const h = v3Ht(gx * CELL + CELL / 2, gy * CELL + CELL / 2) + (t === T.TOWN ? 9 : t === T.FOREST ? 11 : 0);
     Hc[i] = h; if (h > hMax) hMax = h;
   }
   const at = (x, y) => { const gx = x | 0, gy = y | 0; return x < 0 || y < 0 || gx >= GW || gy >= GH ? -3 : Hc[gy * GW + gx]; };
