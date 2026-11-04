@@ -336,7 +336,7 @@ async function uiSetup(p, sh) {
     if (MDX && MDX.el && !MDX.el.hidden) { MDX.dirty = false; closeModEditor(); }   // 编辑器拍完：关掉（没保存的不存）
     if (k === 'codex') { showMenu(); openCodex(); }
     if (k === 'campaign') { if (typeof closeCodex === 'function') closeCodex(); const cx = document.getElementById('cdx'); if (cx) cx.hidden = true; if (typeof lyPop === 'function' && cx) lyPop(cx); mnAct('pve'); }
-    if (k === 'deploy') { lvClose(); lvStart(4); const a = document.querySelector('#sbxPanel [data-act="ai"]'); if (a) a.click(); }
+    if (k === 'deploy') { if (typeof closeCodex === 'function') closeCodex(); const cx = document.getElementById('cdx'); if (cx) cx.hidden = true; if (typeof lyPop === 'function' && cx) lyPop(cx); lvClose(); lvStart(4); const a = document.querySelector('#sbxPanel [data-act="ai"]'); if (a) a.click(); }   // 先关掉上一个镜头开着的图鉴（原来没关，部署镜头的背景还是图鉴）
   }, sh.ui);
   if (sh.ui === 'deploy') {
     await p.evaluate(() => {
