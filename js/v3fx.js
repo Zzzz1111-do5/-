@@ -217,7 +217,7 @@ function v3Fx(C) {
   if (!V3F.tried) v3fxInit(gl);
   if (!V3F.ok) return;
   if (V3F.S !== S) { V3F.S = S; V3F.trail.clear(); V3F.puff.length = 0; V3F.seen.clear(); V3F.ign.clear(); V3F.ex.length = 0; V3F.exSeen = new WeakSet(); if (V3F.vo) V3F.vo.clear(); }
-  const out = V3F.bo || (V3F.bo = new V3FBuf(1 << 16)), sm = V3F.bs || (V3F.bs = new V3FBuf(1 << 15)), E = C.E, box = V3.box || [0, 0, W, H], inB = (x, y, m = 200) => x > box[0] - m && x < box[0] + box[2] + m && y > box[1] - m && y < box[1] + box[3] + m;   // sm：遮挡的烟（普通混合，先画；发光的 out 加法混合后画）
+  const out = V3F.bo || (V3F.bo = new V3FBuf(1 << 16)), sm = V3F.bs || (V3F.bs = new V3FBuf(1 << 15)), E = C.E, box = V3.box || [0, 0, W, H], fogR = (C.fog ? C.fog[1] : 9000) * 1.1, inB = (x, y, m = 200) => (x > box[0] - m && x < box[0] + box[2] + m && y > box[1] - m && y < box[1] + box[3] + m) || ((x < 0 || y < 0 || x > W || y > H) && Math.hypot(x - E[0], y + E[1]) < fogR + m);   // 地图外（小岛机场一带、海峡上空的飞机导弹）按离镜头的距离算；sm：遮挡的烟（普通混合，先画；发光的 out 加法混合后画）
   out.length = 0; sm.length = 0;   // 每帧复用同两块缓冲（不再每帧新建 JS 数组、再拷成 Float32Array——那是每帧最多的垃圾，垃圾回收时画面一顿）
   if (typeof v3jBegin === 'function') v3jBegin();   // 喷口内部、加力尾焰（v3jet.js）：这一帧重新收集
   const spec = specAll() || (typeof R === 'object' && (R.eye === 'all' || R.eye === 'both' || R.eye === 'e'));
