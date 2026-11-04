@@ -399,6 +399,13 @@ function mdxOnPick(h, e) {
   } else return;
   MDX.dirty = true; MDX.keep = true; mdxRender(); mdxMsg('点上了（' + p.join(', ') + '），点「保存」生效');
 }
+// 导入时「类型」选成了坦克装甲车、外形却像飞机（翼展比全长的六成还宽、又扁）：提示改成飞机——飞机的型号要在类型是飞机时才列出来
+function mdxLooksAir(mk, air) {
+  const m = !air && MODX.raw[mk] && MODX.raw[mk].meta, b = m && m.bb;
+  if (!b) return '';
+  const lx = b[3] - b[0], ly = b[4] - b[1], lz = b[5] - b[2];
+  return ly > lx * .6 && lz < lx * .45 ? `<p class="note" style="color:var(--amber, #ffc24a)">看着像飞机（全长 ${mdxR(lx, 10)} 米、宽 ${mdxR(ly, 10)} 米）：要用在飞机上，把「类型」改成「飞机」，下面才列出飞机的型号。</p>` : '';
+}
 function mdxMdlForm(mk) {
   const md = mdxModels().find(r => r.id === mk);
   if (!md) return '';
@@ -413,7 +420,7 @@ function mdxMdlForm(mk) {
   if (md.imp) {
     h += mdxPtForm(mk, air);
     h += `<h3 style="margin-top:12px">模型</h3><div class="mdx-row"><label>名称</label><input type="text" data-lib="nm" value="${mdxEsc(L.nm)}"><span></span><span></span></div>
-      <div class="mdx-row"><label>类型</label><select data-lib="kind"><option value="veh"${L.kind !== 'air' ? ' selected' : ''}>坦克装甲车</option><option value="air"${L.kind === 'air' ? ' selected' : ''}>飞机</option></select><span></span><span></span></div>
+      <div class="mdx-row"><label>类型</label><select data-lib="kind"><option value="veh"${L.kind !== 'air' ? ' selected' : ''}>坦克装甲车</option><option value="air"${L.kind === 'air' ? ' selected' : ''}>飞机</option></select><span></span><span></span></div>${mdxLooksAir(mk, air)}
       <p>朝向不对：<button type="button" class="mdx-btn" data-a="turn" data-ax="z">绕竖轴转 90°</button> <button type="button" class="mdx-btn" data-a="turn" data-ax="fz">前后掉头</button> <button type="button" class="mdx-btn" data-a="turn" data-ax="y">抬头 90°</button> <button type="button" class="mdx-btn" data-a="turn" data-ax="x">侧滚 90°</button>
       <button type="button" class="mdx-btn" data-a="mdel">删除这个模型</button></p>`;
     // 装到哪些型号上
@@ -425,7 +432,7 @@ function mdxMdlForm(mk) {
         ${us.map(([id, u]) => { const B = typeof catalogById === 'function' ? catalogById(u.base) : null; return `<div class="mdx-row"><label>${mdxEsc(u.nm || L.nm)}</label><span class="def">${B ? (B.side === 'e' ? '守方 · 照 ' : '攻方 · 照 ') + mdxEsc(B.name) : ''}</span><button type="button" class="mdx-btn" data-a="cugo" data-id="${mdxEsc(id)}">改名字、性能</button><span></span></div>`; }).join('')}
         <p><button type="button" class="mdx-btn pri" data-a="cuadd" data-mk="${mdxEsc(mk)}">＋ 加进兵种栏（当成新兵种）</button></p>`;
     }
-    h += `<h3 style="margin-top:12px">${air ? '用在这些型号上' : '换掉这些型号的外形'}</h3><div class="mdx-bind">${ts.filter(([s, k]) => !String(k).startsWith('cu_')).map(([s, k, n]) => `<label><input type="checkbox" data-bind="${s}|${k}"${(MDX_W[s][k] || {}).mdl === mk ? ' checked' : ''}> ${mdxEsc(n)}</label>`).join('')}</div>`;
+    h += `<h3 style="margin-top:12px">${air ? '用在这些型号上' : '换掉这些型号的外形'}</h3>${air ? '<p class="note">打勾、保存以后这一型都画这个模型：舰载机在航母甲板上，陆基飞机（歼-20、歼-16 系列、轰-6K、攻击-2、无侦-7）停在南边海上小岛的战区机场（3D 自由镜头往南飞到地图外），起飞后在战场上空。</p>' : ''}<div class="mdx-bind">${ts.filter(([s, k]) => !String(k).startsWith('cu_')).map(([s, k, n]) => `<label><input type="checkbox" data-bind="${s}|${k}"${(MDX_W[s][k] || {}).mdl === mk ? ' checked' : ''}> ${mdxEsc(n)}</label>`).join('')}</div>`;
   }
   const rst = (s, d) => d ? '<span class="def">（游戏原来的）</span>' : `<button type="button" class="mdx-btn" data-mrst="${s}">恢复原来的</button>`;
   if (!air) {
