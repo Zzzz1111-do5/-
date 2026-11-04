@@ -151,7 +151,8 @@ function msPgm(w, side, x0, y0, T, src, delay = 0) {
   const W0 = MS_PGM[w];
   if (!W0) return null;
   if (w === 'ld10' && T.k && T.id != null && typeof ewArm === 'function') { const o = msPgmTgt({ k: T.k, id: T.id }); if (o) ewArm(o); }   // 反辐射弹盯上了：雷达可能关机规避（ew.js）
-  return msLaunch('pgm', side, x0, y0, { x: T.x, y: T.y }, { tgt: T.k && T.id != null ? { k: T.k, id: T.id } : null, src, delay, dur: 60, w });
+  const dur = Math.max(60, dist(x0, y0, T.x, T.y) / (W0.spd || 200) * 1.6 + 20);   // 远海（farsea.js）几十上百公里外打过来的：飞得到
+  return msLaunch('pgm', side, x0, y0, { x: T.x, y: T.y }, { tgt: T.k && T.id != null ? { k: T.k, id: T.id } : null, src, delay, dur, w });
 }
 function msPgmFly(m, dt) {
   const W0 = MS_PGM[m.w || (m.w = 'cj10')], T = msPgmTgt(m.tgt);
@@ -267,7 +268,7 @@ function msDefShips() {
 function msAsm(m, dt) {
   const T = msTgtObj(m.tgt);
   if (T) { m.tx = T.x; m.ty = T.y; }
-  if (m.bx == null) { m.bx = m.x; m.by = m.y; }
+  if (m.bx == null) { m.bx = m.x; m.by = m.y; if (m.life == null && typeof fsOn === 'function' && fsOn()) m.life = Math.max(14, dist(m.x, m.y, m.tx, m.ty) / (m.spd || 260) * 1.5 + 10); }   // 远海按真实射程打的反舰导弹：飞得到
   const d = dist(m.bx, m.by, m.tx, m.ty), st = (m.spd || 260) * dt;
   m.hd = Math.atan2(m.ty - m.by, m.tx - m.bx); m.z = .04;
   if (d > Math.max(10, st)) { m.bx += Math.cos(m.hd) * st; m.by += Math.sin(m.hd) * st; }

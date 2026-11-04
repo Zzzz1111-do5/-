@@ -1046,7 +1046,7 @@ function cvMove(c, dt) {
   c.heading = airAng(c.heading + clamp(df, -.18 * dt, .18 * dt));
   const sp = 10 * clamp(Math.cos(df), .25, 1) * clamp(d / 50, .35, 1) * (typeAt(c.x, c.y) === T.SHOAL ? .55 : 1) * dt;
   const nx = c.x + Math.cos(c.heading) * sp, ny = c.y + Math.sin(c.heading) * sp;
-  if (typeAt(nx, ny) <= T.SHOAL && ny >= STAGING_Y - 200) { c.x = clamp(nx, 60, W - 60); c.y = Math.min(ny, H - 20); }
+  if (typeAt(nx, ny) <= T.SHOAL && ny >= STAGING_Y - 200) { c.x = clamp(nx, 60, W - 60); c.y = c.y > H - 20 ? ny : Math.min(ny, H - 20); }   // 远海航渡（farsea.js）回来的：在地图外照样开
 }
 
 // 爆炸落在舰体 30 以内：甲板受损；直接命中可能毁掉甲板上的飞机（机库里的不受影响）；归零即瘫痪（由 combat.js impact 调用）
