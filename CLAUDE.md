@@ -67,6 +67,11 @@
 - 飞机按真实世界的速度飞（carrier.js AIR_K = 1，型号表 spd 是真实巡航速度，米 / 秒）；机载雷达按真实探测距离（carrier.js AIR_REAL，airwar.js awSeen），锁定、发射仍按游戏里的火控距离。
 - 主菜单「闯关」是 levels.js（三章十关，按预算自己布兵），「海岛战役」是 isle.js，都建在沙盒（sandbox.js）上；两者都记在 S.lv 里（海岛是 S.lv.isle），闯关的逻辑要跳过海岛。
 
+- 战役决策（js/decide.js，默认战役与海岛战役；沙盒、闯关不加）：玩家是战区司令，平时全交给 AI，只在关键处拍板——画面下方决策卡（舰炮齐射、火箭炮覆盖、轰-6K 轰炸各一次；战役预备队 2 艘 271 + 1 艘 072A 只有下令才登陆），点卡后点地图选目标（HOOK.pointer，右键 / Esc 取消）；
+  AI 请示（敌军集结反冲击 thFocusE、推进线 150 秒没前推、敌炮兵阵地暴露，15 秒不答按默认）；战役进度（时限、据点分值 / 七成、指挥所）；结束画面里复盘（每张卡打掉多少、时间线）。状态 S.dec（开战第一步再建）。
+  作战时限按 logistics.js battleT()：远海航渡（farsea.js）将近一小时，时限从编队抵达集结海域（S.fs.arrT）起算。
+- 其他会话的源码有时不推 GitHub、只发布网页版：网页版脚本、模型原样发布，可以从 gh-pages 的发布内容取回（index.html 按 tools/build_www.mjs 逆操作还原）；发布前先看 gh-pages 有没有更新的版本，别覆盖。
+
 ## 代码约定
 - 全部状态在全局 `S`（纯 JSON，可存档）；类型数组、渲染缓存放在 S 之外，S 换了就重建。
 - 模块之间用 core.js 的 `HOOK`（newGame / step / impact / visionP / visionE / drawUnder / drawOver / drawTop / frame / pointer / key）挂接；调用后加载的文件里的函数，先判断 `typeof fn === 'function'`。
