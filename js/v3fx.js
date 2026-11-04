@@ -139,8 +139,8 @@ function v3Fx(C) {
   if (!V3F.tried) v3fxInit(gl);
   if (!V3F.ok) return;
   if (V3F.S !== S) { V3F.S = S; V3F.trail.clear(); V3F.puff.length = 0; V3F.seen.clear(); V3F.ign.clear(); V3F.ex.length = 0; V3F.exSeen = new WeakSet(); if (V3F.vo) V3F.vo.clear(); }
-  const out = V3F.bo || (V3F.bo = new V3FBuf(1 << 16)), sm = V3F.bs || (V3F.bs = new V3FBuf(1 << 15)), E = C.E, box = V3.box || [0, 0, W, H], inB = (x, y, m = 200) => x > box[0] - m && x < box[0] + box[2] + m && y > box[1] - m && y < box[1] + box[3] + m;   // sm：遮挡的烟（普通混合，先画；发光的 out 加法混合后画）
-  out.length = 0; sm.length = 0;   // 每帧复用同两块缓冲（不再每帧新建 JS 数组、再拷成 Float32Array——那是每帧最多的垃圾，垃圾回收时画面一顿）
+  if (typeof v3jBegin === 'function') v3jBegin();   // 喷口内部、加力尾焰（v3jet.js）：这一帧重新收集
+  const out = [], sm = [], E = C.E, box = V3.box || [0, 0, W, H], inB = (x, y, m = 200) => x > box[0] - m && x < box[0] + box[2] + m && y > box[1] - m && y < box[1] + box[3] + m;   // sm：遮挡的烟（普通混合，先画；发光的 out 加法混合后画）
   const spec = specAll() || (typeof R === 'object' && (R.eye === 'all' || R.eye === 'both' || R.eye === 'e'));
   const seen = (x, y) => spec || inVision(x, y);
   const g = (x, y) => v3Ht(clamp(x, 0, W - 1), clamp(y, 0, H - 1));
@@ -164,6 +164,11 @@ function v3Fx(C) {
     if (t.fuzzy) continue;   // 模糊曳光只在平面上示意方向
     const p0 = v3fP(lerp(t.x0, t.x1, u0), lerp(t.y0, t.y1, u0), g(t.x0, t.y0) + 1.6), p1 = v3fP(lerp(t.x0, t.x1, u), lerp(t.y0, t.y1, u), lerp(g(t.x0, t.y0) + 1.6, g(t.x1, t.y1) + 1, u));
     v3fRib(out, E, p0, p1, .7, [col[0], col[1], col[2], 0], [col[0], col[1], col[2], .95 * a]);
+  }
+  // —— 玩家亲自开的飞机的航炮（fpwpn.js）：每发弹这一步走过的一段画成曳光，刚开火时炮口一团焰 ——
+  if (typeof fwBul === 'function') {
+    for (const b of fwBul()) v3fRib(out, E, b.q, b.p, .45, [V3F_COL.amber[0], V3F_COL.amber[1], V3F_COL.amber[2], 0], V3F_COL.amber);
+    if (typeof V3FP === 'object' && V3FP.gunMz && performance.now() - (V3FP.gunT || 0) < 70) v3fSpark(out, C, V3FP.gunMz, 2.4, V3F_COL.amber);
   }
   // —— 坦克炮、机关炮、喷火 ——
   for (const s of S.vshots || []) {
@@ -344,7 +349,11 @@ function v3Fx(C) {
   if (S.eair) for (const p of S.eair.proj || []) {
     if (p.t < 0 || p.done || (!spec && !inVision(p.tx, p.ty) && !inVision(p.x0, p.y0)) || !inB(p.tx, p.ty, 100)) continue;
     const za = v3AltZ(p.x0, p.y0, .25 * V3_AIR, -2.6, 1.5), zb = g(p.tx, p.ty) + 1;   // 直升机悬停高度（view3d.js v3AirZ）
-    if (p.k === 'rk') {
+    if (p.k === 'bomb') {   // A-10C 的 JDAM：从攻击高度加速落下（没有发动机，不拖烟）
+      const zt = v3AltZ(p.x0, p.y0, .35 * V3_AIR, -2.6, 1.5), u = clamp(p.t / p.dur, 0, 1), f = v => v3fP(lerp(p.x0, p.tx, v), lerp(p.y0, p.ty, v), zb + (zt - zb) * (1 - v * v));
+      v3fTrail(out, E, f, Math.max(0, u - .08), u, 3, 1, [.35, .37, .34, .5]);
+      v3fSpark(out, C, f(u), 1.6, [.22, .24, .22, .95]);
+    } else if (p.k === 'rk') {
       const u = clamp(p.t / p.dur, 0, 1), f = v => v3fP(lerp(p.x0, p.tx, v), lerp(p.y0, p.ty, v), lerp(za, zb, v));
       v3fTrail(out, E, f, Math.max(0, u - .12), u, 3, 1.6, V3F_COL.e);
       v3fSpark(out, C, f(u), 2.4, V3F_COL.amber);
@@ -356,35 +365,28 @@ function v3Fx(C) {
   }
   // —— 飞机灯光：左翼尖红、右翼尖绿航行灯，垂尾顶上的白色防撞灯一闪一闪；歼击机起飞滑跑、刚离地爬升时尾喷口拖出加力火焰 ——
   if (typeof AIRD === 'object') {
-    const EA_K3 = { ga: ['a10', 18], heli: ['ah64', 16], uh60: ['uh60', 17], ch47: ['ch47', 20.8], sh60b: ['sh60b', 17], c17: ['c17', 30], ftr: ['f35', 17], ftrb: ['f35b', 17], mq9: ['mq9', 18], f22: ['f22', 18], b2: ['b2', 34], p8: ['p8', 26] };
-    const FTR = { j35: 1, j20: 1, j15: 1, j16: 1, j16d: 1, j50: 1, f35: 1, f22: 1, f35b: 1, j15t: 1 };
+    const EA_K3 = { ga: ['a10', 18], heli: ['ah64', 16], uh60: ['uh60', 17], c17: ['c17', 30], ftr: ['f35', 17], ftrb: ['f35b', 17], mq9: ['mq9', 18], f22: ['f22', 18], b2: ['b2', 34], p8: ['p8', 26] };
+    const FTR = { j35: 1, j20: 1, j15: 1, j16: 1, j16b: 1, j16d: 1, j50: 1, f35: 1, f22: 1, f35b: 1, j15t: 1 };
     const lit = (o, key, sz, own, burn) => {
       const D = AIRD[key];
       if (!D || !D.wing || !inB(o.x, o.y, 220)) return;
-      // 玩家亲自开的：用和机体模型同一个插值后的位置与姿态（v3units.js plane 用 fpRS）——原来按推演位置、航向、坡度画，没有俯仰，
-      //   机头一抬尾焰、航行灯就跟机体错开（推演位置还比画面上的机体超前一步）
-      const rs = own && o.fl && o.fp && typeof fpRS === 'function' ? fpRS(o) : null;
-      const Lc = !rs && own && typeof v3dLaunch === 'function' ? v3dLaunch(o) : null;   // 刚离舰：下沉、抬头（v3det.js）
-      // 机场上的敌机（停机、滑行、滑跑）：机体按机轮着地画（v3units.js v3GroundPlane），这里也按机轮着地点、绕它抬头——原来按「地面 + 1.9」当机身中线，
-      //   不同机型中线高低不一样，滑跑开加力时尾焰比喷口低半米到一米
-      const gnd = !own && !rs && (o.ph === 'gnd' || o.ph === 'roll'), k = sz / 21, ox = rs ? rs.x : o.x, oy = rs ? rs.y : o.y;
-      const z = rs ? rs.z : gnd ? g(o.x, o.y) : v3AirZ(o) + (Lc ? Lc.dz : 0), h = rs ? rs.heading : o.heading || 0, r = rs || !gnd ? (rs ? rs.roll : o.bank || 0) : 0;
-      let pt = rs ? rs.pitch : gnd ? (o.ph === 'roll' && typeof eaVlof === 'function' ? V3_ROT * sm01(((o.spd || 0) / eaVlof(o) - .83) / .17) : 0) : typeof v3dPitchOf === 'function' ? v3dPitchOf(o, own ? 0 : 1) : Lc ? Lc.pitch : 0;
-      if (!own && !gnd && o.toT != null) { const tu = S.t - o.toT; if (tu >= 0 && tu < 3) pt = Math.max(pt, V3_ROT * (1 - sm01((tu - 1.5) / 1.5))); }   // 刚离地头 1.5 秒保持抬起的机头（与 v3units.js plane 一样）
-      const zg = gnd && typeof v3gPlaneZc === 'function' ? v3gPlaneZc(key, sz) : 0;   // 着地画法：机身中线在机轮着地点上方多高
-      // 机体坐标（前、左、上）→ GL：先滚转、再俯仰、再航向，和画机体（v3g.js）、喷口（v3det.js v3dBurner）同一个顺序
-      const R = typeof v3dMul === 'function' ? v3dMul(v3dMul(v3dRz(-h), v3dRy(pt)), v3dRx(r)) : [Math.cos(h), Math.sin(h), 0, -Math.sin(h), Math.cos(h), 0, 0, 0, 1];
-      const Wp = (u, v, w) => { u *= k; v *= k; w = w * k + zg; return [ox + R[0] * u + R[1] * v + R[2] * w, -oy + R[3] * u + R[4] * v + R[5] * w, z + R[6] * u + R[7] * v + R[8] * w]; };
+      const Lc = own && typeof v3dLaunch === 'function' ? v3dLaunch(o) : null;   // 刚离舰：下沉、抬头（v3det.js）
+      const fp = own && o.fl && o.fp && typeof fpRS === 'function' ? fpRS(o) : null;   // 玩家亲自开的：位置、姿态按物理引擎插值后的（和画出来的飞机对得上）
+      const k = sz / 21, gnd = o.ph === 'gnd' || o.ph === 'roll' || o.phase === 'roll' && !o.kind, z = fp ? fp.z : (gnd ? g(o.x, o.y) + 1.9 * k : v3AirZ(o)) + (Lc ? Lc.dz : 0), h = fp ? fp.heading : o.heading || 0, r = fp ? fp.roll : o.bank || 0;
+      if (fp) o = { ...o, x: fp.x, y: fp.y };
+      const ch = Math.cos(h), sh = Math.sin(h), cr = Math.cos(r), sr = Math.sin(r);
+      const Wp = (u, v, w) => { const y = v * cr - w * sr, zz = v * sr + w * cr; return v3fP(o.x + (u * ch + y * sh) * k, o.y + (u * sh - y * ch) * k, z + zz * k); };
       const tip = D.wing.reduce((m, q) => q[1] > m[1] ? q : m, D.wing[0]), tu = tip[0] - .6;
-      const dE = Math.hypot(ox - C.E[0], -oy - C.E[1], z - C.E[2]), lr = Math.min(1.1 * k + .5, .012 * dE + .12);   // 灯的光晕：远处照旧，凑近时按视距缩小（不然近看是两三米的光球）
+      const dE = Math.hypot(o.x - C.E[0], -o.y - C.E[1], z - C.E[2]), lr = Math.min(1.1 * k + .5, .006 * dE + .07);   // 灯的光晕：远处照旧，凑近时按视距缩小（不然近看是一两米的光球，追尾镜头里像两只灯笼）
       v3fSpark(out, C, Wp(tu, tip[1], 0), lr, [1, .25, .2, .95]);   // 左翼尖红灯
       v3fSpark(out, C, Wp(tu, -tip[1], 0), lr, [.3, 1, .45, .95]);   // 右翼尖绿灯
       const tail = D.stab ? D.stab.reduce((m, q) => Math.min(m, q[0]), 0) : (D.body ? D.body[D.body.length - 1][0] : -9);
-      if (((S.t * .8 + o.id * .37) % 1) < .07) v3fSpark(out, C, Wp(tail + 1, 0, 2.6), Math.min(2.4 * k + 1, .02 * dE + .2), [1, 1, 1, 1]);   // 防撞灯
+      if (((S.t * .8 + o.id * .37) % 1) < .07) v3fSpark(out, C, Wp(tail + 1, 0, 2.6), Math.min(2.4 * k + 1, .01 * dE + .1), [1, 1, 1, 1]);   // 防撞灯
       if (FTR[key] && typeof v3dBurner === 'function') {   // 喷口发热、加力尾焰（v3det.js）：按每个喷口，随机身俯仰、滚转；加力开关时火舌平滑地长出、缩回
-        const Eg = v3dEng((own ? 'p' : 'e') + o.id, burn ? 1 : .65, burn ? 1 : 0);
-        v3dBurner(out, C, o, key, sz, { x: ox, y: oy, z, h, pt, rl: r, ground: gnd }, Eg);
-      } else if (typeof v3dExhaust === 'function') v3dExhaust(key, sz, { x: ox, y: oy, z: z + zg, h, pt, rl: r }, gnd ? .6 : 1);   // 其余发动机：排气口后的热浪
+        const F2 = fp && o.fl, Eg = F2 ? v3dEng('p' + o.id, (o.fuel ?? 1) > 0 ? .3 + .7 * (typeof V3FP === 'object' ? V3FP.thr : .85) : 0, F2.ab ? 1 : 0)   // 玩家开的：按油门（慢车 .3 → 最大 1）、加力开关
+          : v3dEng((own ? 'p' : 'e') + o.id, burn ? 1 : .65, burn ? 1 : 0);
+        v3dBurner(out, C, o, key, sz, { x: o.x, y: o.y, z, h, pt: fp ? fp.pitch : typeof v3dPitchOf === 'function' ? v3dPitchOf(o, own ? 0 : 1) : Lc ? Lc.pitch : 0, rl: r }, Eg);
+      } else if (typeof v3dExhaust === 'function') v3dExhaust(key, sz, { x: o.x, y: o.y, z, h, rl: r }, gnd ? .6 : 1);   // 其余发动机：排气口后的热浪
     };
     for (const p of S.planes || []) if (!p.dead && isFinite(p.x) && !(p.phase === 'cat' || p.phase === 'trap' || (p.phase === 'roll' && !p.afPh && !p.land))) {   // 甲板上的由航母那边画
       const key = typeof airSilKey === 'function' ? airSilKey(p.kind, p.v) : null;
@@ -403,7 +405,7 @@ function v3Fx(C) {
   if (typeof a82Fx === 'function') a82Fx(out, sm, C, inB, seen);   // 82 空降师：标枪的烟迹与尾焰、CH-47F 旋翼下洗的尘土（v3a82.js）
   if (typeof fpFx === 'function') fpFx(out, sm, C);   // 亲自驾驶：翼尖涡流、机翼水汽、迎面的风线（v3pilot.js）
   if (typeof v3dHaze === 'function') v3dHaze(C);   // 喷口后的热浪（v3det.js）：在加法特效之前，扭的是火焰后面的画面
-  if (typeof v3ntLamps === 'function') v3ntLamps(out, C);   // 夜里：车灯、尾灯、舰艇航行灯、直升机防撞灯（v3nite.js）
+  if (typeof v3jDraw === 'function') v3jDraw(C);   // 喷口内部（不透明）、加力尾焰（加法）
   if (!out.length && !sm.length) return;
   // —— 画：先画遮挡的烟（预乘透明度的普通混合），再画发光（加法混合）；都测深度、不写深度 ——
   const A = V3F.a;

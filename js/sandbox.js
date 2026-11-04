@@ -386,12 +386,13 @@ function sbxTry(id, x, y, r, extra) {
 }
 function sbxLineTry(id, x0, y0, x1, y1) { const r = sbxPlace(id, x0, y0, x1, y1); return r.ok ? r.it : null; }
 // 预备队、机动车辆的隐蔽集结位置：(x, y) 附近 r 以内的林地、城镇、丘陵（隐蔽伪装，conceal.js），离已放的东西 22 以上；找不到就用原位置
-function sbxCoverAt(x, y, r = 90) {
+// gap：离已经摆下的东西至少多远（车辆按条令车间距 50 米以上传 55，原来一律 22 米，反击群的车挤在同一片林子里）
+function sbxCoverAt(x, y, r = 90, gap = 22) {
   let best = null, bs = -Infinity;
   for (let k = 0; k < 60; k++) {
     const a = k * 2.4, d = 6 + k * r / 60, px = clamp(x + Math.cos(a) * d, 20, W - 20), py = clamp(y + Math.sin(a) * d, 20, H - 20);
     if (!isLand(px, py) || !passInf(px, py) || coverAt(px, py) > .65 || coastAt(px) - py < 120) continue;
-    if (S.sbx.items.some(it => it.x != null && dist(it.x, it.y, px, py) < 22)) continue;
+    if (S.sbx.items.some(it => it.x != null && dist(it.x, it.y, px, py) < gap)) continue;
     const s = -coverAt(px, py) * 2 - d / r;
     if (s > bs) { bs = s; best = { x: px, y: py }; }
   }
@@ -744,7 +745,7 @@ function sbxDefStyle(style, R0) {
   const near = (p, i, r = 70) => ({ x: p.x + Math.cos(i * 2.1) * r, y: p.y - 40 - Math.abs(Math.sin(i * 2.1)) * r });
   if (style === 'bal') {   // 机动反击群：坦克、步兵战车、步兵排、反坦克车、防空车按比例编配，分在两三个枢纽
     const ids = sbxVehOk() ? ['e_tank', 'e_apc', 'e_reserve', 'e_td', 'e_tank', 'e_assault', 'e_sam_veh', 'e_hv_tank', 'e_apc', 'e_reserve', 'e_aa_veh'] : ['e_reserve', 'e_assault', 'e_car', 'e_reserve', 'e_at'];
-    const n = sbxLoop(ids, (id, i) => { const p0 = near(hubs[i % hubs.length], i, 80), p = sbxCoverAt(p0.x, p0.y); return sbxTry(id, p.x, p.y, 40); }, 24, 80);
+    const n = sbxLoop(ids, (id, i) => { const vh = !/reserve|assault|garrison|wave/.test(id), p0 = near(hubs[i % hubs.length], i, vh ? 110 : 80), p = sbxCoverAt(p0.x, p0.y, vh ? 140 : 90, vh ? 55 : 28); return sbxTry(id, p.x, p.y, 40); }, 24, 80);   // 车辆各找一处隐蔽、彼此隔 55 米以上
     say(`机动反击群（${sbxCnt(n)}）分别在${hubs.map(p => p.name).join('、')}附近的林地、村镇里隐蔽集结，熄火伪装、不暴露：判明敌主攻方向后成建制向滩头出口反突击，趁敌坦克、补给还没上岸把登陆场压回海里。`, hubs[0]);
   } else if (style === 'armor' && sbxVehOk()) {
     const n = sbxLoop(['e_hv_tank', 'e_tank', 'e_td', 'e_apc', 'e_tank', 'e_sam_veh', 'e_hv_tank', 'e_aa_veh', 'e_recon'], (id, i) => { const p = near(hubs[i % hubs.length], i); return sbxTry(id, p.x, p.y, 60); }, 22, 80);
@@ -776,7 +777,7 @@ function sbxAIDefend(style = 'bal') {
   if (DS.share) sbxDefStyle(style, R0);
   // 余款不留：补步兵排、坦克、守备排（放在枢纽附近，作预备队）
   const hubs = (R0.cands || [R0.hub]).filter(Boolean).slice(0, 3);
-  if (hubs.length) sbxLoop(sbxVehOk() ? ['e_reserve', 'e_tank', 'e_garrison', 'e_apc'] : ['e_reserve', 'e_garrison'], (id, i) => { const h = hubs[i % hubs.length], p = sbxCoverAt(h.x + Math.cos(i * 1.7) * 60, h.y - 50 - Math.abs(Math.sin(i * 1.7)) * 60); return sbxTry(id, p.x, p.y, 40); }, 14, 60);
+  if (hubs.length) sbxLoop(sbxVehOk() ? ['e_reserve', 'e_tank', 'e_garrison', 'e_apc'] : ['e_reserve', 'e_garrison'], (id, i) => { const h = hubs[i % hubs.length], vh = id === 'e_tank' || id === 'e_apc', p = sbxCoverAt(h.x + Math.cos(i * 1.7) * 60, h.y - 50 - Math.abs(Math.sin(i * 1.7)) * 60, vh ? 140 : 90, vh ? 55 : 28); return sbxTry(id, p.x, p.y, 40); }, 14, 60);
   if (TER.flat && !S.lv) sbxFlatDefend();
   (S.sbx.aiSty || (S.sbx.aiSty = {})).e = style;   // 指挥体系（hq.js）按部署方案定战术
   sbxSync();
@@ -1196,12 +1197,13 @@ function sbxFireShips(dt) {
       // 分区射击（support.js navWeight）：优先本舰责任区，别的舰 6 秒内打过的不重复打，告急区可转火支援
       if (typeof navHotUpdate === 'function') navHotUpdate();
       const nw = (x, y) => typeof navWeight === 'function' ? navWeight(s, x, y) : 1;
-      let t = null, bd = DD_R;
+      let t = (typeof navArmorTarget === 'function' ? navArmorTarget(s) : null) || (typeof navLandTarget === 'function' && navLandTarget(s, false)) || null, bd = t ? 0 : DD_R;   // 正朝我军开火的敌车辆先打，其次第一波抢滩各出口附近已发现的火力点（support.js）
       for (const e of S.enemies) if (!e.dead && (inVision(e.x, e.y) || e.kx != null)) {
         const w = nw(e.x, e.y), d = dist(s.x, s.y, e.x, e.y) * (e.kind === 'coastal' || e.kind === 'bunker' ? .7 : 1);
         if (w && d / w < bd && d < DD_R && sbxSafe(e.x, e.y, 45)) { bd = d / w; t = e; }
       }
       if (!t) { const q = sbxNearFoe(s.x, s.y, DD_R, 0); if (q && sbxSafe(q.x, q.y, 45) && nw(q.x, q.y)) t = q; }
+      if (!t && typeof navLandTarget === 'function') t = navLandTarget(s, true);   // 什么目标都没有：压制第一波要冲的出口
       st.cd = t ? 5 / (s.sbxCls.rof || 1) : 1.5;
       if (!t) continue;
       const dT = dist(s.x, s.y, t.x, t.y), sc = ddSc(dT);

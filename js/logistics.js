@@ -158,27 +158,46 @@ function updatePoints(dt) {
 // 黑夜（S.night，沙盒「黑夜」）：步兵（夜视仪）与工事里的人眼视野缩到六成；车辆热像（vehicles.js）、舰艇、飞机、雷达、远距离热像发现（spot.js）照旧
 const NIGHT_EYE = .6;
 let VIS_GEN = 0;   // 视野版本：每算一次加一（matrix.js fogBytes 据此决定要不要重算画面用的视野图）
-function updateVision() {
+// 守方视野的视野源；half 'a' 只取视高 .35 的（步兵小组等），'b' 取其余的，不给就是全部（各组内的先后顺序与全部时相同）
+function visSrcE(half) {
+  const es = [], a = half !== 'b', b = half !== 'a', nk = S.night ? NIGHT_EYE : 1;
+  if (a) for (const q of S.teams) if (q.side === 'e') es.push({ x: q.x, y: q.y, r: 160 * nk });
+  if (b) {
+    for (const e of S.enemies) if (!e.dead) es.push({ x: e.x, y: e.y, r: e.kind === 'coastal' ? 220 : (e.kind === 'bunker' ? 170 : 90) * nk, h: e.kind === 'coastal' ? 1.2 : .6 });   // 岸防炮靠雷达，夜里照旧
+    if (typeof armorVisionSources === 'function') es.push(...armorVisionSources());
+  }
+  for (const s of hookSources('visionE')) if ((s.h || .35) === .35 ? a : b) es.push(s);
+  return es;
+}
+// 双方视野每 0.25 秒一次，分两步算（step 里 part 'a'、'b'）：'a' 算攻方视野、守方视野的前一半（视高 .35 的源），点进后台缓冲 EVB；
+//   下一步 'b' 点亮守方其余的源、把 EVB 整张换上。castVision 只在视高相同的源之间去重，按视高拆开点亮的格与一次算完完全相同；
+//   一次算完双方要六七毫秒，和别的事挤在一起就掉帧，拆成两步各三毫秒多。不给 part（开局、读档、沙盒）一次算完
+let EVB = null, EVB_S = null;
+function updateVision(part) {
   smokeMask();
-  const ps = [], nk = S.night ? NIGHT_EYE : 1;
-  for (const q of S.teams) if (q.side === 'p' && q.men.includes('radio')) ps.push({ x: q.x, y: q.y, r: 150 * nk });
-  for (const s of S.ships) if (alive(s)) ps.push({ x: s.x, y: s.y, r: s.state === 'beached' ? 60 : 80, h: .8 });
-  if (S.dd.state !== 'sunk') ps.push({ x: S.dd.x, y: S.dd.y, r: 70, h: 1 });
-  if (typeof carrierVision === 'function') ps.push(...carrierVision());
-  for (const p of S.planes) ps.push({ x: p.x, y: p.y, r: 110, h: 12 });
-  S.recon = S.recon.filter(p => p.until > S.t);
-  for (const p of S.recon) ps.push({ x: p.x, y: p.y, r: p.r || 100, h: p.h || 12 });   // 侦察机的侧视传感器（carrier.js ARC）看得更宽、更高
-  ps.push(...hookSources('visionP'));
-  castVision(PV, ps);
-  const es = [];
-  for (const q of S.teams) if (q.side === 'e') es.push({ x: q.x, y: q.y, r: 160 * nk });
-  for (const e of S.enemies) if (!e.dead) es.push({ x: e.x, y: e.y, r: e.kind === 'coastal' ? 220 : (e.kind === 'bunker' ? 170 : 90) * nk, h: e.kind === 'coastal' ? 1.2 : .6 });   // 岸防炮靠雷达，夜里照旧
-  if (typeof armorVisionSources === 'function') es.push(...armorVisionSources());
-  es.push(...hookSources('visionE'));
-  castVision(EV, es);
-  if (typeof cvlApply === 'function') cvlApply();   // 伪装隐蔽：没被近处发现的隐蔽小组从对方视野里抹掉（conceal.js）
-  if (typeof vehDlMark === 'function') vehDlMark();   // 数据链：记下此刻看得见的对方车辆（vehicles.js vehSees）
+  if (part !== 'b') {
+    const ps = [], nk = S.night ? NIGHT_EYE : 1;
+    for (const q of S.teams) if (q.side === 'p' && q.men.includes('radio')) ps.push({ x: q.x, y: q.y, r: 150 * nk });
+    for (const s of S.ships) if (alive(s)) ps.push({ x: s.x, y: s.y, r: s.state === 'beached' ? 60 : 80, h: .8 });
+    if (S.dd.state !== 'sunk') ps.push({ x: S.dd.x, y: S.dd.y, r: 70, h: 1 });
+    if (typeof carrierVision === 'function') ps.push(...carrierVision());
+    for (const p of S.planes) ps.push({ x: p.x, y: p.y, r: 110, h: 12 });
+    S.recon = S.recon.filter(p => p.until > S.t);
+    for (const p of S.recon) ps.push({ x: p.x, y: p.y, r: p.r || 100, h: p.h || 12 });   // 侦察机的侧视传感器（carrier.js ARC）看得更宽、更高
+    ps.push(...hookSources('visionP'));
+    castVision(PV, ps);
+  }
+  if (!part) castVision(EV, visSrcE());
+  else {
+    if (!EVB || EVB.length !== EV.length) { EVB = new Uint8Array(EV.length); EVB_S = null; }
+    if (part === 'a' || EVB_S !== S) castVision(EVB, visSrcE('a'));   // 'b' 前面没有 'a'（读档、换局）：前一半补上
+    EVB_S = S;
+    if (part === 'b') { castVision(EVB, visSrcE('b'), true); const t = EV; EV = EVB; EVB = t; EVB_S = null; }
+  }
+  if (typeof cvlApply === 'function') cvlApply(part);   // 伪装隐蔽：没被近处发现的隐蔽小组从对方视野里抹掉（conceal.js）
+  if (typeof vehDlMark === 'function') vehDlMark(part);   // 数据链：记下此刻看得见的对方车辆（vehicles.js vehSees）
   VIS_GEN++;
+  if (part === 'b') return;
   // 情报记忆：看到过的火力点与工事留下标定；回头再看已空则撤销
   let forts = false;
   for (const e of S.enemies) {
@@ -227,7 +246,8 @@ function step(dt) {
   S.t += dt;
   FBUDGET = PGN > BIG_PG || MAP_K > 2 ? 1 : MAP_K > 1.2 ? 2 : 3;   // 大地图（默认 8400 × 5600、海岛）整图流场贵：每步最多重算一个
   indexUnits();
-  if ((S.visT = (S.visT ?? 0) - dt) <= 0) { S.visT = .25; updateVision(); }
+  if ((S.visT = (S.visT ?? 0) - dt) <= 0) { S.visT = .25; S.visB = 1; updateVision('a'); }
+  else if (S.visB) { S.visB = 0; updateVision('b'); }   // 守方视野的后一半（见 updateVision）
   updateShips(dt); updateDD(dt); updateTeams(dt); indexUnits(); updateUnits(dt);
   if (typeof updateAutopilot === 'function') updateAutopilot(dt);
   updateEnemies(dt); aiUpdate(dt);

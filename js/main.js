@@ -59,7 +59,7 @@ function frame(now) {
   }
   camKeys(dt);
   if (S.phase === 'battle' && !S.paused && !S.over && S.briefed) {
-    acc += dt * S.speed;
+    acc += dt * (typeof V3FP === 'object' && V3FP.on && V3FP.k === 'air' ? 1 : S.speed);   // 亲自开飞机时按真实时间推演：快进时飞机的动态跟着变快，根本没法操纵（v3pilot.js）
     let n = 0;
     // 这一帧按正常节奏（含快进倍数）该推的步数照推；卡了一下之后积压的补算才受时间预算限制——超过约 7 毫秒就留到下一帧
     //   （原来一卡就连补八步，下一帧又被拖慢，一顿接一顿）；积压最多留四步，再多就不追了

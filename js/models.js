@@ -70,7 +70,7 @@ const RLE = {
   // M1A1 / M1A2：TUSK 的 ARAT，裙板前段左右各 2 排 × 16 块（块号 = 边 × 32 + 排 × 16 + 列，和 3D 模型 v3g.js V3G_ERA 拆出来的块一一对应）
   m1a1: { h: [1, -1].map(sd => ({ sd, x0: -2.16, x1: 3.05, n: 16, nz: 2, z: [.39, .76] })) }
 };
-RLE.m1a2 = RLE.m1a1;
+// M1A2 SEPv3：标准配置不挂 TUSK，裙板上没有 ARAT（3D 模型上也没有）——不再借用 M1A1 那套反应装甲
 // 一个部位（'h' 车体 / 't' 炮塔）的块，按块号排：{ P 四个角, c 中心, f 块面朝向, z 高度范围, r 大小 }（B：车宽，裙板用）
 const RLE_B = new Map();
 function rlEraBlocks(M, part) {

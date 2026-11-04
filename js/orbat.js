@@ -23,11 +23,12 @@ const bgRecs = G => G.rec.map(id => S.teams.find(q => q.id === id)).filter(q => 
 // 战斗群在画面上的位置：成员（各组、各车）实际所在处。锚点 ax/ay 只是队形的虚拟基准——行军时跑在前面、据点易手时直接跳过去，
 //   番号牌、营标、「查看」定位按锚点画会跟部队对不上。取兵力最集中的那一片：每个成员数 150 米内的兵力，最多的（并列取离全体重心近的）
 //   为中心，再取它 250 米内成员的平均——营、连散成两三片时牌子立在主力那一片上，不落在几片中间的空地上，掉队的也不把牌子拉走；
-//   同一时刻（且 60ms 内）只算一次；还没有成员上岸（在海上）时用锚点，n = 0（番号牌不画，thpanel.js）
+//   同一推演时刻只算一次（布兵阶段推演时间不走、玩家在挪部队：再加 60ms 刷新）；还没有成员上岸（在海上）时用锚点，n = 0（番号牌不画，thpanel.js）。
+//   对局中不按真实时间失效：战区司令（theater.js）也用它，原来一步算得慢（超过 60ms）就在同一步里重算，机器快慢会让推演结局不同
 const BGAT = { S: null, t: -1, at: 0, m: new Map() };
 function bgAt(G) {
   const now = Date.now();
-  if (BGAT.S !== S || BGAT.t !== S.t || now - BGAT.at > 60) { BGAT.S = S; BGAT.t = S.t; BGAT.at = now; BGAT.m.clear(); }
+  if (BGAT.S !== S || BGAT.t !== S.t || (S.phase !== 'battle' && now - BGAT.at > 60)) { BGAT.S = S; BGAT.t = S.t; BGAT.at = now; BGAT.m.clear(); }
   let c = BGAT.m.get(G.id);
   if (c) return c;
   const P = [];   // [x, y, 兵力]
@@ -84,7 +85,8 @@ function bgSlots(G, mode) {
   const vcls = G.side === 'e' ? 'vehe' : 'veh';
   const snap = (sx, sy) => bgSnap(G, sx, sy, vcls);
   const row = (list, x, w) => list.forEach((v, i) => { const [sx, sy] = snap(...at(x, list.length > 1 ? (i / (list.length - 1) - .5) * w : 0)); out.push({ m: v, k: 'v', x: sx, y: sy }); });
-  row(tk, march ? 70 : 55, Math.max(wid, tk.length * 26));
+  if (march) tk.forEach((v, i) => { const [sx, sy] = snap(...at(70 - i * 30, i % 2 ? 10 : -10)); out.push({ m: v, k: 'v', x: sx, y: sy }); });   // 行军：坦克成纵队，前后约 45 米（纵向放大 1.5 倍）、左右稍错开
+  else row(tk, 55, Math.max(wid, tk.length * 65));   // 展开：车间距 65 米（条令 50–100 米）——原来 26 米，行军时还压到四成五，并排挤在一起
   row(ifv, -28, wid * .8);
   td.forEach((v, i) => { const [sx, sy] = snap(...at(15, (i % 2 ? 1 : -1) * (wid / 2 + 40 + Math.floor(i / 2) * 25))); out.push({ m: v, k: 'v', x: sx, y: sy }); });
   row(aa, -90, Math.min(120, aa.length * 30));

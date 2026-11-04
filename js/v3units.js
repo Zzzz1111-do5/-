@@ -975,7 +975,7 @@ function v3GroundPlane(key, sz, x, y, ground, hd, fold, cpo, still, side, t, sf,
   if (typeof v3gPlane === 'function') v3gPlane(key, sz, x, y, ground, true, hd, side === 4 || side === 1 ? 1 : 0, 0, pt, true, still ? 0 : t, 0, sf, bay, fold);   // sf：挂上弹射杆后的舵面检查（v3det.js v3dDeckSurf）；fold：外翼折起（有折翼的模型，v3g.js V3G_FOLD）
 }
 // 登陆舰艇的外部精细模型（v3utex.js V3U_SHIP）：舰名前缀 → [模型, 画多长（世界单位）]——LC 726 型气垫艇、LA 271 型登陆艇、LV 人员登陆艇；
-//   其余舰型（072A、074A、073A、072、扫雷舰、火力支援艇）没有合规的免费模型，照旧画自带模型
+//   其余舰型（072A、074A、073A、072、火箭 / 火力支援艇、扫雷舰）没有合规的免费模型，照真舰程序建模（v3lst.js V3L_PRE）
 const V3_SHIPX = { LC: ['lcac', 30], LA: ['lcu', 32], LV: ['lcvp', 14] };
 // 登机梯（机型单位，按飞机比例缩放）：梯脚在原点，斜靠向机身（局部 +x）
 function v3mLadder() {
@@ -1086,7 +1086,14 @@ function v3mCollect(C, box) {
       if (typeof v3uShip === 'function' && v3uShip(c, P.x, P.y, -2.6, P.h, Ld, 0)) continue;
       const [mk, mb] = v3mDDK(c); v3mAdd(mk, mb, P.x, P.y, -2.6, P.h, P.k, 0); continue;
     }
-    const X = V3_SHIPX[String(sh.label || '').split('-')[0]], zx = X && sh.hover ? Math.max(-2.6, v3Ht(P.x, P.y)) : -2.6;   // 气垫艇冲上滩头时贴着地面
+    const pre = String(sh.label || '').split('-')[0], X = V3_SHIPX[pre], zx = X && sh.hover ? Math.max(-2.6, v3Ht(P.x, P.y)) : -2.6;   // 气垫艇冲上滩头时贴着地面
+    const Q = !X && typeof V3L_PRE === 'object' && V3L_PRE[pre];   // 登陆舰、火力支援艇、扫雷舰（v3lst.js：按真舰以米建模，这里按游戏长度缩放）
+    if (Q) {
+      const [v, f] = Q, len = d[0] * f * P.k, off = (d[0] * P.k - len) / 2, c = Math.cos(P.h), s = Math.sin(P.h), k = len / V3L_DIM[v][0], F = V3L_FUN[v];
+      v3mAdd('sh:l:' + v, () => v3mLST(v), P.x + c * off, P.y + s * off, -2.6, P.h, k, 0);
+      if (typeof v3dFunnel === 'function') v3dFunnel(P.x + c * off, P.y + s * off, P.h, len, F[0], -2.6 + F[1] * k, .6);
+      continue;
+    }
     if (!(X && typeof v3uShip === 'function' && v3uShip(X[0], P.x, P.y, zx, P.h, X[1] * P.k, 0))) v3mAdd('sh:' + sh.kind, () => v3mShip(sh.kind, d[0], d[1]), P.x, P.y, -2.6, P.h, P.k, 0);
     if (typeof v3dFunnel === 'function') v3dFunnel(P.x, P.y, P.h, (X ? X[1] : d[0]) * P.k, sh.kind === 'assault' ? -.4 : -.25, -2.6 + d[1] * .55, X && X[0] === 'lcac' ? 1.2 : .6);   // 柴油机排气（气垫艇是四台燃气轮机，热浪大）
   }
@@ -1271,7 +1278,6 @@ function v3mCollect(C, box) {
   }
   // 飞机：高度与 3D 地图里的标识一致（view3d.js v3AirZ：甲板上贴着甲板，空中按高度），按滚转角倾斜；直升机主旋翼转动
   const plane = (o, hd, sd, key, sz, bank) => {
-    if (typeof V3FP === 'object' && V3FP.on && V3FP.o === o && V3FP.vw === 'cock' && !(typeof fpPitOn === 'function' && fpPitOn(o))) return;   // 座舱视角：模型没有座舱内饰时不画自己（平面座舱，v3pilot.js）；有内饰就照画，镜头坐在模型座舱里
     const L = !sd && typeof v3dLaunch === 'function' ? v3dLaunch(o) : null;   // 刚离舰：下沉、抬头，起落架过一会儿才收（v3det.js）
     const rs = o.fl && o.fp && typeof fpRS === 'function' ? fpRS(o) : null;   // 玩家开的：推演两步之间插值（不插值一顿一顿地抖）
     const x = rs ? rs.x : o.x, y = rs ? rs.y : o.y, z = rs ? rs.z : v3AirZ(o) + (L ? L.dz : 0);
@@ -1279,10 +1285,11 @@ function v3mCollect(C, box) {
     let pt = rs ? rs.pitch : o.fl && o.fp ? o.pt3 || 0 : typeof V3G_HELI === 'object' && V3G_HELI[key] ? 0 : typeof v3dPitch === 'function' ? v3dPitch(o, sd, z, L, key) : L ? L.pitch : 0;   // 玩家亲自开：机身俯仰就是物理引擎的   // 仰角跟着航迹 + 迎角（js/aero.js；直升机不按航迹抬头）
     const tu = sd && o.toT != null ? S.t - o.toT : -1;   // 机场起飞刚离地（eair.js eaRoll 记的离地时刻）：头 1.5 秒保持滑跑末段抬起的机头，起落架过几秒再收
     if (tu >= 0 && tu < 3) pt = Math.max(pt, V3_ROT * (1 - sm01((tu - 1.5) / 1.5)));
-    const gd = !!(L && L.gear) || (tu >= 0 && tu < (typeof EA_TO === 'object' ? EA_TO.gear : 4));
+    const gd = !!(L && L.gear) || (tu >= 0 && tu < (typeof EA_TO === 'object' ? EA_TO.gear : 4)) || !!(o.fl && o.fp && o.fl.gear > .5);   // 玩家开的：按起落架手柄（v3pilot.js G 键）
     const Pc = o.fl && o.fp ? { de: o.fl.d[0], da: o.fl.d[1] } : typeof V3D_PT === 'object' ? V3D_PT.get((sd ? 'e' : 'p') + o.id) : null;   // 舵面：玩家开的按电传算出的真实舵偏   // v3dPitch 按气动算好的舵面：平尾按迎角配平 + 俯仰角速度，左右差动按滚转角速度
     const bay = typeof fwBay === 'function' ? fwBay(o, sd ? 'e' : 'p') : null;   // 弹舱门开度（fpwpn.js：玩家开的按选中的武器，AI 的按发射时刻）
-    if (typeof v3gPlane === 'function' && v3gPlane(key, sz, x, y, z, false, hd || 0, sd, bank || 0, pt, gd, t, !sd && typeof fpNoz === 'function' ? fpNoz(o) : 0, Pc, bay) && !sd && typeof fwBayMsl === 'function') fwBayMsl(o, key, sz, x, y, z, hd || 0, pt, bank || 0, bay);   // 用户给的飞机模型（js/v3g.js）：起落架收放、直升机旋翼转、尾喷口开合、舵面偏转、弹舱门开合（开着时画舱里的弹）
+    const nz = !sd && typeof fpNoz === 'function' && typeof fpDriving === 'function' && fpDriving(o) ? fpNoz(o) : typeof v3dNozAI === 'function' ? v3dNozAI(o, sd) : 0;   // 尾喷口开合：玩家开的按油门，AI 的按它的发动机状态
+    if (typeof v3gPlane === 'function' && v3gPlane(key, sz, x, y, z, false, hd || 0, sd, bank || 0, pt, gd, t, nz, Pc, bay) && !sd && typeof fwBayMsl === 'function') fwBayMsl(o, key, sz, x, y, z, hd || 0, pt, bank || 0, bay);   // 用户给的飞机模型（js/v3g.js）：起落架收放、直升机旋翼转、尾喷口开合、舵面偏转、弹舱门开合（开着时画舱里的弹）
   };
   for (const p of S.planes || []) if (!p.dead && isFinite(p.x) && (inB(p.x, p.y, 220) || (typeof fpDriving === 'function' && fpDriving(p))) && !(!p.land && (p.phase === 'cat' || p.phase === 'roll' || p.phase === 'trap'))) {   // 甲板上的在航母那里画（放下起落架）
     const key = typeof airSilKey === 'function' ? airSilKey(p.kind, p.v) : 'j35', sz = (typeof airMdl === 'function' && airMdl(p.kind, p.v).size) || ((typeof AIR_SPEC === 'object' && AIR_SPEC[p.kind]) || {}).size || 15;
@@ -1376,6 +1383,7 @@ function v3mDraw(C, LM) {
   for (const k of ['p', 'n', 's', 'b']) gl.disableVertexAttribArray(A[k]);
   if (typeof v3uDraw === 'function') v3uDraw(C, LM);   // 带贴图的精细模型（v3utex.js）
   if (typeof v3gDraw === 'function') v3gDraw(C, LM);   // 用户给的模型（js/v3g.js）
+  if (typeof v3nzDraw === 'function') v3nzDraw(C, LM);   // 真实喷口模型（js/v3noz.js）
 }
 // 画一个网格的全部实例（data：每个实例 8 个数；gb：这一帧已传好的实例缓冲，有就直接绑上）；noLine：不画线（阴影那一遍、透明玻璃那一遍）
 function v3mDrawM(gl, m, data, n, noLine, gb) {

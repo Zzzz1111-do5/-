@@ -118,6 +118,7 @@ const MS_PGM = {
   ba7: { nm: '蓝箭-7 空地导弹', spd: 330, z: .3, dmg: 36, pen: 3.4, st: 7, icp: 0, pw: { men: .5, ship: 2, struct: 0, seg: false, R: 14, vb: 4, veh: true } },
   hj10: { nm: '红箭-10 反坦克导弹', spd: 300, z: .25, dmg: 50, pen: 4, st: 6, icp: 0, pw: { men: .45, ship: 1.5, struct: 0, seg: false, R: 12, vb: 3, veh: true } },
   cj10: { nm: '长剑-10 对陆巡航导弹', spd: 150, z: .08, dmg: 40, pen: 3.4, st: 22, icp: .5, pw: { men: .85, ship: 5, struct: 0, seg: true, R: 34, vb: 10, veh: true } },
+  kd20: { nm: '空地-20 空射巡航导弹', spd: 150, z: .08, dmg: 44, pen: 3.6, st: 24, icp: .5, pw: { men: .85, ship: 5, struct: 0, seg: true, R: 34, vb: 10, veh: true } },   // 轰-6K 翼下 6 枚（长剑-20 的空射型，约 500 公斤战斗部）：防区外打已知的工事、阵地，贴地飞，能被拦截
   yj18: { nm: '鹰击-18A 导弹', spd: 180, sprint: 620, sr: 260, z: .06, dmg: 44, pen: 3.8, st: 24, icp: .22, pw: { men: .85, ship: 6, struct: 0, seg: true, R: 32, vb: 10, veh: true } },
   yj21: { nm: '鹰击-21 高超音速导弹', spd: 900, z: .9, dmg: 60, pen: 4, st: 40, icp: .06, pw: { men: .95, ship: 8, struct: 0, seg: true, R: 42, vb: 14, veh: true } },
   gbu53: { nm: 'GBU-53/B 风暴破坏者小直径炸弹', spd: 200, z: .5, dmg: 40, pen: 3.6, st: 12, icp: .3, pw: { men: .6, ship: 2.5, struct: 0, seg: false, R: 16, vb: 5, veh: true } },   // F-35A 内埋 4 枚：三模导引头，防区外打活动车辆
@@ -145,6 +146,7 @@ function msPgmTgt(t) {
 function msPgm(w, side, x0, y0, T, src, delay = 0) {
   const W0 = MS_PGM[w];
   if (!W0) return null;
+  if (w === 'ld10' && T.k && T.id != null && typeof ewArm === 'function') { const o = msPgmTgt({ k: T.k, id: T.id }); if (o) ewArm(o); }   // 反辐射弹盯上了：雷达可能关机规避（ew.js）
   return msLaunch('pgm', side, x0, y0, { x: T.x, y: T.y }, { tgt: T.k && T.id != null ? { k: T.k, id: T.id } : null, src, delay, dur: 60, w });
 }
 function msPgmFly(m, dt) {
@@ -161,6 +163,7 @@ function msPgmFly(m, dt) {
 }
 // 到达（m.tx、m.ty 是落点）：打敌舰按舰艇毁伤，其余小范围爆炸 + 对目标直接毁伤（fpwpn.js 玩家亲自打的也用这一套）
 function msPgmHit(m, T, W0) {
+  if (m.w === 'ld10' && T && T.emT > S.t && Math.random() < .6) T = null;   // 反辐射弹：目标雷达关机规避了（ew.js），只能打记忆位置
   if (m.tgt && m.tgt.k === 'eship') { if (T && dist(T.x, T.y, m.tx, m.ty) < 24 && typeof navyHit === 'function') navyHit(T, m); else S.fx.push({ kind: 'flash', x: m.tx, y: m.ty, r: 10, life: 0, max: .5, side: m.side }); msStat('pgmHit'); return; }
   impact(m.tx, m.ty, W0.pw, m.side);
   if (m.src === 'b2' && typeof b2Blast === 'function') b2Blast(m.tx, m.ty, m.w);   // B-2 的重磅炸弹：大范围冲击波压制（b2.js）
