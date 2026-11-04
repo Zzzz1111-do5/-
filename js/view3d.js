@@ -1256,6 +1256,17 @@ function v3Init() {
     //   不再有人回读 3D 画布，所以不保留绘制缓冲区（浏览器可以直接交换缓冲，不必每帧再拷一遍）
     const gl = cv.getContext('webgl', { antialias: true, preserveDrawingBuffer: false, alpha: false });
     if (!gl) return;
+    // 显卡上下文丢了（一帧画得太久被浏览器重置显卡，Mac 上常见）：原来什么都不说，画面就停在那一帧，像卡死——
+    //   提示刷新，同时把画质降到低、云量减半、气动特效减弱存进设置，刷新后不再那么重
+    cv.addEventListener('webglcontextlost', e => {
+      e.preventDefault();
+      if (V3.lost) return;
+      V3.lost = true;
+      try { if (typeof SETTINGS === 'object' && SETTINGS) { SETTINGS.quality = 'low'; SETTINGS.cloud = Math.min(+SETTINGS.cloud || 1, .5); SETTINGS.aero = Math.min(SETTINGS.aero ?? 1, .6); if (typeof saveSettings === 'function') saveSettings(); } } catch (er) { /* 存不了就算了 */ }
+      const m = '显卡被重置了（画面太重，浏览器把 3D 停了）：已把画质降到「低」、云量减半，刷新页面（F5）后继续';
+      if (typeof log === 'function') log(m, 'bad');
+      try { alert(m); } catch (er) { /* 没有弹窗 */ }
+    }, false);
     const st = typeof R === 'object' && R.cv && R.cv.parentNode;
     if (st) { cv.id = 'cv3'; cv.setAttribute('aria-hidden', 'true'); cv.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;display:none;pointer-events:none'; st.insertBefore(cv, R.cv); }
     const der = !!gl.getExtension('OES_standard_derivatives'), tlod = !!gl.getExtension('EXT_shader_texture_lod');   // 显式取级：海面反射、天空按自己算的清晰度级别取样（不靠硬件按坐标求导）
