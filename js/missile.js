@@ -124,10 +124,10 @@ const MS_PGM = {
   cj10: { nm: '长剑-10 对陆巡航导弹', spd: 150, z: .08, dmg: 40, pen: 3.4, st: 22, icp: .5, pw: { men: .85, ship: 5, struct: 0, seg: true, R: 34, vb: 10, veh: true } },
   kd20: { nm: '空地-20 空射巡航导弹', spd: 150, z: .08, dmg: 44, pen: 3.6, st: 24, icp: .5, pw: { men: .85, ship: 5, struct: 0, seg: true, R: 34, vb: 10, veh: true } },   // 轰-6K 翼下 6 枚（长剑-20 的空射型，约 500 公斤战斗部）：防区外打已知的工事、阵地，贴地飞，能被拦截
   yj18: { nm: '鹰击-18A 导弹', spd: 180, sprint: 620, sr: 260, z: .06, dmg: 44, pen: 3.8, st: 24, icp: .22, pw: { men: .85, ship: 6, struct: 0, seg: true, R: 32, vb: 10, veh: true } },
-  yj21: { nm: '鹰击-21 高超音速导弹', spd: 900, z: .9, dmg: 60, pen: 4, st: 40, icp: .06, pw: { men: .95, ship: 8, struct: 0, seg: true, R: 42, vb: 14, veh: true } },
+  yj21: { nm: '鹰击-21 高超音速导弹', spd: 900, z: .9, prof: 'ball', lzk: .35, hmax: 40000, dmg: 60, pen: 4, st: 40, icp: .06, pw: { men: .95, ship: 8, struct: 0, seg: true, R: 42, vb: 14, veh: true } },
   gbu53: { nm: 'GBU-53/B 风暴破坏者小直径炸弹', spd: 200, z: .5, dmg: 40, pen: 3.6, st: 12, icp: .3, pw: { men: .6, ship: 2.5, struct: 0, seg: false, R: 16, vb: 5, veh: true } },   // F-35A 内埋 4 枚：三模导引头，防区外打活动车辆
   agm65: { nm: 'AGM-65 小牛空地导弹', spd: 320, z: .3, dmg: 46, pen: 3.8, st: 10, icp: 0, pw: { men: .5, ship: 3, struct: 0, seg: false, R: 16, vb: 5, veh: true } },   // A-10C：防区外打车辆、舰艇
-  yj12: { nm: '鹰击-12 超音速反舰导弹', spd: 600, z: .2, dmg: 50, pen: 4, st: 30, icp: .1, pw: { men: .8, ship: 7, struct: 0, seg: true, R: 32, vb: 10, veh: true } },   // 轰-6K 挂载，末段 4 马赫掠海
+  yj12: { nm: '鹰击-12 超音速反舰导弹', spd: 600, z: .2, prof: 'hilo', hc: 15000, dn: 26000, dmg: 50, pen: 4, st: 30, icp: .1, pw: { men: .8, ship: 7, struct: 0, seg: true, R: 32, vb: 10, veh: true } },   // 轰-6K 挂载，末段 4 马赫掠海
   yj83k: { nm: '鹰击-83K 空舰导弹', spd: 260, z: .06, dmg: 36, pen: 3.6, st: 18, icp: .3, pw: { men: .6, ship: 4, struct: 0, seg: true, R: 22, vb: 6, veh: true } },   // 歼-35 / 歼-15 挂载，亚音速掠海
   ft8: { nm: '飞腾-8 小直径制导炸弹', spd: 200, z: .5, dmg: 40, pen: 3.6, st: 12, icp: .3, pw: { men: .6, ship: 2.5, struct: 0, seg: false, R: 16, vb: 5, veh: true } },   // 歼-35 内埋：约 100 公斤级，GPS/INS + 末端成像，能打运动中的车辆
   ld10: { nm: '雷电-10 反辐射导弹', spd: 420, z: .6, dmg: 34, pen: 3, st: 10, icp: .1, pw: { men: .5, ship: 2, struct: 0, seg: false, R: 14, vb: 4, veh: true } },   // 歼-35 防空压制型：追防空雷达辐射源
@@ -168,10 +168,26 @@ function msPgmFly(m, dt) {
   if (P === 'loft') zc = W0.z + (W0.lz ?? .5) * Math.sin(Math.PI * u);
   else if (P === 'popup') { const pd = W0.pd ?? 700; if (d < pd && d > 120) zc += (W0.lz ?? .3) * Math.sin(Math.PI * clamp(1 - (d - 120) / (pd - 120), 0, 1) * .8); }
   m.z = zc * (d < 120 ? Math.max(.1, d / 120) : Math.min(1, m.t * 2));
+  if (P === 'ball' || P === 'hilo') msPgmArc(m, W0, P, d);   // 先爬得很高再扎下来的（鹰击-21 准弹道、鹰击-12 高空巡航）：按真实米数算高度
   if (m.tgt && m.tgt.k === 'eship' && typeof navyDefend === 'function' && navyDefend(m)) return;   // 敌舰分层拦截
   if (d > Math.max(8, st)) { m.x += Math.cos(m.hd) * st; m.y += Math.sin(m.hd) * st; return; }
   m.done = true; m.x = m.tx; m.y = m.ty;
   msPgmHit(m, T, W0);
+}
+// 高抛弹道（用户：鹰击-21 这种都是先飞得特别高）——高度按真实米数（m.z3，画面直接用；m.z 照旧给别处判断高低）：
+//   ball 准弹道：垂发冲出后几乎竖着往上爬，在航程一半处到顶（顶点 ≈ 射程 × lzk，40 公里封顶），然后陡直俯冲（末段六七十度）；
+//   hilo 高空巡航：爬到 hc（随射程放低）高空超音速巡航，离目标 dn 以内俯冲下来，最后一段贴着海面冲（鹰击-12 的打法）
+function msPgmArc(m, W0, P, d) {
+  const d0 = m.d0 || (m.d0 = Math.max(1, d)), u = clamp(1 - d / d0, 0, 1);
+  let h;
+  if (P === 'ball') { const Hm = clamp(d0 * (W0.lzk ?? .35), 250, W0.hmax ?? 40000); h = Hm * Math.sin(Math.PI * Math.pow(u, .82)) ** .9; }   // 前半段爬得快，顶点稍靠前，后半段越扎越陡
+  else {
+    const Hc = clamp(d0 * .18, 150, W0.hc ?? 15000), dn = Math.min(d0 * .4, W0.dn ?? 26000), go = d0 - d;
+    h = 8 + Hc * Math.min(sm01(go / Math.max(1, Math.min(d0 * .3, 30000))), sm01((d - dn * .25) / Math.max(1, dn * .75)));
+  }
+  if (P === 'ball') h = Math.min(h, 20 + 450 * m.t * m.t);   // 助推段：从垂发筒里竖着冲上去越来越快（不然出筒后高度一下跳上去一千多米）
+  m.z = clamp(h / 3000, .03, 1);
+  m.z3 = m.t > .6 ? Math.max(6, h) : null;   // 出筒那一下（垂发冲出、发射烟）照旧
 }
 // 到达（m.tx、m.ty 是落点）：打敌舰按舰艇毁伤，其余小范围爆炸 + 对目标直接毁伤（fpwpn.js 玩家亲自打的也用这一套）
 function msPgmHit(m, T, W0) {
