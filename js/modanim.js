@@ -1,12 +1,13 @@
 'use strict';
 // 编辑器：局部自由动画（用户：能设计动画，比如坦克的开火动画——模型上任何一个部件都能单独动，想怎么动就怎么动；「拆成碎片跳舞」只是打个比方；自由度拉满、非常好上手）
-//   「模型与挂点」页里车辆模型多一段「动画」：
+//   「模型与挂点」页里车辆、飞机模型多一段「动画」：
 //   ① 分组：自动拆成 N 块（按块的位置聚类）、按模型自带的部件分（炮塔、炮管、车轮……）、或者把选中的块设成一组；
-//   ② 选时机：开炮时、挨打时、走着时（循环）、停着时（循环）、被打掉时；
+//   ② 选时机：开炮时、挨打时、走着时（循环）、停着时（循环）、被打掉时；飞机：发射 / 开火时、飞着时（循环）、停在地上时（循环）、被击落时（v3g.js v3gPlaneAn）；
 //   ③ 点预设（散开跳舞、炸开再合上、原地转圈、弹跳、摇摆、震动、后坐、脉冲、悬浮、波浪），或者自己拖时间轴、给某一组在某一刻摆姿势（挪、转、缩放）记成关键帧；
 //   ④ ▶ 预览里马上动起来看；保存后游戏里到那个时机就播（mod.js modAnimNow → v3g.js v3gAnimDraw）。数据格式见 mod.js「动画」那一段
 const MAN = { ev: 'fire', play: false, t: 0, raf: 0, last: 0, g: -1, amp: 1, n: 10, ax: 'y', key: '', vg: null, vgK: '' };
 const MAN_EV = [['fire', '开炮时'], ['hit', '挨打时'], ['move', '走着时（循环）'], ['idle', '停着时（循环）'], ['die', '被打掉时']];
+const MAN_EV_AIR = [['fire', '发射 / 开火时'], ['move', '飞着时（循环）'], ['idle', '停在地上时（循环）'], ['die', '被击落时']];   // 飞机没记挨打时刻
 const MAN_DEF = { fire: { dur: 2.5, loop: 0 }, hit: { dur: .8, loop: 0 }, move: { dur: 2, loop: 1 }, idle: { dur: 3, loop: 1 }, die: { dur: 3, loop: 0, back: false } };
 const MAN_PRE = [['recoil', '后坐（往后一顿再复位）'], ['shake', '震动'], ['open', '开合（绕转动中心转过去再回来）'], ['lift', '升降'], ['push', '伸出再缩回'], ['spin', '转一圈'], ['sway', '来回摆'], ['pulse', '变大变小'],
   ['bounce', '弹跳'], ['float', '飘起来'], ['wave', '波浪'], ['explode', '炸开再合上'], ['dance', '散开乱跳']];
@@ -147,19 +148,20 @@ function manBar() {
   const r = MDX.el.querySelector('[data-mant="tr"]'); if (r && document.activeElement !== r) r.value = MAN.t.toFixed(2);
   const pb = MDX.el.querySelector('[data-manp="play"]'); if (pb) pb.textContent = MAN.play ? '⏸ 暂停' : '▶ 播放';
 }
-function manForm(mk) {
-  const M = manM(mk), A = manA(mk), G = A.ag || [];
+function manForm(mk, air) {
+  const M = manM(mk), A = manA(mk), G = A.ag || [], EV = air ? MAN_EV_AIR : MAN_EV;
+  if (!EV.some(e => e[0] === MAN.ev)) MAN.ev = 'fire';
   const btn = (attr, t, on, tip) => `<button type="button" class="mdx-btn${on ? ' pri' : ''}" ${attr}${tip ? ` title="${mdxEsc(tip)}"` : ''}>${t}</button>`;
-  let h = `<h3 style="margin-top:12px">动画：自己设计开炮、挨打、走、停、被打掉时怎么动</h3>`;
+  let h = `<h3 style="margin-top:12px">${air ? '动画：自己设计发射、飞行、停放、被击落时怎么动' : '动画：自己设计开炮、挨打、走、停、被打掉时怎么动'}</h3>`;
   if (!M) return h + '<p class="note">模型读出来以后才能做动画（上面的预览加载完会自动刷新这一段）。</p>';
   const c = (A.an || {})[MAN.ev], dur = Math.max(.05, (c && +c.dur) || MAN_DEF[MAN.ev].dur);
-  h += `<p class="note">模型上任何一部分都能单独动：① 选出要动的部件（在模型上点选，或者按模型自带的炮塔、炮管、车轮……分）② 选什么时候播 ③ 点一个动作预设，或者自己拖时间轴、给这个部件在某一刻摆姿势（挪、转、缩放）记成关键帧，
-      转动中心可以在模型上点、也能输数（舱盖绕铰链开合就把中心放在铰链上）④ ▶ 播放看效果，满意就保存，游戏里到那个时机就这么动。</p>
-    <div class="mdx-pcbar">${btn('data-mana="demo"', '示例：开炮时炮管后坐、炮塔一震', false, '按模型自带的部件找出炮管、炮塔，开炮时炮管往后坐、炮塔跟着一震')}</div>
+  h += `<p class="note">模型上任何一部分都能单独动：① 选出要动的部件（在模型上点选，或者按模型自带的${air ? '起落架、弹舱门、旋翼' : '炮塔、炮管、车轮'}……分）② 选什么时候播 ③ 点一个动作预设，或者自己拖时间轴、给这个部件在某一刻摆姿势（挪、转、缩放）记成关键帧，
+      转动中心可以在模型上点、也能输数（${air ? '座舱盖、舱门' : '舱盖'}绕铰链开合就把中心放在铰链上）④ ▶ 播放看效果，满意就保存，游戏里到那个时机就这么动。</p>
+    ${air ? '' : `<div class="mdx-pcbar">${btn('data-mana="demo"', '示例：开炮时炮管后坐、炮塔一震', false, '按模型自带的部件找出炮管、炮塔，开炮时炮管往后坐、炮塔跟着一震')}</div>`}
     <div class="mdx-pcbar"><b>① 要动的部件</b>${btn('data-pk="pc"', '在模型上点选', MDX.pk === 'pc', '在预览里点一块就选上 / 取消（黄色）；部件那一段有框选、按整个部件选')}${btn('data-mana="bysel"', '选中的设成一个部件', false, '点选好以后点这个')}
       ${btn('data-mana="bynode"', '按模型自带的部件分', false, '炮塔、炮管、车轮……各一个')}${btn('data-mana="split"', '自动拆成', false, '按位置聚成几块（拆碎片的效果用）')} <input type="number" min="2" max="60" step="1" data-manf="n" value="${MAN.n}" style="width:56px"> 块${G.length ? btn('data-mana="clr"', '清空分组') : ''}</div>
     <div class="man-chips">${G.length ? G.map((g, gi) => `<button type="button" class="man-chip${MAN.g === gi ? ' on' : ''}" data-mang="${gi}" style="--c:${MAN_COL[gi % MAN_COL.length]}">${mdxEsc(g.nm)}<small>${modIdsDec(g.id).length} 块</small></button>`).join('') + `<button type="button" class="man-chip${MAN.g < 0 ? ' on' : ''}" data-mang="-1" style="--c:#aaa">全部组</button>` : '<span class="def">还没分组：整车不动（先分组才能让各部分各动各的）</span>'}</div>
-    <div class="mdx-pcbar"><b>② 什么时候播</b>${MAN_EV.map(([k, n]) => btn(`data-mane="${k}"`, n + ((A.an || {})[k] ? ' ●' : ''), MAN.ev === k)).join('')}</div>
+    <div class="mdx-pcbar"><b>② 什么时候播</b>${EV.map(([k, n]) => btn(`data-mane="${k}"`, n + ((A.an || {})[k] ? ' ●' : ''), MAN.ev === k)).join('')}</div>
     <div class="mdx-pcbar">时长 <input type="number" min=".1" max="60" step=".1" data-manf="dur" value="${dur}" style="width:64px"> 秒
       <label><input type="checkbox" data-manf="loop"${(c ? c.loop : MAN_DEF[MAN.ev].loop) ? ' checked' : ''}> 循环</label><label><input type="checkbox" data-manf="back"${(c ? c.back : MAN_DEF[MAN.ev].back) !== false ? ' checked' : ''}> 播完回到原位</label>${c ? btn('data-mana="delclip"', '删掉这一段动画') : ''}</div>
     <div class="mdx-pcbar"><b>③ 动作预设</b><span class="def">套给${MAN.g >= 0 && G[MAN.g] ? '「' + mdxEsc(G[MAN.g].nm) + '」' : '全部部件'}</span> 幅度 <input type="range" min=".2" max="4" step=".1" data-manf="amp" value="${MAN.amp}" style="width:90px">
@@ -280,9 +282,9 @@ if (typeof mdxMdlForm === 'function') {
   const f0 = mdxMdlForm;
   mdxMdlForm = function (mk) {
     const h = f0.apply(this, arguments), md = typeof mdxModels === 'function' && mdxModels().find(r => r.id === mk);
-    if (!md || md.kind === 'air') return h;
+    if (!md) return h;
     if (MAN.key !== mk) { MAN.key = mk; MAN.g = -1; MAN.t = 0; MAN.play = false; }
-    const part = manForm(mk), i = h.indexOf('<h3 style="margin-top:12px">主炮炮口');
+    const air = md.kind === 'air', part = manForm(mk, air), i = h.indexOf(air ? '<h3 style="margin-top:12px">挂点' : '<h3 style="margin-top:12px">主炮炮口');   // 飞机：放在挂点前面
     return i < 0 ? h + part : h.slice(0, i) + part + h.slice(i);
   };
 }

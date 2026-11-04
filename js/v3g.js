@@ -547,7 +547,7 @@ const v3dMv3 = (h, p, r, v) => {   // 先滚转（绕 x）、再俯仰（绕 y�
   c = Math.cos(-h); s = Math.sin(-h);
   return [x * c - y * s, x * s + y * c, z];
 };
-function v3gPlane(key, sz, x, y, z, ground, h, side, roll, pitch, gear, t, noz = 0, ctl = null, bay = null, fold = 0) {   // noz：尾喷口开合（正 = 张开，负 = 收拢）；ctl：舵面 { de 平尾（负 = 后缘上偏、抬头）, da 滚转差动 }（v3det.js v3dPitch 按气动算）；bay：弹舱门开度 { main, side }（fpwpn.js fwBay）；fold：外翼折起程度（V3G_FOLD，甲板上）
+function v3gPlane(key, sz, x, y, z, ground, h, side, roll, pitch, gear, t, noz = 0, ctl = null, bay = null, fold = 0, an = null) {   // noz：尾喷口开合（正 = 张开，负 = 收拢）；ctl：舵面 { de 平尾（负 = 后缘上偏、抬头）, da 滚转差动 }（v3det.js v3dPitch 按气动算）；bay：弹舱门开度 { main, side }（fpwpn.js fwBay）；fold：外翼折起程度（V3G_FOLD，甲板上）
   const mk = V3G_AIR[key] || 'j31', M = v3gModel(mk);
   if (!M) return false;
   const k = sz / M.meta.len;
@@ -559,7 +559,22 @@ function v3gPlane(key, sz, x, y, z, ground, h, side, roll, pitch, gear, t, noz =
   if (typeof v3nzPlane === 'function') v3nzPlane(mk, M, ox, oy, oz, h, k, roll, pitch, noz);   // 换装了真实喷口模型的机型（v3noz.js：会收缩的收敛扩散喷口）
   const HZ = typeof modHazeOf === 'function' ? modHazeOf(mk) : null;   // 编辑器设计的热浪（地上怠速弱一些）
   if (HZ && V3G.C && (ox - V3G.C.E[0]) ** 2 + (-oy - V3G.C.E[1]) ** 2 < 900 * 900) for (const e of HZ) v3gHazeEmit(e, ox, oy, oz, h, k, pitch, roll, ground ? .5 : 1, Math.round(x * 13 + y * 7));
+  const AN = an && typeof modAnimNow === 'function' ? modAnimNow(mk, an, an.fs ?? 99, !!an.dead) : null;   // 编辑器设计的动画（mod.js）：发射、飞着、停着、被击落时
+  if (AN) return v3gAnimDraw(mk, AN, ox, oy, oz, h, k, side, roll, pitch, P);
   return v3gAdd(mk, ox, oy, oz, h, k, side, roll, pitch, P);
+}
+// 飞机的动画状态（编辑器给这一型设计了动画才算，v3units.js 画飞机时传给 v3gPlane）：id、刚发射 / 开火后几秒、在不在飞、是不是残骸
+//   发射时刻：AI 的按 airmdl.js 记的抛射事件（airRelLast），玩家开的按 fpwpn.js fwLaunch 调 v3gFired
+const V3G_FT = new Map();
+function v3gFired(id) { if (V3G_FT.S !== S) { V3G_FT.clear(); V3G_FT.S = S; } V3G_FT.set(id, S.t); }
+const v3gHasAnim = key => typeof MOD === 'object' && !!(MOD.mdl[V3G_AIR[key] || 'j31'] || {}).an;
+function v3gPlaneAn(key, id, side, moving, deadT) {
+  if (!v3gHasAnim(key)) return null;
+  if (deadT != null) return { id, dead: true, deadT };
+  const sd = side ? 'e' : 'p';
+  let ft = V3G_FT.S === S ? V3G_FT.get(sd + id) : null;
+  if (typeof airRelLast === 'function') { const t0 = airRelLast(sd, id); if (t0 != null && (ft == null || t0 > ft)) ft = t0; }
+  return { id, moving, fs: ft == null ? 99 : S.t - ft };
 }
 // 飞机模型上一点（模型坐标，米）此刻在世界的哪里（游戏坐标 x、y，高度 z）：和 v3gPlane 同一套变换（绕机身中线俯仰、滚转）——弹舱里的弹、挂点按它放
 function v3gAt(key, sz, x, y, z, h, pitch, roll, v, fold = 0) {   // fold：外翼折着的（甲板上），外翼上的点跟着翻上去
