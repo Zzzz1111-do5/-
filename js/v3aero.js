@@ -48,43 +48,64 @@ float occ(vec3 ro, vec3 rd) {
   }
   return t;
 }
+// 视线在直锥 y² + z² < (c0 + m·x)²（c0 + m·x > 0 那一半）里面、又在 tx 范围里的一段（没有就返回 x > y）：喇叭口锥一定在这个直锥里面，只在这一段取样
+vec2 coneIn(vec3 ro, vec3 rd, float c0, float m, vec2 tx) {
+  float m2 = m * m, e = c0 + m * ro.x, qa = dot(rd.yz, rd.yz) - m2 * rd.x * rd.x, qb = 2. * (dot(ro.yz, rd.yz) - m * e * rd.x), qc = dot(ro.yz, ro.yz) - e * e;
+  if (abs(qa) < 1e-7) {   // 视线和母线平行：一次方程
+    if (abs(qb) < 1e-7) return qc < 0. ? tx : vec2(1., 0.);
+    float t = -qc / qb;
+    return qb > 0. ? vec2(tx.x, min(tx.y, t)) : vec2(max(tx.x, t), tx.y);
+  }
+  float dc = qb * qb - 4. * qa * qc;
+  if (dc < 0.) return qa < 0. ? tx : vec2(1., 0.);
+  float sq = sqrt(dc), t1 = (-qb - sq) / (2. * qa), t2 = (-qb + sq) / (2. * qa);
+  if (t1 > t2) { float tt = t1; t1 = t2; t2 = tt; }
+  if (qa > 0.) return vec2(max(tx.x, t1), min(tx.y, t2));
+  vec2 a = vec2(tx.x, min(tx.y, t1)), b = vec2(max(tx.x, t2), tx.y);   // 双锥：x > 0 那一半是凸的，和 x 范围截出来只剩一段
+  return a.x < a.y ? a : b;
+}
 void main() {
   vec3 ro = vRo, rd = normalize(vLp - vRo), sun = vS.xyz;
-  float L = vE.x, R = vE.y, H = vE.z, ty = vE.w, a = vX.x, sd = vX.y, tO = occ(ro, rd);
-  vec3 col = vec3(0.); float ws = 0., od = 0.;
-  if (abs(ty - 1.) > .5) {   // 蒸汽锥（0）/ 音爆（2）：抛物面薄壳 r² = r0² + (r1² − r0²)·x / L，直接解视线和它的两个交点
-    float r1 = R * .8, r0 = r1 * vX.z, B = (r1 * r1 - r0 * r0) / L, s0 = vX.w;
-    float qa = dot(rd.yz, rd.yz), qb = 2. * dot(ro.yz, rd.yz) - B * rd.x, qc = dot(ro.yz, ro.yz) - r0 * r0 - B * ro.x, ta = -1., tb = -1.;
-    if (qa < 1e-6) { if (abs(qb) > 1e-6) ta = -qc / qb; }
-    else { float dc = qb * qb - 4. * qa * qc; if (dc < 0.) discard; float sq = sqrt(dc); ta = (-qb - sq) / (2. * qa); tb = (-qb + sq) / (2. * qa); }
-    float fm = 0., fs = 0., fn = 0.;   // 两个交点都在：中间那段是锥里面（也有一层薄雾）
-    for (int i = 0; i < 2; i++) {
-      float t = i == 0 ? ta : tb;
-      if (t <= 0. || t > tO) continue;   // 在镜头后面，或者被机身、机翼挡住
-      vec3 q = ro + rd * t; float s = q.x / L;
-      if (s < 0. || s > 1.05) continue;
-      vec2 cs = q.yz / max(length(q.yz), 1e-4);
-      float n1 = fbm(vec3(cs * 2.6, s * 1.6 - uT * 1.1) + sd), n2 = n3(vec3(cs * 11., s * 4. - uT * 2.7) + sd * 1.7), n4 = n3(vec3(cs * 27., s * 9. - uT * 4.) + sd * 2.3);
-      float se = 1. - .1 * n1 - .05 * n2;   // 后缘（激波）那一圈起伏、破碎
-      float m = smoothstep(s0, s0 + .45, s) * (1. - smoothstep(se - .07, se, s));
-      float dn = m * (.2 + 1.7 * n1 * n1) * (.45 + .75 * n2) * (.7 + .5 * n4) * mix(.5, 1.25, s);
-      vec3 nr = normalize(vec3(-B, 2. * q.y, 2. * q.z));
-      float o = dn * a / max(abs(dot(rd, nr)), .22);   // 斜穿薄壳的长度：边上浓，正对着淡
-      fm += t; fs += s; fn += 1.;
-      if (o < .001) continue;
-      float lam = .55 + .45 * dot(vec3(0., cs), sun), fw = pow(max(dot(rd, sun), 0.), 6.);   // 逆着太阳看：水滴往前散射，发亮
-      col += mix(vec3(.6, .66, .76), vec3(1., .995, .985), clamp(lam, 0., 1.)) * (1. + .5 * fw) * o; ws += o;
+  float L = vE.x, R = vE.y, H = vE.z, ty = vE.w, a = vX.x, sd = vX.y, tO = occ(ro, rd), jt = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(.06711056, .00583715))));
+  vec3 col = vec3(0.); float al = 0.;
+  if (abs(ty - 1.) > .5) {
+    // 蒸汽锥（0）/ 音爆（2）：照真实照片（用户给的参考）——又宽又短、往外翻开的喇叭口锥：锥尖在机身中段，从机身表面贴着机身长出来（半径 = Rb·(q0 + (1 − q0)·s^1.8)，
+    //   q0·Rb ≈ 机身半径，越往后张得越快——侧面看锥面和机身轮廓斜斜地并到一点，是尖的），底面（激波）是后面一道清楚的平边、最白最浓的一圈（从后面看是一整块白盘）；
+    //   往前淡、透；锥里也有雾（实心），贴着锥面一层更浓。音爆脱开的那一圈只剩靠底面的一段、空心。先解出视线在外包直锥里的一段，只在这一段取 24 个样、前到后合成
+    float Rb = R * .94, pB = 1.8, q0 = vX.z, s0 = vX.w, fill = ty > 1.5 ? 0. : .45, c0 = Rb * q0 * 1.05, m = Rb * (1. - q0) * 1.05 / L;
+    vec2 tx = abs(rd.x) > 1e-6 ? vec2(-ro.x, L - ro.x) / rd.x : (ro.x > 0. && ro.x < L ? vec2(-1e9, 1e9) : vec2(1., 0.));
+    if (tx.x > tx.y) tx = tx.yx;
+    tx = vec2(max(tx.x, 0.), min(tx.y, tO));   // 镜头前面、x 在 0–L、被机身机翼挡住之前
+    if (tx.x >= tx.y) discard;
+    vec2 A = coneIn(ro, rd, c0, m, tx);
+    if (A.x >= A.y) discard;
+    float dt = (A.y - A.x) / 24., Kx = 5. / Rb, Tr = 1.;
+    for (int k = 0; k < 24; k++) {
+      vec3 q = ro + rd * (A.x + (float(k) + jt) * dt);
+      float s = q.x / L, sp = pow(max(s, 1e-4), pB), lq = length(q.yz), rn = lq / max(Rb * (q0 + (1. - q0) * sp), 1e-3);
+      vec2 cs = q.yz / max(lq, 1e-4);
+      float n1 = fbm(vec3(cs * 2.2, s * 1.2 - uT * .8) + sd);   // 顺着锥面往外的一条条
+      float n2 = n3(vec3(cs * 7.5, s * 3.6 - uT * 2.2) + vec3(rn * 2.) + sd * 1.7), n4 = n3(vec3(cs * 21., s * 8. - uT * 3.6) + vec3(rn * 5.) + sd * 2.9);
+      float se = 1. - .035 * n1 - .025 * n2;   // 底面（激波）：清楚的一道边，微微起伏
+      float rr = rn + .06 * (n2 - .5);
+      float sh = (1. - smoothstep(.9, 1.03, rr)) * (fill + (1. - fill) * smoothstep(.6, .97, rr));   // 锥面轮廓清楚；里面填着雾，贴着锥面一层更浓
+      float base = smoothstep(.62, .93, s) * (1. - smoothstep(.95, 1.03, rr));   // 靠底面（激波）那一层：整个盘都浓
+      float d = (sh * (.35 + .65 * s) + 1.1 * base) * (1. - smoothstep(se - .025, se, s)) * smoothstep(s0, s0 + .12, s)   // 越靠后越浓
+        * mix(.8, 1.1, smoothstep(-.75, .65, cs.y)) * (.55 + .7 * n1) * (.7 + .45 * n2) * (.85 + .3 * n4) * a;
+      if (d < .002) continue;
+      float ab = 1. - exp(-d * dt * Kx);
+      vec3 nr = normalize(vec3(-Rb * (1. - q0) * pB * sp / max(s, 1e-3) / L, cs));   // 锥面的外法线（往前倾）
+      float lam = .55 + .45 * dot(nr, sun), fw = pow(max(dot(rd, sun), 0.), 6.);   // 朝太阳的一面亮；逆着太阳看水滴往前散射，发亮
+      vec3 c = mix(vec3(.66, .7, .79), vec3(1., .995, .985), clamp(lam * (.75 + .25 * min(rn, 1.)), 0., 1.)) * (1. + .45 * fw);
+      col += Tr * ab * c; Tr *= 1. - ab;
+      if (Tr < .02) break;
     }
-    if (fn > 1.5 && tb > ta && ta > 0.) {   // 锥里面：两交点之间按长度加一点雾
-      float s = fs * .5, f = (min(tb, tO) - ta) * .045 * smoothstep(s0, s0 + .5, s) * (1. - smoothstep(.8, 1., s)) * a * (.5 + fbm(vec3(ro + rd * fm * .5) * .35 + sd));
-      col += vec3(.9, .92, .95) * f; ws += f;
-    }
-    od = ws * .5;
+    al = 1. - Tr;
   } else {   // 机翼水汽：沿视线积分；翼面挡住下面的视线，机身挡住另一边机翼
     vec3 lo = vec3(0., -R, -.08 * H), hi = vec3(L, R, H), ia = 1. / (rd + vec3(1e-6)), ta = (lo - ro) * ia, tb = (hi - ro) * ia, tmn = min(ta, tb), tmx = max(ta, tb);
     float t0 = max(max(max(tmn.x, tmn.y), tmn.z), 0.), t1 = min(min(min(tmx.x, tmx.y), tmx.z), tO);
     if (t1 <= t0) discard;
-    float dt = (t1 - t0) / uN, jt = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(.06711056, .00583715)))), hs = max(vY.w, .1), lam = .55 + .45 * sun.z;
+    float dt = (t1 - t0) / uN, hs = max(vY.w, .1), lam = .55 + .45 * sun.z, ws = 0.;
     for (int k = 0; k < 12; k++) {
       if (float(k) >= uN) break;
       vec3 q = ro + rd * (t0 + (float(k) + jt) * dt);
@@ -97,11 +118,12 @@ void main() {
       if (d <= .001) continue;
       col += mix(vec3(.6, .66, .76), vec3(1., .995, .985), clamp(lam, 0., 1.)) * d * dt; ws += d * dt;
     }
-    od = ws * 2.6 / max(H, .3);
+    al = 1. - exp(-ws * 3.6 / max(H, .3));
+    col = col / max(ws, 1e-5) * al;
   }
-  float al = 1. - exp(-od), fog = 1. - smoothstep(uFog.x, uFog.y, vS.w);
+  float fog = 1. - smoothstep(uFog.x, uFog.y, vS.w);
   if (al < .003) discard;
-  gl_FragColor = vec4(col / max(ws, 1e-5) * al * fog, al * fog);   // 预乘透明度
+  gl_FragColor = vec4(col * fog, al * fog);   // 预乘透明度
 }`;
 // 包围盒：x 0–1、y −1–1、z −1–1
 function v3aBox() {
@@ -155,15 +177,15 @@ function v3aeroPlane(o, key, sz, own, R, P, k, D, jet, C) {
   const occY = xo => [G.bw * .8 * k, (xo - G.nose) * k, (xo - G.tail) * k, G.hs * k], occZ = xo => [(xo - G.rLE) * k, (xo - G.rTE) * k, (xo - G.tLE) * k, (xo - G.tTE) * k];   // 挡雾的机身、机翼（以 xo 为原点的局部坐标，x 朝后）
   const dE = C ? Math.hypot(P[0] - C.E[0], P[1] - C.E[1], P[2] - C.E[2]) : 0;
   if (dE > 9000) return;
-  // 蒸汽锥：马赫 0.9–1.07；前端在座舱一带，后缘（激波）在机翼后缘稍后；越过 1 马赫激波往后移、锥变小
-  const vc = smooth(.9, .975, M) * smooth(1.075, 1.005, M) * hum * Ka * (.88 + .12 * Math.sin(S.t * 9 + sd));
-  const ov = Math.max(0, M - .99), x0 = G.rLE + (G.nose - G.rLE) * .35 - ov * len * 3, xr = Math.max(G.tail - len * .3, G.rTE - (G.rTE - G.tail) * .12 - Math.max(0, M - .96) * len * 1.4);
-  const r1 = G.hs * .78 * k * (1 - clamp((M - 1) * 6, 0, .55)), Lc = Math.max(2, (x0 - xr) * k);
-  if (vc > .02 && x0 > xr) v3aAdd(0, Wp(x0, 0, 0), U, V, W, Lc, r1 / .8, r1 / .8, vc, sd, clamp(G.bw * 1.15 * k / r1, .1, .6), 0, occY(x0), occZ(x0));
+  // 蒸汽锥：马赫 0.9–1.07——又短又宽：锥尖在机身中段偏后（离机头 52%），底面（激波）在机尾前（88%），底面半径约 0.55 个机身长（照片里比翼展还大）；越过 1 马赫往后挪、变小
+  const vc = smooth(.9, .975, M) * smooth(1.075, 1.005, M) * hum * Ka * (.9 + .1 * Math.sin(S.t * 9 + sd));
+  const ov = Math.max(0, M - .99), x0 = G.nose - len * (.52 + ov * 2.5), xr = G.nose - len * (.88 + Math.max(0, M - .97) * 1.2);
+  const r1 = len * k * .55 * (1 - clamp((M - 1) * 6, 0, .55)), Lc = Math.max(2, (x0 - xr) * k);
+  if (vc > .02 && x0 > xr) v3aAdd(0, Wp(x0, 0, 0), U, V, W, Lc, r1 / .94, r1 / .94, vc, sd, clamp(G.bw * .95 * k / r1, .05, .5), 0, occY(x0), occZ(x0));   // 锥尖从机身表面长出来
   // 音爆：刚越过 1 马赫——蒸汽锥的后段脱开留在原地
   const Mp = V3AE.prev.get(id);
   V3AE.prev.set(id, M);
-  if (Mp != null && Mp < 1 && M >= 1) V3AE.boom.push({ c: Wp(x0, 0, 0), U, V, W, L: Lc, r1, t0: S.t, sd, hum });
+  if (Mp != null && Mp < 1 && M >= 1) V3AE.boom.push({ c: Wp(x0, 0, 0), U, V, W, L: Lc, r1, q0: clamp(G.bw * .95 * k / r1, .05, .5), t0: S.t, sd, hum });
   // 机翼水汽：过载大、迎角大，速度够（高亚音速最明显）；AI 的飞机只有坡度换算的过载（最多 5 g），门槛低一些
   const wv = clamp((F ? smooth(4, 7.5, nz) : smooth(2.6, 5, nz) * .8) + smooth(.3, .55, aoa) * .7, 0, 1.2) * smooth(110, 200, Va) * (.55 + .45 * hum) * Ka;
   if (wv > .02) {
@@ -187,8 +209,8 @@ function v3aeroFx(sm, C) {
   for (let i = V3AE.boom.length - 1; i >= 0; i--) {
     const B = V3AE.boom[i], u = (S.t - B.t0) / .55;
     if (u < 0 || u > 1) { V3AE.boom.splice(i, 1); continue; }
-    const g = 1 + 1.3 * Math.sqrt(u), a = (1 - u) ** 1.5 * B.hum * v3aK() * 1.3, r = B.r1 * g;
-    v3aAdd(2, B.c, B.U, B.V, B.W, B.L * (1 + .35 * u), r / .8, r / .8, a, B.sd, .45, .55);   // 只剩后半截那一圈：从 0.55 往后
+    const g = 1 + 1.3 * Math.sqrt(u), a = (1 - u) ** 1.3 * B.hum * v3aK() * 1.5, r = B.r1 * g;
+    v3aAdd(2, B.c, B.U, B.V, B.W, B.L * (1 + .35 * u), r / .94, r / .94, a, B.sd, B.q0 / g, .6);   // 只剩靠底面的那一圈：从 0.6 往后
   }
   if (typeof v3fRib !== 'function') return;
   for (const [id, T] of V3AE.vtx) {
