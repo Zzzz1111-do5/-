@@ -590,14 +590,14 @@ function fpFx(out, sm, C) {
   const P = [rs.x, -rs.y, rs.z], sz = (typeof airSize3 === 'function' ? airSize3(o, 'p') : 15), D = typeof AIRD === 'object' ? AIRD[typeof airSilKey === 'function' ? airSilKey(o.kind, o.v) : ''] : null;
   const tip = D && D.wing ? D.wing.reduce((m, q) => q[1] > m[1] ? q : m, D.wing[0]) : [-2, 7], k = sz / 21;
   const at = (u, v) => [P[0] + (B.f[0] * u + B.r[0] * v) * k, P[1] + (B.f[1] * u + B.r[1] * v) * k, P[2] + (B.f[2] * u + B.r[2] * v) * k];
-  // 翼尖涡流：记下最近约 0.7 秒翼尖走过的点（按推演插值后的位置），过载越大越浓
+  // 翼尖涡流：记下最近约 0.45 秒翼尖走过的点（按推演插值后的位置），过载越大越浓（原来 0.7 秒，超音速时拖出几百米一道长白线）
   const vI = clamp(smooth(4.2, 7.5, nz) + smooth(.32, .5, Math.abs(F.a || 0)) * .7, 0, 1), T = V3FP.vtx || (V3FP.vtx = []);
   if (!T.length || now - T[T.length - 1][2] > .016) { T.push([at(tip[0], -tip[1]), at(tip[0], tip[1]), now, vI]); if (T.length > 48) T.shift(); }
-  while (T.length && now - T[0][2] > .7) T.shift();
+  while (T.length && now - T[0][2] > .45) T.shift();
   for (let i = 1; i < T.length; i++) {
-    const a0 = now - T[i - 1][2], a1 = now - T[i][2], i0 = T[i - 1][3] * (1 - a0 / .7), i1 = T[i][3] * (1 - a1 / .7);
+    const a0 = now - T[i - 1][2], a1 = now - T[i][2], i0 = T[i - 1][3] * (1 - a0 / .45) ** 1.5, i1 = T[i][3] * (1 - a1 / .45) ** 1.5;
     if (i0 + i1 < .02) continue;
-    for (const s of [0, 1]) v3fRib(sm, E, T[i - 1][s], T[i][s], .55 * k, [.94, .95, .96, .55 * i0], [.94, .95, .96, .55 * i1]);
+    for (const s of [0, 1]) v3fRib(sm, E, T[i - 1][s], T[i][s], .4 * k, [.94, .95, .96, .45 * i0], [.94, .95, .96, .45 * i1]);
   }
   // 机翼上方的水汽（6 g 以上一片白雾，贴着机翼上表面、往后散）
   const vp = smooth(5.8, 8.5, nz) * smooth(80, 160, V);
@@ -605,8 +605,9 @@ function fpFx(out, sm, C) {
     const u = -1.5 - (i % 5) * 1.2, v = ((i * 37) % 11 - 5) / 5 * tip[1] * .75, p = at(u, v), up = .5 * k + (i % 3) * .15 * k;
     v3fSpark(sm, C, [p[0] + B.u[0] * up, p[1] + B.u[1] * up, p[2] + B.u[2] * up], (1.6 + (i % 4) * .4) * k, [.95, .96, .97, .22 * vp * (.7 + .3 * Math.sin(now * 17 + i))]);
   }
-  // 风线：镜头周围固定在空中的一些点，飞过去时按速度拉成一道道细线（越快、离地越近越多越亮）
-  const agl = -F.P[2] - flGround(F.P[0], F.P[1]), wI = smooth(90, 260, V) * (.35 + .65 * smooth(400, 40, agl));
+  // 风线：镜头周围固定在空中的一些点，飞过去时按速度拉成一道道细线（越快、离地越近越多越亮）——只在贴地飞时有（离地 250 米以上没有）：
+  //   高空、云前面也画的话天上一道道细线，像云雾里有线条（用户：这个云雾为啥有线条）
+  const agl = -F.P[2] - flGround(F.P[0], F.P[1]), wI = smooth(90, 260, V) * smooth(250, 50, agl);
   if (wI < .03) { V3FP.wl = null; return; }
   const dir = v3Norm(F.V ? [F.V[1], F.V[0], -F.V[2]] : B.f), cf = V3FP.camF || B.f, W0 = V3FP.wl || (V3FP.wl = []);
   const spawn = () => { const r = 6 + Math.random() * 34, an = Math.random() * 6.283, s = 60 + Math.random() * 140, cu = B.u, cr = B.r;
@@ -618,7 +619,7 @@ function fpFx(out, sm, C) {
     if (ahead < 4 || ahead > 260 || Math.hypot(rel[0] - cf[0] * ahead, rel[1] - cf[1] * ahead, rel[2] - cf[2] * ahead) > 60) { W0[i] = spawn(); continue; }
     const q = [p[0] - dir[0] * len, p[1] - dir[1] * len, p[2] - dir[2] * len], f = smooth(4, 30, ahead) * smooth(260, 120, ahead) * wI;
     if (i > 14 + 32 * wI) continue;   // 速度不太快、离地高时少几道
-    v3fRib(out, E, q, p, .05 + ahead * .0016, [1, 1, 1, 0], [1, 1, 1, .26 * f]);
+    v3fRib(out, E, q, p, .05 + ahead * .0016, [1, 1, 1, 0], [1, 1, 1, .2 * f]);
   }
 }
 // 受力回馈：镜头抖动（大迎角抖振最猛，过载、加力、开火冲击次之），返回 [右, 上] 两个小角度（弧度）

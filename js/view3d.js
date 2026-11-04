@@ -12,6 +12,28 @@ let V3_HZ = 230;   // 高程 1.0 在 3D 里多高（米）：程序生成的地�
 const V3_FOV = .8, V3_TILT = [.05, 1.45], V3_SKIRT = -70;   // 俯仰：从几乎正俯视到几乎平视
 const V3_ZMAX = 11000, V3_OUT = 2400;   // 镜头最高高度、能飞出地图边多远：拉远能看见整张地图（黑绿画面是整张沙盘桌，v3table.js）
 // 自由镜头能飞到地图外多远（各边）：外面铺着无边海面的地图扩大 10 倍（用户：交战区域扩大 10 倍），南边还要够到战区机场的小岛（afp.js，南缘外约 27 公里）
+// 并行编译着色器（用户：一开飞机就卡死——加力尾焰、音障云这些大着色器原来第一次用到时才编译，链接完马上查状态，主线程要等它编完，
+//   Mac 上的 Chrome（Metal）一编好几秒）：有 KHR_parallel_shader_compile 时编译在后台线程做，链接后先不查状态，done() 编完才是真，
+//   之后 check() 查结果（不再等）；没有这个扩展时 done() 一律为真，第一次 check() 照旧同步等
+const V3PC = { ext: undefined };
+function v3pcLink(gl, vs, fs) {
+  if (V3PC.ext === undefined) V3PC.ext = gl.getExtension('KHR_parallel_shader_compile') || null;
+  const sh = (t, src) => { const o = gl.createShader(t); gl.shaderSource(o, src); gl.compileShader(o); return o; };
+  const v = sh(gl.VERTEX_SHADER, vs), f = sh(gl.FRAGMENT_SHADER, fs), pr = gl.createProgram();
+  gl.attachShader(pr, v); gl.attachShader(pr, f); gl.linkProgram(pr);
+  return {
+    pr, done: () => !V3PC.ext || !!gl.getProgramParameter(pr, V3PC.ext.COMPLETION_STATUS_KHR),
+    check() { if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) throw new Error(gl.getShaderInfoLog(v) || gl.getShaderInfoLog(f) || gl.getProgramInfoLog(pr)); return pr; }
+  };
+}
+// 开飞机才用得上的着色器：进 3D 几秒后（开局的场景先载完）提前开始编译，各模块的 init 自己分两步（第一次只发起，编完才建好）
+const V3PC_WARM = [];
+HOOK.frame.push(now => {
+  if (typeof V3 !== 'object' || !V3.on || !V3.gl || !V3PC_WARM.length) return;
+  if (V3PC.t0 == null) V3PC.t0 = now;
+  if (now - V3PC.t0 < 4000) return;
+  for (let i = V3PC_WARM.length - 1; i >= 0; i--) if (V3PC_WARM[i](V3.gl)) V3PC_WARM.splice(i, 1);   // 返回真：建好了（或失败了不再试）
+});
 const v3OutB = () => { const o = V3.ocean ? V3_OUT * 10 : V3_OUT; return { w: o, e: o, n: o, s: Math.max(o, typeof afpOn === 'function' && afpOn() ? afpSouth() + 3500 : 0, typeof fsSouth === 'function' ? fsSouth() : 0) }; };   // 远海编队（farsea.js）
 let V3_AIR = 230 * V3_HZ / 150;
 function v3SetHz(hz) { V3_HZ = hz; V3_AIR = 230 * Math.max(hz, 230) / 150; }   // 飞机、导弹高度 alt 1.0 对应的 3D 高度：随地形高程放大，高空飞机始终在最高的山顶之上

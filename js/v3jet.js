@@ -138,14 +138,15 @@ void main() {
   if (uMx > .5) col = vec3(.32, 1., .58) * dot(col, vec3(.3, .59, .11));
   gl_FragColor = vec4(col, al);
 }`;
+// 分两步（view3d.js v3pcLink）：第一次只发起编译，编完了才建好；进 3D 几秒后就提前开始（V3PC_WARM），开飞机时不再现编现卡
 function v3jInit(gl) {
-  V3J.tried = true;
+  if (V3J.ok || V3J.tried) return;   // tried：编不过，不再试
   try {
     const ext = gl.getExtension('ANGLE_instanced_arrays');
-    if (!ext) return;
-    const mk = (vs, fs) => { const sh = (t, s) => { const o = gl.createShader(t); gl.shaderSource(o, s); gl.compileShader(o); if (!gl.getShaderParameter(o, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(o)); return o; };
-      const pr = gl.createProgram(); gl.attachShader(pr, sh(gl.VERTEX_SHADER, vs)); gl.attachShader(pr, sh(gl.FRAGMENT_SHADER, fs)); gl.linkProgram(pr); if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(pr)); return pr; };
-    const E = mk(V3J_EVS, V3J_EFS), P = mk(V3J_PVS, V3J_PFS);
+    if (!ext) { V3J.tried = true; return; }
+    if (!V3J.pc) { V3J.pc = [v3pcLink(gl, V3J_EVS, V3J_EFS), v3pcLink(gl, V3J_PVS, V3J_PFS)]; return; }
+    if (!V3J.pc.every(c => c.done())) return;
+    const E = V3J.pc[0].check(), P = V3J.pc[1].check();
     const loc = (pr, names, kind) => Object.fromEntries(names.map(n => [n, kind === 'a' ? gl.getAttribLocation(pr, n) : gl.getUniformLocation(pr, n)]));
     const em = v3jMesh(), pm = v3jPlumeMesh();
     Object.assign(V3J, { ext, E, P, eA: loc(E, ['p', 'n', 'g', 'iO', 'iU', 'iV', 'iX'], 'a'), eU: loc(E, ['uM', 'uEye', 'uFog', 'uBg', 'uMx']),
@@ -154,14 +155,14 @@ function v3jInit(gl) {
     gl.bindBuffer(gl.ARRAY_BUFFER, V3J.eb); gl.bufferData(gl.ARRAY_BUFFER, em, gl.STATIC_DRAW);
     gl.bindBuffer(gl.ARRAY_BUFFER, V3J.pb); gl.bufferData(gl.ARRAY_BUFFER, pm, gl.STATIC_DRAW);
     V3J.ok = true;
-  } catch (e) { console.warn('发动机尾焰着色器没编译过：', e); }
+  } catch (e) { V3J.tried = true; console.warn('发动机尾焰着色器没编译过：', e); }
 }
+if (typeof V3PC_WARM === 'object') V3PC_WARM.push(gl => { v3jInit(gl); return V3J.ok || V3J.tried; });
 // 画这一帧收集到的喷口内部（不透明，写深度）与尾焰（预乘透明度混合，不写深度）
 function v3jDraw(C) {
   if (!V3J.eng.length && !V3J.plm.length) return;
   const gl = V3.gl;
-  if (!V3J.tried) v3jInit(gl);
-  if (!V3J.ok) return;
+  if (!V3J.ok) { v3jInit(gl); if (!V3J.ok) return; }   // 还在编译：这几帧先不画
   const X = V3J.ext, fog = typeof v3FogR === 'function' ? v3FogR(C) : C.fog, bg = typeof v3Bg === 'function' ? v3Bg() : [.6, .65, .7], mx = typeof v3Mx === 'function' && v3Mx() ? 1 : 0;
   const inst = (A, data, stride, names) => {
     gl.bindBuffer(gl.ARRAY_BUFFER, V3J.ib); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(data), gl.DYNAMIC_DRAW);
