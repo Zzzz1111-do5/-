@@ -11,6 +11,7 @@
 //   每个镜头渲染完就存 <镜头>.mp4 和它的音效记录 <镜头>.sfx.json：SKIP=1 跳过两样都有的镜头（中断了接着渲）；
 //   SFXONLY=1 只走一遍记音效、不截图（镜头的视频已经有了；可以用小窗口跑：W=640 H=360，声像按画面比例算，和 1080p 一样）；
 //   没有显卡时可以开两个进程分头渲（ONLY 各给一半、输出目录分开），最后把 trailer_shots 里的文件拷到一起再跑 audio,edit
+//   RS=0.6667：游戏画布（3D、地形、标号）按这个比例的分辨率渲、浏览器放大，字幕卡、编辑器等界面照样按 1080p——软件渲染时省一半时间
 'use strict';
 const { chromium } = require('playwright');
 const fs = require('fs'), path = require('path'), { execFileSync } = require('child_process');
@@ -180,6 +181,7 @@ async function stepShots(b) {
   await p.addStyleTag({ content: OVERLAY_CSS });
   await p.evaluate(PAGE_FNS);
   await battle(p, 0);
+  if (+process.env.RS > 0 && +process.env.RS < 1) await p.evaluate(rs => { R.dprCap = rs; resize(); }, +process.env.RS);   // 画布像素密度压低（render.js resize 按 R.dprCap），界面不变
   const geo = await p.evaluate(() => {
     // 接管：动画循环停掉、时钟由这里推进；音效只记录不发声（声像按 3D 镜头算）
     window.requestAnimationFrame = () => 0;
