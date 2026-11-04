@@ -1163,6 +1163,8 @@ function v3mCollect(C, box) {
   if (typeof v3uClear === 'function') v3uClear(C);   // 带贴图的精细模型（v3utex.js：舰艇）
   if (typeof v3gBegin === 'function') v3gBegin(C);   // 用户给的模型（js/v3g.js：坦克装甲车、飞机、直升机、导弹、士兵）
   const [bx, by, bw, bh] = box, inB = (x, y, m = 40) => x > bx - m && x < bx + bw + m && y > by - m && y < by + bh + m;
+  // 地图外的飞行物、小岛机场（afp.js，南缘外 27 公里）：box 是给地面贴图用的、夹在地图里，地图外的一律在范围外——按离镜头的距离（雾的尽头以内）判断
+  const fogR = (C && C.fog ? C.fog[1] : 9000) * 1.1, inA = (x, y, m = 40) => inB(x, y, m) || ((x < 0 || y < 0 || x > W || y > H) && Math.hypot(x - C.E[0], y + C.E[1]) < fogR + m);
   const spec = specAll() || (typeof R === 'object' && (R.eye === 'all' || R.eye === 'both' || R.eye === 'e')), t = performance.now() / 1000;
   const seen = (x, y) => inVision(x, y), hl = o => typeof sfxHas === 'function' && sfxHas(o);
   // 车辆：用户给的坦克模型（js/v3g.js）——车体贴地（按脚下坡度俯仰、侧倾），炮塔随瞄准转
@@ -1427,7 +1429,7 @@ function v3mCollect(C, box) {
     if (!own && !(spec || (typeof eaBaseSeen === 'function' && eaBaseSeen(b)))) continue;
     for (const P of afbParked(b, own)) {
       const [x, y] = eaW(b, P.u, P.v);
-      if (!inB(x, y, 30)) continue;
+      if (!inA(x, y, 30)) continue;
       const [x2, y2] = eaW(b, P.u + Math.cos(P.a), P.v + Math.sin(P.a)), h = Math.atan2(y2 - y, x2 - x);
       if (typeof v3gPlane === 'function') v3gPlane(P.sil, P.size, x, y, v3Ht(x, y), true, h, own ? 0 : 1, 0, 0, true, 0, 0, null, null, 0, typeof v3gPlaneAn === 'function' ? v3gPlaneAn(P.sil, Math.round(x * 3 + y * 7), !own, false) : null);   // 放下起落架停着（编辑器设计的「停着时」动画）
       if (P.w && typeof fwStoresGnd === 'function' && typeof fwLoadout === 'function') { const n = fwLoadout(P.w.type, P.w.v).length; fwStoresGnd(P.w.type, P.w.v, P.sil, P.size, x, y, v3Ht(x, y), h, P.ready ? n : Math.round(n * clamp(P.prog ?? 1, 0, 1)), null); }   // 我方停着的飞机身上挂好的弹（原来只有航母甲板上画；整备中的按进度挂上一部分）
@@ -1459,7 +1461,7 @@ function v3mCollect(C, box) {
     const An = typeof v3gPlaneAn === 'function' ? v3gPlaneAn(key, o.id, sd, true) : null;   // 编辑器设计的动画（飞着、发射时）
     if (typeof v3gPlane === 'function' && v3gPlane(key, sz, x, y, z, rwy, hd || 0, sd, bank || 0, pt, gd, t, nz, Pc, bay, 0, An) && !sd && typeof fwBayMsl === 'function') fwBayMsl(o, key, sz, x, y, z, hd || 0, pt, bank || 0, bay);   // 用户给的飞机模型（js/v3g.js）：起落架收放、直升机旋翼转、尾喷口开合、舵面偏转、弹舱门开合（开着时画舱里的弹）
   };
-  for (const p of S.planes || []) if (!p.dead && isFinite(p.x) && (inB(p.x, p.y, 220) || (typeof fpDriving === 'function' && fpDriving(p))) && !(!p.land && (p.phase === 'cat' || p.phase === 'roll' || p.phase === 'trap'))) {   // 甲板上的在航母那里画（放下起落架）
+  for (const p of S.planes || []) if (!p.dead && isFinite(p.x) && (inA(p.x, p.y, 220) || (typeof fpDriving === 'function' && fpDriving(p))) && !(!p.land && (p.phase === 'cat' || p.phase === 'roll' || p.phase === 'trap'))) {   // 甲板上的在航母那里画（放下起落架）
     const key = typeof airSilKey === 'function' ? airSilKey(p.kind, p.v) : 'j35', sz = (typeof airMdl === 'function' && airMdl(p.kind, p.v).size) || ((typeof AIR_SPEC === 'object' && AIR_SPEC[p.kind]) || {}).size || 15;
     plane(p, p.heading, 0, key, sz, p.bank);
   }
@@ -1469,11 +1471,11 @@ function v3mCollect(C, box) {
     const age = S.t - w.t;
     if (age < 0 || age > T) return;
     const P = v3WreckAt(w, age, T), sp = (w.t * 7.31) % 1 < .5 ? 1 : -1;
-    if (inB(P.x, P.y, 220) && typeof v3gPlane === 'function') v3gPlane(key, sz, P.x, P.y, P.z, false, w.h + age * .5 * sp, 2, age * 4.2 * sp, -.2 - P.u * .95, false, 0, 0, null, null, 0, typeof v3gPlaneAn === 'function' ? v3gPlaneAn(key, Math.round(w.t * 100), 0, false, w.t) : null);   // 编辑器设计的「被击落时」动画
+    if (inA(P.x, P.y, 220) && typeof v3gPlane === 'function') v3gPlane(key, sz, P.x, P.y, P.z, false, w.h + age * .5 * sp, 2, age * 4.2 * sp, -.2 - P.u * .95, false, 0, 0, null, null, 0, typeof v3gPlaneAn === 'function' ? v3gPlaneAn(key, Math.round(w.t * 100), 0, false, w.t) : null);   // 编辑器设计的「被击落时」动画
   };
   for (const w of (S.air && S.air.wrecks) || []) { const key = typeof airSilKey === 'function' ? airSilKey(w.kind, w.v) : 'j35'; wreck(w, 2.2, key, (typeof airMdl === 'function' && airMdl(w.kind, w.v).size) || 15); }
   if (S.eair) for (const w of S.eair.wr || []) if (spec || seen(w.x, w.y)) { const [key, sz] = EA_K[w.type] || ['f35', 17]; wreck(w, 2, key, sz); }
-  if (S.eair) for (const a of S.eair.fly) if (!a.dead && isFinite(a.x) && (spec || a.pv || seen(a.x, a.y)) && inB(a.x, a.y, 220)) {
+  if (S.eair) for (const a of S.eair.fly) if (!a.dead && isFinite(a.x) && (spec || a.pv || seen(a.x, a.y)) && inA(a.x, a.y, 220)) {
     const [key, sz] = EA_K[a.type] || ['f35', 17];
     if (a.ph === 'vto' || a.ph === 'vl') {   // F-35B 垂直起降：放下起落架，悬停着升降
       const zg = v3Ht(a.x, a.y), z = v3AirZ(a), zc = typeof v3gPlaneZc === 'function' ? v3gPlaneZc(key, sz) : 2;
@@ -1502,7 +1504,7 @@ function v3mCollect(C, box) {
   for (const m of S.missiles || []) {
     if (m.t < 0 || m.done || !isFinite(m.x)) continue;
     mlive.add(m.id);
-    if ((typeof AIRV === 'object' && AIRV.mv && AIRV.mv.has(m.id) && typeof airRelPos === 'function' && airRelPos(m, true)) || !inB(m.x, m.y, 300) || (m.side === 'e' && !(spec || seen(m.x, m.y)))) continue;
+    if ((typeof AIRV === 'object' && AIRV.mv && AIRV.mv.has(m.id) && typeof airRelPos === 'function' && airRelPos(m, true)) || !inA(m.x, m.y, 300) || (m.side === 'e' && !(spec || seen(m.x, m.y)))) continue;
     const z0 = m.z3 != null ? m.z3 : typeof v3AltZ === 'function' ? v3AltZ(m.x, m.y, m.z * (m.kind === 'tbm' ? 620 : V3_AIR), -2.6, 2) : v3Ht(m.x, m.y) + 20;   // z3：三维弹道算的真实高度（fpwpn.js）
     const VP = typeof v3MslPos === 'function' ? v3MslPos(m, z0) : null, mx = VP ? VP.x : m.x, my = VP ? VP.y : m.y, z = VP ? VP.z : z0;   // 垂发冲出阶段（v3fx.js）
     let o = mp.get(m.id);

@@ -1,6 +1,6 @@
 // 宣传片（66 秒，1080p）：跟着游戏自己的进行曲剪——固定 120 拍、一小节 2 秒，换幕和切镜头都在重拍上
 //   开场 海上低空看向满天云的海岸 → 第一幕 先夺制海权（航母、舰队、空袭岸防、战斗机追拍）→ 第二幕 再强行登陆（抢滩、滩头交火）
-//   → 第三幕 向纵深推进（纵深激战、战线）→ 编辑器（局部动画：开炮时炮管后坐、炮塔一震；导弹尾烟设计）、图鉴、部署 → 高潮 → 片尾标志（胜利号角）
+//   → 第三幕 向纵深推进（冲向守军的堑壕、纵深激战、战线）→ 编辑器（局部动画：开炮时炮管后坐、炮塔一震；导弹尾烟设计）、图鉴、部署 → 高潮 → 片尾标志（胜利号角）
 // 画面：同一局（固定地图与随机数）逐帧推演、逐帧截图。推演和画面的随机数分开存：画画用掉的随机数不影响战局，
 //   所以先不画画「侦察」一遍，记下每个时刻爆炸落在哪、部队在哪，再正式渲染时镜头就能对准，每次生成都一样
 //   地图用程序生成的（store_assets.js battle：台湾东海岸的地形模型只许非商用，宣传片不用）
@@ -34,7 +34,7 @@ const SHOTS = [
   { id: 'F', at: 22, dur: 4, T: 262, tg: 'landing', cam: [[520, -1.75, -0.20], [380, -1.55, -0.25]], card: C('PHASE 02 // ASSAULT', '再强行登陆', '抢滩，夺取登陆场', .15, 3.7), flash: true },
   { id: 'G', at: 26, dur: 4, T: 272, tg: 'boom', fire: true, cam: [[420, -0.95, -0.34], [330, -1.35, -0.36]] },
   { id: 'H', at: 30, dur: 4, T: 300, tg: 'boom', fire: true, cam: [[460, -1.95, -0.30], [360, -1.65, -0.28]] },
-  { id: 'I', at: 34, dur: 4, T: 318, tg: 'land', cam: [[560, -1.25, -0.22], [420, -1.0, -0.20]] },
+  { id: 'I', at: 34, dur: 4, T: 318, tg: 'trench', cam: [[115, -1.3, -0.46], [80, -1.05, -0.40]] },   // 堑壕：壕里的守军对着冲上来的登陆部队
   { id: 'J', at: 38, dur: 4, T: 340, tg: 'boom', fire: true, cam: [[430, -1.38, -0.36], [340, -1.08, -0.33]], card: C('PHASE 03 // DEPTH', '向纵深推进', '战区 → 师 → 团 → 营　逐级指挥', .15, 3.7), flash: true },
   { id: 'K', at: 42, dur: 4, T: 360, tg: 'land', hud: true, cam: [[3300, -1.5708, -1.02], [2700, -1.5708, -0.88]] },
   { id: 'N', at: 54, dur: 4, T: 410, tg: 'boom', fire: true, cam: [[400, -1.18, -0.24], [300, -1.36, -0.27]], flash: true, booms: [0, .5, 1, 1.5, 2, 2.25, 2.5, 2.75, 3, 3.25, 3.5] },
@@ -123,6 +123,13 @@ const PAGE_FNS = () => {
     return b ? avg(near(b)) : null;
   };
   window.__fleet = () => avg(S.ships.filter(s => !s.dead));
+  window.__trench = first => {   // 堑壕：登陆部队 900 米以内、壕里站着守军的那一段（开拍时选定那一组守军，之后一直对着它，打光了才换）
+    const L = window.__land(), E = S.teams.filter(q => q.side === 'e' && q.men.length && q.inTrench && !q.ride);
+    if (!first && window.__trP) { const o = E.find(q => q.id === window.__trId); if (o) window.__trP = [o.x, o.y]; return window.__trP; }   // 那组守军打光了：镜头留在那段堑壕上，不跳去别处
+    const o = L && E.filter(q => dist(q.x, q.y, L[0], L[1]) < 900).reduce((a, q) => !a || dist(q.x, q.y, L[0], L[1]) < dist(a.x, a.y, L[0], L[1]) ? q : a, null);
+    if (o) { window.__trId = o.id; window.__trP = [o.x, o.y]; return window.__trP; }
+    return L;
+  };
   window.__ships = reset => {   // 舰艇最密的一群（舰队分成几群时平均位置落在空海上）：开拍时选定这几艘，之后一直跟着，中途不换群
     if (reset || !window.__grp) { const A = S.ships.filter(s => !s.dead), near = q => A.filter(o => dist(o.x, o.y, q.x, q.y) < 300), c = A.reduce((a, q) => !a || near(q).length > near(a).length ? q : a, null); window.__grp = c ? near(c) : []; }
     return avg(window.__grp.filter(s => !s.dead));
@@ -211,7 +218,7 @@ async function stepShots(b) {
       if ((sh.hud || sh.ui) && window.__v3o) { window.v3Overlay = window.__v3o; window.__v3o = null; } }, sh);
     const fixed = staticTarget(sh, sc, geo.W, geo.H), mem = {};
     let cur = null;
-    for (let i = F0 - 2; i < N; i++) {   // 前两帧预热（新镜头位置的贴图、缓存），不推演、不截图、不记声音
+    for (let i = F0 - 8; i < N; i++) {   // 前 8 帧预热（新镜头位置的贴图、缓存，第一次出现的模型载入完——原来 2 帧，追拍的飞机头几帧只有航行灯），不推演、不截图、不记声音
       const t = Math.max(F0, i) / FPS, u = N0 > 1 ? Math.max(F0, i) / (N0 - 1) : 0;
       const cam = sh.ui ? null : await shotCam(p, sh, u, fixed, cur, geo, mem);
       if (cam) cur = cam.tg;
@@ -295,7 +302,7 @@ async function shotCam(p, sh, u, fixed, cur, geo, mem) {
   }
   let tg = fixed;
   if (!tg) {
-    const live = await p.evaluate(([k, first]) => k === 'cv' ? window.__cvp() : k === 'fleet' ? window.__fleet() : k === 'ships' ? window.__ships(first) : window.__land(), [sh.tg, !cur]) || cur || [geo.W / 2, geo.H / 2];
+    const live = await p.evaluate(([k, first]) => k === 'cv' ? window.__cvp() : k === 'fleet' ? window.__fleet() : k === 'ships' ? window.__ships(first) : k === 'trench' ? window.__trench(first) : window.__land(), [sh.tg, !cur]) || cur || [geo.W / 2, geo.H / 2];
     if (sh.ahead) live[1] -= sh.ahead;   // 舰队往岸上看：取景点放在舰队前方
     tg = cur ? [lerp(cur[0], live[0], .08), lerp(cur[1], live[1], .08)] : live;
   }
