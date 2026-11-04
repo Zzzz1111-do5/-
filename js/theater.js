@@ -16,9 +16,9 @@
 // 状态（纯 JSON）：S.th = { on, nid, f: { id: 编队 }, p: { id 战区编队, k 阶段线序号, kT, sp 进行中的穿插 }, e: { … } }
 //   编队 = { id, side, lvl: thr / div / bde / reg, no, name, ech, par, kids: [id], g 营对应的战斗群（S.bgs）id, cols 战线列, sec [x0, x1],
 //     ord { v, x, y, src: ai / pl, t } 正在执行的命令, box [{ ord, at }] 在途命令, man 玩家接管, aiSp AI 派出的穿插, p0 初始兵力 }
-const TH = { org: 2, think: 4, dly: { div: 5, bde: 3, reg: 2 }, bound: 130, lead: 150, back: 240, rest: 30, minW: 60, maxReg: 4, maxBde: 3, maxDiv: 3, link: 380, wait: 20,
+const TH = { org: 2, think: 4, dly: { div: 5, bde: 3, reg: 2 }, bound: 200, lead: 260, back: 240, rest: 10, minW: 60, maxReg: 4, maxBde: 3, maxDiv: 3, link: 380, wait: 8,
   gap: 30, vgap: 60, row: 100, rows: 3, focus: 1.2,   // gap 相邻两排形之间留的空当 · vgap 车辆最小间距（条令：车间距 50 米以上，原来 25 米挤成一团） · row 后几排的排距 · focus 正面超出能守宽度多少倍就收缩
-  adv: 180, advWait: 90, advArr: .7, advNear: 90, advMax: 300, advW: 3, adv0: 160,   // 攻方推进线：一次往前挪 adv 米；一线各营 advArr 以上到了线上（一线的排六成在自己位置 advNear 米内）才挪，
+  adv: 260, advWait: 35, advArr: .5, advNear: 120, advMax: 300, advW: 3, adv0: 160,   // 攻方推进线：一次往前挪 adv 米；一线各营 advArr 以上到了线上（一线的排六成在自己位置 advNear 米内）才挪，
                                                                              //   最多等 advWait 秒（大半个营离线 advMax 以内才直接推）；每跃两头各展开 advW 列
   res: .25, ctr: 2, prep: 12, commit: 1.5, det: 15 };   // 守方：res 登陆场出现后留作预备队的机动营比例 · ctr 反击要的兵力比 · prep 反击前炮火准备秒数 · commit 一线吃紧（当面敌 / 当面守军）到几倍不等判明主攻就投入预备队 · det 判明敌主攻要的上陆兵力
 const TH_V = { auto: '自动', advance: '推进', spear: '穿插', hold: '坚守', retreat: '后撤', reserve: '预备队', follow: '第二梯队', ext: '独立作战' };
