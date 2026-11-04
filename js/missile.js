@@ -291,15 +291,23 @@ function msDefend(m) {
   const D = msDefShips(), C = typeof cvDefs === 'function' ? cvDefs() : [], DC = [...D, ...C];
   if (!DC.length) return false;
   const T = msTgtObj(m.tgt);
-  const cover = s => !T || T === s.o || dist(T.x, T.y, s.x, s.y) < 400;
-  // 外层：舰空导弹（每枚来袭导弹只分配一枚拦截弹）
-  if (!m.samTry) for (const s of D) {
-    const r = s.esc ? 600 : 750, d = dist(m.x, m.y, s.x, s.y);
-    if (d > r || d < 140 || !cover(s) || (s.o.samCd || 0) > S.t || (typeof vlsUse === 'function' && !vlsUse(s.o, 'sam'))) continue;
-    m.samTry = true; s.o.samCd = S.t + 1.5;
-    msLaunch('sam', 'p', s.x, s.y, { x: m.x, y: m.y }, { tgt: { k: 'msl', id: m.id }, src: s.esc ? 'esc' : 'dd', spd: 560, dur: 2.5, pk: (s.esc ? .3 : .35) * (m.lo ? .6 : 1) });   // lo：低可探测的隐身巡航导弹（JASSM-ER），雷达锁得晚
+  const cover = (s, r) => !T || T === s.o || dist(T.x, T.y, s.x, s.y) < (r || 400);
+  // 远海（farsea.js，真实距离）：掠海来袭弹进了雷达地平线（FS.hz 约 28 公里）就用舰空导弹打（海红旗-9 / 海红旗-16，约 1100 米 / 秒），
+  //   区域防空：护着 15 公里内的友舰（航母、登陆舰）；打不中、来袭弹进了 12 公里再补一发（先打、看结果、再打）；进了 8 公里放箔条 / 诱饵弹（软杀伤，每枚来袭弹判一次）；近防炮照旧
+  const fs = typeof fsOn === 'function' && fsOn() && typeof FS === 'object';
+  const inAir = () => S.missiles.some(o => o.kind === 'sam' && o.side === 'p' && !o.done && o.tgt && o.tgt.k === 'msl' && o.tgt.id === m.id);
+  // 外层：舰空导弹（每枚来袭导弹只分配一枚拦截弹；远海补一发）
+  if (!m.samTry || (fs && m.samTry === 1 && !inAir())) for (const s of D) {
+    const r = fs ? (m.samTry ? 12000 : FS.hz) : s.esc ? 600 : 750, d = dist(m.x, m.y, s.x, s.y);
+    if (d > r || d < (fs ? 1500 : 140) || !cover(s, fs ? 15000 : 0) || (s.o.samCd || 0) > S.t || (typeof vlsUse === 'function' && !vlsUse(s.o, 'sam'))) continue;
+    m.samTry = (m.samTry || 0) + 1; s.o.samCd = S.t + 1.5;
+    msLaunch('sam', 'p', s.x, s.y, { x: m.x, y: m.y }, { tgt: { k: 'msl', id: m.id }, src: s.esc ? 'esc' : 'dd', spd: fs ? 1100 : 560, dur: fs ? d / 700 + 4 : 2.5, pk: (s.esc ? .3 : .35) * (m.lo ? .6 : 1) });   // lo：低可探测的隐身巡航导弹（JASSM-ER），雷达锁得晚
     msStat('abm');
     break;
+  }
+  if (fs && !m.dcy && T && dist(m.x, m.y, T.x, T.y) < 8000) {
+    m.dcy = true;
+    if (Math.random() < .25) { m.done = m.icp = true; msPuff(m.x, m.y, 'p', true); msStat('decoy'); log(`来袭的反舰导弹被${msTgtName(m.tgt)}的箔条 / 诱饵弹骗走`, 'good', 'fsdcy', 1.5, { x: m.x, y: m.y }); return true; }
   }
   // 中层：航母红旗-10（每枚来袭导弹只分配一枚）
   if (!m.hqTry) for (const s of C) {

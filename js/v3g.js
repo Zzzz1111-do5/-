@@ -207,6 +207,9 @@ ${typeof V3_SHF === 'string' ? V3_SHF : 'float shadowAt() { return 1.; }'}
 ${typeof V3L_BOOM_GLSL === 'string' ? V3L_BOOM_GLSL : 'vec3 boomLight(vec2 w) { return vec3(0.); }'}
 vec3 lin(vec3 c) { return pow(c, vec3(2.2)); }
 uniform float uMot, uCld, uCldF;
+${typeof V3_GLOW === 'string' ? V3_GLOW : 'vec3 v3Glow(vec3 d) { return vec3(0.); }'}
+// 环境反射的能量（Karis 的解析近似）：掠射角、光滑的面反射多，粗糙的少——代替原来手调的菲涅尔 × (1 − 粗糙度)
+vec3 envBRDF(vec3 F0, float r, float nv) { vec4 rr = r * vec4(-1., -.0275, -.572, .022) + vec4(1., .0425, 1.04, -.04); float a = min(rr.x * rr.x, exp2(-9.28 * nv)) * rr.x + rr.y; vec2 AB = vec2(-1.04, 1.04) * a + rr.zw; return F0 * AB.x + AB.y; }
 float h3(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
 float vn3(vec3 p) { vec3 i = floor(p), f = fract(p); f = f * f * (3. - 2. * f);
   return mix(mix(mix(h3(i), h3(i + vec3(1., 0., 0.)), f.x), mix(h3(i + vec3(0., 1., 0.)), h3(i + vec3(1., 1., 0.)), f.x), f.y),
@@ -226,6 +229,7 @@ void main() {
     float h = clamp(vMP.z / uCld * .5 + .5, 0., 1.), w = dot(N, ${V3_SUNG}) * .5 + .5, f = abs(dot(N, V));
     vec3 cc = mix(vec3(.55, .6, .68), vec3(1., .985, .955), smoothstep(.1, .9, h * .55 + w * .6));
     cc *= .93 + .12 * pow(1. - f, 2.);
+    cc += vec3(1., .88, .7) * pow(max(dot(-V, ${V3_SUNG}), 0.), 6.) * pow(1. - f, 1.5) * .55;   // 逆着太阳看：云的薄边透光发亮（银边）
     // 离镜头近的、镜头在它上面往下看的（看战场）淡掉：原来要高出 900 米才淡、最低也留 3%——部署镜头（约 3.5 公里高）离下面的云顶只有几百米，
     //   这个云模型是七万多个三角形的层层薄壳，每层 3% 叠几十层仍把半个战场、整支舰队盖住；改成高出 300 米、俯角超过约 17° 就淡到没有（丢掉片元），
     //   平着看远处地平线上的云仍然在
@@ -260,8 +264,9 @@ void main() {
   vec3 L = ${V3_SUNG}, H = normalize(L + V);
   float ndl = max(dot(N, L), 0.), ndv = max(dot(N, V), 0.);
   float shd = uLmOn > .5 ? mix(.45, 1., texture2D(uLm, vec2(vW.x, -vW.y) / uWorld).r) : shadowAt();   // 黑绿画面：烘焙的光照贴图（v3light.js）；写实画面：实时太阳阴影（view3d.js）
-  float a2 = rough * rough, sh = clamp(2. / max(a2 * a2, 1e-4) - 2., 1., 4096.);
-  float spec = pow(max(dot(N, H), 0.), sh) * (sh + 2.) / 8.;
+  // 太阳高光：GGX 微表面分布 + Smith 遮蔽（掠射角的高光、金属反光照真实的走；原来是归一化的 Blinn-Phong）
+  float rs = max(rough, .08), a2 = rs * rs, a4 = a2 * a2, ndh = max(dot(N, H), 0.), dd = ndh * ndh * (a4 - 1.) + 1., kk = (rs + 1.) * (rs + 1.) / 8.;
+  float spec = min(a4 / (3.14159 * dd * dd) * (1. / ((ndv * (1. - kk) + kk) * (ndl * (1. - kk) + kk))) * .25, 60.);
   vec3 Fr = F0 + (1. - F0) * pow(1. - max(dot(H, V), 0.), 5.);
   vec3 sunC = vec3(1., .96, .9) * 2.6, sky = mix(vec3(.05, .055, .055), vec3(.3, .32, .34), N.z * .5 + .5);
   vec3 R = reflect(-V, N), env = mix(vec3(.04, .045, .045), vec3(.34, .36, .38), clamp(R.z * .5 + .5, 0., 1.));   // 金属反射的环境：上亮下暗（黑绿画面、天空图还没载入时）
@@ -274,8 +279,17 @@ void main() {
     vec3 sk = lin(texture2D(uEnvT, ev, rough * 7.).rgb);
 #endif
     env = mix(lin(uBg) * vec3(.32, .34, .3), sk * .95, smoothstep(-.1, .05, R.z));
+    // 天光（漫反射）：照法线方向取天空图最模糊的一级——朝天的面是天空的颜色（蓝天下偏冷、阴天发灰），朝下的面是地面反上来的暖色（原来是固定的上下渐变）
+    vec2 nv2 = vec2(fract(atan(N.y, N.x) / 6.2831853 + uEnvU), .5 - asin(clamp(N.z * .7 + .25, 0., 1.)) / 3.1415927);
+#ifdef TLOD
+    vec3 si = lin(texture2DLodEXT(uEnvT, nv2, 9.).rgb);
+#else
+    vec3 si = lin(texture2D(uEnvT, nv2, 9.).rgb);
+#endif
+    sky = mix(lin(uBg) * vec3(.26, .22, .17), si * .46, smoothstep(-.45, .55, N.z));
   }
-  vec3 c = diff * (sky * ao + sunC * ndl * shd) + Fr * spec * sunC * ndl * shd + env * (F0 + (1. - F0) * pow(1. - ndv, 5.) * (1. - rough)) * ao * (.35 + .65 * metal);
+  float ho = clamp(1. + 1.3 * dot(R, normalize(vN) * sign(dot(normalize(vN), V))), 0., 1.);   // 反射方向钻进面里的（凹处、背面）：不反射天空
+  vec3 c = diff * (sky * ao + sunC * ndl * shd) + Fr * spec * sunC * ndl * shd + env * envBRDF(F0, rough, ndv) * ao * ho * ho * mix(.6, 1., metal);
   c += uE * (uTf2.x > .5 ? lin(texture2D(uTe, vUv).rgb) : vec3(1.));
   c += boomLight(vec2(vW.x, -vW.y)) * diff * (.4 + .6 * ndl);   // 近处爆炸的火光
   if (sd > 1.5 && sd < 2.5) c *= .2;   // 残骸：烧黑
@@ -284,7 +298,7 @@ void main() {
   c = pow(max(c, 0.), vec3(1. / 2.2));
   if (uMx > .5) c = (sd > .5 && sd < 1.5 ? vec3(1., .3, .38) : vec3(.32, 1., .58)) * dot(c, vec3(.3, .59, .11)) * .6;   // 黑绿画面：按明暗换成磷光的单色（敌方红）
   c += uHlC * uHl * hl * (.3 + .7 * pow(1. - ndv, 2.));
-  gl_FragColor = vec4(mix(c, uBg, smoothstep(uFog.x, uFog.y, vD)), uAm > 1.5 ? base.a : 1.);
+  gl_FragColor = vec4(mix(c, uBg + (uMx < .5 ? v3Glow(-V) : vec3(0.)), smoothstep(uFog.x, uFog.y, vD)), uAm > 1.5 ? base.a : 1.);   // 大气透视：朝太阳那边的雾发暖（view3d.js V3_GLOW）
 }`;
 function v3gInit(gl) {
   V3G.tried = true; V3G.gl = gl;
@@ -924,6 +938,20 @@ function v3gSmooth(cf, m, VB, IB) {
     }
   }
 }
+// 云朵：模型是一层层薄壳，按每个面的法线打光，近处的云一块块棱角分明、像石膏块——法线大半换成整团云的椭球法线
+//   （中心偏下：云底平、顶上鼓），明暗、边缘透明（uCld 按 |N·V|）都顺着整团云渐变，看着蓬松
+function v3gCloudN(m, VB) {
+  const b = m.bb, st = m.st, cx = (b[0] + b[3]) / 2, cy = (b[1] + b[4]) / 2, cz = b[2] + (b[5] - b[2]) * .3;
+  const ex = Math.max(1, (b[3] - b[0]) / 2), ey = Math.max(1, (b[4] - b[1]) / 2), ez = Math.max(1, (b[5] - b[2]) / 2);
+  for (let i = 0; i + 5 < VB.length; i += st) {
+    let nx = (VB[i] - cx) / (ex * ex), ny = (VB[i + 1] - cy) / (ey * ey), nz = (VB[i + 2] - cz) / (ez * ez);
+    const l = Math.hypot(nx, ny, nz);
+    if (!(l > 0)) continue;
+    nx = nx / l * .78 + VB[i + 3] * .22; ny = ny / l * .78 + VB[i + 4] * .22; nz = nz / l * .78 + VB[i + 5] * .22;
+    const k = Math.hypot(nx, ny, nz) || 1;
+    VB[i + 3] = nx / k; VB[i + 4] = ny / k; VB[i + 5] = nz / k;
+  }
+}
 function v3gRecol(cf, m, VB, IB) {
   const st = m.st;
   for (const R of cf) {
@@ -1014,6 +1042,7 @@ function v3gPrep(key, m, M, VB, IB) {
   if (V3G_ROTSPLIT[key]) v3gRotor(V3G_ROTSPLIT[key], m, VB, IB);
   if (V3G_DROP[key]) v3gDrop(V3G_DROP[key], m, VB, IB);   // 去掉从蒙皮里戳出来的内部结构（歼-31）
   if (V3G_SMOOTH[key]) v3gSmooth(V3G_SMOOTH[key], m, VB, IB);   // 拼起来的蒙皮重算平滑法线（歼-31）
+  if (key === 'cloud') v3gCloudN(m, VB);   // 云朵按整团的形状打光（不按一个个面）
   let R = null;
   const use = r => { if (r) { R = r; VB = r.VB; IB = r.IB; } };   // 补了顶点的步骤换成更长的新数组，后面的步骤接着在新数组上做
   if (V3G_GEAR[key]) use(v3gGear(V3G_GEAR[key], m, VB, IB));   // 补起落架（整架抬高）：弹舱、座舱、挂点都按抬高后的坐标
