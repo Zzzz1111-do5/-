@@ -12,13 +12,16 @@ let V3_HZ = 230;   // 高程 1.0 在 3D 里多高（米）：程序生成的地�
 const V3_FOV = .8, V3_TILT = [.05, 1.45], V3_SKIRT = -70;   // 俯仰：从几乎正俯视到几乎平视
 const V3_ZMAX = 11000, V3_OUT = 2400;   // 镜头最高高度、能飞出地图边多远：拉远能看见整张地图（黑绿画面是整张沙盘桌，v3table.js）
 // 自由镜头能飞到地图外多远（各边）：外面铺着无边海面的地图扩大 10 倍（用户：交战区域扩大 10 倍），南边还要够到战区机场的小岛（afp.js，南缘外约 27 公里）
-const v3OutB = () => { const o = V3.ocean ? V3_OUT * 10 : V3_OUT; return { w: o, e: o, n: o, s: Math.max(o, typeof afpOn === 'function' && afpOn() ? afpSouth() + 3500 : 0) }; };
+const v3OutB = () => { const o = V3.ocean ? V3_OUT * 10 : V3_OUT; return { w: o, e: o, n: o, s: Math.max(o, typeof afpOn === 'function' && afpOn() ? afpSouth() + 3500 : 0, typeof fsSouth === 'function' ? fsSouth() : 0) }; };   // 远海编队（farsea.js）
 let V3_AIR = 230 * V3_HZ / 150;
 function v3SetHz(hz) { V3_HZ = hz; V3_AIR = 230 * Math.max(hz, 230) / 150; }   // 飞机、导弹高度 alt 1.0 对应的 3D 高度：随地形高程放大，高空飞机始终在最高的山顶之上
 let V3_ST = 2;   // 地形网格每几格一个顶点：显卡支持 32 位索引时为 1（每 10 米一个顶点，山脊、河谷的轮廓更细），否则 2
 // 光照（所有 3D 着色器共用）：太阳方向（GL 坐标，指向太阳；与天空图 assets/sky/sky.jpg 里太阳的方位、48° 高度角一致）、日光、天光；
 //   写实画面的背景是真实天空（Poly Haven「kloofendal_48d_partly_cloudy_puresky」，CC0），远处雾成地平线的天色（大气透视）；黑绿画面仍是近黑的底
-const V3_SUN = [-.4236, .5178, .743], V3_SUNG = `normalize(vec3(${V3_SUN.join(', ')}))`, V3_HZ_COL = [.74, .75, .8];
+const V3_SUN = [-.4236, .5178, .743], V3_SUNG = `normalize(vec3(${V3_SUN.join(', ')}))`, V3_HZ_COL = [.74, .75, .8], V3_HZ0 = V3_HZ_COL.slice();
+// 大气透视（用户：光影做到和战雷五五开）：雾色 V3_HZ_COL 每帧取天空图在镜头朝向那边的地平线颜色（v3HzUpdate），远处的地面、海面、模型和天空无缝接上（原来是一种固定的灰，海天之间一道灰带）；
+//   朝太阳那一侧再加前向散射的暖光（v3Glow，逐像素，越贴地平线越明显），背太阳的一侧冷一些
+const V3_GLOW = `vec3 v3Glow(vec3 d) { float s = max(dot(d, ${V3_SUNG}), 0.); return vec3(1., .86, .66) * (.2 * pow(s, 10.) + .07 * pow(s, 2.5)) * clamp(1.2 - d.z * 3., 0., 1.); }`;
 const V3_SKYU = .595 - Math.atan2(V3_SUN[1], V3_SUN[0]) / (2 * Math.PI);   // 天空图横坐标的偏移：太阳在图里的位置（u = 0.595）对准太阳方向
 const v3Bg = () => v3Mx() ? [.004, .02, .011] : typeof TER === 'object' && TER && TER.flat ? V3_SPACE : V3_HZ_COL;   // 雾色 / 背景色（白色平原：太空，近黑带一点星云的暗红）
 const V3_SPACE = [.016, .011, .014];
@@ -101,6 +104,7 @@ ${V3_SHF}
 #define HP mediump
 #endif
 ${typeof V3L_BOOM_GLSL === 'string' ? V3L_BOOM_GLSL : 'vec3 boomLight(vec2 w) { return vec3(0.); }'}
+${V3_GLOW}
 // 云影（写实画面、细节贴图开着时）：几公里大的一团团云的影子随风慢慢飘过地面，只挡太阳直射、天光照旧——大尺度、边缘很软，没有颗粒
 float cH(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float cN(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3. - 2. * f); return mix(mix(cH(i), cH(i + vec2(1., 0.)), f.x), mix(cH(i + vec2(0., 1.)), cH(i + vec2(1., 1.)), f.x), f.y); }
@@ -157,7 +161,7 @@ void main() {
   //   正好丢在边上的话，这个像素里图外的子样本两边都没画，露出背景，图边上一串亮点
   if (uRing > .5 && uRing < 1.5 && w.x > uRect.x + fq.x && w.y > uRect.y + fq.y && w.x < uRect.z - fq.x && w.y < uRect.w - fq.y) discard;
   if (uRing > 1.5 && uRing < 2.5) { w.y = abs(w.y); w.x = uWorld.x - abs(uWorld.x - abs(w.x)); }   // 延伸的陆地：地形照地图北、西、东边镜像，贴图坐标也镜像——接缝处连续
-  vec3 bg = uBg;
+  vec3 bg = uBg + (uMx < .5 && uFlat < .5 ? v3Glow(normalize(-vV)) : vec3(0.));   // 大气透视：朝太阳那边的雾发暖发亮
 #ifdef DER
   float pw = max(length(fwidth(w)), 1e-3);
 #else
@@ -197,6 +201,15 @@ void main() {
     if (uDes > .5 && land > .5) {   // 沙漠（设置「地表」，默认）：俯视贴图里绿的、黄的按明暗换成沙土色，灰的道路、城镇不动
       float l = dot(col, vec3(.3, .59, .11));
       col = mix(col, vec3(.84, .74, .58) * clamp(l * 1.9, .5, 1.25), veg);
+    }
+    if (uSat > .5 && uDet > .5 && land > .5) {   // 卫星图近处的细节：每格 20 米，凑近糊成一片——叠一层只改明暗、不改颜色的细节贴图（按卫星图的颜色、坡度挑草地 / 岩石 / 沙地），颜色照原样；一千米外淡掉
+      float nr = 1. - smoothstep(250., 1100., vDp);
+      if (nr > 0.) {
+        vec3 Y = vec3(.3, .59, .11);
+        float gv = smoothstep(0., .06, col.g - max(col.r, col.b) * .92), rk2 = smoothstep(.85, .6, N.z), sd2 = (1. - gv) * smoothstep(.015, .07, col.r - col.b) * smoothstep(.36, .6, dot(col, vec3(.333)));   // 沙地只给偏黄的（灰色的道面、砾石套上沙纹像水面）
+        float lG = dot(texture2D(uDg, w / 7.).rgb, Y) / max(dot(texture2D(uDg, w / 7., 10.).rgb, Y), .05), lR = dot(texture2D(uDr, w / 13.).rgb, Y) / max(dot(texture2D(uDr, w / 13., 10.).rgb, Y), .05), lS = (dot(texture2D(uDs, w / 5.).rgb, Y) + dot(texture2D(uDs, mat2(.8, -.6, .6, .8) * w / 6.7 + .37).rgb, Y)) * .5 / max(dot(texture2D(uDs, w / 5., 10.).rgb, Y), .05);   // 两个转角叠一起：沙纹不成一道道规则的波纹（像水面）
+        col *= mix(1., clamp(mix(mix(mix(mix(1., lR, .65), lS, sd2), lG, gv), lR, rk2), .55, 1.5), .5 * nr);   // 不绿不黄的（灰土、砾石）按碎石
+      }
     }
     if (uDet > .5 && land > .5 && uSat < .5) {
       // 自然地表换成真实贴图：按地形类别（林地、礁石 / 悬崖、沙滩、沼泽）和坡度（陡坡露岩）混合；两种尺度叠加避免一张贴图重复的痕迹
@@ -487,11 +500,13 @@ void main() { vec4 b = uInv * vec4(p, 1., 1.); vR = b.xyz / b.w - uEye; gl_Posit
 // 高精度（苹果的显卡上 mediump 真的是半精度：方位角坐标只剩千分之一的分辨率，天空图上一格格台阶）；有显式取级扩展时直接取最清楚的一级
 const V3_SKY_FS = tl => `${tl ? '#extension GL_EXT_shader_texture_lod : enable\n' : ''}${V3_PREC}
 uniform sampler2D uSky; uniform float uU; uniform vec3 uBg; varying vec3 vR;
+${V3_GLOW}
 void main() {
   vec3 d = normalize(vR);
   vec2 uv = vec2(fract(atan(d.y, d.x) / 6.2831853 + uU), .5 - asin(clamp(d.z, -1., 1.)) / 3.1415927);
   vec3 c = ${tl ? 'texture2DLodEXT(uSky, uv, 0.)' : 'texture2D(uSky, uv, -16.)'}.rgb;   // 天空图一个像素比屏幕像素大，总用最清楚的一级（方位角的接缝处导数很大，按坐标求导会糊出一条竖线）
-  gl_FragColor = vec4(mix(c, uBg, smoothstep(.03, -.08, d.z)), 1.);
+  c += v3Glow(d) * smoothstep(.22, 0., d.z) * .7;   // 地平线附近朝太阳那边的散射光（同地面、海面的雾）
+  gl_FragColor = vec4(mix(c, uBg + v3Glow(d), smoothstep(.03, -.08, d.z)), 1.);
 }`;
 // 地表细节贴图（写实画面）：第一次用到时载入，四张都好了才启用；绑在 8–11 号纹理单元
 function v3DetTex() {
@@ -678,6 +693,12 @@ function v3Sky(C) {
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
         V3.sky.tex = t; V3.sky.ok = true;
+        try {   // 地平线一圈的颜色（64 个方位，取地平线上 1–4° 那几行的平均）：每帧按镜头朝向取雾色（v3HzUpdate）
+          const cv = document.createElement('canvas'); cv.width = 64; cv.height = 128; const g = cv.getContext('2d'); g.drawImage(img, 0, 0, 64, 128);
+          const D = g.getImageData(0, 0, 64, 128).data, R = new Float32Array(64 * 3), r0 = Math.floor(128 * (.5 - Math.asin(.07) / Math.PI)), r1 = Math.floor(128 * (.5 - Math.asin(.015) / Math.PI));
+          for (let x = 0; x < 64; x++) for (let k = 0; k < 3; k++) { let a = 0; for (let y = r0; y <= r1; y++) a += D[(y * 64 + x) * 4 + k]; R[x * 3 + k] = a / (r1 - r0 + 1) / 255; }
+          V3.hzRing = R;
+        } catch (e) { /* 读不了像素就照旧用固定雾色 */ }
       };
       img.src = 'assets/sky/sky.jpg' + (typeof window === 'object' && window.DS_BUILD ? '?v=' + window.DS_BUILD : '');
     } catch (e) { console.warn('天空不可用', e); }
@@ -1381,6 +1402,16 @@ function v3HoldStep(dt) {
   if (pt) v3Look(0, pt * dt, true);   // R 抬头、F 低头
 }
 // 屏幕点 → 视线 → 与地形求交（先粗步进，再二分）；打不到地面时取视线与海平面的交点
+// 雾色跟着镜头朝向取天空图的地平线色（前后 ±70° 加权平均，慢慢过渡）；黑绿画面、白色平原、黑夜不动
+function v3HzUpdate(C, mx) {
+  const R = V3.hzRing;
+  if (!R || mx || (TER && TER.flat) || (S && S.night) || typeof CAM !== 'object') { for (let k = 0; k < 3; k++) V3_HZ_COL[k] = V3_HZ0[k]; return; }
+  const r = v3Ray(CAM.vw / 2, CAM.vh / 2), u0 = Math.atan2(r.d[1], r.d[0]) / (2 * Math.PI) + V3_SKYU, T = [0, 0, 0];
+  let ws = 0;
+  for (let i = -4; i <= 4; i++) { const w = Math.cos(i / 4 * 1.2), u = ((u0 + i * .05) % 1 + 1) % 1 * 64, x0 = Math.floor(u) % 64, x1 = (x0 + 1) % 64, f = u - Math.floor(u); for (let k = 0; k < 3; k++) T[k] += w * (R[x0 * 3 + k] * (1 - f) + R[x1 * 3 + k] * f); ws += w; }
+  for (let k = 0; k < 3; k++) { const t = T[k] / ws * .82 + V3_HZ0[k] * .18; V3_HZ_COL[k] += (t - V3_HZ_COL[k]) * (V3.hzI ? .08 : 1); }
+  V3.hzI = true;
+}
 function v3Ray(sx, sy) {
   const C = V3.cam || v3Camera(), tf = Math.tan(V3_FOV / 2), nx = (sx / CAM.vw * 2 - 1) * tf * C.asp, ny = (1 - sy / CAM.vh * 2) * tf;
   return { o: C.E, d: v3Norm([-C.z[0] + C.x[0] * nx + C.y[0] * ny, -C.z[1] + C.x[1] * nx + C.y[1] * ny, -C.z[2] + C.x[2] * nx + C.y[2] * ny]), C };
@@ -1506,6 +1537,7 @@ function v3Scene(C, now, vp) {
   gl.activeTexture(gl.TEXTURE4); gl.bindTexture(gl.TEXTURE_2D, V3.fog);
   if (typeof FOGB === 'object' && (V3.fogV !== FOGB_V || V3.fogT !== V3.fog)) { V3.fogV = FOGB_V; V3.fogT = V3.fog; gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE, GW, GH, 0, gl.LUMINANCE, gl.UNSIGNED_BYTE, FOGB); }   // 视野没变不重传   // 视野（drawScene 刚按当前观察视野算好）
   const lmOn = v3Mx() && typeof v3LightBind === 'function' && v3LightBind(gl) ? 1 : 0;   // 光照贴图（v3light.js，第 9 个贴图单元）：只给黑绿 / 数码画面；写实画面用实时阴影
+  v3HzUpdate(C, v3Mx());
   const bgc = v3Bg();
   gl.clearColor(bgc[0], bgc[1], bgc[2], 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
   if (!v3Mx() && !(typeof v3nebOn === 'function' && v3nebOn())) v3Sky(C);   // 写实画面：先画天空（不写深度）；白色平原在太空里，背景是星云（v3neb.js）

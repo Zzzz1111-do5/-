@@ -221,16 +221,17 @@ function modPrepB(key, m, VB, IB) {
   const A = MOD.mdl[key];
   if (MODX.noB || !A || key.startsWith('u_') || key === 'army') return;   // noB：编辑器预览自己套正在改的那份
   const pt = A.pt, ed = Array.isArray(A.ed) ? A.ed : [], ag = Array.isArray(A.ag) && A.ag.length;
-  if (!(pt && pt.x) && !ed.length && !ag) return;
+  if (!(pt && pt.x) && !ed.length && !ag && !(Array.isArray(A.erb) && A.erb.length)) return;
   const st = m.st || 8, P = modPieces(m, VB, IB), del = new Uint8Array(P.pn);
   for (const i of modIdsDec(pt && pt.x)) if (i < P.pn) del[i] = 1;
   const col = modEdApply(ed, VB, st, P.pv, P.pn);
   modEdSplit(m, IB, P.pv, col, ed, del);
+  modEraSplit(key, m, IB, P.pv);
   modAnimSplit(key, m, IB, P.pv);
   MODX.bsig[key] = modBSig(key);
 }
-const modBSig = k => { const A = MOD.mdl[k] || {}; return JSON.stringify([(A.pt && A.pt.x) || '', A.ed || null, (A.ag || []).map(g => g.id)]); };
-const modISig = id => { const A = MOD.mdl[id] || {}; return JSON.stringify([A.pt || null, (A.ag || []).map(g => g.id)]); };
+const modBSig = k => { const A = MOD.mdl[k] || {}; return JSON.stringify([(A.pt && A.pt.x) || '', A.ed || null, (A.ag || []).map(g => g.id), (A.erb || []).map(e => [e.id, e.t])]); };
+const modISig = id => { const A = MOD.mdl[id] || {}; return JSON.stringify([A.pt || null, (A.ag || []).map(g => g.id), (A.erb || []).map(e => [e.id, e.t])]); };   // 爆反块分组改了也要重新解码
 // 改了游戏里模型的部件：已经解码的那份放掉、重新加载（下次画到时从 js/mdl 重新取）
 function modReloadB(key) {
   if (typeof V3G !== 'object') return;
@@ -412,6 +413,7 @@ function modPrep(key, m, VB, IB) {
     for (const [q, L] of [...B.entries()].sort((a, b) => a[0] - b[0])) { IB.set(L, o); out.push([mi, q, o, L.length]); o += L.length; }
   }
   m.lod = [out, out, out]; m.parts = parts;
+  modEraSplit(key, m, IB, pv);   // 编辑器点的爆反块：一组一个部件（炸掉的那组游戏里不画）
   modAnimSplit(key, m, IB, pv);   // 动画分组：每组的三角形单独一段（游戏里播动画时各组各自摆）
   if (typeof VFN === 'object' && (MOD.lib[key] || {}).kind !== 'air' && (ti >= 0 || gi >= 0 || mti >= 0 || mgi >= 0)) {
     const r2 = (a, d) => Array.isArray(a) && a.length === 2 && a.every(modNum) ? [Math.min(a[0], a[1]), Math.max(a[0], a[1])] : d, rc = modNum(pt.rc) && pt.rc >= 0 ? pt.rc : .3;
@@ -466,6 +468,117 @@ function modUnitApply() {
     S.sbx.items = S.sbx.items.filter(it => ok(it.cat));
     for (const it of S.sbx.items) if (Array.isArray(it.cargo)) it.cargo = it.cargo.filter(ok);   // 登陆舰装的车
   }
+}
+// —— 爆反块（用户：编辑器里设置哪些部位是爆反）——
+//   MOD.mdl[模型键].era：点成爆反的块号（区间字符串）；.erb：分好的组（最多 64 组，编辑器 moder.js 按位置分）[{ id 块号区间, t 在炮塔上, b [x0, y0, z0, x1, y1, z1] 包围盒, n [nx, ny, nz] 朝外的平均法线 }]，
+//   .erp 参照 { h 车体包围盒, t 炮塔包围盒, tp [x, y] 炮塔转轴 }（模型米：x 前、y 左、z 上，删过部件以后的坐标）——推演只看这几个数，不用等模型读出来（无头推演、换设备都一样）。
+//   推演（modEraModel，era.js eraHit 先问它）：来弹按方向落在迎弹面某一点（瞄着中间：横向、高度三角分布），那一点上有朝着来弹、还没炸的块才挡；
+//   攻顶的（'top'、'atgm'）打在车顶某一点，车顶上法线朝上的块也挡。炸掉的组记在 v.erm，3D 里那组消失（v3g.js v3gVeh 把位填进 iE，着色器部件模式 6）
+function modEraSplit(key, m, IB, pv) {
+  const A = MOD.mdl[key], E = A && Array.isArray(A.erb) ? A.erb.slice(0, 64) : null;
+  if (!E || !E.length || !pv) return;
+  let n = 0;
+  for (let i = 0; i < pv.length; i++) if (pv[i] + 1 > n) n = pv[i] + 1;
+  const g = new Int16Array(n).fill(-1);
+  E.forEach((e, gi) => { for (const i of modIdsDec(e && e.id)) if (i < n && g[i] < 0) g[i] = gi; });
+  const parts = m.parts || (m.parts = []), pi = new Int16Array(E.length).fill(-1);
+  const isTur = P => P && P.k === 'rot' && Array.isArray(P.w) && P.w[0] === 1;
+  const partOf = (gi, q) => {   // 每组一个部件：在炮塔上的随炮塔转（照炮塔部件的转轴），车体上的不动；炮管、车轮上点的不算
+    if (pi[gi] >= 0) return pi[gi];
+    const T = q >= 0 ? parts[q] : null, tur = isTur(T);
+    return (pi[gi] = parts.push({ n: 'erab', k: 'erab', b: gi, p: tur ? T.p.slice() : [0, 0, 0], a: tur ? T.a.slice() : [0, 0, 1], w: tur ? T.w.slice() : [0, 0, 0, 0] }) - 1);
+  };
+  const done = new Map();
+  m.lod = m.lod.map(L => {
+    if (done.has(L)) return done.get(L);   // 导入的模型三级细节是同一份
+    const out = [];
+    for (const seg of L) {
+      const [mi, q, i0, cnt] = seg, T = q >= 0 ? parts[q] : null;
+      if (q >= 0 && !isTur(T)) { out.push(seg); continue; }
+      const B = new Map();
+      for (let t = i0; t + 2 < i0 + cnt; t += 3) { const gi = g[pv[IB[t]]] ?? -1; let Q = B.get(gi); if (!Q) B.set(gi, Q = []); Q.push(IB[t], IB[t + 1], IB[t + 2]); }
+      if (B.size === 1 && B.has(-1)) { out.push(seg); continue; }
+      let o = i0;
+      for (const [gi, Q] of [...B.entries()].sort((a, b) => a[0] - b[0])) { IB.set(Q, o); out.push([mi, gi < 0 ? q : partOf(gi, q), o, Q.length, ...seg.slice(4)]); o += Q.length; }
+    }
+    done.set(L, out);
+    return out;
+  });
+}
+// 炸掉的组填进实例参数 iE（P[8..11]，各 16 位）
+function modEraBits(key, v, P) {
+  const A = MOD.mdl[key];
+  if (!A || !Array.isArray(A.erb) || !v.erm) return;
+  for (const i of v.erm) if (i >= 0 && i < 64) P[8 + (i >> 4)] = (P[8 + (i >> 4)] || 0) + 2 ** (i & 15);
+}
+const modTri = () => Math.random() + Math.random() - 1;   // 三角分布（−1 … 1，瞄着中间）
+function modEraModel(v, dmg, src, sx, sy) {
+  if (sx == null || v.dead || !['at', 'ap', 'atgm', 'top'].includes(src)) return null;
+  const mk = modVehMdl(v), A = mk && MOD.mdl[mk], E = A && Array.isArray(A.erb) && A.erb.length ? A.erb.slice(0, 64) : null;
+  if (!E) return null;
+  const o = modVehOf(v);
+  if (o && o.era === 'off') return dmg;   // 编辑器里拆掉了
+  const R = A.erp || {}, hb = R.h || [-3, -1.6, 0, 3, 1.6, 2], tb = R.t, tp = R.tp || [0, 0];
+  if (src === 'ap' && !(o && modNum(o.eraKe) && o.eraKe > 0)) return dmg;   // 轻型反应装甲挡不住穿甲弹，也不会被它白白引爆（「爆反挡穿甲弹」设了才算重型）
+  const tur = !!tb && Math.random() < .5, pb = tur ? tb : hb, top = src === 'top' || src === 'atgm';
+  const U = v.erm || (v.erm = []), h = v.heading || 0, ta = tur ? (v.aim ?? h) : h;
+  let hit = -1;
+  if (top) {   // 攻顶：打在这一部分顶上某一点，找那一点上法线朝上的块（取最高的）
+    const x = (pb[0] + pb[3]) / 2 + modTri() * (pb[3] - pb[0]) / 2, y = (pb[1] + pb[4]) / 2 + modTri() * (pb[4] - pb[1]) / 2;
+    let best = -1e9;
+    E.forEach((e, i) => { if (!!e.t !== tur || !(e.n && e.n[2] > .55)) return; const b = e.b; if (x >= b[0] && x <= b[3] && y >= b[1] && y <= b[4] && b[5] > best) { best = b[5]; hit = i; } });
+  } else {
+    const a = Math.atan2(sy - v.y, sx - v.x) - ta, d = [Math.cos(a), -Math.sin(a)], nt = [-d[1], d[0]];   // 模型坐标里朝来弹的方向（y 朝左，游戏里 y 朝下）
+    const cx = (pb[0] + pb[3]) / 2, cy = (pb[1] + pb[4]) / 2, W = ((pb[3] - pb[0]) * Math.abs(d[1]) + (pb[4] - pb[1]) * Math.abs(d[0])) / 2;
+    const s = modTri() * W, z = pb[2] + (pb[5] - pb[2]) * (Math.random() + Math.random()) / 2;
+    let best = -1e9;
+    E.forEach((e, i) => {
+      if (!!e.t !== tur || !e.n) return;
+      const hn = Math.hypot(e.n[0], e.n[1]);
+      if (hn < .3 || (e.n[0] * d[0] + e.n[1] * d[1]) / hn < .34) return;   // 块面没朝着来弹
+      const b = e.b;
+      if (z < b[2] - .05 || z > b[5] + .05) return;
+      let lo = 1e9, hi = -1e9;
+      for (const X of [b[0], b[3]]) for (const Y of [b[1], b[4]]) { const u = (X - cx) * nt[0] + (Y - cy) * nt[1]; lo = Math.min(lo, u); hi = Math.max(hi, u); }
+      const dd = ((b[0] + b[3]) / 2 - cx) * d[0] + ((b[1] + b[4]) / 2 - cy) * d[1];
+      if (s >= lo && s <= hi && dd > best) { best = dd; hit = i; }
+    });
+  }
+  if (hit < 0 || U.includes(hit)) return dmg;   // 没打在块上，或者这块已经炸掉了：本体装甲硬扛
+  U.push(hit);
+  // 起爆的火光：块在世界里的位置（模型米 → 游戏尺寸，炮塔上的绕炮塔转轴转到此刻的方向）
+  const b = E[hit].b, k = typeof vehSp === 'function' ? vehSp(v).len / Math.max(1, (hb[3] - hb[0]) * .92) : 1;
+  let x = (b[0] + b[3]) / 2, y = -(b[1] + b[4]) / 2;
+  if (tur) { const r = ta - h, ux = x - tp[0], uy = y + tp[1]; x = tp[0] + ux * Math.cos(r) - uy * Math.sin(r); y = -tp[1] + ux * Math.sin(r) + uy * Math.cos(r); }
+  S.fx.push({ kind: 'flash', x: v.x + (x * Math.cos(h) - y * Math.sin(h)) * k, y: v.y + (x * Math.sin(h) + y * Math.cos(h)) * k, r: 7, life: 0, max: .35, side: v.side });
+  if (v.side === 'p' && typeof log === 'function') log(`${typeof vehName === 'function' ? vehName(v) : '车辆'}${top ? '车顶' : tur ? '炮塔' : '车体'}的反应装甲炸开一组，${src === 'ap' ? '削弱了这发穿甲弹' : '挡住了这一发'}（还剩 ${E.length - U.length} 组）`, 'info', 'era' + v.id, 6, v);
+  const mkK = modEraK(v, src);
+  return dmg * (mkK != null ? mkK : src === 'ap' ? .7 : .08);
+}
+// —— 主动防御系统（用户：编辑器里能编辑坦克的主动防御）：MOD.veh[型号] 的 aps（'hard' 硬杀伤：发射拦截弹，「战利品」「竞技场」这类；'soft' 软杀伤：光电干扰、烟幕诱骗，只对制导导弹）、
+//   各种来弹的拦截率 apsM 反坦克导弹 / apsTop 攻顶导弹 / apsR 火箭弹、无后坐力炮弹 / apsK 坦克炮穿甲弹（%）、拦截弹数 apsN、两次拦截最短间隔 apsRl 秒、覆盖角度 apsArc（按炮塔朝向，360 = 全向）。
+//   vehicles.js vehDamage 先问它：拦下了这一发就没有伤害（反应装甲、本体装甲都不用扛）；硬杀伤每拦一次（拦没拦住）都用掉一发
+const MOD_APS_D = { apsM: 85, apsTop: 40, apsR: 70, apsK: 0, apsN: 6, apsRl: 1, apsArc: 360 };
+const modApsNum = (o, f) => modNum(o[f]) ? o[f] : MOD_APS_D[f];
+function modAps(v, src, sx, sy) {
+  const o = !v.dead && sx != null ? modVehOf(v) : null;
+  if (!o || (o.aps !== 'hard' && o.aps !== 'soft')) return false;
+  const soft = o.aps === 'soft', f = { atgm: 'apsM', top: 'apsTop', at: 'apsR', ap: 'apsK' }[src];
+  if (!f || (soft && f !== 'apsM' && f !== 'apsTop')) return false;   // 软杀伤只骗得了制导导弹
+  const pk = modApsNum(o, f);
+  if (!(pk > 0)) return false;
+  if (!soft) {
+    if (v.apsL == null) v.apsL = Math.max(0, Math.round(modApsNum(o, 'apsN')));
+    if (v.apsL <= 0 || S.t - (v.apsT ?? -99) < modApsNum(o, 'apsRl')) return false;
+  }
+  const a = Math.atan2(sy - v.y, sx - v.x), ref = v.aim ?? v.heading ?? 0, arc = clamp(modApsNum(o, 'apsArc'), 1, 360);
+  if (arc < 360 && Math.abs(Math.atan2(Math.sin(a - ref), Math.cos(a - ref))) > arc * Math.PI / 360) return false;   // 来弹在覆盖范围外
+  if (!soft) { v.apsL--; v.apsT = S.t; }
+  if (Math.random() * 100 >= pk) return false;
+  const L = typeof vehSp === 'function' ? vehSp(v).len : 12, r = L * (soft ? 2.2 : .95);   // 硬杀伤在车旁十来米外把来弹打爆，软杀伤让导弹偏到远处
+  S.fx.push({ kind: 'flash', x: v.x + Math.cos(a) * r, y: v.y + Math.sin(a) * r, r: soft ? 4 : 9, life: 0, max: soft ? .25 : .4, side: v.side });
+  if (v.side === 'p' && typeof log === 'function') log(`${typeof vehName === 'function' ? vehName(v) : '车辆'}的主动防御${soft ? '干扰偏了' : '拦下了'}一发${{ atgm: '反坦克导弹', top: '攻顶导弹', at: '火箭弹', ap: '穿甲弹' }[src]}${soft ? '' : `（拦截弹还剩 ${v.apsL} 发）`}`, 'info', 'aps' + v.id, 4, v);
+  return true;
 }
 const modVehKey = v => { const M = typeof rlModelOf === 'function' ? rlModelOf(v) : null; return M ? M.key : null; };
 const modVehOf = v => { const k = v && modVehKey(v); return k ? MOD.veh[k] || null : null; };

@@ -65,8 +65,9 @@ function frame(now) {
     // 这一帧按正常节奏（含快进倍数）该推的步数照推；卡了一下之后积压的补算才受时间预算限制——超过约 7 毫秒就留到下一帧
     //   （原来一卡就连补八步，下一帧又被拖慢，一顿接一顿）；积压最多留四步，再多就不追了
     const t0 = performance.now(), due = Math.ceil(dt * sp * 30 - 1e-6);   // 和上面同一个倍数（原来驾驶时这里还按快进倍数，卡顿补帧的预算判断失准）
-    while (acc >= 1 / 30 && n < 8) { step(1 / 30); acc -= 1 / 30; n++; if (n >= due && performance.now() - t0 > 7) break; }
-    if (n >= 8 || acc > 4 / 30) acc = Math.min(acc, 4 / 30);
+    const cap = sp > 4 ? 20 : 8;   // 远海航渡的时间压缩 8、16 倍（farsea.js）：一帧要推的步数多
+    while (acc >= 1 / 30 && n < cap) { step(1 / 30); acc -= 1 / 30; n++; if (n >= due && performance.now() - t0 > 7) break; }
+    if (n >= cap || acc > 4 / 30) acc = Math.min(acc, 4 / 30);
   }
   if (!(typeof INTRO === 'object' && INTRO.on && INTRO.cover)) draw(now);   // 开场转场完全遮住战场时不画
   runHook('frame', now, dt);

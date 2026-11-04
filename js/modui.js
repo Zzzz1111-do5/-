@@ -39,7 +39,16 @@ const MDX_VEH_F = [
   ['eraHeat', '爆反挡破甲弹', '%', o => 92],
   ['eraKe', '爆反挡穿甲弹', '%', o => RLM[o.k] && RLM[o.k].era && RLM[o.k].era.heavy ? 30 : 0],
   ['eraCov', '爆反覆盖率（模型上没有块时）', '%', o => 60],
-  ['eraN', '爆反块数（模型上没有块时）', '块', o => 16]
+  ['eraN', '爆反块数（模型上没有块时）', '块', o => 16],
+  // 主动防御系统（mod.js modAps；vehicles.js vehDamage 先过它）：硬杀伤打拦截弹（每拦一次用掉一发），软杀伤只骗得了制导导弹
+  ['aps', '主动防御系统', [['', '没有'], ['hard', '硬杀伤（发射拦截弹，「战利品」「竞技场」这类）'], ['soft', '软杀伤（光电干扰、烟幕诱骗，只对制导导弹）']], o => ''],
+  ['apsM', '主动防御：拦截反坦克导弹', '%', o => MOD_APS_D.apsM],
+  ['apsTop', '主动防御：拦截攻顶导弹', '%', o => MOD_APS_D.apsTop],
+  ['apsR', '主动防御：拦截火箭弹、无后坐力炮弹（硬杀伤）', '%', o => MOD_APS_D.apsR],
+  ['apsK', '主动防御：拦截坦克炮穿甲弹（硬杀伤）', '%', o => MOD_APS_D.apsK],
+  ['apsN', '主动防御：拦截弹数（硬杀伤）', '发', o => MOD_APS_D.apsN],
+  ['apsRl', '主动防御：两次拦截最短间隔', '秒', o => MOD_APS_D.apsRl],
+  ['apsArc', '主动防御：覆盖角度（按炮塔朝向，360 = 全向）', '度', o => MOD_APS_D.apsArc]
 ];
 // 飞机：[字段, 名称, 单位, 默认值（显示单位）(a 型号表, k 型号键), 显示 → 存的值, 存的值 → 显示]
 const mdxAP0 = k => MOD_DEF.ap[k] || (typeof AP === 'object' && AP[k]) || null;
@@ -70,7 +79,7 @@ const MDX_AIR_F = [
   ['loiter', '盘旋时间', '秒', a => a.loiter ?? null]
 ];
 const MDX_WPN_F = [['M', '速度', '马赫'], ['R', '射程', '公里'], ['Rmin', '最小射程', '米'], ['tb', '发动机工作时间', '秒'], ['g', '最大过载', 'G'], ['cone', '导引头视场', '度'], ['lk', '锁定时间', '秒'], ['pk', '命中概率', '0–1'], ['acc', '助推加速度（默认 20）', 'G']];
-const MDX_PROF = [['cruise', '平飞巡航'], ['skim', '掠海超低空'], ['loft', '高抛（中段爬高）'], ['popup', '末段跃升俯冲']];
+const MDX_PROF = [['cruise', '平飞巡航'], ['skim', '掠海超低空'], ['loft', '高抛（中段爬高）'], ['popup', '末段跃升俯冲'], ['ball', '准弹道（先爬到几十公里高再陡直扎下，鹰击-21）'], ['hilo', '高空巡航、末段俯冲掠海（鹰击-12）']];
 const MDX_MSL_F = [
   ['spd', '飞行速度', '米 / 秒', m => m.spd], ['acc', '加速度（空着 = 一出筒就是巡航速度）', '米 / 秒²', m => m.acc ?? null], ['v0', '出筒速度（设了加速度时）', '米 / 秒', m => m.v0 ?? null],
   ['sprint', '末段冲刺速度', '米 / 秒', m => m.sprint ?? null], ['sr', '末段冲刺距离', '米', m => m.sr ?? null],
@@ -399,6 +408,13 @@ function mdxOnPick(h, e) {
   } else return;
   MDX.dirty = true; MDX.keep = true; mdxRender(); mdxMsg('点上了（' + p.join(', ') + '），点「保存」生效');
 }
+// 导入时「类型」选成了坦克装甲车、外形却像飞机（翼展比全长的六成还宽、又扁）：提示改成飞机——飞机的型号要在类型是飞机时才列出来
+function mdxLooksAir(mk, air) {
+  const m = !air && MODX.raw[mk] && MODX.raw[mk].meta, b = m && m.bb;
+  if (!b) return '';
+  const lx = b[3] - b[0], ly = b[4] - b[1], lz = b[5] - b[2];
+  return ly > lx * .6 && lz < lx * .45 ? `<p class="note" style="color:var(--amber, #ffc24a)">看着像飞机（全长 ${mdxR(lx, 10)} 米、宽 ${mdxR(ly, 10)} 米）：要用在飞机上，把「类型」改成「飞机」，下面才列出飞机的型号。</p>` : '';
+}
 function mdxMdlForm(mk) {
   const md = mdxModels().find(r => r.id === mk);
   if (!md) return '';
@@ -413,7 +429,7 @@ function mdxMdlForm(mk) {
   if (md.imp) {
     h += mdxPtForm(mk, air);
     h += `<h3 style="margin-top:12px">模型</h3><div class="mdx-row"><label>名称</label><input type="text" data-lib="nm" value="${mdxEsc(L.nm)}"><span></span><span></span></div>
-      <div class="mdx-row"><label>类型</label><select data-lib="kind"><option value="veh"${L.kind !== 'air' ? ' selected' : ''}>坦克装甲车</option><option value="air"${L.kind === 'air' ? ' selected' : ''}>飞机</option></select><span></span><span></span></div>
+      <div class="mdx-row"><label>类型</label><select data-lib="kind"><option value="veh"${L.kind !== 'air' ? ' selected' : ''}>坦克装甲车</option><option value="air"${L.kind === 'air' ? ' selected' : ''}>飞机</option></select><span></span><span></span></div>${mdxLooksAir(mk, air)}
       <p>朝向不对：<button type="button" class="mdx-btn" data-a="turn" data-ax="z">绕竖轴转 90°</button> <button type="button" class="mdx-btn" data-a="turn" data-ax="fz">前后掉头</button> <button type="button" class="mdx-btn" data-a="turn" data-ax="y">抬头 90°</button> <button type="button" class="mdx-btn" data-a="turn" data-ax="x">侧滚 90°</button>
       <button type="button" class="mdx-btn" data-a="mdel">删除这个模型</button></p>`;
     // 装到哪些型号上
@@ -425,7 +441,7 @@ function mdxMdlForm(mk) {
         ${us.map(([id, u]) => { const B = typeof catalogById === 'function' ? catalogById(u.base) : null; return `<div class="mdx-row"><label>${mdxEsc(u.nm || L.nm)}</label><span class="def">${B ? (B.side === 'e' ? '守方 · 照 ' : '攻方 · 照 ') + mdxEsc(B.name) : ''}</span><button type="button" class="mdx-btn" data-a="cugo" data-id="${mdxEsc(id)}">改名字、性能</button><span></span></div>`; }).join('')}
         <p><button type="button" class="mdx-btn pri" data-a="cuadd" data-mk="${mdxEsc(mk)}">＋ 加进兵种栏（当成新兵种）</button></p>`;
     }
-    h += `<h3 style="margin-top:12px">${air ? '用在这些型号上' : '换掉这些型号的外形'}</h3><div class="mdx-bind">${ts.filter(([s, k]) => !String(k).startsWith('cu_')).map(([s, k, n]) => `<label><input type="checkbox" data-bind="${s}|${k}"${(MDX_W[s][k] || {}).mdl === mk ? ' checked' : ''}> ${mdxEsc(n)}</label>`).join('')}</div>`;
+    h += `<h3 style="margin-top:12px">${air ? '用在这些型号上' : '换掉这些型号的外形'}</h3>${air ? '<p class="note">打勾、保存以后这一型都画这个模型：舰载机在航母甲板上，陆基飞机（歼-20、歼-16 系列、轰-6K、攻击-2、无侦-7）停在南边海上小岛的战区机场（3D 自由镜头往南飞到地图外），起飞后在战场上空。</p>' : ''}<div class="mdx-bind">${ts.filter(([s, k]) => !String(k).startsWith('cu_')).map(([s, k, n]) => `<label><input type="checkbox" data-bind="${s}|${k}"${(MDX_W[s][k] || {}).mdl === mk ? ' checked' : ''}> ${mdxEsc(n)}</label>`).join('')}</div>`;
   }
   const rst = (s, d) => d ? '<span class="def">（游戏原来的）</span>' : `<button type="button" class="mdx-btn" data-mrst="${s}">恢复原来的</button>`;
   if (!air) {
@@ -1125,7 +1141,7 @@ function mdxChange(e) {
     // 换回表里的单位
     const F = tab === 'air' ? [...MDX_AIR_F, ...MDX_PERF_F, ...MDX_GUN_F] : tab === 'eair' ? [...MDX_EAIR_F, ...MDX_PERF_F] : tab === 'msl' ? MDX_MSL_F : null, d = F && F.find(x => x[0] === f);
     if (d && d[4] && v !== '') v = d[4](v);
-    if (tab === 'veh' && f === 'era' && v === 'auto') v = '';
+    if (tab === 'veh' && ((f === 'era' && v === 'auto') || (f === 'aps' && !v))) v = '';
     mdxSet(t.dataset.p, f, v);
     MDX.keep = true; mdxRender(); mdxMsg('改了，点「保存」生效');
   }
