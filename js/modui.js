@@ -39,7 +39,16 @@ const MDX_VEH_F = [
   ['eraHeat', '爆反挡破甲弹', '%', o => 92],
   ['eraKe', '爆反挡穿甲弹', '%', o => RLM[o.k] && RLM[o.k].era && RLM[o.k].era.heavy ? 30 : 0],
   ['eraCov', '爆反覆盖率（模型上没有块时）', '%', o => 60],
-  ['eraN', '爆反块数（模型上没有块时）', '块', o => 16]
+  ['eraN', '爆反块数（模型上没有块时）', '块', o => 16],
+  // 主动防御系统（mod.js modAps；vehicles.js vehDamage 先过它）：硬杀伤打拦截弹（每拦一次用掉一发），软杀伤只骗得了制导导弹
+  ['aps', '主动防御系统', [['', '没有'], ['hard', '硬杀伤（发射拦截弹，「战利品」「竞技场」这类）'], ['soft', '软杀伤（光电干扰、烟幕诱骗，只对制导导弹）']], o => ''],
+  ['apsM', '主动防御：拦截反坦克导弹', '%', o => MOD_APS_D.apsM],
+  ['apsTop', '主动防御：拦截攻顶导弹', '%', o => MOD_APS_D.apsTop],
+  ['apsR', '主动防御：拦截火箭弹、无后坐力炮弹（硬杀伤）', '%', o => MOD_APS_D.apsR],
+  ['apsK', '主动防御：拦截坦克炮穿甲弹（硬杀伤）', '%', o => MOD_APS_D.apsK],
+  ['apsN', '主动防御：拦截弹数（硬杀伤）', '发', o => MOD_APS_D.apsN],
+  ['apsRl', '主动防御：两次拦截最短间隔', '秒', o => MOD_APS_D.apsRl],
+  ['apsArc', '主动防御：覆盖角度（按炮塔朝向，360 = 全向）', '度', o => MOD_APS_D.apsArc]
 ];
 // 飞机：[字段, 名称, 单位, 默认值（显示单位）(a 型号表, k 型号键), 显示 → 存的值, 存的值 → 显示]
 const mdxAP0 = k => MOD_DEF.ap[k] || (typeof AP === 'object' && AP[k]) || null;
@@ -1132,7 +1141,7 @@ function mdxChange(e) {
     // 换回表里的单位
     const F = tab === 'air' ? [...MDX_AIR_F, ...MDX_PERF_F, ...MDX_GUN_F] : tab === 'eair' ? [...MDX_EAIR_F, ...MDX_PERF_F] : tab === 'msl' ? MDX_MSL_F : null, d = F && F.find(x => x[0] === f);
     if (d && d[4] && v !== '') v = d[4](v);
-    if (tab === 'veh' && f === 'era' && v === 'auto') v = '';
+    if (tab === 'veh' && ((f === 'era' && v === 'auto') || (f === 'aps' && !v))) v = '';
     mdxSet(t.dataset.p, f, v);
     MDX.keep = true; mdxRender(); mdxMsg('改了，点「保存」生效');
   }

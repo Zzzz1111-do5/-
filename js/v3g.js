@@ -160,7 +160,12 @@ void main() {
   vec3 q = p, m = n;
   if (uPk > -.5) {
     float ang = dot(iC, uPw) + dot(iD, uPw2) + dot(iE, uPw3);   // 实例的部件参数按权重组合（一般只取自己那一个；舵面 = 俯仰、滚转、偏航、襟翼、前缘、减速几个通道按权重；弹舱门 = 开度 × 打开角）
-    if (uPm > 4.5) {   // 链式部件（炮管、发射架、炮塔上的雷达，vfn.js）：先绕自己的轴自转（加特林炮管束，uPq3 / uPa3，iD·uPg2），再沿 uPr 平移（后坐 / 举升，iD·uPw2 米），再绕 uPq / uPa2 转（俯仰、起竖、自转），最后随炮塔 / 转台绕 uPp / uPa 转
+    if (uPm > 5.5) {   // 编辑器在模型上点的爆反块（mod.js modEraSplit）：一组一个部件，uPl = 组号，查 iE 里这组的位（各管 16 组），炸掉了就收成一点；炮塔上的随炮塔转（uPw）
+      float f = floor((uPl + .5) / 16.), b = uPl - f * 16., mk = f < .5 ? iE.x : f < 1.5 ? iE.y : f < 2.5 ? iE.z : iE.w;
+      for (int i = 0; i < 16; i++) { if (float(i) >= b) break; mk = floor(mk * .5); }
+      if (mk - 2. * floor(mk * .5) > .5) q = vec3(0.); else { q = uPp + rotA(q - uPp, uPa, ang); m = rotA(m, uPa, ang); }
+    }
+    else if (uPm > 4.5) {   // 链式部件（炮管、发射架、炮塔上的雷达，vfn.js）：先绕自己的轴自转（加特林炮管束，uPq3 / uPa3，iD·uPg2），再沿 uPr 平移（后坐 / 举升，iD·uPw2 米），再绕 uPq / uPa2 转（俯仰、起竖、自转），最后随炮塔 / 转台绕 uPp / uPa 转
       if (uPl > 1.5) { float mk = iD.z; for (int i = 0; i < 16; i++) { if (float(i) >= uPl - 2.) break; mk = floor(mk * .5); } if (mk - 2. * floor(mk * .5) > .5) q = vec3(0.); }   // 发射筒里的弹（v3gCaps）：iD.z 的第 uPl − 2 位 = 这一枚打出去了，筒空了
       float g3 = dot(iD, uPg2);
       q = uPq3 + rotA(q - uPq3, uPa3, g3); m = rotA(m, uPa3, g3);
@@ -411,7 +416,7 @@ function v3gDraw(C, LM) {
         if (P) {
           const w = P.w || [pi === 0 ? 1 : 0, pi === 1 ? 1 : 0, pi === 2 ? 1 : 0, pi >= 3 ? 1 : 0];
           const w2 = P.w2 || V3G_W0;
-          gl.uniform1f(U.uPm, P.k === 'hide' ? 1 : P.k === 'noz' ? 2 : P.k === 'gun' ? 3 : P.k === 'era' ? 4 : P.k === 'chain' ? 5 : 0); gl.uniform1f(U.uPl, P.k === 'chain' ? (P.hb != null ? P.hb + 2 : 0) : P.l || 1); gl.uniform3f(U.uPp, P.p[0], P.p[1], P.p[2]); gl.uniform3f(U.uPa, P.a[0], P.a[1], P.a[2]); gl.uniform4f(U.uPw, w[0], w[1], w[2], w[3]); gl.uniform4f(U.uPw2, w2[0], w2[1], w2[2], w2[3]); const w3 = P.w3 || V3G_W0; gl.uniform4f(U.uPw3, w3[0], w3[1], w3[2], w3[3]);
+          gl.uniform1f(U.uPm, P.k === 'hide' ? 1 : P.k === 'noz' ? 2 : P.k === 'gun' ? 3 : P.k === 'era' ? 4 : P.k === 'chain' ? 5 : P.k === 'erab' ? 6 : 0); gl.uniform1f(U.uPl, P.k === 'chain' ? (P.hb != null ? P.hb + 2 : 0) : P.k === 'erab' ? P.b : P.l || 1); gl.uniform3f(U.uPp, P.p[0], P.p[1], P.p[2]); gl.uniform3f(U.uPa, P.a[0], P.a[1], P.a[2]); gl.uniform4f(U.uPw, w[0], w[1], w[2], w[3]); gl.uniform4f(U.uPw2, w2[0], w2[1], w2[2], w2[3]); const w3 = P.w3 || V3G_W0; gl.uniform4f(U.uPw3, w3[0], w3[1], w3[2], w3[3]);
           if (P.k === 'chain') {
             const q = P.q || P.p, a2 = P.a2 || V3G_AY, e = P.e || V3G_W0, e2 = P.e2 || V3G_W0, r = P.r || V3G_AX, q3 = P.q3 || q, a3 = P.a3 || V3G_AX, g2 = P.g2 || V3G_W0;
             gl.uniform3f(U.uPq, q[0], q[1], q[2]); gl.uniform3f(U.uPa2, a2[0], a2[1], a2[2]); gl.uniform3f(U.uPr, r[0], r[1], r[2]); gl.uniform4f(U.uPe, e[0], e[1], e[2], e[3]); gl.uniform4f(U.uPe2, e2[0], e2[1], e2[2], e2[3]);
@@ -475,6 +480,7 @@ function v3gVeh(v, rk, side, len, x, y, z, h, aim, dead, pitch, roll, hl, fs = 9
   const P = FP || [dead ? -.6 : da, 0, 0, 0, 0, 0, rc, 0], E = !FP && V3G_ERA[key], U = E && v && v.era && v.era.h;
   if (FP && V3G_CAPS[key] && v && v.samN != null) { const n = (typeof vehSp === 'function' && (vehSp(v).sam || {}).n) || 8; P[6] = 2 ** clamp(n - v.samN, 0, 16) - 1; }   // 打出去几枚，就有几个发射筒空了
   if (U && U.length && typeof rlModelOf === 'function' && E.rl.includes((rlModelOf(v) || {}).key)) for (const i of U) if (i >= 0 && i < 64) P[1 + Math.floor(i / 16)] += 2 ** (i % 16);   // 炸掉的反应装甲块（era.js）：每个数 16 位
+  if (v && v.erm && v.erm.length && typeof modEraBits === 'function') modEraBits(key, v, P);   // 编辑器点的爆反块炸掉的（mod.js，iE 各 16 位）
   if (v && v.id != null && typeof modMuzOf === 'function' && (modMuzOf(key) || modMgOf(key))) { if (V3G_VT.S !== S) { V3G_VT.clear(); V3G_VT.S = S; } V3G_VT.set(v.id, { key, x, y, z, h, k, da: dead ? 0 : P[0], el: FP && !dead ? P[1] || 0 : 0, my: FP && !dead ? P[2] || 0 : 0, me: FP && !dead ? P[7] || 0 : 0, pitch, roll }); }   // 编辑器设了炮口、机枪口的模型：记下这一帧怎么摆的（v3gMuzzle / v3gMgMuzzle；炮塔、炮管、机枪塔的角度按画面上的）
   const HZ = !dead && typeof modHazeOf === 'function' ? modHazeOf(key) : null;   // 编辑器设计的热浪：走着的发动机转速高、热得多
   if (HZ && V3G.C && (x - V3G.C.E[0]) ** 2 + (-y - V3G.C.E[1]) ** 2 < 500 * 500) for (const e of HZ) v3gHazeEmit(e, x, y, z, h, k, pitch, roll, v && v.moving ? 1.25 : .85, v ? v.id : 0);
