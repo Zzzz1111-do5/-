@@ -1315,5 +1315,158 @@
         1
       ]
     }
+  },
+  "afhas": {
+    "mode": "tex",
+    "file": "afhas.glb",
+    "name": "Hardened Aircraft Shelter HAS -DRAFT-",
+    "author": "samuelbrunner",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/hardened-aircraft-shelter-has-draft-ccc398978c0f4bb3955ada9d9a1dcf3c",
+    "unit": 1,
+    "tris": 6000,
+    "parts": {
+      "has": [
+        0,
+        1,
+        2,
+        3,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26
+      ]
+    }
+  },
+  "aftank": {
+    "mode": "tex",
+    "file": "aftank.glb",
+    "name": "Large Industrial Storage Tanks",
+    "author": "Duane's Mind",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/large-industrial-storage-tanks-bd3ac97071104b64bc388a155b64f79e",
+    "unit": 1,
+    "parts": {
+      "tank": [
+        26
+      ]
+    }
+  },
+  "afammo": {
+    "mode": "tex",
+    "file": "afammo.glb",
+    "name": "Ammunition Depot — Intact and Destroyed",
+    "author": "xFORTUNAx",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/ammunition-depot-intact-and-destroyed-977c9860b6684739be3b1dbcbc5319f4",
+    "unit": 1,
+    "parts": {
+      "mag": [
+        8
+      ],
+      "tw": [
+        48
+      ],
+      "water": [
+        56
+      ],
+      "kpp": [
+        4
+      ],
+      "shop": [
+        22
+      ],
+      "shed": [
+        20
+      ]
+    },
+    "tex": 1024,
+    "tris": {
+      "shed": 3000
+    }
+  },
+  "afbarr": {
+    "mode": "tex",
+    "file": "afbarr.glb",
+    "name": "Small Barracks",
+    "author": "creationwasteland",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/small-barracks-6bf1d1cb834d433bb3cd169695d87bc2",
+    "unit": 1,
+    "tris": 3000,
+    "tex": 512,
+    "parts": {
+      "barr": [
+        0,
+        1,
+        2,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11
+      ]
+    }
+  },
+  "afstack": {
+    "mode": "tex",
+    "file": "afstack.glb",
+    "name": "Industrial Smoke Stacks",
+    "author": "FrodoUndead",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/industrial-smoke-stacks-ffaf6bfbd8b84eb985dee2a35ba79440",
+    "unit": 1,
+    "parts": {
+      "stack": [
+        0
+      ]
+    }
+  },
+  "afcont": {
+    "mode": "tex",
+    "file": "afcont.glb",
+    "name": "Classic Shipping Container (Free/Gameready)",
+    "author": "Sebastian Webster",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/classic-shipping-container-freegameready-772f4be391a245f699c54e6cf157c58d",
+    "unit": 1,
+    "tris": 1200
+  },
+  "afjbd": {
+    "mode": "tex",
+    "file": "afjbd.glb",
+    "name": "Russian Jet Blast Deflector",
+    "author": "guifly",
+    "license": "CC BY 4.0",
+    "url": "https://sketchfab.com/3d-models/russian-jet-blast-deflector-b86e940ee7fd4f429425db0e1d80a16f",
+    "unit": 1,
+    "mcol": {
+      ".": [
+        0.46,
+        0.47,
+        0.45
+      ]
+    }
   }
 }

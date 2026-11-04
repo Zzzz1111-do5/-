@@ -25,6 +25,13 @@ const V3P_PACKS = {
   industrial: { name: '办公楼', title: 'industrial building', author: 'spicybamer', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/industrial-building-770acf6b0da74af397f748d95141f8be' },
   flats1: { name: '公寓楼', title: 'Davison Street Flats 1 - Flat Roof', author: 'Charlie_Zane', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/davison-street-flats-1-flat-roof-0f461ea81f8541db8d6a5f5e35133588' },
   wh99: { name: '砖砌库房', title: 'Warehouses', author: '99.Miles', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/warehouses-e6e105d35b3f486292c42ffa52f363c0' },
+  afhas: { name: '机场加固机堡', title: 'Hardened Aircraft Shelter HAS -DRAFT-（去掉库里的飞机、地坪）', author: 'samuelbrunner', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/hardened-aircraft-shelter-has-draft-ccc398978c0f4bb3955ada9d9a1dcf3c' },
+  aftank: { name: '机场油库储油罐', title: 'Large Industrial Storage Tanks（只用其中的大储罐）', author: "Duane's Mind", license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/large-industrial-storage-tanks-bd3ac97071104b64bc388a155b64f79e' },
+  afbarr: { name: '机场营房（宿舍）', title: 'Small Barracks', author: 'creationwasteland', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/small-barracks-6bf1d1cb834d433bb3cd169695d87bc2' },
+  afammo: { name: '机场覆土弹药库、岗楼、水塔、装配间、器材棚', title: 'Ammunition Depot — Intact and Destroyed（拆出其中几栋）', author: 'xFORTUNAx', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/ammunition-depot-intact-and-destroyed-977c9860b6684739be3b1dbcbc5319f4' },
+  afstack: { name: '机场电站烟囱', title: 'Industrial Smoke Stacks（用其中一根）', author: 'FrodoUndead', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/industrial-smoke-stacks-ffaf6bfbd8b84eb985dee2a35ba79440' },
+  afcont: { name: '雷达、爱国者阵地的方舱', title: 'Classic Shipping Container (Free/Gameready)', author: 'Sebastian Webster', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/classic-shipping-container-freegameready-772f4be391a245f699c54e6cf157c58d' },
+  afjbd: { name: '试车坪挡流板', title: 'Russian Jet Blast Deflector', author: 'guifly', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/russian-jet-blast-deflector-b86e940ee7fd4f429425db0e1d80a16f' },
   lptrees: { name: '多面体树木（黑绿画面）', title: 'Low poly trees', author: 'Aditya Voxel', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/low-poly-trees-51cae4a194344e8bbfbd0a4cff205f76' },
   lppine: { name: '多面体松树（黑绿画面）', title: 'Low Poly Pine', author: 'Afloat Above the World', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/low-poly-pine-107e3eab9dcb4e29a282c6709178752f' },
   cbridge: { name: '公路拱桥', title: 'Concrete Bridge (low poly)', author: 'Derfmode', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/concrete-bridge-low-poly-77d6c4481e6043889ea8cfe08c8fdcd2' },
@@ -48,7 +55,7 @@ const V3P_BRD_G = [['lptrees', 'ltb1'], ['lptrees', 'ltb2'], ['lptrees', 'ltb3']
 const v3pFacet = () => typeof v3Mx === 'function' && v3Mx();
 const V3P_BUSH = ['bush1', 'bush2', 'bush3', 'bush4'], V3P_ROCK = ['rock0', 'rock1', 'rock2', 'rock3', 'rock4', 'rock5', 'rock6', 'rock7', 'rock8'];
 const V3P_TINT = { bg1: [.56, .84, .44], bg4: [.6, .86, .42], treeD: [.55, .82, .42] };   // 模型里的桦树、落叶松是秋天的黄叶：压成夏天的绿
-const V3P_MUL = { girder: [.5, .5, .48], teeth: [.85, .85, .82] };   // 没贴图（纯白底色）的模型压成混凝土灰
+const V3P_MUL = { girder: [.5, .5, .48], teeth: [.85, .85, .82], afhas: [.6, .59, .56] };   // afhas 机堡（草稿模型没贴图）：压成混凝土灰   // 没贴图（纯白底色）的模型压成混凝土灰
 // 楼房：rot 把模型的正面转到 +x（有的模型正面朝 +y）
 const V3P_HOUSE = [['jph1', 'jph1', 0], ['jph2', 'jph2', -Math.PI / 2], ['jph3', 'jph3', -Math.PI / 2], ['house', 'house', 0]];
 const V3P_FLAT = [['oldconc', 'conc1', 0], ['oldconc', 'conc2', 0], ['oldconc', 'conc3', 0]];
@@ -217,7 +224,7 @@ const V3P_TS = 30;   // 远处替身按 30 × 30 格（300 米）分块
 function v3pPlace() {
   const isle = !!TER.isle;   // 架空海岛（isle.js）：热带植被——沿海一带棕榈，雨林用阔叶树，针叶树只长在高山上
   const fac = V3P.fac = v3pFacet();   // 黑绿 / 数码画面：树换成多面体的低多边形树（每个面一种颜色，棱线发光，不是贴图插片）
-  const need = ['treepack', 'cliffs', 'jph1', 'jph2', 'jph3', 'house', 'oldconc', 'hangar', 'atc', 'quonset', 'firestation', 'wh3', 'sawtooth', 'smallwh', 'industrial', 'flats1', 'wh99', 'girder', 'cbridge', 'pillbox', 'teeth', ...(isle && V3P_VEG ? ['palms'] : []), ...(fac && V3P_VEG ? ['lptrees', 'lppine'] : [])];
+  const need = ['treepack', 'cliffs', 'jph1', 'jph2', 'jph3', 'house', 'oldconc', 'hangar', 'atc', 'quonset', 'firestation', 'wh3', 'sawtooth', 'smallwh', 'industrial', 'flats1', 'wh99', 'afhas', 'aftank', 'afbarr', 'afammo', 'afstack', 'afcont', 'afjbd', 'girder', 'cbridge', 'pillbox', 'teeth', ...(isle && V3P_VEG ? ['palms'] : []), ...(fac && V3P_VEG ? ['lptrees', 'lppine'] : [])];
   const got = need.map(id => v3pPack(id) || (V3P.packs.get(id) || {}).st === -1);   // 先全部发起下载（同时载入），再看是不是都好了
   if (!got.every(Boolean)) return false;
   const tp = v3pPack('treepack');
@@ -450,8 +457,13 @@ function v3pStatic(vOf) {
   const blocks = typeof afb3dBlocks === 'function' ? afb3dBlocks() : [], hg = vOf('hangar', 'hangar'), qs = vOf('quonset', 'quonset'), tw = vOf('atc', 'atc');
   const fs = vOf('firestation', 'firestation'), w3 = vOf('wh3', 'wh3'), st = vOf('sawtooth', 'sawtooth'), sw = vOf('smallwh', 'smallwh'), ind = vOf('industrial', 'industrial'), fl = vOf('flats1', 'flats1'), w99 = vOf('wh99', 'wh99');
   let fire = false;
+  // 按用途（afbase.js 的 f）换专门的模型（用户：机场建筑全部去 Sketchfab 找资源换）：加固机堡、储油罐、营房、覆土弹药库、岗楼、水塔、电站烟囱、
+  //   雷达 / 爱国者阵地的方舱、试车坪挡流板、器材棚（原来是代码画的圆柱、土堆，或拿库房、半圆营房凑的）；哪个包没载入好就照旧
+  const AF = { has: vOf('afhas', 'has'), tank: vOf('aftank', 'tank'), dorm: vOf('afbarr', 'barr'), mag: vOf('afammo', 'mag'), tw: vOf('afammo', 'tw'), water: vOf('afammo', 'water'), shop: vOf('afammo', 'shop'),
+    shed: vOf('afammo', 'shed'), stack: vOf('afstack', 'stack'), cont: vOf('afcont', 'afcont'), jbd: vOf('afjbd', 'afjbd') };
   const pick = (k, big, small) => {
     const asp = big / small, or = (...vs) => vs.find(v => v >= 0) ?? -1;
+    if (k.f && AF[k.f] >= 0) return AF[k.f];
     if (k.r === 'arch') return big >= 30 ? or(hg, qs) : or(qs);
     if (k.r === 'has') return or(qs);   // 加固机堡：拱顶，外形接近半圆营房
     if (k.r === 'gable') return k.m === 'mound' ? -1 : k.m === 'metal' ? or(w3, qs) : or(w99, w3, qs);
@@ -464,6 +476,14 @@ function v3pStatic(vOf) {
   };
   blocks.forEach((k, i) => {
     const P = k.pts;
+    if (P.length !== 4 && k.f && AF[k.f] >= 0) {   // 圆的：储油罐（按占地直径、罐高）、水塔、烟囱（按高度，模型自己的粗细）
+      const v = AF[k.f], b = V3P.VL[v].V.bb, cx = P.reduce((a, p) => a + p[0], 0) / P.length, cy = P.reduce((a, p) => a + p[1], 0) / P.length;
+      const r = Math.max(...P.map(p => Math.hypot(p[0] - cx, p[1] - cy))), sh = 2 * r / Math.max(b[1][0] - b[0][0], b[1][1] - b[0][1]), sv = k.z / (b[1][2] - b[0][2]);
+      const sx = k.f === 'tank' ? sh : k.f === 'stack' ? Math.min(sh, sv * 1.6) : sv;
+      add(v, cx, cy, Math.min(...P.map(([x, y]) => v3HtO(x, y))) - .4, 0, sx, sx, sv);
+      V3P.rep.add(i);
+      return;
+    }
     if (P.length !== 4 && k.k !== 'cab') return;
     if (k.k === 'tower' || k.k === 'cab') {
       if (tw < 0) return;
@@ -477,6 +497,15 @@ function v3pStatic(vOf) {
     const big = Math.max(L, Wd), small = Math.min(L, Wd), v = pick(k, big, small);
     if (v < 0) return;
     const cx = P.reduce((s, p) => s + p[0], 0) / 4, cy = P.reduce((s, p) => s + p[1], 0) / 4, g = Math.min(...P.map(([x, y]) => v3HtO(x, y))) - .4;
+    if (k.f === 'has' || k.f === 'mag' || k.f === 'jbd') {
+      // 有正面的：机堡门、弹药库门脸朝建筑的 +a（afbase.js bld 的 a）、试车坪挡流板的斜面朝试车坪（−a）；模型的正面是 +x
+      const b = V3P.VL[v].V.bb, mL = b[1][0] - b[0][0], mW = b[1][1] - b[0][1], mH = b[1][2] - b[0][2];
+      if (k.f === 'has') { const s = L / mL; add(v, cx, cy, g, a, s, s, s); }   // 机堡：按进深等比放大（两侧土堤比占地宽，机堡之间留着 60 米）
+      else if (k.f === 'mag') { const sx = L / mL, sy = Wd / mW; add(v, cx, cy, g, a, sx, sy, Math.min(sx, sy) * .8); }
+      else { const n = Math.max(1, Math.round(Wd / mW)), s = Wd / n / mW, pa = a + Math.PI / 2; for (let j = 0; j < n; j++) { const o = ((j + .5) / n - .5) * Wd; add(v, cx + Math.cos(pa) * o, cy + Math.sin(pa) * o, g, a + Math.PI, s, s, s); } }
+      V3P.rep.add(i);
+      return;
+    }
     const bb = V3P.VL[v].V.bb, mL = bb[1][0] - bb[0][0], mW = bb[1][1] - bb[0][1], mBig = Math.max(mL, mW), mSmall = Math.min(mL, mW);
     const aL = L >= Wd ? a : a + Math.PI / 2, yaw = mL >= mW ? aL : aL - Math.PI / 2;   // 模型长边转到建筑长边
     const n = v === hg ? 1 : Math.max(1, Math.round((big / small) / (mBig / mSmall))), seg = big / n;

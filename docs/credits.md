@@ -113,6 +113,13 @@
 - 办公楼：This work is based on "industrial building" (https://sketchfab.com/3d-models/industrial-building-770acf6b0da74af397f748d95141f8be) by spicybamer licensed under CC BY 4.0
 - 公寓楼：This work is based on "Davison Street Flats 1 - Flat Roof" (https://sketchfab.com/3d-models/davison-street-flats-1-flat-roof-0f461ea81f8541db8d6a5f5e35133588) by Charlie_Zane licensed under CC BY 4.0
 - 砖砌库房：This work is based on "Warehouses" (https://sketchfab.com/3d-models/warehouses-e6e105d35b3f486292c42ffa52f363c0) by 99.Miles licensed under CC BY 4.0
+- 机场加固机堡：This work is based on "Hardened Aircraft Shelter HAS -DRAFT-" (https://sketchfab.com/3d-models/hardened-aircraft-shelter-has-draft-ccc398978c0f4bb3955ada9d9a1dcf3c) by samuelbrunner licensed under CC BY 4.0（去掉了库里的飞机和地坪，上了混凝土色）
+- 机场油库储油罐：This work is based on "Large Industrial Storage Tanks" (https://sketchfab.com/3d-models/large-industrial-storage-tanks-bd3ac97071104b64bc388a155b64f79e) by Duane's Mind licensed under CC BY 4.0（只用其中的大储罐，按油罐尺寸缩放）
+- 机场营房（宿舍）：This work is based on "Small Barracks" (https://sketchfab.com/3d-models/small-barracks-6bf1d1cb834d433bb3cd169695d87bc2) by creationwasteland licensed under CC BY 4.0（去掉了地面圆盘、室内地板，贴图缩小）
+- 机场覆土弹药库、岗楼、水塔、装配间、器材棚：This work is based on "Ammunition Depot — Intact and Destroyed" (https://sketchfab.com/3d-models/ammunition-depot-intact-and-destroyed-977c9860b6684739be3b1dbcbc5319f4) by xFORTUNAx licensed under CC BY 4.0（从场景里拆出其中几栋单独摆放）
+- 机场电站烟囱：This work is based on "Industrial Smoke Stacks" (https://sketchfab.com/3d-models/industrial-smoke-stacks-ffaf6bfbd8b84eb985dee2a35ba79440) by FrodoUndead licensed under CC BY 4.0（用其中一根）
+- 雷达、爱国者阵地的方舱：This work is based on "Classic Shipping Container (Free/Gameready)" (https://sketchfab.com/3d-models/classic-shipping-container-freegameready-772f4be391a245f699c54e6cf157c58d) by Sebastian Webster licensed under CC BY 4.0（减面）
+- 试车坪挡流板：This work is based on "Russian Jet Blast Deflector" (https://sketchfab.com/3d-models/russian-jet-blast-deflector-b86e940ee7fd4f429425db0e1d80a16f) by guifly licensed under CC BY 4.0（换成钢板灰纯色）
 - 公路桥（炸断后的桥墩）：This work is based on "Concrete Girder Beam Bridges/Tunnels [Free]" (https://sketchfab.com/3d-models/concrete-girder-beam-bridgestunnels-free-1c5d6642796843c198b94124518b9f04) by JoTrain The Aussie licensed under CC BY 4.0
 - 公路拱桥：This work is based on "Concrete Bridge (low poly)" (https://sketchfab.com/3d-models/concrete-bridge-low-poly-77d6c4481e6043889ea8cfe08c8fdcd2) by Derfmode licensed under CC BY 4.0
 - 多面体树木（黑绿画面）：This work is based on "Low poly trees" (https://sketchfab.com/3d-models/low-poly-trees-51cae4a194344e8bbfbd0a4cff205f76) by Aditya Voxel licensed under CC BY 4.0

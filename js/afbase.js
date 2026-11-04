@@ -60,6 +60,7 @@ function afbBuild(h, s) {
   const ngon = (u, v, r, m = 16) => Array.from({ length: m }, (_, i) => [u + Math.cos(i / m * 2 * Math.PI) * r, v + Math.sin(i / m * 2 * Math.PI) * r]);
   const shade = (k, pts, z) => poly(k, afbHull(pts.concat(pts.map(([x, y]) => [x + SH[0] * z, y + SH[1] * z]))));
   const obs = [];   // 营区里已占用的范围（种树时避开）
+  const tag = f => { G.blocks[G.blocks.length - 1].f = f; };   // 建筑用途：3D 里按它换 Sketchfab 模型（v3props.js）
   const take = (u0, v0, u1, v1) => obs.push([Math.min(u0, u1) - 2, Math.min(v0, v1) - 2, Math.max(u0, u1) + 2, Math.max(v0, v1) + 2]);
   const free = (u, v, r) => !obs.some(o => u + r > o[0] && u - r < o[2] && v + r > o[1] && v - r < o[3]);
   // 房屋 / 构筑物：中心 (u, v)、沿 a 方向长 L、横向宽 W、高 z、材质 m；屋顶 r：flat 平顶（女儿墙亮边）· gable 坡顶 · arch 拱顶（两侧明暗、中间中间调）· has 机堡（拱轴沿 a）
@@ -106,7 +107,7 @@ function afbBuild(h, s) {
   const tank = (u, v, r, z) => {
     const o = ngon(u, v, r, 20);
     shade('shade', o, z); poly('foot', o); poly('tankR', o); circ('tank', u, v, r * .9); circ('tankH', u + LT[0] * r * .2, v + LT[1] * r * .2, r * .6); circ('box', u, v, r * .06 + .5);
-    G.blocks.push({ pts: o, z });
+    G.blocks.push({ pts: o, z, f: 'tank' });
   };
 
   // —— 地面：围栏内修剪过的草地；跑道升降带（更平整、割草条纹）——
@@ -116,7 +117,7 @@ function afbBuild(h, s) {
   // 双层围栏（正门留口）、岗楼
   line('fence', 12, 612, 540, 612, 540, -172, -540, -172, -540, 612, -12, 612);
   line('fence2', 16, 616, 544, 616, 544, -176, -544, -176, -544, 616, -16, 616);
-  for (const [u, v] of [[-536, -168], [536, -168], [-536, 608], [536, 608], [-536, 220], [536, 220], [0, -168]]) bld(u, v, 5, 5, 0, 10, 'tan', 'flat');
+  for (const [u, v] of [[-536, -168], [536, -168], [-536, 608], [536, 608], [-536, 220], [536, 220], [0, -168]]) { bld(u, v, 5, 5, 0, 10, 'tan', 'flat'); tag('tw'); }
 
   // —— 道路：巡逻道（碎石，沿围栏内侧一圈）、场内柏油路、停车场 ——
   { const p = P('gravel'), r = 24, U = 526, A = -160, B = 598;
@@ -224,7 +225,7 @@ function afbBuild(h, s) {
 
   // —— 跑道外侧：雷达站、M-SHORAD 与高炮掩体、守备队工事 ——
   rect('gravF', AFD_RAD[0] - 18, AFD_RAD[1] - 14, AFD_RAD[0] + 18, AFD_RAD[1] + 14);   // AN/TPS-80：碎石场坪、雷达拖车（天线旋转另画）、发电机、方舱
-  bld(AFD_RAD[0], AFD_RAD[1] - 3, 12, 4.4, 0, 3.5, 'olive', 'flat'); bld(AFD_RAD[0] - 11, AFD_RAD[1] + 8, 5, 3, 0, 2.5, 'olive', 'flat'); bld(AFD_RAD[0] + 9, AFD_RAD[1] + 8, 6, 4, 0, 3, 'tan', 'flat');
+  bld(AFD_RAD[0], AFD_RAD[1] - 3, 12, 4.4, 0, 3.5, 'olive', 'flat'); tag('cont'); bld(AFD_RAD[0] - 11, AFD_RAD[1] + 8, 5, 3, 0, 2.5, 'olive', 'flat'); tag('cont'); bld(AFD_RAD[0] + 9, AFD_RAD[1] + 8, 6, 4, 0, 3, 'tan', 'flat'); tag('cont');
   line('fence', 262, -133, 298, -133, 298, -103, 262, -103, 262, -133);   // 机场监视雷达：围栏小院、机房、天线塔
   bld(272, -112, 12, 8, 0, 5, 'conc', 'flat'); circ('box', 288, -124, 2.6);
   for (const [u, v] of AFD_SHO) rev(u, v, 20, 18, 1);
@@ -251,13 +252,13 @@ function afbBuild(h, s) {
   for (const u of [-60, 60]) bld(u, 258, 30, 40, 0, 8, 'conc', 'flat');   // 中队楼
   bld(227, 227, 44, 34, 0, 12, 'metal', 'arch'); line('door', 208, 210.7, 246, 210.7);   // 直升机库
   for (const H of AFB_HAS) {   // 机堡：拱顶、门脸墙、门、后部排气口
-    const Q = bld(H.u, H.v, 30, 24, H.a, 9, 'has', 'has');
+    const Q = bld(H.u, H.v, 30, 24, H.a, 9, 'has', 'has'); tag('has');
     poly('wall', [Q(13.6, -13), Q(15.4, -13), Q(15.4, 13), Q(13.6, 13)]);
     line('hasDoor', ...Q(15.4, -10), ...Q(15.4, 10));
     poly('box', [Q(-15.6, -2.2), Q(-14, -2.2), Q(-14, 2.2), Q(-15.6, 2.2)]);
   }
   bld(468, 150, 36, 20, 0, 10, 'conc', 'arch'); bld(494, 150, 16, 7, 0, 6, 'dark', 'arch');   // 发动机试车库与消音排气筒
-  bld(493.5, 206, 3, 38, 0, 4, 'conc', 'flat'); circ('box', 470, 206, .9);                    // 试车坪：导流墙、系留点
+  bld(493.5, 206, 3, 38, 0, 4, 'conc', 'flat'); tag('jbd'); circ('box', 470, 206, .9);                    // 试车坪：导流墙、系留点
   line('fence', 450, 250, 520, 250, 520, 340, 450, 340, 450, 250); take(450, 250, 520, 340);  // 地面设备场：棚、电源车、气源车、照明车
   bld(485, 262, 56, 14, 0, 6, 'metal', 'gable');
   for (let r = 0; r < 4; r++) for (let k = 0; k < 10; k++) if (rnd() < .8) veh(['vOl', 'vAge', 'vWh'][(rnd() * 3) | 0], 457 + k * 6.6, 284 + r * 15, 2.6, 4, Math.PI / 2);
@@ -268,17 +269,17 @@ function afbBuild(h, s) {
   bld(-298, 392, 20, 12, 0, 6, 'tan', 'gable'); bld(-268, 392, 20, 12, 0, 6, 'tan', 'gable');
   circ('pile', -300, 424, 5.5); circ('pile2', -282, 427, 4.5); circ('pile', -262, 423, 6); circ('pile2', -241, 426, 4.2);
   veh('vTan', -236, 400, 3.4, 8, Math.PI / 2); veh('vOl', -226, 400, 3.4, 8, Math.PI / 2);
-  { const o = ngon(-232, 322, 7); shade('shade', o, 26); poly('foot', o); poly('tankR', o); circ('tank', -232, 322, 6.2); circ('tankH', -232 + LT[0] * 1.5, 322 + LT[1] * 1.5, 4); G.blocks.push({ pts: o, z: 26, z0: 17 }); take(-239, 315, -225, 329); }
+  { const o = ngon(-232, 322, 7); shade('shade', o, 26); poly('foot', o); poly('tankR', o); circ('tank', -232, 322, 6.2); circ('tankH', -232 + LT[0] * 1.5, 322 + LT[1] * 1.5, 4); G.blocks.push({ pts: o, z: 26, z0: 17, f: 'water' }); take(-239, 315, -225, 329); }
   circ('wallC', -256, 320, 6.4); circ('water', -256, 320, 5.3); take(-262, 314, -250, 326);
   bld(-236, 353, 44, 22, 0, 10, 'dark', 'flat');
-  for (const u of [-250, -238, -226]) { const o = ngon(u, 349, 1.8, 8); shade('shade', o, 18); poly('foot', o); poly('stack', o); G.blocks.push({ pts: o, z: 18 }); }
+  for (const u of [-250, -238, -226]) { const o = ngon(u, 349, 1.8, 8); shade('shade', o, 18); poly('foot', o); poly('stack', o); G.blocks.push({ pts: o, z: 18, f: 'stack' }); }
   line('fence', -378, 458, -196, 458, -196, 590, -378, 590, -378, 458); take(-378, 458, -196, 590);
   rect('gravF', -376, 492, -198, 588);
   bld(-330, 474, 50, 20, 0, 8, 'metal', 'gable'); rect('apron', -270, 465, -246, 481);
   for (let r = 0; r < 4; r++) for (let k = 0; k < 15; k++) if (rnd() < .78) veh(rnd() < .8 ? 'vOl' : 'vTan', -366 + k * 11, 505 + r * 23, 3.4, 8.6, Math.PI / 2);
 
   // —— 营区：宿舍、指挥部、礼拜堂、体育场、健身房、食堂、诊所、服务社、访客中心、大门 ——
-  for (const u of [-150, -60]) for (const v of [325, 357, 389]) bld(u, v, 50, 12, 0, 9, 'brick', 'gable');
+  for (const u of [-150, -60]) for (const v of [325, 357, 389]) { bld(u, v, 50, 12, 0, 9, 'brick', 'gable'); tag('dorm'); }
   bld(-105, 479, 90, 18, 0, 10, 'white', 'flat'); bld(-141, 514, 18, 52, 0, 10, 'white', 'flat'); bld(-69, 514, 18, 52, 0, 10, 'white', 'flat');
   circ('mast', -105, 463, .8);
   bld(-170, 573, 14, 26, 0, 9, 'brick', 'gable'); bld(-170, 557, 6, 6, 0, 18, 'white', 'flat');
@@ -291,21 +292,21 @@ function afbBuild(h, s) {
   bld(115, 409, 30, 18, 0, 7, 'white', 'flat');
   bld(158, 476, 46, 28, 0, 8, 'conc', 'flat');
   bld(31, 578, 18, 12, 0, 5, 'tan', 'flat');
-  bld(0, 600, 24, 12, 0, 6, 'canopy', 'flat');
+  bld(0, 600, 24, 12, 0, 6, 'canopy', 'flat'); tag('shed');
 
   // —— 油库与加油车场、爱国者导弹排 ——
   bld(316, 322, 24, 16, 0, 6, 'tan', 'flat');
   line('berm', 212, 478, 328, 478, 328, 594, 212, 594, 212, 478); line('crest', 212, 478, 328, 478, 328, 594, 212, 594, 212, 478); take(210, 460, 330, 596);
   for (const [u, v] of [[241, 507], [299, 507], [241, 565], [299, 565]]) tank(u, v, 15, 12);
   bld(270, 536, 12, 8, 0, 5, 'conc', 'flat');
-  bld(233, 465, 26, 10, 0, 6, 'canopy', 'flat'); veh('vWh', 256, 465, 3.6, 10, 0);
+  bld(233, 465, 26, 10, 0, 6, 'canopy', 'flat'); tag('shed'); veh('vWh', 256, 465, 3.6, 10, 0);
   line('pipe', 270, 478, 270, 244);
   for (const [u, v] of AFD_PAT) rev(u, v, 20, 22, 1);
   rev(372, 548, 20, 22, 1); rev(516, 548, 20, 22, 1);   // 预备发射阵位
   rect('gravF', 428, 460, 462, 484);
-  bld(445, 472, 14, 6, 0, 4, 'olive', 'flat'); bld(445, 467.6, 12, 2.8, 0, 5, 'dark', 'flat');   // AN/MPQ-65 雷达（阵面朝跑道外侧）
+  bld(445, 472, 14, 6, 0, 4, 'olive', 'flat'); tag('cont'); bld(445, 467.6, 12, 2.8, 0, 5, 'dark', 'flat');   // AN/MPQ-65 雷达（阵面朝跑道外侧）
   rev(445, 474, 28, 18, -1);
-  bld(420, 497, 10, 5, 0, 3.5, 'olive', 'flat'); bld(470, 497, 10, 5, 0, 3.5, 'olive', 'flat'); bld(445, 522, 8, 4, 0, 3, 'olive', 'flat'); circ('mast', 445, 528, 1.2);   // 交战控制站、电源车、天线车
+  bld(420, 497, 10, 5, 0, 3.5, 'olive', 'flat'); tag('cont'); bld(470, 497, 10, 5, 0, 3.5, 'olive', 'flat'); tag('cont'); bld(445, 522, 8, 4, 0, 3, 'olive', 'flat'); tag('cont'); circ('mast', 445, 528, 1.2);   // 交战控制站、电源车、天线车
   poly('net', [[411, 489], [428, 488], [430, 503], [419, 507], [409, 500]]); poly('net', [[461, 489], [479, 491], [478, 505], [463, 505]]);
   line('cable', 420, 497, 392, 443); line('cable', 420, 497, 498, 443); line('cable', 445, 476, 432, 494);
   line('wire', 350, 398, 532, 398, 532, 596, 350, 596, 350, 398); take(350, 398, 532, 596);
@@ -313,12 +314,12 @@ function afbBuild(h, s) {
   // —— 弹药库区：独立围栏、覆土弹药库（门脸墙朝内部道路）、装配检测间 ——
   line('fence', -388, 444, -388, 202, -532, 202, -532, 470, -388, 470, -388, 456); take(-532, 202, -388, 470);
   const igloo = (u, v, a) => {
-    const Q = bld(u, v, 26, 18, a, 5, 'mound', 'gable');
+    const Q = bld(u, v, 26, 18, a, 5, 'mound', 'gable'); tag('mag');
     poly('wall', [Q(11.6, -12), Q(13.4, -12), Q(13.4, 12), Q(11.6, 12)]); poly('box', [Q(13, -3), Q(13.6, -3), Q(13.6, 3), Q(13, 3)]);
     rect('apron', u + Math.cos(a) * 13.4, v - 5, a ? -456.5 : -463.5, v + 5);
   };
   for (const v of [230, 285, 340, 395]) { igloo(-490, v, 0); igloo(-430, v, Math.PI); }
-  bld(-500, 446, 30, 16, 0, 7, 'conc', 'gable');
+  bld(-500, 446, 30, 16, 0, 7, 'conc', 'gable'); tag('shop');
 
   // —— 树：行道树、围栏边、指挥部庭院、营区草坪、场区边角（离跑道净空远）——
   for (let v = 312; v <= 556; v += 15) { plant(-13, v, 4 + rnd()); plant(13, v, 4 + rnd()); }
@@ -557,7 +558,7 @@ function afb3dBases() {
 const afb3dSig = () => afb3dBases().map(b => `${b.id}:${Math.round(b.x)},${Math.round(b.y)},${(b.rh || 0).toFixed(3)},${b.rs || 1}`).join('|');
 function afb3dBlocks() {
   const out = [];
-  for (const b of afb3dBases()) for (const k of afbGeo(b.rh || 0, b.rs || 1).blocks) out.push({ pts: k.pts.map(([u, v]) => eaW(b, u, v)), z: k.z, z0: k.z0 || 0, m: k.m, r: k.r, k: k.k, base: b.id });
+  for (const b of afb3dBases()) for (const k of afbGeo(b.rh || 0, b.rs || 1).blocks) out.push({ pts: k.pts.map(([u, v]) => eaW(b, u, v)), z: k.z, z0: k.z0 || 0, m: k.m, r: k.r, k: k.k, f: k.f, base: b.id });
   return out;
 }
 
