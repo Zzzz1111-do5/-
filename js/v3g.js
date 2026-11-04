@@ -940,9 +940,27 @@ function v3gSmooth(cf, m, VB, IB) {
 }
 // 云朵：模型是一层层薄壳，按每个面的法线打光，近处的云一块块棱角分明、像石膏块——法线大半换成整团云的椭球法线
 //   （中心偏下：云底平、顶上鼓），明暗、边缘透明（uCld 按 |N·V|）都顺着整团云渐变，看着蓬松
-function v3gCloudN(m, VB) {
+//   里层的壳（椭球半径 < V3G_CLIN，约三成多三角形）去掉：外层已经几乎不透明、里层看不见，却是一层层叠着混色的开销——一朵云一两公里大，
+//   开飞机穿进云层时一朵就盖满整屏，几十层叠着画，Mac 的 Retina 屏上把显卡拖死（用户：很多飞机进去就卡死）
+const V3G_CLIN = .62;
+function v3gCloudN(m, VB, IB) {
   const b = m.bb, st = m.st, cx = (b[0] + b[3]) / 2, cy = (b[1] + b[4]) / 2, cz = b[2] + (b[5] - b[2]) * .3;
   const ex = Math.max(1, (b[3] - b[0]) / 2), ey = Math.max(1, (b[4] - b[1]) / 2), ez = Math.max(1, (b[5] - b[2]) / 2);
+  if (IB) {
+    const rv = v => { const i = v * st; return Math.hypot((VB[i] - cx) / ex, (VB[i + 1] - cy) / ey, (VB[i + 2] - cz) / ez); };
+    const done = new Map();   // 几级网格共用同一段索引时只压一次
+    for (const L of m.lod) for (const e of L) {
+      const k = e[2] + ':' + e[3];
+      if (done.has(k)) { e[3] = done.get(k); continue; }
+      let w = e[2];
+      for (let t = e[2]; t + 2 < e[2] + e[3]; t += 3) {
+        if ((rv(IB[t]) + rv(IB[t + 1]) + rv(IB[t + 2])) / 3 < V3G_CLIN) continue;
+        if (w !== t) { IB[w] = IB[t]; IB[w + 1] = IB[t + 1]; IB[w + 2] = IB[t + 2]; }
+        w += 3;
+      }
+      done.set(k, w - e[2]); e[3] = w - e[2];
+    }
+  }
   for (let i = 0; i + 5 < VB.length; i += st) {
     let nx = (VB[i] - cx) / (ex * ex), ny = (VB[i + 1] - cy) / (ey * ey), nz = (VB[i + 2] - cz) / (ez * ez);
     const l = Math.hypot(nx, ny, nz);
@@ -1042,7 +1060,7 @@ function v3gPrep(key, m, M, VB, IB) {
   if (V3G_ROTSPLIT[key]) v3gRotor(V3G_ROTSPLIT[key], m, VB, IB);
   if (V3G_DROP[key]) v3gDrop(V3G_DROP[key], m, VB, IB);   // 去掉从蒙皮里戳出来的内部结构（歼-31）
   if (V3G_SMOOTH[key]) v3gSmooth(V3G_SMOOTH[key], m, VB, IB);   // 拼起来的蒙皮重算平滑法线（歼-31）
-  if (key === 'cloud') v3gCloudN(m, VB);   // 云朵按整团的形状打光（不按一个个面）
+  if (key === 'cloud') v3gCloudN(m, VB, IB);   // 云朵按整团的形状打光（不按一个个面）、去掉里层的壳
   let R = null;
   const use = r => { if (r) { R = r; VB = r.VB; IB = r.IB; } };   // 补了顶点的步骤换成更长的新数组，后面的步骤接着在新数组上做
   if (V3G_GEAR[key]) use(v3gGear(V3G_GEAR[key], m, VB, IB));   // 补起落架（整架抬高）：弹舱、座舱、挂点都按抬高后的坐标

@@ -28,9 +28,10 @@ function v3cloudAdd(C) {
   const cl = typeof SETTINGS === 'object' && SETTINGS ? clamp(+SETTINGS.cloud, 0, 1) : 1;   // 云量（编辑器 / 设置）：0 不画
   if (!(cl > 0)) return;
   const L = v3cloudInit(), M = V3CL_M, sx = W + 2 * M, sy = H + 2 * M, t = S.t || 0, E = C && C.E, far = C && C.fog ? C.fog[1] * 1.15 + 1300 : 1e9;
+  const th = typeof R === 'object' && R && R.autoLow ? .5 : 1;   // 持续卡顿自动降画质时（main.js R.autoLow）云少一半：云是一层层薄壳叠着混色，开飞机穿云时最吃显卡
   for (let i = 0; i < L.length; i++) {
     const c = L[i];
-    if ((i * .618034) % 1 > cl) continue;   // 云量低于 1：按固定的顺序少画几朵
+    if ((i * .618034) % 1 > cl * th) continue;   // 云量低于 1：按固定的顺序少画几朵
     const x = ((c.x + M + V3CL_WIND[0] * t) % sx + sx) % sx - M, y = ((c.y + M + V3CL_WIND[1] * t) % sy + sy) % sy - M;
     if (E && Math.hypot(x - E[0], -y - E[1], c.z - E[2]) > far) continue;   // 雾的尽头以外：看不见
     v3gAdd('cloud', x, y, c.z, c.a, c.k, 0, 0, 0);
