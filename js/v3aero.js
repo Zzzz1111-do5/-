@@ -152,7 +152,7 @@ function v3aInit(gl) {
   } catch (e) { V3AE.tried = true; console.warn('气动特效着色器没编译过：', e); }
 }
 if (typeof V3PC_WARM === 'object') V3PC_WARM.push(gl => { v3aInit(gl); return V3AE.ok || V3AE.tried; });
-const v3aK = () => typeof SETTINGS === 'object' && SETTINGS && SETTINGS.aero != null ? clamp(+SETTINGS.aero, 0, 2) : 1;   // 强弱（编辑器「画面」页）
+const v3aK = () => (typeof SETTINGS === 'object' && SETTINGS && SETTINGS.aero != null ? clamp(+SETTINGS.aero, 0, 2) : 1) * (typeof R === 'object' && R && R.fpLite ? .5 : 1);   // fpLite：开飞机太卡时减半（main.js）   // 强弱（编辑器「画面」页）
 // 登记一团雾：c 原点、U 顺着气流往后、V 右、W 上（GL，单位向量，右手系），L / R / H 包围盒的长、半宽、半高（米），ty 类型（0 蒸汽锥、1 机翼水汽、2 音爆），
 //   x 参数（蒸汽锥 / 音爆：p1 前端半径比、p2 从哪儿开始有雾），Y、Z 挡雾的机身、机翼（局部坐标，见着色器 occ；没有就全 0）
 const V3AE_0 = [0, 0, 0, 0];

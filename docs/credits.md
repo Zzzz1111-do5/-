@@ -131,6 +131,8 @@
 - 天空：This work is based on "Kloofendal 48d Partly Cloudy (Pure Sky)" (https://polyhaven.com/a/kloofendal_48d_partly_cloudy_puresky) by Greg Zaal / Poly Haven licensed under CC0
 - 地表贴图：This work is based on "Grass004、Ground037、Rock060" (https://ambientcg.com/) by ambientCG licensed under CC0
 - 沙地贴图（沙滩、沙漠地表）：This work is based on "Sand at Sunset Beach" (https://sketchfab.com/3d-models/sand-at-sunset-beach-1ac0847acae44ffe9c3783be28e82bcf) by Terrie Simmons-Ehrhardt (https://sketchfab.com/terrielsimmons) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)；改动：扫描模型俯视渲染成图，裁中间一块、去掉大尺度明暗、做成无缝平铺，颜色均值按游戏原沙地贴图调整（tools/sandtex_render.py、tools/sandtex_tile.py，assets/terrain/sand.jpg）
+- 雪地贴图（雪山地表）：This work is based on "Snow Raw Scan" (https://sketchfab.com/3d-models/snow-raw-scan-67cdd845964e4614a818f35f55de9622) by Phil Gosch (saphires) licensed under CC BY 4.0（俯视渲染、做成无缝平铺）
+- 带雪岩石贴图（雪山陡坡）：This work is based on "Rock terrain with light snow" (https://sketchfab.com/3d-models/rock-terrain-with-light-snow-e37252871af442e2aeb3571d1d11e65a) by Lassi Kaukonen (thesidekick) licensed under CC BY 4.0（俯视渲染、做成无缝平铺）
 - 海面法线贴图（assets/water/normals.jpg）：用户提供的海洋素材（ocean.zip 里的 water_new_height.png）
 - 舰载飞机牵引车：This work is based on "Aircraft_Tug" (https://sketchfab.com/3d-models/aircraft-tug-ac1c0a974a734864a27fe84dbbcb0de8) by Chukk007 licensed under CC Attribution
 - 挂弹车：This work is based on "Weapons Loader" (https://sketchfab.com/3d-models/weapons-loader-016ca0f9b98b4ffbbe0e55f235bef496) by Sengchor licensed under CC Attribution

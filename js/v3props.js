@@ -43,6 +43,8 @@ const V3P_PACKS = {
   sky: { name: '天空', title: 'Kloofendal 48d Partly Cloudy (Pure Sky)', author: 'Greg Zaal / Poly Haven', license: 'CC0', url: 'https://polyhaven.com/a/kloofendal_48d_partly_cloudy_puresky' },
   terrain: { name: '地表贴图', title: 'Grass004、Ground037、Rock060', author: 'ambientCG', license: 'CC0', url: 'https://ambientcg.com/' },
   sand: { name: '沙地贴图', title: 'Sand at Sunset Beach', author: 'Terrie Simmons-Ehrhardt', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/sand-at-sunset-beach-1ac0847acae44ffe9c3783be28e82bcf' },
+  snow: { name: '雪地贴图（雪山）', title: 'Snow Raw Scan', author: 'Phil Gosch (saphires)', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/snow-raw-scan-67cdd845964e4614a818f35f55de9622' },
+  snowrock: { name: '带雪岩石贴图（雪山）', title: 'Rock terrain with light snow', author: 'Lassi Kaukonen (thesidekick)', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/rock-terrain-with-light-snow-e37252871af442e2aeb3571d1d11e65a' },
   water: { name: '水面法线', title: 'waternormals.jpg（three.js 示例）', author: 'three.js authors', license: 'MIT', url: 'https://github.com/mrdoob/three.js/blob/dev/examples/textures/waternormals.jpg' }
 };
 // 树种：针叶（山地、高处多）、阔叶（桦、落叶松）；h：模型原高（米，载入后按包围盒取）

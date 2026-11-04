@@ -18,6 +18,8 @@ P, UV, I, MT = [], [], [], []
 base = 0
 for mi, mesh in enumerate(G['meshes']):
     for pr in mesh['primitives']:
+        mt = G['materials'][pr['material']] if 'material' in pr else {}
+        if pr.get('mode', 4) != 4 or 'TEXCOORD_0' not in pr['attributes'] or 'baseColorTexture' not in mt.get('pbrMetallicRoughness', {}): continue   # 只要带贴图的三角形（扫描里混着的线段、没贴图的辅助网格不要）
         p = acc(pr['attributes']['POSITION']).astype(np.float64); p = (np.c_[p, np.ones(len(p))] @ M.T)[:, :3]
         P.append(p); UV.append(acc(pr['attributes']['TEXCOORD_0']).astype(np.float64)); idx = acc(pr['indices']).astype(np.int64).reshape(-1, 3)
         I.append(idx + base); MT.append(np.full(len(idx), G['materials'][pr['material']]['pbrMetallicRoughness']['baseColorTexture']['index'])); base += len(p)

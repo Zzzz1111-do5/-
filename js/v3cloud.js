@@ -27,6 +27,7 @@ function v3cloudAdd(C) {
   if (!v3gModel('cloud')) return;
   const cl = typeof SETTINGS === 'object' && SETTINGS ? clamp(+SETTINGS.cloud, 0, 1) : 1;   // 云量（编辑器 / 设置）：0 不画
   if (!(cl > 0)) return;
+  if (typeof R === 'object' && R && R.fpLite && typeof V3FP === 'object' && V3FP.on && V3FP.k === 'air') return;   // 开飞机太卡时（main.js fpHeavyGuard）不画云
   const L = v3cloudInit(), M = V3CL_M, sx = W + 2 * M, sy = H + 2 * M, t = S.t || 0, E = C && C.E, far = C && C.fog ? C.fog[1] * 1.15 + 1300 : 1e9;
   const th = typeof R === 'object' && R && R.autoLow ? .5 : 1;   // 持续卡顿自动降画质时（main.js R.autoLow）云少一半：云是一层层薄壳叠着混色，开飞机穿云时最吃显卡
   for (let i = 0; i < L.length; i++) {

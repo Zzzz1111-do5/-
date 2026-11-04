@@ -38,7 +38,31 @@ function bgRain() {
 
 let lastT = performance.now(), acc = 0, hudT = 0, mmT = 0, ema = 1 / 60;
 const DPR_STEPS = [2, 1.5, 1.25, 1];   // 像素密度的几档（不超过屏幕本身的）
+// 一帧里哪里抛了错（比如某型飞机接手时缺数据），原来 requestAnimationFrame 排不到下一帧，整个画面就停住——用户：点驾驶某架飞机会突然死机。
+//   现在出错照样排下一帧；驾驶中出的错先退出驾驶（交回 AI），战报里写出错误（同一个错 5 秒只报一次），控制台留完整堆栈
 function frame(now) {
+  try { frameBody(now); }
+  catch (e) {
+    console.error(e);
+    const msg = String((e && e.message) || e).slice(0, 120);
+    if (!(R.errT > now - 5000 && R.errM === msg)) { R.errT = now; R.errM = msg; if (typeof log === 'function') { try { log(`画面这一帧出错，已跳过（${typeof V3FP === 'object' && V3FP.on ? '退出驾驶，' : ''}截图发给开发者）：${msg}`, 'bad'); } catch (er) { /* 战报也坏了就算了 */ } } }
+    try { if (typeof V3FP === 'object' && V3FP.on && typeof fpExit === 'function') fpExit(); } catch (er) { /* 退不出也继续 */ }
+    requestAnimationFrame(frame);
+  }
+}
+// 开飞机时画面太重的保险（用户：所有飞机点驾驶立马死机——镜头一下到了一两千米高的云层边上，开飞机时云又不淡出，
+//   Mac 的 Retina 屏上一帧画好几秒）：连着两帧间隔超过 0.7 秒就把像素密度降到 1 倍、开飞机时不画云、气动特效减半，战报里说一声（只降一次）
+function fpHeavyGuard(now) {
+  const air = typeof V3FP === 'object' && V3FP.on && V3FP.k === 'air', gap = now - lastT;
+  if (!air || !(gap < 60000)) { R.fpSlowN = 0; return; }
+  R.fpSlowN = gap > 700 ? (R.fpSlowN || 0) + 1 : 0;
+  if (R.fpSlowN < 2 || R.fpLite) return;
+  R.fpLite = true; R.autoLow = true;
+  if ((window.devicePixelRatio || 1) > 1.01) { R.dprLv = DPR_STEPS.length - 1; R.dprCap = 1; R.dprHold = now + 120000; resize(); }
+  if (typeof log === 'function') log(`开飞机的画面太重（一帧要 ${(gap / 1000).toFixed(1)} 秒）：已把像素密度降到 1 倍、开飞机时不画云、气动特效减半；设置里可以再调`, 'warn');
+}
+function frameBody(now) {
+  fpHeavyGuard(now);
   const dt = Math.min(.1, (now - lastT) / 1000);
   lastT = now;
   // 像素密度按帧率逐档升降（2 → 1.5 → 1.25 → 1）：持续 2.5 秒跟不上（平均帧间隔超过约 36ms）降一档，持续 10 秒很流畅（约 48 帧以上）升一档；
