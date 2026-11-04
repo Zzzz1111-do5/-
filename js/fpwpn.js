@@ -78,18 +78,23 @@ const fwSlots = (T, bay, Wd, w) => (w && bay !== 'side' && T[w]) || (bay === 'ma
 
 // —— 挂载 ——
 // 接手时把推演里的计数分到各型弹上（AI 飞的时候打掉了几枚就少几枚）；之后两边一起减，交回 AI 时它照样知道还剩多少
+// 挂载每一行在 o.fwN 里的键：这种弹只占一行就是弹名（和原来一样，老存档照用）；同一种弹放在几处（编辑器里主弹舱 + 外挂各一行）各行分开记，不再互相盖掉
+const fwKey = (L, i) => { const w = L[i].w; let n = 0; for (const s of L) if (s.w === w) n++; return n > 1 ? w + '#' + i : w; };
+const fwKeyOf = (L, s) => s.key || fwKey(L, L.indexOf(s));
 function fwInit(o) {
   const M = airMdl(o.kind, o.v), L = FW_LOAD[airMdlKey(o.kind, o.v)] || [], G = fwGunOf(o);
   if (G && o.gunN == null) o.gunN = G.n;   // 航炮备弹（交回 AI 再接手时接着用）
   const tot = { aam: o.aam ?? M.aam ?? 0, aamL: o.aamL ?? M.aamL ?? 0, gbN: o.gbN ?? M.gbN ?? 0, agmN: o.agmN ?? M.agmN ?? 0 };
-  const have = f => L.filter(s => fwField(s.w) === f).reduce((a, s) => a + ((o.fwN || {})[s.w] || 0), 0);
-  if (o.fwN && Object.keys(tot).every(f => have(f) === (L.some(s => fwField(s.w) === f) ? tot[f] : 0))) return;   // 没变就不重分
-  const N = {};
-  for (const s of L) if (s.sr != null) { const f = fwField(s.w); N[s.w] = Math.min(s.sr, tot[f]); tot[f] -= N[s.w]; }   // 近距弹先分（侧弹舱各一枚）
-  for (const s of L) if (s.sr == null) { const f = fwField(s.w); N[s.w] = tot[f]; tot[f] = 0; }
+  // 一行能分到的上限：编辑器的挂载每行写着几枚（n），型号表原来的挂载不写（这一类弹剩多少都归它）
+  const cap = f => L.reduce((a, s) => a + (fwField(s.w) === f ? s.n ?? Infinity : 0), 0);
+  const have = f => L.reduce((a, s, i) => a + (fwField(s.w) === f ? (o.fwN || {})[fwKey(L, i)] || 0 : 0), 0);
+  if (o.fwN && Object.keys(tot).every(f => have(f) === (L.some(s => fwField(s.w) === f) ? Math.min(tot[f], cap(f)) : 0))) return;   // 没变就不重分
+  const N = {}, put = (s, i, want) => { const f = fwField(s.w), k = fwKey(L, i), c = Math.max(0, Math.min(want, tot[f])); N[k] = (N[k] || 0) + c; tot[f] -= c; };
+  L.forEach((s, i) => { if (s.sr != null) put(s, i, Math.min(s.sr, s.n ?? Infinity)); });   // 近距弹先分（侧弹舱各一枚）
+  L.forEach((s, i) => { if (s.sr == null) put(s, i, s.n ?? Infinity); });
   o.fwN = N;
 }
-const fwList = o => (FW_LOAD[airMdlKey(o.kind, o.v)] || []).map(s => ({ ...s, W: FW_W[s.w], n: (o.fwN || {})[s.w] || 0 }));
+const fwList = o => { const L = FW_LOAD[airMdlKey(o.kind, o.v)] || []; return L.map((s, i) => { const key = fwKey(L, i); return { ...s, key, W: FW_W[s.w], n: (o.fwN || {})[key] || 0 }; }); };
 const fwSelW = () => { const o = V3FP.o; return o && V3FP.k === 'air' && V3FP.ws >= 0 ? fwList(o)[V3FP.ws] || null : null; };
 // 还剩几枚（交回 AI 时打光了就返航）
 const fwLeft = o => fwList(o).reduce((a, s) => a + s.n, 0);
@@ -135,11 +140,11 @@ function fwBayMsl(o, key, sz, x, y, z, h, pt, rl, bay) {
   fwInit(o);
   const sel = V3FP.on && V3FP.o === o ? fwSelW() : null, k = sz / V3G.M[mk].meta.len, A = o.asm && o.asm.w && FW_ASM[mk];
   const put = (ms, v) => { const p = v3gAt(key, sz, x, y, z, h, pt, rl, v); if (p) v3gMsl(ms, p[0], p[1], p[2], h, k, 0, pt); };
-  for (const s of L) {   // 翼下挂架：每种弹挂在自己那组挂点上，剩几枚画几枚（打掉的从第一个挂点开始空）
+  L.forEach((s, j) => {   // 翼下挂架：每种弹挂在自己那组挂点上，剩几枚画几枚（打掉的从第一个挂点开始空）
     const st = s.bay === 'ext' && (T[s.w] || T.ext);
-    if (!st || (A && A.st === s.w)) continue;   // 这组挂点换挂了反舰导弹（下面画）
-    for (let i = st.length - Math.min((o.fwN || {})[s.w] || 0, st.length); i < st.length; i++) put(FW_W[s.w].ms, st[i]);
-  }
+    if (!st || (A && A.st === s.w)) return;   // 这组挂点换挂了反舰导弹（下面画）
+    for (let i = st.length - Math.min((o.fwN || {})[fwKey(L, j)] || 0, st.length); i < st.length; i++) put(FW_W[s.w].ms, st[i]);
+  });
   if (A && T[A.st]) for (let i = Math.max(0, T[A.st].length - A.n); i < T[A.st].length; i++) put(o.asm.w, T[A.st][i]);   // 海战换挂的反舰导弹（打出去以后 navy.js 清掉 p.asm）
   for (const [ms, sk] of FW_POD[airMdlKey(o.kind, o.v)] || []) for (const v of T[sk] || []) put(ms, v);   // 电子战吊舱
   for (const bk of ['main', 'side']) {
@@ -147,7 +152,7 @@ function fwBayMsl(o, key, sz, x, y, z, h, pt, rl, bay) {
     const own = L.filter(q => q.bay === bk);   // 每种弹都有自己的挂点（不重叠）：舱里的全画；共用一组挂点的只画选中的那种（AI 的画头一种）
     const ss = own.length && own.every(q => T[q.w]) ? own : [sel && sel.bay === bk ? sel : own[0]].filter(Boolean);
     for (const s of ss) {
-      const Wd = FW_W[s.w], st = fwSlots(T, bk, Wd, s.w), n = Math.min((o.fwN || {})[s.w] || 0, st ? st.length : 0), e = bk === 'side' ? bay.ext || 0 : 0;
+      const Wd = FW_W[s.w], st = fwSlots(T, bk, Wd, s.w), n = Math.min((o.fwN || {})[fwKeyOf(L, s)] || 0, st ? st.length : 0), e = bk === 'side' ? bay.ext || 0 : 0;
       for (let i = st ? st.length - n : 0; st && i < st.length; i++) {
         const a = st[i], X = bk === 'side' && T.sideX ? T.sideX[i % T.sideX.length] : a, p = v3gAt(key, sz, x, y, z, h, pt, rl, [lerp(a[0], X[0], e), lerp(a[1], X[1], e), lerp(a[2], X[2], e)]);
         if (p) v3gMsl(Wd.ms, p[0], p[1], p[2], h, k, 0, pt);
@@ -163,10 +168,11 @@ function fwLoadout(type, v) {
   if (FW_LD.has(id)) return FW_LD.get(id);
   const mk = typeof V3G_AIR === 'object' && typeof airSilKey === 'function' ? V3G_AIR[airSilKey(type, v)] || 'j31' : 'j31', T = FW_ST[mk] || {}, o = { kind: type, v }, out = [];
   fwInit(o);   // 临时对象：按型号表满载
-  for (const s of FW_LOAD[airMdlKey(type, v)] || []) {
+  const LD = FW_LOAD[airMdlKey(type, v)] || [];
+  LD.forEach((s, j) => {
     const Wd = FW_W[s.w], st = s.bay === 'side' ? T.side : fwSlots(T, s.bay, Wd, s.w);
-    for (let i = 0; i < (o.fwN[s.w] || 0); i++) out.push({ w: s.w, ms: Wd.ms, bay: s.bay, v: st && st.length ? st[st.length - 1 - (i % st.length)] : null });
-  }
+    for (let i = 0; i < (o.fwN[fwKey(LD, j)] || 0); i++) out.push({ w: s.w, ms: Wd.ms, bay: s.bay, v: st && st.length ? st[st.length - 1 - (i % st.length)] : null });
+  });
   FW_LD.set(id, out);
   return out;
 }
@@ -319,14 +325,14 @@ function fwLaunch(o, s, c) {
   S.missiles.push(m);
   if (typeof v3gFired === 'function') v3gFired('p' + o.id);   // 编辑器设计的「发射时」动画（v3g.js）
   if (Wd.k === 'arm' && c.o && typeof ewArm === 'function') ewArm(c.o, c.nm);   // 反辐射弹盯上了：雷达可能关机规避（ew.js）
-  o.fwN[s.w]--;
+  const fk = s.key || s.w; o.fwN[fk]--;
   const f = fwField(s.w); o[f] = Math.max(0, (o[f] ?? airMdl(o.kind, o.v)[f] ?? 0) - 1);   // 推演里没记这一项的（攻击机的自卫空空弹）从型号表的满载数减
   if (f === 'gbN' && o.gbN === 0) o.dropped = true;
   S.stats.shots++;
   if (Wd.k === 'aam' && typeof awStat === 'function') awStat(s.w === 'pl17' ? 'aamL' : 'aamP');
   V3FP.cool = Wd.k === 'aam' ? .5 : .8; V3FP.imp = .5;   // 挂架、弹射臂的冲击（受力回馈）
   if (typeof fpMslOn === 'function') fpMslOn(m);   // 右上角小屏跟着这枚弹（v3pilot.js：导弹视角，V 放大 / 缩回）
-  log(c.o ? `发射${Wd.nm}，打 ${(c.d / 1000).toFixed(1)} 公里外的${c.nm}（还剩 ${o.fwN[s.w]} 枚）` : `发射${Wd.nm}，${Wd.k === 'aam' ? '沿机头方向打出去，导引头自己找目标' : `打${c.nm}`}（还剩 ${o.fwN[s.w]} 枚）`, 'info', 'fwl', 0, { x: c.x, y: c.y });
+  log(c.o ? `发射${Wd.nm}，打 ${(c.d / 1000).toFixed(1)} 公里外的${c.nm}（还剩 ${o.fwN[fk]} 枚）` : `发射${Wd.nm}，${Wd.k === 'aam' ? '沿机头方向打出去，导引头自己找目标' : `打${c.nm}`}（还剩 ${o.fwN[fk]} 枚）`, 'info', 'fwl', 0, { x: c.x, y: c.y });
 }
 
 // —— 弹道（每步 1/30 秒）：GL 坐标（东、北、上），游戏坐标 x = 东、y = −北 ——

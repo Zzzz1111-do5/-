@@ -366,9 +366,9 @@ function fpFly(p, dt) {
       const B = fpBody(p); V3FP.aim = [Math.atan2(-B.f[1], B.f[0]), Math.asin(clamp(B.f[2], -1, 1))];
     } else { x = S0.x; y = S0.y; r = Math.abs(mr) > .02 ? fpCurve(mr) : S0.r; }
   }
-  // 离开作战区域（地图外 3 公里；默认地图、海岛这种外面铺着无边海面的 20 公里——用户：战场区域太小，战斗机一个转弯就飞出去被拉回来）：自动驾驶转回来（压坡度对准地图中心、带一点杆），瞄准方向也跟着转过去
-  const mg = V3.ocean ? 20000 : 3000;
-  V3FP.ap = p.x < -mg || p.x > W + mg || p.y < -mg || p.y > H + Math.max(mg, typeof afpOn === 'function' && afpOn() ? AFP.off + 2500 : 0);   // 南边让出战区机场（afp.js）一带
+  // 离开作战区域（地图外 30 公里；默认地图、海岛这种外面铺着无边海面的 200 公里——用户：战场区域太小，战斗机一个转弯就飞出去被拉回来；后来又要交战区域扩大 10 倍）：自动驾驶转回来（压坡度对准地图中心、带一点杆），瞄准方向也跟着转过去
+  const mg = V3.ocean ? 200000 : 30000;
+  V3FP.ap = p.x < -mg || p.x > W + mg || p.y < -mg || p.y > H + Math.max(mg, typeof afpOn === 'function' && afpOn() ? AFP.off + 4000 : 0);   // 南边让出战区机场的小岛（afp.js）一带
   if (V3FP.ap) {   // 交给教官：准星对着地图中心、低了往上抬一点（原来直接压大坡度拉杆，掉头时升力不够，螺旋往下掉、撞了山）
     const agl = -F.P[2] - flGround(F.P[0], F.P[1]);
     V3FP.aim = [Math.atan2(H / 2 - p.y, W / 2 - p.x), clamp((900 - agl) / 1500, .08, .35)];   // 准星总在地平线以上：转弯带一点爬升（准星和地平线齐平时要压到 90° 坡度转，升力全在水平方向，一路往下掉）

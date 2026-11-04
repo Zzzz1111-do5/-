@@ -108,6 +108,8 @@ const MDX_CSS = `
 #mdx footer { display: flex; gap: 8px; align-items: center; padding: 8px 14px; border-top: 1px solid var(--line); }
 #mdx footer .msg { flex: 1; color: var(--mute); font-size: 12px; }
 #mdx .mdx-load { display: grid; grid-template-columns: 1.6fr 1fr .7fr auto; gap: 6px; align-items: center; margin: 4px 0; }
+#mdx .mdx-ldw { grid-column: 1 / -1; display: flex; gap: 8px; align-items: center; color: var(--amber, #ffc24a); font-size: 12px; }
+#mdx .mdx-ldw .mdx-btn { padding: 2px 8px; font-size: 12px; }
 #mdx .mdx-it.add { color: var(--g-hi); border-style: dashed; border-color: rgba(var(--g-rgb), .35); }
 #mdx .mdx-view { margin: 0 0 4px; }
 #mdx .mdx-stk { position: sticky; top: -12px; z-index: 3; margin: 0 -16px 8px; padding: 8px 16px 2px; background: rgba(var(--pn-rgb), .98); border-bottom: 1px solid var(--line); }   /* 预览和点选那一行钉在表单顶上：往下翻按钮时还能在模型上点 */
@@ -274,7 +276,7 @@ function mdxForm() {
     const a = MOD_DEF.air[k] || AIR_MDL[k], cur = W0.air[k] || {}, load = cur.load || (MOD_DEF.load[k] !== undefined ? MOD_DEF.load[k] : FW_LOAD[k]) || [];
     const rows = (cur.load || load.map(r => ({ w: r.w, bay: r.bay, n: mdxLoadN(k, r) }))).map((r, i) => `<div class="mdx-load"><select data-ld="${i}" data-lf="w">${Object.keys(FW_W).map(w => `<option value="${w}"${w === r.w ? ' selected' : ''}>${mdxEsc((MOD_DEF.wpn[w] || FW_W[w]).nm)}</option>`).join('')}</select>
       <select data-ld="${i}" data-lf="bay">${[['main', '主弹舱'], ['side', '侧弹舱'], ['ext', '外挂']].map(([b, n]) => `<option value="${b}"${b === r.bay ? ' selected' : ''}>${n}</option>`).join('')}</select>
-      <input type="number" min="0" max="16" step="1" data-ld="${i}" data-lf="n" value="${r.n}" aria-label="枚数"><button type="button" class="mdx-rst" data-ldx="${i}" title="去掉这一项">✕</button></div>`).join('');
+      <input type="number" min="0" max="16" step="1" data-ld="${i}" data-lf="n" value="${r.n}" aria-label="枚数"><button type="button" class="mdx-rst" data-ldx="${i}" title="去掉这一项">✕</button>${mdxLoadWarn(k, cur, r)}</div>`).join('');
     return `<h3>${mdxEsc(a.name)}</h3><p class="note">推演里的距离是游戏尺度（地图比真实小），速度是真实的。挂载改的是驾驶时的武器表、3D 挂架上画的弹，以及 AI 出击时带几枚；挂点、尾喷口的位置在「模型与挂点」页。</p>` +
       mdxMdlSel('air|' + k, cur.mdl, mdxAirDef()[modAirSil(k)], 'air') + mdxAirRows('air|' + k, MDX_AIR_F, a, k, cur) +
       (mdxAP0(k) ? `<h3 style="margin-top:14px">性能（加速度、转弯、推力）</h3>${mdxPerf(k, cur, a.spd)}` + mdxAirRows('air|' + k, MDX_PERF_F, a, k, cur, 1) : '') +
@@ -408,7 +410,8 @@ function mdxMdlForm(mk) {
   const P = C.st[MDX.hg] || [];
   h += `<h3 style="margin-top:12px">挂点 ${rst('st', C.stD)}</h3><p class="note">按挂载里的「位置」挂：主弹舱、侧弹舱、外挂；某型武器有专门的一组（「专挂 霹雳-15」）就挂在那组。先打的排在前面。</p>
     <div class="mdx-row"><label>挂点组</label><select data-hg="1">${groups.map(g => `<option value="${g}"${g === MDX.hg ? ' selected' : ''}>${mdxEsc(gname(g))}（${(C.st[g] || []).length}）</option>`).join('')}${Object.keys(FW_W).filter(w => !groups.includes(w)).map(w => `<option value="${w}">新建：专挂 ${mdxEsc((MOD_DEF.wpn[w] || FW_W[w]).nm)}</option>`).join('')}</select><span></span><span></span></div>
-    ${P.map((p, i) => `<div class="mdx-row"><label>${i + 1}</label>${xyz(`st.${MDX.hg}.${i}`, p)}<span></span><button type="button" class="mdx-rst" data-mdel="st.${MDX.hg}.${i}" title="去掉">✕</button></div>`).join('') || '<p class="note">这一组还没有挂点：选「挂点」后在模型上点。</p>'}`;
+    <div class="mdx-pcbar">${[1, 2, 3].map(n => `<button type="button" class="mdx-btn" data-a="autohp" data-n="${n}" title="在翼展几处从下往上找机翼下表面，取弦长中间往下让出挂架，左右对称放；放好以后还能一个个改">机翼下自动放 ${n} 对</button>`).join('')}</div>
+    ${P.map((p, i) => `<div class="mdx-row"><label>${i + 1}</label>${xyz(`st.${MDX.hg}.${i}`, p)}<span></span><button type="button" class="mdx-rst" data-mdel="st.${MDX.hg}.${i}" title="去掉">✕</button></div>`).join('') || '<p class="note">这一组还没有挂点：选「挂点」后在模型上点，或者点上面的「机翼下自动放」。</p>'}`;
   // 尾喷口
   h += `<h3 style="margin-top:12px">尾喷口 ${rst('noz', C.nozD)}</h3><p class="note">喷口出口截面的中心、内半径、出口到喉道的深（米）；y 不为 0 的左右各一个。尾焰、热浪、喷口里的发光都按它画。</p>
     ${C.noz.map((n, i) => `<div class="mdx-row"><label>${i + 1}（x y z · 半径 · 深）</label><span class="mdx-xyz">${[0, 1, 2, 3, 4].map(j => num(`noz.${i}.${j}`, n[j])).join('')}</span><span></span><button type="button" class="mdx-rst" data-mdel="noz.${i}" title="去掉">✕</button></div>`).join('') || '<p class="note">没有喷口（螺旋桨飞机、直升机不用）。</p>'}`;
@@ -945,7 +948,56 @@ function mdxFxAnim(cv) {
 }
 const W0_DEF = () => 8400, H0_DEF = () => 5600;
 // 原挂载里每一项的枚数（从机型表的计数分出来，同 fpwpn.js fwLoadout 的规则）
+// 机翼下面自动放挂点（预览里读出来的模型，模型坐标）：在翼展的几处（半翼展的 34% / 50% / 66%）从下往上打竖直射线找机翼下表面，
+//   取那一段连续命中（机翼）的弦长中间，往下让出 0.35 米（挂架加弹的半径），左右对称；机身那一段（离中线太近、命中太深）跳过
+function mdxAutoPylons(nPairs) {
+  const M = typeof MIV === 'object' && MIV.M;
+  if (!M) return [];
+  const b = M.m.bb, off = MIV.pt && MIV.pt.off ? MIV.pt.off : [0, 0, 0], half = Math.max(Math.abs(b[1]), Math.abs(b[4])), L = b[3] - b[0], VB = M.VB, IB = M.IB, st = M.st, codes = MIV.pt && MIV.pt.codes;
+  const out = [], z0 = b[2] - 1;
+  for (const f of [.34, .5, .66].slice(0, nPairs)) {
+    const y = half * f + off[1], T = [];
+    for (const [, , i0, cnt] of M.m.lod[0]) for (let t = i0; t < i0 + cnt; t += 3) {   // 只留横跨这个翼展位置的三角形
+      if (codes && Math.round(codes[IB[t]]) % 10 === 6) continue;   // 删掉的块
+      const a = IB[t] * st, c = IB[t + 1] * st, d = IB[t + 2] * st, y0 = Math.min(VB[a + 1], VB[c + 1], VB[d + 1]), y1 = Math.max(VB[a + 1], VB[c + 1], VB[d + 1]);
+      if (y0 <= y && y1 >= y) T.push(a, c, d);
+    }
+    const hits = [];
+    for (let i = 0; i <= 120; i++) {
+      const x = b[3] - L * i / 120 + off[0];
+      let best = 1e30;
+      for (let k = 0; k < T.length; k += 3) {   // 竖直射线（往上）和三角形求交：投影到 xy 平面看点在不在三角形里，再插值高度
+        const a = T[k], c = T[k + 1], d = T[k + 2], ax = VB[a], ay = VB[a + 1], bx = VB[c] - ax, by = VB[c + 1] - ay, cx = VB[d] - ax, cy = VB[d + 1] - ay, det = bx * cy - by * cx;
+        if (Math.abs(det) < 1e-12) continue;
+        const px = x - ax, py = y - ay, u = (px * cy - py * cx) / det, v = (bx * py - by * px) / det;
+        if (u < 0 || v < 0 || u + v > 1) continue;
+        const z = VB[a + 2] + u * (VB[c + 2] - VB[a + 2]) + v * (VB[d + 2] - VB[a + 2]);
+        if (z < best) best = z;
+      }
+      if (best < 1e29) hits.push([x, best]);
+    }
+    let run = [], cur = [];   // 最长的一段连续命中：机翼
+    for (let i = 0; i < hits.length; i++) { if (cur.length && Math.abs(hits[i][0] - cur[cur.length - 1][0]) > L / 100) { if (cur.length > run.length) run = cur; cur = []; } cur.push(hits[i]); }
+    if (cur.length > run.length) run = cur;
+    if (run.length < 3) continue;
+    const m = run[Math.floor(run.length / 2)], R4 = v => Math.round(v * 1e3) / 1e3, p = [R4(m[0] - off[0]), R4(y - off[1]), R4(m[1] - .35 - off[2])];
+    out.push(p, [p[0], -p[1], p[2]]);
+  }
+  return out;
+}
+// 这一行的弹在模型上有没有挂点（没有的数量照算、能打，只是画面上看不到）：提示一下，点「去点挂点」直接跳到「模型与挂点」页
+function mdxLoadWarn(k, cur, r) {
+  const W1 = FW_W[r.w], n = +r.n || 0;
+  if (!W1 || !n || typeof fwSlots !== 'function') return '';
+  const mk = cur.mdl && modMdlOk(cur.mdl) ? cur.mdl : mdxAirDef()[modAirSil(k)];
+  if (!mk) return '';
+  const T = (MDX_W.mdl[mk] && MDX_W.mdl[mk].st) || (mk in MOD_DEF.st ? MOD_DEF.st[mk] : FW_ST[mk]) || {}, st = r.bay === 'side' ? T.side : fwSlots(T, r.bay, W1, r.w), m = st ? st.length : 0;
+  if (m >= n) return '';
+  const nm = { main: '主弹舱', side: '侧弹舱', ext: '外挂' }[r.bay] || r.bay;
+  return `<div class="mdx-ldw">${m ? `「${nm}」挂点只有 ${m} 个：多的 ${n - m} 枚照样能打，画面上画不出来` : `这个模型没有「${nm}」挂点：${n} 枚照样带、能打，画面上看不到`}<button type="button" class="mdx-btn" data-a="gohp" data-mk="${mdxEsc(mk)}" data-hg="${r.bay === 'side' ? 'side' : r.bay}">去点挂点</button></div>`;
+}
 function mdxLoadN(k, r) {
+  if (r.n != null) return r.n;   // 编辑器存过的挂载每行带着枚数
   const a = MOD_DEF.air[k] || AIR_MDL[k], W1 = FW_W[r.w];
   if (!a || !W1) return 0;
   if (W1.k === 'aam') return r.sr ? r.sr : Math.max(0, (r.w === 'pl17' ? a.aamL || 0 : a.aam || 0) - ((MOD_DEF.load[k] || FW_LOAD[k] || []).find(o => o.sr && o !== r) || { sr: 0 }).sr);
@@ -1060,6 +1112,16 @@ function mdxClick(e) {
   if (a === 'close') closeModEditor();
   else if (a === 'save') { for (const k of MOD_SEC) if (k !== 'lib') MOD[k] = modClone(MDX_W[k]); modSave(); MDX.dirty = false; MDX.keep = true; mdxRender(); mdxMsg('已保存：下一局生效，正在打的这一局里的车辆也已更新'); }
   else if (a === 'undo') { MDX_W = modClone(MOD); MDX.dirty = false; mdxRender(); mdxMsg('已放弃没保存的改动'); }
+  else if (a === 'autohp') {
+    const mk = MDX.sel, P2 = mdxAutoPylons(+b.dataset.n || 1);
+    if (!P2.length) { mdxMsg('没找到机翼：在翼展那几处从下面往上没打到连成一段的下表面（模型还没读出来，或者不是固定翼）'); return; }
+    const A = MDX_W.mdl[mk] = MDX_W.mdl[mk] || {}, C = mdxMdlCur(mk);
+    if (!A.st) A.st = modClone(C.st) || {};
+    const g = MDX.hg || 'ext';
+    A.st[g] = [...(A.st[g] || []), ...P2];
+    MDX.dirty = true; MDX.keep = true; mdxRender(); mdxMsg('在「' + g + '」这一组加了 ' + P2.length + ' 个挂点（左右对称）：位置不合适就改数或删掉重点，点「保存」生效');
+  }
+  else if (a === 'gohp') { MDX.tab = 'mdl'; MDX.sel = b.dataset.mk; MDX.pk = 'hp'; MDX.hg = b.dataset.hg || 'ext'; MDX.q = ''; mdxRender(); mdxMsg('在模型上点挂点（「' + ({ main: '主弹舱', side: '侧弹舱', ext: '外挂' }[MDX.hg] || MDX.hg) + '」那一组；左右对称会自动在另一边也挂一个），点「保存」生效'); }
   else if (a === 'ldadd') { const k = MDX.sel, A = MDX_W.air[k] = MDX_W.air[k] || {}; if (!A.load) A.load = (FW_LOAD[k] || []).map(r => ({ w: r.w, bay: r.bay, n: mdxLoadN(k, r) })); A.load.push({ w: 'pl15', bay: 'ext', n: 2 }); MDX.dirty = true; MDX.keep = true; mdxRender(); }
   else if (a === 'ldrst') { const A = MDX_W.air[MDX.sel]; if (A) { delete A.load; if (!Object.keys(A).length) delete MDX_W.air[MDX.sel]; } MDX.dirty = true; MDX.keep = true; mdxRender(); }
   else if (a === 'export' || a === 'exportf') {

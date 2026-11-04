@@ -11,6 +11,8 @@ const V3 = { on: false, ok: false, tried: false, gl: null, cv: null, pr: null, u
 let V3_HZ = 230;   // 高程 1.0 在 3D 里多高（米）：程序生成的地图 230；真实地形按 TER.hz（v3SetHz）
 const V3_FOV = .8, V3_TILT = [.05, 1.45], V3_SKIRT = -70;   // 俯仰：从几乎正俯视到几乎平视
 const V3_ZMAX = 11000, V3_OUT = 2400;   // 镜头最高高度、能飞出地图边多远：拉远能看见整张地图（黑绿画面是整张沙盘桌，v3table.js）
+// 自由镜头能飞到地图外多远（各边）：外面铺着无边海面的地图扩大 10 倍（用户：交战区域扩大 10 倍），南边还要够到战区机场的小岛（afp.js，南缘外约 27 公里）
+const v3OutB = () => { const o = V3.ocean ? V3_OUT * 10 : V3_OUT; return { w: o, e: o, n: o, s: Math.max(o, typeof afpOn === 'function' && afpOn() ? AFP.off + 3500 : 0) }; };
 let V3_AIR = 230 * V3_HZ / 150;
 function v3SetHz(hz) { V3_HZ = hz; V3_AIR = 230 * Math.max(hz, 230) / 150; }   // 飞机、导弹高度 alt 1.0 对应的 3D 高度：随地形高程放大，高空飞机始终在最高的山顶之上
 let V3_ST = 2;   // 地形网格每几格一个顶点：显卡支持 32 位索引时为 1（每 10 米一个顶点，山脊、河谷的轮廓更细），否则 2
@@ -886,10 +888,12 @@ function v3OceanBuild(d) {
   V3_OC.ext = V3_OC.exts.find(X => X.side === 'n') || null;
   if (typeof afpOn === 'function' && afpOn()) V3_OC.south = v3SouthBuild();
 }
-// 南缘外的攻方海岸（战区机场，afp.js）：东西向一长条陆地网格（每 50 米一个顶点），高度按 afpHt（海峡里沉到 −9，岸上约 4 米、往南缓丘，机场场区推平）；
-//   北边沉在无边海面下面，看起来是从海里升起的岸；只是远景和飞机起降的地面，部队到不了
+// 南缘外的小岛（战区机场，afp.js）：岛四周一块网格（每 25 米一个顶点），高度按 afpHt（岛外沉到 −9，沙滩、岛上约 4 米，机场场区推平）；
+//   四周沉在无边海面下面，看起来是从海里冒出来的小岛；只是远景和飞机起降的地面，部队到不了
 function v3SouthBuild() {
-  const gl = V3.gl, d = 50, x0 = -7000, x1 = W + 7000, y0 = H + AFP.shore - 400, y1 = H + AFP.off + 4500;
+  const B0 = S.afP, I = AFP.isl;
+  if (!B0 || !I) return null;
+  const gl = V3.gl, d = 25, mg = 300, x0 = B0.x - I.rx * 1.3 - mg, x1 = B0.x + I.rx * 1.3 + mg, y0 = B0.y + I.cy - I.ry * 1.3 - mg, y1 = B0.y + I.cy + I.ry * 1.3 + mg;
   const nx = Math.ceil((x1 - x0) / d) + 1, ny = Math.ceil((y1 - y0) / d) + 1, hz = new Float32Array(nx * ny);
   for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) hz[j * nx + i] = afpHt(x0 + i * d, y0 + j * d);
   const v = [], ix = [];
@@ -1265,7 +1269,7 @@ function v3FcInit() {
   const ps = V3.yawT ?? 0, tz = v3Ht(CAM.x, CAM.y), ux = Math.sin(ps), uy = Math.cos(ps);
   // 平面地图缩得很远时换算出的镜头会在地图外、高度上限以上：改成更陡地俯看、再降低距离，镜头仍对着原来的画面中心
   const lim = (p, u, a, b) => u > 1e-6 ? (b - p) / u : u < -1e-6 ? (a - p) / u : 1e9;
-  const hmax = Math.max(0, Math.min(lim(CAM.x, ux, -V3_OUT, W + V3_OUT), lim(CAM.y, uy, -V3_OUT, H + V3_OUT)));
+  const O = v3OutB(), hmax = Math.max(0, Math.min(lim(CAM.x, ux, -O.w, W + O.e), lim(CAM.y, uy, -O.n, H + O.s)));
   if (D * Math.sin(th) > hmax) th = Math.asin(clamp(hmax / D, 0, 1));
   if (D * Math.cos(th) > V3_ZMAX - tz) D = (V3_ZMAX - tz) / Math.max(.2, Math.cos(th));
   V3.fc = v3FcFromOrbit(CAM.x, CAM.y, tz, D, th, ps);
@@ -1307,7 +1311,7 @@ function v3FcStep(dt) {
   if (F.cx != null && (Math.abs(CAM.x - F.cx) > .5 || Math.abs(CAM.y - F.cy) > .5)) { F.x += CAM.x - F.cx; F.y += CAM.y - F.cy; }   // 别处把画面中心移走了（小地图、双击编队、点消息定位）：镜头平移过去
   F.yaw += Math.atan2(Math.sin(F.yawT - F.yaw), Math.cos(F.yawT - F.yaw)) * Math.min(1, dt * 14);
   F.pitch += (F.pitchT - F.pitch) * Math.min(1, dt * 14);
-  F.x = clamp(F.x, -V3_OUT, W + V3_OUT); F.y = clamp(F.y, -V3_OUT, H + V3_OUT);
+  const O = v3OutB(); F.x = clamp(F.x, -O.w, W + O.e); F.y = clamp(F.y, -O.n, H + O.s);
   F.z = clamp(F.z, v3Gnd(F.x, F.y) + 3, V3_ZMAX);
   const alt = Math.max(1, F.z - v3Gnd(F.x, F.y)), cp = Math.cos(F.pitch), down = -Math.sin(F.pitch);
   const reach = down > .05 ? Math.min(16000, alt / down * cp) : 2600 * Math.min(1, alt / 200 + .3);   // 视线落地点（看天时取前方一段）
