@@ -30,7 +30,7 @@ const SHOTS = [
   { id: 'B', at: 6, dur: 4, T: 44, tg: 'cv', cam: [[460, -2.3, -0.30], [330, -1.75, -0.22]], card: C('PHASE 01 // SEA CONTROL', '先夺制海权', '航母舰载机 · 驱逐舰 · 战区航空兵', .15, 3.7), flash: true },
   { id: 'D', at: 14, dur: 4, T: 52, tg: 'boom', fire: true, cam: [[820, -1.32, -0.44], [640, -1.18, -0.40]] },
   { id: 'C', at: 10, dur: 4, T: 150, tg: 'ships', ahead: 250, cam: [[760, -1.62, -0.17], [560, -1.50, -0.20]] },
-  { id: 'E', at: 18, dur: 4, T: 36, tg: 'plane', cam: [[46, 0.6, -0.12], [34, 0.3, -0.08]] },
+  { id: 'E', at: 18, dur: 4, T: 36, tg: 'plane', cone: 326, cam: [[46, 0.6, -0.12], [34, 0.3, -0.08]] },   // cone：画这一帧时追拍的战斗机按这个速度（米 / 秒）画，带上蒸汽锥（画完改回去，不影响推演）
   { id: 'F', at: 22, dur: 4, T: 262, tg: 'landing', cam: [[520, -1.75, -0.20], [380, -1.55, -0.25]], card: C('PHASE 02 // ASSAULT', '再强行登陆', '抢滩，夺取登陆场', .15, 3.7), flash: true },
   { id: 'G', at: 26, dur: 4, T: 272, tg: 'boom', fire: true, cam: [[420, -0.95, -0.34], [330, -1.35, -0.36]] },
   { id: 'H', at: 30, dur: 4, T: 300, tg: 'boom', fire: true, cam: [[460, -1.95, -0.30], [360, -1.65, -0.28]] },
@@ -243,6 +243,8 @@ async function stepShots(b) {
         window.__st = sh.at + t;
         window.__ss = __rng(); __seed(window.__rs);   // 画面用画面的随机数
         if (cam && cam.live === 'plane') { const P = window.__plane(); if (P) { cam.tg = [P.x, P.y]; cam.tz = P.z; cam.yaw = P.h + cam.yo; } }
+        const cO = sh.cone && (S.planes || []).find(p => p.id === window.__plId), cS = cO ? cO.spd : 0;
+        if (cO) cO.spd = sh.cone;   // 跨音速：气动特效（v3aero.js）按速度画蒸汽锥
         if (sh.ui === 'eanim') { MAN.t = (t * .9) % 1.25; manPose('ztz99', Math.min(MAN.t, 1.2)); MIV.yaw = 2.5 + t * .22; mivDraw(); }   // 编辑器：局部动画——开炮时炮管后坐、炮塔一震（预览按帧驱动，动画循环被接管了）
         if (sh.ui === 'etrail' && typeof mfxTick === 'function') mfxTick(window.__vt);   // 导弹尾烟设计：预览、预设卡片按帧动
         if (cam) { V3.tin = null; const cp = Math.cos(cam.pitch); Object.assign(V3.fc, { x: cam.tg[0] - Math.cos(cam.yaw) * cp * cam.d, y: cam.tg[1] - Math.sin(cam.yaw) * cp * cam.d, z: (cam.tz ?? v3Ht(cam.tg[0], cam.tg[1])) - Math.sin(cam.pitch) * cam.d, yaw: cam.yaw, pitch: cam.pitch, yawT: cam.yaw, pitchT: cam.pitch, cx: null, cy: null }); }
@@ -271,11 +273,12 @@ async function stepShots(b) {
           const s = cd.querySelector('.s'); s.textContent = c.sub || ''; s.style.opacity = c.subA ?? 1;
         }
         acc = -1e9; window.__vt += 1000 / 30; frame(window.__vt);   // 推演已经在上面做了，frame() 只画
+        if (cO) cO.spd = cS;
       }, [i, cam, ov, sh, t, GLYPHS, F0]);
-      if (i >= F0 && !sfxOnly) await p.screenshot({ path: path.join(dir, String(i - F0).padStart(4, '0') + '.jpg'), type: 'jpeg', quality: 93 });
+      if (i >= F0 && !sfxOnly) await p.screenshot({ path: path.join(dir, String(i - F0).padStart(4, '0') + '.jpg'), type: 'jpeg', quality: 93, timeout: 0 });   // 不限时：软件渲染、机器忙的时候一帧能超过默认的 30 秒
     }
     if (!sfxOnly) {
-      execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-framerate', String(FPS), '-i', path.join(dir, '%04d.jpg'), '-c:v', 'libx264', '-preset', 'medium', '-crf', '14', '-pix_fmt', 'yuv420p', path.join(SHOT_DIR, sh.id + '.mp4')]);
+      execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-framerate', String(FPS), '-i', path.join(dir, '%04d.jpg'), '-vf', 'scale=1920:1080:flags=lanczos', '-c:v', 'libx264', '-preset', 'medium', '-crf', '14', '-pix_fmt', 'yuv420p', path.join(SHOT_DIR, sh.id + '.mp4')]);   // 低分辨率渲的（W / H）放大到 1080p，剪辑时各镜头一样大
       fs.rmSync(dir, { recursive: true, force: true });
     }
     const rec = await p.evaluate(() => { const r = window.__snd; window.__snd = []; window.__rec = false; return r; });   // 这个镜头的音效（时间都落在它的时段里）
