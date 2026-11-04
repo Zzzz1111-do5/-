@@ -1,8 +1,8 @@
 'use strict';
 // 气动特效（用户：飞机的超音速云爆过于敷衍，气动特效这些）——三维的白雾（不是一团团贴片），玩家开的、AI 开的喷气机都画：
-//   蒸汽锥：跨音速（马赫 0.9–1.07）时从座舱往后张开的一层钟形凝结云（照片里 F/A-18 那样）——后缘是激波，一道清楚的边，往前渐渐淡进去，
+//   蒸汽锥：跨音速（马赫 0.88–1.16，用户嫌不够密集：原来 0.9–1.07、偏淡）时从座舱往后张开的一层钟形凝结云（照片里 F/A-18 那样）——后缘是激波，一道清楚的边，往前渐渐淡进去，
 //     纹理是顺着气流的一条条；空气越湿（越低）越浓；越过 1 马赫激波往后移、锥变小，然后消失；
-//   音爆：刚越过 1 马赫那一下，蒸汽锥的后缘脱开留在原地，往外扩一圈、0.55 秒散尽（闷响在 fptgp.js）；
+//   音爆：刚越过 1 马赫那一下，蒸汽锥的后缘脱开留在原地，往外扩一圈、0.8 秒散尽（闷响在 fptgp.js）；
 //   机翼水汽：拉大过载、大迎角时机翼上表面一层贴着的白雾，前缘后面一点最浓、往后变厚、拖出后缘散开；
 //   翼尖涡流：大过载时两个翼尖拖出两道细白线（AI 的飞机也有；玩家开的那架在 v3pilot.js fpFx）。
 //   画法：每团雾一个包围盒。蒸汽锥、音爆是一层薄壳（抛物面），片元里直接解出视线和壳的两个交点，按视线斜穿壳的长度算浓淡——边上浓、正对着淡，
@@ -72,14 +72,14 @@ void main() {
     // 蒸汽锥（0）/ 音爆（2）：照真实照片（用户给的参考）——又宽又短、往外翻开的喇叭口锥：锥尖在机身中段，从机身表面贴着机身长出来（半径 = Rb·(q0 + (1 − q0)·s^1.8)，
     //   q0·Rb ≈ 机身半径，越往后张得越快——侧面看锥面和机身轮廓斜斜地并到一点，是尖的），底面（激波）是后面一道清楚的平边、最白最浓的一圈（从后面看是一整块白盘）；
     //   往前淡、透；锥里也有雾（实心），贴着锥面一层更浓。音爆脱开的那一圈只剩靠底面的一段、空心。先解出视线在外包直锥里的一段，只在这一段取 24 个样、前到后合成
-    float Rb = R * .94, pB = 1.8, q0 = vX.z, s0 = vX.w, fill = ty > 1.5 ? 0. : .45, c0 = Rb * q0 * 1.05, m = Rb * (1. - q0) * 1.05 / L;
+    float Rb = R * .94, pB = 1.8, q0 = vX.z, s0 = vX.w, fill = ty > 1.5 ? 0. : .7, c0 = Rb * q0 * 1.05, m = Rb * (1. - q0) * 1.05 / L;
     vec2 tx = abs(rd.x) > 1e-6 ? vec2(-ro.x, L - ro.x) / rd.x : (ro.x > 0. && ro.x < L ? vec2(-1e9, 1e9) : vec2(1., 0.));
     if (tx.x > tx.y) tx = tx.yx;
     tx = vec2(max(tx.x, 0.), min(tx.y, tO));   // 镜头前面、x 在 0–L、被机身机翼挡住之前
     if (tx.x >= tx.y) discard;
     vec2 A = coneIn(ro, rd, c0, m, tx);
     if (A.x >= A.y) discard;
-    float dt = (A.y - A.x) / 24., Kx = 5. / Rb, Tr = 1.;
+    float dt = (A.y - A.x) / 24., Kx = 9. / Rb, Tr = 1.;   // 消光加大：锥里浓密、看不透（用户：音障不够密集）
     for (int k = 0; k < 24; k++) {
       vec3 q = ro + rd * (A.x + (float(k) + jt) * dt);
       float s = q.x / L, sp = pow(max(s, 1e-4), pB), lq = length(q.yz), rn = lq / max(Rb * (q0 + (1. - q0) * sp), 1e-3);
@@ -88,15 +88,17 @@ void main() {
       float n2 = n3(vec3(cs * 7.5, s * 3.6 - uT * 2.2) + vec3(rn * 2.) + sd * 1.7), n4 = n3(vec3(cs * 21., s * 8. - uT * 3.6) + vec3(rn * 5.) + sd * 2.9);
       float se = 1. - .035 * n1 - .025 * n2;   // 底面（激波）：清楚的一道边，微微起伏
       float rr = rn + .06 * (n2 - .5);
-      float sh = (1. - smoothstep(.9, 1.03, rr)) * (fill + (1. - fill) * smoothstep(.6, .97, rr));   // 锥面轮廓清楚；里面填着雾，贴着锥面一层更浓
-      float base = smoothstep(.62, .93, s) * (1. - smoothstep(.95, 1.03, rr));   // 靠底面（激波）那一层：整个盘都浓
-      float d = (sh * (.35 + .65 * s) + 1.1 * base) * (1. - smoothstep(se - .025, se, s)) * smoothstep(s0, s0 + .12, s)   // 越靠后越浓
+      // 锥面轮廓清楚；里面填着雾，贴着锥面一层更浓——贴着机身那一圈（轴心附近）薄：追尾镜头从正后方顺着轴线看，整条锥长的雾叠起来会把飞机整个盖成一块白盘
+      float ax = smoothstep(.2, .65, rr), sh = (1. - smoothstep(.9, 1.03, rr)) * (fill * ax + (1. - fill) * smoothstep(.6, .97, rr));
+      float base = smoothstep(.62, .93, s) * (1. - smoothstep(.95, 1.03, rr)) * (.1 + .9 * ax);   // 靠底面（激波）那一层：外圈浓、中间透（看得见飞机）
+      float d = (sh * (.45 + .65 * s) + 1.5 * base) * (1. - smoothstep(se - .025, se, s)) * smoothstep(s0, s0 + .12, s)   // 越靠后越浓
         * mix(.8, 1.1, smoothstep(-.75, .65, cs.y)) * (.55 + .7 * n1) * (.7 + .45 * n2) * (.85 + .3 * n4) * a;
       if (d < .002) continue;
       float ab = 1. - exp(-d * dt * Kx);
       vec3 nr = normalize(vec3(-Rb * (1. - q0) * pB * sp / max(s, 1e-3) / L, cs));   // 锥面的外法线（往前倾）
       float lam = .55 + .45 * dot(nr, sun), fw = pow(max(dot(rd, sun), 0.), 6.);   // 朝太阳的一面亮；逆着太阳看水滴往前散射，发亮
-      vec3 c = mix(vec3(.66, .7, .79), vec3(1., .995, .985), clamp(lam * (.75 + .25 * min(rn, 1.)), 0., 1.)) * (1. + .45 * fw);
+      vec3 c = mix(vec3(.56, .6, .69), vec3(1., .995, .985),   // 背光一面暗一些：衬在亮天、白云前面也看得出一团
+         clamp(lam * (.75 + .25 * min(rn, 1.)), 0., 1.)) * (1. + .45 * fw);
       col += Tr * ab * c; Tr *= 1. - ab;
       if (Tr < .02) break;
     }
@@ -131,23 +133,25 @@ function v3aBox() {
   for (const [a, b, c, d] of F) V.push(...P[a], ...P[c], ...P[b], ...P[a], ...P[d], ...P[c]);   // 朝外绕（同 v3jet.js 的包围体），画的时候剔掉正面
   return new Float32Array(V);
 }
+// 分两步（view3d.js v3pcLink）：第一次只发起编译，编完了才建好；进 3D 几秒后就提前开始（V3PC_WARM）——这个着色器大（24 步积分、每步几次噪声），
+//   原来第一次拉出机翼水汽 / 蒸汽锥时才编译、主线程等它编完（用户：一开飞机就卡死）
 function v3aInit(gl) {
-  V3AE.tried = true;
+  if (V3AE.ok || V3AE.tried) return;   // tried：编不过，不再试
   try {
     const ext = gl.getExtension('ANGLE_instanced_arrays');
-    if (!ext) return;
-    const sh = (t, s) => { const o = gl.createShader(t); gl.shaderSource(o, s); gl.compileShader(o); if (!gl.getShaderParameter(o, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(o)); return o; };
-    const pr = gl.createProgram();
-    gl.attachShader(pr, sh(gl.VERTEX_SHADER, V3AE_VS)); gl.attachShader(pr, sh(gl.FRAGMENT_SHADER, V3AE_FS)); gl.linkProgram(pr);
-    if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(pr));
+    if (!ext) { V3AE.tried = true; return; }
+    if (!V3AE.pc) { V3AE.pc = v3pcLink(gl, V3AE_VS, V3AE_FS); return; }
+    if (!V3AE.pc.done()) return;
+    const pr = V3AE.pc.check();
     const A = {}, U = {};
     for (const n of ['p', 'iO', 'iU', 'iV', 'iW', 'iX', 'iY', 'iZ']) A[n] = gl.getAttribLocation(pr, n);
     for (const n of ['uM', 'uEye', 'uSun', 'uT', 'uN', 'uFog']) U[n] = gl.getUniformLocation(pr, n);
     const mesh = v3aBox(), mb = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, mb); gl.bufferData(gl.ARRAY_BUFFER, mesh, gl.STATIC_DRAW);
     Object.assign(V3AE, { ext, pr, A, U, mb, mn: mesh.length / 3, ib: gl.createBuffer(), ok: true });
-  } catch (e) { console.warn('气动特效着色器没编译过：', e); }
+  } catch (e) { V3AE.tried = true; console.warn('气动特效着色器没编译过：', e); }
 }
+if (typeof V3PC_WARM === 'object') V3PC_WARM.push(gl => { v3aInit(gl); return V3AE.ok || V3AE.tried; });
 const v3aK = () => typeof SETTINGS === 'object' && SETTINGS && SETTINGS.aero != null ? clamp(+SETTINGS.aero, 0, 2) : 1;   // 强弱（编辑器「画面」页）
 // 登记一团雾：c 原点、U 顺着气流往后、V 右、W 上（GL，单位向量，右手系），L / R / H 包围盒的长、半宽、半高（米），ty 类型（0 蒸汽锥、1 机翼水汽、2 音爆），
 //   x 参数（蒸汽锥 / 音爆：p1 前端半径比、p2 从哪儿开始有雾），Y、Z 挡雾的机身、机翼（局部坐标，见着色器 occ；没有就全 0）
@@ -170,15 +174,15 @@ function v3aeroPlane(o, key, sz, own, R, P, k, D, jet, C) {
   if (V3AE.S !== S) { V3AE.S = S; V3AE.prev.clear(); V3AE.boom.length = 0; V3AE.vtx.clear(); }
   const F = own && o.fl, id = (own ? 'p' : 'e') + o.id, Ka = v3aK();
   const M = F ? F.M || 0 : (o.spd || 0) / 330, nz = F ? F.nz || 1 : 1 / Math.max(.2, Math.cos(o.bank || 0)), aoa = F ? Math.abs(F.a || 0) : 0, Va = F ? F.Va || 0 : o.spd || 0;
-  const alt = F ? -F.P[2] : P[2], hum = clamp(1.15 - alt / 9000, .25, 1);   // 空气越湿（越低）凝结越多
+  const alt = F ? -F.P[2] : P[2], hum = clamp(1.15 - alt / 9000, .45, 1);   // 空气越湿（越低）凝结越多
   const U = [-R[0], -R[3], -R[6]], V = [-R[1], -R[4], -R[7]], W = [R[2], R[5], R[8]];   // 往后、往右、往上：右手系（包围盒的绕向才对，正面朝外）
   const Wp = (u, v, w) => [P[0] + (R[0] * u + R[1] * v + R[2] * w) * k, P[1] + (R[3] * u + R[4] * v + R[5] * w) * k, P[2] + (R[6] * u + R[7] * v + R[8] * w) * k];
   const G = v3aGeo(D), len = G.nose - G.tail, sd = (o.id * .7919) % 1 * 50;
   const occY = xo => [G.bw * .8 * k, (xo - G.nose) * k, (xo - G.tail) * k, G.hs * k], occZ = xo => [(xo - G.rLE) * k, (xo - G.rTE) * k, (xo - G.tLE) * k, (xo - G.tTE) * k];   // 挡雾的机身、机翼（以 xo 为原点的局部坐标，x 朝后）
   const dE = C ? Math.hypot(P[0] - C.E[0], P[1] - C.E[1], P[2] - C.E[2]) : 0;
   if (dE > 9000) return;
-  // 蒸汽锥：马赫 0.9–1.07——又短又宽：锥尖在机身中段偏后（离机头 52%），底面（激波）在机尾前（88%），底面半径约 0.55 个机身长（照片里比翼展还大）；越过 1 马赫往后挪、变小
-  const vc = smooth(.9, .975, M) * smooth(1.075, 1.005, M) * hum * Ka * (.9 + .1 * Math.sin(S.t * 9 + sd));
+  // 蒸汽锥：马赫 0.88–1.16——又短又宽：锥尖在机身中段偏后（离机头 52%），底面（激波）在机尾前（88%），底面半径约 0.55 个机身长（照片里比翼展还大）；越过 1 马赫往后挪、变小
+  const vc = smooth(.88, .95, M) * smooth(1.16, 1.06, M) * hum * Ka * (.92 + .08 * Math.sin(S.t * 9 + sd));
   const ov = Math.max(0, M - .99), x0 = G.nose - len * (.52 + ov * 2.5), xr = G.nose - len * (.88 + Math.max(0, M - .97) * 1.2);
   const r1 = len * k * .55 * (1 - clamp((M - 1) * 6, 0, .55)), Lc = Math.max(2, (x0 - xr) * k);
   if (vc > .02 && x0 > xr) v3aAdd(0, Wp(x0, 0, 0), U, V, W, Lc, r1 / .94, r1 / .94, vc, sd, clamp(G.bw * .95 * k / r1, .05, .5), 0, occY(x0), occZ(x0));   // 锥尖从机身表面长出来
@@ -207,9 +211,9 @@ function v3aeroPlane(o, key, sz, own, R, P, k, D, jet, C) {
 function v3aeroFx(sm, C) {
   if (!S || V3AE.S !== S) return;
   for (let i = V3AE.boom.length - 1; i >= 0; i--) {
-    const B = V3AE.boom[i], u = (S.t - B.t0) / .55;
+    const B = V3AE.boom[i], u = (S.t - B.t0) / .8;
     if (u < 0 || u > 1) { V3AE.boom.splice(i, 1); continue; }
-    const g = 1 + 1.3 * Math.sqrt(u), a = (1 - u) ** 1.3 * B.hum * v3aK() * 1.5, r = B.r1 * g;
+    const g = 1 + 1.3 * Math.sqrt(u), a = (1 - u) ** 1.3 * B.hum * v3aK() * 2, r = B.r1 * g;
     v3aAdd(2, B.c, B.U, B.V, B.W, B.L * (1 + .35 * u), r / .94, r / .94, a, B.sd, B.q0 / g, .6);   // 只剩靠底面的那一圈：从 0.6 往后
   }
   if (typeof v3fRib !== 'function') return;
@@ -226,8 +230,7 @@ function v3aeroDraw(C) {
   const Q = V3AE.q;
   if (!Q.length) return;
   const gl = V3.gl;
-  if (!V3AE.tried) v3aInit(gl);
-  if (!V3AE.ok) { Q.length = 0; return; }
+  if (!V3AE.ok) { v3aInit(gl); if (!V3AE.ok) { Q.length = 0; return; } }   // 还在编译：这几帧先不画
   // 镜头在盒子外面的、里面的分开画（外面：正面 + 深度测试；里面：背面、不做深度测试）；余量按镜头距离放宽（追尾镜头的近裁剪面离镜头好几米）
   const N = V3AE_NF, E = C.E, G = [[], []];
   for (let i = 0; i < Q.length; i += N) {
