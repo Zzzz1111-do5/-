@@ -116,6 +116,7 @@ uniform sampler2D uTop, uBase, uCls, uCls2, uFogT, uHt, uLf, uTopF; uniform vec4
 uniform sampler2D uDg, uDf, uDr, uDs; uniform float uDet, uDes; uniform vec4 uAfb[2];   // 写实地表细节贴图（ambientCG，CC0）：草地、林下地面、岩石、沙滩
 uniform sampler2D uCls3, uSky, uWn; uniform float uSkyOn, uSkyU, uWnOn;   // 水深分类（浅滩、礁石、近岸）、天空图（海面反射）、水面法线贴图（用户提供的海洋素材 ocean.zip 的 water_new_height.png）
 uniform float uRing, uOcn; uniform vec4 uRect;   // 地图外：1 = 无边海面（地图里面丢掉，那里是地形网格），2 = 北面延伸的陆地（贴图照地图北缘镜像），3 = 南缘外的攻方海岸（afp.js 战区机场；uRect 是机场图案的范围，图案临时绑在 uTopF）
+uniform float uSnow; uniform vec2 uSnH;   // 雪山（设置「雪山」，台湾东海岸）：开关、雪线（从哪个高度开始有雪、到哪个高度全白，地形高度单位）
 uniform float uSat;   // 真实地图（台湾东海岸 taiwan.js）：地面直接是卫星图（uBase），不叠程序画的俯视贴图、细节贴图、沙漠换色
 uniform float uFlat;   // 白色平原（flat.js）：太空里的灰色平台，侧壁是深灰的金属
 varying vec3 vP, vN, vV; varying float vD;
@@ -224,7 +225,19 @@ void main() {
       float l = dot(col, vec3(.3, .59, .11));
       col = mix(col, vec3(.84, .74, .58) * clamp(l * 1.9, .5, 1.25), veg);
     }
-    if (uSat > .5 && uDet > .5 && land > .5) {   // 卫星图近处的细节：每格 20 米，凑近糊成一片——叠一层只改明暗、不改颜色的细节贴图（按卫星图的颜色、坡度挑草地 / 岩石 / 沙地），颜色照原样；一千米外淡掉
+    // 雪山（用户：山的画质太低，找 Sketchfab 上的雪山把这个地图改成雪山）：按高度铺雪——雪线用大尺度噪声打散（不是一条齐线），陡坡挂不住雪露出岩石，
+    //   半山腰卫星图里深绿的林地少积一点（针叶林在雪里是深色的）；雪的颜色、近处的颗粒用 Sketchfab 实拍扫描（saphires「Snow Raw Scan」，绑在 9 号单元 uDf），
+    //   露出的岩石用带雪的岩石扫描（thesidekick「Rock terrain with light snow」，绑在 11 号单元 uDs）；卫星图里的山体明暗保留四成多（沟谷、山脊还看得出来）
+    float snC = 0., snR = 0.;
+    if (uSat > .5 && uSnow > .5 && land > .5) {
+      float n1 = texture2D(uDg, w / 1300. + .17, 4.).g, n2 = texture2D(uDg, w / 310. + .53, 2.).g;
+      float hk = smoothstep(uSnH.x, uSnH.y, h + (n1 - .45) * (uSnH.y - uSnH.x) * 1.1);
+      float fo = smoothstep(.02, .09, col.g - max(col.r, col.b)) * smoothstep(.45, .22, dot(col, vec3(.333)));
+      float sl = smoothstep(.7, .88, N.z + (n2 - .5) * .12);   // 坡度超过约 45° 挂不住雪、25° 起开始露岩（山脊、沟壁露出岩石，不是一片白）
+      snR = hk * (1. - sl);
+      snC = clamp(hk * sl * (1. - .4 * fo * (1. - hk * hk)) + .2 * hk * (n2 - .3), 0., 1.);
+    }
+    if (uSat > .5 && uDet > .5 && land > .5 && snC + snR < .98) {   // 卫星图近处的细节：每格 20 米，凑近糊成一片——叠一层只改明暗、不改颜色的细节贴图（按卫星图的颜色、坡度挑草地 / 岩石 / 沙地），颜色照原样；一千米外淡掉
       float nr = 1. - smoothstep(250., 1100., vDp);
       if (nr > 0.) {
         vec3 Y = vec3(.3, .59, .11);
@@ -232,6 +245,17 @@ void main() {
         float lG = dot(texture2D(uDg, w / 7.).rgb, Y) / max(dot(texture2D(uDg, w / 7., 10.).rgb, Y), .05), lR = dot(texture2D(uDr, w / 13.).rgb, Y) / max(dot(texture2D(uDr, w / 13., 10.).rgb, Y), .05), lS = (dot(texture2D(uDs, w / 5.).rgb, Y) + dot(texture2D(uDs, mat2(.8, -.6, .6, .8) * w / 6.7 + .37).rgb, Y)) * .5 / max(dot(texture2D(uDs, w / 5., 10.).rgb, Y), .05);   // 两个转角叠一起：沙纹不成一道道规则的波纹（像水面）
         col *= mix(1., clamp(mix(mix(mix(mix(1., lR, .65), lS, sd2), lG, gv), lR, rk2), .55, 1.5), .5 * nr);   // 不绿不黄的（灰土、砾石）按碎石
       }
+    }
+    if (snC + snR > .002) {
+      vec3 Y = vec3(.3, .59, .11);
+      float rel = clamp(dot(col, Y) / max(dot(texture2D(uBase, w / uWorld, 5.).rgb, Y), .04), .55, 1.5);   // 卫星图里的明暗（相对周围几百米）：山脊、沟谷
+      float nr2 = 1. - smoothstep(900., 4000., vDp);
+      vec3 s1 = texture2D(uDf, w / 7.).rgb, s2 = texture2D(uDf, mat2(.8, -.6, .6, .8) * w / 29. + .41).rgb;
+      float sm = max(dot(texture2D(uDf, w / 7., 12.).rgb, Y), .05);
+      vec3 sn = vec3(.86, .885, .92) * mix(1., clamp(dot(s1 * .55 + s2 * .45, Y) / sm, .6, 1.3), nr2) * mix(1., rel, .45);
+      vec3 r1 = texture2D(uDs, w / 37.).rgb, r2 = texture2D(uDs, mat2(.6, -.8, .8, .6) * w / 121. + .19).rgb;
+      vec3 rk = mix(col * vec3(.78, .8, .85), (r1 * .55 + r2 * .45) * mix(1., rel, .5), .7 * (1. - smoothstep(1500., 6000., vDp)));
+      col = mix(mix(col, rk, snR), sn, snC);
     }
     if (uDet > .5 && land > .5 && uSat < .5) {
       // 自然地表换成真实贴图：按地形类别（林地、礁石 / 悬崖、沙滩、沼泽）和坡度（陡坡露岩）混合；两种尺度叠加避免一张贴图重复的痕迹
@@ -280,7 +304,7 @@ void main() {
     c = col * (amb + vec3(1., .95, .86) * lit * .8 * shadowAt() * (uDet > .5 ? cloudSh(vec2(vP.x, -vP.y)) : 1.));
     c += boomLight(w) * (.35 + .65 * lit);   // 近处爆炸的火光照亮地面（v3light.js）
     // 等高线、方格网：画成地形图那样细而淡的深色线（原来叠一层发亮的绿光，远看挤成一片绿雾，和写实画面不搭），离镜头两公里外渐渐淡掉
-    c *= 1. - (cl * .3 + gl * .45) * land * (1. - smoothstep(1800., 4200., vDp));
+    c *= 1. - (cl * .3 + gl * .45) * land * (1. - smoothstep(1800., 4200., vDp)) * (1. - .7 * snC);   // 雪地上淡一些（白底上的深色线太扎眼）
     if (h < uSea + .6) {   // 海面：波浪法线、天空反射（菲涅尔）、太阳反光、深浅水颜色（浅滩、礁石泛青绿）、近岸白浪；俯视贴图里的航迹等留一点
       // 离地图边 400 米内慢慢变成纯深海（不再混图里的浅滩分类和俯视贴图）：图外的无边海面就是纯深海，边上接得上；
       //   图外原来按图边那一圈的贴图着色，北边那一圈是陆地和浅滩，拉长成一条条青绿色的光带伸到天边
@@ -530,6 +554,20 @@ void main() {
   c += v3Glow(d) * smoothstep(.22, 0., d.z) * .7;   // 地平线附近朝太阳那边的散射光（同地面、海面的雾）
   gl_FragColor = vec4(mix(c, uBg + v3Glow(d), smoothstep(.03, -.08, d.z)), 1.);
 }`;
+// 雪山（设置「雪山」，台湾东海岸）：雪线按这张图陆地高度的分位数——下三成没有雪、过了六成五全白（再按坡度、林地、噪声打散）；
+//   要等雪地贴图载好（V3.det.t[4] / [5]），没载好就先不铺
+function v3SnowH() {
+  const D = V3.det;
+  V3.snow = !!(TER && TER.tw && V3.satOk === TER && typeof SETTINGS === 'object' && SETTINGS.snow !== false && D && D.t[4] && D.t[5] && typeof v3Mx === 'function' && !v3Mx());
+  if (!V3.snow) return null;
+  if (V3.snH && V3.snH.ter === TER) return V3.snH.v;
+  const H0 = [], sea = 1.5;   // 海面高度（同 uSea）
+  for (let gy = 2; gy < GH - 2; gy += 3) for (let gx = 2; gx < GW - 2; gx += 3) { const z = v3Ht(gx * CELL, gy * CELL); if (z > sea + 3) H0.push(z); }
+  H0.sort((a, b) => a - b);
+  const q = f => H0.length ? H0[Math.min(H0.length - 1, Math.floor(H0.length * f))] : 0;
+  V3.snH = { ter: TER, v: [q(.3), q(.65)] };
+  return V3.snH.v;
+}
 // 地表细节贴图（写实画面）：第一次用到时载入，四张都好了才启用；绑在 8–11 号纹理单元
 function v3DetTex() {
   const D = V3.det, gl = V3.gl;
@@ -537,10 +575,10 @@ function v3DetTex() {
   if (!D.req) {
     D.req = true;
     const v = typeof window === 'object' && window.DS_BUILD ? '?v=' + window.DS_BUILD : '';
-    ['grass', 'forest', 'rock', 'sand'].forEach((nm, i) => {
+    ['grass', 'forest', 'rock', 'sand', 'snow', 'snowrock'].forEach((nm, i) => {   // 后两张（雪地、带雪的岩石）雪山时换绑到 9、11 号单元
       const img = new Image();
       img.onload = () => {
-        const t = gl.createTexture(); gl.activeTexture(gl.TEXTURE8 + i); gl.bindTexture(gl.TEXTURE_2D, t);
+        const t = gl.createTexture(); gl.activeTexture(gl.TEXTURE8 + Math.min(i, 3)); gl.bindTexture(gl.TEXTURE_2D, t);
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, img); gl.generateMipmap(gl.TEXTURE_2D);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
@@ -550,8 +588,9 @@ function v3DetTex() {
       img.src = 'assets/terrain/' + nm + '.jpg' + v;
     });
   }
-  if (D.n < 4) return false;
-  for (let i = 0; i < 4; i++) { gl.activeTexture(gl.TEXTURE8 + i); gl.bindTexture(gl.TEXTURE_2D, D.t[i]); }
+  if (!(D.t[0] && D.t[1] && D.t[2] && D.t[3])) return false;
+  const sn = V3.snow && D.t[4] && D.t[5];
+  for (let i = 0; i < 4; i++) { gl.activeTexture(gl.TEXTURE8 + i); gl.bindTexture(gl.TEXTURE_2D, sn && i === 1 ? D.t[4] : sn && i === 3 ? D.t[5] : D.t[i]); }
   return true;
 }
 // 水面法线贴图（写实海面）：第一次用到时载入，绑在 14 号纹理单元
@@ -1276,7 +1315,7 @@ function v3Init() {
     gl.linkProgram(pr);
     if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(pr));
     const u = {}, a = { p: gl.getAttribLocation(pr, 'p'), n: gl.getAttribLocation(pr, 'n') };
-    for (const k of ['uSat', 'uDes', 'uAfb', 'uM', 'uEye', 'uTop', 'uBase', 'uCls', 'uCls2', 'uFogT', 'uHt', 'uLf', 'uTopF', 'uBox', 'uBoxF', 'uWorld', 'uGrid', 'uHG', 'uFog', 'uSea', 'uT', 'uMx', 'uBrM', 'uLm', 'uLmOn', 'uBm', 'uBg', 'uDg', 'uDf', 'uDr', 'uDs', 'uDet', 'uCls3', 'uSky', 'uSkyOn', 'uSkyU', 'uWn', 'uWnOn', 'uShM', 'uShT', 'uShOn', 'uShP', 'uOff', 'uScl', 'uRing', 'uRect', 'uOcn', 'uFlat']) u[k] = gl.getUniformLocation(pr, k);
+    for (const k of ['uSnow', 'uSnH', 'uSat', 'uDes', 'uAfb', 'uM', 'uEye', 'uTop', 'uBase', 'uCls', 'uCls2', 'uFogT', 'uHt', 'uLf', 'uTopF', 'uBox', 'uBoxF', 'uWorld', 'uGrid', 'uHG', 'uFog', 'uSea', 'uT', 'uMx', 'uBrM', 'uLm', 'uLmOn', 'uBm', 'uBg', 'uDg', 'uDf', 'uDr', 'uDs', 'uDet', 'uCls3', 'uSky', 'uSkyOn', 'uSkyU', 'uWn', 'uWnOn', 'uShM', 'uShT', 'uShOn', 'uShP', 'uOff', 'uScl', 'uRing', 'uRect', 'uOcn', 'uFlat']) u[k] = gl.getUniformLocation(pr, k);
     const pb = gl.createProgram();
     gl.attachShader(pb, sh(gl.VERTEX_SHADER, V3_BVS)); gl.attachShader(pb, sh(gl.FRAGMENT_SHADER, V3_BFS()));   // 着色器源码用到时再拼：爆炸火光的 GLSL 在后加载的 v3light.js 里
     gl.linkProgram(pb);
@@ -1588,7 +1627,8 @@ function v3Scene(C, now, vp) {
   { const A = new Float32Array(8), L = typeof afb3dBases === 'function' ? afb3dBases().filter(b => b.x >= 0 && b.y >= 0 && b.x <= W && b.y <= H).slice(0, 2) : [];   // 图里的机场（南缘外的战区机场走 uRing 3）
     L.forEach((b, i) => A.set([b.x, b.y, b.rh || 0, b.rs || 1], i * 4)); gl.uniform4fv(u.uAfb, A); }
   gl.uniform1f(u.uFlat, TER.flat ? 1 : 0);
-  gl.uniform1f(u.uSat, TER.tw && V3.satOk === TER ? 1 : 0);   // 卫星图载入好了才用（v3BaseTex）
+  gl.uniform1f(u.uSat, TER.tw && V3.satOk === TER ? 1 : 0);
+  { const sn = v3SnowH(); gl.uniform1f(u.uSnow, sn ? 1 : 0); if (sn) gl.uniform2f(u.uSnH, sn[0], sn[1]); }   // 卫星图载入好了才用（v3BaseTex）
   const skyT = !mx && V3.sky && V3.sky.ok && V3.cls3 ? V3.sky.tex : null;
   if (V3.cls3) { gl.activeTexture(gl.TEXTURE12); gl.bindTexture(gl.TEXTURE_2D, V3.cls3); }
   if (skyT) { gl.activeTexture(gl.TEXTURE13); gl.bindTexture(gl.TEXTURE_2D, skyT); }

@@ -218,8 +218,6 @@ function updateVision(part) {
 }
 
 const VP_WIN = .7;
-// 登陆作战进行了多久（作战时限按它算）：远海航渡（farsea.js）要将近一小时，从编队抵达集结海域起算——原来从开战算 45 分钟，舰队还在海峡里就判负了
-const battleT = () => !S.fs ? S.t : S.fs.left > 0 ? 0 : S.t - (S.fs.arrT ?? S.fs.t0 ?? 0);
 const vpShare = () => S.points.filter(p => p.owner === 'p').reduce((a, p) => a + p.vp, 0) / S.points.reduce((a, p) => a + p.vp, 0);
 const victoryHeld = () => S.points.some(p => p.key === 'HQ' && p.owner === 'p') && vpShare() >= VP_WIN;
 
@@ -235,7 +233,7 @@ function checkEnd(dt) {
   const pin = S.teams.filter(q => q.side === 'p' && q.kind === 'inf'), more = S.ships.some(s => alive(s) && s.load.teams > 0) || S.boats.length > 0 ||
     (S.assets.reserve > 0 && (S.rlines.length > 0 || (S.assets.rline > 0 && S.ships.some(s => alive(s) && s.state === 'beached' && s.bx != null))));   // 预备队还能经增援线上陆
   if (!pin.length && !more) { S.over = 'lose'; log('登陆步兵已全部损失，车辆无法占领据点', 'bad'); return; }
-  if (battleT() >= LIMIT) { S.over = 'lose'; log('作战时限已到，未能夺取全部据点', 'bad'); return; }
+  if (S.t >= LIMIT) { S.over = 'lose'; log('作战时限已到，未能夺取全部据点', 'bad'); return; }
   // 攻势顶点：无后续梯队、在岸步兵不足 2 个组且久无新进展 → 判负
   const own = S.points.filter(p => p.owner === 'p').length, men = pin.reduce((a, q) => a + q.men.length, 0);
   if (more || men > 6 || S.holdT || own > (S.culOwn ?? 99)) S.culT = 0; else S.culT = (S.culT || 0) + dt;

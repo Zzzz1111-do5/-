@@ -64,7 +64,6 @@ function fsStep(dt) {
     F.left -= dy;
     for (const o of fsUnits()) if (o.fsT) o.y -= dy;
     if (F.left <= 0) {
-      F.arrT = S.t;   // 抵达集结海域的时刻：作战时限从这里起算（logistics.js checkEnd）
       for (const o of fsUnits()) delete o.fsT;
       for (const v of S.veh || []) delete v.fsT;
       for (const s of S.ships || []) delete s.fsT;
