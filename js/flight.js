@@ -15,7 +15,9 @@ const FL_G = 9.81, FL_DT = 1 / 120;
 const FL_AC = {
   j35: { nm: '歼-35', cv: true, m: 20000, S: 50, b: 11.5, c: 4.9, I: [3.6e4, 1.75e5, 2.0e5], Tm: 1.3e5, Ta: 2.0e5, CLa: 3.9, as: .46, CLmax: 1.75, CD0: .021, K: .12, alim: .43, nz: [-3, 9], pmax: 3.8, L: 17.3 },
   // 歼-16 对地满挂：6 枚 500 公斤级炸弹 + 4 枚空空弹约 3.8 吨外挂——更重、阻力更大、过载限制降到 7.5 g、滚转慢
-  j16: { nm: '歼-16', m: 30500, S: 62, b: 14.7, c: 5.3, I: [6.8e4, 2.8e5, 3.3e5], Tm: 1.5e5, Ta: 2.5e5, CLa: 4.2, as: .5, CLmax: 1.9, CD0: .038, K: .12, alim: .42, nz: [-2.5, 7.5], pmax: 2, L: 21.9 },
+  j16: { nm: '歼-16', m: 30500, S: 62, b: 14.7, c: 5.3, I: [6.8e4, 2.8e5, 3.3e5], Tm: 1.5e5, Ta: 2.5e5, CLa: 4.2, as: .5, CLmax: 1.9, CD0: .038, K: .12, alim: .42, nz: [-2.5, 7.5], pmax: 2.6, L: 21.9 },
+  // 歼-16 导弹卡车：8 枚霹雳-15 + 2 枚霹雳-10 约 1.9 吨外挂，挂架多、阻力比 D 型的吊舱小一点
+  j16m: { nm: '歼-16 导弹卡车', m: 26500, S: 62, b: 14.7, c: 5.3, I: [6.2e4, 2.65e5, 3.05e5], Tm: 1.5e5, Ta: 2.5e5, CLa: 4.2, as: .5, CLmax: 1.9, CD0: .03, K: .12, alim: .45, nz: [-3, 8.5], pmax: 3, L: 21.9 },
   j16d: { nm: '歼-16D', m: 26000, S: 62, b: 14.7, c: 5.3, I: [6.0e4, 2.6e5, 3.0e5], Tm: 1.5e5, Ta: 2.5e5, CLa: 4.2, as: .5, CLmax: 1.9, CD0: .03, K: .12, alim: .45, nz: [-3, 8.5], pmax: 3.2, L: 21.9 },
   j15t: { nm: '歼-15T', cv: true, m: 24000, S: 62, b: 14.7, c: 5.3, I: [5.4e4, 2.5e5, 2.9e5], Tm: 1.55e5, Ta: 2.5e5, CLa: 4.2, as: .5, CLmax: 1.9, CD0: .026, K: .12, alim: .45, nz: [-3, 8.5], pmax: 3.3, L: 21.9 },
   // 歼-20：鸭翼 + 三角翼，两台涡扇-10C（军用推力各约 90 千牛、加力约 142 千牛），作战重量约 25 吨
@@ -24,7 +26,7 @@ const FL_AC = {
   j50: { nm: '歼-50', cv: true, m: 24000, S: 70, b: 12.5, c: 6.5, I: [5.0e4, 2.4e5, 2.8e5], Tm: 1.7e5, Ta: 2.6e5, CLa: 3.5, as: .48, CLmax: 1.7, CD0: .018, K: .14, alim: .43, nz: [-3, 9], pmax: 3.5, L: 19 },
 };
 // 型号键（carrier.js AIR_MDL）→ 上面的飞控参数
-const FL_KEY = { j35: 'j35', j35s: 'j35', j16d: 'j16d', j16: 'j16', j15t: 'j15t', j20: 'j20', j50: 'j50' };
+const FL_KEY = { j35: 'j35', j35s: 'j35', j16d: 'j16d', j16: 'j16', j16m: 'j16m', j15t: 'j15t', j20: 'j20', j50: 'j50' };
 // 耗油率（千克 / 牛 / 秒）：军用推力约 0.8、加力约 1.9 磅 / 磅力 / 小时（涡扇战斗机的典型值）
 const FL_TSFC = [2.27e-5, 5.4e-5];
 // 气动导数（机体系前右下，常见战斗机的量级；角速度按 p b / 2V、q c / 2V 无量纲化）
@@ -61,6 +63,8 @@ function flSurf(n, e) {
     if (u < -160 || u > 160 || v < -45 || v > 40 || !flIn(CVG.deck, u, v)) continue;
     return { z: -2.6 + CVG.zd, k: 'deck', c, u, v };
   }
+  const hb = typeof S === 'object' && S && S.afP;   // 进攻方战区机场（afp.js，南缘外）的跑道
+  if (hb && typeof eaL === 'function' && typeof EA_RW === 'object') { const [u, v] = eaL(hb, x, y); if (Math.abs(u) <= EA_RW.hl && Math.abs(v) <= EA_RW.hw) return { z: AFP.z, k: 'rwy', u, v, b: hb }; }
   const b = typeof S === 'object' && S && S.abBase;
   if (b && !b.dead && typeof eaL === 'function' && typeof EA_RW === 'object') {
     const [u, v] = eaL(b, x, y);
@@ -91,7 +95,8 @@ function flInit(p) {
 // 推演一帧：inp = { x 压杆（右正，−1–1）, y 拉杆（拉为正）, r 蹬舵, thr 油门 0–1, ab 加力, law 'n' 正常律 / 'd' 直接律, ap 自动驾驶（离开作战区域时）,
 //   gear 起落架放下（true / false）, flap 襟翼档 0–1, sb 减速板（地面上是刹车）, hook 尾钩放下 }；返回 'ground' / 'sea' 表示撞地 / 落海；起降事件记在 F.ev
 function flStep(F, dt, inp) {
-  const A = FL_AC[F.k], D = FL_D, I = A.I;
+  const A = FL_AC[F.k], D = FL_D, I = A.I, mk = inp.mk || 1, mp = inp.mkp || mk, mt = inp.mt || 1;   // mp：滚转角速度的放大（单独给，免得滚得太快不好控）   // mk：机动性放大（皇牌空战式操纵，v3pilot.js FP_MK）——升力、过载限制、滚转角速度一起乘上，飞机像机翼大三成、结构强三成，转得急、滚得快
+  //   mt：推力放大（同上，FP_MT：推重比跟着机动性提高，耗油仍按真实推力算）
   let hit = null;
   // 起落架：放下 / 收起各约 5 秒；超过限速放不下（F.ev 提示一次）
   const gw = inp.gear ? 1 : 0;
@@ -112,14 +117,19 @@ function flStep(F, dt, inp) {
     else {
       // 俯仰：过载指令（松杆时按坡度补偿到能保持飞行轨迹的过载——倒飞时是负过载；拉杆往 +9 g、推杆往 −3 g）→ 迎角指令（不超迎角限制）→ 俯仰角速度指令 → 动态逆求升降舵
       //   坡度补偿只到约 50°（再大就是在做机动，靠拉杆），50°–60° 平滑退到「只抵重力分量」——原来在 80° 处一刀切，横滚滚过去时机头猛一点头
-      const cf = Math.cos(phi), n0 = Math.cos(th) * (cf + smooth(1.05, .85, Math.abs(phi)) * (1 / Math.max(cf, .4) - cf)), nzc = inp.y >= 0 ? lerp(n0, A.nz[1] + (inp.hg ? 2 : 0), inp.y) : lerp(n0, A.nz[0], -inp.y);
-      const ac = clamp(nzc * A.m * FL_G / (qS * A.CLa), -.2, A.alim + (inp.hg ? .1 : 0));   // hg：高 G 急转——越过飞控的过载限制（多 2 g）、迎角多放 6°：转得更急，掉速度、黑视都快得多
-      const qc = clamp(2.8 * (ac - al) + FL_G / Vn * (nzc - Math.cos(th) * Math.cos(phi)), -1.3, 1.3);
-      const Mreq = I[1] * 7 * (qc - q) - (I[2] - I[0]) * p * r, M0 = qS * A.c * (D.Cm0 + D.Cma * al + D.Cmq * qh);
+      const cf = Math.cos(phi), n0 = Math.cos(th) * (cf + smooth(1.05, .85, Math.abs(phi)) * (1 / Math.max(cf, .4) - cf)), nzc = inp.y >= 0 ? lerp(n0, A.nz[1] * mk + (inp.hg ? 2 : 0), inp.y) : lerp(n0, A.nz[0], -inp.y);
+      //   hg：高 G 急转——越过飞控的过载限制（多 2 g）、迎角多放一点，但不过失速迎角（原来多放 6°，歼-20 一拉就进失速）
+      const kn = qS * A.CLa * mk / (A.m * FL_G), ac = clamp(nzc / kn, -.2, Math.min(A.alim + (inp.hg ? .1 : 0), A.as - .02));
+      //   迎角回路增益按动压排（电传的增益调度）：高速 3.6（迎角约 0.28 秒跟上，拉到 9 g 约 0.6 秒），低速动压只有十分之一，舵面推不动、作动筒跟不上，
+      //   还按 3.6 要就来回过冲（迎角 −19° ↔ +24° 地点头，带着左右摇：用户说的低速摇摆），慢到进近速度退到 1.4。
+      //   俯仰角速度的前馈按「迎角限制下拉得出的过载」ac × kn 算（用户：很容易失速）——原来按要的过载算：速度不够、要的过载拉不出来时，
+      //   前馈要的角速度比迎角回路往回收的还大，迎角一路冲过失速迎角（缠斗时 20 秒里有 17 秒在 40° 迎角的深失速里，边转边掉高度）
+      const ka = lerp(1.4, 3.6, smooth(4000, 16000, qb)), qc = clamp(ka * (ac - al) + FL_G / Vn * (ac * kn - Math.cos(th) * Math.cos(phi)), -1.5, 1.5);
+      const Mreq = I[1] * lerp(3.5, 7, smooth(4000, 16000, qb)) * (qc - q) - (I[2] - I[0]) * p * r, M0 = qS * A.c * (D.Cm0 + D.Cma * al + D.Cmq * qh);   // 俯仰角速度回路同样按动压排：低速舵面饱和、作动筒跟不上时不来回打满舵
       de = (Mreq - M0) / (qS * A.c * D.Cmde);
       // 滚转：角速度指令（松杆保持坡度，坡度小于 8° 时自动改平）
-      const pc = inp.x ? inp.x * A.pmax : Math.abs(phi) < .14 ? -2.5 * phi : 0;
-      const Lreq = I[0] * 13 * (pc - p) - (I[1] - I[2]) * q * r, L0 = qS * A.b * (D.Clb * be + D.Clp * ph + D.Clr * rh);
+      const pc = inp.x ? inp.x * A.pmax * mp : Math.abs(phi) < .14 ? -2.5 * phi : 0;
+      const Lreq = I[0] * lerp(7, 13, smooth(4000, 16000, qb)) * (pc - p) - (I[1] - I[2]) * q * r, L0 = qS * A.b * (D.Clb * be + D.Clp * ph + D.Clr * rh);
       da = (Lreq - L0) / (qS * A.b * D.Clda);
       // 偏航：协调转弯（偏航角速度跟着坡度）+ 侧滑归零（偏航阻尼）
       const rc = FL_G / Vn * Math.sin(phi) * Math.cos(th) + 3 * be + (inp.r || 0) * .4;
@@ -130,12 +140,13 @@ function flStep(F, dt, inp) {
     const cmd = [de, da, dr];
     for (let i = 0; i < 3; i++) F.d[i] = clamp(F.d[i] + clamp(clamp(cmd[i], -FL_DMAX[i], FL_DMAX[i]) - F.d[i], -FL_DRATE[i] * h, FL_DRATE[i] * h), -FL_DMAX[i], FL_DMAX[i]);
     // —— 气动力 ——
-    const fl = F.flap || 0, sa = smooth(A.as, A.as + .25, Math.abs(al)), CL = lerp(clamp(A.CLa * al + .45 * fl, -A.CLmax, A.CLmax + .45 * fl), 1.05 * Math.sin(2 * al), sa);   // 过了失速迎角升力掉下来、变成平板升力；襟翼加升力
-    const CD = A.CD0 * (1 + 1.3 * smooth(.85, 1.05, M) - .4 * smooth(1.2, 1.8, M)) + A.K * CL * CL + 1.3 * Math.sin(al) ** 2 * sa + .04 * (Math.abs(F.d[0]) + Math.abs(F.d[2]))
+    const fl = F.flap || 0, sa = smooth(A.as, A.as + .25, Math.abs(al)), CL = mk * lerp(clamp(A.CLa * al + .45 * fl, -A.CLmax, A.CLmax + .45 * fl), 1.05 * Math.sin(2 * al), sa);   // 过了失速迎角升力掉下来、变成平板升力；襟翼加升力
+    // 诱导阻力按机动性放大倍数除一下：升力放大后同样迎角的诱导阻力涨到 mk² 倍，满过载急转几秒就把速度耗光（用户：容易失速）——相当于翼展效率也跟着好一些
+    const CD = A.CD0 * (1 + 1.3 * smooth(.85, 1.05, M) - .4 * smooth(1.2, 1.8, M)) + A.K * CL * CL / mk + 1.3 * Math.sin(al) ** 2 * sa + .04 * (Math.abs(F.d[0]) + Math.abs(F.d[2]))
       + .018 * F.gear + .035 * fl + (F.sb ? .06 : 0);   // 起落架、襟翼、减速板的阻力
     const CY = D.CYb * be + D.CYdr * F.d[2];
-    const ab = !!inp.ab && F.fuel > 0, thr = F.fuel > 0 ? clamp(inp.thr, 0, 1) : 0, T = (A.Tm * thr + (ab ? A.Ta - A.Tm : 0)) * (rho / 1.225) ** .75 * (1 + .25 * Math.min(M, 1.6));   // 燃油耗尽：发动机熄火，只能滑翔
-    F.ff = T * FL_TSFC[ab ? 1 : 0]; F.fuel = Math.max(0, F.fuel - F.ff * h);   // 耗油（千克 / 秒）
+    const ab = !!inp.ab && F.fuel > 0, thr = F.fuel > 0 ? clamp(inp.thr, 0, 1) : 0, T = (A.Tm * thr + (ab ? A.Ta - A.Tm : 0)) * (rho / 1.225) ** .75 * (1 + .25 * Math.min(M, 1.6)) * mt;   // 燃油耗尽：发动机熄火，只能滑翔
+    F.ff = T / mt * FL_TSFC[ab ? 1 : 0]; F.fuel = Math.max(0, F.fuel - F.ff * h);   // 耗油（千克 / 秒）
     const ca = Math.cos(al), sn = Math.sin(al);
     const Fb = [qb * A.S * (CL * sn - CD * ca) + T, qb * A.S * CY, qb * A.S * (-CL * ca - CD * sn)];
     // —— 力矩 ——
@@ -152,6 +163,7 @@ function flStep(F, dt, inp) {
     const dq = flQmul(F.q, [0, F.w[0], F.w[1], F.w[2]]);
     for (let i = 0; i < 4; i++) F.q[i] += .5 * dq[i] * h;
     const ql = Math.hypot(...F.q); for (let i = 0; i < 4; i++) F.q[i] /= ql;
+    F.ad = (F.ad || 0) + ((al - (F.a ?? al)) / h - (F.ad || 0)) * Math.min(1, h * 10);   // 迎角变化率（约 0.1 秒平滑）：歼-20 鸭翼画面上的拉杆前导（v3det.js v3dCtlP）
     Object.assign(F, { a: al, b: be, M, Va, T, nz: -Fb[2] / (A.m * FL_G), stall: sa, ab });
     // 接地：航母甲板、跑道上放着起落架、姿态和下沉率都在限内就转入地面滑跑；别处、没放起落架、太猛都是摔
     const sf = flSurf(F.P[0], F.P[1]), hz = -F.P[2] - sf.z, GH = F.gh || FL_GH;

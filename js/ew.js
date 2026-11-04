@@ -101,15 +101,19 @@ function ewArm(o, nm) {
   o.emT = S.t + EW.emconT;
   log(`敌${nm || '防空雷达'}发现反辐射导弹来袭，关机规避（${EW.emconT} 秒内不能用雷达打飞机）`, 'info', 'ewemc', 4, { x: o.x, y: o.y });
 }
-// 驾驶时的雷达告警（v3pilot.js 画）：照着这架飞机的敌雷达（开着、它在雷达名义距离 1.6 倍以内）——{ x, y, k, jam 被压着, lock 正在用导弹打它 }；再加飞向它的导弹
+// 驾驶时的雷达告警（v3pilot.js 画、响）：照着这架飞机的敌雷达（开着、它在雷达名义距离 1.6 倍以内）——{ x, y, k, jam 被压着, trk 火控雷达锁定了它, lock 正在用导弹打它 }；再加飞向它的导弹
+//   锁定：敌战斗机把它选为目标且在雷达距离内、高炮正在对它开火、防空导弹车 / 军舰的射程里（隐身机要更近才锁得住；被我方干扰压着的锁不住）；警戒雷达只搜索不锁定
 function ewRwr(o) {
   if (!o || !S) return { em: [], msl: [] };
-  const em = [];
+  const em = [], st = typeof airStealth === 'function' ? Math.min(1, (1 + airStealth(o)) / 2) : 1;
   for (const e of ewEmitters()) {
     const d = dist(o.x, o.y, e.x, e.y);
     if (d > e.R0 * 1.6) continue;
-    const lock = (S.missiles || []).some(m => !m.done && m.side === 'e' && m.tgt && m.tgt.k === 'plane' && m.tgt.id === o.id && dist(m.x0 ?? m.x, m.y0 ?? m.y, e.x, e.y) < 60);
-    em.push({ x: e.x, y: e.y, k: e.k, jam: ewJammed(e.key), lock, d, R0: e.R0 });
+    const lock = (S.missiles || []).some(m => !m.done && m.side === 'e' && m.tgt && m.tgt.k === 'plane' && m.tgt.id === o.id && dist(m.x0 ?? m.x, m.y0 ?? m.y, e.x, e.y) < 60), jam = ewJammed(e.key), a = e.o;
+    const trk = lock || (e.k === 'ftr' ? !!(a.tgt && a.tgt.k === 'plane' && a.tgt.id === o.id) && d < e.R0
+      : e.k === 'aaa' ? (a.aaId != null ? a.aaId === o.id && S.t - (a.aaAt ?? -99) < 1.5 : !jam && d < e.R0 * st)
+      : (e.k === 'sam' || e.k === 'ship') && !jam && d < e.R0 * st);
+    em.push({ x: e.x, y: e.y, k: e.k, jam, trk, lock, d, R0: e.R0 });
   }
   const msl = (S.missiles || []).filter(m => !m.done && m.side === 'e' && m.tgt && m.tgt.k === 'plane' && m.tgt.id === o.id && m.t >= 0).map(m => ({ x: m.x, y: m.y, d: dist(m.x, m.y, o.x, o.y) }));
   return { em, msl };

@@ -157,7 +157,7 @@ function updatePoints(dt) {
 
 // 黑夜（S.night，沙盒「黑夜」）：步兵（夜视仪）与工事里的人眼视野缩到六成；车辆热像（vehicles.js）、舰艇、飞机、雷达、远距离热像发现（spot.js）照旧
 const NIGHT_EYE = .6;
-let VIS_GEN = 0;   // 视野版本：每算一次加一（matrix.js fogBytes 据此决定要不要重算画面用的视野图）
+let VIS_GEN = 0;   // 视野版本：每算一次加一（matrix.js fogBytes、render.js 据此决定要不要重算画面用的视野图）
 // 守方视野的视野源；half 'a' 只取视高 .35 的（步兵小组等），'b' 取其余的，不给就是全部（各组内的先后顺序与全部时相同）
 function visSrcE(half) {
   const es = [], a = half !== 'b', b = half !== 'a', nk = S.night ? NIGHT_EYE : 1;
@@ -196,7 +196,7 @@ function updateVision(part) {
   }
   if (typeof cvlApply === 'function') cvlApply(part);   // 伪装隐蔽：没被近处发现的隐蔽小组从对方视野里抹掉（conceal.js）
   if (typeof vehDlMark === 'function') vehDlMark(part);   // 数据链：记下此刻看得见的对方车辆（vehicles.js vehSees）
-  VIS_GEN++;
+  VIS_GEN++;   // 攻方视野（'a'）、守方视野（'b' 整张换上）都变了：画面用的视野图要重算
   if (part === 'b') return;
   // 情报记忆：看到过的火力点与工事留下标定；回头再看已空则撤销
   let forts = false;

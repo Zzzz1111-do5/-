@@ -6,7 +6,7 @@
 //   东西两个岬角（悬崖、岸防炮台）、近岸珊瑚礁（海滩、港湾口、河口留出水道）、东部沿海平原上的机场、海滩后面的种植园平地
 MAPGEN.isle = { w: 6000, h: 12000, build: buildIsle };
 
-function buildIsle(seed) {
+function buildIsle(seed, dry = false) {   // dry：沙漠（同 mapgen.js buildMap：没有河、红树林）
   const r = rng(seed), ph = Array.from({ length: 12 }, () => r() * 6.28);
   const xc = W * .5 + (r() - .5) * 240, hs = W * .47, D = 3300;   // 岛的中线、图上沿处的半宽、南岸离图上沿最远处
   const U = u => xc + u * hs;   // 岛的横向比例位置 → x
@@ -30,7 +30,7 @@ function buildIsle(seed) {
   const rivers = mouths.map((mx, k) => {
     const top = k === main ? -1 : cAt(mx) - (1250 + r() * 300), rx = new Float32Array(GH);
     for (let gy = 0; gy < GH; gy++) {
-      const y = gy * CELL + 5;
+      const y = gy * CELL + CELL / 2;
       rx[gy] = y < top || y > cAt(mx) + 40 ? -1e9 : mx + (75 * Math.sin(y / 200 + ph[3] + k * 2) + 26 * Math.sin(y / 63 + ph[4] + k)) * smooth(0, 240, cAt(mx) - y);
     }
     return { mx, top, w: k === main ? 9 : 7, rx };
@@ -43,7 +43,7 @@ function buildIsle(seed) {
   for (const [k, rv] of rivers.entries()) {
     if (k === main || rv.mx < afr.x0 - 160 || rv.mx > afr.x1 + 160) continue;
     rv.top = Math.max(rv.top, afr.y1 + 40);
-    for (let gy = 0; gy < GH; gy++) if (gy * CELL + 5 < rv.top) rv.rx[gy] = -1e9;
+    for (let gy = 0; gy < GH; gy++) if (gy * CELL + CELL / 2 < rv.top) rv.rx[gy] = -1e9;
   }
 
   // 海滩：南岸平缓的岸段上六处（避开河口、港湾、岬角和东西两侧的陡岸）
@@ -72,7 +72,7 @@ function buildIsle(seed) {
   const type = new Uint8Array(GW * GH), elev = new Float32Array(GW * GH);
   const yMax = Math.min(H, Math.ceil(Math.max(...coast) + 900));   // 再往南全是深海（下面统一填）
   for (let gy = 0; gy < GH; gy++) for (let gx = 0; gx < GW; gx++) {
-    const x = gx * CELL + 5, y = gy * CELL + 5, i = gy * GW + gx;
+    const x = gx * CELL + CELL / 2, y = gy * CELL + CELL / 2, i = gy * GW + gx;
     if (y > yMax) { type[i] = T.DEEP; continue; }
     const c = cAt(x), d = c - y, b = beachAt(x);
     if (d <= 0) {   // 海：海滩外是浅水泻湖，河口、港湾有浅滩；外面一圈断续的珊瑚礁（海滩、港湾口、河口留出水道）
@@ -97,9 +97,9 @@ function buildIsle(seed) {
     if (x > afr.x0 && x < afr.x1 && y > afr.y0 && y < afr.y1 && rd >= rw) { e = .26 + (e - .26) * .12; elev[i] = e; type[i] = T.FIELD; continue; }   // 机场场区：推平
     let t;
     const mang = (mouths.some(m => dist(x, y, m, cAt(m)) < 300) || (inBay(x, 70) && d < 170)) && e < .34 && noise2(rf(x / W + .5), rf(y / H * 2)) > .34;   // 红树林
-    if (rd < rw) t = T.RIVER;
-    else if (d < 24) t = b >= 0 ? T.BEACH : headland(x) ? T.CLIFF : mang || nearMouth(x, 80) ? T.MARSH : T.ROCKS;
-    else if (mang) t = T.MARSH;
+    if (rd < rw && !dry) t = T.RIVER;
+    else if (d < 24) t = b >= 0 ? T.BEACH : headland(x) ? T.CLIFF : (mang || nearMouth(x, 80)) && !dry ? T.MARSH : T.ROCKS;
+    else if (mang && !dry) t = T.MARSH;
     else if (e > .84) t = T.MOUNT;   // 只有几座山顶是裸露的
     else if (d < 560 && e < .3 && noise2(rf(x / W + .37), rf(y / H + .21)) < .55) t = T.FIELD;   // 海滩后面的种植园、草地
     else if (e > .6 && noise(rf(x / W + .2), rf(y / H + .4)) > .72) t = T.HILL;   // 山上偶尔几片林间空地
@@ -107,7 +107,7 @@ function buildIsle(seed) {
     else t = T.FIELD;
     type[i] = t;
   }
-  TER = { seed, type, elev, coast, beaches, mouths, rivers, massif, bridges: [], fords: [], points: [], af: { x: afr.x, y: afr.y, h: afr.h, s: afr.s }, afr, isle: true,
+  TER = { seed, type, elev, coast, beaches, mouths, rivers: dry ? [] : rivers, massif, dry, bridges: [], fords: [], points: [], af: { x: afr.x, y: afr.y, h: afr.h, s: afr.s }, afr, isle: true,
     port: { x: bay.x, y: cAt(bay.x) - 75 } };   // 湾底的港口镇（mapgen2.js finishMap 画房子、修路、设据点）
   finishMap(r, cAt, headland);
   TER.pathY = Math.ceil(Math.max(...coast) + 700);   // 寻路带：陆地与近岸；更南的大洋上舰船直接朝目标开（units.js），3D 远海是一块平面
@@ -116,7 +116,7 @@ function buildIsle(seed) {
 
 // ———————————————— 海岛战役（主菜单「海岛战役」）————————————————
 //   架空的热带海岛「棕榈岛」：岛名、地名、设施与守军都是虚构的。守方固定部署（同一个种子，每次一样）；我方按预算在沙盒里自己编成，
-//   部署完点「指挥进攻方」或「观战」开战。胜利条件与登陆战役相同：夺取指挥所并控制七成据点分值、坚守 30 秒
+//   部署完点「开始战斗」或「观战」开战。胜利条件与登陆战役相同：夺取指挥所并控制七成据点分值、坚守 30 秒
 //   eB：守方岸上布防的预算；sea：另给舰队、岸舰导弹与航空兵的预算
 const ISLE = { seed: 222, p: 14000, eB: 6000, sea: 5000, style: 'bal', lv: 'hard', fleet: ['e_ddg', 'e_ffg', 'e_ffg', 'e_lcs', 'e_lcs'], ascm: 3,
   nm: '跨海登岛', island: '棕榈岛',
@@ -142,7 +142,7 @@ function isleStart() {
   if (typeof SBX === 'object') { SBX.side = 'p'; SBX.sty.p = 'bal'; SBX.dir = { main: -1, feint: -2 }; SBX.pick = null; }
   isleIntel();
   if (typeof sbxRender === 'function') sbxRender();
-  if (typeof sbxMsg === 'function') sbxMsg(`海岛战役「${ISLE.nm}」：预算 ${ISLE.p} 点，部署完点「指挥进攻方」或「观战」开战`);
+  if (typeof sbxMsg === 'function') sbxMsg(`海岛战役「${ISLE.nm}」：预算 ${ISLE.p} 点，部署完点「开始战斗」或「观战」开战`);
   if (typeof updateHud === 'function') updateHud();
 }
 // 守方固定部署：岸上按风格布防，再另给预算——驱护舰编队在岛南 2.4–3.4 公里的海面成编队巡弋，岬角炮台与港湾两侧配岸舰导弹排，
@@ -167,7 +167,7 @@ function isleDefend() {
 }
 // 余款：多开一条增援线、编后备步兵（滩头站稳后经增援线陆续上岸），再加几艘驱护舰（南边集结海域）和舰载机（航母机库装得下为止）——
 //   各有上限，不为花光预算堆舰堆机（舰船、飞机多了推演也慢）；剩下的点数留给玩家自己加
-const ISLE_TOP = [['p_rline', 1], ['p_reserve', 12], ['p_lci', 4], ['p_dd_h', 2], ['p_cl', 1], ['p_dd_e', 1], ['p_air_ftr', 4], ['p_air_strike', 4], ['p_air_ftr_adv', 2], ['p_air_ew', 1], ['p_air_heavy', 2]];   // p_lci：第二梯队登陆舰（各载一个加强排），滩头出口夺取后再靠岸
+const ISLE_TOP = [['p_rline', 1], ['p_reserve', 12], ['p_lci', 4], ['p_dd_h', 2], ['p_cl', 1], ['p_dd_e', 1], ['p_air_ftr', 4], ['p_air_strike', 4], ['p_air_ftr_adv', 2], ['p_air_ew', 1], ['p_air_bt', 2], ['p_air_heavy', 2]];   // p_air_bt：歼-16 对地满挂（陆基，不占航母机库）   // p_lci：第二梯队登陆舰（各载一个加强排），滩头出口夺取后再靠岸
 function isleTopUp() {
   let n = 0, k = 0;
   for (const [id, cap] of ISLE_TOP) for (let i = 0; i < cap && sbxLeft('p') >= 60; i++) {

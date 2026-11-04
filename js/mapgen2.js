@@ -5,7 +5,7 @@ function finishMap(r, cAt, headland) {
   const eachCell = (x, y, rad, fn) => {
     for (let gy = Math.max(0, Math.floor((y - rad) / CELL)); gy <= Math.min(GH - 1, Math.ceil((y + rad) / CELL)); gy++)
       for (let gx = Math.max(0, Math.floor((x - rad) / CELL)); gx <= Math.min(GW - 1, Math.ceil((x + rad) / CELL)); gx++) {
-        const px = gx * CELL + 5, py = gy * CELL + 5;
+        const px = gx * CELL + CELL / 2, py = gy * CELL + CELL / 2;
         if (dist(px, py, x, y) < rad) fn(gy * GW + gx, px, py);
       }
   };
@@ -26,7 +26,8 @@ function finishMap(r, cAt, headland) {
   }
 
   // 城镇：河口渔村（每条河一个）、两个内陆镇子、北部指挥所；大地图在指挥所对侧纵深再加一个北镇
-  const vills = mouths.map((m, k) => { const vx = m + (r() < .5 ? -1 : 1) * (90 + r() * 30); return awayRiver({ x: vx, y: cAt(vx) - 95 }, 60); });
+  const vills0 = mouths.map((m, k) => { const vx = m + (r() < .5 ? -1 : 1) * (90 + r() * 30); return awayRiver({ x: vx, y: cAt(vx) - 95 }, 60); });
+  const vills = TER.dry ? [] : vills0;   // 沙漠：没有河口渔村（随机数照样取，后面的镇子、指挥所位置与绿地版一样）
   const t1x = W * (.25 + r() * .15), t2x = W * (.62 + r() * .15);
   const town1 = awayRiver({ x: t1x, y: cAt(t1x) - 560 * MAP_K }, 95), town2 = awayRiver({ x: t2x, y: cAt(t2x) - 520 * MAP_K }, 95);
   const hq = awayRiver({ x: (TER.massif.x < W / 2 ? W * .68 : W * .32) + (r() - .5) * 300 * MAP_K, y: 150 + r() * 70 * MAP_K }, 80);
@@ -40,11 +41,11 @@ function finishMap(r, cAt, headland) {
     const ok = cand.find(([x, y]) => x > 80 && x < W - 80 && y > 60 && cAt(x) - y > 260 && !isWater(typeAt(x, y)) && typeAt(x, y) !== T.RIVER);
     if (ok) { p.x = ok[0]; p.y = ok[1]; awayRiver(p, 90); }
   }
-  const blob = (p, rad, dens) => eachCell(p.x, p.y, rad, i => {
+  const blob = (p, rad, dens, paint = true) => eachCell(p.x, p.y, rad, i => {
     const t = type[i];
-    if (!isWater(t) && t !== T.RIVER && t !== T.BEACH && t !== T.CLIFF && r() < dens) type[i] = T.TOWN;
+    if (!isWater(t) && t !== T.RIVER && t !== T.BEACH && t !== T.CLIFF && r() < dens && paint) type[i] = T.TOWN;
   });
-  for (const v of vills) blob(v, 40, .75);
+  for (const v of vills0) blob(v, 40, .75, !TER.dry);
   blob(town1, 64, .8); blob(town2, 58, .8); blob(hq, 52, .82);
   if (TER.port) blob(TER.port, 70, .82);   // 架空海岛：湾底的港口镇（isle.js）
   if (town3) blob(town3, 56, .8);
@@ -124,7 +125,7 @@ function finishMap(r, cAt, headland) {
     for (let tries = 0; tries < 10; tries++) {
       const top = Math.max(rv.top, 120), fy = top + r() * (cAt(rv.mx) - 200 - top), fgy = Math.floor(fy / CELL);
       if (bridges.some(b => Math.abs(b.y - fy) < 140) || riverX(k, fgy) < 0) continue;
-      for (let gy = fgy; gy <= fgy + 1; gy++) for (let gx = 0; gx < GW; gx++) if (type[gy * GW + gx] === T.RIVER && Math.abs(gx * CELL + 5 - riverX(k, gy)) < 20) type[gy * GW + gx] = T.FORD;
+      for (let gy = fgy; gy <= fgy + 1; gy++) for (let gx = 0; gx < GW; gx++) if (type[gy * GW + gx] === T.RIVER && Math.abs(gx * CELL + CELL / 2 - riverX(k, gy)) < 20) type[gy * GW + gx] = T.FORD;
       TER.fords.push({ x: riverX(k, fgy), y: fgy * CELL + 10 });
       break;
     }
@@ -135,12 +136,13 @@ function finishMap(r, cAt, headland) {
   const add = (key, name, x, y, vp) => { if (!P.some(p => dist(p.x, p.y, x, y) < 90)) P.push({ key, name, x, y, vp }); };
   beaches.forEach((b, i) => add('E' + (i + 1), b.name + '出口', b.cx, cAt(b.cx) - 50, 1));
   add('HQ', '指挥所', hq.x, hq.y, 3);
-  add('T1', '西镇', town1.x, town1.y, 2);
-  add('T2', '东镇', town2.x, town2.y, 2);
-  if (town3) add('T3', '北镇', town3.x, town3.y, 2);
+  const tn = TER.dry ? '兵营' : '镇';   // 沙漠：镇子换成兵营（平顶水泥营房，v3props.js 不摆民房）
+  add('T1', '西' + tn, town1.x, town1.y, 2);
+  add('T2', '东' + tn, town2.x, town2.y, 2);
+  if (town3) add('T3', '北' + tn, town3.x, town3.y, 2);
   let best = null, be = -1;
   for (let gy = 0; gy < GH; gy++) for (let gx = 0; gx < GW; gx++) {
-    const x = gx * CELL + 5, y = gy * CELL + 5, i = gy * GW + gx, d = cAt(x) - y;
+    const x = gx * CELL + CELL / 2, y = gy * CELL + CELL / 2, i = gy * GW + gx, d = cAt(x) - y;
     if (x > W * .2 && x < W * .8 && d > 250 * MAP_K && d < 650 * MAP_K && type[i] !== T.TOWN && TER.elev[i] > be && riverGap({ x, y }) > 80) { be = TER.elev[i]; best = { x, y }; }
   }
   if (best) add('RD', '雷达站', best.x, best.y, 2);
@@ -176,7 +178,7 @@ function townBld() {
   BLD = { seed: TER.seed, list: [], at: new Map() };
   const hr = rng(TER.seed + 11);
   for (let i = 0; i < GW * GH; i++) if (TER.type[i] === T.TOWN) {
-    const b = { x: cellCX(i), y: cellCY(i), w: 5 + hr() * 3, h: 4 + hr() * 3, r: hr() < .5, c: (hr() * 6) | 0, f: hr() < .3, dx: (hr() - .5) * 2, dy: (hr() - .5) * 2 };   // c：屋顶色（6 种）
+    const b = { x: cellCX(i), y: cellCY(i), w: 5 + hr() * 3, h: 4 + hr() * 3, r: hr() < .5, c: (hr() * 6) | 0, f: hr() < .3 || !!TER.dry, dx: (hr() - .5) * 2, dy: (hr() - .5) * 2 };   // c：屋顶色（6 种）；f 平顶（沙漠全是平顶营房）
     BLD.list.push(b); BLD.at.set(i, b);
   }
   return BLD;

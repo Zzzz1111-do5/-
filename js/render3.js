@@ -88,6 +88,7 @@ function drawFx() {
   for (const f of S.fx) {
     if (!inView(f.x, f.y, f.r * 2 + 10)) continue;
     if (R.fx3d && (f.kind === 'boom' || f.kind === 'b2') && f.air) continue;   // 3D：空中爆炸在空中立体地画（v3fx.js），地面上不留一圈
+    if (R.fx3d && f.cw) continue;   // 3D：近防炮在空中打爆的来袭弹画在空中（v3fx.js CW_FX），地面贴图上不画
     const u = f.life / f.max;
     if (f.kind === 'flash') {
       ctx.fillStyle = rgba(f.side === 'e' ? COL.enemy : COL.g, (1 - u) * .9);

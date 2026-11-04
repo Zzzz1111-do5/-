@@ -461,14 +461,17 @@ const RLM_NAME = [[/99A/, 'ztz99a'], [/96 式扫雷/, 'ztz96m'], [/GCZ/, 'gcz110
   [/M163/, 'm163'], [/M1150/, 'm1150'], [/LPWS|密集阵/, 'lpws'], [/JLTV/, 'jltv'], [/复仇者/, 'avenger'], [/M1117/, 'm1117']];
 const RLM_TYPE = { p: { lt_tank: 'ztq15', tank: 'ztz96b', hv_tank: 'ztz99a', amtank: 'ztd05', apc: 'zbd05', spg: 'plz07', td: 'ptl02', aa_veh: 'pgz07', sam_veh: 'pgl625', recon: 'zbl08', flame_tank: 'zbd04a', mine_tank: 'ztz96m', abv: 'zbd03' },
   e: { lt_tank: 'm10', tank: 'm1a1', hv_tank: 'm1a2', amtank: 'aav7', apc: 'm2a3', spg: 'm109', td: 'm1134', aa_veh: 'm163', sam_veh: 'mshorad', recon: 'm1127', flame_tank: 'm1150', mine_tank: 'm1150', abv: 'm2a3' } };
-const RLM_KEY = new WeakMap();
+const RLM_KEY = new WeakMap();   // 车 → [型号键, 算的时候的兵种号 sbxV]：沙盒登陆舰卸下的车稍后才记上兵种号（sandbox.js sbxVehVar），变了重算
 function rlModelOf(v) {
-  let k = RLM_KEY.get(v);
-  if (k !== undefined) return k && RLM[k] && Object.assign(RLM[k], { key: k });
-  const nm = typeof vehModel === 'function' ? vehModel(v) : '';
-  k = (RLM_NAME.find(([re]) => re.test(nm)) || [])[1] || (v.tag === 'dozer' ? 'gcz110' : null) || (RLM_TYPE[v.side === 'e' ? 'e' : 'p'] || {})[v.type] || null;
-  if (v.mod && v.mod.cram && !/LPWS|LD-2000|密集阵/.test(nm)) k = v.side === 'e' ? 'lpws' : 'ld2000';
-  RLM_KEY.set(v, k);
+  const c = RLM_KEY.get(v);
+  let k;
+  if (c && c[1] === v.sbxV) k = c[0];
+  else {
+    const nm = typeof vehModel === 'function' ? vehModel(v) : '', cu = v.sbxV && RLM[v.sbxV] ? v.sbxV : null;   // 编辑器加的自制兵种（mod.js modUnitApply）：型号键就是兵种号
+    k = cu || (RLM_NAME.find(([re]) => re.test(nm)) || [])[1] || (v.tag === 'dozer' ? 'gcz110' : null) || (RLM_TYPE[v.side === 'e' ? 'e' : 'p'] || {})[v.type] || null;
+    if (!cu && v.mod && v.mod.cram && !/LPWS|LD-2000|密集阵/.test(nm)) k = v.side === 'e' ? 'lpws' : 'ld2000';
+    RLM_KEY.set(v, [k, v.sbxV]);
+  }
   return k && RLM[k] && Object.assign(RLM[k], { key: k });
 }
 

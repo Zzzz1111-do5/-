@@ -38,14 +38,15 @@ function msLaunch(kind, side, x0, y0, tgt, opts = {}) {
 }
 
 // 玩家（或 AI）对地面一点发射战术导弹：圆概率误差 σ 8
-function msFireP(x, y, ai) {
+function msFireP(x, y, ai, only15) {   // only15：只打东风-15B（rocket.js 点名要的）；否则东风-15B 用完接着用东风-16、长剑-10
   msEnsure();
   if (!msOn() || S.phase !== 'battle') { if (!ai) log('战术导弹在 H 时之后才能使用', 'warn', 'msl0', 2); return false; }
-  if (!(S.assets.msl > 0)) { if (!ai) log('战术导弹已用完', 'warn', 'msl0', 2); return false; }
+  if (!(S.assets.msl > 0)) { if (!only15 && typeof rfFireAny === 'function' && rfFireAny(x, y, ai)) return true; if (!ai) log('战术导弹已用完', 'warn', 'msl0', 2); return false; }
   if (!isLand(x, y)) { if (!ai) log('战术导弹只能打击陆上目标', 'warn', 'msl1', 2); return false; }
   // 东风-15B 由战区火箭军从地图南缘以外发射（驱逐舰的垂发导弹另见 vls.js）
   const tx = clamp(x + gauss() * 8, 0, W), ty = clamp(y + gauss() * 8, 0, H);
   const m = msLaunch('tbm', 'p', tx, H + 60, { x: tx, y: ty }, { src: 'theatre', delay: 4 });
+  m.rf = 'df15b';
   S.assets.msl--; S.msl.p.used++; S.stats.shots++;
   log(`战区火箭军发射东风-15B 战术导弹，约 ${Math.round(m.dur + 4)} 秒后命中`, 'info', null, 0, { x: tx, y: ty });
   return true;
@@ -65,13 +66,15 @@ function msStep(dt) {
     if (m.kind === 'pgm') { msPgmFly(m, dt); continue; }
     const u = clamp(m.t / m.dur, 0, 1);
     m.x = lerp(m.x0, m.tx, u); m.y = lerp(m.y0, m.ty, u); m.z = Math.sin(Math.PI * u) * (m.kind === 'tbm' ? 1 : .15);
+    if (m.rf && typeof rfPath === 'function') rfPath(m, u);   // 东风-17：高超音速滑翔、横向机动（rocket.js）
+    const RFm = m.rf && typeof RF === 'object' ? RF[m.rf] : null;
     if (m.t > 1) m.ph = u > .8 ? 'term' : 'mid';
     // 末段：目标 200 以内的守军高炮各有一次拦截机会（雷达高炮更高）
     if (m.side === 'p' && u > .85 && !m.aaTry) {
       m.aaTry = true;
       for (const a of S.enemies) {
         if (a.dead || a.kind !== 'aa' || dist(a.x, a.y, m.tx, m.ty) > 200) continue;
-        if (Math.random() < .1 * ((a.mod && a.mod.aa) || 1) * (1 - (a.sup || 0) / 130) * (m.nuke ? .5 : 1)) {
+        if (Math.random() < .1 * ((a.mod && a.mod.aa) || 1) * (1 - (a.sup || 0) / 130) * (m.nuke ? .5 : 1) * (RFm ? RFm.icp : 1)) {   // 东风-16 末段机动、东风-17 滑翔弹头更难拦
           m.done = m.icp = true;
           S.fx.push({ kind: 'flash', x: m.x, y: m.y - 20, r: 14, life: 0, max: .7, side: 'e' });
           log(m.nuke ? '战术核弹在末段被敌防空火力拦截，未能起爆' : '战术导弹在末段被敌防空火力拦截', 'bad', null, 0, { x: m.x, y: m.y });
@@ -94,12 +97,13 @@ function msStep(dt) {
     if (u >= 1) {
       m.done = true;
       const before = m.side === 'e' ? S.teams.filter(q => q.side === 'p').reduce((a, q) => a + q.men.length, 0) : 0;
-      impact(m.tx, m.ty, m.side === 'e' ? POWER.etbm : POWER.tbm, m.side);
+      impact(m.tx, m.ty, m.side === 'e' ? POWER.etbm : RFm && RFm.pw ? RFm.pw : POWER.tbm, m.side);   // 东风-16 弹头约 1 吨，毁伤半径大
       S.fx.push({ kind: 'boom', x: m.tx, y: m.ty, r: 52, life: 0, max: 1.5, side: m.side });
       if (m.side === 'p') {
         S.msl.p.hit++;
         const hit = S.enemies.filter(e => e.dead && dist(e.x, e.y, m.tx, m.ty) < 50);
-        log(hit.length ? `战术导弹命中，摧毁${msName(hit[0])}` : '战术导弹命中目标区', 'good', null, 0, { x: m.tx, y: m.ty });
+        const nmR = RFm ? RFm.nm : '战术导弹';
+        log(hit.length ? `${nmR}命中，摧毁${msName(hit[0])}` : `${nmR}命中目标区`, 'good', null, 0, { x: m.tx, y: m.ty });
       } else {
         const k = before - S.teams.filter(q => q.side === 'p').reduce((a, q) => a + q.men.length, 0);
         msStat('telHit'); if (k > 0) msStat('telKill', k);
@@ -120,10 +124,10 @@ const MS_PGM = {
   cj10: { nm: '长剑-10 对陆巡航导弹', spd: 150, z: .08, dmg: 40, pen: 3.4, st: 22, icp: .5, pw: { men: .85, ship: 5, struct: 0, seg: true, R: 34, vb: 10, veh: true } },
   kd20: { nm: '空地-20 空射巡航导弹', spd: 150, z: .08, dmg: 44, pen: 3.6, st: 24, icp: .5, pw: { men: .85, ship: 5, struct: 0, seg: true, R: 34, vb: 10, veh: true } },   // 轰-6K 翼下 6 枚（长剑-20 的空射型，约 500 公斤战斗部）：防区外打已知的工事、阵地，贴地飞，能被拦截
   yj18: { nm: '鹰击-18A 导弹', spd: 180, sprint: 620, sr: 260, z: .06, dmg: 44, pen: 3.8, st: 24, icp: .22, pw: { men: .85, ship: 6, struct: 0, seg: true, R: 32, vb: 10, veh: true } },
-  yj21: { nm: '鹰击-21 高超音速导弹', spd: 900, z: .9, dmg: 60, pen: 4, st: 40, icp: .06, pw: { men: .95, ship: 8, struct: 0, seg: true, R: 42, vb: 14, veh: true } },
+  yj21: { nm: '鹰击-21 高超音速导弹', spd: 900, z: .9, prof: 'ball', lzk: .35, hmax: 40000, dmg: 60, pen: 4, st: 40, icp: .06, pw: { men: .95, ship: 8, struct: 0, seg: true, R: 42, vb: 14, veh: true } },
   gbu53: { nm: 'GBU-53/B 风暴破坏者小直径炸弹', spd: 200, z: .5, dmg: 40, pen: 3.6, st: 12, icp: .3, pw: { men: .6, ship: 2.5, struct: 0, seg: false, R: 16, vb: 5, veh: true } },   // F-35A 内埋 4 枚：三模导引头，防区外打活动车辆
   agm65: { nm: 'AGM-65 小牛空地导弹', spd: 320, z: .3, dmg: 46, pen: 3.8, st: 10, icp: 0, pw: { men: .5, ship: 3, struct: 0, seg: false, R: 16, vb: 5, veh: true } },   // A-10C：防区外打车辆、舰艇
-  yj12: { nm: '鹰击-12 超音速反舰导弹', spd: 600, z: .2, dmg: 50, pen: 4, st: 30, icp: .1, pw: { men: .8, ship: 7, struct: 0, seg: true, R: 32, vb: 10, veh: true } },   // 轰-6K 挂载，末段 4 马赫掠海
+  yj12: { nm: '鹰击-12 超音速反舰导弹', spd: 600, z: .2, prof: 'hilo', hc: 15000, dn: 26000, dmg: 50, pen: 4, st: 30, icp: .1, pw: { men: .8, ship: 7, struct: 0, seg: true, R: 32, vb: 10, veh: true } },   // 轰-6K 挂载，末段 4 马赫掠海
   yj83k: { nm: '鹰击-83K 空舰导弹', spd: 260, z: .06, dmg: 36, pen: 3.6, st: 18, icp: .3, pw: { men: .6, ship: 4, struct: 0, seg: true, R: 22, vb: 6, veh: true } },   // 歼-35 / 歼-15 挂载，亚音速掠海
   ft8: { nm: '飞腾-8 小直径制导炸弹', spd: 200, z: .5, dmg: 40, pen: 3.6, st: 12, icp: .3, pw: { men: .6, ship: 2.5, struct: 0, seg: false, R: 16, vb: 5, veh: true } },   // 歼-35 内埋：约 100 公斤级，GPS/INS + 末端成像，能打运动中的车辆
   ld10: { nm: '雷电-10 反辐射导弹', spd: 420, z: .6, dmg: 34, pen: 3, st: 10, icp: .1, pw: { men: .5, ship: 2, struct: 0, seg: false, R: 14, vb: 4, veh: true } },   // 歼-35 防空压制型：追防空雷达辐射源
@@ -147,19 +151,44 @@ function msPgm(w, side, x0, y0, T, src, delay = 0) {
   const W0 = MS_PGM[w];
   if (!W0) return null;
   if (w === 'ld10' && T.k && T.id != null && typeof ewArm === 'function') { const o = msPgmTgt({ k: T.k, id: T.id }); if (o) ewArm(o); }   // 反辐射弹盯上了：雷达可能关机规避（ew.js）
-  return msLaunch('pgm', side, x0, y0, { x: T.x, y: T.y }, { tgt: T.k && T.id != null ? { k: T.k, id: T.id } : null, src, delay, dur: 60, w });
+  const dur = Math.max(60, dist(x0, y0, T.x, T.y) / (W0.spd || 200) * 1.6 + 20);   // 远海（farsea.js）几十上百公里外打过来的：飞得到
+  return msLaunch('pgm', side, x0, y0, { x: T.x, y: T.y }, { tgt: T.k && T.id != null ? { k: T.k, id: T.id } : null, src, delay, dur, w });
 }
 function msPgmFly(m, dt) {
   const W0 = MS_PGM[m.w || (m.w = 'cj10')], T = msPgmTgt(m.tgt);
   if (T) { m.tx = T.x; m.ty = T.y; }
   if (m.t > m.dur) { m.done = true; return; }
-  const d = dist(m.x, m.y, m.tx, m.ty), v = W0.sprint && d < W0.sr ? W0.sprint : W0.spd, st = v * dt;
+  const d = dist(m.x, m.y, m.tx, m.ty);
+  let v = W0.sprint && d < W0.sr ? W0.sprint : W0.spd;
+  if (W0.acc > 0) { m.cs = Math.min(v, (m.cs ?? (W0.v0 ?? v * .3)) + W0.acc * dt); v = m.cs; }   // 编辑器设了加速度（mod.js）：从出筒速度 v0 加速到巡航 / 冲刺速度
+  const st = v * dt;
   m.hd = Math.atan2(m.ty - m.y, m.tx - m.x);
-  m.z = W0.z * (d < 120 ? Math.max(.1, d / 120) : Math.min(1, m.t * 2));
+  // 弹道（编辑器 mod.js 可改 prof）：cruise 平飞（默认）、skim 掠海超低空、loft 高抛（中段爬到 lz 再下来）、popup 末段跃升俯冲（离目标 pd 内先爬 lz 再扎下去）
+  const P = W0.prof || 'cruise', d0 = P === 'loft' ? m.d0 || (m.d0 = Math.max(1, d)) : 1, u = P === 'loft' ? clamp(1 - d / d0, 0, 1) : 0;   // 起飞时离目标多远只有高抛要记（默认的平飞不往状态里加东西）
+  let zc = P === 'skim' ? Math.min(W0.z, .03) : W0.z;
+  if (P === 'loft') zc = W0.z + (W0.lz ?? .5) * Math.sin(Math.PI * u);
+  else if (P === 'popup') { const pd = W0.pd ?? 700; if (d < pd && d > 120) zc += (W0.lz ?? .3) * Math.sin(Math.PI * clamp(1 - (d - 120) / (pd - 120), 0, 1) * .8); }
+  m.z = zc * (d < 120 ? Math.max(.1, d / 120) : Math.min(1, m.t * 2));
+  if (P === 'ball' || P === 'hilo') msPgmArc(m, W0, P, d);   // 先爬得很高再扎下来的（鹰击-21 准弹道、鹰击-12 高空巡航）：按真实米数算高度
   if (m.tgt && m.tgt.k === 'eship' && typeof navyDefend === 'function' && navyDefend(m)) return;   // 敌舰分层拦截
   if (d > Math.max(8, st)) { m.x += Math.cos(m.hd) * st; m.y += Math.sin(m.hd) * st; return; }
   m.done = true; m.x = m.tx; m.y = m.ty;
   msPgmHit(m, T, W0);
+}
+// 高抛弹道（用户：鹰击-21 这种都是先飞得特别高）——高度按真实米数（m.z3，画面直接用；m.z 照旧给别处判断高低）：
+//   ball 准弹道：垂发冲出后几乎竖着往上爬，在航程一半处到顶（顶点 ≈ 射程 × lzk，40 公里封顶），然后陡直俯冲（末段六七十度）；
+//   hilo 高空巡航：爬到 hc（随射程放低）高空超音速巡航，离目标 dn 以内俯冲下来，最后一段贴着海面冲（鹰击-12 的打法）
+function msPgmArc(m, W0, P, d) {
+  const d0 = m.d0 || (m.d0 = Math.max(1, d)), u = clamp(1 - d / d0, 0, 1);
+  let h;
+  if (P === 'ball') { const Hm = clamp(d0 * (W0.lzk ?? .35), 250, W0.hmax ?? 40000); h = Hm * Math.sin(Math.PI * Math.pow(u, .82)) ** .9; }   // 前半段爬得快，顶点稍靠前，后半段越扎越陡
+  else {
+    const Hc = clamp(d0 * .18, 150, W0.hc ?? 15000), dn = Math.min(d0 * .4, W0.dn ?? 26000), go = d0 - d;
+    h = 8 + Hc * Math.min(sm01(go / Math.max(1, Math.min(d0 * .3, 30000))), sm01((d - dn * .25) / Math.max(1, dn * .75)));
+  }
+  if (P === 'ball') h = Math.min(h, 20 + 450 * m.t * m.t);   // 助推段：从垂发筒里竖着冲上去越来越快（不然出筒后高度一下跳上去一千多米）
+  m.z = clamp(h / 3000, .03, 1);
+  m.z3 = m.t > .6 ? Math.max(6, h) : null;   // 出筒那一下（垂发冲出、发射烟）照旧
 }
 // 到达（m.tx、m.ty 是落点）：打敌舰按舰艇毁伤，其余小范围爆炸 + 对目标直接毁伤（fpwpn.js 玩家亲自打的也用这一套）
 function msPgmHit(m, T, W0) {
@@ -239,7 +268,7 @@ function msDefShips() {
 function msAsm(m, dt) {
   const T = msTgtObj(m.tgt);
   if (T) { m.tx = T.x; m.ty = T.y; }
-  if (m.bx == null) { m.bx = m.x; m.by = m.y; }
+  if (m.bx == null) { m.bx = m.x; m.by = m.y; if (m.life == null && typeof fsOn === 'function' && fsOn()) m.life = Math.max(14, dist(m.x, m.y, m.tx, m.ty) / (m.spd || 260) * 1.5 + 10); }   // 远海按真实射程打的反舰导弹：飞得到
   const d = dist(m.bx, m.by, m.tx, m.ty), st = (m.spd || 260) * dt;
   m.hd = Math.atan2(m.ty - m.by, m.tx - m.bx); m.z = .04;
   if (d > Math.max(10, st)) { m.bx += Math.cos(m.hd) * st; m.by += Math.sin(m.hd) * st; }
@@ -262,15 +291,23 @@ function msDefend(m) {
   const D = msDefShips(), C = typeof cvDefs === 'function' ? cvDefs() : [], DC = [...D, ...C];
   if (!DC.length) return false;
   const T = msTgtObj(m.tgt);
-  const cover = s => !T || T === s.o || dist(T.x, T.y, s.x, s.y) < 400;
-  // 外层：舰空导弹（每枚来袭导弹只分配一枚拦截弹）
-  if (!m.samTry) for (const s of D) {
-    const r = s.esc ? 600 : 750, d = dist(m.x, m.y, s.x, s.y);
-    if (d > r || d < 140 || !cover(s) || (s.o.samCd || 0) > S.t || (typeof vlsUse === 'function' && !vlsUse(s.o, 'sam'))) continue;
-    m.samTry = true; s.o.samCd = S.t + 1.5;
-    msLaunch('sam', 'p', s.x, s.y, { x: m.x, y: m.y }, { tgt: { k: 'msl', id: m.id }, src: s.esc ? 'esc' : 'dd', spd: 560, dur: 2.5, pk: (s.esc ? .3 : .35) * (m.lo ? .6 : 1) });   // lo：低可探测的隐身巡航导弹（JASSM-ER），雷达锁得晚
+  const cover = (s, r) => !T || T === s.o || dist(T.x, T.y, s.x, s.y) < (r || 400);
+  // 远海（farsea.js，真实距离）：掠海来袭弹进了雷达地平线（FS.hz 约 28 公里）就用舰空导弹打（海红旗-9 / 海红旗-16，约 1100 米 / 秒），
+  //   区域防空：护着 15 公里内的友舰（航母、登陆舰）；打不中、来袭弹进了 12 公里再补一发（先打、看结果、再打）；进了 8 公里放箔条 / 诱饵弹（软杀伤，每枚来袭弹判一次）；近防炮照旧
+  const fs = typeof fsOn === 'function' && fsOn() && typeof FS === 'object';
+  const inAir = () => S.missiles.some(o => o.kind === 'sam' && o.side === 'p' && !o.done && o.tgt && o.tgt.k === 'msl' && o.tgt.id === m.id);
+  // 外层：舰空导弹（每枚来袭导弹只分配一枚拦截弹；远海补一发）
+  if (!m.samTry || (fs && m.samTry === 1 && !inAir())) for (const s of D) {
+    const r = fs ? (m.samTry ? 12000 : FS.hz) : s.esc ? 600 : 750, d = dist(m.x, m.y, s.x, s.y);
+    if (d > r || d < (fs ? 1500 : 140) || !cover(s, fs ? 15000 : 0) || (s.o.samCd || 0) > S.t || (typeof vlsUse === 'function' && !vlsUse(s.o, 'sam'))) continue;
+    m.samTry = (m.samTry || 0) + 1; s.o.samCd = S.t + 1.5;
+    msLaunch('sam', 'p', s.x, s.y, { x: m.x, y: m.y }, { tgt: { k: 'msl', id: m.id }, src: s.esc ? 'esc' : 'dd', spd: fs ? 1100 : 560, dur: fs ? d / 700 + 4 : 2.5, pk: (s.esc ? .3 : .35) * (m.lo ? .6 : 1) });   // lo：低可探测的隐身巡航导弹（JASSM-ER），雷达锁得晚
     msStat('abm');
     break;
+  }
+  if (fs && !m.dcy && T && dist(m.x, m.y, T.x, T.y) < 8000) {
+    m.dcy = true;
+    if (Math.random() < .25) { m.done = m.icp = true; msPuff(m.x, m.y, 'p', true); msStat('decoy'); log(`来袭的反舰导弹被${msTgtName(m.tgt)}的箔条 / 诱饵弹骗走`, 'good', 'fsdcy', 1.5, { x: m.x, y: m.y }); return true; }
   }
   // 中层：航母红旗-10（每枚来袭导弹只分配一枚）
   if (!m.hqTry) for (const s of C) {

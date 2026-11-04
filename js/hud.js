@@ -71,7 +71,7 @@ function buildHud() {
     `<button class="ib" id="b-${k}" type="button" title="${tip}（${key}）" aria-label="${tip}">${svg(k)}<kbd>${key}</kbd>${ASSET[k] ? `<em id="n-${k}"></em>` : ''}</button>`).join('');
   for (const [, list] of BTN) for (const [k, , , fn] of list) $('b-' + k).addEventListener('click', fn);
   $('btnPause').addEventListener('click', togglePause);
-  $('btnSpeed').addEventListener('click', () => { S.speed = S.speed === 1 ? 2 : S.speed === 2 ? 4 : 1; updateHud(); });
+  $('btnSpeed').addEventListener('click', () => { S.speed = typeof fsNextSpeed === 'function' ? fsNextSpeed(S.speed) : S.speed === 1 ? 2 : S.speed === 2 ? 4 : 1; updateHud(); });   // 远海航渡中能开 8、16 倍（farsea.js）
   $('btnHelp').addEventListener('click', () => { if (S.phase === 'battle' && !S.over && !S.paused) S.paused = U.helpPause = true; $('brief').hidden = false; updateHud(); });   // 战斗中看帮助先暂停，关闭后恢复
   $('btnStart').addEventListener('click', () => { startBattle(); updateHud(); });
   $('zIn').addEventListener('click', () => camZoomAt(CAM.vw / 2, CAM.vh / 2, 1.3));

@@ -108,7 +108,7 @@ function lvStart(n) {
   if (typeof mnHide === 'function') mnHide();
   if (typeof MENU === 'object') { MENU.pausedBy = false; MENU.game = true; MENU.last = 'lvl'; }
   if (typeof U === 'object') U.level = L.lv;
-  openSandbox(L.seed);
+  openSandbox(L.seed, false, 'std');   // 闯关按程序生成的海岸登陆地图设计（不用台湾东海岸）
   S.level = L.lv;
   S.lv = { n: L.n, kind: L.kind, nm: L.nm, ch: L.ch };
   S.sbx.budget = { p: L.p, e: L.eB || 30000 };
@@ -120,7 +120,7 @@ function lvStart(n) {
   if (typeof SBX === 'object') { SBX.side = 'p'; SBX.sty.p = 'bal'; SBX.dir = { main: -1, feint: -2 }; SBX.pick = null; }
   lvIntel(L);
   if (typeof sbxRender === 'function') sbxRender();
-  if (typeof sbxMsg === 'function') sbxMsg(`第 ${L.n} 关「${L.nm}」：预算 ${L.p} 点，部署完点「指挥进攻方」或「观战」开战`);
+  if (typeof sbxMsg === 'function') sbxMsg(`第 ${L.n} 关「${L.nm}」：预算 ${L.p} 点，部署完点「开始战斗」或「观战」开战`);
   if (typeof updateHud === 'function') updateHud();
 }
 // 海战：守方舰队在岛前海域（本方海岸外 130–330）成编队，岸上岸舰导弹、机场与歼击机按关卡配

@@ -30,7 +30,8 @@ function navyAdd(cls, x, y, nm) {
 }
 // 守方看得见的我方舰艇（任一敌舰雷达范围内，或岸上视野里）
 function nvTargets() {
-  const out = [], seen = (x, y) => nvAlive().some(e => dist(e.x, e.y, x, y) < NV_CLS[e.cls].radar * (e.hp < e.maxhp * .5 ? .75 : 1)) || spotted(x, y);
+  const pic = typeof fsOn === 'function' && fsOn() && typeof asPicture === 'function' ? asPicture() : [];   // 远海：巡逻机报的海情给视距外的目标（同类游戏里的超视距指示）
+  const out = [], seen = (x, y) => nvAlive().some(e => dist(e.x, e.y, x, y) < NV_CLS[e.cls].radar * (e.hp < e.maxhp * .5 ? .75 : 1)) || pic.some(o => dist(o.x, o.y, x, y) < 600) || (x >= 0 && y >= 0 && x <= W && y <= H && spotted(x, y));
   if (S.dd && S.dd.state !== 'sunk' && isFinite(S.dd.x) && seen(S.dd.x, S.dd.y)) out.push({ k: 'dd', id: 'DD', x: S.dd.x, y: S.dd.y, v: 8, nm: S.dd.name || '驱逐舰' });
   if (typeof cvAll === 'function') cvAll().forEach((c, h) => { if (c.hp > 0 && seen(c.x, c.y)) out.push({ k: 'cv', id: cvHome(c) || h, x: c.x, y: c.y, v: 10, nm: c.name || '航母' }); });
   for (const s of S.ships) if (alive(s) && !isLand(s.x, s.y) && s.state !== 'beached' && seen(s.x, s.y)) {
@@ -151,10 +152,11 @@ function navyDefend(m) {
   const W0 = MS_PGM[m.w] || {}, dT = dist(m.x, m.y, m.tx, m.ty), hyp = m.w === 'yj21', fast = hyp || (W0.sprint && dT < W0.sr) || (W0.spd || 0) >= 500;
   const k = hyp ? .12 : fast ? .55 : 1, cover = e => !T || T === e || dist(T.x, T.y, e.x, e.y) < 450;
   // 外层：标准-2 / 标准-6——「射击—射击」：远界一枚，近一些再补一枚；拦截弹飞行时间按相遇点估（来袭弹也在飞近）
-  const vin = (W0.sprint && dT < W0.sr ? W0.sprint : W0.spd) || 200, fly = d => clamp(d / (900 + vin), .25, 1.4);
+  const fs = typeof fsOn === 'function' && fsOn(), low = m.z3 == null ? (m.z || 0) < .2 : m.z3 < 400;   // 远海按真实距离：贴着海面飞的进了雷达地平线（约 28 公里）才看得见、拦得到
+  const vin = (W0.sprint && dT < W0.sr ? W0.sprint : W0.spd) || 200, fly = d => clamp(d / (900 + vin), .25, fs ? 300 : 1.4), engR = R => fs && low ? Math.min(R, FS.hz) : R;
   if ((m.nvS || 0) < 2) for (const e of nvAlive()) {
     const d = dist(m.x, m.y, e.x, e.y), C = NV_CLS[e.cls];
-    if (!(e.sam > 0) || d > C.samR * (m.nvS ? .7 : 1) || d < 160 || !cover(e) || (m.nvSt && S.t - m.nvSt < .8)) continue;
+    if (!(e.sam > 0) || d > engR(C.samR) * (m.nvS ? .7 : 1) || d < (fs ? 3000 : 160) || !cover(e) || (m.nvSt && S.t - m.nvSt < (fs ? 6 : .8))) continue;
     m.nvS = (m.nvS || 0) + 1; m.nvSt = S.t; e.sam--;
     msLaunch('sam', 'e', e.x, e.y, { x: m.x, y: m.y }, { tgt: { k: 'msl', id: m.id }, src: 'eship', spd: 900, dur: fly(d), pk: .55 * k });
     nvStat('nvAbm');
@@ -163,7 +165,7 @@ function navyDefend(m) {
   // 中层：ESSM（300 以内）
   if (!m.nvE) for (const e of nvAlive()) {
     const d = dist(m.x, m.y, e.x, e.y);
-    if (!(e.essm > 0) || d > 300 || d < 70 || !cover(e)) continue;
+    if (!(e.essm > 0) || d > (fs ? engR(30000) : 300) || d < (fs ? 1500 : 70) || !cover(e)) continue;
     m.nvE = true; e.essm--;
     msLaunch('sam', 'e', e.x, e.y, { x: m.x, y: m.y }, { tgt: { k: 'msl', id: m.id }, src: 'eship', spd: 800, dur: fly(d) * .8, pk: .6 * k });
     nvStat('nvEssm');
@@ -177,7 +179,7 @@ function navyDefend(m) {
     m.nvCd = true;
   }
   if (!m.nvC && !m.nvCd) for (const e of nvAlive()) {
-    if (dist(m.x, m.y, e.x, e.y) > 90 || !cover(e)) continue;
+    if (dist(m.x, m.y, e.x, e.y) > (fs ? 2000 : 90) || !cover(e)) continue;
     const C = NV_CLS[e.cls];
     m.nvC = { until: S.t + .4, ok: Math.random() < (C.ram ? .45 : .4) * k * (C.ciws > 1 ? 1.15 : 1), id: e.id };
     break;

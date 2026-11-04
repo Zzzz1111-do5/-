@@ -80,12 +80,5 @@ function flatGroundSpawn(items) {
   if (typeof indexUnits === 'function') indexUnits();
   log('出发阵地展开完毕：补给站开设，向纵深发起进攻', 'good');
 }
-// 战区司令（theater.js）的阶段线从海岸往里数（第 k 道 = 海岸以北 260 + 300k）：这张图上整块出发阵地已经是登陆场，开战时阶段线直接从出发阵地前沿那一道算起——
-//   否则头几道阶段线落在出发阵地里面，推进目标被压在阶段线以南，前面的部队反而往回撤
-HOOK.step.push(() => {
-  if (!S || S.phase !== 'battle' || !TER || !TER.flat || !S.th || !S.th.p || S.th.p.flatK) return;
-  const k0 = Math.max(0, Math.ceil((FLAT.zone - (typeof TH === 'object' ? TH.head : 260)) / (typeof TH === 'object' ? TH.phase : 300)));
-  S.th.p.k = Math.max(S.th.p.k || 0, k0); S.th.p.kT = S.t; S.th.p.flatK = true;
-});
 // 新开一局：055 旗舰没地方停（没有海）——移到图外、算作不在场
 HOOK.newGame.push(() => { if (S && TER && TER.flat && S.dd) Object.assign(S.dd, { x: -9999, y: H + 9999, tx: -9999, ty: H + 9999, hull: 0, state: 'sunk', moving: false, auto: false }); });

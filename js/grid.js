@@ -20,7 +20,7 @@ const spotted = (x, y) => EV[ci(x, y)] === 1;
 function eachCellIn(x, y, rad, fn) {
   for (let gy = Math.max(0, Math.floor((y - rad) / CELL)); gy <= Math.min(GH - 1, Math.floor((y + rad) / CELL)); gy++)
     for (let gx = Math.max(0, Math.floor((x - rad) / CELL)); gx <= Math.min(GW - 1, Math.floor((x + rad) / CELL)); gx++)
-      if (dist(gx * CELL + 5, gy * CELL + 5, x, y) <= rad) fn(gy * GW + gx);
+      if (dist(gx * CELL + CELL / 2, gy * CELL + CELL / 2, x, y) <= rad) fn(gy * GW + gx);
 }
 
 // 烟团此刻的半径：最后 6 秒收小散去；车载烟幕弹（带 t0）弹还在飞时没有烟，炸开后 1.6 秒里从三成半长满（vsmoke.js）
@@ -86,6 +86,9 @@ function visPrep() {
   if (VIS_KEY.ter === TER && VIS_KEY.seed === TER.seed) return;
   VIS_KEY.ter = TER; VIS_KEY.seed = TER.seed;
   for (let i = 0; i < GW * GH; i++) { const t = TER.type[i], g = isWater(t) ? 0 : TER.elev[i] * ELEV_H; VIS_G[i] = g; VIS_B[i] = g + TP[t].bl; }
+  // 整张图一样高、没有任何遮挡（白色平原）：视线投射时地面坡度判据恒成立（见 castVision），只剩烟幕能截断射线
+  VIS_UNI = true;
+  for (let i = 0, g0 = VIS_G[0]; i < GW * GH; i++) if (VIS_G[i] !== g0 || VIS_B[i] !== g0) { VIS_UNI = false; break; }
   const bw = VIS_BW = Math.ceil(GW / VIS_BK), bh = Math.ceil(GH / VIS_BK), bm = VIS_BM = new Float64Array(bw * bh).fill(-1e9);
   for (let gy = 0; gy < GH; gy++) for (let gx = 0; gx < GW; gx++) { const k = ((gy / VIS_BK) | 0) * bw + ((gx / VIS_BK) | 0), g = VIS_G[gy * GW + gx]; if (g > bm[k]) bm[k] = g; }
 }
@@ -119,14 +122,14 @@ function visSmoke(x, y, r, L = VIS_SL) {
   for (let k = 0; k < L.length; k += 3) { const R = L[k + 2]; if (Math.abs(L[k] - x) < r + R + 15 && Math.abs(L[k + 1] - y) < r + R + 15) sig += L[k] + ',' + L[k + 1] + ',' + R + ';'; }   // 比 smokeMask 圈的格子再宽一格
   return sig;
 }
-function castVision(out, sources, keep) {   // keep：接着上一次往 out 里点亮（不先清空）
+// 内层循环只用局部变量、点亮格子就地展开（原来是闭包，每格调用一次）；同一位置的重复视野源按 6 米分桶查（原来每个源都和前面所有源逐个比）——结果逐位相同
+function castVision(out, sources, keep) {   // keep：接着上一次往 out 里点亮（不先清空；视野分两步算的后一半，logistics.js updateVision）
   if (!keep) out.fill(0);
   visPrep();
   if (VISC.ter !== VIS_KEY.ter || VISC.gw !== GW || VISC.gh !== GH) { VISC.m.clear(); VISC.ter = VIS_KEY.ter; VISC.gw = GW; VISC.gh = GH; VISC.mark = new Uint32Array(GW * GH); VISC.sid = 0; }
-  const call = ++VISC.n, mark = VISC.mark;
-  // 内层循环只用局部变量（模块级的 let 每次读都要查作用域，循环里也不能提出去）
-  const G = VIS_G, B = VIS_B, SM = SMOKE, gw = GW, gh = GH;
-  const done = [];
+  const call = ++VISC.n, mark = VISC.mark, SL = visSmokeList();
+  const gw = GW, gh = GH, G = VIS_G, B = VIS_B, SM = SMOKE, ST = VIS_ST;
+  const bk = new Map(), bkey = (x, y) => Math.floor(x / 6) * 65536 + Math.floor(y / 6);
   for (const s of sources) {
     const h = s.h || .35;
     let dup = false;
@@ -139,36 +142,49 @@ function castVision(out, sources, keep) {   // keep：接着上一次往 out 里
     { const k = bkey(s.x, s.y); let L = bk.get(k); if (!L) bk.set(k, L = []); L.push({ x: s.x, y: s.y, r: s.r, h }); }
     const key = s.x + ',' + s.y + ',' + s.r + ',' + h, sm = visSmoke(s.x, s.y, s.r, SL), c = VISC.m.get(key);
     if (c && c.sm === sm) { const L = c.cells; for (let k = 0; k < L.length; k++) out[L[k]] = 1; c.n = call; continue; }
-    const sid = ++VISC.sid, gx0 = s.x / CELL, gy0 = s.y / CELL, i0 = ci(s.x, s.y), rc = s.r / CELL;
-    const eye = G[i0] + h;
-    const nb = (2 * Math.ceil(rc) + 4) ** 2;
-    if (VIS_BUF.length < nb) VIS_BUF = new Int32Array(nb);
-    const buf = VIS_BUF;
+    const sid = ++VISC.sid;
     let nc = 0;
-    out[i0] = 1; mark[i0] = sid; buf[nc++] = i0;
+    const gx0 = s.x / CELL, gy0 = s.y / CELL, i0 = ci(s.x, s.y), rc = s.r / CELL, need = (2 * Math.ceil(rc) + 4) ** 2;
+    if (VIS_BUF.length < need) VIS_BUF = new Int32Array(need);   // 视距圆的外接方块：点亮的格不会更多
+    const cells = VIS_BUF;   // 点亮的格先记在预分配的缓冲里，最后整段拷一份进缓存（原来 JS 数组逐个 push 再 Int32Array.from，占视线开销的四分之一）
+    const eye = G[i0] + h;
+    out[i0] = 1; if (mark[i0] !== sid) { mark[i0] = sid; cells[nc++] = i0; }
     const n = Math.ceil(rc * 7.5), D = visDirs(n);
-    while (VIS_ST[VIS_ST.length - 1] + .7 <= rc) VIS_ST.push(VIS_ST[VIS_ST.length - 1] + .7);
-    const ST = VIS_ST;
+    while (ST[ST.length - 1] + .7 <= rc) ST.push(ST[ST.length - 1] + .7);
     let ns = 0;
     while (ns < ST.length && ST[ns] <= rc) ns++;
-    // 射线提前结束（结果逐格不变）：圈内最高的地面 g（相对眼高）也够不着「此前最高遮挡坡度 − .02」，这条射线后面就一格也点不亮了——
-    //   g ≥ 0 时 g / 距离 随距离变小，看下一步；g < 0 时上界是最远一步的 g / stL。翻过山脊、穿过林带后的射线大多能早早停下
-    const g = visLocMax(gx0, gy0, rc) - eye, stL = ns ? ST[ns - 1] : 1, gFar = g / stL;
-    for (let k = 0; k < n; k++) {
+    // 平坦无遮挡（VIS_UNI）且视高为正：第 j 步地面坡度 −h / st 一定高于此前最高遮挡坡度 −h / st(j−1) 减 0.02，格子一定点亮——
+    //   省掉两次除法与比较，只按烟幕截断（结果与下面的通用循环逐格相同）
+    if (VIS_UNI && h > 0) for (let k = 0; k < n; k++) {
       const dx = D[k * 2], dy = D[k * 2 + 1];
-      let maxS = -1e9;
       for (let j = 0; j < ns; j++) {
         const st = ST[j], fx = gx0 + dx * st, fy = gy0 + dy * st;
         if (fx < 0 || fy < 0 || fx >= gw || fy >= gh) break;
         const i = (fy | 0) * gw + (fx | 0);
-        if ((G[i] - eye) / st >= maxS - .02) { out[i] = 1; if (mark[i] !== sid) { mark[i] = sid; buf[nc++] = i; } }
-        const top = (B[i] - eye) / st;
-        if (top > maxS) maxS = top;
+        out[i] = 1; if (mark[i] !== sid) { mark[i] = sid; cells[nc++] = i; }
         if (SM[i]) break;
-        if (j + 1 < ns && (g >= 0 ? g / ST[j + 1] : gFar) < maxS - .02) break;
       }
     }
-    VISC.m.set(key, { cells: buf.slice(0, nc), sm, n: call });
+    else {
+      // 射线提前结束（结果逐格不变）：圈内最高的地面 g（相对眼高）也够不着「此前最高遮挡坡度 − .02」，这条射线后面就一格也点不亮了——
+      //   g ≥ 0 时 g / 距离 随距离变小，看下一步；g < 0 时上界是最远一步的 g / stL。翻过山脊、穿过林带后的射线大多能早早停下
+      const g = visLocMax(gx0, gy0, rc) - eye, stL = ns ? ST[ns - 1] : 1, gFar = g / stL;
+      for (let k = 0; k < n; k++) {
+        const dx = D[k * 2], dy = D[k * 2 + 1];
+        let maxS = -1e9;
+        for (let j = 0; j < ns; j++) {
+          const st = ST[j], fx = gx0 + dx * st, fy = gy0 + dy * st;
+          if (fx < 0 || fy < 0 || fx >= gw || fy >= gh) break;
+          const i = (fy | 0) * gw + (fx | 0);
+          if ((G[i] - eye) / st >= maxS - .02) { out[i] = 1; if (mark[i] !== sid) { mark[i] = sid; cells[nc++] = i; } }
+          const top = (B[i] - eye) / st;
+          if (top > maxS) maxS = top;
+          if (SM[i]) break;
+          if (j + 1 < ns && (g >= 0 ? g / ST[j + 1] : gFar) < maxS - .02) break;
+        }
+      }
+    }
+    VISC.m.set(key, { cells: cells.slice(0, nc), sm, n: call });
   }
   if (VISC.m.size > 1200) for (const [k, c] of VISC.m) if (call - c.n > 8) VISC.m.delete(k);   // 两秒没用上的（走开了的单位留下的）淘汰
 }
@@ -269,7 +285,22 @@ const fgNow = () => typeof S === 'object' && S && S.phase === 'battle' && isFini
 function costArr(cls, gen, force) {
   let C = COSTS.get(cls);
   const now = fgNow(), fresh = C && C.t != null && now != null && now - C.t >= 0 && now - C.t < (cls === 'raid' ? 1 : 2.5);
-  if (!C || (force && C.gen !== gen) || ((C.gen !== gen || cls === 'raid') && !fresh)) { C = { gen, t: now, a: (C && C.a) || new Float64Array(GW * GH).fill(Infinity) }; costFill(C.a, cls); COSTS.set(cls, C); }   // 寻路带以外一直是 Infinity，不再逐格算
+  if (!C || (force && C.gen !== gen) || ((C.gen !== gen || cls === 'raid') && !fresh)) {
+    // 地形没变（同一张图、同一寻路带、没炸桥修桥）：只有工事格（上一次与这一次的）和视野变了的格（raid）代价会变，只重算它们——
+    //   原来每次整寻路带逐格重算（默认地图近五十万格，raid 每秒一次）；结果与整图重算逐位相同
+    const tv = FPASS[fgKey(cls)];
+    if (C && C.a && C.tv === tv && C.ter === TER && C.pgn === PGN) {
+      const a = C.a, F0 = C.fi, F1 = FORT_IDX;
+      for (let k = 0; k < F0.length; k++) a[F0[k]] = stepCost(F0[k], cls);
+      for (let k = 0; k < F1.length; k++) a[F1[k]] = stepCost(F1[k], cls);
+      if (C.pv) { const P0 = C.pv; for (let k = 0; k < PGN; k++) if (PV[k] !== P0[k]) a[k] = stepCost(k, cls); P0.set(PV); }
+      C = { gen, t: now, a, tv, ter: TER, pgn: PGN, fi: F1, pv: C.pv };
+    } else {
+      C = { gen, t: now, a: (C && C.a) || new (GW * GH > BIG_N ? Float32Array : Float64Array)(GW * GH).fill(Infinity), tv, ter: TER, pgn: PGN, fi: FORT_IDX, pv: cls === 'raid' ? Uint8Array.from(PV) : null };
+      costFill(C.a, cls);   // 整寻路带按类一次填完（与逐格 stepCost 逐位相同）；寻路带以外一直是 Infinity，不再逐格算
+    }
+    COSTS.set(cls, C);
+  }
   return C.a;
 }
 // 整个寻路带的 stepCost（逐格结果与 stepCost 完全相同，乘法顺序也一样）：按类别拆成专用循环、地形底价先按类型查表——

@@ -31,9 +31,11 @@ function fiData(o) {
   if (RL.rdrNm) perf.push(['机载雷达', RL.rdr ? `${RL.rdrNm} · 对战斗机大小目标约 ${RL.rdr} 公里` : RL.rdrNm]);
   if (RL.fuel) perf.push(['机内燃油', `${fiNum(RL.fuel)} 公斤`]);
   if (A) {
-    perf.push(['发动机推力', `两台合计 军用 ${Math.round(A.Tm / 1000)} 千牛 · 加力 ${Math.round(A.Ta / 1000)} 千牛`]);
-    perf.push(['过载限制', `${A.nz[0]} ～ +${A.nz[1]} g（正常律）`]);
-    perf.push(['最大滚转率', `${Math.round(A.pmax * 57.3)}°/秒`]);
+    const kt = typeof fpMt === 'function' ? fpMt() : 1;   // 皇牌空战式操纵的推力放大（v3pilot.js FP_MT）
+    perf.push(['发动机推力', `两台合计 军用 ${Math.round(A.Tm / 1000)} 千牛 · 加力 ${Math.round(A.Ta / 1000)} 千牛（推重比 ${(A.Ta / A.m / FL_G).toFixed(2)}${kt > 1 ? `，皇牌空战式放大 ${kt} 倍：${(A.Ta * kt / A.m / FL_G).toFixed(2)}` : ''}）`]);
+    const mk = typeof fpMk === 'function' ? fpMk() : 1, mp = typeof fpMkP === 'function' ? fpMkP() : 1, mt = mk > 1 ? `（皇牌空战式放大 ${mk} 倍：+${+(A.nz[1] * mk).toFixed(1)} g）` : '';   // 皇牌空战式操纵的机动性放大（v3pilot.js FP_MK）
+    perf.push(['过载限制', `${A.nz[0]} ～ +${A.nz[1]} g（正常律）${mt}`]);
+    perf.push(['最大滚转率', `${Math.round(A.pmax * 57.3)}°/秒${mp > 1 ? `（放大后 ${Math.round(A.pmax * mp * 57.3)}°/秒）` : ''}`]);
     perf.push(['作战重量 · 翼展', `约 ${Math.round(A.m / 1000)} 吨 · ${A.b} 米`]);
   }
   if (M.stealth) perf.push(['隐身', `系数 ${M.stealth}（越小越难被雷达发现；在敌雷达下待久了会被稳定跟踪）`]);
@@ -53,7 +55,7 @@ function fiData(o) {
   const L = typeof fwList === 'function' && o.kind ? fwList(o) : [], full = fiFull(o);
   const load = L.map((s, i) => {
     const W = s.W;
-    return { k: String(i + 1), nm: W.nm, n: s.n, full: full[s.w] ?? s.n, bay: FI_BAY[s.bay] || s.bay, kind: FI_K[W.k] || W.k, sk: FI_SK[W.sk] || W.sk,
+    return { k: String(i + 1), nm: W.nm, n: s.n, full: full[s.key || s.w] ?? s.n, bay: FI_BAY[s.bay] || s.bay, kind: FI_K[W.k] || W.k, sk: FI_SK[W.sk] || W.sk,
       rng: `${fiKm(W.Rmin)} – ${W.R} 公里`, spd: W.M ? `马赫 ${W.M}` : `无动力滑翔（升阻比 ${W.LD || '—'}）`, g: `${W.g} g`, cone: `±${W.cone}°`, lk: `${W.lk} 秒`,
       tb: W.M ? (W.tb < 1e8 ? `${W.tb} 秒` : '全程（涡喷）') : null, ds: FI_WD[s.w] || '' };
   });

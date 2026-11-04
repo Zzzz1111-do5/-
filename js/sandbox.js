@@ -2,7 +2,8 @@
 // 沙盒模式：同一张海岸地图上按预算自由部署岸防与进攻部队（CATALOG 条目），可让「高级指挥官」AI 替任一方部署并在聊天框说明理由；
 // 开战时把部署条目转换为引擎对象，观战 AI 对 AI 或亲自指挥进攻方。部署数据 S.sbx = {items, budget, notes, ...}（纯 JSON）。
 // 条目字段：{id, cat(目录 id), side, x, y, x2, y2, cargo:[目录 id], plan:{x,y}, wave, n(兵组/数量覆盖), r(雷区半径), pts(折线), t(增援时刻)}
-const SBX_BUDGET = 1500, SBX_BUDGET_MAX = 30000;   // 每方初始预算 · 预算上限
+const SBX_BUDGET = 1500, SBX_BUDGET_MAX = 30000;   // 预算的基准（AI 布兵按「预算 ÷ 基准」放大编成）· 预算上限
+const SBX_BUDGET0 = SBX_BUDGET_MAX;   // 每方初始预算：直接给到上限 30000（用户：不用每次手动把双方预算调上去）
 const SBX = { sty: { e: 'bal', p: 'bal' }, dir: { main: -1, feint: -2 }, erase: null, el: null, side: 'e', cat: 'all', pick: null, hover: null, line: null, lineDown: null, drag: null, mouse: null, tip: null, msg: '', msgT: 0, pv: false, endKey: null };
 const sbxEntry = it => it && typeof catalogById === 'function' ? catalogById(it.cat) : null;
 const sbxOn = () => !!(S && S.phase === 'sandbox' && S.sbx);
@@ -648,6 +649,7 @@ function sbxAIAttackBase(mi, fi) {
   if (cv) { buyAir('p_air_recon', 'recon'); if (k >= 1) buyAir('p_air_strike', 'strike'); }
   // 战区航空兵（不需要航母）：攻击-2 无人机、无侦-7、歼-20
   buyAir('p_air_cas', 'cas'); buyAir('p_air_cas', 'cas'); if (k >= 1) buyAir('p_air_recon_lr', 'recon'); if (k >= 1.2) buyAir('p_air_ftr', 'fighter');
+  if (k >= 1.1) buyAir('p_air_bt', 'strike');   // 歼-16 对地满挂（陆基「炸弹卡车」：6 枚雷石-6），打岸防炮、炮位、发射车
   // 5. 两栖坦克、火箭艇、扫雷舰
   let nAm = 0;
   if (veh && typeof VEH_SPEC === 'object' && VEH_SPEC.amtank) for (let i = 0; i < clamp(Math.round(2.4 * k), 1, 5); i++) {
@@ -902,8 +904,12 @@ function sbxSpawn(it, role, acc) {
     const role = s.role, p = role === 'ambush' ? sbxNearPt(x, y, p => /^E\d/.test(p.key)) : sbxNearPt(x, y), n = it.n ?? s.teams;
     const u = addUnit('e', 'inf', { role, obj: p.key });
     if (s.morale) u.morale = s.morale;
+    // 坚守的（守备队、伏击组）原地挖工事：几个组围成一圈的挖环形堑壕，单独一组挖一道 24 米的横壕（朝海）；附近已有堑壕就不再挖
+    const rr0 = n > 1 ? 9 + n * 2.5 : 0;
+    if ((role === 'garrison' || role === 'ambush') && typeof trenchRing === 'function' && !S.trench.some(t => polyDist(x, y, t.pts) < rr0 + 8))
+      trenchAdd(n > 1 ? trenchRing(x, y, rr0, rr0 * .8, Math.max(10, Math.round(rr0 * 6.3 / 4.5))) : passInf(x - 12, y) && passInf(x + 12, y) ? [[[x - 12, y - 1.5], [x - 4, y + 1.5], [x + 4, y - 1.5], [x + 12, y + 1.5]]] : []);
     for (let k = 0; k < n; k++) {
-      const a = k / Math.max(1, n) * 6.283 + .4, rr = n > 1 ? 9 + n * 2.5 : 0, sp = sbxSpot(x + Math.cos(a) * rr, y + Math.sin(a) * rr * .8);
+      const a = k / Math.max(1, n) * 6.283 + .4, rr = rr0, sp = sbxSpot(x + Math.cos(a) * rr, y + Math.sin(a) * rr * .8);
       addTeam('e', sp.x, sp.y, s.men, { role, obj: p.key, u: u.id, ...(role === 'ambush' ? { hold: true } : {}), ...(s.mod ? { mod: { ...s.mod } } : {}), ...(s.tag ? { sbxTag: s.tag } : {}), cat: c.id });
     }
   } else if (s.kind === 'car') {
@@ -931,7 +937,6 @@ function sbxSpawn(it, role, acc) {
     if (vs.length) sh.sbxVeh = vs.map(k => ({ id: k.id, type: k.spawn.type, mod: k.spawn.mod || null, tag: k.spawn.tag || null }));
     if (s.role) { Object.assign(sh, { sbxRole: s.role, load: { teams: 0, eng: 0 } }); if (it.plan) sh.sbxTgt = { x: it.plan.x }; }
     else if (role === 'spectate' && sbxCmd()) { if (it.plan) sh.sbxHint = { ...it.plan }; }   // 观战：指挥官先派侦察机照相、再定登陆点与梯队，部署时的预定点只作参考
-    else if (role === 'spectate' && (it.wave || 1) > 1) Object.assign(sh, { sbxPlan: it.plan ? { ...it.plan } : null, sbxHold: true, auto: false });   // 无指挥官：本模块扣留到出口夺取
     else if (it.plan) sh.plan = { ...it.plan };
     if (kind === 'assault') sh.form = 'wedge';
     S.groups[s.role ? 5 : kind === 'supply' ? 3 : lst ? 4 : (it.wave || 1) > 1 ? 2 : 1].push(sh.id);
@@ -1011,7 +1016,7 @@ function sbxBuild(role) {
 // 开战：spectate 观战 AI 对 AI；attack 亲自指挥进攻方（进入常规部署阶段）
 function sbxStart(role) {
   if (!S || !S.sbx || S.sbx.live) return false;
-  // 「指挥进攻方」也是双方 AI 接管全部兵力（舰船、航母、排都不能直接操控），玩家只在编队面板（thpanel.js）给攻方的师 / 团 / 营下令
+  // 「开始战斗」也是双方 AI 接管全部兵力（舰船、航母、排都不能直接操控），玩家看攻方视野、可以亲自驾驶（编队面板已去掉）
   const ctl = role !== 'spectate' ? 'p' : null;
   role = 'spectate';
   const spent = { p: sbxSpent('p'), e: sbxSpent('e') };
@@ -1031,7 +1036,7 @@ function sbxStart(role) {
     S.ctl = ctl;
     startBattle();
     S.paused = false;
-    log(ctl ? '沙盒：你是攻方战区司令——在左侧编队面板给师、团、营下令（推进 / 穿插 / 坚守 / 后撤 / 预备队），舰船与各排由 AI 执行' : '沙盒观战：双方指挥官 AI 接管全部兵力', 'info');
+    log(ctl ? '沙盒开战：双方指挥官 AI 接管全部兵力，你看攻方的视野；按 P 可以亲自驾驶战机、055 驱逐舰' : '沙盒观战：双方指挥官 AI 接管全部兵力，双方都看得见', 'info');   // 编队面板已去掉（thpanel.js THU_PANEL），原来这里还让玩家去面板下令
   } else {
     S.phase = 'deploy'; S.paused = true;
     log('沙盒：进攻方由你指挥。预定登陆点后按 H-HOUR 开始。', 'info');
@@ -1421,11 +1426,11 @@ HOOK.step.push(dt => {
 HOOK.newGame.push(opts => { if (typeof R === 'object' && R) R.eye = null; if (!(opts && opts.sandbox)) closeSandbox(); });
 
 // ———————————————— 编辑器入口 ————————————————
-function openSandbox(seed, keep, map) {
+function openSandbox(seed, keep, map, dry) {   // dry：沙漠地图（不给就按设置「地表」；读存档时按存档）
   const prev = S && S.sbx ? S : null, lv = (prev && prev.level) || (typeof U === 'object' && U.level) || 'hard';
-  const bud = keep && prev ? { ...prev.sbx.budget } : { p: SBX_BUDGET, e: SBX_BUDGET };
-  map = map || (keep && prev && prev.map && prev.map !== 'std' ? prev.map : undefined);
-  newGame(seed, lv, { sandbox: true, mode: 'sandbox', map });   // map：另外登记的地图（core.js MAPGEN），换种子重建时沿用
+  const bud = keep && prev ? { ...prev.sbx.budget } : { p: SBX_BUDGET0, e: SBX_BUDGET0 };
+  map = map || (keep && prev && prev.map ? prev.map : undefined) || (MAPGEN.tw ? 'tw' : undefined);   // 沙盒默认台湾东海岸（taiwan.js）；选「海岸登陆」时是 'std'；闯关指定 'std'
+  newGame(seed, lv, { sandbox: true, mode: 'sandbox', map, dry });   // map：另外登记的地图（core.js MAPGEN），换种子重建时沿用
   Object.assign(S, { phase: 'sandbox', briefed: true, paused: true, role: 'attack', mode: 'sandbox', armor: [] });
   if (keep && prev && prev.night) S.night = true;   // 黑夜：换种子、换地图时沿用
   S.sbx = { items: [], budget: bud, nid: 1, notes: { p: [], e: [] }, live: false };
@@ -1651,7 +1656,7 @@ function sbxUI() {
     <p class="sbx-hint sbx-styd"></p>
     <div class="sbx-row"><button type="button" data-act="save">保存部署</button><button type="button" data-act="loads" aria-expanded="false">读取部署</button></div>
     <div class="sbx-saves" hidden></div>
-    <div class="sbx-row sbx-mapsel"><label>地图<select data-sel="map"><option value="std">海岸登陆</option><option value="flat">白色平原（超大）</option></select></label><button type="button" data-act="night" aria-pressed="false" title="夜战：肉眼看得近，热像照旧，枪口焰在夜里老远就看得见">黑夜</button></div>
+    <div class="sbx-row sbx-mapsel"><label>地图<select data-sel="map">${MAPGEN.tw ? '<option value="tw">台湾东海岸（真实地形）</option>' : ''}<option value="std">海岸登陆</option><option value="flat">白色平原（超大）</option></select></label><button type="button" data-act="night" aria-pressed="false" title="夜战：肉眼看得近，热像照旧，枪口焰在夜里老远就看得见">黑夜</button></div>
     <div class="sbx-row"><input type="text" inputmode="numeric" aria-label="地图种子" class="sbx-seedin"><button type="button" data-act="map">新地图</button><span class="sbx-lv" role="radiogroup" aria-label="守军 AI 水平"></span></div>
     <details class="sbx-notes"><summary>部署思路</summary><p class="sbx-hint">点「AI 帮我部署」，由高级指挥官按地形判读完成部署并说明理由。</p><ol></ol></details>
     <div class="sbx-hint sbx-keys">左键放置（按住拖动可连续放置）· 运兵船自带满编步兵，选兵种点船可逐个替换 · 右键 / Delete 移除（按住右键拖动连续移除） · 拖动已放置的条目可移位 · Tab 切换攻守 · Esc 取消 · 滚轮缩放、中键拖动平移</div>
@@ -1730,7 +1735,7 @@ const sbxClone = o => JSON.parse(JSON.stringify(o));
 function sbxStore(key, val) { try { if (val == null) localStorage.removeItem(key); else localStorage.setItem(key, JSON.stringify(val)); return true; } catch (e) { return false; } }
 function sbxFetch(key) { try { return JSON.parse(localStorage.getItem(key)); } catch (e) { return null; } }
 function sbxSnap(name) {
-  return { v: 1, name, seed: S.seed, map: S.map && S.map !== 'std' ? S.map : undefined, night: S.night || undefined, level: S.level, budget: { ...S.sbx.budget }, items: sbxClone(S.sbx.items), notes: sbxClone(S.sbx.notes || { p: [], e: [] }),
+  return { v: 1, name, seed: S.seed, map: S.map && S.map !== 'std' ? S.map : undefined, night: S.night || undefined, dry: !!S.dry, level: S.level, budget: { ...S.sbx.budget }, items: sbxClone(S.sbx.items), notes: sbxClone(S.sbx.notes || { p: [], e: [] }),
     spent: { p: sbxSpent('p'), e: sbxSpent('e') }, at: Date.now() };
 }
 const sbxSaves = () => { const a = sbxFetch(SBX_SAVE_KEY); return Array.isArray(a) ? a : SBX.saves || []; };
@@ -1749,12 +1754,12 @@ function sbxLoad(d) {
   if (typeof U === 'object' && DIFF[d.level]) U.level = d.level;
   if (S) S.level = DIFF[d.level] ? d.level : S.level;
   const keepSide = SBX.side;
-  openSandbox(d.seed, false, d.map && MAPGEN[d.map] ? d.map : 'std');
+  openSandbox(d.seed, false, d.map && MAPGEN[d.map] ? d.map : 'std', !!d.dry);   // 以前的存档没记 dry：当时的地图有河，照原样重建
   S.night = !!d.night;
   if (DIFF[d.level]) S.level = d.level;
   const items = sbxClone(d.items).filter(it => catalogById(it.cat));
   for (const it of items) if (it.cargo) it.cargo = it.cargo.filter(id => catalogById(id));
-  Object.assign(S.sbx, { items, budget: { p: (d.budget && d.budget.p) || SBX_BUDGET, e: (d.budget && d.budget.e) || SBX_BUDGET }, notes: sbxClone(d.notes || { p: [], e: [] }) });
+  Object.assign(S.sbx, { items, budget: { p: (d.budget && d.budget.p) || SBX_BUDGET0, e: (d.budget && d.budget.e) || SBX_BUDGET0 }, notes: sbxClone(d.notes || { p: [], e: [] }) });
   S.sbx.nid = items.reduce((m, it) => Math.max(m, it.id || 0), 0) + 1;
   if (TER.af) S.sbx.items = S.sbx.items.filter(it => it.cat !== 'e_airfield');   // 旧存档里买的机场：换成地图自带的空军基地
   sbxMapAF();
@@ -1980,7 +1985,7 @@ HOOK.frame.push(() => {
       let n = $('sbxEnd');
       if (!n) { n = document.createElement('p'); n.id = 'sbxEnd'; n.style.cssText = 'margin:0;font-size:12px;color:var(--intel)'; $('endStats').after(n); }
       const s0 = S.sbx.spent || { p: 0, e: 0 };
-      n.textContent = `沙盒${sp ? ' · 观战 AI 对 AI' : ' · 指挥进攻方'} · 进攻方 ${s0.p} 点 / 防守方 ${s0.e} 点 · 守军 AI ${DIFF[S.level].name}`;
+      n.textContent = `沙盒${sp ? ' · 观战 AI 对 AI' : ' · 攻方视野'} · 进攻方 ${s0.p} 点 / 防守方 ${s0.e} 点 · 守军 AI ${DIFF[S.level].name}`;
       n.hidden = false;
       sbxEditBtn('btnSbxEdit', $('btnAgain'), 'go', '修改部署再战');
     }
@@ -2020,7 +2025,7 @@ function sbxEditBtn(id, ref, cls, text, before) {
     const d = sbxLast();
     if (!d) return;
     $('end').hidden = true;
-    if (sbxLoad(d)) sbxMsg('已恢复上一局的部署：修改后点「观战」或「指挥进攻方」再战');
+    if (sbxLoad(d)) sbxMsg('已恢复上一局的部署：修改后点「开始战斗」或「观战」再战');
   });
   before ? ref.before(b) : ref.after(b);
 }

@@ -87,7 +87,7 @@ function infoDD() {
       V && ['垂发', infoEsc(`${C.cells} 单元：${vlsText(d)}${d.vls0.yu8 ? ` · 鱼-8 ${V.yu8}` : ''}`)],
       V && (V.cj10 != null || V.yj18 != null) && ['对陆导弹', infoEsc(`亚音速：长剑-10 ${V.cj10 ?? 0}；超音速：鹰击-18A ${V.yj18 ?? 0}、鹰击-21 ${V.yj21 ?? 0}`)],
       S.aor && ['补给舰', infoEsc(`${AOR.name}${S.aor.st === 'go' ? '驶来' : S.aor.st === 'rep' ? `补给中 ${Math.round(S.aor.p * 100)}%` : '返航'}`)],
-      ['战术导弹', `${S.assets.msl ?? 0} 枚（东风-15B，战区火箭军）`],
+      ['火箭军', `东风-15B ${S.assets.msl ?? 0} · 东风-16 ${S.assets.df16 ?? 0} · 东风-17 ${S.assets.df17 ?? 0} · 长剑-10 ${S.assets.cj10 ?? 0} 枚`],
       ['状态', d.state === 'repair' ? '损管抢修中' : d.state === 'sunk' ? '—' : d.cool > 0 ? '装填中' : '待命'], ['指挥', d.auto ? '自动掩护' : '手动']] };
 }
 function infoCV() {
@@ -169,6 +169,7 @@ function infoPlane(p) {
   return { t: nm, s: `${INFO_AIRK[p.kind] || p.kind}`,
     rows: [['状态', infoEsc(INFO_AIRPH[p.phase] || p.phase || '')], infoMisP(p) && ['任务', infoEsc(infoMisP(p))], ['速度', `${Math.round(p.spd || 0)}（最大 ${sp.spd || '?'}）`], ['隐身', infoEsc(infoStl(sp.stealth) + infoExp(p))],
       sp.radar && ['机载雷达', `发现距离 ${sp.radar}`], wpn && ['挂载', infoEsc(wpn)], p.flares != null && ['干扰弹', `${p.flares} 组`],
+      typeof apCard === 'function' && apCard(airMdlKey(p.kind, p.v)) && ['机动性', infoEsc(apCard(airMdlKey(p.kind, p.v)))],   // 各型自己的推重比、翼载、转弯、加速（airperf.js，推演里就按它算）
       sp.stealth && p.kind === 'fighter' && ['空战打法', '超视距：发射后侧转保持照射，敌机逼近就拖开，不进格斗'], ['起降', sp.land ? '战区陆基机场' : '航母']] };
 }
 function infoEair(a) {
@@ -178,6 +179,7 @@ function infoEair(a) {
   return { t: '敌 ' + (sp.name || a.type), s: specAll() || inVision(a.x, a.y) ? '目视' : '雷达发现',
     rows: [['状态', infoEsc(INFO_AIRPH[a.ph] || a.ph || '')], ['任务', infoEsc(infoMisE(a))], ['耐久', `${a.hp ?? '?'}/${sp.hp ?? '?'}`], ['速度', `${Math.round(a.spd || 0)}（最大 ${sp.spd || '?'}）`], ['隐身', infoEsc(infoStl(sp.stealth) + infoExp(a))],
       F && ['机载雷达', `发现距离 ${F.radar}`], wpn && ['挂载', infoEsc(wpn)], a.flares != null && ['干扰弹', `${a.flares} 组`],
+      typeof apCard === 'function' && apCard(a.type) && ['机动性', infoEsc(apCard(a.type))],
       sp.stealth && F && ['空战打法', '超视距：发射后侧转，被逼近就拖开'], a.type === 'c17' && ['机上', `${(a.sq || []).length} 个班、${(a.veh || []).length} 辆空投车辆`]] };
 }
 
