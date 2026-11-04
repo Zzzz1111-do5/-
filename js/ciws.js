@@ -7,6 +7,11 @@
 const CW_PK = { mortar: .55, arty: .4, spg: .4, cb: .4, naval: .35, coastal: .3 };
 const CW_FROM = { p: ['arty', 'mortar', 'coastal', 'cb', 'spg'], e: ['naval', 'mortar', 'spg'] };   // 各方拦截的来袭弹种（对方打来的）
 const cwStat = k => { if (typeof v8Stat === 'function') v8Stat(k); };
+// 3D 画面用的连射记录（不进 S、不影响推演）：每次交战一条 {t0, gx, gy, gz 炮口离地高, s 来袭弹的起止与弹种, u 交战时弹飞了几成, kill, side}
+//   v3fx.js 按它画一道从炮口射向空中来袭弹的曳光弹流、炮口焰、空中的爆点——原来借步兵曳光弹画：从 1.6 米高平着射向炮弹在地上的投影点，每次只有 3 条
+const CW_FX = [];
+// 来袭弹在 u 时刻离地多高（同 v3fx.js 画炮弹的弧线：迫击炮弹弧线高、榴弹 / 舰炮炮弹低平）
+const cwShellH = (s, u) => { const d = dist(s.x0, s.y0, s.x1, s.y1), apex = s.kind === 'mortar' ? Math.min(320, d * .75) : Math.min(420, d * .32); return Math.sin(Math.PI * u) * apex + 3 * (1 - u); };
 
 // side 方的近防火力：{o, x, y, r 防区半径, k 命中率系数, cd 冷却, nm 名称, ship}
 function cwGuns(side) {
@@ -24,6 +29,10 @@ function cwGuns(side) {
 }
 
 function cwStep(dt) {
+  if (!S) return;
+  if (CW_FX.S !== S) { CW_FX.length = 0; CW_FX.S = S; }   // 换局清掉
+  let j = 0; while (j < CW_FX.length && S.t - CW_FX[j].t0 > 3) j++;   // 过时的（按时间先后排着）
+  if (j || CW_FX.length > 60) CW_FX.splice(0, Math.max(j, CW_FX.length - 60));
   if (!S || S.phase !== 'battle' || !S.shells || !S.shells.length) return;
   for (const side of ['p', 'e']) {
     const G = cwGuns(side);
@@ -40,13 +49,16 @@ function cwStep(dt) {
       if (!best) continue;
       g.o.cwT = S.t + g.cd;
       best.cw = true;   // 每发弹只拦一次
-      const u = clamp(best.t / best.dur, 0, 1), sx = lerp(best.fx0 ?? best.x0, best.x1, u), sy = lerp(best.fy0 ?? best.y0, best.y1, u) - Math.sin(u * Math.PI) * 18;
+      const u = clamp(best.t / best.dur, 0, 1), gx = lerp(best.fx0 ?? best.x0, best.x1, u), gy = lerp(best.fy0 ?? best.y0, best.y1, u), sx = gx, sy = gy - Math.sin(u * Math.PI) * 18;
       const vis = side === 'p' || inVision(g.x, g.y);
-      for (let i = 0; i < 3; i++) tracer(g.x, g.y, sx + gauss() * 5, sy + gauss() * 5, side, vis);
+      for (let i = 0; i < 3; i++) { tracer(g.x, g.y, sx + gauss() * 5, sy + gauss() * 5, side, vis); S.tracers[S.tracers.length - 1].cw = 1; }   // 平面画面的示意；3D 里按 CW_FX 画
+      if (!g.ship) { const o = g.o, hz = cwShellH(best, u); o.aim = Math.atan2(gy - g.y, gx - g.x); o.mgT = S.t; o.cwAt = S.t; o.cwEl = Math.atan2(hz - 4, Math.max(1, dist(g.x, g.y, gx, gy))); }   // 炮塔转过去、炮管仰起、炮管束转起来（vfn.js）
       if (side === 'e' && g.o.kx !== undefined && !g.ship) { g.o.kx = g.o.x; g.o.ky = g.o.y; g.o.seen = S.t; }   // 守方近防炮开火暴露位置
-      if (Math.random() < (CW_PK[best.kind] || .35) * g.k) {
+      const kill = Math.random() < (CW_PK[best.kind] || .35) * g.k;
+      CW_FX.push({ t0: S.t, gx: g.x, gy: g.y, gz: g.ship ? 14 : 4.3, s: { x0: best.fuzzy ? best.fx0 : best.x0, y0: best.fuzzy ? best.fy0 : best.y0, x1: best.x1, y1: best.y1, kind: best.kind }, u, kill, side, vis });
+      if (kill) {
         best.done = true; best.cwKill = true;
-        S.fx.push({ kind: 'flash', x: sx, y: sy, r: 9, life: 0, max: .5, side });
+        S.fx.push({ kind: 'flash', x: sx, y: sy, r: 9, life: 0, max: .5, side, cw: 1 });
         cwStat(side === 'p' ? 'cwP' : 'cwE');
         if (side === 'p') log(`${g.nm}在空中打掉一发来袭${best.kind === 'mortar' ? '迫击炮弹' : '炮弹'}`, 'good', 'cwp', 12, { x: sx, y: sy });
         else if (vis) log(`敌${g.nm}拦截了我方炮弹`, 'warn', 'cwe', 15, { x: sx, y: sy });

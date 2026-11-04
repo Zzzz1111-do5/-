@@ -366,18 +366,17 @@ function eaDrawBases(time) {
   const ctx = R.ctx, spec = specAll();
   for (const b of S.enemies) {
     if (b.kind !== 'airfield' || !inView(b.x, b.y, 820)) continue;
-    const vis = spec || eaBaseSeen(b);
-    if (vis || b.kx != null) eaDrawBase(ctx, b, vis, time);
+    eaDrawBase(ctx, b, spec || eaBaseSeen(b) || b.kx != null, time);   // 场区设施一直画（同 afb3dBases），停着的飞机侦察到才画
   }
   if (S.abBase && inView(S.abBase.x, S.abBase.y, 820)) eaDrawBase(ctx, S.abBase, true, time, true);   // 我方夺取的机场（abn.js）
 }
 function eaDrawBase(ctx, b, vis, time, own) {
   const G = afbGeo(b.rh || 0, b.rs || 1), rl = realLook(), dead = !!b.dead, sc = R.s, d1 = sc >= .62, d2 = sc >= 1.6, d3 = sc >= 2.6;
   const C = typeof greenLook === 'function' && greenLook() ? AFB_CG : AFB_C;   // 黑绿画面：投影、树、道面接缝的明暗差小一点（着色器按亮度差描边）
-  const park = afbParked(b, own);
+  const park = vis || own ? afbParked(b, own) : [];
   ctx.save();
   ctx.translate(b.x, b.y); ctx.rotate(b.rh || 0); ctx.scale(1, b.rs || 1);
-  ctx.globalAlpha = vis ? 1 : .5; ctx.setLineDash([]); ctx.lineJoin = 'round'; ctx.lineCap = 'butt';
+  ctx.globalAlpha = 1; ctx.setLineDash([]); ctx.lineJoin = 'round'; ctx.lineCap = 'butt';
   const F = (k, col) => { const p = G[k]; if (p) { ctx.fillStyle = col; ctx.fill(p); } };
   const L = (k, col, w, dash, cap) => {
     const p = typeof k === 'string' ? G[k] : k;
@@ -452,7 +451,7 @@ function eaDrawBase(ctx, b, vis, time, own) {
   ant(AFD_RAD[0], AFD_RAD[1] - 3, 8, 2.2, .9);
   afbPlanes(ctx, park, false, d1, rl);
   ctx.restore();
-  if (d2 && !dead) afbRwyNum(ctx, b, vis ? 1 : .5, rl);
+  if (d2 && !dead) afbRwyNum(ctx, b, 1, rl);
 }
 // 停放的飞机：机堡里的先画（拱顶盖住后半截，机头伸出门外），停机线与直升机位的后画；整备中的暗、外加进度弧；
 // 写实近看：停机线上整备中的飞机旁边停一辆加油车、机头前一台电源车
@@ -547,8 +546,9 @@ function afb3dBases() {
   if (!S) return [];
   const out = [];
   if (S.enemies && typeof eaOn === 'function' && eaOn()) {
-    const spec = specAll() || (typeof R === 'object' && R.eye === 'all');
-    out.push(...S.enemies.filter(e => e.kind === 'airfield' && !e.dead && (spec || e.kx != null)));
+    // 场区设施（跑道、机库、塔台等）一直画：机场位置在据点上标着、卫星照片也看得到，原来没侦察到时整个不画，地图上只有「野战机场」标签、底下一片空地；
+    //   停着的飞机、防空阵地仍要侦察到才画（v3units.js、afdef.js 各自按视野判断）
+    out.push(...S.enemies.filter(e => e.kind === 'airfield' && !e.dead));
     if (S.abBase && !S.abBase.dead) out.push(S.abBase);
   }
   if (S.afP) out.push(S.afP);   // 进攻方战区机场（afp.js，南缘外）

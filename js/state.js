@@ -17,19 +17,35 @@ const ENEMY_SPEC = {
 };
 const ROLE_NAME = { radio: '通讯兵', rifle: '步枪手', mg: '机枪手', eng: '工兵', aa: '防空导弹手' };
 
+// 据点外围的环形堑壕（用户：要有堑壕给士兵用）：椭圆（rx × ry）一圈 n 个折点、里外交错 1.5 米（之字形，一发炮弹覆盖不了一长段），
+//   落在水里、悬崖、房屋、道路、桥上的折点断开（路口留通道、不挖穿房子）；返回若干条折线，各自进 S.trench
+function trenchRing(x, y, rx, ry, n = 14) {
+  const ok = (px, py) => px > 4 && py > 4 && px < W - 4 && py < H - 4 && passInf(px, py) && ![T.TOWN, T.ROAD, T.BRIDGE, T.CLIFF].includes(typeAt(px, py));
+  const V = Array.from({ length: n }, (_, k) => { const a = k / n * 6.2832, e = k % 2 ? 1.5 : -1.5; return [+(x + Math.cos(a) * (rx + e)).toFixed(1), +(y + Math.sin(a) * (ry + e)).toFixed(1)]; });
+  const good = V.map(([px, py]) => ok(px, py)), out = [];
+  if (good.every(Boolean)) return [[...V, V[0]]];
+  const s0 = good.indexOf(false);
+  let cur = [];
+  for (let j = 1; j <= n; j++) { const k = (s0 + j) % n; if (good[k]) cur.push(V[k]); else { if (cur.length > 1) out.push(cur); cur = []; } }
+  if (cur.length > 1) out.push(cur);
+  return out;
+}
+const trenchAdd = (L, known = false) => { for (const pts of L) S.trench.push({ id: S.nid++, pts, known }); };
+
 // opts.sandbox：只生成地形，不放守军与舰队（沙盒模式自行部署）
 function newGame(seed, level, opts = {}) {
   level = DIFF[level] ? level : 'hard';
   seed = seed || (Math.random() * 1e9) | 0;
   if (!opts.map && !opts.sandbox && MAPGEN.tw) opts = { ...opts, map: 'tw' };   // 战役默认在台湾东海岸打（taiwan.js；商店版没有这张图就照旧）
   const MG = opts.map && MAPGEN[opts.map];   // 另外的地图（各自登记尺寸与生成函数，见 core.js MAPGEN）
-  if (MG) { setWorld(MG.w, MG.h, MG.cell || 10); MG.build(seed); }
-  else { const Wd = typeof modWorld === 'function' ? modWorld() : { w: W0, h: H0, cell: 10 }; setWorld(Wd.w, Wd.h, Wd.cell); setPathRows(GH); buildMap(seed); }   // 战场大小可在编辑器里改（mod.js）
+  const dry = opts.dry ?? (typeof landDesert === 'function' && landDesert());   // 沙漠地图：没有河流、村镇换成兵营（mapgen.js）；开局时定下、记进 S，读档按它重建
+  if (MG) { setWorld(MG.w, MG.h, MG.cell || 10, MG.seaH ?? MG.h); MG.build(seed, dry); }
+  else { const Wd = typeof modWorld === 'function' ? modWorld() : { w: W0, h: H0, cell: 10 }; setWorld(Wd.w, Wd.h, Wd.cell); setPathRows(GH); buildMap(seed, dry); }   // 战场大小可在编辑器里改（mod.js）
   ELEV_H = TER.hz ? TER.hz / CELL : 6;   // 真实地形（台湾东海岸）：视线高度按真实米数换成格
   if (typeof v3SetHz === 'function') v3SetHz(TER.hz || 230);   // 3D 里高程 1.0 是多少米（view3d.js）
   const r = rng(seed ^ 0x5f3759df);
   S = {
-    seed, level, map: MG ? opts.map : 'std', mode: opts.mode || (opts.sandbox ? 'sandbox' : 'pve'), role: opts.role || 'attack', t: 0, paused: true, speed: 1, nid: 1, over: null, briefed: false, holdT: 0, ai: null, phase: 'deploy', units: [], craters: [], pings: [],
+    seed, level, dry, map: MG ? opts.map : 'std', mode: opts.mode || (opts.sandbox ? 'sandbox' : 'pve'), role: opts.role || 'attack', t: 0, paused: true, speed: 1, nid: 1, over: null, briefed: false, holdT: 0, ai: null, phase: 'deploy', units: [], craters: [], pings: [],
     ships: [], teams: [], enemies: [], planes: [], shells: [], tracers: [], fx: [], smoke: [],
     mines: [], wire: [], obst: [], trench: [], supply: [], rlines: [], boats: [], recon: [], log: [],
     groups: { 1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [], 8: [], 9: [] }, sel: [],
@@ -122,8 +138,9 @@ function deployDefenses(r, D) {
     const p = S.points.find(p => p.key === k);
     if (p) S.mines.push({ id: S.nid++, x: p.x + (r() - .5) * 60, y: p.y + 55, r: 24, known: false, clr: 0 });
   }
-  // 据点守备队
+  // 据点守备队（内陆据点外围挖一圈环形堑壕，守备队就站在壕上：q.inTrench；滩头出口后面已有滩头堑壕）
   for (const p of S.points) {
+    if (!/^E\d/.test(p.key)) trenchAdd(trenchRing(p.x, p.y, 25, 20));
     const n = Math.max(1, ({ 1: 1, 2: 2, 3: 4 })[p.vp] + D.garrison), ug = addUnit('e', 'inf', { role: 'garrison', obj: p.key });
     for (let k = 0; k < n; k++) {
       const a = k / n * 6.28 + r(), x = p.x + Math.cos(a) * 25, y = p.y + Math.sin(a) * 20;

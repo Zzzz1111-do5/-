@@ -93,6 +93,7 @@ function vfnElWant(v, F, z, gz) {
     const p = (S.planes || []).find(o => o.id === v.aaId) || (S.eair && S.eair.fly || []).find(o => o.id === v.aaId);
     if (p && typeof v3AirZ === 'function') return Math.max(lo, Math.min(hi, Math.atan2(v3AirZ(p) - z - gz, Math.max(1, Math.hypot(p.x - v.x, p.y - v.y)))));
   }
+  if (v.cwAt != null && S.t - v.cwAt < 1) return Math.max(lo, Math.min(hi, v.cwEl || 0));   // 近防炮拦截空中来袭弹（ciws.js 记的仰角）
   if (!tg) return 0;
   const tx = tg.t ? tg.t.x : tg.x, ty = tg.t ? tg.t.y : tg.y, d = Math.max(1, Math.hypot(tx - v.x, ty - v.y));
   if (g && g.ind && tg === v.tg) return Math.max(lo, Math.min(hi, .5 * Math.asin(Math.min(1, d / (g.range * 1.05))) + 4 * D2R));

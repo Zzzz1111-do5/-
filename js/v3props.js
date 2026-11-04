@@ -34,7 +34,8 @@ const V3P_PACKS = {
   palms: { name: '棕榈树', title: 'Palm Trees', author: 'YadroGames', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/palm-trees-55690379305145488e20afb05fc687e6' },
   rocks3: { name: '岩石', title: 'Rocks Set 3', author: 'DJMaesen', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/rocks-set-3-9a160330d1c14268948248f387889b35' },
   sky: { name: '天空', title: 'Kloofendal 48d Partly Cloudy (Pure Sky)', author: 'Greg Zaal / Poly Haven', license: 'CC0', url: 'https://polyhaven.com/a/kloofendal_48d_partly_cloudy_puresky' },
-  terrain: { name: '地表贴图', title: 'Grass004、Ground037、Rock060、Ground054', author: 'ambientCG', license: 'CC0', url: 'https://ambientcg.com/' },
+  terrain: { name: '地表贴图', title: 'Grass004、Ground037、Rock060', author: 'ambientCG', license: 'CC0', url: 'https://ambientcg.com/' },
+  sand: { name: '沙地贴图', title: 'Sand at Sunset Beach', author: 'Terrie Simmons-Ehrhardt', license: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/sand-at-sunset-beach-1ac0847acae44ffe9c3783be28e82bcf' },
   water: { name: '水面法线', title: 'waternormals.jpg（three.js 示例）', author: 'three.js authors', license: 'MIT', url: 'https://github.com/mrdoob/three.js/blob/dev/examples/textures/waternormals.jpg' }
 };
 // 树种：针叶（山地、高处多）、阔叶（桦、落叶松）；h：模型原高（米，载入后按包围盒取）
@@ -406,7 +407,7 @@ function v3pStatic(vOf) {
     const k = typeof PKIND === 'function' ? PKIND(p.key) : null, L = V3_PTHOUSE[k];
     if (!L) continue;
     for (const [hx, hy, w, h, , roof] of L) {
-      const cx = p.x + hx, cy = p.y + hy, opts = roof ? hv : fv;
+      const cx = p.x + hx, cy = p.y + hy, opts = roof && !TER.dry ? hv : fv;   // 沙漠：一律平顶水泥房，不摆坡顶民房
       let best = null;
       for (const [v, rot] of opts) for (const q of [0, 1]) {   // 两个朝向：模型长边对着占地长边
         const bb = V3P.VL[v].V.bb, rq = (Math.abs(Math.sin(rot)) > .5) !== !!q, mw = rq ? bb[1][1] - bb[0][1] : bb[1][0] - bb[0][0], mh = rq ? bb[1][0] - bb[0][0] : bb[1][1] - bb[0][1];
