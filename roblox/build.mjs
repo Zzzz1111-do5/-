@@ -16,15 +16,21 @@ const item = (cls, name, props = '', kids = []) =>
   `<Item class="${cls}" referent="${ref()}">\n<Properties>\n<string name="Name">${esc(name)}</string>\n${props}</Properties>\n${kids.join('')}</Item>\n`;
 const script = (cls, name, file, kids = []) => item(cls, name, `<ProtectedString name="Source">${cdata(read(file))}</ProtectedString>\n`, kids);
 
+// 一个脚本 + 同目录下其它 .lua 当它的子模块（init.server.lua / init.client.lua 是脚本本身）
+const withModules = (cls, name, dir, initFile) => {
+  const kids = fs.readdirSync(path.join(path.dirname(fileURLToPath(import.meta.url)), 'src', dir)).filter(f => f.endsWith('.lua') && f !== initFile).sort()
+    .map(f => script('ModuleScript', f.replace(/\.lua$/, ''), dir + '/' + f));
+  return script(cls, name, dir + '/' + initFile, kids);
+};
+
 const xml = '<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">\n' +
   '<Meta name="ExplicitAutoJoints">true</Meta>\n<External>null</External>\n<External>nil</External>\n' +
-  // 关掉流式加载：客户端要找到自己基地和战场的零件（布阵点选、射线）
+  // 关掉流式加载：客户端要找到自己基地和战场的零件（布阵点选、射线、部队平滑显示）
   item('Workspace', 'Workspace', '<bool name="StreamingEnabled">false</bool>\n') +
-  item('ReplicatedStorage', 'ReplicatedStorage', '', [script('ModuleScript', 'Config', 'Config.lua')]) +
-  item('ServerScriptService', 'ServerScriptService', '', [
-    script('Script', 'Main', 'Main/init.server.lua', [script('ModuleScript', 'Models', 'Main/Models.lua'), script('ModuleScript', 'Battle', 'Main/Battle.lua')]),
-  ]) +
-  item('StarterPlayer', 'StarterPlayer', '', [item('StarterPlayerScripts', 'StarterPlayerScripts', '', [script('LocalScript', 'Client', 'Client.client.lua')])]) +
+  // UnitModels：导入的原模型可以放这里（放在 Workspace 里也认）
+  item('ReplicatedStorage', 'ReplicatedStorage', '', [script('ModuleScript', 'Config', 'Config.lua'), item('Folder', 'UnitModels')]) +
+  item('ServerScriptService', 'ServerScriptService', '', [withModules('Script', 'Main', 'Main', 'init.server.lua')]) +
+  item('StarterPlayer', 'StarterPlayer', '', [item('StarterPlayerScripts', 'StarterPlayerScripts', '', [withModules('LocalScript', 'Client', 'Client', 'init.client.lua')])]) +
   '</roblox>\n';
 
 const out = path.join(dir, 'MilitaryTycoon.rbxlx');

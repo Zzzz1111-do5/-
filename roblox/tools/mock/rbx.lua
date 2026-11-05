@@ -283,6 +283,19 @@ function CFrame.lookAt(at, target, up)
   return setmetatable({ p = at, m = { r._x, u._x, -f._x, r._y, u._y, -f._y, r._z, u._z, -f._z } }, CF)
 end
 CFrame.identity = cf(0, 0, 0)
+function CFrame.fromMatrix(pos, vx, vy, vz)
+  if not (isV3(pos) and isV3(vx) and isV3(vy)) then error("CFrame.fromMatrix 参数要 Vector3", 2) end
+  vz = vz or vx:Cross(vy)
+  return setmetatable({ p = pos, m = { vx._x, vy._x, vz._x, vx._y, vy._y, vz._y, vx._z, vy._z, vz._z } }, CF)
+end
+function CFrame.fromAxisAngle(axis, a)
+  if not isV3(axis) or type(a) ~= "number" then error("CFrame.fromAxisAngle(Vector3, 数字)", 2) end
+  local u = axis.Unit
+  local x, y, z = u._x, u._y, u._z
+  local c, s, t = math.cos(a), math.sin(a), 1 - math.cos(a)
+  return setmetatable({ p = v3(0, 0, 0), m = { t * x * x + c, t * x * y - s * z, t * x * z + s * y, t * x * y + s * z, t * y * y + c, t * y * z - s * x,
+    t * x * z - s * y, t * y * z + s * x, t * z * z + c } }, CF)
+end
 
 -- 枚举：只认白名单里的名字（写错了就报错）
 local ENUMS = {
@@ -304,12 +317,13 @@ local ENUMS = {
   HighlightDepthMode = "AlwaysOnTop Occluded",
   UserInputType = "MouseButton1 MouseButton2 MouseButton3 MouseWheel MouseMovement Touch Keyboard Focus Accelerometer Gyro Gamepad1 TextInput InputMethod None",
   UserInputState = "Begin Change End Cancel None",
-  KeyCode = "Unknown A B C D E F G H I J K L M N O P Q R S T U V W X Y Z Up Down Left Right Escape Space Return Tab LeftShift RightShift LeftControl One Two Three Four Five",
+  KeyCode = "Unknown A B C D E F G H I J K L M N O P Q R S T U V W X Y Z Up Down Left Right Escape Space Return Tab LeftShift RightShift LeftControl RightControl One Two Three Four Five",
   MouseBehavior = "Default LockCenter LockCurrentPosition",
   CameraType = "Fixed Attach Watch Track Follow Custom Scriptable Orbital",
   RaycastFilterType = "Exclude Include Blacklist Whitelist",
   NormalId = "Right Top Back Left Bottom Front",
   ProximityPromptStyle = "Default Custom",
+  SurfaceGuiSizingMode = "FixedSize PixelsPerStud",
 }
 local Enum = {}
 for ename, list in pairs(ENUMS) do
@@ -450,6 +464,7 @@ local function setParent(o, p)
     a = rawget(a, "_parent")
   end
   local old = rawget(o, "_parent")
+  if old == p then return end
   if old then
     for i, k in ipairs(old._kids) do
       if k == o then table.remove(old._kids, i) break end
@@ -457,10 +472,29 @@ local function setParent(o, p)
   end
   rawset(o, "_parent", p)
   if p then table.insert(p._kids, o) end
+  if old and old._ev.ChildRemoved then old._ev.ChildRemoved:Fire(o) end
+  if p and p._ev.ChildAdded then p._ev.ChildAdded:Fire(o) end
+  if o._ev.AncestryChanged then o._ev.AncestryChanged:Fire(o, p) end
 end
+
+local function partCF(o)
+  if not o._p.Anchored then
+    for _, c in ipairs(o._kids) do
+      if (c._cls == "Weld" or c._cls == "Motor6D") and c._p.Part1 == o and c._p.Part0 and c._p.Part0 ~= o then
+        local J = c._p
+        local t = J.C0 or CFrame.new()
+        if J.Transform then t = t * J.Transform end
+        return partCF(J.Part0) * t * (J.C1 or CFrame.new()):Inverse()
+      end
+    end
+  end
+  return o._p.CFrame or CFrame.new()
+end
+R.partCF = partCF
 
 INST.__index = function(o, k)
   if k == "Parent" then return rawget(o, "_parent") end
+  if k == "CFrame" and isA(o._cls, "BasePart") then return partCF(o) end
   if k == "ClassName" then return o._cls end
   if k == "Name" then return o._p.Name end
   local spec = lookup(o._cls, "props", k)
@@ -505,6 +539,22 @@ INST.__newindex = function(o, k, v)
   if not spec[1](v) then
     error("给 " .. o._cls .. "." .. k .. " 赋了不对的类型：" .. typeof(v) .. "（" .. tostring(v) .. "）", 2)
   end
+  if o._cls == "Humanoid" and k == "Health" then
+    local max = o._p.MaxHealth or 100
+    v = math.min(v, max)
+    local was = o._p.Health or 100
+    o._p.Health = v
+    if v <= 0 and was > 0 and not rawget(o, "_died") then
+      rawset(o, "_died", true)
+      o.Died:Fire()
+    end
+    return
+  end
+  if o._cls == "Humanoid" and k == "MaxHealth" then
+    o._p.MaxHealth = v
+    if (o._p.Health or 100) > v then o._p.Health = v end
+    return
+  end
   o._p[k] = v
   if o._cls == "Part" and k == "Shape" and v.Name == "Ball" then
     local s = o._p.Size or v3(4, 1.2, 2)
@@ -533,6 +583,34 @@ function base.Destroy(o)
     for _, c in ipairs(s.conns) do c.on = false end
   end
   for _, set in pairs(tags) do set[o] = nil end
+end
+local CLONE_SKIP = { Player = true, Backpack = true, PlayerGui = true }
+function base.Clone(o)
+  if o._p.Archivable == false or CLONE_SKIP[o._cls] then return nil end
+  local map = {}
+  local function copy(src)
+    local c = make(src._cls)
+    map[src] = c
+    for k, v in pairs(src._p) do c._p[k] = v end
+    for k, v in pairs(src._attr) do c._attr[k] = v end
+    for _, set in pairs(tags) do
+      if set[src] then set[c] = true end
+    end
+    for _, kid in ipairs(src._kids) do
+      local kc = copy(kid)
+      rawset(kc, "_parent", c)
+      table.insert(c._kids, kc)
+    end
+    return c
+  end
+  local c = copy(o)
+  for src, dst in pairs(map) do
+    local _ = src
+    for k, v in pairs(dst._p) do
+      if typeof(v) == "Instance" and map[v] then dst._p[k] = map[v] end
+    end
+  end
+  return c
 end
 function base.ClearAllChildren(o)
   for _, c in ipairs({ unpack(o._kids) }) do base.Destroy(c) end
@@ -623,7 +701,7 @@ function base.GetFullName(o)
   end
   return table.concat(names, ".")
 end
-def("Instance", nil, { Archivable = { T.bool, true } }, { methods = base, noCreate = true })
+def("Instance", nil, { Archivable = { T.bool, true } }, { methods = base, noCreate = true, events = { ChildAdded = true, ChildRemoved = true, AncestryChanged = true, Destroying = true } })
 
 -- 物体
 local pv = {}
@@ -649,7 +727,8 @@ def("BasePart", "PVInstance", {
   Material = { E("Material"), Enum.Material.Plastic }, Transparency = { T.number, 0 }, Reflectance = { T.number, 0 },
   TopSurface = { E("SurfaceType"), Enum.SurfaceType.Smooth }, BottomSurface = { E("SurfaceType"), Enum.SurfaceType.Smooth },
   Orientation = { T.Vector3, v3() },
-}, { events = { Touched = true, TouchEnded = true }, ro = { Position = function(o) return (o._p.CFrame or CFrame.new()).Position end }, noCreate = true })
+  LocalTransparencyModifier = { T.number, 0 },
+}, { events = { Touched = true, TouchEnded = true }, ro = { Position = function(o) return partCF(o).Position end }, noCreate = true })
 def("Part", "BasePart", { Shape = { E("PartType"), Enum.PartType.Block } })
 def("Terrain", "BasePart", {}, { noCreate = true, methods = {
   FillBlock = function(_, c, size, mat)
@@ -657,6 +736,21 @@ def("Terrain", "BasePart", {}, { noCreate = true, methods = {
     if size._x > 2048 * 4 or size._z > 2048 * 4 then error("FillBlock 区域太大", 2) end
   end,
 } })
+def("MeshPart", "BasePart", { TextureID = { T.string, "" }, MeshId = { T.string, "" }, DoubleSided = { T.bool, false } })
+def("SurfaceAppearance", "Instance", {})
+def("Attachment", "Instance", { Position = { T.Vector3, v3() }, CFrame = { T.CFrame, CFrame.new() } }, { ro = {
+  WorldPosition = function(o)
+    local p = rawget(o, "_parent")
+    local pos = o._p.Position or v3()
+    if p and isA(p._cls, "BasePart") then return partCF(p) * pos end
+    return pos
+  end,
+} })
+def("Decal", "Instance", { Transparency = { T.number, 0 }, Texture = { T.string, "" } })
+def("Tool", "Model", { RequiresHandle = { T.bool, true }, CanBeDropped = { T.bool, true }, ToolTip = { T.string, "" }, Grip = { T.CFrame, CFrame.new() }, Enabled = { T.bool, true } },
+  { events = { Activated = true, Deactivated = true, Equipped = true, Unequipped = true } })
+def("Backpack", "Instance", {}, { noCreate = true })
+def("StringValue", "Instance", { Value = { T.string, "" } })
 def("Model", "PVInstance", { PrimaryPart = { function(v) return v == nil or (typeof(v) == "Instance" and isA(v._cls, "BasePart")) end, nil }, WorldPivot = { T.CFrame, CFrame.new() } })
 def("Folder", "Instance", {})
 def("JointInstance", "Instance", {
@@ -670,6 +764,10 @@ def("Motor6D", "JointInstance", { Transform = { T.CFrame, CFrame.new() }, MaxVel
 -- 界面
 def("LayerCollector", "Instance", { Enabled = { T.bool, true }, ResetOnSpawn = { T.bool, true }, ZIndexBehavior = { E("ZIndexBehavior"), Enum.ZIndexBehavior.Global } }, { noCreate = true })
 def("ScreenGui", "LayerCollector", { IgnoreGuiInset = { T.bool, false }, DisplayOrder = { T.number, 0 } })
+def("SurfaceGui", "LayerCollector", {
+  Face = { E("NormalId"), Enum.NormalId.Front }, SizingMode = { E("SurfaceGuiSizingMode"), Enum.SurfaceGuiSizingMode.FixedSize }, PixelsPerStud = { T.number, 50 },
+  LightInfluence = { T.number, 1 }, Adornee = { T.Instance, nil }, AlwaysOnTop = { T.bool, false }, CanvasSize = { T.Vector2, newV2(800, 600) },
+})
 def("BillboardGui", "LayerCollector", {
   Size = { T.UDim2, newUDim2(0, 0, 0, 0) }, StudsOffset = { T.Vector3, v3() }, StudsOffsetWorldSpace = { T.Vector3, v3() }, ExtentsOffset = { T.Vector3, v3() },
   AlwaysOnTop = { T.bool, false }, LightInfluence = { T.number, 1 }, MaxDistance = { T.number, math.huge }, Brightness = { T.number, 1 }, Adornee = { T.Instance, nil },
@@ -682,6 +780,7 @@ local guiObj = {
 }
 def("GuiObject", "Instance", guiObj, { noCreate = true })
 def("Frame", "GuiObject", {})
+def("ScrollingFrame", "GuiObject", { CanvasSize = { T.UDim2, newUDim2(0, 0, 0, 0) }, ScrollBarThickness = { T.number, 12 }, CanvasPosition = { T.Vector2, newV2(0, 0) } })
 local textProps = {
   Text = { T.string, "Label" }, TextColor3 = { T.Color3, newC3(0, 0, 0) }, TextSize = { T.number, 14 }, Font = { E("Font"), Enum.Font.Legacy },
   TextScaled = { T.bool, false }, TextWrapped = { T.bool, false }, TextXAlignment = { E("TextXAlignment"), Enum.TextXAlignment.Center },
@@ -693,7 +792,7 @@ local tb = {}
 for k, v in pairs(textProps) do tb[k] = v end
 tb.AutoButtonColor = { T.bool, true }
 tb.Modal = { T.bool, false }
-def("TextButton", "GuiObject", tb, { events = { Activated = true, MouseButton1Click = true } })
+def("TextButton", "GuiObject", tb, { events = { Activated = true, MouseButton1Click = true, MouseButton1Down = true, MouseButton1Up = true } })
 def("UICorner", "Instance", { CornerRadius = { T.UDim, newUDim(0, 8) } })
 def("UIStroke", "Instance", { Color = { T.Color3, newC3(0, 0, 0) }, Thickness = { T.number, 1 }, Transparency = { T.number, 0 }, ApplyStrokeMode = { E("ApplyStrokeMode"), Enum.ApplyStrokeMode.Contextual } })
 def("UIListLayout", "Instance", {
@@ -707,6 +806,7 @@ def("UIScale", "Instance", { Scale = { T.number, 1 } })
 def("ProximityPrompt", "Instance", {
   ActionText = { T.string, "Interact" }, ObjectText = { T.string, "" }, HoldDuration = { T.number, 0 }, MaxActivationDistance = { T.number, 10 },
   RequiresLineOfSight = { T.bool, true }, KeyboardKeyCode = { E("KeyCode"), Enum.KeyCode.E }, Enabled = { T.bool, true }, Style = { E("ProximityPromptStyle"), Enum.ProximityPromptStyle.Default },
+  UIOffset = { T.Vector2, newV2(0, 0) },
 }, { events = { Triggered = true, TriggerEnded = true } })
 def("Smoke", "Instance", { Color = { T.Color3, newC3(1, 1, 1) }, Opacity = { T.number, 0.5 }, RiseVelocity = { T.number, 1 }, Size = { T.number, 1 }, Enabled = { T.bool, true } })
 def("Fire", "Instance", { Color = { T.Color3, newC3(1, 0.5, 0) }, SecondaryColor = { T.Color3, newC3(1, 0, 0) }, Heat = { T.number, 9 }, Size = { T.number, 5 }, Enabled = { T.bool, true } })
@@ -718,7 +818,12 @@ def("Highlight", "Instance", {
 def("Atmosphere", "Instance", { Density = { T.number, 0.3 }, Offset = { T.number, 0 }, Haze = { T.number, 0 }, Glare = { T.number, 0 }, Color = { T.Color3, newC3(0.78, 0.78, 0.78) }, Decay = { T.Color3, newC3(0.42, 0.44, 0.49) } })
 def("IntValue", "Instance", { Value = { function(v) return type(v) == "number" and v == math.floor(v) end, 0 } })
 def("Sound", "Instance", { SoundId = { T.string, "" }, Volume = { T.number, 0.5 }, RollOffMaxDistance = { T.number, 10000 }, Looped = { T.bool, false }, PlaybackSpeed = { T.number, 1 } }, { methods = { Play = function() end, Stop = function() end } })
-def("Humanoid", "Instance", { Health = { T.number, 100 }, MaxHealth = { T.number, 100 }, WalkSpeed = { T.number, 16 } }, { events = { Died = true } })
+def("Humanoid", "Instance", { Health = { T.number, 100 }, MaxHealth = { T.number, 100 }, WalkSpeed = { T.number, 16 } }, { events = { Died = true, HealthChanged = true }, methods = {
+  TakeDamage = function(o, n)
+    if type(n) ~= "number" then error("TakeDamage 要数字", 2) end
+    o.Health = math.max(0, (o._p.Health or 100) - n)
+  end,
+} })
 def("LuaSourceContainer", "Instance", { Source = { T.string, "" } }, { noCreate = true })
 def("ModuleScript", "LuaSourceContainer", {})
 def("Script", "LuaSourceContainer", { Disabled = { T.bool, false } })
@@ -750,6 +855,8 @@ def("RemoteEvent", "Instance", {}, { events = { OnServerEvent = true, OnClientEv
     if side() ~= "client" then error("FireServer 只能在客户端调用", 2) end
     local args = ser({ ... }, {}, o._p.Name, false)
     local pl = R.localPlayer
+    R.up = R.up or {}
+    table.insert(R.up, { name = o._p.Name, args = args })
     task.defer(function() o.OnServerEvent:Fire(pl, unpack(args)) end)
   end,
   FireClient = function(o, pl, ...)
@@ -823,6 +930,7 @@ local ws = service("Workspace", { StreamingEnabled = { T.bool, false }, Gravity 
     if params ~= nil and typeof(params) ~= "RaycastParams" then error("Raycast 第三个参数要 RaycastParams", 2) end
     local hit = R.nextRay
     R.nextRay = nil
+    if not hit then return R.castRay(origin, dir, params) end
     if hit and params and params.FilterType == Enum.RaycastFilterType.Include then
       local ok = false
       for _, inst in ipairs(params.FilterDescendantsInstances) do
@@ -833,15 +941,69 @@ local ws = service("Workspace", { StreamingEnabled = { T.bool, false }, Gravity 
     return hit
   end,
 } })
+local function underAny(o, list)
+  for _, inst in ipairs(list) do
+    if o == inst or base.IsDescendantOf(o, inst) then return true end
+  end
+  return false
+end
+function R.castRay(origin, dir, params)
+  local len = dir.Magnitude
+  if len < 1e-9 then return nil end
+  local d = dir / len
+  local best, bt, bp = nil, len, nil
+  local inc = params and params.FilterType == Enum.RaycastFilterType.Include
+  local list = params and params.FilterDescendantsInstances or {}
+  for _, o in ipairs(descendants(ws, {})) do
+    if isA(o._cls, "BasePart") and o._cls ~= "Terrain" and o._p.CanQuery ~= false and not (o._p.Transparency == 1 and o._p.CanCollide == false and o._p.Name ~= "Root") then
+      local ok = true
+      if params then
+        local u = underAny(o, list)
+        if inc then ok = u else ok = not u end
+      end
+      if ok then
+        local cfp = partCF(o)
+        local inv = CFm.Inverse(cfp)
+        local lo = inv * origin
+        local ld = mvec(inv.m, d)
+        local h = (o._p.Size or v3(4, 1.2, 2)) / 2
+        local t0, t1 = -math.huge, math.huge
+        local hit = true
+        for _, ax in ipairs({ { lo._x, ld._x, h._x }, { lo._y, ld._y, h._y }, { lo._z, ld._z, h._z } }) do
+          local p0, dd, hh = ax[1], ax[2], ax[3]
+          if math.abs(dd) < 1e-12 then
+            if p0 < -hh or p0 > hh then hit = false end
+          else
+            local a, b = (-hh - p0) / dd, (hh - p0) / dd
+            if a > b then a, b = b, a end
+            t0, t1 = math.max(t0, a), math.min(t1, b)
+          end
+        end
+        if hit and t1 >= math.max(t0, 0) then
+          local t = math.max(t0, 0)
+          if t < bt then best, bt, bp = o, t, origin + d * t end
+        end
+      end
+    end
+  end
+  if d._y < -1e-6 and not inc then   -- 地形：y = 0 的平面
+    local t = -origin._y / d._y
+    if t >= 0 and t < bt then best, bt, bp = R.terrain, t, origin + d * t end
+  end
+  if not best then return nil end
+  return { Instance = best, Position = bp, Normal = v3(0, 1, 0), Distance = bt }
+end
 camera.Parent = ws
 ws.CurrentCamera = camera
 local terrain = make("Terrain")
 terrain._p.Name = "Terrain"
 terrain.Parent = ws
+R.terrain = terrain
 R.services.Workspace = ws
 R.workspace = ws
 
 R.services.ReplicatedStorage = service("ReplicatedStorage", {})
+R.services.ServerStorage = service("ServerStorage", {})
 R.services.ServerScriptService = service("ServerScriptService", {})
 R.services.Lighting = service("Lighting", {
   ClockTime = { T.number, 14 }, Brightness = { T.number, 2 }, GlobalShadows = { T.bool, true }, OutdoorAmbient = { T.Color3, newC3(0.5, 0.5, 0.5) },
@@ -918,7 +1080,47 @@ R.services.DataStoreService = service("DataStoreService", {}, { methods = { GetD
     R.store[name .. "/" .. key] = ser(value, {}, key, true)
     R.saves = (R.saves or 0) + 1
   end
+  function ds.UpdateAsync(self, key, f)
+    if self ~= ds then error("UpdateAsync 要用冒号调用", 2) end
+    task.wait(0.1)
+    if R.dsFail then error("模拟：DataStore 不可用") end
+    local k = name .. "/" .. key
+    local new = f(R.store[k] ~= nil and ser(R.store[k], {}, key, true) or nil)
+    if new ~= nil then R.store[k] = ser(new, {}, key, true) end
+    return new
+  end
   return ds
+end, GetOrderedDataStore = function(_, name)
+  if side() ~= "server" then error("DataStore 只能在服务器用", 2) end
+  R.ordered = R.ordered or {}
+  R.ordered[name] = R.ordered[name] or {}
+  local T = R.ordered[name]
+  local ods = {}
+  function ods.SetAsync(self, key, v)
+    if self ~= ods then error("SetAsync 要用冒号调用", 2) end
+    if type(v) ~= "number" or v ~= math.floor(v) then error("有序存档只能存整数", 2) end
+    task.wait(0.05)
+    if R.dsFail then error("模拟：DataStore 不可用") end
+    T[key] = v
+  end
+  function ods.GetAsync(self, key)
+    task.wait(0.05)
+    return T[key]
+  end
+  function ods.GetSortedAsync(self, asc, size, lo, hi)
+    if self ~= ods then error("GetSortedAsync 要用冒号调用", 2) end
+    if type(asc) ~= "boolean" or type(size) ~= "number" or size > 100 then error("GetSortedAsync(是否升序, 每页数量 ≤ 100, 最小, 最大)", 2) end
+    task.wait(0.05)
+    if R.dsFail then error("模拟：DataStore 不可用") end
+    local list = {}
+    for k, v in pairs(T) do
+      if (lo == nil or v >= lo) and (hi == nil or v <= hi) then table.insert(list, { key = k, value = v }) end
+    end
+    table.sort(list, function(a, b) if asc then return a.value < b.value end return a.value > b.value end)
+    while #list > size do table.remove(list) end
+    return { GetCurrentPage = function() return list end, IsFinished = true }
+  end
+  return ods
 end } })
 
 -- 玩家
@@ -930,6 +1132,16 @@ R.services.Players = service("Players", { CharacterAutoLoads = { T.bool, true } 
       local out = {}
       for _, c in ipairs(o._kids) do if c._cls == "Player" then out[#out + 1] = c end end
       return out
+    end,
+    GetPlayerByUserId = function(o, id)
+      for _, c in ipairs(o._kids) do
+        if c._cls == "Player" and c._uid == id then return c end
+      end
+      return nil
+    end,
+    GetNameFromUserIdAsync = function(_, id)
+      task.wait(0.05)
+      return "Name" .. tostring(id)
     end,
     GetPlayerFromCharacter = function(o, char)
       for _, c in ipairs(o._kids) do
@@ -950,14 +1162,27 @@ def("Player", "Instance", { Character = { T.Instance, nil } }, { noCreate = true
     local hrp = make("Part")
     hrp._p.Name = "HumanoidRootPart"
     hrp.Parent = ch
+    local head = make("Part")
+    head._p.Name = "Head"
+    head._p.Size = v3(1, 1, 1)
+    head.Parent = ch
     local hum = make("Humanoid")
     hum.Parent = ch
     ch.PrimaryPart = hrp
+    hrp._p.CFrame = CFrame.new(0, 5, 0)
+    head._p.CFrame = CFrame.new(0, 6.5, 0)
     ch.Parent = ws
+    local bp = base.FindFirstChild(o, "Backpack")
+    if bp then base.ClearAllChildren(bp) end
     o._p.Character = ch
     o.CharacterAdded:Fire(ch)
   end,
   Kick = function(o, msg) rawset(o, "_kicked", msg or "") end,
+  GetMouse = function(o)
+    if side() ~= "client" then error("GetMouse 只能在客户端用", 2) end
+    R.mouse = R.mouse or { Hit = CFrame.new(0, 0, -100), TargetFilter = nil }
+    return R.mouse
+  end,
 } })
 def("PlayerGui", "Instance", {}, { noCreate = true })
 def("PlayerScripts", "Instance", {}, { noCreate = true })
@@ -969,13 +1194,16 @@ function R.addPlayer(name, uid)
   local pg = make("PlayerGui")
   pg._p.Name = "PlayerGui"
   pg.Parent = pl
+  local bp = make("Backpack")
+  bp._p.Name = "Backpack"
+  bp.Parent = pl
   local ps = make("PlayerScripts")
   ps._p.Name = "PlayerScripts"
   ps.Parent = pl
   -- 默认的 PlayerModule（GetControls 返回能 Enable / Disable 的东西）
   local pm = make("ModuleScript")
   pm._p.Name = "PlayerModule"
-  pm.Source = "return { GetControls = function(self) return { Enable = function() end, Disable = function() end } end }"
+  pm.Source = "return { GetControls = function(self) return { Enable = function() end, Disable = function() end, GetMoveVector = function() return MOCK_MOVE() end } end }"
   pm.Parent = ps
   pl.Parent = R.services.Players
   return pl
@@ -1021,6 +1249,7 @@ local function envFor(scriptInst, sd)
     task = task, math = luauMath(), string = string, table = table, os = { time = function() return R.osTime or os.time() end, clock = function() return clock end },
     pairs = pairs, ipairs = ipairs, next = next, select = select, type = type, typeof = typeof, tostring = tostring, tonumber = tonumber,
     print = function(...) if R.verbose then print(...) end end,
+    PROBE_SET = function(v) R.lastProbe = v end,
     warn = function(...)
       local parts = {}
       for i = 1, select("#", ...) do parts[#parts + 1] = tostring(select(i, ...)) end
@@ -1028,11 +1257,12 @@ local function envFor(scriptInst, sd)
     end,
     error = error, assert = assert, pcall = pcall, xpcall = xpcall, setmetatable = setmetatable, getmetatable = getmetatable,
     rawget = rawget, rawset = rawset, rawequal = rawequal, unpack = table.unpack,
+    MOCK_MOVE = function() R.moveCalls = (R.moveCalls or 0) + 1 return R.moveVec or v3(0, 0, 0) end,
   }
   env.require = function(ms)
     if typeof(ms) ~= "Instance" or ms._cls ~= "ModuleScript" then error("require 要 ModuleScript，实际 " .. typeof(ms), 2) end
     if modules[ms] == nil then
-      local f, err = load(ms.Source, "@" .. (ms._path or ms._p.Name), "t", envFor(ms, sd))
+      local f, err = load(ms.Source, "@" .. (rawget(ms, "_path") or ms._p.Name), "t", envFor(ms, sd))
       if not f then error("模块编译失败：" .. err, 2) end
       local r = f()
       if r == nil then error("模块没有返回值：" .. ms._p.Name, 2) end
@@ -1060,7 +1290,7 @@ end
 function R.require(ms) return envFor(ms, "server").require(ms) end
 
 function R.runScript(s, sd)
-  local f, err = load(s.Source, "@" .. (s._path or s._p.Name), "t", envFor(s, sd))
+  local f, err = load(s.Source, "@" .. (rawget(s, "_path") or s._p.Name), "t", envFor(s, sd))
   if not f then
     report("编译失败：" .. err)
     return

@@ -1,0 +1,9 @@
+军事大亨用到的 3D 模型（从网页版《暗剑》的模型转换，几何、贴图未改，只缩小了贴图、用了简化网格）
+
+步兵（soldier.glb）：士兵，作者 MirzaArrafiERV_45，CC-BY-4.0 https://sketchfab.com/3d-models/army-character-2-e3c4da4a33bb42ed8512f423a4319c5a
+步兵战车（ifv.glb）：M2A3 布雷德利步兵战车，作者 42manako，CC-BY-4.0 https://sketchfab.com/3d-models/m2-bradley-ifv-ab022158ab5f4fbfa55d4142db7595ab
+主战坦克（tank.glb）：M1A1 艾布拉姆斯，作者 MirzaArrafiERV_45，CC-BY-4.0 https://sketchfab.com/3d-models/m1a1-abrams-main-battle-tank-1529f5d842cb4f578aa8cb672524f044
+防空车（aa.glb）：M163 火神自行高炮，作者 42manako，CC-BY-4.0 https://sketchfab.com/3d-models/m163-vads-66a6f08ad2d945ccb6e72267e55bc685
+自行火炮（arty.glb）：M109A7 帕拉丁自行榴弹炮，作者 Muhamad Mirza Arrafi，CC-BY-4.0 https://sketchfab.com/3d-models/m109-paladin-artillery-3de0572475d54f7b9da18d6ed26b4a10
+火箭炮（mlrs.glb）：M270 多管火箭炮，作者 Mr. Penguin，CC-BY-4.0 https://sketchfab.com/3d-models/free-m270-fc879301999a4cd0a09721b51affba9b
+武装直升机（heli.glb）：AH-64D 阿帕奇，作者 Muhamad Mirza Arrafi，CC-BY-4.0 https://sketchfab.com/3d-models/boeing-ah-64d-apache-combat-helicopter-c3b58008c46b45048fdd7dd283a3c8c8

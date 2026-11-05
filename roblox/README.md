@@ -1,59 +1,79 @@
-# 军事大亨（Roblox 版）
+# 军事大亨（Roblox 版）0.2
 
-和网页版《暗剑》是两个独立的项目：这里是 Roblox 上的大亨游戏，网页版没有任何改动。
+和网页版《暗剑》是两个独立的项目：这里是 Roblox 上的大亨 + 战斗游戏，网页版没有任何改动。
 
-**玩法**：每个玩家分到一块基地 → 踩发光的按钮盖居民楼、工厂、银行，每秒自动赚钱 → 盖兵营、坦克工厂、防空车间、炮兵阵地、直升机场，花钱生产部队（部队从工厂开出来，停到前面蓝色的部署区）→ 点「布阵」摆位置 → 点「开战」打这一关的 AI 敌军。打赢拿奖励、进下一关，敌军越来越强、兵种越来越多；后期花钱升级「军工科技」（全军血量、伤害）。
+## 玩法
 
-- 兵种克制：坦克克步兵，武装直升机克坦克，防空车克直升机，步兵人多能打直升机，自行火炮打扎堆的步兵（射程最远，被贴近就危险）。
-- 每一关的敌军开打前就摆在对面（左上角也写着），可以照着配兵。
-- 部队上限：没有指挥部 4 个，指挥部 1～4 级是 10 / 18 / 30 / 40 个。
-- 存档：建筑、关卡、部队和阵位、科技、现金都会存；离线最多两小时，按在线收入的两成算离线收益。
+- **大亨**：每人一块基地，踩发光的按钮盖居民楼、工厂、发电厂、银行，每秒自动赚钱；离线最多两小时，按两成算收益。
+- **造兵**：兵营、装甲车厂、防空车间、炮兵阵地、直升机场生产七种部队（步兵班、步兵战车、主战坦克、防空车、自行火炮、火箭炮、武装直升机），从工厂开出来停到前面蓝色的部署区。「布阵」里点部队、点位置摆阵型。
+- **你本人上战场**：点「开战」，你的角色传送到己方阵地。物品栏里有枪（步枪；冲锋枪、狙击枪、火箭筒在「武器」里买），按住左键连发、R 换弹；敌人也会打你，阵亡后在基地复活，点「重返战场」回去。
+- **亲自驾驶**：战斗中点「开车 / 开飞机」，坐进自己的任何一辆车或直升机：WASD 开（手机用摇杆），鼠标瞄准、按住左键开火（手机按「开火」），右键拖动转镜头，直升机空格升、C 降，F 下车。
+- **兵种克制**：坦克克步兵，直升机克坦克，防空车克直升机，步兵人多能打下直升机，火炮、火箭炮打扎堆的步兵，步兵战车什么都能打一点。每关的敌军开打前就摆在对面，左上角也写着。每十关有一个首领（猛犸重坦）。
+- **PvP**
+  - **约战**：同一个服务器里的玩家互相挑战，两边的部队和本人都传到竞技场实时对打（部队不损失，赢的拿奖励）。
+  - **突袭**：打别的玩家存下来的防线（对方不在线也行，按突袭积分匹配差不多强的）；赢了拿战利品、涨积分，对方上线时会看到被突袭了几次。没有合适的真人对手时打 AI 指挥官。
+- **长期目标**：军工科技（全军血量、伤害 +10%/级）、指挥部升级（部队上限 4 → 10 → 18 → 30 → 40）、军衔（列兵到上将，头顶显示）、每日奖励（连续登录叠加）、每日任务（三个，领奖励）、全服排行榜（最高关卡、突袭积分）、**重生**（打到 20 关、盖了银行后可以重生：从头再来，换永久的收入、战力加成）。
 - 一个服务器最多 6 个人（6 块基地并排，各打各的关卡）。
 
 ## 打开、测试
 
 1. 装 [Roblox Studio](https://create.roblox.com/)，登录。
-2. Studio 里「文件 → 打开」（或直接双击）`MilitaryTycoon.rbxlx`。
-3. 点上面的「测试 → 开始游戏」（Play）。地图、基地、建筑都是开始游戏时由脚本生成的，所以编辑模式下场景是空的，这是正常的。
+2. Studio 里「文件 → 打开」`MilitaryTycoon.rbxlx`。
+3. 点「测试 → 开始游戏」。地图、基地、建筑都是开始游戏时由脚本生成的，编辑模式下场景是空的，这是正常的。
+4. 想测约战：「测试」页签里把玩家数设成 2，点「开始」（本地服务器 + 两个玩家窗口）。
 
-没发布之前存档用不了，进游戏会提示「存档没读到」，照样能玩，只是退出不保存。
+没发布之前存档、排行榜、突袭匹配用不了，进游戏会提示「存档没读到」，照样能玩（突袭打 AI 指挥官），只是退出不保存。
+
+## 导入原模型（坦克、直升机……用网页版的真模型）
+
+`models/` 里是从网页版转换好的 7 个模型（.glb，带贴图）。不导入的话游戏用零件拼的模型，也能玩。
+
+1. Studio「主页 → 导入 3D」（Import 3D），把 `models/` 里的 7 个 .glb 都选上导入（设置保持默认，不要勾选合并网格）。
+2. 导入后它们出现在 Workspace 里，名字是 soldier、ifv、tank、aa、arty、mlrs、heli——**不用改名、不用挪**（想整齐的话拖进 ReplicatedStorage → UnitModels 也行）。
+3. 开始游戏时脚本自动认出这些模型：摆正方向、缩放到合适的大小、找到炮塔和旋翼的转轴，之后造出来的部队就是原模型，炮塔会转、旋翼会转。输出窗口里会打一行「用上了导入的原模型：……」。
+
+模型都是 Sketchfab 上 CC-BY-4.0 授权的，作者名单在 `models/credits.txt`，游戏里「致谢」按钮也能看到——发布的游戏里请保留。
 
 ## 发布到 Roblox
 
-1. Studio「文件 → 发布到 Roblox」（Publish to Roblox），选「新体验」，填名字、描述，创建。
-2. 「主页 → 游戏设置」（Game Settings）：
-   - **安全（Security）→ 打开「允许 Studio 访问 API 服务」**（Enable Studio Access to API Services），这样在 Studio 里测试也能存档；线上服务器本来就能存。
-   - **地点（Places）→ 选这个地点 → 最多玩家数（Max Players）设成 6**（一个服务器只有 6 块基地，多出来的人会被提示换服务器）。
-3. 在 [Creator Dashboard](https://create.roblox.com/dashboard/creations) 里把这个体验设成「公开」（Public），别人就能玩了。
+1. 「文件 → 发布到 Roblox」，选「新体验」，填名字、描述，创建。
+2. 「主页 → 游戏设置」：
+   - **安全 → 打开「允许 Studio 访问 API 服务」**，Studio 里测试也能存档。
+   - **地点 → 这个地点 → 最多玩家数设成 6**。
+3. 在 [Creator Dashboard](https://create.roblox.com/dashboard/creations) 里把体验设成「公开」。
 
-改了脚本以后，在 Studio 里再「文件 → 发布到 Roblox」一次就更新了。
+改了脚本以后再「文件 → 发布到 Roblox」一次就更新了。
 
 ## 改数值
 
-全部在 `src/Config.lua`（Studio 里是 ReplicatedStorage → Config）：
-
-- `Config.Buildings`：建筑的价格、收入、解锁顺序（`req`）、位置、大小；指挥部的上限（`cap`）和升级价（`up`）。
-- `Config.Units`：兵种的价格、血量、伤害、射速、射程、速度、对装甲 / 飞机 / 步兵的伤害倍数。
-- `Config.EnemyBudget` / `EnemyTypes` / `Reward`：每关敌军的预算、出现的兵种、胜利奖励。
-- `Config.Tech`：军工科技每级的加成和价格。
-- `Config.Sounds`：音效。默认没有声音；在 Studio 工具箱（Toolbox → 音频）里找声音，把 `rbxassetid://数字` 填进去就有了。
-- `Config.SaveKey`：存档名字，改了就是一套新存档（老进度不会删，只是不读了）。
+全部在 `src/Config.lua`（Studio 里是 ReplicatedStorage → Config）：建筑（价格、收入、解锁顺序）、兵种（价格、血量、伤害、射程、速度、克制倍数）、关卡敌军（预算、兵种、奖励、首领）、武器、军衔、重生、每日奖励和任务、突袭和约战、音效（默认没有声音：在工具箱 → 音频里找，把 `rbxassetid://数字` 填进 `Config.Sounds`）。
 
 ## 文件
 
 ```
-src/Config.lua              共享配置（ReplicatedStorage.Config，ModuleScript）
-src/Main/init.server.lua    服务器主脚本（ServerScriptService.Main）：地图、经济、存档、生产、布阵、战斗流程
-src/Main/Models.lua         零件拼的模型：地图、建筑、购买按钮、兵种（Main 下的 ModuleScript）
-src/Main/Battle.lua         战斗推演：选目标、开火、溅射、炮弹、关卡敌军、排阵（Main 下的 ModuleScript）
-src/Client.client.lua       客户端（StarterPlayerScripts.Client）：界面、布阵、观战镜头、开火爆炸特效
-build.mjs                   把 src/ 打包成 MilitaryTycoon.rbxlx
-default.project.json        用 Rojo 的话按这个同步
-tools/luacheck.mjs          语法和变量名检查
-tools/mock/                 在普通 Lua 里模拟 Roblox，真跑一遍服务器和客户端脚本的测试
+src/Config.lua                 共享配置（ReplicatedStorage.Config）
+src/Main/init.server.lua       服务器主脚本（ServerScriptService.Main）：进出服务器、状态、操作分发、循环
+src/Main/World.lua             地图：地形、六块基地、约战竞技场
+src/Main/Store.lua             存档、防线快照、突袭匹配、排行榜、被突袭记录
+src/Main/Economy.lua           建筑、收入、指挥部、科技、重生、军衔、每日奖励、每日任务、武器商店
+src/Main/Army.lua              平时的部队：生产、阵位、布阵、关卡敌军预览
+src/Main/Combat.lua            战斗：关卡、突袭、约战；本人上阵、亲自驾驶、结算
+src/Main/Weapons.lua           玩家的枪：发枪、开枪校验、命中、火箭筒
+src/Main/Battle.lua            战斗推演：选目标、炮塔、开火、溅射、炮弹、火箭炮齐射
+src/Main/Models.lua            模型：零件拼的部队和建筑、导入原模型的整理
+src/Client/init.client.lua     客户端（StarterPlayerScripts.Client）
+src/Client/UI.lua              界面
+src/Client/Play.lua            操作和镜头：布阵、开车、开枪、战斗事件
+src/Client/View.lua            部队平滑显示（服务器 20 次 / 秒 → 每帧插值）、炮塔、旋翼
+src/Client/Fx.lua              特效
+models/*.glb                   网页版原模型转换的 Roblox 模型
+build.mjs                      打包成 MilitaryTycoon.rbxlx
+tools/export_models.mjs        从网页版模型重新导出 models/*.glb（tools/view_glb.html 检查）
+tools/luacheck.mjs             语法和变量名检查
+tools/mock/                    在普通 Lua 里模拟 Roblox，真跑服务器和客户端脚本的测试
 ```
 
-改了 `src/` 里的脚本以后：
+改了 `src/` 以后：
 
 ```bash
 node roblox/tools/luacheck.mjs
@@ -67,11 +87,4 @@ python3 roblox/tools/mock/run.py roblox/tools/mock/test.lua 20
 node roblox/build.mjs
 ```
 
-第二条是模拟测试：一个机器人玩家进服、盖楼、点界面生产部队、布阵、开战，连续玩 20 分钟（模拟时间），再退出重进测存档；会打出每一场的结果和每栋楼盖好的时间。需要系统里有 Lua 5.4 运行库（Debian / Ubuntu 的 `liblua5.4-0`）。
-
-## 以后可以加
-
-- 真人对战：匹配另一个玩家，用双方的部署阵型打一场。
-- 重生（Rebirth）：清空进度换永久加成，延长后期。
-- 通行证 / 开发者商品：双倍收入、多一个部队上限等。
-- 用 Roblox 资源商店里的模型替换零件拼的坦克、直升机。
+第二条是模拟测试：机器人玩家进服、盖楼、点界面生产、布阵、开战、拿枪打、开坦克和直升机、突袭、和另一个玩家约战、任务、重生、存档读档……全部真跑一遍，再连续玩 20 分钟（模拟时间）打出每场的结果。需要系统里有 Lua 5.4 运行库（Debian / Ubuntu 的 `liblua5.4-0`）。

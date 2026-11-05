@@ -70,8 +70,11 @@
 - 战役决策（js/decide.js，默认战役与海岛战役；沙盒、闯关不加）：玩家是战区司令，平时全交给 AI，只在关键处拍板——画面下方决策卡（舰炮齐射、火箭炮覆盖、轰-6K 轰炸各一次；战役预备队 2 艘 271 + 1 艘 072A 只有下令才登陆），点卡后点地图选目标（HOOK.pointer，右键 / Esc 取消）；
   AI 请示（敌军集结反冲击 thFocusE、推进线 150 秒没前推、敌炮兵阵地暴露，15 秒不答按默认）；战役进度（时限、据点分值 / 七成、指挥所）；结束画面里复盘（每张卡打掉多少、时间线）。状态 S.dec（开战第一步再建）。
   作战时限按 logistics.js battleT()：远海航渡（farsea.js）将近一小时，时限从编队抵达集结海域（S.fs.arrT）起算。
-- roblox/：Roblox 版「军事大亨」（Luau，和网页版无关、互不影响）：src/ 是脚本（Config、Main 服务器 + Models、Battle 模块、Client），`node roblox/build.mjs` 打包成 Studio 能直接打开的 roblox/MilitaryTycoon.rbxlx（提交进仓库）；
-  这台机器没有 Luau：`node roblox/tools/luacheck.mjs` 查语法和未定义变量（脚本只用 Lua 5.1 写法，不用 +=、continue、类型标注），`python3 roblox/tools/mock/run.py roblox/tools/mock/test.lua [分钟]` 用系统的 liblua5.4 在模拟的 Roblox 里真跑一遍（机器人玩家盖楼、生产、布阵、打关卡、存档读档），改完两样都要过。说明见 roblox/README.md。
+- roblox/：Roblox 版「军事大亨」（Luau，和网页版无关、互不影响）：大亨经济 + 七个兵种的自动战斗 + 玩家本人拿枪上阵、亲自开车 / 直升机 + PvP（同服约战、突袭别人存下的防线）+ 重生 / 军衔 / 每日任务 / 排行榜。
+  src/Main（服务器：init.server.lua 建共享上下文 G，World / Store / Economy / Army / Combat / Weapons 各自 init(G) 把函数挂上去，Battle 推演、Models 模型）、src/Client（客户端：Fx / View / UI / Play 同样挂在 G 上）、src/Config.lua；
+  `node roblox/build.mjs` 打包成 Studio 能直接打开的 roblox/MilitaryTycoon.rbxlx（提交进仓库）。
+  原模型：`node roblox/tools/export_models.mjs` 把 js/mdl 的烘焙模型导出成 roblox/models/*.glb（Roblox 坐标、按格缩放、部件按 Body / Turret / Rotor / TailRotor 命名、_Front / _Top / _Pivot* 标记；士兵用 v3man.js 摆端枪姿势），用户在 Studio「导入 3D」后 Models.loadImported 自动摆正、缩放、建炮塔 / 旋翼的 Motor6D；`roblox/tools/view_glb.html` 检查导出结果。
+  这台机器没有 Luau：`node roblox/tools/luacheck.mjs` 查语法和未定义变量（脚本只用 Lua 5.1 写法，不用 +=、continue、类型标注），`python3 roblox/tools/mock/run.py roblox/tools/mock/test.lua [分钟]` 用系统的 liblua5.4 在模拟的 Roblox 里真跑一遍（新档、老档、拿枪、开车、突袭、约战、重生、存档读档，再让机器人连续玩），改完两样都要过。说明见 roblox/README.md。
 - 其他会话的源码有时不推 GitHub、只发布网页版：网页版脚本、模型原样发布，可以从 gh-pages 的发布内容取回（index.html 按 tools/build_www.mjs 逆操作还原）；发布前先看 gh-pages 有没有更新的版本，别覆盖。
 
 ## 代码约定
