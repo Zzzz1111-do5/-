@@ -1,4 +1,4 @@
--- 军事大亨：存档（DataStore）、突袭用的防线快照、积分匹配、排行榜、被突袭记录
+-- 军事大亨：存档（DataStore）、突袭用的防线快照、积分匹配、排行榜（最高关卡、突袭积分、对战积分）、被突袭记录
 -- 读档失败的玩家不存档（别拿新档盖掉老进度）；所有 DataStore 调用都包在 pcall 里（Studio 没开 API 访问时整个存档功能关掉，照样能玩）
 local DSS = game:GetService("DataStoreService")
 local Players = game:GetService("Players")
@@ -23,11 +23,13 @@ function Store.init(G)
   local raidlog = ds("MilitaryTycoon_raidlog_v1")
   local byRating = ds("MilitaryTycoon_rating_v1", true)
   local byLevel = ds("MilitaryTycoon_level_v1", true)
+  local byPvp = ds("MilitaryTycoon_pvp_v1", true)
 
   function G.newData()
     return {
       cash = Config.StartCash, level = 1, best = 1, owned = {}, hq = 0, tech = 0, army = {}, wins = 0,
       rebirth = 0, xp = 0, kills = 0, weapons = { rifle = true }, rating = Config.Raid.start, raidWins = 0, duelWins = 0,
+      pvp = Config.Match.start, pvpWins = 0, pvpGames = 0,
       daily = { day = 0, streak = 0 }, missions = { day = 0, list = {} },
     }
   end
@@ -54,6 +56,9 @@ function Store.init(G)
     d.rating = math.floor(num(raw.rating, 0, nil, Config.Raid.start))
     d.raidWins = math.floor(num(raw.raidWins, 0, nil, 0))
     d.duelWins = math.floor(num(raw.duelWins, 0, nil, 0))
+    d.pvp = math.floor(num(raw.pvp, 0, nil, Config.Match.start))
+    d.pvpWins = math.floor(num(raw.pvpWins, 0, nil, 0))
+    d.pvpGames = math.max(d.pvpWins, math.floor(num(raw.pvpGames, 0, nil, 0)))
     if type(raw.owned) == "table" then
       for id, v in pairs(raw.owned) do
         if BDEF[id] and v then d.owned[id] = true end
@@ -107,7 +112,7 @@ function Store.init(G)
     return {
       v = 2, cash = math.floor(d.cash), level = d.level, best = d.best, owned = owned, hq = d.hq, tech = d.tech, army = armyList(st),
       wins = d.wins or 0, rebirth = d.rebirth, xp = d.xp, kills = d.kills, weapons = weapons, rating = d.rating,
-      raidWins = d.raidWins, duelWins = d.duelWins, daily = { day = d.daily.day, streak = d.daily.streak },
+      raidWins = d.raidWins, duelWins = d.duelWins, pvp = d.pvp, pvpWins = d.pvpWins, pvpGames = d.pvpGames, daily = { day = d.daily.day, streak = d.daily.streak },
       missions = { day = d.missions.day, list = ml }, t = os.time(),
     }
   end
@@ -126,6 +131,7 @@ function Store.init(G)
     end
     if byRating then pcall(function() byRating:SetAsync(key, math.floor(data.rating)) end) end
     if byLevel then pcall(function() byLevel:SetAsync(key, math.floor(data.best)) end) end
+    if byPvp and data.pvpGames > 0 then pcall(function() byPvp:SetAsync(key, math.floor(data.pvp)) end) end
   end
 
   function G.loadData(pl)
@@ -199,7 +205,7 @@ function Store.init(G)
     return list
   end
 
-  -- 排行榜：两个榜各取前 10（名字按 UserId 查，查过的记住）
+  -- 排行榜：三个榜各取前 10（名字按 UserId 查，查过的记住）
   local names = {}
   local function nameOf(key)
     if names[key] then return names[key] end
@@ -223,7 +229,7 @@ function Store.init(G)
     return out
   end
   function G.readBoards()
-    return top(byLevel), top(byRating)
+    return top(byLevel), top(byRating), top(byPvp)
   end
   G.storeOK = main ~= nil
 end

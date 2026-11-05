@@ -171,7 +171,7 @@ function Models.plot(f, origin, color, index)
   anchor.Transparency = 1
   local _, label = Models.sign(anchor, "空基地", 70, 100, 13, color, 1600)
   -- 排行榜牌子（出生点后面的墙上，朝出生点）
-  local board = block(f, base, V(40, 22, 1), CF(0, 14, -hs + 2), RGB(24, 28, 34), MAT.SmoothPlastic)
+  local board = block(f, base, V(54, 22, 1), CF(0, 14, -hs + 2), RGB(24, 28, 34), MAT.SmoothPlastic)
   board.Name = "Board"
   local sg = Instance.new("SurfaceGui")
   sg.Face = Enum.NormalId.Back
@@ -180,12 +180,12 @@ function Models.plot(f, origin, color, index)
   sg.LightInfluence = 0
   sg.Parent = board
   local cols = {}
-  for i, title in ipairs({ "最高关卡", "突袭积分" }) do
+  for i, title in ipairs({ "最高关卡", "突袭积分", "对战积分" }) do
     local col = Instance.new("TextLabel")
     col.Name = "Col" .. i
     col.BackgroundTransparency = 1
-    col.Position = UDim2.fromScale((i - 1) * 0.5, 0)
-    col.Size = UDim2.fromScale(0.5, 1)
+    col.Position = UDim2.fromScale((i - 1) / 3, 0)
+    col.Size = UDim2.fromScale(1 / 3, 1)
     col.Font = Enum.Font.GothamBold
     col.TextScaled = true
     col.TextColor3 = C.white

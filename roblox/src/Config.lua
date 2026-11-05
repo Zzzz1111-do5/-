@@ -187,9 +187,14 @@ Config.Missions = {
 }
 Config.MissionRewardSec = 120   -- 任务奖励 = 这么多秒的收入（至少 400）
 
--- 突袭（打别的玩家存下来的防线，对方不在线也能打）和约战（同一个服务器里实时对战）
+-- 突袭（打别的玩家存下来的防线，对方不在线也能打）和约战（同一个服务器里点名挑战，友谊赛不算积分）
 Config.Raid = { cooldown = 25, range = 250, start = 1000, k = 32, loot = 0.6, minUnits = 1 }
 Config.Duel = { invite = 20, reward = 300, share = 0.2 }
+-- 真人对战（排位，服内或跨服匹配）：start 起始积分、k 每场最多涨跌；window / widen / maxWindow 能配的积分差（等得越久放得越宽，每秒 +widen）；
+--   tick 每几秒配一次、expire 排队记录几秒过期、refresh 几秒刷新一次；waitMax 对战服务器里等对手最多几秒、countdown 到齐后几秒开打、back 打完几秒送回去；
+--   reward 赢了的奖金（再加对方部队价值的 share）、lose 输了的安慰奖
+Config.Match = { start = 1000, k = 32, window = 120, widen = 12, maxWindow = 900, tick = 3, expire = 60, refresh = 10, waitMax = 75, countdown = 5, back = 8,
+  reward = 600, share = 0.25, lose = 150 }
 
 -- 音效：填 "rbxassetid://数字"（Studio 工具箱 → 音频里搜，复制 ID）；留空就不放
 Config.Sounds = { rifle = "", cannon = "", aa = "", rocket = "", boom = "", build = "", buy = "", win = "", lose = "", gun = "" }

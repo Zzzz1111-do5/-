@@ -324,6 +324,7 @@ local ENUMS = {
   NormalId = "Right Top Back Left Bottom Front",
   ProximityPromptStyle = "Default Custom",
   SurfaceGuiSizingMode = "FixedSize PixelsPerStud",
+  SortDirection = "Ascending Descending",
 }
 local Enum = {}
 for ename, list in pairs(ENUMS) do
@@ -893,7 +894,11 @@ end
 R.make = make
 
 local game = make("DataModel")
-def("DataModel", "Instance", {}, { noCreate = true, methods = {
+-- 服务器信息：测试里改 R.placeId / R.jobId / R.privateServerId / R.privateServerOwnerId 模拟不同的服务器（预留的对战服务器 PrivateServerId 不空、OwnerId 为 0）
+def("DataModel", "Instance", {}, { noCreate = true, ro = {
+  PlaceId = function() return R.placeId or 1234 end, JobId = function() return R.jobId or "job-local" end,
+  PrivateServerId = function() return R.privateServerId or "" end, PrivateServerOwnerId = function() return R.privateServerOwnerId or 0 end,
+}, methods = {
   GetService = function(o, name)
     if o ~= game then error("GetService 要用冒号调用", 2) end
     local s = R.services[name]
@@ -1125,6 +1130,140 @@ end, GetOrderedDataStore = function(_, name)
   return ods
 end } })
 
+-- 内存存储（跨服务器排队用的有序映射）：R.mem[名字][键] = { v = 值, exp = 过期时刻（模拟时钟）}；R.memFail 为真时读写都报错
+R.mem = {}
+R.services.MemoryStoreService = service("MemoryStoreService", {}, { methods = { GetSortedMap = function(_, name)
+  if side() ~= "server" then error("MemoryStore 只能在服务器用", 2) end
+  if type(name) ~= "string" then error("GetSortedMap 要名字", 2) end
+  R.mem[name] = R.mem[name] or {}
+  local T = R.mem[name]
+  local m = {}
+  local function live(k)
+    local e = T[k]
+    if e and e.exp <= clock then
+      T[k] = nil
+      e = nil
+    end
+    return e
+  end
+  local function chk(self, key, f)
+    if self ~= m then error(f .. " 要用冒号调用", 3) end
+    if type(key) ~= "string" then error(f .. " 的键要字符串", 3) end
+    task.wait(0.02)
+    if R.memFail then error("模拟：MemoryStore 不可用") end
+  end
+  local function chkExp(exp, f)
+    if type(exp) ~= "number" or exp <= 0 or exp > 3888000 then error(f .. " 要过期秒数（1–3888000）", 3) end
+  end
+  function m.SetAsync(self, key, value, exp)
+    chk(self, key, "SetAsync")
+    chkExp(exp, "SetAsync")
+    T[key] = { v = ser(value, {}, key, true), exp = clock + exp }
+    return true
+  end
+  function m.GetAsync(self, key)
+    chk(self, key, "GetAsync")
+    local e = live(key)
+    return e and ser(e.v, {}, key, true) or nil
+  end
+  function m.RemoveAsync(self, key)
+    chk(self, key, "RemoveAsync")
+    T[key] = nil
+  end
+  function m.UpdateAsync(self, key, f, exp)
+    chk(self, key, "UpdateAsync")
+    if type(f) ~= "function" then error("UpdateAsync 第二个参数要函数", 2) end
+    chkExp(exp, "UpdateAsync")
+    local e = live(key)
+    local new = f(e and ser(e.v, {}, key, true) or nil)
+    if new == nil then return nil end
+    T[key] = { v = ser(new, {}, key, true), exp = clock + exp }
+    return ser(new, {}, key, true)
+  end
+  function m.GetRangeAsync(self, dir, count)
+    if self ~= m then error("GetRangeAsync 要用冒号调用", 2) end
+    if typeof(dir) ~= "EnumItem" or dir.EnumType ~= "SortDirection" or type(count) ~= "number" or count < 1 or count > 200 then
+      error("GetRangeAsync(Enum.SortDirection, 1–200 个)", 2)
+    end
+    task.wait(0.02)
+    if R.memFail then error("模拟：MemoryStore 不可用") end
+    local keys = {}
+    for k in pairs(T) do if live(k) then keys[#keys + 1] = k end end
+    table.sort(keys, function(a, b) if dir.Name == "Descending" then return a > b end return a < b end)
+    local out = {}
+    for _, k in ipairs(keys) do
+      if #out >= count then break end
+      out[#out + 1] = { key = k, value = ser(T[k].v, {}, k, true) }
+    end
+    return out
+  end
+  return m
+end } })
+
+-- 跨服务器消息：本服务器的订阅者都收得到（自己发的也收得到，和真的一样）；R.deliver(主题, 数据) 模拟别的服务器发来的
+R.subs, R.published = {}, {}
+function R.deliver(topic, data)
+  for _, cb in ipairs(R.subs[topic] or {}) do
+    local co = newThread(function() cb({ Data = data, Sent = os.time() }) end, "server")
+    table.insert(queue, { co = co, at = clock, args = table.pack() })
+  end
+end
+R.services.MessagingService = service("MessagingService", {}, { methods = {
+  PublishAsync = function(_, topic, data)
+    if side() ~= "server" then error("MessagingService 只能在服务器用", 2) end
+    if type(topic) ~= "string" then error("PublishAsync 要主题", 2) end
+    local d = ser(data, {}, topic, true)
+    task.wait(0.02)
+    if R.msgFail then error("模拟：MessagingService 不可用") end
+    table.insert(R.published, { topic = topic, data = d })
+    R.deliver(topic, d)
+  end,
+  SubscribeAsync = function(_, topic, cb)
+    if side() ~= "server" then error("MessagingService 只能在服务器用", 2) end
+    if type(topic) ~= "string" or type(cb) ~= "function" then error("SubscribeAsync(主题, 函数)", 2) end
+    task.wait(0.02)
+    if R.msgFail then error("模拟：MessagingService 不可用") end
+    R.subs[topic] = R.subs[topic] or {}
+    table.insert(R.subs[topic], cb)
+    return { Disconnect = function() end }
+  end,
+} })
+
+-- 传送：ReserveServer 给一个预留服务器的访问码；TeleportAsync 记到 R.teleports，玩家随后离开这个服务器；R.tpFail 为真时报错（像 Studio 里）
+def("TeleportOptions", "Instance", { ReservedServerAccessCode = { T.string, "" }, ServerInstanceId = { T.string, "" }, ShouldReserveServer = { T.bool, false } }, { methods = {
+  SetTeleportData = function(o, d) rawset(o, "_td", ser(d, {}, "TeleportData", true)) end,
+  GetTeleportData = function(o) return rawget(o, "_td") end,
+} })
+R.teleports = {}
+local reserveN = 0
+R.services.TeleportService = service("TeleportService", {}, { events = { TeleportInitFailed = true }, methods = {
+  ReserveServer = function(_, placeId)
+    if side() ~= "server" then error("TeleportService 只能在服务器用", 2) end
+    if type(placeId) ~= "number" then error("ReserveServer 要 PlaceId", 2) end
+    task.wait(0.05)
+    if R.tpFail then error("模拟：Studio 里不能传送") end
+    reserveN = reserveN + 1
+    return "rsv-" .. reserveN, "ps-" .. reserveN
+  end,
+  TeleportAsync = function(_, placeId, players, opts)
+    if side() ~= "server" then error("TeleportService 只能在服务器用", 2) end
+    if type(placeId) ~= "number" or type(players) ~= "table" or #players == 0 then error("TeleportAsync(PlaceId, {玩家}, TeleportOptions?)", 2) end
+    if opts ~= nil and (typeof(opts) ~= "Instance" or opts._cls ~= "TeleportOptions") then error("TeleportAsync 第三个参数要 TeleportOptions", 2) end
+    local ids = {}
+    for _, p in ipairs(players) do
+      if typeof(p) ~= "Instance" or p._cls ~= "Player" then error("TeleportAsync 的玩家列表里要 Player", 2) end
+      ids[#ids + 1] = p._uid
+    end
+    task.wait(0.05)
+    if R.tpFail then error("模拟：Studio 里不能传送") end
+    table.insert(R.teleports, { place = placeId, ids = ids, code = opts and opts._p.ReservedServerAccessCode or "", data = opts and rawget(opts, "_td") or nil, t = clock })
+    for _, p in ipairs(players) do
+      task.delay(0.3, function() if p.Parent then R.leave(p) end end)
+    end
+    return {}
+  end,
+} })
+
 -- 玩家
 R.services.Players = service("Players", { CharacterAutoLoads = { T.bool, true } }, {
   events = { PlayerAdded = true, PlayerRemoving = true },
@@ -1180,6 +1319,12 @@ def("Player", "Instance", { Character = { T.Instance, nil } }, { noCreate = true
     o.CharacterAdded:Fire(ch)
   end,
   Kick = function(o, msg) rawset(o, "_kicked", msg or "") end,
+  -- 传送进来时带的数据（R.joinData[UserId]）
+  GetJoinData = function(o)
+    if side() ~= "server" then error("GetJoinData 只能在服务器调用", 2) end
+    local td = R.joinData and R.joinData[o._uid]
+    return { TeleportData = td and ser(td, {}, "TeleportData", true) or nil, SourcePlaceId = td and (R.placeId or 1234) or nil }
+  end,
   GetMouse = function(o)
     if side() ~= "client" then error("GetMouse 只能在客户端用", 2) end
     R.mouse = R.mouse or { Hit = CFrame.new(0, 0, -100), TargetFilter = nil }
@@ -1215,6 +1360,15 @@ function R.removePlayer(pl)
   R.step(1 / 60)
   if pl._p.Character then base.Destroy(pl._p.Character) end
   setParent(pl, nil)
+end
+-- 在脚本线程里离开（传送走）：不推进时钟
+function R.leave(pl)
+  R.services.Players.PlayerRemoving:Fire(pl)
+  task.defer(function()
+    if pl._p.Character then base.Destroy(pl._p.Character) end
+    setParent(pl, nil)
+    if R.localPlayer == pl then R.localPlayer = nil end
+  end)
 end
 
 ------------------------------------------------------------ 跑脚本

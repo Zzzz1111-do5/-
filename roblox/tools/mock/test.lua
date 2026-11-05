@@ -599,6 +599,28 @@ local function fxSince(n, kind)
   end
   return c
 end
+-- 试驾一辆车之前：这一仗要是已经打完了，就再开一仗（老档的部队强，首领关可能很快就赢）
+local function ensureBattle()
+  for i = #R.sent, 1, -1 do
+    local e = R.sent[i]
+    if e.name == "Battle" and type(e.args[1]) == "table" and (e.args[1].phase == "start" or e.args[1].phase == "end") then
+      if e.args[1].phase == "start" then return end
+      break
+    end
+  end
+  local h = button("^回基地$")
+  if h then click(h) end
+  R.run(5)
+  click(button("^开战"))
+  R.run(1)
+end
+local function mouse(down)
+  if down then
+    R.as("client", function() R.services.UserInputService.InputBegan:Fire({ UserInputType = Enum.UserInputType.MouseButton1, Position = V3(640, 360, 0) }, false) end)
+  else
+    R.as("client", function() R.services.UserInputService.InputEnded:Fire({ UserInputType = Enum.UserInputType.MouseButton1, Position = V3(640, 360, 0) }) end)
+  end
+end
 -- 开轰炸机：按一下扔一串炸弹
 local bm = myUnit("bomber")
 if bm then
@@ -607,31 +629,33 @@ if bm then
   R.run(0.5)
   local ev = battleEvent(nd, "drive")
   local nb0 = #R.sent
-  R.as("client", function() R.services.UserInputService.InputBegan:Fire({ UserInputType = Enum.UserInputType.MouseButton1, Position = V3(640, 360, 0) }, false) end)
+  mouse(true)
   R.run(math.min(16, (ev and ev.cd or 0) + 2))   -- 等装填好
-  R.as("client", function() R.services.UserInputService.InputEnded:Fire({ UserInputType = Enum.UserInputType.MouseButton1, Position = V3(640, 360, 0) }) end)
+  mouse(false)
   check(fxSince(nb0, "bomb") >= 8, "开着轰炸机扔了一串炸弹（" .. fxSince(nb0, "bomb") .. " 颗）")
   action("exit")
   R.run(0.5)
 else
   check(false, "老档里有轰炸机（还活着）")
 end
-
 -- 开运兵直升机：一坐进去就在空中，按住 C 降到最低，自动放下两个步兵班
+ensureBattle()
 local tm = myUnit("transport")
 if tm then
+  local t0 = tinf
   action("drive", tm:GetAttribute("Uid"))
   R.run(0.5)
   R.keys.C = true
   R.run(3)
   R.keys.C = nil
-  check(tinf == 2, "开运兵直升机降到低空，放下了 " .. tinf .. " 个步兵班")
+  check(tinf - t0 == 2, "开运兵直升机降到低空，放下了 " .. (tinf - t0) .. " 个步兵班")
   action("exit")
   R.run(0.5)
 else
   check(false, "老档里有运兵直升机")
 end
 -- 开战斗机：一直往前飞，W 加速
+ensureBattle()
 local fm = myUnit("fighter")
 if fm then
   action("drive", fm:GetAttribute("Uid"))
@@ -648,34 +672,44 @@ else
   check(false, "老档里有战斗机（还活着）")
 end
 -- 开坦克
-local tuid = tankModel:GetAttribute("Uid")
-action("drive", tuid)
+ensureBattle()
+local tk = myUnit("tank")
+local nd2 = #R.sent
+if tk then action("drive", tk:GetAttribute("Uid")) end
 R.run(0.5)
-check(battleEvent(n0, "drive") ~= nil and guiText("^下车") ~= nil, "坐进坦克（界面出现「下车」）")
-local before2 = relPos(tankModel)
-R.moveVec = V3(0, 0, -1)
-R.run(2)
-R.moveVec = nil
-local after2 = relPos(tankModel)
-check((after2 - before2).Magnitude > 20, string.format("开着坦克往前走了 %.0f 格", (after2 - before2).Magnitude))
-R.as("client", function() R.services.UserInputService.InputBegan:Fire({ UserInputType = Enum.UserInputType.MouseButton1, Position = V3(640, 360, 0) }, false) end)
+check(tk ~= nil and battleEvent(nd2, "drive") ~= nil and guiText("^下车") ~= nil, "坐进坦克（界面出现「下车」）")
+if tk then
+  local before2 = relPos(tk)
+  R.moveVec = V3(0, 0, -1)
+  R.run(2)
+  R.moveVec = nil
+  local after2 = relPos(tk)
+  check((after2 - before2).Magnitude > 20, string.format("开着坦克往前走了 %.0f 格", (after2 - before2).Magnitude))
+end
+mouse(true)
 R.run(3)
-R.as("client", function() R.services.UserInputService.InputEnded:Fire({ UserInputType = Enum.UserInputType.MouseButton1, Position = V3(640, 360, 0) }) end)
+mouse(false)
 R.as("client", function() R.services.UserInputService.InputBegan:Fire({ KeyCode = Enum.KeyCode.F, UserInputType = Enum.UserInputType.Keyboard }, false) end)
 R.run(0.5)
-check(battleEvent(n0, "exit") ~= nil and pl.Character.HumanoidRootPart.Anchored == false, "按 F 下车，人回到战场")
+check(battleEvent(nd2, "exit") ~= nil and pl.Character.HumanoidRootPart.Anchored == false, "按 F 下车，人回到战场")
 -- 开直升机
-action("drive", heliModel:GetAttribute("Uid"))
-R.run(0.5)
-R.moveVec = V3(0, 0, -1)
-R.keys.Space = true
-R.run(2)
-R.keys.Space = nil
-R.moveVec = nil
-local hy = heliModel.Root.CFrame.Position.Y
-check(hy > 60, string.format("开着直升机飞起来了（高度 %.0f）", hy))
-action("exit")
-R.run(0.5)
+ensureBattle()
+local hm = myUnit("heli")
+if hm then
+  action("drive", hm:GetAttribute("Uid"))
+  R.run(0.5)
+  R.moveVec = V3(0, 0, -1)
+  R.keys.Space = true
+  R.run(2)
+  R.keys.Space = nil
+  R.moveVec = nil
+  local hy = hm.Root.CFrame.Position.Y
+  check(hy > 60, string.format("开着直升机飞起来了（高度 %.0f）", hy))
+  action("exit")
+  R.run(0.5)
+else
+  check(false, "老档里有武装直升机（还活着）")
+end
 -- 火箭筒
 local rpg = pl.Backpack:FindFirstChild("火箭筒")
 if pl.Character:FindFirstChildOfClass("Tool") then pl.Character:FindFirstChildOfClass("Tool").Parent = pl.Backpack end
@@ -690,7 +724,7 @@ if tgt then
 end
 local tBoss = R.clock()
 local res2 = waitResult(400)
-check(res2 ~= nil, "首领关打完：" .. tostring(res2) .. string.format("（试驾以后又打了 %.0f 秒）", R.clock() - tBoss))
+check(res2 ~= nil, "这一仗打完：" .. tostring(res2) .. string.format("（试驾以后又打了 %.0f 秒）", R.clock() - tBoss))
 do
   local kinds = {}
   for _, k in ipairs({ "missile", "bomb", "shell", "mrocket", "intercept", "shot" }) do kinds[#kinds + 1] = k .. " " .. fxSince(n0, k) end
@@ -753,6 +787,39 @@ R.run(1)
 check(#units(rival) >= 1 and relPos(units(rival)[1], rival).Z < Config.Field.deploy[2] + 5, "约战不损失部队，都回了自己基地")
 click(button("^回基地$"))
 
+print("== 排位对战：同一个服务器里两个人都在匹配")
+local function pvpNow()   -- 左上角信息栏那一行（面板里的旧字不算）
+  local t = guiText("^突袭积分 %d+")
+  return t and tonumber(t.Text:match("对战积分 (%d+)"))
+end
+local pvp0 = pvpNow()
+n0 = #R.sent
+click(button("^真人对战"))
+check(guiText("排位战绩") ~= nil, "打开「真人对战」面板（对战积分 " .. tostring(pvp0) .. "）")
+local function matching()   -- 「匹配中」状态条显示着
+  local m = guiText("^匹配中")
+  return m ~= nil and m.Parent.Visible
+end
+click(button("^开始匹配"))
+check(matching() and button("^取消$") ~= nil, "屏幕上方出现「匹配中」和取消按钮")
+actionAs(rival, "match")
+R.run(4)
+local rs = battleEvent(n0, "start")
+check(rs ~= nil and rs.mode == "duel" and tostring(rs.title):find("排位对战") ~= nil, "配上了同服务器的对手，在竞技场开打：" .. tostring(rs and rs.title))
+local res6 = waitResult(400)
+check(res6 ~= nil, "排位对战打完：" .. tostring(res6))
+R.run(1.5)
+local pvp1 = pvpNow()
+check(pvp1 ~= nil and pvp0 ~= nil and pvp1 ~= pvp0, "对战积分变了（" .. tostring(pvp0) .. " → " .. tostring(pvp1) .. "）")
+check(guiText("对战积分 [%+%-]%d+") ~= nil, "结果面板写着积分涨跌")
+click(button("^回基地$"))
+n0 = #R.sent
+action("match")
+R.run(1)
+action("matchCancel")
+R.run(4)
+check(battleEvent(n0, "start") == nil and not matching(), "取消匹配")
+
 print("== 任务、武器、重生、排行榜")
 local mbtn = button("^任务")
 click(mbtn)
@@ -812,6 +879,82 @@ R.run(1)
 check((R.saves or 0) == saves1, "读档失败时不存档（不会盖掉原来的进度）")
 check(#R.errors == 0, "没报错")
 
+print("== 跨服匹配（模拟别的服务器）")
+R.dsFail = false
+local MAP = "mt_match_v1"
+local function memPut(key, v) R.mem[MAP] = R.mem[MAP] or {}; R.mem[MAP][key] = { v = v, exp = R.clock() + 60 } end
+local function memGet(key) local e = R.mem[MAP] and R.mem[MAP][key]; return e and e.v end
+local function armySave(uid)
+  R.store[Config.SaveKey .. "/u" .. uid] = { v = 2, cash = 5000, level = 5, best = 5, owned = { house1 = true, barracks = true }, hq = 0, tech = 0,
+    army = { { t = "inf", x = 0, z = 250 }, { t = "inf", x = 20, z = 250 }, { t = "mg", x = -20, z = 250 } }, pvp = 1000, t = os.time() }
+end
+-- 1）本服的人发起：别的服务器有个 9001 在排队（UserId 比我大，归我发起）
+armySave(5100)
+memPut("u9001", { u = 9001, r = 1010, n = "远方玩家", job = "job-other", t = os.time() })
+pl = join("Global", 5100)
+R.run(2)
+local tp0, saves2 = #R.teleports, R.saves or 0
+action("match")
+R.run(5)
+local tp = R.teleports[tp0 + 1]
+check(tp ~= nil and tp.ids[1] == 5100 and tostring(tp.code):find("^rsv%-") ~= nil and tp.data and tp.data.mode == "match" and tp.data.a == 5100 and tp.data.b == 9001,
+  "配上了别的服务器的玩家：预留了对战服务器，传送过去（" .. tostring(tp and tp.code) .. "）")
+local other = memGet("u9001")
+check(other ~= nil and other.claimed == 5100 and tp ~= nil and other.code == tp.code, "对方的排队记录被认领，写上了对战服务器的访问码")
+local pub = R.published[#R.published]
+check(pub ~= nil and pub.topic == MAP and pub.data.to == 9001 and tp ~= nil and pub.data.code == tp.code, "发消息通知了对方的服务器")
+check(memGet("u5100") == nil and (R.saves or 0) > saves2, "自己的排队记录删了，传送前存了档")
+R.run(1)
+check(Players:GetPlayerByUserId(5100) == nil, "人传走了（离开了这个服务器）")
+-- 2）别的服务器发起：认领了本服排队的 9500，发来消息
+armySave(9500)
+pl = join("Waiter", 9500)
+R.run(2)
+action("match")
+R.run(4)
+check(memGet("u9500") ~= nil and memGet("u9500").job == "job-local", "排队记录写进了全服的匹配表")
+local tp1 = #R.teleports
+memGet("u9500").claimed, memGet("u9500").code = 100, "rsv-remote"
+R.deliver(MAP, { to = 9500, code = "rsv-remote", a = 100, b = 9500, an = "远方玩家", ar = 990 })
+R.run(2)
+local tpw = R.teleports[tp1 + 1]
+check(tpw ~= nil and tpw.ids[1] == 9500 and tpw.code == "rsv-remote" and tpw.data.a == 100 and tpw.data.b == 9500, "别的服务器认领了本服的玩家：收到消息就传过去")
+-- 3）消息丢了：下一轮看到自己的记录被认领、有访问码，自己传过去
+armySave(9600)
+pl = join("Lost", 9600)
+R.run(2)
+action("match")
+R.run(4)
+local tp2 = #R.teleports
+local e9600 = memGet("u9600")
+if e9600 then e9600.claimed, e9600.code, e9600.a, e9600.b = 100, "rsv-lost", 100, 9600 end
+R.run(4)
+local tpl = R.teleports[tp2 + 1]
+check(tpl ~= nil and tpl.ids[1] == 9600 and tpl.code == "rsv-lost", "通知消息丢了也能按匹配表里的访问码传过去")
+-- 4）预留服务器失败（像 Studio 里）：放开两边的认领，接着排队
+armySave(5200)
+memPut("u9002", { u = 9002, r = 1000, n = "远方玩家二", job = "job-other", t = os.time() })
+pl = join("Studio2", 5200)
+R.run(2)
+R.tpFail = true
+local tp3 = #R.teleports
+action("match")
+R.run(5)
+check(#R.teleports == tp3 and memGet("u9002") ~= nil and memGet("u9002").claimed == nil and matching(), "预留服务器失败：放开认领，接着排队")
+R.tpFail = false
+action("matchCancel")
+R.run(1)
+-- 5）MemoryStore 坏了：只能服内匹配，不报错
+R.memFail = true
+action("match")
+R.run(7)
+check(matching(), "MemoryStore 不可用时照样排着（只能配同服务器的）")
+action("matchCancel")
+R.memFail = false
+R.removePlayer(pl)
+R.run(1)
+check(#R.errors == 0, "跨服匹配这一段没报错")
+
 print("== 七个人进一个六块地的服务器")
 R.dsFail = false
 R.localPlayer = nil
@@ -833,4 +976,4 @@ if #R.warns > 0 then
   end
 end
 print(string.format("\n== %d 个检查没通过，%d 个脚本错误", #fails, #R.errors))
-if #fails > 0 or #R.errors > 0 then os.exit(1) end
+if #fails > 0 or #R.errors > 0 then TEST_CODE = 1 end

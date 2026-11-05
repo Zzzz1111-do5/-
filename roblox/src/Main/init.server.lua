@@ -1,6 +1,6 @@
 -- 军事大亨：服务器主脚本（ServerScriptService.Main）
 -- 各模块共用一个上下文 G：每个模块的 init(G) 把自己的函数挂到 G 上，模块之间通过 G 互相调用（不互相 require，免得循环引用）
---   World 地图 · Store 存档 / 排行榜 / 突袭匹配 · Economy 经济与成长 · Army 平时的部队 · Combat 战斗 · Weapons 玩家的枪
+--   World 地图 · Store 存档 / 排行榜 / 突袭匹配 · Economy 经济与成长 · Army 平时的部队 · Combat 战斗 · Weapons 玩家的枪 · Match 真人对战匹配
 --   Models 模型 · Battle 推演
 local Players = game:GetService("Players")
 local RS = game:GetService("ReplicatedStorage")
@@ -41,7 +41,7 @@ end
 -- 先收导入的原模型（在铺地形、建地图之前：没锚定的模型别掉下去砸在地上散开）
 local imported = G.Models.loadImported()
 if #imported > 0 then print("[军事大亨] 用上了导入的原模型：" .. table.concat(imported, "、")) end
-for _, name in ipairs({ "World", "Store", "Economy", "Army", "Combat", "Weapons" }) do
+for _, name in ipairs({ "World", "Store", "Economy", "Army", "Combat", "Weapons", "Match" }) do
   require(script:WaitForChild(name)).init(G)
 end
 
@@ -79,6 +79,7 @@ function G.push(st)
     rebirth = d.rebirth, canRebirth = G.canRebirth(d), xp = d.xp, rank = rank, nextXp = nextXp, rating = d.rating, kills = d.kills,
     weapons = weapons, daily = { ok = dOK, amount = dAmt, streak = dStreak }, missions = ms, missionReward = G.missionReward(st),
     raidCD = math.max(0, math.ceil((st.raidCD or 0) - os.clock())), power = G.powerOf(d),
+    pvp = d.pvp, pvpWins = d.pvpWins, pvpGames = d.pvpGames, match = G.matchInfo(st), matchServer = G.matchServer, teleporting = st.teleporting == true,
   })
   if st.ls then
     st.ls.cash.Value = math.floor(d.cash)
@@ -176,11 +177,13 @@ local function onPlayer(pl)
   st.ready = true
   G.push(st)
   if pl.Character then task.spawn(onCharacter, st, pl.Character) else spawnChar(st) end
+  task.spawn(G.matchArrive, st)   -- 对战服务器：认人、到齐开打
   task.delay(2, function()
     if G.states[pl] ~= st then return end
     if not ok then
       G.toast(st, "存档没读到，这次的进度不会保存（在 Studio 里测试：先发布，再在游戏设置 → 安全里打开 API 访问）", "bad")
     end
+    if G.matchServer then return end
     if type(raw) ~= "table" then
       G.toast(st, "欢迎来到军事大亨！踩绿色按钮盖楼，楼会一直给你赚钱", "info")
       task.wait(6)
@@ -206,9 +209,10 @@ for _, pl in ipairs(Players:GetPlayers()) do task.spawn(onPlayer, pl) end
 Players.PlayerRemoving:Connect(function(pl)
   local st = G.states[pl]
   if not st then return end
+  G.matchCancel(st, true)
   if st.battle then G.abandon(st) end
   st.battle = nil
-  if st.ready then G.save(st) end
+  if st.ready and not st.teleporting then G.save(st) end   -- 传送走的人传送前已经存过（别拿这里的旧数据盖掉对战服务器存的）
   G.states[pl] = nil
   local plot = st.plot
   for _, name in ipairs({ "Buildings", "Pads", "Units", "Enemies" }) do plot[name]:ClearAllChildren() end
@@ -247,7 +251,11 @@ local ACT = {
   exit = function(st) G.driveStop(st) end,
   rejoin = function(st) G.heroJoin(st) end,
   home = function(st) G.sendHome(st) end,
+  match = function(st) G.matchJoin(st) end,
+  matchCancel = function(st) G.matchCancel(st) end,
 }
+-- 对战服务器里只打那一场排位赛
+local MATCHBLOCK = { battle = true, raid = true, duel = true, duelYes = true, match = true, rebirth = true }
 G.R.Action.OnServerEvent:Connect(function(pl, op, a, b, c)
   local st = G.states[pl]
   if not st or not st.ready or type(op) ~= "string" then return end
@@ -257,6 +265,10 @@ G.R.Action.OnServerEvent:Connect(function(pl, op, a, b, c)
   st.tokT = now
   if st.tokens < 1 then return end
   st.tokens = st.tokens - 1
+  if G.matchServer and MATCHBLOCK[op] then
+    G.toast(st, "对战服务器里只打这一场排位赛，打完自动送你回去", "info")
+    return
+  end
   local f = ACT[op]
   if f then f(st, a, b, c) end
 end)
@@ -295,7 +307,7 @@ task.spawn(function()
     local list = {}
     for _, st in pairs(G.states) do table.insert(list, st) end
     for _, st in ipairs(list) do
-      if G.states[st.pl] == st and st.ready then G.save(st) end
+      if G.states[st.pl] == st and st.ready and not st.teleporting then G.save(st) end
     end
   end
 end)
@@ -304,19 +316,20 @@ end)
 task.spawn(function()
   task.wait(8)
   while true do
-    local lv, rt = G.readBoards()
+    local lv, rt, pv = G.readBoards()
     local function lines(title, list)
       local out = { title }
       for i, e in ipairs(list) do table.insert(out, i .. ". " .. e.name .. "  " .. Config.Fmt(e.value)) end
       if #list == 0 then table.insert(out, "（暂无）") end
       return table.concat(out, "\n")
     end
-    local t1, t2 = lines("最高关卡", lv), lines("突袭积分", rt)
+    local t1, t2, t3 = lines("最高关卡", lv), lines("突袭积分", rt), lines("对战积分", pv)
     for _, p in ipairs(G.plots) do
       p.board[1].Text = t1
       p.board[2].Text = t2
+      p.board[3].Text = t3
     end
-    G.R.Board:FireAllClients({ level = lv, rating = rt })
+    G.R.Board:FireAllClients({ level = lv, rating = rt, pvp = pv })
     task.wait(60)
   end
 end)

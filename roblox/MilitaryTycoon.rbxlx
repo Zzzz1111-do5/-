@@ -204,9 +204,14 @@ Config.Missions = {
 }
 Config.MissionRewardSec = 120   -- 任务奖励 = 这么多秒的收入（至少 400）
 
--- 突袭（打别的玩家存下来的防线，对方不在线也能打）和约战（同一个服务器里实时对战）
+-- 突袭（打别的玩家存下来的防线，对方不在线也能打）和约战（同一个服务器里点名挑战，友谊赛不算积分）
 Config.Raid = { cooldown = 25, range = 250, start = 1000, k = 32, loot = 0.6, minUnits = 1 }
 Config.Duel = { invite = 20, reward = 300, share = 0.2 }
+-- 真人对战（排位，服内或跨服匹配）：start 起始积分、k 每场最多涨跌；window / widen / maxWindow 能配的积分差（等得越久放得越宽，每秒 +widen）；
+--   tick 每几秒配一次、expire 排队记录几秒过期、refresh 几秒刷新一次；waitMax 对战服务器里等对手最多几秒、countdown 到齐后几秒开打、back 打完几秒送回去；
+--   reward 赢了的奖金（再加对方部队价值的 share）、lose 输了的安慰奖
+Config.Match = { start = 1000, k = 32, window = 120, widen = 12, maxWindow = 900, tick = 3, expire = 60, refresh = 10, waitMax = 75, countdown = 5, back = 8,
+  reward = 600, share = 0.25, lose = 150 }
 
 -- 音效：填 "rbxassetid://数字"（Studio 工具箱 → 音频里搜，复制 ID）；留空就不放
 Config.Sounds = { rifle = "", cannon = "", aa = "", rocket = "", boom = "", build = "", buy = "", win = "", lose = "", gun = "" }
@@ -277,16 +282,16 @@ return Config
 </Properties>
 </Item>
 </Item>
-<Item class="ServerScriptService" referent="RBX0000000000000000000000000000000E">
+<Item class="ServerScriptService" referent="RBX0000000000000000000000000000000F">
 <Properties>
 <string name="Name">ServerScriptService</string>
 </Properties>
-<Item class="Script" referent="RBX0000000000000000000000000000000D">
+<Item class="Script" referent="RBX0000000000000000000000000000000E">
 <Properties>
 <string name="Name">Main</string>
 <ProtectedString name="Source"><![CDATA[-- 军事大亨：服务器主脚本（ServerScriptService.Main）
 -- 各模块共用一个上下文 G：每个模块的 init(G) 把自己的函数挂到 G 上，模块之间通过 G 互相调用（不互相 require，免得循环引用）
---   World 地图 · Store 存档 / 排行榜 / 突袭匹配 · Economy 经济与成长 · Army 平时的部队 · Combat 战斗 · Weapons 玩家的枪
+--   World 地图 · Store 存档 / 排行榜 / 突袭匹配 · Economy 经济与成长 · Army 平时的部队 · Combat 战斗 · Weapons 玩家的枪 · Match 真人对战匹配
 --   Models 模型 · Battle 推演
 local Players = game:GetService("Players")
 local RS = game:GetService("ReplicatedStorage")
@@ -327,7 +332,7 @@ end
 -- 先收导入的原模型（在铺地形、建地图之前：没锚定的模型别掉下去砸在地上散开）
 local imported = G.Models.loadImported()
 if #imported > 0 then print("[军事大亨] 用上了导入的原模型：" .. table.concat(imported, "、")) end
-for _, name in ipairs({ "World", "Store", "Economy", "Army", "Combat", "Weapons" }) do
+for _, name in ipairs({ "World", "Store", "Economy", "Army", "Combat", "Weapons", "Match" }) do
   require(script:WaitForChild(name)).init(G)
 end
 
@@ -365,6 +370,7 @@ function G.push(st)
     rebirth = d.rebirth, canRebirth = G.canRebirth(d), xp = d.xp, rank = rank, nextXp = nextXp, rating = d.rating, kills = d.kills,
     weapons = weapons, daily = { ok = dOK, amount = dAmt, streak = dStreak }, missions = ms, missionReward = G.missionReward(st),
     raidCD = math.max(0, math.ceil((st.raidCD or 0) - os.clock())), power = G.powerOf(d),
+    pvp = d.pvp, pvpWins = d.pvpWins, pvpGames = d.pvpGames, match = G.matchInfo(st), matchServer = G.matchServer, teleporting = st.teleporting == true,
   })
   if st.ls then
     st.ls.cash.Value = math.floor(d.cash)
@@ -462,11 +468,13 @@ local function onPlayer(pl)
   st.ready = true
   G.push(st)
   if pl.Character then task.spawn(onCharacter, st, pl.Character) else spawnChar(st) end
+  task.spawn(G.matchArrive, st)   -- 对战服务器：认人、到齐开打
   task.delay(2, function()
     if G.states[pl] ~= st then return end
     if not ok then
       G.toast(st, "存档没读到，这次的进度不会保存（在 Studio 里测试：先发布，再在游戏设置 → 安全里打开 API 访问）", "bad")
     end
+    if G.matchServer then return end
     if type(raw) ~= "table" then
       G.toast(st, "欢迎来到军事大亨！踩绿色按钮盖楼，楼会一直给你赚钱", "info")
       task.wait(6)
@@ -492,9 +500,10 @@ for _, pl in ipairs(Players:GetPlayers()) do task.spawn(onPlayer, pl) end
 Players.PlayerRemoving:Connect(function(pl)
   local st = G.states[pl]
   if not st then return end
+  G.matchCancel(st, true)
   if st.battle then G.abandon(st) end
   st.battle = nil
-  if st.ready then G.save(st) end
+  if st.ready and not st.teleporting then G.save(st) end   -- 传送走的人传送前已经存过（别拿这里的旧数据盖掉对战服务器存的）
   G.states[pl] = nil
   local plot = st.plot
   for _, name in ipairs({ "Buildings", "Pads", "Units", "Enemies" }) do plot[name]:ClearAllChildren() end
@@ -533,7 +542,11 @@ local ACT = {
   exit = function(st) G.driveStop(st) end,
   rejoin = function(st) G.heroJoin(st) end,
   home = function(st) G.sendHome(st) end,
+  match = function(st) G.matchJoin(st) end,
+  matchCancel = function(st) G.matchCancel(st) end,
 }
+-- 对战服务器里只打那一场排位赛
+local MATCHBLOCK = { battle = true, raid = true, duel = true, duelYes = true, match = true, rebirth = true }
 G.R.Action.OnServerEvent:Connect(function(pl, op, a, b, c)
   local st = G.states[pl]
   if not st or not st.ready or type(op) ~= "string" then return end
@@ -543,6 +556,10 @@ G.R.Action.OnServerEvent:Connect(function(pl, op, a, b, c)
   st.tokT = now
   if st.tokens < 1 then return end
   st.tokens = st.tokens - 1
+  if G.matchServer and MATCHBLOCK[op] then
+    G.toast(st, "对战服务器里只打这一场排位赛，打完自动送你回去", "info")
+    return
+  end
   local f = ACT[op]
   if f then f(st, a, b, c) end
 end)
@@ -581,7 +598,7 @@ task.spawn(function()
     local list = {}
     for _, st in pairs(G.states) do table.insert(list, st) end
     for _, st in ipairs(list) do
-      if G.states[st.pl] == st and st.ready then G.save(st) end
+      if G.states[st.pl] == st and st.ready and not st.teleporting then G.save(st) end
     end
   end
 end)
@@ -590,19 +607,20 @@ end)
 task.spawn(function()
   task.wait(8)
   while true do
-    local lv, rt = G.readBoards()
+    local lv, rt, pv = G.readBoards()
     local function lines(title, list)
       local out = { title }
       for i, e in ipairs(list) do table.insert(out, i .. ". " .. e.name .. "  " .. Config.Fmt(e.value)) end
       if #list == 0 then table.insert(out, "（暂无）") end
       return table.concat(out, "\n")
     end
-    local t1, t2 = lines("最高关卡", lv), lines("突袭积分", rt)
+    local t1, t2, t3 = lines("最高关卡", lv), lines("突袭积分", rt), lines("对战积分", pv)
     for _, p in ipairs(G.plots) do
       p.board[1].Text = t1
       p.board[2].Text = t2
+      p.board[3].Text = t3
     end
-    G.R.Board:FireAllClients({ level = lv, rating = rt })
+    G.R.Board:FireAllClients({ level = lv, rating = rt, pvp = pv })
     task.wait(60)
   end
 end)
@@ -1543,7 +1561,7 @@ return Battle
 <Item class="ModuleScript" referent="RBX00000000000000000000000000000007">
 <Properties>
 <string name="Name">Combat</string>
-<ProtectedString name="Source"><![CDATA[-- 军事大亨：战斗编排——打 AI 关卡（pve）、突袭别人的防线（raid）、和同服玩家约战（duel）；
+<ProtectedString name="Source"><![CDATA[-- 军事大亨：战斗编排——打 AI 关卡（pve）、突袭别人的防线（raid）、和真人对战（duel：同服点名约战是友谊赛，匹配来的是排位赛 ranked）；
 -- 玩家本人上阵（小人：开战时传送到己方后方，敌人会打你，死了在基地复活、可以重返战场）、亲自驾驶自己的车 / 直升机
 local Players = game:GetService("Players")
 local Debris = game:GetService("Debris")
@@ -1970,10 +1988,7 @@ function Combat.init(G)
       end
     end
     if B.mode == "duel" then
-      local t1, t2 = nil, nil
-      for st, team in pairs(B.sts) do
-        if team == 1 then t1 = st else t2 = st end
-      end
+      local t1, t2 = B.sides[1], B.sides[2]   -- 中途走掉的人不在 B.sts 里了，排位照样算他输
       local winner = 0
       if res == "win" then winner = 1 elseif res == "lose" then winner = 2
       else
@@ -1981,19 +1996,37 @@ function Combat.init(G)
         winner = (v1 >= v2) and 1 or 2
       end
       if B.arena then B.arena.busy = false end
+      -- 排位：ELO（赢的涨、输的掉同样多；走掉的人的存档在 PlayerRemoving 里存）
+      local delta = 0
+      local MC = Config.Match
+      if B.ranked and t1 and t2 and t1.data and t2.data then
+        local d1, d2 = t1.data, t2.data
+        local E1 = 1 / (1 + 10 ^ ((d2.pvp - d1.pvp) / 400))
+        delta = math.max(1, math.floor(MC.k * math.abs(((winner == 1) and 1 or 0) - E1) + 0.5))
+        local w, l = d1, d2
+        if winner == 2 then w, l = d2, d1 end
+        w.pvp = w.pvp + delta
+        l.pvp = math.max(0, l.pvp - delta)
+        w.pvpWins = w.pvpWins + 1
+        d1.pvpGames = d1.pvpGames + 1
+        d2.pvpGames = d2.pvpGames + 1
+      end
       for st, team in pairs(B.sts) do
         if G.states[st.pl] == st then
           local other = (team == 1) and t2 or t1
           local won = team == winner
           local reward = 0
-          if won then
+          if B.ranked then
+            reward = won and math.floor(MC.reward + MC.share * (other and armyValue(other) or 0)) or MC.lose
+            G.addXP(st, won and 40 or 15)
+          elseif won then
             reward = math.floor(Config.Duel.reward + Config.Duel.share * (other and armyValue(other) or 0))
-            st.data.cash = st.data.cash + reward
-            st.data.duelWins = st.data.duelWins + 1
             G.addXP(st, 30)
           else
             G.addXP(st, 10)
           end
+          st.data.cash = st.data.cash + reward
+          if won then st.data.duelWins = st.data.duelWins + 1 end
           G.progress(st, "duel", 1)
           -- 约战不损失部队：打没了的换新模型，全部放回阵位
           for _, bu in ipairs(B.units) do
@@ -2004,12 +2037,18 @@ function Combat.init(G)
           end
           G.homeSnap(st)
           st.battle = nil
-          RB:FireClient(st.pl, { phase = "end", mode = "duel", result = won and "win" or "lose", reward = reward, lost = {}, lostN = 0, level = st.data.level,
-            text = won and ("你赢了 " .. (other and other.pl.DisplayName or "对手") .. "！") or ("输给了 " .. (other and other.pl.DisplayName or "对手") .. "，部队没有损失") })
+          local oname = other and other.pl.DisplayName or "对手"
+          local text = won and ("你赢了 " .. oname .. "！") or ("输给了 " .. oname .. "，部队没有损失")
+          if B.ranked then
+            text = text .. "\n对战积分 " .. (won and "+" or "-") .. delta .. "（现在 " .. st.data.pvp .. "）"
+            if G.matchServer then text = text .. "\n" .. MC.back .. " 秒后送你回普通服务器" end
+          end
+          RB:FireClient(st.pl, { phase = "end", mode = "duel", ranked = B.ranked, result = won and "win" or "lose", reward = reward, lost = {}, lostN = 0, level = st.data.level, text = text })
           G.push(st)
           task.spawn(G.save, st)
         end
       end
+      if G.onDuelEnd then G.onDuelEnd(B) end
       return
     end
     -- 关卡、突袭：第 1 队是玩家
@@ -2102,6 +2141,7 @@ function Combat.init(G)
 
   function G.startBattle(st)
     if not canFight(st) then return end
+    if G.matchCancel then G.matchCancel(st, "开始打关卡，取消了匹配") end
     if #st.enemy == 0 then G.makeEnemy(st) end
     local B = newBattle("pve", st.plot.origin)
     B.level = st.data.level
@@ -2143,6 +2183,7 @@ function Combat.init(G)
       return
     end
     st.raidCD = now + Config.Raid.cooldown
+    if G.matchCancel then G.matchCancel(st, "开始突袭，取消了匹配") end
     st.busy = true
     G.toast(st, "侦察中：找一条差不多强的防线……", "info")
     local opp = G.findOpponent(st)
@@ -2197,6 +2238,12 @@ function Combat.init(G)
       G.toast(ts, "约战没开成（对方在忙或者没有部队）", "info")
       return
     end
+    G.startDuel(st, ts, false)
+  end
+
+  -- 两个人的部队、本人都传到空着的竞技场开打（st 在南边、ts 在北边）；ranked 排位赛记对战积分；返回开没开成
+  function G.startDuel(st, ts, ranked)
+    if not canFight(st) or not canFight(ts) then return false end
     local arena = nil
     for _, a in ipairs(G.arenas) do
       if not a.busy then
@@ -2205,16 +2252,23 @@ function Combat.init(G)
       end
     end
     if not arena then
-      G.toast(st, "竞技场都在用，过一会儿再约", "info")
-      G.toast(ts, "竞技场都在用，过一会儿再约", "info")
-      return
+      G.toast(st, "竞技场都在用，过一会儿再打", "info")
+      G.toast(ts, "竞技场都在用，过一会儿再打", "info")
+      return false
+    end
+    if G.matchCancel then   -- 在排队的话不用排了
+      G.matchCancel(st, true)
+      G.matchCancel(ts, true)
     end
     arena.busy = true
     local B = newBattle("duel", arena.origin)
     B.arena = arena
+    B.ranked = ranked == true
+    B.sides = { [1] = st, [2] = ts }
     enlist(B, st, 1, false)
     enlist(B, ts, 2, true)
-    begin(B, { [1] = st, [2] = ts }, "约战：" .. st.pl.DisplayName .. " vs " .. ts.pl.DisplayName)
+    begin(B, { [1] = st, [2] = ts }, (ranked and "排位对战：" or "约战：") .. st.pl.DisplayName .. " vs " .. ts.pl.DisplayName)
+    return true
   end
 
   -- 战后或者想回去了：传送回自己的基地出生点
@@ -2620,6 +2674,356 @@ return Economy
 </Item>
 <Item class="ModuleScript" referent="RBX00000000000000000000000000000009">
 <Properties>
+<string name="Name">Match</string>
+<ProtectedString name="Source"><![CDATA[-- 军事大亨：真人对战（排位）
+--   服内快速匹配：同一个服务器里两个人都在排队，直接在本服的竞技场开打；
+--   跨服匹配：排队的人写进 MemoryStore 的有序映射（每 10 秒刷新，60 秒过期），每个服务器每 3 秒看一遍：
+--     积分差在窗口内（等得越久窗口越大）、在别的服务器、还没被认领的，userId 小的一方发起——先认领自己、再认领对方（UpdateAsync，谁先改到算谁的），
+--     预留一个对战服务器（ReserveServer），把访问码写进对方的记录、再用 MessagingService 通知对方的服务器，两边各自存档后传送过去；
+--   对战服务器（预留服务器：PrivateServerId 不空、PrivateServerOwnerId 为 0）：两个人都到了 5 秒后自动开打，打完记对战积分，8 秒后传送回普通服务器；
+--     对手 75 秒还没来就把先到的人送回去（积分不变）。
+-- 所有 MemoryStore / MessagingService / TeleportService 调用都包在 pcall 里（Studio 里传送不了：服内匹配照样能用）
+local Players = game:GetService("Players")
+local MSS = game:GetService("MemoryStoreService")
+local MS = game:GetService("MessagingService")
+local TS = game:GetService("TeleportService")
+
+local Match = {}
+
+function Match.init(G)
+  local Config = G.Config
+  local MC = Config.Match
+  local TOPIC = "mt_match_v1"
+  local inMatch = game.PrivateServerId ~= "" and game.PrivateServerOwnerId == 0
+  G.matchServer = inMatch
+
+  local map = nil
+  do
+    local ok, res = pcall(function() return MSS:GetSortedMap("mt_match_v1") end)
+    if ok then map = res else warn("[军事大亨] MemoryStore 不可用，只能服内匹配：" .. tostring(res)) end
+  end
+
+  local queue = {}   -- [st] = { t0 = 开始排队的时刻, key = "u123", entryT = 上次写记录的时刻 }
+  G.matchQueue = queue
+
+  local function keyOf(uid)
+    return "u" .. tostring(uid)
+  end
+  local function entryOf(st)
+    return { u = st.pl.UserId, r = st.data.pvp, n = st.pl.DisplayName, job = game.JobId, t = os.time() }
+  end
+  local function windowOf(q)
+    return math.min(MC.maxWindow, MC.window + MC.widen * (os.clock() - q.t0))
+  end
+  function G.matchInfo(st)
+    local q = queue[st]
+    if not q then return nil end
+    return { since = math.floor(os.clock() - q.t0), window = math.floor(windowOf(q)) }
+  end
+
+  local function canQueue(st)
+    return G.states[st.pl] == st and st.ready and not st.battle and not st.busy and not st.teleporting and G.count(st) > 0
+  end
+
+  -- 写 / 刷新自己的排队记录（被别人认领了就不动它）
+  local function publish(st, q)
+    if not map then return end
+    local ok, err = pcall(function()
+      map:UpdateAsync(q.key, function(old)
+        if type(old) == "table" and old.claimed then return nil end
+        return entryOf(st)
+      end, MC.expire)
+    end)
+    if ok then q.entryT = os.clock() else warn("[军事大亨] 写排队记录失败：" .. tostring(err)) end
+  end
+  local function release(key, by)
+    if not map then return end
+    pcall(function()
+      map:UpdateAsync(key, function(old)
+        if type(old) == "table" and old.claimed == by then
+          old.claimed, old.code = nil, nil
+          return old
+        end
+        return nil
+      end, MC.expire)
+    end)
+  end
+  local function drop(key)
+    if map then pcall(function() map:RemoveAsync(key) end) end
+  end
+
+  -- 传送到对战服务器（先存档：对战服务器读的就是这份）
+  local function go(st, code, a, b)
+    local q = queue[st]
+    queue[st] = nil
+    if q then task.spawn(drop, q.key) end
+    if G.states[st.pl] ~= st or st.battle then return end
+    st.teleporting = true
+    G.push(st)
+    G.save(st)
+    local opts = Instance.new("TeleportOptions")
+    opts.ReservedServerAccessCode = code
+    opts:SetTeleportData({ mode = "match", a = a, b = b })
+    local ok, err = pcall(function() TS:TeleportAsync(game.PlaceId, { st.pl }, opts) end)
+    if not ok then
+      st.teleporting = false
+      G.toast(st, "传送失败：" .. tostring(err), "bad")
+      G.push(st)
+    end
+  end
+
+  -- 发起跨服对战：先认领自己，再认领对方，预留服务器，通知对方，自己传过去
+  local function initiate(st, q, v)
+    local me = st.pl.UserId
+    local ok1, mine = pcall(function()
+      return map:UpdateAsync(q.key, function(old)
+        if type(old) == "table" and old.claimed then return nil end
+        local e = entryOf(st)
+        e.claimed = me
+        return e
+      end, MC.expire)
+    end)
+    if not ok1 or type(mine) ~= "table" or mine.claimed ~= me then return end
+    local okey = keyOf(v.u)
+    local ok2, theirs = pcall(function()
+      return map:UpdateAsync(okey, function(old)
+        if type(old) ~= "table" or old.claimed then return nil end
+        old.claimed = me
+        return old
+      end, MC.expire)
+    end)
+    if not ok2 or type(theirs) ~= "table" then
+      release(q.key, me)
+      return
+    end
+    local ok3, code = pcall(function() return TS:ReserveServer(game.PlaceId) end)
+    if not ok3 or type(code) ~= "string" then
+      warn("[军事大亨] 预留对战服务器失败：" .. tostring(code))
+      release(q.key, me)
+      release(okey, me)
+      return
+    end
+    -- 访问码写进对方的记录（消息丢了，对方的服务器下一轮也能自己看到），再发消息
+    pcall(function()
+      map:UpdateAsync(okey, function(old)
+        if type(old) == "table" and old.claimed == me then
+          old.code, old.a, old.b = code, me, v.u
+          return old
+        end
+        return nil
+      end, MC.expire)
+    end)
+    pcall(function() MS:PublishAsync(TOPIC, { to = v.u, code = code, a = me, b = v.u, an = st.pl.DisplayName, ar = st.data.pvp }) end)
+    G.toast(st, "找到对手：" .. tostring(v.n) .. "（对战积分 " .. tostring(v.r) .. "）！传送到对战服务器……", "good")
+    go(st, code, me, v.u)
+  end
+
+  -- 服内两个人：直接在本服竞技场打排位
+  local function startLocal(a, b)
+    queue[a], queue[b] = nil, nil
+    task.spawn(drop, keyOf(a.pl.UserId))
+    task.spawn(drop, keyOf(b.pl.UserId))
+    G.toast(a, "找到对手：" .. b.pl.DisplayName .. "（同一个服务器）！", "good")
+    G.toast(b, "找到对手：" .. a.pl.DisplayName .. "（同一个服务器）！", "good")
+    if not G.startDuel(a, b, true) then   -- 竞技场都在用：放回队里
+      queue[a] = { t0 = os.clock(), key = keyOf(a.pl.UserId), entryT = -100 }
+      queue[b] = { t0 = os.clock(), key = keyOf(b.pl.UserId), entryT = -100 }
+    end
+  end
+
+  local function cycle()
+    local ready = {}
+    for st in pairs(queue) do
+      if canQueue(st) then table.insert(ready, st) end
+    end
+    table.sort(ready, function(x, y) return queue[x].t0 < queue[y].t0 end)
+    -- 1）服内：先到先配，挑积分最接近的
+    while #ready >= 2 do
+      local a = table.remove(ready, 1)
+      local bi, bd = 1, math.huge
+      for i, b in ipairs(ready) do
+        local d = math.abs(a.data.pvp - b.data.pvp)
+        if d < bd then bi, bd = i, d end
+      end
+      startLocal(a, table.remove(ready, bi))
+    end
+    -- 2）跨服
+    if not map or #ready == 0 then return end
+    local ok, items = pcall(function() return map:GetRangeAsync(Enum.SortDirection.Ascending, 100) end)
+    if not ok or type(items) ~= "table" then return end
+    for _, st in ipairs(ready) do
+      local q = queue[st]
+      if q and canQueue(st) then
+        local mine = nil
+        for _, it in ipairs(items) do
+          if it.key == q.key then mine = it.value end
+        end
+        if type(mine) == "table" and mine.claimed and mine.claimed ~= st.pl.UserId then
+          if mine.code then go(st, mine.code, mine.a, mine.b) end   -- 别的服务器认领了我（消息没收到）：自己按记录传过去
+        else
+          if type(mine) ~= "table" or os.clock() - q.entryT > MC.refresh then publish(st, q) end
+          local me, win = st.pl.UserId, windowOf(q)
+          local best, bd = nil, math.huge
+          for _, it in ipairs(items) do
+            local v = it.value
+            if type(v) == "table" and type(v.u) == "number" and v.u > me and v.job ~= game.JobId and not v.claimed then
+              local d = math.abs((tonumber(v.r) or MC.start) - st.data.pvp)
+              if d <= win and d < bd then best, bd = v, d end
+            end
+          end
+          if best then initiate(st, q, best) end
+        end
+      end
+    end
+  end
+
+  function G.matchJoin(st)
+    if inMatch or queue[st] or not st.ready then return end
+    if st.battle then
+      G.toast(st, "打完这一仗再匹配", "info")
+      return
+    end
+    if G.count(st) == 0 then
+      G.toast(st, "还没有部队：先造兵再来对战", "bad")
+      return
+    end
+    queue[st] = { t0 = os.clock(), key = keyOf(st.pl.UserId), entryT = -100 }
+    G.toast(st, "开始匹配真人对手：先找同服务器的，再找全服积分差不多的", "info")
+    G.push(st)
+  end
+
+  -- why：给了就是被动取消（开始打关卡、离开服务器），提示一句原因
+  function G.matchCancel(st, why)
+    local q = queue[st]
+    if not q then return end
+    queue[st] = nil
+    task.spawn(drop, q.key)
+    if why ~= true and G.states[st.pl] == st then
+      G.toast(st, why or "取消了匹配", "info")
+      G.push(st)
+    end
+  end
+
+  if not inMatch then
+    pcall(function()
+      MS:SubscribeAsync(TOPIC, function(msg)
+        local d = type(msg) == "table" and msg.Data
+        if type(d) ~= "table" or type(d.to) ~= "number" or type(d.code) ~= "string" then return end
+        local pl = Players:GetPlayerByUserId(d.to)
+        local st = pl and G.states[pl]
+        if not st or not queue[st] then return end
+        G.toast(st, "找到对手：" .. tostring(d.an) .. "（对战积分 " .. tostring(d.ar) .. "）！传送到对战服务器……", "good")
+        go(st, d.code, d.a, d.b)
+      end)
+    end)
+    task.spawn(function()
+      while true do
+        task.wait(MC.tick)
+        if next(queue) then
+          local ok, err = pcall(cycle)
+          if not ok then warn("[军事大亨] 匹配出错：" .. tostring(err)) end
+        end
+      end
+    end)
+  end
+
+  TS.TeleportInitFailed:Connect(function(pl, _, msg)
+    local st = G.states[pl]
+    if st and st.teleporting then
+      st.teleporting = false
+      G.toast(st, "传送失败：" .. tostring(msg), "bad")
+      G.push(st)
+    end
+  end)
+
+  ---------------------------------------------------------------- 对战服务器
+
+  -- 送回普通服务器（随便哪个，进去以后读存档、照样是自己的基地）
+  local function sendBack(st)
+    if G.states[st.pl] ~= st or st.teleporting then return end
+    st.teleporting = true
+    G.save(st)
+    local ok, err = pcall(function() TS:TeleportAsync(game.PlaceId, { st.pl }) end)
+    if not ok then
+      st.teleporting = false
+      G.toast(st, "传送回去失败（" .. tostring(err) .. "），可以直接退出再进游戏", "bad")
+    end
+  end
+  G.matchSendBack = sendBack
+
+  local M = nil        -- 这一场：{ a, b, t0, started }
+  local arrived = {}   -- userId → st
+  local function tryStart()
+    if not M or M.started then return end
+    local sa, sb = arrived[M.a], arrived[M.b]
+    if not (sa and sb and G.states[sa.pl] == sa and G.states[sb.pl] == sb) then return end
+    M.started = true
+    for _, st in ipairs({ sa, sb }) do G.toast(st, "对手到了！" .. MC.countdown .. " 秒后开打（排位对战：赢了涨对战积分，部队不会损失）", "good") end
+    task.delay(MC.countdown, function()
+      local okA, okB = G.states[sa.pl] == sa, G.states[sb.pl] == sb
+      if okA and okB and G.startDuel(sa, sb, true) then return end
+      for _, st in ipairs({ sa, sb }) do
+        if G.states[st.pl] == st then
+          G.toast(st, "对手走了，这一场不算，送你回去", "info")
+          sendBack(st)
+        end
+      end
+    end)
+  end
+
+  -- 进服读完档以后调：对战服务器里认人、到齐开打；普通服务器什么都不做
+  function G.matchArrive(st)
+    if not inMatch then return end
+    local ok, jd = pcall(function() return st.pl:GetJoinData() end)
+    local td = ok and type(jd) == "table" and jd.TeleportData or nil
+    if type(td) ~= "table" or td.mode ~= "match" or (td.a ~= st.pl.UserId and td.b ~= st.pl.UserId) then
+      G.toast(st, "这是对战服务器，送你回普通服务器", "info")
+      task.delay(3, function() sendBack(st) end)
+      return
+    end
+    if M and (td.a ~= M.a or td.b ~= M.b) then   -- 预留服务器只打一场：别的对局的人进错了
+      G.toast(st, "这一场不是你的对局，送你回普通服务器", "info")
+      task.delay(3, function() sendBack(st) end)
+      return
+    end
+    arrived[st.pl.UserId] = st
+    M = M or { a = td.a, b = td.b, t0 = os.clock(), started = false }
+    if not M.started then G.toast(st, "进了对战服务器，等对手进场……", "info") end
+    tryStart()
+  end
+
+  -- 对战打完（Combat 的 finish 调）：对战服务器里过几秒送回去
+  function G.onDuelEnd(B)
+    if not inMatch or not B.ranked then return end
+    task.delay(MC.back, function()
+      for _, st in pairs(B.sides or {}) do sendBack(st) end
+    end)
+  end
+
+  if inMatch then
+    task.spawn(function()
+      while true do
+        task.wait(2)
+        if M and not M.started and os.clock() - M.t0 > MC.waitMax then
+          M.started = true
+          for _, st in pairs(arrived) do
+            if G.states[st.pl] == st then
+              G.toast(st, "对手没进来，这一场不算，送你回去（积分不变）", "info")
+              sendBack(st)
+            end
+          end
+        end
+      end
+    end)
+  end
+end
+
+return Match
+]]></ProtectedString>
+</Properties>
+</Item>
+<Item class="ModuleScript" referent="RBX0000000000000000000000000000000A">
+<Properties>
 <string name="Name">Models</string>
 <ProtectedString name="Source"><![CDATA[-- 军事大亨：模型（地图、竞技场、建筑、购买按钮、兵种、武器、排行榜牌子、血条）
 -- 兵种：优先用玩家在 Studio 里「导入 3D」进来的原模型（roblox/models/*.glb，名字 = 槽位：soldier、tank、heli、fighter……和 prop_* 道具），
@@ -2794,7 +3198,7 @@ function Models.plot(f, origin, color, index)
   anchor.Transparency = 1
   local _, label = Models.sign(anchor, "空基地", 70, 100, 13, color, 1600)
   -- 排行榜牌子（出生点后面的墙上，朝出生点）
-  local board = block(f, base, V(40, 22, 1), CF(0, 14, -hs + 2), RGB(24, 28, 34), MAT.SmoothPlastic)
+  local board = block(f, base, V(54, 22, 1), CF(0, 14, -hs + 2), RGB(24, 28, 34), MAT.SmoothPlastic)
   board.Name = "Board"
   local sg = Instance.new("SurfaceGui")
   sg.Face = Enum.NormalId.Back
@@ -2803,12 +3207,12 @@ function Models.plot(f, origin, color, index)
   sg.LightInfluence = 0
   sg.Parent = board
   local cols = {}
-  for i, title in ipairs({ "最高关卡", "突袭积分" }) do
+  for i, title in ipairs({ "最高关卡", "突袭积分", "对战积分" }) do
     local col = Instance.new("TextLabel")
     col.Name = "Col" .. i
     col.BackgroundTransparency = 1
-    col.Position = UDim2.fromScale((i - 1) * 0.5, 0)
-    col.Size = UDim2.fromScale(0.5, 1)
+    col.Position = UDim2.fromScale((i - 1) / 3, 0)
+    col.Size = UDim2.fromScale(1 / 3, 1)
     col.Font = Enum.Font.GothamBold
     col.TextScaled = true
     col.TextColor3 = C.white
@@ -3733,10 +4137,10 @@ return Models
 ]]></ProtectedString>
 </Properties>
 </Item>
-<Item class="ModuleScript" referent="RBX0000000000000000000000000000000A">
+<Item class="ModuleScript" referent="RBX0000000000000000000000000000000B">
 <Properties>
 <string name="Name">Store</string>
-<ProtectedString name="Source"><![CDATA[-- 军事大亨：存档（DataStore）、突袭用的防线快照、积分匹配、排行榜、被突袭记录
+<ProtectedString name="Source"><![CDATA[-- 军事大亨：存档（DataStore）、突袭用的防线快照、积分匹配、排行榜（最高关卡、突袭积分、对战积分）、被突袭记录
 -- 读档失败的玩家不存档（别拿新档盖掉老进度）；所有 DataStore 调用都包在 pcall 里（Studio 没开 API 访问时整个存档功能关掉，照样能玩）
 local DSS = game:GetService("DataStoreService")
 local Players = game:GetService("Players")
@@ -3761,11 +4165,13 @@ function Store.init(G)
   local raidlog = ds("MilitaryTycoon_raidlog_v1")
   local byRating = ds("MilitaryTycoon_rating_v1", true)
   local byLevel = ds("MilitaryTycoon_level_v1", true)
+  local byPvp = ds("MilitaryTycoon_pvp_v1", true)
 
   function G.newData()
     return {
       cash = Config.StartCash, level = 1, best = 1, owned = {}, hq = 0, tech = 0, army = {}, wins = 0,
       rebirth = 0, xp = 0, kills = 0, weapons = { rifle = true }, rating = Config.Raid.start, raidWins = 0, duelWins = 0,
+      pvp = Config.Match.start, pvpWins = 0, pvpGames = 0,
       daily = { day = 0, streak = 0 }, missions = { day = 0, list = {} },
     }
   end
@@ -3792,6 +4198,9 @@ function Store.init(G)
     d.rating = math.floor(num(raw.rating, 0, nil, Config.Raid.start))
     d.raidWins = math.floor(num(raw.raidWins, 0, nil, 0))
     d.duelWins = math.floor(num(raw.duelWins, 0, nil, 0))
+    d.pvp = math.floor(num(raw.pvp, 0, nil, Config.Match.start))
+    d.pvpWins = math.floor(num(raw.pvpWins, 0, nil, 0))
+    d.pvpGames = math.max(d.pvpWins, math.floor(num(raw.pvpGames, 0, nil, 0)))
     if type(raw.owned) == "table" then
       for id, v in pairs(raw.owned) do
         if BDEF[id] and v then d.owned[id] = true end
@@ -3845,7 +4254,7 @@ function Store.init(G)
     return {
       v = 2, cash = math.floor(d.cash), level = d.level, best = d.best, owned = owned, hq = d.hq, tech = d.tech, army = armyList(st),
       wins = d.wins or 0, rebirth = d.rebirth, xp = d.xp, kills = d.kills, weapons = weapons, rating = d.rating,
-      raidWins = d.raidWins, duelWins = d.duelWins, daily = { day = d.daily.day, streak = d.daily.streak },
+      raidWins = d.raidWins, duelWins = d.duelWins, pvp = d.pvp, pvpWins = d.pvpWins, pvpGames = d.pvpGames, daily = { day = d.daily.day, streak = d.daily.streak },
       missions = { day = d.missions.day, list = ml }, t = os.time(),
     }
   end
@@ -3864,6 +4273,7 @@ function Store.init(G)
     end
     if byRating then pcall(function() byRating:SetAsync(key, math.floor(data.rating)) end) end
     if byLevel then pcall(function() byLevel:SetAsync(key, math.floor(data.best)) end) end
+    if byPvp and data.pvpGames > 0 then pcall(function() byPvp:SetAsync(key, math.floor(data.pvp)) end) end
   end
 
   function G.loadData(pl)
@@ -3937,7 +4347,7 @@ function Store.init(G)
     return list
   end
 
-  -- 排行榜：两个榜各取前 10（名字按 UserId 查，查过的记住）
+  -- 排行榜：三个榜各取前 10（名字按 UserId 查，查过的记住）
   local names = {}
   local function nameOf(key)
     if names[key] then return names[key] end
@@ -3961,7 +4371,7 @@ function Store.init(G)
     return out
   end
   function G.readBoards()
-    return top(byLevel), top(byRating)
+    return top(byLevel), top(byRating), top(byPvp)
   end
   G.storeOK = main ~= nil
 end
@@ -3970,7 +4380,7 @@ return Store
 ]]></ProtectedString>
 </Properties>
 </Item>
-<Item class="ModuleScript" referent="RBX0000000000000000000000000000000B">
+<Item class="ModuleScript" referent="RBX0000000000000000000000000000000C">
 <Properties>
 <string name="Name">Weapons</string>
 <ProtectedString name="Source"><![CDATA[-- 军事大亨：玩家本人的武器（背包里的枪）：发枪、开枪（服务器校验射速、弹匣、射程，射线判定打中谁）、
@@ -4118,7 +4528,7 @@ return Weapons
 ]]></ProtectedString>
 </Properties>
 </Item>
-<Item class="ModuleScript" referent="RBX0000000000000000000000000000000C">
+<Item class="ModuleScript" referent="RBX0000000000000000000000000000000D">
 <Properties>
 <string name="Name">World</string>
 <ProtectedString name="Source"><![CDATA[-- 军事大亨：地图（光照、地形、六块基地、约战竞技场）
@@ -4218,15 +4628,15 @@ return World
 </Item>
 </Item>
 </Item>
-<Item class="StarterPlayer" referent="RBX00000000000000000000000000000015">
+<Item class="StarterPlayer" referent="RBX00000000000000000000000000000016">
 <Properties>
 <string name="Name">StarterPlayer</string>
 </Properties>
-<Item class="StarterPlayerScripts" referent="RBX00000000000000000000000000000014">
+<Item class="StarterPlayerScripts" referent="RBX00000000000000000000000000000015">
 <Properties>
 <string name="Name">StarterPlayerScripts</string>
 </Properties>
-<Item class="LocalScript" referent="RBX00000000000000000000000000000013">
+<Item class="LocalScript" referent="RBX00000000000000000000000000000014">
 <Properties>
 <string name="Name">Client</string>
 <ProtectedString name="Source"><![CDATA[-- 军事大亨：客户端（StarterPlayerScripts.Client）
@@ -4262,7 +4672,7 @@ RunService.RenderStepped:Connect(function(dt)
 end)
 ]]></ProtectedString>
 </Properties>
-<Item class="ModuleScript" referent="RBX0000000000000000000000000000000F">
+<Item class="ModuleScript" referent="RBX00000000000000000000000000000010">
 <Properties>
 <string name="Name">Fx</string>
 <ProtectedString name="Source"><![CDATA[-- 军事大亨（客户端）：特效——开火曳光、炮口火光、炮弹 / 火箭弹弧线、导弹（跟着目标飞）、炸弹、拦截炮把炮弹打爆在半空、爆炸、建成、楼顶冒钱；
@@ -4613,7 +5023,7 @@ return Fx
 ]]></ProtectedString>
 </Properties>
 </Item>
-<Item class="ModuleScript" referent="RBX00000000000000000000000000000010">
+<Item class="ModuleScript" referent="RBX00000000000000000000000000000011">
 <Properties>
 <string name="Name">Play</string>
 <ProtectedString name="Source"><![CDATA[-- 军事大亨（客户端）：操作和镜头——
@@ -5268,10 +5678,11 @@ return Play
 ]]></ProtectedString>
 </Properties>
 </Item>
-<Item class="ModuleScript" referent="RBX00000000000000000000000000000011">
+<Item class="ModuleScript" referent="RBX00000000000000000000000000000012">
 <Properties>
 <string name="Name">UI</string>
-<ProtectedString name="Source"><![CDATA[-- 军事大亨（客户端）：界面——钱、关卡、兵工厂、按钮、提示；任务、武器、排行榜、约战、重生、致谢；每日奖励、约战邀请；战斗中的面板、结果
+<ProtectedString name="Source"><![CDATA[-- 军事大亨（客户端）：界面——钱、关卡、兵工厂、按钮、提示；任务、武器、排行榜、真人对战（排位匹配、同服约战）、重生、致谢；
+-- 每日奖励、约战邀请、匹配中的状态条；战斗中的面板、结果
 local Players = game:GetService("Players")
 local UIS = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
@@ -5379,6 +5790,12 @@ function UI.init(G)
   local cashL = text(top, { Position = UDim2.fromOffset(18, 0), Size = UDim2.new(0.6, -18, 1, 0), Font = FONT, TextSize = 30, TextColor3 = RGB(255, 214, 90), Text = "$0" })
   local incL = text(top, { Position = UDim2.new(0.6, 0, 0, 0), Size = UDim2.new(0.4, -16, 1, 0), TextSize = 18, TextColor3 = RGB(130, 235, 140), TextXAlignment = Enum.TextXAlignment.Right, Text = "+0 / 秒" })
 
+  -- 匹配中 / 传送中 / 对战服务器 的状态条（钱的下面）
+  local mbar = panel(root, { AnchorPoint = V2(0.5, 0), Position = UDim2.new(0.5, 0, 0, 70), Size = UDim2.fromOffset(460, 40), Visible = false, ZIndex = 3 })
+  local mbarL = text(mbar, { Position = UDim2.fromOffset(14, 0), Size = UDim2.new(1, -120, 1, 0), TextSize = 15, Font = FONT, TextColor3 = RGB(255, 220, 140), ZIndex = 3 })
+  local mbarBtn = button(mbar, "取消", RGB(120, 60, 52), { AnchorPoint = V2(1, 0.5), Position = UDim2.new(1, -8, 0.5, 0), Size = UDim2.fromOffset(90, 30), TextSize = 14, ZIndex = 3 },
+    function() RA:FireServer("matchCancel") end)
+
   local info = panel(root, { Position = UDim2.fromOffset(10, 72), Size = UDim2.fromOffset(280, 196) })
   local lvL = text(info, { Position = UDim2.fromOffset(14, 8), Size = UDim2.new(1, -28, 0, 28), Font = FONT, TextSize = 22, Text = "第 1 关" })
   local armyL = text(info, { Position = UDim2.fromOffset(14, 38), Size = UDim2.new(1, -28, 0, 20), Text = "部队 0 / 4" })
@@ -5410,7 +5827,7 @@ function UI.init(G)
   local btnMission = button(menu, "任务", RGB(52, 84, 120), { Size = UDim2.fromOffset(140, 40), LayoutOrder = 1, TextSize = 16 }, function() open("missions") end)
   button(menu, "武器", RGB(60, 74, 60), { Size = UDim2.fromOffset(140, 40), LayoutOrder = 2, TextSize = 16 }, function() open("weapons") end)
   button(menu, "排行榜", RGB(84, 70, 40), { Size = UDim2.fromOffset(140, 40), LayoutOrder = 3, TextSize = 16 }, function() open("board") end)
-  local btnDuel = button(menu, "约战玩家", RGB(120, 52, 52), { Size = UDim2.fromOffset(140, 40), LayoutOrder = 4, TextSize = 16 }, function() open("duel") end)
+  local btnDuel = button(menu, "真人对战", RGB(150, 50, 46), { Size = UDim2.fromOffset(140, 40), LayoutOrder = 4, TextSize = 16 }, function() open("duel") end)
   local btnRebirth = button(menu, "重生", RGB(150, 110, 30), { Size = UDim2.fromOffset(140, 40), LayoutOrder = 5, TextSize = 16, Visible = false }, function() open("rebirth") end)
   button(menu, "致谢", RGB(54, 58, 66), { Size = UDim2.fromOffset(140, 34), LayoutOrder = 6, TextSize = 14 }, function() open("credits") end)
 
@@ -5622,15 +6039,16 @@ function UI.init(G)
   end
 
   -- 排行榜
-  local _, bBody = modal("board", "排行榜（全服）", 560, 420)
-  G.board = { level = {}, rating = {} }
+  local _, bBody = modal("board", "排行榜（全服）", 680, 420)
+  G.board = { level = {}, rating = {}, pvp = {} }
+  local BOARDS = { { "level", "最高关卡" }, { "rating", "突袭积分" }, { "pvp", "对战积分" } }
   ui.fill.board = function()
     clear(bBody)
-    for c, key in ipairs({ "level", "rating" }) do
-      local lines = { (key == "level") and "最高关卡" or "突袭积分" }
-      for i, e in ipairs(G.board[key] or {}) do table.insert(lines, i .. ". " .. tostring(e.name) .. "   " .. Config.Fmt(e.value or 0)) end
+    for c, e0 in ipairs(BOARDS) do
+      local lines = { e0[2] }
+      for i, e in ipairs(G.board[e0[1]] or {}) do table.insert(lines, i .. ". " .. tostring(e.name) .. "   " .. Config.Fmt(e.value or 0)) end
       if #lines == 1 then table.insert(lines, "（读取中，或者存档服务不可用）") end
-      text(bBody, { Position = UDim2.new((c - 1) * 0.5, 0, 0, 0), Size = UDim2.new(0.5, -8, 0, 340), Text = table.concat(lines, "\n"), TextSize = 15, TextWrapped = true,
+      text(bBody, { Position = UDim2.new((c - 1) / 3, 0, 0, 0), Size = UDim2.new(1 / 3, -8, 0, 340), Text = table.concat(lines, "\n"), TextSize = 14, TextWrapped = true,
         TextYAlignment = Enum.TextYAlignment.Top, ZIndex = 4 })
     end
   end
@@ -5640,11 +6058,24 @@ function UI.init(G)
     if modals.board.Visible then ui.fill.board() end
   end
 
-  -- 约战：同服的玩家
-  local _, dBody = modal("duel", "约战（同服的玩家）", 520, 380)
+  -- 真人对战：排位匹配（服内 / 跨服）+ 同服点名约战（友谊赛）
+  local _, dBody = modal("duel", "真人对战", 540, 460)
   ui.fill.duel = function()
     clear(dBody)
-    local y = 0
+    local S = G.S
+    if not S then return end
+    local games = S.pvpGames or 0
+    line(dBody, 0, 24, { Text = "对战积分 " .. tostring(S.pvp or Config.Match.start) .. "    排位战绩 " .. tostring(S.pvpWins or 0) .. " 胜 / " .. games .. " 场", TextColor3 = RGB(255, 216, 106) })
+    line(dBody, 28, 66, { Text = "排位赛：先找同一个服务器里也在匹配的玩家，没有就在全服找对战积分差不多的；找到后两个人一起传送到对战服务器，打完自动送回来。部队不会损失，赢了涨积分、拿奖金。",
+      TextColor3 = RGB(170, 180, 192) })
+    local queued = S.match ~= nil
+    button(dBody, queued and "取消匹配" or "开始匹配（排位）", queued and RGB(120, 60, 52) or RGB(190, 60, 50), { Position = UDim2.fromOffset(0, 100), Size = UDim2.fromOffset(240, 46), TextSize = 17, ZIndex = 4 },
+      function()
+        RA:FireServer(queued and "matchCancel" or "match")
+        modals.duel.Visible = false
+      end)
+    line(dBody, 160, 24, { Text = "同服务器的玩家（点名约战，友谊赛不算积分）：", TextColor3 = RGB(200, 210, 220) })
+    local y = 190
     for _, p in ipairs(Players:GetPlayers()) do
       if p ~= player then
         local ls = p:FindFirstChild("leaderstats")
@@ -5659,7 +6090,10 @@ function UI.init(G)
         y = y + 50
       end
     end
-    if y == 0 then line(dBody, 0, 60, { Text = "服务器里还没有别的玩家。叫朋友进同一个服务器，或者点「突袭」打别人存下的防线。" }) end
+    if y == 190 then
+      line(dBody, y, 40, { Text = "服务器里还没有别的玩家（排位匹配会去全服找）。", TextColor3 = RGB(150, 160, 170) })
+      y = y + 40
+    end
     dBody.CanvasSize = UDim2.fromOffset(0, y)
   end
 
@@ -5755,7 +6189,25 @@ function UI.init(G)
     rewardL.Text = "胜利奖励 $" .. Config.Fmt(S.reward or 0)
     rankL.Text = "军衔：" .. tostring(S.rank) .. (S.nextXp and ("   " .. Config.Fmt(S.xp) .. " / " .. Config.Fmt(S.nextXp)) or "（最高）")
     xpFill.Size = UDim2.fromScale(S.nextXp and math.clamp(S.xp / S.nextXp, 0, 1) or 1, 1)
-    ratingL.Text = "突袭积分 " .. tostring(S.rating) .. "   亲手击毁 " .. tostring(S.kills)
+    ratingL.Text = "突袭积分 " .. tostring(S.rating) .. "   对战积分 " .. tostring(S.pvp or Config.Match.start) .. "   击毁 " .. tostring(S.kills)
+    -- 匹配状态条
+    if S.teleporting then
+      mbar.Visible = true
+      mbarL.Text = "正在传送……"
+      mbarBtn.Visible = false
+    elseif S.battle then
+      mbar.Visible = false
+    elseif S.matchServer then
+      mbar.Visible = true
+      mbarL.Text = "对战服务器：等对手进场、开打，打完自动送回去"
+      mbarBtn.Visible = false
+    elseif S.match then
+      mbar.Visible = true
+      mbarL.Text = string.format("匹配中 %d:%02d · 找对战积分 %d±%d 的对手", math.floor(S.match.since / 60), S.match.since % 60, S.pvp or 0, S.match.window or 0)
+      mbarBtn.Visible = true
+    else
+      mbar.Visible = false
+    end
     for _, t in ipairs(Config.UnitOrder) do
       local r = rows[t]
       local def = UNITS[t]
@@ -5794,7 +6246,7 @@ function UI.init(G)
     btnMission.Text = claimable and "任务 ●" or "任务"
     btnMission.BackgroundColor3 = claimable and RGB(60, 150, 80) or RGB(52, 84, 120)
     btnRebirth.Visible = S.canRebirth == true
-    btnDuel.Visible = #Players:GetPlayers() > 1
+    btnDuel.Text = S.match and "真人对战 ●" or "真人对战"
     ui.raidBtn.Text = (S.raidCD or 0) > 0 and ("突袭 " .. S.raidCD .. "s") or "突袭"
     if S.daily and S.daily.ok and not dailyShown then
       dailyShown = true
@@ -5835,7 +6287,7 @@ return UI
 ]]></ProtectedString>
 </Properties>
 </Item>
-<Item class="ModuleScript" referent="RBX00000000000000000000000000000012">
+<Item class="ModuleScript" referent="RBX00000000000000000000000000000013">
 <Properties>
 <string name="Name">View</string>
 <ProtectedString name="Source"><![CDATA[-- 军事大亨（客户端）：部队的显示

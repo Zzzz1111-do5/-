@@ -1,4 +1,4 @@
--- 军事大亨：战斗编排——打 AI 关卡（pve）、突袭别人的防线（raid）、和同服玩家约战（duel）；
+-- 军事大亨：战斗编排——打 AI 关卡（pve）、突袭别人的防线（raid）、和真人对战（duel：同服点名约战是友谊赛，匹配来的是排位赛 ranked）；
 -- 玩家本人上阵（小人：开战时传送到己方后方，敌人会打你，死了在基地复活、可以重返战场）、亲自驾驶自己的车 / 直升机
 local Players = game:GetService("Players")
 local Debris = game:GetService("Debris")
@@ -425,10 +425,7 @@ function Combat.init(G)
       end
     end
     if B.mode == "duel" then
-      local t1, t2 = nil, nil
-      for st, team in pairs(B.sts) do
-        if team == 1 then t1 = st else t2 = st end
-      end
+      local t1, t2 = B.sides[1], B.sides[2]   -- 中途走掉的人不在 B.sts 里了，排位照样算他输
       local winner = 0
       if res == "win" then winner = 1 elseif res == "lose" then winner = 2
       else
@@ -436,19 +433,37 @@ function Combat.init(G)
         winner = (v1 >= v2) and 1 or 2
       end
       if B.arena then B.arena.busy = false end
+      -- 排位：ELO（赢的涨、输的掉同样多；走掉的人的存档在 PlayerRemoving 里存）
+      local delta = 0
+      local MC = Config.Match
+      if B.ranked and t1 and t2 and t1.data and t2.data then
+        local d1, d2 = t1.data, t2.data
+        local E1 = 1 / (1 + 10 ^ ((d2.pvp - d1.pvp) / 400))
+        delta = math.max(1, math.floor(MC.k * math.abs(((winner == 1) and 1 or 0) - E1) + 0.5))
+        local w, l = d1, d2
+        if winner == 2 then w, l = d2, d1 end
+        w.pvp = w.pvp + delta
+        l.pvp = math.max(0, l.pvp - delta)
+        w.pvpWins = w.pvpWins + 1
+        d1.pvpGames = d1.pvpGames + 1
+        d2.pvpGames = d2.pvpGames + 1
+      end
       for st, team in pairs(B.sts) do
         if G.states[st.pl] == st then
           local other = (team == 1) and t2 or t1
           local won = team == winner
           local reward = 0
-          if won then
+          if B.ranked then
+            reward = won and math.floor(MC.reward + MC.share * (other and armyValue(other) or 0)) or MC.lose
+            G.addXP(st, won and 40 or 15)
+          elseif won then
             reward = math.floor(Config.Duel.reward + Config.Duel.share * (other and armyValue(other) or 0))
-            st.data.cash = st.data.cash + reward
-            st.data.duelWins = st.data.duelWins + 1
             G.addXP(st, 30)
           else
             G.addXP(st, 10)
           end
+          st.data.cash = st.data.cash + reward
+          if won then st.data.duelWins = st.data.duelWins + 1 end
           G.progress(st, "duel", 1)
           -- 约战不损失部队：打没了的换新模型，全部放回阵位
           for _, bu in ipairs(B.units) do
@@ -459,12 +474,18 @@ function Combat.init(G)
           end
           G.homeSnap(st)
           st.battle = nil
-          RB:FireClient(st.pl, { phase = "end", mode = "duel", result = won and "win" or "lose", reward = reward, lost = {}, lostN = 0, level = st.data.level,
-            text = won and ("你赢了 " .. (other and other.pl.DisplayName or "对手") .. "！") or ("输给了 " .. (other and other.pl.DisplayName or "对手") .. "，部队没有损失") })
+          local oname = other and other.pl.DisplayName or "对手"
+          local text = won and ("你赢了 " .. oname .. "！") or ("输给了 " .. oname .. "，部队没有损失")
+          if B.ranked then
+            text = text .. "\n对战积分 " .. (won and "+" or "-") .. delta .. "（现在 " .. st.data.pvp .. "）"
+            if G.matchServer then text = text .. "\n" .. MC.back .. " 秒后送你回普通服务器" end
+          end
+          RB:FireClient(st.pl, { phase = "end", mode = "duel", ranked = B.ranked, result = won and "win" or "lose", reward = reward, lost = {}, lostN = 0, level = st.data.level, text = text })
           G.push(st)
           task.spawn(G.save, st)
         end
       end
+      if G.onDuelEnd then G.onDuelEnd(B) end
       return
     end
     -- 关卡、突袭：第 1 队是玩家
@@ -557,6 +578,7 @@ function Combat.init(G)
 
   function G.startBattle(st)
     if not canFight(st) then return end
+    if G.matchCancel then G.matchCancel(st, "开始打关卡，取消了匹配") end
     if #st.enemy == 0 then G.makeEnemy(st) end
     local B = newBattle("pve", st.plot.origin)
     B.level = st.data.level
@@ -598,6 +620,7 @@ function Combat.init(G)
       return
     end
     st.raidCD = now + Config.Raid.cooldown
+    if G.matchCancel then G.matchCancel(st, "开始突袭，取消了匹配") end
     st.busy = true
     G.toast(st, "侦察中：找一条差不多强的防线……", "info")
     local opp = G.findOpponent(st)
@@ -652,6 +675,12 @@ function Combat.init(G)
       G.toast(ts, "约战没开成（对方在忙或者没有部队）", "info")
       return
     end
+    G.startDuel(st, ts, false)
+  end
+
+  -- 两个人的部队、本人都传到空着的竞技场开打（st 在南边、ts 在北边）；ranked 排位赛记对战积分；返回开没开成
+  function G.startDuel(st, ts, ranked)
+    if not canFight(st) or not canFight(ts) then return false end
     local arena = nil
     for _, a in ipairs(G.arenas) do
       if not a.busy then
@@ -660,16 +689,23 @@ function Combat.init(G)
       end
     end
     if not arena then
-      G.toast(st, "竞技场都在用，过一会儿再约", "info")
-      G.toast(ts, "竞技场都在用，过一会儿再约", "info")
-      return
+      G.toast(st, "竞技场都在用，过一会儿再打", "info")
+      G.toast(ts, "竞技场都在用，过一会儿再打", "info")
+      return false
+    end
+    if G.matchCancel then   -- 在排队的话不用排了
+      G.matchCancel(st, true)
+      G.matchCancel(ts, true)
     end
     arena.busy = true
     local B = newBattle("duel", arena.origin)
     B.arena = arena
+    B.ranked = ranked == true
+    B.sides = { [1] = st, [2] = ts }
     enlist(B, st, 1, false)
     enlist(B, ts, 2, true)
-    begin(B, { [1] = st, [2] = ts }, "约战：" .. st.pl.DisplayName .. " vs " .. ts.pl.DisplayName)
+    begin(B, { [1] = st, [2] = ts }, (ranked and "排位对战：" or "约战：") .. st.pl.DisplayName .. " vs " .. ts.pl.DisplayName)
+    return true
   end
 
   -- 战后或者想回去了：传送回自己的基地出生点

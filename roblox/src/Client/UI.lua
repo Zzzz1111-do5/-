@@ -1,4 +1,5 @@
--- 军事大亨（客户端）：界面——钱、关卡、兵工厂、按钮、提示；任务、武器、排行榜、约战、重生、致谢；每日奖励、约战邀请；战斗中的面板、结果
+-- 军事大亨（客户端）：界面——钱、关卡、兵工厂、按钮、提示；任务、武器、排行榜、真人对战（排位匹配、同服约战）、重生、致谢；
+-- 每日奖励、约战邀请、匹配中的状态条；战斗中的面板、结果
 local Players = game:GetService("Players")
 local UIS = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
@@ -106,6 +107,12 @@ function UI.init(G)
   local cashL = text(top, { Position = UDim2.fromOffset(18, 0), Size = UDim2.new(0.6, -18, 1, 0), Font = FONT, TextSize = 30, TextColor3 = RGB(255, 214, 90), Text = "$0" })
   local incL = text(top, { Position = UDim2.new(0.6, 0, 0, 0), Size = UDim2.new(0.4, -16, 1, 0), TextSize = 18, TextColor3 = RGB(130, 235, 140), TextXAlignment = Enum.TextXAlignment.Right, Text = "+0 / 秒" })
 
+  -- 匹配中 / 传送中 / 对战服务器 的状态条（钱的下面）
+  local mbar = panel(root, { AnchorPoint = V2(0.5, 0), Position = UDim2.new(0.5, 0, 0, 70), Size = UDim2.fromOffset(460, 40), Visible = false, ZIndex = 3 })
+  local mbarL = text(mbar, { Position = UDim2.fromOffset(14, 0), Size = UDim2.new(1, -120, 1, 0), TextSize = 15, Font = FONT, TextColor3 = RGB(255, 220, 140), ZIndex = 3 })
+  local mbarBtn = button(mbar, "取消", RGB(120, 60, 52), { AnchorPoint = V2(1, 0.5), Position = UDim2.new(1, -8, 0.5, 0), Size = UDim2.fromOffset(90, 30), TextSize = 14, ZIndex = 3 },
+    function() RA:FireServer("matchCancel") end)
+
   local info = panel(root, { Position = UDim2.fromOffset(10, 72), Size = UDim2.fromOffset(280, 196) })
   local lvL = text(info, { Position = UDim2.fromOffset(14, 8), Size = UDim2.new(1, -28, 0, 28), Font = FONT, TextSize = 22, Text = "第 1 关" })
   local armyL = text(info, { Position = UDim2.fromOffset(14, 38), Size = UDim2.new(1, -28, 0, 20), Text = "部队 0 / 4" })
@@ -137,7 +144,7 @@ function UI.init(G)
   local btnMission = button(menu, "任务", RGB(52, 84, 120), { Size = UDim2.fromOffset(140, 40), LayoutOrder = 1, TextSize = 16 }, function() open("missions") end)
   button(menu, "武器", RGB(60, 74, 60), { Size = UDim2.fromOffset(140, 40), LayoutOrder = 2, TextSize = 16 }, function() open("weapons") end)
   button(menu, "排行榜", RGB(84, 70, 40), { Size = UDim2.fromOffset(140, 40), LayoutOrder = 3, TextSize = 16 }, function() open("board") end)
-  local btnDuel = button(menu, "约战玩家", RGB(120, 52, 52), { Size = UDim2.fromOffset(140, 40), LayoutOrder = 4, TextSize = 16 }, function() open("duel") end)
+  local btnDuel = button(menu, "真人对战", RGB(150, 50, 46), { Size = UDim2.fromOffset(140, 40), LayoutOrder = 4, TextSize = 16 }, function() open("duel") end)
   local btnRebirth = button(menu, "重生", RGB(150, 110, 30), { Size = UDim2.fromOffset(140, 40), LayoutOrder = 5, TextSize = 16, Visible = false }, function() open("rebirth") end)
   button(menu, "致谢", RGB(54, 58, 66), { Size = UDim2.fromOffset(140, 34), LayoutOrder = 6, TextSize = 14 }, function() open("credits") end)
 
@@ -349,15 +356,16 @@ function UI.init(G)
   end
 
   -- 排行榜
-  local _, bBody = modal("board", "排行榜（全服）", 560, 420)
-  G.board = { level = {}, rating = {} }
+  local _, bBody = modal("board", "排行榜（全服）", 680, 420)
+  G.board = { level = {}, rating = {}, pvp = {} }
+  local BOARDS = { { "level", "最高关卡" }, { "rating", "突袭积分" }, { "pvp", "对战积分" } }
   ui.fill.board = function()
     clear(bBody)
-    for c, key in ipairs({ "level", "rating" }) do
-      local lines = { (key == "level") and "最高关卡" or "突袭积分" }
-      for i, e in ipairs(G.board[key] or {}) do table.insert(lines, i .. ". " .. tostring(e.name) .. "   " .. Config.Fmt(e.value or 0)) end
+    for c, e0 in ipairs(BOARDS) do
+      local lines = { e0[2] }
+      for i, e in ipairs(G.board[e0[1]] or {}) do table.insert(lines, i .. ". " .. tostring(e.name) .. "   " .. Config.Fmt(e.value or 0)) end
       if #lines == 1 then table.insert(lines, "（读取中，或者存档服务不可用）") end
-      text(bBody, { Position = UDim2.new((c - 1) * 0.5, 0, 0, 0), Size = UDim2.new(0.5, -8, 0, 340), Text = table.concat(lines, "\n"), TextSize = 15, TextWrapped = true,
+      text(bBody, { Position = UDim2.new((c - 1) / 3, 0, 0, 0), Size = UDim2.new(1 / 3, -8, 0, 340), Text = table.concat(lines, "\n"), TextSize = 14, TextWrapped = true,
         TextYAlignment = Enum.TextYAlignment.Top, ZIndex = 4 })
     end
   end
@@ -367,11 +375,24 @@ function UI.init(G)
     if modals.board.Visible then ui.fill.board() end
   end
 
-  -- 约战：同服的玩家
-  local _, dBody = modal("duel", "约战（同服的玩家）", 520, 380)
+  -- 真人对战：排位匹配（服内 / 跨服）+ 同服点名约战（友谊赛）
+  local _, dBody = modal("duel", "真人对战", 540, 460)
   ui.fill.duel = function()
     clear(dBody)
-    local y = 0
+    local S = G.S
+    if not S then return end
+    local games = S.pvpGames or 0
+    line(dBody, 0, 24, { Text = "对战积分 " .. tostring(S.pvp or Config.Match.start) .. "    排位战绩 " .. tostring(S.pvpWins or 0) .. " 胜 / " .. games .. " 场", TextColor3 = RGB(255, 216, 106) })
+    line(dBody, 28, 66, { Text = "排位赛：先找同一个服务器里也在匹配的玩家，没有就在全服找对战积分差不多的；找到后两个人一起传送到对战服务器，打完自动送回来。部队不会损失，赢了涨积分、拿奖金。",
+      TextColor3 = RGB(170, 180, 192) })
+    local queued = S.match ~= nil
+    button(dBody, queued and "取消匹配" or "开始匹配（排位）", queued and RGB(120, 60, 52) or RGB(190, 60, 50), { Position = UDim2.fromOffset(0, 100), Size = UDim2.fromOffset(240, 46), TextSize = 17, ZIndex = 4 },
+      function()
+        RA:FireServer(queued and "matchCancel" or "match")
+        modals.duel.Visible = false
+      end)
+    line(dBody, 160, 24, { Text = "同服务器的玩家（点名约战，友谊赛不算积分）：", TextColor3 = RGB(200, 210, 220) })
+    local y = 190
     for _, p in ipairs(Players:GetPlayers()) do
       if p ~= player then
         local ls = p:FindFirstChild("leaderstats")
@@ -386,7 +407,10 @@ function UI.init(G)
         y = y + 50
       end
     end
-    if y == 0 then line(dBody, 0, 60, { Text = "服务器里还没有别的玩家。叫朋友进同一个服务器，或者点「突袭」打别人存下的防线。" }) end
+    if y == 190 then
+      line(dBody, y, 40, { Text = "服务器里还没有别的玩家（排位匹配会去全服找）。", TextColor3 = RGB(150, 160, 170) })
+      y = y + 40
+    end
     dBody.CanvasSize = UDim2.fromOffset(0, y)
   end
 
@@ -482,7 +506,25 @@ function UI.init(G)
     rewardL.Text = "胜利奖励 $" .. Config.Fmt(S.reward or 0)
     rankL.Text = "军衔：" .. tostring(S.rank) .. (S.nextXp and ("   " .. Config.Fmt(S.xp) .. " / " .. Config.Fmt(S.nextXp)) or "（最高）")
     xpFill.Size = UDim2.fromScale(S.nextXp and math.clamp(S.xp / S.nextXp, 0, 1) or 1, 1)
-    ratingL.Text = "突袭积分 " .. tostring(S.rating) .. "   亲手击毁 " .. tostring(S.kills)
+    ratingL.Text = "突袭积分 " .. tostring(S.rating) .. "   对战积分 " .. tostring(S.pvp or Config.Match.start) .. "   击毁 " .. tostring(S.kills)
+    -- 匹配状态条
+    if S.teleporting then
+      mbar.Visible = true
+      mbarL.Text = "正在传送……"
+      mbarBtn.Visible = false
+    elseif S.battle then
+      mbar.Visible = false
+    elseif S.matchServer then
+      mbar.Visible = true
+      mbarL.Text = "对战服务器：等对手进场、开打，打完自动送回去"
+      mbarBtn.Visible = false
+    elseif S.match then
+      mbar.Visible = true
+      mbarL.Text = string.format("匹配中 %d:%02d · 找对战积分 %d±%d 的对手", math.floor(S.match.since / 60), S.match.since % 60, S.pvp or 0, S.match.window or 0)
+      mbarBtn.Visible = true
+    else
+      mbar.Visible = false
+    end
     for _, t in ipairs(Config.UnitOrder) do
       local r = rows[t]
       local def = UNITS[t]
@@ -521,7 +563,7 @@ function UI.init(G)
     btnMission.Text = claimable and "任务 ●" or "任务"
     btnMission.BackgroundColor3 = claimable and RGB(60, 150, 80) or RGB(52, 84, 120)
     btnRebirth.Visible = S.canRebirth == true
-    btnDuel.Visible = #Players:GetPlayers() > 1
+    btnDuel.Text = S.match and "真人对战 ●" or "真人对战"
     ui.raidBtn.Text = (S.raidCD or 0) > 0 and ("突袭 " .. S.raidCD .. "s") or "突袭"
     if S.daily and S.daily.ok and not dailyShown then
       dailyShown = true
