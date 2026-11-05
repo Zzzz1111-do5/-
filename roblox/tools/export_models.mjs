@@ -30,6 +30,25 @@ const LIST = [
   // M270 原模型的发射箱朝车体右侧转出、起竖（网页版 v3a82.js 的说明），车体中心在模型 y = 2.84：按车体居中，发射箱朝 +X（车的右边）
   { slot: 'mlrs', key: 'm270', lod: 2, len: 16, cy: 2.84, name: '火箭炮' },
   { slot: 'heli', key: 'ah64', lod: 0, len: 30, name: '武装直升机' },
+  // 0.3 新兵种：飞机去掉起落架（drop），轰-6 烘焙出来机头朝 −x（网页版 V3G_FLIP 解码时转 180°），这里也转
+  { slot: 'transport', key: 'uh60', lod: 1, len: 30, name: '运兵直升机' },
+  { slot: 'drone', key: 'mq9', lod: 0, len: 18, drop: ['gear'], name: '察打无人机' },
+  { slot: 'attacker', key: 'a10', lod: 1, len: 24, drop: ['gear'], name: '攻击机' },
+  { slot: 'fighter', key: 'j20', lod: 2, len: 30, name: '战斗机' },
+  { slot: 'bomber', key: 'h6k', lod: 1, len: 46, drop: ['gear'], flip: true, name: '轰炸机' },
+  { slot: 'jeep', key: 'matv', lod: 1, len: 13, name: '机枪车' },
+  { slot: 'td', key: 'ptl02', lod: 1, len: 18, name: '突击炮' },
+  { slot: 'breacher', key: 'm1150', lod: 1, len: 23, name: '破障车' },
+  { slot: 'spaag', key: 't625', lod: 1, len: 20, name: '弹炮防空车' },
+  { slot: 'cram', key: 'cram', lod: 1, len: 12, name: '拦截炮' },
+  { slot: 'sam', key: 'patriot', lod: 1, len: 22, name: '防空导弹' },
+  { slot: 'howitzer', key: 'm777', lod: 2, len: 20, name: '牵引榴弹炮' },
+  { slot: 'heavyarty', key: 'pzh2000', lod: 1, len: 24, gain: 2.3, name: '重型自行火炮' },   // 原贴图很暗（平均亮度 28/255），提亮
+  // 步兵组手里的道具（摆在士兵旁边）
+  { slot: 'prop_javelin', key: 'javl', lod: 1, len: 2.6, name: '标枪（道具）' },
+  { slot: 'prop_stinger', key: 'stinger', lod: 1, len: 3.4, name: '毒刺（道具）' },
+  { slot: 'prop_mortar', key: 'm224', lod: 1, len: 2.4, name: '迫击炮（道具）' },
+  { slot: 'prop_mg', key: 'm240', lod: 1, len: 2.8, name: '机枪（道具）' },
 ];
 const ROLE = { tur: 'Turret', gun: 'Turret', gat: 'Turret', tow: 'Turret', rdr: 'Turret', rotor: 'Rotor', trotor: 'TailRotor' };
 
@@ -83,6 +102,10 @@ for j in json.load(open(sys.argv[1])):
     if max(im.size) > j['max']:
         k = j['max'] / max(im.size)
         im = im.resize((max(1, round(im.size[0] * k)), max(1, round(im.size[1] * k))), Image.LANCZOS)
+    if j.get('gain', 1) != 1:   # 原贴图太暗的（PzH 2000）提亮：颜色通道乘系数，透明通道不动
+        g = j['gain']
+        bands = im.convert('RGBA').split()
+        im = Image.merge('RGBA', [b.point(lambda v: min(255, round(v * g))) for b in bands[:3]] + [bands[3]])
     if j['fmt'] == 'JPEG':
         im.convert('RGB').save(j['out'], 'JPEG', quality=88, optimize=True)
     else:
@@ -101,14 +124,24 @@ function tetra(c, s) {
 function exportOne(item, tmp) {
   let M = readModel(item.key);
   if (item.pose) M = poseSoldier(M, item.pose);
+  if (item.flip) {   // 绕竖轴转 180°：x、y 取反（法线也是），部件支点跟着转
+    const st0 = M.meta.st || 8, VB2 = new Float32Array(M.VB);
+    for (let i = 0; i < VB2.length; i += st0) { VB2[i] = -VB2[i]; VB2[i + 1] = -VB2[i + 1]; VB2[i + 3] = -VB2[i + 3]; VB2[i + 4] = -VB2[i + 4]; }
+    const meta2 = JSON.parse(JSON.stringify(M.meta));
+    const b0 = meta2.bb;
+    meta2.bb = [-b0[3], -b0[4], b0[2], -b0[0], -b0[1], b0[5]];
+    for (const p of meta2.parts || []) { if (p.p) { p.p[0] = -p.p[0]; p.p[1] = -p.p[1]; } if (p.a) { p.a[0] = -p.a[0]; p.a[1] = -p.a[1]; } }
+    M = { ...M, VB: VB2, meta: meta2 };
+  }
   const { meta, VB, IB, bin } = M;
   const st = meta.st || 8;
   const lod = meta.lod[Math.min(item.lod, meta.lod.length - 1)];
   // 包围盒（模型坐标 x 前、y 左、z 上，米）
   let bb = meta.bb;
-  if (item.pose) {
+  if (item.pose || item.drop || item.flip) {
     bb = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity];
-    for (const [, , i0, cnt] of lod) for (let i = i0; i < i0 + cnt; i++) {
+    for (const [, pi, i0, cnt] of lod) for (let i = i0; i < i0 + cnt; i++) {
+      if (pi >= 0 && item.drop && item.drop.includes(meta.parts[pi].n)) break;
       const o = IB[i] * st;
       for (let k = 0; k < 3; k++) { bb[k] = Math.min(bb[k], VB[o + k]); bb[k + 3] = Math.max(bb[k + 3], VB[o + k]); }
     }
@@ -123,6 +156,7 @@ function exportOne(item, tmp) {
   const groups = new Map();
   for (const [mi, pi, i0, cnt] of lod) {
     const part = pi >= 0 ? meta.parts[pi] : null;
+    if (part && item.drop && item.drop.includes(part.n)) continue;   // 不要的部件（起落架）
     const role = part ? (ROLE[part.n] || 'Body') : 'Body';
     const k = role + '|' + mi;
     if (!groups.has(k)) groups.set(k, { role, mi, tris: [] });
@@ -142,7 +176,7 @@ function exportOne(item, tmp) {
     fs.writeFileSync(src, bin.subarray(I.o, I.o + I.n));
     const fmt = (kind === 'base' && !alpha) ? 'JPEG' : 'PNG';
     const out = path.join(tmp, `${item.slot}_${idx}_${kind}.${fmt === 'JPEG' ? 'jpg' : 'png'}`);
-    jobs.push({ in: src, out, max: kind === 'normal' ? 512 : 1024, fmt });
+    jobs.push({ in: src, out, max: kind === 'normal' ? 512 : 1024, fmt, gain: kind === 'base' ? item.gain || 1 : 1 });
     const gi = images.length;
     images.push({ mimeType: fmt === 'JPEG' ? 'image/jpeg' : 'image/png' });
     imageFiles.push(out);

@@ -5,16 +5,33 @@ local TweenService = game:GetService("TweenService")
 
 local UI = {}
 
--- 模型署名（CC-BY 要求在游戏里写明）
+-- 模型署名（CC-BY 要求在游戏里写明；和 roblox/models/credits.txt 一致）
 local CREDITS = {
   "步兵：Army Character 2 —— MirzaArrafiERV_45",
   "步兵战车：M2 Bradley IFV —— 42manako",
-  "主战坦克：M1A1 Abrams —— MirzaArrafiERV_45",
+  "主战坦克：M1A1 Abrams Main Battle Tank —— MirzaArrafiERV_45",
   "防空车：M163 VADS —— 42manako",
-  "自行火炮：M109 Paladin —— Muhamad Mirza Arrafi",
+  "自行火炮：M109 PALADIN ARTILLERY —— Muhamad Mirza Arrafi",
   "火箭炮：Free M270 —— Mr. Penguin",
-  "武装直升机：AH-64D Apache —— Muhamad Mirza Arrafi",
-  "以上模型都来自 Sketchfab，CC-BY-4.0 授权；只缩小了贴图、用了简化网格",
+  "武装直升机：Boeing AH-64D Apache Combat Helicopter —— Muhamad Mirza Arrafi",
+  "运兵直升机：Sikorsky UH-60M Blackhawk —— Muhamad Mirza Arrafi",
+  "察打无人机：MQ-9 —— IProZenoN",
+  "攻击机：A-10 Thunderbolt II —— AIRMAN Magazine",
+  "战斗机：Chengdu J-20 Fighter —— andertan",
+  "轰炸机：Chinese Xi'an H-6 —— 42manako",
+  "机枪车：Oshkosh M-ATV —— 42manako",
+  "突击炮：Chinese PTL-02 —— 42manako",
+  "破障车：M1150 ABV —— Kalibrovshik",
+  "弹炮防空车：Type-625 Anti Aircraft Gun Missile System —— Muhamad Mirza Arrafi",
+  "拦截炮：Centurion C-RAM —— Muhamad Mirza Arrafi",
+  "防空导弹：MIM-104 Patriot Air Defense System —— Muhamad Mirza Arrafi",
+  "牵引榴弹炮：M777 howitzer —— miloschnack",
+  "重型自行火炮：PANZERHAUBITZE 2000 ARTILLERY (PzH-2000) —— Muhamad Mirza Arrafi",
+  "标枪：FGM-148 Javelin (Low-Poly) —— GoldbergR",
+  "毒刺：FIM-92 Stinger (Low-Poly) —— GoldbergR",
+  "迫击炮：Mortar - M224 —— jcherry3d",
+  "机枪：Low-Poly M240B —— TastyTony",
+  "以上模型都来自 Sketchfab，CC-BY-4.0 授权；只缩小了贴图、用了简化网格（PzH 2000 的贴图调亮了）",
 }
 
 function UI.init(G)
@@ -92,7 +109,8 @@ function UI.init(G)
   local info = panel(root, { Position = UDim2.fromOffset(10, 72), Size = UDim2.fromOffset(280, 196) })
   local lvL = text(info, { Position = UDim2.fromOffset(14, 8), Size = UDim2.new(1, -28, 0, 28), Font = FONT, TextSize = 22, Text = "第 1 关" })
   local armyL = text(info, { Position = UDim2.fromOffset(14, 38), Size = UDim2.new(1, -28, 0, 20), Text = "部队 0 / 4" })
-  local enemyL = text(info, { Position = UDim2.fromOffset(14, 60), Size = UDim2.new(1, -28, 0, 52), TextSize = 14, TextWrapped = true, TextYAlignment = Enum.TextYAlignment.Top, TextColor3 = RGB(255, 165, 150) })
+  local enemyL = text(info, { Position = UDim2.fromOffset(14, 60), Size = UDim2.new(1, -28, 0, 52), TextSize = 14, TextWrapped = true, TextScaled = true, TextYAlignment = Enum.TextYAlignment.Top, TextColor3 = RGB(255, 165, 150) })
+  mk("UITextSizeConstraint", { MaxTextSize = 14, MinTextSize = 9 }, enemyL)
   local rewardL = text(info, { Position = UDim2.fromOffset(14, 112), Size = UDim2.new(1, -28, 0, 20), TextSize = 14, TextColor3 = RGB(255, 214, 90) })
   local rankL = text(info, { Position = UDim2.fromOffset(14, 134), Size = UDim2.new(1, -28, 0, 20), TextSize = 15, Font = FONT, TextColor3 = RGB(255, 216, 106) })
   local xpBg = mk("Frame", { BackgroundColor3 = RGB(40, 44, 50), BorderSizePixel = 0, Position = UDim2.fromOffset(14, 157), Size = UDim2.new(1, -28, 0, 6) }, info)
@@ -123,33 +141,58 @@ function UI.init(G)
   local btnRebirth = button(menu, "重生", RGB(150, 110, 30), { Size = UDim2.fromOffset(140, 40), LayoutOrder = 5, TextSize = 16, Visible = false }, function() open("rebirth") end)
   button(menu, "致谢", RGB(54, 58, 66), { Size = UDim2.fromOffset(140, 34), LayoutOrder = 6, TextSize = 14 }, function() open("credits") end)
 
-  -- 右边：兵工厂（可以滚动）
+  -- 右边：兵工厂（按页签分类：步兵 / 装甲 / 防空 / 炮兵 / 空中，可以滚动；最下面一行是军工科技）
   local ROWH = 62
-  local shop = panel(root, { AnchorPoint = V2(1, 0), Position = UDim2.new(1, -10, 0, 72), Size = UDim2.fromOffset(310, 470) })
+  local shop = panel(root, { AnchorPoint = V2(1, 0), Position = UDim2.new(1, -10, 0, 72), Size = UDim2.fromOffset(330, 500) })
   text(shop, { Position = UDim2.fromOffset(14, 6), Size = UDim2.new(1, -28, 0, 28), Font = FONT, TextSize = 20, Text = "兵工厂" })
-  local list = mk("ScrollingFrame", { BackgroundTransparency = 1, BorderSizePixel = 0, Position = UDim2.fromOffset(6, 38), Size = UDim2.new(1, -12, 1, -44),
-    CanvasSize = UDim2.fromOffset(0, (#Config.UnitOrder + 1) * ROWH), ScrollBarThickness = 5 }, shop)
+  local tabBar = mk("Frame", { BackgroundTransparency = 1, Position = UDim2.fromOffset(10, 38), Size = UDim2.new(1, -20, 0, 30) }, shop)
+  mk("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 4), SortOrder = Enum.SortOrder.LayoutOrder }, tabBar)
+  local list = mk("ScrollingFrame", { BackgroundTransparency = 1, BorderSizePixel = 0, Position = UDim2.fromOffset(6, 74), Size = UDim2.new(1, -12, 1, -80),
+    CanvasSize = UDim2.fromOffset(0, 0), ScrollBarThickness = 5 }, shop)
   local rows = {}
-  local function row(i, color)
-    local r = mk("Frame", { BackgroundColor3 = color or RGB(255, 255, 255), BackgroundTransparency = color and 0.9 or 0.94, BorderSizePixel = 0, Position = UDim2.fromOffset(2, (i - 1) * ROWH), Size = UDim2.new(1, -10, 0, ROWH - 6) }, list)
+  local function row(color)
+    local r = mk("Frame", { BackgroundColor3 = color or RGB(255, 255, 255), BackgroundTransparency = color and 0.9 or 0.94, BorderSizePixel = 0, Size = UDim2.new(1, -10, 0, ROWH - 6) }, list)
     round(r, 8)
     local n = text(r, { Position = UDim2.fromOffset(10, 4), Size = UDim2.new(1, -112, 0, 22), Font = FONT, TextSize = 16 })
     local d = text(r, { Position = UDim2.fromOffset(10, 26), Size = UDim2.new(1, -112, 0, 28), TextSize = 11, TextWrapped = true, TextYAlignment = Enum.TextYAlignment.Top, TextColor3 = RGB(170, 180, 192) })
     return r, n, d
   end
-  for i, t in ipairs(Config.UnitOrder) do
+  for _, t in ipairs(Config.UnitOrder) do
     local def = UNITS[t]
-    local r, n, d = row(i)
+    local r, n, d = row()
     n.Text = def.name
     d.Text = def.desc
     local b = button(r, "$" .. Config.Fmt(def.price), RGB(60, 150, 80), { AnchorPoint = V2(1, 0.5), Position = UDim2.new(1, -8, 0.5, 0), Size = UDim2.fromOffset(94, 40), TextSize = 15 },
       function() RA:FireServer("buy", t) end)
-    rows[t] = { name = n, btn = b }
+    rows[t] = { frame = r, name = n, btn = b }
   end
-  local techRow, techName, techDesc = row(#Config.UnitOrder + 1, RGB(255, 214, 90))
+  local techRow, techName, techDesc = row(RGB(255, 214, 90))
   local techBtn = button(techRow, "", RGB(150, 120, 40), { AnchorPoint = V2(1, 0.5), Position = UDim2.new(1, -8, 0.5, 0), Size = UDim2.fromOffset(94, 40), TextSize = 15 },
     function() RA:FireServer("tech") end)
   techName.TextColor3 = RGB(255, 222, 130)
+  local tabBtns = {}
+  local function showTab(id)
+    ui.tab = id
+    local i = 0
+    for _, t in ipairs(Config.UnitOrder) do
+      local r = rows[t]
+      local on = UNITS[t].cat == id
+      r.frame.Visible = on
+      if on then
+        r.frame.Position = UDim2.fromOffset(2, i * ROWH)
+        i = i + 1
+      end
+    end
+    techRow.Position = UDim2.fromOffset(2, i * ROWH)
+    list.CanvasSize = UDim2.fromOffset(0, (i + 1) * ROWH)
+    list.CanvasPosition = V2(0, 0)
+    for tid, b in pairs(tabBtns) do b.BackgroundColor3 = (tid == id) and RGB(60, 110, 170) or RGB(44, 50, 60) end
+  end
+  for i, tab in ipairs(Config.Tabs) do
+    tabBtns[tab.id] = button(tabBar, tab.name, RGB(44, 50, 60), { Size = UDim2.fromOffset(58, 28), LayoutOrder = i, TextSize = 14 }, function() showTab(tab.id) end)
+  end
+  showTab("foot")
+  G.shopTab = showTab
   ui.shop = shop
 
   -- 下面一排按钮（抬高一点，让开 Roblox 的物品栏）
@@ -373,7 +416,7 @@ function UI.init(G)
     local y = 0
     for m in pairs(G.vis or {}) do
       local t = m:GetAttribute("Type")
-      if m.Parent and m:GetAttribute("Owner") == player.UserId and m:GetAttribute("BU") and not m:GetAttribute("Dead") and t ~= "inf" and UNITS[t] then
+      if m.Parent and m:GetAttribute("Owner") == player.UserId and m:GetAttribute("BU") and not m:GetAttribute("Dead") and UNITS[t] and not UNITS[t].foot then
         local uid = m:GetAttribute("Uid")
         line(vBody, y, 38, { Text = UNITS[t].name .. "  #" .. tostring(uid) })
         button(vBody, "开", RGB(45, 95, 165), { AnchorPoint = V2(1, 0), Position = UDim2.new(1, 0, 0, y), Size = UDim2.fromOffset(90, 36), TextSize = 15, ZIndex = 4 }, function()
@@ -383,7 +426,7 @@ function UI.init(G)
         y = y + 46
       end
     end
-    if y == 0 then line(vBody, 0, 60, { Text = "这一仗里没有能开的车了（步兵班不能开）。" }) end
+    if y == 0 then line(vBody, 0, 60, { Text = "这一仗里没有能开的车、飞机了（步兵不能开）。" }) end
     vBody.CanvasSize = UDim2.fromOffset(0, y)
   end
   ui.closeModals = closeModals
@@ -430,11 +473,11 @@ function UI.init(G)
     lvL.Text = "第 " .. tostring(S.level) .. " 关" .. ((S.rebirth or 0) > 0 and ("   ★" .. S.rebirth) or "")
     armyL.Text = "部队 " .. tostring(S.n) .. " / " .. tostring(S.cap) .. "    战力 ×" .. string.format("%.1f", S.power or 1)
     local parts = {}
+    if S.enemy and S.enemy.boss then table.insert(parts, "首领×" .. S.enemy.boss) end
     for _, t in ipairs(Config.UnitOrder) do
       local n = S.enemy and S.enemy[t]
-      if n and n > 0 then table.insert(parts, UNITS[t].name .. "×" .. n) end
+      if n and n > 0 then table.insert(parts, UNITS[t].short .. "×" .. n) end
     end
-    if S.enemy and S.enemy.boss then table.insert(parts, "首领×" .. S.enemy.boss) end
     enemyL.Text = (#parts > 0) and ("敌军：" .. table.concat(parts, "  ")) or "敌军：侦察中…"
     rewardL.Text = "胜利奖励 $" .. Config.Fmt(S.reward or 0)
     rankL.Text = "军衔：" .. tostring(S.rank) .. (S.nextXp and ("   " .. Config.Fmt(S.xp) .. " / " .. Config.Fmt(S.nextXp)) or "（最高）")

@@ -68,8 +68,10 @@ function Army.init(G)
     return true
   end
 
-  -- 找个空阵位：默认按兵种排在部署区里（步兵最前，火炮、火箭炮最后），从中间往两边一圈圈找
-  local ROWOFF = { inf = 8, ifv = 26, tank = 44, aa = 64, heli = 86, arty = 112, mlrs = 136 }
+  -- 找个空阵位：默认按兵种的 row 排在部署区里（步兵最前，火炮、火箭炮、飞机最后），从中间往两边一圈圈找
+  local function rowOff(t)
+    return 8 + ((UNITS[t].row or 5) - 1) * 15
+  end
   local function zoneOf(size)
     local D = F.deploy
     return F.width / 2 - 10 - size / 2, D[1] + size / 2 + 2, D[2] - size / 2 - 2
@@ -78,7 +80,7 @@ function Army.init(G)
     local size = UNITS[t].size
     local xmax, z1, z2 = zoneOf(size)
     local x0 = math.clamp(nearX or 0, -xmax, xmax)
-    local z0 = math.clamp(nearZ or (F.deploy[2] - (ROWOFF[t] or 40)), z1, z2)
+    local z0 = math.clamp(nearZ or (F.deploy[2] - rowOff(t)), z1, z2)
     local step = size + 3
     for ring = 0, 16 do
       local n = math.max(1, ring * 8)
@@ -94,9 +96,15 @@ function Army.init(G)
     return x0, z0
   end
 
-  -- 新兵从工厂开出来：出门 → 横通道（z = 60）→ 中间通道 → 路上 → 阵位（直升机直接飞过去）
+  -- 新兵从工厂开出来：出门 → 横通道（z = 60）→ 中间通道 → 路上 → 阵位（直升机直接飞过去；喷气机在空军基地的跑道上滑跑起飞）
   local function exitPath(u, b)
-    if UNITS[u.t].air then
+    local def = UNITS[u.t]
+    if def.jet and b.id == "airbase" then
+      local rz0, rz1 = b.z - b.size[3] / 2 + 14, b.z + b.size[3] / 2 - 10
+      u.x, u.z, u.h = b.x, rz0, math.pi
+      u.path = { { x = b.x, z = rz1, y = 0 }, { x = b.x, z = rz1 + 90, y = 30 }, { x = u.sx, z = u.sz, y = 50 }, { x = u.sx, z = u.sz, y = 0 } }
+      setFly(u, true)
+    elseif def.air then
       u.path = { { x = b.x, z = b.z, y = 40 }, { x = u.sx, z = u.sz, y = 40 }, { x = u.sx, z = u.sz, y = 0 } }
       setFly(u, true)
     else
@@ -125,7 +133,7 @@ function Army.init(G)
   local function stepPath(st, u, dt)
     local wp = u.path[1]
     local def = UNITS[u.t]
-    local sp = (def.air and 50 or def.speed * 1.6) * dt
+    local sp = (def.jet and 90 or def.air and 50 or def.speed * 1.6) * dt
     local dx, dy, dz = wp.x - u.x, wp.y - u.y, wp.z - u.z
     local dist = math.sqrt(dx * dx + dy * dy + dz * dz)
     if dist <= sp then
@@ -224,9 +232,9 @@ function Army.init(G)
     local list = {}
     for _, u in pairs(st.units) do table.insert(list, u) end
     if #list == 0 then return end
-    local ROW = Battle.ROW
+    -- 和 Battle.formation 一样的顺序（row，再按兵种名），同兵种按编号
     table.sort(list, function(a, b)
-      if ROW[a.t] ~= ROW[b.t] then return ROW[a.t] < ROW[b.t] end
+      if a.t ~= b.t then return Battle.order(a.t, b.t) end
       return a.uid < b.uid
     end)
     local types = {}
@@ -239,7 +247,7 @@ function Army.init(G)
         G.goTo(u, s.x, s.z)
       end
     end
-    G.toast(st, "排好了：步兵在前，装甲、防空、直升机，火炮、火箭炮在最后", "info")
+    G.toast(st, "排好了：步兵在前，装甲、防空、直升机，火炮、火箭炮、飞机在最后", "info")
   end
 
   -- 这一关的敌军先摆在敌军区（开打前就能看到对面有什么）

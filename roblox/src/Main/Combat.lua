@@ -15,12 +15,13 @@ function Combat.init(G)
   local ZMIN, ZMAX = F.center - F.length / 2 + 5, F.center + F.length / 2 - 5
   local nextBid = 0
 
-  local function addUnit(B, bu)
+  -- later：推演进行中加进来的（机降的步兵）先不放进 B.units，由推演这一步结束时统一加
+  local function addUnit(B, bu, later)
     nextBid = nextBid + 1
     bu.bid = nextBid
     B.byId[nextBid] = bu
     if bu.model and bu.model.Parent then bu.model:SetAttribute("BU", nextBid) end
-    table.insert(B.units, bu)
+    if not later then table.insert(B.units, bu) end
   end
 
   -- 两队玩家本人上阵的位置：第 1 队在部署区后面朝北，第 2 队在敌军区后面朝南
@@ -72,13 +73,13 @@ function Combat.init(G)
       m:SetAttribute("Dead", true)   -- 残骸：客户端布阵时不能选、画成烧黑的
       m:SetAttribute("Fly", false)
       local p = B.origin + V(u.x, 1 + u.y, u.z)
-      if u.t == "inf" then
+      if u.def.foot then
         G.fx({ k = "boom", p = p + V(0, 2, 0), s = 0.7 })
         m:Destroy()
         return
       end
-      G.fx({ k = "boom", p = p + V(0, 3, 0), s = u.def.boss and 3 or 2 })
-      if u.def.air then   -- 直升机摔到地上
+      G.fx({ k = "boom", p = p + V(0, 3, 0), s = (u.def.boss or u.def.bombs) and 3 or 2 })
+      if u.def.air then   -- 飞机摔到地上
         u.root.CFrame = G.unitCF(B.origin, u.x, 0, u.z, u.h) * CFrame.Angles(0.25, 0, 0.6)
         G.fx({ k = "boom", p = B.origin + V(u.x, 3, u.z), s = 1.6 })
       end
@@ -100,11 +101,28 @@ function Combat.init(G)
       smoke.Parent = u.root
       Debris:AddItem(m, 6)
     end
+    -- 运兵直升机放下的步兵：临时单位，模型放在直升机同一个文件夹里（客户端照样平滑显示），打完就删
+    function cb.spawn(src, t, x, z)
+      local def = UNITS[t]
+      local color = (src.owner and src.owner.plot and src.owner.plot.color) or Config.EnemyColor
+      local model, root = Models.unit(t, color)
+      model.Name = "T" .. t
+      model:SetAttribute("Type", t)
+      model:SetAttribute("Fly", false)
+      model.Parent = (src.model and src.model.Parent) or workspace
+      root.CFrame = G.unitCF(B.origin, x, 0, z, src.h)
+      local bar, fill = Models.hpBar(root, Models.heightOf(t) + 3, color)
+      bar.Enabled = true
+      local bu = { t = t, def = def, team = src.team, x = x, y = 0, z = z, h = src.h, ty = 0, hp = def.hp * src.dm, max = def.hp * src.dm, dm = src.dm,
+        cd = math.random() * math.min(def.rate, 3), rt = 0, alive = true, temp = true, model = model, root = root, bar = bar, fill = fill, h3 = Models.heightOf(t) * 0.45 }
+      addUnit(B, bu, true)
+      return bu
+    end
     return cb
   end
 
   local function newBattle(mode, origin)
-    local B = { mode = mode, origin = origin, units = {}, shells = {}, t = 0, alive1 = 0, alive2 = 0, byId = {}, teamOf = {}, sts = {}, over = false }
+    local B = { mode = mode, origin = origin, units = {}, shells = {}, missiles = {}, pending = {}, t = 0, alive1 = 0, alive2 = 0, byId = {}, teamOf = {}, sts = {}, over = false }
     B.cb = callbacks(B)
     return B
   end
@@ -124,7 +142,7 @@ function Combat.init(G)
       if def.air then G.setFly(u, true) end
       addUnit(B, {
         uid = u.uid, owner = st, t = u.t, def = def, team = team, x = x, y = 0, z = z, h = h, ty = 0,
-        hp = def.hp * tm, max = def.hp * tm, dm = tm, cd = math.random() * def.rate, rt = 0, alive = true,
+        hp = def.hp * tm, max = def.hp * tm, dm = tm, cd = math.random() * math.min(def.rate, 3), rt = 0, alive = true,
         model = u.model, root = u.root, bar = u.bar, fill = u.fill, h3 = Models.heightOf(u.t) * 0.45,
       })
     end
@@ -148,7 +166,7 @@ function Combat.init(G)
       if def.air then model:SetAttribute("Fly", true) end
       addUnit(B, {
         t = a.t, def = def, team = 2, x = a.x, y = 0, z = a.z, h = 0, ty = 0, hp = def.hp * hm, max = def.hp * hm, dm = dm,
-        cd = math.random() * def.rate, rt = 0, alive = true, hold = hold, model = model, root = root, bar = bar, fill = fill,
+        cd = math.random() * math.min(def.rate, 3), rt = 0, alive = true, hold = hold, model = model, root = root, bar = bar, fill = fill,
         h3 = Models.heightOf(a.t) * 0.45,
       })
     end
@@ -161,7 +179,7 @@ function Combat.init(G)
         if u.px == nil or math.abs(u.x - u.px) > 0.02 or math.abs(u.z - u.pz) > 0.02 or math.abs(u.y - u.py) > 0.02 or math.abs(u.h - u.ph) > 0.004 then
           u.px, u.pz, u.py, u.ph = u.x, u.z, u.y, u.h
           local cf = G.unitCF(B.origin, u.x, u.y, u.z, u.h)
-          if u.def.air and u.moving then cf = cf * CFrame.Angles(-0.14, 0, 0) end
+          if u.def.air and u.moving and not u.def.jet then cf = cf * CFrame.Angles(-0.14, 0, 0) end   -- 直升机往前飞时低头（喷气机的坡度客户端算）
           u.root.CFrame = cf
         end
         local ty = math.floor((u.ty or 0) * 50 + 0.5) / 50
@@ -250,8 +268,8 @@ function Combat.init(G)
       if u.owner == st and u.uid == uid and u.alive and not u.hero then bu = u end
     end
     if not bu then return end
-    if bu.t == "inf" then
-      G.toast(st, "步兵班不能开——你本人就是步兵", "info")
+    if bu.def.foot then
+      G.toast(st, bu.def.name .. "不能开——你本人就是步兵", "info")
       return
     end
     bu.driver = st.pl
@@ -264,7 +282,7 @@ function Combat.init(G)
       st.hero = nil
     end
     hideChar(st, true)
-    RB:FireClient(st.pl, { phase = "drive", uid = uid, t = bu.t, bid = bu.bid, origin = B.origin })
+    RB:FireClient(st.pl, { phase = "drive", uid = uid, t = bu.t, bid = bu.bid, origin = B.origin, cd = math.max(0, bu.cd) })   -- cd：还要装填几秒
   end
 
   function G.driveStop(st)
@@ -280,25 +298,34 @@ function Combat.init(G)
     if B and not B.over then G.heroJoin(st, at) end
   end
 
-  -- 玩家开的车：客户端算位置（不卡），服务器只检查速度、边界
+  -- 玩家开的车：客户端算位置（不卡），服务器只检查速度、边界；喷气机的范围大一些
   function G.driveInput(st, d)
     local bu = st.driving
     if not bu or not bu.alive or type(d) ~= "table" then return end
     local x, z, h, y, ty = d.x, d.z, d.h, d.y, d.ty
     if type(x) ~= "number" or type(z) ~= "number" or type(h) ~= "number" or x ~= x or z ~= z or h ~= h then return end
+    local def = bu.def
     local now = os.clock()
     local dt = math.min(0.5, now - (st.driveT or now))
     st.driveT = now
-    local maxStep = bu.def.speed * 1.5 * math.max(dt, 0.05) + 3
+    local maxStep = def.speed * 1.5 * math.max(dt, 0.05) + 3
     local dx, dz = x - bu.x, z - bu.z
     local dist = math.sqrt(dx * dx + dz * dz)
     if dist > maxStep then x, z = bu.x + dx / dist * maxStep, bu.z + dz / dist * maxStep end
-    bu.x = math.clamp(x, -XMAX, XMAX)
-    bu.z = math.clamp(z, ZMIN, ZMAX)
+    local ox, oz = bu.x, bu.z
+    if def.jet then
+      bu.x = math.clamp(x, -Battle.JX, Battle.JX)
+      bu.z = math.clamp(z, Battle.JZ0, Battle.JZ1)
+    else
+      bu.x = math.clamp(x, -XMAX, XMAX)
+      bu.z = math.clamp(z, ZMIN, ZMAX)
+    end
+    local step = math.max(dt, 0.05)
+    bu.vx, bu.vz = (bu.x - ox) / step, (bu.z - oz) / step   -- 轰炸机投弹要用速度
     bu.h = h
     bu.moving = dist > 0.05
-    if bu.def.air then
-      bu.y = (type(y) == "number" and y == y) and math.clamp(y, 12, 160) or bu.def.alt
+    if def.air then
+      bu.y = (type(y) == "number" and y == y) and math.clamp(y, def.cargo and 5 or 12, def.jet and 230 or 160) or def.alt
     end
     if type(ty) == "number" and ty == ty then bu.ty = ty end
   end
@@ -390,7 +417,9 @@ function Combat.init(G)
     end
     for _, bu in ipairs(B.units) do
       if bu.bar then bu.bar.Enabled = false end
-      if bu.model and bu.model.Parent and not bu.hero then
+      if bu.temp then   -- 机降的步兵打完就撤
+        if bu.model then bu.model:Destroy() end
+      elseif bu.model and bu.model.Parent and not bu.hero then
         bu.model:SetAttribute("BU", nil)
         bu.model:SetAttribute("TY", 0)
       end
@@ -445,7 +474,7 @@ function Combat.init(G)
     local d = st.data
     local lost, lostN = {}, 0
     for _, bu in ipairs(B.units) do
-      if bu.owner == st and not bu.hero then
+      if bu.owner == st and not bu.hero and not bu.temp then
         local u = st.units[bu.uid]
         if u then
           if bu.alive then   -- 活着的开回战前的阵位，下一仗满血

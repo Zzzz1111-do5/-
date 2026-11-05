@@ -56,23 +56,16 @@ function Economy.init(G)
     if b.income then
       Models.sign(body, b.name .. "  <font color=\"#7CFC8A\">+" .. Config.Fmt(b.income) .. "/秒</font>", top, 20, 2.8, nil, 200)
     elseif b.kind == "mil" then
-      local names = {}
-      for _, u in ipairs(b.units) do table.insert(names, UNITS[u].name) end
-      Models.sign(body, b.name .. " · 生产" .. table.concat(names, "、"), top, 22, 2.8, nil, 200)
-      for i, t in ipairs(b.units) do
-        local pp = Instance.new("ProximityPrompt")
-        pp.ActionText = "生产" .. UNITS[t].name
-        pp.ObjectText = "$" .. Config.Fmt(UNITS[t].price)
-        pp.KeyboardKeyCode = (i == 1) and Enum.KeyCode.E or Enum.KeyCode.Q
-        pp.HoldDuration = 0
-        pp.MaxActivationDistance = 28
-        pp.RequiresLineOfSight = false
-        pp.UIOffset = Vector2.new(0, (i - 1) * 70)
-        pp.Parent = body
-        pp.Triggered:Connect(function(who)
-          if who == st.pl then G.buyUnit(st, t) end
-        end)
-      end
+      Models.sign(body, b.name .. " · " .. Models.milDesc(b), top, 22, 2.8, nil, (b.id == "airbase") and 600 or 200)
+      -- 走到旁边按 E：客户端打开兵工厂对应的页签（提示上的 Tab 属性）
+      local pp = Instance.new("ProximityPrompt")
+      pp.ActionText = "打开兵工厂"
+      pp.ObjectText = b.name
+      pp.HoldDuration = 0
+      pp.MaxActivationDistance = 28
+      pp.RequiresLineOfSight = false
+      pp:SetAttribute("Tab", UNITS[b.units[1]].cat)
+      pp.Parent = body
     elseif b.kind == "hq" then
       local _, label = Models.sign(body, "", top + 5, 24, 2.8, Color3.fromRGB(255, 220, 120), 240)
       st.hqLabel = label
@@ -122,6 +115,10 @@ function Economy.init(G)
           if who == st.pl then G.tryBuild(st, id, false) end
         end)
         st.pads[id] = { pad = pad, b = b }
+        if id == "airbase" and not st.airHint then   -- 空军基地盖在围墙外面，按钮在围墙里靠右
+          st.airHint = true
+          G.toast(st, "空军基地解锁了：购买按钮在基地里靠右边的围墙旁，盖好后跑道在围墙外面", "info")
+        end
       end
     end
     padColors(st)
@@ -152,7 +149,9 @@ function Economy.init(G)
     if b.income then extra = "，收入 +" .. Config.Fmt(b.income) .. "/秒" end
     G.toast(st, "建成：" .. b.name .. extra, "good")
     if b.kind == "mil" then
-      G.toast(st, "可以生产了：右边「兵工厂」，或者走到建筑旁按 E", "info")
+      local names = {}
+      for _, u in ipairs(b.units) do table.insert(names, UNITS[u].name) end
+      G.toast(st, "可以生产" .. table.concat(names, "、") .. "了：右边「兵工厂」，或者走到建筑旁按 E", "info")
     elseif b.kind == "hq" then
       G.toast(st, "部队上限 " .. G.capOf(d) .. "；以后可以升级指挥部带更多兵", "info")
     end

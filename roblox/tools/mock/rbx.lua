@@ -801,6 +801,7 @@ def("UIListLayout", "Instance", {
 })
 def("UIPadding", "Instance", { PaddingTop = { T.UDim, newUDim(0, 0) }, PaddingBottom = { T.UDim, newUDim(0, 0) }, PaddingLeft = { T.UDim, newUDim(0, 0) }, PaddingRight = { T.UDim, newUDim(0, 0) } })
 def("UIScale", "Instance", { Scale = { T.number, 1 } })
+def("UITextSizeConstraint", "Instance", { MaxTextSize = { T.number, 100 }, MinTextSize = { T.number, 1 } })
 
 -- 其他
 def("ProximityPrompt", "Instance", {
@@ -872,6 +873,7 @@ def("RemoteEvent", "Instance", {}, { events = { OnServerEvent = true, OnClientEv
   FireAllClients = function(o, ...)
     if side() ~= "server" then error("FireAllClients 只能在服务器调用", 2) end
     local args = ser({ ... }, {}, o._p.Name, false)
+    table.insert(R.sent, { name = o._p.Name, args = args, all = true })
     if R.localPlayer then
       local co = newThread(function() o.OnClientEvent:Fire(unpack(args)) end, "client")
       table.insert(queue, { co = co, at = clock, args = table.pack() })
@@ -1009,7 +1011,7 @@ R.services.Lighting = service("Lighting", {
   ClockTime = { T.number, 14 }, Brightness = { T.number, 2 }, GlobalShadows = { T.bool, true }, OutdoorAmbient = { T.Color3, newC3(0.5, 0.5, 0.5) },
   Ambient = { T.Color3, newC3(0, 0, 0) }, EnvironmentDiffuseScale = { T.number, 0 }, EnvironmentSpecularScale = { T.number, 0 }, ExposureCompensation = { T.number, 0 },
 })
-R.services.ProximityPromptService = service("ProximityPromptService", { Enabled = { T.bool, true } })
+R.services.ProximityPromptService = service("ProximityPromptService", { Enabled = { T.bool, true } }, { events = { PromptTriggered = true } })
 R.Heartbeat = newSig()
 R.RenderStepped = newSig()
 R.services.RunService = service("RunService", {}, { ro = {

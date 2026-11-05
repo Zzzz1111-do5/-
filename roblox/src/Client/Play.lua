@@ -1,6 +1,6 @@
 -- 军事大亨（客户端）：操作和镜头——
 --   free 在基地里走 / 战场上自己当兵（Roblox 默认镜头）；deploy 布阵（俯瞰自己的部署区，点部队、点位置）；
---   battle 俯瞰战场；drive 开车 / 开直升机（追尾镜头，本地算位置，20 次 / 秒发给服务器）。
+--   battle 俯瞰战场；drive 开车 / 开直升机 / 开喷气机（追尾镜头，本地算位置，20 次 / 秒发给服务器）。
 --   拿枪：按住左键连发（狙击枪、火箭筒一下一发），R 换弹；手机点屏幕开火
 local Players = game:GetService("Players")
 local UIS = game:GetService("UserInputService")
@@ -19,9 +19,9 @@ function Play.init(G)
   local ui = G.ui
   local RA, RShoot, RDrive = G.R.Action, G.R.Shoot, G.R.Drive
   local mouse = player:GetMouse()
-  local TURRET = { ifv = true, tank = true, aa = true, arty = true }
   local XMAX = F.width / 2 - 6
   local ZMIN, ZMAX = F.center - F.length / 2 + 5, F.center + F.length / 2 - 5
+  local JX, JZ0, JZ1 = F.width / 2 + 160, ZMIN - 200, ZMAX + 200   -- 喷气机能飞的范围（和服务器 Battle 一样）
   G.mode = "free"
 
   local function wrap(a)
@@ -237,14 +237,22 @@ function Play.init(G)
     local lv = root.CFrame.LookVector
     local h = math.atan2(-lv.X, -lv.Z)
     local def = UNITS[ev.t]
-    G.drive = { bid = ev.bid, t = ev.t, origin = o, x = p.X, z = p.Z, y = def.air and math.max(def.alt, p.Y - 1) or 0, h = h, ty = 0,
-      camYaw = h, camPitch = math.rad(def.air and 20 or 16), sendT = 0, nextFire = 0, firing = false, model = m, clone = G.cloneOf(m) }
+    G.drive = { bid = ev.bid, t = ev.t, origin = o, x = p.X, z = p.Z, y = def.air and math.max(def.alt, p.Y - 1) or 0, h = h, ty = 0, spd = def.speed, roll = 0,
+      camYaw = h, camPitch = math.rad(def.air and 20 or 16), sendT = 0, nextFire = os.clock() + (ev.cd or 0), firing = false, model = m, clone = G.cloneOf(m) }
     G.drive.cf = root.CFrame
     G.setMode("drive")
     ui.cross.Visible = true
     ui.fireBtn.Visible = G.mobile
-    G.toast((G.mobile and "摇杆开车，转镜头瞄准，按「开火」" or "WASD 开车，鼠标瞄准，按住左键开火，右键拖动转镜头") ..
-      (def.air and (G.mobile and "" or "，空格升高、C 降低") or "") .. "；下车按 F", "info")
+    local tip
+    if def.jet then
+      tip = G.mobile and "摇杆左右转弯、上下加减速，转镜头瞄准，按「开火」" or "W / S 加减速，A / D 转弯，空格升高、C 降低，鼠标瞄准、按住左键开火"
+      if def.bombs then tip = tip .. "；轰炸机按一下扔一串炸弹（落在飞机前方）" end
+    else
+      tip = (G.mobile and "摇杆开车，转镜头瞄准，按「开火」" or "WASD 开车，鼠标瞄准，按住左键开火，右键拖动转镜头") ..
+        (def.air and (G.mobile and "" or "，空格升高、C 降低") or "")
+      if def.cargo then tip = tip .. "；降到最低（按住 C）自动放下步兵" end
+    end
+    G.toast(tip .. "；下车按 F", "info")
   end
 
   local function stopDrive()
@@ -259,8 +267,16 @@ function Play.init(G)
     if not dr then return end
     local def = UNITS[dr.t]
     local mv = moveVector()
-    if not rotating then dr.camYaw = dr.camYaw + wrap(dr.h - dr.camYaw) * math.min(1, dt * (def.air and 0 or 1.5)) end
-    if def.air then
+    if not rotating then dr.camYaw = dr.camYaw + wrap(dr.h - dr.camYaw) * math.min(1, dt * ((def.air and not def.jet) and 0 or 1.5)) end
+    if def.jet then   -- 喷气机：一直往前飞，W / S 加减速，A / D 转弯（压坡度），空格 / C 升降
+      dr.spd = math.clamp(dr.spd + (-mv.Z) * def.speed * 0.8 * dt, def.speed * 0.6, def.speed * 1.15)
+      dr.h = dr.h - mv.X * def.turn * 1.2 * dt
+      dr.roll = dr.roll + (-mv.X * 0.8 - dr.roll) * math.min(1, dt * 4)
+      dr.x = dr.x - math.sin(dr.h) * dr.spd * dt
+      dr.z = dr.z - math.cos(dr.h) * dr.spd * dt
+      if UIS:IsKeyDown(Enum.KeyCode.Space) then dr.y = math.min(220, dr.y + 40 * dt) end
+      if UIS:IsKeyDown(Enum.KeyCode.C) or UIS:IsKeyDown(Enum.KeyCode.LeftControl) then dr.y = math.max(40, dr.y - 40 * dt) end
+    elseif def.air then
       local yaw = dr.camYaw
       local fwd, right = V(-math.sin(yaw), 0, -math.cos(yaw)), V(math.cos(yaw), 0, -math.sin(yaw))
       local move = right * mv.X + fwd * (-mv.Z)
@@ -268,7 +284,7 @@ function Play.init(G)
       dr.x = dr.x + move.X * def.speed * dt
       dr.z = dr.z + move.Z * def.speed * dt
       if UIS:IsKeyDown(Enum.KeyCode.Space) then dr.y = math.min(150, dr.y + 30 * dt) end
-      if UIS:IsKeyDown(Enum.KeyCode.C) or UIS:IsKeyDown(Enum.KeyCode.LeftControl) then dr.y = math.max(15, dr.y - 30 * dt) end
+      if UIS:IsKeyDown(Enum.KeyCode.C) or UIS:IsKeyDown(Enum.KeyCode.LeftControl) then dr.y = math.max(def.cargo and 6 or 15, dr.y - 30 * dt) end
       dr.h = dr.h + wrap(yaw - dr.h) * math.min(1, dt * 3)
     else
       local throttle = -mv.Z
@@ -277,19 +293,24 @@ function Play.init(G)
       dr.x = dr.x - math.sin(dr.h) * sp * dt
       dr.z = dr.z - math.cos(dr.h) * sp * dt
     end
-    dr.x = math.clamp(dr.x, -XMAX, XMAX)
-    dr.z = math.clamp(dr.z, ZMIN, ZMAX)
+    if def.jet then
+      dr.x = math.clamp(dr.x, -JX, JX)
+      dr.z = math.clamp(dr.z, JZ0, JZ1)
+    else
+      dr.x = math.clamp(dr.x, -XMAX, XMAX)
+      dr.z = math.clamp(dr.z, ZMIN, ZMAX)
+    end
     local aim = aimPoint(dr.clone)
     dr.aim = aim
     local rel = aim - dr.origin
-    if TURRET[dr.t] then dr.ty = wrap(math.atan2(-(rel.X - dr.x), -(rel.Z - dr.z)) - dr.h) end
-    dr.cf = CFrame.new(dr.origin + V(dr.x, 1 + dr.y, dr.z)) * CFrame.Angles(0, dr.h, 0)
+    if def.turret then dr.ty = wrap(math.atan2(-(rel.X - dr.x), -(rel.Z - dr.z)) - dr.h) end
+    dr.cf = CFrame.new(dr.origin + V(dr.x, 1 + dr.y, dr.z)) * CFrame.Angles(0, dr.h, 0) * CFrame.Angles(0, 0, dr.roll)
     dr.sendT = dr.sendT + dt
     local fire = nil
     local now = os.clock()
     if dr.firing and now >= dr.nextFire then
       fire = aim
-      dr.nextFire = now + def.rate
+      dr.nextFire = now + (def.bombs and def.rate * 0.5 or def.rate)
     end
     if dr.sendT >= 0.05 or fire then
       dr.sendT = 0
@@ -382,7 +403,16 @@ function Play.init(G)
   if player.Character then onChar(player.Character) end
 
   local function ammoHud()
-    if not gun.id or G.drive then
+    local dr = G.drive
+    if dr then   -- 开车：显示还要装填几秒
+      local def = UNITS[dr.t]
+      local left = dr.nextFire - os.clock()
+      ui.ammo.Visible = true
+      ui.reloadBar.Visible = false
+      ui.ammo.Text = def.name .. ((left > 0.05) and string.format("  装填 %.1f 秒", left) or "  可以开火")
+      return
+    end
+    if not gun.id then
       ui.ammo.Visible = false
       ui.reloadBar.Visible = false
       return
@@ -405,9 +435,17 @@ function Play.init(G)
   G.battle = nil
   local function counterTip(enemy)
     if not enemy then return "多造一些兵再来" end
-    if (enemy.heli or 0) > 0 then return "敌方有直升机：带上防空车、步战车，或者多带步兵" end
-    if (enemy.tank or 0) + (enemy.boss or 0) >= 2 then return "敌方坦克多：武装直升机专克坦克，火箭筒也行" end
-    if (enemy.arty or 0) + (enemy.mlrs or 0) > 0 then return "敌方有炮兵：别把步兵挤成一团，开坦克冲上去端掉它" end
+    local function n(...)
+      local s = 0
+      for _, t in ipairs({ ... }) do s = s + (enemy[t] or 0) end
+      return s
+    end
+    if n("drone", "fighter", "bomber") > 0 then return "敌方有高空的飞机（无人机 / 战斗机 / 轰炸机）：带弹炮防空车、爱国者、单兵防空组，或者自己的战斗机" end
+    if n("heli", "transport", "attacker") > 0 then return "敌方有直升机 / 攻击机：带上防空车、步战车、单兵防空组，或者多带步兵" end
+    if n("tank", "boss", "td", "breacher") >= 2 then return "敌方装甲多：武装直升机、反坦克导弹组、突击炮、攻击机专克装甲，火箭筒也行" end
+    if n("cram") > 0 then return "敌方有拦截炮：炮弹、火箭弹会被打下来，用坦克、攻击机去端掉它" end
+    if n("arty", "mlrs", "howitzer", "heavyarty", "mortar") > 0 then return "敌方有炮兵：别把步兵挤成一团；拦截炮能挡炮弹，开快车冲上去端掉它" end
+    if n("sniper") > 0 then return "敌方有狙击手：用迫击炮、火炮、机枪车压制，你本人也小心" end
     return "多造一些兵再来，或者升级军工科技"
   end
 
@@ -539,6 +577,11 @@ function Play.init(G)
       orbit.dist = math.clamp(pinch0 / scale, 80, 1600)
       if state == Enum.UserInputState.End then pinch0 = nil end
     end
+  end)
+  -- 走到军工建筑旁按 E：兵工厂翻到这个建筑的页签
+  PPS.PromptTriggered:Connect(function(prompt)
+    local tab = prompt:GetAttribute("Tab")
+    if tab and G.shopTab then G.shopTab(tab) end
   end)
   ui.fireBtn.MouseButton1Down:Connect(function()
     if G.drive then G.drive.firing = true end

@@ -1,6 +1,7 @@
 -- 军事大亨（客户端）：部队的显示
 -- 服务器上的单位模型每秒只更新 20 次位置，直接看会一顿一顿的：这里每个单位本地复制一份（服务器那份在本地藏起来），
--- 每帧平滑地追服务器的位置；炮塔按模型的 TY 属性转，旋翼飞的时候转，打掉的涂黑；自己正在开的车直接用本地算的位置（开起来不卡）
+-- 每帧平滑地追服务器的位置；炮塔按模型的 TY 属性转，旋翼飞的时候转，喷气机转弯时压坡度（按转向的快慢），打掉的涂黑；
+-- 自己正在开的车直接用本地算的位置（开起来不卡）
 local Players = game:GetService("Players")
 
 local View = {}
@@ -11,6 +12,7 @@ function View.init(G)
   folder.Name = "ClientUnits"
   folder.Parent = workspace
   G.unitFolder = folder
+  local UNITS = G.Config.Units
   local vis = {}      -- [服务器的模型] = e
   local byClone = {}  -- [本地复制] = 服务器的模型
   G.vis = vis
@@ -38,7 +40,9 @@ function View.init(G)
     end
     clone.Parent = folder
     hide(m)
-    local e = { m = m, clone = clone, root = root, sroot = sroot, cf = sroot.CFrame, ty = 0, dead = false,
+    local def = UNITS[m:GetAttribute("Type") or ""]
+    local e = { m = m, clone = clone, root = root, sroot = sroot, cf = sroot.CFrame, ty = 0, dead = false, jet = m:GetAttribute("Jet") == true, bank = 0,
+      h3 = def and (def.foot and 2.5 or def.air and 2 or 3.5) or 3,   -- 导弹瞄准的高度（离模型底面）
       turret = clone:FindFirstChild("TurretMotor", true), rotor = clone:FindFirstChild("RotorMotor", true), tail = clone:FindFirstChild("TailMotor", true) }
     if e.tail then e.axis = e.tail:GetAttribute("Axis") or V(1, 0, 0) end
     -- 血条在服务器那份的 Root 上：改成跟着本地这份走（开战时才建，所以也盯着新加的）
@@ -59,6 +63,13 @@ function View.init(G)
   function G.cloneOf(m)
     local e = vis[m]
     return e and e.clone
+  end
+  -- 战斗单位编号（模型的 BU 属性）→ 显示用的 e（导弹跟着它的本地复制飞）
+  function G.visByBid(bid)
+    for m, e in pairs(vis) do
+      if m:GetAttribute("BU") == bid then return e end
+    end
+    return nil
   end
 
   local function watch(f)
@@ -95,7 +106,17 @@ function View.init(G)
         local mine = dr ~= nil and dr.cf ~= nil and m:GetAttribute("BU") == dr.bid and m:GetAttribute("Owner") == me.UserId
         local target = mine and dr.cf or e.sroot.CFrame
         if mine or (target.Position - e.cf.Position).Magnitude > 150 then e.cf = target else e.cf = e.cf:Lerp(target, k) end
-        e.root.CFrame = e.cf
+        local cf = e.cf
+        if e.jet and not mine and not e.dead then   -- 喷气机：左转（朝向角变大）向左压坡度
+          local lv = cf.LookVector
+          local yaw = math.atan2(-lv.X, -lv.Z)
+          local dy = (yaw - (e.yaw or yaw) + math.pi) % (2 * math.pi) - math.pi
+          e.yaw = yaw
+          local want = math.clamp(dy / math.max(dt, 1 / 240) * 0.55, -1.1, 1.1)
+          e.bank = e.bank + (want - e.bank) * math.min(1, dt * 4)
+          cf = cf * CFrame.Angles(0, 0, e.bank)
+        end
+        e.root.CFrame = cf
         if e.turret then
           local ty = mine and (dr.ty or 0) or (m:GetAttribute("TY") or 0)
           local diff = (ty - e.ty + math.pi) % (2 * math.pi) - math.pi

@@ -1,5 +1,5 @@
 -- 军事大亨：模型（地图、竞技场、建筑、购买按钮、兵种、武器、排行榜牌子、血条）
--- 兵种：优先用玩家在 Studio 里「导入 3D」进来的原模型（roblox/models/*.glb，名字 = 槽位：soldier / ifv / tank / aa / arty / mlrs / heli），
+-- 兵种：优先用玩家在 Studio 里「导入 3D」进来的原模型（roblox/models/*.glb，名字 = 槽位：soldier、tank、heli、fighter……和 prop_* 道具），
 --   没导入就用零件拼的。模型结构都一样：锚定的隐形 Root（原点在车底中心、正前方 −Z），其余零件焊在 Root 上；
 --   炮塔、旋翼、尾桨各挂在一个用 Motor6D 接到 Root 的「毂」上（TurretMotor / RotorMotor / TailMotor），客户端转它们的 Transform。
 -- 建筑、地面是锚定的静态零件。
@@ -156,12 +156,12 @@ function Models.plot(f, origin, color, index)
     ghostly(block(f, base, V(8, 0.06, 0.8), CF(k * 15, 1.03, roadZ), C.white, MAT.SmoothPlastic))
   end
   local field = battlefield(f, origin, color, RGB(190, 50, 40), rng)
-  -- 树：基地右边的空地（第一块基地左边也种）
+  -- 树：基地右边的空地（空军基地再往右；第一块基地左边也种）
   local sides = { 1 }
   if index == 1 then sides = { 1, -1 } end
   for _, sd in ipairs(sides) do
     for _ = 1, 34 do
-      local x = sd * rng:NextNumber(hs + 40, Config.PlotSpacing - Fd.width / 2 - 20)
+      local x = sd * rng:NextNumber(hs + 140, Config.PlotSpacing - Fd.width / 2 - 20)
       local z = rng:NextNumber(-hs + 5, Fd.center + Fd.length / 2)
       tree(f, origin + V(x, 0, z), rng)
     end
@@ -217,6 +217,17 @@ function Models.arena(f, origin, index)
 end
 
 ---------------------------------------------------------------- 建筑
+
+-- 军工建筑能造什么（牌子上写；太多就写前两个加「等 N 种」）
+function Models.milDesc(b)
+  local names = {}
+  for i, u in ipairs(b.units) do
+    if i <= 2 then table.insert(names, Config.Units[u].name) end
+  end
+  local s = "生产" .. table.concat(names, "、")
+  if #b.units > 2 then s = s .. "等 " .. #b.units .. " 种" end
+  return s
+end
 
 local HOUSE = { house1 = RGB(226, 212, 186), house2 = RGB(186, 206, 222), house3 = RGB(222, 192, 180) }
 
@@ -385,6 +396,30 @@ local function helipad(m, base, b)
   return body
 end
 
+-- 空军基地：在围墙外的草地上（底板从地面铺起），跑道沿 Z（喷气机从 −Z 那头滑跑，往战场方向起飞），右边两座机库，左边塔台
+local function airbase(m, base, b)
+  local w, d = b.size[1], b.size[3]
+  local body = block(m, base, V(w, 1.2, d), CF(0, -0.4, 0), RGB(150, 152, 148), MAT.Concrete)
+  ghostly(block(m, base, V(22, 0.1, d - 8), CF(0, 0.25, 0), C.asphalt, MAT.Asphalt))
+  for k = -7, 7 do ghostly(block(m, base, V(0.8, 0.06, 8), CF(0, 0.32, k * 15), C.white)) end
+  for _, sx in ipairs({ -1, 1 }) do ghostly(block(m, base, V(0.5, 0.06, d - 10), CF(sx * 10, 0.32, 0), C.white)) end
+  for _, sz in ipairs({ -1, 1 }) do
+    for k = -4, 4 do block(m, base, V(0.6, 0.4, 0.6), CF(k * 2.4, 0.4, sz * (d / 2 - 2)), (sz < 0) and RGB(80, 255, 120) or RGB(255, 80, 70), MAT.Neon) end
+  end
+  for _, hz in ipairs({ -60, 20 }) do   -- 机库：门朝跑道
+    local hb = CF(21, 0.2, hz)
+    block(m, base, V(16, 6, 22), hb * CF(0, 3, 0), RGB(112, 120, 100), MAT.Metal)
+    block(m, base, V(16, 22, 22), hb * CF(0, 6 - 11 * 0.42, 0), RGB(100, 108, 90), MAT.CorrodedMetal, CYL)
+    block(m, base, V(0.4, 5.4, 14), hb * CF(-8.1, 2.7, 0), C.dark, MAT.DiamondPlate)
+  end
+  cyl(m, base, 12, 4, CF(-22, 6.2, -90), C.concrete, MAT.Concrete)   -- 塔台
+  block(m, base, V(6, 3, 6), CF(-22, 13.7, -90), C.glass, MAT.Glass)
+  block(m, base, V(6.6, 0.6, 6.6), CF(-22, 15.5, -90), C.roof, MAT.Metal)
+  cyl(m, base, 8, 0.3, CF(-22, 4.2, 40), C.metal, MAT.Metal)   -- 风向袋
+  block(m, base, V(0.9, 0.9, 3), CF(-22, 8, 41.5), RGB(240, 120, 30), MAT.Fabric)
+  return body
+end
+
 local function hq(m, base, b, team)
   local w, h, d = b.size[1], b.size[2], b.size[3]
   slabUnder(m, base, w, d)
@@ -403,7 +438,7 @@ local function hq(m, base, b, team)
 end
 
 local KIND = { house = house, factory = factory, power = power, bank = bank, hq = hq }
-local MIL = { barracks = barracks, tankfac = hangar, aafac = aaShop, artyfac = artyPos, helipad = helipad }
+local MIL = { barracks = barracks, tankfac = hangar, aafac = aaShop, artyfac = artyPos, helipad = helipad, airbase = airbase }
 
 -- 建筑：pos 是地面中心（基地地面顶上）；返回 model、主体零件（挂牌子、提示用）
 function Models.building(parent, b, pos, team)
@@ -426,14 +461,13 @@ function Models.pad(parent, b, pos, team)
   local w, h, d = b.size[1], b.size[2], b.size[3]
   local ghost = ghostly(block(m, base, V(w, h, d), CF(0, h / 2, 0), team, MAT.ForceField))
   ghost.CastShadow = false
-  local pad = block(m, base, V(0.7, 7, 7), CF(0, 0.35, -d / 2 - 6) * UP, C.green, MAT.Neon, CYL)
+  local px, pz = 0, -d / 2 - 6
+  if b.pad then px, pz = b.pad[1], b.pad[2] end
+  local pad = block(m, base, V(0.7, 7, 7), CF(px, 0.35, pz) * UP, C.green, MAT.Neon, CYL)
   pad.Name = "Pad"
   local desc = ""
   if b.income then desc = "收入 +" .. Config.Fmt(b.income) .. "/秒"
-  elseif b.kind == "mil" then
-    local names = {}
-    for _, u in ipairs(b.units) do table.insert(names, Config.Units[u].name) end
-    desc = "生产" .. table.concat(names, "、")
+  elseif b.kind == "mil" then desc = Models.milDesc(b)
   elseif b.kind == "hq" then desc = "部队上限 " .. b.cap[1]
   elseif b.kind == "power" then desc = "工厂收入 ×" .. Config.PowerBoost
   end
@@ -637,9 +671,128 @@ PART.heli = { len = 15.2, build = function(K, col)
   K.rotor(4.6, 13, dk)
 end }
 
+-- 步兵组：几个士兵 + 武器（零件版）；squad 2 / 3 个人的站位
+local FOOTPOS = { [2] = { { -1.4, 0.5 }, { 1.4, 0.5 } }, [3] = { { -1.8, 1 }, { 1.8, 1 }, { 0, -1.3 } } }
+local function footPart(extra)
+  return { len = 4.1, h = 4.1, build = function(K, col, def)
+    for _, o in ipairs(FOOTPOS[def.squad or 3]) do soldier(K, o[1], o[2], col) end
+    if extra then extra(K, col) end
+  end }
+end
+PART.mg = footPart(function(K)
+  K.add(V(0.3, 0.3, 2.2), CF(0, 0.45, -2.4), C.gun, MAT.Metal)
+  K.add(V(0.12, 0.5, 0.12), CF(0, 0.2, -3.2), C.gun, MAT.Metal)
+end)
+PART.sniper = footPart(function(K)
+  K.add(V(0.12, 0.12, 2.4), CF(-1.0, 2.5, -1.2), C.gun, MAT.Metal)
+end)
+PART.mortar = footPart(function(K)
+  K.add(V(1.2, 0.15, 1.2), CF(0, 0.08, 0.6), C.gun, MAT.Metal)
+  K.add(V(0.35, 0.35, 2.2), CF(0, 0.95, 0.1) * CFrame.Angles(math.rad(50), 0, 0), C.gun, MAT.Metal)
+end)
+PART.at = footPart(function(K)
+  K.add(V(0.45, 0.45, 2.6), CF(-0.95, 3.0, 0.4), C.oliveDark, MAT.Metal)
+end)
+PART.manpad = footPart(function(K)
+  K.add(V(0.32, 0.32, 3.0), CF(-0.95, 3.1, 0.4) * CFrame.Angles(math.rad(20), 0, 0), C.oliveDark, MAT.Metal)
+end)
+PART.jeep = { len = 6.5, build = function(K, col)
+  local dk = darker(col, 0.3)
+  for _, sx in ipairs({ -1, 1 }) do
+    for _, sz in ipairs({ -1, 1 }) do K.add(V(0.7, 1.6, 1.6), CF(sx * 1.35, 0.8, sz * 2.0), C.track, MAT.Metal, CYL) end
+  end
+  K.add(V(2.6, 1.3, 6.2), CF(0, 1.55, 0), col, MAT.Metal)
+  K.add(V(2.4, 1.2, 3.0), CF(0, 2.75, 0.4), col, MAT.Metal)
+  K.add(V(2.2, 0.5, 1.4), CF(0, 2.4, -2.5), C.glass, MAT.Glass)
+  K.turret(V(0, 3.35, 0.6))
+  K.addT(V(1.4, 0.6, 1.4), CF(0, 3.65, 0.6), dk, MAT.Metal)
+  K.addT(V(0.18, 0.18, 1.8), CF(0, 3.9, -0.6), C.gun, MAT.Metal)
+end }
+PART.td = { len = 9, build = function(K, col)
+  local dk = darker(col, 0.3)
+  for _, sz in ipairs({ -2.9, -0.6, 2.6 }) do
+    for _, sx in ipairs({ -1, 1 }) do K.add(V(0.7, 1.7, 1.7), CF(sx * 1.6, 0.85, sz), C.track, MAT.Metal, CYL) end
+  end
+  K.add(V(3.0, 1.4, 8.4), CF(0, 1.8, 0), col, MAT.Metal)
+  K.add(V(3.6, 0.3, 8.4), CF(0, 2.6, 0), dk, MAT.Metal)
+  K.turret(V(0, 2.75, 0.8))
+  K.addT(V(2.8, 1.1, 3.2), CF(0, 3.3, 0.8), col, MAT.Metal)
+  K.addT(V(0.38, 0.38, 5.6), CF(0, 3.35, -2.6), C.gun, MAT.Metal)
+  K.addT(V(0.6, 0.6, 0.6), CF(0, 3.35, -5.4), C.gun, MAT.Metal)
+end }
+PART.breacher = { len = 10, build = function(K, col)
+  local dk = darker(col, 0.3)
+  K.add(V(1.5, 1.6, 8.6), CF(-2.85, 0.8, 0), C.track, MAT.Metal)
+  K.add(V(1.5, 1.6, 8.6), CF(2.85, 0.8, 0), C.track, MAT.Metal)
+  K.add(V(4.4, 1.4, 8.2), CF(0, 1.7, 0.3), col, MAT.Metal)
+  K.add(V(3.6, 1.2, 3.6), CF(0, 3.0, 1.2), dk, MAT.Metal)
+  K.add(V(6.4, 1.4, 0.5), CF(0, 0.9, -5.0) * CFrame.Angles(math.rad(-25), 0, 0), C.metal, MAT.DiamondPlate)   -- 扫雷犁
+  for i = -2, 2 do K.add(V(0.25, 0.9, 1.0), CF(i * 1.4, 0.4, -5.5), C.metal, MAT.Metal) end
+  K.add(V(0.8, 0.8, 2.6), CF(1.4, 3.6, 2.6), dk, MAT.Metal)   -- 直线装药发射器
+end }
+PART.cram = { len = 6, build = function(K, col)
+  K.add(V(5.2, 1.6, 6), CF(0, 0.8, 0), darker(col, 0.2), MAT.Metal)
+  K.turret(V(0, 1.6, 0))
+  K.addT(V(2.4, 1.2, 2.4), CF(0, 2.2, 0), col, MAT.Metal)
+  K.addT(V(3.0, 1.6, 1.6), CF(0, 4.3, 0.4) * UP, C.white, MAT.SmoothPlastic, CYL)   -- 雷达罩
+  K.addT(V(0.5, 0.5, 2.6), CF(0, 2.9, -1.6), C.gun, MAT.Metal)
+end }
+PART.sam = { len = 11, build = function(K, col)
+  local dk = darker(col, 0.3)
+  for _, sz in ipairs({ -3.6, -1.6, 2.4, 4.0 }) do
+    for _, sx in ipairs({ -1, 1 }) do K.add(V(0.6, 1.4, 1.4), CF(sx * 1.3, 0.7, sz), C.track, MAT.Metal, CYL) end
+  end
+  K.add(V(2.6, 0.6, 10.4), CF(0, 1.5, 0), dk, MAT.Metal)
+  K.add(V(2.6, 2.0, 2.2), CF(0, 2.6, -4.2), col, MAT.Metal)
+  K.add(V(3.0, 2.4, 5.6), CF(0, 3.6, 1.6) * CFrame.Angles(math.rad(38), 0, 0), col, MAT.Metal)   -- 发射箱起竖
+end }
+PART.howitzer = { len = 10, build = function(K, col)
+  local dk = darker(col, 0.3)
+  for _, sx in ipairs({ -1, 1 }) do
+    K.add(V(0.7, 1.8, 1.8), CF(sx * 1.5, 0.9, 0.4), C.track, MAT.Metal, CYL)
+    K.add(V(0.35, 0.35, 5), CF(sx * 1.4, 0.4, 3.0) * CFrame.Angles(0, sx * 0.35, 0), col, MAT.Metal)   -- 大架
+  end
+  K.add(V(2.4, 0.8, 2.0), CF(0, 1.4, 0.4), col, MAT.Metal)
+  local a = math.rad(25)
+  local dir = V(0, math.sin(a), -math.cos(a))
+  local r0 = V(0, 1.9, 0.4)
+  K.add(V(0.5, 0.5, 7.4), CF(r0 + dir * 3.0) * CFrame.Angles(a, 0, 0), C.gun, MAT.Metal)
+  K.add(V(0.8, 0.8, 0.8), CF(r0 + dir * 6.6) * CFrame.Angles(a, 0, 0), C.gun, MAT.Metal)
+  K.add(V(2.6, 1.4, 0.2), CF(0, 2.3, -0.6), dk, MAT.Metal)   -- 防盾
+end }
+-- 固定翼：机身、机头、座舱、机翼、平尾、垂尾、发动机（参数按设计尺寸）
+local function plane(p)
+  return { len = p.len, h = p.h, build = function(K, col)
+    local dk = darker(col, 0.25)
+    local L, D, y = p.len, p.dia, p.y
+    K.add(V(D, D, L * 0.8), CF(0, y, 0), col, MAT.Metal)
+    K.add(V(D * 0.7, D * 0.7, L * 0.14), CF(0, y - D * 0.05, -L * 0.46), col, MAT.Metal)
+    K.add(V(D * 0.55, D * 0.35, L * 0.12), CF(0, y + D * 0.5, -L * 0.3), C.glass, MAT.Glass)
+    K.add(V(p.span, D * 0.12, p.chord), CF(0, y + p.wingY, p.wingZ), col, MAT.Metal)
+    K.add(V(p.span * 0.38, D * 0.1, p.chord * 0.5), CF(0, y + D * 0.1, L * 0.38), dk, MAT.Metal)
+    for _, fx in ipairs(p.fins) do K.add(V(D * 0.08, p.fin, p.chord * 0.55), CF(fx, y + D * 0.5 + p.fin / 2, L * 0.36), dk, MAT.Metal) end
+    for _, e in ipairs(p.eng or {}) do K.add(V(e[4], e[4], e[5]), CF(e[1], y + e[2], e[3]), dk, MAT.Metal) end
+  end }
+end
+PART.fighter = plane({ len = 20, h = 4.5, dia = 2.0, y = 2.2, span = 13, chord = 6, wingY = -0.2, wingZ = 2, fins = { -1.2, 1.2 }, fin = 3 })
+PART.attacker = plane({ len = 16, h = 4.5, dia = 1.8, y = 2.0, span = 17, chord = 3, wingY = -0.4, wingZ = 0, fins = { -2.8, 2.8 }, fin = 2.6,
+  eng = { { -1.2, 0.9, 3.5, 1.3, 2.6 }, { 1.2, 0.9, 3.5, 1.3, 2.6 } } })
+PART.bomber = plane({ len = 34, h = 7, dia = 3.0, y = 3.0, span = 34, chord = 6, wingY = 0.4, wingZ = 0, fins = { 0 }, fin = 6,
+  eng = { { -4.5, -0.4, -1.5, 1.6, 4 }, { 4.5, -0.4, -1.5, 1.6, 4 } } })
+PART.drone = plane({ len = 11, h = 3, dia = 1.2, y = 1.6, span = 20, chord = 1.4, wingY = 0, wingZ = 0, fins = { -0.8, 0.8 }, fin = 1.4 })
+PART.spaag = PART.aa
+PART.heavyarty = PART.arty
+PART.transport = PART.heli
+
 ---------------------------------------------------------------- 兵种：导入的原模型
 
-local SLOTS = { soldier = true, ifv = true, tank = true, aa = true, arty = true, mlrs = true, heli = true }
+-- 槽位：各兵种的 model，加上步兵组用的道具（值是道具沿前后方向的长度，格）
+local PROPLEN = { prop_javelin = 2.6, prop_stinger = 3.4, prop_mortar = 2.4, prop_mg = 2.8 }
+local SLOTS = {}
+for name in pairs(PROPLEN) do SLOTS[name] = true end
+for _, d in pairs(Config.Units) do
+  if d.model then SLOTS[d.model] = true end
+end
 local TEMPLATES = {}   -- 槽位 → { parts = { { part, role } }, pivots = {…}, h = 高度 }
 local MARKS = { _Front = true, _Top = true, _PivotTurret = true, _PivotRotor = true, _PivotTail = true, _AxisTail = true }
 
@@ -697,7 +850,9 @@ local function prepare(slot, model)
   local size = mx - mn
   local def = Config.Units[slot]
   local k
-  if slot == "soldier" then k = 5.2 / math.max(0.01, size.Y) else k = (def and def.len or 15) / math.max(0.01, size.Z) end
+  if slot == "soldier" then k = 5.2 / math.max(0.01, size.Y)
+  elseif PROPLEN[slot] then k = PROPLEN[slot] / math.max(0.01, size.Z)
+  else k = (def and def.len or 15) / math.max(0.01, size.Z) end
   for _, p in ipairs(all) do
     local pos = p.Position * k
     p.Size = p.Size * k
@@ -756,6 +911,7 @@ end
 -- 兵种的高度（血条、瞄准点）：导入模型按模板，零件模型按设计
 local function heightOf(t)
   local def = Config.Units[t]
+  if def.foot then return 5.2 end
   local T = TEMPLATES[def.model]
   local k = def.boss and 1.36 or 1
   if T then return T.h * k end
@@ -766,10 +922,14 @@ end
 Models.heightOf = heightOf
 
 -- 炮口（模型坐标，炮塔不转时）：大致在车头、炮塔高度
+local MUZ = { at = V(-1.3, 4.4, -1.6), manpad = V(-1.3, 4.7, -1.6), mortar = V(0, 2.2, -0.4), mg = V(0, 0.7, -4.2) }
 function Models.muzzle(t)
   local def = Config.Units[t]
   local h = heightOf(t)
-  if t == "inf" then return V(0.5, 3.1, -2.6) end
+  if MUZ[t] then return MUZ[t] end
+  if def.foot then return V(0.5, 3.1, -2.6) end
+  if def.bombs then return V(0, h * 0.25, 0) end
+  if def.jet then return V(0, h * 0.35, -def.len * 0.45) end
   if def.air then return V(def.len * 0.08, h * 0.35, -def.len * 0.3) end
   if def.side then return V(def.size * 0.45, h * 0.75, 0) end
   return V(0, h * 0.62, -(def.len or 10) * 0.55)
@@ -784,8 +944,7 @@ local function ring(m, root, size, color)
   weld(root, r, CF(0, 0.12, 0) * UP)
 end
 
--- 从模板生成（k 额外放大，offs 一个或几个摆放位置——步兵班是三个士兵）
-local function fromTemplate(T, k, offs)
+local function newRoot()
   local m = Instance.new("Model")
   local root = Instance.new("Part")
   root.Name = "Root"
@@ -797,6 +956,11 @@ local function fromTemplate(T, k, offs)
   root.CFrame = CF()
   root.Parent = m
   m.PrimaryPart = root
+  return m, root
+end
+
+-- 往模型里加一份模板（k 额外放大，offs 一个或几个摆放位置（CFrame）——步兵组是几个士兵；flat 全部焊死在 Root 上，不建炮塔、旋翼）
+local function addTemplate(m, root, T, k, offs, flat)
   local hubs = {}
   local function hubFor(role)
     if hubs[role] then return hubs[role] end
@@ -819,10 +983,10 @@ local function fromTemplate(T, k, offs)
       p.CanTouch = false
       p.Massless = true
       p.Size = p.Size * k
-      local cf = CF(p.Position * k + off) * rotOnly(p.CFrame)
+      local cf = off * CF(p.Position * k) * rotOnly(p.CFrame)
       p.CFrame = cf
       p.Parent = m
-      if e.role == "Body" or #offs > 1 then
+      if e.role == "Body" or flat then
         weld(root, p, cf)
       else
         local h = hubFor(e.role)
@@ -830,8 +994,14 @@ local function fromTemplate(T, k, offs)
       end
     end
   end
-  return m, root
 end
+
+-- 步兵组：几个士兵的站位，武器道具摆在哪（机枪、迫击炮在地上，标枪、毒刺扛在第一个人右肩上）
+local FOOT = { [2] = { CF(-1.8, 0, 0.6), CF(1.8, 0, 0.6) }, [3] = { CF(-2.6, 0, 1.6), CF(2.6, 0, 1.6), CF(0, 0, -2.2) } }
+local PROPAT = {
+  prop_mg = CF(0, 0, -2.9), prop_mortar = CF(0, 0, 0.1),
+  prop_javelin = CF(-1.3, 4.25, 0.9), prop_stinger = CF(-1.3, 4.25, 0.9) * CFrame.Angles(math.rad(20), 0, 0),
+}
 
 -- 兵种模型（还没放进 workspace；放进去以后改 root.CFrame 摆位置）。color 是队伍颜色（零件模型的车身、脚下的色圈）
 function Models.unit(t, color)
@@ -839,19 +1009,24 @@ function Models.unit(t, color)
   local T = TEMPLATES[def.model]
   local k = def.boss and 1.36 or 1
   local m, root
-  if T and t == "inf" then
-    m, root = fromTemplate(T, 1, { V(-2.6, 0, 1.6), V(2.6, 0, 1.6), V(0, 0, -2.2) })
+  if T and def.foot then
+    m, root = newRoot()
+    addTemplate(m, root, T, 1, FOOT[def.squad or 3], true)
+    local P = def.prop and TEMPLATES[def.prop]
+    if P then addTemplate(m, root, P, 1, { PROPAT[def.prop] }, true) end
   elseif T then
-    m, root = fromTemplate(T, k, { V(0, 0, 0) })
+    m, root = newRoot()
+    addTemplate(m, root, T, k, { CF() }, false)
   else
     local P = PART[t] or PART.tank
     local K
-    m, root, K = kit(((def.len or P.len) / P.len) * k * ((t == "inf") and 1.27 or 1))
+    m, root, K = kit(((def.len or P.len) / P.len) * k * (def.foot and 1.27 or 1))
     local col = color:Lerp(C.olive, 0.2)
     if def.boss then col = RGB(40, 40, 44) end
-    P.build(K, col)
+    P.build(K, col, def)
   end
   ring(m, root, def.size * 0.95 * k, color)
+  if def.jet then m:SetAttribute("Jet", true) end
   m.Name = t
   return m, root
 end

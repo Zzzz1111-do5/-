@@ -31,7 +31,7 @@
     const view = i => { const b = J.bufferViews[i]; return new Uint8Array(buf, bo + (b.byteOffset || 0), b.byteLength); };
     const acc = i => { const a = J.accessors[i], v = view(a.bufferView), T = a.componentType === 5126 ? Float32Array : a.componentType === 5125 ? Uint32Array : Uint16Array; return new T(v.buffer.slice(v.byteOffset, v.byteOffset + v.byteLength)); };
     const tex = await Promise.all((J.images || []).map(async im => { const bmp = await createImageBitmap(new Blob([view(im.bufferView)], { type: im.mimeType })); const t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t);
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, bmp); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE); return t; }));
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, bmp); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT); return t; }));
     let mn = [1e9, 1e9, 1e9], mx = [-1e9, -1e9, -1e9];
     for (const a of J.accessors) if (a.min) for (let k = 0; k < 3; k++) { mn[k] = Math.min(mn[k], a.min[k]); mx[k] = Math.max(mx[k], a.max[k]); }
     const c = mn.map((v, k) => (v + mx[k]) / 2), r = Math.hypot(...mx.map((v, k) => v - mn[k])) / 2, d = r * 2.6;

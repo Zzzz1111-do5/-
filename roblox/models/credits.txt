@@ -7,3 +7,20 @@
 自行火炮（arty.glb）：M109A7 帕拉丁自行榴弹炮，作者 Muhamad Mirza Arrafi，CC-BY-4.0 https://sketchfab.com/3d-models/m109-paladin-artillery-3de0572475d54f7b9da18d6ed26b4a10
 火箭炮（mlrs.glb）：M270 多管火箭炮，作者 Mr. Penguin，CC-BY-4.0 https://sketchfab.com/3d-models/free-m270-fc879301999a4cd0a09721b51affba9b
 武装直升机（heli.glb）：AH-64D 阿帕奇，作者 Muhamad Mirza Arrafi，CC-BY-4.0 https://sketchfab.com/3d-models/boeing-ah-64d-apache-combat-helicopter-c3b58008c46b45048fdd7dd283a3c8c8
+运兵直升机（transport.glb）：UH-60M 黑鹰，作者 Muhamad Mirza Arrafi，CC-BY-4.0 https://sketchfab.com/3d-models/sikorsky-uh-60m-blackhawk-12b4e525676a49678ac3006b360c8750
+察打无人机（drone.glb）：MQ-9A 死神（代攻击-2），作者 IProZenoN，CC-BY-4.0 https://sketchfab.com/3d-models/mq-9-fabe963feb354c5584b51f9c470c3f7e
+攻击机（attacker.glb）：A-10C 雷电 II，作者 AIRMAN Magazine，CC-BY-4.0 https://sketchfab.com/3d-models/a-10-thunderbolt-ii-9521ff6ba5d448958ea45a89e94ab23d
+战斗机（fighter.glb）：歼-20，作者 andertan，CC-BY-4.0 https://sketchfab.com/3d-models/chengdu-j-20-fighter-817bcfb55c3e4fcb864e4296e2e57a95
+轰炸机（bomber.glb）：轰-6，作者 42manako，CC-BY-4.0 https://sketchfab.com/3d-models/chinese-xian-h-6-6990848462c54f4397cce71dffa1409f
+机枪车（jeep.glb）：M-ATV 防地雷全地形车（代 JLTV、M1117），作者 42manako，CC-BY-4.0 https://sketchfab.com/3d-models/oshkosh-m-atv-291dc8f07a494751b318e623b89cf538
+突击炮（td.glb）：PTL-02 轮式突击炮，作者 42manako，CC-BY-4.0 https://sketchfab.com/3d-models/chinese-ptl-02-e087eff1ed9b48cabe06d9467fec3311
+破障车（breacher.glb）：M1150 突击破障车，作者 Kalibrovshik，CC-BY-4.0 https://sketchfab.com/3d-models/m1150-abv-26eaeb6a7dbf498db16e02b1c232de33
+弹炮防空车（spaag.glb）：PGL-625 弹炮结合防空车，作者 Muhamad Mirza Arrafi，CC-BY-4.0 https://sketchfab.com/3d-models/type-625-anti-aircraft-gun-missile-system-8b7e85f45b954592bd4bb8e72cdd6312
+拦截炮（cram.glb）：C-RAM 陆基密集阵（百人队长），作者 Muhamad Mirza Arrafi，CC-BY-4.0 https://sketchfab.com/3d-models/centurion-c-ram-10ea7349c7574ca7a43991eece92c9a9
+防空导弹（sam.glb）：M903 爱国者导弹发射车，作者 Muhamad Mirza Arrafi，CC-BY-4.0 https://sketchfab.com/3d-models/mim-104-patriot-air-defense-system-95e1e402426f4ddcb543af7a0455cf05
+牵引榴弹炮（howitzer.glb）：M777A2 155 毫米榴弹炮，作者 miloschnack，CC-BY-4.0 https://sketchfab.com/3d-models/m777-howitzer-2a2c381888ef4e4790ed883cddda0aca
+重型自行火炮（heavyarty.glb）：PzH 2000 自行榴弹炮（代 PLZ-07），作者 Muhamad Mirza Arrafi，CC-BY-4.0 https://sketchfab.com/3d-models/panzerhaubitze-2000-artillery-pzh-2000-da078be6bc66461e87034f29600a4982
+标枪（道具）（prop_javelin.glb）：FGM-148 标枪反坦克导弹发射器，作者 GoldbergR，CC-BY-4.0 https://sketchfab.com/3d-models/fgm-148-javelin-low-poly-140a6ed5943b4b668401a46750fb0686
+毒刺（道具）（prop_stinger.glb）：FIM-92 毒刺便携防空导弹，作者 GoldbergR，CC-BY-4.0 https://sketchfab.com/3d-models/fim-92-stinger-low-poly-c97e321bae1249a78ac4eed43a932ed7
+迫击炮（道具）（prop_mortar.glb）：M224A1 60 毫米迫击炮，作者 jcherry3d，CC-BY-4.0 https://sketchfab.com/3d-models/mortar-m224-c86a73e40d994431bcdb57dc741cf8be
+机枪（道具）（prop_mg.glb）：M240B 7.62 毫米通用机枪，作者 TastyTony，CC-BY-4.0 https://sketchfab.com/3d-models/low-poly-m240b-657a3b8ce0194aae9c7c9036c18c54b9
