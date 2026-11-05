@@ -38,11 +38,25 @@ function G.toast(st, msg, kind)
   G.R.Toast:FireClient(st.pl, msg, kind or "info")
 end
 
+-- 开服时出的错记下来：进服的玩家屏幕上也提示一下（不打开 Output 窗口也看得到）
+G.bootErrors = {}
+local function bootError(what, err)
+  local msg = "[军事大亨] " .. what .. "出错：" .. tostring(err)
+  warn(msg)
+  table.insert(G.bootErrors, msg)
+end
+
 -- 先收导入的原模型（在铺地形、建地图之前：没锚定的模型别掉下去砸在地上散开）
-local imported = G.Models.loadImported()
-if #imported > 0 then print("[军事大亨] 用上了导入的原模型：" .. table.concat(imported, "、")) end
+local okImp, imported = pcall(G.Models.loadImported)
+if not okImp then
+  bootError("整理导入的模型", imported)
+elseif #imported > 0 then
+  print("[军事大亨] 用上了导入的原模型：" .. table.concat(imported, "、"))
+end
+-- 各模块挂到 G 上；一个出错不影响后面的（init 里不能等网络，要等的放 task.spawn）
 for _, name in ipairs({ "World", "Store", "Economy", "Army", "Combat", "Weapons", "Match" }) do
-  require(script:WaitForChild(name)).init(G)
+  local ok, err = pcall(function() require(script:WaitForChild(name)).init(G) end)
+  if not ok then bootError("模块 " .. name .. " ", err) end
 end
 
 local BDEF = Config.BuildingById
@@ -79,7 +93,7 @@ function G.push(st)
     rebirth = d.rebirth, canRebirth = G.canRebirth(d), xp = d.xp, rank = rank, nextXp = nextXp, rating = d.rating, kills = d.kills,
     weapons = weapons, daily = { ok = dOK, amount = dAmt, streak = dStreak }, missions = ms, missionReward = G.missionReward(st),
     raidCD = math.max(0, math.ceil((st.raidCD or 0) - os.clock())), power = G.powerOf(d),
-    pvp = d.pvp, pvpWins = d.pvpWins, pvpGames = d.pvpGames, match = G.matchInfo(st), matchServer = G.matchServer, teleporting = st.teleporting == true,
+    pvp = d.pvp, pvpWins = d.pvpWins, pvpGames = d.pvpGames, match = G.matchInfo and G.matchInfo(st) or nil, matchServer = G.matchServer, teleporting = st.teleporting == true,
   })
   if st.ls then
     st.ls.cash.Value = math.floor(d.cash)
@@ -158,9 +172,13 @@ local function onPlayer(pl)
   st.data = G.cleanData(raw)
   st.canSave = ok
   local d = st.data
-  G.econSetup(st)
-  G.armySetup(st)
-  G.makeEnemy(st)
+  -- 盖楼、摆部队、摆敌军：出错也要接着往下走（至少把人生成出来，屏幕上提示出错）
+  local okSetup, errSetup = pcall(function()
+    G.econSetup(st)
+    G.armySetup(st)
+    G.makeEnemy(st)
+  end)
+  if not okSetup then bootError("给 " .. pl.Name .. " 准备基地", errSetup) end
   -- 离线收益：按在线的 OfflineRate 成，最多算 OfflineHours 小时
   local away = 0
   if type(raw) == "table" and type(raw.t) == "number" then away = os.time() - raw.t end
@@ -175,9 +193,11 @@ local function onPlayer(pl)
     end)
   end
   st.ready = true
-  G.push(st)
+  local okPush, errPush = pcall(G.push, st)
+  if not okPush then bootError("发状态给 " .. pl.Name, errPush) end
   if pl.Character then task.spawn(onCharacter, st, pl.Character) else spawnChar(st) end
-  task.spawn(G.matchArrive, st)   -- 对战服务器：认人、到齐开打
+  if G.matchArrive then task.spawn(G.matchArrive, st) end   -- 对战服务器：认人、到齐开打
+  for _, msg in ipairs(G.bootErrors) do G.toast(st, msg .. "（请把这句截图发给开发者）", "bad") end
   task.delay(2, function()
     if G.states[pl] ~= st then return end
     if not ok then
@@ -209,7 +229,7 @@ for _, pl in ipairs(Players:GetPlayers()) do task.spawn(onPlayer, pl) end
 Players.PlayerRemoving:Connect(function(pl)
   local st = G.states[pl]
   if not st then return end
-  G.matchCancel(st, true)
+  if G.matchCancel then G.matchCancel(st, true) end
   if st.battle then G.abandon(st) end
   st.battle = nil
   if st.ready and not st.teleporting then G.save(st) end   -- 传送走的人传送前已经存过（别拿这里的旧数据盖掉对战服务器存的）
@@ -251,8 +271,8 @@ local ACT = {
   exit = function(st) G.driveStop(st) end,
   rejoin = function(st) G.heroJoin(st) end,
   home = function(st) G.sendHome(st) end,
-  match = function(st) G.matchJoin(st) end,
-  matchCancel = function(st) G.matchCancel(st) end,
+  match = function(st) if G.matchJoin then G.matchJoin(st) end end,
+  matchCancel = function(st) if G.matchCancel then G.matchCancel(st) end end,
 }
 -- 对战服务器里只打那一场排位赛
 local MATCHBLOCK = { battle = true, raid = true, duel = true, duelYes = true, match = true, rebirth = true }
@@ -342,3 +362,5 @@ RunService.Heartbeat:Connect(function(dt)
     fxq = {}
   end
 end)
+
+print("[军事大亨] " .. Config.Version .. " 服务器启动好了" .. ((#G.bootErrors > 0) and ("（有 " .. #G.bootErrors .. " 处出错，见上面的警告）") or ""))

@@ -1,12 +1,13 @@
--- 军事大亨：对战服务器（跨服匹配预留的服务器）的模拟测试，每次一个全新的「服务器」（run.py 跑 test.lua 后接着跑这个）：
---   duel：两个人带着传送数据进来 → 到齐 5 秒后自动开打排位 → 打完记对战积分、存档 → 8 秒后都送回普通服务器
---   timeout：只来了一个人，对手一直不来 → 75 秒后把他送回去，积分不变
+-- 军事大亨：特殊服务器的模拟测试，每次一个全新的「服务器」（run.py 跑 test.lua 后接着跑这个）：
+--   duel：对战服务器（跨服匹配预留的服务器）——两个人带着传送数据进来 → 到齐 5 秒后自动开打排位 → 打完记对战积分、存档 → 8 秒后都送回普通服务器
+--   timeout：对战服务器里只来了一个人，对手一直不来 → 75 秒后把他送回去，积分不变
+--   studio：Studio 里没发布的游戏——存档、MemoryStore、传送都用不了，跨服消息的订阅一直不返回：照样开服、生成小人、能盖楼、能点开战
 local R = dofile(MOCK_DIR .. "/rbx.lua")
 local V3 = R.Vector3.new
 local RS = R.services.ReplicatedStorage
 local SSS = R.services.ServerScriptService
 local Players = R.services.Players
-local MODE = TEST_ARGS:match("timeout") and "timeout" or "duel"
+local MODE = TEST_ARGS:match("timeout") and "timeout" or TEST_ARGS:match("studio") and "studio" or "duel"
 
 local fails = {}
 local function check(ok, msg)
@@ -27,8 +28,12 @@ for _, f in ipairs(listLua(SRC_DIR .. "/Main")) do
 end
 local Config = R.require(RS:FindFirstChild("Config"))
 
--- 这是一台预留服务器；两位玩家的存档（A 的部队强、B 弱）、传送数据
-R.privateServerId, R.privateServerOwnerId, R.jobId = "ps-7", 0, "job-match"
+-- 这是一台预留服务器；两位玩家的存档（A 的部队强、B 弱）、传送数据（studio：普通服务器，网络服务全都用不了）
+if MODE == "studio" then
+  R.dsFail, R.memFail, R.tpFail, R.msgHang = true, true, true, true
+else
+  R.privateServerId, R.privateServerOwnerId, R.jobId = "ps-7", 0, "job-match"
+end
 local function save(uid, army, pvp)
   R.store[Config.SaveKey .. "/u" .. uid] = { v = 2, cash = 3000, level = 8, best = 8, owned = { house1 = true, barracks = true, hq = true, factory1 = true, tankfac = true }, hq = 1, tech = 2, army = army, pvp = pvp, t = os.time() }
 end
@@ -39,10 +44,10 @@ save(100, strong, 1000)
 save(200, weak, 1040)
 R.joinData = { [100] = { mode = "match", a = 100, b = 200 }, [200] = { mode = "match", a = 100, b = 200 } }
 
-print("== 对战服务器（" .. MODE .. "）")
+print("== " .. ((MODE == "studio") and "Studio 里没发布的游戏" or "对战服务器") .. "（" .. MODE .. "）")
 R.runScript(main, "server")
 R.run(1)
-check(#R.errors == 0, "对战服务器启动没报错")
+check(#R.errors == 0, "服务器启动没报错")
 
 local function join(name, uid, withClient)
   local p = R.addPlayer(name, uid)
@@ -80,7 +85,33 @@ local function backOf(uid)
   end
 end
 
-if MODE == "duel" then
+if MODE == "studio" then
+  local p = join("Maker", 4242, true)
+  R.run(3)
+  local hrp = p.Character and p.Character:FindFirstChild("HumanoidRootPart")
+  check(hrp ~= nil, "小人生成出来了")
+  check(guiText(p, "^%$300") ~= nil, "收到了服务器的数据（界面显示 $300）")
+  local plot
+  for _, f in ipairs(R.workspace.Plots:GetChildren()) do
+    for _, d in ipairs(f:GetDescendants()) do
+      if d.ClassName == "TextLabel" and d.Text == "Maker 的基地" then plot = f end
+    end
+  end
+  check(plot ~= nil and hrp ~= nil and (hrp.CFrame.Position - plot.Base.CFrame.Position).Magnitude < 200, "小人在自己的基地里")
+  if plot then
+    plot.Pads.Pad_house1.Pad.Touched:Fire(hrp)
+    R.run(0.5)
+    check(plot.Buildings:FindFirstChild("house1") ~= nil, "踩按钮能盖楼")
+  end
+  local n0 = #R.sent
+  R.as("client", function() RS.Remotes.Action:FireServer("battle") end)
+  R.run(0.5)
+  local got = false
+  for i = n0 + 1, #R.sent do
+    if R.sent[i].name == "Toast" and tostring(R.sent[i].args[1]):find("还没有部队") then got = true end
+  end
+  check(got, "点「开战」有反应（还没有部队的提示）")
+elseif MODE == "duel" then
   local a = join("Alpha", 100, true)
   check(guiText(a, "对战服务器") ~= nil and toastTo("等对手进场"), "先到的人看到「对战服务器：等对手」")
   R.run(3)
@@ -130,5 +161,5 @@ check(#R.errors == 0, "没报错")
 if #R.errors > 0 then
   for _, e in ipairs(R.errors) do print("  " .. e) end
 end
-print(string.format("\n== 对战服务器（%s）：%d 个检查没通过，%d 个脚本错误", MODE, #fails, #R.errors))
+print(string.format("\n== %s（%s）：%d 个检查没通过，%d 个脚本错误", (MODE == "studio") and "Studio 里没发布的游戏" or "对战服务器", MODE, #fails, #R.errors))
 if #fails > 0 or #R.errors > 0 then TEST_CODE = 1 end

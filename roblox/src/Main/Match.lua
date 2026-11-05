@@ -228,16 +228,20 @@ function Match.init(G)
   end
 
   if not inMatch then
-    pcall(function()
-      MS:SubscribeAsync(TOPIC, function(msg)
-        local d = type(msg) == "table" and msg.Data
-        if type(d) ~= "table" or type(d.to) ~= "number" or type(d.code) ~= "string" then return end
-        local pl = Players:GetPlayerByUserId(d.to)
-        local st = pl and G.states[pl]
-        if not st or not queue[st] then return end
-        G.toast(st, "找到对手：" .. tostring(d.an) .. "（对战积分 " .. tostring(d.ar) .. "）！传送到对战服务器……", "good")
-        go(st, d.code, d.a, d.b)
+    -- 订阅要等网络回话（Studio 里没发布的游戏可能一直等）：放到后台，别卡住开服
+    task.spawn(function()
+      local ok, err = pcall(function()
+        MS:SubscribeAsync(TOPIC, function(msg)
+          local d = type(msg) == "table" and msg.Data
+          if type(d) ~= "table" or type(d.to) ~= "number" or type(d.code) ~= "string" then return end
+          local pl = Players:GetPlayerByUserId(d.to)
+          local st = pl and G.states[pl]
+          if not st or not queue[st] then return end
+          G.toast(st, "找到对手：" .. tostring(d.an) .. "（对战积分 " .. tostring(d.ar) .. "）！传送到对战服务器……", "good")
+          go(st, d.code, d.a, d.b)
+        end)
       end)
+      if not ok then warn("[军事大亨] MessagingService 不可用（跨服通知收不到，匹配表里的访问码照样能用）：" .. tostring(err)) end
     end)
     task.spawn(function()
       while true do

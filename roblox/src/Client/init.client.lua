@@ -13,6 +13,13 @@ for _, name in ipairs({ "Fx", "View", "UI", "Play" }) do
   require(script:WaitForChild(name)).init(G)
 end
 
+-- 一直收不到服务器的数据：多半是服务器脚本卡住或出错了，提示一下（不然只看到一片草地，不知道怎么回事）
+task.delay(20, function()
+  if not G.S then
+    G.toast("等了 20 秒还没收到服务器的数据：服务器脚本可能卡住或出错了。请打开 Output（输出）窗口，把红色的字截图发给开发者", "bad")
+  end
+end)
+
 G.R.State.OnClientEvent:Connect(function(s)
   if type(s) ~= "table" then return end
   G.S = s

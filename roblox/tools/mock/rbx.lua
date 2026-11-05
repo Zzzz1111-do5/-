@@ -1221,6 +1221,7 @@ R.services.MessagingService = service("MessagingService", {}, { methods = {
   SubscribeAsync = function(_, topic, cb)
     if side() ~= "server" then error("MessagingService 只能在服务器用", 2) end
     if type(topic) ~= "string" or type(cb) ~= "function" then error("SubscribeAsync(主题, 函数)", 2) end
+    if R.msgHang then task.wait(1e9) end   -- 模拟 Studio 里没发布的游戏：一直等网络，不返回
     task.wait(0.02)
     if R.msgFail then error("模拟：MessagingService 不可用") end
     R.subs[topic] = R.subs[topic] or {}

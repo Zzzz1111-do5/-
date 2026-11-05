@@ -1,7 +1,8 @@
 # 用系统自带的 Lua 5.4 运行库（liblua5.4，Debian / Ubuntu 的 liblua5.4-0 包）跑模拟测试：
 #   python3 roblox/tools/mock/run.py [测试脚本，默认 test.lua] [参数……]
 # 不需要装 lua 命令行，只要有 liblua5.4.so.0。
-# 跑 test.lua 时接着跑 test_match.lua（对战服务器的流程：duel 两个人到齐开打、timeout 对手没来），每个脚本一个全新的 Lua 环境（全新的「服务器」）。
+# 跑 test.lua 时接着跑 test_match.lua（duel 对战服务器两个人到齐开打、timeout 对手没来、studio 没发布的游戏网络服务全不能用），
+# 每个脚本一个全新的 Lua 环境（全新的「服务器」）。
 # 测试脚本把结果写在全局 TEST_CODE（0 通过、1 有检查没通过、2 脚本出错）。
 import ctypes, ctypes.util, os, sys
 
@@ -50,7 +51,7 @@ codes = [run(script, ' '.join(sys.argv[2:]))]
 if os.path.basename(script) == 'test.lua':
     extra = os.path.join(here, 'test_match.lua')
     if os.path.exists(extra):
-        for a in ('duel', 'timeout'):
+        for a in ('duel', 'timeout', 'studio'):
             sys.stdout.flush()
             codes.append(run(extra, a))
 sys.exit(max(codes))
