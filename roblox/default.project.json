@@ -1,0 +1,10 @@
+{
+  "name": "MilitaryTycoon",
+  "tree": {
+    "$className": "DataModel",
+    "Workspace": { "$properties": { "StreamingEnabled": false } },
+    "ReplicatedStorage": { "Config": { "$path": "src/Config.lua" } },
+    "ServerScriptService": { "Main": { "$path": "src/Main" } },
+    "StarterPlayer": { "StarterPlayerScripts": { "Client": { "$path": "src/Client.client.lua" } } }
+  }
+}
