@@ -44,6 +44,7 @@ function frame(now) {
   try { frameBody(now); }
   catch (e) {
     console.error(e);
+    if (typeof fpdErr === 'function') fpdErr(e && e.message || e, '', 0, e && e.stack);   // 屏幕顶上红条（fpdiag.js）
     const msg = String((e && e.message) || e).slice(0, 120);
     if (!(R.errT > now - 5000 && R.errM === msg)) { R.errT = now; R.errM = msg; if (typeof log === 'function') { try { log(`画面这一帧出错，已跳过（${typeof V3FP === 'object' && V3FP.on ? '退出驾驶，' : ''}截图发给开发者）：${msg}`, 'bad'); } catch (er) { /* 战报也坏了就算了 */ } } }
     try { if (typeof V3FP === 'object' && V3FP.on && typeof fpExit === 'function') fpExit(); } catch (er) { /* 退不出也继续 */ }
