@@ -1,4 +1,4 @@
--- 军事大亨：部队（平时）：生产（从工厂开出来停到部署区）、阵位、挪位置、排阵、解散、关卡敌军预览
+-- 军事大亨：部队（平时）：生产（从工厂开出来停到部署区）、阵位、挪位置、排阵、解散、关卡敌军预览；老兵星级（头顶的星）
 local Army = {}
 
 function Army.init(G)
@@ -19,6 +19,30 @@ function Army.init(G)
   end
   G.setFly = setFly
 
+  -- 老兵：头顶的金星（模型属性 Stars 也记一份，客户端布阵时能看）
+  function G.vetTag(st, u)
+    local n = Config.StarsOf(u.v)
+    if not (u.root and u.root.Parent) then return end
+    u.model:SetAttribute("Stars", n)
+    local tag = u.root:FindFirstChild("Vet")
+    if n <= 0 then
+      if tag then tag:Destroy() end
+      return
+    end
+    if not tag then
+      tag = Models.sign(u.root, "", Models.heightOf(u.t) + 6, 6, 1.6, Color3.fromRGB(255, 214, 80), 260)
+      tag.Name = "Vet"
+    end
+    tag:FindFirstChildOfClass("TextLabel").Text = string.rep("★", n)
+  end
+  function G.vetCount(st)
+    local n = 0
+    for _, u in pairs(st.units) do
+      if Config.StarsOf(u.v) > 0 then n = n + 1 end
+    end
+    return n
+  end
+
   local function newModel(st, u)
     local model, root = Models.unit(u.t, st.plot.color)
     model.Name = "U" .. u.uid
@@ -29,11 +53,12 @@ function Army.init(G)
     model.Parent = st.plot.Units
     u.model, u.root, u.bar, u.fill = model, root, nil, nil
     root.CFrame = G.unitCF(st.plot.origin, u.x, u.y, u.z, u.h)
+    if (u.v or 0) > 0 then G.vetTag(st, u) end
   end
 
-  function G.spawnUnit(st, t, x, z, y, h)
+  function G.spawnUnit(st, t, x, z, y, h, v)
     st.nextUid = st.nextUid + 1
-    local u = { uid = st.nextUid, t = t, x = x, y = y or 0, z = z, h = h or math.pi, sx = x, sz = z }
+    local u = { uid = st.nextUid, t = t, x = x, y = y or 0, z = z, h = h or math.pi, sx = x, sz = z, v = v or 0 }
     newModel(st, u)
     st.units[u.uid] = u
     return u
@@ -223,7 +248,8 @@ function Army.init(G)
     st.data.cash = st.data.cash + refund
     if u.model then u.model:Destroy() end
     st.units[uid] = nil
-    G.toast(st, "解散" .. UNITS[u.t].name .. "，退回 $" .. Config.Fmt(refund), "info")
+    local stars = Config.StarsOf(u.v)
+    G.toast(st, "解散" .. UNITS[u.t].name .. ((stars > 0) and ("（" .. string.rep("★", stars) .. " 老兵）") or "") .. "，退回 $" .. Config.Fmt(refund), "info")
     G.push(st)
   end
 
@@ -278,7 +304,7 @@ function Army.init(G)
         if math.abs(x) > xmax or z < z1 or z > z2 or not spotFree(st, x, z, size) then
           x, z = freeSpot(st, a.t)
         end
-        G.spawnUnit(st, a.t, x, z, 0, math.pi)
+        G.spawnUnit(st, a.t, x, z, 0, math.pi, a.v)
       end
     end
     st.data.army = {}

@@ -2,6 +2,8 @@
 --   free 在基地里走 / 战场上自己当兵（Roblox 默认镜头）；deploy 布阵（俯瞰自己的部署区，点部队、点位置）；
 --   battle 俯瞰战场；drive 开车 / 开直升机 / 开喷气机（追尾镜头，本地算位置，20 次 / 秒发给服务器）。
 --   拿枪：按住左键连发（狙击枪、火箭筒一下一发），R 换弹；手机点屏幕开火
+--   支援技能：点技能键（或按 Z X V B N），地上出现范围圈跟着鼠标，左键放下（手机点一下战场），右键 / Esc 取消
+--   战斗事件：命中标记、飘伤害数字、连杀播报、战报滚动条、首领来袭、结算评星
 local Players = game:GetService("Players")
 local UIS = game:GetService("UserInputService")
 local PPS = game:GetService("ProximityPromptService")
@@ -230,7 +232,11 @@ function Play.init(G)
     for sm in pairs(G.vis or {}) do
       if sm.Parent and sm:GetAttribute("BU") == ev.bid then m = sm end
     end
-    if not m then return end
+    if not m then   -- 本地还没这辆车的模型：别让服务器以为在开（角色会一直藏着），直接下车
+      RA:FireServer("exit")
+      G.toast("这辆车还没加载出来，过一秒再试", "info")
+      return
+    end
     local root = m:FindFirstChild("Root")
     local o = ev.origin or (G.battle and G.battle.origin) or V(0, 0, 0)
     local p = root.CFrame.Position - o
@@ -243,22 +249,26 @@ function Play.init(G)
     G.setMode("drive")
     ui.cross.Visible = true
     ui.fireBtn.Visible = G.mobile
+    ui.upBtn.Visible = G.mobile and def.air == true
+    ui.downBtn.Visible = G.mobile and def.air == true
     local tip
     if def.jet then
-      tip = G.mobile and "摇杆左右转弯、上下加减速，转镜头瞄准，按「开火」" or "W / S 加减速，A / D 转弯，空格升高、C 降低，鼠标瞄准、按住左键开火"
+      tip = G.mobile and "摇杆左右转弯、上下加减速，按住「升高」「降低」调高度，转镜头瞄准，按「开火」" or "W / S 加减速，A / D 转弯，空格升高、C 降低，鼠标瞄准、按住左键开火"
       if def.bombs then tip = tip .. "；轰炸机按一下扔一串炸弹（落在飞机前方）" end
     else
       tip = (G.mobile and "摇杆开车，转镜头瞄准，按「开火」" or "WASD 开车，鼠标瞄准，按住左键开火，右键拖动转镜头") ..
-        (def.air and (G.mobile and "" or "，空格升高、C 降低") or "")
-      if def.cargo then tip = tip .. "；降到最低（按住 C）自动放下步兵" end
+        (def.air and (G.mobile and "，按住「升高」「降低」调高度" or "，空格升高、C 降低") or "")
+      if def.cargo then tip = tip .. (G.mobile and "；降到最低（按住「降低」）自动放下步兵" or "；降到最低（按住 C）自动放下步兵") end
     end
-    G.toast(tip .. "；下车按 F", "info")
+    G.toast(tip .. (G.mobile and "；下车点「下车」" or "；下车按 F"), "info")
   end
 
   local function stopDrive()
     G.drive = nil
     ui.cross.Visible = false
     ui.fireBtn.Visible = false
+    ui.upBtn.Visible = false
+    ui.downBtn.Visible = false
     if G.mode == "drive" then G.setMode("free") end
   end
 
@@ -274,8 +284,8 @@ function Play.init(G)
       dr.roll = dr.roll + (-mv.X * 0.8 - dr.roll) * math.min(1, dt * 4)
       dr.x = dr.x - math.sin(dr.h) * dr.spd * dt
       dr.z = dr.z - math.cos(dr.h) * dr.spd * dt
-      if UIS:IsKeyDown(Enum.KeyCode.Space) then dr.y = math.min(220, dr.y + 40 * dt) end
-      if UIS:IsKeyDown(Enum.KeyCode.C) or UIS:IsKeyDown(Enum.KeyCode.LeftControl) then dr.y = math.max(40, dr.y - 40 * dt) end
+      if UIS:IsKeyDown(Enum.KeyCode.Space) or dr.climb == 1 then dr.y = math.min(220, dr.y + 40 * dt) end
+      if UIS:IsKeyDown(Enum.KeyCode.C) or UIS:IsKeyDown(Enum.KeyCode.LeftControl) or dr.climb == -1 then dr.y = math.max(40, dr.y - 40 * dt) end
     elseif def.air then
       local yaw = dr.camYaw
       local fwd, right = V(-math.sin(yaw), 0, -math.cos(yaw)), V(math.cos(yaw), 0, -math.sin(yaw))
@@ -283,8 +293,8 @@ function Play.init(G)
       if move.Magnitude > 1 then move = move.Unit end
       dr.x = dr.x + move.X * def.speed * dt
       dr.z = dr.z + move.Z * def.speed * dt
-      if UIS:IsKeyDown(Enum.KeyCode.Space) then dr.y = math.min(150, dr.y + 30 * dt) end
-      if UIS:IsKeyDown(Enum.KeyCode.C) or UIS:IsKeyDown(Enum.KeyCode.LeftControl) then dr.y = math.max(def.cargo and 6 or 15, dr.y - 30 * dt) end
+      if UIS:IsKeyDown(Enum.KeyCode.Space) or dr.climb == 1 then dr.y = math.min(150, dr.y + 30 * dt) end
+      if UIS:IsKeyDown(Enum.KeyCode.C) or UIS:IsKeyDown(Enum.KeyCode.LeftControl) or dr.climb == -1 then dr.y = math.max(def.cargo and 6 or 15, dr.y - 30 * dt) end
       dr.h = dr.h + wrap(yaw - dr.h) * math.min(1, dt * 3)
     else
       local throttle = -mv.Z
@@ -385,6 +395,18 @@ function Play.init(G)
     RA:FireServer("reload", id)
   end
   local function onChar(char)
+    task.spawn(function()
+      local hum = char:WaitForChild("Humanoid", 10)
+      if not hum then return end
+      local last, lastT = hum.Health, 0
+      hum.HealthChanged:Connect(function(h)
+        if h < last - 4 and G.battle and os.clock() - lastT > 0.35 then
+          lastT = os.clock()
+          G.playSound("hurt")
+        end
+        last = h
+      end)
+    end)
     char.ChildAdded:Connect(function(c)
       if c:IsA("Tool") and c:GetAttribute("Weapon") then
         gun.id, gun.tool = c:GetAttribute("Weapon"), c
@@ -430,7 +452,91 @@ function Play.init(G)
     end
   end
 
+  ---------------------------------------------------------------- 支援技能
+
+  G.aim = nil
+  local aimRing, aimStrip = nil, nil
+  local aimTipShown = false
+  -- 屏幕上一点对应的战场地面（战场顶面 y = 原点 + 1 的平面）
+  local function groundPoint(x, y, viewport)
+    local B = G.battle
+    if not B or not B.origin then return nil end
+    local ray = viewport and cam:ViewportPointToRay(x, y) or cam:ScreenPointToRay(x, y)
+    if math.abs(ray.Direction.Y) < 1e-4 then return nil end
+    local t = (B.origin.Y + 1 - ray.Origin.Y) / ray.Direction.Y
+    if t <= 0 or t > 6000 then return nil end
+    return ray.Origin + ray.Direction * t
+  end
+  function G.toggleAim(id)
+    if G.aim == id then
+      G.aim = nil
+      return
+    end
+    local sk = Config.SkillById[id]
+    if not sk or not G.battle or not (G.skillHave and G.skillHave[id]) then return end
+    local left = (G.skillReady[id] or 0) - os.clock()
+    if left > 0 then
+      G.toast("「" .. sk.name .. "」还要冷却 " .. math.ceil(left) .. " 秒", "info")
+      return
+    end
+    G.aim = id
+    if not aimTipShown then
+      aimTipShown = true
+      G.toast(G.mobile and "点战场上的位置放下「" .. sk.name .. "」（再点一次技能键取消）" or "左键点战场放下「" .. sk.name .. "」，右键或 Esc 取消（俯瞰战场更好瞄）", "info")
+    end
+  end
+  local function castAt(x, y, viewport)
+    local id = G.aim
+    if not id then return false end
+    local p = groundPoint(x, y, viewport)
+    if not p then return true end
+    local rel = p - G.battle.origin
+    RA:FireServer("skill", id, rel.X, rel.Z)
+    G.skillReady[id] = os.clock() + Config.SkillById[id].cd   -- 先在本地进入冷却，服务器放了会再确认
+    G.aim = nil
+    return true
+  end
+  local function aimUpdate()
+    local sk = G.aim and Config.SkillById[G.aim]
+    if sk and not G.battle then G.aim, sk = nil, nil end
+    if not aimRing then
+      aimRing = G.fxPart(Enum.PartType.Cylinder, V(0.3, 10, 10), CFrame.new(), RGB(255, 200, 70), Enum.Material.Neon, 1)
+      aimStrip = G.fxPart(nil, V(20, 0.3, 100), CFrame.new(), RGB(255, 120, 60), Enum.Material.Neon, 1)
+    end
+    aimRing.Transparency, aimStrip.Transparency = 1, 1
+    if not sk then return end
+    local mp = G.mobile and (cam.ViewportSize / 2) or UIS:GetMouseLocation()
+    local p = groundPoint(mp.X, mp.Y, true)
+    if not p then return end
+    if sk.kind == "strike" then
+      local dir = (G.battle.team == 2) and -1 or 1
+      aimStrip.Size = V(22, 0.3, sk.len)
+      aimStrip.CFrame = CFrame.new(p.X, p.Y + 0.4, p.Z) * CFrame.Angles(0, (dir < 0) and math.pi or 0, 0)
+      aimStrip.Transparency = 0.5
+    else
+      local r = sk.r or 14
+      aimRing.Size = V(0.3, r * 2, r * 2)
+      aimRing.Color = (sk.kind == "heal") and RGB(90, 255, 140) or ((sk.kind == "drop") and RGB(120, 190, 255) or RGB(255, 200, 70))
+      aimRing.CFrame = CFrame.new(p.X, p.Y + 0.4, p.Z) * CFrame.Angles(0, 0, math.pi / 2)
+      aimRing.Transparency = 0.5
+    end
+  end
+  local KEYSK = {}
+  for _, sk in ipairs(Config.Skills) do KEYSK[Enum.KeyCode[sk.key]] = sk.id end
+
   ---------------------------------------------------------------- 战斗事件
+
+  -- 连杀：4 秒内接着亲手击毁算连杀
+  local streak, lastKill = 0, 0
+  local STREAK = { [2] = "双杀！", [3] = "三杀！", [4] = "四杀！", [5] = "五杀！" }
+  local function onKill(ev)
+    local now = os.clock()
+    streak = (now - lastKill < 4) and (streak + 1) or 1
+    lastKill = now
+    if streak >= 2 then G.announce(STREAK[streak] or "超神！", RGB(255, 120, 70), nil, 1.2) end
+    local def = UNITS[ev.t]
+    G.feedLine("你击毁了 <font color=\"#FF8A80\">敌方" .. (def and def.name or (ev.hero and "玩家" or "单位")) .. "</font>", RGB(255, 226, 120))
+  end
 
   G.battle = nil
   local function counterTip(enemy)
@@ -440,7 +546,11 @@ function Play.init(G)
       for _, t in ipairs({ ... }) do s = s + (enemy[t] or 0) end
       return s
     end
+    if n("stealth") > 0 then return "敌方有隐身轰炸机：只有爱国者和战斗机打得到它" end
     if n("drone", "fighter", "bomber") > 0 then return "敌方有高空的飞机（无人机 / 战斗机 / 轰炸机）：带弹炮防空车、爱国者、单兵防空组，或者自己的战斗机" end
+    if n("loiter") > 0 then return "敌方有巡飞弹：一头撞上来专炸坦克，带防空车、步战车早点把它打下来" end
+    if n("ew") > 0 then return "敌方有电子战车：导弹容易被干扰偏掉，多用坦克炮、火炮，或者先端掉它" end
+    if n("heavytank") > 0 then return "敌方有重型坦克：反坦克导弹组、武装直升机、攻击机、巡飞弹专克它" end
     if n("heli", "transport", "attacker") > 0 then return "敌方有直升机 / 攻击机：带上防空车、步战车、单兵防空组，或者多带步兵" end
     if n("tank", "boss", "td", "breacher") >= 2 then return "敌方装甲多：武装直升机、反坦克导弹组、突击炮、攻击机专克装甲，火箭筒也行" end
     if n("cram") > 0 then return "敌方有拦截炮：炮弹、火箭弹会被打下来，用坦克、攻击机去端掉它" end
@@ -457,11 +567,44 @@ function Play.init(G)
       G.battle = { origin = ev.origin, team = ev.team or 1, mode = ev.mode, title = ev.title or "", t0 = os.clock(), len = ev.time or Config.BattleTime,
         enemy = G.S and G.S.enemy }
       ui.bInfo.Text = ""
+      G.skillReady = {}
+      G.aim = nil
+      streak = 0
       G.setMode("free")
-      G.toast("开战！你本人也在战场上：拿起枪（物品栏 1），或者点「开车 / 开飞机」", "info")
+      if ev.boss then
+        G.announce("首领来袭！", RGB(255, 90, 70), "第 " .. tostring(ev.level) .. " 关 · 猛犸重坦——血极厚，集中火力、用支援技能", 2.6)
+        G.jingle("alarm")
+        G.shake(0.5)
+      else
+        G.announce("开战！", RGB(255, 214, 90), ev.title, 1.4)
+      end
+      G.toast("你本人也在战场上：拿起枪（物品栏 1）、点「开车 / 开飞机」，下面的支援技能点一下再点战场就放", "info")
     elseif ev.phase == "tick" then
       if G.battle then G.battle.t0 = os.clock() - (ev.t or 0) end
       ui.bInfo.Text = "<font color=\"#7CFC8A\">我方 " .. tostring(ev.a) .. "</font>      <font color=\"#FF8A80\">敌方 " .. tostring(ev.e) .. "</font>"
+      for _, f in ipairs(ev.feed or {}) do
+        local def = UNITS[f.t]
+        local nm = def and def.name or "单位"
+        if f.en and not f.me then
+          G.feedLine("击毁 <font color=\"#FF8A80\">敌方" .. nm .. "</font>", RGB(220, 230, 240))
+          if f.t == "boss" then G.announce("首领被击毁！", RGB(255, 214, 90), nil, 1.8) end
+        elseif not f.en and f.mine then
+          G.feedLine("<font color=\"#FF8A80\">我方" .. nm .. " 被击毁</font>", RGB(255, 140, 130))
+        end
+      end
+    elseif ev.phase == "hit" then
+      if typeof(ev.p) == "Vector3" then
+        G.popText(ev.p, (ev.k and "击毁 " or "") .. "-" .. tostring(ev.d), ev.k and RGB(255, 200, 60) or RGB(255, 255, 255))
+      end
+      G.hitMarker(ev.k)
+      G.playSound(ev.k and "kill" or "hit")
+      if ev.k then onKill(ev) end
+    elseif ev.phase == "theater" then
+      G.announce("进入新战区：" .. tostring(ev.name), RGB(120, 220, 255), ev.desc, 3.2)
+      G.jingle("win")
+    elseif ev.phase == "skill" then
+      G.skillReady[ev.id] = os.clock() + (ev.cd or 0)
+      G.playSound("buy")
     elseif ev.phase == "hero" then
       ui.rejoinBtn.Visible = (not ev.alive) and G.battle ~= nil and G.drive == nil
     elseif ev.phase == "drive" then
@@ -471,19 +614,25 @@ function Play.init(G)
     elseif ev.phase == "end" then
       local enemy = G.battle and G.battle.enemy
       G.battle = nil
+      G.aim = nil
       stopDrive()
       ui.rejoinBtn.Visible = false
       if G.mode == "battle" then G.setMode("free") end
       local win = ev.result == "win"
       ui.resTitle.Text = win and "胜利！" or ((ev.result == "timeout") and "时间到" or "失败")
       ui.resTitle.TextColor3 = win and RGB(255, 214, 90) or RGB(240, 110, 100)
+      ui.resStars.Text = ev.stars and (string.rep("★", ev.stars) .. string.rep("☆", 3 - ev.stars)) or ""
       local lines = {}
+      if ev.record then table.insert(lines, "新纪录！最高打到第 " .. tostring(ev.level) .. " 关") end
       if ev.text then table.insert(lines, ev.text) end
+      local rewardLine = nil
       if win and (ev.reward or 0) > 0 then
-        table.insert(lines, "奖励 $" .. Config.Fmt(ev.reward) .. ((ev.mode == "pve") and ("，下一关：第 " .. tostring(ev.level) .. " 关") or ""))
+        table.insert(lines, "")
+        rewardLine = #lines
       elseif not win and ev.mode == "pve" then
         table.insert(lines, counterTip(enemy))
       end
+      if (ev.pk or 0) > 0 then table.insert(lines, "你亲手击毁 " .. tostring(ev.pk) .. " 个敌方单位") end
       if (ev.lostN or 0) > 0 then
         local parts = {}
         for _, t in ipairs(Config.UnitOrder) do
@@ -494,9 +643,27 @@ function Play.init(G)
       elseif ev.mode ~= "duel" then
         table.insert(lines, "一个都没损失！")
       end
+      local function rewardText(v)
+        return "奖励 $" .. Config.Fmt(v) .. ((ev.mode == "pve") and ("，下一关：第 " .. tostring(ev.level) .. " 关") or "")
+      end
+      if rewardLine then lines[rewardLine] = rewardText(0) end
       ui.resBody.Text = table.concat(lines, "\n")
       ui.result.Visible = true
-      G.playSound(win and "win" or "lose")
+      G.jingle(win and "win" or "lose")
+      if win then G.announce("胜利！", RGB(255, 214, 90), ev.stars and (string.rep("★", ev.stars) .. string.rep("☆", 3 - ev.stars)) or nil, 1.6) end
+      -- 奖励数字滚上去
+      if rewardLine then
+        task.spawn(function()
+          local t0 = os.clock()
+          while ui.result.Visible do
+            local k = math.min(1, (os.clock() - t0) / 0.9)
+            lines[rewardLine] = rewardText(math.floor(ev.reward * k * (2 - k)))
+            ui.resBody.Text = table.concat(lines, "\n")
+            if k >= 1 then break end
+            task.wait(0.03)
+          end
+        end)
+      end
     end
     G.updateButtons()
   end
@@ -504,13 +671,28 @@ function Play.init(G)
   ---------------------------------------------------------------- 输入
 
   UIS.InputBegan:Connect(function(input, gp)
+    if input.UserInputType == Enum.UserInputType.MouseButton2 and G.aim then
+      G.aim = nil   -- 右键取消技能瞄准
+      return
+    end
     if input.UserInputType == Enum.UserInputType.MouseButton2 and G.mode ~= "free" then
       rotating = true
       UIS.MouseBehavior = Enum.MouseBehavior.LockCurrentPosition
     end
     if gp then return end
+    if input.KeyCode == Enum.KeyCode.Escape and G.aim then
+      G.aim = nil
+      return
+    end
+    local skk = KEYSK[input.KeyCode]
+    if skk and G.battle then
+      G.toggleAim(skk)
+      return
+    end
     if input.UserInputType == Enum.UserInputType.MouseButton1 then
-      if G.mode == "deploy" then
+      if G.aim and G.battle then
+        castAt(input.Position.X, input.Position.Y, false)
+      elseif G.mode == "deploy" then
         clickAt(input.Position.X, input.Position.Y)
       elseif G.drive then
         G.drive.firing = true
@@ -550,7 +732,12 @@ function Play.init(G)
   UIS.TouchTap:Connect(function(positions, gp)
     if gp then return end
     local p = positions[1]
-    if p then clickAt(p.X, p.Y) end
+    if not p then return end
+    if G.aim and G.battle then
+      castAt(p.X, p.Y, false)
+    else
+      clickAt(p.X, p.Y)
+    end
   end)
   local pan0 = nil
   UIS.TouchPan:Connect(function(positions, total, velocity, state, gp)
@@ -589,6 +776,17 @@ function Play.init(G)
   ui.fireBtn.MouseButton1Up:Connect(function()
     if G.drive then G.drive.firing = false end
   end)
+  -- 手机：按住「升高」「降低」（松手或手指滑出按钮都停）
+  for _, e in ipairs({ { ui.upBtn, 1 }, { ui.downBtn, -1 } }) do
+    e[1].MouseButton1Down:Connect(function()
+      if G.drive then G.drive.climb = e[2] end
+    end)
+    local function stop()
+      if G.drive and G.drive.climb == e[2] then G.drive.climb = 0 end
+    end
+    e[1].MouseButton1Up:Connect(stop)
+    e[1].MouseLeave:Connect(stop)
+  end
 
   ---------------------------------------------------------------- 每帧
 
@@ -620,9 +818,10 @@ function Play.init(G)
       camCF = camCF and camCF:Lerp(want, 1 - math.exp(-dt * 7)) or want
       cam.CFrame = camCF
     end
-    if gun.firing and gun.id and Config.Weapons[gun.id].auto then tryFire() end
+    if gun.firing and gun.id and Config.Weapons[gun.id].auto and not G.aim then tryFire() end
     ammoHud()
     ghostUpdate()
+    aimUpdate()
     if G.battle then
       local left = math.max(0, G.battle.len - (os.clock() - G.battle.t0))
       ui.bTitle.Text = string.format("%s   %d:%02d", G.battle.title, math.floor(left / 60), math.floor(left % 60))
@@ -636,8 +835,7 @@ function Play.init(G)
       for id in pairs(S.owned) do
         local b = Config.BuildingById[id]
         if b and b.income then
-          local v = b.income * mul
-          if b.kind == "factory" and S.owned.power then v = v * Config.PowerBoost end
+          local v = Config.BuildingIncome(b, S.owned, S.lv and S.lv[id]) * mul
           local p = S.origin + V(b.x, 1 + b.size[2] + 2, b.z)
           if (p - cam.CFrame.Position).Magnitude < 260 then G.popText(p, "+$" .. Config.Fmt(v * 3), RGB(130, 235, 140)) end
         end

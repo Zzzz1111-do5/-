@@ -1,5 +1,7 @@
 -- 军事大亨：战斗推演（服务器）。只管数字：位置、血量、选目标、开火、溅射、炮弹 / 火箭弹 / 炸弹落地、导弹飞行、拦截、机降；
--- 模型、特效、玩家角色的血交给调用方传进来的回调 B.cb（world / muzzle / aim / fx / hurt / die / heroHurt / kill / spawn）。
+-- 模型、特效、玩家角色的血交给调用方传进来的回调 B.cb（world / muzzle / aim / fx / hurt / die / heroHurt / kill / hit / spawn）。
+-- 伤害来源 src = { team, player（玩家亲手：开枪、开车、支援技能）, drive, unit（哪个单位打的：记老兵战功）}；
+-- 打死的单位记进 B.deaths（战报滚动条用，Combat 每半秒发一次）。
 -- 坐标都是相对战场原点的 (x, z)；y 是离地高度（飞机）；h 是车身朝向（CFrame.Angles(0, h, 0)，模型正前方 −Z），ty 是炮塔相对车身的转角。
 -- 单位：u = { t, def, team, x, y, z, h, ty, hp, max, dm（伤害倍数）, cd, rt, alive, tgt, hero（玩家本人）, driver（玩家在开）, hold（守着不出击）, temp（机降的步兵）}
 local Config = require(game:GetService("ReplicatedStorage"):WaitForChild("Config"))
@@ -22,6 +24,7 @@ Battle.HERO = { name = "玩家", hp = Config.Hero.hp, size = Config.Hero.size, s
 
 -- 打得到吗：飞机看飞多高（reach 是能打多高；还在地上的飞机谁都能打），只打飞机的打不了地面
 local function canHit(ad, e)
+  if e.def.stealth and not (ad.homing and (ad.reach or 0) >= 400) then return false end   -- 隐身：只有爱国者、战斗机够得着
   if e.def.air then return (ad.reach or 0) >= (e.y or 0) - 3 end
   return not ad.airOnly
 end
@@ -59,6 +62,7 @@ local function pick(U, u)
       if d.minRange and s < d.minRange then s = s + 400 end
       if prefers(d, e.def) then s = s * 0.6 end
       if e.def.decoy then s = s * 0.45 end
+      if e.def.camo then s = s * 1.6 end   -- 伪装：不显眼，排得靠后
       if e.hero then s = s * 0.8 end
       if e == u.tgt then s = s * 0.85 end
       if s < bs then
@@ -72,19 +76,28 @@ end
 local function hurt(B, u, dmg, src)
   if not u.alive or dmg <= 0 then return false end
   if u.hero then
-    B.cb.heroHurt(u, dmg)
+    B.cb.heroHurt(u, dmg, src)
     return false
   end
   u.hp = u.hp - dmg
+  local killed = false
   if u.hp <= 0 then
     u.hp = 0
     u.alive = false
+    killed = true
     B.cb.die(u)
-    if src and B.cb.kill then B.cb.kill(u, src) end
-    return true
+    if src then
+      if src.unit and src.unit.team ~= u.team then src.unit.kills = (src.unit.kills or 0) + 1 end
+      if B.cb.kill then B.cb.kill(u, src) end
+    end
+    if B.deaths then
+      table.insert(B.deaths, { t = u.t, team = u.team, by = src and src.player and src.player.UserId or nil, uid = u.uid, owner = u.owner and u.owner.pl.UserId or nil })
+    end
+  else
+    B.cb.hurt(u)
   end
-  B.cb.hurt(u)
-  return false
+  if src and src.player and B.cb.hit then B.cb.hit(u, dmg, killed, src) end
+  return killed
 end
 
 -- 外部伤害（玩家开枪、开的车开火）：src = { team, player, drive }；返回打没打死
@@ -108,8 +121,10 @@ local function splash(B, team, ad, x, z, r, dmg, skip, src)
 end
 Battle.splash = splash
 
+-- 这一发算谁的：玩家在开的车算玩家的（亲手击毁），其余算这个单位的（老兵战功）
 local function srcOf(u)
-  return u.driver and { team = u.team, player = u.driver, drive = true } or nil
+  if u.driver then return { team = u.team, player = u.driver, drive = true, unit = u } end
+  return { team = u.team, unit = u }
 end
 
 -- 抛射弹（炮弹、火箭炮火箭弹、炸弹）：飞一会儿才落地；拦截炮能在半空打掉炮弹、火箭弹（炸弹不行）
@@ -122,6 +137,20 @@ local function lob(B, u, x, z, scatter, flight, kind, src)
   B.cb.fx({ k = kind, id = nextShell, u = u.t, a = B.cb.muzzle(u), b = B.cb.world(sx, 0, sz), t = flight })
 end
 
+-- 支援火力（迫击炮急袭、炮火覆盖、空袭）：从 from（世界坐标）打一发到 (x, z) 附近（scatter 散布），flight 秒后落地；
+-- def 给伤害、溅射、各类目标的倍数（同兵种表），dm 是战力倍数；kind：shell 炮弹（拦截炮能打）/ bomb 炸弹（打不了）
+function Battle.strike(B, team, def, dm, x, z, scatter, flight, kind, src, from)
+  local a = math.random() * math.pi * 2
+  local r = math.sqrt(math.random()) * scatter
+  local sx = math.clamp(x + math.cos(a) * r, -XMAX, XMAX)
+  local sz = math.clamp(z + math.sin(a) * r, ZMIN, ZMAX)
+  nextShell = nextShell + 1
+  table.insert(B.shells, { id = nextShell, t0 = B.t, at = B.t + flight, x = sx, z = sz, team = team, def = def, dm = dm, src = src, kind = kind })
+  B.cb.fx({ k = kind, id = nextShell, u = def.fxu or "skill", a = from, b = B.cb.world(sx, 0, sz), t = flight })
+end
+Battle.XMAX, Battle.ZMIN, Battle.ZMAX = XMAX, ZMIN, ZMAX
+Battle.hurt = hurt
+
 -- 导弹：飞到目标（客户端跟着目标画），到了才算伤害；没有目标（玩家对着地面打）就打那个点
 local function missile(B, u, t, dmg, dist, src, px, py, pz)
   local d = u.def
@@ -132,6 +161,18 @@ end
 
 local function fire(B, u, t, dist)
   local d = u.def
+  if d.kamikaze then   -- 巡飞弹：一头撞上去，连自己一起炸了
+    local src = srcOf(u)
+    local dmg = d.dmg * u.dm
+    hurt(B, t, dmg * mult(d, t.def), src)
+    splash(B, u.team, d, t.x, t.z, d.splash or 12, dmg * 0.5, t, src)
+    B.cb.fx({ k = "boom", p = B.cb.world(t.x, (t.y or 0) + 2, t.z), s = 1.5 })
+    u.hp = 0
+    u.alive = false
+    u.spent = true
+    B.cb.die(u)
+    return
+  end
   if d.salvo then   -- 火箭炮：一轮几发，陆续发射
     u.salvoLeft = d.salvo
     u.salvoAt = B.t
@@ -145,12 +186,12 @@ local function fire(B, u, t, dist)
   end
   if d.minRange and d.splash then   -- 火炮、迫击炮：抛物线炮弹，落点有散布，打移动目标往前估一点
     local fl = 1.2 + dist / 170
-    lob(B, u, t.x + (t.vx or 0) * fl * 0.5, t.z + (t.vz or 0) * fl * 0.5, d.foot and 10 or 14, fl, "shell")
+    lob(B, u, t.x + (t.vx or 0) * fl * 0.5, t.z + (t.vz or 0) * fl * 0.5, d.foot and 10 or 14, fl, "shell", srcOf(u))
     return
   end
   local dmg = d.dmg * u.dm
   if d.homing then
-    missile(B, u, t, dmg, dist)
+    missile(B, u, t, dmg, dist, srcOf(u))
     return
   end
   local hitP = d.hit or 0.92
@@ -160,8 +201,9 @@ local function fire(B, u, t, dist)
   end
   if t.hero then hitP = hitP * 0.7 end
   local hit = math.random() < hitP
-  if hit then hurt(B, t, dmg * mult(d, t.def)) end
-  if d.splash and not t.def.air then splash(B, u.team, d, t.x, t.z, d.splash, dmg * 0.5, t) end
+  local src = srcOf(u)
+  if hit then hurt(B, t, dmg * mult(d, t.def), src) end
+  if d.splash and not t.def.air then splash(B, u.team, d, t.x, t.z, d.splash, dmg * 0.5, t, src) end
   B.cb.fx({ k = "shot", u = u.t, a = B.cb.muzzle(u), b = B.cb.aim(t, hit) })
 end
 
@@ -194,7 +236,11 @@ local function shells(B)
       splash(B, s.team, s.def, s.x, s.z, s.def.splash or 10, s.def.dmg * s.dm, nil, s.src)
       local size = 1.3
       if s.kind == "bomb" then size = 1.9 elseif s.def.salvo then size = 1.5 elseif s.def.foot then size = 0.9 end
-      B.cb.fx({ k = "boom", p = B.cb.world(s.x, 0, s.z), s = size })
+      if s.kind == "cruise" then
+        B.cb.fx({ k = "bigboom", p = B.cb.world(s.x, 0, s.z), s = 3.6 })   -- 巡航导弹：大火球、冲击波、震屏
+      else
+        B.cb.fx({ k = "boom", p = B.cb.world(s.x, 0, s.z), s = size })
+      end
     else
       i = i + 1
     end
@@ -211,7 +257,22 @@ local function missiles(B)
       if t then
         local p = 0.9
         if t.def.jet then p = 0.75 end   -- 喷气机放热诱弹、机动
-        if t.alive and math.random() < p then hurt(B, t, m.dmg * mult(m.def, t.def), m.src) end
+        local jammed = false
+        for _, e in ipairs(B.units) do   -- 目标附近有对方的电子战车：干扰
+          if e.alive and e.def.jam and e.team ~= m.team then
+            local dx, dz = e.x - t.x, e.z - t.z
+            if dx * dx + dz * dz <= e.def.jam.r * e.def.jam.r then
+              p = p * e.def.jam.p
+              jammed = true
+              break
+            end
+          end
+        end
+        if t.alive and math.random() < p then
+          hurt(B, t, m.dmg * mult(m.def, t.def), m.src)
+        elseif jammed and t.alive then
+          B.cb.fx({ k = "jam", p = B.cb.world(t.x, (t.y or 0) + 6, t.z) })   -- 被干扰偏掉了
+        end
       elseif m.x then
         splash(B, m.team, m.def, m.x, m.z, m.def.splash or 10, m.dmg, nil, m.src)
       end
@@ -229,7 +290,7 @@ local function interceptStep(B, u, dt)
   local best, bt = nil, math.huge
   local r2 = ic.range * ic.range
   for _, s in ipairs(B.shells) do
-    if not s.dead and s.team ~= u.team and s.kind ~= "bomb" and not (s.tried and s.tried[u]) and B.t >= s.t0 + (s.at - s.t0) * 0.3 then
+    if not s.dead and s.team ~= u.team and s.kind ~= "bomb" and s.kind ~= "cruise" and not (s.tried and s.tried[u]) and B.t >= s.t0 + (s.at - s.t0) * 0.3 then
       local dx, dz = s.x - u.x, s.z - u.z
       if dx * dx + dz * dz < r2 and s.at < bt then best, bt = s, s.at end
     end
@@ -281,10 +342,46 @@ local function dropTroops(B, u)
   B.cb.fx({ k = "boom", p = B.cb.world(u.x, 0, u.z), s = 0.5 })
 end
 
+-- 医疗兵、抢修车：半径里受伤的友军（步兵 / 车辆）每秒回 hps（跟着战力倍数）；玩家本人也算步兵；隔一会儿冒一圈绿光
+local function healStep(B, u, dt)
+  local h = u.def.heal
+  local r2 = h.r * h.r
+  local amt = h.hps * dt * (u.dm or 1)
+  local any = false
+  for _, e in ipairs(B.units) do
+    if e.alive and e.team == u.team and e ~= u then
+      local kind = e.def.foot or e.hero
+      if (h.foot and kind) or (h.armor and not kind and not e.def.air) then
+        local dx, dz = e.x - u.x, e.z - u.z
+        if dx * dx + dz * dz <= r2 then
+          if e.hero then
+            local hum = e.model and e.model:FindFirstChildOfClass("Humanoid")
+            if hum and hum.Health > 0 and hum.Health < hum.MaxHealth then
+              hum.Health = math.min(hum.MaxHealth, hum.Health + amt * 0.6)
+              any = true
+            end
+          elseif e.hp < e.max then
+            e.hp = math.min(e.max, e.hp + amt)
+            B.cb.hurt(e)
+            any = true
+          end
+        end
+      end
+    end
+  end
+  u.healT = (u.healT or 0) - dt
+  if any and u.healT <= 0 then
+    u.healT = 2.5
+    B.cb.fx({ k = "heal", p = B.cb.world(u.x, 0, u.z), s = h.r * 0.5 })
+  end
+end
+
 local function act(B, u, dt)
   local d = u.def
+  local range = d.range * (B.rangeK or 1)   -- 战区：巷战射程短
   u.cd = u.cd - dt
   salvoStep(B, u)
+  if d.heal then healStep(B, u, dt) end
   if d.cargo and u.cargo == nil then u.cargo = d.cargo end
   local t = u.tgt
   if t and not (t.alive and canHit(d, t)) then
@@ -303,10 +400,10 @@ local function act(B, u, dt)
       if u.y <= 7 then dropTroops(B, u) end
     elseif tooClose then
       mx, mz = -dx, -dz            -- 火炮被贴近：往后退
-    elseif dist > d.range * 0.92 and not (u.hold and dist > d.range * 1.6) then
+    elseif dist > range * 0.92 and not (u.hold and dist > range * 1.6) then
       mx, mz = dx, dz              -- 够不着：往前走（守方等敌人走近了才出击）
     end
-    if dist <= d.range and not tooClose then
+    if dist <= range and not tooClose then
       inRange = true
       local err = 0
       if d.turret then
@@ -336,7 +433,7 @@ local function act(B, u, dt)
   u.vx, u.vz = 0, 0
   if mx ~= 0 or mz ~= 0 then
     local l = math.sqrt(mx * mx + mz * mz)
-    local sp = d.speed * dt
+    local sp = d.speed * dt * (d.air and 1 or (B.speedK or 1))   -- 战区：沙地、雪地走得慢
     local nx, nz = mx / l * sp, mz / l * sp
     u.x = u.x + nx
     u.z = u.z + nz
@@ -395,7 +492,7 @@ local function actJet(B, u, dt)
       fire(B, u, t, dist)
       u.cd = d.rate
     end
-  elseif dist <= d.range and err <= d.cone then
+  elseif dist <= d.range * (B.rangeK or 1) and err <= d.cone then
     fire(B, u, t, dist)
     u.cd = d.rate * (0.85 + math.random() * 0.3)
   end
@@ -434,7 +531,7 @@ end
 function Battle.driveFire(B, u, ax, az, ay)
   local d = u.def
   if not u.alive or u.cd > 0.2 then return false end   -- 客户端按服务器给的装填时间算，留一点网络误差
-  local src = { team = u.team, player = u.driver, drive = true }
+  local src = { team = u.team, player = u.driver, drive = true, unit = u }
   if d.bombs then
     u.cd = d.rate * 0.5
     u.bombLeft = d.bombs
@@ -490,6 +587,7 @@ end
 function Battle.step(B, dt)
   B.t = B.t + dt
   B.missiles = B.missiles or {}
+  B.deaths = B.deaths or {}
   B.pending = {}
   local U = B.units
   for _, u in ipairs(U) do

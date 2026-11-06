@@ -27,7 +27,7 @@ function Store.init(G)
 
   function G.newData()
     return {
-      cash = Config.StartCash, level = 1, best = 1, owned = {}, hq = 0, tech = 0, army = {}, wins = 0,
+      cash = Config.StartCash, level = 1, best = 1, owned = {}, lv = {}, hq = 0, tech = 0, army = {}, wins = 0,
       rebirth = 0, xp = 0, kills = 0, weapons = { rifle = true }, rating = Config.Raid.start, raidWins = 0, duelWins = 0,
       pvp = Config.Match.start, pvpWins = 0, pvpGames = 0,
       daily = { day = 0, streak = 0 }, missions = { day = 0, list = {} },
@@ -64,12 +64,18 @@ function Store.init(G)
         if BDEF[id] and v then d.owned[id] = true end
       end
     end
+    if type(raw.lv) == "table" then   -- 建筑级数：只认盖了的、有收入的
+      for id, v in pairs(raw.lv) do
+        local b = BDEF[id]
+        if b and b.income and d.owned[id] and type(v) == "number" then d.lv[id] = math.floor(num(v, 1, Config.Upgrade.max, 1)) end
+      end
+    end
     d.hq = math.floor(num(raw.hq, 0, #BDEF.hq.cap, 0))
     if d.owned.hq then d.hq = math.max(1, d.hq) else d.hq = 0 end
     if type(raw.army) == "table" then
       for _, a in ipairs(raw.army) do
         if type(a) == "table" and UNITS[a.t] and not UNITS[a.t].boss and type(a.x) == "number" and type(a.z) == "number" then
-          table.insert(d.army, { t = a.t, x = a.x, z = a.z })
+          table.insert(d.army, { t = a.t, x = a.x, z = a.z, v = math.floor(num(a.v, 0, 1000, 0)) })
         end
       end
     end
@@ -97,20 +103,21 @@ function Store.init(G)
   local function armyList(st)
     local army = {}
     for _, u in pairs(st.units) do
-      table.insert(army, { t = u.t, x = math.floor(u.sx * 10 + 0.5) / 10, z = math.floor(u.sz * 10 + 0.5) / 10 })
+      table.insert(army, { t = u.t, x = math.floor(u.sx * 10 + 0.5) / 10, z = math.floor(u.sz * 10 + 0.5) / 10, v = u.v or 0 })
     end
     return army
   end
 
   local function serialize(st)
     local d = st.data
-    local owned, weapons = {}, {}
+    local owned, weapons, lv = {}, {}, {}
     for id in pairs(d.owned) do owned[id] = true end
+    for id, v in pairs(d.lv or {}) do if v > 1 then lv[id] = v end end
     for id in pairs(d.weapons) do weapons[id] = true end
     local ml = {}
     for _, m in ipairs(d.missions.list) do table.insert(ml, { id = m.id, prog = m.prog, claimed = m.claimed }) end
     return {
-      v = 2, cash = math.floor(d.cash), level = d.level, best = d.best, owned = owned, hq = d.hq, tech = d.tech, army = armyList(st),
+      v = 2, cash = math.floor(d.cash), level = d.level, best = d.best, owned = owned, lv = lv, hq = d.hq, tech = d.tech, army = armyList(st),
       wins = d.wins or 0, rebirth = d.rebirth, xp = d.xp, kills = d.kills, weapons = weapons, rating = d.rating,
       raidWins = d.raidWins, duelWins = d.duelWins, pvp = d.pvp, pvpWins = d.pvpWins, pvpGames = d.pvpGames, daily = { day = d.daily.day, streak = d.daily.streak },
       missions = { day = d.missions.day, list = ml }, t = os.time(),
@@ -166,7 +173,7 @@ function Store.init(G)
         local army = {}
         for _, a in ipairs(snap.army) do
           if type(a) == "table" and UNITS[a.t] and not UNITS[a.t].boss and type(a.x) == "number" and type(a.z) == "number" then
-            table.insert(army, { t = a.t, x = a.x, z = a.z })
+            table.insert(army, { t = a.t, x = a.x, z = a.z, v = math.floor(num(a.v, 0, 1000, 0)) })
           end
           if #army >= Config.MaxEnemy then break end
         end

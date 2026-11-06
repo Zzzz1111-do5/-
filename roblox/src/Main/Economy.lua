@@ -13,11 +13,7 @@ function Economy.init(G)
     local inc = 0
     for id in pairs(d.owned) do
       local b = BDEF[id]
-      if b and b.income then
-        local v = b.income
-        if b.kind == "factory" and d.owned.power then v = v * Config.PowerBoost end
-        inc = inc + v
-      end
+      if b and b.income then inc = inc + Config.BuildingIncome(b, d.owned, d.lv and d.lv[id]) end
     end
     return inc * (1 + Config.Rebirth.income * (d.rebirth or 0))
   end
@@ -35,6 +31,9 @@ function Economy.init(G)
   function G.recalc(st)
     local d = st.data
     st.income = G.incomeOf(d)
+    for id in pairs(d.owned) do   -- 加成、级数变了：楼顶的收入牌子、升级提示跟着改
+      if BDEF[id] and BDEF[id].income then G.refreshSign(st, id) end
+    end
     if st.hqLabel then st.hqLabel.Text = "指挥部 " .. string.rep("★", d.hq) .. "  部队上限 " .. G.capOf(d) end
     if st.hqPrompt then
       if d.hq < #BDEF.hq.cap then
@@ -50,11 +49,55 @@ function Economy.init(G)
   end
   G.buildingPos = buildingPos
 
+  -- 楼顶的牌子（名字、级数星星、现在每秒挣多少）、旁边的升级提示（按住 E）
+  function G.refreshSign(st, id)
+    local b, d = BDEF[id], st.data
+    local lv = (d.lv and d.lv[id]) or 1
+    local label = st.signs and st.signs[id]
+    if label and label.Parent then
+      local inc = Config.BuildingIncome(b, d.owned, lv) * (1 + Config.Rebirth.income * (d.rebirth or 0))
+      label.Text = b.name .. "  <font color=\"#FFD24A\">Lv." .. lv .. " " .. string.rep("★", lv) .. "</font>  <font color=\"#7CFC8A\">+" .. Config.Fmt(inc) .. "/秒</font>"
+    end
+    local pp = st.upPrompts and st.upPrompts[id]
+    if pp and pp.Parent then
+      if lv >= Config.Upgrade.max then
+        pp.Enabled = false
+      else
+        pp.Enabled = true
+        pp.ActionText = "升级到 Lv." .. (lv + 1)
+        pp.ObjectText = b.name .. "  $" .. Config.Fmt(Config.UpgradeCost(b, lv))
+      end
+    end
+  end
+
   function G.placeBuilding(st, b, fresh)
-    local m, body = Models.building(st.plot.Buildings, b, buildingPos(st.plot, b), st.plot.color)
-    local top = b.size[2] / 2 + 5   -- 牌子的偏移是从主体零件中心算的：大约在楼顶上方
+    local d = st.data
+    local lv = (d.lv and d.lv[b.id]) or 1
+    local old = st.plot.Buildings:FindFirstChild(b.id)
+    if old then old:Destroy() end   -- 升级：换成新样子
+    local m, body = Models.building(st.plot.Buildings, b, buildingPos(st.plot, b), st.plot.color, fresh and workspace:GetServerTimeNow() or nil, lv)
+    local size = Config.SizeAt(b, lv)
+    local top = size[2] / 2 + 5   -- 牌子的偏移是从主体零件中心算的：大约在楼顶上方
     if b.income then
-      Models.sign(body, b.name .. "  <font color=\"#7CFC8A\">+" .. Config.Fmt(b.income) .. "/秒</font>", top, 20, 2.8, nil, 200)
+      local _, label = Models.sign(body, "", top, 22, 2.8, nil, 220)
+      st.signs = st.signs or {}
+      st.signs[b.id] = label
+      -- 升级提示：挂在楼南边地面上（人走过来就看得见），按住 E
+      local at = Instance.new("Attachment")
+      at.Position = body.CFrame:PointToObjectSpace(buildingPos(st.plot, b) + V(0, 3, -size[3] / 2 - 3))
+      at.Parent = body
+      local pp = Instance.new("ProximityPrompt")
+      pp.HoldDuration = 0.3
+      pp.MaxActivationDistance = 16
+      pp.RequiresLineOfSight = false
+      pp.Parent = at
+      st.upPrompts = st.upPrompts or {}
+      st.upPrompts[b.id] = pp
+      local id = b.id
+      pp.Triggered:Connect(function(who)
+        if who == st.pl then G.upgradeBuilding(st, id) end
+      end)
+      G.refreshSign(st, b.id)
     elseif b.kind == "mil" then
       Models.sign(body, b.name .. " · " .. Models.milDesc(b), top, 22, 2.8, nil, (b.id == "airbase") and 600 or 200)
       -- 走到旁边按 E：客户端打开兵工厂对应的页签（提示上的 Tab 属性）
@@ -82,6 +125,10 @@ function Economy.init(G)
       end)
     elseif b.kind == "power" then
       Models.sign(body, "发电厂 · 工厂收入 ×" .. Config.PowerBoost, top + 2, 20, 2.8, nil, 200)
+    elseif b.kind == "radar" then
+      Models.sign(body, "雷达站 · 支援技能冷却 -" .. math.floor((1 - Config.RadarCD) * 100 + 0.5) .. "%", top + 2, 22, 2.8, nil, 220)
+    elseif b.kind == "silo" then
+      Models.sign(body, "导弹发射井 · 支援技能「巡航导弹」", top + 4, 24, 2.8, nil, 220)
     end
     if fresh then G.fx({ k = "build", p = buildingPos(st.plot, b), s = math.max(b.size[1], b.size[3]) }) end
     return m
@@ -115,9 +162,13 @@ function Economy.init(G)
           if who == st.pl then G.tryBuild(st, id, false) end
         end)
         st.pads[id] = { pad = pad, b = b }
+        if id == "oil1" and not st.indHint then   -- 工业区在西墙外，第一次解锁时说一声
+          st.indHint = true
+          G.toast(st, "西边工业区开放了：从基地西墙南段的「工业区大门」出去，先盖油井 A；跟着地上的箭头走", "info")
+        end
         if id == "airbase" and not st.airHint then   -- 空军基地盖在围墙外面，按钮在围墙里靠右
           st.airHint = true
-          G.toast(st, "空军基地解锁了：购买按钮在基地里靠右边的围墙旁，盖好后跑道在围墙外面", "info")
+          G.toast(st, "空军基地解锁了：购买按钮在基地里靠空军那边的围墙旁（面朝战场时的左手边），盖好后跑道在围墙外面；跟着地上的箭头走", "info")
         end
       end
     end
@@ -154,7 +205,38 @@ function Economy.init(G)
       G.toast(st, "可以生产" .. table.concat(names, "、") .. "了：右边「兵工厂」，或者走到建筑旁按 E", "info")
     elseif b.kind == "hq" then
       G.toast(st, "部队上限 " .. G.capOf(d) .. "；以后可以升级指挥部带更多兵", "info")
+    elseif b.kind == "radar" then
+      G.toast(st, "打仗时所有支援技能冷却快 " .. math.floor((1 - Config.RadarCD) * 100 + 0.5) .. "%", "info")
+    elseif b.kind == "silo" then
+      G.toast(st, "打仗时多一个支援技能「巡航导弹」（电脑按 M）：导弹从这口井里升空，炸平一大片", "info")
     end
+    G.push(st)
+  end
+
+  -- 建筑升级：有收入的楼，一级一级升到 Config.Upgrade.max（收入涨、楼变样、从地里重新升起来）
+  function G.upgradeBuilding(st, id)
+    if not st.ready or type(id) ~= "string" then return end
+    local d = st.data
+    local b = BDEF[id]
+    if not b or not b.income or not d.owned[id] then return end
+    local lv = d.lv[id] or 1
+    if lv >= Config.Upgrade.max then
+      G.toast(st, b.name .. " 已经满级了", "info")
+      return
+    end
+    local price = Config.UpgradeCost(b, lv)
+    if d.cash < price then
+      G.toast(st, "升级" .. b.name .. "还差 $" .. Config.Fmt(price - d.cash), "bad")
+      return
+    end
+    local mul = 1 + Config.Rebirth.income * (d.rebirth or 0)
+    local before = Config.BuildingIncome(b, d.owned, lv)
+    d.cash = d.cash - price
+    d.lv[id] = lv + 1
+    G.placeBuilding(st, b, true)
+    G.recalc(st)
+    G.progress(st, "upgrade", 1)
+    G.toast(st, b.name .. " 升到 Lv." .. (lv + 1) .. "：收入 +" .. Config.Fmt((Config.BuildingIncome(b, d.owned, lv + 1) - before) * mul) .. "/秒", "good")
     G.push(st)
   end
 
@@ -216,6 +298,8 @@ function Economy.init(G)
     d.rebirth = d.rebirth + 1
     d.cash = Config.StartCash
     d.owned = {}
+    d.lv = {}
+    st.signs, st.upPrompts = {}, {}
     d.hq = 0
     d.tech = 0
     d.level = 1

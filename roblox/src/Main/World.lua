@@ -1,48 +1,17 @@
--- 军事大亨：地图（光照、地形、六块基地、约战竞技场）
-local Lighting = game:GetService("Lighting")
-
+-- 军事大亨：地图（光影、地形世界、六块基地、约战竞技场；场景细节在 Scenery 里）
 local World = {}
 
 function World.init(G)
   local Config, Models = G.Config, G.Models
+  local Scenery = require(script.Parent:WaitForChild("Scenery"))
+  G.Scenery = Scenery
   local V = Vector3.new
-  local F = Config.Field
 
-  Lighting.ClockTime = 14.3
-  Lighting.Brightness = 2.4
-  Lighting.GlobalShadows = true
-  Lighting.OutdoorAmbient = Color3.fromRGB(125, 128, 135)
-  Lighting.EnvironmentDiffuseScale = 0.6
-  Lighting.EnvironmentSpecularScale = 0.6
-  if not Lighting:FindFirstChildOfClass("Atmosphere") then
-    local atm = Instance.new("Atmosphere")
-    atm.Density = 0.26
-    atm.Offset = 0.15
-    atm.Haze = 1.2
-    atm.Glare = 0.2
-    atm.Color = Color3.fromRGB(198, 210, 226)
-    atm.Decay = Color3.fromRGB(106, 118, 140)
-    atm.Parent = Lighting
-  end
-
-  -- 地面：地形草地，顶面在 y = 0（分块填，单次别太大）；盖住基地、战场和后面的竞技场
-  do
-    local T = workspace.Terrain
-    local half = Config.PlotCount * Config.PlotSpacing / 2 + 200
-    local z0 = -Config.BaseSize / 2 - 200
-    local z1 = Config.Arena.z + F.center + F.length / 2 + 200
-    local x = -half
-    while x < half do
-      local w = math.min(512, half - x)
-      local z = z0
-      while z < z1 do
-        local d = math.min(512, z1 - z)
-        T:FillBlock(CFrame.new(x + w / 2, -6, z + d / 2), V(w, 12, d), Enum.Material.Grass)
-        z = z + d
-      end
-      x = x + w
-    end
-  end
+  Scenery.lighting()
+  -- 地形：一整层草地（顶面 y = 0），基地之间的山丘、四周的雪山、湖、河；树林、桥
+  local groundY, info = Scenery.terrain(Config)
+  G.mapInfo = info
+  G.try("种树", Scenery.nature, workspace, Config, groundY, info)
 
   local PlotsF = Instance.new("Folder")
   PlotsF.Name = "Plots"
@@ -57,12 +26,15 @@ function World.init(G)
     plot.field = info.field
     plot.sign = info.sign
     plot.board = info.board
-    for _, name in ipairs({ "Buildings", "Pads", "Units", "Enemies" }) do
+    for _, name in ipairs({ "Buildings", "Pads", "Units", "Enemies", "Drops" }) do
       local sub = Instance.new("Folder")
       sub.Name = name
       sub.Parent = f
       plot[name] = sub
     end
+    G.try("基地外围", Scenery.base, f, plot.origin, plot.color, Config)
+    G.try("工业区", Scenery.industry, f, plot.origin, Config)
+    G.try("战区", Scenery.theater, plot, "grass", Config)
     f.Parent = PlotsF
     G.plots[i] = plot
   end
@@ -79,8 +51,17 @@ function World.init(G)
     local units = Instance.new("Folder")
     units.Name = "Units"
     units.Parent = f
+    -- 竞技场也有战区样子：1 号城市废墟、2 号沙漠
+    G.try("竞技场战区", Scenery.theater, { origin = origin, folder = f, field = info.field, index = 20 + i, color = Color3.fromRGB(60, 140, 230) }, (i == 1) and "urban" or "desert", Config)
     f.Parent = ArenasF
     G.arenas[i] = { index = i, origin = origin, folder = f, field = info.field, Units = units, busy = false }
+  end
+
+  -- 换战区：这块战场的地面、两边地形、道具全换（打掉首领、进新战区时；进服按关卡）
+  function G.setTheater(st, th)
+    if st.plot.theater == th.id then return false end
+    G.try("换战区", Scenery.theater, st.plot, th.id, Config)
+    return true
   end
 
   -- 单位的位置：战场原点 + (x, 1 + y, z)，朝向 h

@@ -1,239 +1,180 @@
--- 军事大亨（客户端）：指引——告诉玩家下一步干什么、去哪儿
---   地上一条发光的线从脚下连到要去的按钮，光点顺着线往前跑；按钮头顶一个上下跳、一直转的箭头；
---   目标不在画面里时，屏幕边上一个箭头指方向；屏幕上方一行「下一步：……」；要点的界面按钮（兵工厂、开战）一闪一闪。
---   新手一路是：居民楼 A → 兵营 → 买一个步兵班 → 开战；之后一直指向买得起的最便宜的建筑（都买不起就指最便宜的，写还差多少）。
---   左边菜单「指引」能开关；全都自己画在本地，不占网络。只依赖 G.S（状态）、workspace.Plots 里的按钮（Pads 下的 Pad_<建筑 id>）。
+-- 军事大亨（客户端）：地图指引——
+--   ① 地上一串往前流动的绿色箭头，从你脚下指到下一个要去的地方（补给箱优先，其次是左上角「当前目标」说的那个按钮）；
+--   ② 左边的小地图（上面是战场）：自己的基地、盖好的楼、能买的按钮（绿点）、补给箱（金点）、你（白箭头）、你的部队（蓝点）
 local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
 
 local Guide = {}
 
 function Guide.init(G)
   local Config = G.Config
-  local BDEF = Config.BuildingById
-  local player = Players.LocalPlayer
-  local cam = workspace.CurrentCamera
-  local V, V2 = Vector3.new, Vector2.new
+  local V = Vector3.new
   local RGB = Color3.fromRGB
+  local V2 = Vector2.new
+  local player = Players.LocalPlayer
   local ui = G.ui
-  local GREEN, AMBER = RGB(110, 255, 140), RGB(255, 200, 70)
-  local on = true
+  local mk, text, round = G.mk, G.text, G.round
 
-  ---------------------------------------------------------------- 3D：线、光点、箭头
+  ---------------------------------------------------------------- ① 地上的箭头
 
-  local folder = Instance.new("Folder")
-  folder.Name = "ClientGuide"
-  folder.Parent = workspace
-  local function part(size, shape)
-    local p = Instance.new("Part")
-    if shape then p.Shape = shape end
-    p.Size = size
-    p.Color = GREEN
-    p.Material = Enum.Material.Neon
-    p.Anchored = true
-    p.CanCollide = false
-    p.CanQuery = false
-    p.CanTouch = false
-    p.CastShadow = false
-    p.Transparency = 1
-    p.Parent = folder
-    return p
+  -- 一个箭头 = 两根斜着的发光细条拼成的「V」（尖朝前）；一池子反复用
+  local N, GAP, SPEED = 24, 7, 11
+  local pool = {}
+  for i = 1, N do
+    local a = G.fxPart(nil, V(0.55, 0.14, 3.2), CFrame.new(), RGB(120, 255, 150), Enum.Material.Neon, 1)
+    local b = G.fxPart(nil, V(0.55, 0.14, 3.2), CFrame.new(), RGB(120, 255, 150), Enum.Material.Neon, 1)
+    pool[i] = { a, b }
   end
-  -- 箭头（朝下）：竖杆 + 两片斜板拼成「V」
-  local arrow = { part(V(0.9, 4.2, 0.9)), part(V(0.9, 3.2, 0.9)), part(V(0.9, 3.2, 0.9)) }
-  local dots = {}
-  for i = 1, 8 do dots[i] = part(V(0.9, 0.9, 0.9), Enum.PartType.Ball) end
-  local anchor = part(V(0.2, 0.2, 0.2))
-  local a1 = Instance.new("Attachment")
-  a1.Parent = anchor
-  local beam = Instance.new("Beam")
-  beam.Attachment1 = a1
-  beam.LightEmission = 1
-  beam.Transparency = NumberSequence.new(0.35)
-  beam.Width0, beam.Width1 = 0.7, 0.7
-  beam.FaceCamera = true
-  beam.Segments = 2
-  beam.Enabled = false
-  beam.Parent = anchor
-  local function attach(char)
-    local hrp = char and char:WaitForChild("HumanoidRootPart", 10)
-    if not hrp then return end
-    local a0 = Instance.new("Attachment")
-    a0.Name = "GuideA0"
-    a0.Position = V(0, -2.4, 0)   -- 脚底
-    a0.Parent = hrp
-    beam.Attachment0 = a0
-  end
-  player.CharacterAdded:Connect(attach)
-  if player.Character then task.spawn(attach, player.Character) end
-
-  ---------------------------------------------------------------- 界面：提示条、屏幕边的箭头、按钮闪
-
-  local hint = G.mk("Frame", { AnchorPoint = V2(0.5, 0), Position = UDim2.new(0.5, 0, 0, 70), Size = UDim2.fromOffset(560, 36), BackgroundColor3 = RGB(18, 40, 26),
-    BackgroundTransparency = 0.15, BorderSizePixel = 0, Visible = false, ZIndex = 3 }, ui.root)
-  G.round(hint, 8)
-  G.mk("UIStroke", { Color = GREEN, Transparency = 0.5, Thickness = 1, ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, hint)
-  local hintL = G.text(hint, { Position = UDim2.fromOffset(12, 0), Size = UDim2.new(1, -54, 1, 0), TextSize = 15, Font = Enum.Font.GothamBold, TextColor3 = RGB(200, 255, 210),
-    TextScaled = true, ZIndex = 3 })
-  G.mk("UITextSizeConstraint", { MaxTextSize = 15, MinTextSize = 10 }, hintL)
-  G.button(hint, "×", RGB(60, 70, 64), { AnchorPoint = V2(1, 0.5), Position = UDim2.new(1, -5, 0.5, 0), Size = UDim2.fromOffset(30, 26), TextSize = 16, ZIndex = 3 },
-    function() G.toggleGuide(false) end)
-  ui.guideHint = hint
-
-  -- 屏幕边上的箭头（另开一个铺满整个屏幕的界面，坐标和 WorldToViewportPoint 一样）
-  local edgeGui = G.mk("ScreenGui", { Name = "GuideEdge", ResetOnSpawn = false, IgnoreGuiInset = true, DisplayOrder = 2 }, player:WaitForChild("PlayerGui"))
-  local edge = G.mk("Frame", { AnchorPoint = V2(0.5, 0.5), Size = UDim2.fromOffset(46, 46), BackgroundTransparency = 1, Visible = false }, edgeGui)
-  for _, s in ipairs({ -1, 1 }) do   -- 两根短棒拼成「>」，整个框转到朝目标
-    local bar = G.mk("Frame", { AnchorPoint = V2(0.5, 0.5), Position = UDim2.new(0.5, -3, 0.5, s * 8), Size = UDim2.fromOffset(26, 7), BackgroundColor3 = GREEN,
-      BorderSizePixel = 0, Rotation = s * 40 }, edge)
-    G.round(bar, 3)
-  end
-
-  local pulse = G.mk("UIStroke", { Color = AMBER, Thickness = 4, ApplyStrokeMode = Enum.ApplyStrokeMode.Border })
-
-  ---------------------------------------------------------------- 下一步
-
-  local function myPads()
-    local S = G.S
-    local plots = workspace:FindFirstChild("Plots")
-    local plot = S and plots and plots:FindFirstChild("Plot" .. tostring(S.plot))
-    local pads = plot and plot:FindFirstChild("Pads")
-    local list = {}
-    if pads then
-      for _, m in ipairs(pads:GetChildren()) do
-        local id = string.match(m.Name, "^Pad_(.+)$")
-        local b = id and BDEF[id]
-        local pad = m:FindFirstChild("Pad")
-        if b and pad then table.insert(list, { b = b, pad = pad }) end
-      end
+  local LA = CFrame.new(-0.92, 0, 1.31) * CFrame.Angles(0, math.rad(-35), 0)
+  local LB = CFrame.new(0.92, 0, 1.31) * CFrame.Angles(0, math.rad(35), 0)
+  local phase = 0
+  local function hideAll(from)
+    for i = from, N do
+      pool[i][1].Transparency = 1
+      pool[i][2].Transparency = 1
     end
-    table.sort(list, function(x, y) return x.b.price < y.b.price end)
-    return list
+  end
+  -- 现在要去哪：补给箱 > 目标按钮；打仗、布阵、开车时不指
+  local function target()
+    local S = G.S
+    if not S or G.battle or G.mode ~= "free" then return nil, nil end
+    if typeof(S.crate) == "Vector3" then return S.crate, RGB(255, 214, 80) end
+    local pad = G.goalPadPart and G.goalPadPart()
+    if pad and pad.Parent then return pad.CFrame.Position, RGB(120, 255, 150) end
+    return nil, nil
   end
 
-  -- 返回 { text, pos（3D 目标）, ok（买得起）, btn（要闪的界面按钮）, tab（兵工厂翻到哪页）}；没什么要做的返回 nil
-  local function nextStep()
+  ---------------------------------------------------------------- ② 小地图
+
+  local MAP = { x0 = -150, x1 = 250, z0 = -145, z1 = 345 }   -- 相对基地原点的范围（含路和部署区）
+  local MW, MH = 128, 156
+  local mm = mk("Frame", { BackgroundColor3 = RGB(14, 18, 24), BackgroundTransparency = 0.2, BorderSizePixel = 0, Position = UDim2.fromOffset(158, 276), Size = UDim2.fromOffset(MW + 12, MH + 30) }, ui.root)
+  round(mm, 10)
+  text(mm, { Position = UDim2.fromOffset(8, 2), Size = UDim2.new(1, -16, 0, 22), TextSize = 13, Font = Enum.Font.GothamBold, TextColor3 = RGB(255, 214, 90), Text = "地图（上面是战场）" })
+  local area = mk("Frame", { BackgroundColor3 = RGB(70, 96, 58), BorderSizePixel = 0, Position = UDim2.fromOffset(6, 24), Size = UDim2.fromOffset(MW, MH), ClipsDescendants = true }, mm)
+  round(area, 6)
+  ui.minimap = mm
+  -- 世界（相对原点的 x、z）→ 小地图上的位置：北（+Z）朝上，从上往下看时 +X 在左边
+  local function at(x, z)
+    return UDim2.fromScale(1 - (x - MAP.x0) / (MAP.x1 - MAP.x0), 1 - (z - MAP.z0) / (MAP.z1 - MAP.z0))
+  end
+  local function sizeOf(w, d)
+    return UDim2.fromScale(w / (MAP.x1 - MAP.x0), d / (MAP.z1 - MAP.z0))
+  end
+  local function rect(x, z, w, d, color, tr, z0)
+    return mk("Frame", { AnchorPoint = V2(0.5, 0.5), Position = at(x, z), Size = sizeOf(w, d), BackgroundColor3 = color, BackgroundTransparency = tr or 0, BorderSizePixel = 0, ZIndex = z0 or 1 }, area)
+  end
+  local hs = Config.BaseSize / 2
+  local F = Config.Field
+  rect(0, 0, Config.BaseSize, Config.BaseSize, RGB(150, 152, 150), 0, 1)                            -- 基地地面
+  rect(0, (hs + F.center - F.length / 2) / 2, Config.BaseSize, F.center - F.length / 2 - hs, RGB(52, 54, 58), 0, 1)   -- 路
+  local dep = rect(0, (F.deploy[1] + F.deploy[2]) / 2, F.width, F.deploy[2] - F.deploy[1], RGB(60, 120, 220), 0.45, 1)   -- 部署区
+  text(dep, { Size = UDim2.fromScale(1, 1), TextXAlignment = Enum.TextXAlignment.Center, TextSize = 11, Font = Enum.Font.GothamBold, Text = "部署区", ZIndex = 2 })
+  local dyn = mk("Frame", { Name = "Dynamic", BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), ZIndex = 2 }, area)
+  local me = text(area, { AnchorPoint = V2(0.5, 0.5), Size = UDim2.fromOffset(16, 16), TextXAlignment = Enum.TextXAlignment.Center, TextSize = 15, Font = Enum.Font.GothamBold,
+    TextColor3 = RGB(255, 255, 255), TextStrokeTransparency = 0.2, Text = "▲", ZIndex = 6 })
+  local ring = mk("Frame", { AnchorPoint = V2(0.5, 0.5), Size = UDim2.fromOffset(14, 14), BackgroundTransparency = 1, ZIndex = 5, Visible = false }, area)
+  mk("UIStroke", { Color = RGB(120, 255, 150), Thickness = 2 }, ring)
+  round(ring, 7)
+
+  local function dot(x, z, size, color, zi)
+    local f = mk("Frame", { AnchorPoint = V2(0.5, 0.5), Position = at(x, z), Size = UDim2.fromOffset(size, size), BackgroundColor3 = color, BorderSizePixel = 0, ZIndex = zi or 3 }, dyn)
+    round(f, size)
+    return f
+  end
+  -- 楼、按钮、补给箱、部队：状态变了或隔半秒重画
+  local function redraw()
     local S = G.S
-    if not S or S.battle or S.matchServer or S.teleporting then return nil end
+    if not S then return end
+    for _, c in ipairs(dyn:GetChildren()) do c:Destroy() end
     local owned = S.owned or {}
-    local list = myPads()
-    local function padStep(e)
-      local ok = (S.cash or 0) >= e.b.price
-      local text
-      if ok then
-        text = "下一步：去盖「" .. e.b.name .. "」（$" .. Config.Fmt(e.b.price) .. "），跟着地上的绿线走，踩一下发光的按钮"
-      else
-        text = "攒钱盖「" .. e.b.name .. "」：还差 $" .. Config.Fmt(e.b.price - (S.cash or 0)) .. "（每秒 +" .. Config.Fmt(S.income or 0) .. "）"
-      end
-      return { text = text, pos = e.pad.Position, ok = ok }
-    end
-    local function find(id)
-      for _, e in ipairs(list) do
-        if e.b.id == id then return e end
+    for _, b in ipairs(Config.Buildings) do
+      if owned[b.id] then
+        local r = rect(b.x, b.z, b.size[1], b.size[3], RGB(84, 92, 100), 0, 2)
+        r.Parent = dyn
+      elseif not b.req or owned[b.req] then
+        local px, pz = b.x, b.z - b.size[3] / 2 - 6
+        if b.pad then px, pz = b.x + b.pad[1], b.z + b.pad[2] end
+        dot(px, pz, 7, (S.cash >= b.price) and RGB(90, 255, 120) or RGB(230, 90, 70), 3)
       end
     end
-    if not owned.house1 and find("house1") then return padStep(find("house1")) end
-    if not owned.barracks and find("barracks") then return padStep(find("barracks")) end
-    if (S.n or 0) == 0 and owned.barracks then
-      return { text = "下一步：在右边「兵工厂」的步兵页买一个步兵班（$" .. Config.Units.inf.price .. "）", btn = G.shopBtn and G.shopBtn("inf"), tab = "foot" }
+    local o = S.origin
+    for m in pairs(G.vis or {}) do
+      if m.Parent and m:GetAttribute("Owner") == player.UserId and not m:GetAttribute("Dead") then
+        local r = m:FindFirstChild("Root")
+        if r and o then
+          local p = r.CFrame.Position - o
+          dot(p.X, p.Z, 4, RGB(110, 170, 255), 3)
+        end
+      end
     end
-    if (S.level or 1) == 1 and (S.n or 0) > 0 then
-      return { text = "下一步：点下面的「开战！」打第 1 关——你本人也会上战场", btn = ui.fightBtn }
+    if typeof(S.crate) == "Vector3" and o then
+      local p = S.crate - o
+      dot(p.X, p.Z, 9, RGB(255, 214, 80), 4)
     end
-    for _, e in ipairs(list) do
-      if (S.cash or 0) >= e.b.price then return padStep(e) end
-    end
-    if list[1] then return padStep(list[1]) end
-    return nil
   end
 
-  function G.toggleGuide(v)
-    if v == nil then on = not on else on = v end
-    if ui.guideBtn then ui.guideBtn.Text = on and "指引：开" or "指引：关" end
-    if not on then G.toast("指引关了：左边菜单「指引」可以再打开", "info") end
-  end
-
-  local function hide3D()
-    beam.Enabled = false
-    for _, p in ipairs(arrow) do p.Transparency = 1 end
-    for _, p in ipairs(dots) do p.Transparency = 1 end
-  end
+  ---------------------------------------------------------------- 每帧
 
   local t = 0
-  local lastTab = nil
-  RunService.RenderStepped:Connect(function(dt)
+  function G.stepGuide(dt)
+    phase = (phase + dt * SPEED) % GAP
     t = t + dt
-    local st = on and nextStep() or nil
-    -- 提示条（匹配状态条在的时候往下挪一格）
-    if st then
-      hint.Visible = true
-      hintL.Text = st.text
-      hint.Position = UDim2.new(0.5, 0, 0, (ui.mbar and ui.mbar.Visible) and 116 or 70)
-    else
-      hint.Visible = false
-    end
-    -- 要点的界面按钮：闪
-    if st and st.btn and st.btn.Visible then
-      pulse.Parent = st.btn
-      pulse.Transparency = 0.15 + 0.6 * (0.5 + 0.5 * math.sin(t * 6))
-    else
-      pulse.Parent = nil
-    end
-    if st and st.tab and st.tab ~= lastTab and G.shopTab then G.shopTab(st.tab) end
-    lastTab = st and st.tab or nil
-    -- 3D：只在平时（自己走动）显示
-    local a0 = beam.Attachment0
-    local hrp = a0 and a0.Parent
-    if not (st and st.pos and G.mode == "free" and hrp and hrp.Parent) then
-      hide3D()
-      edge.Visible = false
-      return
-    end
-    local col = st.ok and GREEN or AMBER
-    local target = st.pos + V(0, 0.6, 0)
-    anchor.CFrame = CFrame.new(target)
-    beam.Color = ColorSequence.new(col)
-    local foot = hrp.Position - V(0, 2.4, 0)
-    local far = (target - foot).Magnitude > 12
-    beam.Enabled = far
-    -- 光点顺着线往目标跑
-    for i, p in ipairs(dots) do
-      local k = ((i - 1) / #dots + t * 0.25) % 1
-      p.CFrame = CFrame.new(foot:Lerp(target, k) + V(0, 0.4, 0))
-      p.Color = col
-      p.Transparency = far and 0.15 or 1
-    end
-    -- 头顶的箭头：上下跳、转
-    local base = CFrame.new(target + V(0, 9 + math.sin(t * 3) * 1.2, 0)) * CFrame.Angles(0, t * 2, 0)
-    arrow[1].CFrame = base * CFrame.new(0, 2.6, 0)
-    arrow[2].CFrame = base * CFrame.new(-0.9, 0.2, 0) * CFrame.Angles(0, 0, math.rad(40))
-    arrow[3].CFrame = base * CFrame.new(0.9, 0.2, 0) * CFrame.Angles(0, 0, math.rad(-40))
-    for _, p in ipairs(arrow) do
-      p.Color = col
-      p.Transparency = 0.05
-    end
-    -- 目标不在画面里：屏幕边上的箭头指过去
-    local sp, onScreen = cam:WorldToViewportPoint(target)
-    local vs = cam.ViewportSize
-    if onScreen and sp.Z > 0 then
-      edge.Visible = false
-    else
-      local cx, cy = vs.X / 2, vs.Y / 2
-      local dx, dy = sp.X - cx, sp.Y - cy
-      if sp.Z < 0 then dx, dy = -dx, -dy end
-      local l = math.sqrt(dx * dx + dy * dy)
-      if l < 1e-3 then dx, dy, l = 0, 1, 1 end
-      dx, dy = dx / l, dy / l
-      local m = 50
-      local k = math.min((cx - m) / math.max(math.abs(dx), 1e-3), (cy - m) / math.max(math.abs(dy), 1e-3))
-      edge.Position = UDim2.fromOffset(cx + dx * k, cy + dy * k)
-      edge.Rotation = math.deg(math.atan2(dy, dx))
-      for _, b in ipairs(edge:GetChildren()) do
-        if b:IsA("Frame") then b.BackgroundColor3 = col end
+    local S = G.S
+    local char = player.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    -- 地上的箭头
+    local goal, color = target()
+    local used = 0
+    if goal and root and S and S.origin then
+      local from = root.CFrame.Position
+      local y = S.origin.Y + 1.15
+      local a = V(from.X, y, from.Z)
+      local b = V(goal.X, y, goal.Z)
+      local d = b - a
+      local len = d.Magnitude
+      if len > 12 then
+        local dir = d / len
+        local base0 = CFrame.lookAt(a, a + dir)
+        for i = 1, N do
+          local s = phase + (i - 1) * GAP + 4
+          if s > len - 5 then break end
+          local cf = base0 * CFrame.new(0, 0, -s)
+          local p = pool[i]
+          p[1].CFrame = cf * LA
+          p[2].CFrame = cf * LB
+          local fade = math.clamp(math.min(s - 4, len - 5 - s) / 6, 0, 1)
+          local tr = 1 - 0.75 * fade
+          p[1].Transparency, p[2].Transparency = tr, tr
+          p[1].Color, p[2].Color = color, color
+          used = i
+        end
       end
-      edge.Visible = true
     end
-  end)
+    hideAll(used + 1)
+    -- 小地图
+    local show = S ~= nil and not G.battle and G.mode ~= "drive" and not G.compact   -- 手机屏幕小，不放小地图（地上的箭头照样指路）
+    mm.Visible = show
+    if not show then return end
+    if t > 0.5 then
+      t = 0
+      redraw()
+    end
+    if root and S.origin then
+      local p = root.CFrame.Position - S.origin
+      me.Position = at(p.X, p.Z)
+      local lv = root.CFrame.LookVector
+      me.Rotation = math.deg(math.atan2(-lv.X, lv.Z))
+    end
+    if goal and S.origin then
+      local p = goal - S.origin
+      ring.Visible = true
+      ring.Position = at(p.X, p.Z)
+      local k = 1 + 0.35 * math.sin(os.clock() * 5)
+      ring.Size = UDim2.fromOffset(14 * k, 14 * k)
+    else
+      ring.Visible = false
+    end
+  end
 end
 
 return Guide

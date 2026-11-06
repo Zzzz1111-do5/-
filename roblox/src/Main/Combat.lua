@@ -50,13 +50,24 @@ function Combat.init(G)
     function cb.hurt(u)
       if u.fill then u.fill.Size = UDim2.fromScale(math.clamp(u.hp / u.max, 0, 1), 1) end
     end
-    function cb.heroHurt(u, dmg)
+    function cb.heroHurt(u, dmg, src)
       local hum = u.model and u.model:FindFirstChildOfClass("Humanoid")
-      if hum and hum.Health > 0 then hum:TakeDamage(dmg * 0.5) end
+      if hum and hum.Health > 0 then
+        hum:TakeDamage(dmg * 0.5)
+        if src and src.player and src.player ~= u.hero then cb.hit(u, dmg * 0.5, hum.Health <= 0, src) end
+      end
+    end
+    -- 玩家亲手打中的（开枪、开车、支援技能）：告诉他——准星上的命中标记、飘出来的伤害数字、击毁提示
+    function cb.hit(u, dmg, killed, src)
+      local pl = src.player
+      if not (pl and pl.Parent) then return end
+      RB:FireClient(pl, { phase = "hit", p = B.origin + V(u.x, 1 + (u.y or 0) + (u.h3 or 2.5), u.z), d = math.floor(dmg + 0.5), k = killed, t = u.t, hero = u.hero ~= nil })
     end
     function cb.kill(u, src)
       local st = src.player and G.states[src.player]
       if not st or not st.data then return end
+      B.pk = B.pk or {}
+      B.pk[st] = (B.pk[st] or 0) + 1
       st.data.kills = st.data.kills + 1
       G.addXP(st, u.def.boss and 25 or 2)
       G.progress(st, "kill", 1)
@@ -122,7 +133,7 @@ function Combat.init(G)
   end
 
   local function newBattle(mode, origin)
-    local B = { mode = mode, origin = origin, units = {}, shells = {}, missiles = {}, pending = {}, t = 0, alive1 = 0, alive2 = 0, byId = {}, teamOf = {}, sts = {}, over = false }
+    local B = { mode = mode, origin = origin, units = {}, shells = {}, missiles = {}, pending = {}, deaths = {}, t = 0, alive1 = 0, alive2 = 0, byId = {}, teamOf = {}, sts = {}, over = false }
     B.cb = callbacks(B)
     return B
   end
@@ -132,6 +143,8 @@ function Combat.init(G)
     local tm = G.powerOf(st.data)
     for _, u in pairs(st.units) do
       local def = UNITS[u.t]
+      local stars = Config.StarsOf(u.v)
+      local um = tm * (1 + Config.Vet.bonus * stars)   -- 老兵每星再加成
       u.path = nil
       local x, z, h = u.sx, u.sz, math.pi
       if mirror then x, z, h = -u.sx, F.enemy[1] + (F.deploy[2] - u.sz), 0 end
@@ -141,8 +154,8 @@ function Combat.init(G)
       u.fill.Size = UDim2.fromScale(1, 1)
       if def.air then G.setFly(u, true) end
       addUnit(B, {
-        uid = u.uid, owner = st, t = u.t, def = def, team = team, x = x, y = 0, z = z, h = h, ty = 0,
-        hp = def.hp * tm, max = def.hp * tm, dm = tm, cd = math.random() * math.min(def.rate, 3), rt = 0, alive = true,
+        uid = u.uid, owner = st, t = u.t, def = def, team = team, x = x, y = 0, z = z, h = h, ty = 0, stars = stars, kills = 0,
+        hp = def.hp * um, max = def.hp * um, dm = um, cd = math.random() * math.min(def.rate, 3), rt = 0, alive = true,
         model = u.model, root = u.root, bar = u.bar, fill = u.fill, h3 = Models.heightOf(u.t) * 0.45,
       })
     end
@@ -164,8 +177,9 @@ function Combat.init(G)
       local bar, fill = Models.hpBar(root, Models.heightOf(a.t) + 3, Config.EnemyColor)
       bar.Enabled = true
       if def.air then model:SetAttribute("Fly", true) end
+      local vm = 1 + Config.Vet.bonus * Config.StarsOf(a.v)   -- 突袭别人的防线：他的老兵也有加成
       addUnit(B, {
-        t = a.t, def = def, team = 2, x = a.x, y = 0, z = a.z, h = 0, ty = 0, hp = def.hp * hm, max = def.hp * hm, dm = dm,
+        t = a.t, def = def, team = 2, x = a.x, y = 0, z = a.z, h = 0, ty = 0, hp = def.hp * hm * vm, max = def.hp * hm * vm, dm = dm * vm,
         cd = math.random() * math.min(def.rate, 3), rt = 0, alive = true, hold = hold, model = model, root = root, bar = bar, fill = fill,
         h3 = Models.heightOf(a.t) * 0.45,
       })
@@ -338,48 +352,75 @@ function Combat.init(G)
     Battle.driveFire(B, bu, a.X, a.Z, a.Y - 1)
   end
 
+  -- 每半秒：双方还剩多少、这半秒里谁被打掉了（战报滚动条：en 是不是敌方的、me 是不是你亲手打的、mine 是不是你的部队）
   local function tick(B)
+    local deaths = B.deaths or {}
+    B.deaths = {}
     for st, team in pairs(B.sts) do
       if G.states[st.pl] == st then
         local a, e = B.alive1, B.alive2
         if team == 2 then a, e = e, a end
-        RB:FireClient(st.pl, { phase = "tick", t = B.t, a = a, e = e })
+        local feed = nil
+        for _, dd in ipairs(deaths) do
+          feed = feed or {}
+          if #feed >= 8 then break end
+          table.insert(feed, { t = dd.t, en = dd.team ~= team, me = dd.by == st.pl.UserId, mine = dd.owner == st.pl.UserId })
+        end
+        RB:FireClient(st.pl, { phase = "tick", t = B.t, a = a, e = e, feed = feed })
       end
     end
   end
 
-  local finish
+  -- 火山战区：隔一会儿在战场上随机一处先亮出红圈预警，再砸下几颗火山弹（敌我都伤）
+  local LAVA = { dmg = 110, splash = 22, vsArmor = 0.7, vsInf = 1.2, vsAir = 0, fxu = "lava" }
+  local function quakeStep(B, dt)
+    B.quakeT = (B.quakeT or B.quake * 0.6) - dt
+    if B.quakeT > 0 then return end
+    B.quakeT = B.quake * (0.8 + math.random() * 0.4)
+    local x = (math.random() - 0.5) * (F.width - 60)
+    local z = F.deploy[2] + math.random() * (F.enemy[1] - F.deploy[2])
+    local dm = 1 + (B.level or 41) * 0.05
+    G.fx({ k = "quake", p = B.origin + V(x, 1, z), s = 30 })
+    for i = 1, 3 do
+      Battle.strike(B, 0, LAVA, dm, x, z, 24, 1.6 + i * 0.35, "bomb", nil, B.origin + V(x + math.random(-120, 120), 300, z + math.random(-120, 120)))
+    end
+  end
+
+  local finish, forceEnd
   local function begin(B, sides, title)
     for team, st in pairs(sides) do
       st.battle = B
       B.teamOf[st.pl] = team
       B.sts[st] = team
+      if G.skillsReset then G.skillsReset(st) end
     end
     placeAll(B)
     for st, team in pairs(B.sts) do
-      RB:FireClient(st.pl, { phase = "start", mode = B.mode, title = title, level = st.data.level, team = team, time = Config.BattleTime, origin = B.origin })
+      RB:FireClient(st.pl, { phase = "start", mode = B.mode, title = title, level = st.data.level, team = team, time = Config.BattleTime, origin = B.origin, boss = B.boss == true })
       G.push(st)
       G.heroJoin(st)
     end
     task.spawn(function()
-      local tickT = 0
+      local tickT, bad = 0, 0
       while not B.over do
         local dt = task.wait(Config.Tick)
         if B.over then break end
-        syncHeroes(B)
-        local ok, res = pcall(Battle.step, B, math.min(dt, 0.2))
+        G.try("战斗：玩家本人", syncHeroes, B)
+        local ok, res = xpcall(Battle.step, debug.traceback, B, math.min(dt, 0.2))
         if not ok then
-          warn("[军事大亨] 战斗推演出错：" .. tostring(res))
-          res = "timeout"
+          G.reportError("战斗推演", res)
+          bad = bad + 1
+          res = (bad > 40) and "timeout" or nil   -- 偶尔一步出错就跳过这一步；一直出错才收场
         end
-        placeAll(B)
+        G.try("战斗：摆模型", placeAll, B)
+        if B.quake then G.try("战斗：火山弹", quakeStep, B, dt) end
         tickT = tickT + dt
         if tickT >= 0.5 then
           tickT = 0
-          tick(B)
+          G.try("战斗：战报", tick, B)
         end
         if res then
-          finish(B, res)
+          if not G.try("战斗结算", finish, B, res) then forceEnd(B) end
           break
         end
       end
@@ -398,6 +439,24 @@ function Combat.init(G)
     local v = 0
     for _, u in pairs(st.units) do v = v + UNITS[u.t].price end
     return v
+  end
+
+  -- 老兵：活下来的 +1 经验，每击毁一个敌人再 +1；升星了记下来（打完一起提示）
+  local function vetGain(st, u, bu, promos)
+    local old = Config.StarsOf(u.v)
+    u.v = (u.v or 0) + 1 + (bu.kills or 0)
+    local new = Config.StarsOf(u.v)
+    if new > old then
+      table.insert(promos, UNITS[u.t].name .. " " .. string.rep("★", new))
+      if G.vetTag then G.vetTag(st, u) end
+    end
+  end
+  local function promoToast(st, promos)
+    if #promos == 0 then return end
+    local list = {}
+    for i = 1, math.min(4, #promos) do list[i] = promos[i] end
+    G.toast(st, "老兵晋升：" .. table.concat(list, "、") .. ((#promos > 4) and ("等 " .. #promos .. " 个") or "") ..
+      "（每颗星血量、伤害 +" .. math.floor(Config.Vet.bonus * 100 + 0.5) .. "%）", "good")
   end
 
   -- 打完：清理、按模式算奖励；res 是第 1 队的结果
@@ -465,14 +524,16 @@ function Combat.init(G)
           st.data.cash = st.data.cash + reward
           if won then st.data.duelWins = st.data.duelWins + 1 end
           G.progress(st, "duel", 1)
-          -- 约战不损失部队：打没了的换新模型，全部放回阵位
+          -- 约战不损失部队：打没了的换新模型，全部放回阵位；活下来的照样攒老兵经验
+          local promos = {}
           for _, bu in ipairs(B.units) do
-            if bu.owner == st and not bu.hero then
+            if bu.owner == st and not bu.hero and not bu.temp then
               local u = st.units[bu.uid]
-              if u and not bu.alive then G.respawnModel(st, u) end
+              if u and not bu.alive then G.respawnModel(st, u) elseif u then vetGain(st, u, bu, promos) end
             end
           end
           G.homeSnap(st)
+          promoToast(st, promos)
           st.battle = nil
           local oname = other and other.pl.DisplayName or "对手"
           local text = won and ("你赢了 " .. oname .. "！") or ("输给了 " .. oname .. "，部队没有损失")
@@ -480,7 +541,8 @@ function Combat.init(G)
             text = text .. "\n对战积分 " .. (won and "+" or "-") .. delta .. "（现在 " .. st.data.pvp .. "）"
             if G.matchServer then text = text .. "\n" .. MC.back .. " 秒后送你回普通服务器" end
           end
-          RB:FireClient(st.pl, { phase = "end", mode = "duel", ranked = B.ranked, result = won and "win" or "lose", reward = reward, lost = {}, lostN = 0, level = st.data.level, text = text })
+          RB:FireClient(st.pl, { phase = "end", mode = "duel", ranked = B.ranked, result = won and "win" or "lose", reward = reward, lost = {}, lostN = 0, level = st.data.level, text = text,
+            pk = (B.pk and B.pk[st]) or 0 })
           G.push(st)
           task.spawn(G.save, st)
         end
@@ -493,14 +555,20 @@ function Combat.init(G)
     for s in pairs(B.sts) do st = s end
     if not st or G.states[st.pl] ~= st then return end
     local d = st.data
-    local lost, lostN = {}, 0
+    local lost, lostN, total = {}, 0, 0
+    local promos = {}
     for _, bu in ipairs(B.units) do
       if bu.owner == st and not bu.hero and not bu.temp then
         local u = st.units[bu.uid]
+        total = total + 1
         if u then
-          if bu.alive then   -- 活着的开回战前的阵位，下一仗满血
+          if bu.alive then   -- 活着的开回战前的阵位，下一仗满血；攒老兵经验
             u.x, u.y, u.z, u.h = bu.x, bu.y, bu.z, bu.h
             G.goTo(u, u.sx, u.sz)
+            vetGain(st, u, bu, promos)
+          elseif bu.spent then   -- 巡飞弹撞上去了：用掉了，不算损失
+            st.units[bu.uid] = nil
+            total = total - 1
           else
             st.units[bu.uid] = nil
             lost[u.t] = (lost[u.t] or 0) + 1
@@ -511,20 +579,39 @@ function Combat.init(G)
         bu.model:SetAttribute("Fly", false)
       end
     end
-    local reward, text = 0, nil
+    local reward, text, stars = 0, nil, nil
+    local oldBest = d.best
     if B.mode == "pve" then
       if res == "win" then
-        reward = Config.Reward(d.level)
+        local beaten = d.level
+        reward = Config.Reward(beaten)
         d.cash = d.cash + reward
-        if Config.IsBoss(d.level) then
+        if Config.IsBoss(beaten) then
           G.progress(st, "boss", 1)
           text = "打掉了首领！奖励翻倍"
+        end
+        -- 评星：一个没丢三星，丢的不超过三成两星，其余一星
+        stars = (lostN == 0) and 3 or ((lostN <= total * 0.3) and 2 or 1)
+        local M = Config.Milestone
+        if M and beaten % M.every == 0 then
+          local bonus = math.floor(Config.Reward(beaten) * M.k)
+          d.cash = d.cash + bonus
+          reward = reward + bonus
+          text = (text and (text .. "\n") or "") .. "里程碑：打通第 " .. beaten .. " 关，额外奖励 $" .. Config.Fmt(bonus)
         end
         G.addXP(st, 10 + d.level * 2)
         G.progress(st, "win", 1)
         d.level = d.level + 1
         d.best = math.max(d.best, d.level)
         d.wins = (d.wins or 0) + 1
+        -- 打进新战区：战场整个换样子，过一会儿大字播报
+        local th = Config.TheaterOf(d.level)
+        if G.setTheater and G.setTheater(st, th) then
+          text = (text and (text .. "\n") or "") .. "解锁新战区：" .. th.name .. "！" .. th.desc
+          task.delay(3.5, function()
+            if G.states[st.pl] == st then RB:FireClient(st.pl, { phase = "theater", name = th.name, desc = th.desc }) end
+          end)
+        end
       end
     else   -- 突袭
       local opp = B.raid
@@ -544,7 +631,9 @@ function Combat.init(G)
     end
     st.enemy = {}
     st.battle = nil
-    RB:FireClient(st.pl, { phase = "end", mode = B.mode, result = res, reward = reward, lost = lost, lostN = lostN, level = d.level, text = text })
+    RB:FireClient(st.pl, { phase = "end", mode = B.mode, result = res, reward = reward, lost = lost, lostN = lostN, level = d.level, text = text,
+      stars = stars, record = d.best > oldBest and d.best > 2, pk = (B.pk and B.pk[st]) or 0, total = total })
+    promoToast(st, promos)
     G.push(st)
     task.spawn(G.save, st)
     task.delay((res == "win") and 3 or 2, function()
@@ -555,13 +644,39 @@ function Combat.init(G)
     end)
   end
 
+  -- 结算出错时的保底收尾：至少让人退出「打仗中」、部队回到阵位，不然什么都点不了
+  function forceEnd(B)
+    B.over = true
+    if B.arena then B.arena.busy = false end
+    for st in pairs(B.sts) do
+      pcall(function()
+        if st.driving then G.driveStop(st) end
+        st.hero = nil
+        st.battle = nil
+        for _, bu in ipairs(B.units) do
+          if bu.temp and bu.model then pcall(function() bu.model:Destroy() end) end
+          if bu.owner == st and not bu.hero and not bu.temp then
+            local u = st.units[bu.uid]
+            if u and not bu.alive then
+              if B.mode == "duel" then G.respawnModel(st, u) else st.units[bu.uid] = nil end
+            end
+          end
+        end
+        G.homeSnap(st)
+        RB:FireClient(st.pl, { phase = "end", mode = B.mode, result = "timeout", reward = 0, lost = {}, lostN = 0, level = st.data.level,
+          text = "这一仗结算的时候出错了，已经强制结束，部队放回了阵位（出错信息在屏幕上方的红条里）" })
+        G.push(st)
+      end)
+    end
+  end
+
   -- 人走了：约战算他输；关卡、突袭直接结束（不算输赢、不扣兵）
   function G.abandon(st)
     local B = st.battle
     if not B or B.over then return end
     if B.mode == "duel" then
       B.sts[st] = nil
-      finish(B, (B.teamOf[st.pl] == 1) and "lose" or "win")
+      if not G.try("约战结算", finish, B, (B.teamOf[st.pl] == 1) and "lose" or "win") then forceEnd(B) end
     else
       B.over = true
     end
@@ -582,6 +697,14 @@ function Combat.init(G)
     if #st.enemy == 0 then G.makeEnemy(st) end
     local B = newBattle("pve", st.plot.origin)
     B.level = st.data.level
+    B.boss = Config.IsBoss(st.data.level)
+    -- 战区：速度、射程倍数，火山弹
+    local th = Config.TheaterOf(st.data.level)
+    if G.setTheater then G.setTheater(st, th) end
+    B.theater = th
+    B.speedK = th.speed or 1
+    B.rangeK = th.range or 1
+    B.quake = th.quake
     enlist(B, st, 1, false)
     local list = {}
     for _, e in ipairs(st.enemy) do table.insert(list, { t = e.t, x = e.x, z = e.z, model = e.model, root = e.root }) end
@@ -636,7 +759,7 @@ function Combat.init(G)
     local list = {}
     for _, a in ipairs(opp.army) do
       local z = math.clamp(F.enemy[1] + (F.deploy[2] - a.z), F.enemy[1] + 4, F.enemy[2] - 4)
-      table.insert(list, { t = a.t, x = math.clamp(-a.x, -XMAX, XMAX), z = z })
+      table.insert(list, { t = a.t, x = math.clamp(-a.x, -XMAX, XMAX), z = z, v = a.v })
     end
     enlistAI(B, list, tm, tm, true, st.plot.Enemies)
     begin(B, { [1] = st }, "突袭：" .. opp.name .. " 的防线（第 " .. opp.level .. " 关水平）")
