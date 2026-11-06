@@ -87,6 +87,23 @@ function UI.init(G)
   end
   G.mk, G.round, G.text, G.button = mk, round, text, button
 
+  -- 面板右上角的「－ / ＋」：收起只留标题那一条（keep 里的子元素收起时照样显示），再点展开
+  local function collapsible(f, keep, shortH)
+    local full = f.Size
+    local collapsed = false
+    local btn = button(f, "－", RGB(50, 56, 66), { AnchorPoint = V2(1, 0), Position = UDim2.new(1, -6, 0, 6), Size = UDim2.fromOffset(28, 26), TextSize = 16, ZIndex = f.ZIndex + 1 })
+    local function set(c)
+      collapsed = c
+      for _, ch in ipairs(f:GetChildren()) do
+        if ch:IsA("GuiObject") and ch ~= btn and not keep[ch] then ch.Visible = not c end
+      end
+      f.Size = c and UDim2.new(full.X.Scale, full.X.Offset, 0, shortH or 38) or full
+      btn.Text = c and "＋" or "－"
+    end
+    btn.Activated:Connect(function() set(not collapsed) end)
+    return set, btn
+  end
+
   local gui = mk("ScreenGui", { Name = "TycoonUI", ResetOnSpawn = false, ZIndexBehavior = Enum.ZIndexBehavior.Sibling }, player:WaitForChild("PlayerGui"))
   -- 按屏幕大小整体缩放：根框架先放大 1/s 倍再用 UIScale 缩 s 倍，正好铺满屏幕
   local root = mk("Frame", { BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1) }, gui)
@@ -112,6 +129,7 @@ function UI.init(G)
   local mbarL = text(mbar, { Position = UDim2.fromOffset(14, 0), Size = UDim2.new(1, -120, 1, 0), TextSize = 15, Font = FONT, TextColor3 = RGB(255, 220, 140), ZIndex = 3 })
   local mbarBtn = button(mbar, "取消", RGB(120, 60, 52), { AnchorPoint = V2(1, 0.5), Position = UDim2.new(1, -8, 0.5, 0), Size = UDim2.fromOffset(90, 30), TextSize = 14, ZIndex = 3 },
     function() RA:FireServer("matchCancel") end)
+  ui.mbar = mbar
 
   local info = panel(root, { Position = UDim2.fromOffset(10, 72), Size = UDim2.fromOffset(280, 196) })
   local lvL = text(info, { Position = UDim2.fromOffset(14, 8), Size = UDim2.new(1, -28, 0, 28), Font = FONT, TextSize = 22, Text = "第 1 关" })
@@ -125,10 +143,14 @@ function UI.init(G)
   local xpFill = mk("Frame", { BackgroundColor3 = RGB(255, 200, 80), BorderSizePixel = 0, Size = UDim2.fromScale(0, 1) }, xpBg)
   round(xpFill, 3)
   local ratingL = text(info, { Position = UDim2.fromOffset(14, 168), Size = UDim2.new(1, -28, 0, 20), TextSize = 13, TextColor3 = RGB(170, 190, 210) })
+  lvL.Size = UDim2.new(1, -50, 0, 28)
+  ui.infoCollapse, ui.infoBtn = collapsible(info, { [lvL] = true }, 42)
 
   -- 左边一列菜单按钮
-  local menu = mk("Frame", { BackgroundTransparency = 1, Position = UDim2.fromOffset(10, 276), Size = UDim2.fromOffset(140, 300) }, root)
+  local menu = mk("Frame", { BackgroundTransparency = 1, Position = UDim2.fromOffset(10, 276), Size = UDim2.fromOffset(140, 420) }, root)
   mk("UIListLayout", { Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder }, menu)
+  local menuCollapsed = false
+  local menuToggle = button(menu, "菜单 －", RGB(40, 46, 56), { Size = UDim2.fromOffset(140, 30), LayoutOrder = 0, TextSize = 14 })
   local modals = {}
   local function closeModals()
     for _, m in pairs(modals) do m.Visible = false end
@@ -146,7 +168,19 @@ function UI.init(G)
   button(menu, "排行榜", RGB(84, 70, 40), { Size = UDim2.fromOffset(140, 40), LayoutOrder = 3, TextSize = 16 }, function() open("board") end)
   local btnDuel = button(menu, "真人对战", RGB(150, 50, 46), { Size = UDim2.fromOffset(140, 40), LayoutOrder = 4, TextSize = 16 }, function() open("duel") end)
   local btnRebirth = button(menu, "重生", RGB(150, 110, 30), { Size = UDim2.fromOffset(140, 40), LayoutOrder = 5, TextSize = 16, Visible = false }, function() open("rebirth") end)
-  button(menu, "致谢", RGB(54, 58, 66), { Size = UDim2.fromOffset(140, 34), LayoutOrder = 6, TextSize = 14 }, function() open("credits") end)
+  ui.homeBtn = button(menu, "回出生点", RGB(54, 70, 84), { Size = UDim2.fromOffset(140, 34), LayoutOrder = 6, TextSize = 14 }, function() RA:FireServer("home") end)
+  ui.guideBtn = button(menu, "指引：开", RGB(40, 96, 60), { Size = UDim2.fromOffset(140, 34), LayoutOrder = 7, TextSize = 14 }, function()
+    if G.toggleGuide then G.toggleGuide() end
+  end)
+  button(menu, "致谢", RGB(54, 58, 66), { Size = UDim2.fromOffset(140, 34), LayoutOrder = 8, TextSize = 14 }, function() open("credits") end)
+  menuToggle.Activated:Connect(function()
+    menuCollapsed = not menuCollapsed
+    menuToggle.Text = menuCollapsed and "菜单 ＋" or "菜单 －"
+    for _, b in ipairs(menu:GetChildren()) do
+      if b:IsA("TextButton") and b ~= menuToggle then b.Visible = not menuCollapsed end
+    end
+    if not menuCollapsed and G.S then btnRebirth.Visible = G.S.canRebirth == true end
+  end)
 
   -- 右边：兵工厂（按页签分类：步兵 / 装甲 / 防空 / 炮兵 / 空中，可以滚动；最下面一行是军工科技）
   local ROWH = 62
@@ -201,6 +235,11 @@ function UI.init(G)
   showTab("foot")
   G.shopTab = showTab
   ui.shop = shop
+  ui.shopCollapse = collapsible(shop, {}, 40)
+  -- 指引要闪的「买」按钮
+  function G.shopBtn(t)
+    return rows[t] and rows[t].btn
+  end
 
   -- 下面一排按钮（抬高一点，让开 Roblox 的物品栏）
   local bar = mk("Frame", { BackgroundTransparency = 1, AnchorPoint = V2(0.5, 1), Position = UDim2.new(0.5, 0, 1, -78), Size = UDim2.fromOffset(900, 52) }, root)
@@ -263,7 +302,7 @@ function UI.init(G)
   end)
 
   -- 提示条
-  local toastBox = mk("Frame", { BackgroundTransparency = 1, AnchorPoint = V2(0.5, 0), Position = UDim2.new(0.5, 0, 0, 144), Size = UDim2.fromOffset(600, 220) }, root)
+  local toastBox = mk("Frame", { BackgroundTransparency = 1, AnchorPoint = V2(0.5, 0), Position = UDim2.new(0.5, 0, 0, 162), Size = UDim2.fromOffset(600, 220) }, root)
   mk("UIListLayout", { HorizontalAlignment = Enum.HorizontalAlignment.Center, Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder }, toastBox)
   local KIND = { good = RGB(36, 118, 58), bad = RGB(140, 44, 40), info = RGB(28, 38, 54) }
   local toastN = 0
@@ -562,7 +601,7 @@ function UI.init(G)
     end
     btnMission.Text = claimable and "任务 ●" or "任务"
     btnMission.BackgroundColor3 = claimable and RGB(60, 150, 80) or RGB(52, 84, 120)
-    btnRebirth.Visible = S.canRebirth == true
+    btnRebirth.Visible = S.canRebirth == true and not menuCollapsed
     btnDuel.Text = S.match and "真人对战 ●" or "真人对战"
     ui.raidBtn.Text = (S.raidCD or 0) > 0 and ("突袭 " .. S.raidCD .. "s") or "突袭"
     if S.daily and S.daily.ok and not dailyShown then

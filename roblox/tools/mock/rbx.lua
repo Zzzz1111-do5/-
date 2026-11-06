@@ -165,7 +165,15 @@ local UDim2 = {
   fromOffset = function(x, y) return newUDim2(0, x, 0, y) end,
   fromScale = function(x, y) return newUDim2(x, 0, y, 0) end,
 }
-local _ = UD2mt
+-- 和真的一样：UDim2.X / .Y（.Width / .Height）是 UDim，带 .Scale / .Offset
+do
+  local base = UD2mt.__index
+  UD2mt.__index = function(t, k)
+    if k == "X" or k == "Width" then return newUDim(rawget(t, "_XS"), rawget(t, "_XO")) end
+    if k == "Y" or k == "Height" then return newUDim(rawget(t, "_YS"), rawget(t, "_YO")) end
+    return base(t, k)
+  end
+end
 local newC3, C3mt = record("Color3", { "R", "G", "B" })
 local Color3 = {
   new = function(r, g, b) return newC3(r or 0, g or 0, b or 0) end,
@@ -394,6 +402,14 @@ for _, n in ipairs({ "Vector3", "Vector2", "CFrame", "Color3", "UDim", "UDim2" }
   T[n] = function(v) return typeof(v) == n end
 end
 T.Instance = function(v) return v == nil or typeof(v) == "Instance" end
+-- 颜色 / 数字序列（Beam 用）：只记下值
+local function seqType(name)
+  return { new = function(a, b) return setmetatable({ a = a, b = b }, { __type = name }) end }
+end
+local ColorSequence, NumberSequence = seqType("ColorSequence"), seqType("NumberSequence")
+R.ColorSequence, R.NumberSequence = ColorSequence, NumberSequence
+T.ColorSequence = function(v) return typeof(v) == "ColorSequence" end
+T.NumberSequence = function(v) return typeof(v) == "NumberSequence" end
 local function E(name) return function(v) return typeof(v) == "EnumItem" and v.EnumType == name end end
 
 local CLASS = {}
@@ -812,6 +828,11 @@ def("ProximityPrompt", "Instance", {
 }, { events = { Triggered = true, TriggerEnded = true } })
 def("Smoke", "Instance", { Color = { T.Color3, newC3(1, 1, 1) }, Opacity = { T.number, 0.5 }, RiseVelocity = { T.number, 1 }, Size = { T.number, 1 }, Enabled = { T.bool, true } })
 def("Fire", "Instance", { Color = { T.Color3, newC3(1, 0.5, 0) }, SecondaryColor = { T.Color3, newC3(1, 0, 0) }, Heat = { T.number, 9 }, Size = { T.number, 5 }, Enabled = { T.bool, true } })
+def("Beam", "Instance", {
+  Attachment0 = { T.Instance, nil }, Attachment1 = { T.Instance, nil }, Color = { T.ColorSequence, ColorSequence.new(newC3(1, 1, 1)) }, Transparency = { T.NumberSequence, NumberSequence.new(0.5) },
+  Width0 = { T.number, 1 }, Width1 = { T.number, 1 }, LightEmission = { T.number, 0 }, FaceCamera = { T.bool, false }, Enabled = { T.bool, true }, Segments = { T.number, 10 },
+  CurveSize0 = { T.number, 0 }, CurveSize1 = { T.number, 0 }, Texture = { T.string, "" }, TextureSpeed = { T.number, 1 }, TextureLength = { T.number, 1 }, ZOffset = { T.number, 0 },
+})
 def("PointLight", "Instance", { Brightness = { T.number, 1 }, Range = { T.number, 8 }, Color = { T.Color3, newC3(1, 1, 1) }, Shadows = { T.bool, false }, Enabled = { T.bool, true } })
 def("Highlight", "Instance", {
   Adornee = { T.Instance, nil }, FillColor = { T.Color3, newC3(1, 0, 0) }, OutlineColor = { T.Color3, newC3(1, 1, 1) }, FillTransparency = { T.number, 0.5 },
@@ -928,6 +949,17 @@ def("Camera", "Instance", {
   ViewportPointToRay = function(o, x, y)
     if type(x) ~= "number" or type(y) ~= "number" then error("ViewportPointToRay 要两个数字", 2) end
     return setmetatable({ Origin = o.CFrame.Position, Direction = o.CFrame.LookVector }, { __type = "Ray" })
+  end,
+  -- 透视投影到 1280 × 720 的画面：返回（像素 x, 像素 y, 深度）、在不在画面里
+  WorldToViewportPoint = function(o, p)
+    if typeof(p) ~= "Vector3" then error("WorldToViewportPoint 要 Vector3", 2) end
+    local rel = o.CFrame:Inverse() * p
+    local depth = -rel.Z
+    local f = 1 / math.tan(math.rad(o.FieldOfView) / 2)
+    local d = (math.abs(depth) < 1e-6) and 1e-6 or depth
+    local x = 640 + rel.X / d * f * 360
+    local y = 360 - rel.Y / d * f * 360
+    return v3(x, y, depth), depth > 0 and x >= 0 and x <= 1280 and y >= 0 and y <= 720
   end,
 } })
 
@@ -1403,6 +1435,7 @@ local function envFor(scriptInst, sd)
   local env = {
     game = game, workspace = ws, script = scriptInst, Instance = Instance, Vector3 = Vector3, Vector2 = Vector2, CFrame = CFrame,
     Color3 = Color3, UDim = UDim, UDim2 = UDim2, Enum = Enum, TweenInfo = TweenInfo, RaycastParams = RaycastParams, Random = Random,
+    ColorSequence = ColorSequence, NumberSequence = NumberSequence,
     task = task, math = luauMath(), string = string, table = table, os = { time = function() return R.osTime or os.time() end, clock = function() return clock end },
     pairs = pairs, ipairs = ipairs, next = next, select = select, type = type, typeof = typeof, tostring = tostring, tonumber = tonumber,
     print = function(...) if R.verbose then print(...) end end,

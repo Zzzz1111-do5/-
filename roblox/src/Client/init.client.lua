@@ -1,5 +1,5 @@
 -- 军事大亨：客户端（StarterPlayerScripts.Client）
--- 各模块共用一个上下文 G：Fx 特效 · View 部队平滑显示 · UI 界面 · Play 操作和镜头
+-- 各模块共用一个上下文 G：Fx 特效 · View 部队平滑显示 · UI 界面 · Play 操作和镜头 · Guide 指引（下一步去哪儿）
 local RS = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
@@ -9,7 +9,7 @@ for _, name in ipairs({ "State", "Toast", "Action", "Fx", "Battle", "Shoot", "Dr
   G.R[name] = Remotes:WaitForChild(name)
 end
 
-for _, name in ipairs({ "Fx", "View", "UI", "Play" }) do
+for _, name in ipairs({ "Fx", "View", "UI", "Play", "Guide" }) do
   require(script:WaitForChild(name)).init(G)
 end
 

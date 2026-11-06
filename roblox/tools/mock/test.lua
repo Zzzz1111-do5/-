@@ -294,12 +294,61 @@ local n0 = #R.sent
 click(button("^领取$"))
 check(stat("现金") > Config.StartCash and toastSince(n0, "每日奖励"), "领了每日奖励（$" .. stat("现金") .. "）")
 check(plot().Pads:FindFirstChild("Pad_house1") ~= nil, "有居民楼 A 的购买按钮")
+
+print("== 指引、面板收起")
+R.run(0.5)
+local function guideNow()   -- 屏幕上方「下一步」那一条（显示着才算）
+  local g = guiText("^下一步") or guiText("^攒钱盖")
+  return g and g.Parent.Visible and g.Text or nil
+end
+local function guideShown()   -- 箭头、光点有几个显示着；线开没开
+  local gf = ws:FindFirstChild("ClientGuide")
+  local n, beamOn = 0, false
+  for _, d in ipairs(gf and gf:GetDescendants() or {}) do
+    if d:IsA("BasePart") and d.Transparency < 1 then n = n + 1 end
+    if d.ClassName == "Beam" and d.Enabled then beamOn = true end
+  end
+  return n, beamOn
+end
+local gn, gb = guideShown()
+check(tostring(guideNow()):find("居民楼 A") ~= nil, "指引：" .. tostring(guideNow()))
+check(gn >= 8 and gb, "按钮头顶有箭头、地上有绿线和光点（" .. gn .. " 个）")
+local function pulsing(btn)   -- 这个按钮在闪（指引加的粗描边）
+  local s0 = btn and btn:FindFirstChildOfClass("UIStroke")
+  return s0 ~= nil and s0.Thickness == 4
+end
+-- 面板收起 / 展开
+local infoPanel = guiText("^第 %d+ 关").Parent
+local function minusOf(f)
+  for _, c in ipairs(f:GetChildren()) do
+    if c.ClassName == "TextButton" and (c.Text == "－" or c.Text == "＋") then return c end
+  end
+end
+local h0 = infoPanel.Size.Y.Offset
+click(minusOf(infoPanel))
+check(infoPanel.Size.Y.Offset == 42 and not guiText("^部队 ").Visible and guiText("^第 %d+ 关").Visible, "信息栏收起来只剩一行（再点 ＋ 展开）")
+click(minusOf(infoPanel))
+check(infoPanel.Size.Y.Offset == h0 and guiText("^部队 ").Visible, "信息栏展开")
+local shopPanel = guiText("^兵工厂$").Parent
+click(minusOf(shopPanel))
+check(shopPanel.Size.Y.Offset == 40, "兵工厂收起来")
+click(minusOf(shopPanel))
+click(button("^菜单"))
+check(not button("^任务").Visible and button("^菜单 ＋") ~= nil, "左边菜单收起来")
+click(button("^菜单"))
+check(button("^任务").Visible, "左边菜单展开")
+click(button("^指引：开"))
+check(guideNow() == nil and button("^指引：关") ~= nil and select(1, guideShown()) == 0, "指引能关掉")
+click(button("^指引：关"))
+check(guideNow() ~= nil, "指引再打开")
 check(#plot().Enemies:GetChildren() > 0, "第 1 关敌军摆出来了")
 check(ws:FindFirstChild("ClientUnits") and #ws.ClientUnits:GetChildren() == #plot().Enemies:GetChildren(), "客户端给每个单位做了平滑显示的复制")
 
 print("== 盖楼、生产")
 touch("house1")
 check(owned("house1"), "踩按钮盖好居民楼 A")
+R.run(0.5)
+check(tostring(guideNow()):find("兵营") ~= nil, "指引换成下一步：" .. tostring(guideNow()))
 n0 = #R.sent
 touch("bank")
 check(not owned("bank"), "还没解锁的银行盖不了")
@@ -307,11 +356,14 @@ R.run(40)
 touch("barracks")
 check(owned("barracks"), "盖好兵营")
 R.run(25)
+check(tostring(guideNow()):find("买一个步兵班") ~= nil and pulsing(button("^%$60$")), "指引：去兵工厂买步兵班（买的按钮在闪）")
 local before = #units()
 local b = button("^%$60$")
 check(b ~= nil, "兵工厂里步兵班的按钮显示 $60")
 if b then click(b) click(b) end
 check(#units() == before + 2, "生产了两个步兵班")
+R.run(0.5)
+check(tostring(guideNow()):find("开战") ~= nil and pulsing(button("^开战")), "指引：点「开战」（按钮在闪）")
 R.run(25)
 local u1 = units()[1]
 local p1 = u1 and relPos(u1)
