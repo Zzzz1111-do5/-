@@ -10,6 +10,7 @@ const V3 = { on: false, ok: false, tried: false, gl: null, cv: null, pr: null, u
   top: null, tex: null, base: null, hf: null, nx: 0, ny: 0, yaw: 0, tilt: .95, yawT: 0, tiltT: .95, box: null, cam: null, keep: null };
 let V3_HZ = 230;   // 高程 1.0 在 3D 里多高（米）：程序生成的地图 230；真实地形按 TER.hz（v3SetHz）
 const V3_FOV = .8, V3_TILT = [.05, 1.45], V3_SKIRT = -70;   // 俯仰：从几乎正俯视到几乎平视
+const v3Fov = () => V3_FOV * ((typeof V3 === 'object' && V3.fovK) || 1);   // 自由镜头的视场角：V3.fovK 变焦（宣传片的长焦镜头用；游戏里没设，就是 V3_FOV）
 const V3_ZMAX = 11000, V3_OUT = 2400;   // 镜头最高高度、能飞出地图边多远：拉远能看见整张地图（黑绿画面是整张沙盘桌，v3table.js）
 // 自由镜头能飞到地图外多远（各边）：外面铺着无边海面的地图扩大 10 倍（用户：交战区域扩大 10 倍），南边还要够到战区机场的小岛（afp.js，南缘外约 27 公里）
 // 并行编译着色器（用户：一开飞机就卡死——加力尾焰、音障云这些大着色器原来第一次用到时才编译，链接完马上查状态，主线程要等它编完，
@@ -1393,7 +1394,7 @@ function v3FcCamera() {
   const E = [F.x, -F.y, F.z], z = [-f[0], -f[1], -f[2]], x = v3Norm(v3Cross([0, 0, 1], z)), y = v3Cross(z, x);
   const view = new Float32Array([x[0], y[0], z[0], 0, x[1], y[1], z[1], 0, x[2], y[2], z[2], 0, -v3Dot(x, E), -v3Dot(y, E), -v3Dot(z, E), 1]);
   const D = clamp(F.d || 600, 80, 16000), rd = v3RD(), fog = v3Fog(D, rd);
-  const asp = CAM.vw / Math.max(1, CAM.vh), fo = 1 / Math.tan(V3_FOV / 2), n = clamp(Math.min(D * .012, v3NearGap(F) * .45), .3, 25), fa = Math.max(D * 9, fog[1] * 1.5), nf = 1 / (n - fa);   // 近裁剪面：离最近的东西（地面、飞机）越近越小，凑近飞机不会被切掉
+  const asp = CAM.vw / Math.max(1, CAM.vh), fo = 1 / Math.tan(v3Fov() / 2), n = clamp(Math.min(D * .012, v3NearGap(F) * .45), .3, 25), fa = Math.max(D * 9, fog[1] * 1.5), nf = 1 / (n - fa);   // 近裁剪面：离最近的东西（地面、飞机）越近越小，凑近飞机不会被切掉
   const proj = new Float32Array([fo / asp, 0, 0, 0, 0, fo, 0, 0, 0, 0, (fa + n) * nf, -1, 0, 0, 2 * fa * n * nf, 0]);
   return (V3.cam = { E, x, y, z, D, rd, fog, asp, M: v3Mul(proj, view) });
 }
@@ -1485,7 +1486,7 @@ function v3HzUpdate(C, mx) {
   V3.hzI = true;
 }
 function v3Ray(sx, sy) {
-  const C = V3.cam || v3Camera(), tf = Math.tan(V3_FOV / 2), nx = (sx / CAM.vw * 2 - 1) * tf * C.asp, ny = (1 - sy / CAM.vh * 2) * tf;
+  const C = V3.cam || v3Camera(), tf = Math.tan(v3Fov() / 2), nx = (sx / CAM.vw * 2 - 1) * tf * C.asp, ny = (1 - sy / CAM.vh * 2) * tf;
   return { o: C.E, d: v3Norm([-C.z[0] + C.x[0] * nx + C.y[0] * ny, -C.z[1] + C.x[1] * nx + C.y[1] * ny, -C.z[2] + C.x[2] * nx + C.y[2] * ny]), C };
 }
 function v3Pick(sx, sy) {

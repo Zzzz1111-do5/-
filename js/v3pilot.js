@@ -536,7 +536,7 @@ function fpProj(E, x, y, z, D, n, fov = fpFov()) {   // fov：视野（追尾镜
 //   视野随空速放大（120 → 420 米/秒：46° → 约 55°），开加力那一下猛地一推、追尾镜头被甩开一点再追上；贴地高速（离地 220 米以下）气流颠簸，跨音速抖振（镜头抖动 fpShake）；
 //   声音 fpAudio（audio.js 的 Web Audio，全合成）：涡轮啸叫随转速升高、推力的低频轰鸣、加力的爆燃轰鸣与次低音、气流的风噪随动压变响（大迎角抖振时一阵一阵）；
 //   画面 fpFx（v3fx.js 调）：过载 4.5 g 以上或大迎角时翼尖拖出两道白色涡流，6 g 以上机翼上方一片水汽；离地近、速度快时迎面掠过的风线
-const fpFov = () => (V3FP.on && V3FP.k === 'air' && ((V3FP.pipPass || (V3FP.mBig && V3FP.mv != null)) && V3FP.mFov || (V3FP.vw === 'tgp' && V3FP.tg ? V3FP.tg.fov : V3FP.fov))) || V3_FOV;   // 光电吊舱、导弹导引头：真实变焦的视场角（fptgp.js、fpMslCam）
+const fpFov = () => (V3FP.on && V3FP.k === 'air' && ((V3FP.pipPass || (V3FP.mBig && V3FP.mv != null)) && V3FP.mFov || (V3FP.vw === 'tgp' && V3FP.tg ? V3FP.tg.fov : V3FP.fov))) || (typeof v3Fov === 'function' ? v3Fov() : V3_FOV);   // 光电吊舱、导弹导引头：真实变焦的视场角（fptgp.js、fpMslCam）
 function fpFeel(dt) {
   const o = V3FP.o, F = V3FP.on && V3FP.k === 'air' && o && o.fl;
   if (!F) { V3FP.fov = null; V3FP.turb = V3FP.trans = 0; fpAudio(null); return; }
