@@ -1,6 +1,7 @@
 -- 军事大亨（客户端）：界面——钱、关卡、兵工厂、按钮、提示；任务、武器、排行榜、真人对战（排位匹配、同服约战）、重生、致谢；
 -- 每日奖励、约战邀请、匹配中的状态条；战斗中的面板、支援技能栏、战报滚动条、命中标记、大字播报、结果（评星）；
--- 新手目标（左上角 + 指着下一个按钮的箭头）、低血量红边、出错红条
+-- 新手目标（左上角 + 指着下一个按钮的箭头）、低血量红边、出错红条；
+-- 面板右上角「－ / ＋」收起展开（当前目标、信息栏、兵工厂、小地图），左边菜单整列能收起；菜单里「指引」开关、「回出生点」
 local Players = game:GetService("Players")
 local UIS = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
@@ -101,6 +102,35 @@ function UI.init(G)
   end
   G.mk, G.round, G.text, G.button = mk, round, text, button
 
+  -- 面板右上角的「－ / ＋」：收起时只留最上面一条（面板剪裁掉下面的内容，子元素的显示隐藏照旧归别处管），再点展开。
+  -- 排版（ui.layout）会重设面板大小：排完调 c.apply() 再收一次。shortH 是函数：收起后留多高
+  local collapsers = {}
+  local function collapsible(f, shortH)
+    local c = { collapsed = false, f = f, clip = f.ClipsDescendants }
+    c.btn = button(f, "－", RGB(50, 56, 66), { AnchorPoint = V2(1, 0), Position = UDim2.new(1, -5, 0, 5), Size = UDim2.fromOffset(26, 24), TextSize = 15, ZIndex = f.ZIndex + 2 })
+    -- 面板现在的大小不是自己收起时设的那个：是排版（或别处）刚设的完整大小，记下来
+    function c.apply()
+      if c.shrunk == nil or f.Size ~= c.shrunk then c.full = f.Size end
+      if c.collapsed then
+        f.ClipsDescendants = true
+        c.shrunk = UDim2.new(c.full.X.Scale, c.full.X.Offset, 0, shortH())
+        f.Size = c.shrunk
+      else
+        f.ClipsDescendants = c.clip
+        c.shrunk = nil
+        f.Size = c.full
+      end
+      c.btn.Text = c.collapsed and "＋" or "－"
+    end
+    c.btn.Activated:Connect(function()
+      c.collapsed = not c.collapsed
+      c.apply()
+    end)
+    table.insert(collapsers, c)
+    return c
+  end
+  G.collapsible = collapsible
+
   local gui = mk("ScreenGui", { Name = "TycoonUI", ResetOnSpawn = false, ZIndexBehavior = Enum.ZIndexBehavior.Sibling }, player:WaitForChild("PlayerGui"))
   -- 按屏幕大小整体缩放：根框架先放大 1/s 倍再用 UIScale 缩 s 倍，正好铺满屏幕
   local root = mk("Frame", { BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1) }, gui)
@@ -147,6 +177,8 @@ function UI.init(G)
   round(xpFill, 3)
   local ratingL = text(info, { Position = UDim2.fromOffset(14, 168), Size = UDim2.new(1, -28, 0, 20), TextSize = 13, TextColor3 = RGB(170, 190, 210) })
 
+  ui.infoC = collapsible(info, function() return lvL.Position.Y.Offset + lvL.Size.Y.Offset + 6 end)
+
   -- 左边一列菜单按钮
   local menu = mk("Frame", { BackgroundTransparency = 1, Position = UDim2.fromOffset(10, 276), Size = UDim2.fromOffset(140, 300) }, root)
   local menuList = mk("UIListLayout", { Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder }, menu)
@@ -170,8 +202,24 @@ function UI.init(G)
   local btnBoard = button(menu, "排行榜", RGB(84, 70, 40), { Size = UDim2.fromOffset(140, 40), LayoutOrder = 4, TextSize = 16 }, function() open("board") end)
   local btnDuel = button(menu, "真人对战", RGB(150, 50, 46), { Size = UDim2.fromOffset(140, 40), LayoutOrder = 5, TextSize = 16 }, function() open("duel") end)
   local btnRebirth = button(menu, "重生", RGB(150, 110, 30), { Size = UDim2.fromOffset(140, 40), LayoutOrder = 6, TextSize = 16, Visible = false }, function() open("rebirth") end)
-  local btnCredits = button(menu, "致谢", RGB(54, 58, 66), { Size = UDim2.fromOffset(140, 34), LayoutOrder = 7, TextSize = 14 }, function() open("credits") end)
-  local menuBtns = { btnMission, btnBuild, btnWeapon, btnBoard, btnDuel, btnRebirth, btnCredits }
+  local btnHome = button(menu, "回出生点", RGB(54, 70, 84), { Size = UDim2.fromOffset(140, 34), LayoutOrder = 7, TextSize = 14 }, function() RA:FireServer("home") end)
+  local btnGuide = button(menu, "指引：开", RGB(40, 96, 60), { Size = UDim2.fromOffset(140, 34), LayoutOrder = 8, TextSize = 14 }, function()
+    if G.toggleGuide then G.toggleGuide() end
+  end)
+  ui.guideBtn = btnGuide
+  local btnCredits = button(menu, "致谢", RGB(54, 58, 66), { Size = UDim2.fromOffset(140, 34), LayoutOrder = 9, TextSize = 14 }, function() open("credits") end)
+  -- 菜单最上面：收起 / 展开整列
+  local menuCollapsed = false
+  local btnMenu = button(menu, "菜单 －", RGB(40, 46, 56), { Size = UDim2.fromOffset(140, 30), LayoutOrder = 0, TextSize = 14 })
+  local menuBtns = { btnMenu, btnMission, btnBuild, btnWeapon, btnBoard, btnDuel, btnRebirth, btnHome, btnGuide, btnCredits }
+  btnMenu.Activated:Connect(function()
+    menuCollapsed = not menuCollapsed
+    btnMenu.Text = menuCollapsed and "菜单 ＋" or "菜单 －"
+    for _, b in ipairs(menuBtns) do
+      if b ~= btnMenu then b.Visible = not menuCollapsed end
+    end
+    btnRebirth.Visible = not menuCollapsed and G.S ~= nil and G.S.canRebirth == true
+  end)
 
   -- 右边：兵工厂（按页签分类：步兵 / 装甲 / 防空 / 炮兵 / 空中，可以滚动；最下面一行是军工科技）
   local ROWH = 62
@@ -248,6 +296,11 @@ function UI.init(G)
     end
   end
   ui.shop = shop
+  ui.shopC = collapsible(shop, function() return shopTitle.Position.Y.Offset + shopTitle.Size.Y.Offset + 4 end)
+  -- 指引要闪的「买」按钮
+  function G.shopBtn(t)
+    return rows[t] and rows[t].btn
+  end
 
   -- 下面一排按钮（抬高一点，让开 Roblox 的物品栏）
   local bar = mk("Frame", { BackgroundTransparency = 1, AnchorPoint = V2(0.5, 1), Position = UDim2.new(0.5, 0, 1, -78), Size = UDim2.fromOffset(900, 52) }, root)
@@ -593,19 +646,20 @@ function UI.init(G)
   local goalT = text(goal, { Position = UDim2.fromOffset(12, 3), Size = UDim2.new(1, -24, 0, 16), TextSize = 13, Font = FONT, TextColor3 = RGB(255, 214, 90), Text = "当前目标" })
   local goalL = text(goal, { Position = UDim2.fromOffset(12, 20), Size = UDim2.new(1, -24, 0, 38), TextSize = 14, TextWrapped = true, TextScaled = true, TextYAlignment = Enum.TextYAlignment.Top })
   mk("UITextSizeConstraint", { MaxTextSize = 14, MinTextSize = 9 }, goalL)
-  local arrow = mk("BillboardGui", { Name = "GoalArrow", Size = UDim2.fromOffset(140, 90), AlwaysOnTop = true, LightInfluence = 0, MaxDistance = 600, Enabled = false, ResetOnSpawn = false })
+  -- 目标按钮头顶的字（「下一步：兵营」）；箭头本身是 Guide 里发光的立体箭头
+  local arrow = mk("BillboardGui", { Name = "GoalArrow", Size = UDim2.fromOffset(180, 30), AlwaysOnTop = true, LightInfluence = 0, MaxDistance = 600, Enabled = false, ResetOnSpawn = false })
   arrow.Parent = player:WaitForChild("PlayerGui")
-  local arrowT = text(arrow, { Size = UDim2.new(1, 0, 0, 30), Font = FONT, TextSize = 18, TextXAlignment = Enum.TextXAlignment.Center, TextColor3 = RGB(140, 255, 160), TextStrokeTransparency = 0.2, Text = "下一步" })
-  text(arrow, { Position = UDim2.fromOffset(0, 26), Size = UDim2.new(1, 0, 0, 60), Font = FONT, TextSize = 52, TextXAlignment = Enum.TextXAlignment.Center, TextColor3 = RGB(140, 255, 160), TextStrokeTransparency = 0.2, Text = "▼" })
-  local goalPad = nil
+  local arrowT = text(arrow, { Size = UDim2.new(1, 0, 1, 0), Font = FONT, TextSize = 18, TextXAlignment = Enum.TextXAlignment.Center, TextColor3 = RGB(140, 255, 160), TextStrokeTransparency = 0.2, Text = "下一步" })
+  local goalPad, goalUi, goalOk = nil, nil, true
   -- 现在该干什么：没盖第一栋楼 → 没兵营 → 没兵 → 没打过仗 → 没指挥部 → 之后提示下一栋楼 / 下一关
+  -- 返回：说明、要去的按钮（建筑 id）、要点的界面按钮（"inf" 兵工厂里买步兵班 / "fight" 开战 / "build" 左边「建筑」）
   local function objective(S)
     local o = S.owned or {}
     local B = Config.BuildingById
     if not o.house1 then return "踩亮绿色的圆按钮，盖第一栋「居民楼 A」（$" .. B.house1.price .. "）：楼会一直给你赚钱", "house1" end
     if not o.barracks then return "攒到 $" .. B.barracks.price .. " 盖「兵营」：有兵营才能造兵（现在 $" .. Config.Fmt(S.cash) .. "）", "barracks" end
-    if (S.n or 0) == 0 then return "在右边「兵工厂」造 2～3 个步兵班（$" .. Config.Units.inf.price .. " 一个）", nil end
-    if (S.wins or 0) == 0 and (S.level or 1) <= 1 then return "点下面的「开战！」打第 1 关——你本人也会上战场，打仗时下面有支援技能", nil end
+    if (S.n or 0) == 0 then return "在右边「兵工厂」造 2～3 个步兵班（$" .. Config.Units.inf.price .. " 一个）", nil, "inf" end
+    if (S.wins or 0) == 0 and (S.level or 1) <= 1 then return "点下面的「开战！」打第 1 关——你本人也会上战场，打仗时下面有支援技能", nil, "fight" end
     if not o.hq then return "盖「指挥部」：部队上限 4 → 10，还多一个「战地急救」技能", "hq" end
     local best = nil
     for _, b in ipairs(Config.Buildings) do
@@ -624,12 +678,12 @@ function UI.init(G)
       end
     end
     if up and S.cash >= upCost and (not best or S.cash < best.price * 0.6) then
-      return "升级「" .. up.name .. "」到 Lv." .. (((S.lv and S.lv[up.id]) or 1) + 1) .. "：$" .. Config.Fmt(upCost) .. "（左边「建筑」，或走到楼旁边按住 E）", nil
+      return "升级「" .. up.name .. "」到 Lv." .. (((S.lv and S.lv[up.id]) or 1) + 1) .. "：$" .. Config.Fmt(upCost) .. "（左边「建筑」，或走到楼旁边按住 E）", nil, "build"
     end
     local tip = "打第 " .. tostring(S.level) .. " 关拿 $" .. Config.Fmt(S.reward or 0)
     if (S.vets or 0) > 0 then tip = tip .. "；活下来的部队会升星变强" end
     if best then tip = tip .. "；攒钱盖「" .. best.name .. "」$" .. Config.Fmt(best.price) end
-    return tip, nil
+    return tip, best and best.id or nil   -- 下一栋楼一直指着（买不起时箭头是黄的）
   end
   local function padPart(id)
     local S = G.S
@@ -638,24 +692,32 @@ function UI.init(G)
     local m = p and p:FindFirstChild("Pads") and p.Pads:FindFirstChild("Pad_" .. id)
     return m and m:FindFirstChild("Pad")
   end
+  local UIKEY = { inf = function() return rows.inf and rows.inf.btn end, fight = function() return ui.fightBtn end, build = function() return btnBuild end }
   local function updateGoal()
     local S = G.S
     if not S then return end
-    local txt, padId = objective(S)
+    local txt, padId, uiKey = objective(S)
     goalL.Text = txt
     goalPad = padId and padPart(padId) or nil
-    if padId then arrowT.Text = "下一步：" .. Config.BuildingById[padId].name end
+    goalUi = uiKey and UIKEY[uiKey] and UIKEY[uiKey]() or nil
+    goalOk = not padId or (S.cash or 0) >= Config.BuildingById[padId].price
+    if uiKey == "inf" and G.shopTab and ui.tab ~= "foot" then G.shopTab("foot") end
+    if padId then arrowT.Text = (goalOk and "下一步：" or "攒钱盖：") .. Config.BuildingById[padId].name end
+    arrowT.TextColor3 = goalOk and RGB(140, 255, 160) or RGB(255, 210, 90)
   end
   ui.goal = goal
+  ui.goalC = collapsible(goal, function() return math.max(30, goalT.Position.Y.Offset + goalT.Size.Y.Offset + 8) end)
   function G.goalPadPart() return goalPad end
+  function G.goalUiTarget() return goalUi end
+  function G.goalOk() return goalOk end
   local bob = 0
   function G.stepUI(dt)
     bob = bob + dt * 4
-    local show = goalPad ~= nil and goalPad.Parent ~= nil and G.mode == "free" and not G.battle
+    local show = goalPad ~= nil and goalPad.Parent ~= nil and G.mode == "free" and not G.battle and (not G.guideOn or G.guideOn())
     arrow.Enabled = show
     if show then
       arrow.Adornee = goalPad
-      arrow.StudsOffsetWorldSpace = Vector3.new(0, 9 + math.sin(bob) * 1.2, 0)
+      arrow.StudsOffsetWorldSpace = Vector3.new(0, 15.5 + math.sin(bob) * 1.2, 0)
     end
     if G.stepSkills then G.stepSkills() end
     if G.stepVignette then G.stepVignette(dt) end
@@ -859,7 +921,7 @@ function UI.init(G)
       armyL.Position, armyL.Size, armyL.TextSize = O(10, 27), N(1, -20, 0, 18), 14
       enemyL.Position, enemyL.Size = O(10, 46), N(1, -20, 0, 20)
       rewardL.Position, rewardL.Size, rewardL.TextSize = O(10, 68), N(1, -20, 0, 18), 14
-      place(menu, V2(0, 0), O(6, 164), O(240, 116))
+      place(menu, V2(0, 0), O(6, 164), O(240, 160))
       menuList.Parent, menuGrid.Parent = nil, menu
       for _, b in ipairs(menuBtns) do b.TextSize = 14 end
       place(shop, V2(1, 0), N(1, -6, 0, 4), N(0, 296, 1, -118))
@@ -911,9 +973,9 @@ function UI.init(G)
       armyL.Position, armyL.Size, armyL.TextSize = O(14, 38), N(1, -28, 0, 20), 16
       enemyL.Position, enemyL.Size = O(14, 60), N(1, -28, 0, 52)
       rewardL.Position, rewardL.Size, rewardL.TextSize = O(14, 112), N(1, -28, 0, 20), 14
-      place(menu, V2(0, 0), O(10, 276), O(140, 300))
+      place(menu, V2(0, 0), O(10, 276), O(140, 420))
       menuGrid.Parent, menuList.Parent = nil, menu
-      for _, b in ipairs(menuBtns) do b.TextSize = (b == btnCredits) and 14 or 16 end
+      for _, b in ipairs(menuBtns) do b.TextSize = (b == btnCredits or b == btnHome or b == btnGuide or b == btnMenu) and 14 or 16 end
       -- 兵工厂从上面一直到下面那排按钮的上方
       place(shop, V2(1, 0), N(1, -10, 0, 72), N(0, 330, 1, -212))
       shopTitle.Position, shopTitle.Size, shopTitle.TextSize = O(14, 6), N(1, -28, 0, 28), 20
@@ -959,6 +1021,14 @@ function UI.init(G)
       m.Size = (c and wh[2] > 360) and N(0, wh[1], 1, -16) or O(wh[1], wh[2])
     end
     showTab(ui.tab or "foot")
+    for _, cl in ipairs(collapsers) do cl.apply() end
+    if ui.shopC then   -- 手机上兵工厂有自己的「收起 / 打开兵工厂」
+      ui.shopC.btn.Visible = not c
+      if c and ui.shopC.collapsed then
+        ui.shopC.collapsed = false
+        ui.shopC.apply()
+      end
+    end
     if G.updateButtons and G.S then G.updateButtons() end
   end
   ui.layout()
@@ -1041,7 +1111,7 @@ function UI.init(G)
     end
     btnMission.Text = claimable and "任务 ●" or "任务"
     btnMission.BackgroundColor3 = claimable and RGB(60, 150, 80) or RGB(52, 84, 120)
-    btnRebirth.Visible = S.canRebirth == true
+    btnRebirth.Visible = S.canRebirth == true and not menuCollapsed
     btnDuel.Text = S.match and "真人对战 ●" or "真人对战"
     ui.raidBtn.Text = (S.raidCD or 0) > 0 and ("突袭 " .. S.raidCD .. "s") or "突袭"
     if S.daily and S.daily.ok and not dailyShown then

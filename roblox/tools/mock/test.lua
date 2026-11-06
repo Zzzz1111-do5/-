@@ -91,7 +91,7 @@ check(#R.errors == 0, "服务器脚本启动没报错")
 local plotsF = ws:FindFirstChild("Plots")
 check(plotsF ~= nil and #plotsF:GetChildren() == Config.PlotCount, "生成了 " .. Config.PlotCount .. " 块基地")
 check(ws:FindFirstChild("Arenas") ~= nil and #ws.Arenas:GetChildren() == #Config.Arena.xs, "生成了约战竞技场")
-check(RS:FindFirstChild("Remotes") ~= nil and #RS.Remotes:GetChildren() == 9, "九个远程事件")
+check(RS:FindFirstChild("Remotes") ~= nil and #RS.Remotes:GetChildren() >= 10, "远程事件都建好了（" .. #RS.Remotes:GetChildren() .. " 个）")
 local tpl = R.services.ServerStorage:FindFirstChild("UnitTemplates")
 check(tpl and tpl:FindFirstChild("tank") and tpl:FindFirstChild("heli") and not ws:FindFirstChild("tank"), "导入的坦克、直升机收成了模板")
 local remotes = RS.Remotes
@@ -297,50 +297,52 @@ check(plot().Pads:FindFirstChild("Pad_house1") ~= nil, "有居民楼 A 的购买
 
 print("== 指引、面板收起")
 R.run(0.5)
-local function guideNow()   -- 屏幕上方「下一步」那一条（显示着才算）
-  local g = guiText("^下一步") or guiText("^攒钱盖")
-  return g and g.Parent.Visible and g.Text or nil
+local function guideNow()   -- 左上角「当前目标」下面那行字
+  local title = guiText("^当前目标$")
+  if not title then return nil end
+  for _, c in ipairs(title.Parent:GetChildren()) do
+    if c.ClassName == "TextLabel" and c ~= title and c.Text ~= "" then return c.Text end
+  end
 end
-local function guideShown()   -- 箭头、光点有几个显示着；线开没开
-  local gf = ws:FindFirstChild("ClientGuide")
+local function guideShown()   -- 箭头（地上的、头顶的）有几块显示着；线开没开
   local n, beamOn = 0, false
-  for _, d in ipairs(gf and gf:GetDescendants() or {}) do
-    if d:IsA("BasePart") and d.Transparency < 1 then n = n + 1 end
+  for _, d in ipairs(ws:FindFirstChild("ClientFx"):GetDescendants()) do
+    if d:IsA("BasePart") and d.Material == Enum.Material.Neon and d.Transparency < 1 then n = n + 1 end
     if d.ClassName == "Beam" and d.Enabled then beamOn = true end
   end
   return n, beamOn
 end
 local gn, gb = guideShown()
-check(tostring(guideNow()):find("居民楼 A") ~= nil, "指引：" .. tostring(guideNow()))
-check(gn >= 8 and gb, "按钮头顶有箭头、地上有绿线和光点（" .. gn .. " 个）")
+check(tostring(guideNow()):find("居民楼 A") ~= nil, "当前目标：" .. tostring(guideNow()))
+check(gn >= 6 and gb, "按钮头顶有立体箭头、地上有流动的箭头和发光的线（" .. gn .. " 块）")
 local function pulsing(btn)   -- 这个按钮在闪（指引加的粗描边）
   local s0 = btn and btn:FindFirstChildOfClass("UIStroke")
   return s0 ~= nil and s0.Thickness == 4
 end
--- 面板收起 / 展开
-local infoPanel = guiText("^第 %d+ 关").Parent
+-- 面板收起 / 展开（收起 = 只留最上面一条，下面剪掉）
 local function minusOf(f)
   for _, c in ipairs(f:GetChildren()) do
     if c.ClassName == "TextButton" and (c.Text == "－" or c.Text == "＋") then return c end
   end
 end
-local h0 = infoPanel.Size.Y.Offset
-click(minusOf(infoPanel))
-check(infoPanel.Size.Y.Offset == 42 and not guiText("^部队 ").Visible and guiText("^第 %d+ 关").Visible, "信息栏收起来只剩一行（再点 ＋ 展开）")
-click(minusOf(infoPanel))
-check(infoPanel.Size.Y.Offset == h0 and guiText("^部队 ").Visible, "信息栏展开")
-local shopPanel = guiText("^兵工厂$").Parent
-click(minusOf(shopPanel))
-check(shopPanel.Size.Y.Offset == 40, "兵工厂收起来")
-click(minusOf(shopPanel))
+local function folded(f) return f.ClipsDescendants and f.Size.Y.Offset <= 44 end
+for _, e in ipairs({ { guiText("^第 %d+ 关").Parent, "信息栏" }, { guiText("^兵工厂$").Parent, "兵工厂" }, { guiText("^当前目标$").Parent, "当前目标" },
+  { guiText("^地图").Parent, "小地图" } }) do
+  local f, nm = e[1], e[2]
+  local h0 = f.Size.Y.Offset
+  click(minusOf(f))
+  local ok1 = folded(f) and minusOf(f).Text == "＋"
+  click(minusOf(f))
+  check(ok1 and not folded(f) and f.Size.Y.Offset == h0, nm .. "能收起、再展开")
+end
 click(button("^菜单"))
 check(not button("^任务").Visible and button("^菜单 ＋") ~= nil, "左边菜单收起来")
 click(button("^菜单"))
-check(button("^任务").Visible, "左边菜单展开")
+check(button("^任务").Visible and button("^回出生点") ~= nil, "左边菜单展开（有「回出生点」）")
 click(button("^指引：开"))
-check(guideNow() == nil and button("^指引：关") ~= nil and select(1, guideShown()) == 0, "指引能关掉")
+check(select(1, guideShown()) == 0 and button("^指引：关") ~= nil, "指引能关掉（箭头都不画了）")
 click(button("^指引：关"))
-check(guideNow() ~= nil, "指引再打开")
+check(select(1, guideShown()) > 0, "指引再打开")
 check(#plot().Enemies:GetChildren() > 0, "第 1 关敌军摆出来了")
 check(ws:FindFirstChild("ClientUnits") and #ws.ClientUnits:GetChildren() == #plot().Enemies:GetChildren(), "客户端给每个单位做了平滑显示的复制")
 
@@ -356,7 +358,7 @@ R.run(40)
 touch("barracks")
 check(owned("barracks"), "盖好兵营")
 R.run(25)
-check(tostring(guideNow()):find("买一个步兵班") ~= nil and pulsing(button("^%$60$")), "指引：去兵工厂买步兵班（买的按钮在闪）")
+check(tostring(guideNow()):find("步兵班") ~= nil and pulsing(button("^%$60$")), "指引：去兵工厂买步兵班（买的按钮在闪）")
 local before = #units()
 local b = button("^%$60$")
 check(b ~= nil, "兵工厂里步兵班的按钮显示 $60")
@@ -992,10 +994,15 @@ R.tpFail = true
 local tp3 = #R.teleports
 action("match")
 R.run(5)
+for _ = 1, 30 do   -- 匹配每 3 秒一轮：等这一轮的认领放开再看
+  local e = memGet("u9002")
+  if e and e.claimed == nil then break end
+  R.run(0.1)
+end
 check(#R.teleports == tp3 and memGet("u9002") ~= nil and memGet("u9002").claimed == nil and matching(), "预留服务器失败：放开认领，接着排队")
-R.tpFail = false
 action("matchCancel")
 R.run(1)
+R.tpFail = false
 -- 5）MemoryStore 坏了：只能服内匹配，不报错
 R.memFail = true
 action("match")

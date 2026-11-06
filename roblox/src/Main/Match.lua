@@ -126,6 +126,10 @@ function Match.init(G)
       release(okey, me)
       return
     end
+    if queue[st] ~= q or not canQueue(st) then   -- 预留的这一会儿玩家取消了 / 开打了：放开对方，让他配别人
+      release(okey, me)
+      return
+    end
     -- 访问码写进对方的记录（消息丢了，对方的服务器下一轮也能自己看到），再发消息
     pcall(function()
       map:UpdateAsync(okey, function(old)

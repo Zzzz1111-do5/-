@@ -1,6 +1,8 @@
 -- 军事大亨（客户端）：地图指引——
---   ① 地上一串往前流动的绿色箭头，从你脚下指到下一个要去的地方（补给箱优先，其次是左上角「当前目标」说的那个按钮）；
---   ② 左边的小地图（上面是战场）：自己的基地、盖好的楼、能买的按钮（绿点）、补给箱（金点）、你（白箭头）、你的部队（蓝点）
+--   ① 地上一串往前流动的绿色箭头 + 一条发光的线，从你脚下指到下一个要去的地方（补给箱优先，其次是左上角「当前目标」说的那个按钮）；
+--      目标头顶一个上下跳、一直转的立体箭头（钱不够时变黄）；目标不在画面里时，屏幕边上一个箭头指方向；
+--      目标是界面上的按钮（兵工厂里买兵、开战、建筑）时，那个按钮一闪一闪；左边菜单「指引」能关；
+--   ② 左边的小地图（上面是战场）：自己的基地、盖好的楼、能买的按钮（绿点）、补给箱（金点）、你（白箭头）、你的部队（蓝点）；右上角「－」收起
 local Players = game:GetService("Players")
 
 local Guide = {}
@@ -13,6 +15,15 @@ function Guide.init(G)
   local player = Players.LocalPlayer
   local ui = G.ui
   local mk, text, round = G.mk, G.text, G.round
+  local cam = workspace.CurrentCamera
+  local GREEN, AMBER = RGB(120, 255, 150), RGB(255, 205, 80)
+  local on = true
+  function G.guideOn() return on end
+  function G.toggleGuide(v)
+    if v == nil then on = not on else on = v end
+    if ui.guideBtn then ui.guideBtn.Text = on and "指引：开" or "指引：关" end
+    if not on then G.toast("指引关了：左边菜单「指引」可以再打开", "info") end
+  end
 
   ---------------------------------------------------------------- ① 地上的箭头
 
@@ -39,9 +50,52 @@ function Guide.init(G)
     if not S or G.battle or G.mode ~= "free" then return nil, nil end
     if typeof(S.crate) == "Vector3" then return S.crate, RGB(255, 214, 80) end
     local pad = G.goalPadPart and G.goalPadPart()
-    if pad and pad.Parent then return pad.CFrame.Position, RGB(120, 255, 150) end
+    if pad and pad.Parent then return pad.CFrame.Position, (G.goalOk and not G.goalOk()) and AMBER or GREEN end
     return nil, nil
   end
+
+  -- 目标头顶的立体箭头：竖杆 + 两片斜板拼成「V」（朝下），一直转
+  local big = {
+    G.fxPart(nil, V(0.9, 4.2, 0.9), CFrame.new(), GREEN, Enum.Material.Neon, 1),
+    G.fxPart(nil, V(0.9, 3.2, 0.9), CFrame.new(), GREEN, Enum.Material.Neon, 1),
+    G.fxPart(nil, V(0.9, 3.2, 0.9), CFrame.new(), GREEN, Enum.Material.Neon, 1),
+  }
+  -- 一条发光的线（Beam）：脚底 → 目标
+  local anchor = G.fxPart(nil, V(0.2, 0.2, 0.2), CFrame.new(), GREEN, Enum.Material.Neon, 1)
+  local a1 = Instance.new("Attachment")
+  a1.Parent = anchor
+  local beam = Instance.new("Beam")
+  beam.Attachment1 = a1
+  beam.LightEmission = 1
+  beam.Transparency = NumberSequence.new(0.45)
+  beam.Width0, beam.Width1 = 0.6, 0.6
+  beam.FaceCamera = true
+  beam.Segments = 2
+  beam.Enabled = false
+  beam.Parent = anchor
+  local function attach(char)
+    local hrp = char and char:WaitForChild("HumanoidRootPart", 10)
+    if not hrp then return end
+    local a0 = Instance.new("Attachment")
+    a0.Name = "GuideA0"
+    a0.Position = V(0, -2.4, 0)
+    a0.Parent = hrp
+    beam.Attachment0 = a0
+  end
+  player.CharacterAdded:Connect(attach)
+  if player.Character then task.spawn(attach, player.Character) end
+  -- 屏幕边上的箭头（另开一个铺满屏幕的界面，坐标和 WorldToViewportPoint 一样）：两根短棒拼成「>」，整个转向目标
+  local edgeGui = mk("ScreenGui", { Name = "GuideEdge", ResetOnSpawn = false, IgnoreGuiInset = true, DisplayOrder = 2 }, player:WaitForChild("PlayerGui"))
+  local edge = mk("Frame", { AnchorPoint = V2(0.5, 0.5), Size = UDim2.fromOffset(46, 46), BackgroundTransparency = 1, Visible = false }, edgeGui)
+  local edgeBars = {}
+  for _, sgn in ipairs({ -1, 1 }) do
+    local bar = mk("Frame", { AnchorPoint = V2(0.5, 0.5), Position = UDim2.new(0.5, -3, 0.5, sgn * 8), Size = UDim2.fromOffset(26, 7), BackgroundColor3 = GREEN,
+      BorderSizePixel = 0, Rotation = sgn * 40 }, edge)
+    round(bar, 3)
+    table.insert(edgeBars, bar)
+  end
+  -- 界面上要点的按钮：一圈粗描边一闪一闪
+  local pulse = mk("UIStroke", { Color = AMBER, Thickness = 4, ApplyStrokeMode = Enum.ApplyStrokeMode.Border })
 
   ---------------------------------------------------------------- ② 小地图
 
@@ -53,6 +107,7 @@ function Guide.init(G)
   local area = mk("Frame", { BackgroundColor3 = RGB(70, 96, 58), BorderSizePixel = 0, Position = UDim2.fromOffset(6, 24), Size = UDim2.fromOffset(MW, MH), ClipsDescendants = true }, mm)
   round(area, 6)
   ui.minimap = mm
+  ui.minimapC = G.collapsible and G.collapsible(mm, function() return 28 end)
   -- 世界（相对原点的 x、z）→ 小地图上的位置：北（+Z）朝上，从上往下看时 +X 在左边
   local function at(x, z)
     return UDim2.fromScale(1 - (x - MAP.x0) / (MAP.x1 - MAP.x0), 1 - (z - MAP.z0) / (MAP.z1 - MAP.z0))
@@ -122,8 +177,9 @@ function Guide.init(G)
     local S = G.S
     local char = player.Character
     local root = char and char:FindFirstChild("HumanoidRootPart")
-    -- 地上的箭头
+    -- 地上的箭头（指引关了就都不画）
     local goal, color = target()
+    if not on then goal = nil end
     local used = 0
     if goal and root and S and S.origin then
       local from = root.CFrame.Position
@@ -151,6 +207,52 @@ function Guide.init(G)
       end
     end
     hideAll(used + 1)
+    -- 头顶的立体箭头、发光的线、屏幕边的箭头
+    local hrp = beam.Attachment0 and beam.Attachment0.Parent
+    if goal and root and hrp then
+      local tgt = goal + V(0, 0.6, 0)
+      anchor.CFrame = CFrame.new(tgt)
+      beam.Color = ColorSequence.new(color)
+      beam.Enabled = (tgt - root.CFrame.Position).Magnitude > 14
+      local now = os.clock()
+      local base = CFrame.new(tgt + V(0, 9 + math.sin(now * 3) * 1.2, 0)) * CFrame.Angles(0, now * 2, 0)
+      big[1].CFrame = base * CFrame.new(0, 2.6, 0)
+      big[2].CFrame = base * CFrame.new(-0.9, 0.2, 0) * CFrame.Angles(0, 0, math.rad(40))
+      big[3].CFrame = base * CFrame.new(0.9, 0.2, 0) * CFrame.Angles(0, 0, math.rad(-40))
+      for _, p in ipairs(big) do
+        p.Color = color
+        p.Transparency = 0.05
+      end
+      local sp, onScreen = cam:WorldToViewportPoint(tgt)
+      if onScreen and sp.Z > 0 then
+        edge.Visible = false
+      else
+        local vs = cam.ViewportSize
+        local cx, cy = vs.X / 2, vs.Y / 2
+        local dx, dy = sp.X - cx, sp.Y - cy
+        if sp.Z < 0 then dx, dy = -dx, -dy end
+        local l = math.sqrt(dx * dx + dy * dy)
+        if l < 1e-3 then dx, dy, l = 0, 1, 1 end
+        dx, dy = dx / l, dy / l
+        local k = math.min((cx - 50) / math.max(math.abs(dx), 1e-3), (cy - 50) / math.max(math.abs(dy), 1e-3))
+        edge.Position = UDim2.fromOffset(cx + dx * k, cy + dy * k)
+        edge.Rotation = math.deg(math.atan2(dy, dx))
+        for _, b in ipairs(edgeBars) do b.BackgroundColor3 = color end
+        edge.Visible = true
+      end
+    else
+      beam.Enabled = false
+      edge.Visible = false
+      for _, p in ipairs(big) do p.Transparency = 1 end
+    end
+    -- 界面上要点的按钮：闪
+    local btn = on and G.goalUiTarget and G.goalUiTarget() or nil
+    if btn and btn.Visible and not G.battle then
+      pulse.Parent = btn
+      pulse.Transparency = 0.15 + 0.6 * (0.5 + 0.5 * math.sin(os.clock() * 6))
+    else
+      pulse.Parent = nil
+    end
     -- 小地图
     local show = S ~= nil and not G.battle and G.mode ~= "drive" and not G.compact   -- 手机屏幕小，不放小地图（地上的箭头照样指路）
     mm.Visible = show

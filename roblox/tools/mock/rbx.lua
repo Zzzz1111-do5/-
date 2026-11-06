@@ -333,6 +333,9 @@ local ENUMS = {
   ProximityPromptStyle = "Default Custom",
   SurfaceGuiSizingMode = "FixedSize PixelsPerStud",
   SortDirection = "Ascending Descending",
+  CoreGuiType = "PlayerList Health Backpack Chat All EmotesMenu SelfView Captures",
+  RenderPriority = "First Input Camera Character Last",
+  StartCorner = "TopLeft TopRight BottomLeft BottomRight",
 }
 local Enum = {}
 for ename, list in pairs(ENUMS) do
@@ -403,13 +406,35 @@ for _, n in ipairs({ "Vector3", "Vector2", "CFrame", "Color3", "UDim", "UDim2" }
 end
 T.Instance = function(v) return v == nil or typeof(v) == "Instance" end
 -- 颜色 / 数字序列（Beam 用）：只记下值
-local function seqType(name)
-  return { new = function(a, b) return setmetatable({ a = a, b = b }, { __type = name }) end }
+local function seqType(name, kp)
+  return { new = function(a, b)
+    if type(a) == "table" and typeof(a) == "table" then   -- 关键点表：至少两个，首尾时间 0 和 1
+      if #a < 2 then error(name .. ".new 关键点至少两个", 2) end
+      for _, k in ipairs(a) do if typeof(k) ~= kp then error(name .. ".new 的表里要 " .. kp, 2) end end
+      if a[1].Time ~= 0 or a[#a].Time ~= 1 then error(name .. ".new 关键点的时间要从 0 到 1", 2) end
+    end
+    return setmetatable({ a = a, b = b }, { __type = name })
+  end }
 end
-local ColorSequence, NumberSequence = seqType("ColorSequence"), seqType("NumberSequence")
+local ColorSequence, NumberSequence = seqType("ColorSequence", "ColorSequenceKeypoint"), seqType("NumberSequence", "NumberSequenceKeypoint")
+local NumberSequenceKeypoint = { new = function(t, v, e)
+  if type(t) ~= "number" or type(v) ~= "number" then error("NumberSequenceKeypoint.new(时间, 值)", 2) end
+  return setmetatable({ Time = t, Value = v, Envelope = e or 0 }, { __type = "NumberSequenceKeypoint" })
+end }
+local ColorSequenceKeypoint = { new = function(t, c)
+  if type(t) ~= "number" or typeof(c) ~= "Color3" then error("ColorSequenceKeypoint.new(时间, Color3)", 2) end
+  return setmetatable({ Time = t, Value = c }, { __type = "ColorSequenceKeypoint" })
+end }
+local NumberRange = { new = function(a, b)
+  if type(a) ~= "number" then error("NumberRange.new 要数字", 2) end
+  b = b or a
+  if b < a then error("NumberRange.new 的最大值比最小值小", 2) end
+  return setmetatable({ Min = a, Max = b }, { __type = "NumberRange" })
+end }
 R.ColorSequence, R.NumberSequence = ColorSequence, NumberSequence
 T.ColorSequence = function(v) return typeof(v) == "ColorSequence" end
 T.NumberSequence = function(v) return typeof(v) == "NumberSequence" end
+T.NumberRange = function(v) return typeof(v) == "NumberRange" end
 local function E(name) return function(v) return typeof(v) == "EnumItem" and v.EnumType == name end end
 
 local CLASS = {}
@@ -661,6 +686,14 @@ function base.FindFirstAncestorOfClass(o, cls)
   end
   return nil
 end
+function base.FindFirstAncestor(o, name)
+  local a = rawget(o, "_parent")
+  while a do
+    if a._p.Name == name then return a end
+    a = rawget(a, "_parent")
+  end
+  return nil
+end
 function base.FindFirstAncestorWhichIsA(o, cls)
   local a = rawget(o, "_parent")
   while a do
@@ -747,12 +780,26 @@ def("BasePart", "PVInstance", {
   LocalTransparencyModifier = { T.number, 0 },
 }, { events = { Touched = true, TouchEnded = true }, ro = { Position = function(o) return partCF(o).Position end }, noCreate = true })
 def("Part", "BasePart", { Shape = { E("PartType"), Enum.PartType.Block } })
-def("Terrain", "BasePart", {}, { noCreate = true, methods = {
+def("Terrain", "BasePart", {
+  Decoration = { T.bool, false }, WaterColor = { T.Color3, newC3(0.05, 0.33, 0.36) }, WaterTransparency = { T.number, 0.3 }, WaterReflectance = { T.number, 1 },
+  WaterWaveSize = { T.number, 0.15 }, WaterWaveSpeed = { T.number, 10 },
+}, { noCreate = true, methods = {
   FillBlock = function(_, c, size, mat)
     if not isCF(c) or not isV3(size) or typeof(mat) ~= "EnumItem" or mat.EnumType ~= "Material" then error("FillBlock(CFrame, Vector3, Material) 参数不对", 2) end
     if size._x > 2048 * 4 or size._z > 2048 * 4 then error("FillBlock 区域太大", 2) end
   end,
+  FillBall = function(_, c, r, mat)
+    if not isV3(c) or type(r) ~= "number" or typeof(mat) ~= "EnumItem" or mat.EnumType ~= "Material" then error("FillBall(Vector3, 半径, Material) 参数不对", 2) end
+  end,
+  FillCylinder = function(_, c, h, r, mat)
+    if not isCF(c) or type(h) ~= "number" or type(r) ~= "number" or typeof(mat) ~= "EnumItem" or mat.EnumType ~= "Material" then error("FillCylinder(CFrame, 高, 半径, Material) 参数不对", 2) end
+  end,
+  FillWedge = function(_, c, size, mat)
+    if not isCF(c) or not isV3(size) or typeof(mat) ~= "EnumItem" or mat.EnumType ~= "Material" then error("FillWedge(CFrame, Vector3, Material) 参数不对", 2) end
+  end,
 } })
+def("WedgePart", "BasePart", {})
+def("Clouds", "Instance", { Cover = { T.number, 0.5 }, Density = { T.number, 0.7 }, Color = { T.Color3, newC3(1, 1, 1) }, Enabled = { T.bool, true } })
 def("MeshPart", "BasePart", { TextureID = { T.string, "" }, MeshId = { T.string, "" }, DoubleSided = { T.bool, false } })
 def("SurfaceAppearance", "Instance", {})
 def("Attachment", "Instance", { Position = { T.Vector3, v3() }, CFrame = { T.CFrame, CFrame.new() } }, { ro = {
@@ -795,7 +842,7 @@ local guiObj = {
   Visible = { T.bool, true }, ZIndex = { T.number, 1 }, LayoutOrder = { T.number, 0 }, AutomaticSize = { E("AutomaticSize"), Enum.AutomaticSize.None },
   ClipsDescendants = { T.bool, false }, Rotation = { T.number, 0 }, Active = { T.bool, false },
 }
-def("GuiObject", "Instance", guiObj, { noCreate = true })
+def("GuiObject", "Instance", guiObj, { noCreate = true, events = { MouseEnter = true, MouseLeave = true, InputBegan = true, InputEnded = true, InputChanged = true } })
 def("Frame", "GuiObject", {})
 def("ScrollingFrame", "GuiObject", { CanvasSize = { T.UDim2, newUDim2(0, 0, 0, 0) }, ScrollBarThickness = { T.number, 12 }, CanvasPosition = { T.Vector2, newV2(0, 0) } })
 local textProps = {
@@ -818,6 +865,13 @@ def("UIListLayout", "Instance", {
 })
 def("UIPadding", "Instance", { PaddingTop = { T.UDim, newUDim(0, 0) }, PaddingBottom = { T.UDim, newUDim(0, 0) }, PaddingLeft = { T.UDim, newUDim(0, 0) }, PaddingRight = { T.UDim, newUDim(0, 0) } })
 def("UIScale", "Instance", { Scale = { T.number, 1 } })
+def("UIGradient", "Instance", { Color = { T.ColorSequence, ColorSequence.new(newC3(1, 1, 1)) }, Transparency = { T.NumberSequence, NumberSequence.new(0) },
+  Rotation = { T.number, 0 }, Offset = { T.Vector2, newV2(0, 0) }, Enabled = { T.bool, true } })
+def("UIGridLayout", "Instance", { CellSize = { T.UDim2, newUDim2(0, 100, 0, 100) }, CellPadding = { T.UDim2, newUDim2(0, 5, 0, 5) },
+  FillDirection = { E("FillDirection"), Enum.FillDirection.Horizontal }, SortOrder = { E("SortOrder"), Enum.SortOrder.Name },
+  HorizontalAlignment = { E("HorizontalAlignment"), Enum.HorizontalAlignment.Left }, VerticalAlignment = { E("VerticalAlignment"), Enum.VerticalAlignment.Top },
+  StartCorner = { E("StartCorner"), Enum.StartCorner.TopLeft }, FillDirectionMaxCells = { T.number, 0 } })
+def("UISizeConstraint", "Instance", { MaxSize = { T.Vector2, newV2(math.huge, math.huge) }, MinSize = { T.Vector2, newV2(0, 0) } })
 def("UITextSizeConstraint", "Instance", { MaxTextSize = { T.number, 100 }, MinTextSize = { T.number, 1 } })
 
 -- 其他
@@ -828,6 +882,28 @@ def("ProximityPrompt", "Instance", {
 }, { events = { Triggered = true, TriggerEnded = true } })
 def("Smoke", "Instance", { Color = { T.Color3, newC3(1, 1, 1) }, Opacity = { T.number, 0.5 }, RiseVelocity = { T.number, 1 }, Size = { T.number, 1 }, Enabled = { T.bool, true } })
 def("Fire", "Instance", { Color = { T.Color3, newC3(1, 0.5, 0) }, SecondaryColor = { T.Color3, newC3(1, 0, 0) }, Heat = { T.number, 9 }, Size = { T.number, 5 }, Enabled = { T.bool, true } })
+def("Sky", "Instance", {
+  SkyboxBk = { T.string, "" }, SkyboxDn = { T.string, "" }, SkyboxFt = { T.string, "" }, SkyboxLf = { T.string, "" }, SkyboxRt = { T.string, "" }, SkyboxUp = { T.string, "" },
+  StarCount = { T.number, 3000 }, CelestialBodiesShown = { T.bool, true }, SunAngularSize = { T.number, 21 }, MoonAngularSize = { T.number, 11 },
+  SunTextureId = { T.string, "" }, MoonTextureId = { T.string, "" },
+})
+def("PostEffect", "Instance", { Enabled = { T.bool, true } }, { noCreate = true })
+def("BloomEffect", "PostEffect", { Intensity = { T.number, 1 }, Size = { T.number, 24 }, Threshold = { T.number, 2 } })
+def("ColorCorrectionEffect", "PostEffect", { Brightness = { T.number, 0 }, Contrast = { T.number, 0 }, Saturation = { T.number, 0 }, TintColor = { T.Color3, newC3(1, 1, 1) } })
+def("SunRaysEffect", "PostEffect", { Intensity = { T.number, 0.25 }, Spread = { T.number, 1 } })
+def("BlurEffect", "PostEffect", { Size = { T.number, 24 } })
+def("ParticleEmitter", "Instance", {
+  Enabled = { T.bool, true }, Rate = { T.number, 5 }, Lifetime = { T.NumberRange, NumberRange.new(5, 10) }, Speed = { T.NumberRange, NumberRange.new(5) },
+  SpreadAngle = { T.Vector2, newV2(0, 0) }, Size = { T.NumberSequence, NumberSequence.new(1) }, Transparency = { T.NumberSequence, NumberSequence.new(0) },
+  Color = { T.ColorSequence, ColorSequence.new(newC3(1, 1, 1)) }, Texture = { T.string, "" }, Rotation = { T.NumberRange, NumberRange.new(0) },
+  RotSpeed = { T.NumberRange, NumberRange.new(0) }, Acceleration = { T.Vector3, v3() }, EmissionDirection = { E("NormalId"), Enum.NormalId.Top },
+  LightEmission = { T.number, 0 }, LightInfluence = { T.number, 0 }, Drag = { T.number, 0 }, LockedToPart = { T.bool, false }, ZOffset = { T.number, 0 },
+  VelocityInheritance = { T.number, 0 },
+}, { methods = { Emit = function(_, n) if n ~= nil and type(n) ~= "number" then error("Emit 要数字", 2) end end, Clear = function() end } })
+def("SpotLight", "Instance", { Brightness = { T.number, 1 }, Range = { T.number, 16 }, Angle = { T.number, 90 }, Color = { T.Color3, newC3(1, 1, 1) },
+  Face = { E("NormalId"), Enum.NormalId.Front }, Shadows = { T.bool, false }, Enabled = { T.bool, true } })
+def("SurfaceLight", "Instance", { Brightness = { T.number, 1 }, Range = { T.number, 16 }, Angle = { T.number, 90 }, Color = { T.Color3, newC3(1, 1, 1) },
+  Face = { E("NormalId"), Enum.NormalId.Front }, Shadows = { T.bool, false }, Enabled = { T.bool, true } })
 def("Beam", "Instance", {
   Attachment0 = { T.Instance, nil }, Attachment1 = { T.Instance, nil }, Color = { T.ColorSequence, ColorSequence.new(newC3(1, 1, 1)) }, Transparency = { T.NumberSequence, NumberSequence.new(0.5) },
   Width0 = { T.number, 1 }, Width1 = { T.number, 1 }, LightEmission = { T.number, 0 }, FaceCamera = { T.bool, false }, Enabled = { T.bool, true }, Segments = { T.number, 10 },
@@ -840,7 +916,8 @@ def("Highlight", "Instance", {
 })
 def("Atmosphere", "Instance", { Density = { T.number, 0.3 }, Offset = { T.number, 0 }, Haze = { T.number, 0 }, Glare = { T.number, 0 }, Color = { T.Color3, newC3(0.78, 0.78, 0.78) }, Decay = { T.Color3, newC3(0.42, 0.44, 0.49) } })
 def("IntValue", "Instance", { Value = { function(v) return type(v) == "number" and v == math.floor(v) end, 0 } })
-def("Sound", "Instance", { SoundId = { T.string, "" }, Volume = { T.number, 0.5 }, RollOffMaxDistance = { T.number, 10000 }, Looped = { T.bool, false }, PlaybackSpeed = { T.number, 1 } }, { methods = { Play = function() end, Stop = function() end } })
+def("Sound", "Instance", { SoundId = { T.string, "" }, Volume = { T.number, 0.5 }, RollOffMaxDistance = { T.number, 10000 }, RollOffMinDistance = { T.number, 10 }, Looped = { T.bool, false },
+  PlaybackSpeed = { T.number, 1 }, TimePosition = { T.number, 0 }, PlayOnRemove = { T.bool, false } }, { events = { Ended = true }, methods = { Play = function() end, Stop = function() end, Pause = function() end, Resume = function() end } })
 def("Humanoid", "Instance", { Health = { T.number, 100 }, MaxHealth = { T.number, 100 }, WalkSpeed = { T.number, 16 } }, { events = { Died = true, HealthChanged = true }, methods = {
   TakeDamage = function(o, n)
     if type(n) ~= "number" then error("TakeDamage 要数字", 2) end
@@ -964,6 +1041,7 @@ def("Camera", "Instance", {
 } })
 
 local ws = service("Workspace", { StreamingEnabled = { T.bool, false }, Gravity = { T.number, 196.2 }, CurrentCamera = { T.Instance, nil } }, { parent = "Model", methods = {
+  GetServerTimeNow = function() return (R.osTime or os.time()) + clock % 1 end,
   Raycast = function(_, origin, dir, params)
     if not isV3(origin) or not isV3(dir) then error("Raycast(Vector3, Vector3, RaycastParams)", 2) end
     if params ~= nil and typeof(params) ~= "RaycastParams" then error("Raycast 第三个参数要 RaycastParams", 2) end
@@ -1047,7 +1125,18 @@ R.services.ServerScriptService = service("ServerScriptService", {})
 R.services.Lighting = service("Lighting", {
   ClockTime = { T.number, 14 }, Brightness = { T.number, 2 }, GlobalShadows = { T.bool, true }, OutdoorAmbient = { T.Color3, newC3(0.5, 0.5, 0.5) },
   Ambient = { T.Color3, newC3(0, 0, 0) }, EnvironmentDiffuseScale = { T.number, 0 }, EnvironmentSpecularScale = { T.number, 0 }, ExposureCompensation = { T.number, 0 },
+  GeographicLatitude = { T.number, 41.7 }, ColorShift_Top = { T.Color3, newC3(0, 0, 0) }, ColorShift_Bottom = { T.Color3, newC3(0, 0, 0) }, ShadowSoftness = { T.number, 0.2 },
+  FogColor = { T.Color3, newC3(0.75, 0.75, 0.75) }, FogEnd = { T.number, 100000 }, FogStart = { T.number, 0 },
 })
+R.services.SoundService = service("SoundService", { AmbientReverb = { E("ReverbType"), nil }, RespectFilteringEnabled = { T.bool, true } })
+R.services.StarterGui = service("StarterGui", {}, { methods = {
+  SetCoreGuiEnabled = function(_, t, on)
+    if typeof(t) ~= "EnumItem" or t.EnumType ~= "CoreGuiType" or type(on) ~= "boolean" then error("SetCoreGuiEnabled(Enum.CoreGuiType, 布尔)", 2) end
+  end,
+  SetCore = function() end,
+} })
+R.services.GuiService = service("GuiService", {}, { methods = { GetGuiInset = function() return newV2(0, 58), newV2(0, 0) end } })
+R.services.ScriptContext = service("ScriptContext", {}, { events = { Error = true } })
 R.services.ProximityPromptService = service("ProximityPromptService", { Enabled = { T.bool, true } }, { events = { PromptTriggered = true } })
 R.Heartbeat = newSig()
 R.RenderStepped = newSig()
@@ -1057,7 +1146,17 @@ R.services.RunService = service("RunService", {}, { ro = {
     if side() ~= "client" then error("RenderStepped 只能在客户端用", 3) end
     return R.RenderStepped
   end,
-}, methods = { IsStudio = function() return true end, IsServer = function() return side() == "server" end, IsClient = function() return side() == "client" end } })
+}, methods = { IsStudio = function() return true end, IsServer = function() return side() == "server" end, IsClient = function() return side() == "client" end,
+  BindToRenderStep = function(_, name, prio, f)
+    if side() ~= "client" then error("BindToRenderStep 只能在客户端用", 2) end
+    if type(name) ~= "string" or type(prio) ~= "number" or type(f) ~= "function" then error("BindToRenderStep(名字, 优先级数字, 函数)", 2) end
+    R.boundSteps = R.boundSteps or {}
+    R.boundSteps[name] = R.RenderStepped:Connect(f)
+  end,
+  UnbindFromRenderStep = function(_, name)
+    if R.boundSteps and R.boundSteps[name] then R.boundSteps[name]:Disconnect() R.boundSteps[name] = nil end
+  end,
+} })
 R.services.Debris = service("Debris", {}, { methods = { AddItem = function(_, inst, t)
   if typeof(inst) ~= "Instance" or type(t) ~= "number" then error("Debris:AddItem(Instance, 秒数)", 2) end
   task.delay(t, function() base.Destroy(inst) end)
@@ -1415,6 +1514,16 @@ local function luauMath()
     return math.max(lo, math.min(hi, x))
   end
   m.atan2 = function(y, x) return math.atan(y, x) end
+  -- Perlin 噪声的替身：平滑、确定、整数点上是 0（和真的一样），范围大约 -1..1
+  m.noise = function(x, y, z)
+    if type(x) ~= "number" then error("math.noise 要数字", 2) end
+    y, z = y or 0, z or 0
+    local v = math.sin(x * 1.7 + y * 2.3 + z * 0.9) * math.sin(x * 0.5 - y * 1.1 + z * 1.9) * math.sin(math.pi * x) * 0.9
+    if y ~= 0 or z ~= 0 then v = v + 0.1 * math.sin(math.pi * y) * math.cos(z) end
+    return math.max(-1, math.min(1, v))
+  end
+  m.sign = m.sign or function(x) if x > 0 then return 1 elseif x < 0 then return -1 end return 0 end
+  m.round = m.round or function(x) return math.floor(x + 0.5) end
   m.random = function(a, b)
     if a == nil then return R.rng() end
     if b == nil then return math.floor(R.rng() * a) + 1 end
@@ -1435,7 +1544,8 @@ local function envFor(scriptInst, sd)
   local env = {
     game = game, workspace = ws, script = scriptInst, Instance = Instance, Vector3 = Vector3, Vector2 = Vector2, CFrame = CFrame,
     Color3 = Color3, UDim = UDim, UDim2 = UDim2, Enum = Enum, TweenInfo = TweenInfo, RaycastParams = RaycastParams, Random = Random,
-    ColorSequence = ColorSequence, NumberSequence = NumberSequence,
+    ColorSequence = ColorSequence, NumberSequence = NumberSequence, NumberRange = NumberRange,
+    NumberSequenceKeypoint = NumberSequenceKeypoint, ColorSequenceKeypoint = ColorSequenceKeypoint,
     task = task, math = luauMath(), string = string, table = table, os = { time = function() return R.osTime or os.time() end, clock = function() return clock end },
     pairs = pairs, ipairs = ipairs, next = next, select = select, type = type, typeof = typeof, tostring = tostring, tonumber = tonumber,
     print = function(...) if R.verbose then print(...) end end,
@@ -1447,6 +1557,7 @@ local function envFor(scriptInst, sd)
     end,
     error = error, assert = assert, pcall = pcall, xpcall = xpcall, setmetatable = setmetatable, getmetatable = getmetatable,
     rawget = rawget, rawset = rawset, rawequal = rawequal, unpack = table.unpack,
+    debug = { traceback = debug.traceback, profilebegin = function() end, profileend = function() end, info = function() return nil end },
     MOCK_MOVE = function() R.moveCalls = (R.moveCalls or 0) + 1 return R.moveVec or v3(0, 0, 0) end,
   }
   env.require = function(ms)
