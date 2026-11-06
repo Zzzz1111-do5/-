@@ -43,7 +43,7 @@ function saMembers() {
   SA.memK = k; SA.memS = m;
   return m;
 }
-// 态势：返回 { odds 有效兵力比, raw 当面兵力比, ours, friends, theirs, rising, sup, cover, fx, fy 敌中心, main 可汇合的主力 }
+// 态势：返回 { odds 有效兵力比, raw 当面兵力比, ours, friends, theirs, rising, sup, cover, fx, fy 敌中心, main 可汇合的主力（营的编号）}
 function saLook(G, pw, near) {
   if (G.sa && S.t - G.sa.t < SA.every && G.sa.n0 === (near ? near.n : -1)) return G.sa;
   pw = pw || hqRegPow(G);
@@ -75,11 +75,12 @@ function saLook(G, pw, near) {
   const sup = saSup(G.side, ex, ey), cover = 1 - coverAt(G.ax, G.ay);
   const theirs = Math.max(1, G.saM) * (rising ? SA.trendW : 1), ours = pw.tot + fr * SA.fw;
   const odds = ours * (1 + SA.cover * cover) * (1 + SA.sup * sup) / theirs;
-  return (G.sa = { t: S.t, n0: near.n, odds, raw: pw.tot / Math.max(1, near.n), ours: pw.tot, friends: fr, theirs: G.saM, rising, sup, cover, fx: ex, fy: ey, main, dec: G.sa ? G.sa.dec : null });
+  return (G.sa = { t: S.t, n0: near.n, odds, raw: pw.tot / Math.max(1, near.n), ours: pw.tot, friends: fr, theirs: G.saM, rising, sup, cover, fx: ex, fy: ey, main: main ? main.id : null, dec: G.sa ? G.sa.dec : null });   // main 只记编号：原来存对象，两个营互相指着成了环，存档序列化失败、读档后也成了断开的拷贝
 }
 // 往哪儿撤：主力那边，否则大后方（攻方海边、守方纵深），同时背离追兵；落在可走的陆地上
 function saRear(G, L) {
-  if (L.main) return { x: L.main.ax, y: L.main.ay, link: L.main.id };
+  const M = L.main != null ? (S.bgs || []).find(o => o.id === L.main) : null;
+  if (M) return { x: M.ax, y: M.ay, link: M.id };
   const away = Math.atan2(G.ay - L.fy, G.ax - L.fx), home = G.side === 'p' ? Math.PI / 2 : -Math.PI / 2;
   const vx = Math.cos(away) * .7 + Math.cos(home), vy = Math.sin(away) * .7 + Math.sin(home), l = Math.hypot(vx, vy) || 1;
   let x = clamp(G.ax + vx / l * 500, 40, W - 40), y = clamp(G.ay + vy / l * 500, 40, H - 40);

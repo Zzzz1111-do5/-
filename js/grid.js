@@ -242,7 +242,7 @@ function stepCost(i, cls) {
   if (cls === 'veh' || cls === 'vehe' || cls === 'amph') {
     let c = cls === 'amph' && (t === T.DEEP || t === T.SHOAL) ? 1.7 : cls === 'amph' && t === T.RIVER ? 2.5 : VCOST[t];
     if (c === Infinity || OBSC[i] === 2 || (cls === 'vehe' && OBSC[i])) return Infinity;
-    if (t === T.HILL) { const e = TER.elev[i]; if (e > VEH_ELEV) return Infinity; c *= 1 + (e - .5) * 5; }
+    if (t === T.HILL) { const e = TER.elev[i]; if (e > VEH_ELEV) return Infinity; c *= Math.max(1, 1 + (e - .5) * 5); }   // 系数不低于 1：台湾图的山地按坡度分，海拔低于 0.3 的陡坡原来算出负代价，寻路（localField 的 Dijkstra）在两格负代价之间无限循环——抢滩后车辆一上坡就卡死；程序生成的地图山地海拔都 ≥ 0.5，结果不变
     if (MINEC[i] && (cls === 'vehe' || MINEC[i] === 2)) c *= cls === 'vehe' ? 25 : 8;
     return WIREC[i] ? c * 1.2 : c;
   }
@@ -319,7 +319,7 @@ function costFill(a, cls) {
       const t = ty[k], o = ob[k];
       let c = base[t];
       if (c === Infinity || o === 2 || (ve && o)) { a[k] = Infinity; continue; }
-      if (t === HL) { const e = el[k]; if (e > e0) { a[k] = Infinity; continue; } c *= 1 + (e - .5) * 5; }
+      if (t === HL) { const e = el[k]; if (e > e0) { a[k] = Infinity; continue; } c *= Math.max(1, 1 + (e - .5) * 5); }   // 同 stepCost：不低于 1（台湾图低处的陡坡原来是负代价）
       const m = mi[k];
       if (m && (ve || m === 2)) c *= mk;
       a[k] = wi[k] ? c * 1.2 : c;
