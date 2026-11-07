@@ -121,6 +121,7 @@ tools/rbxl.mjs                 读二进制场景文件（.rbxl）：导出实�
 tools/rbxl_patch.mjs           把 src/ 的脚本写回 .rbxl（只换源码，导入的模型等原样保留）
 tools/luacheck.mjs             语法和变量名检查
 tools/mock/                    在普通 Lua 里模拟 Roblox，真跑服务器和客户端脚本的测试（test.lua 普通服务器，test_match.lua 对战服务器）
+tools/trailer/                 宣传片：录场景和一场真实推演、WebGL 逐帧渲染、合成配乐和音效、压成 MP4（见下面「宣传片」）
 ```
 
 改了 `src/` 以后：
@@ -138,3 +139,20 @@ node roblox/build.mjs
 ```
 
 第二条是模拟测试：先单独推演各兵种（射高、拦截炮弹、机降、轰炸、导弹、喷气机、两边 25 个兵种混战），再让机器人玩家进服、盖楼、点界面生产、布阵、开战、拿枪打、开坦克、直升机、战斗机、轰炸机、运兵直升机、突袭、和另一个玩家约战、排位匹配（同服、跨服：模拟别的服务器排队、认领、发消息）、任务、重生、存档读档……全部真跑一遍，再连续玩 20 分钟（模拟时间）打出每场的结果；最后在几台全新的「服务器」里跑：对战服务器的排位流程（两个人到齐开打、对手没来），和 Studio 里没发布的游戏（存档、MemoryStore、传送都用不了，跨服消息的订阅一直不返回——照样能开服、生成小人、盖楼、开战）。需要系统里有 Lua 5.4 运行库（Debian / Ubuntu 的 `liblua5.4-0`）。
+
+## 宣传片
+
+64 秒的 1080p 宣传片，画面全部来自游戏本身：在模拟的 Roblox 里真跑服务器脚本，盖满基地（重生 3 次、开放的新区域都在）、按真实规则打一关，录下场景零件和每个单位每 1/20 秒的位置、开火、爆炸；再用 `models/` 里的原模型逐帧渲染（阴影、天空、雾、色调映射、粒子、光束、字幕卡），配乐和音效全部程序合成（不用外部音频素材）。视频不进仓库。
+
+```bash
+TR_LEVEL=27 TR_TECH=2 python3 roblox/tools/mock/run.py roblox/tools/trailer/record.lua /tmp/trailer_rec
+```
+
+```bash
+NODE_PATH=$(npm root -g) node roblox/tools/trailer/render.mjs /tmp/trailer_rec /tmp/trailer_out
+```
+
+第一条录场景（`scene.json`）和战斗（`battle.json`）；`TR_LEVEL` 打第几关、`TR_TECH` 敌军强弱（第 27 关雪原、2 时一场约 50 秒、我方赢）。
+第二条依次做：`frames` 逐帧截图（Playwright + 软件渲染，一帧 3–4 秒，全片 1920 帧）、`cues` 不画画面快速走一遍分镜记下音效点、`audio`（`audio.mjs` 合成配乐和音效）、`video`（ffmpeg 合成 `trailer_1080p.mp4`）。
+后面可以加帧范围和步骤，几个进程分段渲染：`render.mjs <录像> <输出> 0-480 frames`、`480-960 frames`……画完再 `render.mjs <录像> <输出> 0-0 cues,audio,video`。
+只看某几帧：`ONLY=300,900,1500` 环境变量。分镜（每个镜头的时间、镜头运动、字幕）在 `timeline.js`，渲染器在 `render.html`。

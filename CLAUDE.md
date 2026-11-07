@@ -80,6 +80,7 @@
   0.9：新兵种（炮艇 lob、蜂群 swarm 放 swarmling、激光 laser、电磁炮 pierce、布雷 mines（Battle.layMine / minesStep）、弹道导弹 ballistic + 爱国者 abm 拦截），
   单位技能 Config.Abilities（按 cat，Battle.ability 给 u.buff，Battle.step 换成 spK / rtK / dmK / takenK），战况 Config.Events / EventOf（Combat eventSetup / eventStep）。
   重生：基地里（含已开放的新区域）的楼全部盖好才能重生，最多 Config.Rebirth.max = 3 次，每次开放一块 Config.Areas（基地南边，后墙南门出去；建筑带 area 字段，Config.AreaOpen 判断能不能盖）。不要新加 ModuleScript：rbxl_patch.mjs 只能换已有脚本的源码。
+  宣传片（roblox/tools/trailer/，视频不进仓库）：record.lua 在模拟里盖满基地、真打一关，录场景和逐帧轨迹 → render.html（WebGL 渲染器，原模型、阴影、粒子）+ timeline.js（64 秒分镜、字幕卡）由 render.mjs 用 Playwright 逐帧截图 → audio.mjs 程序合成配乐与音效（按推演里的开火、爆炸点放）→ ffmpeg 出 MP4；用法见 roblox/README.md「宣传片」。
   原模型：`node roblox/tools/export_models.mjs` 把 js/mdl 的烘焙模型导出成 roblox/models/*.glb（Roblox 坐标、按格缩放、部件按 Body / Turret / Rotor / TailRotor 命名、_Front / _Top / _Pivot* 标记；士兵用 v3man.js 摆端枪姿势；LIST 里 drop 去掉起落架、flip 转 180°、gain 提亮太暗的贴图），用户在 Studio「导入 3D」后 Models.loadImported 自动摆正、缩放、建炮塔 / 旋翼的 Motor6D；`roblox/tools/view_glb.html` 检查导出结果。
   这台机器没有 Luau：`node roblox/tools/luacheck.mjs` 查语法和未定义变量（脚本只用 Lua 5.1 写法，不用 +=、continue、类型标注），`python3 roblox/tools/mock/run.py roblox/tools/mock/test.lua [分钟]` 用系统的 liblua5.4 在模拟的 Roblox 里真跑一遍（推演单测、新档、老档、拿枪、开车开飞机、突袭、约战、排位匹配（同服、跨服）、重生、存档读档，再让机器人连续玩；接着在全新的环境里跑 test_match.lua 的对战服务器流程），改完两样都要过。说明见 roblox/README.md。
 - 其他会话的源码有时不推 GitHub、只发布网页版：网页版脚本、模型原样发布，可以从 gh-pages 的发布内容取回（index.html 按 tools/build_www.mjs 逆操作还原）；发布前先看 gh-pages 有没有更新的版本，别覆盖。

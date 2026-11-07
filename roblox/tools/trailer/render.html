@@ -1,0 +1,803 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>军事大亨 宣传片渲染</title>
+<style>
+@font-face { font-family: "NotoSC"; font-weight: 700; src: url(/fonts/NotoSansSC-Bold.woff2) format("woff2"); }
+@font-face { font-family: "NotoSC"; font-weight: 400; src: url(/fonts/NotoSansSC-Regular.woff2) format("woff2"); }
+html, body { margin: 0; background: #000; overflow: hidden; width: 1920px; height: 1080px; }
+#c { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; }
+#ov { position: absolute; inset: 0; pointer-events: none; font-family: "NotoSC", "WenQuanYi Zen Hei", sans-serif; color: #fff; overflow: hidden; }
+#vig { position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 48%, rgba(0,0,0,0) 55%, rgba(0,0,0,.55) 100%); }
+#bars:before, #bars:after { content: ""; position: absolute; left: 0; right: 0; height: var(--bar, 0px); background: #000; }
+#bars:before { top: 0; } #bars:after { bottom: 0; }
+#fade { position: absolute; inset: 0; background: #000; opacity: 0; }
+#flash { position: absolute; inset: 0; background: #fff6e0; opacity: 0; }
+.card { position: absolute; opacity: 0; will-change: transform, opacity; }
+.card .k { font-weight: 700; font-size: 26px; letter-spacing: .32em; color: #ffb648; text-shadow: 0 2px 10px rgba(0,0,0,.6); }
+.card .t { font-weight: 700; font-size: 96px; line-height: 1.1; letter-spacing: .06em; margin-top: 6px; text-shadow: 0 4px 24px rgba(0,0,0,.65), 0 0 2px rgba(0,0,0,.8); }
+.card .r { height: 4px; width: 320px; margin-top: 18px; background: linear-gradient(90deg, #ffb648, rgba(255,182,72,0)); }
+.card .s { font-weight: 400; font-size: 34px; letter-spacing: .08em; margin-top: 16px; color: #f2f4f6; text-shadow: 0 2px 12px rgba(0,0,0,.75); }
+.card.left { left: 120px; bottom: 150px; }
+.card.mid { left: 0; right: 0; top: 36%; text-align: center; }
+.card.mid .r { margin-left: auto; margin-right: auto; background: linear-gradient(90deg, rgba(255,182,72,0), #ffb648, rgba(255,182,72,0)); }
+.card.logo { left: 0; right: 0; top: 30%; text-align: center; }
+.card.logo .t { font-size: 190px; letter-spacing: .14em; margin-right: -.14em; background: linear-gradient(180deg, #fff6dc 10%, #ffcf6a 55%, #d88a22 100%); -webkit-background-clip: text; color: transparent;
+  text-shadow: none; filter: drop-shadow(0 8px 30px rgba(0,0,0,.7)); }
+.card.logo .k { font-size: 40px; letter-spacing: .7em; margin-right: -.7em; color: #e9eef2; margin-top: 10px; }
+.card.logo .r { margin: 30px auto 0; width: 640px; background: linear-gradient(90deg, rgba(255,182,72,0), #ffb648, rgba(255,182,72,0)); }
+.card.logo .s { font-size: 38px; margin-top: 30px; letter-spacing: .3em; margin-right: -.3em; }
+</style></head>
+<body>
+<canvas id="c" width="1920" height="1080"></canvas>
+<div id="ov"><div id="vig"></div><div id="bars"></div>
+  <div class="card" id="card"><div class="k"></div><div class="t"></div><div class="r"></div><div class="s"></div></div>
+  <div id="flash"></div><div id="fade"></div></div>
+<script>
+'use strict';
+// 军事大亨宣传片的逐帧渲染器：读 record.lua 录的 scene.json / battle.json 和 roblox/models 里的 glb，按 timeline 一帧一帧画；
+// 画法：一整块合并好的场景网格（基地、工业区、新区域、战场的零件）+ 地形（地面、山、湖）+ 单位（glb，炮塔、旋翼会转）+ 特效（爆炸、烟、曳光、激光、电磁炮、炮弹、导弹、地雷……）
+// 太阳阴影（正交阴影图）、天空、雾、色调映射；字幕卡是网页元素，截图一起截下来。TR.frame(i) 画第 i 帧，TR.cues 是给配乐用的音效时间点
+const TR = window.TR = {};
+const W = 1920, H = 1080, FPS = 30;
+const cv = document.getElementById('c');
+const gl = cv.getContext('webgl', { antialias: true, preserveDrawingBuffer: true, alpha: false });
+gl.getExtension('OES_element_index_uint');
+const DEG = Math.PI / 180;
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v)), lerp = (a, b, u) => a + (b - a) * u;
+const ease = u => u * u * (3 - 2 * u), easeOut = u => 1 - (1 - u) * (1 - u), easeIn = u => u * u;
+const v3 = (x, y, z) => [x, y, z];
+const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]], sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+const mul = (a, k) => [a[0] * k, a[1] * k, a[2] * k], dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+const len = a => Math.hypot(a[0], a[1], a[2]), norm = a => { const l = len(a) || 1; return [a[0] / l, a[1] / l, a[2] / l]; };
+const mix3 = (a, b, u) => [lerp(a[0], b[0], u), lerp(a[1], b[1], u), lerp(a[2], b[2], u)];
+// 可重复的随机数（同一个特效每帧一样）
+const hash = n => { let x = Math.sin(n * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
+
+// ---------------------------------------------------------------- 矩阵（列主序，和 WebGL 一样）
+const M4 = {
+  id: () => new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]),
+  mul(a, b) { const r = new Float32Array(16); for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) { let s = 0; for (let k = 0; k < 4; k++) s += a[k * 4 + j] * b[i * 4 + k]; r[i * 4 + j] = s; } return r; },
+  persp(f, a, n, fa) { const t = 1 / Math.tan(f / 2); return new Float32Array([t / a, 0, 0, 0, 0, t, 0, 0, 0, 0, (fa + n) / (n - fa), -1, 0, 0, 2 * fa * n / (n - fa), 0]); },
+  ortho(l, r, b, t, n, f) { return new Float32Array([2 / (r - l), 0, 0, 0, 0, 2 / (t - b), 0, 0, 0, 0, -2 / (f - n), 0, -(r + l) / (r - l), -(t + b) / (t - b), -(f + n) / (f - n), 1]); },
+  look(e, c, up) { const z = norm(sub(e, c)), x = norm(cross(up || [0, 1, 0], z)), y = cross(z, x);
+    return new Float32Array([x[0], y[0], z[0], 0, x[1], y[1], z[1], 0, x[2], y[2], z[2], 0, -dot(x, e), -dot(y, e), -dot(z, e), 1]); },
+  tr(x, y, z) { const m = M4.id(); m[12] = x; m[13] = y; m[14] = z; return m; },
+  sc(x, y, z) { const m = M4.id(); m[0] = x; m[5] = y; m[10] = z; return m; },
+  ry(a) { const c = Math.cos(a), s = Math.sin(a); return new Float32Array([c, 0, -s, 0, 0, 1, 0, 0, s, 0, c, 0, 0, 0, 0, 1]); },
+  rx(a) { const c = Math.cos(a), s = Math.sin(a); return new Float32Array([1, 0, 0, 0, 0, c, s, 0, 0, -s, c, 0, 0, 0, 0, 1]); },
+  rz(a) { const c = Math.cos(a), s = Math.sin(a); return new Float32Array([c, s, 0, 0, -s, c, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]); },
+  axis(ax, a) { const [x, y, z] = norm(ax), c = Math.cos(a), s = Math.sin(a), t = 1 - c;
+    return new Float32Array([t * x * x + c, t * x * y + s * z, t * x * z - s * y, 0, t * x * y - s * z, t * y * y + c, t * y * z + s * x, 0, t * x * z + s * y, t * y * z - s * x, t * z * z + c, 0, 0, 0, 0, 1]); },
+  app(m, p) { return [m[0] * p[0] + m[4] * p[1] + m[8] * p[2] + m[12], m[1] * p[0] + m[5] * p[1] + m[9] * p[2] + m[13], m[2] * p[0] + m[6] * p[1] + m[10] * p[2] + m[14]]; },
+};
+const chain = (...ms) => ms.reduce((a, b) => M4.mul(a, b));
+
+// ---------------------------------------------------------------- 着色器
+function shader(vs, fs) {
+  const mk = (t, s) => { const o = gl.createShader(t); gl.shaderSource(o, s); gl.compileShader(o); if (!gl.getShaderParameter(o, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(o) + '\n' + s); return o; };
+  const p = gl.createProgram(); gl.attachShader(p, mk(gl.VERTEX_SHADER, vs)); gl.attachShader(p, mk(gl.FRAGMENT_SHADER, fs)); gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+  const n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS), u = {}, a = {};
+  for (let i = 0; i < n; i++) { const inf = gl.getActiveUniform(p, i); u[inf.name.replace(/\[0\]$/, '')] = gl.getUniformLocation(p, inf.name); }
+  const na = gl.getProgramParameter(p, gl.ACTIVE_ATTRIBUTES);
+  for (let i = 0; i < na; i++) { const inf = gl.getActiveAttrib(p, i); a[inf.name] = gl.getAttribLocation(p, inf.name); }
+  return { p, u, a };
+}
+const NOISE = `
+float h21(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
+float vn(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3. - 2. * f);
+  return mix(mix(h21(i), h21(i + vec2(1, 0)), f.x), mix(h21(i + vec2(0, 1)), h21(i + vec2(1, 1)), f.x), f.y); }
+float fbm(vec2 p) { return vn(p) * .5 + vn(p * 2.03) * .27 + vn(p * 4.1) * .15 + vn(p * 8.3) * .08; }`;
+// 场景 / 单位共用：太阳 + 天空光 + 阴影 + 雾 + 色调映射；mat 是材质编号（0 塑料 1 草 2 混凝土 3 金属 4 木 5 布 6 砖 7 霓虹 8 玻璃 9 沥青 10 雪 11 沙土 12 水 13 岩石）
+const LIT_VS = `
+attribute vec3 aP; attribute vec3 aN; attribute vec4 aC; attribute vec2 aU; attribute float aB;
+uniform mat4 uVP, uM, uSVP; uniform float uRise[40]; uniform float uUseB;
+varying vec3 vW, vN; varying vec4 vC; varying vec2 vU; varying vec4 vS;
+void main() {
+  vec3 p = aP;
+  if (uUseB > .5 && aB > .5) { float k = uRise[int(aB + .5)]; p.y = 1. + (p.y - 1.) * k; }
+  vec4 w = uM * vec4(p, 1.);
+  vW = w.xyz; vN = normalize(mat3(uM) * aN); vC = aC; vU = aU;
+  vS = uSVP * w;
+  gl_Position = uVP * w;
+}`;
+const LIT_FS = `
+precision highp float;
+varying vec3 vW, vN; varying vec4 vC; varying vec2 vU; varying vec4 vS;
+uniform vec3 uSun, uSunC, uSky, uGnd, uFog, uEye; uniform float uFogD, uTime, uTex, uTint, uAlpha, uShadowOn, uDark, uUA;
+uniform sampler2D uT, uSM; uniform vec4 uBase;
+${NOISE}
+float unpack(vec4 c) { return dot(c, vec4(1., 1. / 255., 1. / 65025., 1. / 16581375.)); }
+float shadow() {
+  if (uShadowOn < .5) return 1.;
+  vec3 s = vS.xyz / vS.w * .5 + .5;
+  if (s.x < 0. || s.x > 1. || s.y < 0. || s.y > 1. || s.z > 1.) return 1.;
+  float z = s.z - .0016, sum = 0.;
+  // 双线性 PCF：2×2 个取样点、每点按四个最近格子的位置插值——影子边是软的，不是一格一格的锯齿
+  for (int i = 0; i < 2; i++) for (int j = 0; j < 2; j++) {
+    vec2 t = (s.xy + (vec2(float(i), float(j)) - .5) * 1.5 / 2048.) * 2048. - .5, f = fract(t), c = (floor(t) + .5) / 2048.;
+    float a0 = z > unpack(texture2D(uSM, c)) ? 0. : 1., a1 = z > unpack(texture2D(uSM, c + vec2(1. / 2048., 0.))) ? 0. : 1.;
+    float a2 = z > unpack(texture2D(uSM, c + vec2(0., 1. / 2048.))) ? 0. : 1., a3 = z > unpack(texture2D(uSM, c + vec2(1. / 2048.))) ? 0. : 1.;
+    sum += mix(mix(a0, a1, f.x), mix(a2, a3, f.x), f.y);
+  }
+  return sum / 4.;
+}
+vec3 tone(vec3 c) { c *= .82; vec3 a = c * (2.51 * c + .03), b = c * (2.43 * c + .59) + .14; return pow(clamp(a / b, 0., 1.), vec3(1. / 2.2)); }
+void main() {
+  float mat = floor(vC.a * 255. + .5);
+  vec3 base = vC.rgb * uBase.rgb;
+  float alpha = uAlpha * uBase.a;
+  if (uUA > .5) alpha = 1. - vU.x;   // 场景零件：自己的透明度
+  if (uTex > .5) { vec4 t = texture2D(uT, vU); if (t.a < .4) discard; base *= t.rgb; }
+  base = pow(base, vec3(2.2));
+  vec3 N = normalize(vN);
+  if (!gl_FrontFacing) N = -N;
+  vec2 q = vW.xz;
+  float spec = .04, rough = .9;
+  if (mat == 1.) { float n = fbm(q * .09); base *= mix(.72, 1.18, n) * mix(.9, 1.05, vn(q * 1.7)); }
+  else if (mat == 2.) { base *= mix(.86, 1.08, vn(q * .9 + vW.y)); }
+  else if (mat == 3.) { spec = .35; rough = .45; base *= mix(.9, 1.06, vn(q * 3.)); }
+  else if (mat == 4.) { base *= mix(.82, 1.1, vn(vec2(q.x * .3, vW.y * 6.))); }
+  else if (mat == 9.) { base *= mix(.8, 1.1, vn(q * 2.3)); }
+  else if (mat == 10.) { base *= mix(.92, 1.04, fbm(q * .12)); spec = .2; }
+  else if (mat == 11.) { base *= mix(.85, 1.1, fbm(q * .2)); }
+  else if (mat == 13.) { base *= mix(.75, 1.15, fbm(q * .05 + vW.y * .05)); }
+  vec3 L = normalize(uSun);
+  float sh = shadow();
+  float nl = max(dot(N, L), 0.);
+  vec3 V = normalize(uEye - vW);
+  vec3 Hh = normalize(L + V);
+  float sp = pow(max(dot(N, Hh), 0.), mix(8., 80., 1. - rough)) * spec * 3.;
+  vec3 amb = mix(uGnd, uSky, N.y * .5 + .5);
+  vec3 col = base * (uSunC * nl * sh + amb) + uSunC * sp * sh;
+  if (mat == 7.) col = base * 2.4 + .15;   // 霓虹：自己发光
+  if (mat == 8.) { float fr = pow(1. - max(dot(N, V), 0.), 3.); col = mix(base * amb * .6, uSky * 1.3, .35 + fr * .5) + uSunC * sp * 2.; }
+  col *= uDark;
+  float dist = length(vW - uEye);
+  float fog = 1. - exp(-dist * uFogD);
+  col = mix(col, uFog, clamp(fog, 0., 1.));
+  gl_FragColor = vec4(tone(col), alpha);
+}`;
+// 阴影图：深度存进 RGBA
+const SH_VS = `attribute vec3 aP; attribute float aB; uniform mat4 uVP, uM; uniform float uRise[40]; uniform float uUseB; varying float vD;
+void main() { vec3 p = aP; if (uUseB > .5 && aB > .5) { float k = uRise[int(aB + .5)]; p.y = 1. + (p.y - 1.) * k; }
+  vec4 c = uVP * uM * vec4(p, 1.); vD = c.z / c.w * .5 + .5; gl_Position = c; }`;
+const SH_FS = `precision highp float; varying float vD;
+void main() { vec4 e = fract(vD * vec4(1., 255., 65025., 16581375.)); e -= e.yzww * vec4(1. / 255., 1. / 255., 1. / 255., 0.); gl_FragColor = e; }`;
+// 天空：按视线方向的渐变 + 太阳光晕
+const SKY_VS = `attribute vec2 aP; varying vec2 vP; void main() { vP = aP; gl_Position = vec4(aP, .9999, 1.); }`;
+const SKY_FS = `precision highp float; varying vec2 vP; uniform mat4 uInv; uniform vec3 uSun, uHor, uZen, uSunC;
+vec3 tone(vec3 c) { vec3 a = c * (2.51 * c + .03), b = c * (2.43 * c + .59) + .14; return pow(clamp(a / b, 0., 1.), vec3(1. / 2.2)); }
+void main() { vec4 a = uInv * vec4(vP, 1., 1.); vec3 d = normalize(a.xyz / a.w);
+  float h = clamp(d.y, -.1, 1.);
+  vec3 c = mix(uHor, uZen, pow(max(h, 0.), .55));
+  float s = max(dot(d, normalize(uSun)), 0.);
+  c += uSunC * (pow(s, 900.) * 6. + pow(s, 24.) * .25 + pow(s, 4.) * .08);
+  gl_FragColor = vec4(tone(c), 1.); }`;
+// 特效粒子（朝镜头的方片）：kind 0 烟（混合）、1 火 / 闪光（相加）
+const PT_VS = `attribute vec3 aP; attribute vec4 aD; attribute vec4 aC; uniform mat4 uVP; uniform vec3 uR, uU; varying vec2 vQ; varying vec4 vC; varying float vS;
+void main() { vec2 q = aD.xy; float s = aD.z, r = aD.w; vec2 rq = vec2(q.x * cos(r) - q.y * sin(r), q.x * sin(r) + q.y * cos(r));
+  vec3 p = aP + (uR * rq.x + uU * rq.y) * s; vQ = q; vC = aC; vS = r; gl_Position = uVP * vec4(p, 1.); }`;
+const PT_FS = `precision highp float; varying vec2 vQ; varying vec4 vC; varying float vS; uniform float uKind;
+${NOISE}
+void main() { float r = length(vQ);
+  if (uKind < .5) { float n = fbm(vQ * 1.8 + vec2(vS * 3.7, vS * 1.3)); float a = smoothstep(1., .2, r + (n - .5) * .6);
+    vec3 c = vC.rgb * (.8 + .45 * n); gl_FragColor = vec4(c, a * vC.a); }
+  else { float a = pow(max(1. - r, 0.), 2.2); gl_FragColor = vec4(vC.rgb * a * vC.a, a * vC.a * .4); } }`;
+// 光束（曳光、激光、电磁炮）：朝镜头展开的长条，相加
+const BM_VS = `attribute vec3 aP; attribute vec4 aC; attribute float aE; uniform mat4 uVP; varying vec4 vC; varying float vE; void main() { vC = aC; vE = aE; gl_Position = uVP * vec4(aP, 1.); }`;
+const BM_FS = `precision highp float; varying vec4 vC; varying float vE; void main() { float a = 1. - abs(vE); a = a * a; gl_FragColor = vec4(vC.rgb * vC.a * a, 1.); }`;
+
+let P_LIT, P_SH, P_SKY, P_PT, P_BM;
+
+// ---------------------------------------------------------------- 网格
+function makeBuf(arr, Ty) { const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, Ty ? new Ty(arr) : arr, gl.STATIC_DRAW); return b; }
+function makeIdx(arr) { const b = gl.createBuffer(); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, b); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, arr instanceof Uint32Array ? arr : new Uint32Array(arr), gl.STATIC_DRAW); return b; }
+// 单位形状（局部 ±0.5）
+const SHAPES = (() => {
+  const box = { p: [], n: [], i: [] };
+  const faces = [[[1, 0, 0], [0, 1, 0], [0, 0, 1]], [[-1, 0, 0], [0, 1, 0], [0, 0, -1]], [[0, 1, 0], [0, 0, 1], [1, 0, 0]], [[0, -1, 0], [0, 0, -1], [1, 0, 0]], [[0, 0, 1], [0, 1, 0], [-1, 0, 0]], [[0, 0, -1], [0, 1, 0], [1, 0, 0]]];
+  for (const [n, u, v] of faces) {
+    const b = box.p.length / 3;
+    for (const [a, c] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) { box.p.push(n[0] * .5 + u[0] * a * .5 + v[0] * c * .5, n[1] * .5 + u[1] * a * .5 + v[1] * c * .5, n[2] * .5 + u[2] * a * .5 + v[2] * c * .5); box.n.push(...n); }
+    box.i.push(b, b + 1, b + 2, b, b + 2, b + 3);
+  }
+  const cyl = { p: [], n: [], i: [] }, S = 16;   // 沿 X 轴（Roblox 的圆柱）
+  for (let k = 0; k <= S; k++) { const a = k / S * Math.PI * 2, y = Math.cos(a), z = Math.sin(a); cyl.p.push(-.5, y * .5, z * .5, .5, y * .5, z * .5); cyl.n.push(0, y, z, 0, y, z); }
+  for (let k = 0; k < S; k++) { const b = k * 2; cyl.i.push(b, b + 2, b + 1, b + 1, b + 2, b + 3); }
+  for (const sx of [-1, 1]) { const c = cyl.p.length / 3; cyl.p.push(sx * .5, 0, 0); cyl.n.push(sx, 0, 0);
+    for (let k = 0; k <= S; k++) { const a = k / S * Math.PI * 2; cyl.p.push(sx * .5, Math.cos(a) * .5, Math.sin(a) * .5); cyl.n.push(sx, 0, 0); }
+    for (let k = 0; k < S; k++) cyl.i.push(c, c + 1 + k + (sx > 0 ? 0 : 1), c + 1 + k + (sx > 0 ? 1 : 0)); }
+  const ball = { p: [], n: [], i: [] }, LA = 10, LO = 16;
+  for (let a = 0; a <= LA; a++) for (let b = 0; b <= LO; b++) { const th = a / LA * Math.PI, ph = b / LO * Math.PI * 2; const x = Math.sin(th) * Math.cos(ph), y = Math.cos(th), z = Math.sin(th) * Math.sin(ph); ball.p.push(x * .5, y * .5, z * .5); ball.n.push(x, y, z); }
+  for (let a = 0; a < LA; a++) for (let b = 0; b < LO; b++) { const i0 = a * (LO + 1) + b, i1 = i0 + LO + 1; ball.i.push(i0, i1, i0 + 1, i0 + 1, i1, i1 + 1); }
+  // 楔形：底面、后面（+Z）整面，斜面从后上到前下
+  const wedge = { p: [], n: [], i: [] };
+  const wq = (pts, n) => { const b = wedge.p.length / 3; for (const q of pts) { wedge.p.push(...q); wedge.n.push(...n); } if (pts.length === 4) wedge.i.push(b, b + 1, b + 2, b, b + 2, b + 3); else wedge.i.push(b, b + 1, b + 2); };
+  wq([[-.5, -.5, -.5], [.5, -.5, -.5], [.5, -.5, .5], [-.5, -.5, .5]], [0, -1, 0]);
+  wq([[-.5, -.5, .5], [.5, -.5, .5], [.5, .5, .5], [-.5, .5, .5]], [0, 0, 1]);
+  wq([[-.5, -.5, -.5], [-.5, .5, .5], [.5, .5, .5], [.5, -.5, -.5]], norm([0, 1, -1]));
+  wq([[-.5, -.5, -.5], [-.5, -.5, .5], [-.5, .5, .5]], [-1, 0, 0]);
+  wq([[.5, -.5, -.5], [.5, .5, .5], [.5, -.5, .5]], [1, 0, 0]);
+  return { Block: box, Cylinder: cyl, Ball: ball, Wedge: wedge };
+})();
+const MATID = { Grass: 1, LeafyGrass: 1, Concrete: 2, Slate: 2, Cobblestone: 2, Pebble: 2, Marble: 2, Granite: 2, Metal: 3, DiamondPlate: 3, CorrodedMetal: 3, Foil: 3,
+  Wood: 4, WoodPlanks: 4, Fabric: 5, Brick: 6, Neon: 7, Glass: 8, Asphalt: 9, Snow: 10, Sand: 11, Ground: 11, Mud: 11, Water: 12, Rock: 13 };
+const TERRAIN_COL = { Grass: [106, 127, 63], LeafyGrass: [97, 118, 58], Ground: [116, 98, 72], Rock: [118, 114, 108], Snow: [232, 238, 246], Slate: [88, 92, 96], Sand: [206, 186, 140], Concrete: [150, 150, 146], Water: [40, 92, 120] };
+
+// 合并网格的收集器：每个顶点 位置 3、法线 3、颜色 4（rgb + 材质编号）、贴图坐标 2、楼号 1
+function Collector() { return { p: [], n: [], c: [], u: [], b: [], i: [] }; }
+function pushShape(C, sh, toW, nrm, col, mat, bIdx, tr) {
+  const base = C.p.length / 3;
+  for (let k = 0; k < sh.p.length; k += 3) {
+    const w = toW(sh.p[k], sh.p[k + 1], sh.p[k + 2]), nn = nrm(sh.n[k], sh.n[k + 1], sh.n[k + 2]);
+    C.p.push(w[0], w[1], w[2]); C.n.push(nn[0], nn[1], nn[2]); C.c.push(col[0] / 255, col[1] / 255, col[2] / 255, mat / 255); C.u.push(tr || 0, 0); C.b.push(bIdx || 0);
+  }
+  for (const i of sh.i) C.i.push(base + i);
+}
+function upload(C) {
+  if (!C.i.length) return null;
+  return { p: makeBuf(C.p, Float32Array), n: makeBuf(C.n, Float32Array), c: makeBuf(C.c, Float32Array), u: makeBuf(C.u, Float32Array), b: makeBuf(C.b, Float32Array), i: makeIdx(C.i), count: C.i.length };
+}
+
+// ---------------------------------------------------------------- 读 glb（导出时顶点已经摆好：Roblox 坐标、格为单位、底面中心在原点）
+async function loadGLB(url) {
+  const buf = await (await fetch(url)).arrayBuffer(), dv = new DataView(buf);
+  const jl = dv.getUint32(12, true), J = JSON.parse(new TextDecoder().decode(new Uint8Array(buf, 20, jl))), bo = 20 + jl + 8;
+  const view = i => { const b = J.bufferViews[i]; return new Uint8Array(buf, bo + (b.byteOffset || 0), b.byteLength); };
+  const acc = i => { const a = J.accessors[i], v = view(a.bufferView), T = a.componentType === 5126 ? Float32Array : a.componentType === 5125 ? Uint32Array : Uint16Array; return new T(v.buffer.slice(v.byteOffset, v.byteOffset + v.byteLength)); };
+  const tex = await Promise.all((J.images || []).map(async im => { const bmp = await createImageBitmap(new Blob([view(im.bufferView)], { type: im.mimeType }));
+    const t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, bmp);
+    gl.generateMipmap(gl.TEXTURE_2D); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT); return t; }));
+  const out = { meshes: [], mk: {}, mn: [1e9, 1e9, 1e9], mx: [-1e9, -1e9, -1e9] };
+  for (const node of J.nodes) {
+    if (node.mesh === undefined) continue;
+    for (const P of J.meshes[node.mesh].primitives) {
+      const pos = acc(P.attributes.POSITION);
+      if (node.name.startsWith('_')) {   // 标记：取中心
+        let c = [0, 0, 0]; const n = pos.length / 3; for (let k = 0; k < pos.length; k += 3) { c[0] += pos[k] / n; c[1] += pos[k + 1] / n; c[2] += pos[k + 2] / n; }
+        out.mk[node.name.slice(1)] = c; continue;
+      }
+      for (let k = 0; k < pos.length; k += 3) for (let a = 0; a < 3; a++) { out.mn[a] = Math.min(out.mn[a], pos[k + a]); out.mx[a] = Math.max(out.mx[a], pos[k + a]); }
+      const mat = J.materials[P.material] || {}, pb = mat.pbrMetallicRoughness || {}, bt = pb.baseColorTexture;
+      const nor = acc(P.attributes.NORMAL), uv = P.attributes.TEXCOORD_0 !== undefined ? acc(P.attributes.TEXCOORD_0) : new Float32Array(pos.length / 3 * 2);
+      const I = acc(P.indices);
+      out.meshes.push({ name: node.name, role: node.name.replace(/_\d+$/, ''), p: makeBuf(pos), n: makeBuf(nor), u: makeBuf(uv), i: makeIdx(I instanceof Uint32Array ? I : new Uint32Array(I)), count: I.length,
+        tex: bt ? tex[J.textures[bt.index].source] : null, col: pb.baseColorFactor || [1, 1, 1, 1], blend: mat.alphaMode === 'BLEND' });
+    }
+  }
+  out.len = out.mx[2] - out.mn[2];
+  return out;
+}
+
+// ---------------------------------------------------------------- 资源
+let S, B, ORIG, GLB = {}, STATIC = null, STATIC_T = null, ANIM = [], TERR = null, WATER = null, UNITM = {}, BLDS = [], BIDX = {};
+let SMfb, SMtex, SKYbuf, PTbuf = {}, BMbuf = {};
+const unitDisc = (() => { const C = Collector(); const S2 = 24; C.p.push(0, 0, 0); C.n.push(0, 1, 0); C.c.push(1, 1, 1, 0); C.u.push(0, 0); C.b.push(0);
+  for (let k = 0; k <= S2; k++) { const a = k / S2 * Math.PI * 2; C.p.push(Math.cos(a), 0, Math.sin(a)); C.n.push(0, 1, 0); C.c.push(1, 1, 1, 0); C.u.push(0, 0); C.b.push(0); }
+  for (let k = 0; k < S2; k++) C.i.push(0, k + 2, k + 1); return C; })();
+let DISC;
+
+TR.init = async function (opt) {
+  TR.opt = opt;
+  P_LIT = shader(LIT_VS, LIT_FS); P_SH = shader(SH_VS, SH_FS); P_SKY = shader(SKY_VS, SKY_FS); P_PT = shader(PT_VS, PT_FS); P_BM = shader(BM_VS, BM_FS);
+  S = await (await fetch(opt.rec + '/scene.json')).json();
+  B = await (await fetch(opt.rec + '/battle.json')).json();
+  ORIG = S.origin;
+  // 楼号（从 1 开始）
+  S.buildings.forEach((b, i) => { BIDX[b.id] = i + 1; BLDS.push(b); });
+  // 场景零件 → 一块不透明网格 + 一块半透明网格；带动画的单独画
+  const C = Collector(), CT = Collector();
+  for (const p of S.parts) {
+    const sh = SHAPES[p.s] || SHAPES.Block;
+    let sz = p.z.slice();
+    if (p.s === 'Cylinder') { const d = Math.min(sz[1], sz[2]); sz = [sz[0], d, d]; }
+    if (p.s === 'Ball') { const d = Math.min(sz[0], sz[1], sz[2]); sz = [d, d, d]; }
+    const c = p.c, px = c[0] - ORIG[0], py = c[1] - ORIG[1], pz = c[2] - ORIG[2];
+    const R = [c[3], c[4], c[5], c[6], c[7], c[8], c[9], c[10], c[11]];
+    const toW = (x, y, z) => { x *= sz[0]; y *= sz[1]; z *= sz[2]; return [px + R[0] * x + R[1] * y + R[2] * z, py + R[3] * x + R[4] * y + R[5] * z, pz + R[6] * x + R[7] * y + R[8] * z]; };
+    const nrm = (x, y, z) => { x /= sz[0] || 1; y /= sz[1] || 1; z /= sz[2] || 1; return norm([R[0] * x + R[1] * y + R[2] * z, R[3] * x + R[4] * y + R[5] * z, R[6] * x + R[7] * y + R[8] * z]); };
+    const mat = MATID[p.m] || 0;
+    if (p.a) { ANIM.push({ p, sh, sz, px, py, pz, R, mat }); continue; }
+    pushShape((p.t || mat === 8) ? CT : C, sh, toW, nrm, p.col, mat, BIDX[p.b] || 0, p.t || (mat === 8 ? 0.3 : 0));
+  }
+  STATIC = upload(C); STATIC_T = upload(CT);
+  // 地形：大地面、山（球的地面以上部分）、湖和河的水面、沙滩、战区两边的地形
+  const T = Collector(), WT = Collector();
+  const quad = (Cx, x0, z0, x1, z1, y, col, mat) => pushShape(Cx, SHAPES.Block, (x, yy, z) => [lerp(x0, x1, x + .5), y + yy * .01, lerp(z0, z1, z + .5)], (x, y, z) => [x, y, z], col, mat, 0);
+  quad(T, -9000, -9000, 9000, 9000, -0.02, TERRAIN_COL.Grass, 1);
+  for (const f of S.fills) {
+    const m = f.mat, col = TERRAIN_COL[m] || TERRAIN_COL.Grass, mat = MATID[m] || 1;
+    if (f.k === 'ball') {
+      const r = f.r, c = sub(f.p, ORIG);
+      if (c[1] + r < 0.5) continue;
+      pushShape(T, SHAPES.Ball, (x, y, z) => [c[0] + x * 2 * r, c[1] + y * 2 * r, c[2] + z * 2 * r], (x, y, z) => [x, y, z], col, mat, 0);
+    } else if (f.k === 'block' && (m === 'Water' || m === 'Sand' || m === 'Snow' || m === 'Concrete')) {
+      const c = sub(f.p, ORIG), s2 = f.size, top = c[1] + s2[1] / 2;
+      const y = (m === 'Water') ? 0.06 : Math.max(0.03, top + (m === 'Sand' ? 0.03 : 0.02));
+      quad(m === 'Water' ? WT : T, c[0] - s2[0] / 2, c[2] - s2[2] / 2, c[0] + s2[0] / 2, c[2] + s2[2] / 2, y, col, mat);
+    }
+  }
+  TERR = upload(T); WATER = upload(WT);
+  // 单位的 glb
+  const slots = new Set(Object.values(B.units).map(u => u.model).filter(Boolean));
+  for (const pr of ['prop_mg', 'prop_javelin', 'prop_stinger', 'prop_mortar']) slots.add(pr);
+  if (!opt.noModels) for (const s of slots) { try { GLB[s] = await loadGLB(opt.models + '/' + s + '.glb'); } catch (e) { console.warn('没有模型 ' + s); } }
+  DISC = upload(unitDisc);
+  // 阴影图
+  SMtex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, SMtex); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 2048, 2048, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  SMfb = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, SMfb); gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, SMtex, 0);
+  const rb = gl.createRenderbuffer(); gl.bindRenderbuffer(gl.RENDERBUFFER, rb); gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, 2048, 2048);
+  gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, rb); gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  SKYbuf = makeBuf([-1, -1, 1, -1, 1, 1, -1, -1, 1, 1, -1, 1], Float32Array);
+  for (const k of ['p', 'd', 'c']) PTbuf[k] = gl.createBuffer();
+  PTbuf.i = gl.createBuffer();
+  for (const k of ['p', 'c', 'e']) BMbuf[k] = gl.createBuffer();
+  prepTracks();
+  prepFx();
+  TR.finish = B.finish; TR.start = B.start || null;
+  TR.ready = true;
+  return { parts: S.parts.length, tracks: B.tracks.length, fx: B.fx.length, glb: Object.keys(GLB) };
+};
+
+// ---------------------------------------------------------------- 单位轨迹：按时间插值
+const BYBU = {};
+function prepTracks() {
+  for (const tr of B.tracks) {
+    tr.def = B.units[tr.t] || {};
+    tr.t0 = tr.f[0][0]; tr.t1 = tr.f[tr.f.length - 1][0];
+    tr.dieT = null;
+    for (const f of tr.f) if (f[7] && tr.dieT === null) tr.dieT = f[0];
+    if (tr.bu) BYBU[tr.bu] = tr;
+  }
+}
+const wrapA = a => ((a + Math.PI) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI) - Math.PI;
+function sample(tr, T) {
+  const f = tr.f;
+  if (T < tr.t0 - 0.06 || T > tr.t1 + 0.06) return null;
+  let lo = 0, hi = f.length - 1;
+  while (hi - lo > 1) { const m = (lo + hi) >> 1; if (f[m][0] <= T) lo = m; else hi = m; }
+  const a = f[lo], b = f[hi], u = (b[0] > a[0]) ? clamp((T - a[0]) / (b[0] - a[0]), 0, 1) : 0;
+  const yaw = a[4] + wrapA(b[4] - a[4]) * u;
+  // 喷气机转弯压坡度（和游戏客户端一样按转向快慢）
+  let bank = 0;
+  if (tr.def.jet) {
+    const i0 = Math.max(0, lo - 3), i1 = Math.min(f.length - 1, lo + 3);
+    const dy = wrapA(f[i1][4] - f[i0][4]) / Math.max(0.05, f[i1][0] - f[i0][0]);
+    bank = clamp(dy * 0.55, -1.1, 1.1);
+  }
+  return { x: lerp(a[1], b[1], u), y: lerp(a[2], b[2], u), z: lerp(a[3], b[3], u), yaw, pitch: lerp(a[5], b[5], u), ty: a[6] + wrapA(b[6] - a[6]) * u, dead: a[7] > 0, fly: a[8] > 0, bank };
+}
+TR.posOf = (trOrId, T) => { const tr = typeof trOrId === 'object' ? trOrId : B.tracks[trOrId - 1]; const s = sample(tr, T); return s && [s.x, s.y, s.z]; };
+
+// ---------------------------------------------------------------- 特效：每个特效是「开始时间 + 年龄」的函数（随时都能跳到任意时刻）
+let FX = [];
+const ICP = {}, MINEEND = {};
+function prepFx() {
+  FX = B.fx.filter(e => e && e.k);
+  FX.forEach((e, i) => { e.i = i; });
+  for (const e of FX) {
+    if ((e.k === 'intercept' || e.k === 'abm') && e.id !== undefined) {
+      const end = e.tt + (e.k === 'abm' ? 0.7 : 0);
+      if (!(e.k === 'abm' && e.miss)) ICP[e.id] = Math.min(ICP[e.id] || 1e9, end);
+    }
+    if (e.k === 'mineboom') MINEEND[e.id] = e.tt;
+  }
+  for (const e of FX) {
+    e.dur = 2.5;
+    switch (e.k) {
+      case 'shot': e.dur = 0.14; break; case 'laser': e.dur = 0.16; break; case 'rail': e.dur = 0.6; break;
+      case 'shell': case 'gshell': case 'mrocket': case 'bomb': case 'cruise': case 'ballistic': case 'missile': e.dur = (e.t || 1) + 1.2; break;
+      case 'boom': e.dur = 2.6 * Math.max(1, e.s || 1); break; case 'bigboom': e.dur = 6; break;
+      case 'mine': e.dur = ((MINEEND[e.id] !== undefined) ? MINEEND[e.id] : 999) - e.tt; break;
+      case 'mineboom': e.dur = 2.6; break; case 'flyover': e.dur = (e.t || 4) + 0.5; break;
+      case 'intercept': e.dur = 1.2; break; case 'abm': e.dur = 2.6; break;
+    }
+  }
+  FX.sort((a, b) => a.tt - b.tt);
+}
+
+// 一发弹在年龄 age 的位置（抛物线 / 直线 / 炸弹往下掉 / 导弹追目标）
+function projPos(e, age) {
+  const a = e.a, dur = Math.max(0.05, e.t || 1);
+  let b = e.b;
+  if (e.k === 'missile' && e.bid && BYBU[e.bid]) { const tp = TR.posOf(BYBU[e.bid], e.tt + Math.min(age, dur)); if (tp) b = [tp[0], tp[1] + 3, tp[2]]; }
+  const k = clamp(age / dur, 0, 1);
+  if (e.k === 'bomb') { return [lerp(a[0], b[0], k), a[1] + (b[1] - a[1]) * k * k, lerp(a[2], b[2], k)]; }
+  const d = len(sub(b, a));
+  let arc = d * 0.28;
+  if (e.k === 'mrocket') arc = d * 0.22; else if (e.k === 'gshell') arc = 0; else if (e.k === 'missile') arc = d * 0.06; else if (e.k === 'cruise') arc = d * 0.45; else if (e.k === 'ballistic') arc = 320;
+  const p = mix3(a, b, k); p[1] += arc * 4 * k * (1 - k);
+  return p;
+}
+
+// ---------------------------------------------------------------- 每帧的粒子、光束收集
+let PT = [], BM = [];
+const puff = (p, size, col, alpha, rot, kind) => PT.push({ p, s: size, c: col, a: alpha, r: rot || 0, k: kind || 0 });
+const beam = (a, b, w, col, alpha) => BM.push({ a, b, w, c: col, al: alpha });
+function boomFx(p, s, age, seed) {
+  // 闪光、火球、翻滚的烟、溅起的土、碎片
+  if (age < 0.15) puff([p[0], p[1] + 3 * s, p[2]], 13 * s * (0.6 + age * 3), [1, .88, .65], (1 - age / 0.15) * .9, 0, 1);
+  if (age < 0.7) {
+    const k = age / 0.7;
+    for (let j = 0; j < 4; j++) {
+      const o = [(hash(seed + j) - .5) * 6 * s, (hash(seed + j + 9) * 4 + 1.5) * s, (hash(seed + j + 17) - .5) * 6 * s];
+      puff(add(p, add(o, [0, k * 6 * s, 0])), (5 + 10 * easeOut(k)) * s, [1, .5 + .3 * (1 - k), .16], (1 - k) * .8, hash(seed + j) * 6, 1);
+    }
+  }
+  const nS = s >= 1.3 ? 7 : 5;
+  for (let j = 0; j < nS; j++) {
+    const life = 2.2 + hash(seed + j + 3) * 1.6;
+    const k = (age - 0.08) / life;
+    if (k <= 0 || k >= 1) continue;
+    const o = [(hash(seed + j * 3) - .5) * 9 * s, 0, (hash(seed + j * 5) - .5) * 9 * s];
+    const rise = (6 + hash(seed + j * 7) * 10) * s * easeOut(k) + 2 * s;
+    const g = .2 + .15 * hash(seed + j);
+    puff([p[0] + o[0] + k * 6 * s, p[1] + rise, p[2] + o[2] + k * 3 * s], (7 + 16 * easeOut(k)) * s, [g, g * .95, g * .9], (1 - k) * .72 * (k < .08 ? k / .08 : 1), hash(seed + j * 11) * 6 + k, 0);
+  }
+  if (age < 0.9) {   // 土
+    const k = age / 0.9;
+    for (let j = 0; j < 6; j++) {
+      const an = j / 6 * Math.PI * 2 + hash(seed) * 3;
+      puff([p[0] + Math.cos(an) * 14 * s * easeOut(k), p[1] + 1 + 2 * s * k, p[2] + Math.sin(an) * 14 * s * easeOut(k)], 6 * s * (0.5 + k), [.55, .47, .36], (1 - k) * .7, an, 0);
+    }
+  }
+}
+function bigBoomFx(p, s, age, seed) {
+  boomFx(p, s * 0.9, age, seed);
+  if (age < 1.2) { const k = age / 1.2; for (let j = 0; j < 24; j++) { const an = j / 24 * Math.PI * 2; puff([p[0] + Math.cos(an) * 160 * easeOut(k), p[1] + 2, p[2] + Math.sin(an) * 160 * easeOut(k)], 18, [.85, .8, .72], (1 - k) * .55, an, 0); } }
+  for (let i = 0; i < 6; i++) {   // 火柱、蘑菇云
+    const life = 2.4 + i * 0.4, k = (age - 0.1) / life;
+    if (k <= 0 || k >= 1) continue;
+    const q = [p[0], p[1] + 8 + i * 10 + 50 * easeOut(k), p[2]];
+    puff(q, 26 + 30 * k, k < .4 ? [1, .5, .16] : [.28, .26, .24], k < .4 ? (1 - k / .4) * .6 : (1 - k) * .9, i, k < .4 ? 1 : 0);
+  }
+  const k = (age - 0.4) / 5;
+  if (k > 0 && k < 1) puff([p[0], p[1] + 70 + 60 * easeOut(k), p[2]], 60 + 90 * k, [.3, .28, .26], (1 - k) * .9, 2, 0);
+}
+const SHOTSTY = { tank: [1, .7, .35, 0.9], heavytank: [1, .65, .3, 1.1], boss: [1, .6, .3, 1.3], td: [1, .7, .35, 0.8], ifv: [1, .8, .45, 0.45], aa: [1, .85, .4, 0.4], spaag: [1, .85, .4, 0.45],
+  attacker: [1, .8, .35, 0.6], heli: [1, .8, .4, 0.5] };
+function fxDraw(T, eye) {
+  for (const e of FX) {
+    if (e.tt > T) break;
+    const age = T - e.tt;
+    if (age > e.dur) continue;
+    const seed = e.i * 7.3;
+    switch (e.k) {
+      case 'shot': {
+        if (age > 0.1) break;
+        const st = SHOTSTY[e.u] || [1, .9, .55, 0.22];
+        beam(e.a, e.b, st[3], [st[0], st[1], st[2]], 1.6 * (1 - age / 0.1));
+        if (age < 0.06) puff(e.a, 2 + st[3] * 5, [1, .85, .5], 1, seed, 1);
+        if (age > 0.02 && age < 0.1 && st[3] > 0.6) puff(e.b, 4 + st[3] * 4, [1, .7, .35], 1, seed, 1);
+        break;
+      }
+      case 'laser':
+        if (age > 0.14) break;
+        beam(e.a, e.b, 0.8, [1, .25, .2], 2 * (1 - age / 0.14)); beam(e.a, e.b, 0.25, [1, .9, .85], 2 * (1 - age / 0.14));
+        puff(e.b, 3, [1, .4, .3], 1, seed, 1); break;
+      case 'rail': {
+        const k = age / 0.5;
+        if (k < 1) { beam(e.a, e.b, 1.5 * (1 - k * .5), [.25, .7, 1], 1.1 * (1 - k)); beam(e.a, e.b, 0.4, [.8, .95, 1], 1.3 * (1 - k)); }
+        if (age < 0.1) puff(e.a, 8, [.5, .8, 1], .9, seed, 1);
+        for (let j = 1; j < 7; j++) { const kk = (age - j * 0.02) / 0.45; if (kk > 0 && kk < 1) puff(add(mix3(e.a, e.b, j / 7), [0, kk * 3, 0]), 3 + kk * 6, [.6, .85, 1], 1 - kk, j, 1); }
+        break;
+      }
+      case 'shell': case 'gshell': case 'mrocket': case 'bomb': case 'cruise': case 'ballistic': case 'missile': {
+        const dur = Math.max(0.05, e.t || 1);
+        const end = (e.id !== undefined && ICP[e.id] !== undefined && e.k !== 'missile') ? Math.min(dur, ICP[e.id] - e.tt) : dur;
+        if (age < end) {
+          const p = projPos(e, age);
+          const big = e.k === 'cruise' || e.k === 'ballistic';
+          const hs = big ? 7 : (e.k === 'mrocket' || e.k === 'missile') ? 3 : (e.k === 'bomb' ? 2 : 2.2);
+          puff(p, hs, big ? [1, .85, .6] : [1, .75, .4], 1, seed, 1);
+          if (e.k !== 'bomb') {   // 尾烟
+            const n = big ? 26 : (e.k === 'shell' || e.k === 'gshell' ? 6 : 14), dt = big ? 0.12 : 0.05;
+            for (let j = 1; j <= n; j++) {
+              const ta = age - j * dt;
+              if (ta < 0) break;
+              const q = projPos(e, ta), kk = j / n;
+              const g = big ? .88 : .75;
+              puff(q, (big ? 6 : 1.6) + kk * (big ? 14 : 4), [g, g, g * .97], (1 - kk) * (big ? .7 : .45), j + seed, 0);
+            }
+            if (big && age < 0.5) puff(e.a, 20, [1, .8, .5], 1 - age / 0.5, seed, 1);
+          }
+        } else if (end < dur && age < end + 1.4) {   // 被拦截：半空炸开
+          const p = projPos(e, end);
+          boomFx(p, big2(e), age - end, seed);
+        } else if (e.k === 'missile' && age >= dur && age < dur + 1.2) {
+          boomFx(projPos(e, dur), 0.9, age - dur, seed);
+        }
+        break;
+      }
+      case 'boom': boomFx(e.p, e.s || 1, age, seed); break;
+      case 'mineboom': boomFx(e.p, 1.4, age, seed); break;
+      case 'bigboom': bigBoomFx(e.p, e.s || 3, age, seed); break;
+      case 'intercept': {
+        const tgt = FX.find(x => x.id === e.id && (x.k === 'shell' || x.k === 'mrocket' || x.k === 'gshell'));
+        if (!tgt) break;
+        const p = projPos(tgt, e.tt - tgt.tt);
+        if (age < 0.16) { if (e.laser) { beam(e.a, p, 0.9, [1, .25, .2], 2); beam(e.a, p, 0.3, [1, .9, .85], 2); } else for (let j = 0; j < 3; j++) beam(e.a, add(p, [(hash(seed + j) - .5) * 3, 0, (hash(seed + j + 1) - .5) * 3]), 0.3, [1, .88, .5], 1.4); }
+        boomFx(p, 0.5, age, seed);
+        break;
+      }
+      case 'abm': {
+        const tgt = FX.find(x => x.id === e.id && x.k === 'ballistic');
+        if (!tgt) break;
+        const hitT = e.tt + 0.7, p = projPos(tgt, hitT - tgt.tt);
+        if (age < 0.7) {   // 拦截弹往上飞
+          const k = age / 0.7, q = mix3(e.a, p, k); q[1] += 40 * 4 * k * (1 - k);
+          puff(q, 2.5, [1, .85, .6], 1, seed, 1);
+          for (let j = 1; j < 12; j++) { const kk = (age - j * 0.04) / 0.7; if (kk <= 0) break; const r = mix3(e.a, p, kk); r[1] += 160 * kk * (1 - kk); puff(r, 2 + j * .6, [.9, .9, .88], (1 - j / 12) * .6, j, 0); }
+        } else if (!e.miss) bigBoomFx(p, 1.6, age - 0.7, seed);
+        break;
+      }
+      case 'mine': {
+        const on = ((T * 1.5) % 1) < 0.5;
+        puff([e.p[0], e.p[1] + 0.5, e.p[2]], 2.2, [.25, .27, .2], .9, 0, 0);
+        if (on) puff([e.p[0], e.p[1] + 0.9, e.p[2]], 1.6, [1, .15, .1], 1, 0, 1);
+        break;
+      }
+      case 'swarm': if (age < 1.4) for (let j = 0; j < 4; j++) { const k = age / 1.4; puff(add(e.p, [(hash(seed + j) - .5) * 8, 2 + 8 * k, (hash(seed + j + 3) - .5) * 8]), 5 + 9 * k, [.86, .85, .82], (1 - k) * .7, j, 0); } break;
+      case 'heal': case 'jam': case 'ability': if (age < 1.2) { const k = age / 1.2, col = e.k === 'heal' ? [.4, 1, .55] : e.k === 'jam' ? [.7, .45, 1] : [1, .85, .35];
+        for (let j = 0; j < 16; j++) { const an = j / 16 * Math.PI * 2; puff([e.p[0] + Math.cos(an) * (e.s || 20) * easeOut(k), e.p[1] + 1.5, e.p[2] + Math.sin(an) * (e.s || 20) * easeOut(k)], 3, col, 1 - k, 0, 1); } } break;
+      case 'drop': if (age < 1.5) puff(add(e.p, [0, 2 + age * 3, 0]), 6 + age * 6, [.8, .78, .74], (1 - age / 1.5) * .6, 0, 0); break;
+    }
+  }
+}
+const big2 = e => (e.k === 'ballistic' || e.k === 'cruise') ? 2 : 0.5;
+
+// ---------------------------------------------------------------- 画一帧
+let VP, VIEW, PROJ, EYE, SVP;
+const SUN = norm([-0.42, 0.62, -0.66]), SUNC = [3.1, 2.85, 2.45];
+let SKY = [0.30, 0.37, 0.48], GND = [0.20, 0.18, 0.15], FOG = [0.62, 0.72, 0.85], HOR = [0.66, 0.76, 0.9], ZEN = [0.16, 0.34, 0.68], FOGD = 0.00013;
+function bindLit(prog, m) {
+  const u = prog.u;
+  gl.uniformMatrix4fv(u.uM, false, m);
+}
+function attr(prog, name, buf, n) { const loc = prog.a[name]; if (loc === undefined || loc < 0) return; gl.bindBuffer(gl.ARRAY_BUFFER, buf); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, n, gl.FLOAT, false, 0, 0); }
+function noAttr(prog, name, v) { const loc = prog.a[name]; if (loc === undefined || loc < 0) return; gl.disableVertexAttribArray(loc); gl.vertexAttrib4f(loc, v[0], v[1], v[2], v[3]); }
+function drawMerged(prog, M, shadowPass) {
+  if (!M) return;
+  attr(prog, 'aP', M.p, 3); attr(prog, 'aB', M.b, 1);
+  if (!shadowPass) { attr(prog, 'aN', M.n, 3); attr(prog, 'aC', M.c, 4); attr(prog, 'aU', M.u, 2); }
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, M.i); gl.drawElements(gl.TRIANGLES, M.count, gl.UNSIGNED_INT, 0);
+}
+// 一个单位 → 一串（网格、矩阵、颜色、贴图）
+function unitDraws(T, list) {
+  for (const tr of B.tracks) {
+    const s = sample(tr, T);
+    if (!s) continue;
+    const def = tr.def;
+    let dark = 1;
+    if (tr.dieT !== null && T >= tr.dieT) {
+      if (def.foot) continue;
+      const da = T - tr.dieT;
+      if (da > 6) continue;
+      dark = 0.22;
+      // 着火、冒黑烟
+      const sd = tr.id * 3.1;
+      puff([s.x, s.y + 4, s.z], 6 + hash(sd + Math.floor(T * 8)) * 3, [1, .5, .15], .9, T * 3, 1);
+      for (let j = 0; j < 5; j++) { const k = ((T * 0.5 + j / 5) % 1); puff([s.x + k * 5, s.y + 5 + k * 26, s.z + k * 2], 5 + k * 12, [.16, .15, .14], (1 - k) * .75, j + k, 0); }
+    }
+    const g = GLB[def.model];
+    if (!g) continue;
+    const scale = def.foot ? 1 : (def.len && g.len > 0.01 ? def.len / g.len : 1);
+    const base = chain(M4.tr(s.x, s.y + 1, s.z), M4.ry(s.yaw), M4.rx(s.pitch), M4.rz(s.bank));
+    const team = tr.team === 1 ? [52 / 255, 120 / 255, 220 / 255] : [200 / 255, 50 / 255, 45 / 255];
+    const copies = def.foot ? ({ 2: [[-1.8, 0, 0.6], [1.8, 0, 0.6]], 3: [[-2.6, 0, 1.6], [2.6, 0, 1.6], [0, 0, -2.2]] }[def.squad || 3] || [[0, 0, 0]]) : [[0, 0, 0]];
+    for (const o of copies) {
+      const M = chain(base, M4.tr(o[0], o[1], o[2]), M4.sc(scale, scale, scale));
+      for (const mesh of g.meshes) {
+        let m = M;
+        if (mesh.role === 'Turret' && g.mk.PivotTurret) { const pv = g.mk.PivotTurret; m = chain(M, M4.tr(pv[0], pv[1], pv[2]), M4.ry(s.ty), M4.tr(-pv[0], -pv[1], -pv[2])); }
+        else if (mesh.role === 'Rotor' && g.mk.PivotRotor) { const pv = g.mk.PivotRotor; m = chain(M, M4.tr(pv[0], pv[1], pv[2]), M4.ry(T * 31), M4.tr(-pv[0], -pv[1], -pv[2])); }
+        else if (mesh.role === 'TailRotor' && g.mk.PivotTail && g.mk.AxisTail) { const pv = g.mk.PivotTail; m = chain(M, M4.tr(pv[0], pv[1], pv[2]), M4.axis(sub(g.mk.AxisTail, pv), T * 52), M4.tr(-pv[0], -pv[1], -pv[2])); }
+        list.push({ mesh, m, dark });
+      }
+    }
+    if (def.foot && def.prop && GLB[def.prop]) {
+      const at = { prop_mg: [0, 0, -2.9], prop_mortar: [0, 0, 0.1], prop_javelin: [-1.3, 4.25, 0.9], prop_stinger: [-1.3, 4.25, 0.9] }[def.prop] || [0, 0, 0];
+      const M = chain(base, M4.tr(at[0], at[1], at[2]));
+      for (const mesh of GLB[def.prop].meshes) list.push({ mesh, m: M, dark });
+    }
+    if (!def.air || s.y < 3) list.push({ disc: true, m: chain(M4.tr(s.x, s.y + 1.15, s.z), M4.sc(def.size * 0.48, 1, def.size * 0.48)), col: team });
+  }
+}
+// 动画零件（雷达转、灯闪）
+function animDraws(T, list) {
+  for (const a of ANIM) {
+    const p = a.p;
+    let rot = M4.id();
+    if (p.a === 'blink') { if (((T * (p.sp || 1)) % 1) > 0.5) continue; }
+    else if (p.a === 'spin') rot = M4.ry(T * (p.sp || 0.3) * Math.PI * 2);
+    list.push({ part: a, m: chain(M4.tr(a.px, a.py, a.pz), rot) });
+  }
+}
+const ANIMBUF = {};
+function animMesh(a) {
+  if (ANIMBUF[a.p.s + a.sz.join(',') + a.R.join(',') + a.p.col.join(',') + a.mat]) return ANIMBUF[a.p.s + a.sz.join(',') + a.R.join(',') + a.p.col.join(',') + a.mat];
+  const C = Collector(), R = a.R, sz = a.sz;
+  pushShape(C, a.sh, (x, y, z) => { x *= sz[0]; y *= sz[1]; z *= sz[2]; return [R[0] * x + R[1] * y + R[2] * z, R[3] * x + R[4] * y + R[5] * z, R[6] * x + R[7] * y + R[8] * z]; },
+    (x, y, z) => norm([R[0] * x / sz[0] + R[1] * y / sz[1] + R[2] * z / sz[2], R[3] * x / sz[0] + R[4] * y / sz[1] + R[5] * z / sz[2], R[6] * x / sz[0] + R[7] * y / sz[1] + R[8] * z / sz[2]]), a.p.col, a.mat, 0);
+  return (ANIMBUF[a.p.s + a.sz.join(',') + a.R.join(',') + a.p.col.join(',') + a.mat] = upload(C));
+}
+
+function setLitCommon(prog, rise, useB) {
+  gl.uniform1fv(prog.u.uRise, rise);
+  gl.uniform1f(prog.u.uUseB, useB ? 1 : 0);
+}
+TR.render = function (st) {
+  // st：{ T 战斗时间, eye, at, fov, rise[40], shadow, dark, sky... }
+  PT = []; BM = [];
+  EYE = st.eye;
+  PROJ = M4.persp((st.fov || 50) * DEG, W / H, 1.5, 9000);
+  VIEW = M4.look(st.eye, st.at, st.up);
+  VP = M4.mul(PROJ, VIEW);
+  const rise = new Float32Array(40).fill(1);
+  if (st.rise) for (let i = 0; i < 40; i++) rise[i] = st.rise[i] === undefined ? 1 : st.rise[i];
+  const draws = [];
+  if (st.units !== false) unitDraws(st.T, draws);
+  animDraws(st.T, draws);
+  // ---- 阴影图：太阳方向的正交投影，罩住镜头看着的那一片
+  const R2 = st.shadowR || clamp(len(sub(st.at, st.eye)) * 2.2, 160, 520);
+  const fc = [st.at[0], 0, st.at[2]];
+  const sEye = add(fc, mul(SUN, 1600));
+  SVP = M4.mul(M4.ortho(-R2, R2, -R2, R2, 200, 3400), M4.look(sEye, fc, [0, 1, 0]));
+  const shadowOn = st.shadow !== false;
+  if (shadowOn) {
+    gl.bindFramebuffer(gl.FRAMEBUFFER, SMfb); gl.viewport(0, 0, 2048, 2048);
+    gl.clearColor(1, 1, 1, 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    gl.enable(gl.DEPTH_TEST); gl.disable(gl.BLEND); gl.disable(gl.CULL_FACE);
+    gl.useProgram(P_SH.p); gl.uniformMatrix4fv(P_SH.u.uVP, false, SVP); setLitCommon(P_SH, rise, true);
+    gl.uniformMatrix4fv(P_SH.u.uM, false, M4.id());
+    drawMerged(P_SH, STATIC, true);
+    gl.uniform1f(P_SH.u.uUseB, 0);
+    for (const d of draws) {
+      if (d.disc) continue;
+      gl.uniformMatrix4fv(P_SH.u.uM, false, d.m);
+      const mesh = d.part ? animMesh(d.part) : d.mesh;
+      if (!mesh) continue;
+      attr(P_SH, 'aP', mesh.p, 3); noAttr(P_SH, 'aB', [0, 0, 0, 0]);
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, mesh.i); gl.drawElements(gl.TRIANGLES, mesh.count, gl.UNSIGNED_INT, 0);
+    }
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  }
+  gl.viewport(0, 0, W, H);
+  gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  // ---- 天空
+  gl.disable(gl.DEPTH_TEST); gl.useProgram(P_SKY.p);
+  const inv = invert(VP);
+  gl.uniformMatrix4fv(P_SKY.u.uInv, false, inv); gl.uniform3fv(P_SKY.u.uSun, SUN); gl.uniform3fv(P_SKY.u.uHor, HOR); gl.uniform3fv(P_SKY.u.uZen, ZEN); gl.uniform3fv(P_SKY.u.uSunC, SUNC);
+  gl.bindBuffer(gl.ARRAY_BUFFER, SKYbuf); gl.enableVertexAttribArray(P_SKY.a.aP); gl.vertexAttribPointer(P_SKY.a.aP, 2, gl.FLOAT, false, 0, 0);
+  gl.drawArrays(gl.TRIANGLES, 0, 6);
+  gl.disableVertexAttribArray(P_SKY.a.aP);
+  // ---- 场景、地形、单位
+  gl.enable(gl.DEPTH_TEST); gl.depthMask(true); gl.disable(gl.BLEND); gl.disable(gl.CULL_FACE);
+  const L = P_LIT; gl.useProgram(L.p);
+  gl.uniformMatrix4fv(L.u.uVP, false, VP); gl.uniformMatrix4fv(L.u.uSVP, false, SVP);
+  gl.uniform3fv(L.u.uSun, SUN); gl.uniform3fv(L.u.uSunC, SUNC); gl.uniform3fv(L.u.uSky, SKY); gl.uniform3fv(L.u.uGnd, GND); gl.uniform3fv(L.u.uFog, FOG); gl.uniform3fv(L.u.uEye, EYE);
+  gl.uniform1f(L.u.uFogD, st.fogD || FOGD); gl.uniform1f(L.u.uTime, st.T || 0); gl.uniform1f(L.u.uShadowOn, shadowOn ? 1 : 0); gl.uniform1f(L.u.uAlpha, 1); gl.uniform1f(L.u.uDark, 1); gl.uniform1f(L.u.uUA, 0);
+  gl.uniform4f(L.u.uBase, 1, 1, 1, 1); gl.uniform1f(L.u.uTex, 0);
+  gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, SMtex); gl.uniform1i(L.u.uSM, 1); gl.activeTexture(gl.TEXTURE0); gl.uniform1i(L.u.uT, 0);
+  setLitCommon(L, rise, false);
+  bindLit(L, M4.id());
+  drawMerged(L, TERR, false);
+  setLitCommon(L, rise, true);
+  drawMerged(L, STATIC, false);
+  gl.uniform1f(L.u.uUseB, 0);
+  for (const d of draws) {
+    if (d.disc) continue;
+    bindLit(L, d.m);
+    if (d.part) {
+      const mesh = animMesh(d.part);
+      gl.uniform1f(L.u.uTex, 0); gl.uniform4f(L.u.uBase, 1, 1, 1, 1); gl.uniform1f(L.u.uDark, 1);
+      drawMerged(L, mesh, false);
+      continue;
+    }
+    const mesh = d.mesh;
+    attr(L, 'aP', mesh.p, 3); attr(L, 'aN', mesh.n, 3); attr(L, 'aU', mesh.u, 2); noAttr(L, 'aC', [1, 1, 1, 3 / 255]); noAttr(L, 'aB', [0, 0, 0, 0]);
+    gl.uniform4fv(L.u.uBase, mesh.col); gl.uniform1f(L.u.uDark, d.dark);
+    if (mesh.tex) { gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, mesh.tex); gl.uniform1f(L.u.uTex, 1); } else gl.uniform1f(L.u.uTex, 0);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, mesh.i); gl.drawElements(gl.TRIANGLES, mesh.count, gl.UNSIGNED_INT, 0);
+  }
+  gl.uniform1f(L.u.uTex, 0); gl.uniform4f(L.u.uBase, 1, 1, 1, 1); gl.uniform1f(L.u.uDark, 1);
+  // ---- 半透明：水面、玻璃、半透明零件、队伍色圈
+  gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); gl.depthMask(false);
+  bindLit(L, M4.id());
+  gl.uniform1f(L.u.uAlpha, 0.86); drawMerged(L, WATER, false);
+  gl.uniform1f(L.u.uUA, 1); setLitCommon(L, rise, true); drawMerged(L, STATIC_T, false); gl.uniform1f(L.u.uUseB, 0); gl.uniform1f(L.u.uUA, 0);
+  for (const d of draws) {
+    if (!d.disc) continue;
+    bindLit(L, d.m); gl.uniform4f(L.u.uBase, d.col[0] * 1.6, d.col[1] * 1.6, d.col[2] * 1.6, 1); gl.uniform1f(L.u.uAlpha, 0.45);
+    attr(L, 'aP', DISC.p, 3); attr(L, 'aN', DISC.n, 3); attr(L, 'aU', DISC.u, 2); noAttr(L, 'aC', [1, 1, 1, 7 / 255]); noAttr(L, 'aB', [0, 0, 0, 0]);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, DISC.i); gl.drawElements(gl.TRIANGLES, DISC.count, gl.UNSIGNED_INT, 0);
+  }
+  gl.uniform1f(L.u.uAlpha, 1); gl.uniform4f(L.u.uBase, 1, 1, 1, 1);
+  // ---- 特效
+  if (st.T !== undefined && st.fx !== false) fxDraw(st.T, EYE);
+  if (st.extraFx) st.extraFx(st);
+  drawParticles();
+  drawBeams();
+  gl.depthMask(true); gl.disable(gl.BLEND);
+};
+function invert(m) {
+  const inv = new Float32Array(16), a = m;
+  inv[0] = a[5] * a[10] * a[15] - a[5] * a[11] * a[14] - a[9] * a[6] * a[15] + a[9] * a[7] * a[14] + a[13] * a[6] * a[11] - a[13] * a[7] * a[10];
+  inv[4] = -a[4] * a[10] * a[15] + a[4] * a[11] * a[14] + a[8] * a[6] * a[15] - a[8] * a[7] * a[14] - a[12] * a[6] * a[11] + a[12] * a[7] * a[10];
+  inv[8] = a[4] * a[9] * a[15] - a[4] * a[11] * a[13] - a[8] * a[5] * a[15] + a[8] * a[7] * a[13] + a[12] * a[5] * a[11] - a[12] * a[7] * a[9];
+  inv[12] = -a[4] * a[9] * a[14] + a[4] * a[10] * a[13] + a[8] * a[5] * a[14] - a[8] * a[6] * a[13] - a[12] * a[5] * a[10] + a[12] * a[6] * a[9];
+  inv[1] = -a[1] * a[10] * a[15] + a[1] * a[11] * a[14] + a[9] * a[2] * a[15] - a[9] * a[3] * a[14] - a[13] * a[2] * a[11] + a[13] * a[3] * a[10];
+  inv[5] = a[0] * a[10] * a[15] - a[0] * a[11] * a[14] - a[8] * a[2] * a[15] + a[8] * a[3] * a[14] + a[12] * a[2] * a[11] - a[12] * a[3] * a[10];
+  inv[9] = -a[0] * a[9] * a[15] + a[0] * a[11] * a[13] + a[8] * a[1] * a[15] - a[8] * a[3] * a[13] - a[12] * a[1] * a[11] + a[12] * a[3] * a[9];
+  inv[13] = a[0] * a[9] * a[14] - a[0] * a[10] * a[13] - a[8] * a[1] * a[14] + a[8] * a[2] * a[13] + a[12] * a[1] * a[10] - a[12] * a[2] * a[9];
+  inv[2] = a[1] * a[6] * a[15] - a[1] * a[7] * a[14] - a[5] * a[2] * a[15] + a[5] * a[3] * a[14] + a[13] * a[2] * a[7] - a[13] * a[3] * a[6];
+  inv[6] = -a[0] * a[6] * a[15] + a[0] * a[7] * a[14] + a[4] * a[2] * a[15] - a[4] * a[3] * a[14] - a[12] * a[2] * a[7] + a[12] * a[3] * a[6];
+  inv[10] = a[0] * a[5] * a[15] - a[0] * a[7] * a[13] - a[4] * a[1] * a[15] + a[4] * a[3] * a[13] + a[12] * a[1] * a[7] - a[12] * a[3] * a[5];
+  inv[14] = -a[0] * a[5] * a[14] + a[0] * a[6] * a[13] + a[4] * a[1] * a[14] - a[4] * a[2] * a[13] - a[12] * a[1] * a[6] + a[12] * a[2] * a[5];
+  inv[3] = -a[1] * a[6] * a[11] + a[1] * a[7] * a[10] + a[5] * a[2] * a[11] - a[5] * a[3] * a[10] - a[9] * a[2] * a[7] + a[9] * a[3] * a[6];
+  inv[7] = a[0] * a[6] * a[11] - a[0] * a[7] * a[10] - a[4] * a[2] * a[11] + a[4] * a[3] * a[10] + a[8] * a[2] * a[7] - a[8] * a[3] * a[6];
+  inv[11] = -a[0] * a[5] * a[11] + a[0] * a[7] * a[9] + a[4] * a[1] * a[11] - a[4] * a[3] * a[9] - a[8] * a[1] * a[7] + a[8] * a[3] * a[5];
+  inv[15] = a[0] * a[5] * a[10] - a[0] * a[6] * a[9] - a[4] * a[1] * a[10] + a[4] * a[2] * a[9] + a[8] * a[1] * a[6] - a[8] * a[2] * a[5];
+  let det = a[0] * inv[0] + a[1] * inv[4] + a[2] * inv[8] + a[3] * inv[12];
+  det = 1 / det; for (let i = 0; i < 16; i++) inv[i] *= det; return inv;
+}
+function drawParticles() {
+  if (!PT.length) return;
+  const camR = [VIEW[0], VIEW[4], VIEW[8]], camU = [VIEW[1], VIEW[5], VIEW[9]], fwd = [-VIEW[2], -VIEW[6], -VIEW[10]];
+  gl.useProgram(P_PT.p); gl.uniformMatrix4fv(P_PT.u.uVP, false, VP); gl.uniform3fv(P_PT.u.uR, camR); gl.uniform3fv(P_PT.u.uU, camU);
+  for (const kind of [0, 1]) {
+    let list = PT.filter(q => q.k === kind && q.a > 0.005);
+    if (!list.length) continue;
+    if (kind === 0) { list.forEach(q => { q.d = dot(sub(q.p, EYE), fwd); }); list.sort((a, b) => b.d - a.d); }
+    const n = list.length, P = new Float32Array(n * 12), Dd = new Float32Array(n * 16), Cc = new Float32Array(n * 16), I = new Uint32Array(n * 6);
+    const cor = [[-1, -1], [1, -1], [1, 1], [-1, 1]];
+    list.forEach((q, i) => {
+      for (let c = 0; c < 4; c++) {
+        P.set(q.p, i * 12 + c * 3);
+        Dd.set([cor[c][0], cor[c][1], q.s, q.r], i * 16 + c * 4);
+        Cc.set([q.c[0], q.c[1], q.c[2], clamp(q.a, 0, 1)], i * 16 + c * 4);
+      }
+      I.set([i * 4, i * 4 + 1, i * 4 + 2, i * 4, i * 4 + 2, i * 4 + 3], i * 6);
+    });
+    gl.bindBuffer(gl.ARRAY_BUFFER, PTbuf.p); gl.bufferData(gl.ARRAY_BUFFER, P, gl.DYNAMIC_DRAW); gl.enableVertexAttribArray(P_PT.a.aP); gl.vertexAttribPointer(P_PT.a.aP, 3, gl.FLOAT, false, 0, 0);
+    gl.bindBuffer(gl.ARRAY_BUFFER, PTbuf.d); gl.bufferData(gl.ARRAY_BUFFER, Dd, gl.DYNAMIC_DRAW); gl.enableVertexAttribArray(P_PT.a.aD); gl.vertexAttribPointer(P_PT.a.aD, 4, gl.FLOAT, false, 0, 0);
+    gl.bindBuffer(gl.ARRAY_BUFFER, PTbuf.c); gl.bufferData(gl.ARRAY_BUFFER, Cc, gl.DYNAMIC_DRAW); gl.enableVertexAttribArray(P_PT.a.aC); gl.vertexAttribPointer(P_PT.a.aC, 4, gl.FLOAT, false, 0, 0);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, PTbuf.i); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, I, gl.DYNAMIC_DRAW);
+    gl.uniform1f(P_PT.u.uKind, kind);
+    gl.enable(gl.BLEND);
+    if (kind === 0) gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); else gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    gl.drawElements(gl.TRIANGLES, n * 6, gl.UNSIGNED_INT, 0);
+    for (const k of ['aP', 'aD', 'aC']) gl.disableVertexAttribArray(P_PT.a[k]);
+  }
+}
+function drawBeams() {
+  if (!BM.length) return;
+  const n = BM.length, P = new Float32Array(n * 12), Cc = new Float32Array(n * 16), E = new Float32Array(n * 4), I = new Uint32Array(n * 6);
+  BM.forEach((b, i) => {
+    const d = sub(b.b, b.a), toE = sub(EYE, b.a);
+    let side = norm(cross(d, toE)); side = mul(side, b.w);
+    P.set(sub(b.a, side), i * 12); P.set(add(b.a, side), i * 12 + 3); P.set(add(b.b, side), i * 12 + 6); P.set(sub(b.b, side), i * 12 + 9);
+    for (let c = 0; c < 4; c++) Cc.set([b.c[0], b.c[1], b.c[2], b.al], i * 16 + c * 4);
+    E.set([-1, 1, 1, -1], i * 4);
+    I.set([i * 4, i * 4 + 1, i * 4 + 2, i * 4, i * 4 + 2, i * 4 + 3], i * 6);
+  });
+  gl.useProgram(P_BM.p); gl.uniformMatrix4fv(P_BM.u.uVP, false, VP);
+  gl.bindBuffer(gl.ARRAY_BUFFER, BMbuf.p); gl.bufferData(gl.ARRAY_BUFFER, P, gl.DYNAMIC_DRAW); gl.enableVertexAttribArray(P_BM.a.aP); gl.vertexAttribPointer(P_BM.a.aP, 3, gl.FLOAT, false, 0, 0);
+  gl.bindBuffer(gl.ARRAY_BUFFER, BMbuf.c); gl.bufferData(gl.ARRAY_BUFFER, Cc, gl.DYNAMIC_DRAW); gl.enableVertexAttribArray(P_BM.a.aC); gl.vertexAttribPointer(P_BM.a.aC, 4, gl.FLOAT, false, 0, 0);
+  gl.bindBuffer(gl.ARRAY_BUFFER, BMbuf.e); gl.bufferData(gl.ARRAY_BUFFER, E, gl.DYNAMIC_DRAW); gl.enableVertexAttribArray(P_BM.a.aE); gl.vertexAttribPointer(P_BM.a.aE, 1, gl.FLOAT, false, 0, 0);
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, PTbuf.i); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, I, gl.DYNAMIC_DRAW);
+  gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE);
+  gl.drawElements(gl.TRIANGLES, n * 6, gl.UNSIGNED_INT, 0);
+  for (const k of ['aP', 'aC', 'aE']) gl.disableVertexAttribArray(P_BM.a[k]);
+}
+TR.setSky = o => { if (o.sky) SKY = o.sky; if (o.gnd) GND = o.gnd; if (o.fog) FOG = o.fog; if (o.hor) HOR = o.hor; if (o.zen) ZEN = o.zen; if (o.fogD) FOGD = o.fogD; };
+TR.tracks = () => B.tracks;
+TR.fx = () => FX;
+TR.scene = () => S;
+</script>
+<script src="timeline.js"></script>
+</body></html>

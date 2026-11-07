@@ -2,7 +2,7 @@
 --   属性名写错、类型不对（比如 nil 赋给 bool 属性）、枚举名写错、服务器 / 客户端用错 API、远程事件传了不能传的东西、
 --   DataStore 存了不能存的东西、脚本里 nil 当表用……
 -- 不模拟物理、渲染、网络延迟：RemoteEvent 下一帧把参数（深拷贝）交给另一边；Raycast 返回测试脚本指定的结果。
-local R = { errors = {}, warns = {}, sent = {} }
+local R = { errors = {}, warns = {}, sent = {}, terrainFills = {} }
 
 local unpack = table.unpack
 
@@ -808,9 +808,11 @@ def("Terrain", "BasePart", {
   FillBlock = function(_, c, size, mat)
     if not isCF(c) or not isV3(size) or typeof(mat) ~= "EnumItem" or mat.EnumType ~= "Material" then error("FillBlock(CFrame, Vector3, Material) 参数不对", 2) end
     if size._x > 2048 * 4 or size._z > 2048 * 4 then error("FillBlock 区域太大", 2) end
+    table.insert(R.terrainFills, { k = "block", p = c.Position, size = size, mat = mat.Name })   -- 宣传片录场景用
   end,
   FillBall = function(_, c, r, mat)
     if not isV3(c) or type(r) ~= "number" or typeof(mat) ~= "EnumItem" or mat.EnumType ~= "Material" then error("FillBall(Vector3, 半径, Material) 参数不对", 2) end
+    table.insert(R.terrainFills, { k = "ball", p = c, r = r, mat = mat.Name })
   end,
   FillCylinder = function(_, c, h, r, mat)
     if not isCF(c) or type(h) ~= "number" or type(r) ~= "number" or typeof(mat) ~= "EnumItem" or mat.EnumType ~= "Material" then error("FillCylinder(CFrame, 高, 半径, Material) 参数不对", 2) end
@@ -1567,6 +1569,24 @@ do
   end
 end
 
+-- Luau 的 table 比 Lua 5.4 多几个函数：clone、find、create
+R.luauTable = setmetatable({
+  clone = function(t)
+    if type(t) ~= "table" then error("table.clone 要表", 2) end
+    local o = {}
+    for k, v in pairs(t) do o[k] = v end
+    return setmetatable(o, getmetatable(t))
+  end,
+  find = function(t, v, init)
+    for i = init or 1, #t do if t[i] == v then return i end end
+    return nil
+  end,
+  create = function(n, v)
+    local o = {}
+    for i = 1, n do o[i] = v end
+    return o
+  end,
+}, { __index = table })
 local modules = {}
 local function envFor(scriptInst, sd)
   local env = {
@@ -1574,7 +1594,7 @@ local function envFor(scriptInst, sd)
     Color3 = Color3, UDim = UDim, UDim2 = UDim2, Enum = Enum, TweenInfo = TweenInfo, RaycastParams = RaycastParams, Random = Random,
     ColorSequence = ColorSequence, NumberSequence = NumberSequence, NumberRange = NumberRange,
     NumberSequenceKeypoint = NumberSequenceKeypoint, ColorSequenceKeypoint = ColorSequenceKeypoint,
-    task = task, math = luauMath(), string = string, table = table, utf8 = utf8, os = { time = function() return R.osTime or os.time() end, clock = function() return clock end },
+    task = task, math = luauMath(), string = string, table = R.luauTable, utf8 = utf8, os = { time = function() return R.osTime or os.time() end, clock = function() return clock end },
     pairs = pairs, ipairs = ipairs, next = next, select = select, type = type, typeof = typeof, tostring = tostring, tonumber = tonumber,
     print = function(...) if R.verbose then print(...) end end,
     PROBE_SET = function(v) R.lastProbe = v end,
