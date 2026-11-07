@@ -50,29 +50,29 @@ const C = (kick, title, sub, at, out, pos) => ({ kick, title, sub, at, out, pos:
 const SHOTS = [
   { id: 'A', dur: 6, T: 20, tg: 'fleet', ahead: 700, cam: [[2700, -1.36, -0.045], [2000, -1.30, -0.07]], card: C('DARKSWORD // JOINT AMPHIBIOUS WARFARE', '体系对体系的登陆战', '海 · 空 · 天 · 电 · 陆　实时推演', 1.2, 5.3), fadeIn: .9 },
   // 第一幕：体系破击——守方爱国者齐射拦截 → 东风-17 突防摧毁爱国者阵地 → 055 垂发 → 歼-16D 反辐射压制 → 舰载机弹射、精确制导炸弹 → 歼-20 掌握制空权
-  { id: 'B1', dur: 4, q: { P: { k: ['kj600'], after: 60 } }, rig: { k: 'chase', o: 'A', d: [95, 62], yo: [2.3, 1.8], pit: [-0.10, -0.05] }, chain: ['p1', 0], tag: ['空警-600', '舰载预警机 · 远在视距外发现目标', 'p'], card: C('PHASE 01 // SYSTEM STRIKE', '先打体系', '预警 · 电子战 · 火箭军 · 联合火力', .1, 1.9), flash: true },   // 字幕卡下去以后才出杀伤链、名牌
+  { id: 'B1', warm: 14, dur: 4, q: { P: { k: ['kj600'], after: 60 } }, rig: { k: 'chase', o: 'A', d: [95, 62], yo: [2.3, 1.8], pit: [-0.10, -0.05] }, chain: ['p1', 0], tag: ['空警-600', '舰载预警机 · 远在视距外发现目标', 'p'], card: C('PHASE 01 // SYSTEM STRIKE', '先打体系', '预警 · 电子战 · 火箭军 · 联合火力', .1, 1.9), flash: true },   // 字幕卡下去以后才出杀伤链、名牌
   { id: 'B5', dur: 2, spd: 1, q: { L: { side: 'e', kind: 'sam', src: 'samv', tg: 'msl', dense: true }, lead: 0.5 }, rig: { k: 'pt', o: 'SRC', cam: [[220, -2.3, -0.2], [190, -2.15, -0.17]], tz: 25 }, fov: .85, chain: ['e1', 1], tag: ['爱国者 PAC-3', '哨兵雷达引导 · 四弹齐射拦截来袭弹道导弹', 'e'] },
   { id: 'B6', dur: 2, spd: 1, q: { cont: true }, rig: { k: 'chase', o: 'M', d: [110, 150], yo: [1.35, 1.2], pit: [-0.08, -0.04] }, chain: ['e1', 2] },   // 侧面跟拍：烟迹在旁边，不挡镜头
   { id: 'B3', dur: 2, spd: 1, q: { X: { kind: 'tbm', w: 'df17' }, lead: 2 }, rig: { k: 'look', o: 'M', at: 'IMP', off: [-760, 380, 140], abs: true }, chain: ['p1', 1], tag: ['东风-17', '高超音速滑翔弹头 · 机动突防', 'p'] },
   { id: 'B4', dur: 2, spd: 1, q: { cont: true }, rig: { k: 'pt', o: 'IMP', cam: [[270, -1.9, -0.20], [230, -1.75, -0.18]] }, fire: true, chain: ['p1', 2] },
-  { id: 'BY', dur: 2, spd: 1, q: { L: { side: 'p', kind: 'pgm', w: 'yj18' }, lead: 0.5 }, rig: { k: 'look', o: 'M', at: 'SRC', off: [95, 62, 9], abs: true }, fov: .8, tag: ['055 型驱逐舰', '垂直发射 · 鹰击-18 打击岸上目标', 'p'] },
-  { id: 'BL', dur: 2, spd: 1, q: { L: { side: 'p', kind: 'pgm', w: 'ld10' }, lead: 0.5 }, rig: { k: 'chase', o: 'SRCP', d: [46, 40], yo: [1.25, 1.0], pit: [-0.02, 0.02] }, tag: ['歼-16D', '电子侦察测出雷达 · 雷电-10 反辐射导弹', 'p'] },
-  { id: 'BC', dur: 2, spd: 1, q: { C: { k: ['j35', 'j15'] }, lead: 0.6 }, rig: { k: 'look', o: 'A', at: 'A', off: [48, -17, 5] }, chain: ['p4', 0], tag: ['福建舰 · 歼-35', '电磁弹射 · 舰载隐身战斗机出击', 'p'] },
-  { id: 'BF', dur: 2, spd: 1, q: { L: { side: 'p', kind: 'pgm', w: 'ft8' }, lead: 0.5 }, rig: { k: 'chase', o: 'SRCP', d: [40, 36], yo: [1.35, 1.15], pit: [0.06, 0.08] }, chain: ['p4', 1] },
+  { id: 'BY', warm: 14, dur: 2, spd: 1, q: { L: { side: 'p', kind: 'pgm', w: 'yj18' }, lead: 0.5 }, rig: { k: 'look', o: 'M', at: 'SRC', off: [95, 62, 9], abs: true }, fov: .8, tag: ['055 型驱逐舰', '垂直发射 · 鹰击-18 打击岸上目标', 'p'] },
+  { id: 'BL', warm: 14, dur: 2, spd: 1, q: { L: { side: 'p', kind: 'pgm', w: 'ld10' }, lead: 0.5 }, rig: { k: 'chase', o: 'SRCP', d: [46, 40], yo: [1.25, 1.0], pit: [-0.02, 0.02] }, tag: ['歼-16D', '电子侦察测出雷达 · 雷电-10 反辐射导弹', 'p'] },
+  { id: 'BC', warm: 14, dur: 2, spd: 1, q: { C: { k: ['j35', 'j15'] }, lead: 0.6 }, rig: { k: 'look', o: 'A', at: 'A', off: [48, -17, 5] }, chain: ['p4', 0], tag: ['福建舰 · 歼-35', '电磁弹射 · 舰载隐身战斗机出击', 'p'] },
+  { id: 'BF', warm: 14, dur: 2, spd: 1, q: { L: { side: 'p', kind: 'pgm', w: 'ft8' }, lead: 0.5 }, rig: { k: 'chase', o: 'SRCP', d: [40, 36], yo: [1.35, 1.15], pit: [0.06, 0.08] }, chain: ['p4', 1] },
   { id: 'BG', dur: 2, spd: 1, q: { cont: true }, rig: { k: 'pt', o: 'IMP', cam: [[330, -2.0, -0.26], [280, -1.8, -0.23]] }, fire: true, chain: ['p4', 2] },
-  { id: 'B7', dur: 2, cone: 326, q: { P: { k: ['j20'] } }, rig: { k: 'chase', o: 'A', d: [46, 34], yo: [0.6, 0.3], pit: [-0.12, -0.08] }, tag: ['歼-20', '隐身战斗机 · 夺取制空权', 'p'] },
+  { id: 'B7', warm: 14, dur: 2, cone: 326, q: { P: { k: ['j20'] } }, rig: { k: 'chase', o: 'A', d: [46, 34], yo: [0.6, 0.3], pit: [-0.12, -0.08] }, tag: ['歼-20', '隐身战斗机 · 夺取制空权', 'p'] },
   // 第二幕：强行登陆——抢滩、壕里的守军、步兵与工事对射、坦克对坦克、守方反坦克车打登陆舰
   { id: 'F', dur: 4, q: { T: 'landing', lead: 26 }, rig: { k: 'chase', o: 'SHIP', d: [120, 85], yo: [0.6, 0.35], pit: [-0.12, -0.09] }, card: C('PHASE 02 // ASSAULT', '再强行登陆', '抢滩 · 舰炮火力 · 夺取登陆场', .15, 3.7), flash: true },
   { id: 'I', dur: 4, q: { T: 'landing', lead: -50 }, tg: 'trench', cam: [[115, -1.3, -0.40], [80, -1.05, -0.34]] },
   { id: 'I2', dur: 4, q: { F: { after: 0 } }, rig: { k: 'two', o: 'A', b: 'B', d: [62, 50], yo: [0.35, 0.22], pit: [-0.16, -0.12], f: .5 }, fov: .75 },   // 步兵与工事对射：攻方在前景，守方阵地在远处
   { id: 'G', dur: 4, q: { F: { after: 120, bunker: true } }, rig: { k: 'two', o: 'A', b: 'B', d: [70, 56], yo: [0.45, 0.3], pit: [-0.2, -0.16], f: .55 }, fov: .75, tag: ['登陆突击队', '步兵冲击守方火力点', 'p'] },   // 坦克对射那一段双方都放了烟幕、看不清：改拍步兵冲击工事（B 换成离攻方最近的守方工事）
-  { id: 'H', dur: 4, T: 850, pick: [['ftr', 'F-35A 闪电 II', '守方战斗机 · 争夺登陆场上空的制空权'], ['ftrb', 'F-35B 闪电 II', '守方短距起降战斗机 · 争夺制空权'], ['c17', 'C-17 运输机', '守方 · 空运增援']], rig: { k: 'chase', o: null, d: [62, 48], yo: [2.5, 2.2], pit: [-0.06, -0.03] } },   // 守方装备：开拍时挑一架在空中的 F-35（没有就 C-17），从前侧方回看
+  { id: 'H', warm: 14, dur: 4, T: 850, pick: [['ftr', 'F-35A 闪电 II', '守方战斗机 · 争夺登陆场上空的制空权'], ['ftrb', 'F-35B 闪电 II', '守方短距起降战斗机 · 争夺制空权'], ['c17', 'C-17 运输机', '守方 · 空运增援']], rig: { k: 'chase', o: null, d: [62, 48], yo: [2.5, 2.2], pit: [-0.06, -0.03] } },   // 守方装备：开拍时挑一架在空中的 F-35（没有就 C-17），从前侧方回看
   // 第三幕：纵深攻防——055 长剑-10 齐射；守方防空车拦截鹰击-18、击落我方飞机；步兵与工事对射；战区逐级指挥
   { id: 'J', dur: 4, spd: 1, q: { L: { side: 'p', kind: 'pgm', w: 'cj10', src: 'vls', dense: true }, after: 1100, lead: 1.2 }, rig: { k: 'look', o: 'SRC', at: 'SRC', off: [105, 75, 10], tz: 34, abs: true }, fov: .8, chain: ['p5', 1], card: C('PHASE 03 // DEPTH', '向纵深推进', '战区 → 师 → 团 → 营　逐级指挥', .15, 2.6), flash: true },
   { id: 'J2', dur: 2, spd: 1, q: { X: 'prev', lead: 1.4 }, rig: { k: 'look', o: 'M', at: 'IMP', off: [-380, 300, 90], abs: true }, fire: true, chain: ['p5', 2] },
   { id: 'JE1', dur: 2, spd: 1, q: { L: { side: 'e', kind: 'sam', src: 'samv', tg: 'msl', out: 'kill' }, after: 1100, lead: 1.2 }, rig: { k: 'look', o: 'TGT', at: 'SRC', off: [-70, -45, 7], abs: true }, chain: ['e2', 1], tag: ['@SRC', '野战防空 · 拦截来袭的鹰击-18', 'e'] },   // 从发射车身后看向来袭的鹰击-18：来袭弹、拦截弹、空中爆炸都在画面里
   { id: 'JE2', dur: 2, spd: 1, q: { L: { side: 'e', kind: 'sam', src: 'samv', tg: 'msl', out: 'kill' }, after: 1121, lead: 0.8 }, rig: { k: 'chase', o: 'TGT', d: [34, 42], yo: [0.28, 0.18], pit: [-0.12, -0.09] }, chain: ['e2', 2] },   // 跟在来袭的鹰击-18 后面：前方是防空阵地，拦截弹迎面打上来
-  { id: 'JA', dur: 2, spd: 1, q: { L: { side: 'e', kind: 'sam', src: 'samv', tg: 'plane', out: 'kill' }, lead: 0.8 }, rig: { k: 'chase', o: 'TGT', d: [60, 80], yo: [0.7, 0.5], pit: [-0.16, -0.12] }, tag: ['@SRC', '击落低空突防的我方飞机', 'e'] },   // 跟着被打的那架飞机：防空导弹从下面打上来
+  { id: 'JA', warm: 14, dur: 2, spd: 1, q: { L: { side: 'e', kind: 'sam', src: 'samv', tg: 'plane', out: 'kill' }, lead: 0.8 }, rig: { k: 'chase', o: 'TGT', d: [60, 80], yo: [0.7, 0.5], pit: [-0.16, -0.12] }, tag: ['@SRC', '击落低空突防的我方飞机', 'e'] },   // 跟着被打的那架飞机：防空导弹从下面打上来
   { id: 'I3', dur: 4, q: { F: { after: 450 } }, rig: { k: 'two', o: 'A', b: 'B', d: [80, 60], yo: [-0.4, -0.25], pit: [-0.14, -0.1], f: .5 }, fov: .75 },
   { id: 'K', dur: 4, q: { T: 'landing', lead: -360 }, tg: 'land', hud: true, cam: [[5200, -1.5708, -1.02], [4200, -1.5708, -0.88]] },
   // 编辑器、内容一览：最后拍（编辑器只是盖在上面；部署会换掉战局，放最后）
@@ -436,14 +436,8 @@ async function stepShots(b) {
     return { W, H, SEA_H: typeof SEA_H === 'number' ? SEA_H : H };
   });
   await sleep(1500);   // 已排上的那一帧跑完（暂停中，不推演），再接管时钟
-  // 飞机、车辆模型先全部下载、解码好：第一次出现的模型要好几帧才解码完，镜头开头只有航行灯（解码是异步的，等它们都 ready）
-  await p.evaluate(() => { const K = new Set([...Object.values(V3G_AIR), ...Object.values(V3G_VEH)].filter(k => typeof k === 'string').map(k => k.replace(/~$/, ''))); window.__pre = [...K]; v3gPreload(window.__pre); });
-  for (let k = 0; k < 150; k++) {   // 解码跟着画面走：暂停中照样画几帧（不推演），每帧都要一下这些模型
-    const left = await p.evaluate(() => { for (const k of window.__pre) v3gModel(k); acc = -1e9; window.__vt += 1000 / 30; frame(window.__vt); return window.__pre.filter(k => !(V3G.M[k] && V3G.M[k].ready) && !V3G.fail.has(k)); });
-    if (!left.length) { console.log(`模型都解码好了（${k + 1} 帧）`); break; }
-    if (k % 30 === 29) console.log(`还有 ${left.length} 个模型在解码：${left.slice(0, 8).join(' ')}…`);
-    await sleep(200);
-  }
+  // 飞机、车辆模型先下载好（解码跟着画面走：第一次出现的模型要画上几帧才解码完——飞机镜头多预热几帧，见 warm）
+  await p.evaluate(() => { const K = new Set([...Object.values(V3G_AIR), ...Object.values(V3G_VEH)].filter(k => typeof k === 'string').map(k => k.replace(/~$/, ''))); v3gPreload([...K]); });
   await p.evaluate(() => { window.__vt = lastT; __seed(window.__rs); S.paused = false; });
   const only = process.env.ONLY ? process.env.ONLY.split(',') : null;
   const order = SHOTS.filter(s => !s.ui).sort((a, b) => a.T - b.T).concat(SHOTS.filter(s => s.ui)).filter(s => !only || only.includes(s.id));
@@ -488,7 +482,7 @@ async function stepShots(b) {
       if (!sh.hud && !sh.ui && !window.__v3o) { window.__v3o = v3Overlay; window.v3Overlay = () => {}; }
       if ((sh.hud || sh.ui) && window.__v3o) { window.v3Overlay = window.__v3o; window.__v3o = null; } }, sh);
     const fixed = staticTarget(sh, sc, geo.W, geo.H);
-    for (let i = F0 - 8; i < N; i++) {   // 前 8 帧预热（新镜头位置的贴图、缓存，第一次出现的模型载入完——原来 2 帧，追拍的飞机头几帧只有航行灯），不推演、不截图、不记声音
+    for (let i = F0 - (sh.warm || 8); i < N; i++) {   // 前 8 帧预热（warm：飞机镜头 14 帧）（新镜头位置的贴图、缓存，第一次出现的模型载入完——原来 2 帧，追拍的飞机头几帧只有航行灯），不推演、不截图、不记声音
       const t = Math.max(F0, i) / FPS, u = N0 > 1 ? Math.max(F0, i) / (N0 - 1) : 0;
       const ov = overlayState(sh, t);
       await p.evaluate(([i, ov, sh, t, u, glyph, f0, fixed, geo, draw]) => {
