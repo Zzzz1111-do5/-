@@ -66,7 +66,7 @@ const SHOTS = [
   { id: 'I', dur: 4, q: { T: 'landing', lead: -50 }, tg: 'trench', cam: [[115, -1.3, -0.40], [80, -1.05, -0.34]] },
   { id: 'I2', dur: 4, q: { F: { after: 0 } }, rig: { k: 'two', o: 'A', b: 'B', d: [62, 50], yo: [0.35, 0.22], pit: [-0.16, -0.12], f: .5 }, fov: .75 },   // 步兵与工事对射：攻方在前景，守方阵地在远处
   { id: 'G', dur: 4, q: { F: { after: 120, bunker: true } }, rig: { k: 'two', o: 'A', b: 'B', d: [70, 56], yo: [0.45, 0.3], pit: [-0.2, -0.16], f: .55 }, fov: .75, tag: ['登陆突击队', '步兵冲击守方火力点', 'p'] },   // 坦克对射那一段双方都放了烟幕、看不清：改拍步兵冲击工事（B 换成离攻方最近的守方工事）
-  { id: 'H', dur: 4, q: { V: { side: 'e', tk: ['sh'], type: ['tank', 'hv_tank', 'td', 'lt_tank', 'apc'] } }, rig: { k: 'two', o: 'A', b: 'B', d: [210, 175], yo: [-0.3, -0.2], pit: [-0.62, -0.55], f: .22 }, fov: .8, tag: ['@A', '守方 · 打抢滩的登陆舰', 'e'] },   // 高空俯拍：低机位被山脊挡住   // 从内陆往海面看：反坦克车在前景，登陆舰在远处
+  { id: 'H', dur: 4, T: 850, pick: [['ftr', 'F-35A 闪电 II', '守方战斗机 · 争夺登陆场上空的制空权'], ['ftrb', 'F-35B 闪电 II', '守方短距起降战斗机 · 争夺制空权'], ['c17', 'C-17 运输机', '守方 · 空运增援']], rig: { k: 'chase', o: null, d: [62, 48], yo: [2.5, 2.2], pit: [-0.06, -0.03] } },   // 守方装备：开拍时挑一架在空中的 F-35（没有就 C-17），从前侧方回看
   // 第三幕：纵深攻防——055 长剑-10 齐射；守方防空车拦截鹰击-18、击落我方飞机；步兵与工事对射；战区逐级指挥
   { id: 'J', dur: 4, spd: 1, q: { L: { side: 'p', kind: 'pgm', w: 'cj10', src: 'vls', dense: true }, after: 1100, lead: 1.2 }, rig: { k: 'look', o: 'SRC', at: 'SRC', off: [105, 75, 10], tz: 34, abs: true }, fov: .8, chain: ['p5', 1], card: C('PHASE 03 // DEPTH', '向纵深推进', '战区 → 师 → 团 → 营　逐级指挥', .15, 2.6), flash: true },
   { id: 'J2', dur: 2, spd: 1, q: { X: 'prev', lead: 1.4 }, rig: { k: 'look', o: 'M', at: 'IMP', off: [-380, 300, 90], abs: true }, fire: true, chain: ['p5', 2] },
@@ -436,6 +436,14 @@ async function stepShots(b) {
     return { W, H, SEA_H: typeof SEA_H === 'number' ? SEA_H : H };
   });
   await sleep(1500);   // 已排上的那一帧跑完（暂停中，不推演），再接管时钟
+  // 飞机、车辆模型先全部下载、解码好：第一次出现的模型要好几帧才解码完，镜头开头只有航行灯（解码是异步的，等它们都 ready）
+  await p.evaluate(() => { const K = new Set([...Object.values(V3G_AIR), ...Object.values(V3G_VEH)].filter(k => typeof k === 'string').map(k => k.replace(/~$/, ''))); window.__pre = [...K]; v3gPreload(window.__pre); });
+  for (let k = 0; k < 150; k++) {   // 解码跟着画面走：暂停中照样画几帧（不推演），每帧都要一下这些模型
+    const left = await p.evaluate(() => { for (const k of window.__pre) v3gModel(k); acc = -1e9; window.__vt += 1000 / 30; frame(window.__vt); return window.__pre.filter(k => !(V3G.M[k] && V3G.M[k].ready) && !V3G.fail.has(k)); });
+    if (!left.length) { console.log(`模型都解码好了（${k + 1} 帧）`); break; }
+    if (k % 30 === 29) console.log(`还有 ${left.length} 个模型在解码：${left.slice(0, 8).join(' ')}…`);
+    await sleep(200);
+  }
   await p.evaluate(() => { window.__vt = lastT; __seed(window.__rs); S.paused = false; });
   const only = process.env.ONLY ? process.env.ONLY.split(',') : null;
   const order = SHOTS.filter(s => !s.ui).sort((a, b) => a.T - b.T).concat(SHOTS.filter(s => s.ui)).filter(s => !only || only.includes(s.id));
@@ -449,6 +457,10 @@ async function stepShots(b) {
     if (!sh.ui) {
       const st = await p.evaluate(T => { __seed(window.__ss); while (S.t < T - 1e-6 && !S.over) step(1 / 30); window.__ss = __rng(); __seed(window.__rs); return { t: S.t, land: window.__land(), en: S.enemies.filter(e => !e.dead).length, tm: S.teams.filter(q => q.side === 'p' && q.men.length).length }; }, sh.T);
       if (sh0.q && sh0.q.P && sh.rig) { sh.rig.o = await p.evaluate(ks => window.__pickPl(ks), sh0.q.P.k); if (!sh.rig.o) console.warn(`镜头 ${sh.id}：这一刻天上没有 ${sh0.q.P.k}`); }   // 某型飞机：开拍这一刻挑一架
+      if (sh0.pick && sh.rig) {   // pick：按顺序挑第一种在空中的机型，名牌跟着换
+        for (const [k, nm, sb] of sh0.pick) { const o = await p.evaluate(k => window.__pickPl([k]), k); if (o) { sh.rig.o = o; sh.tag = [nm, sb, o[0] === 'ea' ? 'e' : 'p']; break; } }
+        if (!sh.rig.o) console.warn(`镜头 ${sh.id}：这一刻天上没有 ${sh0.pick.map(q => q[0])}`);
+      }
       // 空射弹没记到出自哪架飞机：开拍这一刻离发射点最近的那架就是（还有半秒才放弹）；名牌 '@SRC'：发射点上那辆车的型号
       if (sh0.q && sh0.q.F && sh0.q.F.bunker && sh.rig && sh.rig.o) {
         const e = await p.evaluate(A => { const E = S.enemies.filter(o => !o.dead && isFinite(o.x)); const o = E.reduce((a, o) => !a || dist(o.x, o.y, A[1], A[2]) < dist(a.x, a.y, A[1], A[2]) ? o : a, null); return o && dist(o.x, o.y, A[1], A[2]) < 450 ? ['e', o.id] : null; }, sh.rig.o);

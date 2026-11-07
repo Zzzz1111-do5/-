@@ -10,6 +10,9 @@
 - 电脑版（Steam）用 Electron 打包：desktop/（main.js 外壳、preload.js 给网页的 `window.dsDesktop`）；`cd desktop && npm ci && npm start` 试玩，`npm run dist:win` 打 Windows 包。
 - 商店版（安卓、电脑）与网页版的差别都在 js/platform.js（要在 menu.js 之前加载）：「退出游戏」、全屏、安卓返回键、首次打开的《用户协议》《隐私政策》确认（legal/）。`tools/build_www.mjs --app` 生成商店版网页。
 - 上架：docs/release.md（Steam、TapTap 步骤与每次更新要改的版本号）、docs/store.md（商店文案）、store/（商店素材，`tools/store_assets.js` 与 `tools/make_icons.py` 生成；宣传片 `tools/trailer.js`，视频不进仓库）、.github/workflows/release.yml（推 v 开头的标签打全部安装包）。
+  宣传片（用户：凸显各型装备、主画面要有两军对抗、两边的体系化作战）：台湾雪山图（用户选的——这一版只能非商用：片尾署名 Miguel Cueva、注明本片按 CC BY-NC-SA 4.0 发布、不写上架平台），远海航渡关掉，R.eye = 'all' 两军都画；
+  先「侦察」推演一遍记下每一发导弹（谁打的、打什么、结局）、空射弹出自哪架飞机、弹射起飞、车炮与曳光对射，分镜写「找哪种事件」（q：L 发射 / X 命中 / V 车炮 / F 对射 / C 弹射 / P 某型飞机 / cont 接上一镜），planShots 按记录定开拍时刻和要跟的对象（推演时段不重叠）；
+  画面上有杀伤链字幕条（CHAINS，攻方绿、守方红）和装备名牌；DRAFT=2 W=960 H=540 出低清草稿（每镜两帧），正式渲染 RS=0.6667、两个进程按 ONLY 分头渲、各自的 trailer_shots 拷到一起再跑 audio,edit。
 - 网页版：`bash tools/publish_pages.sh` 生成 www/ 并推到 gh-pages 分支（GitHub Pages）。
 - 地势：默认地图、海岛地图的丘陵起伏照 js/hmap.js（Sketchfab 上 hirnlaich 的「Soft Hills」高度场，CC-BY，`python3 -I tools/hmap_build.py <glTF 目录>` 生成；hmapWin 按种子翻转、错开），不再随机撒小山包、叠高频噪声；大山体、内陆山脊、海岸、海滩、河流仍由程序生成。
 - 默认地图 8400 × 5600（core.js MAP_K = 2.8，W0 × H0）；大海域地图在 MAPGEN 里登记、建图前 setWorld 换尺寸（海岛战役 isle.js：6000 × 12000，远海只在 3D 里铺一块平面）。西、东、南三边都是海的地图（海岛），3D 写实画面里地图外是无边海面（view3d.js v3OceanBuild / v3OceanDraw：跟着镜头走、铺到雾的尽头），北边是陆地时把岛按北缘镜像延伸约 3 公里再收出北岸（只是远景）。
