@@ -168,10 +168,10 @@ local units = {}
 for t, d in pairs(Config.Units) do units[t] = { model = d.model, len = d.len, size = d.size, foot = d.foot, squad = d.squad, air = d.air, jet = d.jet, prop = d.prop, name = d.name, short = d.short, cat = d.cat } end
 
 -- 开战，录：每 1/20 秒每个单位的位置、朝向、炮塔转角、死没死；全部特效
+local seenSent = #R.sent   -- 开战的消息是点「开战」时同步发的：先记下位置再点
 action("battle")
 local tracks, order = {}, {}
 local fxs = {}
-local seenSent = #R.sent
 local t0 = R.clock()
 local DT = 1 / 20
 local finished, startInfo = nil, nil
@@ -229,5 +229,6 @@ local ks = {}
 for k, n in pairs(kinds) do table.insert(ks, k .. " " .. n) end
 table.sort(ks)
 print("战斗：" .. tostring(finished and finished.result) .. "，" .. string.format("%.0f", finished and finished.t or -1) .. " 秒；单位 " .. #list .. " 个；特效 " .. #fxs .. "（" .. table.concat(ks, "，") .. "）")
-write("battle.json", enc({ units = units, tracks = list, fx = fxs, start = startInfo, level = LEVEL, finish = finished, dt = DT }))
+local th = Config.TheaterOf(LEVEL)
+write("battle.json", enc({ units = units, tracks = list, fx = fxs, start = startInfo, level = LEVEL, theater = th and th.name, finish = finished, dt = DT }))
 TEST_CODE = 0

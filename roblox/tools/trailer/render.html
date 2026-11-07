@@ -345,7 +345,7 @@ TR.init = async function (opt) {
   for (const k of ['p', 'c', 'e']) BMbuf[k] = gl.createBuffer();
   prepTracks();
   prepFx();
-  TR.finish = B.finish; TR.start = B.start || null;
+  TR.finish = B.finish; TR.start = B.start || null; TR.level = B.level || null; TR.theater = B.theater || null;
   TR.ready = true;
   return { parts: S.parts.length, tracks: B.tracks.length, fx: B.fx.length, glb: Object.keys(GLB) };
 };

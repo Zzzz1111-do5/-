@@ -145,7 +145,7 @@
     // 打完以后部队掉头回基地，所以这个镜头停在打完前一刻（还在往前冲）
     shot({ at: 52, dur: 4, T0: end - 3.4, rate: 0.8, cam: (u, T) => { const c = hg.at(T), k = sm(u);
       return { eye: add(c, add(mul(hf, lerp(78, 62, k)), add(mul(hs, lerp(20, 10, k)), [0, lerp(5, 15, k), 0]))), at: add(c, [0, lerp(12, 9, k), 0]), fov: 44 }; },   // 看车队上方一点：车在画面下三分之一，字卡在上面不挡车
-      card: K('', '胜利！', (TR.start && TR.start.title ? TR.start.title.replace(/\s*·\s*/g, ' · ') : '第 27 关 · 雪原战区'), 'win'), cardAt: [0.5, 3.8] });
+      card: K('', '胜利！', (TR.level ? '第 ' + TR.level + ' 关' + (TR.theater ? ' · ' + TR.theater : '') : '第 27 关 · 雪原战区'), 'win'), cardAt: [0.5, 3.8] });
     // ⑲ 56–64 片尾：基地上空慢慢飘，压暗，标志
     shot({ at: 56, dur: 8, T0: 0, rate: 0, units: true, dim: 0.5, fadeOut: 1.2, cam: dolly([-320, 260, -520], [-200, 230, -420], [0, 20, 80], [0, 20, 100], 44),
       card: K('MILITARY TYCOON', '军事大亨', '现已登陆 Roblox', 'logo'), cardAt: [0.6, 7.6] });
