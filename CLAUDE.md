@@ -1,0 +1,117 @@
+# 暗剑 Darksword · 给 Claude 的项目说明
+
+## 沟通
+- 用户说中文：回复、提交说明、代码注释、游戏内文字一律用中文。
+- README.md 是仓库建立时留下的，与本项目无关；项目说明以本文件和 docs/ 为准。
+
+## 项目是什么
+- 两栖登陆作战沙盘游戏，浏览器运行：index.html 按顺序加载 js/ 下的普通脚本（共享全局变量，没有构建步骤）。
+- 安卓版用 Capacitor 打包（android/、capacitor.config.json；`npm run sync` 生成商店版网页 www/ 并同步到安卓工程）。
+- 电脑版（Steam）用 Electron 打包：desktop/（main.js 外壳、preload.js 给网页的 `window.dsDesktop`）；`cd desktop && npm ci && npm start` 试玩，`npm run dist:win` 打 Windows 包。
+- 商店版（安卓、电脑）与网页版的差别都在 js/platform.js（要在 menu.js 之前加载）：「退出游戏」、全屏、安卓返回键、首次打开的《用户协议》《隐私政策》确认（legal/）。`tools/build_www.mjs --app` 生成商店版网页。
+- 上架：docs/release.md（Steam、TapTap 步骤与每次更新要改的版本号）、docs/store.md（商店文案）、store/（商店素材，`tools/store_assets.js` 与 `tools/make_icons.py` 生成；宣传片 `tools/trailer.js`，视频不进仓库）、.github/workflows/release.yml（推 v 开头的标签打全部安装包）。
+- 网页版：`bash tools/publish_pages.sh` 生成 www/ 并推到 gh-pages 分支（GitHub Pages）。
+- 默认地图 8400 × 5600（core.js MAP_K = 2.8，W0 × H0）；大海域地图在 MAPGEN 里登记、建图前 setWorld 换尺寸（海岛战役 isle.js：6000 × 12000，远海只在 3D 里铺一块平面）。南边是海的地图（海岛、默认地图），3D 写实画面里地图外是无边海面（view3d.js v3OceanBuild / v3OceanDraw：跟着镜头走、铺到雾的尽头），北、西、东边上的陆地按图边镜像往外延伸、按每段陆地的宽度收出约 3 公里的圆弧形海岸（v3ExtBuild，只是远景；v3HtX 查延伸陆地的高度）——地图不再是一块悬在灰底上的沙盘。
+- 画面默认「写实」（设置里还能选黑绿 / 数码，look.js）；对局默认 3D——view3d.js 自由镜头、真实天空与地表贴图、实时太阳阴影、海面（法线贴图按像素大小分层淡出，远处不出噪点），v3post.js 后期；黑绿 / 数码画面四周是 v3table.js 的沙盘桌。
+- 坦克装甲车、飞机、直升机、导弹、单兵用的是用户给的模型，原封不动导入（js/v3g.js 渲染，js/mdl/<键>.js；转换工具 tools/v3gconv.py、tools/v3gbake.js、配置 tools/v3gmodels.json、预览 tools/v3gview.html）；兵种 → 模型的对照表在 v3g.js 的 V3G_VEH / V3G_AIR / V3G_MSL。舰艇是 Sketchfab 上 CC-BY 的模型（v3utex.js、assets/models），甲板牵引车、挂弹车、导弹挂载架（rack）是 v3x.js 的导入模型（tools/sfmodel.js + tools/sfmodels.json，密钥只从环境变量 SKETCHFAB_TOKEN 读）。
+- Sketchfab 下载的车辆模型（全部 CC-BY-4.0，署名在 tools/v3gmodels.json 的 credit，烘焙时自动写进 docs/credits.md、legal/credits.html；v3g.js 的 V3G_CRED 是游戏里的致谢表）：
+  先 `python3 -I tools/sfprep.py <gltf.zip> <新空目录> [贴图最长边]` 解压并缩贴图，再 `node tools/v3gbake.js <上级目录> <键>`。v3gmodels.json 新选项：tri0 / tri0Flags 近看网格减面（Permissive 才减得动零件多的）、
+  texMax 记录贴图缩到多大（署名里写明改动）、opaque 作者误设成半透明的材质按不透明画（底色本身调低了不透明度的座舱盖、车窗照原样透明；个别误设的机体材质在 mats 里写 alpha: 'OPAQUE'）、roughMin 涂装按哑光、level 把摆成倾斜飞行姿态的飞机摆正、rot 补转、drop 按部件规则整块去掉连通块（模型自带的外挂弹；dropNote / modNote 写进署名的改动说明）；
+  部件规则：kind each（每个连通块各成一个部件，车轮；byNode / cluster 把轮毂轮胎合成一个轮，roll 按半径换算转角）、kind chain（自转 → 平移 → 俯仰 → 随炮塔转，q / a2 / e / e2 / q3 / a3 / g2）、triBelow（按三角形高度挑起落架）。
+- 每型装备「身上能动的功能」与真实参数在 js/vfn.js 的 VFN（逐型查的资料，出处写在注释里）：炮塔回转速度（推演里的转速也用它，vfnTrav）、炮管俯仰范围与速度（直瞄按目标高低、间瞄按射程算弹道仰角、对空按飞机高度）、
+  后坐、发射架起竖（布雷德利陶式、爱国者 38°）、跳板（上下车时放下）、加特林炮管束开火时转、雷达转、扫雷犁放下、车轮按里程滚。v3g.js v3gVeh 每帧调 vfnParts 算 8 个部件参数。
+  车辆型号 → 模型在 V3G_VEH（美军：布雷德利、M109、斯特赖克、爱国者、M163、C-RAM、M1150、M-ATV、悍马；解放军：ZBD-04、PTL-02、PGL-625、PzH2000（代 PLZ-07）、LAV-25（代 ZSL-92B / 08 式））。
+  飞机模型都接进了 V3G_AIR（键是 carrier.js airSilKey / eair.js EA_SIL 的机型键）：美军 F-22、F-35（含 B）、A-10、B-2、C-17、P-8（剪影键 p8）、MQ-9、AH-64、UH-60，我方歼-20、歼-31（代歼-35）、歼-15（歼-15T）、歼-16（歼-16D，剪影键 j16）、歼-50、运-20、轰-6、直-10、直-21；
+  我方没有模型的用外形最接近的美军机代替、去掉原机涂装（键名后加 '~'，v3gPlain：不贴底色贴图，原机的国籍标志、舷号都在底色贴图里）：空警-600 = E-2D、攻击-11 = X-47B、攻击-2 = MQ-9、无侦-7 = RQ-4。
+  起落架按 triBelow 挑；模型本身没放起落架的（歼-50、F-22、运-20、RQ-4）在 v3g.js V3G_GEAR 里程序化补上（整架抬高到真实全高、支柱插进机腹、轮胎轮毂舱门、舰载机弹射杆，'gear' 部件随起落架收放；
+  抬高后的坐标就是之后弹舱、挂点、座舱的坐标）；直升机旋翼、尾桨按 V3G_ROTOR 的转速转；尾喷口位置在 v3gmodels.json 的 noz（喷焰、热浪用，烘焙坐标；[x, y, z, 半径, 深] 后再跟 [半宽, 半高] 是扁平二元喷口，歼-50）。
+  弹舱（V3G_BAY）：歼-20、歼-31 照模型的舱门位置；歼-50 两个机腹弹舱按公开照片的布局和机腹平坦的范围定。挂点（fpwpn.js FW_ST）可按武器各给一组（一个舱里几种弹不重叠，fwSlots 的 w 参数）。
+  座舱眼位（V3G_PIT eye）：歼-31、歼-15、歼-20 坐进模型自带的座舱（坐垫顶面 + 0.78 米、头靠前一点，正好从平显组合玻璃中间看出去）；没有座舱内饰的（歼-50 等）座舱视角在机头上方、不画自己，画平面平显（v3pilot.js fpHudFlat）。
+  解码时的模型加工（v3gPrep 开头）：V3G_MATFIX（直-10 原模型整架设成半透明，改回不透明）、V3G_FLIP（C-17、运-20、轰-6、X-47B 烘焙出来机头朝 −x，转 180°，部件支点、喷口跟着转）、
+  V3G_ROTSPLIT（直-10 的旋翼和机身烘焙成一体：按连通块拆出主旋翼、尾桨部件；AH-64、UH-60 烘焙时已拆好）。
+  歼-15 折翼（v3g.js V3G_FOLD / v3gFold，实例参数 iD.z = 折起程度）：模型外翼本来在折叠线 |y| ≈ 3.47 米处分开，外翼、平尾外段挂成绕上表面铰链转的部件（平尾跨线的面按线切开），补了四个翼下挂架；甲板上停着折翼（整备时先展开、挂完再折：v3det.js v3dParkFold），滑行按 p.fold；挂的弹、保险销跟着外翼翻（v3gAt / v3dGndAt / fwStoresGnd 的 fold 参数）。歼-15 座舱眼位在 V3G_PIT.j15（坐进模型自带的座舱）。
+  E-2D（代空警-600）也用 V3G_FOLD：格鲁曼 Sto-Wing 式斜铰链（ax / px：外翼绕斜轴转 120°，翼尖朝后、前缘朝下，贴在机身两侧，折叠后宽约 8.9 米），甲板上停放、滑行时折着，不再和旁边的飞机叠在一起。
+- 模型加工都在 v3g.js 的 v3gPrep 里（上传缓冲区之前）：歼-31 尾喷口、舵面（V3G_PIT）；歼-20、歼-31 的弹舱（V3G_BAY：按真实弹舱位置把机腹蒙皮多边形裁剪切开，切出的舱门绕铰链转，补弹舱井）；坦克炮管拆成单独部件（V3G_GUN：开炮后坐、复进，车体后坐翘起）；M1A1 裙板上原有的 64 块 ARAT 拆成能逐块消失的 'era' 部件（V3G_ERA：块号编在顶点 |y| 里，一次绘制，块后面补焦黑底板）。实例参数 8 个（iC、iD）：iC.x 炮塔转角，iD 0 主弹舱开度、1 侧弹舱开度、2 炮管后坐（飞机：外翼折起程度）；坦克 iC.yzw、iD.x 是炸掉的反应装甲块（各 16 位）；vfn.js 管的车辆按它那套参数槽。着色器部件模式：1 收起、2 尾喷口、3 炮管、4 反应装甲块、5 链式部件。
+- 人物（js/v3man.js，v3g.js v3gMan 调用）：士兵模型是 T 字站姿的 OBJ、没有骨骼——加载时焊接顶点、平滑法线，按身体部位程序化分到 11 块骨上（关节位置照模型量的），姿势表（v3manSpec：站、端枪、走 / 跑 8 帧、弯腰抬弹、跪射、弹射官跪指、跪着挂弹、调度手势、举销、吊伞、坐着开车、爬梯、卧倒、匍匐、阵亡、站 → 跪 → 卧过渡）按关节角度正向运动学蒙皮，每种姿势第一次用到时生成一份顶点缓冲（每帧限量，超了这一帧先不画）；
+  步兵手里补一支步枪（V3MAN_RIFLE，按两手位置对齐；端枪、走跑、跪、卧都握着枪，阵亡、吊伞不带），飞行员、甲板人员不带枪。姿势键来自 manim.js manPose3（st / sa / kn / pr / w0–7 / r0–7 / c0–3 / L1–15）和甲板、座舱里的 pt / sit / cl0–7 / dead 等；
+  着装：kind 'deck#rrggbb' 甲板人员马甲颜色（牵引车蓝、弹药红、调度 / 弹射官黄、弹射与拦阻绿、机务棕、安全白），'pilot' 飞行员（橄榄绿飞行服、白头盔）——身体贴图按部位画遮罩重新着色。新姿势码先在 v3manSpec 里加。
+- 美军第 82 空降师（守方，js/a82.js 推演、js/v3a82.js 三维）：联合强行进入——5 架 C-17A（a.a82，eair.js 交给 a82Fly）交叉装载一个加强伞兵连（A82_T / A82_LOAD：连部、3 个步枪排、M240B 机枪组、标枪组、M224A1 迫击炮班、毒刺组、营狙击组，139 人；每组 3 人，三维里各人拿 w 里的枪），
+  800 英尺投放（T-11 每秒 5.8 米下降）、第 5 架重装空投 JLTV 与 M119A3；落地集合编成战斗群（orbat.js bgNew，目标选择借 a101Aim）；标枪（S.e82.jv）CLU 热像自己查通视（spot.js spotLos）、攻顶弹道；
+  伞降约 150 秒后 CH-47F（type 'ch47'）吊 M777A2 到后方炮位、放炮、落地卸炮班；战役困难 / 地狱各一波，沙盒目录 e_82（S.assets.e82），海岛战役不来。
+  三维：v3a82.js a82Man 用 v3man.js 的姿势函数蒙出不带方块枪的身体，再按枪架势 G 摆真实枪械模型（V3A_GUN 量过每型的握把、枪管轴线）；a82Emp 让 M777 / M270 阵地、82 师迫击炮用模型；a82Collect / a82Fx 画伞、重装平台、吊挂的炮、标枪与烟迹。
+  挂接点只有几行：v3units.js（步兵 a82Man、阵地 a82Emp、收集 a82Collect、EA_K 加 ch47 / sh60b）、v3fx.js（a82Fx、EA_K3）、eair.js（a.a82 的飞机交给 a82Fly）。
+  美舰舰载直升机（js/mh60.js）：MH-60R（用 SH-60B 模型）每舰一架在空、在本舰朝我方一侧盘旋警戒，也走 a.a82 → a82Fly → mh60Fly。
+- 新模型（tools/v3gmodels.json，都已烘焙）：ch47、sh60b、m777（去掉地上的炮弹）、m270（发射箱朝右转出起竖，车体中心在模型 y = 2.84）、jltv（V3G_VEH.jltv 改用它）、
+  m4a1、m249、m110、m240、javl（发射筒原来斜 17°，rot 转平）、javm（标枪弹体）、m224、stinger、m2hb；枪口一律朝 +x。
+- 高级感（3A 质感）：写实画面的后期（v3post.js comp）加电影感调色（中间调 S 形对比、暗部偏青蓝亮部偏暖金、高光略压饱和，uGrade）、镜头色差（四角红蓝错开一两个像素，uCA）、
+  太阳在镜头前方时的光晕 / 横向拉丝 / 鬼影（v3poSun 算太阳在画面上的位置，辉光图里太阳那块不亮就是被挡住了，uSun）；黑夜、白色平原、黑绿 / 数码画面不做。
+  特效（v3fx.js）：v3fBillow 画翻滚的烟团（遮光，放 sm）和火球（加法，放 out；同一文件里另有画烟幕的老 v3fPuff，名字不能重——后声明的会覆盖前面的）——带内坐标里编进画法（x + 8 × 1 烟 / 2 火）和噪声种子（y + 4 × 0–15），片元着色器用两层随时间翻卷的值噪声啃边；
+  爆炸 = 白热闪光 + 贴地冲击波圈 + 翻滚冷却的火球 + 碎片 + 往下风飘的浓烟柱（V3F_WIND）+ 掀起的尘土（水面是白色水汽）；烟幕的烟团也翻滚；被打掉的车辆起火约 50 秒、黑烟柱约两分钟（最多 18 辆）。
+  地面云影（view3d.js 地形着色器 cloudSh：几公里大的云影随风飘，只挡太阳直射，细节贴图开着时才有）；行进中的车辆车尾扬尘（v3fx.js，最多 40 辆）；音效总线分一路进卷积混响（audio.js auIR 程序生成的室外回声，湿声 0.2）。
+  界面（js/polish.js）：写实画面、桌面、画质高时面板是毛玻璃（data-glass，backdrop-filter 模糊背后的战场），开新局黑场淡入，3D 自由镜头被附近的大爆炸震一下（plShake3，设置里「屏幕震动」可关，暂停不震）。
+- 海面反射天空（view3d.js）：有 EXT_shader_texture_lod 时按反射方向本身的屏幕导数算级别、texture2DLodEXT 显式取样（方位角 atan 的导数 (x·dy − y·dx)/(x² + y²) 在接缝两边连续），完全不碰接缝；没有这个扩展时才退回「按 2×2 像素块统一挑写法」（按块首像素的方位角）——不能逐像素比较 fwidth：真显卡的导数逐行算，块里选成两种写法会整块取最糊的一级，镜头朝北时左半屏一层颗粒（软件渲染器测不出来）。天空着色器 V3_SKY_FS 用高精度（苹果显卡的 mediump 是真半精度）、显式取最清楚一级。
+- 航母甲板（cvdeck.js、v3det.js）：飞机按机身 / 机翼 / 平尾三块矩形占位（cvShape），滑行每步先试、会碰上别的飞机或舰岛就原地等（cvFollow；互相挡住的低优先级那架倒一点让路，20 秒还过不去才硬走）；
+  滑行令 c.tx：甲板上同一时间只滑一架（滑去弹射器、着舰后滑回机位），刚着舰的优先；滑行时折着机翼，到偏流板后展开完才上弹射器；出机位先顺机头拖 6 米再往舷内拐。
+  每个机位旁一辆挂弹车 + 一个导弹挂载架（rack，0.62 倍），整备时一趟挂一枚（v3dArmQ / v3dArmLoaded / v3dArmBay，满载清单 fpwpn.js fwLoadout），挂弹时弹舱门开着，挂上的弹留在飞机上（fwStoresGnd）；牵引车不再瞬移。
+- 爆炸反应装甲（js/era.js，vehicles.js vehDamage 先过 eraHit）：用的就是模型上原有的块——布局登记在 models.js 的 RLE（99A、96B、15 式首上和炮塔正面的块，2D 贴图照它画；M1A1 / M1A2 裙板的 ARAT，与 3D 模型的块一一对应），按块记（v.era.h / v.era.t 炸掉的块号）。来弹按来向落在迎弹面某一点，正好打在还在的块上才挡（破甲弹挡九成多，重型的削弱穿甲弹三成），块炸掉后那里就是本体装甲；炸掉的块 2D 画成焦黑空位（rlEraUsed）、3D 从模型上消失。96 式 3D 模型本身没挂反应装甲。攻顶导弹不管用。
+- 亲自操纵（3D 里 P 键 / 「驾驶」按钮，js/v3pilot.js）：055 驱逐舰（舰桥视角，车钟、转舵、主炮、垂发）；升空的战斗机（歼-20、歼-50）、歼-35、歼-15T、歼-16D 用飞控物理引擎 js/flight.js 真飞（六自由度 + 电传飞控，正常律 / 直接律），操纵照《战争雷霆》：默认鼠标瞄准（教官把机头带向准星，fpInstr），M 切鼠标摇杆；键盘杆量有平滑、死区、指数响应曲线；能横滚、筋斗；受力回馈（手柄震动、抖振、黑视红视、头随过载晃，G 开关）；追尾镜头（手动操纵时跟机体姿态翻），V 切座舱视角（座舱盖、平显玻璃透明）；手柄也能飞。画面上除了武器平显不画任何标识（地名、番号牌、状态行、按键提示都不画）。
+  速度感与手感（v3pilot.js fpFeel / fpAudio / fpFx）：视野随空速放大（fpFov，投影与平面平显都用它）、开加力那一下推背（视野一推、追尾镜头甩开 cdK）、贴地高速气流颠簸与跨音速抖振（fpShake）；
+  合成的涡轮啸叫、推力轰鸣、加力爆燃与次低音、随动压变响的风噪（audio.js 的 AU 总线）；翼尖涡流、6 g 以上机翼水汽、迎面掠过的风线（v3fx.js 调 fpFx）；满杆滚转 200°/s 以上（flight.js pmax），教官最多拉约 7.5 g。
+  鼠标瞄准的「教官」（v3pilot.js fpInstr）按升力矢量指向：机头按偏差 1.6 倍角速度转向准星（最多 7.5 g），要的加速度加上抵消重力的一份就是机翼该给的升力；要的升力大时滚转让座舱顶对准它、按它在座舱顶方向的分量拉杆；要的升力小（准星就在前方附近）按水平方向那一份压坡度（倒飞先滚回正飞）；横向 7° 以内方向舵把机头蹬过去、坡度按航迹（速度方向）的偏差压；正飞时准星在下方 20° 以内直接推杆；离地近时只按安全下滑角飞（避地）。原来偏差小时转弯角速度跟偏差平方一样小，偏 8° 要十几秒才对上。锁定鼠标时单次几百像素的假位移丢掉。
+  机型与挂载参数（js/fpinfo.js）：驾驶时按 I（武器栏「I 参数」、手机「参数」）开关右侧面板——机型性能、此刻状态、每种挂载的剩余 / 满载、挂在哪、制导、射程、速度、过载、导引头离轴角、锁定时间、弹体说明、热诱弹；驾驶列表每架飞机下面「挂载参数」可展开。数字都取自现有的表，只补了弹体说明 FI_WD。
+  光电吊舱、锁定、热诱弹、武器栏、音障云（js/fptgp.js）：B 进出吊舱视角（机腹吊舱看出去，V3FP.vw = 'tgp'，V3FP.tg）——真实变焦：投影视场角 40° → 0.6°（滚轮连续、Z 按档），fpFov 同时给投影、平面平显、v3g.js 细节档用；
+  N 切红外白热 / 黑热 / 电视（v3post.js comp 里按 ftIR() 换算，画质低时也做这一遍；模型按 ftHeat 的热度在 v3g.js 着色器里提亮（uIRh：人、车、直升机、导弹按外形发亮），车辆发动机舱在 ftFx 里另外点亮）；鼠标转视线、吊舱稳定在地面一点（锁了目标就跟目标）；吊舱是本方视野源（HOOK.visionP：看得见的地面宽度不超过约 2.2 公里时，画面里那一片的敌人被发现）；手机触屏有「吊舱、锁定、诱弹、变焦、红外」按钮、拖动画面转视线；L 锁定地面目标（V3FP.gl：车辆、阵地、装甲车、敌舰、步兵或地面坐标点），
+  对地武器开火先打锁定的目标（fpwpn.js fwFire 调 ftLockTgt）；R 热诱弹（一组 4 发，o.flN，3 公里内的红外制导来袭弹六成被骗走）；画面下方武器栏（按键、名称、剩余、热诱弹）；
+  跨音速蒸汽锥、越过 1 马赫的音爆；加力尾焰按玩家真实的加力开关画（v3fx.js lit 的 burn）。
+  武器系统 js/fpwpn.js：数字键选武器（再按收起）、F 开火；选中时打开对应弹舱门（歼-20 侧弹舱把霹雳-10 连挂架推出舱外），开着时画舱里的弹；武器按真实参数（FW_W：霹雳-15 / 10、雷电-10、KD-88、飞腾-8；霹雳-17、雷石-6 的参数还在，现在没有机型挂），各机型挂载 FW_LOAD、挂点 FW_ST；平显画选中武器的大环（导引头 / 火控能锁的偏离角，按真实角度），环里射程内的目标出锁定框，锁稳了变红才能打；弹在三维里飞（助推、比例导引、过载限制、近炸引信，m.fw / m.z3，missile.js 不再推演它），命中走 msSamHit / msPgmHit。玩家开的飞机 v3AirZ 返回真实高度（不受高度档上限）。「驾驶」列表里还能选待命的飞机登机（fpBoard：派出这一架，舰载机坐在座舱里看登机、牵引车一路拖到偏流板后（cvdeck.js 见到 p.fpBrd）、上弹射器、弹射，离舰后物理引擎接手，满油门加力；陆基的从战区机场直接飞来）。被操纵的单位推演里用 fpDriving(o) 判断，AI 让出指挥。
+- 飞机按真实世界的速度飞（carrier.js AIR_K = 1，型号表 spd 是真实巡航速度，米 / 秒）；机载雷达按真实探测距离（carrier.js AIR_REAL，airwar.js awSeen），锁定、发射仍按游戏里的火控距离。
+- 主菜单「闯关」是 levels.js（三章十关，按预算自己布兵），「海岛战役」是 isle.js，都建在沙盒（sandbox.js）上；两者都记在 S.lv 里（海岛是 S.lv.isle），闯关的逻辑要跳过海岛。
+
+- 战役决策（js/decide.js，默认战役与海岛战役；沙盒、闯关不加）：玩家是战区司令，平时全交给 AI，只在关键处拍板——画面下方决策卡（舰炮齐射、火箭炮覆盖、轰-6K 轰炸各一次；战役预备队 2 艘 271 + 1 艘 072A 只有下令才登陆），点卡后点地图选目标（HOOK.pointer，右键 / Esc 取消）；
+  AI 请示（敌军集结反冲击 thFocusE、推进线 150 秒没前推、敌炮兵阵地暴露，15 秒不答按默认）；战役进度（时限、据点分值 / 七成、指挥所）；结束画面里复盘（每张卡打掉多少、时间线）。状态 S.dec（开战第一步再建）。
+  作战时限按 logistics.js battleT()：远海航渡（farsea.js）将近一小时，时限从编队抵达集结海域（S.fs.arrT）起算。
+- roblox/：Roblox 版「军事大亨」（Luau，和网页版无关、互不影响）：大亨经济 + 25 个兵种的自动战斗（步兵组、装甲、防空、炮兵、直升机、喷气机；射高 reach / 只打飞机 airOnly、导弹、C-RAM 拦截炮弹、运兵直升机机降、轰炸机投弹）+ 玩家本人拿枪上阵、亲自开车 / 直升机 / 喷气机 + PvP（排位匹配：服内或跨服，跨服用 MemoryStore 排队、预留对战服务器、MessagingService 通知、传送；同服约战；突袭别人存下的防线）+ 重生 / 军衔 / 每日任务 / 排行榜。
+  src/Main（服务器：init.server.lua 建共享上下文 G，World / Store / Economy / Army / Combat / Weapons / Match 各自 init(G) 把函数挂上去，Battle 推演、Models 模型）、src/Client（客户端：Fx / View / UI / Play 同样挂在 G 上）、src/Config.lua（兵种、建筑、Config.Match 等全部数值）；
+  `node roblox/build.mjs` 打包成 Studio 能直接打开的 roblox/MilitaryTycoon.rbxlx（提交进仓库，只有脚本）。
+  用户在 Studio 里导入了模型（Workspace.MilitaryTycoonUnits）、也让别的 AI 直接在 Studio 里改过：以用户发来的 .rbxl 为准——`node roblox/tools/rbxl.mjs <.rbxl> <目录>` 导出脚本和实例树来合并，
+  改完用 `node roblox/tools/rbxl_patch.mjs <原.rbxl> <输出.rbxl>` 只换脚本源码写回（导入的模型、资源号原样保留）；给用户发写回后的 .rbxl，别发 build.mjs 的 rbxlx（会丢模型和他那边的改动）。
+  另一个 AI 加的模块：Main/Crates（补给空投）、Skills（支援技能）、Scenery（地形世界、战区）、Client/Anim（建筑动画）、Weather（战区天气）、Guide（指引、小地图）；UI 里有当前目标、建筑升级、手机紧凑排版。
+  布阵 / 观战的镜头和点选在 Play.lua 开头的 ctlInit（单独一个函数，Play.init 的局部变量快到 200 个上限）：布阵镜头按屏幕空着的那块框住部署区，点选 / 拖框 / 拖动摆放、成组放下（服务器 Army.placeUnits，直接摆到位）；开战默认观战（自动导播框住交火的单位、点单位跟随）。
+  0.9：新兵种（炮艇 lob、蜂群 swarm 放 swarmling、激光 laser、电磁炮 pierce、布雷 mines（Battle.layMine / minesStep）、弹道导弹 ballistic + 爱国者 abm 拦截），
+  单位技能 Config.Abilities（按 cat，Battle.ability 给 u.buff，Battle.step 换成 spK / rtK / dmK / takenK），战况 Config.Events / EventOf（Combat eventSetup / eventStep）。
+  0.9.1：兵种 static = true 是固定阵地（拦截炮、激光防空，用密集阵模型）：Battle.act 不挪、车身不转，separate 不推，pick 射程外的目标排后，Combat.driveInput 只收炮塔角，Army.buyUnit 直接架在阵位上。
+  起飞：Battle.actJet 开战时 u.spd 从 0 滑跑（不转弯）→ 一半巡航速度离地 → 爬升率 u.vy 慢慢加上、近巡航高度改平，u.pitch 给 Combat.placeAll 抬机头；
+  直升机 act 里先垂直拔高（liftK）；基地里 Army.stepPath 的飞机按剩余路程加减速（u.pv）、机头随升降（u.bp），喷气机落阵位是边飞边降到上空 30 格再慢慢落下（jetLanding）。
+  重生：基地里（含已开放的新区域）的楼全部盖好才能重生，最多 Config.Rebirth.max = 3 次，每次开放一块 Config.Areas（基地南边，后墙南门出去；建筑带 area 字段，Config.AreaOpen 判断能不能盖）。不要新加 ModuleScript：rbxl_patch.mjs 只能换已有脚本的源码。
+  宣传片（roblox/tools/trailer/，视频不进仓库）：record.lua 在模拟里盖满基地、真打一关，录场景和逐帧轨迹 → render.html（WebGL 渲染器，原模型、阴影、粒子）+ timeline.js（64 秒分镜、字幕卡）由 render.mjs 用 Playwright 逐帧截图 → audio.mjs 程序合成配乐与音效（按推演里的开火、爆炸点放）→ ffmpeg 出 MP4；用法见 roblox/README.md「宣传片」。
+  原模型：`node roblox/tools/export_models.mjs` 把 js/mdl 的烘焙模型导出成 roblox/models/*.glb（Roblox 坐标、按格缩放、部件按 Body / Turret / Rotor / TailRotor 命名、_Front / _Top / _Pivot* 标记；士兵用 v3man.js 摆端枪姿势；LIST 里 drop 去掉起落架、flip 转 180°、gain 提亮太暗的贴图），用户在 Studio「导入 3D」后 Models.loadImported 自动摆正、缩放、建炮塔 / 旋翼的 Motor6D；`roblox/tools/view_glb.html` 检查导出结果。
+  这台机器没有 Luau：`node roblox/tools/luacheck.mjs` 查语法和未定义变量（脚本只用 Lua 5.1 写法，不用 +=、continue、类型标注），`python3 roblox/tools/mock/run.py roblox/tools/mock/test.lua [分钟]` 用系统的 liblua5.4 在模拟的 Roblox 里真跑一遍（推演单测、新档、老档、拿枪、开车开飞机、突袭、约战、排位匹配（同服、跨服）、重生、存档读档，再让机器人连续玩；接着在全新的环境里跑 test_match.lua 的对战服务器流程），改完两样都要过。说明见 roblox/README.md。
+- 其他会话的源码有时不推 GitHub、只发布网页版：网页版脚本、模型原样发布，可以从 gh-pages 的发布内容取回（index.html 按 tools/build_www.mjs 逆操作还原）；发布前先看 gh-pages 有没有更新的版本，别覆盖。
+
+## 代码约定
+- 全部状态在全局 `S`（纯 JSON，可存档）；类型数组、渲染缓存放在 S 之外，S 换了就重建。
+- 模块之间用 core.js 的 `HOOK`（newGame / step / impact / visionP / visionE / drawUnder / drawOver / drawTop / frame / pointer / key）挂接；调用后加载的文件里的函数，先判断 `typeof fn === 'function'`。
+- 每个文件开头 `'use strict';`；两格缩进、单引号、分号，紧凑写法；注释用简短中文，写清楚为什么这么做。
+- 司令发言（作战通联 chat.js）已删除：commander.js 的 chatSay 不再记录、不显示（CMD_TALK 关着），AI 指挥官照样下令执行；对局里没有操作按钮了（编队面板、命令 / 阵型 / 支援栏都去掉），我方全部资产由 AI 指挥（cmdAll 恒为真），玩家布好兵就看、可以亲自驾驶（P）。
+- 沙盒 / 闯关布兵是 TABS 式（sandbox.js sbxUI）：底部兵种栏（分类页签 + 大卡片：白色图标、名称、点数），顶上双方预算，右下「开始战斗」「观战」，其余工具收在左上角「部署工具」；配色透明黑、细边框不明显，地图上布兵的兵种也画白色。
+
+## AI：要求与现状
+- 改 AI 之前先读 docs/ai_requirements.md（用户原话整理的硬性要求 + 实现对照），改完同步更新其中的「实现对照」。
+- 默认对局的指挥体系是 js/theater.js（战区 → 师 → 团 → 营，钢铁雄心式战线推演）。它启用时关掉旧的 hq.js 司令与团（S.v7off.hq）、brain.js（br）、tf.js（tf）。所以：
+  - 默认对局里不生效：js/cmddoc.js（hq.js 守方司令战法表）、js/jointdoc.js 的 BDE_DOC（hq.js 团的协同）；
+  - 仍然生效：hq.js 的营长状态机 regThink（穿插、预备队、第二梯队）与 js/doctrine.js 团长战法表、js/sa.js 的态势感知与边打边撤（SA_DOC）。
+- 战区司令的条令参数在 js/theater.js 的 `TH_DOC`（攻方：第二梯队比例、恢复推进的兵力比、火力准备；守方：战役预备队比例、反击兵力比、炮火准备、吃紧投入门槛、判明主攻门槛），由 tools/train_real.js 训练，记录在 docs/real_train.md。改 `TH_DOC` 时同步改 tools/train_real.js 的 `DEF`（训练场把它当「现行参数」比较）。
+
+## 测试与训练（Node 无头运行；tools/headless.js 按 index.html 的顺序加载 js/）
+- tools/headless.js 用严格模式包起来、内建对象（Math、Infinity、类型数组……）绑成局部常量：原来 vm 沙箱里每次访问全局都过拦截器，热循环慢一二十倍（流场测出 500 毫秒、实际 50），2026-11-01 以前在无头工具里量的耗时与热点排行都不准。量推演开销按游戏真实步长 1/30 秒（main.js），看每 1 秒游戏时间要多少毫秒 CPU 和单步最长
+- 语法检查：`for f in js/*.js; do node --check $f || echo FAIL $f; done`
+- 条令符合度：`node tools/doctrine_eval.js [局数（最多 20）] [每局秒数]`。沙盒 AI 对 AI 加战役，测双方「打得像不像真的」：冲击前火力准备、局部兵力比、主攻集中、梯队、零打碎敲、步坦协同、防空伞、兵力闲置、守方预备队与纵深、反冲击兵力比等，对照条令目标范围打分，并报结局。改 AI 前后各跑一次对比。随机性大：10 局之间差几个百分点属正常波动；守方反冲击每局只有一两次，相关指标至少看 20 局。
+- 训练场（同一局面配对比较、逐轮淘汰、冠军变异复赛，稳健分 = 平均 − 0.4 × 标准差，四个进程并行；成绩缓存在 tools/.cache/，不进仓库，代码改了自动作废）：
+  - tools/train_real.js：战区司令 TH_DOC，打分一半胜负、一半条令符合度（`PFIX` / `EFIX` 环境变量指定对手参数）；
+  - tools/train_reg.js：团长战法（js/doctrine.js）；tools/train_101.js：101 空降师；tools/train_joint.js、tools/train_cmd.js：hq.js 体系（默认对局里不生效）。
+  - 一次训练常要一两个小时，放后台跑；中途打断可以重跑，已打过的局直接读缓存。
+- 浏览器检查：Playwright 已全局安装（`NODE_PATH=$(npm root -g)`），打开 `file://…/index.html`，调用 `startPvE('hard')` 或 `mnSandbox()` 后用 `step(1 / 30)` 同步推演，截图、看 pageerror。
+
+## 分支与协作
+- 可能同时有几个 Claude 会话在改这个仓库，各自在 `claude/*` 分支上；main 只有初始提交。
+- 开工前先 `git fetch`，找最新的开发分支，在它的基础上改；不要和正在推送的会话同时改同一批核心文件（theater.js、hq.js、brain.js、sandbox.js 等）。

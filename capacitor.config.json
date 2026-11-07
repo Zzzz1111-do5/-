@@ -1,0 +1,9 @@
+{
+  "appId": "com.studio.darksword",
+  "appName": "暗剑",
+  "webDir": "www",
+  "android": {
+    "backgroundColor": "#020704",
+    "allowMixedContent": false
+  }
+}

@@ -1,0 +1,86 @@
+# 打包发布版：电脑版（Windows、Linux、macOS，传 Steam）与安卓版（APK / AAB，传 TapTap）
+# 什么时候跑：推送 v 开头的标签（git tag v1.0.0 && git push origin v1.0.0）；改了打包相关的文件时自检一次；也可以在 Actions 页面手动运行
+# 打好的包在这次运行页面底部的 Artifacts 里下载。安卓正式签名：仓库 Settings → Secrets and variables → Actions 里设
+#   ANDROID_KEYSTORE_BASE64（签名文件 base64）、ANDROID_KEYSTORE_PASSWORD、ANDROID_KEY_ALIAS、ANDROID_KEY_PASSWORD（见 docs/release.md）；不设只出调试包
+name: 打包发布版
+on:
+  push:
+    tags: ['v*']
+    branches: ['**']
+    paths: ['.github/workflows/release.yml', 'desktop/**', 'android/**', 'tools/build_www.mjs', 'tools/steam_upload.sh', 'package.json', 'package-lock.json']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  desktop:
+    name: 电脑版（Windows、Linux）
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: desktop/package-lock.json }
+      - name: 打包（Windows 版在 Linux 上交叉打包）
+        working-directory: desktop
+        run: |
+          npm ci
+          npm run dist:win
+          npx electron-builder --linux --x64
+          tar -czf dist/Darksword-linux-x64.tar.gz -C dist/linux-unpacked .
+      - uses: actions/upload-artifact@v4
+        with: { name: Darksword-windows-x64, path: desktop/dist/win-unpacked, if-no-files-found: error }
+      - uses: actions/upload-artifact@v4   # 打成 tar 保留可执行权限（Artifacts 的 zip 会丢）
+        with: { name: Darksword-linux-x64, path: desktop/dist/Darksword-linux-x64.tar.gz, if-no-files-found: error }
+
+  mac:
+    name: 电脑版（macOS）
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: desktop/package-lock.json }
+      - name: 打包（通用二进制，Intel 与 Apple 芯片都能跑）
+        working-directory: desktop
+        run: |
+          npm ci
+          npm run dist:mac
+          ditto -c -k --keepParent dist/mac-universal/Darksword.app dist/Darksword-mac-universal.zip
+      - uses: actions/upload-artifact@v4
+        with: { name: Darksword-mac-universal, path: desktop/dist/Darksword-mac-universal.zip, if-no-files-found: error }
+
+  android:
+    name: 安卓版
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 21, cache: gradle }
+      - name: 生成网页并同步安卓工程
+        run: |
+          npm ci
+          npm run sync
+      - name: 取出签名文件
+        env: { KS: '${{ secrets.ANDROID_KEYSTORE_BASE64 }}' }
+        run: |
+          if [ -n "$KS" ]; then echo "$KS" | base64 -d > android/release.jks; echo 'DS_KEYSTORE=release.jks' >> "$GITHUB_ENV"; fi
+      - name: 打包
+        working-directory: android
+        env:
+          DS_KEYSTORE_PASSWORD: '${{ secrets.ANDROID_KEYSTORE_PASSWORD }}'
+          DS_KEY_ALIAS: '${{ secrets.ANDROID_KEY_ALIAS }}'
+          DS_KEY_PASSWORD: '${{ secrets.ANDROID_KEY_PASSWORD }}'
+        run: |
+          if [ -n "$DS_KEYSTORE" ]; then ./gradlew --no-daemon assembleRelease bundleRelease; else ./gradlew --no-daemon assembleDebug; fi
+          rm -f release.jks
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Darksword-android
+          if-no-files-found: error
+          path: |
+            android/app/build/outputs/apk/**/*.apk
+            android/app/build/outputs/bundle/**/*.aab

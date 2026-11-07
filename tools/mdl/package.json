@@ -1,0 +1,11 @@
+{
+  "private": true,
+  "description": "离线模型转换（tools/mdl/build.mjs）用的依赖：npm i 一次即可，node_modules 不进仓库",
+  "type": "module",
+  "dependencies": {
+    "@gltf-transform/core": "^4.5.1",
+    "@gltf-transform/extensions": "^4.5.1",
+    "meshoptimizer": "0.22.0",
+    "sharp": "^0.34.0"
+  }
+}

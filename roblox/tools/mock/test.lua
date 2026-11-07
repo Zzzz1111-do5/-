@@ -1,0 +1,1382 @@
+-- 军事大亨的模拟测试：在 rbx.lua 模拟的 Roblox 里真跑服务器和客户端脚本。
+--   推演：射高、只打飞机、拦截炮打炮弹、运兵直升机机降、轰炸机投弹、导弹、喷气机、两边各 25 个兵种混战
+--   新档：进服 → 踩按钮盖楼 → 点界面生产 → 布阵 → 开战（本人上阵）→ 机器人连续玩几十分钟（模拟时间）
+--   老玩家的档（全建筑、25 个兵种都有、首领关）：拿枪打、开坦克、开直升机、开战斗机、开轰炸机投弹、开运兵直升机放兵、
+--   突袭别人的防线、和另一个玩家约战、任务、每日奖励、武器、重生、排行榜
+--   导入的原模型（假装是 Studio 导入的：转了 90°、放大了 3.6 倍）能摆正、缩放、炮塔能转
+--   退出存档 → 过一小时再进（读档、离线收益）→ 存档服务坏掉 → 七个人进六块地的服务器
+-- 有脚本报错就算失败。用法：python3 roblox/tools/mock/run.py roblox/tools/mock/test.lua [机器人玩几分钟]
+local R = dofile(MOCK_DIR .. "/rbx.lua")
+local V3 = R.Vector3.new
+local CF = R.CFrame.new
+local Enum = R.Enum
+local RS = R.services.ReplicatedStorage
+local SSS = R.services.ServerScriptService
+local Players = R.services.Players
+local ws = R.workspace
+
+local MINUTES = tonumber(TEST_ARGS:match("(%d+)")) or 20
+local fails = {}
+local function check(ok, msg)
+  if ok then print("  ✓ " .. msg) else print("  ✗ " .. msg); table.insert(fails, msg) end
+end
+
+-- 装脚本：和 build.mjs 一样的结构
+local function listLua(dir)
+  local p = io.popen('ls "' .. dir .. '"')
+  local out = {}
+  for f in p:lines() do if f:match("%.lua$") then table.insert(out, f) end end
+  p:close()
+  return out
+end
+local configMS = R.scriptFrom("ModuleScript", "Config", SRC_DIR .. "/Config.lua", RS)
+local um = R.make("Folder")
+um._p.Name = "UnitModels"
+um.Parent = RS
+local main = R.scriptFrom("Script", "Main", SRC_DIR .. "/Main/init.server.lua", SSS)
+for _, f in ipairs(listLua(SRC_DIR .. "/Main")) do
+  if f ~= "init.server.lua" then R.scriptFrom("ModuleScript", f:gsub("%.lua$", ""), SRC_DIR .. "/Main/" .. f, main) end
+end
+local Config = R.require(configMS)
+
+-- 假装导入的原模型：坦克（车身、炮塔、标记），整体绕 Y 转 90°、放大 3.6 倍（导入器可能这样换坐标）；直升机（主旋翼、尾桨）
+local function fakeImport(name, parts)
+  local m = R.make("Model")
+  m._p.Name = name
+  local rot = R.CFrame.Angles(0, math.pi / 2, 0)
+  for _, e in ipairs(parts) do
+    local p = R.make("MeshPart")
+    p._p.Name = e[1]
+    p._p.Anchored = true
+    p._p.Size = e[2] * 3.6
+    p._p.CFrame = CF(500, 0, 300) * rot * CF(e[3] * 3.6)
+    p.Parent = m
+  end
+  m.Parent = ws
+  return m
+end
+-- 原始坐标（米）：车头朝 −Z
+fakeImport("tank", {
+  { "Body_1", V3(3.6, 1.6, 9), V3(0, 0.8, 0) }, { "Body_2", V3(3.2, 0.4, 8), V3(0, 1.8, 0) },
+  { "Turret_1", V3(2.4, 1, 3), V3(0, 2.4, 0.5) }, { "Turret_2", V3(0.3, 0.3, 5), V3(0, 2.5, -3.5) },
+  { "_Front", V3(0.2, 0.2, 0.2), V3(0, 1.3, -5.5) }, { "_Top", V3(0.2, 0.2, 0.2), V3(0, 4, 0) }, { "_PivotTurret", V3(0.2, 0.2, 0.2), V3(0, 2.2, 0.5) },
+})
+fakeImport("heli", {
+  { "Body_1", V3(2, 2, 12), V3(0, 2, 0) }, { "Rotor_1", V3(13, 0.1, 0.4), V3(0, 3.6, 0) }, { "TailRotor_1", V3(0.1, 2, 0.3), V3(0.4, 2.6, 6.2) },
+  { "_Front", V3(0.2, 0.2, 0.2), V3(0, 2, -6.5) }, { "_Top", V3(0.2, 0.2, 0.2), V3(0, 5, 0) }, { "_PivotRotor", V3(0.2, 0.2, 0.2), V3(0, 3.6, 0) },
+  { "_PivotTail", V3(0.2, 0.2, 0.2), V3(0.4, 2.6, 6.2) }, { "_AxisTail", V3(0.2, 0.2, 0.2), V3(1.4, 2.6, 6.2) },
+})
+
+-- 一个老玩家的档：全部建筑、指挥部 4 级、科技 5、四把枪、40 个兵（25 个兵种各一个，再加些坦克、步兵）、第 10 关（首领关）
+local army = {}
+local mix = {}
+for _, t in ipairs(Config.UnitOrder) do table.insert(mix, t) end
+for _, t in ipairs({ "tank", "tank", "tank", "inf", "inf", "inf", "heli", "aa", "ifv", "arty", "spaag", "at", "mg", "cram", "tank" }) do table.insert(mix, t) end
+for i = 1, 40 do table.insert(army, { t = mix[i], x = ((i - 1) % 10 - 4.5) * 30, z = 200 + math.floor((i - 1) / 10) * 30 }) end
+local owned = {}
+for _, b in ipairs(Config.Buildings) do owned[b.id] = true end
+local now0 = os.time()
+R.store[Config.SaveKey .. "/u5005"] = { v = 2, cash = 2000000, level = 10, best = 10, owned = owned, hq = 4, tech = 5, army = army, wins = 9, rebirth = 0, xp = 900,
+  kills = 3, weapons = { rifle = true, smg = true, sniper = true, rpg = true }, rating = 1000, raidWins = 0, duelWins = 0,
+  daily = { day = math.floor(now0 / 86400) - 1, streak = 3 }, missions = { day = 0, list = {} }, t = now0 - 30 }
+-- 一位不在线玩家的防线（突袭对象）
+R.store["MilitaryTycoon_def_v1/u7007"] = { name = "远方的对手", level = 8, tech = 1, rebirth = 0, rating = 1040,
+  army = { { t = "inf", x = -20, z = 300 }, { t = "inf", x = 20, z = 300 }, { t = "tank", x = 0, z = 270 }, { t = "aa", x = 40, z = 240 } }, t = now0 - 99 }
+R.ordered = { MilitaryTycoon_rating_v1 = { u7007 = 1040 }, MilitaryTycoon_level_v1 = { u7007 = 8 } }
+
+print("== 启动服务器")
+R.runScript(main, "server")
+R.run(1)
+check(#R.errors == 0, "服务器脚本启动没报错")
+local plotsF = ws:FindFirstChild("Plots")
+check(plotsF ~= nil and #plotsF:GetChildren() == Config.PlotCount, "生成了 " .. Config.PlotCount .. " 块基地")
+check(ws:FindFirstChild("Arenas") ~= nil and #ws.Arenas:GetChildren() == #Config.Arena.xs, "生成了约战竞技场")
+check(RS:FindFirstChild("Remotes") ~= nil and #RS.Remotes:GetChildren() >= 10, "远程事件都建好了（" .. #RS.Remotes:GetChildren() .. " 个）")
+local tpl = R.services.ServerStorage:FindFirstChild("UnitTemplates")
+check(tpl and tpl:FindFirstChild("tank") and tpl:FindFirstChild("heli") and not ws:FindFirstChild("tank"), "导入的坦克、直升机收成了模板")
+local remotes = RS.Remotes
+
+print("== 推演：射高、拦截、机降、轰炸、导弹、喷气机、全兵种混战")
+local Battle = R.require(main:FindFirstChild("Battle"))
+local UD = Config.Units
+local function bu(t, team, x, z, extra)
+  local d = UD[t]
+  local u = { t = t, def = d, team = team, x = x, y = 0, z = z, h = (team == 1) and math.pi or 0, ty = 0, hp = d.hp, max = d.hp, dm = 1, cd = 0, rt = 0, alive = true }
+  for k, v in pairs(extra or {}) do u[k] = v end
+  return u
+end
+-- 不经过 Combat，直接推演一组单位；返回 B、各种特效的次数、机降了几个、结果、喷气机离中线最远多少
+local function sim(list, secs, full)
+  local fx, spawned, nb = {}, 0, 0
+  local B = { units = {}, shells = {}, missiles = {}, pending = {}, t = 0, byId = {} }
+  local function add(u)
+    nb = nb + 1
+    u.bid = nb
+    B.byId[nb] = u
+    return u
+  end
+  for _, u in ipairs(list) do table.insert(B.units, add(u)) end
+  B.cb = {
+    fx = function(e) table.insert(fx, e) end,
+    world = function(x, y, z) return V3(x, 1 + y, z) end,
+    muzzle = function(u) return V3(u.x, 3 + u.y, u.z) end,
+    aim = function(t) return V3(t.x, 2 + t.y, t.z) end,
+    hurt = function() end, die = function() end, heroHurt = function() end,
+    spawn = function(src, t, x, z)
+      spawned = spawned + 1
+      return add(bu(t, src.team, x, z))
+    end,
+  }
+  local res, out = nil, 0
+  for _ = 1, math.floor(secs / 0.05) do
+    res = Battle.step(B, 0.05)
+    for _, u in ipairs(B.units) do
+      if u.alive and u.def.jet then out = math.max(out, math.abs(u.x)) end
+    end
+    if res and not full then break end
+  end
+  local kinds = {}
+  for _, e in ipairs(fx) do kinds[e.k] = (kinds[e.k] or 0) + 1 end
+  return B, kinds, spawned, res, out
+end
+local function deadOf(B, t, team)
+  local n = 0
+  for _, u in ipairs(B.units) do if u.t == t and u.team == team and not u.alive then n = n + 1 end end
+  return n
+end
+do
+  local heli = bu("heli", 2, 0, 700, { y = 70 })
+  local drone = bu("drone", 2, 0, 700, { y = 160 })
+  check(Battle.canHit(UD.inf, heli) and not Battle.canHit(UD.tank, heli), "步兵打得到直升机（70 高），坦克打不到")
+  check(not Battle.canHit(UD.inf, drone) and Battle.canHit(UD.spaag, drone) and Battle.canHit(UD.sam, drone), "无人机飞 160 高：步兵够不着，弹炮、爱国者够得着")
+  check(not Battle.canHit(UD.sam, bu("tank", 2, 0, 0)) and not Battle.canHit(UD.fighter, bu("inf", 2, 0, 0)), "爱国者、战斗机打不了地面")
+end
+do
+  local _, k = sim({ bu("cram", 1, 0, 300), bu("inf", 1, 10, 310, { hold = true }), bu("inf", 1, -10, 310, { hold = true }),
+    bu("howitzer", 2, -20, 820, { hold = true }), bu("howitzer", 2, 0, 820, { hold = true }), bu("howitzer", 2, 20, 820, { hold = true }) }, 30, true)
+  check((k.intercept or 0) >= 3 and (k.shell or 0) > (k.intercept or 0), string.format("拦截炮把炮弹打爆在半空（%d 发里拦下 %d 发）", k.shell or 0, k.intercept or 0))
+end
+do
+  local _, _, sp = sim({ bu("transport", 1, 0, 300), bu("inf", 2, 0, 700, { hold = true }), bu("inf", 2, 30, 700, { hold = true }) }, 40)
+  check(sp == 2, "运兵直升机飞到敌人跟前放下两个步兵班（" .. sp .. "）")
+end
+do
+  local list = { bu("bomber", 1, 0, 250) }
+  for i = 1, 8 do table.insert(list, bu("inf", 2, (i - 4.5) * 9, 700, { hold = true })) end
+  local B, k = sim(list, 60, true)
+  check((k.bomb or 0) >= 8 and deadOf(B, "inf", 2) >= 2, string.format("轰炸机投了 %d 颗炸弹，炸掉 %d 个步兵班", k.bomb or 0, deadOf(B, "inf", 2)))
+end
+do
+  local B, k = sim({ bu("fighter", 1, 0, 300), bu("heli", 2, 0, 800) }, 60)
+  check(deadOf(B, "heli", 2) == 1 and (k.missile or 0) > 0, "战斗机用导弹打掉了直升机（" .. string.format("%.0f", B.t) .. " 秒）")
+end
+do
+  local B, k, _, _, out = sim({ bu("drone", 1, 0, 300), bu("tank", 2, 0, 800), bu("tank", 2, 30, 800) }, 120)
+  check(deadOf(B, "tank", 2) == 2 and (k.missile or 0) >= 4, string.format("无人机绕圈打导弹，打掉两辆坦克（%.0f 秒，坦克打不着它）", B.t))
+  check(out <= Battle.JX + 230, string.format("无人机没飞出范围（最远 %.0f）", out))
+end
+-- 0.9 新兵种
+do   -- 空中炮艇：绕圈从天上往下砸炮弹
+  local list = { bu("gunship", 1, 0, 300) }
+  for i = 1, 6 do table.insert(list, bu("inf", 2, (i - 3.5) * 14, 700, { hold = true })) end
+  local B, k = sim(list, 60, true)
+  check((k.gshell or 0) >= 3 and deadOf(B, "inf", 2) >= 3, string.format("空中炮艇从天上打了 %d 发炮弹，炸掉 %d 个步兵班", k.gshell or 0, deadOf(B, "inf", 2)))
+end
+do   -- 蜂群：放自杀小无人机去撞坦克
+  local B, k, sp = sim({ bu("swarm", 1, 0, 300), bu("tank", 2, 0, 640, { hold = true }), bu("tank", 2, 40, 640, { hold = true }) }, 60, true)
+  check(sp >= 8 and (k.swarm or 0) >= 2 and deadOf(B, "tank", 2) >= 1, string.format("蜂群无人机车放出 %d 架小无人机，撞掉 %d 辆坦克", sp, deadOf(B, "tank", 2)))
+end
+do   -- 激光：打飞机、烧炮弹
+  local B, k = sim({ bu("laser", 1, 0, 300), bu("heli", 2, 0, 560, { y = 70, hold = true }), bu("drone", 2, 60, 600, { y = 160 }) }, 40)
+  check((k.laser or 0) >= 4 and deadOf(B, "heli", 2) == 1, string.format("激光防空车打了 %d 道光束，打掉直升机", k.laser or 0))
+  local _, k2 = sim({ bu("laser", 1, 0, 300), bu("inf", 1, 10, 310, { hold = true }),
+    bu("howitzer", 2, -20, 820, { hold = true }), bu("howitzer", 2, 0, 820, { hold = true }), bu("howitzer", 2, 20, 820, { hold = true }) }, 30, true)
+  check((k2.intercept or 0) >= 4, string.format("激光把炮弹烧爆在半空（%d 发里拦下 %d 发）", k2.shell or 0, k2.intercept or 0))
+end
+do   -- 0.9.1：密集阵（拦截炮、激光）是固定阵地：一步不挪、车身不转、不被挤开
+  local c, l = bu("cram", 1, 0, 300), bu("laser", 1, 30, 300)
+  sim({ c, l, bu("tank", 1, 4, 303), bu("heli", 2, 0, 700, { y = 70 }), bu("tank", 2, 40, 760), bu("inf", 2, -40, 760) }, 20, true)
+  check(c.x == 0 and c.z == 300 and l.x == 30 and l.z == 300 and c.h == math.pi and l.h == math.pi,
+    string.format("密集阵开战 20 秒一步没挪、车身没转（拦截炮 %.1f,%.1f；激光 %.1f,%.1f）", c.x, c.z, l.x, l.z))
+end
+do   -- 0.9.1：喷气机先在地上滑跑加速、离地后抬头爬升；直升机先原地拔高再往前飞
+  local f, h = bu("fighter", 1, 0, 250), bu("heli", 1, 100, 250)
+  local list = { f, h, bu("tank", 2, 0, 900, { hold = true }) }
+  local B = { units = {}, shells = {}, missiles = {}, pending = {}, t = 0, byId = {} }
+  for i, u in ipairs(list) do u.bid = i B.byId[i] = u table.insert(B.units, u) end
+  B.cb = { fx = function() end, world = function(x, y, z) return V3(x, 1 + y, z) end, muzzle = function(u) return V3(u.x, 3 + u.y, u.z) end,
+    aim = function(t) return V3(t.x, 2 + t.y, t.z) end, hurt = function() end, die = function() end, heroHurt = function() end }
+  for _ = 1, 10 do Battle.step(B, 0.05) end
+  local fy, fs, fd = f.y, f.spd or 0, math.abs(f.z - 250)
+  local hy, hd = h.y, math.sqrt((h.x - 100) ^ 2 + (h.z - 250) ^ 2)
+  local maxP = 0
+  for _ = 1, 70 do Battle.step(B, 0.05) maxP = math.max(maxP, f.pitch or 0) end
+  check(fy == 0 and fs < UD.fighter.speed * 0.3 and fd < 15, string.format("战斗机开战先在地上滑跑（0.5 秒：速度 %.0f、跑了 %.0f 格）", fs, fd))
+  check(f.y > 30 and maxP > math.rad(5) and maxP < math.rad(25) and (f.spd or 0) >= UD.fighter.speed * 0.99,
+    string.format("离地后机头抬起来爬升（最大 %.0f°），4 秒爬到 %.0f 高、加到全速", math.deg(maxP), f.y))
+  check(hy > 1 and hd < 2, string.format("直升机先原地拔高（0.5 秒：高 %.1f、只挪了 %.1f 格）", hy, hd))
+end
+do   -- 电磁炮：一发打穿一排
+  local list = { bu("railgun", 1, 0, 300) }
+  for i = 1, 4 do table.insert(list, bu("jeep", 2, 0, 560 + i * 30, { hold = true, h = 0 })) end
+  local B = sim(list, 8, true)
+  local hit = 0
+  for _, u in ipairs(B.units) do if u.team == 2 and u.hp < u.max then hit = hit + 1 end end
+  check(hit >= 3, "电磁炮一发贯穿一排车，打到 " .. hit .. " 辆")
+end
+do   -- 布雷车：开战撒雷，敌人的车冲过来踩上就炸
+  local list = { bu("miner", 1, 0, 300, { hold = true }), bu("tank", 1, 40, 280, { hold = true }), bu("tank", 1, -40, 280, { hold = true }) }
+  for i = 1, 8 do table.insert(list, bu((i % 2 == 0) and "jeep" or "inf", 2, (i - 4.5) * 22, 720)) end
+  local B, k = sim(list, 60)
+  check((k.mine or 0) >= 10 and (k.mineboom or 0) >= 1, string.format("布雷车撒了 %d 颗雷，冲过来的敌人踩响 %d 颗", k.mine or 0, k.mineboom or 0))
+  local _ = B
+end
+do   -- 弹道导弹：打敌人最密的地方；敌人有爱国者能拦
+  local list = { bu("ballistic", 1, 0, 250, { hold = true }) }
+  for i = 1, 6 do table.insert(list, bu("inf", 2, (i - 3.5) * 10, 760, { hold = true })) end
+  table.insert(list, bu("inf", 2, 200, 900, { hold = true }))
+  local B, k = sim(list, 50, true)
+  check((k.ballistic or 0) >= 2 and (k.bigboom or 0) >= 1 and deadOf(B, "inf", 2) >= 3, string.format("弹道导弹打了 %d 枚，炸掉扎堆的 %d 个步兵班", k.ballistic or 0, deadOf(B, "inf", 2)))
+  local list2 = { bu("ballistic", 1, 0, 250, { hold = true }), bu("sam", 2, 0, 900, { hold = true }), bu("sam", 2, 40, 900, { hold = true }) }
+  for i = 1, 4 do table.insert(list2, bu("inf", 2, (i - 2.5) * 10, 760, { hold = true })) end
+  local _, k3 = sim(list2, 70, true)
+  check((k3.abm or 0) >= 1, string.format("敌人的爱国者起来拦弹道导弹（%d 次）", k3.abm or 0))
+end
+do   -- 单位技能：冲锋跑得快、烟幕少挨打
+  local a, b = bu("inf", 1, -40, 200), bu("inf", 1, 40, 200)
+  local list = { a, b, bu("inf", 2, -40, 900, { hold = true }), bu("inf", 2, 40, 900, { hold = true }) }
+  local B = { units = {}, shells = {}, missiles = {}, pending = {}, t = 0, byId = {} }
+  for i, u in ipairs(list) do u.bid = i B.byId[i] = u table.insert(B.units, u) end
+  B.cb = { fx = function() end, world = function(x, y, z) return V3(x, 1 + y, z) end, muzzle = function(u) return V3(u.x, 3, u.z) end,
+    aim = function(t) return V3(t.x, 2, t.z) end, hurt = function() end, die = function() end, heroHurt = function() end }
+  local ab = Battle.ability(B, a)
+  for _ = 1, 60 do Battle.step(B, 0.05) end
+  check(ab ~= nil and ab.id == "charge" and (a.z - 200) > (b.z - 200) * 1.6, string.format("步兵「冲锋」：3 秒跑了 %.0f 格，没冲锋的 %.0f 格", a.z - 200, b.z - 200))
+  local tk = bu("tank", 1, 0, 300)
+  B.units = { tk }
+  Battle.ability(B, tk)
+  Battle.step(B, 0.05)
+  local hp0 = tk.hp
+  Battle.damage(B, tk, 100, nil)
+  check(math.abs((hp0 - tk.hp) - 35) < 0.01, string.format("装甲「烟幕」：挨 100 伤害只掉 %.0f 血", hp0 - tk.hp))
+end
+do
+  local all = {}
+  for i, t in ipairs(Config.UnitOrder) do
+    table.insert(all, bu(t, 1, ((i - 1) % 9 - 4) * 50, 200 + math.floor((i - 1) / 9) * 40))
+    table.insert(all, bu(t, 2, ((i - 1) % 9 - 4) * 50, 940 - math.floor((i - 1) / 9) * 40))
+  end
+  local B, k, sp, res, out = sim(all, 300)
+  check(res ~= nil, string.format("两边各 %d 个兵种混战打完：%s（%.0f 秒，机降 / 放出 %d 个）", #Config.UnitOrder, tostring(res), B.t, sp))
+  check(out <= Battle.JX + 230, string.format("喷气机没飞出范围（最远 %.0f）", out))
+  local parts = {}
+  for kk, n in pairs(k) do table.insert(parts, kk .. " " .. n) end
+  table.sort(parts)
+  print("    特效：" .. table.concat(parts, "，"))
+end
+
+local pl
+local function join(name, uid, noClient)
+  local p = R.addPlayer(name, uid)
+  if not noClient then R.localPlayer = p end
+  Players.PlayerAdded:Fire(p)
+  if not noClient then
+    local client = R.scriptFrom("LocalScript", "Client", SRC_DIR .. "/Client/init.client.lua", p.PlayerScripts)
+    for _, f in ipairs(listLua(SRC_DIR .. "/Client")) do
+      if f ~= "init.client.lua" then R.scriptFrom("ModuleScript", f:gsub("%.lua$", ""), SRC_DIR .. "/Client/" .. f, client) end
+    end
+    R.runScript(client, "client")
+  end
+  R.run(3)
+  return p
+end
+
+local function plotOf(p)
+  for _, f in ipairs(plotsF:GetChildren()) do
+    for _, d in ipairs(f:GetDescendants()) do
+      if d.ClassName == "TextLabel" and d.Text == p.Name .. " 的基地" then return f end
+    end
+  end
+end
+local function plot() return plotOf(pl) end
+local function stat(name, p) return (p or pl).leaderstats[name].Value end
+local function guiText(pattern)
+  for _, d in ipairs(pl.PlayerGui:GetDescendants()) do
+    if (d.ClassName == "TextLabel" or d.ClassName == "TextButton") and d.Text:find(pattern) then return d end
+  end
+end
+local function button(pattern)
+  for _, d in ipairs(pl.PlayerGui:GetDescendants()) do
+    if d.ClassName == "TextButton" and d.Text:find(pattern) then return d end
+  end
+end
+local function click(btn)
+  R.as("client", function() btn.Activated:Fire() end)
+  R.run(0.2)
+end
+local function action(...)
+  local args = table.pack(...)
+  R.as("client", function() remotes.Action:FireServer(table.unpack(args, 1, args.n)) end)
+  R.run(0.1)
+end
+local function actionAs(p, ...)
+  local keep = R.localPlayer
+  R.localPlayer = p
+  action(...)
+  R.localPlayer = keep
+end
+local builtAt = {}
+local function touch(id, p)
+  p = p or pl
+  local m = plotOf(p).Pads:FindFirstChild("Pad_" .. id)
+  if not m then return false end
+  m.Pad.Touched:Fire(p.Character.HumanoidRootPart)
+  R.run(0.1)
+  if plotOf(p).Buildings:FindFirstChild(id) and not builtAt[id] then builtAt[id] = R.clock() / 60 end
+  return true
+end
+local function owned(id) return plot().Buildings:FindFirstChild(id) ~= nil end
+local function units(p)
+  local out = {}
+  for _, u in ipairs(plotOf(p or pl).Units:GetChildren()) do
+    if not u:GetAttribute("Dead") then table.insert(out, u) end
+  end
+  return out
+end
+local function toastSince(n, pattern)
+  for i = n + 1, #R.sent do
+    if R.sent[i].name == "Toast" and tostring(R.sent[i].args[1]):find(pattern) then return true end
+  end
+  return false
+end
+local function battleEvent(n, phase)
+  for i = n + 1, #R.sent do
+    local e = R.sent[i]
+    if e.name == "Battle" and type(e.args[1]) == "table" and e.args[1].phase == phase then return e.args[1] end
+  end
+end
+local function waitResult(maxSec)
+  for _ = 1, (maxSec or 300) * 2 do
+    R.run(0.5)
+    local r = guiText("^胜利！$") or guiText("^失败$") or guiText("^时间到$")
+    if r and r.Parent.Visible then return r.Text end
+  end
+end
+local function relPos(m, p)
+  return m.Root.CFrame.Position - plotOf(p or pl).Base.CFrame.Position + V3(0, 0.5, 0)
+end
+
+print("== 新玩家进服")
+pl = join("Tester", 1001)
+check(#R.errors == 0, "进服没报错")
+check(plot() ~= nil, "分到了基地（牌子写着名字）")
+check(pl.Character ~= nil and pl.Character:FindFirstChild("Head") and pl.Character.Head:FindFirstChild("RankTag"), "角色生成了，头上有军衔名牌")
+check(pl.Backpack:FindFirstChild("步枪") ~= nil, "背包里有步枪")
+check(stat("现金") == Config.StartCash and stat("军衔") == "列兵", "起始现金 " .. Config.StartCash .. "，军衔列兵")
+check(guiText("^%$300") ~= nil, "界面上显示 $300")
+check(guiText("每日奖励") ~= nil, "弹出每日奖励")
+local n0 = #R.sent
+click(button("^领取$"))
+check(stat("现金") > Config.StartCash and toastSince(n0, "每日奖励"), "领了每日奖励（$" .. stat("现金") .. "）")
+check(plot().Pads:FindFirstChild("Pad_house1") ~= nil, "有居民楼 A 的购买按钮")
+
+print("== 指引、面板收起")
+R.run(0.5)
+local function guideNow()   -- 左上角「当前目标」下面那行字
+  local title = guiText("^当前目标$")
+  if not title then return nil end
+  for _, c in ipairs(title.Parent:GetChildren()) do
+    if c.ClassName == "TextLabel" and c ~= title and c.Text ~= "" then return c.Text end
+  end
+end
+local function guideShown()   -- 箭头（地上的、头顶的）有几块显示着；线开没开
+  local n, beamOn = 0, false
+  for _, d in ipairs(ws:FindFirstChild("ClientFx"):GetDescendants()) do
+    if d:IsA("BasePart") and d.Material == Enum.Material.Neon and d.Transparency < 1 then n = n + 1 end
+    if d.ClassName == "Beam" and d.Enabled then beamOn = true end
+  end
+  return n, beamOn
+end
+local gn, gb = guideShown()
+check(tostring(guideNow()):find("居民楼 A") ~= nil, "当前目标：" .. tostring(guideNow()))
+check(gn >= 6 and gb, "按钮头顶有立体箭头、地上有流动的箭头和发光的线（" .. gn .. " 块）")
+local function pulsing(btn)   -- 这个按钮在闪（指引加的粗描边）
+  local s0 = btn and btn:FindFirstChildOfClass("UIStroke")
+  return s0 ~= nil and s0.Thickness == 4
+end
+-- 面板收起 / 展开（收起 = 只留最上面一条，下面剪掉）
+local function minusOf(f)
+  for _, c in ipairs(f:GetChildren()) do
+    if c.ClassName == "TextButton" and (c.Text == "－" or c.Text == "＋") then return c end
+  end
+end
+local function folded(f) return f.ClipsDescendants and f.Size.Y.Offset <= 44 end
+for _, e in ipairs({ { guiText("^第 %d+ 关").Parent, "信息栏" }, { guiText("^兵工厂$").Parent, "兵工厂" }, { guiText("^当前目标$").Parent, "当前目标" },
+  { guiText("^地图").Parent, "小地图" } }) do
+  local f, nm = e[1], e[2]
+  local h0 = f.Size.Y.Offset
+  click(minusOf(f))
+  local ok1 = folded(f) and minusOf(f).Text == "＋"
+  click(minusOf(f))
+  check(ok1 and not folded(f) and f.Size.Y.Offset == h0, nm .. "能收起、再展开")
+end
+click(button("^菜单"))
+check(not button("^任务").Visible and button("^菜单 ＋") ~= nil, "左边菜单收起来")
+click(button("^菜单"))
+check(button("^任务").Visible and button("^回出生点") ~= nil, "左边菜单展开（有「回出生点」）")
+click(button("^指引：开"))
+check(select(1, guideShown()) == 0 and button("^指引：关") ~= nil, "指引能关掉（箭头都不画了）")
+click(button("^指引：关"))
+check(select(1, guideShown()) > 0, "指引再打开")
+check(#plot().Enemies:GetChildren() > 0, "第 1 关敌军摆出来了")
+check(ws:FindFirstChild("ClientUnits") and #ws.ClientUnits:GetChildren() == #plot().Enemies:GetChildren(), "客户端给每个单位做了平滑显示的复制")
+
+print("== 盖楼、生产")
+touch("house1")
+check(owned("house1"), "踩按钮盖好居民楼 A")
+R.run(0.5)
+check(tostring(guideNow()):find("兵营") ~= nil, "指引换成下一步：" .. tostring(guideNow()))
+n0 = #R.sent
+touch("bank")
+check(not owned("bank"), "还没解锁的银行盖不了")
+R.run(40)
+touch("barracks")
+check(owned("barracks"), "盖好兵营")
+R.run(25)
+check(tostring(guideNow()):find("步兵班") ~= nil and pulsing(button("^%$60$")), "指引：去兵工厂买步兵班（买的按钮在闪）")
+local before = #units()
+local b = button("^%$60$")
+check(b ~= nil, "兵工厂里步兵班的按钮显示 $60")
+if b then click(b) click(b) end
+check(#units() == before + 2, "生产了两个步兵班")
+R.run(0.5)
+check(tostring(guideNow()):find("开战") ~= nil and pulsing(button("^开战")), "指引：点「开战」（按钮在闪）")
+R.run(25)
+local u1 = units()[1]
+local p1 = u1 and relPos(u1)
+check(p1 ~= nil and p1.Z > Config.Field.deploy[1] - 1 and p1.Z < Config.Field.deploy[2] + 1, "步兵从兵营开到了部署区")
+
+print("== 布阵")
+click(button("^布阵$"))
+R.run(0.5)
+local cam = ws.CurrentCamera
+check(cam.CameraType == Enum.CameraType.Scriptable, "镜头切到布阵视角")
+local FD = Config.Field
+local origin = plot().Base.CFrame.Position - V3(0, 0.5, 0)
+local function vp(p) return cam:WorldToViewportPoint(p) end
+local function onScreen(v) return v.Z > 0 and v.X >= 0 and v.X <= 1280 and v.Y >= 0 and v.Y <= 720 end
+local nl, nr = vp(origin + V3(FD.width / 2, 1, FD.deploy[1])), vp(origin + V3(-FD.width / 2, 1, FD.deploy[1]))
+local fl, fr = vp(origin + V3(FD.width / 2, 1, FD.deploy[2])), vp(origin + V3(-FD.width / 2, 1, FD.deploy[2]))
+check(onScreen(nl) and onScreen(nr) and onScreen(fl) and onScreen(fr) and math.abs(nr.X - nl.X) > 1280 * 0.35,
+  string.format("镜头自动框住整个部署区（近边占画面 %.0f%% 宽）", math.abs(nr.X - nl.X) / 12.8))
+local UISv = R.services.UserInputService
+local function press(x, y) R.as("client", function() UISv.InputBegan:Fire({ UserInputType = Enum.UserInputType.MouseButton1, Position = V3(x, y, 0) }, false) end) end
+local function release(x, y) R.as("client", function() UISv.InputEnded:Fire({ UserInputType = Enum.UserInputType.MouseButton1, Position = V3(x, y, 0) }) end) end
+local function moveTo(x, y)
+  R.mouseAt = R.Vector2.new(x, y + 58)
+  R.as("client", function() UISv.InputChanged:Fire({ UserInputType = Enum.UserInputType.MouseMovement, Position = V3(x, y, 0), Delta = V3(0, 0, 0) }, false) end)
+end
+local function groundOf(x, y)   -- 屏幕像素（不含顶栏）→ 战场地面
+  local ray = cam:ViewportPointToRay(x, y + 58)
+  local t = (origin.Y + 1 - ray.Origin.Y) / ray.Direction.Y
+  return ray.Origin + ray.Direction * t
+end
+local function cloneOf(m)
+  for _, c in ipairs(ws.ClientUnits:GetChildren()) do
+    if c:GetAttribute("Uid") == m:GetAttribute("Uid") then return c end
+  end
+end
+local clone = cloneOf(u1)
+check(clone ~= nil, "找到这个步兵班的本地复制")
+local part
+for _, c in ipairs(clone:GetChildren()) do if c.Name ~= "Root" and c:IsA("BasePart") then part = c break end end
+R.nextRay = { Instance = part, Position = part.CFrame.Position }
+press(600, 300)
+release(600, 300)
+R.run(0.3)
+check(clone:FindFirstChildOfClass("Highlight") ~= nil and button("^解散 %+%$") and button("^解散 %+%$").Visible, "点到的部队被选中（高亮、出现「解散」）")
+local tag = clone:FindFirstChild("DeployTag", true)
+check(tag ~= nil and tag.Enabled and tag:FindFirstChildOfClass("TextLabel").Text == Config.Units.inf.short, "布阵时部队头顶有名字（" .. tostring(tag and tag:FindFirstChildOfClass("TextLabel").Text) .. "）")
+R.nextRay = { Instance = plot().Field, Position = origin + V3(60, 1, 250) }
+press(1000, 600)
+release(1000, 600)
+R.run(0.4)
+local p2 = relPos(u1)
+check(math.abs(p2.X - 60) < 1 and math.abs(p2.Z - 250) < 1, string.format("点空地：部队直接摆到点的位置（%.1f, %.1f）", p2.X, p2.Z))
+R.run(0.6)
+local cp = clone.Root.CFrame.Position - origin
+check((cp - p2).Magnitude < 2, "本地复制也很快滑过去了")
+-- 按住部队拖到别处：挪的距离 = 鼠标在地面上挪的距离
+R.nextRay = { Instance = part, Position = part.CFrame.Position }
+press(640, 300)
+moveTo(560, 340)
+R.run(0.05)
+local ghosts = 0
+for _, d in ipairs(ws.ClientFx:GetChildren()) do
+  if d.ClassName == "Part" and d.Transparency < 1 and d.Color.G > 0.8 and d.Color.R < 0.5 then ghosts = ghosts + 1 end
+end
+release(560, 340)
+R.run(0.4)
+local dg = groundOf(560, 340) - groundOf(640, 300)
+local want = p2 + V3(dg.X, 0, dg.Z)
+local p3 = relPos(u1)
+check(ghosts >= 1, "拖动时地上有绿色的虚影（放在哪）")
+check(math.abs(p3.X - want.X) < 1.5 and math.abs(p3.Z - want.Z) < 1.5, string.format("按住拖动：部队跟着挪过去（%.1f, %.1f），应在（%.1f, %.1f）", p3.X, p3.Z, want.X, want.Z))
+-- 下面一排的「全部」：一次选上所有部队，点空地就地排成一块
+local allBtn = button("^全部 %d+$")
+check(allBtn ~= nil and allBtn.Visible and button("^" .. Config.Units.inf.short .. " 2$") ~= nil, "布阵时下面一排列出兵种（全部 2、" .. Config.Units.inf.short .. " 2）")
+click(allBtn)
+local hl = 0
+for _, u in ipairs(units()) do
+  local c = cloneOf(u)
+  if c and c:FindFirstChildOfClass("Highlight") then hl = hl + 1 end
+end
+check(hl == #units() and not button("^解散 %+%$").Visible, "「全部」选上了 " .. hl .. " 个（选了几个时不显示解散）")
+R.nextRay = { Instance = plot().Field, Position = origin + V3(-150, 1, 300) }
+press(1000, 600)
+release(1000, 600)
+R.run(0.4)
+local ps = {}
+for _, u in ipairs(units()) do table.insert(ps, relPos(u)) end
+local okBlock = #ps == 2 and (ps[1] - ps[2]).Magnitude >= Config.Units.inf.size and (ps[1] - ps[2]).Magnitude < 40
+for _, q in ipairs(ps) do
+  if math.abs(q.X + 150) > 30 or math.abs(q.Z - 300) > 30 or q.Z > FD.deploy[2] or q.Z < FD.deploy[1] then okBlock = false end
+end
+check(okBlock, string.format("几个一起点空地：就地排成一块、不叠在一起（%.0f,%.0f / %.0f,%.0f）", ps[1].X, ps[1].Z, ps[2] and ps[2].X or 0, ps[2] and ps[2].Z or 0))
+-- 空地上拖框：框住的都选上
+press(4, 4)
+moveTo(1276, 650)
+release(1276, 650)
+R.run(0.3)
+hl = 0
+for _, u in ipairs(units()) do
+  local c = cloneOf(u)
+  if c and c:FindFirstChildOfClass("Highlight") then hl = hl + 1 end
+end
+check(hl == #units(), "拖框多选：框里的 " .. hl .. " 个都选上了")
+click(button("^看敌军$"))
+R.run(1.5)
+local ez = vp(origin + V3(0, 1, (FD.enemy[1] + FD.enemy[2]) / 2))
+local dz = vp(origin + V3(0, 1, (FD.deploy[1] + FD.deploy[2]) / 2))
+check(onScreen(ez) and button("^看我方$") ~= nil and not (onScreen(dz) and dz.Z < ez.Z), "「看敌军」：镜头转去框住敌军区")
+click(button("^看我方$"))
+R.run(1)
+check(onScreen(vp(origin + V3(0, 1, (FD.deploy[1] + FD.deploy[2]) / 2))), "「看我方」：回到部署区")
+click(button("^回基地$"))
+R.run(0.3)
+check(cam.CameraType == Enum.CameraType.Custom and (tag == nil or not tag.Enabled), "回基地：镜头回到小人，头顶名字收起")
+
+print("== 开战（观战镜头、本人上阵）")
+n0 = #R.sent
+click(button("^开战"))
+R.run(1)
+local hrp = pl.Character.HumanoidRootPart
+local hp = hrp.CFrame.Position - origin
+check(battleEvent(n0, "start") ~= nil and guiText("^第 1 关") ~= nil, "开战，界面显示「第 1 关」")
+check(hp.Z > Config.Field.deploy[1] and hp.Z < Config.Field.deploy[2] and pl.Character:GetAttribute("BU") ~= nil, "本人传送到了己方阵地，算一个战斗单位")
+check(pl.Character.Humanoid.MaxHealth == Config.Hero.hp, "上阵血量 " .. Config.Hero.hp)
+local camL = guiText("^自动镜头 ·")
+check(cam.CameraType == Enum.CameraType.Scriptable and camL ~= nil and camL.Visible, "开战默认观战镜头：" .. tostring(camL and camL.Text:match("^[^\n]+")))
+local seen = 0
+for _, u in ipairs(units()) do if onScreen(vp(u.Root.CFrame.Position)) then seen = seen + 1 end end
+check(seen == #units(), "自动镜头把我军都框在画面里（" .. seen .. " / " .. #units() .. "）")
+click(button("^跟随下一个"))
+R.run(1)
+local fl1 = guiText("^跟随：")
+local fu = units()[1]
+check(fl1 ~= nil and button("^自动镜头") and button("^自动镜头").Visible, "「跟随下一个」：镜头跟着一个单位（" .. tostring(fl1 and fl1.Text:match("^[^\n]+")) .. "）")
+check(fu ~= nil and (cam.CFrame.Position - fu.Root.CFrame.Position).Magnitude < 160, "跟随镜头离那个单位很近")
+R.as("client", function() UISv.InputBegan:Fire({ UserInputType = Enum.UserInputType.Keyboard, KeyCode = Enum.KeyCode.Space }, false) end)
+R.run(0.5)
+check(guiText("^自动镜头 ·") ~= nil and not button("^自动镜头").Visible, "空格：回到自动镜头")
+-- 跟随自己的单位：出现技能键，按 F 放（步兵「冲锋」），之后在冷却
+click(button("^跟随下一个"))
+R.run(0.5)
+local ab = button("^冲锋")
+check(ab ~= nil and ab.Visible and guiText("技能「冲锋」") ~= nil, "跟随自己的步兵：出现技能键「" .. tostring(ab and ab.Text) .. "」")
+local na = #R.sent
+R.as("client", function() UISv.InputBegan:Fire({ UserInputType = Enum.UserInputType.Keyboard, KeyCode = Enum.KeyCode.F }, false) end)
+R.run(0.6)
+local abEv = battleEvent(na, "ability")
+check(abEv ~= nil and abEv.id == "charge" and button("^冲锋 %d+ 秒$") ~= nil, "按 F 放出「冲锋」，技能键开始冷却（" .. tostring(button("^冲锋") and button("^冲锋").Text) .. "）")
+R.as("client", function() UISv.InputBegan:Fire({ UserInputType = Enum.UserInputType.Keyboard, KeyCode = Enum.KeyCode.Space }, false) end)
+R.run(0.3)
+-- 拿起步枪：切回自己的小人，对着最近的敌人打
+local rifle = pl.Backpack:FindFirstChild("步枪")
+rifle.Parent = pl.Character
+R.run(0.2)
+check(cam.CameraType == Enum.CameraType.Custom and button("^观战镜头$") ~= nil, "拿起枪：镜头切回自己的小人（「观战镜头」能切回去）")
+local target = plot().Enemies:GetChildren()[1]
+local fill0 = target.Root:FindFirstChild("HP") and target.Root.HP:FindFirstChildOfClass("Frame").Fill.Size.XS or 1
+pl.Character.Head._p.CFrame = CF(target.Root.CFrame.Position + V3(0, 2.5, -40))
+for _ = 1, 6 do
+  R.as("client", function() remotes.Shoot:FireServer("rifle", target.Root.CFrame.Position + V3(0, 2, 0)) end)
+  R.run(0.2)
+end
+local fill1 = target.Parent and target.Root:FindFirstChild("HP") and target.Root.HP:FindFirstChildOfClass("Frame").Fill.Size.XS or 0
+check(fill1 < fill0, string.format("步枪打中了敌人（血条 %.2f → %.2f）", fill0, fill1))
+R.as("client", function() R.services.UserInputService.InputBegan:Fire({ UserInputType = Enum.UserInputType.MouseButton1, Position = V3(640, 360, 0) }, false) end)
+R.run(0.6)
+R.as("client", function() R.services.UserInputService.InputEnded:Fire({ UserInputType = Enum.UserInputType.MouseButton1, Position = V3(640, 360, 0) }) end)
+check(guiText("^步枪  %d+ / 30") ~= nil, "按住左键连发，弹药显示在右下角")
+local res = waitResult(300)
+check(res ~= nil, "打完了：" .. tostring(res))
+check(pl.Character.Humanoid.MaxHealth == 100, "打完血量上限恢复")
+click(button("^回基地$"))
+check(#R.errors == 0, "战斗没报错")
+
+print("== 机器人连续玩 " .. MINUTES .. " 分钟（模拟时间）")
+local U = Config.Units
+local function enemyComp()
+  local c = {}
+  local value = 0
+  for _, e in ipairs(plot().Enemies:GetChildren()) do
+    local t = e:GetAttribute("Type")
+    if t then
+      c[t] = (c[t] or 0) + 1
+      value = value + U[t].price
+    end
+  end
+  return c, value
+end
+local function myComp()
+  local c = {}
+  local value = 0
+  for _, u in ipairs(units()) do
+    local t = u:GetAttribute("Type")
+    if t then
+      c[t] = (c[t] or 0) + 1
+      value = value + U[t].price
+    end
+  end
+  return c, value
+end
+local function capNow()
+  local txt = guiText("^部队 ")
+  local n, cap = txt.Text:match("部队 (%d+) / (%d+)")
+  return tonumber(n), tonumber(cap)
+end
+local HQOF = { [4] = 0, [10] = 1, [18] = 2, [30] = 3, [40] = 4 }
+-- 机器人想要的阵容：先按敌军配克制的（高空飞机 → 弹炮 / 爱国者 / 战斗机，低空 → 防空车，装甲 → 武直 / 反坦克导弹 / 攻击机，炮兵多 → 拦截炮），
+-- 再各样来一个（把新兵种都用上），剩下的坦克、步战车、突击炮、步兵；返回 { {兵种, 个数} }（按买的先后）
+local function desired(ec, cap)
+  local hq = HQOF[cap] or 0
+  local out, left = {}, cap
+  local function want(t, n)
+    if n <= 0 or left <= 0 then return end
+    local d = U[t]
+    if not owned(Config.UnitSource[t]) or (d.needHQ or 0) > hq then return end
+    n = math.min(n, left)
+    table.insert(out, { t, n })
+    left = left - n
+  end
+  local function e(...)
+    local s0 = 0
+    for _, t in ipairs({ ... }) do s0 = s0 + (ec[t] or 0) end
+    return s0
+  end
+  local high, low, armor = e("drone", "fighter", "bomber"), e("heli", "transport", "attacker"), e("tank", "td", "breacher") + e("boss") * 3
+  want("sam", math.ceil(high * 0.4))
+  want("spaag", math.ceil(high * 0.4))
+  want("fighter", math.ceil(high * 0.3))
+  want("aa", math.ceil(low * 0.8))
+  want("heli", math.ceil(armor * 0.5))
+  want("at", math.ceil(armor * 0.4))
+  want("attacker", math.ceil(armor * 0.15))
+  if e("arty", "mlrs", "howitzer", "heavyarty") >= 2 then want("cram", 1) end
+  want("arty", math.min(3, math.floor((ec.inf or 0) / 5)))
+  for _, t in ipairs({ "breacher", "mg", "mortar", "jeep", "transport", "drone", "heavyarty", "bomber", "howitzer", "mlrs", "sniper", "manpad" }) do want(t, 1) end
+  local rest = left
+  want("tank", math.ceil(rest * 0.45))
+  want("ifv", math.ceil(rest * 0.2))
+  want("td", math.ceil(rest * 0.15))
+  want("inf", left)
+  return out
+end
+local battles, wins = 0, 0
+local log = {}
+local tEnd = R.clock() + MINUTES * 60
+local nextFight = 0
+local lostLast = false
+while R.clock() < tEnd do
+  R.run(2)
+  local pads = plot().Pads:GetChildren()
+  table.sort(pads, function(a, b2) return Config.BuildingById[a.Name:sub(5)].price < Config.BuildingById[b2.Name:sub(5)].price end)
+  local saving = false
+  for _, m in ipairs(pads) do
+    local bd = Config.BuildingById[m.Name:sub(5)]
+    if stat("现金") >= bd.price then touch(bd.id) elseif bd.price < stat("现金") * 3 then saving = true end
+  end
+  local hq = button("^升级指挥部")
+  if hq and hq.Visible then
+    local price = tonumber((hq.Text:gsub(",", "")):match("%$(%d+)"))
+    if price and stat("现金") >= price then click(hq) end
+  end
+  local ec, evalue = enemyComp()
+  local n, cap = capNow()
+  local plan = desired(ec, cap)
+  local want = {}
+  for _, w in ipairs(plan) do want[w[1]] = (want[w[1]] or 0) + w[2] end
+  if lostLast then
+    local have = myComp()
+    for _, u in ipairs(units()) do
+      local t = u:GetAttribute("Type")
+      if (have[t] or 0) > (want[t] or 0) then
+        action("sell", u:GetAttribute("Uid"))
+        have[t] = have[t] - 1
+      end
+    end
+    lostLast = false
+  end
+  local have = myComp()
+  for _, w in ipairs(plan) do
+    local t = w[1]
+    while (have[t] or 0) < (want[t] or 0) do
+      n, cap = capNow()
+      if n >= cap or stat("现金") < U[t].price then break end
+      action("buy", t)
+      have[t] = (have[t] or 0) + 1
+    end
+  end
+  n, cap = capNow()
+  if n >= cap and not saving then
+    local lbl = guiText("^军工科技 Lv")
+    local tb = lbl and lbl.Parent:FindFirstChildOfClass("TextButton")
+    if tb then
+      local price = tonumber((tb.Text:gsub(",", "")):match("%$(%d+)"))
+      if price and stat("现金") >= price then click(tb) end
+    end
+  end
+  local _, mvalue = myComp()
+  if R.clock() >= nextFight and #units() > 0 and evalue > 0 and (mvalue >= evalue * 1.3 or n >= cap) then
+    local lvl = stat("关卡")
+    action("arrange")
+    R.run(8)
+    action("battle")
+    local tb0 = R.clock()
+    local r = waitResult(400)
+    battles = battles + 1
+    if r == "胜利！" then wins = wins + 1 end
+    local body = guiText("^损失：") or guiText("没损失")
+    table.insert(log, string.format("%5.1f 分  第 %2d 关  %-6s %3.0f 秒  我方 $%-6d 敌方 $%-7d 现金 $%-9d %s", R.clock() / 60, lvl, tostring(r), R.clock() - tb0, mvalue, evalue, stat("现金"),
+      body and body.Text:gsub("\n", " ") or ""))
+    local h = button("^回基地$")
+    if h then click(h) end
+    if r ~= "胜利！" then
+      nextFight = R.clock() + 60
+      lostLast = true
+    end
+    R.run(4)
+  end
+  if #R.errors > 0 then break end
+end
+for _, line in ipairs(log) do print("  " .. line) end
+local bl = {}
+for _, bd in ipairs(Config.Buildings) do
+  if builtAt[bd.id] then table.insert(bl, string.format("%s %.1f", bd.name, builtAt[bd.id])) end
+end
+print("  盖好的时间（分钟）：" .. table.concat(bl, "，"))
+local built = 0
+for _, bd in ipairs(Config.Buildings) do if owned(bd.id) then built = built + 1 end end
+print(string.format("  %d 分钟后：第 %d 关，打了 %d 场赢 %d 场，盖了 %d/%d 栋，部队 %d 个，现金 $%d，军衔 %s", MINUTES, stat("关卡"), battles, wins, built, #Config.Buildings, #units(), stat("现金"), stat("军衔")))
+check(#R.errors == 0, "连续玩没报错")
+check(battles > 0 and wins > 0, "打赢过关卡")
+
+print("== 退出、过一小时再进（存档、离线收益）")
+local lvl, cashBefore, nb, nu = stat("关卡"), stat("现金"), built, #units()
+local saves0 = R.saves or 0
+R.removePlayer(pl)
+R.run(1)
+check((R.saves or 0) > saves0, "退出时存档了")
+R.osTime = os.time() + 3600
+n0 = #R.sent
+pl = join("Tester", 1001)
+R.run(5)
+local built2 = 0
+for _, bd in ipairs(Config.Buildings) do if owned(bd.id) then built2 = built2 + 1 end end
+check(stat("关卡") == lvl and built2 == nb and #units() == nu, "关卡、建筑、部队都读回来了（第 " .. lvl .. " 关，" .. built2 .. " 栋，" .. #units() .. " 个）")
+check(stat("现金") > cashBefore and toastSince(n0, "离线收益"), "有离线收益（$" .. cashBefore .. " → $" .. stat("现金") .. "）")
+R.removePlayer(pl)
+R.run(1)
+R.osTime = nil
+
+print("== 老玩家：首领关、拿枪、开坦克、开直升机")
+n0 = #R.sent
+pl = join("Veteran", 5005)
+R.run(3)
+check(stat("关卡") == 10 and #units() == 40, "读到老档：第 10 关、40 个兵")
+check(guiText("首领×1") ~= nil, "第 10 关是首领关，敌军里有首领")
+local anyMesh, tankModel = false, nil
+for _, u in ipairs(units()) do
+  if u:GetAttribute("Type") == "tank" then tankModel = u end
+end
+if tankModel then
+  for _, d in ipairs(tankModel:GetDescendants()) do if d.ClassName == "MeshPart" then anyMesh = true end end
+end
+check(anyMesh and tankModel:FindFirstChild("TurretMotor", true) ~= nil, "坦克用的是导入的原模型，炮塔挂在 Motor6D 上")
+do
+  local mn, mx = math.huge, -math.huge
+  local base = tankModel.Root.CFrame
+  for _, d in ipairs(tankModel:GetDescendants()) do
+    if d.ClassName == "MeshPart" then
+      local lp = base:Inverse() * d.CFrame.Position
+      local hz = d.Size.Z / 2
+      mn, mx = math.min(mn, lp.Z - hz), math.max(mx, lp.Z + hz)
+    end
+  end
+  check(math.abs((mx - mn) - Config.Units.tank.len) < 1.5, string.format("导入模型摆正、缩放到配置长度（%.1f 格，要 %d）", mx - mn, Config.Units.tank.len))
+end
+local heliModel
+for _, u in ipairs(units()) do if u:GetAttribute("Type") == "heli" then heliModel = u end end
+check(heliModel and heliModel:FindFirstChild("RotorMotor", true) and heliModel:FindFirstChild("TailMotor", true), "直升机的主旋翼、尾桨挂在 Motor6D 上")
+-- 0.9.1：密集阵是固定阵地——造好直接架在阵位上，不从工厂开出来
+do
+  local sold
+  for _, u in ipairs(units()) do if not sold and u:GetAttribute("Type") == "inf" then sold = u end end
+  if sold then action("sell", sold:GetAttribute("Uid")) R.run(0.3) end
+  local before = {}
+  for _, u in ipairs(units()) do before[u] = true end
+  action("buy", "cram")
+  R.run(0.3)
+  local nc
+  for _, u in ipairs(units()) do if not before[u] and u:GetAttribute("Type") == "cram" then nc = u end end
+  local p = nc and relPos(nc)
+  R.run(2)
+  local p2 = nc and relPos(nc)
+  check(nc ~= nil and p.Z >= Config.Field.deploy[1] - 1 and p.Z <= Config.Field.deploy[2] + 1 and (p2 - p).Magnitude < 0.01,
+    "新造的拦截炮直接架在阵位上，不从工厂开出来" .. (p and string.format("（z %.0f）", p.Z) or ""))
+end
+-- 武器：四把都在
+check(pl.Backpack:FindFirstChild("火箭筒") and pl.Backpack:FindFirstChild("狙击枪"), "买过的枪都发了")
+local tinf = 0
+plot().Units.ChildAdded:Connect(function(c) if c.Name == "Tinf" then tinf = tinf + 1 end end)
+click(button("^开战"))
+R.run(1)
+check(battleEvent(n0, "start") ~= nil, "首领关开打")
+local function myUnit(t)
+  for _, u in ipairs(units()) do
+    if u:GetAttribute("Type") == t and u:GetAttribute("BU") then return u end
+  end
+end
+local function fxSince(n, kind)
+  local c = 0
+  for i = n + 1, #R.sent do
+    local e = R.sent[i]
+    if e.name == "Fx" and type(e.args[1]) == "table" then
+      for _, f in ipairs(e.args[1]) do if f.k == kind then c = c + 1 end end
+    end
+  end
+  return c
+end
+-- 试驾一辆车之前：这一仗要是已经打完了，就再开一仗（老档的部队强，首领关可能很快就赢）
+local function ensureBattle()
+  for i = #R.sent, 1, -1 do
+    local e = R.sent[i]
+    if e.name == "Battle" and type(e.args[1]) == "table" and (e.args[1].phase == "start" or e.args[1].phase == "end") then
+      if e.args[1].phase == "start" then return end
+      break
+    end
+  end
+  local h = button("^回基地$")
+  if h then click(h) end
+  R.run(5)
+  click(button("^开战"))
+  R.run(1)
+end
+local function mouse(down)
+  if down then
+    R.as("client", function() R.services.UserInputService.InputBegan:Fire({ UserInputType = Enum.UserInputType.MouseButton1, Position = V3(640, 360, 0) }, false) end)
+  else
+    R.as("client", function() R.services.UserInputService.InputEnded:Fire({ UserInputType = Enum.UserInputType.MouseButton1, Position = V3(640, 360, 0) }) end)
+  end
+end
+-- 开拦截炮（固定阵地）：按 W 车不动，只能转炮塔、开火
+do
+  local cm = myUnit("cram")
+  if cm then
+    action("drive", cm:GetAttribute("Uid"))
+    R.run(0.5)
+    local c0 = relPos(cm)
+    R.moveVec = V3(0, 0, -1)
+    R.run(2)
+    R.moveVec = nil
+    local c1 = relPos(cm)
+    check((c1 - c0).Magnitude < 0.5, string.format("开拦截炮（固定阵地）：按 W 车不动（挪了 %.2f 格）", (c1 - c0).Magnitude))
+    action("exit")
+    R.run(0.5)
+  else
+    check(false, "老档里有拦截炮（还活着）")
+  end
+end
+-- 开轰炸机：按一下扔一串炸弹
+local bm = myUnit("bomber")
+if bm then
+  local nd = #R.sent
+  action("drive", bm:GetAttribute("Uid"))
+  R.run(0.5)
+  local ev = battleEvent(nd, "drive")
+  local nb0 = #R.sent
+  mouse(true)
+  R.run(math.min(16, (ev and ev.cd or 0) + 2))   -- 等装填好
+  mouse(false)
+  check(fxSince(nb0, "bomb") >= 8, "开着轰炸机扔了一串炸弹（" .. fxSince(nb0, "bomb") .. " 颗）")
+  action("exit")
+  R.run(0.5)
+else
+  check(false, "老档里有轰炸机（还活着）")
+end
+-- 开运兵直升机：一坐进去就在空中，按住 C 降到最低，自动放下两个步兵班
+ensureBattle()
+local tm = myUnit("transport")
+if tm then
+  local t0 = tinf
+  action("drive", tm:GetAttribute("Uid"))
+  R.run(0.5)
+  R.keys.C = true
+  R.run(3)
+  R.keys.C = nil
+  check(tinf - t0 == 2, "开运兵直升机降到低空，放下了 " .. (tinf - t0) .. " 个步兵班")
+  action("exit")
+  R.run(0.5)
+else
+  check(false, "老档里有运兵直升机")
+end
+-- 开战斗机：一直往前飞，W 加速
+ensureBattle()
+local fm = myUnit("fighter")
+if fm then
+  action("drive", fm:GetAttribute("Uid"))
+  R.run(0.5)
+  local f0 = relPos(fm)
+  R.moveVec = V3(0, 0, -1)
+  R.run(2)
+  R.moveVec = nil
+  local f1 = relPos(fm)
+  check((f1 - f0).Magnitude > 150 and f1.Y > 40, string.format("开着战斗机飞了 %.0f 格（高度 %.0f）", (f1 - f0).Magnitude, f1.Y))
+  action("exit")
+  R.run(0.5)
+else
+  check(false, "老档里有战斗机（还活着）")
+end
+-- 开坦克
+ensureBattle()
+local tk = myUnit("tank")
+local nd2 = #R.sent
+if tk then action("drive", tk:GetAttribute("Uid")) end
+R.run(0.5)
+check(tk ~= nil and battleEvent(nd2, "drive") ~= nil and guiText("^下车") ~= nil, "坐进坦克（界面出现「下车」）")
+if tk then
+  local before2 = relPos(tk)
+  R.moveVec = V3(0, 0, -1)
+  R.run(2)
+  R.moveVec = nil
+  local after2 = relPos(tk)
+  check((after2 - before2).Magnitude > 20, string.format("开着坦克往前走了 %.0f 格", (after2 - before2).Magnitude))
+end
+mouse(true)
+R.run(3)
+mouse(false)
+R.as("client", function() R.services.UserInputService.InputBegan:Fire({ KeyCode = Enum.KeyCode.F, UserInputType = Enum.UserInputType.Keyboard }, false) end)
+R.run(0.5)
+check(battleEvent(nd2, "exit") ~= nil and pl.Character.HumanoidRootPart.Anchored == false, "按 F 下车，人回到战场")
+-- 开直升机
+ensureBattle()
+local hm = myUnit("heli")
+if hm then
+  action("drive", hm:GetAttribute("Uid"))
+  R.run(0.5)
+  R.moveVec = V3(0, 0, -1)
+  R.keys.Space = true
+  R.run(2)
+  R.keys.Space = nil
+  R.moveVec = nil
+  local hy = hm.Root.CFrame.Position.Y
+  check(hy > 60, string.format("开着直升机飞起来了（高度 %.0f）", hy))
+  action("exit")
+  R.run(0.5)
+else
+  check(false, "老档里有武装直升机（还活着）")
+end
+-- 火箭筒
+local rpg = pl.Backpack:FindFirstChild("火箭筒")
+if pl.Character:FindFirstChildOfClass("Tool") then pl.Character:FindFirstChildOfClass("Tool").Parent = pl.Backpack end
+rpg.Parent = pl.Character
+R.run(0.2)
+local tgt
+for _, e in ipairs(plot().Enemies:GetChildren()) do if not e:GetAttribute("Dead") then tgt = e end end
+if tgt then
+  pl.Character.Head._p.CFrame = CF(tgt.Root.CFrame.Position + V3(0, 3, -60))
+  R.as("client", function() remotes.Shoot:FireServer("rpg", tgt.Root.CFrame.Position + V3(0, 2, 0)) end)
+  R.run(1)
+end
+local tBoss = R.clock()
+local res2 = waitResult(400)
+check(res2 ~= nil, "这一仗打完：" .. tostring(res2) .. string.format("（试驾以后又打了 %.0f 秒）", R.clock() - tBoss))
+do
+  local kinds = {}
+  for _, k in ipairs({ "missile", "bomb", "shell", "mrocket", "intercept", "shot" }) do kinds[#kinds + 1] = k .. " " .. fxSince(n0, k) end
+  print("    这一仗的特效：" .. table.concat(kinds, "，"))
+  check(fxSince(n0, "missile") > 0 and fxSince(n0, "shell") > 0, "AI 也打了导弹、炮弹")
+  local temps = 0
+  for _, u in ipairs(plot().Units:GetChildren()) do if u.Name == "Tinf" then temps = temps + 1 end end
+  check(temps == 0, "打完机降的步兵撤了（不留在基地里）")
+end
+click(button("^回基地$"))
+check(#R.errors == 0, "老玩家这一段没报错")
+
+print("== 突袭别人的防线（不在线的玩家）")
+R.run(30)
+n0 = #R.sent
+local rating0 = tonumber((guiText("^突袭积分") or { Text = "0" }).Text:match("(%d+)"))
+click(button("^突袭"))
+R.run(3)
+local st = battleEvent(n0, "start")
+check(st ~= nil and tostring(st.title):find("的防线") ~= nil and not tostring(st.title):find("AI 指挥官"), "匹配到了一位真人玩家存下的防线：" .. tostring(st and st.title))
+local res3 = waitResult(400)
+check(res3 ~= nil, "突袭打完：" .. tostring(res3))
+local rating1 = tonumber((guiText("^突袭积分") or { Text = "0" }).Text:match("(%d+)"))
+check(rating1 ~= rating0, "积分变了（" .. tostring(rating0) .. " → " .. tostring(rating1) .. "）")
+R.run(1)
+local logged = false
+for k, v in pairs(R.store) do
+  if k:find("^MilitaryTycoon_raidlog_v1/") and type(v) == "table" and #v > 0 then logged = true end
+end
+check(logged, "对方的被突袭记录写上了")
+click(button("^回基地$"))
+
+print("== 约战（同服的另一个玩家）")
+local rival = join("Rival", 6006, true)
+R.run(2)
+for _, t in ipairs({ "house1", "barracks" }) do
+  R.run(40)
+  touch(t, rival)
+end
+R.run(20)
+actionAs(rival, "buy", "inf")
+actionAs(rival, "buy", "inf")
+R.run(25)
+check(#units(rival) >= 1, "对手也有部队了（" .. #units(rival) .. " 个）")
+n0 = #R.sent
+action("duel", 6006)
+local inv = nil
+for i = n0 + 1, #R.sent do if R.sent[i].name == "Duel" then inv = R.sent[i].args[1] end end
+check(inv ~= nil and inv.name == "Veteran", "对手收到约战邀请")
+actionAs(rival, "duelYes", 5005)
+R.run(1)
+local ds = battleEvent(n0, "start")
+check(ds ~= nil and ds.mode == "duel", "约战开打")
+local arena = ws.Arenas.Arena1.Field.CFrame.Position
+local rp = units(rival)[1].Root.CFrame.Position
+check(math.abs(rp.X - arena.X) < 300 and math.abs(rp.Z - arena.Z) < 500, "对手的部队传到了竞技场")
+local res4 = waitResult(400)
+check(res4 ~= nil, "约战打完：" .. tostring(res4))
+R.run(1)
+check(#units(rival) >= 1 and relPos(units(rival)[1], rival).Z < Config.Field.deploy[2] + 5, "约战不损失部队，都回了自己基地")
+click(button("^回基地$"))
+
+print("== 排位对战：同一个服务器里两个人都在匹配")
+local function pvpNow()   -- 左上角信息栏那一行（面板里的旧字不算）
+  local t = guiText("^突袭积分 %d+")
+  return t and tonumber(t.Text:match("对战积分 (%d+)"))
+end
+local pvp0 = pvpNow()
+n0 = #R.sent
+click(button("^真人对战"))
+check(guiText("排位战绩") ~= nil, "打开「真人对战」面板（对战积分 " .. tostring(pvp0) .. "）")
+local function matching()   -- 「匹配中」状态条显示着
+  local m = guiText("^匹配中")
+  return m ~= nil and m.Parent.Visible
+end
+click(button("^开始匹配"))
+check(matching() and button("^取消$") ~= nil, "屏幕上方出现「匹配中」和取消按钮")
+actionAs(rival, "match")
+R.run(4)
+local rs = battleEvent(n0, "start")
+check(rs ~= nil and rs.mode == "duel" and tostring(rs.title):find("排位对战") ~= nil, "配上了同服务器的对手，在竞技场开打：" .. tostring(rs and rs.title))
+local res6 = waitResult(400)
+check(res6 ~= nil, "排位对战打完：" .. tostring(res6))
+R.run(1.5)
+local pvp1 = pvpNow()
+check(pvp1 ~= nil and pvp0 ~= nil and pvp1 ~= pvp0, "对战积分变了（" .. tostring(pvp0) .. " → " .. tostring(pvp1) .. "）")
+check(guiText("对战积分 [%+%-]%d+") ~= nil, "结果面板写着积分涨跌")
+click(button("^回基地$"))
+n0 = #R.sent
+action("match")
+R.run(1)
+action("matchCancel")
+R.run(4)
+check(battleEvent(n0, "start") == nil and not matching(), "取消匹配")
+
+print("== 任务、武器、重生、排行榜")
+local mbtn = button("^任务")
+click(mbtn)
+check(guiText("每日任务") ~= nil, "打开任务面板")
+local claim = button("^领 %$")
+if claim then
+  local c0 = stat("现金")
+  click(claim)
+  check(stat("现金") > c0, "领了任务奖励")
+end
+click(button("^×$"))
+local lb = guiText("^1%. ")
+check(plot().Board:FindFirstChildOfClass("SurfaceGui").Col2.Text:find("Name7007") ~= nil or plot().Board:FindFirstChildOfClass("SurfaceGui").Col1.Text:find("1%.") ~= nil, "基地里的排行榜牌子有数据")
+local _ = lb
+-- 重生：老档的建筑全部盖好了 → 菜单里「重生」亮了（不再看关卡）
+R.removePlayer(pl)
+R.run(1)
+pl = join("Veteran", 5005)
+R.run(3)
+local nOpen = select(2, Config.RebirthProgress({}, 0))
+check(button("^重生$") ~= nil and button("^重生$").Visible, "基地的 " .. nOpen .. " 栋全部盖好：菜单里「重生」亮了")
+check(tostring(guideNow()):find("重生") ~= nil, "指引：" .. tostring(guideNow()))
+local function areaSign(id)
+  local areaF = plot():FindFirstChild("Areas")
+  local a = areaF and areaF:FindFirstChild("Area_" .. id)
+  for _, d in ipairs(a and a:GetDescendants() or {}) do
+    if d.ClassName == "TextLabel" and d.Text:find("重生开放") then return d.Text end
+  end
+end
+check(areaSign("port") ~= nil and areaSign("missile") ~= nil and areaSign("space") ~= nil, "南边三块新区域都围着、立着「第 n 次重生开放」的牌子")
+check(plot().Pads:FindFirstChild("Pad_dock") == nil, "没重生前新区域里没有购买按钮")
+click(button("^重生$"))
+check(guiText("开放新区域「港口区」") ~= nil, "重生面板写着这次开放「港口区」")
+click(button("^确定重生$"))
+R.run(1)
+check(stat("关卡") == 1 and stat("现金") == Config.StartCash and #units() == 0 and #plot().Buildings:GetChildren() == 0, "重生：清零从头再来")
+check(guiText("★1") ~= nil, "界面上显示重生 ★1")
+check(areaSign("port") == nil and areaSign("missile") ~= nil and plot().Pads:FindFirstChild("Pad_dock") ~= nil, "港口区开放了（铁丝网拆了、码头仓库有购买按钮），导弹基地还围着")
+local rbBtn = button("^重生 %d+/%d+$")
+check(rbBtn ~= nil and rbBtn.Visible, "重生后菜单里写着下一次的进度（" .. tostring(rbBtn and rbBtn.Text) .. "）")
+local nt = #R.sent
+action("rebirth")
+check(toastSince(nt, "全部盖好才能重生"), "没盖满点重生：服务器不让（提示还差几栋）")
+touch("house1")
+R.run(10)
+check(stat("现金") > Config.StartCash - 60 + 5 * 10, "重生后收入有加成")
+check(#R.errors == 0, "这一段没报错")
+R.removePlayer(pl)
+R.run(1)
+check(R.store[Config.SaveKey .. "/u5005"].rebirth == 1, "退出时存档：重生 1 次存上了")
+-- 重生满 3 次的老档：三块新区域都开着、里面的楼都读回来了；不能再重生
+local owned3 = {}
+for _, b in ipairs(Config.Buildings) do owned3[b.id] = true end
+R.store[Config.SaveKey .. "/u5006"] = { v = 2, cash = 1000, level = 30, best = 30, owned = owned3, hq = 4, tech = 3, army = {}, rebirth = 5, xp = 100,
+  weapons = { rifle = true }, t = os.time() - 10 }
+local p3 = join("Max", 5006)
+local keep = pl
+pl = p3
+R.run(3)
+check(plot():FindFirstChild("Buildings"):FindFirstChild("launchpad") ~= nil and plot().Buildings:FindFirstChild("dock") ~= nil and plot().Buildings:FindFirstChild("strategic") ~= nil,
+  "重生 3 次的档：港口区、导弹基地、航天中心的楼都读回来了")
+check(areaSign("port") == nil and areaSign("missile") == nil and areaSign("space") == nil, "三块新区域都开放了")
+check(button("^重生") == nil or not button("^重生").Visible, "重生满 3 次：菜单里不再有「重生」")
+check(guiText("★3") ~= nil, "存档里写着重生 5 次的按上限 3 次算（★3）")
+nt = #R.sent
+action("rebirth")
+check(toastSince(nt, "重生满"), "重生满了再点：提示已经重生满 3 次")
+check(stat("现金") > 0 and guiText("进度已自动保存") ~= nil or guiText("进度会自动保存") ~= nil, "左下角写着进度会自动保存")
+R.removePlayer(p3)
+pl = keep
+R.removePlayer(rival)
+R.run(1)
+
+print("== 战况：敌机突袭、空降增援、雷区、大雾、夜战")
+do
+  local seen = {}
+  for lv = 1, 30 do
+    local ev = Config.EventOf(lv)
+    if ev then seen[ev.id] = true end
+  end
+  local n = 0
+  for _ in pairs(seen) do n = n + 1 end
+  check(n == #Config.Events and Config.EventOf(1) == nil and Config.EventOf(10) == nil, "前 30 关五种战况都有，第 1 关、首领关没有")
+  local function lvWith(id)
+    for lv = 4, 40 do
+      local ev = Config.EventOf(lv)
+      if ev and ev.id == id then return lv end
+    end
+  end
+  local function fight(id, uid, secs)
+    local lv = lvWith(id)
+    local own = { house1 = true, barracks = true, house2 = true, hq = true, factory1 = true, tankfac = true }
+    local arm = {}
+    for i = 1, 3 do table.insert(arm, { t = "inf", x = (i - 2) * 30, z = 300 }) end
+    R.store[Config.SaveKey .. "/u" .. uid] = { v = 2, cash = 5000, level = lv, best = lv, owned = own, hq = 2, tech = 3, army = arm, weapons = { rifle = true }, t = os.time() - 10 }
+    local p = join("Ev" .. id, uid)
+    local keep = pl
+    pl = p
+    R.run(2)
+    local n1 = #R.sent
+    local info = guiText("战况：")
+    click(button("^开战"))
+    R.run(secs)
+    local st = battleEvent(n1, "start")
+    return p, keep, n1, lv, st, info
+  end
+  local p, keep, n1, lv, st, info = fight("airraid", 5101, 13)
+  check(info ~= nil and st ~= nil and st.event and st.event.id == "airraid" and tostring(st.title):find("敌机突袭") ~= nil, "第 " .. lv .. " 关的战况写在信息栏、开战标题上：" .. tostring(st and st.title))
+  local ev1 = battleEvent(n1, "event")
+  local bombs = 0
+  for i = n1 + 1, #R.sent do
+    local e = R.sent[i]
+    if e.name == "Fx" then
+      for _, f in ipairs(e.args[1] or {}) do if f.k == "bomb" and f.u == "bomber" then bombs = bombs + 1 end end
+    end
+  end
+  check(ev1 ~= nil and tostring(ev1.text):find("敌机突袭") and bombs >= 8, "开打 8 秒：敌机突袭（播报、扔了 " .. bombs .. " 颗炸弹）")
+  R.removePlayer(p)
+  pl = keep
+  R.run(1)
+  p, keep, n1, lv = fight("reinforce", 5102, 14)
+  local temp = 0   -- 落下来的（打完敌军区会清空，所以数空降的特效）
+  for i = n1 + 1, #R.sent do
+    local e = R.sent[i]
+    if e.name == "Fx" then for _, f in ipairs(e.args[1] or {}) do if f.k == "drop" then temp = temp + 1 end end end
+  end
+  check(battleEvent(n1, "event") ~= nil and temp >= 4, "第 " .. lv .. " 关开打 10 秒：敌军空降增援（落下 " .. temp .. " 个）")
+  R.removePlayer(p)
+  pl = keep
+  R.run(1)
+  p, keep, n1, lv = fight("minefield", 5103, 2)
+  local mines = 0
+  for i = n1 + 1, #R.sent do
+    local e = R.sent[i]
+    if e.name == "Fx" then
+      for _, f in ipairs(e.args[1] or {}) do if f.k == "mine" and f.team == 0 then mines = mines + 1 end end
+    end
+  end
+  check(mines >= 16, "第 " .. lv .. " 关的雷区：开打前两军中间埋了 " .. mines .. " 颗雷")
+  R.removePlayer(p)
+  pl = keep
+  R.run(1)
+  check(#R.errors == 0, "战况这一段没报错")
+end
+
+print("== 存档服务坏了（比如 Studio 没开 API 访问）")
+R.dsFail = true
+local saves1 = R.saves or 0
+n0 = #R.sent
+pl = join("Studio", 2002)
+R.run(8)
+check(toastSince(n0, "存档没读到"), "提示「存档没读到」")
+check(stat("现金") == Config.StartCash and plot().Pads:FindFirstChild("Pad_house1") ~= nil, "照样能玩（新档）")
+touch("house1")
+R.run(20)
+touch("barracks")
+R.run(30)
+action("buy", "inf")
+R.run(20)
+n0 = #R.sent
+click(button("^突袭"))
+R.run(3)
+local st5 = battleEvent(n0, "start")
+check(st5 ~= nil and tostring(st5.title):find("AI 指挥官") ~= nil, "存档服务不可用时突袭打 AI 指挥官")
+waitResult(300)
+R.removePlayer(pl)
+R.run(1)
+check((R.saves or 0) == saves1, "读档失败时不存档（不会盖掉原来的进度）")
+check(#R.errors == 0, "没报错")
+
+print("== 跨服匹配（模拟别的服务器）")
+R.dsFail = false
+local MAP = "mt_match_v1"
+local function memPut(key, v) R.mem[MAP] = R.mem[MAP] or {}; R.mem[MAP][key] = { v = v, exp = R.clock() + 60 } end
+local function memGet(key) local e = R.mem[MAP] and R.mem[MAP][key]; return e and e.v end
+local function armySave(uid)
+  R.store[Config.SaveKey .. "/u" .. uid] = { v = 2, cash = 5000, level = 5, best = 5, owned = { house1 = true, barracks = true }, hq = 0, tech = 0,
+    army = { { t = "inf", x = 0, z = 250 }, { t = "inf", x = 20, z = 250 }, { t = "mg", x = -20, z = 250 } }, pvp = 1000, t = os.time() }
+end
+-- 1）本服的人发起：别的服务器有个 9001 在排队（UserId 比我大，归我发起）
+armySave(5100)
+memPut("u9001", { u = 9001, r = 1010, n = "远方玩家", job = "job-other", t = os.time() })
+pl = join("Global", 5100)
+R.run(2)
+local tp0, saves2 = #R.teleports, R.saves or 0
+action("match")
+R.run(5)
+local tp = R.teleports[tp0 + 1]
+check(tp ~= nil and tp.ids[1] == 5100 and tostring(tp.code):find("^rsv%-") ~= nil and tp.data and tp.data.mode == "match" and tp.data.a == 5100 and tp.data.b == 9001,
+  "配上了别的服务器的玩家：预留了对战服务器，传送过去（" .. tostring(tp and tp.code) .. "）")
+local other = memGet("u9001")
+check(other ~= nil and other.claimed == 5100 and tp ~= nil and other.code == tp.code, "对方的排队记录被认领，写上了对战服务器的访问码")
+local pub = R.published[#R.published]
+check(pub ~= nil and pub.topic == MAP and pub.data.to == 9001 and tp ~= nil and pub.data.code == tp.code, "发消息通知了对方的服务器")
+check(memGet("u5100") == nil and (R.saves or 0) > saves2, "自己的排队记录删了，传送前存了档")
+R.run(1)
+check(Players:GetPlayerByUserId(5100) == nil, "人传走了（离开了这个服务器）")
+-- 2）别的服务器发起：认领了本服排队的 9500，发来消息
+armySave(9500)
+pl = join("Waiter", 9500)
+R.run(2)
+action("match")
+R.run(4)
+check(memGet("u9500") ~= nil and memGet("u9500").job == "job-local", "排队记录写进了全服的匹配表")
+local tp1 = #R.teleports
+memGet("u9500").claimed, memGet("u9500").code = 100, "rsv-remote"
+R.deliver(MAP, { to = 9500, code = "rsv-remote", a = 100, b = 9500, an = "远方玩家", ar = 990 })
+R.run(2)
+local tpw = R.teleports[tp1 + 1]
+check(tpw ~= nil and tpw.ids[1] == 9500 and tpw.code == "rsv-remote" and tpw.data.a == 100 and tpw.data.b == 9500, "别的服务器认领了本服的玩家：收到消息就传过去")
+-- 3）消息丢了：下一轮看到自己的记录被认领、有访问码，自己传过去
+armySave(9600)
+pl = join("Lost", 9600)
+R.run(2)
+action("match")
+R.run(4)
+local tp2 = #R.teleports
+local e9600 = memGet("u9600")
+if e9600 then e9600.claimed, e9600.code, e9600.a, e9600.b = 100, "rsv-lost", 100, 9600 end
+R.run(4)
+local tpl = R.teleports[tp2 + 1]
+check(tpl ~= nil and tpl.ids[1] == 9600 and tpl.code == "rsv-lost", "通知消息丢了也能按匹配表里的访问码传过去")
+-- 4）预留服务器失败（像 Studio 里）：放开两边的认领，接着排队
+armySave(5200)
+memPut("u9002", { u = 9002, r = 1000, n = "远方玩家二", job = "job-other", t = os.time() })
+pl = join("Studio2", 5200)
+R.run(2)
+R.tpFail = true
+local tp3 = #R.teleports
+action("match")
+R.run(5)
+for _ = 1, 30 do   -- 匹配每 3 秒一轮：等这一轮的认领放开再看
+  local e = memGet("u9002")
+  if e and e.claimed == nil then break end
+  R.run(0.1)
+end
+check(#R.teleports == tp3 and memGet("u9002") ~= nil and memGet("u9002").claimed == nil and matching(), "预留服务器失败：放开认领，接着排队")
+action("matchCancel")
+R.run(1)
+R.tpFail = false
+-- 5）MemoryStore 坏了：只能服内匹配，不报错
+R.memFail = true
+action("match")
+R.run(7)
+check(matching(), "MemoryStore 不可用时照样排着（只能配同服务器的）")
+action("matchCancel")
+R.memFail = false
+R.removePlayer(pl)
+R.run(1)
+check(#R.errors == 0, "跨服匹配这一段没报错")
+
+print("== 七个人进一个六块地的服务器")
+R.dsFail = false
+R.localPlayer = nil
+local list = {}
+for i = 1, 7 do
+  local p = R.addPlayer("P" .. i, 3000 + i)
+  Players.PlayerAdded:Fire(p)
+  table.insert(list, p)
+end
+R.run(3)
+check(list[7]._kicked ~= nil, "第七个人被请出去（提示换服务器）")
+check(#R.errors == 0, "多人没报错")
+
+if #R.warns > 0 then
+  print("== warn 输出")
+  local seen = {}
+  for _, w in ipairs(R.warns) do
+    if not seen[w] then seen[w] = true print("  " .. w) end
+  end
+end
+print(string.format("\n== %d 个检查没通过，%d 个脚本错误", #fails, #R.errors))
+if #fails > 0 or #R.errors > 0 then TEST_CODE = 1 end
