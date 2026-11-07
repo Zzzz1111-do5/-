@@ -74,7 +74,12 @@ if (steps.includes('audio')) {
   execFileSync('node', [path.join(here, 'audio.mjs'), path.join(out, 'cues.json'), path.join(out, 'music.wav')], { stdio: 'inherit' });
 }
 if (steps.includes('video')) {
-  execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-framerate', String(FPS), '-i', path.join(out, 'frames', '%05d.jpg'), '-i', path.join(out, 'music.wav'),
-    '-c:v', 'libx264', '-preset', 'slow', '-crf', '18', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '192k', '-shortest', '-movflags', '+faststart', path.join(out, 'trailer_1080p.mp4')], { stdio: 'inherit' });
-  console.log('写好 ' + path.join(out, 'trailer_1080p.mp4'));
+  // 1080p 码率封顶 6 Mbit/s（64 秒约 45 MB，好传）；再出一份 720p 给手机看
+  const enc = (vf, rate, name) => {
+    execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-framerate', String(FPS), '-i', path.join(out, 'frames', '%05d.jpg'), '-i', path.join(out, 'music.wav'), ...(vf ? ['-vf', vf] : []),
+      '-c:v', 'libx264', '-preset', 'slow', '-crf', '19', '-maxrate', rate + 'M', '-bufsize', (rate * 2) + 'M', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '192k', '-shortest', '-movflags', '+faststart', path.join(out, name)], { stdio: 'inherit' });
+    console.log('写好 ' + path.join(out, name) + '（' + (fs.statSync(path.join(out, name)).size / 1e6).toFixed(1) + ' MB）');
+  };
+  enc(null, 6, 'trailer_1080p.mp4');
+  enc('scale=1280:720:flags=lanczos', 3, 'trailer_720p.mp4');
 }

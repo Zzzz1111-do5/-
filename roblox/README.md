@@ -153,6 +153,6 @@ NODE_PATH=$(npm root -g) node roblox/tools/trailer/render.mjs /tmp/trailer_rec /
 ```
 
 第一条录场景（`scene.json`）和战斗（`battle.json`）；`TR_LEVEL` 打第几关、`TR_TECH` 敌军强弱（第 27 关雪原、2 时一场约 50 秒、我方赢）。
-第二条依次做：`frames` 逐帧截图（Playwright + 软件渲染，一帧 3–4 秒，全片 1920 帧）、`cues` 不画画面快速走一遍分镜记下音效点、`audio`（`audio.mjs` 合成配乐和音效）、`video`（ffmpeg 合成 `trailer_1080p.mp4`）。
+第二条依次做：`frames` 逐帧截图（Playwright + 软件渲染，一帧 3–4 秒，全片 1920 帧）、`cues` 不画画面快速走一遍分镜记下音效点、`audio`（`audio.mjs` 合成配乐和音效）、`video`（ffmpeg 合成 `trailer_1080p.mp4`，码率封顶 6 Mbit/s、约 50 MB；另出一份 `trailer_720p.mp4` 约 25 MB）。
 后面可以加帧范围和步骤，几个进程分段渲染：`render.mjs <录像> <输出> 0-480 frames`、`480-960 frames`……画完再 `render.mjs <录像> <输出> 0-0 cues,audio,video`。
 只看某几帧：`ONLY=300,900,1500` 环境变量。分镜（每个镜头的时间、镜头运动、字幕）在 `timeline.js`，渲染器在 `render.html`。

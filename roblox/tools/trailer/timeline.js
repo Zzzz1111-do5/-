@@ -18,6 +18,19 @@
       let hits = 0; for (let j = 1; j < 16; j++) { const q = L3(eye, tg, j / 18); for (const n of near) if (Math.hypot(q[0] - n[0], q[1] - n[1], q[2] - n[2]) < n[3] + 3) hits++; }
       if (hits < bh) { bh = hits; best = a; } if (!hits) break; }
     return best; };
+  // 打完时我方地面单位里「最像主角」的一群：60 米内的装甲车算 3、别的算 1，分最高的那群；返回中心和平均车头方向
+  const heroGroup = T => {
+    const al = [];
+    for (const tr of tracks()) { if (tr.team !== 1 || tr.def.air) continue; const s = TR.sampleOf(tr, T); if ((!s.x && !s.z) || s.dead) continue; al.push({ s, tr, w: tr.def.cat === 'armor' ? 3 : 1 }); }
+    let best = null, bs = -1;
+    for (const a of al) { const g = al.filter(b => Math.hypot(b.s.x - a.s.x, b.s.z - a.s.z) < 60), sc = g.reduce((n, b) => n + b.w, 0) + a.s.z * 1e-4; if (sc > bs) { bs = sc; best = g; } }
+    if (!best) { const c = TR.armyCenter(T, 1); return { at: () => c, fw: [0, 0, 1] }; }
+    const f = [0, 0, 0];
+    if (best.some(b => b.w > 1)) best = best.filter(b => b.w > 1);   // 镜头只跟装甲车（防空车停着不动，会把中心拖开）
+    for (const b of best) { f[0] -= Math.sin(b.s.yaw); f[2] -= Math.cos(b.s.yaw); }
+    // 这群车在任意时刻的中心（谁在那一刻没有轨迹就不算）
+    const at = T2 => { let x = 0, z = 0, n = 0; for (const b of best) { const s = sample(b.tr, T2); if (s) { x += s.x; z += s.z; n++; } } return n ? [x / n, 0, z / n] : [0, 0, 0]; };
+    return { at, fw: len(f) > 0.3 ? norm(f) : [0, 0, 1] }; };
   // T0–T1 一直活着、在动的我方地面单位里，身边特效最多的那个
   const busiest = (T0, T1) => { let best = null, bn = -1;
     for (const tr of tracks()) { if (tr.team !== 1 || tr.def.air) continue; const a = TR.sampleOf(tr, T0), b = TR.sampleOf(tr, T1); if (!a.x && !a.z || a.dead || b.dead || !b.x && !b.z) continue;
@@ -125,11 +138,14 @@
     picks.sort((a, b) => a.tt - b.tt);
     picks.forEach((e, i) => { const c = e.c, D = e.d, ang = clearAng(c, D, 30, i * 1.7 + 0.6); shot({ at: 48 + i, dur: 1, T0: e.tt - 0.12, rate: 0.85, flash: i > 0 ? 0.4 : 0,
       cam: dolly([c[0] + Math.cos(ang) * D, 30, c[2] + Math.sin(ang) * D], [c[0] + Math.cos(ang) * D * 0.9, 27, c[2] + Math.sin(ang) * D * 0.9], [c[0], 9, c[2]], [c[0], 13, c[2]], 50) }); });
-    // ⑱ 52–56 胜利：摇臂升起来看我军
+    // ⑱ 52–56 胜利：低机位在打得最靠前的装甲车队正前方，慢慢推近、升起来（车头朝着镜头）
     const end = (TR.finish && TR.finish.t) || 50;
-    const wc = TR.armyCenter(end - 1, 1);
-    shot({ at: 52, dur: 4, T0: end - 2.5, rate: 0.8, cam: dolly([wc[0] + 20, 18, wc[2] - 90], [wc[0] + 10, 150, wc[2] - 230], [wc[0], 8, wc[2] + 60], [wc[0], 0, wc[2] + 160], 50),
-      card: K('', '胜利！', (TR.start && TR.start.title ? TR.start.title.replace(/\s*·\s*/g, ' · ') : '第 27 关 · 雪原战区'), 'mid'), cardAt: [0.4, 3.7] });
+    // 车队还在往前开：镜头跟着车队中心退，车头一直冲着镜头开过来，镜头慢慢升高
+    const hg = heroGroup(end - 1), hf = hg.fw, hs = [hf[2], 0, -hf[0]];
+    // 打完以后部队掉头回基地，所以这个镜头停在打完前一刻（还在往前冲）
+    shot({ at: 52, dur: 4, T0: end - 3.4, rate: 0.8, cam: (u, T) => { const c = hg.at(T), k = sm(u);
+      return { eye: add(c, add(mul(hf, lerp(78, 62, k)), add(mul(hs, lerp(20, 10, k)), [0, lerp(5, 15, k), 0]))), at: add(c, [0, lerp(12, 9, k), 0]), fov: 44 }; },   // 看车队上方一点：车在画面下三分之一，字卡在上面不挡车
+      card: K('', '胜利！', (TR.start && TR.start.title ? TR.start.title.replace(/\s*·\s*/g, ' · ') : '第 27 关 · 雪原战区'), 'win'), cardAt: [0.5, 3.8] });
     // ⑲ 56–64 片尾：基地上空慢慢飘，压暗，标志
     shot({ at: 56, dur: 8, T0: 0, rate: 0, units: true, dim: 0.5, fadeOut: 1.2, cam: dolly([-320, 260, -520], [-200, 230, -420], [0, 20, 80], [0, 20, 100], 44),
       card: K('MILITARY TYCOON', '军事大亨', '现已登陆 Roblox', 'logo'), cardAt: [0.6, 7.6] });
@@ -150,7 +166,7 @@
       card.style.opacity = a;
       const k = easeOut(clamp((tl - t0) / 0.5, 0, 1));
       if (c.pos === 'left') card.style.transform = `translateX(${(1 - k) * -60}px)`;
-      else if (c.pos === 'mid') card.style.transform = `scale(${1.25 - 0.25 * k})`;
+      else if (c.pos === 'mid' || c.pos === 'win') card.style.transform = `scale(${1.25 - 0.25 * k})`;
       else card.style.transform = `scale(${1.08 - 0.08 * k})`;
     } else card.style.opacity = 0;
     let fade = 0;

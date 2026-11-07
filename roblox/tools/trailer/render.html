@@ -19,6 +19,13 @@ html, body { margin: 0; background: #000; overflow: hidden; width: 1920px; heigh
 .card.left { left: 120px; bottom: 150px; }
 .card.mid { left: 0; right: 0; top: 36%; text-align: center; }
 .card.mid .r { margin-left: auto; margin-right: auto; background: linear-gradient(90deg, rgba(255,182,72,0), #ffb648, rgba(255,182,72,0)); }
+.card.win { left: 0; right: 0; top: 19%; text-align: center; }
+.card.win:before { content: ""; position: absolute; left: 50%; top: 50%; width: 1200px; height: 460px; transform: translate(-50%, -50%); z-index: -1;
+  background: radial-gradient(ellipse at center, rgba(0,0,0,.45), rgba(0,0,0,0) 70%); }
+.card.win .t { font-size: 170px; letter-spacing: .2em; margin-right: -.2em; background: linear-gradient(180deg, #fff6dc 10%, #ffcf6a 55%, #d88a22 100%); -webkit-background-clip: text; color: transparent;
+  text-shadow: none; filter: drop-shadow(0 8px 30px rgba(0,0,0,.7)); }
+.card.win .r { margin: 24px auto 0; width: 560px; background: linear-gradient(90deg, rgba(255,182,72,0), #ffb648, rgba(255,182,72,0)); }
+.card.win .s { font-size: 40px; margin-top: 22px; letter-spacing: .2em; margin-right: -.2em; }
 .card.logo { left: 0; right: 0; top: 30%; text-align: center; }
 .card.logo .t { font-size: 190px; letter-spacing: .14em; margin-right: -.14em; background: linear-gradient(180deg, #fff6dc 10%, #ffcf6a 55%, #d88a22 100%); -webkit-background-clip: text; color: transparent;
   text-shadow: none; filter: drop-shadow(0 8px 30px rgba(0,0,0,.7)); }
