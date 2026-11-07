@@ -1,0 +1,62 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>GLB 检查</title></head>
+<body style="margin:0;background:#8fa3b0;font:14px sans-serif">
+<canvas id="c" width="1600" height="900"></canvas>
+<script>
+// 导出的 glb 检查器：?f=a.glb,b.glb&yaw=35&pitch=20 —— 每个模型一格，相机从左前上方看（Roblox 坐标：Y 上、正前方 −Z），标记网格画成品红
+(async () => {
+  const q = new URLSearchParams(location.search);
+  const files = (q.get('f') || '').split(',').filter(Boolean);
+  const yaw = +(q.get('yaw') ?? 35) * Math.PI / 180, pitch = +(q.get('pitch') ?? 20) * Math.PI / 180;
+  const cv = document.getElementById('c'), gl = cv.getContext('webgl', { antialias: true, preserveDrawingBuffer: true });
+  gl.getExtension('OES_element_index_uint');
+  const vs = `attribute vec3 p; attribute vec3 n; attribute vec2 uv; uniform mat4 M; varying vec3 vN; varying vec2 vU; void main(){ vN = n; vU = uv; gl_Position = M * vec4(p, 1.); }`;
+  const fs = `precision mediump float; varying vec3 vN; varying vec2 vU; uniform sampler2D T; uniform float uT, uA; uniform vec4 C;
+    void main(){ vec4 c = C; if (uT > .5) c *= texture2D(T, vU); if (uA > .5 && c.a < .5) discard;
+      float l = max(dot(normalize(vN), normalize(vec3(.4, .8, .3))), 0.) * .8 + .35; gl_FragColor = vec4(c.rgb * l, 1.); }`;
+  const sh = (t, s) => { const o = gl.createShader(t); gl.shaderSource(o, s); gl.compileShader(o); if (!gl.getShaderParameter(o, gl.COMPILE_STATUS)) throw gl.getShaderInfoLog(o); return o; };
+  const pr = gl.createProgram(); gl.attachShader(pr, sh(gl.VERTEX_SHADER, vs)); gl.attachShader(pr, sh(gl.FRAGMENT_SHADER, fs)); gl.linkProgram(pr); gl.useProgram(pr);
+  const L = { p: gl.getAttribLocation(pr, 'p'), n: gl.getAttribLocation(pr, 'n'), uv: gl.getAttribLocation(pr, 'uv') };
+  const U = { M: gl.getUniformLocation(pr, 'M'), T: gl.getUniformLocation(pr, 'T'), uT: gl.getUniformLocation(pr, 'uT'), uA: gl.getUniformLocation(pr, 'uA'), C: gl.getUniformLocation(pr, 'C') };
+  const mul = (a, b) => { const r = new Float32Array(16); for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) { let s = 0; for (let k = 0; k < 4; k++) s += a[k * 4 + j] * b[i * 4 + k]; r[i * 4 + j] = s; } return r; };
+  const persp = (f, a, n, fa) => { const t = 1 / Math.tan(f / 2); return new Float32Array([t / a, 0, 0, 0, 0, t, 0, 0, 0, 0, (fa + n) / (n - fa), -1, 0, 0, 2 * fa * n / (n - fa), 0]); };
+  const look = (e, c) => { const sub = (a, b) => a.map((v, i) => v - b[i]), nor = a => { const l = Math.hypot(...a); return a.map(v => v / l); }, cr = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]], dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+    const z = nor(sub(e, c)), x = nor(cr([0, 1, 0], z)), y = cr(z, x); return new Float32Array([x[0], y[0], z[0], 0, x[1], y[1], z[1], 0, x[2], y[2], z[2], 0, -dot(x, e), -dot(y, e), -dot(z, e), 1]); };
+  gl.enable(gl.DEPTH_TEST); gl.clearColor(.56, .64, .69, 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  const cols = Math.min(4, files.length), rows = Math.ceil(files.length / cols), W = cv.width / cols, H = cv.height / rows;
+  const info = [];
+  for (let fi = 0; fi < files.length; fi++) {
+    const buf = await (await fetch(files[fi])).arrayBuffer(), dv = new DataView(buf);
+    const jl = dv.getUint32(12, true), J = JSON.parse(new TextDecoder().decode(new Uint8Array(buf, 20, jl))), bo = 20 + jl + 8;
+    const view = i => { const b = J.bufferViews[i]; return new Uint8Array(buf, bo + (b.byteOffset || 0), b.byteLength); };
+    const acc = i => { const a = J.accessors[i], v = view(a.bufferView), T = a.componentType === 5126 ? Float32Array : a.componentType === 5125 ? Uint32Array : Uint16Array; return new T(v.buffer.slice(v.byteOffset, v.byteOffset + v.byteLength)); };
+    const tex = await Promise.all((J.images || []).map(async im => { const bmp = await createImageBitmap(new Blob([view(im.bufferView)], { type: im.mimeType })); const t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, bmp); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT); return t; }));
+    let mn = [1e9, 1e9, 1e9], mx = [-1e9, -1e9, -1e9];
+    for (const a of J.accessors) if (a.min) for (let k = 0; k < 3; k++) { mn[k] = Math.min(mn[k], a.min[k]); mx[k] = Math.max(mx[k], a.max[k]); }
+    const c = mn.map((v, k) => (v + mx[k]) / 2), r = Math.hypot(...mx.map((v, k) => v - mn[k])) / 2, d = r * 2.6;
+    // 相机在左前上方：前方是 −Z
+    const eye = [c[0] - Math.sin(yaw) * Math.cos(pitch) * d, c[1] + Math.sin(pitch) * d, c[2] - Math.cos(yaw) * Math.cos(pitch) * d];
+    const Mx = mul(persp(.8, W / H, r * .1, r * 10), look(eye, c));
+    gl.viewport((fi % cols) * W, (rows - 1 - Math.floor(fi / cols)) * H, W, H);
+    gl.uniformMatrix4fv(U.M, false, Mx);
+    for (const node of J.nodes) {
+      const m = J.meshes[node.mesh];
+      for (const P of m.primitives) {
+        const mat = J.materials[P.material] || {}, pb = mat.pbrMetallicRoughness || {};
+        const bind = (loc, a, n) => { const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, acc(a), gl.STATIC_DRAW); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, n, gl.FLOAT, false, 0, 0); };
+        bind(L.p, P.attributes.POSITION, 3); bind(L.n, P.attributes.NORMAL, 3); bind(L.uv, P.attributes.TEXCOORD_0, 2);
+        const ib = gl.createBuffer(), I = acc(P.indices); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, I, gl.STATIC_DRAW);
+        const bt = pb.baseColorTexture; gl.uniform1f(U.uT, bt ? 1 : 0); if (bt) { gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, tex[J.textures[bt.index].source]); gl.uniform1i(U.T, 0); }
+        gl.uniform1f(U.uA, mat.alphaMode ? 1 : 0); gl.uniform4fv(U.C, pb.baseColorFactor || [1, 1, 1, 1]);
+        if (node.name.startsWith('_')) gl.disable(gl.DEPTH_TEST);
+        gl.drawElements(gl.TRIANGLES, I.length, I instanceof Uint32Array ? gl.UNSIGNED_INT : gl.UNSIGNED_SHORT, 0);
+        gl.enable(gl.DEPTH_TEST);
+      }
+    }
+    info.push(files[fi] + ' ' + J.nodes.map(n => n.name).join(' '));
+  }
+  document.title = 'ok';
+  window.__info = info;
+})().catch(e => { document.title = 'err ' + e; });
+</script></body></html>
