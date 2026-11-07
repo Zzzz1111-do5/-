@@ -775,6 +775,37 @@ local function ctlInit(G, getControls)
       orbit.dist = orbit.dist + (want - orbit.dist) * (1 - math.exp(-dt * 1.3))
     end
   end
+  -- 跟随着的是不是自己能放技能的单位：返回 技能、战斗编号、还要冷却几秒
+  local function followAbility()
+    local m = spec.m
+    if G.mode ~= "battle" or spec.mode ~= "follow" or not m or not m.Parent or m:GetAttribute("Dead") then return nil end
+    if m.Parent ~= myF("Units") and m:GetAttribute("Owner") ~= player.UserId then return nil end
+    local def = UNITS[m:GetAttribute("Type") or ""]
+    local ab = def and not def.hidden and Config.Abilities[def.cat or ""]
+    local bid = m:GetAttribute("BU")
+    if not ab or not bid then return nil end
+    return ab, bid, math.max(0, ((G.abCD and G.abCD[bid]) or 0) - os.clock())
+  end
+  function G.useAbility()
+    local ab, bid, left = followAbility()
+    if not ab then return false end
+    if left > 0 then
+      G.toast("「" .. ab.name .. "」还要冷却 " .. math.ceil(left) .. " 秒", "info")
+      return true
+    end
+    RA:FireServer("ability", bid)
+    return true
+  end
+  local function abilityButton()
+    local b = ui.abilBtn
+    if not b then return end
+    local ab, _, left = followAbility()
+    b.Visible = ab ~= nil and G.drive == nil
+    if ab then
+      b.Text = (left > 0) and (ab.name .. " " .. math.ceil(left) .. " 秒") or (ab.name .. (G.mobile and "" or "（F）"))
+      b.BackgroundColor3 = (left > 0) and RGB(80, 74, 60) or RGB(176, 128, 34)
+    end
+  end
   local function camLabel()
     local L = ui.camL
     if not L then return end
@@ -784,8 +815,10 @@ local function ctlInit(G, getControls)
       local def = UNITS[m:GetAttribute("Type") or ""]
       local friend = (m.Parent == myF("Units")) or m:GetAttribute("Owner") == player.UserId
       local hp = hpOf(m)
+      local ab = followAbility()
       line = "跟随：" .. (friend and "<font color=\"#7CFC8A\">我方</font> " or "<font color=\"#FF8A80\">敌方</font> ") .. (def and def.name or "单位") ..
-        (hp and string.format("  · 血量 %d%%", math.floor(hp * 100 + 0.5)) or "")
+        (hp and string.format("  · 血量 %d%%", math.floor(hp * 100 + 0.5)) or "") ..
+        (ab and ("  · <font color=\"#FFD24A\">技能「" .. ab.name .. "」</font>" .. (G.mobile and "" or " 按 F") .. "：" .. ab.desc) or "")
     elseif spec.mode == "auto" then
       line = spec.hot and "自动镜头 · 跟着交火的地方" or "自动镜头 · 看我军推进"
     else
@@ -1118,7 +1151,9 @@ local function ctlInit(G, getControls)
   end
   function G.ctlKey(kc)
     if G.mode == "battle" then
-      if kc == Enum.KeyCode.Tab then
+      if kc == Enum.KeyCode.F then
+        return G.useAbility()
+      elseif kc == Enum.KeyCode.Tab then
         G.followNext(shiftDown() and -1 or 1)
         return true
       elseif kc == Enum.KeyCode.Space then
@@ -1159,6 +1194,7 @@ local function ctlInit(G, getControls)
       tagStep(dep)
       chipsStep(dep)
       if active and G.mode == "battle" then camLabel() end
+      abilityButton()
     end
   end
 end
@@ -1563,6 +1599,11 @@ function Play.init(G)
       return s
     end
     if n("stealth") > 0 then return "敌方有隐身轰炸机：只有爱国者和战斗机打得到它" end
+    if n("ballistic") > 0 then return "敌方有弹道导弹车：专打你扎堆的地方，别挤成一团；带上爱国者能把导弹拦下来" end
+    if n("gunship") > 0 then return "敌方有空中炮艇：在高空绕圈往下砸炮弹，带防空车、弹炮、激光防空、爱国者或者战斗机" end
+    if n("swarm") > 0 then return "敌方有蜂群无人机车：一窝蜂的小无人机专撞车，多带防空车、激光防空、步兵把它们打下来" end
+    if n("miner") > 0 then return "敌方会布雷：让皮厚的破障车开在最前面趟雷，或者用火炮、飞机远远地打" end
+    if n("railgun") > 0 then return "敌方有电磁炮：一发打穿一整排，别排成一条长龙；直升机、攻击机绕过去打它"  end
     if n("drone", "fighter", "bomber") > 0 then return "敌方有高空的飞机（无人机 / 战斗机 / 轰炸机）：带弹炮防空车、爱国者、单兵防空组，或者自己的战斗机" end
     if n("loiter") > 0 then return "敌方有巡飞弹：一头撞上来专炸坦克，带防空车、步战车早点把它打下来" end
     if n("ew") > 0 then return "敌方有电子战车：导弹容易被干扰偏掉，多用坦克炮、火炮，或者先端掉它" end
@@ -1594,8 +1635,15 @@ function Play.init(G)
       else
         G.announce("开战！", RGB(255, 214, 90), ev.title, 1.4)
       end
-      G.toast(G.mobile and "观战镜头自动跟着交火的地方，点单位跟随它；想亲自上阵点「操控小人」或拿起枪"
-        or "观战镜头自动跟着交火的地方：点单位跟随，Tab 换下一个，空格回自动；想亲自上阵点「操控小人」或按 1 拿枪", "info")
+      G.toast(G.mobile and "观战镜头自动跟着交火的地方，点自己的单位跟随它、还能放技能；想亲自上阵点「操控小人」或拿起枪"
+        or "观战镜头自动跟着交火的地方：点自己的单位跟随，按 F 放它的技能（冲锋、烟幕……），Tab 换下一个，空格回自动；想亲自上阵点「操控小人」或按 1 拿枪", "info")
+      G.abCD = {}
+      G.skyEvent = ev.event and ev.event.id or nil   -- 大雾、夜战：天色跟着变（Weather）
+      if ev.event then
+        task.delay(1.7, function()
+          if G.battle then G.announce("战况：" .. tostring(ev.event.name), RGB(255, 170, 90), ev.event.desc, 2.6) end
+        end)
+      end
     elseif ev.phase == "tick" then
       if G.battle then G.battle.t0 = os.clock() - (ev.t or 0) end
       ui.bInfo.Text = "<font color=\"#7CFC8A\">我方 " .. tostring(ev.a) .. "</font>      <font color=\"#FF8A80\">敌方 " .. tostring(ev.e) .. "</font>"
@@ -1622,6 +1670,13 @@ function Play.init(G)
     elseif ev.phase == "skill" then
       G.skillReady[ev.id] = os.clock() + (ev.cd or 0)
       G.playSound("buy")
+    elseif ev.phase == "ability" then   -- 单位技能放出去了：这个单位冷却
+      G.abCD = G.abCD or {}
+      if ev.bid then G.abCD[ev.bid] = os.clock() + (ev.cd or 0) end
+      G.feedLine("<font color=\"#FFD24A\">" .. tostring(ev.name) .. "！</font>", RGB(255, 226, 120))
+    elseif ev.phase == "event" then   -- 战况：敌机突袭、空降增援
+      G.announce(tostring(ev.text), RGB(255, 120, 80), ev.sub, 1.8)
+      G.jingle("alarm")
     elseif ev.phase == "hero" then
       ui.rejoinBtn.Visible = (not ev.alive) and G.battle ~= nil and G.drive == nil
     elseif ev.phase == "drive" then
@@ -1632,6 +1687,8 @@ function Play.init(G)
       local enemy = G.battle and G.battle.enemy
       G.battle = nil
       G.aim = nil
+      G.skyEvent = nil
+      if G.clearMines then G.clearMines() end
       preDrive = "free"
       stopDrive()
       ui.rejoinBtn.Visible = false

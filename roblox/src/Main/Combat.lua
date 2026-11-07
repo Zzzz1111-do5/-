@@ -386,6 +386,90 @@ function Combat.init(G)
     end
   end
 
+  -- 战况（打关卡时按关卡定）：大雾、夜战射程短；雷区开打前埋好；敌机突袭、空降增援到时候来
+  local function eventSetup(B)
+    local ev = B.event
+    if ev.id == "fog" then
+      B.rangeK = (B.rangeK or 1) * 0.7
+    elseif ev.id == "night" then
+      B.rangeK = (B.rangeK or 1) * 0.8
+    elseif ev.id == "minefield" then   -- 中立的雷：谁踩上都炸
+      local pseudo = { def = { mines = { dmg = 300, splash = 16, r = 11 } }, team = 0, dm = 1 }
+      for _ = 1, 16 do
+        Battle.layMine(B, pseudo, (math.random() - 0.5) * (F.width - 80), F.deploy[2] + 100 + math.random() * (F.enemy[1] - F.deploy[2] - 200))
+      end
+    end
+  end
+  local function eventSay(B, text, sub)
+    for st in pairs(B.sts) do
+      if G.states[st.pl] == st then RB:FireClient(st.pl, { phase = "event", text = text, sub = sub }) end
+    end
+  end
+  local function eventStep(B)
+    local ev = B.event
+    if B.evDone then return end
+    if ev.id == "airraid" and B.t >= (ev.at or 8) then
+      B.evDone = true
+      local sx, sz, n = 0, 0, 0
+      for _, u in ipairs(B.units) do
+        if u.alive and u.team == 1 and not u.hero and not u.def.air then sx, sz, n = sx + u.x, sz + u.z, n + 1 end
+      end
+      if n == 0 then return end
+      local x, z = sx / n, sz / n
+      local def = { dmg = 120, splash = 22, vsArmor = 0.9, vsInf = 1.3, vsAir = 0, fxu = "bomber" }
+      local len, cnt, dm = 170, 12, B.enemyDm or 1
+      eventSay(B, "敌机突袭！", "轰炸机从北边飞过来，沿着你的阵线扔炸弹")
+      G.fx({ k = "flyover", a = B.origin + V(x, 95, z + len / 2 + 420), b = B.origin + V(x, 95, z - len / 2 - 420), t = 4.2, jet = true })
+      for i = 1, cnt do
+        local bz = z + len / 2 - (i - 1) * len / (cnt - 1)
+        task.delay(1.55 + (i - 1) * 0.11, function()
+          if B.over then return end
+          Battle.strike(B, 2, def, dm, x + math.random(-8, 8), bz, 5, 1.1, "bomb", nil, B.origin + V(x, 92, bz + 30))
+        end)
+      end
+    elseif ev.id == "reinforce" and B.t >= (ev.at or 10) then
+      B.evDone = true
+      eventSay(B, "敌军空降增援！", "战场中间落下一批步兵和机枪车")
+      local x0, z0 = (math.random() - 0.5) * 160, F.center + 60
+      G.fx({ k = "flyover", a = B.origin + V(x0 + 60, 70, z0 + 380), b = B.origin + V(x0 - 60, 70, z0 - 380), t = 3.2, heli = true })
+      local src = { team = 2, h = 0, dm = B.enemyDm or 1, model = { Parent = B.enemyFolder } }
+      local list = { "inf", "inf", "inf", "inf", "jeep", "jeep" }
+      for i, t in ipairs(list) do
+        task.delay(1.4 + i * 0.25, function()
+          if B.over or not B.cb.spawn then return end
+          local a = (i / #list) * math.pi * 2
+          local px = math.clamp(x0 + math.cos(a) * 26, -Battle.XMAX, Battle.XMAX)
+          local pz = math.clamp(z0 + math.sin(a) * 26, Battle.ZMIN, Battle.ZMAX)
+          local bu = B.cb.spawn(src, t, px, pz)
+          if bu then
+            table.insert(B.units, bu)   -- 不在推演那一步里：直接加
+            G.fx({ k = "drop", p = B.origin + V(px, 1, pz), s = 1 })
+          end
+        end)
+      end
+    else
+      if ev.id ~= "airraid" and ev.id ~= "reinforce" then B.evDone = true end
+    end
+  end
+
+  -- 单位技能：观战时点开自己的一个单位放（按兵种的页签：冲锋、烟幕、全力开火、急速射、加力冲刺），每个单位各自冷却
+  function G.useAbility(st, bid)
+    local B = st.battle
+    if not B or B.over or type(bid) ~= "number" then return end
+    local u = B.byId[bid]
+    if not u or not u.alive or u.owner ~= st or u.hero or u.temp then return end
+    local ab = Config.Abilities[u.def.cat or ""]
+    if not ab then return end
+    if (u.abReady or 0) > B.t then
+      G.toast(st, "「" .. ab.name .. "」还要冷却 " .. math.ceil(u.abReady - B.t) .. " 秒", "info")
+      return
+    end
+    u.abReady = B.t + ab.cd
+    Battle.ability(B, u)
+    RB:FireClient(st.pl, { phase = "ability", bid = bid, id = ab.id, name = ab.name, cd = ab.cd })
+    G.progress(st, "skill", 1)
+  end
+
   local finish, forceEnd
   local function begin(B, sides, title)
     for team, st in pairs(sides) do
@@ -396,7 +480,8 @@ function Combat.init(G)
     end
     placeAll(B)
     for st, team in pairs(B.sts) do
-      RB:FireClient(st.pl, { phase = "start", mode = B.mode, title = title, level = st.data.level, team = team, time = Config.BattleTime, origin = B.origin, boss = B.boss == true })
+      RB:FireClient(st.pl, { phase = "start", mode = B.mode, title = title, level = st.data.level, team = team, time = Config.BattleTime, origin = B.origin, boss = B.boss == true,
+        event = B.event and { id = B.event.id, name = B.event.name, desc = B.event.desc } or nil })
       G.push(st)
       G.heroJoin(st)
     end
@@ -414,6 +499,7 @@ function Combat.init(G)
         end
         G.try("战斗：摆模型", placeAll, B)
         if B.quake then G.try("战斗：火山弹", quakeStep, B, dt) end
+        if B.event then G.try("战斗：战况", eventStep, B) end
         tickT = tickT + dt
         if tickT >= 0.5 then
           tickT = 0
@@ -711,7 +797,10 @@ function Combat.init(G)
     local hm, dm = 1, 1
     if st.enemy[1] then hm, dm = st.enemy[1].hm, st.enemy[1].dm end
     enlistAI(B, list, hm, dm, false, st.plot.Enemies)
-    local title = "第 " .. st.data.level .. " 关" .. (Config.IsBoss(st.data.level) and "（首领）" or "")
+    B.event = Config.EventOf(st.data.level)
+    B.enemyDm, B.enemyFolder = dm, st.plot.Enemies
+    if B.event then eventSetup(B) end
+    local title = "第 " .. st.data.level .. " 关" .. (Config.IsBoss(st.data.level) and "（首领）" or "") .. (B.event and ("  · " .. B.event.name) or "")
     begin(B, { [1] = st }, title)
   end
 

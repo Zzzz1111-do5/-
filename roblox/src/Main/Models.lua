@@ -2114,6 +2114,14 @@ PART.ew = { len = 9, build = function(K, col)
 end }
 -- 巡飞弹：小无人机
 PART.loiter = plane({ len = 6, h = 1.6, dia = 0.7, y = 1.0, span = 5.5, chord = 1.0, wingY = 0, wingZ = 0.4, fins = { 0 }, fin = 0.8 })
+-- 0.9 的新兵种没导入专门的模型时，借外形最像的零件模型（导入了用 def.model 那一个）
+PART.swarmling = PART.loiter
+PART.gunship = PART.bomber
+PART.swarm = PART.mlrs
+PART.laser = PART.cram
+PART.railgun = PART.td
+PART.miner = PART.breacher
+PART.ballistic = PART.sam
 -- 隐身轰炸机：飞翼（中间机身 + 两边后掠翼，锯齿后缘）
 PART.stealth = { len = 20, h = 3, build = function(K, col)
   local dark = RGB(44, 46, 52)

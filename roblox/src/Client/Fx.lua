@@ -229,8 +229,10 @@ function Fx.init(G)
     end
     return f.a:Lerp(b, k) + V(0, f.arc * 4 * k * (1 - k), 0)
   end
+  local stepMinesF = nil
   function G.stepFx()
     local now = os.clock()
+    if stepMinesF then stepMinesF() end
     for i = #flying, 1, -1 do
       local f = flying[i]
       local k = (now - f.t0) / f.dur
@@ -323,13 +325,117 @@ function Fx.init(G)
     f.dead = true
     f.p:Destroy()
     byId[e.id] = nil
-    for _ = 1, 3 do
-      local j = V(math.random() - 0.5, math.random() - 0.5, math.random() - 0.5) * 3
-      beam(e.a, pos + j, 0.2, RGB(255, 226, 130), 0.14)
+    if e.laser then   -- 激光：一道红光，炮弹在半空烧爆
+      beam(e.a, pos, 0.5, RGB(255, 70, 60), 0.18)
+      beam(e.a, pos, 0.18, RGB(255, 230, 220), 0.12)
+    else
+      for _ = 1, 3 do
+        local j = V(math.random() - 0.5, math.random() - 0.5, math.random() - 0.5) * 3
+        beam(e.a, pos + j, 0.2, RGB(255, 226, 130), 0.14)
+      end
     end
     flash(e.a, 1.6)
     boom(pos, 0.45)
     G.playSound("aa", e.a)
+  end
+
+  -- 爱国者拦截弹道导弹：一枚拦截弹拖着白烟飞上去，拦住了就在半空炸成一团（没拦住就擦过去）
+  local function abm(e)
+    local f = e.id and byId[e.id]
+    if not f or f.dead then return end
+    local k = math.clamp((os.clock() - f.t0) / f.dur, 0, 1)
+    local pos = arcPos(f, k)
+    local fl = launch(e.a, pos + (e.miss and V(30, 20, 0) or V(0, 0, 0)), 0.7, 40, "missile")
+    flash(e.a, 2.4)
+    G.playSound("rocket", e.a)
+    if not e.miss then
+      task.delay(0.7, function()
+        local k2 = math.clamp((os.clock() - f.t0) / f.dur, 0, 1)
+        local p2 = arcPos(f, k2)
+        f.dead = true
+        if f.p then f.p:Destroy() end
+        byId[e.id] = nil
+        boom(p2, 2.2)
+        G.playSound("boom", p2, 0.7)
+      end)
+    end
+    return fl
+  end
+
+  -- 地雷：布雷车撒下的（一块扁扁的雷，中间一颗红灯一闪一闪），踩上就炸
+  local mines = {}
+  local function mineFx(e)
+    if not e.id or typeof(e.p) ~= "Vector3" then return end
+    local m = part(CYL, V(0.5, 3.2, 3.2), CFrame.new(e.p.X, e.p.Y + 0.25, e.p.Z) * FLAT, RGB(74, 82, 58), Enum.Material.Metal, 0)
+    local dot = part(BALL, V(0.7, 0.7, 0.7), CFrame.new(e.p + V(0, 0.6, 0)), RGB(255, 60, 40), Enum.Material.Neon, 0)
+    mines[e.id] = { m, dot, t = os.clock() }
+    Debris:AddItem(m, 400)
+    Debris:AddItem(dot, 400)
+  end
+  -- 打完了：剩下的雷都收走
+  function G.clearMines()
+    for id, m in pairs(mines) do
+      for _, p in ipairs(m) do p:Destroy() end
+      mines[id] = nil
+    end
+  end
+  local function mineBoom(e)
+    local m = e.id and mines[e.id]
+    if m then
+      for _, p in ipairs(m) do p:Destroy() end
+      mines[e.id] = nil
+    end
+    boom(e.p, 1.4)
+    G.playSound("boom", e.p)
+  end
+  -- 地雷的红灯：一闪一闪（每帧 stepFx 里调）
+  local function stepMines()
+    local on = (os.clock() % 1) < 0.5
+    for id, m in pairs(mines) do
+      if not m[2].Parent then
+        mines[id] = nil
+      else
+        m[2].Transparency = on and 0 or 0.85
+      end
+    end
+  end
+
+  stepMinesF = stepMines
+
+  -- 电磁炮：一道粗的蓝白光贯穿过去，路上冒火花
+  local function rail(e)
+    beam(e.a, e.b, 1.6, RGB(110, 210, 255), 0.4)
+    beam(e.a, e.b, 0.45, RGB(235, 250, 255), 0.25)
+    flash(e.a, 5)
+    local len = (e.b - e.a).Magnitude
+    for i = 1, 6 do
+      local p = e.a:Lerp(e.b, i / 7) + V(math.random() - 0.5, math.random() - 0.5, math.random() - 0.5) * 2
+      local sp = part(BALL, V(1.4, 1.4, 1.4), CFrame.new(p), RGB(160, 230, 255), Enum.Material.Neon, 0.1)
+      tween(sp, 0.35, { Size = V(4, 4, 4), Transparency = 1 })
+      Debris:AddItem(sp, 0.4)
+    end
+    local dist = (e.a - cam.CFrame.Position).Magnitude
+    if dist < 220 and len > 0 then G.shake(0.25) end
+    G.playSound("cannon", e.a)
+  end
+
+  -- 单位技能：脚下一圈光（颜色按技能），烟幕再冒一圈烟
+  local ABC = { charge = RGB(255, 214, 80), smoke = RGB(200, 200, 196), rapid = RGB(255, 150, 60), barrage = RGB(255, 90, 60), burner = RGB(110, 190, 255) }
+  local function abilityFx(e)
+    local p, s = e.p, (e.s or 10) + 8
+    local ring = part(CYL, V(0.3, s, s), CFrame.new(p.X, p.Y + 0.6, p.Z) * FLAT, ABC[e.id] or RGB(255, 255, 255), Enum.Material.Neon, 0.2)
+    tween(ring, 0.7, { Size = V(0.3, s * 3, s * 3), Transparency = 1 })
+    Debris:AddItem(ring, 0.75)
+    if e.id == "smoke" then
+      for i = 1, 8 do
+        local a = i / 8 * math.pi * 2
+        local q = p + V(math.cos(a) * s * 0.6, 2, math.sin(a) * s * 0.6)
+        local sm = part(BALL, V(8, 8, 8), CFrame.new(q), RGB(214, 214, 210), Enum.Material.SmoothPlastic, 0.3)
+        tween(sm, (e.dur or 6), { Size = V(22, 22, 22), Transparency = 1, CFrame = CFrame.new(q + V(0, 6, 0)) })
+        Debris:AddItem(sm, (e.dur or 6) + 0.1)
+      end
+    end
+    G.playSound("buy", p)
   end
 
   local SHOT = {
@@ -352,6 +458,7 @@ function Fx.init(G)
     repair = { w = 0.16, c = RGB(255, 232, 130), life = 0.05, fl = 1, n = 2, snd = "rifle" },
     ew = { w = 0.18, c = RGB(255, 226, 120), life = 0.05, fl = 1.2, n = 2, snd = "rifle" },
     heavytank = { w = 0.9, c = RGB(255, 170, 80), life = 0.14, fl = 6.5, hit = 1.1, snd = "cannon" },
+    miner = { w = 0.2, c = RGB(255, 220, 120), life = 0.06, fl = 1.2, snd = "rifle" },
   }
   local GUN = {
     rifle = { w = 0.12, c = RGB(255, 236, 150), life = 0.05 },
@@ -569,6 +676,38 @@ function Fx.init(G)
           G.playSound("rocket", e.a)
         elseif e.k == "intercept" then
           intercept(e)
+        elseif e.k == "gshell" then   -- 空中炮艇：炮弹从天上直直地砸下来
+          launch(e.a, e.b, e.t or 1.4, 0, "shell", e.id, 1.3)
+          flash(e.a, 3)
+          G.playSound("cannon", e.a, 0.8)
+        elseif e.k == "ballistic" then   -- 弹道导弹：高高抛起来，拖一道粗白烟
+          launch(e.a, e.b, e.t or 6.5, 320, "cruise", e.id)
+          flash(e.a, 7)
+          G.playSound("rocket", e.a, 0.6)
+          G.playSound("alarm", e.b, 0.5)
+        elseif e.k == "abm" then
+          abm(e)
+        elseif e.k == "rail" then
+          rail(e)
+        elseif e.k == "laser" then
+          beam(e.a, e.b, 0.45, RGB(255, 70, 60), 0.12)
+          beam(e.a, e.b, 0.15, RGB(255, 230, 220), 0.08)
+          flash(e.b, 1.2)
+          G.playSound("aa", e.a, 1.4)
+        elseif e.k == "mine" then
+          mineFx(e)
+        elseif e.k == "mineboom" then
+          mineBoom(e)
+        elseif e.k == "swarm" then   -- 蜂群：发射箱一阵白烟
+          for _ = 1, 3 do
+            local o = V(math.random() - 0.5, 0, math.random() - 0.5) * 6
+            local sm = part(BALL, V(4, 4, 4), CFrame.new(e.p + o), RGB(226, 222, 216), Enum.Material.SmoothPlastic, 0.3)
+            tween(sm, 1.2, { Size = V(12, 12, 12), Transparency = 1, CFrame = CFrame.new(e.p + o + V(0, 8, 0)) })
+            Debris:AddItem(sm, 1.25)
+          end
+          G.playSound("rocket", e.p)
+        elseif e.k == "ability" then
+          abilityFx(e)
         elseif e.k == "boom" then
           boom(e.p, e.s or 1)
           G.playSound("boom", e.p)

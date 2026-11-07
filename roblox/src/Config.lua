@@ -2,7 +2,7 @@
 -- 数值都在这里调：建筑、兵种、关卡敌军、武器、军衔、重生、每日奖励与任务、突袭与约战、战场支援、老兵、补给空投
 local Config = {}
 
-Config.Version = "0.8"
+Config.Version = "0.9"
 Config.SaveKey = "MilitaryTycoon_v1"   -- DataStore 名字（改了就是新存档）
 Config.StartCash = 300
 Config.BaseCap = 4                     -- 没有指挥部时最多几个单位
@@ -37,15 +37,15 @@ Config.Buildings = {
   { id = "house2", name = "居民楼 B", kind = "house", price = 300, income = 10, req = "house1", x = -40, z = -95, size = { 18, 22, 18 } },
   { id = "hq", name = "指挥部", kind = "hq", price = 800, req = "barracks", x = -95, z = 100, size = { 30, 14, 24 }, cap = { 10, 18, 30, 40 }, up = { 3000, 15000, 60000 } },
   { id = "factory1", name = "轻工厂", kind = "factory", price = 900, income = 20, req = "house2", x = -95, z = -45, size = { 26, 13, 22 } },
-  { id = "tankfac", name = "装甲车厂", kind = "mil", units = { "jeep", "ifv", "td", "tank", "breacher", "repair", "heavytank" }, price = 2500, req = "factory1", x = -40, z = 30, size = { 36, 18, 30 } },
+  { id = "tankfac", name = "装甲车厂", kind = "mil", units = { "jeep", "ifv", "td", "tank", "miner", "breacher", "repair", "railgun", "heavytank" }, price = 2500, req = "factory1", x = -40, z = 30, size = { 36, 18, 30 } },
   { id = "house3", name = "居民楼 C", kind = "house", price = 2000, income = 30, req = "factory1", x = 15, z = -95, size = { 18, 30, 18 } },
   { id = "power", name = "发电厂", kind = "power", price = 4000, req = "factory1", x = 15, z = -45, size = { 22, 20, 22 } },
-  { id = "aafac", name = "防空车间", kind = "mil", units = { "aa", "spaag", "cram", "sam", "ew" }, price = 6000, req = "tankfac", x = 15, z = 30, size = { 30, 14, 24 } },
-  { id = "artyfac", name = "炮兵阵地", kind = "mil", units = { "howitzer", "arty", "heavyarty", "mlrs" }, price = 9000, req = "tankfac", x = 80, z = 30, size = { 32, 9, 32 } },
+  { id = "aafac", name = "防空车间", kind = "mil", units = { "aa", "spaag", "cram", "laser", "sam", "ew" }, price = 6000, req = "tankfac", x = 15, z = 30, size = { 30, 14, 24 } },
+  { id = "artyfac", name = "炮兵阵地", kind = "mil", units = { "howitzer", "arty", "heavyarty", "mlrs", "ballistic" }, price = 9000, req = "tankfac", x = 80, z = 30, size = { 32, 9, 32 } },
   { id = "factory2", name = "重工厂", kind = "factory", price = 12000, income = 60, req = "power", x = -40, z = -45, size = { 28, 16, 24 } },
-  { id = "helipad", name = "直升机场", kind = "mil", units = { "heli", "transport", "drone", "loiter" }, price = 20000, req = "factory2", x = 85, z = 100, size = { 48, 3, 48 } },
+  { id = "helipad", name = "直升机场", kind = "mil", units = { "heli", "transport", "drone", "loiter", "swarm" }, price = 20000, req = "factory2", x = 85, z = 100, size = { 48, 3, 48 } },
   -- 空军基地在围墙外面（基地右边），购买按钮在围墙里面靠右（pad 是按钮相对建筑中心的位置）
-  { id = "airbase", name = "空军基地", kind = "mil", units = { "attacker", "fighter", "bomber", "stealth" }, price = 40000, req = "helipad", x = 205, z = -10, size = { 60, 12, 240 }, pad = { -90, 0 } },
+  { id = "airbase", name = "空军基地", kind = "mil", units = { "attacker", "fighter", "gunship", "bomber", "stealth" }, price = 40000, req = "helipad", x = 205, z = -10, size = { 60, 12, 240 }, pad = { -90, 0 } },
   { id = "factory3", name = "军工联合体", kind = "factory", price = 45000, income = 150, req = "factory2", x = 80, z = -45, size = { 30, 20, 26 } },
   { id = "bank", name = "银行", kind = "bank", price = 120000, income = 350, req = "factory3", x = 80, z = -95, size = { 22, 28, 22 } },
   -- 西边工业区（围墙外；西墙南段有工业区大门）：油井（炼油厂加成）、弹药厂、钢铁厂、矿场（算工厂，发电厂、核电站加成）、核电站
@@ -141,7 +141,10 @@ end
 --   prefer 优先打的目标（inf / armor / air）；model 用哪个导入模型（没导入就用零件拼的）；needHQ 指挥部几级才能造；
 --   heal 给附近的友军回血（r 半径、hps 每秒回多少、foot / armor 给步兵还是车辆）；flame 喷火（画成火焰）；camo 伪装（敌人不爱打它）；
 --   kamikaze 一次性：飞到跟前一头撞上（打完不回来，不算损失）；jam 电子干扰（半径 r 里的友军被导弹打中的几率 × p）；
---   stealth 隐身：只有带导弹、够得着 400 格高的（爱国者、战斗机）才打得到
+--   stealth 隐身：只有带导弹、够得着 400 格高的（爱国者、战斗机）才打得到；
+--   lob 从飞机上往下打炮弹（空中炮艇）；swarm 放自杀无人机（n 架、t 兵种）；laser 激光（瞬间命中、画成光束）；pierce 贯穿（电磁炮：一条线上的都打，长度）；
+--   mines 开战时在前方布雷（n 颗、dmg、splash、r 触发半径、re 隔几秒补一颗、more 最多补几颗）；ballistic 弹道导弹（打敌人最密的地方，高抛，只有爱国者拦得住）；
+--   abm 反导（爱国者拦弹道导弹：range、rate、p）；hidden 不在兵工厂里卖（蜂群放出来的小无人机）
 -- 克制：坦克克步兵，直升机、攻击机、反坦克导弹克坦克，防空车、弹炮、单兵防空、爱国者、战斗机克飞机，火炮、迫击炮、轰炸机打扎堆的步兵，拦截炮挡炮弹
 Config.Units = {
   -- 步兵（兵营）
@@ -184,6 +187,12 @@ Config.Units = {
   repair = { name = "抢修车", short = "抢修", cat = "armor", row = 4, lv = 12, ew = 0.5, price = 480, hp = 460, dmg = 7, rate = 0.5, range = 110, speed = 26, size = 14, len = 13,
     armor = true, turret = true, heal = { r = 80, hps = 32, armor = true }, vsArmor = 0.05, vsAir = 0.2, vsInf = 0.7, prefer = "inf", model = "jeep",
     desc = "跟在车队后面，附近的坦克、装甲车、火炮慢慢修好" },
+  railgun = { name = "电磁炮", short = "电磁炮", cat = "armor", row = 4, lv = 21, ew = 0.5, price = 1500, hp = 520, dmg = 360, rate = 5.5, range = 480, speed = 20, size = 18, len = 18,
+    armor = true, turret = true, pierce = 430, vsArmor = 1.3, vsInf = 0.9, prefer = "armor", needHQ = 3, model = "td",
+    desc = "电磁轨道炮：一发蓝光贯穿一整条线，路上的车、人都打穿（越往后越弱）；射程远、装填慢" },
+  miner = { name = "布雷车", short = "布雷", cat = "armor", row = 2, lv = 14, ew = 0.6, price = 800, hp = 700, dmg = 12, rate = 1, range = 130, speed = 24, size = 18, len = 18,
+    armor = true, mines = { n = 10, dmg = 320, splash = 16, r = 11, re = 14, more = 4 }, vsArmor = 0.2, vsInf = 0.8, vsAir = 0, prefer = "inf", needHQ = 2, model = "breacher",
+    desc = "开战就在部队前方撒一片地雷（10 颗，撒在敌人停下来开火的那一带），敌人的车、步兵踩上就炸；之后每 14 秒再补一颗" },
   heavytank = { name = "重型坦克", short = "重坦", cat = "armor", row = 4, lv = 19, ew = 0.5, price = 1800, hp = 2400, dmg = 170, rate = 2.8, range = 240, speed = 17, size = 26, len = 27,
     armor = true, turret = true, splash = 18, vsArmor = 1.15, vsInf = 1.2, prefer = "armor", needHQ = 4, model = "tank",
     desc = "又大又硬：血是主战坦克的三倍多，炮也更狠；走得慢，怕攻击机和反坦克导弹" },
@@ -197,7 +206,11 @@ Config.Units = {
     armor = true, turret = true, reach = 130, airOnly = true, vsAir = 2.2, intercept = { range = 280, rate = 0.35, p = 0.65 }, prefer = "air", needHQ = 2, model = "cram",
     desc = "C-RAM 陆基密集阵：把飞来的炮弹、火箭弹打爆在半空（附近 280 格）；顺手打低空的直升机" },
   sam = { name = "爱国者", short = "爱国者", cat = "aa", row = 5, lv = 18, ew = 0.4, price = 1600, hp = 380, dmg = 520, rate = 7, range = 700, speed = 12, size = 22, len = 22,
-    armor = true, homing = 420, reach = 1000, airOnly = true, vsAir = 1, prefer = "air", needHQ = 3, model = "sam", desc = "爱国者防空导弹：射程最远，一发打掉一架直升机；只打飞机（也只有它和战斗机打得到隐身轰炸机）" },
+    armor = true, homing = 420, reach = 1000, airOnly = true, vsAir = 1, abm = { range = 760, rate = 4, p = 0.6 }, prefer = "air", needHQ = 3, model = "sam",
+    desc = "爱国者防空导弹：射程最远，一发打掉一架直升机；只打飞机（也只有它和战斗机打得到隐身轰炸机），还能拦截敌人的弹道导弹" },
+  laser = { name = "激光防空车", short = "激光", cat = "aa", row = 5, lv = 20, ew = 0.4, price = 1700, hp = 420, dmg = 45, rate = 0.35, range = 300, speed = 22, size = 16, len = 12,
+    armor = true, turret = true, laser = true, reach = 320, vsAir = 2.6, vsArmor = 0.25, vsInf = 0.4, intercept = { range = 300, rate = 0.45, p = 0.85, laser = true },
+    prefer = "air", needHQ = 3, model = "cram", desc = "高能激光：光束一扫，无人机、直升机冒烟掉下来；还能把飞来的炮弹、火箭弹烧爆在半空" },
   ew = { name = "电子战车", short = "电战", cat = "aa", row = 5, lv = 17, ew = 0.4, price = 950, hp = 400, dmg = 8, rate = 0.4, range = 150, speed = 22, size = 20, len = 20,
     armor = true, jam = { r = 230, p = 0.45 }, vsArmor = 0.1, vsAir = 0.6, vsInf = 0.8, reach = 120, prefer = "inf", needHQ = 2, model = "sam",
     desc = "干扰敌人的导弹：附近的友军被反坦克导弹、防空导弹打中的几率少一半多" },
@@ -209,6 +222,9 @@ Config.Units = {
   heavyarty = { name = "重型自行火炮", short = "重炮", cat = "arty", row = 9, lv = 18, ew = 0.6, price = 1500, hp = 420, dmg = 120, rate = 5.5, range = 760, minRange = 120, splash = 36,
     speed = 16, size = 22, len = 24, armor = true, turret = true, vsArmor = 0.9, vsInf = 1.4, prefer = "inf", needHQ = 3, model = "heavyarty",
     desc = "PzH 2000：射程最远的火炮，炮弹大、炸一大片" },
+  ballistic = { name = "弹道导弹车", short = "弹道", cat = "arty", row = 9, lv = 26, ew = 0.3, price = 2600, hp = 360, dmg = 650, rate = 20, range = 1000, minRange = 150, splash = 48,
+    speed = 14, size = 22, len = 22, armor = true, ballistic = true, vsArmor = 1.2, vsInf = 1.3, prefer = "armor", needHQ = 4, model = "sam",
+    desc = "每 20 秒朝敌人扎堆最密的地方打一枚弹道导弹，炸平一大片（满场都打得到）；只有敌人的爱国者拦得住" },
   mlrs = { name = "火箭炮", short = "火箭炮", cat = "arty", row = 9, lv = 12, ew = 0.7, price = 1400, hp = 300, dmg = 60, rate = 10, salvo = 6, range = 700, minRange = 150,
     speed = 18, size = 22, len = 16, armor = true, vsArmor = 0.7, vsInf = 1.3, splash = 26, side = true, prefer = "inf", model = "mlrs", needHQ = 2,
     desc = "一轮六发覆盖一片，射程很远；装填慢、怕近身" },
@@ -224,6 +240,11 @@ Config.Units = {
   loiter = { name = "巡飞弹", short = "巡飞弹", cat = "air", row = 6, lv = 16, ew = 0.6, price = 380, hp = 90, dmg = 420, rate = 1, range = 14, speed = 72, size = 10, len = 7,
     air = true, alt = 40, kamikaze = true, splash = 16, vsArmor = 1.5, vsInf = 1, vsAir = 0, prefer = "armor", model = "drone",
     desc = "一次性的自杀式无人机：飞过去一头撞上，专炸坦克（撞了就没了，不算损失）；路上会被防空打下来" },
+  swarm = { name = "蜂群无人机车", short = "蜂群", cat = "air", row = 7, lv = 23, ew = 0.4, price = 2000, hp = 380, dmg = 0, rate = 11, range = 420, speed = 20, size = 20, len = 16,
+    armor = true, swarm = { n = 4, t = "swarmling" }, vsArmor = 0, vsInf = 0, vsAir = 0, prefer = "armor", needHQ = 3, model = "mlrs",
+    desc = "每 11 秒放出 4 架自杀小无人机，一窝蜂扑向敌人的车（小无人机会被防空、步兵打下来）" },
+  swarmling = { name = "自杀小无人机", short = "小无人机", cat = "air", row = 6, hidden = true, price = 0, hp = 35, dmg = 140, rate = 1, range = 12, speed = 85, size = 6, len = 4,
+    air = true, alt = 32, kamikaze = true, splash = 10, vsArmor = 1.2, vsInf = 1, vsAir = 0, prefer = "armor", model = "drone", desc = "蜂群无人机车放出来的" },
   attacker = { name = "攻击机", short = "攻击机", cat = "air", row = 10, lv = 16, ew = 0.6, price = 2200, hp = 1100, dmg = 160, rate = 1.6, range = 200, speed = 110, size = 26, len = 24,
     air = true, alt = 75, jet = true, turn = 1.1, cone = 0.35, splash = 12, vsArmor = 1.4, vsInf = 1.1, prefer = "armor", model = "attacker",
     desc = "A-10 雷电：低空俯冲，30 毫米机炮扫车队；皮很厚" },
@@ -233,16 +254,42 @@ Config.Units = {
   bomber = { name = "轰炸机", short = "轰炸机", cat = "air", row = 10, lv = 22, ew = 0.4, price = 4500, hp = 2200, dmg = 180, rate = 14, bombs = 8, splash = 34, range = 260, speed = 90,
     size = 44, len = 46, air = true, alt = 170, jet = true, turn = 0.6, cone = 0.25, vsArmor = 0.9, vsInf = 1.5, prefer = "inf", needHQ = 4, model = "bomber",
     desc = "轰-6K：飞到敌人头顶扔一串八颗炸弹，炸平一大片；转弯慢" },
+  gunship = { name = "空中炮艇", short = "炮艇", cat = "air", row = 10, lv = 24, ew = 0.3, price = 3800, hp = 1600, dmg = 95, rate = 1.6, range = 440, speed = 70, size = 40, len = 36,
+    air = true, alt = 175, jet = true, turn = 0.55, orbit = true, cone = 4, lob = true, splash = 20, vsArmor = 0.9, vsInf = 1.4, prefer = "inf", needHQ = 4, model = "bomber",
+    desc = "在战场上空绕大圈，侧舷的 105 毫米炮一发一发往下砸；飞得高，只有防空车、弹炮、激光、爱国者、战斗机够得着" },
   stealth = { name = "隐身轰炸机", short = "隐轰", cat = "air", row = 10, lv = 25, ew = 0.3, price = 6500, hp = 1700, dmg = 260, rate = 16, bombs = 6, splash = 40, range = 260, speed = 110,
     size = 40, len = 34, air = true, alt = 210, jet = true, turn = 0.7, cone = 0.25, stealth = true, vsArmor = 1.1, vsInf = 1.5, prefer = "armor", needHQ = 4, model = "stealth",
     desc = "飞翼隐身轰炸机：雷达看不见，只有爱国者和战斗机打得到；扔六颗重磅炸弹" },
   boss = { name = "猛犸重坦", short = "首领", row = 4, price = 0, hp = 9000, dmg = 220, rate = 3, range = 260, speed = 14, size = 32, len = 30, armor = true, turret = true,
     vsArmor = 1.2, vsInf = 1.2, splash = 22, prefer = "armor", model = "tank", boss = true, desc = "每十关的首领：血极厚" },
 }
+-- 单位技能：观战时点开自己的一个单位（跟随它），按「技能」（电脑按 F）——按兵种的页签：dur 管几秒、cd 冷却几秒；
+--   sp 速度倍数、rate 射击间隔倍数（越小越快）、dmg 伤害倍数、taken 挨打倍数、reload 放的时候马上装填好
+Config.Abilities = {
+  foot = { id = "charge", name = "冲锋", dur = 6, cd = 25, sp = 1.8, dmg = 1.35, desc = "6 秒里跑得快一倍、打得更狠" },
+  armor = { id = "smoke", name = "烟幕", dur = 6, cd = 25, taken = 0.35, desc = "放一圈烟幕：6 秒里挨打只受三成多伤害" },
+  aa = { id = "rapid", name = "全力开火", dur = 6, cd = 25, rate = 0.45, reload = true, desc = "6 秒里射速翻一倍多" },
+  arty = { id = "barrage", name = "急速射", dur = 6, cd = 25, rate = 0.4, reload = true, desc = "马上装填好，6 秒里射速翻一倍多" },
+  air = { id = "burner", name = "加力冲刺", dur = 6, cd = 25, sp = 1.5, rate = 0.6, desc = "6 秒里飞得快一半、打得更快" },
+}
+
+-- 战况：打关卡时每关一个（第 1～3 关、首领关、逢 5 的关没有），开打前信息栏写着，开战时播报
+Config.Events = {
+  { id = "fog", name = "大雾", desc = "能见度低：两边射程都短三成" },
+  { id = "minefield", name = "雷区", desc = "两军中间埋着一片地雷，谁踩上都炸" },
+  { id = "airraid", name = "敌机突袭", desc = "两军快接上火时（开打 8 秒），敌方轰炸机沿你的阵线扔一串炸弹", at = 8 },
+  { id = "reinforce", name = "空降增援", desc = "开打 10 秒，敌军在战场中间空降一批步兵和机枪车", at = 10 },
+  { id = "night", name = "夜战", desc = "天黑了：两边射程短两成" },
+}
+function Config.EventOf(level)
+  if level <= 3 or Config.IsBoss(level) or level % 5 == 0 then return nil end
+  return Config.Events[(level + math.floor(level / 5)) % #Config.Events + 1]
+end
+
 -- 兵工厂的页签和兵种顺序
 Config.Tabs = { { id = "foot", name = "步兵" }, { id = "armor", name = "装甲" }, { id = "aa", name = "防空" }, { id = "arty", name = "炮兵" }, { id = "air", name = "空中" } }
-Config.UnitOrder = { "inf", "mg", "mortar", "sniper", "at", "manpad", "medic", "flamer", "commando", "jeep", "ifv", "td", "tank", "breacher", "repair", "heavytank",
-  "aa", "spaag", "cram", "sam", "ew", "howitzer", "arty", "heavyarty", "mlrs", "heli", "transport", "drone", "loiter", "attacker", "fighter", "bomber", "stealth" }
+Config.UnitOrder = { "inf", "mg", "mortar", "sniper", "at", "manpad", "medic", "flamer", "commando", "jeep", "ifv", "td", "tank", "miner", "breacher", "repair", "railgun", "heavytank",
+  "aa", "spaag", "cram", "laser", "sam", "ew", "howitzer", "arty", "heavyarty", "mlrs", "ballistic", "heli", "transport", "drone", "loiter", "swarm", "attacker", "fighter", "gunship", "bomber", "stealth" }
 -- 玩家本人上阵（小人）：在推演里算一个步兵大小的目标，血量用角色的 Humanoid
 Config.Hero = { hp = 200, size = 3, regen = 6, regenDelay = 5, respawn = 3 }
 

@@ -75,6 +75,7 @@ end
 
 local function hurt(B, u, dmg, src)
   if not u.alive or dmg <= 0 then return false end
+  if u.takenK then dmg = dmg * u.takenK end   -- 技能「烟幕」：少挨打
   if u.hero then
     B.cb.heroHurt(u, dmg, src)
     return false
@@ -133,9 +134,84 @@ local function lob(B, u, x, z, scatter, flight, kind, src)
   local r = math.random() * scatter
   local sx, sz = x + math.cos(a) * r, z + math.sin(a) * r
   nextShell = nextShell + 1
-  table.insert(B.shells, { id = nextShell, t0 = B.t, at = B.t + flight, x = sx, z = sz, team = u.team, def = u.def, dm = u.dm, src = src, kind = kind })
+  table.insert(B.shells, { id = nextShell, t0 = B.t, at = B.t + flight, x = sx, z = sz, team = u.team, def = u.def, dm = u.dm * (u.dmK or 1), src = src, kind = kind })
   B.cb.fx({ k = kind, id = nextShell, u = u.t, a = B.cb.muzzle(u), b = B.cb.world(sx, 0, sz), t = flight })
 end
+
+-- 敌人扎堆最密的地方（弹道导弹打这里）：每个地面敌人 45 格以内有多少兵力（按价钱算），挑最多的
+local function densest(B, team, t)
+  local best, bn = t, -1
+  for _, e in ipairs(B.units) do
+    if e.alive and e.team ~= team and not e.hero and not (e.def.air and (e.y or 0) > 3) then
+      local n = 0
+      for _, o in ipairs(B.units) do
+        if o.alive and o.team ~= team and not (o.def.air and (o.y or 0) > 3) then
+          local dx, dz = o.x - e.x, o.z - e.z
+          if dx * dx + dz * dz < 45 * 45 then n = n + (o.def.price or 50) + 30 end
+        end
+      end
+      if n > bn then best, bn = e, n end
+    end
+  end
+  return best.x, best.z
+end
+
+-- 布雷车：开战在部队前方撒一片雷（敌人的地面单位走近就炸，炸完就没了）；之后隔一会儿在自己前面补一颗
+local nextMine = 0
+local function layMine(B, u, x, z)
+  local m = u.def.mines
+  nextMine = nextMine + 1
+  local mine = { id = nextMine, x = math.clamp(x, -XMAX, XMAX), z = math.clamp(z, ZMIN, ZMAX), team = u.team, r = m.r, dm = u.dm,
+    def = { dmg = m.dmg, splash = m.splash, vsArmor = 1.1, vsInf = 1, vsAir = 0 }, src = { team = u.team, unit = u } }
+  B.mines = B.mines or {}
+  table.insert(B.mines, mine)
+  B.cb.fx({ k = "mine", id = mine.id, p = B.cb.world(mine.x, 0, mine.z), team = u.team })
+end
+local function mineLayStep(B, u, dt)
+  local m = u.def.mines
+  local dir = (u.team == 1) and 1 or -1
+  if not u.mined then
+    u.mined, u.mineMore, u.mineT = true, m.more, m.re
+    -- 撒在敌人停下来开火的那一带：前后两排交错（我方前沿往前约 100、160 格，步兵、装甲车、坦克都在这一带停下来打）
+    for i = 1, m.n do
+      local row = (i % 2 == 0) and 160 or 100
+      layMine(B, u, u.x + (i - (m.n + 1) / 2) * 15 + (math.random() - 0.5) * 8, u.z + dir * (row + (math.random() - 0.5) * 30))
+    end
+    return
+  end
+  u.mineT = u.mineT - dt
+  if u.mineT <= 0 and (u.mineMore or 0) > 0 then
+    u.mineT, u.mineMore = m.re, u.mineMore - 1
+    layMine(B, u, u.x + (math.random() - 0.5) * 80, u.z + dir * (60 + math.random() * 90))
+  end
+end
+local function minesStep(B)
+  local list = B.mines
+  if not list or #list == 0 then return end
+  local i = 1
+  while i <= #list do
+    local m = list[i]
+    local hit = false
+    for _, e in ipairs(B.units) do
+      if e.alive and e.team ~= m.team and not e.hero and not (e.def.air and (e.y or 0) > 2) then
+        local dx, dz = e.x - m.x, e.z - m.z
+        local rr = m.r + e.def.size * 0.3
+        if dx * dx + dz * dz < rr * rr then
+          hit = true
+          break
+        end
+      end
+    end
+    if hit then
+      table.remove(list, i)
+      splash(B, m.team, m.def, m.x, m.z, m.def.splash, m.def.dmg * m.dm, nil, m.src)
+      B.cb.fx({ k = "mineboom", id = m.id, p = B.cb.world(m.x, 0, m.z) })
+    else
+      i = i + 1
+    end
+  end
+end
+Battle.layMine = layMine
 
 -- 支援火力（迫击炮急袭、炮火覆盖、空袭）：从 from（世界坐标）打一发到 (x, z) 附近（scatter 散布），flight 秒后落地；
 -- def 给伤害、溅射、各类目标的倍数（同兵种表），dm 是战力倍数；kind：shell 炮弹（拦截炮能打）/ bomb 炸弹（打不了）
@@ -173,6 +249,53 @@ local function fire(B, u, t, dist)
     B.cb.die(u)
     return
   end
+  if d.swarm then   -- 蜂群：放出几架自杀小无人机，各自去撞（小无人机这一仗打完就没了，不算损失）
+    if B.cb.spawn then
+      local sw = d.swarm
+      for i = 1, sw.n do
+        local a = (i / sw.n) * math.pi * 2
+        local bu = B.cb.spawn(u, sw.t, u.x + math.cos(a) * 6, u.z + math.sin(a) * 6)
+        if bu then
+          bu.y = 4
+          bu.tgt = t
+          table.insert(B.pending, bu)
+        end
+      end
+      B.cb.fx({ k = "swarm", p = B.cb.world(u.x, 3, u.z), n = sw.n })
+    end
+    return
+  end
+  if d.lob then   -- 空中炮艇：从天上往下打炮弹（打移动目标往前估一点）
+    lob(B, u, t.x + (t.vx or 0) * 0.7, t.z + (t.vz or 0) * 0.7, 9, 1.4, "gshell", srcOf(u))
+    return
+  end
+  if d.ballistic then   -- 弹道导弹：打敌人扎堆最密的地方，高高抛起来（只有爱国者拦得住）
+    local x, z = densest(B, u.team, t)
+    lob(B, u, x, z, 6, 6.5, "ballistic", srcOf(u))
+    return
+  end
+  if d.pierce then   -- 电磁炮：一条线贯穿过去，线上的地面敌人都挨打（按离炮口远近排，越往后越弱）
+    local dx, dz = (t.x - u.x) / math.max(dist, 0.01), (t.z - u.z) / math.max(dist, 0.01)
+    local L = d.pierce
+    local hits = {}
+    for _, e in ipairs(B.units) do
+      if e.alive and e.team ~= u.team and not (e.def.air and (e.y or 0) > 12) then
+        local rx, rz = e.x - u.x, e.z - u.z
+        local s = rx * dx + rz * dz
+        if s > 0 and s < L then
+          local px, pz = rx - dx * s, rz - dz * s
+          local w = 4 + e.def.size * 0.4
+          if px * px + pz * pz < w * w then table.insert(hits, { e = e, s = s }) end
+        end
+      end
+    end
+    table.sort(hits, function(a, b) return a.s < b.s end)
+    local src = srcOf(u)
+    local dmg = d.dmg * u.dm * (u.dmK or 1)
+    for i, h in ipairs(hits) do hurt(B, h.e, dmg * math.max(0.4, 1 - 0.15 * (i - 1)) * mult(d, h.e.def), src) end
+    B.cb.fx({ k = "rail", u = u.t, a = B.cb.muzzle(u), b = B.cb.world(u.x + dx * L, 2, u.z + dz * L), n = #hits })
+    return
+  end
   if d.salvo then   -- 火箭炮：一轮几发，陆续发射
     u.salvoLeft = d.salvo
     u.salvoAt = B.t
@@ -189,7 +312,7 @@ local function fire(B, u, t, dist)
     lob(B, u, t.x + (t.vx or 0) * fl * 0.5, t.z + (t.vz or 0) * fl * 0.5, d.foot and 10 or 14, fl, "shell", srcOf(u))
     return
   end
-  local dmg = d.dmg * u.dm
+  local dmg = d.dmg * u.dm * (u.dmK or 1)
   if d.homing then
     missile(B, u, t, dmg, dist, srcOf(u))
     return
@@ -200,11 +323,12 @@ local function fire(B, u, t, dist)
     if d.foot then hitP = hitP * 0.65 end
   end
   if t.hero then hitP = hitP * 0.7 end
+  if d.laser then hitP = 0.97 end   -- 激光：光速，几乎打不偏
   local hit = math.random() < hitP
   local src = srcOf(u)
   if hit then hurt(B, t, dmg * mult(d, t.def), src) end
   if d.splash and not t.def.air then splash(B, u.team, d, t.x, t.z, d.splash, dmg * 0.5, t, src) end
-  B.cb.fx({ k = "shot", u = u.t, a = B.cb.muzzle(u), b = B.cb.aim(t, hit) })
+  B.cb.fx({ k = d.laser and "laser" or "shot", u = u.t, a = B.cb.muzzle(u), b = B.cb.aim(t, hit) })
 end
 
 local function salvoStep(B, u)
@@ -236,8 +360,8 @@ local function shells(B)
       splash(B, s.team, s.def, s.x, s.z, s.def.splash or 10, s.def.dmg * s.dm, nil, s.src)
       local size = 1.3
       if s.kind == "bomb" then size = 1.9 elseif s.def.salvo then size = 1.5 elseif s.def.foot then size = 0.9 end
-      if s.kind == "cruise" then
-        B.cb.fx({ k = "bigboom", p = B.cb.world(s.x, 0, s.z), s = 3.6 })   -- 巡航导弹：大火球、冲击波、震屏
+      if s.kind == "cruise" or s.kind == "ballistic" then
+        B.cb.fx({ k = "bigboom", p = B.cb.world(s.x, 0, s.z), s = (s.kind == "cruise") and 3.6 or 3.2 })   -- 巡航导弹、弹道导弹：大火球、冲击波、震屏
       else
         B.cb.fx({ k = "boom", p = B.cb.world(s.x, 0, s.z), s = size })
       end
@@ -290,7 +414,7 @@ local function interceptStep(B, u, dt)
   local best, bt = nil, math.huge
   local r2 = ic.range * ic.range
   for _, s in ipairs(B.shells) do
-    if not s.dead and s.team ~= u.team and s.kind ~= "bomb" and s.kind ~= "cruise" and not (s.tried and s.tried[u]) and B.t >= s.t0 + (s.at - s.t0) * 0.3 then
+    if not s.dead and s.team ~= u.team and s.kind ~= "bomb" and s.kind ~= "cruise" and s.kind ~= "ballistic" and not (s.tried and s.tried[u]) and B.t >= s.t0 + (s.at - s.t0) * 0.3 then
       local dx, dz = s.x - u.x, s.z - u.z
       if dx * dx + dz * dz < r2 and s.at < bt then best, bt = s, s.at end
     end
@@ -301,8 +425,30 @@ local function interceptStep(B, u, dt)
   best.tried[u] = true
   if math.random() < ic.p then
     best.dead = true
-    B.cb.fx({ k = "intercept", id = best.id, a = B.cb.muzzle(u) })
+    B.cb.fx({ k = "intercept", id = best.id, a = B.cb.muzzle(u), laser = ic.laser })
   end
+end
+
+-- 爱国者反导：盯着飞过来的敌方弹道导弹，隔一会儿打一发拦截弹（每枚导弹每辆车只试一次）
+local function abmStep(B, u, dt)
+  local ab = u.def.abm
+  u.acd = (u.acd or 0) - dt
+  if u.acd > 0 then return end
+  local best, bt = nil, math.huge
+  local r2 = ab.range * ab.range
+  for _, s in ipairs(B.shells) do
+    if not s.dead and s.team ~= u.team and s.kind == "ballistic" and not (s.tried and s.tried[u]) and B.t >= s.t0 + (s.at - s.t0) * 0.35 then
+      local dx, dz = s.x - u.x, s.z - u.z
+      if dx * dx + dz * dz < r2 and s.at < bt then best, bt = s, s.at end
+    end
+  end
+  if not best then return end
+  u.acd = ab.rate
+  best.tried = best.tried or {}
+  best.tried[u] = true
+  local ok = math.random() < ab.p
+  if ok then best.dead = true end
+  B.cb.fx({ k = "abm", id = best.id, a = B.cb.muzzle(u), miss = not ok })
 end
 
 -- 转向：最多每秒 rate 弧度，朝 (dx, dz)
@@ -382,6 +528,7 @@ local function act(B, u, dt)
   u.cd = u.cd - dt
   salvoStep(B, u)
   if d.heal then healStep(B, u, dt) end
+  if d.mines then mineLayStep(B, u, dt) end
   if d.cargo and u.cargo == nil then u.cargo = d.cargo end
   local t = u.tgt
   if t and not (t.alive and canHit(d, t)) then
@@ -420,7 +567,7 @@ local function act(B, u, dt)
       local ready = ((not d.air) or u.y >= d.alt * 0.5) and err < 0.35
       if u.cd <= 0 and ready then
         fire(B, u, t, dist)
-        u.cd = d.rate * (0.85 + math.random() * 0.3)
+        u.cd = d.rate * (0.85 + math.random() * 0.3) * (u.rtK or 1)
       end
     elseif d.turret then
       aimTurret(u, dx, dz, dt)
@@ -433,7 +580,7 @@ local function act(B, u, dt)
   u.vx, u.vz = 0, 0
   if mx ~= 0 or mz ~= 0 then
     local l = math.sqrt(mx * mx + mz * mz)
-    local sp = d.speed * dt * (d.air and 1 or (B.speedK or 1))   -- 战区：沙地、雪地走得慢
+    local sp = d.speed * dt * (d.air and 1 or (B.speedK or 1)) * (u.spK or 1)   -- 战区：沙地、雪地走得慢；技能「冲锋」跑得快
     local nx, nz = mx / l * sp, mz / l * sp
     u.x = u.x + nx
     u.z = u.z + nz
@@ -481,7 +628,7 @@ local function actJet(B, u, dt)
   else
     turn(u, dx, dz, dt, d.turn)
   end
-  u.vx, u.vz = -math.sin(u.h) * d.speed, -math.cos(u.h) * d.speed
+  u.vx, u.vz = -math.sin(u.h) * d.speed * (u.spK or 1), -math.cos(u.h) * d.speed * (u.spK or 1)
   u.x = math.clamp(u.x + u.vx * dt, -JX - 220, JX + 220)
   u.z = math.clamp(u.z + u.vz * dt, JZ0 - 220, JZ1 + 220)
   u.moving = true
@@ -494,7 +641,7 @@ local function actJet(B, u, dt)
     end
   elseif dist <= d.range * (B.rangeK or 1) and err <= d.cone then
     fire(B, u, t, dist)
-    u.cd = d.rate * (0.85 + math.random() * 0.3)
+    u.cd = d.rate * (0.85 + math.random() * 0.3) * (u.rtK or 1)
   end
 end
 
@@ -590,6 +737,14 @@ function Battle.step(B, dt)
   B.deaths = B.deaths or {}
   B.pending = {}
   local U = B.units
+  for _, u in ipairs(U) do   -- 技能（冲锋、烟幕、全力开火、加力）：还在时效里就按它的倍数
+    local b = u.buff
+    if b and B.t < b.t then
+      u.spK, u.rtK, u.dmK, u.takenK = b.sp, b.rate, b.dmg, b.taken
+    elseif b then
+      u.buff, u.spK, u.rtK, u.dmK, u.takenK = nil, nil, nil, nil, nil
+    end
+  end
   for _, u in ipairs(U) do
     if u.alive and not u.hero and not u.driver then
       u.rt = u.rt - dt
@@ -617,12 +772,14 @@ function Battle.step(B, dt)
         act(B, u, dt)
       end
       if d.intercept then interceptStep(B, u, dt) end
+      if d.abm then abmStep(B, u, dt) end
     end
   end
   for _, bu in ipairs(B.pending) do table.insert(U, bu) end
   separate(U)
   shells(B)
   missiles(B)
+  minesStep(B)
   local a, e = 0, 0
   for _, u in ipairs(U) do
     if u.alive and not u.hero then
@@ -634,6 +791,16 @@ function Battle.step(B, dt)
   if a == 0 then return "lose" end
   if B.t >= Config.BattleTime then return "timeout" end
   return nil
+end
+
+-- 单位技能（玩家观战时点的）：按兵种的页签（步兵冲锋、装甲烟幕、防空全力开火、炮兵急速射、空中加力），时效 dur 秒
+function Battle.ability(B, u)
+  local ab = Config.Abilities and Config.Abilities[u.def.cat or ""]
+  if not ab or not u.alive then return nil end
+  u.buff = { t = B.t + ab.dur, sp = ab.sp, rate = ab.rate, dmg = ab.dmg, taken = ab.taken, id = ab.id }
+  if ab.reload then u.cd = math.min(u.cd, 0.2) end   -- 炮兵、防空：马上装填好
+  B.cb.fx({ k = "ability", id = ab.id, p = B.cb.world(u.x, (u.y or 0), u.z), bid = u.bid, s = u.def.size, dur = ab.dur })
+  return ab
 end
 
 -- 关卡敌军：按预算随机买兵（同一关每次都一样）；超过人数上限的预算换成属性加成；首领关多一辆猛犸重坦

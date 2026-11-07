@@ -171,7 +171,7 @@ function UI.init(G)
   local armyL = text(info, { Position = UDim2.fromOffset(14, 38), Size = UDim2.new(1, -28, 0, 20), Text = "部队 0 / 4" })
   local enemyL = text(info, { Position = UDim2.fromOffset(14, 60), Size = UDim2.new(1, -28, 0, 52), TextSize = 14, TextWrapped = true, TextScaled = true, TextYAlignment = Enum.TextYAlignment.Top, TextColor3 = RGB(255, 165, 150) })
   mk("UITextSizeConstraint", { MaxTextSize = 14, MinTextSize = 9 }, enemyL)
-  local rewardL = text(info, { Position = UDim2.fromOffset(14, 112), Size = UDim2.new(1, -28, 0, 20), TextSize = 14, TextColor3 = RGB(255, 214, 90) })
+  local rewardL = text(info, { Position = UDim2.fromOffset(14, 112), Size = UDim2.new(1, -28, 0, 20), TextSize = 14, TextColor3 = RGB(255, 214, 90), RichText = true })
   local rankL = text(info, { Position = UDim2.fromOffset(14, 134), Size = UDim2.new(1, -28, 0, 20), TextSize = 15, Font = FONT, TextColor3 = RGB(255, 216, 106) })
   local xpBg = mk("Frame", { BackgroundColor3 = RGB(40, 44, 50), BorderSizePixel = 0, Position = UDim2.fromOffset(14, 157), Size = UDim2.new(1, -28, 0, 6) }, info)
   round(xpBg, 3)
@@ -343,14 +343,18 @@ function UI.init(G)
   ui.followBtn = button(bbar, mobile and "跟随下一个" or "跟随下一个 Tab", RGB(52, 92, 120), { Size = UDim2.fromOffset(150, 48), LayoutOrder = 3, Visible = false, TextSize = 16 }, function()
     if G.followNext then G.followNext(1) end
   end)
-  ui.autoBtn = button(bbar, mobile and "自动镜头" or "自动镜头 空格", RGB(60, 110, 80), { Size = UDim2.fromOffset(140, 48), LayoutOrder = 4, Visible = false, TextSize = 16 }, function()
+  ui.autoBtn = button(bbar, mobile and "自动镜头" or "自动镜头 空格", RGB(60, 110, 80), { Size = UDim2.fromOffset(140, 48), LayoutOrder = 5, Visible = false, TextSize = 16 }, function()
     if G.specAuto then G.specAuto() end
   end)
-  ui.rejoinBtn = button(bbar, "重返战场", RGB(60, 150, 80), { Size = UDim2.fromOffset(150, 48), LayoutOrder = 5, Visible = false }, function()
+  -- 跟随着自己的单位时：放它的技能（文字、冷却由 Play 每隔一会儿更新）
+  ui.abilBtn = button(bbar, "技能", RGB(176, 128, 34), { Size = UDim2.fromOffset(150, 48), LayoutOrder = 4, Visible = false, TextSize = 16 }, function()
+    if G.useAbility then G.useAbility() end
+  end)
+  ui.rejoinBtn = button(bbar, "重返战场", RGB(60, 150, 80), { Size = UDim2.fromOffset(150, 48), LayoutOrder = 6, Visible = false }, function()
     RA:FireServer("rejoin")
     if G.mode == "battle" then G.setMode("free") end   -- 回去亲自打：镜头跟着自己的小人
   end)
-  ui.exitBtn = button(bbar, mobile and "下车" or "下车（F）", RGB(150, 70, 30), { Size = UDim2.fromOffset(140, 48), LayoutOrder = 6, Visible = false }, function() RA:FireServer("exit") end)
+  ui.exitBtn = button(bbar, mobile and "下车" or "下车（F）", RGB(150, 70, 30), { Size = UDim2.fromOffset(140, 48), LayoutOrder = 7, Visible = false }, function() RA:FireServer("exit") end)
   -- 观战镜头现在是什么（自动 / 跟随谁 / 自由）和怎么操作
   ui.camL = text(root, { AnchorPoint = V2(0.5, 1), Position = UDim2.new(0.5, 0, 1, -206), Size = UDim2.fromOffset(720, 40), TextXAlignment = Enum.TextXAlignment.Center,
     TextYAlignment = Enum.TextYAlignment.Bottom, RichText = true, TextSize = 16, TextStrokeTransparency = 0.45, Visible = false })
@@ -991,7 +995,7 @@ function UI.init(G)
       ui.bTitle.Position, ui.bTitle.Size, ui.bTitle.TextSize = O(0, 2), N(1, 0, 0, 24), 18
       ui.bInfo.Position, ui.bInfo.Size, ui.bInfo.TextSize = O(0, 26), N(1, 0, 0, 20), 15
       place(bbar, V2(0.5, 1), N(0.5, 0, 1, -68), O(700, 44))
-      sizes({ { ui.driveBtn, 140, 44, 16 }, { ui.viewBtn, 104, 44, 16 }, { ui.followBtn, 110, 44, 15 }, { ui.autoBtn, 96, 44, 15 }, { ui.rejoinBtn, 110, 44, 16 }, { ui.exitBtn, 110, 44, 16 } })
+      sizes({ { ui.driveBtn, 120, 44, 15 }, { ui.viewBtn, 96, 44, 15 }, { ui.followBtn, 104, 44, 14 }, { ui.abilBtn, 104, 44, 14 }, { ui.autoBtn, 90, 44, 14 }, { ui.rejoinBtn, 104, 44, 15 }, { ui.exitBtn, 104, 44, 15 } })
       place(ui.camL, V2(0.5, 1), N(0.5, -60, 1, -116), O(560, 36))
       ui.camL.TextSize = 14
       -- 技能：右边一竖列，右手拇指够得着
@@ -1046,7 +1050,7 @@ function UI.init(G)
       ui.bTitle.Position, ui.bTitle.Size, ui.bTitle.TextSize = O(0, 4), N(1, 0, 0, 28), 21
       ui.bInfo.Position, ui.bInfo.Size, ui.bInfo.TextSize = O(0, 33), N(1, 0, 0, 22), 16
       place(bbar, V2(0.5, 1), N(0.5, 0, 1, -78), O(820, 52))
-      sizes({ { ui.driveBtn, 170, 48, 18 }, { ui.viewBtn, 140, 48, 18 }, { ui.followBtn, 160, 48, 16 }, { ui.autoBtn, 150, 48, 16 }, { ui.rejoinBtn, 150, 48, 18 }, { ui.exitBtn, 140, 48, 18 } })
+      sizes({ { ui.driveBtn, 160, 48, 17 }, { ui.viewBtn, 130, 48, 17 }, { ui.followBtn, 150, 48, 16 }, { ui.abilBtn, 150, 48, 16 }, { ui.autoBtn, 140, 48, 16 }, { ui.rejoinBtn, 140, 48, 17 }, { ui.exitBtn, 130, 48, 17 } })
       place(ui.camL, V2(0.5, 1), N(0.5, 0, 1, -206), O(720, 40))
       ui.camL.TextSize = 16
       place(sbar, V2(0.5, 1), N(0.5, 0, 1, -138), O(820, 64))
@@ -1104,7 +1108,7 @@ function UI.init(G)
       if n and n > 0 then table.insert(parts, UNITS[t].short .. "×" .. n) end
     end
     enemyL.Text = (#parts > 0) and ("敌军：" .. table.concat(parts, "  ")) or "敌军：侦察中…"
-    rewardL.Text = "胜利奖励 $" .. Config.Fmt(S.reward or 0)
+    rewardL.Text = "胜利奖励 $" .. Config.Fmt(S.reward or 0) .. (S.event and ("  · <font color=\"#FFAA60\">战况：" .. tostring(S.event.name) .. "</font>") or "")
     rankL.Text = "军衔：" .. tostring(S.rank) .. (S.nextXp and ("   " .. Config.Fmt(S.xp) .. " / " .. Config.Fmt(S.nextXp)) or "（最高）")
     xpFill.Size = UDim2.fromScale(S.nextXp and math.clamp(S.xp / S.nextXp, 0, 1) or 1, 1)
     ratingL.Text = "突袭积分 " .. tostring(S.rating) .. "   对战积分 " .. tostring(S.pvp or Config.Match.start) .. "   击毁 " .. tostring(S.kills)
@@ -1232,6 +1236,7 @@ function UI.init(G)
     ui.followBtn.Visible = fighting and mode == "battle"
     ui.autoBtn.Visible = fighting and mode == "battle" and spec ~= nil and spec.mode ~= "auto"
     ui.camL.Visible = fighting and mode == "battle"
+    if not (fighting and mode == "battle") then ui.abilBtn.Visible = false end
   end
 end
 

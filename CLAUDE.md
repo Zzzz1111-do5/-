@@ -77,6 +77,8 @@
   改完用 `node roblox/tools/rbxl_patch.mjs <原.rbxl> <输出.rbxl>` 只换脚本源码写回（导入的模型、资源号原样保留）；给用户发写回后的 .rbxl，别发 build.mjs 的 rbxlx（会丢模型和他那边的改动）。
   另一个 AI 加的模块：Main/Crates（补给空投）、Skills（支援技能）、Scenery（地形世界、战区）、Client/Anim（建筑动画）、Weather（战区天气）、Guide（指引、小地图）；UI 里有当前目标、建筑升级、手机紧凑排版。
   布阵 / 观战的镜头和点选在 Play.lua 开头的 ctlInit（单独一个函数，Play.init 的局部变量快到 200 个上限）：布阵镜头按屏幕空着的那块框住部署区，点选 / 拖框 / 拖动摆放、成组放下（服务器 Army.placeUnits，直接摆到位）；开战默认观战（自动导播框住交火的单位、点单位跟随）。
+  0.9：新兵种（炮艇 lob、蜂群 swarm 放 swarmling、激光 laser、电磁炮 pierce、布雷 mines（Battle.layMine / minesStep）、弹道导弹 ballistic + 爱国者 abm 拦截），
+  单位技能 Config.Abilities（按 cat，Battle.ability 给 u.buff，Battle.step 换成 spK / rtK / dmK / takenK），战况 Config.Events / EventOf（Combat eventSetup / eventStep）。
   重生：基地里（含已开放的新区域）的楼全部盖好才能重生，最多 Config.Rebirth.max = 3 次，每次开放一块 Config.Areas（基地南边，后墙南门出去；建筑带 area 字段，Config.AreaOpen 判断能不能盖）。不要新加 ModuleScript：rbxl_patch.mjs 只能换已有脚本的源码。
   原模型：`node roblox/tools/export_models.mjs` 把 js/mdl 的烘焙模型导出成 roblox/models/*.glb（Roblox 坐标、按格缩放、部件按 Body / Turret / Rotor / TailRotor 命名、_Front / _Top / _Pivot* 标记；士兵用 v3man.js 摆端枪姿势；LIST 里 drop 去掉起落架、flip 转 180°、gain 提亮太暗的贴图），用户在 Studio「导入 3D」后 Models.loadImported 自动摆正、缩放、建炮塔 / 旋翼的 Motor6D；`roblox/tools/view_glb.html` 检查导出结果。
   这台机器没有 Luau：`node roblox/tools/luacheck.mjs` 查语法和未定义变量（脚本只用 Lua 5.1 写法，不用 +=、continue、类型标注），`python3 roblox/tools/mock/run.py roblox/tools/mock/test.lua [分钟]` 用系统的 liblua5.4 在模拟的 Roblox 里真跑一遍（推演单测、新档、老档、拿枪、开车开飞机、突袭、约战、排位匹配（同服、跨服）、重生、存档读档，再让机器人连续玩；接着在全新的环境里跑 test_match.lua 的对战服务器流程），改完两样都要过。说明见 roblox/README.md。

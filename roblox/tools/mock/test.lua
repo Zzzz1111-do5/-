@@ -175,6 +175,68 @@ do
   check(deadOf(B, "tank", 2) == 2 and (k.missile or 0) >= 4, string.format("无人机绕圈打导弹，打掉两辆坦克（%.0f 秒，坦克打不着它）", B.t))
   check(out <= Battle.JX + 230, string.format("无人机没飞出范围（最远 %.0f）", out))
 end
+-- 0.9 新兵种
+do   -- 空中炮艇：绕圈从天上往下砸炮弹
+  local list = { bu("gunship", 1, 0, 300) }
+  for i = 1, 6 do table.insert(list, bu("inf", 2, (i - 3.5) * 14, 700, { hold = true })) end
+  local B, k = sim(list, 60, true)
+  check((k.gshell or 0) >= 3 and deadOf(B, "inf", 2) >= 3, string.format("空中炮艇从天上打了 %d 发炮弹，炸掉 %d 个步兵班", k.gshell or 0, deadOf(B, "inf", 2)))
+end
+do   -- 蜂群：放自杀小无人机去撞坦克
+  local B, k, sp = sim({ bu("swarm", 1, 0, 300), bu("tank", 2, 0, 640, { hold = true }), bu("tank", 2, 40, 640, { hold = true }) }, 60, true)
+  check(sp >= 8 and (k.swarm or 0) >= 2 and deadOf(B, "tank", 2) >= 1, string.format("蜂群无人机车放出 %d 架小无人机，撞掉 %d 辆坦克", sp, deadOf(B, "tank", 2)))
+end
+do   -- 激光：打飞机、烧炮弹
+  local B, k = sim({ bu("laser", 1, 0, 300), bu("heli", 2, 0, 560, { y = 70, hold = true }), bu("drone", 2, 60, 600, { y = 160 }) }, 40)
+  check((k.laser or 0) >= 4 and deadOf(B, "heli", 2) == 1, string.format("激光防空车打了 %d 道光束，打掉直升机", k.laser or 0))
+  local _, k2 = sim({ bu("laser", 1, 0, 300), bu("inf", 1, 10, 310, { hold = true }),
+    bu("howitzer", 2, -20, 820, { hold = true }), bu("howitzer", 2, 0, 820, { hold = true }), bu("howitzer", 2, 20, 820, { hold = true }) }, 30, true)
+  check((k2.intercept or 0) >= 4, string.format("激光把炮弹烧爆在半空（%d 发里拦下 %d 发）", k2.shell or 0, k2.intercept or 0))
+end
+do   -- 电磁炮：一发打穿一排
+  local list = { bu("railgun", 1, 0, 300) }
+  for i = 1, 4 do table.insert(list, bu("jeep", 2, 0, 560 + i * 30, { hold = true, h = 0 })) end
+  local B = sim(list, 8, true)
+  local hit = 0
+  for _, u in ipairs(B.units) do if u.team == 2 and u.hp < u.max then hit = hit + 1 end end
+  check(hit >= 3, "电磁炮一发贯穿一排车，打到 " .. hit .. " 辆")
+end
+do   -- 布雷车：开战撒雷，敌人的车冲过来踩上就炸
+  local list = { bu("miner", 1, 0, 300, { hold = true }), bu("tank", 1, 40, 280, { hold = true }), bu("tank", 1, -40, 280, { hold = true }) }
+  for i = 1, 8 do table.insert(list, bu((i % 2 == 0) and "jeep" or "inf", 2, (i - 4.5) * 22, 720)) end
+  local B, k = sim(list, 60)
+  check((k.mine or 0) >= 10 and (k.mineboom or 0) >= 1, string.format("布雷车撒了 %d 颗雷，冲过来的敌人踩响 %d 颗", k.mine or 0, k.mineboom or 0))
+  local _ = B
+end
+do   -- 弹道导弹：打敌人最密的地方；敌人有爱国者能拦
+  local list = { bu("ballistic", 1, 0, 250, { hold = true }) }
+  for i = 1, 6 do table.insert(list, bu("inf", 2, (i - 3.5) * 10, 760, { hold = true })) end
+  table.insert(list, bu("inf", 2, 200, 900, { hold = true }))
+  local B, k = sim(list, 50, true)
+  check((k.ballistic or 0) >= 2 and (k.bigboom or 0) >= 1 and deadOf(B, "inf", 2) >= 3, string.format("弹道导弹打了 %d 枚，炸掉扎堆的 %d 个步兵班", k.ballistic or 0, deadOf(B, "inf", 2)))
+  local list2 = { bu("ballistic", 1, 0, 250, { hold = true }), bu("sam", 2, 0, 900, { hold = true }), bu("sam", 2, 40, 900, { hold = true }) }
+  for i = 1, 4 do table.insert(list2, bu("inf", 2, (i - 2.5) * 10, 760, { hold = true })) end
+  local _, k3 = sim(list2, 70, true)
+  check((k3.abm or 0) >= 1, string.format("敌人的爱国者起来拦弹道导弹（%d 次）", k3.abm or 0))
+end
+do   -- 单位技能：冲锋跑得快、烟幕少挨打
+  local a, b = bu("inf", 1, -40, 200), bu("inf", 1, 40, 200)
+  local list = { a, b, bu("inf", 2, -40, 900, { hold = true }), bu("inf", 2, 40, 900, { hold = true }) }
+  local B = { units = {}, shells = {}, missiles = {}, pending = {}, t = 0, byId = {} }
+  for i, u in ipairs(list) do u.bid = i B.byId[i] = u table.insert(B.units, u) end
+  B.cb = { fx = function() end, world = function(x, y, z) return V3(x, 1 + y, z) end, muzzle = function(u) return V3(u.x, 3, u.z) end,
+    aim = function(t) return V3(t.x, 2, t.z) end, hurt = function() end, die = function() end, heroHurt = function() end }
+  local ab = Battle.ability(B, a)
+  for _ = 1, 60 do Battle.step(B, 0.05) end
+  check(ab ~= nil and ab.id == "charge" and (a.z - 200) > (b.z - 200) * 1.6, string.format("步兵「冲锋」：3 秒跑了 %.0f 格，没冲锋的 %.0f 格", a.z - 200, b.z - 200))
+  local tk = bu("tank", 1, 0, 300)
+  B.units = { tk }
+  Battle.ability(B, tk)
+  Battle.step(B, 0.05)
+  local hp0 = tk.hp
+  Battle.damage(B, tk, 100, nil)
+  check(math.abs((hp0 - tk.hp) - 35) < 0.01, string.format("装甲「烟幕」：挨 100 伤害只掉 %.0f 血", hp0 - tk.hp))
+end
 do
   local all = {}
   for i, t in ipairs(Config.UnitOrder) do
@@ -182,7 +244,7 @@ do
     table.insert(all, bu(t, 2, ((i - 1) % 9 - 4) * 50, 940 - math.floor((i - 1) / 9) * 40))
   end
   local B, k, sp, res, out = sim(all, 300)
-  check(res ~= nil, string.format("两边各 25 个兵种混战打完：%s（%.0f 秒，机降 %d 个）", tostring(res), B.t, sp))
+  check(res ~= nil, string.format("两边各 %d 个兵种混战打完：%s（%.0f 秒，机降 / 放出 %d 个）", #Config.UnitOrder, tostring(res), B.t, sp))
   check(out <= Battle.JX + 230, string.format("喷气机没飞出范围（最远 %.0f）", out))
   local parts = {}
   for kk, n in pairs(k) do table.insert(parts, kk .. " " .. n) end
@@ -504,6 +566,18 @@ check(fu ~= nil and (cam.CFrame.Position - fu.Root.CFrame.Position).Magnitude < 
 R.as("client", function() UISv.InputBegan:Fire({ UserInputType = Enum.UserInputType.Keyboard, KeyCode = Enum.KeyCode.Space }, false) end)
 R.run(0.5)
 check(guiText("^自动镜头 ·") ~= nil and not button("^自动镜头").Visible, "空格：回到自动镜头")
+-- 跟随自己的单位：出现技能键，按 F 放（步兵「冲锋」），之后在冷却
+click(button("^跟随下一个"))
+R.run(0.5)
+local ab = button("^冲锋")
+check(ab ~= nil and ab.Visible and guiText("技能「冲锋」") ~= nil, "跟随自己的步兵：出现技能键「" .. tostring(ab and ab.Text) .. "」")
+local na = #R.sent
+R.as("client", function() UISv.InputBegan:Fire({ UserInputType = Enum.UserInputType.Keyboard, KeyCode = Enum.KeyCode.F }, false) end)
+R.run(0.6)
+local abEv = battleEvent(na, "ability")
+check(abEv ~= nil and abEv.id == "charge" and button("^冲锋 %d+ 秒$") ~= nil, "按 F 放出「冲锋」，技能键开始冷却（" .. tostring(button("^冲锋") and button("^冲锋").Text) .. "）")
+R.as("client", function() UISv.InputBegan:Fire({ UserInputType = Enum.UserInputType.Keyboard, KeyCode = Enum.KeyCode.Space }, false) end)
+R.run(0.3)
 -- 拿起步枪：切回自己的小人，对着最近的敌人打
 local rifle = pl.Backpack:FindFirstChild("步枪")
 rifle.Parent = pl.Character
@@ -1047,6 +1121,78 @@ R.removePlayer(p3)
 pl = keep
 R.removePlayer(rival)
 R.run(1)
+
+print("== 战况：敌机突袭、空降增援、雷区、大雾、夜战")
+do
+  local seen = {}
+  for lv = 1, 30 do
+    local ev = Config.EventOf(lv)
+    if ev then seen[ev.id] = true end
+  end
+  local n = 0
+  for _ in pairs(seen) do n = n + 1 end
+  check(n == #Config.Events and Config.EventOf(1) == nil and Config.EventOf(10) == nil, "前 30 关五种战况都有，第 1 关、首领关没有")
+  local function lvWith(id)
+    for lv = 4, 40 do
+      local ev = Config.EventOf(lv)
+      if ev and ev.id == id then return lv end
+    end
+  end
+  local function fight(id, uid, secs)
+    local lv = lvWith(id)
+    local own = { house1 = true, barracks = true, house2 = true, hq = true, factory1 = true, tankfac = true }
+    local arm = {}
+    for i = 1, 3 do table.insert(arm, { t = "inf", x = (i - 2) * 30, z = 300 }) end
+    R.store[Config.SaveKey .. "/u" .. uid] = { v = 2, cash = 5000, level = lv, best = lv, owned = own, hq = 2, tech = 3, army = arm, weapons = { rifle = true }, t = os.time() - 10 }
+    local p = join("Ev" .. id, uid)
+    local keep = pl
+    pl = p
+    R.run(2)
+    local n1 = #R.sent
+    local info = guiText("战况：")
+    click(button("^开战"))
+    R.run(secs)
+    local st = battleEvent(n1, "start")
+    return p, keep, n1, lv, st, info
+  end
+  local p, keep, n1, lv, st, info = fight("airraid", 5101, 13)
+  check(info ~= nil and st ~= nil and st.event and st.event.id == "airraid" and tostring(st.title):find("敌机突袭") ~= nil, "第 " .. lv .. " 关的战况写在信息栏、开战标题上：" .. tostring(st and st.title))
+  local ev1 = battleEvent(n1, "event")
+  local bombs = 0
+  for i = n1 + 1, #R.sent do
+    local e = R.sent[i]
+    if e.name == "Fx" then
+      for _, f in ipairs(e.args[1] or {}) do if f.k == "bomb" and f.u == "bomber" then bombs = bombs + 1 end end
+    end
+  end
+  check(ev1 ~= nil and tostring(ev1.text):find("敌机突袭") and bombs >= 8, "开打 8 秒：敌机突袭（播报、扔了 " .. bombs .. " 颗炸弹）")
+  R.removePlayer(p)
+  pl = keep
+  R.run(1)
+  p, keep, n1, lv = fight("reinforce", 5102, 14)
+  local temp = 0   -- 落下来的（打完敌军区会清空，所以数空降的特效）
+  for i = n1 + 1, #R.sent do
+    local e = R.sent[i]
+    if e.name == "Fx" then for _, f in ipairs(e.args[1] or {}) do if f.k == "drop" then temp = temp + 1 end end end
+  end
+  check(battleEvent(n1, "event") ~= nil and temp >= 4, "第 " .. lv .. " 关开打 10 秒：敌军空降增援（落下 " .. temp .. " 个）")
+  R.removePlayer(p)
+  pl = keep
+  R.run(1)
+  p, keep, n1, lv = fight("minefield", 5103, 2)
+  local mines = 0
+  for i = n1 + 1, #R.sent do
+    local e = R.sent[i]
+    if e.name == "Fx" then
+      for _, f in ipairs(e.args[1] or {}) do if f.k == "mine" and f.team == 0 then mines = mines + 1 end end
+    end
+  end
+  check(mines >= 16, "第 " .. lv .. " 关的雷区：开打前两军中间埋了 " .. mines .. " 颗雷")
+  R.removePlayer(p)
+  pl = keep
+  R.run(1)
+  check(#R.errors == 0, "战况这一段没报错")
+end
 
 print("== 存档服务坏了（比如 Studio 没开 API 访问）")
 R.dsFail = true

@@ -137,6 +137,7 @@ function Weather.init(G)
 
   local cur, w, want = nil, 0, nil
   local checkT, appliedKey = 0, nil
+  local baseClock = nil   -- 夜战前的时间（打完放回去）
   function G.stepWeather(dt)
     checkT = checkT - dt
     if checkT <= 0 then
@@ -167,7 +168,7 @@ function Weather.init(G)
     end
     -- 天色（没变就不改）
     local k = cur and w or 0
-    local key = tostring(cur) .. string.format("%.3f", k)
+    local key = tostring(cur) .. string.format("%.3f", k) .. tostring(G.skyEvent)   -- 战况（大雾、夜战）也算在里面
     if key == appliedKey then return end
     if not base then grab() end
     if not base then return end
@@ -185,6 +186,20 @@ function Weather.init(G)
     if clouds then
       clouds.Cover = base.cover + (s.cover - base.cover) * k
       clouds.Color = base.cloud:Lerp(s.cloud, k)
+    end
+    -- 战况：大雾雾气浓；夜战天黑（打完把时间放回去）
+    local ev = G.skyEvent
+    if ev == "fog" then
+      atm.Density = math.min(0.9, atm.Density + 0.32)
+      atm.Haze = atm.Haze + 3
+    end
+    if ev == "night" then
+      if not baseClock then baseClock = Lighting.ClockTime end
+      Lighting.ClockTime = 21.6
+      cc.Brightness = cc.Brightness - 0.03
+    elseif baseClock then
+      Lighting.ClockTime = baseClock
+      baseClock = nil
     end
   end
   function G.weatherNow() return cur, w end

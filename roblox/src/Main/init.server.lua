@@ -116,7 +116,7 @@ function G.push(st)
     raidCD = math.max(0, math.ceil((st.raidCD or 0) - os.clock())), power = G.powerOf(d),
     pvp = d.pvp, pvpWins = d.pvpWins, pvpGames = d.pvpGames, match = G.matchInfo and G.matchInfo(st) or nil, matchServer = G.matchServer, teleporting = st.teleporting == true,
     skills = G.skillInfo and G.skillInfo(st) or nil, vets = G.vetCount and G.vetCount(st) or 0, wins = d.wins or 0,
-    crate = st.crate and st.crate.landed and st.crate.pos or nil,
+    crate = st.crate and st.crate.landed and st.crate.pos or nil, event = Config.EventOf(d.level),
   })
   if st.ls then
     st.ls.cash.Value = math.floor(d.cash)
@@ -301,6 +301,7 @@ local ACT = {
   match = function(st) if G.matchJoin then G.matchJoin(st) end end,
   matchCancel = function(st) if G.matchCancel then G.matchCancel(st) end end,
   skill = function(st, a, b, c) if G.useSkill then G.useSkill(st, a, b, c) end end,
+  ability = function(st, a) if G.useAbility then G.useAbility(st, a) end end,
 }
 -- 对战服务器里只打那一场排位赛
 local MATCHBLOCK = { battle = true, raid = true, duel = true, duelYes = true, match = true, rebirth = true }
