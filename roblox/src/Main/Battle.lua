@@ -59,6 +59,7 @@ local function pick(U, u)
     if e.alive and e.team ~= u.team and canHit(d, e) then
       local dx, dz = e.x - u.x, e.z - u.z
       local s = math.sqrt(dx * dx + dz * dz)
+      if d.static and s > d.range then s = s + 2000 end   -- 固定阵地（密集阵）走不过去：射程里的先打
       if d.minRange and s < d.minRange then s = s + 400 end
       if prefers(d, e.def) then s = s * 0.6 end
       if e.def.decoy then s = s * 0.45 end
@@ -550,12 +551,13 @@ local function act(B, u, dt)
     elseif dist > range * 0.92 and not (u.hold and dist > range * 1.6) then
       mx, mz = dx, dz              -- 够不着：往前走（守方等敌人走近了才出击）
     end
+    if d.static then mx, mz = 0, 0 end   -- 固定阵地（密集阵）：不挪窝，只转炮塔
     if dist <= range and not tooClose then
       inRange = true
       local err = 0
       if d.turret then
         err = aimTurret(u, dx, dz, dt)
-        if mx == 0 and mz == 0 then turn(u, dx, dz, dt, 0.8) end   -- 停下打的时候车身慢慢转正
+        if mx == 0 and mz == 0 and not d.static then turn(u, dx, dz, dt, 0.8) end   -- 停下打的时候车身慢慢转正（固定阵地不转）
       elseif d.side then
         turn(u, dz, -dx, dt, 1.6)  -- 火箭炮发射箱朝右：右侧对准目标
         local want = math.atan2(-dz, dx)
@@ -573,14 +575,24 @@ local function act(B, u, dt)
       aimTurret(u, dx, dz, dt)
     end
   end
+  local liftK = 1
   if d.air then
-    if u.y < wantY then u.y = math.min(wantY, u.y + 16 * dt) elseif u.y > wantY then u.y = math.max(wantY, u.y - 22 * dt) end
+    if u.y < wantY then
+      -- 往上：垂直速度一点点加上去（旋翼转起来、慢慢离地），快到高度了收着点；巡飞弹、小无人机是弹射出去的，照旧
+      local vmax = d.kamikaze and 16 or math.min(16, (wantY - u.y) * 1.5 + 2)
+      u.vy = d.kamikaze and 16 or math.min(vmax, (u.vy or 0) + 20 * dt)
+      u.y = math.min(wantY, u.y + u.vy * dt)
+    else
+      u.vy = 0
+      if u.y > wantY then u.y = math.max(wantY, u.y - 22 * dt) end
+    end
+    if not d.kamikaze then liftK = math.clamp((u.y - 2) / 14, 0, 1) end   -- 还没离地十几格：先往上升，不往前冲
   end
   u.moving = false
   u.vx, u.vz = 0, 0
   if mx ~= 0 or mz ~= 0 then
     local l = math.sqrt(mx * mx + mz * mz)
-    local sp = d.speed * dt * (d.air and 1 or (B.speedK or 1)) * (u.spK or 1)   -- 战区：沙地、雪地走得慢；技能「冲锋」跑得快
+    local sp = d.speed * dt * (d.air and liftK or (B.speedK or 1)) * (u.spK or 1)   -- 战区：沙地、雪地走得慢；技能「冲锋」跑得快
     local nx, nz = mx / l * sp, mz / l * sp
     u.x = u.x + nx
     u.z = u.z + nz
@@ -598,7 +610,27 @@ local function actJet(B, u, dt)
   local d = u.def
   u.cd = u.cd - dt
   bombStep(B, u)
-  if u.y < d.alt then u.y = math.min(d.alt, u.y + 26 * dt) end
+  -- 起飞：开战时飞机停在地上——先顺着机头滑跑加速（约 1.6 秒到一半巡航速度），离地后爬升率一点点加上去（机头跟着抬起来），
+  -- 离巡航高度还剩 30 格开始慢慢改平；速度继续加到巡航。空中出来的（已经过了一半高度）直接按巡航速度飞
+  local vmax = d.speed * (u.spK or 1)
+  if u.spd == nil then u.spd = (u.y >= d.alt * 0.5) and vmax or 0 end
+  local rolling = u.y <= 0.05 and u.spd < d.speed * 0.5
+  if rolling then
+    u.spd = math.min(d.speed * 0.5, u.spd + d.speed * 0.32 * dt)
+  elseif u.spd < vmax then
+    u.spd = math.min(vmax, u.spd + d.speed * 0.25 * dt)
+  else
+    u.spd = math.max(vmax, u.spd - d.speed * 0.5 * dt)   -- 加力结束：慢慢减回巡航
+  end
+  if not rolling and u.y < d.alt then
+    local want = math.min(26, u.spd * 0.38) * math.clamp((d.alt - u.y) / 30, 0.08, 1)   -- 爬升角最多约 21°（慢的无人机、轰炸机也不会翘得太陡）
+    u.vy = math.min(want, (u.vy or 0) + 24 * dt)
+    u.y = math.min(d.alt, u.y + u.vy * dt)
+  else
+    u.vy = 0
+  end
+  u.pitch = math.atan2(u.vy, math.max(u.spd, 1))   -- 机头抬起的角度（模型跟着抬）
+  local tk = rolling and 0 or math.clamp(u.y / 25, 0.25, 1)   -- 滑跑时不转弯，刚离地转得慢
   local t = u.tgt
   if t and not (t.alive and canHit(d, t)) then
     u.tgt, u.rt, t = nil, 0, nil
@@ -611,24 +643,26 @@ local function actJet(B, u, dt)
     err = math.abs(wrap(math.atan2(-dx, -dz) - u.h))
   end
   local R = d.speed / d.turn   -- 转弯半径
-  if out then
-    turn(u, -u.x, F.center - u.z, dt, d.turn)
+  if tk == 0 then
+    -- 还在跑道上：直着跑
+  elseif out then
+    turn(u, -u.x, F.center - u.z, dt, d.turn * tk)
   elseif not t then
-    turn(u, -u.x, F.center - u.z, dt, d.turn * 0.5)   -- 没有目标：在战场上空盘旋
+    turn(u, -u.x, F.center - u.z, dt, d.turn * 0.5 * tk)   -- 没有目标：在战场上空盘旋
   elseif d.orbit and dist < d.range * 0.8 then
     -- 绕目标转圈：切线方向（挑和现在机头同一边的），离得远往里收、太近往外放
     local tx, tz = -dz / dist, dx / dist
     if tx * -math.sin(u.h) + tz * -math.cos(u.h) < 0 then tx, tz = -tx, -tz end
     local k = (dist - d.range * 0.55) / (d.range * 0.55)
-    turn(u, tx + dx / dist * k, tz + dz / dist * k, dt, d.turn)
+    turn(u, tx + dx / dist * k, tz + dz / dist * k, dt, d.turn * tk)
   elseif u.extendT and B.t < u.extendT then
     -- 冲过头了：直飞拉开距离
   elseif dist < R * 1.3 and err > 1.6 then
     u.extendT = B.t + 1.4 + R / d.speed
   else
-    turn(u, dx, dz, dt, d.turn)
+    turn(u, dx, dz, dt, d.turn * tk)
   end
-  u.vx, u.vz = -math.sin(u.h) * d.speed * (u.spK or 1), -math.cos(u.h) * d.speed * (u.spK or 1)
+  u.vx, u.vz = -math.sin(u.h) * u.spd, -math.cos(u.h) * u.spd
   u.x = math.clamp(u.x + u.vx * dt, -JX - 220, JX + 220)
   u.z = math.clamp(u.z + u.vz * dt, JZ0 - 220, JZ1 + 220)
   u.moving = true
@@ -665,8 +699,8 @@ local function separate(U)
             end
             local push = math.min(1.2, (need - dd) * 0.5)
             local ux, uz = dx / dd, dz / dd
-            if not a.driver then a.x, a.z = a.x - ux * push, a.z - uz * push end
-            if not b.driver then b.x, b.z = b.x + ux * push, b.z + uz * push end
+            if not a.driver and not a.def.static then a.x, a.z = a.x - ux * push, a.z - uz * push end   -- 固定阵地不被挤走
+            if not b.driver and not b.def.static then b.x, b.z = b.x + ux * push, b.z + uz * push end
           end
         end
       end

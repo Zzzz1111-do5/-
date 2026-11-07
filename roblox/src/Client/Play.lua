@@ -1290,7 +1290,9 @@ function Play.init(G)
     local lv = root.CFrame.LookVector
     local h = math.atan2(-lv.X, -lv.Z)
     local def = UNITS[ev.t]
-    G.drive = { bid = ev.bid, t = ev.t, origin = o, x = p.X, z = p.Z, y = def.air and math.max(def.alt, p.Y - 1) or 0, h = h, ty = 0, spd = def.speed, roll = 0,
+    -- 喷气机接手时可能还在跑道上 / 爬升：从它现在的高度、速度接着飞（不一下子跳到巡航高度）
+    local y0 = def.air and (def.jet and math.max(0, p.Y - 1) or math.max(def.alt, p.Y - 1)) or 0
+    G.drive = { bid = ev.bid, t = ev.t, origin = o, x = p.X, z = p.Z, y = y0, h = h, ty = 0, spd = def.jet and y0 < 30 and def.speed * 0.6 or def.speed, roll = 0, pitch = 0,
       camYaw = h, camPitch = math.rad(def.air and 20 or 16), sendT = 0, nextFire = os.clock() + (ev.cd or 0), firing = false, model = m, clone = G.cloneOf(m) }
     G.drive.cf = root.CFrame
     if G.mode ~= "drive" then preDrive = G.mode end
@@ -1301,7 +1303,9 @@ function Play.init(G)
     ui.upBtn.Visible = G.mobile and def.air == true
     ui.downBtn.Visible = G.mobile and def.air == true
     local tip
-    if def.jet then
+    if def.static then
+      tip = G.mobile and "固定阵地：转镜头瞄准，按「开火」" or "固定阵地（只转炮塔）：鼠标瞄准、按住左键开火，右键拖动转镜头"
+    elseif def.jet then
       tip = G.mobile and "摇杆左右转弯、上下加减速，按住「升高」「降低」调高度，转镜头瞄准，按「开火」" or "W / S 加减速，A / D 转弯，空格升高、C 降低，鼠标瞄准、按住左键开火"
       if def.bombs then tip = tip .. "；轰炸机按一下扔一串炸弹（落在飞机前方）" end
     else
@@ -1336,6 +1340,7 @@ function Play.init(G)
       dr.z = dr.z - math.cos(dr.h) * dr.spd * dt
       if UIS:IsKeyDown(Enum.KeyCode.Space) or dr.climb == 1 then dr.y = math.min(220, dr.y + 40 * dt) end
       if UIS:IsKeyDown(Enum.KeyCode.C) or UIS:IsKeyDown(Enum.KeyCode.LeftControl) or dr.climb == -1 then dr.y = math.max(40, dr.y - 40 * dt) end
+      if dr.y < 40 then dr.y = math.min(40, dr.y + dr.spd * 0.3 * dt) end   -- 接手时还在起飞：自己爬到最低高度
     elseif def.air then
       local yaw = dr.camYaw
       local fwd, right = V(-math.sin(yaw), 0, -math.cos(yaw)), V(math.cos(yaw), 0, -math.sin(yaw))
@@ -1346,6 +1351,8 @@ function Play.init(G)
       if UIS:IsKeyDown(Enum.KeyCode.Space) or dr.climb == 1 then dr.y = math.min(150, dr.y + 30 * dt) end
       if UIS:IsKeyDown(Enum.KeyCode.C) or UIS:IsKeyDown(Enum.KeyCode.LeftControl) or dr.climb == -1 then dr.y = math.max(def.cargo and 6 or 15, dr.y - 30 * dt) end
       dr.h = dr.h + wrap(yaw - dr.h) * math.min(1, dt * 3)
+    elseif def.static then
+      -- 固定阵地（密集阵）：车不动，只转炮塔
     else
       local throttle = -mv.Z
       dr.h = dr.h - mv.X * 1.4 * dt
@@ -1364,7 +1371,12 @@ function Play.init(G)
     dr.aim = aim
     local rel = aim - dr.origin
     if def.turret then dr.ty = wrap(math.atan2(-(rel.X - dr.x), -(rel.Z - dr.z)) - dr.h) end
-    dr.cf = CFrame.new(dr.origin + V(dr.x, 1 + dr.y, dr.z)) * CFrame.Angles(0, dr.h, 0) * CFrame.Angles(0, 0, dr.roll)
+    if def.jet then   -- 机头跟着爬升 / 俯冲抬低（按这一帧的升降速度）
+      local vy = (dr.y - (dr.py or dr.y)) / math.max(dt, 1 / 240)
+      dr.pitch = dr.pitch + (math.clamp(math.atan2(vy, dr.spd), -0.4, 0.4) - dr.pitch) * math.min(1, dt * 5)
+    end
+    dr.py = dr.y
+    dr.cf = CFrame.new(dr.origin + V(dr.x, 1 + dr.y, dr.z)) * CFrame.Angles(0, dr.h, 0) * CFrame.Angles(dr.pitch, 0, 0) * CFrame.Angles(0, 0, dr.roll)
     dr.sendT = dr.sendT + dt
     local fire = nil
     local now = os.clock()

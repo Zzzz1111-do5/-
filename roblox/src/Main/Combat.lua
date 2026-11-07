@@ -190,10 +190,12 @@ function Combat.init(G)
   local function placeAll(B)
     for _, u in ipairs(B.units) do
       if u.alive and not u.hero and u.root and u.root.Parent then
-        if u.px == nil or math.abs(u.x - u.px) > 0.02 or math.abs(u.z - u.pz) > 0.02 or math.abs(u.y - u.py) > 0.02 or math.abs(u.h - u.ph) > 0.004 then
-          u.px, u.pz, u.py, u.ph = u.x, u.z, u.y, u.h
+        local pitch = u.pitch or 0
+        if u.px == nil or math.abs(u.x - u.px) > 0.02 or math.abs(u.z - u.pz) > 0.02 or math.abs(u.y - u.py) > 0.02 or math.abs(u.h - u.ph) > 0.004 or math.abs(pitch - (u.ppitch or 0)) > 0.004 then
+          u.px, u.pz, u.py, u.ph, u.ppitch = u.x, u.z, u.y, u.h, pitch
           local cf = G.unitCF(B.origin, u.x, u.y, u.z, u.h)
           if u.def.air and u.moving and not u.def.jet then cf = cf * CFrame.Angles(-0.14, 0, 0) end   -- 直升机往前飞时低头（喷气机的坡度客户端算）
+          if u.def.jet and pitch > 0.002 then cf = cf * CFrame.Angles(pitch, 0, 0) end   -- 喷气机起飞爬升：机头抬起来
           u.root.CFrame = cf
         end
         local ty = math.floor((u.ty or 0) * 50 + 0.5) / 50
@@ -326,6 +328,11 @@ function Combat.init(G)
     local dx, dz = x - bu.x, z - bu.z
     local dist = math.sqrt(dx * dx + dz * dz)
     if dist > maxStep then x, z = bu.x + dx / dist * maxStep, bu.z + dz / dist * maxStep end
+    if def.static then   -- 固定阵地（密集阵）：只能转炮塔瞄准、开火，车不动
+      bu.vx, bu.vz, bu.moving = 0, 0, false
+      if type(ty) == "number" and ty == ty then bu.ty = ty end
+      return
+    end
     local ox, oz = bu.x, bu.z
     if def.jet then
       bu.x = math.clamp(x, -Battle.JX, Battle.JX)
@@ -339,7 +346,12 @@ function Combat.init(G)
     bu.h = h
     bu.moving = dist > 0.05
     if def.air then
-      bu.y = (type(y) == "number" and y == y) and math.clamp(y, def.cargo and 5 or 12, def.jet and 230 or 160) or def.alt
+      local oy = bu.y
+      bu.y = (type(y) == "number" and y == y) and math.clamp(y, def.jet and 0 or (def.cargo and 5 or 12), def.jet and 230 or 160) or def.alt   -- 喷气机接手时可能还在起飞
+      if def.jet then   -- 别的玩家看到的机头跟着升降（AI 不推演玩家开的飞机，这里按升降速度算）
+        bu.spd = math.max(dist / step, def.speed * 0.6)
+        bu.pitch = math.clamp(math.atan2((bu.y - oy) / step, bu.spd), -0.4, 0.4)
+      end
     end
     if type(ty) == "number" and ty == ty then bu.ty = ty end
   end
@@ -650,6 +662,7 @@ function Combat.init(G)
         if u then
           if bu.alive then   -- 活着的开回战前的阵位，下一仗满血；攒老兵经验
             u.x, u.y, u.z, u.h = bu.x, bu.y, bu.z, bu.h
+            u.pv = bu.def.jet and bu.spd or nil   -- 喷气机按打仗时的速度接着飞回去（不在半空一下停住）
             G.goTo(u, u.sx, u.sz)
             vetGain(st, u, bu, promos)
           elseif bu.spent then   -- 巡飞弹撞上去了：用掉了，不算损失

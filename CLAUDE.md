@@ -79,6 +79,9 @@
   布阵 / 观战的镜头和点选在 Play.lua 开头的 ctlInit（单独一个函数，Play.init 的局部变量快到 200 个上限）：布阵镜头按屏幕空着的那块框住部署区，点选 / 拖框 / 拖动摆放、成组放下（服务器 Army.placeUnits，直接摆到位）；开战默认观战（自动导播框住交火的单位、点单位跟随）。
   0.9：新兵种（炮艇 lob、蜂群 swarm 放 swarmling、激光 laser、电磁炮 pierce、布雷 mines（Battle.layMine / minesStep）、弹道导弹 ballistic + 爱国者 abm 拦截），
   单位技能 Config.Abilities（按 cat，Battle.ability 给 u.buff，Battle.step 换成 spK / rtK / dmK / takenK），战况 Config.Events / EventOf（Combat eventSetup / eventStep）。
+  0.9.1：兵种 static = true 是固定阵地（拦截炮、激光防空，用密集阵模型）：Battle.act 不挪、车身不转，separate 不推，pick 射程外的目标排后，Combat.driveInput 只收炮塔角，Army.buyUnit 直接架在阵位上。
+  起飞：Battle.actJet 开战时 u.spd 从 0 滑跑（不转弯）→ 一半巡航速度离地 → 爬升率 u.vy 慢慢加上、近巡航高度改平，u.pitch 给 Combat.placeAll 抬机头；
+  直升机 act 里先垂直拔高（liftK）；基地里 Army.stepPath 的飞机按剩余路程加减速（u.pv）、机头随升降（u.bp），喷气机落阵位是边飞边降到上空 30 格再慢慢落下（jetLanding）。
   重生：基地里（含已开放的新区域）的楼全部盖好才能重生，最多 Config.Rebirth.max = 3 次，每次开放一块 Config.Areas（基地南边，后墙南门出去；建筑带 area 字段，Config.AreaOpen 判断能不能盖）。不要新加 ModuleScript：rbxl_patch.mjs 只能换已有脚本的源码。
   宣传片（roblox/tools/trailer/，视频不进仓库）：record.lua 在模拟里盖满基地、真打一关，录场景和逐帧轨迹 → render.html（WebGL 渲染器，原模型、阴影、粒子）+ timeline.js（64 秒分镜、字幕卡）由 render.mjs 用 Playwright 逐帧截图 → audio.mjs 程序合成配乐与音效（按推演里的开火、爆炸点放）→ ffmpeg 出 MP4；用法见 roblox/README.md「宣传片」。
   原模型：`node roblox/tools/export_models.mjs` 把 js/mdl 的烘焙模型导出成 roblox/models/*.glb（Roblox 坐标、按格缩放、部件按 Body / Turret / Rotor / TailRotor 命名、_Front / _Top / _Pivot* 标记；士兵用 v3man.js 摆端枪姿势；LIST 里 drop 去掉起落架、flip 转 180°、gain 提亮太暗的贴图），用户在 Studio「导入 3D」后 Models.loadImported 自动摆正、缩放、建炮塔 / 旋翼的 Motor6D；`roblox/tools/view_glb.html` 检查导出结果。

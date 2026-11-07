@@ -193,6 +193,29 @@ do   -- 激光：打飞机、烧炮弹
     bu("howitzer", 2, -20, 820, { hold = true }), bu("howitzer", 2, 0, 820, { hold = true }), bu("howitzer", 2, 20, 820, { hold = true }) }, 30, true)
   check((k2.intercept or 0) >= 4, string.format("激光把炮弹烧爆在半空（%d 发里拦下 %d 发）", k2.shell or 0, k2.intercept or 0))
 end
+do   -- 0.9.1：密集阵（拦截炮、激光）是固定阵地：一步不挪、车身不转、不被挤开
+  local c, l = bu("cram", 1, 0, 300), bu("laser", 1, 30, 300)
+  sim({ c, l, bu("tank", 1, 4, 303), bu("heli", 2, 0, 700, { y = 70 }), bu("tank", 2, 40, 760), bu("inf", 2, -40, 760) }, 20, true)
+  check(c.x == 0 and c.z == 300 and l.x == 30 and l.z == 300 and c.h == math.pi and l.h == math.pi,
+    string.format("密集阵开战 20 秒一步没挪、车身没转（拦截炮 %.1f,%.1f；激光 %.1f,%.1f）", c.x, c.z, l.x, l.z))
+end
+do   -- 0.9.1：喷气机先在地上滑跑加速、离地后抬头爬升；直升机先原地拔高再往前飞
+  local f, h = bu("fighter", 1, 0, 250), bu("heli", 1, 100, 250)
+  local list = { f, h, bu("tank", 2, 0, 900, { hold = true }) }
+  local B = { units = {}, shells = {}, missiles = {}, pending = {}, t = 0, byId = {} }
+  for i, u in ipairs(list) do u.bid = i B.byId[i] = u table.insert(B.units, u) end
+  B.cb = { fx = function() end, world = function(x, y, z) return V3(x, 1 + y, z) end, muzzle = function(u) return V3(u.x, 3 + u.y, u.z) end,
+    aim = function(t) return V3(t.x, 2 + t.y, t.z) end, hurt = function() end, die = function() end, heroHurt = function() end }
+  for _ = 1, 10 do Battle.step(B, 0.05) end
+  local fy, fs, fd = f.y, f.spd or 0, math.abs(f.z - 250)
+  local hy, hd = h.y, math.sqrt((h.x - 100) ^ 2 + (h.z - 250) ^ 2)
+  local maxP = 0
+  for _ = 1, 70 do Battle.step(B, 0.05) maxP = math.max(maxP, f.pitch or 0) end
+  check(fy == 0 and fs < UD.fighter.speed * 0.3 and fd < 15, string.format("战斗机开战先在地上滑跑（0.5 秒：速度 %.0f、跑了 %.0f 格）", fs, fd))
+  check(f.y > 30 and maxP > math.rad(5) and maxP < math.rad(25) and (f.spd or 0) >= UD.fighter.speed * 0.99,
+    string.format("离地后机头抬起来爬升（最大 %.0f°），4 秒爬到 %.0f 高、加到全速", math.deg(maxP), f.y))
+  check(hy > 1 and hd < 2, string.format("直升机先原地拔高（0.5 秒：高 %.1f、只挪了 %.1f 格）", hy, hd))
+end
 do   -- 电磁炮：一发打穿一排
   local list = { bu("railgun", 1, 0, 300) }
   for i = 1, 4 do table.insert(list, bu("jeep", 2, 0, 560 + i * 30, { hold = true, h = 0 })) end
@@ -806,6 +829,23 @@ end
 local heliModel
 for _, u in ipairs(units()) do if u:GetAttribute("Type") == "heli" then heliModel = u end end
 check(heliModel and heliModel:FindFirstChild("RotorMotor", true) and heliModel:FindFirstChild("TailMotor", true), "直升机的主旋翼、尾桨挂在 Motor6D 上")
+-- 0.9.1：密集阵是固定阵地——造好直接架在阵位上，不从工厂开出来
+do
+  local sold
+  for _, u in ipairs(units()) do if not sold and u:GetAttribute("Type") == "inf" then sold = u end end
+  if sold then action("sell", sold:GetAttribute("Uid")) R.run(0.3) end
+  local before = {}
+  for _, u in ipairs(units()) do before[u] = true end
+  action("buy", "cram")
+  R.run(0.3)
+  local nc
+  for _, u in ipairs(units()) do if not before[u] and u:GetAttribute("Type") == "cram" then nc = u end end
+  local p = nc and relPos(nc)
+  R.run(2)
+  local p2 = nc and relPos(nc)
+  check(nc ~= nil and p.Z >= Config.Field.deploy[1] - 1 and p.Z <= Config.Field.deploy[2] + 1 and (p2 - p).Magnitude < 0.01,
+    "新造的拦截炮直接架在阵位上，不从工厂开出来" .. (p and string.format("（z %.0f）", p.Z) or ""))
+end
 -- 武器：四把都在
 check(pl.Backpack:FindFirstChild("火箭筒") and pl.Backpack:FindFirstChild("狙击枪"), "买过的枪都发了")
 local tinf = 0
@@ -848,6 +888,24 @@ local function mouse(down)
     R.as("client", function() R.services.UserInputService.InputBegan:Fire({ UserInputType = Enum.UserInputType.MouseButton1, Position = V3(640, 360, 0) }, false) end)
   else
     R.as("client", function() R.services.UserInputService.InputEnded:Fire({ UserInputType = Enum.UserInputType.MouseButton1, Position = V3(640, 360, 0) }) end)
+  end
+end
+-- 开拦截炮（固定阵地）：按 W 车不动，只能转炮塔、开火
+do
+  local cm = myUnit("cram")
+  if cm then
+    action("drive", cm:GetAttribute("Uid"))
+    R.run(0.5)
+    local c0 = relPos(cm)
+    R.moveVec = V3(0, 0, -1)
+    R.run(2)
+    R.moveVec = nil
+    local c1 = relPos(cm)
+    check((c1 - c0).Magnitude < 0.5, string.format("开拦截炮（固定阵地）：按 W 车不动（挪了 %.2f 格）", (c1 - c0).Magnitude))
+    action("exit")
+    R.run(0.5)
+  else
+    check(false, "老档里有拦截炮（还活着）")
   end
 end
 -- 开轰炸机：按一下扔一串炸弹

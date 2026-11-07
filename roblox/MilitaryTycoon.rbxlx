@@ -19,7 +19,7 @@
 -- 数值都在这里调：建筑、兵种、关卡敌军、武器、军衔、重生、每日奖励与任务、突袭与约战、战场支援、老兵、补给空投
 local Config = {}
 
-Config.Version = "0.9"
+Config.Version = "0.9.1"
 Config.SaveKey = "MilitaryTycoon_v1"   -- DataStore 名字（改了就是新存档）
 Config.StartCash = 300
 Config.BaseCap = 4                     -- 没有指挥部时最多几个单位
@@ -220,14 +220,14 @@ Config.Units = {
     armor = true, turret = true, reach = 260, vsAir = 3.4, vsArmor = 0.4, vsInf = 0.7, prefer = "air", needHQ = 2, model = "spaag",
     desc = "PGL-625 弹炮结合：比防空车射得远、射得高，皮也厚" },
   cram = { name = "拦截炮", short = "拦截", cat = "aa", row = 5, lv = 15, ew = 0.4, price = 1100, hp = 360, dmg = 14, rate = 0.15, range = 220, speed = 10, size = 16, len = 12,
-    armor = true, turret = true, reach = 130, airOnly = true, vsAir = 2.2, intercept = { range = 280, rate = 0.35, p = 0.65 }, prefer = "air", needHQ = 2, model = "cram",
-    desc = "C-RAM 陆基密集阵：把飞来的炮弹、火箭弹打爆在半空（附近 280 格）；顺手打低空的直升机" },
+    armor = true, turret = true, static = true, reach = 130, airOnly = true, vsAir = 2.2, intercept = { range = 280, rate = 0.35, p = 0.65 }, prefer = "air", needHQ = 2, model = "cram",
+    desc = "C-RAM 陆基密集阵：固定阵地，摆在哪就守在哪（不会开走，只转炮塔）；把飞来的炮弹、火箭弹打爆在半空（附近 280 格），顺手打低空的直升机" },
   sam = { name = "爱国者", short = "爱国者", cat = "aa", row = 5, lv = 18, ew = 0.4, price = 1600, hp = 380, dmg = 520, rate = 7, range = 700, speed = 12, size = 22, len = 22,
     armor = true, homing = 420, reach = 1000, airOnly = true, vsAir = 1, abm = { range = 760, rate = 4, p = 0.6 }, prefer = "air", needHQ = 3, model = "sam",
     desc = "爱国者防空导弹：射程最远，一发打掉一架直升机；只打飞机（也只有它和战斗机打得到隐身轰炸机），还能拦截敌人的弹道导弹" },
-  laser = { name = "激光防空车", short = "激光", cat = "aa", row = 5, lv = 20, ew = 0.4, price = 1700, hp = 420, dmg = 45, rate = 0.35, range = 300, speed = 22, size = 16, len = 12,
-    armor = true, turret = true, laser = true, reach = 320, vsAir = 2.6, vsArmor = 0.25, vsInf = 0.4, intercept = { range = 300, rate = 0.45, p = 0.85, laser = true },
-    prefer = "air", needHQ = 3, model = "cram", desc = "高能激光：光束一扫，无人机、直升机冒烟掉下来；还能把飞来的炮弹、火箭弹烧爆在半空" },
+  laser = { name = "激光防空", short = "激光", cat = "aa", row = 5, lv = 20, ew = 0.4, price = 1700, hp = 420, dmg = 45, rate = 0.35, range = 300, speed = 22, size = 16, len = 12,
+    armor = true, turret = true, static = true, laser = true, reach = 320, vsAir = 2.6, vsArmor = 0.25, vsInf = 0.4, intercept = { range = 300, rate = 0.45, p = 0.85, laser = true },
+    prefer = "air", needHQ = 3, model = "cram", desc = "高能激光，固定阵地（摆在哪就守在哪，只转炮塔）：光束一扫，无人机、直升机冒烟掉下来；还能把飞来的炮弹、火箭弹烧爆在半空" },
   ew = { name = "电子战车", short = "电战", cat = "aa", row = 5, lv = 17, ew = 0.4, price = 950, hp = 400, dmg = 8, rate = 0.4, range = 150, speed = 22, size = 20, len = 20,
     armor = true, jam = { r = 230, p = 0.45 }, vsArmor = 0.1, vsAir = 0.6, vsInf = 0.8, reach = 120, prefer = "inf", needHQ = 2, model = "sam",
     desc = "干扰敌人的导弹：附近的友军被反坦克导弹、防空导弹打中的几率少一半多" },
@@ -1029,13 +1029,19 @@ function Army.init(G)
     return x0, z0
   end
 
+  -- 喷气机落到阵位上（阵位挤在基地北墙外，没有跑道）：边飞边降到阵位上空 30 格、越近飞得越慢，再像 F-35B 那样慢慢垂直落下，落的时候机头转回朝前
+  local function jetLanding(x, z)
+    return { x = x, z = z, y = 30 }, { x = x, z = z, y = 0 }
+  end
+
   -- 新兵从工厂开出来：出门 → 横通道（z = 60）→ 中间通道 → 路上 → 阵位（直升机直接飞过去；喷气机在空军基地的跑道上滑跑起飞）
   local function exitPath(u, b)
     local def = UNITS[u.t]
     if def.jet and b.id == "airbase" then
       local rz0, rz1 = b.z - b.size[3] / 2 + 14, b.z + b.size[3] / 2 - 10
       u.x, u.z, u.h = b.x, rz0, math.pi
-      u.path = { { x = b.x, z = rz1, y = 0 }, { x = b.x, z = rz1 + 90, y = 30 }, { x = u.sx, z = u.sz, y = 50 }, { x = u.sx, z = u.sz, y = 0 } }
+      u.pv = 0   -- 从跑道头静止开始滑跑（速度在 stepPath 里慢慢加上去）
+      u.path = { { x = b.x, z = rz1, y = 0 }, { x = b.x, z = rz1 + 120, y = 26 }, { x = u.sx, z = u.sz, y = 50 }, { x = u.sx, z = u.sz, y = 0 } }
       setFly(u, true)
     elseif def.air then
       u.path = { { x = b.x, z = b.z, y = 40 }, { x = u.sx, z = u.sz, y = 40 }, { x = u.sx, z = u.sz, y = 0 } }
@@ -1054,7 +1060,12 @@ function Army.init(G)
 
   -- 开到新位置（直升机先升空再落）
   function G.goTo(u, x, z)
-    if UNITS[u.t].air then
+    local def = UNITS[u.t]
+    if def.jet and (u.y > 1 or (x - u.x) ^ 2 + (z - u.z) ^ 2 > 4) then   -- 喷气机：边飞边降到阵位上空，再慢慢落下
+      local a1, a2 = jetLanding(x, z)
+      u.path = { a1, a2 }
+      setFly(u, true)
+    elseif def.air then
       local cruise = math.max(u.y, 24)
       u.path = { { x = u.x, z = u.z, y = cruise }, { x = x, z = z, y = cruise }, { x = x, z = z, y = 0 } }
       setFly(u, true)
@@ -1066,24 +1077,50 @@ function Army.init(G)
   local function stepPath(st, u, dt)
     local wp = u.path[1]
     local def = UNITS[u.t]
-    local sp = (def.jet and 90 or def.air and 50 or def.speed * 1.6) * dt
     local dx, dy, dz = wp.x - u.x, wp.y - u.y, wp.z - u.z
     local dist = math.sqrt(dx * dx + dy * dy + dz * dz)
+    local sp = def.speed * 1.6 * dt
+    if def.air then
+      -- 飞机、直升机：速度慢慢加上去，离终点（整条路剩下的长度）近了慢慢减下来——不再一下子全速、一下子停住
+      local rem = dist
+      for i = 1, #u.path - 1 do
+        local a, b = u.path[i], u.path[i + 1]
+        rem = rem + math.sqrt((b.x - a.x) ^ 2 + (b.y - a.y) ^ 2 + (b.z - a.z) ^ 2)
+      end
+      local vmax, acc = def.jet and 90 or 50, def.jet and 36 or 28
+      local want = math.min(vmax, 5 + rem * (def.jet and 0.7 or 1.1))
+      local v = u.pv or 0
+      if v < want then v = math.min(want, v + acc * dt) else v = math.max(want, v - acc * 1.6 * dt) end
+      u.pv = v
+      sp = v * dt
+      local hz = math.sqrt(dx * dx + dz * dz)
+      local wantP = 0
+      if def.jet then wantP = math.clamp(math.atan2(dy, math.max(hz, 0.01)), -0.3, 0.3)   -- 喷气机：机头顺着爬升 / 下滑
+      elseif hz > 0.5 then wantP = -0.14 * math.clamp(v / 50, 0, 1) end                   -- 直升机：往前飞低头
+      if def.jet and u.y < 0.05 and dy <= 0 then wantP = 0 end                           -- 在跑道上：机头平
+      u.bp = (u.bp or 0) + (wantP - (u.bp or 0)) * math.min(1, dt * 4)
+    end
     if dist <= sp then
       u.x, u.y, u.z = wp.x, wp.y, wp.z
       table.remove(u.path, 1)
       if #u.path == 0 then
         u.path = nil
         u.h = math.pi
+        u.pv, u.bp = nil, nil
         setFly(u, false)
       end
     else
       u.x = u.x + dx / dist * sp
       u.y = u.y + dy / dist * sp
       u.z = u.z + dz / dist * sp
-      if dx * dx + dz * dz > 0.04 then Battle.turn(u, dx, dz, dt, 4) end
+      if dx * dx + dz * dz > 0.04 then Battle.turn(u, dx, dz, dt, 4)
+      elseif def.air then Battle.turn(u, 0, 1, dt, 1.2) end   -- 垂直起落那一段：慢慢转回朝前（到了不再一下子扭过去）
     end
-    if u.root and u.root.Parent then u.root.CFrame = G.unitCF(st.plot.origin, u.x, u.y, u.z, u.h) end
+    if u.root and u.root.Parent then
+      local cf = G.unitCF(st.plot.origin, u.x, u.y, u.z, u.h)
+      if u.bp and math.abs(u.bp) > 0.002 then cf = cf * CFrame.Angles(u.bp, 0, 0) end
+      u.root.CFrame = cf
+    end
   end
 
   -- 每帧：平时（不在打仗）的部队开来开去
@@ -1126,9 +1163,13 @@ function Army.init(G)
     end
     d.cash = d.cash - def.price
     local x, z = freeSpot(st, t)
-    local u = G.spawnUnit(st, t, src.x, src.z, def.air and 0.8 or 0, math.pi)
-    u.sx, u.sz = x, z
-    exitPath(u, src)
+    if def.static then   -- 固定阵地（密集阵）：不从工厂开出来，直接架在阵位上
+      G.spawnUnit(st, t, x, z, 0, math.pi)
+    else
+      local u = G.spawnUnit(st, t, src.x, src.z, def.air and 0.8 or 0, math.pi)
+      u.sx, u.sz = x, z
+      exitPath(u, src)
+    end
     G.progress(st, "make", 1)
     G.push(st)
   end
@@ -1309,6 +1350,7 @@ local function pick(U, u)
     if e.alive and e.team ~= u.team and canHit(d, e) then
       local dx, dz = e.x - u.x, e.z - u.z
       local s = math.sqrt(dx * dx + dz * dz)
+      if d.static and s > d.range then s = s + 2000 end   -- 固定阵地（密集阵）走不过去：射程里的先打
       if d.minRange and s < d.minRange then s = s + 400 end
       if prefers(d, e.def) then s = s * 0.6 end
       if e.def.decoy then s = s * 0.45 end
@@ -1800,12 +1842,13 @@ local function act(B, u, dt)
     elseif dist > range * 0.92 and not (u.hold and dist > range * 1.6) then
       mx, mz = dx, dz              -- 够不着：往前走（守方等敌人走近了才出击）
     end
+    if d.static then mx, mz = 0, 0 end   -- 固定阵地（密集阵）：不挪窝，只转炮塔
     if dist <= range and not tooClose then
       inRange = true
       local err = 0
       if d.turret then
         err = aimTurret(u, dx, dz, dt)
-        if mx == 0 and mz == 0 then turn(u, dx, dz, dt, 0.8) end   -- 停下打的时候车身慢慢转正
+        if mx == 0 and mz == 0 and not d.static then turn(u, dx, dz, dt, 0.8) end   -- 停下打的时候车身慢慢转正（固定阵地不转）
       elseif d.side then
         turn(u, dz, -dx, dt, 1.6)  -- 火箭炮发射箱朝右：右侧对准目标
         local want = math.atan2(-dz, dx)
@@ -1823,14 +1866,24 @@ local function act(B, u, dt)
       aimTurret(u, dx, dz, dt)
     end
   end
+  local liftK = 1
   if d.air then
-    if u.y < wantY then u.y = math.min(wantY, u.y + 16 * dt) elseif u.y > wantY then u.y = math.max(wantY, u.y - 22 * dt) end
+    if u.y < wantY then
+      -- 往上：垂直速度一点点加上去（旋翼转起来、慢慢离地），快到高度了收着点；巡飞弹、小无人机是弹射出去的，照旧
+      local vmax = d.kamikaze and 16 or math.min(16, (wantY - u.y) * 1.5 + 2)
+      u.vy = d.kamikaze and 16 or math.min(vmax, (u.vy or 0) + 20 * dt)
+      u.y = math.min(wantY, u.y + u.vy * dt)
+    else
+      u.vy = 0
+      if u.y > wantY then u.y = math.max(wantY, u.y - 22 * dt) end
+    end
+    if not d.kamikaze then liftK = math.clamp((u.y - 2) / 14, 0, 1) end   -- 还没离地十几格：先往上升，不往前冲
   end
   u.moving = false
   u.vx, u.vz = 0, 0
   if mx ~= 0 or mz ~= 0 then
     local l = math.sqrt(mx * mx + mz * mz)
-    local sp = d.speed * dt * (d.air and 1 or (B.speedK or 1)) * (u.spK or 1)   -- 战区：沙地、雪地走得慢；技能「冲锋」跑得快
+    local sp = d.speed * dt * (d.air and liftK or (B.speedK or 1)) * (u.spK or 1)   -- 战区：沙地、雪地走得慢；技能「冲锋」跑得快
     local nx, nz = mx / l * sp, mz / l * sp
     u.x = u.x + nx
     u.z = u.z + nz
@@ -1848,7 +1901,27 @@ local function actJet(B, u, dt)
   local d = u.def
   u.cd = u.cd - dt
   bombStep(B, u)
-  if u.y < d.alt then u.y = math.min(d.alt, u.y + 26 * dt) end
+  -- 起飞：开战时飞机停在地上——先顺着机头滑跑加速（约 1.6 秒到一半巡航速度），离地后爬升率一点点加上去（机头跟着抬起来），
+  -- 离巡航高度还剩 30 格开始慢慢改平；速度继续加到巡航。空中出来的（已经过了一半高度）直接按巡航速度飞
+  local vmax = d.speed * (u.spK or 1)
+  if u.spd == nil then u.spd = (u.y >= d.alt * 0.5) and vmax or 0 end
+  local rolling = u.y <= 0.05 and u.spd < d.speed * 0.5
+  if rolling then
+    u.spd = math.min(d.speed * 0.5, u.spd + d.speed * 0.32 * dt)
+  elseif u.spd < vmax then
+    u.spd = math.min(vmax, u.spd + d.speed * 0.25 * dt)
+  else
+    u.spd = math.max(vmax, u.spd - d.speed * 0.5 * dt)   -- 加力结束：慢慢减回巡航
+  end
+  if not rolling and u.y < d.alt then
+    local want = math.min(26, u.spd * 0.38) * math.clamp((d.alt - u.y) / 30, 0.08, 1)   -- 爬升角最多约 21°（慢的无人机、轰炸机也不会翘得太陡）
+    u.vy = math.min(want, (u.vy or 0) + 24 * dt)
+    u.y = math.min(d.alt, u.y + u.vy * dt)
+  else
+    u.vy = 0
+  end
+  u.pitch = math.atan2(u.vy, math.max(u.spd, 1))   -- 机头抬起的角度（模型跟着抬）
+  local tk = rolling and 0 or math.clamp(u.y / 25, 0.25, 1)   -- 滑跑时不转弯，刚离地转得慢
   local t = u.tgt
   if t and not (t.alive and canHit(d, t)) then
     u.tgt, u.rt, t = nil, 0, nil
@@ -1861,24 +1934,26 @@ local function actJet(B, u, dt)
     err = math.abs(wrap(math.atan2(-dx, -dz) - u.h))
   end
   local R = d.speed / d.turn   -- 转弯半径
-  if out then
-    turn(u, -u.x, F.center - u.z, dt, d.turn)
+  if tk == 0 then
+    -- 还在跑道上：直着跑
+  elseif out then
+    turn(u, -u.x, F.center - u.z, dt, d.turn * tk)
   elseif not t then
-    turn(u, -u.x, F.center - u.z, dt, d.turn * 0.5)   -- 没有目标：在战场上空盘旋
+    turn(u, -u.x, F.center - u.z, dt, d.turn * 0.5 * tk)   -- 没有目标：在战场上空盘旋
   elseif d.orbit and dist < d.range * 0.8 then
     -- 绕目标转圈：切线方向（挑和现在机头同一边的），离得远往里收、太近往外放
     local tx, tz = -dz / dist, dx / dist
     if tx * -math.sin(u.h) + tz * -math.cos(u.h) < 0 then tx, tz = -tx, -tz end
     local k = (dist - d.range * 0.55) / (d.range * 0.55)
-    turn(u, tx + dx / dist * k, tz + dz / dist * k, dt, d.turn)
+    turn(u, tx + dx / dist * k, tz + dz / dist * k, dt, d.turn * tk)
   elseif u.extendT and B.t < u.extendT then
     -- 冲过头了：直飞拉开距离
   elseif dist < R * 1.3 and err > 1.6 then
     u.extendT = B.t + 1.4 + R / d.speed
   else
-    turn(u, dx, dz, dt, d.turn)
+    turn(u, dx, dz, dt, d.turn * tk)
   end
-  u.vx, u.vz = -math.sin(u.h) * d.speed * (u.spK or 1), -math.cos(u.h) * d.speed * (u.spK or 1)
+  u.vx, u.vz = -math.sin(u.h) * u.spd, -math.cos(u.h) * u.spd
   u.x = math.clamp(u.x + u.vx * dt, -JX - 220, JX + 220)
   u.z = math.clamp(u.z + u.vz * dt, JZ0 - 220, JZ1 + 220)
   u.moving = true
@@ -1915,8 +1990,8 @@ local function separate(U)
             end
             local push = math.min(1.2, (need - dd) * 0.5)
             local ux, uz = dx / dd, dz / dd
-            if not a.driver then a.x, a.z = a.x - ux * push, a.z - uz * push end
-            if not b.driver then b.x, b.z = b.x + ux * push, b.z + uz * push end
+            if not a.driver and not a.def.static then a.x, a.z = a.x - ux * push, a.z - uz * push end   -- 固定阵地不被挤走
+            if not b.driver and not b.def.static then b.x, b.z = b.x + ux * push, b.z + uz * push end
           end
         end
       end
@@ -2334,10 +2409,12 @@ function Combat.init(G)
   local function placeAll(B)
     for _, u in ipairs(B.units) do
       if u.alive and not u.hero and u.root and u.root.Parent then
-        if u.px == nil or math.abs(u.x - u.px) > 0.02 or math.abs(u.z - u.pz) > 0.02 or math.abs(u.y - u.py) > 0.02 or math.abs(u.h - u.ph) > 0.004 then
-          u.px, u.pz, u.py, u.ph = u.x, u.z, u.y, u.h
+        local pitch = u.pitch or 0
+        if u.px == nil or math.abs(u.x - u.px) > 0.02 or math.abs(u.z - u.pz) > 0.02 or math.abs(u.y - u.py) > 0.02 or math.abs(u.h - u.ph) > 0.004 or math.abs(pitch - (u.ppitch or 0)) > 0.004 then
+          u.px, u.pz, u.py, u.ph, u.ppitch = u.x, u.z, u.y, u.h, pitch
           local cf = G.unitCF(B.origin, u.x, u.y, u.z, u.h)
           if u.def.air and u.moving and not u.def.jet then cf = cf * CFrame.Angles(-0.14, 0, 0) end   -- 直升机往前飞时低头（喷气机的坡度客户端算）
+          if u.def.jet and pitch > 0.002 then cf = cf * CFrame.Angles(pitch, 0, 0) end   -- 喷气机起飞爬升：机头抬起来
           u.root.CFrame = cf
         end
         local ty = math.floor((u.ty or 0) * 50 + 0.5) / 50
@@ -2470,6 +2547,11 @@ function Combat.init(G)
     local dx, dz = x - bu.x, z - bu.z
     local dist = math.sqrt(dx * dx + dz * dz)
     if dist > maxStep then x, z = bu.x + dx / dist * maxStep, bu.z + dz / dist * maxStep end
+    if def.static then   -- 固定阵地（密集阵）：只能转炮塔瞄准、开火，车不动
+      bu.vx, bu.vz, bu.moving = 0, 0, false
+      if type(ty) == "number" and ty == ty then bu.ty = ty end
+      return
+    end
     local ox, oz = bu.x, bu.z
     if def.jet then
       bu.x = math.clamp(x, -Battle.JX, Battle.JX)
@@ -2483,7 +2565,12 @@ function Combat.init(G)
     bu.h = h
     bu.moving = dist > 0.05
     if def.air then
-      bu.y = (type(y) == "number" and y == y) and math.clamp(y, def.cargo and 5 or 12, def.jet and 230 or 160) or def.alt
+      local oy = bu.y
+      bu.y = (type(y) == "number" and y == y) and math.clamp(y, def.jet and 0 or (def.cargo and 5 or 12), def.jet and 230 or 160) or def.alt   -- 喷气机接手时可能还在起飞
+      if def.jet then   -- 别的玩家看到的机头跟着升降（AI 不推演玩家开的飞机，这里按升降速度算）
+        bu.spd = math.max(dist / step, def.speed * 0.6)
+        bu.pitch = math.clamp(math.atan2((bu.y - oy) / step, bu.spd), -0.4, 0.4)
+      end
     end
     if type(ty) == "number" and ty == ty then bu.ty = ty end
   end
@@ -2794,6 +2881,7 @@ function Combat.init(G)
         if u then
           if bu.alive then   -- 活着的开回战前的阵位，下一仗满血；攒老兵经验
             u.x, u.y, u.z, u.h = bu.x, bu.y, bu.z, bu.h
+            u.pv = bu.def.jet and bu.spd or nil   -- 喷气机按打仗时的速度接着飞回去（不在半空一下停住）
             G.goTo(u, u.sx, u.sz)
             vetGain(st, u, bu, promos)
           elseif bu.spent then   -- 巡飞弹撞上去了：用掉了，不算损失
@@ -10982,7 +11070,9 @@ function Play.init(G)
     local lv = root.CFrame.LookVector
     local h = math.atan2(-lv.X, -lv.Z)
     local def = UNITS[ev.t]
-    G.drive = { bid = ev.bid, t = ev.t, origin = o, x = p.X, z = p.Z, y = def.air and math.max(def.alt, p.Y - 1) or 0, h = h, ty = 0, spd = def.speed, roll = 0,
+    -- 喷气机接手时可能还在跑道上 / 爬升：从它现在的高度、速度接着飞（不一下子跳到巡航高度）
+    local y0 = def.air and (def.jet and math.max(0, p.Y - 1) or math.max(def.alt, p.Y - 1)) or 0
+    G.drive = { bid = ev.bid, t = ev.t, origin = o, x = p.X, z = p.Z, y = y0, h = h, ty = 0, spd = def.jet and y0 < 30 and def.speed * 0.6 or def.speed, roll = 0, pitch = 0,
       camYaw = h, camPitch = math.rad(def.air and 20 or 16), sendT = 0, nextFire = os.clock() + (ev.cd or 0), firing = false, model = m, clone = G.cloneOf(m) }
     G.drive.cf = root.CFrame
     if G.mode ~= "drive" then preDrive = G.mode end
@@ -10993,7 +11083,9 @@ function Play.init(G)
     ui.upBtn.Visible = G.mobile and def.air == true
     ui.downBtn.Visible = G.mobile and def.air == true
     local tip
-    if def.jet then
+    if def.static then
+      tip = G.mobile and "固定阵地：转镜头瞄准，按「开火」" or "固定阵地（只转炮塔）：鼠标瞄准、按住左键开火，右键拖动转镜头"
+    elseif def.jet then
       tip = G.mobile and "摇杆左右转弯、上下加减速，按住「升高」「降低」调高度，转镜头瞄准，按「开火」" or "W / S 加减速，A / D 转弯，空格升高、C 降低，鼠标瞄准、按住左键开火"
       if def.bombs then tip = tip .. "；轰炸机按一下扔一串炸弹（落在飞机前方）" end
     else
@@ -11028,6 +11120,7 @@ function Play.init(G)
       dr.z = dr.z - math.cos(dr.h) * dr.spd * dt
       if UIS:IsKeyDown(Enum.KeyCode.Space) or dr.climb == 1 then dr.y = math.min(220, dr.y + 40 * dt) end
       if UIS:IsKeyDown(Enum.KeyCode.C) or UIS:IsKeyDown(Enum.KeyCode.LeftControl) or dr.climb == -1 then dr.y = math.max(40, dr.y - 40 * dt) end
+      if dr.y < 40 then dr.y = math.min(40, dr.y + dr.spd * 0.3 * dt) end   -- 接手时还在起飞：自己爬到最低高度
     elseif def.air then
       local yaw = dr.camYaw
       local fwd, right = V(-math.sin(yaw), 0, -math.cos(yaw)), V(math.cos(yaw), 0, -math.sin(yaw))
@@ -11038,6 +11131,8 @@ function Play.init(G)
       if UIS:IsKeyDown(Enum.KeyCode.Space) or dr.climb == 1 then dr.y = math.min(150, dr.y + 30 * dt) end
       if UIS:IsKeyDown(Enum.KeyCode.C) or UIS:IsKeyDown(Enum.KeyCode.LeftControl) or dr.climb == -1 then dr.y = math.max(def.cargo and 6 or 15, dr.y - 30 * dt) end
       dr.h = dr.h + wrap(yaw - dr.h) * math.min(1, dt * 3)
+    elseif def.static then
+      -- 固定阵地（密集阵）：车不动，只转炮塔
     else
       local throttle = -mv.Z
       dr.h = dr.h - mv.X * 1.4 * dt
@@ -11056,7 +11151,12 @@ function Play.init(G)
     dr.aim = aim
     local rel = aim - dr.origin
     if def.turret then dr.ty = wrap(math.atan2(-(rel.X - dr.x), -(rel.Z - dr.z)) - dr.h) end
-    dr.cf = CFrame.new(dr.origin + V(dr.x, 1 + dr.y, dr.z)) * CFrame.Angles(0, dr.h, 0) * CFrame.Angles(0, 0, dr.roll)
+    if def.jet then   -- 机头跟着爬升 / 俯冲抬低（按这一帧的升降速度）
+      local vy = (dr.y - (dr.py or dr.y)) / math.max(dt, 1 / 240)
+      dr.pitch = dr.pitch + (math.clamp(math.atan2(vy, dr.spd), -0.4, 0.4) - dr.pitch) * math.min(1, dt * 5)
+    end
+    dr.py = dr.y
+    dr.cf = CFrame.new(dr.origin + V(dr.x, 1 + dr.y, dr.z)) * CFrame.Angles(0, dr.h, 0) * CFrame.Angles(dr.pitch, 0, 0) * CFrame.Angles(0, 0, dr.roll)
     dr.sendT = dr.sendT + dt
     local fire = nil
     local now = os.clock()

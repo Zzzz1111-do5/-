@@ -121,13 +121,19 @@ function Army.init(G)
     return x0, z0
   end
 
+  -- 喷气机落到阵位上（阵位挤在基地北墙外，没有跑道）：边飞边降到阵位上空 30 格、越近飞得越慢，再像 F-35B 那样慢慢垂直落下，落的时候机头转回朝前
+  local function jetLanding(x, z)
+    return { x = x, z = z, y = 30 }, { x = x, z = z, y = 0 }
+  end
+
   -- 新兵从工厂开出来：出门 → 横通道（z = 60）→ 中间通道 → 路上 → 阵位（直升机直接飞过去；喷气机在空军基地的跑道上滑跑起飞）
   local function exitPath(u, b)
     local def = UNITS[u.t]
     if def.jet and b.id == "airbase" then
       local rz0, rz1 = b.z - b.size[3] / 2 + 14, b.z + b.size[3] / 2 - 10
       u.x, u.z, u.h = b.x, rz0, math.pi
-      u.path = { { x = b.x, z = rz1, y = 0 }, { x = b.x, z = rz1 + 90, y = 30 }, { x = u.sx, z = u.sz, y = 50 }, { x = u.sx, z = u.sz, y = 0 } }
+      u.pv = 0   -- 从跑道头静止开始滑跑（速度在 stepPath 里慢慢加上去）
+      u.path = { { x = b.x, z = rz1, y = 0 }, { x = b.x, z = rz1 + 120, y = 26 }, { x = u.sx, z = u.sz, y = 50 }, { x = u.sx, z = u.sz, y = 0 } }
       setFly(u, true)
     elseif def.air then
       u.path = { { x = b.x, z = b.z, y = 40 }, { x = u.sx, z = u.sz, y = 40 }, { x = u.sx, z = u.sz, y = 0 } }
@@ -146,7 +152,12 @@ function Army.init(G)
 
   -- 开到新位置（直升机先升空再落）
   function G.goTo(u, x, z)
-    if UNITS[u.t].air then
+    local def = UNITS[u.t]
+    if def.jet and (u.y > 1 or (x - u.x) ^ 2 + (z - u.z) ^ 2 > 4) then   -- 喷气机：边飞边降到阵位上空，再慢慢落下
+      local a1, a2 = jetLanding(x, z)
+      u.path = { a1, a2 }
+      setFly(u, true)
+    elseif def.air then
       local cruise = math.max(u.y, 24)
       u.path = { { x = u.x, z = u.z, y = cruise }, { x = x, z = z, y = cruise }, { x = x, z = z, y = 0 } }
       setFly(u, true)
@@ -158,24 +169,50 @@ function Army.init(G)
   local function stepPath(st, u, dt)
     local wp = u.path[1]
     local def = UNITS[u.t]
-    local sp = (def.jet and 90 or def.air and 50 or def.speed * 1.6) * dt
     local dx, dy, dz = wp.x - u.x, wp.y - u.y, wp.z - u.z
     local dist = math.sqrt(dx * dx + dy * dy + dz * dz)
+    local sp = def.speed * 1.6 * dt
+    if def.air then
+      -- 飞机、直升机：速度慢慢加上去，离终点（整条路剩下的长度）近了慢慢减下来——不再一下子全速、一下子停住
+      local rem = dist
+      for i = 1, #u.path - 1 do
+        local a, b = u.path[i], u.path[i + 1]
+        rem = rem + math.sqrt((b.x - a.x) ^ 2 + (b.y - a.y) ^ 2 + (b.z - a.z) ^ 2)
+      end
+      local vmax, acc = def.jet and 90 or 50, def.jet and 36 or 28
+      local want = math.min(vmax, 5 + rem * (def.jet and 0.7 or 1.1))
+      local v = u.pv or 0
+      if v < want then v = math.min(want, v + acc * dt) else v = math.max(want, v - acc * 1.6 * dt) end
+      u.pv = v
+      sp = v * dt
+      local hz = math.sqrt(dx * dx + dz * dz)
+      local wantP = 0
+      if def.jet then wantP = math.clamp(math.atan2(dy, math.max(hz, 0.01)), -0.3, 0.3)   -- 喷气机：机头顺着爬升 / 下滑
+      elseif hz > 0.5 then wantP = -0.14 * math.clamp(v / 50, 0, 1) end                   -- 直升机：往前飞低头
+      if def.jet and u.y < 0.05 and dy <= 0 then wantP = 0 end                           -- 在跑道上：机头平
+      u.bp = (u.bp or 0) + (wantP - (u.bp or 0)) * math.min(1, dt * 4)
+    end
     if dist <= sp then
       u.x, u.y, u.z = wp.x, wp.y, wp.z
       table.remove(u.path, 1)
       if #u.path == 0 then
         u.path = nil
         u.h = math.pi
+        u.pv, u.bp = nil, nil
         setFly(u, false)
       end
     else
       u.x = u.x + dx / dist * sp
       u.y = u.y + dy / dist * sp
       u.z = u.z + dz / dist * sp
-      if dx * dx + dz * dz > 0.04 then Battle.turn(u, dx, dz, dt, 4) end
+      if dx * dx + dz * dz > 0.04 then Battle.turn(u, dx, dz, dt, 4)
+      elseif def.air then Battle.turn(u, 0, 1, dt, 1.2) end   -- 垂直起落那一段：慢慢转回朝前（到了不再一下子扭过去）
     end
-    if u.root and u.root.Parent then u.root.CFrame = G.unitCF(st.plot.origin, u.x, u.y, u.z, u.h) end
+    if u.root and u.root.Parent then
+      local cf = G.unitCF(st.plot.origin, u.x, u.y, u.z, u.h)
+      if u.bp and math.abs(u.bp) > 0.002 then cf = cf * CFrame.Angles(u.bp, 0, 0) end
+      u.root.CFrame = cf
+    end
   end
 
   -- 每帧：平时（不在打仗）的部队开来开去
@@ -218,9 +255,13 @@ function Army.init(G)
     end
     d.cash = d.cash - def.price
     local x, z = freeSpot(st, t)
-    local u = G.spawnUnit(st, t, src.x, src.z, def.air and 0.8 or 0, math.pi)
-    u.sx, u.sz = x, z
-    exitPath(u, src)
+    if def.static then   -- 固定阵地（密集阵）：不从工厂开出来，直接架在阵位上
+      G.spawnUnit(st, t, x, z, 0, math.pi)
+    else
+      local u = G.spawnUnit(st, t, src.x, src.z, def.air and 0.8 or 0, math.pi)
+      u.sx, u.sz = x, z
+      exitPath(u, src)
+    end
     G.progress(st, "make", 1)
     G.push(st)
   end

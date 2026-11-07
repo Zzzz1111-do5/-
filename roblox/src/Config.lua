@@ -2,7 +2,7 @@
 -- 数值都在这里调：建筑、兵种、关卡敌军、武器、军衔、重生、每日奖励与任务、突袭与约战、战场支援、老兵、补给空投
 local Config = {}
 
-Config.Version = "0.9"
+Config.Version = "0.9.1"
 Config.SaveKey = "MilitaryTycoon_v1"   -- DataStore 名字（改了就是新存档）
 Config.StartCash = 300
 Config.BaseCap = 4                     -- 没有指挥部时最多几个单位
@@ -203,14 +203,14 @@ Config.Units = {
     armor = true, turret = true, reach = 260, vsAir = 3.4, vsArmor = 0.4, vsInf = 0.7, prefer = "air", needHQ = 2, model = "spaag",
     desc = "PGL-625 弹炮结合：比防空车射得远、射得高，皮也厚" },
   cram = { name = "拦截炮", short = "拦截", cat = "aa", row = 5, lv = 15, ew = 0.4, price = 1100, hp = 360, dmg = 14, rate = 0.15, range = 220, speed = 10, size = 16, len = 12,
-    armor = true, turret = true, reach = 130, airOnly = true, vsAir = 2.2, intercept = { range = 280, rate = 0.35, p = 0.65 }, prefer = "air", needHQ = 2, model = "cram",
-    desc = "C-RAM 陆基密集阵：把飞来的炮弹、火箭弹打爆在半空（附近 280 格）；顺手打低空的直升机" },
+    armor = true, turret = true, static = true, reach = 130, airOnly = true, vsAir = 2.2, intercept = { range = 280, rate = 0.35, p = 0.65 }, prefer = "air", needHQ = 2, model = "cram",
+    desc = "C-RAM 陆基密集阵：固定阵地，摆在哪就守在哪（不会开走，只转炮塔）；把飞来的炮弹、火箭弹打爆在半空（附近 280 格），顺手打低空的直升机" },
   sam = { name = "爱国者", short = "爱国者", cat = "aa", row = 5, lv = 18, ew = 0.4, price = 1600, hp = 380, dmg = 520, rate = 7, range = 700, speed = 12, size = 22, len = 22,
     armor = true, homing = 420, reach = 1000, airOnly = true, vsAir = 1, abm = { range = 760, rate = 4, p = 0.6 }, prefer = "air", needHQ = 3, model = "sam",
     desc = "爱国者防空导弹：射程最远，一发打掉一架直升机；只打飞机（也只有它和战斗机打得到隐身轰炸机），还能拦截敌人的弹道导弹" },
-  laser = { name = "激光防空车", short = "激光", cat = "aa", row = 5, lv = 20, ew = 0.4, price = 1700, hp = 420, dmg = 45, rate = 0.35, range = 300, speed = 22, size = 16, len = 12,
-    armor = true, turret = true, laser = true, reach = 320, vsAir = 2.6, vsArmor = 0.25, vsInf = 0.4, intercept = { range = 300, rate = 0.45, p = 0.85, laser = true },
-    prefer = "air", needHQ = 3, model = "cram", desc = "高能激光：光束一扫，无人机、直升机冒烟掉下来；还能把飞来的炮弹、火箭弹烧爆在半空" },
+  laser = { name = "激光防空", short = "激光", cat = "aa", row = 5, lv = 20, ew = 0.4, price = 1700, hp = 420, dmg = 45, rate = 0.35, range = 300, speed = 22, size = 16, len = 12,
+    armor = true, turret = true, static = true, laser = true, reach = 320, vsAir = 2.6, vsArmor = 0.25, vsInf = 0.4, intercept = { range = 300, rate = 0.45, p = 0.85, laser = true },
+    prefer = "air", needHQ = 3, model = "cram", desc = "高能激光，固定阵地（摆在哪就守在哪，只转炮塔）：光束一扫，无人机、直升机冒烟掉下来；还能把飞来的炮弹、火箭弹烧爆在半空" },
   ew = { name = "电子战车", short = "电战", cat = "aa", row = 5, lv = 17, ew = 0.4, price = 950, hp = 400, dmg = 8, rate = 0.4, range = 150, speed = 22, size = 20, len = 20,
     armor = true, jam = { r = 230, p = 0.45 }, vsArmor = 0.1, vsAir = 0.6, vsInf = 0.8, reach = 120, prefer = "inf", needHQ = 2, model = "sam",
     desc = "干扰敌人的导弹：附近的友军被反坦克导弹、防空导弹打中的几率少一半多" },
