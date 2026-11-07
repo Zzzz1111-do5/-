@@ -355,7 +355,7 @@ for (const c of cues) {
     case 'bigboom': X(boomSfx(3, sl, true), c, 3.2, 0.5); break;
     case 'intercept': X(boomSfx(0.6, sl, false), c, 0.55, 0.4); break;
     case 'bomb': X(whistle(sl), c, 0.5, 0.3); break;
-    case 'flyover': put(jetRoar(4.5), c.t - 0.6, 0.7, 0, 0.3, 'x'); break;
+    case 'flyover': { const x = jetRoar(4.5); if (c.skip) put(x.subarray(Math.min(x.length - 1, Math.round((c.skip + 0.6) * SR))), c.t, 0.7, 0, 0.3, 'x'); else put(x, c.t - 0.6, 0.7, 0, 0.3, 'x'); break; }
     case 'swarm': X(buzz(sl), c, 0.9); break;
     case 'heal': case 'jam': case 'ability': X(bell(midi(84), 1, 1.2), c, 0.25, 0.5); break;
   }

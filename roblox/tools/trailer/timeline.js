@@ -187,7 +187,11 @@
     if (!dry) { TR.render({ T, eye: c.eye, at: c.at, fov: c.fov, rise: s.rise ? s.rise(u) : null, units: s.units !== false, shadowR: s.shadowR }); overlay(s, u, tl); }
     const rt = norm(cross(norm(sub(c.at, c.eye)), [0, 1, 0]));
     // 音效点
-    if (s !== prevShot) { TR.cues.push({ t, k: 'cut', big: !!s.flash, card: s.card ? s.card.t : null }); prevT = T - 1e-6; prevShot = s; }
+    if (s !== prevShot) {
+      TR.cues.push({ t, k: 'cut', big: !!s.flash, card: s.card ? s.card.t : null }); prevT = T - 1e-6; prevShot = s;
+      // 镜头开始时已经在飞的轰炸机编队：从半截接上轰鸣声（skip = 已经过去的秒数）
+      if (s.rate > 0) for (const e of TR.fx()) { if (e.tt > T) break; if (e.k === 'flyover' && T - e.tt < (e.t || 4)) TR.cues.push({ t, k: 'flyover', skip: T - e.tt, d: 200, x: 0 }); }
+    }
     if (s.rate > 0) for (const e of TR.fx()) {
       if (e.tt > T) break;
       if (e.tt > prevT && e.tt <= T) {
