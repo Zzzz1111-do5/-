@@ -146,7 +146,7 @@ function Guide.init(G)
       if owned[b.id] then
         local r = rect(b.x, b.z, b.size[1], b.size[3], RGB(84, 92, 100), 0, 2)
         r.Parent = dyn
-      elseif not b.req or owned[b.req] then
+      elseif (not b.req or owned[b.req]) and Config.AreaOpen(b, S.rebirth) then
         local px, pz = b.x, b.z - b.size[3] / 2 - 6
         if b.pad then px, pz = b.x + b.pad[1], b.z + b.pad[2] end
         dot(px, pz, 7, (S.cash >= b.price) and RGB(90, 255, 120) or RGB(230, 90, 70), 3)
@@ -186,6 +186,16 @@ function Guide.init(G)
       local y = S.origin.Y + 1.15
       local a = V(from.X, y, from.Z)
       local b = V(goal.X, y, goal.Z)
+      -- 在围墙里、目标在墙外：先指到门口（南边的新区域走南门，西边工业区走西门），出了门再直接指过去
+      local hs = Config.BaseSize / 2
+      local pr, gr = from - S.origin, goal - S.origin
+      if math.abs(pr.X) < hs and math.abs(pr.Z) < hs then
+        if gr.Z < -hs - 2 then
+          b = S.origin + V((Config.SouthGate[1] + Config.SouthGate[2]) / 2, 1.15, -hs - 8)
+        elseif gr.X < -hs - 2 then
+          b = S.origin + V(-hs - 8, 1.15, (Config.Industry.gate[1] + Config.Industry.gate[2]) / 2)
+        end
+      end
       local d = b - a
       local len = d.Magnitude
       if len > 12 then

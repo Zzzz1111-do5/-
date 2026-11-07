@@ -373,29 +373,115 @@ check(p1 ~= nil and p1.Z > Config.Field.deploy[1] - 1 and p1.Z < Config.Field.de
 
 print("== 布阵")
 click(button("^布阵$"))
-check(ws.CurrentCamera.CameraType == Enum.CameraType.Scriptable, "镜头切到布阵视角")
-local clone
-for _, c in ipairs(ws.ClientUnits:GetChildren()) do
-  if c:GetAttribute("Uid") == u1:GetAttribute("Uid") then clone = c end
+R.run(0.5)
+local cam = ws.CurrentCamera
+check(cam.CameraType == Enum.CameraType.Scriptable, "镜头切到布阵视角")
+local FD = Config.Field
+local origin = plot().Base.CFrame.Position - V3(0, 0.5, 0)
+local function vp(p) return cam:WorldToViewportPoint(p) end
+local function onScreen(v) return v.Z > 0 and v.X >= 0 and v.X <= 1280 and v.Y >= 0 and v.Y <= 720 end
+local nl, nr = vp(origin + V3(FD.width / 2, 1, FD.deploy[1])), vp(origin + V3(-FD.width / 2, 1, FD.deploy[1]))
+local fl, fr = vp(origin + V3(FD.width / 2, 1, FD.deploy[2])), vp(origin + V3(-FD.width / 2, 1, FD.deploy[2]))
+check(onScreen(nl) and onScreen(nr) and onScreen(fl) and onScreen(fr) and math.abs(nr.X - nl.X) > 1280 * 0.35,
+  string.format("镜头自动框住整个部署区（近边占画面 %.0f%% 宽）", math.abs(nr.X - nl.X) / 12.8))
+local UISv = R.services.UserInputService
+local function press(x, y) R.as("client", function() UISv.InputBegan:Fire({ UserInputType = Enum.UserInputType.MouseButton1, Position = V3(x, y, 0) }, false) end) end
+local function release(x, y) R.as("client", function() UISv.InputEnded:Fire({ UserInputType = Enum.UserInputType.MouseButton1, Position = V3(x, y, 0) }) end) end
+local function moveTo(x, y)
+  R.mouseAt = R.Vector2.new(x, y + 58)
+  R.as("client", function() UISv.InputChanged:Fire({ UserInputType = Enum.UserInputType.MouseMovement, Position = V3(x, y, 0), Delta = V3(0, 0, 0) }, false) end)
 end
+local function groundOf(x, y)   -- 屏幕像素（不含顶栏）→ 战场地面
+  local ray = cam:ViewportPointToRay(x, y + 58)
+  local t = (origin.Y + 1 - ray.Origin.Y) / ray.Direction.Y
+  return ray.Origin + ray.Direction * t
+end
+local function cloneOf(m)
+  for _, c in ipairs(ws.ClientUnits:GetChildren()) do
+    if c:GetAttribute("Uid") == m:GetAttribute("Uid") then return c end
+  end
+end
+local clone = cloneOf(u1)
 check(clone ~= nil, "找到这个步兵班的本地复制")
 local part
 for _, c in ipairs(clone:GetChildren()) do if c.Name ~= "Root" and c:IsA("BasePart") then part = c break end end
 R.nextRay = { Instance = part, Position = part.CFrame.Position }
-R.as("client", function() R.services.UserInputService.InputBegan:Fire({ UserInputType = Enum.UserInputType.MouseButton1, Position = V3(600, 300, 0) }, false) end)
-R.run(0.1)
-check(clone:FindFirstChildOfClass("Highlight") ~= nil, "点到的部队被选中（高亮）")
-local origin = plot().Base.CFrame.Position - V3(0, 0.5, 0)
+press(600, 300)
+release(600, 300)
+R.run(0.3)
+check(clone:FindFirstChildOfClass("Highlight") ~= nil and button("^解散 %+%$") and button("^解散 %+%$").Visible, "点到的部队被选中（高亮、出现「解散」）")
+local tag = clone:FindFirstChild("DeployTag", true)
+check(tag ~= nil and tag.Enabled and tag:FindFirstChildOfClass("TextLabel").Text == Config.Units.inf.short, "布阵时部队头顶有名字（" .. tostring(tag and tag:FindFirstChildOfClass("TextLabel").Text) .. "）")
 R.nextRay = { Instance = plot().Field, Position = origin + V3(60, 1, 250) }
-R.as("client", function() R.services.UserInputService.InputBegan:Fire({ UserInputType = Enum.UserInputType.MouseButton1, Position = V3(700, 320, 0) }, false) end)
-R.run(10)
+press(1000, 600)
+release(1000, 600)
+R.run(0.4)
 local p2 = relPos(u1)
-check(math.abs(p2.X - 60) < 1 and math.abs(p2.Z - 250) < 1, string.format("部队开到了点的位置（%.1f, %.1f）", p2.X, p2.Z))
+check(math.abs(p2.X - 60) < 1 and math.abs(p2.Z - 250) < 1, string.format("点空地：部队直接摆到点的位置（%.1f, %.1f）", p2.X, p2.Z))
+R.run(0.6)
 local cp = clone.Root.CFrame.Position - origin
-check((cp - p2).Magnitude < 2, "本地复制也跟过去了（平滑显示）")
+check((cp - p2).Magnitude < 2, "本地复制也很快滑过去了")
+-- 按住部队拖到别处：挪的距离 = 鼠标在地面上挪的距离
+R.nextRay = { Instance = part, Position = part.CFrame.Position }
+press(640, 300)
+moveTo(560, 340)
+R.run(0.05)
+local ghosts = 0
+for _, d in ipairs(ws.ClientFx:GetChildren()) do
+  if d.ClassName == "Part" and d.Transparency < 1 and d.Color.G > 0.8 and d.Color.R < 0.5 then ghosts = ghosts + 1 end
+end
+release(560, 340)
+R.run(0.4)
+local dg = groundOf(560, 340) - groundOf(640, 300)
+local want = p2 + V3(dg.X, 0, dg.Z)
+local p3 = relPos(u1)
+check(ghosts >= 1, "拖动时地上有绿色的虚影（放在哪）")
+check(math.abs(p3.X - want.X) < 1.5 and math.abs(p3.Z - want.Z) < 1.5, string.format("按住拖动：部队跟着挪过去（%.1f, %.1f），应在（%.1f, %.1f）", p3.X, p3.Z, want.X, want.Z))
+-- 下面一排的「全部」：一次选上所有部队，点空地就地排成一块
+local allBtn = button("^全部 %d+$")
+check(allBtn ~= nil and allBtn.Visible and button("^" .. Config.Units.inf.short .. " 2$") ~= nil, "布阵时下面一排列出兵种（全部 2、" .. Config.Units.inf.short .. " 2）")
+click(allBtn)
+local hl = 0
+for _, u in ipairs(units()) do
+  local c = cloneOf(u)
+  if c and c:FindFirstChildOfClass("Highlight") then hl = hl + 1 end
+end
+check(hl == #units() and not button("^解散 %+%$").Visible, "「全部」选上了 " .. hl .. " 个（选了几个时不显示解散）")
+R.nextRay = { Instance = plot().Field, Position = origin + V3(-150, 1, 300) }
+press(1000, 600)
+release(1000, 600)
+R.run(0.4)
+local ps = {}
+for _, u in ipairs(units()) do table.insert(ps, relPos(u)) end
+local okBlock = #ps == 2 and (ps[1] - ps[2]).Magnitude >= Config.Units.inf.size and (ps[1] - ps[2]).Magnitude < 40
+for _, q in ipairs(ps) do
+  if math.abs(q.X + 150) > 30 or math.abs(q.Z - 300) > 30 or q.Z > FD.deploy[2] or q.Z < FD.deploy[1] then okBlock = false end
+end
+check(okBlock, string.format("几个一起点空地：就地排成一块、不叠在一起（%.0f,%.0f / %.0f,%.0f）", ps[1].X, ps[1].Z, ps[2] and ps[2].X or 0, ps[2] and ps[2].Z or 0))
+-- 空地上拖框：框住的都选上
+press(4, 4)
+moveTo(1276, 650)
+release(1276, 650)
+R.run(0.3)
+hl = 0
+for _, u in ipairs(units()) do
+  local c = cloneOf(u)
+  if c and c:FindFirstChildOfClass("Highlight") then hl = hl + 1 end
+end
+check(hl == #units(), "拖框多选：框里的 " .. hl .. " 个都选上了")
+click(button("^看敌军$"))
+R.run(1.5)
+local ez = vp(origin + V3(0, 1, (FD.enemy[1] + FD.enemy[2]) / 2))
+local dz = vp(origin + V3(0, 1, (FD.deploy[1] + FD.deploy[2]) / 2))
+check(onScreen(ez) and button("^看我方$") ~= nil and not (onScreen(dz) and dz.Z < ez.Z), "「看敌军」：镜头转去框住敌军区")
+click(button("^看我方$"))
+R.run(1)
+check(onScreen(vp(origin + V3(0, 1, (FD.deploy[1] + FD.deploy[2]) / 2))), "「看我方」：回到部署区")
 click(button("^回基地$"))
+R.run(0.3)
+check(cam.CameraType == Enum.CameraType.Custom and (tag == nil or not tag.Enabled), "回基地：镜头回到小人，头顶名字收起")
 
-print("== 开战（本人上阵）")
+print("== 开战（观战镜头、本人上阵）")
 n0 = #R.sent
 click(button("^开战"))
 R.run(1)
@@ -404,10 +490,25 @@ local hp = hrp.CFrame.Position - origin
 check(battleEvent(n0, "start") ~= nil and guiText("^第 1 关") ~= nil, "开战，界面显示「第 1 关」")
 check(hp.Z > Config.Field.deploy[1] and hp.Z < Config.Field.deploy[2] and pl.Character:GetAttribute("BU") ~= nil, "本人传送到了己方阵地，算一个战斗单位")
 check(pl.Character.Humanoid.MaxHealth == Config.Hero.hp, "上阵血量 " .. Config.Hero.hp)
--- 拿起步枪，对着最近的敌人打
+local camL = guiText("^自动镜头 ·")
+check(cam.CameraType == Enum.CameraType.Scriptable and camL ~= nil and camL.Visible, "开战默认观战镜头：" .. tostring(camL and camL.Text:match("^[^\n]+")))
+local seen = 0
+for _, u in ipairs(units()) do if onScreen(vp(u.Root.CFrame.Position)) then seen = seen + 1 end end
+check(seen == #units(), "自动镜头把我军都框在画面里（" .. seen .. " / " .. #units() .. "）")
+click(button("^跟随下一个"))
+R.run(1)
+local fl1 = guiText("^跟随：")
+local fu = units()[1]
+check(fl1 ~= nil and button("^自动镜头") and button("^自动镜头").Visible, "「跟随下一个」：镜头跟着一个单位（" .. tostring(fl1 and fl1.Text:match("^[^\n]+")) .. "）")
+check(fu ~= nil and (cam.CFrame.Position - fu.Root.CFrame.Position).Magnitude < 160, "跟随镜头离那个单位很近")
+R.as("client", function() UISv.InputBegan:Fire({ UserInputType = Enum.UserInputType.Keyboard, KeyCode = Enum.KeyCode.Space }, false) end)
+R.run(0.5)
+check(guiText("^自动镜头 ·") ~= nil and not button("^自动镜头").Visible, "空格：回到自动镜头")
+-- 拿起步枪：切回自己的小人，对着最近的敌人打
 local rifle = pl.Backpack:FindFirstChild("步枪")
 rifle.Parent = pl.Character
 R.run(0.2)
+check(cam.CameraType == Enum.CameraType.Custom and button("^观战镜头$") ~= nil, "拿起枪：镜头切回自己的小人（「观战镜头」能切回去）")
 local target = plot().Enemies:GetChildren()[1]
 local fill0 = target.Root:FindFirstChild("HP") and target.Root.HP:FindFirstChildOfClass("Frame").Fill.Size.XS or 1
 pl.Character.Head._p.CFrame = CF(target.Root.CFrame.Position + V3(0, 2.5, -40))
@@ -888,23 +989,62 @@ click(button("^×$"))
 local lb = guiText("^1%. ")
 check(plot().Board:FindFirstChildOfClass("SurfaceGui").Col2.Text:find("Name7007") ~= nil or plot().Board:FindFirstChildOfClass("SurfaceGui").Col1.Text:find("1%.") ~= nil, "基地里的排行榜牌子有数据")
 local _ = lb
--- 重生：老档第 11 关、有银行 → 还不够 20 关；直接改存档里的关卡再进
+-- 重生：老档的建筑全部盖好了 → 菜单里「重生」亮了（不再看关卡）
 R.removePlayer(pl)
 R.run(1)
-R.store[Config.SaveKey .. "/u5005"].level = 21
 pl = join("Veteran", 5005)
 R.run(3)
-check(button("^重生$") ~= nil and button("^重生$").Visible, "第 21 关、有银行：出现「重生」")
+local nOpen = select(2, Config.RebirthProgress({}, 0))
+check(button("^重生$") ~= nil and button("^重生$").Visible, "基地的 " .. nOpen .. " 栋全部盖好：菜单里「重生」亮了")
+check(tostring(guideNow()):find("重生") ~= nil, "指引：" .. tostring(guideNow()))
+local function areaSign(id)
+  local areaF = plot():FindFirstChild("Areas")
+  local a = areaF and areaF:FindFirstChild("Area_" .. id)
+  for _, d in ipairs(a and a:GetDescendants() or {}) do
+    if d.ClassName == "TextLabel" and d.Text:find("重生开放") then return d.Text end
+  end
+end
+check(areaSign("port") ~= nil and areaSign("missile") ~= nil and areaSign("space") ~= nil, "南边三块新区域都围着、立着「第 n 次重生开放」的牌子")
+check(plot().Pads:FindFirstChild("Pad_dock") == nil, "没重生前新区域里没有购买按钮")
 click(button("^重生$"))
+check(guiText("开放新区域「港口区」") ~= nil, "重生面板写着这次开放「港口区」")
 click(button("^确定重生$"))
 R.run(1)
 check(stat("关卡") == 1 and stat("现金") == Config.StartCash and #units() == 0 and #plot().Buildings:GetChildren() == 0, "重生：清零从头再来")
 check(guiText("★1") ~= nil, "界面上显示重生 ★1")
+check(areaSign("port") == nil and areaSign("missile") ~= nil and plot().Pads:FindFirstChild("Pad_dock") ~= nil, "港口区开放了（铁丝网拆了、码头仓库有购买按钮），导弹基地还围着")
+local rbBtn = button("^重生 %d+/%d+$")
+check(rbBtn ~= nil and rbBtn.Visible, "重生后菜单里写着下一次的进度（" .. tostring(rbBtn and rbBtn.Text) .. "）")
+local nt = #R.sent
+action("rebirth")
+check(toastSince(nt, "全部盖好才能重生"), "没盖满点重生：服务器不让（提示还差几栋）")
 touch("house1")
 R.run(10)
 check(stat("现金") > Config.StartCash - 60 + 5 * 10, "重生后收入有加成")
 check(#R.errors == 0, "这一段没报错")
 R.removePlayer(pl)
+R.run(1)
+check(R.store[Config.SaveKey .. "/u5005"].rebirth == 1, "退出时存档：重生 1 次存上了")
+-- 重生满 3 次的老档：三块新区域都开着、里面的楼都读回来了；不能再重生
+local owned3 = {}
+for _, b in ipairs(Config.Buildings) do owned3[b.id] = true end
+R.store[Config.SaveKey .. "/u5006"] = { v = 2, cash = 1000, level = 30, best = 30, owned = owned3, hq = 4, tech = 3, army = {}, rebirth = 5, xp = 100,
+  weapons = { rifle = true }, t = os.time() - 10 }
+local p3 = join("Max", 5006)
+local keep = pl
+pl = p3
+R.run(3)
+check(plot():FindFirstChild("Buildings"):FindFirstChild("launchpad") ~= nil and plot().Buildings:FindFirstChild("dock") ~= nil and plot().Buildings:FindFirstChild("strategic") ~= nil,
+  "重生 3 次的档：港口区、导弹基地、航天中心的楼都读回来了")
+check(areaSign("port") == nil and areaSign("missile") == nil and areaSign("space") == nil, "三块新区域都开放了")
+check(button("^重生") == nil or not button("^重生").Visible, "重生满 3 次：菜单里不再有「重生」")
+check(guiText("★3") ~= nil, "存档里写着重生 5 次的按上限 3 次算（★3）")
+nt = #R.sent
+action("rebirth")
+check(toastSince(nt, "重生满"), "重生满了再点：提示已经重生满 3 次")
+check(stat("现金") > 0 and guiText("进度已自动保存") ~= nil or guiText("进度会自动保存") ~= nil, "左下角写着进度会自动保存")
+R.removePlayer(p3)
+pl = keep
 R.removePlayer(rival)
 R.run(1)
 

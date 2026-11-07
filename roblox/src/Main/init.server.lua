@@ -106,11 +106,12 @@ function G.push(st)
   local weapons = {}
   for id in pairs(d.weapons) do weapons[id] = true end
   local B = st.battle
+  local rbBuilt, rbTotal = Config.RebirthProgress(d.owned, d.rebirth)
   G.R.State:FireClient(st.pl, {
     cash = d.cash, income = st.income, level = d.level, best = d.best, cap = G.capOf(d), n = G.count(st), counts = counts,
     owned = d.owned, lv = d.lv, hq = d.hq, hqNext = hqNext, tech = d.tech, techNext = techNext, plot = st.plot.index, origin = st.plot.origin,
     battle = B ~= nil, mode = B and B.mode or nil, enemy = enemy, reward = Config.Reward(d.level), save = st.canSave,
-    rebirth = d.rebirth, canRebirth = G.canRebirth(d), xp = d.xp, rank = rank, nextXp = nextXp, rating = d.rating, kills = d.kills,
+    rebirth = d.rebirth, canRebirth = G.canRebirth(d), rbBuilt = rbBuilt, rbTotal = rbTotal, savedAt = st.savedAt, xp = d.xp, rank = rank, nextXp = nextXp, rating = d.rating, kills = d.kills,
     weapons = weapons, daily = { ok = dOK, amount = dAmt, streak = dStreak }, missions = ms, missionReward = G.missionReward(st),
     raidCD = math.max(0, math.ceil((st.raidCD or 0) - os.clock())), power = G.powerOf(d),
     pvp = d.pvp, pvpWins = d.pvpWins, pvpGames = d.pvpGames, match = G.matchInfo and G.matchInfo(st) or nil, matchServer = G.matchServer, teleporting = st.teleporting == true,
@@ -258,7 +259,7 @@ Players.PlayerRemoving:Connect(function(pl)
   if st.ready and not st.teleporting then G.save(st) end   -- 传送走的人传送前已经存过（别拿这里的旧数据盖掉对战服务器存的）
   G.states[pl] = nil
   local plot = st.plot
-  for _, name in ipairs({ "Buildings", "Pads", "Units", "Enemies", "Drops" }) do plot[name]:ClearAllChildren() end
+  for _, name in ipairs({ "Buildings", "Pads", "Units", "Enemies", "Drops", "Areas" }) do plot[name]:ClearAllChildren() end
   st.crate = nil
   plot.owner = nil
   plot.sign.Text = "空基地"
@@ -277,6 +278,7 @@ end)
 local ACT = {
   buy = function(st, a) G.buyUnit(st, a) end,
   move = function(st, a, b, c) G.moveUnit(st, a, b, c) end,
+  place = function(st, a) G.placeUnits(st, a) end,
   sell = function(st, a) G.sellUnit(st, a) end,
   arrange = function(st) G.arrange(st) end,
   battle = function(st) G.startBattle(st) end,
@@ -316,7 +318,10 @@ G.R.Action.OnServerEvent:Connect(function(pl, op, a, b, c)
     return
   end
   local f = ACT[op]
-  if f then G.try("操作 " .. op, f, st, a, b, c) end
+  if f then
+    G.try("操作 " .. op, f, st, a, b, c)
+    st.needSave = true   -- 下一轮自动存档存上
+  end
 end)
 
 G.R.Shoot.OnServerEvent:Connect(function(pl, id, aim)
@@ -348,14 +353,19 @@ task.spawn(function()
   end
 end)
 
--- 自动存档
+-- 自动存档：每 30 秒看一圈，这段时间里操作过的（买、盖、升级、打完仗……）就存；没操作的也至少两分钟存一次（钱一直在涨）
 task.spawn(function()
   while true do
-    task.wait(90)
+    task.wait(30)
     local list = {}
     for _, st in pairs(G.states) do table.insert(list, st) end
+    local now = os.clock()
     for _, st in ipairs(list) do
-      if G.states[st.pl] == st and st.ready and not st.teleporting then G.try("自动存档", G.save, st) end
+      if G.states[st.pl] == st and st.ready and not st.teleporting and (st.needSave or now - (st.saveT or 0) > 120) then
+        st.needSave = false
+        st.saveT = now
+        G.try("自动存档", G.save, st)
+      end
     end
   end
 end)

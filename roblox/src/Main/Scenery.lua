@@ -106,6 +106,8 @@ local function reserved(Config, x, z, margin)
     if dx > 150 - margin and dx < 262 + margin and z > -hs - 20 - margin and z < hs + margin then return true end           -- 空军基地
     local I = Config.Industry
     if dx > I.x0 - 12 - margin and dx < I.x1 + margin and z > I.z0 - 12 - margin and z < I.z1 + 12 + margin then return true end   -- 西边工业区
+    if math.abs(dx) < 404 + margin and z > -314 - margin and z < -126 + margin then return true end   -- 南门外的路、重生开放的三块新区域
+    if math.abs(dx) < 36 + margin and z > -356 - margin and z < -300 + margin then return true end    -- 港口区伸进湖里的码头
   end
   for _, ax in ipairs(Config.Arena.xs) do
     if math.abs(x - ax) < F.width / 2 + 40 + margin and z > Config.Arena.z + F.center - F.length / 2 - 40 - margin and z < Config.Arena.z + F.center + F.length / 2 + 40 + margin then return true end
@@ -322,7 +324,39 @@ function Scenery.base(f, origin, color, Config)
       part(g, V(0.12, 0.12, len), base * CF(mid + V(0, 1 + h + dy, 0)) * (rot - rot.Position), RGB(70, 70, 72), MAT.Metal)
     end
   end
-  wall(-hs, -hs, hs, -hs, 8)           -- 后墙
+  -- 后墙：中间开南门（门外一条东西向的大路，通重生开放的新区域）
+  local sg0, sg1 = Config.SouthGate[1], Config.SouthGate[2]
+  wall(-hs, -hs, sg0 - 3, -hs, 8)
+  wall(sg1 + 3, -hs, hs, -hs, 8)
+  for _, gx in ipairs({ sg0 - 2.5, sg1 + 2.5 }) do
+    part(g, V(5, 12, 5), base * CF(gx, 7, -hs), RGB(124, 124, 118), MAT.Concrete, nil, true)
+    part(g, V(5.6, 0.8, 5.6), base * CF(gx, 13.4, -hs), RGB(100, 100, 96), MAT.Concrete)
+    part(g, V(1, 1, 1), base * CF(gx, 14.3, -hs), RGB(255, 170, 60), MAT.Neon):SetAttribute("Anim", "blink")
+  end
+  local sl = part(g, V(sg1 - sg0 + 6, 2.4, 1), base * CF((sg0 + sg1) / 2, 14, -hs), RGB(214, 170, 40), MAT.SmoothPlastic)
+  for _, face in ipairs({ Enum.NormalId.Front, Enum.NormalId.Back }) do
+    local sg = Instance.new("SurfaceGui")
+    sg.Face = face
+    sg.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+    sg.PixelsPerStud = 24
+    sg.LightInfluence = 0
+    local t = Instance.new("TextLabel")
+    t.Size = UDim2.fromScale(1, 1)
+    t.BackgroundTransparency = 1
+    t.Font = Enum.Font.GothamBlack
+    t.TextScaled = true
+    t.TextColor3 = RGB(40, 36, 30)
+    t.Text = (face == Enum.NormalId.Back) and "南门 · 新区域" or "回基地"
+    t.Parent = sg
+    sg.Parent = sl
+  end
+  -- 门外的大路（东西向，接三块新区域）和门口那一小段
+  local R = Config.SouthRoad
+  local rz = (R.z0 + R.z1) / 2
+  part(g, V(800, 1, R.z1 - R.z0 + 4), base * CF(0, 0.5, rz), RGB(150, 150, 142), MAT.Concrete, nil, true)
+  part(g, V(sg1 - sg0 + 4, 1, -hs - R.z1 + 1), base * CF((sg0 + sg1) / 2, 0.5, (R.z1 - hs) / 2), RGB(150, 150, 142), MAT.Concrete, nil, true)
+  part(g, V(796, 0.1, R.z1 - R.z0), base * CF(0, 1.05, rz), RGB(62, 64, 68), MAT.Asphalt)
+  for x = -390, 390, 16 do part(g, V(6, 0.06, 0.5), base * CF(x, 1.12, rz), RGB(236, 232, 210), MAT.SmoothPlastic) end
   -- 左墙（西）：南段开一个工业区大门（门柱、门楣上写「工业区」）
   local gz0, gz1 = Config.Industry.gate[1], Config.Industry.gate[2]
   wall(-hs, -hs, -hs, gz0 - 3, 8)

@@ -26,7 +26,7 @@ function World.init(G)
     plot.field = info.field
     plot.sign = info.sign
     plot.board = info.board
-    for _, name in ipairs({ "Buildings", "Pads", "Units", "Enemies", "Drops" }) do
+    for _, name in ipairs({ "Buildings", "Pads", "Units", "Enemies", "Drops", "Areas" }) do
       local sub = Instance.new("Folder")
       sub.Name = name
       sub.Parent = f

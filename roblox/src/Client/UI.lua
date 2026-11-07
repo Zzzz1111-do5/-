@@ -135,6 +135,7 @@ function UI.init(G)
   -- 按屏幕大小整体缩放：根框架先放大 1/s 倍再用 UIScale 缩 s 倍，正好铺满屏幕
   local root = mk("Frame", { BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1) }, gui)
   local uiScale = mk("UIScale", {}, root)
+  ui.scale = uiScale   -- 镜头取景按它算面板在屏幕上占多大
   local function rescale()
     local vs = cam.ViewportSize
     G.compact = isCompact()
@@ -165,6 +166,7 @@ function UI.init(G)
     function() RA:FireServer("matchCancel") end)
 
   local info = panel(root, { Position = UDim2.fromOffset(10, 72), Size = UDim2.fromOffset(280, 196) })
+  ui.info = info
   local lvL = text(info, { Position = UDim2.fromOffset(14, 8), Size = UDim2.new(1, -28, 0, 28), Font = FONT, TextSize = 22, Text = "第 1 关" })
   local armyL = text(info, { Position = UDim2.fromOffset(14, 38), Size = UDim2.new(1, -28, 0, 20), Text = "部队 0 / 4" })
   local enemyL = text(info, { Position = UDim2.fromOffset(14, 60), Size = UDim2.new(1, -28, 0, 52), TextSize = 14, TextWrapped = true, TextScaled = true, TextYAlignment = Enum.TextYAlignment.Top, TextColor3 = RGB(255, 165, 150) })
@@ -218,7 +220,7 @@ function UI.init(G)
     for _, b in ipairs(menuBtns) do
       if b ~= btnMenu then b.Visible = not menuCollapsed end
     end
-    btnRebirth.Visible = not menuCollapsed and G.S ~= nil and G.S.canRebirth == true
+    btnRebirth.Visible = not menuCollapsed and G.S ~= nil and (G.S.rebirth or 0) < Config.Rebirth.max
   end)
 
   -- 右边：兵工厂（按页签分类：步兵 / 装甲 / 防空 / 炮兵 / 空中，可以滚动；最下面一行是军工科技）
@@ -307,20 +309,24 @@ function UI.init(G)
   mk("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, HorizontalAlignment = Enum.HorizontalAlignment.Center, VerticalAlignment = Enum.VerticalAlignment.Center, Padding = UDim.new(0, 10), SortOrder = Enum.SortOrder.LayoutOrder }, bar)
   ui.deployBtn = button(bar, "布阵", RGB(45, 95, 165), { Size = UDim2.fromOffset(120, 48), LayoutOrder = 1 }, function() G.toggleDeploy() end)
   ui.arrangeBtn = button(bar, "一键排阵", RGB(70, 115, 75), { Size = UDim2.fromOffset(120, 48), LayoutOrder = 2, Visible = false }, function() RA:FireServer("arrange") end)
-  ui.sellBtn = button(bar, "解散", RGB(120, 62, 52), { Size = UDim2.fromOffset(150, 48), LayoutOrder = 3, Visible = false }, function() G.sellSelected() end)
-  ui.fightBtn = button(bar, "开战！", RGB(195, 52, 45), { Size = UDim2.fromOffset(140, 48), LayoutOrder = 4, TextSize = 22 }, function()
+  -- 布阵时看一眼这一关的敌军摆在哪（再点回来）
+  ui.eviewBtn = button(bar, "看敌军", RGB(128, 62, 56), { Size = UDim2.fromOffset(110, 48), LayoutOrder = 3, Visible = false }, function()
+    if G.toggleDeployView then G.toggleDeployView() end
+  end)
+  ui.sellBtn = button(bar, "解散", RGB(120, 62, 52), { Size = UDim2.fromOffset(150, 48), LayoutOrder = 4, Visible = false }, function() G.sellSelected() end)
+  ui.fightBtn = button(bar, "开战！", RGB(195, 52, 45), { Size = UDim2.fromOffset(140, 48), LayoutOrder = 5, TextSize = 22 }, function()
     if G.S and not G.S.battle then RA:FireServer("battle") end
   end)
-  ui.raidBtn = button(bar, "突袭", RGB(150, 70, 30), { Size = UDim2.fromOffset(120, 48), LayoutOrder = 5 }, function()
+  ui.raidBtn = button(bar, "突袭", RGB(150, 70, 30), { Size = UDim2.fromOffset(120, 48), LayoutOrder = 6 }, function()
     if G.S and not G.S.battle then RA:FireServer("raid") end
   end)
-  ui.hqBtn = button(bar, "升级指挥部", RGB(125, 102, 40), { Size = UDim2.fromOffset(200, 48), LayoutOrder = 6, TextSize = 15, Visible = false }, function() RA:FireServer("hq") end)
+  ui.hqBtn = button(bar, "升级指挥部", RGB(125, 102, 40), { Size = UDim2.fromOffset(200, 48), LayoutOrder = 7, TextSize = 15, Visible = false }, function() RA:FireServer("hq") end)
 
   ui.hint = text(root, {
     AnchorPoint = V2(0.5, 1), Position = UDim2.new(0.5, 0, 1, -136), Size = UDim2.fromOffset(820, 24),
     TextXAlignment = Enum.TextXAlignment.Center, TextSize = 15, TextStrokeTransparency = 0.4, Visible = false,
-    Text = mobile and "点自己的部队选中，再点蓝色部署区放下 · 单指拖动转镜头 · 双指缩放"
-      or "点自己的部队选中，再点蓝色部署区放下 · 右键拖动转镜头 · 滚轮缩放 · WASD 移动 · Q / E 转向",
+    Text = mobile and "点部队选中、点空地放下 · 按住部队拖动 · 单指拖地图 · 双指缩放 · 下面一排点一下选一类"
+      or "点部队选中（Shift 加选 · 双击选同兵种 · 空地上拖框）· 按住拖动摆放 · 点空地放下 · 滚轮缩放 · 右键转 · 空格复位",
   })
 
   ---------------------------------------------------------------- 战斗中
@@ -333,9 +339,21 @@ function UI.init(G)
   mk("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, HorizontalAlignment = Enum.HorizontalAlignment.Center, VerticalAlignment = Enum.VerticalAlignment.Center, Padding = UDim.new(0, 10), SortOrder = Enum.SortOrder.LayoutOrder }, bbar)
   ui.bbar = bbar
   ui.driveBtn = button(bbar, "开车 / 开飞机", RGB(45, 95, 165), { Size = UDim2.fromOffset(170, 48), LayoutOrder = 1 }, function() open("drive") end)
-  ui.viewBtn = button(bbar, "俯瞰战场", RGB(70, 80, 92), { Size = UDim2.fromOffset(140, 48), LayoutOrder = 2 }, function() G.toggleOverview() end)
-  ui.rejoinBtn = button(bbar, "重返战场", RGB(60, 150, 80), { Size = UDim2.fromOffset(150, 48), LayoutOrder = 3, Visible = false }, function() RA:FireServer("rejoin") end)
-  ui.exitBtn = button(bbar, mobile and "下车" or "下车（F）", RGB(150, 70, 30), { Size = UDim2.fromOffset(140, 48), LayoutOrder = 4, Visible = false }, function() RA:FireServer("exit") end)
+  ui.viewBtn = button(bbar, "操控小人", RGB(70, 80, 92), { Size = UDim2.fromOffset(140, 48), LayoutOrder = 2 }, function() G.toggleOverview() end)
+  ui.followBtn = button(bbar, mobile and "跟随下一个" or "跟随下一个 Tab", RGB(52, 92, 120), { Size = UDim2.fromOffset(150, 48), LayoutOrder = 3, Visible = false, TextSize = 16 }, function()
+    if G.followNext then G.followNext(1) end
+  end)
+  ui.autoBtn = button(bbar, mobile and "自动镜头" or "自动镜头 空格", RGB(60, 110, 80), { Size = UDim2.fromOffset(140, 48), LayoutOrder = 4, Visible = false, TextSize = 16 }, function()
+    if G.specAuto then G.specAuto() end
+  end)
+  ui.rejoinBtn = button(bbar, "重返战场", RGB(60, 150, 80), { Size = UDim2.fromOffset(150, 48), LayoutOrder = 5, Visible = false }, function()
+    RA:FireServer("rejoin")
+    if G.mode == "battle" then G.setMode("free") end   -- 回去亲自打：镜头跟着自己的小人
+  end)
+  ui.exitBtn = button(bbar, mobile and "下车" or "下车（F）", RGB(150, 70, 30), { Size = UDim2.fromOffset(140, 48), LayoutOrder = 6, Visible = false }, function() RA:FireServer("exit") end)
+  -- 观战镜头现在是什么（自动 / 跟随谁 / 自由）和怎么操作
+  ui.camL = text(root, { AnchorPoint = V2(0.5, 1), Position = UDim2.new(0.5, 0, 1, -206), Size = UDim2.fromOffset(720, 40), TextXAlignment = Enum.TextXAlignment.Center,
+    TextYAlignment = Enum.TextYAlignment.Bottom, RichText = true, TextSize = 16, TextStrokeTransparency = 0.45, Visible = false })
 
   -- 准星（开车、手机上拿枪时）、手机的开火键、弹药
   ui.cross = text(root, { AnchorPoint = V2(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromOffset(40, 40), Text = "+", Font = FONT, TextSize = 34,
@@ -366,6 +384,9 @@ function UI.init(G)
     G.setMode("free")
   end)
 
+  -- 存档状态（左下角，电脑上）：已自动保存 / 存档不可用
+  ui.saveL = text(root, { AnchorPoint = V2(0, 1), Position = UDim2.new(0, 12, 1, -10), Size = UDim2.fromOffset(620, 20), TextSize = 13, RichText = true,
+    TextColor3 = RGB(200, 208, 216), TextStrokeTransparency = 0.5, Text = "" })
   -- 提示条
   local toastBox = mk("Frame", { BackgroundTransparency = 1, AnchorPoint = V2(0.5, 0), Position = UDim2.new(0.5, 0, 0, 144), Size = UDim2.fromOffset(600, 220) }, root)
   mk("UIListLayout", { HorizontalAlignment = Enum.HorizontalAlignment.Center, Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder }, toastBox)
@@ -567,18 +588,40 @@ function UI.init(G)
   end
 
   -- 重生
-  local _, rBody = modal("rebirth", "重生", 520, 300)
+  local _, rBody = modal("rebirth", "重生", 580, 360)
   ui.fill.rebirth = function()
     clear(rBody)
     local S = G.S
     if not S then return end
-    local n = (S.rebirth or 0) + 1
-    line(rBody, 0, 150, { Text = "重生后：建筑、现金、关卡、部队、军工科技全部清零，从头再来。\n换来永久加成（第 " .. n .. " 次之后）：收入 +" ..
-      math.floor(Config.Rebirth.income * 100 * n) .. "%，部队血量和伤害 +" .. math.floor(Config.Rebirth.power * 100 * n) .. "%。\n武器、经验、军衔、突袭积分都会保留。" })
-    button(rBody, "确定重生", RGB(170, 120, 30), { Position = UDim2.fromOffset(0, 170), Size = UDim2.fromOffset(200, 48), ZIndex = 4 }, function()
-      RA:FireServer("rebirth")
-      modals.rebirth.Visible = false
-    end)
+    local done = S.rebirth or 0
+    if done >= Config.Rebirth.max then
+      line(rBody, 0, 80, { Text = "已经重生满 " .. Config.Rebirth.max .. " 次了：三块新区域都开放了。\n现在收入 +" .. math.floor(Config.Rebirth.income * 100 * done) ..
+        "%，部队血量和伤害 +" .. math.floor(Config.Rebirth.power * 100 * done) .. "%。", TextColor3 = RGB(255, 222, 130) })
+      return
+    end
+    local n = done + 1
+    local area = Config.Areas[n]
+    local y = 0
+    line(rBody, y, 24, { Text = "第 " .. n .. " 次重生（最多 " .. Config.Rebirth.max .. " 次）", TextColor3 = RGB(255, 222, 130) })
+    y = y + 28
+    line(rBody, y, 66, { Text = "要求：基地里的建筑全部盖好（现在 " .. tostring(S.rbBuilt or 0) .. " / " .. tostring(S.rbTotal or 0) .. " 栋）。\n" ..
+      "重生后：建筑、现金、关卡、部队、军工科技清零；武器、经验、军衔、积分保留。" })
+    y = y + 70
+    line(rBody, y, 66, { Text = "换来：收入永久 +" .. math.floor(Config.Rebirth.income * 100 * n) .. "%，部队血量和伤害 +" .. math.floor(Config.Rebirth.power * 100 * n) .. "%；" ..
+      (area and ("开放新区域「" .. area.name .. "」（" .. area.desc .. "，从基地后墙的南门出去）") or ""), TextColor3 = RGB(170, 230, 180) })
+    y = y + 72
+    if S.canRebirth then
+      button(rBody, "确定重生", RGB(170, 120, 30), { Position = UDim2.fromOffset(0, y), Size = UDim2.fromOffset(200, 48), ZIndex = 4 }, function()
+        RA:FireServer("rebirth")
+        modals.rebirth.Visible = false
+      end)
+    else
+      local miss = {}
+      for _, b in ipairs(Config.Buildings) do
+        if Config.AreaOpen(b, done) and not (S.owned and S.owned[b.id]) and #miss < 8 then table.insert(miss, b.name) end
+      end
+      line(rBody, y, 60, { Text = "还没盖：" .. table.concat(miss, "、") .. (((S.rbTotal or 0) - (S.rbBuilt or 0) > #miss) and " ……" or ""), TextColor3 = RGB(255, 170, 150) })
+    end
   end
 
   -- 致谢
@@ -661,9 +704,13 @@ function UI.init(G)
     if (S.n or 0) == 0 then return "在右边「兵工厂」造 2～3 个步兵班（$" .. Config.Units.inf.price .. " 一个）", nil, "inf" end
     if (S.wins or 0) == 0 and (S.level or 1) <= 1 then return "点下面的「开战！」打第 1 关——你本人也会上战场，打仗时下面有支援技能", nil, "fight" end
     if not o.hq then return "盖「指挥部」：部队上限 4 → 10，还多一个「战地急救」技能", "hq" end
+    if S.canRebirth then
+      local area = Config.Areas[(S.rebirth or 0) + 1]
+      return "基地全部建好了！点左边「重生」：收入、部队永久变强" .. (area and ("，还开放新区域「" .. area.name .. "」") or ""), nil, "rebirth"
+    end
     local best = nil
     for _, b in ipairs(Config.Buildings) do
-      if not o[b.id] and (not b.req or o[b.req]) and (not best or b.price < best.price) then best = b end
+      if not o[b.id] and (not b.req or o[b.req]) and Config.AreaOpen(b, S.rebirth) and (not best or b.price < best.price) then best = b end
     end
     if best and S.cash >= best.price * 0.6 then
       return "下一栋：「" .. best.name .. "」$" .. Config.Fmt(best.price) .. "（现在 $" .. Config.Fmt(S.cash) .. "）", best.id
@@ -692,7 +739,8 @@ function UI.init(G)
     local m = p and p:FindFirstChild("Pads") and p.Pads:FindFirstChild("Pad_" .. id)
     return m and m:FindFirstChild("Pad")
   end
-  local UIKEY = { inf = function() return rows.inf and rows.inf.btn end, fight = function() return ui.fightBtn end, build = function() return btnBuild end }
+  local UIKEY = { inf = function() return rows.inf and rows.inf.btn end, fight = function() return ui.fightBtn end, build = function() return btnBuild end,
+    rebirth = function() return btnRebirth end }
   local function updateGoal()
     local S = G.S
     if not S then return end
@@ -937,13 +985,15 @@ function UI.init(G)
         e.b.Size = O(84, 36)
       end
       place(bar, V2(0.5, 1), N(0.5, 0, 1, -68), O(700, 44))
-      sizes({ { ui.deployBtn, 96, 44, 17 }, { ui.arrangeBtn, 110, 44, 16 }, { ui.sellBtn, 96, 44, 16 }, { ui.fightBtn, 110, 44, 20 }, { ui.raidBtn, 96, 44, 17 }, { ui.hqBtn, 170, 44, 14 } })
-      place(ui.hint, V2(0.5, 1), N(0.5, 0, 1, -116), O(820, 22))
+      sizes({ { ui.deployBtn, 96, 44, 17 }, { ui.arrangeBtn, 110, 44, 16 }, { ui.eviewBtn, 90, 44, 16 }, { ui.sellBtn, 96, 44, 16 }, { ui.fightBtn, 110, 44, 20 }, { ui.raidBtn, 96, 44, 17 }, { ui.hqBtn, 170, 44, 14 } })
+      place(ui.hint, V2(0.5, 1), N(0.5, 0, 1, -152), O(820, 22))
       place(bpanel, V2(0.5, 0), N(0.5, 0, 0, 4), O(300, 50))
       ui.bTitle.Position, ui.bTitle.Size, ui.bTitle.TextSize = O(0, 2), N(1, 0, 0, 24), 18
       ui.bInfo.Position, ui.bInfo.Size, ui.bInfo.TextSize = O(0, 26), N(1, 0, 0, 20), 15
       place(bbar, V2(0.5, 1), N(0.5, 0, 1, -68), O(700, 44))
-      sizes({ { ui.driveBtn, 150, 44, 16 }, { ui.viewBtn, 120, 44, 16 }, { ui.rejoinBtn, 120, 44, 16 }, { ui.exitBtn, 110, 44, 16 } })
+      sizes({ { ui.driveBtn, 140, 44, 16 }, { ui.viewBtn, 104, 44, 16 }, { ui.followBtn, 110, 44, 15 }, { ui.autoBtn, 96, 44, 15 }, { ui.rejoinBtn, 110, 44, 16 }, { ui.exitBtn, 110, 44, 16 } })
+      place(ui.camL, V2(0.5, 1), N(0.5, -60, 1, -116), O(560, 36))
+      ui.camL.TextSize = 14
       -- 技能：右边一竖列，右手拇指够得着
       place(sbar, V2(1, 0), N(1, -6, 0, 4), O(112, 300))
       sbarList.FillDirection, sbarList.HorizontalAlignment, sbarList.Padding = Enum.FillDirection.Vertical, Enum.HorizontalAlignment.Right, UDim.new(0, 5)
@@ -990,13 +1040,15 @@ function UI.init(G)
         e.b.Size = O(94, 40)
       end
       place(bar, V2(0.5, 1), N(0.5, 0, 1, -78), O(900, 52))
-      sizes({ { ui.deployBtn, 120, 48, 18 }, { ui.arrangeBtn, 120, 48, 18 }, { ui.sellBtn, 150, 48, 18 }, { ui.fightBtn, 140, 48, 22 }, { ui.raidBtn, 120, 48, 18 }, { ui.hqBtn, 200, 48, 15 } })
-      place(ui.hint, V2(0.5, 1), N(0.5, 0, 1, -136), O(820, 24))
+      sizes({ { ui.deployBtn, 120, 48, 18 }, { ui.arrangeBtn, 120, 48, 18 }, { ui.eviewBtn, 110, 48, 18 }, { ui.sellBtn, 150, 48, 18 }, { ui.fightBtn, 140, 48, 22 }, { ui.raidBtn, 120, 48, 18 }, { ui.hqBtn, 200, 48, 15 } })
+      place(ui.hint, V2(0.5, 1), N(0.5, 0, 1, -176), O(900, 24))
       place(bpanel, V2(0.5, 0), N(0.5, 0, 0, 72), O(420, 62))
       ui.bTitle.Position, ui.bTitle.Size, ui.bTitle.TextSize = O(0, 4), N(1, 0, 0, 28), 21
       ui.bInfo.Position, ui.bInfo.Size, ui.bInfo.TextSize = O(0, 33), N(1, 0, 0, 22), 16
       place(bbar, V2(0.5, 1), N(0.5, 0, 1, -78), O(820, 52))
-      sizes({ { ui.driveBtn, 170, 48, 18 }, { ui.viewBtn, 140, 48, 18 }, { ui.rejoinBtn, 150, 48, 18 }, { ui.exitBtn, 140, 48, 18 } })
+      sizes({ { ui.driveBtn, 170, 48, 18 }, { ui.viewBtn, 140, 48, 18 }, { ui.followBtn, 160, 48, 16 }, { ui.autoBtn, 150, 48, 16 }, { ui.rejoinBtn, 150, 48, 18 }, { ui.exitBtn, 140, 48, 18 } })
+      place(ui.camL, V2(0.5, 1), N(0.5, 0, 1, -206), O(720, 40))
+      ui.camL.TextSize = 16
       place(sbar, V2(0.5, 1), N(0.5, 0, 1, -138), O(820, 64))
       sbarList.FillDirection, sbarList.HorizontalAlignment, sbarList.Padding = Enum.FillDirection.Horizontal, Enum.HorizontalAlignment.Center, UDim.new(0, 8)
       for _, e in pairs(sbtn) do
@@ -1111,7 +1163,19 @@ function UI.init(G)
     end
     btnMission.Text = claimable and "任务 ●" or "任务"
     btnMission.BackgroundColor3 = claimable and RGB(60, 150, 80) or RGB(52, 84, 120)
-    btnRebirth.Visible = S.canRebirth == true and not menuCollapsed
+    -- 重生键：没重生满就一直在（盖满了写「重生」、亮金色；没盖满写进度）
+    btnRebirth.Visible = (S.rebirth or 0) < Config.Rebirth.max and not menuCollapsed
+    btnRebirth.Text = S.canRebirth and "重生" or ("重生 " .. tostring(S.rbBuilt or 0) .. "/" .. tostring(S.rbTotal or 0))
+    btnRebirth.BackgroundColor3 = S.canRebirth and RGB(196, 140, 30) or RGB(96, 84, 52)
+    -- 存档状态（左下角）
+    if S.save == false then
+      ui.saveL.Text = "<font color=\"#FF8A80\">●</font> 存档不可用：这次的进度不会保存（Studio 里要发布游戏、在「游戏设置 → 安全」打开 API 访问）"
+    elseif S.savedAt then
+      local ago = math.max(0, os.time() - S.savedAt)
+      ui.saveL.Text = "<font color=\"#7CFC8A\">●</font> 进度已自动保存（" .. ((ago < 60) and (ago .. " 秒前") or (math.floor(ago / 60) .. " 分钟前")) .. "），退出重进接着玩"
+    else
+      ui.saveL.Text = "<font color=\"#B8C2CC\">●</font> 进度会自动保存，退出重进接着玩"
+    end
     btnDuel.Text = S.match and "真人对战 ●" or "真人对战"
     ui.raidBtn.Text = (S.raidCD or 0) > 0 and ("突袭 " .. S.raidCD .. "s") or "突袭"
     if S.daily and S.daily.ok and not dailyShown then
@@ -1135,6 +1199,8 @@ function UI.init(G)
     ui.fightBtn.Visible = not fighting
     ui.raidBtn.Visible = not fighting and mode ~= "deploy"
     ui.arrangeBtn.Visible = mode == "deploy" and not fighting
+    ui.eviewBtn.Visible = mode == "deploy" and not fighting
+    ui.eviewBtn.Text = (G.deployView == "enemy") and "看我方" or "看敌军"
     ui.sellBtn.Visible = mode == "deploy" and G.sel ~= nil and not fighting
     ui.hqBtn.Visible = mode == "free" and not fighting and S ~= nil and S.hqNext ~= nil
     if S ~= nil and S.hqNext ~= nil then ui.hqBtn.Text = "升级指挥部 $" .. Config.Fmt(S.hqNext) end
@@ -1149,17 +1215,23 @@ function UI.init(G)
     shopToggle.Visible = shopOk and c and not shopOpen
     shopClose.Visible = c
     top.Visible = not (c and fighting)
-    menu.Visible = not fighting
+    menu.Visible = not fighting and not (c and mode == "deploy")   -- 手机布阵时左边的菜单让出地方
     info.Visible = mode ~= "drive" and not (c and fighting)
-    ui.hint.Visible = mode == "deploy"
+    ui.hint.Visible = mode == "deploy" and not c and G.deployView ~= "enemy"
     bpanel.Visible = fighting
     bbar.Visible = fighting
     sbar.Visible = fighting and S ~= nil and S.skills ~= nil and #S.skills > 0
     feed.Visible = fighting
     goal.Visible = not fighting and mode ~= "drive"
+    ui.saveL.Visible = not c and mode == "free" and not fighting
     ui.driveBtn.Visible = fighting and G.drive == nil
     ui.exitBtn.Visible = G.drive ~= nil
-    ui.viewBtn.Text = (mode == "battle") and "跟随自己" or "俯瞰战场"
+    ui.viewBtn.Visible = fighting and G.drive == nil
+    ui.viewBtn.Text = (mode == "battle") and "操控小人" or "观战镜头"
+    local spec = G.spec
+    ui.followBtn.Visible = fighting and mode == "battle"
+    ui.autoBtn.Visible = fighting and mode == "battle" and spec ~= nil and spec.mode ~= "auto"
+    ui.camL.Visible = fighting and mode == "battle"
   end
 end
 

@@ -2,7 +2,7 @@
 -- 数值都在这里调：建筑、兵种、关卡敌军、武器、军衔、重生、每日奖励与任务、突袭与约战、战场支援、老兵、补给空投
 local Config = {}
 
-Config.Version = "0.7"
+Config.Version = "0.8"
 Config.SaveKey = "MilitaryTycoon_v1"   -- DataStore 名字（改了就是新存档）
 Config.StartCash = 300
 Config.BaseCap = 4                     -- 没有指挥部时最多几个单位
@@ -60,7 +60,40 @@ Config.Buildings = {
   -- 工业区里的两座战略设施：雷达站（打仗时所有支援技能冷却快两成）、导弹发射井（多一个支援技能「巡航导弹」）
   { id = "radar", name = "雷达站", kind = "radar", price = 25000, req = "hq", x = -280, z = -100, size = { 26, 22, 26 } },
   { id = "silo", name = "导弹发射井", kind = "silo", price = 150000, req = "radar", x = -258, z = 45, size = { 26, 10, 26 } },
+  -- 重生开放的新区域（area = 重生第几次开放，范围见 Config.Areas；从后墙的南门出去，门外一条东西向的路连着三块；买的按钮在楼北边、挨着路）
+  { id = "dock", name = "码头仓库", kind = "port", area = 1, price = 250000, income = 700, x = -78, z = -214, size = { 44, 14, 34 }, pad = { 0, 24 } },
+  { id = "shipyard", name = "造船厂", kind = "port", area = 1, price = 650000, income = 1700, req = "dock", x = 2, z = -222, size = { 54, 26, 46 }, pad = { 0, 30 } },
+  { id = "navalhq", name = "海军司令部", kind = "port", area = 1, price = 1600000, income = 4000, req = "shipyard", x = 84, z = -212, size = { 36, 24, 32 }, pad = { 0, 23 } },
+  { id = "propellant", name = "推进剂工厂", kind = "missile", area = 2, price = 2600000, income = 6500, x = 186, z = -214, size = { 44, 18, 36 }, pad = { 0, 25 } },
+  { id = "assembly", name = "导弹总装厂", kind = "missile", area = 2, price = 6500000, income = 16000, req = "propellant", x = 266, z = -220, size = { 50, 28, 44 }, pad = { 0, 29 } },
+  { id = "strategic", name = "战略导弹营", kind = "missile", area = 2, price = 16000000, income = 38000, req = "assembly", x = 346, z = -214, size = { 40, 16, 40 }, pad = { 0, 27 } },
+  { id = "satfac", name = "卫星工厂", kind = "space", area = 3, price = 32000000, income = 75000, x = -186, z = -214, size = { 44, 22, 36 }, pad = { 0, 25 } },
+  { id = "launchpad", name = "火箭发射台", kind = "space", area = 3, price = 85000000, income = 190000, req = "satfac", x = -266, z = -226, size = { 46, 70, 46 }, pad = { 0, 30 } },
+  { id = "spacecmd", name = "太空指挥中心", kind = "space", area = 3, price = 220000000, income = 450000, req = "launchpad", x = -346, z = -212, size = { 40, 26, 34 }, pad = { 0, 24 } },
 }
+-- 重生开放的新区域：重生第 n 次开放 Areas[n]（相对基地中心的范围，都在基地南边、湖北岸；没开放的围着铁丝网、立着牌子）
+Config.Areas = {
+  { n = 1, id = "port", name = "港口区", x0 = -128, x1 = 128, z0 = -302, z1 = -158, color = Color3.fromRGB(60, 130, 210), desc = "湖边的码头仓库、造船厂、海军司令部" },
+  { n = 2, id = "missile", name = "导弹基地", x0 = 140, x1 = 392, z0 = -302, z1 = -158, color = Color3.fromRGB(214, 120, 40), desc = "推进剂工厂、导弹总装厂、战略导弹营" },
+  { n = 3, id = "space", name = "航天中心", x0 = -392, x1 = -140, z0 = -302, z1 = -158, color = Color3.fromRGB(150, 110, 230), desc = "卫星工厂、火箭发射台、太空指挥中心" },
+}
+Config.SouthGate = { -16, 16 }              -- 后墙中间的南门（x 范围）
+Config.SouthRoad = { z0 = -154, z1 = -138 }  -- 门外东西向的路（z 范围），x 从最西的区域通到最东的
+-- 这栋楼现在能不能盖：老区域一直开着，新区域要重生够次数
+function Config.AreaOpen(b, rebirth)
+  return b.area == nil or (rebirth or 0) >= b.area
+end
+-- 重生进度：开放了的区域里盖了几栋、一共几栋
+function Config.RebirthProgress(owned, rebirth)
+  local built, total = 0, 0
+  for _, b in ipairs(Config.Buildings) do
+    if Config.AreaOpen(b, rebirth) then
+      total = total + 1
+      if owned and owned[b.id] then built = built + 1 end
+    end
+  end
+  return built, total
+end
 Config.PowerBoost = 1.5     -- 有发电厂时工厂收入乘几
 Config.RefineryBoost = 1.5  -- 有炼油厂时油井收入乘几
 Config.NuclearBoost = 1.3   -- 有核电站时工厂收入再乘几
@@ -237,8 +270,9 @@ function Config.RankOf(xp)
   return name, i
 end
 
--- 重生：打到 level 关、盖了银行就能重生——建筑、现金、关卡、部队、科技清零，换永久加成（每次收入 +income、部队血量伤害 +power）
-Config.Rebirth = { level = 20, income = 0.5, power = 0.1 }
+-- 重生：基地里（含已经开放的新区域）的建筑全部盖好就能重生，最多 max 次——建筑、现金、关卡、部队、科技清零，
+--   换永久加成（每次收入 +income、部队血量伤害 +power），再开放一块新区域（Config.Areas）；武器、经验、军衔、积分留着
+Config.Rebirth = { max = 3, income = 0.5, power = 0.1 }
 
 -- 战场支援（打仗时屏幕下方的技能键：点一下技能，再点战场上的位置；电脑上也能按 Z X V B N）：
 --   need 盖了哪栋楼才有；cd 冷却秒数（每一仗开打时全部就绪）；伤害、援军强度跟着全军战力（军工科技 × 重生）走

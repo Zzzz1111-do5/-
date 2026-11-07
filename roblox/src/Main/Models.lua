@@ -1347,8 +1347,365 @@ local function missileSilo(m, base, b)
   return body
 end
 
+---------------------------------------------------------------- 重生开放的新区域：港口区、导弹基地、航天中心
+
+-- 一排集装箱（两层、颜色随机）
+local CONT = { RGB(176, 64, 48), RGB(52, 104, 160), RGB(214, 160, 40), RGB(70, 130, 80), RGB(150, 150, 154), RGB(200, 96, 40) }
+local function containers(m, base, x0, z, n, rng)
+  for i = 0, n - 1 do
+    for tier = 0, (rng:NextNumber() < 0.6) and 1 or 0 do
+      local c = CONT[rng:NextInteger(1, #CONT)]
+      block(m, base, V(5.8, 5.2, 2.6), CF(x0 + i * 6.2, 0.6 + 2.6 + tier * 5.3, z), c, MAT.CorrodedMetal)
+    end
+  end
+end
+
+-- 码头仓库：瓦楞铁皮的大仓库（两扇卷帘门、屋顶天窗）、门口两排集装箱、一台叉车、系船柱
+local function dockWarehouse(m, base, b)
+  local w, h, d = b.size[1], b.size[2], b.size[3]
+  local body = hiddenBody(m, base, w, h, d)
+  local rng = Random.new(301)
+  block(m, base, V(w, 0.6, d), CF(0, 0.3, 0), RGB(150, 150, 144), MAT.Concrete)
+  local Y = 0.6
+  local hw, hd = w * 0.6, d * 0.86
+  local wx = -w / 2 + hw / 2 + 1
+  block(m, base, V(hw, h - 1.5, hd), CF(wx, Y + (h - 1.5) / 2, 0), RGB(170, 160, 140), MAT.CorrodedMetal)
+  block(m, base, V(hw + 1, 1, hd + 1), CF(wx, Y + h - 1, 0), RGB(96, 100, 104), MAT.Metal)
+  for _, oz in ipairs({ -hd * 0.22, hd * 0.22 }) do
+    block(m, base, V(0.3, h * 0.55, hd * 0.3), CF(wx + hw / 2 + 0.1, Y + h * 0.275, oz), RGB(70, 74, 78), MAT.DiamondPlate)
+  end
+  for k = -1, 1 do block(m, base, V(hw * 0.7, 0.4, 2), CF(wx, Y + h - 0.4, k * hd * 0.28), C.glass, MAT.Glass) end
+  facadeSign(m, base, CF(wx + hw / 2 + 0.25, Y + h * 0.78, 0) * CFrame.Angles(0, math.pi / 2, 0), 14, 2.2, "码 头 仓 库", RGB(255, 226, 140))
+  local cx = wx + hw / 2 + 4
+  containers(m, base, cx, d * 0.32, 2, rng)
+  containers(m, base, cx, -d * 0.36, 2, rng)
+  -- 叉车：车身、门架、货叉
+  local fx, fz = cx + 3, 0
+  block(m, base, V(2.4, 1.6, 3.6), CF(fx, Y + 1.4, fz), RGB(236, 180, 30), MAT.Metal)
+  block(m, base, V(2.2, 1.6, 0.3), CF(fx, Y + 2.9, fz + 0.6), C.dark, MAT.Metal)
+  block(m, base, V(0.3, 4.2, 0.3), CF(fx - 0.9, Y + 2.7, fz - 1.9), C.dark, MAT.Metal)
+  block(m, base, V(0.3, 4.2, 0.3), CF(fx + 0.9, Y + 2.7, fz - 1.9), C.dark, MAT.Metal)
+  block(m, base, V(2.2, 0.2, 2.2), CF(fx, Y + 0.9, fz - 3), C.dark, MAT.Metal)
+  for _, ox in ipairs({ -w / 2 + 4, 0, w / 2 - 4 }) do cyl(m, base, 1.4, 1.2, CF(ox, Y + 0.7, -d / 2 + 1.5), RGB(40, 40, 42), MAT.Metal) end
+  return body
+end
+
+-- 造船厂：干船坞里一条造了一半的军舰（灰色船体、上层建筑、炮塔）、跨在船坞上的龙门吊（小车来回、顶上红灯）
+local function shipyard(m, base, b)
+  local w, h, d = b.size[1], b.size[2], b.size[3]
+  local body = hiddenBody(m, base, w, h, d)
+  block(m, base, V(w, 0.6, d), CF(0, 0.3, 0), RGB(140, 140, 136), MAT.Concrete)
+  local Y = 0.6
+  -- 船坞：两边的坞墙、坞底
+  block(m, base, V(w * 0.9, 0.2, d * 0.5), CF(0, Y + 0.1, 0), RGB(60, 64, 70), MAT.Concrete)
+  for _, sz in ipairs({ -1, 1 }) do block(m, base, V(w * 0.9, 3, 2), CF(0, Y + 1.5, sz * d * 0.26), RGB(120, 120, 116), MAT.Concrete) end
+  -- 船：船体（船头收窄）、甲板、舰桥、桅杆、主炮
+  local HULL = RGB(120, 128, 136)
+  block(m, base, V(w * 0.62, 4.2, d * 0.3), CF(-w * 0.06, Y + 2.3, 0), HULL, MAT.Metal)
+  block(m, base, V(w * 0.16, 4.2, d * 0.21), CF(w * 0.31, Y + 2.3, 0), HULL, MAT.Metal)
+  block(m, base, V(w * 0.08, 4.2, d * 0.11), CF(w * 0.42, Y + 2.3, 0), HULL, MAT.Metal)
+  block(m, base, V(w * 0.86, 0.3, d * 0.3), CF(w * 0.05, Y + 4.55, 0), RGB(96, 100, 104), MAT.Metal)
+  block(m, base, V(w * 0.18, 5, d * 0.2), CF(-w * 0.12, Y + 7.2, 0), RGB(150, 156, 162), MAT.Metal)
+  block(m, base, V(w * 0.12, 3, d * 0.16), CF(-w * 0.14, Y + 11.2, 0), RGB(150, 156, 162), MAT.Metal)
+  block(m, base, V(w * 0.12, 0.8, d * 0.165), CF(-w * 0.14, Y + 11.6, 0), C.glass, MAT.Glass)
+  cyl(m, base, 8, 0.5, CF(-w * 0.14, Y + 16.6, 0), C.metal, MAT.Metal)
+  block(m, base, V(3.2, 1.6, 3.2), CF(w * 0.22, Y + 5.5, 0), RGB(140, 146, 152), MAT.Metal)
+  block(m, base, V(4, 0.4, 0.4), CF(w * 0.22 + 2.4, Y + 5.7, 0), C.gun, MAT.Metal)
+  -- 焊花（一闪一闪）
+  for _, p in ipairs({ { w * 0.1, 3.5 }, { -w * 0.3, 2.6 } }) do anim(ghostly(block(m, base, V(0.7, 0.7, 0.7), CF(p[1], Y + p[2], d * 0.15 + 0.4), RGB(180, 220, 255), MAT.Neon)), "blink", 2.6) end
+  -- 龙门吊：两条腿、横梁、小车、吊钩
+  local GY = RGB(236, 180, 30)
+  for _, sx in ipairs({ -1, 1 }) do
+    for _, sz in ipairs({ -1, 1 }) do block(m, base, V(1.4, h - 2, 1.4), CF(sx * w * 0.2, Y + (h - 2) / 2, sz * d * 0.4), GY, MAT.Metal) end
+    block(m, base, V(1.6, 1.6, d * 0.84), CF(sx * w * 0.2, Y + h - 1.4, 0), GY, MAT.Metal)
+  end
+  block(m, base, V(w * 0.44, 1.8, 2), CF(0, Y + h - 0.2, 0), GY, MAT.Metal)
+  block(m, base, V(3, 1.6, 3), CF(w * 0.05, Y + h - 1.8, 0), C.dark, MAT.Metal)
+  ghostly(block(m, base, V(0.15, 8, 0.15), CF(w * 0.05, Y + h - 6.6, 0), C.dark, MAT.Metal))
+  block(m, base, V(1.2, 1, 1.2), CF(w * 0.05, Y + h - 11, 0), GY, MAT.Metal)
+  for _, sx in ipairs({ -1, 1 }) do anim(ghostly(block(m, base, V(0.8, 0.8, 0.8), CF(sx * w * 0.2, Y + h + 0.4, 0), RGB(255, 40, 30), MAT.Neon)), "blink", 0.8) end
+  facadeSign(m, base, CF(0, Y + 4, -d / 2 + 0.6), 14, 2.2, "造 船 厂", RGB(255, 226, 140), Enum.NormalId.Front)
+  return body
+end
+
+-- 海军司令部：白楼蓝腰线、玻璃大门、楼顶转的雷达、两根旗杆、门口的锚
+local function navalHQ(m, base, b)
+  local w, h, d = b.size[1], b.size[2], b.size[3]
+  local body = hiddenBody(m, base, w, h, d)
+  block(m, base, V(w, 0.6, d), CF(0, 0.3, 0), RGB(160, 160, 156), MAT.Concrete)
+  local Y = 0.6
+  local WH, BL = RGB(236, 238, 240), RGB(40, 80, 150)
+  block(m, base, V(w * 0.9, h * 0.62, d * 0.7), CF(0, Y + h * 0.31, 0), WH, MAT.SmoothPlastic)
+  block(m, base, V(w * 0.92, 1.4, d * 0.72), CF(0, Y + h * 0.22, 0), BL, MAT.SmoothPlastic)
+  block(m, base, V(w * 0.92, 1, d * 0.72), CF(0, Y + h * 0.62, 0), RGB(200, 204, 208), MAT.Concrete)
+  for k = -2, 2 do block(m, base, V(w * 0.1, h * 0.18, 0.2), CF(k * w * 0.17, Y + h * 0.43, -d * 0.35 - 0.05), C.glass, MAT.Glass) end
+  block(m, base, V(w * 0.3, h * 0.3, d * 0.4), CF(0, Y + h * 0.77, 0), WH, MAT.SmoothPlastic)
+  block(m, base, V(w * 0.2, h * 0.22, 0.4), CF(0, Y + h * 0.13, -d * 0.35 - 0.1), C.glass, MAT.Glass)
+  -- 雷达：杆子 + 转的天线
+  local rx, rz = w * 0.08, 0
+  cyl(m, base, 6, 0.8, CF(rx, Y + h * 0.92 + 3, rz), C.metal, MAT.Metal)
+  local piv = (base * CF(rx, 0, rz)).Position
+  spinAbout(block(m, base, V(9, 1.6, 0.6), CF(rx, Y + h * 0.92 + 6.4, rz), RGB(220, 222, 226), MAT.Metal), piv, V(0, 1, 0), 0.25)
+  spinAbout(block(m, base, V(1, 1, 1.6), CF(rx, Y + h * 0.92 + 6.4, rz - 0.8), C.dark, MAT.Metal), piv, V(0, 1, 0), 0.25)
+  for _, sx in ipairs({ -1, 1 }) do flag(m, base, CF(sx * w * 0.42, 0, -d * 0.45), (sx < 0) and BL or RGB(200, 40, 40)) end
+  -- 锚：竖杆、横杆、两个爪
+  local ax, az = -w * 0.3, -d * 0.45
+  block(m, base, V(0.6, 4, 0.6), CF(ax, Y + 2.6, az), C.dark, MAT.Metal)
+  block(m, base, V(3, 0.5, 0.5), CF(ax, Y + 3.8, az), C.dark, MAT.Metal)
+  block(m, base, V(3.6, 0.5, 0.5), CF(ax, Y + 0.9, az), C.dark, MAT.Metal)
+  facadeSign(m, base, CF(0, Y + h * 0.53, -d * 0.35 - 0.2), 14, 2, "海 军 司 令 部", RGB(255, 230, 150), Enum.NormalId.Front)
+  return body
+end
+
+-- 推进剂工厂：三个球形储罐（支腿、黄黑警示带）、管廊、控制楼、火炬（一直烧着）
+local function propellantPlant(m, base, b)
+  local w, h, d = b.size[1], b.size[2], b.size[3]
+  local body = hiddenBody(m, base, w, h, d)
+  block(m, base, V(w, 0.6, d), CF(0, 0.3, 0), RGB(150, 146, 136), MAT.Concrete)
+  local Y = 0.6
+  for i, tx in ipairs({ -w * 0.3, 0, w * 0.3 }) do
+    local tz, r = d * 0.12, 11 - i
+    for _, o in ipairs({ { -1, -1 }, { 1, -1 }, { -1, 1 }, { 1, 1 } }) do block(m, base, V(0.6, r * 0.7, 0.6), CF(tx + o[1] * r * 0.32, Y + r * 0.35, tz + o[2] * r * 0.32), C.metal, MAT.Metal) end
+    block(m, base, V(r, r, r), CF(tx, Y + r * 0.62 + r * 0.3, tz), RGB(236, 236, 232), MAT.SmoothPlastic, BALL)
+    ghostly(block(m, base, V(r + 0.2, 0.5, r + 0.2), CF(tx, Y + r * 0.62 + r * 0.3, tz), RGB(236, 190, 40), MAT.SmoothPlastic, CYL) )
+  end
+  -- 管廊
+  block(m, base, V(w * 0.85, 0.6, 0.6), CF(0, Y + 4.5, -d * 0.18), RGB(170, 60, 50), MAT.Metal)
+  block(m, base, V(w * 0.85, 0.6, 0.6), CF(0, Y + 5.4, -d * 0.18), RGB(60, 110, 170), MAT.Metal)
+  for k = -2, 2 do block(m, base, V(0.5, 5.4, 0.5), CF(k * w * 0.2, Y + 2.7, -d * 0.18), C.metal, MAT.Metal) end
+  -- 控制楼
+  block(m, base, V(12, 6, 8), CF(-w * 0.3, Y + 3, -d * 0.36), RGB(200, 196, 186), MAT.Concrete)
+  block(m, base, V(12.2, 1.2, 8.2), CF(-w * 0.3, Y + 4.4, -d * 0.36), C.glass, MAT.Glass)
+  facadeSign(m, base, CF(-w * 0.3, Y + 7, -d * 0.36 - 4.2), 12, 1.8, "推 进 剂 工 厂", RGB(255, 226, 140), Enum.NormalId.Front)
+  -- 火炬
+  local fx, fz = w * 0.38, -d * 0.36
+  cyl(m, base, h, 1, CF(fx, Y + h / 2, fz), C.metal, MAT.Metal)
+  local fl = anim(ghostly(block(m, base, V(1.6, 2.4, 1.6), CF(fx, Y + h + 1.2, fz), RGB(255, 140, 40), MAT.Neon, BALL)), "blink", 3)
+  local fire = Instance.new("Fire")
+  fire.Size = 4
+  fire.Heat = 9
+  fire.Parent = fl
+  return body
+end
+
+-- 导弹总装厂：高大的总装厂房（带黄黑条的大门、天窗）、门口运输车上一枚整弹（弹体、弹头、尾翼）
+local function missileAssembly(m, base, b)
+  local w, h, d = b.size[1], b.size[2], b.size[3]
+  local body = hiddenBody(m, base, w, h, d)
+  block(m, base, V(w, 0.6, d), CF(0, 0.3, 0), RGB(146, 146, 140), MAT.Concrete)
+  local Y = 0.6
+  local hz = d * 0.12
+  block(m, base, V(w * 0.86, h - 2, d * 0.62), CF(0, Y + (h - 2) / 2, hz), RGB(178, 176, 166), MAT.Concrete)
+  block(m, base, V(w * 0.88, 1.2, d * 0.64), CF(0, Y + h - 1.4, hz), RGB(110, 112, 116), MAT.Metal)
+  block(m, base, V(w * 0.44, h * 0.62, 0.4), CF(0, Y + h * 0.31, hz - d * 0.31 - 0.1), RGB(70, 74, 80), MAT.DiamondPlate)
+  for k = 0, 5 do
+    ghostly(block(m, base, V(1.4, h * 0.62, 0.1), CF(-w * 0.2 + k * w * 0.08, Y + h * 0.31, hz - d * 0.31 - 0.35), (k % 2 == 0) and RGB(236, 190, 40) or RGB(30, 30, 30), MAT.SmoothPlastic))
+  end
+  facadeSign(m, base, CF(0, Y + h * 0.78, hz - d * 0.31 - 0.3), 16, 2.4, "导 弹 总 装 厂", RGB(255, 226, 140), Enum.NormalId.Front)
+  -- 运输车 + 导弹
+  local tx, tz = w * 0.18, -d * 0.36
+  block(m, base, V(22, 1.4, 4), CF(tx, Y + 1.6, tz), RGB(70, 84, 60), MAT.Metal)
+  block(m, base, V(4, 3.4, 4), CF(tx + 12, Y + 2.6, tz), RGB(78, 94, 66), MAT.Metal)
+  for k = 0, 4 do
+    for _, sz in ipairs({ -1.9, 1.9 }) do block(m, base, V(1.8, 1.8, 0.8), CF(tx - 9 + k * 5, Y + 0.9, tz + sz), RGB(30, 30, 32), MAT.SmoothPlastic, CYL) end
+  end
+  local MS = RGB(228, 230, 226)
+  block(m, base, V(18, 2.6, 2.6), CF(tx - 1, Y + 3.8, tz), MS, MAT.SmoothPlastic, CYL)
+  block(m, base, V(2.6, 2.6, 2.6), CF(tx + 8.2, Y + 3.8, tz), RGB(60, 64, 60), MAT.SmoothPlastic, BALL)
+  for _, a in ipairs({ 0, math.pi / 2 }) do block(m, base, V(2.4, 4.4, 0.2), CF(tx - 9, Y + 3.8, tz) * CFrame.Angles(a, 0, 0), RGB(60, 64, 60), MAT.Metal) end
+  ghostly(block(m, base, V(2, 0.1, 2.7), CF(tx + 3, Y + 5.1, tz), RGB(200, 40, 40), MAT.SmoothPlastic))
+  return body
+end
+
+-- 战略导弹营：两辆起竖的导弹发射车（发射筒斜着竖起来）、半埋的指挥掩体、伪装网
+local function strategicBattalion(m, base, b)
+  local w, h, d = b.size[1], b.size[2], b.size[3]
+  local body = hiddenBody(m, base, w, h, d)
+  block(m, base, V(w, 0.6, d), CF(0, 0.3, 0), RGB(126, 130, 116), MAT.Concrete)
+  local Y = 0.6
+  local GR = RGB(70, 84, 58)
+  for i, tx in ipairs({ -w * 0.22, w * 0.22 }) do
+    local tz = d * 0.05
+    block(m, base, V(4.4, 1.6, 20), CF(tx, Y + 2, tz), GR, MAT.Metal)
+    block(m, base, V(4.4, 3.2, 4), CF(tx, Y + 2.6, tz - 10.5), RGB(80, 96, 64), MAT.Metal)
+    block(m, base, V(4.2, 1, 0.2), CF(tx, Y + 3.4, tz - 12.55), C.glass, MAT.Glass)
+    for k = 0, 3 do
+      for _, sx in ipairs({ -2.3, 2.3 }) do block(m, base, V(0.9, 2, 2), CF(tx + sx, Y + 1, tz - 7 + k * 4.6), RGB(30, 30, 32), MAT.SmoothPlastic, CYL) end
+    end
+    local ang = (i == 1) and math.rad(62) or math.rad(40)   -- 一辆竖着，一辆在起竖
+    block(m, base, V(2.8, 2.8, 18), CF(tx, Y + 3.2, tz + 6) * CFrame.Angles(ang, 0, 0) * CF(0, 0, -6), RGB(96, 110, 80), MAT.Metal)
+    ghostly(block(m, base, V(2.9, 0.4, 0.4), CF(tx, Y + 3.2, tz + 6) * CFrame.Angles(ang, 0, 0) * CF(0, 1.5, -10), RGB(200, 40, 40), MAT.SmoothPlastic))
+  end
+  -- 掩体
+  block(m, base, V(12, 4, 8), CF(0, Y + 2, -d * 0.38), RGB(120, 124, 110), MAT.Concrete)
+  block(m, base, V(13, 0.8, 9), CF(0, Y + 4.4, -d * 0.38), RGB(100, 104, 92), MAT.Concrete)
+  block(m, base, V(2.4, 2.8, 0.2), CF(0, Y + 1.4, -d * 0.38 - 4.05), C.dark, MAT.Metal)
+  anim(ghostly(block(m, base, V(0.6, 0.4, 0.12), CF(1.8, Y + 3, -d * 0.38 - 4.05), RGB(90, 255, 120), MAT.Neon)), "blink", 1.1)
+  local net = block(m, base, V(w * 0.9, 0.3, d * 0.5), CF(0, Y + 13.5, d * 0.08), RGB(80, 98, 58), MAT.Fabric)
+  net.Transparency = 0.35
+  for _, o in ipairs({ { -1, -1 }, { 1, -1 }, { -1, 1 }, { 1, 1 } }) do cyl(m, base, 13.5, 0.4, CF(o[1] * w * 0.44, Y + 6.75, d * 0.08 + o[2] * d * 0.24), RGB(90, 74, 50), MAT.Wood) end
+  facadeSign(m, base, CF(0, Y + 6.2, -d * 0.38 - 4.6), 12, 1.8, "战 略 导 弹 营", RGB(255, 226, 140), Enum.NormalId.Front)
+  return body
+end
+
+-- 卫星工厂：白色洁净厂房（一排窗、蓝色腰线）、屋顶一颗卫星样机（本体、两块太阳能板）、旁边三面测试天线
+local function satelliteFactory(m, base, b)
+  local w, h, d = b.size[1], b.size[2], b.size[3]
+  local body = hiddenBody(m, base, w, h, d)
+  block(m, base, V(w, 0.6, d), CF(0, 0.3, 0), RGB(176, 178, 182), MAT.Concrete)
+  local Y = 0.6
+  local WH = RGB(240, 242, 246)
+  block(m, base, V(w * 0.72, h * 0.6, d * 0.7), CF(-w * 0.1, Y + h * 0.3, 0), WH, MAT.SmoothPlastic)
+  block(m, base, V(w * 0.73, 1, d * 0.71), CF(-w * 0.1, Y + h * 0.2, 0), RGB(50, 110, 200), MAT.SmoothPlastic)
+  for k = -3, 3 do block(m, base, V(w * 0.06, h * 0.14, 0.2), CF(-w * 0.1 + k * w * 0.09, Y + h * 0.42, -d * 0.35 - 0.05), C.glass, MAT.Glass) end
+  -- 卫星样机
+  local sx, sy = -w * 0.1, Y + h * 0.6
+  block(m, base, V(4, 4, 4), CF(sx, sy + 2.6, 0), RGB(214, 170, 60), MAT.Foil)
+  for _, o in ipairs({ -1, 1 }) do
+    block(m, base, V(8, 0.2, 3.4), CF(sx + o * 6.4, sy + 2.6, 0), RGB(30, 50, 110), MAT.Glass)
+    block(m, base, V(1.6, 0.2, 0.2), CF(sx + o * 2.6, sy + 2.6, 0), C.metal, MAT.Metal)
+  end
+  cyl(m, base, 0.6, 2.6, CF(sx, sy + 4.9, 0), RGB(230, 230, 230), MAT.SmoothPlastic)
+  -- 测试天线（碗朝天，慢慢转）
+  for i, ax in ipairs({ w * 0.32, w * 0.32, w * 0.42 }) do
+    local az = (i == 1) and -d * 0.25 or ((i == 2) and d * 0.2 or -d * 0.02)
+    cyl(m, base, 4, 0.8, CF(ax, Y + 2, az), C.metal, MAT.Metal)
+    local dish = block(m, base, V(0.6, 6, 6), CF(ax, Y + 5, az) * CFrame.Angles(0, 0, math.rad(60)), RGB(236, 236, 232), MAT.SmoothPlastic, CYL)
+    spinAbout(dish, (base * CF(ax, 0, az)).Position, V(0, 1, 0), 0.05 + i * 0.02)
+  end
+  facadeSign(m, base, CF(-w * 0.1, Y + h * 0.53, -d * 0.35 - 0.2), 14, 2, "卫 星 工 厂", RGB(120, 200, 255), Enum.NormalId.Front)
+  return body
+end
+
+-- 火箭发射台：混凝土台、导流槽、钢架发射塔（顶上红灯、摆杆）、一枚立着的运载火箭（芯级、两个助推器、整流罩）
+local function launchPad(m, base, b)
+  local w, h, d = b.size[1], b.size[2], b.size[3]
+  local body = hiddenBody(m, base, w, h, d)
+  block(m, base, V(w, 1.2, d), CF(0, 0.6, 0), RGB(160, 160, 156), MAT.Concrete)
+  local Y = 1.2
+  block(m, base, V(w * 0.3, 0.2, d * 0.9), CF(0, Y + 0.05, 0), RGB(40, 40, 42), MAT.Concrete)
+  -- 发射塔
+  local tx, tz, tw = w * 0.28, 0, 6
+  local ST = RGB(200, 70, 40)
+  for _, o in ipairs({ { -1, -1 }, { 1, -1 }, { -1, 1 }, { 1, 1 } }) do block(m, base, V(0.8, h, 0.8), CF(tx + o[1] * tw / 2, Y + h / 2, tz + o[2] * tw / 2), ST, MAT.Metal) end
+  for y = 6, h - 4, 8 do
+    block(m, base, V(tw, 0.5, 0.5), CF(tx, Y + y, tz - tw / 2), ST, MAT.Metal)
+    block(m, base, V(tw, 0.5, 0.5), CF(tx, Y + y, tz + tw / 2), ST, MAT.Metal)
+    block(m, base, V(0.5, 0.5, tw), CF(tx - tw / 2, Y + y, tz), ST, MAT.Metal)
+    block(m, base, V(0.5, 0.5, tw), CF(tx + tw / 2, Y + y, tz), ST, MAT.Metal)
+  end
+  for _, y in ipairs({ h * 0.45, h * 0.78 }) do block(m, base, V(tx - 4, 0.8, 1.6), CF(tx / 2 + 1, Y + y, tz), RGB(170, 170, 166), MAT.Metal) end
+  anim(ghostly(block(m, base, V(1.2, 1.2, 1.2), CF(tx, Y + h + 0.6, tz), RGB(255, 40, 30), MAT.Neon)), "blink", 0.7)
+  -- 火箭
+  local RW = RGB(240, 240, 236)
+  local rh = h * 0.86
+  cyl(m, base, rh * 0.8, 6, CF(0, Y + 1 + rh * 0.4, 0), RW, MAT.SmoothPlastic)
+  for _, k in ipairs({ { 0.86, 5.4 }, { 0.92, 4.2 }, { 0.97, 2.6 } }) do cyl(m, base, rh * 0.06, k[2], CF(0, Y + 1 + rh * k[1], 0), RW, MAT.SmoothPlastic) end
+  block(m, base, V(2, 2, 2), CF(0, Y + 1 + rh, 0), RW, MAT.SmoothPlastic, BALL)
+  for _, y in ipairs({ 0.25, 0.55 }) do cyl(m, base, 1.2, 6.1, CF(0, Y + 1 + rh * y, 0), RGB(30, 30, 32), MAT.SmoothPlastic) end
+  for _, sx in ipairs({ -1, 1 }) do
+    cyl(m, base, rh * 0.4, 2.8, CF(sx * 4.4, Y + 1 + rh * 0.2, 0), RW, MAT.SmoothPlastic)
+    block(m, base, V(2.8, 2.8, 2.8), CF(sx * 4.4, Y + 1 + rh * 0.4, 0), RW, MAT.SmoothPlastic, BALL)
+  end
+  ghostly(block(m, base, V(0.2, rh * 0.3, 3), CF(-3.05, Y + 1 + rh * 0.5, 0), RGB(200, 40, 40), MAT.SmoothPlastic))
+  facadeSign(m, base, CF(0, Y + 3, -d / 2 + 0.6), 14, 2.2, "火 箭 发 射 台", RGB(120, 200, 255), Enum.NormalId.Front)
+  return body
+end
+
+-- 太空指挥中心：玻璃幕墙的指挥楼、半个圆顶、屋顶一面大天线（慢慢转）、天线杆
+local function spaceCommand(m, base, b)
+  local w, h, d = b.size[1], b.size[2], b.size[3]
+  local body = hiddenBody(m, base, w, h, d)
+  block(m, base, V(w, 0.6, d), CF(0, 0.3, 0), RGB(176, 178, 182), MAT.Concrete)
+  local Y = 0.6
+  block(m, base, V(w * 0.8, h * 0.45, d * 0.6), CF(0, Y + h * 0.225, d * 0.05), RGB(60, 70, 86), MAT.Metal)
+  block(m, base, V(w * 0.81, h * 0.36, d * 0.605), CF(0, Y + h * 0.24, d * 0.05), RGB(90, 150, 200), MAT.Glass)
+  block(m, base, V(w * 0.82, 1, d * 0.62), CF(0, Y + h * 0.45, d * 0.05), RGB(220, 222, 226), MAT.Concrete)
+  block(m, base, V(w * 0.5, w * 0.5, w * 0.5), CF(-w * 0.12, Y + h * 0.45, d * 0.05), RGB(236, 238, 242), MAT.SmoothPlastic, BALL)
+  -- 大天线：底座、斜着的碗、馈源
+  local ax, az = w * 0.24, d * 0.05
+  local piv = (base * CF(ax, 0, az)).Position
+  cyl(m, base, 4, 2, CF(ax, Y + h * 0.45 + 2, az), C.metal, MAT.Metal)
+  spinAbout(block(m, base, V(0.8, 11, 11), CF(ax, Y + h * 0.45 + 8, az) * CFrame.Angles(0, 0, math.rad(55)), RGB(240, 240, 236), MAT.SmoothPlastic, CYL), piv, V(0, 1, 0), 0.04)
+  spinAbout(block(m, base, V(0.4, 0.4, 5), CF(ax + 2, Y + h * 0.45 + 10, az), C.dark, MAT.Metal), piv, V(0, 1, 0), 0.04)
+  cyl(m, base, 9, 0.4, CF(-w * 0.36, Y + h * 0.45 + 4.5, -d * 0.1), C.metal, MAT.Metal)
+  anim(ghostly(block(m, base, V(0.8, 0.8, 0.8), CF(-w * 0.36, Y + h * 0.45 + 9.2, -d * 0.1), RGB(255, 40, 30), MAT.Neon)), "blink", 0.9)
+  facadeSign(m, base, CF(0, Y + h * 0.53, d * 0.05 - d * 0.3 - 0.2), 16, 2.2, "太 空 指 挥 中 心", RGB(120, 200, 255), Enum.NormalId.Front)
+  return body
+end
+
+-- 新区域的地皮：开放了的铺地面、北边一条路接南门外的大路、竖区域名（港口区还有伸进湖里的码头）；
+-- 没开放的围一圈铁丝网，路边立块牌子「第 n 次重生开放」，摆几个路障
+function Models.area(f, origin, a, open, team)
+  local base = CF(origin)
+  local w, d = a.x1 - a.x0, a.z1 - a.z0
+  local cx, cz = (a.x0 + a.x1) / 2, (a.z0 + a.z1) / 2
+  local g = Instance.new("Folder")
+  g.Name = "Area_" .. a.id
+  if open then
+    local col = (a.id == "port") and RGB(146, 148, 146) or ((a.id == "missile") and RGB(138, 136, 124) or RGB(178, 180, 186))
+    block(g, base, V(w, 1, d), CF(cx, 0.5, cz), col, MAT.Concrete)
+    ghostly(block(g, base, V(w - 6, 0.08, 10), CF(cx, 1.04, a.z1 - 8), C.asphalt, MAT.Asphalt))
+    for x = a.x0 + 10, a.x1 - 10, 14 do ghostly(block(g, base, V(6, 0.06, 0.5), CF(x, 1.1, a.z1 - 8), C.white, MAT.SmoothPlastic)) end
+    for _, x in ipairs({ a.x0 + 3, a.x1 - 3 }) do ghostly(block(g, base, V(0.6, 0.06, d - 4), CF(x, 1.06, cz), a.color, MAT.Neon)) end
+    if a.id == "port" then   -- 码头：木栈桥伸进湖里、系船柱、一条小艇
+      block(g, base, V(16, 1, 50), CF(0, 0.6, a.z0 - 24), RGB(122, 92, 62), MAT.WoodPlanks)
+      for k = 0, 4 do
+        for _, sx in ipairs({ -7, 7 }) do block(g, base, V(1, 8, 1), CF(sx, -2.8, a.z0 - 4 - k * 11), RGB(104, 78, 54), MAT.Wood) end
+      end
+      for k = 0, 3 do cyl(g, base, 1.4, 1.2, CF(7.4, 1.8, a.z0 - 8 - k * 12), RGB(40, 40, 42), MAT.Metal) end
+      block(g, base, V(5, 2.4, 16), CF(13, -2.2, a.z0 - 30), RGB(120, 128, 136), MAT.Metal)
+      block(g, base, V(3.4, 2, 4), CF(13, -0.2, a.z0 - 27), RGB(200, 204, 208), MAT.SmoothPlastic)
+    end
+    zoneLabel(g, base, CF(cx, 34, cz), a.name, a.color:Lerp(Color3.new(1, 1, 1), 0.35))
+  else
+    local POST, MESH = RGB(84, 86, 90), RGB(150, 156, 160)
+    local function fence(x0, z0, x1, z1)
+      local p0, p1 = V(x0, 0, z0), V(x1, 0, z1)
+      local len = (p1 - p0).Magnitude
+      local mid = (p0 + p1) / 2
+      local rot = CFrame.lookAt(mid, p1)
+      rot = rot - rot.Position
+      local mesh = block(g, base, V(0.15, 5, len), CF(mid + V(0, 3.5, 0)) * rot, MESH, MAT.SmoothPlastic)
+      mesh.Transparency = 0.8
+      ghostly(block(g, base, V(0.2, 0.2, len), CF(mid + V(0, 6.2, 0)) * rot, POST, MAT.Metal))
+      local n = math.max(1, math.floor(len / 18))
+      for k = 0, n do cyl(g, base, 6.4, 0.45, CF(p0:Lerp(p1, k / n) + V(0, 4.2, 0)), POST, MAT.Metal) end
+    end
+    fence(a.x0, a.z1, a.x1, a.z1)
+    fence(a.x0, a.z0, a.x1, a.z0)
+    fence(a.x0, a.z0, a.x0, a.z1)
+    fence(a.x1, a.z0, a.x1, a.z1)
+    -- 路边的牌子（朝北，对着路）
+    for _, x in ipairs({ cx - 10, cx + 10 }) do block(g, base, V(0.5, 9, 0.5), CF(x, 5.5, a.z1 + 3), POST, MAT.Metal) end
+    local board = block(g, base, V(24, 7, 0.4), CF(cx, 9, a.z1 + 3), RGB(28, 32, 38), MAT.SmoothPlastic)
+    local sg = Instance.new("SurfaceGui")
+    sg.Face = Enum.NormalId.Back
+    sg.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+    sg.PixelsPerStud = 24
+    sg.LightInfluence = 0
+    sg.Parent = board
+    local t = Instance.new("TextLabel")
+    t.Size = UDim2.fromScale(1, 1)
+    t.BackgroundTransparency = 1
+    t.Font = Enum.Font.GothamBlack
+    t.TextScaled = true
+    t.RichText = true
+    t.TextColor3 = a.color:Lerp(Color3.new(1, 1, 1), 0.4)
+    t.Text = a.name .. "\n<font size=\"40\" color=\"#FFD24A\">第 " .. a.n .. " 次重生开放</font>"
+    t.Parent = sg
+    for k = -2, 2 do   -- 红白路障
+      block(g, base, V(4, 1.4, 0.6), CF(cx + k * 6, 1.7, a.z1 - 1.5), (k % 2 == 0) and RGB(220, 50, 40) or C.white, MAT.SmoothPlastic)
+    end
+    zoneLabel(g, base, CF(cx, 30, cz), a.name .. "（第 " .. a.n .. " 次重生开放）", RGB(200, 200, 200))
+  end
+  g.Parent = f
+  return g
+end
+
 local IND = { oil1 = oilWell, oil2 = oilWell, oil3 = oilWell, refinery = refinery, ammo = ammoPlant, steel = steelMill, mine = mine, nuclear = nuclear,
-  radar = radarStation, silo = missileSilo }
+  radar = radarStation, silo = missileSilo, dock = dockWarehouse, shipyard = shipyard, navalhq = navalHQ, propellant = propellantPlant, assembly = missileAssembly,
+  strategic = strategicBattalion, satfac = satelliteFactory, launchpad = launchPad, spacecmd = spaceCommand }
 Models.IND = IND
 
 local KIND = { house = house, factory = factory, power = power, bank = bank, hq = hq }
@@ -2071,6 +2428,7 @@ function Models.unit(t, color)
   end
   ring(m, root, def.size * 0.95 * k, color)
   if def.jet then m:SetAttribute("Jet", true) end
+  m:SetAttribute("H", heightOf(t))   -- 模型多高：客户端把名字、选中框摆在头顶
   m.Name = t
   return m, root
 end

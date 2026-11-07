@@ -50,7 +50,7 @@ function Store.init(G)
     d.best = math.max(d.level, math.floor(num(raw.best, 1, nil, 1)))
     d.wins = num(raw.wins, 0, nil, 0)
     d.tech = math.floor(num(raw.tech, 0, Config.Tech.max, 0))
-    d.rebirth = math.floor(num(raw.rebirth, 0, nil, 0))
+    d.rebirth = math.floor(num(raw.rebirth, 0, Config.Rebirth.max, 0))
     d.xp = math.floor(num(raw.xp, 0, nil, 0))
     d.kills = math.floor(num(raw.kills, 0, nil, 0))
     d.rating = math.floor(num(raw.rating, 0, nil, Config.Raid.start))
@@ -60,8 +60,8 @@ function Store.init(G)
     d.pvpWins = math.floor(num(raw.pvpWins, 0, nil, 0))
     d.pvpGames = math.max(d.pvpWins, math.floor(num(raw.pvpGames, 0, nil, 0)))
     if type(raw.owned) == "table" then
-      for id, v in pairs(raw.owned) do
-        if BDEF[id] and v then d.owned[id] = true end
+      for id, v in pairs(raw.owned) do   -- 没开放的新区域里的楼不认（重生次数不够）
+        if BDEF[id] and v and Config.AreaOpen(BDEF[id], d.rebirth) then d.owned[id] = true end
       end
     end
     if type(raw.lv) == "table" then   -- 建筑级数：只认盖了的、有收入的
@@ -130,7 +130,11 @@ function Store.init(G)
     local data = serialize(st)
     local key = "u" .. st.pl.UserId
     local ok, err = pcall(function() main:SetAsync(key, data) end)
-    if not ok then warn("[军事大亨] 存档失败：" .. tostring(err)) end
+    if ok then
+      st.savedAt = os.time()   -- 界面上显示「已自动保存」
+    else
+      warn("[军事大亨] 存档失败：" .. tostring(err))
+    end
     if #data.army > 0 and defense then
       pcall(function()
         defense:SetAsync(key, { name = st.pl.DisplayName, level = data.level, tech = data.tech, rebirth = data.rebirth, rating = data.rating, army = data.army, t = data.t })

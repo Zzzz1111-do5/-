@@ -225,19 +225,44 @@ function Army.init(G)
     G.push(st)
   end
 
-  function G.moveUnit(st, uid, x, z)
-    if st.battle then return end
-    if type(uid) ~= "number" or type(x) ~= "number" or type(z) ~= "number" then return end
-    if x ~= x or z ~= z then return end
-    local u = st.units[uid]
-    if not u then return end
-    local size = UNITS[u.t].size
-    local xmax, z1, z2 = zoneOf(size)
-    x = math.clamp(x, -xmax, xmax)
-    z = math.clamp(z, z1, z2)
-    if not spotFree(st, x, z, size, u) then x, z = freeSpot(st, u.t, x, z, u) end
+  -- 直接摆到阵位上（布阵时挪位置不再慢慢开过去：客户端那份显示会很快地滑过去）
+  local function snapTo(st, u, x, z)
     u.sx, u.sz = x, z
-    G.goTo(u, x, z)
+    u.path = nil
+    u.x, u.y, u.z, u.h = x, 0, z, math.pi
+    setFly(u, false)
+    if u.root and u.root.Parent then u.root.CFrame = G.unitCF(st.plot.origin, x, 0, z, u.h) end
+  end
+
+  -- 布阵：挪一个或一批（list = { { uid, x, z }, ... }，最多 200 个）。挪的这批原来的阵位先不算占着，再按顺序一个个找空位
+  function G.placeUnits(st, list)
+    if st.battle or type(list) ~= "table" then return end
+    local items, seen = {}, {}
+    for i = 1, math.min(#list, 200) do
+      local e = list[i]
+      if type(e) == "table" then
+        local uid, x, z = e[1], e[2], e[3]
+        local u = (type(uid) == "number") and st.units[uid] or nil
+        if u and not seen[u] and type(x) == "number" and type(z) == "number" and x == x and z == z then
+          seen[u] = true
+          table.insert(items, { u = u, x = x, z = z })
+        end
+      end
+    end
+    if #items == 0 then return end
+    for _, it in ipairs(items) do it.u.sx, it.u.sz = 1e6, 1e6 end
+    for _, it in ipairs(items) do
+      local u = it.u
+      local size = UNITS[u.t].size
+      local xmax, z1, z2 = zoneOf(size)
+      local x, z = math.clamp(it.x, -xmax, xmax), math.clamp(it.z, z1, z2)
+      if not spotFree(st, x, z, size, u) then x, z = freeSpot(st, u.t, x, z, u) end
+      snapTo(st, u, x, z)
+    end
+  end
+
+  function G.moveUnit(st, uid, x, z)
+    G.placeUnits(st, { { uid, x, z } })
   end
 
   function G.sellUnit(st, uid)
@@ -268,10 +293,7 @@ function Army.init(G)
     local slots = Battle.formation(types, F.deploy[2] - 4, -1, F.deploy[2] - F.deploy[1] - 8)
     for i, u in ipairs(list) do
       local s = slots[i]
-      if s then
-        u.sx, u.sz = s.x, s.z
-        G.goTo(u, s.x, s.z)
-      end
+      if s then snapTo(st, u, s.x, s.z) end
     end
     G.toast(st, "排好了：步兵在前，装甲、防空、直升机，火炮、火箭炮、飞机在最后", "info")
   end

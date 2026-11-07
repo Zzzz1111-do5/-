@@ -157,6 +157,27 @@ local Vector2 = { new = function(x, y) return newV2(x, y) end }
 Vector2.zero = newV2(0, 0)
 V2mt.__sub = function(a, b) return newV2(a._X - b._X, a._Y - b._Y) end
 V2mt.__add = function(a, b) return newV2(a._X + b._X, a._Y + b._Y) end
+V2mt.__mul = function(a, b)
+  if type(a) == "number" then return newV2(a * b._X, a * b._Y) end
+  if type(b) == "number" then return newV2(a._X * b, a._Y * b) end
+  return newV2(a._X * b._X, a._Y * b._Y)
+end
+V2mt.__div = function(a, b)
+  if type(b) == "number" then return newV2(a._X / b, a._Y / b) end
+  return newV2(a._X / b._X, a._Y / b._Y)
+end
+do   -- Vector2.Magnitude / .Unit
+  local base = V2mt.__index
+  V2mt.__index = function(t, k)
+    if k == "Magnitude" then return math.sqrt(rawget(t, "_X") ^ 2 + rawget(t, "_Y") ^ 2) end
+    if k == "Unit" then
+      local m = math.sqrt(rawget(t, "_X") ^ 2 + rawget(t, "_Y") ^ 2)
+      if m < 1e-12 then return newV2(0, 0) end
+      return newV2(rawget(t, "_X") / m, rawget(t, "_Y") / m)
+    end
+    return base(t, k)
+  end
+end
 local newUDim = record("UDim", { "Scale", "Offset" })
 local UDim = { new = function(s, o) return newUDim(s, o) end }
 local newUDim2, UD2mt = record("UDim2", { "XS", "XO", "YS", "YO" })
@@ -1021,11 +1042,11 @@ def("Camera", "Instance", {
 }, { noCreate = true, ro = { ViewportSize = newV2(1280, 720) }, methods = {
   ScreenPointToRay = function(o, x, y)
     if type(x) ~= "number" or type(y) ~= "number" then error("ScreenPointToRay 要两个数字", 2) end
-    return setmetatable({ Origin = o.CFrame.Position, Direction = o.CFrame.LookVector }, { __type = "Ray" })
+    return R.pixelRay(o, x, y + 58)
   end,
   ViewportPointToRay = function(o, x, y)
     if type(x) ~= "number" or type(y) ~= "number" then error("ViewportPointToRay 要两个数字", 2) end
-    return setmetatable({ Origin = o.CFrame.Position, Direction = o.CFrame.LookVector }, { __type = "Ray" })
+    return R.pixelRay(o, x, y)
   end,
   -- 透视投影到 1280 × 720 的画面：返回（像素 x, 像素 y, 深度）、在不在画面里
   WorldToViewportPoint = function(o, p)
@@ -1040,6 +1061,13 @@ def("Camera", "Instance", {
   end,
 } })
 
+-- 视口像素 (x, y) 的视线：和 WorldToViewportPoint 反过来
+function R.pixelRay(o, x, y)
+  local f = 1 / math.tan(math.rad(o.FieldOfView) / 2)
+  local cf = o.CFrame
+  local d = cf.RightVector * ((x - 640) / (f * 360)) + cf.UpVector * (-(y - 360) / (f * 360)) + cf.LookVector
+  return setmetatable({ Origin = cf.Position, Direction = d.Unit }, { __type = "Ray" })
+end
 local ws = service("Workspace", { StreamingEnabled = { T.bool, false }, Gravity = { T.number, 196.2 }, CurrentCamera = { T.Instance, nil } }, { parent = "Model", methods = {
   GetServerTimeNow = function() return (R.osTime or os.time()) + clock % 1 end,
   Raycast = function(_, origin, dir, params)
@@ -1184,14 +1212,14 @@ R.services.CollectionService = service("CollectionService", {}, { methods = {
 } })
 R.keys = {}
 R.services.UserInputService = service("UserInputService", { MouseBehavior = { E("MouseBehavior"), Enum.MouseBehavior.Default } }, {
-  events = { InputBegan = true, InputEnded = true, InputChanged = true, TouchTap = true, TouchPan = true, TouchPinch = true },
+  events = { InputBegan = true, InputEnded = true, InputChanged = true, TouchTap = true, TouchPan = true, TouchPinch = true, TouchRotate = true },
   ro = { TouchEnabled = false, KeyboardEnabled = true, MouseEnabled = true },
   methods = {
     IsKeyDown = function(_, kc)
       if typeof(kc) ~= "EnumItem" or kc.EnumType ~= "KeyCode" then error("IsKeyDown 要 Enum.KeyCode", 2) end
       return R.keys[kc.Name] == true
     end,
-    GetMouseLocation = function() return newV2(640, 400) end,
+    GetMouseLocation = function() return R.mouseAt or newV2(640, 400) end,
     GetFocusedTextBox = function() return nil end,
   },
 })
@@ -1546,7 +1574,7 @@ local function envFor(scriptInst, sd)
     Color3 = Color3, UDim = UDim, UDim2 = UDim2, Enum = Enum, TweenInfo = TweenInfo, RaycastParams = RaycastParams, Random = Random,
     ColorSequence = ColorSequence, NumberSequence = NumberSequence, NumberRange = NumberRange,
     NumberSequenceKeypoint = NumberSequenceKeypoint, ColorSequenceKeypoint = ColorSequenceKeypoint,
-    task = task, math = luauMath(), string = string, table = table, os = { time = function() return R.osTime or os.time() end, clock = function() return clock end },
+    task = task, math = luauMath(), string = string, table = table, utf8 = utf8, os = { time = function() return R.osTime or os.time() end, clock = function() return clock end },
     pairs = pairs, ipairs = ipairs, next = next, select = select, type = type, typeof = typeof, tostring = tostring, tonumber = tonumber,
     print = function(...) if R.verbose then print(...) end end,
     PROBE_SET = function(v) R.lastProbe = v end,

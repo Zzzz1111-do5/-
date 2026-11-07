@@ -134,6 +134,18 @@ function Economy.init(G)
     return m
   end
 
+  -- 重生开放的新区域（基地南边三块）：开放了的铺好地面、立区域名；没开放的围着铁丝网、立牌子；fresh：刚开放的那块（放个烟花）
+  function G.areaRefresh(st, fresh)
+    local f = st.plot.Areas
+    if not f then return end
+    f:ClearAllChildren()
+    local rb = st.data.rebirth or 0
+    for _, a in ipairs(Config.Areas) do
+      Models.area(f, st.plot.origin, a, rb >= a.n, st.plot.color)
+      if fresh == a.n then G.fx({ k = "build", p = st.plot.origin + V((a.x0 + a.x1) / 2, 1, (a.z0 + a.z1) / 2), s = 120 }) end
+    end
+  end
+
   -- 按钮颜色：买得起绿、买不起红（只在变的时候改，省得每秒同步）
   local function padColors(st)
     for _, p in pairs(st.pads) do
@@ -151,7 +163,7 @@ function Economy.init(G)
     st.pads = {}
     local d = st.data
     for _, b in ipairs(Config.Buildings) do
-      if not d.owned[b.id] and (not b.req or d.owned[b.req]) then
+      if not d.owned[b.id] and (not b.req or d.owned[b.req]) and Config.AreaOpen(b, d.rebirth) then
         local _, pad, pp = Models.pad(st.plot.Pads, b, buildingPos(st.plot, b), st.plot.color)
         local id = b.id
         pad.Touched:Connect(function(hit)
@@ -179,7 +191,7 @@ function Economy.init(G)
     if not st.ready then return end
     local b = BDEF[id]
     local d = st.data
-    if not b or d.owned[id] or (b.req and not d.owned[b.req]) then return end
+    if not b or d.owned[id] or (b.req and not d.owned[b.req]) or not Config.AreaOpen(b, d.rebirth) then return end
     if touch then   -- 踩着按钮不停触发：隔一会儿才算一次
       local now = os.clock()
       if now - (st.padT[id] or 0) < 1.2 then return end
@@ -283,16 +295,24 @@ function Economy.init(G)
     G.push(st)
   end
 
+  -- 能不能重生：还没重生满 max 次，开放了的区域里的建筑全部盖好
   function G.canRebirth(d)
-    return d.level >= Config.Rebirth.level and d.owned.bank == true
+    if (d.rebirth or 0) >= Config.Rebirth.max then return false end
+    local built, total = Config.RebirthProgress(d.owned, d.rebirth)
+    return built >= total
   end
 
-  -- 重生：建筑、现金、关卡、部队、科技清零；武器、经验、军衔、积分留着；换永久加成
+  -- 重生：建筑、现金、关卡、部队、科技清零；武器、经验、军衔、积分留着；换永久加成，再开放一块新区域
   function G.rebirth(st)
     if not st.ready or st.battle then return end
     local d = st.data
+    if (d.rebirth or 0) >= Config.Rebirth.max then
+      G.toast(st, "已经重生满 " .. Config.Rebirth.max .. " 次了", "info")
+      return
+    end
     if not G.canRebirth(d) then
-      G.toast(st, "打到第 " .. Config.Rebirth.level .. " 关、盖了银行才能重生", "bad")
+      local built, total = Config.RebirthProgress(d.owned, d.rebirth)
+      G.toast(st, "基地里的建筑全部盖好才能重生（现在 " .. built .. " / " .. total .. " 栋）", "bad")
       return
     end
     d.rebirth = d.rebirth + 1
@@ -315,6 +335,11 @@ function Economy.init(G)
     G.addXP(st, 200)
     G.fx({ k = "build", p = st.plot.origin + V(0, 1, 0), s = 120 })
     G.toast(st, "重生第 " .. d.rebirth .. " 次！收入永久 +" .. math.floor(Config.Rebirth.income * 100 * d.rebirth) .. "%，部队永久 +" .. math.floor(Config.Rebirth.power * 100 * d.rebirth) .. "%", "good")
+    local area = Config.Areas[d.rebirth]
+    if area then
+      G.toast(st, "新区域「" .. area.name .. "」开放了：从基地后墙中间的南门出去（" .. area.desc .. "）", "good")
+      if G.areaRefresh then G.areaRefresh(st, area.n) end
+    end
     G.rankTag(st)
     G.push(st)
     task.spawn(G.save, st)
@@ -451,6 +476,7 @@ function Economy.init(G)
 
   -- 进服：盖好已有的建筑、摆按钮、今天的任务
   function G.econSetup(st)
+    if G.areaRefresh then G.areaRefresh(st) end
     for _, b in ipairs(Config.Buildings) do
       if st.data.owned[b.id] then G.placeBuilding(st, b, false) end
     end
