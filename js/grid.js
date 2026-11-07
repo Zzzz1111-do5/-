@@ -414,10 +414,10 @@ let AS_STAMP = 0, AS_LAST = 0;   // AS_LAST：上一次 A* 展开了多少格
 //   几十辆车挤在同一步里搜就明显卡顿；预算用完的这一步改走流场（与 A* 搜到上限时的退路一样），默认地图不设预算、行为不变
 let AS_BUD = 0, AS_BUDT = null;
 const AS_STEP = 120000, BIG_PG = 150000;
-function astar(s, g, cls, maxN = 40000) {
+function astar(s, g, cls, maxN = 40000, hw = 1) {   // hw：启发值放大倍数（加权 A*：搜得少、路线可能绕一点；默认 1 = 原来的结果）
   if (g < 0) return null;
   if (s === g) return [];
-  const cost = costArr(cls, FGEN[fgKey(cls)]), stamp = ++AS_STAMP, mc = (cls === 'ship' ? 1 : .72) * 1.2;
+  const cost = costArr(cls, FGEN[fgKey(cls)]), stamp = ++AS_STAMP, mc = (cls === 'ship' ? 1 : .72) * 1.2 * hw;
   // 内层循环只用局部变量，启发值与入堆就地展开（闭包里改写的变量每次都要查作用域）；不贴边的格按下标偏移取邻格——搜索顺序与结果不变，快两三成
   const gw = GW, gh = GH, gx = g % gw, gy = (g / gw) | 0, HN = HEAP_N, HP = HEAP_P, cap = HN.length, G = AS_G, FR = AS_FROM, SN = AS_SEEN;
   const OFF = nbOff(gw), DX = NDX, DY = NDY, DM = NDM;
@@ -504,7 +504,7 @@ function field(tx, ty, cls) {
 function fieldPut(key, d, gen, now) {
   FIELDS.delete(key);
   FIELDS.set(key, { d, gen, t: now });
-  while (FIELDS.size > (GW * GH > BIG_N ? 12 : GW * GH > 200000 ? 32 : 48)) FIELDS.delete(FIELDS.keys().next().value);   // 超大地图一张流场 7 MB：少存几张
+  while (FIELDS.size > (GW * GH > BIG_N ? 20 : GW * GH > 200000 ? 32 : 48)) FIELDS.delete(FIELDS.keys().next().value);   // 超大地图一张流场 7–8 MB：少存几张（台湾图开战时同时要的远途流场多，12 张会来回挤掉重算）
   return d;
 }
 // 流场用桶队列（Dial）：桶宽取略小于最小一步代价，同一个桶里的格先出后出都不会被同桶的格再改小——每格的值都是
@@ -628,9 +628,21 @@ function pathStep(u, tx, ty, cls, fget, look, ahead = 2, off = 30) {
         mx = Math.min(mx, AS_BUD);
         if (F && F.tx === tx && F.ty === ty && F.cls === cls && S.t - F.t < 8) mx = 0;   // 8 秒内对同一目标 A* 刚搜到上限没找到：直接用流场，不再白搜一遍
       }
+      // 超大地图（台湾东海岸、白色平原，寻路带两百多万格）：3 公里以上的长途（从纵深调往滩头这一类，绕山的路 A* 搜十几万格也搜不完）不先白搜 A*，
+      //   直接用流场（vehField 把远处的目标按 400 米取整，同去一段滩头的车共用一张）；这一步的 A* 预算用完了的等下一步再搜，不退回去算整图流场——
+      //   一张整图流场两三百毫秒，沙盘开战时上百辆车同时出发，原来一步接一步地算（用户：沙盒一开战就卡死）；A* 搜过上限没找到的（asF）照旧用流场
+      const far = PGN > BIG_N && dist(u.x, u.y, tx, ty) > 3000;
+      if (far) mx = 0;
+      else if (PGN > BIG_N && mx < 1500 && !(F && F.tx === tx && F.ty === ty && F.cls === cls && S.t - F.t < 8)) { u.fpth = null; return null; }
       AS_LAST = 0;
-      p = mx >= 1500 ? astar(i0, nearestPassable(ci(tx, ty), cls), cls, mx) : null;
-      if (big) { AS_BUD -= AS_LAST; if (!p && AS_LAST > mx && mx >= 40000) u.asF = { tx, ty, cls, t: S.t }; }
+      const gi = nearestPassable(ci(tx, ty), cls);
+      p = mx >= 1500 ? astar(i0, gi, cls, mx) : null;
+      let failed = !p && AS_LAST > mx && mx >= 40000;
+      if (big) AS_BUD -= AS_LAST;
+      // 超大地图：普通 A* 搜满了没找到（多半是绕开车辆上不去的高山的长路）——先用加权 A*（启发值 × 2.5，沿一条走廊搜）再找一次，
+      //   找不到才退回整图流场（原来沙盘开战后 6 秒里算了六十张整图流场，一张两三百毫秒）
+      if (failed && PGN > BIG_N) { AS_LAST = 0; p = astar(i0, gi, cls, 80000, 2.5); AS_BUD -= AS_LAST; if (p) failed = false; }
+      if (big && failed) u.asF = { tx, ty, cls, t: S.t };
       if (p && !p.length) { u.fpth = null; return { end: true }; }
     }
     if (!p) {

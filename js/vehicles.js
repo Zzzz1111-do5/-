@@ -245,7 +245,7 @@ const vehClear = (x0, y0, x1, y1, cls) => { const n = Math.ceil(dist(x0, y0, x1,
 // 远距离寻路用量化的目标点（>60 量化到 30，>240 量化到 80）：多辆车、多次下令共用流场缓存（每张流场要整图算一遍）；量化点不通时退回精确目标
 function vehField(v, x, y, cls) {
   const i = ci(v.x, v.y), d = dist(v.x, v.y, x, y);
-  if (d > 60) { const q = d > 240 ? 80 : 30, f = field(Math.round(x / q) * q, Math.round(y / q) * q, cls); if (f && isFinite(f[i])) return f; }
+  if (d > 60) { const q = d > 3000 && PGN > BIG_N ? 400 : d > 240 ? 80 : 30, f = field(Math.round(x / q) * q, Math.round(y / q) * q, cls); if (f && isFinite(f[i])) return f; }   // 超大地图的远途按 400 米取整：同去一段滩头的车共用一张整图流场
   return field(x, y, cls);
 }
 // 下令：检查可达（车辆所在格与目标同属一片连通区域，grid.js reachable——不为判断可达整图算流场）
