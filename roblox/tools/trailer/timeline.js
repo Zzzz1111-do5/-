@@ -63,11 +63,11 @@
     // ③ 8–12 工业区、核电站、空军基地
     shot({ at: 8, dur: 4, T0: 0, rate: 0, units: false, cam: dolly([-470, 115, -190], [-280, 70, 150], [-250, 12, -40], [-40, 10, 40], 48),
       card: K('扩建', '工业区 · 空军基地', '油井、钢铁厂、核电站、跑道'), cardAt: [0.4, 3.7] });
-    // ④ 12–16 重生开放的三块新区域（从航天中心的火箭扫到导弹基地）
-    shot({ at: 12, dur: 4, T0: 0, rate: 0, units: false, cam: dolly([-430, 70, -400], [330, 95, -430], [-270, 34, -228], [240, 12, -215], 48),
+    // ④ 12–16 重生开放的三块新区域（从航天中心的火箭扫到导弹基地；横移别太快——没有动态模糊，一帧挪太多就一跳一跳的）
+    shot({ at: 12, dur: 4, T0: 0, rate: 0, units: false, cam: dolly([-330, 85, -440], [190, 100, -460], [-200, 30, -228], [160, 14, -215], 48),
       card: K('重生 · 最多 3 次', '开放新区域', '港口区 · 导弹基地 · 航天中心'), cardAt: [0.4, 3.7] });
-    // ⑤ 16–20 布阵：贴地沿着阵线前面扫过去（定格在开战前）
-    shot({ at: 16, dur: 4, T0: 0.02, rate: 0, cam: dolly([-250, 11, 352], [250, 13, 352], [-190, 7, 270], [190, 7, 270], 50),
+    // ⑤ 16–20 布阵：低机位沿着阵线前面慢慢横移（定格在开战前；原来 4 秒扫 500 格，画面一帧挪五六十个像素，一跳一跳的）
+    shot({ at: 16, dur: 4, T0: 0.02, rate: 0, cam: dolly([-75, 16, 378], [75, 19, 372], [-55, 6, 270], [55, 6, 270], 50),
       card: K('布阵', '39 个兵种', '步兵 · 装甲 · 防空 · 炮兵 · 空中'), cardAt: [0.4, 3.7] });
     // ⑥ 20–22 开战！坦克后面推进
     const tk = pick('tank', 1, 1) || pick('tank', 1, 0);
@@ -100,7 +100,7 @@
         card: K('新兵种', '电磁炮', '一发蓝光，贯穿一整排'), cardAt: [0.1, 1.9] }); }
     // ⑫ 34–36 弹道导弹发射（慢动作，从车旁边往上看）
     const bl = evs('ballistic', e => e.tt > 2)[0] || evs('ballistic')[0];
-    if (bl) shot({ at: 34, dur: 2, T0: bl.tt - 0.35, rate: 0.6, cam: dolly([bl.a[0] + 62, bl.a[1] + 8, bl.a[2] - 40], [bl.a[0] + 58, bl.a[1] + 10, bl.a[2] - 36], [bl.a[0], bl.a[1] + 12, bl.a[2] + 6], [bl.a[0], bl.a[1] + 70, bl.a[2] + 40], 56),
+    if (bl) shot({ at: 34, dur: 2, T0: bl.tt - 0.35, rate: 0.6, cam: dolly([bl.a[0] + 62, bl.a[1] + 8, bl.a[2] - 40], [bl.a[0] + 58, bl.a[1] + 10, bl.a[2] - 36], [bl.a[0], bl.a[1] + 14, bl.a[2] + 8], [bl.a[0], bl.a[1] + 46, bl.a[2] + 30], 56),
       card: K('新兵种', '弹道导弹', '专打敌人扎堆最密的地方'), cardAt: [0.1, 1.9] });
     // ⑬ 36–38 弹道导弹落地：大爆炸
     const bb = evs('bigboom')[0];
@@ -136,7 +136,7 @@
     const picks = [];
     for (const c of cl) { if (picks.length >= 4) break; if (!picks.some(q => Math.abs(q.tt - c.tt) < 3)) picks.push(c); }
     picks.sort((a, b) => a.tt - b.tt);
-    picks.forEach((e, i) => { const c = e.c, D = e.d, ang = clearAng(c, D, 30, i * 1.7 + 0.6); shot({ at: 48 + i, dur: 1, T0: e.tt - 0.12, rate: 0.85, flash: i > 0 ? 0.4 : 0,
+    picks.forEach((e, i) => { const c = e.c, D = e.d, ang = clearAng(c, D, 30, i * 1.7 + 0.6); shot({ at: 48 + i, dur: 1, T0: e.tt - 0.12, rate: 0.85, flash: i > 0 ? 0.22 : 0,
       cam: dolly([c[0] + Math.cos(ang) * D, 30, c[2] + Math.sin(ang) * D], [c[0] + Math.cos(ang) * D * 0.9, 27, c[2] + Math.sin(ang) * D * 0.9], [c[0], 9, c[2]], [c[0], 13, c[2]], 50) }); });
     // ⑱ 52–56 胜利：低机位在打得最靠前的装甲车队正前方，慢慢推近、升起来（车头朝着镜头）
     const end = (TR.finish && TR.finish.t) || 50;
@@ -190,6 +190,8 @@
     const tl = t - s.at, u = clamp(tl / s.dur, 0, 1);
     const T = s.T0 + tl * s.rate;
     const c = s.cam(u, T);
+    // 这个镜头的阴影图范围：按镜头中段的远近定一次，整个镜头不变（每帧变的话影子的格子跟着缩放，边上一闪一闪）
+    if (s._sr === undefined) { const m = s.cam(0.5, s.T0 + s.dur * 0.5 * s.rate), want = clamp(len(sub(m.at, m.eye)) * 2.2, 160, 520); s._sr = s.shadowR || [160, 220, 300, 400, 520].find(v => v >= want - 1) || 520; }
     // 大爆炸震一下镜头
     let shake = 0;
     for (const e of TR.fx()) {
@@ -199,8 +201,13 @@
         if (d < 260) shake += amp * (260 - d) / 260 * 0.9;
       }
     }
-    if (shake > 0) { const n = i * 1.37; c.eye = [c.eye[0] + (hash(n) - .5) * shake, c.eye[1] + (hash(n + 3) - .5) * shake, c.eye[2] + (hash(n + 7) - .5) * shake]; }
-    if (!dry) { TR.render({ T, eye: c.eye, at: c.at, fov: c.fov, rise: s.rise ? s.rise(u) : null, units: s.units !== false, shadowR: s.shadowR }); overlay(s, u, tl); }
+    // 震动用平滑的噪声（每秒十来下、连续变化），幅度也压小：原来每帧随机跳一个位置，画面一抽一抽的
+    if (shake > 0) {
+      const amp = Math.min(1.4, shake * 0.35), vn = x => { const k = Math.floor(x), f = x - k, w = f * f * (3 - 2 * f); return lerp(hash(k), hash(k + 1), w) * 2 - 1; };
+      const o = [vn(t * 11 + 3.1) * amp, vn(t * 13 + 7.7) * amp * 0.7, vn(t * 12 + 1.3) * amp];
+      c.eye = add(c.eye, o); c.at = add(c.at, mul(o, 0.6));
+    }
+    if (!dry) { TR.render({ T, eye: c.eye, at: c.at, fov: c.fov, rise: s.rise ? s.rise(u) : null, units: s.units !== false, shadowR: s._sr }); overlay(s, u, tl); }
     const rt = norm(cross(norm(sub(c.at, c.eye)), [0, 1, 0]));
     // 音效点
     if (s !== prevShot) {

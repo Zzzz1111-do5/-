@@ -98,14 +98,14 @@ float fbm(vec2 p) { return vn(p) * .5 + vn(p * 2.03) * .27 + vn(p * 4.1) * .15 +
 // 场景 / 单位共用：太阳 + 天空光 + 阴影 + 雾 + 色调映射；mat 是材质编号（0 塑料 1 草 2 混凝土 3 金属 4 木 5 布 6 砖 7 霓虹 8 玻璃 9 沥青 10 雪 11 沙土 12 水 13 岩石）
 const LIT_VS = `
 attribute vec3 aP; attribute vec3 aN; attribute vec4 aC; attribute vec2 aU; attribute float aB;
-uniform mat4 uVP, uM, uSVP; uniform float uRise[40]; uniform float uUseB;
+uniform mat4 uVP, uM, uSVP; uniform float uRise[40]; uniform float uUseB; uniform float uNO;
 varying vec3 vW, vN; varying vec4 vC; varying vec2 vU; varying vec4 vS;
 void main() {
   vec3 p = aP;
   if (uUseB > .5 && aB > .5) { float k = uRise[int(aB + .5)]; p.y = 1. + (p.y - 1.) * k; }
   vec4 w = uM * vec4(p, 1.);
   vW = w.xyz; vN = normalize(mat3(uM) * aN); vC = aC; vU = aU;
-  vS = uSVP * w;
+  vS = uSVP * vec4(w.xyz + vN * uNO, 1.);   // 法线偏移：沿法线挪出一个多阴影格再查影子——几乎和阳光平行的面不再自己挡自己出细条纹（一动就闪）
   gl_Position = uVP * w;
 }`;
 const LIT_FS = `
@@ -119,7 +119,7 @@ float shadow() {
   if (uShadowOn < .5) return 1.;
   vec3 s = vS.xyz / vS.w * .5 + .5;
   if (s.x < 0. || s.x > 1. || s.y < 0. || s.y > 1. || s.z > 1.) return 1.;
-  float z = s.z - .0016, sum = 0.;
+  float z = s.z - .0008, sum = 0.;
   // 双线性 PCF：2×2 个取样点、每点按四个最近格子的位置插值——影子边是软的，不是一格一格的锯齿
   for (int i = 0; i < 2; i++) for (int j = 0; j < 2; j++) {
     vec2 t = (s.xy + (vec2(float(i), float(j)) - .5) * 1.5 / 2048.) * 2048. - .5, f = fract(t), c = (floor(t) + .5) / 2048.;
@@ -242,6 +242,23 @@ function pushShape(C, sh, toW, nrm, col, mat, bIdx, tr) {
   }
   for (const i of sh.i) C.i.push(base + i);
 }
+// 大方块（地面、大底板）的面拆成小格再画：一个三角形跨几千格时，软件渲染器按投影到画面外很远的顶点算深度，精度丢得厉害，
+// 上下只差零点几格的两层地面（草地和雪地）会一帧一帧地换着赢——画面一闪一闪
+const BOXF = [[[1, 0, 0], [0, 1, 0], [0, 0, 1]], [[-1, 0, 0], [0, 1, 0], [0, 0, -1]], [[0, 1, 0], [0, 0, 1], [1, 0, 0]], [[0, -1, 0], [0, 0, -1], [1, 0, 0]], [[0, 0, 1], [0, 1, 0], [-1, 0, 0]], [[0, 0, -1], [0, 1, 0], [1, 0, 0]]];
+const TILE = 60;
+function pushBoxTess(C, toW, nrm, sz, col, mat, bIdx, tr) {
+  for (const [n, u, v] of BOXF) {
+    const du = Math.abs(u[0] * sz[0] + u[1] * sz[1] + u[2] * sz[2]), dv = Math.abs(v[0] * sz[0] + v[1] * sz[1] + v[2] * sz[2]);
+    const nu = Math.min(160, Math.max(1, Math.ceil(du / TILE))), nv = Math.min(160, Math.max(1, Math.ceil(dv / TILE)));
+    const base = C.p.length / 3, nn = nrm(n[0], n[1], n[2]);
+    for (let j = 0; j <= nv; j++) for (let i = 0; i <= nu; i++) {
+      const a = (i / nu - .5), c = (j / nv - .5);
+      const w = toW(n[0] * .5 + u[0] * a + v[0] * c, n[1] * .5 + u[1] * a + v[1] * c, n[2] * .5 + u[2] * a + v[2] * c);
+      C.p.push(w[0], w[1], w[2]); C.n.push(nn[0], nn[1], nn[2]); C.c.push(col[0] / 255, col[1] / 255, col[2] / 255, mat / 255); C.u.push(tr || 0, 0); C.b.push(bIdx || 0);
+    }
+    for (let j = 0; j < nv; j++) for (let i = 0; i < nu; i++) { const k = base + j * (nu + 1) + i; C.i.push(k, k + 1, k + nu + 2, k, k + nu + 2, k + nu + 1); }
+  }
+}
 function upload(C) {
   if (!C.i.length) return null;
   return { p: makeBuf(C.p, Float32Array), n: makeBuf(C.n, Float32Array), c: makeBuf(C.c, Float32Array), u: makeBuf(C.u, Float32Array), b: makeBuf(C.b, Float32Array), i: makeIdx(C.i), count: C.i.length };
@@ -307,12 +324,13 @@ TR.init = async function (opt) {
     const nrm = (x, y, z) => { x /= sz[0] || 1; y /= sz[1] || 1; z /= sz[2] || 1; return norm([R[0] * x + R[1] * y + R[2] * z, R[3] * x + R[4] * y + R[5] * z, R[6] * x + R[7] * y + R[8] * z]); };
     const mat = MATID[p.m] || 0;
     if (p.a) { ANIM.push({ p, sh, sz, px, py, pz, R, mat }); continue; }
-    pushShape((p.t || mat === 8) ? CT : C, sh, toW, nrm, p.col, mat, BIDX[p.b] || 0, p.t || (mat === 8 ? 0.3 : 0));
+    if (sh === SHAPES.Block && Math.max(sz[0], sz[2]) > TILE) pushBoxTess((p.t || mat === 8) ? CT : C, toW, nrm, sz, p.col, mat, BIDX[p.b] || 0, p.t || (mat === 8 ? 0.3 : 0));
+    else pushShape((p.t || mat === 8) ? CT : C, sh, toW, nrm, p.col, mat, BIDX[p.b] || 0, p.t || (mat === 8 ? 0.3 : 0));
   }
   STATIC = upload(C); STATIC_T = upload(CT);
   // 地形：大地面、山（球的地面以上部分）、湖和河的水面、沙滩、战区两边的地形
   const T = Collector(), WT = Collector();
-  const quad = (Cx, x0, z0, x1, z1, y, col, mat) => pushShape(Cx, SHAPES.Block, (x, yy, z) => [lerp(x0, x1, x + .5), y + yy * .01, lerp(z0, z1, z + .5)], (x, y, z) => [x, y, z], col, mat, 0);
+  const quad = (Cx, x0, z0, x1, z1, y, col, mat) => pushBoxTess(Cx, (x, yy, z) => [lerp(x0, x1, x + .5), y + yy * .01, lerp(z0, z1, z + .5)], (x, y, z) => [x, y, z], [x1 - x0, 0.01, z1 - z0], col, mat, 0);
   quad(T, -9000, -9000, 9000, 9000, -0.02, TERRAIN_COL.Grass, 1);
   for (const f of S.fills) {
     const m = f.mat, col = TERRAIN_COL[m] || TERRAIN_COL.Grass, mat = MATID[m] || 1;
@@ -650,8 +668,12 @@ TR.render = function (st) {
   if (st.units !== false) unitDraws(st.T, draws);
   animDraws(st.T, draws);
   // ---- 阴影图：太阳方向的正交投影，罩住镜头看着的那一片
+  // 阴影图罩的范围由镜头头给定（一个镜头里不变），中心对齐到阴影图的格子上：镜头怎么动，影子的格子都钉在地上不动，影子边不会一帧一帧地爬、闪
   const R2 = st.shadowR || clamp(len(sub(st.at, st.eye)) * 2.2, 160, 520);
-  const fc = [st.at[0], 0, st.at[2]];
+  let fc = [st.at[0], 0, st.at[2]];
+  { const lx = norm(cross([0, 1, 0], SUN)), ly = cross(SUN, lx), ts = 2 * R2 / 2048;
+    const a = dot(lx, fc), b = dot(ly, fc);
+    fc = add(fc, add(mul(lx, Math.round(a / ts) * ts - a), mul(ly, Math.round(b / ts) * ts - b))); }
   const sEye = add(fc, mul(SUN, 1600));
   SVP = M4.mul(M4.ortho(-R2, R2, -R2, R2, 200, 3400), M4.look(sEye, fc, [0, 1, 0]));
   const shadowOn = st.shadow !== false;
@@ -687,6 +709,7 @@ TR.render = function (st) {
   const L = P_LIT; gl.useProgram(L.p);
   gl.uniformMatrix4fv(L.u.uVP, false, VP); gl.uniformMatrix4fv(L.u.uSVP, false, SVP);
   gl.uniform3fv(L.u.uSun, SUN); gl.uniform3fv(L.u.uSunC, SUNC); gl.uniform3fv(L.u.uSky, SKY); gl.uniform3fv(L.u.uGnd, GND); gl.uniform3fv(L.u.uFog, FOG); gl.uniform3fv(L.u.uEye, EYE);
+  gl.uniform1f(L.u.uNO, 2 * R2 / 2048 * 1.6);
   gl.uniform1f(L.u.uFogD, st.fogD || FOGD); gl.uniform1f(L.u.uTime, st.T || 0); gl.uniform1f(L.u.uShadowOn, shadowOn ? 1 : 0); gl.uniform1f(L.u.uAlpha, 1); gl.uniform1f(L.u.uDark, 1); gl.uniform1f(L.u.uUA, 0);
   gl.uniform4f(L.u.uBase, 1, 1, 1, 1); gl.uniform1f(L.u.uTex, 0);
   gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, SMtex); gl.uniform1i(L.u.uSM, 1); gl.activeTexture(gl.TEXTURE0); gl.uniform1i(L.u.uT, 0);
