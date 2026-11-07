@@ -377,6 +377,13 @@ function prepTracks() {
     tr.dieT = null;
     for (const f of tr.f) if (f[7] && tr.dieT === null) tr.dieT = f[0];
     if (tr.bu) BYBU[tr.bu] = tr;
+    if (tr.def.jet) {   // 喷气机坡度：按前后 0.6 秒的转弯快慢加权平均（像真飞机那样慢慢压坡度），每个采样点算一个，画的时候在两点之间插值——原来按采样一跳一跳，机翼一抖一抖
+      const f = tr.f, n = f.length, rate = new Float32Array(n);
+      for (let i = 0; i < n - 1; i++) rate[i] = wrapA(f[i + 1][4] - f[i][4]) / Math.max(0.02, f[i + 1][0] - f[i][0]);
+      if (n > 1) rate[n - 1] = rate[n - 2];
+      tr.bank = new Float32Array(n);
+      for (let i = 0; i < n; i++) { let s = 0, w = 0; for (let k = -12; k <= 12; k++) { const j = i + k; if (j < 0 || j >= n) continue; const g = Math.exp(-k * k / 40); s += rate[j] * g; w += g; } tr.bank[i] = clamp(s / w * 0.55, -1.1, 1.1); }
+    }
   }
 }
 const wrapA = a => ((a + Math.PI) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI) - Math.PI;
@@ -387,13 +394,8 @@ function sample(tr, T) {
   while (hi - lo > 1) { const m = (lo + hi) >> 1; if (f[m][0] <= T) lo = m; else hi = m; }
   const a = f[lo], b = f[hi], u = (b[0] > a[0]) ? clamp((T - a[0]) / (b[0] - a[0]), 0, 1) : 0;
   const yaw = a[4] + wrapA(b[4] - a[4]) * u;
-  // 喷气机转弯压坡度（和游戏客户端一样按转向快慢）
-  let bank = 0;
-  if (tr.def.jet) {
-    const i0 = Math.max(0, lo - 3), i1 = Math.min(f.length - 1, lo + 3);
-    const dy = wrapA(f[i1][4] - f[i0][4]) / Math.max(0.05, f[i1][0] - f[i0][0]);
-    bank = clamp(dy * 0.55, -1.1, 1.1);
-  }
+  // 喷气机转弯压坡度（和游戏客户端一样按转向快慢；prepTracks 里已经平滑好，这里在两个采样之间插值）
+  const bank = tr.bank ? lerp(tr.bank[lo], tr.bank[hi], u) : 0;
   return { x: lerp(a[1], b[1], u), y: lerp(a[2], b[2], u), z: lerp(a[3], b[3], u), yaw, pitch: lerp(a[5], b[5], u), ty: a[6] + wrapA(b[6] - a[6]) * u, dead: a[7] > 0, fly: a[8] > 0, bank };
 }
 TR.posOf = (trOrId, T) => { const tr = typeof trOrId === 'object' ? trOrId : B.tracks[trOrId - 1]; const s = sample(tr, T); return s && [s.x, s.y, s.z]; };
