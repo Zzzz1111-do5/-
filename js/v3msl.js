@@ -16,6 +16,7 @@ const V3MS = {
   hhq16: { L: 5.5, d: .34, nose: .1, tail: [.05, .45, .2, .28, .25], strake: [1, 2.6, 2.5, .09, .08] },
   hhq10: { L: 2.0, d: .12, nose: .05, dome: 1, tail: [.02, .15, .08, .09, .07], wing: [1.45, .12, .06, .06, .05] },   // 红旗-10：航母、055 的近程防空
   sm6: { L: 6.6, d: .34, nose: .1, tail: [.05, .55, .25, .3, .3], strake: [.9, 3.6, 3.5, .1, .08] },   // 敌舰标准-6 / 标准-2
+  pac3: { L: 5.2, d: .29, nose: .09, tail: [.04, .4, .18, .22, .22] },   // 爱国者 PAC-3 MSE（车载防空导弹里的大型弹，m.big）：弹长 5.2 米、弹径 0.29 米
   yj21: { L: 9.5, d: .85, nose: .34, cone: 1, tail: [.1, .9, .45, .32, .4] },   // 鹰击-21：大锥体弹头 + 粗助推段（055 大垂发）
   yj18: { L: 8.2, d: .53, nose: .07, tail: [.1, .5, .25, .34, .25], wing: [3.9, .5, .3, .7, .3], w2: 1, inl: 'belly' },
   yj12: { L: 6.25, d: .5, nose: .13, tail: [.1, .55, .25, .34, .3], wing: [2.6, .4, .2, .2, .25], inl: 'quad' },   // 鹰击-12：四个冲压进气道
@@ -52,7 +53,7 @@ function v3MslKey(m) {
   if (m.src === 'cv') return 'hhq10';
   if (m.src === 'eship') return 'sm6';
   if (m.src === 'dd' || m.src === 'esc') { const o = typeof v3VlsOrigin === 'function' ? v3VlsOrigin(m) : null; return o && o.cls === '054A' ? 'hhq16' : 'hhq9'; }
-  if (m.src === 'samv') return e ? 'aim9' : 'hhq10';
+  if (m.src === 'samv') return e ? (m.big ? 'pac3' : 'aim9') : 'hhq10';   // 守方爱国者是大弹、大烟柱（原来一律按毒刺画，远看什么都没有）
   return e ? 'aim120' : 'pl15';
 }
 // 世界单位 / 米：舰上发射的（垂发、舰空导弹）跟驱逐舰同一比例，航母上的跟航母（1 比 1），其余跟飞机（歼-35 17.3 米画成 15）

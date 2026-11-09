@@ -31,7 +31,7 @@ function msLaunch(kind, side, x0, y0, tgt, opts = {}) {
   msEnsure();
   const d = dist(x0, y0, tgt.x, tgt.y), dur = opts.dur || (kind === 'tbm' ? 5 + d / 600 : 2.2);
   const m = { id: S.nid++, kind, side, x0, y0, x: x0, y: y0, z: 0, tx: tgt.x, ty: tgt.y, t: -(opts.delay || 0), dur, tgt: opts.tgt || null, ph: opts.delay ? 'wait' : 'boost', icp: false, src: opts.src || null,
-    spd: opts.spd || null, pk: opts.pk || null, sup: opts.sup || 0, w: opts.w || null, ...(opts.lr ? { lr: true } : {}) };   // lr：远程空空导弹（霹雳-17 一类）
+    spd: opts.spd || null, pk: opts.pk || null, sup: opts.sup || 0, w: opts.w || null, ...(opts.lr ? { lr: true } : {}), ...(opts.big ? { big: true } : {}) };   // lr：远程空空导弹（霹雳-17 一类）；big：车载防空里的大型弹（爱国者），只是画面（v3msl.js 弹形、v3fx.js 烟柱）
   S.missiles.push(m);
   if (kind === 'asm' && side === 'e') S.asmSrc = { x: Math.round(x0), y: Math.round(y0), t: S.t };   // 反舰导弹从哪个方向来（舰队预警机按它定阵位，carrier.js cvAewP）
   return m;

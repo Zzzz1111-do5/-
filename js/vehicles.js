@@ -701,7 +701,7 @@ function vehSam(v, dt) {
     if (!tg) return;
     k = v.side === 'p' ? 'eair' : 'plane';
   }
-  msLaunch('sam', v.side, v.x, v.y, { x: tg.x, y: tg.y }, { tgt: { k, id: tg.id }, src: 'samv', spd: 620, dur: 3, pk: (k === 'msl' ? (tg.kind === 'tbm' ? (tg.nuke ? .2 : .5) * (tg.rf && typeof RF === 'object' && RF[tg.rf] ? RF[tg.rf].icp : 1) : tg.kind === 'pgm' ? MS_PGM[tg.w].icp : .55) : .6 * (rdr && k === 'plane' ? ewPk('v' + v.id, tg, false) : 1)) * (M.pkK || 1), sup: v.sup });   // 打飞机：被欺骗干扰掩护的命中率打折
+  msLaunch('sam', v.side, v.x, v.y, { x: tg.x, y: tg.y }, { tgt: { k, id: tg.id }, src: 'samv', big: !!M.hi, spd: 620, dur: 3, pk: (k === 'msl' ? (tg.kind === 'tbm' ? (tg.nuke ? .2 : .5) * (tg.rf && typeof RF === 'object' && RF[tg.rf] ? RF[tg.rf].icp : 1) : tg.kind === 'pgm' ? MS_PGM[tg.w].icp : .55) : .6 * (rdr && k === 'plane' ? ewPk('v' + v.id, tg, false) : 1)) * (M.pkK || 1), sup: v.sup });   // 打飞机：被欺骗干扰掩护的命中率打折
   v.samN--; v.samCd = M.cd; v.aim = Math.atan2(tg.y - v.y, tg.x - v.x); v.samT = S.t;
   S.fx.push({ kind: 'flash', x: v.x, y: v.y, r: 8, life: 0, max: .4, side: v.side });
   if (v.side === 'e') { v.kx = v.x; v.ky = v.y; v.kh = v.heading; v.seen = S.t; }   // 导弹尾焰暴露发射车

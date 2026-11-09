@@ -4,6 +4,9 @@
 //   空战：歼-20 前出跟踪 → 数据链 → 歼-16 导弹卡车发射）→ 第二幕 强行登陆（抢滩、舰炮、守方炮火反击、滩头对射、堑壕）
 //   → 第三幕 纵深攻防（坦克交战、炮兵、直升机、轰炸）→ 编辑器、图鉴、部署 → 高潮 → 片尾标志（胜利号角）
 //   画面上：杀伤链字幕条（发现 → 引导 → 打击 → 毁伤，攻方绿、守方红）、装备名牌；两军都画（R.eye = 'all'：游戏平时只画侦察到的敌人）
+//   第三版（用户：宣传片里一堆 bug）：镜头一律做视线避让（__clr：镜头和要看的点之间被山挡住、或者低低地对着山坡时抬高——原来贴着山坡拍，
+//   卫星图凑近是一大块糊的纯绿三角形）；拦截弹改从远处长焦看齐射的烟迹（原来跟拍钻进云里）、东风-17 从目标旁边仰拍来袭、蒸汽锥从侧面看、
+//   开场跟着舰艇最密的一群、名牌照画面里的东西写（被击落的是我方飞机就写那型飞机）、尾烟设计页的预览先跑几秒再拍（原来只看到左边一个点）
 // 地图：台湾东海岸雪山图（用户选的）。这张图的地形来自 Miguel Cueva 的「Taiwan (East coast)」（CC BY-NC-SA 4.0）——
 //   用了它的这一版只能非商用：片尾署名、注明本片按 CC BY-NC-SA 4.0 发布，不写上架平台（商店素材 store_assets.js 仍用程序生成的地图）
 // 画面：同一局（固定地图与随机数）逐帧推演、逐帧截图。推演和画面的随机数分开存：画画用掉的随机数不影响战局，
@@ -33,7 +36,8 @@ const CHAINS = {
   p1: { side: 'p', hd: 'KILL CHAIN // 攻方 · 联合火力打击', n: ['空警-600 预警探测', '东风-17 高超音速突防', '摧毁爱国者阵地'] },
   e1: { side: 'e', hd: 'KILL CHAIN // 守方 · 一体化防空反导', n: ['哨兵雷达 发现来袭', '爱国者 齐射拦截', '拦截弹爬升'] },
   p4: { side: 'p', hd: 'KILL CHAIN // 攻方 · 舰载机突击', n: ['福建舰 电磁弹射', '飞腾-8 精确制导', '摧毁岸防工事'] },
-  p5: { side: 'p', hd: 'KILL CHAIN // 攻方 · 舰载远程火力', n: ['空警-600 指示目标', '055 长剑-10 齐射', '纵深打击'] },
+  p5: { side: 'p', hd: 'KILL CHAIN // 攻方 · 舰载远程火力', n: ['空警-600 指示目标', '055 垂发长剑-10', '纵深打击'] },
+  p6: { side: 'p', hd: 'KILL CHAIN // 攻方 · 防区外精确打击', n: ['侦察发现防空车', '055 鹰击-18', '突破拦截 摧毁'] },
   e2: { side: 'e', hd: 'KILL CHAIN // 守方 · 野战防空', n: ['雷达 发现来袭', '防空车 拦截', '空中拦截'] }
 };
 // —— 分镜 ——
@@ -43,44 +47,45 @@ const CHAINS = {
 //     chase 跟在对象后面（o 对象、d 距离、yo 相对航向的方位、pit 俯角，[起, 止] 之间缓动）· look 镜头钉在 at 附近（off [前, 右, 上]）一直看着对象 ·
 //     two 两军同框：A 在前景、B 在远处（镜头在 A 身后、B→A 的延长线转 yo，看向 A 与 B 之间 f 处）· orbit 绕对象转 · pt 固定的点按 [距离, 方位, 俯角] 起止缓动
 //     对象：['pl', 编号] 我机 · ['ea', 编号] 敌机 · ['m', 编号] 导弹 · ['v', 编号] 车辆 · ['e', 编号] 工事 · ['s', 编号] 舰船 · ['dd'] 驱逐舰 · ['cv'] 航母 · ['xy', x, y, z]；
-//     'M' / 'SRC' / 'IMP' / 'A' / 'B' 由 q 找到的事件填上（导弹、发射点、落点、射手、目标）
-//   旧的取景 tg：fleet 舰队、cv 航母、ships 舰艇最密的一群、land 登陆部队最密处、boom 本镜头时段里炸得最集中处、landing 部队刚上岸的地方、trench 堑壕；
-//   fov 视场角倍数（< 1 长焦）；chain 杀伤链 [链, 第几节]；tag 装备名牌 [名称, 说明, 攻方 p / 守方 e]；card 字幕卡；flash 开头一闪（换幕，配乐重击）；fire 真实爆炸放大一些、隔几帧在旁边再炸一团（S.fx 只是画面）
+//     'M' / 'SRC' / 'IMP' / 'TGT' / 'A' / 'B' 由 q 找到的事件填上（导弹、发射点、落点、导弹打的目标、射手、目标）；look 的 b + f：看 o 与 b 之间 f 处（来袭弹和它的落点都在画面里）
+//     L 的筛选：nm 发射车型号里有这几个字 · tgw 打的那发来袭弹的型号 · quiet 前多少秒附近没发射过（齐射的头一发，烟还没起）· salvo 之后 5 秒内附近至少几发
+//   旧的取景 tg：fleet 舰队、cv 航母、ships 舰艇最密的一群、land 登陆部队最密处、boom 本镜头时段里炸得最集中处、landing 部队刚上岸的地方、trench 堑壕；shift [前, 右] 取景点挪开（主体让到画面一边）
+//   fov 视场角倍数（< 1 长焦）；chain 杀伤链 [链, 第几节, 下一节亮起的时刻（'X'：这一发导弹结束时）]；tag 装备名牌 [名称, 说明, 攻方 p / 守方 e]（'@SRC' 发射车型号、'@TGT' 被打的飞机型号）；
+//   card 字幕卡；flash 开头一闪（换幕，配乐重击）；fire 真实爆炸放大一些、隔几帧在旁边再炸一团（S.fx 只是画面）
 const C = (kick, title, sub, at, out, pos) => ({ kick, title, sub, at, out, pos: pos || 'left' });
 const SHOTS = [
-  { id: 'A', dur: 6, T: 20, tg: 'fleet', ahead: 700, cam: [[2700, -1.36, -0.045], [2000, -1.30, -0.07]], card: C('DARKSWORD // JOINT AMPHIBIOUS WARFARE', '体系对体系的登陆战', '海 · 空 · 天 · 电 · 陆　实时推演', 1.2, 5.3), fadeIn: .9 },
+  { id: 'A', dur: 6, T: 20, rig: { k: 'pt', o: ['cv'], cam: [[540, -1.42, -0.06], [400, -1.5, -0.075]], tz: 20, pan: [-0.4, -0.36] }, card: C('DARKSWORD // JOINT AMPHIBIOUS WARFARE', '体系对体系的登陆战', '海 · 空 · 天 · 电 · 陆　实时推演', 1.2, 5.3), fadeIn: .9 },   // 航母在前景，055、登陆舰在它前面，远处是雪山海岸；主体让到画面右边（原来取整个舰队的平均位置——这时舰艇一字排开、相隔一公里半，平均落在空海上）
   // 第一幕：体系破击——守方爱国者齐射拦截 → 东风-17 突防摧毁爱国者阵地 → 055 垂发 → 歼-16D 反辐射压制 → 舰载机弹射、精确制导炸弹 → 歼-20 掌握制空权
   { id: 'B1', warm: 14, dur: 4, q: { P: { k: ['kj600'], after: 60 } }, rig: { k: 'chase', o: 'A', d: [95, 62], yo: [2.3, 1.8], pit: [-0.10, -0.05] }, chain: ['p1', 0], tag: ['空警-600', '舰载预警机 · 远在视距外发现目标', 'p'], card: C('PHASE 01 // SYSTEM STRIKE', '先打体系', '预警 · 电子战 · 火箭军 · 联合火力', .1, 1.9), flash: true },   // 字幕卡下去以后才出杀伤链、名牌
-  { id: 'B5', dur: 2, spd: 1, q: { L: { side: 'e', kind: 'sam', src: 'samv', tg: 'msl', dense: true }, lead: 0.5 }, rig: { k: 'pt', o: 'SRC', cam: [[220, -2.3, -0.2], [190, -2.15, -0.17]], tz: 25 }, fov: .85, chain: ['e1', 1], tag: ['爱国者 PAC-3', '哨兵雷达引导 · 四弹齐射拦截来袭弹道导弹', 'e'] },
-  { id: 'B6', dur: 2, spd: 1, q: { cont: true }, rig: { k: 'chase', o: 'M', d: [110, 150], yo: [1.35, 1.2], pit: [-0.08, -0.04] }, chain: ['e1', 2] },   // 侧面跟拍：烟迹在旁边，不挡镜头
-  { id: 'B3', dur: 2, spd: 1, q: { X: { kind: 'tbm', w: 'df17' }, lead: 2 }, rig: { k: 'look', o: 'M', at: 'IMP', off: [-760, 380, 140], abs: true }, chain: ['p1', 1], tag: ['东风-17', '高超音速滑翔弹头 · 机动突防', 'p'] },
+  { id: 'B5', dur: 2, spd: 1, q: { L: { side: 'e', kind: 'sam', src: 'samv', tg: 'msl', nm: '爱国者', dense: true }, lead: 0.5 }, rig: { k: 'pt', o: 'SRC', cam: [[150, 0.85, 0.03], [130, 1.02, 0.06]], tz: 20 }, fov: .85, chain: ['e1', 1], tag: ['@SRC', '哨兵雷达引导 · 齐射拦截来袭弹道导弹', 'e'] },   // 低机位稍稍仰拍、太阳在身后：发射车在下面，背景是天（原来俯拍，背景是糊的地面）
+  { id: 'B6', dur: 2, spd: 1, q: { cont: true }, rig: { k: 'look', o: 'M', at: 'SRC', off: [-330, -180, 14], abs: true, b: 'SRC', f: .62 }, fov: .9, chain: ['e1', 2] },   // 站在阵地西北几百米外看拦截弹的烟迹从发射车上爬起来（原来贴着拦截弹跟拍钻进云里；两公里外长焦又什么都看不见）
+  { id: 'B3', dur: 2, spd: 1, q: { X: { kind: 'tbm', w: 'df17' }, lead: 2 }, rig: { k: 'look', o: 'M', at: 'IMP', off: [-260, -640, 22], abs: true, b: 'IMP', f: .45 }, fov: .85, chain: ['p1', 1], tag: ['东风-17', '高超音速滑翔弹头 · 机动突防', 'p'] },   // 站在目标北边往南仰看：来袭的弹头和它要打的阵地都在画面里，背景是天和海岸山脉（原来从高处看，弹头是糊地面上一个亮点）
   { id: 'B4', dur: 2, spd: 1, q: { cont: true }, rig: { k: 'pt', o: 'IMP', cam: [[270, -1.9, -0.20], [230, -1.75, -0.18]] }, fire: true, chain: ['p1', 2] },
   { id: 'BY', warm: 14, dur: 2, spd: 1, q: { L: { side: 'p', kind: 'pgm', w: 'yj18' }, lead: 0.5 }, rig: { k: 'look', o: 'M', at: 'SRC', off: [95, 62, 9], abs: true }, fov: .8, tag: ['055 型驱逐舰', '垂直发射 · 鹰击-18 打击岸上目标', 'p'] },
   { id: 'BL', warm: 14, dur: 2, spd: 1, q: { L: { side: 'p', kind: 'pgm', w: 'ld10' }, lead: 0.5 }, rig: { k: 'chase', o: 'SRCP', d: [46, 40], yo: [1.25, 1.0], pit: [-0.02, 0.02] }, tag: ['歼-16D', '电子侦察测出雷达 · 雷电-10 反辐射导弹', 'p'] },
   { id: 'BC', warm: 14, dur: 2, spd: 1, q: { C: { k: ['j35', 'j15'] }, lead: 0.6 }, rig: { k: 'look', o: 'A', at: 'A', off: [48, -17, 5] }, chain: ['p4', 0], tag: ['福建舰 · 歼-35', '电磁弹射 · 舰载隐身战斗机出击', 'p'] },
   { id: 'BF', warm: 14, dur: 2, spd: 1, q: { L: { side: 'p', kind: 'pgm', w: 'ft8' }, lead: 0.5 }, rig: { k: 'chase', o: 'SRCP', d: [40, 36], yo: [1.35, 1.15], pit: [0.06, 0.08] }, chain: ['p4', 1] },
   { id: 'BG', dur: 2, spd: 1, q: { cont: true }, rig: { k: 'pt', o: 'IMP', cam: [[330, -2.0, -0.26], [280, -1.8, -0.23]] }, fire: true, chain: ['p4', 2] },
-  { id: 'B7', warm: 14, dur: 2, cone: 326, q: { P: { k: ['j20'] } }, rig: { k: 'chase', o: 'A', d: [46, 34], yo: [0.6, 0.3], pit: [-0.12, -0.08] }, tag: ['歼-20', '隐身战斗机 · 夺取制空权', 'p'] },
+  { id: 'B7', warm: 14, dur: 2, cone: 312, q: { P: { k: ['j20'], inMap: true } }, rig: { k: 'chase', o: 'A', d: [44, 38], yo: [0.95, 0.82], pit: [-0.12, -0.09] }, tag: ['歼-20', '隐身战斗机 · 夺取制空权', 'p'] },   // 斜后方看蒸汽锥（正后方是一个大白盘、正侧面是一面白帆）；挑在战场上空的（原来在战区机场小岛上空）
   // 第二幕：强行登陆——抢滩、壕里的守军、步兵与工事对射、坦克对坦克、守方反坦克车打登陆舰
-  { id: 'F', dur: 4, q: { T: 'landing', lead: 26 }, rig: { k: 'chase', o: 'SHIP', d: [120, 85], yo: [0.6, 0.35], pit: [-0.12, -0.09] }, card: C('PHASE 02 // ASSAULT', '再强行登陆', '抢滩 · 舰炮火力 · 夺取登陆场', .15, 3.7), flash: true },
-  { id: 'I', dur: 4, q: { T: 'landing', lead: -50 }, tg: 'trench', cam: [[115, -1.3, -0.40], [80, -1.05, -0.34]] },
-  { id: 'I2', dur: 4, q: { F: { after: 0 } }, rig: { k: 'two', o: 'A', b: 'B', d: [62, 50], yo: [0.35, 0.22], pit: [-0.16, -0.12], f: .5 }, fov: .75 },   // 步兵与工事对射：攻方在前景，守方阵地在远处
-  { id: 'G', dur: 4, q: { F: { after: 120, bunker: true } }, rig: { k: 'two', o: 'A', b: 'B', d: [70, 56], yo: [0.45, 0.3], pit: [-0.2, -0.16], f: .55 }, fov: .75, tag: ['登陆突击队', '步兵冲击守方火力点', 'p'] },   // 坦克对射那一段双方都放了烟幕、看不清：改拍步兵冲击工事（B 换成离攻方最近的守方工事）
+  { id: 'F', dur: 4, q: { T: 'landing', lead: 26 }, tg: 'ships', shift: [0, -45], cam: [[150, -1.62, -0.05], [110, -1.56, -0.07]], card: C('PHASE 02 // ASSAULT', '再强行登陆', '抢滩 · 舰炮火力 · 夺取登陆场', .15, 3.7), flash: true },   // 低低地跟在冲滩的登陆艇群后面，前方是海滩和雪山（原来跟拍一艘顺着岸边开的小艇）
+  { id: 'I', dur: 4, q: { T: 'landing', lead: -50 }, tg: 'trench', cam: [[170, 1.25, -0.44], [130, 1.5, -0.38]] },   // 站在堑壕后面往海那边看：守军在前景，海滩、冲上来的攻方、海在后面（原来从海上往山里看，背景是糊的山坡）
+  { id: 'I2', dur: 4, q: { F: { after: 0 } }, rig: { k: 'two', o: 'B', b: 'A', d: [130, 105], yo: [0.35, 0.22], pit: [-0.3, -0.26], f: .55 }, fov: .7 },   // 步兵与工事对射：镜头在守方阵地后面、往坡下的攻方和海那边看（滩头后面就是陡山：从攻方身后往上拍，画面是一整面糊的绿坡）
+  { id: 'G', dur: 4, q: { F: { after: 120, bunker: true } }, rig: { k: 'two', o: 'B', b: 'A', d: [150, 124], yo: [-0.6, -0.45], pit: [-0.32, -0.28], f: .5 }, fov: .7, tag: ['登陆突击队', '步兵冲击守方火力点', 'p'] },   // 守方工事在前景（B 换成离攻方最近的守方工事），攻方从坡下冲上来；和上一个镜头同一片战场，换个方向
   { id: 'H', warm: 14, dur: 4, T: 850, pick: [['ftr', 'F-35A 闪电 II', '守方战斗机 · 争夺登陆场上空的制空权'], ['ftrb', 'F-35B 闪电 II', '守方短距起降战斗机 · 争夺制空权'], ['c17', 'C-17 运输机', '守方 · 空运增援']], rig: { k: 'chase', o: null, d: [62, 48], yo: [2.5, 2.2], pit: [-0.06, -0.03] } },   // 守方装备：开拍时挑一架在空中的 F-35（没有就 C-17），从前侧方回看
   // 第三幕：纵深攻防——055 长剑-10 齐射；守方防空车拦截鹰击-18、击落我方飞机；步兵与工事对射；战区逐级指挥
-  { id: 'J', dur: 4, spd: 1, q: { L: { side: 'p', kind: 'pgm', w: 'cj10', src: 'vls', dense: true }, after: 1100, lead: 1.2 }, rig: { k: 'look', o: 'SRC', at: 'SRC', off: [105, 75, 10], tz: 34, abs: true }, fov: .8, chain: ['p5', 1], card: C('PHASE 03 // DEPTH', '向纵深推进', '战区 → 师 → 团 → 营　逐级指挥', .15, 2.6), flash: true },
-  { id: 'J2', dur: 2, spd: 1, q: { X: 'prev', lead: 1.4 }, rig: { k: 'look', o: 'M', at: 'IMP', off: [-380, 300, 90], abs: true }, fire: true, chain: ['p5', 2] },
-  { id: 'JE1', dur: 2, spd: 1, q: { L: { side: 'e', kind: 'sam', src: 'samv', tg: 'msl', out: 'kill' }, after: 1100, lead: 1.2 }, rig: { k: 'look', o: 'TGT', at: 'SRC', off: [-70, -45, 7], abs: true }, chain: ['e2', 1], tag: ['@SRC', '野战防空 · 拦截来袭的鹰击-18', 'e'] },   // 从发射车身后看向来袭的鹰击-18：来袭弹、拦截弹、空中爆炸都在画面里
-  { id: 'JE2', dur: 2, spd: 1, q: { L: { side: 'e', kind: 'sam', src: 'samv', tg: 'msl', out: 'kill' }, after: 1121, lead: 0.8 }, rig: { k: 'chase', o: 'TGT', d: [34, 42], yo: [0.28, 0.18], pit: [-0.12, -0.09] }, chain: ['e2', 2] },   // 跟在来袭的鹰击-18 后面：前方是防空阵地，拦截弹迎面打上来
-  { id: 'JA', warm: 14, dur: 2, spd: 1, q: { L: { side: 'e', kind: 'sam', src: 'samv', tg: 'plane', out: 'kill' }, lead: 0.8 }, rig: { k: 'chase', o: 'TGT', d: [60, 80], yo: [0.7, 0.5], pit: [-0.16, -0.12] }, tag: ['@SRC', '击落低空突防的我方飞机', 'e'] },   // 跟着被打的那架飞机：防空导弹从下面打上来
-  { id: 'I3', dur: 4, q: { F: { after: 450 } }, rig: { k: 'two', o: 'A', b: 'B', d: [80, 60], yo: [-0.4, -0.25], pit: [-0.14, -0.1], f: .5 }, fov: .75 },
-  { id: 'K', dur: 4, q: { T: 'landing', lead: -360 }, tg: 'land', hud: true, cam: [[5200, -1.5708, -1.02], [4200, -1.5708, -0.88]] },
+  { id: 'J', dur: 4, spd: 1, q: { L: { side: 'p', kind: 'pgm', w: 'cj10', src: 'vls', quiet: 25 }, lead: 1.2 }, rig: { k: 'look', o: 'M', at: 'SRC', off: [-118, 58, 9], abs: true, b: 'SRC', f: .9, tz: 14 }, fov: .75, chain: ['p5', 1], card: C('PHASE 03 // DEPTH', '向纵深推进', '战区 → 师 → 团 → 营　逐级指挥', .15, 2.6), flash: true },   // 站在上风处（西边：烟往东飘）一百三十米看舰、导弹出筒后镜头跟着往上抬一点（原来站在下风处，烟柱飘过来把舰挡住；舰按游戏长度画，四五十米，再远就太小）
+  { id: 'J2', dur: 2, spd: 1, q: { X: 'prev', lead: 1.4 }, rig: { k: 'look', o: 'M', at: 'IMP', off: [-520, 400, 170], abs: true, b: 'IMP', f: .55 }, fov: .75, fire: true, chain: ['p5', 2] },   // 原来镜头被山挡住，只拍到一面山坡
+  { id: 'JE1', dur: 4, spd: 1, q: { L: { side: 'e', kind: 'sam', src: 'samv', tg: 'msl', tgw: ['yj18'] }, after: 900, lead: 1.0 }, rig: { k: 'two', o: 'SRC', b: 'TGT', d: [46, 40], yo: [0.34, 0.24], pit: [-0.24, -0.2], f: .08 }, fov: .8, chain: ['p6', 1, 'XT'], tag: ['@SRC', '守方野战防空 · 毒刺拦截来袭的鹰击-18', 'e'] },   // 防空车在前景、来袭的鹰击-18 从海那边过来：毒刺从车上打出去没打中，鹰击-18 扎下来（这一局里就是这样）；杀伤链在鹰击-18 落地那一刻走到最后一节
+  { id: 'TK', dur: 4, spd: 1, q: { V: { side: 'p', tk: 'veh' } }, rig: { k: 'two', o: 'B', b: 'A', d: [70, 58], yo: [0.42, 0.3], pit: [-0.2, -0.16], f: .5 }, fov: .75, tag: ['@B', '守方前沿 · 遭坡下攻方坦克炮击', 'e'] },   // 守方的车在前景、坡下的坦克开炮：两军的装甲在一个画面里，背景是海滩；名牌写前景那辆守方车
+  { id: 'JB', warm: 14, dur: 4, spd: 1, q: { L: { side: 'p', kind: 'pgm', w: 'ls6' }, lead: 0.6 }, rig: { k: 'chase', o: 'SRCP', d: [50, 44], yo: [1.15, 0.95], pit: [-0.05, -0.02] }, tag: ['歼-16', '对地满挂 · 雷石-6 滑翔制导炸弹', 'p'] },   // 原来又一个步兵在山坡上的镜头（滩头后面的陡坡，怎么拍都是一大面绿）：换成歼-16 投弹
+  { id: 'K', dur: 4, q: { T: 'landing', lead: -360 }, tg: 'land', hud: true, cam: [[5200, -1.3, -1.02], [4200, -1.3, -0.88]] },   // 朝北偏东看：太阳在西北，海面上那一大块反光不进画面
   // 编辑器、内容一览：最后拍（编辑器只是盖在上面；部署会换掉战局，放最后）
   { id: 'L', dur: 4, ui: 'eanim', card: C('EDITOR // DESIGN ANYTHING', '想怎么设计就怎么设计', '参数 · 模型 · 部件 · 局部动画 · 特效', .2, 3.8, 'low') },
   { id: 'M1', dur: 4 / 3, ui: 'codex', card: C('ORDER OF BATTLE', '一百多种兵力', '', .05, 1.3, 'low') },
   { id: 'M2', dur: 4 / 3, ui: 'etrail', card: C('MISSILE TRAILS', '尾烟、尾焰自己设计', '', .05, 1.3, 'low') },
   { id: 'M3', dur: 4 / 3, ui: 'deploy', card: C('SANDBOX', '自由部署 · 攻守对抗', '', .05, 1.3, 'low') },
-  { id: 'N', dur: 4, q: { T: 'landing', lead: -620 }, tg: 'boom', fire: true, cam: [[650, -1.5708, -0.30], [520, -1.5708, -0.27]], fov: .8, flash: true, booms: [0, .5, 1, 1.5, 2, 2.25, 2.5, 2.75, 3, 3.25, 3.5] },
+  { id: 'N', dur: 4, q: { T: 'landing', lead: -620 }, tg: 'boom', fire: true, cam: [[650, -1.5708, -0.32], [520, -1.5708, -0.29]], fov: .8, flash: true, booms: [0, .5, 1, 1.5, 2, 2.25, 2.5, 2.75, 3, 3.25, 3.5] },   // 从海边往山里看（滩头后面全是陡坡：从山里往外看、顺着山脊看、从高处往下看都是一整面糊的山坡）；近处的坡面现在有草地细节贴图
   { id: 'O', dur: 8, q: { T: 'landing', lead: -628 }, tg: 'land', end: true }
 ];
 { let t = 0; SHOTS.forEach((s, i) => { s.at = t; t += s.dur; const P = SHOTS[i - 1], N = SHOTS[i + 1], k = s.chain && s.chain[0]; if (k) { s.chF = !(P && P.chain && P.chain[0] === k); s.chL = !(N && N.chain && N.chain[0] === k); } }); }   // chF / chL：这条链在这个镜头淡入 / 淡出
@@ -130,10 +135,10 @@ function overlayState(sh, t) {   // 本镜头第 t 秒的字幕卡、杀伤链�
     if (a > 0) st.card = { ...c, a, rev: clamp((t - c.at) / .55, 0, 1), rule: ease(clamp((t - c.at - .1) / .5, 0, 1)), slide: (1 - ease(clamp((t - c.at) / .4, 0, 1))) * -24 };
     st.shade = c.pos === 'left' ? a * .9 : c.pos === 'low' ? a * .8 : a * .55;
   }
-  if (sh.chain) {   // 杀伤链：这一节在镜头开头亮起（前一节到这一节的箭头先走满）；链的头一节淡入、最后一节淡出
-    const [k, i] = sh.chain, CH = CHAINS[k];
+  if (sh.chain) {   // 杀伤链：这一节在镜头开头亮起（前一节到这一节的箭头先走满）；链的头一节淡入、最后一节淡出；chT：镜头中途亮下一节（拦截弹炸开的那一刻）
+    const [k, i0] = sh.chain, CH = CHAINS[k], adv = sh.chT != null && t >= sh.chT && i0 + 1 < CH.n.length, i = adv ? i0 + 1 : i0, tf = adv ? t - sh.chT : t;
     const a = (sh.chF && !sh.card ? clamp(t / .25, 0, 1) : 1) * (sh.chL ? clamp((sh.dur - t) / .3, 0, 1) : 1) * (sh.card ? clamp((t - c.out) / .25, 0, 1) : 1);
-    st.chain = { k, i, side: CH.side, hd: CH.hd, n: CH.n, a, fill: ease(clamp(t / .3, 0, 1)), pulse: .5 + .5 * Math.cos(t * 7) };
+    st.chain = { k, i, side: CH.side, hd: CH.hd, n: CH.n, a, fill: ease(clamp(tf / .3, 0, 1)), pulse: .5 + .5 * Math.cos(t * 7) };
     st.shade = Math.max(st.shade, a * .42);
   }
   if (sh.tag) {
@@ -167,7 +172,12 @@ async function scout(b) {
       const t = +S.t.toFixed(3), now = new Set();
       for (const m of S.missiles || []) {
         now.add(m.id);
-        if (!seenM.has(m.id)) { seenM.set(m.id, {}); ev.push(['L', t, m.id, m.kind, m.side, m.rf || m.w || '', typeof m.src === 'object' && m.src ? String(m.src.id ?? '') : String(m.src ?? ''), Math.round(m.x0), Math.round(m.y0), Math.round(m.tx), Math.round(m.ty), m.tgt ? (m.tgt.k || '') + ':' + (m.tgt.id ?? '') : '']); }
+        if (!seenM.has(m.id)) {
+          seenM.set(m.id, {});
+          let nm = '';   // 车载防空导弹：发射点上那辆车的型号（爱国者、复仇者……）
+          if (m.src === 'samv') { const v = (S.veh || []).filter(o => o.side === m.side && !o.dead && dist(o.x, o.y, m.x0, m.y0) < 40).reduce((a, o) => !a || dist(o.x, o.y, m.x0, m.y0) < dist(a.x, a.y, m.x0, m.y0) ? o : a, null); nm = v ? vehModel(v) : ''; }
+          ev.push(['L', t, m.id, m.kind, m.side, m.rf || m.w || '', typeof m.src === 'object' && m.src ? String(m.src.id ?? '') : String(m.src ?? ''), Math.round(m.x0), Math.round(m.y0), Math.round(m.tx), Math.round(m.ty), m.tgt ? (m.tgt.k || '') + ':' + (m.tgt.id ?? '') : '', nm]);
+        }
         const s = seenM.get(m.id); s.icp = m.icp; s.ph = m.ph; s.x = Math.round(m.x); s.y = Math.round(m.y); s.tg = m.tgt;
         if (!s.a && m.t >= 0 && typeof AIRV === 'object' && AIRV.mv) { if (typeof airRelScan === 'function') airRelScan(); const rr = AIRV.mv.get(m.id); if (rr) { s.a = 1; const L = rr.side === 'p' ? S.planes || [] : (S.eair && S.eair.fly) || [], o = L.find(q => q.id === rr.id); ev.push(['A', t, m.id, rr.side, rr.id, o ? (rr.side === 'p' ? airSilKey(o.kind, o.v) : o.type) : '']); } }
       }
@@ -182,9 +192,9 @@ async function scout(b) {
       if (landT != null) for (const r of S.tracers) if (!seenT.has(r)) { seenT.add(r); if (!r.fuzzy && !r.cw) ev.push(['T', t, r.side, Math.round(r.x0), Math.round(r.y0), Math.round(r.x1), Math.round(r.y1)]); }   // 曳光（上岸以后；看不见射手的模糊弹道画面上不画，不记）
       if (landT == null && S.teams.some(q => q.side === 'p' && q.men.length && isLand(q.x, q.y))) landT = t;   // 第一组人上岸
       if (i % 15 === 0) samp.push({ t: S.t, land: window.__land(), fleet: avg(S.ships.filter(s => !s.dead)), cv: S.cv && !S.cv.dead ? [S.cv.x, S.cv.y] : null,
-        pl: (S.planes || []).filter(p => !p.dead && p.phase === 'out' && (p.alt ?? 1) > .12).map(p => airSilKey(p.kind, p.v)) });
+        pl: (S.planes || []).filter(p => !p.dead && p.phase === 'out' && (p.alt ?? 1) > .12).map(p => [airSilKey(p.kind, p.v), Math.round(p.x), Math.round(p.y)]) });   // 机型和位置（挑在战场上空的）
     }
-    return { samp, ev, landT };
+    return { samp, ev, landT, geo: { W, H, SEA_H: typeof SEA_H === 'number' ? SEA_H : H } };
   }, SCOUT_END);
   await p.close();
   return r;
@@ -196,7 +206,7 @@ async function scoutSaved(b) {
   console.log(`第一组人上岸：第 ${sc.landT} 秒；事件 ${sc.ev.length} 条`);
   for (let t = 0; t < sc.samp[sc.samp.length - 1].t; t += 30) {   // 每 30 秒：导弹、车炮、爆炸数、登陆部队位置——选镜头时间时看
     const E = sc.ev.filter(q => q[1] >= t && q[1] < t + 30), s = sc.samp.find(q => q.t >= t + 29.9), n = k => E.filter(q => q[0] === k).length;
-    console.log(`${String(t).padStart(4)}–${t + 30} 秒：导弹 ${n('L')}，车炮 ${n('V')}，爆炸 ${n('B')}；空中 ${s ? s.pl.join(',') : '-'}；登陆部队 ${s && s.land ? s.land.map(Math.round) : '-'}`);
+    console.log(`${String(t).padStart(4)}–${t + 30} 秒：导弹 ${n('L')}，车炮 ${n('V')}，爆炸 ${n('B')}；空中 ${s ? s.pl.map(q => q[0]).join(',') : '-'}；登陆部队 ${s && s.land ? s.land.map(Math.round) : '-'}`);
   }
   return sc;
 }
@@ -204,9 +214,13 @@ async function scoutSaved(b) {
 // —— 按侦察记录定下每个镜头的开拍时刻和对象 ——
 //   推演只能往前走、各镜头在推演里的时段不能重叠；剪辑顺序（分镜顺序）和推演顺序可以不同：按分镜顺序逐个找「时段还空着的、最早的那一次」
 function planShots(sc) {
-  const ev = sc.ev, X = new Map(ev.filter(e => e[0] === 'X').map(e => [e[2], e])), A = new Map(ev.filter(e => e[0] === 'A').map(e => [e[2], e]));
+  const ev = sc.ev, X = new Map(ev.filter(e => e[0] === 'X').map(e => [e[2], e])), A = new Map(ev.filter(e => e[0] === 'A').map(e => [e[2], e])), LM = new Map(ev.filter(e => e[0] === 'L').map(e => [e[2], e]));
   const has = (v, x) => v == null || [].concat(v).includes(x);
-  const okL = (e, L) => e[0] === 'L' && has(L.side, e[4]) && has(L.kind, e[3]) && has(L.w, e[5]) && has(L.src, e[6]) && (!L.tg || String(e[11]).startsWith(L.tg));
+  const tgW = e => { const [k, id] = String(e[11]).split(':'), o = k === 'msl' ? LM.get(+id) : null; return o ? o[5] : ''; };   // 打的那发来袭弹的型号
+  const near = (e, o, r) => Math.hypot(o[7] - e[7], o[8] - e[8]) < r;
+  const okL = (e, L) => e[0] === 'L' && has(L.side, e[4]) && has(L.kind, e[3]) && has(L.w, e[5]) && has(L.src, e[6]) && (!L.tg || String(e[11]).startsWith(L.tg)) && (!L.nm || String(e[12] || '').includes(L.nm)) && (!L.tgw || L.tgw.includes(tgW(e)))
+    && (!L.quiet || !ev.some(o => o[0] === 'L' && o !== e && o[1] < e[1] && o[1] > e[1] - L.quiet && o[4] === e[4] && near(e, o, 400)))   // 齐射的头一发：之前一段时间附近没发射过（烟还没起）
+    && (!L.salvo || ev.filter(o => o[0] === 'L' && o[1] >= e[1] && o[1] < e[1] + 5 && o[4] === e[4] && o[5] === e[5] && near(e, o, 1000)).length >= L.salvo);
   const outOf = e => { const x = X.get(e[2]); return x ? x[3] : 'live'; };
   const landT = sc.landT ?? 300, placed = [], plan = [], tEnd = sc.samp.length ? sc.samp[sc.samp.length - 1].t : SCOUT_END;
   const free = (T, span) => T >= 0 && T + span <= tEnd && placed.every(([a, b]) => T + span <= a + 1e-6 || T >= b - 1e-6);
@@ -226,7 +240,9 @@ function planShots(sc) {
     else if (q.X === 'prev') { const e = prev && prev.e, x = e && X.get(e[2]); if (!x) fail('上一个镜头没有导弹可接'); T = Math.max(x[1] - lead, prev.T + prev.span); ref = { ...prev.ref, IMP: ['xy', x[4], x[5]] }; hit = e; }
     else if (q.T === 'landing') T = landT - lead;
     else if (q.L || q.X) {   // 某类导弹发射（从发射前 lead 秒开拍）/ 落地、命中（落地前 lead 秒开拍）：时段空着的最早一次
-      const Q = q.L || q.X, M = ev.filter(e => okL(e, Q) && e[1] >= (q.after || 0) && (!q.from || (A.get(e[2]) && has(q.from, A.get(e[2])[5]))) && (!Q.out || outOf(e) === Q.out) && (q.L || X.get(e[2])));
+      const Q0 = q.L || q.X, find = Q => ev.filter(e => okL(e, Q) && e[1] >= (q.after || 0) && (!q.from || (A.get(e[2]) && has(q.from, A.get(e[2])[5]))) && (!Q.out || outOf(e) === Q.out) && (q.L || X.get(e[2])));
+      let M = find(Q0), Q = Q0;
+      for (const k of ['nm', 'tgw', 'salvo', 'quiet']) if (!M.some(e => free((q.L ? e[1] : X.get(e[2])[1]) - lead, span)) && Q[k] != null) { Q = { ...Q, [k]: undefined }; M = find(Q); console.warn(`镜头 ${s.id}：没有合 ${k} 的，放宽`); }   // 找不到就逐条放宽（发射车型号、来袭弹型号、齐射、头一发）
       let e = M.find(e => free((q.L ? e[1] : X.get(e[2])[1]) - lead, span));
       if (e && Q.dense) { const G = M.filter(o => Math.abs(o[1] - e[1]) < .3), d = o => G.reduce((a, g) => a + Math.hypot(g[7] - o[7], g[8] - o[8]), 0); e = G.reduce((a, o) => d(o) < d(a) ? o : a, e); }
       if (!e) fail('侦察记录里找不到时段空着的');
@@ -260,8 +276,9 @@ function planShots(sc) {
       const e = ev.find(e => e[0] === 'C' && has(q.C.k, e[3]) && free(e[1] - lead, span));
       if (!e) fail('侦察记录里找不到时段空着的弹射起飞');
       T = e[1] - lead; ref = { A: ['pl', e[2]] };
-    } else if (q.P) {   // 某型飞机在空中：开拍时在页面里挑一架
-      const o = sc.samp.find(o => o.t >= (q.P.after ?? 0) && o.pl.some(k => q.P.k.includes(k)) && free(o.t, span));
+    } else if (q.P) {   // 某型飞机在空中：开拍时在页面里挑一架（inMap：在战场上空的，不要还在远海、战区机场小岛那边的）
+      const G = sc.geo || { W: 1e9, SEA_H: 1e9 }, ok = p => Array.isArray(p) ? q.P.k.includes(p[0]) && (!q.P.inMap || (p[1] > 600 && p[1] < G.W - 600 && p[2] > 0 && p[2] < G.SEA_H)) : q.P.k.includes(p);
+      const o = sc.samp.find(o => o.t >= (q.P.after ?? 0) && o.pl.some(ok) && free(o.t, span)) || sc.samp.find(o => o.t >= (q.P.after ?? 0) && o.pl.some(p => q.P.k.includes(Array.isArray(p) ? p[0] : p)) && free(o.t, span));
       if (!o) fail('侦察记录里这型飞机不在空中');
       T = o.t;
     }
@@ -269,7 +286,9 @@ function planShots(sc) {
     T = Math.round(T * 30) / 30;   // 落在推演步上
     if (!free(T, span)) fail(`推演第 ${T.toFixed(1)}–${(T + span).toFixed(1)} 秒和别的镜头重叠`);
     placed.push([T, T + span]);
-    plan.push({ id: s.id, T, ref });   // ref.nmA：对射镜头里射手的型号（名牌 '@A' 换成它）
+    let chT = null;   // 杀伤链中途亮下一节：'X' 是这一发导弹结束（拦截弹炸开）的时刻，换算成片中秒数
+    if (s.chain && s.chain[2] != null) { const c2 = s.chain[2], [tk, tid] = hit ? String(hit[11]).split(':') : [], x = c2 === 'X' ? hit && X.get(hit[2]) : c2 === 'XT' && tk === 'msl' ? X.get(+tid) : null; chT = typeof c2 === 'string' ? (x ? clamp((x[1] - T) / spd, .3, s.dur - .4) : null) : c2; }   // 'XT'：这一发打的那发来袭弹结束的时刻
+    plan.push({ id: s.id, T, ref, chT });   // ref.nmA：对射镜头里射手的型号（名牌 '@A' 换成它）
     res.set(s.id, { T, span, ref, e: hit });
   }
   return plan;
@@ -317,18 +336,40 @@ const PAGE_FNS = () => {
     if (k === 'cv') return S.cv && !S.cv.dead ? { x: S.cv.x, y: S.cv.y, z: 20, h: S.cv.heading || 0 } : null;
     return null;
   };
-  // 开拍时挑一架某型飞机（在空中飞的；先找离登陆场近的），之后一直跟着它
-  window.__pickPl = ks => {
+  // 开拍时挑一架某型飞机（在空中飞的；inMap：先挑在战场上空的，离登陆场近的优先），之后一直跟着它
+  window.__pickPl = (ks, inMap) => {
+    const ok = o => !inMap || (o.x > 600 && o.x < W - 600 && o.y > 0 && o.y < (typeof SEA_H === 'number' ? SEA_H : H)), L = window.__land() || [W / 2, H / 2], dl = o => dist(o.x, o.y, L[0], L[1]);
     const A = (S.planes || []).filter(p => !p.dead && isFinite(p.x) && p.phase === 'out' && (p.alt ?? 1) > .12 && ks.includes(airSilKey(p.kind, p.v)));
     const E = (S.eair && S.eair.fly || []).filter(a => !a.dead && isFinite(a.x) && ks.includes(a.type));
-    const o = A[0] || E[0];
-    return o ? [A[0] ? 'pl' : 'ea', o.id] : null;
+    const best = X => X.filter(ok).sort((a, b) => dl(a) - dl(b))[0] || (inMap ? null : X[0]);
+    const a = best(A), e = a ? null : best(E), o = a || e || A[0] || E[0];
+    return o ? [A.includes(o) ? 'pl' : 'ea', o.id] : null;
   };
   // 镜头：返回 { eye: [x, y, z], yaw, pitch }；M 是这个镜头的记忆（上一帧对象的位置、平滑后的航向、镜头钉住的位置）
   const look = (E, T) => { const dx = T[0] - E[0], dy = T[1] - E[1], dz = T[2] - E[2]; return { eye: E, yaw: Math.atan2(dy, dx), pitch: Math.atan2(dz, Math.hypot(dx, dy)) }; };
   const aim = (tg, tz, d, yaw, pitch) => { const cp = Math.cos(pitch); return { eye: [tg[0] - Math.cos(yaw) * cp * d, tg[1] - Math.sin(yaw) * cp * d, tz - Math.sin(pitch) * d], yaw, pitch }; };
   const wrap = a => Math.atan2(Math.sin(a), Math.cos(a));
-  window.__rig = (R, u, M) => {
+  // 视线避让：镜头和要看的点之间被山挡住、或者镜头低低地对着山坡（台湾图的卫星图凑近是一大块糊的纯色三角形）——把镜头抬到视线处处离地面留够余量
+  //   （镜头那头 6 米 + 视线长的 3.5%，往看的点那头渐渐收到 0）；抬得快（这一帧就抬）、落得慢（每帧 1.5 米），镜头不跳。
+  //   只看镜头这一头七成五的视线、最多抬到水平距离的一半：看的点就在一道山梁后面时，要越过它得抬几公里、几乎朝正下方看（高潮镜头原来就这样坏了）——那种宁可被挡一点
+  const gh = (x, y) => x >= 0 && y >= 0 && x <= W && y <= H ? v3Ht(x, y) : 0;
+  window.__clr = (E, T, M) => {
+    const dx = T[0] - E[0], dy = T[1] - E[1], hd = Math.hypot(dx, dy), L = Math.hypot(hd, T[2] - E[2]), m0 = 6 + L * .035, n = Math.min(48, Math.max(10, Math.ceil(hd / 20)));
+    let need = gh(E[0], E[1]) + 5;
+    for (let k = 1; k < n; k++) {
+      const s = k / n; if (s > .75) break;
+      need = Math.max(need, (gh(E[0] + dx * s, E[1] + dy * s) + m0 * (1 - s) - T[2] * s) / (1 - s));
+    }
+    need = Math.min(need, Math.max(gh(E[0], E[1]) + 5, E[2] + Math.max(30, hd * .5)));
+    M.lf = Math.max(0, need - E[2], (M.lf || 0) - 1.5);
+    return M.lf > 0 ? look([E[0], E[1], E[2] + M.lf], T) : look(E, T);
+  };
+  window.__rig = (R, u, M) => {   // pan：镜头算好以后视线再转一点（负的往左转，主体让到画面右边——字幕卡在左边）
+    const c = rig0(R, u, M), e = u * u * (3 - 2 * u);
+    if (c && R.pan) c.yaw += Array.isArray(R.pan) ? R.pan[0] + (R.pan[1] - R.pan[0]) * e : R.pan;
+    return c;
+  };
+  const rig0 = (R, u, M) => {
     const e = u * u * (3 - 2 * u), L = v => Array.isArray(v) ? v[0] + (v[1] - v[0]) * e : (v ?? 0);
     const A = window.__obj(R.o);
     if (A) {   // 航向按相邻两帧的位置算（导弹、飞机转弯时镜头跟着转），平滑一下
@@ -340,13 +381,16 @@ const PAGE_FNS = () => {
     if (!P) return null;
     if (R.k === 'chase') {
       if (!A && M.eye) return look(M.eye, [P.x, P.y, P.z]);
-      const yaw = (R.abs ? 0 : M.h ?? P.h) + L(R.yo), r = aim([P.x, P.y], P.z, L(R.d), yaw, L(R.pit));
+      const yaw = (R.abs ? 0 : M.h ?? P.h) + L(R.yo), r = window.__clr(aim([P.x, P.y], P.z, L(R.d), yaw, L(R.pit)).eye, [P.x, P.y, P.z], M);
       M.eye = r.eye; return r;
     }
-    if (R.k === 'look') {   // 镜头钉在 at（发射点、落点或对象开拍时的位置）旁边：off 按对象航向的 [前, 右, 上]
-      if (!M.eye) { const o = (R.at && window.__obj(R.at)) || P, h = R.abs ? 0 : (o.h || M.h || 0), f = R.off || [0, 0, 0], gz = o.x >= 0 && o.y >= 0 && o.x <= W && o.y <= H ? v3Ht(o.x, o.y) : 0;
+    if (R.k === 'look') {   // 镜头钉在 at（发射点、落点或对象开拍时的位置）旁边：off 按对象航向的 [前, 右, 上]；b + f：看 P 与 b 之间 f 处
+      if (!M.eye) { const o = (R.at && window.__obj(R.at)) || P, h = R.abs ? 0 : (o.h || M.h || 0), f = R.off || [0, 0, 0], gz = gh(o.x, o.y);
         M.eye = [o.x + Math.cos(h) * f[0] - Math.sin(h) * f[1], o.y + Math.sin(h) * f[0] + Math.cos(h) * f[1], Math.max(gz, o.z) + f[2]]; }
-      return look(M.eye, [P.x, P.y, P.z + (R.tz || 0)]);
+      const B = R.b && window.__obj(R.b), f = B ? (R.f ?? .5) : 0, T = B ? [P.x + (B.x - P.x) * f, P.y + (B.y - P.y) * f, P.z + (B.z - P.z) * f + (R.tz || 0)] : [P.x, P.y, P.z + (R.tz || 0)];
+      if (!M.T) M.T = T; else for (let k = 0; k < 3; k++) M.T[k] += (T[k] - M.T[k]) * .35;   // 看的点平滑一点（对象没了一下跳到 b 上时不甩）
+      const r = window.__clr(M.eye, M.T, M);
+      return r;   // 镜头位置不跟着抬高后的存：抬多少每帧按视线重算（M.lf 慢慢落）
     }
     if (R.k === 'two') {   // 两军同框：A 在前景，B 在远处
       const B = window.__obj(R.b) || M.b || window.__obj(R.bxy);
@@ -357,10 +401,10 @@ const PAGE_FNS = () => {
       const f = R.f ?? .45, tx = P.x + (B.x - P.x) * f, ty = P.y + (B.y - P.y) * f, tz = P.z + (B.z - P.z) * f, yaw = M.ba + L(R.yo), d = L(R.d), pit = L(R.pit), cp = Math.cos(pit);
       const eye = [P.x - Math.cos(yaw) * cp * d, P.y - Math.sin(yaw) * cp * d, P.z - Math.sin(pit) * d];
       if (!M.t0) M.t0 = [tx, ty, tz]; else M.t0 = [M.t0[0] + (tx - M.t0[0]) * .15, M.t0[1] + (ty - M.t0[1]) * .15, M.t0[2] + (tz - M.t0[2]) * .15];
-      return look(eye, M.t0);
+      return window.__clr(eye, M.t0, M);
     }
-    if (R.k === 'orbit') return aim([P.x, P.y], P.z + (R.tz || 0), L(R.d), L(R.yaw), L(R.pit));
-    if (R.k === 'pt') { const [a, b] = R.cam; return aim([P.x, P.y], P.z + (R.tz || 0), lerp(a[0], b[0], e), lerp(a[1], b[1], e), lerp(a[2], b[2], e)); }   // tz：看着对象上方多高
+    if (R.k === 'orbit') return window.__clr(aim([P.x, P.y], P.z + (R.tz || 0), L(R.d), L(R.yaw), L(R.pit)).eye, [P.x, P.y, P.z + (R.tz || 0)], M);
+    if (R.k === 'pt') { const [a, b] = R.cam; return window.__clr(aim([P.x, P.y], P.z + (R.tz || 0), lerp(a[0], b[0], e), lerp(a[1], b[1], e), lerp(a[2], b[2], e)).eye, [P.x, P.y, P.z + (R.tz || 0)], M); }   // tz：看着对象上方多高
     return null;
   };
 };
@@ -394,7 +438,7 @@ async function loadPlan(b) {
   const scf = path.join(OUT, 'trailer_scout.json');
   const sc = process.env.SCOUT === 'reuse' && fs.existsSync(scf) ? JSON.parse(fs.readFileSync(scf, 'utf8')) : await scoutSaved(b);   // SCOUT=reuse：调试时用上次的侦察结果
   const plan = planShots(sc);
-  for (const q of plan) { const s = SHOTS.find(o => o.id === q.id); s.T = q.T; s.ref = q.ref; }
+  for (const q of plan) { const s = SHOTS.find(o => o.id === q.id); s.T = q.T; s.ref = q.ref; s.chT = q.chT; }
   for (const s of SHOTS.filter(o => !o.ui)) console.log(`镜头 ${s.id.padEnd(3)} 片中 ${s.at.toFixed(1).padStart(5)} 秒 · 推演第 ${s.T.toFixed(1).padStart(6)} 秒${Object.keys(s.ref || {}).length ? ' · ' + JSON.stringify(s.ref) : ''}`);
   return sc;
 }
@@ -450,31 +494,38 @@ async function stepShots(b) {
     if (!sfxOnly && !DR) { fs.rmSync(dir, { recursive: true, force: true }); fs.mkdirSync(dir, { recursive: true }); }
     if (!sh.ui) {
       const st = await p.evaluate(T => { __seed(window.__ss); while (S.t < T - 1e-6 && !S.over) step(1 / 30); window.__ss = __rng(); __seed(window.__rs); return { t: S.t, land: window.__land(), en: S.enemies.filter(e => !e.dead).length, tm: S.teams.filter(q => q.side === 'p' && q.men.length).length }; }, sh.T);
-      if (sh0.q && sh0.q.P && sh.rig) { sh.rig.o = await p.evaluate(ks => window.__pickPl(ks), sh0.q.P.k); if (!sh.rig.o) console.warn(`镜头 ${sh.id}：这一刻天上没有 ${sh0.q.P.k}`); }   // 某型飞机：开拍这一刻挑一架
+      if (sh0.q && sh0.q.P && sh.rig) { sh.rig.o = await p.evaluate(([ks, im]) => window.__pickPl(ks, im), [sh0.q.P.k, !!sh0.q.P.inMap]); if (!sh.rig.o) console.warn(`镜头 ${sh.id}：这一刻天上没有 ${sh0.q.P.k}`); }   // 某型飞机：开拍这一刻挑一架
       if (sh0.pick && sh.rig) {   // pick：按顺序挑第一种在空中的机型，名牌跟着换
         for (const [k, nm, sb] of sh0.pick) { const o = await p.evaluate(k => window.__pickPl([k]), k); if (o) { sh.rig.o = o; sh.tag = [nm, sb, o[0] === 'ea' ? 'e' : 'p']; break; } }
         if (!sh.rig.o) console.warn(`镜头 ${sh.id}：这一刻天上没有 ${sh0.pick.map(q => q[0])}`);
       }
       // 空射弹没记到出自哪架飞机：开拍这一刻离发射点最近的那架就是（还有半秒才放弹）；名牌 '@SRC'：发射点上那辆车的型号
-      if (sh0.q && sh0.q.F && sh0.q.F.bunker && sh.rig && sh.rig.o) {
-        const e = await p.evaluate(A => { const E = S.enemies.filter(o => !o.dead && isFinite(o.x)); const o = E.reduce((a, o) => !a || dist(o.x, o.y, A[1], A[2]) < dist(a.x, a.y, A[1], A[2]) ? o : a, null); return o && dist(o.x, o.y, A[1], A[2]) < 450 ? ['e', o.id] : null; }, sh.rig.o);
-        if (e) sh.rig.b = e;
+      if (sh0.q && sh0.q.F && sh0.q.F.bunker && sh.rig && sh0.ref && sh0.ref.A) {   // 守方工事：离攻方（A）最近的那座，放到分镜里写 'B' 的那一头
+        const e = await p.evaluate(A => { const E = S.enemies.filter(o => !o.dead && isFinite(o.x)); const o = E.reduce((a, o) => !a || dist(o.x, o.y, A[1], A[2]) < dist(a.x, a.y, A[1], A[2]) ? o : a, null); return o && dist(o.x, o.y, A[1], A[2]) < 450 ? ['e', o.id] : null; }, sh0.ref.A);
+        if (e) { if (sh0.rig.o === 'B') sh.rig.o = e; else sh.rig.b = e; }
       }
-      if (sh0.rig && sh0.rig.o === 'SHIP') {   // 跟拍的登陆舰：开拍这一刻离上岸点最近、还在开的那艘
+      if (sh0.rig && sh0.rig.o === 'SHIP') {   // 跟拍的登陆舰：开拍这一刻朝岸上开的、离上岸点最近的那艘；坦克登陆舰、后勤登陆舰优先（原来挑到一艘顺着岸边开的小艇）
         const L = (sc.samp.find(q => q.t >= (sc.landT ?? 0) && q.land) || {}).land || [geo.W / 2, geo.SEA_H];
-        sh.rig.o = await p.evaluate(L => { const A = S.ships.filter(s => !s.dead && s.state === 'move' && isFinite(s.x)); const o = A.reduce((a, s) => !a || dist(s.x, s.y, L[0], L[1]) < dist(a.x, a.y, L[0], L[1]) ? s : a, null); return o ? ['s', o.id] : null; }, L);
+        sh.rig.o = await p.evaluate(L => {
+          const A = S.ships.filter(s => !s.dead && s.state === 'move' && isFinite(s.x)), north = s => Math.cos(Math.atan2(s.ty - s.y, s.tx - s.x) + Math.PI / 2) > .55 && s.ty < s.y - 150;   // 目标在北边（岸上）、往北开
+          const sc2 = s => dist(s.x, s.y, L[0], L[1]) - (s.kind === 'lst' ? 900 : s.kind === 'supply' ? 500 : 0) - (north(s) ? 1500 : 0);
+          const o = A.reduce((a, s) => !a || sc2(s) < sc2(a) ? s : a, null); return o ? ['s', o.id] : null;
+        }, L);
         if (!sh.rig.o) console.warn(`镜头 ${sh.id}：这一刻没有在开的登陆舰`);
       }
-      const R0 = sh0.ref || {}, needPl = sh0.rig && sh0.rig.o === 'SRCP' && !R0.SRCP && R0.SRC, needNm = sh0.tag && sh0.tag[0] === '@SRC' && R0.SRC;
-      if (needPl || needNm) {
-        const fx = await p.evaluate(([src, needPl, needNm]) => {
+      const R0 = sh0.ref || {}, needPl = sh0.rig && sh0.rig.o === 'SRCP' && !R0.SRCP && R0.SRC, needNm = sh0.tag && sh0.tag[0] === '@SRC' && R0.SRC, needTg = sh0.tag && sh0.tag[0] === '@TGT' && R0.TGT;
+      if (sh0.tag && sh0.tag[0] === '@B') { const nm = R0.B && R0.B[0] === 'v' ? await p.evaluate(id => { const v = (S.veh || []).find(o => o.id === id); return v ? vehModel(v) : null; }, R0.B[1]) : null; sh.tag = nm ? [nm, sh.tag[1], sh.tag[2]] : null; }   // 对射镜头前景那辆车的型号
+      if (needPl || needNm || needTg) {
+        const fx = await p.evaluate(([src, needPl, needNm, tg]) => {
           const out = {}, d = o => dist(o.x, o.y, src[1], src[2]);
           if (needPl) { let bd = 4000; for (const o of S.planes || []) if (!o.dead && isFinite(o.x) && d(o) < bd) { bd = d(o); out.pl = ['pl', o.id]; } for (const o of (S.eair && S.eair.fly) || []) if (!o.dead && isFinite(o.x) && d(o) < bd) { bd = d(o); out.pl = ['ea', o.id]; } }
           if (needNm) { const v = (S.veh || []).filter(o => !o.dead).reduce((a, o) => !a || d(o) < d(a) ? o : a, null); out.nm = v && d(v) < 80 ? vehModel(v) : null; }
+          if (tg && tg[0] === 'pl') { const o = (S.planes || []).find(q => q.id === tg[1]); out.tn = o ? String(airName(o.kind, o.v)).split(' ')[0] : null; }   // 被打的那架我方飞机的型号（「歼-16 多用途战斗机」取「歼-16」）
           return out;
-        }, [R0.SRC, !!needPl, !!needNm]);
+        }, [R0.SRC || ['xy', 0, 0], !!needPl, !!needNm, needTg ? R0.TGT : null]);
         if (needPl && fx.pl) sh.rig.o = fx.pl;
         if (needNm) sh.tag = [fx.nm || '野战防空车', sh.tag[1], sh.tag[2]];
+        if (needTg) sh.tag = fx.tn ? [fx.tn, sh.tag[1], sh.tag[2]] : null;   // 不是我方飞机：不出名牌
       }
       console.log(`镜头 ${sh.id}：第 ${st.t.toFixed(1)} 秒，敌工事 ${st.en}、我 ${st.tm} 组；对象 ${sh.rig ? JSON.stringify(sh.rig.o) : sh.tg}`);
     } else await uiSetup(p, sh);
@@ -506,7 +557,7 @@ async function stepShots(b) {
         if (sh.rig) cam = window.__rig(sh.rig, u, M);
         else if (sh.end) {   // 片尾：从登陆场拉远到整段雪山海岸（距离按对数插值，拉远的速度看起来均匀）
           if (!M.start) M.start = window.__land() || [geo.W / 2, geo.SEA_H - 3000];
-          const v = Math.min(1, u / .55), e = v * v * (3 - 2 * v), a = M.start, tg = [a[0] + (geo.W / 2 - a[0]) * e, a[1] + (geo.SEA_H - 9000 - a[1]) * e], d = Math.exp(Math.log(600) + (Math.log(20000) - Math.log(600)) * e), yaw = -1.3 + (-1.5708 + 1.3) * e, pitch = -.45 + (-.5 + .45) * e, cp = Math.cos(pitch);   // 拉到 20 公里外：镜头最高 11 公里（V3_ZMAX）
+          const v = Math.min(1, u / .55), e = v * v * (3 - 2 * v), a = M.start, tg = [a[0] + (geo.W / 2 - a[0]) * e, a[1] + (geo.SEA_H - 9000 - a[1]) * e], d = Math.exp(Math.log(1400) + (Math.log(20000) - Math.log(1400)) * e), yaw = -1.3 + (-1.5708 + 1.3) * e, pitch = -.45 + (-.5 + .45) * e, cp = Math.cos(pitch);   // 拉到 20 公里外：镜头最高 11 公里（V3_ZMAX）；从 1.4 公里起（原来 600 米，头一秒近处的地面糊成一片）
           cam = { eye: [tg[0] - Math.cos(yaw) * cp * d, tg[1] - Math.sin(yaw) * cp * d, v3Ht(tg[0], tg[1]) - Math.sin(pitch) * d], yaw, pitch };
         } else if (!sh.ui) {
           let tg = fixed;
@@ -517,7 +568,9 @@ async function stepShots(b) {
           }
           M.cur = tg;
           const v = u * u * (3 - 2 * u), [a, b] = sh.cam, d = a[0] + (b[0] - a[0]) * v, yaw = a[1] + (b[1] - a[1]) * v, pitch = a[2] + (b[2] - a[2]) * v, cp = Math.cos(pitch);
-          cam = { eye: [tg[0] - Math.cos(yaw) * cp * d, tg[1] - Math.sin(yaw) * cp * d, v3Ht(tg[0], tg[1]) - Math.sin(pitch) * d], yaw, pitch };
+          if (sh.shift) { const [f, r] = sh.shift; tg = [tg[0] + Math.cos(yaw) * f - Math.sin(yaw) * r, tg[1] + Math.sin(yaw) * f + Math.cos(yaw) * r]; }   // 取景点挪开：主体让到画面一边（字幕卡在左边）
+          const gz = tg[0] >= 0 && tg[1] >= 0 && tg[0] <= geo.W && tg[1] <= geo.H ? v3Ht(tg[0], tg[1]) : 0;
+          cam = window.__clr([tg[0] - Math.cos(yaw) * cp * d, tg[1] - Math.sin(yaw) * cp * d, gz - Math.sin(pitch) * d], [tg[0], tg[1], gz], M);
           if (sh.booms && i >= f0) for (const [j, bt] of sh.booms.entries()) if (Math.round(bt * 30) === i) {   // 高潮：按拍子落下的爆炸（位置固定，不用随机数）
             const an = j * 2.39996, r = 60 + (j % 4) * 45, f = { kind: 'boom', x: tg[0] + Math.cos(an) * r, y: tg[1] + Math.sin(an) * r * .7, r: 22 + (j % 3) * 8, life: .05, max: 1.2, side: 'e' };
             (window.__fireS || (window.__fireS = new WeakSet())).add(f); S.fx.push(f);
@@ -606,13 +659,14 @@ async function uiSetup(p, sh) {
       MDX.dirty = false; MDX.q = ''; MDX.pk = '';
       if (k === 'eanim') { MDX.tab = 'mdl'; MDX.sel = 'ztz99'; } else { MDX.tab = 'trl'; MDX.sel = 'pl15'; MDX_W.trl.pl15 = { ...MFX_PRE[1][1] }; }
       mdxRender();
+      if (k === 'etrail' && typeof mfxTick === 'function') for (let j = 72; j >= 1; j--) mfxTick(window.__vt - j * 1000 / 30);   // 预览先跑 2.4 秒（时间要接得上拍摄时的时钟，不能倒退）：原来一开拍导弹才从左边出来，只看到一个点
     }, sh.ui);
     if (sh.ui === 'eanim') {
       await p.waitForFunction(() => MIV.M && MIV.M.bi && MIV.key === 'ztz99' && document.querySelector('#mdx [data-mana="demo"]'), null, { timeout: 120000, polling: 500 });
       await p.evaluate(() => {
         const b = document.querySelector('#mdx [data-mana="demo"]'); if (b) b.click();   // 「示例：开炮时炮管后坐、炮塔一震」
         manPlay(false); MAN.t = 0; MDX.keep = true; mdxRender();
-        const g = (MDX_W.mdl.ztz99 && MDX_W.mdl.ztz99.ag || [])[0]; if (g && g.cp) MIV.tgt = g.cp.slice(); MIV.pit = .2; MIV.dist = 7.5; mivDraw();   // 凑近炮塔、炮管：看得清后坐
+        const g = (MDX_W.mdl.ztz99 && MDX_W.mdl.ztz99.ag || [])[0]; const bb = MIV.M && MIV.M.m && MIV.M.m.bb; if (bb) { MIV.tgt = [(bb[0] + bb[3]) / 2, (bb[1] + bb[4]) / 2, (bb[2] + bb[5]) / 2]; MIV.dist = Math.hypot(bb[3] - bb[0], bb[4] - bb[1], bb[5] - bb[2]) * .95; } else if (g && g.cp) MIV.tgt = g.cp.slice(); MIV.pit = .22; mivDraw();   // 整辆车在框里、对着车身中心（原来对着炮塔凑得太近，车尾、履带出了框）
       });
     }
     await sleep(800);

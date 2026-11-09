@@ -215,6 +215,11 @@ void main() {
     vec3 cF = uSat > .5 ? texture2D(uBase, w / uWorld).rgb : inF ? texture2D(uTopF, uvF).rgb : texture2D(uBase, w / uWorld).rgb, top = wN > 0. && uSat < .5 ? mix(cF, texture2D(uTop, uv).rgb, wN) : cF;
     // 写实：天光（上冷下暖，按坡面朝天的程度）+ 日光；地图底色偏暗，整体提亮到白天的亮度；等高线、方格网淡一些
     vec3 amb = mix(vec3(.3, .29, .27), vec3(.47, .52, .6), clamp(N.z, 0., 1.)), col = top * (uSat > .5 ? 1.05 : 1.22);   // 卫星图本身带着山体明暗，提亮少一点
+    if (uSat > .5 && land > .5) {   // 卫星图离岸百来米那一条拍的是浅海、碎浪（青蓝、青绿色，近岸陆地格有近三成是这样），游戏里那里是陆地（海滩、滩头的堑壕和碉堡）：换成砾石滩的灰色，明暗照原样
+      float l0 = dot(col, vec3(.3, .59, .11)), tq = smoothstep(.02, .08, col.b - col.r);   // 蓝比红多：浅海、河里的水（植被、土都是红多蓝少）
+      float fm = smoothstep(.6, .82, l0) * (1. - smoothstep(6., 14., h - uSea));   // 贴着海平面的大片白：碎浪（东海岸是灰黑的砾石滩，不是白沙）
+      col = mix(col, vec3(.6, .58, .53) * clamp(l0 / .45, .7, 1.25), max(tq, fm));
+    }
     float veg = smoothstep(.02, .1, col.g - col.b);   // 绿的、黄的（草地、林地、田块）
     // 机场围栏以内（afbase.js 场区，局部坐标 |u| < 548、v −180 … 620）：图里的道面全用俯视贴图；北面延伸的远景（地图镜像出去）里不要它——
     //   原来离北缘七百米的野战机场被镜像出一座只有道面没有房子的「重影机场」
@@ -244,7 +249,8 @@ void main() {
         vec3 Y = vec3(.3, .59, .11);
         float gv = smoothstep(0., .06, col.g - max(col.r, col.b) * .92), rk2 = smoothstep(.85, .6, N.z), sd2 = (1. - gv) * smoothstep(.015, .07, col.r - col.b) * smoothstep(.36, .6, dot(col, vec3(.333)));   // 沙地只给偏黄的（灰色的道面、砾石套上沙纹像水面）
         float lG = dot(texture2D(uDg, w / 7.).rgb, Y) / max(dot(texture2D(uDg, w / 7., 10.).rgb, Y), .05), lR = dot(texture2D(uDr, w / 13.).rgb, Y) / max(dot(texture2D(uDr, w / 13., 10.).rgb, Y), .05), lS = (dot(texture2D(uDs, w / 5.).rgb, Y) + dot(texture2D(uDs, mat2(.8, -.6, .6, .8) * w / 6.7 + .37).rgb, Y)) * .5 / max(dot(texture2D(uDs, w / 5., 10.).rgb, Y), .05);   // 两个转角叠一起：沙纹不成一道道规则的波纹（像水面）
-        col *= mix(1., clamp(mix(mix(mix(mix(1., lR, .65), lS, sd2), lG, gv), lR, rk2), .55, 1.5), .5 * nr);   // 不绿不黄的（灰土、砾石）按碎石
+        float lM = dot(texture2D(uDg, w / 53. + .21).rgb, Y) / max(dot(texture2D(uDg, w / 53. + .21, 10.).rgb, Y), .05);   // 再叠一层五十多米的大尺度明暗：草地、林地成片深浅，不是一整面一个颜色
+        col *= mix(1., clamp(mix(mix(mix(mix(1., lR, .65), lS, sd2), lG * mix(1., lM, .7), gv), lR, rk2), .4, 1.7), .9 * nr);   // 不绿不黄的（灰土、砾石）按碎石；原来只叠五成，凑近（宣传片、电影镜头、开飞机贴地）还是一整面糊的纯绿
       }
     }
     if (snC + snR > .002) {

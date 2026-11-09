@@ -124,7 +124,12 @@ function v3VlsOrigin(m) {
 // 画面里导弹的位置：垂发冲出阶段竖直往上（加速），之后半秒内平滑接上实际弹道
 function v3MslPos(m, zReal) {
   const o = v3VlsOrigin(m);
-  if (!o) return null;
+  if (!o) {   // 地面发射的防空导弹（防空车、单兵）：推演里的高度一出筒就是目标那一档（三维里凭空出现在一两千米高，从地面看烟迹是从半空冒出来的）——
+    //   按约 60° 的爬升角从发射车爬上去，追上那一档高度后照常
+    if (m.kind !== 'sam' || (m.src !== 'samv' && m.src !== 'manpads') || !isFinite(m.x0) || !(zReal > 0)) return null;
+    const zc = v3Ht(clamp(m.x0, 0, W), clamp(m.y0, 0, H)) + 3 + Math.hypot(m.x - m.x0, m.y - m.y0) * 1.8;
+    return zc < zReal ? { x: m.x, y: m.y, z: zc } : null;
+  }
   const top = 34 * (o.up > .6 ? 1.3 : 1);
   if (m.t < o.up) { const u = clamp(m.t / o.up, 0, 1); return { x: o.x, y: o.y, z: o.z + top * Math.pow(u, 1.7), vls: true }; }
   // 出筒后 1.2 秒里转向（原来半秒就生硬地拐过去）：高度先接着往上冲一点再接上弹道，水平位置平滑过去
@@ -145,7 +150,7 @@ const V3F_MOT = {
   tbm: { tbm: .3, smoke: 1, life: 30, w: 7, fl: 34 },                    // 弹道导弹：主动段约全程三成，粗大的烟柱
   none: { burn: 0, sus: 0, smoke: 0, life: 1, w: 1, fl: 0 }               // 滑翔炸弹（飞腾-8）：没有发动机
 };
-const V3F_MK = { pl15: 'aam', pl10: 'aam', pl17: 'aam', aim120: 'aam', aim9: 'sams', ld10: 'aam', hhq9: 'sam', hhq16: 'sam', sm6: 'sam', hhq10: 'sams', manpad: 'manpad',
+const V3F_MK = { pl15: 'aam', pl10: 'aam', pl17: 'aam', aim120: 'aam', aim9: 'sams', ld10: 'aam', hhq9: 'sam', hhq16: 'sam', sm6: 'sam', pac3: 'sam', hhq10: 'sams', manpad: 'manpad',
   yj21: 'big', yj18: 'cruise', yj12: 'cruise', yj83: 'cruise', yj83k: 'cruise', yj62: 'cruise', cj10: 'cruise', kd88: 'cruise', kd20: 'cruise', nsm: 'cruise', lrasm: 'cruise', tomahawk: 'cruise',
   agm: 'agm', agm65: 'agm', sdb: 'none', bomb: 'none', tbm: 'tbm', df15: 'tbm' };
 // 这一刻的发动机：{ on 尾焰大小 0–1, sm 烟量, jet 涡喷续航 }；没点火 / 没发动机返回 null。玩家打的（fpwpn.js）按它的点火时刻和燃烧时间 tb
