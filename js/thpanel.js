@@ -348,6 +348,17 @@ HOOK.step.push(dt => {
 
 // 3D：每个营（连）头顶立一块番号牌——北约兵种框（步兵 ×、装甲椭圆、机步两者都有）上加编制记号（II 营 / I 连），旁边写番号、当前命令，
 //   下面一条兵力条；引线落到营的位置。远看（镜头拉远）只立师的牌子。牌子按屏幕像素定大小，远近都看得清；互相不叠；点牌子选中这个编队
+// 番号牌的位置去抖（只管画面）：编队「实际所在处」按兵力最密的一团算（orbat.js bgAt），两团差不多时会在两团之间来回跳，
+//   牌子跳一帧又回来（宣传片总览镜头）；bgAt 推演里也用，不能在它身上加记忆（画面帧率会影响推演）——
+//   这里跳开 60 米以上要连着 3 帧都在新地方才跟过去，平常的移动照常跟
+function thStable3(id, c) {
+  if (!c) return c;
+  const M = THU.st3 || (THU.st3 = new Map()), o = M.get(id);
+  if (!o || S.t < o.t - .5 || S.t - o.t > 2) { M.set(id, { x: c.x, y: c.y, n: 0, t: S.t }); if (M.size > 600) M.clear(); return c; }
+  o.t = S.t;
+  if (Math.hypot(c.x - o.x, c.y - o.y) < 60 || ++o.n >= 3) { o.x = c.x; o.y = c.y; o.n = 0; return c; }
+  return { ...c, x: o.x, y: o.y };
+}
 function thMarks3(ctx, stem) {
   THU.hit3 = [];
   if (!thOn() || !thuActive()) return;
@@ -357,7 +368,7 @@ function thMarks3(ctx, stem) {
     if (!R0) continue;
     const mine = !S.ctl || side === S.ctl, col = side === 'p' ? COL.g : COL.enemy;
     for (const F of thuTier(R0, zr)) {
-      const c = F.lvl === 'reg' ? bgAt(thG(F)) : thAtV(F);   // 部队实际所在处（锚点行军时跑在前面、据点易手时会跳过去）
+      const c = thStable3(F.id, F.lvl === 'reg' ? bgAt(thG(F)) : thAtV(F));   // 部队实际所在处（锚点行军时跑在前面、据点易手时会跳过去）；画面上去抖
       if (!c || !c.n || !(mine || (side === 'e' ? inVision(c.x, c.y) : spotted(c.x, c.y)))) continue;
       list.push({ F, c, col, d: C ? dist(c.x, -c.y, C.E[0], C.E[1]) : 0 });
     }
