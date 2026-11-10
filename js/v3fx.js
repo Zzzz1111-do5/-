@@ -370,7 +370,10 @@ function v3Fx(C) {
         const zq = airRelZ(rp, m), q = v3fP(rp.x, rp.y, zq), k = clamp((rp.u - rp.ign) / .12, 0, 1), L = (2.5 + 6 * k) * rp.sc, tx = rp.x - Math.cos(rp.h) * L, ty = rp.y - Math.sin(rp.h) * L;
         if (!V3F.ign.has(m.id)) { V3F.ign.add(m.id); V3F.puff.push({ x: rp.x, y: rp.y, z: zq, t0: S.t, big: false, side: m.side, air: true }); }
         v3fRib(out, E, q, v3fP(tx, ty, zq), 1.3 * rp.sc + .5, [1, .95, .8, .95], [1, .45, .1, 0]);
-        v3fSpark(out, C, q, 2.2 + rp.e * 1.4 + (1 - k) * 3, V3F_COL.amber);
+        // 弹尾：和正常飞行段（下面「尾焰」）一样是一个小而亮的芯 + 一圈淡光晕；原来一团 2.2 + 1.4e + 3(1 − k) 米、几乎不透明的琥珀色，
+        //   一点火就是一个和翼展差不多大的实心亮盘（宣传片歼-16D 发射雷电-10）
+        v3fSpark(out, C, q, .7 + (1 - k) * .9, [1, .96, .86, 1]);
+        v3fSpark(out, C, q, 1.6 + rp.e * .9, [1, .55, .2, .3]);
       }
       continue;
     }
