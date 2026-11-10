@@ -424,7 +424,7 @@ function v3Fx(C) {
       if (top > 1 && fade > 0) { const drift = a * 1.6; v3fRib(out, E, v3fP(o.x, o.y, o.z + .5), v3fP(o.x + drift, o.y - drift * .5, o.z + top), (1.6 + a * 2.2) * k, [.85, .9, .9, .5 * fade], [.75, .8, .82, .18 * fade]); }
     }
     if (o.air) {   // 空中点火：发动机一闪，一团白烟在空中翻滚着散开、变淡（不往地上落、几乎不往上飘）
-      if (a < .15) v3fSpark(out, C, v3fP(o.x, o.y, o.z), 3 + a * 26, [1, .95, .85, .95 * (1 - a / .15)]);
+      if (a < .12) v3fSpark(out, C, v3fP(o.x, o.y, o.z), 1.2 + a * 12, [1, .93, .8, .9 * (1 - a / .12)]);   // 闪光不超过 3 米：原来按 3 + 26a 涨到近 7 米，一枚导弹点火闪出一个和翼展一样大的光球
       for (let i = 0; i < 6; i++) { const an = i * 2.4 + o.t0, r = 1 + a * 2.2, ex = Math.cos(an) * r, ey = Math.sin(an) * r; v3fSpark(out, C, v3fP(o.x + ex, o.y + ey, o.z + (i % 3 - 1) * r * .5 + a * .4), 1.8 + a * 3.2, [.55, .58, .56, .2 * (1 - a / 4.5)]); }
       continue;
     }
@@ -455,7 +455,8 @@ function v3Fx(C) {
     const VXo = VX && !sea;   // 地面、空中的爆炸用序列帧；水面的水柱照旧
     if (VXo) {   // 序列帧：火球炸开、翻滚着冷却成黑烟（121 帧放 2.8 秒，大的 3.6 秒），之后几团烟团接着往上飘、往下风散开
       const T = o.r > 40 ? 3.6 : 2.8, u = a / T, s = r * 1.4;
-      if (u < 1) v3vAdd('expl', v3fP(o.x, o.y, o.z + (o.air ? 0 : s * (.12 + .45 * u))), s, u * 120, 1, 1.7 * (1 - smooth(.12, .55, u)) + .15, [.25, .23, .21], null, o.sd);
+      // 最后三成时间淡出：这张序列帧的浓烟到最后一帧还是满的（原包在虚幻里靠粒子生命周期淡出），原来播完直接不画，一大团黑烟一下子没了
+      if (u < 1) v3vAdd('expl', v3fP(o.x, o.y, o.z + (o.air ? 0 : s * (.12 + .45 * u))), s, u * 120, 1 - smooth(.72, 1, u), 1.7 * (1 - smooth(.12, .55, u)) + .15, [.25, .23, .21], null, o.sd);
       for (let i = 0; i < 3; i++) {
         const b = a - T * .7 - i * .5;
         if (b < 0 || b > 6.5) continue;

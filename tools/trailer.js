@@ -533,7 +533,7 @@ async function stepShots(b) {
     await p.evaluate(sh => { window.__cm = {}; window.__trP = null; window.__grp = null; document.body.classList.toggle('trClean', !sh.hud && !sh.ui); document.body.classList.toggle('trChat', !!sh.chat);
       if (!sh.hud && !sh.ui && !window.__v3o) { window.__v3o = v3Overlay; window.v3Overlay = () => {}; }
       if ((sh.hud || sh.ui) && window.__v3o) { window.v3Overlay = window.__v3o; window.__v3o = null; }
-      // 界面藏着的镜头不更新面板、小地图（反正看不见）：它们每 200 毫秒改一次网页，软件渲染下截图偶尔截到合成到一半的画面——烟团里一块块方格花纹，每 7 帧一次
+      // 界面藏着的镜头不更新面板、小地图（反正看不见，省时间）。烟团里每 7 帧一片方格花纹不是它们引起的：是序列帧着色器在片元里对帧号取整（v3vfx.js V3V_VS 的说明）
       if (!sh.hud && !sh.ui && !window.__uh) { window.__uh = [updateHud, mmDraw]; window.updateHud = () => {}; window.mmDraw = () => {}; }
       if ((sh.hud || sh.ui) && window.__uh) { [window.updateHud, window.mmDraw] = window.__uh; window.__uh = null; } }, sh);
     const fixed = staticTarget(sh, sc, geo.W, geo.H);
@@ -640,10 +640,39 @@ async function stepShots(b) {
       }, [i, ov, sh, t, u, GLYPHS, F0, fixed, geo, ddraw(i) || i < F0 && !DR]);
       if (DR) { if (dpick.includes(i)) { fs.mkdirSync(path.join(SHOT_DIR, 'draft'), { recursive: true }); await p.screenshot({ path: path.join(SHOT_DIR, 'draft', `${sh.id}_${String(i).padStart(3, '0')}.jpg`), type: 'jpeg', quality: 85, timeout: 0 }); } }
       else if (i >= F0 && !sfxOnly) await p.screenshot({ path: path.join(dir, String(i - F0).padStart(4, '0') + '.jpg'), type: 'jpeg', quality: 93, timeout: 0 });   // 不限时：软件渲染、机器忙的时候一帧能超过默认的 30 秒
+      // 查花屏：DBG=40-44 这几帧拍完后不推演、换几种画法各再画一遍存 dbg_帧号_画法.jpg（原样重画 / 后期抓帧前先等画完 / 不做后期 / 不画序列帧 / 不画热浪）
+      const DBG = (process.env.DBG || '').split('-').map(Number);
+      if (DBG.length === 2 && !DR && i - F0 >= DBG[0] && i - F0 <= DBG[1]) {
+        // 先把这一帧的序列帧队列和镜头存下来（离线复现用）
+        const dump = await p.evaluate(() => {
+          const f0 = v3vDraw; let D = null;
+          window.v3vDraw = C => { D = { q: V3V.q.map(o => ({ ...o })), C: { M: Array.from(C.M), E: Array.from(C.E), x: Array.from(C.x), y: Array.from(C.y), z: Array.from(C.z), fog: typeof v3FogR === 'function' ? v3FogR(C) : C.fog, bg: typeof v3Bg === 'function' ? v3Bg() : null }, W: V3.cv.width, H: V3.cv.height }; f0(C); };
+          acc = -1e9; frame(window.__vt); window.v3vDraw = f0;
+          return JSON.stringify(D);
+        });
+        fs.writeFileSync(path.join(dir, `dbg_${String(i - F0).padStart(4, '0')}_vfx.json`), dump || 'null');
+        for (const v of ['redraw', 'fin', 'nopost', 'novfx', 'nohaze', 'nodepth', 'split', 'no-expl', 'no-fire', 'no-mzl', 'no-mzla', 'no-puff']) {
+          await p.evaluate(v => {
+            const sw = { fin: 'v3Post', nopost: 'v3Post', novfx: 'v3vDraw', nohaze: 'v3dHaze', nodepth: 'v3vDraw', split: 'v3vDraw' }[v] || (v.startsWith('no-') ? 'v3vAdd' : null), f0 = sw && window[sw];
+            if (v === 'fin') window.v3Post = now => { V3.gl.finish(); f0(now); };
+            else if (v.startsWith('no-')) window.v3vAdd = (t, ...a) => t === v.slice(3) ? undefined : f0(t, ...a);   // 只去掉这一种序列帧
+            else if (v === 'nodepth') window.v3vDraw = C => { const gl = V3.gl; gl.disable(gl.DEPTH_TEST); f0(C); gl.enable(gl.DEPTH_TEST); };
+            else if (v === 'split') window.v3vDraw = C => {   // 每个精灵单独画一次（同样的远近次序）
+              const E = C.E, Q = V3V.q.slice().sort((a, b) => ((b.p[0] - E[0]) ** 2 + (b.p[1] - E[1]) ** 2 + (b.p[2] - E[2]) ** 2) - ((a.p[0] - E[0]) ** 2 + (a.p[1] - E[1]) ** 2 + (a.p[2] - E[2]) ** 2));
+              for (const o of Q) { V3V.q = [o]; f0(C); }
+              V3V.q = [];
+            };
+            else if (sw) window[sw] = () => {};
+            acc = -1e9; frame(window.__vt);
+            if (sw) window[sw] = f0;
+          }, v);
+          await p.screenshot({ path: path.join(dir, `dbg_${String(i - F0).padStart(4, '0')}_${v}.jpg`), type: 'jpeg', quality: 93, timeout: 0 });
+        }
+      }
     }
     if (!sfxOnly && !DR) {
       execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-framerate', String(FPS), '-i', path.join(dir, '%04d.jpg'), '-vf', 'scale=1920:1080:flags=lanczos', '-c:v', 'libx264', '-preset', 'medium', '-crf', '14', '-pix_fmt', 'yuv420p', path.join(SHOT_DIR, sh.id + '.mp4')]);   // 低分辨率渲的（W / H）放大到 1080p，剪辑时各镜头一样大
-      fs.rmSync(dir, { recursive: true, force: true });
+      if (!process.env.DBG) fs.rmSync(dir, { recursive: true, force: true });   // 查花屏时留着逐帧图和 dbg_ 文件
     }
     const rec = await p.evaluate(() => { const r = window.__snd; window.__snd = []; window.__rec = false; return r; });   // 这个镜头的音效（时间都落在它的时段里）
     if (!DR) fs.writeFileSync(sfxf, JSON.stringify(rec));   // 草稿不记音效

@@ -362,7 +362,12 @@ function thMarks3(ctx, stem) {
       list.push({ F, c, col, d: C ? dist(c.x, -c.y, C.E[0], C.E[1]) : 0 });
     }
   }
-  list.sort((a, b) => a.d - b.d);
+  // 近的先占位置；远近差不多的两个牌子不跟着每帧一点点的挪动来回换先后（原来一换，重叠的那串牌子整体跳一帧）：
+  //   排序用的远近只在真实远近偏开 3%（至少 30 米）以后才更新
+  const K3 = THU.k3 || (THU.k3 = new Map());
+  for (const o of list) { const k = K3.get(o.F.id); o.k = k != null && Math.abs(k - o.d) < Math.max(30, o.d * .03) ? k : o.d; K3.set(o.F.id, o.k); }
+  if (K3.size > 4 * list.length + 200) K3.clear();
+  list.sort((a, b) => a.k - b.k || (String(a.F.id) < String(b.F.id) ? -1 : 1));
   for (const { F, c, col } of list) {
     const q = stem(c.x, c.y, F.lvl === 'div' ? 90 : F.lvl === 'bde' ? 72 : 55, col, 1);
     if (!q) continue;

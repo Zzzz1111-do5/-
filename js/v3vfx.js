@@ -33,16 +33,30 @@ function v3vUserTex(key) {
   (typeof createImageBitmap === 'function' ? createImageBitmap(U.blob) : Promise.reject(new Error())).then(up, () => { const u = URL.createObjectURL(U.blob), I = new Image(); I.onload = () => { URL.revokeObjectURL(u); up(I); }; I.src = u; });
   return null;
 }
+// 这一帧、下一帧在图集里的格子在顶点里算好（vC：两个格子的列、行；vK.x 换成两帧之间的小数）：帧号是每个精灵一个常数，
+//   原来在片元里对插值后的帧号取 floor——帧号正好是整数时（2.8 秒的爆炸每推演 7 步就有一次）插值误差让相邻像素一个取到 n − 1、一个取到 n，
+//   同一个 2×2 像素块里贴图坐标跳一整格，按最粗一级的 mipmap 采样，整个精灵成了一片方格花纹 / 一道道横纹（第三版宣传片的花屏）；
+//   四个顶点的帧号一样，在顶点里取整就不会跳。uNF：每行几格、总帧数（片元里的 uN 是 mediump，同名 uniform 两边精度要一致，所以另起一个）
 const V3V_VS = `attribute vec3 p; attribute vec2 uv; attribute vec4 k; attribute vec3 tn;
-uniform mat4 uM; uniform vec3 uEye; varying vec2 vUv; varying vec4 vK; varying vec3 vTn; varying float vD;
-void main() { vUv = uv; vK = k; vTn = tn; vD = length(p - uEye); gl_Position = uM * vec4(p, 1.); }`;
-const V3V_FS = `precision mediump float;
-uniform sampler2D uT; uniform float uN, uF, uCol; uniform vec3 uNt, uBg, uSunC, uAmb; uniform vec2 uFog;
-varying vec2 vUv; varying vec4 vK; varying vec3 vTn; varying float vD;   // vK：帧号、透明度、火光强度、受光
-vec4 at(float f) { float c = mod(f, uN), r = floor(f / uN + .001); return texture2D(uT, (vec2(c, r) + clamp(vUv, .004, .996)) / uN); }
+uniform mat4 uM; uniform vec3 uEye; uniform vec2 uNF; varying vec2 vUv; varying vec4 vK; varying vec3 vTn; varying float vD; varying vec4 vC;
 void main() {
-  float f0 = floor(vK.x), w = vK.x - f0;
-  vec4 t = mix(at(f0), at(min(f0 + 1., uF - 1.)), w);
+  float f0 = floor(k.x + 1e-4), f1 = min(f0 + 1., uNF.y - 1.), r0 = floor((f0 + .5) / uNF.x), r1 = floor((f1 + .5) / uNF.x);
+  vC = vec4(f0 - r0 * uNF.x, r0, f1 - r1 * uNF.x, r1);
+  vUv = uv; vK = vec4(max(0., k.x - f0), k.yzw); vTn = tn; vD = length(p - uEye); gl_Position = uM * vec4(p, 1.);
+}`;
+const V3V_FS = `precision mediump float;
+uniform sampler2D uT; uniform float uN, uCol; uniform vec3 uNt, uBg, uSunC, uAmb; uniform vec2 uFog;
+varying vec2 vUv; varying vec4 vK; varying vec3 vTn; varying float vD; varying vec4 vC;   // vK：两帧之间的小数、透明度、火光强度、受光；vC：这一帧、下一帧的格子
+vec4 at(vec2 c) { return texture2D(uT, (c + clamp(vUv, .004, .996)) / uN); }
+// 火光的颜色按强度 T（0–1）走「暗红 → 橙 → 黄 → 白热」：只有最旺的芯子才发白
+vec3 fireRamp(float T) {
+  vec3 c = mix(vec3(.35, .06, .01), vec3(.8, .3, .06), smoothstep(.25, .5, T));
+  c = mix(c, vec3(1., .6, .2), smoothstep(.5, .75, T));
+  c = mix(c, vec3(1., .84, .48), smoothstep(.75, .92, T));
+  return mix(c, vec3(1., .96, .85), smoothstep(.92, 1., T)) * smoothstep(0., .3, T);
+}
+void main() {
+  vec4 t = mix(at(vC.xy), at(vC.zw), vK.x);
   vec2 eg = min(vUv, 1. - vUv);
   float fog = smoothstep(uFog.x, uFog.y, vD), a = t.a * vK.y * smoothstep(0., .14, min(eg.x, eg.y));   // 格子边上淡出：个别贴图（车炮口焰）每格的不透明度一直铺到格子边，近处放大成一块圆角方板
   if (a < .003) discard;
@@ -53,9 +67,10 @@ void main() {
     float l = t.r * .4 + t.g * .6;   // 两个方向的受光合成一个（太阳在上方偏一侧）
     vec3 sm = vTn * (uAmb * (.55 + .45 * l) + uSunC * l * vK.w) * uNt;
     float e = t.b * vK.z * smoothstep(.04, .35, t.a);   // 火光只加在有不透明度的地方：B 通道在透明区里有 WebP 压缩的方块，原来不管透明度直接加，近处放大成一圈锯齿硬边、一块块的黄
-    vec3 fire = mix(vec3(.95, .22, .04), vec3(1., .66, .26), smoothstep(.15, .6, t.b)) + vec3(.55, .5, .4) * smoothstep(.72, 1., t.b);
-    vec3 fl = fire * e * e * (1. - .6 * fog) * 1.6;
-    c = mix(sm, uBg, fog) * a + fl / (1. + .15 * dot(fl, vec3(.333)));   // 火光加在上面（不受透明度压暗）；轻轻压一下高光：近处的大火球中间不再整块冲成平的白
+    // 火光强度 1 − e^(−kI) 压进 1 以内再按强度取色：原来是一个颜色乘强度（强度到 4–5 倍），三个通道一起冲过 1，
+    //   近处的残骸火、炮口焰、刚炸开的火球成了一整块平的白
+    float T = 1. - exp(-1.44 * e * e * (1. - .6 * fog));
+    c = mix(sm, uBg, fog) * a * (1. - .6 * smoothstep(.4, .9, T)) + fireRamp(T);   // 火光加在上面（不受透明度压暗）；火旺的地方烟的受光让位（两个加起来也会冲白）
   }
   gl_FragColor = vec4(c, a);
 }`;
@@ -68,7 +83,7 @@ function v3vInit(gl) {
     if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(pr));
     V3V.pr = pr;
     for (const k of ['p', 'uv', 'k', 'tn']) V3V.a[k] = gl.getAttribLocation(pr, k);
-    for (const k of ['uM', 'uEye', 'uT', 'uN', 'uF', 'uCol', 'uNt', 'uBg', 'uSunC', 'uAmb', 'uFog']) V3V.u[k] = gl.getUniformLocation(pr, k);
+    for (const k of ['uM', 'uEye', 'uT', 'uN', 'uNF', 'uCol', 'uNt', 'uBg', 'uSunC', 'uAmb', 'uFog']) V3V.u[k] = gl.getUniformLocation(pr, k);
     V3V.buf = gl.createBuffer();
     const v = typeof window === 'object' && window.DS_BUILD ? '?v=' + window.DS_BUILD : '';
     for (const key in V3V_TEX0) {
@@ -149,7 +164,7 @@ function v3vDraw(C) {
     gl.vertexAttribPointer(A.p, 3, gl.FLOAT, false, NV * 4, 0); gl.vertexAttribPointer(A.uv, 2, gl.FLOAT, false, NV * 4, 12);
     gl.vertexAttribPointer(A.k, 4, gl.FLOAT, false, NV * 4, 20); gl.vertexAttribPointer(A.tn, 3, gl.FLOAT, false, NV * 4, 36);
     gl.bindTexture(gl.TEXTURE_2D, T.u ? V3V_USR[tk].tex : V3V.tex[tk]);
-    gl.uniform1f(V3V.u.uN, T.n); gl.uniform1f(V3V.u.uF, T.f); gl.uniform1f(V3V.u.uCol, T.col || 0);
+    gl.uniform1f(V3V.u.uN, T.n); gl.uniform2f(V3V.u.uNF, T.n, T.f); gl.uniform1f(V3V.u.uCol, T.col || 0);
     gl.drawArrays(gl.TRIANGLES, 0, n);
     i0 = i1;
   }
