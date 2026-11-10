@@ -428,7 +428,7 @@ function v3Fx(C) {
     }
     if (o.air) {   // 空中点火：发动机一闪，一团白烟在空中翻滚着散开、变淡（不往地上落、几乎不往上飘）
       if (a < .12) v3fSpark(out, C, v3fP(o.x, o.y, o.z), 1.2 + a * 12, [1, .93, .8, .9 * (1 - a / .12)]);   // 闪光不超过 3 米：原来按 3 + 26a 涨到近 7 米，一枚导弹点火闪出一个和翼展一样大的光球
-      for (let i = 0; i < 6; i++) { const an = i * 2.4 + o.t0, r = 1 + a * 2.2, ex = Math.cos(an) * r, ey = Math.sin(an) * r; v3fSpark(out, C, v3fP(o.x + ex, o.y + ey, o.z + (i % 3 - 1) * r * .5 + a * .4), 1.8 + a * 3.2, [.55, .58, .56, .2 * (1 - a / 4.5)]); }
+      // 白烟只由 v3fLaunchSmoke 画（遮挡的烟团）：原来这里再叠 6 团加法混合的灰光，四秒半里长到十几米，在天空前是一个发白的光盘
       continue;
     }
     if (a < .3 && !o.vls) v3fSpark(out, C, v3fP(o.x, o.y, o.z + 2), (8 + a * 20) * k, [1, .9, .7, .8 * (1 - a / .3)]);
