@@ -43,7 +43,8 @@ vec4 at(float f) { float c = mod(f, uN), r = floor(f / uN + .001); return textur
 void main() {
   float f0 = floor(vK.x), w = vK.x - f0;
   vec4 t = mix(at(f0), at(min(f0 + 1., uF - 1.)), w);
-  float fog = smoothstep(uFog.x, uFog.y, vD), a = t.a * vK.y;
+  vec2 eg = min(vUv, 1. - vUv);
+  float fog = smoothstep(uFog.x, uFog.y, vD), a = t.a * vK.y * smoothstep(0., .14, min(eg.x, eg.y));   // 格子边上淡出：个别贴图（车炮口焰）每格的不透明度一直铺到格子边，近处放大成一块圆角方板
   if (a < .003) discard;
   vec3 c;
   if (uCol > 1.5) c = t.rgb * a * (1. - .5 * fog);   // 导入的发光序列帧（火焰、尾焰）：原色发光
@@ -51,9 +52,10 @@ void main() {
   else {
     float l = t.r * .4 + t.g * .6;   // 两个方向的受光合成一个（太阳在上方偏一侧）
     vec3 sm = vTn * (uAmb * (.55 + .45 * l) + uSunC * l * vK.w) * uNt;
-    float e = t.b * vK.z;
+    float e = t.b * vK.z * smoothstep(.04, .35, t.a);   // 火光只加在有不透明度的地方：B 通道在透明区里有 WebP 压缩的方块，原来不管透明度直接加，近处放大成一圈锯齿硬边、一块块的黄
     vec3 fire = mix(vec3(.95, .22, .04), vec3(1., .66, .26), smoothstep(.15, .6, t.b)) + vec3(.55, .5, .4) * smoothstep(.72, 1., t.b);
-    c = mix(sm, uBg, fog) * a + fire * e * e * (1. - .6 * fog) * 1.6;   // 火光加在上面（不受透明度压暗）
+    vec3 fl = fire * e * e * (1. - .6 * fog) * 1.6;
+    c = mix(sm, uBg, fog) * a + fl / (1. + .15 * dot(fl, vec3(.333)));   // 火光加在上面（不受透明度压暗）；轻轻压一下高光：近处的大火球中间不再整块冲成平的白
   }
   gl_FragColor = vec4(c, a);
 }`;

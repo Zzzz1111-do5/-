@@ -66,12 +66,12 @@ const SHOTS = [
   { id: 'BC', warm: 14, dur: 2, spd: 1, q: { C: { k: ['j35', 'j15'] }, lead: 0.6 }, rig: { k: 'look', o: 'A', at: 'A', off: [48, -17, 5] }, chain: ['p4', 0], tag: ['福建舰 · 歼-35', '电磁弹射 · 舰载隐身战斗机出击', 'p'] },
   { id: 'BF', warm: 14, dur: 2, spd: 1, q: { L: { side: 'p', kind: 'pgm', w: 'ft8' }, lead: 0.5 }, rig: { k: 'chase', o: 'SRCP', d: [40, 36], yo: [1.35, 1.15], pit: [0.06, 0.08] }, chain: ['p4', 1] },
   { id: 'BG', dur: 2, spd: 1, q: { cont: true }, rig: { k: 'pt', o: 'IMP', cam: [[330, -2.0, -0.26], [280, -1.8, -0.23]] }, fire: true, chain: ['p4', 2] },
-  { id: 'B7', warm: 14, dur: 2, cone: 312, q: { P: { k: ['j20'], inMap: true } }, rig: { k: 'chase', o: 'A', d: [44, 38], yo: [0.95, 0.82], pit: [-0.12, -0.09] }, tag: ['歼-20', '隐身战斗机 · 夺取制空权', 'p'] },   // 斜后方看蒸汽锥（正后方是一个大白盘、正侧面是一面白帆）；挑在战场上空的（原来在战区机场小岛上空）
+  { id: 'B7', warm: 14, dur: 2, q: { P: { k: ['j20'], inMap: true } }, rig: { k: 'chase', o: 'A', d: [36, 31], yo: [2.25, 1.95], pit: [-0.08, -0.05] }, tag: ['歼-20', '隐身战斗机 · 夺取制空权', 'p'] },   // 从前侧方拍歼-20 本身、在战场上空的（原来带蒸汽锥：正后方是一个大白盘、斜后方是飞机旁边一团白，看不懂、像 bug）
   // 第二幕：强行登陆——抢滩、壕里的守军、步兵与工事对射、坦克对坦克、守方反坦克车打登陆舰
-  { id: 'F', dur: 4, q: { T: 'landing', lead: 26 }, tg: 'ships', shift: [0, -45], cam: [[150, -1.62, -0.05], [110, -1.56, -0.07]], card: C('PHASE 02 // ASSAULT', '再强行登陆', '抢滩 · 舰炮火力 · 夺取登陆场', .15, 3.7), flash: true },   // 低低地跟在冲滩的登陆艇群后面，前方是海滩和雪山（原来跟拍一艘顺着岸边开的小艇）
+  { id: 'F', dur: 4, q: { T: 'landing', lead: 26 }, rig: { k: 'two', o: 'SHIP', b: 'LAND', d: [72, 58], yo: [0.28, 0.18], pit: [-0.12, -0.1], f: .7, pan: [-0.26, -0.22] }, card: C('PHASE 02 // ASSAULT', '再强行登陆', '抢滩 · 舰炮火力 · 夺取登陆场', .15, 3.7), flash: true },   // 跟在一艘冲滩的登陆舰后面、看着前方的海滩（原来跟着舰艇最密的一群：这一刻是远处的第二波，画面只有空海）；主体让到右边
   { id: 'I', dur: 4, q: { T: 'landing', lead: -50 }, tg: 'trench', cam: [[170, 1.25, -0.44], [130, 1.5, -0.38]] },   // 站在堑壕后面往海那边看：守军在前景，海滩、冲上来的攻方、海在后面（原来从海上往山里看，背景是糊的山坡）
-  { id: 'I2', dur: 4, q: { F: { after: 0 } }, rig: { k: 'two', o: 'B', b: 'A', d: [130, 105], yo: [0.35, 0.22], pit: [-0.3, -0.26], f: .55 }, fov: .7 },   // 步兵与工事对射：镜头在守方阵地后面、往坡下的攻方和海那边看（滩头后面就是陡山：从攻方身后往上拍，画面是一整面糊的绿坡）
-  { id: 'G', dur: 4, q: { F: { after: 120, bunker: true } }, rig: { k: 'two', o: 'B', b: 'A', d: [150, 124], yo: [-0.6, -0.45], pit: [-0.32, -0.28], f: .5 }, fov: .7, tag: ['登陆突击队', '步兵冲击守方火力点', 'p'] },   // 守方工事在前景（B 换成离攻方最近的守方工事），攻方从坡下冲上来；和上一个镜头同一片战场，换个方向
+  { id: 'I2', dur: 4, spd: 1.5, q: { F: { T: 990 } }, rig: { k: 'two', o: 'B', b: 'A', d: [130, 105], yo: [0.35, 0.22], pit: [-0.3, -0.26], f: .55 }, fov: .7 },   // 步兵与工事对射：镜头在守方阵地后面、往坡下的攻方和海那边看（滩头后面就是陡山：从攻方身后往上拍，画面是一整面糊的绿坡）；推演第 990–996 秒（1.5 倍速）：这一局 996.3 秒那发大爆炸正落在镜头前的守军阵地上，序列帧烟团被放得很大，成了一块硬边的白剪影
+  { id: 'G', dur: 4, q: { F: { T: 982, bunker: true } }, rig: { k: 'two', o: 'B', b: 'A', d: [150, 124], yo: [-0.6, -0.45], pit: [-0.32, -0.28], f: .5 }, fov: .7, tag: ['登陆突击队', '步兵冲击守方火力点', 'p'] },   // 守方工事在前景（B 换成离攻方最近的守方工事），攻方从坡下冲上来；和上一个镜头同一片战场，换个方向
   { id: 'H', warm: 14, dur: 4, T: 850, pick: [['ftr', 'F-35A 闪电 II', '守方战斗机 · 争夺登陆场上空的制空权'], ['ftrb', 'F-35B 闪电 II', '守方短距起降战斗机 · 争夺制空权'], ['c17', 'C-17 运输机', '守方 · 空运增援']], rig: { k: 'chase', o: null, d: [62, 48], yo: [2.5, 2.2], pit: [-0.06, -0.03] } },   // 守方装备：开拍时挑一架在空中的 F-35（没有就 C-17），从前侧方回看
   // 第三幕：纵深攻防——055 长剑-10 齐射；守方防空车拦截鹰击-18、击落我方飞机；步兵与工事对射；战区逐级指挥
   { id: 'J', dur: 4, spd: 1, q: { L: { side: 'p', kind: 'pgm', w: 'cj10', src: 'vls', quiet: 25 }, lead: 1.2 }, rig: { k: 'look', o: 'M', at: 'SRC', off: [-118, 58, 9], abs: true, b: 'SRC', f: .9, tz: 14 }, fov: .75, chain: ['p5', 1], card: C('PHASE 03 // DEPTH', '向纵深推进', '战区 → 师 → 团 → 营　逐级指挥', .15, 2.6), flash: true },   // 站在上风处（西边：烟往东飘）一百三十米看舰、导弹出筒后镜头跟着往上抬一点（原来站在下风处，烟柱飘过来把舰挡住；舰按游戏长度画，四五十米，再远就太小）
@@ -85,7 +85,7 @@ const SHOTS = [
   { id: 'M1', dur: 4 / 3, ui: 'codex', card: C('ORDER OF BATTLE', '一百多种兵力', '', .05, 1.3, 'low') },
   { id: 'M2', dur: 4 / 3, ui: 'etrail', card: C('MISSILE TRAILS', '尾烟、尾焰自己设计', '', .05, 1.3, 'low') },
   { id: 'M3', dur: 4 / 3, ui: 'deploy', card: C('SANDBOX', '自由部署 · 攻守对抗', '', .05, 1.3, 'low') },
-  { id: 'N', dur: 4, q: { T: 'landing', lead: -620 }, tg: 'boom', fire: true, cam: [[650, -1.5708, -0.32], [520, -1.5708, -0.29]], fov: .8, flash: true, booms: [0, .5, 1, 1.5, 2, 2.25, 2.5, 2.75, 3, 3.25, 3.5] },   // 从海边往山里看（滩头后面全是陡坡：从山里往外看、顺着山脊看、从高处往下看都是一整面糊的山坡）；近处的坡面现在有草地细节贴图
+  { id: 'N', dur: 4, q: { T: 'landing', lead: -234 }, tg: 'boom', fire: true, cam: [[470, 1.4, -0.38], [390, 1.52, -0.34]], fov: .8, flash: true, booms: [0, .5, 1, 1.5, 2, 2.25, 2.5, 2.75, 3, 3.25, 3.5] },   // 滩头激战那一段、从山上往海边看（这一局后段炸得最集中的地方在一条山谷里，从哪边看都是一条糊的山沟）
   { id: 'O', dur: 8, q: { T: 'landing', lead: -628 }, tg: 'land', end: true }
 ];
 { let t = 0; SHOTS.forEach((s, i) => { s.at = t; t += s.dur; const P = SHOTS[i - 1], N = SHOTS[i + 1], k = s.chain && s.chain[0]; if (k) { s.chF = !(P && P.chain && P.chain[0] === k); s.chL = !(N && N.chain && N.chain[0] === k); } }); }   // chF / chL：这条链在这个镜头淡入 / 淡出
@@ -234,7 +234,7 @@ function planShots(sc) {
     const prev = res.get((sim[sim.indexOf(s) - 1] || {}).id) || null;
     const q = s.q || {}, spd = s.spd || 2, span = s.dur * spd, lead = q.lead != null ? q.lead : 1;
     let T = null, ref = {}, hit = null;
-    const fail = why => { throw new Error(`镜头 ${s.id}：${why}（${JSON.stringify(q)}）`); };
+    const fail = why => { throw new Error(`镜头 ${s.id}：${why}（${JSON.stringify(q)}）；已占的推演时段 ${JSON.stringify(plan.map((o, k) => [o.id, ...placed[k].map(v => +v.toFixed(1))]))}`); };
     if (s.T != null && !s.q) T = s.T;
     else if (q.cont) { if (!prev) fail('上一个镜头还没定下来'); T = prev.T + prev.span; ref = prev.ref; hit = prev.e; }
     else if (q.X === 'prev') { const e = prev && prev.e, x = e && X.get(e[2]); if (!x) fail('上一个镜头没有导弹可接'); T = Math.max(x[1] - lead, prev.T + prev.span); ref = { ...prev.ref, IMP: ['xy', x[4], x[5]] }; hit = e; }
@@ -262,7 +262,7 @@ function planShots(sc) {
     } else if (q.F) {   // 步兵、工事对射：曳光按 300 米的格子分，两边都在打的格子（双方发数里少的那一边越多越好），镜头在攻方射手身后看向守方
       const Tr = ev.filter(e => e[0] === 'T' && e[1] >= (q.F.after != null ? landT + q.F.after : landT)), G = 300;
       let best = null;
-      for (let t = Math.ceil(Tr.length ? Tr[0][1] : 0); Tr.length && t < Tr[Tr.length - 1][1]; t += 1) {
+      for (let t = q.F.T != null ? q.F.T : Math.ceil(Tr.length ? Tr[0][1] : 0); Tr.length && t < Tr[Tr.length - 1][1] && (q.F.T == null || t === q.F.T); t += 1) {   // F.T：就从推演第几秒开拍（避开某个时刻）
         if (!free(t, span)) continue;
         const W = Tr.filter(e => e[1] >= t && e[1] < t + span), cell = new Map();
         for (const e of W) { const k = Math.floor((e[3] + e[5]) / 2 / G) + ',' + Math.floor((e[4] + e[6]) / 2 / G); const c = cell.get(k) || cell.set(k, { p: [], e: [] }).get(k); c[e[2] === 'p' ? 'p' : 'e'].push(e); }
@@ -512,6 +512,7 @@ async function stepShots(b) {
           const o = A.reduce((a, s) => !a || sc2(s) < sc2(a) ? s : a, null); return o ? ['s', o.id] : null;
         }, L);
         if (!sh.rig.o) console.warn(`镜头 ${sh.id}：这一刻没有在开的登陆舰`);
+        if (sh0.rig.b === 'LAND') sh.rig.b = ['xy', Math.round(L[0]), Math.round(L[1])];   // 看着登陆场（第一组人上岸的地方）
       }
       const R0 = sh0.ref || {}, needPl = sh0.rig && sh0.rig.o === 'SRCP' && !R0.SRCP && R0.SRC, needNm = sh0.tag && sh0.tag[0] === '@SRC' && R0.SRC, needTg = sh0.tag && sh0.tag[0] === '@TGT' && R0.TGT;
       if (sh0.tag && sh0.tag[0] === '@B') { const nm = R0.B && R0.B[0] === 'v' ? await p.evaluate(id => { const v = (S.veh || []).find(o => o.id === id); return v ? vehModel(v) : null; }, R0.B[1]) : null; sh.tag = nm ? [nm, sh.tag[1], sh.tag[2]] : null; }   // 对射镜头前景那辆车的型号
@@ -531,7 +532,10 @@ async function stepShots(b) {
     } else await uiSetup(p, sh);
     await p.evaluate(sh => { window.__cm = {}; window.__trP = null; window.__grp = null; document.body.classList.toggle('trClean', !sh.hud && !sh.ui); document.body.classList.toggle('trChat', !!sh.chat);
       if (!sh.hud && !sh.ui && !window.__v3o) { window.__v3o = v3Overlay; window.v3Overlay = () => {}; }
-      if ((sh.hud || sh.ui) && window.__v3o) { window.v3Overlay = window.__v3o; window.__v3o = null; } }, sh);
+      if ((sh.hud || sh.ui) && window.__v3o) { window.v3Overlay = window.__v3o; window.__v3o = null; }
+      // 界面藏着的镜头不更新面板、小地图（反正看不见）：它们每 200 毫秒改一次网页，软件渲染下截图偶尔截到合成到一半的画面——烟团里一块块方格花纹，每 7 帧一次
+      if (!sh.hud && !sh.ui && !window.__uh) { window.__uh = [updateHud, mmDraw]; window.updateHud = () => {}; window.mmDraw = () => {}; }
+      if ((sh.hud || sh.ui) && window.__uh) { [window.updateHud, window.mmDraw] = window.__uh; window.__uh = null; } }, sh);
     const fixed = staticTarget(sh, sc, geo.W, geo.H);
     for (let i = F0 - (sh.warm || 8); i < N; i++) {   // 前 8 帧预热（warm：飞机镜头 14 帧）（新镜头位置的贴图、缓存，第一次出现的模型载入完——原来 2 帧，追拍的飞机头几帧只有航行灯），不推演、不截图、不记声音
       const t = Math.max(F0, i) / FPS, u = N0 > 1 ? Math.max(F0, i) / (N0 - 1) : 0;

@@ -17,7 +17,7 @@ precision mediump float;
 #endif
 uniform float uT; uniform vec3 uNt;   // uNt：夜里遮光的烟按月光压暗（发光的那一遍是 1）
 varying vec4 vC; varying vec2 vQ;
-float h2(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float h2(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * .1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }   // 不用 sin 的哈希：噪声坐标里带着随推演时间增长的偏移，原来 fract(sin(x)·43758) 打到几百秒以后 sin 的参数上十万、精度不够，噪声碎成方块——烟团、火球边缘变硬、里面一块平的白，还有迷宫似的花纹
 float vn(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3. - 2. * f); return mix(mix(h2(i), h2(i + vec2(1., 0.)), f.x), mix(h2(i + vec2(0., 1.)), h2(i + vec2(1., 1.)), f.x), f.y); }
 void main() {
   float md = floor((vQ.x + 4.) / 8.), sd = floor((vQ.y + 2.) / 4.);
@@ -630,7 +630,7 @@ function v3Fx(C) {
   // —— 画：先画遮挡的烟（预乘透明度的普通混合），再画发光（加法混合）；都测深度、不写深度 ——
   const A = V3F.a;
   gl.useProgram(V3F.pr);
-  gl.uniformMatrix4fv(V3F.u.uM, false, C.M); gl.uniform1f(V3F.u.uT, (S.t || 0) % 600);   // 烟团、火球按推演时间翻卷（暂停时定住）
+  gl.uniformMatrix4fv(V3F.u.uM, false, C.M); gl.uniform1f(V3F.u.uT, (S.t || 0) % 3000);   // 烟团、火球按推演时间翻卷（暂停时定住）；哈希不怕大坐标了，绕回去的间隔拉长到 50 分钟（绕回那一下烟团会跳）
   gl.bindBuffer(gl.ARRAY_BUFFER, V3F.buf);
   gl.enableVertexAttribArray(A.p); gl.enableVertexAttribArray(A.c); gl.enableVertexAttribArray(A.q);
   gl.enable(gl.BLEND); gl.depthMask(false);
