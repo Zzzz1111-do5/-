@@ -1171,7 +1171,7 @@ function v3mCollect(C, box) {
   // 车辆：用户给的坦克模型（js/v3g.js）——车体贴地（按脚下坡度俯仰、侧倾），炮塔随瞄准转
   for (const v of S.veh || []) {
     if (v.lst || !inX(v.x, v.y) || (v.dead && S.t - (v.deadT ?? 0) > 120)) continue;   // inX：远海航渡（farsea.js）的两栖车辆在地图外
-    if (v.side === 'e' && !v.dead && !seen(v.x, v.y)) continue;
+    if (v.side === 'e' && !v.dead && !spec && !seen(v.x, v.y)) continue;   // 观战 / 两军都画（R.eye 'all'）时不看侦察：原来这里和步兵漏了 spec，守方的车、兵在被侦察到那一刻才凭空冒出来（特效、遗体、舰艇、飞机都早就按 spec 画）
     const Mm = typeof rlModelOf === 'function' ? rlModelOf(v) : null, side = v.side === 'e' ? 'e' : 'p', h = v.heading || 0, len = vehSp(v).len, z = v3Ht(v.x, v.y);
     const g = v3Grad(v.x, v.y, Math.max(2.5, len * .45), v.id), [hp, hr] = v3Pose(g, h);
     if (typeof v3dVehHaze === 'function' && Mm) v3dVehHaze(v, Mm.key, len, z, h, C.E);   // 发动机排气的热浪（v3det.js）
@@ -1181,7 +1181,7 @@ function v3mCollect(C, box) {
   // 远近都是立体的：离镜头 180 米外换低模，再远一点略放大（远看不至于缩成看不见的一个点；三人的间距一起放大，不挤成一团）
   const E3 = C.E, lod = (x, y, z) => { const d = Math.hypot(x - E3[0], y + E3[1], z - E3[2]); return { lo: d > 180, k: clamp(d / 700, 1, 1.6) }; };
   for (const q of S.teams) {
-    if (!q.men.length || q.ride || q.boarded || !inB(q.x, q.y) || (q.side === 'e' && !seen(q.x, q.y))) continue;
+    if (!q.men.length || q.ride || q.boarded || !inB(q.x, q.y) || (q.side === 'e' && !spec && !seen(q.x, q.y))) continue;
     const f = typeof faceDraw === 'function' ? faceDraw(q) : faceOf(q), c = Math.cos(f + 1.57), s = Math.sin(f + 1.57), sd = (q.side === 'e' ? 1 : 0) + (hl(q) ? 8 : 0), T = typeof manTeam === 'function' ? manTeam(q) : null;   // + 8：选中编队的成员，全身发光（selfx.js）
     const Lq = lod(q.x, q.y, v3Ht(q.x, q.y)), ks = Lq.k, Tr = q.inTrench ? v3uTrenchAt(q.x, q.y) : null;   // 在堑壕里：三个人沿壕排开、站在壕里
     const Hd = !Tr && typeof digHole === 'function' ? digHole(q) : null, Hk = Hd && Hd.d > .5 ? Hd : null;   // 散兵坑挖到一半以上：三个人挤在坑里（横着排开）

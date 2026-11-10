@@ -128,7 +128,7 @@ const NT_HEAD = [1, .9, .74], NT_FIRE = [1, .52, .2], NT_FLASH = [1, .74, .42];
 function ntLights(C) {
   const L = [], ex = C.E[0], ey = -C.E[1], tw = performance.now() / 1000;
   const near = (x, y, m) => Math.hypot(x - ex, y - ey) < m;
-  const seenE = (x, y) => (typeof specAll === 'function' && specAll()) || (typeof inVision === 'function' && inVision(x, y));
+  const seenE = (x, y) => (typeof specAll === 'function' && specAll()) || (typeof R === 'object' && (R.eye === 'all' || R.eye === 'both' || R.eye === 'e')) || (typeof inVision === 'function' && inVision(x, y));   // 同 v3units.js 的 spec
   // 车灯：活着的车（看得见的敌车也算），离镜头 1.6 公里内；开着的时候一直亮（停着的也亮着近光）
   for (const arr of [S.veh || [], S.armor || []]) for (const v of arr) {
     if (v.dead || v.lst || !isFinite(v.x) || !near(v.x, v.y, 1600) || (v.side === 'e' && !seenE(v.x, v.y)) || (arr === S.veh && v.swim)) continue;

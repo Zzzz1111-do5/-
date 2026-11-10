@@ -10,7 +10,7 @@
 - 电脑版（Steam）用 Electron 打包：desktop/（main.js 外壳、preload.js 给网页的 `window.dsDesktop`）；`cd desktop && npm ci && npm start` 试玩，`npm run dist:win` 打 Windows 包。
 - 商店版（安卓、电脑）与网页版的差别都在 js/platform.js（要在 menu.js 之前加载）：「退出游戏」、全屏、安卓返回键、首次打开的《用户协议》《隐私政策》确认（legal/）。`tools/build_www.mjs --app` 生成商店版网页。
 - 上架：docs/release.md（Steam、TapTap 步骤与每次更新要改的版本号）、docs/store.md（商店文案）、store/（商店素材，`tools/store_assets.js` 与 `tools/make_icons.py` 生成；宣传片 `tools/trailer.js`，视频不进仓库）、.github/workflows/release.yml（推 v 开头的标签打全部安装包）。
-  宣传片（用户：凸显各型装备、主画面要有两军对抗、两边的体系化作战；第三版修「一堆 bug」）：台湾雪山图（用户选的——这一版只能非商用：片尾署名 Miguel Cueva、注明本片按 CC BY-NC-SA 4.0 发布、不写上架平台），远海航渡关掉，R.eye = 'all' 两军都画；
+  宣传片（用户：凸显各型装备、主画面要有两军对抗、两边的体系化作战；第三版修「一堆 bug」）：台湾雪山图（用户选的——这一版只能非商用：片尾署名 Miguel Cueva、注明本片按 CC BY-NC-SA 4.0 发布、不写上架平台），远海航渡关掉，R.eye = 'all' 两军都画（v3units.js 的车辆、步兵原来漏了 spec，守方的车、兵只有被侦察到才画——第二版的堑壕镜头里壕是空的、爱国者导弹从空地上升起）；
   先「侦察」推演一遍记下每一发导弹（谁打的、打什么、结局）、空射弹出自哪架飞机、弹射起飞、车炮与曳光对射，分镜写「找哪种事件」（q：L 发射 / X 命中 / V 车炮 / F 对射 / C 弹射 / P 某型飞机 / cont 接上一镜），planShots 按记录定开拍时刻和要跟的对象（推演时段不重叠）；镜头一律视线避让（__clr：被山挡住、低低地对着山坡时抬高，有上限）；台湾图滩头后面就是陡山，地面对抗镜头从守方一侧（坡上）往海那边拍——从攻方身后往上拍是一整面糊的绿坡；推演代码一改战局就变，侦察要重跑、草稿要重看；
   画面上有杀伤链字幕条（CHAINS，攻方绿、守方红）和装备名牌；DRAFT=2 W=960 H=540 出低清草稿（每镜两帧），正式渲染 RS=0.6667、两个进程按 ONLY 分头渲、各自的 trailer_shots 拷到一起再跑 audio,edit；界面藏着的镜头不跑 updateHud / mmDraw（省时间）；查花屏：DBG=40-44 让这几帧拍完后不推演、换十几种画法各再画一遍（原样重画、后期前 gl.finish、不做后期 / 序列帧 / 热浪、关深度测试、每个精灵单独画、去掉某一种序列帧）存 dbg_帧号_画法.jpg，并把这一帧的序列帧队列和镜头存成 dbg_帧号_vfx.json（scratchpad 里有离线重放页面），逐帧图不删。第三版的「方格花纹 / 横条纹」查下来是序列帧着色器在片元里对插值后的帧号取整（见下面序列帧特效一条），不是截图、缓冲区重传、后期抓帧的问题。
 - 网页版：`bash tools/publish_pages.sh` 生成 www/ 并推到 gh-pages 分支（GitHub Pages）。
