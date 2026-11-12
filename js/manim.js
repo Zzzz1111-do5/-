@@ -62,7 +62,7 @@ function manAn(q, T, i, kind) {
     mo: kind === 'mortar' && !mv && t - T.mo < 1.2 ? t - T.mo : null, sof: q.cat === 'p_ranger' || !!(u && u.paEv != null),
     bino: kind === 'fo' && !mv && fire == null, cmd: kind === 'officer' && !mv && fire == null,
     kneel: !mv && !q.prone && (fired || kind === 'mortar') && kind !== 'eng', rel: T.rel > t && T.rel - t < 1.9 && kind !== 'at' && kind !== 'aa' && kind !== 'mortar' ? 1 - (T.rel - t) / 1.9 : null,
-    thr: i === 0 && T.thr != null && t - T.thr < .55 ? (t - T.thr) / .55 : null, sup: q.sup >= 55 && !q.prone, work: !!q.working && kind === 'eng',
+    thr: i === (typeof manRep === 'function' ? manRep(q) : 0) && T.thr != null && t - T.thr < .55 ? (t - T.thr) / .55 : null, sup: q.sup >= 55 && !q.prone, work: !!q.working && kind === 'eng',
     look: !mv && !fired ? Math.sin(t * .37 + q.id * 1.7 + i * 2.3) * .55 : 0, t: t + q.id * .61 + i * 1.3,
     low: manLowStep(q, T, i, q.prone ? 2 : !mv && (fired || kind === 'mortar') && kind !== 'eng' ? 1 : 0)
   };
@@ -72,7 +72,8 @@ function manAn(q, T, i, kind) {
 function manDied(q, i, role) {
   if (typeof S !== 'object' || !S || !isFinite(q.x) || !isFinite(q.y)) return;
   manReset();
-  const f = typeof faceOf === 'function' ? faceOf(q) : 0, c = Math.cos(f + 1.57), s = Math.sin(f + 1.57), o = (typeof MO === 'object' && MO[Math.min(i, MO.length - 1)]) || [0, 0], k = (q.id * 7 + i * 13 + Math.round(S.t * 10)) % 997;
+  // 遗体落在小组周围（MO 三角站位）；组里最后一个人倒下时就在画出来的那个兵站的地方（每组只画一个兵，render2.js manRep）
+  const f = typeof faceOf === 'function' ? faceOf(q) : 0, c = Math.cos(f + 1.57), s = Math.sin(f + 1.57), o = q.men.length <= 1 ? [0, 0] : (typeof MO === 'object' && MO[Math.min(i, MO.length - 1)]) || [0, 0], k = (q.id * 7 + i * 13 + Math.round(S.t * 10)) % 997;
   MANV.dead.push({ x: q.x + o[0] * c - o[1] * s, y: q.y + o[0] * s + o[1] * c, a: f, tw: ((k % 7) - 3) * .3, k, side: q.side, t0: S.t, kind: manKind(q, i, role), prone: !!q.prone });
   if (MANV.dead.length > 400) MANV.dead.splice(0, MANV.dead.length - 400);
 }

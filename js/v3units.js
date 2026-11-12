@@ -689,6 +689,141 @@ function v3mTrench(dry) {
   }
   return M;
 }
+// —— 写实画面的堑壕：壕身挖进地里画（地形网格挖不了洞）——
+//   原来壕壁、壕底、沙袋都立在地面上（壕底贴地、两道 0.55 米高的护壁），远看近看都像一排架在地上的木箱。现在：
+//   ① 两侧是圆鼓鼓的土胸墙（v3mTrParapet，普通模型，有阴影）；朝海一侧高、里面一级放沙袋的台阶；
+//   ② 壕口在地面上画一条四边形，片元里沿视线算进壕里——先碰到壕壁还是壕底、那一点晒不晒得到太阳（被对面壕壁挡住）、越深越暗；
+//   ③ 有模板缓冲和 EXT_frag_depth 时：先按地面深度在模板里标出看得见的壕口，再在标出的像素里写壕里那一点的深度——
+//      壕里的士兵（下沉 0.95 米）腿脚照样画得出来，壕口外面的仍被地面挡住；没有时只画颜色、不写深度（腿脚被地面挡住）
+const V3TR = { d: new Float32Array(4096), n: 0, buf: null, pr: null, pm: null, u: null, uM: null, a: null, st: false, tried: false };
+const V3TR_D = 1.9;   // 壕深（米）：士兵按 1.9 倍画（约 3.4 米高），站在壕底露出胸口以上——真实一人深的壕按同样比例
+function v3mTrParapet(dry, v) {
+  const M = mbNew(), w = V3_TRW, earth = mbRGB(dry ? ['#a08b68', '#9a8562', '#a6916d'][v] : ['#6c6352', '#675e4d', '#716756'][v]), bag = mbRGB(dry ? '#b5a47f' : '#8f8466');
+  // 横截面（离壕中线的距离、高度）：前（+y，朝海）高、里侧一级放沙袋的台阶；后面低；脚埋进地面一点，接缝看不出来
+  const F = [[w - .03, -.12], [w + .03, .2], [w + .4, .25], [w + .62, .44], [w + .98, .43], [w + 1.42, .22], [w + 1.95, -.12]];
+  const B = [[w - .03, -.12], [w + .1, .14], [w + .42, .29], [w + .86, .24], [w + 1.3, .07], [w + 1.62, -.12]];
+  const jit = (i, j) => Math.sin(i * 12.9898 + j * 78.233 + v * 37.7) * .5 + .5;   // 每种变体的土堆起伏不一样，一节节排开看不出重复
+  for (const [sg, P] of [[1, F], [-1, B]]) {
+    const nx = 5, xs = Array.from({ length: nx + 1 }, (_, i) => -2.05 + 4.1 * i / nx);
+    const pt = (i, j) => { const [y, z] = P[j], e = j > 0 && j < P.length - 1 ? (jit(i, j) - .5) * .1 : 0; return [xs[i], sg * (y + e * .6), z + e]; };
+    const nrm = j => { const a = P[Math.max(0, j - 1)], b = P[Math.min(P.length - 1, j + 1)], ty = b[0] - a[0], tz = b[1] - a[1], l = Math.hypot(ty, tz) || 1; return [0, sg * -tz / l, ty / l]; };
+    for (let i = 0; i < nx; i++) for (let j = 0; j < P.length - 1; j++) {
+      const c = earth, a = pt(i, j), b = pt(i + 1, j), cc = pt(i + 1, j + 1), d = pt(i, j + 1), na = nrm(j), nb = nrm(j + 1);
+      if (sg > 0) { mbTriN(M, a, cc, b, na, nb, na, c); mbTriN(M, a, d, cc, na, nb, nb, c); } else { mbTriN(M, a, b, cc, na, na, nb, c); mbTriN(M, a, cc, d, na, nb, nb, c); }
+    }
+  }
+  // 沙袋：前胸墙里侧的台阶上一排，长短、间隙略有出入
+  for (let i = 0, x = -1.98; i < 6 && x < 1.9; i++) { const L = .5 + .14 * jit(i, 9), x1 = Math.min(1.98, x + L); mbBox(M, x, x1, w + .05, w + .38, .2, .37, bag, { taper: .18 }); x = x1 + .05 + .04 * jit(i, 3); }
+  return M;
+}
+// 三角形网格上的地面高度（与 view3d.js v3Mesh 的三角剖分一致：每格沿 (i+1, j)–(i, j+1) 那条对角线分成两个三角形）；
+//   v3Ht 是双线性插值，起伏大的地方和画出来的地面差几十厘米，壕口贴着地面画、标模板要和地面深度对得上
+function v3HtT(x, y) {
+  if (!V3.hf) return 0;
+  const d = CELL * V3_ST, fx = clamp(x / d, 0, V3.nx - 1.001), fy = clamp(y / d, 0, V3.ny - 1.001), i = Math.floor(fx), j = Math.floor(fy), u = fx - i, v = fy - j, H = V3.hf, n = V3.nx;
+  const ha = H[j * n + i], hb = H[j * n + i + 1], hc = H[(j + 1) * n + i], he = H[(j + 1) * n + i + 1];
+  return u + v <= 1 ? ha + u * (hb - ha) + v * (hc - ha) : he + (1 - u) * (hc - he) + (1 - v) * (hb - he);
+}
+// 收集一节壕口（v3mCollect 里）：中心 (x, y)、走向 a（世界坐标，y 朝南）、长 L
+function v3trAdd(x, y, a, L) {
+  const w = V3_TRW, ca = Math.cos(a), sa = Math.sin(a), hx = L / 2 + .03;
+  const hp = (u, v) => v3HtT(x + ca * u - sa * v, y + sa * u + ca * v);
+  const sx = (hp(hx, 0) - hp(-hx, 0)) / (2 * hx), sy = (hp(0, w) - hp(0, -w)) / (2 * w);   // 壕口平面的坡度（沿走向、横向）
+  if (V3TR.n + 66 > V3TR.d.length) { const nd = new Float32Array(V3TR.d.length * 2); nd.set(V3TR.d); V3TR.d = nd; }
+  const D = V3TR.d, ex = ca, ey = -sa;   // 走向在 GL 坐标里（y 朝北）
+  const corner = (u, v) => { const wx = x + ca * u - sa * v, wy = y + sa * u + ca * v; D.set([wx, -wy, v3HtT(wx, wy) + .012, ex, ey, sx, -sy, u, -v, w, V3TR_D], V3TR.n); V3TR.n += 11; };   // 局部横坐标按 GL 的右手系取（-v），横向坡度跟着反号
+  for (const [u, v] of [[-hx, -w], [hx, -w], [hx, w], [-hx, -w], [hx, w], [-hx, w]]) corner(u, v);
+}
+const V3TR_VS = `attribute vec3 p; attribute vec4 f; attribute vec4 g;
+uniform mat4 uM; varying vec3 vW; varying vec2 vL; varying vec4 vF; varying vec2 vG;
+void main() { vW = p; vL = g.xy; vF = f; vG = g.zw; gl_Position = uM * vec4(p, 1.); }`;
+const V3TR_FS = fd => `${fd ? '#extension GL_EXT_frag_depth : enable\n#define FD 1\n' : ''}precision highp float;
+uniform mat4 uM; uniform vec3 uEye, uSun, uBg; uniform vec2 uFog; uniform float uDry;
+varying vec3 vW; varying vec2 vL; varying vec4 vF; varying vec2 vG;
+float hs(vec2 p) { p = fract(p * vec2(.1031, .1030)); p += dot(p, p.yx + 33.33); return fract((p.x + p.y) * p.x); }   // 不用 sin 的哈希（坐标是这一节里的局部米数）
+float vn(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3. - 2. * f); return mix(mix(hs(i), hs(i + vec2(1., 0.)), f.x), mix(hs(i + vec2(0., 1.)), hs(i + vec2(1., 1.)), f.x), f.y); }
+void main() {
+  vec2 ex = vF.xy, ey = vec2(-ex.y, ex.x);   // 局部坐标轴（GL）：沿壕、横过壕
+  float w = vG.x, d = vG.y;
+  vec3 V = normalize(vW - uEye);
+  float vx = dot(V.xy, ex), vy = dot(V.xy, ey), k = min(V.z - vF.z * vx - vF.w * vy, -1e-3);   // k：视线相对壕口平面往下钻的速度
+  float tf = d / -k, tw = abs(vy) > 1e-5 ? (sign(vy) * w - vL.y) / vy : 1e9;   // 碰到壕底、碰到对面壕壁
+  float wall = step(tw, tf), t = max(min(tf, tw), 0.), dep = -k * t;
+  vec2 h = vL + t * vec2(vx, vy);
+  vec3 N = wall > .5 ? vec3(-sign(vy) * ey, 0.) : vec3(0., 0., 1.);
+  // 晒不晒得到：从这一点朝太阳走，出壕口之前横向没越过壕壁
+  float lx = dot(uSun.xy, ex), ly = dot(uSun.xy, ey), kl = uSun.z - vF.z * lx - vF.w * ly, ye = h.y + dep / max(kl, 1e-3) * ly;
+  float lit = step(0., kl) * (1. - smoothstep(w, w + .08, abs(ye))) * max(dot(N, uSun), 0.);
+  float ao = wall > .5 ? mix(1., .5, dep / d) : .5 + .18 * (1. - abs(h.y) / w);   // 越深越暗，壕底两边的墙角最暗
+  float q = wall > .5 ? dep : h.y, nz = vn(vec2(h.x * 2.3, q * 6.)) * .55 + vn(vec2(h.x * 7.1 + 3., q * 17.)) * .45;
+  vec3 c = (uDry > .5 ? vec3(.58, .49, .37) : vec3(.45, .38, .29)) * (.76 + .48 * nz);
+  if (wall > .5) c *= .93 + .07 * sin(dep * 21. + nz * 4.);   // 壕壁上一层层的土
+  else c *= .82 + .18 * smoothstep(.0, .5, abs(h.y) / w);   // 壕底中间踩实了，发暗
+  vec3 amb = mix(vec3(.42, .4, .37), vec3(.5, .54, .6), N.z);   // 天光 + 对面壕壁、壕底反上来的光（比地面上的竖直面亮一些）
+  c = c * (amb * ao + vec3(1., .95, .86) * .8 * lit);
+  vec3 H = vW + V * t;
+  gl_FragColor = vec4(mix(c, uBg, smoothstep(uFog.x, uFog.y, length(H - uEye))), 1.);
+#ifdef FD
+  vec4 cp = uM * vec4(H, 1.);
+  gl_FragDepthEXT = clamp(cp.z / cp.w * .5 + .5, 0., 1.);
+#endif
+}`;
+function v3trInit(gl) {
+  V3TR.tried = true;
+  try {
+    const hp = gl.getShaderPrecisionFormat && gl.getShaderPrecisionFormat(gl.FRAGMENT_SHADER, gl.HIGH_FLOAT);
+    if (!hp || hp.precision < 16) return;   // 片元没有高精度：世界坐标几万米，算不准视线，不画
+    const fdx = gl.getExtension('EXT_frag_depth'), ctxA = gl.getContextAttributes ? gl.getContextAttributes() : null;
+    V3TR.st = !!(ctxA && ctxA.stencil) && !!fdx;
+    const sh = (t, src) => { const o = gl.createShader(t); gl.shaderSource(o, src); gl.compileShader(o); if (!gl.getShaderParameter(o, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(o)); return o; };
+    // 属性位置写死（标模板、画壕身两个程序共用一份顶点格式）
+    const link = fs => { const pr = gl.createProgram(); gl.attachShader(pr, sh(gl.VERTEX_SHADER, V3TR_VS)); gl.attachShader(pr, sh(gl.FRAGMENT_SHADER, fs)); ['p', 'f', 'g'].forEach((k, i) => gl.bindAttribLocation(pr, i, k)); gl.linkProgram(pr); if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(pr)); return pr; };
+    // 写壕里深度的只有模板那条路：深度测试按着色器写出的深度做，标模板那一遍要按壕口本身（地面）的深度比，所以另用一个不写深度的程序
+    const pr = link(V3TR_FS(V3TR.st)), pm = V3TR.st ? link('precision mediump float;\nvoid main() { gl_FragColor = vec4(0.); }') : null;
+    V3TR.pr = pr; V3TR.pm = pm; V3TR.u = {}; V3TR.a = { p: 0, f: 1, g: 2 };
+    for (const k of ['uM', 'uEye', 'uSun', 'uBg', 'uFog', 'uDry']) V3TR.u[k] = gl.getUniformLocation(pr, k);
+    if (pm) V3TR.uM = gl.getUniformLocation(pm, 'uM');
+    V3TR.buf = gl.createBuffer();
+  } catch (e) { V3TR.pr = null; console.warn('堑壕着色器不可用', e); }
+}
+function v3trDraw(C) {
+  const gl = V3.gl;
+  if (!V3TR.n || !gl) return;
+  if (!V3TR.tried) v3trInit(gl);
+  if (!V3TR.pr) return;
+  const A = V3TR.a, U = V3TR.u, bg = typeof v3Bg === 'function' ? v3Bg() : [.6, .65, .7], L = v3Norm(V3_SUN);
+  const paint = () => {
+    gl.useProgram(V3TR.pr);
+    gl.uniformMatrix4fv(U.uM, false, C.M); gl.uniform3f(U.uEye, C.E[0], C.E[1], C.E[2]); gl.uniform3f(U.uSun, L[0], L[1], L[2]);
+    gl.uniform3f(U.uBg, bg[0], bg[1], bg[2]); gl.uniform2f(U.uFog, ...v3FogR(C)); gl.uniform1f(U.uDry, typeof TER === 'object' && TER.dry ? 1 : 0);
+  };
+  gl.bindBuffer(gl.ARRAY_BUFFER, V3TR.buf); gl.bufferData(gl.ARRAY_BUFFER, V3TR.d.subarray(0, V3TR.n), gl.STREAM_DRAW);
+  for (const k of ['p', 'f', 'g']) gl.enableVertexAttribArray(A[k]);
+  gl.vertexAttribPointer(A.p, 3, gl.FLOAT, false, 44, 0); gl.vertexAttribPointer(A.f, 4, gl.FLOAT, false, 44, 12); gl.vertexAttribPointer(A.g, 4, gl.FLOAT, false, 44, 28);
+  const n = V3TR.n / 11;
+  gl.enable(gl.DEPTH_TEST); gl.disable(gl.BLEND); gl.disable(gl.CULL_FACE);
+  gl.enable(gl.POLYGON_OFFSET_FILL); gl.polygonOffset(-1, -2);   // 壕口贴着地面：比地面稍微靠前一点，深度比较稳赢
+  if (V3TR.st) {
+    // ① 标模板：壕口在地面前面（没被山、近处的地面挡住）的像素记 1，不写颜色、深度
+    gl.useProgram(V3TR.pm); gl.uniformMatrix4fv(V3TR.uM, false, C.M);
+    gl.enable(gl.STENCIL_TEST); gl.stencilMask(0xff);
+    gl.stencilFunc(gl.ALWAYS, 1, 0xff); gl.stencilOp(gl.KEEP, gl.KEEP, gl.REPLACE);
+    gl.colorMask(false, false, false, false); gl.depthMask(false); gl.depthFunc(gl.LEQUAL);
+    gl.drawArrays(gl.TRIANGLES, 0, n);
+    paint();
+    // ② 在标过的像素里画壕里的颜色，深度写成壕里那一点的（比地面深）；画过一次就清掉，几节壕口叠着的地方只画一遍
+    gl.stencilFunc(gl.EQUAL, 1, 0xff); gl.stencilOp(gl.KEEP, gl.KEEP, gl.ZERO);
+    gl.colorMask(true, true, true, true); gl.depthMask(true); gl.depthFunc(gl.ALWAYS);
+    gl.drawArrays(gl.TRIANGLES, 0, n);
+    gl.disable(gl.STENCIL_TEST); gl.depthFunc(gl.LEQUAL);
+  } else {
+    paint(); gl.depthMask(false); gl.depthFunc(gl.LEQUAL);
+    gl.drawArrays(gl.TRIANGLES, 0, n);
+    gl.depthMask(true);
+  }
+  gl.disable(gl.POLYGON_OFFSET_FILL); gl.polygonOffset(0, 0);
+  for (const k of ['p', 'f', 'g']) gl.disableVertexAttribArray(A[k]);
+}
 // 离 (x, y) 最近的堑壕点（14 米以内）：{x, y, ux, uy 那一段的走向}；没有返回 null（壕里的士兵沿壕排开，v3units 步兵那一段）
 function v3uTrenchAt(x, y) {
   let best = null, bd = 14 * 14;
@@ -1160,6 +1295,7 @@ function v3mCollect(C, box) {
   if (!V3M.tried) v3mInit(gl);
   if (!V3M.ok) return;
   for (const L of V3M.inst.values()) L.d.length = 0;
+  V3TR.n = 0;
   if (typeof v3uClear === 'function') v3uClear(C);   // 带贴图的精细模型（v3utex.js：舰艇）
   if (typeof v3gBegin === 'function') v3gBegin(C);   // 用户给的模型（js/v3g.js：坦克装甲车、飞机、直升机、导弹、士兵）
   const [bx, by, bw, bh] = box, inB = (x, y, m = 40) => x > bx - m && x < bx + bw + m && y > by - m && y < by + bh + m;
@@ -1177,25 +1313,26 @@ function v3mCollect(C, box) {
     if (typeof v3dVehHaze === 'function' && Mm) v3dVehHaze(v, Mm.key, len, z, h, C.E);   // 发动机排气的热浪（v3det.js）
     if (typeof v3gVeh === 'function') v3gVeh(v, Mm ? Mm.key : null, side, len, v.x, v.y, z, h, v.dead ? h + .6 : (v.aim ?? h), v.dead, hp, hr, hl(v), S.t - (v.fireT ?? -99));   // 开炮后几秒：炮管后坐、车体后坐（v3g.js）
   }
-  // 步兵（画得出单兵的距离都是立体模型，地面贴图里不再画平的小人）：三人按二维画面的三角站位，按兵种建模、按动作选姿态帧（manim.js：走 / 跑四帧、跪射、卧倒、匍匐），开火时枪口焰
-  // 远近都是立体的：离镜头 180 米外换低模，再远一点略放大（远看不至于缩成看不见的一个点；三人的间距一起放大，不挤成一团）
+  // 步兵（画得出单兵的距离都是立体模型，地面贴图里不再画平的小人）：每组一个兵，按兵种建模、按动作选姿态帧（manim.js：走 / 跑四帧、跪射、卧倒、匍匐），开火时枪口焰
+  // 远近都是立体的：离镜头 180 米外换低模，再远一点略放大（远看不至于缩成看不见的一个点）
   const E3 = C.E, lod = (x, y, z) => { const d = Math.hypot(x - E3[0], y + E3[1], z - E3[2]); return { lo: d > 180, k: clamp(d / 700, 1, 1.6) }; };
   for (const q of S.teams) {
     if (!q.men.length || q.ride || q.boarded || !inB(q.x, q.y) || (q.side === 'e' && !spec && !seen(q.x, q.y))) continue;
-    const f = typeof faceDraw === 'function' ? faceDraw(q) : faceOf(q), c = Math.cos(f + 1.57), s = Math.sin(f + 1.57), sd = (q.side === 'e' ? 1 : 0) + (hl(q) ? 8 : 0), T = typeof manTeam === 'function' ? manTeam(q) : null;   // + 8：选中编队的成员，全身发光（selfx.js）
-    const Lq = lod(q.x, q.y, v3Ht(q.x, q.y)), ks = Lq.k, Tr = q.inTrench ? v3uTrenchAt(q.x, q.y) : null;   // 在堑壕里：三个人沿壕排开、站在壕里
-    const Hd = !Tr && typeof digHole === 'function' ? digHole(q) : null, Hk = Hd && Hd.d > .5 ? Hd : null;   // 散兵坑挖到一半以上：三个人挤在坑里（横着排开）
+    const f = typeof faceDraw === 'function' ? faceDraw(q) : faceOf(q), sd = (q.side === 'e' ? 1 : 0) + (hl(q) ? 8 : 0), T = typeof manTeam === 'function' ? manTeam(q) : null;   // + 8：选中编队的成员，全身发光（selfx.js）
+    const Lq = lod(q.x, q.y, v3Ht(q.x, q.y)), ks = Lq.k, Tr = q.inTrench ? v3uTrenchAt(q.x, q.y) : null;   // 在堑壕里：站在壕里
+    const Hd = !Tr && typeof digHole === 'function' ? digHole(q) : null, Hk = Hd && Hd.d > .5 ? Hd : null;   // 散兵坑挖到一半以上：站在坑里
+    const rep = typeof manRep === 'function' ? manRep(q) : 0;   // 每组只画一个兵（render2.js manRep：挑最能看出兵种的那个人），站在小组的位置上
     q.men.forEach((role, i) => {
-      if (i > 2) return;
-      let mx = q.x + (MO[i][0] * c - MO[i][1] * s) * ks, my = q.y + (MO[i][0] * s + MO[i][1] * c) * ks;
-      if (Tr) { mx = Tr.x + Tr.ux * (i - 1) * 2.6; my = Tr.y + Tr.uy * (i - 1) * 2.6; }
-      else if (Hk) { const a = (Hk.a || 0) + 1.5708, k = (i - 1) * 1.5 * (.55 + .45 * Hk.d); mx = Hk.x + Math.cos(a) * k; my = Hk.y + Math.sin(a) * k; }
+      if (i !== rep) return;
+      let mx = q.x, my = q.y;
+      if (Tr) { mx = Tr.x; my = Tr.y; }
+      else if (Hk) { mx = Hk.x; my = Hk.y; }
       const bo = !Tr && !Hk && typeof bldOut === 'function' && bldOut(mx, my, .5);
       if (bo) [mx, my] = bo;
       const kind = typeof manKind === 'function' ? manKind(q, i, role) : role, P = T ? manPose3(q, T, i, kind) : { p: q.prone ? 'pr' : 'st', fire: null };
       // 壕里：卧倒、跪、匍匐都改成站着（端枪）——整个人往下沉，胸墙上只露出肩膀和头；地面以下的部分被地形挡住
       if ((Tr || Hk) && (P.p === 'pr' || P.p === 'kn' || P.p[0] === 'c')) P.p = P.fire != null ? 'sa' : 'st';
-      const z = v3Ht(mx, my) - (Tr ? .95 : Hk ? (Hk.d - .5) * 1.8 : 0);   // 散兵坑越挖越深，人跟着沉下去（挖完 0.9 米）
+      const z = v3Ht(mx, my) - (Tr ? (typeof v3Mx === 'function' && !v3Mx() ? V3TR_D - .05 : .95) : Hk ? (Hk.d - .5) * 1.8 : 0);   // 写实画面的壕挖进地里（v3trDraw）：站在壕底；黑绿画面的壕立在地上，下沉 0.95 米让地面挡住腿脚；散兵坑越挖越深，人跟着沉下去（挖完 0.9 米）
       const K = V3_MAN * ks;
       if (!(q.a82 && typeof a82Man === 'function' && a82Man(q, i, kind, P.p, mx, my, z, f, K, sd)) && typeof v3gMan === 'function') v3gMan(kind, P.p, mx, my, z, f, K, sd);   // 用户给的士兵模型原样摆放（卧倒、匍匐时放平）；82 空降师的拿各自的真实枪械模型（v3a82.js）
       if (P.fire != null && P.fire < .07) {   // 枪口焰：站姿在胸高、跪姿低一些、卧倒贴地（按姿态高度 L 插值）
@@ -1355,6 +1492,16 @@ function v3mCollect(C, box) {
     if (k === 'radar') v3mAdd('rad:4', () => v3mRadar(4), p.x + 4, p.y - 4, z + 9.6, p.owner === 'e' ? t * 1.4 : .5, 1, sd);
   }
   for (const o of S.obst || []) if (o.known && !o.dead && inB(o.x, o.y)) v3mAdd('hedge', v3mHedgehog, o.x, o.y, sea(o.x, o.y), (o.x * 7.1 + o.y * 3.3) % 6.28, 1.3, 1);   // 海滩反登陆障碍
+  // 堑壕一节（约 4 米）：写实画面挖进地里（v3trAdd 壕口 + 土胸墙），走向朝西的掉个头，让高的前胸墙朝南（海、攻方来的方向）；
+  //   离镜头 2.5 公里外只剩几个像素，不画壕身；黑绿 / 数码画面照旧是立在地上的发光棱线模型
+  const trMx = typeof v3Mx === 'function' && v3Mx(), trFar = (x, y) => Math.hypot(x - C.E[0], y + C.E[1]) > 2500;
+  const trSeg = (x, y, z, a, L, dry, key, sc = 1) => {
+    if (trMx) { v3mAdd(key, () => v3mTrench(dry), x, y, z, a, L / 4 * sc, 1); return; }
+    if (Math.cos(a) < 0) a += Math.PI;
+    const vk = ((x * 7.13 + y * 3.71) | 0) % 3, pk = (dry ? 'trp:d' : 'trp:g') + vk;
+    v3mAdd(pk, () => v3mTrParapet(dry, vk), x, y, z, a, L / 4 * sc, 1);
+    if (!trFar(x, y)) v3trAdd(x, y, a, L * sc);
+  };
   for (const t of S.trench || []) if ((t.known || spec) && t.pts && t.pts.length > 1) {   // 堑壕：每段折线按约 4 米一节摆（节长微调到整除，接成一条）
     const dry = typeof TER === 'object' && !!TER.dry, key = dry ? 'trench:d' : 'trench:g';
     for (let j = 1; j < t.pts.length; j++) {
@@ -1363,7 +1510,7 @@ function v3mCollect(C, box) {
       const n = Math.max(1, Math.round(L / 4)), a = Math.atan2(y1 - y0, x1 - x0);
       for (let i = 0; i < n; i++) {
         const ua = i / n, ub = (i + 1) / n, xa = lerp(x0, x1, ua), ya = lerp(y0, y1, ua), xb = lerp(x0, x1, ub), yb = lerp(y0, y1, ub);
-        v3mAdd(key, () => v3mTrench(dry), (xa + xb) / 2, (ya + yb) / 2, Math.min(v3Ht(xa, ya), v3Ht(xb, yb)) - .04, a, L / n / 4, 1);
+        trSeg((xa + xb) / 2, (ya + yb) / 2, trMx ? Math.min(v3Ht(xa, ya), v3Ht(xb, yb)) - .04 : v3Ht((xa + xb) / 2, (ya + yb) / 2), a, L / n, dry, key);
       }
     }
   }
@@ -1374,7 +1521,7 @@ function v3mCollect(C, box) {
       if (!vis(p) || !inB((p.x + q.x) / 2, (p.y + q.y) / 2, 40)) continue;
       const L = dist(p.x, p.y, q.x, q.y) - 2.4, a = Math.atan2(q.y - p.y, q.x - p.x), n = Math.max(1, Math.round(L / 4));
       if (L < 1) continue;
-      for (let i = 0; i < n; i++) { const u = (1.2 + (i + .5) * L / n) / (L + 2.4), x = lerp(p.x, q.x, u), y = lerp(p.y, q.y, u); v3mAdd(dry ? 'trench:d' : 'trench:g', () => v3mTrench(dry), x, y, v3Ht(x, y) - .04, a, L / n / 4 * .85, 1); }
+      for (let i = 0; i < n; i++) { const u = (1.2 + (i + .5) * L / n) / (L + 2.4), x = lerp(p.x, q.x, u), y = lerp(p.y, q.y, u); trSeg(x, y, v3Ht(x, y) - (trMx ? .04 : 0), a, L / n, dry, dry ? 'trench:d' : 'trench:g', .85); }
     }
   }
   for (const w of S.wire || []) if (w.known && inB((w.x0 + w.x1) / 2, (w.y0 + w.y1) / 2, 120)) {   // 铁丝网：每 6 米一段

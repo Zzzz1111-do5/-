@@ -528,7 +528,7 @@ function fpProj(E, x, y, z, D, n, fov = fpFov()) {   // fov：视野（追尾镜
   const view = new Float32Array([x[0], y[0], z[0], 0, x[1], y[1], z[1], 0, x[2], y[2], z[2], 0, -v3Dot(x, E), -v3Dot(y, E), -v3Dot(z, E), 1]);
   // 远裁剪面：雾的尽头再外一点就够了（雾后面什么都看不见）——原来取 9 倍镜头尺度，和很近的近裁剪面一除，远处的深度精度只剩十几米，
   //   地面、道路、海岸、海面这些贴得很近的层互相打架闪烁（用户：飞得快时有马赛克、贴图冲突——速度快镜头拉高、看得更远，更明显）
-  const rd = v3RD(), fog = [D * 1.3 * rd, D * 2.8 * rd], asp = CAM.vw / Math.max(1, CAM.vh), fo = 1 / Math.tan(fov / 2), fa = Math.max(D * 4, fog[1] * 1.3), nf = 1 / (n - fa);
+  const rd = v3RD(), fog = v3FogK(D * 2.8, rd, .46), asp = CAM.vw / Math.max(1, CAM.vh), fo = 1 / Math.tan(fov / 2), fa = Math.max(D * 4, fog[1] * 1.3), nf = 1 / (n - fa);
   const proj = new Float32Array([fo / asp, 0, 0, 0, 0, fo, 0, 0, 0, 0, (fa + n) * nf, -1, 0, 0, 2 * fa * n * nf, 0]);
   return (V3.cam = { E, x, y, z, D, rd, fog, asp, M: v3Mul(proj, view) });
 }

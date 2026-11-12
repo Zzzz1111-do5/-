@@ -172,7 +172,7 @@ function v3cCamera() {
   const x = v3Norm(v3Cross([0, 0, 1], z)), y = v3Cross(z, x);
   const view = new Float32Array([x[0], y[0], z[0], 0, x[1], y[1], z[1], 0, x[2], y[2], z[2], 0, -v3Dot(x, E), -v3Dot(y, E), -v3Dot(z, E), 1]);
   const alt = E[2] - Math.max(v3Ht(clamp(E[0], 0, W - 1), clamp(-E[1], 0, H - 1)), -2.6), D = clamp(Math.max(alt * 5, dl * 2.5), 520, 2600);
-  const rd = v3RD(), fog = [D * 1.3 * rd, D * 2.8 * rd], asp = CAM.vw / Math.max(1, CAM.vh), fo = 1 / Math.tan(V3_FOV * .82 / 2), n = clamp(dl * .02, .8, 6), fa = Math.max(D * 4, fog[1] * 1.3), nf = 1 / (n - fa);
+  const rd = v3RD(), fog = v3FogK(D * 2.8, rd, .46), asp = CAM.vw / Math.max(1, CAM.vh), fo = 1 / Math.tan(V3_FOV * .82 / 2), n = clamp(dl * .02, .8, 6), fa = Math.max(D * 4, fog[1] * 1.3), nf = 1 / (n - fa);
   const proj = new Float32Array([fo / asp, 0, 0, 0, 0, fo, 0, 0, 0, 0, (fa + n) * nf, -1, 0, 0, 2 * fa * n * nf, 0]);
   return (V3.cam = { E, x, y, z, D, rd, fog, asp, M: v3Mul(proj, view) });
 }

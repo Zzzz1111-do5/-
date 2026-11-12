@@ -583,11 +583,13 @@ function v3Fx(C) {
       const R = typeof v3dMul === 'function' ? v3dMul(v3dMul(v3dRz(-h), v3dRy(pt)), v3dRx(r)) : [Math.cos(h), Math.sin(h), 0, -Math.sin(h), Math.cos(h), 0, 0, 0, 1];
       const Wp = (u, v, w) => { u *= k; v *= k; w = w * k + zg; return [ox + R[0] * u + R[1] * v + R[2] * w, -oy + R[3] * u + R[4] * v + R[5] * w, z + R[6] * u + R[7] * v + R[8] * w]; };
       const tip = D.wing.reduce((m, q) => q[1] > m[1] ? q : m, D.wing[0]), tu = tip[0] - .6;
-      const dE = Math.hypot(ox - C.E[0], -oy - C.E[1], z - C.E[2]), lr = Math.min(1.1 * k + .5, .012 * dE + .12);   // 灯的光晕：远处照旧，凑近时按视距缩小（不然近看是两三米的光球）
-      v3fSpark(out, C, Wp(tu, tip[1], 0), lr, [1, .25, .2, .95]);   // 左翼尖红灯
-      v3fSpark(out, C, Wp(tu, -tip[1], 0), lr, [.3, 1, .45, .95]);   // 右翼尖绿灯
+      // 灯的光晕：远处照旧，凑近时按视距缩小（不然近看是两三米的光球）；白天只是翼尖上一个小亮点——几十瓦的灯在日光下没有光晕，
+      //   原来白天也画成和尾喷口一样大的红、绿光球（歼-35 近景两个发光的球）
+      const dE = Math.hypot(ox - C.E[0], -oy - C.E[1], z - C.E[2]), day = !S.night, lr = day ? Math.min(.3 * k + .12, .0035 * dE + .05) : Math.min(1.1 * k + .5, .012 * dE + .12), la = day ? .7 : .95;
+      v3fSpark(out, C, Wp(tu, tip[1], 0), lr, [1, .25, .2, la]);   // 左翼尖红灯
+      v3fSpark(out, C, Wp(tu, -tip[1], 0), lr, [.3, 1, .45, la]);   // 右翼尖绿灯
       const tail = D.stab ? D.stab.reduce((m, q) => Math.min(m, q[0]), 0) : (D.body ? D.body[D.body.length - 1][0] : -9);
-      if (((S.t * .8 + o.id * .37) % 1) < .07) v3fSpark(out, C, Wp(tail + 1, 0, 2.6), Math.min(2.4 * k + 1, .01 * dE + .1), [1, 1, 1, 1]);   // 防撞灯
+      if (((S.t * .8 + o.id * .37) % 1) < .07) v3fSpark(out, C, Wp(tail + 1, 0, 2.6), day ? Math.min(1.1 * k + .3, .006 * dE + .08) : Math.min(2.4 * k + 1, .01 * dE + .1), [1, 1, 1, 1]);   // 防撞灯（频闪白天也亮，只是小一些）
       const MG = typeof V3G_AIR === 'object' && typeof V3G === 'object' && V3G.M[V3G_AIR[key]];
       if (MG && MG.ready && MG.glowS && typeof v3gAt === 'function' && dE < 2500) {   // 绿色电致发光编队灯带（歼-20）：沿模型里的灯带画发光的光带（里层亮、外层泛光），白天、远一点也看得见
         const pg = pt, kk = sz / MG.meta.len;

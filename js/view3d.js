@@ -118,6 +118,7 @@ uniform sampler2D uDg, uDf, uDr, uDs; uniform float uDet, uDes; uniform vec4 uAf
 uniform sampler2D uCls3, uSky, uWn; uniform float uSkyOn, uSkyU, uWnOn;   // 水深分类（浅滩、礁石、近岸）、天空图（海面反射）、水面法线贴图（用户提供的海洋素材 ocean.zip 的 water_new_height.png）
 uniform float uRing, uOcn; uniform vec4 uRect;   // 地图外：1 = 无边海面（地图里面丢掉，那里是地形网格），2 = 北面延伸的陆地（贴图照地图北缘镜像），3 = 南缘外的攻方海岸（afp.js 战区机场；uRect 是机场图案的范围，图案临时绑在 uTopF）
 uniform float uSnow; uniform vec2 uSnH;   // 雪山（设置「雪山」，台湾东海岸）：开关、雪线（从哪个高度开始有雪、到哪个高度全白，地形高度单位）
+uniform float uCtr;   // 写实画面的等高线、方格网线：镜头离地高时（看地图）才画，贴近地面看战场时淡掉（地上一道道深色细线像调试画面）
 uniform float uSat;   // 真实地图（台湾东海岸 taiwan.js）：地面直接是卫星图（uBase），不叠程序画的俯视贴图、细节贴图、沙漠换色
 uniform float uFlat;   // 白色平原（flat.js）：太空里的灰色平台，侧壁是深灰的金属
 varying vec3 vP, vN, vV; varying float vD;
@@ -151,15 +152,21 @@ float wNoise(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3. - 2. * f
 // 水面法线：同一张法线贴图按四种尺度、四个方向流动叠加（大的慢、小的快）；
 //   每层按一个像素在海面上有几米（fw）淡出成平的：这层的浪纹（约一圈的 1/40）比像素还细时，多级渐远纹理平均剩下的零碎起伏
 //   会让每个像素反射的天空、太阳各跳各的，远看是一层颗粒噪点——细浪先退，远处只剩大浪，再远是平静的镜面
-vec3 wnL(vec2 uv, float L, float fw) { return mix(vec3(0., 0., 1.), texture2D(uWn, uv).rgb * 2. - 1., 1. - smoothstep(L / 90., L / 30., fw)); }   // 比原来早一倍淡出：苹果显卡上中远处还是一层颗粒
+// 远处淡掉的浪纹：它的斜率方差记进 wLost（Toksvig），太阳反光的瓣按它放宽、亮度按面积摊薄——浪纹比像素细的地方法线是平的，
+//   原来远海成了一面镜子，太阳反光是一块边缘清楚的白圆斑（开局默认镜头左下角）；真实的海从高处看，比像素细的浪把反光摊成一大片柔和的亮带
+float wLost;
+vec3 wnL(vec2 uv, float L, float fw, float k) { float f = smoothstep(L / 90., L / 30., fw); wLost += k * f; return mix(vec3(0., 0., 1.), texture2D(uWn, uv).rgb * 2. - 1., 1. - f); }   // 比原来早一倍淡出：苹果显卡上中远处还是一层颗粒
 vec3 waterNrm(HP vec2 w, float t, float fw) {
   // 用户给的海浪贴图（ocean.zip）：大的两层占大头、浪纹放大、起伏加深，让贴图里的浪形看得出来（原来四层平均、法线压平，换了贴图也看不出差别）
-  vec3 n = wnL(w / 240. + vec2(t * .010, t * .006), 240., fw) * .4 + wnL(w / 120. + vec2(-t * .008, t * .012), 120., fw) * .3
-         + wnL(w / 52. + vec2(t * .018, -t * .014), 52., fw) * .2 + wnL(w / 21. + vec2(-t * .03, -t * .024), 21., fw) * .1;
+  //   每层的方差份额 = 权重² × 贴图斜率方差（两个方向合计约 .079，除以法线 z 的平方 1.13）
+  wLost = 0.;
+  vec3 n = wnL(w / 240. + vec2(t * .010, t * .006), 240., fw, .0112) * .4 + wnL(w / 120. + vec2(-t * .008, t * .012), 120., fw, .0063) * .3
+         + wnL(w / 52. + vec2(t * .018, -t * .014), 52., fw, .0028) * .2 + wnL(w / 21. + vec2(-t * .03, -t * .024), 21., fw, .0007) * .1;
   return vec3(n.x, -n.y, n.z * .9 + .25);   // 贴图 v 朝南（w.y），GL 的 y 朝北
 }
 vec2 waveSlope(HP vec2 w, float t, float fw) {
   vec2 g = vec2(0.);
+  wLost = 0.;
 #ifdef GL_FRAGMENT_PRECISION_HIGH
   HP vec2 m = mod(w, 2000.);
   float mod1 = .55 + .9 * wNoise(m / 170.), mod2 = .5 + 1. * wNoise(m / 47. + 7.3);
@@ -169,7 +176,10 @@ vec2 waveSlope(HP vec2 w, float t, float fw) {
     float aa = 1. - smoothstep(.25, .5, fw * k / 6.2831853), om = sqrt(9.8 * k);
     HP float ph = fract(dot(K, m) / 2000. - om * t / 6.2831853) * 6.2831853;
     g += st * aa * (i < 5 ? mod1 : mod2) * normalize(K) * cos(ph);
+    wLost += st * st * .5 * (1. - aa);   // 淡掉的这道浪的斜率方差
   }
+#else
+  wLost = .014;   // 没有高精度：海面是平的，反光按浪的总方差摊开
 #endif
   return g;
 }
@@ -311,7 +321,7 @@ void main() {
     c = col * (amb + vec3(1., .95, .86) * lit * .8 * shadowAt() * (uDet > .5 ? cloudSh(vec2(vP.x, -vP.y)) : 1.));
     c += boomLight(w) * (.35 + .65 * lit);   // 近处爆炸的火光照亮地面（v3light.js）
     // 等高线、方格网：画成地形图那样细而淡的深色线（原来叠一层发亮的绿光，远看挤成一片绿雾，和写实画面不搭），离镜头两公里外渐渐淡掉
-    c *= 1. - (cl * .3 + gl * .45) * land * (1. - smoothstep(1800., 4200., vDp)) * (1. - .7 * snC);   // 雪地上淡一些（白底上的深色线太扎眼）
+    c *= 1. - (cl * .3 + gl * .45) * land * (1. - smoothstep(1800., 4200., vDp)) * (1. - .7 * snC) * uCtr;   // 雪地上淡一些（白底上的深色线太扎眼）
     if (h < uSea + .6) {   // 海面：波浪法线、天空反射（菲涅尔）、太阳反光、深浅水颜色（浅滩、礁石泛青绿）、近岸白浪；俯视贴图里的航迹等留一点
       // 离地图边 400 米内慢慢变成纯深海（不再混图里的浅滩分类和俯视贴图）：图外的无边海面就是纯深海，边上接得上；
       //   图外原来按图边那一圈的贴图着色，北边那一圈是陆地和浅滩，拉长成一条条青绿色的光带伸到天边
@@ -360,9 +370,9 @@ void main() {
       // 太阳反光：相邻像素的法线差得越多，光斑放得越宽、亮度按面积摊薄（总的反光不变）——不然只有零星像素恰好对上太阳，一闪一闪成白点
 #ifdef DER
       vec3 dnx = dFdx(Nw), dny = dFdy(Nw);
-      float vn = min(max(dot(dnx, dnx), dot(dny, dny)) * 4., .2);
+      float vn = min(max(dot(dnx, dnx), dot(dny, dny)) * 4., .2) + wLost;
 #else
-      float vn = 0.;
+      float vn = wLost;
 #endif
       float sp = max(dot(Rf, ${V3_SUNG}), 0.), e1 = 2. / (2. / 420. + vn) - 2., e2 = 2. / (2. / 62. + vn) - 2.;   // 碎光的瓣宽一些、亮度低三成：一动起来满屏白点在闪，像噪点
       float gs = pow(sp, e1) * 3.5 * (e1 + 2.) / 420. + pow(sp, e2) * .12 * (e2 + 2.) / 62.;
@@ -1300,7 +1310,7 @@ function v3Init() {
     // 3D 画布直接放进页面，垫在 2D 画布（#cv）底下：2D 画布每帧清空后只画文字、标识、平显，由合成器叠上去——
     //   原来每帧把整张 3D 画面 drawImage 到 2D 画布上（全屏拷贝，还要等显卡画完；软件渲染时占了九成多的时间）。
     //   不再有人回读 3D 画布，所以不保留绘制缓冲区（浏览器可以直接交换缓冲，不必每帧再拷一遍）
-    const gl = cv.getContext('webgl', { antialias: true, preserveDrawingBuffer: false, alpha: false });
+    const gl = cv.getContext('webgl', { antialias: true, preserveDrawingBuffer: false, alpha: false, stencil: true });   // 模板缓冲：堑壕挖进地里（v3units.js v3trDraw）
     if (!gl) return;
     // 显卡上下文丢了（一帧画得太久被浏览器重置显卡，Mac 上常见）：原来什么都不说，画面就停在那一帧，像卡死——
     //   提示刷新，同时把画质降到低、云量减半、气动特效减弱存进设置，刷新后不再那么重
@@ -1322,7 +1332,7 @@ function v3Init() {
     gl.linkProgram(pr);
     if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(pr));
     const u = {}, a = { p: gl.getAttribLocation(pr, 'p'), n: gl.getAttribLocation(pr, 'n') };
-    for (const k of ['uSnow', 'uSnH', 'uSat', 'uDes', 'uAfb', 'uM', 'uEye', 'uTop', 'uBase', 'uCls', 'uCls2', 'uFogT', 'uHt', 'uLf', 'uTopF', 'uBox', 'uBoxF', 'uWorld', 'uGrid', 'uHG', 'uFog', 'uSea', 'uT', 'uMx', 'uBrM', 'uLm', 'uLmOn', 'uBm', 'uBg', 'uDg', 'uDf', 'uDr', 'uDs', 'uDet', 'uCls3', 'uSky', 'uSkyOn', 'uSkyU', 'uWn', 'uWnOn', 'uShM', 'uShT', 'uShOn', 'uShP', 'uOff', 'uScl', 'uRing', 'uRect', 'uOcn', 'uFlat']) u[k] = gl.getUniformLocation(pr, k);
+    for (const k of ['uSnow', 'uSnH', 'uCtr', 'uSat', 'uDes', 'uAfb', 'uM', 'uEye', 'uTop', 'uBase', 'uCls', 'uCls2', 'uFogT', 'uHt', 'uLf', 'uTopF', 'uBox', 'uBoxF', 'uWorld', 'uGrid', 'uHG', 'uFog', 'uSea', 'uT', 'uMx', 'uBrM', 'uLm', 'uLmOn', 'uBm', 'uBg', 'uDg', 'uDf', 'uDr', 'uDs', 'uDet', 'uCls3', 'uSky', 'uSkyOn', 'uSkyU', 'uWn', 'uWnOn', 'uShM', 'uShT', 'uShOn', 'uShP', 'uOff', 'uScl', 'uRing', 'uRect', 'uOcn', 'uFlat']) u[k] = gl.getUniformLocation(pr, k);
     const pb = gl.createProgram();
     gl.attachShader(pb, sh(gl.VERTEX_SHADER, V3_BVS)); gl.attachShader(pb, sh(gl.FRAGMENT_SHADER, V3_BFS()));   // 着色器源码用到时再拼：爆炸火光的 GLSL 在后加载的 v3light.js 里
     gl.linkProgram(pb);
@@ -1355,8 +1365,13 @@ function v3Init() {
 //   画面中心（CAM.x, CAM.y）与缩放 CAM.z 每帧由镜头推算（视线落地点、离地高度），贴图范围、细节档、平面地图的切换都照旧按它们
 // 渲染距离（设置「3D 渲染距离」）：雾、远景贴图、远裁剪面一起放远 / 拉近
 const v3RD = () => clamp(+(typeof SETTINGS === 'object' && SETTINGS && SETTINGS.rdist) || 1, .5, 4);
-// 能见距离（雾的起点、终点）：按镜头尺度 D，再乘玩家设的渲染距离（设置里的「3D 渲染距离」、3D 里 [ ] 键）；贴近地面时也至少看得到 1000 × 倍数 米
-const v3Fog = (D, rd = v3RD()) => { const f1 = Math.max(D * 3.2, 1000) * rd; return [f1 * .5, f1]; };   // 远处清楚的范围放远（原来 2.8 倍、雾从 46% 起，远处的地面一片暗）
+// 能见距离（雾的起点、终点）：按镜头尺度 D，再乘玩家设的渲染距离（设置里的「3D 渲染距离」、3D 里 [ ] 键）
+//   贴近地面时至少看得到 V3_FOG0 × 倍数 米：D 是视线落地点的远近，贴地往下看近处时只有一两百米——原来下限 1000 米、雾从 500 米起，
+//   滩头低机位两三百米外就是一堵灰墙（地平线在几十公里外，真实的雾霾天也有五六公里能见度）。下限起作用时雾起得早一些、过渡更长，
+//   远处一层层淡下去，不是一刀切的雾墙；镜头拉高（D 大）时和原来一样
+const V3_FOG0 = 5000;
+const v3FogK = (a, rd, r0) => { const f1 = Math.max(a, V3_FOG0) * rd; return [f1 * (.28 + (r0 - .28) * Math.min(1, a / V3_FOG0)), f1]; };
+const v3Fog = (D, rd = v3RD()) => v3FogK(D * 3.2, rd, .5);   // 远处清楚的范围放远（原来 2.8 倍、雾从 46% 起，远处的地面一片暗）
 const v3FogR = C => C.fog || [C.D * 1.3, C.D * 2.8], v3FogE = C => v3FogR(C)[1];
 // 从「注视点 + 距离 + 俯角 + 方位」（原来的环绕参数）换算成自由镜头：进 3D 时画面和平面地图一致
 function v3FcFromOrbit(tx, ty, tz, D, th, ps) {
@@ -1509,9 +1524,14 @@ function v3Pick(sx, sy) {
 const V3_SKY = 700;   // 最高的飞行高度（战术弹道导弹弹道顶点附近）
 function v3Box(lim = 2.6) {
   const C = V3.cam, pts = [];
+  // 往下的视线和「地面」平面求交：平面取三成地形高度，但不高于画面中心脚下的地面，镜头在它下面时取海平面——
+  //   台湾东海岸的高程比例上千米，三成就是九百多米：镜头在滩头几十、几百米高往下看时，往下的视线碰不到那个平面（t < 0，夹成 0），
+  //   取景框缩成镜头脚下 120 米见方，这以外的部队、工事、堑壕一概不画（原来的 bug）
+  let zp = Math.min(V3_HZ * .3, v3Gnd(CAM.x, CAM.y));
+  if (C.E[2] < zp + 1) zp = -3;
   for (const [sx, sy] of [[0, 0], [CAM.vw / 2, 0], [CAM.vw, 0], [0, CAM.vh / 2], [CAM.vw, CAM.vh / 2], [0, CAM.vh], [CAM.vw / 2, CAM.vh], [CAM.vw, CAM.vh]]) {
     const { o, d } = v3Ray(sx, sy);
-    let t = d[2] < -1e-4 ? (V3_HZ * .3 - o[2]) / d[2] : d[2] > 1e-4 ? (V3_SKY - o[2]) / d[2] : C.D * lim;   // 往上看的视线：飞机、导弹只会在它穿过最高飞行高度之前出现
+    let t = d[2] < -1e-4 ? (zp - o[2]) / d[2] : d[2] > 1e-4 ? (V3_SKY - o[2]) / d[2] : C.D * lim;   // 往上看的视线：飞机、导弹只会在它穿过最高飞行高度之前出现
     t = Math.min(Math.max(t, 0), C.D * lim);   // 再远的地方已经暗下去了（雾），用底图
     pts.push([o[0] + d[0] * t, -(o[1] + d[1] * t)]);
   }
@@ -1618,7 +1638,7 @@ function v3Scene(C, now, vp) {
   const lmOn = v3Mx() && typeof v3LightBind === 'function' && v3LightBind(gl) ? 1 : 0;   // 光照贴图（v3light.js，第 9 个贴图单元）：只给黑绿 / 数码画面；写实画面用实时阴影
   v3HzUpdate(C, v3Mx());
   const bgc = v3Bg();
-  gl.clearColor(bgc[0], bgc[1], bgc[2], 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  gl.clearColor(bgc[0], bgc[1], bgc[2], 1); gl.clearStencil(0); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT | gl.STENCIL_BUFFER_BIT);
   if (!v3Mx() && !(typeof v3nebOn === 'function' && v3nebOn())) v3Sky(C);   // 写实画面：先画天空（不写深度）；白色平原在太空里，背景是星云（v3neb.js）
   gl.useProgram(V3.pr);
   const u = V3.u;
@@ -1627,6 +1647,7 @@ function v3Scene(C, now, vp) {
   gl.uniform4f(u.uBox, V3.boxN[0], V3.boxN[1], V3.boxN[2], V3.boxN[3]); gl.uniform4f(u.uBoxF, V3.boxF[0], V3.boxF[1], V3.boxF[2] || 1, V3.boxF[3] || 1);
   gl.uniform2f(u.uWorld, W, H); gl.uniform2f(u.uGrid, GW, GH); gl.uniform2f(u.uHG, Math.max(1, V3.nx - 1), Math.max(1, V3.ny - 1));
   gl.uniform2f(u.uFog, ...v3FogR(C));
+  gl.uniform1f(u.uCtr, smooth(700, 1600, C.E[2] - v3Gnd(C.E[0], -C.E[1])));   // 镜头离地 700 米以下不画等高线、方格网，1600 米以上照原样
   gl.uniform1f(u.uSea, 1.5); gl.uniform3f(u.uBg, bgc[0], bgc[1], bgc[2]);
   const mx = v3Mx() ? 1 : 0, tm = (now / 1000) % 3600;   // 黑绿画面：黑客帝国式数码风
   gl.uniform1f(u.uDet, !mx && v3DetTex() && !TER.flat ? 1 : 0);   // 白色平原：灰色地面就是俯视贴图本身，不叠草地、岩石细节
@@ -1652,6 +1673,7 @@ function v3Scene(C, now, vp) {
   gl.enableVertexAttribArray(V3.a.n); gl.vertexAttribPointer(V3.a.n, 3, gl.FLOAT, false, 24, 12);
   gl.drawElements(gl.TRIANGLES, V3.n, V3.it || gl.UNSIGNED_SHORT, 0);
   if (!mx) v3OceanDraw(C);   // 地图外的海（海岛：三面无边大洋 + 北面延伸的岛）
+  if (!mx && typeof v3trDraw === 'function' && !(SETTINGS && SETTINGS.models3d === false)) { gl.disableVertexAttribArray(V3.a.p); gl.disableVertexAttribArray(V3.a.n); v3trDraw(C); gl.useProgram(V3.pr); }   // 堑壕的壕身：挖进地里（v3units.js）；在别的模型之前画，壕里的士兵按壕里的深度遮挡
   if (!pip && typeof v3Table === 'function') { gl.disableVertexAttribArray(V3.a.p); gl.disableVertexAttribArray(V3.a.n); v3Table(C); gl.useProgram(V3.pr); }   // 沙盘桌：边框、桌面（v3table.js）
   if (V3.bn && V3.pb && V3.bch) {   // 城镇房屋、机场建筑、树木（分块的静态缓冲区）
     const ub = V3.ub, ab = V3.ab;
@@ -1695,6 +1717,8 @@ function v3Overlay(ctx, time) {
   ctx.save(); ctx.setTransform(R.dpr, 0, 0, R.dpr, 0, 0);
   // 亲自操纵时（v3pilot.js）：地名、方格号、番号牌这些标识都不画，只画武器平显
   if (typeof V3FP === 'object' && V3FP.on) { if (typeof v3fpOverlay === 'function') v3fpOverlay(ctx); ctx.restore(); return; }
+  // 主菜单开着：背景里的 3D 地图只当布景，不画地名、据点菱形（原来透过半透明的菜单卡片露出一串红菱形和地名）
+  if (typeof MENU === 'object' && MENU.open) { ctx.restore(); return; }
   ctx.lineCap = 'round'; ctx.font = '11px "IBM Plex Mono", "Noto Sans SC", monospace'; ctx.textAlign = 'center';
   const near = CAM.z / CAM.fit > 2.2, spec = specAll() || R.eye === 'all', used = [];
   if (typeof v3TableMarks === 'function') v3TableMarks(ctx);   // 沙盘桌边框上的方格坐标
@@ -1709,8 +1733,12 @@ function v3Overlay(ctx, time) {
     used.push(r); ctx.fillStyle = rgba(col, al); ctx.fillText(t, x, y);
   };
   const stem = (x, y, hgt, col, a) => {
-    const g = v3Ht(x, y), p0 = v3Proj(x, y, g), p1 = v3Proj(x, y, g + hgt);
+    const g = v3Ht(x, y), p0 = v3Proj(x, y, g);
+    let p1 = v3Proj(x, y, g + hgt);
     if (!p0 || !p1 || p1.f > .97) return null;
+    // 杆子在屏幕上最长 110 像素：贴近地面看时 70 米高的杆子有大半屏高，番号牌飘到顶栏底下、离自己的部队老远
+    const L = Math.hypot(p1.x - p0.x, p1.y - p0.y);
+    if (L > 110) p1 = { ...p1, x: p0.x + (p1.x - p0.x) * 110 / L, y: p0.y + (p1.y - p0.y) * 110 / L };
     const al = a * (1 - p1.f);
     ctx.strokeStyle = rgba(col, al * .55); ctx.lineWidth = 1; ctx.setLineDash([3, 3]);
     ctx.beginPath(); ctx.moveTo(p0.x, p0.y); ctx.lineTo(p1.x, p1.y); ctx.stroke(); ctx.setLineDash([]);
@@ -1727,11 +1755,14 @@ function v3Overlay(ctx, time) {
     ctx.beginPath(); ctx.moveTo(q.x, q.y - r); ctx.lineTo(q.x + r, q.y); ctx.lineTo(q.x, q.y + r); ctx.lineTo(q.x - r, q.y); ctx.closePath(); ctx.fill(); ctx.stroke();
     if (p.owner === 'e' && p.prog > 0) { ctx.fillStyle = rgba(COL.g, q.al); ctx.fillRect(q.x - r, q.y + r + 2, r * 2 * p.prog, 2); }
     if (q.f < .6) label(p.name, q.x, q.y - r - 4, COL.text, q.al * .85);   // 地名（通联里说的据点名）一直标着，压住了就让近处的
+    used.push([q.x - r - 2, q.y - r - 2, q.x + r + 2, q.y + r + 2]);   // 菱形也占位：后画的海滩名不压在上面
   }
   // 海滩名（海面上）、方格号（近看时贴在地面每格左上角，与通联里的「D7 方格」对应）
-  for (const b of TER.beaches) { const q = v3Proj(b.cx, coastAt(b.cx) + 70, 0); if (q && q.f < .7) label(b.name, q.x, q.y, COL.amber, .75 * (1 - q.f)); }
-  if (near) {   // 只标陆地上的格（海面上标一片格号没有用，低空看海时满屏都是）；写实画面里淡一些、只标镜头周围 5 × 5 格
-    const gx0 = Math.floor(CAM.x / 200), gy0 = Math.floor(CAM.y / 200), rl = typeof realLook === 'function' && realLook() && !v3Mx(), gr = rl ? 2 : 3, ga = rl ? .3 : .45;
+  // 海滩名写在岸线下方 16 像素（屏幕上）：原来写在岸外 70 米处，远看正好盖在滩头出口的菱形上，一团橙字压红菱形
+  for (const b of TER.beaches) { const q = v3Proj(b.cx, coastAt(b.cx), 0); if (q && q.f < .7) label(b.name, q.x, q.y + 16, COL.amber, .75 * (1 - q.f)); }
+  const rl = typeof realLook === 'function' && realLook() && !v3Mx();
+  if (near && !rl) {   // 只标陆地上的格（海面上标一片格号没有用，低空看海时满屏都是）；写实画面不标：近看时一片 AZ108 之类的字飘在地上，像调试画面
+    const gx0 = Math.floor(CAM.x / 200), gy0 = Math.floor(CAM.y / 200), gr = 3, ga = .45;
     for (let gx = gx0 - gr; gx <= gx0 + gr; gx++) for (let gy = gy0 - gr; gy <= gy0 + gr; gy++) {
       if (gx < 0 || gy < 0 || gx * 200 >= W || gy * 200 >= H) continue;
       const x = gx * 200 + 14, y = gy * 200 + 16;

@@ -1,7 +1,17 @@
 'use strict';
 // 渲染（二）：工事、烟幕、补给/增援线、据点、敌我单位
 // 舰船为俯视剪影（见 ships.js）；小组远看为楔形三点（屏幕尺寸固定），近看为世界尺寸的单兵小人；红色 = 敌方（仅视野内或已标定）
-const MO = [[0, -4.6], [-4.6, 3.4], [4.6, 3.4]];   // 三人组成三角（世界单位；小人约 4 单位宽，彼此留空）
+const MO = [[0, -4.6], [-4.6, 3.4], [4.6, 3.4]];   // 三人组成三角（世界单位；小人约 4 单位宽，彼此留空）——阵亡遗体按它落在小组周围
+// 每个小组只画一个兵（用户：士兵一个一组，不要三个一组——原来三个人摆成三角一起走，像粘在一块的玩具）：推演里的组照旧（几个人、血量、伤亡），
+//   画面上挑组里最能看出兵种的那个人画在小组的位置上——喷火、反坦克、防空、迫击炮、狙击……都没有就画步枪手
+const MAN_REP_ORD = ['flame', 'at', 'aa', 'mortar', 'sniper', 'fo', 'medic', 'eng', 'officer', 'crew', 'rifle', 'mg', 'spot', 'radio'];
+function manRep(q) {
+  const n = Math.min(3, q.men.length);
+  if (q.a82w) for (let i = 0; i < n; i++) if (q.a82w[i] && q.a82w[i] !== 'm4a1') return i;   // 82 空降师：拿着标枪、机枪、毒刺、狙击枪的那个
+  let b = 0, bk = 1e9;
+  for (let i = 0; i < n; i++) { const k = MAN_REP_ORD.indexOf(typeof manKind === 'function' ? manKind(q, i, q.men[i]) : q.men[i]), r = k < 0 ? 50 : k; if (r < bk) { bk = r; b = i; } }
+  return b;
+}
 
 function drawForts(time) {
   const ctx = R.ctx;
@@ -138,20 +148,19 @@ function faceDraw(q) {
 // 小组本体：远看（每格不足 10px）为楔形三点，点与间距按屏幕像素（随缩放略增），不会糊成一团；近看为世界尺寸的单兵小人
 function drawTeamBody(ctx, q, f, col) {
   const c = Math.cos(f + 1.57), s = Math.sin(f + 1.57), n = q.men.length;
-  if (R.fig) {
-    const T = manTeam(q), real = realLook();   // 动作状态（manim.js）
-    for (let i = 0; i < n; i++) {
-      let mx = q.x + MO[i][0] * c - MO[i][1] * s, my = q.y + MO[i][0] * s + MO[i][1] * c;
-      const bo = bldOut(mx, my, .5);   // 小人落在房子轮廓里：画在墙根
-      if (bo) [mx, my] = bo;
-      const kind = manKind(q, i, q.men[i]);
-      manDraw(ctx, mx, my, f, kind, col, q.side, manAn(q, T, i, kind), real);
-    }
+  if (!n) return;
+  if (R.fig) {   // 近看：一个单兵小人（每组一个兵，manRep）
+    const T = manTeam(q), real = realLook(), i = manRep(q);   // 动作状态（manim.js）
+    let mx = q.x, my = q.y;
+    const bo = bldOut(mx, my, .5);   // 小人落在房子轮廓里：画在墙根
+    if (bo) [mx, my] = bo;
+    const kind = manKind(q, i, q.men[i]);
+    manDraw(ctx, mx, my, f, kind, col, q.side, manAn(q, T, i, kind), real);
     return;
   }
-  const k = Math.max(1, px(2.3) / 4.6), d = px(clamp(1.5 + R.s, 1.8, 2.5));
+  const d = px(clamp(1.8 + R.s, 2.1, 2.9));   // 远看：一个点
   ctx.fillStyle = col;
-  for (let i = 0; i < n; i++) ctx.fillRect(q.x + (MO[i][0] * c - MO[i][1] * s) * k - d / 2, q.y + (MO[i][0] * s + MO[i][1] * c) * k - d / 2, d, d);
+  ctx.fillRect(q.x - d / 2, q.y - d / 2, d, d);
 }
 
 // 压制：近看为小组下方的细琥珀条（长度 = 压制程度）；远看只在被压制住（≥60）时让三点转琥珀色（见调用处）

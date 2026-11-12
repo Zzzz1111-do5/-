@@ -35,15 +35,14 @@ function sfxU() { const t = (performance.now() - SFX.t0) / 1000; return t >= 0 &
 const sfxHl = () => sfxOn() ? .3 + sfxFlash() * 1.15 : 0;
 
 // 小组里每个人的位置与血量（与 render2.js drawTeamBody、v3units.js 的站位一致：MO 三角站位按朝向转，落在房子轮廓里的挪到墙根）；ks：3D 远处的放大
+//   每组只画一个兵（render2.js manRep）：一个光圈，血量是整个小组的兵力；在堑壕、散兵坑里时站在壕里、坑里（同 v3units.js）
 function sfxMen(q, ks = 1) {
-  const f = typeof faceDraw === 'function' ? faceDraw(q) : faceOf(q), c = Math.cos(f + 1.57), s = Math.sin(f + 1.57), h = manHp(q), out = [];
-  for (let i = 0; i < Math.min(3, q.men.length); i++) {
-    let x = q.x + (MO[i][0] * c - MO[i][1] * s) * ks, y = q.y + (MO[i][0] * s + MO[i][1] * c) * ks;
-    const bo = typeof bldOut === 'function' && bldOut(x, y, .5);
-    if (bo) [x, y] = bo;
-    out.push([x, y, h[i]]);
-  }
-  return out;
+  if (!q.men.length) return [];
+  let x = q.x, y = q.y;
+  const Tr = q.inTrench && typeof v3uTrenchAt === 'function' ? v3uTrenchAt(q.x, q.y) : null, Hd = !Tr && typeof digHole === 'function' ? digHole(q) : null;
+  if (Tr) { x = Tr.x; y = Tr.y; } else if (Hd && Hd.d > .5) { x = Hd.x; y = Hd.y; }
+  else { const bo = typeof bldOut === 'function' && bldOut(x, y, .5); if (bo) [x, y] = bo; }
+  return [[x, y, sfxTeamHp(q)]];
 }
 // 小组的兵力：活着的人的血量之和 / 满员（至少按 3 人算）
 const sfxTeamHp = q => manHp(q).reduce((a, v) => a + v, 0) / Math.max(3, q.men.length);
