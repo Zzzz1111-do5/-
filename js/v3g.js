@@ -292,7 +292,7 @@ void main() {
   vec3 c = diff * (sky * ao + sunC * ndl * shd) + Fr * spec * sunC * ndl * shd + env * envBRDF(F0, rough, ndv) * ao * ho * ho * mix(.6, 1., metal);
   c += uE * (uTf2.x > .5 ? lin(texture2D(uTe, vUv).rgb) : vec3(1.));
   c += boomLight(vec2(vW.x, -vW.y)) * diff * (.4 + .6 * ndl);   // 近处爆炸的火光
-  if (sd > 1.5 && sd < 2.5) c *= .2;   // 残骸：烧黑
+  if (sd > 1.5 && sd < 2.5) c = mix(vec3(dot(c, vec3(.3, .59, .11))), c, .3) * vec3(.3, .27, .24);   // 残骸：烧过的焦黑、发灰带点锈色——原来整个乘 0.2，明暗全没了，被毁的碉堡、车成了一块漆黑的剪影
   if (uIRh > 0.) c = mix(c, vec3(1.1, 1.04, .98) * (.55 + .45 * ndl * shd), clamp(uIRh * (sd > 1.5 && sd < 2.5 ? 1.25 : 1.), 0., 1.));   // 吊舱红外（fptgp.js ftHeat）：人、车、直升机、导弹比地面热，晒着太阳的面更热；残骸还在烧（后期换算成白热 / 黑热）
   if (uMx < .5) { vec3 k = max(c - .8, 0.); c = min(c, .8) + .2 * (1. - exp(-k / .2)); }   // 写实画面：亮过 0.8 的柔和地收住（阳光下的金属高光、发白的漆面不再一片死白，像胶片的肩部）
   c = pow(max(c, 0.), vec3(1. / 2.2));

@@ -380,7 +380,7 @@ void main() {
       vec3 wat = mix(body, sk * (.75 + .25 * shw), fr) + vec3(1., .96, .88) * gs * shw;
       float fo = k3.b * (.55 + .45 * sin(w.x * .21 + w.y * .17 - uT * 1.3)) * smoothstep(.2, .8, k3.b);   // 近岸白浪：一条条随时间起伏
       wat = mix(wat, vec3(.86, .9, .92), fo * .55);
-      wat = mix(wat, top * 1.2, .14 * ek);   // 航迹、标号等
+      wat = mix(wat, top * 1.2, .14 * ek * (1. - uSat));   // 航迹、标号等（俯视贴图里画的）；卫星图（台湾东海岸）不混：top 是卫星照片本身，数据以外的远海是底图的暗绿色，图里的海比图外的无边海面暗一截，远看一道斜边
       c = mix(wat, c, smoothstep(uSea - .4, uSea + .5, h));
     }
     gl_FragColor = vec4(mix(c, bg, smoothstep(uFog.x, uFog.y, vDp)), 1.); return;
@@ -1013,19 +1013,25 @@ function v3SouthBuild() {
 function v3ExtBuild(side, d) {
   const gl = V3.gl, nx = V3.nx, ny = V3.ny, hf = V3.hf, ds = 40, Dmax = 3200, K = Math.ceil((Dmax + 300) / ds), n = side === 'n' ? nx : ny;
   const at = (a, m) => side === 'n' ? hf[m * nx + a] : side === 'w' ? hf[a * nx + m] : hf[a * nx + (nx - 1 - m)];   // 沿边第 a 个、往里第 m 排的高度
-  const Dn = new Float32Array(n);
+  // Dn：往外延伸多远；Wf：最外面多宽一段往下收成岸坡。山越高收得越长（坡不陡过约 40°）——原来一律 380 米：台湾东海岸的图东、北边是上千米的山，
+  //   在图边外几百米内直落到海面以下，远看图边是一道竖直的悬崖、一刀切的沙盘
+  const Dn = new Float32Array(n), Wf = new Float32Array(n);
   for (let i = 0; i < n;) {
     if (at(i, 0) <= -2.9) { i++; continue; }
     let j = i; while (j < n && at(j, 0) > -2.9) j++;
     const L = (j - i) * d, Dm = Math.min(Dmax, L * .8);
-    for (let k = i; k < j; k++) { const u = ((k + .5) - (i + j) / 2) / ((j - i) / 2); Dn[k] = Dm * Math.sqrt(Math.max(0, 1 - Math.abs(u) ** 2.2)) * (.9 + .1 * Math.sin(k * d / 430) * Math.sin(k * d / 170 + 1.3)); }
+    for (let k = i; k < j; k++) {
+      const u = ((k + .5) - (i + j) / 2) / ((j - i) / 2), z0 = Math.max(0, at(k, 0));
+      Dn[k] = Math.max(Dm * Math.sqrt(Math.max(0, 1 - Math.abs(u) ** 2.2)), Math.min(Dmax, z0 * 1.25 + 120)) * (.9 + .1 * Math.sin(k * d / 430) * Math.sin(k * d / 170 + 1.3));
+      Wf[k] = clamp(z0 * 1.2, 380, Math.max(380, Dn[k]));
+    }
     i = j;
   }
   if (!Dn.some(v => v > 50)) return null;
   const mMax = side === 'n' ? ny - 1 : nx - 1, hz = new Float32Array(n * (K + 1));
   for (let k = 0; k <= K; k++) {
     const sk = k * ds, m = Math.min(mMax, Math.round(sk / d));
-    for (let i = 0; i < n; i++) { const zm = k === 0 ? at(i, 0) : at(i, m); hz[k * n + i] = k === 0 ? zm : zm <= -2.9 ? -9 : lerp(-9, zm, smooth(0, 380, Dn[i] - sk)); }   // 水下压到 -9：别和无边海面（-3）抢深度
+    for (let i = 0; i < n; i++) { const zm = k === 0 ? at(i, 0) : at(i, m); hz[k * n + i] = k === 0 ? zm : zm <= -2.9 ? -9 : lerp(-9, zm, smooth(0, Wf[i], Dn[i] - sk)); }   // 水下压到 -9：别和无边海面（-3）抢深度
   }
   // GL 坐标（y 朝北）：沿边一格 A、往外一排 O；北：A 东、O 北；西：A 南、O 西；东：A 南、O 东
   const A = side === 'n' ? [d, 0] : [0, -d], O = side === 'n' ? [0, ds] : side === 'w' ? [-ds, 0] : [ds, 0], P0 = side === 'e' ? [(nx - 1) * d, 0] : [0, 0];
