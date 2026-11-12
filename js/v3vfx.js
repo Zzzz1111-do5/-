@@ -37,16 +37,16 @@ function v3vUserTex(key) {
 //   原来在片元里对插值后的帧号取 floor——帧号正好是整数时（2.8 秒的爆炸每推演 7 步就有一次）插值误差让相邻像素一个取到 n − 1、一个取到 n，
 //   同一个 2×2 像素块里贴图坐标跳一整格，按最粗一级的 mipmap 采样，整个精灵成了一片方格花纹 / 一道道横纹（第三版宣传片的花屏）；
 //   四个顶点的帧号一样，在顶点里取整就不会跳。uNF：每行几格、总帧数（片元里的 uN 是 mediump，同名 uniform 两边精度要一致，所以另起一个）
-const V3V_VS = `attribute vec3 p; attribute vec2 uv; attribute vec4 k; attribute vec3 tn;
-uniform mat4 uM; uniform vec3 uEye; uniform vec2 uNF; varying vec2 vUv; varying vec4 vK; varying vec3 vTn; varying float vD; varying vec4 vC;
+const V3V_VS = `attribute vec3 p; attribute vec2 uv; attribute vec4 k; attribute vec3 tn; attribute float gz;
+uniform mat4 uM; uniform vec3 uEye; uniform vec2 uNF; varying vec2 vUv; varying vec4 vK; varying vec3 vTn; varying float vD, vGz; varying vec4 vC;
 void main() {
   float f0 = floor(k.x + 1e-4), f1 = min(f0 + 1., uNF.y - 1.), r0 = floor((f0 + .5) / uNF.x), r1 = floor((f1 + .5) / uNF.x);
   vC = vec4(f0 - r0 * uNF.x, r0, f1 - r1 * uNF.x, r1);
-  vUv = uv; vK = vec4(max(0., k.x - f0), k.yzw); vTn = tn; vD = length(p - uEye); gl_Position = uM * vec4(p, 1.);
+  vUv = uv; vK = vec4(max(0., k.x - f0), k.yzw); vTn = tn; vGz = gz; vD = length(p - uEye); gl_Position = uM * vec4(p, 1.);
 }`;
 const V3V_FS = `precision mediump float;
 uniform sampler2D uT; uniform float uN, uCol; uniform vec3 uNt, uBg, uSunC, uAmb; uniform vec2 uFog;
-varying vec2 vUv; varying vec4 vK; varying vec3 vTn; varying float vD; varying vec4 vC;   // vK：两帧之间的小数、透明度、火光强度、受光；vC：这一帧、下一帧的格子
+varying vec2 vUv; varying vec4 vK; varying vec3 vTn; varying float vD, vGz; varying vec4 vC;   // vK：两帧之间的小数、透明度、火光强度、受光；vC：这一帧、下一帧的格子；vGz：离地多高（按软化距离归一）
 vec4 at(vec2 c) { return texture2D(uT, (c + clamp(vUv, .004, .996)) / uN); }
 // 火光的颜色按强度 T（0–1）走「暗红 → 橙 → 黄 → 白热」：只有最旺的芯子才发白
 vec3 fireRamp(float T) {
@@ -58,7 +58,8 @@ vec3 fireRamp(float T) {
 void main() {
   vec4 t = mix(at(vC.xy), at(vC.zw), vK.x);
   vec2 eg = min(vUv, 1. - vUv);
-  float fog = smoothstep(uFog.x, uFog.y, vD), a = t.a * vK.y * smoothstep(0., .14, min(eg.x, eg.y));   // 格子边上淡出：个别贴图（车炮口焰）每格的不透明度一直铺到格子边，近处放大成一块圆角方板
+  float fog = smoothstep(uFog.x, uFog.y, vD), a = t.a * vK.y * smoothstep(0., .14, min(eg.x, eg.y)) * smoothstep(0., 1., vGz);   // 格子边上淡出：个别贴图（车炮口焰）每格的不透明度一直铺到格子边，近处放大成一块圆角方板；
+  //   贴近地面的部分淡出（软粒子）：面朝镜头的方片插进地里，地面挡住的那条边原来是一道笔直的硬边（地面上的爆炸、残骸火、烟团）
   if (a < .003) discard;
   vec3 c;
   if (uCol > 1.5) c = t.rgb * a * (1. - .5 * fog);   // 导入的发光序列帧（火焰、尾焰）：原色发光
@@ -82,7 +83,7 @@ function v3vInit(gl) {
     gl.attachShader(pr, sh(gl.VERTEX_SHADER, V3V_VS)); gl.attachShader(pr, sh(gl.FRAGMENT_SHADER, V3V_FS)); gl.linkProgram(pr);
     if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(pr));
     V3V.pr = pr;
-    for (const k of ['p', 'uv', 'k', 'tn']) V3V.a[k] = gl.getAttribLocation(pr, k);
+    for (const k of ['p', 'uv', 'k', 'tn', 'gz']) V3V.a[k] = gl.getAttribLocation(pr, k);
     for (const k of ['uM', 'uEye', 'uT', 'uN', 'uNF', 'uCol', 'uNt', 'uBg', 'uSunC', 'uAmb', 'uFog']) V3V.u[k] = gl.getUniformLocation(pr, k);
     V3V.buf = gl.createBuffer();
     const v = typeof window === 'object' && window.DS_BUILD ? '?v=' + window.DS_BUILD : '';
@@ -137,7 +138,7 @@ function v3vDraw(C) {
   gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA); gl.depthMask(false);
   gl.bindBuffer(gl.ARRAY_BUFFER, V3V.buf);
   const A = V3V.a;
-  for (const k of ['p', 'uv', 'k', 'tn']) if (A[k] >= 0) gl.enableVertexAttribArray(A[k]);
+  for (const k of ['p', 'uv', 'k', 'tn', 'gz']) if (A[k] >= 0) gl.enableVertexAttribArray(A[k]);
   // 按贴图一段段画：排好序的队列里相邻同贴图的合成一批
   let i0 = 0;
   while (i0 < Q.length) {
@@ -156,19 +157,22 @@ function v3vDraw(C) {
         r = [R0[0] * c + U0[0] * s2, R0[1] * c + U0[1] * s2, R0[2] * c + U0[2] * s2]; u = [U0[0] * c - R0[0] * s2, U0[1] * c - R0[1] * s2, U0[2] * c - R0[2] * s2];
       }
       const s = o.s, su = s * (o.asp || 1), P = o.p;
+      // 软化：这一片中心脚下的地面高度，按片的大小定一段淡出的高度（大火球一两米、小的几十厘米）；每个顶点记离地多高 ÷ 这段高度，片元里插值
+      const g0 = typeof v3HtO === 'function' ? Math.max(v3HtO(P[0], -P[1]), -2.6) : -1e4, soft = clamp(s * .28, .35, 3);
       const V = (cx, cy) => { const j = n * NV; D[j] = P[0] + r[0] * cx * s + u[0] * cy * su; D[j + 1] = P[1] + r[1] * cx * s + u[1] * cy * su; D[j + 2] = P[2] + r[2] * cx * s + u[2] * cy * su;
-        D[j + 3] = (cx + 1) / 2; D[j + 4] = (1 - cy) / 2; D[j + 5] = o.fr; D[j + 6] = o.a; D[j + 7] = o.e; D[j + 8] = o.lit; D[j + 9] = o.tn[0]; D[j + 10] = o.tn[1]; D[j + 11] = o.tn[2]; D[j + 12] = 0; n++; };
+        D[j + 3] = (cx + 1) / 2; D[j + 4] = (1 - cy) / 2; D[j + 5] = o.fr; D[j + 6] = o.a; D[j + 7] = o.e; D[j + 8] = o.lit; D[j + 9] = o.tn[0]; D[j + 10] = o.tn[1]; D[j + 11] = o.tn[2]; D[j + 12] = (D[j + 2] - g0) / soft; n++; };
       V(-1, -1); V(1, -1); V(1, 1); V(-1, -1); V(1, 1); V(-1, 1);
     }
     gl.bufferData(gl.ARRAY_BUFFER, D.subarray(0, n * NV), gl.DYNAMIC_DRAW);
     gl.vertexAttribPointer(A.p, 3, gl.FLOAT, false, NV * 4, 0); gl.vertexAttribPointer(A.uv, 2, gl.FLOAT, false, NV * 4, 12);
     gl.vertexAttribPointer(A.k, 4, gl.FLOAT, false, NV * 4, 20); gl.vertexAttribPointer(A.tn, 3, gl.FLOAT, false, NV * 4, 36);
+    if (A.gz >= 0) gl.vertexAttribPointer(A.gz, 1, gl.FLOAT, false, NV * 4, 48);
     gl.bindTexture(gl.TEXTURE_2D, T.u ? V3V_USR[tk].tex : V3V.tex[tk]);
     gl.uniform1f(V3V.u.uN, T.n); gl.uniform2f(V3V.u.uNF, T.n, T.f); gl.uniform1f(V3V.u.uCol, T.col || 0);
     gl.drawArrays(gl.TRIANGLES, 0, n);
     i0 = i1;
   }
-  for (const k of ['p', 'uv', 'k', 'tn']) if (A[k] >= 0) gl.disableVertexAttribArray(A[k]);
+  for (const k of ['p', 'uv', 'k', 'tn', 'gz']) if (A[k] >= 0) gl.disableVertexAttribArray(A[k]);
   gl.depthMask(true); gl.disable(gl.BLEND);
   Q.length = 0;
 }
