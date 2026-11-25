@@ -1,0 +1,5 @@
+bpy==4.2.23
+numpy
+pillow
+opencv-python-headless
+scipy

@@ -1,0 +1,8 @@
+#!/bin/sh
+# Runs a Python script/module inside the project venv, where Blender 4.2 LTS is available as the `bpy` module.
+#   ./blpy path/to/script.py [args]      ./blpy -m package.module [args]
+ROOT="$(cd "$(dirname "$0")" && pwd)"
+if [ ! -x "$ROOT/.venv/bin/python" ]; then
+  echo "venv missing - run tools/setup_env.sh first" >&2; exit 1
+fi
+PYTHONPATH="$ROOT${PYTHONPATH:+:$PYTHONPATH}" exec "$ROOT/.venv/bin/python" "$@"
